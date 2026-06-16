@@ -1,11 +1,27 @@
 news:
+  - id: "v2.0.0-release"
+    title: "发布 v2.0.0 版本"
+    description: "v2.0.0 版本标志项目进入新的里程碑。提供商管理全面升级：彻底移除 .env 配置，统一由 providers.yaml + 前端面板管理。Markdown 渲染引擎从 marked 切换到 markdown-it，新增数学公式定界符支持。所有工具 description 添加调用策略标签，协作更规范。"
+    type: "feat"
+    date: "2026-06-16"
+    tags: ["发布", "版本"]
+    version: "v2.0.0"
+    pr_number: 0
+  - id: "unified-provider-management"
+    title: "提供商管理全面升级"
+    description: "彻底移除 .env 模型配置，所有 LLM 提供商统一由 providers.yaml 通过前端 UI 管理。ProviderConfig 新增 context_window 字段，前端无提供商时友好提示引导配置。告别 .env 手动修改模型参数。"
+    type: "refactor"
+    date: "2026-06-16"
+    tags: ["提供商", "重构", "配置"]
+    version: "v2.0.0"
+    pr_number: 114
   - id: "switch-to-markdown-it"
     title: "Markdown 渲染引擎升级"
     description: "Markdown 渲染引擎从 marked 切换到 markdown-it，新增 \\(...\\) 和 \\[...\\] 数学公式定界符支持。公式渲染失败时自动降级显示原文，不再抛错中断。"
     type: "feat"
     date: "2026-06-14"
     tags: ["渲染", "数学公式", "Markdown", "KaTeX"]
-    version: "PREVIEW"
+    version: "v2.0.0"
     pr_number: 108
   - id: "url-paste-fix"
     title: "粘贴 URL 识别修复"
