@@ -16,6 +16,10 @@ import type {
   TestConnectionResponse,
   DiscoverModelsResponse,
   ConstifyResponse,
+  WhitelistEntry,
+  ListWhitelistResponse,
+  BlockerEntry,
+  ListBlockerResponse,
 } from '@/types'
 
 const BASE = '/api'
@@ -141,4 +145,61 @@ export const api = {
 
   generateSessionTitle: (id: string) =>
     request<{ title: string }>(`/sessions/${id}/generate-title`, { method: 'POST' }),
+
+  // ── Persona 人设 ──
+
+  getPersona: (type: 'soul' | 'user') =>
+    request<{ content: string; type: string }>(`/persona?type=${type}`),
+
+  updatePersona: (type: 'soul' | 'user', content: string) =>
+    request<{ content: string; type: string }>(`/persona?type=${type}`, {
+      method: 'PUT',
+      body: JSON.stringify({ content }),
+    }),
+
+  // ── Path Whitelist 路径白名单 ──
+
+  listWhitelist: () =>
+    request<ListWhitelistResponse>('/path-whitelist'),
+
+  addWhitelistEntry: (entry: { path: string; description: string }) =>
+    request<WhitelistEntry>('/path-whitelist', {
+      method: 'POST',
+      body: JSON.stringify(entry),
+    }),
+
+  updateWhitelistEntry: (index: number, entry: { path: string; description: string }) =>
+    request<WhitelistEntry>(`/path-whitelist/${index}`, {
+      method: 'PUT',
+      body: JSON.stringify(entry),
+    }),
+
+  deleteWhitelistEntry: (index: number) =>
+    request<{ status: string }>(`/path-whitelist/${index}`, { method: 'DELETE' }),
+
+  // ── 文件选择器 ──
+
+  selectFolder: () =>
+    request<{ path: string | null }>('/select-file?type=folder'),
+
+  // ── 路径安全检查 ──
+
+  checkPathBlocked: (path: string) =>
+    request<{ blocked: boolean; reason: string | null; blocker_path: string | null }>(
+      `/check-path-blocked?path=${encodeURIComponent(path)}`
+    ),
+
+  // ── SonettoBlocker 拒止锚 ──
+
+  listBlockers: () =>
+    request<ListBlockerResponse>('/sonetto-blocker'),
+
+  addBlocker: (entry: { path: string; description: string }) =>
+    request<BlockerEntry>('/sonetto-blocker', {
+      method: 'POST',
+      body: JSON.stringify(entry),
+    }),
+
+  deleteBlocker: (index: number) =>
+    request<{ status: string }>(`/sonetto-blocker/${index}`, { method: 'DELETE' }),
 }

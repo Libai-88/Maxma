@@ -346,3 +346,25 @@ export interface ToolInfo {
 export interface ListToolsResponse {
   tools: ToolInfo[]
 }
+
+// === 路径白名单 ===
+
+export interface WhitelistEntry {
+  path: string
+  description: string
+}
+
+export interface ListWhitelistResponse {
+  entries: WhitelistEntry[]
+}
+
+// === SonettoBlocker 拒止锚 ===
+
+export interface BlockerEntry {
+  path: string
+  description: string
+}
+
+export interface ListBlockerResponse {
+  entries: BlockerEntry[]
+}

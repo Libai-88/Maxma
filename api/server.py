@@ -19,6 +19,9 @@ from api.health import get_health_report
 from api.providers.manager import ProviderManager
 from api.providers.store import ProviderConfigStore
 from api.routes import chat, files, memory, sessions, balance, providers
+from api.routes import path_whitelist as path_whitelist_router
+from api.routes import persona as persona_router
+from api.routes import sonetto_blocker as sonetto_blocker_router
 from api.routes import skills as skills_router
 from api.routes import news as news_router
 from api.session_manager import SessionManager, SessionState
@@ -156,6 +159,15 @@ def create_app() -> FastAPI:
 
     # Provider CRUD 路由
     app.include_router(providers.router, prefix="/api")
+
+    # 人设读写 (SOUL.md / USER.md)
+    app.include_router(persona_router.router, prefix="/api")
+
+    # 本地路径白名单管理
+    app.include_router(path_whitelist_router.router, prefix="/api")
+
+    # SonettoBlocker 拒止锚管理
+    app.include_router(sonetto_blocker_router.router, prefix="/api")
 
     # Anthropic Skills
     app.include_router(skills_router.router, prefix="/api")
