@@ -1,11 +1,19 @@
 news:
+  - id: "v2.2.0-release"
+    title: "发布 v2.2.0 版本"
+    description: "v2.2.0 版本带来完整的本地安全防护系统与前端设置体系。新增 SonettoBlocker 拒止锚与路径白名单双层安全机制，保护本地文件安全。前端新增设置页体系，包含用户、人设、路径白名单、拒止锚管理页面及安全标识。输入框新增拖拽调整高度手柄，优化长文本编辑体验。"
+    type: "feat"
+    date: "2026-06-19"
+    tags: ["发布", "版本"]
+    version: "v2.2.0"
+    pr_number: 0
   - id: "chat-input-resize-handle"
     title: "输入框拖拽调整高度"
     description: "ChatInput 文本输入框顶部新增拖拽手柄，hover 时显示蓝色横线。使用 Pointer Events 实现流畅拖拽，容器高度可在默认高度到 600px 之间自由调整，拖拽后高度自动保持不受输入内容影响。"
     type: "feat"
     date: "2026-06-18"
     tags: ["输入框", "拖拽", "UI"]
-    version: "PREVIEW"
+    version: "v2.2.0"
     pr_number: 129
   - id: "local-file-security"
     title: "本地文件安全防护"
@@ -13,7 +21,7 @@ news:
     type: "feat"
     date: "2026-06-18"
     tags: ["安全", "文件", "权限"]
-    version: "PREVIEW"
+    version: "v2.2.0"
     pr_number: 127
   - id: "v2.0.0-release"
     title: "发布 v2.0.0 版本"
