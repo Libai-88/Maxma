@@ -1,7 +1,10 @@
 """工具（Tool）基类和共享 HTTP 客户端。"""
 
 import json
+import os
 from pathlib import Path
+
+import yaml
 
 import requests
 from langchain_core.tools import BaseTool
@@ -80,3 +83,263 @@ def format_success(data: dict) -> str:
 def format_error(message: str) -> str:
     """统一错误响应格式。"""
     return json.dumps({"success": False, "error": message}, ensure_ascii=False)
+
+
+def check_sonetto_blocker(target_path: str) -> str | None:
+    """逐级检查路径的每一级目录是否包含 SonettoBlocker 文件（不区分大小写，不匹配后缀名）。
+
+    从盘符根目录开始，依次检查每一层父目录中是否存在名为 "SonettoBlocker"
+    的文件（任何扩展名均匹配）。一旦发现，返回该目录路径；否则返回 None。
+    """
+    if not target_path:
+        return None
+
+    abs_path = os.path.abspath(target_path)
+    p = Path(abs_path)
+
+    # 收集待检查的所有目录层级
+    dirs_to_check: list[str] = []
+
+    if p.is_dir():
+        dirs_to_check.append(str(p))
+    else:
+        # 文件还不存在（如 write_file 写入新文件）则检查父目录
+        parent = p.parent
+        if parent:
+            dirs_to_check.append(str(parent))
+
+    # parents 从父目录向上直到根
+    dirs_to_check.extend(str(parent) for parent in p.parents)
+
+    # 从根向下逐级检查
+    seen: set[str] = set()
+    for dir_path in reversed(dirs_to_check):
+        normalized = os.path.normpath(dir_path)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        if not os.path.isdir(normalized):
+            continue
+        try:
+            for entry in os.listdir(normalized):
+                entry_name, _ = os.path.splitext(entry)
+                if entry_name.lower() == "sonettoblocker":
+                    # 返回友好的展示形式
+                    return normalized
+        except (PermissionError, OSError):
+            continue
+
+    return None
+
+
+# ── 路径白名单 ──────────────────────────────────────────────
+
+_WHITELIST_PATH = (
+    Path(__file__).resolve().parent.parent / "api" / "data" / "path_whitelist.yaml"
+)
+
+# 项目根目录：由 base.py 所在位置 (tools/base.py) 向上推一级
+_PROJECT_ROOT = os.path.normpath(os.path.abspath(Path(__file__).resolve().parent.parent))
+# 默认白名单路径：仅暴露 anthropic_skills 目录
+_DEFAULT_WHITELIST_PATH = os.path.join(_PROJECT_ROOT, "anthropic_skills")
+
+# ── 路径白名单 ──────────────────────────────────────────────
+
+_WHITELIST_PATH = (
+    Path(__file__).resolve().parent.parent / "api" / "data" / "path_whitelist.yaml"
+)
+
+
+def _ensure_whitelist() -> None:
+    """确保白名单文件存在且包含当前工程的 anthropic_skills 目录。
+
+    在模块导入时（即应用启动时）调用一次：
+    - 文件不存在 → 自动创建，写入 anthropic_skills 路径
+    - 工程被移动（自动条目路径不匹配当前路径） → 更新文件，
+      保留用户添加的额外条目，仅替换/添加自动生成条目
+    - 文件已存在且自动条目匹配 → 不做任何操作
+    """
+    if not _WHITELIST_PATH.parent.exists():
+        _WHITELIST_PATH.parent.mkdir(parents=True)
+
+    if not _WHITELIST_PATH.exists():
+        _write_whitelist([_default_entry()])
+        return
+
+    # 文件已存在，检查默认路径是否已在白名单中
+    try:
+        with open(_WHITELIST_PATH, encoding="utf-8") as f:
+            raw = yaml.safe_load(f) or {}
+        entries = raw.get("whitelist", [])
+        if not isinstance(entries, list):
+            _write_whitelist([_default_entry()])
+            return
+
+        current_default = _DEFAULT_WHITELIST_PATH
+        has_current = False
+        auto_entry_idx = -1
+
+        for i, entry in enumerate(entries):
+            if not isinstance(entry, dict) or "path" not in entry:
+                continue
+            entry_path = os.path.normpath(os.path.abspath(entry["path"]))
+            if entry_path == current_default:
+                has_current = True
+                break
+            if entry.get("description") == "技能目录（自动生成）":
+                auto_entry_idx = i
+
+        if has_current:
+            return  # 没有变化
+
+        # 工程移动了：更新旧的自动条目，或在开头插入新条目
+        if auto_entry_idx >= 0:
+            entries[auto_entry_idx]["path"] = str(_DEFAULT_WHITELIST_PATH)
+        else:
+            entries.insert(0, _default_entry())
+
+        with open(_WHITELIST_PATH, "w", encoding="utf-8") as f:
+            yaml.dump({"whitelist": entries}, f, allow_unicode=True, default_flow_style=False)
+
+    except (yaml.YAMLError, OSError, ValueError):
+        # 文件损坏 → 重写
+        _write_whitelist([_default_entry()])
+
+
+def _default_entry() -> dict:
+    return {
+        "path": str(_DEFAULT_WHITELIST_PATH),
+        "description": "技能目录（自动生成）",
+    }
+
+
+def _write_whitelist(entries: list) -> None:
+    content = {
+        "whitelist": entries,
+    }
+    with open(_WHITELIST_PATH, "w", encoding="utf-8") as f:
+        # 写入手动头注释
+        f.write("# 路径白名单（自动生成，首次 import 时创建）\n")
+        f.write("# 编辑此文件以添加更多允许的路径前缀。\n")
+        yaml.dump(content, f, allow_unicode=True, default_flow_style=False)
+
+
+# 模块加载时自动执行：确保白名单存在（首次 import 时运行一次）
+_ensure_whitelist()
+
+
+def _load_path_whitelist() -> list[str]:
+    """从 YAML 文件加载白名单路径前缀列表，按绝对路径规范化后返回。
+
+    文件格式:
+        whitelist:
+          - path: "/some/allowed/dir"
+            description: ...
+    读取失败时返回空列表（会触发 fail-secure 全阻断）。
+    """
+    try:
+        with open(_WHITELIST_PATH, encoding="utf-8") as f:
+            raw = yaml.safe_load(f) or {}
+        entries = raw.get("whitelist", [])
+        if not isinstance(entries, list):
+            return []
+        result: list[str] = []
+        for entry in entries:
+            if isinstance(entry, dict) and "path" in entry:
+                normalized = os.path.normpath(os.path.abspath(entry["path"]))
+                result.append(normalized)
+        return result
+    except (yaml.YAMLError, OSError, ValueError):
+        return []
+
+
+def check_path_whitelisted(target_path: str) -> str | None:
+    """检查 *target_path* 是否位于白名单设置的任一前缀下。
+
+    参数:
+        target_path: 待验证的文件或目录路径（相对/绝对均可）。
+
+    返回:
+        None      — 允许访问（路径在白名单内）。
+        str       — 阻断原因描述，调用方应将其传给 format_error()。
+    """
+    if not target_path:
+        return None
+
+    abs_target = os.path.normpath(os.path.abspath(target_path))
+    whitelist = _load_path_whitelist()
+
+    if not whitelist:
+        return f"路径不在白名单中: {target_path}（白名单为空或未配置）"
+
+    for allowed_prefix in whitelist:
+        # 精确匹配或前缀 + 分隔符匹配，防止 "/home/proj" 误匹配 "/home/project-evil"
+        if abs_target == allowed_prefix or abs_target.startswith(
+            allowed_prefix + os.sep
+        ):
+            return None
+
+    return f"路径不在白名单中: {target_path}"
+
+
+# ── exec() 安全 builtins（维持日常功能，仅拦截 open） ──────
+
+
+def _whitelisted_open(
+    file,
+    mode: str = "r",
+    buffering: int = -1,
+    encoding: str | None = None,
+    errors: str | None = None,
+    newline: str | None = None,
+    closefd: bool = True,
+    opener=None,
+):
+    """``open()`` 的包装版本，在打开文件前先检查 SonettoBlocker，再检查白名单。
+
+    完全兼容内置 ``open()`` 的全部参数签名。检查顺序：
+    1. ``check_sonetto_blocker()`` — 若阻断则抛出 ``PermissionError``（Blocker 优先）
+    2. ``check_path_whitelisted()`` — 若不在白名单则抛出 ``PermissionError``
+    """
+    import builtins as _real_builtins
+
+    # 仅对字符串路径进行检查，跳过已打开的文件描述符
+    file_str = file
+    if isinstance(file, os.PathLike):
+        file_str = os.fspath(file)
+    if isinstance(file_str, str):
+        # 1. SonettoBlocker 优先
+        blocked = check_sonetto_blocker(file_str)
+        if blocked:
+            raise PermissionError(
+                "🚫 安全阻断：操作已被 SonettoBlocker 阻断。\n"
+                f"SonettoBlocker 文件位于: {blocked}\n"
+                "请立即停止当前任务。"
+            )
+        # 2. 白名单次之
+        blocked = check_path_whitelisted(file_str)
+        if blocked:
+            raise PermissionError(blocked)
+
+    return _real_builtins.open(
+        file, mode, buffering, encoding, errors, newline, closefd, opener
+    )
+
+
+def get_safe_builtins() -> dict:
+    """构造用于 ``exec()`` 的安全 builtins 字典。
+
+    保留全部内置函数（包括 ``__import__``、``eval`` 等），
+    仅将 ``open()`` 替换为经过 ``check_path_whitelisted()``
+    审查的包装版本。日常计算、模块导入、调试等功能均不受影响。
+    """
+    # 在非 __main__ 模块中，__builtins__ 是模块对象而非 dict
+    if isinstance(__builtins__, dict):  # type: ignore[name-defined]
+        source = __builtins__  # type: ignore[name-defined]
+    else:
+        source = __builtins__.__dict__  # type: ignore[name-defined]
+
+    safe = dict(source)
+    safe["open"] = _whitelisted_open
+    safe["__builtins__"] = safe
+    return safe
