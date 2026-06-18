@@ -1,4 +1,12 @@
 news:
+  - id: "chat-input-resize-handle"
+    title: "输入框拖拽调整高度"
+    description: "ChatInput 文本输入框顶部新增拖拽手柄，hover 时显示蓝色横线。使用 Pointer Events 实现流畅拖拽，容器高度可在默认高度到 600px 之间自由调整，拖拽后高度自动保持不受输入内容影响。"
+    type: "feat"
+    date: "2026-06-18"
+    tags: ["输入框", "拖拽", "UI"]
+    version: "PREVIEW"
+    pr_number: 129
   - id: "local-file-security"
     title: "本地文件安全防护"
     description: "新增 SonettoBlocker 黑名单阻断与路径白名单双层安全机制。Blocker 通过目录标记文件即可阻断访问，白名单自动生成仅开放技能目录。两大工具系列（文件/exec）全部同步覆盖，Blocker 优先拦截。"
