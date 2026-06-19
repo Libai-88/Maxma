@@ -29,6 +29,10 @@
           <router-link to="/user" class="popup-item" @click="closeSettingsMenu">用户 USER</router-link>
           <router-link to="/path-whitelist" class="popup-item" @click="closeSettingsMenu">路径白名单</router-link>
           <router-link to="/sonetto-blocker" class="popup-item" @click="closeSettingsMenu">拒止锚</router-link>
+          <div class="popup-divider"></div>
+          <button class="popup-item popup-action" :class="{ restarting }" :disabled="restarting" @click="handleRestart">
+            {{ restarting ? '重启中...' : '重启服务' }}
+          </button>
         </div>
       </Transition>
       <SessionSidebar
@@ -68,6 +72,28 @@ const settingsTriggerRef = ref<HTMLElement | null>(null)
 const settingsPopupRef = ref<HTMLElement | null>(null)
 const popupTop = ref('0px')
 const popupLeft = ref('228px')
+const restarting = ref(false)
+
+async function handleRestart() {
+  if (restarting.value) return
+  if (!window.confirm('确定要重启 SonettoHere 服务吗？正在进行的对话可能会中断。')) return
+  restarting.value = true
+  closeSettingsMenu()
+  try {
+    await fetch('/api/restart', { method: 'POST' })
+  } catch { /* server will close connection, expected */ }
+  const poll = async () => {
+    for (let i = 0; i < 60; i++) {
+      await new Promise(r => setTimeout(r, 2000))
+      try {
+        const res = await fetch('/api/health')
+        if (res.ok) { location.reload(); return }
+      } catch { /* still down */ }
+    }
+    restarting.value = false
+  }
+  poll()
+}
 
 function toggleSettingsMenu() {
   showSettingsMenu.value = !showSettingsMenu.value
@@ -354,6 +380,33 @@ html, body {
   color: var(--accent);
   font-weight: 600;
   background: var(--bg-secondary);
+}
+
+.popup-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.popup-action {
+  width: 100%;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  background: transparent;
+  color: #dc2626;
+}
+.popup-action:hover:not(:disabled) {
+  background: var(--bg-secondary);
+  color: #b91c1c;
+}
+.popup-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.popup-action.restarting {
+  color: #f59e0b;
 }
 
 /* ── Popup transition ── */
