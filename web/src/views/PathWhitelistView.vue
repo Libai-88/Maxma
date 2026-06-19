@@ -7,6 +7,20 @@
         <button class="btn btn-primary" @click="startAdd">添加</button>
       </div>
 
+      <details class="rule-card">
+        <summary class="rule-summary">规则说明</summary>
+        <div class="rule-body">
+          <p>权限检查按以下优先级判断：</p>
+          <ol>
+            <li><strong>拒止锚优先</strong> — 目标目录本身或任意父目录存在 <code>SonettoBlocker</code> 标记文件时直接阻断，白名单不生效。详见<router-link to="/sonetto-blocker">拒止锚</router-link>页面。</li>
+            <li><strong>精确匹配</strong> — 目标目录与某条目的目录完全一致时，始终放行，不受子目录继承开关影响。</li>
+            <li><strong>非递归阻断</strong> — 匹配到「仅当前目录」条目的子目录时阻断。父目录的阻断优先于子目录的递归放行。</li>
+            <li><strong>递归放行</strong> — 无上方阻断时，匹配到「允许子目录」条目的子目录时放行。</li>
+            <li><strong>无匹配</strong> — 以上均不满足时阻断。</li>
+          </ol>
+        </div>
+      </details>
+
       <div v-if="loading" class="loading">加载中...</div>
       <div v-else-if="entries.length === 0" class="empty">尚未添加任何路径。</div>
       <div v-else class="entry-list">
@@ -282,6 +296,54 @@ onMounted(loadEntries)
 .msg.error {
   background: #fee2e2;
   color: #991b1b;
+}
+
+/* ── 规则说明 ── */
+.rule-card {
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-card);
+  overflow: hidden;
+}
+.rule-summary {
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.rule-summary:hover {
+  opacity: 0.8;
+}
+.rule-body {
+  padding: 0 16px 12px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+.rule-body ol {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+.rule-body li {
+  margin-bottom: 4px;
+}
+.rule-note {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: #f0f5ff;
+  border-radius: 6px;
+  color: #1a4a8a;
+  font-size: 12px;
+}
+.rule-note code {
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 12px;
+  background: #dbeafe;
+  padding: 1px 5px;
+  border-radius: 3px;
 }
 
 /* ── 按钮 ── */

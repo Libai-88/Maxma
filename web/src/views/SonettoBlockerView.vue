@@ -7,10 +7,22 @@
         <button class="btn btn-primary" @click="startAdd">添加</button>
       </div>
 
+      <details class="rule-card">
+        <summary class="rule-summary">规则说明</summary>
+        <div class="rule-body">
+          <p>拒止锚是一种强制安全机制，优先级高于白名单：</p>
+          <ul>
+            <li>在指定目录中创建 <code>SonettoBlocker</code> 标记文件（无扩展名），AI 的所有文件工具将无法访问该目录及其所有子目录。</li>
+            <li>检查时会从目标目录逐级向上查找，一旦发现任何父目录包含 <code>SonettoBlocker</code> 文件即强制阻断。</li>
+            <li>访问被拒止锚阻断时，白名单中即使有对应的放行条目也不会生效。</li>
+          </ul>
+          <p class="rule-note">路径白名单及完整权限规则参见设置页的「<router-link to="/path-whitelist">路径白名单</router-link>」页面。</p>
+        </div>
+      </details>
+
       <div v-if="loading" class="loading">加载中...</div>
       <div v-else-if="entries.length === 0" class="empty">
         <p>尚未添加任何拒止锚。</p>
-        <p class="empty-hint">拒止锚会在所选目录中创建 <code>SonettoBlocker</code> 标记文件，<br>阻止任何文件工具访问该目录及其子目录。</p>
       </div>
       <div v-else class="entry-list">
         <div v-for="(entry, i) in entries" :key="i" class="entry-card">
@@ -165,19 +177,61 @@ onMounted(loadEntries)
   color: var(--text-secondary);
   padding: 40px 0;
 }
-.empty-hint {
-  font-size: 13px;
-  margin-top: 8px;
-  line-height: 1.6;
-  color: var(--text-tertiary);
+/* ── 规则说明 ── */
+.rule-card {
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-card);
+  overflow: hidden;
 }
-.empty-hint code {
+.rule-summary {
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.rule-summary:hover {
+  opacity: 0.8;
+}
+.rule-body {
+  padding: 0 16px 12px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+.rule-body ul {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+.rule-body li {
+  margin-bottom: 4px;
+}
+.rule-body code {
   font-family: 'SF Mono', 'Consolas', monospace;
   font-size: 12px;
   background: var(--bg-secondary);
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: 3px;
 }
+.rule-note {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: #f0f5ff;
+  border-radius: 6px;
+  color: #1a4a8a;
+  font-size: 12px;
+}
+.rule-note code {
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 12px;
+  background: #dbeafe;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
 .entry-list {
   display: flex;
   flex-direction: column;
