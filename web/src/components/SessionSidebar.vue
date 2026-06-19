@@ -7,8 +7,11 @@
     <div class="session-list">
 
       <!-- ── 已保存（固定会话）── -->
-      <div v-if="constSessions.length > 0" class="const-section">
+      <div class="const-section">
         <div class="section-label">已保存</div>
+        <div v-if="constSessions.length === 0" class="section-hint">
+          右键点击临时会话可将其固定保存
+        </div>
         <div
           v-for="(s, ci) in constSessions"
           :key="s.session_id"
@@ -56,7 +59,7 @@
 
       <!-- ── 临时会话 ── -->
       <div class="temp-section">
-        <div v-if="constSessions.length > 0" class="section-label">临时会话</div>
+        <div class="section-label">临时会话</div>
         <div
           v-for="(s, index) in tempSessions"
           :key="s.session_id"
@@ -69,7 +72,7 @@
         >
           <div class="session-item-main">
             <span class="session-id">
-              Session #{{ getSessionDisplayIndex(s) }}
+              临时会话#{{ getSessionDisplayIndex(s) }}
               <span v-if="s.is_subagent" class="sub-badge" title="子 Agent 会话（只读）">sub</span>
             </span>
             <span class="session-count">{{ formatRelativeTime(s.last_active ?? s.created_at) }} · {{ s.message_count }} 条消息</span>
@@ -522,6 +525,13 @@ function closeContextMenu() {
   padding: 4px 12px 2px;
 }
 
+.section-hint {
+  font-size: 11px;
+  color: var(--text-tertiary, #9ca3af);
+  padding: 6px 12px 8px;
+  line-height: 1.4;
+}
+
 /* ── Session items ── */
 .session-item {
   display: flex;
@@ -735,8 +745,9 @@ function closeContextMenu() {
   padding: 0;
   margin: 0;
 }
-/* collapsed 时隐藏分区 label */
-.session-sidebar.collapsed .section-label {
+/* collapsed 时隐藏分区 label 和提示 */
+.session-sidebar.collapsed .section-label,
+.session-sidebar.collapsed .section-hint {
   max-height: 0;
   opacity: 0;
   overflow: hidden;
