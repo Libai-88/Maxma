@@ -72,8 +72,7 @@ class PDFReaderTool(ToolBase):
             return format_error(f"不是 PDF 文件: {file_path}")
 
         try:
-            from PyPDF2 import PdfReader
-
+            import PyPDF2  # noqa: F401 — 仅用于检查包是否可用
             if operation == "get_metadata":
                 return self._get_metadata(file_path)
             elif operation == "extract_text":

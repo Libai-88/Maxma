@@ -322,7 +322,7 @@ class LongTermMemoryInterface:
                     checkpointer=MemorySaver(),
                 )
 
-                result = await agent.ainvoke(
+                await agent.ainvoke(
                     {"messages": [HumanMessage(content=user_prompt)]},
                     config={"configurable": {"thread_id": "ltm-consumer"}},
                 )

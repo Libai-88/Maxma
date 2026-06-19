@@ -79,7 +79,6 @@ class SessionManager:
         return False
 
     def list_sessions(self) -> list[dict]:
-        now = time.time()
         result = []
         for s in self._sessions.values():
             has_active = (

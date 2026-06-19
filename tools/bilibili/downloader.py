@@ -208,7 +208,6 @@ class BilibiliDownloader:
                         logger.info("%s 已下载完毕", label)
                         return True
 
-                    total = int(resp.headers.get("content-length", 0)) + file_size
                     mode = "ab" if file_size > 0 else "wb"
                     downloaded = file_size
 

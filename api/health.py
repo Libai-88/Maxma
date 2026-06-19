@@ -93,7 +93,6 @@ async def check_native_tools(app: FastAPI) -> ComponentHealth:
     start = time.monotonic()
     try:
         tools = app.state.native_tools
-        names = sorted(t.name for t in tools)
         elapsed = (time.monotonic() - start) * 1000
         return ComponentHealth(
             status="ok",

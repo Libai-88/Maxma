@@ -2,7 +2,6 @@
 
 import asyncio
 import contextvars
-import json
 import sys
 import traceback
 
@@ -88,7 +87,7 @@ class CallSubAgentTool(ToolBase):
         print(f"[call_sub_agent] sub-session created: {sub.session_id}", file=sys.stderr)
 
         # 2. 通知前端（通过主 WS）
-        print(f"[call_sub_agent] sending sub_session_created via WS", file=sys.stderr)
+        print("[call_sub_agent] sending sub_session_created via WS", file=sys.stderr)
         await ws.send_json({
             "type": "sub_session_created",
             "payload": {
@@ -98,7 +97,7 @@ class CallSubAgentTool(ToolBase):
                 "name": name[:100] if name else "",
             },
         })
-        print(f"[call_sub_agent] sub_session_created sent, awaiting pending_result...", file=sys.stderr)
+        print("[call_sub_agent] sub_session_created sent, awaiting pending_result...", file=sys.stderr)
 
         # 3. 等待 sub-agent 执行完成
         #    sub-agent 由前端连接 sub-session WS 后自动启动
@@ -111,23 +110,23 @@ class CallSubAgentTool(ToolBase):
                 )
                 print(f"[call_sub_agent] pending_result resolved, answer len={len(final_answer)}", file=sys.stderr)
             except asyncio.TimeoutError:
-                print(f"[call_sub_agent] timeout waiting for pending_result (120s), trying background...", file=sys.stderr)
+                print("[call_sub_agent] timeout waiting for pending_result (120s), trying background...", file=sys.stderr)
                 # 如果前端一直未连接，后端直接执行（无 WS streaming）
                 if not sub._pending_result.done():
                     # 尝试后台执行
                     final_answer = await self._run_background(sub, task, app_state)
                     print(f"[call_sub_agent] background done, answer len={len(final_answer)}", file=sys.stderr)
                 else:
-                    print(f"[call_sub_agent] pending_result done during timeout, re-raising", file=sys.stderr)
+                    print("[call_sub_agent] pending_result done during timeout, re-raising", file=sys.stderr)
                     raise
 
-            print(f"[call_sub_agent] returning success", file=sys.stderr)
+            print("[call_sub_agent] returning success", file=sys.stderr)
             return format_success({
                 "sub_session_id": sub.session_id,
                 "answer": final_answer,
             })
         except asyncio.CancelledError:
-            print(f"[call_sub_agent] cancelled", file=sys.stderr)
+            print("[call_sub_agent] cancelled", file=sys.stderr)
             # 主 Agent 被取消 → 取消 sub-agent
             if sub._active_task and not sub._active_task.done():
                 sub._active_task.cancel()

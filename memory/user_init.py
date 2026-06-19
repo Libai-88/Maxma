@@ -1,6 +1,5 @@
 """首次运行初始化 — 从 example 文件复制用户自述、人设文件、环境变量。"""
 
-import os
 import shutil
 from pathlib import Path
 

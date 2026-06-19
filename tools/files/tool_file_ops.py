@@ -82,7 +82,7 @@ class FileOperationsTool(ToolBase):
         if blocker_paths:
             return format_error(
                 "🚫 安全阻断：操作已被 SonettoBlocker 阻断。\n"
-                f"在以下目录中发现了 SonettoBlocker 文件：\n"
+                "在以下目录中发现了 SonettoBlocker 文件：\n"
                 + "\n".join(f"  • {d}" for d in blocker_paths)
                 + "\n\n请立即停止当前任务，先说明你为什么需要访问该路径，"
                   "再说明下一步打算做什么。"

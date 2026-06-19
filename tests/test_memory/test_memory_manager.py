@@ -1,8 +1,6 @@
 """memory/memory_manager.py 测试 — MemoryManager 直接测试。"""
 
-import os
 import re
-from pathlib import Path
 
 import pytest
 
@@ -58,7 +56,7 @@ class TestMemoryManager:
     def test_init_creates_yaml_file(self, tmp_path):
         """初始化时创建 yaml 文件。"""
         path = tmp_path / "test_memory.yaml"
-        mm = MemoryManager(yaml_file=str(path))
+        MemoryManager(yaml_file=str(path))
         assert path.exists()
         # 文件内容应为有效 yaml
         import yaml
@@ -68,7 +66,7 @@ class TestMemoryManager:
     def test_init_creates_parent_dir(self, tmp_path):
         """初始化时创建父目录。"""
         path = tmp_path / "subdir" / "memory.yaml"
-        mm = MemoryManager(yaml_file=str(path))
+        MemoryManager(yaml_file=str(path))
         assert path.exists()
 
     def test_add_returns_id(self, tmp_path):

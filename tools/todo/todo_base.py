@@ -1,7 +1,6 @@
 """Todoist API 共享封装（内部依赖，不是 Tool）。"""
 
 from datetime import datetime
-from typing import Optional
 
 from todoist_api_python.api import TodoistAPI
 
