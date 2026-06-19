@@ -10,7 +10,9 @@
       <div class="const-section">
         <div class="section-label">已保存</div>
         <div v-if="constSessions.length === 0" class="section-hint">
-          右键点击临时会话可将其固定保存
+          无已保存的会话。
+          <br>
+          右键点击临时会话来固定保存
         </div>
         <div
           v-for="(s, ci) in constSessions"
@@ -72,7 +74,7 @@
         >
           <div class="session-item-main">
             <span class="session-id">
-              临时会话#{{ getSessionDisplayIndex(s) }}
+              Session #{{ getSessionDisplayIndex(s) }}
               <span v-if="s.is_subagent" class="sub-badge" title="子 Agent 会话（只读）">sub</span>
             </span>
             <span class="session-count">{{ formatRelativeTime(s.last_active ?? s.created_at) }} · {{ s.message_count }} 条消息</span>
