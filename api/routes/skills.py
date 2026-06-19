@@ -8,7 +8,9 @@ from fastapi import APIRouter, Request
 router = APIRouter()
 
 PERSONAS_DIR = Path(__file__).resolve().parent.parent.parent / "config" / "personas"
-ANTHROPIC_SKILLS_DIR = Path(__file__).resolve().parent.parent.parent / "anthropic_skills"
+ANTHROPIC_SKILLS_DIR = (
+    Path(__file__).resolve().parent.parent.parent / "anthropic_skills"
+)
 
 
 def _parse_frontmatter(text: str) -> dict[str, str]:
@@ -30,7 +32,9 @@ def _parse_frontmatter(text: str) -> dict[str, str]:
                     # 多行块标量：收集后续缩进行
                     parts: list[str] = []
                     i += 1
-                    while i < len(lines) and (lines[i].startswith("  ") or lines[i].startswith("\t")):
+                    while i < len(lines) and (
+                        lines[i].startswith("  ") or lines[i].startswith("\t")
+                    ):
                         parts.append(lines[i].strip())
                         i += 1
                     meta[key] = " ".join(parts)
@@ -54,11 +58,13 @@ async def list_skills():
         name = meta.get("name", str(rel))
         description = meta.get("description", "")
         path_str = str(sk_path).replace("\\", "/")
-        skills.append({
-            "name": name,
-            "description": description,
-            "path": path_str,
-        })
+        skills.append(
+            {
+                "name": name,
+                "description": description,
+                "path": path_str,
+            }
+        )
 
     return {"skills": skills}
 
@@ -67,9 +73,4 @@ async def list_skills():
 async def list_tools(request: Request):
     """返回所有已加载的 Python 内置工具（native_tools + mcp_tools）。"""
     tools = getattr(request.app.state, "tools", [])
-    return {
-        "tools": [
-            {"name": t.name, "description": t.description}
-            for t in tools
-        ]
-    }
+    return {"tools": [{"name": t.name, "description": t.description} for t in tools]}

@@ -95,14 +95,21 @@ class BilibiliDownloader:
         timeout = httpx.Timeout(60.0, connect=15.0)
         for attempt in range(max_retries):
             try:
-                async with httpx.AsyncClient(follow_redirects=True, timeout=timeout) as client:
+                async with httpx.AsyncClient(
+                    follow_redirects=True, timeout=timeout
+                ) as client:
                     resp = await client.get(url, headers=self._headers)
                     resp.raise_for_status()
                     return BeautifulSoup(resp.text, "html.parser")
             except (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.RequestError):
                 if attempt < max_retries - 1:
                     wait = (attempt + 1) * 5
-                    logger.warning("页面抓取超时，%d秒后重试 (%d/%d)", wait, attempt + 1, max_retries)
+                    logger.warning(
+                        "页面抓取超时，%d秒后重试 (%d/%d)",
+                        wait,
+                        attempt + 1,
+                        max_retries,
+                    )
                     await asyncio.sleep(wait)
                 else:
                     raise
@@ -143,7 +150,9 @@ class BilibiliDownloader:
         else:
             raise ValueError("未找到可下载的流 (dash 或 durl)")
 
-    def _parse_dash(self, url: str, title: str, dash: dict, target_id: int | None) -> VideoInfo:
+    def _parse_dash(
+        self, url: str, title: str, dash: dict, target_id: int | None
+    ) -> VideoInfo:
         video_streams = dash["video"]
         audio_streams = dash["audio"]
 
@@ -194,8 +203,12 @@ class BilibiliDownloader:
                     raise RuntimeError("视频或音频下载失败")
 
     async def _download(
-        self, client: httpx.AsyncClient, url: str, filename: str,
-        label: str = "文件", max_retries: int = 5,
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+        filename: str,
+        label: str = "文件",
+        max_retries: int = 5,
     ) -> bool:
         retry_delay = 5
         for attempt in range(max_retries):
@@ -221,7 +234,9 @@ class BilibiliDownloader:
                 logger.info("%s 下载完成 (%.1f MB)", label, size_mb)
                 return True
             except (httpx.RemoteProtocolError, httpx.RequestError) as e:
-                logger.warning("%s 下载出错: %s，重试 (%d/%d)", label, e, attempt + 1, max_retries)
+                logger.warning(
+                    "%s 下载出错: %s，重试 (%d/%d)", label, e, attempt + 1, max_retries
+                )
                 if attempt < max_retries - 1:
                     await asyncio.sleep(retry_delay)
 
@@ -244,15 +259,28 @@ class BilibiliDownloader:
         if shutil.which("ffmpeg"):
             logger.info("使用 ffmpeg 合并...")
             result = subprocess.run(
-                ["ffmpeg", "-i", video_path, "-i", audio_path,
-                 "-c:v", "copy", "-c:a", "copy", output_path, "-y"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                [
+                    "ffmpeg",
+                    "-i",
+                    video_path,
+                    "-i",
+                    audio_path,
+                    "-c:v",
+                    "copy",
+                    "-c:a",
+                    "copy",
+                    output_path,
+                    "-y",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
             )
             if result.returncode != 0:
                 raise RuntimeError(f"ffmpeg 合并失败，退出码: {result.returncode}")
         else:
             logger.info("使用 moviepy 合并...")
             from moviepy import VideoFileClip
+
             clip = VideoFileClip(video_path)
             clip.write_videofile(output_path, audio=audio_path)
         logger.info("合并完成: %s", output_path)
@@ -276,9 +304,19 @@ class BilibiliDownloader:
         try:
             if shutil.which("ffmpeg"):
                 result = subprocess.run(
-                    ["ffmpeg", "-i", video.output_path, "-vframes", "1",
-                     "-q:v", "2", cover_path, "-y"],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    [
+                        "ffmpeg",
+                        "-i",
+                        video.output_path,
+                        "-vframes",
+                        "1",
+                        "-q:v",
+                        "2",
+                        cover_path,
+                        "-y",
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
                     timeout=30,
                 )
                 if result.returncode == 0:
@@ -287,6 +325,7 @@ class BilibiliDownloader:
             else:
                 logger.info("使用 moviepy 提取封面...")
                 from moviepy import VideoFileClip
+
                 clip = VideoFileClip(video.output_path)
                 clip.save_frame(cover_path, t=0)
                 clip.close()

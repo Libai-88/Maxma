@@ -8,19 +8,17 @@ from tools.todo.todo_base import TodoAPIHelper
 
 class TodoUpdateInput(BaseModel):
     get_doc: bool = Field(
-        default=False,
-        description="设为 true 以获取 Todoist 领域知识文档"
+        default=False, description="设为 true 以获取 Todoist 领域知识文档"
     )
     task_id: str = Field(default="", description="要更新的任务 ID")
     content: str | None = Field(default=None, description="新的任务名称")
     due_date: str | None = Field(
-        default=None,
-        description="新的截止日期，YYYY-MM-DD 或 YYYY-MM-DD HH:MM"
+        default=None, description="新的截止日期，YYYY-MM-DD 或 YYYY-MM-DD HH:MM"
     )
     priority: int | None = Field(default=None, description="1=低, 2=中, 3=高, 4=紧急")
     project_name: str | None = Field(
         default=None,
-        description="新的项目名（用于移动任务）。先通过 todo_list_projects 确认存在"
+        description="新的项目名（用于移动任务）。先通过 todo_list_projects 确认存在",
     )
 
 
@@ -82,7 +80,9 @@ class TodoUpdateTool(ToolBase):
                 else:
                     due_date_obj = self.helper.parse_date(due_date)
                     if due_date_obj is None:
-                        return format_error("due_date 格式错误，应为 YYYY-MM-DD 或 YYYY-MM-DD HH:MM")
+                        return format_error(
+                            "due_date 格式错误，应为 YYYY-MM-DD 或 YYYY-MM-DD HH:MM"
+                        )
 
             task = api.update_task(
                 task_id=task_id,
@@ -90,12 +90,14 @@ class TodoUpdateTool(ToolBase):
                 priority=priority,
                 due_date=due_date_obj,
             )
-            return format_success({
-                "task_id": task.id,
-                "content": task.content,
-                "due_date": self.helper.format_due_date(task),
-                "priority": task.priority,
-                "project": self.helper.get_project_name(task.project_id),
-            })
+            return format_success(
+                {
+                    "task_id": task.id,
+                    "content": task.content,
+                    "due_date": self.helper.format_due_date(task),
+                    "priority": task.priority,
+                    "project": self.helper.get_project_name(task.project_id),
+                }
+            )
         except Exception as e:
             return format_error(f"任务不存在或更新失败: {e}")

@@ -36,10 +36,7 @@ class TodoListProjectsTool(ToolBase):
         for projects in api.get_projects():
             all_projects.extend(projects)
 
-        project_list = [
-            {"project_id": p.id, "name": p.name}
-            for p in all_projects
-        ]
+        project_list = [{"project_id": p.id, "name": p.name} for p in all_projects]
         project_list.sort(key=lambda x: x["project_id"])
 
         return format_success({"total": len(project_list), "projects": project_list})

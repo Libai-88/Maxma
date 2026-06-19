@@ -81,28 +81,26 @@ class SessionManager:
     def list_sessions(self) -> list[dict]:
         result = []
         for s in self._sessions.values():
-            has_active = (
-                s._active_task is not None
-                and not s._active_task.done()
+            has_active = s._active_task is not None and not s._active_task.done()
+            result.append(
+                {
+                    "session_id": s.session_id,
+                    "message_count": s.message_count,
+                    "created_at": s.created_at,
+                    "last_active": s.last_active,
+                    "has_active_agent": has_active,
+                    "is_subagent": s.is_subagent,
+                    "is_const": s.is_const,
+                    "const_name": s.const_name,
+                }
             )
-            result.append({
-                "session_id": s.session_id,
-                "message_count": s.message_count,
-                "created_at": s.created_at,
-                "last_active": s.last_active,
-                "has_active_agent": has_active,
-                "is_subagent": s.is_subagent,
-                "is_const": s.is_const,
-                "const_name": s.const_name,
-            })
         result.sort(key=lambda x: x["last_active"], reverse=True)
         return result
 
     def cleanup_expired(self) -> int:
         now = time.time()
         expired = [
-            sid for sid, s in self._sessions.items()
-            if now - s.last_active > self._ttl
+            sid for sid, s in self._sessions.items() if now - s.last_active > self._ttl
         ]
         for sid in expired:
             del self._sessions[sid]

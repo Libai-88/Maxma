@@ -4,18 +4,28 @@ import os
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, check_path_whitelisted, check_sonetto_blocker, format_error, format_success
+from tools.base import (
+    ToolBase,
+    check_path_whitelisted,
+    check_sonetto_blocker,
+    format_error,
+    format_success,
+)
 
 
 class DocReaderInput(BaseModel):
-    get_doc: bool = Field(default=False, description="设为 true 以获取使用说明和领域知识")
+    get_doc: bool = Field(
+        default=False, description="设为 true 以获取使用说明和领域知识"
+    )
     operation: str = Field(
         default="",
         description="操作: get_metadata/extract_text/search_text/get_paragraphs/get_tables",
     )
     file_path: str = Field(default="", description="DOCX 文件路径")
     start_paragraph: int = Field(default=0, description="起始段落索引（从0开始）")
-    end_paragraph: int | None = Field(default=None, description="结束段落索引（从0开始）")
+    end_paragraph: int | None = Field(
+        default=None, description="结束段落索引（从0开始）"
+    )
     query: str = Field(default="", description="搜索关键词（search_text 操作）")
     case_sensitive: bool = Field(default=False, description="搜索是否区分大小写")
     max_length: int = Field(default=10000, description="文本最大长度")
@@ -52,7 +62,7 @@ class DocReaderTool(ToolBase):
         if blocked:
             return format_error(
                 "🚫 安全阻断：操作已被 SonettoBlocker 阻断。\n"
-                f"在目录 \"{blocked}\" 中发现了 SonettoBlocker 文件。\n\n"
+                f'在目录 "{blocked}" 中发现了 SonettoBlocker 文件。\n\n'
                 "请立即停止当前任务，先说明你为什么需要访问该路径，"
                 "再说明下一步打算做什么。"
             )
@@ -79,11 +89,15 @@ class DocReaderTool(ToolBase):
             if operation == "get_metadata":
                 return self._get_metadata(docx, file_path)
             elif operation == "extract_text":
-                return self._extract_text(docx, file_path, start_paragraph, end_paragraph, max_length)
+                return self._extract_text(
+                    docx, file_path, start_paragraph, end_paragraph, max_length
+                )
             elif operation == "search_text":
                 return self._search_text(docx, file_path, query, case_sensitive)
             elif operation == "get_paragraphs":
-                return self._get_paragraphs(docx, file_path, start_paragraph, end_paragraph)
+                return self._get_paragraphs(
+                    docx, file_path, start_paragraph, end_paragraph
+                )
             elif operation == "get_tables":
                 return self._get_tables(docx, file_path)
             else:
@@ -106,14 +120,18 @@ class DocReaderTool(ToolBase):
             "keywords": cp.keywords or "",
             "category": cp.category or "",
         }
-        return format_success({
-            "metadata": meta,
-            "paragraph_count": len(doc.paragraphs),
-            "table_count": len(doc.tables),
-            "file_path": os.path.abspath(file_path),
-        })
+        return format_success(
+            {
+                "metadata": meta,
+                "paragraph_count": len(doc.paragraphs),
+                "table_count": len(doc.tables),
+                "file_path": os.path.abspath(file_path),
+            }
+        )
 
-    def _extract_text(self, docx, file_path: str, start: int, end: int | None, max_length: int) -> str:
+    def _extract_text(
+        self, docx, file_path: str, start: int, end: int | None, max_length: int
+    ) -> str:
         doc = docx.Document(file_path)
         total = len(doc.paragraphs)
 
@@ -131,14 +149,18 @@ class DocReaderTool(ToolBase):
         if len(text) > max_length:
             text = text[:max_length] + "\n\n[内容已截断]"
 
-        return format_success({
-            "text": text,
-            "paragraph_range": [start, end],
-            "total_paragraphs": total,
-            "text_length": len(text),
-        })
+        return format_success(
+            {
+                "text": text,
+                "paragraph_range": [start, end],
+                "total_paragraphs": total,
+                "text_length": len(text),
+            }
+        )
 
-    def _search_text(self, docx, file_path: str, query: str, case_sensitive: bool) -> str:
+    def _search_text(
+        self, docx, file_path: str, query: str, case_sensitive: bool
+    ) -> str:
         if not query:
             return format_error("请提供搜索关键词")
 
@@ -151,18 +173,22 @@ class DocReaderTool(ToolBase):
                 continue
             check = para.text if case_sensitive else para.text.lower()
             if q in check:
-                results.append({
-                    "paragraph_index": idx,
-                    "paragraph_number": idx + 1,
-                    "content": para.text.strip(),
-                })
+                results.append(
+                    {
+                        "paragraph_index": idx,
+                        "paragraph_number": idx + 1,
+                        "content": para.text.strip(),
+                    }
+                )
 
-        return format_success({
-            "query": query,
-            "total_paragraphs": len(doc.paragraphs),
-            "results": results,
-            "total_matches": len(results),
-        })
+        return format_success(
+            {
+                "query": query,
+                "total_paragraphs": len(doc.paragraphs),
+                "results": results,
+                "total_matches": len(results),
+            }
+        )
 
     def _get_paragraphs(self, docx, file_path: str, start: int, end: int | None) -> str:
         doc = docx.Document(file_path)
@@ -176,29 +202,35 @@ class DocReaderTool(ToolBase):
         paras = []
         for i in range(start, end + 1):
             p = doc.paragraphs[i]
-            paras.append({
-                "index": i,
-                "number": i + 1,
-                "text": p.text,
-                "style": p.style.name if p.style else None,
-            })
+            paras.append(
+                {
+                    "index": i,
+                    "number": i + 1,
+                    "text": p.text,
+                    "style": p.style.name if p.style else None,
+                }
+            )
 
-        return format_success({
-            "paragraphs": paras,
-            "paragraph_range": [start, end],
-            "total_paragraphs": total,
-        })
+        return format_success(
+            {
+                "paragraphs": paras,
+                "paragraph_range": [start, end],
+                "total_paragraphs": total,
+            }
+        )
 
     def _get_tables(self, docx, file_path: str) -> str:
         doc = docx.Document(file_path)
         tables = []
         for idx, table in enumerate(doc.tables):
             data = [[cell.text for cell in row.cells] for row in table.rows]
-            tables.append({
-                "index": idx,
-                "rows": len(table.rows),
-                "columns": len(table.columns),
-                "data": data,
-            })
+            tables.append(
+                {
+                    "index": idx,
+                    "rows": len(table.rows),
+                    "columns": len(table.columns),
+                    "data": data,
+                }
+            )
 
         return format_success({"tables": tables, "total_tables": len(tables)})

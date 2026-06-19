@@ -75,13 +75,16 @@ def fail(msg):
 def _npm_cmd():
     return ["npm"]
 
+
 def _node_cmd():
     return ["node"]
 
 
 def check_nodejs():
     try:
-        r = subprocess.run(_node_cmd() + ["--version"], capture_output=True, text=True, shell=True)
+        r = subprocess.run(
+            _node_cmd() + ["--version"], capture_output=True, text=True, shell=True
+        )
         if r.returncode != 0:
             return fail("未找到 Node.js，请从 https://nodejs.org/ 下载安装")
         ver = r.stdout.strip()
@@ -121,7 +124,9 @@ def setup_frontend():
         return True
 
     print("  正在安装前端 npm 包 ...")
-    r = subprocess.run(_npm_cmd() + ["install"], cwd=os.path.join(PROJECT_ROOT, "web"), shell=True)
+    r = subprocess.run(
+        _npm_cmd() + ["install"], cwd=os.path.join(PROJECT_ROOT, "web"), shell=True
+    )
     if r.returncode != 0:
         return fail("npm install 失败")
     ok("前端依赖已安装")
@@ -139,7 +144,9 @@ def setup_env():
     if os.path.exists(example_path):
         shutil.copy2(example_path, env_path)
         ok("已从 .env.example 创建 .env")
-        print("       您可以编辑 .env 填入你的 API 密钥（Todoist、高德、Tavily 等）供工具使用")
+        print(
+            "       您可以编辑 .env 填入你的 API 密钥（Todoist、高德、Tavily 等）供工具使用"
+        )
     else:
         print("  [!] 未找到 .env.example，如有需要请手动创建 .env")
     return True
@@ -196,9 +203,7 @@ def setup_provider():
             continue
 
         models = [
-            m["id"]
-            for m in data.get("data", [])
-            if isinstance(m, dict) and "id" in m
+            m["id"] for m in data.get("data", []) if isinstance(m, dict) and "id" in m
         ]
         if not models:
             print("  [✗] 连接成功但未获取到模型列表，请检查 Base URL 是否正确")
@@ -259,7 +264,9 @@ def setup_persona():
     }
 
     print()
-    name = input('  你希望 Sonetto 怎么称呼你？（直接按 Enter 则默认为”朋友”）: ').strip()
+    name = input(
+        "  你希望 Sonetto 怎么称呼你？（直接按 Enter 则默认为”朋友”）: "
+    ).strip()
     if not name:
         name = "朋友"
     ok(f"好的，Sonetto 之后会称呼你为「{name}」")
@@ -300,10 +307,14 @@ def summary():
     print()
     print("  [✓] Python 依赖已安装")
     print("  [✓] 前端依赖已安装")
-    print(f"  [{'✓' if env_ok else '−'}] .env "
-          f"{'已就绪' if env_ok else '— 请从 .env.example 创建'}")
-    print(f"  [{'✓' if prov_ok else '−'}] LLM 提供商 "
-          f"{'已配置' if prov_ok else '— 请启动后在 /providers 页面添加'}")
+    print(
+        f"  [{'✓' if env_ok else '−'}] .env "
+        f"{'已就绪' if env_ok else '— 请从 .env.example 创建'}"
+    )
+    print(
+        f"  [{'✓' if prov_ok else '−'}] LLM 提供商 "
+        f"{'已配置' if prov_ok else '— 请启动后在 /providers 页面添加'}"
+    )
     print("  [✓] AI 个性文件已配置")
     print()
     print("  接下来：")

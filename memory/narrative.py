@@ -18,6 +18,7 @@ def _sanitize(text: str) -> str:
     """将多行文本折叠为单行，防止破坏 YAML 格式。"""
     return text.replace("\n", " ").replace("\r", " ")
 
+
 PERSONAS_DIR = Path(__file__).resolve().parent.parent / "config" / "personas"
 MEMORY_PATH = PERSONAS_DIR / "memory.yaml"
 
@@ -297,15 +298,21 @@ class LongTermMemoryInterface:
 
                 if items:
                     system_prompt = UPDATE_SYSTEM
-                    user_prompt = (
-                        f"## 新一轮对话\n{messages_text}"
-                    )
+                    user_prompt = f"## 新一轮对话\n{messages_text}"
                 else:
                     system_prompt = COLD_START_SYSTEM
                     user_prompt = messages_text
 
                 now = datetime.now()
-                weekday_cn = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"][now.weekday()]
+                weekday_cn = [
+                    "星期一",
+                    "星期二",
+                    "星期三",
+                    "星期四",
+                    "星期五",
+                    "星期六",
+                    "星期日",
+                ][now.weekday()]
                 time_suffix = (
                     f"\n\n## 当前时间\n"
                     f"日期: {now.strftime('%Y-%m-%d')}  {weekday_cn}\n"
@@ -313,7 +320,13 @@ class LongTermMemoryInterface:
                 )
                 user_prompt = user_prompt + time_suffix
 
-                crud_tools = [create_memory, read_memories, update_memory, delete_memory, merge_memories]
+                crud_tools = [
+                    create_memory,
+                    read_memories,
+                    update_memory,
+                    delete_memory,
+                    merge_memories,
+                ]
 
                 agent = create_react_agent(
                     model=llm,

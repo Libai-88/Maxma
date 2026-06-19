@@ -7,7 +7,9 @@ from tools.map.map_api import parse_poi_response
 
 
 class FuzzyAddressInput(BaseModel):
-    get_doc: bool = Field(default=False, description="设为 true 以获取使用说明和领域知识")
+    get_doc: bool = Field(
+        default=False, description="设为 true 以获取使用说明和领域知识"
+    )
     keywords: str = Field(default="", description="搜索关键字，如'北京大学'、'肯德基'")
     city: str | None = Field(default=None, description="限定城市，如'北京'")
     types: str | None = Field(default=None, description="POI类型码，如'050000'（餐饮）")
@@ -58,12 +60,14 @@ class FuzzyAddressTool(ToolBase):
             result = parse_poi_response(data)
 
             if result["status"] == "1":
-                return format_success({
-                    "keywords": keywords,
-                    "city": city,
-                    "count": result["count"],
-                    "pois": result["pois"],
-                })
+                return format_success(
+                    {
+                        "keywords": keywords,
+                        "city": city,
+                        "count": result["count"],
+                        "pois": result["pois"],
+                    }
+                )
             return format_error(f"模糊搜索失败: {result.get('info', '未知错误')}")
         except Exception as e:
             return format_error(f"模糊搜索异常: {e}")

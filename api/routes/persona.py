@@ -25,7 +25,9 @@ class PersonaUpdateRequest(BaseModel):
 async def get_persona(type: str = Query(..., description="soul 或 user")):
     t = type.lower()
     if t not in VALID_TYPES:
-        raise HTTPException(status_code=400, detail=f"无效 type: {type}，仅支持 soul/user")
+        raise HTTPException(
+            status_code=400, detail=f"无效 type: {type}，仅支持 soul/user"
+        )
     path = PERSONAS_DIR / VALID_TYPES[t]
     content = path.read_text(encoding="utf-8") if path.exists() else ""
     return PersonaResponse(content=content, type=t)
@@ -38,7 +40,9 @@ async def update_persona(
 ):
     t = type.lower()
     if t not in VALID_TYPES:
-        raise HTTPException(status_code=400, detail=f"无效 type: {type}，仅支持 soul/user")
+        raise HTTPException(
+            status_code=400, detail=f"无效 type: {type}，仅支持 soul/user"
+        )
     path = PERSONAS_DIR / VALID_TYPES[t]
     path.write_text(body.content, encoding="utf-8")
     return PersonaResponse(content=body.content, type=t)

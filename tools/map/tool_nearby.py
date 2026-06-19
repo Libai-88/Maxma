@@ -7,7 +7,9 @@ from tools.map.map_api import parse_poi_response
 
 
 class NearbySearchInput(BaseModel):
-    get_doc: bool = Field(default=False, description="设为 true 以获取使用说明和领域知识")
+    get_doc: bool = Field(
+        default=False, description="设为 true 以获取使用说明和领域知识"
+    )
     location: str = Field(default="", description='中心点坐标，格式为"经度,纬度"')
     keywords: str | None = Field(default=None, description="搜索关键字，如'肯德基'")
     types: str | None = Field(default=None, description="POI类型码，如'050000'（餐饮）")
@@ -62,13 +64,15 @@ class NearbySearchTool(ToolBase):
             result = parse_poi_response(data)
 
             if result["status"] == "1":
-                return format_success({
-                    "location": location,
-                    "keywords": keywords,
-                    "radius": radius,
-                    "count": result["count"],
-                    "pois": result["pois"],
-                })
+                return format_success(
+                    {
+                        "location": location,
+                        "keywords": keywords,
+                        "radius": radius,
+                        "count": result["count"],
+                        "pois": result["pois"],
+                    }
+                )
             return format_error(f"附近搜索失败: {result.get('info', '未知错误')}")
         except Exception as e:
             return format_error(f"附近搜索异常: {e}")

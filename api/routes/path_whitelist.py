@@ -38,7 +38,9 @@ def _load() -> list[dict]:
 
 def _save(entries: list[dict]) -> None:
     with open(WHITELIST_PATH, "w", encoding="utf-8") as f:
-        yaml.dump({"whitelist": entries}, f, allow_unicode=True, default_flow_style=False)
+        yaml.dump(
+            {"whitelist": entries}, f, allow_unicode=True, default_flow_style=False
+        )
 
 
 @router.get("/path-whitelist", response_model=WhitelistResponse)

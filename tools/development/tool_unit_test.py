@@ -9,10 +9,14 @@ from tools.base import ToolBase, check_path_whitelisted, format_error, format_su
 
 
 class UnitTestInput(BaseModel):
-    get_doc: bool = Field(default=False, description="设为 true 以获取使用说明和领域知识")
+    get_doc: bool = Field(
+        default=False, description="设为 true 以获取使用说明和领域知识"
+    )
     test_file: str = Field(default="", description="测试文件路径")
     test_class: str = Field(default="", description="特定测试类名（可选）")
-    test_method: str = Field(default="", description="特定测试方法名（可选，需配合 test_class）")
+    test_method: str = Field(
+        default="", description="特定测试方法名（可选，需配合 test_class）"
+    )
 
 
 class UnitTestTool(ToolBase):
@@ -68,7 +72,9 @@ class UnitTestTool(ToolBase):
                 "errors": errors,
                 "skipped": skipped,
                 "successful": total - failures - errors - skipped,
-                "success_rate": (total - failures - errors) / total * 100 if total > 0 else 0,
+                "success_rate": (total - failures - errors) / total * 100
+                if total > 0
+                else 0,
             }
 
             if result.failures:

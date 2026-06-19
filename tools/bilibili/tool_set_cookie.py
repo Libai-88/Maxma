@@ -11,7 +11,10 @@ COOKIE_FILE = os.path.join(os.path.dirname(__file__), "cookie.txt")
 
 class SetCookieInput(BaseModel):
     get_doc: bool = Field(default=False, description="设为 true 以获取使用说明")
-    cookie: str = Field(default="", description="完整的 B 站 Cookie 字符串，从浏览器开发者工具 Application > Cookies 复制")
+    cookie: str = Field(
+        default="",
+        description="完整的 B 站 Cookie 字符串，从浏览器开发者工具 Application > Cookies 复制",
+    )
 
 
 class BilibiliSetCookieTool(ToolBase):

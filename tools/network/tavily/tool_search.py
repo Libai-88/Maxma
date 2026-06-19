@@ -95,12 +95,14 @@ class TavilySearchTool(ToolBase):
             result = self._tavily_client.search(**params)
 
             # Tavily 返回格式: { query, answer, results: [...], response_time }
-            return format_success({
-                "query": result.get("query", query),
-                "answer": result.get("answer", ""),
-                "results": result.get("results", []),
-                "response_time": result.get("response_time", 0),
-            })
+            return format_success(
+                {
+                    "query": result.get("query", query),
+                    "answer": result.get("answer", ""),
+                    "results": result.get("results", []),
+                    "response_time": result.get("response_time", 0),
+                }
+            )
 
         except Exception as e:
             return format_error(f"Tavily 搜索失败: {e!s}")

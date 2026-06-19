@@ -8,10 +8,15 @@ from tools.base import ToolBase, check_path_whitelisted, format_error, format_su
 
 
 class CodeQualityInput(BaseModel):
-    get_doc: bool = Field(default=False, description="设为 true 以获取使用说明和领域知识")
+    get_doc: bool = Field(
+        default=False, description="设为 true 以获取使用说明和领域知识"
+    )
     code: str = Field(default="", description="需要分析的 Python 代码")
     file_path: str = Field(default="", description="代码文件路径（可选，优先于 code）")
-    analysis_type: str = Field(default="all", description="分析类型: complexity/maintainability/duplication/all")
+    analysis_type: str = Field(
+        default="all",
+        description="分析类型: complexity/maintainability/duplication/all",
+    )
 
 
 class CodeQualityTool(ToolBase):
@@ -63,9 +68,14 @@ class CodeQualityTool(ToolBase):
 
         class FuncVisitor(ast.NodeVisitor):
             def visit_FunctionDef(self, node):
-                functions.append({"name": node.name, "line": node.lineno, "endline": node.end_lineno})
+                functions.append(
+                    {"name": node.name, "line": node.lineno, "endline": node.end_lineno}
+                )
+
             def visit_AsyncFunctionDef(self, node):
-                functions.append({"name": node.name, "line": node.lineno, "endline": node.end_lineno})
+                functions.append(
+                    {"name": node.name, "line": node.lineno, "endline": node.end_lineno}
+                )
 
         FuncVisitor().visit(tree)
 
@@ -75,7 +85,12 @@ class CodeQualityTool(ToolBase):
             total = sum(f.get("endline", 0) - f.get("line", 0) + 1 for f in functions)
             avg_len = total / len(functions)
 
-        return {"total_lines": total_lines, "function_count": len(functions), "avg_function_length": avg_len, "functions": functions}
+        return {
+            "total_lines": total_lines,
+            "function_count": len(functions),
+            "avg_function_length": avg_len,
+            "functions": functions,
+        }
 
     def _analyze_maintainability(self, code: str) -> dict:
         lines = code.split("\n")
@@ -116,7 +131,12 @@ class CodeQualityTool(ToolBase):
         elif camel > 0:
             score += 15
 
-        return {"comment_ratio": comment_ratio, "snake_case_count": snake, "camel_case_count": camel, "maintainability_score": min(score, 100)}
+        return {
+            "comment_ratio": comment_ratio,
+            "snake_case_count": snake,
+            "camel_case_count": camel,
+            "maintainability_score": min(score, 100),
+        }
 
     def _analyze_duplication(self, code: str) -> dict:
         lines = code.split("\n")
@@ -129,4 +149,8 @@ class CodeQualityTool(ToolBase):
         dups = [{"line": ln, "count": c} for ln, c in counts.items() if c > 1]
         ratio = len(dups) / len(lines) if lines else 0
 
-        return {"duplicate_lines": len(dups), "duplicate_ratio": ratio, "duplicates": dups[:10]}
+        return {
+            "duplicate_lines": len(dups),
+            "duplicate_ratio": ratio,
+            "duplicates": dups[:10],
+        }

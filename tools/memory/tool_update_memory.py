@@ -9,12 +9,19 @@ from tools.base import ToolBase, format_error, format_success
 
 class UpdateMemoryInput(BaseModel):
     get_doc: bool = Field(default=False, description="设为 true 以获取使用说明")
-    id: str = Field(default="", description="要更新的记忆 ID（来自 read_memories 的输出）")
+    id: str = Field(
+        default="", description="要更新的记忆 ID（来自 read_memories 的输出）"
+    )
     content: str = Field(default="", description="更新后的完整记忆内容")
     reason: str = Field(default="", description="修改原因，说明为什么要更新这条记忆")
 
 
-MEMORY_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "personas" / "memory.yaml"
+MEMORY_PATH = (
+    Path(__file__).resolve().parent.parent.parent
+    / "config"
+    / "personas"
+    / "memory.yaml"
+)
 
 
 class UpdateMemoryTool(ToolBase):
@@ -25,7 +32,9 @@ class UpdateMemoryTool(ToolBase):
     )
     args_schema: type[BaseModel] = UpdateMemoryInput
 
-    def _run(self, get_doc: bool = False, id: str = "", content: str = "", reason: str = "") -> str:
+    def _run(
+        self, get_doc: bool = False, id: str = "", content: str = "", reason: str = ""
+    ) -> str:
         if get_doc:
             return self._load_doc()
 
@@ -42,10 +51,14 @@ class UpdateMemoryTool(ToolBase):
         try:
             mm.update(id, reason=reason, new_description=content)
         except ValueError:
-            return format_error(f"未找到 ID 为 {id} 的记忆条目。请先调用 read_memories 确认 ID。")
-        return format_success({
-            "id": id,
-            "content": content,
-            "reason": reason,
-            "message": f"已更新 [{id}]: {content}",
-        })
+            return format_error(
+                f"未找到 ID 为 {id} 的记忆条目。请先调用 read_memories 确认 ID。"
+            )
+        return format_success(
+            {
+                "id": id,
+                "content": content,
+                "reason": reason,
+                "message": f"已更新 [{id}]: {content}",
+            }
+        )

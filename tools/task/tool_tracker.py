@@ -16,7 +16,9 @@ class TodoItem(BaseModel):
 
 class TaskTrackerInput(BaseModel):
     get_doc: bool = Field(default=False, description="设为 true 以获取使用说明")
-    todos: list[TodoItem] | None = Field(default=None, description="全量任务清单，每次传入完整列表")
+    todos: list[TodoItem] | None = Field(
+        default=None, description="全量任务清单，每次传入完整列表"
+    )
 
 
 class TaskTrackerTool(ToolBase):
@@ -48,11 +50,13 @@ class TaskTrackerTool(ToolBase):
             None,
         )
 
-        return format_success({
-            "total": total,
-            "pending": pending,
-            "in_progress": in_progress_count,
-            "completed": completed,
-            "current_task": current_task,
-            "todos": [t.model_dump() for t in todos],
-        })
+        return format_success(
+            {
+                "total": total,
+                "pending": pending,
+                "in_progress": in_progress_count,
+                "completed": completed,
+                "current_task": current_task,
+                "todos": [t.model_dump() for t in todos],
+            }
+        )

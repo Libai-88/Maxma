@@ -19,7 +19,10 @@ def _find_deepseek_api_key(request: Request) -> str:
         if "deepseek" in lid and config.api_key:
             return config.api_key
 
-    raise HTTPException(status_code=400, detail="DeepSeek provider not configured. Add one via the providers panel.")
+    raise HTTPException(
+        status_code=400,
+        detail="DeepSeek provider not configured. Add one via the providers panel.",
+    )
 
 
 @router.get("/deepseek-balance")
@@ -40,4 +43,3 @@ async def get_deepseek_balance(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"DeepSeek API error: {e}")
     return data
-

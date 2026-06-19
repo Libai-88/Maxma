@@ -107,7 +107,9 @@ async def lifespan(app: FastAPI):
         app.state.llm = get_llm(provider_manager)
     except RuntimeError as e:
         print(f"[llm] {e}")
-        print("[llm] No LLM configured — chat will be read-only until a provider is added")
+        print(
+            "[llm] No LLM configured — chat will be read-only until a provider is added"
+        )
         app.state.llm = None
     app.state.system_prompt = get_system_prompt()
     app.state.native_tools = get_tools()

@@ -27,7 +27,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # 尝试从请求头或查询参数获取 Token
         token = request.headers.get("x-sonetto-token", "")
         if not token:
-            token = request.url.query.split("token=")[-1].split("&")[0] if "token=" in request.url.query else ""
+            token = (
+                request.url.query.split("token=")[-1].split("&")[0]
+                if "token=" in request.url.query
+                else ""
+            )
 
         expected = request.app.state.auth_token
         if not expected or token != expected:

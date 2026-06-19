@@ -6,10 +6,14 @@ from tools.base import ToolBase, format_error, format_success
 
 
 class WeatherInput(BaseModel):
-    get_doc: bool = Field(default=False, description="设为 true 以获取使用说明和领域知识")
+    get_doc: bool = Field(
+        default=False, description="设为 true 以获取使用说明和领域知识"
+    )
     city: str = Field(default="", description="城市名称，如'北京'、'Shanghai'")
     adcode: str = Field(default="", description="行政区划代码，如'110000'")
-    extended: bool = Field(default=False, description="返回体感温度/能见度/气压/紫外线/AQI等扩展信息")
+    extended: bool = Field(
+        default=False, description="返回体感温度/能见度/气压/紫外线/AQI等扩展信息"
+    )
     forecast: bool = Field(default=False, description="返回最多7天预报")
     hourly: bool = Field(default=False, description="返回24小时逐小时预报")
     minutely: bool = Field(default=False, description="返回分钟级降水预报（仅国内）")

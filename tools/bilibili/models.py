@@ -32,6 +32,7 @@ QUALITY_ALIAS = {
 
 class VideoInfo(BaseModel):
     """从 B 站页面解析出的视频元信息。"""
+
     url: str
     title: str = ""
     quality_id: int = 0

@@ -22,10 +22,20 @@ class AskUserSingleChoiceTool(ToolBase):
     )
     args_schema: type[BaseModel] = AskUserSingleChoiceInput
 
-    def _run(self, get_doc: bool = False, question: str = "", options: list[str] | None = None) -> str:
+    def _run(
+        self,
+        get_doc: bool = False,
+        question: str = "",
+        options: list[str] | None = None,
+    ) -> str:
         raise NotImplementedError("ask_user_single_choice 仅支持异步模式")
 
-    async def _arun(self, get_doc: bool = False, question: str = "", options: list[str] | None = None) -> str:
+    async def _arun(
+        self,
+        get_doc: bool = False,
+        question: str = "",
+        options: list[str] | None = None,
+    ) -> str:
         if get_doc:
             return self._load_doc()
         if not question:
@@ -37,20 +47,24 @@ class AskUserSingleChoiceTool(ToolBase):
 
         interaction_id, future = interaction.register()
 
-        await ws.send_json({
-            "type": "ask_user",
-            "payload": {
-                "tool_name": self.name,
-                "question": question,
-                "mode": "single_choice",
-                "options": options,
-                "interaction_id": interaction_id,
-            },
-        })
+        await ws.send_json(
+            {
+                "type": "ask_user",
+                "payload": {
+                    "tool_name": self.name,
+                    "question": question,
+                    "mode": "single_choice",
+                    "options": options,
+                    "interaction_id": interaction_id,
+                },
+            }
+        )
 
         try:
             answer = await future
-            return format_success({"question": question, "answer": answer, "options": options})
+            return format_success(
+                {"question": question, "answer": answer, "options": options}
+            )
         except asyncio.CancelledError:
             return format_error("用户取消了回复")
         finally:

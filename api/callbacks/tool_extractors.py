@@ -20,24 +20,30 @@ _PREFIX_REGISTRY: list[tuple[str, Handler]] = []
 
 def register(tool_name: str) -> Callable[[Handler], Handler]:
     """精确匹配注册装饰器。"""
+
     def decorator(fn: Handler) -> Handler:
         _REGISTRY[tool_name] = fn
         return fn
+
     return decorator
 
 
 def register_prefix(prefix: str) -> Callable[[Handler], Handler]:
     """前缀匹配注册装饰器（如 todo_*）。"""
+
     def decorator(fn: Handler) -> Handler:
         _PREFIX_REGISTRY.append((prefix, fn))
         return fn
+
     return decorator
 
 
 # ── Dispatch ───────────────────────────────────────────────────────────
 
-def _dispatch(tool_name: str, parsed: dict[str, Any],
-              tool_input: str | None = None) -> dict[str, Any] | None:
+
+def _dispatch(
+    tool_name: str, parsed: dict[str, Any], tool_input: str | None = None
+) -> dict[str, Any] | None:
     handler = _REGISTRY.get(tool_name)
     if handler:
         return handler(tool_name, parsed, tool_input)
@@ -50,6 +56,7 @@ def _dispatch(tool_name: str, parsed: dict[str, Any],
 
 
 # ── Helper ─────────────────────────────────────────────────────────────
+
 
 def _get_data(parsed: dict[str, Any]) -> dict[str, Any] | None:
     """提取 parsed['data'] 并校验为 dict。success=false 时视为错误返回 None。"""
@@ -65,9 +72,12 @@ def _get_data(parsed: dict[str, Any]) -> dict[str, Any] | None:
 
 # ── Bilibili 下载 ──────────────────────────────────────────────────────
 
+
 @register("bilibili_download")
 def _extract_bilibili(
-    _tool_name: str, parsed: dict[str, Any], _tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 video_title, cover_url, file_path, quality。"""
     data = _get_data(parsed)
@@ -84,9 +94,12 @@ def _extract_bilibili(
 
 # ── Todo 系列 ──────────────────────────────────────────────────────────
 
+
 @register("todo_list")
 def _extract_todo_list(
-    _tool_name: str, parsed: dict[str, Any], _tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 tool_type=task_list, total, tasks。"""
     data = _get_data(parsed)
@@ -102,7 +115,9 @@ def _extract_todo_list(
 
 @register("todo_list_projects")
 def _extract_todo_projects(
-    _tool_name: str, parsed: dict[str, Any], _tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 tool_type=project_list, total, projects。"""
     data = _get_data(parsed)
@@ -118,15 +133,24 @@ def _extract_todo_projects(
 
 @register_prefix("todo_")
 def _extract_todo_generic(
-    tool_name: str, parsed: dict[str, Any], _tool_input: str | None = None,
+    tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 tool_type=single_task, task_id, content, due_date, priority, project, message, is_completed。"""
     data = _get_data(parsed)
     if data is None:
         return None
     result: dict[str, Any] = {"tool_type": "single_task"}
-    for field in ("task_id", "content", "due_date", "priority",
-                  "project", "message", "is_completed"):
+    for field in (
+        "task_id",
+        "content",
+        "due_date",
+        "priority",
+        "project",
+        "message",
+        "is_completed",
+    ):
         if field in data:
             result[field] = data[field]
     return result
@@ -134,9 +158,12 @@ def _extract_todo_generic(
 
 # ── Task Tracker ───────────────────────────────────────────────────────
 
+
 @register("task_tracker")
 def _extract_task_tracker(
-    _tool_name: str, parsed: dict[str, Any], _tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 tool_type, total, pending, in_progress, completed, current_task, todos。"""
     data = _get_data(parsed)
@@ -158,9 +185,12 @@ def _extract_task_tracker(
 
 # ── Python 执行 ────────────────────────────────────────────────────────
 
+
 @register("run_python")
 def _extract_run_python(
-    _tool_name: str, parsed: dict[str, Any], tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 tool_type, stdout, code。"""
     data = _get_data(parsed)
@@ -185,9 +215,12 @@ def _extract_run_python(
 
 # ── 文件操作 ────────────────────────────────────────────────────────────
 
+
 @register("file_operations")
 def _extract_file_operations(
-    _tool_name: str, parsed: dict[str, Any], tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """按 operation (read_file / write_file / list_directory / search_files) 返回不同字段。"""
     data = _get_data(parsed)
@@ -234,11 +267,13 @@ def _extract_file_operations(
         items_raw = data.get("items", [])
         items = []
         for item in items_raw if isinstance(items_raw, list) else []:
-            items.append({
-                "name": item.get("name", ""),
-                "type": "directory" if item.get("is_dir") else "file",
-                "size_bytes": item.get("size", 0),
-            })
+            items.append(
+                {
+                    "name": item.get("name", ""),
+                    "type": "directory" if item.get("is_dir") else "file",
+                    "size_bytes": item.get("size", 0),
+                }
+            )
         return {
             "operation": "list_directory",
             "directory_path": directory,
@@ -251,11 +286,13 @@ def _extract_file_operations(
         items_raw = data.get("found_files", [])
         items = []
         for item in items_raw if isinstance(items_raw, list) else []:
-            items.append({
-                "name": item.get("name", ""),
-                "type": "directory" if item.get("is_dir") else "file",
-                "size_bytes": item.get("size", 0),
-            })
+            items.append(
+                {
+                    "name": item.get("name", ""),
+                    "type": "directory" if item.get("is_dir") else "file",
+                    "size_bytes": item.get("size", 0),
+                }
+            )
         return {
             "operation": "search_files",
             "search_directory": directory,
@@ -268,9 +305,12 @@ def _extract_file_operations(
 
 # ── 文件精确编辑 ────────────────────────────────────────────────────────
 
+
 @register("file_edit")
 def _extract_file_edit(
-    _tool_name: str, parsed: dict[str, Any], tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """按 operation 返回不同字段：edit → old/new/replaced_count；read → lines；search → matches。"""
     data = _get_data(parsed)
@@ -333,9 +373,12 @@ def _extract_file_edit(
 
 # ── 塔罗占卜 ───────────────────────────────────────────────────────────
 
+
 @register("tarot")
 def _extract_tarot(
-    _tool_name: str, parsed: dict[str, Any], _tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 tool_type, question, spread_type, spread_name, cards_count, cards。"""
     data = _get_data(parsed)
@@ -347,17 +390,19 @@ def _extract_tarot(
         for card in cards_raw:
             if not isinstance(card, dict):
                 continue
-            cards.append({
-                "name": card.get("name", ""),
-                "name_en": card.get("name_en", ""),
-                "suit": card.get("suit", ""),
-                "element": card.get("element", ""),
-                "keywords": card.get("keywords", []),
-                "position": card.get("position", ""),
-                "status": card.get("status", ""),
-                "meaning": card.get("meaning", []),
-                "description": card.get("description", ""),
-            })
+            cards.append(
+                {
+                    "name": card.get("name", ""),
+                    "name_en": card.get("name_en", ""),
+                    "suit": card.get("suit", ""),
+                    "element": card.get("element", ""),
+                    "keywords": card.get("keywords", []),
+                    "position": card.get("position", ""),
+                    "status": card.get("status", ""),
+                    "meaning": card.get("meaning", []),
+                    "description": card.get("description", ""),
+                }
+            )
     return {
         "tool_type": "tarot",
         "question": data.get("question", ""),
@@ -370,9 +415,12 @@ def _extract_tarot(
 
 # ── 答案之书 ───────────────────────────────────────────────────────────
 
+
 @register("answer_book")
 def _extract_answer_book(
-    _tool_name: str, parsed: dict[str, Any], _tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 tool_type, question, answer。"""
     data = _get_data(parsed)
@@ -387,10 +435,13 @@ def _extract_answer_book(
 
 # ── 地图系列 ───────────────────────────────────────────────────────────
 
+
 @register("nearby_search")
 @register("fuzzy_address_search")
 def _extract_map_search(
-    tool_name: str, parsed: dict[str, Any], _tool_input: str | None = None,
+    tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 count, pois；nearby_search 额外返回 location/radius, fuzzy_address_search 额外返回 city。"""
     data = _get_data(parsed)
@@ -402,14 +453,16 @@ def _extract_map_search(
         for poi in pois_raw:
             if not isinstance(poi, dict):
                 continue
-            pois.append({
-                "name": poi.get("name", ""),
-                "address": poi.get("address", ""),
-                "location": poi.get("location", ""),
-                "cityname": poi.get("cityname", ""),
-                "adname": poi.get("adname", ""),
-                "type": poi.get("type", ""),
-            })
+            pois.append(
+                {
+                    "name": poi.get("name", ""),
+                    "address": poi.get("address", ""),
+                    "location": poi.get("location", ""),
+                    "cityname": poi.get("cityname", ""),
+                    "adname": poi.get("adname", ""),
+                    "type": poi.get("type", ""),
+                }
+            )
     result = {
         "count": data.get("count", len(pois)),
         "pois": pois,
@@ -426,7 +479,9 @@ def _extract_map_search(
 
 @register("geocode_address")
 def _extract_geocode(
-    _tool_name: str, parsed: dict[str, Any], _tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 address, location。"""
     data = _get_data(parsed)
@@ -440,7 +495,9 @@ def _extract_geocode(
 
 @register("get_transit_route")
 def _extract_transit_route(
-    _tool_name: str, parsed: dict[str, Any], _tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 origin, destination, origin_city, destination_city, route_count, routes。"""
     data = _get_data(parsed)
@@ -468,23 +525,27 @@ def _extract_transit_route(
                     for line in bus.get("lines", []):
                         if not isinstance(line, dict):
                             continue
-                        lines.append({
-                            "type": line.get("type", ""),
-                            "name": line.get("name", ""),
-                            "departure_stop": line.get("departure_stop", ""),
-                            "arrival_stop": line.get("arrival_stop", ""),
-                            "via_num": line.get("via_num", 0),
-                            "distance": line.get("distance", 0),
-                            "duration": line.get("duration", 0),
-                        })
+                        lines.append(
+                            {
+                                "type": line.get("type", ""),
+                                "name": line.get("name", ""),
+                                "departure_stop": line.get("departure_stop", ""),
+                                "arrival_stop": line.get("arrival_stop", ""),
+                                "via_num": line.get("via_num", 0),
+                                "distance": line.get("distance", 0),
+                                "duration": line.get("duration", 0),
+                            }
+                        )
                     seg_info["bus"] = {"lines": lines}
                 segments.append(seg_info)
-            routes.append({
-                "cost": route.get("cost", 0),
-                "duration": route.get("duration", 0),
-                "walking_distance": route.get("walking_distance", 0),
-                "segments": segments,
-            })
+            routes.append(
+                {
+                    "cost": route.get("cost", 0),
+                    "duration": route.get("duration", 0),
+                    "walking_distance": route.get("walking_distance", 0),
+                    "segments": segments,
+                }
+            )
     return {
         "origin": data.get("origin", ""),
         "destination": data.get("destination", ""),
@@ -497,7 +558,9 @@ def _extract_transit_route(
 
 @register("get_cycling_route")
 def _extract_cycling_route(
-    _tool_name: str, parsed: dict[str, Any], _tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 origin, destination, path_count, paths。"""
     data = _get_data(parsed)
@@ -513,18 +576,22 @@ def _extract_cycling_route(
             for step in path.get("steps", []):
                 if not isinstance(step, dict):
                     continue
-                steps.append({
-                    "instruction": step.get("instruction", ""),
-                    "orientation": step.get("orientation", ""),
-                    "road": step.get("road", ""),
-                    "distance": step.get("distance", 0),
-                    "duration": step.get("duration", 0),
-                })
-            paths.append({
-                "distance": path.get("distance", 0),
-                "duration": path.get("duration", 0),
-                "steps": steps,
-            })
+                steps.append(
+                    {
+                        "instruction": step.get("instruction", ""),
+                        "orientation": step.get("orientation", ""),
+                        "road": step.get("road", ""),
+                        "distance": step.get("distance", 0),
+                        "duration": step.get("duration", 0),
+                    }
+                )
+            paths.append(
+                {
+                    "distance": path.get("distance", 0),
+                    "duration": path.get("duration", 0),
+                    "steps": steps,
+                }
+            )
     return {
         "origin": data.get("origin", ""),
         "destination": data.get("destination", ""),
@@ -535,9 +602,12 @@ def _extract_cycling_route(
 
 # ── 天气查询 ───────────────────────────────────────────────────────────
 
+
 @register("get_current_weather")
 def _extract_weather(
-    _tool_name: str, parsed: dict[str, Any], _tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 city, temp, condition, humidity, wind；可选 temp_feel, visibility, pressure, forecast。"""
     data = _get_data(parsed)
@@ -552,7 +622,13 @@ def _extract_weather(
     temp_val = data.get("temperature")
     temp_str = _fmt_temp(temp_val)
     humidity_val = data.get("humidity")
-    humidity_str = f"{humidity_val}%" if isinstance(humidity_val, (int, float)) else str(humidity_val) if humidity_val else ""
+    humidity_str = (
+        f"{humidity_val}%"
+        if isinstance(humidity_val, (int, float))
+        else str(humidity_val)
+        if humidity_val
+        else ""
+    )
     wind_parts = []
     if data.get("wind_direction"):
         wind_parts.append(data["wind_direction"])
@@ -570,9 +646,9 @@ def _extract_weather(
         feels = data["feels_like"]
         result["temp_feel"] = _fmt_temp(feels)
     if "visibility" in data:
-        result["visibility"] = f'{data["visibility"]}km'
+        result["visibility"] = f"{data['visibility']}km"
     if "pressure" in data:
-        result["pressure"] = f'{data["pressure"]}hPa'
+        result["pressure"] = f"{data['pressure']}hPa"
     forecast = data.get("forecast")
     if isinstance(forecast, list):
         result["forecast"] = [
@@ -582,16 +658,20 @@ def _extract_weather(
                 "low": _fmt_temp(d.get("temp_min", "")),
                 "condition": d.get("weather_day", d.get("weather_night", "")),
             }
-            for d in forecast if isinstance(d, dict)
+            for d in forecast
+            if isinstance(d, dict)
         ]
     return result
 
 
 # ── 时间查询 ───────────────────────────────────────────────────────────
 
+
 @register("time_tool")
 def _extract_time(
-    _tool_name: str, parsed: dict[str, Any], _tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 tool_type, datetime, date, time, weekday, timezone。"""
     data = _get_data(parsed)
@@ -609,9 +689,12 @@ def _extract_time(
 
 # ── 语法检查 ───────────────────────────────────────────────────────────
 
+
 @register("syntax_checker")
 def _extract_syntax_check(
-    _tool_name: str, parsed: dict[str, Any], _tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 tool_type, language, errors, warnings。"""
     data = _get_data(parsed)
@@ -627,9 +710,12 @@ def _extract_syntax_check(
 
 # ── B站 Cookie 设置 ────────────────────────────────────────────────────
 
+
 @register("bilibili_set_cookie")
 def _extract_set_cookie(
-    _tool_name: str, parsed: dict[str, Any], _tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 tool_type, message。"""
     data = _get_data(parsed)
@@ -643,9 +729,12 @@ def _extract_set_cookie(
 
 # ── 图片理解 ───────────────────────────────────────────────────────────
 
+
 @register("analyze_image")
 def _extract_analyze_image(
-    _tool_name: str, parsed: dict[str, Any], _tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 tool_type, response。"""
     data = _get_data(parsed)
@@ -659,9 +748,12 @@ def _extract_analyze_image(
 
 # ── 节假日查询 ─────────────────────────────────────────────────────────
 
+
 @register("holiday_calendar")
 def _extract_holiday(
-    _tool_name: str, parsed: dict[str, Any], _tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 mode, date/month/year, 统计字段, days, holidays, nearby。"""
     data = _get_data(parsed)
@@ -677,8 +769,13 @@ def _extract_holiday(
 
     summary = data.get("summary")
     if isinstance(summary, dict):
-        for field in ("total_days", "holiday_events", "rest_days",
-                       "legal_rest_days", "workdays"):
+        for field in (
+            "total_days",
+            "holiday_events",
+            "rest_days",
+            "legal_rest_days",
+            "workdays",
+        ):
             if field in summary:
                 result[field] = summary[field]
 
@@ -701,7 +798,8 @@ def _extract_holiday(
                 "ganzhi_month": d.get("ganzhi_month", ""),
                 "ganzhi_day": d.get("ganzhi_day", ""),
             }
-            for d in days_raw if isinstance(d, dict)
+            for d in days_raw
+            if isinstance(d, dict)
         ]
         first = result["days"][0] if result["days"] else None
         if first:
@@ -719,7 +817,8 @@ def _extract_holiday(
                 "type": h.get("type", ""),
                 "date": h.get("date", ""),
             }
-            for h in holidays if isinstance(h, dict)
+            for h in holidays
+            if isinstance(h, dict)
         ]
 
     nearby = data.get("nearby")
@@ -737,10 +836,12 @@ def _extract_holiday(
                                 "type": e.get("type", ""),
                                 "date": e.get("date", ""),
                             }
-                            for e in item.get("events", []) if isinstance(e, dict)
+                            for e in item.get("events", [])
+                            if isinstance(e, dict)
                         ],
                     }
-                    for item in items if isinstance(item, dict)
+                    for item in items
+                    if isinstance(item, dict)
                 ]
         if nb:
             result["nearby"] = nb
@@ -750,9 +851,12 @@ def _extract_holiday(
 
 # ── PDF 阅读 ───────────────────────────────────────────────────────────
 
+
 @register("pdf_reader")
 def _extract_pdf(
-    _tool_name: str, parsed: dict[str, Any], tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 operation, file_path, file_size, page_count；可选 metadata, toc, text, page_range, query, results, total_matches, page_contents, total_pages。"""
     data = _get_data(parsed)
@@ -798,9 +902,12 @@ def _extract_pdf(
 
 # ── Word 文档阅读 ─────────────────────────────────────────────────────
 
+
 @register("doc_reader")
 def _extract_doc(
-    _tool_name: str, parsed: dict[str, Any], tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 operation, file_path, file_size, paragraph_count, table_count；可选 metadata, paragraphs, paragraph_range, tables, text, query, results, total_matches, total_paragraphs。"""
     data = _get_data(parsed)
@@ -847,9 +954,12 @@ def _extract_doc(
 
 # ── 代码质量分析 ───────────────────────────────────────────────────────
 
+
 @register("code_quality_analyzer")
 def _extract_code_quality(
-    _tool_name: str, parsed: dict[str, Any], tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 file_path, analysis_type；可选 complexity, maintainability, duplication。"""
     data = _get_data(parsed)
@@ -883,9 +993,12 @@ def _extract_code_quality(
 
 # ── 单元测试运行 ───────────────────────────────────────────────────────
 
+
 @register("unit_test_runner")
 def _extract_test_runner(
-    _tool_name: str, parsed: dict[str, Any], _tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 tests_run, failures, errors, skipped, successful, success_rate；可选 failures_details, errors_details。"""
     data = _get_data(parsed)
@@ -909,9 +1022,12 @@ def _extract_test_runner(
 
 # ── 代码调试 ───────────────────────────────────────────────────────────
 
+
 @register("debugger")
 def _extract_debugger(
-    _tool_name: str, parsed: dict[str, Any], _tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """get_doc 模式返回 operation+content；其余返回 status/variables/output 或 status+error_type/error_message/traceback。"""
     raw_data = parsed.get("data")
@@ -940,9 +1056,12 @@ def _extract_debugger(
 
 # ── Tavily 搜索 ──────────────────────────────────────────────────────────
 
+
 @register("tavily_search")
 def _extract_tavily_search(
-    _tool_name: str, parsed: dict[str, Any], _tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 query, answer, results, response_time。"""
     data = _get_data(parsed)
@@ -977,9 +1096,12 @@ def _extract_tavily_search(
 
 # ── Tavily 提取 ──────────────────────────────────────────────────────────
 
+
 @register("tavily_extract")
 def _extract_tavily_extract(
-    _tool_name: str, parsed: dict[str, Any], _tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 results（url, title, raw_content, images）, failed_results, response_time。"""
     data = _get_data(parsed)
@@ -1007,10 +1129,12 @@ def _extract_tavily_extract(
         for item in failed_raw:
             if not isinstance(item, dict):
                 continue
-            failed_results.append({
-                "url": item.get("url", ""),
-                "error": item.get("error", ""),
-            })
+            failed_results.append(
+                {
+                    "url": item.get("url", ""),
+                    "error": item.get("error", ""),
+                }
+            )
 
     return {
         "results": results,
@@ -1026,7 +1150,9 @@ def _extract_tavily_extract(
 
 @register("list_memories")
 def _extract_list_memories(
-    _tool_name: str, parsed: dict[str, Any], _tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 items（列表），count。"""
     data = _get_data(parsed)
@@ -1042,7 +1168,9 @@ def _extract_list_memories(
 
 @register("read_memories")
 def _extract_read_memories(
-    _tool_name: str, parsed: dict[str, Any], _tool_input: str | None = None,
+    _tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回单条记忆的 id、description、theme，可选 history。"""
     data = _get_data(parsed)
@@ -1060,14 +1188,24 @@ def _extract_read_memories(
 @register("delete_memory")
 @register("merge_memories")
 def _extract_memory_generic(
-    tool_name: str, parsed: dict[str, Any], _tool_input: str | None = None,
+    tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
 ) -> dict[str, Any] | None:
     """返回 id / kept_id / removed_id, content, section, message。"""
     data = _get_data(parsed)
     if data is None:
         return None
     result: dict[str, Any] = {}
-    for field in ("id", "kept_id", "removed_id", "content", "section", "message", "reason"):
+    for field in (
+        "id",
+        "kept_id",
+        "removed_id",
+        "content",
+        "section",
+        "message",
+        "reason",
+    ):
         if field in data:
             result[field] = data[field]
     return result if result else None

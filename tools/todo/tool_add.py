@@ -8,25 +8,20 @@ from tools.todo.todo_base import TodoAPIHelper
 
 class TodoAddInput(BaseModel):
     """添加任务的输入参数"""
+
     get_doc: bool = Field(
         default=False,
-        description="设为 true 以获取 Todoist 领域知识文档（首次使用或不确定参数规则时建议先调用）"
+        description="设为 true 以获取 Todoist 领域知识文档（首次使用或不确定参数规则时建议先调用）",
     )
-    content: str = Field(
-        default="",
-        description="任务名称/内容，例如'完成项目报告'"
-    )
+    content: str = Field(default="", description="任务名称/内容，例如'完成项目报告'")
     due_date: str | None = Field(
         default=None,
-        description="截止日期。支持自然语言（明天下午3点、下周五）或 YYYY-MM-DD HH:MM"
+        description="截止日期。支持自然语言（明天下午3点、下周五）或 YYYY-MM-DD HH:MM",
     )
-    priority: int = Field(
-        default=1,
-        description="1=低, 2=中, 3=高, 4=紧急"
-    )
+    priority: int = Field(default=1, description="1=低, 2=中, 3=高, 4=紧急")
     project_name: str = Field(
         default="Inbox",
-        description="所属项目名。务必先通过 todo_list_projects 确认项目存在"
+        description="所属项目名。务必先通过 todo_list_projects 确认项目存在",
     )
 
 
@@ -82,12 +77,14 @@ class TodoAddTool(ToolBase):
                 priority=priority,
                 due_date=due_date_obj,
             )
-            return format_success({
-                "task_id": task.id,
-                "content": task.content,
-                "due_date": self.helper.format_due_date(task),
-                "priority": task.priority,
-                "project": self.helper.get_project_name(task.project_id),
-            })
+            return format_success(
+                {
+                    "task_id": task.id,
+                    "content": task.content,
+                    "due_date": self.helper.format_due_date(task),
+                    "priority": task.priority,
+                    "project": self.helper.get_project_name(task.project_id),
+                }
+            )
         except Exception as e:
             return format_error(f"添加任务失败: {e}")

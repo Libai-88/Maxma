@@ -11,9 +11,13 @@ from tools.base import ToolBase, check_path_whitelisted, format_error, format_su
 
 
 class SyntaxCheckerInput(BaseModel):
-    get_doc: bool = Field(default=False, description="设为 true 以获取使用说明和领域知识")
+    get_doc: bool = Field(
+        default=False, description="设为 true 以获取使用说明和领域知识"
+    )
     code: str = Field(default="", description="需要检查的代码内容")
-    language: str = Field(default="python", description="语言: python/javascript/typescript")
+    language: str = Field(
+        default="python", description="语言: python/javascript/typescript"
+    )
     file_path: str = Field(default="", description="代码文件路径（可选，优先于 code）")
 
 
@@ -63,11 +67,20 @@ class SyntaxCheckerTool(ToolBase):
             ast.parse(code)
             return format_success({"language": "python", "errors": [], "warnings": []})
         except SyntaxError as e:
-            return format_success({
-                "language": "python",
-                "errors": [{"line": e.lineno, "column": e.offset, "message": e.msg, "type": "SyntaxError"}],
-                "warnings": [],
-            })
+            return format_success(
+                {
+                    "language": "python",
+                    "errors": [
+                        {
+                            "line": e.lineno,
+                            "column": e.offset,
+                            "message": e.msg,
+                            "type": "SyntaxError",
+                        }
+                    ],
+                    "warnings": [],
+                }
+            )
 
     def _check_javascript(self, code: str) -> str:
         tmp = None
@@ -80,18 +93,26 @@ class SyntaxCheckerTool(ToolBase):
 
             result = subprocess.run(
                 ["node", "--check", tmp],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             os.unlink(tmp)
 
             if result.returncode == 0:
-                return format_success({"language": "javascript", "errors": [], "warnings": []})
+                return format_success(
+                    {"language": "javascript", "errors": [], "warnings": []}
+                )
             else:
-                return format_success({
-                    "language": "javascript",
-                    "errors": [{"message": result.stderr.strip(), "type": "SyntaxError"}],
-                    "warnings": [],
-                })
+                return format_success(
+                    {
+                        "language": "javascript",
+                        "errors": [
+                            {"message": result.stderr.strip(), "type": "SyntaxError"}
+                        ],
+                        "warnings": [],
+                    }
+                )
         except FileNotFoundError:
             if tmp:
                 os.unlink(tmp)

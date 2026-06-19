@@ -70,7 +70,9 @@ async def select_file(type: str = "file"):
         path = await loop.run_in_executor(None, _open_dialog)
         return {"path": path}
     except ImportError:
-        raise HTTPException(status_code=500, detail="tkinter 不可用，无法打开文件对话框")
+        raise HTTPException(
+            status_code=500, detail="tkinter 不可用，无法打开文件对话框"
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"打开文件对话框失败: {str(e)}")
 

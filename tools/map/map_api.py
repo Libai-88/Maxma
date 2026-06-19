@@ -56,7 +56,10 @@ def parse_transit_response(json_data: dict) -> dict:
 
             walking_info = segment.get("walking")
             if walking_info and walking_info.get("steps"):
-                walk_data = {"distance": int(walking_info.get("distance", 0)), "steps": []}
+                walk_data = {
+                    "distance": int(walking_info.get("distance", 0)),
+                    "steps": [],
+                }
                 for step in walking_info.get("steps", []):
                     walk_data["steps"].append(
                         {
@@ -76,8 +79,12 @@ def parse_transit_response(json_data: dict) -> dict:
                         {
                             "type": busline.get("type", ""),
                             "name": busline.get("name", ""),
-                            "departure_stop": busline.get("departure_stop", {}).get("name", ""),
-                            "arrival_stop": busline.get("arrival_stop", {}).get("name", ""),
+                            "departure_stop": busline.get("departure_stop", {}).get(
+                                "name", ""
+                            ),
+                            "arrival_stop": busline.get("arrival_stop", {}).get(
+                                "name", ""
+                            ),
                             "via_num": int(busline.get("via_num", 0)),
                             "distance": int(busline.get("distance", 0)),
                             "duration": int(busline.get("duration", 0)),

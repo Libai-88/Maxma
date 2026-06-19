@@ -28,13 +28,9 @@ def _exec_code(code: str) -> str:
 
 class RunPythonInput(BaseModel):
     get_doc: bool = Field(
-        default=False,
-        description="设为 true 以获取使用说明和安全限制"
+        default=False, description="设为 true 以获取使用说明和安全限制"
     )
-    code: str = Field(
-        default="",
-        description="要执行的 Python 代码，支持多行"
-    )
+    code: str = Field(default="", description="要执行的 Python 代码，支持多行")
 
 
 class RunPythonTool(ToolBase):
@@ -64,17 +60,19 @@ class RunPythonTool(ToolBase):
         ws = interaction.current_ws.get()
         interaction_id, future = interaction.register()
 
-        await ws.send_json({
-            "type": "ask_user",
-            "payload": {
-                "tool_name": self.name,
-                "question": "即将执行以下 Python 代码，是否确认执行？",
-                "mode": "confirm",
-                "options": ["执行", "取消"],
-                "interaction_id": interaction_id,
-                "code": code,
-            },
-        })
+        await ws.send_json(
+            {
+                "type": "ask_user",
+                "payload": {
+                    "tool_name": self.name,
+                    "question": "即将执行以下 Python 代码，是否确认执行？",
+                    "mode": "confirm",
+                    "options": ["执行", "取消"],
+                    "interaction_id": interaction_id,
+                    "code": code,
+                },
+            }
+        )
 
         try:
             answer = await future

@@ -34,16 +34,18 @@ class AskUserQATool(ToolBase):
 
         interaction_id, future = interaction.register()
 
-        await ws.send_json({
-            "type": "ask_user",
-            "payload": {
-                "tool_name": self.name,
-                "question": question,
-                "mode": "qa",
-                "options": [],
-                "interaction_id": interaction_id,
-            },
-        })
+        await ws.send_json(
+            {
+                "type": "ask_user",
+                "payload": {
+                    "tool_name": self.name,
+                    "question": question,
+                    "mode": "qa",
+                    "options": [],
+                    "interaction_id": interaction_id,
+                },
+            }
+        )
 
         try:
             answer = await future

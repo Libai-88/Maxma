@@ -11,7 +11,12 @@ class ListMemoriesInput(BaseModel):
     get_doc: bool = Field(default=False, description="设为 true 以获取使用说明")
 
 
-MEMORY_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "personas" / "memory.yaml"
+MEMORY_PATH = (
+    Path(__file__).resolve().parent.parent.parent
+    / "config"
+    / "personas"
+    / "memory.yaml"
+)
 
 # 描述截断长度（字符数），取自现有 memory.yaml 描述长度分布分析
 # 大部分描述在 100-300 字符，200 字能覆盖关键信息，节省约 40% 上下文
@@ -69,12 +74,13 @@ class ListMemoriesTool(ToolBase):
 
         # 返回 items 时同样截断，供前端气泡使用
         truncated_items = [
-            {**item, "description": _truncate(item["description"])}
-            for item in items
+            {**item, "description": _truncate(item["description"])} for item in items
         ]
         formatted = _format_entries(items)
-        return format_success({
-            "count": len(items),
-            "items": truncated_items,
-            "formatted": formatted,
-        })
+        return format_success(
+            {
+                "count": len(items),
+                "items": truncated_items,
+                "formatted": formatted,
+            }
+        )

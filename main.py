@@ -12,6 +12,7 @@ def main():
     # CLI：轮换 Token
     if "--rotate-token" in sys.argv:
         from api.auth import rotate_token
+
         rotated = rotate_token()
         print(f"[auth] Token rotated: {rotated}")
         return

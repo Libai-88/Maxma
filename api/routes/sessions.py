@@ -35,7 +35,8 @@ async def get_session(session_id: str, request: Request):
         "session_id": session.session_id,
         "message_count": session.message_count,
         "created_at": session.created_at,
-        "has_active_agent": session._active_task is not None and not session._active_task.done(),
+        "has_active_agent": session._active_task is not None
+        and not session._active_task.done(),
         "is_const": session.is_const,
         "const_name": session.const_name,
     }
@@ -51,10 +52,15 @@ async def get_messages(session_id: str, request: Request):
         cpt = await session.checkpointer.aget_tuple(
             {"configurable": {"thread_id": session.session_id}}
         )
-        msgs = cpt.checkpoint.get("channel_values", {}).get("messages", []) if cpt else []
+        msgs = (
+            cpt.checkpoint.get("channel_values", {}).get("messages", []) if cpt else []
+        )
     except Exception:
         msgs = []
-    return {"session_id": session_id, "messages": [{"role": m.type, "content": m.content} for m in msgs]}
+    return {
+        "session_id": session_id,
+        "messages": [{"role": m.type, "content": m.content} for m in msgs],
+    }
 
 
 @router.post("/sessions/{session_id}/undo")
@@ -67,7 +73,9 @@ async def undo_session_messages(session_id: str, request: Request, n: int = 1):
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
     if session._graph is None:
-        raise HTTPException(status_code=400, detail="No agent graph available for this session")
+        raise HTTPException(
+            status_code=400, detail="No agent graph available for this session"
+        )
 
     config = {"configurable": {"thread_id": session_id}}
     deleted = await undo_rounds(session._graph, config, n=n)
@@ -95,7 +103,9 @@ async def get_context_usage(session_id: str, request: Request):
         cpt = await session.checkpointer.aget_tuple(
             {"configurable": {"thread_id": session.session_id}}
         )
-        counting_messages = cpt.checkpoint.get("channel_values", {}).get("messages", []) if cpt else []
+        counting_messages = (
+            cpt.checkpoint.get("channel_values", {}).get("messages", []) if cpt else []
+        )
     except Exception:
         counting_messages = []
     usage = estimate_context_usage(
@@ -116,6 +126,7 @@ async def delete_session(session_id: str, request: Request):
     # 若为 const 会话，先清理磁盘文件
     if session is not None and session.is_const:
         from api.const_session_store import delete_const_session
+
         delete_const_session(session_id)
 
     if not sm.delete(session_id):
@@ -143,7 +154,9 @@ async def constify_session(session_id: str, body: ConstifyRequest, request: Requ
         cpt = await session.checkpointer.aget_tuple(
             {"configurable": {"thread_id": session.session_id}}
         )
-        raw_messages = cpt.checkpoint.get("channel_values", {}).get("messages", []) if cpt else []
+        raw_messages = (
+            cpt.checkpoint.get("channel_values", {}).get("messages", []) if cpt else []
+        )
     except Exception:
         raw_messages = []
 
@@ -181,7 +194,9 @@ async def generate_session_title(session_id: str, request: Request):
         cpt = await session.checkpointer.aget_tuple(
             {"configurable": {"thread_id": session.session_id}}
         )
-        messages = cpt.checkpoint.get("channel_values", {}).get("messages", []) if cpt else []
+        messages = (
+            cpt.checkpoint.get("channel_values", {}).get("messages", []) if cpt else []
+        )
     except Exception:
         messages = []
 
@@ -216,7 +231,11 @@ async def generate_session_title(session_id: str, request: Request):
     try:
         llm = request.app.state.llm
         response = await llm.ainvoke(prompt)
-        title = response.content.strip().strip('"').strip("'") if hasattr(response, "content") else str(response).strip()
+        title = (
+            response.content.strip().strip('"').strip("'")
+            if hasattr(response, "content")
+            else str(response).strip()
+        )
         title = title[:50]
         if not title:
             title = "未命名会话"
@@ -230,6 +249,7 @@ async def generate_session_title(session_id: str, request: Request):
 async def unconstify_session(session_id: str, request: Request):
     """取消固定，删除磁盘文件。"""
     from api.const_session_store import delete_const_session
+
     delete_const_session(session_id)
 
     sm = request.app.state.session_manager

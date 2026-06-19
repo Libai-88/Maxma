@@ -10,6 +10,7 @@ router = APIRouter()
 
 # ── Pydantic 请求/响应模型 ──────────────────────────────
 
+
 class ProviderCreateBody(BaseModel):
     id: str
     provider_type: str = "openai"
@@ -38,11 +39,13 @@ class TestConnectionBody(BaseModel):
 
 # ── HELPERS ─────────────────────────────────────────────
 
+
 def _get_manager(request: Request):
     return request.app.state.provider_manager
 
 
 # ── CRUD ────────────────────────────────────────────────
+
 
 @router.get("/providers")
 def list_providers(request: Request):
@@ -65,7 +68,9 @@ def create_provider(body: ProviderCreateBody, request: Request):
     """新增提供商。"""
     mgr = _get_manager(request)
     if mgr.get_config(body.id) is not None:
-        raise HTTPException(status_code=409, detail=f"Provider '{body.id}' already exists")
+        raise HTTPException(
+            status_code=409, detail=f"Provider '{body.id}' already exists"
+        )
 
     config = ProviderConfig(
         id=body.id,
@@ -107,17 +112,20 @@ def delete_provider(provider_id: str, request: Request):
 
 # ── 连接测试与模型发现 ─────────────────────────────────
 
+
 def _build_temp_provider(body: TestConnectionBody):
     """根据请求体凭据临时创建 provider 用于测试。"""
     from api.providers.openai_provider import OpenAIProvider
 
-    return OpenAIProvider(ProviderConfig(
-        id="_test_",
-        provider_type=body.provider_type,
-        label="",
-        api_key=body.api_key,
-        base_url=body.base_url,
-    ))
+    return OpenAIProvider(
+        ProviderConfig(
+            id="_test_",
+            provider_type=body.provider_type,
+            label="",
+            api_key=body.api_key,
+            base_url=body.base_url,
+        )
+    )
 
 
 @router.post("/providers/test")

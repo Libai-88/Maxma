@@ -59,11 +59,13 @@ def deserialize_messages(data: list[dict]) -> list:
                     kwargs["additional_kwargs"] = m["additional_kwargs"]
                 reconstructed.append(AIMessage(**kwargs))
             case "tool":
-                reconstructed.append(ToolMessage(
-                    content=content,
-                    tool_call_id=m.get("tool_call_id", ""),
-                    name=m.get("name", ""),
-                ))
+                reconstructed.append(
+                    ToolMessage(
+                        content=content,
+                        tool_call_id=m.get("tool_call_id", ""),
+                        name=m.get("name", ""),
+                    )
+                )
             case _:
                 # fallback: treat as human message
                 reconstructed.append(HumanMessage(content=content))

@@ -7,10 +7,7 @@ from tools.todo.todo_base import TodoAPIHelper
 
 
 class TodoListInput(BaseModel):
-    get_doc: bool = Field(
-        default=False,
-        description="设为 true 以获取使用说明"
-    )
+    get_doc: bool = Field(default=False, description="设为 true 以获取使用说明")
 
 
 class TodoListTool(ToolBase):
@@ -41,14 +38,16 @@ class TodoListTool(ToolBase):
 
         task_list = []
         for task in all_tasks:
-            task_list.append({
-                "task_id": task.id,
-                "content": task.content,
-                "due_date": self.helper.format_due_date(task),
-                "priority": task.priority,
-                "project": self.helper.get_project_name(task.project_id),
-                "is_completed": task.is_completed,
-            })
+            task_list.append(
+                {
+                    "task_id": task.id,
+                    "content": task.content,
+                    "due_date": self.helper.format_due_date(task),
+                    "priority": task.priority,
+                    "project": self.helper.get_project_name(task.project_id),
+                    "is_completed": task.is_completed,
+                }
+            )
         task_list.sort(key=lambda x: x["task_id"])
 
         return format_success({"total": len(task_list), "tasks": task_list})

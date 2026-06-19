@@ -39,6 +39,7 @@ class TestLoadOrCreateToken:
     def test_load_or_create_corrupted_file(self, monkeypatch, tmp_path):
         """文件存在但 YAML 无效 → 抛出异常（生产代码暂未处理此情况）。"""
         import yaml
+
         token_path = tmp_path / "auth_token.yaml"
         token_path.write_text("{{ 无效 yaml !!", encoding="utf-8")
         monkeypatch.setattr(auth, "AUTH_TOKEN_PATH", token_path)

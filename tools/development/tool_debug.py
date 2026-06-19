@@ -8,9 +8,13 @@ from tools.base import ToolBase, format_error, format_success, get_safe_builtins
 
 
 class DebuggerInput(BaseModel):
-    get_doc: bool = Field(default=False, description="设为 true 以获取使用说明和领域知识")
+    get_doc: bool = Field(
+        default=False, description="设为 true 以获取使用说明和领域知识"
+    )
     code: str = Field(default="", description="需要调试/执行的 Python 代码")
-    variables: list[str] = Field(default_factory=list, description="需要监视的变量名列表")
+    variables: list[str] = Field(
+        default_factory=list, description="需要监视的变量名列表"
+    )
 
 
 class DebuggerTool(ToolBase):
@@ -38,16 +42,20 @@ class DebuggerTool(ToolBase):
         env: dict = {}
         try:
             exec(code, {"__builtins__": get_safe_builtins()}, env)
-            return format_success({
-                "status": "success",
-                "variables": {v: repr(env.get(v, "未定义")) for v in variables},
-                "output": "代码执行成功",
-            })
+            return format_success(
+                {
+                    "status": "success",
+                    "variables": {v: repr(env.get(v, "未定义")) for v in variables},
+                    "output": "代码执行成功",
+                }
+            )
         except Exception as e:
-            return format_success({
-                "status": "error",
-                "error_type": type(e).__name__,
-                "error_message": str(e),
-                "traceback": traceback.format_exc(),
-                "variables": {v: repr(env.get(v, "未定义")) for v in variables},
-            })
+            return format_success(
+                {
+                    "status": "error",
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                    "traceback": traceback.format_exc(),
+                    "variables": {v: repr(env.get(v, "未定义")) for v in variables},
+                }
+            )

@@ -87,5 +87,3 @@ def build_system_prompt() -> str:
         _scan_anthropic_skills(),
     ]
     return "\n".join(parts)
-
-

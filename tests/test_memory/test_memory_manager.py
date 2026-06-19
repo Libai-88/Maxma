@@ -60,6 +60,7 @@ class TestMemoryManager:
         assert path.exists()
         # 文件内容应为有效 yaml
         import yaml
+
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
         assert data == {}
 

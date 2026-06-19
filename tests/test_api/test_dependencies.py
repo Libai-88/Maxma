@@ -11,12 +11,14 @@ class TestGetLlm:
     def test_get_llm_no_provider_raises(self):
         """provider_manager 为 None → RuntimeError。"""
         import pytest
+
         with pytest.raises(RuntimeError, match="No enabled LLM provider"):
             deps.get_llm(provider_manager=None)
 
     def test_get_llm_empty_provider_raises(self):
         """provider_manager.count == 0 → RuntimeError。"""
         import pytest
+
         pm = MagicMock()
         pm.count = 0
         with pytest.raises(RuntimeError, match="No enabled LLM provider"):
@@ -37,7 +39,9 @@ class TestGetLlm:
 
         assert result is fake_llm
         fake_provider.create_llm.assert_called_once_with(
-            "gpt-4", temperature=0.7, streaming=True,
+            "gpt-4",
+            temperature=0.7,
+            streaming=True,
         )
 
 

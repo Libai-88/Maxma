@@ -9,11 +9,18 @@ from tools.base import ToolBase, format_error, format_success
 
 class DeleteMemoryInput(BaseModel):
     get_doc: bool = Field(default=False, description="设为 true 以获取使用说明")
-    id: str = Field(default="", description="要删除的记忆 ID（来自 read_memories 的输出）")
+    id: str = Field(
+        default="", description="要删除的记忆 ID（来自 read_memories 的输出）"
+    )
     reason: str = Field(default="", description="删除原因，说明为什么要删除这条记忆")
 
 
-MEMORY_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "personas" / "memory.yaml"
+MEMORY_PATH = (
+    Path(__file__).resolve().parent.parent.parent
+    / "config"
+    / "personas"
+    / "memory.yaml"
+)
 
 
 class DeleteMemoryTool(ToolBase):
@@ -39,10 +46,14 @@ class DeleteMemoryTool(ToolBase):
         try:
             removed = mm.delete(id)
         except ValueError:
-            return format_error(f"未找到 ID 为 {id} 的记忆条目。请先调用 read_memories 确认 ID。")
-        return format_success({
-            "id": id,
-            "removed_content": removed,
-            "reason": reason,
-            "message": f"已删除 [{id}]: {removed}",
-        })
+            return format_error(
+                f"未找到 ID 为 {id} 的记忆条目。请先调用 read_memories 确认 ID。"
+            )
+        return format_success(
+            {
+                "id": id,
+                "removed_content": removed,
+                "reason": reason,
+                "message": f"已删除 [{id}]: {removed}",
+            }
+        )

@@ -6,16 +6,26 @@ from tools.base import ToolBase, format_error, format_success
 
 
 class HolidayCalendarInput(BaseModel):
-    get_doc: bool = Field(default=False, description="设为 true 以获取使用说明和领域知识")
-    date: str = Field(default="", description="按天查询，格式 YYYY-MM-DD（与 month/year 三选一）")
-    month: str = Field(default="", description="按月查询，格式 YYYY-MM（与 date/year 三选一）")
-    year: str = Field(default="", description="按年查询，格式 YYYY（与 date/month 三选一）")
+    get_doc: bool = Field(
+        default=False, description="设为 true 以获取使用说明和领域知识"
+    )
+    date: str = Field(
+        default="", description="按天查询，格式 YYYY-MM-DD（与 month/year 三选一）"
+    )
+    month: str = Field(
+        default="", description="按月查询，格式 YYYY-MM（与 date/year 三选一）"
+    )
+    year: str = Field(
+        default="", description="按年查询，格式 YYYY（与 date/month 三选一）"
+    )
     timezone: str = Field(default="Asia/Shanghai", description="时区")
     holiday_type: str = Field(
         default="all",
         description="节日类型: all/legal/legal_rest/legal_workday/solar/lunar/term",
     )
-    include_nearby: bool = Field(default=False, description="是否返回前后最近节日（仅 date 模式）")
+    include_nearby: bool = Field(
+        default=False, description="是否返回前后最近节日（仅 date 模式）"
+    )
     nearby_limit: int = Field(default=7, ge=1, le=30, description="最近节日数量限制")
 
 

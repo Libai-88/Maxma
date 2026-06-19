@@ -12,14 +12,18 @@ def NOW() -> str:
 
 
 class MemoryItem:
-
     def __init__(self, description, theme, **kwargs):
         self.description = description
         self.theme = theme
         self.history = kwargs.get("history", [])
         self.latest_update_time = kwargs.get("latest_update_time", NOW())
 
-    def update(self, reason: str, new_description: Optional[str] = None, new_theme: Optional[str] = None):
+    def update(
+        self,
+        reason: str,
+        new_description: Optional[str] = None,
+        new_theme: Optional[str] = None,
+    ):
         new_history = {"reason": reason}
         if new_description is not None:
             new_history["new_description"] = new_description
@@ -42,19 +46,26 @@ class MemoryItem:
         result = [{"description": self.description, "time": self.latest_update_time}]
         for entry in reversed(self.history):
             if "old_description" in entry:
-                result.append({
-                    "description": entry["old_description"],
-                    "time": entry["old_time"],
-                })
+                result.append(
+                    {
+                        "description": entry["old_description"],
+                        "time": entry["old_time"],
+                    }
+                )
         return result
 
-    def merge(self, another: 'MemoryItem', reason: str, merged_description: str, merged_theme: str):
+    def merge(
+        self,
+        another: "MemoryItem",
+        reason: str,
+        merged_description: str,
+        merged_theme: str,
+    ):
         self.history += another.history
         self.update(reason, merged_description, merged_theme)
 
 
 class MemoryManager:
-
     def __init__(self, yaml_file: str = "memory.yaml"):
         self._yaml_file = yaml_file
         self._ensure_file_exists()
@@ -67,13 +78,13 @@ class MemoryManager:
             with open(self._yaml_file, "w") as f:
                 yaml.dump({}, f, default_flow_style=False, allow_unicode=True)
 
-    def _read_all(self) -> dict[str, 'MemoryItem']:
+    def _read_all(self) -> dict[str, "MemoryItem"]:
         """读取完整文件。调用方必须已持有文件锁。"""
         with open(self._yaml_file, "r") as f:
             data = yaml.safe_load(f) or {}
         return {id: MemoryItem(**data[id]) for id in data}
 
-    def _write_all(self, items: dict[str, 'MemoryItem']) -> None:
+    def _write_all(self, items: dict[str, "MemoryItem"]) -> None:
         """覆写完整文件。调用方必须已持有文件锁。"""
         data_dict = {id: item.__dict__ for id, item in items.items()}
         with open(self._yaml_file, "w") as f:
@@ -104,16 +115,31 @@ class MemoryManager:
             self._write_all(items)
         return removed.description
 
-    def merge(self, id1: str, id2: str, merged_description: str, merged_theme: str, reason: str):
+    def merge(
+        self,
+        id1: str,
+        id2: str,
+        merged_description: str,
+        merged_theme: str,
+        reason: str,
+    ):
         with portalocker.Lock(self._lock_path, timeout=5):
             items = self._read_all()
             if id1 not in items or id2 not in items:
-                raise ValueError(f"MemoryManager: Memory items with IDs {id1} and {id2} not found")
+                raise ValueError(
+                    f"MemoryManager: Memory items with IDs {id1} and {id2} not found"
+                )
             items[id1].merge(items[id2], reason, merged_description, merged_theme)
             items.pop(id2)
             self._write_all(items)
 
-    def update(self, id: str, reason: str, new_description: Optional[str] = None, new_theme: Optional[str] = None):
+    def update(
+        self,
+        id: str,
+        reason: str,
+        new_description: Optional[str] = None,
+        new_theme: Optional[str] = None,
+    ):
         with portalocker.Lock(self._lock_path, timeout=5):
             items = self._read_all()
             if id not in items:
@@ -139,12 +165,14 @@ class MemoryManager:
                 theme = item.theme
                 if theme not in groups:
                     groups[theme] = []
-                groups[theme].append({
-                    "id": id,
-                    "description": item.description,
-                    "history": item.show_description_history(),
-                    "_sort_time": item.latest_update_time,
-                })
+                groups[theme].append(
+                    {
+                        "id": id,
+                        "description": item.description,
+                        "history": item.show_description_history(),
+                        "_sort_time": item.latest_update_time,
+                    }
+                )
             # 每组内按更新时间倒序
             for theme in groups:
                 groups[theme].sort(key=lambda x: x["_sort_time"], reverse=True)
@@ -153,7 +181,9 @@ class MemoryManager:
             # 分区间按条目数降序
             sections = [
                 {"theme": theme, "items": items}
-                for theme, items in sorted(groups.items(), key=lambda x: len(x[1]), reverse=True)
+                for theme, items in sorted(
+                    groups.items(), key=lambda x: len(x[1]), reverse=True
+                )
             ]
             return {"sections": sections}
 

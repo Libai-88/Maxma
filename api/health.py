@@ -69,7 +69,9 @@ async def check_memory(app: FastAPI) -> ComponentHealth:
         memory_path = MEMORY_PATH
         if not memory_path.exists():
             elapsed = (time.monotonic() - start) * 1000
-            return ComponentHealth(status="error", latency_ms=round(elapsed, 1), detail="记忆文件不存在")
+            return ComponentHealth(
+                status="error", latency_ms=round(elapsed, 1), detail="记忆文件不存在"
+            )
 
         mm = MemoryManager(yaml_file=str(memory_path))
         items = mm.show()
@@ -83,10 +85,14 @@ async def check_memory(app: FastAPI) -> ComponentHealth:
         status: Literal["ok", "error"] = "ok" if consumer_running else "error"
 
         elapsed = (time.monotonic() - start) * 1000
-        return ComponentHealth(status=status, latency_ms=round(elapsed, 1), detail="，".join(parts))
+        return ComponentHealth(
+            status=status, latency_ms=round(elapsed, 1), detail="，".join(parts)
+        )
     except Exception as e:
         elapsed = (time.monotonic() - start) * 1000
-        return ComponentHealth(status="error", latency_ms=round(elapsed, 1), detail=str(e))
+        return ComponentHealth(
+            status="error", latency_ms=round(elapsed, 1), detail=str(e)
+        )
 
 
 async def check_native_tools(app: FastAPI) -> ComponentHealth:
@@ -101,7 +107,9 @@ async def check_native_tools(app: FastAPI) -> ComponentHealth:
         )
     except Exception as e:
         elapsed = (time.monotonic() - start) * 1000
-        return ComponentHealth(status="error", latency_ms=round(elapsed, 1), detail=str(e))
+        return ComponentHealth(
+            status="error", latency_ms=round(elapsed, 1), detail=str(e)
+        )
 
 
 async def check_mcp_tools(app: FastAPI) -> ComponentHealth:
@@ -110,7 +118,11 @@ async def check_mcp_tools(app: FastAPI) -> ComponentHealth:
         tools = app.state.mcp_tools
         if not tools:
             elapsed = (time.monotonic() - start) * 1000
-            return ComponentHealth(status="ok", latency_ms=round(elapsed, 1), detail="0 个工具（未配置 MCP 服务器）")
+            return ComponentHealth(
+                status="ok",
+                latency_ms=round(elapsed, 1),
+                detail="0 个工具（未配置 MCP 服务器）",
+            )
         elapsed = (time.monotonic() - start) * 1000
         return ComponentHealth(
             status="ok",
@@ -119,7 +131,9 @@ async def check_mcp_tools(app: FastAPI) -> ComponentHealth:
         )
     except Exception as e:
         elapsed = (time.monotonic() - start) * 1000
-        return ComponentHealth(status="error", latency_ms=round(elapsed, 1), detail=str(e))
+        return ComponentHealth(
+            status="error", latency_ms=round(elapsed, 1), detail=str(e)
+        )
 
 
 async def check_health_providers(app: FastAPI) -> dict[str, ComponentHealth]:
@@ -130,11 +144,14 @@ async def check_health_providers(app: FastAPI) -> dict[str, ComponentHealth]:
 
     async def _check_one(provider) -> tuple[str, ComponentHealth]:
         result = await provider.check_health()
-        return (provider.provider_name, ComponentHealth(
-            status=result.status,
-            latency_ms=result.latency_ms,
-            detail=result.detail,
-        ))
+        return (
+            provider.provider_name,
+            ComponentHealth(
+                status=result.status,
+                latency_ms=result.latency_ms,
+                detail=result.detail,
+            ),
+        )
 
     tasks = [_check_one(p) for p in mgr.iter_enabled()]
     results = await asyncio.gather(*tasks)

@@ -12,6 +12,7 @@ NEWS_PATH = Path(__file__).resolve().parent.parent / "data" / "news.yaml"
 
 # ── Pydantic 模型 ──
 
+
 class NewsEntry(BaseModel):
     id: str
     en_title: str | None = None
@@ -30,6 +31,7 @@ class ListNewsResponse(BaseModel):
 
 # ── 读取 ──
 
+
 def _load_news() -> list[NewsEntry]:
     if not NEWS_PATH.exists():
         return []
@@ -42,6 +44,7 @@ def _load_news() -> list[NewsEntry]:
 
 
 # ── 路由 ──
+
 
 @router.get("/news", response_model=ListNewsResponse)
 def list_news():

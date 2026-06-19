@@ -11,12 +11,21 @@ class MergeMemoriesInput(BaseModel):
     get_doc: bool = Field(default=False, description="设为 true 以获取使用说明")
     id1: str = Field(default="", description="合并后保留的记忆 ID（主条目）")
     id2: str = Field(default="", description="合并后将被删除的记忆 ID（从条目）")
-    content: str = Field(default="", description="合并后的完整记忆内容，涵盖两条原条目的信息")
+    content: str = Field(
+        default="", description="合并后的完整记忆内容，涵盖两条原条目的信息"
+    )
     section: str = Field(default="", description="合并后的记忆分区")
-    reason: str = Field(default="", description="合并原因，说明为什么这两条记忆需要合并")
+    reason: str = Field(
+        default="", description="合并原因，说明为什么这两条记忆需要合并"
+    )
 
 
-MEMORY_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "personas" / "memory.yaml"
+MEMORY_PATH = (
+    Path(__file__).resolve().parent.parent.parent
+    / "config"
+    / "personas"
+    / "memory.yaml"
+)
 
 
 class MergeMemoriesTool(ToolBase):
@@ -57,12 +66,16 @@ class MergeMemoriesTool(ToolBase):
         try:
             mm.merge(id1, id2, content, section, reason)
         except ValueError:
-            return format_error(f"未找到 ID 为 {id1} 或 {id2} 的记忆条目。请先调用 read_memories 确认 ID。")
-        return format_success({
-            "kept_id": id1,
-            "removed_id": id2,
-            "content": content,
-            "section": section,
-            "reason": reason,
-            "message": f"已合并 [{id2}] → [{id1}] ({section}): {content}",
-        })
+            return format_error(
+                f"未找到 ID 为 {id1} 或 {id2} 的记忆条目。请先调用 read_memories 确认 ID。"
+            )
+        return format_success(
+            {
+                "kept_id": id1,
+                "removed_id": id2,
+                "content": content,
+                "section": section,
+                "reason": reason,
+                "message": f"已合并 [{id2}] → [{id1}] ({section}): {content}",
+            }
+        )

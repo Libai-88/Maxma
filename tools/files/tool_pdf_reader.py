@@ -4,11 +4,19 @@ import os
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, check_path_whitelisted, check_sonetto_blocker, format_error, format_success
+from tools.base import (
+    ToolBase,
+    check_path_whitelisted,
+    check_sonetto_blocker,
+    format_error,
+    format_success,
+)
 
 
 class PDFReaderInput(BaseModel):
-    get_doc: bool = Field(default=False, description="设为 true 以获取使用说明和领域知识")
+    get_doc: bool = Field(
+        default=False, description="设为 true 以获取使用说明和领域知识"
+    )
     operation: str = Field(
         default="",
         description="操作: get_metadata/extract_text/extract_pages/search_text/get_toc/get_page_count",
@@ -16,7 +24,9 @@ class PDFReaderInput(BaseModel):
     file_path: str = Field(default="", description="PDF 文件路径")
     start_page: int = Field(default=0, description="起始页码（从0开始）")
     end_page: int | None = Field(default=None, description="结束页码（从0开始）")
-    pages: list[int] = Field(default_factory=list, description="指定页码列表（extract_pages 操作）")
+    pages: list[int] = Field(
+        default_factory=list, description="指定页码列表（extract_pages 操作）"
+    )
     query: str = Field(default="", description="搜索关键词（search_text 操作）")
     case_sensitive: bool = Field(default=False, description="搜索是否区分大小写")
     max_length: int = Field(default=10000, description="文本最大长度")
@@ -54,7 +64,7 @@ class PDFReaderTool(ToolBase):
         if blocked:
             return format_error(
                 "🚫 安全阻断：操作已被 SonettoBlocker 阻断。\n"
-                f"在目录 \"{blocked}\" 中发现了 SonettoBlocker 文件。\n\n"
+                f'在目录 "{blocked}" 中发现了 SonettoBlocker 文件。\n\n'
                 "请立即停止当前任务，先说明你为什么需要访问该路径，"
                 "再说明下一步打算做什么。"
             )
@@ -73,6 +83,7 @@ class PDFReaderTool(ToolBase):
 
         try:
             import PyPDF2  # noqa: F401 — 仅用于检查包是否可用
+
             if operation == "get_metadata":
                 return self._get_metadata(file_path)
             elif operation == "extract_text":
@@ -108,13 +119,17 @@ class PDFReaderTool(ToolBase):
                             val = str(val)
                     meta[key] = val
 
-            return format_success({
-                "metadata": meta,
-                "page_count": len(reader.pages),
-                "file_path": os.path.abspath(file_path),
-            })
+            return format_success(
+                {
+                    "metadata": meta,
+                    "page_count": len(reader.pages),
+                    "file_path": os.path.abspath(file_path),
+                }
+            )
 
-    def _extract_text(self, file_path: str, start_page: int, end_page: int | None, max_length: int) -> str:
+    def _extract_text(
+        self, file_path: str, start_page: int, end_page: int | None, max_length: int
+    ) -> str:
         from PyPDF2 import PdfReader
 
         with open(file_path, "rb") as f:
@@ -138,12 +153,14 @@ class PDFReaderTool(ToolBase):
             if len(text) > max_length:
                 text = text[:max_length] + "\n\n[内容已截断]"
 
-            return format_success({
-                "text": text,
-                "page_range": [start_page, end_page],
-                "total_pages": total,
-                "text_length": len(text),
-            })
+            return format_success(
+                {
+                    "text": text,
+                    "page_range": [start_page, end_page],
+                    "total_pages": total,
+                    "text_length": len(text),
+                }
+            )
 
     def _extract_pages(self, file_path: str, pages: list[int], max_length: int) -> str:
         from PyPDF2 import PdfReader
@@ -192,12 +209,14 @@ class PDFReaderTool(ToolBase):
                     ]
                     results.append({"page_number": pn + 1, "matched_lines": matched})
 
-            return format_success({
-                "query": query,
-                "total_pages": total,
-                "results": results,
-                "total_matches": sum(r["matched_lines"].__len__() for r in results),
-            })
+            return format_success(
+                {
+                    "query": query,
+                    "total_pages": total,
+                    "results": results,
+                    "total_matches": sum(r["matched_lines"].__len__() for r in results),
+                }
+            )
 
     def _get_toc(self, file_path: str) -> str:
         from PyPDF2 import PdfReader
@@ -217,11 +236,15 @@ class PDFReaderTool(ToolBase):
                                 page_num = reader.get_page_number(item.page) + 1
                         except Exception:
                             pass
-                        toc.append({
-                            "title": item.title if hasattr(item, "title") else str(item),
-                            "level": level,
-                            "page_number": page_num,
-                        })
+                        toc.append(
+                            {
+                                "title": item.title
+                                if hasattr(item, "title")
+                                else str(item),
+                                "level": level,
+                                "page_number": page_num,
+                            }
+                        )
 
             try:
                 parse_outlines(reader.outlines)
@@ -235,4 +258,9 @@ class PDFReaderTool(ToolBase):
 
         with open(file_path, "rb") as f:
             reader = PdfReader(f)
-            return format_success({"page_count": len(reader.pages), "file_path": os.path.abspath(file_path)})
+            return format_success(
+                {
+                    "page_count": len(reader.pages),
+                    "file_path": os.path.abspath(file_path),
+                }
+            )

@@ -87,18 +87,22 @@ class ImageUnderstandTool(ToolBase):
 
             response = client.chat.completions.create(
                 model=MODEL,
-                messages=[{
-                    "role": "user",
-                    "content": [
-                        {"type": "image_url", "image_url": {"url": data_url}},
-                        {"type": "text", "text": prompt},
-                    ],
-                }],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "image_url", "image_url": {"url": data_url}},
+                            {"type": "text", "text": prompt},
+                        ],
+                    }
+                ],
                 thinking={"type": "enabled"},
             )
 
-            return format_success({
-                "response": response.choices[0].message.content,
-            })
+            return format_success(
+                {
+                    "response": response.choices[0].message.content,
+                }
+            )
         except Exception as e:
             return format_error(f"图片理解失败: {e}")

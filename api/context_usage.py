@@ -42,7 +42,8 @@ def estimate_context_usage(
         # content 可能是 list（Anthropic 多内容块格式）或 None
         if isinstance(content, list):
             parts = [
-                b.get("text", "") for b in content
+                b.get("text", "")
+                for b in content
                 if isinstance(b, dict) and b.get("type") == "text"
             ]
             content = " ".join(parts)

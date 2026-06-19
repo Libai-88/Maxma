@@ -1,6 +1,5 @@
 """memory/user_init.py 测试。"""
 
-
 import memory.user_init as user_init
 
 

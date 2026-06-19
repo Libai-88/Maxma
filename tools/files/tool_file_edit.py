@@ -7,11 +7,19 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, check_path_whitelisted, check_sonetto_blocker, format_error, format_success
+from tools.base import (
+    ToolBase,
+    check_path_whitelisted,
+    check_sonetto_blocker,
+    format_error,
+    format_success,
+)
 
 
 class FileEditInput(BaseModel):
-    get_doc: bool = Field(default=False, description="设为 true 以获取使用说明和领域知识")
+    get_doc: bool = Field(
+        default=False, description="设为 true 以获取使用说明和领域知识"
+    )
 
     operation: str = Field(
         default="",
@@ -20,14 +28,18 @@ class FileEditInput(BaseModel):
     file_path: str = Field(default="", description="文件绝对路径")
 
     # edit 操作
-    old_string: str = Field(default="", description="要被替换掉的原文，必须完全一致（含空白、缩排、换行）")
+    old_string: str = Field(
+        default="", description="要被替换掉的原文，必须完全一致（含空白、缩排、换行）"
+    )
     new_string: str = Field(default="", description="替换后的新内容")
-    replace_all: bool = Field(default=False, description="设为 true 则替换文件中所有匹配项")
+    replace_all: bool = Field(
+        default=False, description="设为 true 则替换文件中所有匹配项"
+    )
 
     # multi_edit 操作
     edits: str = Field(
         default="",
-        description="multi_edit 操作的 JSON 编辑列表，格式: [{\"old_string\": \"...\", \"new_string\": \"...\", \"replace_all\": false}]",
+        description='multi_edit 操作的 JSON 编辑列表，格式: [{"old_string": "...", "new_string": "...", "replace_all": false}]',
     )
 
     # read 操作
@@ -75,7 +87,7 @@ class FileEditTool(ToolBase):
         if blocked:
             return format_error(
                 "🚫 安全阻断：操作已被 SonettoBlocker 阻断。\n"
-                f"在目录 \"{blocked}\" 中发现了 SonettoBlocker 文件。\n\n"
+                f'在目录 "{blocked}" 中发现了 SonettoBlocker 文件。\n\n'
                 "请立即停止当前任务，先说明你为什么需要访问该路径，"
                 "再说明下一步打算做什么。"
             )
@@ -117,22 +129,28 @@ class FileEditTool(ToolBase):
         end = start + limit if limit > 0 else total_lines
         selected = lines[start:end]
 
-        return format_success({
-            "file_path": os.path.abspath(file_path),
-            "total_lines": total_lines,
-            "offset": start,
-            "limit": end - start,
-            "lines": [
-                {"num": start + i + 1, "content": line.rstrip("\n\r")}
-                for i, line in enumerate(selected)
-            ],
-            "content": "".join(selected),
-        })
+        return format_success(
+            {
+                "file_path": os.path.abspath(file_path),
+                "total_lines": total_lines,
+                "offset": start,
+                "limit": end - start,
+                "lines": [
+                    {"num": start + i + 1, "content": line.rstrip("\n\r")}
+                    for i, line in enumerate(selected)
+                ],
+                "content": "".join(selected),
+            }
+        )
 
     # ── Edit ──────────────────────────────────────────────────────
 
     def _edit(
-        self, file_path: str, old_string: str, new_string: str, replace_all: bool = False
+        self,
+        file_path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool = False,
     ) -> str:
         if not old_string:
             return format_error("edit 操作需要提供 old_string")
@@ -152,13 +170,15 @@ class FileEditTool(ToolBase):
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(new_content)
 
-        return format_success({
-            "file_path": os.path.abspath(file_path),
-            "replaced_count": count if replace_all else 1,
-            "replace_all": replace_all,
-            "total_lines": new_content.count("\n") + 1,
-            "message": f"已替换 {count if replace_all else 1} 处匹配",
-        })
+        return format_success(
+            {
+                "file_path": os.path.abspath(file_path),
+                "replaced_count": count if replace_all else 1,
+                "replace_all": replace_all,
+                "total_lines": new_content.count("\n") + 1,
+                "message": f"已替换 {count if replace_all else 1} 处匹配",
+            }
+        )
 
     # ── Multi-Edit ───────────────────────────────────────────────
 
@@ -184,7 +204,9 @@ class FileEditTool(ToolBase):
             all_ = edit.get("replace_all", False)
 
             if not old:
-                results.append({"index": i, "status": "error", "message": "old_string 为空"})
+                results.append(
+                    {"index": i, "status": "error", "message": "old_string 为空"}
+                )
                 continue
 
             count = content.count(old)
@@ -192,30 +214,39 @@ class FileEditTool(ToolBase):
                 results.append({"index": i, "status": "error", "message": "未找到匹配"})
                 continue
             if count > 1 and not all_:
-                results.append({
-                    "index": i, "status": "error",
-                    "message": f"有 {count} 处匹配，需设置 replace_all=true",
-                })
+                results.append(
+                    {
+                        "index": i,
+                        "status": "error",
+                        "message": f"有 {count} 处匹配，需设置 replace_all=true",
+                    }
+                )
                 continue
 
             content = content.replace(old, new, -1 if all_ else 1)
-            results.append({"index": i, "status": "ok", "replaced_count": count if all_ else 1})
+            results.append(
+                {"index": i, "status": "ok", "replaced_count": count if all_ else 1}
+            )
 
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
 
         success_count = sum(1 for r in results if r["status"] == "ok")
-        return format_success({
-            "file_path": os.path.abspath(file_path),
-            "total_edits": len(edit_list),
-            "success_count": success_count,
-            "failed_count": len(edit_list) - success_count,
-            "results": results,
-        })
+        return format_success(
+            {
+                "file_path": os.path.abspath(file_path),
+                "total_edits": len(edit_list),
+                "success_count": success_count,
+                "failed_count": len(edit_list) - success_count,
+                "results": results,
+            }
+        )
 
     # ── Search ───────────────────────────────────────────────────
 
-    def _search(self, file_path: str, pattern: str, case_insensitive: bool = False) -> str:
+    def _search(
+        self, file_path: str, pattern: str, case_insensitive: bool = False
+    ) -> str:
         if not pattern:
             return format_error("search 操作需要提供 pattern")
 
@@ -234,15 +265,19 @@ class FileEditTool(ToolBase):
         matches: list[dict[str, Any]] = []
         for i, line in enumerate(lines):
             for m in regex.finditer(line.rstrip("\n\r")):
-                matches.append({
-                    "line_num": i + 1,
-                    "column": m.start() + 1,
-                    "match": m.group(),
-                })
+                matches.append(
+                    {
+                        "line_num": i + 1,
+                        "column": m.start() + 1,
+                        "match": m.group(),
+                    }
+                )
 
-        return format_success({
-            "file_path": os.path.abspath(file_path),
-            "pattern": pattern,
-            "total_matches": len(matches),
-            "matches": matches,
-        })
+        return format_success(
+            {
+                "file_path": os.path.abspath(file_path),
+                "pattern": pattern,
+                "total_matches": len(matches),
+                "matches": matches,
+            }
+        )

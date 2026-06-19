@@ -14,6 +14,7 @@ from memory.narrative import LongTermMemoryInterface
 
 def _make_fake_agent(entries_setup=None):
     """构建 mock agent，ainvoke 时执行 entries_setup 修改当前 MemoryManager。"""
+
     async def fake_ainvoke(_input, config=None):
         if entries_setup:
             entries_setup()
@@ -43,21 +44,32 @@ async def test_full_pipeline_cold_start_to_update(tmp_path, monkeypatch):
         captured_prompts.append(kwargs.get("prompt", ""))
 
         if call_count[0] == 1:
+
             def setup1():
-                narrative._current_mm.add(description="第1轮记忆：用户打了招呼。", theme="身份")
+                narrative._current_mm.add(
+                    description="第1轮记忆：用户打了招呼。", theme="身份"
+                )
+
             return _make_fake_agent(entries_setup=setup1)
         elif call_count[0] == 2:
+
             def setup2():
                 mm = narrative._current_mm
                 mm.add(description="第1轮记忆：用户打了招呼。", theme="身份")
-                mm.add(description="第2轮补充：用户叫Miso，在北京学习网络安全。", theme="身份")
+                mm.add(
+                    description="第2轮补充：用户叫Miso，在北京学习网络安全。",
+                    theme="身份",
+                )
+
             return _make_fake_agent(entries_setup=setup2)
         else:
+
             def setup3():
                 mm = narrative._current_mm
                 for item in mm.show():
                     mm.delete(item["id"])
                 mm.add(description=f"第{call_count[0]}轮记忆：已更新。", theme="身份")
+
             return _make_fake_agent(entries_setup=setup3)
 
     monkeypatch.setattr(narrative, "create_react_agent", agent_factory)
@@ -125,6 +137,7 @@ async def test_pipeline_handles_concurrent_sends(tmp_path, monkeypatch):
                 description=f"记忆{processed_count[0]}。",
                 theme="身份",
             )
+
         return _make_fake_agent(entries_setup=setup)
 
     monkeypatch.setattr(narrative, "create_react_agent", agent_factory)
@@ -134,10 +147,12 @@ async def test_pipeline_handles_concurrent_sends(tmp_path, monkeypatch):
 
     # 快速连续投放 5 轮对话
     for i in range(5):
-        await ltm.send_history([
-            {"role": "user", "content": f"消息{i}"},
-            {"role": "assistant", "content": f"回复{i}"},
-        ])
+        await ltm.send_history(
+            [
+                {"role": "user", "content": f"消息{i}"},
+                {"role": "assistant", "content": f"回复{i}"},
+            ]
+        )
 
     await ltm.stop_listening()
 
@@ -165,6 +180,7 @@ async def test_send_history_is_non_blocking(tmp_path, monkeypatch):
     ltm.start_listening(MagicMock())
 
     import time
+
     start = time.monotonic()
     for i in range(3):
         await ltm.send_history([{"role": "user", "content": f"msg{i}"}])

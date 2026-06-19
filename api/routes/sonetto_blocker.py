@@ -42,7 +42,9 @@ def _load() -> list[dict]:
 def _save(entries: list[dict]) -> None:
     YAML_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(YAML_PATH, "w", encoding="utf-8") as f:
-        yaml.dump({"blockers": entries}, f, allow_unicode=True, default_flow_style=False)
+        yaml.dump(
+            {"blockers": entries}, f, allow_unicode=True, default_flow_style=False
+        )
 
 
 def _create_marker(dir_path: str) -> None:

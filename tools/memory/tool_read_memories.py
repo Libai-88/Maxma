@@ -9,10 +9,17 @@ from tools.base import ToolBase, format_error, format_success
 
 class ReadMemoriesInput(BaseModel):
     get_doc: bool = Field(default=False, description="设为 true 以获取使用说明")
-    id: str = Field(default="", description="要读取的记忆 ID（来自 list_memories 的输出）")
+    id: str = Field(
+        default="", description="要读取的记忆 ID（来自 list_memories 的输出）"
+    )
 
 
-MEMORY_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "personas" / "memory.yaml"
+MEMORY_PATH = (
+    Path(__file__).resolve().parent.parent.parent
+    / "config"
+    / "personas"
+    / "memory.yaml"
+)
 
 
 class ReadMemoriesTool(ToolBase):
@@ -47,7 +54,9 @@ class ReadMemoriesTool(ToolBase):
                 break
 
         if target is None:
-            return format_error(f"未找到 ID 为 {id} 的记忆条目。请先调用 list_memories 确认 ID。")
+            return format_error(
+                f"未找到 ID 为 {id} 的记忆条目。请先调用 list_memories 确认 ID。"
+            )
 
         result = {
             "id": target["id"],
@@ -70,7 +79,9 @@ class ReadMemoriesTool(ToolBase):
             lines.append("")
             lines.append("### 变更历史")
             for h in result["history"]:
-                lines.append(f"  - {h['time']}: {h['description'][:60]}{'…' if len(h['description']) > 60 else ''}")
+                lines.append(
+                    f"  - {h['time']}: {h['description'][:60]}{'…' if len(h['description']) > 60 else ''}"
+                )
         result["formatted"] = "\n".join(lines)
 
         return format_success(result)

@@ -80,11 +80,13 @@ class TavilyExtractTool(ToolBase):
 
             # Tavily extract 返回格式:
             # { results: [{ url, title, raw_content, images }], failed_results, response_time }
-            return format_success({
-                "results": result.get("results", []),
-                "failed_results": result.get("failed_results", []),
-                "response_time": result.get("response_time", 0),
-            })
+            return format_success(
+                {
+                    "results": result.get("results", []),
+                    "failed_results": result.get("failed_results", []),
+                    "response_time": result.get("response_time", 0),
+                }
+            )
 
         except Exception as e:
             return format_error(f"Tavily 提取失败: {e!s}")

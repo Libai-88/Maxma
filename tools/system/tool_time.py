@@ -18,10 +18,12 @@ class TimeTool(ToolBase):
 
     def _run(self) -> str:
         now = datetime.now()
-        return format_success({
-            "datetime": now.strftime("%Y-%m-%d %H:%M:%S"),
-            "date": now.strftime("%Y-%m-%d"),
-            "time": now.strftime("%H:%M:%S"),
-            "weekday": now.strftime("%A"),
-            "timezone": "Asia/Shanghai",
-        })
+        return format_success(
+            {
+                "datetime": now.strftime("%Y-%m-%d %H:%M:%S"),
+                "date": now.strftime("%Y-%m-%d"),
+                "time": now.strftime("%H:%M:%S"),
+                "weekday": now.strftime("%A"),
+                "timezone": "Asia/Shanghai",
+            }
+        )

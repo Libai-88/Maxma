@@ -22,7 +22,9 @@ def get_llm(provider_manager=None):
                 streaming=True,
             )
 
-    raise RuntimeError("No enabled LLM provider configured. Add one via the providers panel (/providers).")
+    raise RuntimeError(
+        "No enabled LLM provider configured. Add one via the providers panel (/providers)."
+    )
 
 
 def get_system_prompt() -> str:

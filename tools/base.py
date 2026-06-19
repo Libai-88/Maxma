@@ -45,9 +45,7 @@ class SharedAPIClient:
     def amap_request(self, endpoint: str, params: dict) -> dict:
         """发起高德地图 API 请求。"""
         params["key"] = self._amap_key
-        resp = self._session.get(
-            f"https://restapi.amap.com{endpoint}", params=params
-        )
+        resp = self._session.get(f"https://restapi.amap.com{endpoint}", params=params)
         resp.raise_for_status()
         return resp.json()
 
@@ -139,7 +137,9 @@ _WHITELIST_PATH = (
 )
 
 # 项目根目录：由 base.py 所在位置 (tools/base.py) 向上推一级
-_PROJECT_ROOT = os.path.normpath(os.path.abspath(Path(__file__).resolve().parent.parent))
+_PROJECT_ROOT = os.path.normpath(
+    os.path.abspath(Path(__file__).resolve().parent.parent)
+)
 # 默认白名单路径：仅暴露 anthropic_skills 目录
 _DEFAULT_WHITELIST_PATH = os.path.join(_PROJECT_ROOT, "anthropic_skills")
 
@@ -199,7 +199,9 @@ def _ensure_whitelist() -> None:
             entries.insert(0, _default_entry())
 
         with open(_WHITELIST_PATH, "w", encoding="utf-8") as f:
-            yaml.dump({"whitelist": entries}, f, allow_unicode=True, default_flow_style=False)
+            yaml.dump(
+                {"whitelist": entries}, f, allow_unicode=True, default_flow_style=False
+            )
 
     except (yaml.YAMLError, OSError, ValueError):
         # 文件损坏 → 重写
@@ -263,12 +265,20 @@ def _ensure_blocker() -> None:
             for e in entries
         )
         if not has_entry:
-            entries.insert(0, {
-                "path": _AUTO_BLOCKER_PATH,
-                "description": "API 数据目录（自动生成）",
-            })
+            entries.insert(
+                0,
+                {
+                    "path": _AUTO_BLOCKER_PATH,
+                    "description": "API 数据目录（自动生成）",
+                },
+            )
             with open(_BLOCKER_YAML_PATH, "w", encoding="utf-8") as f:
-                yaml.dump({"blockers": entries}, f, allow_unicode=True, default_flow_style=False)
+                yaml.dump(
+                    {"blockers": entries},
+                    f,
+                    allow_unicode=True,
+                    default_flow_style=False,
+                )
     except (yaml.YAMLError, OSError):
         pass
 

@@ -9,11 +9,21 @@ from tools.base import ToolBase, format_error, format_success
 
 class CreateMemoryInput(BaseModel):
     get_doc: bool = Field(default=False, description="设为 true 以获取使用说明")
-    content: str = Field(default="", description="记忆内容，用第三人称中文描述用户的一个事实")
-    section: str = Field(default="", description="记忆分区，如「身份」「音乐」「品味」「地点与路径」「瞬间」「时效待办」，也可创建新分区（1-4字中文名词）")
+    content: str = Field(
+        default="", description="记忆内容，用第三人称中文描述用户的一个事实"
+    )
+    section: str = Field(
+        default="",
+        description="记忆分区，如「身份」「音乐」「品味」「地点与路径」「瞬间」「时效待办」，也可创建新分区（1-4字中文名词）",
+    )
 
 
-MEMORY_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "personas" / "memory.yaml"
+MEMORY_PATH = (
+    Path(__file__).resolve().parent.parent.parent
+    / "config"
+    / "personas"
+    / "memory.yaml"
+)
 
 
 class CreateMemoryTool(ToolBase):
@@ -37,9 +47,11 @@ class CreateMemoryTool(ToolBase):
 
         mm = MemoryManager(yaml_file=str(MEMORY_PATH))
         new_id = mm.add(description=content, theme=section)
-        return format_success({
-            "id": new_id,
-            "content": content,
-            "section": section,
-            "message": f"已创建 [{new_id}] ({section}): {content}",
-        })
+        return format_success(
+            {
+                "id": new_id,
+                "content": content,
+                "section": section,
+                "message": f"已创建 [{new_id}] ({section}): {content}",
+            }
+        )

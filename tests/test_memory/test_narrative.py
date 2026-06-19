@@ -20,6 +20,7 @@ def _fake_agent_factory(entries_setup=None):
 
     entries_setup 用于在"Agent 调用工具"后模拟 MemoryManager 的条目变化。
     """
+
     async def fake_ainvoke(_input, config=None):
         if entries_setup:
             entries_setup()
@@ -168,7 +169,9 @@ class TestCrudTools:
 
     def test_create_memory(self, tmp_path):
         mm = self._make_mm(tmp_path)
-        result = narrative.create_memory.invoke({"content": "用户叫Miso。", "section": "身份"})
+        result = narrative.create_memory.invoke(
+            {"content": "用户叫Miso。", "section": "身份"}
+        )
         assert "已创建 [" in result
         assert "身份" in result
         items = mm.show()
@@ -178,7 +181,9 @@ class TestCrudTools:
 
     def test_create_memory_custom_section_preserved(self, tmp_path):
         mm = self._make_mm(tmp_path)
-        result = narrative.create_memory.invoke({"content": "用户叫Miso。", "section": "健康"})
+        result = narrative.create_memory.invoke(
+            {"content": "用户叫Miso。", "section": "健康"}
+        )
         assert "已创建 [" in result
         assert "健康" in result
         items = mm.show()
@@ -186,19 +191,23 @@ class TestCrudTools:
 
     def test_create_memory_empty_section_fallback(self, tmp_path):
         mm = self._make_mm(tmp_path)
-        result = narrative.create_memory.invoke({"content": "用户叫Miso。", "section": "   "})
+        result = narrative.create_memory.invoke(
+            {"content": "用户叫Miso。", "section": "   "}
+        )
         assert "已创建 [" in result
         items = mm.show()
         assert items[0]["theme"] == "   "
 
     def test_create_memory_id_is_uuid(self, tmp_path):
         self._make_mm(tmp_path)
-        result = narrative.create_memory.invoke({"content": "用户叫Miso。", "section": "身份"})
+        result = narrative.create_memory.invoke(
+            {"content": "用户叫Miso。", "section": "身份"}
+        )
         # Extract ID from result string
         match = re.search(r"\[([\w-]+)\]", result)
         assert match is not None
         assert len(match.group(1)) == 36  # UUID v4 length
-        assert "-" in match.group(1)     # UUID contains hyphens
+        assert "-" in match.group(1)  # UUID contains hyphens
 
     def test_read_memories_empty(self, tmp_path):
         mm = MemoryManager(yaml_file=str(tmp_path / "memory.yaml"))
@@ -217,37 +226,52 @@ class TestCrudTools:
     def test_update_memory_success(self, tmp_path):
         mm = self._make_mm(tmp_path)
         item_id = mm.add(description="旧内容", theme="身份")
-        result = narrative.update_memory.invoke({
-            "id": item_id, "content": "新内容",
-            "reason": "信息过时，需要更新",
-            "origin_content": "旧内容",
-        })
+        result = narrative.update_memory.invoke(
+            {
+                "id": item_id,
+                "content": "新内容",
+                "reason": "信息过时，需要更新",
+                "origin_content": "旧内容",
+            }
+        )
         assert "已更新" in result
         items = mm.show()
         assert items[0]["description"] == "新内容"
 
     def test_update_memory_not_found(self, tmp_path):
         self._make_mm(tmp_path)
-        result = narrative.update_memory.invoke({
-            "id": "nonexistent-id", "content": "x",
-            "reason": "测试", "origin_content": "不存在",
-        })
+        result = narrative.update_memory.invoke(
+            {
+                "id": "nonexistent-id",
+                "content": "x",
+                "reason": "测试",
+                "origin_content": "不存在",
+            }
+        )
         assert "错误" in result
 
     def test_delete_memory_success(self, tmp_path):
         mm = self._make_mm(tmp_path)
         item_id = mm.add(description="删除我", theme="身份")
-        result = narrative.delete_memory.invoke({
-            "id": item_id, "reason": "信息已过时", "origin_content": "删除我",
-        })
+        result = narrative.delete_memory.invoke(
+            {
+                "id": item_id,
+                "reason": "信息已过时",
+                "origin_content": "删除我",
+            }
+        )
         assert "已删除" in result
         assert mm.show() == []
 
     def test_delete_memory_not_found(self, tmp_path):
         self._make_mm(tmp_path)
-        result = narrative.delete_memory.invoke({
-            "id": "nonexistent-id", "reason": "测试", "origin_content": "不存在",
-        })
+        result = narrative.delete_memory.invoke(
+            {
+                "id": "nonexistent-id",
+                "reason": "测试",
+                "origin_content": "不存在",
+            }
+        )
         assert "错误" in result
 
 
@@ -282,10 +306,13 @@ class TestGetNarrative:
 
     def test_multiple_themes(self, monkeypatch, tmp_path):
         p = tmp_path / "memory.yaml"
-        _populate_mm(p, [
-            ("用户叫Miso。", "身份"),
-            ("用户喜欢洛天依。", "音乐"),
-        ])
+        _populate_mm(
+            p,
+            [
+                ("用户叫Miso。", "身份"),
+                ("用户喜欢洛天依。", "音乐"),
+            ],
+        )
         monkeypatch.setattr(narrative, "MEMORY_PATH", p)
         result = narrative.get_narrative()
         assert "用户叫Miso。" in result
@@ -395,6 +422,7 @@ class TestLongTermMemoryInterface:
         path = tmp_path / "memory.yaml"
 
         captured_prompt = []
+
         def capture_agent(**kwargs):
             captured_prompt.append(kwargs.get("prompt", ""))
             return _fake_agent_factory()
@@ -419,13 +447,16 @@ class TestLongTermMemoryInterface:
         _populate_mm(path, [("旧记忆。", "身份")])
 
         captured_prompt = []
+
         def capture_agent(**kwargs):
             captured_prompt.append(kwargs.get("prompt", ""))
+
             def update_entries():
                 mm = narrative._current_mm
                 for item in mm.show():
                     mm.delete(item["id"])
                 mm.add(description="更新后的记忆内容。", theme="身份")
+
             return _fake_agent_factory(entries_setup=update_entries)
 
         monkeypatch.setattr(narrative, "create_react_agent", capture_agent)
@@ -453,14 +484,18 @@ class TestLongTermMemoryInterface:
             captured_prompts.append(kwargs.get("prompt", ""))
             call_count[0] += 1
             if call_count[0] == 1:
+
                 def setup1():
                     narrative._current_mm.add(description="第一轮记忆。", theme="身份")
+
                 return _fake_agent_factory(entries_setup=setup1)
             else:
+
                 def setup2():
                     mm = narrative._current_mm
                     mm.add(description="第一轮记忆。", theme="身份")
                     mm.add(description="第二轮补充。", theme="身份")
+
                 return _fake_agent_factory(entries_setup=setup2)
 
         monkeypatch.setattr(narrative, "create_react_agent", capture_agent)
@@ -503,7 +538,9 @@ class TestLongTermMemoryInterface:
         assert mm.show() == []
 
     @pytest.mark.asyncio
-    async def test_agent_produces_no_entries_preserves_original(self, tmp_path, monkeypatch):
+    async def test_agent_produces_no_entries_preserves_original(
+        self, tmp_path, monkeypatch
+    ):
         """Agent 未创建条目时文件为空。"""
         path = tmp_path / "memory.yaml"
 
@@ -544,7 +581,9 @@ class TestLongTermMemoryInterface:
         path = tmp_path / "memory.yaml"
 
         fake_agent = _fake_agent_factory(
-            entries_setup=lambda: narrative._current_mm.add(description="记忆。", theme="身份")
+            entries_setup=lambda: narrative._current_mm.add(
+                description="记忆。", theme="身份"
+            )
         )
         monkeypatch.setattr(narrative, "create_react_agent", lambda **kw: fake_agent)
 
