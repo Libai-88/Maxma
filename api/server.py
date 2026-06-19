@@ -1,15 +1,14 @@
-"""FastAPI 应用工厂 — 生命周期管理、CORS、路由挂载、静态文件服务。"""
+"""FastAPI 应用工厂 — 生命周期管理、CORS、路由挂载。"""
 
+import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from starlette.responses import FileResponse
 
 import time
 
+from api.auth import load_or_create_token
 from api.const_session_store import (
     deserialize_messages,
     load_all_const_sessions,
@@ -30,7 +29,7 @@ from memory.narrative import MEMORY_PATH, LongTermMemoryInterface
 from tools.mcp import init_mcp_tools, close_mcp
 from version import __version__
 
-WEB_DIR = Path(__file__).resolve().parent.parent / "web" / "dist"
+from api.middleware.auth import AuthMiddleware
 
 
 async def _load_const_sessions(app: FastAPI):
@@ -126,6 +125,10 @@ async def lifespan(app: FastAPI):
     # 加载 const 固定会话（需要 tools 已就绪）
     await _load_const_sessions(app)
 
+    # 3. 初始化认证 Token
+    app.state.auth_token = load_or_create_token()
+    print(f"[auth] token: {app.state.auth_token}")
+
     yield
 
     # 关闭：清理资源
@@ -140,9 +143,19 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # CORS：开发环境仅放行 Vite（5173），生产可加 localhost:8000
+    cors_origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+    if os.environ.get("SONETTO_ENV") == "production":
+        cors_origins += [
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
+        ]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -180,12 +193,7 @@ def create_app() -> FastAPI:
     async def health():
         return await get_health_report(app)
 
-    # 生产模式：serve 前端静态文件（用 /assets 前缀避免拦截 WebSocket）
-    if WEB_DIR.exists():
-        app.mount("/assets", StaticFiles(directory=str(WEB_DIR / "assets")), name="assets")
-
-        @app.exception_handler(404)
-        async def spa_fallback(request, exc):
-            return FileResponse(WEB_DIR / "index.html")
+    # 认证中间件（在路由之后添加，确保只拦截 API/WS 路径）
+    app.add_middleware(AuthMiddleware)
 
     return app
