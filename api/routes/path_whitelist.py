@@ -1,5 +1,6 @@
 """REST API — 路径白名单 (path_whitelist.yaml) CRUD。"""
 
+import os
 from pathlib import Path
 
 import yaml
@@ -22,6 +23,7 @@ WHITELIST_PATH = (
 class WhitelistEntry(BaseModel):
     path: str
     description: str = ""
+    recursive: bool = True
 
 
 class WhitelistResponse(BaseModel):
@@ -33,7 +35,11 @@ def _load() -> list[dict]:
         return []
     with open(WHITELIST_PATH, encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
-    return raw.get("whitelist", []) or []
+    entries = raw.get("whitelist", []) or []
+    for e in entries:
+        if isinstance(e, dict) and "recursive" not in e:
+            e["recursive"] = True
+    return entries
 
 
 def _save(entries: list[dict]) -> None:
@@ -52,9 +58,11 @@ async def list_whitelist():
 @router.post("/path-whitelist", response_model=WhitelistEntry)
 async def add_whitelist(entry: WhitelistEntry):
     entries = _load()
-    entries.append(entry.model_dump())
+    data = entry.model_dump()
+    data["path"] = os.path.normpath(data["path"])
+    entries.append(data)
     _save(entries)
-    return entry
+    return WhitelistEntry(**data)
 
 
 @router.put("/path-whitelist/{index}", response_model=WhitelistEntry)
@@ -62,9 +70,11 @@ async def update_whitelist(index: int, entry: WhitelistEntry):
     entries = _load()
     if index < 0 or index >= len(entries):
         raise HTTPException(status_code=404, detail=f"索引 {index} 超出范围")
-    entries[index] = entry.model_dump()
+    data = entry.model_dump()
+    data["path"] = os.path.normpath(data["path"])
+    entries[index] = data
     _save(entries)
-    return entry
+    return WhitelistEntry(**data)
 
 
 @router.delete("/path-whitelist/{index}")

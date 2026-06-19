@@ -210,8 +210,9 @@ def _ensure_whitelist() -> None:
 
 def _default_entry() -> dict:
     return {
-        "path": str(_DEFAULT_WHITELIST_PATH),
+        "path": os.path.normpath(str(_DEFAULT_WHITELIST_PATH)),
         "description": "技能目录（自动生成）",
+        "recursive": True,
     }
 
 
@@ -288,13 +289,18 @@ _ensure_whitelist()
 _ensure_blocker()
 
 
-def _load_path_whitelist() -> list[str]:
-    """从 YAML 文件加载白名单路径前缀列表，按绝对路径规范化后返回。
+def _load_path_whitelist() -> list[tuple[str, bool]]:
+    """从 YAML 文件加载白名单条目列表。
+
+    每个条目返回 (normalized_path, recursive) 元组。
+    recursive=True 时该路径下所有子目录继承访问权限；
+    recursive=False 时仅允许访问该确切路径。
 
     文件格式:
         whitelist:
           - path: "/some/allowed/dir"
             description: ...
+            recursive: true
     读取失败时返回空列表（会触发 fail-secure 全阻断）。
     """
     try:
@@ -303,11 +309,15 @@ def _load_path_whitelist() -> list[str]:
         entries = raw.get("whitelist", [])
         if not isinstance(entries, list):
             return []
-        result: list[str] = []
+        result: list[tuple[str, bool]] = []
         for entry in entries:
             if isinstance(entry, dict) and "path" in entry:
                 normalized = os.path.normpath(os.path.abspath(entry["path"]))
-                result.append(normalized)
+                recursive = entry.get("recursive", True)
+                if isinstance(recursive, bool):
+                    result.append((normalized, recursive))
+                else:
+                    result.append((normalized, True))
         return result
     except (yaml.YAMLError, OSError, ValueError):
         return []
@@ -317,11 +327,31 @@ def check_path_whitelisted(target_path: str) -> str | None:
     """检查 *target_path* 是否位于白名单设置的任一前缀下。
 
     参数:
-        target_path: 待验证的文件或目录路径（相对/绝对均可）。
+        target_path: 待验证的文件或目录路径（相对或绝对均可）。
 
     返回:
         None      — 允许访问（路径在白名单内）。
-        str       — 阻断原因描述，调用方应将其传给 format_error()。
+        str       — 阻断原因描述，调用方应将其传给 format_error() 返回给 LLM。
+
+    算法行为（按优先级排列）:
+
+        1) 精确匹配
+           目标路径与任何条目的路径完全一致 → 放行。这是最高优先级，
+           不受该条目或任何父目录条目的 recursive 标志影响。
+
+        2) 非递归阻断
+           匹配到某个 non-recursive 条目的子路径 → 阻断。
+           non-recursive 的含义是"仅当前目录"——该条目的所有子路径
+           均被拒绝，即使更深层另有一个 recursive 子条目也无法覆盖。
+           父目录 non-recursive 的阻断强于子目录 recursive 的放行。
+
+        3) 递归放行
+           没有任何 non-recursive 父目录阻断，且匹配到某个 recursive
+           条目的子路径 → 放行。recursive 的含义是该路径及以下所有
+           目录均允许访问。
+
+        4) 无匹配
+           以上都不满足 → 阻断。
     """
     if not target_path:
         return None
@@ -332,12 +362,30 @@ def check_path_whitelisted(target_path: str) -> str | None:
     if not whitelist:
         return f"路径不在白名单中: {target_path}（白名单为空或未配置）"
 
-    for allowed_prefix in whitelist:
-        # 精确匹配或前缀 + 分隔符匹配，防止 "/home/proj" 误匹配 "/home/project-evil"
-        if abs_target == allowed_prefix or abs_target.startswith(
-            allowed_prefix + os.sep
-        ):
+    has_recursive_parent = False
+
+    for allowed_prefix, recursive in whitelist:
+        # 去掉末尾分隔符，避免 root 路径（如 T:\）拼接 os.sep 产生双分隔符
+        prefix_stripped = allowed_prefix.rstrip(os.sep)
+        separator = prefix_stripped + os.sep
+
+        # 优先级 1: 精确匹配 → 不受 recursive 标志影响
+        if abs_target in (allowed_prefix, prefix_stripped):
             return None
+
+        # 目标不在当前条目的路径树下 → 跳过，检查下一项
+        if not abs_target.startswith(separator):
+            continue
+
+        # 目标在当前条目的子目录中
+        if not recursive:
+            # 优先级 2: non-recursive → 阻断一切子路径（即使另有 recursive 子条目）
+            return f"路径受限: {target_path}（白名单条目 '{allowed_prefix}' 限定仅当前目录）"
+        # 优先级 3 候选: recursive 父目录匹配 → 标记，继续检查后续非递归条目
+        has_recursive_parent = True
+
+    if has_recursive_parent:
+        return None
 
     return f"路径不在白名单中: {target_path}"
 

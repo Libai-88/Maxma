@@ -14,6 +14,9 @@
           <div class="entry-body">
             <div class="entry-path">{{ entry.path }}</div>
             <div v-if="entry.description" class="entry-desc">{{ entry.description }}</div>
+            <div class="entry-recursive-tag" :class="entry.recursive ? 'recursive-yes' : 'recursive-no'">
+              {{ entry.recursive ? '允许子目录' : '仅当前目录' }}
+            </div>
           </div>
           <div class="entry-actions">
             <button class="btn" @click="startEdit(i)">编辑</button>
@@ -49,6 +52,14 @@
             placeholder="用途说明"
           />
         </div>
+        <div class="form-section">
+          <label class="form-label">子目录继承</label>
+          <label class="toggle-row">
+            <input type="checkbox" v-model="formRecursive" class="toggle-input" />
+            <span class="toggle-slider"></span>
+            <span class="toggle-label">{{ formRecursive ? '允许访问所有子目录' : '仅允许访问此目录（不含子目录）' }}</span>
+          </label>
+        </div>
         <div v-if="formError" class="msg error">{{ formError }}</div>
         <div class="form-actions">
           <button class="btn" @click="cancelForm">取消</button>
@@ -74,6 +85,7 @@ const formError = ref('')
 const editingIndex = ref(-1)
 const formPath = ref('')
 const formDesc = ref('')
+const formRecursive = ref(true)
 
 async function loadEntries() {
   loading.value = true
@@ -103,6 +115,7 @@ function startAdd() {
   editingIndex.value = -1
   formPath.value = ''
   formDesc.value = ''
+  formRecursive.value = true
   formError.value = ''
   mode.value = 'form'
 }
@@ -111,6 +124,7 @@ function startEdit(i: number) {
   editingIndex.value = i
   formPath.value = entries.value[i].path
   formDesc.value = entries.value[i].description || ''
+  formRecursive.value = entries.value[i].recursive === true
   formError.value = ''
   mode.value = 'form'
 }
@@ -124,7 +138,7 @@ async function handleSave() {
   saving.value = true
   formError.value = ''
   try {
-    const entry = { path: formPath.value.trim(), description: formDesc.value.trim() }
+    const entry = { path: formPath.value.trim(), description: formDesc.value.trim(), recursive: formRecursive.value }
     if (editingIndex.value >= 0) {
       await api.updateWhitelistEntry(editingIndex.value, entry)
     } else {
@@ -292,5 +306,64 @@ onMounted(loadEntries)
 .btn-danger {
   color: var(--status-error);
   border-color: var(--status-error);
+}
+
+/* ── 递归标签 ── */
+.entry-recursive-tag {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+.recursive-yes {
+  background: #dcfce7;
+  color: #166534;
+}
+.recursive-no {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* ── Toggle 开关 ── */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+.toggle-input {
+  display: none;
+}
+.toggle-slider {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  background: #d1d5db;
+  border-radius: 11px;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.toggle-slider::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+.toggle-input:checked + .toggle-slider {
+  background: var(--accent, #3b82f6);
+}
+.toggle-input:checked + .toggle-slider::after {
+  transform: translateX(18px);
+}
+.toggle-label {
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 </style>

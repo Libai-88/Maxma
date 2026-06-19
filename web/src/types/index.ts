@@ -352,6 +352,7 @@ export interface ListToolsResponse {
 export interface WhitelistEntry {
   path: string
   description: string
+  recursive: boolean
 }
 
 export interface ListWhitelistResponse {
