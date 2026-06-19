@@ -88,5 +88,6 @@ We do not operate a bug bounty program. Thank you for your contribution!
 - [x] Secret files gitignored — 防止凭据意外提交
 - [x] SonettoBlocker on config directories — 防止 Agent 自篡改配置
 - [x] CodeQL scanning — 代码静态分析
+- [x] Gitleaks scanning — 密钥泄露检测（CI 自动运行）
 - [ ] Encryption at rest — API Key 文件加密（设计决策：单用户本地部署场景未启用）
 - [ ] Audit logging — 所有 API 请求审计日志（规划中）
