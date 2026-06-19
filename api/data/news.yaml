@@ -1,4 +1,12 @@
 news:
+  - id: "session-sidebar-categories"
+    title: "会话侧边栏分类改进"
+    description: "会话侧边栏分类显示优化：已保存和临时会话分区始终可见，无已保存会话时显示引导提示。侧边栏收起时同步隐藏提示文字。"
+    type: "enhance"
+    date: "2026-06-19"
+    tags: ["会话", "侧边栏", "UI"]
+    version: ""
+    pr_number: 134
   - id: "v2.2.0-release"
     title: "发布 v2.2.0 版本"
     description: "v2.2.0 版本带来完整的本地安全防护系统与前端设置体系。新增 SonettoBlocker 拒止锚与路径白名单双层安全机制，保护本地文件安全。前端新增设置页体系，包含用户、人设、路径白名单、拒止锚管理页面及安全标识。输入框新增拖拽调整高度手柄，优化长文本编辑体验。"
