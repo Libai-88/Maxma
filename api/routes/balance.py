@@ -9,14 +9,20 @@ DEEPSEEK_BALANCE_URL = "https://api.deepseek.com/user/balance"
 
 
 def _find_deepseek_api_key(request: Request) -> str:
-    """在已配置的 provider 中查找 DeepSeek API key。"""
+    """在已配置的 provider 中查找 DeepSeek API key。
+
+    通过 base_url 中是否包含 deepseek.com 来判断，
+    不依赖用户填写的 id/label 名称。
+    """
     mgr = getattr(request.app.state, "provider_manager", None)
     if mgr is None:
         raise HTTPException(status_code=400, detail="Provider manager not initialized")
 
     for config in mgr.list_configs():
-        lid = (config.id + config.label).lower()
-        if "deepseek" in lid and config.api_key:
+        if not config.api_key:
+            continue
+        base = (config.base_url or "").lower()
+        if "deepseek.com" in base:
             return config.api_key
 
     raise HTTPException(
