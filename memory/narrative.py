@@ -287,7 +287,7 @@ class LongTermMemoryInterface:
             await self._queue.put((session_id, turn_id, list(turn_messages)))
             print(f"[ltm] queue.put session={session_id} turn_id={turn_id} queue_size≈{self._queue.qsize()}")
         else:
-            print(f"[ltm] queue is None, dropping history")
+            print("[ltm] queue is None, dropping history")
 
     async def stop_listening(self) -> None:
         """发送 None 哨兵并等待消费者排空队列。"""
@@ -374,9 +374,9 @@ class LongTermMemoryInterface:
                     )
                     callbacks.append(memory_cb)
                 else:
-                    print(f"[ltm] NO ws_registry or session_id — skip callbacks")
+                    print("[ltm] NO ws_registry or session_id — skip callbacks")
 
-                print(f"[ltm] invoking CRUD agent...")
+                print("[ltm] invoking CRUD agent...")
                 await agent.ainvoke(
                     {"messages": [HumanMessage(content=user_prompt)]},
                     config={
@@ -384,7 +384,7 @@ class LongTermMemoryInterface:
                         "callbacks": callbacks,
                     },
                 )
-                print(f"[ltm] CRUD agent done")
+                print("[ltm] CRUD agent done")
 
             except Exception as e:
                 print(f"[ltm] CRUD agent error: {e}")
@@ -404,4 +404,4 @@ class LongTermMemoryInterface:
                     else:
                         print(f"[ltm] ws_registry.get returned None for session={session_id[:8]}")
                 else:
-                    print(f"[ltm] NO ws_registry or session_id — skip memory_done")
+                    print("[ltm] NO ws_registry or session_id — skip memory_done")
