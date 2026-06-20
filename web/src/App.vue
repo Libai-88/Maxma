@@ -62,12 +62,8 @@ import { allSessionStatuses } from '@/composables/useChat';
 import { health, startPolling, useHealth } from '@/composables/useHealth';
 import { constifySession, unconstifySession, useSession } from '@/composables/useSession';
 import { useSidebar } from '@/composables/useSidebar';
-<<<<<<< Updated upstream
-import { nextTick, onMounted, onUnmounted, ref } from 'vue';
-=======
 import { api } from '@/api';
 import { ref, onMounted, onUnmounted, nextTick } from 'vue';
->>>>>>> Stashed changes
 import { useRouter } from 'vue-router';
 
 const { effectiveCollapsed, toggleSidebar } = useSidebar()
