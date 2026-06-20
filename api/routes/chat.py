@@ -368,7 +368,9 @@ async def _run_agent_turn(
             session_id=session.session_id,
             turn_id=turn_id,
         )
-        print(f"[ltm] send_history enqueued session={session.session_id[:8]} turn_id={turn_id[:8]}")
+        print(
+            f"[ltm] send_history enqueued session={session.session_id[:8]} turn_id={turn_id[:8]}"
+        )
 
     # 4. [Const 会话] 自动持久化到磁盘 YAML
     if final_answer and session.is_const:

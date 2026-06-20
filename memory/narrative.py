@@ -285,7 +285,9 @@ class LongTermMemoryInterface:
             return
         if self._queue is not None:
             await self._queue.put((session_id, turn_id, list(turn_messages)))
-            print(f"[ltm] queue.put session={session_id} turn_id={turn_id} queue_size≈{self._queue.qsize()}")
+            print(
+                f"[ltm] queue.put session={session_id} turn_id={turn_id} queue_size≈{self._queue.qsize()}"
+            )
         else:
             print("[ltm] queue is None, dropping history")
 
@@ -305,7 +307,9 @@ class LongTermMemoryInterface:
             if item is None:
                 break
             session_id, turn_id, turn_messages = item
-            print(f"[ltm] consumer got session={session_id} turn_id={turn_id} msgs={len(turn_messages)}")
+            print(
+                f"[ltm] consumer got session={session_id} turn_id={turn_id} msgs={len(turn_messages)}"
+            )
 
             # 无论后续成功与否，先通知前端「开始处理」
             _sent_done = False
@@ -313,11 +317,15 @@ class LongTermMemoryInterface:
                 ws = self._ws_registry.get(session_id)
                 if ws is not None:
                     try:
-                        await ws.send_json({
-                            "type": "memory_start",
-                            "payload": {"turn_id": turn_id or ""},
-                        })
-                        print(f"[ltm] memory_start sent session={session_id[:8]} turn_id={turn_id[:8]}")
+                        await ws.send_json(
+                            {
+                                "type": "memory_start",
+                                "payload": {"turn_id": turn_id or ""},
+                            }
+                        )
+                        print(
+                            f"[ltm] memory_start sent session={session_id[:8]} turn_id={turn_id[:8]}"
+                        )
                     except Exception:
                         pass
 
@@ -368,9 +376,13 @@ class LongTermMemoryInterface:
                 # 创建回调：推送 CRUD 工具调用到前端对应轮次
                 callbacks = []
                 if self._ws_registry is not None and session_id:
-                    print(f"[ltm] creating MemoryToolCallback session={session_id[:8]} turn_id={turn_id[:8]}")
+                    print(
+                        f"[ltm] creating MemoryToolCallback session={session_id[:8]} turn_id={turn_id[:8]}"
+                    )
                     memory_cb = MemoryToolCallback(
-                        self._ws_registry, session_id, turn_id or "",
+                        self._ws_registry,
+                        session_id,
+                        turn_id or "",
                     )
                     callbacks.append(memory_cb)
                 else:
@@ -394,14 +406,20 @@ class LongTermMemoryInterface:
                     ws = self._ws_registry.get(session_id)
                     if ws is not None:
                         try:
-                            await ws.send_json({
-                                "type": "memory_done",
-                                "payload": {"turn_id": turn_id or ""},
-                            })
-                            print(f"[ltm] memory_done sent session={session_id[:8]} turn_id={turn_id[:8]}")
+                            await ws.send_json(
+                                {
+                                    "type": "memory_done",
+                                    "payload": {"turn_id": turn_id or ""},
+                                }
+                            )
+                            print(
+                                f"[ltm] memory_done sent session={session_id[:8]} turn_id={turn_id[:8]}"
+                            )
                         except Exception as e:
                             print(f"[ltm] memory_done send error: {e}")
                     else:
-                        print(f"[ltm] ws_registry.get returned None for session={session_id[:8]}")
+                        print(
+                            f"[ltm] ws_registry.get returned None for session={session_id[:8]}"
+                        )
                 else:
                     print("[ltm] NO ws_registry or session_id — skip memory_done")

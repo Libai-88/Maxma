@@ -31,7 +31,9 @@ class MemoryToolCallback(BaseCallbackHandler):
             return  # WebSocket 已断开，静默跳过
         try:
             await ws.send_json({"type": event_type, "payload": payload})
-            print(f"[ltm-cb] {event_type} sent to session={self._session_id[:8]} tool={payload.get('tool_name','?')}")
+            print(
+                f"[ltm-cb] {event_type} sent to session={self._session_id[:8]} tool={payload.get('tool_name', '?')}"
+            )
         except Exception as e:
             print(f"[ltm-cb] _send error: {e}")
 
@@ -45,11 +47,14 @@ class MemoryToolCallback(BaseCallbackHandler):
 
         # 截断过长输入
         truncated = input_str[:300] if len(input_str) > 300 else input_str
-        await self._send("memory_tool_start", {
-            "turn_id": self._turn_id,
-            "tool_name": tool_name,
-            "input": truncated,
-        })
+        await self._send(
+            "memory_tool_start",
+            {
+                "turn_id": self._turn_id,
+                "tool_name": tool_name,
+                "input": truncated,
+            },
+        )
 
     async def on_tool_end(self, output: str, **kwargs: Any) -> None:
         run_id = str(kwargs.get("run_id", ""))
@@ -61,19 +66,25 @@ class MemoryToolCallback(BaseCallbackHandler):
         if len(out_str) > 300:
             out_str = out_str[:300] + f"... (共 {len(out_str)} 字符)"
 
-        await self._send("memory_tool_end", {
-            "turn_id": self._turn_id,
-            "tool_name": tool_name,
-            "output": out_str,
-            "elapsed": round(elapsed, 2),
-        })
+        await self._send(
+            "memory_tool_end",
+            {
+                "turn_id": self._turn_id,
+                "tool_name": tool_name,
+                "output": out_str,
+                "elapsed": round(elapsed, 2),
+            },
+        )
 
     async def on_tool_error(self, error: BaseException, **kwargs: Any) -> None:
         run_id = str(kwargs.get("run_id", ""))
         self._tool_start_time.pop(run_id, None)
         tool_name = self._tool_names.pop(run_id, "unknown")
-        await self._send("memory_tool_error", {
-            "turn_id": self._turn_id,
-            "tool_name": tool_name,
-            "error": str(error),
-        })
+        await self._send(
+            "memory_tool_error",
+            {
+                "turn_id": self._turn_id,
+                "tool_name": tool_name,
+                "error": str(error),
+            },
+        )
