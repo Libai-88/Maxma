@@ -62,7 +62,12 @@ import { allSessionStatuses } from '@/composables/useChat';
 import { health, startPolling, useHealth } from '@/composables/useHealth';
 import { constifySession, unconstifySession, useSession } from '@/composables/useSession';
 import { useSidebar } from '@/composables/useSidebar';
+<<<<<<< Updated upstream
+import { nextTick, onMounted, onUnmounted, ref } from 'vue';
+=======
+import { api } from '@/api';
 import { ref, onMounted, onUnmounted, nextTick } from 'vue';
+>>>>>>> Stashed changes
 import { useRouter } from 'vue-router';
 
 const { effectiveCollapsed, toggleSidebar } = useSidebar()
@@ -79,15 +84,13 @@ async function handleRestart() {
   if (!window.confirm('确定要重启 SonettoHere 服务吗？正在进行的对话可能会中断。')) return
   restarting.value = true
   closeSettingsMenu()
-  try {
-    await fetch('/api/restart', { method: 'POST' })
-  } catch { /* server will close connection, expected */ }
+  api.restart()
   const poll = async () => {
     for (let i = 0; i < 60; i++) {
       await new Promise(r => setTimeout(r, 2000))
       try {
-        const res = await fetch('/api/health')
-        if (res.ok) { location.reload(); return }
+        await api.health()
+        location.reload(); return
       } catch { /* still down */ }
     }
     restarting.value = false
@@ -245,6 +248,8 @@ html, body {
   flex-direction: column;
   padding: 24px 20px;
   gap: 24px;
+  position: relative;
+  overflow: hidden;
 }
 
 .sidebar-header {
@@ -496,6 +501,35 @@ html, body {
   overflow: hidden;
   padding: 0;
   margin: 0;
+}
+
+/* ── Sidebar background image with blur + white overlay ── */
+.sidebar::before {
+  content: '';
+  position: absolute;
+  inset: -5%;
+  background-image: url('/images/sidebar-bg.jpg');
+  background-size: cover;
+  background-position: left center;
+  background-repeat: no-repeat;
+  filter: blur(10px);
+  transform: scale(1.05);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.sidebar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: #ffffffd3;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.sidebar > :not(.settings-popup) {
+  position: relative;
+  z-index: 1;
 }
 
 /* ── Shared markdown rendered content ── */
