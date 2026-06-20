@@ -20,7 +20,7 @@
             <ThinkingBlock :block="ev" />
           </div>
           <div
-            v-else
+            v-else-if="ev.kind === 'tool'"
             class="cite-source"
             @contextmenu.prevent="
               onBubbleContextMenu(
