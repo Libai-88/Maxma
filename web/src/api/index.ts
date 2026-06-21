@@ -12,6 +12,7 @@ import type {
   ListNewsResponse,
   ListSkillsResponse,
   ListToolsResponse,
+  ListMacrosResponse,
   ProviderConfig,
   TestConnectionResponse,
   DiscoverModelsResponse,

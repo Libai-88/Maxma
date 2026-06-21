@@ -72,9 +72,7 @@ async def list_skills():
 @router.get("/macros")
 async def list_macros():
     """扫描 macros/ 下所有 MACRO.md，返回结构化列表。"""
-    MACROS_DIR = (
-        Path(__file__).resolve().parent.parent.parent / "macros"
-    )
+    MACROS_DIR = Path(__file__).resolve().parent.parent.parent / "macros"
     if not MACROS_DIR.is_dir():
         return {"macros": []}
 
