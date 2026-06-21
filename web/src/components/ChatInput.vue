@@ -701,7 +701,7 @@ function onResizeEnd(e: PointerEvent) {
   background: #ffffff;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-lg);
   min-width: 140px;
   max-height: 200px;
   overflow-y: auto;
@@ -910,7 +910,7 @@ function onResizeEnd(e: PointerEvent) {
   border: 1px solid var(--border);
   border-radius: 20px;
   padding: 4px 14px 8px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-soft);
   transition: border-color 0.2s, box-shadow 0.2s;
   overflow: visible;
 }
@@ -920,7 +920,7 @@ function onResizeEnd(e: PointerEvent) {
 }
 .chat-input:focus-within {
   border-color: var(--accent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent);
+  box-shadow: var(--shadow-soft), 0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 /* 添加文件按钮 */
@@ -979,7 +979,7 @@ function onResizeEnd(e: PointerEvent) {
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-lg);
   min-width: 140px;
 }
 .add-file-menu-item {
