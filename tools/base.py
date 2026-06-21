@@ -208,7 +208,10 @@ def _ensure_whitelist() -> None:
         if changed:
             with open(_WHITELIST_PATH, "w", encoding="utf-8") as f:
                 yaml.dump(
-                    {"whitelist": entries}, f, allow_unicode=True, default_flow_style=False
+                    {"whitelist": entries},
+                    f,
+                    allow_unicode=True,
+                    default_flow_style=False,
                 )
 
     except (yaml.YAMLError, OSError, ValueError):
