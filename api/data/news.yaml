@@ -5,7 +5,7 @@ news:
     type: "feat"
     date: "2026-06-21"
     tags: ["Todoist", "工具增强"]
-    version: ""
+    version: "v2.5.0"
     pr_number: 170
   - id: "macros-support"
     title: "新增宏系统"
@@ -13,7 +13,7 @@ news:
     type: "feat"
     date: "2026-06-21"
     tags: ["宏", "自动补全"]
-    version: "PREVIEW"
+    version: "v2.5.0"
     pr_number: 165
   - id: "v2.4.1-release"
     title: "发布 v2.4.1 版本"
