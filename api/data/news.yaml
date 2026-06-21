@@ -1,4 +1,12 @@
 news:
+  - id: "todoist-full-encapsulation"
+    title: "Todoist 工具全面增强"
+    description: "Todoist 工具套件迎来全面升级。现有 6 个工具补齐 40+ 缺失的 SDK 参数（标签、时长、硬期限等），新增 list_sections、list_labels、add_quick 三个快捷工具，响应字段统一全量展示，并新增 70 个自动化测试保障稳定性。"
+    type: "feat"
+    date: "2026-06-21"
+    tags: ["Todoist", "工具增强"]
+    version: ""
+    pr_number: 170
   - id: "macros-support"
     title: "新增宏系统"
     description: "新增 macros 宏目录系统，支持在 anthropic_skills 同级创建 MACRO.md 文件封装可复用指令片段。输入框中输入 ! 或 ！即可触发宏自动补全列表。"
