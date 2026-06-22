@@ -22,19 +22,79 @@
       </svg>
       <span class="label">{{ Math.round(usage.usage_percent) }}%</span>
       <div class="hover-card card-usage">
-        <div class="card-row">
-          <span class="card-label">Current</span>
-          <span class="card-value">{{ formatTokens(usage.current_tokens) }}</span>
+        <!-- 总览 -->
+        <div class="breakdown-section">
+          <div class="card-row breakdown-header">
+            <span class="card-label">总览</span>
+            <span class="card-value">{{ Math.round(usage.usage_percent) }}%</span>
+          </div>
+          <div class="mini-bar-track" :class="level">
+            <div
+              class="mini-bar-fill"
+              :style="{ width: Math.min(usage.usage_percent, 100) + '%' }"
+            ></div>
+          </div>
+          <div class="card-row breakdown-part">
+            <span class="card-label indent">已用</span>
+            <span class="card-value">{{ formatTokens(usage.current_tokens) }}</span>
+          </div>
+          <div class="card-row breakdown-part">
+            <span class="card-label indent">极限</span>
+            <span class="card-value">{{ formatTokens(usage.max_tokens) }}</span>
+          </div>
         </div>
-        <div class="card-row">
-          <span class="card-label">Max</span>
-          <span class="card-value">{{ formatTokens(usage.max_tokens) }}</span>
-        </div>
-        <div class="card-divider"></div>
-        <div class="card-row">
-          <span class="card-label">Used</span>
-          <span class="card-value">{{ Math.round(usage.usage_percent) }}%</span>
-        </div>
+
+        <!-- 细分数据（可选） -->
+        <template v-if="usage.breakdown">
+          <div class="card-divider"></div>
+
+          <!-- 系统提示词 -->
+          <div class="breakdown-section">
+            <div class="card-row breakdown-header">
+              <span class="card-label">系统提示词</span>
+              <span class="card-value">{{ formatTokens(usage.breakdown.system_prompt.total) }}</span>
+            </div>
+            <div class="mini-bar-track">
+              <div
+                class="mini-bar-fill"
+                :style="{ width: usage.breakdown.system_prompt.usage_percent + '%' }"
+              ></div>
+            </div>
+            <div
+              v-for="part in usage.breakdown.system_prompt.parts"
+              :key="part.key || part.label"
+              class="card-row breakdown-part"
+            >
+              <span class="card-label indent">{{ part.label }}</span>
+              <span class="card-value">{{ formatTokens(part.tokens) }}</span>
+            </div>
+          </div>
+
+          <!-- 对话数据 -->
+          <div class="breakdown-section">
+            <div class="card-row breakdown-header">
+              <span class="card-label">对话数据</span>
+              <span class="card-value">{{ formatTokens(usage.breakdown.messages.total) }}</span>
+            </div>
+            <div class="mini-bar-track">
+              <div
+                class="mini-bar-fill"
+                :style="{ width: usage.breakdown.messages.usage_percent + '%' }"
+              ></div>
+            </div>
+            <div
+              v-for="(part, idx) in usage.breakdown.messages.parts"
+              :key="idx"
+              class="card-row breakdown-part"
+            >
+              <span class="card-label indent">
+                {{ part.label }}
+                <span class="msg-count">({{ part.count }})</span>
+              </span>
+              <span class="card-value">{{ formatTokens(part.tokens) }}</span>
+            </div>
+          </div>
+        </template>
       </div>
     </span>
 
@@ -184,6 +244,15 @@ async function onBalanceHover() {
 .danger .label {
   color: var(--status-error);
 }
+.safe .mini-bar-fill {
+  background: var(--status-ok);
+}
+.warn .mini-bar-fill {
+  background: var(--status-warn);
+}
+.danger .mini-bar-fill {
+  background: var(--status-error);
+}
 .model-name {
   color: var(--text-secondary);
   opacity: 1;
@@ -224,7 +293,9 @@ async function onBalanceHover() {
   box-shadow: var(--shadow-lg);
   font-size: 12px;
   line-height: 1.6;
-  white-space: nowrap;
+}
+.card-usage {
+  min-width: 260px;
 }
 .card-row {
   display: flex;
@@ -264,5 +335,36 @@ async function onBalanceHover() {
 }
 .balance-error {
   color: var(--status-error);
+}
+
+/* ── 细分展示 ── */
+.breakdown-section + .breakdown-section {
+  margin-top: 8px;
+}
+.breakdown-header .card-label {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.breakdown-part .indent {
+  padding-left: 12px;
+  font-size: 11px;
+}
+.msg-count {
+  color: var(--text-tertiary, var(--text-secondary));
+  font-size: 10px;
+  margin-left: 2px;
+}
+.mini-bar-track {
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  margin: 2px 0 4px 0;
+}
+.mini-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--text-secondary);
+  transition: width 0.3s ease;
 }
 </style>
