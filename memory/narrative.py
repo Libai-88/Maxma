@@ -12,7 +12,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
 
 from memory.memory_callback import MemoryToolCallback
-from memory.memory_manager import MemoryManager
+from memory.memory_manager import MAX_DESC_LENGTH, MemoryManager
 
 
 def _sanitize(text: str) -> str:
@@ -165,6 +165,11 @@ def create_memory(content: str, section: str) -> str:
             - "时效待办"（有截止日期的事项：作业、预约、考试）
     """
     content = _sanitize(content)
+    if len(content) > MAX_DESC_LENGTH:
+        return (
+            f"驳回：记忆内容超过 {MAX_DESC_LENGTH} 字限制（当前 {len(content)} 字），"
+            f"请精简至 {MAX_DESC_LENGTH} 字以内，避免列举；或拆分为多条独立条目。"
+        )
     if _current_mm is None:
         return "错误：记忆管理器未初始化。"
     new_id = _current_mm.add(description=content, theme=section)
@@ -190,6 +195,11 @@ def update_memory(id: str, content: str, reason: str) -> str:
         reason: 修改原因，说明为什么要更新这条记忆。
     """
     content = _sanitize(content)
+    if len(content) > MAX_DESC_LENGTH:
+        return (
+            f"驳回：更新后的记忆内容超过 {MAX_DESC_LENGTH} 字限制（当前 {len(content)} 字），"
+            f"请精简至 {MAX_DESC_LENGTH} 字以内，避免列举；或拆分为多条独立条目。"
+        )
     if _current_mm is None:
         return "错误：记忆管理器未初始化。"
     try:
@@ -230,6 +240,11 @@ def merge_memories(id1: str, id2: str, content: str, section: str, reason: str) 
         section: 合并后的记忆分区。
         reason: 合并原因，说明为什么这两条记忆需要合并。
     """
+    if len(content) > MAX_DESC_LENGTH:
+        return (
+            f"驳回：合并后的记忆内容超过 {MAX_DESC_LENGTH} 字限制（当前 {len(content)} 字），"
+            f"请精简至 {MAX_DESC_LENGTH} 字以内，避免列举；或保留两条各自独立。"
+        )
     if _current_mm is None:
         return "错误：记忆管理器未初始化。"
     try:

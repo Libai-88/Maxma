@@ -46,7 +46,7 @@ class UpdateMemoryTool(ToolBase):
         if len(content) > MAX_DESC_LENGTH:
             return format_error(
                 f"更新后的记忆内容超过 {MAX_DESC_LENGTH} 字限制（当前 {len(content)} 字），"
-                f"请精简至 {MAX_DESC_LENGTH} 字以内，或拆分为多条独立条目"
+                f"请精简至 {MAX_DESC_LENGTH} 字以内，避免列举；或拆分为多条独立条目"
             )
         if not reason:
             return format_error("reason 不能为空，请说明更新原因")

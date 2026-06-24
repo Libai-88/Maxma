@@ -44,7 +44,7 @@ class CreateMemoryTool(ToolBase):
         if len(content) > MAX_DESC_LENGTH:
             return format_error(
                 f"记忆内容超过 {MAX_DESC_LENGTH} 字限制（当前 {len(content)} 字），"
-                f"请精简至 {MAX_DESC_LENGTH} 字以内。"
+                f"请精简至 {MAX_DESC_LENGTH} 字以内，避免列举。"
             )
         if not section:
             return format_error("section 不能为空，请指定记忆分区")

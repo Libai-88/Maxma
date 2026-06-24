@@ -59,7 +59,7 @@ class MergeMemoriesTool(ToolBase):
         if len(content) > MAX_DESC_LENGTH:
             return format_error(
                 f"合并后的记忆内容超过 {MAX_DESC_LENGTH} 字限制（当前 {len(content)} 字），"
-                f"请精简至 {MAX_DESC_LENGTH} 字以内，或保留两条各自独立"
+                f"请精简至 {MAX_DESC_LENGTH} 字以内，避免列举；或保留两条各自独立"
             )
         if not section:
             return format_error("section 不能为空，请指定合并后的分区")
