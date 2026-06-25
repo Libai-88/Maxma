@@ -161,8 +161,8 @@ function persistTurns(sid: string) {
 
 // ── WebSocket 生命周期（每 Session 独立管理） ──────────────
 
-/** 会话 ID 格式验证：由后端生成的 UUID v4 */
-const SID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+/** 会话 ID 格式验证：由后端 uuid.uuid4().hex 生成（32 位 hex） */
+const SID_RE = /^[0-9a-f]{32}$/i
 
 function isValidSessionId(sid: string): boolean {
   return SID_RE.test(sid)
