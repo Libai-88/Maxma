@@ -112,7 +112,7 @@ class CallSubAgentTool(ToolBase):
                 "payload": {
                     "sub_session_id": sub.session_id,
                     "parent_session_id": parent_session_id,
-                    "task": task[:200],
+                    "task": task,
                     "name": name[:100] if name else "",
                 },
             }
