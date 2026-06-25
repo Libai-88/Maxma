@@ -155,7 +155,6 @@ function getBubbleComponentName(name: string): string {
     'file_list': 'FilesBubble.vue',
     'file_operations': 'FilesBubble.vue',
     'tarot': 'TarotBubble.vue',
-    'answer_book': 'AnswerBookBubble.vue',
     'nearby_search': 'MapBubble.vue',
     'fuzzy_address_search': 'MapBubble.vue',
     'geocode_address': 'MapBubble.vue',
@@ -163,15 +162,8 @@ function getBubbleComponentName(name: string): string {
     'get_cycling_route': 'MapBubble.vue',
     'get_current_weather': 'WeatherBubble.vue',
     'holiday_calendar': 'HolidayBubble.vue',
-    'time_tool': 'TimeBubble.vue',
-    'syntax_checker': 'SyntaxBubble.vue',
     'analyze_image': 'ImageBubble.vue',
     'tavily_search': 'TavilySearchBubble.vue',
-    'pdf_reader': 'PdfReaderBubble.vue',
-    'doc_reader': 'DocReaderBubble.vue',
-    'code_quality_analyzer': 'CodeQualityBubble.vue',
-    'unit_test_runner': 'UnitTestBubble.vue',
-    'debugger': 'DebuggerBubble.vue',
     'tavily_extract': 'TavilyExtractBubble.vue',
   }
   return map[name] ?? name
@@ -726,57 +718,6 @@ const mockTemplates: Record<string, MockTemplate> = {
       ],
     },
   },
-  answer_book: {
-    input: { question: '我今天的面试会顺利吗？' },
-    doneOutput: JSON.stringify({ success: true, data: { question: '我今天的面试会顺利吗？', answer: '答案是肯定的' } }),
-    toolData: {
-      tool_type: 'answer_book',
-      question: '我今天的面试会顺利吗？',
-      answer: '答案是肯定的',
-    },
-  },
-  time_tool: {
-    input: {},
-    doneOutput: JSON.stringify({
-      success: true,
-      data: {
-        datetime: '2026-05-16 14:32:00',
-        date: '2026-05-16',
-        time: '14:32:00',
-        weekday: 'Saturday',
-        timezone: 'Asia/Shanghai',
-      },
-    }),
-    toolData: {
-      tool_type: 'time',
-      datetime: '2026-05-16 14:32:00',
-      date: '2026-05-16',
-      time: '14:32:00',
-      weekday: 'Saturday',
-      timezone: 'Asia/Shanghai',
-    },
-  },
-  syntax_checker: {
-    input: { language: 'python', code: 'def foo():\n  print("hello"\n' },
-    doneOutput: JSON.stringify({
-      success: true,
-      data: {
-        language: 'python',
-        errors: [
-          { line: 1, column: 23, message: 'SyntaxError: incomplete input. Expected an indented block after function definition', type: 'SyntaxError' },
-        ],
-        warnings: [],
-      },
-    }),
-    toolData: {
-      tool_type: 'syntax_check',
-      language: 'python',
-      errors: [
-        { line: 1, column: 23, message: 'SyntaxError: incomplete input. Expected an indented block after function definition', type: 'SyntaxError' },
-      ],
-      warnings: [],
-    },
-  },
   analyze_image: {
     input: { image_source: 'url:https://example.com/photo.jpg', prompt: '请描述这张图片' },
     doneOutput: JSON.stringify({
@@ -786,202 +727,6 @@ const mockTemplates: Record<string, MockTemplate> = {
     toolData: {
       tool_type: 'analyze_image',
       response: '这张图片展示了一片宁静的竹林小径，阳光透过竹叶洒落在地面上形成斑驳的光影。小径蜿蜒伸向远方，两旁是高耸的翠竹。画面整体色调清新自然，给人一种幽静深远的感觉，仿佛置身于京都岚山的竹林之中。',
-    },
-  },
-  pdf_reader: {
-    input: { operation: 'get_metadata', file_path: '/home/user/project/reports/年度技术报告_v3.pdf' },
-    doneOutput: JSON.stringify({
-      success: true,
-      data: {
-        operation: 'get_metadata',
-        file_path: '/home/user/project/reports/年度技术报告_v3.pdf',
-        metadata: {
-          '/Title': '2026 年度技术总结报告',
-          '/Author': '技术研发部',
-          '/Subject': '年度技术回顾与展望',
-          '/Keywords': 'AI, 大模型, 前端, 架构',
-          '/Creator': 'Microsoft Word',
-          '/Producer': 'PyPDF2',
-          '/CreationDate': '2026-03-15 10:30:00',
-        },
-        page_count: 42,
-        toc: [
-          { title: '一、概述', level: 0, page_number: 1 },
-          { title: '1.1 项目背景', level: 1, page_number: 1 },
-          { title: '1.2 工作范围', level: 1, page_number: 3 },
-          { title: '二、技术成果', level: 0, page_number: 5 },
-          { title: '2.1 AI 模型优化', level: 1, page_number: 5 },
-          { title: '2.2 前端架构演进', level: 1, page_number: 8 },
-          { title: '2.3 后端性能提升', level: 1, page_number: 12 },
-          { title: '三、数据分析', level: 0, page_number: 15 },
-          { title: '3.1 系统性能指标', level: 1, page_number: 15 },
-          { title: '3.2 用户行为分析', level: 1, page_number: 20 },
-          { title: '四、未来规划', level: 0, page_number: 25 },
-          { title: '五、附录', level: 0, page_number: 30 },
-        ],
-      },
-    }),
-    toolData: {
-      operation: 'get_metadata',
-      file_path: '/home/user/project/reports/年度技术报告_v3.pdf',
-      file_size: 2841600,
-      metadata: {
-        '/Title': '2026 年度技术总结报告',
-        '/Author': '技术研发部',
-        '/Subject': '年度技术回顾与展望',
-        '/Keywords': 'AI, 大模型, 前端, 架构',
-        '/Creator': 'Microsoft Word',
-        '/Producer': 'PyPDF2',
-        '/CreationDate': '2026-03-15 10:30:00',
-      },
-      page_count: 42,
-      toc: [
-        { title: '一、概述', level: 0, page_number: 1 },
-        { title: '1.1 项目背景', level: 1, page_number: 1 },
-        { title: '1.2 工作范围', level: 1, page_number: 3 },
-        { title: '二、技术成果', level: 0, page_number: 5 },
-        { title: '2.1 AI 模型优化', level: 1, page_number: 5 },
-        { title: '2.2 前端架构演进', level: 1, page_number: 8 },
-        { title: '2.3 后端性能提升', level: 1, page_number: 12 },
-        { title: '三、数据分析', level: 0, page_number: 15 },
-        { title: '3.1 系统性能指标', level: 1, page_number: 15 },
-        { title: '3.2 用户行为分析', level: 1, page_number: 20 },
-        { title: '四、未来规划', level: 0, page_number: 25 },
-        { title: '五、附录', level: 0, page_number: 30 },
-      ],
-    },
-  },
-  doc_reader: {
-    input: { operation: 'get_metadata', file_path: '/home/user/project/docs/产品需求文档_v2.docx' },
-    doneOutput: JSON.stringify({
-      success: true,
-      data: {
-        operation: 'get_metadata',
-        file_path: '/home/user/project/docs/产品需求文档_v2.docx',
-        metadata: {
-          title: 'SonettoHere 产品需求文档 v2.0',
-          author: '产品经理',
-          subject: '产品功能规格说明',
-          created: '2026-04-01 09:00:00',
-          modified: '2026-05-10 14:30:00',
-          last_modified_by: '产品经理',
-          keywords: '聊天, AI, 工具, 平台',
-          category: '产品文档',
-        },
-        paragraph_count: 86,
-        table_count: 3,
-        paragraphs: [
-          { index: 0, number: 1, text: 'SonettoHere 产品需求文档', style: 'Title' },
-          { index: 1, number: 2, text: '版本: v2.0', style: 'Normal' },
-          { index: 2, number: 3, text: '最后更新: 2026-05-10', style: 'Normal' },
-          { index: 3, number: 4, text: '1. 项目概述', style: 'Heading 1' },
-          { index: 4, number: 5, text: 'SonettoHere 是一款基于大语言模型的智能对话助手，支持多工具调用、流式输出和长期记忆。', style: 'Normal' },
-          { index: 5, number: 6, text: '2. 功能需求', style: 'Heading 1' },
-          { index: 6, number: 7, text: '2.1 对话管理', style: 'Heading 2' },
-          { index: 7, number: 8, text: '支持多会话切换，每条对话包含完整的消息历史和工具调用记录。', style: 'Normal' },
-          { index: 8, number: 9, text: '2.2 工具系统', style: 'Heading 2' },
-          { index: 9, number: 10, text: '提供可扩展的气泡组件系统，每种工具拥有专属的渲染组件。', style: 'Normal' },
-        ],
-        tables: [
-          {
-            index: 0, rows: 4, columns: 3,
-            data: [
-              ['优先级', '功能模块', '预计工时'],
-              ['P0', '多会话管理', '5人日'],
-              ['P1', '工具气泡系统', '8人日'],
-              ['P2', '长期记忆', '10人日'],
-            ],
-          },
-        ],
-      },
-    }),
-    toolData: {
-      operation: 'get_metadata',
-      file_path: '/home/user/project/docs/产品需求文档_v2.docx',
-      file_size: 152800,
-      metadata: {
-        title: 'SonettoHere 产品需求文档 v2.0',
-        author: '产品经理',
-        subject: '产品功能规格说明',
-        created: '2026-04-01 09:00:00',
-        modified: '2026-05-10 14:30:00',
-        last_modified_by: '产品经理',
-        keywords: '聊天, AI, 工具, 平台',
-        category: '产品文档',
-      },
-      paragraph_count: 86,
-      table_count: 3,
-      paragraphs: [
-        { index: 0, number: 1, text: 'SonettoHere 产品需求文档', style: 'Title' },
-        { index: 1, number: 2, text: '版本: v2.0', style: 'Normal' },
-        { index: 2, number: 3, text: '最后更新: 2026-05-10', style: 'Normal' },
-        { index: 3, number: 4, text: '1. 项目概述', style: 'Heading 1' },
-        { index: 4, number: 5, text: 'SonettoHere 是一款基于大语言模型的智能对话助手，支持多工具调用、流式输出和长期记忆。', style: 'Normal' },
-        { index: 5, number: 6, text: '2. 功能需求', style: 'Heading 1' },
-        { index: 6, number: 7, text: '2.1 对话管理', style: 'Heading 2' },
-        { index: 7, number: 8, text: '支持多会话切换，每条对话包含完整的消息历史和工具调用记录。', style: 'Normal' },
-        { index: 8, number: 9, text: '2.2 工具系统', style: 'Heading 2' },
-        { index: 9, number: 10, text: '提供可扩展的气泡组件系统，每种工具拥有专属的渲染组件。', style: 'Normal' },
-      ],
-      tables: [
-        {
-          index: 0, rows: 4, columns: 3,
-          data: [
-            ['优先级', '功能模块', '预计工时'],
-            ['P0', '多会话管理', '5人日'],
-            ['P1', '工具气泡系统', '8人日'],
-            ['P2', '长期记忆', '10人日'],
-          ],
-        },
-      ],
-    },
-  },
-  code_quality_analyzer: {
-    input: { analysis_type: 'all', file_path: '/home/user/project/src/main.py' },
-    doneOutput: JSON.stringify({
-      success: true,
-      data: {
-        complexity: { total_lines: 156, function_count: 4, avg_function_length: 18.5, functions: [{ name: 'process_data', line: 1, endline: 25 }, { name: 'validate_input', line: 27, endline: 40 }, { name: 'transform_results', line: 42, endline: 58 }, { name: 'format_output', line: 60, endline: 72 }] },
-        maintainability: { comment_ratio: 0.12, snake_case_count: 8, camel_case_count: 2, maintainability_score: 72 },
-        duplication: { duplicate_lines: 3, duplicate_ratio: 0.019, duplicates: [{ line: 'result = process(item)', count: 3 }, { line: 'if item is None:', count: 2 }] },
-      },
-    }),
-    toolData: {
-      file_path: '/home/user/project/src/main.py',
-      analysis_type: 'all',
-      complexity: { total_lines: 156, function_count: 4, avg_function_length: 18.5, functions: [{ name: 'process_data', line: 1, endline: 25 }, { name: 'validate_input', line: 27, endline: 40 }, { name: 'transform_results', line: 42, endline: 58 }, { name: 'format_output', line: 60, endline: 72 }] },
-      maintainability: { comment_ratio: 0.12, snake_case_count: 8, camel_case_count: 2, maintainability_score: 72 },
-      duplication: { duplicate_lines: 3, duplicate_ratio: 0.019, duplicates: [{ line: 'result = process(item)', count: 3 }, { line: 'if item is None:', count: 2 }] },
-    },
-  },
-  unit_test_runner: {
-    input: { test_file: '/home/user/project/tests/test_math.py' },
-    doneOutput: JSON.stringify({
-      success: true,
-      data: {
-        tests_run: 5, failures: 1, errors: 0, skipped: 1, successful: 3, success_rate: 80.0,
-        failures_details: [{ test: 'test_addition (test_math.TestMathFunctions)', message: 'test_addition (test_math.TestMathFunctions)', traceback: 'Traceback (most recent call last):\n  File "tests/test_math.py", line 12, in test_addition\n    self.assertEqual(2 + 2, 5)\nAssertionError: 4 != 5' }],
-      },
-    }),
-    toolData: {
-      tests_run: 5, failures: 1, errors: 0, skipped: 1, successful: 3, success_rate: 80.0,
-      failures_details: [{ test: 'test_addition (test_math.TestMathFunctions)', message: 'test_addition (test_math.TestMathFunctions)', traceback: 'Traceback (most recent call last):\n  File "tests/test_math.py", line 12, in test_addition\n    self.assertEqual(2 + 2, 5)\nAssertionError: 4 != 5' }],
-    },
-  },
-  debugger: {
-    input: { code: 'x = 1\ny = 0\nresult = x / y\nprint(result)', variables: ['x', 'y', 'result'] },
-    doneOutput: JSON.stringify({
-      success: true,
-      data: {
-        status: 'error', error_type: 'ZeroDivisionError', error_message: 'division by zero',
-        traceback: 'Traceback (most recent call last):\n  File "<string>", line 3, in <module>\nZeroDivisionError: division by zero',
-        variables: { x: '1', y: '0', result: '未定义' },
-      },
-    }),
-    toolData: {
-      status: 'error', error_type: 'ZeroDivisionError', error_message: 'division by zero',
-      traceback: 'Traceback (most recent call last):\n  File "<string>", line 3, in <module>\nZeroDivisionError: division by zero',
-      variables: { x: '1', y: '0', result: '未定义' },
     },
   },
   tavily_extract: {
@@ -1036,7 +781,7 @@ function buildMock(name: string, status: ToolStatus): ToolCall {
   // done
   return {
     ...base,
-    elapsed: name === 'tavily_search' ? 1.82 : name === 'tavily_extract' ? 2.64 : name === 'pdf_reader' || name === 'doc_reader' ? 0.89 : name === 'code_quality_analyzer' ? 1.52 : name === 'unit_test_runner' ? 4.21 : name === 'debugger' ? 0.67 : 2.35,
+    elapsed: name === 'tavily_search' ? 1.82 : name === 'tavily_extract' ? 2.64 : 2.35,
     output: tpl?.doneOutput ?? JSON.stringify({ success: true, data: { result: 'OK' } }),
     toolData: tpl?.toolData,
   }

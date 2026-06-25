@@ -20,7 +20,6 @@ def get_all_tools() -> list[BaseTool]:
     client = _get_client()
 
     # System
-    from tools.system.tool_time import TimeTool
     from tools.system.tool_python import RunPythonTool
 
     # Todo
@@ -49,16 +48,11 @@ def get_all_tools() -> list[BaseTool]:
     from tools.network.tavily import TavilySearchTool, TavilyExtractTool
 
     # Files
-    from tools.files.tool_file_ops import FileOperationsTool
+    from tools.files.tool_file_read import FileReadTool
+    from tools.files.tool_file_write import FileWriteTool
+    from tools.files.tool_file_manage import FileManageTool
+    from tools.files.tool_file_search import FileSearchTool
     from tools.files.tool_file_edit import FileEditTool
-    from tools.files.tool_pdf_reader import PDFReaderTool
-    from tools.files.tool_doc_reader import DocReaderTool
-
-    # Development
-    from tools.development.tool_syntax import SyntaxCheckerTool
-    from tools.development.tool_code_quality import CodeQualityTool
-    from tools.development.tool_unit_test import UnitTestTool
-    from tools.development.tool_debug import DebuggerTool
 
     # Task
     from tools.task.tool_tracker import TaskTrackerTool
@@ -72,7 +66,6 @@ def get_all_tools() -> list[BaseTool]:
     from tools.interaction.tool_multi_choice import AskUserMultiChoiceTool
 
     # Entertainment
-    from tools.entertainment.tool_answer_book import AnswerBookTool
     from tools.entertainment.tool_tarot import TarotTool
 
     # Memory
@@ -85,7 +78,6 @@ def get_all_tools() -> list[BaseTool]:
 
     return [
         # System
-        TimeTool(client=client),
         RunPythonTool(client=client),
         # Todo
         TodoAddTool(client=client),
@@ -111,15 +103,11 @@ def get_all_tools() -> list[BaseTool]:
         TavilySearchTool(client=client),
         TavilyExtractTool(client=client),
         # Files
-        FileOperationsTool(client=client),
+        FileReadTool(client=client),
+        FileWriteTool(client=client),
+        FileManageTool(client=client),
+        FileSearchTool(client=client),
         FileEditTool(client=client),
-        PDFReaderTool(client=client),
-        DocReaderTool(client=client),
-        # Development
-        SyntaxCheckerTool(client=client),
-        CodeQualityTool(client=client),
-        UnitTestTool(client=client),
-        DebuggerTool(client=client),
         # Task
         TaskTrackerTool(client=client),
         # SubAgent
@@ -129,7 +117,6 @@ def get_all_tools() -> list[BaseTool]:
         AskUserSingleChoiceTool(client=client),
         AskUserMultiChoiceTool(client=client),
         # Entertainment
-        AnswerBookTool(client=client),
         TarotTool(client=client),
         # Memory
         ListMemoriesTool(client=client),

@@ -17,7 +17,6 @@ Handler = Callable[[str, dict[str, Any], str | None], dict[str, Any] | None]
 _REGISTRY: dict[str, Handler] = {}
 _PREFIX_REGISTRY: list[tuple[str, Handler]] = []
 
-
 def register(tool_name: str) -> Callable[[Handler], Handler]:
     """精确匹配注册装饰器。"""
 
@@ -26,7 +25,6 @@ def register(tool_name: str) -> Callable[[Handler], Handler]:
         return fn
 
     return decorator
-
 
 def register_prefix(prefix: str) -> Callable[[Handler], Handler]:
     """前缀匹配注册装饰器（如 todo_*）。"""
@@ -37,9 +35,7 @@ def register_prefix(prefix: str) -> Callable[[Handler], Handler]:
 
     return decorator
 
-
 # ── Dispatch ───────────────────────────────────────────────────────────
-
 
 def _dispatch(
     tool_name: str, parsed: dict[str, Any], tool_input: str | None = None
@@ -54,9 +50,7 @@ def _dispatch(
 
     return None
 
-
 # ── Helper ─────────────────────────────────────────────────────────────
-
 
 def _get_data(parsed: dict[str, Any]) -> dict[str, Any] | None:
     """提取 parsed['data'] 并校验为 dict。success=false 时视为错误返回 None。"""
@@ -65,13 +59,11 @@ def _get_data(parsed: dict[str, Any]) -> dict[str, Any] | None:
     data = parsed.get("data", {})
     return data if isinstance(data, dict) else None
 
-
 # ═══════════════════════════════════════════════════════════════════════
 # 工具提取器
 # ═══════════════════════════════════════════════════════════════════════
 
 # ── Todo 系列 ──────────────────────────────────────────────────────────
-
 
 @register("todo_list")
 def _extract_todo_list(
@@ -90,7 +82,6 @@ def _extract_todo_list(
         result["tasks"] = tasks
     return result
 
-
 @register("todo_list_projects")
 def _extract_todo_projects(
     _tool_name: str,
@@ -107,7 +98,6 @@ def _extract_todo_projects(
     if isinstance(projects, list):
         result["projects"] = projects
     return result
-
 
 @register("todo_list_sections")
 def _extract_todo_sections(
@@ -128,7 +118,6 @@ def _extract_todo_sections(
             result["project_name"] = sections[0].get("project_name")
     return result if result.get("sections") is not None else None
 
-
 @register("todo_list_labels")
 def _extract_todo_labels(
     _tool_name: str,
@@ -145,7 +134,6 @@ def _extract_todo_labels(
     if isinstance(labels, list):
         result["labels"] = labels
     return result if result.get("labels") is not None else None
-
 
 @register_prefix("todo_")
 def _extract_todo_generic(
@@ -171,9 +159,7 @@ def _extract_todo_generic(
             result[field] = data[field]
     return result
 
-
 # ── Task Tracker ───────────────────────────────────────────────────────
-
 
 @register("task_tracker")
 def _extract_task_tracker(
@@ -198,9 +184,7 @@ def _extract_task_tracker(
         result["todos"] = todos
     return result
 
-
 # ── Python 执行 ────────────────────────────────────────────────────────
-
 
 @register("run_python")
 def _extract_run_python(
@@ -228,17 +212,65 @@ def _extract_run_python(
                     result["code"] = code
     return result
 
+# ── 文件读取 ────────────────────────────────────────────────────────────
 
-# ── 文件操作 ────────────────────────────────────────────────────────────
+@register("file_read")
+def _extract_file_read(
+    _tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
+) -> dict[str, Any] | None:
+    """返回 read_file 的数据字段。"""
+    data = _get_data(parsed)
+    if data is None:
+        return None
+
+    file_path = data.get("file_path", "")
+    content = data.get("content", "")
+    file_info = data.get("file_info", {})
+    return {
+        "operation": "read_file",
+        "file_path": file_path,
+        "file_name": file_path.split("/")[-1].split("\\")[-1] or "unknown",
+        "size_bytes": file_info.get("size", 0),
+        "line_count": content.count("\n") + 1 if isinstance(content, str) else 0,
+        "content": content,
+    }
 
 
-@register("file_operations")
-def _extract_file_operations(
+# ── 文件写入 ────────────────────────────────────────────────────────────
+
+@register("file_write")
+def _extract_file_write(
+    _tool_name: str,
+    parsed: dict[str, Any],
+    _tool_input: str | None = None,
+) -> dict[str, Any] | None:
+    """返回 write_file 的数据字段。"""
+    data = _get_data(parsed)
+    if data is None:
+        return None
+
+    file_path = data.get("file_path", "")
+    return {
+        "operation": "write_file",
+        "file_path": file_path,
+        "file_name": file_path.split("/")[-1].split("\\")[-1] or "unknown",
+        "size_bytes": data.get("size", 0),
+        "line_count": data.get("line_count", data.get("size", 0)),
+        "success": True,
+    }
+
+
+# ── 文件管理 ────────────────────────────────────────────────────────────
+
+@register("file_manage")
+def _extract_file_manage(
     _tool_name: str,
     parsed: dict[str, Any],
     tool_input: str | None = None,
 ) -> dict[str, Any] | None:
-    """按 operation (read_file / write_file / list_directory / search_files) 返回不同字段。"""
+    """按 operation (delete_file / rename_file / create_directory) 返回不同字段。"""
     data = _get_data(parsed)
     if data is None:
         return None
@@ -253,43 +285,64 @@ def _extract_file_operations(
             if isinstance(input_parsed, dict):
                 operation = str(input_parsed.get("operation", "") or "")
 
-    if operation == "read_file":
-        file_path = data.get("file_info", {}).get("path", "")
-        content = data.get("content", "")
-        size = data.get("file_info", {}).get("size", 0)
+    if operation == "delete_file":
         return {
-            "operation": "read_file",
-            "file_path": file_path,
-            "file_name": file_path.split("/")[-1].split("\\")[-1] or "unknown",
-            "size_bytes": size,
-            "line_count": content.count("\n") + 1 if isinstance(content, str) else 0,
-            "content": content,
+            "operation": "delete_file",
+            "file_path": data.get("file_path", ""),
+            "message": data.get("message", ""),
         }
 
-    if operation == "write_file":
-        file_path = data.get("file_path", "")
-        size = data.get("size", 0)
+    if operation == "rename_file":
         return {
-            "operation": "write_file",
-            "file_path": file_path,
-            "file_name": file_path.split("/")[-1].split("\\")[-1] or "unknown",
-            "size_bytes": size,
-            "line_count": size,
-            "success": True,
+            "operation": "rename_file",
+            "file_path": data.get("old_path", data.get("file_path", "")),
+            "new_path": data.get("new_path", ""),
+            "message": data.get("message", ""),
         }
 
-    if operation in ("list_directory",):
+    if operation == "create_directory":
+        return {
+            "operation": "create_directory",
+            "directory_path": data.get("directory_path", ""),
+            "message": data.get("message", ""),
+        }
+
+    return None
+
+
+# ── 文件搜索 ────────────────────────────────────────────────────────────
+
+@register("file_search")
+def _extract_file_search(
+    _tool_name: str,
+    parsed: dict[str, Any],
+    tool_input: str | None = None,
+) -> dict[str, Any] | None:
+    """按 operation (list_directory / search_files) 返回不同字段。"""
+    data = _get_data(parsed)
+    if data is None:
+        return None
+
+    operation = ""
+    if tool_input:
+        try:
+            input_parsed = ast.literal_eval(tool_input)
+        except (ValueError, SyntaxError, TypeError):
+            pass
+        else:
+            if isinstance(input_parsed, dict):
+                operation = str(input_parsed.get("operation", "") or "")
+
+    if operation == "list_directory":
         directory = data.get("directory", "")
         items_raw = data.get("items", [])
         items = []
         for item in items_raw if isinstance(items_raw, list) else []:
-            items.append(
-                {
-                    "name": item.get("name", ""),
-                    "type": "directory" if item.get("is_dir") else "file",
-                    "size_bytes": item.get("size", 0),
-                }
-            )
+            items.append({
+                "name": item.get("name", ""),
+                "type": "directory" if item.get("is_dir") else "file",
+                "size_bytes": item.get("size", 0),
+            })
         return {
             "operation": "list_directory",
             "directory_path": directory,
@@ -302,13 +355,11 @@ def _extract_file_operations(
         items_raw = data.get("found_files", [])
         items = []
         for item in items_raw if isinstance(items_raw, list) else []:
-            items.append(
-                {
-                    "name": item.get("name", ""),
-                    "type": "directory" if item.get("is_dir") else "file",
-                    "size_bytes": item.get("size", 0),
-                }
-            )
+            items.append({
+                "name": item.get("name", ""),
+                "type": "directory" if item.get("is_dir") else "file",
+                "size_bytes": item.get("size", 0),
+            })
         return {
             "operation": "search_files",
             "search_directory": directory,
@@ -320,7 +371,6 @@ def _extract_file_operations(
 
 
 # ── 文件精确编辑 ────────────────────────────────────────────────────────
-
 
 @register("file_edit")
 def _extract_file_edit(
@@ -361,6 +411,7 @@ def _extract_file_edit(
             "offset": data.get("offset", 0),
             "content": data.get("content", ""),
             "line_count": len(lines),
+            "lines": lines,
         }
 
     if operation == "multi_edit":
@@ -386,9 +437,7 @@ def _extract_file_edit(
 
     return None
 
-
 # ── 塔罗占卜 ───────────────────────────────────────────────────────────
-
 
 @register("tarot")
 def _extract_tarot(
@@ -428,29 +477,7 @@ def _extract_tarot(
         "cards": cards,
     }
 
-
-# ── 答案之书 ───────────────────────────────────────────────────────────
-
-
-@register("answer_book")
-def _extract_answer_book(
-    _tool_name: str,
-    parsed: dict[str, Any],
-    _tool_input: str | None = None,
-) -> dict[str, Any] | None:
-    """返回 tool_type, question, answer。"""
-    data = _get_data(parsed)
-    if data is None:
-        return None
-    return {
-        "tool_type": "answer_book",
-        "question": data.get("question", ""),
-        "answer": data.get("answer", ""),
-    }
-
-
 # ── 地图系列 ───────────────────────────────────────────────────────────
-
 
 @register("nearby_search")
 @register("fuzzy_address_search")
@@ -492,7 +519,6 @@ def _extract_map_search(
         result["city"] = data.get("city", "")
     return result
 
-
 @register("geocode_address")
 def _extract_geocode(
     _tool_name: str,
@@ -507,7 +533,6 @@ def _extract_geocode(
         "address": data.get("address", ""),
         "location": data.get("location", ""),
     }
-
 
 @register("get_transit_route")
 def _extract_transit_route(
@@ -571,7 +596,6 @@ def _extract_transit_route(
         "routes": routes,
     }
 
-
 @register("get_cycling_route")
 def _extract_cycling_route(
     _tool_name: str,
@@ -615,9 +639,7 @@ def _extract_cycling_route(
         "paths": paths,
     }
 
-
 # ── 天气查询 ───────────────────────────────────────────────────────────
-
 
 @register("get_current_weather")
 def _extract_weather(
@@ -679,53 +701,7 @@ def _extract_weather(
         ]
     return result
 
-
-# ── 时间查询 ───────────────────────────────────────────────────────────
-
-
-@register("time_tool")
-def _extract_time(
-    _tool_name: str,
-    parsed: dict[str, Any],
-    _tool_input: str | None = None,
-) -> dict[str, Any] | None:
-    """返回 tool_type, datetime, date, time, weekday, timezone。"""
-    data = _get_data(parsed)
-    if data is None:
-        return None
-    return {
-        "tool_type": "time",
-        "datetime": data.get("datetime", ""),
-        "date": data.get("date", ""),
-        "time": data.get("time", ""),
-        "weekday": data.get("weekday", ""),
-        "timezone": data.get("timezone", ""),
-    }
-
-
-# ── 语法检查 ───────────────────────────────────────────────────────────
-
-
-@register("syntax_checker")
-def _extract_syntax_check(
-    _tool_name: str,
-    parsed: dict[str, Any],
-    _tool_input: str | None = None,
-) -> dict[str, Any] | None:
-    """返回 tool_type, language, errors, warnings。"""
-    data = _get_data(parsed)
-    if data is None:
-        return None
-    return {
-        "tool_type": "syntax_check",
-        "language": data.get("language", ""),
-        "errors": data.get("errors", []),
-        "warnings": data.get("warnings", []),
-    }
-
-
 # ── 图片理解 ───────────────────────────────────────────────────────────
-
 
 @register("analyze_image")
 def _extract_analyze_image(
@@ -742,9 +718,7 @@ def _extract_analyze_image(
         "response": data.get("response", ""),
     }
 
-
 # ── 节假日查询 ─────────────────────────────────────────────────────────
-
 
 @register("holiday_calendar")
 def _extract_holiday(
@@ -845,214 +819,7 @@ def _extract_holiday(
 
     return result
 
-
-# ── PDF 阅读 ───────────────────────────────────────────────────────────
-
-
-@register("pdf_reader")
-def _extract_pdf(
-    _tool_name: str,
-    parsed: dict[str, Any],
-    tool_input: str | None = None,
-) -> dict[str, Any] | None:
-    """返回 operation, file_path, file_size, page_count；可选 metadata, toc, text, page_range, query, results, total_matches, page_contents, total_pages。"""
-    data = _get_data(parsed)
-    if data is None:
-        return None
-
-    file_path = data.get("file_path", "") or ""
-    if not file_path and tool_input:
-        try:
-            inp = ast.literal_eval(tool_input)
-        except Exception:
-            pass
-        else:
-            if isinstance(inp, dict):
-                file_path = inp.get("file_path", "") or ""
-
-    result: dict[str, Any] = {
-        "operation": data.get("operation", ""),
-        "file_path": file_path,
-        "file_size": data.get("file_size", 0),
-        "page_count": data.get("page_count", data.get("total_pages", 0)),
-    }
-    if "metadata" in data and isinstance(data["metadata"], dict):
-        result["metadata"] = data["metadata"]
-    if "toc" in data and isinstance(data["toc"], list):
-        result["toc"] = data["toc"]
-    if "text" in data:
-        result["text"] = data["text"]
-    if "page_range" in data:
-        result["page_range"] = data["page_range"]
-    if "query" in data:
-        result["query"] = data["query"]
-    if "results" in data and isinstance(data["results"], list):
-        result["results"] = data["results"]
-    if "total_matches" in data:
-        result["total_matches"] = data["total_matches"]
-    if "page_contents" in data and isinstance(data["page_contents"], dict):
-        result["page_contents"] = data["page_contents"]
-    if "total_pages" in data:
-        result["total_pages"] = data["total_pages"]
-    return result
-
-
-# ── Word 文档阅读 ─────────────────────────────────────────────────────
-
-
-@register("doc_reader")
-def _extract_doc(
-    _tool_name: str,
-    parsed: dict[str, Any],
-    tool_input: str | None = None,
-) -> dict[str, Any] | None:
-    """返回 operation, file_path, file_size, paragraph_count, table_count；可选 metadata, paragraphs, paragraph_range, tables, text, query, results, total_matches, total_paragraphs。"""
-    data = _get_data(parsed)
-    if data is None:
-        return None
-
-    file_path = data.get("file_path", "") or ""
-    if not file_path and tool_input:
-        try:
-            inp = ast.literal_eval(tool_input)
-        except Exception:
-            pass
-        else:
-            if isinstance(inp, dict):
-                file_path = inp.get("file_path", "") or ""
-
-    result: dict[str, Any] = {
-        "operation": data.get("operation", ""),
-        "file_path": file_path,
-        "file_size": data.get("file_size", 0),
-        "paragraph_count": data.get("paragraph_count", data.get("total_paragraphs", 0)),
-        "table_count": data.get("table_count", 0),
-    }
-    if "metadata" in data and isinstance(data["metadata"], dict):
-        result["metadata"] = data["metadata"]
-    if "paragraphs" in data and isinstance(data["paragraphs"], list):
-        result["paragraphs"] = data["paragraphs"]
-    if "paragraph_range" in data:
-        result["paragraph_range"] = data["paragraph_range"]
-    if "tables" in data and isinstance(data["tables"], list):
-        result["tables"] = data["tables"]
-    if "text" in data:
-        result["text"] = data["text"]
-    if "query" in data:
-        result["query"] = data["query"]
-    if "results" in data and isinstance(data["results"], list):
-        result["results"] = data["results"]
-    if "total_matches" in data:
-        result["total_matches"] = data["total_matches"]
-    if "total_paragraphs" in data:
-        result["total_paragraphs"] = data["total_paragraphs"]
-    return result
-
-
-# ── 代码质量分析 ───────────────────────────────────────────────────────
-
-
-@register("code_quality_analyzer")
-def _extract_code_quality(
-    _tool_name: str,
-    parsed: dict[str, Any],
-    tool_input: str | None = None,
-) -> dict[str, Any] | None:
-    """返回 file_path, analysis_type；可选 complexity, maintainability, duplication。"""
-    data = _get_data(parsed)
-    if data is None:
-        return None
-
-    file_path = ""
-    analysis_type = ""
-    if tool_input:
-        try:
-            inp = ast.literal_eval(tool_input)
-        except Exception:
-            pass
-        else:
-            if isinstance(inp, dict):
-                file_path = inp.get("file_path", "") or ""
-                analysis_type = inp.get("analysis_type", "") or ""
-
-    result: dict[str, Any] = {
-        "file_path": file_path,
-        "analysis_type": analysis_type,
-    }
-    if "complexity" in data and isinstance(data["complexity"], dict):
-        result["complexity"] = data["complexity"]
-    if "maintainability" in data and isinstance(data["maintainability"], dict):
-        result["maintainability"] = data["maintainability"]
-    if "duplication" in data and isinstance(data["duplication"], dict):
-        result["duplication"] = data["duplication"]
-    return result
-
-
-# ── 单元测试运行 ───────────────────────────────────────────────────────
-
-
-@register("unit_test_runner")
-def _extract_test_runner(
-    _tool_name: str,
-    parsed: dict[str, Any],
-    _tool_input: str | None = None,
-) -> dict[str, Any] | None:
-    """返回 tests_run, failures, errors, skipped, successful, success_rate；可选 failures_details, errors_details。"""
-    data = _get_data(parsed)
-    if data is None:
-        return None
-
-    result: dict[str, Any] = {
-        "tests_run": data.get("tests_run", 0),
-        "failures": data.get("failures", 0),
-        "errors": data.get("errors", 0),
-        "skipped": data.get("skipped", 0),
-        "successful": data.get("successful", 0),
-        "success_rate": data.get("success_rate", 0.0),
-    }
-    if "failures_details" in data and isinstance(data["failures_details"], list):
-        result["failures_details"] = data["failures_details"]
-    if "errors_details" in data and isinstance(data["errors_details"], list):
-        result["errors_details"] = data["errors_details"]
-    return result
-
-
-# ── 代码调试 ───────────────────────────────────────────────────────────
-
-
-@register("debugger")
-def _extract_debugger(
-    _tool_name: str,
-    parsed: dict[str, Any],
-    _tool_input: str | None = None,
-) -> dict[str, Any] | None:
-    """get_doc 模式返回 operation+content；其余返回 status/variables/output 或 status+error_type/error_message/traceback。"""
-    raw_data = parsed.get("data")
-    if isinstance(raw_data, str):
-        return {"operation": "get_doc", "content": raw_data}
-    if not isinstance(raw_data, dict):
-        return None
-    data = raw_data
-
-    result: dict[str, Any] = {
-        "status": data.get("status", ""),
-    }
-    if "variables" in data and isinstance(data["variables"], dict):
-        result["variables"] = data["variables"]
-    if data.get("status") == "success":
-        result["output"] = data.get("output", "")
-    else:
-        if "error_type" in data:
-            result["error_type"] = data["error_type"]
-        if "error_message" in data:
-            result["error_message"] = data["error_message"]
-        if "traceback" in data:
-            result["traceback"] = data["traceback"]
-    return result
-
-
 # ── Tavily 搜索 ──────────────────────────────────────────────────────────
-
 
 @register("tavily_search")
 def _extract_tavily_search(
@@ -1090,9 +857,7 @@ def _extract_tavily_search(
         "response_time": data.get("response_time", 0),
     }
 
-
 # ── Tavily 提取 ──────────────────────────────────────────────────────────
-
 
 @register("tavily_extract")
 def _extract_tavily_extract(
@@ -1139,11 +904,9 @@ def _extract_tavily_extract(
         "response_time": data.get("response_time", 0),
     }
 
-
 # ═══════════════════════════════════════════════════════════════════════
 # 记忆 CRUD 工具系列
 # ═══════════════════════════════════════════════════════════════════════
-
 
 @register("list_memories")
 def _extract_list_memories(
@@ -1162,7 +925,6 @@ def _extract_list_memories(
         result["count"] = len(items)
     return result if result else None
 
-
 @register("read_memories")
 def _extract_read_memories(
     _tool_name: str,
@@ -1178,7 +940,6 @@ def _extract_read_memories(
         if key in data:
             result[key] = data[key]
     return result if result else None
-
 
 @register("create_memory")
 @register("update_memory")

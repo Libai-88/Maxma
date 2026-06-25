@@ -5,18 +5,10 @@ import PythonBubble from './PythonBubble.vue'
 import FilesBubble from './FilesBubble.vue'
 import FileEditBubble from './FileEditBubble.vue'
 import TarotBubble from './TarotBubble.vue'
-import AnswerBookBubble from './AnswerBookBubble.vue'
 import MapBubble from './MapBubble.vue'
 import WeatherBubble from './WeatherBubble.vue'
 import HolidayBubble from './HolidayBubble.vue'
-import TimeBubble from './TimeBubble.vue'
-import SyntaxBubble from './SyntaxBubble.vue'
 import ImageBubble from './ImageBubble.vue'
-import PdfReaderBubble from './PdfReaderBubble.vue'
-import DocReaderBubble from './DocReaderBubble.vue'
-import CodeQualityBubble from './CodeQualityBubble.vue'
-import UnitTestBubble from './UnitTestBubble.vue'
-import DebuggerBubble from './DebuggerBubble.vue'
 import TavilySearchBubble from './TavilySearchBubble.vue'
 import TavilyExtractBubble from './TavilyExtractBubble.vue'
 import AskUserBubble from './AskUserBubble.vue'
@@ -41,9 +33,10 @@ const registry: Record<string, Component> = {
   'file_write': FilesBubble,
   'file_list': FilesBubble,
   'file_operations': FilesBubble,
+  'file_manage': FilesBubble,
+  'file_search': FilesBubble,
   'file_edit': FileEditBubble,
   'tarot': TarotBubble,
-  'answer_book': AnswerBookBubble,
   'nearby_search': MapBubble,
   'fuzzy_address_search': MapBubble,
   'geocode_address': MapBubble,
@@ -51,15 +44,8 @@ const registry: Record<string, Component> = {
   'get_cycling_route': MapBubble,
   'get_current_weather': WeatherBubble,
   'holiday_calendar': HolidayBubble,
-  'time_tool': TimeBubble,
-  'syntax_checker': SyntaxBubble,
   'analyze_image': ImageBubble,
   'tavily_search': TavilySearchBubble,
-  'pdf_reader': PdfReaderBubble,
-  'doc_reader': DocReaderBubble,
-  'code_quality_analyzer': CodeQualityBubble,
-  'unit_test_runner': UnitTestBubble,
-  'debugger': DebuggerBubble,
   'tavily_extract': TavilyExtractBubble,
   'ask_user_for_info': AskUserBubble,
   'ask_user_qa': AskUserBubble,
