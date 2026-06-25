@@ -161,7 +161,18 @@ function persistTurns(sid: string) {
 
 // ── WebSocket 生命周期（每 Session 独立管理） ──────────────
 
+/** 会话 ID 格式验证：由后端生成的 UUID v4 */
+const SID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function isValidSessionId(sid: string): boolean {
+  return SID_RE.test(sid)
+}
+
 function connectSession(sid: string) {
+  if (!isValidSessionId(sid)) {
+    console.error(`[useChat] 拒绝连接：非法的 sessionId "${sid}"`)
+    return
+  }
   const ch = getOrCreateChannel(sid)
   if (ch.ws?.readyState === WebSocket.OPEN) return
 
@@ -200,6 +211,10 @@ function connectSession(sid: string) {
 export function ensureConnected(sid: string) {
   if (!sid) {
     console.warn(`[useChat:ensureConnected] 跳过空 sid`)
+    return
+  }
+  if (!isValidSessionId(sid)) {
+    console.error(`[useChat:ensureConnected] 拒绝连接：非法的 sessionId "${sid}"`)
     return
   }
   const ch = getOrCreateChannel(sid)
