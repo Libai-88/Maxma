@@ -8,6 +8,10 @@ __pycache__/
 build/
 *.egg
 
+# All dist directories (build output for various packages)
+dist/
+dist-electron/
+
 # Virtual environment
 .venv/
 venv/
