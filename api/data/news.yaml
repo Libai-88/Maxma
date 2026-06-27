@@ -1,4 +1,12 @@
 news:
+  - id: "weather-tool-enhance"
+    title: "天气工具优化升级"
+    description: "天气卡片全面升级：新增雷电/大风等预警信息显示（等级颜色区分）；详情栏增加 AQI 空气质量、UV 紫外线、云量指标；状况行增加湿度；预报卡片增加日出日落和降水概率。修复更新时间不显示 bug，新增 TypeScript 类型定义。"
+    type: "enhance"
+    date: "2026-06-27"
+    tags: ["天气", "优化"]
+    version: ""
+    pr_number: 186
   - id: "tool-simplify-env-vars"
     title: "工具精简与环境变量管理"
     description: "6+ 开发工具转为独立 Anthropic Skills（语法检查/代码质量/单元测试/调试器/PDF阅读/DOC阅读），file_ops 拆分为 4 个专注文件工具（读/写/管理/搜索），代码净减 1873 行。新增环境变量管理页面，支持可视化 CRUD 操作与密码脱敏展示。"
