@@ -1,4 +1,20 @@
 news:
+  - id: "tool-simplify-env-vars"
+    title: "工具精简与环境变量管理"
+    description: "6+ 开发工具转为独立 Anthropic Skills（语法检查/代码质量/单元测试/调试器/PDF阅读/DOC阅读），file_ops 拆分为 4 个专注文件工具（读/写/管理/搜索），代码净减 1873 行。新增环境变量管理页面，支持可视化 CRUD 操作与密码脱敏展示。"
+    type: "refactor"
+    date: "2026-06-25"
+    tags: ["重构", "工具", "环境变量", "Anthropic Skills"]
+    version: "v2.7.0"
+    pr_number: 183
+  - id: "v2.7.0-release"
+    title: "发布 v2.7.0 版本"
+    description: "v2.7.0 版本聚焦工具架构重组与运维能力升级。6+ 开发工具转为独立 Anthropic Skills，file_ops 拆分为 4 个专注文件工具，代码净减 1873 行。新增环境变量管理页面，支持可视化 CRUD 操作。WebSocket 认证集中至 AuthMiddleware ASGI 中间件解除业务耦合。记忆系统增加内容长度限制与驳回机制，sessionId 格式验证修复 CRITICAL 级 SSRF 告警。"
+    type: "feat"
+    date: "2026-06-27"
+    tags: ["发布", "版本"]
+    version: "v2.7.0"
+    pr_number: 0
   - id: "mcp-yaml-config"
     title: "MCP YAML 配置化"
     description: "新增 config/mcp_servers.yaml 声明式配置，支持本地 stdio 和远程 SSE/HTTP/WebSocket 四种传输类型，用户仅需编辑 YAML 即可接入 MCP 服务器，无需改代码。内置 POST /api/mcp/reload 热加载端点，工具名自动添加 serverId 前缀，前端统一展示。"
@@ -126,7 +142,7 @@ news:
     date: "2026-06-14"
     tags: ["发布", "版本"]
     version: "v1.6.0"
-    pr_number: 0
+    pr_number: 106
   - id: "task-status-patterns"
     title: "任务追踪状态语义升级"
     description: "任务追踪新增动态状态标签，根据任务清单组合自动切换（出发/就绪/待命/工作中）。顶栏进度条随状态语义变化，LLM 可通过调整任务列表精确表达当前阶段。同步更新了工具文档教会 LLM 状态模式的使用时机。"
