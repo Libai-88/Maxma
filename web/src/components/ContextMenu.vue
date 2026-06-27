@@ -100,6 +100,15 @@ onUnmounted(() => {
   transform-origin: top left;
 }
 
+.context-menu::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.244);
+  pointer-events: none;
+  z-index: -1;
+}
+
 .context-menu-item {
   display: flex;
   align-items: center;
