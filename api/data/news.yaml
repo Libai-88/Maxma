@@ -1,4 +1,12 @@
 news:
+  - id: "auto-approve-mid-turn"
+    title: "工具交互优化"
+    description: "Python 自动执行开关支持对话中途即时生效，无需等待下一轮对话。文件搜索气泡新增搜索表达式的可视化展示。气泡前端字段与后端全面对齐，修复字段不一致问题。"
+    type: "feat"
+    date: "2026-06-28"
+    tags: ["工具", "优化"]
+    version: ""
+    pr_number: 195
   - id: "weather-tool-enhance"
     title: "天气工具优化升级"
     description: "天气卡片全面升级：新增雷电/大风等预警信息显示（等级颜色区分）；详情栏增加 AQI 空气质量、UV 紫外线、云量指标；状况行增加湿度；预报卡片增加日出日落和降水概率。修复更新时间不显示 bug，新增 TypeScript 类型定义。"
