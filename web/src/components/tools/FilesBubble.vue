@@ -26,7 +26,6 @@
           </div>
           <div class="file-meta">
             <span class="meta-tag" v-if="fileSize">{{ fileSize }}</span>
-            <span class="meta-tag" v-if="td.encoding">{{ td.encoding }}</span>
             <span class="meta-tag" v-if="td.line_count">{{ td.line_count }} 行</span>
           </div>
           <div class="file-preview" v-if="td.content">
@@ -72,13 +71,6 @@
           <div class="file-path-display">{{ td.file_path }}</div>
           <div class="file-actions">
             <button
-              v-if="td.file_path"
-              class="action-btn"
-              @click="openFile"
-            >
-              打开文件
-            </button>
-            <button
               class="action-btn"
               @click="copyPath"
             >
@@ -94,14 +86,15 @@
             <div class="dir-header-text">
               <div class="dir-name">{{ dirName }}</div>
               <div class="dir-path">{{ td.directory_path || td.search_directory }}</div>
+              <div class="search-pattern" v-if="td.search_pattern">
+                <span class="search-pattern-label">搜索</span>
+                <code class="search-pattern-value">{{ td.search_pattern }}</code>
+              </div>
             </div>
           </div>
           <div class="file-meta">
             <span class="meta-tag" v-if="td.total_items != null">
               {{ td.total_items }} 项
-            </span>
-            <span class="meta-tag" v-if="td.extension">
-              {{ td.extension }}
             </span>
           </div>
           <div class="items-list" v-if="items.length > 0">
@@ -113,7 +106,6 @@
               <span class="item-icon">{{ item.type === 'directory' ? '&#128193;' : '&#128196;' }}</span>
               <span class="item-name">{{ item.name }}</span>
               <span class="item-size" v-if="item.size_bytes != null">{{ formatSize(item.size_bytes) }}</span>
-              <span class="item-date" v-if="item.modified">{{ item.modified }}</span>
             </div>
           </div>
           <div class="items-footer" v-if="isMoreItems">
@@ -121,7 +113,7 @@
           </div>
           <div class="file-actions">
             <button
-              v-if="td.directory_path"
+              v-if="td.directory_path || td.search_directory"
               class="action-btn"
               @click="copyPath"
             >
@@ -236,7 +228,7 @@ const isTruncated = computed(() => {
 const previewLineCount = computed(() => MAX_PREVIEW_LINES)
 
 // ── 文件列表 ──
-const items = computed<Array<{ name: string; type: string; size_bytes?: number; modified?: string }>>(() => {
+const items = computed<Array<{ name: string; type: string; size_bytes?: number }>>(() => {
   const raw = td.value.items as Array<Record<string, unknown>> | undefined
   return Array.isArray(raw) ? raw : []
 })
@@ -266,7 +258,6 @@ const runningLabel = computed(() => {
   switch (props.toolCall.name) {
     case 'file_read': return '正在读取文件...'
     case 'file_write': return '正在写入文件...'
-    case 'file_list':
     case 'file_search': return '正在搜索文件...'
     case 'file_manage': return '正在管理文件...'
     default: return '正在操作文件...'
@@ -284,6 +275,7 @@ function formatSize(bytes: number): string {
 function copyPath() {
   const path = td.value.file_path as string
     || td.value.directory_path as string
+    || td.value.search_directory as string
     || ''
   if (!path) return
   navigator.clipboard.writeText(path)
@@ -295,12 +287,6 @@ function copyContent() {
   if (!content) return
   navigator.clipboard.writeText(content)
   emit('action', { action: 'copy-content', data: { length: content.length } })
-}
-
-function openFile() {
-  const path = td.value.file_path as string | undefined
-  if (!path) return
-  emit('action', { action: 'open-file', data: { path } })
 }
 </script>
 
@@ -350,6 +336,27 @@ function openFile() {
   font-family: 'SF Mono', 'Consolas', monospace;
   word-break: break-all;
   opacity: 0.8;
+}
+
+.search-pattern {
+  font-size: 11px;
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.search-pattern-label {
+  color: var(--text-secondary);
+  opacity: 0.8;
+}
+
+.search-pattern-value {
+  font-family: 'SF Mono', 'Consolas', monospace;
+  background: var(--bg-secondary, #f0f0f0);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--text-primary);
 }
 
 .dir-name {
@@ -532,13 +539,6 @@ function openFile() {
   text-align: right;
 }
 
-.item-date {
-  font-size: 11px;
-  color: var(--text-secondary);
-  flex-shrink: 0;
-  min-width: 56px;
-  text-align: right;
-}
 
 .items-footer {
   font-size: 11px;
