@@ -1,8 +1,9 @@
-"""SonettoHere v2.0.0 — LangGraph ReAct AI Agent Web 入口。"""
+"""SonettoHere — LangGraph ReAct AI Agent Web 入口。"""
 
 import sys
 
 import uvicorn
+from version import __version__
 
 from api.server import create_app
 from memory.user_init import ensure_all
@@ -17,7 +18,7 @@ def main():
         print(f"[auth] Token rotated: {rotated}")
         return
 
-    print("SonettoHere v2.0.0")
+    print(f"SonettoHere {__version__}")
     print()
 
     ensure_all()

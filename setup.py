@@ -7,12 +7,14 @@ import shutil
 import subprocess
 import sys
 
+from version import __version__
+
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
 def header():
     print("=" * 48)
-    print("  SonettoHere v2.0.0 — 首次初始化")
+    print(f"  SonettoHere {__version__} — 首次初始化")
     print("=" * 48)
     print()
     print("本脚本将自动安装依赖并准备好运行环境。")
