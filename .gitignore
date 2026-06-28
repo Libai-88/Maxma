@@ -20,6 +20,10 @@ env/
 # IDE
 .idea/
 .vscode/
+
+# CI / Tools
+.github/
+.trae/
 *.swp
 *.swo
 
