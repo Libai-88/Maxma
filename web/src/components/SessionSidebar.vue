@@ -50,7 +50,7 @@
             />
             <button
               class="btn-delete"
-              @click.stop="$emit('delete', s.session_id)"
+              @click.stop="showDeleteConfirm(s)"
               title="删除会话"
             >
               &times;
@@ -97,7 +97,7 @@
             />
             <button
               class="btn-delete"
-              @click.stop="$emit('delete', s.session_id)"
+              @click.stop="showDeleteConfirm(s)"
               title="删除会话"
             >
               &times;
@@ -186,6 +186,24 @@
               :disabled="!constifyName.trim()"
               @click="confirmConstify"
             >确定</button>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- ── 删除确认对话框 ── -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="deleteConfirmTarget" class="delete-confirm-overlay" @click="cancelDelete">
+          <div class="delete-confirm-card" @click.stop>
+            <div class="delete-confirm-title">确认删除会话</div>
+            <div class="delete-confirm-message">
+              此会话包含 <strong>{{ deleteConfirmTarget.message_count }}</strong> 条消息，删除后无法恢复。
+            </div>
+            <div class="delete-confirm-actions">
+              <button class="delete-confirm-btn cancel" @click="cancelDelete">取消</button>
+              <button class="delete-confirm-btn confirm" @click="confirmDelete">删除</button>
+            </div>
           </div>
         </div>
       </Transition>
@@ -465,6 +483,25 @@ function handleContextMenuSelect(action: string) {
 function closeContextMenu() {
   ctxMenuVisible.value = false
   ctxMenuSession.value = null
+}
+
+// ── 删除确认对话框 ──────────────────────────────────────────────
+
+const deleteConfirmTarget = ref<SessionInfo | null>(null)
+
+function showDeleteConfirm(session: SessionInfo) {
+  deleteConfirmTarget.value = session
+}
+
+function cancelDelete() {
+  deleteConfirmTarget.value = null
+}
+
+function confirmDelete() {
+  if (deleteConfirmTarget.value) {
+    emit('delete', deleteConfirmTarget.value.session_id)
+  }
+  deleteConfirmTarget.value = null
 }
 </script>
 
@@ -901,5 +938,90 @@ function closeContextMenu() {
 .constify-pop-leave-to {
   opacity: 0;
   transform: translateX(-4px) scale(0.96);
+}
+
+/* ── 删除确认对话框 ── */
+.delete-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.delete-confirm-card {
+  background: var(--bg-card);
+  border-radius: 12px;
+  padding: 20px;
+  min-width: 300px;
+  max-width: 400px;
+  box-shadow: var(--shadow-xl);
+}
+
+.delete-confirm-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.delete-confirm-message {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+.delete-confirm-message strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.delete-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.delete-confirm-btn {
+  padding: 8px 18px;
+  font-size: 14px;
+  font-family: inherit;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.delete-confirm-btn.cancel {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.delete-confirm-btn.cancel:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.delete-confirm-btn.confirm {
+  background: var(--status-error, #dc2626);
+  color: #fff;
+}
+
+.delete-confirm-btn.confirm:hover {
+  opacity: 0.9;
+}
+
+/* Fade transition */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

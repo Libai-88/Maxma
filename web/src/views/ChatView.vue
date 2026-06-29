@@ -65,6 +65,8 @@
       :turns="turns"
       :current-turn="currentTurn"
       :error="error"
+      :error-category="errorCategory"
+      :error-trace-id="errorTraceId"
       @action="handleToolAction"
       @cite="addCitation"
       @toggle-private="setPrivateMode(!privateMode)"
@@ -100,8 +102,11 @@ import type { ParsedRef } from '@/utils/references'
 import { computed, onMounted, ref } from 'vue'
 
 const { sessionId, sessions } = useSession()
-const { connected, isStreaming, turns, currentTurn, error, contextUsage, taskTrackerData, send, cancel, sendUserResponse, removeTurns, privateMode, setPrivateMode, autoApprove, setAutoApprove } =
-  useChat(sessionId)
+const {
+  connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId,
+  contextUsage, taskTrackerData, send, cancel, sendUserResponse, removeTurns,
+  privateMode, setPrivateMode, autoApprove, setAutoApprove
+} = useChat(sessionId)
 
 const selectedModelName = ref('')
 const hasProviders = ref(true)
