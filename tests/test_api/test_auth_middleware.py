@@ -24,12 +24,12 @@ class TestAuthMiddleware:
 
     def test_wrong_token_returns_401(self, client):
         """token 不匹配 → 401。"""
-        resp = client.get("/api/test", headers={"X-Sonetto-Token": "wrong-token"})
+        resp = client.get("/api/test", headers={"X-Maxma-Token": "wrong-token"})
         assert resp.status_code == 401
 
     def test_correct_header_token(self, client, auth_token):
-        """X-Sonetto-Token 正确 → 200。"""
-        resp = client.get("/api/test", headers={"X-Sonetto-Token": auth_token})
+        """X-Maxma-Token 正确 → 200。"""
+        resp = client.get("/api/test", headers={"X-Maxma-Token": auth_token})
         assert resp.status_code == 200
         assert resp.json() == {"status": "ok"}
 
@@ -39,14 +39,14 @@ class TestAuthMiddleware:
         assert resp.status_code == 401
 
     def test_ws_path_with_valid_token(self, client, auth_token):
-        """/ws/ 路径带 X-Sonetto-Token 头 → 200。"""
-        resp = client.get("/ws/test", headers={"X-Sonetto-Token": auth_token})
+        """/ws/ 路径带 X-Maxma-Token 头 → 200。"""
+        resp = client.get("/ws/test", headers={"X-Maxma-Token": auth_token})
         assert resp.status_code == 200
         assert resp.json() == {"status": "ws"}
 
     def test_ws_path_with_wrong_token(self, client):
-        """/ws/ 路径带错误 X-Sonetto-Token → 401。"""
-        resp = client.get("/ws/test", headers={"X-Sonetto-Token": "wrong"})
+        """/ws/ 路径带错误 X-Maxma-Token → 401。"""
+        resp = client.get("/ws/test", headers={"X-Maxma-Token": "wrong"})
         assert resp.status_code == 401
 
     def test_query_param_no_longer_works(self, client):
@@ -62,5 +62,5 @@ class TestAuthMiddlewareNoToken:
         """app.state.auth_token 为 None → 401。"""
         # 覆盖 fixture：设置 auth_token 为 None
         client.app.state.auth_token = None
-        resp = client.get("/api/test", headers={"X-Sonetto-Token": "any-token"})
+        resp = client.get("/api/test", headers={"X-Maxma-Token": "any-token"})
         assert resp.status_code == 401

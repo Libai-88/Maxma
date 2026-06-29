@@ -2,9 +2,9 @@
 name: macro-creator
 type: macro
 version: 1.0
-author: Sonetto
+author: Maxma
 keywords: [创建宏, 新建宏, 写宏, macro, 工作流模板, 步骤指引]
-description: 指导 Agent 创建新的 SonettoHere Macro。Macro 是轻量化的 Skill（Markdown 子集），不含脚本或外部依赖，一篇 MACRO.md 即可完成。适用场景：纯步骤指引、流程稳定频繁、无需外部依赖。当用户说"把这个流程写成宏"、"封装成宏"、"新建一个宏"、"写个宏"时使用。当用户要求创建一个仅包含流程指导的技能，也可以使用并评估创建宏是否更为合适。
+description: 指导 Agent 创建新的 MaxmaHere Macro。Macro 是轻量化的 Skill（Markdown 子集），不含脚本或外部依赖，一篇 MACRO.md 即可完成。适用场景：纯步骤指引、流程稳定频繁、无需外部依赖。当用户说"把这个流程写成宏"、"封装成宏"、"新建一个宏"、"写个宏"时使用。当用户要求创建一个仅包含流程指导的技能，也可以使用并评估创建宏是否更为合适。
 category: 工具
 ---
 
@@ -60,7 +60,7 @@ MACRO.md 的 YAML frontmatter 格式：
 name: <宏的英文标识>
 type: macro          # 固定值，区分 macro 与 skill
 version: 1.0         # 语义化版本
-author: Sonetto      # 或用户的名字
+author: Maxma      # 或用户的名字
 keywords: [关键词1, 关键词2]
 description: >-
   用一句话描述什么时候该用这个宏。
@@ -74,7 +74,7 @@ category: <分类名>
 | 字段 | 必填 | 说明 |
 |---|---|---|
 | `name` | 是 | 宏的英文标识，用连字符连接，如 `exam-countdown` |
-| `type` | 是 | 固定为 `macro`，用于 SonettoHere 区分 Macro 和 Skill |
+| `type` | 是 | 固定为 `macro`，用于 MaxmaHere 区分 Macro 和 Skill |
 | `version` | 推荐 | 语义化版本号，如 `1.0`、`1.1` |
 | `author` | 可选 | 创建者名字 |
 | `keywords` | 推荐 | 搜索关键词列表 |
@@ -134,7 +134,7 @@ category: <分类名>
 name: example-macro
 type: macro
 version: 1.0
-author: Sonetto
+author: Maxma
 keywords: [示例, 模板, 参考]
 description: 这是一个示例宏的模板。当你需要参考 Macro 的格式来创建新宏时使用。
 category: 工具

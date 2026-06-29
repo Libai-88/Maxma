@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from tools.base import (
     ToolBase,
     check_path_whitelisted,
-    check_sonetto_blocker,
+    check_maxma_blocker,
     format_error,
     format_success,
 )
@@ -82,12 +82,12 @@ class FileEditTool(ToolBase):
         if not file_path:
             return format_error("file_path 不能为空")
 
-        # ── SonettoBlocker 安全检查 ────────────────────────────────
-        blocked = check_sonetto_blocker(file_path)
+        # ── MaxmaBlocker 安全检查 ────────────────────────────────
+        blocked = check_maxma_blocker(file_path)
         if blocked:
             return format_error(
-                "🚫 安全阻断：操作已被 SonettoBlocker 阻断。\n"
-                f'在目录 "{blocked}" 中发现了 SonettoBlocker 文件。\n\n'
+                "🚫 安全阻断：操作已被 MaxmaBlocker 阻断。\n"
+                f'在目录 "{blocked}" 中发现了 MaxmaBlocker 文件。\n\n'
                 "请立即停止当前任务，先说明你为什么需要访问该路径，"
                 "再说明下一步打算做什么。"
             )

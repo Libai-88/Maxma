@@ -12,7 +12,7 @@
         <div class="rule-body">
           <p>权限检查按以下优先级判断：</p>
           <ol>
-            <li><strong>拒止锚优先</strong> — 目标目录本身或任意父目录存在 <code>SonettoBlocker</code> 标记文件时直接阻断，白名单不生效。详见<router-link to="/sonetto-blocker">拒止锚</router-link>页面。</li>
+            <li><strong>拒止锚优先</strong> — 目标目录本身或任意父目录存在 <code>MaxmaBlocker</code> 标记文件时直接阻断，白名单不生效。详见<router-link to="/maxma-blocker">拒止锚</router-link>页面。</li>
             <li><strong>精确匹配</strong> — 目标目录与某条目的目录完全一致时，始终放行，不受子目录继承开关影响。</li>
             <li><strong>非递归阻断</strong> — 匹配到「仅当前目录」条目的子目录时阻断。父目录的阻断优先于子目录的递归放行。</li>
             <li><strong>递归放行</strong> — 无上方阻断时，匹配到「允许子目录」条目的子目录时放行。</li>

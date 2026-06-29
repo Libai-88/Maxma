@@ -1,4 +1,4 @@
-"""SonettoHere — LangGraph ReAct AI Agent Web 入口。"""
+"""MaxmaHere — LangGraph ReAct AI Agent Web 入口。"""
 
 import sys
 
@@ -18,7 +18,7 @@ def main():
         print(f"[auth] Token rotated: {rotated}")
         return
 
-    print(f"SonettoHere {__version__}")
+    print(f"MaxmaHere {__version__}")
     print()
 
     ensure_all()

@@ -211,7 +211,7 @@ async function refreshSessions() {
 页面首次加载时：
 
 ```typescript
-const stored = localStorage.getItem('sonetto_session_id')
+const stored = localStorage.getItem('maxma_session_id')
 if (stored) {
   try {
     await api.getSession(stored)  // GET /api/sessions/{id}

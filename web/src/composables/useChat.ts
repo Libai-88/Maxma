@@ -7,7 +7,7 @@ import { getToken } from '@/api'
 /** 匹配旧格式尾缀（用于 localStorage 迁移） */
 const TIME_SUFFIX_RE = /（\d{4}-\d{2}-\d{2} \w{3} \d{2}:\d{2}）$/
 
-export const TURNS_KEY_PREFIX = 'sonetto_turns_'
+export const TURNS_KEY_PREFIX = 'maxma_turns_'
 
 /** 将旧格式 turn（userMessage 含 __refs__ 和时间尾缀）迁移为新格式 */
 function migrateLegacyTurn(turn: any): ChatTurn {

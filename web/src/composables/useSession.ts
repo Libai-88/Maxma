@@ -3,7 +3,7 @@ import { api } from '@/api'
 import { removeTurnsFromStorage, disconnectSession, TURNS_KEY_PREFIX } from '@/composables/useChat'
 import type { SessionInfo } from '@/types'
 
-const STORAGE_KEY = 'sonetto_session_id'
+const STORAGE_KEY = 'maxma_session_id'
 
 // Module-level shared state — all callers share the same session
 const sessionId = ref('')

@@ -65,7 +65,7 @@ news:
     pr_number: 165
   - id: "v2.4.1-release"
     title: "发布 v2.4.1 版本"
-    description: "v2.4.1 补丁版本带来侧栏视觉升级与安全增强。侧栏新增自定义背景图片，支持模糊和白色叠加效果，适配折叠/展开不同设备尺寸。全端 API 调用 Token 审计覆盖，补全 restart 和 health 接口的身份验证，确保每一处请求均携带 X-Sonetto-Token。修复设置弹出菜单的层叠问题。"
+    description: "v2.4.1 补丁版本带来侧栏视觉升级与安全增强。侧栏新增自定义背景图片，支持模糊和白色叠加效果，适配折叠/展开不同设备尺寸。全端 API 调用 Token 审计覆盖，补全 restart 和 health 接口的身份验证，确保每一处请求均携带 X-Maxma-Token。修复设置弹出菜单的层叠问题。"
     type: "feat"
     date: "2026-06-20"
     tags: ["发布", "版本"]
@@ -97,7 +97,7 @@ news:
     pr_number: 134
   - id: "v2.2.0-release"
     title: "发布 v2.2.0 版本"
-    description: "v2.2.0 版本带来完整的本地安全防护系统与前端设置体系。新增 SonettoBlocker 拒止锚与路径白名单双层安全机制，保护本地文件安全。前端新增设置页体系，包含用户、人设、路径白名单、拒止锚管理页面及安全标识。输入框新增拖拽调整高度手柄，优化长文本编辑体验。"
+    description: "v2.2.0 版本带来完整的本地安全防护系统与前端设置体系。新增 MaxmaBlocker 拒止锚与路径白名单双层安全机制，保护本地文件安全。前端新增设置页体系，包含用户、人设、路径白名单、拒止锚管理页面及安全标识。输入框新增拖拽调整高度手柄，优化长文本编辑体验。"
     type: "feat"
     date: "2026-06-19"
     tags: ["发布", "版本"]
@@ -113,7 +113,7 @@ news:
     pr_number: 129
   - id: "local-file-security"
     title: "本地文件安全防护"
-    description: "新增 SonettoBlocker 黑名单阻断与路径白名单双层安全机制。Blocker 通过目录标记文件即可阻断访问，白名单自动生成仅开放技能目录。两大工具系列（文件/exec）全部同步覆盖，Blocker 优先拦截。"
+    description: "新增 MaxmaBlocker 黑名单阻断与路径白名单双层安全机制。Blocker 通过目录标记文件即可阻断访问，白名单自动生成仅开放技能目录。两大工具系列（文件/exec）全部同步覆盖，Blocker 优先拦截。"
     type: "feat"
     date: "2026-06-18"
     tags: ["安全", "文件", "权限"]

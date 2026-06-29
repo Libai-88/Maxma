@@ -74,12 +74,12 @@ class ToolBase(BaseTool):
 
 
 def check_path_access(target_path: str) -> str | None:
-    """合并 SonettoBlocker + 路径白名单检查。返回错误信息或 None。"""
-    blocked = check_sonetto_blocker(target_path)
+    """合并 MaxmaBlocker + 路径白名单检查。返回错误信息或 None。"""
+    blocked = check_maxma_blocker(target_path)
     if blocked:
         return (
-            "🚫 安全阻断：操作已被 SonettoBlocker 阻断。\n"
-            f"在以下目录中发现了 SonettoBlocker 文件：\n  • {blocked}\n\n"
+            "🚫 安全阻断：操作已被 MaxmaBlocker 阻断。\n"
+            f"在以下目录中发现了 MaxmaBlocker 文件：\n  • {blocked}\n\n"
             "请立即停止当前任务，先说明你为什么需要访问该路径，"
             "再说明下一步打算做什么。"
         )
@@ -99,10 +99,10 @@ def format_error(message: str) -> str:
     return json.dumps({"success": False, "error": message}, ensure_ascii=False)
 
 
-def check_sonetto_blocker(target_path: str) -> str | None:
-    """逐级检查路径的每一级目录是否包含 SonettoBlocker 文件（不区分大小写，不匹配后缀名）。
+def check_maxma_blocker(target_path: str) -> str | None:
+    """逐级检查路径的每一级目录是否包含 MaxmaBlocker 文件（不区分大小写，不匹配后缀名）。
 
-    从盘符根目录开始，依次检查每一层父目录中是否存在名为 "SonettoBlocker"
+    从盘符根目录开始，依次检查每一层父目录中是否存在名为 "MaxmaBlocker"
     的文件（任何扩展名均匹配）。一旦发现，返回该目录路径；否则返回 None。
     """
     if not target_path:
@@ -137,7 +137,7 @@ def check_sonetto_blocker(target_path: str) -> str | None:
         try:
             for entry in os.listdir(normalized):
                 entry_name, _ = os.path.splitext(entry)
-                if entry_name.lower() == "sonettoblocker":
+                if entry_name.lower() == "maxmablocker":
                     # 返回友好的展示形式
                     return normalized
         except (PermissionError, OSError):
@@ -268,19 +268,19 @@ def _write_whitelist(entries: list) -> None:
 
 
 _BLOCKER_YAML_PATH = (
-    Path(__file__).resolve().parent.parent / "api" / "data" / "sonetto_blocker.yaml"
+    Path(__file__).resolve().parent.parent / "api" / "data" / "maxma_blocker.yaml"
 )
 
-_BLOCKER_FILENAME = "SonettoBlocker"
+_BLOCKER_FILENAME = "MaxmaBlocker"
 _AUTO_BLOCKER_PATH = os.path.join(_PROJECT_ROOT, "api", "data")
 
 
 def _ensure_blocker() -> None:
-    """确保 api/data/ 目录受 SonettoBlocker 保护。
+    """确保 api/data/ 目录受 MaxmaBlocker 保护。
 
     在模块导入时自动运行：
-    - 如果 api/data/ 下没有 SonettoBlocker 标记文件 → 创建
-    - 如果 sonetto_blocker.yaml 中没有对应条目 → 添加
+    - 如果 api/data/ 下没有 MaxmaBlocker 标记文件 → 创建
+    - 如果 maxma_blocker.yaml 中没有对应条目 → 添加
     """
     marker = Path(_AUTO_BLOCKER_PATH) / _BLOCKER_FILENAME
     if not marker.exists():
@@ -443,10 +443,10 @@ def _whitelisted_open(
     closefd: bool = True,
     opener=None,
 ):
-    """``open()`` 的包装版本，在打开文件前先检查 SonettoBlocker，再检查白名单。
+    """``open()`` 的包装版本，在打开文件前先检查 MaxmaBlocker，再检查白名单。
 
     完全兼容内置 ``open()`` 的全部参数签名。检查顺序：
-    1. ``check_sonetto_blocker()`` — 若阻断则抛出 ``PermissionError``（Blocker 优先）
+    1. ``check_maxma_blocker()`` — 若阻断则抛出 ``PermissionError``（Blocker 优先）
     2. ``check_path_whitelisted()`` — 若不在白名单则抛出 ``PermissionError``
     """
     import builtins as _real_builtins
@@ -456,12 +456,12 @@ def _whitelisted_open(
     if isinstance(file, os.PathLike):
         file_str = os.fspath(file)
     if isinstance(file_str, str):
-        # 1. SonettoBlocker 优先
-        blocked = check_sonetto_blocker(file_str)
+        # 1. MaxmaBlocker 优先
+        blocked = check_maxma_blocker(file_str)
         if blocked:
             raise PermissionError(
-                "🚫 安全阻断：操作已被 SonettoBlocker 阻断。\n"
-                f"SonettoBlocker 文件位于: {blocked}\n"
+                "🚫 安全阻断：操作已被 MaxmaBlocker 阻断。\n"
+                f"MaxmaBlocker 文件位于: {blocked}\n"
                 "请立即停止当前任务。"
             )
         # 2. 白名单次之

@@ -3,7 +3,7 @@
 cd /d "%~dp0"
 
 echo ========================================
-echo   SonettoHere Startup
+echo   MaxmaHere Startup
 echo ========================================
 echo.
 
@@ -29,7 +29,7 @@ if not exist "web\node_modules" (
 )
 
 echo [1/3] Starting backend (FastAPI :8000) ...
-start "SonettoHere Backend" /d "%~dp0" cmd /k ".venv\Scripts\python main.py web"
+start "MaxmaHere Backend" /d "%~dp0" cmd /k ".venv\Scripts\python main.py web"
 
 echo [2/3] Waiting for backend ...
 set "READY=0"
@@ -50,7 +50,7 @@ if "%READY%"=="0" (
 )
 
 echo [3/3] Starting frontend (Vite :5173) ...
-start "SonettoHere Frontend" /d "%~dp0web" cmd /k "npm run dev"
+start "MaxmaHere Frontend" /d "%~dp0web" cmd /k "npm run dev"
 
 echo        Waiting for frontend ...
 set "READY=0"

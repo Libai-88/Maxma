@@ -2,7 +2,7 @@
 
 ## 一、项目概述
 
-**Project Jet**（喷气计划）的目标是：将 SonettoHere 现有的网络搜索和网页抓取工具全面替换为 **Tavily Search API**，利用其 LLM 优化的搜索结果、内容提取、深度研究等能力，淘汰基于 UAPI 的 `smart_search` 和基于 Playwright 的 `scrape_webpage`，同时新增爬取、站点发现、研究报告等能力。
+**Project Jet**（喷气计划）的目标是：将 MaxmaHere 现有的网络搜索和网页抓取工具全面替换为 **Tavily Search API**，利用其 LLM 优化的搜索结果、内容提取、深度研究等能力，淘汰基于 UAPI 的 `smart_search` 和基于 Playwright 的 `scrape_webpage`，同时新增爬取、站点发现、研究报告等能力。
 
 "喷气"寓意旧引擎（活塞式）换新引擎（喷气式）—— 更快、更稳、覆盖更广。
 

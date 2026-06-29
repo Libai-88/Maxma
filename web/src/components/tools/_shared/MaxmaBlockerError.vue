@@ -1,5 +1,5 @@
 <template>
-  <!-- SonettoBlocker 阻断错误（特殊视觉） -->
+  <!-- MaxmaBlocker 阻断错误（特殊视觉） -->
   <div v-if="isBlocked" class="blocker-banner">
     <div class="blocker-header">
       <span class="blocker-shield">🛡️</span>
@@ -7,7 +7,7 @@
     </div>
     <div class="blocker-divider" />
     <div class="blocker-body">
-      <p class="blocker-intro">此操作因 <strong>SonettoBlocker</strong> 安全机制被阻止：</p>
+      <p class="blocker-intro">此操作因 <strong>MaxmaBlocker</strong> 安全机制被阻止：</p>
 
       <div v-if="blockedPaths.length" class="blocker-section">
         <div class="blocker-label">阻断位置</div>
@@ -41,7 +41,7 @@ const props = defineProps<{
 const displayText = computed(() => props.output || props.fallback || '操作失败')
 
 const isBlocked = computed(() => {
-  return !!props.output && props.output.includes('SonettoBlocker')
+  return !!props.output && props.output.includes('MaxmaBlocker')
 })
 
 /** 从后端错误消息中提取被阻断的目录路径 */

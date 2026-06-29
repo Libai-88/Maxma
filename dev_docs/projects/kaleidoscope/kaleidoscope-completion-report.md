@@ -4,7 +4,7 @@
 
 ## 一、项目概述
 
-Kaleidoscope 项目旨在为 SonettoHere 的所有后端工具创建专属的前端气泡组件（Tool Bubble），替代原有的通用文本渲染方案，提供结构化、可视化的工具调用结果展示。
+Kaleidoscope 项目旨在为 MaxmaHere 的所有后端工具创建专属的前端气泡组件（Tool Bubble），替代原有的通用文本渲染方案，提供结构化、可视化的工具调用结果展示。
 
 - **起止时间**：2026-04  — 2026-05-17
 - **分支**：`feat/kaleidoscope-playground`
@@ -84,6 +84,6 @@ Skill (format_success JSON)
 
 ## 四、项目总结
 
-Kaleidoscope 项目成功将 SonettoHere 的工具展示从通用文本升级为专属结构化气泡，显著提升了用户体验。建立了完整的前端气泡开发标准、注册机制和调试工具（Playground），为后续新工具的接入提供了清晰模板。
+Kaleidoscope 项目成功将 MaxmaHere 的工具展示从通用文本升级为专属结构化气泡，显著提升了用户体验。建立了完整的前端气泡开发标准、注册机制和调试工具（Playground），为后续新工具的接入提供了清晰模板。
 
 唯一未覆盖的 `ask_user_for_info` 因涉及前端工具系统的交互模式重构，需要单独立项处理。

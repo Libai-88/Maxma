@@ -6,7 +6,7 @@
 
 ### 功能目标
 
-在 SonettoHere 的对话界面中，用户可以通过右键菜单撤回自己发送的最后一条消息（及其对应的工具调用和 AI 回复），使对话状态回退到上一轮之前。
+在 MaxmaHere 的对话界面中，用户可以通过右键菜单撤回自己发送的最后一条消息（及其对应的工具调用和 AI 回复），使对话状态回退到上一轮之前。
 
 ---
 
@@ -35,7 +35,7 @@
 
 #### 为什么用 `CompiledStateGraph` 而不是直接操作 checkpointer
 
-设计文档原本提议通过 `agent.get_state()` / `agent.update_state()` 操作状态。在 SonettoHere 中，Agent 图每次在 `_run_agent_turn` 中构建，未持久化在 session 上。
+设计文档原本提议通过 `agent.get_state()` / `agent.update_state()` 操作状态。在 MaxmaHere 中，Agent 图每次在 `_run_agent_turn` 中构建，未持久化在 session 上。
 
 **方案**：在 `SessionState` 中新增 `_graph` 字段，`build_agent()` 后将编译图缓存到 session 上。撤回端点通过 `session._graph` 调用 `aget_state` / `aupdate_state`。
 

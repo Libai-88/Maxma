@@ -39,7 +39,7 @@ def _load_image_bytes(image_source: str) -> tuple[bytes, str]:
 
     if image_source.startswith("url:"):
         url = image_source[4:]
-        resp = requests.get(url, timeout=30, headers={"User-Agent": "SonettoHere/1.0"})
+        resp = requests.get(url, timeout=30, headers={"User-Agent": "MaxmaHere/1.0"})
         resp.raise_for_status()
         content_type = resp.headers.get("Content-Type")
         mime = _get_mime_type(url, content_type)

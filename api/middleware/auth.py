@@ -2,7 +2,7 @@
 认证中间件 — ASGI 中间件，统一拦截 HTTP API 和 WebSocket 请求进行 Token 鉴权。
 
 Token 来源：
-- HTTP / WebSocket 通用: X-Sonetto-Token 请求头
+- HTTP / WebSocket 通用: X-Maxma-Token 请求头
 - WebSocket (浏览器子协议): Sec-WebSocket-Protocol（前端通过 WebSocket sub-protocol 传入）
 
 鉴权失败的响应：
@@ -58,15 +58,15 @@ class AuthMiddleware:
     def _extract_token(self, scope) -> str:
         """从请求头提取 Token。
 
-        HTTP / WebSocket 通用路径: X-Sonetto-Token 自定义头
+        HTTP / WebSocket 通用路径: X-Maxma-Token 自定义头
         WebSocket 专用路径: scope.subprotocols（由 ASGI server/uvicorn 从
         Sec-WebSocket-Protocol 握手头部解析，前端通过 new WebSocket(url, [token])
         传入）。优先使用 subprotocols 字段，比手动解析 raw header 更可靠。
         """
         headers = dict(scope.get("headers", []))
 
-        # 通用：X-Sonetto-Token 自定义头
-        token_bytes = headers.get(b"x-sonetto-token", b"")
+        # 通用：X-Maxma-Token 自定义头
+        token_bytes = headers.get(b"x-maxma-token", b"")
         if token_bytes:
             return token_bytes.decode()
 
@@ -86,7 +86,7 @@ class AuthMiddleware:
             await send({"type": "websocket.close", "code": 4001})
         else:
             response = JSONResponse(
-                {"detail": "Unauthorized — X-Sonetto-Token 缺失或不匹配"},
+                {"detail": "Unauthorized — X-Maxma-Token 缺失或不匹配"},
                 status_code=401,
             )
             await response(scope, receive, send)

@@ -289,13 +289,13 @@ async def _run_agent_turn(
         return
 
     system_prompt = build_system_prompt()
-    agent_sonetto = build_agent(
+    agent_maxma = build_agent(
         model=llm,
         tools=app_state.tools,
         system_prompt=system_prompt,
         checkpointer=session.checkpointer,
     )
-    session._graph = agent_sonetto
+    session._graph = agent_maxma
     inputs = {"messages": [HumanMessage(content=user_message)]}
     config = {
         "configurable": {"thread_id": session.session_id},
@@ -317,7 +317,7 @@ async def _run_agent_turn(
         await ws.send_json({"type": "context_usage", "payload": initial_turn_usage})
 
         final_answer = await _stream_turn(
-            agent_sonetto,
+            agent_maxma,
             inputs,
             config,
             ws,

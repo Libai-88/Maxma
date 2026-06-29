@@ -5,8 +5,8 @@
       <span>{{ runningLabel }}</span>
     </div>
 
-    <!-- 错误（含 SonettoBlocker 特殊渲染） -->
-    <SonettoBlockerError
+    <!-- 错误（含 MaxmaBlocker 特殊渲染） -->
+    <MaxmaBlockerError
       v-else-if="toolCall.status === 'error'"
       :output="toolCall.output"
       fallback="编辑操作失败"
@@ -134,7 +134,7 @@
 import { computed } from 'vue'
 import type { ToolCall } from '@/types'
 import BubbleChrome from './_shared/BubbleChrome.vue'
-import SonettoBlockerError from './_shared/SonettoBlockerError.vue'
+import MaxmaBlockerError from './_shared/MaxmaBlockerError.vue'
 
 const props = defineProps<{ toolCall: ToolCall }>()
 const emit = defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()

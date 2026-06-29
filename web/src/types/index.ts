@@ -455,7 +455,7 @@ export interface ListWhitelistResponse {
   entries: WhitelistEntry[]
 }
 
-// === SonettoBlocker 拒止锚 ===
+// === MaxmaBlocker 拒止锚 ===
 
 export interface BlockerEntry {
   path: string
