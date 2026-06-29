@@ -2,7 +2,7 @@
 
 ## 概述
 
-SonettoHere Web 端采用 **REST + WebSocket 双通道**通信架构：
+MaxmaHere Web 端采用 **REST + WebSocket 双通道**通信架构：
 
 - **REST API**：会话 CRUD、记忆查询、文件操作等请求-响应式操作
 - **WebSocket**：流式 Agent 对话、实时 tool call 推送、ask_user 交互

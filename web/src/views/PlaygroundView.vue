@@ -597,8 +597,8 @@ const mockTemplates: Record<string, MockTemplate> = {
   },
   todo_query: {
     input: { task_id: 't4' },
-    doneOutput: JSON.stringify({ success: true, data: { task_id: 't4', content: '复习行波分析', description: '半波损失、驻波叠加、两端反射分析，结合 Sonetto 生成的复习资料', project_name: '学术', section_name: '考试&复习', priority: 3, due: { date: '2026-06-22', string: '2026-06-22 15:00' }, creator_id: '58490144', is_completed: false } }),
-    toolData: { task_id: 't4', content: '复习行波分析', description: '半波损失、驻波叠加、两端反射分析，结合 Sonetto 生成的复习资料', project_id: 'p2', project_name: '学术', section_id: 's1', section_name: '考试&复习', parent_id: null, labels: [], priority: 3, due: { date: '2026-06-22', string: '2026-06-22 15:00', lang: 'en', is_recurring: false, timezone: null }, deadline: null, duration: null, order: 4, is_collapsed: false, assignee_id: null, assigner_id: null, creator_id: '58490144', is_completed: false, url: null },
+    doneOutput: JSON.stringify({ success: true, data: { task_id: 't4', content: '复习行波分析', description: '半波损失、驻波叠加、两端反射分析，结合 Maxma 生成的复习资料', project_name: '学术', section_name: '考试&复习', priority: 3, due: { date: '2026-06-22', string: '2026-06-22 15:00' }, creator_id: '58490144', is_completed: false } }),
+    toolData: { task_id: 't4', content: '复习行波分析', description: '半波损失、驻波叠加、两端反射分析，结合 Maxma 生成的复习资料', project_id: 'p2', project_name: '学术', section_id: 's1', section_name: '考试&复习', parent_id: null, labels: [], priority: 3, due: { date: '2026-06-22', string: '2026-06-22 15:00', lang: 'en', is_recurring: false, timezone: null }, deadline: null, duration: null, order: 4, is_collapsed: false, assignee_id: null, assigner_id: null, creator_id: '58490144', is_completed: false, url: null },
   },
   todo_list_projects: {
     input: {},
@@ -678,7 +678,7 @@ const mockTemplates: Record<string, MockTemplate> = {
       encoding: 'UTF-8',
       size_bytes: 2841,
       line_count: 68,
-      content: `{\n  "app_name": "SonettoHere",\n  "version": "2.1.0",\n  "description": "AI 聊天应用",\n  "theme": "dark",\n  "locale": "zh-CN",\n  "features": {\n    "kaleidoscope": true,\n    "playground": true,\n    "voice_input": false,\n    "export_chat": true\n  },\n  "editor": {\n    "font_size": 14,\n    "tab_size": 2,\n    "word_wrap": true,\n    "minimap": false\n  },\n  "shortcuts": {\n    "send_message": "Ctrl+Enter",\n    "new_chat": "Ctrl+Shift+N",\n    "toggle_sidebar": "Ctrl+B"\n  }\n}`,
+      content: `{\n  "app_name": "MaxmaHere",\n  "version": "2.1.0",\n  "description": "AI 聊天应用",\n  "theme": "dark",\n  "locale": "zh-CN",\n  "features": {\n    "kaleidoscope": true,\n    "playground": true,\n    "voice_input": false,\n    "export_chat": true\n  },\n  "editor": {\n    "font_size": 14,\n    "tab_size": 2,\n    "word_wrap": true,\n    "minimap": false\n  },\n  "shortcuts": {\n    "send_message": "Ctrl+Enter",\n    "new_chat": "Ctrl+Shift+N",\n    "toggle_sidebar": "Ctrl+B"\n  }\n}`,
     },
   },
   file_write: {

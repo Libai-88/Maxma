@@ -1,7 +1,7 @@
 [project]
-name = "sonettohere"
+name = "maxmahere"
 dynamic = ["version"]
-description = "SonettoHere — LangChain-based ReAct AI Agent"
+description = "MaxmaHere — LangChain-based ReAct AI Agent"
 requires-python = ">=3.11"
 
 dependencies = [

@@ -41,7 +41,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     'Content-Type': 'application/json',
   }
   if (token) {
-    headers['X-Sonetto-Token'] = token
+    headers['X-Maxma-Token'] = token
   }
   const res = await fetch(`${BASE}${url}`, {
     headers,
@@ -94,7 +94,7 @@ export const api = {
 
   restart: async () => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (token) headers['X-Sonetto-Token'] = token
+    if (token) headers['X-Maxma-Token'] = token
     try {
       await fetch(`${BASE}/restart`, { method: 'POST', headers })
     } catch { /* server will close connection, expected */ }
@@ -221,19 +221,19 @@ export const api = {
       `/check-path-blocked?path=${encodeURIComponent(path)}`
     ),
 
-  // ── SonettoBlocker 拒止锚 ──
+  // ── MaxmaBlocker 拒止锚 ──
 
   listBlockers: () =>
-    request<ListBlockerResponse>('/sonetto-blocker'),
+    request<ListBlockerResponse>('/maxma-blocker'),
 
   addBlocker: (entry: { path: string; description: string }) =>
-    request<BlockerEntry>('/sonetto-blocker', {
+    request<BlockerEntry>('/maxma-blocker', {
       method: 'POST',
       body: JSON.stringify(entry),
     }),
 
   deleteBlocker: (index: number) =>
-    request<{ status: string }>(`/sonetto-blocker/${index}`, { method: 'DELETE' }),
+    request<{ status: string }>(`/maxma-blocker/${index}`, { method: 'DELETE' }),
 
   // ── 工具环境变量 ──
 

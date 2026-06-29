@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 # 导入安全检查函数
-from tools.base import check_path_whitelisted, check_sonetto_blocker
+from tools.base import check_path_whitelisted, check_maxma_blocker
 
 router = APIRouter()
 
@@ -100,11 +100,11 @@ async def check_path_blocked(path: str = Query(..., description="要检查的路
         - ``blocker_path``: 拒止锚所在目录（仅拒止锚阻挡时有值）
     """
     # 1. 拒止锚检查
-    blocker = check_sonetto_blocker(path)
+    blocker = check_maxma_blocker(path)
     if blocker is not None:
         return {
             "blocked": True,
-            "reason": f"被拒止锚阻挡：目录「{blocker}」含有 SonettoBlocker 标记",
+            "reason": f"被拒止锚阻挡：目录「{blocker}」含有 MaxmaBlocker 标记",
             "blocker_path": blocker,
         }
 

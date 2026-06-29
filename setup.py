@@ -1,4 +1,4 @@
-"""SonettoHere — 首次设置脚本
+"""MaxmaHere — 首次设置脚本
 用法: python setup.py
 """
 
@@ -14,7 +14,7 @@ PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 def header():
     print("=" * 48)
-    print(f"  SonettoHere {__version__} — 首次初始化")
+    print(f"  MaxmaHere {__version__} — 首次初始化")
     print("=" * 48)
     print()
     print("本脚本将自动安装依赖并准备好运行环境。")
@@ -24,12 +24,12 @@ def header():
 
 def welcome(total: int):
     """新手友好的开头总结"""
-    print("本脚本将一步步帮你准备好运行 SonettoHere 所需的一切。")
+    print("本脚本将一步步帮你准备好运行 MaxmaHere 所需的一切。")
     print()
     print(f"一共 {total} 步，分别是：")
     print()
     print("  [1/6 全自动]  检查 Node.js 是否安装")
-    print("         确保你的电脑有 JavaScript 运行环境，这是Sonetto前端界面的基础")
+    print("         确保你的电脑有 JavaScript 运行环境，这是Maxma前端界面的基础")
     print()
     print("  [2/6 全自动]  创建 Python 虚拟环境，安装后端依赖")
     print("         会在当前目录创建 .venv 文件夹")
@@ -46,7 +46,7 @@ def welcome(total: int):
     print("         填写 Base URL 和 API Key，自动测试连接并保存可用模型")
     print()
     print("  [6/6 手动输入]  设定你的称呼，配置 AI 个性")
-    print("         告诉 Sonetto 如何称呼你，自动完成个性文件设置")
+    print("         告诉 Maxma 如何称呼你，自动完成个性文件设置")
     print()
     print("对电脑的影响：")
     print("  • 不修改系统文件，不写注册表，不装全局工具")
@@ -267,11 +267,11 @@ def setup_persona():
 
     print()
     name = input(
-        "  你希望 Sonetto 怎么称呼你？（直接按 Enter 则默认为”朋友”）: "
+        “  你希望 Maxma 怎么称呼你？（直接按 Enter 则默认为”朋友”）: “
     ).strip()
     if not name:
-        name = "朋友"
-    ok(f"好的，Sonetto 之后会称呼你为「{name}」")
+        name = “朋友”
+    ok(f”好的，Maxma 之后会称呼你为「{name}」”)
 
     for target, src in TEMPLATES.items():
         target_path = os.path.join(PROJECT_ROOT, PERSONAS, target)

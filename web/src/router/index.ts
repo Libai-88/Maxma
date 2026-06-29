@@ -33,9 +33,9 @@ const router = createRouter({
       component: () => import('@/views/PathWhitelistView.vue'),
     },
     {
-      path: '/sonetto-blocker',
-      name: 'sonetto-blocker',
-      component: () => import('@/views/SonettoBlockerView.vue'),
+      path: '/maxma-blocker',
+      name: 'maxma-blocker',
+      component: () => import('@/views/MaxmaBlockerView.vue'),
     },
     {
       path: '/env-vars',

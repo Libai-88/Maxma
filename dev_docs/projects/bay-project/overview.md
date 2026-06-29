@@ -2,7 +2,7 @@
 
 ## 一、项目概述
 
-**Project Bay**（湾区计划）的目标是：将 SonettoHere 从单一 DeepSeek 提供商扩展为**支持多种 LLM 后端**的基础设施，并在前端提供统一的配置与管理界面。
+**Project Bay**（湾区计划）的目标是：将 MaxmaHere 从单一 DeepSeek 提供商扩展为**支持多种 LLM 后端**的基础设施，并在前端提供统一的配置与管理界面。
 
 正如港湾（Bay）可供不同船只停泊，本项目要让不同 LLM 提供商（DeepSeek、Qwen、Kimi、Minimax、OpenRouter 等）都能便捷地接入系统。
 

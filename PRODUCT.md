@@ -1,4 +1,4 @@
-# SonettoHere
+# MaxmaHere
 
 ## Register
 
@@ -6,11 +6,11 @@ product
 
 ## Users
 
-**普通用户** — 使用 AI 助手的日常用户，有一定技术背景但不一定是开发者。他们在个人电脑上使用 SonettoHere 完成信息查询、内容生成、任务规划等日常工作。使用场景多为深夜或私人时间，追求流畅、美观、不折腾的 AI 对话体验。
+**普通用户** — 使用 AI 助手的日常用户，有一定技术背景但不一定是开发者。他们在个人电脑上使用 MaxmaHere 完成信息查询、内容生成、任务规划等日常工作。使用场景多为深夜或私人时间，追求流畅、美观、不折腾的 AI 对话体验。
 
 ## Product Purpose
 
-SonettoHere 是一个多 LLM 提供商支持的 ReAct AI Agent 桌面客户端。它让用户能够：
+MaxmaHere 是一个多 LLM 提供商支持的 ReAct AI Agent 桌面客户端。它让用户能够：
 - 与 AI 进行自由对话，调用多种工具（天气、待办、文件操作、网页搜索等）
 - 在多个 LLM 提供商之间灵活切换（DeepSeek、OpenAI、Qwen 等）
 - 管理 AI 的长期记忆和个性设定

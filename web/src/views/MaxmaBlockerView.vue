@@ -3,7 +3,7 @@
     <!-- ── 列表 ── -->
     <template v-if="!showForm">
       <div class="header">
-        <h2>拒止锚 <span class="subtitle">SonettoBlocker</span></h2>
+        <h2>拒止锚 <span class="subtitle">MaxmaBlocker</span></h2>
         <button class="btn btn-primary" @click="startAdd">添加</button>
       </div>
 
@@ -12,8 +12,8 @@
         <div class="rule-body">
           <p>拒止锚是一种强制安全机制，优先级高于白名单：</p>
           <ul>
-            <li>在指定目录中创建 <code>SonettoBlocker</code> 标记文件（无扩展名），AI 的所有文件工具将无法访问该目录及其所有子目录。</li>
-            <li>检查时会从目标目录逐级向上查找，一旦发现任何父目录包含 <code>SonettoBlocker</code> 文件即强制阻断。</li>
+            <li>在指定目录中创建 <code>MaxmaBlocker</code> 标记文件（无扩展名），AI 的所有文件工具将无法访问该目录及其所有子目录。</li>
+            <li>检查时会从目标目录逐级向上查找，一旦发现任何父目录包含 <code>MaxmaBlocker</code> 文件即强制阻断。</li>
             <li>访问被拒止锚阻断时，白名单中即使有对应的放行条目也不会生效。</li>
           </ul>
           <p class="rule-note">路径白名单及完整权限规则参见设置页的「<router-link to="/path-whitelist">路径白名单</router-link>」页面。</p>
@@ -137,7 +137,7 @@ async function handleSave() {
 }
 
 async function confirmDelete(i: number) {
-  if (!window.confirm(`确定解除对此目录的拒止？\n${entries.value[i].path}\n\nSonettoBlocker 标记文件将被删除。`)) return
+  if (!window.confirm(`确定解除对此目录的拒止？\n${entries.value[i].path}\n\nMaxmaBlocker 标记文件将被删除。`)) return
   try {
     await api.deleteBlocker(i)
     entries.value.splice(i, 1)

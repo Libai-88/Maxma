@@ -5,7 +5,7 @@
       <div class="no-provider-card">
         <div class="no-provider-icon">⚙️</div>
         <h3>暂无已配置的 LLM 提供商</h3>
-        <p>请添加一个 API 提供商以开始对话。SonettoHere 支持任何 OpenAI 兼容 API。</p>
+        <p>请添加一个 API 提供商以开始对话。MaxmaHere 支持任何 OpenAI 兼容 API。</p>
         <router-link to="/providers" class="btn primary">前往模型设置</router-link>
       </div>
     </div>

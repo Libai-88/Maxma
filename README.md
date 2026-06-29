@@ -1,6 +1,6 @@
 ![首页](images/%E9%A6%96%E9%A1%B5.png)
 
-# SonettoHere
+# MaxmaHere
 
 基于 LangChain + LangGraph 的 ReAct AI Agent，支持 **多 LLM 提供商**、**SubAgent**、**Anthropic Skill 体系**。
 
@@ -15,11 +15,11 @@
 ### 1. 获取代码
 
 ```bash
-git clone https://github.com/Miso2233/SonettoHere.git
-cd SonettoHere
+git clone https://github.com/Miso2233/MaxmaHere.git
+cd MaxmaHere
 ```
 
-或直接下载 [ZIP 源码](https://github.com/Miso2233/SonettoHere/archive/refs/heads/main.zip) 并解压。
+或直接下载 [ZIP 源码](https://github.com/Miso2233/MaxmaHere/archive/refs/heads/main.zip) 并解压。
 
 ### 2. 一键初始化
 
@@ -64,17 +64,17 @@ start.bat
 
 或双击 `start.bat`，脚本会自动启动后端 + 前端并打开浏览器。
 
-浏览器访问 `http://localhost:5173`，即可开始与 Sonetto 对话。
+浏览器访问 `http://localhost:5173`，即可开始与 Maxma 对话。
 
 ## 初次开始对话
 
-打开页面后，你会看到 Sonetto 的聊天界面。可以直接在输入框打字发送：
+打开页面后，你会看到 Maxma 的聊天界面。可以直接在输入框打字发送：
 
 ```
 你好，我是 [你的名字]。
 ```
 
-在与Sonetto的聊天过程中，Sonetto将逐步建立对你的了解。这些信息会被记录在 `config/personas/memory.yaml` 中，成为 AI 对你的长期记忆。
+在与Maxma的聊天过程中，Maxma将逐步建立对你的了解。这些信息会被记录在 `config/personas/memory.yaml` 中，成为 AI 对你的长期记忆。
 
 你也可以直接提出具体需求：
 
@@ -100,7 +100,7 @@ start.bat
 
 | 文件 | 用途 | 示例 |
 |------|------|------|
-| `SOUL.md` | AI 的人设、性格、说话风格 | "你是 Sonetto，一位温柔细腻的 AI 助手" |
+| `SOUL.md` | AI 的人设、性格、说话风格 | "你是 Maxma，一位温柔细腻的 AI 助手" |
 | `USER.md` | 你的基本信息和偏好 | "用户是一名全栈开发者，喜欢简洁的回复" |
 | `AGENTS.md` | AI 的工具使用策略等行为规则 | 预置了工具使用和调用规范 |
 | `memory.yaml` | AI 自动记录的长期记忆 | 对话中积累的关于你的事实 |
@@ -113,7 +113,7 @@ start.bat
 
 **路径白名单**（`设置 → 路径白名单`）— 限制 AI 可读写的文件目录范围。未在白名单中的路径会被拒绝访问。默认只放行了项目自身目录的技能文件夹。
 
-**SonettoBlocker 拒止锚**（`设置 → 拒止锚`）— 在敏感目录下放置一个 `.sonetto_blocker` 标记文件（锚）。AI 在访问任何文件前会检查路径中是否存在此标记，一旦发现立即阻断并复述自己的意图。
+**MaxmaBlocker 拒止锚**（`设置 → 拒止锚`）— 在敏感目录下放置一个 `.maxma_blocker` 标记文件（锚）。AI 在访问任何文件前会检查路径中是否存在此标记，一旦发现立即阻断并复述自己的意图。
 
 ```
 用法示例：在 `C:/重要文档/` 下创建拒止锚 →
@@ -168,7 +168,7 @@ Macros 是比 Skills 更轻量的流程指引，本质是一篇带 YAML frontmat
 name: <宏的英文标识>
 type: macro
 version: 1.0
-author: Sonetto
+author: Maxma
 keywords: [关键词1, 关键词2]
 description: 一句话描述触发场景，Agent 据此匹配宏
 category: <分类名>
@@ -182,7 +182,7 @@ category: <分类名>
 
 ## MCP 服务器
 
-SonettoHere 支持通过 MCP（Model Context Protocol）接入外部工具，只需编辑 `config/mcp_servers.yaml` 即可添加 MCP 服务器，无需改动代码。
+MaxmaHere 支持通过 MCP（Model Context Protocol）接入外部工具，只需编辑 `config/mcp_servers.yaml` 即可添加 MCP 服务器，无需改动代码。
 
 支持 4 种传输类型：本地子进程（stdio）和远程连接（SSE / Streamable HTTP / WebSocket）。
 
@@ -235,7 +235,7 @@ SonettoHere 支持通过 MCP（Model Context Protocol）接入外部工具，只
 
 ## 引用机制
 
-SonettoHere 支持在输入框中引用多种类型的内容作为对话上下文：
+MaxmaHere 支持在输入框中引用多种类型的内容作为对话上下文：
 
 | 引用类型 | 说明 | 触发方式 |
 |----------|------|----------|

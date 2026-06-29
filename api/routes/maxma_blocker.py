@@ -1,7 +1,7 @@
-"""REST API — SonettoBlocker（拒止锚）管理。
+"""REST API — MaxmaBlocker（拒止锚）管理。
 
-在目标目录中创建/删除 SonettoBlocker 标记文件，
-并持久化跟踪列表到 sonetto_blocker.yaml。"""
+在目标目录中创建/删除 MaxmaBlocker 标记文件，
+并持久化跟踪列表到 maxma_blocker.yaml。"""
 
 import os
 from pathlib import Path
@@ -16,10 +16,10 @@ YAML_PATH = (
     Path(__file__).resolve().parent.parent.parent
     / "api"
     / "data"
-    / "sonetto_blocker.yaml"
+    / "maxma_blocker.yaml"
 )
 
-BLOCKER_FILENAME = "SonettoBlocker"
+BLOCKER_FILENAME = "MaxmaBlocker"
 
 
 class BlockerEntry(BaseModel):
@@ -48,14 +48,14 @@ def _save(entries: list[dict]) -> None:
 
 
 def _create_marker(dir_path: str) -> None:
-    """在目标目录中创建 SonettoBlocker 标记文件。"""
+    """在目标目录中创建 MaxmaBlocker 标记文件。"""
     marker = Path(dir_path) / BLOCKER_FILENAME
     if not marker.exists():
         marker.write_text("", encoding="utf-8")
 
 
 def _remove_marker(dir_path: str) -> None:
-    """移除目标目录中的 SonettoBlocker 标记文件（忽略扩展名）。"""
+    """移除目标目录中的 MaxmaBlocker 标记文件（忽略扩展名）。"""
     target = Path(dir_path)
     if not target.is_dir():
         return
@@ -66,13 +66,13 @@ def _remove_marker(dir_path: str) -> None:
             return
 
 
-@router.get("/sonetto-blocker", response_model=BlockerResponse)
+@router.get("/maxma-blocker", response_model=BlockerResponse)
 async def list_blockers():
     entries = _load()
     return BlockerResponse(entries=[BlockerEntry(**e) for e in entries])
 
 
-@router.post("/sonetto-blocker", response_model=BlockerEntry, status_code=201)
+@router.post("/maxma-blocker", response_model=BlockerEntry, status_code=201)
 async def add_blocker(entry: BlockerEntry):
     if not entry.path or not Path(entry.path).is_dir():
         raise HTTPException(status_code=400, detail="无效目录路径")
@@ -83,7 +83,7 @@ async def add_blocker(entry: BlockerEntry):
     return entry
 
 
-@router.delete("/sonetto-blocker/{index}")
+@router.delete("/maxma-blocker/{index}")
 async def delete_blocker(index: int):
     entries = _load()
     if index < 0 or index >= len(entries):

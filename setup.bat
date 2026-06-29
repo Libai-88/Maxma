@@ -2,7 +2,7 @@
 cd /d "%~dp0"
 
 echo ========================================
-echo   SonettoHere Setup
+echo   MaxmaHere Setup
 echo ========================================
 echo.
 

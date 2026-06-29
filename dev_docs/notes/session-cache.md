@@ -2,7 +2,7 @@
 
 ## 概述
 
-前端使用 `localStorage` 缓存每条会话的聊天记录（`ChatTurn[]`），使得页面刷新后能恢复历史对话。缓存 key 格式为 `sonetto_turns_<session_id>`，值是对 `ChatTurn[]` 的 `JSON.stringify`。
+前端使用 `localStorage` 缓存每条会话的聊天记录（`ChatTurn[]`），使得页面刷新后能恢复历史对话。缓存 key 格式为 `maxma_turns_<session_id>`，值是对 `ChatTurn[]` 的 `JSON.stringify`。
 
 ---
 
@@ -51,11 +51,11 @@ handleEventForChannel()
 
 | 常量 | 值 | 来源 |
 |------|-----|------|
-| `TURNS_KEY_PREFIX` | `sonetto_turns_` | [useChat.ts:5](web/src/composables/useChat.ts#L5) |
-| `STORAGE_KEY` | `sonetto_session_id` | [useSession.ts:6](web/src/composables/useSession.ts#L6) |
+| `TURNS_KEY_PREFIX` | `maxma_turns_` | [useChat.ts:5](web/src/composables/useChat.ts#L5) |
+| `STORAGE_KEY` | `maxma_session_id` | [useSession.ts:6](web/src/composables/useSession.ts#L6) |
 
-- 缓存 key: `sonetto_turns_<session_id>`（如 `sonetto_turns_550e8400e29b41d4a716446655440000`）
-- 当前会话 ID key: `sonetto_session_id`（值仅为 UUID 字符串，不包含前缀）
+- 缓存 key: `maxma_turns_<session_id>`（如 `maxma_turns_550e8400e29b41d4a716446655440000`）
+- 当前会话 ID key: `maxma_session_id`（值仅为 UUID 字符串，不包含前缀）
 
 ---
 
@@ -65,7 +65,7 @@ handleEventForChannel()
 
 **位置**: [useChat.ts:8-32](web/src/composables/useChat.ts#L8-L32) `loadAllTurnsFromStorage()`
 
-在 `useChat.ts` 模块首次被 import 时调用，遍历 `localStorage` 中所有以 `sonetto_turns_` 开头的键，反序列化后存入模块级 `turnsCache: Map<string, ChatTurn[]>`。
+在 `useChat.ts` 模块首次被 import 时调用，遍历 `localStorage` 中所有以 `maxma_turns_` 开头的键，反序列化后存入模块级 `turnsCache: Map<string, ChatTurn[]>`。
 
 ```typescript
 const turnsCache = loadAllTurnsFromStorage()    // 模块级，仅执行一次
@@ -76,7 +76,7 @@ const turnsCache = loadAllTurnsFromStorage()    // 模块级，仅执行一次
 **位置**: [useChat.ts:393-422](web/src/composables/useChat.ts#L393-L422) `watch(sessionId, ..., { immediate: true })`
 
 在以下两种场景触发：
-1. **页面初始化** — `initIfNeeded()` 从 `sonetto_session_id` 恢复会话 ID，watch 以 `{ immediate: true }` 触发
+1. **页面初始化** — `initIfNeeded()` 从 `maxma_session_id` 恢复会话 ID，watch 以 `{ immediate: true }` 触发
 2. **用户切换会话** — 点击侧边栏会话 → `switchSession(id)` → `sessionId.value = id` → watch 触发
 
 恢复逻辑：
@@ -160,7 +160,7 @@ async function deleteSession(id: string) {
 
 **位置**: [useSession.ts:92-114](web/src/composables/useSession.ts#L92-L114) `cleanupOrphanedCaches()`
 
-在 `initIfNeeded()` 获取后端会话列表后执行。删除所有 `sonetto_turns_*` 中后端已不存在的会话缓存。
+在 `initIfNeeded()` 获取后端会话列表后执行。删除所有 `maxma_turns_*` 中后端已不存在的会话缓存。
 
 ### 删除函数
 
@@ -183,7 +183,7 @@ export function removeTurnsFromStorage(sid: string) {
   │     └─ turnsCache = loadAllTurnsFromStorage()    ← 读所有 localStorage
   │
   ├─ useSession().initIfNeeded()
-  │     ├─ localStorage.getItem('sonetto_session_id') ← 读存储的 sessionId
+  │     ├─ localStorage.getItem('maxma_session_id') ← 读存储的 sessionId
   │     ├─ api.getSession(stored)                     ← 验证后端存在
   │     └─ sessionId.value = stored
   │
@@ -210,7 +210,7 @@ export function removeTurnsFromStorage(sid: string) {
   │     ├─ watch 触发
   │     │   ├─ persistTurns(oldId)                    ← 写旧会话缓存
   │     │   └─ 恢复新会话的缓存                        ← 读缓存
-  │     └─ localStorage.setItem('sonetto_session_id') ← 写 sessionId
+  │     └─ localStorage.setItem('maxma_session_id') ← 写 sessionId
   │
   └─ deleteSession(id)
         └─ removeTurnsFromStorage(id)                  ← 删 localStorage 条目

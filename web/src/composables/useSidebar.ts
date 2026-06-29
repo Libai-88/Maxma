@@ -1,6 +1,6 @@
 import { ref, computed, watch } from 'vue'
 
-const STORAGE_KEY = 'sonetto_sidebar_collapsed'
+const STORAGE_KEY = 'maxma_sidebar_collapsed'
 
 // 模块级状态（所有 useSidebar 调用共享同一份）
 const userCollapsed = ref(false)

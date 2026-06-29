@@ -31,7 +31,7 @@ class AgentState(TypedDict):
 
 ```python
 messages = [
-    SystemMessage(content="你是 Sonetto..."),
+    SystemMessage(content="你是 Maxma..."),
     HumanMessage(content="明天北京天气怎么样？"),
     AIMessage(content="", tool_calls=[{"name": "get_current_weather", "args": {...}}]),
     ToolMessage(content='{"success": true, "data": {...}}', name="get_current_weather"),

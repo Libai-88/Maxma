@@ -1,5 +1,5 @@
 ---
-name: SonettoHere
+name: MaxmaHere
 description: A ReAct AI Agent desktop client with multi-LLM support
 colors:
   bg-primary: "#ffffff"
@@ -86,13 +86,13 @@ components:
     rounded: "{rounded.lg}"
 ---
 
-# Design System: SonettoHere
+# Design System: MaxmaHere
 
 ## 1. Overview
 
 **Creative North Star: "The Workbench"**
 
-SonettoHere is a workbench. In the center sits the conversation — the piece being crafted. Around it, arranged with intention, sit the tools: session management, provider configuration, memory inspection, environmental controls. The workbench is clean and organized, every tool has its place, and nothing distracts from the work itself.
+MaxmaHere is a workbench. In the center sits the conversation — the piece being crafted. Around it, arranged with intention, sit the tools: session management, provider configuration, memory inspection, environmental controls. The workbench is clean and organized, every tool has its place, and nothing distracts from the work itself.
 
 The design is a deliberate **restrained monochrome** system: black, white, and grays only. The absence of color is the point — it keeps the eye on the content, not the chrome. Black (`--accent: #000000`) serves as the sole accent, used sparingly for primary actions, interactive elements, and wayfinding. The palette is inspired by precision instruments and well-organized workshops: functional, tactile, and quietly confident.
 

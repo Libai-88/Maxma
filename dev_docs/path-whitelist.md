@@ -2,9 +2,9 @@
 
 ## 背景
 
-SonettoHere 的 Python 执行工具（`run_python`、`debugger`）通过 `exec()` 执行 LLM 生成的代码时，原先暴露了完整的 Python 内置函数，被执行代码可以自由读写系统中任何路径的文件。同时 `unit_test_runner`、`syntax_checker`、`code_quality_analyzer` 等工具接受文件路径参数却未做任何验证。
+MaxmaHere 的 Python 执行工具（`run_python`、`debugger`）通过 `exec()` 执行 LLM 生成的代码时，原先暴露了完整的 Python 内置函数，被执行代码可以自由读写系统中任何路径的文件。同时 `unit_test_runner`、`syntax_checker`、`code_quality_analyzer` 等工具接受文件路径参数却未做任何验证。
 
-此前仅有文件操作工具通过 `check_sonetto_blocker()` 实现了基本的阻断机制（检查目录中是否存在 `SonettoBlocker` 标记文件），但缺少一个"白名单允许"机制——即只有明确授权的路径才能被访问。
+此前仅有文件操作工具通过 `check_maxma_blocker()` 实现了基本的阻断机制（检查目录中是否存在 `MaxmaBlocker` 标记文件），但缺少一个"白名单允许"机制——即只有明确授权的路径才能被访问。
 
 ## 设计目标
 
@@ -67,7 +67,7 @@ SonettoHere 的 Python 执行工具（`run_python`、`debugger`）通过 `exec()
 # 编辑此文件以添加更多允许的路径前缀。
 whitelist:
 - description: 技能目录（自动生成）
-  path: C:\Users\xxx\PycharmProjects\SonettoHere\anthropic_skills
+  path: C:\Users\xxx\PycharmProjects\MaxmaHere\anthropic_skills
 ```
 
 - 每个条目包含 `path`（允许的路径前缀，支持正斜杠/反斜杠）和可选的 `description`
@@ -88,7 +88,7 @@ whitelist:
 
 ### 2. 核心函数
 
-定义在 `tools/base.py`，与已有的 `check_sonetto_blocker()` 同级。
+定义在 `tools/base.py`，与已有的 `check_maxma_blocker()` 同级。
 
 #### `_ensure_whitelist()`
 
@@ -159,16 +159,16 @@ if blocked:
 - 被执行代码中的 `open()` 实际上是 `_whitelisted_open`，在每次打开文件时实时检查白名单
 - 非白名单路径 → `PermissionError`，由 exec 的异常捕获流程返回给 LLM
 
-### 4. 与 SonettoBlocker 的关系
+### 4. 与 MaxmaBlocker 的关系
 
-现有 SonettoBlocker 和白名单是互补的两层：
+现有 MaxmaBlocker 和白名单是互补的两层：
 
 | 机制 | 作用 | 范围 |
 |------|------|------|
-| **SonettoBlocker** | 黑名单式阻断（目录中存在标记文件即阻断） | 仅文件操作工具 |
+| **MaxmaBlocker** | 黑名单式阻断（目录中存在标记文件即阻断） | 仅文件操作工具 |
 | **路径白名单** | 白名单式允许（仅允许已列出的前缀） | Python 执行工具 + 开发工具 |
 
-SonettoBlocker 的"阻断"层级更高——即使路径在白名单内，如果某级目录存在 `SonettoBlocker` 文件，仍然会被阻断。
+MaxmaBlocker 的"阻断"层级更高——即使路径在白名单内，如果某级目录存在 `MaxmaBlocker` 文件，仍然会被阻断。
 
 ## 安全边界与局限
 

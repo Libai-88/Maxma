@@ -20,7 +20,7 @@ from api.providers.store import ProviderConfigStore
 from api.routes import chat, files, memory, sessions, balance, providers
 from api.routes import path_whitelist as path_whitelist_router
 from api.routes import persona as persona_router
-from api.routes import sonetto_blocker as sonetto_blocker_router
+from api.routes import maxma_blocker as maxma_blocker_router
 from api.routes import skills as skills_router
 from api.routes import news as news_router
 from api.routes import mcp as mcp_router
@@ -145,7 +145,7 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="SonettoHere API",
+        title="MaxmaHere API",
         version=__version__,
         lifespan=lifespan,
     )
@@ -155,7 +155,7 @@ def create_app() -> FastAPI:
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ]
-    if os.environ.get("SONETTO_ENV") == "production":
+    if os.environ.get("MAXMA_ENV") == "production":
         cors_origins += [
             "http://localhost:8000",
             "http://127.0.0.1:8000",
@@ -189,8 +189,8 @@ def create_app() -> FastAPI:
     # 本地路径白名单管理
     app.include_router(path_whitelist_router.router, prefix="/api")
 
-    # SonettoBlocker 拒止锚管理
-    app.include_router(sonetto_blocker_router.router, prefix="/api")
+    # MaxmaBlocker 拒止锚管理
+    app.include_router(maxma_blocker_router.router, prefix="/api")
 
     # Anthropic Skills
     app.include_router(skills_router.router, prefix="/api")
