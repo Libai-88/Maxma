@@ -2,7 +2,6 @@
 
 import asyncio
 from datetime import datetime
-from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
@@ -126,9 +125,11 @@ def _format_entries_for_tool(items: list[dict]) -> str:
     return "\n".join(lines).strip()
 
 
-@lru_cache(maxsize=1)
 def get_narrative() -> str:
-    """读取当前记忆叙事，不存在则返回空字符串。"""
+    """读取当前记忆叙事，不存在则返回空字符串。
+
+    每次调用都从磁盘重新读取，确保记忆更新后能立即反映到 Agent 行为中。
+    """
     if not MEMORY_PATH.exists():
         return ""
     mm = MemoryManager(yaml_file=str(MEMORY_PATH))

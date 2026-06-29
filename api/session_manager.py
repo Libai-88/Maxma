@@ -99,9 +99,23 @@ class SessionManager:
 
     def cleanup_expired(self) -> int:
         now = time.time()
-        expired = [
-            sid for sid, s in self._sessions.items() if now - s.last_active > self._ttl
-        ]
+        expired = []
+        for sid, s in self._sessions.items():
+            # 不清理固定会话
+            if s.is_const:
+                continue
+            # 不清理有活跃任务的会话
+            if s._active_task is not None and not s._active_task.done():
+                continue
+            if now - s.last_active > self._ttl:
+                expired.append(sid)
         for sid in expired:
             del self._sessions[sid]
         return len(expired)
+
+    def session_count(self) -> int:
+        """返回当前活跃会话数（不含子 Agent）。"""
+        return sum(
+            1 for s in self._sessions.values()
+            if not s.is_subagent
+        )
