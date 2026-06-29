@@ -1,5 +1,6 @@
-"""系统提示词组装。"""
+"""系统提示词组装（带内容哈希缓存）。"""
 
+import hashlib
 import re
 from pathlib import Path
 
@@ -9,6 +10,104 @@ from memory.user_init import ensure_user_md
 PERSONAS_DIR = Path(__file__).resolve().parent.parent / "config" / "personas"
 ANTHROPIC_SKILLS_DIR = Path(__file__).resolve().parent.parent / "anthropic_skills"
 MACROS_DIR = Path(__file__).resolve().parent.parent / "macros"
+
+
+# ── 内容哈希缓存 ────────────────────────────────────────────
+
+_cached_fingerprint: str | None = None
+_cached_prompt: str = ""
+_cached_parts: list[dict] = []
+
+
+def _file_hash(path: Path) -> str:
+    """计算文件内容的 MD5 摘要（仅 hex 前 16 位）。"""
+    try:
+        return hashlib.md5(path.read_bytes()).hexdigest()[:16]
+    except OSError:
+        return ""
+
+
+def _current_fingerprint() -> str:
+    """根据所有依赖文件的内容哈希生成指纹字符串。
+
+    依赖文件包括 personas 目录下的 AGENTS/SOUL/USER/memory.yaml，
+    以及 anthropic_skills/ 和 macros/ 下的所有 SKILL.md / MACRO.md。
+    """
+    parts: list[str] = []
+
+    # 固定 personas 文件
+    for name in ("AGENTS.md", "SOUL.md", "USER.md", "memory.yaml"):
+        parts.append(f"{name}:{_file_hash(PERSONAS_DIR / name)}")
+
+    # 动态扫描 skills / macros
+    if ANTHROPIC_SKILLS_DIR.is_dir():
+        for p in sorted(ANTHROPIC_SKILLS_DIR.rglob("SKILL.md")):
+            parts.append(f"sk:{p.name}:{_file_hash(p)}")
+
+    if MACROS_DIR.is_dir():
+        for p in sorted(MACROS_DIR.rglob("MACRO.md")):
+            parts.append(f"mc:{p.name}:{_file_hash(p)}")
+
+    return "|".join(parts)
+
+
+def _rebuild(fingerprint: str) -> None:
+    """重新构建缓存的系统提示词和 parts。"""
+    global _cached_fingerprint, _cached_prompt, _cached_parts
+
+    ensure_user_md()
+
+    # ── parts（用于 token 细分展示）──
+    _cached_parts = [
+        {"key": "behavior_rules", "label": "系统行为规则",
+         "content": "## 行为规则\n" + _read_persona("AGENTS.md")},
+        {"key": "personality", "label": "性格人设",
+         "content": "## 性格设定\n" + _read_persona("SOUL.md")},
+        {"key": "user_self_report", "label": "用户自述",
+         "content": "## 用户自述\n" + _read_if_exists("USER.md")},
+        {"key": "long_term_memory", "label": "长期记忆",
+         "content": "## 我对用户的记忆\n" + get_narrative()},
+        {"key": "skills", "label": "Skills 清单",
+         "content": _scan_anthropic_skills()},
+        {"key": "macros", "label": "宏清单",
+         "content": _scan_macros()},
+    ]
+
+    # ── 完整 prompt ──
+    full_parts = [
+        "## 行为规则",
+        _read_persona("AGENTS.md"),
+        "",
+        "## 性格设定",
+        _read_persona("SOUL.md"),
+        "",
+        "## 用户自述",
+        _read_if_exists("USER.md"),
+        "",
+        "## 我对用户的记忆",
+        get_narrative(),
+        "",
+        _scan_anthropic_skills(),
+        "",
+        _scan_macros(),
+    ]
+    _cached_prompt = "\n".join(full_parts)
+    _cached_fingerprint = fingerprint
+
+
+def _ensure_cache() -> None:
+    """检查指纹，若依赖文件有变化则重建缓存。"""
+    fp = _current_fingerprint()
+    if fp != _cached_fingerprint:
+        _rebuild(fp)
+
+
+def invalidate_prompt_cache() -> None:
+    """强制清空缓存（供外部调用，例如记忆更新后）。"""
+    global _cached_fingerprint, _cached_prompt, _cached_parts
+    _cached_fingerprint = None
+    _cached_prompt = ""
+    _cached_parts = []
 
 
 def _read_persona(filename: str) -> str:
@@ -102,41 +201,11 @@ def get_system_prompt_parts() -> list[dict]:
     每个元素::
         {"key": str, "label": str, "content": str}
     """
-    ensure_user_md()
-    return [
-        {"key": "behavior_rules", "label": "系统行为规则",
-         "content": "## 行为规则\n" + _read_persona("AGENTS.md")},
-        {"key": "personality", "label": "性格人设",
-         "content": "## 性格设定\n" + _read_persona("SOUL.md")},
-        {"key": "user_self_report", "label": "用户自述",
-         "content": "## 用户自述\n" + _read_if_exists("USER.md")},
-        {"key": "long_term_memory", "label": "长期记忆",
-         "content": "## 我对用户的记忆\n" + get_narrative()},
-        {"key": "skills", "label": "Skills 清单",
-         "content": _scan_anthropic_skills()},
-        {"key": "macros", "label": "宏清单",
-         "content": _scan_macros()},
-    ]
+    _ensure_cache()
+    return list(_cached_parts)
 
 
 def build_system_prompt() -> str:
-    """组装完整系统提示词，进程生命周期内只组装一次（LRU 缓存）。"""
-    ensure_user_md()
-    parts = [
-        "## 行为规则",
-        _read_persona("AGENTS.md"),
-        "",
-        "## 性格设定",
-        _read_persona("SOUL.md"),
-        "",
-        "## 用户自述",
-        _read_if_exists("USER.md"),
-        "",
-        "## 我对用户的记忆",
-        get_narrative(),
-        "",
-        _scan_anthropic_skills(),
-        "",
-        _scan_macros(),
-    ]
-    return "\n".join(parts)
+    """组装完整系统提示词，依赖文件未变化时直接返回缓存。"""
+    _ensure_cache()
+    return _cached_prompt

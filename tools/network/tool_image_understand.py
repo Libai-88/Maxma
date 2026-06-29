@@ -5,7 +5,6 @@ import mimetypes
 import urllib.parse
 from pathlib import Path
 
-import requests
 from pydantic import BaseModel, Field
 from zai import ZhipuAiClient
 
@@ -24,8 +23,11 @@ def _get_mime_type(source: str, content_type: str | None = None) -> str:
     return mime or "image/png"
 
 
-def _load_image_bytes(image_source: str) -> tuple[bytes, str]:
-    """解析 image_source 前缀，返回 (bytes, mime_type)。"""
+def _load_image_bytes(image_source: str, session=None) -> tuple[bytes, str]:
+    """解析 image_source 前缀，返回 (bytes, mime_type)。
+
+    session: 共享的 requests.Session，用于连接池复用。
+    """
     if image_source.startswith("local:"):
         path = image_source[6:]
         file_path = Path(path)
@@ -39,7 +41,11 @@ def _load_image_bytes(image_source: str) -> tuple[bytes, str]:
 
     if image_source.startswith("url:"):
         url = image_source[4:]
-        resp = requests.get(url, timeout=30, headers={"User-Agent": "MaxmaHere/1.0"})
+        if session is not None:
+            resp = session.get(url, timeout=30)
+        else:
+            import requests
+            resp = requests.get(url, timeout=30, headers={"User-Agent": "MaxmaHere/1.0"})
         resp.raise_for_status()
         content_type = resp.headers.get("Content-Type")
         mime = _get_mime_type(url, content_type)
@@ -81,7 +87,8 @@ class ImageUnderstandTool(ToolBase):
         client = ZhipuAiClient(api_key=settings.zhipuai_api_key)
 
         try:
-            image_bytes, mime = _load_image_bytes(image_source)
+            session = self.client.session if self.client else None
+            image_bytes, mime = _load_image_bytes(image_source, session=session)
             image_b64 = base64.b64encode(image_bytes).decode("utf-8")
             data_url = f"data:{mime};base64,{image_b64}"
 

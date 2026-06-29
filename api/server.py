@@ -157,6 +157,7 @@ async def lifespan(app: FastAPI):
     except asyncio.CancelledError:
         pass
     await close_mcp()
+    await balance.close_async_client()
     await app.state.ltm.stop_listening()
 
 

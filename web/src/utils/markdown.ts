@@ -46,9 +46,40 @@ md.renderer.rules.fence = function (tokens, idx, options, env, self) {
   return self.renderToken(tokens, idx, options)
 }
 
+// ── 渲染缓存 ──────────────────────────────────────────────
+// Map 保持插入顺序，满时删除最早插入的条目（FIFO 淘汰）
+const RENDER_CACHE_MAX = 200
+const renderCache = new Map<string, string>()
+
+function getCachedRender(input: string): string {
+  // 命中：删除再插入以刷新为"最新"（近似 LRU）
+  if (renderCache.has(input)) {
+    const cached = renderCache.get(input)!
+    renderCache.delete(input)
+    renderCache.set(input, cached)
+    return cached
+  }
+  // 未命中：渲染并缓存
+  const html = md.render(input)
+  if (renderCache.size >= RENDER_CACHE_MAX) {
+    // 删除最早插入的条目
+    const firstKey = renderCache.keys().next().value
+    if (firstKey !== undefined) {
+      renderCache.delete(firstKey)
+    }
+  }
+  renderCache.set(input, html)
+  return html
+}
+
 export function renderMarkdown(content: string): string {
   if (!content) return ''
-  return md.render(content)
+  return getCachedRender(content)
+}
+
+/** 清空渲染缓存（供调试或主题切换时使用）。 */
+export function clearRenderCache(): void {
+  renderCache.clear()
 }
 
 /**
