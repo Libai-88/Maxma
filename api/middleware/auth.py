@@ -10,6 +10,8 @@ Token 来源：
 - WebSocket: 4001 关闭码
 """
 
+import hmac
+
 from starlette.responses import JSONResponse
 
 
@@ -35,7 +37,7 @@ class AuthMiddleware:
         app = scope.get("app")
         expected = app.state.auth_token if app is not None else None
 
-        if not expected or token != expected:
+        if not expected or not hmac.compare_digest(token, expected):
             return await self._reject(scope, receive, send)
 
         # WebSocket 鉴权通过后：拦截 handler 的 websocket.accept 消息，

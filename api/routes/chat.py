@@ -3,6 +3,7 @@
 import asyncio
 import json
 import sys
+import logging
 import traceback
 import uuid
 
@@ -17,6 +18,8 @@ from api.const_session_store import save_const_session, serialize_messages
 from api.context_usage import estimate_context_usage
 from api.session_manager import SessionState
 from tools.base import format_error
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -40,6 +43,7 @@ async def _get_session_messages(session) -> list[dict]:
             return []
         raw = cpt.checkpoint.get("channel_values", {}).get("messages", [])
     except Exception:
+        logger.debug("Failed to read session messages from checkpoint", exc_info=True)
         return []
 
     role_map = {"human": "user", "ai": "assistant", "tool": "tool"}
@@ -108,7 +112,7 @@ async def _stream_turn(
                     if candidate:
                         final_answer = candidate
         except Exception:
-            pass
+            logger.debug("Failed to read fallback final_answer from checkpoint", exc_info=True)
     return final_answer
 
 
@@ -133,6 +137,7 @@ async def _calculate_context_usage(
         else:
             counting_messages = []
     except Exception:
+        logger.debug("Failed to read checkpoint for context usage estimation", exc_info=True)
         counting_messages = []
 
     return estimate_context_usage(
@@ -169,6 +174,7 @@ async def _inject_cancel_tool_messages(session, config, ws: WebSocket) -> None:
     try:
         state = await graph.aget_state(config)
     except Exception:
+        logger.debug("Failed to get graph state for cancel cleanup", exc_info=True)
         return  # checkpoint 不可读时静默跳过
 
     messages = state.values.get("messages", [])
@@ -215,7 +221,7 @@ async def _inject_cancel_tool_messages(session, config, ws: WebSocket) -> None:
                 }
             )
         except Exception:
-            pass  # WebSocket 已断开时静默忽略
+            logger.debug("Failed to send tool_error via WebSocket (connection may be closed)", exc_info=True)
 
     # 生成取消 ToolMessage 并写入 checkpoint
     cancel_msgs = []
@@ -498,6 +504,8 @@ async def websocket_chat(ws: WebSocket, session_id: str):
         while True:
             raw = await ws.receive_text()
             msg = json.loads(raw)
+            if not isinstance(msg, dict):
+                continue
 
             match msg.get("type", ""):
                 case "ping":
@@ -507,8 +515,10 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                     if agent_task and not agent_task.done():
                         continue  # 已有 Agent 运行中，忽略本次输入
 
-                    payload = msg["payload"]
-                    user_message = payload["message"].strip()
+                    payload = msg.get("payload")
+                    if not isinstance(payload, dict):
+                        continue
+                    user_message = str(payload.get("message", "")).strip()
                     if not user_message:
                         continue
 
@@ -543,10 +553,14 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                         agent_task = None
 
                 case "update_auto_approve":
+                    payload = msg.get("payload")
+                    if not isinstance(payload, dict):
+                        continue
+                    auto_approve_val = payload.get("auto_approve", False)
                     interaction.set_session_auto_approve(
-                        session_id, msg["payload"]["auto_approve"]
+                        session_id, auto_approve_val
                     )
-                    session.auto_approve = msg["payload"]["auto_approve"]
+                    session.auto_approve = auto_approve_val
 
     except WebSocketDisconnect:
         pass  # 客户端断开是正常行为

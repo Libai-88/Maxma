@@ -23,6 +23,16 @@ class ProviderConfig:
     def to_dict(self) -> dict:
         return asdict(self)
 
+    def to_safe_dict(self) -> dict:
+        """返回脱敏后的配置字典，API Key 仅保留首尾各 4 位。"""
+        d = asdict(self)
+        key = d.get("api_key", "")
+        if len(key) > 8:
+            d["api_key"] = key[:4] + "****" + key[-4:]
+        elif key:
+            d["api_key"] = "****"
+        return d
+
 
 @dataclass
 class HealthStatus:

@@ -58,6 +58,7 @@ tools/bilibili/cookie.txt
 output/bilibili/
 config/personas/memory.yaml
 *.lock
+!requirements.lock
 *.clean
 
 # Provider credentials (明文 API key)

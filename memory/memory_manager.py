@@ -83,12 +83,12 @@ class MemoryManager:
         if dir_path:
             os.makedirs(dir_path, exist_ok=True)
         if not os.path.exists(self._yaml_file):
-            with open(self._yaml_file, "w") as f:
+            with open(self._yaml_file, "w", encoding="utf-8") as f:
                 yaml.dump({}, f, default_flow_style=False, allow_unicode=True)
 
     def _maybe_migrate_old_ids(self) -> None:
         """将 YAML 中旧版 UUID key 原地迁移为短十六进制 ID。调用方必须已持有文件锁。"""
-        with open(self._yaml_file, "r") as f:
+        with open(self._yaml_file, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
         old_keys = [k for k in data if self._UUID_PATTERN.match(k)]
         if not old_keys:
@@ -102,21 +102,21 @@ class MemoryManager:
         for k, v in data.items():
             if k not in old_keys:
                 new_data[k] = v
-        with open(self._yaml_file, "w") as f:
+        with open(self._yaml_file, "w", encoding="utf-8") as f:
             yaml.dump(new_data, f, default_flow_style=False, allow_unicode=True)
         print(f"[memory] migrated {len(old_keys)} UUID keys to short hex IDs")
 
     def _read_all(self) -> dict[str, "MemoryItem"]:
         """读取完整文件。调用方必须已持有文件锁。"""
         self._maybe_migrate_old_ids()
-        with open(self._yaml_file, "r") as f:
+        with open(self._yaml_file, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
         return {id: MemoryItem(**data[id]) for id in data}
 
     def _write_all(self, items: dict[str, "MemoryItem"]) -> None:
         """覆写完整文件。调用方必须已持有文件锁。"""
         data_dict = {id: item.__dict__ for id, item in items.items()}
-        with open(self._yaml_file, "w") as f:
+        with open(self._yaml_file, "w", encoding="utf-8") as f:
             yaml.dump(data_dict, f, default_flow_style=False, allow_unicode=True)
 
     @staticmethod
