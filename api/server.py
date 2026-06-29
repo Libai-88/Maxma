@@ -1,5 +1,6 @@
 """FastAPI 应用工厂 — 生命周期管理、CORS、路由挂载。"""
 
+import asyncio
 import os
 from contextlib import asynccontextmanager
 
@@ -132,13 +133,29 @@ async def lifespan(app: FastAPI):
     # 加载 const 固定会话（需要 tools 已就绪）
     await _load_const_sessions(app)
 
-    # 3. 初始化认证 Token
+    # 4. 启动定时 session 清理任务（每 5 分钟清理超过 TTL 的不活跃会话）
+    async def _periodic_cleanup():
+        while True:
+            await asyncio.sleep(300)  # 5 分钟
+            sm = app.state.session_manager
+            removed = sm.cleanup_expired()
+            if removed:
+                print(f"[session] cleanup: removed {removed} expired session(s), {len(sm._sessions)} remaining")
+
+    app.state._cleanup_task = asyncio.create_task(_periodic_cleanup())
+
+    # 5. 初始化认证 Token
     app.state.auth_token = load_or_create_token()
     print(f"[auth] token: {app.state.auth_token}")
 
     yield
 
     # 关闭：清理资源
+    app.state._cleanup_task.cancel()
+    try:
+        await app.state._cleanup_task
+    except asyncio.CancelledError:
+        pass
     await close_mcp()
     await app.state.ltm.stop_listening()
 

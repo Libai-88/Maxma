@@ -19,7 +19,7 @@
           <div class="lf-header">
             <div class="lf-header-left">
               <div class="lf-city">{{ cityName }}</div>
-              <div class="lf-time" v-if="td.update_time">{{ td.update_time }}</div>
+              <div class="lf-time" v-if="td?.update_time">{{ td.update_time }}</div>
             </div>
             <div class="lf-header-icon" v-html="svgIcon(conditionText, 36)"></div>
           </div>
@@ -36,12 +36,12 @@
             <span>{{ conditionText }}</span>
             <span class="divider">|</span>
             <span>{{ windText }}</span>
-            <span class="divider" v-if="td.humidity">|</span>
-            <span v-if="td.humidity">湿度 {{ td.humidity }}</span>
+            <span class="divider" v-if="td?.humidity">|</span>
+            <span v-if="td?.humidity">湿度 {{ td.humidity }}</span>
           </div>
 
           <!-- 天气预警 -->
-          <div class="lf-alerts" v-if="td.alerts && td.alerts.length">
+          <div class="lf-alerts" v-if="td?.alerts && td.alerts.length">
             <div v-for="(alert, i) in td.alerts" :key="i" class="lf-alert-item"
                  :class="'alert-level-' + (alert.level || 'unknown')">
               <div class="alert-header">
@@ -77,22 +77,22 @@
 
           <!-- 详情 -->
           <div class="lf-details" v-if="hasDetails">
-            <div class="lf-detail-item" v-if="td.temp_feel">
+            <div class="lf-detail-item" v-if="td?.temp_feel">
               体感<span class="lf-dv">{{ td.temp_feel }}</span>
             </div>
-            <div class="lf-detail-item" v-if="td.visibility">
+            <div class="lf-detail-item" v-if="td?.visibility">
               能见度<span class="lf-dv">{{ td.visibility }}</span>
             </div>
-            <div class="lf-detail-item" v-if="td.pressure">
+            <div class="lf-detail-item" v-if="td?.pressure">
               气压<span class="lf-dv">{{ td.pressure }}</span>
             </div>
-            <div class="lf-detail-item" v-if="td.cloud">
+            <div class="lf-detail-item" v-if="td?.cloud">
               云量<span class="lf-dv">{{ td.cloud }}</span>
             </div>
-            <div class="lf-detail-item" v-if="td.aqi !== undefined && td.aqi !== null">
-              AQI<span class="lf-dv">{{ td.aqi }}<span class="aqi-label" v-if="td.aqi_category">{{ td.aqi_category }}</span></span>
+            <div class="lf-detail-item" v-if="td?.aqi !== undefined && td?.aqi !== null">
+              AQI<span class="lf-dv">{{ td.aqi }}<span class="aqi-label" v-if="td?.aqi_category">{{ td.aqi_category }}</span></span>
             </div>
-            <div class="lf-detail-item" v-if="td.uv !== undefined && td.uv !== null">
+            <div class="lf-detail-item" v-if="td?.uv !== undefined && td?.uv !== null">
               UV<span class="lf-dv">{{ td.uv }}</span>
             </div>
           </div>
@@ -140,31 +140,31 @@ if (rawOutput) {
 }
 
 // ── 数据源 ──
-const td = computed<WeatherData>(() => {
-  if (props.toolCall.toolData) return props.toolCall.toolData as WeatherData
+const td = computed<WeatherData | null>(() => {
+  if (props.toolCall.toolData) return props.toolCall.toolData as unknown as WeatherData
   if (props.toolCall.output) {
     try {
       const p = JSON.parse(props.toolCall.output)
-      if (p?.data) return p.data as WeatherData
+      if (p?.data) return p.data as unknown as WeatherData
     } catch { /* ignore */ }
   }
-  return {}
+  return null
 })
 
-const hasData = computed(() => Object.keys(td.value).length > 0)
+const hasData = computed(() => td.value !== null && Object.keys(td.value).length > 0)
 
 // ── 核心字段 ──
-const cityName = computed(() => td.value.city || '未知城市')
-const conditionText = computed(() => td.value.condition || '')
-const windText = computed(() => td.value.wind || '')
+const cityName = computed(() => td.value?.city || '未知城市')
+const conditionText = computed(() => td.value?.condition || '')
+const windText = computed(() => td.value?.wind || '')
 
 // ── 温度解析 ──
 const tempValue = computed(() => {
-  const raw = String(td.value.temp || '')
+  const raw = String(td.value?.temp || '')
   return raw.replace(/°[CF]?$/, '') || raw
 })
 const tempUnit = computed(() => {
-  const raw = String(td.value.temp || '')
+  const raw = String(td.value?.temp || '')
   if (raw.includes('°F')) return '°F'
   return '°C'
 })
@@ -275,19 +275,19 @@ function svgIcon(condition: string, size: number): string {
 
 // ── 详情 ──
 const hasDetails = computed(() =>
-  !!(td.value.temp_feel || td.value.visibility || td.value.pressure || td.value.cloud
-     || td.value.aqi != null || td.value.uv != null)
+  !!(td.value?.temp_feel || td.value?.visibility || td.value?.pressure || td.value?.cloud
+     || td.value?.aqi != null || td.value?.uv != null)
 )
 
 // ── 预报 ──
 const forecastList = computed<WeatherForecastItem[]>(() => {
-  const fc = td.value.forecast
+  const fc = td.value?.forecast
   return Array.isArray(fc) ? fc : []
 })
 
 // ── 分钟级降水 ──
 const precipData = computed<MinutePrecipSummary | null>(() => {
-  const p = td.value.minutely_precip
+  const p = td.value?.minutely_precip
   if (p && typeof p === 'object' && 'summary' in p && 'ranges' in p) {
     return p as MinutePrecipSummary
   }

@@ -105,6 +105,7 @@ interface SessionChannel {
   contextUsage: ContextUsage | null
   taskTrackerData: Record<string, unknown> | null
   reconnectTimer: ReturnType<typeof setTimeout> | null
+  reconnectAttempts: number  // 重连次数，用于计算退避延迟
   initialized: boolean
   _awaitingToolName: string | null
   parentSessionId: string | null  // sub-agent 用：完成时切回主会话
@@ -137,6 +138,7 @@ function getOrCreateChannel(sid: string): SessionChannel {
       contextUsage: null,
       taskTrackerData: null,
       reconnectTimer: null,
+      reconnectAttempts: 0,
       initialized: false,
       _awaitingToolName: null,
       parentSessionId: null,
@@ -168,13 +170,23 @@ function isValidSessionId(sid: string): boolean {
   return SID_RE.test(sid)
 }
 
+/** 计算指数退避延迟（毫秒）：1s → 2s → 4s → 8s → ... → 最大 30s */
+function getReconnectDelay(attempts: number): number {
+  const base = 1000
+  const maxDelay = 30000
+  return Math.min(base * Math.pow(2, attempts), maxDelay)
+}
+
 function connectSession(sid: string) {
   if (!isValidSessionId(sid)) {
     console.error(`[useChat] 拒绝连接：非法的 sessionId "${sid}"`)
     return
   }
   const ch = getOrCreateChannel(sid)
-  if (ch.ws?.readyState === WebSocket.OPEN) return
+  // 防止重复连接：如果已有 OPEN 或 CONNECTING 的 WS，跳过
+  if (ch.ws && (ch.ws.readyState === WebSocket.OPEN || ch.ws.readyState === WebSocket.CONNECTING)) {
+    return
+  }
 
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
   const token = getToken()
@@ -183,15 +195,27 @@ function connectSession(sid: string) {
 
   ch.ws.onopen = () => {
     ch.connected = true
+    ch.reconnectAttempts = 0  // 连接成功，重置退避计数
+    ch.error = null  // 清除连接错误状态
     if (ch.reconnectTimer) {
       clearTimeout(ch.reconnectTimer)
       ch.reconnectTimer = null
     }
+    console.log(`[useChat] WS connected: session=${sid}`)
   }
 
   ch.ws.onclose = () => {
     ch.connected = false
-    ch.reconnectTimer = setTimeout(() => connectSession(sid), 3000)
+    // 指数退避重连
+    const delay = getReconnectDelay(ch.reconnectAttempts)
+    ch.reconnectAttempts++
+    console.log(`[useChat] WS closed: session=${sid}, reconnecting in ${delay}ms (attempt ${ch.reconnectAttempts})`)
+    ch.reconnectTimer = setTimeout(() => connectSession(sid), delay)
+  }
+
+  ch.ws.onerror = () => {
+    // onerror 后通常会触发 onclose，退避重连在 onclose 中处理
+    console.warn(`[useChat] WS error: session=${sid}`)
   }
 
   ch.ws.onmessage = (event) => {

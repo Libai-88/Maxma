@@ -228,9 +228,14 @@ const isTruncated = computed(() => {
 const previewLineCount = computed(() => MAX_PREVIEW_LINES)
 
 // ── 文件列表 ──
-const items = computed<Array<{ name: string; type: string; size_bytes?: number }>>(() => {
+const items = computed(() => {
   const raw = td.value.items as Array<Record<string, unknown>> | undefined
-  return Array.isArray(raw) ? raw : []
+  if (!Array.isArray(raw)) return []
+  return raw.map((item) => ({
+    name: String(item.name ?? ''),
+    type: String(item.type ?? ''),
+    size_bytes: typeof item.size_bytes === 'number' ? item.size_bytes : undefined,
+  }))
 })
 
 const MAX_VISIBLE_ITEMS = 20

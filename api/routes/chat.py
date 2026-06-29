@@ -12,6 +12,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from agent.graph import build_agent
 from agent.prompts import build_system_prompt, get_system_prompt_parts
+from agent.context_manager import maybe_trim_checkpoint
 from api import interaction
 from api.callbacks.websocket_callback import WebSocketCallback
 from api.const_session_store import save_const_session, serialize_messages
@@ -308,6 +309,13 @@ async def _run_agent_turn(
         "callbacks": [ws_callback],
         "recursion_limit": 120,
     }
+
+    # 上下文窗口保护：当对话历史过长时自动截断，防止超出模型上下文限制
+    from api.context_usage import count_tokens
+    system_prompt_tokens = count_tokens(system_prompt)
+    await maybe_trim_checkpoint(
+        agent_maxma, config, system_prompt_tokens, current_max_tokens
+    )
 
     # 2. [执行轮次] 流式执行 Agent 图，副作用推送最终回答，另有config回调副作用
     final_answer = ""
