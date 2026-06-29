@@ -2,6 +2,7 @@
 
 import asyncio
 import contextvars
+import logging
 import sys
 import traceback
 
@@ -9,6 +10,8 @@ from pydantic import BaseModel, Field
 
 from api import interaction
 from tools.base import ToolBase, format_success, format_error
+
+logger = logging.getLogger(__name__)
 
 
 class CallSubAgentInput(BaseModel):
@@ -93,7 +96,7 @@ class CallSubAgentTool(ToolBase):
             if "/ws/chat/" in path:
                 parent_session_id = path.rsplit("/ws/chat/", 1)[-1]
         except Exception:
-            pass
+            logger.debug("Failed to parse parent_session_id from WebSocket URL", exc_info=True)
 
         # 1. 创建 sub-session
         sub = sm.create_sub_session(
@@ -226,7 +229,7 @@ class CallSubAgentTool(ToolBase):
                             if candidate:
                                 final_answer = candidate
                 except Exception:
-                    pass
+                    logger.debug("Failed to read fallback final_answer from sub-agent checkpoint", exc_info=True)
         except Exception as e:
             print(
                 f"[call_sub_agent] _run_background agent failed: {e}", file=sys.stderr

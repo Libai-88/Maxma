@@ -1,7 +1,10 @@
 """REST API — 本地文件服务（封面图等）。"""
 
 import asyncio
+import logging
 from fastapi import APIRouter, HTTPException
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -41,7 +44,7 @@ async def select_file(type: str = "file"):
                 dpi = root.winfo_fpixels("1i")
                 root.tk.call("tk", "scaling", dpi / 72.0)
             except Exception:
-                pass
+                logger.debug("Failed to set tkinter DPI scaling", exc_info=True)
             root.attributes("-topmost", True)
 
             if type == "folder":

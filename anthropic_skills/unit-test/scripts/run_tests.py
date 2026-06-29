@@ -26,7 +26,7 @@ def run_tests(test_file: str, test_class: str = "", test_method: str = "") -> di
     else:
         tests = loader.loadTestsFromModule(module)
 
-    runner = unittest.TextTestRunner(verbosity=2, stream=open(sys.devnull, "w"))
+    runner = unittest.TextTestRunner(verbosity=2, stream=open(sys.devnull, "w", encoding="utf-8"))
     result = runner.run(tests)
 
     total = result.testsRun

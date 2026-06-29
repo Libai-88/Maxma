@@ -51,7 +51,7 @@ def _get_manager(request: Request):
 def list_providers(request: Request):
     """返回所有已配置的提供商（含未启用的）。"""
     configs = _get_manager(request).list_configs()
-    return {"providers": [c.to_dict() for c in configs]}
+    return {"providers": [c.to_safe_dict() for c in configs]}
 
 
 @router.get("/providers/{provider_id}")
@@ -60,7 +60,7 @@ def get_provider(provider_id: str, request: Request):
     config = _get_manager(request).get_config(provider_id)
     if config is None:
         raise HTTPException(status_code=404, detail="Provider not found")
-    return config.to_dict()
+    return config.to_safe_dict()
 
 
 @router.post("/providers")
@@ -83,7 +83,7 @@ def create_provider(body: ProviderCreateBody, request: Request):
         context_window=body.context_window,
     )
     mgr.save_config(config)
-    return config.to_dict()
+    return config.to_safe_dict()
 
 
 @router.put("/providers/{provider_id}")
@@ -99,7 +99,7 @@ def update_provider(provider_id: str, body: ProviderUpdateBody, request: Request
         setattr(config, field, value)
 
     mgr.save_config(config)
-    return config.to_dict()
+    return config.to_safe_dict()
 
 
 @router.delete("/providers/{provider_id}")

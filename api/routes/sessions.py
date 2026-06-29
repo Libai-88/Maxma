@@ -1,10 +1,14 @@
 """REST API — 会话 CRUD + Const 固定会话。"""
 
+import logging
+
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from api.context_usage import estimate_context_usage
 from agent.prompts import get_system_prompt_parts
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -57,6 +61,7 @@ async def get_messages(session_id: str, request: Request):
             cpt.checkpoint.get("channel_values", {}).get("messages", []) if cpt else []
         )
     except Exception:
+        logger.debug("Failed to read messages from checkpoint for session %s", session_id, exc_info=True)
         msgs = []
     return {
         "session_id": session_id,
@@ -108,6 +113,7 @@ async def get_context_usage(session_id: str, request: Request):
             cpt.checkpoint.get("channel_values", {}).get("messages", []) if cpt else []
         )
     except Exception:
+        logger.debug("Failed to read checkpoint for context usage in session %s", session_id, exc_info=True)
         counting_messages = []
     usage = estimate_context_usage(
         messages=counting_messages,
@@ -160,6 +166,7 @@ async def constify_session(session_id: str, body: ConstifyRequest, request: Requ
             cpt.checkpoint.get("channel_values", {}).get("messages", []) if cpt else []
         )
     except Exception:
+        logger.debug("Failed to read checkpoint for constify in session %s", session_id, exc_info=True)
         raw_messages = []
 
     from api.const_session_store import save_const_session, serialize_messages
@@ -200,6 +207,7 @@ async def generate_session_title(session_id: str, request: Request):
             cpt.checkpoint.get("channel_values", {}).get("messages", []) if cpt else []
         )
     except Exception:
+        logger.debug("Failed to read checkpoint for title generation in session %s", session_id, exc_info=True)
         messages = []
 
     if not messages:
