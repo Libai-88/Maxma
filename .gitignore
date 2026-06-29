@@ -83,5 +83,8 @@ anthropic_skills/*/
 # Macros（同上）
 macros/*/
 
+# 用户上传文件和浏览器截图（运行时生成）
+uploads/
+
 # 安全威胁模型（本地文档，不提交）
 dev_docs/security/

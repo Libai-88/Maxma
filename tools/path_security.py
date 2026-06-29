@@ -25,9 +25,10 @@ _WHITELIST_PATH = (
     Path(__file__).resolve().parent.parent / "api" / "data" / "path_whitelist.yaml"
 )
 
-# 默认白名单条目：仅暴露 anthropic_skills 和 macros 目录
+# 默认白名单条目：仅暴露 anthropic_skills、macros 和 uploads 目录
 _DEFAULT_WHITELIST_PATH = os.path.join(_PROJECT_ROOT, "anthropic_skills")
 _DEFAULT_MACROS_WHITELIST_PATH = os.path.join(_PROJECT_ROOT, "macros")
+_DEFAULT_UPLOADS_PATH = os.path.join(_PROJECT_ROOT, "uploads")
 
 # MaxmaBlocker 相关常量
 _BLOCKER_YAML_PATH = (
@@ -193,9 +194,17 @@ def _default_macros_entry() -> dict:
     }
 
 
+def _default_uploads_entry() -> dict:
+    return {
+        "path": os.path.normpath(str(_DEFAULT_UPLOADS_PATH)),
+        "description": "用户上传文件目录（自动生成）",
+        "recursive": True,
+    }
+
+
 def _default_entries() -> list[dict]:
     """返回所有自动生成的默认白名单条目。"""
-    return [_default_entry(), _default_macros_entry()]
+    return [_default_entry(), _default_macros_entry(), _default_uploads_entry()]
 
 
 def _write_whitelist(entries: list) -> None:

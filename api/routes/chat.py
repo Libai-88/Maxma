@@ -19,6 +19,7 @@ from api.const_session_store import save_const_session, serialize_messages
 from api.context_usage import estimate_context_usage
 from api.errors import ErrorCode, format_ws_error
 from api.session_manager import SessionState
+from tools import select_tools_for_query
 from tools.base import format_error
 
 logger = logging.getLogger(__name__)
@@ -294,9 +295,11 @@ async def _run_agent_turn(
         return
 
     system_prompt = build_system_prompt()
+    # 动态工具过滤：根据用户消息选择相关工具子集，减少 token 消耗
+    turn_tools = select_tools_for_query(user_message)
     agent_maxma = build_agent(
         model=llm,
-        tools=app_state.tools,
+        tools=turn_tools,
         system_prompt=system_prompt,
         checkpointer=session.checkpointer,
     )
@@ -312,7 +315,7 @@ async def _run_agent_turn(
     from api.context_usage import count_tokens
     system_prompt_tokens = count_tokens(system_prompt)
     await maybe_trim_checkpoint(
-        agent_maxma, config, system_prompt_tokens, current_max_tokens
+        agent_maxma, config, system_prompt_tokens, current_max_tokens, llm=llm
     )
 
     # 2. [执行轮次] 流式执行 Agent 图，副作用推送最终回答，另有config回调副作用
