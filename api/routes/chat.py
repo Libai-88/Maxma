@@ -17,6 +17,7 @@ from api import interaction
 from api.callbacks.websocket_callback import WebSocketCallback
 from api.const_session_store import save_const_session, serialize_messages
 from api.context_usage import estimate_context_usage
+from api.errors import ErrorCode, format_ws_error
 from api.session_manager import SessionState
 from tools.base import format_error
 
@@ -285,13 +286,10 @@ async def _run_agent_turn(
 
     if llm is None:
         await ws.send_json(
-            {
-                "type": "error",
-                "payload": {
-                    "code": "NO_LLM",
-                    "message": "No LLM provider configured. Add one in Model Settings first.",
-                },
-            }
+            format_ws_error(
+                ErrorCode.NO_LLM,
+                "No LLM provider configured. Add one in Model Settings first.",
+            )
         )
         return
 
@@ -357,23 +355,22 @@ async def _run_agent_turn(
             print(f"[cancel] checkpoint cleanup error: {e}", file=sys.stderr)
 
         await ws.send_json(
-            {  # [向前端通信] 2. 通知客户端生成已被取消
-                "type": "error",
-                "payload": {"code": "CANCELLED", "message": "生成已取消"},
-            }
+            format_ws_error(ErrorCode.CANCELLED, "生成已取消")
         )
     except Exception as e:
         _run_error = str(e)
-        print(
+        trace_id = uuid.uuid4().hex[:8]
+        logger.error(
             f"[sub-agent:{session.session_id[:8]}] _run_agent_turn error: {e}",
-            file=sys.stderr,
+            exc_info=True,
+            extra={"trace_id": trace_id},
         )
-        traceback.print_exc(file=sys.stderr)
         await ws.send_json(
-            {
-                "type": "error",
-                "payload": {"code": "AGENT_ERROR", "message": str(e)},
-            }
+            format_ws_error(
+                ErrorCode.AGENT_ERROR,
+                f"Agent 执行出错: {str(e)[:200]}",
+                trace_id=trace_id,
+            )
         )
     finally:
         session._active_task = None

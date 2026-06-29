@@ -80,7 +80,17 @@
       </template>
 
       <!-- 错误提示 -->
-      <div v-if="error" class="error-banner">{{ error }}</div>
+      <div v-if="error" class="error-banner" :class="'error-' + (errorCategory || 'system')">
+        <span class="error-icon">
+          <template v-if="errorCategory === 'user_error'">⚠️</template>
+          <template v-else-if="errorCategory === 'tool_error'">🔧</template>
+          <template v-else-if="errorCategory === 'rate_limit'">⏳</template>
+          <template v-else-if="errorCategory === 'cancelled'">⛔</template>
+          <template v-else>❌</template>
+        </span>
+        <span class="error-message">{{ error }}</span>
+        <span v-if="errorTraceId" class="error-trace-id">Trace: {{ errorTraceId }}</span>
+      </div>
 
       <!-- 空状态 -->
       <div v-if="turns.length === 0 && !currentTurn" class="empty-state">
@@ -145,6 +155,8 @@ const props = defineProps<{
   turns: ChatTurn[]
   currentTurn: ChatTurn | null
   error: string | null
+  errorCategory: 'user_error' | 'tool_error' | 'system_error' | 'rate_limit' | 'cancelled' | null
+  errorTraceId: string | null
 }>()
 
 const emit = defineEmits<{
@@ -380,6 +392,12 @@ function closeContextMenu() {
   flex-direction: column;
   gap: 6px;
 }
+/* 每个轮次的用户消息和助手回复：跳过屏幕外内容的渲染，提升长对话性能 */
+.messages-list > .cite-source,
+.messages-list > .assistant-side {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 150px;  /* 估算高度，减少布局偏移 */
+}
 .messages-list:has(.empty-state) {
   height: 100%;
 }
@@ -491,12 +509,61 @@ function closeContextMenu() {
   cursor: pointer;
 }
 .error-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 10px 16px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  margin: 8px 0;
+}
+.error-icon {
+  flex-shrink: 0;
+  font-size: 16px;
+}
+.error-message {
+  flex: 1;
+}
+.error-trace-id {
+  font-size: 11px;
+  opacity: 0.7;
+  font-family: monospace;
+}
+/* 用户错误：黄色警告 */
+.error-banner.error-user_error {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+}
+/* 工具错误：橙色 */
+.error-banner.error-tool_error {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+}
+/* 系统错误：红色 */
+.error-banner.error-system_error {
   background: #fef2f2;
   border: 1px solid #fecaca;
-  border-radius: var(--radius);
   color: #b91c1c;
-  font-size: 13px;
+}
+/* 限流错误：蓝色 */
+.error-banner.error-rate_limit {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+}
+/* 取消：灰色 */
+.error-banner.error-cancelled {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  color: #4b5563;
+}
+/* 默认/系统错误 */
+.error-banner.error-system {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
 }
 
 /* ── 右侧滚动标记 ── */

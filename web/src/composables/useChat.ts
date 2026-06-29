@@ -102,6 +102,8 @@ interface SessionChannel {
   turns: ChatTurn[]
   currentTurn: ChatTurn | null
   error: string | null
+  errorCategory: 'user_error' | 'tool_error' | 'system_error' | 'rate_limit' | 'cancelled' | null
+  errorTraceId: string | null
   contextUsage: ContextUsage | null
   taskTrackerData: Record<string, unknown> | null
   reconnectTimer: ReturnType<typeof setTimeout> | null
@@ -135,6 +137,8 @@ function getOrCreateChannel(sid: string): SessionChannel {
       turns: [] as ChatTurn[],
       currentTurn: null,
       error: null,
+      errorCategory: null,
+      errorTraceId: null,
       contextUsage: null,
       taskTrackerData: null,
       reconnectTimer: null,
@@ -429,7 +433,10 @@ function handleEventForChannel(sid: string, event: ServerEvent) {
       ch.isAwaitingUser = false
       ch._awaitingToolName = null
       ch.error = event.payload.message
+      ch.errorCategory = event.payload.category ?? null
+      ch.errorTraceId = event.payload.trace_id ?? null
       ch.isStreaming = false
+      console.warn(`[useChat] error: ${event.payload.code} (${event.payload.category ?? 'unknown'})`, event.payload.message)
       break
 
     case 'pong':
@@ -544,6 +551,8 @@ export function useChat(sessionId: Ref<string>) {
   const turns = computed(() => activeChannel.value.turns)
   const currentTurn = computed(() => activeChannel.value.currentTurn)
   const error = computed(() => activeChannel.value.error)
+  const errorCategory = computed(() => activeChannel.value.errorCategory)
+  const errorTraceId = computed(() => activeChannel.value.errorTraceId)
   const contextUsage = computed(() => activeChannel.value.contextUsage)
   const taskTrackerData = computed(() => activeChannel.value.taskTrackerData)
 
@@ -656,7 +665,8 @@ export function useChat(sessionId: Ref<string>) {
   }
 
   return {
-    connected, isStreaming, turns, currentTurn, error, contextUsage, taskTrackerData,
+    connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId,
+    contextUsage, taskTrackerData,
     send, cancel, sendUserResponse, removeTurns,
     privateMode, setPrivateMode,
     autoApprove, setAutoApprove,

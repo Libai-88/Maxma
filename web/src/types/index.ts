@@ -44,7 +44,13 @@ export interface DoneEvent {
 
 export interface ErrorEvent {
   type: 'error'
-  payload: { code: string; message: string }
+  payload: {
+    code: string
+    message: string
+    category?: 'user_error' | 'tool_error' | 'system_error' | 'rate_limit' | 'cancelled'
+    details?: Record<string, unknown>
+    trace_id?: string
+  }
 }
 
 export interface PongEvent {
