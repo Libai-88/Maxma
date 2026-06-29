@@ -281,6 +281,9 @@ class TestCrudTools:
 class TestGetNarrative:
     """模块级 get_narrative 测试。"""
 
+    def setup_method(self):
+        narrative.invalidate_narrative_cache()
+
     def test_file_not_exists(self, monkeypatch, tmp_path):
         p = tmp_path / "memory.yaml"
         monkeypatch.setattr(narrative, "MEMORY_PATH", p)
@@ -326,9 +329,11 @@ class TestLongTermMemoryInterface:
 
     def setup_method(self):
         narrative._set_current_mm(None)
+        narrative.invalidate_narrative_cache()
 
     def teardown_method(self):
         narrative._set_current_mm(None)
+        narrative.invalidate_narrative_cache()
 
     # ── get_narrative（实例方法） ──────────────────────────────
 

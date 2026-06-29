@@ -125,15 +125,40 @@ def _format_entries_for_tool(items: list[dict]) -> str:
     return "\n".join(lines).strip()
 
 
+# ── get_narrative 缓存（基于文件 mtime）─────────────────────
+
+_narrative_cache: str | None = None
+_narrative_mtime: float = -1.0
+
+
 def get_narrative() -> str:
     """读取当前记忆叙事，不存在则返回空字符串。
 
-    每次调用都从磁盘重新读取，确保记忆更新后能立即反映到 Agent 行为中。
+    基于 memory.yaml 的修改时间做缓存：文件未变化时直接返回上次结果，
+    避免每次调用都创建 MemoryManager 并解析 YAML。
     """
+    global _narrative_cache, _narrative_mtime
+
     if not MEMORY_PATH.exists():
+        _narrative_cache = ""
+        _narrative_mtime = -1.0
         return ""
+
+    current_mtime = MEMORY_PATH.stat().st_mtime
+    if _narrative_cache is not None and current_mtime == _narrative_mtime:
+        return _narrative_cache
+
     mm = MemoryManager(yaml_file=str(MEMORY_PATH))
-    return _format_narrative(mm.show())
+    _narrative_cache = _format_narrative(mm.show())
+    _narrative_mtime = current_mtime
+    return _narrative_cache
+
+
+def invalidate_narrative_cache() -> None:
+    """强制清空叙事缓存（供外部调用，例如 CRUD 写入后）。"""
+    global _narrative_cache, _narrative_mtime
+    _narrative_cache = None
+    _narrative_mtime = -1.0
 
 
 def _format_messages(messages: list[dict]) -> str:
@@ -282,7 +307,7 @@ class LongTermMemoryInterface:
         return self._consumer_task is not None and not self._consumer_task.done()
 
     def get_narrative(self) -> str:
-        """读取当前记忆叙事，不存在则返回空字符串。"""
+        """读取当前记忆叙事，从实例自身的 _memory_path 读取。"""
         if not self._memory_path.exists():
             return ""
         mm = MemoryManager(yaml_file=str(self._memory_path))
@@ -421,6 +446,7 @@ class LongTermMemoryInterface:
                     },
                 )
                 print("[ltm] CRUD agent done")
+                invalidate_narrative_cache()
 
             except Exception as e:
                 print(f"[ltm] CRUD agent error: {e}")
