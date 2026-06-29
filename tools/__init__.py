@@ -1,5 +1,7 @@
 """工具（Tool）集中注册 — ALL_TOOLS 供 Agent 使用。"""
 
+from collections import defaultdict
+
 from langchain_core.tools import BaseTool
 
 from tools.base import SharedAPIClient
@@ -7,6 +9,19 @@ from tools.base import SharedAPIClient
 # 懒加载 client，避免循环导入
 _client: SharedAPIClient | None = None
 _cached_tools: list[BaseTool] | None = None
+
+# 工具使用统计（工具名 → 调用次数）
+_tool_usage: dict[str, int] = defaultdict(int)
+
+
+def record_tool_usage(tool_name: str) -> None:
+    """记录一次工具调用（供回调函数调用）。"""
+    _tool_usage[tool_name] += 1
+
+
+def get_tool_stats() -> dict[str, int]:
+    """返回所有工具的使用次数统计。"""
+    return dict(_tool_usage)
 
 
 def _get_client() -> SharedAPIClient:
@@ -51,6 +66,11 @@ def get_all_tools() -> list[BaseTool]:
     from tools.network.tool_holiday import HolidayCalendarTool
     from tools.network.tool_image_understand import ImageUnderstandTool
     from tools.network.tavily import TavilySearchTool, TavilyExtractTool
+    from tools.network.playwright_tools import (
+        BrowserBrowseTool,
+        BrowserScreenshotTool,
+        BrowserExtractTool,
+    )
 
     # Files
     from tools.files.tool_file_read import FileReadTool
@@ -64,6 +84,9 @@ def get_all_tools() -> list[BaseTool]:
 
     # SubAgent
     from tools.sub_agent.tool_call_sub_agent import CallSubAgentTool
+
+    # QuickTask
+    from tools.quick_task.tool_quick_task import QuickTaskTool
 
     # Interaction
     from tools.interaction.tool_ask_qa import AskUserQATool
@@ -107,6 +130,9 @@ def get_all_tools() -> list[BaseTool]:
         ImageUnderstandTool(client=client),
         TavilySearchTool(client=client),
         TavilyExtractTool(client=client),
+        BrowserBrowseTool(client=client),
+        BrowserScreenshotTool(client=client),
+        BrowserExtractTool(client=client),
         # Files
         FileReadTool(client=client),
         FileWriteTool(client=client),
@@ -117,6 +143,8 @@ def get_all_tools() -> list[BaseTool]:
         TaskTrackerTool(client=client),
         # SubAgent
         CallSubAgentTool(client=client),
+        # QuickTask
+        QuickTaskTool(client=client),
         # Interaction
         AskUserQATool(client=client),
         AskUserSingleChoiceTool(client=client),
@@ -157,13 +185,14 @@ TOOL_CATEGORIES: dict[str, list[str]] = {
     "network": [
         "weather", "holiday_calendar", "image_understand",
         "tavily_search", "tavily_extract",
+        "browser_browse", "browser_screenshot", "browser_extract",
     ],
     "files": [
         "file_read", "file_write", "file_manage",
         "file_search", "file_edit",
     ],
     "task": ["task_tracker"],
-    "sub_agent": ["call_sub_agent"],
+    "sub_agent": ["call_sub_agent", "quick_task"],
     "interaction": ["ask_user_qa", "ask_user_single_choice", "ask_user_multi_choice"],
     "entertainment": ["tarot"],
     "memory": [
@@ -175,7 +204,7 @@ TOOL_CATEGORIES: dict[str, list[str]] = {
 # 始终加载的核心工具（不受过滤影响）
 CORE_TOOLS = {
     "run_python", "file_read", "file_write", "file_manage", "file_search", "file_edit",
-    "task_tracker", "call_sub_agent",
+    "task_tracker", "call_sub_agent", "quick_task",
     "ask_user_qa", "ask_user_single_choice", "ask_user_multi_choice",
     "list_memories", "read_memories", "create_memory", "update_memory", "delete_memory", "merge_memories",
 }
@@ -197,6 +226,11 @@ KEYWORD_TO_CATEGORIES: dict[str, list[str]] = {
     "search": ["network"],
     "网页": ["network"],
     "图片": ["network"],
+    "浏览器": ["network"],
+    "截图": ["network"],
+    "screenshot": ["network"],
+    "browser": ["network"],
+    "爬取": ["network"],
     "tarot": ["entertainment"],
     "塔罗": ["entertainment"],
     "占卜": ["entertainment"],

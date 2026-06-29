@@ -8,6 +8,8 @@ from fastapi import WebSocket
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 
+from tools import record_tool_usage
+
 from .tool_extractors import _dispatch
 
 
@@ -82,6 +84,8 @@ class WebSocketCallback(BaseCallbackHandler):
         self._tool_start_time[run_id] = time.time()
         self._tool_names[run_id] = tool_name
         self._tool_inputs[run_id] = input_str
+
+        record_tool_usage(tool_name)
 
         await self._ws.send_json(
             {

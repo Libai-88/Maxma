@@ -44,9 +44,9 @@ def _find_trim_boundary(messages: Sequence[BaseMessage], min_turns: int) -> int:
 
 
 def _summarize_old_messages(messages: Sequence[BaseMessage]) -> str:
-    """将旧消息压缩为简短摘要文本。
+    """将旧消息压缩为简短摘要文本（无 LLM 时的回退方案）。
 
-    当前实现：提取关键信息拼接。后续可接入 LLM 生成更智能的摘要。
+    提取关键信息拼接：统计消息类型数量，保留最近用户消息摘要。
     """
     summaries = []
     tool_count = 0
@@ -57,7 +57,6 @@ def _summarize_old_messages(messages: Sequence[BaseMessage]) -> str:
         if isinstance(msg, HumanMessage):
             human_count += 1
             content = msg.content if isinstance(msg.content, str) else str(msg.content)
-            # 只保留用户消息的前 100 字符
             if len(content) > 100:
                 content = content[:100] + "..."
             summaries.append(f"用户: {content}")
@@ -77,10 +76,54 @@ def _summarize_old_messages(messages: Sequence[BaseMessage]) -> str:
     header = f"[历史对话摘要: {', '.join(parts)}]"
 
     if summaries:
-        # 最多保留最近 3 条用户消息的摘要
         recent = summaries[-3:]
         return header + "\n" + "\n".join(recent)
     return header
+
+
+async def _llm_summarize(messages: Sequence[BaseMessage], llm) -> str:
+    """使用 LLM 生成高质量对话摘要。
+
+    摘要格式：关键决策 + 已完成任务 + 待办事项 + 重要上下文。
+    """
+    # 构造对话文本（过滤工具输出，避免幻觉）
+    conversation_parts = []
+    for msg in messages:
+        if isinstance(msg, HumanMessage):
+            content = msg.content if isinstance(msg.content, str) else str(msg.content)
+            conversation_parts.append(f"用户: {content[:200]}")
+        elif isinstance(msg, AIMessage):
+            content = msg.content if isinstance(msg.content, str) else str(msg.content)
+            if content:
+                conversation_parts.append(f"助手: {content[:200]}")
+
+    if not conversation_parts:
+        return _summarize_old_messages(messages)
+
+    conversation_text = "\n".join(conversation_parts)
+
+    try:
+        from langchain_core.messages import HumanMessage as HM
+
+        response = await llm.ainvoke(
+            [
+                HM(
+                    content=(
+                        "请将以下对话历史压缩为简短摘要（不超过 200 字），包含：\n"
+                        "1. 关键决策和结论\n"
+                        "2. 已完成的任务\n"
+                        "3. 待办事项\n"
+                        "4. 重要上下文信息\n\n"
+                        f"对话历史：\n{conversation_text}"
+                    )
+                ),
+            ],
+        )
+        summary = response.content if isinstance(response.content, str) else str(response.content)
+        return f"[历史对话摘要] {summary.strip()}"
+    except Exception as e:
+        logger.warning(f"LLM summarization failed, falling back to extraction: {e}")
+        return _summarize_old_messages(messages)
 
 
 def should_trim_context(
@@ -136,7 +179,7 @@ def trim_messages(
     old_messages = messages[:boundary]
     kept_messages = messages[boundary:]
 
-    # 生成旧消息摘要
+    # 生成旧消息摘要（回退到提取式）
     summary_text = _summarize_old_messages(old_messages)
 
     # 构造截断后的消息列表
@@ -166,6 +209,7 @@ async def maybe_trim_checkpoint(
     config: dict,
     system_prompt_tokens: int,
     max_tokens: int,
+    llm=None,
 ) -> bool:
     """检查 checkpoint 中的消息是否需要截断，如需则更新。
 
@@ -174,6 +218,7 @@ async def maybe_trim_checkpoint(
         config: LangGraph config (含 thread_id)
         system_prompt_tokens: 系统提示词 token 数
         max_tokens: 模型上下文窗口上限
+        llm: 可选 LLM 实例，用于生成高质量摘要
 
     Returns:
         True 如果执行了截断
@@ -190,14 +235,31 @@ async def maybe_trim_checkpoint(
         if not should_trim_context(messages, system_prompt_tokens, max_tokens):
             return False
 
-        trimmed = trim_messages(messages, system_prompt_tokens, max_tokens)
+        boundary = _find_trim_boundary(messages, MIN_RECENT_TURNS)
+        if boundary == 0:
+            return False
+
+        old_messages = messages[:boundary]
+        kept_messages = messages[boundary:]
+
+        # 使用 LLM 摘要（如果可用）或回退到提取式
+        if llm is not None:
+            summary_text = await _llm_summarize(old_messages, llm)
+        else:
+            summary_text = _summarize_old_messages(old_messages)
+
+        # 构造截断后的消息列表
+        trimmed: list[BaseMessage] = []
+        if kept_messages and isinstance(kept_messages[0], SystemMessage):
+            trimmed.append(kept_messages[0])
+            kept_messages = kept_messages[1:]
+        if summary_text:
+            trimmed.append(SystemMessage(content=f"[上下文压缩] {summary_text}"))
+        trimmed.extend(kept_messages)
+
         if len(trimmed) == len(messages):
             return False
 
-        # 使用 aupdate_state 更新 checkpoint
-        # 注意：需要清除旧消息，写入新消息
-        # LangGraph 的 messages channel 使用 add_messages reducer，
-        # 所以我们需要先清空再写入
         await graph.aupdate_state(
             config,
             {"messages": trimmed},

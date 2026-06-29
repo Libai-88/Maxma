@@ -27,6 +27,8 @@ from api.routes import news as news_router
 from api.routes import mcp as mcp_router
 from api.routes import restart as restart_router
 from api.routes import env_vars as env_vars_router
+from api.routes import tool_stats as tool_stats_router
+from api.routes import upload as upload_router
 from api.session_manager import SessionManager, SessionState
 from api.ws_registry import WebSocketRegistry
 from agent.graph import build_agent
@@ -160,6 +162,13 @@ async def lifespan(app: FastAPI):
     await balance.close_async_client()
     await app.state.ltm.stop_listening()
 
+    # 关闭 Playwright 浏览器（如果已启动）
+    try:
+        from tools.network.playwright_tools.browser_manager import BrowserManager
+        BrowserManager().shutdown()
+    except Exception:
+        pass
+
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -221,6 +230,12 @@ def create_app() -> FastAPI:
 
     # 工具环境变量管理
     app.include_router(env_vars_router.router, prefix="/api")
+
+    # 工具使用统计
+    app.include_router(tool_stats_router.router, prefix="/api")
+
+    # 文件上传
+    app.include_router(upload_router.router, prefix="/api")
 
     # 健康检查
     @app.get("/api/health")

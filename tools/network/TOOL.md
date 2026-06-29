@@ -8,6 +8,9 @@
 | `tavily_extract` | 网页内容提取 | Tavily Extract API |
 | `holiday_calendar` | 节假日/万年历查询 | UAPI misc.get_misc_holiday_calendar |
 | `analyze_image` | 图片理解/OCR/描述 | GLM-5V-Turbo 多模态模型 |
+| `browser_browse` | 无头浏览器访问网页（JS 渲染） | Playwright Chromium |
+| `browser_screenshot` | 网页截图 | Playwright Chromium |
+| `browser_extract` | CSS/JS 结构化数据提取 | Playwright Chromium |
 
 ## 技能协作流程
 - **天气 + 节假日**：用户问"国庆节北京天气如何"时，先调 `holiday_calendar` 确认日期，再调 `get_current_weather`
