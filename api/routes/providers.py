@@ -1,9 +1,13 @@
 """REST API — 提供商 CRUD 与连接测试。"""
 
+import logging
+
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from api.providers import ProviderConfig
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -44,6 +48,38 @@ def _get_manager(request: Request):
     return request.app.state.provider_manager
 
 
+async def _maybe_initialize_llm(request: Request) -> None:
+    """如果 LLM 尚未初始化，尝试从 ProviderManager 初始化。
+
+    同时启动长期记忆监听器（如果之前因缺少 LLM 而跳过）。
+    """
+    app = request.app
+
+    # LLM 已就绪，无需操作
+    if app.state.llm is not None:
+        return
+
+    from api.dependencies import get_llm
+
+    try:
+        app.state.llm = get_llm(app.state.provider_manager)
+        logger.info("[providers] LLM 已自动初始化")
+    except RuntimeError:
+        # 仍然没有可用的 provider
+        return
+
+    # LLM 刚初始化成功，启动长期记忆监听
+    if hasattr(app.state, "ltm") and app.state.ltm is not None:
+        try:
+            app.state.ltm.start_listening(
+                app.state.llm,
+                ws_registry=app.state.ws_registry,
+            )
+            logger.info("[providers] 长期记忆监听器已自动启动")
+        except Exception as e:
+            logger.warning("[providers] 启动长期记忆监听器失败: %s", e)
+
+
 # ── CRUD ────────────────────────────────────────────────
 
 
@@ -64,7 +100,7 @@ def get_provider(provider_id: str, request: Request):
 
 
 @router.post("/providers")
-def create_provider(body: ProviderCreateBody, request: Request):
+async def create_provider(body: ProviderCreateBody, request: Request):
     """新增提供商。"""
     mgr = _get_manager(request)
     if mgr.get_config(body.id) is not None:
@@ -83,11 +119,15 @@ def create_provider(body: ProviderCreateBody, request: Request):
         context_window=body.context_window,
     )
     mgr.save_config(config)
+
+    # 自动初始化 LLM 和 Memory（如果之前因缺少 provider 而未启动）
+    await _maybe_initialize_llm(request)
+
     return config.to_safe_dict()
 
 
 @router.put("/providers/{provider_id}")
-def update_provider(provider_id: str, body: ProviderUpdateBody, request: Request):
+async def update_provider(provider_id: str, body: ProviderUpdateBody, request: Request):
     """更新提供商配置（部分字段）。"""
     mgr = _get_manager(request)
     config = mgr.get_config(provider_id)
@@ -99,6 +139,10 @@ def update_provider(provider_id: str, body: ProviderUpdateBody, request: Request
         setattr(config, field, value)
 
     mgr.save_config(config)
+
+    # 自动初始化 LLM 和 Memory（如果之前因缺少 provider 而未启动）
+    await _maybe_initialize_llm(request)
+
     return config.to_safe_dict()
 
 
