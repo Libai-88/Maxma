@@ -1,6 +1,7 @@
 """上下文窗口管理 — 滑动窗口截断与摘要。"""
 
 import logging
+import re
 from typing import Sequence
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
@@ -9,10 +10,41 @@ from api.context_usage import count_tokens
 
 logger = logging.getLogger(__name__)
 
-# 保留最近的最小轮次数（即使超出 token 限制也不截断这些）
-MIN_RECENT_TURNS = 5
 # 当上下文占比超过此阈值时触发截断
-TRIM_THRESHOLD = 0.75
+TRIM_THRESHOLD = 0.6
+
+# 动态保留轮次参数
+MIN_RECENT_TURNS_DEFAULT = 5
+# 工具密集场景（平均每轮 3+ 工具调用）少保留
+MIN_RECENT_TURNS_MIN = 3
+# 纯文本场景多保留
+MIN_RECENT_TURNS_MAX = 6
+
+
+def _calc_min_turns(messages: Sequence[BaseMessage]) -> int:
+    """根据消息中 ToolMessage 的密度动态计算应保留的轮次数。
+
+    工具调用密集时每条 turn 占用 token 多，少保留几轮；
+    纯文本对话时每条 turn 轻量，多保留几轮。
+    """
+    total_turns = 0
+    tool_count = 0
+    for msg in messages:
+        if isinstance(msg, HumanMessage):
+            total_turns += 1
+        elif isinstance(msg, ToolMessage):
+            tool_count += 1
+
+    if total_turns == 0:
+        return MIN_RECENT_TURNS_DEFAULT
+
+    avg_tools_per_turn = tool_count / total_turns
+    if avg_tools_per_turn >= 3:
+        return MIN_RECENT_TURNS_MIN
+    elif avg_tools_per_turn >= 1:
+        return MIN_RECENT_TURNS_DEFAULT
+    else:
+        return MIN_RECENT_TURNS_MAX
 
 
 def _count_turns(messages: Sequence[BaseMessage]) -> int:
@@ -43,10 +75,89 @@ def _find_trim_boundary(messages: Sequence[BaseMessage], min_turns: int) -> int:
     return 0
 
 
+# ── 实体提取（借鉴 Codex：被截断的消息中保留可重读的引用）────
+
+_PATH_RE = re.compile(
+    r"(?:[a-zA-Z]:[\\/]|[./~]|[\w.-]+/)[\w./\\-]+"
+    r"(?:\.\w{1,5})?"  # 可选扩展名
+)
+_URL_RE = re.compile(r"https?://[^\s)>\]\"']+")
+
+
+def _extract_entities(messages: Sequence[BaseMessage]) -> str:
+    """从旧消息中提取文件路径、URL 等具体实体，作为"重读清单"。
+
+    模型在后续对话中如果需要这些信息，可以用工具重新读取文件。
+    """
+    file_paths: set[str] = set()
+    urls: set[str] = set()
+
+    for msg in messages:
+        content = msg.content if isinstance(msg.content, str) else str(msg.content)
+        if not content:
+            continue
+
+        # 提取文件路径（过滤掉太短或太像普通单词的匹配）
+        for m in _PATH_RE.finditer(content):
+            path = m.group(0).rstrip(".,;:!?")
+            if len(path) > 4 and "/" in path or "\\" in path:
+                file_paths.add(path)
+
+        # 提取 URL
+        for m in _URL_RE.finditer(content):
+            urls.add(m.group(0).rstrip(".,;:!?"))
+
+    parts = []
+    if file_paths:
+        # 最多保留 20 个路径，避免过长
+        sorted_paths = sorted(file_paths)[:20]
+        parts.append("## 涉及的文件/路径\n" + "\n".join(f"- {p}" for p in sorted_paths))
+    if urls:
+        sorted_urls = sorted(urls)[:10]
+        parts.append("## 涉及的 URL\n" + "\n".join(f"- {u}" for u in sorted_urls))
+
+    return "\n\n".join(parts)
+
+
+# ── 结构化摘要 prompt（借鉴 Claude Code compact 机制）────
+
+_COMPACT_PROMPT = """请将以下对话历史压缩为一份结构化交接文档。
+
+这不是普通摘要——这是后续对话的唯一上下文来源。必须保留具体实体（文件路径、函数名、人名、数值、配置项），不要模糊概括。
+
+按以下格式输出：
+
+## 当前任务状态
+- 正在做的事：...
+- 已完成的事：...
+- 待办/阻塞项：...
+
+## 关键实体
+- 涉及的文件/路径：...（保留完整路径）
+- 涉及的人名/术语：...
+- 关键数值/配置：...
+
+## 重要决策
+- 决策内容（原因）
+
+## 错误与解决
+- 问题 → 解决方案
+
+规则：
+1. 每个具体实体（路径、名称、数值）必须原样保留，不要概括
+2. 如果某个分类没有内容，直接跳过该分类
+3. 摘要长度根据对话复杂度自适应：简单对话可以很短，复杂对话（>10轮或含大量工具调用）应更详细
+4. 不要使用"用户讨论了..."这类叙述性语言，直接用结构化列表
+
+对话历史：
+{conversation}"""
+
+
 def _summarize_old_messages(messages: Sequence[BaseMessage]) -> str:
     """将旧消息压缩为简短摘要文本（无 LLM 时的回退方案）。
 
     提取关键信息拼接：统计消息类型数量，保留最近用户消息摘要。
+    同时追加实体提取结果作为"重读清单"。
     """
     summaries = []
     tool_count = 0
@@ -75,27 +186,46 @@ def _summarize_old_messages(messages: Sequence[BaseMessage]) -> str:
 
     header = f"[历史对话摘要: {', '.join(parts)}]"
 
+    result = header
     if summaries:
         recent = summaries[-3:]
-        return header + "\n" + "\n".join(recent)
-    return header
+        result = header + "\n" + "\n".join(recent)
+
+    # 追加实体提取结果
+    entities = _extract_entities(messages)
+    if entities:
+        result = f"{result}\n\n{entities}"
+
+    return result
 
 
 async def _llm_summarize(messages: Sequence[BaseMessage], llm) -> str:
-    """使用 LLM 生成高质量对话摘要。
+    """使用 LLM 生成结构化交接文档式摘要（借鉴 Claude Code compact 机制）。
 
-    摘要格式：关键决策 + 已完成任务 + 待办事项 + 重要上下文。
+    特点：
+    - 结构化模板：按任务状态、关键实体、决策、错误分类提取
+    - 自适应长度：根据对话复杂度动态调整输入文本量
+    - 实体保留：从旧消息中提取文件路径、URL 作为"重读清单"
     """
+    # 自适应：根据消息数量调整每条消息截取长度
+    msg_count = len(messages)
+    if msg_count > 30:
+        per_msg_limit = 100
+    elif msg_count > 15:
+        per_msg_limit = 200
+    else:
+        per_msg_limit = 400
+
     # 构造对话文本（过滤工具输出，避免幻觉）
     conversation_parts = []
     for msg in messages:
         if isinstance(msg, HumanMessage):
             content = msg.content if isinstance(msg.content, str) else str(msg.content)
-            conversation_parts.append(f"用户: {content[:200]}")
+            conversation_parts.append(f"用户: {content[:per_msg_limit]}")
         elif isinstance(msg, AIMessage):
             content = msg.content if isinstance(msg.content, str) else str(msg.content)
             if content:
-                conversation_parts.append(f"助手: {content[:200]}")
+                conversation_parts.append(f"助手: {content[:per_msg_limit]}")
 
     if not conversation_parts:
         return _summarize_old_messages(messages)
@@ -105,22 +235,16 @@ async def _llm_summarize(messages: Sequence[BaseMessage], llm) -> str:
     try:
         from langchain_core.messages import HumanMessage as HM
 
-        response = await llm.ainvoke(
-            [
-                HM(
-                    content=(
-                        "请将以下对话历史压缩为简短摘要（不超过 200 字），包含：\n"
-                        "1. 关键决策和结论\n"
-                        "2. 已完成的任务\n"
-                        "3. 待办事项\n"
-                        "4. 重要上下文信息\n\n"
-                        f"对话历史：\n{conversation_text}"
-                    )
-                ),
-            ],
-        )
+        prompt = _COMPACT_PROMPT.format(conversation=conversation_text)
+        response = await llm.ainvoke([HM(content=prompt)])
         summary = response.content if isinstance(response.content, str) else str(response.content)
-        return f"[历史对话摘要] {summary.strip()}"
+
+        # 追加实体提取结果作为"重读清单"
+        entities = _extract_entities(messages)
+        if entities:
+            summary = f"{summary.strip()}\n\n{entities}"
+
+        return summary.strip()
     except Exception as e:
         logger.warning(f"LLM summarization failed, falling back to extraction: {e}")
         return _summarize_old_messages(messages)
@@ -141,7 +265,8 @@ def should_trim_context(
     Returns:
         True 如果当前上下文占比超过阈值且对话轮次足够多
     """
-    if len(messages) < MIN_RECENT_TURNS * 2:
+    min_turns = _calc_min_turns(messages)
+    if len(messages) < min_turns * 2:
         return False
 
     # 估算当前 token 使用
@@ -172,7 +297,8 @@ def trim_messages(
     if not should_trim_context(messages, system_prompt_tokens, max_tokens):
         return list(messages)
 
-    boundary = _find_trim_boundary(messages, MIN_RECENT_TURNS)
+    min_turns = _calc_min_turns(messages)
+    boundary = _find_trim_boundary(messages, min_turns)
     if boundary == 0:
         return list(messages)
 
@@ -235,18 +361,32 @@ async def maybe_trim_checkpoint(
         if not should_trim_context(messages, system_prompt_tokens, max_tokens):
             return False
 
-        boundary = _find_trim_boundary(messages, MIN_RECENT_TURNS)
+        min_turns = _calc_min_turns(messages)
+        boundary = _find_trim_boundary(messages, min_turns)
         if boundary == 0:
             return False
 
         old_messages = messages[:boundary]
         kept_messages = messages[boundary:]
 
+        # 增量摘要：提取旧消息中已有的压缩摘要，合并到新摘要中
+        prev_summary_parts = []
+        for msg in old_messages:
+            if isinstance(msg, SystemMessage):
+                content = msg.content if isinstance(msg.content, str) else str(msg.content)
+                if content.startswith("[上下文压缩]"):
+                    prev_summary_parts.append(content)
+
         # 使用 LLM 摘要（如果可用）或回退到提取式
         if llm is not None:
             summary_text = await _llm_summarize(old_messages, llm)
         else:
             summary_text = _summarize_old_messages(old_messages)
+
+        # 如果有旧摘要，合并到当前摘要前面
+        if prev_summary_parts:
+            prev_text = "\n".join(prev_summary_parts)
+            summary_text = f"{prev_text}\n{summary_text}"
 
         # 构造截断后的消息列表
         trimmed: list[BaseMessage] = []

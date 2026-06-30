@@ -10,6 +10,9 @@ import yaml
 MAX_DESC_LENGTH = 75
 """记忆描述最大字数限制，超过此长度的创建/更新/合并请求将被驳回。"""
 
+MAX_HISTORY_LENGTH = 5
+"""单条记忆保留的最大历史记录条数，超出时丢弃最早的记录。"""
+
 
 def NOW() -> str:
     return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -40,6 +43,9 @@ class MemoryItem:
         new_history["old_time"] = self.latest_update_time
         self.latest_update_time = NOW()
         self.history.append(new_history)
+        # 裁剪：保留最近 MAX_HISTORY_LENGTH 条，丢弃最早的
+        if len(self.history) > MAX_HISTORY_LENGTH:
+            self.history = self.history[-MAX_HISTORY_LENGTH:]
 
     def show_description_history(self) -> list[dict]:
         """返回描述历史记录及时间（从当前到最早）。
@@ -177,11 +183,16 @@ class MemoryManager:
             self._write_all(items)
 
     def show(self):
-        """整理为大模型易于理解的形式"""
+        """整理为大模型易于理解的形式，包含更新时间供排序。"""
         with portalocker.Lock(self._lock_path, timeout=5):
             items = self._read_all()
             return [
-                {"id": id, "description": item.description, "theme": item.theme}
+                {
+                    "id": id,
+                    "description": item.description,
+                    "theme": item.theme,
+                    "latest_update_time": item.latest_update_time,
+                }
                 for id, item in items.items()
             ]
 

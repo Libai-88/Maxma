@@ -1,12 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import ChatView from '@/views/ChatView.vue'
-import MemoryView from '@/views/MemoryView.vue'
-
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', name: 'chat', component: ChatView },
-    { path: '/memory', name: 'memory', component: MemoryView },
+    { path: '/', name: 'chat', component: () => import('@/views/ChatView.vue') },
+    { path: '/memory', name: 'memory', component: () => import('@/views/MemoryView.vue') },
     {
       path: '/playground',
       name: 'news',

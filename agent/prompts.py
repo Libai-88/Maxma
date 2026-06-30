@@ -68,6 +68,9 @@ def _rebuild(fingerprint: str) -> None:
         soul_content = soul_content.replace("{{USER_NAME}}", "你")
 
     # ── parts（用于 token 细分展示）──
+    # 按变化频率从低到高排列：稳定内容在前，频繁变化的放最后。
+    # 这样 Anthropic/OpenAI prompt caching 可以缓存更长的前缀，
+    # 记忆变化时不会导致 skills/macros 等稳定部分的缓存失效。
     _cached_parts = [
         {"key": "behavior_rules", "label": "系统行为规则",
          "content": "## 行为规则\n" + _read_persona("AGENTS.md")},
@@ -75,15 +78,16 @@ def _rebuild(fingerprint: str) -> None:
          "content": "## 性格设定\n" + soul_content},
         {"key": "user_self_report", "label": "用户自述",
          "content": "## 用户自述\n" + user_md_raw},
-        {"key": "long_term_memory", "label": "长期记忆",
-         "content": "## 我对用户的记忆\n" + get_narrative()},
         {"key": "skills", "label": "Skills 清单",
          "content": _scan_anthropic_skills()},
         {"key": "macros", "label": "宏清单",
          "content": _scan_macros()},
+        {"key": "long_term_memory", "label": "长期记忆",
+         "content": "## 我对用户的记忆\n" + get_narrative()},
     ]
 
     # ── 完整 prompt ──
+    # 与 _cached_parts 保持一致顺序：稳定内容在前，记忆放最后
     full_parts = [
         "## 行为规则",
         _read_persona("AGENTS.md"),
@@ -94,12 +98,12 @@ def _rebuild(fingerprint: str) -> None:
         "## 用户自述",
         user_md_raw,
         "",
-        "## 我对用户的记忆",
-        get_narrative(),
-        "",
         _scan_anthropic_skills(),
         "",
         _scan_macros(),
+        "",
+        "## 我对用户的记忆",
+        get_narrative(),
     ]
     _cached_prompt = "\n".join(full_parts)
     _cached_fingerprint = fingerprint
