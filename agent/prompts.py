@@ -57,14 +57,24 @@ def _rebuild(fingerprint: str) -> None:
 
     ensure_user_md()
 
+    # 解析用户称呼，用于替换 SOUL.md 中的 {{USER_NAME}}
+    user_md_raw = _read_if_exists("USER.md")
+    user_name = _parse_user_name(user_md_raw)
+    soul_content = _read_persona("SOUL.md")
+    if user_name:
+        soul_content = soul_content.replace("{{USER_NAME}}", user_name)
+    else:
+        # 未配置称呼时保留占位符，但替换为通用称呼避免 LLM 困惑
+        soul_content = soul_content.replace("{{USER_NAME}}", "你")
+
     # ── parts（用于 token 细分展示）──
     _cached_parts = [
         {"key": "behavior_rules", "label": "系统行为规则",
          "content": "## 行为规则\n" + _read_persona("AGENTS.md")},
         {"key": "personality", "label": "性格人设",
-         "content": "## 性格设定\n" + _read_persona("SOUL.md")},
+         "content": "## 性格设定\n" + soul_content},
         {"key": "user_self_report", "label": "用户自述",
-         "content": "## 用户自述\n" + _read_if_exists("USER.md")},
+         "content": "## 用户自述\n" + user_md_raw},
         {"key": "long_term_memory", "label": "长期记忆",
          "content": "## 我对用户的记忆\n" + get_narrative()},
         {"key": "skills", "label": "Skills 清单",
@@ -79,10 +89,10 @@ def _rebuild(fingerprint: str) -> None:
         _read_persona("AGENTS.md"),
         "",
         "## 性格设定",
-        _read_persona("SOUL.md"),
+        soul_content,
         "",
         "## 用户自述",
-        _read_if_exists("USER.md"),
+        user_md_raw,
         "",
         "## 我对用户的记忆",
         get_narrative(),
@@ -123,6 +133,22 @@ def _read_if_exists(filename: str) -> str:
     if path.exists():
         return path.read_text(encoding="utf-8").strip()
     return ""
+
+
+def _parse_user_name(user_md_content: str) -> str:
+    """从 USER.md 结构化模板中提取称呼。
+
+    匹配格式：``**称呼**：xxx`` 或 ``**称呼**: xxx``
+    若未填写或格式不匹配，返回空字符串。
+    """
+    m = re.search(r"\*\*称呼\*\*\s*[：:]\s*(.+)", user_md_content)
+    if not m:
+        return ""
+    name = m.group(1).strip()
+    # 过滤掉占位符文本（括号内的提示文字）
+    if not name or name.startswith("（") or name.startswith("("):
+        return ""
+    return name
 
 
 def _parse_frontmatter(text: str) -> dict[str, str]:
