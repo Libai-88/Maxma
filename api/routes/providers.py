@@ -51,7 +51,7 @@ def _get_manager(request: Request):
 async def _maybe_initialize_llm(request: Request) -> None:
     """如果 LLM 尚未初始化，尝试从 ProviderManager 初始化。
 
-    同时启动长期记忆监听器（如果之前因缺少 LLM 而跳过）。
+    同时启动长期记忆监听器（start_listening 是幂等的，重复调用安全）。
     """
     app = request.app
 
@@ -68,16 +68,13 @@ async def _maybe_initialize_llm(request: Request) -> None:
         # 仍然没有可用的 provider
         return
 
-    # LLM 刚初始化成功，启动长期记忆监听
+    # LLM 刚初始化成功，启动长期记忆监听（幂等，可重复调用）
     if hasattr(app.state, "ltm") and app.state.ltm is not None:
-        try:
-            app.state.ltm.start_listening(
-                app.state.llm,
-                ws_registry=app.state.ws_registry,
-            )
-            logger.info("[providers] 长期记忆监听器已自动启动")
-        except Exception as e:
-            logger.warning("[providers] 启动长期记忆监听器失败: %s", e)
+        app.state.ltm.start_listening(
+            app.state.llm,
+            ws_registry=app.state.ws_registry,
+        )
+        logger.info("[providers] 长期记忆监听器已自动启动")
 
 
 # ── CRUD ────────────────────────────────────────────────

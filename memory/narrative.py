@@ -1,6 +1,7 @@
 """记忆叙事模块 — 每轮对话后将裸消息送给 LLM，增量更新 memory.yaml。"""
 
 import asyncio
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -12,6 +13,8 @@ from langgraph.prebuilt import create_react_agent
 
 from memory.memory_callback import MemoryToolCallback
 from memory.memory_manager import MAX_DESC_LENGTH, MemoryManager
+
+logger = logging.getLogger(__name__)
 
 
 def _sanitize(text: str) -> str:
@@ -286,17 +289,13 @@ def merge_memories(id1: str, id2: str, content: str, section: str, reason: str) 
 class LongTermMemoryInterface:
     """异步管线：逐轮对话消息 → asyncio.Queue → 后台 LLM 总结 → memory.yaml 写入。
 
-    用法::
-
-        ltm = LongTermMemoryInterface("/path/to/memory.yaml")
-        ltm.start_listening(llm)          # 启动后台消费者
-        await ltm.send_history(messages)  # 投放本轮对话（非阻塞）
-        await ltm.stop_listening()        # 排空队列并停止
+    具备自恢复能力：若后台消费者协程意外退出，下次 send_history 时会自动重启。
     """
 
     def __init__(self, memory_path: str | Path) -> None:
         self._memory_path = Path(memory_path)
         self._mm = MemoryManager(yaml_file=str(self._memory_path))
+        self._llm = None
         self._queue: asyncio.Queue | None = None
         self._consumer_task: asyncio.Task | None = None
         self._ws_registry = None
@@ -314,13 +313,30 @@ class LongTermMemoryInterface:
         return _format_narrative(mm.show())
 
     def start_listening(self, llm, ws_registry=None) -> None:
-        """创建 asyncio.Queue 并启动后台消费者协程。
+        """保存 LLM 引用并确保后台消费者正在运行。
 
-        必须在运行中的事件循环内调用。
+        幂等：若消费者已在运行则不重复创建；若消费者已死则自动重启。
         """
+        self._llm = llm
         self._ws_registry = ws_registry
-        self._queue = asyncio.Queue()
-        self._consumer_task = asyncio.create_task(self._consumer(llm))
+        self._ensure_consumer()
+
+    def _ensure_consumer(self) -> None:
+        """确保后台消费者协程正在运行，若已停止则重启。
+
+        这是自恢复的关键：lifespan 因异常提前进入 shutdown 阶段后，
+        消费者可能已被 stop_listening 终止，但服务器仍在服务请求。
+        当 send_history 被调用时，此方法会重新拉起消费者。
+        """
+        if self._llm is None:
+            return
+        if self.is_listening:
+            return
+        # 消费者未运行（从未启动或已崩溃），重新创建
+        if self._queue is None:
+            self._queue = asyncio.Queue()
+        self._consumer_task = asyncio.create_task(self._consumer(self._llm))
+        logger.info("[ltm] consumer (re)started, task=%s", self._consumer_task.get_name())
 
     async def send_history(
         self,
@@ -330,43 +346,56 @@ class LongTermMemoryInterface:
     ) -> None:
         """生产者：将本轮对话消息放入队列（非阻塞）。
 
-        可附带 session_id 和 turn_id，供后台消费者关联到前端对话轮次。
+        若消费者已停止，会自动重启（自恢复）。
         """
         if not turn_messages:
             return
+        self._ensure_consumer()
         if self._queue is not None:
             await self._queue.put((session_id, turn_id, list(turn_messages)))
-            print(
-                f"[ltm] queue.put session={session_id} turn_id={turn_id} queue_size≈{self._queue.qsize()}"
+            logger.debug(
+                "[ltm] queue.put session=%s turn_id=%s queue_size≈%d",
+                session_id, turn_id, self._queue.qsize(),
             )
         else:
-            print("[ltm] queue is None, dropping history")
+            logger.warning("[ltm] queue is None after _ensure_consumer, dropping history")
 
     async def stop_listening(self) -> None:
-        """发送 None 哨兵并等待消费者排空队列。"""
-        if self._queue is not None:
+        """发送 None 哨兵并等待消费者排空队列。
+
+        幂等：若消费者未运行则直接返回。
+        """
+        if self._queue is None or self._consumer_task is None:
+            return
+        # 只有消费者还在跑时才发哨兵
+        if not self._consumer_task.done():
             await self._queue.put(None)
-            if self._consumer_task is not None:
+            try:
                 await self._consumer_task
-            self._queue = None
-            self._consumer_task = None
+            except Exception as e:
+                logger.warning("[ltm] error waiting for consumer to finish: %s", e)
+        self._queue = None
+        self._consumer_task = None
 
     async def _consumer(self, llm) -> None:
         """后台消费者协程：从队列取消息，调用 CRUD Agent，写入 memory.yaml。"""
+        logger.info("[ltm] _consumer coroutine started")
 
         while True:
             if self._queue is None:
+                logger.warning("[ltm] consumer exiting: queue is None")
                 break
             item = await self._queue.get()
             if item is None:
+                logger.info("[ltm] consumer received sentinel, shutting down")
                 break
             session_id, turn_id, turn_messages = item
-            print(
-                f"[ltm] consumer got session={session_id} turn_id={turn_id} msgs={len(turn_messages)}"
+            logger.info(
+                "[ltm] consumer got session=%s turn_id=%s msgs=%d",
+                session_id, turn_id, len(turn_messages),
             )
 
             # 无论后续成功与否，先通知前端「开始处理」
-            _sent_done = False
             if self._ws_registry is not None and session_id:
                 ws = self._ws_registry.get(session_id)
                 if ws is not None:
@@ -377,8 +406,9 @@ class LongTermMemoryInterface:
                                 "payload": {"turn_id": turn_id or ""},
                             }
                         )
-                        print(
-                            f"[ltm] memory_start sent session={session_id[:8]} turn_id={turn_id[:8]}"
+                        logger.debug(
+                            "[ltm] memory_start sent session=%s turn_id=%s",
+                            session_id[:8], turn_id[:8],
                         )
                     except Exception:
                         pass
@@ -428,8 +458,9 @@ class LongTermMemoryInterface:
                 # 创建回调：推送 CRUD 工具调用到前端对应轮次
                 callbacks: list = []
                 if self._ws_registry is not None and session_id:
-                    print(
-                        f"[ltm] creating MemoryToolCallback session={session_id[:8]} turn_id={turn_id[:8]}"
+                    logger.debug(
+                        "[ltm] creating MemoryToolCallback session=%s turn_id=%s",
+                        session_id[:8], turn_id[:8],
                     )
                     memory_cb = MemoryToolCallback(
                         self._ws_registry,
@@ -437,10 +468,8 @@ class LongTermMemoryInterface:
                         turn_id or "",
                     )
                     callbacks.append(memory_cb)
-                else:
-                    print("[ltm] NO ws_registry or session_id — skip callbacks")
 
-                print("[ltm] invoking CRUD agent...")
+                logger.info("[ltm] invoking CRUD agent...")
                 from langchain_core.runnables import RunnableConfig
                 config: RunnableConfig = {
                     "configurable": {"thread_id": "ltm-consumer"},
@@ -450,11 +479,11 @@ class LongTermMemoryInterface:
                     {"messages": [HumanMessage(content=user_prompt)]},
                     config=config,
                 )
-                print("[ltm] CRUD agent done")
+                logger.info("[ltm] CRUD agent done")
                 invalidate_narrative_cache()
 
             except Exception as e:
-                print(f"[ltm] CRUD agent error: {e}")
+                logger.error("[ltm] CRUD agent error: %s", e, exc_info=True)
             finally:
                 # 无论异常与否，都通知前端本轮记忆处理完成
                 if self._ws_registry is not None and session_id:
@@ -467,14 +496,14 @@ class LongTermMemoryInterface:
                                     "payload": {"turn_id": turn_id or ""},
                                 }
                             )
-                            print(
-                                f"[ltm] memory_done sent session={session_id[:8]} turn_id={turn_id[:8]}"
+                            logger.debug(
+                                "[ltm] memory_done sent session=%s turn_id=%s",
+                                session_id[:8], turn_id[:8],
                             )
                         except Exception as e:
-                            print(f"[ltm] memory_done send error: {e}")
+                            logger.warning("[ltm] memory_done send error: %s", e)
                     else:
-                        print(
-                            f"[ltm] ws_registry.get returned None for session={session_id[:8]}"
+                        logger.warning(
+                            "[ltm] ws_registry.get returned None for session=%s",
+                            session_id[:8],
                         )
-                else:
-                    print("[ltm] NO ws_registry or session_id — skip memory_done")
