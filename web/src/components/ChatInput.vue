@@ -666,7 +666,7 @@ function onResizeEnd(e: PointerEvent) {
   display: inline-block;
 }
 .dropdown-trigger {
-  font-size: 11px;
+  font-size: 0.75em;
   padding: 4px 8px;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -675,11 +675,15 @@ function onResizeEnd(e: PointerEvent) {
   cursor: pointer;
   font-family: inherit;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   transition: all 0.15s;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 4px;
-  max-width: 110px;
+  max-width: 160px;
+  flex-shrink: 1;
+  min-width: 0;
 }
 .dropdown-trigger:hover {
   border-color: var(--border);
@@ -698,14 +702,15 @@ function onResizeEnd(e: PointerEvent) {
   color: var(--text-secondary);
   font-style: italic;
   cursor: default;
-  font-size: 11px;
+  font-size: 0.8em;
   white-space: normal;
   line-height: 1.4;
 }
 .dropdown-arrow {
-  font-size: 8px;
+  font-size: 0.6em;
   line-height: 1;
   opacity: 0.5;
+  flex-shrink: 0;
 }
 .dropdown-menu {
   position: absolute;
@@ -730,7 +735,7 @@ function onResizeEnd(e: PointerEvent) {
   border-radius: 6px;
   background: transparent;
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: 0.85em;
   cursor: pointer;
   font-family: inherit;
   white-space: nowrap;
@@ -763,7 +768,7 @@ function onResizeEnd(e: PointerEvent) {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: 100px;
-  font-size: 11px;
+  font-size: 0.75em;
   color: var(--text-primary);
   max-width: 100%;
   overflow: hidden;
@@ -785,7 +790,7 @@ function onResizeEnd(e: PointerEvent) {
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 0.85em;
   padding: 0 2px;
   line-height: 1;
   transition: color 0.15s;
@@ -794,7 +799,7 @@ function onResizeEnd(e: PointerEvent) {
   color: var(--status-error);
 }
 .file-tag-source {
-  font-size: 9px;
+  font-size: 0.65em;
   color: var(--text-secondary);
   background: color-mix(in srgb, var(--accent) 6%, transparent);
   padding: 1px 6px;
@@ -804,7 +809,7 @@ function onResizeEnd(e: PointerEvent) {
   text-transform: uppercase;
 }
 .file-tag-blocked {
-  font-size: 9px;
+  font-size: 0.65em;
   color: var(--status-error);
   background: #fee2e2;
   padding: 0 5px;
@@ -874,7 +879,7 @@ function onResizeEnd(e: PointerEvent) {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 6px 10px;
-  font-size: 13px;
+  font-size: 0.9em;
   background: var(--bg-primary);
   color: var(--text-primary);
   outline: none;
@@ -899,7 +904,7 @@ function onResizeEnd(e: PointerEvent) {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 0.9em;
   transition: all 0.12s;
   flex-shrink: 0;
 }
@@ -960,8 +965,8 @@ function onResizeEnd(e: PointerEvent) {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 .chat-input:focus-within {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-soft), 0 0 0 1px color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: var(--accent-pink);
+  box-shadow: var(--shadow-soft), 0 0 0 1px var(--accent-pink-soft);
 }
 
 /* 添加文件按钮 */
@@ -1031,7 +1036,7 @@ function onResizeEnd(e: PointerEvent) {
   border: none;
   background: transparent;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 0.9em;
   cursor: pointer;
   text-align: left;
   font-family: inherit;
@@ -1047,7 +1052,7 @@ function onResizeEnd(e: PointerEvent) {
   border: none;
   outline: none;
   background: transparent;
-  font-size: 15px;
+  font-size: 1em;
   line-height: 1.6;
   color: var(--text-primary);
   resize: none;
@@ -1094,7 +1099,7 @@ function onResizeEnd(e: PointerEvent) {
   height: 34px;
   border: none;
   border-radius: 50%;
-  font-size: 15px;
+  font-size: 1em;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
   font-family: inherit;
@@ -1108,9 +1113,9 @@ function onResizeEnd(e: PointerEvent) {
   color: #fff;
 }
 .btn-send:hover:not(:disabled) {
-  background: #1d4ed8;
+  background: var(--accent-pink);
   transform: scale(1.08);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  box-shadow: var(--shadow-pink);
 }
 .btn-send:active:not(:disabled) {
   transform: scale(0.95);
@@ -1122,7 +1127,7 @@ function onResizeEnd(e: PointerEvent) {
 .btn-stop {
   background: #ef4444;
   color: #fff;
-  font-size: 12px;
+  font-size: 0.8em;
 }
 .btn-stop:hover {
   background: #dc2626;

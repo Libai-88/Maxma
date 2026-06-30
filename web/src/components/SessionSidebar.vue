@@ -515,7 +515,7 @@ function confirmDelete() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: 0.75em;
   font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
@@ -557,7 +557,7 @@ function confirmDelete() {
 
 /* ── Section label ── */
 .section-label {
-  font-size: 10px;
+  font-size: 0.7em;
   font-weight: 600;
   color: var(--text-tertiary, #9ca3af);
   text-transform: uppercase;
@@ -566,7 +566,7 @@ function confirmDelete() {
 }
 
 .section-hint {
-  font-size: 11px;
+  font-size: 0.75em;
   color: var(--text-tertiary, #9ca3af);
   padding: 6px 12px 8px;
   line-height: 1.4;
@@ -613,7 +613,7 @@ function confirmDelete() {
   max-height: 80px;
 }
 .session-id {
-  font-size: 13px;
+  font-size: 0.9em;
   font-weight: 500;
   color: var(--text-primary);
   display: flex;
@@ -629,7 +629,7 @@ function confirmDelete() {
   display: inline-block;
   margin-left: 4px;
   padding: 0 4px;
-  font-size: 9px;
+  font-size: 0.65em;
   font-weight: 600;
   color: var(--text-secondary);
   background: var(--bg-secondary);
@@ -638,7 +638,7 @@ function confirmDelete() {
   vertical-align: middle;
 }
 .session-count {
-  font-size: 11px;
+  font-size: 0.75em;
   color: var(--text-secondary);
 }
 .btn-delete {
@@ -662,7 +662,7 @@ function confirmDelete() {
   color: var(--status-error);
 }
 .no-sessions {
-  font-size: 12px;
+  font-size: 0.8em;
   color: var(--text-secondary);
   padding: 8px;
   transition: opacity 0.2s ease 0.05s;
@@ -710,7 +710,7 @@ function confirmDelete() {
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: var(--shadow-lg);
-  font-size: 12px;
+  font-size: 0.8em;
   line-height: 1.6;
   white-space: nowrap;
 }
@@ -818,7 +818,7 @@ function confirmDelete() {
 }
 
 .constify-card-title {
-  font-size: 14px;
+  font-size: 0.95em;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -832,7 +832,7 @@ function confirmDelete() {
 .constify-input {
   flex: 1;
   padding: 8px 12px;
-  font-size: 13px;
+  font-size: 0.9em;
   font-family: inherit;
   color: var(--text-primary);
   background: var(--bg-primary);
@@ -892,7 +892,7 @@ function confirmDelete() {
 
 .constify-btn {
   padding: 6px 16px;
-  font-size: 13px;
+  font-size: 0.9em;
   font-family: inherit;
   border: none;
   border-radius: 6px;
@@ -961,14 +961,14 @@ function confirmDelete() {
 }
 
 .delete-confirm-title {
-  font-size: 16px;
+  font-size: 1.1em;
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 12px;
 }
 
 .delete-confirm-message {
-  font-size: 14px;
+  font-size: 0.95em;
   color: var(--text-secondary);
   line-height: 1.5;
   margin-bottom: 20px;
@@ -987,7 +987,7 @@ function confirmDelete() {
 
 .delete-confirm-btn {
   padding: 8px 18px;
-  font-size: 14px;
+  font-size: 0.95em;
   font-family: inherit;
   border: none;
   border-radius: 6px;

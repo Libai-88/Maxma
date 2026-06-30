@@ -82,14 +82,21 @@
       <!-- 错误提示 -->
       <div v-if="error" class="error-banner" :class="'error-' + (errorCategory || 'system')">
         <span class="error-icon">
-          <template v-if="errorCategory === 'user_error'">⚠️</template>
-          <template v-else-if="errorCategory === 'tool_error'">🔧</template>
-          <template v-else-if="errorCategory === 'rate_limit'">⏳</template>
+          <template v-if="errorCategory === 'user_error'">️</template>
+          <template v-else-if="errorCategory === 'tool_error'"></template>
+          <template v-else-if="errorCategory === 'rate_limit'"></template>
           <template v-else-if="errorCategory === 'cancelled'">⛔</template>
           <template v-else>❌</template>
         </span>
         <span class="error-message">{{ error }}</span>
         <span v-if="errorTraceId" class="error-trace-id">Trace: {{ errorTraceId }}</span>
+      </div>
+
+      <!-- 流式输出打字指示器 -->
+      <div v-if="currentTurn && isStreamingTurn(currentTurn)" class="typing-indicator">
+        <span class="typing-dot"></span>
+        <span class="typing-dot"></span>
+        <span class="typing-dot"></span>
       </div>
 
       <!-- 空状态 -->
@@ -98,7 +105,7 @@
           <div class="empty-state-text">
             <p class="empty-title">MaxmaHere<svg viewBox="0 0 64 64" fill="currentColor" style="width:32px;height:32px;flex-shrink:0"><path d="M21.956,48.12,21.18,52H20a1,1,0,0,0-1,1v3a1,1,0,0,0,0,2v3a1,1,0,0,0,1,1H44a1,1,0,0,0,1-1V58a1,1,0,0,0,0-2V53a1,1,0,0,0-1-1H42.82l-.776-3.88A19.007,19.007,0,0,0,50.064,26.1a1,1,0,1,0-1.9.621,17.027,17.027,0,0,1-7.829,20.1.973.973,0,0,0-.208.18H33V43.916A6.95,6.95,0,0,0,39,37V32.708A1,1,0,0,0,37.293,32l-2.648,2.648a.378.378,0,0,1-.605-.1.382.382,0,0,1-.04-.169V28.708a1,1,0,0,0-1.581-.813L28.1,30.981A7.412,7.412,0,0,0,25,37a7.006,7.006,0,0,0,.4,2.339,1,1,0,0,0,1.885-.668A5,5,0,0,1,27,37a5.41,5.41,0,0,1,2.26-4.392L32,30.651v3.732a2.378,2.378,0,0,0,4.059,1.681L37,35.123V37a4.961,4.961,0,0,1-4,4.891V39a1,1,0,0,0-2,0v2.891a4.932,4.932,0,0,1-1.235-.418,4.992,4.992,0,0,1-.824-.518,1,1,0,0,0-1.224,1.582A6.851,6.851,0,0,0,31,43.916V47H23.873a.973.973,0,0,0-.208-.18A17,17,0,0,1,22.36,18H41.63a17.016,17.016,0,0,1,4.2,4.114,1,1,0,0,0,1.627-1.164A19,19,0,0,0,43,16.527V12a1,1,0,0,0-.445-.832l-3-2A1.006,1.006,0,0,0,39,9H37V7A5,5,0,0,0,27,7V9H25a1.006,1.006,0,0,0-.555.168l-3,2A1,1,0,0,0,21,12v4.517a18.984,18.984,0,0,0,.956,31.6ZM40.181,49l.6,3H31a1,1,0,0,0,0,2H43v2H31a1,1,0,0,0,0,2H43v2H21V58h2a1,1,0,0,0,0-2H21V54h5a1,1,0,0,0,0-2H23.22l.6-3ZM29,7a3,3,0,0,1,6,0V9H29Zm-6,5.535L25.3,11H38.7L41,12.535V16H23Z"/></svg></p>
             <p class="empty-desc">
-              Built for <span class="typewriter">{{ displayedWord }}<span class="typewriter-cursor">|</span></span>
+              <span class="typewriter">{{ displayedWord }}<span class="typewriter-cursor">|</span></span>
             </p>
           </div>
           <div class="quick-hints" data-qh>
@@ -235,8 +242,19 @@ watch(
   }
 )
 
-// ── Typewriter: Built for Dream/Answer/Chatting/You ──
-const words = ['Dreaming', 'Answers', 'Chatting', 'Creating', 'Connection', 'Building', 'Tinkering', 'Exploration', 'Heart', 'Logic', 'Empathy', 'You', 'Caring', 'Listening']
+// ── Typewriter: 调皮互动文案轮播 ──
+const words = [
+  '想我了没宝宝',
+  '我厉害不',
+  '今天想聊什么呀',
+  '快夸我快夸我',
+  '你是不是又想我了',
+  '来找我玩啦',
+  '等你好久啦',
+  '有什么好玩的事吗',
+  '小猪猪在干嘛呢',
+  '嘿嘿嘿'
+]
 const displayedWord = ref(words[0])
 let wordIndex = 0
 let charIndex = words[0].length
@@ -435,14 +453,16 @@ function closeContextMenu() {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 42px;
+  font-size: 2.8em;
   font-weight: 700;
+  font-family: var(--font-display);
   letter-spacing: -0.5px;
   color: var(--accent);
 }
 .empty-desc {
-  font-size: 20px;
-  color: var(--text-secondary);
+  font-size: 1.3em;
+  color: var(--accent-pink);
+  font-weight: 500;
 }
 .typewriter {
   display: inline-block;
@@ -474,7 +494,7 @@ function closeContextMenu() {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: 0.9em;
   color: var(--text-secondary);
   line-height: 1.5;
   cursor: default;
@@ -487,7 +507,7 @@ function closeContextMenu() {
   min-width: 22px;
   height: 22px;
   padding: 0 5px;
-  font-size: 11px;
+  font-size: 0.75em;
   font-family: inherit;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
@@ -514,18 +534,18 @@ function closeContextMenu() {
   gap: 10px;
   padding: 10px 16px;
   border-radius: var(--radius);
-  font-size: 13px;
+  font-size: 0.9em;
   margin: 8px 0;
 }
 .error-icon {
   flex-shrink: 0;
-  font-size: 16px;
+  font-size: 1em;
 }
 .error-message {
   flex: 1;
 }
 .error-trace-id {
-  font-size: 11px;
+  font-size: 0.75em;
   opacity: 0.7;
   font-family: monospace;
 }
@@ -636,7 +656,7 @@ function closeContextMenu() {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 11px;
+  font-size: 0.75em;
   color: var(--text-secondary);
   line-height: 1.4;
   opacity: 0.7;
@@ -705,6 +725,42 @@ function closeContextMenu() {
 .memory-tool-elapsed {
   font-variant-numeric: tabular-nums;
   opacity: 0.6;
-  font-size: 10px;
+  font-size: 0.7em;
+}
+
+/* ── 流式输出打字指示器 ── */
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 16px;
+  margin: 8px 0;
+}
+
+.typing-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-pink);
+  animation: typingBounce 1.4s infinite ease-in-out both;
+}
+
+.typing-dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes typingBounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 </style>

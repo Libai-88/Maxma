@@ -189,7 +189,7 @@ async function handleUndo() {
   border-radius: 6px;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 0.8em;
   cursor: pointer;
   transition: all 0.15s;
   user-select: none;
@@ -230,7 +230,7 @@ async function handleUndo() {
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: var(--shadow-lg);
-  font-size: 12px;
+  font-size: 0.8em;
   line-height: 1.6;
 }
 .private-trigger:hover .hover-card {
@@ -266,7 +266,7 @@ async function handleUndo() {
   transform: translateY(0);
 }
 .private-desc {
-  font-size: 12px;
+  font-size: 0.8em;
   color: var(--text-secondary);
   line-height: 1.6;
   white-space: normal;
@@ -304,7 +304,7 @@ async function handleUndo() {
   margin: 4px 0;
 }
 .auto-approve-desc {
-  font-size: 12px;
+  font-size: 0.8em;
   color: var(--text-secondary);
   line-height: 1.6;
   white-space: normal;
@@ -319,7 +319,7 @@ async function handleUndo() {
   background: var(--bg-secondary);
 }
 .sub-agent-readonly-text {
-  font-size: 12px;
+  font-size: 0.8em;
   color: var(--text-secondary);
 }
 
@@ -345,13 +345,13 @@ async function handleUndo() {
   margin-bottom: 16px;
 }
 .no-provider-card h3 {
-  font-size: 18px;
+  font-size: 1.2em;
   font-weight: 700;
   margin: 0 0 8px;
   color: var(--text-primary);
 }
 .no-provider-card p {
-  font-size: 14px;
+  font-size: 0.95em;
   color: var(--text-secondary);
   line-height: 1.6;
   margin: 0 0 24px;
@@ -363,7 +363,7 @@ async function handleUndo() {
   color: #fff;
   border-radius: 8px;
   text-decoration: none;
-  font-size: 14px;
+  font-size: 0.95em;
   font-weight: 600;
   transition: opacity 0.15s;
 }

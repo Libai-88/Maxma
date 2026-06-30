@@ -329,14 +329,18 @@ class LongTermMemoryInterface:
         当 send_history 被调用时，此方法会重新拉起消费者。
         """
         if self._llm is None:
+            logger.warning("[ltm] _ensure_consumer: _llm is None, cannot start consumer")
             return
         if self.is_listening:
             return
         # 消费者未运行（从未启动或已崩溃），重新创建
-        if self._queue is None:
-            self._queue = asyncio.Queue()
-        self._consumer_task = asyncio.create_task(self._consumer(self._llm))
-        logger.info("[ltm] consumer (re)started, task=%s", self._consumer_task.get_name())
+        try:
+            if self._queue is None:
+                self._queue = asyncio.Queue()
+            self._consumer_task = asyncio.create_task(self._consumer(self._llm))
+            logger.info("[ltm] consumer (re)started, task=%s", self._consumer_task.get_name())
+        except Exception as e:
+            logger.error("[ltm] _ensure_consumer failed: %s", e, exc_info=True)
 
     async def send_history(
         self,

@@ -405,14 +405,16 @@ async def _run_agent_turn(
                 {"role": "user", "content": user_message},
                 {"role": "assistant", "content": final_answer},
             ]
-        await app_state.ltm.send_history(
-            messages_for_memory,
-            session_id=session.session_id,
-            turn_id=turn_id,
-        )
-        print(
-            f"[ltm] send_history enqueued session={session.session_id[:8]} turn_id={turn_id[:8]}"
-        )
+        logger.info("[ltm] calling send_history, messages=%d", len(messages_for_memory))
+        try:
+            await app_state.ltm.send_history(
+                messages_for_memory,
+                session_id=session.session_id,
+                turn_id=turn_id,
+            )
+            logger.info("[ltm] send_history completed")
+        except Exception as e:
+            logger.error("[ltm] send_history failed: %s", e, exc_info=True)
 
     # 4. [Const 会话] 自动持久化到磁盘 YAML
     if final_answer and session.is_const:
