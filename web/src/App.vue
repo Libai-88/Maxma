@@ -184,6 +184,9 @@ onMounted(() => {
   --text-tertiary: #9ca3af;
   --accent: #000000;
   --accent-light: #b9b9b9;
+  --accent-pink: #FF6B9D;
+  --accent-pink-light: #FF8FAB;
+  --accent-pink-soft: rgba(255, 107, 157, 0.1);
   --border: #e5e7eb;
   --user-bubble: #ffffff;
   --status-ok: #000000;
@@ -196,7 +199,11 @@ onMounted(() => {
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);   /* 气泡、通用卡片 */
   --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);  /* 下拉菜单、浮层 */
   --shadow-xl: 0 6px 28px rgba(0, 0, 0, 0.18);  /* 模态弹窗、重型浮层 */
+  --shadow-pink: 0 4px 16px rgba(255, 107, 157, 0.3);  /* 粉色光晕 */
   --radius: 10px;
+  --font-display: 'ZCOOL KuaiLe', 'Comic Sans MS', cursive;
+  --font-body: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
 }
 
 ::selection {
@@ -226,9 +233,9 @@ onMounted(() => {
 
 html, body {
   height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
-    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  font-size: 15px;
+  font-family: var(--font-body);
+  /* 响应式字体：15px 基准，随视口宽度自适应缩放（1920px≈16px, 2560px≈18px） */
+  font-size: clamp(15px, 14px + 0.2vw, 18px);
   color: var(--text-primary);
   background: var(--bg-primary);
 }
@@ -266,6 +273,7 @@ html, body {
 .logo {
   font-size: 18px;
   font-weight: 700;
+  font-family: var(--font-display);
   color: var(--accent);
   letter-spacing: -0.3px;
 }
@@ -284,7 +292,7 @@ html, body {
   border-radius: var(--radius);
   color: var(--text-secondary);
   text-decoration: none;
-  font-size: 14px;
+  font-size: 0.9em;
   transition: background 0.15s, color 0.15s;
 }
 
@@ -311,7 +319,7 @@ html, body {
   border-top: 1px solid var(--border);
   padding-top: 12px;
   border-radius: 0;
-  font-size: 12px;
+  font-size: 0.8em;
   color: var(--text-secondary);
   opacity: 0.7;
 }
@@ -330,7 +338,7 @@ html, body {
   border: none;
   cursor: pointer;
   font-family: inherit;
-  font-size: 14px;
+  font-size: 0.9em;
   background: transparent;
 }
 
@@ -360,7 +368,7 @@ html, body {
 
 .popup-header {
   padding: 8px 12px 6px;
-  font-size: 11px;
+  font-size: 0.75em;
   font-weight: 600;
   color: var(--text-tertiary);
   text-transform: uppercase;
@@ -375,7 +383,7 @@ html, body {
   border-radius: 6px;
   color: var(--text-secondary);
   text-decoration: none;
-  font-size: 14px;
+  font-size: 0.9em;
   transition: background 0.15s, color 0.15s;
 }
 
@@ -401,7 +409,7 @@ html, body {
   border: none;
   cursor: pointer;
   font-family: inherit;
-  font-size: 14px;
+  font-size: 0.9em;
   background: transparent;
   color: #dc2626;
 }
@@ -537,7 +545,7 @@ html, body {
 
 /* ── Shared markdown rendered content ── */
 .markdown-body {
-  font-size: 16px;
+  font-size: 1.05em; /* 相对于父元素（消息气泡）的字体大小 */
   line-height: 1.6;
   color: var(--text-primary);
   word-break: break-word;
@@ -597,7 +605,7 @@ html, body {
   background: none;
   padding: 0;
   border-radius: 0;
-  font-size: 13px;
+  font-size: 0.85em;
 }
 
 .markdown-body blockquote {

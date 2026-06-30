@@ -60,6 +60,7 @@ watch(() => props.content, () => {
 .message-row {
   display: flex;
   padding: 4px 0;
+  animation: messageSlideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .message-row.user {
   justify-content: flex-end;
@@ -67,11 +68,23 @@ watch(() => props.content, () => {
 .message-row.assistant {
   justify-content: flex-start;
 }
+
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .bubble {
   max-width: 72%;
   padding: 10px 16px;
   border-radius: 14px;
-  font-size: 16px;
+  font-size: 1em;
   line-height: 1.6;
   word-break: break-word;
   box-shadow: var(--shadow);
@@ -114,7 +127,7 @@ watch(() => props.content, () => {
   display: block;
   margin: 6px auto 0;
   padding: 2px 16px;
-  font-size: 12px;
+  font-size: 0.8em;
   color: var(--text-secondary);
   background: transparent;
   border: 1px solid var(--border);
