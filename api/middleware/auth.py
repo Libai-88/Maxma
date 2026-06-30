@@ -70,7 +70,7 @@ class AuthMiddleware:
         # 通用：X-Maxma-Token 自定义头
         token_bytes = headers.get(b"x-maxma-token", b"")
         if token_bytes:
-            return token_bytes.decode()
+            return str(token_bytes.decode())
 
         # WebSocket 专用：从 ASGI scope 的 subprotocols 字段提取
         # ASGI server 在握手时自动解析 Sec-WebSocket-Protocol 头部，
@@ -78,7 +78,7 @@ class AuthMiddleware:
         if scope["type"] == "websocket":
             protocols = scope.get("subprotocols", [])
             if protocols:
-                return protocols[0]
+                return str(protocols[0])
 
         return ""
 

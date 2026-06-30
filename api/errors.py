@@ -53,7 +53,7 @@ class AppError:
 
     def to_dict(self) -> dict:
         """转换为前端可用的字典格式。"""
-        result = {
+        result: dict = {
             "code": self.code.value if isinstance(self.code, ErrorCode) else self.code,
             "message": self.message,
             "category": self.category,

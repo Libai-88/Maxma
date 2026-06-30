@@ -58,11 +58,22 @@ class WebSocketCallback(BaseCallbackHandler):
             }
         )
 
-    async def on_llm_new_token(self, token: str, **kwargs: Any) -> None:
+    async def on_llm_new_token(
+        self,
+        token: str | list[str | dict[str, Any]],
+        *,
+        chunk: Any | None = None,
+        run_id: Any = None,
+        parent_run_id: Any | None = None,
+        tags: list[str] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        # token may be str or list; normalize to str for WebSocket payload
+        token_str = token if isinstance(token, str) else str(token)
         await self._ws.send_json(
             {
                 "type": "token",
-                "payload": {"token": token},
+                "payload": {"token": token_str},
             }
         )
 

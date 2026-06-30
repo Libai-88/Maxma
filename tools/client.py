@@ -85,7 +85,7 @@ class SharedAPIClient:
             timeout=timeout,
         )
         resp.raise_for_status()
-        return resp.json()
+        return dict(resp.json())
 
     def http_get(self, url: str, **kwargs) -> requests.Response:
         """通用 GET 请求，自动注入超时和重试。"""

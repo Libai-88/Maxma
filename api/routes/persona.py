@@ -36,8 +36,10 @@ async def get_persona(type: str = Query(..., description="soul 或 user")):
 @router.put("/persona", response_model=PersonaResponse)
 async def update_persona(
     type: str = Query(..., description="soul 或 user"),
-    body: PersonaUpdateRequest = None,
+    body: PersonaUpdateRequest | None = None,
 ):
+    if body is None:
+        raise HTTPException(status_code=400, detail="请求体不能为空")
     t = type.lower()
     if t not in VALID_TYPES:
         raise HTTPException(

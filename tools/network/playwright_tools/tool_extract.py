@@ -1,5 +1,7 @@
 """Tool: browser_extract — 使用 Playwright 通过 CSS 选择器或 JS 提取结构化数据。"""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from tools.base import ToolBase, format_success, format_error
@@ -21,7 +23,7 @@ class BrowserExtractInput(BaseModel):
         default=None,
         description="可选 JS 表达式，在页面中执行并返回结果（优先级高于 selectors）",
     )
-    wait_until: str = Field(
+    wait_until: Literal["load", "domcontentloaded", "networkidle", "commit"] = Field(
         default="load",
         description="等待策略: load / domcontentloaded / networkidle / commit",
     )
@@ -44,7 +46,7 @@ class BrowserExtractTool(ToolBase):
         selectors: list[str] | None = None,
         attributes: list[str] | None = None,
         javascript: str | None = None,
-        wait_until: str = "load",
+        wait_until: Literal["load", "domcontentloaded", "networkidle", "commit"] = "load",
         timeout: int = 30,
     ) -> str:
         if get_doc:
@@ -77,7 +79,7 @@ class BrowserExtractTool(ToolBase):
 
             # CSS 选择器模式
             elif selectors:
-                selector_results = {}
+                selector_results: dict[str, list | dict] = {}
                 attrs = attributes or []
 
                 for selector in selectors:

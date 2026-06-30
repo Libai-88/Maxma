@@ -346,7 +346,8 @@ class LongTermMemoryInterface:
         """发送 None 哨兵并等待消费者排空队列。"""
         if self._queue is not None:
             await self._queue.put(None)
-            await self._consumer_task
+            if self._consumer_task is not None:
+                await self._consumer_task
             self._queue = None
             self._consumer_task = None
 
@@ -354,6 +355,8 @@ class LongTermMemoryInterface:
         """后台消费者协程：从队列取消息，调用 CRUD Agent，写入 memory.yaml。"""
 
         while True:
+            if self._queue is None:
+                break
             item = await self._queue.get()
             if item is None:
                 break
@@ -423,7 +426,7 @@ class LongTermMemoryInterface:
                 )
 
                 # 创建回调：推送 CRUD 工具调用到前端对应轮次
-                callbacks = []
+                callbacks: list = []
                 if self._ws_registry is not None and session_id:
                     print(
                         f"[ltm] creating MemoryToolCallback session={session_id[:8]} turn_id={turn_id[:8]}"
@@ -438,12 +441,14 @@ class LongTermMemoryInterface:
                     print("[ltm] NO ws_registry or session_id — skip callbacks")
 
                 print("[ltm] invoking CRUD agent...")
+                from langchain_core.runnables import RunnableConfig
+                config: RunnableConfig = {
+                    "configurable": {"thread_id": "ltm-consumer"},
+                    "callbacks": callbacks,
+                }
                 await agent.ainvoke(
                     {"messages": [HumanMessage(content=user_prompt)]},
-                    config={
-                        "configurable": {"thread_id": "ltm-consumer"},
-                        "callbacks": callbacks,
-                    },
+                    config=config,
                 )
                 print("[ltm] CRUD agent done")
                 invalidate_narrative_cache()

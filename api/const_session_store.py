@@ -44,7 +44,7 @@ def deserialize_messages(data: list[dict]) -> list:
     """将纯 dict 列表重建为 LangChain BaseMessage 对象。"""
     from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-    reconstructed = []
+    reconstructed: list = []
     for m in data:
         msg_type = m.get("type", "human")
         content = m.get("content", "")
@@ -104,7 +104,8 @@ def load_const_session(filepath: Path) -> dict | None:
     """加载单个 const 会话 YAML 文件。"""
     try:
         with open(filepath, encoding="utf-8") as f:
-            return yaml.safe_load(f)
+            data = yaml.safe_load(f)
+            return data if isinstance(data, dict) else None
     except Exception:
         return None
 

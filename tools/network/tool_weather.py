@@ -167,7 +167,7 @@ class WeatherTool(ToolBase):
             return self._load_doc()
 
         try:
-            result = self.client.uapi.misc.get_misc_weather(
+            result = self._client.uapi.misc.get_misc_weather(
                 city=city,
                 adcode=adcode,
                 extended=extended,

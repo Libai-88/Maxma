@@ -7,6 +7,7 @@ import sys
 import traceback
 
 from pydantic import BaseModel, Field
+from langchain_core.runnables import RunnableConfig
 
 from api import interaction
 from tools.base import ToolBase, format_success, format_error
@@ -194,7 +195,7 @@ class CallSubAgentTool(ToolBase):
             checkpointer=sub.checkpointer,
         )
         inputs = {"messages": [HumanMessage(content=task)]}
-        config = {"configurable": {"thread_id": sub.session_id}, "recursion_limit": 72}
+        config: RunnableConfig = {"configurable": {"thread_id": sub.session_id}, "recursion_limit": 72}
 
         final_answer = ""
         try:
@@ -205,7 +206,7 @@ class CallSubAgentTool(ToolBase):
                     event.get("event") == "on_chain_end"
                     and event.get("name") == "agent"
                 ):
-                    output = event["data"].get("output", {})
+                    output: dict = event["data"].get("output", {})
                     messages = output.get("messages", [])
                     if messages:
                         last = messages[-1]

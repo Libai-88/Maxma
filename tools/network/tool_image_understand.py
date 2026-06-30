@@ -104,11 +104,12 @@ class ImageUnderstandTool(ToolBase):
                     }
                 ],
                 thinking={"type": "enabled"},
+                stream=False,
             )
 
             return format_success(
                 {
-                    "response": response.choices[0].message.content,
+                    "response": response.choices[0].message.content,  # type: ignore[union-attr]
                 }
             )
         except Exception as e:

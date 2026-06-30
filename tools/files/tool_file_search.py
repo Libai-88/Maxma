@@ -88,7 +88,7 @@ class FileSearchTool(ToolBase):
                 "size": st.st_size if os.path.isfile(item_path) else 0,
             })
 
-        items.sort(key=lambda x: (not x["is_dir"], x["name"].lower()))
+        items.sort(key=lambda x: (not x["is_dir"], str(x["name"]).lower()))
 
         return format_success({
             "directory": os.path.abspath(directory_path),
@@ -145,7 +145,7 @@ class FileSearchTool(ToolBase):
                 "size": st.st_size if os.path.isfile(fp) else 0,
             })
 
-        found.sort(key=lambda x: x["path"].lower())
+        found.sort(key=lambda x: str(x["path"]).lower())
         return format_success({
             "search_pattern": pattern,
             "search_directory": os.path.abspath(directory),

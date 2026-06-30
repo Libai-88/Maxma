@@ -1,6 +1,7 @@
 """FastAPI 应用工厂 — 生命周期管理、CORS、路由挂载。"""
 
 import asyncio
+import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -16,6 +17,7 @@ from api.const_session_store import (
 )
 from api.dependencies import get_llm, get_system_prompt, get_tools
 from api.health import get_health_report
+from api.logging_config import setup_logging
 from api.providers.manager import ProviderManager
 from api.providers.store import ProviderConfigStore
 from api.routes import chat, files, memory, sessions, balance, providers
@@ -29,6 +31,7 @@ from api.routes import restart as restart_router
 from api.routes import env_vars as env_vars_router
 from api.routes import tool_stats as tool_stats_router
 from api.routes import upload as upload_router
+from api.routes import metrics as metrics_router
 from api.session_manager import SessionManager, SessionState
 from api.ws_registry import WebSocketRegistry
 from agent.graph import build_agent
@@ -37,6 +40,9 @@ from tools.mcp import init_mcp_tools, close_mcp
 from version import __version__
 
 from api.middleware.auth import AuthMiddleware
+from api.middleware.request_log import RequestLogMiddleware
+
+logger = logging.getLogger(__name__)
 
 
 async def _load_const_sessions(app: FastAPI):
@@ -47,7 +53,7 @@ async def _load_const_sessions(app: FastAPI):
         return
 
     if app.state.llm is None:
-        print(f"[const] Skipping {len(const_list)} const session(s) — no LLM available")
+        logger.warning("[const] Skipping %d const session(s) — no LLM available", len(const_list))
         return
 
     from langgraph.checkpoint.memory import MemorySaver
@@ -78,7 +84,7 @@ async def _load_const_sessions(app: FastAPI):
                     {"messages": reconstructed},
                 )
         except Exception as e:
-            print(f"[const] 重建会话 {sid} 失败: {e}")
+            logger.warning("[const] 重建会话 %s 失败: %s", sid, e)
             continue
 
         session = SessionState(
@@ -93,7 +99,7 @@ async def _load_const_sessions(app: FastAPI):
         sm._sessions[sid] = session
         loaded += 1
 
-    print(f"[const] 已加载 {loaded}/{len(const_list)} 个固定会话")
+    logger.info("[const] 已加载 %d/%d 个固定会话", loaded, len(const_list))
 
 
 @asynccontextmanager
@@ -103,20 +109,18 @@ async def lifespan(app: FastAPI):
     if provider_store.is_empty:
         migrated = provider_store.migrate_from_env()
         if migrated:
-            print(f"[provider] migrated {migrated.label} from .env → providers.yaml")
+            logger.info("[provider] migrated %s from .env → providers.yaml", migrated.label)
     provider_manager = ProviderManager(provider_store)
     provider_manager.load_all()
     app.state.provider_manager = provider_manager
-    print(f"[provider] loaded {provider_manager.count} provider(s)")
+    logger.info("[provider] loaded %d provider(s)", provider_manager.count)
 
     # 2. 其他共享资源（LLM 统一从 ProviderManager 获取）
     try:
         app.state.llm = get_llm(provider_manager)
     except RuntimeError as e:
-        print(f"[llm] {e}")
-        print(
-            "[llm] No LLM configured — chat will be read-only until a provider is added"
-        )
+        logger.warning("[llm] %s", e)
+        logger.warning("[llm] No LLM configured — chat will be read-only until a provider is added")
         app.state.llm = None
     app.state.system_prompt = get_system_prompt()
     app.state.native_tools = get_tools()
@@ -126,7 +130,7 @@ async def lifespan(app: FastAPI):
     if app.state.llm is not None:
         app.state.ltm.start_listening(app.state.llm, ws_registry=app.state.ws_registry)
     else:
-        print("[ltm] Skipped (no LLM available)")
+        logger.info("[ltm] Skipped (no LLM available)")
 
     # 从 YAML 配置加载 MCP 工具
     app.state.mcp_tools = await init_mcp_tools()
@@ -142,13 +146,16 @@ async def lifespan(app: FastAPI):
             sm = app.state.session_manager
             removed = sm.cleanup_expired()
             if removed:
-                print(f"[session] cleanup: removed {removed} expired session(s), {len(sm._sessions)} remaining")
+                logger.info(
+                    "[session] cleanup: removed %d expired session(s), %d remaining",
+                    removed, len(sm._sessions),
+                )
 
     app.state._cleanup_task = asyncio.create_task(_periodic_cleanup())
 
     # 5. 初始化认证 Token
     app.state.auth_token = load_or_create_token()
-    print(f"[auth] token: {app.state.auth_token}")
+    logger.info("[auth] token: %s...%s", app.state.auth_token[:4], app.state.auth_token[-4:])
 
     yield
 
@@ -237,6 +244,9 @@ def create_app() -> FastAPI:
     # 文件上传
     app.include_router(upload_router.router, prefix="/api")
 
+    # 运行时指标
+    app.include_router(metrics_router.router, prefix="/api")
+
     # 健康检查
     @app.get("/api/health")
     async def health():
@@ -244,5 +254,8 @@ def create_app() -> FastAPI:
 
     # 认证中间件（在路由之后添加，确保只拦截 API/WS 路径）
     app.add_middleware(AuthMiddleware)
+
+    # 请求日志中间件（在认证之前，记录所有请求）
+    app.add_middleware(RequestLogMiddleware)
 
     return app

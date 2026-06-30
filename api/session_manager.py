@@ -94,7 +94,7 @@ class SessionManager:
                     "const_name": s.const_name,
                 }
             )
-        result.sort(key=lambda x: x["last_active"], reverse=True)
+        result.sort(key=lambda x: x["last_active"] if isinstance(x["last_active"], (int, float)) else 0.0, reverse=True)
         return result
 
     def cleanup_expired(self) -> int:

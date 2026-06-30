@@ -60,7 +60,7 @@ class NearbySearchTool(ToolBase):
             if types:
                 params["types"] = types
 
-            data = self.client.amap_request("/v3/place/around", params)
+            data = self._client.amap_request("/v3/place/around", params)
             result = parse_poi_response(data)
 
             if result["status"] == "1":
