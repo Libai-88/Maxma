@@ -129,6 +129,7 @@ async def lifespan(app: FastAPI):
     app.state.ltm = LongTermMemoryInterface(MEMORY_PATH)
     if app.state.llm is not None:
         app.state.ltm.start_listening(app.state.llm, ws_registry=app.state.ws_registry)
+        logger.info("[ltm] 长期记忆监听器已启动")
     else:
         logger.info("[ltm] Skipped (no LLM available)")
 
