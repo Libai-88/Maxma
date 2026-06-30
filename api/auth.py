@@ -13,7 +13,7 @@ def load_or_create_token() -> str:
     if AUTH_TOKEN_PATH.exists():
         data = yaml.safe_load(AUTH_TOKEN_PATH.read_text(encoding="utf-8"))
         if data and "token" in data:
-            return data["token"]
+            return str(data["token"])
 
     token = secrets.token_urlsafe(32)
     AUTH_TOKEN_PATH.write_text(

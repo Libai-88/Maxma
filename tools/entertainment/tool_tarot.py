@@ -374,13 +374,16 @@ class TarotTool(ToolBase):
         deck = TAROT_DECK.copy()
         random.shuffle(deck)
 
+        positions: int = int(str(spread["positions"]))
+        descriptions: list[str] = list(spread["descriptions"]) if isinstance(spread["descriptions"], list) else []
+
         cards = []
-        for i in range(spread["positions"]):
+        for i in range(positions):
             card = deck[i].copy()
             card["is_reversed"] = random.random() < 0.15
             pos = (
-                spread["descriptions"][i]
-                if i < len(spread["descriptions"])
+                descriptions[i]
+                if i < len(descriptions)
                 else f"位置{i + 1}"
             )
             meanings = card["reversed"] if card["is_reversed"] else card["upright"]

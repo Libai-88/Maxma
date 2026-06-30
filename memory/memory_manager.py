@@ -16,11 +16,11 @@ def NOW() -> str:
 
 
 class MemoryItem:
-    def __init__(self, description, theme, **kwargs):
-        self.description = description
-        self.theme = theme
-        self.history = kwargs.get("history", [])
-        self.latest_update_time = kwargs.get("latest_update_time", NOW())
+    def __init__(self, description: str, theme: str, **kwargs):
+        self.description: str = description
+        self.theme: str = theme
+        self.history: list[dict] = kwargs.get("history", [])
+        self.latest_update_time: str = kwargs.get("latest_update_time", NOW())
 
     def update(
         self,

@@ -1,9 +1,11 @@
 """高德地图 API 响应解析工具（内部依赖，不是 Tool）。"""
 
+from typing import Any
 
-def parse_poi_response(data: dict) -> dict:
+
+def parse_poi_response(data: dict) -> dict[str, Any]:
     """解析 POI 搜索响应（fuzzy_search / nearby_search 共用）。"""
-    result = {
+    result: dict[str, Any] = {
         "status": data.get("status"),
         "info": data.get("info"),
         "count": data.get("count"),
@@ -26,9 +28,9 @@ def parse_poi_response(data: dict) -> dict:
     return result
 
 
-def parse_transit_response(json_data: dict) -> dict:
+def parse_transit_response(json_data: dict) -> dict[str, Any]:
     """解析高德公交路线规划 v3 API 响应。"""
-    result = {
+    result: dict[str, Any] = {
         "status": json_data.get("status"),
         "count": json_data.get("count"),
         "routes": [],
@@ -44,7 +46,7 @@ def parse_transit_response(json_data: dict) -> dict:
         elif isinstance(walking_dist, str) and not walking_dist.isdigit():
             walking_dist = 0
 
-        route_info = {
+        route_info: dict[str, Any] = {
             "cost": float(transit.get("cost", 0)),
             "duration": int(transit.get("duration", 0)),
             "walking_distance": int(walking_dist),
@@ -52,11 +54,11 @@ def parse_transit_response(json_data: dict) -> dict:
         }
 
         for segment in transit.get("segments", []):
-            segment_info = {"walking": None, "bus": None}
+            segment_info: dict[str, Any] = {"walking": None, "bus": None}
 
             walking_info = segment.get("walking")
             if walking_info and walking_info.get("steps"):
-                walk_data = {
+                walk_data: dict[str, Any] = {
                     "distance": int(walking_info.get("distance", 0)),
                     "steps": [],
                 }
@@ -73,7 +75,7 @@ def parse_transit_response(json_data: dict) -> dict:
 
             bus_info = segment.get("bus")
             if bus_info and bus_info.get("buslines"):
-                bus_data = {"lines": []}
+                bus_data: dict[str, Any] = {"lines": []}
                 for busline in bus_info.get("buslines", []):
                     bus_data["lines"].append(
                         {
@@ -99,9 +101,9 @@ def parse_transit_response(json_data: dict) -> dict:
     return result
 
 
-def parse_cycling_response(json_data: dict) -> dict:
+def parse_cycling_response(json_data: dict) -> dict[str, Any]:
     """解析高德骑行路线规划 v4 API 响应。"""
-    result = {
+    result: dict[str, Any] = {
         "status": json_data.get("errcode", -1),
         "message": json_data.get("errmsg", ""),
         "origin": None,
@@ -117,7 +119,7 @@ def parse_cycling_response(json_data: dict) -> dict:
     result["destination"] = data.get("destination")
 
     for path in data.get("paths", []):
-        path_info = {
+        path_info: dict[str, Any] = {
             "distance": int(path.get("distance", 0)),
             "duration": int(path.get("duration", 0)),
             "steps": [],

@@ -49,7 +49,7 @@ class TransitRouteTool(ToolBase):
             return format_error("起点和终点经纬度不能为空")
 
         try:
-            data = self.client.amap_request(
+            data = self._client.amap_request(
                 "/v3/direction/transit/integrated",
                 {
                     "origin": f"{origin_longitude},{origin_latitude}",

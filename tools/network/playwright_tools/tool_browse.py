@@ -1,5 +1,7 @@
 """Tool: browser_browse — 使用 Playwright 无头浏览器访问网页并提取文本内容。"""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 from bs4 import BeautifulSoup
 
@@ -10,7 +12,7 @@ from tools.network.playwright_tools.browser_manager import BrowserManager
 class BrowserBrowseInput(BaseModel):
     get_doc: bool = Field(default=False, description="设为 true 以获取使用说明")
     url: str = Field(description="要访问的网页 URL（必须包含 http:// 或 https://）")
-    wait_until: str = Field(
+    wait_until: Literal["load", "domcontentloaded", "networkidle", "commit"] = Field(
         default="load",
         description="等待策略: load / domcontentloaded / networkidle / commit",
     )
@@ -41,7 +43,7 @@ class BrowserBrowseTool(ToolBase):
         self,
         get_doc: bool = False,
         url: str = "",
-        wait_until: str = "load",
+        wait_until: Literal["load", "domcontentloaded", "networkidle", "commit"] = "load",
         wait_for_selector: str | None = None,
         timeout: int = 30,
         max_length: int = 8000,

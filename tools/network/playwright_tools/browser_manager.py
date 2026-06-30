@@ -3,7 +3,7 @@
 import threading
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright, Playwright, Browser, BrowserContext
+from playwright.sync_api import sync_playwright, Playwright, Browser, BrowserContext, ViewportSize
 
 
 class BrowserManager:
@@ -17,18 +17,18 @@ class BrowserManager:
 
     _instance: "BrowserManager | None" = None
     _lock = threading.Lock()
+    _initialized: bool = False
 
     def __new__(cls) -> "BrowserManager":
         with cls._lock:
             if cls._instance is None:
                 cls._instance = super().__new__(cls)
-                cls._instance._initialized = False
             return cls._instance
 
     def __init__(self) -> None:
-        if self._initialized:
+        if BrowserManager._initialized:
             return
-        self._initialized = True
+        BrowserManager._initialized = True
         self._playwright: Playwright | None = None
         self._browser: Browser | None = None
         self._browser_lock = threading.Lock()
@@ -45,7 +45,7 @@ class BrowserManager:
 
     def new_context(
         self,
-        viewport: dict | None = None,
+        viewport: ViewportSize | None = None,
         user_agent: str | None = None,
         timeout: int = 30000,
     ) -> BrowserContext:

@@ -56,7 +56,7 @@ class FuzzyAddressTool(ToolBase):
             if citylimit:
                 params["citylimit"] = "true"
 
-            data = self.client.amap_request("/v3/place/text", params)
+            data = self._client.amap_request("/v3/place/text", params)
             result = parse_poi_response(data)
 
             if result["status"] == "1":

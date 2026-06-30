@@ -12,6 +12,12 @@ class ToolBase(BaseTool):
 
     client: SharedAPIClient | None = None
 
+    @property
+    def _client(self) -> SharedAPIClient:
+        """非空 client 访问器，供子类安全使用。"""
+        assert self.client is not None, "Tool client not initialized"
+        return self.client
+
     def _load_doc(self) -> str:
         """读取同目录下的 TOOL.md，作为领域知识返回给 LLM。"""
         import sys

@@ -1,5 +1,6 @@
 """OpenAI 兼容 API 的通用 Provider 实现。"""
 
+from pydantic import SecretStr
 from langchain_core.language_models.chat_models import BaseChatModel
 
 from api.providers import HealthStatus, Provider
@@ -13,7 +14,7 @@ class OpenAIProvider(Provider):
 
         return ChatOpenAI(
             model=model,
-            api_key=self.config.api_key,
+            api_key=SecretStr(self.config.api_key),
             base_url=self.config.base_url,
             **kwargs,
         )

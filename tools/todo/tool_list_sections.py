@@ -28,7 +28,7 @@ class TodoListSectionsTool(ToolBase):
     @property
     def helper(self) -> TodoAPIHelper:
         if self._helper is None:
-            self._helper = TodoAPIHelper(self.client._todoist_token)
+            self._helper = TodoAPIHelper(self._client._todoist_token)
         return self._helper
 
     def _run(self, get_doc: bool = False, project_name: str | None = None) -> str:

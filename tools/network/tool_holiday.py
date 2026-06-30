@@ -54,7 +54,7 @@ class HolidayCalendarTool(ToolBase):
             return format_error("必须提供 date、month 或 year 参数之一")
 
         try:
-            result = self.client.uapi.misc.get_misc_holiday_calendar(
+            result = self._client.uapi.misc.get_misc_holiday_calendar(
                 date=date,
                 month=month,
                 year=year,

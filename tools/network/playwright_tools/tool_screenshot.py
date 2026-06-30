@@ -3,6 +3,7 @@
 import time
 import uuid
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -20,7 +21,7 @@ class BrowserScreenshotInput(BaseModel):
     full_page: bool = Field(
         default=False, description="是否截取完整页面（包括滚动区域）"
     )
-    wait_until: str = Field(
+    wait_until: Literal["load", "domcontentloaded", "networkidle", "commit"] = Field(
         default="load",
         description="等待策略: load / domcontentloaded / networkidle / commit",
     )
@@ -51,7 +52,7 @@ class BrowserScreenshotTool(ToolBase):
         get_doc: bool = False,
         url: str = "",
         full_page: bool = False,
-        wait_until: str = "load",
+        wait_until: Literal["load", "domcontentloaded", "networkidle", "commit"] = "load",
         wait_for_selector: str | None = None,
         viewport_width: int = 1280,
         viewport_height: int = 720,

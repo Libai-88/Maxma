@@ -30,7 +30,7 @@ class GeocodeTool(ToolBase):
             return format_error("address 不能为空")
 
         try:
-            data = self.client.amap_request(
+            data = self._client.amap_request(
                 "/v3/geocode/geo",
                 {"address": address, "output": "json"},
             )

@@ -48,7 +48,7 @@ def _find_deepseek_api_key(request: Request) -> str:
             continue
         base = (config.base_url or "").lower()
         if "deepseek.com" in base:
-            return config.api_key
+            return str(config.api_key)
 
     raise HTTPException(
         status_code=400,
