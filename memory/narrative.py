@@ -85,13 +85,34 @@ def _set_current_mm(mm: Optional[MemoryManager]) -> None:
 # ── 格式化辅助 ──────────────────────────────────────────────
 
 
+# 注入系统提示词的记忆条目上限，超出部分折叠
+NARRATIVE_MAX_ITEMS = 40
+
+
 def _format_narrative(items: list[dict]) -> str:
-    """将 MemoryManager.show() 的输出格式化为人类可读的长记忆叙事文本。"""
+    """将 MemoryManager.show() 的输出格式化为人类可读的长记忆叙事文本。
+
+    按更新时间降序排列（最近更新的记忆排在前面），
+    超过 NARRATIVE_MAX_ITEMS 的条目折叠，并在末尾附加提示。
+    """
     if not items:
         return ""
+
+    # 按 latest_update_time 降序排列（最近更新的优先）
+    sorted_items = sorted(
+        items,
+        key=lambda x: x.get("latest_update_time", ""),
+        reverse=True,
+    )
+
+    # 容量上限
+    total_count = len(sorted_items)
+    visible_items = sorted_items[:NARRATIVE_MAX_ITEMS]
+    folded_count = total_count - len(visible_items)
+
     by_theme: dict[str, list[dict]] = {}
     theme_order: list[str] = []
-    for item in items:
+    for item in visible_items:
         theme = item["theme"]
         by_theme.setdefault(theme, []).append(item)
         if theme not in theme_order:
@@ -105,6 +126,11 @@ def _format_narrative(items: list[dict]) -> str:
         for item in by_theme[theme]:
             lines.append(f"- {item['description']}")
         lines.append("")
+
+    if folded_count > 0:
+        lines.append(f"（还有 {folded_count} 条较早记忆已折叠）")
+        lines.append("")
+
     return "\n".join(lines).strip() + "\n"
 
 

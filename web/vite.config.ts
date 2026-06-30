@@ -29,6 +29,22 @@ export default defineConfig({
   define: {
     __API_TOKEN__: JSON.stringify(loadApiToken()),
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vue-vendor': ['vue', 'vue-router', 'vue-virtual-scroller'],
+          'markdown-vendor': ['markdown-it', 'markdown-it-task-lists', 'markdown-it-texmath', 'katex'],
+          'codemirror': [
+            'codemirror',
+            'vue-codemirror',
+            '@codemirror/lang-markdown',
+            '@codemirror/theme-one-dark',
+          ],
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {
