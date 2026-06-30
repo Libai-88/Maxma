@@ -1,9 +1,8 @@
 """Tool: read_memories — 按 ID 读取单条记忆的完整内容。"""
 
-from pathlib import Path
-
 from pydantic import BaseModel, Field
 
+from app_paths import MEMORY_CONFIG_PATH as MEMORY_PATH
 from tools.base import ToolBase, format_error, format_success
 
 
@@ -12,14 +11,6 @@ class ReadMemoriesInput(BaseModel):
     id: str = Field(
         default="", description="要读取的记忆 ID（来自 list_memories 的输出）"
     )
-
-
-MEMORY_PATH = (
-    Path(__file__).resolve().parent.parent.parent
-    / "config"
-    / "personas"
-    / "memory.yaml"
-)
 
 
 class ReadMemoriesTool(ToolBase):

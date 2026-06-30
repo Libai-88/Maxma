@@ -12,7 +12,9 @@ from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from pydantic import BaseModel, Field
 
-_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "mcp_servers.yaml"
+from app_paths import MCP_CONFIG_PATH
+
+_CONFIG_PATH = MCP_CONFIG_PATH
 
 _client: MultiServerMCPClient | None = None
 _tools: list[BaseTool] | None = None

@@ -1,13 +1,11 @@
 """REST API — 人设文件 (SOUL.md / USER.md) 读写。"""
 
-from pathlib import Path
-
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-router = APIRouter()
+from app_paths import PERSONAS_DATA_DIR as PERSONAS_DIR
 
-PERSONAS_DIR = Path(__file__).resolve().parent.parent.parent / "config" / "personas"
+router = APIRouter()
 
 VALID_TYPES = {"soul": "SOUL.md", "user": "USER.md"}
 

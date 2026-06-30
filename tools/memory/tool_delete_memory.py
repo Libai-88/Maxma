@@ -1,9 +1,8 @@
 """Tool: delete_memory — 删除一条记忆条目。"""
 
-from pathlib import Path
-
 from pydantic import BaseModel, Field
 
+from app_paths import MEMORY_CONFIG_PATH as MEMORY_PATH
 from tools.base import ToolBase, format_error, format_success
 
 
@@ -13,14 +12,6 @@ class DeleteMemoryInput(BaseModel):
         default="", description="要删除的记忆 ID（来自 read_memories 的输出）"
     )
     reason: str = Field(default="", description="删除原因，说明为什么要删除这条记忆")
-
-
-MEMORY_PATH = (
-    Path(__file__).resolve().parent.parent.parent
-    / "config"
-    / "personas"
-    / "memory.yaml"
-)
 
 
 class DeleteMemoryTool(ToolBase):

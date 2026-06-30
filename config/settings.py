@@ -5,6 +5,7 @@ LLM 提供商配置（API key、base_url、model、context_window）
 此文件仅保留工具类凭据和第三方服务 API key。
 """
 
+from app_paths import ENV_FILE_PATH
 from pydantic_settings import BaseSettings
 
 
@@ -27,7 +28,7 @@ class Settings(BaseSettings):
     tavily_api_key: str = ""
 
     model_config = {
-        "env_file": ".env",
+        "env_file": str(ENV_FILE_PATH),
         "env_file_encoding": "utf-8",
         "extra": "ignore",
     }

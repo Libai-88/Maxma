@@ -7,11 +7,12 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
 
+from app_paths import UPLOADS_DIR as UPLOAD_DIR
+
 router = APIRouter()
 
-# 上传文件存储目录
-UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent / "uploads"
-UPLOAD_DIR.mkdir(exist_ok=True)
+# 确保上传目录存在
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # 单文件最大 20MB
 MAX_FILE_SIZE = 20 * 1024 * 1024

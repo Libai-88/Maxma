@@ -2,14 +2,10 @@
 
 import subprocess
 import sys
-from pathlib import Path
 
 from fastapi import APIRouter
 
 router = APIRouter()
-
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-_MAIN_PY = _PROJECT_ROOT / "main.py"
 
 
 @router.post("/restart")
@@ -20,10 +16,24 @@ async def restart_server():
     sys.exit(0) 会触发 FastAPI lifespan shutdown 释放资源（MCP 连接、后台任务等），
     随后 uvicorn 退出，OS 释放端口，新进程即可绑定。
     前端检测到服务恢复后应自动刷新页面。
+
+    打包模式：直接重启 exe 本身（sys.executable 即为 maxma-server.exe）。
+    开发模式：重启 Python + main.py。
     """
+    if getattr(sys, "frozen", False):
+        # 打包模式：sys.executable 就是 maxma-server.exe
+        cmd = [sys.executable]
+        cwd = None
+    else:
+        # 开发模式：找到 main.py 并重启
+        from pathlib import Path
+        project_root = Path(__file__).resolve().parent.parent.parent
+        cmd = [sys.executable, str(project_root / "main.py")]
+        cwd = str(project_root)
+
     subprocess.Popen(
-        [sys.executable, str(_MAIN_PY)],
-        cwd=str(_PROJECT_ROOT),
+        cmd,
+        cwd=cwd,
         creationflags=subprocess.CREATE_NEW_CONSOLE if sys.platform == "win32" else 0,
     )
     sys.exit(0)

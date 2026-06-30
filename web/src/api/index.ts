@@ -29,14 +29,42 @@ declare const __API_TOKEN__: string
 
 const BASE = '/api'
 
-/** 从 Vite 编译期注入的 Token */
+/** 从 Vite 编译期注入的 Token（开发模式） */
 let token: string = typeof __API_TOKEN__ !== 'undefined' ? __API_TOKEN__ : ''
+
+/** Token 是否已从运行时接口获取 */
+let tokenFetchedAtRuntime = false
 
 export function getToken(): string {
   return token
 }
 
+/**
+ * 运行时获取 Token（桌面应用模式）。
+ * 当构建时未注入 Token 时，首次 API 调用会触发此函数。
+ * 导出为 ensureTokenLoaded 供 WebSocket 连接前调用。
+ */
+export async function ensureTokenLoaded(): Promise<void> {
+  if (tokenFetchedAtRuntime) return
+  try {
+    const res = await fetch(`${BASE}/auth/token`)
+    if (res.ok) {
+      const data = await res.json()
+      token = data.token || ''
+      tokenFetchedAtRuntime = true
+      console.log('[api] Token acquired at runtime')
+    }
+  } catch (e) {
+    console.warn('[api] Failed to fetch token at runtime:', e)
+  }
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
+  // 如果没有 Token，先运行时获取
+  if (!token && !tokenFetchedAtRuntime) {
+    await ensureTokenLoaded()
+  }
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   }

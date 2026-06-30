@@ -2,17 +2,17 @@
 
 import time
 import uuid
-from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app_paths import UPLOADS_DIR
 from tools.base import ToolBase, format_success, format_error
 from tools.network.playwright_tools.browser_manager import BrowserManager
 
 # 上传目录（与 api/routes/upload.py 一致）
-_UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent.parent / "uploads"
-_UPLOAD_DIR.mkdir(exist_ok=True)
+_UPLOAD_DIR = UPLOADS_DIR
+_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 class BrowserScreenshotInput(BaseModel):

@@ -12,30 +12,30 @@ from pathlib import Path
 
 import yaml
 
+from app_paths import (
+    DATA_DIR, BUNDLE_DIR, UPLOADS_DIR,
+    PATH_WHITELIST_YAML_PATH, MAXMA_BLOCKER_YAML_PATH,
+    ANTHROPIC_SKILLS_DIR, MACROS_DIR, API_DATA_DIR,
+)
+
 
 # ── 路径常量 ────────────────────────────────────────────────
 
-# 项目根目录：由本文件 (tools/path_security.py) 向上推一级
-_PROJECT_ROOT = os.path.normpath(
-    os.path.abspath(Path(__file__).resolve().parent.parent)
-)
+# 项目根目录：开发模式为项目根，打包模式为用户数据目录
+_PROJECT_ROOT = str(DATA_DIR)
 
 # 白名单 YAML 路径
-_WHITELIST_PATH = (
-    Path(__file__).resolve().parent.parent / "api" / "data" / "path_whitelist.yaml"
-)
+_WHITELIST_PATH = PATH_WHITELIST_YAML_PATH
 
 # 默认白名单条目：仅暴露 anthropic_skills、macros 和 uploads 目录
-_DEFAULT_WHITELIST_PATH = os.path.join(_PROJECT_ROOT, "anthropic_skills")
-_DEFAULT_MACROS_WHITELIST_PATH = os.path.join(_PROJECT_ROOT, "macros")
-_DEFAULT_UPLOADS_PATH = os.path.join(_PROJECT_ROOT, "uploads")
+_DEFAULT_WHITELIST_PATH = str(ANTHROPIC_SKILLS_DIR)
+_DEFAULT_MACROS_WHITELIST_PATH = str(MACROS_DIR)
+_DEFAULT_UPLOADS_PATH = str(UPLOADS_DIR)
 
 # MaxmaBlocker 相关常量
-_BLOCKER_YAML_PATH = (
-    Path(__file__).resolve().parent.parent / "api" / "data" / "maxma_blocker.yaml"
-)
+_BLOCKER_YAML_PATH = MAXMA_BLOCKER_YAML_PATH
 _BLOCKER_FILENAME = "MaxmaBlocker"
-_AUTO_BLOCKER_PATH = os.path.join(_PROJECT_ROOT, "api", "data")
+_AUTO_BLOCKER_PATH = str(API_DATA_DIR)
 
 
 # ── 统一入口 ────────────────────────────────────────────────

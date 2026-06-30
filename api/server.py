@@ -5,8 +5,11 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 import time
 
@@ -20,6 +23,7 @@ from api.health import get_health_report
 from api.logging_config import setup_logging
 from api.providers.manager import ProviderManager
 from api.providers.store import ProviderConfigStore
+from app_paths import PROVIDERS_YAML_PATH
 from api.routes import chat, files, memory, sessions, balance, providers
 from api.routes import path_whitelist as path_whitelist_router
 from api.routes import persona as persona_router
@@ -105,7 +109,7 @@ async def _load_const_sessions(app: FastAPI):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 1. 初始化 Provider 管理器（优先从 YAML 加载）
-    provider_store = ProviderConfigStore()
+    provider_store = ProviderConfigStore(path=PROVIDERS_YAML_PATH)
     if provider_store.is_empty:
         migrated = provider_store.migrate_from_env()
         if migrated:
@@ -185,7 +189,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS：开发环境仅放行 Vite（5173），生产可加 localhost:8000
+    # CORS：开发环境仅放行 Vite（5173），生产环境加 localhost:8000 + Tauri 协议
     cors_origins = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
@@ -194,6 +198,9 @@ def create_app() -> FastAPI:
         cors_origins += [
             "http://localhost:8000",
             "http://127.0.0.1:8000",
+            # Tauri v2 协议
+            "tauri://localhost",
+            "https://tauri.localhost",
         ]
     app.add_middleware(
         CORSMiddleware,
@@ -248,6 +255,12 @@ def create_app() -> FastAPI:
     # 运行时指标
     app.include_router(metrics_router.router, prefix="/api")
 
+    # Auth token 端点 — 桌面应用运行时获取 Token（替代构建时硬编码）
+    @app.get("/api/auth/token")
+    async def get_auth_token():
+        """返回当前认证 Token。桌面应用启动后调用此接口获取 Token。"""
+        return {"token": app.state.auth_token}
+
     # 健康检查
     @app.get("/api/health")
     async def health():
@@ -258,5 +271,38 @@ def create_app() -> FastAPI:
 
     # 请求日志中间件（在认证之前，记录所有请求）
     app.add_middleware(RequestLogMiddleware)
+
+    # 生产模式：挂载前端静态文件（必须在所有 API 路由之后）
+    if os.environ.get("MAXMA_ENV") == "production":
+        from app_paths import WEB_DIST_DIR as dist_dir
+        if dist_dir.exists():
+            from fastapi.responses import FileResponse
+
+            # 挂载静态资源目录
+            app.mount("/assets", StaticFiles(directory=dist_dir / "assets"), name="assets")
+            if (dist_dir / "fonts").exists():
+                app.mount("/fonts", StaticFiles(directory=dist_dir / "fonts"), name="fonts")
+            if (dist_dir / "images").exists():
+                app.mount("/images", StaticFiles(directory=dist_dir / "images"), name="images")
+
+            # SPA 路由回退：所有非 API、非静态资源路径返回 index.html
+            @app.get("/{path:path}")
+            async def spa_fallback(path: str):
+                index_path = dist_dir / "index.html"
+                if index_path.exists():
+                    return FileResponse(index_path)
+                return {"detail": "Not Found"}
+
+            # 根路径也返回 index.html
+            @app.get("/")
+            async def root_fallback():
+                index_path = dist_dir / "index.html"
+                if index_path.exists():
+                    return FileResponse(index_path)
+                return {"detail": "Not Found"}
+
+            logger.info("[static] 已挂载前端静态文件: %s", dist_dir)
+        else:
+            logger.warning("[static] web/dist 目录不存在，跳过前端挂载: %s", dist_dir)
 
     return app

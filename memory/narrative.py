@@ -22,8 +22,7 @@ def _sanitize(text: str) -> str:
     return text.replace("\n", " ").replace("\r", " ")
 
 
-PERSONAS_DIR = Path(__file__).resolve().parent.parent / "config" / "personas"
-MEMORY_PATH = PERSONAS_DIR / "memory.yaml"
+from app_paths import PERSONAS_DIR, MEMORY_CONFIG_PATH as MEMORY_PATH
 
 _CORE_PRINCIPLES = """核心原则：
 0. 对于记忆来讲，主观印象第一，客观事实第二。科技、事实等固定的客观事实必须简洁简练，不要尝试在记忆里写大量知识性质的东西。相反地，用户的喜好等主观印象可以相对正常地描写。每个记忆条目最长不超过三句话。

@@ -1,11 +1,10 @@
 """Token 认证管理 — 生成、加载、轮换。"""
 
 import secrets
-from pathlib import Path
 
 import yaml
 
-AUTH_TOKEN_PATH = Path(__file__).resolve().parent / "data" / "auth_token.yaml"
+from app_paths import AUTH_TOKEN_PATH, API_DATA_DIR
 
 
 def load_or_create_token() -> str:
@@ -15,6 +14,7 @@ def load_or_create_token() -> str:
         if data and "token" in data:
             return str(data["token"])
 
+    API_DATA_DIR.mkdir(parents=True, exist_ok=True)
     token = secrets.token_urlsafe(32)
     AUTH_TOKEN_PATH.write_text(
         yaml.dump({"token": token}, encoding="utf-8").decode("utf-8"),

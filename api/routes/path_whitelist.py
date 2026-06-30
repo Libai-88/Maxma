@@ -1,7 +1,6 @@
 """REST API — 路径白名单 (path_whitelist.yaml) CRUD。"""
 
 import os
-from pathlib import Path
 
 import yaml
 from fastapi import APIRouter, HTTPException, Query
@@ -9,15 +8,11 @@ from pydantic import BaseModel
 
 # 导入安全检查函数
 from tools.base import check_path_whitelisted, check_maxma_blocker
+from app_paths import PATH_WHITELIST_YAML_PATH
 
 router = APIRouter()
 
-WHITELIST_PATH = (
-    Path(__file__).resolve().parent.parent.parent
-    / "api"
-    / "data"
-    / "path_whitelist.yaml"
-)
+WHITELIST_PATH = PATH_WHITELIST_YAML_PATH
 
 
 class WhitelistEntry(BaseModel):

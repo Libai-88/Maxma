@@ -89,7 +89,7 @@ class ConsoleFormatter(logging.Formatter):
 
 
 # ── 公共 API ─────────────────────────────────────────────────────
-_LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
+from app_paths import LOGS_DIR as _LOG_DIR
 
 
 def setup_logging() -> None:
