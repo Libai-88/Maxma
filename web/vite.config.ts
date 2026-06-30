@@ -5,6 +5,12 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 function loadApiToken(): string {
+  // 桌面应用模式：不注入 Token，运行时从 /api/auth/token 获取
+  if (process.env.MAXMA_DESKTOP === '1') {
+    console.log('[vite] Desktop mode: token will be fetched at runtime')
+    return ''
+  }
+
   try {
     const yamlPath = path.resolve(__dirname, '..', 'api', 'data', 'auth_token.yaml')
     const raw = fs.readFileSync(yamlPath, 'utf-8')

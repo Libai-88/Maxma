@@ -7,6 +7,7 @@ from version import __version__
 
 from api.logging_config import setup_logging
 from api.server import create_app
+from app_paths import ensure_data_dirs
 from memory.user_init import ensure_all
 
 
@@ -25,6 +26,9 @@ def main():
     import logging
     logger = logging.getLogger(__name__)
     logger.info("MaxmaHere %s starting", __version__)
+
+    # 确保所有用户数据目录存在（打包模式下首次运行时自动创建）
+    ensure_data_dirs()
 
     ensure_all()
 

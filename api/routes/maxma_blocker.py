@@ -4,20 +4,16 @@
 并持久化跟踪列表到 maxma_blocker.yaml。"""
 
 import os
-from pathlib import Path
 
 import yaml
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app_paths import MAXMA_BLOCKER_YAML_PATH
+
 router = APIRouter()
 
-YAML_PATH = (
-    Path(__file__).resolve().parent.parent.parent
-    / "api"
-    / "data"
-    / "maxma_blocker.yaml"
-)
+YAML_PATH = MAXMA_BLOCKER_YAML_PATH
 
 BLOCKER_FILENAME = "MaxmaBlocker"
 

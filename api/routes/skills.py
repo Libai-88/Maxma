@@ -1,16 +1,12 @@
 """Anthropic Skills & 内置工具列表 API。"""
 
 import re
-from pathlib import Path
 
 from fastapi import APIRouter, Request
 
-router = APIRouter()
+from app_paths import ANTHROPIC_SKILLS_DIR, MACROS_DIR, PERSONAS_DIR
 
-PERSONAS_DIR = Path(__file__).resolve().parent.parent.parent / "config" / "personas"
-ANTHROPIC_SKILLS_DIR = (
-    Path(__file__).resolve().parent.parent.parent / "anthropic_skills"
-)
+router = APIRouter()
 
 
 def _parse_frontmatter(text: str) -> dict[str, str]:
@@ -72,7 +68,6 @@ async def list_skills():
 @router.get("/macros")
 async def list_macros():
     """扫描 macros/ 下所有 MACRO.md，返回结构化列表。"""
-    MACROS_DIR = Path(__file__).resolve().parent.parent.parent / "macros"
     if not MACROS_DIR.is_dir():
         return {"macros": []}
 

@@ -3,7 +3,7 @@ import type { ClientMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, Tur
 import { refreshSessions, switchSession } from '@/composables/useSession'
 import { buildFlatMessage, buildTimestamp, parseReferences } from '@/utils/references'
 import type { ParsedRef } from '@/utils/references'
-import { getToken } from '@/api'
+import { getToken, ensureTokenLoaded } from '@/api'
 /** 匹配旧格式尾缀（用于 localStorage 迁移） */
 const TIME_SUFFIX_RE = /（\d{4}-\d{2}-\d{2} \w{3} \d{2}:\d{2}）$/
 
@@ -181,7 +181,7 @@ function getReconnectDelay(attempts: number): number {
   return Math.min(base * Math.pow(2, attempts), maxDelay)
 }
 
-function connectSession(sid: string) {
+async function connectSession(sid: string) {
   if (!isValidSessionId(sid)) {
     console.error(`[useChat] 拒绝连接：非法的 sessionId "${sid}"`)
     return
@@ -193,6 +193,8 @@ function connectSession(sid: string) {
   }
 
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
+  // 确保 Token 已加载（桌面应用运行时获取）
+  await ensureTokenLoaded()
   const token = getToken()
   const url = `${protocol}//${location.host}/ws/chat/${sid}`
   ch.ws = new WebSocket(url, [token])

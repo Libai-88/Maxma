@@ -13,7 +13,8 @@ class TestEnsureUserMd:
         example = persona_dir / "USER.example.md"
         example.write_text("这是模板内容。", encoding="utf-8")
 
-        monkeypatch.setattr(user_init, "PERSONAS_DIR", persona_dir)
+        monkeypatch.setattr(user_init, "_BUNDLE_PERSONAS_DIR", persona_dir)
+        monkeypatch.setattr(user_init, "PERSONAS_DATA_DIR", persona_dir)
 
         user_md = persona_dir / "USER.md"
         assert not user_md.exists()
@@ -33,7 +34,8 @@ class TestEnsureUserMd:
         user_md = persona_dir / "USER.md"
         user_md.write_text("用户自己写的内容。", encoding="utf-8")
 
-        monkeypatch.setattr(user_init, "PERSONAS_DIR", persona_dir)
+        monkeypatch.setattr(user_init, "_BUNDLE_PERSONAS_DIR", persona_dir)
+        monkeypatch.setattr(user_init, "PERSONAS_DATA_DIR", persona_dir)
 
         user_init.ensure_user_md()
 
@@ -45,7 +47,8 @@ class TestEnsureUserMd:
         persona_dir = tmp_path / "personas"
         persona_dir.mkdir(parents=True)
 
-        monkeypatch.setattr(user_init, "PERSONAS_DIR", persona_dir)
+        monkeypatch.setattr(user_init, "_BUNDLE_PERSONAS_DIR", persona_dir)
+        monkeypatch.setattr(user_init, "PERSONAS_DATA_DIR", persona_dir)
 
         # 不应抛异常
         user_init.ensure_user_md()
@@ -63,7 +66,8 @@ class TestEnsureUserMd:
         user_md = persona_dir / "USER.md"
         user_md.write_text("旧内容。", encoding="utf-8")
 
-        monkeypatch.setattr(user_init, "PERSONAS_DIR", persona_dir)
+        monkeypatch.setattr(user_init, "_BUNDLE_PERSONAS_DIR", persona_dir)
+        monkeypatch.setattr(user_init, "PERSONAS_DATA_DIR", persona_dir)
 
         user_init.ensure_user_md()
 
@@ -80,7 +84,8 @@ class TestEnsureSoulMd:
         example = persona_dir / "SOUL.example.md"
         example.write_text("人设模板内容。", encoding="utf-8")
 
-        monkeypatch.setattr(user_init, "PERSONAS_DIR", persona_dir)
+        monkeypatch.setattr(user_init, "_BUNDLE_PERSONAS_DIR", persona_dir)
+        monkeypatch.setattr(user_init, "PERSONAS_DATA_DIR", persona_dir)
 
         soul_md = persona_dir / "SOUL.md"
         assert not soul_md.exists()
@@ -100,7 +105,8 @@ class TestEnsureSoulMd:
         soul_md = persona_dir / "SOUL.md"
         soul_md.write_text("用户自定义人设。", encoding="utf-8")
 
-        monkeypatch.setattr(user_init, "PERSONAS_DIR", persona_dir)
+        monkeypatch.setattr(user_init, "_BUNDLE_PERSONAS_DIR", persona_dir)
+        monkeypatch.setattr(user_init, "PERSONAS_DATA_DIR", persona_dir)
 
         user_init.ensure_soul_md()
 
@@ -111,7 +117,8 @@ class TestEnsureSoulMd:
         persona_dir = tmp_path / "personas"
         persona_dir.mkdir(parents=True)
 
-        monkeypatch.setattr(user_init, "PERSONAS_DIR", persona_dir)
+        monkeypatch.setattr(user_init, "_BUNDLE_PERSONAS_DIR", persona_dir)
+        monkeypatch.setattr(user_init, "PERSONAS_DATA_DIR", persona_dir)
 
         user_init.ensure_soul_md()
 
@@ -128,7 +135,8 @@ class TestEnsureEnvFile:
         example = project_root / ".env.example"
         example.write_text("API_KEY=test", encoding="utf-8")
 
-        monkeypatch.setattr(user_init, "PROJECT_ROOT", project_root)
+        monkeypatch.setattr(user_init, "BUNDLE_DIR", project_root)
+        monkeypatch.setattr(user_init, "DATA_DIR", project_root)
 
         env_file = project_root / ".env"
         assert not env_file.exists()
@@ -147,7 +155,8 @@ class TestEnsureEnvFile:
         env_file = project_root / ".env"
         env_file.write_text("用户已有的配置。", encoding="utf-8")
 
-        monkeypatch.setattr(user_init, "PROJECT_ROOT", project_root)
+        monkeypatch.setattr(user_init, "BUNDLE_DIR", project_root)
+        monkeypatch.setattr(user_init, "DATA_DIR", project_root)
 
         user_init.ensure_env_file()
 
@@ -156,7 +165,8 @@ class TestEnsureEnvFile:
     def test_env_no_example_does_nothing(self, monkeypatch, tmp_path):
         """example 文件不存在时什么都不做。"""
         project_root = tmp_path
-        monkeypatch.setattr(user_init, "PROJECT_ROOT", project_root)
+        monkeypatch.setattr(user_init, "BUNDLE_DIR", project_root)
+        monkeypatch.setattr(user_init, "DATA_DIR", project_root)
 
         user_init.ensure_env_file()
 
@@ -178,8 +188,10 @@ class TestEnsureAll:
         (persona_dir / "SOUL.example.md").write_text("soul", encoding="utf-8")
         (project_root / ".env.example").write_text("env", encoding="utf-8")
 
-        monkeypatch.setattr(user_init, "PERSONAS_DIR", persona_dir)
-        monkeypatch.setattr(user_init, "PROJECT_ROOT", project_root)
+        monkeypatch.setattr(user_init, "_BUNDLE_PERSONAS_DIR", persona_dir)
+        monkeypatch.setattr(user_init, "PERSONAS_DATA_DIR", persona_dir)
+        monkeypatch.setattr(user_init, "BUNDLE_DIR", project_root)
+        monkeypatch.setattr(user_init, "DATA_DIR", project_root)
 
         user_init.ensure_all()
 

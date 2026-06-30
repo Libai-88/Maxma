@@ -4,12 +4,9 @@ import hashlib
 import re
 from pathlib import Path
 
+from app_paths import ANTHROPIC_SKILLS_DIR, MACROS_DIR, PERSONAS_DATA_DIR as PERSONAS_DIR
 from memory.narrative import get_narrative
 from memory.user_init import ensure_user_md
-
-PERSONAS_DIR = Path(__file__).resolve().parent.parent / "config" / "personas"
-ANTHROPIC_SKILLS_DIR = Path(__file__).resolve().parent.parent / "anthropic_skills"
-MACROS_DIR = Path(__file__).resolve().parent.parent / "macros"
 
 
 # ── 内容哈希缓存 ────────────────────────────────────────────

@@ -1,13 +1,14 @@
 """REST API — 系统更新动态。"""
 
+import yaml
 from fastapi import APIRouter
 from pydantic import BaseModel
-from pathlib import Path
-import yaml
+
+from app_paths import NEWS_YAML_PATH
 
 router = APIRouter()
 
-NEWS_PATH = Path(__file__).resolve().parent.parent / "data" / "news.yaml"
+NEWS_PATH = NEWS_YAML_PATH
 
 
 # ── Pydantic 模型 ──

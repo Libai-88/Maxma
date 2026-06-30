@@ -6,11 +6,12 @@ from dotenv import dotenv_values, set_key
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app_paths import ENV_FILE_PATH
 from config.settings import get_settings
 
 router = APIRouter()
 
-ENV_PATH = Path(__file__).resolve().parent.parent.parent / ".env"
+ENV_PATH = ENV_FILE_PATH
 
 # ── 已知环境变量元信息 ──
 

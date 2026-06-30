@@ -1,9 +1,8 @@
 """Tool: update_memory — 更新已有记忆条目。"""
 
-from pathlib import Path
-
 from pydantic import BaseModel, Field
 
+from app_paths import MEMORY_CONFIG_PATH as MEMORY_PATH
 from tools.base import ToolBase, format_error, format_success
 from memory.memory_manager import MAX_DESC_LENGTH
 
@@ -15,14 +14,6 @@ class UpdateMemoryInput(BaseModel):
     )
     content: str = Field(default="", description="更新后的完整记忆内容")
     reason: str = Field(default="", description="修改原因，说明为什么要更新这条记忆")
-
-
-MEMORY_PATH = (
-    Path(__file__).resolve().parent.parent.parent
-    / "config"
-    / "personas"
-    / "memory.yaml"
-)
 
 
 class UpdateMemoryTool(ToolBase):
