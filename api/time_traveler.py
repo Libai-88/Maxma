@@ -42,9 +42,13 @@ async def undo_rounds(graph, config, n: int = 1) -> int:
         to_delete = messages[cutoff:]
 
     # 提交删除指令 — RemoveMessage 会被 add_messages reducer 识别并删除对应 id 的消息
-    await graph.aupdate_state(
-        config, {"messages": [RemoveMessage(id=m.id) for m in to_delete]}
-    )
+    remove_msgs = []
+    for m in to_delete:
+        msg_id = getattr(m, "id", None)
+        if msg_id:
+            remove_msgs.append(RemoveMessage(id=msg_id))
+    if remove_msgs:
+        await graph.aupdate_state(config, {"messages": remove_msgs})
     return len(to_delete)
 
 

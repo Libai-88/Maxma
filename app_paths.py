@@ -40,7 +40,6 @@ def _get_data_dir() -> Path:
             base = Path.home() / "Library" / "Application Support"
         else:
             base = Path.home() / ".maxmahere"
-            return base
         return base / "MaxmaHere"
     # 开发模式：数据就在项目根目录
     return Path(__file__).resolve().parent

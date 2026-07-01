@@ -33,7 +33,15 @@ def main():
     ensure_all()
 
     app = create_app()
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+
+    dev_mode = "--dev" in sys.argv
+    uvicorn.run(
+        app,
+        host="127.0.0.1",
+        port=8000,
+        reload=dev_mode,
+        reload_dirs=["agent", "api", "tools", "memory"] if dev_mode else None,
+    )
 
 
 if __name__ == "__main__":
