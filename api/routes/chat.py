@@ -443,9 +443,9 @@ async def _run_agent_turn(
     # ────────────────────────────────────────────────────────────
 
     # 动态工具过滤：根据用户消息选择相关工具子集，减少 token 消耗
-    # 同时追加 MCP 工具，确保外部工具始终可用
-    mcp_tools = getattr(app.state, "mcp_tools", None)
-    turn_tools = select_tools_for_query(user_message, mcp_tools=mcp_tools)
+    # 追加 MCP 工具，确保外部工具始终可用（只构建一次 Agent 图）
+    mcp_tools = getattr(ws.app.state, "mcp_tools", None) or []
+    turn_tools = select_tools_for_query(user_message, mcp_tools=list(mcp_tools))
     agent_maxma = build_agent(
         model=llm,
         tools=turn_tools,
@@ -491,12 +491,13 @@ async def _run_agent_turn(
             model_name=current_model_name,
             max_tokens=current_max_tokens,
         )
-        await ws.send_json(
-            {  # [向前端通信] 1. 向客户端推送最终答案
-                "type": "answer",
-                "payload": {"content": final_answer},
-            }
-        )
+        if final_answer:
+            await ws.send_json(
+                {  # [向前端通信] 1. 向客户端推送最终答案
+                    "type": "answer",
+                    "payload": {"content": final_answer},
+                }
+            )
     except asyncio.CancelledError:
         # 清理 interaction 挂起 Future
         interaction.cancel_all()
@@ -511,6 +512,8 @@ async def _run_agent_turn(
             format_ws_error(ErrorCode.CANCELLED, "生成已取消")
         )
     except Exception as e:
+        # 清理可能挂起的用户交互 Future，防止阻塞后续交互
+        interaction.cancel_all("Agent 执行出错，交互已取消")
         _run_error = str(e)
         trace_id = uuid.uuid4().hex[:8]
         logger.error(

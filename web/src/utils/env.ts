@@ -18,10 +18,12 @@ function detectTauri(): boolean {
   return !!(window as any).__TAURI_INTERNALS__ || !!(window as any).__TAURI__
 }
 
-/** True when running inside a Tauri v2 WebView */
-export const isTauri: boolean = new Proxy({} as any, {
-  get: () => detectTauri(),
-}) as any as boolean
+/** True when running inside a Tauri v2 WebView.
+ * 注意：必须调用 isTauri() 而非直接引用，Proxy 对象永远 truthy。
+ */
+export function isTauri(): boolean {
+  return detectTauri()
+}
 
 /** 所有 HTTP API 请求的基础路径 */
 export function getApiBase(): string {

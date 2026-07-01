@@ -158,6 +158,8 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 const props = defineProps<{
   isStreaming: boolean
   disabled: boolean
+  initialProviderId?: string
+  initialModelName?: string
 }>()
 
 const emit = defineEmits<{
@@ -201,6 +203,11 @@ function addRef(r: ParsedRef) {
 }
 
 function removeRef(idx: number) {
+  const ref = refs.value[idx]
+  // 释放图片 blob URL，防止内存泄漏
+  if (ref && ref.type === 'image' && (ref as ImageRef).preview?.startsWith('blob:')) {
+    URL.revokeObjectURL((ref as ImageRef).preview)
+  }
   refs.value.splice(idx, 1)
 }
 
@@ -559,6 +566,18 @@ async function loadProviders() {
   try {
     const res = await api.listProviders()
     providers.value = res.providers.filter(p => p.enabled)
+    // 优先使用父组件传入的初始值（跨对话持久化）
+    if (props.initialProviderId) {
+      const provider = providers.value.find(p => p.id === props.initialProviderId)
+      if (provider) {
+        selectedProviderId.value = provider.id
+        currentModels.value = provider.models ?? []
+        selectedModelName.value = props.initialModelName && currentModels.value.includes(props.initialModelName)
+          ? props.initialModelName
+          : (currentModels.value[0] || '')
+        return
+      }
+    }
     // 默认选中第一个已启用的提供商
     if (providers.value.length > 0 && !selectedProviderId.value) {
       selectProvider(providers.value[0].id)

@@ -78,6 +78,8 @@
       ref="chatInputRef"
       :is-streaming="isStreaming"
       :disabled="!connected"
+      :initial-provider-id="selectedProviderId"
+      :initial-model-name="selectedModelName"
       @send="onSend"
       @stop="cancel"
       @model-change="onModelChange"
@@ -109,6 +111,7 @@ const {
   privateMode, setPrivateMode, autoApprove, setAutoApprove
 } = useChat(sessionId)
 
+const selectedProviderId = ref('')
 const selectedModelName = ref('')
 const hasProviders = ref(true)
 
@@ -121,7 +124,8 @@ onMounted(async () => {
   }
 })
 
-function onModelChange(_providerId: string, modelName: string) {
+function onModelChange(providerId: string, modelName: string) {
+  selectedProviderId.value = providerId
   selectedModelName.value = modelName
 }
 
