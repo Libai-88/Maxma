@@ -52,6 +52,7 @@
 import { computed, ref } from 'vue'
 import type { ToolCall } from '@/types'
 import BubbleChrome from './_shared/BubbleChrome.vue'
+import { openExternal } from '@/utils/env'
 
 const props = defineProps<{ toolCall: ToolCall }>()
 const emit = defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()
@@ -82,7 +83,7 @@ const resultCount = computed(() => items.value.length)
 
 function openUrl(url: string) {
   emit('action', { action: 'open_url', data: { url } })
-  window.open(url, '_blank', 'noopener,noreferrer')
+  openExternal(url)
 }
 
 const fallback = computed(() => props.toolCall.output

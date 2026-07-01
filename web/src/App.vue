@@ -28,11 +28,15 @@
         <div v-if="showSettingsMenu" ref="settingsPopupRef" class="settings-popup" :style="{ top: popupTop, left: popupLeft }" @click.stop>
           <div class="popup-header">设置</div>
           <router-link to="/providers" class="popup-item" @click="closeSettingsMenu">模型 MODELS</router-link>
+          <router-link to="/mcp" class="popup-item" @click="closeSettingsMenu">MCP 服务</router-link>
+          <router-link to="/skills" class="popup-item" @click="closeSettingsMenu">Skills & 宏</router-link>
           <router-link to="/soul" class="popup-item" @click="closeSettingsMenu">人设 SOUL</router-link>
           <router-link to="/user" class="popup-item" @click="closeSettingsMenu">用户 USER</router-link>
           <router-link to="/path-whitelist" class="popup-item" @click="closeSettingsMenu">路径白名单</router-link>
           <router-link to="/maxma-blocker" class="popup-item" @click="closeSettingsMenu">拒止锚</router-link>
           <router-link to="/env-vars" class="popup-item" @click="closeSettingsMenu">环境变量</router-link>
+          <router-link to="/event-hooks" class="popup-item" @click="closeSettingsMenu">事件钩子</router-link>
+          <router-link to="/privacy" class="popup-item" @click="closeSettingsMenu">隐私仪表盘</router-link>
           <div class="popup-divider"></div>
           <button class="popup-item popup-action" :class="{ restarting }" :disabled="restarting" @click="handleRestart">
             {{ restarting ? '重启中...' : '重启服务' }}
@@ -170,6 +174,8 @@ onMounted(() => {
 </script>
 
 <style>
+@import '@/assets/styles/design-system.css';
+
 *,
 *::before,
 *::after {

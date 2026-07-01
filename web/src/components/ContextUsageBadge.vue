@@ -22,6 +22,29 @@
       </svg>
       <span class="label">{{ Math.round(usage.usage_percent) }}%</span>
       <div class="hover-card card-usage">
+        <!-- 饼图：上下文组成概览 -->
+        <div v-if="pieSegments.length > 0" class="pie-chart-container">
+          <svg class="pie-chart" viewBox="0 0 36 36">
+            <circle
+              v-for="(seg, idx) in pieSegments"
+              :key="idx"
+              cx="18" cy="18" r="15.9155"
+              fill="none"
+              :stroke="seg.color"
+              stroke-width="4"
+              :stroke-dasharray="`${seg.percent} ${100 - seg.percent}`"
+              :stroke-dashoffset="seg.offset"
+            />
+          </svg>
+          <div class="pie-legend">
+            <div v-for="(seg, idx) in pieSegments" :key="'l'+idx" class="pie-legend-item">
+              <span class="pie-dot" :style="{ background: seg.color }"></span>
+              <span class="pie-label">{{ seg.label }}</span>
+              <span class="pie-value">{{ formatTokens(seg.tokens) }}</span>
+            </div>
+          </div>
+        </div>
+
         <!-- 总览 -->
         <div class="breakdown-section">
           <div class="card-row breakdown-header">
@@ -182,6 +205,45 @@ const level = computed(() => {
   if (props.usage.usage_percent < 60) return 'safe'
   if (props.usage.usage_percent < 85) return 'warn'
   return 'danger'
+})
+
+/** 饼图分段数据 */
+const pieSegments = computed(() => {
+  if (!props.usage?.breakdown) return []
+  const total = props.usage.current_tokens || 1
+  const sysTokens = props.usage.breakdown.system_prompt.total
+  const msgTokens = props.usage.breakdown.messages.total
+
+  const segments: Array<{ label: string; tokens: number; percent: number; offset: number; color: string }> = []
+  let cumPercent = 0
+
+  // 系统提示词
+  const sysPercent = (sysTokens / total) * 100
+  segments.push({
+    label: '系统提示词',
+    tokens: sysTokens,
+    percent: sysPercent,
+    offset: 25 - cumPercent,
+    color: '#6366f1',
+  })
+  cumPercent += sysPercent
+
+  // 消息部分按类型拆分
+  const colors = ['#22c55e', '#3b82f6', '#f59e0b']
+  const msgParts = props.usage.breakdown.messages.parts || []
+  msgParts.forEach((part, idx) => {
+    const partPercent = (part.tokens / total) * 100
+    segments.push({
+      label: part.label,
+      tokens: part.tokens,
+      percent: partPercent,
+      offset: 25 - cumPercent,
+      color: colors[idx % colors.length],
+    })
+    cumPercent += partPercent
+  })
+
+  return segments
 })
 
 const isDeepSeek = computed(() => {
@@ -366,5 +428,52 @@ async function onBalanceHover() {
   border-radius: 2px;
   background: var(--text-secondary);
   transition: width 0.3s ease;
+}
+
+/* ── 饼图 ── */
+.pie-chart-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.pie-chart {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  transform: rotate(-90deg);
+}
+.pie-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.pie-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+.pie-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.pie-label {
+  flex: 1;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pie-value {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
 }
 </style>

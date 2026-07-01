@@ -23,11 +23,21 @@ import type {
   ListBlockerResponse,
   ListEnvVarsResponse,
   UpdateEnvVarResponse,
+  MCPServerInfo,
+  MCPServerConfig,
+  MCPServerCreateBody,
+  MCPServerUpdateBody,
+  ListMCPServersResponse,
+  SkillDetail,
+  SkillCreateBody,
+  SkillUpdateBody,
+  MacroDetail,
+  MacroCreateBody,
+  MacroUpdateBody,
 } from '@/types'
+import { getApiBase, tauriFetch } from '@/utils/env'
 
-declare const __API_TOKEN__: string
-
-const BASE = '/api'
+const BASE = getApiBase()
 
 /** 从 Vite 编译期注入的 Token（开发模式） */
 let token: string = typeof __API_TOKEN__ !== 'undefined' ? __API_TOKEN__ : ''
@@ -47,7 +57,7 @@ export function getToken(): string {
 export async function ensureTokenLoaded(): Promise<void> {
   if (tokenFetchedAtRuntime) return
   try {
-    const res = await fetch(`${BASE}/auth/token`)
+    const res = await tauriFetch(`${BASE}/auth/token`)
     if (res.ok) {
       const data = await res.json()
       token = data.token || ''
@@ -71,7 +81,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   if (token) {
     headers['X-Maxma-Token'] = token
   }
-  const res = await fetch(`${BASE}${url}`, {
+  const res = await tauriFetch(`${BASE}${url}`, {
     headers,
     ...options,
   })
@@ -82,6 +92,28 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
       if (body.detail) detail += `: ${body.detail}`
     } catch { /* ignore parse errors */ }
     throw new Error(detail)
+  }
+  return res.json()
+}
+
+/** 上传图片文件（multipart/form-data），返回服务端路径 */
+async function uploadImage(file: File): Promise<{ file_id: string; filename: string; path: string }> {
+  if (!token && !tokenFetchedAtRuntime) {
+    await ensureTokenLoaded()
+  }
+  const form = new FormData()
+  form.append('file', file)
+  const headers: Record<string, string> = {}
+  if (token) {
+    headers['X-Maxma-Token'] = token
+  }
+  const res = await tauriFetch(`${BASE}/api/upload`, {
+    method: 'POST',
+    headers,
+    body: form,
+  })
+  if (!res.ok) {
+    throw new Error(`图片上传失败: ${res.status}`)
   }
   return res.json()
 }
@@ -108,6 +140,12 @@ export const api = {
   getMemories: () =>
     request<VignetteResponse>('/memories'),
 
+  updateMemory: (id: string, content: string, section: string) =>
+    request<{ status: string }>(`/memories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ content, section }),
+    }),
+
   getContextUsage: (sessionId: string) =>
     request<ContextUsage & { session_id: string }>(`/sessions/${sessionId}/context-usage`),
 
@@ -124,7 +162,7 @@ export const api = {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (token) headers['X-Maxma-Token'] = token
     try {
-      await fetch(`${BASE}/restart`, { method: 'POST', headers })
+      await tauriFetch(`${BASE}/restart`, { method: 'POST', headers })
     } catch { /* server will close connection, expected */ }
   },
 
@@ -178,16 +216,56 @@ export const api = {
   listNews: () =>
     request<ListNewsResponse>('/news'),
 
-  // ── Anthropic Skills ──
+  // ── Anthropic Skills & Macros ──
 
   listSkills: () =>
     request<ListSkillsResponse>('/skills'),
 
-  listTools: () =>
-    request<ListToolsResponse>('/tools'),
+  getSkill: (id: string) =>
+    request<SkillDetail>(`/skills/${encodeURIComponent(id)}`),
+
+  createSkill: (body: SkillCreateBody) =>
+    request<SkillDetail>('/skills', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  updateSkill: (id: string, body: SkillUpdateBody) =>
+    request<{ id: string; status: string }>(`/skills/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  deleteSkill: (id: string) =>
+    request<{ id: string; status: string }>(`/skills/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
 
   listMacros: () =>
     request<ListMacrosResponse>('/macros'),
+
+  getMacro: (id: string) =>
+    request<MacroDetail>(`/macros/${encodeURIComponent(id)}`),
+
+  createMacro: (body: MacroCreateBody) =>
+    request<MacroDetail>('/macros', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  updateMacro: (id: string, body: MacroUpdateBody) =>
+    request<{ id: string; status: string }>(`/macros/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  deleteMacro: (id: string) =>
+    request<{ id: string; status: string }>(`/macros/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+
+  listTools: () =>
+    request<ListToolsResponse>('/tools'),
 
   // ── Const 固定会话 ──
 
@@ -205,13 +283,28 @@ export const api = {
 
   // ── Persona 人设 ──
 
-  getPersona: (type: 'soul' | 'user') =>
-    request<{ content: string; type: string }>(`/persona?type=${type}`),
+  getPersona: (type: 'soul' | 'user', variant?: string) =>
+    request<{ content: string; type: string }>(`/persona?type=${type}${variant ? `&variant=${encodeURIComponent(variant)}` : ''}`),
 
   updatePersona: (type: 'soul' | 'user', content: string) =>
     request<{ content: string; type: string }>(`/persona?type=${type}`, {
       method: 'PUT',
       body: JSON.stringify({ content }),
+    }),
+
+  listPersonas: () =>
+    request<{ personas: { id: string; file: string; name: string; description: string; active: boolean }[]; active_file: string }>('/personas'),
+
+  switchPersona: (file: string) =>
+    request<{ status: string; active_file: string }>('/personas/active', {
+      method: 'PUT',
+      body: JSON.stringify({ file }),
+    }),
+
+  createPersona: (body: { name: string; description?: string; tools?: string; memory?: string }) =>
+    request<{ status: string; file: string; memory_mode: string; tools: string }>('/personas', {
+      method: 'POST',
+      body: JSON.stringify(body),
     }),
 
   // ── Path Whitelist 路径白名单 ──
@@ -279,4 +372,76 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ env_vars }),
     }),
+
+  // ── MCP 服务器管理 ──
+
+  listMcpServers: () =>
+    request<ListMCPServersResponse>('/mcp/servers'),
+
+  getMcpServer: (serverId: string) =>
+    request<MCPServerConfig>(`/mcp/servers/${encodeURIComponent(serverId)}`),
+
+  createMcpServer: (body: MCPServerCreateBody) =>
+    request<MCPServerConfig & { status: string; servers: MCPServerInfo[]; tool_count: number }>('/mcp/servers', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  updateMcpServer: (serverId: string, body: MCPServerUpdateBody) =>
+    request<MCPServerConfig & { status: string; servers: MCPServerInfo[]; tool_count: number }>(`/mcp/servers/${encodeURIComponent(serverId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  deleteMcpServer: (serverId: string) =>
+    request<{ status: string; removed: string; servers: MCPServerInfo[]; tool_count: number }>(`/mcp/servers/${encodeURIComponent(serverId)}`, {
+      method: 'DELETE',
+    }),
+
+  reloadMcp: () =>
+    request<{ status: string; servers: MCPServerInfo[]; tool_count: number }>('/mcp/reload', {
+      method: 'POST',
+    }),
+
+  uploadImage,
+
+  // Event Hooks
+  listHooks: () =>
+    request<{ hooks: any[] }>('/event-hooks'),
+
+  getHook: (hookId: string) =>
+    request<any>(`/event-hooks/${hookId}`),
+
+  createHook: (body: { name: string; hook_type: string; config: Record<string, any>; action: string }) =>
+    request<{ status: string; hook: any }>('/event-hooks', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  updateHook: (hookId: string, body: Record<string, any>) =>
+    request<{ status: string; hook: any }>(`/event-hooks/${hookId}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  deleteHook: (hookId: string) =>
+    request<{ status: string }>(`/event-hooks/${hookId}`, { method: 'DELETE' }),
+
+  getHookHistory: (limit: number = 50) =>
+    request<{ history: any[] }>(`/event-hooks/history?limit=${limit}`),
+
+  // Audit Log
+  getAuditLog: (params: string = '?limit=50') =>
+    request<{ records: any[] }>(`/audit-log${params}`),
+
+  getAuditStats: () =>
+    request<{ stats: any }>('/audit-log/stats'),
+
+  clearAuditLog: () =>
+    request<{ status: string; deleted: number }>('/audit-log/clear', { method: 'POST' }),
+
+  encryptApiKeys: () =>
+    request<{ status: string; encrypted: number }>('/audit-log/encrypt-keys', { method: 'POST' }),
 }
+
+export { request }

@@ -41,6 +41,10 @@ def get_all_tools() -> list[BaseTool]:
 
     # System
     from tools.system.tool_python import RunPythonTool
+    from tools.system.tool_project_info import ProjectInfoTool
+    from tools.system.tool_context_strategy import ContextStrategyTool
+    from tools.system.tool_forget import ForgetTool
+    from tools.system.tool_create_persona import CreatePersonaTool
 
     # Todo
     from tools.todo.tool_add import TodoAddTool
@@ -84,6 +88,7 @@ def get_all_tools() -> list[BaseTool]:
 
     # SubAgent
     from tools.sub_agent.tool_call_sub_agent import CallSubAgentTool
+    from tools.sub_agent.tool_parallel import ParallelExecuteTool
 
     # QuickTask
     from tools.quick_task.tool_quick_task import QuickTaskTool
@@ -92,6 +97,7 @@ def get_all_tools() -> list[BaseTool]:
     from tools.interaction.tool_ask_qa import AskUserQATool
     from tools.interaction.tool_single_choice import AskUserSingleChoiceTool
     from tools.interaction.tool_multi_choice import AskUserMultiChoiceTool
+    from tools.interaction.tool_ask_confirm import AskUserConfirmTool
 
     # Entertainment
     from tools.entertainment.tool_tarot import TarotTool
@@ -103,10 +109,32 @@ def get_all_tools() -> list[BaseTool]:
     from tools.memory.tool_update_memory import UpdateMemoryTool
     from tools.memory.tool_delete_memory import DeleteMemoryTool
     from tools.memory.tool_merge_memories import MergeMemoriesTool
+    from tools.memory.tool_search_memories import SearchMemoriesTool
+
+    # Config (MCP / Skills / Macros / Providers / EnvVars / Whitelist)
+    from tools.config.tool_manage_mcp import ManageMCPTool
+    from tools.config.tool_manage_skills import ManageSkillsTool
+    from tools.config.tool_manage_macros import ManageMacrosTool
+    from tools.config.tool_manage_providers import ManageProvidersTool
+    from tools.config.tool_manage_env_vars import ManageEnvVarsTool
+    from tools.config.tool_manage_whitelist import ManageWhitelistTool
+
+    # Git
+    from tools.git.tool_git_status import GitStatusTool
+    from tools.git.tool_git_diff import GitDiffTool
+    from tools.git.tool_git_log import GitLogTool
+    from tools.git.tool_git_commit import GitCommitTool
+    from tools.git.tool_git_branch import GitBranchTool
+    from tools.git.tool_git_push import GitPushTool
+    from tools.git.tool_git_pr import GitPRTool
 
     _cached_tools = [
         # System
         RunPythonTool(client=client),
+        ProjectInfoTool(client=client),
+        ContextStrategyTool(client=client),
+        ForgetTool(client=client),
+        CreatePersonaTool(client=client),
         # Todo
         TodoAddTool(client=client),
         TodoListTool(client=client),
@@ -143,12 +171,14 @@ def get_all_tools() -> list[BaseTool]:
         TaskTrackerTool(client=client),
         # SubAgent
         CallSubAgentTool(client=client),
+        ParallelExecuteTool(client=client),
         # QuickTask
         QuickTaskTool(client=client),
         # Interaction
         AskUserQATool(client=client),
         AskUserSingleChoiceTool(client=client),
         AskUserMultiChoiceTool(client=client),
+        AskUserConfirmTool(client=client),
         # Entertainment
         TarotTool(client=client),
         # Memory
@@ -158,6 +188,22 @@ def get_all_tools() -> list[BaseTool]:
         UpdateMemoryTool(client=client),
         DeleteMemoryTool(client=client),
         MergeMemoriesTool(client=client),
+        SearchMemoriesTool(client=client),
+        # Config
+        ManageMCPTool(client=client),
+        ManageSkillsTool(client=client),
+        ManageMacrosTool(client=client),
+        ManageProvidersTool(client=client),
+        ManageEnvVarsTool(client=client),
+        ManageWhitelistTool(client=client),
+        # Git
+        GitStatusTool(client=client),
+        GitDiffTool(client=client),
+        GitLogTool(client=client),
+        GitCommitTool(client=client),
+        GitBranchTool(client=client),
+        GitPushTool(client=client),
+        GitPRTool(client=client),
     ]
     return _cached_tools
 
@@ -172,7 +218,7 @@ def clear_tool_cache() -> None:
 
 # 工具名称到分类的映射
 TOOL_CATEGORIES: dict[str, list[str]] = {
-    "system": ["run_python"],
+    "system": ["run_python", "project_info", "context_strategy", "forget", "create_persona"],
     "todo": [
         "todo_add", "todo_list", "todo_complete", "todo_uncomplete",
         "todo_delete", "todo_update", "todo_query",
@@ -192,21 +238,31 @@ TOOL_CATEGORIES: dict[str, list[str]] = {
         "file_search", "file_edit",
     ],
     "task": ["task_tracker"],
-    "sub_agent": ["call_sub_agent", "quick_task"],
-    "interaction": ["ask_user_qa", "ask_user_single_choice", "ask_user_multi_choice"],
+    "sub_agent": ["call_sub_agent", "parallel_execute", "quick_task"],
+    "interaction": ["ask_user_qa", "ask_user_single_choice", "ask_user_multi_choice", "ask_user_confirm"],
     "entertainment": ["tarot"],
     "memory": [
         "list_memories", "read_memories", "create_memory",
-        "update_memory", "delete_memory", "merge_memories",
+        "update_memory", "delete_memory", "merge_memories", "search_memories",
+    ],
+    "config": [
+        "manage_mcp", "manage_skills", "manage_macros",
+        "manage_providers", "manage_env_vars", "manage_whitelist",
+    ],
+    "git": [
+        "git_status", "git_diff", "git_log",
+        "git_commit", "git_branch", "git_push", "git_pr",
     ],
 }
 
 # 始终加载的核心工具（不受过滤影响）
 CORE_TOOLS = {
-    "run_python", "file_read", "file_write", "file_manage", "file_search", "file_edit",
-    "task_tracker", "call_sub_agent", "quick_task",
-    "ask_user_qa", "ask_user_single_choice", "ask_user_multi_choice",
-    "list_memories", "read_memories", "create_memory", "update_memory", "delete_memory", "merge_memories",
+    "run_python", "project_info", "context_strategy", "forget", "create_persona", "file_read", "file_write", "file_manage", "file_search", "file_edit",
+    "task_tracker", "call_sub_agent", "parallel_execute", "quick_task",
+    "ask_user_qa", "ask_user_single_choice", "ask_user_multi_choice", "ask_user_confirm",
+    "list_memories", "read_memories", "create_memory", "update_memory", "delete_memory", "merge_memories", "search_memories",
+    "manage_mcp", "manage_skills", "manage_macros", "manage_providers", "manage_env_vars", "manage_whitelist",
+    "git_status", "git_diff", "git_log", "git_commit", "git_branch", "git_push", "git_pr",
 }
 
 # 关键词到工具分类的映射
@@ -234,18 +290,74 @@ KEYWORD_TO_CATEGORIES: dict[str, list[str]] = {
     "tarot": ["entertainment"],
     "塔罗": ["entertainment"],
     "占卜": ["entertainment"],
+    "mcp": ["config"],
+    "MCP": ["config"],
+    "skill": ["config"],
+    "skills": ["config"],
+    "技能": ["config"],
+    "macro": ["config"],
+    "macros": ["config"],
+    "宏": ["config"],
+    "服务器": ["config"],
+    "工具配置": ["config"],
+    "配置": ["config"],
+    "提供商": ["config"],
+    "provider": ["config"],
+    "模型": ["config"],
+    "API": ["config"],
+    "api": ["config"],
+    "环境变量": ["config"],
+    "密钥": ["config"],
+    "key": ["config"],
+    "白名单": ["config"],
+    "whitelist": ["config"],
+    "路径": ["config"],
+    "git": ["git"],
+    "Git": ["git"],
+    "提交": ["git"],
+    "commit": ["git"],
+    "分支": ["git"],
+    "branch": ["git"],
+    "代码": ["git"],
+    "推送": ["git"],
+    "push": ["git"],
+    "PR": ["git"],
+    "pr": ["git"],
+    "pull request": ["git"],
+    "diff": ["git"],
+    "差异": ["git"],
+    "项目": ["system"],
+    "project": ["system"],
+    "结构": ["system"],
+    "技术栈": ["system"],
+    "上下文": ["system"],
+    "忘记": ["system"],
+    "遗忘": ["system"],
+    "forget": ["system"],
+    "人格": ["system"],
+    "persona": ["system"],
+    "并行": ["sub_agent"],
+    "parallel": ["sub_agent"],
+    "同时": ["sub_agent"],
+    "批量": ["sub_agent"],
+    "记忆": ["memory"],
+    "memory": ["memory"],
+    "记得": ["memory"],
+    "之前": ["memory"],
+    "以前": ["memory"],
 }
 
 
-def select_tools_for_query(query: str, max_tools: int = 20) -> list[BaseTool]:
+def select_tools_for_query(query: str, max_tools: int = 20, mcp_tools: list | None = None) -> list[BaseTool]:
     """根据用户查询动态选择相关工具子集。
 
     Args:
         query: 用户输入文本
-        max_tools: 最大返回工具数
+        max_tools: 最大返回工具数（不含 MCP 工具）
+        mcp_tools: 可选的 MCP 工具列表，始终追加到结果中
 
     Returns:
-        过滤后的工具列表，包含核心工具 + 匹配查询的工具
+        过滤后的工具列表，包含核心工具 + 匹配查询的工具 + MCP 工具
     """
     all_tools = get_all_tools()
     query_lower = query.lower()
@@ -266,9 +378,28 @@ def select_tools_for_query(query: str, max_tools: int = 20) -> list[BaseTool]:
 
     # 如果过滤后工具数少于上限，返回全部
     if len(filtered) <= max_tools:
-        return filtered
+        result = filtered
+    else:
+        # 否则优先返回核心工具
+        core = [t for t in all_tools if t.name in CORE_TOOLS]
+        non_core = [t for t in filtered if t.name not in CORE_TOOLS]
+        result = core + non_core[:max_tools - len(core)]
 
-    # 否则优先返回核心工具
-    core = [t for t in all_tools if t.name in CORE_TOOLS]
-    non_core = [t for t in filtered if t.name not in CORE_TOOLS]
-    return core + non_core[:max_tools - len(core)]
+    # 追加 MCP 工具（始终包含，不受过滤影响）
+    if mcp_tools:
+        result = result + list(mcp_tools)
+
+    # ── 人格专属工具集过滤 ──
+    # 如果当前人格的 SOUL 文件 frontmatter 中声明了 tools 列表，
+    # 只保留允许的工具（MCP 工具不受限制）
+    try:
+        from agent.prompts import get_persona_allowed_tools
+        allowed = get_persona_allowed_tools()
+        if allowed is not None:
+            native_filtered = [t for t in result if t.name in allowed]
+            mcp_only = [t for t in result if t not in native_filtered]
+            result = native_filtered + mcp_only
+    except Exception:
+        pass  # 解析失败时不限制
+
+    return result

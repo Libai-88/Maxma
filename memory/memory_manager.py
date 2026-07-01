@@ -7,7 +7,7 @@ from typing import Optional
 import portalocker
 import yaml
 
-MAX_DESC_LENGTH = 75
+MAX_DESC_LENGTH = 150
 """记忆描述最大字数限制，超过此长度的创建/更新/合并请求将被驳回。"""
 
 MAX_HISTORY_LENGTH = 5
@@ -234,3 +234,107 @@ class MemoryManager:
             if id not in items:
                 raise ValueError(f"MemoryManager: Memory item with ID {id} not found")
             return items[id].show_description_history()
+
+    def search(
+        self,
+        keyword: str = "",
+        theme: str = "",
+        since: str = "",
+        limit: int = 50,
+    ) -> list[dict]:
+        """搜索记忆条目。
+
+        Args:
+            keyword: 关键词（在 description 和 theme 中模糊匹配）
+            theme: 按分区过滤
+            since: 时间范围起始（格式 YYYY-MM-DD），仅返回此日期之后更新的条目
+            limit: 最大返回条数
+        """
+        with portalocker.Lock(self._lock_path, timeout=5):
+            items = self._read_all()
+            results = []
+            for id, item in items.items():
+                # 分区过滤
+                if theme and item.theme != theme:
+                    continue
+                # 时间过滤
+                if since and item.latest_update_time < since:
+                    continue
+                # 关键词匹配（在 description 和 theme 中搜索）
+                if keyword:
+                    kw = keyword.lower()
+                    if kw not in item.description.lower() and kw not in item.theme.lower():
+                        continue
+                results.append({
+                    "id": id,
+                    "description": item.description,
+                    "theme": item.theme,
+                    "latest_update_time": item.latest_update_time,
+                })
+            # 按更新时间倒序
+            results.sort(key=lambda x: x["latest_update_time"], reverse=True)
+            return results[:limit]
+
+    def find_similar(self, description: str, theme: str = "", threshold: float = 0.6) -> list[dict]:
+        """查找与给定描述相似的已有记忆条目。
+
+        使用关键词重叠 + 主题匹配计算相似度，不需要 embedding 模型。
+
+        Args:
+            description: 待比较的描述文本
+            theme: 可选，限定在某个分区内查找
+            threshold: 相似度阈值（0-1），默认 0.6
+
+        Returns:
+            相似度超过阈值的条目列表，每项包含 id, description, theme, similarity
+        """
+        with portalocker.Lock(self._lock_path, timeout=5):
+            items = self._read_all()
+
+        # 将描述拆分为字符 bigrams 作为简易 token
+        def _tokenize(text: str) -> set[str]:
+            text = text.lower().strip()
+            # 中文按字拆分，英文按词拆分
+            tokens = set()
+            # 提取英文单词
+            for word in re.findall(r'[a-zA-Z]+', text):
+                tokens.add(word.lower())
+            # 提取中文 bigrams
+            chinese_chars = re.findall(r'[\u4e00-\u9fff]', text)
+            for i in range(len(chinese_chars) - 1):
+                tokens.add(chinese_chars[i] + chinese_chars[i + 1])
+            # 单字也加入（权重较低，但通过集合交集仍可匹配）
+            for ch in chinese_chars:
+                tokens.add(ch)
+            return tokens
+
+        new_tokens = _tokenize(description)
+        if not new_tokens:
+            return []
+
+        results = []
+        for id, item in items.items():
+            if theme and item.theme != theme:
+                continue
+            existing_tokens = _tokenize(item.description)
+            if not existing_tokens:
+                continue
+            # Jaccard 相似度
+            intersection = new_tokens & existing_tokens
+            union = new_tokens | existing_tokens
+            similarity = len(intersection) / len(union) if union else 0
+
+            # 同主题加权
+            if item.theme == theme:
+                similarity = min(1.0, similarity + 0.15)
+
+            if similarity >= threshold:
+                results.append({
+                    "id": id,
+                    "description": item.description,
+                    "theme": item.theme,
+                    "similarity": round(similarity, 3),
+                })
+
+        results.sort(key=lambda x: x["similarity"], reverse=True)
+        return results

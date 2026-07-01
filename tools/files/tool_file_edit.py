@@ -1,5 +1,6 @@
 """Tool: file_edit — 文件精确编辑工具（基于 Claude Code Edit 工具模式）。"""
 
+import difflib
 import json
 import os
 import re
@@ -23,7 +24,7 @@ class FileEditInput(BaseModel):
 
     operation: str = Field(
         default="",
-        description="操作类型: edit / multi_edit / read / search",
+        description="操作类型: edit / multi_edit / preview / read / search",
     )
     file_path: str = Field(default="", description="文件绝对路径")
 
@@ -78,7 +79,7 @@ class FileEditTool(ToolBase):
             return self._load_doc()
 
         if not operation:
-            return format_error("operation 必填: edit / multi_edit / read / search")
+            return format_error("operation 必填: edit / multi_edit / preview / read / search")
         if not file_path:
             return format_error("file_path 不能为空")
 
@@ -111,6 +112,8 @@ class FileEditTool(ToolBase):
                 return self._edit(file_path, old_string, new_string, replace_all)
             elif operation == "multi_edit":
                 return self._multi_edit(file_path, edits)
+            elif operation == "preview":
+                return self._preview(file_path, old_string, new_string)
             elif operation == "search":
                 return self._search(file_path, pattern, case_insensitive)
             else:
@@ -143,6 +146,30 @@ class FileEditTool(ToolBase):
             }
         )
 
+    # ── Diff 辅助 ─────────────────────────────────────────────────
+
+    @staticmethod
+    def _compute_diff(old_content: str, new_content: str, file_path: str, context: int = 3) -> str:
+        """计算 unified diff 字符串。"""
+        old_lines = old_content.splitlines(keepends=True)
+        new_lines = new_content.splitlines(keepends=True)
+        diff = difflib.unified_diff(
+            old_lines, new_lines,
+            fromfile=f"a/{os.path.basename(file_path)}",
+            tofile=f"b/{os.path.basename(file_path)}",
+            n=context,
+        )
+        return "".join(diff)
+
+    @staticmethod
+    def _diff_stats(diff_text: str) -> dict:
+        """从 unified diff 文本提取统计信息。"""
+        if not diff_text:
+            return {"additions": 0, "deletions": 0}
+        additions = sum(1 for line in diff_text.splitlines() if line.startswith("+") and not line.startswith("+++"))
+        deletions = sum(1 for line in diff_text.splitlines() if line.startswith("-") and not line.startswith("---"))
+        return {"additions": additions, "deletions": deletions}
+
     # ── Edit ──────────────────────────────────────────────────────
 
     def _edit(
@@ -170,6 +197,10 @@ class FileEditTool(ToolBase):
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(new_content)
 
+        # 计算 diff
+        diff_text = self._compute_diff(content, new_content, file_path)
+        stats = self._diff_stats(diff_text)
+
         return format_success(
             {
                 "file_path": os.path.abspath(file_path),
@@ -177,6 +208,9 @@ class FileEditTool(ToolBase):
                 "replace_all": replace_all,
                 "total_lines": new_content.count("\n") + 1,
                 "message": f"已替换 {count if replace_all else 1} 处匹配",
+                "diff": diff_text,
+                "additions": stats["additions"],
+                "deletions": stats["deletions"],
             }
         )
 
@@ -195,8 +229,9 @@ class FileEditTool(ToolBase):
             return format_error("edits 应为非空 JSON 数组")
 
         with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read()
+            original_content = f.read()
 
+        content = original_content
         results: list[dict[str, Any]] = []
         for i, edit in enumerate(edit_list):
             old = edit.get("old_string", "")
@@ -232,6 +267,11 @@ class FileEditTool(ToolBase):
             f.write(content)
 
         success_count = sum(1 for r in results if r["status"] == "ok")
+
+        # 计算 diff
+        diff_text = self._compute_diff(original_content, content, file_path)
+        stats = self._diff_stats(diff_text)
+
         return format_success(
             {
                 "file_path": os.path.abspath(file_path),
@@ -239,6 +279,42 @@ class FileEditTool(ToolBase):
                 "success_count": success_count,
                 "failed_count": len(edit_list) - success_count,
                 "results": results,
+                "diff": diff_text,
+                "additions": stats["additions"],
+                "deletions": stats["deletions"],
+            }
+        )
+
+    # ── Preview ──────────────────────────────────────────────────
+
+    def _preview(self, file_path: str, old_string: str, new_string: str) -> str:
+        """只计算 diff 不实际写入，供 Agent 预览变更效果。"""
+        if not old_string:
+            return format_error("preview 操作需要提供 old_string")
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        count = content.count(old_string)
+        if count == 0:
+            return format_error("未找到匹配的 old_string，内容不匹配")
+        if count > 1:
+            return format_error(
+                f"old_string 有 {count} 处匹配。请提供更多上下文使匹配唯一"
+            )
+
+        new_content = content.replace(old_string, new_string, 1)
+        diff_text = self._compute_diff(content, new_content, file_path)
+        stats = self._diff_stats(diff_text)
+
+        return format_success(
+            {
+                "file_path": os.path.abspath(file_path),
+                "message": "预览模式 — 未实际写入",
+                "diff": diff_text,
+                "additions": stats["additions"],
+                "deletions": stats["deletions"],
+                "total_lines": new_content.count("\n") + 1,
             }
         )
 

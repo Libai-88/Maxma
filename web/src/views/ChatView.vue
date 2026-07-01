@@ -70,6 +70,7 @@
       @action="handleToolAction"
       @cite="addCitation"
       @toggle-private="setPrivateMode(!privateMode)"
+      @plan-respond="sendPlanResponse"
     />
 
     <ChatInput
@@ -104,7 +105,7 @@ import { computed, onMounted, ref } from 'vue'
 const { sessionId, sessions } = useSession()
 const {
   connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId,
-  contextUsage, taskTrackerData, send, cancel, sendUserResponse, removeTurns,
+  contextUsage, taskTrackerData, send, cancel, sendUserResponse, sendPlanResponse, removeTurns,
   privateMode, setPrivateMode, autoApprove, setAutoApprove
 } = useChat(sessionId)
 

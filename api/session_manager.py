@@ -30,6 +30,10 @@ class SessionState:
     is_const: bool = False
     const_name: str = ""
 
+    # ── 项目上下文缓存 ──────────────────────────────────────
+    _project_context: str | None = field(default=None, repr=False)
+    _project_path: str | None = field(default=None, repr=False)
+
 
 class SessionManager:
     def __init__(self, ttl_seconds: int = 1800):

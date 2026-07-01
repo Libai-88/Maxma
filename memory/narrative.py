@@ -31,8 +31,8 @@ _CORE_PRINCIPLES = """核心原则：
 3. 每条记忆一个独立事实，每次必须提供正确的 section。
 4. 用第三人称自然语言描述。
 5. 禁止使用"今天""明天""昨天""下周"等相对时间词汇，必须使用绝对日期写入记忆。已提供当前日期和星期几，请自行换算。
-6. 少即是多。任何条目不能过长。每个记忆描述**不得超过 75 个中文字符（含标点）**。超过 75 字的记忆创建、更新或合并请求会被系统自动驳回。
-7. 若内容超过 75 字，应主动拆分：保留核心事实，将次要信息另起一条独立条目。
+6. 少即是多。任何条目不能过长。每个记忆描述**不得超过 150 个中文字符（含标点）**。超过 150 字的记忆创建、更新或合并请求会被系统自动驳回。
+7. 若内容超过 150 字，应主动拆分：保留核心事实，将次要信息另起一条独立条目。
 
 反面例子：2026年6月23日，用户 和 Maxma 讨论了用声明式 YAML 配置（类似 providers.yaml 的模式）来管理 MCP 服务器的方案，目标是实现不写代码就能添加 MCP 服务器。方案包括新建 config/mcp_servers.yaml 以及可选的 POST /api/mcp/reload 热加载端点。
 
@@ -164,19 +164,25 @@ def get_narrative() -> str:
 
     基于 memory.yaml 的修改时间做缓存：文件未变化时直接返回上次结果，
     避免每次调用都创建 MemoryManager 并解析 YAML。
+    支持人格专属记忆：如果当前人格配置了 memory: persona，
+    则从独立的 memory_{persona}.yaml 读取。
     """
     global _narrative_cache, _narrative_mtime
 
-    if not MEMORY_PATH.exists():
+    # 获取当前人格的记忆路径
+    from agent.prompts import get_persona_memory_path
+    memory_path = get_persona_memory_path()
+
+    if not memory_path.exists():
         _narrative_cache = ""
         _narrative_mtime = -1.0
         return ""
 
-    current_mtime = MEMORY_PATH.stat().st_mtime
+    current_mtime = memory_path.stat().st_mtime
     if _narrative_cache is not None and current_mtime == _narrative_mtime:
         return _narrative_cache
 
-    mm = MemoryManager(yaml_file=str(MEMORY_PATH))
+    mm = MemoryManager(yaml_file=str(memory_path))
     _narrative_cache = _format_narrative(mm.show())
     _narrative_mtime = current_mtime
     return _narrative_cache
@@ -226,6 +232,15 @@ def create_memory(content: str, section: str) -> str:
         )
     if _current_mm is None:
         return "错误：记忆管理器未初始化。"
+    # 智能合并检测：查找相似条目
+    similar = _current_mm.find_similar(content, theme=section, threshold=0.65)
+    if similar:
+        top = similar[0]
+        return (
+            f"驳回：发现高度相似的已有记忆 [{top['id']}] ({top['theme']}) "
+            f"「{top['description']}」（相似度 {top['similarity']:.0%}）。"
+            f"请使用 update_memory 更新该条目，或使用 merge_memories 合并，而非新建。"
+        )
     new_id = _current_mm.add(description=content, theme=section)
     return f"已创建 [{new_id}] ({section}): {content}"
 
@@ -306,6 +321,28 @@ def merge_memories(id1: str, id2: str, content: str, section: str, reason: str) 
     except ValueError:
         return f"错误：未找到 ID 为 {id1} 或 {id2} 的记忆条目。请先调用 read_memories 确认 ID。"
     return f"已合并 [{id2}] → [{id1}] ({section}): {content}"
+
+
+@tool
+def search_memories(keyword: str = "", section: str = "", since: str = "") -> str:
+    """搜索记忆条目。支持按关键词、分区、时间范围过滤。
+
+    当用户提到'我之前跟你说过关于 XX 的事'或需要回忆历史信息时使用。
+
+    Args:
+        keyword: 搜索关键词，在记忆内容和分区名中模糊匹配
+        section: 可选，按分区过滤（如 '身份'、'音乐'、'品味' 等）
+        since: 可选，时间范围起始（格式 YYYY-MM-DD），仅返回此日期之后更新的条目
+    """
+    if _current_mm is None:
+        return "（暂无记忆条目）"
+    results = _current_mm.search(keyword=keyword, theme=section, since=since)
+    if not results:
+        return "未找到匹配的记忆条目"
+    lines = []
+    for item in results:
+        lines.append(f"[{item['id']}] ({item['theme']}) {item['description']}")
+    return "\n".join(lines)
 
 
 # ── LongTermMemoryInterface ───────────────────────────────────
@@ -475,6 +512,7 @@ class LongTermMemoryInterface:
                     update_memory,
                     delete_memory,
                     merge_memories,
+                    search_memories,
                 ]
 
                 agent = create_react_agent(

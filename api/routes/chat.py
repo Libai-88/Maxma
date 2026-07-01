@@ -36,6 +36,114 @@ def _get_provider_context(app_state) -> tuple[int, str]:
     return 256_000, ""
 
 
+async def _process_image_refs(user_message: str) -> str:
+    """从用户消息中提取图片引用，自动描述图片内容并追加到消息末尾。
+
+    流程：
+    1. 解析 __refs__ 块中的 image 类型引用
+    2. 对每个有 path 的图片调用 GLM-5V-Turbo 生成描述
+    3. 将描述追加到用户消息文本末尾（在 __refs__ 之前）
+
+    Returns:
+        增强后的用户消息文本
+    """
+    import re
+    import base64
+    import mimetypes
+    from pathlib import Path
+
+    # 提取 refs 块
+    refs_start = user_message.rfind("__refs__")
+    if refs_start == -1:
+        return user_message
+
+    refs_end = user_message.find("__/refs__", refs_start)
+    if refs_end == -1:
+        return user_message
+
+    refs_json = user_message[refs_start + len("__refs__"):refs_end]
+    try:
+        refs_list = json.loads(refs_json)
+    except (json.JSONDecodeError, ValueError):
+        return user_message
+
+    # 提取图片引用
+    image_paths = []
+    for ref_item in refs_list:
+        if isinstance(ref_item, dict) and ref_item.get("type") == "image":
+            path = ref_item.get("path", "")
+            if path:
+                image_paths.append((path, ref_item.get("label", "image")))
+
+    if not image_paths:
+        return user_message
+
+    # 对每张图片生成描述
+    descriptions = []
+    for path, label in image_paths:
+        try:
+            desc = await _describe_image(path)
+            if desc:
+                descriptions.append(f"[图片 {label}: {desc}]")
+        except Exception as e:
+            logger.warning(f"Failed to describe image {path}: {e}")
+            descriptions.append(f"[图片 {label}: 描述失败 - {str(e)[:80]}]")
+
+    if not descriptions:
+        return user_message
+
+    # 将描述插入到 __refs__ 之前
+    before_refs = user_message[:refs_start].rstrip()
+    after_refs = user_message[refs_start:]
+    desc_text = "\n\n" + "\n".join(descriptions)
+    return before_refs + desc_text + "\n\n" + after_refs
+
+
+async def _describe_image(image_path: str) -> str:
+    """调用 GLM-5V-Turbo 描述单张图片。"""
+    import base64
+    import mimetypes
+    from pathlib import Path
+
+    file_path = Path(image_path)
+    if not file_path.exists():
+        raise FileNotFoundError(f"图片文件不存在: {image_path}")
+
+    # 读取并编码图片
+    image_bytes = file_path.read_bytes()
+    mime = mimetypes.guess_type(str(file_path))[0] or "image/png"
+    image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+    data_url = f"data:{mime};base64,{image_b64}"
+
+    # 调用 GLM-5V-Turbo
+    from config.settings import get_settings
+    from zai import ZhipuAiClient
+
+    settings = get_settings()
+    if not settings.zhipuai_api_key:
+        return "(图片描述不可用: 未配置智谱 API Key)"
+
+    client = ZhipuAiClient(api_key=settings.zhipuai_api_key)
+
+    response = await asyncio.to_thread(
+        client.chat.completions.create,
+        model="glm-5v-turbo",
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": data_url}},
+                    {"type": "text", "text": "请简洁描述这张图片的主要内容，包括关键元素、场景和文字（如果有）。控制在 100 字以内。"},
+                ],
+            }
+        ],
+        thinking={"type": "enabled"},
+        stream=False,
+    )
+
+    return response.choices[0].message.content or "(无法描述)"
+
+
 def _get_final_answer(event) -> str:
     """
     从 on_chain_end 事件提取原始 final_answer，
@@ -221,6 +329,58 @@ async def _inject_cancel_tool_messages(session, config, ws: WebSocket) -> None:
         raise
 
 
+# ── 项目上下文自动感知 ──────────────────────────────────────────
+
+import re as _re
+
+# 匹配 Windows / Unix 绝对路径
+_PATH_PATTERN = _re.compile(
+    r"(?:[A-Za-z]:[\\/]|[\\/])(?:[\w .\-]+[\\/])*[\w .\-]+"
+)
+
+
+def _detect_project_path(message: str) -> str | None:
+    """从用户消息中提取可能的项目根目录路径。"""
+    matches = _PATH_PATTERN.findall(message)
+    for m in matches:
+        p = m.rstrip("\\/").rstrip()
+        # 检查是否是目录
+        from pathlib import Path as _Path
+        if _Path(p).is_dir():
+            # 检查是否像项目根目录（含 .git 或 package.json 或 pyproject.toml 等）
+            markers = [".git", "package.json", "pyproject.toml", "Cargo.toml",
+                       "go.mod", "requirements.txt", "setup.py"]
+            if any((_Path(p) / marker).exists() for marker in markers):
+                return p
+    return None
+
+
+def _get_project_context(session: SessionState, user_message: str) -> str | None:
+    """获取项目上下文：优先用缓存，否则尝试从消息检测并扫描。"""
+    # 已有缓存
+    if session._project_context is not None:
+        return session._project_context
+
+    # 尝试从消息检测项目路径
+    project_path = _detect_project_path(user_message)
+    if project_path is None:
+        return None
+
+    # 扫描项目
+    try:
+        from agent.project_scanner import scan_project
+        ctx = scan_project(project_path)
+        text = ctx.to_prompt_text()
+        # 缓存到 session
+        session._project_context = text
+        session._project_path = project_path
+        return text
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("[project_scanner] 扫描失败: %s", e)
+        return None
+
+
 async def _run_agent_turn(
     ws: WebSocket,
     session: SessionState,
@@ -242,6 +402,10 @@ async def _run_agent_turn(
     app_state = ws.app.state
     session.auto_approve = auto_approve
     ws_callback = WebSocketCallback(ws)  # WebUI 回调函数系统
+
+    # ── 多模态：自动描述用户附带的图片 ──────────────────────────
+    user_message = await _process_image_refs(user_message)
+    # ────────────────────────────────────────────────────────────
 
     # 获取默认上下文窗口大小
     default_max_tokens, _ = _get_provider_context(app_state)
@@ -271,13 +435,23 @@ async def _run_agent_turn(
         return
 
     system_prompt = build_system_prompt()
+
+    # ── 项目上下文自动感知 ──────────────────────────────────────
+    project_ctx = _get_project_context(session, user_message)
+    if project_ctx:
+        system_prompt = system_prompt + "\n\n" + project_ctx
+    # ────────────────────────────────────────────────────────────
+
     # 动态工具过滤：根据用户消息选择相关工具子集，减少 token 消耗
-    turn_tools = select_tools_for_query(user_message)
+    # 同时追加 MCP 工具，确保外部工具始终可用
+    mcp_tools = getattr(app.state, "mcp_tools", None)
+    turn_tools = select_tools_for_query(user_message, mcp_tools=mcp_tools)
     agent_maxma = build_agent(
         model=llm,
         tools=turn_tools,
         system_prompt=system_prompt,
         checkpointer=session.checkpointer,
+        ws=ws,
     )
     session._graph = agent_maxma
     inputs = {"messages": [HumanMessage(content=user_message)]}
@@ -530,6 +704,21 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                     response = payload.get("response", "")
                     if interaction_id:
                         interaction.resolve(interaction_id, response)
+
+                case "plan_response":
+                    payload = msg.get("payload", {})
+                    plan_id = payload.get("plan_id", "")
+                    action = payload.get("action", "")
+                    modified_plan = payload.get("modified_plan", "")
+                    if plan_id:
+                        if action == "approve":
+                            interaction.resolve(plan_id, "approve")
+                        elif action == "reject":
+                            interaction.resolve(plan_id, "reject")
+                        elif action == "modify" and modified_plan:
+                            interaction.resolve(plan_id, modified_plan)
+                        else:
+                            interaction.resolve(plan_id, "approve")
 
                 case "cancel":
                     if agent_task and not agent_task.done():
