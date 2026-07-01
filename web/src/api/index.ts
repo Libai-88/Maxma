@@ -69,6 +69,12 @@ export async function ensureTokenLoaded(): Promise<void> {
   }
 }
 
+/** 强制清除 Token 缓存，下次请求时重新获取（用于 auth 失败后刷新） */
+export function resetToken(): void {
+  tokenFetchedAtRuntime = false
+  token = ''
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   // 如果没有 Token，先运行时获取
   if (!token && !tokenFetchedAtRuntime) {

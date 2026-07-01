@@ -396,9 +396,11 @@ def select_tools_for_query(query: str, max_tools: int = 20, mcp_tools: list | No
         from agent.prompts import get_persona_allowed_tools
         allowed = get_persona_allowed_tools()
         if allowed is not None:
-            native_filtered = [t for t in result if t.name in allowed]
-            mcp_only = [t for t in result if t not in native_filtered]
-            result = native_filtered + mcp_only
+            all_native_names = {t.name for t in get_all_tools()}
+            result = [
+                t for t in result
+                if t.name in allowed or t.name not in all_native_names
+            ]
     except Exception:
         pass  # 解析失败时不限制
 

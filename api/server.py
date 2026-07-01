@@ -295,6 +295,10 @@ def create_app() -> FastAPI:
     # 审计日志
     app.include_router(audit_log_router.router, prefix="/api")
 
+    # 表情包
+    from api.routes import stickers as stickers_router
+    app.include_router(stickers_router.router, prefix="/api")
+
     # Auth token 端点 — 桌面应用运行时获取 Token（替代构建时硬编码）
     @app.get("/api/auth/token")
     async def get_auth_token():

@@ -222,6 +222,7 @@ export interface ThinkingBlock {
   tokens: string
   done: boolean
   becameAnswer: boolean
+  consumed?: boolean  // 中间思考块（工具调用前的思考），UI 不渲染
 }
 
 /** ask_user 交互工具在前端存储的交互数据 */

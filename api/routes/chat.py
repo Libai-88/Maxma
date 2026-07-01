@@ -492,10 +492,16 @@ async def _run_agent_turn(
             max_tokens=current_max_tokens,
         )
         if final_answer:
+            # 表情包处理：解析 [表情包:情绪] 占位符
+            from tools.sticker_utils import process_stickers
+            processed_answer, sticker_files = process_stickers(final_answer)
+            answer_payload: dict = {"content": processed_answer}
+            if sticker_files:
+                answer_payload["stickers"] = sticker_files
             await ws.send_json(
                 {  # [向前端通信] 1. 向客户端推送最终答案
                     "type": "answer",
-                    "payload": {"content": final_answer},
+                    "payload": answer_payload,
                 }
             )
     except asyncio.CancelledError:
@@ -627,6 +633,10 @@ def _resume_sub_agent(ws: WebSocket, session: SessionState) -> asyncio.Task | No
         return None
     task = session._sub_agent_task
     session._sub_agent_task = None  # 消费掉，防止重连后重复启动
+    # 取消旧任务，防止双重执行（两个 task 操作同一个 checkpointer 和 _pending_result）
+    if session._active_task is not None and not session._active_task.done():
+        session._active_task.cancel()
+        session._active_task = None
     interaction.current_ws.set(ws)
     agent_task = asyncio.create_task(
         _run_agent_turn(ws, session, task, private_mode=False)
