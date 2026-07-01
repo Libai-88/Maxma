@@ -8,17 +8,46 @@
     </div>
     <div class="thinking-body" v-if="block.tokens">
       <div class="thinking-content">
-        <RenderMarkdown :content="block.tokens" :streaming="!block.done" />
+        <template v-if="block.becameAnswer">
+          <template v-for="(seg, i) in segments" :key="i">
+            <RenderMarkdown v-if="seg.type === 'text'" :content="seg.text" />
+            <span v-else class="sticker-inline">
+              <img :src="seg.src" class="sticker-img" loading="lazy" />
+            </span>
+          </template>
+        </template>
+        <RenderMarkdown v-else :content="block.tokens" :streaming="!block.done" />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { ThinkingBlock as ThinkingBlockType } from '@/types'
 import RenderMarkdown from './RenderMarkdown.vue'
 
 const props = defineProps<{ block: ThinkingBlockType }>()
+
+const segments = computed(() => {
+  const text = props.block.tokens
+  if (!text) return []
+  const regex = /<sticker:([^>]+)>/g
+  const segs: Array<{ type: 'text'; text: string } | { type: 'sticker'; src: string }> = []
+  let lastIndex = 0
+  let match
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      segs.push({ type: 'text', text: text.slice(lastIndex, match.index) })
+    }
+    segs.push({ type: 'sticker', src: `/api/stickers/${match[1]}` })
+    lastIndex = match.index + match[0].length
+  }
+  if (lastIndex < text.length) {
+    segs.push({ type: 'text', text: text.slice(lastIndex) })
+  }
+  return segs
+})
 </script>
 
 <style scoped>
@@ -85,5 +114,24 @@ const props = defineProps<{ block: ThinkingBlockType }>()
 }
 .thinking-content {
   color: var(--text-primary);
+}
+
+.sticker-inline {
+  display: inline-block;
+  vertical-align: middle;
+  margin: 4px 6px;
+  cursor: pointer;
+}
+
+.sticker-img {
+  width: 100px;
+  height: 100px;
+  object-fit: contain;
+  transition: transform 0.15s ease;
+  display: block;
+}
+
+.sticker-inline:hover .sticker-img {
+  transform: scale(1.15);
 }
 </style>

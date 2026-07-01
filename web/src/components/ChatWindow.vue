@@ -21,7 +21,7 @@
           />
           <template v-for="(ev, i) in turn.events" :key="i">
             <div
-              v-if="ev.kind === 'thinking'"
+              v-if="ev.kind === 'thinking' && !ev.consumed"
               class="cite-source"
               @contextmenu.prevent="onBubbleContextMenu($event, 'thinking', ev.tokens, '思考过程')"
             >

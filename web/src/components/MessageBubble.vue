@@ -6,7 +6,12 @@
         :class="{ collapsed: isCollapsed }"
         ref="contentEl"
       >
-        <RenderMarkdown v-if="content" :content="content" />
+        <template v-for="(seg, i) in segments" :key="i">
+          <RenderMarkdown v-if="seg.type === 'text'" :content="seg.text" />
+          <span v-else class="sticker-inline" @click="previewSticker(seg.src)">
+            <img :src="seg.src" class="sticker-img" loading="lazy" />
+          </span>
+        </template>
       </div>
       <button
         v-if="isCollapsible"
@@ -23,6 +28,10 @@
         />
       </div>
     </div>
+    <!-- 表情预览 overlay -->
+    <div v-if="previewSrc" class="sticker-preview-overlay" @click="previewSrc = ''">
+      <img :src="previewSrc" class="sticker-preview-img" />
+    </div>
   </div>
 </template>
 
@@ -37,8 +46,34 @@ const props = defineProps<{ role: 'user' | 'assistant'; content: string; refs?: 
 const isCollapsed = ref(true)
 const contentEl = ref<HTMLElement | null>(null)
 const contentHeight = ref(0)
+const previewSrc = ref('')
 
 const isCollapsible = computed(() => contentHeight.value > 500)
+
+/** 解析内容中的 <sticker:category/filename.webp> 标记，分段返回 */
+const segments = computed(() => {
+  const text = props.content
+  if (!text) return []
+  const regex = /<sticker:([^>]+)>/g
+  const segs: Array<{ type: 'text'; text: string } | { type: 'sticker'; src: string }> = []
+  let lastIndex = 0
+  let match
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      segs.push({ type: 'text', text: text.slice(lastIndex, match.index) })
+    }
+    segs.push({ type: 'sticker', src: `/api/stickers/${match[1]}` })
+    lastIndex = match.index + match[0].length
+  }
+  if (lastIndex < text.length) {
+    segs.push({ type: 'text', text: text.slice(lastIndex) })
+  }
+  return segs
+})
+
+function previewSticker(src: string) {
+  previewSrc.value = src
+}
 
 function measureHeight() {
   if (contentEl.value) {
@@ -47,7 +82,6 @@ function measureHeight() {
 }
 
 onMounted(() => {
-  // 延迟测量，等待 Markdown 渲染完成
   requestAnimationFrame(measureHeight)
 })
 
@@ -147,5 +181,55 @@ watch(() => props.content, () => {
   margin-top: 8px;
   padding-top: 6px;
   border-top: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
+}
+
+/* ── 表情包内联渲染 ── */
+.sticker-inline {
+  display: inline-block;
+  vertical-align: middle;
+  margin: 4px 6px;
+  cursor: pointer;
+}
+
+.sticker-img {
+  width: 100px;
+  height: 100px;
+  object-fit: contain;
+  transition: transform 0.15s ease;
+  display: block;
+}
+
+.sticker-inline:hover .sticker-img {
+  transform: scale(1.15);
+}
+
+/* ── 表情预览 overlay ── */
+.sticker-preview-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  cursor: pointer;
+  animation: fadeIn 0.15s ease;
+}
+
+.sticker-preview-img {
+  max-width: 80vw;
+  max-height: 80vh;
+  object-fit: contain;
+  animation: scaleIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
 }
 </style>

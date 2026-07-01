@@ -3,7 +3,7 @@ import type { ClientMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, Tur
 import { refreshSessions, switchSession } from '@/composables/useSession'
 import { buildFlatMessage, buildTimestamp, parseReferences } from '@/utils/references'
 import type { ParsedRef } from '@/utils/references'
-import { getToken, ensureTokenLoaded } from '@/api'
+import { getToken, ensureTokenLoaded, resetToken } from '@/api'
 import { getWsBase } from '@/utils/env'
 /** 匹配旧格式尾缀（用于 localStorage 迁移） */
 const TIME_SUFFIX_RE = /（\d{4}-\d{2}-\d{2} \w{3} \d{2}:\d{2}）$/
@@ -182,6 +182,9 @@ function getReconnectDelay(attempts: number): number {
   return Math.min(base * Math.pow(2, attempts), maxDelay)
 }
 
+/** 最大重连次数，超过后停止重连 */
+const MAX_RECONNECT_ATTEMPTS = 20
+
 async function connectSession(sid: string) {
   if (!isValidSessionId(sid)) {
     console.error(`[useChat] 拒绝连接：非法的 sessionId "${sid}"`)
@@ -210,8 +213,19 @@ async function connectSession(sid: string) {
     console.log(`[useChat] WS connected: session=${sid}`)
   }
 
-  ch.ws.onclose = () => {
+  ch.ws.onclose = (event) => {
     ch.connected = false
+    // 认证失败（Token 过期/轮换）— 刷新 Token 后重连
+    if (event.code === 4001) {
+      console.log(`[useChat] WS auth failure (4001), refreshing token...`)
+      resetToken()  // 强制下次请求重新获取 Token
+    }
+    // 超过最大重连次数，停止重连
+    if (ch.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      console.error(`[useChat] WS 已达最大重连次数 (${MAX_RECONNECT_ATTEMPTS})，停止重连`)
+      ch.error = '连接失败：已达最大重连次数，请刷新页面重试'
+      return
+    }
     // 指数退避重连
     const delay = getReconnectDelay(ch.reconnectAttempts)
     ch.reconnectAttempts++
@@ -327,6 +341,11 @@ function handleEventForChannel(sid: string, event: ServerEvent) {
 
     case 'tool_start': {
       console.log(`[useChat] tool_start: "${event.payload.tool_name}"`, { input: event.payload.input, session: sid })
+      // 标记上一个 thinking 块为 consumed（工具调用前的中间思考，UI 不渲染）
+      const lastThink = findLastThinking(turn.events)
+      if (lastThink && !lastThink.becameAnswer) {
+        lastThink.consumed = true
+      }
       turn.events.push({
         kind: 'tool',
         name: event.payload.tool_name,
@@ -378,6 +397,7 @@ function handleEventForChannel(sid: string, event: ServerEvent) {
       const lastThink = findLastThinking(turn.events)
       if (lastThink) {
         lastThink.becameAnswer = true
+        lastThink.tokens = event.payload.content
       }
       turn.finalAnswer = event.payload.content
       break
@@ -678,8 +698,8 @@ export function useChat(sessionId: Ref<string>) {
   function sendPlanResponse(planId: string, action: 'approve' | 'modify' | 'reject', modifiedPlan?: string) {
     const ch = activeChannel.value
     if (!ch.ws || ch.ws.readyState !== WebSocket.OPEN) return
-    // 更新 planCard 状态
-    const currentTurn = ch.turns[ch.turns.length - 1]
+    // 更新 planCard 状态 — 必须用 currentTurn（plan_proposed 也写在这里）
+    const currentTurn = ch.currentTurn
     if (currentTurn?.planCard && currentTurn.planCard.planId === planId) {
       currentTurn.planCard.status = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'modified'
     }
