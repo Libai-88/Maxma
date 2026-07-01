@@ -11,6 +11,7 @@
 - tools（节点名 "tools"）: 执行工具调用，返回结果
 """
 
+import asyncio
 import logging
 
 from langchain_core.language_models import BaseChatModel
@@ -23,7 +24,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import ToolNode
 from typing_extensions import Annotated, TypedDict
 
-from agent.planner import classify_and_plan
+from agent.planner import classify_and_plan, parse_plan_steps, PLAN_CONFIRM_THRESHOLD
 
 logger = logging.getLogger(__name__)
 
@@ -38,11 +39,13 @@ def build_agent(
     tools: list[BaseTool],
     system_prompt: str,
     checkpointer: MemorySaver | None = None,
+    ws=None,
 ) -> CompiledStateGraph:
     """构建带规划节点的 ReAct Agent 图。
 
     若提供 checkpointer 则复用（跨轮次持久化状态），
     否则每次新建 MemorySaver（原有行为）。
+    若提供 ws（WebSocket），复杂计划将发送 plan_proposed 事件等待用户确认。
     """
     if checkpointer is None:
         checkpointer = MemorySaver()
@@ -53,7 +56,11 @@ def build_agent(
     # ── 节点函数（闭包捕获 model / llm_with_tools）──
 
     async def planner_node(state: AgentState) -> dict:
-        """规划节点：单次 LLM 调用判断复杂度 + 生成计划。"""
+        """规划节点：单次 LLM 调用判断复杂度 + 生成计划。
+
+        当计划步骤 >= PLAN_CONFIRM_THRESHOLD 且 ws 可用时，
+        发送 plan_proposed 事件并等待用户确认。
+        """
         messages = state["messages"]
         if not messages:
             return {}
@@ -68,6 +75,61 @@ def build_agent(
             return {}
 
         logger.info(f"Plan generated for user request: {user_text[:60]}...")
+
+        # ── 计划确认流程 ──
+        steps = parse_plan_steps(plan)
+        if ws is not None and len(steps) >= PLAN_CONFIRM_THRESHOLD:
+            import uuid
+            from api import interaction
+
+            plan_id = uuid.uuid4().hex[:12]
+
+            # 发送 plan_proposed 事件
+            try:
+                await ws.send_json({
+                    "type": "plan_proposed",
+                    "payload": {
+                        "plan_id": plan_id,
+                        "steps": steps,
+                        "plan_text": plan,
+                    },
+                })
+            except Exception as e:
+                logger.warning(f"Failed to send plan_proposed: {e}")
+                # WebSocket 发送失败，跳过确认直接执行
+                plan_msg = SystemMessage(content=f"[执行计划]\n{plan}")
+                return {"messages": [plan_msg]}
+
+            # 注册交互并等待用户响应
+            interaction_id, future = interaction.register()
+            # 用 plan_id 作为 interaction_id 的映射（前端用 plan_id 回复）
+            interaction._pending[plan_id] = future
+
+            try:
+                response = await asyncio.wait_for(future, timeout=120)
+            except asyncio.TimeoutError:
+                logger.info("Plan confirmation timed out, proceeding with original plan")
+                response = None
+            finally:
+                interaction.cleanup(plan_id)
+                interaction.cleanup(interaction_id)  # 清理 register() 创建的原始条目
+
+            # 处理用户响应
+            if response is None:
+                # 超时，使用原计划
+                pass
+            elif isinstance(response, str):
+                resp_data = response.strip()
+                if resp_data.lower() in ("reject", "取消", "拒绝", "否", "no", "deny"):
+                    logger.info("Plan rejected by user")
+                    reject_msg = SystemMessage(content="[执行计划] 用户已拒绝此计划，请直接用简洁方式回应用户。")
+                    return {"messages": [reject_msg]}
+                elif resp_data.lower() not in ("approve", "确认", "同意", "是", "ok"):
+                    # 用户修改了计划
+                    plan = resp_data
+                    logger.info(f"Plan modified by user: {plan[:60]}...")
+            # else: response 是 approve，使用原计划
+
         plan_msg = SystemMessage(content=f"[执行计划]\n{plan}")
         return {"messages": [plan_msg]}
 

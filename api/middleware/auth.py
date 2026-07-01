@@ -28,6 +28,10 @@ class AuthMiddleware:
         if not path.startswith("/api/") and not path.startswith("/ws/"):
             return await self.app(scope, receive, send)
 
+        # CORS 预检请求由 CORS 中间件处理，不做鉴权
+        if scope.get("type") == "http" and scope.get("method") == "OPTIONS":
+            return await self.app(scope, receive, send)
+
         # 白名单：健康检查 + Token 获取（桌面应用启动时需要）
         if path == "/api/health" or path == "/api/auth/token":
             return await self.app(scope, receive, send)

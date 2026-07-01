@@ -76,6 +76,24 @@ export interface AskUserEvent {
   }
 }
 
+/** plan_proposed — Planner 生成计划后等待用户确认 */
+export interface PlanProposedEvent {
+  type: 'plan_proposed'
+  payload: {
+    plan_id: string
+    steps: string[]
+    plan_text: string
+  }
+}
+
+/** 前端计划卡片状态 */
+export interface PlanCard {
+  planId: string
+  steps: string[]
+  planText: string
+  status: 'pending' | 'approved' | 'modified' | 'rejected'
+}
+
 /** sub_session_created — 主 Agent 调用 call_sub_agent 后推送 */
 export interface SubSessionCreatedEvent {
   type: 'sub_session_created'
@@ -147,6 +165,7 @@ export type ServerEvent =
   | PongEvent
   | ContextUsageEvent
   | AskUserEvent
+  | PlanProposedEvent
   | SubSessionCreatedEvent
   | MemoryStartEvent
   | MemoryToolStartEvent
@@ -213,6 +232,7 @@ export interface AskUserInteraction {
   interactionId: string
   submitted: boolean
   code?: string
+  detail?: string
 }
 
 export interface ToolCall {
@@ -248,6 +268,8 @@ export interface ChatTurn {
   finalAnswer: string | null
   /** 后端生成的 turn_id，用于关联后台记忆 consumer 的事件 */
   turnId?: string
+  /** 计划卡片（plan_proposed 事件） */
+  planCard?: PlanCard
 }
 
 // === 会话与 API 类型 ===
@@ -422,20 +444,70 @@ export interface ListNewsResponse {
   news: NewsEntry[]
 }
 
-// === Anthropic Skills ===
+// === Anthropic Skills & Macros ===
 
 export interface SkillInfo {
+  id: string
   name: string
   description: string
   path: string
+  source: 'builtin' | 'user'
+}
+
+export interface SkillDetail {
+  id: string
+  name: string
+  description: string
+  content: string
+  source: 'builtin' | 'user'
+}
+
+export interface SkillCreateBody {
+  name: string
+  description?: string
+  content?: string
+}
+
+export interface SkillUpdateBody {
+  name?: string
+  description?: string
+  content?: string
 }
 
 export interface ListSkillsResponse {
   skills: SkillInfo[]
 }
 
+export interface MacroInfo {
+  id: string
+  name: string
+  description: string
+  path: string
+  source: 'builtin' | 'user'
+}
+
+export interface MacroDetail {
+  id: string
+  name: string
+  description: string
+  content: string
+  source: 'builtin' | 'user'
+}
+
+export interface MacroCreateBody {
+  name: string
+  description?: string
+  content?: string
+}
+
+export interface MacroUpdateBody {
+  name?: string
+  description?: string
+  content?: string
+}
+
 export interface ListMacrosResponse {
-  macros: SkillInfo[]
+  macros: MacroInfo[]
 }
 
 // === 内置工具 ===
@@ -490,4 +562,62 @@ export interface UpdateEnvVarResponse {
   status: string
   key: string
   masked_value: string
+}
+
+// === MCP 服务器配置 ===
+
+export type MCPTransport = 'stdio' | 'sse' | 'streamable_http' | 'websocket'
+
+export interface MCPServerInfo {
+  server_id: string
+  transport: MCPTransport
+  enabled: boolean
+  description: string
+  tool_count: number
+}
+
+export interface MCPServerConfig extends MCPServerInfo {
+  // stdio 专用
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  cwd?: string
+  // sse / streamable_http / websocket 专用
+  url?: string
+  headers?: Record<string, string>
+  timeout?: number
+  sse_read_timeout?: number
+}
+
+export interface ListMCPServersResponse {
+  servers: MCPServerInfo[]
+  tool_count: number
+}
+
+export interface MCPServerCreateBody {
+  server_id: string
+  transport: MCPTransport
+  enabled?: boolean
+  description?: string
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  cwd?: string
+  url?: string
+  headers?: Record<string, string>
+  timeout?: number
+  sse_read_timeout?: number
+}
+
+export interface MCPServerUpdateBody {
+  enabled?: boolean
+  description?: string
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  cwd?: string
+  url?: string
+  headers?: Record<string, string>
+  timeout?: number
+  sse_read_timeout?: number
 }

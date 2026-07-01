@@ -4,9 +4,75 @@ import hashlib
 import re
 from pathlib import Path
 
-from app_paths import ANTHROPIC_SKILLS_DIR, MACROS_DIR, PERSONAS_DATA_DIR as PERSONAS_DIR
+from app_paths import ANTHROPIC_SKILLS_DIR, MACROS_DIR, SKILLS_DATA_DIR, MACROS_DATA_DIR, PERSONAS_DATA_DIR as PERSONAS_DIR, ACTIVE_PERSONA_PATH
 from memory.narrative import get_narrative
 from memory.user_init import ensure_user_md
+
+
+# ── 活跃人格管理 ────────────────────────────────────────────
+
+_DEFAULT_PERSONA_FILE = "SOUL.md"
+
+
+def get_active_persona_file() -> str:
+    """返回当前活跃人格文件名。未配置时默认 SOUL.md。"""
+    if ACTIVE_PERSONA_PATH.exists():
+        try:
+            import yaml
+            data = yaml.safe_load(ACTIVE_PERSONA_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and "file" in data:
+                return data["file"]
+        except Exception:
+            pass
+    return _DEFAULT_PERSONA_FILE
+
+
+def set_active_persona(filename: str) -> None:
+    """设置当前活跃人格文件，并失效提示词缓存。"""
+    import yaml
+    ACTIVE_PERSONA_PATH.write_text(
+        yaml.dump({"file": filename}, allow_unicode=True, default_flow_style=False),
+        encoding="utf-8",
+    )
+    invalidate_prompt_cache()
+
+
+def list_personas() -> list[dict]:
+    """扫描 PERSONAS_DATA_DIR 下所有 SOUL*.md 文件，返回人格列表。"""
+    personas = []
+    active_file = get_active_persona_file()
+    for p in sorted(PERSONAS_DIR.glob("SOUL*.md")):
+        if p.name == "SOUL.example.md":
+            continue
+        content = p.read_text(encoding="utf-8")
+        # 从第一个 # 标题提取显示名
+        display_name = p.stem  # 默认用文件名（去掉 .md）
+        for line in content.splitlines():
+            line = line.strip()
+            if line.startswith("# "):
+                display_name = line[2:].strip()
+                break
+        # 提取前 1-2 行非标题内容作为描述
+        desc_lines = []
+        for line in content.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            desc_lines.append(line)
+            if len(desc_lines) >= 1:
+                break
+        description = desc_lines[0] if desc_lines else ""
+        # 截断过长描述
+        if len(description) > 80:
+            description = description[:77] + "..."
+        personas.append({
+            "id": p.stem,
+            "file": p.name,
+            "name": display_name,
+            "description": description,
+            "active": p.name == active_file,
+        })
+    return personas
 
 
 # ── 内容哈希缓存 ────────────────────────────────────────────
@@ -27,14 +93,17 @@ def _file_hash(path: Path) -> str:
 def _current_fingerprint() -> str:
     """根据所有依赖文件的内容哈希生成指纹字符串。
 
-    依赖文件包括 personas 目录下的 AGENTS/SOUL/USER/memory.yaml，
+    依赖文件包括 personas 目录下的 AGENTS/活跃人格/USER/memory.yaml，
     以及 anthropic_skills/ 和 macros/ 下的所有 SKILL.md / MACRO.md。
     """
     parts: list[str] = []
 
     # 固定 personas 文件
-    for name in ("AGENTS.md", "SOUL.md", "USER.md", "memory.yaml"):
+    active_soul = get_active_persona_file()
+    for name in ("AGENTS.md", active_soul, "USER.md", "memory.yaml"):
         parts.append(f"{name}:{_file_hash(PERSONAS_DIR / name)}")
+    # 额外记录 active_persona.yaml 自身，切换人格时触发缓存刷新
+    parts.append(f"active:{_file_hash(ACTIVE_PERSONA_PATH)}")
 
     # 动态扫描 skills / macros
     if ANTHROPIC_SKILLS_DIR.is_dir():
@@ -57,7 +126,8 @@ def _rebuild(fingerprint: str) -> None:
     # 解析用户称呼，用于替换 SOUL.md 中的 {{USER_NAME}}
     user_md_raw = _read_if_exists("USER.md")
     user_name = _parse_user_name(user_md_raw)
-    soul_content = _read_persona("SOUL.md")
+    active_soul_file = get_active_persona_file()
+    soul_content = _read_persona(active_soul_file)
     if user_name:
         soul_content = soul_content.replace("{{USER_NAME}}", user_name)
     else:
@@ -153,7 +223,7 @@ def _parse_user_name(user_md_content: str) -> str:
 
 
 def _parse_frontmatter(text: str) -> dict[str, str]:
-    """简易解析 YAML frontmatter，提取 name 和 description。"""
+    """简易解析 YAML frontmatter，提取元数据字段。"""
     m = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
     if not m:
         return {}
@@ -163,26 +233,68 @@ def _parse_frontmatter(text: str) -> dict[str, str]:
             key, _, val = line.partition(":")
             key = key.strip()
             val = val.strip().strip('"').strip("'")
-            if key in ("name", "description"):
+            if key in ("name", "description", "tools", "memory"):
                 meta[key] = val
     return meta
 
 
+def get_persona_memory_path() -> Path:
+    """获取当前人格的记忆文件路径。
+
+    如果 SOUL 文件的 frontmatter 中声明了 memory: persona，
+    则使用独立记忆文件 memory_{persona_id}.yaml；
+    否则使用共享的 memory.yaml。
+    """
+    active_file = get_active_persona_file()
+    content = _read_persona(active_file)
+    meta = _parse_frontmatter(content)
+
+    if meta.get("memory", "").strip().lower() == "persona":
+        # 独立记忆：memory_{persona_stem}.yaml
+        persona_id = Path(active_file).stem  # e.g. "SOUL.饱饱"
+        return PERSONAS_DIR / f"memory_{persona_id}.yaml"
+    # 共享记忆
+    from app_paths import MEMORY_CONFIG_PATH
+    return MEMORY_CONFIG_PATH
+
+
+def get_persona_allowed_tools() -> set[str] | None:
+    """获取当前人格允许使用的工具集。
+
+    如果 SOUL 文件的 frontmatter 中声明了 tools 列表，
+    返回允许的工具名集合；否则返回 None（表示不限制）。
+
+    tools 格式示例：
+        tools: file_read, file_write, run_python, ask_user_qa
+    """
+    active_file = get_active_persona_file()
+    content = _read_persona(active_file)
+    meta = _parse_frontmatter(content)
+
+    tools_str = meta.get("tools", "").strip()
+    if not tools_str:
+        return None  # 未声明 = 不限制
+
+    allowed = {t.strip() for t in tools_str.split(",") if t.strip()}
+    return allowed if allowed else None
+
+
 def _scan_anthropic_skills() -> str:
-    """扫描 anthropic_skills/ 下所有 SKILL.md，返回元数据清单。"""
-    if not ANTHROPIC_SKILLS_DIR.is_dir():
-        return ""
+    """扫描内置 + 用户自定义 anthropic_skills/ 下所有 SKILL.md，返回元数据清单。"""
     entries: list[str] = []
-    for sk_path in sorted(ANTHROPIC_SKILLS_DIR.rglob("SKILL.md")):
-        rel = sk_path.relative_to(ANTHROPIC_SKILLS_DIR).parent
-        meta = _parse_frontmatter(sk_path.read_text(encoding="utf-8"))
-        name = meta.get("name", rel.name)
-        desc = meta.get("description", "")
-        path_str = str(sk_path).replace("\\", "/")
-        if desc:
-            entries.append(f"- [{name}]({path_str}): {desc}")
-        else:
-            entries.append(f"- [{name}]({path_str})")
+    for base_dir in (ANTHROPIC_SKILLS_DIR, SKILLS_DATA_DIR):
+        if not base_dir.is_dir():
+            continue
+        for sk_path in sorted(base_dir.rglob("SKILL.md")):
+            rel = sk_path.relative_to(base_dir).parent
+            meta = _parse_frontmatter(sk_path.read_text(encoding="utf-8"))
+            name = meta.get("name", rel.name)
+            desc = meta.get("description", "")
+            path_str = str(sk_path).replace("\\", "/")
+            if desc:
+                entries.append(f"- [{name}]({path_str}): {desc}")
+            else:
+                entries.append(f"- [{name}]({path_str})")
     if not entries:
         return ""
     lines = [

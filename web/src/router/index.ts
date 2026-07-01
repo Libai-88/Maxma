@@ -20,6 +20,16 @@ const router = createRouter({
       component: () => import('@/views/SoulView.vue'),
     },
     {
+      path: '/mcp',
+      name: 'mcp',
+      component: () => import('@/views/McpView.vue'),
+    },
+    {
+      path: '/skills',
+      name: 'skills',
+      component: () => import('@/views/SkillsView.vue'),
+    },
+    {
       path: '/user',
       name: 'user',
       component: () => import('@/views/UserView.vue'),
@@ -38,6 +48,16 @@ const router = createRouter({
       path: '/env-vars',
       name: 'env-vars',
       component: () => import('@/views/EnvVarsView.vue'),
+    },
+    {
+      path: '/event-hooks',
+      name: 'event-hooks',
+      component: () => import('@/views/HooksView.vue'),
+    },
+    {
+      path: '/privacy',
+      name: 'privacy',
+      component: () => import('@/views/PrivacyView.vue'),
     },
   ],
 })

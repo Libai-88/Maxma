@@ -1,9 +1,10 @@
 import { reactive, computed, watch, nextTick, type Ref } from 'vue'
-import type { ClientMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, AskUserEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent } from '@/types'
+import type { ClientMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, AskUserEvent, PlanProposedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent } from '@/types'
 import { refreshSessions, switchSession } from '@/composables/useSession'
 import { buildFlatMessage, buildTimestamp, parseReferences } from '@/utils/references'
 import type { ParsedRef } from '@/utils/references'
 import { getToken, ensureTokenLoaded } from '@/api'
+import { getWsBase } from '@/utils/env'
 /** 匹配旧格式尾缀（用于 localStorage 迁移） */
 const TIME_SUFFIX_RE = /（\d{4}-\d{2}-\d{2} \w{3} \d{2}:\d{2}）$/
 
@@ -192,11 +193,10 @@ async function connectSession(sid: string) {
     return
   }
 
-  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
   // 确保 Token 已加载（桌面应用运行时获取）
   await ensureTokenLoaded()
   const token = getToken()
-  const url = `${protocol}//${location.host}/ws/chat/${sid}`
+  const url = `${getWsBase()}/ws/chat/${sid}`
   ch.ws = new WebSocket(url, [token])
 
   ch.ws.onopen = () => {
@@ -469,6 +469,27 @@ function handleEventForChannel(sid: string, event: ServerEvent) {
           interactionId: ae.payload.interaction_id,
           submitted: false,
           code: ae.payload.code,
+          detail: (ae.payload as Record<string, unknown>).detail as string | undefined,
+        }
+      }
+      break
+    }
+
+    case 'plan_proposed': {
+      const pe = event as PlanProposedEvent
+      console.log('[useChat] received plan_proposed:', {
+        plan_id: pe.payload.plan_id,
+        steps: pe.payload.steps.length,
+        session: sid,
+      })
+      // 将计划卡片附加到当前正在执行的 turn（不是已完成的 turn）
+      const targetTurn = ch.currentTurn
+      if (targetTurn) {
+        targetTurn.planCard = {
+          planId: pe.payload.plan_id,
+          steps: pe.payload.steps,
+          planText: pe.payload.plan_text,
+          status: 'pending',
         }
       }
       break
@@ -654,6 +675,24 @@ export function useChat(sessionId: Ref<string>) {
     ch.ws.send(JSON.stringify(payload))
   }
 
+  function sendPlanResponse(planId: string, action: 'approve' | 'modify' | 'reject', modifiedPlan?: string) {
+    const ch = activeChannel.value
+    if (!ch.ws || ch.ws.readyState !== WebSocket.OPEN) return
+    // 更新 planCard 状态
+    const currentTurn = ch.turns[ch.turns.length - 1]
+    if (currentTurn?.planCard && currentTurn.planCard.planId === planId) {
+      currentTurn.planCard.status = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'modified'
+    }
+    const msg: Record<string, unknown> = {
+      type: 'plan_response',
+      payload: { plan_id: planId, action },
+    }
+    if (modifiedPlan) {
+      (msg.payload as Record<string, unknown>).modified_plan = modifiedPlan
+    }
+    ch.ws.send(JSON.stringify(msg))
+  }
+
   /** 从当前会话的 turns 列表中移除最后 count 条轮次（撤回后的前端同步）。 */
   function removeTurns(count: number) {
     const ch = getOrCreateChannel(sessionId.value)
@@ -669,7 +708,7 @@ export function useChat(sessionId: Ref<string>) {
   return {
     connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId,
     contextUsage, taskTrackerData,
-    send, cancel, sendUserResponse, removeTurns,
+    send, cancel, sendUserResponse, sendPlanResponse, removeTurns,
     privateMode, setPrivateMode,
     autoApprove, setAutoApprove,
   }

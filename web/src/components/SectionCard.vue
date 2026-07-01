@@ -5,6 +5,11 @@
       <span class="section-title">{{ theme }}</span>
       <span class="section-nav">
         <button
+          class="nav-link edit-btn"
+          title="编辑此条目"
+          @click="emitEdit"
+        >&#9998;</button>
+        <button
           class="nav-link"
           :disabled="currentIndex === 0"
           @click="prev"
@@ -18,7 +23,7 @@
     </div>
 
     <!-- 条目内容 -->
-    <p class="item-text">{{ currentItem.description }}</p>
+    <p class="item-text" @dblclick="emitEdit">{{ currentItem.description }}</p>
   </div>
 </template>
 
@@ -31,6 +36,10 @@ const props = defineProps<{
   items: VignetteMemoryItem[]
 }>()
 
+const emit = defineEmits<{
+  (e: 'edit-item', item: { id: string; description: string; theme: string }): void
+}>()
+
 const currentIndex = ref(0)
 
 const currentItem = computed<VignetteMemoryItem>(() => props.items[currentIndex.value])
@@ -40,6 +49,17 @@ function prev() {
 }
 function next() {
   if (currentIndex.value < props.items.length - 1) currentIndex.value++
+}
+
+function emitEdit() {
+  const item = currentItem.value
+  if (item?.id) {
+    emit('edit-item', {
+      id: item.id,
+      description: item.description,
+      theme: props.theme,
+    })
+  }
 }
 </script>
 
@@ -86,6 +106,15 @@ function next() {
 .nav-link:disabled {
   opacity: 0.2;
   cursor: not-allowed;
+}
+.nav-link.edit-btn {
+  font-size: 14px;
+  opacity: 0.4;
+  transition: opacity 0.15s;
+}
+.nav-link.edit-btn:hover {
+  opacity: 1;
+  color: var(--accent);
 }
 
 /* ── 内容 ── */

@@ -62,6 +62,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { ToolCall } from '@/types'
+import { openExternal } from '@/utils/env'
 import BubbleChrome from './_shared/BubbleChrome.vue'
 
 const props = defineProps<{ toolCall: ToolCall }>()
@@ -91,7 +92,7 @@ const page = computed(() => pages.value[tab.value] ?? null)
 
 function openUrl(url: string) {
   emit('action', { action: 'open_url', data: { url } })
-  window.open(url, '_blank', 'noopener,noreferrer')
+  openExternal(url)
 }
 
 const fallback = computed(() => props.toolCall.output

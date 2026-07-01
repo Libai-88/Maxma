@@ -34,6 +34,9 @@ const DISPLAY_NAMES: Record<string, string> = {
   todo_list_labels: '标签列表',
   python: 'Python 执行',
   run_python: 'Python 执行',
+  context_strategy: '上下文策略',
+  forget: '选择性遗忘',
+  create_persona: '创建人格',
   nearby_search: '周边搜索',
   fuzzy_address_search: '模糊地址搜索',
   geocode_address: '地理编码',
@@ -45,6 +48,7 @@ const DISPLAY_NAMES: Record<string, string> = {
   ask_user_qa: '询问用户',
   ask_user_single_choice: '请选择',
   ask_user_multi_choice: '多选',
+  ask_user_confirm: '危险操作确认',
   task_tracker: '任务追踪',
 
   /* Memory */
@@ -54,6 +58,24 @@ const DISPLAY_NAMES: Record<string, string> = {
   update_memory: '更新记忆',
   delete_memory: '删除记忆',
   merge_memories: '合并记忆',
+  search_memories: '搜索记忆',
+
+  /* Config */
+  manage_mcp: 'MCP 管理',
+  manage_skills: '技能管理',
+  manage_macros: '宏管理',
+  manage_providers: '提供商管理',
+  manage_env_vars: '环境变量管理',
+  manage_whitelist: '路径白名单管理',
+
+  /* Git */
+  git_status: '仓库状态',
+  git_diff: '文件差异',
+  git_log: '提交历史',
+  git_commit: '提交代码',
+  git_branch: '分支管理',
+  git_push: '推送远程',
+  git_pr: '创建 PR',
 }
 export function toolDisplayName(name: string): string {
   if (DISPLAY_NAMES[name]) return DISPLAY_NAMES[name]

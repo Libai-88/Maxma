@@ -13,6 +13,8 @@ import TavilySearchBubble from './TavilySearchBubble.vue'
 import TavilyExtractBubble from './TavilyExtractBubble.vue'
 import AskUserBubble from './AskUserBubble.vue'
 import MemoryBubble from './MemoryBubble.vue'
+import GitStatusBubble from './GitStatusBubble.vue'
+import GitDiffBubble from './GitDiffBubble.vue'
 
 /** 工具注册表：tool_name → 专属气泡组件 */
 const registry: Record<string, Component> = {
@@ -57,6 +59,15 @@ const registry: Record<string, Component> = {
   'update_memory': MemoryBubble,
   'delete_memory': MemoryBubble,
   'merge_memories': MemoryBubble,
+
+  /* Git */
+  'git_status': GitStatusBubble,
+  'git_commit': GitStatusBubble,
+  'git_branch': GitStatusBubble,
+  'git_push': GitStatusBubble,
+  'git_pr': GitStatusBubble,
+  'git_log': GitStatusBubble,
+  'git_diff': GitDiffBubble,
 }
 
 export function getBubbleComponent(name: string): Component | null {

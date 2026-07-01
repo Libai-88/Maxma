@@ -52,7 +52,17 @@ export interface MacroRef {
   name: string
 }
 
-export type ParsedRef = FileRef | FolderRef | CiteRef | WebLinkRef | SkillRef | ToolRef | MacroRef
+/** 图片引用（拖拽/粘贴/选择图片） */
+export interface ImageRef {
+  type: 'image'
+  label: string
+  /** 上传后的服务端路径 */
+  path: string
+  /** 本地预览 URL（object URL 或 data URL） */
+  preview: string
+}
+
+export type ParsedRef = FileRef | FolderRef | CiteRef | WebLinkRef | SkillRef | ToolRef | MacroRef | ImageRef
 
 /**
  * 引用 chip 渲染配置，每种 type 自注册 icon 名与 tooltip 函数。
@@ -91,6 +101,10 @@ export const REF_CHIP_CONFIG: Record<string, RefChipConfig> = {
   macro: {
     icon: 'sparkles',
     tooltip: (r: ParsedRef) => `宏: ${(r as MacroRef).name}`,
+  },
+  image: {
+    icon: 'image',
+    tooltip: (r: ParsedRef) => `图片: ${(r as ImageRef).label}`,
   },
 }
 

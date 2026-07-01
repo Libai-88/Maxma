@@ -28,6 +28,13 @@
             <span class="meta-tag">{{ td.replaced_count }} 处匹配已替换</span>
             <span class="meta-tag" v-if="td.replace_all">全部替换</span>
           </div>
+          <FileDiffView
+            v-if="hasDiff"
+            :diff="diffText"
+            :additions="diffAdditions"
+            :deletions="diffDeletions"
+            :file-name="diffFileName"
+          />
           <div class="file-actions">
             <button class="action-btn" @click="copyPath">复制路径</button>
           </div>
@@ -87,6 +94,13 @@
               <span class="eri-msg">{{ r.message || r.replaced_count + ' 处替换' }}</span>
             </div>
           </div>
+          <FileDiffView
+            v-if="hasDiff"
+            :diff="diffText"
+            :additions="diffAdditions"
+            :deletions="diffDeletions"
+            :file-name="diffFileName"
+          />
         </template>
 
         <!-- ===== 搜索 ===== -->
@@ -135,6 +149,7 @@ import { computed } from 'vue'
 import type { ToolCall } from '@/types'
 import BubbleChrome from './_shared/BubbleChrome.vue'
 import MaxmaBlockerError from './_shared/MaxmaBlockerError.vue'
+import FileDiffView from './FileDiffView.vue'
 
 const props = defineProps<{ toolCall: ToolCall }>()
 const emit = defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()
@@ -204,6 +219,27 @@ const isMoreMatches = computed(() => (td.value.total_matches as number) > MAX_VI
 // ── 标签 ──
 const runningLabel = computed(() => {
   return '正在编辑文件...'
+})
+
+// ── Diff ──
+const hasDiff = computed(() => {
+  return !!td.value.diff
+})
+
+const diffText = computed(() => {
+  return (td.value.diff as string) || ''
+})
+
+const diffAdditions = computed(() => {
+  return (td.value.additions as number) || 0
+})
+
+const diffDeletions = computed(() => {
+  return (td.value.deletions as number) || 0
+})
+
+const diffFileName = computed(() => {
+  return fileName.value || ''
 })
 
 // ── 动作 ──

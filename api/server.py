@@ -36,11 +36,13 @@ from api.routes import env_vars as env_vars_router
 from api.routes import tool_stats as tool_stats_router
 from api.routes import upload as upload_router
 from api.routes import metrics as metrics_router
+from api.routes import event_hooks as event_hooks_router
+from api.routes import audit_log as audit_log_router
 from api.session_manager import SessionManager, SessionState
 from api.ws_registry import WebSocketRegistry
 from agent.graph import build_agent
 from memory.narrative import MEMORY_PATH, LongTermMemoryInterface
-from tools.mcp import init_mcp_tools, close_mcp
+from tools.mcp import init_mcp_tools, close_mcp, set_reload_callback
 from version import __version__
 
 from api.middleware.auth import AuthMiddleware
@@ -141,6 +143,24 @@ async def lifespan(app: FastAPI):
     app.state.mcp_tools = await init_mcp_tools()
     app.state.tools = app.state.native_tools + app.state.mcp_tools
 
+    # 注入 MCP 重载回调：工具修改 YAML 后通过此回调触发异步重载
+    _loop = asyncio.get_running_loop()  # 在 lifespan 协程中安全获取
+
+    def _mcp_reload_callback():
+        _loop.call_soon_threadsafe(lambda: _loop.create_task(_do_reload_from_tool()))
+
+    async def _do_reload_from_tool():
+        try:
+            from tools.mcp import reload_mcp
+            new_tools = await reload_mcp()
+            app.state.mcp_tools = new_tools
+            app.state.tools = app.state.native_tools + new_tools
+            logger.info("[mcp] 工具触发热重载成功，共 %d 个 MCP 工具", len(new_tools))
+        except Exception as exc:
+            logger.error("[mcp] 工具触发热重载失败: %s", exc)
+
+    set_reload_callback(_mcp_reload_callback)
+
     # 加载 const 固定会话（需要 tools 已就绪）
     await _load_const_sessions(app)
 
@@ -162,6 +182,15 @@ async def lifespan(app: FastAPI):
     app.state.auth_token = load_or_create_token()
     logger.info("[auth] token: %s...%s", app.state.auth_token[:4], app.state.auth_token[-4:])
 
+    # 6. 初始化事件钩子管理器
+    from agent.hooks import get_hook_manager
+    hook_manager = get_hook_manager()
+    hook_manager.set_loop(asyncio.get_running_loop())
+    hook_manager.load()
+    hook_manager.start_all()
+    app.state.hook_manager = hook_manager
+    logger.info("[hooks] 事件钩子管理器已启动，%d 个钩子", len(hook_manager.list_hooks()))
+
     yield
 
     # 关闭：清理资源
@@ -170,6 +199,11 @@ async def lifespan(app: FastAPI):
         await app.state._cleanup_task
     except asyncio.CancelledError:
         pass
+
+    # 关闭事件钩子
+    hook_manager.stop_all()
+    logger.info("[hooks] 事件钩子管理器已停止")
+
     await close_mcp()
     await balance.close_async_client()
     await app.state.ltm.stop_listening()
@@ -254,6 +288,12 @@ def create_app() -> FastAPI:
 
     # 运行时指标
     app.include_router(metrics_router.router, prefix="/api")
+
+    # 事件钩子
+    app.include_router(event_hooks_router.router, prefix="/api")
+
+    # 审计日志
+    app.include_router(audit_log_router.router, prefix="/api")
 
     # Auth token 端点 — 桌面应用运行时获取 Token（替代构建时硬编码）
     @app.get("/api/auth/token")

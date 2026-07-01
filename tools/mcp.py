@@ -21,6 +21,24 @@ _tools: list[BaseTool] | None = None
 _config: list["MCPServerConfig"] | None = None
 _last_error: str | None = None
 
+# 重载回调：由 server.py 在启动时注入，工具修改 YAML 后调用此回调触发异步重载
+_reload_callback: Any = None
+
+
+def set_reload_callback(callback) -> None:
+    """注入 MCP 重载回调函数（由 api/server.py lifespan 调用）。"""
+    global _reload_callback
+    _reload_callback = callback
+
+
+def trigger_reload() -> None:
+    """同步触发 MCP 重载（供工具 _run 调用）。"""
+    if _reload_callback is not None:
+        try:
+            _reload_callback()
+        except Exception as exc:
+            print(f"[mcp] 重载回调调用失败: {exc}")
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Pydantic 配置模型

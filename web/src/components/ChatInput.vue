@@ -16,8 +16,12 @@
     <div
       ref="inputContainerRef"
       class="chat-input"
-      :class="{ 'is-resizing': isResizing }"
+      :class="{ 'is-resizing': isResizing, 'is-dragover': isDragover }"
       :style="containerStyle"
+      @dragenter.prevent="onDragEnter"
+      @dragover.prevent="onDragOver"
+      @dragleave.prevent="onDragLeave"
+      @drop.prevent="onDrop"
     >
       <div
         class="resize-handle"
@@ -27,8 +31,19 @@
         <div class="resize-handle-grip"></div>
       </div>
       <TransitionGroup name="ref-tag" tag="div" class="file-refs-bar" @before-leave="freezeLeavePos">
+        <!-- 图片引用：缩略图预览 -->
         <span
-          v-for="(r, idx) in refs"
+          v-for="(r, idx) in imageRefs"
+          :key="'img-' + idx"
+          class="image-tag"
+        >
+          <img :src="r.preview" class="image-tag-preview" :alt="r.label" />
+          <span class="image-tag-name">{{ r.label }}</span>
+          <button class="image-tag-remove" @click="removeRef(getRefIndex(r))">✕</button>
+        </span>
+        <!-- 其他引用：文本 chip -->
+        <span
+          v-for="(r, idx) in nonImageRefs"
           :key="r.type + r.label + idx"
           class="file-tag"
           :class="{ blocked: 'blocked' in r && r.blocked }"
@@ -38,7 +53,7 @@
           <span class="file-tag-name">{{ r.label }}</span>
           <span class="file-tag-source">{{ r.type }}</span>
           <span v-if="'blocked' in r && r.blocked" class="file-tag-blocked">blocked</span>
-          <button class="file-tag-remove" @click="removeRef(idx)">✕</button>
+          <button class="file-tag-remove" @click="removeRef(getNonImageRefIndex(r))">✕</button>
         </span>
       </TransitionGroup>
       <div class="input-body">
@@ -68,6 +83,9 @@
             </button>
             <button class="add-file-menu-item" @click="pickFolder">
               <Icon name="menu-folder" :size="14" /> 选择文件夹
+            </button>
+            <button class="add-file-menu-item" @click="pickImage">
+              <Icon name="image" :size="14" /> 选择图片
             </button>
             <button class="add-file-menu-item" @click="startLinkInput">
               <Icon name="link" :size="14" /> 加入链接
@@ -101,7 +119,7 @@
             <button
               v-if="!isStreaming"
               class="btn-send"
-              :disabled="!text.trim() || disabled || noProvider"
+              :disabled="(!text.trim() && imageRefs.length === 0) || disabled || noProvider"
               :title="noProvider ? '请先在模型设置中添加 LLM 提供商' : ''"
               @click="handleSend"
             >
@@ -133,7 +151,7 @@ import { api } from '@/api'
 import AutocompletePanel from '@/components/AutocompletePanel.vue'
 import Icon from '@/components/Icon.vue'
 import type { ProviderConfig, SkillInfo, ToolInfo } from '@/types'
-import type { ParsedRef } from '@/utils/references'
+import type { ParsedRef, ImageRef } from '@/utils/references'
 import { REF_CHIP_CONFIG } from '@/utils/references'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
@@ -153,6 +171,24 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const inputContainerRef = ref<HTMLDivElement | null>(null)
 const refs = ref<ParsedRef[]>([])
 const loading = ref(false)
+
+// ── 图片引用分离（用于模板中分别渲染缩略图和文本 chip）──
+const imageRefs = computed(() => refs.value.filter((r): r is ImageRef => r.type === 'image'))
+const nonImageRefs = computed(() => refs.value.filter((r): r is Exclude<ParsedRef, ImageRef> => r.type !== 'image'))
+
+/** 获取 ImageRef 在 refs 数组中的真实索引 */
+function getRefIndex(imgRef: ImageRef): number {
+  return refs.value.indexOf(imgRef)
+}
+
+/** 获取 nonImageRef 在 refs 数组中的真实索引 */
+function getNonImageRefIndex(r: Exclude<ParsedRef, ImageRef>): number {
+  return refs.value.indexOf(r as ParsedRef)
+}
+
+// ── 拖拽图片状态 ──
+const isDragover = ref(false)
+let dragCounter = 0
 const showMenu = ref(false)
 const showLinkInput = ref(false)
 const linkUrl = ref('')
@@ -236,6 +272,21 @@ function looksLikeHost(text: string): boolean {
 }
 
 function onPaste(e: ClipboardEvent) {
+  // ── 剪贴板图片粘贴 ──
+  const items = e.clipboardData?.items
+  if (items) {
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault()
+        const file = item.getAsFile()
+        if (file) {
+          handleImageFile(file)
+        }
+        return
+      }
+    }
+  }
+
   const text = e.clipboardData?.getData('text/plain')?.trim()
   if (!text) return
 
@@ -380,6 +431,9 @@ watch(text, () => {
 })
 
 function onKeydown(e: KeyboardEvent) {
+  // IME 组合态（中文输入法选字中）不拦截任何按键
+  if (e.isComposing || e.keyCode === 229) return
+
   if (acMode.value) {
     const len = acFiltered.value.length
     if (e.key === 'Tab') {
@@ -571,12 +625,109 @@ async function _pick(type: 'file' | 'folder') {
   }
 }
 
+// ── 图片处理 ──
+
+const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg']
+const MAX_IMAGE_SIZE = 20 * 1024 * 1024 // 20MB
+
+/** 通过文件选择器选择图片 */
+async function pickImage() {
+  showMenu.value = false
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/*'
+  input.multiple = true
+  input.onchange = async () => {
+    if (!input.files) return
+    for (const file of Array.from(input.files)) {
+      await handleImageFile(file)
+    }
+  }
+  input.click()
+}
+
+/** 处理单个图片文件：校验 → 上传 → 添加到 refs */
+async function handleImageFile(file: File) {
+  // 校验类型
+  const ext = file.name.split('.').pop()?.toLowerCase() || ''
+  if (!file.type.startsWith('image/') && !IMAGE_EXTS.includes(ext)) {
+    console.warn('[ChatInput] 非图片文件:', file.name)
+    return
+  }
+  // 校验大小
+  if (file.size > MAX_IMAGE_SIZE) {
+    console.warn('[ChatInput] 图片过大:', file.size, file.name)
+    return
+  }
+
+  // 本地预览 URL
+  const preview = URL.createObjectURL(file)
+  const label = file.name || 'image'
+
+  // 先添加为占位（path 为空），上传完成后更新
+  const idx = refs.value.length
+  refs.value.push({ type: 'image', label, path: '', preview } as ImageRef)
+
+  try {
+    const result = await api.uploadImage(file)
+    // 上传成功，更新 path
+    const entry = refs.value[idx] as ImageRef
+    entry.path = result.path
+    console.log('[ChatInput] image uploaded:', result.path)
+  } catch (e) {
+    console.error('[ChatInput] image upload failed:', e)
+    // 上传失败，移除该引用并释放 preview URL
+    refs.value.splice(idx, 1)
+    URL.revokeObjectURL(preview)
+  }
+}
+
+/** 拖拽进入 */
+function onDragEnter(e: DragEvent) {
+  if (!e.dataTransfer?.types.includes('Files')) return
+  dragCounter++
+  isDragover.value = true
+}
+
+/** 拖拽经过 */
+function onDragOver(_e: DragEvent) {
+  // 保持 isDragover 状态，CSS 显示高亮
+}
+
+/** 拖拽离开 */
+function onDragLeave(_e: DragEvent) {
+  dragCounter--
+  if (dragCounter <= 0) {
+    dragCounter = 0
+    isDragover.value = false
+  }
+}
+
+/** 拖拽放下 */
+async function onDrop(e: DragEvent) {
+  isDragover.value = false
+  dragCounter = 0
+  const files = e.dataTransfer?.files
+  if (!files) return
+  for (const file of Array.from(files)) {
+    if (file.type.startsWith('image/')) {
+      await handleImageFile(file)
+    }
+  }
+}
+
 function handleSend() {
   const msg = text.value.trim()
-  if (!msg || props.disabled) return
+  if ((!msg && imageRefs.value.length === 0) || props.disabled) return
 
   emit('send', msg, refs.value, selectedProviderId.value || undefined, selectedModelName.value || undefined)
   text.value = ''
+  // 释放图片预览 URL
+  for (const r of refs.value) {
+    if (r.type === 'image' && r.preview.startsWith('blob:')) {
+      URL.revokeObjectURL(r.preview)
+    }
+  }
   refs.value = []
   nextTick(() => autoResize())
 }
@@ -823,6 +974,57 @@ function onResizeEnd(e: PointerEvent) {
 }
 .file-tag.blocked .file-tag-name {
   color: var(--status-error);
+}
+
+/* ── 图片引用缩略图 ── */
+.image-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px 3px 3px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  font-size: 0.75em;
+  color: var(--text-primary);
+  max-width: 180px;
+  transition: border-color 0.15s;
+}
+.image-tag:hover {
+  border-color: var(--accent-light);
+}
+.image-tag-preview {
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+.image-tag-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.image-tag-remove {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.85em;
+  padding: 0 2px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+.image-tag-remove:hover {
+  color: var(--status-error);
+}
+
+/* ── 拖拽图片高亮 ── */
+.chat-input.is-dragover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
 }
 
 /* ── 输入区主体 ── */

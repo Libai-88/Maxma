@@ -1,0 +1,132 @@
+<template>
+  <div class="error-card" :class="[`error-card--${category}`]">
+    <div class="error-card__header">
+      <span class="error-card__icon">{{ icon }}</span>
+      <span class="error-card__title">{{ title }}</span>
+      <span v-if="traceId" class="error-card__trace">ID: {{ traceId }}</span>
+    </div>
+    <div class="error-card__message">{{ message }}</div>
+    <div v-if="suggestion" class="error-card__suggestion">
+      <span class="suggestion-label">建议：</span>{{ suggestion }}
+    </div>
+    <div class="error-card__actions">
+      <button v-if="retryable" class="error-card__btn" @click="$emit('retry')">重试</button>
+      <button class="error-card__btn" @click="$emit('dismiss')">关闭</button>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed } from 'vue'
+
+const props = defineProps<{
+  message: string
+  category?: string
+  traceId?: string
+  retryable?: boolean
+}>()
+
+defineEmits<{ retry: []; dismiss: [] }>()
+
+const icon = computed(() => {
+  switch (props.category) {
+    case 'network': return '🌐'
+    case 'auth': return '🔑'
+    case 'timeout': return '⏱️'
+    case 'permission': return '🚫'
+    case 'not_found': return '🔍'
+    default: return '⚠️'
+  }
+})
+
+const title = computed(() => {
+  switch (props.category) {
+    case 'network': return '网络错误'
+    case 'auth': return '认证失败'
+    case 'timeout': return '请求超时'
+    case 'permission': return '权限不足'
+    case 'not_found': return '未找到'
+    default: return '发生错误'
+  }
+})
+
+const suggestion = computed(() => {
+  switch (props.category) {
+    case 'network': return '请检查网络连接后重试'
+    case 'auth': return '请检查 API 密钥是否正确配置'
+    case 'timeout': return '请稍后重试，或尝试简化请求'
+    case 'permission': return '请确认路径是否在白名单中'
+    case 'not_found': return '请确认目标路径或资源是否存在'
+    default: return '如果问题持续，请尝试重启服务'
+  }
+})
+</script>
+
+<style scoped>
+.error-card {
+  border: 1px solid #fecaca;
+  border-radius: var(--radius, 10px);
+  background: #fef2f2;
+  padding: 12px 16px;
+  margin: 8px 0;
+}
+.error-card--network { border-color: #bfdbfe; background: #eff6ff; }
+.error-card--timeout { border-color: #fed7aa; background: #fff7ed; }
+.error-card--auth { border-color: #fecaca; background: #fef2f2; }
+
+.error-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.error-card__icon { font-size: 16px; }
+.error-card__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #1f2937);
+}
+.error-card__trace {
+  font-size: 11px;
+  color: var(--text-tertiary, #9ca3af);
+  font-family: monospace;
+  margin-left: auto;
+}
+.error-card__message {
+  font-size: 13px;
+  color: var(--text-secondary, #6b7280);
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+.error-card__suggestion {
+  font-size: 12px;
+  color: var(--text-secondary, #6b7280);
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+.suggestion-label {
+  font-weight: 500;
+  color: var(--text-primary, #1f2937);
+}
+.error-card__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.error-card__btn {
+  padding: 4px 12px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 6px;
+  background: var(--bg-primary, #fff);
+  color: var(--text-secondary, #6b7280);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.error-card__btn:hover {
+  border-color: var(--accent, #000);
+  color: var(--text-primary, #1f2937);
+}
+</style>

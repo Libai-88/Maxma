@@ -13,6 +13,12 @@
         </div>
         <!-- 助手侧：events + finalAnswer + 记忆日志，hover 时才显示记忆日志 -->
         <div class="assistant-side">
+          <!-- 计划确认卡片 -->
+          <PlanCard
+            v-if="turn.planCard"
+            :plan="turn.planCard"
+            @respond="onPlanRespond"
+          />
           <template v-for="(ev, i) in turn.events" :key="i">
             <div
               v-if="ev.kind === 'thinking'"
@@ -159,6 +165,7 @@ import ContextMenu from './ContextMenu.vue'
 import MessageBubble from './MessageBubble.vue'
 import ThinkingBlock from './ThinkingBlock.vue'
 import ToolBubbleRouter from './ToolBubbleRouter.vue'
+import PlanCard from './PlanCard.vue'
 import { toolDisplayName } from './tools/_shared/displayNames'
 
 const props = defineProps<{
@@ -173,10 +180,15 @@ const emit = defineEmits<{
   (e: 'action', p: { action: string; data?: unknown }): void
   (e: 'cite', ref: ParsedRef): void
   (e: 'togglePrivate'): void
+  (e: 'planRespond', planId: string, action: 'approve' | 'modify' | 'reject', modifiedPlan?: string): void
 }>()
 
 function forwardAction(payload: { action: string; data?: unknown }) {
   emit('action', payload)
+}
+
+function onPlanRespond(planId: string, action: 'approve' | 'modify' | 'reject', modifiedPlan?: string) {
+  emit('planRespond', planId, action, modifiedPlan)
 }
 
 const windowRef = ref<HTMLElement | null>(null)

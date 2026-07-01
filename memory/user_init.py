@@ -55,8 +55,20 @@ def ensure_env_file() -> None:
     )
 
 
+def ensure_builtin_personas() -> None:
+    """将内置人格模板（SOUL.*.md）复制到可写目录，不覆盖已有文件。"""
+    if not _BUNDLE_PERSONAS_DIR.is_dir():
+        return
+    for src in _BUNDLE_PERSONAS_DIR.glob("SOUL*.md"):
+        if src.name in ("SOUL.md", "SOUL.example.md"):
+            continue  # 这两个由 ensure_soul_md() 单独处理
+        dst = PERSONAS_DATA_DIR / src.name
+        _copy_if_missing(src, dst, f"内置人格: {src.stem}")
+
+
 def ensure_all() -> None:
     """运行所有文件初始化检查（启动时调用一次）。"""
     ensure_env_file()
     ensure_user_md()
     ensure_soul_md()
+    ensure_builtin_personas()

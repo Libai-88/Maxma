@@ -75,6 +75,44 @@
           确认选择（{{ multiSelected.length }}）
         </button>
       </div>
+
+      <!-- 确认模式：危险操作确认 -->
+      <div v-else-if="interactionData.mode === 'confirm'" class="confirm-area">
+        <div class="confirm-warning">
+          <span class="confirm-warning-icon">&#9888;</span>
+          <span class="confirm-warning-text">危险操作</span>
+        </div>
+        <p v-if="interactionData.detail" class="confirm-detail">{{ interactionData.detail }}</p>
+        <div class="confirm-input-area">
+          <label class="confirm-label">请输入"确认"以继续：</label>
+          <input
+            v-model="confirmText"
+            type="text"
+            class="confirm-input"
+            placeholder="确认"
+            @keydown.enter="submitConfirm"
+          />
+          <button
+            class="btn-confirm-submit"
+            :disabled="confirmText.trim() !== '确认'"
+            @click="submitConfirm"
+          >
+            确认执行
+          </button>
+        </div>
+      </div>
+
+      <!-- 倒计时进度条 -->
+      <div v-if="showCountdown" class="countdown-bar">
+        <div
+          class="countdown-fill"
+          :class="{ urgent: countdownPercent < 20 }"
+          :style="{ width: countdownPercent + '%' }"
+        ></div>
+        <span class="countdown-text" :class="{ urgent: countdownPercent < 20 }">
+          {{ countdownSeconds }}s
+        </span>
+      </div>
     </div>
 
     <!-- 已提交，等待回复 -->
@@ -109,7 +147,7 @@
 
 <script setup lang="ts">
 import type { ToolCall } from '@/types';
-import { computed, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import BubbleChrome from './_shared/BubbleChrome.vue';
 
 const props = defineProps<{ toolCall: ToolCall }>()
@@ -121,6 +159,49 @@ const submitted = ref(false)
 const qaText = ref('')
 const singleSelected = ref('')
 const multiSelected = ref<string[]>([])
+const confirmText = ref('')
+
+// ── 倒计时 ──
+const TIMEOUT_SECONDS = 300
+const countdownRemaining = ref(TIMEOUT_SECONDS)
+let countdownTimer: ReturnType<typeof setInterval> | null = null
+
+const showCountdown = computed(() => {
+  return props.toolCall.status === 'running' && !submitted.value && !!interactionData.value.interactionId
+})
+
+const countdownPercent = computed(() => {
+  return (countdownRemaining.value / TIMEOUT_SECONDS) * 100
+})
+
+const countdownSeconds = computed(() => {
+  return Math.max(0, Math.ceil(countdownRemaining.value))
+})
+
+function startCountdown() {
+  stopCountdown()
+  countdownRemaining.value = TIMEOUT_SECONDS
+  countdownTimer = setInterval(() => {
+    countdownRemaining.value -= 1
+    if (countdownRemaining.value <= 0) {
+      stopCountdown()
+    }
+  }, 1000)
+}
+
+function stopCountdown() {
+  if (countdownTimer) {
+    clearInterval(countdownTimer)
+    countdownTimer = null
+  }
+}
+
+// 交互数据到达时启动倒计时
+watch(() => interactionData.value.interactionId, (id) => {
+  if (id) startCountdown()
+})
+
+onUnmounted(() => stopCountdown())
 
 const interactionData = computed(() => {
   const result = props.toolCall.interaction
@@ -131,6 +212,7 @@ const interactionData = computed(() => {
         options: [] as string[],
         interactionId: '',
         submitted: false,
+        detail: '',
       }
   console.log('[AskUserBubble] interactionData computed:', {
     status: props.toolCall.status,
@@ -197,6 +279,18 @@ function submitMulti() {
     data: {
       interactionId: interactionData.value.interactionId,
       response: multiSelected.value,
+    },
+  })
+}
+
+function submitConfirm() {
+  if (confirmText.value.trim() !== '确认') return
+  submitted.value = true
+  emit('action', {
+    action: 'user_response',
+    data: {
+      interactionId: interactionData.value.interactionId,
+      response: confirmText.value.trim(),
     },
   })
 }
@@ -354,5 +448,112 @@ function submitMulti() {
 }
 .ask-done-field {
   color: var(--text-secondary);
+}
+
+/* 确认模式 */
+.confirm-area {
+  padding: 4px 0;
+}
+.confirm-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+.confirm-warning-icon {
+  font-size: 16px;
+  color: #dc2626;
+}
+.confirm-warning-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #b91c1c;
+}
+.confirm-detail {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 8px 0;
+  line-height: 1.5;
+}
+.confirm-input-area {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.confirm-label {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.confirm-input {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.confirm-input:focus {
+  border-color: var(--accent);
+}
+.btn-confirm-submit {
+  padding: 8px 16px;
+  background: #dc2626;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+  align-self: flex-start;
+}
+.btn-confirm-submit:hover:not(:disabled) {
+  background: #b91c1c;
+}
+.btn-confirm-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── 倒计时进度条 ── */
+.countdown-bar {
+  position: relative;
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  margin-top: 12px;
+  overflow: visible;
+}
+.countdown-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 1s linear, background 0.3s;
+}
+.countdown-fill.urgent {
+  background: var(--status-error);
+  animation: countdown-flash 0.5s ease-in-out infinite alternate;
+}
+.countdown-text {
+  position: absolute;
+  right: 0;
+  top: -18px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.countdown-text.urgent {
+  color: var(--status-error);
+  font-weight: 600;
+}
+
+@keyframes countdown-flash {
+  from { opacity: 0.6; }
+  to { opacity: 1; }
 }
 </style>
