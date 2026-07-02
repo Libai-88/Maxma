@@ -70,8 +70,9 @@ import HealthPanel from '@/components/HealthPanel.vue';
 import Icon from '@/components/Icon.vue';
 import SessionSidebar from '@/components/SessionSidebar.vue';
 import { allSessionStatuses } from '@/composables/useChat';
-import { health, startPolling, useHealth } from '@/composables/useHealth';
-import { constifySession, unconstifySession, useSession } from '@/composables/useSession';
+import { useHealthStore } from '@/stores/health';
+import { storeToRefs } from 'pinia';
+import { useSessionStore } from '@/stores/session';
 import { useSidebar } from '@/composables/useSidebar';
 import { api } from '@/api';
 import { computed, ref, onMounted, onUnmounted, nextTick } from 'vue';
@@ -163,23 +164,25 @@ function handleSwitchSession(id: string) {
 
 function handleConstify(id: string, name: string) {
   if (name && name.trim()) {
-    constifySession(id, name.trim())
+    sessionStore.constifySession(id, name.trim())
   }
 }
 
 function handleUnconstify(id: string) {
   if (window.confirm('确定取消固定此会话？')) {
-    unconstifySession(id)
+    sessionStore.unconstifySession(id)
   }
 }
 
-const { sessionId, sessions, createSession, switchSession, deleteSession } =
-  useSession()
+const sessionStore = useSessionStore()
+const { sessionId, sessions } = storeToRefs(sessionStore)
+const { createSession, switchSession, deleteSession } = sessionStore
 
-useHealth()
+const healthStore = useHealthStore()
+const { health } = storeToRefs(healthStore)
 
 onMounted(() => {
-  startPolling()
+  healthStore.startPolling()
 })
 </script>
 
