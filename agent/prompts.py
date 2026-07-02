@@ -137,6 +137,13 @@ def _rebuild(fingerprint: str) -> None:
 
     # ── parts（用于 token 细分展示）──
     # 按变化频率从低到高排列：稳定内容在前，频繁变化的放最后。
+    # 只调用一次 I/O 密集型函数，两处复用
+    skills_content = _scan_anthropic_skills()
+    macros_content = _scan_macros()
+    narrative_content = get_narrative()
+
+    # 拆分系统 prompt，将稳定内容（skills/macros 等保持不变的部分）
+    # 放在前面，动态内容（记忆）放在末尾，
     # 这样 Anthropic/OpenAI prompt caching 可以缓存更长的前缀，
     # 记忆变化时不会导致 skills/macros 等稳定部分的缓存失效。
     _cached_parts = [
@@ -147,11 +154,11 @@ def _rebuild(fingerprint: str) -> None:
         {"key": "user_self_report", "label": "用户自述",
          "content": "## 用户自述\n" + user_md_raw},
         {"key": "skills", "label": "Skills 清单",
-         "content": _scan_anthropic_skills()},
+         "content": skills_content},
         {"key": "macros", "label": "宏清单",
-         "content": _scan_macros()},
+         "content": macros_content},
         {"key": "long_term_memory", "label": "长期记忆",
-         "content": "## 我对用户的记忆\n" + get_narrative()},
+         "content": "## 我对用户的记忆\n" + narrative_content},
     ]
 
     # ── 完整 prompt ──
@@ -166,12 +173,12 @@ def _rebuild(fingerprint: str) -> None:
         "## 用户自述",
         user_md_raw,
         "",
-        _scan_anthropic_skills(),
+        skills_content,
         "",
-        _scan_macros(),
+        macros_content,
         "",
         "## 我对用户的记忆",
-        get_narrative(),
+        narrative_content,
     ]
     _cached_prompt = "\n".join(full_parts)
     _cached_fingerprint = fingerprint

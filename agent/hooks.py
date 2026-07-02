@@ -364,7 +364,14 @@ class HookManager:
                 loop,
             )
         elif callback:
-            asyncio.create_task(self._execute_trigger(hook, record, callback))
+            logger.warning(
+                "Hook '%s' trigger fired but no event loop available (watchdog thread). "
+                "Marking as unsupported.",
+                hook.name,
+            )
+            record.status = "unsupported"
+            record.result = "事件钩子执行不可用：无可用事件循环（来自 watchdog 线程）"
+            self._add_history(record)
         else:
             record.status = "unsupported"
             record.result = "事件钩子执行不可用：未注册触发回调"

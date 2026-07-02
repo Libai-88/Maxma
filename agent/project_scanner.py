@@ -1,9 +1,12 @@
 """项目结构自动感知 — 扫描项目目录，生成结构化上下文摘要。"""
 
+import logging
 import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # 扫描时忽略的目录
 _IGNORE_DIRS = {

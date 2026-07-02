@@ -4,7 +4,7 @@ import logging
 import re
 from typing import Sequence
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, RemoveMessage, SystemMessage, ToolMessage
 
 from api.context_usage import count_tokens
 
@@ -388,25 +388,26 @@ async def maybe_trim_checkpoint(
             prev_text = "\n".join(prev_summary_parts)
             summary_text = f"{prev_text}\n{summary_text}"
 
-        # 构造截断后的消息列表
-        trimmed: list[BaseMessage] = []
-        if kept_messages and isinstance(kept_messages[0], SystemMessage):
-            trimmed.append(kept_messages[0])
-            kept_messages = kept_messages[1:]
-        if summary_text:
-            trimmed.append(SystemMessage(content=f"[上下文压缩] {summary_text}"))
-        trimmed.extend(kept_messages)
+        # 构造删除操作：为旧消息生成 RemoveMessage，并加上摘要
+        update_msgs: list[BaseMessage] = []
+        for msg in old_messages:
+            msg_id = getattr(msg, "id", None)
+            if msg_id:
+                update_msgs.append(RemoveMessage(id=msg_id))
 
-        if len(trimmed) == len(messages):
+        if summary_text:
+            update_msgs.append(SystemMessage(content=f"[上下文压缩] {summary_text}"))
+
+        if not update_msgs:
             return False
 
         await graph.aupdate_state(
             config,
-            {"messages": trimmed},
+            {"messages": update_msgs},
         )
         logger.info(
             f"Checkpoint trimmed for thread {config.get('configurable', {}).get('thread_id', '?')}: "
-            f"{len(messages)} → {len(trimmed)} messages"
+            f"{len(messages)} → {len(old_messages)} removed, summary added"
         )
         return True
 
