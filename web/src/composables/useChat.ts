@@ -1,7 +1,7 @@
 import { reactive, computed, watch, onUnmounted, ref, type Ref } from 'vue'
 import type { ClientMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, AskUserEvent, PlanProposedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent } from '@/types'
-import { useSessionStore } from '@/stores/session'
 import { useChatStore } from '@/stores/chat'
+import { useSessionStore } from '@/stores/session'
 import { buildFlatMessage, buildTimestamp, parseReferences } from '@/utils/references'
 import type { ParsedRef } from '@/utils/references'
 import { getToken, ensureTokenLoaded, resetToken } from '@/api'
@@ -71,7 +71,7 @@ function saveTurnsToStorage(sid: string, data: ChatTurn[]) {
 }
 
 export function removeTurnsFromStorage(sid: string) {
-  useChatStore().removeTurnsFromStorage(sid)
+  localStorage.removeItem(TURNS_KEY_PREFIX + sid)
 }
 
 export function disconnectSession(sid: string) {
@@ -92,10 +92,12 @@ export function disconnectSession(sid: string) {
   chatStore.removeChannel(sid)
 }
 
-const _sessionStore = useSessionStore()
-const refreshSessions = _sessionStore.refreshSessions
-const switchSession = _sessionStore.switchSession
-const chatStore = useChatStore()
+// Lazy store accessors — Pinia 在模块加载时尚未安装，只能在运行时调用
+function getChatStore() { return useChatStore() }
+function getSessionStore() { return useSessionStore() }
+
+const refreshSessions = () => getSessionStore().refreshSessions()
+const switchSession = (id: string) => getSessionStore().switchSession(id)
 const turnsCache = new Map<string, ChatTurn[]>()
 
 // ── 多会话通道 ─────────────────────────────────────────────
@@ -123,10 +125,11 @@ interface SessionChannel {
 
 const channels = reactive(new Map<string, SessionChannel>())
 
-export const allSessionStatuses = useChatStore().allSessionStatuses
+// Lazy export — 运行时才访问 Store（Pinia 在模块加载时尚未安装）
+export function getAllSessionStatuses() { return getChatStore().allSessionStatuses }
 
 function getOrCreateChannel(sid: string): SessionChannel {
-  return chatStore.getOrCreateChannel(sid) as SessionChannel
+  return getChatStore().getOrCreateChannel(sid) as SessionChannel
 }
 
 function persistTurns(sid: string) {
