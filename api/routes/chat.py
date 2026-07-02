@@ -6,6 +6,7 @@ import sys
 import logging
 import traceback
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
@@ -21,10 +22,13 @@ from api.errors import ErrorCode, format_ws_error
 from api.session_manager import SessionState
 from tools import select_tools_for_query
 from tools.base import format_error
+from tools.path_security import check_path_access
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_LOCAL_REF_PREFIX = "local:"
 
 
 def _get_provider_context(app_state) -> tuple[int, str]:
@@ -48,9 +52,6 @@ async def _process_image_refs(user_message: str) -> str:
         增强后的用户消息文本
     """
     import re
-    import base64
-    import mimetypes
-    from pathlib import Path
 
     # 提取 refs 块
     refs_start = user_message.rfind("__refs__")
@@ -99,13 +100,27 @@ async def _process_image_refs(user_message: str) -> str:
     return before_refs + desc_text + "\n\n" + after_refs
 
 
+def _resolve_local_image_ref(image_ref: str) -> Path:
+    """将前端图片 ref 解析为已通过路径安全检查的本地路径。"""
+    path_text = image_ref.strip()
+    if path_text.startswith(_LOCAL_REF_PREFIX):
+        path_text = path_text[len(_LOCAL_REF_PREFIX):].strip()
+    if not path_text:
+        raise ValueError("图片路径为空")
+
+    file_path = Path(path_text).expanduser().resolve(strict=False)
+    blocked = check_path_access(str(file_path))
+    if blocked:
+        raise PermissionError(blocked)
+    return file_path
+
+
 async def _describe_image(image_path: str) -> str:
     """调用 GLM-5V-Turbo 描述单张图片。"""
     import base64
     import mimetypes
-    from pathlib import Path
 
-    file_path = Path(image_path)
+    file_path = _resolve_local_image_ref(image_path)
     if not file_path.exists():
         raise FileNotFoundError(f"图片文件不存在: {image_path}")
 
@@ -423,6 +438,7 @@ async def _run_agent_turn(
     app_state = ws.app.state
     current_task = asyncio.current_task()
     session.auto_approve = auto_approve
+    interaction.current_session_id.set(session.session_id)
     ws_callback = WebSocketCallback(ws)  # WebUI 回调函数系统
 
     # ── 多模态：自动描述用户附带的图片 ──────────────────────────
@@ -553,7 +569,7 @@ async def _run_agent_turn(
             )
     except asyncio.CancelledError:
         # 清理 interaction 挂起 Future
-        interaction.cancel_all()
+        interaction.cancel_session(session.session_id)
 
         # 修复 checkpoint：为孤立 tool_calls 注入取消 ToolMessage，并通知前端
         try:
@@ -566,7 +582,7 @@ async def _run_agent_turn(
         )
     except Exception as e:
         # 清理可能挂起的用户交互 Future，防止阻塞后续交互
-        interaction.cancel_all("Agent 执行出错，交互已取消")
+        interaction.cancel_session(session.session_id, "Agent 执行出错，交互已取消")
         _run_error = str(e)
         trace_id = uuid.uuid4().hex[:8]
         logger.error(
@@ -690,6 +706,7 @@ def _resume_sub_agent(ws: WebSocket, session: SessionState) -> asyncio.Task | No
         session._active_task.cancel()
         session._active_task = None
     interaction.current_ws.set(ws)
+    interaction.current_session_id.set(session.session_id)
     agent_task = asyncio.create_task(
         _run_agent_turn(ws, session, task, private_mode=False)
     )

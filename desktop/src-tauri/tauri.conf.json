@@ -5,7 +5,7 @@
   "identifier": "com.maxmahere.app",
   "build": {
     "frontendDist": "../../web/dist",
-    "devUrl": "http://localhost:5173",
+    "devUrl": "http://127.0.0.1:5173",
     "beforeDevCommand": "",
     "beforeBuildCommand": ""
   },
@@ -23,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:8000 ws://127.0.0.1:8000 ws://localhost:5173 ws://127.0.0.1:5173; font-src 'self' https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' http://127.0.0.1:8000 data:; media-src 'self' data:;"
+      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:8000 ws://127.0.0.1:8000 ws://localhost:5173 ws://127.0.0.1:5173; font-src 'self' https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' http://127.0.0.1:8000 data: blob:; media-src 'self' data: blob:;"
     }
   },
   "bundle": {

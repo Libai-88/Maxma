@@ -584,7 +584,8 @@ function handleMemoryToolEvent(ch: SessionChannel, sid: string, event: ServerEve
 // ── useChat composable ─────────────────────────────────────
 
 export function useChat(sessionId: Ref<string>) {
-  const activeChannelRef = ref(getOrCreateChannel(sessionId.value))
+  // 若 sessionId 为空，创建占位通道，等 watch 触发时再连接
+  const activeChannelRef = ref(getOrCreateChannel(sessionId.value || '__pending__'))
   const activeChannel = computed(() => activeChannelRef.value)
 
   // 暴露给 ChatView 的响应式属性（指向当前 Session 通道）

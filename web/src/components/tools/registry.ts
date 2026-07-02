@@ -51,6 +51,7 @@ const registry: Record<string, Component> = {
   'ask_user_qa': AskUserBubble,
   'ask_user_single_choice': AskUserBubble,
   'ask_user_multi_choice': AskUserBubble,
+  'ask_user_confirm': AskUserBubble,
 
   /* Memory */
   'list_memories': MemoryBubble,

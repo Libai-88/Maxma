@@ -65,7 +65,9 @@ async def _maybe_initialize_llm(request: Request, force: bool = False) -> None:
         app.state.llm = get_llm(app.state.provider_manager)
         logger.info("[providers] LLM 已自动初始化")
     except RuntimeError:
-        # 仍然没有可用的 provider
+        # 仍然没有可用的 provider：必须清空旧 runtime，避免 chat 继续使用已删除/禁用的 provider。
+        app.state.llm = None
+        logger.info("[providers] 无可用 LLM provider，已清空旧 runtime")
         return
 
     # LLM 刚初始化成功，启动长期记忆监听（幂等，可重复调用）

@@ -328,13 +328,13 @@ onMounted(loadVars)
 }
 
 .msg.error {
-  background: #fee2e2;
-  color: #991b1b;
+  background: color-mix(in srgb, var(--status-error) 10%, var(--bg-card));
+  color: var(--status-error);
 }
 
 .msg.success {
-  background: #dcfce7;
-  color: #166534;
+  background: color-mix(in srgb, #22c55e 10%, var(--bg-card));
+  color: #16a34a;
 }
 
 /* ── 按钮 ── */

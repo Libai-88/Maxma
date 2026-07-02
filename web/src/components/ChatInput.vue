@@ -72,7 +72,7 @@
           ref="textareaRef"
           v-model="text"
           class="input-area"
-          placeholder="输入消息…… @技能 · #工具 · !宏"
+          :placeholder="inputPlaceholder"
           :disabled="disabled"
           rows="1"
           @keydown="onKeydown"
@@ -138,8 +138,8 @@
             <button
               v-if="!isStreaming"
               class="btn-send"
-              :disabled="(!text.trim() && imageRefs.length === 0) || disabled || noProvider"
-              :title="noProvider ? '请先在模型设置中添加 LLM 提供商' : ''"
+              :disabled="(!text.trim() && imageRefs.length === 0) || disabled || noProvider || !canSend"
+              :title="sendButtonTitle"
               @click="handleSend"
             >
               <Icon name="send" :size="16" />
@@ -194,12 +194,13 @@ import type { ProviderConfig, SkillInfo, ToolInfo } from '@/types'
 import { useStickerSegments, type StickerSegment } from '@/composables/useStickerSegments'
 import type { ParsedRef, ImageRef } from '@/utils/references'
 import { REF_CHIP_CONFIG } from '@/utils/references'
-import { getApiBase, tauriFetch } from '@/utils/env'
+import { getApiBase, isTauri, tauriFetch } from '@/utils/env'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
 const props = defineProps<{
   isStreaming: boolean
   disabled: boolean
+  canSend: boolean
   initialProviderId?: string
   initialModelName?: string
 }>()
@@ -215,6 +216,16 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const inputContainerRef = ref<HTMLDivElement | null>(null)
 const refs = ref<ParsedRef[]>([])
 const loading = ref(false)
+const inputPlaceholder = computed(() =>
+  props.canSend
+    ? '输入消息…… @技能 · #工具 · !宏'
+    : '后端连接中，可先输入内容，连接完成后发送……'
+)
+const sendButtonTitle = computed(() => {
+  if (noProvider.value) return '请先在模型设置中添加 LLM 提供商'
+  if (!props.canSend) return '后端连接中，暂时还不能发送'
+  return ''
+})
 
 // ── 表情选择器状态 ──
 const showStickerPicker = ref(false)
@@ -724,16 +735,16 @@ async function _pick(type: 'file' | 'folder') {
   if (loading.value) return
   loading.value = true
   try {
-    const data = await api.selectFile(type)
-    if (data.path) {
+    const path = await selectLocalPath(type)
+    if (path) {
       const refType = type === 'folder' ? 'folder' : 'file'
       const idx = refs.value.length
-      refs.value.push({ type: refType, path: data.path, label: getFileName(data.path) } as ParsedRef)
-      console.log('[ChatInput] _pick: pushed ref idx=%d type=%s path=%s', idx, refType, data.path)
+      refs.value.push({ type: refType, path, label: getFileName(path) } as ParsedRef)
+      console.log('[ChatInput] _pick: pushed ref idx=%d type=%s path=%s', idx, refType, path)
 
       // 异步检查路径是否被拒止锚或白名单阻挡
-      api.checkPathBlocked(data.path).then(result => {
-        console.log('[ChatInput] checkPathBlocked result for', data.path, result)
+      api.checkPathBlocked(path).then(result => {
+        console.log('[ChatInput] checkPathBlocked result for', path, result)
         if (result.blocked) {
           // 通过 refs.value[idx] 操作以触发响应式更新
           const entry = refs.value[idx] as any
@@ -750,6 +761,16 @@ async function _pick(type: 'file' | 'folder') {
   } finally {
     loading.value = false
   }
+}
+
+async function selectLocalPath(type: 'file' | 'folder'): Promise<string | null> {
+  if (isTauri()) {
+    const invoke = (window as any).__TAURI_INTERNALS__?.invoke ?? (window as any).__TAURI__?.core?.invoke
+    if (invoke) return await invoke('select_path', { kind: type })
+  }
+
+  const data = await api.selectFile(type)
+  return data.path
 }
 
 // ── 图片处理 ──
@@ -845,7 +866,7 @@ async function onDrop(e: DragEvent) {
 
 function handleSend() {
   const msg = text.value.trim()
-  if ((!msg && imageRefs.value.length === 0) || props.disabled) return
+  if ((!msg && imageRefs.value.length === 0) || props.disabled || !props.canSend) return
 
   emit('send', msg, refs.value, selectedProviderId.value || undefined, selectedModelName.value || undefined)
   text.value = ''
@@ -1090,7 +1111,7 @@ function onResizeEnd(e: PointerEvent) {
 .file-tag-blocked {
   font-size: 0.65em;
   color: var(--status-error);
-  background: #fee2e2;
+  background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
   padding: 0 5px;
   border-radius: 3px;
   flex-shrink: 0;
@@ -1098,7 +1119,7 @@ function onResizeEnd(e: PointerEvent) {
 }
 .file-tag.blocked {
   border-color: var(--status-error);
-  background: #fef2f2;
+  background: color-mix(in srgb, var(--status-error) 8%, var(--bg-card));
 }
 .file-tag.blocked .file-tag-name {
   color: var(--status-error);
@@ -1533,11 +1554,11 @@ function onResizeEnd(e: PointerEvent) {
   cursor: default;
 }
 .btn-stop {
-  background: #ef4444;
+  background: var(--status-error);
   color: #fff;
   font-size: 0.8em;
 }
 .btn-stop:hover {
-  background: #dc2626;
+  background: color-mix(in srgb, var(--status-error) 80%, #000);
 }
 </style>

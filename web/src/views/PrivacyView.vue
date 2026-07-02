@@ -215,6 +215,8 @@ onMounted(() => {
   padding: 24px 32px;
   max-width: 900px;
   margin: 0 auto;
+  overflow-y: auto;
+  height: 100%;
 }
 .header { margin-bottom: 24px; }
 .header h2 { font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0; }
@@ -354,8 +356,8 @@ onMounted(() => {
   padding: 6px 12px;
   border-radius: 6px;
 }
-.action-message.ok { color: #22c55e; background: #f0fdf4; }
-.action-message.error { color: #ef4444; background: #fef2f2; }
+.action-message.ok { color: #22c55e; background: color-mix(in srgb, #22c55e 10%, var(--bg-card)); }
+.action-message.error { color: var(--status-error); background: color-mix(in srgb, var(--status-error) 10%, var(--bg-card)); }
 
 .loading-text, .empty-text {
   color: var(--text-secondary);

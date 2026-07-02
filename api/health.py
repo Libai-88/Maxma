@@ -1,4 +1,8 @@
-"""后端四部件健康自检 — LLM / 记忆 / 原生工具集 / MCP 工具集。"""
+"""后端四部件健康自检 — LLM / 记忆 / 原生工具集 / MCP 工具集。
+
+默认返回本地就绪状态，不主动探测远端 provider。
+需要深度探测时，由调用方显式传入 ``probe_remote=True``。
+"""
 
 import asyncio
 import time
@@ -33,8 +37,12 @@ class HealthResponse(BaseModel):
 # ── LLM 健康检查（通过 ProviderManager）──────────────
 
 
-async def check_llm(app: FastAPI) -> ComponentHealth:
-    """使用 ProviderManager 中第一个 enabled provider 检查 LLM 连通性。"""
+async def check_llm(app: FastAPI, probe_remote: bool = False) -> ComponentHealth:
+    """检查 LLM 运行时状态。
+
+    默认仅判断本地是否存在可用 provider 与已初始化的 llm runtime，
+    不在健康检查里阻塞等待远端模型连通性。
+    """
     mgr = getattr(app.state, "provider_manager", None)
     if mgr is None or mgr.count == 0:
         return ComponentHealth(
@@ -42,8 +50,28 @@ async def check_llm(app: FastAPI) -> ComponentHealth:
             detail="No LLM providers configured. Add one via the providers panel.",
         )
 
+    providers = list(mgr.iter_enabled())
+    if not providers:
+        return ComponentHealth(
+            status="error",
+            detail="No enabled provider available",
+        )
+
     start = time.monotonic()
-    for provider in mgr.iter_enabled():
+    if not probe_remote:
+        elapsed = (time.monotonic() - start) * 1000
+        runtime_ready = getattr(app.state, "llm", None) is not None
+        primary = providers[0].provider_name
+        detail = f"{len(providers)} 个 provider 已启用，当前默认 {primary}，未执行远端探测"
+        if not runtime_ready:
+            detail = f"{detail}；本地 runtime 尚未初始化"
+        return ComponentHealth(
+            status="ok" if runtime_ready else "error",
+            latency_ms=round(elapsed, 1),
+            detail=detail,
+        )
+
+    for provider in providers:
         result = await provider.check_health()
         if result.status == "ok":
             elapsed = (time.monotonic() - start) * 1000
@@ -134,11 +162,27 @@ async def check_mcp_tools(app: FastAPI) -> ComponentHealth:
         )
 
 
-async def check_health_providers(app: FastAPI) -> dict[str, ComponentHealth]:
-    """遍历 ProviderManager 中所有 enabled provider 并行健康检查。"""
+async def check_health_providers(
+    app: FastAPI, probe_remote: bool = False
+) -> dict[str, ComponentHealth]:
+    """遍历所有 enabled provider。
+
+    默认只返回本地配置状态；深度模式下才并行执行远端健康检查。
+    """
     mgr = getattr(app.state, "provider_manager", None)
     if mgr is None or mgr.count == 0:
         return {}
+
+    providers = list(mgr.iter_enabled())
+    if not probe_remote:
+        return {
+            provider.provider_name: ComponentHealth(
+                status="ok",
+                latency_ms=0.0,
+                detail="已配置，未执行远端探测",
+            )
+            for provider in providers
+        }
 
     async def _check_one(provider) -> tuple[str, ComponentHealth]:
         result = await provider.check_health()
@@ -151,19 +195,19 @@ async def check_health_providers(app: FastAPI) -> dict[str, ComponentHealth]:
             ),
         )
 
-    tasks = [_check_one(p) for p in mgr.iter_enabled()]
+    tasks = [_check_one(p) for p in providers]
     results = await asyncio.gather(*tasks)
     return dict(results)
 
 
-async def get_health_report(app: FastAPI) -> HealthResponse:
+async def get_health_report(app: FastAPI, probe_remote: bool = False) -> HealthResponse:
     from version import __version__
 
-    llm = await check_llm(app)
+    llm = await check_llm(app, probe_remote=probe_remote)
     memory = await check_memory(app)
     native_tools = await check_native_tools(app)
     mcp_tools = await check_mcp_tools(app)
-    providers = await check_health_providers(app)
+    providers = await check_health_providers(app, probe_remote=probe_remote)
 
     # 统计 anthropic_skills 下的 skill 数量
     skills_count = 0
