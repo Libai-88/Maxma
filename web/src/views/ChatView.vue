@@ -100,12 +100,15 @@ import ContextUsageBadge from '@/components/ContextUsageBadge.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import TaskTrackerBar from '@/components/TaskTrackerBar.vue'
 import { useChat } from '@/composables/useChat'
-import { health } from '@/composables/useHealth'
-import { useSession } from '@/composables/useSession'
+import { useHealthStore } from '@/stores/health'
+import { useSessionStore } from '@/stores/session'
 import type { ParsedRef } from '@/utils/references'
+import { storeToRefs } from 'pinia'
 import { computed, onMounted, ref } from 'vue'
 
-const { sessionId, sessions } = useSession()
+const sessionStore = useSessionStore()
+const { sessionId, sessions } = storeToRefs(sessionStore)
+const { health } = storeToRefs(useHealthStore())
 const {
   connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId,
   contextUsage, taskTrackerData, send, cancel, sendUserResponse, sendPlanResponse, removeTurns,

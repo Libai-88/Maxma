@@ -214,9 +214,11 @@
 <script setup lang="ts">
 import ContextMenu from '@/components/ContextMenu.vue';
 import Icon from '@/components/Icon.vue';
-import { generateSessionTitle } from '@/composables/useSession';
+import { useSessionStore } from '@/stores/session';
 import type { SessionInfo } from '@/types';
 import { computed, nextTick, ref, watch } from 'vue';
+
+const sessionStore = useSessionStore()
 
 const props = defineProps<{
   sessions: SessionInfo[]
@@ -411,7 +413,7 @@ async function generateTitle() {
   if (!session || generating.value) return
   generating.value = true
   try {
-    const title = await generateSessionTitle(session.session_id)
+    const title = await sessionStore.generateSessionTitle(session.session_id)
     constifyName.value = title
     nextTick(() => {
       constifyInputRef.value?.focus()
