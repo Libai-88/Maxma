@@ -184,7 +184,9 @@ const { allSessionStatuses } = storeToRefs(chatStore)
 const healthStore = useHealthStore()
 const { health } = storeToRefs(healthStore)
 
-onMounted(() => {
+onMounted(async () => {
+  // 初始化 Session 状态（从 localStorage 恢复或创建新会话）
+  await sessionStore.initIfNeeded()
   healthStore.startPolling()
 })
 </script>
