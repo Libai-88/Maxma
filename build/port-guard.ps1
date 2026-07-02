@@ -5,14 +5,21 @@ param(
 $ErrorActionPreference = "Stop"
 $cleaned = 0
 
-# Also kill any lingering Tauri/sidecar processes by name
-$targetNames = @("maxma-here", "maxma-server", "node")
+$Ports = ($PortsStr -split '[, ]' | Where-Object { $_ -ne '' } | ForEach-Object { [int]$_ })
+
+# Kill by process name only when cleaning up from scratch (step 0)
+# Skip process-name killing when called before Tauri launch (step 3)
+# to avoid killing the Vite dev server that was just started.
+$doKillByName = $Ports -contains 5173
 $extraPids = @()
-foreach ($name in $targetNames) {
-    $procs = Get-Process -Name $name -ErrorAction SilentlyContinue
-    foreach ($p in $procs) {
-        $extraPids += $p.Id
-        Write-Host "[port-guard] Found stale process: $($p.ProcessName) (PID $($p.Id))"
+if ($doKillByName) {
+    $targetNames = @("maxma-here", "maxma-server", "node")
+    foreach ($name in $targetNames) {
+        $procs = Get-Process -Name $name -ErrorAction SilentlyContinue
+        foreach ($p in $procs) {
+            $extraPids += $p.Id
+            Write-Host "[port-guard] Found stale process: $($p.ProcessName) (PID $($p.Id))"
+        }
     }
 }
 
