@@ -42,6 +42,7 @@ from api.session_manager import SessionManager, SessionState
 from api.ws_registry import WebSocketRegistry
 from agent.graph import build_agent
 from memory.narrative import MEMORY_PATH, LongTermMemoryInterface
+from tools import merge_tool_lists
 from tools.mcp import init_mcp_tools, close_mcp, set_reload_callback
 from version import __version__
 
@@ -112,6 +113,14 @@ async def _load_const_sessions(app: FastAPI):
 async def lifespan(app: FastAPI):
     # 1. 初始化 Provider 管理器（优先从 YAML 加载）
     provider_store = ProviderConfigStore(path=PROVIDERS_YAML_PATH)
+    if provider_store.migrate_from_legacy_root_yaml():
+        logger.info("[provider] migrated legacy root providers.yaml -> %s", PROVIDERS_YAML_PATH)
+    elif provider_store.has_legacy_root_conflict():
+        logger.warning(
+            "[provider] detected legacy root providers.yaml with different content; "
+            "active config is %s and root providers.yaml is ignored",
+            PROVIDERS_YAML_PATH,
+        )
     if provider_store.is_empty:
         migrated = provider_store.migrate_from_env()
         if migrated:
@@ -141,7 +150,7 @@ async def lifespan(app: FastAPI):
 
     # 从 YAML 配置加载 MCP 工具
     app.state.mcp_tools = await init_mcp_tools()
-    app.state.tools = app.state.native_tools + app.state.mcp_tools
+    app.state.tools = merge_tool_lists(app.state.native_tools, app.state.mcp_tools)
 
     # 注入 MCP 重载回调：工具修改 YAML 后通过此回调触发异步重载
     _loop = asyncio.get_running_loop()  # 在 lifespan 协程中安全获取
@@ -154,7 +163,7 @@ async def lifespan(app: FastAPI):
             from tools.mcp import reload_mcp
             new_tools = await reload_mcp()
             app.state.mcp_tools = new_tools
-            app.state.tools = app.state.native_tools + new_tools
+            app.state.tools = merge_tool_lists(app.state.native_tools, new_tools)
             logger.info("[mcp] 工具触发热重载成功，共 %d 个 MCP 工具", len(new_tools))
         except Exception as exc:
             logger.error("[mcp] 工具触发热重载失败: %s", exc)
@@ -213,7 +222,7 @@ async def lifespan(app: FastAPI):
         from tools.network.playwright_tools.browser_manager import BrowserManager
         BrowserManager().shutdown()
     except Exception:
-        pass
+        logger.warning("[playwright] browser shutdown failed", exc_info=True)
 
 
 def create_app() -> FastAPI:
@@ -299,6 +308,14 @@ def create_app() -> FastAPI:
     from api.routes import stickers as stickers_router
     app.include_router(stickers_router.router, prefix="/api")
 
+    # 表情收藏
+    from api.routes import sticker_favorites as sticker_favorites_router
+    app.include_router(sticker_favorites_router.router, prefix="/api")
+
+    # 自定义表情上传
+    from api.routes import sticker_upload as sticker_upload_router
+    app.include_router(sticker_upload_router.router, prefix="/api")
+
     # Auth token 端点 — 桌面应用运行时获取 Token（替代构建时硬编码）
     @app.get("/api/auth/token")
     async def get_auth_token():
@@ -310,10 +327,13 @@ def create_app() -> FastAPI:
     async def health():
         return await get_health_report(app)
 
-    # 认证中间件（在路由之后添加，确保只拦截 API/WS 路径）
+    # 中间件执行顺序以“最后 add 的最先执行”为准。
+    # 这里先注册 Auth，再注册 RequestLog，因此实际顺序是：
+    # RequestLog -> Auth -> 路由。
+    # Auth 是否放行由它自身的路径判断控制，而不是由路由注册顺序控制。
     app.add_middleware(AuthMiddleware)
 
-    # 请求日志中间件（在认证之前，记录所有请求）
+    # 请求日志放在最外层，确保包括被鉴权拒绝的请求也会被记录。
     app.add_middleware(RequestLogMiddleware)
 
     # 生产模式：挂载前端静态文件（必须在所有 API 路由之后）

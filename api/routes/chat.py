@@ -162,6 +162,27 @@ def _get_final_answer(event) -> str:
     return final_answer
 
 
+async def _get_recent_ai_messages(session, config, limit: int = 5) -> list[str]:
+    """从 checkpoint 获取最近 N 条 AI 消息内容。"""
+    try:
+        cpt = await session.checkpointer.aget_tuple(config)
+        if cpt is None:
+            return []
+        messages = cpt.checkpoint.get("channel_values", {}).get("messages", [])
+        # 从后往前取 AI 消息（排除最后一条，因为那是当前回复）
+        ai_messages = []
+        for msg in reversed(messages[:-1]):
+            if hasattr(msg, 'type') and msg.type == 'ai':
+                content = msg.content if hasattr(msg, 'content') else str(msg)
+                if content:
+                    ai_messages.append(content)
+                    if len(ai_messages) >= limit:
+                        break
+        return ai_messages
+    except Exception:
+        return []
+
+
 async def _stream_turn(
     graph,
     inputs,
@@ -400,6 +421,7 @@ async def _run_agent_turn(
     """
     # 1. [准备环境] 从 WebSocket 获取应用状态
     app_state = ws.app.state
+    current_task = asyncio.current_task()
     session.auto_approve = auto_approve
     ws_callback = WebSocketCallback(ws)  # WebUI 回调函数系统
 
@@ -409,6 +431,7 @@ async def _run_agent_turn(
 
     # 获取默认上下文窗口大小
     default_max_tokens, _ = _get_provider_context(app_state)
+    fallback_model_name = default_max_tokens and _get_provider_context(app_state)[1]
 
     # 动态 LLM 选择（Phase 2：每次消息独立指定提供商/模型）
     current_max_tokens = default_max_tokens
@@ -419,8 +442,27 @@ async def _run_agent_turn(
             current_model_name = model_name
             current_max_tokens = provider.config.context_window
         except KeyError:
+            logger.warning(
+                "[chat:%s] requested provider/model fallback: provider_id=%r model=%r not found; "
+                "using default provider/model=%r",
+                session.session_id[:8],
+                provider_id,
+                model_name,
+                fallback_model_name or "<unknown>",
+            )
             llm = app_state.llm
             current_model_name = None
+    elif provider_id or model_name:
+        logger.warning(
+            "[chat:%s] requested provider/model fallback: provider_id=%r model=%r incomplete or unavailable; "
+            "using default provider/model=%r",
+            session.session_id[:8],
+            provider_id,
+            model_name,
+            fallback_model_name or "<unknown>",
+        )
+        llm = app_state.llm
+        current_model_name = None
     else:
         llm = app_state.llm
         current_model_name = None
@@ -492,16 +534,21 @@ async def _run_agent_turn(
             max_tokens=current_max_tokens,
         )
         if final_answer:
-            # 表情包处理：解析 [表情包:情绪] 占位符
+            # 表情包处理：分层决策架构
+            # 1. LLM 主动输出 [表情包:情绪] → 直接解析
+            # 2. LLM 未输出 → 决策器判断是否补发
             from tools.sticker_utils import process_stickers
-            processed_answer, sticker_files = process_stickers(final_answer)
-            answer_payload: dict = {"content": processed_answer}
-            if sticker_files:
-                answer_payload["stickers"] = sticker_files
+            ai_recent = await _get_recent_ai_messages(session, config, limit=5)
+            processed_answer, _ = process_stickers(
+                final_answer,
+                user_message=user_message,
+                ai_recent_messages=ai_recent,
+            )
+            final_answer = processed_answer
             await ws.send_json(
                 {  # [向前端通信] 1. 向客户端推送最终答案
                     "type": "answer",
-                    "payload": answer_payload,
+                    "payload": {"content": processed_answer},
                 }
             )
     except asyncio.CancelledError:
@@ -535,7 +582,8 @@ async def _run_agent_turn(
             )
         )
     finally:
-        session._active_task = None
+        if session._active_task is current_task:
+            session._active_task = None
         context_usage = await _calculate_context_usage(
             session,
             system_prompt,
@@ -590,6 +638,10 @@ async def _run_agent_turn(
                 "message_count": session.message_count,
             }
             serialized = serialize_messages(raw_messages)
+            for item in reversed(serialized):
+                if item.get("type") == "ai":
+                    item["content"] = final_answer
+                    break
             save_const_session(
                 session.session_id, session.const_name, metadata, serialized
             )
@@ -754,5 +806,6 @@ async def websocket_chat(ws: WebSocket, session_id: str):
         app_state.ws_registry.unregister(session_id)
         if agent_task and not agent_task.done():
             agent_task.cancel()
-        session._active_task = None
+        if session._active_task is agent_task:
+            session._active_task = None
         interaction.clear_session_settings(session_id)

@@ -11,43 +11,52 @@
         <template v-if="block.becameAnswer">
           <template v-for="(seg, i) in segments" :key="i">
             <RenderMarkdown v-if="seg.type === 'text'" :content="seg.text" />
-            <span v-else class="sticker-inline">
-              <img :src="seg.src" class="sticker-img" loading="lazy" />
-            </span>
+            <StickerInline v-else :sticker="seg" @preview="previewSticker" />
           </template>
         </template>
-        <RenderMarkdown v-else :content="block.tokens" :streaming="!block.done" />
+        <RenderMarkdown v-else :content="streamingText" :streaming="!block.done" />
       </div>
     </div>
   </div>
+  <!-- 表情预览 overlay -->
+  <StickerPreviewOverlay
+    v-if="previewIndex >= 0"
+    :stickers="stickerSegments"
+    :initial-index="previewIndex"
+    @close="previewIndex = -1"
+  />
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import type { ThinkingBlock as ThinkingBlockType } from '@/types'
 import RenderMarkdown from './RenderMarkdown.vue'
+import StickerInline from './StickerInline.vue'
+import StickerPreviewOverlay from './StickerPreviewOverlay.vue'
+import { useStickerSegments, type StickerSegment } from '@/composables/useStickerSegments'
 
 const props = defineProps<{ block: ThinkingBlockType }>()
 
-const segments = computed(() => {
+const previewIndex = ref(-1)
+
+function previewSticker(sticker: StickerSegment) {
+  previewIndex.value = stickerSegments.value.findIndex(
+    seg => seg.occurrenceKey === sticker.occurrenceKey
+  )
+}
+
+const STICKER_PLACEHOLDER_RE = /\[表情包(?::[^\]]+)?\]/g
+
+/** 流式阶段隐藏原始 [表情包:xxx] 占位符，避免用户看到明文 */
+const streamingText = computed(() => {
   const text = props.block.tokens
-  if (!text) return []
-  const regex = /<sticker:([^>]+)>/g
-  const segs: Array<{ type: 'text'; text: string } | { type: 'sticker'; src: string }> = []
-  let lastIndex = 0
-  let match
-  while ((match = regex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      segs.push({ type: 'text', text: text.slice(lastIndex, match.index) })
-    }
-    segs.push({ type: 'sticker', src: `/api/stickers/${match[1]}` })
-    lastIndex = match.index + match[0].length
-  }
-  if (lastIndex < text.length) {
-    segs.push({ type: 'text', text: text.slice(lastIndex) })
-  }
-  return segs
+  if (!text) return ''
+  return text.replace(STICKER_PLACEHOLDER_RE, '')
 })
+
+/** 解析内容中的 <sticker:category/filename.webp> 标记，分段返回 */
+const segments = useStickerSegments(computed(() => props.block.tokens))
+const stickerSegments = computed(() => segments.value.filter((seg): seg is StickerSegment => seg.type === 'sticker'))
 </script>
 
 <style scoped>
@@ -116,22 +125,16 @@ const segments = computed(() => {
   color: var(--text-primary);
 }
 
-.sticker-inline {
-  display: inline-block;
-  vertical-align: middle;
-  margin: 4px 6px;
-  cursor: pointer;
+@media (prefers-reduced-motion: reduce) {
+  .thinking-block,
+  .thinking-header,
+  .thinking-body {
+    transition: none;
+  }
+
+  .spinner {
+    animation: none;
+  }
 }
 
-.sticker-img {
-  width: 100px;
-  height: 100px;
-  object-fit: contain;
-  transition: transform 0.15s ease;
-  display: block;
-}
-
-.sticker-inline:hover .sticker-img {
-  transform: scale(1.15);
-}
 </style>

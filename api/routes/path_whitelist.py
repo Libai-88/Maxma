@@ -2,13 +2,13 @@
 
 import os
 
-import yaml
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 # 导入安全检查函数
 from tools.base import check_path_whitelisted, check_maxma_blocker
 from app_paths import PATH_WHITELIST_YAML_PATH
+from api.yaml_store import dump_yaml_atomic, load_yaml, yaml_file_lock
 
 router = APIRouter()
 
@@ -28,8 +28,7 @@ class WhitelistResponse(BaseModel):
 def _load() -> list[dict]:
     if not WHITELIST_PATH.exists():
         return []
-    with open(WHITELIST_PATH, encoding="utf-8") as f:
-        raw = yaml.safe_load(f) or {}
+    raw = load_yaml(WHITELIST_PATH, default={}) or {}
     entries = raw.get("whitelist", []) or []
     for e in entries:
         if isinstance(e, dict) and "recursive" not in e:
@@ -38,47 +37,48 @@ def _load() -> list[dict]:
 
 
 def _save(entries: list[dict]) -> None:
-    with open(WHITELIST_PATH, "w", encoding="utf-8") as f:
-        yaml.dump(
-            {"whitelist": entries}, f, allow_unicode=True, default_flow_style=False
-        )
+    dump_yaml_atomic(WHITELIST_PATH, {"whitelist": entries})
 
 
 @router.get("/path-whitelist", response_model=WhitelistResponse)
 async def list_whitelist():
-    entries = _load()
+    with yaml_file_lock(WHITELIST_PATH):
+        entries = _load()
     return WhitelistResponse(entries=[WhitelistEntry(**e) for e in entries])
 
 
 @router.post("/path-whitelist", response_model=WhitelistEntry)
 async def add_whitelist(entry: WhitelistEntry):
-    entries = _load()
-    data = entry.model_dump()
-    data["path"] = os.path.normpath(data["path"])
-    entries.append(data)
-    _save(entries)
+    with yaml_file_lock(WHITELIST_PATH):
+        entries = _load()
+        data = entry.model_dump()
+        data["path"] = os.path.normpath(data["path"])
+        entries.append(data)
+        _save(entries)
     return WhitelistEntry(**data)
 
 
 @router.put("/path-whitelist/{index}", response_model=WhitelistEntry)
 async def update_whitelist(index: int, entry: WhitelistEntry):
-    entries = _load()
-    if index < 0 or index >= len(entries):
-        raise HTTPException(status_code=404, detail=f"索引 {index} 超出范围")
-    data = entry.model_dump()
-    data["path"] = os.path.normpath(data["path"])
-    entries[index] = data
-    _save(entries)
+    with yaml_file_lock(WHITELIST_PATH):
+        entries = _load()
+        if index < 0 or index >= len(entries):
+            raise HTTPException(status_code=404, detail=f"索引 {index} 超出范围")
+        data = entry.model_dump()
+        data["path"] = os.path.normpath(data["path"])
+        entries[index] = data
+        _save(entries)
     return WhitelistEntry(**data)
 
 
 @router.delete("/path-whitelist/{index}")
 async def delete_whitelist(index: int):
-    entries = _load()
-    if index < 0 or index >= len(entries):
-        raise HTTPException(status_code=404, detail=f"索引 {index} 超出范围")
-    removed = entries.pop(index)
-    _save(entries)
+    with yaml_file_lock(WHITELIST_PATH):
+        entries = _load()
+        if index < 0 or index >= len(entries):
+            raise HTTPException(status_code=404, detail=f"索引 {index} 超出范围")
+        removed = entries.pop(index)
+        _save(entries)
     return {"status": "ok", "removed": removed}
 
 

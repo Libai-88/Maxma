@@ -53,6 +53,26 @@ async def get_messages(session_id: str, request: Request):
     session = sm.get(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
+
+    if session.is_const:
+        from api.const_session_store import load_const_session_by_id
+
+        const_data = load_const_session_by_id(session_id)
+        if const_data is not None:
+            persisted_messages = const_data.get("messages", [])
+            if isinstance(persisted_messages, list):
+                return {
+                    "session_id": session_id,
+                    "messages": [
+                        {
+                            "role": str(m.get("type", "human")),
+                            "content": m.get("content", ""),
+                        }
+                        for m in persisted_messages
+                        if isinstance(m, dict)
+                    ],
+                }
+
     try:
         cpt = await session.checkpointer.aget_tuple(
             {"configurable": {"thread_id": session.session_id}}

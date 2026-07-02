@@ -4,6 +4,7 @@ import type { HealthResponse } from '@/types'
 
 export const health = ref<HealthResponse | null>(null)
 let _timer: ReturnType<typeof setInterval> | null = null
+let _consumers = 0
 
 export async function refreshHealth() {
   try {
@@ -27,6 +28,12 @@ export function stopPolling() {
 }
 
 export function useHealth() {
-  onUnmounted(stopPolling)
+  _consumers++
+  onUnmounted(() => {
+    _consumers = Math.max(0, _consumers - 1)
+    if (_consumers === 0) {
+      stopPolling()
+    }
+  })
   return { health, refreshHealth, startPolling, stopPolling }
 }

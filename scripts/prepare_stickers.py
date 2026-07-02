@@ -13,7 +13,7 @@ import re
 import shutil
 from pathlib import Path
 
-from PIL import Image, ImageSequence
+from PIL import Image, ImageOps, ImageSequence
 
 # ── 配置 ──────────────────────────────────────────────────────
 
@@ -57,7 +57,7 @@ TAG_TO_EMOTION = {
     "思念": "爱心",
     "回复": "日常",
     "节日": "日常",
-    "沙雕": "搞笑",  # 搞笑→开心
+    "沙雕": "开心",
 }
 
 
@@ -115,6 +115,8 @@ def convert_to_webp(src: Path, dst: Path, size: int = TARGET_SIZE) -> bool:
         else:
             # 静态图
             img = Image.open(src)
+            # 自动根据 EXIF 方向信息旋转，避免手机拍摄照片方向错误
+            img = ImageOps.exif_transpose(img)
             if img.mode in ('RGBA', 'LA', 'P'):
                 img = img.convert('RGBA')
             else:
@@ -203,8 +205,10 @@ def main():
                 skipped += 1
                 continue
 
-            # 生成输出文件名
-            dst_name = f"{Path(filename).stem}.webp"
+            # 生成输出文件名（保留原始扩展名以避免同名文件覆盖）
+            src_stem = Path(filename).stem
+            src_ext = Path(filename).suffix.lstrip('.').lower()
+            dst_name = f"{src_stem}_{src_ext}.webp"
             dst = out_dir / dst_name
 
             if convert_to_webp(src, dst):

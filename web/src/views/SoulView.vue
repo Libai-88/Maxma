@@ -190,7 +190,7 @@ async function saveContent() {
   try {
     // 如果当前编辑的不是默认 SOUL.md，需要通过 variant 保存
     const variant = activeFile.value !== 'SOUL.md' ? activeFile.value : undefined
-    await api.updatePersona(TYPE, content.value)
+    await api.updatePersona(TYPE, content.value, variant)
     savedContent.value = content.value
     saveState.value = 'saved'
     setTimeout(() => { saveState.value = '' }, 2000)

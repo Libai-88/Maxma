@@ -1,10 +1,13 @@
 """工具（Tool）集中注册 — ALL_TOOLS 供 Agent 使用。"""
 
 from collections import defaultdict
+import logging
 
 from langchain_core.tools import BaseTool
 
 from tools.base import SharedAPIClient
+
+logger = logging.getLogger(__name__)
 
 # 懒加载 client，避免循环导入
 _client: SharedAPIClient | None = None
@@ -214,6 +217,30 @@ def clear_tool_cache() -> None:
     _cached_tools = None
 
 
+def merge_tool_lists(
+    primary_tools: list[BaseTool],
+    secondary_tools: list[BaseTool] | None = None,
+    *,
+    log_collisions: bool = True,
+) -> list[BaseTool]:
+    """按名称合并两组工具，保留第一组优先级。"""
+    merged = list(primary_tools)
+    seen_names = {tool.name for tool in merged}
+
+    for tool in secondary_tools or []:
+        if tool.name in seen_names:
+            if log_collisions:
+                logger.warning(
+                    "[tools] skip duplicate tool name from secondary toolset: %s",
+                    tool.name,
+                )
+            continue
+        merged.append(tool)
+        seen_names.add(tool.name)
+
+    return merged
+
+
 # ── 工具分类与动态选择 ──────────────────────────────────────────
 
 # 工具名称到分类的映射
@@ -385,9 +412,9 @@ def select_tools_for_query(query: str, max_tools: int = 20, mcp_tools: list | No
         non_core = [t for t in filtered if t.name not in CORE_TOOLS]
         result = core + non_core[:max_tools - len(core)]
 
-    # 追加 MCP 工具（始终包含，不受过滤影响）
+    # 追加 MCP 工具（始终包含，不受过滤影响），若名称冲突则保留已选中的第一份。
     if mcp_tools:
-        result = result + list(mcp_tools)
+        result = merge_tool_lists(result, list(mcp_tools), log_collisions=False)
 
     # ── 人格专属工具集过滤 ──
     # 如果当前人格的 SOUL 文件 frontmatter 中声明了 tools 列表，

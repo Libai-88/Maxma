@@ -31,6 +31,17 @@
         <div class="resize-handle-grip"></div>
       </div>
       <TransitionGroup name="ref-tag" tag="div" class="file-refs-bar" @before-leave="freezeLeavePos">
+        <!-- 表情引用：缩略图预览 -->
+        <span
+          v-for="seg in stickerSegments"
+          :key="'sticker-' + seg.occurrenceKey"
+          class="sticker-tag"
+          :title="seg.path"
+        >
+          <img :src="seg.src" class="sticker-tag-preview" :alt="seg.filename" />
+          <span class="sticker-tag-name">{{ seg.category || '表情' }}</span>
+          <button class="sticker-tag-remove" @click="removeStickerSegment(seg)">✕</button>
+        </span>
         <!-- 图片引用：缩略图预览 -->
         <span
           v-for="(r, idx) in imageRefs"
@@ -117,6 +128,14 @@
           <span class="input-separator"></span>
           <div class="input-actions">
             <button
+              class="btn-sticker"
+              :class="{ active: showStickerPicker }"
+              @click.stop="toggleStickerPicker"
+              title="表情"
+            >
+              <Icon name="sticker" :size="18" />
+            </button>
+            <button
               v-if="!isStreaming"
               class="btn-send"
               :disabled="(!text.trim() && imageRefs.length === 0) || disabled || noProvider"
@@ -132,6 +151,25 @@
         </div>
       </div>
     </div>
+    <!-- 表情选择器 -->
+    <StickerPicker
+      v-if="showStickerPicker"
+      ref="stickerPickerRef"
+      :visible="showStickerPicker"
+      :context-text="text"
+      @select="onStickerSelect"
+      @close="showStickerPicker = false"
+      @contextmenu="onStickerContextMenu"
+    />
+    <!-- 表情右键菜单 -->
+    <StickerContextMenu
+      v-if="contextMenuVisible"
+      :visible="contextMenuVisible"
+      :position="contextMenuPosition"
+      :sticker="contextMenuSticker"
+      @close="contextMenuVisible = false"
+      @refresh="onContextMenuRefresh"
+    />
     <AutocompletePanel
       :items="acFiltered"
       :visible="acMode !== null"
@@ -150,9 +188,13 @@
 import { api } from '@/api'
 import AutocompletePanel from '@/components/AutocompletePanel.vue'
 import Icon from '@/components/Icon.vue'
+import StickerPicker from '@/components/StickerPicker.vue'
+import StickerContextMenu from '@/components/StickerContextMenu.vue'
 import type { ProviderConfig, SkillInfo, ToolInfo } from '@/types'
+import { useStickerSegments, type StickerSegment } from '@/composables/useStickerSegments'
 import type { ParsedRef, ImageRef } from '@/utils/references'
 import { REF_CHIP_CONFIG } from '@/utils/references'
+import { getApiBase, tauriFetch } from '@/utils/env'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
 const props = defineProps<{
@@ -173,6 +215,72 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const inputContainerRef = ref<HTMLDivElement | null>(null)
 const refs = ref<ParsedRef[]>([])
 const loading = ref(false)
+
+// ── 表情选择器状态 ──
+const showStickerPicker = ref(false)
+const contextMenuVisible = ref(false)
+const contextMenuPosition = ref({ x: 0, y: 0 })
+const contextMenuSticker = ref<any>(null)
+const stickerPickerRef = ref<InstanceType<typeof StickerPicker> | null>(null)
+const parsedInputSegments = useStickerSegments(text)
+const stickerSegments = computed(() =>
+  parsedInputSegments.value.filter((seg): seg is StickerSegment => seg.type === 'sticker')
+)
+
+function toggleStickerPicker() {
+  console.log('[ChatInput] toggleStickerPicker called, current:', showStickerPicker.value)
+  showStickerPicker.value = !showStickerPicker.value
+  console.log('[ChatInput] showStickerPicker now:', showStickerPicker.value)
+}
+
+async function onStickerSelect(sticker: any) {
+  console.log('[ChatInput] onStickerSelect called with:', sticker)
+  // 直接用用户选择的具体表情，不再调 random API
+  const stickerTag = `<sticker:${sticker.path}>`
+  text.value += stickerTag
+  recordStickerUsage(sticker)
+  console.log('[ChatInput] Inserted sticker tag:', stickerTag)
+  showStickerPicker.value = false
+  nextTick(() => {
+    textareaRef.value?.focus()
+    autoResize()
+  })
+}
+
+function removeStickerSegment(sticker: StickerSegment) {
+  const currentSticker = stickerSegments.value.find(seg => seg.occurrenceKey === sticker.occurrenceKey) || sticker
+  text.value = text.value.slice(0, currentSticker.start) + text.value.slice(currentSticker.end)
+  nextTick(() => {
+    textareaRef.value?.focus()
+    autoResize()
+  })
+}
+
+async function recordStickerUsage(sticker: any) {
+  try {
+    await tauriFetch(`${getApiBase()}/stickers/usage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        category: sticker.category,
+        filename: sticker.filename
+      })
+    })
+  } catch (err) {
+    console.warn('[ChatInput] 记录表情使用失败:', err)
+  }
+}
+
+function onStickerContextMenu(event: MouseEvent, sticker: any) {
+  contextMenuSticker.value = sticker
+  contextMenuPosition.value = { x: event.clientX, y: event.clientY }
+  contextMenuVisible.value = true
+}
+
+function onContextMenuRefresh() {
+  stickerPickerRef.value?.refresh()
+  contextMenuVisible.value = false
+}
 
 // ── 图片引用分离（用于模板中分别渲染缩略图和文本 chip）──
 const imageRefs = computed(() => refs.value.filter((r): r is ImageRef => r.type === 'image'))
@@ -828,6 +936,7 @@ function onResizeEnd(e: PointerEvent) {
 .chat-input-wrapper {
   padding: 12px 24px 16px;
   background: var(--bg-card);
+  position: relative;
 }
 
 /* ── 自定义 Dropdown ── */
@@ -996,6 +1105,57 @@ function onResizeEnd(e: PointerEvent) {
 }
 
 /* ── 图片引用缩略图 ── */
+.sticker-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px 3px 3px;
+  border: 1px solid color-mix(in srgb, var(--accent-pink) 36%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-pink) 8%, var(--bg-secondary));
+  font-size: 0.75em;
+  color: var(--text-primary);
+  max-width: 180px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.sticker-tag:hover {
+  border-color: var(--accent-pink);
+  background: color-mix(in srgb, var(--accent-pink) 12%, var(--bg-secondary));
+}
+
+.sticker-tag-preview {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  border-radius: 8px;
+  flex-shrink: 0;
+  background: #fff;
+}
+
+.sticker-tag-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.sticker-tag-remove {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.85em;
+  padding: 0 2px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
+.sticker-tag-remove:hover {
+  color: var(--status-error);
+}
+
 .image-tag {
   display: inline-flex;
   align-items: center;
@@ -1266,6 +1426,33 @@ function onResizeEnd(e: PointerEvent) {
 }
 .add-file-menu-item:hover {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* 表情按钮 */
+.btn-sticker {
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  padding: 0;
+  font-family: inherit;
+  font-size: 17px;
+  line-height: 1;
+}
+.btn-sticker:hover:not(:disabled) {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+.btn-sticker.active {
+  background: var(--accent);
+  color: white;
 }
 .input-area {
   width: 100%;

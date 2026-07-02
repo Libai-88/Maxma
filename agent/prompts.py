@@ -1,12 +1,16 @@
 """系统提示词组装（带内容哈希缓存）。"""
 
 import hashlib
+import logging
 import re
 from pathlib import Path
 
 from app_paths import ANTHROPIC_SKILLS_DIR, MACROS_DIR, SKILLS_DATA_DIR, MACROS_DATA_DIR, PERSONAS_DATA_DIR as PERSONAS_DIR, ACTIVE_PERSONA_PATH
 from memory.narrative import get_narrative
 from memory.user_init import ensure_user_md
+from api.yaml_store import dump_yaml_atomic, yaml_file_lock
+
+logger = logging.getLogger(__name__)
 
 
 # ── 活跃人格管理 ────────────────────────────────────────────
@@ -23,17 +27,14 @@ def get_active_persona_file() -> str:
             if isinstance(data, dict) and "file" in data:
                 return data["file"]
         except Exception:
-            pass
+            logger.warning("failed to load active_persona.yaml", exc_info=True)
     return _DEFAULT_PERSONA_FILE
 
 
 def set_active_persona(filename: str) -> None:
     """设置当前活跃人格文件，并失效提示词缓存。"""
-    import yaml
-    ACTIVE_PERSONA_PATH.write_text(
-        yaml.dump({"file": filename}, allow_unicode=True, default_flow_style=False),
-        encoding="utf-8",
-    )
+    with yaml_file_lock(ACTIVE_PERSONA_PATH):
+        dump_yaml_atomic(ACTIVE_PERSONA_PATH, {"file": filename})
     invalidate_prompt_cache()
 
 

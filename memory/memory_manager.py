@@ -1,4 +1,5 @@
 import datetime
+import logging
 import os
 import re
 import secrets
@@ -6,6 +7,8 @@ from typing import Optional
 
 import portalocker
 import yaml
+
+logger = logging.getLogger(__name__)
 
 MAX_DESC_LENGTH = 150
 """记忆描述最大字数限制，超过此长度的创建/更新/合并请求将被驳回。"""
@@ -117,7 +120,30 @@ class MemoryManager:
         self._maybe_migrate_old_ids()
         with open(self._yaml_file, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
-        return {id: MemoryItem(**data[id]) for id in data}
+        if not isinstance(data, dict):
+            logger.warning("[memory] invalid top-level YAML structure in %s", self._yaml_file)
+            return {}
+
+        items: dict[str, MemoryItem] = {}
+        for item_id, raw in data.items():
+            if not isinstance(raw, dict):
+                logger.warning(
+                    "[memory] skipping invalid item %s in %s: expected dict, got %s",
+                    item_id,
+                    self._yaml_file,
+                    type(raw).__name__,
+                )
+                continue
+            try:
+                items[item_id] = MemoryItem(**raw)
+            except TypeError as exc:
+                logger.warning(
+                    "[memory] skipping invalid item %s in %s: %s",
+                    item_id,
+                    self._yaml_file,
+                    exc,
+                )
+        return items
 
     def _write_all(self, items: dict[str, "MemoryItem"]) -> None:
         """覆写完整文件。调用方必须已持有文件锁。"""

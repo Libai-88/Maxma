@@ -1,5 +1,5 @@
 <template>
-  <div class="app-layout">
+  <div class="app-layout" :class="{ 'night-mode': isNightMode }">
     <aside class="sidebar" :class="{ collapsed: effectiveCollapsed }" @click="onSidebarClick">
       <div class="sidebar-header">
         <h1 class="logo">
@@ -38,6 +38,9 @@
           <router-link to="/event-hooks" class="popup-item" @click="closeSettingsMenu">事件钩子</router-link>
           <router-link to="/privacy" class="popup-item" @click="closeSettingsMenu">隐私仪表盘</router-link>
           <div class="popup-divider"></div>
+          <button class="popup-item popup-action neutral" @click="cycleNightModeSetting">
+            深夜模式：{{ nightModeLabel }}
+          </button>
           <button class="popup-item popup-action" :class="{ restarting }" :disabled="restarting" @click="handleRestart">
             {{ restarting ? '重启中...' : '重启服务' }}
           </button>
@@ -71,8 +74,9 @@ import { health, startPolling, useHealth } from '@/composables/useHealth';
 import { constifySession, unconstifySession, useSession } from '@/composables/useSession';
 import { useSidebar } from '@/composables/useSidebar';
 import { api } from '@/api';
-import { ref, onMounted, onUnmounted, nextTick } from 'vue';
+import { computed, ref, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
+import { useNightModeClock } from '@/composables/useNightMode'
 
 const { effectiveCollapsed, toggleSidebar } = useSidebar()
 
@@ -82,6 +86,12 @@ const settingsPopupRef = ref<HTMLElement | null>(null)
 const popupTop = ref('0px')
 const popupLeft = ref('228px')
 const restarting = ref(false)
+const { nightModeSetting, isNightMode, cycleNightModeSetting } = useNightModeClock()
+const nightModeLabel = computed(() =>
+  nightModeSetting.value === 'auto' ? '自动'
+  : nightModeSetting.value === 'on' ? '开启'
+  : '关闭'
+)
 
 async function handleRestart() {
   if (restarting.value) return
@@ -256,6 +266,51 @@ html, body {
 .app-layout {
   display: flex;
   height: 100%;
+}
+
+.app-layout.night-mode {
+  --bg-primary: #f4eadc;
+  --bg-secondary: #ede1d1;
+  --bg-card: #fff5e6;
+  --user-bubble: #fff1dc;
+  --text-primary: #2a2118;
+  --text-secondary: #756657;
+  --text-tertiary: #a08f7f;
+  --accent: #2b2117;
+  --accent-light: #b79d82;
+  --accent-pink: #d87974;
+  --accent-pink-light: #e59a8e;
+  --accent-pink-soft: rgba(216, 121, 116, 0.14);
+  --border: #dccbbb;
+  --shadow: 0 2px 8px rgba(73, 45, 25, 0.08);
+  --shadow-soft: 0 8px 24px rgba(73, 45, 25, 0.06);
+  --shadow-sm: 0 1px 4px rgba(73, 45, 25, 0.06);
+  --shadow-md: 0 2px 8px rgba(73, 45, 25, 0.08);
+  --shadow-lg: 0 4px 16px rgba(73, 45, 25, 0.14);
+  --shadow-xl: 0 6px 28px rgba(73, 45, 25, 0.18);
+  --shadow-pink: 0 4px 16px rgba(216, 121, 116, 0.28);
+
+  background:
+    linear-gradient(rgba(52, 36, 22, 0.16), rgba(52, 36, 22, 0.16)),
+    var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.app-layout.night-mode .chat-window {
+  background:
+    radial-gradient(circle at 20% 0%, rgba(255, 214, 168, 0.34), transparent 32%),
+    linear-gradient(rgba(45, 28, 16, 0.08), rgba(45, 28, 16, 0.08)),
+    var(--bg-primary);
+}
+
+.app-layout.night-mode .markdown-body,
+.app-layout.night-mode .bubble {
+  line-height: 1.72;
+  font-weight: 350;
+}
+
+.app-layout.night-mode .sidebar::after {
+  background: rgba(255, 245, 230, 0.86);
 }
 
 .sidebar {
@@ -444,6 +499,12 @@ html, body {
   font-size: 0.9em;
   background: transparent;
   color: #dc2626;
+}
+.popup-action.neutral {
+  color: var(--text-secondary);
+}
+.popup-action.neutral:hover {
+  color: var(--text-primary);
 }
 .popup-action:hover:not(:disabled) {
   background: var(--bg-secondary);

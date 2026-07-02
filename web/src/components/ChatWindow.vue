@@ -9,7 +9,12 @@
           :data-user-msg-idx="turnsIndex(mergedIdx)"
           @contextmenu.prevent="onBubbleContextMenu($event, 'user_message', turn.userMessage, '用户', turnsIndex(mergedIdx))"
         >
-          <MessageBubble role="user" :content="turn.userMessage" :refs="turn.refs" />
+          <MessageBubble
+            role="user"
+            :content="turn.userMessage"
+            :refs="turn.refs"
+            :read-status="isStreamingTurn(turn) ? 'pending' : 'read'"
+          />
         </div>
         <!-- 助手侧：events + finalAnswer + 记忆日志，hover 时才显示记忆日志 -->
         <div class="assistant-side">
@@ -99,10 +104,13 @@
       </div>
 
       <!-- 流式输出打字指示器 -->
-      <div v-if="currentTurn && isStreamingTurn(currentTurn)" class="typing-indicator">
-        <span class="typing-dot"></span>
-        <span class="typing-dot"></span>
-        <span class="typing-dot"></span>
+      <div v-if="showTypingIndicator" class="typing-indicator">
+        <span class="typing-label">饱饱正在输入</span>
+        <span class="typing-dots">
+          <span class="typing-dot"></span>
+          <span class="typing-dot"></span>
+          <span class="typing-dot"></span>
+        </span>
       </div>
 
       <!-- 空状态 -->
@@ -193,6 +201,19 @@ function onPlanRespond(planId: string, action: 'approve' | 'modify' | 'reject', 
 
 const windowRef = ref<HTMLElement | null>(null)
 const SCROLL_BOTTOM_THRESHOLD = 100
+const typingDelayElapsed = ref(false)
+let typingTimer: ReturnType<typeof setTimeout> | null = null
+
+const currentTurnHasVisibleActivity = computed(() => {
+  const turn = props.currentTurn
+  if (!turn) return false
+  if (turn.finalAnswer) return true
+  return turn.events.some(ev => ev.kind === 'tool' || (ev.kind === 'thinking' && !ev.consumed))
+})
+
+const showTypingIndicator = computed(() =>
+  Boolean(props.currentTurn) && typingDelayElapsed.value && !currentTurnHasVisibleActivity.value
+)
 
 function isNearBottom(): boolean {
   const el = windowRef.value
@@ -224,6 +245,25 @@ function turnsIndex(mergedIdx: number): number {
 function isStreamingTurn(turn: ChatTurn): boolean {
   return props.currentTurn?.id === turn.id
 }
+
+watch(
+  () => props.currentTurn?.id,
+  (id) => {
+    if (typingTimer) {
+      clearTimeout(typingTimer)
+      typingTimer = null
+    }
+    typingDelayElapsed.value = false
+    if (!id) return
+    const delay = 1500 + Math.floor(Math.random() * 2000)
+    typingTimer = setTimeout(() => {
+      if (props.currentTurn?.id === id) {
+        typingDelayElapsed.value = true
+      }
+    }, delay)
+  },
+  { immediate: true }
+)
 
 function scrollToBottom() {
   nextTick(() => {
@@ -325,6 +365,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (typeTimer) clearTimeout(typeTimer)
+  if (typingTimer) clearTimeout(typingTimer)
   document.removeEventListener('keydown', onPrivateKeydown)
 })
 
@@ -763,6 +804,18 @@ function closeContextMenu() {
   gap: 4px;
   padding: 12px 16px;
   margin: 8px 0;
+  color: var(--text-secondary);
+  font-size: 0.86em;
+}
+
+.typing-label {
+  margin-right: 4px;
+}
+
+.typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .typing-dot {
@@ -773,11 +826,11 @@ function closeContextMenu() {
   animation: typingBounce 1.4s infinite ease-in-out both;
 }
 
-.typing-dot:nth-child(1) {
+.typing-dots .typing-dot:nth-child(1) {
   animation-delay: -0.32s;
 }
 
-.typing-dot:nth-child(2) {
+.typing-dots .typing-dot:nth-child(2) {
   animation-delay: -0.16s;
 }
 
@@ -789,6 +842,21 @@ function closeContextMenu() {
   40% {
     transform: scale(1);
     opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .typewriter-cursor,
+  .memory-spinner,
+  .typing-dot {
+    animation: none;
+  }
+
+  .quick-hints,
+  .scroll-mark,
+  .assistant-side .memory-tool-log,
+  .memory-tool-entry {
+    transition: none;
   }
 }
 </style>

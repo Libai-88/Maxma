@@ -49,6 +49,12 @@ const svgContents: Record<string, string> = {
   tool: toolRaw,
   send: sendRaw,
   stop: stopRaw,
+  sticker: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"/>
+  <path d="M14 2v6h6"/>
+  <circle cx="10" cy="13" r="2"/>
+  <path d="m16 15-2 2 2 2"/>
+</svg>`,
   image: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
   <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
   <circle cx="8.5" cy="8.5" r="1.5"/>

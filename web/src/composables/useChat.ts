@@ -1,4 +1,4 @@
-import { reactive, computed, watch, nextTick, type Ref } from 'vue'
+import { reactive, computed, watch, onUnmounted, ref, type Ref } from 'vue'
 import type { ClientMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, AskUserEvent, PlanProposedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent } from '@/types'
 import { refreshSessions, switchSession } from '@/composables/useSession'
 import { buildFlatMessage, buildTimestamp, parseReferences } from '@/utils/references'
@@ -199,6 +199,17 @@ async function connectSession(sid: string) {
   // 确保 Token 已加载（桌面应用运行时获取）
   await ensureTokenLoaded()
   const token = getToken()
+  if (!token) {
+    ch.connected = false
+    ch.error = '连接失败：未能获取认证令牌'
+    if (ch.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      return
+    }
+    const delay = getReconnectDelay(ch.reconnectAttempts)
+    ch.reconnectAttempts++
+    ch.reconnectTimer = setTimeout(() => connectSession(sid), delay)
+    return
+  }
   const url = `${getWsBase()}/ws/chat/${sid}`
   ch.ws = new WebSocket(url, [token])
 
@@ -415,30 +426,17 @@ function handleEventForChannel(sid: string, event: ServerEvent) {
         console.log(`[ltm-fe] turnId set on turn.id=${ch.currentTurn.id}: ${ch.currentTurn.turnId}`)
       }
       if (ch.currentTurn) {
-        const lastThink = findLastThinking(ch.currentTurn.events)
+        const turnToFinalize = ch.currentTurn
+        const lastThink = findLastThinking(turnToFinalize.events)
         const trackBecame = lastThink?.becameAnswer
-        console.log(`[useChat:done] 会话 ${sid}: becameAnswer=${trackBecame}, events=${ch.currentTurn.events.length}, finalAnswer=${ch.currentTurn.finalAnswer?.slice(0, 50) ?? 'null'}`)
-        if (trackBecame) {
-          const turnToFinalize = ch.currentTurn
-          void nextTick(() => {
-            setTimeout(() => {
-              console.log(`[useChat:done] becameAnswer 分支执行 persist (会话 ${sid})`)
-              ch.turns.push(turnToFinalize)
-              ch.currentTurn = null
-              ch.isStreaming = false
-              if (!ch.privateMode) {
-                persistTurns(sid)
-              }
-            }, 420)
-          })
-        } else {
-          console.log(`[useChat:done] 直接分支执行 persist (会话 ${sid})`)
-          ch.turns.push(ch.currentTurn)
+        console.log(`[useChat:done] 会话 ${sid}: becameAnswer=${trackBecame}, events=${turnToFinalize.events.length}, finalAnswer=${turnToFinalize.finalAnswer?.slice(0, 50) ?? 'null'}`)
+        ch.turns.push(turnToFinalize)
+        if (ch.currentTurn?.id === turnToFinalize.id) {
           ch.currentTurn = null
-          ch.isStreaming = false
-          if (!ch.privateMode) {
-            persistTurns(sid)
-          }
+        }
+        ch.isStreaming = false
+        if (!ch.privateMode) {
+          persistTurns(sid)
         }
         void refreshSessions()  // 轮次结束，刷新会话列表以更新 message_count
       } else {
@@ -586,7 +584,8 @@ function handleMemoryToolEvent(ch: SessionChannel, sid: string, event: ServerEve
 // ── useChat composable ─────────────────────────────────────
 
 export function useChat(sessionId: Ref<string>) {
-  const activeChannel = computed(() => getOrCreateChannel(sessionId.value))
+  const activeChannelRef = ref(getOrCreateChannel(sessionId.value))
+  const activeChannel = computed(() => activeChannelRef.value)
 
   // 暴露给 ChatView 的响应式属性（指向当前 Session 通道）
   const connected = computed(() => activeChannel.value.connected)
@@ -625,7 +624,12 @@ export function useChat(sessionId: Ref<string>) {
       if (oldId) {
         console.log(`[useChat:watch] 在切换前持久化旧会话 "${oldId}"`)
         persistTurns(oldId)
+        const oldChannel = channels.get(oldId)
+        if (oldChannel && !oldChannel.isStreaming && !oldChannel.isAwaitingUser) {
+          disconnectSession(oldId)
+        }
       }
+      activeChannelRef.value = getOrCreateChannel(newId)
       ensureConnected(newId)
       // 恢复新会话的消息缓存（页面刷新场景）
       const cached = turnsCache.get(newId)
@@ -648,6 +652,12 @@ export function useChat(sessionId: Ref<string>) {
     },
     { immediate: true }
   )
+
+  onUnmounted(() => {
+    for (const sid of Array.from(channels.keys())) {
+      disconnectSession(sid)
+    }
+  })
 
   function send(text: string, refs: ParsedRef[] = [], providerId?: string, modelName?: string) {
     const ch = activeChannel.value

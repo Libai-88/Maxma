@@ -9,32 +9,45 @@ const STORAGE_KEY = 'maxma_session_id'
 const sessionId = ref('')
 const sessions = ref<SessionInfo[]>([])
 let _initialized = false
+let _initPromise: Promise<void> | null = null
 
 async function initIfNeeded() {
   if (_initialized) {
     console.log('[useSession:init] 已初始化, 跳过')
     return
   }
-  _initialized = true
-
-  const stored = localStorage.getItem(STORAGE_KEY)
-  console.log(`[useSession:init] 从 localStorage 读取 stored="${stored}"`)
-  if (stored) {
-    try {
-      await api.getSession(stored)
-      sessionId.value = stored
-      console.log(`[useSession:init] 恢复已有会话: "${stored}"`)
-    } catch (e) {
-      console.warn(`[useSession:init] 会话 "${stored}" 不存在于后端, 创建新会话:`, e)
-      await _createSession()
-    }
-  } else {
-    console.log('[useSession:init] localStorage 中无会话记录, 创建新会话')
-    await _createSession()
+  if (_initPromise) {
+    await _initPromise
+    return
   }
-  await refreshSessions()
-  cleanupOrphanedCaches()
-  console.log(`[useSession:init] 完成, sessionId="${sessionId.value}", 共 ${sessions.value.length} 个会话`)
+
+  _initPromise = (async () => {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    console.log(`[useSession:init] 从 localStorage 读取 stored="${stored}"`)
+    try {
+      if (stored) {
+        try {
+          await api.getSession(stored)
+          sessionId.value = stored
+          console.log(`[useSession:init] 恢复已有会话: "${stored}"`)
+        } catch (e) {
+          console.warn(`[useSession:init] 会话 "${stored}" 不存在于后端, 创建新会话:`, e)
+          await _createSession()
+        }
+      } else {
+        console.log('[useSession:init] localStorage 中无会话记录, 创建新会话')
+        await _createSession()
+      }
+      await refreshSessions()
+      cleanupOrphanedCaches()
+      _initialized = true
+      console.log(`[useSession:init] 完成, sessionId="${sessionId.value}", 共 ${sessions.value.length} 个会话`)
+    } finally {
+      _initPromise = null
+    }
+  })()
+
+  await _initPromise
 }
 
 export async function refreshSessions() {

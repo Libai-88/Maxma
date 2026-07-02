@@ -87,8 +87,8 @@ const panelStyle = computed(() => ({
   max-width: 360px;
   max-height: 280px;
   overflow-y: auto;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: var(--shadow-xl);
   padding: 4px;
@@ -104,7 +104,7 @@ const panelStyle = computed(() => ({
 }
 .ac-item.active,
 .ac-item:hover {
-  background: #f3f4f6;
+  background: var(--bg-secondary);
 }
 .ac-item-icon {
   display: inline-flex;
@@ -115,13 +115,13 @@ const panelStyle = computed(() => ({
 .ac-item-name {
   font-size: 13px;
   font-weight: 600;
-  color: #111827;
+  color: var(--text-primary);
   white-space: nowrap;
   flex-shrink: 0;
 }
 .ac-item-desc {
   font-size: 11px;
-  color: #6b7280;
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -129,7 +129,7 @@ const panelStyle = computed(() => ({
 .ac-empty {
   padding: 10px 12px;
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--text-tertiary);
   text-align: center;
 }
 </style>

@@ -48,15 +48,15 @@ def _get_manager(request: Request):
     return request.app.state.provider_manager
 
 
-async def _maybe_initialize_llm(request: Request) -> None:
-    """如果 LLM 尚未初始化，尝试从 ProviderManager 初始化。
+async def _maybe_initialize_llm(request: Request, force: bool = False) -> None:
+    """如果 LLM 尚未初始化（或 force=True），尝试从 ProviderManager 初始化。
 
     同时启动长期记忆监听器（start_listening 是幂等的，重复调用安全）。
     """
     app = request.app
 
-    # LLM 已就绪，无需操作
-    if app.state.llm is not None:
+    # LLM 已就绪且非强制刷新，无需操作
+    if app.state.llm is not None and not force:
         return
 
     from api.dependencies import get_llm
@@ -118,7 +118,7 @@ async def create_provider(body: ProviderCreateBody, request: Request):
     mgr.save_config(config)
 
     # 自动初始化 LLM 和 Memory（如果之前因缺少 provider 而未启动）
-    await _maybe_initialize_llm(request)
+    await _maybe_initialize_llm(request, force=True)
 
     return config.to_safe_dict()
 
@@ -138,16 +138,18 @@ async def update_provider(provider_id: str, body: ProviderUpdateBody, request: R
     mgr.save_config(config)
 
     # 自动初始化 LLM 和 Memory（如果之前因缺少 provider 而未启动）
-    await _maybe_initialize_llm(request)
+    await _maybe_initialize_llm(request, force=True)
 
     return config.to_safe_dict()
 
 
 @router.delete("/providers/{provider_id}")
-def delete_provider(provider_id: str, request: Request):
+async def delete_provider(provider_id: str, request: Request):
     """删除提供商配置。"""
     if not _get_manager(request).delete_config(provider_id):
         raise HTTPException(status_code=404, detail="Provider not found")
+    # 删除后强制重新初始化 LLM（可能删的是当前正在使用的 provider）
+    await _maybe_initialize_llm(request, force=True)
     return {"status": "deleted"}
 
 

@@ -83,6 +83,7 @@ async def get_persona(
 @router.put("/persona", response_model=PersonaResponse)
 async def update_persona(
     type: str = Query(..., description="soul 或 user"),
+    variant: str | None = Query(None, description="指定人格文件名，如 SOUL.饱饱.md"),
     body: PersonaUpdateRequest | None = None,
 ):
     if body is None:
@@ -92,7 +93,15 @@ async def update_persona(
         raise HTTPException(
             status_code=400, detail=f"无效 type: {type}，仅支持 soul/user"
         )
-    path = PERSONAS_DIR / VALID_TYPES[t]
+    if t == "soul" and variant:
+        import re
+        if not re.match(r'^SOUL\.[\w\u4e00-\u9fff\-]+\.md$', variant):
+            raise HTTPException(status_code=400, detail="无效的人格文件名")
+        path = PERSONAS_DIR / variant
+        if not path.resolve().is_relative_to(PERSONAS_DIR.resolve()):
+            raise HTTPException(status_code=400, detail="非法路径")
+    else:
+        path = PERSONAS_DIR / VALID_TYPES[t]
     path.write_text(body.content, encoding="utf-8")
     invalidate_prompt_cache()
     return PersonaResponse(content=body.content, type=t)

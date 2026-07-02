@@ -271,9 +271,11 @@ async def reload_mcp() -> list[BaseTool]:
 
     try:
         result = await init_mcp_tools()
-        if _tools is None:
-            _tools = []
-        return _tools
+        if _last_error is not None:
+            raise RuntimeError(_last_error)
+        if result is None:
+            result = []
+        return result
     except Exception as exc:
         # 恢复旧状态
         _client = old_client
