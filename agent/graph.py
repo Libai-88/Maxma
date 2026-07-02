@@ -115,6 +115,44 @@ class AgentState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
 
 
+async def _request_plan_confirmation(
+    *,
+    ws,
+    interaction,
+    plan_id: str,
+    steps: list[str],
+    plan: str,
+    timeout: float = 120,
+):
+    """发送计划确认请求并确保所有 pending 映射最终被清理。"""
+    interaction_id: str | None = None
+    future: asyncio.Future | None = None
+    try:
+        interaction_id, future = interaction.register()
+        interaction._pending[plan_id] = future
+        await ws.send_json({
+            "type": "plan_proposed",
+            "payload": {
+                "plan_id": plan_id,
+                "steps": steps,
+                "plan_text": plan,
+            },
+        })
+        return await asyncio.wait_for(future, timeout=timeout)
+    except asyncio.TimeoutError:
+        logger.info("Plan confirmation timed out, proceeding with original plan")
+        return None
+    except Exception as e:
+        logger.warning("Plan confirmation failed, proceeding with original plan: %s", e)
+        return None
+    finally:
+        if future is not None and not future.done():
+            future.cancel()
+        interaction.cleanup(plan_id)
+        if interaction_id is not None:
+            interaction.cleanup(interaction_id)
+
+
 def build_agent(
     model: BaseChatModel,
     tools: list[BaseTool],
@@ -168,36 +206,13 @@ def build_agent(
             from api import interaction
 
             plan_id = uuid.uuid4().hex[:12]
-
-            # 发送 plan_proposed 事件
-            try:
-                await ws.send_json({
-                    "type": "plan_proposed",
-                    "payload": {
-                        "plan_id": plan_id,
-                        "steps": steps,
-                        "plan_text": plan,
-                    },
-                })
-            except Exception as e:
-                logger.warning(f"Failed to send plan_proposed: {e}")
-                # WebSocket 发送失败，跳过确认直接执行
-                plan_msg = SystemMessage(content=f"[执行计划]\n{plan}")
-                return {"messages": [plan_msg]}
-
-            # 注册交互并等待用户响应
-            interaction_id, future = interaction.register()
-            # 用 plan_id 作为 interaction_id 的映射（前端用 plan_id 回复）
-            interaction._pending[plan_id] = future
-
-            try:
-                response = await asyncio.wait_for(future, timeout=120)
-            except asyncio.TimeoutError:
-                logger.info("Plan confirmation timed out, proceeding with original plan")
-                response = None
-            finally:
-                interaction.cleanup(plan_id)
-                interaction.cleanup(interaction_id)  # 清理 register() 创建的原始条目
+            response = await _request_plan_confirmation(
+                ws=ws,
+                interaction=interaction,
+                plan_id=plan_id,
+                steps=steps,
+                plan=plan,
+            )
 
             # 处理用户响应
             if response is None:

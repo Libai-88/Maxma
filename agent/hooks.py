@@ -235,13 +235,28 @@ class HookManager:
                 watcher.stop()
             except Exception:
                 logger.warning("Failed to stop file watcher for hook %s", hook.hook_id, exc_info=True)
+            try:
+                join = getattr(watcher, "join", None)
+                if callable(join):
+                    join(timeout=5)
+                    is_alive = getattr(watcher, "is_alive", None)
+                    if callable(is_alive) and is_alive():
+                        logger.warning("File watcher for hook %s did not exit within timeout", hook.hook_id)
+            except Exception:
+                logger.warning("Failed to join file watcher for hook %s", hook.hook_id, exc_info=True)
 
         # 停止定时任务
         task = None
         with self._lock:
             task = self._schedule_tasks.pop(hook.hook_id, None)
         if task is not None:
-            task.cancel()
+            try:
+                if self._loop is not None:
+                    self._loop.call_soon_threadsafe(task.cancel)
+                else:
+                    task.cancel()
+            except Exception:
+                logger.warning("Failed to cancel schedule task for hook %s", hook.hook_id, exc_info=True)
 
     # ── 文件变更监听 ────────────────────────────────────────
 

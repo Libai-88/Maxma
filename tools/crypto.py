@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 # 加密标记前缀 — 用于识别已加密的值
 _ENCRYPTED_PREFIX = "enc:"
+_ENV_FERNET_KEY = "MAXMAHERE_FERNET_KEY"
 
 
 def is_encrypted(value: str) -> bool:
@@ -114,10 +115,23 @@ def _decrypt_dpapi(encoded: str) -> str:
 
 def _get_machine_key() -> bytes:
     """从机器特征派生加密密钥。"""
+    env_key = os.environ.get(_ENV_FERNET_KEY)
+    if env_key:
+        try:
+            raw = base64.urlsafe_b64decode(env_key.encode("ascii"))
+            if len(raw) == 32:
+                return raw
+            logger.warning("%s must decode to 32 bytes; falling back to machine key", _ENV_FERNET_KEY)
+        except Exception as e:
+            logger.warning("%s is invalid, falling back to machine key: %s", _ENV_FERNET_KEY, e)
     try:
         username = os.getlogin()
     except OSError:
         username = os.environ.get("USERNAME") or os.environ.get("USER") or "unknown"
+    logger.warning(
+        "Using machine-derived Fernet key on non-Windows platform; set %s for stable cross-session decryption",
+        _ENV_FERNET_KEY,
+    )
     seed = f"MaxmaHere-{platform.node()}-{username}"
     return hashlib.sha256(seed.encode()).digest()
 

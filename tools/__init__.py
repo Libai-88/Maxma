@@ -1,17 +1,20 @@
 """工具（Tool）集中注册 — ALL_TOOLS 供 Agent 使用。"""
 
+from __future__ import annotations
+
 from collections import defaultdict
 import logging
+from typing import TYPE_CHECKING
 
-from langchain_core.tools import BaseTool
-
-from tools.base import SharedAPIClient
+if TYPE_CHECKING:
+    from langchain_core.tools import BaseTool
 
 logger = logging.getLogger(__name__)
 
 # 懒加载 client，避免循环导入
 _client: SharedAPIClient | None = None
 _cached_tools: list[BaseTool] | None = None
+_registry_validated = False
 
 # 工具使用统计（工具名 → 调用次数）
 _tool_usage: dict[str, int] = defaultdict(int)
@@ -28,6 +31,8 @@ def get_tool_stats() -> dict[str, int]:
 
 
 def _get_client() -> SharedAPIClient:
+    from tools.base import SharedAPIClient
+
     global _client
     if _client is None:
         _client = SharedAPIClient()
@@ -208,13 +213,15 @@ def get_all_tools() -> list[BaseTool]:
         GitPushTool(client=client),
         GitPRTool(client=client),
     ]
+    validate_tool_registry(_cached_tools)
     return _cached_tools
 
 
 def clear_tool_cache() -> None:
     """清除工具缓存，下次调用 get_all_tools() 时重新加载。"""
-    global _cached_tools
+    global _cached_tools, _registry_validated
     _cached_tools = None
+    _registry_validated = False
 
 
 def merge_tool_lists(
@@ -241,6 +248,81 @@ def merge_tool_lists(
     return merged
 
 
+class ToolRegistryError(RuntimeError):
+    """工具注册表与实际工具装配结果不一致。"""
+
+
+def _registered_tool_names(tools: list[BaseTool]) -> list[str]:
+    return [str(tool.name) for tool in tools]
+
+
+def _find_duplicate_names(names: list[str]) -> list[str]:
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for name in names:
+        if name in seen:
+            duplicates.add(name)
+        seen.add(name)
+    return sorted(duplicates)
+
+
+def validate_tool_registry(tools: list[BaseTool] | None = None) -> None:
+    """校验工具分类/核心工具声明与实际装配工具名保持同步。
+
+    不在模块 import 时运行；默认在 get_all_tools() 首次完成装配后运行一次。
+    测试可传入轻量 fake tool 列表，避免触发真实工具初始化。
+    """
+    global _registry_validated
+    if tools is None:
+        if _registry_validated:
+            return
+        tools = get_all_tools()
+
+    actual_names_list = _registered_tool_names(tools)
+    actual_names = set(actual_names_list)
+    categorized_names = {
+        tool_name
+        for category_tools in TOOL_CATEGORIES.values()
+        for tool_name in category_tools
+    }
+    category_names = set(TOOL_CATEGORIES)
+    keyword_categories = {
+        category
+        for categories in KEYWORD_TO_CATEGORIES.values()
+        for category in categories
+    }
+
+    issues: list[str] = []
+    duplicates = _find_duplicate_names(actual_names_list)
+    if duplicates:
+        issues.append(f"duplicate registered tool names: {duplicates}")
+
+    missing_category_tools = sorted(categorized_names - actual_names)
+    if missing_category_tools:
+        issues.append(f"TOOL_CATEGORIES references unregistered tools: {missing_category_tools}")
+
+    missing_core_tools = sorted(CORE_TOOLS - actual_names)
+    if missing_core_tools:
+        issues.append(f"CORE_TOOLS references unregistered tools: {missing_core_tools}")
+
+    uncategorized_tools = sorted(actual_names - categorized_names)
+    if uncategorized_tools:
+        issues.append(f"registered tools missing from TOOL_CATEGORIES: {uncategorized_tools}")
+
+    core_not_categorized = sorted(CORE_TOOLS - categorized_names)
+    if core_not_categorized:
+        issues.append(f"CORE_TOOLS missing from TOOL_CATEGORIES: {core_not_categorized}")
+
+    unknown_keyword_categories = sorted(keyword_categories - category_names)
+    if unknown_keyword_categories:
+        issues.append(f"KEYWORD_TO_CATEGORIES references unknown categories: {unknown_keyword_categories}")
+
+    if issues:
+        raise ToolRegistryError("; ".join(issues))
+
+    _registry_validated = True
+
+
 # ── 工具分类与动态选择 ──────────────────────────────────────────
 
 # 工具名称到分类的映射
@@ -252,11 +334,11 @@ TOOL_CATEGORIES: dict[str, list[str]] = {
         "todo_list_projects", "todo_list_sections", "todo_list_labels",
     ],
     "map": [
-        "nearby_search", "geocode", "transit_route",
-        "cycling_route", "fuzzy_address",
+        "nearby_search", "geocode_address", "get_transit_route",
+        "get_cycling_route", "fuzzy_address_search",
     ],
     "network": [
-        "weather", "holiday_calendar", "image_understand",
+        "get_current_weather", "holiday_calendar", "analyze_image",
         "tavily_search", "tavily_extract",
         "browser_browse", "browser_screenshot", "browser_extract",
     ],

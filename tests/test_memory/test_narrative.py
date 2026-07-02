@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+import agent.prompts as prompts
 import memory.narrative as narrative
 from memory.memory_manager import MemoryManager
 from memory.narrative import LongTermMemoryInterface
@@ -48,6 +49,11 @@ def _populate_mm(path: Path, items: list[tuple[str, str]]) -> None:
     mm = MemoryManager(yaml_file=str(path))
     for desc, theme in items:
         mm.add(description=desc, theme=theme)
+
+
+def _patch_persona_memory_path(monkeypatch, path: Path) -> None:
+    """让 get_narrative 读取测试指定的记忆文件。"""
+    monkeypatch.setattr(prompts, "get_persona_memory_path", lambda: path)
 
 
 # ── TestFormatMessages ────────────────────────────────────────
@@ -286,13 +292,13 @@ class TestGetNarrative:
 
     def test_file_not_exists(self, monkeypatch, tmp_path):
         p = tmp_path / "memory.yaml"
-        monkeypatch.setattr(narrative, "MEMORY_PATH", p)
+        _patch_persona_memory_path(monkeypatch, p)
         assert narrative.get_narrative() == ""
 
     def test_file_exists(self, monkeypatch, tmp_path):
         p = tmp_path / "memory.yaml"
         _populate_mm(p, [("Miso 是学生。", "身份")])
-        monkeypatch.setattr(narrative, "MEMORY_PATH", p)
+        _patch_persona_memory_path(monkeypatch, p)
         result = narrative.get_narrative()
         assert "Miso 是学生。" in result
         assert "## 身份" in result
@@ -300,7 +306,7 @@ class TestGetNarrative:
     def test_file_empty(self, monkeypatch, tmp_path):
         p = tmp_path / "memory.yaml"
         MemoryManager(yaml_file=str(p))  # creates empty file
-        monkeypatch.setattr(narrative, "MEMORY_PATH", p)
+        _patch_persona_memory_path(monkeypatch, p)
         assert narrative.get_narrative() == ""
 
     def test_multiple_themes(self, monkeypatch, tmp_path):
@@ -312,7 +318,7 @@ class TestGetNarrative:
                 ("用户喜欢洛天依。", "音乐"),
             ],
         )
-        monkeypatch.setattr(narrative, "MEMORY_PATH", p)
+        _patch_persona_memory_path(monkeypatch, p)
         result = narrative.get_narrative()
         assert "用户叫Miso。" in result
         assert "用户喜欢洛天依。" in result
