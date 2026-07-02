@@ -1,6 +1,13 @@
-"""Tests for agent/hooks.py — 事件钩子停止与回收测试。"""
+"""Tests for agent/hooks.py — 事件钩子停止、回收与触发状态测试。"""
 
-from agent.hooks import HookConfig, HookManager
+import pytest
+
+from agent.hooks import (
+    HookConfig,
+    HookManager,
+    HookTriggerRecord,
+    HookUnsupportedError,
+)
 
 
 class _FakeWatcher:
@@ -56,3 +63,40 @@ def test_stop_hook_still_joins_when_stop_raises():
 
     assert watcher.stop_calls == 1
     assert watcher.join_calls == [5]
+
+
+def test_fire_trigger_without_callback_records_unsupported():
+    manager = HookManager()
+    manager.save = lambda: None
+    hook = _build_hook()
+
+    manager._fire_trigger(hook, "file_change", "modified: example.py")
+
+    history = manager.get_history()
+    assert len(history) == 1
+    assert history[0]["status"] == "unsupported"
+    assert "未注册触发回调" in history[0]["result"]
+    assert hook.trigger_count == 1
+
+
+@pytest.mark.asyncio
+async def test_execute_trigger_marks_unsupported_error():
+    manager = HookManager()
+    hook = _build_hook()
+    record = HookTriggerRecord(
+        trigger_id="trigger-1",
+        hook_id=hook.hook_id,
+        timestamp=1.0,
+        trigger_type="webhook",
+        trigger_detail="payload",
+        status="pending",
+    )
+
+    async def unsupported_callback(_hook, _detail):
+        raise HookUnsupportedError("not available")
+
+    await manager._execute_trigger(hook, record, unsupported_callback)
+
+    history = manager.get_history()
+    assert history[0]["status"] == "unsupported"
+    assert history[0]["result"] == "not available"

@@ -7,6 +7,11 @@ echo   MaxmaHere Startup
 echo ========================================
 echo.
 
+REM Step 0: Clean up stale backend process
+echo [0/5] Cleaning stale processes on port 8000...
+powershell -NoProfile -ExecutionPolicy Bypass -File build\port-guard.ps1 -PortsStr "8000"
+echo.
+
 if not exist "main.py" (
     echo [ERR] Run this script from the project root.
     pause

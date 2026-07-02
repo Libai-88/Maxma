@@ -10,9 +10,11 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from langchain_core.messages import HumanMessage
 
 import time
 
+from agent.hooks import HookUnsupportedError
 from api.auth import load_or_create_token
 from api.const_session_store import (
     deserialize_messages,
@@ -50,6 +52,101 @@ from api.middleware.auth import AuthMiddleware
 from api.middleware.request_log import RequestLogMiddleware
 
 logger = logging.getLogger(__name__)
+
+
+def _hook_tools_for_action(app_state, action: str, trigger_detail: str) -> list:
+    """Select tools for a headless event-hook run.
+
+    Event hooks execute without a live chat WebSocket, so tools that require
+    immediate user interaction are intentionally excluded.
+    """
+    from tools import select_tools_for_query
+
+    mcp_tools = getattr(app_state, "mcp_tools", None) or []
+    selected = select_tools_for_query(
+        f"{action}\n\n触发详情：{trigger_detail}",
+        mcp_tools=list(mcp_tools),
+    )
+    return [
+        tool
+        for tool in selected
+        if not str(getattr(tool, "name", "")).startswith("ask_user_")
+    ]
+
+
+def _extract_hook_final_answer(output) -> str:
+    messages = output.get("messages", []) if isinstance(output, dict) else []
+    if not messages:
+        return ""
+    last = messages[-1]
+    content = last.content if hasattr(last, "content") else str(last)
+    return str(content or "")
+
+
+async def _run_event_hook_action(app: FastAPI, hook, trigger_detail: str) -> str:
+    """Run one event-hook action through the normal LangGraph Agent entrypoint."""
+    app_state = app.state
+    llm = getattr(app_state, "llm", None)
+    if llm is None:
+        raise HookUnsupportedError("事件钩子执行不可用：未配置 LLM Provider")
+
+    session_manager = getattr(app_state, "session_manager", None)
+    if session_manager is None:
+        raise HookUnsupportedError("事件钩子执行不可用：会话管理器未初始化")
+
+    session = session_manager.create()
+    try:
+        system_prompt = getattr(app_state, "system_prompt", "") or get_system_prompt()
+        system_prompt = (
+            system_prompt
+            + "\n\n[事件钩子执行模式]\n"
+            + "当前任务由后台事件钩子自动触发，没有可交互的聊天 WebSocket。"
+            + "不要请求用户确认或等待用户输入；"
+            + "如果动作需要人工确认，请说明无法在后台执行。"
+        )
+        tools = _hook_tools_for_action(app_state, hook.action, trigger_detail)
+        graph = build_agent(
+            model=llm,
+            tools=tools,
+            system_prompt=system_prompt,
+            checkpointer=session.checkpointer,
+        )
+        session._graph = graph
+
+        prompt = (
+            "[事件钩子触发]\n"
+            f"钩子名称：{hook.name}\n"
+            f"钩子类型：{hook.hook_type}\n"
+            f"触发详情：{trigger_detail}\n\n"
+            "[预设动作]\n"
+            f"{hook.action}"
+        )
+        timeout = float(hook.config.get("timeout", 600))
+        output = await asyncio.wait_for(
+            graph.ainvoke(
+                {"messages": [HumanMessage(content=prompt)]},
+                config={
+                    "configurable": {"thread_id": session.session_id},
+                    "recursion_limit": 120,
+                },
+            ),
+            timeout=timeout,
+        )
+        return (
+            _extract_hook_final_answer(output)
+            or "事件钩子动作已执行，但没有生成文本结果"
+        )
+    finally:
+        delete_session = getattr(session_manager, "delete", None)
+        if callable(delete_session):
+            delete_session(session.session_id)
+
+
+def _build_event_hook_callback(app: FastAPI):
+    async def _callback(hook, trigger_detail: str) -> str:
+        return await _run_event_hook_action(app, hook, trigger_detail)
+
+    return _callback
 
 
 async def _load_const_sessions(app: FastAPI):
@@ -130,23 +227,29 @@ async def lifespan(app: FastAPI):
     app.state.provider_manager = provider_manager
     logger.info("[provider] loaded %d provider(s)", provider_manager.count)
 
-    # 2. 其他共享资源（LLM 统一从 ProviderManager 获取）
-    try:
-        app.state.llm = get_llm(provider_manager)
-    except RuntimeError as e:
-        logger.warning("[llm] %s", e)
-        logger.warning("[llm] No LLM configured — chat will be read-only until a provider is added")
-        app.state.llm = None
+    # 2. 其他共享资源（不阻塞启动 — LLM 在后台初始化）
     app.state.system_prompt = get_system_prompt()
     app.state.native_tools = get_tools()
     app.state.session_manager = SessionManager()
     app.state.ws_registry = WebSocketRegistry()
     app.state.ltm = LongTermMemoryInterface(MEMORY_PATH)
-    if app.state.llm is not None:
-        app.state.ltm.start_listening(app.state.llm, ws_registry=app.state.ws_registry)
-        logger.info("[ltm] 长期记忆监听器已启动")
-    else:
-        logger.info("[ltm] Skipped (no LLM available)")
+
+    # 后台初始化 LLM（不阻塞 lifespan，让 API 立即就绪）
+    async def _init_llm_background():
+        try:
+            llm = get_llm(provider_manager)
+            app.state.llm = llm
+            logger.info("[llm] LLM 后台初始化完成")
+            # LLM 就绪后启动长期记忆
+            app.state.ltm.start_listening(
+                llm, ws_registry=app.state.ws_registry,
+            )
+            logger.info("[ltm] 长期记忆监听器已启动")
+        except RuntimeError as e:
+            logger.warning("[llm] %s", e)
+            logger.warning("[llm] No LLM configured — chat will be read-only until a provider is added")
+            app.state.llm = None
+    app.state._llm_init_task = asyncio.create_task(_init_llm_background())
 
     # 从 YAML 配置加载 MCP 工具
     app.state.mcp_tools = await init_mcp_tools()
@@ -195,6 +298,7 @@ async def lifespan(app: FastAPI):
     from agent.hooks import get_hook_manager
     hook_manager = get_hook_manager()
     hook_manager.set_loop(asyncio.get_running_loop())
+    hook_manager.set_trigger_callback(_build_event_hook_callback(app))
     hook_manager.load()
     hook_manager.start_all()
     app.state.hook_manager = hook_manager
@@ -202,7 +306,15 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # 关闭：清理资源
+    # 关闭：后台 LLM 初始化任务
+    llm_task = getattr(app.state, "_llm_init_task", None)
+    if llm_task and not llm_task.done():
+        llm_task.cancel()
+        try:
+            await llm_task
+        except asyncio.CancelledError:
+            pass
+
     app.state._cleanup_task.cancel()
     try:
         await app.state._cleanup_task
@@ -324,8 +436,8 @@ def create_app() -> FastAPI:
 
     # 健康检查
     @app.get("/api/health")
-    async def health():
-        return await get_health_report(app)
+    async def health(full: bool = False):
+        return await get_health_report(app, probe_remote=full)
 
     # 中间件执行顺序以“最后 add 的最先执行”为准。
     # 这里先注册 Auth，再注册 RequestLog，因此实际顺序是：

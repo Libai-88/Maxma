@@ -12,18 +12,14 @@ router = APIRouter()
 async def restart_server():
     """重启后端进程。
 
-    启动一个新后端进程后优雅退出当前进程。
-    sys.exit(0) 会触发 FastAPI lifespan shutdown 释放资源（MCP 连接、后台任务等），
-    随后 uvicorn 退出，OS 释放端口，新进程即可绑定。
-    前端检测到服务恢复后应自动刷新页面。
+    打包桌面模式下，后端作为 Tauri sidecar 运行，重启责任只属于
+    Tauri 进程监控器；这里仅退出当前进程，避免同时拉起两个后端竞争端口。
 
-    打包模式：直接重启 exe 本身（sys.executable 即为 maxma-server.exe）。
-    开发模式：重启 Python + main.py。
+    开发模式下没有 Tauri sidecar 监控，因此保留 Python + main.py 自重启。
+    前端检测到服务恢复后应自动刷新页面。
     """
     if getattr(sys, "frozen", False):
-        # 打包模式：sys.executable 就是 maxma-server.exe
-        cmd = [sys.executable]
-        cwd = None
+        sys.exit(0)
     else:
         # 开发模式：找到 main.py 并重启
         from pathlib import Path

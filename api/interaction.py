@@ -41,13 +41,19 @@ def clear_session_settings(session_id: str) -> None:
 
 # 全局待处理交互表：interaction_id → Future
 _pending: dict[str, asyncio.Future] = {}
+_pending_sessions: dict[str, str] = {}
+_pending_by_session: dict[str, set[str]] = {}
 
 
-def register() -> tuple[str, asyncio.Future]:
+def register(session_id: str | None = None) -> tuple[str, asyncio.Future]:
     """注册一次待处理的用户交互，返回 (interaction_id, future)。"""
     interaction_id = uuid.uuid4().hex
     future: asyncio.Future = asyncio.Future()
     _pending[interaction_id] = future
+    resolved_session_id = session_id if session_id is not None else current_session_id.get()
+    if resolved_session_id:
+        _pending_sessions[interaction_id] = resolved_session_id
+        _pending_by_session.setdefault(resolved_session_id, set()).add(interaction_id)
     return interaction_id, future
 
 
@@ -65,18 +71,39 @@ def resolve(interaction_id: str, response) -> bool:
 def cleanup(interaction_id: str):
     """清理（超时或取消时调用）。"""
     _pending.pop(interaction_id, None)
+    session_id = _pending_sessions.pop(interaction_id, None)
+    if session_id:
+        session_pending = _pending_by_session.get(session_id)
+        if session_pending is not None:
+            session_pending.discard(interaction_id)
+            if not session_pending:
+                _pending_by_session.pop(session_id, None)
 
 
-def cancel_all(reason: str | None = None):
-    """将所有挂起的交互 Future 以取消原因标记为已完成，并清空 _pending。
+def cancel_all(reason: str | None = None, session_id: str | None = None):
+    """将挂起的交互 Future 以取消原因标记为已完成。
 
-    在取消 Agent 任务时由 _run_agent_turn 的 CancelledError 处理器调用。
-    返回值套用统一错误响应格式。
+    默认保留历史兼容行为：无 session_id 时取消所有挂起交互。
+    传入 session_id 时只取消该会话，避免影响其他会话的 ask_user / plan_proposed。
     """
     if reason is None:
         reason = "用户取消了该工具调用"
     formatted = format_error(reason)
-    for interaction_id, future in list(_pending.items()):
+    if session_id:
+        interaction_ids = list(_pending_by_session.get(session_id, set()))
+    else:
+        interaction_ids = list(_pending.keys())
+
+    for interaction_id in interaction_ids:
+        future = _pending.get(interaction_id)
+        if future is None:
+            cleanup(interaction_id)
+            continue
         if not future.done():
             future.set_result(formatted)
-        _pending.pop(interaction_id, None)
+        cleanup(interaction_id)
+
+
+def cancel_session(session_id: str, reason: str | None = None):
+    """取消指定会话的挂起交互。"""
+    cancel_all(reason=reason, session_id=session_id)

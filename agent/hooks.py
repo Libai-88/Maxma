@@ -44,7 +44,7 @@ class HookTriggerRecord:
     timestamp: float
     trigger_type: str  # file_change / schedule / webhook
     trigger_detail: str  # 触发详情（如变更的文件路径）
-    status: str  # success / error / timeout
+    status: str  # pending / success / error / timeout / unsupported
     result: str = ""  # Agent 执行结果摘要
 
 
@@ -68,6 +68,10 @@ class HookConfig:
     @classmethod
     def from_dict(cls, d: dict) -> "HookConfig":
         return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
+
+
+class HookUnsupportedError(RuntimeError):
+    """Raised when a hook trigger cannot be executed by the current runtime."""
 
 
 class HookManager:
@@ -356,23 +360,34 @@ class HookManager:
         # 异步执行 Agent 动作
         if callback and loop:
             asyncio.run_coroutine_threadsafe(
-                self._execute_trigger(hook, record),
+                self._execute_trigger(hook, record, callback),
                 loop,
             )
         elif callback:
-            asyncio.create_task(self._execute_trigger(hook, record))
+            asyncio.create_task(self._execute_trigger(hook, record, callback))
         else:
-            # 没有回调，只记录
-            record.status = "skipped"
-            record.result = "无触发回调"
+            record.status = "unsupported"
+            record.result = "事件钩子执行不可用：未注册触发回调"
             self._add_history(record)
 
-    async def _execute_trigger(self, hook: HookConfig, record: HookTriggerRecord):
+    async def _execute_trigger(
+        self,
+        hook: HookConfig,
+        record: HookTriggerRecord,
+        callback=None,
+    ):
         """执行钩子动作（调用 Agent）。"""
         try:
-            result = await self._on_trigger(hook, record.trigger_detail)
+            if callback is None:
+                callback = self._on_trigger
+            if callback is None:
+                raise HookUnsupportedError("事件钩子执行不可用：未注册触发回调")
+            result = await callback(hook, record.trigger_detail)
             record.status = "success"
             record.result = str(result)[:500]
+        except HookUnsupportedError as e:
+            record.status = "unsupported"
+            record.result = str(e)[:500]
         except asyncio.TimeoutError:
             record.status = "timeout"
             record.result = "Agent 执行超时"

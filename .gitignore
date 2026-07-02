@@ -5,7 +5,11 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 /dist/
-build/
+/build/maxma-server/
+!/build/
+!/build/*.bat
+!/build/*.ps1
+!/build/*.spec
 *.egg
 
 # All dist directories (build output for various packages)
@@ -61,6 +65,7 @@ output/bilibili/
 config/personas/memory.yaml
 *.lock
 !requirements.lock
+!desktop/src-tauri/Cargo.lock
 *.clean
 
 # Provider credentials (明文 API key)

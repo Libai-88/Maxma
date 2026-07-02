@@ -289,9 +289,19 @@ python -m pre_commit run --all-files
 
 这组命令会安装后端测试与质量门禁所需依赖，并运行 pytest 与最小 pre-commit 检查。
 
-### 完整功能测试（打包前）
+### Windows 桌面开发与打包
 
-在最终打包为桌面应用之前，可以通过 **Tauri dev 模式** 测试完整软件功能：
+桌面链路只支持 Windows 本地应用。不要沿用手工旧流程，统一使用 `build\` 下的脚本入口。
+所有桌面入口都会先调用 `build\setup-dev-env.bat`，由 `build\dev-tools.ps1` 统一解析 Python / Node / Rust / VS Build Tools / Windows Kits。
+如果怀疑工具链解析有问题，先运行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File build\dev-tools.ps1 -Doctor
+```
+
+后端打包边界与验证规则以 [docs/backend-bundle-rules.md](docs/backend-bundle-rules.md) 为准。
+`build\build-server.bat` 现在会在产出 `dist\maxma-server.exe` 后自动执行 `build\smoke-test-server.ps1`，
+确认打包后的后端至少能正常启动并返回 `/api/auth/token`、`/api/health`、`/api/providers`。
 
 #### 前置条件
 
@@ -300,34 +310,34 @@ python -m pre_commit run --all-files
 3. **Rust 工具链**：已安装（用于 Tauri）
 4. **VS Build Tools**：Windows 编译必需
 
-#### 测试流程
+#### 桌面 dev / 全功能测试
 
-```bash
-# 1. 构建前端
-cd web
-npm run build
-
-# 2. 启动后端（生产模式）
-cd ..
-MAXMA_ENV=production .venv/Scripts/python.exe main.py web
-
-# 3. 编译并启动 Tauri（新终端）
-cd desktop/src-tauri
-cargo build
-./target/debug/maxma-here.exe
+```bat
+build\run-desktop-dev.bat
 ```
 
-**关键点：**
-- 后端必须以 `MAXMA_ENV=production` 模式启动，这样才会挂载前端静态文件
-- Tauri 编译会将前端构建产物嵌入二进制，确保测试的是最终版本
-- 此模式下所有功能（包括表情包、文件操作、MCP 工具等）与打包后完全一致
+这个入口会刷新 Python sidecar、启动 Vite，并打开 Tauri dev 窗口；全功能测试时不要再手动打开浏览器。
 
-#### 快速重启
+#### 生产打包
 
-修改代码后只需：
-1. 后端 Python 代码修改 → 重启 `main.py`
-2. 前端 Vue 代码修改 → 重新 `npm run build` + 重新 `cargo build`
-3. 配置文件修改 → 重启后端即可
+```bat
+build\build-desktop.bat
+```
+
+该入口会先构建前端与后端 sidecar，再执行 Tauri 打包。安装包输出目录：
+
+```text
+desktop\src-tauri\target\release\bundle\nsis
+```
+
+#### 路径规则
+
+- 后端单文件产物：`dist\maxma-server.exe`
+- Tauri sidecar：`desktop\src-tauri\binaries\maxma-server-x86_64-pc-windows-msvc.exe`
+- 前端生产产物：`web\dist`
+- 桌面安装包：`desktop\src-tauri\target\release\bundle\nsis`
+
+packaged 桌面模式下，后端作为 Tauri sidecar 运行；`/api/restart` 只让后端退出，重启由 Tauri 监控负责，避免重复启动导致端口竞争。
 
 ---
 

@@ -309,6 +309,13 @@ html, body {
   font-weight: 350;
 }
 
+/* 夜间模式：品牌 logo 融入暖色背景 */
+.app-layout.night-mode .empty-illustration {
+  filter: brightness(0.93) contrast(0.9);
+  mix-blend-mode: multiply;
+  opacity: 0.9;
+}
+
 .app-layout.night-mode .sidebar::after {
   background: rgba(255, 245, 230, 0.86);
 }
@@ -626,7 +633,7 @@ html, body {
   content: '';
   position: absolute;
   inset: 0;
-  background: #ffffffd3;
+  background: color-mix(in srgb, var(--bg-primary) 85%, transparent);
   z-index: 0;
   pointer-events: none;
 }
@@ -634,6 +641,18 @@ html, body {
 .sidebar > :not(.settings-popup) {
   position: relative;
   z-index: 1;
+}
+
+/* ── 无障碍：减少动画 ── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .typewriter-cursor { display: none; }
 }
 
 /* ── Shared markdown rendered content ── */

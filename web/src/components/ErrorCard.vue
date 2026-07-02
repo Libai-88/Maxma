@@ -64,15 +64,15 @@ const suggestion = computed(() => {
 
 <style scoped>
 .error-card {
-  border: 1px solid #fecaca;
+  border: 1px solid var(--border);
   border-radius: var(--radius, 10px);
-  background: #fef2f2;
+  background: color-mix(in srgb, var(--status-error) 8%, var(--bg-card));
   padding: 12px 16px;
   margin: 8px 0;
 }
-.error-card--network { border-color: #bfdbfe; background: #eff6ff; }
-.error-card--timeout { border-color: #fed7aa; background: #fff7ed; }
-.error-card--auth { border-color: #fecaca; background: #fef2f2; }
+.error-card--network { border-color: color-mix(in srgb, #3b82f6 30%, transparent); background: color-mix(in srgb, #3b82f6 10%, var(--bg-card)); }
+.error-card--timeout { border-color: color-mix(in srgb, #f97316 30%, transparent); background: color-mix(in srgb, #f97316 10%, var(--bg-card)); }
+.error-card--auth { border-color: color-mix(in srgb, var(--status-error) 30%, transparent); background: color-mix(in srgb, var(--status-error) 8%, var(--bg-card)); }
 
 .error-card__header {
   display: flex;

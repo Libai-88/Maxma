@@ -5,8 +5,16 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::Emitter;
 use tauri::Manager;
-use tauri_plugin_shell::process::{CommandEvent, CommandChild};
+use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
+use windows::core::PCWSTR;
+use windows::Win32::System::Com::{
+    CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_INPROC_SERVER,
+    COINIT_APARTMENTTHREADED,
+};
+use windows::Win32::UI::Shell::{
+    FileOpenDialog, IFileOpenDialog, FOS_FORCEFILESYSTEM, FOS_PICKFOLDERS, SIGDN_FILESYSPATH,
+};
 
 /// 最大崩溃重启次数
 const MAX_RESTARTS: u32 = 3;
@@ -15,10 +23,74 @@ const HEALTH_TIMEOUT_SECS: u64 = 30;
 /// 重启前等待（秒）
 const RESTART_DELAY_SECS: u64 = 2;
 
-/// 轮询后端健康检查，直到返回 200 或超时。
+/// 打开 Windows 原生文件/文件夹选择对话框。
+#[tauri::command]
+fn select_path(kind: String) -> Option<String> {
+    open_windows_file_dialog(kind == "folder").ok().flatten()
+}
+
+fn open_windows_file_dialog(pick_folder: bool) -> windows::core::Result<Option<String>> {
+    unsafe {
+        let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let initialized = hr.is_ok();
+        if !initialized && hr.0 != 0x80010106u32 as i32 {
+            hr.ok()?;
+        }
+
+        let result = (|| {
+            let dialog: IFileOpenDialog =
+                CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER)?;
+            let title = if pick_folder {
+                wide("选择要引用的文件夹")
+            } else {
+                wide("选择要引用的文件")
+            };
+
+            dialog.SetTitle(PCWSTR(title.as_ptr()))?;
+            let mut options = dialog.GetOptions()? | FOS_FORCEFILESYSTEM;
+            if pick_folder {
+                options |= FOS_PICKFOLDERS;
+            }
+            dialog.SetOptions(options)?;
+
+            if dialog.Show(None).is_err() {
+                return Ok(None);
+            }
+
+            let item = dialog.GetResult()?;
+            let display_name = item.GetDisplayName(SIGDN_FILESYSPATH)?;
+            let path = pwstr_to_string(display_name.as_ptr());
+            CoTaskMemFree(Some(display_name.as_ptr() as _));
+            Ok(Some(path))
+        })();
+
+        if initialized {
+            CoUninitialize();
+        }
+        result
+    }
+}
+
+fn wide(value: &str) -> Vec<u16> {
+    value.encode_utf16().chain(std::iter::once(0)).collect()
+}
+
+unsafe fn pwstr_to_string(ptr: *const u16) -> String {
+    if ptr.is_null() {
+        return String::new();
+    }
+
+    let mut len = 0;
+    while *ptr.add(len) != 0 {
+        len += 1;
+    }
+    String::from_utf16_lossy(std::slice::from_raw_parts(ptr, len))
+}
+
+/// 轮询后端轻量就绪接口，直到返回 200 或超时。
 fn wait_for_server() -> bool {
     let client = reqwest::blocking::Client::new();
-    let url = "http://127.0.0.1:8000/api/health";
+    let url = "http://127.0.0.1:8000/api/auth/token";
 
     for i in 0..HEALTH_TIMEOUT_SECS {
         if let Ok(resp) = client.get(url).timeout(Duration::from_secs(1)).send() {
@@ -46,7 +118,9 @@ fn spawn_sidecar_with_monitor(
         .sidecar("maxma-server")
         .expect("Failed to get sidecar");
 
-    let (mut rx, child) = sidecar.spawn().expect("Failed to start maxma-server sidecar");
+    let (mut rx, child) = sidecar
+        .spawn()
+        .expect("Failed to start maxma-server sidecar");
 
     // 存储 child handle 以便窗口关闭时 kill
     {
@@ -77,9 +151,12 @@ fn spawn_sidecar_with_monitor(
                 CommandEvent::Terminated(status) => {
                     eprintln!("[tauri] 后端进程退出 (code={:?})", status.code);
                     exited = true;
-                    let _ = app.emit("server-disconnected", serde_json::json!({
-                        "code": status.code
-                    }));
+                    let _ = app.emit(
+                        "server-disconnected",
+                        serde_json::json!({
+                            "code": status.code
+                        }),
+                    );
                     break;
                 }
                 _ => {}
@@ -90,22 +167,24 @@ fn spawn_sidecar_with_monitor(
         if exited && !shutting_down.load(Ordering::Relaxed) {
             let count = restart_count.fetch_add(1, Ordering::Relaxed);
             if count < MAX_RESTARTS {
-                eprintln!(
-                    "[tauri] 尝试重启后端 ({}/{})",
-                    count + 1,
-                    MAX_RESTARTS
+                eprintln!("[tauri] 尝试重启后端 ({}/{})", count + 1, MAX_RESTARTS);
+                let _ = app.emit(
+                    "server-restarting",
+                    serde_json::json!({
+                        "attempt": count + 1,
+                        "max": MAX_RESTARTS
+                    }),
                 );
-                let _ = app.emit("server-restarting", serde_json::json!({
-                    "attempt": count + 1,
-                    "max": MAX_RESTARTS
-                }));
                 std::thread::sleep(Duration::from_secs(RESTART_DELAY_SECS));
                 spawn_sidecar_with_monitor(app, restart_count, shutting_down, child_store);
             } else {
                 eprintln!("[tauri] 已达最大重启次数 ({})，放弃重启", MAX_RESTARTS);
-                let _ = app.emit("server-disconnected-permanent", serde_json::json!({
-                    "max_restarts": MAX_RESTARTS
-                }));
+                let _ = app.emit(
+                    "server-disconnected-permanent",
+                    serde_json::json!({
+                        "max_restarts": MAX_RESTARTS
+                    }),
+                );
             }
         }
     });
@@ -115,6 +194,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_http::init())
+        .invoke_handler(tauri::generate_handler![select_path])
         .setup(|app| {
             let shutting_down = Arc::new(AtomicBool::new(false));
             let restart_count = Arc::new(AtomicU32::new(0));

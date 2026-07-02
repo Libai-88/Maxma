@@ -21,7 +21,7 @@ async function initIfNeeded() {
     return
   }
 
-  _initPromise = (async () => {
+    _initPromise = (async () => {
     const stored = localStorage.getItem(STORAGE_KEY)
     console.log(`[useSession:init] 从 localStorage 读取 stored="${stored}"`)
     try {
@@ -42,6 +42,10 @@ async function initIfNeeded() {
       cleanupOrphanedCaches()
       _initialized = true
       console.log(`[useSession:init] 完成, sessionId="${sessionId.value}", 共 ${sessions.value.length} 个会话`)
+    } catch (e) {
+      // 初始化失败时重置状态，允许重试
+      console.error('[useSession:init] 初始化失败，将在下次调用时重试:', e)
+      _initialized = false
     } finally {
       _initPromise = null
     }

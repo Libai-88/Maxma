@@ -457,7 +457,7 @@ function closeContextMenu() {
   flex: 1;
   overflow-y: auto;
   padding: 20px 24px;
-  background: #ffffff;
+  background: var(--bg-card);
 }
 .messages-list {
   max-width: 768px;
@@ -620,39 +620,39 @@ function closeContextMenu() {
 }
 /* 用户错误：黄色警告 */
 .error-banner.error-user_error {
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  color: #92400e;
+  background: color-mix(in srgb, #f59e0b 10%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, #f59e0b 30%, transparent);
+  color: var(--status-warn);
 }
 /* 工具错误：橙色 */
 .error-banner.error-tool_error {
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
-  color: #9a3412;
+  background: color-mix(in srgb, #f97316 10%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, #f97316 30%, transparent);
+  color: #f97316;
 }
 /* 系统错误：红色 */
 .error-banner.error-system_error {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #b91c1c;
+  background: color-mix(in srgb, var(--status-error) 10%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--status-error) 25%, transparent);
+  color: var(--status-error);
 }
 /* 限流错误：蓝色 */
 .error-banner.error-rate_limit {
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  color: #1e40af;
+  background: color-mix(in srgb, #3b82f6 10%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, #3b82f6 25%, transparent);
+  color: #3b82f6;
 }
 /* 取消：灰色 */
 .error-banner.error-cancelled {
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  color: #4b5563;
+  background: color-mix(in srgb, var(--text-secondary) 8%, var(--bg-card));
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
 }
 /* 默认/系统错误 */
 .error-banner.error-system {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #b91c1c;
+  background: color-mix(in srgb, var(--status-error) 10%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--status-error) 25%, transparent);
+  color: var(--status-error);
 }
 
 /* ── 右侧滚动标记 ── */

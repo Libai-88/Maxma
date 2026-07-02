@@ -323,6 +323,8 @@ onMounted(() => {
 
 <style scoped>
 .hooks-view {
+  flex: 1;
+  overflow-y: auto;
   padding: 24px 32px;
   max-width: 900px;
   margin: 0 auto;

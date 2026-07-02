@@ -16,8 +16,20 @@ export async function refreshHealth() {
 
 export function startPolling(intervalMs = 30000) {
   stopPolling()
+  // 快速探测阶段：前 3 次 3 秒间隔，让前端尽早感知后端就绪
+  let fastPolls = 0
+  const fastInterval = 3000
   refreshHealth()
-  _timer = setInterval(refreshHealth, intervalMs)
+  _timer = setInterval(() => {
+    if (fastPolls < 3) {
+      fastPolls++
+      refreshHealth()
+    } else {
+      // 切换到常规间隔
+      clearInterval(_timer!)
+      _timer = setInterval(refreshHealth, intervalMs)
+    }
+  }, fastInterval)
 }
 
 export function stopPolling() {
