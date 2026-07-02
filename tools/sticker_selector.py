@@ -13,6 +13,9 @@ from typing import Optional
 from app_paths import DATA_DIR, BUNDLE_DIR
 from tools.emotion_detector import normalize_emotion_category
 from tools.shared.time_utils import get_time_candidate_boost
+import logging
+logger = logging.getLogger(__name__)
+
 
 # 表情库根目录
 STICKERS_DIR = BUNDLE_DIR / "config" / "stickers"

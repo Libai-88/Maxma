@@ -6,6 +6,9 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from tools.base import ToolBase, format_error, format_success
+import logging
+logger = logging.getLogger(__name__)
+
 
 # 敏感文件模式 — 提交前需要警告
 _SENSITIVE_PATTERNS = [

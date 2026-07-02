@@ -54,6 +54,30 @@ from api.middleware.request_log import RequestLogMiddleware
 logger = logging.getLogger(__name__)
 
 
+def _migrate_provider_from_env(store) -> object | None:
+    """从 .env 读取 DeepSeek 配置写入 SQLite（向后兼容）。"""
+    import os
+    api_key = os.getenv("DEEPSEEK_API_KEY", "")
+    if not api_key:
+        return None
+    base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+    model_name = os.getenv("MODEL_NAME", "deepseek-v4-flash")
+    context_window_str = os.getenv("MODEL_CONTEXT_WINDOW", "256000")
+    from api.providers import ProviderConfig
+    config = ProviderConfig(
+        id="deepseek-main",
+        provider_type="openai",
+        label="DeepSeek",
+        api_key=api_key,
+        base_url=base_url,
+        models=[model_name],
+        enabled=True,
+        context_window=int(context_window_str),
+    )
+    store.save(config)
+    return config
+
+
 def _hook_tools_for_action(app_state, action: str, trigger_detail: str) -> list:
     """Select tools for a headless event-hook run.
 
@@ -94,7 +118,7 @@ async def _run_event_hook_action(app: FastAPI, hook, trigger_detail: str) -> str
     if session_manager is None:
         raise HookUnsupportedError("事件钩子执行不可用：会话管理器未初始化")
 
-    session = session_manager.create()
+    session = await session_manager.create()
     try:
         system_prompt = getattr(app_state, "system_prompt", "") or get_system_prompt()
         system_prompt = (
@@ -208,20 +232,23 @@ async def _load_const_sessions(app: FastAPI):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 1. 初始化 Provider 管理器（优先从 YAML 加载）
-    provider_store = ProviderConfigStore(path=PROVIDERS_YAML_PATH)
-    if provider_store.migrate_from_legacy_root_yaml():
-        logger.info("[provider] migrated legacy root providers.yaml -> %s", PROVIDERS_YAML_PATH)
-    elif provider_store.has_legacy_root_conflict():
-        logger.warning(
-            "[provider] detected legacy root providers.yaml with different content; "
-            "active config is %s and root providers.yaml is ignored",
-            PROVIDERS_YAML_PATH,
-        )
+    # 1. 初始化 Provider 管理器（SQLite 存储，兼容旧 YAML 导入）
+    from api.db.core import initialize_database
+    from api.db.providers import ProviderDbStore
+
+    initialize_database()  # 确保 DB schema 已创建
+
+    provider_store = ProviderDbStore()
+    # 首次迁移：从旧 YAML 导入已有配置
+    migrated_count = provider_store.migrate_from_yaml()
+    if migrated_count:
+        logger.info("[provider] migrated %d provider(s) from YAML", migrated_count)
+    # 迁移 .env 中的 DeepSeek 配置（纯新安装场景）
     if provider_store.is_empty:
-        migrated = provider_store.migrate_from_env()
+        migrated = _migrate_provider_from_env(provider_store)
         if migrated:
-            logger.info("[provider] migrated %s from .env → providers.yaml", migrated.label)
+            logger.info("[provider] migrated %s from .env", migrated.label)
+
     provider_manager = ProviderManager(provider_store)
     provider_manager.load_all()
     app.state.provider_manager = provider_manager
@@ -281,7 +308,7 @@ async def lifespan(app: FastAPI):
         while True:
             await asyncio.sleep(300)  # 5 分钟
             sm = app.state.session_manager
-            removed = sm.cleanup_expired()
+            removed = await sm.cleanup_expired()
             if removed:
                 logger.info(
                     "[session] cleanup: removed %d expired session(s), %d remaining",
@@ -290,8 +317,9 @@ async def lifespan(app: FastAPI):
 
     app.state._cleanup_task = asyncio.create_task(_periodic_cleanup())
 
-    # 5. 初始化认证 Token
-    app.state.auth_token = load_or_create_token()
+    # 5. 初始化认证 Token（SQLite 存储）
+    from api.db.auth import load_or_create_token as load_token_db
+    app.state.auth_token = load_token_db()
     logger.info("[auth] token: %s...%s", app.state.auth_token[:4], app.state.auth_token[-4:])
 
     # 6. 初始化事件钩子管理器
