@@ -8,9 +8,7 @@
       >
         <template v-for="(seg, i) in segments" :key="i">
           <RenderMarkdown v-if="seg.type === 'text'" :content="seg.text" />
-          <span v-else class="sticker-inline" @click="previewSticker(seg.src)">
-            <img :src="seg.src" class="sticker-img" loading="lazy" />
-          </span>
+          <StickerInline v-else :sticker="seg" @preview="previewSticker" />
         </template>
       </div>
       <button
@@ -27,52 +25,52 @@
           :chip="r"
         />
       </div>
+      <div v-if="readStatus" class="read-status" :class="readStatus">
+        <span class="read-dot"></span>
+        <span>{{ readStatus === 'read' ? '已读' : '送达' }}</span>
+      </div>
     </div>
     <!-- 表情预览 overlay -->
-    <div v-if="previewSrc" class="sticker-preview-overlay" @click="previewSrc = ''">
-      <img :src="previewSrc" class="sticker-preview-img" />
-    </div>
+    <StickerPreviewOverlay
+      v-if="previewIndex >= 0"
+      :stickers="stickerSegments"
+      :initial-index="previewIndex"
+      @close="previewIndex = -1"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, toRef } from 'vue'
 import type { ParsedRef } from '@/utils/references'
 import ReferenceChip from './ReferenceChip.vue'
 import RenderMarkdown from './RenderMarkdown.vue'
+import StickerInline from './StickerInline.vue'
+import StickerPreviewOverlay from './StickerPreviewOverlay.vue'
+import { useStickerSegments, type StickerSegment } from '@/composables/useStickerSegments'
 
-const props = defineProps<{ role: 'user' | 'assistant'; content: string; refs?: ParsedRef[] }>()
+const props = defineProps<{
+  role: 'user' | 'assistant'
+  content: string
+  refs?: ParsedRef[]
+  readStatus?: 'pending' | 'read'
+}>()
 
 const isCollapsed = ref(true)
 const contentEl = ref<HTMLElement | null>(null)
 const contentHeight = ref(0)
-const previewSrc = ref('')
+const previewIndex = ref(-1)
 
 const isCollapsible = computed(() => contentHeight.value > 500)
 
 /** 解析内容中的 <sticker:category/filename.webp> 标记，分段返回 */
-const segments = computed(() => {
-  const text = props.content
-  if (!text) return []
-  const regex = /<sticker:([^>]+)>/g
-  const segs: Array<{ type: 'text'; text: string } | { type: 'sticker'; src: string }> = []
-  let lastIndex = 0
-  let match
-  while ((match = regex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      segs.push({ type: 'text', text: text.slice(lastIndex, match.index) })
-    }
-    segs.push({ type: 'sticker', src: `/api/stickers/${match[1]}` })
-    lastIndex = match.index + match[0].length
-  }
-  if (lastIndex < text.length) {
-    segs.push({ type: 'text', text: text.slice(lastIndex) })
-  }
-  return segs
-})
+const segments = useStickerSegments(toRef(props, 'content'))
+const stickerSegments = computed(() => segments.value.filter((seg): seg is StickerSegment => seg.type === 'sticker'))
 
-function previewSticker(src: string) {
-  previewSrc.value = src
+function previewSticker(sticker: StickerSegment) {
+  previewIndex.value = stickerSegments.value.findIndex(
+    seg => seg.occurrenceKey === sticker.occurrenceKey
+  )
 }
 
 function measureHeight() {
@@ -183,53 +181,40 @@ watch(() => props.content, () => {
   border-top: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
 }
 
-/* ── 表情包内联渲染 ── */
-.sticker-inline {
-  display: inline-block;
-  vertical-align: middle;
-  margin: 4px 6px;
-  cursor: pointer;
-}
-
-.sticker-img {
-  width: 100px;
-  height: 100px;
-  object-fit: contain;
-  transition: transform 0.15s ease;
-  display: block;
-}
-
-.sticker-inline:hover .sticker-img {
-  transform: scale(1.15);
-}
-
-/* ── 表情预览 overlay ── */
-.sticker-preview-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.75);
+.read-status {
   display: flex;
   align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  cursor: pointer;
-  animation: fadeIn 0.15s ease;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 0.72em;
+  line-height: 1;
+  color: var(--text-tertiary);
 }
 
-.sticker-preview-img {
-  max-width: 80vw;
-  max-height: 80vh;
-  object-fit: contain;
-  animation: scaleIn 0.2s ease;
+.read-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  transition: background 0.2s, box-shadow 0.2s;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+.read-status.read .read-dot {
+  background: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
 }
 
-@keyframes scaleIn {
-  from { transform: scale(0.8); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .message-row {
+    animation: none;
+  }
+
+  .bubble-content,
+  .collapse-toggle,
+  .read-dot {
+    transition: none;
+  }
 }
+
 </style>

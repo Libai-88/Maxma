@@ -1,5 +1,7 @@
 """上下文窗口用量估算 — 基于 tiktoken 的 token 计数工具。"""
 
+import json
+
 import tiktoken
 
 _ENCODING = None
@@ -17,6 +19,50 @@ def count_tokens(text: str) -> int:
     if not isinstance(text, str) or not text:
         return 0
     return len(_get_encoding().encode(text))
+
+
+def _normalize_message_content(content) -> str:
+    """将消息内容统一折叠为可计数文本。"""
+    if isinstance(content, list):
+        parts_text = []
+        for block in content:
+            if isinstance(block, dict):
+                if block.get("type") == "text":
+                    parts_text.append(str(block.get("text", "")))
+                else:
+                    parts_text.append(
+                        json.dumps(block, ensure_ascii=False, sort_keys=True)
+                    )
+            else:
+                parts_text.append(str(block))
+        return " ".join(part for part in parts_text if part)
+    if isinstance(content, str):
+        return content
+    return str(content) if content is not None else ""
+
+
+def _count_message_tokens(msg) -> int:
+    """估算单条消息的 token，占位包含工具调用元数据。"""
+    content = _normalize_message_content(
+        msg.content if hasattr(msg, "content") else str(msg)
+    )
+    total = count_tokens(content) + 4  # ~4 tokens 消息格式化开销
+
+    tool_calls = getattr(msg, "tool_calls", None)
+    if tool_calls:
+        total += count_tokens(json.dumps(tool_calls, ensure_ascii=False, sort_keys=True))
+
+    additional_kwargs = getattr(msg, "additional_kwargs", None)
+    if additional_kwargs:
+        total += count_tokens(
+            json.dumps(additional_kwargs, ensure_ascii=False, sort_keys=True)
+        )
+
+    tool_call_id = getattr(msg, "tool_call_id", None)
+    if tool_call_id:
+        total += count_tokens(str(tool_call_id))
+
+    return total
 
 
 def estimate_context_usage(
@@ -61,19 +107,7 @@ def estimate_context_usage(
     total = sys_total  # 从 system prompt 开始累加
 
     for msg in messages:
-        content = msg.content if hasattr(msg, "content") else str(msg)
-        # content 可能是 list（Anthropic 多内容块格式）或 None
-        if isinstance(content, list):
-            parts_text = [
-                b.get("text", "")
-                for b in content
-                if isinstance(b, dict) and b.get("type") == "text"
-            ]
-            content = " ".join(parts_text)
-        elif not isinstance(content, str):
-            content = str(content) if content is not None else ""
-        t = count_tokens(content) + 4  # ~4 tokens 消息格式化开销
-
+        t = _count_message_tokens(msg)
         role = getattr(msg, "type", "")
         bucket = role if role in msg_buckets else "human"  # fallback
         msg_buckets[bucket] += t

@@ -43,3 +43,10 @@ def get_settings() -> Settings:
     if _settings is None:
         _settings = Settings()
     return _settings
+
+
+def reload_settings() -> Settings:
+    """重建 Settings 单例，用于 .env 更新后的运行时刷新。"""
+    global _settings
+    _settings = Settings()
+    return _settings

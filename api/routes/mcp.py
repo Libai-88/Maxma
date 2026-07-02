@@ -2,11 +2,12 @@
 
 import logging
 
-import yaml
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app_paths import MCP_CONFIG_PATH
+from api.yaml_store import dump_yaml_atomic, load_yaml, yaml_file_lock
+from tools import merge_tool_lists
 from tools.mcp import (
     MCPServerConfig,
     MCPServersConfigFile,
@@ -69,21 +70,14 @@ def _load_raw() -> list[dict]:
     """读取 YAML 原始数据（list of dicts）。"""
     if not MCP_YAML_PATH.exists():
         return []
-    with open(MCP_YAML_PATH, encoding="utf-8") as f:
-        raw = yaml.safe_load(f) or {}
+    raw = load_yaml(MCP_YAML_PATH, default={}) or {}
     return raw.get("mcp_servers", []) or []
 
 
 def _save_raw(servers: list[dict]) -> None:
     """写入 YAML。"""
     MCP_YAML_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(MCP_YAML_PATH, "w", encoding="utf-8") as f:
-        yaml.dump(
-            {"mcp_servers": servers},
-            f,
-            allow_unicode=True,
-            default_flow_style=False,
-        )
+    dump_yaml_atomic(MCP_YAML_PATH, {"mcp_servers": servers})
 
 
 def _build_server_dict(body: MCPServerCreateBody) -> dict:
@@ -138,7 +132,7 @@ async def _do_reload(request: Request | None = None) -> dict:
         new_tools = await reload_mcp()
         if request is not None:
             request.app.state.mcp_tools = new_tools
-            request.app.state.tools = request.app.state.native_tools + new_tools
+            request.app.state.tools = merge_tool_lists(request.app.state.native_tools, new_tools)
         server_info = get_mcp_servers_info()
         return {
             "status": "ok",
@@ -169,7 +163,8 @@ async def list_mcp_servers(request: Request):
 @router.get("/mcp/servers/{server_id}")
 async def get_mcp_server(server_id: str):
     """获取单个 MCP 服务器的完整配置。"""
-    entries = _load_raw()
+    with yaml_file_lock(MCP_YAML_PATH):
+        entries = _load_raw()
     for entry in entries:
         if entry.get("server_id") == server_id:
             return entry
@@ -179,17 +174,18 @@ async def get_mcp_server(server_id: str):
 @router.post("/mcp/servers")
 async def create_mcp_server(body: MCPServerCreateBody, request: Request):
     """创建新的 MCP 服务器配置。"""
-    entries = _load_raw()
-    # 检查 ID 是否重复
-    for entry in entries:
-        if entry.get("server_id") == body.server_id:
-            raise HTTPException(
-                status_code=409,
-                detail=f"server_id '{body.server_id}' 已存在",
-            )
-    server_dict = _build_server_dict(body)
-    entries.append(server_dict)
-    _save_raw(entries)
+    with yaml_file_lock(MCP_YAML_PATH):
+        entries = _load_raw()
+        # 检查 ID 是否重复
+        for entry in entries:
+            if entry.get("server_id") == body.server_id:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"server_id '{body.server_id}' 已存在",
+                )
+        server_dict = _build_server_dict(body)
+        entries.append(server_dict)
+        _save_raw(entries)
     logger.info(f"[mcp] 创建服务器: {body.server_id} ({body.transport})")
     result = await _do_reload(request)
     return {"status": "created", "server": server_dict, **result}
@@ -202,21 +198,22 @@ async def update_mcp_server(
     request: Request,
 ):
     """更新现有 MCP 服务器配置（部分更新）。"""
-    entries = _load_raw()
-    target = None
-    for entry in entries:
-        if entry.get("server_id") == server_id:
-            target = entry
-            break
-    if target is None:
-        raise HTTPException(status_code=404, detail=f"MCP 服务器 '{server_id}' 不存在")
+    with yaml_file_lock(MCP_YAML_PATH):
+        entries = _load_raw()
+        target = None
+        for entry in entries:
+            if entry.get("server_id") == server_id:
+                target = entry
+                break
+        if target is None:
+            raise HTTPException(status_code=404, detail=f"MCP 服务器 '{server_id}' 不存在")
 
-    # 部分更新：只更新非 None 字段
-    update_fields = body.model_dump(exclude_unset=True)
-    for key, value in update_fields.items():
-        target[key] = value
+        # 部分更新：只更新非 None 字段
+        update_fields = body.model_dump(exclude_unset=True)
+        for key, value in update_fields.items():
+            target[key] = value
 
-    _save_raw(entries)
+        _save_raw(entries)
     logger.info(f"[mcp] 更新服务器: {server_id}")
     result = await _do_reload(request)
     return {"status": "updated", "server": target, **result}
@@ -225,12 +222,13 @@ async def update_mcp_server(
 @router.delete("/mcp/servers/{server_id}")
 async def delete_mcp_server(server_id: str, request: Request):
     """删除 MCP 服务器配置。"""
-    entries = _load_raw()
-    new_entries = [e for e in entries if e.get("server_id") != server_id]
-    if len(new_entries) == len(entries):
-        raise HTTPException(status_code=404, detail=f"MCP 服务器 '{server_id}' 不存在")
-    removed = [e for e in entries if e.get("server_id") == server_id][0]
-    _save_raw(new_entries)
+    with yaml_file_lock(MCP_YAML_PATH):
+        entries = _load_raw()
+        new_entries = [e for e in entries if e.get("server_id") != server_id]
+        if len(new_entries) == len(entries):
+            raise HTTPException(status_code=404, detail=f"MCP 服务器 '{server_id}' 不存在")
+        removed = [e for e in entries if e.get("server_id") == server_id][0]
+        _save_raw(new_entries)
     logger.info(f"[mcp] 删除服务器: {server_id}")
     result = await _do_reload(request)
     return {"status": "deleted", "removed": removed["server_id"], **result}

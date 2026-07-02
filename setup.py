@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 
+from app_paths import PROVIDERS_YAML_PATH
 from version import __version__
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -230,7 +231,8 @@ def setup_provider():
         provider_id = "custom-provider"
 
     # 写入 providers.yaml
-    yaml_path = os.path.join(PROJECT_ROOT, "providers.yaml")
+    yaml_path = str(PROVIDERS_YAML_PATH)
+    os.makedirs(os.path.dirname(yaml_path), exist_ok=True)
     models_block = "\n".join(f"  - {m}" for m in models)
     entry = f"""- api_key: {api_key}
   base_url: {base_url}
@@ -253,7 +255,7 @@ def setup_provider():
     with open(yaml_path, "w", encoding="utf-8") as f:
         f.write(content)
 
-    ok(f"提供商「{label}」已保存至 providers.yaml")
+    ok(f"提供商「{label}」已保存至 {yaml_path}")
     return True
 
 
@@ -267,11 +269,11 @@ def setup_persona():
 
     print()
     name = input(
-        “  你希望 Maxma 怎么称呼你？（直接按 Enter 则默认为”朋友”）: “
+        '  你希望 Maxma 怎么称呼你？（直接按 Enter 则默认为"朋友"）: '
     ).strip()
     if not name:
-        name = “朋友”
-    ok(f”好的，Maxma 之后会称呼你为「{name}」”)
+        name = "朋友"
+    ok(f"好的，Maxma 之后会称呼你为「{name}」")
 
     for target, src in TEMPLATES.items():
         target_path = os.path.join(PROJECT_ROOT, PERSONAS, target)
@@ -300,7 +302,7 @@ def setup_persona():
 def summary():
     env_path = os.path.join(PROJECT_ROOT, ".env")
     env_ok = os.path.exists(env_path)
-    prov_path = os.path.join(PROJECT_ROOT, "providers.yaml")
+    prov_path = str(PROVIDERS_YAML_PATH)
     prov_ok = os.path.exists(prov_path) and os.path.getsize(prov_path) > 20
     print()
     print("=" * 48)

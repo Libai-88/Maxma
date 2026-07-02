@@ -1,7 +1,10 @@
 """Tool: ask_user_for_info — 向用户询问信息。"""
 
+import asyncio
+
 from pydantic import BaseModel, Field
 
+from api import interaction
 from tools.base import ToolBase, format_error, format_success
 
 
@@ -19,13 +22,33 @@ class AskUserTool(ToolBase):
     args_schema: type[BaseModel] = AskUserInput
 
     def _run(self, get_doc: bool = False, question: str = "") -> str:
+        raise NotImplementedError("ask_user_for_info 仅支持异步模式")
+
+    async def _arun(self, get_doc: bool = False, question: str = "") -> str:
         if get_doc:
             return self._load_doc()
         if not question:
             return format_error("question 不能为空")
 
+        ws = interaction.current_ws.get()
+        interaction_id, future = interaction.register()
+
         try:
-            answer = input(question)
+            await ws.send_json(
+                {
+                    "type": "ask_user",
+                    "payload": {
+                        "tool_name": self.name,
+                        "question": question,
+                        "mode": "qa",
+                        "options": [],
+                        "interaction_id": interaction_id,
+                    },
+                }
+            )
+            answer = await future
             return format_success({"question": question, "answer": answer})
-        except EOFError:
-            return format_error("无法获取用户输入（非交互模式）")
+        except asyncio.CancelledError:
+            return format_error("用户取消了回复")
+        finally:
+            interaction.cleanup(interaction_id)

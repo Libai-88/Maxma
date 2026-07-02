@@ -63,6 +63,8 @@ config/personas/memory.yaml
 
 # Provider credentials (明文 API key)
 providers.yaml
+providers.yaml.legacy-*.bak
+api/data/providers.yaml
 
 # 路径白名单（自动生成，每用户本地配置）
 api/data/path_whitelist.yaml
@@ -76,6 +78,19 @@ api/data/auth_token.yaml
 
 # MCP 服务器配置（每用户本地配置，可能含 API Key 等敏感信息）
 config/mcp_servers.yaml
+api/data/mcp_servers.yaml
+
+# 事件钩子配置（每用户本地配置）
+api/data/event_hooks.yaml
+
+# Sticker 本地运行数据（自动生成）
+api/data/sticker_favorites.yaml
+api/data/sticker_preferences.yaml
+api/data/sticker_recent.yaml
+
+# Tauri 本地构建产物
+desktop/src-tauri/target/
+desktop/src-tauri/binaries/*.exe
 
 # Anthropic Skills（忽略 skill 子目录，保留目录本身用于 .gitkeep）
 anthropic_skills/*/

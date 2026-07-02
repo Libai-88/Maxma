@@ -13,6 +13,7 @@
 
 import asyncio
 import logging
+import re
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -27,6 +28,86 @@ from typing_extensions import Annotated, TypedDict
 from agent.planner import classify_and_plan, parse_plan_steps, PLAN_CONFIRM_THRESHOLD
 
 logger = logging.getLogger(__name__)
+
+_SIMPLE_CHAT_RE = re.compile(
+    r"^(?:你好(?:呀)?|您好|hello|hi|hey|在吗|在不在|谢谢(?:你)?|thanks|thank you|"
+    r"好的|ok|okay|收到|明白|再见|拜拜|早上好|中午好|晚上好|辛苦了|哈哈+|嗯+|喂)"
+    r"[!,.，。？！~\s]*$",
+    re.IGNORECASE,
+)
+_COMPLEXITY_HINTS = (
+    "然后",
+    "再",
+    "同时",
+    "并行",
+    "分别",
+    "对比",
+    "比较",
+    "分析",
+    "研究",
+    "调查",
+    "排查",
+    "定位",
+    "修复",
+    "重构",
+    "实现",
+    "设计",
+    "规划",
+    "计划",
+    "步骤",
+    "清单",
+    "todo",
+    "phase",
+    "阶段",
+    "汇总",
+    "总结",
+    "审查",
+    "review",
+    "debug",
+    "bug",
+    "测试",
+    "构建",
+    "部署",
+    "迁移",
+    "优化",
+    "写一个",
+    "写个",
+    "做一个",
+    "做个",
+    "创建",
+    "生成",
+    "开发",
+)
+
+
+def _should_skip_planner(user_text: str) -> bool:
+    """对明显简单的输入做本地短路，避免每轮都额外调用 planner。"""
+    text = user_text.strip()
+    if not text:
+        return True
+
+    normalized = " ".join(text.split())
+    if _SIMPLE_CHAT_RE.fullmatch(normalized):
+        return True
+
+    if "\n" in text or len(normalized) > 48:
+        return False
+
+    if "```" in text or "http://" in text or "https://" in text or "\\" in text:
+        return False
+
+    if re.search(r"(?:^|\s)\d+[.)]", normalized):
+        return False
+
+    lower_text = normalized.lower()
+    if any(hint in lower_text for hint in _COMPLEXITY_HINTS):
+        return False
+
+    punctuation_count = sum(normalized.count(ch) for ch in "。？！!?；;")
+    if punctuation_count >= 2:
+        return False
+
+    return len(normalized) <= 20 or normalized.endswith(("吗", "么", "呢", "?", "？"))
 
 
 class AgentState(TypedDict):
@@ -70,6 +151,10 @@ def build_agent(
             return {}
 
         user_text = last_msg.content if isinstance(last_msg.content, str) else str(last_msg.content)
+        if _should_skip_planner(user_text):
+            logger.debug("Skipping planner for simple turn: %s", user_text[:60])
+            return {}
+
         plan = await classify_and_plan(model, user_text)
         if not plan:
             return {}

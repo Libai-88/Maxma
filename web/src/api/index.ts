@@ -39,11 +39,12 @@ import { getApiBase, tauriFetch } from '@/utils/env'
 
 const BASE = getApiBase()
 
-/** 从 Vite 编译期注入的 Token（开发模式） */
-let token: string = typeof __API_TOKEN__ !== 'undefined' ? __API_TOKEN__ : ''
+/** 运行时从后端获取的 Token。桌面端与浏览器端都以这份为准。 */
+let token = ''
 
 /** Token 是否已从运行时接口获取 */
 let tokenFetchedAtRuntime = false
+let tokenLoadPromise: Promise<void> | null = null
 
 export function getToken(): string {
   return token
@@ -56,28 +57,36 @@ export function getToken(): string {
  */
 export async function ensureTokenLoaded(): Promise<void> {
   if (tokenFetchedAtRuntime) return
-  try {
-    const res = await tauriFetch(`${BASE}/auth/token`)
-    if (res.ok) {
-      const data = await res.json()
-      token = data.token || ''
-      tokenFetchedAtRuntime = true
-      console.log('[api] Token acquired at runtime')
-    }
-  } catch (e) {
-    console.warn('[api] Failed to fetch token at runtime:', e)
+  if (!tokenLoadPromise) {
+    tokenLoadPromise = (async () => {
+      try {
+        const res = await tauriFetch(`${BASE}/auth/token`)
+        if (res.ok) {
+          const data = await res.json()
+          token = data.token || ''
+          tokenFetchedAtRuntime = true
+          console.log('[api] Token acquired at runtime')
+        }
+      } catch (e) {
+        console.warn('[api] Failed to fetch token at runtime:', e)
+      } finally {
+        tokenLoadPromise = null
+      }
+    })()
   }
+  await tokenLoadPromise
 }
 
 /** 强制清除 Token 缓存，下次请求时重新获取（用于 auth 失败后刷新） */
 export function resetToken(): void {
   tokenFetchedAtRuntime = false
   token = ''
+  tokenLoadPromise = null
 }
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
-  // 如果没有 Token，先运行时获取
-  if (!token && !tokenFetchedAtRuntime) {
+  // 桌面端始终以运行时 Token 为准，避免构建期 token 过期或串台。
+  if (!tokenFetchedAtRuntime) {
     await ensureTokenLoaded()
   }
 
@@ -104,7 +113,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 
 /** 上传图片文件（multipart/form-data），返回服务端路径 */
 async function uploadImage(file: File): Promise<{ file_id: string; filename: string; path: string }> {
-  if (!token && !tokenFetchedAtRuntime) {
+  if (!tokenFetchedAtRuntime) {
     await ensureTokenLoaded()
   }
   const form = new FormData()
@@ -165,6 +174,9 @@ export const api = {
     request<HealthResponse>('/health'),
 
   restart: async () => {
+    if (!tokenFetchedAtRuntime) {
+      await ensureTokenLoaded()
+    }
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (token) headers['X-Maxma-Token'] = token
     try {
@@ -292,8 +304,8 @@ export const api = {
   getPersona: (type: 'soul' | 'user', variant?: string) =>
     request<{ content: string; type: string }>(`/persona?type=${type}${variant ? `&variant=${encodeURIComponent(variant)}` : ''}`),
 
-  updatePersona: (type: 'soul' | 'user', content: string) =>
-    request<{ content: string; type: string }>(`/persona?type=${type}`, {
+  updatePersona: (type: 'soul' | 'user', content: string, variant?: string) =>
+    request<{ content: string; type: string }>(`/persona?type=${type}${variant ? `&variant=${encodeURIComponent(variant)}` : ''}`, {
       method: 'PUT',
       body: JSON.stringify({ content }),
     }),

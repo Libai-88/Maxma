@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -538,8 +539,10 @@ class LongTermMemoryInterface:
 
                 logger.info("[ltm] invoking CRUD agent...")
                 from langchain_core.runnables import RunnableConfig
+                thread_suffix = turn_id or uuid.uuid4().hex[:8]
+                thread_id = f"ltm-{session_id or 'anon'}-{thread_suffix}"
                 config: RunnableConfig = {
-                    "configurable": {"thread_id": "ltm-consumer"},
+                    "configurable": {"thread_id": thread_id},
                     "callbacks": callbacks,
                 }
                 await agent.ainvoke(

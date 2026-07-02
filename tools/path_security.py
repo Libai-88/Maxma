@@ -8,6 +8,7 @@
 """
 
 import os
+import logging
 from pathlib import Path
 
 import yaml
@@ -17,6 +18,9 @@ from app_paths import (
     PATH_WHITELIST_YAML_PATH, MAXMA_BLOCKER_YAML_PATH,
     ANTHROPIC_SKILLS_DIR, MACROS_DIR, API_DATA_DIR,
 )
+from api.yaml_store import dump_yaml_atomic, load_yaml
+
+logger = logging.getLogger(__name__)
 
 
 # ── 路径常量 ────────────────────────────────────────────────
@@ -130,8 +134,7 @@ def _ensure_whitelist() -> None:
 
     # 文件已存在，检查默认路径是否已在白名单中
     try:
-        with open(_WHITELIST_PATH, encoding="utf-8") as f:
-            raw = yaml.safe_load(f) or {}
+        raw = load_yaml(_WHITELIST_PATH, default={}) or {}
         entries = raw.get("whitelist", [])
         if not isinstance(entries, list):
             _write_whitelist(_defaults)
@@ -165,13 +168,7 @@ def _ensure_whitelist() -> None:
             changed = True
 
         if changed:
-            with open(_WHITELIST_PATH, "w", encoding="utf-8") as f:
-                yaml.dump(
-                    {"whitelist": entries},
-                    f,
-                    allow_unicode=True,
-                    default_flow_style=False,
-                )
+            dump_yaml_atomic(_WHITELIST_PATH, {"whitelist": entries})
 
     except (yaml.YAMLError, OSError, ValueError):
         # 文件损坏 → 重写
@@ -211,11 +208,7 @@ def _write_whitelist(entries: list) -> None:
     content = {
         "whitelist": entries,
     }
-    with open(_WHITELIST_PATH, "w", encoding="utf-8") as f:
-        # 写入手动头注释
-        f.write("# 路径白名单（自动生成，首次 import 时创建）\n")
-        f.write("# 编辑此文件以添加更多允许的路径前缀。\n")
-        yaml.dump(content, f, allow_unicode=True, default_flow_style=False)
+    dump_yaml_atomic(_WHITELIST_PATH, content)
 
 
 def _ensure_blocker() -> None:
@@ -236,8 +229,7 @@ def _ensure_blocker() -> None:
         return
 
     try:
-        with open(_BLOCKER_YAML_PATH, encoding="utf-8") as f:
-            raw = yaml.safe_load(f) or {}
+        raw = load_yaml(_BLOCKER_YAML_PATH, default={}) or {}
         entries = raw.get("blockers", [])
         if not isinstance(entries, list):
             return
@@ -256,15 +248,9 @@ def _ensure_blocker() -> None:
                     "description": "API 数据目录（自动生成）",
                 },
             )
-            with open(_BLOCKER_YAML_PATH, "w", encoding="utf-8") as f:
-                yaml.dump(
-                    {"blockers": entries},
-                    f,
-                    allow_unicode=True,
-                    default_flow_style=False,
-                )
+            dump_yaml_atomic(_BLOCKER_YAML_PATH, {"blockers": entries})
     except (yaml.YAMLError, OSError):
-        pass
+        logger.warning("failed to ensure blocker metadata", exc_info=True)
 
 
 # 模块加载时自动执行：确保白名单存在 + api/data/ 拒止锚存在（首次 import 时运行一次）

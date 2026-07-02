@@ -32,8 +32,8 @@ class AuthMiddleware:
         if scope.get("type") == "http" and scope.get("method") == "OPTIONS":
             return await self.app(scope, receive, send)
 
-        # 白名单：健康检查 + Token 获取（桌面应用启动时需要）
-        if path == "/api/health" or path == "/api/auth/token":
+        # 白名单：健康检查 + Token 获取（桌面应用启动时需要）+ 表情包（img 标签无法携带自定义头）
+        if path == "/api/health" or path == "/api/auth/token" or path.startswith("/api/stickers"):
             return await self.app(scope, receive, send)
 
         # 提取并校验 Token

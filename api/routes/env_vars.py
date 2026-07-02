@@ -1,13 +1,13 @@
 """REST API — 工具环境变量管理（读取/更新 .env 文件）。"""
 
-from pathlib import Path
+import os
 
 from dotenv import dotenv_values, set_key
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app_paths import ENV_FILE_PATH
-from config.settings import get_settings
+from config.settings import get_settings, reload_settings
 
 router = APIRouter()
 
@@ -37,6 +37,18 @@ ENV_VAR_META: dict[str, dict[str, str]] = {
         "description": "网络搜索与内容提取",
     },
 }
+
+
+def _refresh_runtime_settings() -> None:
+    """同步当前进程环境并重建 Settings 单例。"""
+    file_values = dotenv_values(ENV_PATH)
+    for key in ENV_VAR_META:
+        value = file_values.get(key, "")
+        if value:
+            os.environ[key] = value
+        else:
+            os.environ.pop(key, None)
+    reload_settings()
 
 
 def _mask_value(value: str) -> str:
@@ -106,12 +118,7 @@ async def update_env_var(req: UpdateEnvVarRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"写入 .env 失败: {e}")
 
-    # 刷新运行时配置
-    import importlib
-    import config.settings
-    importlib.reload(config.settings)
-    from config.settings import get_settings as reloaded_settings
-    reloaded_settings()
+    _refresh_runtime_settings()
 
     return {
         "status": "ok",
@@ -139,10 +146,6 @@ async def batch_update_env_vars(req: BatchUpdateEnvVarRequest):
             )
 
     if updated:
-        import importlib
-        import config.settings
-        importlib.reload(config.settings)
-        from config.settings import get_settings as reloaded_settings
-        reloaded_settings()
+        _refresh_runtime_settings()
 
     return {"status": "ok", "updated": updated}

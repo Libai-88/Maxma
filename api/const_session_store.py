@@ -3,12 +3,16 @@
 提供将会话状态（元数据 + 对话消息）序列化为 YAML 文件并重新加载的能力。
 """
 
+import logging
 import time
 from pathlib import Path
 
 import yaml
 
 from app_paths import CONST_SESSIONS_DIR as _CONST_DIR
+from api.yaml_store import dump_yaml_atomic, load_yaml, yaml_file_lock
+
+logger = logging.getLogger(__name__)
 
 
 def _ensure_dir() -> Path:
@@ -94,19 +98,25 @@ def save_const_session(
         "messages": messages,
     }
     filepath = ensure_dir / f"{session_id}.yaml"
-    with open(filepath, "w", encoding="utf-8") as f:
-        yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
+    with yaml_file_lock(filepath):
+        dump_yaml_atomic(filepath, data)
     return str(filepath)
 
 
 def load_const_session(filepath: Path) -> dict | None:
     """加载单个 const 会话 YAML 文件。"""
     try:
-        with open(filepath, encoding="utf-8") as f:
-            data = yaml.safe_load(f)
+        with yaml_file_lock(filepath):
+            data = load_yaml(filepath, default=None)
             return data if isinstance(data, dict) else None
     except Exception:
+        logger.warning("[const] failed to load session file %s", filepath, exc_info=True)
         return None
+
+
+def load_const_session_by_id(session_id: str) -> dict | None:
+    """按 session_id 加载持久化 const 会话。"""
+    return load_const_session(_CONST_DIR / f"{session_id}.yaml")
 
 
 def load_all_const_sessions() -> list[dict]:
