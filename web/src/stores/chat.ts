@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, reactive } from 'vue'
 import type { ChatTurn, ContextUsage } from '@/types'
 
-const TURNS_KEY_PREFIX = 'maxma_turns_'
+export const TURNS_KEY_PREFIX = 'maxma_turns_'
 
 interface SessionChannel {
   ws: WebSocket | null
@@ -88,9 +88,14 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   return {
-    channels, allSessionStatuses,
+    channels, allSessionStatuses, TURNS_KEY_PREFIX,
     getOrCreateChannel, removeChannel,
     removeTurnsFromStorage, saveTurnsToStorage, loadTurnsFromStorage,
     cleanupOrphanedCaches,
   }
 })
+
+/** 便捷工具函数：从 localStorage 移除指定会话的 turns 缓存 */
+export function removeTurnsFromStorage(sid: string) {
+  localStorage.removeItem(TURNS_KEY_PREFIX + sid)
+}

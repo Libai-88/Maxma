@@ -69,7 +69,7 @@
 import HealthPanel from '@/components/HealthPanel.vue';
 import Icon from '@/components/Icon.vue';
 import SessionSidebar from '@/components/SessionSidebar.vue';
-import { allSessionStatuses } from '@/composables/useChat';
+import { useChatStore } from '@/stores/chat';
 import { useHealthStore } from '@/stores/health';
 import { storeToRefs } from 'pinia';
 import { useSessionStore } from '@/stores/session';
@@ -177,6 +177,9 @@ function handleUnconstify(id: string) {
 const sessionStore = useSessionStore()
 const { sessionId, sessions } = storeToRefs(sessionStore)
 const { createSession, switchSession, deleteSession } = sessionStore
+
+const chatStore = useChatStore()
+const { allSessionStatuses } = storeToRefs(chatStore)
 
 const healthStore = useHealthStore()
 const { health } = storeToRefs(healthStore)

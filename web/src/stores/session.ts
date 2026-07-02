@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { api } from '@/api'
-import { removeTurnsFromStorage, TURNS_KEY_PREFIX } from '@/composables/useChat'
+import { removeTurnsFromStorage, TURNS_KEY_PREFIX } from '@/stores/chat'
 import type { SessionInfo } from '@/types'
 
 const STORAGE_KEY = 'maxma_session_id'
