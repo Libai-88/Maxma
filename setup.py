@@ -163,6 +163,9 @@ def setup_provider():
     import urllib.request
     from urllib.parse import urlparse
 
+    from api.providers import ProviderConfig
+    from api.providers.store import ProviderConfigStore
+
     print()
     print("  LLM 提供商是对话功能的基础。")
     print("  如果暂时跳过，之后可以随时在网页端 /providers 页面配置。")
@@ -230,32 +233,20 @@ def setup_provider():
     if not provider_id:
         provider_id = "custom-provider"
 
-    # 写入 providers.yaml
-    yaml_path = str(PROVIDERS_YAML_PATH)
-    os.makedirs(os.path.dirname(yaml_path), exist_ok=True)
-    models_block = "\n".join(f"  - {m}" for m in models)
-    entry = f"""- api_key: {api_key}
-  base_url: {base_url}
-  context_window: 256000
-  enabled: true
-  id: {provider_id}
-  label: {label}
-  models:
-{models_block}
-  provider_type: openai
-"""
+    # 写入 providers.yaml。复用正式配置存储，确保 API key 落盘前加密。
+    config = ProviderConfig(
+        id=provider_id,
+        provider_type="openai",
+        label=label,
+        api_key=api_key,
+        base_url=base_url,
+        models=models,
+        enabled=True,
+        context_window=256000,
+    )
+    ProviderConfigStore(PROVIDERS_YAML_PATH).save(config)
 
-    if os.path.exists(yaml_path):
-        with open(yaml_path, "r", encoding="utf-8") as f:
-            content = f.read()
-        content = content.rstrip() + "\n" + entry
-    else:
-        content = "providers:\n" + entry
-
-    with open(yaml_path, "w", encoding="utf-8") as f:
-        f.write(content)
-
-    ok(f"提供商「{label}」已保存至 {yaml_path}")
+    ok(f"提供商「{label}」已保存至 {PROVIDERS_YAML_PATH}")
     return True
 
 

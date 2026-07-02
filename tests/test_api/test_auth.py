@@ -37,15 +37,18 @@ class TestLoadOrCreateToken:
         assert data["token"] == result
 
     def test_load_or_create_corrupted_file(self, monkeypatch, tmp_path):
-        """文件存在但 YAML 无效 → 抛出异常（生产代码暂未处理此情况）。"""
-        import yaml
+        """文件存在但 YAML 无效 → 自动重建并返回新 token。"""
 
         token_path = tmp_path / "auth_token.yaml"
         token_path.write_text("{{ 无效 yaml !!", encoding="utf-8")
         monkeypatch.setattr(auth, "AUTH_TOKEN_PATH", token_path)
 
-        with pytest.raises(yaml.parser.ParserError):
-            auth.load_or_create_token()
+        result = auth.load_or_create_token()
+
+        assert isinstance(result, str)
+        assert len(result) > 0
+        data = yaml.safe_load(token_path.read_text(encoding="utf-8"))
+        assert data["token"] == result
 
     def test_load_or_create_missing_key(self, monkeypatch, tmp_path):
         """文件存在但无 token key → 重新生成。"""

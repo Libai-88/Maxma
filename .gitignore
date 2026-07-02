@@ -22,7 +22,9 @@ env/
 .vscode/
 
 # CI / Tools
-.github/
+.github/*
+!.github/workflows/
+!.github/workflows/*.yml
 .trae/
 *.swp
 *.swo

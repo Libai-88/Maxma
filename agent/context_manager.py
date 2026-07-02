@@ -100,7 +100,7 @@ def _extract_entities(messages: Sequence[BaseMessage]) -> str:
         # 提取文件路径（过滤掉太短或太像普通单词的匹配）
         for m in _PATH_RE.finditer(content):
             path = m.group(0).rstrip(".,;:!?")
-            if len(path) > 4 and "/" in path or "\\" in path:
+            if len(path) > 4 and ("/" in path or "\\" in path):
                 file_paths.add(path)
 
         # 提取 URL
