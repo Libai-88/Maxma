@@ -445,9 +445,8 @@ async def _run_agent_turn(
     user_message = await _process_image_refs(user_message)
     # ────────────────────────────────────────────────────────────
 
-    # 获取默认上下文窗口大小
-    default_max_tokens, _ = _get_provider_context(app_state)
-    fallback_model_name = default_max_tokens and _get_provider_context(app_state)[1]
+    # 获取默认上下文窗口大小和模型名（一次性解构，避免重复调用）
+    default_max_tokens, fallback_model_name = _get_provider_context(app_state)
 
     # 动态 LLM 选择（Phase 2：每次消息独立指定提供商/模型）
     current_max_tokens = default_max_tokens
@@ -701,9 +700,13 @@ def _resume_sub_agent(ws: WebSocket, session: SessionState) -> asyncio.Task | No
         return None
     task = session._sub_agent_task
     session._sub_agent_task = None  # 消费掉，防止重连后重复启动
-    # 取消旧任务，防止双重执行（两个 task 操作同一个 checkpointer 和 _pending_result）
+    # 取消旧任务，等待其完成后再创建新任务，避免 checkpoint 竞态
     if session._active_task is not None and not session._active_task.done():
         session._active_task.cancel()
+        try:
+            await asyncio.wait_for(session._active_task, timeout=5)
+        except (asyncio.CancelledError, asyncio.TimeoutError):
+            pass
         session._active_task = None
     interaction.current_ws.set(ws)
     interaction.current_session_id.set(session.session_id)

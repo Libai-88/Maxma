@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 from api import interaction
 from tools.base import ToolBase, format_error, format_success
+from langchain_core.messages import RemoveMessage
 
 
 class ForgetInput(BaseModel):
@@ -40,7 +41,7 @@ class ForgetTool(ToolBase):
                 return format_error("无法获取当前会话 ID")
 
             sm = ws.app.state.session_manager
-            session = sm.get(session_id)
+            session = await sm.get(session_id)
             if not session or not session._graph:
                 return format_error("当前会话不存在或没有活跃的图")
 
@@ -57,16 +58,17 @@ class ForgetTool(ToolBase):
             if not messages:
                 return format_error("当前没有对话消息")
 
-            # 过滤掉包含关键词的消息
+            # 过滤掉包含关键词的消息，生成 RemoveMessage 删除列表
             keyword = topic.lower()
-            kept = []
+            remove_msgs = []
             removed_count = 0
             for msg in messages:
                 content = str(getattr(msg, "content", ""))
                 if keyword in content.lower():
+                    msg_id = getattr(msg, "id", None)
+                    if msg_id:
+                        remove_msgs.append(RemoveMessage(id=msg_id))
                     removed_count += 1
-                else:
-                    kept.append(msg)
 
             if removed_count == 0:
                 return format_success({
@@ -75,8 +77,8 @@ class ForgetTool(ToolBase):
                     "message": f"未找到与 '{topic}' 相关的消息",
                 })
 
-            # 更新状态
-            await graph.aupdate_state(config, {"messages": kept})
+            # 使用 RemoveMessage 删除旧消息（add_messages reducer 正确识别）
+            await graph.aupdate_state(config, {"messages": remove_msgs})
 
             return format_success({
                 "topic": topic,

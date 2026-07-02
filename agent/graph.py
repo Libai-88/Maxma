@@ -130,6 +130,11 @@ async def _request_plan_confirmation(
     try:
         interaction_id, future = interaction.register()
         interaction._pending[plan_id] = future
+        # 同步将 plan_id 加入会话跟踪，确保 cancel_session 能正常清理
+        session_id = interaction.current_session_id.get()
+        if session_id:
+            interaction._pending_sessions[plan_id] = session_id
+            interaction._pending_by_session.setdefault(session_id, set()).add(plan_id)
         await ws.send_json({
             "type": "plan_proposed",
             "payload": {
@@ -188,7 +193,8 @@ def build_agent(
         if not isinstance(last_msg, HumanMessage):
             return {}
 
-        user_text = last_msg.content if isinstance(last_msg.content, str) else str(last_msg.content)
+        # 提取用户消息文本（支持多模态 content list）
+        user_text = _extract_text_content(last_msg.content)
         if _should_skip_planner(user_text):
             logger.debug("Skipping planner for simple turn: %s", user_text[:60])
             return {}
@@ -236,11 +242,12 @@ def build_agent(
     async def agent_node(state: AgentState) -> dict:
         """模型节点：调用 LLM，返回 AI 响应（可能包含 tool_calls）。
 
-        若消息列表开头没有 SystemMessage，自动注入 system_prompt（仅首次）。
+        始终在 LLM 调用前注入系统提示词（本地 prepend，不持久化到 state）。
+        不依赖 messages[0] 的类型判断，确保压缩摘要 SystemMessage 不会
+        抑制系统提示词注入（压缩后 LLM 仍保留所有人设/行为规则）。
         """
         messages = state["messages"]
-        if not messages or not isinstance(messages[0], SystemMessage):
-            messages = [SystemMessage(content=system_prompt)] + list(messages)
+        messages = [SystemMessage(content=system_prompt)] + list(messages)
         response = await llm_with_tools.ainvoke(messages)
         return {"messages": [response]}
 
@@ -276,3 +283,21 @@ def build_agent(
         graph.add_edge("agent", END)
 
     return graph.compile(checkpointer=checkpointer)
+
+
+def _extract_text_content(content) -> str:
+    """从消息 content 中提取可读文本，支持多模态 content list。"""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                parts.append(str(block.get("text", "")))
+            elif isinstance(block, dict):
+                import json
+                parts.append(json.dumps(block, ensure_ascii=False))
+            else:
+                parts.append(str(block))
+        return " ".join(p for p in parts if p)
+    return str(content) if content is not None else ""
