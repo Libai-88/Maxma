@@ -199,6 +199,15 @@ hiddenimports = [
     "api.routes.event_hooks",
     "api.routes.audit_log",
 
+    # ── SQLite 数据层（Phase 1 新增，动态导入） ──
+    "api.db.core",
+    "api.db.providers",
+    "api.db.auth",
+    "api.db.hooks",
+
+    # ── langchain_core.messages 子类（动态 import，PyInstaller 可能遗漏） ──
+    "langchain_core.messages.RemoveMessage",
+
     # ── Agent 模块 ──
     "agent.graph",
     "agent.prompts",

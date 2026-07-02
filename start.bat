@@ -33,10 +33,10 @@ if not exist "web\node_modules" (
     exit /b 1
 )
 
-echo [1/3] Starting backend (FastAPI :8000) ...
+echo [1/5] Starting backend (FastAPI :8000) ...
 start "MaxmaHere Backend" /d "%~dp0" cmd /k ".venv\Scripts\python main.py web"
 
-echo [2/3] Waiting for backend ...
+echo [2/5] Waiting for backend ...
 set "READY=0"
 for /L %%i in (1,1,30) do (
     curl -s http://localhost:8000/api/health >nul 2>&1
@@ -54,10 +54,10 @@ if "%READY%"=="0" (
     echo        Backend ready.
 )
 
-echo [3/3] Starting frontend (Vite :5173) ...
+echo [3/5] Starting frontend (Vite :5173) ...
 start "MaxmaHere Frontend" /d "%~dp0web" cmd /k "npm run dev"
 
-echo        Waiting for frontend ...
+echo [4/5] Waiting for frontend ...
 set "READY=0"
 for /L %%i in (1,1,20) do (
     curl -s http://localhost:5173 >nul 2>&1
@@ -69,6 +69,7 @@ for /L %%i in (1,1,20) do (
 )
 :frontend_ready
 
+echo [5/5] Opening browser...
 start "" http://localhost:5173
 
 echo.

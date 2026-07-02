@@ -28,84 +28,84 @@ echo   MaxmaHere Server Build
 echo ============================================
 echo.
 
-REM ??????
+REM 清理旧 venv 检查
 if not exist ".venv\Scripts\activate.bat" (
-    echo [ERROR] ??????? .venv?????????
+    echo [ERROR] Python 虚拟环境不存在，请先运行 setup-dev-env.bat
     exit /b 1
 )
 
-REM ??????
+REM 激活虚拟环境
 call .venv\Scripts\activate.bat
 
-REM ?? PyInstaller
+REM 检查 PyInstaller
 %PYTHON_EXE% -c "import PyInstaller" 2>nul
 if errorlevel 1 (
     if exist "%PYI_SITE_PACKAGES%\PyInstaller\__init__.py" (
-        echo [INFO] ???? PyInstaller ???%PYI_SITE_PACKAGES%
-        set "PYTHONPATH=%PYI_SITE_PACKAGES%"
+        echo [INFO] 从系统库加载 PyInstaller：%PYI_SITE_PACKAGES%
+        set "PYTHONPATH=%PI_SITE_PACKAGES%"
     ) else (
-        echo [ERROR] ?????? PyInstaller?.venv ??????????
+        echo [ERROR] 未找到 PyInstaller，请在 venv 中安装
         exit /b 1
     )
 )
 
-REM ???????? onedir ??????
+REM 清理旧产物（onedir 目录和 exe）
 if exist "%STALE_DIST_DIR%\" (
-    echo [INFO] ??????? %STALE_DIST_DIR%
+    echo [INFO] 清理旧目录 %STALE_DIST_DIR%
     rmdir /s /q "%STALE_DIST_DIR%"
 )
 if exist "%DIST_EXE%" (
     del /f /q "%DIST_EXE%"
 )
 
-REM ?????
-echo [1/4] ????...
+REM 构建前端
+echo [1/4] 构建前端...
 cd web
 call npm run build --silent 2>nul
 if errorlevel 1 (
-    echo [ERROR] ??????
+    echo [ERROR] 前端构建失败
     exit /b 1
 )
 cd ..
 
-REM ?? PyInstaller
-echo [2/4] ????...
+REM 打包后端
+echo [2/4] 打包后端...
 %PYINSTALLER_CMD% build\maxma-server.spec --clean --noconfirm
 
 if errorlevel 1 (
-    echo [ERROR] PyInstaller ????
+    echo [ERROR] PyInstaller 打包失败
     exit /b 1
 )
 
-echo [3/4] ????????...
+echo [3/4] 运行冒烟测试...
 powershell -NoProfile -ExecutionPolicy Bypass -File build\smoke-test-server.ps1
 if errorlevel 1 (
-    echo [ERROR] ?????????
+    echo [ERROR] 冒烟测试未通过
     exit /b 1
 )
 
-REM ????
-echo [4/4] ????...
+REM 部署
+echo [4/4] 部署到 Tauri binaries...
 if exist "%DIST_EXE%" (
     if not exist "%TAURI_BIN_DIR%\" mkdir "%TAURI_BIN_DIR%"
     copy /y "%DIST_EXE%" "%TAURI_BIN_EXE%" >nul
     if errorlevel 1 (
-        echo [ERROR] ??????? Tauri binaries ????
+        echo [ERROR] 复制 exe 到 Tauri binaries 失败
         exit /b 1
     )
 
     echo.
     echo ============================================
-    echo   ?????
-    echo   ???%DIST_EXE%
-    echo   Tauri sidecar?%TAURI_BIN_EXE%
+    echo   打包完成
+    echo   产物：%DIST_EXE%
+    echo   Tauri sidecar：%TAURI_BIN_EXE%
     echo ============================================
-    
-    REM ??????
+
+    REM 显示文件大小
     for %%F in ("%DIST_EXE%") do (
-        echo   ?????%%~zF bytes
+        echo   文件大小：%%~zF bytes
     )
 ) else (
-    echo [ERROR] ????? %DIST_EXE%
+    echo [ERROR] 未找到产物 %DIST_EXE%
     exit /b 1
 )
