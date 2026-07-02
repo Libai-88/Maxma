@@ -1,4 +1,4 @@
-import { reactive, computed, watch, onUnmounted, ref, type Ref } from 'vue'
+import { computed, watch, onUnmounted, ref, type Ref } from 'vue'
 import type { ClientMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, AskUserEvent, PlanProposedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent } from '@/types'
 import { useChatStore } from '@/stores/chat'
 import { useSessionStore } from '@/stores/session'
@@ -100,7 +100,7 @@ const refreshSessions = () => getSessionStore().refreshSessions()
 const switchSession = (id: string) => getSessionStore().switchSession(id)
 const turnsCache = new Map<string, ChatTurn[]>()
 
-// ── 多会话通道 ─────────────────────────────────────────────
+// ── SessionChannel 定义 ────────────────────────────────────
 
 interface SessionChannel {
   ws: WebSocket | null
@@ -123,8 +123,6 @@ interface SessionChannel {
   autoApprove: boolean
 }
 
-const channels = reactive(new Map<string, SessionChannel>())
-
 // Lazy export — 运行时才访问 Store（Pinia 在模块加载时尚未安装）
 export function getAllSessionStatuses() { return getChatStore().allSessionStatuses }
 
@@ -133,7 +131,7 @@ function getOrCreateChannel(sid: string): SessionChannel {
 }
 
 function persistTurns(sid: string) {
-  const ch = channels.get(sid)
+  const ch = getChatStore().channels.get(sid)
   if (!ch) {
     console.warn(`[useChat:persist] 跳过保存 sid="${sid}": 通道不存在`)
     return
@@ -263,7 +261,7 @@ export function ensureConnected(sid: string) {
 // ── 事件路由 ──────────────────────────────────────────────
 
 function handleEventForChannel(sid: string, event: ServerEvent) {
-  const ch = channels.get(sid)
+  const ch = getChatStore().channels.get(sid)
   if (!ch) return
 
   // context_usage 可以在无活跃轮次时接收（如连接初始化）
@@ -603,7 +601,7 @@ export function useChat(sessionId: Ref<string>) {
       if (oldId) {
         console.log(`[useChat:watch] 在切换前持久化旧会话 "${oldId}"`)
         persistTurns(oldId)
-        const oldChannel = channels.get(oldId)
+        const oldChannel = getChatStore().channels.get(oldId)
         if (oldChannel && !oldChannel.isStreaming && !oldChannel.isAwaitingUser) {
           disconnectSession(oldId)
         }
@@ -633,7 +631,7 @@ export function useChat(sessionId: Ref<string>) {
   )
 
   onUnmounted(() => {
-    for (const sid of Array.from(channels.keys())) {
+    for (const sid of Array.from(getChatStore().channels.keys())) {
       disconnectSession(sid)
     }
   })
