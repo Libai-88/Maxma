@@ -1,6 +1,7 @@
 import { reactive, computed, watch, onUnmounted, ref, type Ref } from 'vue'
 import type { ClientMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, AskUserEvent, PlanProposedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent } from '@/types'
-import { refreshSessions, switchSession } from '@/composables/useSession'
+import { useSessionStore } from '@/stores/session'
+import { useChatStore } from '@/stores/chat'
 import { buildFlatMessage, buildTimestamp, parseReferences } from '@/utils/references'
 import type { ParsedRef } from '@/utils/references'
 import { getToken, ensureTokenLoaded, resetToken } from '@/api'
@@ -70,17 +71,17 @@ function saveTurnsToStorage(sid: string, data: ChatTurn[]) {
 }
 
 export function removeTurnsFromStorage(sid: string) {
-  localStorage.removeItem(TURNS_KEY_PREFIX + sid)
+  useChatStore().removeTurnsFromStorage(sid)
 }
 
 export function disconnectSession(sid: string) {
-  const ch = channels.get(sid)
+  const chatStore = useChatStore()
+  const ch = chatStore.channels.get(sid)
   if (!ch) return
   if (ch.reconnectTimer) {
     clearTimeout(ch.reconnectTimer)
     ch.reconnectTimer = null
   }
-  // 先清除 onclose，再手动关闭 WS — 防止 onclose 触发意外重连
   if (ch.ws) {
     ch.ws.onclose = null
     ch.ws.close()
@@ -88,10 +89,14 @@ export function disconnectSession(sid: string) {
   }
   ch.connected = false
   ch.initialized = false
-  channels.delete(sid)
+  chatStore.removeChannel(sid)
 }
 
-const turnsCache = loadAllTurnsFromStorage()
+const _sessionStore = useSessionStore()
+const refreshSessions = _sessionStore.refreshSessions
+const switchSession = _sessionStore.switchSession
+const chatStore = useChatStore()
+const turnsCache = new Map<string, ChatTurn[]>()
 
 // ── 多会话通道 ─────────────────────────────────────────────
 
@@ -118,40 +123,10 @@ interface SessionChannel {
 
 const channels = reactive(new Map<string, SessionChannel>())
 
-// 所有 Session 的连接/流式状态（模块级，供 sidebar 使用）
-export const allSessionStatuses = computed(() => {
-  const map: Record<string, { connected: boolean; isStreaming: boolean; isAwaitingUser: boolean }> = {}
-  for (const [sid, ch] of channels) {
-    map[sid] = { connected: ch.connected, isStreaming: ch.isStreaming, isAwaitingUser: ch.isAwaitingUser }
-  }
-  return map
-})
+export const allSessionStatuses = useChatStore().allSessionStatuses
 
 function getOrCreateChannel(sid: string): SessionChannel {
-  if (!channels.has(sid)) {
-    console.log(`[useChat:channel] 创建新通道 sid="${sid}"`)
-    channels.set(sid, {
-      ws: null,
-      connected: false,
-      isStreaming: false,
-      isAwaitingUser: false,
-      turns: [] as ChatTurn[],
-      currentTurn: null,
-      error: null,
-      errorCategory: null,
-      errorTraceId: null,
-      contextUsage: null,
-      taskTrackerData: null,
-      reconnectTimer: null,
-      reconnectAttempts: 0,
-      initialized: false,
-      _awaitingToolName: null,
-      parentSessionId: null,
-      privateMode: false,
-      autoApprove: false,
-    })
-  }
-  return channels.get(sid)!
+  return chatStore.getOrCreateChannel(sid) as SessionChannel
 }
 
 function persistTurns(sid: string) {
