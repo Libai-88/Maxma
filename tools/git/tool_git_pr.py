@@ -6,6 +6,9 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from tools.base import ToolBase, format_error, format_success
+import logging
+logger = logging.getLogger(__name__)
+
 
 
 class GitPRInput(BaseModel):

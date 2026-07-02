@@ -197,8 +197,8 @@ def scan_project(root: str | Path) -> ProjectContext:
                 if len(content) > 10000:
                     content = content[:10000] + "\n...(truncated)"
                 ctx.key_files_content[fname] = content
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to read key file %s: %s", fname, e)
 
     # 3. 检测技术栈
     ctx.tech_stack = _detect_stack(root, ctx.key_files_content)

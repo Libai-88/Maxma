@@ -721,7 +721,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
 
     # ── 初始化会话 ────────────────────────────────────────
     app_state = ws.app.state
-    session = app_state.session_manager.get_or_create(session_id)
+    session = await app_state.session_manager.get_or_create(session_id)
 
     # 注册 WebSocket 到注册表，供后台记忆 consumer 推送事件
     app_state.ws_registry.register(session_id, ws)

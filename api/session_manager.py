@@ -40,16 +40,16 @@ class SessionManager:
     def __init__(self, ttl_seconds: int = 1800):
         self._sessions: dict[str, SessionState] = {}
         self._ttl = ttl_seconds
-        self._lock = threading.RLock()
+        self._lock = asyncio.Lock()
 
-    def create(self) -> SessionState:
+    async def create(self) -> SessionState:
         session_id = uuid.uuid4().hex
         session = SessionState(session_id=session_id)
-        with self._lock:
+        async with self._lock:
             self._sessions[session_id] = session
         return session
 
-    def create_sub_session(
+    async def create_sub_session(
         self,
         task: str,
         parent_session_id: str | None = None,
@@ -63,22 +63,22 @@ class SessionManager:
             _sub_agent_task=task,
             _pending_result=asyncio.Future(),
         )
-        with self._lock:
+        async with self._lock:
             self._sessions[session_id] = session
         return session
 
-    def get(self, session_id: str) -> SessionState | None:
-        with self._lock:
+    async def get(self, session_id: str) -> SessionState | None:
+        async with self._lock:
             session = self._sessions.get(session_id)
         if session is not None:
             session.last_active = time.time()
         return session
 
-    def get_or_create(self, session_id: str) -> SessionState:
-        session = self.get(session_id)
+    async def get_or_create(self, session_id: str) -> SessionState:
+        session = await self.get(session_id)
         if session is None:
             session = SessionState(session_id=session_id)
-            with self._lock:
+            async with self._lock:
                 existing = self._sessions.get(session_id)
                 if existing is not None:
                     existing.last_active = time.time()
@@ -86,17 +86,17 @@ class SessionManager:
                 self._sessions[session_id] = session
         return session
 
-    def delete(self, session_id: str) -> bool:
-        with self._lock:
+    async def delete(self, session_id: str) -> bool:
+        async with self._lock:
             if session_id in self._sessions:
                 del self._sessions[session_id]
                 return True
             return False
 
-    def list_sessions(self) -> list[dict]:
-        result = []
-        with self._lock:
+    async def list_sessions(self) -> list[dict]:
+        async with self._lock:
             sessions = list(self._sessions.values())
+        result = []
         for s in sessions:
             has_active = s._active_task is not None and not s._active_task.done()
             result.append(
@@ -114,29 +114,27 @@ class SessionManager:
         result.sort(key=lambda x: x["last_active"] if isinstance(x["last_active"], (int, float)) else 0.0, reverse=True)
         return result
 
-    def cleanup_expired(self) -> int:
+    async def cleanup_expired(self) -> int:
         now = time.time()
         expired = []
-        with self._lock:
+        async with self._lock:
             items = list(self._sessions.items())
         for sid, s in items:
-            # 不清理固定会话
             if s.is_const:
                 continue
-            # 不清理有活跃任务的会话
             if s._active_task is not None and not s._active_task.done():
                 continue
             if now - s.last_active > self._ttl:
                 expired.append(sid)
         if expired:
-            with self._lock:
+            async with self._lock:
                 for sid in expired:
                     self._sessions.pop(sid, None)
         return len(expired)
 
-    def session_count(self) -> int:
+    async def session_count(self) -> int:
         """返回当前活跃会话数（不含子 Agent）。"""
-        with self._lock:
+        async with self._lock:
             sessions = list(self._sessions.values())
         return sum(
             1 for s in sessions
