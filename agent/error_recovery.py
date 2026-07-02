@@ -8,6 +8,7 @@
 """
 
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Optional
@@ -44,69 +45,87 @@ class RecoverySuggestion:
 
 
 class ErrorRecoveryManager:
-    """错误恢复管理器。"""
+    """错误恢复管理器（线程安全，使用 threading.Lock 保护所有共享状态）。"""
 
     def __init__(self):
         self._records: dict[str, ToolFailureRecord] = {}
         self._recovery_history: list[RecoverySuggestion] = []
+        self._lock = threading.Lock()
 
     def record_failure(self, tool_name: str, error: str) -> Optional[RecoverySuggestion]:
         """记录一次工具失败。如果连续失败达到阈值，返回恢复建议。"""
-        if tool_name not in self._records:
-            self._records[tool_name] = ToolFailureRecord(tool_name=tool_name)
+        with self._lock:
+            if tool_name not in self._records:
+                self._records[tool_name] = ToolFailureRecord(tool_name=tool_name)
 
-        record = self._records[tool_name]
-        record.consecutive_failures += 1
-        record.total_failures += 1
-        record.last_error = error
-        record.last_error_time = time.time()
+            record = self._records[tool_name]
+            record.consecutive_failures += 1
+            record.total_failures += 1
+            record.last_error = error
+            record.last_error_time = time.time()
 
-        if record.consecutive_failures >= FAILURE_THRESHOLD and not record.recovery_suggested:
-            record.recovery_suggested = True
-            suggestion = self._generate_suggestion(tool_name, error, record)
-            self._recovery_history.append(suggestion)
-            # 限制历史记录数
-            if len(self._recovery_history) > 200:
-                self._recovery_history = self._recovery_history[-200:]
-            return suggestion
+            if record.consecutive_failures >= FAILURE_THRESHOLD and not record.recovery_suggested:
+                record.recovery_suggested = True
+                suggestion = self._generate_suggestion(tool_name, error, record)
+                self._recovery_history.append(suggestion)
+                # 限制历史记录数
+                if len(self._recovery_history) > 200:
+                    self._recovery_history = self._recovery_history[-200:]
+                return suggestion
 
-        return None
+            return None
 
     def record_success(self, tool_name: str) -> None:
         """记录一次工具成功，重置连续失败计数。"""
-        if tool_name in self._records:
-            self._records[tool_name].consecutive_failures = 0
-            self._records[tool_name].recovery_suggested = False
+        with self._lock:
+            if tool_name in self._records:
+                self._records[tool_name].consecutive_failures = 0
+                self._records[tool_name].recovery_suggested = False
 
     def get_failure_count(self, tool_name: str) -> int:
         """获取工具的连续失败次数。"""
-        record = self._records.get(tool_name)
-        return record.consecutive_failures if record else 0
+        with self._lock:
+            record = self._records.get(tool_name)
+            return record.consecutive_failures if record else 0
 
     def get_stats(self) -> dict:
         """获取所有工具的失败统计。"""
-        return {
-            name: {
-                "consecutive_failures": r.consecutive_failures,
-                "total_failures": r.total_failures,
-                "last_error": r.last_error[:100],
-                "last_error_time": r.last_error_time,
+        with self._lock:
+            return {
+                name: {
+                    "consecutive_failures": r.consecutive_failures,
+                    "total_failures": r.total_failures,
+                    "last_error": r.last_error[:100],
+                    "last_error_time": r.last_error_time,
+                }
+                for name, r in self._records.items()
+                if r.total_failures > 0
             }
-            for name, r in self._records.items()
-            if r.total_failures > 0
-        }
 
     def get_recovery_history(self, limit: int = 20) -> list[dict]:
         """获取恢复建议历史。"""
-        return [
-            {
-                "tool_name": s.tool_name,
-                "strategy": s.strategy,
-                "message": s.message,
-                "alternative_tools": s.alternative_tools,
-            }
-            for s in self._recovery_history[-limit:]
-        ]
+        with self._lock:
+            return [
+                {
+                    "tool_name": s.tool_name,
+                    "strategy": s.strategy,
+                    "message": s.message,
+                    "alternative_tools": s.alternative_tools,
+                }
+                for s in self._recovery_history[-limit:]
+            ]
+
+    def reset(self, tool_name: str = "") -> None:
+        """重置失败计数。如果指定工具名，只重置该工具；否则重置全部。"""
+        with self._lock:
+            if tool_name:
+                if tool_name in self._records:
+                    self._records[tool_name].consecutive_failures = 0
+                    self._records[tool_name].recovery_suggested = False
+            else:
+                for record in self._records.values():
+                    record.consecutive_failures = 0
+                    record.recovery_suggested = False
 
     def _generate_suggestion(
         self, tool_name: str, error: str, record: ToolFailureRecord
@@ -163,17 +182,6 @@ class ErrorRecoveryManager:
             "git_push": ["run_python"],
         }
         return alternatives_map.get(tool_name, [])
-
-    def reset(self, tool_name: str = "") -> None:
-        """重置失败计数。如果指定工具名，只重置该工具；否则重置全部。"""
-        if tool_name:
-            if tool_name in self._records:
-                self._records[tool_name].consecutive_failures = 0
-                self._records[tool_name].recovery_suggested = False
-        else:
-            for record in self._records.values():
-                record.consecutive_failures = 0
-                record.recovery_suggested = False
 
 
 # 网络重试装饰器
