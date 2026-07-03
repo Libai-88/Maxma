@@ -45,22 +45,21 @@ class AskUserSingleChoiceTool(ToolBase):
 
         ws = interaction.current_ws.get()
 
-        interaction_id, future = interaction.register()
-
-        await ws.send_json(
-            {
-                "type": "ask_user",
-                "payload": {
-                    "tool_name": self.name,
-                    "question": question,
-                    "mode": "single_choice",
-                    "options": options,
-                    "interaction_id": interaction_id,
-                },
-            }
-        )
+        interaction_id, future = await interaction.register()
 
         try:
+            await ws.send_json(
+                {
+                    "type": "ask_user",
+                    "payload": {
+                        "tool_name": self.name,
+                        "question": question,
+                        "mode": "single_choice",
+                        "options": options,
+                        "interaction_id": interaction_id,
+                    },
+                }
+            )
             answer = await future
             return format_success(
                 {"question": question, "answer": answer, "options": options}
@@ -68,4 +67,4 @@ class AskUserSingleChoiceTool(ToolBase):
         except asyncio.CancelledError:
             return format_error("用户取消了回复")
         finally:
-            interaction.cleanup(interaction_id)
+            await interaction.cleanup(interaction_id)

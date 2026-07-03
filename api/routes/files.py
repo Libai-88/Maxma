@@ -2,11 +2,17 @@
 
 import asyncio
 import logging
+import os
 from fastapi import APIRouter, HTTPException
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _is_local_runtime() -> bool:
+    """判断当前是否处于本地开发/桌面运行时（非 production 部署）。"""
+    return os.environ.get("MAXMA_ENV", "") != "production"
 
 
 @router.get("/select-file")
@@ -16,6 +22,12 @@ async def select_file(type: str = "file"):
     仅在本地开发环境可用（对话框在服务器端弹出）。
     type: "file" 选择文件, "folder" 选择文件夹
     """
+    if not _is_local_runtime():
+        raise HTTPException(
+            status_code=403,
+            detail="select-file 仅在本地开发/桌面运行时可用",
+        )
+
     try:
         import tkinter as tk
         from tkinter import filedialog

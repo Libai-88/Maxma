@@ -10,9 +10,10 @@ from typing import Annotated, Any, Literal, Union
 import yaml
 from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app_paths import MCP_CONFIG_PATH
+from tools.mcp_security import validate_stdio_command
 
 _CONFIG_PATH = MCP_CONFIG_PATH
 
@@ -61,6 +62,14 @@ class StdioServerConfig(_BaseServerMixin):
     args: list[str] = []
     env: dict[str, str] | None = None
     cwd: str | None = None
+
+    @field_validator("command")
+    @classmethod
+    def _validate_command(cls, v: str) -> str:
+        error = validate_stdio_command(v)
+        if error:
+            raise ValueError(error)
+        return v
 
     def to_connection(self) -> dict[str, Any]:
         conn: dict[str, Any] = {

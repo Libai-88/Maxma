@@ -310,11 +310,20 @@ class TestGetSafeBuiltins:
         assert safe["dict"] is builtins.dict
         assert safe["list"] is builtins.list
 
-    def test_import_is_present(self):
-        """__import__ is available in the safe builtins dict."""
+    def test_dangerous_builtins_removed(self):
+        """危险内置函数不应出现在受限 builtins 中。"""
         safe = get_safe_builtins()
-        assert "__import__" in safe
-        assert safe["__import__"] is builtins.__import__
+        dangerous = {
+            "__import__", "eval", "exec", "compile", "breakpoint", "input",
+            "exit", "quit",
+        }
+        for name in dangerous:
+            assert name not in safe, f"{name} should not be in safe builtins"
+
+    def test_open_is_replaced_wrapper(self):
+        """open() is replaced with the whitelisted wrapper."""
+        safe = get_safe_builtins()
+        assert safe["open"] is ps._whitelisted_open
 
     def test_builtins_key_is_self_referencing(self):
         """__builtins__ in the returned dict points to the dict itself."""

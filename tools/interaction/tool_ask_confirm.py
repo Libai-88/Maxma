@@ -47,23 +47,22 @@ class AskUserConfirmTool(ToolBase):
 
         ws = interaction.current_ws.get()
 
-        interaction_id, future = interaction.register()
-
-        await ws.send_json(
-            {
-                "type": "ask_user",
-                "payload": {
-                    "tool_name": self.name,
-                    "question": question,
-                    "mode": "confirm",
-                    "options": [],
-                    "interaction_id": interaction_id,
-                    "detail": detail,
-                },
-            }
-        )
+        interaction_id, future = await interaction.register()
 
         try:
+            await ws.send_json(
+                {
+                    "type": "ask_user",
+                    "payload": {
+                        "tool_name": self.name,
+                        "question": question,
+                        "mode": "confirm",
+                        "options": [],
+                        "interaction_id": interaction_id,
+                        "detail": detail,
+                    },
+                }
+            )
             answer = await asyncio.wait_for(future, timeout=300)
             # 校验用户是否输入了'确认'
             if isinstance(answer, str) and answer.strip() in ("确认", "确认执行", "confirm"):
@@ -79,4 +78,4 @@ class AskUserConfirmTool(ToolBase):
         except asyncio.CancelledError:
             return format_error("用户取消了确认")
         finally:
-            interaction.cleanup(interaction_id)
+            await interaction.cleanup(interaction_id)

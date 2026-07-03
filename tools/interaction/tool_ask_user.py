@@ -31,7 +31,7 @@ class AskUserTool(ToolBase):
             return format_error("question 不能为空")
 
         ws = interaction.current_ws.get()
-        interaction_id, future = interaction.register()
+        interaction_id, future = await interaction.register()
 
         try:
             await ws.send_json(
@@ -51,4 +51,4 @@ class AskUserTool(ToolBase):
         except asyncio.CancelledError:
             return format_error("用户取消了回复")
         finally:
-            interaction.cleanup(interaction_id)
+            await interaction.cleanup(interaction_id)

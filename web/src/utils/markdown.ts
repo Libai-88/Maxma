@@ -9,6 +9,148 @@ const md = new MarkdownIt({
   linkify: true, // 自动识别 URL 为可点击链接
 })
 
+// ── XSS 防御：无外部依赖的轻量级 HTML 消毒 ─────────────────
+// 因运行环境限制无法新增 npm 包，使用浏览器原生 DOMParser 实现。
+
+/** 危险标签：这些标签会执行代码或引入外部资源。 */
+const DANGEROUS_TAGS = new Set([
+  'script', 'style', 'iframe', 'frame', 'object', 'embed', 'applet',
+  'meta', 'link', 'base', 'form', 'input', 'textarea', 'select', 'option',
+  'noscript', 'template',
+])
+
+/** 允许保留但需清理属性的标签。 */
+const ALLOWED_TAGS = new Set([
+  'div', 'span', 'p', 'br', 'hr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'a', 'b', 'strong', 'i', 'em', 'u', 's', 'strike', 'del', 'ins',
+  'ul', 'ol', 'li', 'dl', 'dt', 'dd',
+  'blockquote', 'q', 'cite',
+  'pre', 'code',
+  'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'caption', 'colgroup', 'col',
+  'img', 'figure', 'figcaption',
+  'details', 'summary',
+  'mark', 'small', 'sub', 'sup', 'time',
+  'section', 'article', 'aside', 'header', 'footer', 'main', 'nav',
+])
+
+/** URL 属性：需要校验协议，防止 javascript: 伪协议。 */
+const URL_ATTRS = new Set([
+  'href', 'src', 'srcset', 'action', 'formaction', 'cite', 'poster', 'data',
+])
+
+const ALLOWED_URL_SCHEMES = new Set([
+  'http:', 'https:', 'mailto:', 'tel:', 'data:', 'ftp:', 'ftps:',
+])
+
+function isDangerousUrl(value: string): boolean {
+  const trimmed = value.trim().toLowerCase()
+  // 拦截 javascript:、vbscript:、data:text/html 等危险协议
+  if (/^(javascript|vbscript|data:text\/html|data:image\/svg\+xml)/i.test(trimmed)) {
+    return true
+  }
+  // 显式协议但不在白名单内
+  const match = trimmed.match(/^([a-z][a-z0-9+.-]*:)/i)
+  if (match && !ALLOWED_URL_SCHEMES.has(match[1].toLowerCase())) {
+    return true
+  }
+  return false
+}
+
+function sanitizeAttribute(name: string, value: string): string | null {
+  const lowerName = name.toLowerCase()
+
+  // 1. 事件处理器全部移除
+  if (lowerName.startsWith('on')) {
+    return null
+  }
+
+  // 2. 危险属性直接移除
+  if (
+    lowerName === 'style' ||
+    lowerName === 'contenteditable' ||
+    lowerName === 'draggable' ||
+    lowerName === 'form' ||
+    lowerName === 'formaction' ||
+    lowerName === 'manifest'
+  ) {
+    return null
+  }
+
+  // 3. URL 属性校验协议
+  if (URL_ATTRS.has(lowerName) && isDangerousUrl(value)) {
+    return null
+  }
+
+  return value
+}
+
+function sanitizeNode(node: Node): Node | null {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return node.cloneNode(false)
+  }
+
+  if (node.nodeType === Node.COMMENT_NODE) {
+    return null // 移除注释，防止条件注释等技巧
+  }
+
+  if (node.nodeType !== Node.ELEMENT_NODE) {
+    return null
+  }
+
+  const el = node as Element
+  const tag = el.tagName.toLowerCase()
+
+  // 移除危险标签（包括子树）
+  if (DANGEROUS_TAGS.has(tag)) {
+    return null
+  }
+
+  // 不在白名单的标签：只保留子节点内容（unwrap）
+  if (!ALLOWED_TAGS.has(tag)) {
+    const fragment = document.createDocumentFragment()
+    el.childNodes.forEach((child) => {
+      const sanitized = sanitizeNode(child)
+      if (sanitized) fragment.appendChild(sanitized)
+    })
+    return fragment
+  }
+
+  // 创建同类型元素（避免克隆可能存在的污染）
+  const safe = document.createElement(tag)
+  for (let i = 0; i < el.attributes.length; i++) {
+    const attr = el.attributes[i]
+    if (!attr) continue
+    const cleanValue = sanitizeAttribute(attr.name, attr.value)
+    if (cleanValue !== null) {
+      safe.setAttribute(attr.name, cleanValue)
+    }
+  }
+
+  el.childNodes.forEach((child) => {
+    const sanitized = sanitizeNode(child)
+    if (sanitized) safe.appendChild(sanitized)
+  })
+
+  return safe
+}
+
+/** 对 HTML 字符串进行消毒，移除危险标签、事件处理器与伪协议 URL。 */
+export function sanitizeHtml(input: string): string {
+  if (!input) return ''
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(input, 'text/html')
+  const fragment = document.createDocumentFragment()
+
+  Array.from(doc.body.childNodes).forEach((child) => {
+    const sanitized = sanitizeNode(child)
+    if (sanitized) fragment.appendChild(sanitized)
+  })
+
+  const wrapper = document.createElement('div')
+  wrapper.appendChild(fragment)
+  return wrapper.innerHTML
+}
+
 // GFM 任务列表：- [x] 已完成 / - [ ] 未完成
 md.use(taskLists, { enabled: true })
 
@@ -27,6 +169,7 @@ md.use(texmath, {
 })
 
 // 自定义 fence 渲染器：```html 代码块渲染为实际 HTML，而非源代码显示
+// 内容先经过 sanitizeHtml，避免 LLM 通过 html 代码块注入脚本。
 const defaultFence = md.renderer.rules.fence
 
 md.renderer.rules.fence = function (tokens, idx, options, env, self) {
@@ -36,7 +179,7 @@ md.renderer.rules.fence = function (tokens, idx, options, env, self) {
 
   // ```html 代码块：输出原始内容作为实际 HTML（不包裹 <pre><code>）
   if (lang === 'html') {
-    return token.content
+    return sanitizeHtml(token.content)
   }
 
   // 其他语言：使用默认渲染（转义后包裹 <pre><code>）
@@ -50,36 +193,51 @@ md.renderer.rules.fence = function (tokens, idx, options, env, self) {
 // Map 保持插入顺序，满时删除最早插入的条目（FIFO 淘汰）
 const RENDER_CACHE_MAX = 200
 const renderCache = new Map<string, string>()
+const rawRenderCache = new Map<string, string>()
 
-function getCachedRender(input: string): string {
+function getCachedRender(input: string, sanitize = true): string {
+  const cache = sanitize ? renderCache : rawRenderCache
   // 命中：删除再插入以刷新为"最新"（近似 LRU）
-  if (renderCache.has(input)) {
-    const cached = renderCache.get(input)!
-    renderCache.delete(input)
-    renderCache.set(input, cached)
+  if (cache.has(input)) {
+    const cached = cache.get(input)!
+    cache.delete(input)
+    cache.set(input, cached)
     return cached
   }
   // 未命中：渲染并缓存
   const html = md.render(input)
-  if (renderCache.size >= RENDER_CACHE_MAX) {
+  const output = sanitize ? sanitizeHtml(html) : html
+  if (cache.size >= RENDER_CACHE_MAX) {
     // 删除最早插入的条目
-    const firstKey = renderCache.keys().next().value
+    const firstKey = cache.keys().next().value
     if (firstKey !== undefined) {
-      renderCache.delete(firstKey)
+      cache.delete(firstKey)
     }
   }
-  renderCache.set(input, html)
-  return html
+  cache.set(input, output)
+  return output
 }
 
-export function renderMarkdown(content: string): string {
+export interface RenderMarkdownOptions {
+  /** 是否对输出进行消毒（默认 true）。沙箱渲染可传 false 以保留原始交互式 HTML。 */
+  sanitize?: boolean
+}
+
+export function renderMarkdown(content: string, options: RenderMarkdownOptions = {}): string {
   if (!content) return ''
-  return getCachedRender(content)
+  return getCachedRender(content, options.sanitize !== false)
+}
+
+/** 渲染 Markdown 但不进行消毒，用于 iframe 沙箱等隔离环境。 */
+export function renderMarkdownRaw(content: string): string {
+  if (!content) return ''
+  return getCachedRender(content, false)
 }
 
 /** 清空渲染缓存（供调试或主题切换时使用）。 */
 export function clearRenderCache(): void {
   renderCache.clear()
+  rawRenderCache.clear()
 }
 
 /**
