@@ -141,6 +141,7 @@ def _rebuild(fingerprint: str) -> None:
     skills_content = _scan_anthropic_skills()
     macros_content = _scan_macros()
     narrative_content = get_narrative()
+    agents_md_content = _read_persona("AGENTS.md")
 
     # 拆分系统 prompt，将稳定内容（skills/macros 等保持不变的部分）
     # 放在前面，动态内容（记忆）放在末尾，
@@ -148,7 +149,7 @@ def _rebuild(fingerprint: str) -> None:
     # 记忆变化时不会导致 skills/macros 等稳定部分的缓存失效。
     _cached_parts = [
         {"key": "behavior_rules", "label": "系统行为规则",
-         "content": "## 行为规则\n" + _read_persona("AGENTS.md")},
+         "content": "## 行为规则\n" + agents_md_content},
         {"key": "personality", "label": "性格人设",
          "content": "## 性格设定\n" + soul_content},
         {"key": "user_self_report", "label": "用户自述",
@@ -165,7 +166,7 @@ def _rebuild(fingerprint: str) -> None:
     # 与 _cached_parts 保持一致顺序：稳定内容在前，记忆放最后
     full_parts = [
         "## 行为规则",
-        _read_persona("AGENTS.md"),
+        agents_md_content,
         "",
         "## 性格设定",
         soul_content,

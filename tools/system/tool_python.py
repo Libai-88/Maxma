@@ -21,47 +21,42 @@ MAX_TIMEOUT = 120  # 最大超时（秒）
 MAX_MEMORY_MB = 512  # 最大内存（MB）
 
 # 沙箱执行器脚本 — 在子进程中运行用户代码
-_SANDBOX_WRAPPER = '''
-import sys
-import json
-import traceback
+# 使用受限的 __builtins__ 防止文件系统逃逸和危险操作
+_SANDBOX_WRAPPER = r'''
+import sys, json, traceback, io as _io
+
+# 受限 builtins：禁止文件 I/O、代码执行、动态 import
+_DANGEROUS = frozenset({"open", "exec", "eval", "compile", "__import__", "input", "breakpoint", "help"})
+if isinstance(__builtins__, dict):
+    _src = __builtins__
+else:
+    _src = __builtins__.__dict__
+_safe_builtins = {_k: _v for _k, _v in _src.items() if _k not in _DANGEROUS}
 
 code = sys.stdin.read()
-
-# 捕获 stdout/stderr
-import io
 old_stdout = sys.stdout
 old_stderr = sys.stderr
-sys.stdout = io.StringIO()
-sys.stderr = io.StringIO()
+sys.stdout = _io.StringIO()
+sys.stderr = _io.StringIO()
 
 exit_code = 0
-output = ""
-error_msg = ""
-
 try:
-    exec(code, {"__name__": "__main__"})
-    output = sys.stdout.getvalue()
-    error_msg = sys.stderr.getvalue()
+    exec(code, {"__name__": "__main__", "__builtins__": _safe_builtins})
+    _stdout = sys.stdout.getvalue()
+    _stderr = sys.stderr.getvalue()
 except SystemExit as e:
-    output = sys.stdout.getvalue()
-    error_msg = sys.stderr.getvalue()
+    _stdout = sys.stdout.getvalue()
+    _stderr = sys.stderr.getvalue()
     exit_code = e.code if isinstance(e.code, int) else 1
 except Exception:
-    output = sys.stdout.getvalue()
-    error_msg = traceback.format_exc()
+    _stdout = sys.stdout.getvalue()
+    _stderr = traceback.format_exc()
     exit_code = 1
 finally:
     sys.stdout = old_stdout
     sys.stderr = old_stderr
 
-# 输出结构化结果
-result = {
-    "stdout": output or "",
-    "stderr": error_msg or "",
-    "exit_code": exit_code,
-}
-print(json.dumps(result, ensure_ascii=False))
+print(json.dumps({"stdout": _stdout or "", "stderr": _stderr or "", "exit_code": exit_code}, ensure_ascii=False))
 '''
 
 
@@ -75,13 +70,6 @@ def _run_in_sandbox(code: str, timeout: int = DEFAULT_TIMEOUT) -> dict:
     Returns:
         dict with keys: stdout, stderr, exit_code, timed_out
     """
-    # 创建临时文件写入用户代码
-    with tempfile.NamedTemporaryFile(
-        mode='w', suffix='.py', delete=False, encoding='utf-8'
-    ) as f:
-        f.write(code)
-        code_file = f.name
-
     try:
         # 构建子进程命令
         cmd = [sys.executable, "-c", _SANDBOX_WRAPPER]
@@ -103,9 +91,6 @@ def _run_in_sandbox(code: str, timeout: int = DEFAULT_TIMEOUT) -> dict:
             env=env,
             cwd=tempfile.gettempdir(),  # 在临时目录执行，防止访问项目文件
         )
-
-        # 设置内存限制（Windows 使用 job object，Linux 使用 resource）
-        _apply_memory_limit(proc, MAX_MEMORY_MB)
 
         try:
             stdout, stderr = proc.communicate(
@@ -144,65 +129,13 @@ def _run_in_sandbox(code: str, timeout: int = DEFAULT_TIMEOUT) -> dict:
                 "timed_out": False,
             }
 
-    finally:
-        # 清理临时文件
-        try:
-            os.unlink(code_file)
-        except OSError:
-            pass
-
-
-def _apply_memory_limit(proc: subprocess.Popen, max_mb: int) -> None:
-    """尝试为子进程设置内存限制。
-
-    Windows: 使用 Job Object 限制内存
-    Linux: 使用 resource 模块（通过 preexec_fn）
-    """
-    if sys.platform == 'win32':
-        try:
-            import ctypes
-            from ctypes import wintypes
-
-            # 创建 Job Object
-            job = ctypes.windll.kernel32.CreateJobObjectW(None, None)
-            if job:
-                # JOBJECT_LIMIT_INFO 结构
-                class JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
-                    _fields_ = [
-                        ("BasicLimitInformation", ctypes.c_uint32 * 4),
-                        ("IoInfo", ctypes.c_uint64 * 3),
-                        ("ProcessMemoryLimit", ctypes.c_size_t),
-                        ("PeakProcessMemoryUsed", ctypes.c_size_t),
-                        ("JobMemoryLimit", ctypes.c_size_t),
-                        ("PeakJobMemoryUsed", ctypes.c_size_t),
-                    ]
-
-                limit_info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
-                limit_info.ProcessMemoryLimit = max_mb * 1024 * 1024  # 转换为字节
-
-                # JobObjectExtendedLimitInformation = 9
-                ctypes.windll.kernel32.SetInformationJobObject(
-                    job, 9, ctypes.byref(limit_info), ctypes.sizeof(limit_info)
-                )
-
-                # 将进程分配到 Job Object
-                ctypes.windll.kernel32.AssignProcessToJobObject(job, proc._handle)
-        except Exception:
-            pass  # 内存限制失败不阻塞执行
-    else:
-        # Linux: 使用 resource 模块
-        try:
-            import resource
-
-            def set_limits():
-                # RLIMIT_AS: 虚拟内存限制
-                max_bytes = max_mb * 1024 * 1024
-                resource.setrlimit(resource.RLIMIT_AS, (max_bytes, max_bytes))
-
-            # 注意：preexec_fn 在 Popen 中已弃用，但在此场景下仍可用
-            # 如果需要更可靠的方案，可以使用 subprocess.Popen 的 start_new_session 参数
-        except Exception:
-            pass
+    except Exception as e:
+        return {
+            "stdout": "",
+            "stderr": f"沙箱执行失败: {e}",
+            "exit_code": -1,
+            "timed_out": False,
+        }
 
 
 class RunPythonInput(BaseModel):

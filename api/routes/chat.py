@@ -692,7 +692,7 @@ async def _run_agent_turn(
             )
 
 
-def _resume_sub_agent(ws: WebSocket, session: SessionState) -> asyncio.Task | None:
+async def _resume_sub_agent(ws: WebSocket, session: SessionState) -> asyncio.Task | None:
     """WebSocket 重连时，若会话有未完成的 sub-agent 任务则自动恢复执行。"""
     if session._sub_agent_task is None or session._pending_result is None:
         return None
@@ -740,7 +740,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
     await ws.send_json({"type": "context_usage", "payload": initial_usage})
 
     # ── 断线重连时恢复 sub-agent ──────────────────────────
-    agent_task = _resume_sub_agent(ws, session)
+    agent_task = await _resume_sub_agent(ws, session)
 
     # ── 消息主循环 ────────────────────────────────────────
     try:
@@ -803,7 +803,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                         elif action == "modify" and modified_plan:
                             interaction.resolve(plan_id, modified_plan)
                         else:
-                            interaction.resolve(plan_id, "approve")
+                            interaction.resolve(plan_id, "reject")
 
                 case "cancel":
                     if agent_task and not agent_task.done():
