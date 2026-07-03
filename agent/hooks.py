@@ -331,7 +331,10 @@ class HookManager:
                     self._schedule_tasks[hook.hook_id] = task
             self._loop.call_soon_threadsafe(_create_task)
         else:
-            # 直接在当前循环中创建
+            logger.warning(
+                "Hook '%s' schedule not started: no event loop available",
+                hook.name,
+            )
             task = asyncio.create_task(_schedule_loop())
             with self._lock:
                 self._schedule_tasks[hook.hook_id] = task

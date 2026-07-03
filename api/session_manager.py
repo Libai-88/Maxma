@@ -123,6 +123,10 @@ class SessionManager:
             if s.is_const:
                 continue
             if s._active_task is not None and not s._active_task.done():
+                # 活跃任务只有在超过 TTL 后才强制取消（防止卡住任务永久泄漏）
+                if now - s.last_active > self._ttl:
+                    s._active_task.cancel()
+                    expired.append(sid)
                 continue
             if now - s.last_active > self._ttl:
                 expired.append(sid)
