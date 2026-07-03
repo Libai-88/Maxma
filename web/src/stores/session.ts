@@ -12,13 +12,13 @@ export const useSessionStore = defineStore('session', () => {
   let _initialized = false
   let _initPromise: Promise<void> | null = null
 
-  async function initIfNeeded() {
+  async function initIfNeeded(retries = 5, delayMs = 1000) {
     if (_initialized) return
     if (_initPromise) { await _initPromise; return }
 
-    _initPromise = (async () => {
-      const stored = localStorage.getItem(STORAGE_KEY)
+    for (let attempt = 1; attempt <= retries; attempt++) {
       try {
+        const stored = localStorage.getItem(STORAGE_KEY)
         if (stored) {
           try {
             await api.getSession(stored)
@@ -32,14 +32,18 @@ export const useSessionStore = defineStore('session', () => {
         await refreshSessions()
         cleanupOrphanedCaches()
         _initialized = true
+        return
       } catch (e) {
-        console.error('[session] init failed, will retry:', e)
+        console.error(`[session] init failed (attempt ${attempt}/${retries}), retrying in ${delayMs}ms:`, e)
         _initialized = false
-      } finally {
-        _initPromise = null
+        if (attempt < retries) {
+          await new Promise(r => setTimeout(r, delayMs))
+          delayMs *= 1.5  // 指数退避
+        } else {
+          console.error('[session] init failed after all retries')
+        }
       }
-    })()
-    await _initPromise
+    }
   }
 
   async function refreshSessions() {
