@@ -568,20 +568,20 @@ async def _run_agent_turn(
             )
     except asyncio.CancelledError:
         # 清理 interaction 挂起 Future
-        interaction.cancel_session(session.session_id)
+        await interaction.cancel_session(session.session_id)
 
         # 修复 checkpoint：为孤立 tool_calls 注入取消 ToolMessage，并通知前端
         try:
             await _inject_cancel_tool_messages(session, config, ws)
         except Exception as e:
-            print(f"[cancel] checkpoint cleanup error: {e}", file=sys.stderr)
+            logger.warning("[cancel] checkpoint cleanup error: %s", e)
 
         await ws.send_json(
             format_ws_error(ErrorCode.CANCELLED, "生成已取消")
         )
     except Exception as e:
         # 清理可能挂起的用户交互 Future，防止阻塞后续交互
-        interaction.cancel_session(session.session_id, "Agent 执行出错，交互已取消")
+        await interaction.cancel_session(session.session_id, "Agent 执行出错，交互已取消")
         _run_error = str(e)
         trace_id = uuid.uuid4().hex[:8]
         logger.error(
@@ -788,7 +788,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                     interaction_id = payload.get("interaction_id", "")
                     response = payload.get("response", "")
                     if interaction_id:
-                        interaction.resolve(interaction_id, response)
+                        await interaction.resolve(interaction_id, response)
 
                 case "plan_response":
                     payload = msg.get("payload", {})
@@ -797,13 +797,13 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                     modified_plan = payload.get("modified_plan", "")
                     if plan_id:
                         if action == "approve":
-                            interaction.resolve(plan_id, "approve")
+                            await interaction.resolve(plan_id, "approve")
                         elif action == "reject":
-                            interaction.resolve(plan_id, "reject")
+                            await interaction.resolve(plan_id, "reject")
                         elif action == "modify" and modified_plan:
-                            interaction.resolve(plan_id, modified_plan)
+                            await interaction.resolve(plan_id, modified_plan)
                         else:
-                            interaction.resolve(plan_id, "reject")
+                            await interaction.resolve(plan_id, "reject")
 
                 case "cancel":
                     if agent_task and not agent_task.done():

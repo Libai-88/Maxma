@@ -44,43 +44,56 @@ _pending: dict[str, asyncio.Future] = {}
 _pending_sessions: dict[str, str] = {}
 _pending_by_session: dict[str, set[str]] = {}
 
-
-def register(session_id: str | None = None) -> tuple[str, asyncio.Future]:
-    """注册一次待处理的用户交互，返回 (interaction_id, future)。"""
-    interaction_id = uuid.uuid4().hex
-    future: asyncio.Future = asyncio.Future()
-    _pending[interaction_id] = future
-    resolved_session_id = session_id if session_id is not None else current_session_id.get()
-    if resolved_session_id:
-        _pending_sessions[interaction_id] = resolved_session_id
-        _pending_by_session.setdefault(resolved_session_id, set()).add(interaction_id)
-    return interaction_id, future
+# 保护上述全局状态在并发注册/取消/解析时的一致性
+_lock = asyncio.Lock()
 
 
-def resolve(interaction_id: str, response) -> bool:
+async def register(
+    session_id: str | None = None,
+    interaction_id: str | None = None,
+) -> tuple[str, asyncio.Future]:
+    """注册一次待处理的用户交互，返回 (interaction_id, future)。
+
+    调用方可传入固定的 interaction_id（如 plan_id），用于需要前端
+    通过已知 ID 回传响应的场景；未传入时随机生成 UUID。
+    """
+    async with _lock:
+        resolved_id = interaction_id or uuid.uuid4().hex
+        future: asyncio.Future = asyncio.Future()
+        _pending[resolved_id] = future
+        resolved_session_id = session_id if session_id is not None else current_session_id.get()
+        if resolved_session_id:
+            _pending_sessions[resolved_id] = resolved_session_id
+            _pending_by_session.setdefault(resolved_session_id, set()).add(resolved_id)
+        return resolved_id, future
+
+
+async def resolve(interaction_id: str, response) -> bool:
     """用用户响应结果唤醒并解决挂起的 Future。返回是否成功。"""
-    future = _pending.get(interaction_id)
-    if not future:
-        return False
-    if future.done():
-        return False
-    future.set_result(response)
-    return True
+    async with _lock:
+        future = _pending.get(interaction_id)
+        if not future:
+            return False
+        if future.done():
+            return False
+        future.set_result(response)
+        return True
 
 
-def cleanup(interaction_id: str):
+async def cleanup(interaction_id: str):
     """清理（超时或取消时调用）。"""
-    _pending.pop(interaction_id, None)
-    session_id = _pending_sessions.pop(interaction_id, None)
-    if session_id:
-        session_pending = _pending_by_session.get(session_id)
-        if session_pending is not None:
-            session_pending.discard(interaction_id)
-            if not session_pending:
-                _pending_by_session.pop(session_id, None)
+    async with _lock:
+        _pending.pop(interaction_id, None)
+        session_id = _pending_sessions.pop(interaction_id, None)
+        if session_id:
+            session_pending = _pending_by_session.get(session_id)
+            if session_pending is not None:
+                session_pending.discard(interaction_id)
+                if not session_pending:
+                    _pending_by_session.pop(session_id, None)
 
 
-def cancel_all(reason: str | None = None, session_id: str | None = None):
+async def cancel_all(reason: str | None = None, session_id: str | None = None):
     """将挂起的交互 Future 以取消原因标记为已完成。
 
     默认保留历史兼容行为：无 session_id 时取消所有挂起交互。
@@ -89,21 +102,29 @@ def cancel_all(reason: str | None = None, session_id: str | None = None):
     if reason is None:
         reason = "用户取消了该工具调用"
     formatted = format_error(reason)
-    if session_id:
-        interaction_ids = list(_pending_by_session.get(session_id, set()))
-    else:
-        interaction_ids = list(_pending.keys())
+    async with _lock:
+        if session_id:
+            interaction_ids = list(_pending_by_session.get(session_id, set()))
+        else:
+            interaction_ids = list(_pending.keys())
 
-    for interaction_id in interaction_ids:
-        future = _pending.get(interaction_id)
-        if future is None:
-            cleanup(interaction_id)
-            continue
-        if not future.done():
-            future.set_result(formatted)
-        cleanup(interaction_id)
+        for interaction_id in interaction_ids:
+            future = _pending.get(interaction_id)
+            if future is None:
+                continue
+            if not future.done():
+                future.set_result(formatted)
+            # 在持有锁的情况下同步清理，避免 await 导致锁释放期间状态变化
+            _pending.pop(interaction_id, None)
+            removed_session_id = _pending_sessions.pop(interaction_id, None)
+            if removed_session_id:
+                session_pending = _pending_by_session.get(removed_session_id)
+                if session_pending is not None:
+                    session_pending.discard(interaction_id)
+                    if not session_pending:
+                        _pending_by_session.pop(removed_session_id, None)
 
 
-def cancel_session(session_id: str, reason: str | None = None):
+async def cancel_session(session_id: str, reason: str | None = None):
     """取消指定会话的挂起交互。"""
-    cancel_all(reason=reason, session_id=session_id)
+    await cancel_all(reason=reason, session_id=session_id)

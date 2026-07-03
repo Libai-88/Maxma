@@ -403,12 +403,34 @@ def _whitelisted_open(
     )
 
 
-def get_safe_builtins() -> dict:
-    """构造用于 ``exec()`` 的安全 builtins 字典。
+# 允许在受限 exec 环境中保留的安全内置名称。
+# 仅包含纯计算/数据结构/基本 I/O（print）相关的内置函数；
+# 任何可能导致代码执行、文件系统访问或进程控制的内置函数均被排除。
+_SAFE_BUILTIN_NAMES: frozenset[str] = frozenset({
+    "abs", "aiter", "all", "anext", "any", "ascii", "bin", "bool", "bytearray",
+    "bytes", "callable", "chr", "classmethod", "complex", "delattr", "dict",
+    "dir", "divmod", "enumerate", "filter", "float", "format", "frozenset",
+    "getattr", "globals", "hasattr", "hash", "hex", "id", "int",
+    "isinstance", "issubclass", "iter", "len", "list", "locals", "map", "max",
+    "memoryview", "min", "next", "object", "oct", "ord", "pow", "print",
+    "property", "range", "repr", "reversed", "round", "set", "slice", "sorted",
+    "staticmethod", "str", "sum", "super", "tuple", "type", "vars", "zip",
+})
 
-    保留全部内置函数（包括 ``__import__``、``eval`` 等），
-    仅将 ``open()`` 替换为经过 ``check_path_whitelisted()``
-    审查的包装版本。日常计算、模块导入、调试等功能均不受影响。
+# 明确禁止在受限 exec 中使用的危险内置函数。
+_DANGEROUS_BUILTIN_NAMES: frozenset[str] = frozenset({
+    "__import__", "breakpoint", "compile", "copyright", "credits", "eval",
+    "exec", "exit", "input", "license", "open", "quit",
+})
+
+
+def get_safe_builtins() -> dict:
+    """构造用于 ``exec()`` 的受限 builtins 字典。
+
+    仅保留常见计算/数据结构相关的内置函数，移除所有可能导致代码执行、
+    文件系统访问或进程控制的内置函数（如 ``__import__``、``eval``、``exec``、
+    ``compile``、``breakpoint``、``open`` 等）。``open()`` 被替换为经过
+    ``check_path_whitelisted()`` 审查的白名单包装版本。
     """
     # 在非 __main__ 模块中，__builtins__ 是模块对象而非 dict
     if isinstance(__builtins__, dict):  # type: ignore[name-defined]
@@ -416,7 +438,11 @@ def get_safe_builtins() -> dict:
     else:
         source = __builtins__.__dict__  # type: ignore[name-defined]
 
-    safe: dict = dict(source)  # type: ignore[arg-type]
+    safe: dict = {
+        name: value
+        for name, value in source.items()  # type: ignore[arg-type]
+        if name in _SAFE_BUILTIN_NAMES and name not in _DANGEROUS_BUILTIN_NAMES
+    }
     safe["open"] = _whitelisted_open
     safe["__builtins__"] = safe
     return safe

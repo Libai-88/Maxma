@@ -16,6 +16,7 @@ from tools.mcp import (
     load_mcp_config,
     reload_mcp,
 )
+from tools.mcp_security import validate_stdio_command
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +93,9 @@ def _build_server_dict(body: MCPServerCreateBody) -> dict:
     if t == "stdio":
         if not body.command:
             raise HTTPException(status_code=400, detail="stdio 模式必须指定 command")
+        error = validate_stdio_command(body.command)
+        if error:
+            raise HTTPException(status_code=400, detail=error)
         d["command"] = body.command
         if body.args:
             d["args"] = body.args
@@ -210,6 +214,10 @@ async def update_mcp_server(
 
         # 部分更新：只更新非 None 字段
         update_fields = body.model_dump(exclude_unset=True)
+        if "command" in update_fields:
+            error = validate_stdio_command(update_fields["command"])
+            if error:
+                raise HTTPException(status_code=400, detail=error)
         for key, value in update_fields.items():
             target[key] = value
 

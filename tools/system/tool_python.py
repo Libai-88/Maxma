@@ -33,6 +33,11 @@ else:
     _src = __builtins__.__dict__
 _safe_builtins = {_k: _v for _k, _v in _src.items() if _k not in _DANGEROUS}
 
+# 显式拦截 import 语句，给出清晰错误，而不是让 __import__ 缺失导致隐式失败。
+def _blocked_import(*args, **kwargs):
+    raise ImportError("沙箱中已禁用模块导入")
+_safe_builtins["__import__"] = _blocked_import
+
 code = sys.stdin.read()
 old_stdout = sys.stdout
 old_stderr = sys.stderr
@@ -60,6 +65,26 @@ print(json.dumps({"stdout": _stdout or "", "stderr": _stderr or "", "exit_code":
 '''
 
 
+# 允许传入沙箱子进程的环境变量白名单。
+# 使用白名单而非黑名单，避免攻击者通过变换变量名绕过过滤。
+_ALLOWED_ENV_VARS: frozenset[str] = frozenset({
+    # Windows / Python 运行必需
+    "PATH", "PATHEXT", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR",
+    "TEMP", "TMP", "USERPROFILE", "HOMEDRIVE", "HOMEPATH",
+    "PYTHONUTF8", "PYTHONIOENCODING", "PYTHONLEGACYWINDOWSSTDIO",
+    "PYTHONHOME", "PYTHONPATH",
+})
+
+
+def _build_sandbox_env() -> dict[str, str]:
+    """构建沙箱子进程使用的环境变量字典（白名单过滤）。"""
+    return {
+        key: value
+        for key, value in os.environ.items()
+        if key.upper() in _ALLOWED_ENV_VARS
+    }
+
+
 def _run_in_sandbox(code: str, timeout: int = DEFAULT_TIMEOUT) -> dict:
     """在独立子进程中执行 Python 代码。
 
@@ -74,13 +99,8 @@ def _run_in_sandbox(code: str, timeout: int = DEFAULT_TIMEOUT) -> dict:
         # 构建子进程命令
         cmd = [sys.executable, "-c", _SANDBOX_WRAPPER]
 
-        # 准备环境变量 — 限制子进程环境
-        env = os.environ.copy()
-        # 移除可能的敏感环境变量
-        _secret_patterns = ("API_", "SECRET", "TOKEN", "KEY", "PASSWORD", "PASSWD", "_KEY")
-        for key in list(env.keys()):
-            if any(p in key.upper() for p in _secret_patterns):
-                del env[key]
+        # 使用白名单限制子进程环境变量，防止敏感信息泄漏
+        env = _build_sandbox_env()
 
         # 启动子进程
         proc = subprocess.Popen(
@@ -180,7 +200,7 @@ class RunPythonTool(ToolBase):
                 return format_error(f"沙箱执行错误: {e}")
 
         ws = interaction.current_ws.get()
-        interaction_id, future = interaction.register()
+        interaction_id, future = await interaction.register()
 
         await ws.send_json(
             {
@@ -223,7 +243,7 @@ class RunPythonTool(ToolBase):
         except asyncio.CancelledError:
             return format_error("用户取消了回复")
         finally:
-            interaction.cleanup(interaction_id)
+            await interaction.cleanup(interaction_id)
 
     def _format_result(self, result: dict, code: str) -> str:
         """格式化沙箱执行结果。"""

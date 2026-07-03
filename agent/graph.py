@@ -125,16 +125,9 @@ async def _request_plan_confirmation(
     timeout: float = 120,
 ):
     """发送计划确认请求并确保所有 pending 映射最终被清理。"""
-    interaction_id: str | None = None
     future: asyncio.Future | None = None
     try:
-        interaction_id, future = interaction.register()
-        interaction._pending[plan_id] = future
-        # 同步将 plan_id 加入会话跟踪，确保 cancel_session 能正常清理
-        session_id = interaction.current_session_id.get()
-        if session_id:
-            interaction._pending_sessions[plan_id] = session_id
-            interaction._pending_by_session.setdefault(session_id, set()).add(plan_id)
+        _, future = await interaction.register(interaction_id=plan_id)
         await ws.send_json({
             "type": "plan_proposed",
             "payload": {
@@ -153,9 +146,7 @@ async def _request_plan_confirmation(
     finally:
         if future is not None and not future.done():
             future.cancel()
-        interaction.cleanup(plan_id)
-        if interaction_id is not None:
-            interaction.cleanup(interaction_id)
+        await interaction.cleanup(plan_id)
 
 
 def build_agent(

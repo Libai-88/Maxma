@@ -115,26 +115,25 @@ class SessionManager:
         return result
 
     async def cleanup_expired(self) -> int:
+        """清理过期会话。所有判断与删除在锁内完成，避免检查与清理之间状态变化导致误删。"""
         now = time.time()
-        expired = []
+        expired_count = 0
         async with self._lock:
-            items = list(self._sessions.items())
-        for sid, s in items:
-            if s.is_const:
-                continue
-            if s._active_task is not None and not s._active_task.done():
-                # 活跃任务只有在超过 TTL 后才强制取消（防止卡住任务永久泄漏）
+            # 使用 list() 复制键值，避免遍历期间修改 dict
+            for sid, s in list(self._sessions.items()):
+                if s.is_const:
+                    continue
+                if s._active_task is not None and not s._active_task.done():
+                    # 活跃任务只有在超过 TTL 后才强制取消（防止卡住任务永久泄漏）
+                    if now - s.last_active > self._ttl:
+                        s._active_task.cancel()
+                        self._sessions.pop(sid, None)
+                        expired_count += 1
+                    continue
                 if now - s.last_active > self._ttl:
-                    s._active_task.cancel()
-                    expired.append(sid)
-                continue
-            if now - s.last_active > self._ttl:
-                expired.append(sid)
-        if expired:
-            async with self._lock:
-                for sid in expired:
                     self._sessions.pop(sid, None)
-        return len(expired)
+                    expired_count += 1
+        return expired_count
 
     async def session_count(self) -> int:
         """返回当前活跃会话数（不含子 Agent）。"""

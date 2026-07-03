@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from app_paths import MCP_CONFIG_PATH
 from tools.base import ToolBase, format_error, format_success
+from tools.mcp_security import validate_stdio_command
 
 
 class ManageMCPInput(BaseModel):
@@ -110,6 +111,9 @@ class ManageMCPTool(ToolBase):
             if t == "stdio":
                 if not command:
                     return format_error("stdio 模式必须指定 command（如 npx, python）")
+                error = validate_stdio_command(command)
+                if error:
+                    return format_error(error)
                 d["command"] = command
                 if args:
                     d["args"] = [a.strip() for a in args.split("|") if a.strip()]
