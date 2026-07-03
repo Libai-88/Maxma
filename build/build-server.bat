@@ -37,14 +37,17 @@ if not exist ".venv\Scripts\activate.bat" (
 REM 激活虚拟环境
 call .venv\Scripts\activate.bat
 
-REM 检查 PyInstaller
-%PYTHON_EXE% -c "import PyInstaller" 2>nul
-if errorlevel 1 (
+REM 检查并设置 PyInstaller
+set "HAS_PYI=0"
+%PYTHON_EXE% -c "import PyInstaller" 2>nul && set "HAS_PYI=1"
+if "%HAS_PYI%"=="0" (
     if exist "%PYI_SITE_PACKAGES%\PyInstaller\__init__.py" (
         echo [INFO] 从系统库加载 PyInstaller：%PYI_SITE_PACKAGES%
-        set "PYTHONPATH=%PI_SITE_PACKAGES%"
+        set "PYTHONPATH=%PYI_SITE_PACKAGES%;%PYTHONPATH%"
     ) else (
-        echo [ERROR] 未找到 PyInstaller，请在 venv 中安装
+        echo [ERROR] 未找到 PyInstaller。
+        echo   请确认 %PYI_SITE_PACKAGES% 下存在 PyInstaller
+        echo   或运行：%PYTHON_EXE% -m pip install pyinstaller
         exit /b 1
     )
 )
