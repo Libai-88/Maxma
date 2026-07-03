@@ -64,7 +64,7 @@ if exist "%DIST_EXE%" (
 REM 构建前端
 echo [1/4] 构建前端...
 cd web
-call npm run build --silent 2>nul
+call npm run build 2>&1
 if errorlevel 1 (
     echo [ERROR] 前端构建失败
     exit /b 1
