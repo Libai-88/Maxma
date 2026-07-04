@@ -1,5 +1,0 @@
-fix(api,tests): 修正异步 session_manager.delete 调用与对应测试
-
-- api/server.py: 事件钩子 finally 中 await session_manager.delete()
-- tests/test_agent/test_graph.py: _FakeInteraction.register/cleanup 改为 async，匹配 interaction API
-- tests/test_api/test_event_hook_callback.py: mock 的 session_manager.create/delete 改为 async
