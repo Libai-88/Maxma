@@ -8,6 +8,7 @@ from version import __version__
 from api.logging_config import setup_logging
 from api.server import create_app
 from app_paths import ensure_data_dirs
+from config.settings import get_settings
 from memory.user_init import ensure_all
 
 
@@ -34,11 +35,12 @@ def main():
 
     app = create_app()
 
+    settings = get_settings()
     dev_mode = "--dev" in sys.argv
     uvicorn.run(
         app,
         host="127.0.0.1",
-        port=8000,
+        port=settings.maxma_api_port,
         reload=dev_mode,
         reload_dirs=["agent", "api", "tools", "memory"] if dev_mode else None,
     )

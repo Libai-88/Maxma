@@ -2,14 +2,18 @@
 
 cd /d "%~dp0"
 
+REM 端口配置：优先读取环境变量，未设置则使用默认值
+if "%MAXMA_API_PORT%"=="" set "MAXMA_API_PORT=8000"
+if "%MAXMA_WEB_PORT%"=="" set "MAXMA_WEB_PORT=5173"
+
 echo ========================================
 echo   MaxmaHere Startup
 echo ========================================
 echo.
 
 REM Step 0: Clean up stale backend process
-echo [0/5] Cleaning stale processes on port 8000...
-powershell -NoProfile -ExecutionPolicy Bypass -File build\port-guard.ps1 -PortsStr "8000"
+echo [0/5] Cleaning stale processes on port %MAXMA_API_PORT%...
+powershell -NoProfile -ExecutionPolicy Bypass -File build\port-guard.ps1 -PortsStr "%MAXMA_API_PORT%"
 echo.
 
 if not exist "main.py" (
@@ -33,13 +37,13 @@ if not exist "web\node_modules" (
     exit /b 1
 )
 
-echo [1/5] Starting backend (FastAPI :8000) ...
+echo [1/5] Starting backend (FastAPI :%MAXMA_API_PORT%) ...
 start "MaxmaHere Backend" /d "%~dp0" cmd /k ".venv\Scripts\python main.py web"
 
 echo [2/5] Waiting for backend ...
 set "READY=0"
 for /L %%i in (1,1,30) do (
-    curl -s http://localhost:8000/api/health >nul 2>&1
+    curl -s http://localhost:%MAXMA_API_PORT%/api/health >nul 2>&1
     if not errorlevel 1 (
         set "READY=1"
         goto :backend_ready
@@ -54,13 +58,13 @@ if "%READY%"=="0" (
     echo        Backend ready.
 )
 
-echo [3/5] Starting frontend (Vite :5173) ...
+echo [3/5] Starting frontend (Vite :%MAXMA_WEB_PORT%) ...
 start "MaxmaHere Frontend" /d "%~dp0web" cmd /k "npm run dev"
 
 echo [4/5] Waiting for frontend ...
 set "READY=0"
 for /L %%i in (1,1,20) do (
-    curl -s http://localhost:5173 >nul 2>&1
+    curl -s http://localhost:%MAXMA_WEB_PORT% >nul 2>&1
     if not errorlevel 1 (
         set "READY=1"
         goto :frontend_ready
@@ -70,13 +74,13 @@ for /L %%i in (1,1,20) do (
 :frontend_ready
 
 echo [5/5] Opening browser...
-start "" http://localhost:5173
+start "" http://localhost:%MAXMA_WEB_PORT%
 
 echo.
 echo ========================================
 echo   All services started
-echo   Backend:  http://localhost:8000
-echo   Frontend: http://localhost:5173
+echo   Backend:  http://localhost:%MAXMA_API_PORT%
+echo   Frontend: http://localhost:%MAXMA_WEB_PORT%
 echo ========================================
 echo.
 echo Close the two server windows to stop.

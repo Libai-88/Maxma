@@ -32,6 +32,11 @@ dependencies = [
     "zai-sdk",
 ]
 
+[project.urls]
+Homepage = "https://github.com/Libai-88/Maxma"
+Repository = "https://github.com/Libai-88/Maxma.git"
+Issues = "https://github.com/Libai-88/Maxma/issues"
+
 [project.optional-dependencies]
 dev = [
     "pre-commit>=4.0.0",

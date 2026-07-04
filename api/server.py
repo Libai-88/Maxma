@@ -22,6 +22,7 @@ from api.const_session_store import (
 )
 from api.dependencies import get_llm, get_system_prompt, get_tools
 from api.health import get_health_report
+from api.cors_config import build_cors_origins
 from api.logging_config import setup_logging
 from api.providers.manager import ProviderManager
 from api.providers.store import ProviderConfigStore
@@ -372,19 +373,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS：开发环境仅放行 Vite（5173），生产环境加 localhost:8000 + Tauri 协议
-    cors_origins = [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ]
-    if os.environ.get("MAXMA_ENV") == "production":
-        cors_origins += [
-            "http://localhost:8000",
-            "http://127.0.0.1:8000",
-            # Tauri v2 协议
-            "tauri://localhost",
-            "https://tauri.localhost",
-        ]
+    cors_origins = build_cors_origins()
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,
