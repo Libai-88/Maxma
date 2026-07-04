@@ -8,9 +8,12 @@
 
 import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
 
-/** Tauri 桌面端后端地址（与 main.py uvicorn.run 保持一致） */
-const TAURI_HTTP = 'http://127.0.0.1:8000'
-const TAURI_WS = 'ws://127.0.0.1:8000'
+/** Tauri 桌面端后端地址（与 main.py uvicorn.run 保持一致）。
+ *  优先读取 Vite 环境变量，fallback 为默认端口 8000。 */
+const DEFAULT_API_PORT = 8000
+const apiPort = Number(import.meta.env.VITE_MAXMA_API_PORT) || DEFAULT_API_PORT
+const TAURI_HTTP = `http://127.0.0.1:${apiPort}`
+const TAURI_WS = `ws://127.0.0.1:${apiPort}`
 
 /** 实时检测是否在 Tauri WebView 中运行 */
 function detectTauri(): boolean {

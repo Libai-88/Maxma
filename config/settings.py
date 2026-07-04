@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     # Tavily（网络搜索/提取）
     tavily_api_key: str = ""
 
+    # 服务端口（开发/本地运行）
+    maxma_api_port: int = 8000
+    maxma_web_port: int = 5173
+
     model_config = {
         "env_file": str(ENV_FILE_PATH),
         "env_file_encoding": "utf-8",

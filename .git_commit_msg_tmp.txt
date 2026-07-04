@@ -1,0 +1,10 @@
+fix(config,api,web,desktop): 解决代码审查中的配置管理与元数据问题
+
+- 新增 MAXMA_API_PORT / MAXMA_WEB_PORT 配置（config/settings.py + .env.example）
+- main.py 使用 settings.maxma_api_port 启动 uvicorn
+- api/server.py CORS 来源根据配置端口动态生成，提取 api/cors_config.py 便于测试
+- web/env.ts 与 vite.config.ts 支持通过环境变量读取后端端口
+- start.bat / run-desktop-dev.bat 支持环境变量配置端口
+- desktop/src-tauri/src/main.rs 支持 MAXMA_API_PORT 环境变量
+- pyproject.toml 补充 [project.urls] 元数据
+- 新增测试：tests/test_config_settings.py、tests/test_api/test_server.py

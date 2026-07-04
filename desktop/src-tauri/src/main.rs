@@ -22,6 +22,16 @@ const MAX_RESTARTS: u32 = 3;
 const HEALTH_TIMEOUT_SECS: u64 = 30;
 /// 重启前等待（秒）
 const RESTART_DELAY_SECS: u64 = 2;
+/// 默认后端端口
+const DEFAULT_API_PORT: u16 = 8000;
+
+/// 从环境变量读取后端端口，未设置则使用默认值。
+fn api_port() -> u16 {
+    std::env::var("MAXMA_API_PORT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(DEFAULT_API_PORT)
+}
 
 /// 打开 Windows 原生文件/文件夹选择对话框。
 #[tauri::command]
@@ -90,7 +100,7 @@ unsafe fn pwstr_to_string(ptr: *const u16) -> String {
 /// 轮询后端轻量就绪接口，直到返回 200 或超时。
 fn wait_for_server() -> bool {
     let client = reqwest::blocking::Client::new();
-    let url = "http://127.0.0.1:8000/api/auth/token";
+    let url = format!("http://127.0.0.1:{}/api/auth/token", api_port());
 
     for i in 0..HEALTH_TIMEOUT_SECS {
         if let Ok(resp) = client.get(url).timeout(Duration::from_secs(1)).send() {
