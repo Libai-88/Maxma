@@ -1,5 +1,19 @@
 # MaxmaHere 桌面应用构建方案
 
+> **2026-07-04 更新（阶段 4.5 完成）**：所有 Phase 1-6 已落地。阶段 4.5 在此基础上完成：
+> - 端口动态分配（`port_manager.rs`，扫描 8000-8010，优先 `MAXMA_API_PORT` 环境变量）
+> - sidecar stdout/stderr 重定向到 `%APPDATA%/MaxmaHere/logs/server.log`
+> - `tauri-plugin-single-instance` 防止多开
+> - `tauri-plugin-log` 统一日志
+> - 健康检查改用 `/api/health`（原 `/api/auth/token`）
+> - 首次运行复制默认 MCP 配置（`resources/default-config/mcp_servers.yaml`）
+> - 前端动态端口加载（`ensurePortLoaded()` + `invoke('get_api_port')`）
+> - CSP 收紧（移除开发源 `ws://localhost:5173`）
+> - NSIS 安装包图标
+> - 冒烟测试新增 MCP `/mcp/servers` 端点验证
+>
+> 详见 [enhancement-plan-v3-stage4.md](file:///d:/Maxma/MaxmaHere/docs/enhancement-plan-v3-stage4.md) 子任务 4.5。
+
 ## 目标
 
 将 MaxmaHere（Python 后端 + Vue 前端）打包为 Windows 桌面应用，用户双击即用，无需安装 Python、Node 或任何依赖。
@@ -384,4 +398,4 @@
 2. **环境准备**：安装 Rust 工具链、PyInstaller
 3. **技术验证**：先手动跑通 `PyInstaller 打包` + `Tauri sidecar 加载`，确认可行性
 
-是否现在开始实施 Phase 1？
+> **2026-07-04 状态**：Phase 1-6 全部完成，阶段 4.5 增强已完成。当前可执行 `build\build-desktop.bat` 生成 NSIS 安装包。后续可选增强：自动更新（需配置更新服务器）、macOS/Linux 支持。

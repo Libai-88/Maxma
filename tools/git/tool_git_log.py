@@ -5,7 +5,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 
 
 class GitLogInput(BaseModel):
@@ -16,6 +16,7 @@ class GitLogInput(BaseModel):
     oneline: bool = Field(default=True, description="是否使用简洁格式（一行一条）")
 
 
+@register_tool
 class GitLogTool(ToolBase):
     name: str = "git_log"
     description: str = (

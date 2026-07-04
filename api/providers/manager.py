@@ -1,27 +1,52 @@
-"""Provider 管理器 — 按 id 索引。"""
+"""Provider 管理器 — 按 id 索引 + 阶段 3.3 fallback 链路。
 
+阶段 3.3 增强：
+- iter_enabled() 按 priority 排序（数字越小优先级越高）
+- get_healthy() 跳过 health_status == error 的 provider
+- get_fallback(exclude_ids) 返回下一个可用 provider
+- mark_unhealthy/mark_healthy 状态标记
+"""
+
+import logging
+import threading
+import time
 from collections.abc import Iterator
+from typing import Optional
 
-from api.providers import Provider, ProviderConfig
+from api.providers import HealthStatus, Provider, ProviderConfig
 from api.providers.store import ProviderConfigStore
+
+logger = logging.getLogger(__name__)
 
 
 class ProviderManager:
-    """管理所有已注册的 Provider，支持按 id 查找和批量遍历。"""
+    """管理所有已注册的 Provider，支持按 id 查找、批量遍历和 fallback。
+
+    阶段 3.3：新增健康状态管理和 fallback 链路。健康状态使用 threading.Lock
+    保护（与 ErrorRecoveryManager 一致），与 Provider 自身的 health_status
+    字段读写同步。
+    """
 
     def __init__(self, store: ProviderConfigStore):
         self._store = store
         self._providers: dict[str, Provider] = {}
+        self._lock = threading.Lock()  # 保护健康状态读写
 
     # ── 生命周期 ────────────────────────────────────────
 
     def load_all(self) -> None:
-        """从 store 加载所有 enabled provider 并创建实例。"""
-        self._providers.clear()
+        """从 store 加载所有 enabled provider 并创建实例。
+
+        线程安全：在锁内重建 _providers，避免与 get_healthy/get_fallback 竞争。
+        """
+        new_providers: dict[str, Provider] = {}
         for config in self._store.load_all():
             if config.enabled:
                 provider = self._build_provider(config)
-                self._providers[config.id] = provider
+                new_providers[config.id] = provider
+        with self._lock:
+            self._providers.clear()
+            self._providers.update(new_providers)
 
     def reload(self) -> None:
         """重新加载 YAML 配置。"""
@@ -38,6 +63,19 @@ class ProviderManager:
         return provider
 
     def iter_enabled(self) -> Iterator[Provider]:
+        """遍历所有 enabled provider，按 priority 升序排序。
+
+        阶段 3.3：priority 数字越小优先级越高，相同 priority 保持插入顺序。
+        线程安全：在锁内快照列表，避免迭代时 load_all() 修改字典。
+        """
+        with self._lock:
+            providers = list(self._providers.values())
+        # 稳定排序：相同 priority 保持插入顺序
+        providers.sort(key=lambda p: p.config.priority)
+        return iter(providers)
+
+    def iter_all(self) -> Iterator[Provider]:
+        """遍历所有 provider（不排序，原始顺序）。"""
         return iter(self._providers.values())
 
     def has(self, provider_id: str) -> bool:
@@ -46,6 +84,135 @@ class ProviderManager:
     @property
     def count(self) -> int:
         return len(self._providers)
+
+    # ── 阶段 3.3：健康状态 + fallback 链路 ──────────────────
+
+    def get_healthy(self) -> Optional[Provider]:
+        """返回优先级最高的健康 provider（跳过 health_status == error）。
+
+        health_status 为 None（未检查）或 ok 的 provider 视为可用。
+        全部 unhealthy 时返回 None。
+        线程安全：在锁内读取 health_status，避免与 mark_unhealthy/mark_healthy 竞争。
+        """
+        with self._lock:
+            providers = sorted(self._providers.values(), key=lambda p: p.config.priority)
+            for provider in providers:
+                if not provider.is_unhealthy:
+                    return provider
+        return None
+
+    def get_fallback(self, exclude_ids: Optional[set[str]] = None) -> Optional[Provider]:
+        """返回下一个可用的 fallback provider。
+
+        按 priority 升序遍历，跳过：
+        - exclude_ids 中的 provider（已失败的）
+        - health_status == error 的 provider
+
+        Returns:
+            下一个可用的 Provider；全部不可用时返回 None
+        线程安全：在锁内读取 health_status，避免与 mark_unhealthy/mark_healthy 竞争。
+        """
+        exclude = exclude_ids or set()
+        with self._lock:
+            providers = sorted(self._providers.values(), key=lambda p: p.config.priority)
+            for provider in providers:
+                if provider.config.id in exclude:
+                    continue
+                if provider.is_unhealthy:
+                    continue
+                return provider
+        return None
+
+    def mark_unhealthy(self, provider_id: str, detail: str = "") -> None:
+        """标记 provider 为不健康状态（health_status=error）。
+
+        递增 consecutive_failures 计数，供 fallback 决策使用。
+        """
+        with self._lock:
+            provider = self._providers.get(provider_id)
+            if provider is None:
+                return
+            provider.health_status = HealthStatus(
+                status="error",
+                detail=detail or "marked unhealthy by caller",
+            )
+            provider.last_check_time = time.time()
+            provider.consecutive_failures += 1
+            logger.warning(
+                "[provider] %s 标记为 unhealthy（连续失败 %d 次）: %s",
+                provider_id,
+                provider.consecutive_failures,
+                detail[:100],
+            )
+
+    def mark_healthy(self, provider_id: str, latency_ms: float | None = None) -> None:
+        """标记 provider 为健康状态（health_status=ok），重置失败计数。"""
+        with self._lock:
+            provider = self._providers.get(provider_id)
+            if provider is None:
+                return
+            provider.health_status = HealthStatus(
+                status="ok",
+                latency_ms=latency_ms,
+            )
+            provider.last_check_time = time.time()
+            provider.consecutive_failures = 0
+            logger.info("[provider] %s 标记为 healthy", provider_id)
+
+    def mark_degraded(self, provider_id: str, detail: str = "") -> None:
+        """标记 provider 为降级状态（health_status=degraded）。
+
+        degraded 不完全禁用，但优先级降低（仍可被 get_healthy 选中，
+        但 get_fallback 会优先选择 healthy 的）。
+        """
+        with self._lock:
+            provider = self._providers.get(provider_id)
+            if provider is None:
+                return
+            provider.health_status = HealthStatus(
+                status="degraded",
+                detail=detail,
+            )
+            provider.last_check_time = time.time()
+            logger.info("[provider] %s 标记为 degraded: %s", provider_id, detail[:100])
+
+    def get_health_status(self, provider_id: str) -> Optional[HealthStatus]:
+        """获取 provider 的健康状态（None 表示未检查）。"""
+        with self._lock:
+            provider = self._providers.get(provider_id)
+            return provider.health_status if provider else None
+
+    def get_failure_snapshot(self, provider_id: str) -> tuple[int, Optional[HealthStatus]]:
+        """原子读取 (consecutive_failures, health_status)。
+
+        修复 Bug 1.5：health_monitor 原先在锁外分两次读取这两个字段，可能读到
+        mark_unhealthy/mark_healthy 调用过程中的中间状态（如 failures 已递增但
+        health_status 尚未更新）。现在在同一个锁内返回一致的快照。
+
+        Returns:
+            (consecutive_failures, health_status)；provider 不存在时返回 (0, None)。
+        """
+        with self._lock:
+            provider = self._providers.get(provider_id)
+            if provider is None:
+                return 0, None
+            return provider.consecutive_failures, provider.health_status
+
+    def get_all_health_status(self) -> dict[str, dict]:
+        """获取所有 provider 的健康状态摘要（用于监控/前端展示）。"""
+        with self._lock:
+            result = {}
+            for pid, provider in self._providers.items():
+                hs = provider.health_status
+                result[pid] = {
+                    "status": hs.status if hs else "unknown",
+                    "latency_ms": hs.latency_ms if hs else None,
+                    "detail": hs.detail if hs else None,
+                    "last_check_time": provider.last_check_time,
+                    "consecutive_failures": provider.consecutive_failures,
+                    "priority": provider.config.priority,
+                }
+            return result
 
     # ── 配置 CRUD（委托 store 并同步缓存）────────────────
 

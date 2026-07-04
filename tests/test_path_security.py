@@ -329,3 +329,55 @@ class TestGetSafeBuiltins:
         """__builtins__ in the returned dict points to the dict itself."""
         safe = get_safe_builtins()
         assert safe["__builtins__"] is safe
+
+    def test_metaprogramming_entries_blocked(self):
+        """阶段 3.5：元编程逃逸入口不应出现在 safe builtins 中。"""
+        safe = get_safe_builtins()
+        metaprogramming_entries = {
+            # 内省/反射函数
+            "globals", "locals", "vars", "dir",
+            # 类型/属性操作
+            "type", "getattr", "setattr", "delattr", "super",
+            # 描述符协议
+            "classmethod", "staticmethod", "property",
+            # 内存视图
+            "memoryview",
+            # 代码执行/动态求值（应在 _DANGEROUS_BUILTIN_NAMES 中）
+            "eval", "exec", "compile", "__import__",
+        }
+        for name in metaprogramming_entries:
+            assert name not in safe, (
+                f"{name} 不应在 get_safe_builtins() 中（元编程逃逸入口）"
+            )
+
+    def test_sandbox_builtins_stricter_than_safe_builtins(self):
+        """阶段 3.5：get_sandbox_builtins() 应比 get_safe_builtins() 更严格。"""
+        sandbox_builtins = ps.get_sandbox_builtins()
+        safe_builtins = get_safe_builtins()
+
+        # sandbox 不应含 open（沙箱内禁文件 I/O）
+        assert "open" not in sandbox_builtins
+        # safe 应含 open（白名单包装版本）
+        assert "open" in safe_builtins
+
+        # sandbox 不应含 hasattr（可触发 __getattr__ 链）
+        assert "hasattr" not in sandbox_builtins
+        # safe 应含 hasattr
+        assert "hasattr" in safe_builtins
+
+        # 两者都不应含元编程入口
+        for bad in ("globals", "type", "getattr"):
+            assert bad not in sandbox_builtins
+            assert bad not in safe_builtins
+
+    def test_blocked_dunder_attributes_constant_exists(self):
+        """阶段 3.5：_BLOCKED_DUNDER_ATTRIBUTES 集合应包含已知逃逸路径。"""
+        blocked = ps._BLOCKED_DUNDER_ATTRIBUTES
+        # 已知逃逸路径必须被覆盖
+        required = {
+            "__subclasses__", "__bases__", "__mro__", "__class__",
+            "__globals__", "__builtins__", "__dict__", "__code__",
+        }
+        assert required.issubset(blocked), (
+            f"缺失关键 dunder 拦截: {required - blocked}"
+        )

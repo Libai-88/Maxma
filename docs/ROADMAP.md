@@ -1,7 +1,20 @@
 # MaxmaHere 全面开发路线图
 
 > 目标：补齐与 Codex / Claude Code / ZCode / Trae Solo 的全部能力差距，同时将品牌独特优势打磨到生产级可靠。
-> 最后更新：2026-07-01
+> 最后更新：2026-07-04
+
+---
+
+## v3 增强计划进度（2026-07-04 更新）
+
+| 阶段 | 名称 | 状态 | 计划文档 |
+|---|---|---|---|
+| 阶段 1 | 监控与审计前端面板 | ✅ 已完成 | [enhancement-plan-v3-stage1.md](file:///d:/Maxma/MaxmaHere/docs/enhancement-plan-v3-stage1.md) |
+| 阶段 2 | Plan-and-Execute + 错误恢复 | ✅ 已完成 | [enhancement-plan-v3-stage2.md](file:///d:/Maxma/MaxmaHere/docs/enhancement-plan-v3-stage2.md) |
+| 阶段 3 | 熔断 + 限流 + Provider Fallback + 沙箱 | ✅ 已完成 | [enhancement-plan-v3-stage3.md](file:///d:/Maxma/MaxmaHere/docs/enhancement-plan-v3-stage3.md) |
+| 阶段 4 | MCP 安全闭环 + Tauri 桌面打包 | ✅ 已完成 | [enhancement-plan-v3-stage4.md](file:///d:/Maxma/MaxmaHere/docs/enhancement-plan-v3-stage4.md) |
+
+阶段 4 同时完成了阶段 1-3 遗留的 15 个深藏 bug 善后（详见 stage4 文档「阶段 1-3 遗留 Bug 善后」章节），全量测试 857 passed / 9 skipped。
 
 ---
 

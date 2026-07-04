@@ -5,7 +5,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 from tavily import TavilyClient
 
-from tools.base import ToolBase, format_success, format_error
+from tools.base import ToolBase, format_success, format_error, register_tool
 
 
 class TavilyExtractInput(BaseModel):
@@ -30,6 +30,7 @@ class TavilyExtractInput(BaseModel):
     )
 
 
+@register_tool
 class TavilyExtractTool(ToolBase):
     """从 URL 列表提取网页内容（Markdown 格式），支持一次性批量提取和定向提取。"""
 

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 
 
 class GitStatusInput(BaseModel):
@@ -13,6 +13,7 @@ class GitStatusInput(BaseModel):
     repo_path: str = Field(default="", description="仓库根目录路径（留空则使用当前工作目录）")
 
 
+@register_tool
 class GitStatusTool(ToolBase):
     name: str = "git_status"
     description: str = (

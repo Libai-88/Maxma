@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 
 
 class HolidayCalendarInput(BaseModel):
@@ -29,6 +29,7 @@ class HolidayCalendarInput(BaseModel):
     nearby_limit: int = Field(default=7, ge=1, le=30, description="最近节日数量限制")
 
 
+@register_tool
 class HolidayCalendarTool(ToolBase):
     name: str = "holiday_calendar"
     description: str = (

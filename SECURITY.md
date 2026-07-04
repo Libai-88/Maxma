@@ -89,5 +89,55 @@ We do not operate a bug bounty program. Thank you for your contribution!
 - [x] MaxmaBlocker on config directories — 防止 Agent 自篡改配置
 - [x] CodeQL scanning — 代码静态分析
 - [x] Gitleaks scanning — 密钥泄露检测（CI 自动运行）
+- [x] Python sandbox metaprogramming filter — 阶段 3.5：AST 预检 + 白名单 builtins 双层拦截 `__subclasses__`/`__globals__`/`__class__` 等元编程逃逸入口
+- [x] Python sandbox whitelist builtins — 阶段 3.5：`_SANDBOX_WRAPPER` 从黑名单升级为白名单，仅暴露纯计算/数据结构 builtins
+- [ ] Python sandbox OS-level isolation — 阶段 3.4：firejail/nsjail/Job Object 平台抽象层（规划中）
 - [ ] Encryption at rest — API Key 文件加密（设计决策：单用户本地部署场景未启用）
 - [ ] Audit logging — 所有 API 请求审计日志（规划中）
+
+---
+
+## Python 沙箱安全策略 / Python Sandbox Security Strategy
+
+MaxmaHere 的 `run_python` 工具采用多层纵深防御：
+
+### 当前层（阶段 3.5 已落地）
+
+1. **AST 预检（主进程）**：`_check_metaprogramming_safety` 在执行前扫描用户代码 AST，
+   拦截已知元编程逃逸入口：
+   - 阻断 `_BLOCKED_DUNDER_ATTRIBUTES` 中的属性访问（`__subclasses__`、`__globals__`、
+     `__class__`、`__bases__`、`__mro__`、`__builtins__`、`__dict__`、`__code__`、
+     `__getattribute__`、`__getattr__`、`__reduce__`、`__closure__` 等）
+   - 阻断危险 builtins 引用（`globals`、`locals`、`vars`、`dir`、`type`、`getattr`、
+     `setattr`、`super`、`eval`、`exec`、`compile`、`open`、`__import__` 等）
+
+2. **白名单 builtins（子进程）**：`_SANDBOX_WRAPPER` 仅暴露纯计算/数据结构 builtins
+   （`print`、`len`、`range`、`sum`、`sorted` 等），不暴露 `open`、`type`、`getattr` 等。
+   与 `tools/path_security.get_sandbox_builtins()` 策略一致。
+
+3. **AST 变换 + 运行时 dunder 拦截（子进程）**：`_SandboxTransformer` 在子进程编译前
+   将所有 `obj.attr`（Load 上下文）重写为 `_safe_getattr(obj, 'attr')` 调用，
+   `_safe_getattr` 在运行时阻断所有 `__*__` dunder 属性（`__name__`/`__doc__` 等少数
+   无害元数据除外）。即便主进程 AST 预检漏检，子进程仍在运行时阻断逃逸入口。
+   隐式 dunder 调用（`len(obj)`→`obj.__len__()`、`str(obj)`→`obj.__str__()`）不受影响。
+   同时将 `__builtins__` 名称引用重写为 `_blocked_name(...)` 调用予以阻断。
+
+4. **环境变量白名单**：子进程仅接收 `_ALLOWED_ENV_VARS` 中的环境变量，防止敏感信息泄漏。
+
+5. **超时控制**：`subprocess.Popen.communicate(timeout=...)` 强制终止超时进程。
+
+### 规划层（阶段 3.4 实施中）
+
+6. **OS 级隔离**：`SandboxRunner` 平台抽象层，按平台能力探测降级：
+   - Linux: firejail（`--net=none` 网络隔离 + 内存限制）
+   - Windows: Job Object（`JOB_OBJECT_LIMIT_PROCESS_MEMORY` 内存限制）
+   - macOS: 降级到无 OS 级隔离（仅依赖前 5 层）
+7. **MAX_MEMORY_MB 真正生效**：
+   - Unix: `preexec_fn=resource.setrlimit(RLIMIT_AS, ...)`
+   - Windows: `win32job.CreateJobObject` + `AssignProcessToJobObject`
+
+### 已知限制
+
+- 元编程过滤是"军备竞赛"，攻击者可能构造 AST 难以识别的逃逸 payload
+- 真正的根治方案是 OS 级隔离（阶段 3.4），元编程过滤是纵深防御的第二层
+- macOS 平台无法强制内存限制（`RLIMIT_RSS` 不强制，`RLIMIT_AS` 可能导致 Python 自身崩溃）

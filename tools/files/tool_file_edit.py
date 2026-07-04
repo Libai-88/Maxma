@@ -14,6 +14,7 @@ from tools.base import (
     check_maxma_blocker,
     format_error,
     format_success,
+    register_tool,
 )
 
 
@@ -52,6 +53,7 @@ class FileEditInput(BaseModel):
     case_insensitive: bool = Field(default=False, description="搜索时是否忽略大小写")
 
 
+@register_tool
 class FileEditTool(ToolBase):
     name: str = "file_edit"
     description: str = (

@@ -44,12 +44,17 @@ from api.routes import audit_log as audit_log_router
 from api.session_manager import SessionManager, SessionState
 from api.ws_registry import WebSocketRegistry
 from agent.graph import build_agent
+from memory.episodic import EpisodicMemoryManager
+from memory.memory_manager import MemoryManager
 from memory.narrative import MEMORY_PATH, LongTermMemoryInterface
+from memory.semantic import SemanticMemoryManager
+from memory.coordinator import MemoryCoordinator
 from tools import merge_tool_lists
 from tools.mcp import init_mcp_tools, close_mcp, set_reload_callback
 from version import __version__
 
 from api.middleware.auth import AuthMiddleware
+from api.middleware.rate_limit import RateLimitMiddleware
 from api.middleware.request_log import RequestLogMiddleware
 
 logger = logging.getLogger(__name__)
@@ -130,11 +135,15 @@ async def _run_event_hook_action(app: FastAPI, hook, trigger_detail: str) -> str
             + "如果动作需要人工确认，请说明无法在后台执行。"
         )
         tools = _hook_tools_for_action(app_state, hook.action, trigger_detail)
+        # 4 层架构：注入情景记忆管理器（事件钩子场景也启用 episodic 检索）
+        episodic_mm = getattr(app_state, "episodic_mm", None)
         graph = build_agent(
             model=llm,
             tools=tools,
             system_prompt=system_prompt,
             checkpointer=session.checkpointer,
+            episodic_mm=episodic_mm,
+            enable_hitl=False,  # 事件钩子无 ws，禁用 HITL 避免阻塞
         )
         session._graph = graph
 
@@ -255,6 +264,26 @@ async def lifespan(app: FastAPI):
     app.state.provider_manager = provider_manager
     logger.info("[provider] loaded %d provider(s)", provider_manager.count)
 
+    # 阶段 3.3：启动 provider 健康监控后台任务
+    # - 健康 provider 每 check_interval 秒检查一次
+    # - unhealthy provider 每 recovery_interval 秒重新探测
+    # - 连续失败达 unhealthy_threshold 才标记 error（避免单次抖动）
+    from api.providers.health_monitor import start_health_monitor
+    from config.settings import get_settings as _get_settings_for_health
+    _health_settings = _get_settings_for_health()
+    start_health_monitor(
+        provider_manager,
+        check_interval=_health_settings.provider_health_check_interval_seconds,
+        recovery_interval=_health_settings.provider_recovery_check_interval_seconds,
+        unhealthy_threshold=_health_settings.provider_unhealthy_threshold,
+    )
+    logger.info(
+        "[health_monitor] 已启动（check=%ds, recovery=%ds, threshold=%d）",
+        _health_settings.provider_health_check_interval_seconds,
+        _health_settings.provider_recovery_check_interval_seconds,
+        _health_settings.provider_unhealthy_threshold,
+    )
+
     # 2. 其他共享资源（不阻塞启动 — LLM 在后台初始化）
     app.state.system_prompt = get_system_prompt()
     app.state.native_tools = get_tools()
@@ -318,6 +347,40 @@ async def lifespan(app: FastAPI):
 
     app.state._cleanup_task = asyncio.create_task(_periodic_cleanup())
 
+    # 4.5 启动指标持久化 flush 任务（定期将内存快照写入 SQLite）
+    from api.metrics import get_metrics
+    get_metrics().start_flush_task()
+
+    # 4.6 启动 TTL 遗忘机制后台清理任务（定期清理 memory.yaml 中已过期条目）
+    from memory.ttl import schedule_purge as schedule_ttl_purge
+    from config.settings import get_settings
+    from app_paths import EPISODIC_MEMORY_PATH, SEMANTIC_MEMORY_PATH
+    _settings = get_settings()
+    # 初始化 4 层记忆：长期/情景/语义管理器 + 协调器
+    _long_term_mm = MemoryManager(yaml_file=str(MEMORY_PATH))
+    _episodic_mm = EpisodicMemoryManager(
+        json_file=str(EPISODIC_MEMORY_PATH),
+        default_ttl=_settings.default_episodic_ttl,
+    )
+    _semantic_mm = SemanticMemoryManager(json_file=str(SEMANTIC_MEMORY_PATH))
+    app.state.episodic_mm = _episodic_mm
+    app.state.semantic_mm = _semantic_mm
+    app.state.memory_coordinator = MemoryCoordinator(
+        long_term_mm=_long_term_mm,
+        episodic_mm=_episodic_mm,
+        semantic_mm=_semantic_mm,
+    )
+    logger.info(
+        "[memory] 4 层记忆架构已初始化：long_term + episodic + semantic",
+    )
+    schedule_ttl_purge(
+        _settings.ttl_purge_interval_seconds,
+        [_long_term_mm, _episodic_mm, _semantic_mm],
+    )
+    logger.info(
+        "[ttl] 后台清理任务已启动，间隔 %d 秒", _settings.ttl_purge_interval_seconds,
+    )
+
     # 5. 初始化认证 Token（SQLite 存储）
     from api.db.auth import load_or_create_token as load_token_db
     app.state.auth_token = load_token_db()
@@ -344,11 +407,23 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
 
+    # 阶段 3.3：停止 provider 健康监控后台任务
+    from api.providers.health_monitor import stop_health_monitor
+    await stop_health_monitor()
+
     app.state._cleanup_task.cancel()
     try:
         await app.state._cleanup_task
     except asyncio.CancelledError:
         pass
+
+    # 停止指标 flush 任务（执行最终 flush）
+    from api.metrics import get_metrics
+    await get_metrics().stop_flush_task()
+
+    # 停止 TTL 遗忘机制后台清理任务
+    from memory.ttl import stop_purge as stop_ttl_purge
+    await stop_ttl_purge()
 
     # 关闭事件钩子
     hook_manager.stop_all()
@@ -433,6 +508,10 @@ def create_app() -> FastAPI:
     # 审计日志
     app.include_router(audit_log_router.router, prefix="/api")
 
+    # 知识库
+    from api.routes import kb as kb_router
+    app.include_router(kb_router.router, prefix="/api")
+
     # 表情包
     from api.routes import stickers as stickers_router
     app.include_router(stickers_router.router, prefix="/api")
@@ -457,10 +536,13 @@ def create_app() -> FastAPI:
         return await get_health_report(app, probe_remote=full)
 
     # 中间件执行顺序以“最后 add 的最先执行”为准。
-    # 这里先注册 Auth，再注册 RequestLog，因此实际顺序是：
-    # RequestLog -> Auth -> 路由。
-    # Auth 是否放行由它自身的路径判断控制，而不是由路由注册顺序控制。
+    # 注册顺序（add 顺序）与实际执行顺序（后 add 先执行）：
+    #   add 顺序: Auth → RateLimit → RequestLog
+    #   执行顺序: RequestLog → RateLimit → Auth → 路由
+    # 限流在 Auth 之前，避免被拒绝的鉴权请求也消耗限流配额。
+    # 阶段 3.2：新增 RateLimitMiddleware（HTTP 按 IP 限流）
     app.add_middleware(AuthMiddleware)
+    app.add_middleware(RateLimitMiddleware)
 
     # 请求日志放在最外层，确保包括被鉴权拒绝的请求也会被记录。
     app.add_middleware(RequestLogMiddleware)

@@ -4,7 +4,7 @@ import os
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, check_path_access, format_error, format_success
+from tools.base import ToolBase, check_path_access, format_error, format_success, register_tool
 
 
 class FileReadInput(BaseModel):
@@ -14,6 +14,7 @@ class FileReadInput(BaseModel):
     file_path: str = Field(default="", description="文件绝对路径")
 
 
+@register_tool
 class FileReadTool(ToolBase):
     name: str = "file_read"
     description: str = (

@@ -19,6 +19,8 @@ from api.callbacks.websocket_callback import WebSocketCallback
 from api.const_session_store import save_const_session, serialize_messages
 from api.context_usage import estimate_context_usage
 from api.errors import ErrorCode, format_ws_error
+from api.metrics import get_metrics
+from api.middleware.rate_limit import get_ws_rate_limiter
 from api.session_manager import SessionState
 from tools import select_tools_for_query
 from tools.base import format_error
@@ -272,6 +274,69 @@ async def _calculate_context_usage(
     )
 
 
+async def _maybe_notify_plan_degraded(graph, config, ws: WebSocket) -> None:
+    """阶段 2.3：检测 plan 是否以降级状态完成，向前端推送 plan_degraded 事件。
+
+    降级状态：plan_steps 中有步骤被 SKIPPED 或 FAILED（重规划失败 N 次后跳过步骤）。
+    前端收到此事件后可提示用户"结果可能不完整"，并展示被跳过的步骤列表。
+
+    幂等：仅在 is_degraded=True 时推送；无 plan 或 plan 正常完成时不推送。
+    """
+    try:
+        state = await graph.aget_state(config)
+    except Exception:
+        return
+    if state is None:
+        return
+
+    values = state.values or {}
+    plan_steps = values.get("plan_steps") or []
+    if not plan_steps:
+        return  # 无计划，简单任务不处理
+
+    step_status = values.get("step_status") or {}
+    failure_count = values.get("failure_count", 0)
+    replan_count = values.get("replan_count", 0)
+
+    # 收集被跳过/失败的步骤
+    skipped: list[dict] = []
+    failed: list[dict] = []
+    from agent.step_state import StepStatus
+    for step_dict in plan_steps:
+        idx = step_dict.get("index", 0)
+        status_val = step_status.get(str(idx))
+        if status_val == StepStatus.SKIPPED.value:
+            skipped.append({
+                "index": idx,
+                "description": step_dict.get("description", ""),
+            })
+        elif status_val == StepStatus.FAILED.value:
+            failed.append({
+                "index": idx,
+                "description": step_dict.get("description", ""),
+            })
+
+    if not skipped and not failed:
+        return  # 正常完成，无需通知
+
+    try:
+        await ws.send_json({
+            "type": "plan_degraded",
+            "payload": {
+                "skipped_steps": skipped,
+                "failed_steps": failed,
+                "failure_count": failure_count,
+                "replan_count": replan_count,
+                "message": (
+                    f"执行计划以降级模式完成：{len(skipped)} 个步骤被跳过，"
+                    f"{len(failed)} 个步骤失败。结果可能不完整，建议检查或重新提问。"
+                ),
+            },
+        })
+    except Exception:
+        logger.debug("[degraded] ws send failed", exc_info=True)
+
+
 async def _inject_cancel_tool_messages(session, config, ws: WebSocket) -> None:
     """为 checkpoint 中孤立的 tool_calls 注入统一格式的正常 ToolMessage，
     并通知前端使对应工具气泡进入错误状态。
@@ -449,6 +514,7 @@ async def _run_agent_turn(
     default_max_tokens, fallback_model_name = _get_provider_context(app_state)
 
     # 动态 LLM 选择（Phase 2：每次消息独立指定提供商/模型）
+    # 阶段 3.3：指定 provider 失败时尝试 fallback 链（按 priority 排序）
     current_max_tokens = default_max_tokens
     if provider_id and model_name and hasattr(app_state, "provider_manager"):
         try:
@@ -457,16 +523,37 @@ async def _run_agent_turn(
             current_model_name = model_name
             current_max_tokens = provider.config.context_window
         except KeyError:
-            logger.warning(
-                "[chat:%s] requested provider/model fallback: provider_id=%r model=%r not found; "
-                "using default provider/model=%r",
-                session.session_id[:8],
-                provider_id,
-                model_name,
-                fallback_model_name or "<unknown>",
+            # 阶段 3.3：尝试 fallback 到下一个可用 provider
+            fallback_provider = app_state.provider_manager.get_fallback(
+                exclude_ids={provider_id} if provider_id else None
             )
-            llm = app_state.llm
-            current_model_name = None
+            if fallback_provider is not None:
+                logger.warning(
+                    "[chat:%s] requested provider/model fallback: provider_id=%r model=%r not found; "
+                    "switching to fallback provider=%r (priority=%d)",
+                    session.session_id[:8],
+                    provider_id,
+                    model_name,
+                    fallback_provider.config.id,
+                    fallback_provider.config.priority,
+                )
+                llm = fallback_provider.create_llm(
+                    fallback_provider.default_model,
+                    temperature=0.7,
+                    streaming=True,
+                )
+                current_model_name = fallback_provider.default_model
+                current_max_tokens = fallback_provider.config.context_window
+            else:
+                logger.warning(
+                    "[chat:%s] requested provider/model fallback: provider_id=%r model=%r not found; "
+                    "no fallback available, using default",
+                    session.session_id[:8],
+                    provider_id,
+                    model_name,
+                )
+                llm = app_state.llm
+                current_model_name = None
     elif provider_id or model_name:
         logger.warning(
             "[chat:%s] requested provider/model fallback: provider_id=%r model=%r incomplete or unavailable; "
@@ -503,12 +590,15 @@ async def _run_agent_turn(
     # 追加 MCP 工具，确保外部工具始终可用（只构建一次 Agent 图）
     mcp_tools = getattr(ws.app.state, "mcp_tools", None) or []
     turn_tools = select_tools_for_query(user_message, mcp_tools=list(mcp_tools))
+    # 4 层架构：注入情景记忆管理器，启用 episodic_retriever 节点
+    episodic_mm = getattr(ws.app.state, "episodic_mm", None)
     agent_maxma = build_agent(
         model=llm,
         tools=turn_tools,
         system_prompt=system_prompt,
         checkpointer=session.checkpointer,
         ws=ws,
+        episodic_mm=episodic_mm,
     )
     session._graph = agent_maxma
     inputs = {"messages": [HumanMessage(content=user_message)]}
@@ -548,6 +638,15 @@ async def _run_agent_turn(
             model_name=current_model_name,
             max_tokens=current_max_tokens,
         )
+
+        # 阶段 2.3：重规划失败 N 次后优雅降级通知
+        # 当 plan 以降级状态完成（有步骤被跳过/失败）时，向前端推送 plan_degraded 事件
+        # 让用户知道结果可能不完整，可考虑手动介入或重新提问
+        try:
+            await _maybe_notify_plan_degraded(agent_maxma, config, ws)
+        except Exception:
+            logger.debug("[degraded] failed to notify plan degraded state", exc_info=True)
+
         if final_answer:
             # 表情包处理：分层决策架构
             # 1. LLM 主动输出 [表情包:情绪] → 直接解析
@@ -763,6 +862,13 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                         continue
                     user_message = str(payload.get("message", "")).strip()
                     if not user_message:
+                        continue
+
+                    # 阶段 3.2：per-session 令牌桶限流
+                    allowed, rate_err = get_ws_rate_limiter().try_consume(session_id)
+                    if not allowed:
+                        get_metrics().record_rate_limit("ws")
+                        await ws.send_json({"type": "error", "payload": rate_err})
                         continue
 
                     auto_approve = payload.get("auto_approve", False)

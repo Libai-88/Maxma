@@ -136,6 +136,9 @@ class ProviderConfigStore:
                 logger.warning("Failed to decrypt provider api_key for provider_id=%s", data.get("id", ""))
             else:
                 data["api_key"] = decrypted
+        # 向后兼容：旧 YAML 无 priority 字段时默认 0
+        if "priority" not in data:
+            data["priority"] = 0
         return ProviderConfig(**data)
 
     def _normalize_raw_data(self, raw: dict) -> dict:

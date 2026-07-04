@@ -5,7 +5,7 @@ import shutil
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, check_path_access, format_error, format_success
+from tools.base import ToolBase, check_path_access, format_error, format_success, register_tool
 
 
 class FileManageInput(BaseModel):
@@ -25,6 +25,7 @@ class FileManageInput(BaseModel):
     )
 
 
+@register_tool
 class FileManageTool(ToolBase):
     name: str = "file_manage"
     description: str = (

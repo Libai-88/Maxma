@@ -95,7 +95,8 @@ def _current_fingerprint() -> str:
     """根据所有依赖文件的内容哈希生成指纹字符串。
 
     依赖文件包括 personas 目录下的 AGENTS/活跃人格/USER/memory.yaml，
-    以及 anthropic_skills/ 和 macros/ 下的所有 SKILL.md / MACRO.md。
+    以及 anthropic_skills/ 和 macros/ 下的所有 SKILL.md / MACRO.md，
+    以及语义记忆 JSON（4 层架构）。
     """
     parts: list[str] = []
 
@@ -105,6 +106,10 @@ def _current_fingerprint() -> str:
         parts.append(f"{name}:{_file_hash(PERSONAS_DIR / name)}")
     # 额外记录 active_persona.yaml 自身，切换人格时触发缓存刷新
     parts.append(f"active:{_file_hash(ACTIVE_PERSONA_PATH)}")
+
+    # 4 层架构：语义记忆 JSON
+    from app_paths import SEMANTIC_MEMORY_PATH
+    parts.append(f"semantic:{_file_hash(SEMANTIC_MEMORY_PATH)}")
 
     # 动态扫描 skills / macros
     if ANTHROPIC_SKILLS_DIR.is_dir():
@@ -116,6 +121,35 @@ def _current_fingerprint() -> str:
             parts.append(f"mc:{p.name}:{_file_hash(p)}")
 
     return "|".join(parts)
+
+
+def _scan_semantic_facts() -> str:
+    """扫描语义记忆层（SemanticMemoryManager）的所有事实，格式化为系统提示词片段。
+
+    4 层架构：把语义记忆（结构化事实三元组）作为系统提示词的一部分注入，
+    让 LLM 能直接引用已确认的事实（如用户偏好、项目截止日期等）。
+    无事实或文件不存在时返回空字符串。
+    """
+    try:
+        from app_paths import SEMANTIC_MEMORY_PATH
+        from memory.semantic import SemanticMemoryManager
+
+        if not SEMANTIC_MEMORY_PATH.exists():
+            return ""
+        sm = SemanticMemoryManager(json_file=str(SEMANTIC_MEMORY_PATH))
+        facts = sm.list_facts()
+        if not facts:
+            return ""
+        lines = ["## 语义记忆（结构化事实）"]
+        for fact in facts:
+            lines.append(
+                f"- {fact.get('subject', '')} {fact.get('predicate', '')} "
+                f"{fact.get('object', '')}"
+            )
+        return "\n".join(lines)
+    except Exception as e:
+        logger.warning("[prompts] _scan_semantic_facts failed: %s", e)
+        return ""
 
 
 def _rebuild(fingerprint: str) -> None:
@@ -142,6 +176,8 @@ def _rebuild(fingerprint: str) -> None:
     macros_content = _scan_macros()
     narrative_content = get_narrative()
     agents_md_content = _read_persona("AGENTS.md")
+    # 4 层架构：语义记忆事实三元组（结构化知识库）
+    semantic_facts_content = _scan_semantic_facts()
 
     # 拆分系统 prompt，将稳定内容（skills/macros 等保持不变的部分）
     # 放在前面，动态内容（记忆）放在末尾，
@@ -160,6 +196,8 @@ def _rebuild(fingerprint: str) -> None:
          "content": macros_content},
         {"key": "long_term_memory", "label": "长期记忆",
          "content": "## 我对用户的记忆\n" + narrative_content},
+        {"key": "semantic_memory", "label": "语义记忆",
+         "content": semantic_facts_content},
     ]
 
     # ── 完整 prompt ──
@@ -181,6 +219,8 @@ def _rebuild(fingerprint: str) -> None:
         "## 我对用户的记忆",
         narrative_content,
     ]
+    if semantic_facts_content:
+        full_parts.extend(["", semantic_facts_content])
     _cached_prompt = "\n".join(full_parts)
     _cached_fingerprint = fingerprint
 

@@ -5,7 +5,7 @@ import asyncio
 from pydantic import BaseModel, Field
 
 from api import interaction
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 
 
 class AskUserMultiChoiceInput(BaseModel):
@@ -14,6 +14,7 @@ class AskUserMultiChoiceInput(BaseModel):
     options: list[str] = Field(default=[], description="选项列表，用户可勾选多项")
 
 
+@register_tool
 class AskUserMultiChoiceTool(ToolBase):
     name: str = "ask_user_multi_choice"
     description: str = (

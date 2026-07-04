@@ -4,7 +4,7 @@ import random
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 
 # 78 张韦特塔罗牌（22 大阿尔卡纳 + 56 小阿尔卡纳）
 TAROT_DECK: list[dict] = [
@@ -347,6 +347,7 @@ class TarotInput(BaseModel):
     spread_type: str = Field(default="three", description="牌阵: single/three/celtic")
 
 
+@register_tool
 class TarotTool(ToolBase):
     name: str = "tarot"
     description: str = (

@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 
 
 class WeatherInput(BaseModel):
@@ -143,6 +143,7 @@ def _summarize_minutely(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+@register_tool
 class WeatherTool(ToolBase):
     name: str = "get_current_weather"
     description: str = (

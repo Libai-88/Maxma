@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 from tools.todo.todo_base import TodoAPIHelper
 
 
@@ -14,6 +14,7 @@ class TodoListSectionsInput(BaseModel):
     )
 
 
+@register_tool
 class TodoListSectionsTool(ToolBase):
     name: str = "todo_list_sections"
     description: str = (

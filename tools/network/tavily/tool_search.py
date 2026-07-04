@@ -5,7 +5,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 from tavily import TavilyClient
 
-from tools.base import ToolBase, format_success, format_error
+from tools.base import ToolBase, format_success, format_error, register_tool
 
 
 class TavilySearchInput(BaseModel):
@@ -39,6 +39,7 @@ class TavilySearchInput(BaseModel):
     )
 
 
+@register_tool
 class TavilySearchTool(ToolBase):
     """使用 Tavily Search API 执行网络搜索，支持深度/时间/域名等多维度控制。"""
 

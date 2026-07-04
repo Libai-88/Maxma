@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from bs4 import BeautifulSoup
 
-from tools.base import ToolBase, format_success, format_error
+from tools.base import ToolBase, format_success, format_error, register_tool
 from tools.network.playwright_tools.browser_manager import BrowserManager
 
 
@@ -29,6 +29,7 @@ class BrowserBrowseInput(BaseModel):
     )
 
 
+@register_tool
 class BrowserBrowseTool(ToolBase):
     name: str = "browser_browse"
     description: str = (

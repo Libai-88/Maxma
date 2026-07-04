@@ -3,7 +3,7 @@
 from pydantic import BaseModel, Field
 
 from app_paths import MEMORY_CONFIG_PATH as MEMORY_PATH
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 from memory.memory_manager import MAX_DESC_LENGTH
 
 
@@ -20,6 +20,7 @@ class MergeMemoriesInput(BaseModel):
     )
 
 
+@register_tool
 class MergeMemoriesTool(ToolBase):
     name: str = "merge_memories"
     description: str = (

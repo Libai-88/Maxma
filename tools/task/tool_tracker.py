@@ -5,7 +5,7 @@ LLM 每次调用传入全量 todos 列表，工具仅做统计和摘要返回。
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 
 
 class TodoItem(BaseModel):
@@ -21,6 +21,7 @@ class TaskTrackerInput(BaseModel):
     )
 
 
+@register_tool
 class TaskTrackerTool(ToolBase):
     name: str = "task_tracker"
     description: str = (

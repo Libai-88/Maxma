@@ -429,11 +429,18 @@ class HookManager:
 
 # 全局单例
 _hook_manager: HookManager | None = None
+_hook_manager_lock = threading.Lock()  # 保护单例初始化
 
 
 def get_hook_manager() -> HookManager:
-    """获取全局 HookManager 实例。"""
+    """获取全局 HookManager 实例。
+
+    线程安全：通过 _hook_manager_lock 双重检查，保证仅创建一个实例。
+    """
     global _hook_manager
-    if _hook_manager is None:
-        _hook_manager = HookManager()
-    return _hook_manager
+    if _hook_manager is not None:
+        return _hook_manager
+    with _hook_manager_lock:
+        if _hook_manager is None:
+            _hook_manager = HookManager()
+        return _hook_manager

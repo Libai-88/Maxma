@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 
 
 class GeocodeInput(BaseModel):
@@ -14,6 +14,7 @@ class GeocodeInput(BaseModel):
     )
 
 
+@register_tool
 class GeocodeTool(ToolBase):
     name: str = "geocode_address"
     description: str = (

@@ -17,6 +17,9 @@
         <router-link to="/memory" class="nav-item">
           <Icon name="memory" :size="18" /> <span class="nav-label">记忆&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MEMORY</span>
         </router-link>
+        <router-link to="/kb" class="nav-item">
+          <Icon name="memory" :size="18" /> <span class="nav-label">知识库&nbsp;&nbsp;&nbsp;&nbsp;KB</span>
+        </router-link>
         <router-link to="/playground" class="nav-item pg-nav">动态 NEWS</router-link>
         <div class="settings-area" ref="settingsTriggerRef">
           <button class="nav-item settings-btn" :class="{ active: showSettingsMenu }" @click="toggleSettingsMenu">
@@ -37,6 +40,8 @@
           <router-link to="/env-vars" class="popup-item" @click="closeSettingsMenu">环境变量</router-link>
           <router-link to="/event-hooks" class="popup-item" @click="closeSettingsMenu">事件钩子</router-link>
           <router-link to="/privacy" class="popup-item" @click="closeSettingsMenu">隐私仪表盘</router-link>
+          <router-link to="/metrics" class="popup-item" @click="closeSettingsMenu">运行指标</router-link>
+          <router-link to="/audit-log" class="popup-item" @click="closeSettingsMenu">审计日志</router-link>
           <div class="popup-divider"></div>
           <button class="popup-item popup-action neutral" @click="cycleNightModeSetting">
             深夜模式：{{ nightModeLabel }}

@@ -6,7 +6,7 @@ import shutil
 from pydantic import BaseModel, Field
 
 from app_paths import MACROS_DIR, MACROS_DATA_DIR
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 
 _SAFE_ID = re.compile(r"^[a-zA-Z0-9_\-][a-zA-Z0-9_\- .]{0,63}$")
 
@@ -80,6 +80,7 @@ def _invalidate_prompt_cache():
         pass
 
 
+@register_tool
 class ManageMacrosTool(ToolBase):
     name: str = "manage_macros"
     description: str = (

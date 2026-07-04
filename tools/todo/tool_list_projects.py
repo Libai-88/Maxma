@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 from tools.todo.todo_base import TodoAPIHelper
 
 
@@ -10,6 +10,7 @@ class TodoListProjectsInput(BaseModel):
     get_doc: bool = Field(default=False, description="设为 true 以获取使用说明")
 
 
+@register_tool
 class TodoListProjectsTool(ToolBase):
     name: str = "todo_list_projects"
     description: str = "列出 Todoist 中所有项目及其详细信息。添加任务前建议先调用以确认项目名。[调用积极性: 可自由看情况调用] [get_doc: 仅在发生错误时 get_doc]"

@@ -69,9 +69,13 @@ MACROS_DATA_DIR = DATA_DIR / "macros"  # 用户自定义 macros
 API_DATA_DIR = DATA_DIR / "api" / "data"
 LOGS_DIR = DATA_DIR / "logs"
 UPLOADS_DIR = DATA_DIR / "uploads"
+VECTOR_DB_DIR = DATA_DIR / "vector_db"  # chromadb 向量数据库持久化目录
+KB_DIR = DATA_DIR / "knowledge_base"  # 知识库原始文档副本
 AUTH_TOKEN_PATH = API_DATA_DIR / "auth_token.yaml"
 CONST_SESSIONS_DIR = API_DATA_DIR / "const-sessions"
 MEMORY_CONFIG_PATH = PERSONAS_DATA_DIR / "memory.yaml"
+EPISODIC_MEMORY_PATH = API_DATA_DIR / "episodic_memory.json"  # 情景记忆 JSON 存储
+SEMANTIC_MEMORY_PATH = API_DATA_DIR / "semantic_memory.json"  # 语义记忆 JSON 存储
 SOUL_MD_PATH = PERSONAS_DATA_DIR / "SOUL.md"
 USER_MD_PATH = PERSONAS_DATA_DIR / "USER.md"
 ACTIVE_PERSONA_PATH = PERSONAS_DATA_DIR / "active_persona.yaml"
@@ -88,6 +92,28 @@ PROJECT_ROOT: Path = BUNDLE_DIR if not _is_frozen() else DATA_DIR
 
 
 def ensure_data_dirs():
-    """确保所有用户数据目录存在（首次运行时自动创建）。"""
-    for d in [API_DATA_DIR, LOGS_DIR, UPLOADS_DIR, CONST_SESSIONS_DIR, PERSONAS_DATA_DIR, SKILLS_DATA_DIR, MACROS_DATA_DIR]:
+    """确保所有用户数据目录存在（首次运行时自动创建）。
+
+    同时确保 MCP 配置文件存在：首次运行时创建空 YAML（servers: []），
+    避免打包模式下 MCP_CONFIG_PATH 指向不存在的文件导致加载失败。
+    """
+    for d in [API_DATA_DIR, LOGS_DIR, UPLOADS_DIR, CONST_SESSIONS_DIR, PERSONAS_DATA_DIR, SKILLS_DATA_DIR, MACROS_DATA_DIR, VECTOR_DB_DIR, KB_DIR]:
         d.mkdir(parents=True, exist_ok=True)
+
+    # 首次运行时创建空的 MCP 配置文件（打包模式下 %APPDATA% 内默认不存在）
+    _ensure_mcp_config()
+
+
+def _ensure_mcp_config() -> None:
+    """若 MCP_CONFIG_PATH 不存在，创建一个空的 servers: [] YAML。"""
+    if MCP_CONFIG_PATH.exists():
+        return
+    try:
+        MCP_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        MCP_CONFIG_PATH.write_text(
+            "# MaxmaHere MCP 服务器配置\n# 在 Web UI 的 MCP 管理页面添加服务器\nservers: []\n",
+            encoding="utf-8",
+        )
+    except OSError:
+        # 权限不足或磁盘满时静默失败，避免阻塞启动
+        pass

@@ -25,7 +25,7 @@ class TestGetLlm:
             deps.get_llm(provider_manager=pm)
 
     def test_get_llm_with_enabled_provider(self):
-        """有 enabled provider → 返回 LLM。"""
+        """有 enabled provider → 返回 LLM（阶段 3.3：优先用 get_healthy）。"""
         fake_llm = MagicMock()
         fake_provider = MagicMock()
         fake_provider.default_model = "gpt-4"
@@ -33,13 +33,38 @@ class TestGetLlm:
 
         pm = MagicMock()
         pm.count = 1
+        # 阶段 3.3：get_llm 优先调用 get_healthy()，返回 None 时回退到 iter_enabled()
+        pm.get_healthy.return_value = fake_provider
         pm.iter_enabled.return_value = [fake_provider]
 
         result = deps.get_llm(provider_manager=pm)
 
         assert result is fake_llm
+        pm.get_healthy.assert_called_once()
         fake_provider.create_llm.assert_called_once_with(
             "gpt-4",
+            temperature=0.7,
+            streaming=True,
+        )
+
+    def test_get_llm_falls_back_to_iter_enabled_when_no_healthy(self):
+        """阶段 3.3：get_healthy 返回 None → 回退到 iter_enabled 第一个。"""
+        fake_llm = MagicMock()
+        fake_provider = MagicMock()
+        fake_provider.default_model = "deepseek-v4"
+        fake_provider.create_llm.return_value = fake_llm
+
+        pm = MagicMock()
+        pm.count = 1
+        pm.get_healthy.return_value = None  # 全部 unhealthy
+        pm.iter_enabled.return_value = [fake_provider]
+
+        result = deps.get_llm(provider_manager=pm)
+
+        assert result is fake_llm
+        pm.get_healthy.assert_called_once()
+        fake_provider.create_llm.assert_called_once_with(
+            "deepseek-v4",
             temperature=0.7,
             streaming=True,
         )

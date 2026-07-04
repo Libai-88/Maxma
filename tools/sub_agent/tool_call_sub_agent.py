@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from langchain_core.runnables import RunnableConfig
 
 from api import interaction
-from tools.base import ToolBase, format_success, format_error
+from tools.base import ToolBase, format_success, format_error, register_tool
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,7 @@ _sub_call_depth: contextvars.ContextVar[int] = contextvars.ContextVar(
 _MAX_SUB_CALL_DEPTH = 2
 
 
+@register_tool
 class CallSubAgentTool(ToolBase):
     name: str = "call_sub_agent"
     description: str = (
@@ -188,11 +189,15 @@ class CallSubAgentTool(ToolBase):
         from langchain_core.messages import HumanMessage
 
         system_prompt = build_system_prompt()
+        # 4 层架构：子 Agent 也启用情景记忆检索
+        episodic_mm = getattr(app_state, "episodic_mm", None)
         agent = build_agent(
             model=app_state.llm,
             tools=app_state.tools,
             system_prompt=system_prompt,
             checkpointer=sub.checkpointer,
+            episodic_mm=episodic_mm,
+            enable_executor=False,  # 子 Agent 不启用 executor，防止递归爆炸
         )
         inputs = {"messages": [HumanMessage(content=task)]}
         config: RunnableConfig = {"configurable": {"thread_id": sub.session_id}, "recursion_limit": 72}

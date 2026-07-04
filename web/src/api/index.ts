@@ -15,6 +15,7 @@ import type {
   ListMacrosResponse,
   ProviderConfig,
   TestConnectionResponse,
+  ProviderHealthCheckResponse,
   DiscoverModelsResponse,
   ConstifyResponse,
   WhitelistEntry,
@@ -28,16 +29,26 @@ import type {
   MCPServerCreateBody,
   MCPServerUpdateBody,
   ListMCPServersResponse,
+  MCPServerToolsResponse,
   SkillDetail,
   SkillCreateBody,
   SkillUpdateBody,
   MacroDetail,
   MacroCreateBody,
   MacroUpdateBody,
+  KbDocument,
+  KbSearchResult,
+  MetricsSnapshot,
+  MetricsHistoryResponse,
+  AuditLogRecord,
+  AuditLogStats,
+  AuditLogListResponse,
 } from '@/types'
-import { getApiBase, tauriFetch } from '@/utils/env'
+import { ensurePortLoaded, getApiBase, tauriFetch } from '@/utils/env'
 
-const BASE = getApiBase()
+// 注意：BASE 在 ensurePortLoaded() 完成后可能因端口冲突回退而变化，
+// 因此在 ensureTokenLoaded() 中会重新计算。
+let BASE = getApiBase()
 
 /** 运行时从后端获取的 Token。桌面端与浏览器端都以这份为准。 */
 let token = ''
@@ -60,6 +71,9 @@ export async function ensureTokenLoaded(): Promise<void> {
   if (!tokenLoadPromise) {
     tokenLoadPromise = (async () => {
       try {
+        // 先加载运行时端口（Tauri 端口冲突回退），再构造请求 URL
+        await ensurePortLoaded()
+        BASE = getApiBase()
         const res = await tauriFetch(`${BASE}/auth/token`)
         if (res.ok) {
           const data = await res.json()
@@ -122,7 +136,7 @@ async function uploadImage(file: File): Promise<{ file_id: string; filename: str
   if (token) {
     headers['X-Maxma-Token'] = token
   }
-  const res = await tauriFetch(`${BASE}/api/upload`, {
+  const res = await tauriFetch(`${BASE}/upload`, {
     method: 'POST',
     headers,
     body: form,
@@ -226,6 +240,12 @@ export const api = {
 
   testExistingProvider: (id: string) =>
     request<TestConnectionResponse>(`/providers/${id}/test`, {
+      method: 'POST',
+    }),
+
+  // 阶段 3.3：按需触发健康检查并同步运行时健康状态（影响 fallback 链路）
+  checkProviderHealth: (id: string) =>
+    request<ProviderHealthCheckResponse>(`/providers/${id}/health`, {
       method: 'POST',
     }),
 
@@ -421,6 +441,14 @@ export const api = {
       method: 'POST',
     }),
 
+  // 阶段 4.1：列出某 MCP 服务器加载的所有工具名（供前端勾选 allowlist）
+  listMcpServerTools: (serverId: string) =>
+    request<MCPServerToolsResponse>(`/mcp/servers/${encodeURIComponent(serverId)}/tools`),
+
+  // 阶段 4.2：MCP 调用审计聚合统计
+  getMcpAuditSummary: () =>
+    request<{ summary: any[]; event_type: string }>('/audit-log/mcp-summary'),
+
   uploadImage,
 
   // Event Hooks
@@ -450,16 +478,65 @@ export const api = {
 
   // Audit Log
   getAuditLog: (params: string = '?limit=50') =>
-    request<{ records: any[] }>(`/audit-log${params}`),
+    request<AuditLogListResponse>(`/audit-log${params}`),
 
   getAuditStats: () =>
-    request<{ stats: any }>('/audit-log/stats'),
+    request<{ stats: AuditLogStats }>('/audit-log/stats'),
 
   clearAuditLog: () =>
     request<{ status: string; deleted: number }>('/audit-log/clear', { method: 'POST' }),
 
   encryptApiKeys: () =>
-    request<{ status: string; encrypted: number }>('/audit-log/encrypt-keys', { method: 'POST' }),
+    request<{ status: string; encrypted: number }>('/audit-log/encrypt-keys', {
+      method: 'POST',
+    }),
+
+  // ── 运行时指标 Metrics ──
+
+  getMetrics: () =>
+    request<MetricsSnapshot>('/metrics'),
+
+  getMetricsHistory: (windowSeconds: number = 3600) =>
+    request<MetricsHistoryResponse>(`/metrics/history?window=${windowSeconds}`),
+
+  // ── Knowledge Base 知识库 ──
+
+  listKbDocuments: () =>
+    request<{ items: KbDocument[] }>('/kb/documents'),
+
+  getKbDocument: (docId: string) =>
+    request<KbDocument>(`/kb/documents/${encodeURIComponent(docId)}`),
+
+  deleteKbDocument: (docId: string) =>
+    request<{ status: string; doc_id: string }>(`/kb/documents/${encodeURIComponent(docId)}`, { method: 'DELETE' }),
+
+  uploadKbDocument: (file: File, docId?: string) => {
+    const form = new FormData()
+    form.append('file', file)
+    const headers: Record<string, string> = {}
+    if (token) headers['X-Maxma-Token'] = token
+    if (docId) form.append('doc_id', docId)
+    return tauriFetch(`${BASE}/kb/documents`, { method: 'POST', headers, body: form })
+      .then(res => { if (!res.ok) throw new Error(`上传失败: ${res.status}`); return res.json() })
+  },
+
+  indexKbText: (body: { content: string; doc_id: string; filename?: string; source?: string }) =>
+    request<{ doc_id: string; chunks: number; status: string }>('/kb/documents/text', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  importKbUrl: (body: { url: string; doc_id?: string }) =>
+    request<{ doc_id: string; chunks: number; status: string }>('/kb/documents/url', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  searchKb: (body: { query: string; top_k?: number; threshold?: number }) =>
+    request<{ query: string; count: number; items: KbSearchResult[] }>('/kb/search', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 }
 
 export { request }

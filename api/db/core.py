@@ -30,9 +30,23 @@ DB_PATH = DB_DIR / "maxma.db"
 
 # ── Schema 迁移 ──────────────────────────────────────────
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 3
 
-SCHEMA_MIGRATIONS: list[str] = [
+
+def _migrate_v3_add_priority(conn: sqlite3.Connection) -> None:
+    """v3 迁移：providers 表新增 priority 列（幂等实现）。
+
+    先检查列是否已存在，避免崩溃重启后重复 ALTER TABLE 报错。
+    """
+    cols = [row[1] for row in conn.execute("PRAGMA table_info(providers)").fetchall()]
+    if "priority" not in cols:
+        conn.execute("ALTER TABLE providers ADD COLUMN priority INTEGER NOT NULL DEFAULT 0")
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (3, julianday('now'))"
+    )
+
+
+SCHEMA_MIGRATIONS: list[str | Any] = [
     # v1: 初始 schema
     """
     CREATE TABLE IF NOT EXISTS schema_version (
@@ -97,6 +111,40 @@ SCHEMA_MIGRATIONS: list[str] = [
     INSERT OR IGNORE INTO schema_version (version, applied_at)
     VALUES (1, julianday('now'));
     """,
+    # v2: 运行时指标持久化（snapshots + events）
+    """
+    CREATE TABLE IF NOT EXISTS metrics_snapshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT NOT NULL,
+        uptime_seconds REAL,
+        http_json TEXT,
+        tools_json TEXT,
+        llm_json TEXT,
+        errors_json TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_metrics_snapshots_ts
+        ON metrics_snapshots(timestamp);
+
+    CREATE TABLE IF NOT EXISTS metrics_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        name TEXT,
+        latency_ms REAL,
+        status TEXT,
+        extra_json TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_metrics_events_type_ts
+        ON metrics_events(event_type, timestamp);
+
+    INSERT OR IGNORE INTO schema_version (version, applied_at)
+    VALUES (2, julianday('now'));
+    """,
+    # v3: 阶段 3.3 — providers 表新增 priority 列（用于 fallback 排序）
+    # 幂等实现：先检查列是否已存在，避免崩溃重启后重复 ALTER TABLE 报错
+    _migrate_v3_add_priority,
 ]
 
 
@@ -116,6 +164,14 @@ def _get_connection() -> sqlite3.Connection:
     return conn
 
 
+def _apply_migration(conn: sqlite3.Connection, migration) -> None:
+    """执行单个迁移：字符串用 executescript，可调用对象直接调用。"""
+    if callable(migration):
+        migration(conn)
+    else:
+        conn.executescript(migration)
+
+
 def initialize_database() -> None:
     """初始化数据库：确保目录存在、运行迁移。"""
     global _db_initialized
@@ -132,15 +188,15 @@ def initialize_database() -> None:
 
             if not exists:
                 # 全新数据库：执行所有迁移
-                for sql in SCHEMA_MIGRATIONS:
-                    conn.executescript(sql)
+                for migration in SCHEMA_MIGRATIONS:
+                    _apply_migration(conn, migration)
                 logger.info("[db] Initialized new database at %s", DB_PATH)
             else:
                 # 已有数据库：检查版本并升级
                 current = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0] or 0
                 if current < SCHEMA_VERSION:
-                    for sql in SCHEMA_MIGRATIONS[current:]:
-                        conn.executescript(sql)
+                    for migration in SCHEMA_MIGRATIONS[current:]:
+                        _apply_migration(conn, migration)
                     logger.info("[db] Migrated from v%s to v%s", current, SCHEMA_VERSION)
 
             conn.commit()

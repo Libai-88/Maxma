@@ -9,7 +9,7 @@ import traceback
 from pydantic import BaseModel, Field
 
 from api import interaction
-from tools.base import ToolBase, format_success, format_error
+from tools.base import ToolBase, format_success, format_error, register_tool
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +30,7 @@ class ParallelExecuteInput(BaseModel):
     )
 
 
+@register_tool
 class ParallelExecuteTool(ToolBase):
     name: str = "parallel_execute"
     description: str = (
@@ -183,11 +184,15 @@ class ParallelExecuteTool(ToolBase):
         from langchain_core.runnables import RunnableConfig
 
         system_prompt = build_system_prompt()
+        # 4 层架构：子 Agent 也启用情景记忆检索
+        episodic_mm = getattr(app_state, "episodic_mm", None)
         agent = build_agent(
             model=app_state.llm,
             tools=app_state.tools,
             system_prompt=system_prompt,
             checkpointer=sub.checkpointer,
+            episodic_mm=episodic_mm,
+            enable_executor=False,  # 子 Agent 不启用 executor，防止递归爆炸
         )
         inputs = {"messages": [HumanMessage(content=task)]}
         config: RunnableConfig = {

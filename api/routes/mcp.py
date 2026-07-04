@@ -12,11 +12,12 @@ from tools.mcp import (
     MCPServerConfig,
     MCPServersConfigFile,
     get_mcp_error,
+    get_mcp_server_tools,
     get_mcp_servers_info,
     load_mcp_config,
     reload_mcp,
 )
-from tools.mcp_security import validate_stdio_command
+from tools.mcp_security import validate_stdio_command, validate_transport_url, validate_tls_config
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,9 @@ class MCPServerCreateBody(BaseModel):
     transport: str = Field(..., description="stdio / sse / streamable_http / websocket")
     enabled: bool = True
     description: str = ""
+    # 阶段 4.1：工具级 allowlist / blocklist
+    allowed_tools: list[str] | None = None
+    blocked_tools: list[str] | None = None
     # stdio 专用
     command: str | None = None
     args: list[str] = []
@@ -46,12 +50,15 @@ class MCPServerCreateBody(BaseModel):
     headers: dict[str, str] | None = None
     timeout: float | None = None
     sse_read_timeout: float | None = None
+    tls_verify: bool = True
 
 
 class MCPServerUpdateBody(BaseModel):
     """更新 MCP 服务器的请求体（所有字段可选）。"""
     enabled: bool | None = None
     description: str | None = None
+    allowed_tools: list[str] | None = None
+    blocked_tools: list[str] | None = None
     command: str | None = None
     args: list[str] | None = None
     env: dict[str, str] | None = None
@@ -60,6 +67,7 @@ class MCPServerUpdateBody(BaseModel):
     headers: dict[str, str] | None = None
     timeout: float | None = None
     sse_read_timeout: float | None = None
+    tls_verify: bool | None = None
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -89,6 +97,12 @@ def _build_server_dict(body: MCPServerCreateBody) -> dict:
         "enabled": body.enabled,
         "description": body.description,
     }
+    # 阶段 4.1：allowlist / blocklist
+    if body.allowed_tools is not None:
+        d["allowed_tools"] = body.allowed_tools
+    if body.blocked_tools is not None:
+        d["blocked_tools"] = body.blocked_tools
+
     t = body.transport
     if t == "stdio":
         if not body.command:
@@ -106,7 +120,15 @@ def _build_server_dict(body: MCPServerCreateBody) -> dict:
     elif t in ("sse", "streamable_http"):
         if not body.url:
             raise HTTPException(status_code=400, detail=f"{t} 模式必须指定 url")
+        # 阶段 4.3：URL 白名单 + TLS 校验
+        url_error = validate_transport_url(body.url, t)
+        if url_error:
+            raise HTTPException(status_code=400, detail=url_error)
+        tls_error = validate_tls_config(body.url, body.tls_verify)
+        if tls_error:
+            raise HTTPException(status_code=400, detail=tls_error)
         d["url"] = body.url
+        d["tls_verify"] = body.tls_verify
         if body.headers:
             d["headers"] = body.headers
         if body.timeout is not None:
@@ -116,7 +138,15 @@ def _build_server_dict(body: MCPServerCreateBody) -> dict:
     elif t == "websocket":
         if not body.url:
             raise HTTPException(status_code=400, detail="websocket 模式必须指定 url")
+        # 阶段 4.3：URL 白名单 + TLS 校验
+        url_error = validate_transport_url(body.url, t)
+        if url_error:
+            raise HTTPException(status_code=400, detail=url_error)
+        tls_error = validate_tls_config(body.url, body.tls_verify)
+        if tls_error:
+            raise HTTPException(status_code=400, detail=tls_error)
         d["url"] = body.url
+        d["tls_verify"] = body.tls_verify
     else:
         raise HTTPException(
             status_code=400,
@@ -173,6 +203,23 @@ async def get_mcp_server(server_id: str):
         if entry.get("server_id") == server_id:
             return entry
     raise HTTPException(status_code=404, detail=f"MCP 服务器 '{server_id}' 不存在")
+
+
+@router.get("/mcp/servers/{server_id}/tools")
+async def list_mcp_server_tools(server_id: str):
+    """列出指定 MCP 服务器加载到的所有工具名（阶段 4.1）。
+
+    供前端在选择 allowlist / blocklist 时列出可选工具。
+    工具名含 {server_id}_ 前缀。
+    """
+    # 先确认服务器存在
+    with yaml_file_lock(MCP_YAML_PATH):
+        entries = _load_raw()
+    if not any(e.get("server_id") == server_id for e in entries):
+        raise HTTPException(status_code=404, detail=f"MCP 服务器 '{server_id}' 不存在")
+
+    tools = get_mcp_server_tools(server_id)
+    return {"server_id": server_id, "tools": tools}
 
 
 @router.post("/mcp/servers")

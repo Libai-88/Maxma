@@ -10,11 +10,21 @@ _tools: list | None = None
 def get_llm(provider_manager=None):
     """获取 LLM。
 
-    从 ProviderManager 中取第一个 enabled provider 创建 LLM。
+    阶段 3.3：从 ProviderManager 中取优先级最高的健康 provider 创建 LLM
+    （使用 get_healthy 跳过 health_status == error 的 provider）。
     若无可用的 provider 则抛出 RuntimeError。
     LLM 配置统一由 providers.yaml 管理，不再降级到 .env。
     """
     if provider_manager is not None and provider_manager.count > 0:
+        # 阶段 3.3：优先返回健康 provider
+        provider = provider_manager.get_healthy()
+        if provider is not None:
+            return provider.create_llm(
+                provider.default_model,
+                temperature=0.7,
+                streaming=True,
+            )
+        # 全部 unhealthy 时回退到 iter_enabled 第一个（让调用方得到错误）
         for provider in provider_manager.iter_enabled():
             return provider.create_llm(
                 provider.default_model,

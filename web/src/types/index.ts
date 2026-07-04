@@ -42,13 +42,19 @@ export interface DoneEvent {
   payload: { turn_id?: string; context_usage?: ContextUsage }
 }
 
+export interface RateLimitDetails {
+  retry_after: number
+  limit: number
+  remaining: number
+}
+
 export interface ErrorEvent {
   type: 'error'
   payload: {
     code: string
     message: string
     category?: 'user_error' | 'tool_error' | 'system_error' | 'rate_limit' | 'cancelled'
-    details?: Record<string, unknown>
+    details?: RateLimitDetails & Record<string, unknown>
     trace_id?: string
   }
 }
@@ -86,12 +92,70 @@ export interface PlanProposedEvent {
   }
 }
 
+/** plan_step_start — executor 开始执行某步骤 */
+export interface PlanStepStartEvent {
+  type: 'plan_step_start'
+  payload: {
+    step_index: number
+    step_description: string
+    tool_hint?: string
+    total_steps: number
+  }
+}
+
+/** plan_step_end — executor 完成某步骤 */
+export interface PlanStepEndEvent {
+  type: 'plan_step_end'
+  payload: {
+    step_index: number
+    step_description: string
+    status: 'done' | 'skipped'
+  }
+}
+
+/** plan_step_error — executor 某步骤失败 */
+export interface PlanStepErrorEvent {
+  type: 'plan_step_error'
+  payload: {
+    step_index: number
+    step_description: string
+    error: string
+    replanning: boolean
+    skipped?: boolean
+  }
+}
+
+/** plan_completed — 全部步骤执行完成 */
+export interface PlanCompletedEvent {
+  type: 'plan_completed'
+  payload: {
+    summary: {
+      total_steps: number
+      current_step_index: number
+      statuses: Record<string, string>
+      failure_count: number
+      replan_count: number
+      is_complete: boolean
+    }
+  }
+}
+
 /** 前端计划卡片状态 */
 export interface PlanCard {
   planId: string
   steps: string[]
   planText: string
-  status: 'pending' | 'approved' | 'modified' | 'rejected'
+  status: 'pending' | 'approved' | 'modified' | 'rejected' | 'running' | 'failed' | 'replanning'
+  /** 当前执行步骤索引（-1 表示未开始） */
+  currentStepIndex?: number
+  /** 各步骤状态：{ step_index_str: 'pending' | 'running' | 'done' | 'failed' | 'skipped' } */
+  stepStatuses?: Record<string, string>
+  /** 工具提示 */
+  toolHints?: Record<string, string>
+  /** 失败次数 */
+  failureCount?: number
+  /** 重规划次数 */
+  replanCount?: number
 }
 
 /** sub_session_created — 主 Agent 调用 call_sub_agent 后推送 */
@@ -166,6 +230,10 @@ export type ServerEvent =
   | ContextUsageEvent
   | AskUserEvent
   | PlanProposedEvent
+  | PlanStepStartEvent
+  | PlanStepEndEvent
+  | PlanStepErrorEvent
+  | PlanCompletedEvent
   | SubSessionCreatedEvent
   | MemoryStartEvent
   | MemoryToolStartEvent
@@ -411,6 +479,14 @@ export interface ProviderConfig {
   models: string[]
   enabled: boolean
   context_window?: number
+  // 阶段 3.3：优先级（数字越小优先级越高，0 = 最高），用于 fallback 排序
+  priority?: number
+  // 阶段 3.3：运行时健康状态（由后台 health_monitor 维护，未持久化）
+  health_status?: 'ok' | 'degraded' | 'error' | 'unknown'
+  health_detail?: string | null
+  health_latency_ms?: number | null
+  last_check_time?: number
+  consecutive_failures?: number
 }
 
 export interface ListProvidersResponse {
@@ -421,6 +497,15 @@ export interface TestConnectionResponse {
   status: 'ok' | 'error'
   latency_ms: number | null
   detail: string | null
+}
+
+// 阶段 3.3：按需健康检查响应（POST /providers/{id}/health）
+export interface ProviderHealthCheckResponse {
+  status: 'ok' | 'degraded' | 'error'
+  latency_ms: number | null
+  detail: string | null
+  last_check_time: number
+  consecutive_failures: number
 }
 
 export interface DiscoverModelsResponse {
@@ -575,6 +660,11 @@ export interface MCPServerInfo {
   enabled: boolean
   description: string
   tool_count: number
+  // 阶段 4.1：工具级 allowlist / blocklist
+  allowed_tools?: string[] | null
+  blocked_tools?: string[] | null
+  // 阶段 4.3：TLS 校验开关（仅 sse / streamable_http / websocket）
+  tls_verify?: boolean
 }
 
 export interface MCPServerConfig extends MCPServerInfo {
@@ -600,25 +690,138 @@ export interface MCPServerCreateBody {
   transport: MCPTransport
   enabled?: boolean
   description?: string
+  // 阶段 4.1
+  allowed_tools?: string[] | null
+  blocked_tools?: string[] | null
   command?: string
   args?: string[]
   env?: Record<string, string>
   cwd?: string
+  // 阶段 4.3
   url?: string
   headers?: Record<string, string>
   timeout?: number
   sse_read_timeout?: number
+  tls_verify?: boolean
 }
 
 export interface MCPServerUpdateBody {
   enabled?: boolean
   description?: string
+  // 阶段 4.1
+  allowed_tools?: string[] | null
+  blocked_tools?: string[] | null
   command?: string
   args?: string[]
   env?: Record<string, string>
   cwd?: string
+  // 阶段 4.3
   url?: string
   headers?: Record<string, string>
   timeout?: number
   sse_read_timeout?: number
+  tls_verify?: boolean
+}
+
+// 阶段 4.1：列出某个 MCP 服务器所有工具名（供前端勾选 allowlist）
+export interface MCPServerToolsResponse {
+  server_id: string
+  tools: string[]
+}
+
+// === 知识库 KB ===
+
+export interface KbDocument {
+  doc_id: string
+  filename: string
+  source: string
+  file_type: string
+  size: number
+  chunk_count: number
+  indexed_chunk_count: number
+  chunk_ids: string[]
+  created_at: string
+  metadata: Record<string, any>
+}
+
+export interface KbSearchResult {
+  chunk_id: string
+  text: string
+  source_doc_id: string
+  source_filename: string
+  source_path: string
+  similarity: number
+  score_percent: number
+}
+
+// === 运行时指标 Metrics ===
+
+export interface MetricsHistogram {
+  count: number
+  avg_ms: number
+  min_ms: number
+  max_ms: number
+}
+
+export interface MetricsSnapshot {
+  uptime_seconds: number
+  http: {
+    total_requests: number
+    status_codes: Record<string, number>
+    latency_ms: MetricsHistogram
+    top_paths: Record<string, MetricsHistogram>
+  }
+  tools: {
+    total_calls: number
+    total_errors: number
+    by_tool: Record<string, {
+      count: number
+      errors?: number
+      latency?: MetricsHistogram
+    }>
+  }
+  llm: {
+    total_calls: number
+    total_tokens_in: number
+    total_tokens_out: number
+    latency_ms: MetricsHistogram
+    by_model: Record<string, number>
+  }
+  errors: Record<string, number>
+}
+
+export interface MetricsHistoryResponse {
+  window_seconds: number
+  snapshots: Array<{
+    timestamp: string
+    uptime_seconds: number
+    http: Record<string, any>
+    tools: Record<string, any>
+    llm: Record<string, any>
+    errors: Record<string, any>
+  }>
+}
+
+// === 审计日志 AuditLog ===
+
+export interface AuditLogRecord {
+  timestamp: string
+  epoch: number
+  type: string
+  target: string
+  detail: string
+  data_size: number
+  status: string
+  extra?: Record<string, any>
+}
+
+export interface AuditLogStats {
+  total: number
+  by_type: Record<string, number>
+  by_status: Record<string, number>
+  top_targets: Array<{ target: string; count: number }>
+}
+
+export interface AuditLogListResponse {
+  records: AuditLogRecord[]
 }

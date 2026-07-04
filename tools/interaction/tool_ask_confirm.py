@@ -5,7 +5,7 @@ import asyncio
 from pydantic import BaseModel, Field
 
 from api import interaction
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 
 
 class AskUserConfirmInput(BaseModel):
@@ -17,6 +17,7 @@ class AskUserConfirmInput(BaseModel):
     )
 
 
+@register_tool
 class AskUserConfirmTool(ToolBase):
     name: str = "ask_user_confirm"
     description: str = (

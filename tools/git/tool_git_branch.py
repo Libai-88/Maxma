@@ -5,7 +5,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 
 
 class GitBranchInput(BaseModel):
@@ -19,6 +19,7 @@ class GitBranchInput(BaseModel):
     create_from: str = Field(default="", description="创建分支时指定起点（commit/分支/tag），留空则从当前 HEAD 创建")
 
 
+@register_tool
 class GitBranchTool(ToolBase):
     name: str = "git_branch"
     description: str = (

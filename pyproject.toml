@@ -30,6 +30,10 @@ dependencies = [
     "watchdog>=3.0.0",
     "cryptography>=41.0.0",
     "zai-sdk",
+    # RAG 子系统：向量检索 + ONNX 嵌入（不依赖 torch，体积优化 ~600MB）
+    "chromadb>=0.5.0",
+    "onnxruntime>=1.16.0",
+    "transformers>=4.40.0",
 ]
 
 [project.urls]
@@ -45,6 +49,9 @@ dev = [
     "pytest-mock>=3.12.0",
     "ruff>=0.11.0",
     "pyinstaller>=6.0.0",
+    # RAG 模型导出工具：仅当需要将非 ONNX 预置模型导出为 ONNX 格式时临时安装
+    # 运行时/打包时不需要（paraphrase-multilingual-MiniLM-L12-v2 官方已预置 ONNX）
+    # 安装命令: pip install 'optimum[onnxruntime]>=1.20.0'
 ]
 
 [tool.pytest.ini_options]

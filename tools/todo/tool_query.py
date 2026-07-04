@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 from tools.todo.todo_base import TodoAPIHelper
 
 
@@ -11,6 +11,7 @@ class TodoQueryInput(BaseModel):
     task_id: str = Field(default="", description="要查询的任务 ID")
 
 
+@register_tool
 class TodoQueryTool(ToolBase):
     name: str = "todo_query"
     description: str = "根据 task_id 查询 Todoist 中单个任务的详细信息。查不到时用 todo_list 列出全部任务。[调用积极性: 可自由看情况调用] [get_doc: 仅在发生错误时 get_doc]"

@@ -6,7 +6,7 @@ import yaml
 from pydantic import BaseModel, Field
 
 from app_paths import PATH_WHITELIST_YAML_PATH
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 
 
 class ManageWhitelistInput(BaseModel):
@@ -44,6 +44,7 @@ def _save_raw(entries: list[dict]) -> None:
         )
 
 
+@register_tool
 class ManageWhitelistTool(ToolBase):
     name: str = "manage_whitelist"
     description: str = (
