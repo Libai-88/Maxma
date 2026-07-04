@@ -125,6 +125,8 @@ venv_stdout.log
 # 向量数据库本地缓存
 vector_db/
 
-# 生产打包：构建时下载的嵌入式运行时和资源（不进 git）
-desktop/src-tauri/resources/runtime/
-desktop/src-tauri/resources/assets/
+# 生产打包：构建时下载的嵌入式运行时和资源（不进 git，但保留 .gitkeep 占位）
+desktop/src-tauri/resources/runtime/*
+!desktop/src-tauri/resources/runtime/.gitkeep
+desktop/src-tauri/resources/assets/*
+!desktop/src-tauri/resources/assets/.gitkeep
