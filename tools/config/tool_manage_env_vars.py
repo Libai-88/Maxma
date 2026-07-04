@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 
 
 class ManageEnvVarsInput(BaseModel):
@@ -33,6 +33,7 @@ def _mask_value(val: str) -> str:
     return val[:4] + "****" + val[-4:]
 
 
+@register_tool
 class ManageEnvVarsTool(ToolBase):
     name: str = "manage_env_vars"
     description: str = (

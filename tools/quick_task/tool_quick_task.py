@@ -9,7 +9,7 @@ import logging
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_success, format_error
+from tools.base import ToolBase, format_success, format_error, register_tool
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,7 @@ class QuickTaskInput(BaseModel):
     )
 
 
+@register_tool
 class QuickTaskTool(ToolBase):
     name: str = "quick_task"
     description: str = (

@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from zai import ZhipuAiClient
 
 from config.settings import get_settings
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 
 MODEL = "glm-5v-turbo"
 
@@ -63,6 +63,7 @@ class ImageUnderstandInput(BaseModel):
     prompt: str = Field(default="请描述这张图片", description="向模型提问的指令")
 
 
+@register_tool
 class ImageUnderstandTool(ToolBase):
     name: str = "analyze_image"
     description: str = (

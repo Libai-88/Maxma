@@ -73,6 +73,14 @@ framework_hiddenimports = []
 for package_name in (
     "langgraph",
     "langchain_openai",
+    # Stage 1 RAG 子系统：chromadb / transformers / onnxruntime 动态导入
+    # 注意：不收集 sentence_transformers / torch（已改用 ONNX Runtime 直推）
+    "chromadb",
+    "transformers",
+    "onnxruntime",
+    # 自动收集 tools 下所有子模块，避免 pkgutil.walk_packages 在 PyInstaller
+    # 打包后遗漏动态注册的工具（如 tool_ask_user 曾遗漏导致启动校验失败）
+    "tools",
 ):
     framework_hiddenimports.extend(safe_collect_submodules(package_name))
 
@@ -163,6 +171,7 @@ hiddenimports = [
     "tools.sub_agent.tool_parallel",
     "tools.quick_task.tool_quick_task",
     "tools.interaction.tool_ask_qa",
+    "tools.interaction.tool_ask_user",  # ask_user_for_info 工具（曾遗漏导致打包后启动失败）
     "tools.interaction.tool_single_choice",
     "tools.interaction.tool_multi_choice",
     "tools.interaction.tool_ask_confirm",
@@ -174,6 +183,12 @@ hiddenimports = [
     "tools.memory.tool_delete_memory",
     "tools.memory.tool_merge_memories",
     "tools.memory.tool_search_memories",
+    # Stage 1 子任务 1.2：4 层记忆架构新增工具
+    "tools.memory.tool_search_episodic",
+    "tools.memory.tool_search_semantic",
+    # Stage 1 子任务 1.4：通用知识库工具
+    "tools.kb.tool_kb_search",
+    "tools.kb.tool_kb_add",
     "tools.config.tool_manage_mcp",
     "tools.config.tool_manage_skills",
     "tools.config.tool_manage_macros",
@@ -198,12 +213,27 @@ hiddenimports = [
     "api.providers.openai_provider",
     "api.routes.event_hooks",
     "api.routes.audit_log",
+    # Phase 3.2：HTTP/WS 限流中间件（server.py 顶层导入 + 函数内导入）
+    "api.middleware",
+    "api.middleware.auth",
+    "api.middleware.rate_limit",
+    "api.middleware.request_log",
+    # Phase 3.3：Provider fallback 链路（manager 在 server.py 顶层导入；
+    # health_monitor 在 lifespan 内函数导入，PyInstaller 静态分析会遗漏）
+    "api.providers.manager",
+    "api.providers.health_monitor",
+    "api.providers.store",
+    # Stage 1 子任务 1.4/1.5：知识库 + 指标路由（函数内延迟导入）
+    "api.routes.kb",
+    "api.routes.metrics",
 
     # ── SQLite 数据层（Phase 1 新增，动态导入） ──
     "api.db.core",
     "api.db.providers",
     "api.db.auth",
     "api.db.hooks",
+    # Stage 1 子任务 1.6：metrics SQLite 持久化
+    "api.db.metrics",
 
     # ── langchain_core.messages 子类（动态 import，PyInstaller 可能遗漏） ──
     "langchain_core.messages.RemoveMessage",
@@ -217,15 +247,47 @@ hiddenimports = [
     "agent.error_recovery",
     "agent.performance",
     "agent.project_scanner",
+    # Phase 3.1：工具熔断器（ErrorRecoveryManager 内延迟导入）
+    "agent.circuit_breaker",
+    # Stage 2 子任务 2.1：Plan-and-Execute 重构新增模块
+    # executor.py 含 executor_node/StepStateMachine/detect_tool_failure（大量延迟导入）
+    # step_state.py 含 PlanStep/StepStatus/ExecutionPlan/merge_dicts reducer（LangGraph 动态特性）
+    "agent.executor",
+    "agent.step_state",
 
     # ── Memory 模块 ──
     "memory.memory_manager",
     "memory.narrative",
     "memory.memory_callback",
     "memory.user_init",
+    # Stage 1 子任务 1.2：4 层记忆架构
+    "memory.episodic",
+    "memory.semantic",
+    "memory.coordinator",
+    # Stage 1 子任务 1.3：TTL 遗忘机制
+    "memory.ttl",
+    # Stage 1 子任务 1.1：RAG 子系统
+    "memory.rag",
+    "memory.rag.embedding",
+    "memory.rag.vector_store",
+    "memory.rag.indexer",
+    # Stage 1 子任务 1.4：通用知识库
+    "memory.kb",
+    "memory.kb.document_loader",
+    "memory.kb.chunker",
+    "memory.kb.indexer",
+    "memory.kb.retriever",
 
     # ── 路径安全 ──
     "tools.path_security",
+
+    # ── MCP 模块（Stage 4：MCP 工具管理 + 安全 + 限流） ──
+    # tools.mcp 被 api.routes.mcp 顶层导入，但 init_mcp_tools() 内有大量延迟导入
+    "tools.mcp",
+    # tools.mcp_security 被 tools.mcp 顶层导入（validate_stdio_command 等）
+    "tools.mcp_security",
+    # 阶段 4.4：MCP 限流器（tools.mcp._wrap_tool_with_safety 内延迟导入）
+    "tools.mcp_rate_limiter",
 
     # ── 第三方库 ──
     "portalocker",
@@ -248,7 +310,6 @@ hiddenimports = list(dict.fromkeys(hiddenimports))
 excludes = [
     "tkinter",          # 文件选择器在桌面模式下由 Tauri 处理
     "matplotlib",
-    "scipy",
     "numpy.distutils",
     "setuptools",
     "unittest",
@@ -257,6 +318,19 @@ excludes = [
     "jupyter",
     "notebook",
     "pytest",
+    # Stage 1 RAG 体积优化：已改用 ONNX Runtime 直推，排除 torch 全家桶（省 ~600MB）
+    "torch",
+    "torchvision",
+    "torchaudio",
+    "sentence_transformers",
+    "scipy",
+    "sklearn",
+    "scikit_learn",
+    "sympy",
+    "networkx",
+    # chromadb 的云端/可观测性依赖，桌面端不需要
+    "kubernetes",
+    "opentelemetry",
 ]
 
 a = Analysis(

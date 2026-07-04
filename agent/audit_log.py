@@ -21,6 +21,9 @@ AUDIT_LOG_PATH = LOGS_DIR / "audit.jsonl"
 # 最大保留记录数
 MAX_RECORDS = 5000
 
+# 事件类型常量（阶段 4.2）
+EVENT_MCP_CALL = "mcp_call"
+
 
 def _ensure_dir():
     """确保日志目录存在。"""
@@ -185,3 +188,121 @@ def trim_log(max_records: int = MAX_RECORDS) -> int:
     except Exception as e:
         logger.warning(f"Failed to trim audit log: {e}")
         return 0
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 阶段 4.2：MCP 调用审计
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def log_mcp_call(
+    server_id: str,
+    tool_name: str,
+    args_summary: str = "",
+    result_summary: str = "",
+    duration_ms: int = 0,
+    status: str = "ok",
+    error: Optional[str] = None,
+) -> None:
+    """记录一次 MCP 工具调用到审计日志（阶段 4.2）。
+
+    Args:
+        server_id: MCP 服务器 ID
+        tool_name: 工具名（含 server_id 前缀）
+        args_summary: 入参摘要（已脱敏，避免泄漏敏感数据）
+        result_summary: 结果摘要（已脱敏）
+        duration_ms: 耗时（毫秒）
+        status: ok / error / rate_limited / blocked
+        error: 失败时的错误信息
+    """
+    extra = {
+        "server_id": server_id,
+        "tool_name": tool_name,
+        "duration_ms": duration_ms,
+    }
+    if args_summary:
+        extra["args_summary"] = args_summary[:500]  # 截断避免日志膨胀
+    if result_summary:
+        extra["result_summary"] = result_summary[:500]
+    if error:
+        extra["error"] = error[:500]
+
+    log_event(
+        event_type=EVENT_MCP_CALL,
+        target=f"{server_id}/{tool_name}",
+        detail=status,
+        data_size=len(args_summary) + len(result_summary),
+        status=status,
+        extra=extra,
+    )
+
+
+def get_mcp_summary() -> list[dict]:
+    """聚合统计每个 server_id+tool_name 的 MCP 调用次数/成功率/平均耗时（阶段 4.2）。
+
+    Returns:
+        list of dict，每项含 server_id / tool_name / total / ok / error / rate_limited /
+        avg_duration_ms / last_call_at
+    """
+    if not AUDIT_LOG_PATH.exists():
+        return []
+
+    # key: (server_id, tool_name) -> stats
+    stats: dict[tuple[str, str], dict] = {}
+
+    try:
+        with open(AUDIT_LOG_PATH, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if record.get("type") != EVENT_MCP_CALL:
+                    continue
+
+                extra = record.get("extra", {}) or {}
+                server_id = extra.get("server_id", "")
+                tool_name = extra.get("tool_name", "")
+                status = record.get("status", "unknown")
+                duration_ms = extra.get("duration_ms", 0) or 0
+                timestamp = record.get("timestamp", "")
+
+                key = (server_id, tool_name)
+                if key not in stats:
+                    stats[key] = {
+                        "server_id": server_id,
+                        "tool_name": tool_name,
+                        "total": 0,
+                        "ok": 0,
+                        "error": 0,
+                        "rate_limited": 0,
+                        "blocked": 0,
+                        "_duration_sum": 0,
+                        "last_call_at": "",
+                    }
+
+                s = stats[key]
+                s["total"] += 1
+                if status in s:
+                    s[status] += 1
+                s["_duration_sum"] += duration_ms
+                if timestamp > s["last_call_at"]:
+                    s["last_call_at"] = timestamp
+    except Exception as e:
+        logger.warning(f"Failed to read MCP audit summary: {e}")
+        return []
+
+    # 计算平均耗时并清理内部字段
+    result = []
+    for s in stats.values():
+        total = s["total"]
+        s["avg_duration_ms"] = round(s["_duration_sum"] / total, 2) if total else 0
+        s["success_rate"] = round(s["ok"] / total, 4) if total else 0
+        s.pop("_duration_sum", None)
+        result.append(s)
+    # 按 total 降序
+    result.sort(key=lambda x: x["total"], reverse=True)
+    return result

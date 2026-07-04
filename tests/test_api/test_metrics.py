@@ -2,6 +2,7 @@
 
 import pytest
 
+from api.db.metrics import MetricsDbStore
 from api.metrics import Metrics, get_metrics
 
 
@@ -115,3 +116,90 @@ class TestMetrics:
         assert snapshot["tools"]["total_calls"] == 0
         assert snapshot["llm"]["total_calls"] == 0
         assert snapshot["errors"] == {}
+
+
+class TestMetricsPersistence:
+    """指标 SQLite 持久化测试 — 使用 tmp_path 隔离 DB。"""
+
+    def setup_method(self):
+        """每个测试前重置指标（清空内存 + 既有 DB）。"""
+        Metrics().reset()
+
+    def teardown_method(self):
+        """每个测试后清理 DB 引用，避免影响其他测试。"""
+        Metrics()._db = None
+        Metrics().reset()
+
+    def _make_store(self, tmp_path) -> MetricsDbStore:
+        """创建基于 tmp_path 的隔离 store 并注入到 Metrics 单例。"""
+        db_path = tmp_path / "test_metrics.db"
+        store = MetricsDbStore(db_path)
+        Metrics()._db = store
+        return store
+
+    def test_snapshot_persists_to_sqlite(self, tmp_path):
+        """快照应该被持久化到 SQLite，且能通过 get_history 读回。"""
+        m = Metrics()
+        self._make_store(tmp_path)
+
+        m.record_request("GET", "/test", 200, 10.0)
+        m.record_tool_call("tool_a", latency_ms=5.0)
+        m.record_llm_call("model_x", 100, 50, 500.0)
+        m.persist_snapshot()
+
+        history = m.get_history(window_seconds=3600)
+        assert len(history) >= 1
+        snap = history[-1]
+        assert "id" in snap
+        assert "timestamp" in snap
+        assert "uptime_seconds" in snap
+        assert "http" in snap
+        assert "tools" in snap
+        assert "llm" in snap
+        assert "errors" in snap
+        assert snap["http"]["total_requests"] == 1
+        assert snap["tools"]["total_calls"] == 1
+        assert snap["llm"]["total_calls"] == 1
+
+    def test_history_respects_window(self, tmp_path):
+        """get_history 的窗口过滤应只返回近期快照。"""
+        m = Metrics()
+        store = self._make_store(tmp_path)
+
+        # 记录一条请求并手动插入一条"旧"快照（时间戳远在过去）
+        m.record_request("GET", "/old", 200, 10.0)
+        old_snapshot = m.get_snapshot()
+        store.save_snapshot({
+            "timestamp": "2020-01-01T00:00:00",
+            "uptime_seconds": old_snapshot["uptime_seconds"],
+            "http": old_snapshot["http"],
+            "tools": old_snapshot["tools"],
+            "llm": old_snapshot["llm"],
+            "errors": old_snapshot["errors"],
+        })
+        # 再记录一条新请求，然后 persist 当前快照（时间戳为现在）
+        m.record_request("GET", "/new", 200, 20.0)
+        m.persist_snapshot()
+
+        # 足够大的窗口应返回两条（覆盖 2020 年的旧快照）
+        all_history = m.get_history(window_seconds=10**10)
+        assert len(all_history) == 2
+
+        # 小窗口只返回新快照（2020-01-01 远在窗口之外）
+        recent = m.get_history(window_seconds=60)
+        assert len(recent) == 1
+        # 新快照应包含两条请求（/old + /new）
+        assert recent[0]["http"]["total_requests"] == 2
+
+    def test_reset_clears_db(self, tmp_path):
+        """reset 应该清空 DB 中的历史快照。"""
+        m = Metrics()
+        self._make_store(tmp_path)
+
+        m.record_request("GET", "/test", 200, 10.0)
+        m.persist_snapshot()
+        assert len(m.get_history()) >= 1
+
+        m.reset()
+
+        assert m.get_history() == []

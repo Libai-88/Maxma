@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 
 
 class CreatePersonaInput(BaseModel):
@@ -29,6 +29,7 @@ class CreatePersonaInput(BaseModel):
     )
 
 
+@register_tool
 class CreatePersonaTool(ToolBase):
     name: str = "create_persona"
     description: str = (

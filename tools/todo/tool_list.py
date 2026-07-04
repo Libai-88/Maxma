@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 from tools.todo.todo_base import TodoAPIHelper
 
 
@@ -39,6 +39,7 @@ class TodoListInput(BaseModel):
     )
 
 
+@register_tool
 class TodoListTool(ToolBase):
     name: str = "todo_list"
     description: str = (

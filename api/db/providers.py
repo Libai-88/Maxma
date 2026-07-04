@@ -43,8 +43,8 @@ class ProviderDbStore:
         with transaction() as db:
             db.execute(
                 """INSERT INTO providers (id, provider_type, label, api_key, base_url,
-                     models, enabled, context_window, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, julianday('now'))
+                     models, enabled, context_window, priority, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, julianday('now'))
                    ON CONFLICT(id) DO UPDATE SET
                      provider_type=excluded.provider_type,
                      label=excluded.label,
@@ -53,10 +53,12 @@ class ProviderDbStore:
                      models=excluded.models,
                      enabled=excluded.enabled,
                      context_window=excluded.context_window,
+                     priority=excluded.priority,
                      updated_at=julianday('now')""",
                 (config.id, config.provider_type, config.label,
                  config.api_key, config.base_url, models_json,
-                 1 if config.enabled else 0, config.context_window),
+                 1 if config.enabled else 0, config.context_window,
+                 config.priority),
             )
 
     def delete(self, provider_id: str) -> bool:
@@ -96,6 +98,7 @@ class ProviderDbStore:
                     models=item.get("models", []),
                     enabled=item.get("enabled", True),
                     context_window=item.get("context_window", 256000),
+                    priority=item.get("priority", 0),
                 )
                 self.save(config)
                 count += 1
@@ -109,6 +112,8 @@ class ProviderDbStore:
     @staticmethod
     def _row_to_config(row: Any) -> ProviderConfig:
         models = json.loads(row["models"]) if isinstance(row["models"], str) else (row["models"] or [])
+        # priority 列在 v3 迁移后存在；用 keys() 兼容旧数据库快照
+        priority = row["priority"] if "priority" in row.keys() else 0
         return ProviderConfig(
             id=row["id"],
             provider_type=row["provider_type"],
@@ -118,4 +123,5 @@ class ProviderDbStore:
             models=models,
             enabled=bool(row["enabled"]),
             context_window=row["context_window"],
+            priority=priority,
         )

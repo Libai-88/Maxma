@@ -5,6 +5,11 @@ const router = createRouter({
     { path: '/', name: 'chat', component: () => import('@/views/ChatView.vue') },
     { path: '/memory', name: 'memory', component: () => import('@/views/MemoryView.vue') },
     {
+      path: '/kb',
+      name: 'kb',
+      component: () => import('@/views/KbView.vue'),
+    },
+    {
       path: '/playground',
       name: 'news',
       component: () => import('@/views/NewsView.vue'),
@@ -58,6 +63,16 @@ const router = createRouter({
       path: '/privacy',
       name: 'privacy',
       component: () => import('@/views/PrivacyView.vue'),
+    },
+    {
+      path: '/metrics',
+      name: 'metrics',
+      component: () => import('@/views/MetricsView.vue'),
+    },
+    {
+      path: '/audit-log',
+      name: 'audit-log',
+      component: () => import('@/views/AuditLogView.vue'),
     },
   ],
 })

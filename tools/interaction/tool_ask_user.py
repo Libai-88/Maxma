@@ -5,7 +5,7 @@ import asyncio
 from pydantic import BaseModel, Field
 
 from api import interaction
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 
 
 class AskUserInput(BaseModel):
@@ -13,6 +13,7 @@ class AskUserInput(BaseModel):
     question: str = Field(default="", description="需要询问用户的问题")
 
 
+@register_tool
 class AskUserTool(ToolBase):
     name: str = "ask_user_for_info"
     description: str = (

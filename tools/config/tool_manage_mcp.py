@@ -4,7 +4,7 @@ import yaml
 from pydantic import BaseModel, Field
 
 from app_paths import MCP_CONFIG_PATH
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 from tools.mcp_security import validate_stdio_command
 
 
@@ -48,6 +48,7 @@ def _trigger_reload():
     trigger_reload()
 
 
+@register_tool
 class ManageMCPTool(ToolBase):
     name: str = "manage_mcp"
     description: str = (

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 import logging
+import threading
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -13,7 +14,9 @@ logger = logging.getLogger(__name__)
 
 # 懒加载 client，避免循环导入
 _client: SharedAPIClient | None = None
+_client_lock = threading.Lock()  # 保护 _client 单例初始化
 _cached_tools: list[BaseTool] | None = None
+_cached_tools_lock = threading.Lock()  # 保护 _cached_tools 初始化
 _registry_validated = False
 
 # 工具使用统计（工具名 → 调用次数）
@@ -34,194 +37,45 @@ def _get_client() -> SharedAPIClient:
     from tools.base import SharedAPIClient
 
     global _client
-    if _client is None:
-        _client = SharedAPIClient()
-    return _client
+    if _client is not None:
+        return _client
+    with _client_lock:
+        if _client is None:
+            _client = SharedAPIClient()
+        return _client
 
 
 def get_all_tools() -> list[BaseTool]:
-    """返回所有已注册的 Tool 实例（带缓存，仅首次调用时加载）。"""
+    """返回所有已注册的 Tool 实例（带缓存，仅首次调用时加载）。
+
+    通过 ``tools.registry.discover_tools()`` 扫描 ``tools/*/tool_*.py``，
+    收集所有带 ``@register_tool`` 装饰器的类并实例化。
+    新增工具只需在文件中加 ``@register_tool``，无需修改本文件。
+
+    线程安全：通过 _cached_tools_lock 双重检查，避免重复实例化。
+    """
     global _cached_tools
     if _cached_tools is not None:
         return _cached_tools
+    with _cached_tools_lock:
+        if _cached_tools is not None:
+            return _cached_tools
+        client = _get_client()
 
-    client = _get_client()
+        from tools.registry import instantiate_tools
 
-    # System
-    from tools.system.tool_python import RunPythonTool
-    from tools.system.tool_project_info import ProjectInfoTool
-    from tools.system.tool_context_strategy import ContextStrategyTool
-    from tools.system.tool_forget import ForgetTool
-    from tools.system.tool_create_persona import CreatePersonaTool
-
-    # Todo
-    from tools.todo.tool_add import TodoAddTool
-    from tools.todo.tool_list import TodoListTool
-    from tools.todo.tool_complete import TodoCompleteTool
-    from tools.todo.tool_uncomplete import TodoUncompleteTool
-    from tools.todo.tool_delete import TodoDeleteTool
-    from tools.todo.tool_update import TodoUpdateTool
-    from tools.todo.tool_query import TodoQueryTool
-    from tools.todo.tool_list_projects import TodoListProjectsTool
-    from tools.todo.tool_list_sections import TodoListSectionsTool
-    from tools.todo.tool_list_labels import TodoListLabelsTool
-
-    # Map
-    from tools.map.tool_nearby import NearbySearchTool
-    from tools.map.tool_geocode import GeocodeTool
-    from tools.map.tool_transit import TransitRouteTool
-    from tools.map.tool_cycling import CyclingRouteTool
-    from tools.map.tool_fuzzy_addr import FuzzyAddressTool
-
-    # Network
-    from tools.network.tool_weather import WeatherTool
-    from tools.network.tool_holiday import HolidayCalendarTool
-    from tools.network.tool_image_understand import ImageUnderstandTool
-    from tools.network.tavily import TavilySearchTool, TavilyExtractTool
-    from tools.network.playwright_tools import (
-        BrowserBrowseTool,
-        BrowserScreenshotTool,
-        BrowserExtractTool,
-    )
-
-    # Files
-    from tools.files.tool_file_read import FileReadTool
-    from tools.files.tool_file_write import FileWriteTool
-    from tools.files.tool_file_manage import FileManageTool
-    from tools.files.tool_file_search import FileSearchTool
-    from tools.files.tool_file_edit import FileEditTool
-
-    # Task
-    from tools.task.tool_tracker import TaskTrackerTool
-
-    # SubAgent
-    from tools.sub_agent.tool_call_sub_agent import CallSubAgentTool
-    from tools.sub_agent.tool_parallel import ParallelExecuteTool
-
-    # QuickTask
-    from tools.quick_task.tool_quick_task import QuickTaskTool
-
-    # Interaction
-    from tools.interaction.tool_ask_qa import AskUserQATool
-    from tools.interaction.tool_single_choice import AskUserSingleChoiceTool
-    from tools.interaction.tool_multi_choice import AskUserMultiChoiceTool
-    from tools.interaction.tool_ask_confirm import AskUserConfirmTool
-
-    # Entertainment
-    from tools.entertainment.tool_tarot import TarotTool
-
-    # Memory
-    from tools.memory.tool_list_memories import ListMemoriesTool
-    from tools.memory.tool_read_memories import ReadMemoriesTool
-    from tools.memory.tool_create_memory import CreateMemoryTool
-    from tools.memory.tool_update_memory import UpdateMemoryTool
-    from tools.memory.tool_delete_memory import DeleteMemoryTool
-    from tools.memory.tool_merge_memories import MergeMemoriesTool
-    from tools.memory.tool_search_memories import SearchMemoriesTool
-
-    # Config (MCP / Skills / Macros / Providers / EnvVars / Whitelist)
-    from tools.config.tool_manage_mcp import ManageMCPTool
-    from tools.config.tool_manage_skills import ManageSkillsTool
-    from tools.config.tool_manage_macros import ManageMacrosTool
-    from tools.config.tool_manage_providers import ManageProvidersTool
-    from tools.config.tool_manage_env_vars import ManageEnvVarsTool
-    from tools.config.tool_manage_whitelist import ManageWhitelistTool
-
-    # Git
-    from tools.git.tool_git_status import GitStatusTool
-    from tools.git.tool_git_diff import GitDiffTool
-    from tools.git.tool_git_log import GitLogTool
-    from tools.git.tool_git_commit import GitCommitTool
-    from tools.git.tool_git_branch import GitBranchTool
-    from tools.git.tool_git_push import GitPushTool
-    from tools.git.tool_git_pr import GitPRTool
-
-    _cached_tools = [
-        # System
-        RunPythonTool(client=client),
-        ProjectInfoTool(client=client),
-        ContextStrategyTool(client=client),
-        ForgetTool(client=client),
-        CreatePersonaTool(client=client),
-        # Todo
-        TodoAddTool(client=client),
-        TodoListTool(client=client),
-        TodoCompleteTool(client=client),
-        TodoUncompleteTool(client=client),
-        TodoDeleteTool(client=client),
-        TodoUpdateTool(client=client),
-        TodoQueryTool(client=client),
-        TodoListProjectsTool(client=client),
-        TodoListSectionsTool(client=client),
-        TodoListLabelsTool(client=client),
-        # Map
-        NearbySearchTool(client=client),
-        GeocodeTool(client=client),
-        TransitRouteTool(client=client),
-        CyclingRouteTool(client=client),
-        FuzzyAddressTool(client=client),
-        # Network
-        WeatherTool(client=client),
-        HolidayCalendarTool(client=client),
-        ImageUnderstandTool(client=client),
-        TavilySearchTool(client=client),
-        TavilyExtractTool(client=client),
-        BrowserBrowseTool(client=client),
-        BrowserScreenshotTool(client=client),
-        BrowserExtractTool(client=client),
-        # Files
-        FileReadTool(client=client),
-        FileWriteTool(client=client),
-        FileManageTool(client=client),
-        FileSearchTool(client=client),
-        FileEditTool(client=client),
-        # Task
-        TaskTrackerTool(client=client),
-        # SubAgent
-        CallSubAgentTool(client=client),
-        ParallelExecuteTool(client=client),
-        # QuickTask
-        QuickTaskTool(client=client),
-        # Interaction
-        AskUserQATool(client=client),
-        AskUserSingleChoiceTool(client=client),
-        AskUserMultiChoiceTool(client=client),
-        AskUserConfirmTool(client=client),
-        # Entertainment
-        TarotTool(client=client),
-        # Memory
-        ListMemoriesTool(client=client),
-        ReadMemoriesTool(client=client),
-        CreateMemoryTool(client=client),
-        UpdateMemoryTool(client=client),
-        DeleteMemoryTool(client=client),
-        MergeMemoriesTool(client=client),
-        SearchMemoriesTool(client=client),
-        # Config
-        ManageMCPTool(client=client),
-        ManageSkillsTool(client=client),
-        ManageMacrosTool(client=client),
-        ManageProvidersTool(client=client),
-        ManageEnvVarsTool(client=client),
-        ManageWhitelistTool(client=client),
-        # Git
-        GitStatusTool(client=client),
-        GitDiffTool(client=client),
-        GitLogTool(client=client),
-        GitCommitTool(client=client),
-        GitBranchTool(client=client),
-        GitPushTool(client=client),
-        GitPRTool(client=client),
-    ]
-    validate_tool_registry(_cached_tools)
-    return _cached_tools
+        tools_list = instantiate_tools(client)
+        validate_tool_registry(tools_list)
+        _cached_tools = tools_list
+        return _cached_tools
 
 
 def clear_tool_cache() -> None:
     """清除工具缓存，下次调用 get_all_tools() 时重新加载。"""
     global _cached_tools, _registry_validated
-    _cached_tools = None
-    _registry_validated = False
+    with _cached_tools_lock:
+        _cached_tools = None
+        _registry_validated = False
 
 
 def merge_tool_lists(
@@ -348,11 +202,15 @@ TOOL_CATEGORIES: dict[str, list[str]] = {
     ],
     "task": ["task_tracker"],
     "sub_agent": ["call_sub_agent", "parallel_execute", "quick_task"],
-    "interaction": ["ask_user_qa", "ask_user_single_choice", "ask_user_multi_choice", "ask_user_confirm"],
+    "interaction": ["ask_user_qa", "ask_user_for_info", "ask_user_single_choice", "ask_user_multi_choice", "ask_user_confirm"],
     "entertainment": ["tarot"],
     "memory": [
         "list_memories", "read_memories", "create_memory",
         "update_memory", "delete_memory", "merge_memories", "search_memories",
+        "search_episodic", "search_semantic",
+    ],
+    "kb": [
+        "kb_search", "kb_add_document",
     ],
     "config": [
         "manage_mcp", "manage_skills", "manage_macros",
@@ -368,8 +226,9 @@ TOOL_CATEGORIES: dict[str, list[str]] = {
 CORE_TOOLS = {
     "run_python", "project_info", "context_strategy", "forget", "create_persona", "file_read", "file_write", "file_manage", "file_search", "file_edit",
     "task_tracker", "call_sub_agent", "parallel_execute", "quick_task",
-    "ask_user_qa", "ask_user_single_choice", "ask_user_multi_choice", "ask_user_confirm",
-    "list_memories", "read_memories", "create_memory", "update_memory", "delete_memory", "merge_memories", "search_memories",
+    "ask_user_qa", "ask_user_for_info", "ask_user_single_choice", "ask_user_multi_choice", "ask_user_confirm",
+    "list_memories", "read_memories", "create_memory", "update_memory", "delete_memory", "merge_memories", "search_memories", "search_episodic", "search_semantic",
+    "kb_search", "kb_add_document",
     "manage_mcp", "manage_skills", "manage_macros", "manage_providers", "manage_env_vars", "manage_whitelist",
     "git_status", "git_diff", "git_log", "git_commit", "git_branch", "git_push", "git_pr",
 }
@@ -454,6 +313,18 @@ KEYWORD_TO_CATEGORIES: dict[str, list[str]] = {
     "记得": ["memory"],
     "之前": ["memory"],
     "以前": ["memory"],
+    "上次": ["memory"],
+    "回忆": ["memory"],
+    "历史对话": ["memory"],
+    "情景": ["memory"],
+    "事实": ["memory"],
+    "知识": ["memory"],
+    "知识库": ["kb"],
+    "文档": ["kb"],
+    "kb": ["kb"],
+    "KB": ["kb"],
+    "检索文档": ["kb"],
+    "导入": ["kb"],
 }
 
 

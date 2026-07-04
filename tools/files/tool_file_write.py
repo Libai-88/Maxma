@@ -4,7 +4,7 @@ import os
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, check_path_access, format_error, format_success
+from tools.base import ToolBase, check_path_access, format_error, format_success, register_tool
 
 
 class FileWriteInput(BaseModel):
@@ -15,6 +15,7 @@ class FileWriteInput(BaseModel):
     content: str = Field(default="", description="要写入的文件内容")
 
 
+@register_tool
 class FileWriteTool(ToolBase):
     name: str = "file_write"
     description: str = (

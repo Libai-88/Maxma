@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 from tools.todo.todo_base import TodoAPIHelper
 
 
@@ -11,6 +11,7 @@ class TodoUncompleteInput(BaseModel):
     task_id: str = Field(default="", description="要重新打开的任务 ID")
 
 
+@register_tool
 class TodoUncompleteTool(ToolBase):
     name: str = "todo_uncomplete"
     description: str = "将 Todoist 中已完成的任务重新打开。需要提供 task_id。[调用积极性: 可自由看情况调用] [get_doc: 仅在发生错误时 get_doc]"

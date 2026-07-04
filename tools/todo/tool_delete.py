@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 from tools.todo.todo_base import TodoAPIHelper
 
 
@@ -11,6 +11,7 @@ class TodoDeleteInput(BaseModel):
     task_id: str = Field(default="", description="要删除的任务 ID")
 
 
+@register_tool
 class TodoDeleteTool(ToolBase):
     name: str = "todo_delete"
     description: str = "从 Todoist 删除指定任务。需要提供 task_id。[调用积极性: 可自由看情况调用] [get_doc: 仅在发生错误时 get_doc]"

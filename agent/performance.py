@@ -7,9 +7,17 @@
 - 上下文 token 使用量
 
 慢查询告警：单回合超过阈值时通过 WebSocket 通知前端。
+
+线程安全（修复 Bug 1.7）：所有状态读写通过 threading.Lock 保护，避免并发
+请求的 start_turn / record_tool_call / end_turn 互相覆盖。当前回合（
+_current_turn）和工具调用列表（_tool_calls）在同一锁内更新，保证一致性。
+
+单例初始化（修复 Bug 1.8）：get_performance_monitor() 通过 _init_lock
+保证仅创建一个实例，避免双检查锁失效。
 """
 
 import logging
+import threading
 import time
 from dataclasses import dataclass, field, asdict
 from typing import Optional
@@ -54,12 +62,17 @@ class ToolCallMetric:
 
 
 class PerformanceMonitor:
-    """性能监控器。"""
+    """性能监控器。
+
+    线程安全（修复 Bug 1.7）：所有状态读写通过 _lock 保护。当前回合和工具
+    调用列表在同一个锁内更新，避免并发请求互相覆盖。
+    """
 
     def __init__(self):
         self._turn_history: list[TurnMetrics] = []
         self._current_turn: Optional[TurnMetrics] = None
         self._tool_calls: list[ToolCallMetric] = []
+        self._lock = threading.Lock()
 
     def start_turn(self, session_id: str, turn_id: str = "", user_message: str = "") -> TurnMetrics:
         """开始追踪一个新的 Agent 回合。"""
@@ -69,15 +82,17 @@ class PerformanceMonitor:
             start_time=time.time(),
             user_message_preview=user_message[:80],
         )
-        self._current_turn = metrics
-        self._tool_calls = []
+        with self._lock:
+            self._current_turn = metrics
+            self._tool_calls = []
         return metrics
 
     def record_llm_call(self, duration: float) -> None:
         """记录一次 LLM 调用。"""
-        if self._current_turn:
-            self._current_turn.llm_call_count += 1
-            self._current_turn.llm_total_duration += duration
+        with self._lock:
+            if self._current_turn:
+                self._current_turn.llm_call_count += 1
+                self._current_turn.llm_total_duration += duration
 
     def record_tool_call(self, tool_name: str, duration: float, success: bool = True) -> None:
         """记录一次工具调用。"""
@@ -87,46 +102,49 @@ class PerformanceMonitor:
             is_slow=duration > SLOW_TOOL_THRESHOLD,
             success=success,
         )
-        self._tool_calls.append(metric)
+        with self._lock:
+            self._tool_calls.append(metric)
 
-        if self._current_turn:
-            self._current_turn.tool_call_count += 1
-            self._current_turn.tool_total_duration += duration
-            if metric.is_slow:
-                self._current_turn.slow_tools.append(
-                    f"{tool_name} ({duration:.1f}s)"
-                )
+            if self._current_turn:
+                self._current_turn.tool_call_count += 1
+                self._current_turn.tool_total_duration += duration
+                if metric.is_slow:
+                    self._current_turn.slow_tools.append(
+                        f"{tool_name} ({duration:.1f}s)"
+                    )
 
     def record_context_usage(self, tokens: int, max_tokens: int) -> None:
         """记录上下文 token 使用量。"""
-        if self._current_turn:
-            self._current_turn.context_tokens = tokens
-            self._current_turn.context_max_tokens = max_tokens
-            self._current_turn.context_usage_percent = (
-                (tokens / max_tokens * 100) if max_tokens > 0 else 0
-            )
+        with self._lock:
+            if self._current_turn:
+                self._current_turn.context_tokens = tokens
+                self._current_turn.context_max_tokens = max_tokens
+                self._current_turn.context_usage_percent = (
+                    (tokens / max_tokens * 100) if max_tokens > 0 else 0
+                )
 
     def end_turn(self) -> TurnMetrics:
         """结束当前回合追踪，返回性能指标。"""
-        if not self._current_turn:
-            return TurnMetrics(session_id="")
+        with self._lock:
+            if not self._current_turn:
+                return TurnMetrics(session_id="")
 
-        self._current_turn.end_time = time.time()
-        self._current_turn.total_duration = (
-            self._current_turn.end_time - self._current_turn.start_time
-        )
-        self._current_turn.is_slow = (
-            self._current_turn.total_duration > SLOW_TURN_THRESHOLD
-        )
+            self._current_turn.end_time = time.time()
+            self._current_turn.total_duration = (
+                self._current_turn.end_time - self._current_turn.start_time
+            )
+            self._current_turn.is_slow = (
+                self._current_turn.total_duration > SLOW_TURN_THRESHOLD
+            )
 
-        # 存入历史
-        self._turn_history.append(self._current_turn)
-        if len(self._turn_history) > MAX_HISTORY:
-            self._turn_history = self._turn_history[-MAX_HISTORY:]
+            # 存入历史
+            self._turn_history.append(self._current_turn)
+            if len(self._turn_history) > MAX_HISTORY:
+                self._turn_history = self._turn_history[-MAX_HISTORY:]
 
-        result = self._current_turn
-        self._current_turn = None
-        self._tool_calls = []
+            result = self._current_turn
+            self._current_turn = None
+            self._tool_calls = []
 
         if result.is_slow:
             logger.warning(
@@ -140,11 +158,13 @@ class PerformanceMonitor:
 
     def get_current_turn(self) -> Optional[TurnMetrics]:
         """获取当前正在追踪的回合。"""
-        return self._current_turn
+        with self._lock:
+            return self._current_turn
 
     def get_history(self, limit: int = 50) -> list[dict]:
         """获取回合性能历史。"""
-        records = self._turn_history[-limit:]
+        with self._lock:
+            records = list(self._turn_history[-limit:])
         return [
             {
                 "session_id": m.session_id[:8],
@@ -164,7 +184,9 @@ class PerformanceMonitor:
 
     def get_summary(self) -> dict:
         """获取性能摘要统计。"""
-        if not self._turn_history:
+        with self._lock:
+            history = list(self._turn_history)
+        if not history:
             return {
                 "total_turns": 0,
                 "avg_duration": 0,
@@ -173,30 +195,37 @@ class PerformanceMonitor:
                 "avg_tool_duration": 0,
             }
 
-        durations = [m.total_duration for m in self._turn_history]
-        slow_count = sum(1 for m in self._turn_history if m.is_slow)
+        durations = [m.total_duration for m in history]
+        slow_count = sum(1 for m in history if m.is_slow)
 
         return {
-            "total_turns": len(self._turn_history),
+            "total_turns": len(history),
             "avg_duration": round(sum(durations) / len(durations), 2),
             "max_duration": round(max(durations), 2),
             "slow_turns": slow_count,
             "avg_llm_duration": round(
-                sum(m.llm_total_duration for m in self._turn_history) / len(self._turn_history), 2
+                sum(m.llm_total_duration for m in history) / len(history), 2
             ),
             "avg_tool_duration": round(
-                sum(m.tool_total_duration for m in self._turn_history) / len(self._turn_history), 2
+                sum(m.tool_total_duration for m in history) / len(history), 2
             ),
         }
 
 
 # 全局单例
 _monitor: PerformanceMonitor | None = None
+_monitor_lock = threading.Lock()  # 修复 Bug 1.8：保护单例初始化
 
 
 def get_performance_monitor() -> PerformanceMonitor:
-    """获取全局 PerformanceMonitor 实例。"""
+    """获取全局 PerformanceMonitor 实例。
+
+    线程安全（修复 Bug 1.8）：通过 _monitor_lock 双重检查，保证仅创建一个实例。
+    """
     global _monitor
-    if _monitor is None:
-        _monitor = PerformanceMonitor()
-    return _monitor
+    if _monitor is not None:
+        return _monitor
+    with _monitor_lock:
+        if _monitor is None:
+            _monitor = PerformanceMonitor()
+        return _monitor

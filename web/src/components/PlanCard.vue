@@ -3,14 +3,41 @@
     <div class="plan-header">
       <span class="plan-icon">&#128203;</span>
       <span class="plan-title">执行计划</span>
-      <span class="plan-status">{{ statusText }}</span>
+      <span class="plan-status" :class="plan.status">{{ statusText }}</span>
     </div>
 
     <div class="plan-steps">
-      <div v-for="(step, i) in plan.steps" :key="i" class="plan-step">
-        <span class="step-num">{{ i + 1 }}</span>
+      <div
+        v-for="(step, i) in plan.steps"
+        :key="i"
+        class="plan-step"
+        :class="getStepClass(i)"
+      >
+        <span class="step-num" :class="getStepClass(i)">
+          <span v-if="getStepStatus(i) === 'done'">&#10003;</span>
+          <span v-else-if="getStepStatus(i) === 'failed'">&#10007;</span>
+          <span v-else-if="getStepStatus(i) === 'skipped'">&ndash;</span>
+          <span v-else-if="getStepStatus(i) === 'running'" class="step-spinner"></span>
+          <template v-else>{{ i + 1 }}</template>
+        </span>
         <span class="step-text">{{ step }}</span>
+        <span v-if="getStepStatus(i) === 'running'" class="step-badge running">执行中</span>
+        <span v-else-if="getStepStatus(i) === 'failed'" class="step-badge failed">失败</span>
+        <span v-else-if="getStepStatus(i) === 'skipped'" class="step-badge skipped">跳过</span>
+        <span v-else-if="getStepStatus(i) === 'done'" class="step-badge done">完成</span>
       </div>
+    </div>
+
+    <!-- 重规划提示 -->
+    <div v-if="plan.status === 'replanning'" class="plan-replan-hint">
+      <span class="replan-icon">&#128260;</span>
+      <span>步骤失败，正在重新规划... (第 {{ (plan.replanCount || 0) + 1 }} 次重规划)</span>
+    </div>
+
+    <!-- 失败信息 -->
+    <div v-if="plan.status === 'failed'" class="plan-failed-hint">
+      <span class="failed-icon">&#9888;</span>
+      <span>步骤执行失败（共 {{ plan.failureCount || 0 }} 次失败）</span>
     </div>
 
     <!-- 编辑模式 -->
@@ -67,9 +94,22 @@ const statusText = computed(() => {
     case 'approved': return '已确认'
     case 'modified': return '已修改并确认'
     case 'rejected': return '已拒绝'
+    case 'running': return '执行中'
+    case 'failed': return '执行失败'
+    case 'replanning': return '重规划中'
     default: return ''
   }
 })
+
+function getStepStatus(index: number): string {
+  const statuses = props.plan.stepStatuses
+  if (!statuses) return 'pending'
+  return statuses[String(index)] || 'pending'
+}
+
+function getStepClass(index: number): string {
+  return `step-${getStepStatus(index)}`
+}
 
 function approve() {
   emit('respond', props.plan.planId, 'approve')
@@ -128,6 +168,21 @@ function submitEdit() {
   opacity: 0.7;
 }
 
+.plan-card.running {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
+.plan-card.failed {
+  border-color: #fca5a5;
+  background: #fef2f2;
+}
+
+.plan-card.replanning {
+  border-color: #fbbf24;
+  background: #fffbeb;
+}
+
 /* ── 头部 ── */
 .plan-header {
   display: flex;
@@ -156,25 +211,13 @@ function submitEdit() {
   font-weight: 500;
 }
 
-.pending .plan-status {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.approved .plan-status {
-  background: #dcfce7;
-  color: #166534;
-}
-
-.modified .plan-status {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-.rejected .plan-status {
-  background: #fee2e2;
-  color: #991b1b;
-}
+.pending .plan-status { background: #fef3c7; color: #92400e; }
+.approved .plan-status { background: #dcfce7; color: #166534; }
+.modified .plan-status { background: #dbeafe; color: #1e40af; }
+.rejected .plan-status { background: #fee2e2; color: #991b1b; }
+.running .plan-status { background: #dbeafe; color: #1e40af; }
+.failed .plan-status { background: #fee2e2; color: #991b1b; }
+.replanning .plan-status { background: #fef3c7; color: #92400e; }
 
 /* ── 步骤列表 ── */
 .plan-steps {
@@ -190,6 +233,26 @@ function submitEdit() {
   gap: 10px;
   font-size: 13px;
   line-height: 1.5;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.plan-step.step-running {
+  background: color-mix(in srgb, #93c5fd 12%, transparent);
+}
+
+.plan-step.step-done {
+  opacity: 0.7;
+}
+
+.plan-step.step-failed {
+  background: color-mix(in srgb, #fca5a5 12%, transparent);
+}
+
+.plan-step.step-skipped {
+  opacity: 0.5;
+  text-decoration: line-through;
 }
 
 .step-num {
@@ -207,9 +270,69 @@ function submitEdit() {
   margin-top: 1px;
 }
 
+.step-num.step-done { background: #16a34a; }
+.step-num.step-failed { background: #dc2626; }
+.step-num.step-skipped { background: #9ca3af; }
+.step-num.step-running { background: #2563eb; }
+
+.step-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .step-text {
   color: var(--text-primary);
   flex: 1;
+}
+
+.step-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.step-badge.running { background: #dbeafe; color: #1e40af; }
+.step-badge.done { background: #dcfce7; color: #166534; }
+.step-badge.failed { background: #fee2e2; color: #991b1b; }
+.step-badge.skipped { background: #f3f4f6; color: #6b7280; }
+
+/* ── 重规划/失败提示 ── */
+.plan-replan-hint,
+.plan-failed-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.plan-replan-hint {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.plan-failed-hint {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.replan-icon {
+  display: inline-block;
+  animation: spin 1.5s linear infinite;
 }
 
 /* ── 编辑区 ── */

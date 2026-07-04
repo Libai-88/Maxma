@@ -1,8 +1,14 @@
-"""上下文窗口管理 — 滑动窗口截断与摘要。"""
+"""上下文窗口管理 — 滑动窗口截断与摘要。
+
+本模块同时承载 4 层记忆架构中「短期记忆层（ShortTerm）」的职责：
+- 滑动窗口截断与摘要（核心）
+- ``commit_to_episodic``: 把当前 checkpoint 的摘要写入情景记忆层
+- ``retrieve_from_episodic``: 按向量检索历史情景记忆
+"""
 
 import logging
 import re
-from typing import Sequence
+from typing import Optional, Sequence
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, RemoveMessage, SystemMessage, ToolMessage
 
@@ -414,3 +420,106 @@ async def maybe_trim_checkpoint(
     except Exception as e:
         logger.warning(f"Failed to trim checkpoint: {e}", exc_info=True)
         return False
+
+
+# ── 4 层记忆架构：情景记忆层接口 ──────────────────────────────
+
+
+async def commit_to_episodic(
+    graph,
+    config: dict,
+    episodic_mm,
+    *,
+    session_id: str = "",
+    turn_id: str = "",
+    llm=None,
+) -> Optional[str]:
+    """把当前 checkpoint 的对话摘要写入情景记忆层。
+
+    在对话轮次结束时调用：从 checkpoint 取出当前消息列表，
+    生成简短摘要后写入 ``EpisodicMemoryManager``。若 ``llm`` 可用则使用 LLM
+    生成摘要，否则回退到 ``_summarize_old_messages`` 提取式摘要。
+
+    Args:
+        graph: LangGraph compiled agent
+        config: LangGraph config（含 thread_id）
+        episodic_mm: EpisodicMemoryManager 实例
+        session_id: 会话 ID（可选）
+        turn_id: 轮次 ID（可选）
+        llm: 可选 LLM 实例，用于生成高质量摘要
+
+    Returns:
+        新建的 episode ID；失败时返回 None
+    """
+    if episodic_mm is None:
+        return None
+    try:
+        state = await graph.aget_state(config)
+        if state is None:
+            return None
+        messages = state.values.get("messages", [])
+        if not messages:
+            return None
+
+        # 生成摘要
+        if llm is not None:
+            summary_text = await _llm_summarize(messages, llm)
+        else:
+            summary_text = _summarize_old_messages(messages)
+
+        if not summary_text:
+            return None
+
+        # 统计消息数
+        message_count = len(messages)
+
+        episode_id = episodic_mm.add_episode(
+            summary=summary_text,
+            session_id=session_id,
+            turn_id=turn_id,
+            message_count=message_count,
+        )
+        logger.info(
+            "[episodic] committed episode %s for thread %s (%d messages)",
+            episode_id,
+            config.get("configurable", {}).get("thread_id", "?"),
+            message_count,
+        )
+        return episode_id
+    except Exception as e:
+        logger.warning(f"[episodic] commit_to_episodic failed: {e}", exc_info=True)
+        return None
+
+
+def retrieve_from_episodic(
+    query: str,
+    episodic_mm,
+    top_k: int = 3,
+) -> str:
+    """按向量检索历史情景记忆，返回可读文本（供注入系统提示词）。
+
+    Args:
+        query: 检索查询文本（通常是用户最近一条消息）
+        episodic_mm: EpisodicMemoryManager 实例
+        top_k: 返回的最大结果数
+
+    Returns:
+        格式化的情景记忆文本；若无结果返回空字符串
+    """
+    if episodic_mm is None or not query:
+        return ""
+    try:
+        results = episodic_mm.retrieve(query=query, top_k=top_k)
+        if not results:
+            return ""
+        lines = ["## 相关历史对话"]
+        for item in results:
+            lines.append(
+                f"- [{item.get('timestamp', '')}] "
+                f"{item.get('summary', '')} "
+                f"(相似度 {item.get('similarity', 0):.0%})"
+            )
+        return "\n".join(lines)
+    except Exception as e:
+        logger.warning(f"[episodic] retrieve_from_episodic failed: {e}")
+        return ""

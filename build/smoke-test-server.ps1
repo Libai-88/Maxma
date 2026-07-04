@@ -64,10 +64,12 @@ try {
     $headers = @{ "X-Maxma-Token" = [string]$auth.token }
     $health = Wait-HttpJson -Url "$apiBase/health" -Headers $headers -TimeoutSeconds 10
     $providers = Wait-HttpJson -Url "$apiBase/providers" -Headers $headers -TimeoutSeconds 10
+    $mcpServers = Wait-HttpJson -Url "$apiBase/mcp/servers" -Headers $headers -TimeoutSeconds 10
 
     Write-Host "[smoke] auth: ok"
     Write-Host "[smoke] health: $($health.status)"
     Write-Host "[smoke] providers: $($providers.providers.Count)"
+    Write-Host "[smoke] mcp servers: $($mcpServers.servers.Count)"
     Write-Host "[smoke] bundle startup verification passed"
 } finally {
     if ($proc -and -not $proc.HasExited) {

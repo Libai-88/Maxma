@@ -5,7 +5,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 import logging
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,7 @@ class GitPRInput(BaseModel):
     draft: bool = Field(default=False, description="是否创建为草稿 PR")
 
 
+@register_tool
 class GitPRTool(ToolBase):
     name: str = "git_pr"
     description: str = (

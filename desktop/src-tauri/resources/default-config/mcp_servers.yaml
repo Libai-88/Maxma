@@ -1,0 +1,40 @@
+# MaxmaHere 默认 MCP 服务器配置模板
+#
+# 此文件在桌面应用首次运行时复制到 %APPDATA%/MaxmaHere/api/data/mcp_servers.yaml
+# 用户可在 Web UI 的 "MCP 管理" 页面修改配置，所有改动会写回上述路径。
+#
+# 字段说明：
+#   id: 服务器唯一标识（用于工具名前缀和审计日志）
+#   transport: 传输协议，可选 stdio | sse | streamable_http | websocket
+#   enabled: 是否启用
+#   command / args: stdio 传输专用，被 mcp_security.validate_stdio_command 白名单校验
+#   url / headers: sse / streamable_http / websocket 传输专用
+#   url 的 host 必须在 config.settings.mcp_allowed_url_hosts 白名单内
+#   allowed_tools: 工具允许列表（fnmatch 通配符，如 "github_*"）；为空表示不限制
+#   blocked_tools: 工具屏蔽列表（优先级高于 allowed_tools）
+#   tls_verify: 是否校验 TLS 证书（生产模式强制 HTTPS/WSS，开发模式可关闭）
+#
+# 示例（默认不启用任何 MCP 服务器，由用户自行添加）：
+# servers:
+#   - id: filesystem
+#     transport: stdio
+#     enabled: false
+#     command: npx
+#     args:
+#       - "-y"
+#       - "@modelcontextprotocol/server-filesystem"
+#       - "D:\\"
+#     allowed_tools:
+#       - "read_*"
+#       - "list_*"
+#     blocked_tools:
+#       - "write_*"
+#   - id: internal-api
+#     transport: sse
+#     enabled: false
+#     url: "http://127.0.0.1:9000/sse"
+#     tls_verify: true
+#     allowed_tools:
+#       - "*"
+
+servers: []

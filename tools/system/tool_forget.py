@@ -3,7 +3,7 @@
 from pydantic import BaseModel, Field
 
 from api import interaction
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 from langchain_core.messages import RemoveMessage
 
 
@@ -15,6 +15,7 @@ class ForgetInput(BaseModel):
     )
 
 
+@register_tool
 class ForgetTool(ToolBase):
     name: str = "forget"
     description: str = (
@@ -80,11 +81,12 @@ class ForgetTool(ToolBase):
             # 使用 RemoveMessage 删除旧消息（add_messages reducer 正确识别）
             await graph.aupdate_state(config, {"messages": remove_msgs})
 
+            remaining_count = len(messages) - removed_count
             return format_success({
                 "topic": topic,
                 "removed_count": removed_count,
-                "remaining_count": len(kept),
-                "message": f"已移除 {removed_count} 条与 '{topic}' 相关的消息，剩余 {len(kept)} 条",
+                "remaining_count": remaining_count,
+                "message": f"已移除 {removed_count} 条与 '{topic}' 相关的消息，剩余 {remaining_count} 条",
             })
 
         except LookupError:

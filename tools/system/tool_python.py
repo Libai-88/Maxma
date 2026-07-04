@@ -2,8 +2,15 @@
 
 Phase 1 沙箱：使用 subprocess.run 在独立进程中执行代码，
 支持超时控制和内存限制，防止恶意或失控代码影响主进程。
+
+阶段 3.5 加固：
+- _SANDBOX_WRAPPER 改为白名单策略（与 path_security.get_safe_builtins 一致）
+- 主进程 AST 预检拦截元编程逃逸入口（__subclasses__/__globals__/__class__ 等 dunder）
+- 与 path_security._BLOCKED_DUNDER_ATTRIBUTES 双层防御
+- MAX_MEMORY_MB 真正生效由阶段 3.4 SandboxRunner 落地（Unix: RLIMIT_AS / Windows: Job Object）
 """
 
+import ast
 import asyncio
 import os
 import subprocess
@@ -13,32 +20,134 @@ import tempfile
 from pydantic import BaseModel, Field
 
 from api import interaction
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 
 # 沙箱配置
 DEFAULT_TIMEOUT = 30  # 默认超时（秒）
 MAX_TIMEOUT = 120  # 最大超时（秒）
-MAX_MEMORY_MB = 512  # 最大内存（MB）
+MAX_MEMORY_MB = 512  # 最大内存（MB）—— 实际生效由阶段 3.4 SandboxRunner 实现
+
+# 沙箱内允许的 builtins 白名单（与 tools/path_security._SAFE_BUILTIN_NAMES 同步，
+# 但移除 hasattr — 可触发 __getattr__ 链导致元编程逃逸；移除 open — 沙箱内禁文件 I/O）。
+# 子进程无法 import path_security 模块，故在此内联维护白名单。
+_SANDBOX_BUILTIN_NAMES: frozenset[str] = frozenset({
+    "abs", "aiter", "all", "anext", "any", "ascii", "bin", "bool", "bytearray",
+    "bytes", "callable", "chr", "complex", "dict",
+    "divmod", "enumerate", "filter", "float", "format", "frozenset",
+    "hash", "hex", "id", "int",
+    "isinstance", "issubclass", "iter", "len", "list", "map", "max",
+    "min", "next", "object", "oct", "ord", "pow", "print",
+    "range", "repr", "reversed", "round", "set", "slice", "sorted",
+    "str", "sum", "tuple", "zip",
+})
+
+# 受限 exec 环境中明令阻断的 dunder 属性名（与 path_security._BLOCKED_DUNDER_ATTRIBUTES 一致）。
+# AST 预检会扫描代码中所有 `obj.<attr>` 形式的属性访问，命中即拒绝执行。
+# 阶段 3.5 增强：新增 __getattribute__/__getattr__/__reduce__/__reduce_ex__/__closure__
+# 等"元 dunder"——它们可绕过属性访问拦截器本身，是已知的二级逃逸向量。
+_BLOCKED_DUNDER_ATTRIBUTES: frozenset[str] = frozenset({
+    "__subclasses__", "__bases__", "__mro__", "__class__", "__globals__",
+    "__builtins__", "__dict__", "__code__", "__func__", "__self__",
+    "__module__", "__loader__", "__spec__", "__import_subclasses__",
+    "__getattribute__", "__getattr__", "__reduce__", "__reduce_ex__",
+    "__closure__", "__init_subclass__", "__subclasshook__",
+})
 
 # 沙箱执行器脚本 — 在子进程中运行用户代码
-# 使用受限的 __builtins__ 防止文件系统逃逸和危险操作
+# 阶段 3.5 双层防御：
+#   1. 白名单 builtins（仅 _SANDBOX_BUILTIN_NAMES 可用，不暴露 type/getattr/open 等）
+#   2. AST 变换 + 运行时 dunder 拦截（_safe_getattr 阻断所有 __*__ 属性访问）
+# AST 变换将 `obj.attr` (Load) 重写为 `_safe_getattr(obj, 'attr')`，即便主进程
+# AST 预检漏检，子进程仍在运行时阻断 __subclasses__/__class__/__globals__ 等逃逸入口。
+# 隐式 dunder 调用（len(obj)→obj.__len__()、str(obj)→obj.__str__()）不受影响——
+# 它们由内置函数/语法触发，不经过用户代码的属性访问路径。
 _SANDBOX_WRAPPER = r'''
-import sys, json, traceback, io as _io
+import sys, json, traceback, io as _io, ast
 
-# 受限 builtins：禁止文件 I/O、代码执行、动态 import
-_DANGEROUS = frozenset({"open", "exec", "eval", "compile", "__import__", "input", "breakpoint", "help"})
+# 白名单 builtins：仅暴露纯计算/数据结构函数。
+_SAFE_NAMES = frozenset({
+    "abs", "aiter", "all", "anext", "any", "ascii", "bin", "bool", "bytearray",
+    "bytes", "callable", "chr", "complex", "dict",
+    "divmod", "enumerate", "filter", "float", "format", "frozenset",
+    "hash", "hex", "id", "int",
+    "isinstance", "issubclass", "iter", "len", "list", "map", "max",
+    "min", "next", "object", "oct", "ord", "pow", "print",
+    "range", "repr", "reversed", "round", "set", "slice", "sorted",
+    "str", "sum", "tuple", "zip",
+})
+
 if isinstance(__builtins__, dict):
     _src = __builtins__
 else:
     _src = __builtins__.__dict__
-_safe_builtins = {_k: _v for _k, _v in _src.items() if _k not in _DANGEROUS}
 
-# 显式拦截 import 语句，给出清晰错误，而不是让 __import__ 缺失导致隐式失败。
+_safe_builtins = {_k: _v for _k, _v in _src.items() if _k in _SAFE_NAMES}
+
+# 显式拦截 import 语句，给出清晰错误。
 def _blocked_import(*args, **kwargs):
     raise ImportError("沙箱中已禁用模块导入")
 _safe_builtins["__import__"] = _blocked_import
 
+
+# ── 运行时 dunder 属性拦截（第二层防御）──────────────────────
+# _safe_getattr 阻断所有 __*__ 形式的 dunder 属性（__name__/__doc__ 等少数无害除外）。
+# 阻断 dunder 是因为 __subclasses__/__class__/__globals__/__getattribute__ 等
+# 是 Python 沙箱逃逸的标准跳板。允许的 dunder 仅限纯字符串元数据。
+_ALLOWED_DUNDER = frozenset({
+    "__name__", "__doc__", "__qualname__", "__annotations__",
+})
+
+def _safe_getattr(obj, name):
+    """运行时属性访问拦截：阻断所有 dunder 属性（少数无害元数据除外）。"""
+    if isinstance(name, str) and name.startswith("__") and name.endswith("__"):
+        if name not in _ALLOWED_DUNDER:
+            raise AttributeError(f"沙箱禁止访问 dunder 属性: .{name}")
+    return getattr(obj, name)
+
+def _blocked_name(name):
+    """运行时名称拦截：阻断 __builtins__ 等危险名称引用。"""
+    raise NameError(f"沙箱禁止访问名称: {name}")
+
+
+class _SandboxTransformer(ast.NodeTransformer):
+    """AST 变换器：将属性访问重写为 _safe_getattr 调用，__builtins__ 名称重写为 _blocked_name 调用。"""
+
+    def visit_Attribute(self, node):
+        self.generic_visit(node)
+        if isinstance(node.ctx, ast.Load):
+            # obj.attr (Load) → _safe_getattr(obj, 'attr')
+            return ast.Call(
+                func=ast.Name(id='_safe_getattr', ctx=ast.Load()),
+                args=[node.value, ast.Constant(value=node.attr)],
+                keywords=[]
+            )
+        return node
+
+    def visit_Name(self, node):
+        if node.id == '__builtins__' and isinstance(node.ctx, ast.Load):
+            # __builtins__ (Load) → _blocked_name('__builtins__')
+            return ast.Call(
+                func=ast.Name(id='_blocked_name', ctx=ast.Load()),
+                args=[ast.Constant(value=node.id)],
+                keywords=[]
+            )
+        return node
+
+
 code = sys.stdin.read()
+
+# 解析并变换 AST：将所有 Load 属性访问替换为 _safe_getattr 调用
+parse_error = None
+code_obj = None
+try:
+    tree = ast.parse(code)
+    transformer = _SandboxTransformer()
+    tree = transformer.visit(tree)
+    ast.fix_missing_locations(tree)
+    code_obj = compile(tree, '<sandbox>', 'exec')
+except SyntaxError as e:
+    parse_error = e
+
 old_stdout = sys.stdout
 old_stderr = sys.stderr
 sys.stdout = _io.StringIO()
@@ -46,9 +155,20 @@ sys.stderr = _io.StringIO()
 
 exit_code = 0
 try:
-    exec(code, {"__name__": "__main__", "__builtins__": _safe_builtins})
-    _stdout = sys.stdout.getvalue()
-    _stderr = sys.stderr.getvalue()
+    if code_obj is None:
+        # 语法错误或 AST 变换失败 — 不执行
+        _stdout = ""
+        _stderr = f"SyntaxError: {parse_error}"
+        exit_code = 1
+    else:
+        exec(code_obj, {
+            "__name__": "__main__",
+            "__builtins__": _safe_builtins,
+            "_safe_getattr": _safe_getattr,
+            "_blocked_name": _blocked_name,
+        })
+        _stdout = sys.stdout.getvalue()
+        _stderr = sys.stderr.getvalue()
 except SystemExit as e:
     _stdout = sys.stdout.getvalue()
     _stderr = sys.stderr.getvalue()
@@ -63,6 +183,58 @@ finally:
 
 print(json.dumps({"stdout": _stdout or "", "stderr": _stderr or "", "exit_code": exit_code}, ensure_ascii=False))
 '''
+
+
+class MetaprogrammingError(Exception):
+    """用户代码包含被拦截的元编程逃逸入口（阶段 3.5）。"""
+
+
+def _check_metaprogramming_safety(code: str) -> None:
+    """AST 预检：拦截已知元编程逃逸入口（阶段 3.5）。
+
+    扫描代码中所有属性访问 ``obj.attr``，若 ``attr`` 命中
+    ``_BLOCKED_DUNDER_ATTRIBUTES`` 则抛出 ``MetaprogrammingError``。
+
+    拦截示例：
+    - ``().__class__.__bases__[0].__subclasses__()`` → 命中 __class__/__bases__/__subclasses__
+    - ``type('X', (object,), {...})`` → type 不在白名单 builtins，子进程内 NameError
+    - ``getattr(obj, '__class__')`` → getattr 不在白名单 builtins，子进程内 NameError
+    - ``func.__globals__['__builtins__']`` → 命中 __globals__/__builtins__
+
+    注意：AST 预检是第一层防御，第二层是沙箱 builtins 白名单。
+    即便 AST 漏检，沙箱内仍因 type/getattr/globals 等不在白名单而失败。
+    """
+    try:
+        tree = ast.parse(code)
+    except SyntaxError as e:
+        # 语法错误交给子进程处理，这里不阻断
+        raise MetaprogrammingError(f"代码语法错误: {e}") from None
+
+    for node in ast.walk(tree):
+        # 检测属性访问：obj.attr（含 obj."attr"）
+        if isinstance(node, ast.Attribute):
+            attr_name = node.attr
+            if attr_name in _BLOCKED_DUNDER_ATTRIBUTES:
+                raise MetaprogrammingError(
+                    f"沙箱禁止访问 dunder 属性: .{attr_name}（元编程逃逸入口已拦截）"
+                )
+        # 检测名称引用：直接引用 globals/locals/vars/dir/type/getattr/setattr/delattr/super
+        # 这些已不在白名单 builtins 中，但 AST 预检给出更清晰的错误信息
+        if isinstance(node, ast.Name):
+            name = node.id
+            blocked_builtins = {
+                "globals", "locals", "vars", "dir", "type",
+                "getattr", "setattr", "delattr", "super",
+                "classmethod", "staticmethod", "property", "memoryview",
+                "eval", "exec", "compile", "open", "__import__",
+                "breakpoint", "input", "help",
+                # __builtins__ 作为名称引用也应阻断（直接拿到内置命名空间）
+                "__builtins__",
+            }
+            if name in blocked_builtins and isinstance(node.ctx, ast.Load):
+                raise MetaprogrammingError(
+                    f"沙箱禁止使用内置函数: {name}（元编程/IO 入口已拦截）"
+                )
 
 
 # 允许传入沙箱子进程的环境变量白名单。
@@ -86,7 +258,7 @@ def _build_sandbox_env() -> dict[str, str]:
 
 
 def _run_in_sandbox(code: str, timeout: int = DEFAULT_TIMEOUT) -> dict:
-    """在独立子进程中执行 Python 代码。
+    """在独立子进程中执行 Python 代码（阶段 3.4：集成 SandboxRunner OS 级隔离）。
 
     Args:
         code: 要执行的 Python 代码
@@ -96,11 +268,19 @@ def _run_in_sandbox(code: str, timeout: int = DEFAULT_TIMEOUT) -> dict:
         dict with keys: stdout, stderr, exit_code, timed_out
     """
     try:
-        # 构建子进程命令
-        cmd = [sys.executable, "-c", _SANDBOX_WRAPPER]
+        from tools.system.sandbox_runner import get_sandbox_runner
+
+        # 获取 OS 级隔离运行器（首次调用时执行能力探测）
+        runner = get_sandbox_runner(memory_mb=MAX_MEMORY_MB)
+
+        # 构建子进程命令（firejail 模式下会包装命令）
+        cmd = runner.build_command([sys.executable, "-c", _SANDBOX_WRAPPER])
 
         # 使用白名单限制子进程环境变量，防止敏感信息泄漏
         env = _build_sandbox_env()
+
+        # 获取平台相关 Popen kwargs（preexec_fn / creationflags）
+        popen_kwargs = runner.get_popen_kwargs()
 
         # 启动子进程
         proc = subprocess.Popen(
@@ -110,7 +290,11 @@ def _run_in_sandbox(code: str, timeout: int = DEFAULT_TIMEOUT) -> dict:
             stderr=subprocess.PIPE,
             env=env,
             cwd=tempfile.gettempdir(),  # 在临时目录执行，防止访问项目文件
+            **popen_kwargs,
         )
+
+        # Windows Job Object 模式：分配进程到 job 并恢复线程（其他模式空操作）
+        runner.on_process_started(proc)
 
         try:
             stdout, stderr = proc.communicate(
@@ -169,6 +353,7 @@ class RunPythonInput(BaseModel):
     )
 
 
+@register_tool
 class RunPythonTool(ToolBase):
     name: str = "run_python"
     description: str = (
@@ -190,6 +375,13 @@ class RunPythonTool(ToolBase):
 
         # 限制超时范围
         timeout = max(1, min(timeout, MAX_TIMEOUT))
+
+        # 阶段 3.5：AST 预检拦截元编程逃逸入口（在用户确认前先阻断，
+        # 避免恶意代码即便不被执行也消耗交互资源）
+        try:
+            _check_metaprogramming_safety(code)
+        except MetaprogrammingError as e:
+            return format_error(str(e))
 
         session_id = interaction.current_session_id.get()
         if session_id and interaction.get_session_auto_approve(session_id):

@@ -35,6 +35,7 @@ const icon = computed(() => {
     case 'timeout': return '⏱️'
     case 'permission': return '🚫'
     case 'not_found': return '🔍'
+    case 'rate_limit': return '⏳'
     default: return '⚠️'
   }
 })
@@ -46,6 +47,7 @@ const title = computed(() => {
     case 'timeout': return '请求超时'
     case 'permission': return '权限不足'
     case 'not_found': return '未找到'
+    case 'rate_limit': return '请求过于频繁'
     default: return '发生错误'
   }
 })
@@ -57,6 +59,7 @@ const suggestion = computed(() => {
     case 'timeout': return '请稍后重试，或尝试简化请求'
     case 'permission': return '请确认路径是否在白名单中'
     case 'not_found': return '请确认目标路径或资源是否存在'
+    case 'rate_limit': return '请稍候片刻再重试'
     default: return '如果问题持续，请尝试重启服务'
   }
 })
@@ -73,6 +76,7 @@ const suggestion = computed(() => {
 .error-card--network { border-color: color-mix(in srgb, #3b82f6 30%, transparent); background: color-mix(in srgb, #3b82f6 10%, var(--bg-card)); }
 .error-card--timeout { border-color: color-mix(in srgb, #f97316 30%, transparent); background: color-mix(in srgb, #f97316 10%, var(--bg-card)); }
 .error-card--auth { border-color: color-mix(in srgb, var(--status-error) 30%, transparent); background: color-mix(in srgb, var(--status-error) 8%, var(--bg-card)); }
+.error-card--rate_limit { border-color: color-mix(in srgb, #a855f7 30%, transparent); background: color-mix(in srgb, #a855f7 10%, var(--bg-card)); }
 
 .error-card__header {
   display: flex;

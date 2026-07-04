@@ -130,6 +130,20 @@
         <div class="form-section">
           <label class="form-label">URL</label>
           <input v-model="form.url" class="input mono" placeholder="例如: http://localhost:3000/mcp" required />
+          <div class="form-hint">
+            仅允许 host 白名单（localhost / 127.0.0.1 / 0.0.0.0 / ::1）。
+            SSE/HTTP 用 http/https，WebSocket 用 ws/wss。
+          </div>
+        </div>
+
+        <div class="form-section">
+          <label class="form-label">
+            <input type="checkbox" v-model="form.tls_verify" />
+            启用 TLS 证书校验
+          </label>
+          <div class="form-hint">
+            默认开启。生产模式（MAXMA_ENV=production）下关闭会被忽略并强制启用。
+          </div>
         </div>
 
         <div class="form-section">
@@ -154,6 +168,63 @@
           <input v-model.number="form.sse_read_timeout" type="number" class="input" placeholder="可选" min="0" step="0.1" />
         </div>
       </template>
+
+      <!-- 阶段 4.1：工具级 allowlist / blocklist -->
+      <div class="form-section">
+        <label class="form-label">允许的工具（allowlist，可选）</label>
+        <div class="chips-list">
+          <span v-for="(t, i) in form.allowed_tools" :key="'a'+i" class="chip">
+            {{ t }}
+            <button type="button" class="chip-remove" @click="form.allowed_tools!.splice(i, 1)">✕</button>
+          </span>
+          <input
+            class="chip-input"
+            v-model="newAllowedTool"
+            placeholder="新增工具名或通配符（如 github_*）后回车"
+            @keydown.enter.prevent="addChip(form.allowed_tools!, newAllowedTool); newAllowedTool = ''"
+          />
+        </div>
+        <div class="form-hint">
+          留空 = 允许全部。配置后仅允许的工具可用。支持通配符（* 匹配任意字符）。
+        </div>
+        <div v-if="availableTools.length" class="form-hint">
+          已加载工具（点击添加）：
+          <span
+            v-for="t in availableTools"
+            :key="t"
+            class="tool-pick"
+            @click="addChip(form.allowed_tools!, t)"
+          >{{ t }}</span>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <label class="form-label">屏蔽的工具（blocklist，可选）</label>
+        <div class="chips-list">
+          <span v-for="(t, i) in form.blocked_tools" :key="'b'+i" class="chip chip-danger">
+            {{ t }}
+            <button type="button" class="chip-remove" @click="form.blocked_tools!.splice(i, 1)">✕</button>
+          </span>
+          <input
+            class="chip-input"
+            v-model="newBlockedTool"
+            placeholder="新增工具名或通配符（如 admin_*）后回车"
+            @keydown.enter.prevent="addChip(form.blocked_tools!, newBlockedTool); newBlockedTool = ''"
+          />
+        </div>
+        <div class="form-hint">
+          blocklist 优先于 allowlist。被屏蔽的工具不会出现在 LLM 可见工具列表中。
+        </div>
+        <div v-if="availableTools.length" class="form-hint">
+          已加载工具（点击屏蔽）：
+          <span
+            v-for="t in availableTools"
+            :key="t"
+            class="tool-pick tool-pick-danger"
+            @click="addChip(form.blocked_tools!, t)"
+          >{{ t }}</span>
+        </div>
+      </div>
 
       <!-- 保存按钮 -->
       <div class="form-actions">
@@ -189,6 +260,11 @@ const globalMessageClass = ref('')
 
 const editingId = ref('')
 
+// 阶段 4.1：可用工具列表（编辑时从后端加载，供点击添加到 allowlist/blocklist）
+const availableTools = ref<string[]>([])
+const newAllowedTool = ref('')
+const newBlockedTool = ref('')
+
 const emptyForm = () => ({
   server_id: '',
   transport: 'stdio' as MCPTransport,
@@ -202,11 +278,23 @@ const emptyForm = () => ({
   headers: {} as Record<string, string>,
   timeout: undefined as number | undefined,
   sse_read_timeout: undefined as number | undefined,
+  // 阶段 4.3：TLS 校验
+  tls_verify: true,
+  // 阶段 4.1：工具 allowlist / blocklist
+  allowed_tools: [] as string[],
+  blocked_tools: [] as string[],
 })
 
 const form = reactive(emptyForm())
 
 const isEditing = computed(() => mode.value === 'edit')
+
+function addChip(arr: string[], value: string) {
+  const v = value.trim()
+  if (v && !arr.includes(v)) {
+    arr.push(v)
+  }
+}
 
 function transportLabel(t: string): string {
   const map: Record<string, string> = {
@@ -234,6 +322,9 @@ async function loadServers() {
 
 function startAdd() {
   Object.assign(form, emptyForm())
+  availableTools.value = []
+  newAllowedTool.value = ''
+  newBlockedTool.value = ''
   mode.value = 'add'
   saveMessage.value = ''
 }
@@ -242,6 +333,9 @@ async function startEdit(server: MCPServerInfo) {
   mode.value = 'edit'
   editingId.value = server.server_id
   saveMessage.value = ''
+  availableTools.value = []
+  newAllowedTool.value = ''
+  newBlockedTool.value = ''
   try {
     const full = await api.getMcpServer(server.server_id)
     Object.assign(form, {
@@ -257,7 +351,18 @@ async function startEdit(server: MCPServerInfo) {
       headers: (full as any).headers || {},
       timeout: (full as any).timeout,
       sse_read_timeout: (full as any).sse_read_timeout,
+      tls_verify: (full as any).tls_verify !== false, // 默认 true
+      allowed_tools: (full as any).allowed_tools || [],
+      blocked_tools: (full as any).blocked_tools || [],
     })
+    // 阶段 4.1：加载该服务器已加载的工具列表（供点击添加到 allowlist/blocklist）
+    try {
+      const res = await api.listMcpServerTools(server.server_id)
+      availableTools.value = res.tools || []
+    } catch {
+      // 工具列表加载失败不阻塞编辑
+      availableTools.value = []
+    }
   } catch (e: any) {
     globalMessage.value = '加载服务器详情失败: ' + (e?.message || String(e))
     globalMessageClass.value = 'error'
@@ -317,12 +422,17 @@ async function handleSave() {
       if (form.cwd) body.cwd = form.cwd
     } else {
       body.url = form.url
+      body.tls_verify = form.tls_verify
       if (Object.keys(form.headers).length) body.headers = form.headers
       if (form.timeout != null) body.timeout = form.timeout
       if (form.transport === 'sse' && form.sse_read_timeout != null) {
         body.sse_read_timeout = form.sse_read_timeout
       }
     }
+
+    // 阶段 4.1：allowlist / blocklist（非空才发送，避免覆盖未配置状态）
+    if (form.allowed_tools.length) body.allowed_tools = form.allowed_tools
+    if (form.blocked_tools.length) body.blocked_tools = form.blocked_tools
 
     if (mode.value === 'add') {
       await api.createMcpServer(body)
@@ -687,6 +797,74 @@ select.input {
 }
 .global-message.error {
   background: #ffebee;
+  color: #d32f2f;
+}
+
+/* ── 阶段 4.1：chips 输入（allowlist / blocklist） ── */
+.chips-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  min-height: 38px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: #e3f2fd;
+  color: #1565c0;
+  font-size: 12px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+}
+.chip.chip-danger {
+  background: #ffebee;
+  color: #c62828;
+}
+.chip-remove {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0;
+  line-height: 1;
+}
+.chip-input {
+  flex: 1;
+  min-width: 200px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  padding: 4px;
+}
+.tool-pick {
+  display: inline-block;
+  margin: 2px 4px 2px 0;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  cursor: pointer;
+  border: 1px solid var(--border);
+}
+.tool-pick:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.tool-pick-danger:hover {
+  border-color: #d32f2f;
   color: #d32f2f;
 }
 </style>

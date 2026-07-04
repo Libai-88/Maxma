@@ -2,7 +2,13 @@
 
 from fastapi import APIRouter, Query
 
-from agent.audit_log import read_log, get_stats, clear_log
+from agent.audit_log import (
+    EVENT_MCP_CALL,
+    clear_log,
+    get_mcp_summary,
+    get_stats,
+    read_log,
+)
 
 router = APIRouter()
 
@@ -34,3 +40,13 @@ def encrypt_api_keys():
     from tools.crypto import encrypt_providers_yaml
     count = encrypt_providers_yaml(PROVIDERS_YAML_PATH)
     return {"status": "ok", "encrypted": count}
+
+
+@router.get("/audit-log/mcp-summary")
+def mcp_audit_summary():
+    """阶段 4.2：聚合统计每个 server_id+tool_name 的 MCP 调用情况。
+
+    返回 list of dict，每项含 server_id / tool_name / total / ok / error /
+    rate_limited / avg_duration_ms / success_rate / last_call_at。
+    """
+    return {"summary": get_mcp_summary(), "event_type": EVENT_MCP_CALL}

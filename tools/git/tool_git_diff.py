@@ -5,7 +5,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 
 
 class GitDiffInput(BaseModel):
@@ -16,6 +16,7 @@ class GitDiffInput(BaseModel):
     commit: str = Field(default="", description="对比的 commit（如 HEAD~1 或某个 commit hash）")
 
 
+@register_tool
 class GitDiffTool(ToolBase):
     name: str = "git_diff"
     description: str = (

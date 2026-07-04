@@ -4,7 +4,7 @@ import yaml
 from pydantic import BaseModel, Field
 
 from app_paths import PROVIDERS_YAML_PATH
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 
 
 class ManageProvidersInput(BaseModel):
@@ -46,6 +46,7 @@ def _mask_key(key: str) -> str:
     return key[:4] + "****" + key[-4:]
 
 
+@register_tool
 class ManageProvidersTool(ToolBase):
     name: str = "manage_providers"
     description: str = (

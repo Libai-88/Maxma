@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app_paths import UPLOADS_DIR
-from tools.base import ToolBase, format_success, format_error
+from tools.base import ToolBase, format_success, format_error, register_tool
 from tools.network.playwright_tools.browser_manager import BrowserManager
 
 # 上传目录（与 api/routes/upload.py 一致）
@@ -38,6 +38,7 @@ class BrowserScreenshotInput(BaseModel):
     timeout: int = Field(default=30, ge=5, le=120, description="页面加载超时（秒）")
 
 
+@register_tool
 class BrowserScreenshotTool(ToolBase):
     name: str = "browser_screenshot"
     description: str = (

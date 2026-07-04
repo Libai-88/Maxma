@@ -4,7 +4,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 
 
 class ProjectInfoInput(BaseModel):
@@ -19,6 +19,7 @@ class ProjectInfoInput(BaseModel):
     )
 
 
+@register_tool
 class ProjectInfoTool(ToolBase):
     name: str = "project_info"
     description: str = (

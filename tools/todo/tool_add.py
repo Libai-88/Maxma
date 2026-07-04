@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 from tools.todo.todo_base import TodoAPIHelper
 
 
@@ -93,6 +93,7 @@ class TodoAddInput(BaseModel):
     )
 
 
+@register_tool
 class TodoAddTool(ToolBase):
     name: str = "todo_add"
     description: str = (

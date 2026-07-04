@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 from tools.map.map_api import parse_poi_response
 
 
@@ -18,6 +18,7 @@ class FuzzyAddressInput(BaseModel):
     page: int = Field(default=1, description="当前页数")
 
 
+@register_tool
 class FuzzyAddressTool(ToolBase):
     name: str = "fuzzy_address_search"
     description: str = (

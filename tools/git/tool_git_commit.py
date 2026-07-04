@@ -5,7 +5,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 import logging
 logger = logging.getLogger(__name__)
 
@@ -43,6 +43,7 @@ class GitCommitInput(BaseModel):
     skip_sensitive_check: bool = Field(default=False, description="跳过敏感文件检测（不推荐）")
 
 
+@register_tool
 class GitCommitTool(ToolBase):
     name: str = "git_commit"
     description: str = (

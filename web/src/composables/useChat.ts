@@ -1,5 +1,5 @@
 import { computed, watch, onUnmounted, ref, type Ref } from 'vue'
-import type { ClientMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, AskUserEvent, PlanProposedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent } from '@/types'
+import type { ClientMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, AskUserEvent, PlanProposedEvent, PlanStepStartEvent, PlanStepEndEvent, PlanStepErrorEvent, PlanCompletedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent } from '@/types'
 import { useChatStore } from '@/stores/chat'
 import { useSessionStore } from '@/stores/session'
 import { buildFlatMessage, buildTimestamp, parseReferences } from '@/utils/references'
@@ -484,7 +484,72 @@ function handleEventForChannel(sid: string, event: ServerEvent) {
           steps: pe.payload.steps,
           planText: pe.payload.plan_text,
           status: 'pending',
+          currentStepIndex: -1,
+          stepStatuses: {},
+          failureCount: 0,
+          replanCount: 0,
         }
+      }
+      break
+    }
+
+    case 'plan_step_start': {
+      const se = event as PlanStepStartEvent
+      const targetTurn = ch.currentTurn
+      if (targetTurn?.planCard) {
+        targetTurn.planCard.status = 'running'
+        targetTurn.planCard.currentStepIndex = se.payload.step_index
+        if (!targetTurn.planCard.stepStatuses) targetTurn.planCard.stepStatuses = {}
+        targetTurn.planCard.stepStatuses[String(se.payload.step_index)] = 'running'
+        if (se.payload.tool_hint && targetTurn.planCard.toolHints) {
+          targetTurn.planCard.toolHints[String(se.payload.step_index)] = se.payload.tool_hint
+        } else if (se.payload.tool_hint) {
+          targetTurn.planCard.toolHints = { [String(se.payload.step_index)]: se.payload.tool_hint }
+        }
+      }
+      break
+    }
+
+    case 'plan_step_end': {
+      const se = event as PlanStepEndEvent
+      const targetTurn = ch.currentTurn
+      if (targetTurn?.planCard) {
+        if (!targetTurn.planCard.stepStatuses) targetTurn.planCard.stepStatuses = {}
+        targetTurn.planCard.stepStatuses[String(se.payload.step_index)] = se.payload.status
+      }
+      break
+    }
+
+    case 'plan_step_error': {
+      const se = event as PlanStepErrorEvent
+      const targetTurn = ch.currentTurn
+      if (targetTurn?.planCard) {
+        if (!targetTurn.planCard.stepStatuses) targetTurn.planCard.stepStatuses = {}
+        targetTurn.planCard.stepStatuses[String(se.payload.step_index)] = 'failed'
+        targetTurn.planCard.failureCount = (targetTurn.planCard.failureCount || 0) + 1
+        if (se.payload.replanning) {
+          targetTurn.planCard.status = 'replanning'
+          targetTurn.planCard.replanCount = (targetTurn.planCard.replanCount || 0) + 1
+        } else if (se.payload.skipped) {
+          targetTurn.planCard.stepStatuses[String(se.payload.step_index)] = 'skipped'
+        } else {
+          targetTurn.planCard.status = 'failed'
+        }
+      }
+      break
+    }
+
+    case 'plan_completed': {
+      const ce = event as PlanCompletedEvent
+      const targetTurn = ch.currentTurn
+      if (targetTurn?.planCard) {
+        targetTurn.planCard.status = 'approved'  // 保持已确认状态
+        targetTurn.planCard.currentStepIndex = ce.payload.summary.total_steps
+        if (ce.payload.summary.statuses) {
+          targetTurn.planCard.stepStatuses = { ...ce.payload.summary.statuses }
+        }
+        targetTurn.planCard.failureCount = ce.payload.summary.failure_count
+        targetTurn.planCard.replanCount = ce.payload.summary.replan_count
       }
       break
     }

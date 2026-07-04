@@ -3,7 +3,7 @@
 from pydantic import BaseModel, Field
 
 from api import interaction
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 
 
 class ContextStrategyInput(BaseModel):
@@ -19,6 +19,7 @@ class ContextStrategyInput(BaseModel):
     )
 
 
+@register_tool
 class ContextStrategyTool(ToolBase):
     name: str = "context_strategy"
     description: str = (

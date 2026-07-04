@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 from tools.map.map_api import parse_transit_response
 
 
@@ -18,6 +18,7 @@ class TransitRouteInput(BaseModel):
     destination_city: str = Field(default="北京", description="终点城市名称")
 
 
+@register_tool
 class TransitRouteTool(ToolBase):
     name: str = "get_transit_route"
     description: str = (

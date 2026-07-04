@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success
+from tools.base import ToolBase, format_error, format_success, register_tool
 from tools.map.map_api import parse_cycling_response
 
 
@@ -16,6 +16,7 @@ class CyclingRouteInput(BaseModel):
     destination_latitude: str = Field(default="", description="终点纬度")
 
 
+@register_tool
 class CyclingRouteTool(ToolBase):
     name: str = "get_cycling_route"
     description: str = (

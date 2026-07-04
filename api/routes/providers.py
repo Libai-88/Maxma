@@ -24,6 +24,8 @@ class ProviderCreateBody(BaseModel):
     models: list[str] = []
     enabled: bool = True
     context_window: int = 256_000
+    # 阶段 3.3：优先级（数字越小优先级越高，0 = 最高），用于 fallback 排序
+    priority: int = 0
 
 
 class ProviderUpdateBody(BaseModel):
@@ -33,6 +35,8 @@ class ProviderUpdateBody(BaseModel):
     models: list[str] | None = None
     enabled: bool | None = None
     context_window: int | None = None
+    # 阶段 3.3：优先级（数字越小优先级越高，0 = 最高），用于 fallback 排序
+    priority: int | None = None
 
 
 class TestConnectionBody(BaseModel):
@@ -46,6 +50,38 @@ class TestConnectionBody(BaseModel):
 
 def _get_manager(request: Request):
     return request.app.state.provider_manager
+
+
+def _config_with_health(request: Request, config) -> dict:
+    """合并 provider 配置与运行时健康状态（阶段 3.3）。
+
+    健康状态由 ProviderManager 的后台 health_monitor 维护，未持久化，
+    重启后重置为 unknown（前端应优雅处理 unknown 状态）。
+    """
+    data = config.to_safe_dict()
+    mgr = _get_manager(request)
+    try:
+        hs = mgr.get_health_status(config.id)
+    except Exception:
+        hs = None
+    if hs is None:
+        data["health_status"] = "unknown"
+        data["health_detail"] = None
+        data["health_latency_ms"] = None
+        data["last_check_time"] = 0.0
+        data["consecutive_failures"] = 0
+    else:
+        data["health_status"] = hs.status
+        data["health_detail"] = hs.detail
+        data["health_latency_ms"] = hs.latency_ms
+        try:
+            provider = mgr.get(config.id)
+            data["last_check_time"] = provider.last_check_time
+            data["consecutive_failures"] = provider.consecutive_failures
+        except KeyError:
+            data["last_check_time"] = 0.0
+            data["consecutive_failures"] = 0
+    return data
 
 
 async def _maybe_initialize_llm(request: Request, force: bool = False) -> None:
@@ -84,18 +120,18 @@ async def _maybe_initialize_llm(request: Request, force: bool = False) -> None:
 
 @router.get("/providers")
 def list_providers(request: Request):
-    """返回所有已配置的提供商（含未启用的）。"""
+    """返回所有已配置的提供商（含未启用的，附带运行时健康状态）。"""
     configs = _get_manager(request).list_configs()
-    return {"providers": [c.to_safe_dict() for c in configs]}
+    return {"providers": [_config_with_health(request, c) for c in configs]}
 
 
 @router.get("/providers/{provider_id}")
 def get_provider(provider_id: str, request: Request):
-    """获取单个提供商配置。"""
+    """获取单个提供商配置（附带运行时健康状态）。"""
     config = _get_manager(request).get_config(provider_id)
     if config is None:
         raise HTTPException(status_code=404, detail="Provider not found")
-    return config.to_safe_dict()
+    return _config_with_health(request, config)
 
 
 @router.post("/providers")
@@ -116,13 +152,14 @@ async def create_provider(body: ProviderCreateBody, request: Request):
         models=body.models,
         enabled=body.enabled,
         context_window=body.context_window,
+        priority=body.priority,
     )
     mgr.save_config(config)
 
     # 自动初始化 LLM 和 Memory（如果之前因缺少 provider 而未启动）
     await _maybe_initialize_llm(request, force=True)
 
-    return config.to_safe_dict()
+    return _config_with_health(request, config)
 
 
 @router.put("/providers/{provider_id}")
@@ -142,7 +179,7 @@ async def update_provider(provider_id: str, body: ProviderUpdateBody, request: R
     # 自动初始化 LLM 和 Memory（如果之前因缺少 provider 而未启动）
     await _maybe_initialize_llm(request, force=True)
 
-    return config.to_safe_dict()
+    return _config_with_health(request, config)
 
 
 @router.delete("/providers/{provider_id}")
@@ -198,6 +235,50 @@ async def test_existing_provider(provider_id: str, request: Request):
         "status": result.status,
         "latency_ms": result.latency_ms,
         "detail": result.detail,
+    }
+
+
+@router.post("/providers/{provider_id}/health")
+async def check_provider_health(provider_id: str, request: Request):
+    """阶段 3.3：触发按需健康检查并更新 provider 的运行时健康状态。
+
+    与后台 health_monitor 互补：管理员可在 UI 上手动触发即时检查，
+    结果会同步写入 ProviderManager 的健康状态（影响 fallback 链路决策）。
+
+    返回最新的健康状态摘要（status/latency_ms/detail/last_check_time/
+    consecutive_failures），便于前端立即刷新 UI。
+    """
+    mgr = _get_manager(request)
+    try:
+        provider = mgr.get(provider_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Provider not found or not enabled")
+
+    result = await provider.check_health()
+
+    # 同步健康状态到 ProviderManager（影响 get_healthy / get_fallback 决策）
+    if result.status == "ok":
+        mgr.mark_healthy(provider_id, latency_ms=result.latency_ms)
+    elif result.status == "degraded":
+        mgr.mark_degraded(provider_id, detail=result.detail or "degraded")
+    else:
+        mgr.mark_unhealthy(provider_id, detail=result.detail or "error")
+
+    # 重新查询以拿到更新后的 last_check_time / consecutive_failures
+    try:
+        provider = mgr.get(provider_id)
+        last_check_time = provider.last_check_time
+        consecutive_failures = provider.consecutive_failures
+    except KeyError:
+        last_check_time = 0.0
+        consecutive_failures = 0
+
+    return {
+        "status": result.status,
+        "latency_ms": result.latency_ms,
+        "detail": result.detail,
+        "last_check_time": last_check_time,
+        "consecutive_failures": consecutive_failures,
     }
 
 

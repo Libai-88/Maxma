@@ -406,15 +406,20 @@ def _whitelisted_open(
 # 允许在受限 exec 环境中保留的安全内置名称。
 # 仅包含纯计算/数据结构/基本 I/O（print）相关的内置函数；
 # 任何可能导致代码执行、文件系统访问或进程控制的内置函数均被排除。
+# 阶段 3.5 收紧：移除元编程逃逸入口（globals/locals/vars/dir/type/getattr/
+# setattr/delattr/super/classmethod/staticmethod/property/memoryview）。
+# 这些函数可访问对象内部状态、构造新类型、动态查/改属性，是 Python 沙箱逃逸的
+# 标准起点（如 ``().__class__.__bases__[0].__subclasses__()``、``type(...)``、
+# ``getattr(obj, '__class__')`` 等）。
 _SAFE_BUILTIN_NAMES: frozenset[str] = frozenset({
     "abs", "aiter", "all", "anext", "any", "ascii", "bin", "bool", "bytearray",
-    "bytes", "callable", "chr", "classmethod", "complex", "delattr", "dict",
-    "dir", "divmod", "enumerate", "filter", "float", "format", "frozenset",
-    "getattr", "globals", "hasattr", "hash", "hex", "id", "int",
-    "isinstance", "issubclass", "iter", "len", "list", "locals", "map", "max",
-    "memoryview", "min", "next", "object", "oct", "ord", "pow", "print",
-    "property", "range", "repr", "reversed", "round", "set", "slice", "sorted",
-    "staticmethod", "str", "sum", "super", "tuple", "type", "vars", "zip",
+    "bytes", "callable", "chr", "complex", "dict",
+    "divmod", "enumerate", "filter", "float", "format", "frozenset",
+    "hasattr", "hash", "hex", "id", "int",
+    "isinstance", "issubclass", "iter", "len", "list", "map", "max",
+    "min", "next", "object", "oct", "ord", "pow", "print",
+    "range", "repr", "reversed", "round", "set", "slice", "sorted",
+    "str", "sum", "tuple", "zip",
 })
 
 # 明确禁止在受限 exec 中使用的危险内置函数。
@@ -422,6 +427,42 @@ _DANGEROUS_BUILTIN_NAMES: frozenset[str] = frozenset({
     "__import__", "breakpoint", "compile", "copyright", "credits", "eval",
     "exec", "exit", "input", "license", "open", "quit",
 })
+
+# 受限 exec 环境中明令阻断的 dunder 属性名（阶段 3.5 新增）。
+# 这些属性是 Python 元编程逃逸链路的关键节点，禁止在 exec 代码中通过
+# ``obj.__subclasses__``/``obj.__globals__``/``obj.__class__`` 等访问。
+# AST 预检 + 沙箱 builtins 双层拦截。
+# 阶段 3.5 增强：新增 __getattribute__/__getattr__/__reduce__/__reduce_ex__/__closure__
+# 等"元 dunder"——它们可绕过属性访问拦截器本身，是已知的二级逃逸向量。
+_BLOCKED_DUNDER_ATTRIBUTES: frozenset[str] = frozenset({
+    "__subclasses__",      # type.__subclasses__() → 找到 subprocess.Popen 等危险类型
+    "__bases__",           # 类的基类元组 → 顺链找到 object
+    "__mro__",             # 方法解析顺序 → 顺链找到 object
+    "__class__",           # 实例 → 类型 → 顺链逃逸
+    "__globals__",         # 函数对象 → 全局命名空间 → __builtins__
+    "__builtins__",        # 模块/帧 → 内置命名空间 → __import__
+    "__dict__",            # 任意对象的属性字典 → 内部状态
+    "__code__",            # 函数对象 → code object → exec/eval
+    "__func__",            # bound method → 原函数 → __globals__
+    "__self__",            # bound method → 实例 → __class__
+    "__module__",          # 类/函数 → 模块名 → import
+    "__loader__",          # 模块 → loader → import 系统
+    "__spec__",            # 模块 → ModuleSpec → import 系统
+    "__import_subclasses__",  # 防御性变体
+    "__getattribute__",    # 元 dunder → 可绕过 _safe_getattr 拦截器
+    "__getattr__",         # 元 dunder → 可绕过 _safe_getattr 拦截器
+    "__reduce__",          # pickle 协议 → 可能泄露类型信息
+    "__reduce_ex__",       # pickle 协议 → 可能泄露类型信息
+    "__closure__",         # 函数闭包 → 可能访问外部变量
+    "__init_subclass__",   # 类创建钩子 → 可能触发意外代码
+    "__subclasshook__",    # ABC 钩子 → 可能触发意外代码
+})
+
+# 沙箱专用（tool_python）的安全内置名称 — 比 _SAFE_BUILTIN_NAMES 更严格：
+# 不含 open（沙箱内文件 I/O 一律禁用）、不含 hasattr（仍可触发 __getattr__ 链）。
+# 实际沙箱 builtins 由 tool_python._SANDBOX_WRAPPER 内联维护（子进程无法 import），
+# 此常量供主进程 AST 预检与文档参考。
+_SANDBOX_BUILTIN_NAMES: frozenset[str] = _SAFE_BUILTIN_NAMES - {"hasattr"}
 
 
 def get_safe_builtins() -> dict:
@@ -431,6 +472,9 @@ def get_safe_builtins() -> dict:
     文件系统访问或进程控制的内置函数（如 ``__import__``、``eval``、``exec``、
     ``compile``、``breakpoint``、``open`` 等）。``open()`` 被替换为经过
     ``check_path_whitelisted()`` 审查的白名单包装版本。
+
+    注意：阶段 3.5 已收紧白名单，移除了 ``globals``/``locals``/``vars``/``dir``/
+    ``type``/``getattr``/``setattr``/``delattr``/``super`` 等元编程入口。
     """
     # 在非 __main__ 模块中，__builtins__ 是模块对象而非 dict
     if isinstance(__builtins__, dict):  # type: ignore[name-defined]
@@ -444,5 +488,31 @@ def get_safe_builtins() -> dict:
         if name in _SAFE_BUILTIN_NAMES and name not in _DANGEROUS_BUILTIN_NAMES
     }
     safe["open"] = _whitelisted_open
+    safe["__builtins__"] = safe
+    return safe
+
+
+def get_sandbox_builtins() -> dict:
+    """构造 run_python 沙箱专用的受限 builtins 字典（阶段 3.5 新增）。
+
+    比 ``get_safe_builtins()`` 更严格：
+    - 不含 ``open``（沙箱内文件 I/O 一律禁用）
+    - 不含 ``hasattr``（可触发 ``__getattr__`` 链导致元编程逃逸）
+    - 不含任何元编程入口（同 ``_SAFE_BUILTIN_NAMES`` 已收紧名单）
+
+    Returns:
+        受限 builtins 字典，``__builtins__`` 自引用以供 ``exec`` 使用。
+    """
+    if isinstance(__builtins__, dict):  # type: ignore[name-defined]
+        source: dict = __builtins__  # type: ignore[name-defined,assignment]
+    else:
+        source = __builtins__.__dict__  # type: ignore[name-defined]
+
+    safe: dict = {
+        name: value
+        for name, value in source.items()  # type: ignore[arg-type]
+        if name in _SANDBOX_BUILTIN_NAMES and name not in _DANGEROUS_BUILTIN_NAMES
+    }
+    # 沙箱内 __builtins__ 自引用（不提供 open）
     safe["__builtins__"] = safe
     return safe
