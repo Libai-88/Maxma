@@ -164,7 +164,7 @@ async def _run_event_hook_action(app: FastAPI, hook, trigger_detail: str) -> str
     finally:
         delete_session = getattr(session_manager, "delete", None)
         if callable(delete_session):
-            delete_session(session.session_id)
+            await delete_session(session.session_id)
 
 
 def _build_event_hook_callback(app: FastAPI):

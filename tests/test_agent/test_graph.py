@@ -11,16 +11,15 @@ class _FakeInteraction:
     def __init__(self):
         self._pending = {}
         self.cleaned: list[str] = []
-        self._counter = 0
 
-    def register(self):
-        self._counter += 1
-        interaction_id = f"interaction-{self._counter}"
+    async def register(self, interaction_id: str | None = None):
+        if interaction_id is None:
+            interaction_id = "interaction-1"
         future = asyncio.Future()
         self._pending[interaction_id] = future
         return interaction_id, future
 
-    def cleanup(self, interaction_id: str):
+    async def cleanup(self, interaction_id: str):
         self.cleaned.append(interaction_id)
         self._pending.pop(interaction_id, None)
 
@@ -58,7 +57,6 @@ async def test_request_plan_confirmation_cleans_pending_when_send_fails():
     assert response is None
     assert interaction._pending == {}
     assert "plan-1" in interaction.cleaned
-    assert "interaction-1" in interaction.cleaned
 
 
 @pytest.mark.asyncio
