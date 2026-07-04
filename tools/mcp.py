@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field, field_validator
 from agent.audit_log import log_mcp_call
 from app_paths import MCP_CONFIG_PATH
 from tools.mcp_rate_limiter import get_mcp_rate_limiter
+from tools.mcp_runtime import build_mcp_env, resolve_mcp_command
 from tools.mcp_security import validate_stdio_command, validate_transport_url, validate_tls_config
 
 logger = logging.getLogger(__name__)
@@ -84,13 +85,16 @@ class StdioServerConfig(_BaseServerMixin):
         return v
 
     def to_connection(self) -> dict[str, Any]:
+        # 阶段 5.3：命令解析 + 环境变量注入（嵌入式运行时支持）
+        resolved_command = resolve_mcp_command(self.command)
+        merged_env = build_mcp_env(self.env if self.env is not None else {})
+
         conn: dict[str, Any] = {
             "transport": "stdio",
-            "command": self.command,
+            "command": resolved_command,
             "args": self.args,
+            "env": merged_env,
         }
-        if self.env is not None:
-            conn["env"] = self.env
         if self.cwd is not None:
             conn["cwd"] = self.cwd
         return conn

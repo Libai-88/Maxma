@@ -1,5 +1,6 @@
 """Playwright 浏览器生命周期管理 — 单例模式，headless Chromium。"""
 
+import os
 import threading
 from pathlib import Path
 
@@ -34,9 +35,18 @@ class BrowserManager:
         self._browser_lock = threading.Lock()
 
     def _ensure_browser(self) -> Browser:
-        """懒加载初始化 Playwright + Chromium。线程安全。"""
+        """懒加载初始化 Playwright + Chromium。线程安全。
+
+        打包模式下通过 PLAYWRIGHT_BROWSERS_PATH 环境变量指向嵌入式 Chromium，
+        必须在 sync_playwright().start() 之前设置（Playwright 启动时读取该变量）。
+        """
         with self._browser_lock:
             if self._browser is None:
+                # 阶段 5.3：打包模式下注入嵌入式 Chromium 路径
+                from app_paths import PLAYWRIGHT_BROWSERS_PATH, _is_frozen
+                if _is_frozen() and PLAYWRIGHT_BROWSERS_PATH.exists():
+                    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(PLAYWRIGHT_BROWSERS_PATH)
+
                 self._playwright = sync_playwright().start()
                 self._browser = self._playwright.chromium.launch(
                     headless=True,

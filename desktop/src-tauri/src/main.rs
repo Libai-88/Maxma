@@ -152,7 +152,15 @@ fn spawn_sidecar_with_monitor(
         .expect("Failed to get sidecar");
 
     // 通过环境变量将端口传给 sidecar（Python 端从 settings.maxma_api_port 读取）
-    let sidecar = sidecar.env("MAXMA_API_PORT", port.to_string());
+    // 同时注入 MAXMA_RESOURCES_DIR 让 Python 后端能定位嵌入式运行时
+    let resource_dir = app
+        .path()
+        .resource_dir()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+
+    let sidecar = sidecar
+        .env("MAXMA_API_PORT", port.to_string())
+        .env("MAXMA_RESOURCES_DIR", resource_dir.to_string_lossy().to_string());
 
     let (mut rx, child) = sidecar
         .spawn()

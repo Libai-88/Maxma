@@ -64,11 +64,17 @@ class EmbeddingEngine:
 
         self._np = np
 
-        # 确定模型目录
+        # 阶段 5.3：优先级：显式配置 > 打包预置 > 在线下载
         if self._local_path and Path(self._local_path).exists():
             model_dir = Path(self._local_path)
         else:
-            model_dir = self._download_model()
+            # 打包模式：尝试使用 RUNTIME_DIR 下的预置模型
+            from app_paths import ONNX_MODEL_PATH, _is_frozen
+            if _is_frozen() and ONNX_MODEL_PATH.exists():
+                model_dir = ONNX_MODEL_PATH
+                logger.info("[rag] 使用打包预置 ONNX 模型: %s", model_dir)
+            else:
+                model_dir = self._download_model()
 
         # 定位 ONNX 模型文件
         onnx_file = self._find_onnx_file(model_dir)
