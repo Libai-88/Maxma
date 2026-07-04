@@ -184,7 +184,12 @@ def _build_event_hook_callback(app: FastAPI):
 
 
 async def _load_const_sessions(app: FastAPI):
-    """从 YAML 重建所有 const 固定会话到内存 SessionManager。"""
+    """从 YAML 重建所有 const 固定会话到内存 SessionManager。
+
+    阶段 5.1：改用全局持久化 checkpointer（AsyncSqliteSaver）。
+    - thread_id = const session_id 天然隔离，无需为每个 const 会话单独建 saver
+    - 进程重启后，SQLite 中已存在的 checkpoint 可直接恢复，aupdate_state 幂等覆盖
+    """
     sm = app.state.session_manager
     const_list = load_all_const_sessions()
     if not const_list:
@@ -194,7 +199,10 @@ async def _load_const_sessions(app: FastAPI):
         logger.warning("[const] Skipping %d const session(s) — no LLM available", len(const_list))
         return
 
-    from langgraph.checkpoint.memory import MemorySaver
+    from api.checkpointer_factory import get_persistent_checkpointer
+
+    # 共享全局 checkpointer（thread_id 区分会话）
+    shared_checkpointer = get_persistent_checkpointer()
 
     loaded = 0
     for const_data in const_list:
@@ -206,16 +214,15 @@ async def _load_const_sessions(app: FastAPI):
         const_name = const_data.get("const_name", "")
         messages = const_data.get("messages", [])
 
-        # 重建 checkpointer
+        # 用共享 checkpointer 重建会话状态
         try:
             reconstructed = deserialize_messages(messages)
-            checkpointer = MemorySaver()
             if reconstructed:
                 agent = build_agent(
                     model=app.state.llm,
                     tools=app.state.tools,
                     system_prompt=app.state.system_prompt,
-                    checkpointer=checkpointer,
+                    checkpointer=shared_checkpointer,
                 )
                 await agent.aupdate_state(
                     {"configurable": {"thread_id": sid}},
@@ -230,7 +237,7 @@ async def _load_const_sessions(app: FastAPI):
             created_at=metadata.get("created_at", time.time()),
             last_active=metadata.get("last_active", time.time()),
             message_count=metadata.get("message_count", 0),
-            checkpointer=checkpointer,
+            checkpointer=shared_checkpointer,
             is_const=True,
             const_name=const_name,
         )
@@ -290,6 +297,14 @@ async def lifespan(app: FastAPI):
     app.state.session_manager = SessionManager()
     app.state.ws_registry = WebSocketRegistry()
     app.state.ltm = LongTermMemoryInterface(MEMORY_PATH)
+
+    # 阶段 5.1：初始化持久化 checkpointer（必须在 _load_const_sessions 之前）
+    # - 启用 SQLite 持久化：进程重启后可恢复会话状态
+    # - 失败时自动回退到 MemorySaver（仅内存，重启丢失）
+    from api.checkpointer_factory import init_persistent_checkpointer
+    await init_persistent_checkpointer()
+    from api.checkpointer_factory import get_checkpointer_info
+    logger.info("[checkpointer] %s", get_checkpointer_info())
 
     # 后台初始化 LLM（不阻塞 lifespan，让 API 立即就绪）
     async def _init_llm_background():
@@ -439,6 +454,10 @@ async def lifespan(app: FastAPI):
         BrowserManager().shutdown()
     except Exception:
         logger.warning("[playwright] browser shutdown failed", exc_info=True)
+
+    # 阶段 5.1：关闭持久化 checkpointer（释放 SQLite 连接）
+    from api.checkpointer_factory import close_persistent_checkpointer
+    await close_persistent_checkpointer()
 
 
 def create_app() -> FastAPI:

@@ -355,15 +355,50 @@ def build_agent(
         response = await llm_with_tools.ainvoke(messages)
         return {"messages": [response], "episodic_context": ""}
 
+    async def loop_breaker_node(state: AgentState) -> dict:
+        """循环终止节点：注入 ToolMessage + SystemMessage 后结束。
+
+        当 should_continue 检测到死循环时路由到此节点。
+        为 last AIMessage 的每个 tool_call 生成"已取消"的 ToolMessage，
+        避免下轮 "tool_calls without corresponding ToolMessage" 错误，
+        并追加 SystemMessage 通知 LLM 已终止循环、需向用户说明情况。
+        """
+        from agent.loop_detector import get_loop_break_messages
+
+        last = state["messages"][-1]
+        if isinstance(last, AIMessage) and last.tool_calls:
+            break_msgs = get_loop_break_messages(last)
+            logger.warning(
+                "[loop_detector] 检测到死循环，已终止重复工具调用: %s",
+                [tc.get("name", "") for tc in last.tool_calls],
+            )
+            return {"messages": break_msgs}
+        return {}
+
     def should_continue(state: AgentState) -> str:
         """路由：最后一条 AI 消息有 tool_calls → 执行工具，否则结束或回 executor。
 
         阶段 2 扩展：
         - enable_executor=True 且有计划 → agent 完成后回 executor（步骤推进）
         - 其他情况 → END
+
+        阶段 5.2 扩展：
+        - 检测到死循环 → 路由到 loop_breaker 节点注入终止消息后 END
         """
         last = state["messages"][-1]
         if isinstance(last, AIMessage) and last.tool_calls:
+            # 阶段 5.2：死循环检测（在路由到 tools 之前）
+            try:
+                from config.settings import get_settings
+                ld_enabled = get_settings().loop_detection_enabled
+                ld_threshold = get_settings().loop_detection_threshold
+            except Exception:
+                ld_enabled = True
+                ld_threshold = 3
+            if ld_enabled:
+                from agent.loop_detector import detect_loop
+                if detect_loop(state["messages"], threshold=ld_threshold):
+                    return "loop_breaker"
             return "tools"
         # 无 tool_calls：executor 模式下回 executor 推进步骤，否则结束
         if enable_executor and state.get("plan_steps"):
@@ -425,6 +460,8 @@ def build_agent(
         graph.add_node("executor", executor_node)
 
     graph.add_node("agent", agent_node)
+    # 阶段 5.2：循环终止节点（检测到死循环时注入终止消息后结束）
+    graph.add_node("loop_breaker", loop_breaker_node)
     if tool_node is not None:
         graph.add_node("tools", tool_node)
 
@@ -453,12 +490,13 @@ def build_agent(
             {"agent": "agent", "planner": "planner", END: END},
         )
 
-        # agent → tools | executor | END（条件路由）
+        # agent → tools | loop_breaker | executor | END（条件路由）
+        # loop_breaker → END（死循环终止后直接结束）
         if tool_node is not None:
             graph.add_conditional_edges(
                 "agent",
                 should_continue,
-                {"tools": "tools", "executor": "executor", END: END},
+                {"tools": "tools", "loop_breaker": "loop_breaker", "executor": "executor", END: END},
             )
             # tools → agent（工具执行后回到模型继续推理）
             graph.add_edge("tools", "agent")
@@ -466,15 +504,21 @@ def build_agent(
             graph.add_conditional_edges(
                 "agent",
                 should_continue,
-                {"executor": "executor", END: END},
+                {"loop_breaker": "loop_breaker", "executor": "executor", END: END},
             )
+        graph.add_edge("loop_breaker", END)
     else:
-        # 非 executor 模式（子 Agent）：agent → tools | END
+        # 非 executor 模式（子 Agent）：agent → tools | loop_breaker | END
         if tool_node is not None:
-            graph.add_conditional_edges("agent", should_continue, {"tools": "tools", END: END})
+            graph.add_conditional_edges(
+                "agent",
+                should_continue,
+                {"tools": "tools", "loop_breaker": "loop_breaker", END: END},
+            )
             graph.add_edge("tools", "agent")
         else:
             graph.add_edge("agent", END)
+        graph.add_edge("loop_breaker", END)
 
     return graph.compile(checkpointer=checkpointer)
 
