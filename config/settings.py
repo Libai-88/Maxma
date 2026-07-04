@@ -81,6 +81,16 @@ class Settings(BaseSettings):
     mcp_rate_limit_burst: int = 10  # 突发上限（令牌桶容量）
     mcp_rate_limit_enabled: bool = True  # 是否启用 MCP 限流
 
+    # 阶段 5.1：进程级持久化 checkpointer
+    # 启用后使用 SqliteSaver 持久化会话状态到磁盘，进程重启可恢复
+    persistence_enabled: bool = True  # 是否启用 SQLite 持久化（False 时回退到 MemorySaver）
+    persistence_db_path: str = ""  # SQLite 数据库路径，留空时使用 DATA_DIR/checkpoints.sqlite
+
+    # 阶段 5.2：死循环检测
+    # 连续 N 次调用相同工具且参数相同时自动终止，防止 LLM 陷入死循环
+    loop_detection_enabled: bool = True  # 是否启用死循环检测
+    loop_detection_threshold: int = 3  # 连续重复次数阈值，达到后终止
+
     model_config = {
         "env_file": str(ENV_FILE_PATH),
         "env_file_encoding": "utf-8",

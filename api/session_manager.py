@@ -5,8 +5,8 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
+from typing import Any
 
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph.state import CompiledStateGraph
 
 
@@ -17,7 +17,9 @@ class SessionState:
     last_active: float = field(default_factory=time.time)
     message_count: int = 0
     _active_task: asyncio.Task | None = field(default=None, repr=False)
-    checkpointer: MemorySaver = field(default_factory=MemorySaver)
+    # 阶段 5.1：使用持久化 checkpointer（AsyncSqliteSaver 或 MemorySaver 回退）
+    # default_factory 延迟导入避免循环依赖，且保证测试环境无 SQLite 时可用
+    checkpointer: Any = field(default=None)
     _graph: CompiledStateGraph | None = field(default=None, repr=False)
     auto_approve: bool = False
 
@@ -34,6 +36,19 @@ class SessionState:
     # ── 项目上下文缓存 ──────────────────────────────────────
     _project_context: str | None = field(default=None, repr=False)
     _project_path: str | None = field(default=None, repr=False)
+
+    def __post_init__(self) -> None:
+        """初始化后处理：若未显式提供 checkpointer，使用持久化 checkpointer 单例。
+
+        工厂不可导入时（如测试环境）回退到 MemorySaver。
+        """
+        if self.checkpointer is None:
+            try:
+                from api.checkpointer_factory import get_persistent_checkpointer
+                self.checkpointer = get_persistent_checkpointer()
+            except Exception:
+                from langgraph.checkpoint.memory import MemorySaver
+                self.checkpointer = MemorySaver()
 
 
 class SessionManager:

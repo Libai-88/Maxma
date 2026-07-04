@@ -111,6 +111,11 @@ hiddenimports = [
     "langchain_core.messages",
     "langchain_core.runnables",
     "langgraph.checkpoint.memory",
+    # 阶段 5.1：SQLite 持久化 checkpointer（langgraph.checkpoint.sqlite.aio
+    # 已被 collect_submodules("langgraph") 覆盖，但 aiosqlite 是独立包需显式声明）
+    "langgraph.checkpoint.sqlite",
+    "langgraph.checkpoint.sqlite.aio",
+    "aiosqlite",
     "langgraph.stream",
     "openai",
 
@@ -210,6 +215,8 @@ hiddenimports = [
     "api.time_traveler",
     "api.const_session_store",
     "api.interaction",
+    # 阶段 5.1：持久化 checkpointer 工厂（lifespan + SessionState.__post_init__ 延迟导入）
+    "api.checkpointer_factory",
     "api.providers.openai_provider",
     "api.routes.event_hooks",
     "api.routes.audit_log",
@@ -254,6 +261,8 @@ hiddenimports = [
     # step_state.py 含 PlanStep/StepStatus/ExecutionPlan/merge_dicts reducer（LangGraph 动态特性）
     "agent.executor",
     "agent.step_state",
+    # 阶段 5.2：死循环检测器（graph.should_continue + loop_breaker_node 延迟导入）
+    "agent.loop_detector",
 
     # ── Memory 模块 ──
     "memory.memory_manager",

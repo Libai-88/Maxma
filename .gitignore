@@ -113,3 +113,14 @@ logs/
 # 安全威胁模型（本地文档，不提交）
 dev_docs/security/
 api/data/maxma.db
+
+# 临时测试/调试输出文件
+pytest_*.txt
+pytest_*.xml
+stderr.log
+stdout.log
+test_output.txt
+venv_stdout.log
+
+# 向量数据库本地缓存
+vector_db/
