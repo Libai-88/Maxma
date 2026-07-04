@@ -64,7 +64,6 @@ tools/bilibili/cookie.txt
 output/bilibili/
 config/personas/memory.yaml
 *.lock
-!requirements.lock
 !desktop/src-tauri/Cargo.lock
 *.clean
 
