@@ -36,8 +36,11 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "resources/default-config/*"
+      "resources/default-config/*",
+      "resources/runtime/**/*",
+      "resources/assets/**/*"
     ],
+    "publisher": "MaxmaHere",
     "externalBin": [
       "binaries/maxma-server"
     ],

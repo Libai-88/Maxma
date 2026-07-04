@@ -34,6 +34,7 @@ from api.routes import maxma_blocker as maxma_blocker_router
 from api.routes import skills as skills_router
 from api.routes import news as news_router
 from api.routes import mcp as mcp_router
+from api.routes import mcp_test as mcp_test_router
 from api.routes import restart as restart_router
 from api.routes import env_vars as env_vars_router
 from api.routes import tool_stats as tool_stats_router
@@ -490,6 +491,9 @@ def create_app() -> FastAPI:
 
     # MCP 服务器配置查看与热加载
     app.include_router(mcp_router.router, prefix="/api")
+
+    # MCP 测试连接（路由自带 /api/mcp 前缀）
+    app.include_router(mcp_test_router.router)
 
     # 人设读写 (SOUL.md / USER.md)
     app.include_router(persona_router.router, prefix="/api")

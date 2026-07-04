@@ -35,7 +35,7 @@ class Settings(BaseSettings):
 
     # RAG 子系统配置
     embedding_model_name: str = "paraphrase-multilingual-MiniLM-L12-v2"
-    embedding_model_local_path: str = ""  # 打包时预置模型路径，留空则从 HuggingFace 下载
+    embedding_model_local_path: str = ""  # 留空则从 HuggingFace 下载；打包模式下由 app_paths.ONNX_MODEL_PATH 注入
     chromadb_collection_name: str = "long_term_memory"
     rag_top_k: int = 5
     rag_similarity_threshold: float = 0.6

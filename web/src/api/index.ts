@@ -445,6 +445,13 @@ export const api = {
   listMcpServerTools: (serverId: string) =>
     request<MCPServerToolsResponse>(`/mcp/servers/${encodeURIComponent(serverId)}/tools`),
 
+  // 测试 MCP 服务器连接（stdio 命令解析 + 子进程启动探测）
+  testMcpConnection: (body: { command: string; args: string[]; env: Record<string, string> }) =>
+    request<{ success: boolean; error: string | null; resolved_command: string }>('/mcp/test-connection', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
   // 阶段 4.2：MCP 调用审计聚合统计
   getMcpAuditSummary: () =>
     request<{ summary: any[]; event_type: string }>('/audit-log/mcp-summary'),

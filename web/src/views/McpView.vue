@@ -228,7 +228,16 @@
 
       <!-- 保存按钮 -->
       <div class="form-actions">
-        <button type="submit" class="btn primary" :disabled="saving">
+        <button
+          v-if="form.transport === 'stdio'"
+          type="button"
+          class="btn"
+          :disabled="testing || saving"
+          @click="handleTestConnection"
+        >
+          {{ testing ? '测试中...' : '测试连接' }}
+        </button>
+        <button type="submit" class="btn primary" :disabled="saving || testing">
           {{ saving ? '保存中...' : (isEditing ? '保存修改' : '创建服务器') }}
         </button>
         <span v-if="saveMessage" class="save-msg" :class="saveMessageClass">{{ saveMessage }}</span>
@@ -253,6 +262,7 @@ const loading = ref(true)
 const servers = ref<MCPServerInfo[]>([])
 const mode = ref<Mode>('list')
 const saving = ref(false)
+const testing = ref(false)
 const saveMessage = ref('')
 const saveMessageClass = ref('')
 const globalMessage = ref('')
@@ -400,6 +410,45 @@ function renameHeaderKey(oldKey: string, newKey: string) {
   if (newKey && newKey !== oldKey && !(newKey in form.headers)) {
     form.headers[newKey] = form.headers[oldKey]
     delete form.headers[oldKey]
+  }
+}
+
+async function handleTestConnection() {
+  if (!form.command) {
+    saveMessage.value = '请填写命令'
+    saveMessageClass.value = 'error'
+    return
+  }
+  testing.value = true
+  saveMessage.value = ''
+  saveMessageClass.value = ''
+  try {
+    // form.args: string[]，form.env: Record<string, string>（已是对齐后端的格式）
+    const argsList = form.args.filter((a) => a != null && a !== '')
+    const envMap: Record<string, string> = {}
+    Object.keys(form.env).forEach((k) => {
+      if (k) envMap[k] = form.env[k]
+    })
+
+    const result = await api.testMcpConnection({
+      command: form.command,
+      args: argsList,
+      env: envMap,
+    })
+
+    if (result.success) {
+      saveMessage.value = '连接成功'
+      saveMessageClass.value = 'ok'
+      alert(`连接成功!\n解析命令: ${result.resolved_command}`)
+    } else {
+      saveMessage.value = result.error || '连接失败'
+      saveMessageClass.value = 'error'
+    }
+  } catch (e: any) {
+    saveMessage.value = '请求失败: ' + (e?.message || String(e))
+    saveMessageClass.value = 'error'
+  } finally {
+    testing.value = false
   }
 }
 

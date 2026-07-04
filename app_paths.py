@@ -91,6 +91,22 @@ EVENT_HOOKS_YAML_PATH = API_DATA_DIR / "event_hooks.yaml"
 PROJECT_ROOT: Path = BUNDLE_DIR if not _is_frozen() else DATA_DIR
 
 
+# ── 运行时资源目录（嵌入式运行时 + 大文件） ──
+# 打包模式: Tauri 安装目录下的 resources/ 目录（由 main.rs 通过 MAXMA_RESOURCES_DIR 注入）
+# 开发模式: BUNDLE_DIR/../resources/（便于调试，目录不存在时不影响功能）
+RUNTIME_DIR: Path = Path(os.environ.get("MAXMA_RESOURCES_DIR") or (BUNDLE_DIR.parent / "resources"))
+
+# 嵌入式运行时二进制路径
+NODE_EXE = RUNTIME_DIR / "runtime" / "node" / "node.exe"
+NODE_NPX_CMD = RUNTIME_DIR / "runtime" / "node" / "npx.cmd"
+PYTHON_EMBED_EXE = RUNTIME_DIR / "runtime" / "python" / "python.exe"
+UV_EXE = RUNTIME_DIR / "runtime" / "uv" / "uv.exe"
+
+# 资源层路径
+PLAYWRIGHT_BROWSERS_PATH = RUNTIME_DIR / "assets" / "playwright"
+ONNX_MODEL_PATH = RUNTIME_DIR / "assets" / "models" / "paraphrase-multilingual-MiniLM-L12-v2"
+
+
 def ensure_data_dirs():
     """确保所有用户数据目录存在（首次运行时自动创建）。
 

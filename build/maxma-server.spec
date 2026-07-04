@@ -233,6 +233,8 @@ hiddenimports = [
     # Stage 1 子任务 1.4/1.5：知识库 + 指标路由（函数内延迟导入）
     "api.routes.kb",
     "api.routes.metrics",
+    # Task 4：MCP 测试路由（server.py 顶层注册路由时延迟导入）
+    "api.routes.mcp_test",
 
     # ── SQLite 数据层（Phase 1 新增，动态导入） ──
     "api.db.core",
@@ -297,6 +299,8 @@ hiddenimports = [
     "tools.mcp_security",
     # 阶段 4.4：MCP 限流器（tools.mcp._wrap_tool_with_safety 内延迟导入）
     "tools.mcp_rate_limiter",
+    # Task 2：MCP 运行时管理器（tools.mcp._init_mcp_tools 内延迟导入）
+    "tools.mcp_runtime",
 
     # ── 第三方库 ──
     "portalocker",
