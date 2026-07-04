@@ -19,7 +19,6 @@ set "DIST_EXE=dist\maxma-server.exe"
 set "TAURI_BIN_DIR=desktop\src-tauri\binaries"
 set "TAURI_BIN_EXE=%TAURI_BIN_DIR%\maxma-server-x86_64-pc-windows-msvc.exe"
 set "STALE_DIST_DIR=dist\maxma-server"
-set "PYI_SITE_PACKAGES=D:\PythonLibraries\site-packages"
 set "PYTHON_EXE=.venv\Scripts\python.exe"
 set "PYINSTALLER_CMD=%PYTHON_EXE% -m PyInstaller"
 
@@ -37,17 +36,14 @@ if not exist ".venv\Scripts\activate.bat" (
 REM 激活虚拟环境
 call .venv\Scripts\activate.bat
 
-REM 检查并设置 PyInstaller
+REM 检查并安装 PyInstaller
 set "HAS_PYI=0"
 %PYTHON_EXE% -c "import PyInstaller" 2>nul && set "HAS_PYI=1"
 if "%HAS_PYI%"=="0" (
-    if exist "%PYI_SITE_PACKAGES%\PyInstaller\__init__.py" (
-        echo [INFO] 从系统库加载 PyInstaller：%PYI_SITE_PACKAGES%
-        set "PYTHONPATH=%PYI_SITE_PACKAGES%;%PYTHONPATH%"
-    ) else (
-        echo [ERROR] 未找到 PyInstaller。
-        echo   请确认 %PYI_SITE_PACKAGES% 下存在 PyInstaller
-        echo   或运行：%PYTHON_EXE% -m pip install pyinstaller
+    echo [INFO] PyInstaller 未安装，正在安装...
+    uv pip install pyinstaller
+    if errorlevel 1 (
+        echo [ERROR] PyInstaller 安装失败
         exit /b 1
     )
 )

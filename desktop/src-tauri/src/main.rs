@@ -103,7 +103,7 @@ fn wait_for_server() -> bool {
     let url = format!("http://127.0.0.1:{}/api/auth/token", api_port());
 
     for i in 0..HEALTH_TIMEOUT_SECS {
-        if let Ok(resp) = client.get(url).timeout(Duration::from_secs(1)).send() {
+        if let Ok(resp) = client.get(&url).timeout(Duration::from_secs(1)).send() {
             if resp.status().is_success() {
                 println!("[tauri] 后端就绪 ({}s)", i + 1);
                 return true;
