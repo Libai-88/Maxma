@@ -4,9 +4,13 @@
 转换为 WebP 格式，缩放到 256x256px，放入 config/stickers/ 目录。
 
 用法：
-    .venv/Scripts/python scripts/prepare_stickers.py
+    .venv/Scripts/python scripts/prepare_stickers.py \
+        --source-dir /path/to/emojis \
+        --csv /path/to/emoji_labels.csv \
+        --output-dir config/stickers
 """
 
+import argparse
 import csv
 import os
 import re
@@ -16,10 +20,6 @@ from pathlib import Path
 from PIL import Image, ImageOps, ImageSequence
 
 # ── 配置 ──────────────────────────────────────────────────────
-
-SOURCE_DIR = Path(r"D:\Maxma\私聊_九曜山的小猪\media\emojis")
-CSV_FILE = Path(r"D:\Maxma\emoji_labels.csv")
-OUTPUT_DIR = Path(r"D:\Maxma\MaxmaHere\config\stickers")
 
 TARGET_SIZE = 256  # 目标尺寸 256x256
 WEBP_QUALITY = 80  # WebP 质量
@@ -129,7 +129,46 @@ def convert_to_webp(src: Path, dst: Path, size: int = TARGET_SIZE) -> bool:
         return False
 
 
+def parse_args() -> argparse.Namespace:
+    """解析命令行参数。"""
+    parser = argparse.ArgumentParser(
+        description="表情包资源准备脚本：从 CSV 标签和源图片生成 config/stickers/ 下的分类 WebP。"
+    )
+    parser.add_argument(
+        "--source-dir",
+        type=Path,
+        required=True,
+        help="表情源图片目录（例如 /path/to/emojis）。",
+    )
+    parser.add_argument(
+        "--csv",
+        type=Path,
+        required=True,
+        help="已标注标签 CSV 文件路径（例如 /path/to/emoji_labels.csv）。",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path(__file__).resolve().parent.parent / "config" / "stickers",
+        help="输出目录，默认为项目根目录下的 config/stickers。",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+    source_dir: Path = args.source_dir
+    csv_file: Path = args.csv
+    output_dir: Path = args.output_dir
+
+    # 校验输入存在
+    if not source_dir.is_dir():
+        print(f"[ERR] 源目录不存在: {source_dir}")
+        raise SystemExit(1)
+    if not csv_file.is_file():
+        print(f"[ERR] CSV 文件不存在: {csv_file}")
+        raise SystemExit(1)
+
     print("=" * 60)
     print("Phase 1: 表情包资源准备")
     print("=" * 60)
@@ -137,7 +176,7 @@ def main():
     # 1. 读取 CSV
     print("\n[1/6] 读取标签 CSV...")
     records = []
-    with open(CSV_FILE, 'r', encoding='utf-8') as f:
+    with open(csv_file, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         for row in reader:
             filename = row.get('filename', '').strip()
@@ -183,11 +222,11 @@ def main():
 
     # 3. 创建输出目录
     print("\n[3/6] 创建输出目录...")
-    if OUTPUT_DIR.exists():
-        shutil.rmtree(OUTPUT_DIR)
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
     for cat in EMOTION_CATEGORIES:
-        (OUTPUT_DIR / cat).mkdir(parents=True, exist_ok=True)
-    print(f"  已创建 {OUTPUT_DIR}")
+        (output_dir / cat).mkdir(parents=True, exist_ok=True)
+    print(f"  已创建 {output_dir}")
 
     # 4-6. 转换、缩放、复制
     print("\n[4/6] 转换 WebP + 缩放 + 复制...")
@@ -196,11 +235,11 @@ def main():
     skipped = 0
 
     for emotion, filenames in categorized.items():
-        out_dir = OUTPUT_DIR / emotion
+        out_dir = output_dir / emotion
         print(f"\n  [{emotion}] 处理 {len(filenames)} 个文件...")
 
         for i, filename in enumerate(filenames):
-            src = SOURCE_DIR / filename
+            src = source_dir / filename
             if not src.exists():
                 skipped += 1
                 continue
@@ -226,14 +265,14 @@ def main():
     print(f"  文件缺失: {skipped}")
 
     # 计算总大小
-    total_size = sum(f.stat().st_size for f in OUTPUT_DIR.rglob("*.webp"))
+    total_size = sum(f.stat().st_size for f in output_dir.rglob("*.webp"))
     print(f"  总大小: {total_size / 1024 / 1024:.1f} MB")
 
     # 各分类文件数
     print("\n  各分类文件数:")
     for cat in EMOTION_CATEGORIES:
-        count = len(list((OUTPUT_DIR / cat).glob("*.webp")))
-        size = sum(f.stat().st_size for f in (OUTPUT_DIR / cat).glob("*.webp"))
+        count = len(list((output_dir / cat).glob("*.webp")))
+        size = sum(f.stat().st_size for f in (output_dir / cat).glob("*.webp"))
         print(f"    {cat:4s}: {count:3d} 张 ({size / 1024:.0f} KB)")
 
 
