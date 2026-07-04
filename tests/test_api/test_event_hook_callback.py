@@ -20,10 +20,13 @@ def _hook() -> HookConfig:
 
 @pytest.mark.asyncio
 async def test_event_hook_action_reports_unsupported_without_llm():
+    async def _fake_create():
+        return object()
+
     app = SimpleNamespace(
         state=SimpleNamespace(
             llm=None,
-            session_manager=SimpleNamespace(create=lambda: object()),
+            session_manager=SimpleNamespace(create=_fake_create),
             system_prompt="system",
         )
     )
@@ -48,12 +51,20 @@ async def test_event_hook_action_uses_agent_entrypoint(monkeypatch):
 
     session = SimpleNamespace(session_id="session-1", checkpointer=object(), _graph=None)
     deleted_sessions = []
+
+    # 模拟异步 session_manager：create/delete 都需要可被 await
+    async def _fake_create():
+        return session
+
+    async def _fake_delete(session_id: str):
+        deleted_sessions.append(session_id)
+
     app = SimpleNamespace(
         state=SimpleNamespace(
             llm=object(),
             session_manager=SimpleNamespace(
-                create=lambda: session,
-                delete=lambda session_id: deleted_sessions.append(session_id),
+                create=_fake_create,
+                delete=_fake_delete,
             ),
             system_prompt="system",
             mcp_tools=[],
