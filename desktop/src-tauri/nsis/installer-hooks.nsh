@@ -20,7 +20,8 @@
 ; taskkill 找不到进程时返回 128，我们用 Pop 接住并丢弃，不视为错误。
 ; nsExec::ExecToLog 会把命令输出打到安装日志（用户点 Show details 可见）。
 !macro _SafeTaskKill exe
-  nsExec::ExecToLog 'taskkill /F /IM "${exe}"'
+  ; 使用 /T 标志杀死进程树（PyInstaller onefile bootloader 会启动 Python 子进程）
+  nsExec::ExecToLog 'taskkill /T /F /IM "${exe}"'
   Pop $0   ; $0 = exitcode（0=成功 kill，128=进程不存在，其他=错误）
   DetailPrint "taskkill ${exe} -> exitcode=$0"
 !macroend

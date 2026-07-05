@@ -74,10 +74,11 @@ fn assign_current_process_to_job(job: HANDLE) -> Result<(), windows::core::Error
 /// 启动前清理可能残留的旧版 maxma-server.exe 进程。
 /// 场景：旧版本（无 Job Object）被 NSIS 强杀后 sidecar 成为孤儿进程，
 /// 或主进程崩溃后 sidecar 残留。新版启动时先 taskkill 清理。
+/// 使用 /T 标志同时杀死子进程树（PyInstaller onefile bootloader 会启动 Python 子进程）。
 /// 清理后等待端口释放，避免 pick_available_port 误判端口被占用。
 fn cleanup_stale_sidecar() {
     let output = std::process::Command::new("taskkill")
-        .args(["/F", "/IM", "maxma-server.exe"])
+        .args(["/T", "/F", "/IM", "maxma-server.exe"])
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .output();
@@ -86,8 +87,8 @@ fn cleanup_stale_sidecar() {
     if let Ok(o) = output {
         if o.status.success() {
             println!("[tauri] cleanup_stale_sidecar: killed stale maxma-server.exe, waiting for port release...");
-            // 等待最多 3 秒让内核释放 socket 端口
-            for _ in 0..30 {
+            // 等待最多 5 秒让内核释放 socket 端口
+            for _ in 0..50 {
                 if port_manager::is_port_available(port_manager::DEFAULT_API_PORT) {
                     break;
                 }
