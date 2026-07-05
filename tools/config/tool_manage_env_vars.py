@@ -84,9 +84,8 @@ class ManageEnvVarsTool(ToolBase):
 
             # 重新加载 settings
             try:
-                import importlib
-                import config.settings
-                importlib.reload(config.settings)
+                from config.settings import reload_settings
+                reload_settings()
             except Exception:
                 pass
 
