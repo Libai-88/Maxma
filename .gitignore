@@ -98,8 +98,7 @@ api/data/sticker_recent.yaml
 desktop/src-tauri/target/
 desktop/src-tauri/binaries/*.exe
 
-# Anthropic Skills（忽略 skill 子目录，保留目录本身用于 .gitkeep）
-anthropic_skills/*/
+# Anthropic Skills（内置 skill 子目录需要版本控制，用户自定义 skill 在打包模式写入 %APPDATA%）
 
 # Macros（同上）
 macros/*/
@@ -113,6 +112,11 @@ logs/
 # 安全威胁模型（本地文档，不提交）
 dev_docs/security/
 api/data/maxma.db
+
+# 会话状态持久化（SQLite WAL 模式，运行时生成）
+checkpoints.sqlite
+checkpoints.sqlite-shm
+checkpoints.sqlite-wal
 
 # 临时测试/调试输出文件
 pytest_*.txt
