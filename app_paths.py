@@ -121,13 +121,18 @@ def ensure_data_dirs():
 
 
 def _ensure_mcp_config() -> None:
-    """若 MCP_CONFIG_PATH 不存在，创建一个空的 servers: [] YAML。"""
+    """若 MCP_CONFIG_PATH 不存在，创建一个空的 mcp_servers: [] YAML。
+
+    注意：YAML key 必须是 `mcp_servers`（与 MCPServersConfigFile pydantic 模型
+    和 tool_manage_mcp / api/routes/mcp 的读写逻辑一致），不能用 `servers`，
+    否则手动编辑的配置会被静默忽略。
+    """
     if MCP_CONFIG_PATH.exists():
         return
     try:
         MCP_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
         MCP_CONFIG_PATH.write_text(
-            "# MaxmaHere MCP 服务器配置\n# 在 Web UI 的 MCP 管理页面添加服务器\nservers: []\n",
+            "# MaxmaHere MCP 服务器配置\n# 在 Web UI 的 MCP 管理页面添加服务器\nmcp_servers: []\n",
             encoding="utf-8",
         )
     except OSError:

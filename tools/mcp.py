@@ -125,6 +125,8 @@ class SSEServerConfig(_BaseServerMixin):
         conn: dict[str, Any] = {
             "transport": "sse",
             "url": self.url,
+            # 传递 TLS 校验偏好给 langchain_mcp_adapters（缺失时默认校验）
+            "tls_verify": self.tls_verify,
         }
         if self.headers is not None:
             conn["headers"] = self.headers
@@ -159,6 +161,7 @@ class StreamableHttpServerConfig(_BaseServerMixin):
         conn: dict[str, Any] = {
             "transport": "streamable_http",
             "url": self.url,
+            "tls_verify": self.tls_verify,
         }
         if self.headers is not None:
             conn["headers"] = self.headers
@@ -186,7 +189,11 @@ class WebsocketServerConfig(_BaseServerMixin):
         return v
 
     def to_connection(self) -> dict[str, Any]:
-        return {"transport": "websocket", "url": self.url}
+        return {
+            "transport": "websocket",
+            "url": self.url,
+            "tls_verify": self.tls_verify,
+        }
 
 
 MCPServerConfig = Annotated[

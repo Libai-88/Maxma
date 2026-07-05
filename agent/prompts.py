@@ -113,14 +113,16 @@ def _current_fingerprint() -> str:
     from app_paths import SEMANTIC_MEMORY_PATH
     parts.append(f"semantic:{_file_hash(SEMANTIC_MEMORY_PATH)}")
 
-    # 动态扫描 skills / macros
-    if ANTHROPIC_SKILLS_DIR.is_dir():
-        for p in sorted(ANTHROPIC_SKILLS_DIR.rglob("SKILL.md")):
-            parts.append(f"sk:{p.name}:{_file_hash(p)}")
+    # 动态扫描 skills / macros（同时扫描内置目录和用户数据目录）
+    for skills_dir in (ANTHROPIC_SKILLS_DIR, SKILLS_DATA_DIR):
+        if skills_dir.is_dir():
+            for p in sorted(skills_dir.rglob("SKILL.md")):
+                parts.append(f"sk:{p.name}:{_file_hash(p)}")
 
-    if MACROS_DIR.is_dir():
-        for p in sorted(MACROS_DIR.rglob("MACRO.md")):
-            parts.append(f"mc:{p.name}:{_file_hash(p)}")
+    for macros_dir in (MACROS_DIR, MACROS_DATA_DIR):
+        if macros_dir.is_dir():
+            for p in sorted(macros_dir.rglob("MACRO.md")):
+                parts.append(f"mc:{p.name}:{_file_hash(p)}")
 
     return "|".join(parts)
 
@@ -371,20 +373,26 @@ def _scan_anthropic_skills() -> str:
 
 
 def _scan_macros() -> str:
-    """扫描 macros/ 下所有 MACRO.md，返回元数据清单。"""
-    if not MACROS_DIR.is_dir():
-        return ""
+    """扫描 macros/ 下所有 MACRO.md，返回元数据清单。
+
+    同时扫描内置目录（BUNDLE_DIR/macros，只读）和用户数据目录
+    （DATA_DIR/macros，可写）。用户通过 manage_macros 工具或 REST API
+    创建的宏保存在用户数据目录，必须扫描此目录才能让 LLM 感知。
+    """
     entries: list[str] = []
-    for mp_path in sorted(MACROS_DIR.rglob("MACRO.md")):
-        rel = mp_path.relative_to(MACROS_DIR).parent
-        meta = _parse_frontmatter(mp_path.read_text(encoding="utf-8"))
-        name = meta.get("name", rel.name)
-        desc = meta.get("description", "")
-        path_str = str(mp_path).replace("\\", "/")
-        if desc:
-            entries.append(f"- [{name}]({path_str}): {desc}")
-        else:
-            entries.append(f"- [{name}]({path_str})")
+    for base_dir in (MACROS_DIR, MACROS_DATA_DIR):
+        if not base_dir.is_dir():
+            continue
+        for mp_path in sorted(base_dir.rglob("MACRO.md")):
+            rel = mp_path.relative_to(base_dir).parent
+            meta = _parse_frontmatter(mp_path.read_text(encoding="utf-8"))
+            name = meta.get("name", rel.name)
+            desc = meta.get("description", "")
+            path_str = str(mp_path).replace("\\", "/")
+            if desc:
+                entries.append(f"- [{name}]({path_str}): {desc}")
+            else:
+                entries.append(f"- [{name}]({path_str})")
     if not entries:
         return ""
     lines = [

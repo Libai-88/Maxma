@@ -67,7 +67,7 @@ class FileSearchTool(ToolBase):
 
     def _list_directory(self, directory_path: str) -> str:
         if not directory_path:
-            directory_path = "."
+            return format_error("directory_path 不能为空")
         if not os.path.exists(directory_path):
             return format_error(f"目录不存在: {directory_path}")
         if not os.path.isdir(directory_path):
@@ -110,7 +110,7 @@ class FileSearchTool(ToolBase):
         if not pattern:
             pattern = "*"
         if not directory:
-            directory = "."
+            return format_error("directory 不能为空")
 
         err = check_path_access(directory)
         if err:

@@ -273,8 +273,18 @@ def _run_in_sandbox(code: str, timeout: int = DEFAULT_TIMEOUT) -> dict:
         # 获取 OS 级隔离运行器（首次调用时执行能力探测）
         runner = get_sandbox_runner(memory_mb=MAX_MEMORY_MB)
 
+        # 选择子进程 Python 解释器：
+        # - 打包模式：使用嵌入式 Python（PYTHON_EMBED_EXE），避免触发 PyInstaller
+        #   bootloader 解压（每次调用 5-10 秒，极慢）
+        # - 开发模式：使用当前解释器 sys.executable
+        from app_paths import PYTHON_EMBED_EXE, _is_frozen
+        if _is_frozen() and PYTHON_EMBED_EXE.exists():
+            python_exe = str(PYTHON_EMBED_EXE)
+        else:
+            python_exe = sys.executable
+
         # 构建子进程命令（firejail 模式下会包装命令）
-        cmd = runner.build_command([sys.executable, "-c", _SANDBOX_WRAPPER])
+        cmd = runner.build_command([python_exe, "-c", _SANDBOX_WRAPPER])
 
         # 使用白名单限制子进程环境变量，防止敏感信息泄漏
         env = _build_sandbox_env()
