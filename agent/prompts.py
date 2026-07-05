@@ -113,15 +113,24 @@ def _current_fingerprint() -> str:
     from app_paths import SEMANTIC_MEMORY_PATH
     parts.append(f"semantic:{_file_hash(SEMANTIC_MEMORY_PATH)}")
 
-    # 动态扫描 skills / macros（同时扫描内置目录和用户数据目录）
+    # 动态扫描 skills / macros（同时扫描内置目录和用户数据目录，按 canonical path 去重）
+    seen: set[str] = set()
     for skills_dir in (ANTHROPIC_SKILLS_DIR, SKILLS_DATA_DIR):
         if skills_dir.is_dir():
             for p in sorted(skills_dir.rglob("SKILL.md")):
+                canon = str(p.resolve())
+                if canon in seen:
+                    continue
+                seen.add(canon)
                 parts.append(f"sk:{p.name}:{_file_hash(p)}")
 
     for macros_dir in (MACROS_DIR, MACROS_DATA_DIR):
         if macros_dir.is_dir():
             for p in sorted(macros_dir.rglob("MACRO.md")):
+                canon = str(p.resolve())
+                if canon in seen:
+                    continue
+                seen.add(canon)
                 parts.append(f"mc:{p.name}:{_file_hash(p)}")
 
     return "|".join(parts)
@@ -345,12 +354,21 @@ def get_persona_allowed_tools() -> set[str] | None:
 
 
 def _scan_anthropic_skills() -> str:
-    """扫描内置 + 用户自定义 anthropic_skills/ 下所有 SKILL.md，返回元数据清单。"""
+    """扫描内置 + 用户自定义 anthropic_skills/ 下所有 SKILL.md，返回元数据清单。
+
+    开发模式下 ANTHROPIC_SKILLS_DIR 与 SKILLS_DATA_DIR 可能指向同一目录，
+    按 canonical path 去重避免清单里出现重复条目。
+    """
     entries: list[str] = []
+    seen_paths: set[str] = set()
     for base_dir in (ANTHROPIC_SKILLS_DIR, SKILLS_DATA_DIR):
         if not base_dir.is_dir():
             continue
         for sk_path in sorted(base_dir.rglob("SKILL.md")):
+            canonical = str(sk_path.resolve())
+            if canonical in seen_paths:
+                continue
+            seen_paths.add(canonical)
             rel = sk_path.relative_to(base_dir).parent
             meta = _parse_frontmatter(sk_path.read_text(encoding="utf-8"))
             name = meta.get("name", rel.name)
@@ -380,10 +398,15 @@ def _scan_macros() -> str:
     创建的宏保存在用户数据目录，必须扫描此目录才能让 LLM 感知。
     """
     entries: list[str] = []
+    seen_paths: set[str] = set()
     for base_dir in (MACROS_DIR, MACROS_DATA_DIR):
         if not base_dir.is_dir():
             continue
         for mp_path in sorted(base_dir.rglob("MACRO.md")):
+            canonical = str(mp_path.resolve())
+            if canonical in seen_paths:
+                continue
+            seen_paths.add(canonical)
             rel = mp_path.relative_to(base_dir).parent
             meta = _parse_frontmatter(mp_path.read_text(encoding="utf-8"))
             name = meta.get("name", rel.name)

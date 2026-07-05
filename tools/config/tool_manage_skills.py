@@ -1,7 +1,13 @@
 """Tool: manage_skills — 通过自然语言管理 Skills（技能）。"""
 
+import base64
+import json
 import re
 import shutil
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
 
 from pydantic import BaseModel, Field
 
@@ -23,12 +29,17 @@ class ManageSkillsInput(BaseModel):
     get_doc: bool = Field(default=False, description="设为 true 以获取使用说明")
     action: str = Field(
         default="list",
-        description="操作类型: list（列出所有 Skills）、get（查看详情）、create（创建）、update（更新）、delete（删除）",
+        description="操作类型: list（列出）、get（查看详情）、create（创建）、update（更新）、delete（删除）、import（从外部导入）",
     )
     skill_id: str = Field(default="", description="Skill ID（get/update/delete 时必填）")
     name: str = Field(default="", description="Skill 名称（create 时必填，小写字母+连字符）")
     description: str = Field(default="", description="Skill 描述")
     content: str = Field(default="", description="SKILL.md 完整内容（create/update 时使用）")
+    source: str = Field(
+        default="",
+        description="import 操作的来源：GitHub 'owner/repo' 或 'owner/repo@skill-name'、"
+        "raw URL 指向 SKILL.md、或本地目录绝对路径",
+    )
 
 
 def _parse_frontmatter(text: str) -> dict[str, str]:
@@ -99,6 +110,7 @@ class ManageSkillsTool(ToolBase):
         name: str = "",
         description: str = "",
         content: str = "",
+        source: str = "",
     ) -> str:
         if get_doc:
             return self._load_doc()
@@ -106,8 +118,16 @@ class ManageSkillsTool(ToolBase):
         action = action.strip().lower()
 
         if action == "list":
+            # 开发模式下 ANTHROPIC_SKILLS_DIR 与 SKILLS_DATA_DIR 可能指向同一目录，
+            # 按 id 去重避免重复
             skills = _scan_skills_dir(ANTHROPIC_SKILLS_DIR, "builtin")
-            skills += _scan_skills_dir(SKILLS_DATA_DIR, "user")
+            user_skills = _scan_skills_dir(SKILLS_DATA_DIR, "user")
+            # 去重：用户数据目录中与内置目录相同的条目跳过
+            deduped_user = [
+                s for s in user_skills
+                if not any(s["id"] == b["id"] for b in skills)
+            ]
+            skills += deduped_user
             if not skills:
                 return format_success({"message": "当前没有任何 Skill", "skills": []})
             summary = []
@@ -238,4 +258,289 @@ description: {description}
                 "id": skill_id,
             })
 
-        return format_error(f"未知操作: {action}，支持 list/get/create/update/delete")
+        if action == "import":
+            return self._handle_import(source, skill_id)
+
+        return format_error(f"未知操作: {action}，支持 list/get/create/update/delete/import")
+
+    # ── import 实现 ─────────────────────────────────────────────
+
+    def _handle_import(self, source: str, skill_id_override: str) -> str:
+        """从外部来源导入 Skill。
+
+        支持三种来源：
+        1. GitHub: 'owner/repo' 或 'owner/repo@skill-name'
+        2. URL: 指向 SKILL.md 的 raw URL（https://raw.githubusercontent.com/...）
+        3. 本地路径: 包含 SKILL.md 的目录绝对路径
+        """
+        if not source:
+            return format_error("source 不能为空，请提供 GitHub owner/repo、URL 或本地路径")
+
+        source = source.strip()
+
+        # 判断来源类型
+        if source.startswith(("http://", "https://")):
+            return self._import_from_url(source, skill_id_override)
+        elif Path(source).exists() and Path(source).is_dir():
+            return self._import_from_local(source, skill_id_override)
+        elif re.match(r"^[\w.-]+/[\w.-]+(@[\w.-]+)?$", source):
+            return self._import_from_github(source, skill_id_override)
+        else:
+            return format_error(
+                f"无法识别 source 格式: {source}\n"
+                "支持：GitHub 'owner/repo'、'owner/repo@skill'、URL、本地目录路径"
+            )
+
+    def _import_from_local(self, local_path: str, skill_id_override: str) -> str:
+        """从本地目录导入 Skill。"""
+        src_dir = Path(local_path).resolve()
+        sk_file = src_dir / "SKILL.md"
+        if not sk_file.exists():
+            return format_error(f"目录中未找到 SKILL.md: {src_dir}")
+
+        try:
+            content = sk_file.read_text(encoding="utf-8")
+        except OSError as e:
+            return format_error(f"读取 SKILL.md 失败: {e}")
+
+        meta = _parse_frontmatter(content)
+        skill_name = skill_id_override or meta.get("name", src_dir.name)
+        skill_name = _valid_id(skill_name)
+        if skill_name is None:
+            return format_error(f"从 frontmatter 解析的 name 不合法: {meta.get('name')}")
+
+        target_dir = SKILLS_DATA_DIR / skill_name
+        if target_dir.exists():
+            return format_error(f"Skill '{skill_name}' 已存在，如需覆盖请先 delete")
+
+        target_dir.mkdir(parents=True, exist_ok=True)
+        # 复制整个目录（包含 scripts/ references/ 等子目录）
+        try:
+            for item in src_dir.rglob("*"):
+                if item.is_file():
+                    rel = item.relative_to(src_dir)
+                    # 安全检查：防止路径穿越
+                    rel_str = str(rel).replace("\\", "/")
+                    if ".." in rel_str or rel_str.startswith("/"):
+                        continue
+                    target_file = target_dir / rel
+                    target_file.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(str(item), str(target_file))
+        except OSError as e:
+            shutil.rmtree(target_dir, ignore_errors=True)
+            return format_error(f"复制文件失败: {e}")
+
+        _invalidate_prompt_cache()
+        return format_success({
+            "message": f"已从本地导入 Skill '{skill_name}'（来源: {src_dir}）",
+            "id": skill_name,
+            "source": f"local:{src_dir}",
+            "files_copied": sum(1 for _ in target_dir.rglob("*") if _.is_file()),
+        })
+
+    def _import_from_url(self, url: str, skill_id_override: str) -> str:
+        """从 URL 导入单个 SKILL.md 文件。"""
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Maxma/1.0"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                if resp.status != 200:
+                    return format_error(f"HTTP {resp.status}: {url}")
+                content = resp.read().decode("utf-8", errors="replace")
+        except urllib.error.HTTPError as e:
+            return format_error(f"HTTP 错误 {e.code}: {e.reason}")
+        except urllib.error.URLError as e:
+            return format_error(f"URL 错误: {e.reason}")
+        except Exception as e:
+            return format_error(f"获取失败: {e}")
+
+        meta = _parse_frontmatter(content)
+        if not meta.get("name"):
+            return format_error("URL 内容缺少有效的 frontmatter（name 字段必填）")
+
+        skill_name = skill_id_override or meta["name"]
+        skill_name = _valid_id(skill_name)
+        if skill_name is None:
+            return format_error(f"name 不合法: {meta.get('name')}")
+
+        target_dir = SKILLS_DATA_DIR / skill_name
+        if target_dir.exists():
+            return format_error(f"Skill '{skill_name}' 已存在，如需覆盖请先 delete")
+
+        target_dir.mkdir(parents=True, exist_ok=True)
+        (target_dir / "SKILL.md").write_text(content, encoding="utf-8")
+        _invalidate_prompt_cache()
+        return format_success({
+            "message": f"已从 URL 导入 Skill '{skill_name}'",
+            "id": skill_name,
+            "source": url,
+        })
+
+    def _import_from_github(self, repo_spec: str, skill_id_override: str) -> str:
+        """从 GitHub 仓库导入 Skill。
+
+        支持格式：
+        - 'owner/repo' → 搜索仓库根目录和常见目录（skills/、anthropic_skills/）下的 SKILL.md
+        - 'owner/repo@skill-name' → 导入特定 skill 子目录
+        """
+        if "@" in repo_spec:
+            repo_part, skill_part = repo_spec.split("@", 1)
+            skill_to_find = skill_part
+        else:
+            repo_part = repo_spec
+            skill_to_find = None
+
+        # 验证 owner/repo 格式
+        if not re.match(r"^[\w.-]+/[\w.-]+$", repo_part):
+            return format_error(f"GitHub 仓库格式不合法: {repo_part}，应为 owner/repo")
+
+        owner, repo = repo_part.split("/", 1)
+
+        # 尝试通过 GitHub API 列出仓库内容
+        # 先尝试 main 分支，失败再试 master
+        candidates = []
+        for branch in ("main", "master"):
+            listing = self._github_list_dir(owner, repo, "", branch)
+            if listing is not None:
+                candidates = listing
+                break
+
+        if candidates is None:
+            return format_error(
+                f"无法访问 GitHub 仓库 {owner}/{repo}（可能是私有仓库或不存在）"
+            )
+
+        # 找到含 SKILL.md 的目录
+        # 策略：先看根目录有没有 SKILL.md，再看 skills/ 和 anthropic_skills/ 子目录
+        skill_dirs = []
+
+        # 1. 根目录直接有 SKILL.md
+        if any(item.get("name") == "SKILL.md" and item.get("type") == "file" for item in candidates):
+            skill_dirs.append(("", ""))  # (dir_path, skill_name_from_dir)
+
+        # 2. 检查常见子目录
+        for subdir_name in ("skills", "anthropic_skills"):
+            subdir_items = self._github_list_dir(owner, repo, subdir_name, branch)
+            if subdir_items is None:
+                continue
+            for item in subdir_items:
+                if item.get("type") == "dir":
+                    # 检查这个子目录里有没有 SKILL.md
+                    sub_items = self._github_list_dir(owner, repo, f"{subdir_name}/{item['name']}", branch)
+                    if sub_items and any(i.get("name") == "SKILL.md" for i in sub_items):
+                        skill_dirs.append((f"{subdir_name}/{item['name']}", item["name"]))
+
+        # 3. 根目录下的子目录
+        for item in candidates:
+            if item.get("type") == "dir" and item["name"] not in (".git", ".github", "docs", "scripts"):
+                sub_items = self._github_list_dir(owner, repo, item["name"], branch)
+                if sub_items and any(i.get("name") == "SKILL.md" for i in sub_items):
+                    skill_dirs.append((item["name"], item["name"]))
+
+        if not skill_dirs:
+            return format_error(f"在 {owner}/{repo} 中未找到任何含 SKILL.md 的目录")
+
+        # 如果指定了 skill-name，过滤
+        if skill_to_find:
+            filtered = [(p, n) for p, n in skill_dirs if n == skill_to_find]
+            if not filtered:
+                available = ", ".join(n for _, n in skill_dirs)
+                return format_error(
+                    f"未找到 skill '{skill_to_find}'，可用: {available}"
+                )
+            skill_dirs = filtered
+
+        # 如果有多个，全部导入
+        imported = []
+        errors = []
+        for dir_path, dir_name in skill_dirs:
+            result = self._github_fetch_and_install(
+                owner, repo, branch, dir_path, dir_name, skill_id_override
+            )
+            if result.get("ok"):
+                imported.append(result["id"])
+            else:
+                errors.append(f"{dir_name}: {result.get('error')}")
+
+        if not imported:
+            return format_error(f"导入失败: {'; '.join(errors)}")
+
+        msg = f"已从 GitHub {owner}/{repo} 导入 {len(imported)} 个 Skill: {', '.join(imported)}"
+        if errors:
+            msg += f"\n部分失败: {'; '.join(errors)}"
+
+        return format_success({
+            "message": msg,
+            "imported": imported,
+            "errors": errors,
+            "source": f"github:{owner}/{repo}@{branch}",
+        })
+
+    def _github_list_dir(self, owner: str, repo: str, path: str, branch: str) -> list[dict] | None:
+        """通过 GitHub API 列出目录内容。返回 None 表示失败。"""
+        url = f"https://api.github.com/repos/{owner}/{repo}/contents/{urllib.parse.quote(path)}?ref={branch}"
+        try:
+            req = urllib.request.Request(url, headers={
+                "User-Agent": "Maxma/1.0",
+                "Accept": "application/vnd.github.v3+json",
+            })
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                if resp.status != 200:
+                    return None
+                data = json.loads(resp.read().decode("utf-8"))
+                if isinstance(data, list):
+                    return data
+                return None
+        except Exception:
+            return None
+
+    def _github_fetch_and_install(
+        self, owner: str, repo: str, branch: str, dir_path: str,
+        dir_name: str, skill_id_override: str,
+    ) -> dict:
+        """从 GitHub 抓取 skill 目录并安装。"""
+        # 先抓 SKILL.md
+        skill_md_url = f"https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{dir_path}/SKILL.md"
+        try:
+            req = urllib.request.Request(skill_md_url, headers={"User-Agent": "Maxma/1.0"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                if resp.status != 200:
+                    return {"ok": False, "error": f"HTTP {resp.status}"}
+                content = resp.read().decode("utf-8", errors="replace")
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+        meta = _parse_frontmatter(content)
+        skill_name = skill_id_override or meta.get("name", dir_name)
+        skill_name = _valid_id(skill_name)
+        if skill_name is None:
+            return {"ok": False, "error": f"name 不合法: {meta.get('name', dir_name)}"}
+
+        target_dir = SKILLS_DATA_DIR / skill_name
+        if target_dir.exists():
+            return {"ok": False, "error": f"已存在（如需覆盖请先 delete）"}
+
+        target_dir.mkdir(parents=True, exist_ok=True)
+        (target_dir / "SKILL.md").write_text(content, encoding="utf-8")
+
+        # 尝试抓取 scripts/ 和 references/ 子目录（如果有）
+        for subdir in ("scripts", "references", "assets", "templates"):
+            sub_items = self._github_list_dir(owner, repo, f"{dir_path}/{subdir}" if dir_path else subdir, branch)
+            if not sub_items:
+                continue
+            local_subdir = target_dir / subdir
+            local_subdir.mkdir(exist_ok=True)
+            for item in sub_items:
+                if item.get("type") == "file" and item.get("download_url"):
+                    try:
+                        file_req = urllib.request.Request(
+                            item["download_url"],
+                            headers={"User-Agent": "Maxma/1.0"},
+                        )
+                        with urllib.request.urlopen(file_req, timeout=30) as resp:
+                            file_content = resp.read()
+                        (local_subdir / item["name"]).write_bytes(file_content)
+                    except Exception:
+                        pass  # 子文件失败不阻塞主流程
+
+        _invalidate_prompt_cache()
+        return {"ok": True, "id": skill_name}
