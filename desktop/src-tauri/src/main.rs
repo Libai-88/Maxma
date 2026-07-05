@@ -3,7 +3,7 @@
 mod port_manager;
 
 use std::fs::{File, OpenOptions};
-use std::io::{BufWriter, Write};
+use std::io::BufWriter;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
@@ -232,7 +232,12 @@ fn spawn_sidecar_with_monitor(
 
     let sidecar = sidecar
         .env("MAXMA_API_PORT", port.to_string())
-        .env("MAXMA_RESOURCES_DIR", resource_dir.to_string_lossy().to_string());
+        .env("MAXMA_RESOURCES_DIR", resource_dir.to_string_lossy().to_string())
+        // 注入 Tauri 主进程 PID，供 Python sidecar 守护线程监控。
+        // PyInstaller onefile 模式下 os.getppid() 返回的是 bootloader PID 而非 Tauri，
+        // 当 Job Object 失效且 Tauri 退出时，bootloader 可能仍存活，
+        // 因此必须让 sidecar 监控 Tauri PID 而非直接父进程。
+        .env("MAXMA_PARENT_PID", std::process::id().to_string());
 
     let (mut rx, child) = sidecar
         .spawn()
