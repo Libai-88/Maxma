@@ -13,10 +13,18 @@ use tauri::Manager;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use windows::core::PCWSTR;
+use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_INPROC_SERVER,
     COINIT_APARTMENTTHREADED,
 };
+use windows::Win32::System::JobObjects::{
+    AssignProcessToJobObject, CreateJobObjectW, SetInformationJobObject,
+    JobObjectExtendedLimitInformation, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+    JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+};
+use windows::Win32::System::Threading::OpenProcess;
+use windows::Win32::System::Threading::{PROCESS_SET_QUOTA, PROCESS_TERMINATE};
 use windows::Win32::UI::Shell::{
     FileOpenDialog, IFileOpenDialog, FOS_FORCEFILESYSTEM, FOS_PICKFOLDERS, SIGDN_FILESYSPATH,
 };
@@ -27,6 +35,46 @@ const MAX_RESTARTS: u32 = 3;
 const HEALTH_TIMEOUT_SECS: u64 = 30;
 /// 重启前等待（秒）
 const RESTART_DELAY_SECS: u64 = 2;
+
+/// 创建 Windows Job Object，设置 KILL_ON_JOB_CLOSE 标志。
+/// 主进程任何原因退出（含被 NSIS/taskkill 强杀）时，Job 句柄关闭，
+/// Windows 内核会自动终止 Job 内的所有子进程（sidecar）。
+/// 这是比 WindowEvent::Destroyed 更可靠的子进程清理机制。
+fn create_kill_on_close_job() -> Result<HANDLE, windows::core::Error> {
+    unsafe {
+        let job = CreateJobObjectW(None, None)?;
+        let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        SetInformationJobObject(
+            job,
+            JobObjectExtendedLimitInformation,
+            &info as *const _ as _,
+            std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        )?;
+        Ok(job)
+    }
+}
+
+/// 将进程加入 Job Object。后续主进程退出时，该进程会被内核自动 kill。
+fn assign_process_to_job(job: HANDLE, pid: u32) -> Result<(), windows::core::Error> {
+    unsafe {
+        let handle = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, false, pid)?;
+        AssignProcessToJobObject(job, handle)?;
+        let _ = CloseHandle(handle);
+        Ok(())
+    }
+}
+
+/// 启动前清理可能残留的旧版 maxma-server.exe 进程。
+/// 场景：旧版本（无 Job Object）被 NSIS 强杀后 sidecar 成为孤儿进程，
+/// 或主进程崩溃后 sidecar 残留。新版启动时先 taskkill 清理。
+fn cleanup_stale_sidecar() {
+    let _ = std::process::Command::new("taskkill")
+        .args(["/F", "/IM", "maxma-server.exe"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
+}
 
 /// 获取 sidecar 日志文件路径：%APPDATA%/MaxmaHere/logs/server.log
 fn server_log_path() -> Option<PathBuf> {
@@ -138,6 +186,8 @@ fn wait_for_server(port: u16) -> bool {
 }
 
 /// 启动 sidecar 并在后台监控其生命周期（日志 + 崩溃检测）。
+/// job_raw: Windows Job Object 句柄的原始值（isize），sidecar 进程会被加入 Job，
+/// 主进程任何原因退出时内核自动 kill Job 内进程。
 fn spawn_sidecar_with_monitor(
     app: tauri::AppHandle,
     restart_count: Arc<AtomicU32>,
@@ -145,6 +195,7 @@ fn spawn_sidecar_with_monitor(
     child_store: Arc<Mutex<Option<CommandChild>>>,
     port: u16,
     log_writer: Arc<Mutex<Option<BufWriter<File>>>>,
+    job_raw: Arc<isize>,
 ) {
     let sidecar = app
         .shell()
@@ -165,6 +216,16 @@ fn spawn_sidecar_with_monitor(
     let (mut rx, child) = sidecar
         .spawn()
         .expect("Failed to start maxma-server sidecar");
+
+    // 将 sidecar 进程加入 Job Object，确保主进程退出时 sidecar 被内核自动 kill
+    let pid = child.pid();
+    let job_handle = HANDLE(*job_raw as *mut _);
+    if *job_raw != 0 {
+        match assign_process_to_job(job_handle, pid) {
+            Ok(()) => println!("[tauri] sidecar (pid={}) 已加入 Job Object", pid),
+            Err(e) => eprintln!("[tauri] 警告：无法将 sidecar 加入 Job Object: {}，依赖窗口事件清理", e),
+        }
+    }
 
     // 存储 child handle 以便窗口关闭时 kill
     {
@@ -229,7 +290,7 @@ fn spawn_sidecar_with_monitor(
                     }),
                 );
                 std::thread::sleep(Duration::from_secs(RESTART_DELAY_SECS));
-                spawn_sidecar_with_monitor(app, restart_count, shutting_down, child_store, port, log_writer);
+                spawn_sidecar_with_monitor(app, restart_count, shutting_down, child_store, port, log_writer, job_raw);
             } else {
                 let msg = format!("已达最大重启次数 ({})，放弃重启", MAX_RESTARTS);
                 eprintln!("[tauri] {}", msg);
@@ -264,6 +325,11 @@ struct AppState {
 }
 
 fn main() {
+    // 启动前清理可能残留的旧版 maxma-server.exe 进程
+    // 场景：旧版本（无 Job Object）被 NSIS 强杀后 sidecar 成为孤儿进程，
+    // 或主进程崩溃后 sidecar 残留。新版启动时先 taskkill 清理，避免端口/文件冲突。
+    cleanup_stale_sidecar();
+
     // 启动前选择可用端口（冲突时自动回退到 8001-8010）
     let selected_port = match port_manager::pick_available_port() {
         Some(p) => p,
@@ -276,6 +342,21 @@ fn main() {
 
     // 打开 sidecar 日志文件
     let log_writer = Arc::new(Mutex::new(open_server_log()));
+
+    // 创建 Windows Job Object（KILL_ON_JOB_CLOSE）
+    // 主进程任何原因退出（含被 NSIS/taskkill 强杀）时，Job 句柄被 OS 关闭，
+    // 内核自动终止 Job 内的 sidecar 进程，避免 sidecar 成为孤儿占用文件句柄。
+    // 注意：HANDLE 不实现 Drop，这里将原始句柄值存入 Arc<isize>，
+    // 故意不关闭句柄，让其随进程退出被 OS 回收（这正是触发 KILL_ON_JOB_CLOSE 的关键）。
+    let job = match create_kill_on_close_job() {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("[tauri] 警告：创建 Job Object 失败: {}，sidecar 清理将依赖窗口事件", e);
+            // 即使 Job Object 创建失败，应用仍可运行（降级为原有行为）
+            HANDLE(std::ptr::null_mut())
+        }
+    };
+    let job_raw: Arc<isize> = Arc::new(job.0 as isize);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -300,7 +381,7 @@ fn main() {
                 port: AtomicU16::new(selected_port),
             });
 
-            // 启动 sidecar + 监控
+            // 启动 sidecar + 监控（绑定到 Job Object）
             spawn_sidecar_with_monitor(
                 app.handle().clone(),
                 restart_count,
@@ -308,6 +389,7 @@ fn main() {
                 child_store,
                 selected_port,
                 log_writer.clone(),
+                job_raw.clone(),
             );
 
             // 后台等待后端就绪
