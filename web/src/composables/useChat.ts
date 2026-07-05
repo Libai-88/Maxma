@@ -5,7 +5,7 @@ import { useSessionStore } from '@/stores/session'
 import { buildFlatMessage, buildTimestamp, parseReferences } from '@/utils/references'
 import type { ParsedRef } from '@/utils/references'
 import { getToken, ensureTokenLoaded, resetToken } from '@/api'
-import { getWsBase } from '@/utils/env'
+import { ensurePortLoaded, getWsBase } from '@/utils/env'
 /** 匹配旧格式尾缀（用于 localStorage 迁移） */
 const TIME_SUFFIX_RE = /（\d{4}-\d{2}-\d{2} \w{3} \d{2}:\d{2}）$/
 
@@ -171,6 +171,9 @@ async function connectSession(sid: string) {
   if (ch.ws && (ch.ws.readyState === WebSocket.OPEN || ch.ws.readyState === WebSocket.CONNECTING)) {
     return
   }
+
+  // 确保端口已加载（Tauri 环境下 sidecar 端口可能不是默认 8000）
+  await ensurePortLoaded()
 
   // 确保 Token 已加载（桌面应用运行时获取）
   await ensureTokenLoaded()
