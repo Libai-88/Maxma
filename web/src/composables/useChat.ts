@@ -5,7 +5,7 @@ import { useSessionStore } from '@/stores/session'
 import { buildFlatMessage, buildTimestamp, parseReferences } from '@/utils/references'
 import type { ParsedRef } from '@/utils/references'
 import { getToken, ensureTokenLoaded, resetToken } from '@/api'
-import { ensurePortLoaded, getWsBase } from '@/utils/env'
+import { ensurePortLoaded, waitForBackend, getWsBase } from '@/utils/env'
 /** 匹配旧格式尾缀（用于 localStorage 迁移） */
 const TIME_SUFFIX_RE = /（\d{4}-\d{2}-\d{2} \w{3} \d{2}:\d{2}）$/
 
@@ -174,6 +174,11 @@ async function connectSession(sid: string) {
 
   // 确保端口已加载（Tauri 环境下 sidecar 端口可能不是默认 8000）
   await ensurePortLoaded()
+
+  // 等待后端就绪（PyInstaller onefile 启动可能需要数秒，孤儿 sidecar 被清理后
+  // 新 sidecar 需要时间启动）。waitForBackend 在后端已就绪时立即返回，仅在后端
+  // 未启动时重试等待，避免前端在后端启动期间反复失败。
+  await waitForBackend()
 
   // 确保 Token 已加载（桌面应用运行时获取）
   await ensureTokenLoaded()
