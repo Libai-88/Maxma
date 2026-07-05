@@ -6,6 +6,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from tools.base import ToolBase, format_error, format_success, register_tool
+from tools.git._utils import validate_git_arg
 
 
 class GitPushInput(BaseModel):
@@ -47,9 +48,16 @@ class GitPushTool(ToolBase):
             cmd.append("-u")
         if force:
             cmd.append("--force")
-        cmd.append(remote.strip())
+        remote_clean, err = validate_git_arg(remote, "remote")
+        if err:
+            return format_error(err)
+        cmd.append(remote_clean)
+        branch_clean = ""
         if branch.strip():
-            cmd.append(branch.strip())
+            branch_clean, err = validate_git_arg(branch, "branch")
+            if err:
+                return format_error(err)
+            cmd.append(branch_clean)
 
         try:
             result = subprocess.run(
@@ -75,12 +83,12 @@ class GitPushTool(ToolBase):
             return format_error(f"git push 失败: {stderr}")
 
         # 获取推送的目标分支
-        target_branch = branch.strip() if branch.strip() else "当前分支"
+        target_branch = branch_clean if branch_clean else "当前分支"
         output = result.stdout.strip() or result.stderr.strip()
 
         return format_success({
-            "message": f"已推送 {target_branch} 到 {remote.strip()}",
-            "remote": remote.strip(),
+            "message": f"已推送 {target_branch} 到 {remote_clean}",
+            "remote": remote_clean,
             "branch": target_branch,
             "output": output,
         })

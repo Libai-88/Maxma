@@ -6,6 +6,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from tools.base import ToolBase, format_error, format_success, register_tool
+from tools.git._utils import validate_git_arg
 import logging
 logger = logging.getLogger(__name__)
 
@@ -79,18 +80,30 @@ class GitPRTool(ToolBase):
         # 自动检测目标分支
         if not base.strip():
             base = self._detect_default_branch(cwd)
+        else:
+            base_clean, err = validate_git_arg(base, "base")
+            if err:
+                return format_error(err)
+            base = base_clean
 
         # 构建 gh pr create 命令
         cmd = ["gh", "pr", "create"]
+        title_clean = ""
         if title.strip():
-            cmd.extend(["--title", title.strip()])
+            title_clean, err = validate_git_arg(title, "title")
+            if err:
+                return format_error(err)
+            cmd.extend(["--title", title_clean])
         else:
             # 让 gh 自动从 commit 生成标题
             pass
         if body.strip():
-            cmd.extend(["--body", body.strip()])
+            body_clean, err = validate_git_arg(body, "body")
+            if err:
+                return format_error(err)
+            cmd.extend(["--body", body_clean])
         if base.strip():
-            cmd.extend(["--base", base.strip()])
+            cmd.extend(["--base", base])
         if draft:
             cmd.append("--draft")
 
@@ -120,8 +133,8 @@ class GitPRTool(ToolBase):
         return format_success({
             "message": f"PR 已创建: {pr_url}",
             "url": pr_url,
-            "title": title.strip() if title.strip() else "(auto-generated)",
-            "base": base.strip(),
+            "title": title_clean if title_clean else "(auto-generated)",
+            "base": base,
             "draft": draft,
         })
 

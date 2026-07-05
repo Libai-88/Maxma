@@ -6,6 +6,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from tools.base import ToolBase, format_error, format_success, register_tool
+from tools.git._utils import validate_git_arg
 
 
 class GitBranchInput(BaseModel):
@@ -85,9 +86,15 @@ class GitBranchTool(ToolBase):
         if action == "create":
             if not branch_name.strip():
                 return format_error("branch_name 不能为空")
-            cmd = ["git", "branch", branch_name.strip()]
+            branch_name_clean, err = validate_git_arg(branch_name, "branch_name")
+            if err:
+                return format_error(err)
+            cmd = ["git", "branch", branch_name_clean]
             if create_from.strip():
-                cmd.append(create_from.strip())
+                create_from_clean, err = validate_git_arg(create_from, "create_from")
+                if err:
+                    return format_error(err)
+                cmd.append(create_from_clean)
 
             try:
                 result = subprocess.run(
@@ -105,17 +112,20 @@ class GitBranchTool(ToolBase):
                 return format_error(f"创建分支失败: {result.stderr.strip()}")
 
             return format_success({
-                "message": f"已创建分支 '{branch_name.strip()}'",
-                "branch": branch_name.strip(),
+                "message": f"已创建分支 '{branch_name_clean}'",
+                "branch": branch_name_clean,
             })
 
         # ── switch ──
         if action == "switch":
             if not branch_name.strip():
                 return format_error("branch_name 不能为空")
+            branch_name_clean, err = validate_git_arg(branch_name, "branch_name")
+            if err:
+                return format_error(err)
             try:
                 result = subprocess.run(
-                    ["git", "checkout", branch_name.strip()],
+                    ["git", "checkout", branch_name_clean],
                     capture_output=True, text=True, cwd=cwd, timeout=15,
                     encoding="utf-8", errors="replace",
                 )
@@ -130,17 +140,20 @@ class GitBranchTool(ToolBase):
                 return format_error(f"切换分支失败: {result.stderr.strip()}")
 
             return format_success({
-                "message": f"已切换到分支 '{branch_name.strip()}'",
-                "branch": branch_name.strip(),
+                "message": f"已切换到分支 '{branch_name_clean}'",
+                "branch": branch_name_clean,
             })
 
         # ── delete ──
         if action == "delete":
             if not branch_name.strip():
                 return format_error("branch_name 不能为空")
+            branch_name_clean, err = validate_git_arg(branch_name, "branch_name")
+            if err:
+                return format_error(err)
             try:
                 result = subprocess.run(
-                    ["git", "branch", "-d", branch_name.strip()],
+                    ["git", "branch", "-d", branch_name_clean],
                     capture_output=True, text=True, cwd=cwd, timeout=10,
                     encoding="utf-8", errors="replace",
                 )
@@ -155,14 +168,14 @@ class GitBranchTool(ToolBase):
                 stderr = result.stderr.strip()
                 if "not fully merged" in stderr:
                     return format_error(
-                        f"分支 '{branch_name.strip()}' 未完全合并。"
-                        f"如确认要强制删除，请手动执行 git branch -D {branch_name.strip()}"
+                        f"分支 '{branch_name_clean}' 未完全合并。"
+                        f"如确认要强制删除，请手动执行 git branch -D {branch_name_clean}"
                     )
                 return format_error(f"删除分支失败: {stderr}")
 
             return format_success({
-                "message": f"已删除分支 '{branch_name.strip()}'",
-                "branch": branch_name.strip(),
+                "message": f"已删除分支 '{branch_name_clean}'",
+                "branch": branch_name_clean,
             })
 
         return format_error(f"未知操作: {action}，支持 list/create/switch/delete")

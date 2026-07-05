@@ -6,6 +6,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from tools.base import ToolBase, format_error, format_success, register_tool
+from tools.git._utils import validate_git_arg
 import logging
 logger = logging.getLogger(__name__)
 
@@ -72,9 +73,19 @@ class GitCommitTool(ToolBase):
         if not message.strip():
             return format_error("提交信息（message）不能为空")
 
+        message_clean, err = validate_git_arg(message, "message")
+        if err:
+            return format_error(err)
+
         # 1. 暂存文件
         if files.strip():
-            file_list = [f.strip() for f in files.split("|") if f.strip()]
+            file_list = []
+            for f in files.split("|"):
+                f_clean, f_err = validate_git_arg(f, "files")
+                if f_err:
+                    return format_error(f_err)
+                if f_clean:
+                    file_list.append(f_clean)
             add_cmd = ["git", "add"] + file_list
         else:
             file_list = []
@@ -117,7 +128,7 @@ class GitCommitTool(ToolBase):
                 )
 
         # 3. 提交
-        commit_cmd = ["git", "commit", "-m", message.strip()]
+        commit_cmd = ["git", "commit", "-m", message_clean]
         if allow_empty:
             commit_cmd.append("--allow-empty")
 
@@ -149,8 +160,8 @@ class GitCommitTool(ToolBase):
             commit_hash = "unknown"
 
         return format_success({
-            "message": f"已提交: {commit_hash} — {message.strip()}",
+            "message": f"已提交: {commit_hash} — {message_clean}",
             "commit_hash": commit_hash,
-            "commit_message": message.strip(),
+            "commit_message": message_clean,
             "files_staged": file_list if file_list else "all",
         })

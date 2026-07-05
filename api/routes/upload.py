@@ -5,7 +5,7 @@ import time
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Request
 
 from app_paths import UPLOADS_DIR as UPLOAD_DIR
 
@@ -37,7 +37,7 @@ def _sanitize_filename(name: str) -> str:
     return Path(name).name
 
 @router.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(request: Request, file: UploadFile = File(...)):
     """上传文件供 Agent 读取和分析。
 
     返回文件 ID 和路径，Agent 可通过 file_read 工具读取。
@@ -55,13 +55,34 @@ async def upload_file(file: UploadFile = File(...)):
             detail=f"不支持的文件类型: {ext}。支持的类型: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
         )
 
-    # 读取文件内容
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=413,
-            detail=f"文件过大（{len(content)} 字节），最大允许 {MAX_FILE_SIZE // 1024 // 1024}MB",
-        )
+    # 先检查 Content-Length（快速拒绝）
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            cl_value = int(content_length)
+        except (TypeError, ValueError):
+            cl_value = None
+        if cl_value is not None and cl_value > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"文件过大（Content-Length: {cl_value} 字节），最大允许 {MAX_FILE_SIZE // 1024 // 1024}MB",
+            )
+
+    # 分块读取，避免大文件 OOM（即使 Content-Length 被伪造也安全）
+    chunks = []
+    total = 0
+    while True:
+        chunk = await file.read(1024 * 1024)  # 1MB chunks
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"文件过大（{total} 字节），最大允许 {MAX_FILE_SIZE // 1024 // 1024}MB",
+            )
+        chunks.append(chunk)
+    content = b"".join(chunks)
 
     # 生成唯一文件名
     file_id = uuid.uuid4().hex[:8]

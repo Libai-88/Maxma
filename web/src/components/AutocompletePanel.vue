@@ -58,14 +58,20 @@ watch(() => props.activeIndex, async () => {
   }
 })
 
-/** 将 name 中匹配 filterText 的部分用 <strong> 包裹 */
+/** 将 name 中匹配 filterText 的部分用 <strong> 包裹（先 HTML 转义防 XSS） */
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+}
 function highlightName(name: string): string {
-  if (!props.filterText) return name
-  const lower = name.toLowerCase()
+  // 先转义，再做高亮替换，避免 name 中含恶意 HTML 被注入
+  const safe = escapeHtml(name)
+  if (!props.filterText) return safe
+  const lower = safe.toLowerCase()
   const needle = props.filterText.toLowerCase()
-  if (!lower.includes(needle)) return name
+  if (!lower.includes(needle)) return safe
   const re = new RegExp(`(${needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi')
-  return name.replace(re, '<strong>$1</strong>')
+  return safe.replace(re, '<strong>$1</strong>')
 }
 
 const panelStyle = computed(() => ({

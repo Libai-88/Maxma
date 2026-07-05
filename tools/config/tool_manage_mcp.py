@@ -4,6 +4,7 @@ import yaml
 from pydantic import BaseModel, Field
 
 from app_paths import MCP_CONFIG_PATH
+from api.yaml_store import dump_yaml_atomic
 from tools.base import ToolBase, format_error, format_success, register_tool
 from tools.mcp_security import validate_stdio_command
 
@@ -32,14 +33,7 @@ def _load_raw() -> list[dict]:
 
 
 def _save_raw(servers: list[dict]) -> None:
-    MCP_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(MCP_CONFIG_PATH, "w", encoding="utf-8") as f:
-        yaml.dump(
-            {"mcp_servers": servers},
-            f,
-            allow_unicode=True,
-            default_flow_style=False,
-        )
+    dump_yaml_atomic(MCP_CONFIG_PATH, {"mcp_servers": servers})
 
 
 def _trigger_reload():

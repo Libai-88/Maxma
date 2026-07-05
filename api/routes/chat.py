@@ -845,7 +845,11 @@ async def websocket_chat(ws: WebSocket, session_id: str):
     try:
         while True:
             raw = await ws.receive_text()
-            msg = json.loads(raw)
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError:
+                # 客户端发送非 JSON 文本（心跳探针、协议错误等），忽略不中断连接
+                continue
             if not isinstance(msg, dict):
                 continue
 

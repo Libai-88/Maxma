@@ -6,6 +6,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from tools.base import ToolBase, format_error, format_success, register_tool
+from tools.git._utils import validate_git_arg
 
 
 class GitLogInput(BaseModel):
@@ -49,7 +50,10 @@ class GitLogTool(ToolBase):
             cmd.extend(["--format=%H %s (%an, %ar)"])
         cmd.extend(["-n", str(count)])
         if file_path.strip():
-            cmd.extend(["--", file_path.strip()])
+            file_path_clean, err = validate_git_arg(file_path, "file_path")
+            if err:
+                return format_error(err)
+            cmd.extend(["--", file_path_clean])
 
         try:
             result = subprocess.run(

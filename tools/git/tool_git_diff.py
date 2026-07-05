@@ -6,6 +6,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from tools.base import ToolBase, format_error, format_success, register_tool
+from tools.git._utils import validate_git_arg
 
 
 class GitDiffInput(BaseModel):
@@ -45,10 +46,16 @@ class GitDiffTool(ToolBase):
         if staged:
             cmd.append("--cached")
         if commit:
-            cmd.append(commit)
+            commit_clean, err = validate_git_arg(commit, "commit")
+            if err:
+                return format_error(err)
+            cmd.append(commit_clean)
         if file_path.strip():
+            file_path_clean, err = validate_git_arg(file_path, "file_path")
+            if err:
+                return format_error(err)
             cmd.append("--")
-            cmd.append(file_path.strip())
+            cmd.append(file_path_clean)
 
         try:
             result = subprocess.run(
