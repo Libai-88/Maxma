@@ -10,8 +10,7 @@ from pydantic import BaseModel, Field
 
 from tools.base import (
     ToolBase,
-    check_path_whitelisted,
-    check_maxma_blocker,
+    check_path_access,  # 统一的安全检查入口（MaxmaBlocker + 白名单）
     format_error,
     format_success,
     register_tool,
@@ -85,21 +84,10 @@ class FileEditTool(ToolBase):
         if not file_path:
             return format_error("file_path 不能为空")
 
-        # ── MaxmaBlocker 安全检查 ────────────────────────────────
-        blocked = check_maxma_blocker(file_path)
-        if blocked:
-            return format_error(
-                "🚫 安全阻断：操作已被 MaxmaBlocker 阻断。\n"
-                f'在目录 "{blocked}" 中发现了 MaxmaBlocker 文件。\n\n'
-                "请立即停止当前任务，先说明你为什么需要访问该路径，"
-                "再说明下一步打算做什么。"
-            )
-        # ────────────────────────────────────────────────────────────
-
-        # ── 路径白名单检查 ──────────────────────────────────────────
-        blocked = check_path_whitelisted(file_path)
-        if blocked:
-            return format_error(blocked)
+        # ── 统一安全检查（MaxmaBlocker + 白名单）────────────────────
+        err = check_path_access(file_path)
+        if err:
+            return format_error(err)
         # ────────────────────────────────────────────────────────────
 
         if not os.path.exists(file_path):

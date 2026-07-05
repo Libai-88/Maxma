@@ -136,7 +136,8 @@ class SearchMemoriesTool(ToolBase):
                     "id": item["id"],
                     "description": item["description"],
                     "theme": item["theme"],
-                    "updated_at": item.get("updated_at", ""),
+                    # 修复字段名：MemoryManager.show() 返回 "latest_update_time" 而非 "updated_at"
+                    "updated_at": item.get("latest_update_time", item.get("updated_at", "")),
                     "similarity": round(similarity * 100, 1),
                 })
             return results

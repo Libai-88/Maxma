@@ -15,7 +15,7 @@
 #   tls_verify: 是否校验 TLS 证书（生产模式强制 HTTPS/WSS，开发模式可关闭）
 #
 # 示例（默认不启用任何 MCP 服务器，由用户自行添加）：
-# servers:
+# mcp_servers:
 #   - id: filesystem
 #     transport: stdio
 #     enabled: false
@@ -37,4 +37,4 @@
 #     allowed_tools:
 #       - "*"
 
-servers: []
+mcp_servers: []

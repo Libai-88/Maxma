@@ -194,7 +194,6 @@ def get_vector_store() -> "VectorStore | None":
         # 二次检查：可能在等锁期间已被其他线程初始化
         if _store is not None or _tried_init:
             return _store
-        _tried_init = True
         try:
             import chromadb  # noqa: F401
         except ImportError:
@@ -202,15 +201,18 @@ def get_vector_store() -> "VectorStore | None":
                 "[rag] chromadb 未安装，find_similar 将回退到 bigram Jaccard。"
                 " 安装依赖: pip install chromadb"
             )
+            _tried_init = True  # 依赖缺失是环境问题，重试无意义
             return None
         try:
             from app_paths import VECTOR_DB_DIR
 
             VECTOR_DB_DIR.mkdir(parents=True, exist_ok=True)
             _store = VectorStore(persist_dir=str(VECTOR_DB_DIR))
+            _tried_init = True  # 成功才标记，失败时允许后续重试
             return _store
         except Exception as e:
-            logger.warning("[rag] vector store init failed: %s", e)
+            # 不设置 _tried_init = True，允许后续重试
+            logger.warning("[rag] vector store init failed (will retry on next call): %s", e)
             return None
 
 

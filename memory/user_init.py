@@ -66,9 +66,38 @@ def ensure_builtin_personas() -> None:
         _copy_if_missing(src, dst, f"内置人格: {src.stem}")
 
 
+def ensure_agents_md() -> None:
+    """若 AGENTS.md 不存在，从内置模板复制。
+
+    打包模式下 PERSONAS_DATA_DIR 与 PERSONAS_DIR（BUNDLE_DIR）分离，
+    若不复制，prompts.py 的 _read_persona("AGENTS.md") 会读到空字符串，
+    导致系统提示词丢失"行为规则"段。
+    """
+    _copy_if_missing(
+        _BUNDLE_PERSONAS_DIR / "AGENTS.md",
+        PERSONAS_DATA_DIR / "AGENTS.md",
+        "行为规则",
+    )
+
+
+def ensure_active_persona() -> None:
+    """若 active_persona.yaml 不存在，从内置模板复制。
+
+    打包模式下内置模板在 BUNDLE_DIR（只读），需复制到 PERSONAS_DATA_DIR（可写）
+    才能支持运行时切换人格。
+    """
+    _copy_if_missing(
+        _BUNDLE_PERSONAS_DIR / "active_persona.yaml",
+        PERSONAS_DATA_DIR / "active_persona.yaml",
+        "当前人格配置",
+    )
+
+
 def ensure_all() -> None:
     """运行所有文件初始化检查（启动时调用一次）。"""
     ensure_env_file()
     ensure_user_md()
     ensure_soul_md()
+    ensure_agents_md()  # 新增：复制 AGENTS.md 到可写目录
+    ensure_active_persona()  # 新增：复制 active_persona.yaml
     ensure_builtin_personas()

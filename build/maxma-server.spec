@@ -78,6 +78,10 @@ for package_name in (
     "chromadb",
     "transformers",
     "onnxruntime",
+    # MCP 客户端库（tools/mcp.py 动态导入，PyInstaller 静态分析可能遗漏）
+    "langchain_mcp_adapters",
+    # Tavily 网络搜索 SDK（tools/network/tavily/ 动态导入）
+    "tavily",
     # 自动收集 tools 下所有子模块，避免 pkgutil.walk_packages 在 PyInstaller
     # 打包后遗漏动态注册的工具（如 tool_ask_user 曾遗漏导致启动校验失败）
     "tools",
@@ -194,6 +198,10 @@ hiddenimports = [
     # Stage 1 子任务 1.4：通用知识库工具
     "tools.kb.tool_kb_search",
     "tools.kb.tool_kb_add",
+    # 知识库文档加载器依赖（PyInstaller 静态分析可能遗漏函数级 import）
+    "PyPDF2",
+    "docx",
+    "lxml",
     "tools.config.tool_manage_mcp",
     "tools.config.tool_manage_skills",
     "tools.config.tool_manage_macros",

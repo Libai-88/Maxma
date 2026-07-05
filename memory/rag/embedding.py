@@ -207,7 +207,6 @@ def get_embedding_engine() -> EmbeddingEngine | None:
         # 二次检查：可能在等锁期间已被其他线程初始化
         if _engine is not None or _tried_init:
             return _engine
-        _tried_init = True
         # 检查依赖是否安装
         try:
             import onnxruntime  # noqa: F401
@@ -217,6 +216,7 @@ def get_embedding_engine() -> EmbeddingEngine | None:
                 "[rag] onnxruntime/transformers 未安装，find_similar 将回退到 bigram Jaccard。"
                 " 安装依赖: pip install onnxruntime transformers"
             )
+            _tried_init = True  # 依赖缺失是环境问题，重试无意义
             return None
         # 初始化引擎
         try:
@@ -227,13 +227,16 @@ def get_embedding_engine() -> EmbeddingEngine | None:
                 model_name=settings.embedding_model_name,
                 local_path=settings.embedding_model_local_path or None,
             )
+            _tried_init = True  # 成功才标记，失败时允许后续重试
             logger.info(
                 "[rag] embedding engine ready (model=%s, backend=onnxruntime)",
                 settings.embedding_model_name,
             )
             return _engine
         except Exception as e:
-            logger.warning("[rag] embedding engine init failed: %s", e)
+            # 不设置 _tried_init = True，允许后续重试
+            # （模型文件可能暂时不可用、瞬时 IO 错误等）
+            logger.warning("[rag] embedding engine init failed (will retry on next call): %s", e)
             return None
 
 

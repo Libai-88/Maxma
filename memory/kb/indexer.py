@@ -195,6 +195,7 @@ class KBIndexer:
         # 生成 embedding 并写入向量库
         chunk_ids = []
         indexed_count = 0
+        index_error: str | None = None  # 记录索引失败原因，传播给调用方
         try:
             from memory.rag.embedding import get_embedding_engine
             from memory.rag.vector_store import COLLECTION_KB, get_vector_store
@@ -228,8 +229,14 @@ class KBIndexer:
                     chunk_ids.extend(batch_ids)
                     indexed_count += len(batch)
             else:
-                logger.warning("[kb] 向量库或 embedding 引擎不可用，仅记录元数据")
+                # 明确记录哪个引擎不可用，便于排查
+                index_error = (
+                    f"embedding engine={'available' if engine else 'UNAVAILABLE'}, "
+                    f"vector store={'available' if store else 'UNAVAILABLE'}"
+                )
+                logger.warning("[kb] 向量库或 embedding 引擎不可用，仅记录元数据: %s", index_error)
         except Exception as e:
+            index_error = str(e)
             logger.warning("[kb] 索引 %s 到向量库失败: %s", document.id, e)
 
         # 修复 Bug 5.3：使用 timezone-aware datetime，避免 naive 时间戳与其他时区时间比较出错
@@ -244,6 +251,8 @@ class KBIndexer:
             "chunk_ids": chunk_ids,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "metadata": document.metadata,
+            # 记录索引失败原因，便于排查（None 表示无错误）
+            "index_error": index_error,
         }
 
         # ── 阶段 2：单段锁覆盖「读 meta → 删除旧切块 → 写新 meta」──
@@ -278,6 +287,11 @@ class KBIndexer:
             "chunks": len(chunks),
             "indexed": indexed_count,
             "status": "ok" if indexed_count > 0 else "metadata_only",
+            # 当索引失败时，明确告知 agent 原因，避免误以为添加成功
+            "warning": (
+                f"向量索引失败（{index_error}），文档已保存但无法被语义检索。"
+                "请检查 ONNX 模型或 chromadb 是否可用。"
+            ) if (indexed_count == 0 and index_error) else None,
         }
 
     def _read_meta(self) -> dict:
