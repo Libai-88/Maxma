@@ -98,7 +98,7 @@ class ParallelExecuteTool(ToolBase):
         for item in task_list:
             task_desc = item["task"].strip()
             name = item.get("name", "").strip()
-            sub = sm.create_sub_session(
+            sub = await sm.create_sub_session(
                 task=task_desc,
                 parent_session_id=parent_session_id,
             )

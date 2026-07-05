@@ -101,7 +101,7 @@ class CallSubAgentTool(ToolBase):
             logger.debug("Failed to parse parent_session_id from WebSocket URL", exc_info=True)
 
         # 1. 创建 sub-session
-        sub = sm.create_sub_session(
+        sub = await sm.create_sub_session(
             task=task,
             parent_session_id=parent_session_id,
         )
