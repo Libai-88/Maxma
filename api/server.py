@@ -196,8 +196,11 @@ async def _load_const_sessions(app: FastAPI):
     if not const_list:
         return
 
-    if app.state.llm is None:
-        logger.warning("[const] Skipping %d const session(s) — no LLM available", len(const_list))
+    # 使用 getattr 避免 AttributeError：app.state.llm 是在 _init_llm_background()
+    # 异步任务中设置的，_load_const_sessions 可能在该任务完成前就被调用
+    llm = getattr(app.state, 'llm', None)
+    if llm is None:
+        logger.warning("[const] Skipping %d const session(s) — no LLM available yet", len(const_list))
         return
 
     from api.checkpointer_factory import get_persistent_checkpointer
@@ -220,7 +223,7 @@ async def _load_const_sessions(app: FastAPI):
             reconstructed = deserialize_messages(messages)
             if reconstructed:
                 agent = build_agent(
-                    model=app.state.llm,
+                    model=llm,
                     tools=app.state.tools,
                     system_prompt=app.state.system_prompt,
                     checkpointer=shared_checkpointer,

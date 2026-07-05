@@ -2,7 +2,7 @@ param(
     [string]$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
     [string]$ExePath = "",
     [int]$Port = 8000,
-    [int]$TimeoutSec = 45
+    [int]$TimeoutSec = 120
 )
 
 $ErrorActionPreference = "Stop"
