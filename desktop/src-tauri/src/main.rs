@@ -31,8 +31,10 @@ use windows::Win32::UI::Shell::{
 
 /// 最大崩溃重启次数
 const MAX_RESTARTS: u32 = 3;
-/// 后端健康检查超时（秒）
-const HEALTH_TIMEOUT_SECS: u64 = 30;
+/// 后端健康检查超时（秒）。
+/// PyInstaller onefile 第二次启动时需要解压 + 加载 SQLite/chromadb/ONNX 等数据，
+/// 30s 不够，改为 90s 留足余量。
+const HEALTH_TIMEOUT_SECS: u64 = 90;
 /// 重启前等待（秒）
 const RESTART_DELAY_SECS: u64 = 2;
 
@@ -55,10 +57,14 @@ fn create_kill_on_close_job() -> Result<HANDLE, windows::core::Error> {
     }
 }
 
-/// 将进程加入 Job Object。后续主进程退出时，该进程会被内核自动 kill。
-fn assign_process_to_job(job: HANDLE, pid: u32) -> Result<(), windows::core::Error> {
+/// 将当前进程加入 Job Object。
+/// 关键：加入 Job 后，**所有后代进程自动继承 Job 成员资格**，
+/// 无需对 sidecar 单独 assign（避免了 PyInstaller bootloader 启动 Python 子进程
+/// 与 assign_process_to_job 之间的竞态）。
+fn assign_current_process_to_job(job: HANDLE) -> Result<(), windows::core::Error> {
     unsafe {
-        let handle = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, false, pid)?;
+        let current_pid = std::process::id();
+        let handle = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, false, current_pid)?;
         AssignProcessToJobObject(job, handle)?;
         let _ = CloseHandle(handle);
         Ok(())
@@ -68,12 +74,27 @@ fn assign_process_to_job(job: HANDLE, pid: u32) -> Result<(), windows::core::Err
 /// 启动前清理可能残留的旧版 maxma-server.exe 进程。
 /// 场景：旧版本（无 Job Object）被 NSIS 强杀后 sidecar 成为孤儿进程，
 /// 或主进程崩溃后 sidecar 残留。新版启动时先 taskkill 清理。
+/// 清理后等待端口释放，避免 pick_available_port 误判端口被占用。
 fn cleanup_stale_sidecar() {
-    let _ = std::process::Command::new("taskkill")
+    let output = std::process::Command::new("taskkill")
         .args(["/F", "/IM", "maxma-server.exe"])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status();
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output();
+
+    // 如果确实 kill 了进程（taskkill 返回 0），等待端口释放
+    if let Ok(o) = output {
+        if o.status.success() {
+            println!("[tauri] cleanup_stale_sidecar: killed stale maxma-server.exe, waiting for port release...");
+            // 等待最多 3 秒让内核释放 socket 端口
+            for _ in 0..30 {
+                if port_manager::is_port_available(port_manager::DEFAULT_API_PORT) {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+        }
+    }
 }
 
 /// 获取 sidecar 日志文件路径：%APPDATA%/MaxmaHere/logs/server.log
@@ -186,8 +207,8 @@ fn wait_for_server(port: u16) -> bool {
 }
 
 /// 启动 sidecar 并在后台监控其生命周期（日志 + 崩溃检测）。
-/// job_raw: Windows Job Object 句柄的原始值（isize），sidecar 进程会被加入 Job，
-/// 主进程任何原因退出时内核自动 kill Job 内进程。
+/// 注意：主进程已在 main() 中加入 Job Object，sidecar 作为后代进程自动继承 Job 成员资格，
+/// 无需在此处单独 assign（避免了 PyInstaller bootloader 启动 Python 子进程的竞态）。
 fn spawn_sidecar_with_monitor(
     app: tauri::AppHandle,
     restart_count: Arc<AtomicU32>,
@@ -195,7 +216,6 @@ fn spawn_sidecar_with_monitor(
     child_store: Arc<Mutex<Option<CommandChild>>>,
     port: u16,
     log_writer: Arc<Mutex<Option<BufWriter<File>>>>,
-    job_raw: Arc<isize>,
 ) {
     let sidecar = app
         .shell()
@@ -217,15 +237,7 @@ fn spawn_sidecar_with_monitor(
         .spawn()
         .expect("Failed to start maxma-server sidecar");
 
-    // 将 sidecar 进程加入 Job Object，确保主进程退出时 sidecar 被内核自动 kill
-    let pid = child.pid();
-    let job_handle = HANDLE(*job_raw as *mut _);
-    if *job_raw != 0 {
-        match assign_process_to_job(job_handle, pid) {
-            Ok(()) => println!("[tauri] sidecar (pid={}) 已加入 Job Object", pid),
-            Err(e) => eprintln!("[tauri] 警告：无法将 sidecar 加入 Job Object: {}，依赖窗口事件清理", e),
-        }
-    }
+    println!("[tauri] sidecar (pid={}) 已启动，自动继承 Job Object", child.pid());
 
     // 存储 child handle 以便窗口关闭时 kill
     {
@@ -290,7 +302,7 @@ fn spawn_sidecar_with_monitor(
                     }),
                 );
                 std::thread::sleep(Duration::from_secs(RESTART_DELAY_SECS));
-                spawn_sidecar_with_monitor(app, restart_count, shutting_down, child_store, port, log_writer, job_raw);
+                spawn_sidecar_with_monitor(app, restart_count, shutting_down, child_store, port, log_writer);
             } else {
                 let msg = format!("已达最大重启次数 ({})，放弃重启", MAX_RESTARTS);
                 eprintln!("[tauri] {}", msg);
@@ -343,20 +355,28 @@ fn main() {
     // 打开 sidecar 日志文件
     let log_writer = Arc::new(Mutex::new(open_server_log()));
 
-    // 创建 Windows Job Object（KILL_ON_JOB_CLOSE）
+    // 创建 Windows Job Object（KILL_ON_JOB_CLOSE）并将主进程自身加入 Job。
+    // 关键改进：主进程加入 Job 后，所有后代进程（含 PyInstaller bootloader 启动的
+    // Python 子进程）自动继承 Job 成员资格，无需事后 assign，避免了竞态条件。
     // 主进程任何原因退出（含被 NSIS/taskkill 强杀）时，Job 句柄被 OS 关闭，
-    // 内核自动终止 Job 内的 sidecar 进程，避免 sidecar 成为孤儿占用文件句柄。
-    // 注意：HANDLE 不实现 Drop，这里将原始句柄值存入 Arc<isize>，
-    // 故意不关闭句柄，让其随进程退出被 OS 回收（这正是触发 KILL_ON_JOB_CLOSE 的关键）。
-    let job = match create_kill_on_close_job() {
-        Ok(h) => h,
+    // 内核自动终止 Job 内的所有后代进程，避免 sidecar 成为孤儿占用文件句柄。
+    // 注意：HANDLE 是 Copy 类型，没有 Drop 实现，离开作用域不会调用 CloseHandle，
+    // 句柄会一直保持开放，直到进程退出时被 OS 回收（触发 KILL_ON_JOB_CLOSE）。
+    // 用 `static` 绑定确保 Job 句柄存活到进程退出（防止编译器优化掉）。
+    static JOB_HANDLE_RAW: std::sync::OnceLock<isize> = std::sync::OnceLock::new();
+    match create_kill_on_close_job() {
+        Ok(job) => {
+            match assign_current_process_to_job(job) {
+                Ok(()) => println!("[tauri] 主进程已加入 Job Object，后代进程将自动继承"),
+                Err(e) => eprintln!("[tauri] 警告：主进程加入 Job Object 失败: {}，sidecar 清理将依赖窗口事件", e),
+            }
+            // 存入 static 变量，确保 Job 句柄存活到进程退出
+            let _ = JOB_HANDLE_RAW.set(job.0 as isize);
+        }
         Err(e) => {
             eprintln!("[tauri] 警告：创建 Job Object 失败: {}，sidecar 清理将依赖窗口事件", e);
-            // 即使 Job Object 创建失败，应用仍可运行（降级为原有行为）
-            HANDLE(std::ptr::null_mut())
         }
-    };
-    let job_raw: Arc<isize> = Arc::new(job.0 as isize);
+    }
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -381,7 +401,7 @@ fn main() {
                 port: AtomicU16::new(selected_port),
             });
 
-            // 启动 sidecar + 监控（绑定到 Job Object）
+            // 启动 sidecar + 监控（sidecar 作为主进程后代自动继承 Job Object）
             spawn_sidecar_with_monitor(
                 app.handle().clone(),
                 restart_count,
@@ -389,7 +409,6 @@ fn main() {
                 child_store,
                 selected_port,
                 log_writer.clone(),
-                job_raw.clone(),
             );
 
             // 后台等待后端就绪
