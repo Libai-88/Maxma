@@ -1,7 +1,7 @@
 @echo off
 REM ============================================================
-REM  MaxmaHere — pytest 一键入口
-REM  始终使用项目 .venv 的 Python，避免全局环境干扰
+REM  MaxmaHere - pytest entry point
+REM  Always use project .venv Python to avoid global env issues
 REM ============================================================
 
 setlocal

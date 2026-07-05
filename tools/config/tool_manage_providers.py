@@ -4,6 +4,7 @@ import yaml
 from pydantic import BaseModel, Field
 
 from app_paths import PROVIDERS_YAML_PATH
+from api.yaml_store import dump_yaml_atomic
 from tools.base import ToolBase, format_error, format_success, register_tool
 
 
@@ -30,14 +31,7 @@ def _load_raw() -> list[dict]:
 
 
 def _save_raw(providers: list[dict]) -> None:
-    PROVIDERS_YAML_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(PROVIDERS_YAML_PATH, "w", encoding="utf-8") as f:
-        yaml.dump(
-            {"providers": providers},
-            f,
-            allow_unicode=True,
-            default_flow_style=False,
-        )
+    dump_yaml_atomic(PROVIDERS_YAML_PATH, {"providers": providers})
 
 
 def _mask_key(key: str) -> str:

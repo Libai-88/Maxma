@@ -13,7 +13,7 @@ from typing import Any
 from api.db.core import transaction, row_to_dict, rows_to_dicts
 from api.providers import ProviderConfig
 from app_paths import PROVIDERS_YAML_PATH
-from tools.crypto import decrypt_value, is_encrypted
+from tools.crypto import decrypt_value, encrypt_value, is_encrypted
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +38,10 @@ class ProviderDbStore:
         return self._row_to_config(row) if row else None
 
     def save(self, config: ProviderConfig) -> None:
-        """新增或更新配置。"""
+        """新增或更新配置。API Key 落盘前加密存储。"""
         models_json = json.dumps(config.models, ensure_ascii=False)
+        # 加密 API Key，避免明文落盘（与 ProviderConfigStore YAML 路径保持一致）
+        api_key_stored = encrypt_value(config.api_key) if config.api_key else ""
         with transaction() as db:
             db.execute(
                 """INSERT INTO providers (id, provider_type, label, api_key, base_url,
@@ -56,7 +58,7 @@ class ProviderDbStore:
                      priority=excluded.priority,
                      updated_at=julianday('now')""",
                 (config.id, config.provider_type, config.label,
-                 config.api_key, config.base_url, models_json,
+                 api_key_stored, config.base_url, models_json,
                  1 if config.enabled else 0, config.context_window,
                  config.priority),
             )
@@ -114,11 +116,14 @@ class ProviderDbStore:
         models = json.loads(row["models"]) if isinstance(row["models"], str) else (row["models"] or [])
         # priority 列在 v3 迁移后存在；用 keys() 兼容旧数据库快照
         priority = row["priority"] if "priority" in row.keys() else 0
+        # 读取时解密 API Key（兼容历史明文数据：未加密则原样返回）
+        api_key_raw = row["api_key"]
+        api_key = decrypt_value(api_key_raw) if is_encrypted(api_key_raw) else api_key_raw
         return ProviderConfig(
             id=row["id"],
             provider_type=row["provider_type"],
             label=row["label"],
-            api_key=row["api_key"],
+            api_key=api_key,
             base_url=row["base_url"],
             models=models,
             enabled=bool(row["enabled"]),

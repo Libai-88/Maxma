@@ -352,7 +352,15 @@ def build_agent(
         if episodic_context:
             prompt = f"{system_prompt}\n\n{episodic_context}"
         messages = [SystemMessage(content=prompt)] + list(messages)
-        response = await llm_with_tools.ainvoke(messages)
+        try:
+            response = await llm_with_tools.ainvoke(messages)
+        except Exception as e:
+            logger.error("[agent_node] LLM 调用失败: %s", e, exc_info=True)
+            # 优雅降级：返回错误提示，避免整个 Graph 崩溃
+            err_msg = AIMessage(
+                content=f"（调用模型时出错：{type(e).__name__}: {str(e)[:200]}。请稍后重试或检查提供商配置。）"
+            )
+            return {"messages": [err_msg], "episodic_context": ""}
         return {"messages": [response], "episodic_context": ""}
 
     async def loop_breaker_node(state: AgentState) -> dict:

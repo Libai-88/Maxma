@@ -6,6 +6,7 @@ import yaml
 from pydantic import BaseModel, Field
 
 from app_paths import PATH_WHITELIST_YAML_PATH
+from api.yaml_store import dump_yaml_atomic
 from tools.base import ToolBase, format_error, format_success, register_tool
 
 
@@ -34,14 +35,7 @@ def _load_raw() -> list[dict]:
 
 
 def _save_raw(entries: list[dict]) -> None:
-    PATH_WHITELIST_YAML_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(PATH_WHITELIST_YAML_PATH, "w", encoding="utf-8") as f:
-        yaml.dump(
-            {"whitelist": entries},
-            f,
-            allow_unicode=True,
-            default_flow_style=False,
-        )
+    dump_yaml_atomic(PATH_WHITELIST_YAML_PATH, {"whitelist": entries})
 
 
 @register_tool

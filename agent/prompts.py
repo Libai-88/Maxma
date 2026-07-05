@@ -3,6 +3,7 @@
 import hashlib
 import logging
 import re
+import threading
 from pathlib import Path
 
 from app_paths import ANTHROPIC_SKILLS_DIR, MACROS_DIR, SKILLS_DATA_DIR, MACROS_DATA_DIR, PERSONAS_DATA_DIR as PERSONAS_DIR, ACTIVE_PERSONA_PATH
@@ -81,6 +82,7 @@ def list_personas() -> list[dict]:
 _cached_fingerprint: str | None = None
 _cached_prompt: str = ""
 _cached_parts: list[dict] = []
+_cache_lock = threading.Lock()
 
 
 def _file_hash(path: Path) -> str:
@@ -226,18 +228,30 @@ def _rebuild(fingerprint: str) -> None:
 
 
 def _ensure_cache() -> None:
-    """检查指纹，若依赖文件有变化则重建缓存。"""
+    """检查指纹，若依赖文件有变化则重建缓存。
+
+    使用 _cache_lock 保护：避免并发请求时多个线程同时重建缓存，
+    或在 _rebuild 写入过程中读到不一致的中间状态。
+    """
+    global _cached_fingerprint, _cached_prompt, _cached_parts
+    # 双重检查锁定：先无锁读指纹，命中则直接返回；未命中再加锁重建
     fp = _current_fingerprint()
-    if fp != _cached_fingerprint:
-        _rebuild(fp)
+    if fp == _cached_fingerprint:
+        return
+    with _cache_lock:
+        # 再次检查，防止前一个持锁线程已经完成了重建
+        fp = _current_fingerprint()
+        if fp != _cached_fingerprint:
+            _rebuild(fp)
 
 
 def invalidate_prompt_cache() -> None:
     """强制清空缓存（供外部调用，例如记忆更新后）。"""
     global _cached_fingerprint, _cached_prompt, _cached_parts
-    _cached_fingerprint = None
-    _cached_prompt = ""
-    _cached_parts = []
+    with _cache_lock:
+        _cached_fingerprint = None
+        _cached_prompt = ""
+        _cached_parts = []
 
 
 def _read_persona(filename: str) -> str:
@@ -390,10 +404,12 @@ def get_system_prompt_parts() -> list[dict]:
         {"key": str, "label": str, "content": str}
     """
     _ensure_cache()
-    return list(_cached_parts)
+    with _cache_lock:
+        return list(_cached_parts)
 
 
 def build_system_prompt() -> str:
     """组装完整系统提示词，依赖文件未变化时直接返回缓存。"""
     _ensure_cache()
-    return _cached_prompt
+    with _cache_lock:
+        return _cached_prompt

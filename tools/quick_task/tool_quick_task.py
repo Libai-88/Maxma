@@ -85,8 +85,10 @@ class QuickTaskTool(ToolBase):
             # 直接调用 LLM，不使用工具，不创建 session
             from langchain_core.messages import HumanMessage
 
+            # 通过 bind 把 max_tokens 注入到本次调用（ChatOpenAI 支持）
+            llm_with_limit = llm.bind(max_tokens=max_tokens)
             response = await asyncio.wait_for(
-                llm.ainvoke([HumanMessage(content=full_prompt)]),
+                llm_with_limit.ainvoke([HumanMessage(content=full_prompt)]),
                 timeout=DEFAULT_TIMEOUT,
             )
             result = response.content if isinstance(response.content, str) else str(response.content)

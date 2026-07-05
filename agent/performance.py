@@ -8,14 +8,17 @@
 
 慢查询告警：单回合超过阈值时通过 WebSocket 通知前端。
 
-线程安全（修复 Bug 1.7）：所有状态读写通过 threading.Lock 保护，避免并发
-请求的 start_turn / record_tool_call / end_turn 互相覆盖。当前回合（
-_current_turn）和工具调用列表（_tool_calls）在同一锁内更新，保证一致性。
+线程安全（修复 Bug 1.7）：所有共享状态读写通过 threading.Lock 保护。
+
+并发 Turn 支持（修复审核报告 CRITICAL #5）：使用 contextvars.ContextVar
+让每个协程/线程有自己的 current turn，多个并发请求的指标互不覆盖。
+共享的 _turn_history 仍由 _lock 保护。
 
 单例初始化（修复 Bug 1.8）：get_performance_monitor() 通过 _init_lock
 保证仅创建一个实例，避免双检查锁失效。
 """
 
+import contextvars
 import logging
 import threading
 import time
@@ -64,102 +67,113 @@ class ToolCallMetric:
 class PerformanceMonitor:
     """性能监控器。
 
-    线程安全（修复 Bug 1.7）：所有状态读写通过 _lock 保护。当前回合和工具
-    调用列表在同一个锁内更新，避免并发请求互相覆盖。
+    线程安全（修复 Bug 1.7）：所有共享状态读写通过 _lock 保护。
+
+    并发 Turn 支持（修复审核报告 CRITICAL #5）：使用 ContextVar 让每个协程/
+    线程有自己的 current turn 和 tool_calls，多个并发请求的指标互不覆盖。
+    共享的 _turn_history 由 _lock 保护。
     """
 
     def __init__(self):
         self._turn_history: list[TurnMetrics] = []
-        self._current_turn: Optional[TurnMetrics] = None
-        self._tool_calls: list[ToolCallMetric] = []
         self._lock = threading.Lock()
+        # 每协程/线程独立的 current turn 和 tool_calls（并发安全）
+        self._current_turn_var: contextvars.ContextVar[Optional[TurnMetrics]] = (
+            contextvars.ContextVar("perf_current_turn", default=None)
+        )
+        self._tool_calls_var: contextvars.ContextVar[list[ToolCallMetric]] = (
+            contextvars.ContextVar("perf_tool_calls", default=None)
+        )
 
     def start_turn(self, session_id: str, turn_id: str = "", user_message: str = "") -> TurnMetrics:
-        """开始追踪一个新的 Agent 回合。"""
+        """开始追踪一个新的 Agent 回合。
+
+        在当前协程/线程上下文中设置 current turn，不影响其他并发请求。
+        """
         metrics = TurnMetrics(
             session_id=session_id,
             turn_id=turn_id,
             start_time=time.time(),
             user_message_preview=user_message[:80],
         )
-        with self._lock:
-            self._current_turn = metrics
-            self._tool_calls = []
+        self._current_turn_var.set(metrics)
+        self._tool_calls_var.set([])
         return metrics
 
     def record_llm_call(self, duration: float) -> None:
-        """记录一次 LLM 调用。"""
-        with self._lock:
-            if self._current_turn:
-                self._current_turn.llm_call_count += 1
-                self._current_turn.llm_total_duration += duration
+        """记录一次 LLM 调用（写入当前协程的 turn）。"""
+        turn = self._current_turn_var.get()
+        if turn:
+            turn.llm_call_count += 1
+            turn.llm_total_duration += duration
 
     def record_tool_call(self, tool_name: str, duration: float, success: bool = True) -> None:
-        """记录一次工具调用。"""
+        """记录一次工具调用（写入当前协程的 tool_calls 和 turn 聚合字段）。"""
         metric = ToolCallMetric(
             tool_name=tool_name,
             duration=duration,
             is_slow=duration > SLOW_TOOL_THRESHOLD,
             success=success,
         )
-        with self._lock:
-            self._tool_calls.append(metric)
+        tool_calls = self._tool_calls_var.get()
+        if tool_calls is not None:
+            tool_calls.append(metric)
 
-            if self._current_turn:
-                self._current_turn.tool_call_count += 1
-                self._current_turn.tool_total_duration += duration
-                if metric.is_slow:
-                    self._current_turn.slow_tools.append(
-                        f"{tool_name} ({duration:.1f}s)"
-                    )
-
-    def record_context_usage(self, tokens: int, max_tokens: int) -> None:
-        """记录上下文 token 使用量。"""
-        with self._lock:
-            if self._current_turn:
-                self._current_turn.context_tokens = tokens
-                self._current_turn.context_max_tokens = max_tokens
-                self._current_turn.context_usage_percent = (
-                    (tokens / max_tokens * 100) if max_tokens > 0 else 0
+        turn = self._current_turn_var.get()
+        if turn:
+            turn.tool_call_count += 1
+            turn.tool_total_duration += duration
+            if metric.is_slow:
+                turn.slow_tools.append(
+                    f"{tool_name} ({duration:.1f}s)"
                 )
 
+    def record_context_usage(self, tokens: int, max_tokens: int) -> None:
+        """记录上下文 token 使用量（写入当前协程的 turn）。"""
+        turn = self._current_turn_var.get()
+        if turn:
+            turn.context_tokens = tokens
+            turn.context_max_tokens = max_tokens
+            turn.context_usage_percent = (
+                (tokens / max_tokens * 100) if max_tokens > 0 else 0
+            )
+
     def end_turn(self) -> TurnMetrics:
-        """结束当前回合追踪，返回性能指标。"""
+        """结束当前协程的回合追踪，返回性能指标。
+
+        将 turn 写入共享 _turn_history（加锁），并清理当前协程的上下文。
+        """
+        turn = self._current_turn_var.get()
+        if not turn:
+            return TurnMetrics(session_id="")
+
+        turn.end_time = time.time()
+        turn.total_duration = turn.end_time - turn.start_time
+        turn.is_slow = turn.total_duration > SLOW_TURN_THRESHOLD
+
+        # 共享历史需要加锁
         with self._lock:
-            if not self._current_turn:
-                return TurnMetrics(session_id="")
-
-            self._current_turn.end_time = time.time()
-            self._current_turn.total_duration = (
-                self._current_turn.end_time - self._current_turn.start_time
-            )
-            self._current_turn.is_slow = (
-                self._current_turn.total_duration > SLOW_TURN_THRESHOLD
-            )
-
-            # 存入历史
-            self._turn_history.append(self._current_turn)
+            self._turn_history.append(turn)
             if len(self._turn_history) > MAX_HISTORY:
                 self._turn_history = self._turn_history[-MAX_HISTORY:]
 
-            result = self._current_turn
-            self._current_turn = None
-            self._tool_calls = []
+        # 清理当前协程上下文
+        self._current_turn_var.set(None)
+        self._tool_calls_var.set(None)
 
-        if result.is_slow:
+        if turn.is_slow:
             logger.warning(
-                f"Slow turn detected: {result.total_duration:.1f}s "
-                f"(LLM: {result.llm_total_duration:.1f}s, "
-                f"Tools: {result.tool_total_duration:.1f}s, "
-                f"session={result.session_id[:8]})"
+                f"Slow turn detected: {turn.total_duration:.1f}s "
+                f"(LLM: {turn.llm_total_duration:.1f}s, "
+                f"Tools: {turn.tool_total_duration:.1f}s, "
+                f"session={turn.session_id[:8]})"
             )
 
-        return result
+        return turn
 
     def get_current_turn(self) -> Optional[TurnMetrics]:
-        """获取当前正在追踪的回合。"""
-        with self._lock:
-            return self._current_turn
+        """获取当前协程正在追踪的回合。"""
+        return self._current_turn_var.get()
 
     def get_history(self, limit: int = 50) -> list[dict]:
         """获取回合性能历史。"""

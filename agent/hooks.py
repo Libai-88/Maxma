@@ -154,22 +154,32 @@ class HookManager:
         return hook
 
     def update_hook(self, hook_id: str, **kwargs) -> HookConfig | None:
-        """更新钩子配置。"""
+        """更新钩子配置。
+
+        修复 TOCTOU 竞态：在锁内完成"取出 + 字段更新 + 持久化"，
+        锁外只做 stop/start（这两个操作内部有自己的锁，且对已删除的 hook 操作是安全的）。
+        """
         with self._lock:
             hook = self._hooks.get(hook_id)
-        if not hook:
-            return None
-        # 先停止旧的监听
-        self._stop_hook(hook)
-        # 更新字段
-        with self._lock:
+            if not hook:
+                return None
+            # 在锁内完成字段更新，避免与 delete_hook 竞态
             for key, value in kwargs.items():
                 if value is not None and hasattr(hook, key):
                     setattr(hook, key, value)
-        self.save()
-        # 重新启动
-        if hook.enabled and hook.status == STATUS_ACTIVE:
-            self._start_hook(hook)
+            # 锁内持久化，确保 save 与 delete 串行
+            self.save()
+            # 取出 enabled/status 快照，供锁外判断使用
+            should_restart = hook.enabled and hook.status == STATUS_ACTIVE
+        # 锁外停止旧监听（_stop_hook 内部有自己的锁，对已删除 hook 安全）
+        self._stop_hook(hook)
+        # 锁外重新启动（_start_hook 内部也有锁）
+        if should_restart:
+            # 再次检查 hook 是否还存在，避免对已删除 hook 启动新监听
+            with self._lock:
+                still_exists = hook_id in self._hooks
+            if still_exists:
+                self._start_hook(hook)
         return hook
 
     def delete_hook(self, hook_id: str) -> bool:
