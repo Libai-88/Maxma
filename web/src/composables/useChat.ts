@@ -4,7 +4,7 @@ import { useChatStore } from '@/stores/chat'
 import { useSessionStore } from '@/stores/session'
 import { buildFlatMessage, buildTimestamp, parseReferences } from '@/utils/references'
 import type { ParsedRef } from '@/utils/references'
-import { getToken, ensureTokenLoaded, resetToken } from '@/api'
+import { getToken, ensureTokenLoaded, resetToken, api } from '@/api'
 import { ensurePortLoaded, waitForBackend, getWsBase } from '@/utils/env'
 /** 匹配旧格式尾缀（用于 localStorage 迁移） */
 const TIME_SUFFIX_RE = /（\d{4}-\d{2}-\d{2} \w{3} \d{2}:\d{2}）$/
@@ -98,7 +98,10 @@ function getSessionStore() { return useSessionStore() }
 
 const refreshSessions = () => getSessionStore().refreshSessions()
 const switchSession = (id: string) => getSessionStore().switchSession(id)
-const turnsCache = new Map<string, ChatTurn[]>()
+// 模块级缓存：首次 import 时从 localStorage 恢复所有会话的历史消息
+// （修复：此前为 new Map()，导致 loadAllTurnsFromStorage 成为死代码，
+//   页面刷新后 turnsCache 为空，旧会话点击后无历史显示）
+const turnsCache = loadAllTurnsFromStorage()
 
 // ── SessionChannel 定义 ────────────────────────────────────
 
@@ -666,10 +669,59 @@ export function useChat(sessionId: Ref<string>) {
     }
   }
 
+  // 从后端加载历史消息并转换为 ChatTurn[]（localStorage 无缓存时的回退方案）
+  // const 会话从 YAML 文件读取，普通会话从 checkpointer 读取
+  async function loadHistoryFromBackend(sid: string, ch: SessionChannel) {
+    try {
+      const res = await api.getMessages(sid)
+      if (!res.messages || res.messages.length === 0) {
+        console.log(`[useChat:loadHistory] 会话 ${sid} 后端无历史消息`)
+        return
+      }
+      // 后端返回 [{role, content}]，两两配对成 ChatTurn（human + ai）
+      const turns: ChatTurn[] = []
+      for (let i = 0; i < res.messages.length; i++) {
+        const msg = res.messages[i]
+        if (msg.role === 'human') {
+          const aiMsg = res.messages[i + 1]
+          if (aiMsg && aiMsg.role === 'ai') {
+            turns.push({
+              id: `history-${sid}-${i}`,
+              userMessage: msg.content,
+              refs: [],
+              events: [],
+              memoryEvents: [],
+              finalAnswer: aiMsg.content,
+            })
+            i++ // 跳过已配对的 ai 消息
+          } else {
+            // 只有人类消息没有回复（异常情况）
+            turns.push({
+              id: `history-${sid}-${i}`,
+              userMessage: msg.content,
+              refs: [],
+              events: [],
+              memoryEvents: [],
+              finalAnswer: null,
+            })
+          }
+        }
+      }
+      if (turns.length > 0) {
+        console.log(`[useChat:loadHistory] 从后端加载会话 ${sid}: ${turns.length} 条 turn`)
+        ch.turns.push(...turns)
+        turnsCache.set(sid, turns)
+        saveTurnsToStorage(sid, turns)
+      }
+    } catch (e) {
+      console.warn(`[useChat:loadHistory] 加载会话 ${sid} 历史失败:`, e)
+    }
+  }
+
   // Session 切换：只确保新 Session 的 WS 连接，不断开旧的
   watch(
     sessionId,
-    (newId, oldId) => {
+    async (newId, oldId) => {
       console.log(`[useChat:watch] sessionId 变化: "${oldId}" → "${newId}"`)
       if (oldId) {
         console.log(`[useChat:watch] 在切换前持久化旧会话 "${oldId}"`)
@@ -695,9 +747,14 @@ export function useChat(sessionId: Ref<string>) {
         }
       } else {
         console.log(`[useChat:watch] 未找到会话 ${newId} 的缓存, sessionId="${sessionId.value}"`)
-        // 调试：列出 turnsCache 中所有可用的 key
         const available = Array.from(turnsCache.keys())
         console.log(`[useChat:watch] turnsCache 可用键:`, available.length ? available : '(空)')
+        // 回退：从后端加载历史消息（const 会话从 YAML，普通会话从 checkpointer）
+        // 修复：此前前端从未调用 /sessions/{id}/messages，导致 localStorage 无缓存时
+        // 旧会话点击后无历史显示
+        if (ch.turns.length === 0) {
+          await loadHistoryFromBackend(newId, ch)
+        }
       }
     },
     { immediate: true }

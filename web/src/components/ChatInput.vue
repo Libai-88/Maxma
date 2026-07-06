@@ -191,6 +191,7 @@ import Icon from '@/components/Icon.vue'
 import StickerPicker from '@/components/StickerPicker.vue'
 import StickerContextMenu from '@/components/StickerContextMenu.vue'
 import type { ProviderConfig, SkillInfo, ToolInfo } from '@/types'
+import { useProviderStore } from '@/stores/provider'
 import { useStickerSegments, type StickerSegment } from '@/composables/useStickerSegments'
 import type { ParsedRef, ImageRef } from '@/utils/references'
 import { REF_CHIP_CONFIG } from '@/utils/references'
@@ -649,7 +650,9 @@ function calcCursorPixelPos(textarea: HTMLTextAreaElement, pos: number): { x: nu
 }
 
 // ── LLM 选择器 ──
-const providers = ref<ProviderConfig[]>([])
+// provider 列表来自全局 store（含重试），消除此前各组件独立请求导致的状态不一致
+const providerStore = useProviderStore()
+const providers = computed(() => providerStore.enabledProviders)
 const selectedProviderId = ref('')
 const selectedModelName = ref('')
 const currentModels = ref<string[]>([])
@@ -681,30 +684,42 @@ function onDocumentClick() {
 onMounted(() => document.addEventListener('click', onDocumentClick))
 onUnmounted(() => document.removeEventListener('click', onDocumentClick))
 
+// 从 store 加载 provider 列表并设置默认选中
 async function loadProviders() {
-  try {
-    const res = await api.listProviders()
-    providers.value = res.providers.filter(p => p.enabled)
-    // 优先使用父组件传入的初始值（跨对话持久化）
-    if (props.initialProviderId) {
-      const provider = providers.value.find(p => p.id === props.initialProviderId)
-      if (provider) {
-        selectedProviderId.value = provider.id
-        currentModels.value = provider.models ?? []
-        selectedModelName.value = props.initialModelName && currentModels.value.includes(props.initialModelName)
-          ? props.initialModelName
-          : (currentModels.value[0] || '')
-        return
-      }
+  await providerStore.loadProviders()
+  // 优先使用父组件传入的初始值（跨对话持久化）
+  if (props.initialProviderId) {
+    const provider = providers.value.find(p => p.id === props.initialProviderId)
+    if (provider) {
+      selectedProviderId.value = provider.id
+      currentModels.value = provider.models ?? []
+      selectedModelName.value = props.initialModelName && currentModels.value.includes(props.initialModelName)
+        ? props.initialModelName
+        : (currentModels.value[0] || '')
+      return
     }
-    // 默认选中第一个已启用的提供商
-    if (providers.value.length > 0 && !selectedProviderId.value) {
-      selectProvider(providers.value[0].id)
-    }
-  } catch {
-    // 静默失败
+  }
+  // 默认选中第一个已启用的提供商
+  if (providers.value.length > 0 && !selectedProviderId.value) {
+    selectProvider(providers.value[0].id)
   }
 }
+
+// 监听 store 中 provider 列表变化（例如 ProvidersView 增删改后刷新 store）
+watch(providers, (newList) => {
+  // 当前选中的 provider 不在新列表中时，重置选中
+  if (selectedProviderId.value && !newList.find(p => p.id === selectedProviderId.value)) {
+    selectedProviderId.value = ''
+    currentModels.value = []
+    selectedModelName.value = ''
+    if (newList.length > 0) {
+      selectProvider(newList[0].id)
+    }
+  } else if (!selectedProviderId.value && newList.length > 0) {
+    // 之前没有 provider，现在有了，自动选中第一个
+    selectProvider(newList[0].id)
+  }
+})
 
 onMounted(loadProviders)
 onMounted(loadSkills)
