@@ -55,6 +55,14 @@
           >
             <MessageBubble role="assistant" :content="turn.finalAnswer" />
           </div>
+          <!-- 占位提示：finalAnswer 为空但轮次已完成（非流式）且有工具事件时，
+               显示一个轻量提示，避免用户感知为"整轮被吞掉" -->
+          <div
+            v-else-if="!turn.finalAnswer && !hasAnswerBlock(turn) && !isStreamingTurn(turn) && turn.events?.length"
+            class="cite-source empty-reply-placeholder"
+          >
+            <MessageBubble role="assistant" content="（这一轮处理未生成文字回复，请查看上方工具执行结果或重新提问。）" />
+          </div>
           <!-- 后台记忆更新日志（小字，轮次底部）—— 默认隐藏，hover 才显示 -->
           <div v-if="turn.memoryEvents?.length" class="memory-tool-log">
             <div
@@ -115,10 +123,8 @@
 
       <!-- 空状态 -->
       <div v-if="turns.length === 0 && !currentTurn" class="empty-state">
+        <div class="empty-state-overlay"></div>
         <div class="empty-state-content">
-          <div class="empty-state-visual">
-            <img src="@/assets/images/brand/logo-companion-opt.jpg" alt="MaxmaHere" class="empty-illustration" />
-          </div>
           <div class="empty-state-text">
             <p class="empty-title">MaxmaHere</p>
             <p class="empty-desc">
@@ -478,45 +484,42 @@ function closeContextMenu() {
 .cite-source {
   /* 包装层，不引入额外布局影响 */
 }
+.empty-reply-placeholder {
+  opacity: 0.7;
+}
 .empty-state {
+  position: relative;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-end;
   height: 100%;
-  padding: 0 48px 0 48px;
+  padding: 0 48px 40px 48px;
   gap: 16px;
+  background-image: url('@/assets/images/brand/empty-bg-day.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  border-radius: 14px;
+  overflow: hidden;
 }
-.empty-state::before {
-  content: '';
-  display: block;
-  width: 40px;
-  height: 2px;
-  background: var(--border);
+.empty-state-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 35%, rgba(255, 255, 255, 0.55) 100%);
+  pointer-events: none;
+  z-index: 0;
 }
 .empty-state-content {
+  position: relative;
+  z-index: 1;
   display: flex;
-  flex-direction: row;
-  align-items: flex-start;
-  gap: 64px;
-}
-.empty-state-visual {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.empty-illustration {
-  width: 180px;
-  height: 180px;
-  object-fit: contain;
-  border-radius: 16px;
-  opacity: 0.95;
+  flex-direction: column;
+  gap: 20px;
 }
 .empty-state-text {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  flex-shrink: 0;
 }
 .empty-title {
   display: flex;
@@ -527,11 +530,13 @@ function closeContextMenu() {
   font-family: var(--font-display);
   letter-spacing: -0.5px;
   color: var(--accent);
+  text-shadow: 0 2px 16px rgba(255, 255, 255, 0.6);
 }
 .empty-desc {
   font-size: 1.3em;
   color: var(--accent-pink);
   font-weight: 500;
+  text-shadow: 0 1px 12px rgba(255, 255, 255, 0.6);
 }
 .typewriter {
   display: inline-block;
@@ -553,11 +558,12 @@ function closeContextMenu() {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  opacity: .55;
+  opacity: .65;
   transition: opacity .2s;
+  text-shadow: 0 1px 8px rgba(255, 255, 255, 0.5);
 }
 .quick-hints:hover {
-  opacity: .85;
+  opacity: .9;
 }
 .quick-hint {
   display: inline-flex;

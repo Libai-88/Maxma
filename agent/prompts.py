@@ -117,8 +117,15 @@ def _current_fingerprint() -> str:
     seen: set[str] = set()
     for skills_dir in (ANTHROPIC_SKILLS_DIR, SKILLS_DATA_DIR):
         if skills_dir.is_dir():
-            for p in sorted(skills_dir.rglob("SKILL.md")):
-                canon = str(p.resolve())
+            try:
+                iter_paths = sorted(skills_dir.rglob("SKILL.md"))
+            except (OSError, RecursionError):
+                iter_paths = []
+            for p in iter_paths:
+                try:
+                    canon = str(p.resolve())
+                except OSError:
+                    continue
                 if canon in seen:
                     continue
                 seen.add(canon)
@@ -126,8 +133,15 @@ def _current_fingerprint() -> str:
 
     for macros_dir in (MACROS_DIR, MACROS_DATA_DIR):
         if macros_dir.is_dir():
-            for p in sorted(macros_dir.rglob("MACRO.md")):
-                canon = str(p.resolve())
+            try:
+                iter_paths = sorted(macros_dir.rglob("MACRO.md"))
+            except (OSError, RecursionError):
+                iter_paths = []
+            for p in iter_paths:
+                try:
+                    canon = str(p.resolve())
+                except OSError:
+                    continue
                 if canon in seen:
                     continue
                 seen.add(canon)
@@ -297,18 +311,32 @@ def _parse_user_name(user_md_content: str) -> str:
 
 
 def _parse_frontmatter(text: str) -> dict[str, str]:
-    """简易解析 YAML frontmatter，提取元数据字段。"""
+    """简易解析 YAML frontmatter，提取元数据字段（支持多行 | 和 >）。"""
     m = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
     if not m:
         return {}
     meta: dict[str, str] = {}
-    for line in m.group(1).splitlines():
+    lines = m.group(1).splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
         if ":" in line:
             key, _, val = line.partition(":")
             key = key.strip()
-            val = val.strip().strip('"').strip("'")
+            val = val.strip()
             if key in ("name", "description", "tools", "memory"):
-                meta[key] = val
+                if val in ("|", ">"):
+                    # 多行值：合并后续缩进行
+                    parts: list[str] = []
+                    i += 1
+                    while i < len(lines) and (lines[i].startswith("  ") or lines[i].startswith("\t")):
+                        parts.append(lines[i].strip())
+                        i += 1
+                    meta[key] = " ".join(parts)
+                    continue
+                else:
+                    meta[key] = val.strip('"').strip("'")
+        i += 1
     return meta
 
 
@@ -358,19 +386,34 @@ def _scan_anthropic_skills() -> str:
 
     开发模式下 ANTHROPIC_SKILLS_DIR 与 SKILLS_DATA_DIR 可能指向同一目录，
     按 canonical path 去重避免清单里出现重复条目。
+    单个 SKILL.md 损坏不会影响其他 skill 的展示。
     """
     entries: list[str] = []
     seen_paths: set[str] = set()
     for base_dir in (ANTHROPIC_SKILLS_DIR, SKILLS_DATA_DIR):
         if not base_dir.is_dir():
             continue
-        for sk_path in sorted(base_dir.rglob("SKILL.md")):
-            canonical = str(sk_path.resolve())
+        try:
+            iter_paths = sorted(base_dir.rglob("SKILL.md"))
+        except (OSError, RecursionError) as e:
+            logger.warning("[prompts] 扫描 skills 目录失败 %s: %s", base_dir, e)
+            continue
+        for sk_path in iter_paths:
+            try:
+                canonical = str(sk_path.resolve())
+            except OSError:
+                continue
             if canonical in seen_paths:
                 continue
             seen_paths.add(canonical)
+            try:
+                content = sk_path.read_text(encoding="utf-8")
+                meta = _parse_frontmatter(content)
+            except (OSError, UnicodeDecodeError) as e:
+                # 错误隔离：跳过损坏文件，不阻断整个系统提示词构建
+                logger.warning("[prompts] 跳过损坏的 SKILL.md %s: %s", sk_path, e)
+                continue
             rel = sk_path.relative_to(base_dir).parent
-            meta = _parse_frontmatter(sk_path.read_text(encoding="utf-8"))
             name = meta.get("name", rel.name)
             desc = meta.get("description", "")
             path_str = str(sk_path).replace("\\", "/")
@@ -396,19 +439,33 @@ def _scan_macros() -> str:
     同时扫描内置目录（BUNDLE_DIR/macros，只读）和用户数据目录
     （DATA_DIR/macros，可写）。用户通过 manage_macros 工具或 REST API
     创建的宏保存在用户数据目录，必须扫描此目录才能让 LLM 感知。
+    单个 MACRO.md 损坏不会影响其他 macro 的展示。
     """
     entries: list[str] = []
     seen_paths: set[str] = set()
     for base_dir in (MACROS_DIR, MACROS_DATA_DIR):
         if not base_dir.is_dir():
             continue
-        for mp_path in sorted(base_dir.rglob("MACRO.md")):
-            canonical = str(mp_path.resolve())
+        try:
+            iter_paths = sorted(base_dir.rglob("MACRO.md"))
+        except (OSError, RecursionError) as e:
+            logger.warning("[prompts] 扫描 macros 目录失败 %s: %s", base_dir, e)
+            continue
+        for mp_path in iter_paths:
+            try:
+                canonical = str(mp_path.resolve())
+            except OSError:
+                continue
             if canonical in seen_paths:
                 continue
             seen_paths.add(canonical)
+            try:
+                content = mp_path.read_text(encoding="utf-8")
+                meta = _parse_frontmatter(content)
+            except (OSError, UnicodeDecodeError) as e:
+                logger.warning("[prompts] 跳过损坏的 MACRO.md %s: %s", mp_path, e)
+                continue
             rel = mp_path.relative_to(base_dir).parent
-            meta = _parse_frontmatter(mp_path.read_text(encoding="utf-8"))
             name = meta.get("name", rel.name)
             desc = meta.get("description", "")
             path_str = str(mp_path).replace("\\", "/")

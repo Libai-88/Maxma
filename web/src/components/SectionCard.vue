@@ -23,12 +23,13 @@
     </div>
 
     <!-- 条目内容 -->
-    <p class="item-text" @dblclick="emitEdit">{{ currentItem.description }}</p>
+    <p v-if="currentItem" class="item-text" @dblclick="emitEdit">{{ currentItem.description }}</p>
+    <p v-else class="item-text item-empty">（无条目）</p>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { VignetteMemoryItem } from '@/types'
 
 const props = defineProps<{
@@ -42,7 +43,21 @@ const emit = defineEmits<{
 
 const currentIndex = ref(0)
 
-const currentItem = computed<VignetteMemoryItem>(() => props.items[currentIndex.value])
+// 监听 items 变化：当 items 数组变化（如删除/刷新后）时重置 currentIndex 防止越界
+watch(
+  () => props.items,
+  (newItems) => {
+    if (currentIndex.value >= newItems.length) {
+      currentIndex.value = Math.max(0, newItems.length - 1)
+    }
+  },
+)
+
+const currentItem = computed<VignetteMemoryItem | undefined>(() => {
+  const idx = currentIndex.value
+  if (idx < 0 || idx >= props.items.length) return undefined
+  return props.items[idx]
+})
 
 function prev() {
   if (currentIndex.value > 0) currentIndex.value--
@@ -126,5 +141,9 @@ function emitEdit() {
   color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-word;
+}
+.item-empty {
+  color: var(--text-secondary);
+  font-style: italic;
 }
 </style>

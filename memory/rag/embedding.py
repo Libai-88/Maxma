@@ -58,6 +58,21 @@ class EmbeddingEngine:
         """首次调用时加载模型。"""
         if self._session is not None:
             return
+        # 防止下载失败后每次 embed() 都反复尝试 HuggingFace 下载（SSL 证书失败时
+        # 会持续触发，污染日志且每次请求都阻塞数秒）。
+        # _model_load_failed 标志由 _load_or_download_model 设置，仅在加载成功后清除。
+        if getattr(self, "_model_load_failed", False):
+            raise RuntimeError("embedding model 加载已失败，跳过重试")
+
+        try:
+            self._load_or_download_model()
+        except Exception:
+            # 标记加载失败，下次直接抛 RuntimeError 而非再次尝试下载
+            self._model_load_failed = True
+            raise
+
+    def _load_or_download_model(self) -> None:
+        """实际加载模型（与 _ensure_model 分离，便于失败标记）。"""
         import numpy as np
         import onnxruntime as ort
         from transformers import AutoTokenizer
@@ -87,6 +102,8 @@ class EmbeddingEngine:
             str(onnx_file), providers=["CPUExecutionProvider"]
         )
         self._input_names = [inp.name for inp in self._session.get_inputs()]
+        # 加载成功，清除失败标志（仅对首次加载成功有意义）
+        self._model_load_failed = False
 
     def _download_model(self) -> Path:
         """从 HuggingFace 下载模型（仅必要文件）。"""

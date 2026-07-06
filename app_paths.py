@@ -94,7 +94,44 @@ PROJECT_ROOT: Path = BUNDLE_DIR if not _is_frozen() else DATA_DIR
 # ── 运行时资源目录（嵌入式运行时 + 大文件） ──
 # 打包模式: Tauri 安装目录下的 resources/ 目录（由 main.rs 通过 MAXMA_RESOURCES_DIR 注入）
 # 开发模式: BUNDLE_DIR/../resources/（便于调试，目录不存在时不影响功能）
-RUNTIME_DIR: Path = Path(os.environ.get("MAXMA_RESOURCES_DIR") or (BUNDLE_DIR.parent / "resources"))
+#
+# 多级 fallback：
+# 1. MAXMA_RESOURCES_DIR 环境变量（Tauri 注入，正常情况）
+# 2. BUNDLE_DIR.parent / "resources"（开发模式）
+# 3. sys.executable 父目录 / "resources"（Tauri 安装目录 fallback：
+#    PyInstaller onefile 下 sys.executable 是 maxma-server.exe，
+#    它和 resources/ 同处 Tauri 安装目录）
+# 4. 上述候选中第一个真实存在的目录；都不存在则用 MAXMA_RESOURCES_DIR（保持原行为）
+
+
+def _resolve_runtime_dir() -> Path:
+    """解析运行时资源目录，多级 fallback 保证能在 Tauri 安装目录下找到 resources/。
+
+    修复历史：Tauri 的 app.path().resource_dir() 在某些环境下返回 "."（unwrap 失败），
+    导致 MAXMA_RESOURCES_DIR="." → ONNX_MODEL_PATH.exists()=False → 反复尝试 HuggingFace
+    下载并 SSL 失败。该 fallback 通过 sys.executable 推导出 Tauri 安装目录。
+    """
+    candidates: list[Path] = []
+    env_val = os.environ.get("MAXMA_RESOURCES_DIR")
+    if env_val:
+        candidates.append(Path(env_val))
+    candidates.append(BUNDLE_DIR.parent / "resources")
+    if _is_frozen():
+        # PyInstaller onefile: sys.executable = maxma-server.exe 的真实路径，
+        # resources/ 与之同目录（Tauri 安装目录结构）
+        candidates.append(Path(sys.executable).resolve().parent / "resources")
+
+    for c in candidates:
+        try:
+            if c.exists() and (c / "assets").exists():
+                return c
+        except (OSError, ValueError):
+            continue
+    # 都不匹配时返回第一个候选（保持旧行为，让下游 .exists() 检查会自然返回 False）
+    return candidates[0] if candidates else (BUNDLE_DIR.parent / "resources")
+
+
+RUNTIME_DIR: Path = _resolve_runtime_dir()
 
 # 嵌入式运行时二进制路径
 NODE_EXE = RUNTIME_DIR / "runtime" / "node" / "node.exe"

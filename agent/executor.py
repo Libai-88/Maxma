@@ -793,8 +793,18 @@ def make_executor_router(max_replans: int = 2):
         current_index = state.get("current_step_index", 0)
         plan = ExecutionPlan.from_dict_list(plan_steps)
 
-        # 全部完成 → END
+        # 全部完成 → END（但如果最后一步是被跳过/失败的，先路由回 agent
+        # 让 LLM 有机会向用户解释错误，避免整轮对话被"吞掉"）
         if current_index >= plan.step_count:
+            messages = state.get("messages", [])
+            if messages:
+                last = messages[-1]
+                if isinstance(last, SystemMessage):
+                    content = last.content if isinstance(last.content, str) else str(last.content)
+                    if "[步骤跳过]" in content or "[步骤失败]" in content:
+                        # 路由回 agent：LLM 看到错误后会生成文字回复，
+                        # 下一轮 executor_router 时 last 已是 AIMessage → 正常 END
+                        return "agent"
             return "END"
 
         # 检查是否需要重规划

@@ -31,7 +31,9 @@ class AskUserQATool(ToolBase):
         if not question:
             return format_error("question 不能为空")
 
-        ws = interaction.current_ws.get()
+        ws = interaction.current_ws.get(None)
+        if ws is None:
+            return format_error("当前无 WebSocket 连接，无法向用户提问")
 
         interaction_id, future = await interaction.register()
 
@@ -48,8 +50,12 @@ class AskUserQATool(ToolBase):
                     },
                 }
             )
-            answer = await future
+            # 修复：此前无超时 → 用户不回复则 Agent 任务永久挂起，session._active_task
+            # 无法完成，直到 TTL 清理（30 分钟）才被取消。QA 给 10 分钟超时。
+            answer = await asyncio.wait_for(future, timeout=600)
             return format_success({"question": question, "answer": answer})
+        except asyncio.TimeoutError:
+            return format_error("用户回复超时（600 秒），问题已取消")
         except asyncio.CancelledError:
             return format_error("用户取消了回复")
         finally:

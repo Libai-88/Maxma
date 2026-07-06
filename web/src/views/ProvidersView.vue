@@ -150,8 +150,10 @@ const presets = [
 
 // ── 模式 ──
 const mode = ref<'list' | 'add' | 'edit'>('list')
-const providers = ref<ProviderConfig[]>([])
-const loading = ref(false)
+// providers 直接来自 store computed，消除本地 ref 与 store 状态不一致
+const providerStore = useProviderStore()
+const providers = computed(() => providerStore.allProviders)
+const loading = computed(() => providerStore.loading)
 
 // ── 表单 ──
 const form = ref({ id: '', provider_type: 'deepseek', label: '', api_key: '', base_url: '', context_window: 256000 })
@@ -209,18 +211,26 @@ async function handleDiscover() {
   discovering.value = true
   formError.value = ''
   try {
+    let models: string[] = []
     if (isEditing.value && !form.value.api_key) {
       const res = await api.discoverModelsForExisting(editingId.value)
-      discoveredModels.value = res.models
-      selectedModels.value = [...res.models]
+      models = res.models
     } else {
       const res = await api.discoverModels({
         api_key: form.value.api_key,
         base_url: form.value.base_url,
       })
-      discoveredModels.value = res.models
-      selectedModels.value = [...res.models]
+      models = res.models
     }
+    // 合并策略：保留用户之前手动取消选择的模型状态
+    // 新发现的模型默认选中，已有列表中用户取消选择的模型保持取消状态
+    const previousSelection = new Set(selectedModels.value)
+    const previousDiscovered = new Set(discoveredModels.value)
+    discoveredModels.value = models
+    // 之前已发现且用户取消选择的模型，保持取消状态
+    // 之前未发现的新模型，默认选中
+    // 之前已发现且用户选中的模型，保持选中
+    selectedModels.value = models.filter(m => previousDiscovered.has(m) ? previousSelection.has(m) : true)
   } catch (e: any) {
     formError.value = e.message
   } finally {
@@ -242,19 +252,10 @@ function selectAllModels() {
 const saving = ref(false)
 const testResult = ref<Record<string, TestConnectionResponse>>({})
 
-const providerStore = useProviderStore()
-
+// 加载 provider 列表（首次挂载时调用）
+// 后续 CRUD 操作通过 refreshStore 强制刷新 store，无需再调用 loadProviders
 async function loadProviders() {
-  loading.value = true
-  try {
-    // 从全局 store 加载（含重试），同时更新 store 和本地 providers 列表
-    await providerStore.loadProviders()
-    providers.value = providerStore.allProviders
-  } catch (e: any) {
-    console.error('Failed to load providers', e)
-  } finally {
-    loading.value = false
-  }
+  await providerStore.loadProviders()
 }
 
 function startAdd() {
@@ -284,8 +285,8 @@ function startEdit(p: ProviderConfig) {
 }
 
 function cancelForm() {
+  // 取消表单不做任何修改，无需重新加载 provider 列表
   mode.value = 'list'
-  loadProviders()
 }
 
 async function handleSave() {
@@ -311,7 +312,8 @@ async function handleSave() {
       await api.createProvider(body)
     }
     mode.value = 'list'
-    await loadProviders()
+    // 用 refresh() 强制刷新 store，让 ChatInput 等消费方立即感知变化
+    await providerStore.refresh()
   } catch (e: any) {
     formError.value = e.message
   } finally {
@@ -323,7 +325,8 @@ async function deleteProvider(id: string) {
   if (!confirm(`确定删除提供商「${id}」？`)) return
   try {
     await api.deleteProvider(id)
-    await loadProviders()
+    // 用 refresh() 强制刷新 store，让 ChatInput 等消费方感知删除
+    await providerStore.refresh()
   } catch (e: any) {
     alert('删除失败: ' + e.message)
   }
@@ -341,7 +344,7 @@ async function testProvider(id: string) {
 async function discoverProvider(id: string) {
   try {
     await api.discoverModelsForExisting(id)
-    await loadProviders()
+    await providerStore.refresh()
   } catch (e: any) {
     alert('拉取失败: ' + e.message)
   }
@@ -350,9 +353,8 @@ async function discoverProvider(id: string) {
 async function toggleProvider(id: string, enabled: boolean) {
   try {
     await api.updateProvider(id, { enabled })
-    const p = providers.value.find(p => p.id === id)
-    if (p) p.enabled = enabled
     // 同步刷新全局 store，让 ChatInput 等消费方感知到 enabled 变化
+    // providers 是 computed，会自动更新，无需手动修改
     await providerStore.refresh()
   } catch (e: any) {
     alert('切换失败: ' + e.message)

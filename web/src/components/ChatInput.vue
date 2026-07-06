@@ -190,7 +190,7 @@ import AutocompletePanel from '@/components/AutocompletePanel.vue'
 import Icon from '@/components/Icon.vue'
 import StickerPicker from '@/components/StickerPicker.vue'
 import StickerContextMenu from '@/components/StickerContextMenu.vue'
-import type { ProviderConfig, SkillInfo, ToolInfo } from '@/types'
+import type { ProviderConfig, SkillInfo, MacroInfo, ToolInfo } from '@/types'
 import { useProviderStore } from '@/stores/provider'
 import { useStickerSegments, type StickerSegment } from '@/composables/useStickerSegments'
 import type { ParsedRef, ImageRef } from '@/utils/references'
@@ -457,7 +457,7 @@ const acTriggerChar = ref('')
 
 const skills = ref<SkillInfo[]>([])
 const tools = ref<ToolInfo[]>([])
-const macros = ref<SkillInfo[]>([])
+const macros = ref<MacroInfo[]>([])
 
 /** 当前模式对应的数据源 */
 const acSource = computed(() =>
@@ -696,6 +696,8 @@ async function loadProviders() {
       selectedModelName.value = props.initialModelName && currentModels.value.includes(props.initialModelName)
         ? props.initialModelName
         : (currentModels.value[0] || '')
+      // 同步回父组件，确保父组件持有的状态与实际选中一致
+      emit('modelChange', selectedProviderId.value, selectedModelName.value)
       return
     }
   }
@@ -707,13 +709,33 @@ async function loadProviders() {
 
 // 监听 store 中 provider 列表变化（例如 ProvidersView 增删改后刷新 store）
 watch(providers, (newList) => {
-  // 当前选中的 provider 不在新列表中时，重置选中
-  if (selectedProviderId.value && !newList.find(p => p.id === selectedProviderId.value)) {
-    selectedProviderId.value = ''
-    currentModels.value = []
-    selectedModelName.value = ''
-    if (newList.length > 0) {
-      selectProvider(newList[0].id)
+  // 如果有初始值且初始值有效，让 loadProviders 处理初始选择，避免竞态覆盖
+  if (props.initialProviderId && newList.find(p => p.id === props.initialProviderId) && !selectedProviderId.value) {
+    return
+  }
+  if (selectedProviderId.value) {
+    // 当前选中的 provider 还在列表中
+    const p = newList.find(p => p.id === selectedProviderId.value)
+    if (p) {
+      // 更新 currentModels（provider 的 models 可能被修改过）
+      const newModels = p.models ?? []
+      const modelsChanged = JSON.stringify(currentModels.value) !== JSON.stringify(newModels)
+      if (modelsChanged) {
+        currentModels.value = newModels
+        // selectedModelName 不在新 models 中时重置为第一个
+        if (!newModels.includes(selectedModelName.value)) {
+          selectedModelName.value = newModels[0] || ''
+          emit('modelChange', selectedProviderId.value, selectedModelName.value)
+        }
+      }
+    } else {
+      // 当前选中的 provider 不在新列表中（被删除或禁用），重置选中
+      selectedProviderId.value = ''
+      currentModels.value = []
+      selectedModelName.value = ''
+      if (newList.length > 0) {
+        selectProvider(newList[0].id)
+      }
     }
   } else if (!selectedProviderId.value && newList.length > 0) {
     // 之前没有 provider，现在有了，自动选中第一个

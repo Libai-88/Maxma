@@ -98,14 +98,64 @@ async def undo_session_messages(session_id: str, request: Request, n: int = 1):
     session = await sm.get(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    if session._graph is None:
-        raise HTTPException(
-            status_code=400, detail="No agent graph available for this session"
-        )
 
     config = {"configurable": {"thread_id": session_id}}
-    deleted = await undo_rounds(session._graph, config, n=n)
+    # 修复：const 会话从 YAML 重建时 _graph=None（_run_agent_turn 才会设置 _graph），
+    # 导致用户在尚未发消息的 const 会话上点"撤回"会 400 报错。
+    # 此处按需构建临时 graph（仅用于 aget_state/aupdate_state 操作 checkpointer）。
+    graph = session._graph
+    if graph is None:
+        llm = getattr(request.app.state, "llm", None)
+        if llm is None:
+            raise HTTPException(
+                status_code=503, detail="LLM 未就绪，无法执行撤回操作"
+            )
+        from agent.graph import build_agent
+
+        tools = getattr(request.app.state, "tools", []) or []
+        system_prompt = getattr(request.app.state, "system_prompt", "") or ""
+        graph = build_agent(
+            model=llm,
+            tools=tools,
+            system_prompt=system_prompt,
+            checkpointer=session.checkpointer,
+        )
+        session._graph = graph  # 缓存供后续 undo 复用
+    deleted = await undo_rounds(graph, config, n=n)
     session.message_count = max(0, session.message_count - deleted)
+
+    # 修复：const 会话撤回后需同步更新 YAML，否则下次启动恢复的是撤回前的消息
+    if session.is_const and deleted > 0:
+        from api.const_session_store import save_const_session, serialize_messages
+
+        try:
+            cpt = await session.checkpointer.aget_tuple(
+                {"configurable": {"thread_id": session.session_id}}
+            )
+            raw_messages = (
+                cpt.checkpoint.get("channel_values", {}).get("messages", []) if cpt else []
+            )
+            metadata = {
+                "created_at": session.created_at,
+                "last_active": session.last_active,
+                "message_count": session.message_count,
+            }
+            save_const_session(
+                session_id,
+                session.const_name,
+                metadata,
+                serialize_messages(raw_messages),
+            )
+            logger.info(
+                "[undo] const 会话 %s 已同步更新 YAML (deleted=%d, msg_count=%d)",
+                session_id, deleted, session.message_count,
+            )
+        except Exception:
+            logger.warning(
+                "[undo] const 会话 %s 撤回后同步 YAML 失败",
+                session_id, exc_info=True,
+            )
+
     return {"deleted_count": deleted}
 
 

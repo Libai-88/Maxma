@@ -65,7 +65,11 @@
       <HealthPanel :health="health!" v-if="health" />
     </aside>
     <main class="main">
-      <router-view />
+      <router-view v-slot="{ Component }">
+        <keep-alive include="ChatView">
+          <component :is="Component" />
+        </keep-alive>
+      </router-view>
     </main>
   </div>
 </template>
@@ -332,11 +336,21 @@ html, body {
   font-weight: 350;
 }
 
-/* 夜间模式：品牌 logo 融入暖色背景 */
-.app-layout.night-mode .empty-illustration {
-  filter: brightness(0.93) contrast(0.9);
-  mix-blend-mode: multiply;
-  opacity: 0.9;
+/* 夜间模式：空状态使用更柔和的深色背景图 */
+.app-layout.night-mode .empty-state {
+  background-image: url('@/assets/images/brand/empty-bg-night.jpg');
+}
+.app-layout.night-mode .empty-state-overlay {
+  background: linear-gradient(to bottom, transparent 40%, rgba(244, 234, 220, 0.5) 100%);
+}
+.app-layout.night-mode .empty-title {
+  text-shadow: 0 2px 16px rgba(244, 234, 220, 0.55);
+}
+.app-layout.night-mode .empty-desc {
+  text-shadow: 0 1px 12px rgba(244, 234, 220, 0.55);
+}
+.app-layout.night-mode .quick-hints {
+  text-shadow: 0 1px 8px rgba(244, 234, 220, 0.5);
 }
 
 .app-layout.night-mode .sidebar::after {

@@ -236,6 +236,11 @@ class MemoryManager:
         merged_theme: str,
         reason: str,
     ):
+        # 长度校验：合并后的内容不得超过 MAX_DESC_LENGTH
+        if len(merged_description) > MAX_DESC_LENGTH:
+            raise ValueError(
+                f"合并后的记忆内容超过 {MAX_DESC_LENGTH} 字限制（当前 {len(merged_description)} 字）"
+            )
         with portalocker.Lock(self._lock_path, timeout=5):
             items = self._read_all()
             if id1 not in items or id2 not in items:

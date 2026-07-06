@@ -12,11 +12,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from memory.kb.document_loader import SUPPORTED_EXTENSIONS
 from memory.kb.indexer import KBIndexer
@@ -24,6 +26,9 @@ from memory.kb.retriever import KBRetriever
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# 文件大小限制：50MB（防止内存耗尽）
+MAX_FILE_SIZE = 50 * 1024 * 1024
 
 
 def _get_indexer(request: Request) -> KBIndexer:
@@ -42,6 +47,35 @@ def _get_retriever(request: Request) -> KBRetriever:
         retriever = KBRetriever()
         request.app.state.kb_retriever = retriever
     return retriever
+
+
+def _parse_tavily_result(result_str: str) -> str:
+    """解析 Tavily Extract 返回的 JSON，提取 Markdown 文本。
+
+    kb.py 和 tool_kb_add.py 共用此函数。
+    """
+    import json
+
+    try:
+        result_data = json.loads(result_str)
+        if isinstance(result_data, dict):
+            return (
+                result_data.get("formatted", "")
+                or result_data.get("content", "")
+                or result_data.get("markdown", "")
+            )
+        elif isinstance(result_data, list) and result_data:
+            first = result_data[0]
+            if isinstance(first, dict):
+                return (
+                    first.get("formatted", "")
+                    or first.get("content", "")
+                    or first.get("markdown", "")
+                )
+            return str(first)
+    except (json.JSONDecodeError, IndexError, AttributeError):
+        pass
+    return result_str
 
 
 # ── 文档管理 ──
@@ -66,10 +100,10 @@ async def get_document(doc_id: str, request: Request):
 
 @router.delete("/kb/documents/{doc_id}")
 async def delete_document(doc_id: str, request: Request):
-    """删除文档及其所有切块。"""
+    """删除文档及其所有切块（幂等：删除不存在的文档返回 200）。"""
     indexer = _get_indexer(request)
-    if not indexer.delete_document(doc_id):
-        raise HTTPException(status_code=404, detail=f"文档 {doc_id} 不存在")
+    # 幂等删除：即使文档不存在也返回成功
+    indexer.delete_document(doc_id)
     return {"status": "deleted", "doc_id": doc_id}
 
 
@@ -82,6 +116,7 @@ async def upload_document(
     """上传文档文件进行索引。
 
     支持的文件类型：txt, md, markdown, pdf, docx, csv, json
+    文件大小限制：50MB
     """
     # 检查文件扩展名
     filename = file.filename or "unknown"
@@ -92,16 +127,23 @@ async def upload_document(
             detail=f"不支持的文件类型: {ext}（支持: {', '.join(sorted(SUPPORTED_EXTENSIONS))}）",
         )
 
-    # 读取文件内容
+    # 读取文件内容（带大小限制）
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="文件内容为空")
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"文件过大（{len(content)} bytes），最大支持 {MAX_FILE_SIZE // (1024 * 1024)}MB",
+        )
 
-    # 保存到 KB_DIR
+    # 保存到 KB_DIR（使用 UUID 避免文件名冲突）
     from app_paths import KB_DIR
 
     safe_filename = filename.replace("/", "_").replace("\\", "_")
-    save_path = KB_DIR / safe_filename
+    # 用 UUID 前缀避免同名文件互相覆盖
+    unique_filename = f"{uuid.uuid4().hex[:8]}_{safe_filename}"
+    save_path = KB_DIR / unique_filename
     save_path.parent.mkdir(parents=True, exist_ok=True)
     save_path.write_bytes(content)
 
@@ -149,6 +191,7 @@ async def import_url(body: ImportUrlBody, request: Request):
     """从 URL 导入内容（使用 Tavily Extract 提取 Markdown 后索引）。
 
     若 Tavily 不可用，返回 503。
+    Tavily 调用通过 asyncio.to_thread 异步化，避免阻塞事件循环。
     """
     if not body.url.strip():
         raise HTTPException(status_code=400, detail="url 不能为空")
@@ -161,34 +204,12 @@ async def import_url(body: ImportUrlBody, request: Request):
 
     extract_tool = TavilyExtractTool()
     try:
-        result_str = extract_tool._run(urls=body.url)
+        # 异步化同步调用，避免阻塞事件循环
+        result_str = await asyncio.to_thread(extract_tool._run, urls=body.url)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"URL 内容提取失败: {e}")
 
-    # 解析提取结果（tool_extract 返回 JSON 格式的结果）
-    import json
-
-    try:
-        result_data = json.loads(result_str)
-        # 提取 Markdown 内容
-        if isinstance(result_data, dict):
-            markdown = (
-                result_data.get("formatted", "")
-                or result_data.get("content", "")
-                or result_data.get("markdown", "")
-            )
-        elif isinstance(result_data, list) and result_data:
-            markdown = (
-                result_data[0].get("formatted", "")
-                or result_data[0].get("content", "")
-                or result_data[0].get("markdown", "")
-                if isinstance(result_data[0], dict)
-                else str(result_data[0])
-            )
-        else:
-            markdown = str(result_data)
-    except (json.JSONDecodeError, IndexError, AttributeError):
-        markdown = result_str
+    markdown = _parse_tavily_result(result_str)
 
     if not markdown.strip():
         raise HTTPException(status_code=502, detail="URL 内容提取为空")
@@ -202,8 +223,8 @@ async def import_url(body: ImportUrlBody, request: Request):
 
 class SearchBody(BaseModel):
     query: str
-    top_k: int = 5
-    threshold: float = 0.3
+    top_k: int = Field(default=5, ge=1, le=50)
+    threshold: float = Field(default=0.3, ge=0.0, le=1.0)
 
 
 @router.post("/kb/search")

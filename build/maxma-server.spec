@@ -349,9 +349,11 @@ excludes = [
     "scikit_learn",
     "sympy",
     "networkx",
-    # chromadb 的云端/可观测性依赖，桌面端不需要
+    # chromadb 的云端依赖，桌面端不需要
     "kubernetes",
-    "opentelemetry",
+    # 注意：opentelemetry 不能排除 — chromadb 1.5.x 在运行时 import chromadb
+    # 会触发 opentelemetry.instrumentation 的导入，排除后导致 ImportError，
+    # 使 vector_store.get_vector_store() 返回 None，知识库功能完全不可用。
 ]
 
 a = Analysis(

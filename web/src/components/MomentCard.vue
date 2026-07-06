@@ -29,6 +29,9 @@
           </div>
         </div>
       </template>
+      <div v-else-if="errorMessage" class="moment-error">
+        {{ errorMessage }}
+      </div>
       <div v-else class="moment-empty">
         暂无记忆条目
       </div>
@@ -37,31 +40,43 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { api } from '@/api'
 import type { MomentItem } from '@/types'
 
 const moment = ref<MomentItem | null>(null)
 const loading = ref(false)
+const errorMessage = ref('')
+
+// 竞态保护：fetchMoment 序列号，丢弃过期响应
+let fetchSeq = 0
+let isMounted = true
 
 async function fetchMoment() {
-  console.log('[MomentCard] fetchMoment called')
+  const mySeq = ++fetchSeq
   loading.value = true
+  errorMessage.value = ''
   try {
     const res = await api.getMoment()
-    console.log('[MomentCard] API response:', res)
+    if (mySeq !== fetchSeq || !isMounted) return  // 丢弃过期响应
     moment.value = res.moment
-  } catch (e) {
+  } catch (e: any) {
+    if (mySeq !== fetchSeq || !isMounted) return
     console.error('[MomentCard] API error:', e)
-    moment.value = null
+    const detail = e?.message || String(e)
+    errorMessage.value = `加载失败：${detail}`
+    // 失败时保留旧数据，不清空 moment.value
   } finally {
-    loading.value = false
+    if (mySeq === fetchSeq && isMounted) loading.value = false
   }
 }
 
 onMounted(() => {
-  console.log('[MomentCard] mounted')
   fetchMoment()
+})
+
+onUnmounted(() => {
+  isMounted = false
 })
 </script>
 
@@ -207,6 +222,13 @@ onMounted(() => {
 .moment-empty {
   text-align: center;
   color: var(--text-secondary);
+  font-size: 13px;
+  padding: 24px 0;
+}
+
+.moment-error {
+  text-align: center;
+  color: #dc3545;
   font-size: 13px;
   padding: 24px 0;
 }

@@ -13,7 +13,15 @@ class KbSearchInput(BaseModel):
     )
     top_k: int = Field(
         default=5,
-        description="返回的最大结果数（默认 5）",
+        ge=1,
+        le=50,
+        description="返回的最大结果数（默认 5，最大 50）",
+    )
+    threshold: float = Field(
+        default=0.3,
+        ge=0.0,
+        le=1.0,
+        description="相似度阈值（默认 0.3，低于此值的结果被过滤）",
     )
 
 
@@ -27,7 +35,13 @@ class KbSearchTool(ToolBase):
     )
     args_schema: type[BaseModel] = KbSearchInput
 
-    def _run(self, get_doc: bool = False, query: str = "", top_k: int = 5) -> str:
+    def _run(
+        self,
+        get_doc: bool = False,
+        query: str = "",
+        top_k: int = 5,
+        threshold: float = 0.3,
+    ) -> str:
         if get_doc:
             return self._load_doc()
 
@@ -37,7 +51,7 @@ class KbSearchTool(ToolBase):
         from memory.kb.retriever import KBRetriever
 
         retriever = KBRetriever()
-        results = retriever.retrieve(query=query, top_k=top_k)
+        results = retriever.retrieve(query=query, top_k=top_k, threshold=threshold)
 
         if not results:
             return format_success({
@@ -48,10 +62,11 @@ class KbSearchTool(ToolBase):
 
         lines = []
         for i, r in enumerate(results, 1):
+            score = r.get('score_percent', 0)
             lines.append(
-                f"{i}. [{r['source_filename']}] (相似度 {r['score_percent']}%)"
+                f"{i}. [{r.get('source_filename', '?')}] (相似度 {score}%)"
             )
-            text = r["text"]
+            text = r.get("text", "")
             if len(text) > 300:
                 text = text[:300] + "…"
             lines.append(f"   {text}")

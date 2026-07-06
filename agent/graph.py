@@ -343,15 +343,24 @@ def build_agent(
         始终在 LLM 调用前注入系统提示词（本地 prepend，不持久化到 state）。
         不依赖 messages[0] 的类型判断，确保压缩摘要 SystemMessage 不会
         抑制系统提示词注入（压缩后 LLM 仍保留所有人设/行为规则）。
-        若 episodic_context 非空，将其追加到系统提示词后供 LLM 参考。
+
+        缓存优化（DeepSeek prompt cache）：
+        SystemMessage 保持完全稳定（仅含 build_system_prompt() 输出），
+        不再追加 episodic_context 等动态内容。episodic_context 改为
+        prepend 到最新的 HumanMessage（本地修改，不持久化到 state），
+        这样 SystemMessage + 消息历史前缀可以命中缓存。
         """
         messages = state["messages"]
         episodic_context = state.get("episodic_context", "") or ""
-        # 系统提示词 + 情景记忆上下文（本地拼接，不持久化）
-        prompt = system_prompt
-        if episodic_context:
-            prompt = f"{system_prompt}\n\n{episodic_context}"
-        messages = [SystemMessage(content=prompt)] + list(messages)
+        # 系统提示词保持完全稳定，不追加动态内容（有利于 DeepSeek prompt cache）
+        # episodic_context 改为 prepend 到最新 HumanMessage（本地修改，不持久化）
+        msgs = list(messages)
+        if episodic_context and msgs and isinstance(msgs[-1], HumanMessage):
+            original_content = msgs[-1].content
+            msgs[-1] = HumanMessage(
+                content=f"[相关情景记忆]\n{episodic_context}\n\n---\n\n{original_content}"
+            )
+        messages = [SystemMessage(content=system_prompt)] + msgs
         try:
             response = await llm_with_tools.ainvoke(messages)
         except Exception as e:

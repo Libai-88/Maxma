@@ -401,7 +401,10 @@ class RunPythonTool(ToolBase):
             except Exception as e:
                 return format_error(f"沙箱执行错误: {e}")
 
-        ws = interaction.current_ws.get()
+        ws = interaction.current_ws.get(None)
+        if ws is None:
+            return format_error("当前无 WebSocket 连接，无法请求用户确认代码执行")
+
         interaction_id, future = await interaction.register()
 
         await ws.send_json(

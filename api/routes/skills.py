@@ -20,6 +20,20 @@ router = APIRouter()
 _SAFE_ID = re.compile(r"^[a-zA-Z0-9_\-][a-zA-Z0-9_\- .]{0,63}$")
 
 
+def _invalidate_prompt_cache() -> None:
+    """失效 system prompt 缓存，使新增/修改/删除的 Skill/Macro 立即生效。
+
+    与 tool_manage_skills.py 保持一致：try/except 包裹，避免 import 失败导致 500。
+    即便此调用失败，agent/prompts.py 的指纹机制仍会在下次 build_system_prompt 时
+    通过文件哈希变化被动检测到改动并重建缓存。
+    """
+    try:
+        from agent.prompts import invalidate_prompt_cache
+        invalidate_prompt_cache()
+    except Exception:
+        pass
+
+
 def _validate_id(value: str, label: str = "ID") -> str:
     """校验 ID 安全：仅允许字母数字、连字符、下划线、空格、点。"""
     v = value.strip()
@@ -28,7 +42,7 @@ def _validate_id(value: str, label: str = "ID") -> str:
     if not _SAFE_ID.match(v):
         raise HTTPException(
             status_code=400,
-            detail=f"{label} 仅允许字母、数字、连字符、下划线（1-64 字符）",
+            detail=f"{label} 仅允许字母、数字、连字符、下划线、空格、点（首字符不能为空格或点，1-64 字符）",
         )
     if ".." in v or "/" in v or "\\" in v:
         raise HTTPException(status_code=400, detail=f"{label} 包含非法字符")
@@ -66,14 +80,57 @@ def _parse_frontmatter(text: str) -> dict[str, str]:
     return meta
 
 
+def _parse_frontmatter_full(text: str) -> dict[str, str]:
+    """解析 YAML frontmatter 的所有字段（保留 version/author 等扩展字段）。
+
+    与 _parse_frontmatter 不同：不限制字段名，但仅支持单行值（多行 | / > 仅取首行标识符）。
+    用于 update 操作时保留原 frontmatter 的所有元数据。
+    """
+    m = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
+    if not m:
+        return {}
+    meta: dict[str, str] = {}
+    lines = m.group(1).splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if ":" in line:
+            key, _, val = line.partition(":")
+            key = key.strip()
+            val = val.strip()
+            if val in ("|", ">"):
+                # 多行值：合并后续缩进行
+                parts: list[str] = []
+                i += 1
+                while i < len(lines) and (lines[i].startswith("  ") or lines[i].startswith("\t")):
+                    parts.append(lines[i].strip())
+                    i += 1
+                meta[key] = " ".join(parts) if parts else ""
+                continue
+            else:
+                meta[key] = val.strip('"').strip("'")
+        i += 1
+    return meta
+
+
 def _scan_skills_dir(base_dir: Path, source_label: str) -> list[dict[str, str]]:
-    """扫描指定目录下的所有 SKILL.md。"""
+    """扫描指定目录下的所有 SKILL.md。单个文件损坏不会影响其他文件。"""
     if not base_dir.is_dir():
         return []
     skills = []
-    for sk_path in sorted(base_dir.rglob("SKILL.md")):
+    try:
+        iter_paths = sorted(base_dir.rglob("SKILL.md"))
+    except (OSError, RecursionError):
+        return []
+    for sk_path in iter_paths:
+        try:
+            content = sk_path.read_text(encoding="utf-8")
+            meta = _parse_frontmatter(content)
+        except (OSError, UnicodeDecodeError) as e:
+            # 错误隔离：跳过损坏文件，不阻断整个列表
+            print(f"[skills] 跳过损坏的 SKILL.md {sk_path}: {e}")
+            continue
         rel = sk_path.relative_to(base_dir).parent
-        meta = _parse_frontmatter(sk_path.read_text(encoding="utf-8"))
         name = meta.get("name", str(rel))
         description = meta.get("description", "")
         path_str = str(sk_path).replace("\\", "/")
@@ -88,13 +145,22 @@ def _scan_skills_dir(base_dir: Path, source_label: str) -> list[dict[str, str]]:
 
 
 def _scan_macros_dir(base_dir: Path, source_label: str) -> list[dict[str, str]]:
-    """扫描指定目录下的所有 MACRO.md。"""
+    """扫描指定目录下的所有 MACRO.md。单个文件损坏不会影响其他文件。"""
     if not base_dir.is_dir():
         return []
     macros_list = []
-    for mp_path in sorted(base_dir.rglob("MACRO.md")):
+    try:
+        iter_paths = sorted(base_dir.rglob("MACRO.md"))
+    except (OSError, RecursionError):
+        return []
+    for mp_path in iter_paths:
+        try:
+            content = mp_path.read_text(encoding="utf-8")
+            meta = _parse_frontmatter(content)
+        except (OSError, UnicodeDecodeError) as e:
+            print(f"[skills] 跳过损坏的 MACRO.md {mp_path}: {e}")
+            continue
         rel = mp_path.relative_to(base_dir).parent
-        meta = _parse_frontmatter(mp_path.read_text(encoding="utf-8"))
         name = meta.get("name", str(rel))
         description = meta.get("description", "")
         path_str = str(mp_path).replace("\\", "/")
@@ -106,6 +172,27 @@ def _scan_macros_dir(base_dir: Path, source_label: str) -> list[dict[str, str]]:
             "id": str(rel),
         })
     return macros_list
+
+
+def _dedup_by_canonical_path(items: list[dict[str, str]]) -> list[dict[str, str]]:
+    """按 canonical path（resolve 后的绝对路径）去重。
+
+    开发模式下 ANTHROPIC_SKILLS_DIR 与 SKILLS_DATA_DIR 可能指向同一物理目录，
+    rglob 会扫描到同一文件两次。按 path resolve 去重可正确处理这种情况。
+    与 agent/prompts.py 的 _scan_anthropic_skills 去重策略保持一致。
+    """
+    seen: set[str] = set()
+    result: list[dict[str, str]] = []
+    for item in items:
+        try:
+            canon = str(Path(item["path"]).resolve())
+        except OSError:
+            canon = item["path"]
+        if canon in seen:
+            continue
+        seen.add(canon)
+        result.append(item)
+    return result
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -139,6 +226,7 @@ async def list_skills():
     """扫描内置 + 用户自定义 skills，返回结构化列表。"""
     skills = _scan_skills_dir(ANTHROPIC_SKILLS_DIR, "builtin")
     skills += _scan_skills_dir(SKILLS_DATA_DIR, "user")
+    skills = _dedup_by_canonical_path(skills)
     return {"skills": skills}
 
 
@@ -168,6 +256,13 @@ async def create_skill(body: SkillCreateBody):
     skill_dir = SKILLS_DATA_DIR / safe_name
     if skill_dir.exists():
         raise HTTPException(status_code=409, detail=f"Skill '{body.name}' 已存在")
+    # 检查与内置 skill 的命名冲突（避免用户 skill 被静默遮蔽）
+    builtin_path = ANTHROPIC_SKILLS_DIR / safe_name / "SKILL.md"
+    if builtin_path.exists():
+        raise HTTPException(
+            status_code=409,
+            detail=f"内置 Skill '{body.name}' 已存在，请使用其他名称以避免冲突",
+        )
     skill_dir.mkdir(parents=True, exist_ok=True)
     # 生成 SKILL.md 内容
     if body.content:
@@ -194,10 +289,13 @@ description: {body.description}
 """
     sk_path = skill_dir / "SKILL.md"
     sk_path.write_text(content, encoding="utf-8")
+    # 从实际写入的 content 解析 frontmatter，保证返回值与文件一致
+    actual_meta = _parse_frontmatter(content)
+    _invalidate_prompt_cache()
     return {
         "id": body.name,
-        "name": body.name,
-        "description": body.description,
+        "name": actual_meta.get("name", body.name),
+        "description": actual_meta.get("description", body.description),
         "source": "user",
     }
 
@@ -219,16 +317,18 @@ async def update_skill(skill_id: str, body: SkillUpdateBody):
     if body.content is not None:
         content = body.content
     if body.name is not None or body.description is not None:
-        meta = _parse_frontmatter(content)
+        # 保留原 frontmatter 的所有字段（如 version/author），仅更新 name/description
+        meta = _parse_frontmatter_full(content)
         if body.name is not None:
             meta["name"] = body.name
         if body.description is not None:
             meta["description"] = body.description
-        # 重建 frontmatter
+        # 重建 frontmatter，保留所有字段
         fm_lines = [f"{k}: {v}" for k, v in meta.items()]
         body_text = re.sub(r"^---\s*\n.*?\n---", "---\n" + "\n".join(fm_lines) + "\n---", content, count=1, flags=re.DOTALL)
         content = body_text
     sk_path.write_text(content, encoding="utf-8")
+    _invalidate_prompt_cache()
     return {"id": skill_id, "status": "updated"}
 
 
@@ -250,6 +350,7 @@ async def delete_skill(skill_id: str):
         shutil.rmtree(skill_dir)
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"删除失败: {exc}")
+    _invalidate_prompt_cache()
     return {"id": skill_id, "status": "deleted"}
 
 
@@ -284,6 +385,7 @@ async def list_macros():
     """扫描内置 + 用户自定义 macros，返回结构化列表。"""
     macros_list = _scan_macros_dir(MACROS_DIR, "builtin")
     macros_list += _scan_macros_dir(MACROS_DATA_DIR, "user")
+    macros_list = _dedup_by_canonical_path(macros_list)
     return {"macros": macros_list}
 
 
@@ -313,6 +415,13 @@ async def create_macro(body: MacroCreateBody):
     macro_dir = MACROS_DATA_DIR / safe_name
     if macro_dir.exists():
         raise HTTPException(status_code=409, detail=f"Macro '{body.name}' 已存在")
+    # 检查与内置 macro 的命名冲突
+    builtin_path = MACROS_DIR / safe_name / "MACRO.md"
+    if builtin_path.exists():
+        raise HTTPException(
+            status_code=409,
+            detail=f"内置 Macro '{body.name}' 已存在，请使用其他名称以避免冲突",
+        )
     macro_dir.mkdir(parents=True, exist_ok=True)
     if body.content:
         content = body.content
@@ -331,10 +440,12 @@ description: {body.description}
 """
     mp_path = macro_dir / "MACRO.md"
     mp_path.write_text(content, encoding="utf-8")
+    actual_meta = _parse_frontmatter(content)
+    _invalidate_prompt_cache()
     return {
         "id": body.name,
-        "name": body.name,
-        "description": body.description,
+        "name": actual_meta.get("name", body.name),
+        "description": actual_meta.get("description", body.description),
         "source": "user",
     }
 
@@ -353,7 +464,8 @@ async def update_macro(macro_id: str, body: MacroUpdateBody):
     if body.content is not None:
         content = body.content
     if body.name is not None or body.description is not None:
-        meta = _parse_frontmatter(content)
+        # 保留原 frontmatter 的所有字段
+        meta = _parse_frontmatter_full(content)
         if body.name is not None:
             meta["name"] = body.name
         if body.description is not None:
@@ -367,6 +479,7 @@ async def update_macro(macro_id: str, body: MacroUpdateBody):
             flags=re.DOTALL,
         )
     mp_path.write_text(content, encoding="utf-8")
+    _invalidate_prompt_cache()
     return {"id": macro_id, "status": "updated"}
 
 
@@ -385,6 +498,7 @@ async def delete_macro(macro_id: str):
         shutil.rmtree(macro_dir)
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"删除失败: {exc}")
+    _invalidate_prompt_cache()
     return {"id": macro_id, "status": "deleted"}
 
 
