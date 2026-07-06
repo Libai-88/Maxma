@@ -23,6 +23,7 @@ import uuid
 from typing import Any, Callable, Optional
 
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage, ToolMessage
+from langgraph.graph import END
 
 from agent.step_state import ExecutionPlan, PlanStep, StepStatus, merge_dicts
 
@@ -782,7 +783,7 @@ def make_executor_router(max_replans: int = 2):
     路由目标：
     - "agent"：执行当前步骤
     - "planner"：重规划
-    - END：全部完成或无计划
+    - END（langgraph.graph.END）：全部完成或无计划
     """
     def executor_router(state: dict) -> str:
         plan_steps = state.get("plan_steps", [])
@@ -805,7 +806,7 @@ def make_executor_router(max_replans: int = 2):
                         # 路由回 agent：LLM 看到错误后会生成文字回复，
                         # 下一轮 executor_router 时 last 已是 AIMessage → 正常 END
                         return "agent"
-            return "END"
+            return END
 
         # 检查是否需要重规划
         step_status = state.get("step_status", {})
