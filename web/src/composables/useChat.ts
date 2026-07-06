@@ -96,7 +96,7 @@ export function disconnectSession(sid: string) {
 function getChatStore() { return useChatStore() }
 function getSessionStore() { return useSessionStore() }
 
-const refreshSessions = () => getSessionStore().refreshSessions()
+const refreshSessions = () => getSessionStore().refreshSessions().catch(() => {/* 保留现有列表，静默失败 */})
 const switchSession = (id: string) => getSessionStore().switchSession(id)
 // 模块级缓存：首次 import 时从 localStorage 恢复所有会话的历史消息
 // （修复：此前为 new Map()，导致 loadAllTurnsFromStorage 成为死代码，
