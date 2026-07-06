@@ -47,12 +47,12 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   async function refreshSessions() {
-    try {
-      const res = await api.listSessions()
-      sessions.value = res.sessions
-    } catch {
-      sessions.value = []
-    }
+    // 失败时保留现有数据（不置空），并抛错让调用方决定是否重试
+    // 修复：此前失败时 sessions.value = [] 且不抛错，
+    // 导致 initIfNeeded 误认为 init 成功不再重试，
+    // 页面刷新时如果后端还在启动会话列表永久为空
+    const res = await api.listSessions()
+    sessions.value = res.sessions
   }
 
   async function _createSession() {
@@ -63,7 +63,7 @@ export const useSessionStore = defineStore('session', () => {
 
   async function createSession() {
     await _createSession()
-    await refreshSessions()
+    await refreshSessions().catch(() => {})
   }
 
   async function switchSession(id: string) {
@@ -75,25 +75,25 @@ export const useSessionStore = defineStore('session', () => {
     await api.deleteSession(id)
     removeTurnsFromStorage(id)
     if (sessionId.value === id) {
-      await refreshSessions()
+      await refreshSessions().catch(() => {})
       if (sessions.value.length > 0) {
         await switchSession(sessions.value[0].session_id)
       } else {
         await createSession()
       }
     } else {
-      await refreshSessions()
+      await refreshSessions().catch(() => {})
     }
   }
 
   async function constifySession(id: string, name: string) {
     await api.constifySession(id, name)
-    await refreshSessions()
+    await refreshSessions().catch(() => {})
   }
 
   async function unconstifySession(id: string) {
     await api.unconstifySession(id)
-    await refreshSessions()
+    await refreshSessions().catch(() => {})
   }
 
   async function generateSessionTitle(id: string): Promise<string> {

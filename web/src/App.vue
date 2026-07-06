@@ -80,7 +80,7 @@ import { storeToRefs } from 'pinia';
 import { useSessionStore } from '@/stores/session';
 import { useSidebar } from '@/composables/useSidebar';
 import { api } from '@/api';
-import { computed, ref, onMounted, onUnmounted, nextTick } from 'vue';
+import { computed, ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useNightModeClock } from '@/composables/useNightMode'
 
@@ -193,6 +193,16 @@ onMounted(async () => {
   // 初始化 Session 状态（从 localStorage 恢复或创建新会话）
   await sessionStore.initIfNeeded()
   healthStore.startPolling()
+})
+
+// 监听健康状态：后端从离线恢复到在线时，自动刷新会话列表
+// 修复：页面刷新时如果后端还在启动，initIfNeeded 的 refreshSessions 可能失败，
+// 此处作为兜底，在后端就绪后自动补刷会话列表
+watch(health, (newHealth, oldHealth) => {
+  if (!oldHealth && newHealth) {
+    // 从 null（离线）变为有值（在线），刷新会话列表
+    sessionStore.refreshSessions().catch(() => {})
+  }
 })
 </script>
 
