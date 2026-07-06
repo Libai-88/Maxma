@@ -134,6 +134,7 @@
 <script setup lang="ts">
 import { api } from '@/api'
 import type { ProviderConfig, TestConnectionResponse } from '@/types'
+import { useProviderStore } from '@/stores/provider'
 import { computed, onMounted, ref } from 'vue'
 
 // ── 预设提供商列表 ──
@@ -241,11 +242,14 @@ function selectAllModels() {
 const saving = ref(false)
 const testResult = ref<Record<string, TestConnectionResponse>>({})
 
+const providerStore = useProviderStore()
+
 async function loadProviders() {
   loading.value = true
   try {
-    const res = await api.listProviders()
-    providers.value = res.providers
+    // 从全局 store 加载（含重试），同时更新 store 和本地 providers 列表
+    await providerStore.loadProviders()
+    providers.value = providerStore.allProviders
   } catch (e: any) {
     console.error('Failed to load providers', e)
   } finally {
@@ -348,6 +352,8 @@ async function toggleProvider(id: string, enabled: boolean) {
     await api.updateProvider(id, { enabled })
     const p = providers.value.find(p => p.id === id)
     if (p) p.enabled = enabled
+    // 同步刷新全局 store，让 ChatInput 等消费方感知到 enabled 变化
+    await providerStore.refresh()
   } catch (e: any) {
     alert('切换失败: ' + e.message)
   }

@@ -101,6 +101,7 @@ import StatusBadge from '@/components/StatusBadge.vue'
 import TaskTrackerBar from '@/components/TaskTrackerBar.vue'
 import { useChat } from '@/composables/useChat'
 import { useHealthStore } from '@/stores/health'
+import { useProviderStore } from '@/stores/provider'
 import { useSessionStore } from '@/stores/session'
 import type { ParsedRef } from '@/utils/references'
 import { storeToRefs } from 'pinia'
@@ -117,15 +118,12 @@ const {
 
 const selectedProviderId = ref('')
 const selectedModelName = ref('')
-const hasProviders = ref(true)
+const providerStore = useProviderStore()
+const { hasProviders } = storeToRefs(providerStore)
 
 onMounted(async () => {
-  try {
-    const res = await api.listProviders()
-    hasProviders.value = res.providers.some(p => p.enabled)
-  } catch {
-    hasProviders.value = true // fallback: assume there's a provider
-  }
+  // 通过全局 store 加载 provider 列表（含重试），消除 ChatView/ChatInput 状态不一致
+  await providerStore.loadProviders()
 })
 
 function onModelChange(providerId: string, modelName: string) {

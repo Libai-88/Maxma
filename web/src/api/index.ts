@@ -157,6 +157,9 @@ export const api = {
   getSession: (id: string) =>
     request<SessionInfo>(`/sessions/${id}`),
 
+  getMessages: (id: string) =>
+    request<{ session_id: string; messages: { role: string; content: string }[] }>(`/sessions/${id}/messages`),
+
   deleteSession: (id: string) =>
     request<{ status: string }>(`/sessions/${id}`, { method: 'DELETE' }),
 
