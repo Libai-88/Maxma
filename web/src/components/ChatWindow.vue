@@ -109,6 +109,10 @@
         </span>
         <span class="error-message">{{ error }}</span>
         <span v-if="errorTraceId" class="error-trace-id">Trace: {{ errorTraceId }}</span>
+        <button class="error-copy-btn" @click="copyErrorLog" :title="'复制错误日志'">
+          <span v-if="copySuccess" class="copy-success">✓</span>
+          <span v-else class="copy-icon"></span>
+        </button>
       </div>
 
       <!-- 流式输出打字指示器 -->
@@ -189,6 +193,38 @@ const props = defineProps<{
   errorCategory: 'user_error' | 'tool_error' | 'system_error' | 'rate_limit' | 'cancelled' | null
   errorTraceId: string | null
 }>()
+
+// 错误日志一键复制
+const copySuccess = ref(false)
+async function copyErrorLog() {
+  const now = new Date()
+  const ts = now.toISOString().replace('T', ' ').substring(0, 19)
+  const lines = [
+    'MaxmaHere 错误报告',
+    '========================================',
+    `时间: ${ts}`,
+    `Trace ID: ${props.errorTraceId || 'N/A'}`,
+    `错误类别: ${props.errorCategory || 'system_error'}`,
+    `错误信息: ${props.error || 'N/A'}`,
+    '========================================',
+  ]
+  const text = lines.join('\n')
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    // 降级：用临时 textarea
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+  }
+  copySuccess.value = true
+  setTimeout(() => { copySuccess.value = false }, 2000)
+}
 
 const emit = defineEmits<{
   (e: 'action', p: { action: string; data?: unknown }): void
@@ -623,6 +659,40 @@ function closeContextMenu() {
   font-size: 0.75em;
   opacity: 0.7;
   font-family: monospace;
+}
+.error-copy-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s, background 0.15s;
+  font-size: 0.8em;
+  padding: 0;
+}
+.error-copy-btn:hover {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+.error-copy-btn .copy-icon {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='9' y='9' width='13' height='13' rx='2' ry='2'%3E%3C/rect%3E%3Cpath d='M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1'%3E%3C/path%3E%3C/svg%3E");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.error-copy-btn .copy-success {
+  color: #22c55e;
+  font-weight: bold;
 }
 /* 用户错误：黄色警告 */
 .error-banner.error-user_error {
