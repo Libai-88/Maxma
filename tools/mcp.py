@@ -445,6 +445,17 @@ def _wrap_tool_with_safety(tool: BaseTool, server_id: str) -> BaseTool:
 # 生命周期
 # ═══════════════════════════════════════════════════════════════════════
 
+# reload 串行化锁：防止并发 reload 互相干扰
+_reload_lock: asyncio.Lock | None = None
+
+
+def _get_reload_lock() -> asyncio.Lock:
+    """获取 reload 锁（延迟创建，确保在事件循环内）。"""
+    global _reload_lock
+    if _reload_lock is None:
+        _reload_lock = asyncio.Lock()
+    return _reload_lock
+
 
 async def init_mcp_tools() -> list[BaseTool]:
     """从 YAML 加载配置并初始化 MCP 客户端。
@@ -452,6 +463,10 @@ async def init_mcp_tools() -> list[BaseTool]:
     仅连接 enabled=True 的服务器，工具名自动加 {serverId}_ 前缀。
     阶段 4.1：按 allowed_tools / blocked_tools 过滤工具。
     阶段 4.2/4.4：用 _wrap_tool_with_safety 包装每个工具（审计 + 限流）。
+
+    单 server 失败隔离：每个 server 单独创建 client 加载工具，一个失败
+    不影响其他 server（避免 MultiServerMCPClient.get_tools() 内部
+    asyncio.gather 无 return_exceptions 导致全部工具消失）。
     """
     global _client, _tools, _last_error
 
@@ -464,37 +479,33 @@ async def init_mcp_tools() -> list[BaseTool]:
         _tools = []
         return _tools
 
-    connections: dict[str, Any] = {}
     server_errors: list[str] = []
+    all_filtered_tools: list[BaseTool] = []
+    clients: list[MultiServerMCPClient] = []
 
+    # 按 server 逐个加载，隔离失败
     for cfg in enabled:
         try:
-            connections[cfg.server_id] = cfg.to_connection()
+            connection = cfg.to_connection()
         except Exception as exc:
             msg = f"服务器 '{cfg.server_id}' 连接构建失败: {exc}"
             server_errors.append(msg)
             logger.warning(msg)
+            continue
 
-    if not connections:
-        _tools = []
-        if server_errors:
-            _last_error = "; ".join(server_errors)
-        return _tools
+        try:
+            # 为每个 server 单独创建 client，隔离失败
+            single_client = MultiServerMCPClient(
+                connections={cfg.server_id: connection},
+                tool_name_prefix=True,
+            )
+            server_raw_tools = await single_client.get_tools()
+            clients.append(single_client)
 
-    try:
-        _client = MultiServerMCPClient(
-            connections=connections,
-            tool_name_prefix=True,
-        )
-        raw_tools = await _client.get_tools()
-        _last_error = None
-
-        # 阶段 4.1：按 server_id 分组，应用 allowlist/blocklist 过滤
-        # 阶段 4.2/4.4：对保留的工具应用 _wrap_tool_with_safety 包装
-        filtered_tools: list[BaseTool] = []
-        for cfg in enabled:
+            # 阶段 4.1：应用 allowlist/blocklist 过滤
+            # 阶段 4.2/4.4：对保留的工具应用 _wrap_tool_with_safety 包装
             prefix = f"{cfg.server_id}_"
-            server_tools = [t for t in raw_tools if t.name.startswith(prefix)]
+            server_tools = [t for t in server_raw_tools if t.name.startswith(prefix)]
 
             kept = 0
             blocked = 0
@@ -503,7 +514,7 @@ async def init_mcp_tools() -> list[BaseTool]:
                     t.name, cfg.server_id, cfg.allowed_tools, cfg.blocked_tools
                 ):
                     wrapped = _wrap_tool_with_safety(t, cfg.server_id)
-                    filtered_tools.append(wrapped)
+                    all_filtered_tools.append(wrapped)
                     kept += 1
                 else:
                     blocked += 1
@@ -519,12 +530,21 @@ async def init_mcp_tools() -> list[BaseTool]:
                     "[mcp] 服务器 '%s' 已加载 %d 个工具（已包装审计+限流）",
                     cfg.server_id, kept,
                 )
+        except Exception as exc:
+            msg = f"服务器 '{cfg.server_id}' 工具加载失败: {exc}"
+            server_errors.append(msg)
+            logger.warning(msg)
+            # 继续加载其他 server，不中断
 
-        _tools = filtered_tools
-    except Exception as exc:
-        _last_error = f"初始化 MCP 客户端失败: {exc}"
-        logger.exception(_last_error)
-        _tools = []
+    # 保留第一个 client 引用避免被 GC（close_mcp 会清理）
+    if clients:
+        _client = clients[0]
+
+    _tools = all_filtered_tools
+    if server_errors:
+        _last_error = "; ".join(server_errors)
+    else:
+        _last_error = None
 
     return _tools
 
@@ -551,34 +571,37 @@ async def reload_mcp() -> list[BaseTool]:
     """重新加载 MCP 配置并重建连接。
 
     失败时保留旧状态不变。
+    串行化：防止并发 reload 互相干扰（多个请求同时触发热加载）。
     """
     global _client, _tools, _config, _last_error
 
-    old_client = _client
-    old_tools = _tools
-    old_config = _config
-    old_error = _last_error
+    lock = _get_reload_lock()
+    async with lock:
+        old_client = _client
+        old_tools = _tools
+        old_config = _config
+        old_error = _last_error
 
-    # 清除缓存，强制重新加载
-    _client = None
-    _tools = None
-    _config = None
-    _last_error = None
+        # 清除缓存，强制重新加载
+        _client = None
+        _tools = None
+        _config = None
+        _last_error = None
 
-    try:
-        result = await init_mcp_tools()
-        if _last_error is not None:
-            raise RuntimeError(_last_error)
-        if result is None:
-            result = []
-        return result
-    except Exception as exc:
-        # 恢复旧状态
-        _client = old_client
-        _tools = old_tools
-        _config = old_config
-        _last_error = old_error
-        raise
+        try:
+            result = await init_mcp_tools()
+            if _last_error is not None:
+                raise RuntimeError(_last_error)
+            if result is None:
+                result = []
+            return result
+        except Exception as exc:
+            # 恢复旧状态
+            _client = old_client
+            _tools = old_tools
+            _config = old_config
+            _last_error = old_error
+            raise
 
 
 def get_mcp_servers_info() -> list[dict[str, Any]]:

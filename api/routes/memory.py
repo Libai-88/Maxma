@@ -4,7 +4,7 @@ import random
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from memory.memory_manager import MAX_DESC_LENGTH, MemoryManager
 
@@ -21,7 +21,7 @@ async def get_narrative(request: Request):
 async def get_memories(request: Request, include_expired: bool = False):
     """返回分组记忆。include_expired=true 时包含已过期但未清理的条目。"""
     ltm = request.app.state.ltm
-    mm = MemoryManager(yaml_file=str(ltm._memory_path))
+    mm = MemoryManager(yaml_file=str(ltm.memory_path))
     return mm.get_memories_grouped(include_expired=include_expired)
 
 
@@ -29,21 +29,25 @@ async def get_memories(request: Request, include_expired: bool = False):
 async def list_expired_memories(request: Request):
     """列出已过期但尚未清理的记忆条目。"""
     ltm = request.app.state.ltm
-    mm = MemoryManager(yaml_file=str(ltm._memory_path))
+    mm = MemoryManager(yaml_file=str(ltm.memory_path))
     return {"items": mm.list_expired()}
 
 
 class UpdateMemoryBody(BaseModel):
     content: str
     section: str
-    ttl: Optional[int] = None  # None=保留原过期时间；0=改为永久；>0=重置
+    ttl: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="None=保留原过期时间；0=改为永久；>0=重置（秒）",
+    )
 
 
 @router.put("/memories/{memory_id}")
 async def update_memory(memory_id: str, body: UpdateMemoryBody, request: Request):
     """更新指定记忆条目。"""
     ltm = request.app.state.ltm
-    mm = MemoryManager(yaml_file=str(ltm._memory_path))
+    mm = MemoryManager(yaml_file=str(ltm.memory_path))
 
     content = body.content.replace("\n", " ").replace("\r", " ").strip()
     if not content:
@@ -77,7 +81,7 @@ async def update_memory(memory_id: str, body: UpdateMemoryBody, request: Request
 async def purge_expired_memories(request: Request):
     """手动触发清理已过期记忆条目。"""
     ltm = request.app.state.ltm
-    mm = MemoryManager(yaml_file=str(ltm._memory_path))
+    mm = MemoryManager(yaml_file=str(ltm.memory_path))
     purged = mm.purge_expired()
     if purged > 0:
         from memory.narrative import invalidate_narrative_cache
@@ -88,7 +92,7 @@ async def purge_expired_memories(request: Request):
 @router.get("/moment")
 async def get_moment(request: Request):
     ltm = request.app.state.ltm
-    mm = MemoryManager(yaml_file=str(ltm._memory_path))
+    mm = MemoryManager(yaml_file=str(ltm.memory_path))
     items = mm.show()
     if not items:
         return {"moment": None}
@@ -120,8 +124,8 @@ class AddEpisodeBody(BaseModel):
     summary: str
     session_id: str = ""
     turn_id: str = ""
-    message_count: int = 0
-    ttl: Optional[int] = None
+    message_count: int = Field(default=0, ge=0)
+    ttl: Optional[int] = Field(default=None, ge=0)
 
 
 @router.post("/memories/episodic")
@@ -142,14 +146,15 @@ async def add_episodic_memory(body: AddEpisodeBody, request: Request):
 
 @router.delete("/memories/episodic/{episode_id}")
 async def delete_episodic_memory(episode_id: str, request: Request):
-    """删除指定情景记忆条目。"""
+    """删除指定情景记忆条目（幂等：删除不存在也返回 200）。"""
     episodic_mm = getattr(request.app.state, "episodic_mm", None)
     if episodic_mm is None:
         raise HTTPException(status_code=503, detail="情景记忆未初始化")
     try:
         removed = episodic_mm.delete_episode(episode_id)
     except ValueError:
-        raise HTTPException(status_code=404, detail=f"未找到 ID 为 {episode_id} 的情景记忆")
+        # 幂等：条目不存在时返回空字符串，避免前端重试时 404
+        removed = ""
     return {"removed": removed}
 
 
@@ -167,7 +172,7 @@ class AddFactBody(BaseModel):
     predicate: str
     object: str
     source: str = "manual"
-    ttl: Optional[int] = None
+    ttl: Optional[int] = Field(default=None, ge=0)
 
 
 @router.post("/memories/semantic")
@@ -191,14 +196,15 @@ async def add_semantic_memory(body: AddFactBody, request: Request):
 
 @router.delete("/memories/semantic/{fact_id}")
 async def delete_semantic_memory(fact_id: str, request: Request):
-    """删除指定语义记忆条目。"""
+    """删除指定语义记忆条目（幂等：删除不存在也返回 200）。"""
     semantic_mm = getattr(request.app.state, "semantic_mm", None)
     if semantic_mm is None:
         raise HTTPException(status_code=503, detail="语义记忆未初始化")
     try:
         removed = semantic_mm.delete_fact(fact_id)
     except ValueError:
-        raise HTTPException(status_code=404, detail=f"未找到 ID 为 {fact_id} 的语义记忆")
+        # 幂等：条目不存在时返回空字符串，避免前端重试时 404
+        removed = ""
     # 4 层架构：语义记忆变更后失效系统提示词缓存
     from agent.prompts import invalidate_prompt_cache
     invalidate_prompt_cache()
@@ -208,8 +214,8 @@ async def delete_semantic_memory(fact_id: str, request: Request):
 class SearchBody(BaseModel):
     query: str
     layers: Optional[list[str]] = None  # 默认 ["long", "episodic", "semantic"]
-    top_k: int = 5
-    threshold: float = 0.6
+    top_k: int = Field(default=5, ge=1, le=50)
+    threshold: float = Field(default=0.6, ge=0.0, le=1.0)
 
 
 @router.post("/memories/search")

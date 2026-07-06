@@ -32,33 +32,84 @@ class ManageMacrosInput(BaseModel):
 
 
 def _parse_frontmatter(text: str) -> dict[str, str]:
+    """解析 YAML frontmatter（支持多行 | 和 >），提取 name/description。"""
     m = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
     if not m:
         return {}
     meta: dict[str, str] = {}
     lines = m.group(1).splitlines()
-    for line in lines:
+    i = 0
+    while i < len(lines):
+        line = lines[i]
         if ":" in line:
             key, _, val = line.partition(":")
             key = key.strip()
-            val = val.strip().strip('"').strip("'")
+            val = val.strip()
             if key in ("name", "description"):
-                meta[key] = val
+                if val in ("|", ">"):
+                    parts: list[str] = []
+                    i += 1
+                    while i < len(lines) and (lines[i].startswith("  ") or lines[i].startswith("\t")):
+                        parts.append(lines[i].strip())
+                        i += 1
+                    meta[key] = " ".join(parts)
+                    continue
+                else:
+                    meta[key] = val.strip('"').strip("'")
+        i += 1
+    return meta
+
+
+def _parse_frontmatter_full(text: str) -> dict[str, str]:
+    """解析 YAML frontmatter 的所有字段（保留扩展字段）。"""
+    m = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
+    if not m:
+        return {}
+    meta: dict[str, str] = {}
+    lines = m.group(1).splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if ":" in line:
+            key, _, val = line.partition(":")
+            key = key.strip()
+            val = val.strip()
+            if val in ("|", ">"):
+                parts: list[str] = []
+                i += 1
+                while i < len(lines) and (lines[i].startswith("  ") or lines[i].startswith("\t")):
+                    parts.append(lines[i].strip())
+                    i += 1
+                meta[key] = " ".join(parts) if parts else ""
+                continue
+            else:
+                meta[key] = val.strip('"').strip("'")
+        i += 1
     return meta
 
 
 def _scan_macros_dir(base_dir, source_label: str) -> list[dict]:
+    """扫描指定目录下的所有 MACRO.md。单个文件损坏不会影响其他文件。"""
     if not base_dir.is_dir():
         return []
     macros_list = []
-    for mp_path in sorted(base_dir.rglob("MACRO.md")):
+    try:
+        iter_paths = sorted(base_dir.rglob("MACRO.md"))
+    except (OSError, RecursionError):
+        return []
+    for mp_path in iter_paths:
+        try:
+            content = mp_path.read_text(encoding="utf-8")
+            meta = _parse_frontmatter(content)
+        except (OSError, UnicodeDecodeError):
+            continue
         rel = mp_path.relative_to(base_dir).parent
-        meta = _parse_frontmatter(mp_path.read_text(encoding="utf-8"))
         macros_list.append({
             "id": str(rel),
             "name": meta.get("name", str(rel)),
             "description": meta.get("description", ""),
             "source": source_label,
+            "_canon": str(mp_path.resolve()),
         })
     return macros_list
 
@@ -105,8 +156,19 @@ class ManageMacrosTool(ToolBase):
         action = action.strip().lower()
 
         if action == "list":
-            macros_list = _scan_macros_dir(MACROS_DIR, "builtin")
-            macros_list += _scan_macros_dir(MACROS_DATA_DIR, "user")
+            # 按 canonical path 去重（与 agent/prompts.py 策略一致）
+            all_macros = _scan_macros_dir(MACROS_DIR, "builtin")
+            all_macros += _scan_macros_dir(MACROS_DATA_DIR, "user")
+            seen: set[str] = set()
+            deduped: list[dict] = []
+            for m in all_macros:
+                canon = m.pop("_canon", "")
+                if canon and canon in seen:
+                    continue
+                if canon:
+                    seen.add(canon)
+                deduped.append(m)
+            macros_list = deduped
             if not macros_list:
                 return format_success({"message": "当前没有任何宏", "macros": []})
             summary = []
@@ -149,6 +211,12 @@ class ManageMacrosTool(ToolBase):
             macro_dir = MACROS_DATA_DIR / target_name
             if macro_dir.exists():
                 return format_error(f"宏 '{target_name}' 已存在")
+            # 检查与内置 macro 的命名冲突
+            builtin_path = MACROS_DIR / target_name / "MACRO.md"
+            if builtin_path.exists():
+                return format_error(
+                    f"内置宏 '{target_name}' 已存在，请使用其他名称以避免冲突"
+                )
             macro_dir.mkdir(parents=True, exist_ok=True)
 
             if content:
@@ -190,7 +258,8 @@ description: {description}
                 mp_path.write_text(content, encoding="utf-8")
             elif description:
                 old_content = mp_path.read_text(encoding="utf-8")
-                meta = _parse_frontmatter(old_content)
+                # 保留原 frontmatter 的所有字段
+                meta = _parse_frontmatter_full(old_content)
                 meta["description"] = description
                 fm_lines = [f"{k}: {v}" for k, v in meta.items()]
                 new_content = re.sub(

@@ -16,6 +16,12 @@
     <!-- ── 列表模式 ── -->
     <template v-if="mode === 'list'">
       <div v-if="loading" class="loading">加载中...</div>
+      <div v-else-if="loadError" class="empty">
+        加载失败，请稍后重试。
+        <div class="empty-hint">
+          <button class="btn primary retry-btn" @click="loadData">重试</button>
+        </div>
+      </div>
       <div v-else-if="currentList.length === 0" class="empty">
         <template v-if="activeTab === 'skills'">
           尚未创建任何 Skill。点击上方按钮新建。
@@ -36,12 +42,13 @@
           <div class="card-footer">
             <span class="card-id">{{ item.id }}</span>
             <div class="card-actions" @click.stop>
-              <button class="action-btn" @click="startEdit(item)">编辑</button>
+              <button class="action-btn" @click.stop="startEdit(item)">编辑</button>
               <button
                 v-if="item.source === 'user'"
                 class="action-btn danger"
-                @click="deleteItem(item.id)"
-              >删除</button>
+                :disabled="deletingId === item.id"
+                @click.stop="deleteItem(item.id)"
+              >{{ deletingId === item.id ? '删除中...' : '删除' }}</button>
               <span v-else class="readonly-hint">只读</span>
             </div>
           </div>
@@ -51,21 +58,29 @@
 
     <!-- ── 表单模式（新建/编辑） ── -->
     <form v-else class="wizard-form" @submit.prevent="handleSave">
+      <div v-if="loadingDetail" class="loading">加载详情中...</div>
+      <template v-else>
       <div class="form-section">
         <label class="form-label">名称 (ID)</label>
         <input
           v-model="form.name"
           class="input mono"
           placeholder="例如: code-review, commit-message"
+          maxlength="64"
           :disabled="isEditing"
           required
         />
-        <div class="form-hint">唯一标识符，将作为目录名使用</div>
+        <div class="form-hint">唯一标识符，将作为目录名使用。仅允许字母、数字、连字符、下划线、空格、点（首字符不能为空格或点）</div>
       </div>
 
       <div class="form-section">
         <label class="form-label">描述</label>
-        <input v-model="form.description" class="input" :disabled="isEditing && editingSource === 'builtin'" placeholder="简要描述这个 {{ activeTab === 'skills' ? 'Skill' : '宏' }} 的用途" />
+        <input
+          v-model="form.description"
+          class="input"
+          :disabled="isEditing && editingSource === 'builtin'"
+          :placeholder="`简要描述这个 ${activeTab === 'skills' ? 'Skill' : '宏'} 的用途`"
+        />
       </div>
 
       <div class="form-section content-section">
@@ -94,6 +109,7 @@
         </button>
         <span v-if="saveMessage" class="save-msg" :class="saveMessageClass">{{ saveMessage }}</span>
       </div>
+      </template>
     </form>
 
     <!-- ── 全局提示 ── -->
@@ -104,17 +120,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { api } from '@/api'
 import type { SkillInfo, MacroInfo } from '@/types'
 
 type Tab = 'skills' | 'macros'
 type Mode = 'list' | 'add' | 'edit'
 
+// 与后端 _SAFE_ID 同步：首字符不能是空格或点，1-64 字符，允许字母/数字/连字符/下划线/空格/点
+const ID_PATTERN = /^[A-Za-z0-9_-][A-Za-z0-9_\- .]{0,63}$/
+
 const loading = ref(true)
+const loadingDetail = ref(false)
+const loadError = ref(false)
 const activeTab = ref<Tab>('skills')
 const mode = ref<Mode>('list')
 const saving = ref(false)
+const deletingId = ref('')
 const saveMessage = ref('')
 const saveMessageClass = ref('')
 const globalMessage = ref('')
@@ -125,6 +147,21 @@ const editingSource = ref<'builtin' | 'user'>('user')
 
 const skills = ref<SkillInfo[]>([])
 const macros = ref<MacroInfo[]>([])
+
+// 请求序列号：用于取消竞态请求（startEdit/loadData 快速重复触发）
+let loadSeq = 0
+let editSeq = 0
+
+// setTimeout 计时器集合，组件卸载时统一清理
+const timers: number[] = []
+function schedule(fn: () => void, delay: number) {
+  const id = window.setTimeout(() => {
+    const idx = timers.indexOf(id)
+    if (idx >= 0) timers.splice(idx, 1)
+    fn()
+  }, delay)
+  timers.push(id)
+}
 
 const emptyForm = () => ({
   name: '',
@@ -140,68 +177,120 @@ const currentList = computed(() => {
   return activeTab.value === 'skills' ? skills.value : macros.value
 })
 
+function resetFormState() {
+  Object.assign(form, emptyForm())
+  editingId.value = ''
+  editingSource.value = 'user'
+  saveMessage.value = ''
+  saveMessageClass.value = ''
+}
+
 function switchTab(tab: Tab) {
   activeTab.value = tab
-  if (mode.value !== 'list') {
-    mode.value = 'list'
-  }
+  // 切换 tab 时彻底重置表单状态，避免残留
+  mode.value = 'list'
+  resetFormState()
   loadData()
 }
 
 async function loadData() {
+  const mySeq = ++loadSeq
   loading.value = true
+  loadError.value = false
   globalMessage.value = ''
   try {
     const [skillsRes, macrosRes] = await Promise.all([
       api.listSkills(),
       api.listMacros(),
     ])
+    // 竞态保护：丢弃过期响应
+    if (mySeq !== loadSeq) return
     skills.value = skillsRes.skills
     macros.value = macrosRes.macros
   } catch (e: any) {
+    if (mySeq !== loadSeq) return
+    loadError.value = true
+    // 失败时清空旧数据，避免显示陈旧列表误导用户
+    skills.value = []
+    macros.value = []
     globalMessage.value = '加载失败: ' + (e?.message || String(e))
     globalMessageClass.value = 'error'
   } finally {
-    loading.value = false
+    if (mySeq === loadSeq) {
+      loading.value = false
+    }
   }
 }
 
 function startAdd() {
-  Object.assign(form, emptyForm())
+  resetFormState()
   mode.value = 'add'
-  editingId.value = ''
-  editingSource.value = 'user'
-  saveMessage.value = ''
 }
 
 async function startEdit(item: SkillInfo | MacroInfo) {
+  // 竞态保护：快速点击不同卡片时，丢弃过期响应
+  const mySeq = ++editSeq
   mode.value = 'edit'
   editingId.value = item.id
   editingSource.value = item.source
   saveMessage.value = ''
+  loadingDetail.value = true
 
   try {
     const detail = activeTab.value === 'skills'
       ? await api.getSkill(item.id)
       : await api.getMacro(item.id)
+    if (mySeq !== editSeq) return  // 已被后续点击取代
     Object.assign(form, {
       name: detail.name,
       description: detail.description,
       content: detail.content,
     })
   } catch (e: any) {
+    if (mySeq !== editSeq) return
     globalMessage.value = '加载详情失败: ' + (e?.message || String(e))
     globalMessageClass.value = 'error'
     mode.value = 'list'
+  } finally {
+    if (mySeq === editSeq) {
+      loadingDetail.value = false
+    }
   }
 }
 
 function cancelForm() {
   mode.value = 'list'
-  saveMessage.value = ''
+  resetFormState()
+}
+
+function validateForm(): string | null {
+  if (!form.name.trim()) {
+    return '名称不能为空'
+  }
+  if (!ID_PATTERN.test(form.name)) {
+    return '名称仅允许字母、数字、连字符、下划线、空格、点（首字符不能为空格或点，1-64 字符）'
+  }
+  return null
 }
 
 async function handleSave() {
+  // 防御性检查：内置项目不可编辑
+  if (isEditing.value && editingSource.value === 'builtin') {
+    saveMessage.value = '内置项目不可编辑'
+    saveMessageClass.value = 'error'
+    return
+  }
+
+  // 前端校验（与后端 regex 同步）
+  if (mode.value === 'add') {
+    const err = validateForm()
+    if (err) {
+      saveMessage.value = err
+      saveMessageClass.value = 'error'
+      return
+    }
+  }
+
   saving.value = true
   saveMessage.value = ''
   saveMessageClass.value = ''
@@ -238,21 +327,27 @@ async function handleSave() {
       saveMessage.value = '保存成功'
       saveMessageClass.value = 'ok'
     }
-    setTimeout(() => {
+    // saving 锁延迟到返回列表后再释放，避免 800ms 窗口期内重复提交
+    schedule(() => {
       mode.value = 'list'
+      resetFormState()
       loadData()
+      saving.value = false
     }, 800)
   } catch (e: any) {
     saveMessage.value = '失败: ' + (e?.message || String(e))
     saveMessageClass.value = 'error'
-  } finally {
     saving.value = false
   }
 }
 
 async function deleteItem(id: string) {
+  // 防抖锁：避免快速点击重复发送 DELETE
+  if (deletingId.value) return
   const label = activeTab.value === 'skills' ? 'Skill' : '宏'
   if (!confirm(`确定删除${label} "${id}" 吗？此操作不可恢复。`)) return
+
+  deletingId.value = id
   try {
     if (activeTab.value === 'skills') {
       await api.deleteSkill(id)
@@ -261,15 +356,29 @@ async function deleteItem(id: string) {
     }
     globalMessage.value = `已删除 ${id}`
     globalMessageClass.value = 'ok'
-    setTimeout(() => { globalMessage.value = '' }, 2000)
+    schedule(() => {
+      globalMessage.value = ''
+      globalMessageClass.value = ''
+    }, 2000)
     loadData()
   } catch (e: any) {
     globalMessage.value = '删除失败: ' + (e?.message || String(e))
     globalMessageClass.value = 'error'
+  } finally {
+    deletingId.value = ''
   }
 }
 
 onMounted(loadData)
+
+onUnmounted(() => {
+  // 清理所有未触发的 setTimeout，避免卸载后修改 reactive 状态
+  timers.forEach(clearTimeout)
+  timers.length = 0
+  // 重置序列号，使任何残留的 Promise.resolve 也会因 seq 不匹配而被丢弃
+  loadSeq++
+  editSeq++
+})
 </script>
 
 <style scoped>
@@ -352,6 +461,12 @@ onMounted(loadData)
   font-size: 13px;
   margin-top: 8px;
   opacity: 0.7;
+}
+
+.retry-btn {
+  margin-top: 12px;
+  padding: 6px 16px;
+  font-size: 13px;
 }
 
 /* ── 卡片网格 ── */

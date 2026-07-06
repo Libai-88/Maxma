@@ -102,11 +102,24 @@ class SessionManager:
         return session
 
     async def delete(self, session_id: str) -> bool:
+        # 修复：删除前必须取消运行中的 _active_task，否则会留下孤儿 Agent 任务：
+        # 任务继续运行、继续向 WS 推送事件、继续消耗 LLM 配额，且 session 对象
+        # 因任务闭包持有引用而无法被 GC，最终导致资源泄漏。
         async with self._lock:
-            if session_id in self._sessions:
-                del self._sessions[session_id]
-                return True
-            return False
+            session = self._sessions.get(session_id)
+            if session is None:
+                return False
+            task = session._active_task
+            session._active_task = None
+            del self._sessions[session_id]
+        # 在锁外取消任务，避免锁内 await 引起的复杂时序问题
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
+        return True
 
     async def list_sessions(self) -> list[dict]:
         async with self._lock:

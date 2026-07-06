@@ -23,7 +23,9 @@ class SearchMemoriesInput(BaseModel):
     )
     top_k: int = Field(
         default=5,
-        description="向量检索返回的最大结果数（默认 5）",
+        ge=1,
+        le=50,
+        description="向量检索返回的最大结果数（默认 5，最大 50）",
     )
 
 

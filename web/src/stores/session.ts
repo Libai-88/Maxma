@@ -103,6 +103,12 @@ export const useSessionStore = defineStore('session', () => {
 
   function cleanupOrphanedCaches() {
     const validIds = new Set(sessions.value.map(s => s.session_id))
+    // 防御：sessions 为空时（可能是后端不可用或 refreshSessions 失败），
+    // 不清空缓存，避免后端短暂不可用时丢失所有会话历史
+    if (validIds.size === 0) {
+      console.warn('[session] cleanupOrphanedCaches: sessions 列表为空，跳过清理（可能是后端不可用）')
+      return
+    }
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
       if (key && key.startsWith(TURNS_KEY_PREFIX)) {

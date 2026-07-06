@@ -46,7 +46,9 @@ class AskUserConfirmTool(ToolBase):
         if not question:
             return format_error("question 不能为空")
 
-        ws = interaction.current_ws.get()
+        ws = interaction.current_ws.get(None)
+        if ws is None:
+            return format_error("当前无 WebSocket 连接，无法向用户确认")
 
         interaction_id, future = await interaction.register()
 

@@ -196,10 +196,11 @@ def get_vector_store() -> "VectorStore | None":
             return _store
         try:
             import chromadb  # noqa: F401
-        except ImportError:
+        except ImportError as e:
             logger.warning(
-                "[rag] chromadb 未安装，find_similar 将回退到 bigram Jaccard。"
-                " 安装依赖: pip install chromadb"
+                "[rag] chromadb 导入失败（知识库向量检索将不可用）: %s。"
+                " 可能原因：打包时 opentelemetry 被 excludes 排除导致 chromadb 运行时 ImportError。",
+                e,
             )
             _tried_init = True  # 依赖缺失是环境问题，重试无意义
             return None

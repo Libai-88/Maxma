@@ -3,6 +3,7 @@
 from pydantic import BaseModel, Field
 
 from tools.base import ToolBase, format_error, format_success, register_tool
+from tools.path_security import check_path_access
 
 
 class KbAddDocumentInput(BaseModel):
@@ -61,7 +62,11 @@ class KbAddDocumentTool(ToolBase):
 
         try:
             if file_path.strip():
-                result = indexer.index_file(file_path, doc_id=effective_doc_id)
+                # 安全校验：file_path 必须通过 MaxmaBlocker + 路径白名单检查
+                access_error = check_path_access(file_path.strip())
+                if access_error:
+                    return format_error(access_error)
+                result = indexer.index_file(file_path.strip(), doc_id=effective_doc_id)
             elif url.strip():
                 # 使用 Tavily Extract 提取 URL 内容
                 markdown = self._extract_url(url.strip())
@@ -85,29 +90,9 @@ class KbAddDocumentTool(ToolBase):
     @staticmethod
     def _extract_url(url: str) -> str:
         """使用 Tavily Extract 从 URL 提取 Markdown 文本。"""
+        from api.routes.kb import _parse_tavily_result
         from tools.network.tavily.tool_extract import TavilyExtractTool
-        import json
 
         extract_tool = TavilyExtractTool()
         result_str = extract_tool._run(urls=url)
-
-        try:
-            result_data = json.loads(result_str)
-            if isinstance(result_data, dict):
-                return (
-                    result_data.get("formatted", "")
-                    or result_data.get("content", "")
-                    or result_data.get("markdown", "")
-                )
-            elif isinstance(result_data, list) and result_data:
-                first = result_data[0]
-                if isinstance(first, dict):
-                    return (
-                        first.get("formatted", "")
-                        or first.get("content", "")
-                        or first.get("markdown", "")
-                    )
-                return str(first)
-        except (json.JSONDecodeError, IndexError, AttributeError):
-            pass
-        return result_str
+        return _parse_tavily_result(result_str)

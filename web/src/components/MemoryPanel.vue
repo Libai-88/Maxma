@@ -76,22 +76,40 @@
       </div>
     </template>
 
+    <!-- 错误提示 -->
+    <div v-if="errorMessage" class="error-banner">
+      <span>{{ errorMessage }}</span>
+      <button class="error-close" @click="errorMessage = ''">&#10005;</button>
+    </div>
+
     <!-- 编辑弹窗 -->
-    <div v-if="editDialog.show" class="edit-overlay" @click.self="editDialog.show = false">
-      <div class="edit-dialog">
+    <div v-if="editDialog.show" class="edit-overlay" @click.self="closeEditDialog">
+      <div class="edit-dialog" @keydown.esc="closeEditDialog">
         <h3 class="edit-title">编辑记忆</h3>
         <div class="edit-field">
           <label>内容</label>
-          <textarea v-model="editDialog.content" rows="3" class="edit-textarea" maxlength="150"></textarea>
+          <textarea
+            v-model="editDialog.content"
+            rows="3"
+            class="edit-textarea"
+            maxlength="150"
+            :disabled="saving"
+          ></textarea>
           <span class="edit-counter">{{ editDialog.content.length }}/150</span>
         </div>
         <div class="edit-field">
           <label>分区</label>
-          <input v-model="editDialog.theme" class="edit-input" />
+          <input v-model="editDialog.theme" class="edit-input" :disabled="saving" />
         </div>
         <div class="edit-actions">
-          <button class="edit-btn cancel" @click="editDialog.show = false">取消</button>
-          <button class="edit-btn save" :disabled="!editDialog.content.trim()" @click="saveEdit">保存</button>
+          <button class="edit-btn cancel" :disabled="saving" @click="closeEditDialog">取消</button>
+          <button
+            class="edit-btn save"
+            :disabled="!editDialog.content.trim() || saving"
+            @click="saveEdit"
+          >
+            {{ saving ? '保存中…' : '保存' }}
+          </button>
         </div>
       </div>
     </div>
@@ -99,7 +117,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { api } from '@/api'
 import type { VignetteSection } from '@/types'
 import MomentCard from '@/components/MomentCard.vue'
@@ -112,6 +130,8 @@ const useVignette = ref(true)
 const narrative = ref('')
 const sections = ref<VignetteSection[]>([])
 const loading = ref(false)
+const errorMessage = ref('')
+const saving = ref(false)
 
 // 搜索与过滤
 const searchQuery = ref('')
@@ -124,6 +144,11 @@ const editDialog = ref({
   content: '',
   theme: '',
 })
+
+// 竞态保护：refresh 序列号，丢弃过期响应
+let refreshSeq = 0
+// 组件卸载标志：防止卸载后修改 reactive 状态
+let isMounted = true
 
 /** 所有分区名（用于过滤标签） */
 const allThemes = computed(() => sections.value.map(s => s.theme))
@@ -162,40 +187,70 @@ function handleEditItem(item: { id: string; description: string; theme: string }
   }
 }
 
+function closeEditDialog() {
+  if (saving.value) return  // 保存中不允许关闭
+  editDialog.value.show = false
+}
+
+function showGlobalError(msg: string) {
+  if (!isMounted) return
+  errorMessage.value = msg
+}
+
 async function saveEdit() {
   if (!editDialog.value.content.trim() || !editDialog.value.id) return
+  if (saving.value) return  // 防抖锁：防止重复提交
+
+  saving.value = true
+  errorMessage.value = ''
   try {
     await api.updateMemory(
       editDialog.value.id,
       editDialog.value.content.trim(),
       editDialog.value.theme.trim(),
     )
+    if (!isMounted) return
     editDialog.value.show = false
     await refresh()
-  } catch (e) {
+  } catch (e: any) {
     console.error('Failed to update memory:', e)
+    const detail = e?.message || String(e)
+    showGlobalError(`保存失败：${detail}`)
+  } finally {
+    if (isMounted) saving.value = false
   }
 }
 
 async function refresh() {
+  const mySeq = ++refreshSeq
   loading.value = true
+  errorMessage.value = ''
   try {
     if (useVignette.value) {
       const res = await api.getMemories()
+      if (mySeq !== refreshSeq || !isMounted) return  // 丢弃过期响应
       sections.value = res.sections
     } else {
       const res = await api.getNarrative()
+      if (mySeq !== refreshSeq || !isMounted) return  // 丢弃过期响应
       narrative.value = res.narrative
     }
-  } catch {
-    sections.value = []
-    narrative.value = ''
+  } catch (e: any) {
+    if (mySeq !== refreshSeq || !isMounted) return
+    console.error('Failed to load memories:', e)
+    const detail = e?.message || String(e)
+    showGlobalError(`加载失败：${detail}`)
+    // 失败时不清空已有数据，保留用户上次看到的内容
   } finally {
-    loading.value = false
+    if (mySeq === refreshSeq && isMounted) loading.value = false
   }
 }
 
 onMounted(() => refresh())
+
+onUnmounted(() => {
+  isMounted = false
+})
 </script>
 
 <style scoped>
@@ -341,6 +396,37 @@ onMounted(() => refresh())
   align-items: center;
   justify-content: center;
   z-index: 1000;
+}
+
+/* ── 错误提示 ── */
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  background: rgba(220, 53, 69, 0.1);
+  border: 1px solid rgba(220, 53, 69, 0.3);
+  border-radius: 8px;
+  color: #dc3545;
+  font-size: 13px;
+}
+.error-banner span {
+  flex: 1;
+  word-break: break-word;
+}
+.error-close {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.error-close:hover {
+  background: rgba(220, 53, 69, 0.15);
 }
 .edit-dialog {
   background: var(--bg-card);

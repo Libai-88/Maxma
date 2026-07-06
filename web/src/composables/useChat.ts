@@ -53,20 +53,54 @@ function loadAllTurnsFromStorage(): Map<string, ChatTurn[]> {
 
 function saveTurnsToStorage(sid: string, data: ChatTurn[]) {
   const key = TURNS_KEY_PREFIX + sid
-  try {
+  const tryWrite = () => {
     const serialized = JSON.stringify(data)
     const size = new Blob([serialized]).size
-    console.log(`[useChat:save] 保存会话 ${sid} 到 localStorage: ${data.length} 条 turn, 约 ${(size / 1024).toFixed(1)} KB, key=${key}`)
     localStorage.setItem(key, serialized)
+    return size
+  }
+  try {
+    const size = tryWrite()
+    console.log(`[useChat:save] 保存会话 ${sid} 到 localStorage: ${data.length} 条 turn, 约 ${(size / 1024).toFixed(1)} KB, key=${key}`)
   } catch (e) {
-    console.error(`[useChat:save] 保存会话 ${sid} 到 localStorage 失败 (key=${key}):`, e)
-    // 尝试估算 localStorage 用量
-    let total = 0
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i)
-      if (k) total += k.length + (localStorage.getItem(k) || '').length
+    // 修复：配额超限后无清理 → 后续所有保存全部静默失败，用户无感知地丢失持久化。
+    // 策略：删除其他会话中最早（按 localStorage 键的写入顺序近似）的缓存，腾出空间后重试一次。
+    if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+      console.warn(`[useChat:save] localStorage 配额超限，尝试清理其他会话缓存后重试 (key=${key})`)
+      // 收集除当前 sid 外的所有 turns 缓存键，按"最近未使用"策略删除最旧的
+      const otherKeys: string[] = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i)
+        if (k && k.startsWith(TURNS_KEY_PREFIX) && k !== key) {
+          otherKeys.push(k)
+        }
+      }
+      // 删除一半最旧的缓存（最多保留一半），按键在 localStorage 中的顺序（近似 FIFO）
+      const toEvict = otherKeys.slice(0, Math.max(1, Math.ceil(otherKeys.length / 2)))
+      for (const k of toEvict) {
+        localStorage.removeItem(k)
+        const evictedSid = k.slice(TURNS_KEY_PREFIX.length)
+        turnsCache.delete(evictedSid)
+        console.warn(`[useChat:save] 配额压力下清理会话 ${evictedSid} 的缓存`)
+      }
+      // 重试一次
+      try {
+        const size = tryWrite()
+        console.log(`[useChat:save] 清理后重试成功: 会话 ${sid}, ${data.length} 条 turn, 约 ${(size / 1024).toFixed(1)} KB`)
+      } catch (e2) {
+        console.error(`[useChat:save] 清理后仍无法保存会话 ${sid} (key=${key}):`, e2)
+        // 最后手段：移除当前会话自己的缓存键，避免留下部分写入的脏数据
+        try { localStorage.removeItem(key) } catch { /* ignore */ }
+      }
+    } else {
+      console.error(`[useChat:save] 保存会话 ${sid} 到 localStorage 失败 (key=${key}):`, e)
+      let total = 0
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i)
+        if (k) total += k.length + (localStorage.getItem(k) || '').length
+      }
+      console.warn(`[useChat:save] localStorage 当前总估算用量: ${(total * 2 / 1024).toFixed(1)} KB`)
     }
-    console.warn(`[useChat:save] localStorage 当前总估算用量: ${(total * 2 / 1024).toFixed(1)} KB`)
   }
 }
 
@@ -209,6 +243,25 @@ async function connectSession(sid: string) {
       ch.reconnectTimer = null
     }
     console.log(`[useChat] WS connected: session=${sid}`)
+    // 修复：重连后若上一轮 currentTurn 仍卡住（WS 中断时未收到 done/error），
+    // 必须清理否则 isStreaming 永久为 true，且中断的轮次数据会因下次 send 被覆盖而丢失。
+    // 后端 WS 断开时已 cancel agent_task，所以这个 currentTurn 永远等不到 done 事件。
+    if (ch.isStreaming && ch.currentTurn) {
+      const interrupted = ch.currentTurn
+      console.warn(`[useChat] 重连检测到中断的轮次 (turn.id=${interrupted.id}), 推入 turns 并重置状态`)
+      // 保留已生成的部分内容（用户能看到中断点），标记未完成
+      if (!interrupted.finalAnswer) {
+        interrupted.finalAnswer = '（连接中断，回复未完成）'
+      }
+      ch.turns.push(interrupted)
+      ch.currentTurn = null
+      ch.isStreaming = false
+      ch.isAwaitingUser = false
+      ch._awaitingToolName = null
+      if (!ch.privateMode) {
+        persistTurns(sid)
+      }
+    }
   }
 
   ch.ws.onclose = (event) => {
@@ -672,39 +725,57 @@ export function useChat(sessionId: Ref<string>) {
   // 从后端加载历史消息并转换为 ChatTurn[]（localStorage 无缓存时的回退方案）
   // const 会话从 YAML 文件读取，普通会话从 checkpointer 读取
   async function loadHistoryFromBackend(sid: string, ch: SessionChannel) {
+    // 防御：空 sessionId 或占位符 sessionId 不加载
+    if (!sid || sid === '__pending__') {
+      console.log(`[useChat:loadHistory] 跳过空/占位 sessionId: "${sid}"`)
+      return
+    }
     try {
       const res = await api.getMessages(sid)
       if (!res.messages || res.messages.length === 0) {
         console.log(`[useChat:loadHistory] 会话 ${sid} 后端无历史消息`)
         return
       }
-      // 后端返回 [{role, content}]，两两配对成 ChatTurn（human + ai）
+      // 后端返回 [{role, content}]，按 human 分组配对成 ChatTurn
+      // 一轮对话 = 1 个 human + 后续所有非 human 消息（ai/tool），直到下一个 human
+      // 修复：此前只看 human/ai 相邻配对，含工具调用的回复（human → ai(tool_calls) → tool → ai(final)）会丢失
       const turns: ChatTurn[] = []
-      for (let i = 0; i < res.messages.length; i++) {
+      let i = 0
+      while (i < res.messages.length) {
         const msg = res.messages[i]
         if (msg.role === 'human') {
-          const aiMsg = res.messages[i + 1]
-          if (aiMsg && aiMsg.role === 'ai') {
-            turns.push({
-              id: `history-${sid}-${i}`,
-              userMessage: msg.content,
-              refs: [],
-              events: [],
-              memoryEvents: [],
-              finalAnswer: aiMsg.content,
-            })
-            i++ // 跳过已配对的 ai 消息
-          } else {
-            // 只有人类消息没有回复（异常情况）
-            turns.push({
-              id: `history-${sid}-${i}`,
-              userMessage: msg.content,
-              refs: [],
-              events: [],
-              memoryEvents: [],
-              finalAnswer: null,
-            })
+          // 开始一轮新对话
+          const turn: ChatTurn = {
+            id: `history-${sid}-${i}`,
+            userMessage: msg.content,
+            refs: [],
+            events: [],
+            memoryEvents: [],
+            finalAnswer: null,
           }
+          i++
+          // 收集后续所有非 human 消息（ai/tool），直到下一个 human
+          const aiContents: string[] = []
+          while (i < res.messages.length && res.messages[i].role !== 'human') {
+            const m = res.messages[i]
+            if (m.role === 'ai' && m.content) {
+              // 收集非空 ai 消息内容，最后一个非空 ai 消息作为 finalAnswer
+              aiContents.push(m.content)
+            }
+            // tool 消息跳过（历史回看不需要显示工具调用细节）
+            i++
+          }
+          // 最后一个非空 ai 消息作为 finalAnswer
+          turn.finalAnswer = aiContents.length > 0 ? aiContents[aiContents.length - 1] : null
+          // 兜底：如果 finalAnswer 为空（如 agent 被取消、工具失败后图直接结束），
+          // 设置占位提示，避免用户感知为"整轮对话被吞掉"
+          if (!turn.finalAnswer) {
+            turn.finalAnswer = '（这一轮处理未生成文字回复，请查看工具执行结果或重新提问。）'
+          }
+          turns.push(turn)
+        } else {
+          // 非 human 消息但没有前置 human（异常情况），跳过
+          i++
         }
       }
       if (turns.length > 0) {
@@ -761,6 +832,9 @@ export function useChat(sessionId: Ref<string>) {
   )
 
   onUnmounted(() => {
+    // 组件真正卸载时（非 keep-alive deactivated）断开所有 WS。
+    // 注意：keep-alive 场景下切换路由触发的是 onDeactivated 而非 onUnmounted，
+    // 所以 ChatView 被 keep-alive 缓存时，WS 不会被关闭，流式回复可以继续。
     for (const sid of Array.from(getChatStore().channels.keys())) {
       disconnectSession(sid)
     }

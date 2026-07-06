@@ -1,7 +1,18 @@
 <template>
   <div class="chat-view">
+    <!-- 后端不可用：provider 加载失败 -->
+    <div v-if="providerLoadFailed" class="no-provider-overlay">
+      <div class="no-provider-card">
+        <div class="no-provider-icon">⚠️</div>
+        <h3>无法加载模型配置</h3>
+        <p>后端服务可能未就绪，请稍后重试。</p>
+        <button class="btn primary" :disabled="providerRetrying" @click="retryLoadProviders">
+          {{ providerRetrying ? '重试中...' : '重试' }}
+        </button>
+      </div>
+    </div>
     <!-- 无提供商引导卡片 -->
-    <div v-if="!hasProviders" class="no-provider-overlay">
+    <div v-else-if="!hasProviders" class="no-provider-overlay">
       <div class="no-provider-card">
         <div class="no-provider-icon">⚙️</div>
         <h3>暂无已配置的 LLM 提供商</h3>
@@ -93,6 +104,7 @@
 </template>
 
 <script setup lang="ts">
+defineOptions({ name: 'ChatView' })
 import { api } from '@/api'
 import ChatInput from '@/components/ChatInput.vue'
 import ChatWindow from '@/components/ChatWindow.vue'
@@ -116,19 +128,47 @@ const {
   privateMode, setPrivateMode, autoApprove, setAutoApprove
 } = useChat(sessionId)
 
-const selectedProviderId = ref('')
-const selectedModelName = ref('')
+// 持久化 provider/model 选择到 localStorage，刷新后恢复
+const SELECTED_PROVIDER_KEY = 'maxma_selected_provider'
+const SELECTED_MODEL_KEY = 'maxma_selected_model'
+const selectedProviderId = ref(localStorage.getItem(SELECTED_PROVIDER_KEY) || '')
+const selectedModelName = ref(localStorage.getItem(SELECTED_MODEL_KEY) || '')
+
 const providerStore = useProviderStore()
 const { hasProviders } = storeToRefs(providerStore)
 
+// 后端不可用时的加载失败状态（区分"后端不可用"和"真的无 provider"）
+const providerLoadFailed = ref(false)
+const providerRetrying = ref(false)
+
+async function loadProvidersWithStatus() {
+  await providerStore.loadProviders()
+  // loadProviders 内部 catch 了错误，不会抛出
+  // 通过 loaded 标志判断是否成功加载过至少一次
+  providerLoadFailed.value = !providerStore.loaded && providerStore.allProviders.length === 0
+}
+
+async function retryLoadProviders() {
+  if (providerRetrying.value) return
+  providerRetrying.value = true
+  try {
+    await loadProvidersWithStatus()
+  } finally {
+    providerRetrying.value = false
+  }
+}
+
 onMounted(async () => {
   // 通过全局 store 加载 provider 列表（含重试），消除 ChatView/ChatInput 状态不一致
-  await providerStore.loadProviders()
+  await loadProvidersWithStatus()
 })
 
 function onModelChange(providerId: string, modelName: string) {
   selectedProviderId.value = providerId
   selectedModelName.value = modelName
+  // 持久化到 localStorage，刷新后可恢复
+  localStorage.setItem(SELECTED_PROVIDER_KEY, providerId)
+  localStorage.setItem(SELECTED_MODEL_KEY, modelName)
 }
 
 const isSubagent = computed(() => {

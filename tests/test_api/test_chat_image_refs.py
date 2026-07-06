@@ -93,6 +93,10 @@ def _load_chat_module():
 
     tools = types.ModuleType("tools")
     tools.select_tools_for_query = lambda *args, **kwargs: []
+    tools.get_all_tools = lambda *args, **kwargs: []
+    tools.merge_tool_lists = lambda primary, secondary, **kwargs: list(primary) + [
+        t for t in (secondary or [])
+    ]
     add_module("tools", tools)
 
     tools_base = types.ModuleType("tools.base")

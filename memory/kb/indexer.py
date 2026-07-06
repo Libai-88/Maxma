@@ -120,7 +120,7 @@ class KBIndexer:
         return self._index_document(document)
 
     def delete_document(self, doc_id: str) -> bool:
-        """删除文档及其所有切块。
+        """删除文档及其所有切块（包括原始文件）。
 
         Args:
             doc_id: 文档 ID
@@ -145,6 +145,17 @@ class KBIndexer:
                     store.delete(collection=COLLECTION_KB, ids=chunk_ids)
             except Exception as e:
                 logger.warning("[kb] 从向量库删除 %s 的切块失败: %s", doc_id, e)
+
+            # 删除原始文件（仅当文件在 KB_DIR 内时，防止路径穿越）
+            source_path = doc_info.get("source", "")
+            if source_path:
+                try:
+                    file_path = Path(source_path)
+                    # 安全检查：只删除 KB_DIR 内的文件
+                    if file_path.exists() and KB_DIR in file_path.resolve().parents:
+                        file_path.unlink()
+                except (OSError, ValueError) as e:
+                    logger.warning("[kb] 删除原始文件 %s 失败: %s", source_path, e)
 
             # 从元数据删除
             meta.pop(doc_id, None)
@@ -218,7 +229,20 @@ class KBIndexer:
                         continue
 
                     batch_ids = [c.id for c in batch]
-                    batch_metas = [c.to_dict() for c in batch]
+                    # chromadb metadata 值必须是标量（str/int/float/bool/None），
+                    # 不能是嵌套 dict。Chunk.to_dict() 返回的 "metadata" 字段是 dict，
+                    # 直接传给 chromadb 会抛 "Expected metadata value to be a str, int, ..."
+                    # 因此这里手动构造扁平化的 metadata。
+                    batch_metas = [
+                        {
+                            "doc_id": c.source_doc_id,
+                            "filename": c.source_filename,
+                            "source_path": c.source_path,
+                            "offset": c.offset,
+                            "length": c.length,
+                        }
+                        for c in batch
+                    ]
                     store.upsert(
                         collection=COLLECTION_KB,
                         ids=batch_ids,

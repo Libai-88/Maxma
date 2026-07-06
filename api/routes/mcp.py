@@ -76,11 +76,17 @@ class MCPServerUpdateBody(BaseModel):
 
 
 def _load_raw() -> list[dict]:
-    """读取 YAML 原始数据（list of dicts）。"""
+    """读取 YAML 原始数据（list of dicts）。
+
+    配置文件损坏（YAML 语法错误）时返回空列表而非抛异常，避免 500 错误。
+    """
     if not MCP_YAML_PATH.exists():
         return []
     raw = load_yaml(MCP_YAML_PATH, default={}) or {}
-    return raw.get("mcp_servers", []) or []
+    if not isinstance(raw, dict):
+        return []
+    servers = raw.get("mcp_servers", [])
+    return servers if isinstance(servers, list) else []
 
 
 def _save_raw(servers: list[dict]) -> None:
@@ -248,7 +254,11 @@ async def update_mcp_server(
     body: MCPServerUpdateBody,
     request: Request,
 ):
-    """更新现有 MCP 服务器配置（部分更新）。"""
+    """更新现有 MCP 服务器配置（部分更新）。
+
+    安全校验：command 走 stdio 白名单；url/tls_verify 走 URL 白名单 + TLS 校验。
+    防止用户通过 update 端点绕过 create 端点的安全校验。
+    """
     with yaml_file_lock(MCP_YAML_PATH):
         entries = _load_raw()
         target = None
@@ -261,10 +271,26 @@ async def update_mcp_server(
 
         # 部分更新：只更新非 None 字段
         update_fields = body.model_dump(exclude_unset=True)
-        if "command" in update_fields:
+
+        # 安全校验：command 走 stdio 白名单
+        if "command" in update_fields and update_fields["command"]:
             error = validate_stdio_command(update_fields["command"])
             if error:
                 raise HTTPException(status_code=400, detail=error)
+
+        # 安全校验：url/tls_verify 走 URL 白名单 + TLS 校验
+        # 需要根据 target 现有 transport 或 update_fields 中的 transport 判断
+        effective_transport = update_fields.get("transport", target.get("transport", ""))
+        if "url" in update_fields and update_fields["url"]:
+            url_error = validate_transport_url(update_fields["url"], effective_transport)
+            if url_error:
+                raise HTTPException(status_code=400, detail=url_error)
+        if "tls_verify" in update_fields:
+            effective_url = update_fields.get("url", target.get("url", ""))
+            tls_error = validate_tls_config(effective_url, update_fields["tls_verify"])
+            if tls_error:
+                raise HTTPException(status_code=400, detail=tls_error)
+
         for key, value in update_fields.items():
             target[key] = value
 

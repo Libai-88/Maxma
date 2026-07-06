@@ -22,7 +22,7 @@ from api.errors import ErrorCode, format_ws_error
 from api.metrics import get_metrics
 from api.middleware.rate_limit import get_ws_rate_limiter
 from api.session_manager import SessionState
-from tools import select_tools_for_query
+from tools import get_all_tools, merge_tool_lists
 from tools.base import format_error
 from tools.path_security import check_path_access
 
@@ -238,6 +238,45 @@ async def _stream_turn(
                         final_answer = candidate
         except Exception:
             logger.debug("Failed to read fallback final_answer from checkpoint", exc_info=True)
+
+    # 二级兜底：如果 final_answer 仍为空（如 executor 跳过最后一步后图直接结束，
+    # LLM 未生成文字回复），从 checkpoint 中提取最后一个工具错误，
+    # 包装为用户可见的提示，确保这一轮对话不会被"吞掉"。
+    if not final_answer:
+        try:
+            cpt = await session.checkpointer.aget_tuple(config)
+            if cpt is not None:
+                messages = cpt.checkpoint.get("channel_values", {}).get("messages", [])
+                # 从后往前找最后一个含错误标记的 ToolMessage
+                for msg in reversed(messages):
+                    if not isinstance(msg, ToolMessage):
+                        continue
+                    content = msg.content if isinstance(msg.content, str) else str(msg.content)
+                    if '"success": false' not in content and '"success":false' not in content:
+                        continue
+                    # 提取错误信息
+                    tool_err_msg = "工具执行失败"
+                    try:
+                        import json as _json
+                        parsed = _json.loads(content)
+                        if isinstance(parsed, dict) and parsed.get("success") is False:
+                            tool_err_msg = parsed.get("error", tool_err_msg)
+                    except (ValueError, TypeError):
+                        tool_err_msg = content[:200]
+                    tool_name = getattr(msg, "name", "") or "工具"
+                    final_answer = (
+                        f"抱歉，这一轮处理没能完成。\n\n"
+                        f"**{tool_name}** 报告：{tool_err_msg}\n\n"
+                        f"你可以调整后重试，或者告诉我换个方式处理。"
+                    )
+                    break
+        except Exception:
+            logger.debug("Failed to extract tool error fallback from checkpoint", exc_info=True)
+
+    # 三级兜底：所有提取均失败时，给用户一个明确的提示而非空白
+    if not final_answer:
+        final_answer = "（这一轮处理未生成文字回复，请查看工具执行结果或重新提问。）"
+
     return final_answer
 
 
@@ -581,15 +620,17 @@ async def _run_agent_turn(
     system_prompt = build_system_prompt()
 
     # ── 项目上下文自动感知 ──────────────────────────────────────
+    # 缓存优化：project_ctx 不再追加到 system_prompt，而是 prepend 到
+    # user_message。这样 SystemMessage 保持完全稳定，有利于 DeepSeek
+    # prompt cache 命中（project_ctx 仅在检测到项目路径时非空）。
     project_ctx = _get_project_context(session, user_message)
-    if project_ctx:
-        system_prompt = system_prompt + "\n\n" + project_ctx
     # ────────────────────────────────────────────────────────────
 
-    # 动态工具过滤：根据用户消息选择相关工具子集，减少 token 消耗
-    # 追加 MCP 工具，确保外部工具始终可用（只构建一次 Agent 图）
+    # 缓存优化：使用全量工具集 + MCP 工具，避免每轮工具集变化破坏
+    # DeepSeek prompt cache（tools 字段是 prompt 前缀的一部分）。
+    # 全量工具带来的额外 token 会被缓存，成本远低于缓存 miss。
     mcp_tools = getattr(ws.app.state, "mcp_tools", None) or []
-    turn_tools = select_tools_for_query(user_message, mcp_tools=list(mcp_tools))
+    turn_tools = merge_tool_lists(get_all_tools(), list(mcp_tools), log_collisions=False)
     # 4 层架构：注入情景记忆管理器，启用 episodic_retriever 节点
     episodic_mm = getattr(ws.app.state, "episodic_mm", None)
     agent_maxma = build_agent(
@@ -601,7 +642,12 @@ async def _run_agent_turn(
         episodic_mm=episodic_mm,
     )
     session._graph = agent_maxma
-    inputs = {"messages": [HumanMessage(content=user_message)]}
+    # project_ctx prepend 到 user_message（不修改 system_prompt，保持缓存稳定）
+    if project_ctx:
+        user_message_for_llm = f"[项目上下文]\n{project_ctx}\n\n---\n\n{user_message}"
+    else:
+        user_message_for_llm = user_message
+    inputs = {"messages": [HumanMessage(content=user_message_for_llm)]}
     config = {
         "configurable": {"thread_id": session.session_id},
         "callbacks": [ws_callback],
@@ -675,6 +721,17 @@ async def _run_agent_turn(
         except Exception as e:
             logger.warning("[cancel] checkpoint cleanup error: %s", e)
 
+        # 向 checkpoint 注入一条"被中断"的 AIMessage，确保前端 loadHistoryFromBackend
+        # 能取到非空 finalAnswer，避免用户感知为"整轮对话被吞掉"。
+        # 注意：必须用 as_node="agent" 写入，否则 aupdate_state 路由会出错。
+        try:
+            interrupt_msg = AIMessage(
+                content="（回复已中断——可能因网络断开或切换页面。请重新提问以继续。）"
+            )
+            await graph.aupdate_state(config, {"messages": [interrupt_msg]}, as_node="agent")
+        except Exception as e:
+            logger.warning("[cancel] failed to inject interrupt AIMessage: %s", e)
+
         await ws.send_json(
             format_ws_error(ErrorCode.CANCELLED, "生成已取消")
         )
@@ -716,8 +773,15 @@ async def _run_agent_turn(
         )
 
     # 3. [后处理] 增加消息计数器，将对话记录入长期记忆
+    # 修复：此前仅在 final_answer 非空时 +=2，错误轮次仍写 checkpointer（至少写入 HumanMessage）
+    # 但计数不增 → message_count 与 checkpointer 实际消息数漂移，导致：
+    # 1) undo 端点 max(0, count - deleted) 计算错误
+    # 2) const 会话 YAML metadata.message_count 不准，重启后显示错误
     if final_answer:
-        session.message_count += 2
+        session.message_count += 2  # human + ai
+    else:
+        # Agent 出错：graph.ainvoke 已把 HumanMessage 写入 checkpointer，但没有 AI 回复
+        session.message_count += 1
     if not private_mode:
         # 增量发送：只传本轮消息给记忆消费者，避免每轮重复处理全量历史
         messages_for_memory = [

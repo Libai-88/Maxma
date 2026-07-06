@@ -37,9 +37,10 @@
       <span v-if="store.uploading" class="drop-busy">上传中...</span>
     </div>
 
-    <!-- ── 错误提示 ── -->
+    <!-- ── 错误提示（带关闭按钮） ── -->
     <div v-if="store.error" class="msg error">
       {{ store.error }}
+      <button class="msg-close" @click="store.error = ''">✕</button>
     </div>
 
     <!-- ── 搜索栏 ── -->
@@ -69,7 +70,7 @@
           <div class="result-header">
             <span class="result-source" :title="r.source_path">{{ r.source_filename || r.source_doc_id }}</span>
             <span class="result-score" :class="scoreClass(r.score_percent)">
-              {{ r.score_percent.toFixed(1) }}%
+              {{ formatScore(r.score_percent) }}%
             </span>
           </div>
           <div class="result-text">{{ r.text }}</div>
@@ -109,7 +110,13 @@
           </div>
           <div class="col-created" :title="d.created_at">{{ formatDate(d.created_at) }}</div>
           <div class="col-actions">
-            <button class="action-btn danger" :disabled="store.uploading" @click="onDelete(d)">删除</button>
+            <button
+              class="action-btn danger"
+              :disabled="store.uploading || deletingDocId === d.doc_id"
+              @click="onDelete(d)"
+            >
+              {{ deletingDocId === d.doc_id ? '删除中...' : '删除' }}
+            </button>
           </div>
         </div>
       </div>
@@ -186,18 +193,31 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, reactive } from 'vue'
+import { ref, computed, onMounted, onUnmounted, reactive } from 'vue'
 import Icon from '@/components/Icon.vue'
 import { useKbStore } from '@/stores/kb'
 import type { KbDocument } from '@/types'
 
 const store = useKbStore()
 
+// ── setTimeout 统一清理 ──
+const timers: number[] = []
+function schedule(fn: () => void, delay: number) {
+  const id = window.setTimeout(fn, delay)
+  timers.push(id)
+}
+onUnmounted(() => {
+  while (timers.length) {
+    window.clearTimeout(timers.pop())
+  }
+})
+
 // ── 文件上传 ──
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const isDragging = ref(false)
 
 function triggerFilePick() {
+  if (store.uploading) return
   fileInputRef.value?.click()
 }
 
@@ -222,38 +242,55 @@ async function handleUpload(file: File) {
   }
 }
 
-// ── 文档删除 ──
+// ── 文档删除（防抖） ──
+const deletingDocId = ref('')
 async function onDelete(d: KbDocument) {
+  if (deletingDocId.value) return  // 防抖
   if (!confirm(`确定删除文档「${d.filename || d.doc_id}」？此操作将一并删除其所有切块，且不可恢复。`)) return
+  deletingDocId.value = d.doc_id
   try {
     await store.deleteDocument(d.doc_id)
   } catch (e: any) {
     console.error('delete failed', e)
+  } finally {
+    deletingDocId.value = ''
   }
 }
 
-// ── 搜索 ──
+// ── 搜索（竞态保护） ──
 const searchInput = ref('')
+let searchSeq = 0
 
 async function runSearch() {
   const q = searchInput.value.trim()
   if (!q) return
+  const mySeq = ++searchSeq
   try {
     await store.searchKb(q)
+    // 竞态保护：丢弃过期响应
+    if (mySeq !== searchSeq) return
   } catch (e: any) {
+    if (mySeq !== searchSeq) return
     console.error('search failed', e)
   }
 }
 
 function clearSearch() {
+  searchSeq++  // 取消正在进行的搜索
   searchInput.value = ''
   store.clearSearch()
 }
 
 function scoreClass(score: number): string {
+  if (score == null || isNaN(score)) return 'low'
   if (score >= 75) return 'high'
   if (score >= 50) return 'mid'
   return 'low'
+}
+
+function formatScore(score: number): string {
+  if (score == null || isNaN(score)) return '0.0'
+  return score.toFixed(1)
 }
 
 // ── 文本模态 ──
@@ -271,6 +308,7 @@ const canSubmitText = computed(
 )
 
 function openTextModal() {
+  if (store.uploading) return
   modalError.value = ''
   textForm.doc_id = ''
   textForm.filename = ''
@@ -308,6 +346,7 @@ const urlForm = reactive({
 })
 
 function openUrlModal() {
+  if (store.uploading) return
   modalError.value = ''
   urlForm.url = ''
   urlForm.doc_id = ''
@@ -476,10 +515,27 @@ onMounted(() => {
   padding: 10px 14px;
   border-radius: 8px;
   line-height: 1.5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 .msg.error {
   background: color-mix(in srgb, var(--status-error) 8%, var(--bg-card));
   color: var(--status-error);
+}
+.msg-close {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+.msg-close:hover {
+  opacity: 1;
 }
 
 /* ── 搜索 ── */

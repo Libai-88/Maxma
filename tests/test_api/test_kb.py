@@ -89,7 +89,8 @@ class TestDeleteDocument:
             mock_instance = MockIndexer.return_value
             mock_instance.delete_document.return_value = False
             response = client.delete("/kb/documents/nonexistent")
-            assert response.status_code == 404
+            # 幂等删除：不存在的文档也返回 200，避免前端重试时 404
+            assert response.status_code == 200
 
 
 class TestIndexText:

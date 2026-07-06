@@ -10,6 +10,12 @@
     <!-- ── 列表模式 ── -->
     <template v-if="mode === 'list'">
       <div v-if="loading" class="loading">加载中...</div>
+      <div v-else-if="loadError" class="empty">
+        加载失败: {{ loadError }}
+        <div style="margin-top: 12px">
+          <button class="btn primary" @click="loadServers">重试</button>
+        </div>
+      </div>
       <div v-else-if="servers.length === 0" class="empty">
         尚未配置任何 MCP 服务器。点击上方按钮添加。
         <div class="empty-hint">MCP（Model Context Protocol）让 Maxma 能调用外部工具和服务。</div>
@@ -25,6 +31,7 @@
             <button
               class="toggle-btn"
               :class="{ active: s.enabled }"
+              :disabled="toggling.has(s.server_id)"
               :title="s.enabled ? '已启用' : '已停用'"
               @click="toggleServer(s.server_id, !s.enabled)"
             ></button>
@@ -52,8 +59,12 @@
 
           <!-- 操作按钮 -->
           <div class="card-actions">
-            <button class="action-btn" @click="startEdit(s)">编辑</button>
-            <button class="action-btn danger" @click="deleteServer(s.server_id)">删除</button>
+            <button class="action-btn" :disabled="loadingDetailId === s.server_id" @click="startEdit(s)">
+              {{ loadingDetailId === s.server_id ? '加载...' : '编辑' }}
+            </button>
+            <button class="action-btn danger" :disabled="deletingId === s.server_id" @click="deleteServer(s.server_id)">
+              {{ deletingId === s.server_id ? '删除中...' : '删除' }}
+            </button>
           </div>
         </div>
       </div>
@@ -110,12 +121,12 @@
         <div class="form-section">
           <label class="form-label">环境变量</label>
           <div class="kv-list">
-            <div v-for="(val, key) in form.env" :key="key" class="kv-row">
-              <input :value="key" class="input mono" placeholder="KEY" @input="renameEnvKey(key, ($event.target as HTMLInputElement).value)" />
-              <input v-model="form.env[key]" class="input mono" placeholder="VALUE" />
-              <button type="button" class="kv-remove" @click="delete form.env[key]">✕</button>
+            <div v-for="(entry, i) in form.envEntries" :key="i" class="kv-row">
+              <input v-model="entry.key" class="input mono" placeholder="KEY" />
+              <input v-model="entry.value" class="input mono" placeholder="VALUE" />
+              <button type="button" class="kv-remove" @click="form.envEntries.splice(i, 1)">✕</button>
             </div>
-            <button type="button" class="kv-add" @click="addEnvVar()">+ 添加环境变量</button>
+            <button type="button" class="kv-add" @click="form.envEntries.push({ key: '', value: '' })">+ 添加环境变量</button>
           </div>
         </div>
 
@@ -149,12 +160,12 @@
         <div class="form-section">
           <label class="form-label">请求头</label>
           <div class="kv-list">
-            <div v-for="(val, key) in form.headers" :key="key" class="kv-row">
-              <input :value="key" class="input mono" placeholder="Header-Name" @input="renameHeaderKey(key, ($event.target as HTMLInputElement).value)" />
-              <input v-model="form.headers[key]" class="input mono" placeholder="Value" />
-              <button type="button" class="kv-remove" @click="delete form.headers[key]">✕</button>
+            <div v-for="(entry, i) in form.headersEntries" :key="i" class="kv-row">
+              <input v-model="entry.key" class="input mono" placeholder="Header-Name" />
+              <input v-model="entry.value" class="input mono" placeholder="Value" />
+              <button type="button" class="kv-remove" @click="form.headersEntries.splice(i, 1)">✕</button>
             </div>
-            <button type="button" class="kv-add" @click="addHeader()">+ 添加请求头</button>
+            <button type="button" class="kv-add" @click="form.headersEntries.push({ key: '', value: '' })">+ 添加请求头</button>
           </div>
         </div>
 
@@ -252,45 +263,74 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { api } from '@/api'
-import type { MCPServerInfo, MCPServerConfig, MCPTransport } from '@/types'
+import type { MCPServerInfo, MCPTransport } from '@/types'
 
 type Mode = 'list' | 'add' | 'edit'
 
+// ── 列表状态 ──
 const loading = ref(true)
+const loadError = ref('')
 const servers = ref<MCPServerInfo[]>([])
 const mode = ref<Mode>('list')
+
+// ── 表单状态 ──
 const saving = ref(false)
 const testing = ref(false)
 const saveMessage = ref('')
 const saveMessageClass = ref('')
+const editingId = ref('')
+const loadingDetailId = ref('')  // 编辑按钮加载状态
+const deletingId = ref('')       // 删除按钮防抖
+
+// ── 全局提示 ──
 const globalMessage = ref('')
 const globalMessageClass = ref('')
 
-const editingId = ref('')
+// ── toggle 防抖 ──
+const toggling = reactive<Set<string>>(new Set())
 
-// 阶段 4.1：可用工具列表（编辑时从后端加载，供点击添加到 allowlist/blocklist）
+// ── 阶段 4.1：可用工具列表 ──
 const availableTools = ref<string[]>([])
 const newAllowedTool = ref('')
 const newBlockedTool = ref('')
+
+// ── 竞态保护：编辑请求序列号 ──
+let editSeq = 0
+
+// ── setTimeout 统一清理 ──
+const timers: number[] = []
+function schedule(fn: () => void, delay: number) {
+  const id = window.setTimeout(fn, delay)
+  timers.push(id)
+}
+onUnmounted(() => {
+  while (timers.length) {
+    window.clearTimeout(timers.pop())
+  }
+})
+
+// ── 表单结构：env/headers 用数组化避免 key 重命名导致 DOM 重建 ──
+type KVEntry = { key: string; value: string }
 
 const emptyForm = () => ({
   server_id: '',
   transport: 'stdio' as MCPTransport,
   enabled: true,
   description: '',
+  // stdio 专用
   command: '',
   args: [] as string[],
-  env: {} as Record<string, string>,
+  envEntries: [] as KVEntry[],
   cwd: '',
+  // URL 类专用
   url: '',
-  headers: {} as Record<string, string>,
+  headersEntries: [] as KVEntry[],
   timeout: undefined as number | undefined,
   sse_read_timeout: undefined as number | undefined,
-  // 阶段 4.3：TLS 校验
   tls_verify: true,
-  // 阶段 4.1：工具 allowlist / blocklist
+  // 工具 allowlist / blocklist
   allowed_tools: [] as string[],
   blocked_tools: [] as string[],
 })
@@ -299,6 +339,7 @@ const form = reactive(emptyForm())
 
 const isEditing = computed(() => mode.value === 'edit')
 
+// ── helpers ──
 function addChip(arr: string[], value: string) {
   const v = value.trim()
   if (v && !arr.includes(v)) {
@@ -316,38 +357,71 @@ function transportLabel(t: string): string {
   return map[t] || t
 }
 
+// 对象 ↔ 数组 转换
+function objToEntries(obj: Record<string, string> | undefined): KVEntry[] {
+  if (!obj) return []
+  return Object.keys(obj).map((k) => ({ key: k, value: obj[k] }))
+}
+
+function entriesToObj(entries: KVEntry[]): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const e of entries) {
+    const k = (e.key || '').trim()
+    if (k) out[k] = e.value
+  }
+  return out
+}
+
+function showGlobal(msg: string, cls: 'ok' | 'error', autoClearMs = 2500) {
+  globalMessage.value = msg
+  globalMessageClass.value = cls
+  if (autoClearMs > 0) {
+    schedule(() => {
+      if (globalMessage.value === msg) globalMessage.value = ''
+    }, autoClearMs)
+  }
+}
+
+// ── 列表加载 ──
 async function loadServers() {
   loading.value = true
-  globalMessage.value = ''
+  loadError.value = ''
   try {
     const res = await api.listMcpServers()
-    servers.value = res.servers
+    servers.value = res.servers || []
   } catch (e: any) {
-    globalMessage.value = '加载失败: ' + (e?.message || String(e))
-    globalMessageClass.value = 'error'
+    loadError.value = e?.message || String(e)
   } finally {
     loading.value = false
   }
 }
 
+// ── 新增 ──
 function startAdd() {
   Object.assign(form, emptyForm())
   availableTools.value = []
   newAllowedTool.value = ''
   newBlockedTool.value = ''
-  mode.value = 'add'
   saveMessage.value = ''
+  saveMessageClass.value = ''
+  mode.value = 'add'
 }
 
+// ── 编辑（带竞态保护 + 加载状态） ──
 async function startEdit(server: MCPServerInfo) {
-  mode.value = 'edit'
-  editingId.value = server.server_id
+  const mySeq = ++editSeq
+  loadingDetailId.value = server.server_id
   saveMessage.value = ''
+  saveMessageClass.value = ''
   availableTools.value = []
   newAllowedTool.value = ''
   newBlockedTool.value = ''
+
   try {
     const full = await api.getMcpServer(server.server_id)
+    // 竞态保护：期间用户可能点了其他卡片或离开页面
+    if (mySeq !== editSeq) return
+
     Object.assign(form, {
       server_id: full.server_id,
       transport: full.transport,
@@ -355,80 +429,60 @@ async function startEdit(server: MCPServerInfo) {
       description: full.description || '',
       command: (full as any).command || '',
       args: (full as any).args || [],
-      env: (full as any).env || {},
+      envEntries: objToEntries((full as any).env),
       cwd: (full as any).cwd || '',
       url: (full as any).url || '',
-      headers: (full as any).headers || {},
+      headersEntries: objToEntries((full as any).headers),
       timeout: (full as any).timeout,
       sse_read_timeout: (full as any).sse_read_timeout,
-      tls_verify: (full as any).tls_verify !== false, // 默认 true
+      tls_verify: (full as any).tls_verify !== false,
       allowed_tools: (full as any).allowed_tools || [],
       blocked_tools: (full as any).blocked_tools || [],
     })
-    // 阶段 4.1：加载该服务器已加载的工具列表（供点击添加到 allowlist/blocklist）
+    editingId.value = server.server_id
+    mode.value = 'edit'
+
+    // 加载该服务器已加载的工具列表（失败不阻塞编辑）
     try {
       const res = await api.listMcpServerTools(server.server_id)
+      if (mySeq !== editSeq) return
       availableTools.value = res.tools || []
     } catch {
-      // 工具列表加载失败不阻塞编辑
+      if (mySeq !== editSeq) return
       availableTools.value = []
     }
   } catch (e: any) {
-    globalMessage.value = '加载服务器详情失败: ' + (e?.message || String(e))
-    globalMessageClass.value = 'error'
-    mode.value = 'list'
+    if (mySeq !== editSeq) return
+    showGlobal('加载服务器详情失败: ' + (e?.message || String(e)), 'error')
+  } finally {
+    if (mySeq === editSeq) {
+      loadingDetailId.value = ''
+    }
   }
 }
 
 function cancelForm() {
+  editSeq++  // 取消正在进行的编辑请求
   mode.value = 'list'
   saveMessage.value = ''
+  saveMessageClass.value = ''
+  loadingDetailId.value = ''
 }
 
-function addEnvVar() {
-  const key = prompt('环境变量名 (KEY):')
-  if (key && !(key in form.env)) {
-    form.env[key] = ''
-  }
-}
-
-function addHeader() {
-  const key = prompt('请求头名称 (例如 Authorization):')
-  if (key && !(key in form.headers)) {
-    form.headers[key] = ''
-  }
-}
-
-function renameEnvKey(oldKey: string, newKey: string) {
-  if (newKey && newKey !== oldKey && !(newKey in form.env)) {
-    form.env[newKey] = form.env[oldKey]
-    delete form.env[oldKey]
-  }
-}
-
-function renameHeaderKey(oldKey: string, newKey: string) {
-  if (newKey && newKey !== oldKey && !(newKey in form.headers)) {
-    form.headers[newKey] = form.headers[oldKey]
-    delete form.headers[oldKey]
-  }
-}
-
+// ── 测试连接（仅 stdio） ──
 async function handleTestConnection() {
   if (!form.command) {
     saveMessage.value = '请填写命令'
     saveMessageClass.value = 'error'
     return
   }
+  if (testing.value) return  // 防抖
   testing.value = true
   saveMessage.value = ''
   saveMessageClass.value = ''
   try {
-    // form.args: string[]，form.env: Record<string, string>（已是对齐后端的格式）
     const argsList = form.args.filter((a) => a != null && a !== '')
-    const envMap: Record<string, string> = {}
-    Object.keys(form.env).forEach((k) => {
-      if (k) envMap[k] = form.env[k]
-    })
+    const envMap = entriesToObj(form.envEntries)
 
     const result = await api.testMcpConnection({
       command: form.command,
@@ -437,9 +491,8 @@ async function handleTestConnection() {
     })
 
     if (result.success) {
-      saveMessage.value = '连接成功'
+      saveMessage.value = `连接成功（解析命令: ${result.resolved_command || '-'}）`
       saveMessageClass.value = 'ok'
-      alert(`连接成功!\n解析命令: ${result.resolved_command}`)
     } else {
       saveMessage.value = result.error || '连接失败'
       saveMessageClass.value = 'error'
@@ -452,83 +505,116 @@ async function handleTestConnection() {
   }
 }
 
+// ── 保存（新增/编辑） ──
 async function handleSave() {
+  if (saving.value) return  // 防抖
+  // 前端基础校验
+  if (!form.server_id.trim()) {
+    saveMessage.value = '请填写服务器 ID'
+    saveMessageClass.value = 'error'
+    return
+  }
+  if (form.transport === 'stdio' && !form.command.trim()) {
+    saveMessage.value = '请填写命令'
+    saveMessageClass.value = 'error'
+    return
+  }
+  if (form.transport !== 'stdio' && !form.url.trim()) {
+    saveMessage.value = '请填写 URL'
+    saveMessageClass.value = 'error'
+    return
+  }
+
   saving.value = true
   saveMessage.value = ''
   saveMessageClass.value = ''
   try {
     const body: any = {
-      server_id: form.server_id,
+      server_id: form.server_id.trim(),
       transport: form.transport,
       enabled: form.enabled,
       description: form.description,
     }
-    // 根据 transport 添加对应字段
     if (form.transport === 'stdio') {
       body.command = form.command
-      if (form.args.length) body.args = form.args
-      if (Object.keys(form.env).length) body.env = form.env
+      const argsList = form.args.filter((a) => a != null && a !== '')
+      if (argsList.length) body.args = argsList
+      const envMap = entriesToObj(form.envEntries)
+      if (Object.keys(envMap).length) body.env = envMap
       if (form.cwd) body.cwd = form.cwd
     } else {
       body.url = form.url
       body.tls_verify = form.tls_verify
-      if (Object.keys(form.headers).length) body.headers = form.headers
+      const headersMap = entriesToObj(form.headersEntries)
+      if (Object.keys(headersMap).length) body.headers = headersMap
       if (form.timeout != null) body.timeout = form.timeout
       if (form.transport === 'sse' && form.sse_read_timeout != null) {
         body.sse_read_timeout = form.sse_read_timeout
       }
     }
-
-    // 阶段 4.1：allowlist / blocklist（非空才发送，避免覆盖未配置状态）
     if (form.allowed_tools.length) body.allowed_tools = form.allowed_tools
     if (form.blocked_tools.length) body.blocked_tools = form.blocked_tools
 
     if (mode.value === 'add') {
       await api.createMcpServer(body)
       saveMessage.value = '创建成功'
-      saveMessageClass.value = 'ok'
     } else {
       await api.updateMcpServer(editingId.value, body)
       saveMessage.value = '保存成功'
-      saveMessageClass.value = 'ok'
     }
-    setTimeout(() => {
+    saveMessageClass.value = 'ok'
+
+    // saving 锁延迟释放：避免 800ms 窗口期内用户重复点击
+    schedule(() => {
       mode.value = 'list'
+      Object.assign(form, emptyForm())
+      editingId.value = ''
       loadServers()
+      saving.value = false
     }, 800)
   } catch (e: any) {
     saveMessage.value = '失败: ' + (e?.message || String(e))
     saveMessageClass.value = 'error'
-  } finally {
-    saving.value = false
+    saving.value = false  // 失败立即释放
   }
 }
 
+// ── 启用/停用（防抖） ──
 async function toggleServer(serverId: string, enabled: boolean) {
+  if (toggling.has(serverId)) return  // 防抖
+  toggling.add(serverId)
   try {
     await api.updateMcpServer(serverId, { enabled })
-    const s = servers.value.find(x => x.server_id === serverId)
+    const s = servers.value.find((x) => x.server_id === serverId)
     if (s) s.enabled = enabled
-    globalMessage.value = enabled ? `已启用 ${serverId}` : `已停用 ${serverId}`
-    globalMessageClass.value = 'ok'
-    setTimeout(() => { globalMessage.value = '' }, 2000)
+    showGlobal(enabled ? `已启用 ${serverId}` : `已停用 ${serverId}`, 'ok')
   } catch (e: any) {
-    globalMessage.value = '操作失败: ' + (e?.message || String(e))
-    globalMessageClass.value = 'error'
+    showGlobal('操作失败: ' + (e?.message || String(e)), 'error')
+    // 失败时刷新列表以恢复真实状态
+    loadServers()
+  } finally {
+    toggling.delete(serverId)
   }
 }
 
+// ── 删除（防抖 + 利用返回值刷新） ──
 async function deleteServer(serverId: string) {
-  if (!confirm(`确定删除 MCP 服务器 "${serverId}" 吗？`)) return
+  if (deletingId.value) return
+  if (!window.confirm(`确定删除 MCP 服务器 "${serverId}" 吗？`)) return
+  deletingId.value = serverId
   try {
-    await api.deleteMcpServer(serverId)
-    servers.value = servers.value.filter(s => s.server_id !== serverId)
-    globalMessage.value = `已删除 ${serverId}`
-    globalMessageClass.value = 'ok'
-    setTimeout(() => { globalMessage.value = '' }, 2000)
+    const res = await api.deleteMcpServer(serverId)
+    // 优先利用后端返回的列表刷新（确保 tool_count 等同步）
+    if (res?.servers) {
+      servers.value = res.servers
+    } else {
+      servers.value = servers.value.filter((s) => s.server_id !== serverId)
+    }
+    showGlobal(`已删除 ${serverId}`, 'ok')
   } catch (e: any) {
-    globalMessage.value = '删除失败: ' + (e?.message || String(e))
-    globalMessageClass.value = 'error'
+    showGlobal('删除失败: ' + (e?.message || String(e)), 'error')
+  } finally {
+    deletingId.value = ''
   }
 }
 
@@ -640,6 +726,10 @@ onMounted(loadServers)
   position: relative;
   transition: background 0.2s;
 }
+.toggle-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .toggle-btn::after {
   content: '';
   position: absolute;
@@ -714,6 +804,10 @@ onMounted(loadServers)
 }
 .action-btn:hover {
   border-color: var(--accent);
+}
+.action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .action-btn.danger {
   color: #d32f2f;

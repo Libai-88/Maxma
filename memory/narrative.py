@@ -383,6 +383,11 @@ class LongTermMemoryInterface:
         """后台消费者协程是否正在运行。"""
         return self._consumer_task is not None and not self._consumer_task.done()
 
+    @property
+    def memory_path(self) -> Path:
+        """当前长期记忆 YAML 文件路径（公开访问，供 REST API 使用）。"""
+        return self._memory_path
+
     def get_narrative(self) -> str:
         """读取当前记忆叙事，从实例自身的 _memory_path 读取。"""
         if not self._memory_path.exists():

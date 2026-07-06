@@ -43,33 +43,56 @@ class ManageSkillsInput(BaseModel):
 
 
 def _parse_frontmatter(text: str) -> dict[str, str]:
+    """解析 YAML frontmatter（支持多行 | 和 >），提取 name/description。"""
     m = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
     if not m:
         return {}
     meta: dict[str, str] = {}
     lines = m.group(1).splitlines()
-    for line in lines:
+    i = 0
+    while i < len(lines):
+        line = lines[i]
         if ":" in line:
             key, _, val = line.partition(":")
             key = key.strip()
-            val = val.strip().strip('"').strip("'")
+            val = val.strip()
             if key in ("name", "description"):
-                meta[key] = val
+                if val in ("|", ">"):
+                    parts: list[str] = []
+                    i += 1
+                    while i < len(lines) and (lines[i].startswith("  ") or lines[i].startswith("\t")):
+                        parts.append(lines[i].strip())
+                        i += 1
+                    meta[key] = " ".join(parts)
+                    continue
+                else:
+                    meta[key] = val.strip('"').strip("'")
+        i += 1
     return meta
 
 
 def _scan_skills_dir(base_dir, source_label: str) -> list[dict]:
+    """扫描指定目录下的所有 SKILL.md。单个文件损坏不会影响其他文件。"""
     if not base_dir.is_dir():
         return []
     skills = []
-    for sk_path in sorted(base_dir.rglob("SKILL.md")):
+    try:
+        iter_paths = sorted(base_dir.rglob("SKILL.md"))
+    except (OSError, RecursionError):
+        return []
+    for sk_path in iter_paths:
+        try:
+            content = sk_path.read_text(encoding="utf-8")
+            meta = _parse_frontmatter(content)
+        except (OSError, UnicodeDecodeError):
+            continue
         rel = sk_path.relative_to(base_dir).parent
-        meta = _parse_frontmatter(sk_path.read_text(encoding="utf-8"))
         skills.append({
             "id": str(rel),
             "name": meta.get("name", str(rel)),
             "description": meta.get("description", ""),
             "source": source_label,
+            "_canon": str(sk_path.resolve()),  # 用于去重
         })
     return skills
 
@@ -119,15 +142,20 @@ class ManageSkillsTool(ToolBase):
 
         if action == "list":
             # 开发模式下 ANTHROPIC_SKILLS_DIR 与 SKILLS_DATA_DIR 可能指向同一目录，
-            # 按 id 去重避免重复
-            skills = _scan_skills_dir(ANTHROPIC_SKILLS_DIR, "builtin")
-            user_skills = _scan_skills_dir(SKILLS_DATA_DIR, "user")
-            # 去重：用户数据目录中与内置目录相同的条目跳过
-            deduped_user = [
-                s for s in user_skills
-                if not any(s["id"] == b["id"] for b in skills)
-            ]
-            skills += deduped_user
+            # 按 canonical path 去重（与 agent/prompts.py 策略一致）
+            all_skills = _scan_skills_dir(ANTHROPIC_SKILLS_DIR, "builtin")
+            all_skills += _scan_skills_dir(SKILLS_DATA_DIR, "user")
+            # 按 _canon 去重：同一物理文件只保留首次出现（builtin 优先）
+            seen: set[str] = set()
+            deduped: list[dict] = []
+            for s in all_skills:
+                canon = s.pop("_canon", "")
+                if canon and canon in seen:
+                    continue
+                if canon:
+                    seen.add(canon)
+                deduped.append(s)
+            skills = deduped
             if not skills:
                 return format_success({"message": "当前没有任何 Skill", "skills": []})
             summary = []
@@ -170,6 +198,12 @@ class ManageSkillsTool(ToolBase):
             skill_dir = SKILLS_DATA_DIR / target_name
             if skill_dir.exists():
                 return format_error(f"Skill '{target_name}' 已存在")
+            # 检查与内置 skill 的命名冲突（避免用户 skill 被静默遮蔽）
+            builtin_path = ANTHROPIC_SKILLS_DIR / target_name / "SKILL.md"
+            if builtin_path.exists():
+                return format_error(
+                    f"内置 Skill '{target_name}' 已存在，请使用其他名称以避免冲突"
+                )
             skill_dir.mkdir(parents=True, exist_ok=True)
 
             if content:
@@ -312,11 +346,27 @@ description: {description}
         target_dir = SKILLS_DATA_DIR / skill_name
         if target_dir.exists():
             return format_error(f"Skill '{skill_name}' 已存在，如需覆盖请先 delete")
+        # 检查与内置 skill 的命名冲突
+        builtin_path = ANTHROPIC_SKILLS_DIR / skill_name / "SKILL.md"
+        if builtin_path.exists():
+            return format_error(
+                f"内置 Skill '{skill_name}' 已存在，请使用其他名称以避免冲突"
+            )
 
         target_dir.mkdir(parents=True, exist_ok=True)
         # 复制整个目录（包含 scripts/ references/ 等子目录）
+        # 安全防护：拒绝跟随指向源目录外的符号链接，防止路径穿越攻击
+        src_resolved = src_dir.resolve()
         try:
             for item in src_dir.rglob("*"):
+                # 符号链接防护：检查真实路径是否仍在 src_dir 内
+                if item.is_symlink():
+                    try:
+                        real = item.resolve()
+                        real.relative_to(src_resolved)
+                    except ValueError:
+                        # 符号链接指向源目录外，跳过
+                        continue
                 if item.is_file():
                     rel = item.relative_to(src_dir)
                     # 安全检查：防止路径穿越
@@ -325,7 +375,8 @@ description: {description}
                         continue
                     target_file = target_dir / rel
                     target_file.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(str(item), str(target_file))
+                    # 不跟随符号链接：copy2 默认会跟随，这里用 follow_symlinks=False
+                    shutil.copy2(str(item), str(target_file), follow_symlinks=False)
         except OSError as e:
             shutil.rmtree(target_dir, ignore_errors=True)
             return format_error(f"复制文件失败: {e}")
@@ -365,6 +416,12 @@ description: {description}
         target_dir = SKILLS_DATA_DIR / skill_name
         if target_dir.exists():
             return format_error(f"Skill '{skill_name}' 已存在，如需覆盖请先 delete")
+        # 检查与内置 skill 的命名冲突
+        builtin_path = ANTHROPIC_SKILLS_DIR / skill_name / "SKILL.md"
+        if builtin_path.exists():
+            return format_error(
+                f"内置 Skill '{skill_name}' 已存在，请使用其他名称以避免冲突"
+            )
 
         target_dir.mkdir(parents=True, exist_ok=True)
         (target_dir / "SKILL.md").write_text(content, encoding="utf-8")
@@ -518,6 +575,10 @@ description: {description}
         target_dir = SKILLS_DATA_DIR / skill_name
         if target_dir.exists():
             return {"ok": False, "error": f"已存在（如需覆盖请先 delete）"}
+        # 检查与内置 skill 的命名冲突
+        builtin_path = ANTHROPIC_SKILLS_DIR / skill_name / "SKILL.md"
+        if builtin_path.exists():
+            return {"ok": False, "error": f"内置 Skill '{skill_name}' 已存在，请使用其他名称"}
 
         target_dir.mkdir(parents=True, exist_ok=True)
         (target_dir / "SKILL.md").write_text(content, encoding="utf-8")
