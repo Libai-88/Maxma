@@ -46,6 +46,9 @@
           <button class="popup-item popup-action neutral" @click="cycleNightModeSetting">
             深夜模式：{{ nightModeLabel }}
           </button>
+          <button class="popup-item popup-action" :class="{ exporting: exportingErrorLog }" :disabled="exportingErrorLog" @click="handleExportErrorLog">
+            {{ exportingErrorLog ? '导出中...' : '导出错误日志' }}
+          </button>
           <button class="popup-item popup-action" :class="{ restarting }" :disabled="restarting" @click="handleRestart">
             {{ restarting ? '重启中...' : '重启服务' }}
           </button>
@@ -96,12 +99,38 @@ const settingsPopupRef = ref<HTMLElement | null>(null)
 const popupTop = ref('0px')
 const popupLeft = ref('228px')
 const restarting = ref(false)
+const exportingErrorLog = ref(false)
 const { nightModeSetting, isNightMode, cycleNightModeSetting } = useNightModeClock()
 const nightModeLabel = computed(() =>
   nightModeSetting.value === 'auto' ? '自动'
   : nightModeSetting.value === 'on' ? '开启'
   : '关闭'
 )
+
+async function handleExportErrorLog() {
+  if (exportingErrorLog.value) return
+  exportingErrorLog.value = true
+  closeSettingsMenu()
+  try {
+    const text = await api.getErrorLogText()
+    const ts = new Date().toISOString().replace(/[:T]/g, '-').substring(0, 19)
+    const filename = `maxma-error-report-${ts}.txt`
+    // 触发浏览器下载
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    alert('导出错误日志失败: ' + (e instanceof Error ? e.message : String(e)))
+  } finally {
+    exportingErrorLog.value = false
+  }
+}
 
 async function handleRestart() {
   if (restarting.value) return
@@ -560,6 +589,9 @@ html, body {
 }
 .popup-action.restarting {
   color: #f59e0b;
+}
+.popup-action.exporting {
+  color: #3b82f6;
 }
 
 /* ── Popup transition ── */

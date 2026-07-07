@@ -21,6 +21,7 @@ from api.context_usage import estimate_context_usage
 from api.errors import ErrorCode, format_ws_error
 from api.metrics import get_metrics
 from api.middleware.rate_limit import get_ws_rate_limiter
+from api.diagnostics import error_collector
 from api.session_manager import SessionState
 from tools import get_all_tools, merge_tool_lists
 from tools.base import format_error
@@ -609,6 +610,12 @@ async def _run_agent_turn(
         current_model_name = None
 
     if llm is None:
+        error_collector.add_error(
+            level="ERROR",
+            category="llm",
+            message="No LLM provider configured",
+            session_id=session.session_id,
+        )
         await ws.send_json(
             format_ws_error(
                 ErrorCode.NO_LLM,
@@ -744,6 +751,13 @@ async def _run_agent_turn(
             f"[sub-agent:{session.session_id[:8]}] _run_agent_turn error: {e}",
             exc_info=True,
             extra={"trace_id": trace_id},
+        )
+        error_collector.add_exception(
+            e,
+            category="agent",
+            message=f"Agent 执行出错: {str(e)[:200]}",
+            trace_id=trace_id,
+            session_id=session.session_id,
         )
         await ws.send_json(
             format_ws_error(
@@ -936,6 +950,12 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                     allowed, rate_err = get_ws_rate_limiter().try_consume(session_id)
                     if not allowed:
                         get_metrics().record_rate_limit("ws")
+                        error_collector.add_error(
+                            level="WARNING",
+                            category="rate_limit",
+                            message=f"WebSocket 限流: {rate_err}",
+                            session_id=session_id,
+                        )
                         await ws.send_json({"type": "error", "payload": rate_err})
                         continue
 
