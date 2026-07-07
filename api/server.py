@@ -42,6 +42,7 @@ from api.routes import upload as upload_router
 from api.routes import metrics as metrics_router
 from api.routes import event_hooks as event_hooks_router
 from api.routes import audit_log as audit_log_router
+from api.routes import diagnostics as diagnostics_router
 from api.session_manager import SessionManager, SessionState
 from api.ws_registry import WebSocketRegistry
 from agent.graph import build_agent
@@ -534,6 +535,9 @@ def create_app() -> FastAPI:
     # 审计日志
     app.include_router(audit_log_router.router, prefix="/api")
 
+    # 诊断与错误日志导出
+    app.include_router(diagnostics_router.router, prefix="/api")
+
     # 知识库
     from api.routes import kb as kb_router
     app.include_router(kb_router.router, prefix="/api")
@@ -560,6 +564,35 @@ def create_app() -> FastAPI:
     @app.get("/api/health")
     async def health(full: bool = False):
         return await get_health_report(app, probe_remote=full)
+
+    # ── 全局异常处理器 ──────────────────────────────────────────
+    # 捕获所有未处理的异常，记录到 ErrorCollector 供一键导出，
+    # 同时写入日志（带 exc_info），避免错误丢失。
+    import traceback as _traceback
+    from fastapi.responses import JSONResponse as _JSONResponse
+    from fastapi import Request as _Request
+    from api.diagnostics import error_collector as _error_collector
+
+    @app.exception_handler(Exception)
+    async def _global_exception_handler(request: _Request, exc: Exception):
+        _error_collector.add_exception(
+            exc,
+            category="uncaught",
+            message=f"未捕获异常 [{type(exc).__name__}]: {exc}",
+            request_id=getattr(request.state, "request_id", None),
+        )
+        logger.error(
+            "未捕获异常: %s %s -> %s: %s",
+            request.method,
+            request.url.path,
+            type(exc).__name__,
+            exc,
+            exc_info=True,
+        )
+        return _JSONResponse(
+            status_code=500,
+            content={"detail": "Internal Server Error", "error_type": type(exc).__name__},
+        )
 
     # 中间件执行顺序以“最后 add 的最先执行”为准。
     # 注册顺序（add 顺序）与实际执行顺序（后 add 先执行）：

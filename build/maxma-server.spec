@@ -228,6 +228,9 @@ hiddenimports = [
     "api.providers.openai_provider",
     "api.routes.event_hooks",
     "api.routes.audit_log",
+    # 错误诊断与导出（server.py 顶层导入 + 全局 exception_handler）
+    "api.diagnostics",
+    "api.routes.diagnostics",
     # Phase 3.2：HTTP/WS 限流中间件（server.py 顶层导入 + 函数内导入）
     "api.middleware",
     "api.middleware.auth",

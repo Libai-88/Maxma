@@ -9,6 +9,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 
 from tools import record_tool_usage
+from api.diagnostics import error_collector
 
 from .tool_extractors import _dispatch
 
@@ -121,6 +122,12 @@ class WebSocketCallback(BaseCallbackHandler):
             parsed = json.loads(out_str)
             if isinstance(parsed, dict) and parsed.get("success") is False:
                 error_msg = parsed.get("error", "操作执行失败")
+                error_collector.add_error(
+                    level="WARNING",
+                    category="tool",
+                    message=f"工具 [{tool_name}] 执行失败: {error_msg}",
+                    extra={"tool_name": tool_name},
+                )
                 await self._ws.send_json(
                     {
                         "type": "tool_error",
@@ -158,6 +165,12 @@ class WebSocketCallback(BaseCallbackHandler):
         self._tool_start_time.pop(run_id, None)
         self._tool_inputs.pop(run_id, None)
         tool_name = self._tool_names.pop(run_id, "unknown")
+        error_collector.add_exception(
+            error,
+            category="tool",
+            message=f"工具 [{tool_name}] 抛出异常: {error}",
+            extra={"tool_name": tool_name},
+        )
         await self._ws.send_json(
             {
                 "type": "tool_error",

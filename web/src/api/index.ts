@@ -547,6 +547,58 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  // ── 诊断与错误日志导出 ──
+
+  /** 导出完整错误报告（JSON 格式，含系统信息 + 内存收集 + 日志扫描） */
+  getErrorLog: () =>
+    request<{
+      generated_at: string
+      system_info: Record<string, unknown>
+      errors: Array<{
+        timestamp: string
+        level: string
+        category: string
+        message: string
+        trace_id?: string
+        session_id?: string
+        request_id?: string
+        logger_name?: string
+        exception?: string
+        extra?: Record<string, unknown>
+        source_file?: string
+        source_line?: number
+      }>
+      stats: {
+        memory_error_count: number
+        log_file_error_count: number
+        merged_total: number
+        uptime_seconds: number
+        buffer_capacity: number
+      }
+    }>('/diagnostics/error-log'),
+
+  /** 导出纯文本错误报告（便于下载或复制粘贴反馈给开发者） */
+  getErrorLogText: async (): Promise<string> => {
+    if (!tokenFetchedAtRuntime) {
+      await ensureTokenLoaded()
+    }
+    const headers: Record<string, string> = {}
+    if (token) {
+      headers['X-Maxma-Token'] = token
+    }
+    const res = await tauriFetch(`${BASE}/diagnostics/error-log/text`, { headers })
+    if (!res.ok) {
+      throw new Error(`导出错误日志失败: ${res.status}`)
+    }
+    return await res.text()
+  },
+
+  /** 清空内存缓冲区中的错误记录 */
+  clearErrorLog: () =>
+    request<{ status: string; deleted: number }>('/diagnostics/error-log', {
+      method: 'DELETE',
+    }),
 }
 
 export { request }
