@@ -34,6 +34,8 @@ datas = [
     (str(project_root / "anthropic_skills"), "anthropic_skills"),
     # Macros
     (str(project_root / "macros"), "macros"),
+    # Phase B：三层人设模板（persona_loader 读取）
+    (str(project_root / "agent" / "persona"), "agent/persona"),
     # 工具文档（TOOL.md）
     *_tool_docs,
 ]
@@ -284,6 +286,13 @@ hiddenimports = [
     "agent.approval_gateway",
     "agent.approval_tool_node",
     "agent.context_manager",
+    # Phase B/C/D/E：openhanako 对齐新增模块
+    "agent.persona_loader",
+    "agent.execution_boundary",
+    "agent.session_health",
+    "agent.capability_policy",
+    "agent.llm_reviewer",
+    "agent.execution_lease",
 
     # ── Memory 模块 ──
     "memory.memory_manager",
@@ -307,6 +316,13 @@ hiddenimports = [
     "memory.kb.chunker",
     "memory.kb.indexer",
     "memory.kb.retriever",
+    # Phase C：openhanako 对齐新增记忆模块
+    "memory.fact_store",
+    "memory.deep_memory",
+    "memory.rolling_summary",
+    "memory.memory_scheduler",
+    "memory.pinned_store",
+    "memory.pii_guard",
 
     # ── 路径安全 ──
     "tools.path_security",
