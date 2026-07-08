@@ -78,11 +78,13 @@
     <!-- 悬停滑入侧边栏 -->
     <FloatSidebar />
     <main class="main">
-      <router-view v-slot="{ Component }">
-        <keep-alive include="ChatView">
-          <component :is="Component" />
-        </keep-alive>
-      </router-view>
+      <RegionalErrorBoundary :reset-keys="[$route.path]">
+        <router-view v-slot="{ Component }">
+          <keep-alive include="ChatView">
+            <component :is="Component" />
+          </keep-alive>
+        </router-view>
+      </RegionalErrorBoundary>
     </main>
     <!-- 树阴光影氛围层 -->
     <LeavesOverlay />
@@ -102,7 +104,7 @@ import { useSessionStore } from '@/stores/session';
 import { useSidebar } from '@/composables/useSidebar';
 import { api } from '@/api';
 import { computed, ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { useTheme } from '@/composables/useTheme'
 import ThemePicker from '@/components/ThemePicker.vue'
 import LeavesOverlay from '@/components/LeavesOverlay.vue'
@@ -110,6 +112,7 @@ import MediaViewer from '@/components/MediaViewer.vue'
 import FloatSidebar from '@/components/FloatSidebar.vue'
 import { useFloatSidebar } from '@/composables/useFloatSidebar'
 import { usePaperTexture } from '@/composables/usePaperTexture'
+import RegionalErrorBoundary from '@/components/ui/RegionalErrorBoundary.vue'
 
 const { effectiveCollapsed, toggleSidebar } = useSidebar()
 
@@ -211,6 +214,7 @@ function onSidebarClick(e: MouseEvent) {
 }
 
 const router = useRouter()
+const route = useRoute()
 
 function handleSwitchSession(id: string) {
   switchSession(id)
