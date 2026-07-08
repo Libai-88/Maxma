@@ -265,6 +265,8 @@ def make_executor_node(
     send_event: Optional[Callable] = None,
     recovery_manager: Optional[Any] = None,
     performance_monitor: Optional[Any] = None,
+    on_plan_confirmation: Optional[Callable] = None,
+    on_activity_event: Optional[Callable] = None,
 ):
     """创建 executor 节点函数（闭包捕获 ws / interaction / 配置）。
 
@@ -282,10 +284,82 @@ def make_executor_node(
             生产代码由 graph.py 显式注入全局单例，测试传 None 隔离状态）
         performance_monitor: PerformanceMonitor 实例（None 时跳过 record_tool_call；
             阶段 2.3 接入：record_tool_call(success=False)）
+        on_plan_confirmation: 计划确认回调（B5 回调注入）。
+            None 时使用本模块的 request_plan_confirmation。
+        on_activity_event: 活动事件记录回调（B5 回调注入）。
+            None 时懒加载 api.activity_hub.activity_hub.add。
+            用于将 plan_step_start / plan_step_end / plan_step_error / plan_completed
+            事件记录到 ActivityHub。
     """
+    # 回调注入默认值：未提供时使用直接引用 / 懒加载
+    if on_plan_confirmation is None:
+        on_plan_confirmation = request_plan_confirmation
+    if on_activity_event is None:
+        try:
+            from api.activity_hub import activity_hub
+            on_activity_event = activity_hub.add
+        except Exception:
+            on_activity_event = None
+
+    def _record_activity(event: dict) -> None:
+        """将 plan 事件记录到 ActivityHub（通过注入的 on_activity_event 回调）。
+
+        与 _send_event 的 WS 推送互补：WS 推送给前端实时展示，
+        ActivityHub 记录供后续查询/审计。记录失败不影响主流程。
+        """
+        if on_activity_event is None:
+            return
+        try:
+            from api.interaction import current_session_id
+            _session_id = current_session_id.get() or ""
+        except Exception:
+            _session_id = ""
+        event_type = event.get("type", "")
+        payload = event.get("payload", {})
+        try:
+            if event_type == "plan_step_start":
+                step_idx = payload.get("step_index", 0)
+                on_activity_event(
+                    category="plan",
+                    event_type="plan_step_start",
+                    session_id=_session_id,
+                    message=f"开始步骤 {step_idx + 1}: {payload.get('step_description', '')}",
+                    payload=payload,
+                )
+            elif event_type == "plan_step_end":
+                step_idx = payload.get("step_index", 0)
+                on_activity_event(
+                    category="plan",
+                    event_type="plan_step_end",
+                    session_id=_session_id,
+                    message=f"完成步骤 {step_idx + 1}（{payload.get('status', 'done')}）",
+                    payload=payload,
+                )
+            elif event_type == "plan_step_error":
+                step_idx = payload.get("step_index", 0)
+                on_activity_event(
+                    category="plan",
+                    event_type="plan_step_error",
+                    session_id=_session_id,
+                    level="warn",
+                    message=f"步骤 {step_idx + 1} 失败: {payload.get('error', '')[:100]}",
+                    payload=payload,
+                )
+            elif event_type == "plan_completed":
+                on_activity_event(
+                    category="plan",
+                    event_type="plan_completed",
+                    session_id=_session_id,
+                    message="计划执行完成",
+                    payload=payload,
+                )
+        except Exception:
+            logger.debug("Failed to record plan event to ActivityHub", exc_info=True)
 
     async def _send_event(payload: dict) -> None:
-        """通过 ws 或 send_event 回调推送事件。"""
+        """通过 ws 或 send_event 回调推送事件，并记录到 ActivityHub。"""
+        # 记录到 ActivityHub（B5：plan 事件记录）
+        _record_activity(payload)
         if send_event is not None:
             await send_event(payload)
         elif ws is not None:
@@ -342,7 +416,7 @@ def make_executor_node(
                 if not auto_approve:
                     plan_id = uuid.uuid4().hex[:12]
                     steps_text = [s.description for s in plan.steps_in_order()]
-                    response = await request_plan_confirmation(
+                    response = await on_plan_confirmation(
                         ws=ws,
                         interaction=interaction_module,
                         plan_id=plan_id,
@@ -656,37 +730,39 @@ def make_executor_node(
 
         在 turn 开始/结束时记录事件，使用 try/finally 确保所有 return 路径
         都能触发 turn_end 记录。Activity Hub 记录失败不影响正常流程。
+
+        B5：使用注入的 on_activity_event 回调，而非直接 import activity_hub。
         """
         # 记录 turn 开始
-        try:
-            from api.activity_hub import activity_hub
-            from api.interaction import current_session_id
-            _session_id = current_session_id.get() or ""
-            activity_hub.add(
-                category="turn",
-                event_type="turn_start",
-                session_id=_session_id,
-                message="Agent turn 开始",
-            )
-        except Exception:
-            pass
+        if on_activity_event is not None:
+            try:
+                from api.interaction import current_session_id
+                _session_id = current_session_id.get() or ""
+                on_activity_event(
+                    category="turn",
+                    event_type="turn_start",
+                    session_id=_session_id,
+                    message="Agent turn 开始",
+                )
+            except Exception:
+                pass
 
         try:
             return await executor_node(state)
         finally:
             # 记录 turn 结束
-            try:
-                from api.activity_hub import activity_hub
-                from api.interaction import current_session_id
-                _session_id = current_session_id.get() or ""
-                activity_hub.add(
-                    category="turn",
-                    event_type="turn_end",
-                    session_id=_session_id,
-                    message="Agent turn 结束",
-                )
-            except Exception:
-                pass
+            if on_activity_event is not None:
+                try:
+                    from api.interaction import current_session_id
+                    _session_id = current_session_id.get() or ""
+                    on_activity_event(
+                        category="turn",
+                        event_type="turn_end",
+                        session_id=_session_id,
+                        message="Agent turn 结束",
+                    )
+                except Exception:
+                    pass
 
     return _executor_node_with_activity
 

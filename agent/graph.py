@@ -23,7 +23,7 @@
 import asyncio
 import logging
 import re
-from typing import Optional
+from typing import Callable, Optional
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -173,6 +173,9 @@ def build_agent(
     episodic_mm=None,
     enable_executor: bool | None = None,
     enable_hitl: bool = True,
+    # 回调注入：Agent 不直接持有这些模块的引用，通过回调间接访问
+    on_plan_confirmation: Callable | None = None,
+    on_activity_event: Callable | None = None,
 ) -> CompiledStateGraph:
     """构建带规划节点的 ReAct Agent 图。
 
@@ -186,7 +189,18 @@ def build_agent(
     - enable_executor: 是否启用 executor 节点（plan-and-execute 步骤级驱动）。
       None 时从 settings.executor_enable_by_default 读取。子 Agent 应传 False。
     - enable_hitl: 是否启用 HITL 计划确认。事件钩子场景应传 False。
+
+    回调注入参数（B5）：
+    - on_plan_confirmation: 计划确认回调，None 时懒加载 agent.executor.request_plan_confirmation
+    - on_activity_event: 活动事件记录回调，None 时懒加载 api.activity_hub.activity_hub.add
     """
+    # 使用注入的回调，而非直接 import
+    if on_plan_confirmation is None:
+        from agent.executor import request_plan_confirmation as on_plan_confirmation
+    if on_activity_event is None:
+        from api.activity_hub import activity_hub
+        on_activity_event = activity_hub.add
+
     if checkpointer is None:
         checkpointer = MemorySaver()
 
@@ -487,6 +501,8 @@ def build_agent(
             max_replans=max_replans,
             recovery_manager=recovery_manager,
             performance_monitor=performance_monitor,
+            on_plan_confirmation=on_plan_confirmation,
+            on_activity_event=on_activity_event,
         )
         graph.add_node("executor", executor_node)
 
