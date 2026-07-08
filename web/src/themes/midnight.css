@@ -12,7 +12,6 @@
 
   /* ── 主色调（柔粉） ── */
   --accent:        #C99AAF;
-  --accent-light:  #D8AFC0;
   --accent-pink:   #EAB2A0;
   --accent-pink-light: #EAB2A0;
   --accent-pink-soft:  rgba(234, 178, 160, 0.12);
@@ -43,4 +42,25 @@
   --overlay-light:  rgba(255, 255, 255, 0.05);
   --overlay-medium: rgba(255, 255, 255, 0.08);
   --overlay-strong: rgba(255, 255, 255, 0.15);
+
+  /* RGB 拆分（用于 rgba(var(--accent-rgb), 0.08)） */
+  --accent-rgb: 201, 154, 175;
+  --green-rgb: 129, 199, 132;
+  --coral-rgb: 255, 138, 101;
+  --danger-rgb: 229, 115, 115;
+
+  /* 聊天专用语义色 */
+  --hana-text: #c99aaf;
+  --mood-bg: rgba(201, 154, 175, 0.08);
+  --mood-text: #b88a9f;
+  --mood-border: rgba(201, 154, 175, 0.2);
+  --tool-bg: rgba(201, 154, 175, 0.06);
+  --tool-text: #a97a8f;
+  --user-bg: rgba(201, 154, 175, 0.1);
+  --drop-overlay-bg: rgba(201, 154, 175, 0.15);
+  --attach-bg: rgba(201, 154, 175, 0.08);
+
+  /* 修复 --accent-light 语义冲突 */
+  --accent-light: rgba(201, 154, 175, 0.08);
+  --accent-hover: #b88a9f;
 }
