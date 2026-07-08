@@ -124,3 +124,34 @@
   33%      { content: '..'; }
   66%      { content: '...'; }
 }
+
+/* ── 无障碍：尊重 prefers-reduced-motion ── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* 位移类动画直接跳到终态 */
+  .hana-fade-up,
+  .hana-fade-down,
+  .hana-slide-in-left,
+  .hana-slide-out-left,
+  .hana-slide-in-top,
+  .hana-slide-out-top {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  /* 旋转/脉动停止 */
+  .hana-spin,
+  .hana-globe-spin,
+  .hana-pulse {
+    animation: none !important;
+  }
+}
