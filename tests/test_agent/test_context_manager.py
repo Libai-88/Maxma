@@ -227,3 +227,43 @@ def test_hard_truncation_utf8_safe():
     assert head.encode('utf-8').decode('utf-8') == head
     assert tail.encode('utf-8').decode('utf-8') == tail
     assert len(head.encode('utf-8')) <= 50
+
+
+# ── Task E1: Hard Truncation 降级策略 ─────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_compaction_falls_back_to_hard_truncation_on_llm_error():
+    """LLM 摘要失败时应降级为 hard truncation"""
+    from agent.context_manager import maybe_trim_checkpoint
+    from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+    from unittest.mock import AsyncMock
+
+    messages = [SystemMessage(content="You are helpful.")]
+    for i in range(50):
+        messages.append(HumanMessage(content=f"Hello {i} " * 50))
+        messages.append(AIMessage(content=f"Hi {i} " * 50))
+
+    mock_llm = AsyncMock()
+    # LLM 抛错模拟超窗
+    mock_llm.ainvoke = AsyncMock(side_effect=Exception("context length exceeded"))
+
+    result = await maybe_trim_checkpoint(
+        {"messages": messages, "session_id": "s1"},
+        {"configurable": {"thread_id": "t1"}},
+        llm=mock_llm,
+        checkpointer=None,
+        ws_callback=None,
+        token_counter=lambda msgs: 100000,
+        max_tokens=1000,
+    )
+
+    # 不应抛错，应返回降级结果
+    assert "messages" in result
+    new_msgs = result["messages"]
+    # SystemMessage 仍应保留
+    assert any(isinstance(m, SystemMessage) for m in new_msgs)
+    # 消息总数应显著减少
+    assert len(new_msgs) < len(messages)
+    # 应标记降级原因
+    assert result.get("compaction_fallback") in (True, "hard_truncation", None)

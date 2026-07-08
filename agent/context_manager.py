@@ -238,13 +238,19 @@ def _summarize_old_messages(messages: Sequence[BaseMessage]) -> str:
     return result
 
 
-async def _llm_summarize(messages: Sequence[BaseMessage], llm) -> str:
+async def _llm_summarize(messages: Sequence[BaseMessage], llm, *, raise_on_error: bool = False) -> str:
     """使用 LLM 生成结构化交接文档式摘要（借鉴 Claude Code compact 机制）。
 
     特点：
     - 结构化模板：按任务状态、关键实体、决策、错误分类提取
     - 自适应长度：根据对话复杂度动态调整输入文本量
     - 实体保留：从旧消息中提取文件路径、URL 作为"重读清单"
+
+    Args:
+        messages: 待摘要的消息列表
+        llm: LLM 实例
+        raise_on_error: 为 True 时，LLM 调用失败将抛出异常（由调用方处理降级）；
+            为 False（默认）时，内部回退到 ``_summarize_old_messages`` 提取式摘要。
     """
     # 自适应：根据消息数量调整每条消息截取长度
     msg_count = len(messages)
@@ -286,6 +292,8 @@ async def _llm_summarize(messages: Sequence[BaseMessage], llm) -> str:
         return summary.strip()
     except Exception as e:
         logger.warning(f"LLM summarization failed, falling back to extraction: {e}")
+        if raise_on_error:
+            raise
         return _summarize_old_messages(messages)
 
 
@@ -455,9 +463,23 @@ async def maybe_trim_checkpoint(
         old_messages = dynamic_messages[:boundary]
         retained_messages = dynamic_messages[boundary:]
 
-        # 使用 LLM 摘要（如果可用）或回退到提取式
+        # 使用 LLM 摘要（如果可用）；LLM 失败时降级为 head+tail 硬截断
+        compaction_fallback = None
         if llm is not None:
-            summary_text = await _llm_summarize(old_messages, llm)
+            try:
+                summary_text = await _llm_summarize(old_messages, llm, raise_on_error=True)
+            except Exception as e:
+                logger.warning(
+                    f"LLM summary failed, falling back to hard truncation: {e}"
+                )
+                # 降级：把较早的动态消息拼成文本做 head+tail 硬截断
+                old_text = "\n\n".join(
+                    (m.content if isinstance(m.content, str) else str(m.content))
+                    for m in old_messages
+                )
+                head, tail = truncate_text_head_tail(old_text, max_bytes=4096)
+                summary_text = f"[会话历史摘要-降级]\n{head}\n{tail}"
+                compaction_fallback = "hard_truncation"
         else:
             summary_text = _summarize_old_messages(old_messages)
 
@@ -501,6 +523,8 @@ async def maybe_trim_checkpoint(
             "context_usage_before": usage_ratio_before,
             "context_usage_after": usage_ratio_after,
         }
+        if compaction_fallback:
+            compress_detail["compaction_fallback"] = compaction_fallback
 
         # 通过 WS 回调推送压缩事件（推送失败不影响压缩结果）
         if ws_callback:
