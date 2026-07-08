@@ -109,6 +109,7 @@ import LeavesOverlay from '@/components/LeavesOverlay.vue'
 import MediaViewer from '@/components/MediaViewer.vue'
 import FloatSidebar from '@/components/FloatSidebar.vue'
 import { useFloatSidebar } from '@/composables/useFloatSidebar'
+import { usePaperTexture } from '@/composables/usePaperTexture'
 
 const { effectiveCollapsed, toggleSidebar } = useSidebar()
 
@@ -242,6 +243,10 @@ onMounted(async () => {
   // 初始化 Session 状态（从 localStorage 恢复或创建新会话）
   await sessionStore.initIfNeeded()
   healthStore.startPolling()
+
+  // 初始化纸质纹理 body class
+  const { enabled: paperTextureEnabled } = usePaperTexture()
+  document.body.classList.toggle('paper-texture', paperTextureEnabled.value)
 })
 
 // 监听健康状态：后端从离线恢复到在线时，自动刷新会话列表
@@ -308,6 +313,37 @@ watch(health, (newHealth, oldHealth) => {
 }
 *::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
+}
+
+/* ── 纸质纹理系统：三层叠加 ── */
+/* ① Surface 层：铺底元素直接叠纹理 */
+body.paper-texture,
+body.paper-texture .sidebar,
+body.paper-texture .chat-header {
+  background-image: var(--paper-texture-url);
+  background-repeat: repeat;
+  background-size: var(--paper-texture-size);
+  background-attachment: fixed;
+}
+
+/* ② Card 层：bg-card 元素用 lighten 混合 */
+body.paper-texture .msg-card,
+body.paper-texture .ds-card,
+body.paper-texture .input-wrapper,
+body.paper-texture .hover-card,
+body.paper-texture .no-provider-card {
+  background-blend-mode: var(--paper-texture-card-blend-mode);
+}
+
+/* ③ 亮度补偿：暖白叠层抵消纹理变暗（暗色主题跳过） */
+html:not([data-theme="midnight"]):not([data-theme="midnight-contrast"])
+body.paper-texture::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: rgba(255, 253, 247, var(--paper-texture-opacity));
+  pointer-events: none;
 }
 
 html, body {
