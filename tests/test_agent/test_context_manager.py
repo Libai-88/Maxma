@@ -351,3 +351,76 @@ def test_file_operations_appended_to_summary():
     assert "d:/proj/main.py" in result
     assert "d:/proj/utils.py" in result
     assert "read" in result.lower() or "读" in result
+
+
+# ── Task E4: 结构化摘要格式 ─────────────────────────────
+
+
+def test_structured_summary_has_five_sections():
+    """结构化摘要应有 5 个固定段"""
+    from agent.context_manager import StructuredSummary, format_structured_summary
+
+    summary = StructuredSummary(
+        goal="帮用户搭建 Vue3 项目",
+        constraints=["使用 TypeScript", "不引入 UI 库"],
+        progress=["已初始化项目", "已配置 ESLint"],
+        key_decisions=["选择 Vite 而非 Webpack", "使用 Composition API"],
+        next_steps=["添加路由", "接入 Pinia"],
+    )
+    text = format_structured_summary(summary)
+    assert "## Goal" in text or "## 目标" in text
+    assert "## Constraints" in text or "## 约束" in text
+    assert "## Progress" in text or "## 进展" in text
+    assert "## Key Decisions" in text or "## 关键决策" in text
+    assert "## Next Steps" in text or "## 下一步" in text
+    assert "帮用户搭建 Vue3 项目" in text
+    assert "选择 Vite 而非 Webpack" in text
+
+
+def test_parse_structured_summary():
+    """解析结构化摘要文本"""
+    from agent.context_manager import parse_structured_summary
+
+    text = """## Goal
+帮用户重构代码
+
+## Constraints
+- 不破坏现有 API
+- 保持测试通过
+
+## Progress
+- 完成模块拆分
+
+## Key Decisions
+- 采用工厂模式
+
+## Next Steps
+- 更新文档"""
+
+    summary = parse_structured_summary(text)
+    assert summary.goal == "帮用户重构代码"
+    assert len(summary.constraints) == 2
+    assert "不破坏现有 API" in summary.constraints[0]
+    assert len(summary.progress) == 1
+    assert len(summary.key_decisions) == 1
+    assert len(summary.next_steps) == 1
+
+
+def test_structured_summary_roundtrip():
+    """结构化摘要往返：format → parse 应保持数据"""
+    from agent.context_manager import StructuredSummary, format_structured_summary, parse_structured_summary
+
+    original = StructuredSummary(
+        goal="测试目标",
+        constraints=["约束1"],
+        progress=["进展1"],
+        key_decisions=["决策1"],
+        next_steps=["步骤1"],
+    )
+    text = format_structured_summary(original)
+    parsed = parse_structured_summary(text)
+    assert parsed.goal == original.goal
+    assert parsed.constraints == original.constraints
+    assert parsed.progress == original.progress
+    assert parsed.key_decisions == original.key_decisions
+    assert parsed.next_steps == original.next_steps

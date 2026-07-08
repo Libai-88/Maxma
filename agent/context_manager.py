@@ -8,6 +8,7 @@
 
 import logging
 import re
+from dataclasses import dataclass, field
 from typing import Optional, Sequence
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, RemoveMessage, SystemMessage, ToolMessage
@@ -771,13 +772,29 @@ async def fresh_compact(
 
 
 def _build_summary_prompt(messages) -> str:
-    """构建摘要 prompt。"""
-    lines = ["请总结以下对话的关键信息（事实、决策、用户偏好）：\n"]
+    """构建摘要 prompt（引导 LLM 输出 5 段结构化格式）。"""
+    lines = ["请总结以下对话，输出格式必须为：\n"]
+    lines.append("## Goal")
+    lines.append("<本次会话的核心目标>")
+    lines.append("")
+    lines.append("## Constraints")
+    lines.append("- <约束1>")
+    lines.append("- <约束2>")
+    lines.append("")
+    lines.append("## Progress")
+    lines.append("- <已完成的进展>")
+    lines.append("")
+    lines.append("## Key Decisions")
+    lines.append("- <关键决策>")
+    lines.append("")
+    lines.append("## Next Steps")
+    lines.append("- <下一步>")
+    lines.append("")
+    lines.append("对话内容：\n")
     for m in messages:
         role = getattr(m, 'type', 'unknown')
         content = m.content if isinstance(m.content, str) else str(m.content)
         lines.append(f"[{role}] {content[:500]}")
-    lines.append("\n输出格式：\n## Facts\n- 事实1\n- 事实2\n\n## Timeline\n- 事件1")
     return "\n".join(lines)
 
 
@@ -845,3 +862,98 @@ def append_file_ops_to_summary(summary: str, file_ops: list[dict[str, str]]) -> 
         lines.append(f"- {label}: {op['path']}")
 
     return "\n".join(lines)
+
+
+# ── 结构化摘要格式（5 段固定格式）──────────────────────────────
+
+
+@dataclass
+class StructuredSummary:
+    """结构化会话摘要（5 段固定格式）。"""
+    goal: str = ""
+    constraints: list[str] = field(default_factory=list)
+    progress: list[str] = field(default_factory=list)
+    key_decisions: list[str] = field(default_factory=list)
+    next_steps: list[str] = field(default_factory=list)
+
+
+def format_structured_summary(summary: StructuredSummary) -> str:
+    """格式化结构化摘要为文本。"""
+    lines: list[str] = []
+
+    lines.append("## Goal")
+    lines.append(summary.goal or "(未明确)")
+    lines.append("")
+
+    lines.append("## Constraints")
+    if summary.constraints:
+        for c in summary.constraints:
+            lines.append(f"- {c}")
+    else:
+        lines.append("(无)")
+    lines.append("")
+
+    lines.append("## Progress")
+    if summary.progress:
+        for p in summary.progress:
+            lines.append(f"- {p}")
+    else:
+        lines.append("(无)")
+    lines.append("")
+
+    lines.append("## Key Decisions")
+    if summary.key_decisions:
+        for d in summary.key_decisions:
+            lines.append(f"- {d}")
+    else:
+        lines.append("(无)")
+    lines.append("")
+
+    lines.append("## Next Steps")
+    if summary.next_steps:
+        for s in summary.next_steps:
+            lines.append(f"- {s}")
+    else:
+        lines.append("(无)")
+
+    return "\n".join(lines)
+
+
+_SECTION_PATTERN = re.compile(
+    r'##\s*(?:Goal|目标)\s*\n(.*?)\n\s*##\s*(?:Constraints|约束)\s*\n(.*?)\n\s*##\s*(?:Progress|进展)\s*\n(.*?)\n\s*##\s*(?:Key Decisions|关键决策)\s*\n(.*?)\n\s*##\s*(?:Next Steps|下一步)\s*\n(.*?)(?=\n##\s|$)',
+    re.DOTALL
+)
+
+
+def _parse_bullet_section(text: str) -> list[str]:
+    """解析 bullet 列表段。"""
+    items: list[str] = []
+    for line in text.strip().split('\n'):
+        line = line.strip()
+        if line.startswith('- '):
+            items.append(line[2:].strip())
+        elif line and line not in ('(无)', '(未明确)'):
+            items.append(line)
+    return items
+
+
+def parse_structured_summary(text: str) -> StructuredSummary:
+    """解析结构化摘要文本。"""
+    match = _SECTION_PATTERN.search(text)
+    if not match:
+        # 尝试宽松匹配
+        return StructuredSummary(goal=text[:200] if text else "")
+
+    goal_raw, constraints_raw, progress_raw, decisions_raw, next_raw = match.groups()
+
+    goal = goal_raw.strip()
+    if goal in ('(未明确)', '(无)'):
+        goal = ""
+
+    return StructuredSummary(
+        goal=goal,
+        constraints=_parse_bullet_section(constraints_raw),
+        progress=_parse_bullet_section(progress_raw),
+        key_decisions=_parse_bullet_section(decisions_raw),
+        next_steps=_parse_bullet_section(next_raw),
+    )
