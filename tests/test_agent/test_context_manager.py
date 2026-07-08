@@ -309,3 +309,45 @@ async def test_fresh_compact_regenerates_from_raw_messages():
     assert mock_llm.ainvoke.called
     # 结果应包含新摘要
     assert result.get("refreshed") is True
+
+
+# ── Task E3: 文件操作上下文追加 ─────────────────────────────
+
+
+def test_extract_file_operations_from_messages():
+    """从消息中提取文件操作上下文"""
+    from agent.context_manager import extract_file_operations
+    from langchain_core.messages import ToolMessage, AIMessage
+
+    messages = [
+        AIMessage(content="", tool_calls=[{"id": "tc1", "name": "file_read", "args": {"path": "d:/proj/main.py"}}]),
+        ToolMessage(content="file content...", tool_call_id="tc1"),
+        AIMessage(content="", tool_calls=[{"id": "tc2", "name": "file_write", "args": {"path": "d:/proj/utils.py", "content": "..."}}]),
+        ToolMessage(content="written", tool_call_id="tc2"),
+        AIMessage(content="", tool_calls=[{"id": "tc3", "name": "file_read", "args": {"path": "d:/proj/main.py"}}]),
+        ToolMessage(content="file content...", tool_call_id="tc3"),
+    ]
+
+    ops = extract_file_operations(messages)
+    # main.py 被读 2 次，应去重为 1 个 read
+    assert any(o["path"] == "d:/proj/main.py" and o["op"] == "read" for o in ops)
+    assert any(o["path"] == "d:/proj/utils.py" and o["op"] == "write" for o in ops)
+    # 去重后应为 2 条
+    paths = {(o["path"], o["op"]) for o in ops}
+    assert len(paths) == 2
+
+
+def test_file_operations_appended_to_summary():
+    """文件操作上下文应追加到摘要末尾"""
+    from agent.context_manager import append_file_ops_to_summary
+    from langchain_core.messages import HumanMessage, AIMessage
+
+    summary = "用户讨论了项目架构"
+    file_ops = [
+        {"path": "d:/proj/main.py", "op": "read"},
+        {"path": "d:/proj/utils.py", "op": "write"},
+    ]
+    result = append_file_ops_to_summary(summary, file_ops)
+    assert "d:/proj/main.py" in result
+    assert "d:/proj/utils.py" in result
+    assert "read" in result.lower() or "读" in result

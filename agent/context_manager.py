@@ -486,6 +486,11 @@ async def maybe_trim_checkpoint(
         if not summary_text:
             return {"compressed": False}
 
+        # 追加文件操作上下文（保留本次会话操作过哪些文件的元信息）
+        file_ops = extract_file_operations(dynamic_messages)
+        if file_ops:
+            summary_text = append_file_ops_to_summary(summary_text, file_ops)
+
         # 构造摘要消息
         summary_message = SystemMessage(content=f"[上下文压缩] {summary_text}")
 
@@ -773,4 +778,70 @@ def _build_summary_prompt(messages) -> str:
         content = m.content if isinstance(m.content, str) else str(m.content)
         lines.append(f"[{role}] {content[:500]}")
     lines.append("\n输出格式：\n## Facts\n- 事实1\n- 事实2\n\n## Timeline\n- 事件1")
+    return "\n".join(lines)
+
+
+# ── 文件操作上下文提取（压缩时保留文件操作元信息）──────────────
+
+
+def extract_file_operations(messages: list) -> list[dict[str, str]]:
+    """从消息列表中提取文件操作上下文（去重）。
+
+    扫描所有 tool_call，识别 file_read / file_write / file_edit / file_delete，
+    提取 path 和操作类型。相同 (path, op) 只保留一条。
+    """
+    FILE_TOOLS_OP_MAP = {
+        "file_read": "read",
+        "file_write": "write",
+        "file_edit": "edit",
+        "file_delete": "delete",
+        "tool_file_read": "read",
+        "tool_file_write": "write",
+        "tool_file_edit": "edit",
+    }
+
+    seen: set[tuple[str, str]] = set()
+    ops: list[dict[str, str]] = []
+
+    for m in messages:
+        tool_calls = getattr(m, 'tool_calls', None) or []
+        if not tool_calls:
+            continue
+        for tc in tool_calls:
+            if not isinstance(tc, dict):
+                continue
+            name = tc.get('name', '')
+            args = tc.get('args', {}) or {}
+            if name not in FILE_TOOLS_OP_MAP:
+                continue
+            path = args.get('path') or args.get('file_path') or ''
+            if not path:
+                continue
+            op = FILE_TOOLS_OP_MAP[name]
+            key = (path, op)
+            if key in seen:
+                continue
+            seen.add(key)
+            ops.append({"path": path, "op": op})
+
+    return ops
+
+
+def append_file_ops_to_summary(summary: str, file_ops: list[dict[str, str]]) -> str:
+    """将文件操作上下文追加到摘要末尾。"""
+    if not file_ops:
+        return summary
+
+    OP_LABEL = {
+        "read": "读取",
+        "write": "写入",
+        "edit": "编辑",
+        "delete": "删除",
+    }
+
+    lines = [summary, "", "## 本次会话文件操作"]
+    for op in file_ops:
+        label = OP_LABEL.get(op["op"], op["op"])
+        lines.append(f"- {label}: {op['path']}")
+
     return "\n".join(lines)
