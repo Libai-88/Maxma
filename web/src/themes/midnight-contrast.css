@@ -51,6 +51,6 @@
   --attach-bg: rgba(224, 191, 200, 0.08);
 
   /* 修复 --accent-light 语义冲突 */
-  --accent-light: rgba(224, 191, 200, 0.08);
+  --accent-light: #F0D0D8;
   --accent-hover: #ceafbc;
 }

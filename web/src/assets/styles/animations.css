@@ -154,4 +154,7 @@
   .hana-pulse {
     animation: none !important;
   }
+
+  /* 打字机光标隐藏 */
+  .typewriter-cursor { display: none; }
 }

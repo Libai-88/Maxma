@@ -1,7 +1,7 @@
 <!-- web/src/components/ui/DsOverlay.vue -->
 <template>
   <Teleport to="body">
-    <Transition name="ds-overlay" @after-enter="onAfterEnter" @after-leave="onAfterLeave">
+    <Transition name="ds-overlay" appear @after-enter="onAfterEnter" @after-leave="onAfterLeave">
       <div
         v-if="modelValue"
         ref="rootRef"

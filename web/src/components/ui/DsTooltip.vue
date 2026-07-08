@@ -76,12 +76,16 @@ function show(e: Event) {
   showTimer = setTimeout(() => {
     visible.value = true
     nextTick(updatePosition)
+    window.addEventListener('scroll', onScroll, true)
+    window.addEventListener('resize', onScroll)
   }, props.delay)
 }
 
 function hide() {
   if (showTimer) { clearTimeout(showTimer); showTimer = null }
   visible.value = false
+  window.removeEventListener('scroll', onScroll, true)
+  window.removeEventListener('resize', onScroll)
 }
 
 function onScroll() { if (visible.value) updatePosition() }

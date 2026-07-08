@@ -336,6 +336,7 @@ body.paper-texture .ds-card,
 body.paper-texture .input-wrapper,
 body.paper-texture .hover-card,
 body.paper-texture .no-provider-card {
+  background-image: var(--paper-texture-url);
   background-blend-mode: var(--paper-texture-card-blend-mode);
 }
 
@@ -702,18 +703,6 @@ html, body {
 .sidebar > :not(.settings-popup) {
   position: relative;
   z-index: 1;
-}
-
-/* ── 无障碍：减少动画 ── */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-  .typewriter-cursor { display: none; }
 }
 
 /* ── Shared markdown rendered content ── */
