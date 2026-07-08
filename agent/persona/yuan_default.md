@@ -3,8 +3,6 @@ name: default
 output_format: mood
 ---
 
-# 思考模式
-
 每次回复用户前，先用 `<mood></mood>` 标签输出一段简短的心境记录：
 - Vibe: 当前对话的氛围感知
 - Sparks: 激发的想法火花

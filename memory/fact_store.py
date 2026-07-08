@@ -12,6 +12,7 @@ import json
 import logging
 import re
 import sqlite3
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -65,6 +66,7 @@ class FactStore:
         self._db_path = db_path
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        self._lock = threading.Lock()
         self._init_schema()
         self._init_fts()
 
@@ -114,18 +116,19 @@ class FactStore:
         expires_at = now + ttl if ttl else None
         tags_json = json.dumps(tags or [], ensure_ascii=False)
 
-        self._conn.execute(
-            "INSERT INTO facts (id, content, tags, source, session_id, created_at, updated_at, ttl, expires_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (fact_id, content, tags_json, source, session_id, now, now, ttl, expires_at)
-        )
-        if self._fts_available:
-            search_text = _build_search_text(content, tags or [])
+        with self._lock:
             self._conn.execute(
-                "INSERT INTO facts_fts (fact_id, search_text, content) VALUES (?, ?, ?)",
-                (fact_id, search_text, content)
+                "INSERT INTO facts (id, content, tags, source, session_id, created_at, updated_at, ttl, expires_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (fact_id, content, tags_json, source, session_id, now, now, ttl, expires_at)
             )
-        self._conn.commit()
+            if self._fts_available:
+                search_text = _build_search_text(content, tags or [])
+                self._conn.execute(
+                    "INSERT INTO facts_fts (fact_id, search_text, content) VALUES (?, ?, ?)",
+                    (fact_id, search_text, content)
+                )
+            self._conn.commit()
         return fact_id
 
     def search(self, query: str, *, limit: int = 10, session_id: str | None = None) -> list[dict[str, Any]]:
@@ -170,11 +173,12 @@ class FactStore:
 
     def delete(self, fact_id: str) -> bool:
         """删除一条事实。"""
-        cur = self._conn.execute("DELETE FROM facts WHERE id = ?", (fact_id,))
-        if self._fts_available:
-            self._conn.execute("DELETE FROM facts_fts WHERE fact_id = ?", (fact_id,))
-        self._conn.commit()
-        return cur.rowcount > 0
+        with self._lock:
+            cur = self._conn.execute("DELETE FROM facts WHERE id = ?", (fact_id,))
+            if self._fts_available:
+                self._conn.execute("DELETE FROM facts_fts WHERE fact_id = ?", (fact_id,))
+            self._conn.commit()
+            return cur.rowcount > 0
 
     def _row_to_dict(self, row: sqlite3.Row) -> dict[str, Any]:
         return {

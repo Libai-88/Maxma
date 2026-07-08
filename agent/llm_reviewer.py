@@ -116,7 +116,11 @@ class LLMReviewer:
                 f"会话: {session_id}"
             )
             response = await llm.ainvoke(user_msg)
-            content = response.content if hasattr(response, 'content') else str(response)
+            raw = response.content if hasattr(response, 'content') else str(response)
+            if isinstance(raw, list):
+                content = "".join(b.get("text", "") for b in raw if isinstance(b, dict) and b.get("type") == "text")
+            else:
+                content = str(raw)
 
             return self._parse_review_response(content, reviewer_name)
         except Exception as e:

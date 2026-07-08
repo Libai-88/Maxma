@@ -78,18 +78,24 @@ def classify_permission(
     if is_subagent and tool_name in SUBAGENT_BLOCKED_TOOLS:
         return PermissionDecision.DENY
 
-    # 2. AUTO 模式 + auto_approve
+    # 2. READ_ONLY 模式：硬性安全约束，不被 auto_approve 覆盖
+    if mode == "read_only":
+        if tool_name in SIDE_EFFECT_TOOLS:
+            return PermissionDecision.DENY
+        if tool_name in INFORMATION_TOOLS:
+            return PermissionDecision.ALLOW
+        return PermissionDecision.DENY
+
+    # 3. AUTO 模式 + auto_approve
     if mode == "auto" or auto_approve:
         return PermissionDecision.ALLOW
 
-    # 3. 信息类工具：所有模式都放行
+    # 4. 信息类工具：所有模式都放行
     if tool_name in INFORMATION_TOOLS:
         return PermissionDecision.ALLOW
 
-    # 4. 副作用工具：根据模式决策
+    # 5. 副作用工具：根据模式决策
     if tool_name in SIDE_EFFECT_TOOLS:
-        if mode == "read_only":
-            return PermissionDecision.DENY
         if mode == "ask":
             return PermissionDecision.PROMPT
         if mode == "operate":
@@ -97,9 +103,7 @@ def classify_permission(
             return PermissionDecision.REVIEW
         return PermissionDecision.ALLOW
 
-    # 5. 未知工具：保守策略
-    if mode == "read_only":
-        return PermissionDecision.DENY
+    # 6. 未知工具：保守策略
     if mode == "ask":
         return PermissionDecision.PROMPT
     return PermissionDecision.REVIEW
