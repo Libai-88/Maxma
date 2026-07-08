@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 from app_paths import LOGS_DIR
+from memory.pii_guard import scrub_pii
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ def log_event(
     status: str = "ok",
     extra: Optional[dict] = None,
 ) -> None:
-    """记录一条审计日志。
+    """记录一条审计日志（带 PII 脱敏）。
 
     Args:
         event_type: 事件类型（api_call / file_access / config_change / auth 等）
@@ -49,17 +50,28 @@ def log_event(
         extra: 额外字段
     """
     _ensure_dir()
+
+    # 脱敏所有字符串值（PII + 长度限制）
+    safe_target = scrub_pii(target, max_length=500) if target else target
+    safe_detail = scrub_pii(detail, max_length=500) if detail else detail
+    safe_extra = None
+    if extra:
+        safe_extra = {
+            k: scrub_pii(v, max_length=500) if isinstance(v, str) else v
+            for k, v in extra.items()
+        }
+
     record = {
         "timestamp": datetime.now().isoformat(timespec="seconds"),
         "epoch": time.time(),
         "type": event_type,
-        "target": target,
-        "detail": detail,
+        "target": safe_target,
+        "detail": safe_detail,
         "data_size": data_size,
         "status": status,
     }
-    if extra:
-        record["extra"] = extra
+    if safe_extra:
+        record["extra"] = safe_extra
 
     try:
         with open(AUDIT_LOG_PATH, "a", encoding="utf-8") as f:

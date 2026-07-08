@@ -189,3 +189,26 @@ class TestGetMcpSummary:
         records = audit_log.read_log(limit=10, event_type=audit_log.EVENT_MCP_CALL)
         # read_log 返回最新在前，最后写入的是 records[0]
         assert summary[0]["last_call_at"] == records[0]["timestamp"]
+
+
+class TestAuditLogPiiScrubbing:
+    """审计日志 PII 脱敏测试（Task D5）。"""
+
+    def test_audit_log_scrubs_pii(self):
+        """审计日志应脱敏 PII（邮箱、手机号）"""
+        audit_log.log_event(
+            event_type="tool_call",
+            target="file_write",
+            detail="联系 test@example.com",
+            extra={
+                "path": "test.txt",
+                "content": "联系 test@example.com",
+                "user_input": "我的手机号是 13812345678",
+            },
+        )
+
+        events = audit_log.read_log(limit=10)
+        dumped = "\n".join(str(e) for e in events)
+        assert "test@example.com" not in dumped
+        assert "13812345678" not in dumped
+        assert "[EMAIL]" in dumped or "[PHONE]" in dumped
