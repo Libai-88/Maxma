@@ -671,9 +671,14 @@ async def _run_agent_turn(
         await ws.send_json(msg)
 
     await maybe_trim_checkpoint(
-        agent_maxma, config, system_prompt_tokens, current_max_tokens,
+        agent_maxma, config,
         llm=llm,
         ws_callback=_compress_ws_callback,
+        token_counter=lambda msgs: system_prompt_tokens + sum(
+            count_tokens(m.content if isinstance(m.content, str) else str(m.content)) + 4
+            for m in msgs
+        ),
+        max_tokens=current_max_tokens,
     )
 
     # 2. [执行轮次] 流式执行 Agent 图，副作用推送最终回答，另有config回调副作用

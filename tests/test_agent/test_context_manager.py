@@ -5,7 +5,7 @@ import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from agent.context_manager import (
     _summarize_old_messages,
@@ -143,43 +143,87 @@ class TestMaybeTrimCheckpoint:
     """maybe_trim_checkpoint() 函数测试。"""
 
     def test_no_trim_when_not_needed(self):
-        """不需要截断时返回 False。"""
-        mock_graph = MagicMock()
+        """不需要截断时返回 compressed=False。"""
         mock_config = {"configurable": {"thread_id": "test"}}
 
-        # Mock graph 的 get_state 返回短消息
-        mock_state = MagicMock()
-        mock_state.values = {"messages": [HumanMessage(content="hello")]}
-        mock_graph.aget_state = AsyncMock(return_value=mock_state)
+        # token_counter 返回低值，不应触发截断
+        state = {"messages": [HumanMessage(content="hello")]}
 
         result = asyncio.run(
             maybe_trim_checkpoint(
-                graph=mock_graph,
-                config=mock_config,
-                system_prompt_tokens=500,
+                state, mock_config,
+                token_counter=lambda msgs: 100,
                 max_tokens=4000,
             )
         )
 
-        # 应该返回 False（未截断）
-        assert result is False
+        assert result.get("compressed") is False
 
     def test_handles_empty_messages(self):
-        """空消息列表时返回 False。"""
-        mock_graph = MagicMock()
+        """空消息列表时返回 compressed=False。"""
         mock_config = {"configurable": {"thread_id": "test"}}
 
-        mock_state = MagicMock()
-        mock_state.values = {"messages": []}
-        mock_graph.aget_state = AsyncMock(return_value=mock_state)
+        state = {"messages": []}
 
         result = asyncio.run(
             maybe_trim_checkpoint(
-                graph=mock_graph,
-                config=mock_config,
-                system_prompt_tokens=500,
+                state, mock_config,
+                token_counter=lambda msgs: 0,
                 max_tokens=4000,
             )
         )
 
-        assert result is False
+        assert result.get("compressed") is False
+
+
+# ── Task B1: Cache-Preserving Compaction ─────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_cache_preserving_compaction_keeps_static_prefix():
+    """cache-preserving 压缩应保留 SystemMessage（静态前缀）"""
+    from agent.context_manager import maybe_trim_checkpoint
+
+    messages = [
+        SystemMessage(content="You are a helpful assistant."),
+        HumanMessage(content="Hello 1"),
+        AIMessage(content="Hi 1"),
+        HumanMessage(content="Hello 2"),
+        AIMessage(content="Hi 2"),
+        HumanMessage(content="Hello 3"),
+        AIMessage(content="Hi 3"),
+    ]
+
+    state = {
+        "messages": messages,
+        "session_id": "test-session",
+    }
+
+    config = {"configurable": {"thread_id": "test-thread"}}
+    mock_llm = AsyncMock()
+    mock_llm.ainvoke = AsyncMock(return_value=MagicMock(content="Summary of old conversation"))
+
+    result = await maybe_trim_checkpoint(
+        state, config, llm=mock_llm,
+        checkpointer=None, ws_callback=None,
+        token_counter=lambda msgs: 10000,
+        max_tokens=100,
+    )
+
+    # SystemMessage 必须保留在压缩后的消息列表中
+    assert "messages" in result
+    compressed_messages = result["messages"]
+    assert any(isinstance(m, SystemMessage) for m in compressed_messages), \
+        "SystemMessage (static prefix) must be preserved after compaction"
+
+
+def test_hard_truncation_utf8_safe():
+    """hard truncation 不应截断 UTF-8 多字节字符"""
+    from agent.context_manager import truncate_text_head_tail
+
+    text = "你好世界" * 100  # 每个"你好世界"是 12 字节
+    head, tail = truncate_text_head_tail(text, max_bytes=50)
+    # 确保截断后的文本可以正常编码解码
+    assert head.encode('utf-8').decode('utf-8') == head
+    assert tail.encode('utf-8').decode('utf-8') == tail
+    assert len(head.encode('utf-8')) <= 50

@@ -27,6 +27,39 @@ MIN_RECENT_TURNS_MIN = 3
 MIN_RECENT_TURNS_MAX = 6
 
 
+def truncate_text_head_tail(text: str, max_bytes: int = 4096) -> tuple[str, str]:
+    """UTF-8 安全的 head+tail 硬截断。当压缩请求本身超窗时使用。"""
+    encoded = text.encode('utf-8')
+    if len(encoded) <= max_bytes:
+        return text, ""
+    # 保留前 1/3 和后 1/3
+    head_size = max_bytes // 3
+    tail_size = max_bytes - head_size - 20  # 留 20 字节给省略号
+    # 找到不截断 UTF-8 多字节字符的安全位置
+    head_bytes = encoded[:head_size]
+    # 回退到最后一个完整字符
+    while head_bytes and (head_bytes[-1] & 0xC0) == 0x80:
+        head_bytes = head_bytes[:-1]
+    # 如果回退后还是不完整，再回退一个字节
+    if head_bytes:
+        last = head_bytes[-1]
+        if (last & 0xE0) == 0xC0 and len(head_bytes) < 2:
+            head_bytes = head_bytes[:-1]
+        elif (last & 0xF0) == 0xE0 and len(head_bytes) < 3:
+            head_bytes = head_bytes[:-1]
+        elif (last & 0xF8) == 0xF0 and len(head_bytes) < 4:
+            head_bytes = head_bytes[:-1]
+
+    tail_bytes = encoded[-tail_size:]
+    # 跳过开头不完整的字符
+    while tail_bytes and (tail_bytes[0] & 0xC0) == 0x80:
+        tail_bytes = tail_bytes[1:]
+
+    head = head_bytes.decode('utf-8', errors='ignore')
+    tail = tail_bytes.decode('utf-8', errors='ignore')
+    return head + "\n...(省略)...", "\n...(省略)...\n" + tail
+
+
 def _calc_min_turns(messages: Sequence[BaseMessage]) -> int:
     """根据消息中 ToolMessage 的密度动态计算应保留的轮次数。
 
@@ -337,57 +370,90 @@ def trim_messages(
 
 
 async def maybe_trim_checkpoint(
-    agent_maxma,
+    state,
     config: dict,
-    system_prompt_tokens: int,
-    current_max_tokens: int,
     *,
     llm=None,
-    ws_callback=None,  # WS 回调，用于推送压缩事件
+    checkpointer=None,
+    ws_callback=None,
+    token_counter=None,
+    max_tokens=None,
 ) -> dict:
-    """检查 checkpoint 中的消息是否需要截断，如需则更新。
+    """检查 checkpoint 中的消息是否需要截断，如需则更新（cache-preserving 版本）。
+
+    保留 SystemMessage 作为静态前缀（保护 prompt cache），
+    只对动态消息（Human/AI/Tool）执行截断和摘要。
 
     Args:
-        agent_maxma: LangGraph compiled agent
+        state: 状态 dict，至少包含 ``messages`` 键；也可传入 LangGraph
+            agent（具有 ``aget_state``），此时会自动拉取 state 并将其作为
+            checkpointer。
         config: LangGraph config (含 thread_id)
-        system_prompt_tokens: 系统提示词 token 数
-        current_max_tokens: 模型上下文窗口上限
         llm: 可选 LLM 实例，用于生成高质量摘要
+        checkpointer: 可选 LangGraph compiled agent，用于更新 checkpoint 状态
         ws_callback: 可选 WS 回调协程，签名 ``async def(msg: dict) -> None``，
             压缩成功时用于推送 ``context_compressed`` 事件
+        token_counter: 可选的 token 计数函数，签名 ``f(messages) -> int``
+        max_tokens: 模型上下文窗口上限
 
     Returns:
         dict，至少包含 ``"compressed"`` 字段；压缩成功时附带
-        ``removed_count``/``summary_preview``/``context_usage_before``/
-        ``context_usage_after`` 等详情
+        ``messages``/``removed_count``/``summary_preview``/
+        ``context_usage_before``/``context_usage_after`` 等详情
     """
     try:
-        state = await agent_maxma.aget_state(config)
-        if state is None:
-            return {"compressed": False}
+        # 向后兼容：如果传入的是 LangGraph agent，自动拉取 state
+        if hasattr(state, "aget_state"):
+            if checkpointer is None:
+                checkpointer = state
+            state_obj = await state.aget_state(config)
+            if state_obj is None:
+                return {"compressed": False}
+            messages = state_obj.values.get("messages", [])
+        else:
+            messages = state.get("messages", []) if hasattr(state, "get") else []
 
-        messages = state.values.get("messages", [])
         if not messages:
             return {"compressed": False}
 
-        if not should_trim_context(messages, system_prompt_tokens, current_max_tokens):
+        # 判断是否需要截断
+        if token_counter is None or not max_tokens:
             return {"compressed": False}
 
-        min_turns = _calc_min_turns(messages)
-        boundary = _find_trim_boundary(messages, min_turns)
+        total_tokens = token_counter(messages)
+        usage_ratio_before = total_tokens / max_tokens if max_tokens else 0
+        if usage_ratio_before <= TRIM_THRESHOLD:
+            return {"compressed": False}
+
+        # 分离静态前缀（SystemMessage）和动态消息，保护 prompt cache 前缀
+        static_prefix: list[BaseMessage] = []
+        dynamic_messages: list[BaseMessage] = []
+        for m in messages:
+            if isinstance(m, SystemMessage):
+                static_prefix.append(m)
+            else:
+                dynamic_messages.append(m)
+
+        if not dynamic_messages:
+            return {"compressed": False, "reason": "no dynamic messages"}
+
+        # 计算保留轮次，但不强制要求消息数达到 min_turns*2 —— 当 token
+        # 占比已超阈值时（由调用方通过 token_counter 判定），即使消息
+        # 较少也应压缩。只需保证至少有 2 轮（1 轮压缩 + 1 轮保留）。
+        actual_turns = _count_turns(dynamic_messages)
+        if actual_turns < 2:
+            return {"compressed": False}
+
+        min_turns = _calc_min_turns(dynamic_messages)
+        # 确保 min_turns 不超过 actual_turns-1，以便总能找到截断边界
+        min_turns = min(min_turns, max(1, actual_turns - 1))
+
+        boundary = _find_trim_boundary(dynamic_messages, min_turns)
         if boundary == 0:
             return {"compressed": False}
 
-        old_messages = messages[:boundary]
-        kept_messages = messages[boundary:]
-
-        # 增量摘要：提取旧消息中已有的压缩摘要，合并到新摘要中
-        prev_summary_parts = []
-        for msg in old_messages:
-            if isinstance(msg, SystemMessage):
-                content = msg.content if isinstance(msg.content, str) else str(msg.content)
-                if content.startswith("[上下文压缩]"):
-                    prev_summary_parts.append(content)
+        old_messages = dynamic_messages[:boundary]
+        retained_messages = dynamic_messages[boundary:]
 
         # 使用 LLM 摘要（如果可用）或回退到提取式
         if llm is not None:
@@ -395,53 +461,41 @@ async def maybe_trim_checkpoint(
         else:
             summary_text = _summarize_old_messages(old_messages)
 
-        # 如果有旧摘要，合并到当前摘要前面
-        if prev_summary_parts:
-            prev_text = "\n".join(prev_summary_parts)
-            summary_text = f"{prev_text}\n{summary_text}"
-
-        # 构造删除操作：为旧消息生成 RemoveMessage，并加上摘要
-        update_msgs: list[BaseMessage] = []
-        for msg in old_messages:
-            msg_id = getattr(msg, "id", None)
-            if msg_id:
-                update_msgs.append(RemoveMessage(id=msg_id))
-
-        if summary_text:
-            update_msgs.append(SystemMessage(content=f"[上下文压缩] {summary_text}"))
-
-        if not update_msgs:
+        if not summary_text:
             return {"compressed": False}
 
-        # 估算上下文占比（参考 should_trim_context 的计算逻辑）
-        def _calc_usage_ratio(msgs: Sequence[BaseMessage]) -> float:
-            total = system_prompt_tokens
-            for m in msgs:
-                c = m.content if isinstance(m.content, str) else str(m.content)
-                total += count_tokens(c) + 4  # 格式化开销
-            return total / current_max_tokens if current_max_tokens else 0
+        # 构造摘要消息
+        summary_message = SystemMessage(content=f"[上下文压缩] {summary_text}")
 
-        # 压缩前上下文占比
-        usage_ratio_before = _calc_usage_ratio(messages)
+        # 重组：静态前缀 + 摘要 + 保留的近期消息
+        new_messages = static_prefix + [summary_message] + retained_messages
 
-        await agent_maxma.aupdate_state(
-            config,
-            {"messages": update_msgs},
-        )
-        logger.info(
-            f"Checkpoint trimmed for thread {config.get('configurable', {}).get('thread_id', '?')}: "
-            f"{len(messages)} → {len(old_messages)} removed, summary added"
-        )
+        # 更新 checkpointer（如果提供）
+        if checkpointer is not None:
+            update_msgs: list[BaseMessage] = []
+            for msg in old_messages:
+                msg_id = getattr(msg, "id", None)
+                if msg_id:
+                    update_msgs.append(RemoveMessage(id=msg_id))
+            update_msgs.append(summary_message)
 
-        # 压缩后上下文占比（保留消息 + 新摘要 SystemMessage）
-        after_msgs = list(kept_messages)
-        if summary_text:
-            after_msgs.append(SystemMessage(content=f"[上下文压缩] {summary_text}"))
-        usage_ratio_after = _calc_usage_ratio(after_msgs)
+            await checkpointer.aupdate_state(
+                config,
+                {"messages": update_msgs},
+            )
+            logger.info(
+                f"Checkpoint trimmed for thread {config.get('configurable', {}).get('thread_id', '?')}: "
+                f"{len(old_messages)} dynamic messages removed, summary added"
+            )
+
+        # 估算压缩后上下文占比
+        after_tokens = token_counter(new_messages)
+        usage_ratio_after = after_tokens / max_tokens if max_tokens else 0
 
         # 构建压缩详情
         compress_detail = {
             "compressed": True,
+            "messages": new_messages,
             "removed_count": len(old_messages),
             "summary_preview": summary_text[:200] if summary_text else "",
             "context_usage_before": usage_ratio_before,
@@ -453,7 +507,13 @@ async def maybe_trim_checkpoint(
             try:
                 await ws_callback({
                     "type": "context_compressed",
-                    "payload": compress_detail,
+                    "payload": {
+                        "compressed": True,
+                        "removed_count": len(old_messages),
+                        "summary_preview": summary_text[:200] if summary_text else "",
+                        "context_usage_before": usage_ratio_before,
+                        "context_usage_after": usage_ratio_after,
+                    },
                 })
             except Exception:
                 logger.debug("ws_callback push context_compressed failed", exc_info=True)

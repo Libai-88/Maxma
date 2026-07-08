@@ -69,8 +69,13 @@ async def compress_session(session_id: str, request: Request) -> dict:
 
     try:
         result = await maybe_trim_checkpoint(
-            agent_maxma, config, system_prompt_tokens, current_max_tokens,
+            agent_maxma, config,
             llm=llm, ws_callback=None,
+            token_counter=lambda msgs: system_prompt_tokens + sum(
+                count_tokens(m.content if isinstance(m.content, str) else str(m.content)) + 4
+                for m in msgs
+            ),
+            max_tokens=current_max_tokens,
         )
         return result
     except Exception as e:
