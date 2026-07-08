@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Default capabilities for MaxmaHere",
-  "windows": ["main"],
+  "windows": ["main", "quick-chat"],
   "permissions": [
     "core:default",
     "shell:allow-open",
@@ -50,6 +50,8 @@
         { "url": "http://localhost:8009/*" },
         { "url": "http://localhost:8010/*" }
       ]
-    }
+    },
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister"
   ]
 }

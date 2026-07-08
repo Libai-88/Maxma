@@ -24,6 +24,10 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       rollupOptions: {
+        input: {
+          main: fileURLToPath(new URL('./index.html', import.meta.url)),
+          'quick-chat': fileURLToPath(new URL('./quick-chat.html', import.meta.url)),
+        },
         output: {
           manualChunks: {
             'vue-vendor': ['vue', 'vue-router', 'vue-virtual-scroller'],

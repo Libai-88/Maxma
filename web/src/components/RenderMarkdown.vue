@@ -1,12 +1,29 @@
 <template>
   <HtmlSandbox v-if="useSandbox" :html="sandboxHtml" />
-  <div v-else class="markdown-body" v-html="renderedHtml"></div>
+  <div v-else class="markdown-body" v-html="renderedHtml" @click="onImageClick"></div>
 </template>
 
 <script setup lang="ts">
 import { computed, onUnmounted } from 'vue'
 import { renderMarkdown, renderMarkdownRaw, contentNeedsIsolation } from '@/utils/markdown'
 import HtmlSandbox from './HtmlSandbox.vue'
+import { useMediaViewer } from '@/composables/useMediaViewer'
+
+const { open } = useMediaViewer()
+
+function onImageClick(e: MouseEvent) {
+  const target = e.target as HTMLElement
+  if (target.tagName === 'IMG') {
+    e.preventDefault()
+    const img = target as HTMLImageElement
+    // 收集同一容器内所有图片，支持画廊切换
+    const container = img.closest('.markdown-body')
+    const allImgs = container ? Array.from(container.querySelectorAll('img')) : [img]
+    const items = allImgs.map(im => ({ src: (im as HTMLImageElement).src, alt: (im as HTMLImageElement).alt }))
+    const startIndex = allImgs.indexOf(img)
+    open(items, startIndex)
+  }
+}
 
 const props = withDefaults(defineProps<{
   /** 原始 Markdown 文本 */

@@ -1,0 +1,36 @@
+/* web/src/themes/contemplation.css
+ * 沉思主题 — 灰蓝调，雨天窗外感
+ */
+
+[data-theme="contemplation"] {
+  --bg-primary:    #F3F5F7;
+  --bg-secondary:  #E8ECF0;
+  --bg-card:       #F8FAFC;
+  --user-bubble:   rgba(89, 120, 145, 0.08);
+
+  --accent:        #597891;
+  --accent-light:  #466A85;
+  --accent-pink:   #C99AAF;
+  --accent-pink-light: #C99AAF;
+  --accent-pink-soft:  rgba(201, 154, 175, 0.1);
+
+  --text-primary:   #2A3340;
+  --text-secondary: #5A6678;
+  --text-tertiary:  #8A96A8;
+
+  --border:         rgba(89, 120, 145, 0.18);
+  --shadow-color:   rgba(42, 51, 64, 0.08);
+
+  --status-ok:      #6A9A70;
+  --status-error:   #A05050;
+  --status-warn:    #B89060;
+
+  --hana-text:      #3A4A5C;
+  --tool-bg:        rgba(89, 120, 145, 0.06);
+  --sidebar-bg:     #E8ECF0;
+
+  --overlay-subtle: rgba(0, 0, 0, 0.03);
+  --overlay-light:  rgba(0, 0, 0, 0.05);
+  --overlay-medium: rgba(0, 0, 0, 0.08);
+  --overlay-strong: rgba(0, 0, 0, 0.15);
+}

@@ -538,6 +538,14 @@ def create_app() -> FastAPI:
     # 诊断与错误日志导出
     app.include_router(diagnostics_router.router, prefix="/api")
 
+    # Activity Hub —— 活动事件中心（REST + SSE）
+    from api.routes import activity as activity_router
+    app.include_router(activity_router.router, prefix="/api")
+
+    # 会话手动压缩
+    from api.routes import session_compress
+    app.include_router(session_compress.router, prefix="/api")
+
     # 知识库
     from api.routes import kb as kb_router
     app.include_router(kb_router.router, prefix="/api")

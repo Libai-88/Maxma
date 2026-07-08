@@ -1,0 +1,47 @@
+/* web/src/themes/warm-paper.css
+ * 默认主题 — 暖纸底 + 远山青印章色
+ * 灵感：和纸手抄本，温润文人感
+ */
+
+[data-theme="warm-paper"],
+:root:not([data-theme]) {
+  /* ── 背景 ── */
+  --bg-primary:    #F8F4ED;
+  --bg-secondary:  #F4F0EA;
+  --bg-card:       #FCFAF5;
+  --user-bubble:   rgba(83, 125, 150, 0.08);
+
+  /* ── 主色调（远山青） ── */
+  --accent:        #537D96;
+  --accent-light:  #456A80;
+  --accent-pink:   #EC8F8D;
+  --accent-pink-light: #EC8F8D;
+  --accent-pink-soft:  rgba(236, 143, 141, 0.1);
+
+  /* ── 文字（5 档墨色） ── */
+  --text-primary:   #3B3D3F;
+  --text-secondary: #6B6F73;
+  --text-tertiary:  #8E9196;
+
+  /* ── 边框与阴影 ── */
+  --border:         rgba(122, 96, 88, 0.18);
+  --shadow-color:   rgba(59, 61, 63, 0.09);
+
+  /* ── 状态色 ── */
+  --status-ok:      #7BAE7F;
+  --status-error:   #8B3A3A;
+  --status-warn:    #C99A6A;
+
+  /* ── 聊天专用 ── */
+  --hana-text:      #2B3A4E;
+  --tool-bg:        rgba(83, 125, 150, 0.06);
+
+  /* ── 侧边栏 ── */
+  --sidebar-bg:     #F4F0EA;
+
+  /* ── 遮罩层 ── */
+  --overlay-subtle: rgba(0, 0, 0, 0.03);
+  --overlay-light:  rgba(0, 0, 0, 0.05);
+  --overlay-medium: rgba(0, 0, 0, 0.08);
+  --overlay-strong: rgba(0, 0, 0, 0.15);
+}

@@ -60,6 +60,18 @@ class Settings(BaseSettings):
     circuit_breaker_recovery_timeout: int = 60  # 熔断后冷却时间（秒），过后进入 half-open
     circuit_breaker_half_open_max_calls: int = 1  # half-open 状态下允许的探测调用数
 
+    # 阶段 3.6：LLM 审批网关 —— 工具执行前的统一审批决策层
+    approval_required_tools: list[str] = [
+        "run_python",
+        "file_edit",
+        "file_write",
+        "git_push",
+        "git_commit",
+        "shell_exec",
+    ]  # 需要审批的工具列表（工具名匹配）
+    approval_timeout: int = 300  # 审批超时时间（秒）
+    approval_gateway_enabled: bool = True  # 是否启用审批网关（False 时所有工具直接执行）
+
     # 阶段 3.2：API 限流配置
     rate_limit_http_capacity: int = 10  # HTTP 限流桶容量（按 IP）
     rate_limit_http_window_seconds: int = 60  # HTTP 限流时间窗口（秒）

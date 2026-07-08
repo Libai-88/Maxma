@@ -1,0 +1,36 @@
+/* web/src/themes/absolutely.css
+ * 暖奶油底 + 哑光赤陶 accent
+ */
+
+[data-theme="absolutely"] {
+  --bg-primary:    #F4F3EE;
+  --bg-secondary:  #EAE8E1;
+  --bg-card:       #FAF9F5;
+  --user-bubble:   rgba(165, 75, 55, 0.08);
+
+  --accent:        #A54B37;
+  --accent-light:  #8F3D2D;
+  --accent-pink:   #6B8E7A;
+  --accent-pink-light: #6B8E7A;
+  --accent-pink-soft:  rgba(107, 142, 122, 0.1);
+
+  --text-primary:   #2E2A26;
+  --text-secondary: #665E56;
+  --text-tertiary:  #948A80;
+
+  --border:         rgba(165, 75, 55, 0.16);
+  --shadow-color:   rgba(46, 42, 38, 0.07);
+
+  --status-ok:      #6B8E7A;
+  --status-error:   #A04540;
+  --status-warn:    #C09040;
+
+  --hana-text:      #3A332E;
+  --tool-bg:        rgba(165, 75, 55, 0.05);
+  --sidebar-bg:     #EAE8E1;
+
+  --overlay-subtle: rgba(0, 0, 0, 0.03);
+  --overlay-light:  rgba(0, 0, 0, 0.05);
+  --overlay-medium: rgba(0, 0, 0, 0.08);
+  --overlay-strong: rgba(0, 0, 0, 0.15);
+}

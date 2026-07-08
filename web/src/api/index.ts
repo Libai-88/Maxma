@@ -43,6 +43,9 @@ import type {
   AuditLogRecord,
   AuditLogStats,
   AuditLogListResponse,
+  ActivityRecentResponse,
+  ActivityStatsResponse,
+  ActivityClearResponse,
 } from '@/types'
 import { ensurePortLoaded, getApiBase, tauriFetch } from '@/utils/env'
 
@@ -183,6 +186,16 @@ export const api = {
 
   undoMessages: (sessionId: string, n: number = 1) =>
     request<{ deleted_count: number }>(`/sessions/${sessionId}/undo?n=${n}`, { method: 'POST' }),
+
+  /** 手动触发会话上下文压缩 */
+  compressSession: (sessionId: string) =>
+    request<{
+      compressed: boolean
+      removed_count?: number
+      summary_preview?: string
+      context_usage_before?: number
+      context_usage_after?: number
+    }>(`/sessions/${sessionId}/compress`, { method: 'POST' }),
 
   getDeepSeekBalance: () =>
     request<DeepSeekBalanceResponse>('/deepseek-balance'),
@@ -599,6 +612,20 @@ export const api = {
     request<{ status: string; deleted: number }>('/diagnostics/error-log', {
       method: 'DELETE',
     }),
+
+  // ── Activity 活动中心 ──
+
+  /** 获取最近的活动记录 */
+  getActivityRecent: (limit = 100) =>
+    request<ActivityRecentResponse>(`/activity/recent?limit=${limit}`),
+
+  /** 获取活动统计信息 */
+  getActivityStats: () =>
+    request<ActivityStatsResponse>('/activity/stats'),
+
+  /** 清空所有活动记录 */
+  clearActivity: () =>
+    request<ActivityClearResponse>('/activity', { method: 'DELETE' }),
 }
 
 export { request }

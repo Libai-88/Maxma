@@ -105,6 +105,10 @@
         <div class="form-section">
           <label class="form-label">命令</label>
           <input v-model="form.command" class="input mono" placeholder="例如: npx, python, node" required />
+          <div class="form-hint">
+            推荐命令：npx / node / python / uvx / go / cargo / docker / git / bash 等。
+            其他命令需自行确保安全（不可包含路径分隔符）。
+          </div>
         </div>
 
         <div class="form-section">

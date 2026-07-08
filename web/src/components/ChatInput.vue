@@ -67,6 +67,15 @@
           <button class="file-tag-remove" @click="removeRef(getNonImageRefIndex(r))">✕</button>
         </span>
       </TransitionGroup>
+      <!-- 已引用选区卡片栏 -->
+      <div v-if="quotedSelections.length" class="quoted-selections-bar">
+        <QuotedSelectionCard
+          v-for="q in quotedSelections"
+          :key="q.id"
+          :quote="q"
+          @remove="$emit('removeQuote', q.id)"
+        />
+      </div>
       <div class="input-body">
         <textarea
           ref="textareaRef"
@@ -181,6 +190,18 @@
       @close="acMode = null"
       @update:active-index="acActiveIndex = $event"
     />
+    <!-- 选区引用浮层 -->
+    <Transition name="quote-pop">
+      <button
+        v-if="quoteCandidate"
+        class="quote-float-btn"
+        :style="quoteFloatStyle"
+        @click="$emit('commitQuote')"
+        title="引用选中文本"
+      >
+        + 引用
+      </button>
+    </Transition>
   </div>
 </template>
 
@@ -190,6 +211,9 @@ import AutocompletePanel from '@/components/AutocompletePanel.vue'
 import Icon from '@/components/Icon.vue'
 import StickerPicker from '@/components/StickerPicker.vue'
 import StickerContextMenu from '@/components/StickerContextMenu.vue'
+import QuotedSelectionCard from '@/components/QuotedSelectionCard.vue'
+import type { QuotedSelection, QuoteCandidate } from '@/composables/useSelectionQuote'
+import { computeFloatingInputPosition } from '@/utils/floatingPosition'
 import type { ProviderConfig, SkillInfo, MacroInfo, ToolInfo } from '@/types'
 import { useProviderStore } from '@/stores/provider'
 import { useStickerSegments, type StickerSegment } from '@/composables/useStickerSegments'
@@ -198,18 +222,25 @@ import { REF_CHIP_CONFIG } from '@/utils/references'
 import { getApiBase, isTauri, tauriFetch } from '@/utils/env'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   isStreaming: boolean
   disabled: boolean
   canSend: boolean
   initialProviderId?: string
   initialModelName?: string
-}>()
+  quotedSelections?: QuotedSelection[]
+  quoteCandidate?: QuoteCandidate | null
+}>(), {
+  quotedSelections: () => [],
+  quoteCandidate: null,
+})
 
 const emit = defineEmits<{
   send: [text: string, refs: ParsedRef[], providerId?: string, modelName?: string]
   stop: []
   modelChange: [providerId: string, modelName: string]
+  commitQuote: []
+  removeQuote: [id: string]
 }>()
 
 const text = ref('')
@@ -226,6 +257,23 @@ const sendButtonTitle = computed(() => {
   if (noProvider.value) return '请先在模型设置中添加 LLM 提供商'
   if (!props.canSend) return '后端连接中，暂时还不能发送'
   return ''
+})
+
+// 选区引用浮层定位
+const quoteFloatStyle = computed(() => {
+  if (!props.quoteCandidate) return {}
+  const result = computeFloatingInputPosition(
+    props.quoteCandidate.rect,
+    { width: 100, height: 32 },
+    window.innerWidth,
+    window.innerHeight,
+    'top',
+  )
+  return {
+    left: `${result.left}px`,
+    top: `${result.top}px`,
+    transformOrigin: result.origin,
+  }
 })
 
 // ── 表情选择器状态 ──
@@ -1597,5 +1645,48 @@ function onResizeEnd(e: PointerEvent) {
 }
 .btn-stop:hover {
   background: color-mix(in srgb, var(--status-error) 80%, #000);
+}
+
+/* ── 选区引用卡片栏 ── */
+.quoted-selections-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 0;
+  margin-bottom: 4px;
+}
+
+/* ── 选区引用浮动按钮 ── */
+.quote-float-btn {
+  position: fixed;
+  z-index: 300;
+  padding: 4px 12px;
+  background: var(--accent);
+  color: var(--bg-primary);
+  border: none;
+  border-radius: 100px;
+  font-size: 0.8em;
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+  white-space: nowrap;
+}
+.quote-float-btn:hover {
+  opacity: 0.9;
+}
+
+.quote-pop-enter-active {
+  animation: quote-pop-in 0.15s var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+}
+.quote-pop-leave-active {
+  animation: quote-pop-in 0.1s reverse;
+}
+@keyframes quote-pop-in {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quote-pop-enter-active,
+  .quote-pop-leave-active { animation: none; }
 }
 </style>

@@ -337,40 +337,46 @@ def trim_messages(
 
 
 async def maybe_trim_checkpoint(
-    graph,
+    agent_maxma,
     config: dict,
     system_prompt_tokens: int,
-    max_tokens: int,
+    current_max_tokens: int,
+    *,
     llm=None,
-) -> bool:
+    ws_callback=None,  # WS 回调，用于推送压缩事件
+) -> dict:
     """检查 checkpoint 中的消息是否需要截断，如需则更新。
 
     Args:
-        graph: LangGraph compiled agent
+        agent_maxma: LangGraph compiled agent
         config: LangGraph config (含 thread_id)
         system_prompt_tokens: 系统提示词 token 数
-        max_tokens: 模型上下文窗口上限
+        current_max_tokens: 模型上下文窗口上限
         llm: 可选 LLM 实例，用于生成高质量摘要
+        ws_callback: 可选 WS 回调协程，签名 ``async def(msg: dict) -> None``，
+            压缩成功时用于推送 ``context_compressed`` 事件
 
     Returns:
-        True 如果执行了截断
+        dict，至少包含 ``"compressed"`` 字段；压缩成功时附带
+        ``removed_count``/``summary_preview``/``context_usage_before``/
+        ``context_usage_after`` 等详情
     """
     try:
-        state = await graph.aget_state(config)
+        state = await agent_maxma.aget_state(config)
         if state is None:
-            return False
+            return {"compressed": False}
 
         messages = state.values.get("messages", [])
         if not messages:
-            return False
+            return {"compressed": False}
 
-        if not should_trim_context(messages, system_prompt_tokens, max_tokens):
-            return False
+        if not should_trim_context(messages, system_prompt_tokens, current_max_tokens):
+            return {"compressed": False}
 
         min_turns = _calc_min_turns(messages)
         boundary = _find_trim_boundary(messages, min_turns)
         if boundary == 0:
-            return False
+            return {"compressed": False}
 
         old_messages = messages[:boundary]
         kept_messages = messages[boundary:]
@@ -405,9 +411,20 @@ async def maybe_trim_checkpoint(
             update_msgs.append(SystemMessage(content=f"[上下文压缩] {summary_text}"))
 
         if not update_msgs:
-            return False
+            return {"compressed": False}
 
-        await graph.aupdate_state(
+        # 估算上下文占比（参考 should_trim_context 的计算逻辑）
+        def _calc_usage_ratio(msgs: Sequence[BaseMessage]) -> float:
+            total = system_prompt_tokens
+            for m in msgs:
+                c = m.content if isinstance(m.content, str) else str(m.content)
+                total += count_tokens(c) + 4  # 格式化开销
+            return total / current_max_tokens if current_max_tokens else 0
+
+        # 压缩前上下文占比
+        usage_ratio_before = _calc_usage_ratio(messages)
+
+        await agent_maxma.aupdate_state(
             config,
             {"messages": update_msgs},
         )
@@ -415,11 +432,53 @@ async def maybe_trim_checkpoint(
             f"Checkpoint trimmed for thread {config.get('configurable', {}).get('thread_id', '?')}: "
             f"{len(messages)} → {len(old_messages)} removed, summary added"
         )
-        return True
+
+        # 压缩后上下文占比（保留消息 + 新摘要 SystemMessage）
+        after_msgs = list(kept_messages)
+        if summary_text:
+            after_msgs.append(SystemMessage(content=f"[上下文压缩] {summary_text}"))
+        usage_ratio_after = _calc_usage_ratio(after_msgs)
+
+        # 构建压缩详情
+        compress_detail = {
+            "compressed": True,
+            "removed_count": len(old_messages),
+            "summary_preview": summary_text[:200] if summary_text else "",
+            "context_usage_before": usage_ratio_before,
+            "context_usage_after": usage_ratio_after,
+        }
+
+        # 通过 WS 回调推送压缩事件（推送失败不影响压缩结果）
+        if ws_callback:
+            try:
+                await ws_callback({
+                    "type": "context_compressed",
+                    "payload": compress_detail,
+                })
+            except Exception:
+                logger.debug("ws_callback push context_compressed failed", exc_info=True)
+
+        # 记录到 Activity Hub（失败不影响压缩结果）
+        try:
+            from api.activity_hub import activity_hub
+            activity_hub.add(
+                category="compression",
+                event_type="context_compressed",
+                session_id=config.get("configurable", {}).get("thread_id", ""),
+                message=f"上下文压缩：移除 {len(old_messages)} 条消息",
+                payload={
+                    "removed_count": len(old_messages),
+                    "summary_preview": summary_text[:200] if summary_text else "",
+                },
+            )
+        except Exception:
+            logger.debug("activity_hub record context_compressed failed", exc_info=True)
+
+        return compress_detail
 
     except Exception as e:
         logger.warning(f"Failed to trim checkpoint: {e}", exc_info=True)
-        return False
+        return {"compressed": False}
 
 
 # ── 4 层记忆架构：情景记忆层接口 ──────────────────────────────

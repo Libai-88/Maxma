@@ -24,17 +24,54 @@ _ALLOWED_STDIO_COMMANDS: frozenset[str] = frozenset({
     "python",
     "python3",
     "uvx",
+    "uv",
+    "pip",
+    "pip3",
+    "go",
+    "cargo",
+    "rustc",
+    "java",
+    "javac",
+    "dotnet",
+    "ruby",
+    "gem",
+    "php",
+    "composer",
+    "git",
+    "docker",
+    "docker-compose",
+    "podman",
+    "bash",
+    "sh",
+    "zsh",
+    "pwsh",
+    "powershell",
+    "cmd",
+    "deno",
+    "bun",
+    "tsx",
+    "ts-node",
+    "maven",
+    "mvn",
+    "gradle",
+    "make",
+    "cmake",
 })
 
 
 def validate_stdio_command(command: str | None) -> str | None:
     """校验 stdio 命令是否在白名单中。
 
+    安全策略：
+    - 拒绝空命令、含路径分隔符的命令、相对路径命令（防目录遍历）
+    - 白名单内的命令直接通过
+    - 白名单外的命令记录警告日志但不拒绝（用户自主决策）
+
     Args:
         command: 用户配置的命令字符串。
 
     Returns:
-        错误信息（如果无效），None 表示有效。
+        错误信息（如果存在安全问题），None 表示有效。
     """
     if not command or not command.strip():
         return "stdio 命令不能为空"
@@ -54,10 +91,15 @@ def validate_stdio_command(command: str | None) -> str | None:
     if basename.lower().endswith(".exe"):
         basename = basename[:-4]
 
+    # 白名单校验：白名单外命令记录警告但不拒绝
     allowed_lower = {c.lower() for c in _ALLOWED_STDIO_COMMANDS}
     if basename.lower() not in allowed_lower:
-        allowed = ", ".join(sorted(_ALLOWED_STDIO_COMMANDS))
-        return f"stdio 命令 '{command}' 不在白名单中。允许: {allowed}"
+        logger.warning(
+            "[mcp_security] stdio 命令 '%s' 不在推荐白名单中，"
+            "用户需自行确保该命令安全。推荐命令: %s",
+            command,
+            ", ".join(sorted(_ALLOWED_STDIO_COMMANDS)),
+        )
 
     return None
 

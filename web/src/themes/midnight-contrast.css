@@ -1,0 +1,36 @@
+/* web/src/themes/midnight-contrast.css
+ * 无障碍高对比深色主题 — 更深青蓝 + 高可读文字
+ */
+
+[data-theme="midnight-contrast"] {
+  --bg-primary:    #26343D;
+  --bg-secondary:  #1F2A32;
+  --bg-card:       #2E3E48;
+  --user-bubble:   rgba(255, 255, 255, 0.08);
+
+  --accent:        #E0BFC8;
+  --accent-light:  #F0D0D8;
+  --accent-pink:   #F0C0A0;
+  --accent-pink-light: #F0C0A0;
+  --accent-pink-soft:  rgba(240, 192, 160, 0.14);
+
+  --text-primary:   #F0F4F8;
+  --text-secondary: #C8D4DC;
+  --text-tertiary:  #A0B0BC;
+
+  --border:         rgba(255, 255, 255, 0.2);
+  --shadow-color:   rgba(0, 0, 0, 0.5);
+
+  --status-ok:      #80D088;
+  --status-error:   #E08080;
+  --status-warn:    #E8B060;
+
+  --hana-text:      #E8EEF4;
+  --tool-bg:        rgba(255, 255, 255, 0.06);
+  --sidebar-bg:     #1F2A32;
+
+  --overlay-subtle: rgba(255, 255, 255, 0.03);
+  --overlay-light:  rgba(255, 255, 255, 0.05);
+  --overlay-medium: rgba(255, 255, 255, 0.08);
+  --overlay-strong: rgba(255, 255, 255, 0.15);
+}

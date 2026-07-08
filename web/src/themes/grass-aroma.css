@@ -1,0 +1,36 @@
+/* web/src/themes/grass-aroma.css
+ * 草香主题 — 青草绿调，清晨露水感
+ */
+
+[data-theme="grass-aroma"] {
+  --bg-primary:    #F5F8F3;
+  --bg-secondary:  #EDF2E9;
+  --bg-card:       #FAFCF8;
+  --user-bubble:   rgba(122, 174, 127, 0.08);
+
+  --accent:        #5B8C5F;
+  --accent-light:  #4A7A4E;
+  --accent-pink:   #E8A07A;
+  --accent-pink-light: #E8A07A;
+  --accent-pink-soft:  rgba(232, 160, 122, 0.1);
+
+  --text-primary:   #2D3F30;
+  --text-secondary: #5A6B5E;
+  --text-tertiary:  #8A9A8E;
+
+  --border:         rgba(91, 140, 95, 0.18);
+  --shadow-color:   rgba(45, 63, 48, 0.08);
+
+  --status-ok:      #5B8C5F;
+  --status-error:   #A04545;
+  --status-warn:    #C99A5A;
+
+  --hana-text:      #2D4A35;
+  --tool-bg:        rgba(91, 140, 95, 0.06);
+  --sidebar-bg:     #EDF2E9;
+
+  --overlay-subtle: rgba(0, 0, 0, 0.03);
+  --overlay-light:  rgba(0, 0, 0, 0.05);
+  --overlay-medium: rgba(0, 0, 0, 0.08);
+  --overlay-strong: rgba(0, 0, 0, 0.15);
+}

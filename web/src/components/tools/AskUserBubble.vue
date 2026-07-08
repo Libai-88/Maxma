@@ -204,8 +204,12 @@ watch(() => interactionData.value.interactionId, (id) => {
 onUnmounted(() => stopCountdown())
 
 const interactionData = computed(() => {
-  const result = props.toolCall.interaction
-    ? props.toolCall.interaction
+  // AskUserBubble 只处理 qa/single_choice/multi_choice/confirm 模式，
+  // approval 模式由 ApprovalBubble 渲染，因此 options 始终为 string[]。
+  // 此处做类型断言以兼容扩展后的 AskUserInteraction.options 联合类型。
+  const raw = props.toolCall.interaction
+  const result = raw
+    ? { ...raw, options: raw.options as string[] }
     : {
         question: '',
         mode: 'qa' as const,

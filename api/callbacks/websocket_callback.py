@@ -35,6 +35,9 @@ class WebSocketCallback(BaseCallbackHandler):
         self._tool_start_time: dict[str, float] = {}
         self._tool_names: dict[str, str] = {}
         self._tool_inputs: dict[str, str] = {}
+        # 由 chat.py 在创建实例后赋值，供 Activity Hub 记录使用
+        self.session_id: str = ""
+        self.turn_id: str = ""
 
     @staticmethod
     def _extract_tool_data(
@@ -109,6 +112,21 @@ class WebSocketCallback(BaseCallbackHandler):
             }
         )
 
+        # 记录到 Activity Hub
+        try:
+            from api.activity_hub import activity_hub
+            activity_hub.add(
+                category="tool",
+                event_type="tool_start",
+                session_id=getattr(self, "session_id", ""),
+                turn_id=getattr(self, "turn_id", ""),
+                tool_name=tool_name,
+                message=f"工具开始：{tool_name}",
+                payload={"input": input_str[:500]} if input_str else {},
+            )
+        except Exception:
+            pass  # Activity Hub 记录失败不影响正常流程
+
     async def on_tool_end(self, output: str, **kwargs: Any) -> None:
         run_id = str(kwargs.get("run_id", ""))
         elapsed = time.time() - self._tool_start_time.pop(run_id, time.time())
@@ -116,6 +134,21 @@ class WebSocketCallback(BaseCallbackHandler):
         tool_input = self._tool_inputs.pop(run_id, None)
 
         out_str = _extract_content(output)
+
+        # 记录到 Activity Hub
+        try:
+            from api.activity_hub import activity_hub
+            activity_hub.add(
+                category="tool",
+                event_type="tool_end",
+                session_id=getattr(self, "session_id", ""),
+                turn_id=getattr(self, "turn_id", ""),
+                tool_name=tool_name,
+                message="工具结束",
+                payload={"output_preview": out_str[:200]},
+            )
+        except Exception:
+            pass
 
         # ── 检测 format_error 响应 → 路由到 tool_error ────────────
         try:

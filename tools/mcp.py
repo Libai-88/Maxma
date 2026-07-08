@@ -219,7 +219,10 @@ class MCPServersConfigFile(BaseModel):
 
 
 def load_mcp_config() -> list[MCPServerConfig]:
-    """解析并验证 config/mcp_servers.yaml。"""
+    """解析并验证 config/mcp_servers.yaml。
+
+    单 server 验证失败时隔离该 server，不影响其他 server 加载。
+    """
     global _last_error, _config
 
     if _config is not None:
@@ -232,15 +235,54 @@ def load_mcp_config() -> list[MCPServerConfig]:
     try:
         with open(_CONFIG_PATH, encoding="utf-8") as f:
             raw = yaml.safe_load(f) or {}
-        validated = MCPServersConfigFile(**raw)
-        _config = validated.mcp_servers
-        _last_error = None
-        return _config
     except Exception as exc:
-        _last_error = f"加载 MCP 配置失败: {exc}"
+        _last_error = f"读取 MCP 配置文件失败: {exc}"
         print(f"[mcp] {_last_error}")
         _config = []
         return []
+
+    servers_raw = raw.get("mcp_servers", [])
+    if not isinstance(servers_raw, list):
+        _last_error = "MCP 配置格式错误：mcp_servers 应为列表"
+        print(f"[mcp] {_last_error}")
+        _config = []
+        return []
+
+    # 逐个 server 验证，失败的 server 隔离不影响其他
+    valid_servers: list[MCPServerConfig] = []
+    failed_servers: list[str] = []
+    for i, srv_raw in enumerate(servers_raw):
+        if not isinstance(srv_raw, dict):
+            failed_servers.append(f"#{i}（非字典）")
+            continue
+        srv_id = srv_raw.get("server_id", f"#{i}")
+        try:
+            # 根据 transport 字段选择对应的配置类
+            transport = srv_raw.get("transport", "stdio")
+            if transport == "stdio":
+                cfg = StdioServerConfig(**srv_raw)
+            elif transport == "sse":
+                cfg = SSEServerConfig(**srv_raw)
+            elif transport == "streamable_http":
+                cfg = StreamableHttpServerConfig(**srv_raw)
+            elif transport == "websocket":
+                cfg = WebsocketServerConfig(**srv_raw)
+            else:
+                failed_servers.append(f"{srv_id}（未知 transport: {transport}）")
+                continue
+            valid_servers.append(cfg)
+        except Exception as exc:
+            failed_servers.append(f"{srv_id}（{exc}）")
+            print(f"[mcp] server '{srv_id}' 配置验证失败，已跳过: {exc}")
+
+    if failed_servers:
+        _last_error = f"部分 MCP server 加载失败: {', '.join(failed_servers)}"
+        print(f"[mcp] {_last_error}")
+    else:
+        _last_error = None
+
+    _config = valid_servers
+    return _config
 
 
 # ═══════════════════════════════════════════════════════════════════════

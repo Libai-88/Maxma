@@ -74,6 +74,11 @@ const router = createRouter({
       name: 'audit-log',
       component: () => import('@/views/AuditLogView.vue'),
     },
+    {
+      path: '/activity',
+      name: 'activity',
+      component: () => import('@/views/ActivityView.vue'),
+    },
   ],
 })
 

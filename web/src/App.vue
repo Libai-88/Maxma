@@ -1,5 +1,12 @@
 <template>
-  <div class="app-layout" :class="{ 'night-mode': isNightMode }">
+  <div class="app-layout">
+    <!-- 折叠时的悬停触发条 -->
+    <div
+      v-if="effectiveCollapsed"
+      class="sidebar-hover-trigger"
+      @mouseenter="onFloatSidebarEnter"
+      @mouseleave="onFloatSidebarLeave"
+    ></div>
     <aside class="sidebar" :class="{ collapsed: effectiveCollapsed }" @click="onSidebarClick">
       <div class="sidebar-header">
         <h1 class="logo">
@@ -19,6 +26,9 @@
         </router-link>
         <router-link to="/kb" class="nav-item">
           <Icon name="memory" :size="18" /> <span class="nav-label">知识库&nbsp;&nbsp;&nbsp;&nbsp;KB</span>
+        </router-link>
+        <router-link to="/activity" class="nav-item">
+          <Icon name="memory" :size="18" /> <span class="nav-label">活动&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ACTIVITY</span>
         </router-link>
         <router-link to="/playground" class="nav-item pg-nav">动态 NEWS</router-link>
         <div class="settings-area" ref="settingsTriggerRef">
@@ -43,9 +53,7 @@
           <router-link to="/metrics" class="popup-item" @click="closeSettingsMenu">运行指标</router-link>
           <router-link to="/audit-log" class="popup-item" @click="closeSettingsMenu">审计日志</router-link>
           <div class="popup-divider"></div>
-          <button class="popup-item popup-action neutral" @click="cycleNightModeSetting">
-            深夜模式：{{ nightModeLabel }}
-          </button>
+          <ThemePicker />
           <button class="popup-item popup-action" :class="{ exporting: exportingErrorLog }" :disabled="exportingErrorLog" @click="handleExportErrorLog">
             {{ exportingErrorLog ? '导出中...' : '导出错误日志' }}
           </button>
@@ -67,6 +75,8 @@
       />
       <HealthPanel :health="health!" v-if="health" />
     </aside>
+    <!-- 悬停滑入侧边栏 -->
+    <FloatSidebar />
     <main class="main">
       <router-view v-slot="{ Component }">
         <keep-alive include="ChatView">
@@ -74,6 +84,10 @@
         </keep-alive>
       </router-view>
     </main>
+    <!-- 树阴光影氛围层 -->
+    <LeavesOverlay />
+    <!-- 全屏媒体查看器 -->
+    <MediaViewer />
   </div>
 </template>
 
@@ -89,9 +103,16 @@ import { useSidebar } from '@/composables/useSidebar';
 import { api } from '@/api';
 import { computed, ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { useNightModeClock } from '@/composables/useNightMode'
+import { useTheme } from '@/composables/useTheme'
+import ThemePicker from '@/components/ThemePicker.vue'
+import LeavesOverlay from '@/components/LeavesOverlay.vue'
+import MediaViewer from '@/components/MediaViewer.vue'
+import FloatSidebar from '@/components/FloatSidebar.vue'
+import { useFloatSidebar } from '@/composables/useFloatSidebar'
 
 const { effectiveCollapsed, toggleSidebar } = useSidebar()
+
+const { onEnter: onFloatSidebarEnter, onLeave: onFloatSidebarLeave } = useFloatSidebar()
 
 const showSettingsMenu = ref(false)
 const settingsTriggerRef = ref<HTMLElement | null>(null)
@@ -100,12 +121,7 @@ const popupTop = ref('0px')
 const popupLeft = ref('228px')
 const restarting = ref(false)
 const exportingErrorLog = ref(false)
-const { nightModeSetting, isNightMode, cycleNightModeSetting } = useNightModeClock()
-const nightModeLabel = computed(() =>
-  nightModeSetting.value === 'auto' ? '自动'
-  : nightModeSetting.value === 'on' ? '开启'
-  : '关闭'
-)
+const { isDark: isNightMode } = useTheme()
 
 async function handleExportErrorLog() {
   if (exportingErrorLog.value) return
@@ -240,7 +256,19 @@ watch(health, (newHealth, oldHealth) => {
 </script>
 
 <style>
+@import '@/assets/styles/tokens.css';
+@import '@/assets/styles/animations.css';
 @import '@/assets/styles/design-system.css';
+@import '@/themes/warm-paper.css';
+@import '@/themes/midnight.css';
+@import '@/themes/high-contrast.css';
+@import '@/themes/grass-aroma.css';
+@import '@/themes/contemplation.css';
+@import '@/themes/coral.css';
+@import '@/themes/delve.css';
+@import '@/themes/deep-think.css';
+@import '@/themes/absolutely.css';
+@import '@/themes/midnight-contrast.css';
 
 *,
 *::before,
@@ -251,39 +279,15 @@ watch(health, (newHealth, oldHealth) => {
 }
 
 :root {
-  --bg-primary: #ffffff;
-  --bg-secondary: #f9fafb;
-  --bg-card: #ffffff;
-  --text-primary: #1f2937;
-  --text-secondary: #6b7280;
-  --text-tertiary: #9ca3af;
-  --accent: #000000;
-  --accent-light: #b9b9b9;
-  --accent-pink: #FF6B9D;
-  --accent-pink-light: #FF8FAB;
-  --accent-pink-soft: rgba(255, 107, 157, 0.1);
-  --border: #e5e7eb;
-  --user-bubble: #ffffff;
-  --status-ok: #000000;
-  --status-error: #ef4444;
-  --status-warn: #f59e0b;
-  --shadow: 0 2px 8px rgba(0, 0, 0, 0.08);       /* 兼容别名，同级 --shadow-md */
-  --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.04);   /* 极浅分割 */
-  --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.06); /* 大面积超浅阴影（输入框） */
-  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.06);   /* 卡片、条目 hover */
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);   /* 气泡、通用卡片 */
-  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);  /* 下拉菜单、浮层 */
-  --shadow-xl: 0 6px 28px rgba(0, 0, 0, 0.18);  /* 模态弹窗、重型浮层 */
-  --shadow-pink: 0 4px 16px rgba(255, 107, 157, 0.3);  /* 粉色光晕 */
-  --radius: 10px;
-  --font-display: 'ZCOOL KuaiLe', 'Comic Sans MS', cursive;
-  --font-body: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
-    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  /* 配色变量由主题文件定义（web/src/themes/*.css），结构 token 由 tokens.css 定义 */
+  --radius: var(--radius-md);
+  --shadow: var(--shadow-md);
+  --shadow-pink: 0 4px 16px var(--shadow-color, rgba(0, 0, 0, 0.18));
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  color: #000000;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--text-primary);
 }
 
 /* ── Scrollbar ── */
@@ -324,66 +328,14 @@ html, body {
   height: 100%;
 }
 
-.app-layout.night-mode {
-  --bg-primary: #f4eadc;
-  --bg-secondary: #ede1d1;
-  --bg-card: #fff5e6;
-  --user-bubble: #fff1dc;
-  --text-primary: #2a2118;
-  --text-secondary: #756657;
-  --text-tertiary: #a08f7f;
-  --accent: #2b2117;
-  --accent-light: #b79d82;
-  --accent-pink: #d87974;
-  --accent-pink-light: #e59a8e;
-  --accent-pink-soft: rgba(216, 121, 116, 0.14);
-  --border: #dccbbb;
-  --shadow: 0 2px 8px rgba(73, 45, 25, 0.08);
-  --shadow-soft: 0 8px 24px rgba(73, 45, 25, 0.06);
-  --shadow-sm: 0 1px 4px rgba(73, 45, 25, 0.06);
-  --shadow-md: 0 2px 8px rgba(73, 45, 25, 0.08);
-  --shadow-lg: 0 4px 16px rgba(73, 45, 25, 0.14);
-  --shadow-xl: 0 6px 28px rgba(73, 45, 25, 0.18);
-  --shadow-pink: 0 4px 16px rgba(216, 121, 116, 0.28);
-
-  background:
-    linear-gradient(rgba(52, 36, 22, 0.16), rgba(52, 36, 22, 0.16)),
-    var(--bg-primary);
-  color: var(--text-primary);
-}
-
-.app-layout.night-mode .chat-window {
-  background:
-    radial-gradient(circle at 20% 0%, rgba(255, 214, 168, 0.34), transparent 32%),
-    linear-gradient(rgba(45, 28, 16, 0.08), rgba(45, 28, 16, 0.08)),
-    var(--bg-primary);
-}
-
-.app-layout.night-mode .markdown-body,
-.app-layout.night-mode .bubble {
-  line-height: 1.72;
-  font-weight: 350;
-}
-
-/* 夜间模式：空状态使用更柔和的深色背景图 */
-.app-layout.night-mode .empty-state {
-  background-image: url('@/assets/images/brand/empty-bg-night.jpg');
-}
-.app-layout.night-mode .empty-state-overlay {
-  background: linear-gradient(to bottom, transparent 40%, rgba(244, 234, 220, 0.5) 100%);
-}
-.app-layout.night-mode .empty-title {
-  text-shadow: 0 2px 16px rgba(244, 234, 220, 0.55);
-}
-.app-layout.night-mode .empty-desc {
-  text-shadow: 0 1px 12px rgba(244, 234, 220, 0.55);
-}
-.app-layout.night-mode .quick-hints {
-  text-shadow: 0 1px 8px rgba(244, 234, 220, 0.5);
-}
-
-.app-layout.night-mode .sidebar::after {
-  background: rgba(255, 245, 230, 0.86);
+.sidebar-hover-trigger {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 8px;
+  z-index: 140;
+  cursor: default;
 }
 
 .sidebar {

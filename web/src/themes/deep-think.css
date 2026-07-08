@@ -1,0 +1,36 @@
+/* web/src/themes/deep-think.css
+ * DeepSeek 风格 — 干净白底 + 克制蓝紫
+ */
+
+[data-theme="deep-think"] {
+  --bg-primary:    #FCFCFD;
+  --bg-secondary:  #F4F5F8;
+  --bg-card:       #FFFFFF;
+  --user-bubble:   rgba(81, 95, 220, 0.06);
+
+  --accent:        #515FDC;
+  --accent-light:  #3F4EC8;
+  --accent-pink:   #E85A4F;
+  --accent-pink-light: #E85A4F;
+  --accent-pink-soft:  rgba(232, 90, 79, 0.1);
+
+  --text-primary:   #1A1B2E;
+  --text-secondary: #5A5D7A;
+  --text-tertiary:  #8A8DA8;
+
+  --border:         rgba(81, 95, 220, 0.14);
+  --shadow-color:   rgba(26, 27, 46, 0.06);
+
+  --status-ok:      #4D7CC8;
+  --status-error:   #DC4C4C;
+  --status-warn:    #E8A040;
+
+  --hana-text:      #2A2D4A;
+  --tool-bg:        rgba(81, 95, 220, 0.04);
+  --sidebar-bg:     #F4F5F8;
+
+  --overlay-subtle: rgba(0, 0, 0, 0.03);
+  --overlay-light:  rgba(0, 0, 0, 0.05);
+  --overlay-medium: rgba(0, 0, 0, 0.08);
+  --overlay-strong: rgba(0, 0, 0, 0.15);
+}

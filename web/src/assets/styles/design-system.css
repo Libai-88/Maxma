@@ -66,7 +66,7 @@
 }
 .ds-btn--primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--bg-primary);
   border-color: var(--accent);
 }
 .ds-btn--primary:hover:not(:disabled) {

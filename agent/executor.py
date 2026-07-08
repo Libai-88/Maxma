@@ -57,7 +57,54 @@ async def request_plan_confirmation(
                 "plan_text": plan,
             },
         })
-        return await asyncio.wait_for(future, timeout=timeout)
+        # 记录计划提案到 Activity Hub
+        try:
+            from api.activity_hub import activity_hub
+            from api.interaction import current_session_id
+            _session_id = current_session_id.get() or ""
+            activity_hub.add(
+                category="plan",
+                event_type="plan_proposed",
+                session_id=_session_id,
+                message=f"计划待确认：{len(steps)} 步",
+                payload={"plan_steps": steps[:5]},
+            )
+        except Exception:
+            pass
+
+        response = await asyncio.wait_for(future, timeout=timeout)
+        # 记录计划确认响应到 Activity Hub
+        try:
+            from api.activity_hub import activity_hub
+            from api.interaction import current_session_id
+            _session_id = current_session_id.get() or ""
+            if isinstance(response, str):
+                resp_lower = response.strip().lower()
+                if resp_lower in ("reject", "取消", "拒绝", "否", "no", "deny"):
+                    activity_hub.add(
+                        category="plan",
+                        event_type="plan_rejected",
+                        session_id=_session_id,
+                        level="warn",
+                        message="用户拒绝执行计划",
+                    )
+                elif resp_lower in ("approve", "确认", "同意", "是", "ok"):
+                    activity_hub.add(
+                        category="plan",
+                        event_type="plan_approved",
+                        session_id=_session_id,
+                        message="用户批准执行计划",
+                    )
+                else:
+                    activity_hub.add(
+                        category="plan",
+                        event_type="plan_modified",
+                        session_id=_session_id,
+                        message="用户修改了执行计划",
+                    )
+        except Exception:
+            pass
+        return response
     except asyncio.TimeoutError:
         logger.info("Plan confirmation timed out, proceeding with original plan")
         return None
@@ -604,7 +651,44 @@ def make_executor_node(
             **next_update,
         }
 
-    return executor_node
+    async def _executor_node_with_activity(state: dict) -> dict:
+        """带 Activity Hub 记录的 executor 节点包装。
+
+        在 turn 开始/结束时记录事件，使用 try/finally 确保所有 return 路径
+        都能触发 turn_end 记录。Activity Hub 记录失败不影响正常流程。
+        """
+        # 记录 turn 开始
+        try:
+            from api.activity_hub import activity_hub
+            from api.interaction import current_session_id
+            _session_id = current_session_id.get() or ""
+            activity_hub.add(
+                category="turn",
+                event_type="turn_start",
+                session_id=_session_id,
+                message="Agent turn 开始",
+            )
+        except Exception:
+            pass
+
+        try:
+            return await executor_node(state)
+        finally:
+            # 记录 turn 结束
+            try:
+                from api.activity_hub import activity_hub
+                from api.interaction import current_session_id
+                _session_id = current_session_id.get() or ""
+                activity_hub.add(
+                    category="turn",
+                    event_type="turn_end",
+                    session_id=_session_id,
+                    message="Agent turn 结束",
+                )
+            except Exception:
+                pass
+
+    return _executor_node_with_activity
 
 
 def _inject_step(

@@ -12,6 +12,7 @@ use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::System::Com::{
@@ -130,6 +131,20 @@ fn select_path(kind: String) -> Option<String> {
     open_windows_file_dialog(kind == "folder").ok().flatten()
 }
 
+/// Tauri 命令：切换 Quick Chat 窗口可见性
+#[tauri::command]
+fn toggle_quick_chat(app: tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("quick-chat") {
+        if window.is_visible().unwrap_or(false) {
+            let _ = window.hide();
+        } else {
+            let _ = window.center();
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }
+}
+
 fn open_windows_file_dialog(pick_folder: bool) -> windows::core::Result<Option<String>> {
     unsafe {
         let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
@@ -189,12 +204,18 @@ unsafe fn pwstr_to_string(ptr: *const u16) -> String {
 }
 
 /// 轮询后端健康检查接口，直到返回 200 或超时。
+/// 关键：必须用 .no_proxy() 禁用系统代理，否则 Clash/V2Ray 等本地代理
+/// 会拦截对 127.0.0.1 的请求，导致健康检查永远超时，应用闪退。
 fn wait_for_server(port: u16) -> bool {
-    let client = reqwest::blocking::Client::new();
+    let client = reqwest::blocking::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(2))
+        .build()
+        .expect("Failed to build reqwest client");
     let url = format!("http://127.0.0.1:{}/api/health", port);
 
     for i in 0..HEALTH_TIMEOUT_SECS {
-        if let Ok(resp) = client.get(&url).timeout(Duration::from_secs(1)).send() {
+        if let Ok(resp) = client.get(&url).send() {
             if resp.status().is_success() {
                 println!("[tauri] 后端就绪 ({}s)", i + 1);
                 return true;
@@ -343,6 +364,29 @@ struct AppState {
 }
 
 fn main() {
+    // 关键：禁用系统代理对本地回环的拦截。
+    // Clash/V2Ray 等本地代理软件会拦截 127.0.0.1 的请求，导致
+    // Tauri 主进程的健康检查、Tauri HTTP 插件、Python sidecar 的请求全部失败。
+    // 设置 NO_PROXY 环境变量后，所有遵循标准的环境变量代理约定的 HTTP 客户端
+    //（reqwest、Python requests/httpx、Tauri HTTP 插件）都会绕过代理访问本地。
+    // 这必须在任何 HTTP 客户端初始化之前执行。
+    let no_proxy = "127.0.0.1,localhost,::1";
+    if let Ok(existing) = std::env::var("NO_PROXY") {
+        // 合并已有的 NO_PROXY，保留用户/系统原有配置
+        let merged = format!("{},{}", existing, no_proxy);
+        std::env::set_var("NO_PROXY", merged);
+    } else {
+        std::env::set_var("NO_PROXY", no_proxy);
+    }
+    // 同时设置小写版本（部分库只认小写）
+    if let Ok(existing) = std::env::var("no_proxy") {
+        let merged = format!("{},{}", existing, no_proxy);
+        std::env::set_var("no_proxy", merged);
+    } else {
+        std::env::set_var("no_proxy", no_proxy);
+    }
+    println!("[tauri] NO_PROXY={}", no_proxy);
+
     // 启动前清理可能残留的旧版 maxma-server.exe 进程
     // 场景：旧版本（无 Job Object）被 NSIS 强杀后 sidecar 成为孤儿进程，
     // 或主进程崩溃后 sidecar 残留。新版启动时先 taskkill 清理，避免端口/文件冲突。
@@ -394,7 +438,27 @@ fn main() {
                 let _ = window.set_focus();
             }
         }))
-        .invoke_handler(tauri::generate_handler![select_path, get_api_port])
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_shortcut(Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::Space))
+                .expect("Failed to create shortcut")
+                .with_handler(|app, _shortcut, event| {
+                    if event.state == ShortcutState::Pressed {
+                        if let Some(window) = app.get_webview_window("quick-chat") {
+                            if window.is_visible().unwrap_or(false) {
+                                let _ = window.hide();
+                            } else {
+                                // 居中显示并聚焦
+                                let _ = window.center();
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                    }
+                })
+                .build()
+        )
+        .invoke_handler(tauri::generate_handler![select_path, get_api_port, toggle_quick_chat])
         .setup(move |app| {
             let shutting_down = Arc::new(AtomicBool::new(false));
             let restart_count = Arc::new(AtomicU32::new(0));

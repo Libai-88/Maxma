@@ -1,0 +1,36 @@
+/* web/src/themes/coral.css
+ * 珊瑚主题 — 墨蓝 + 珊瑚朱 + 古金
+ */
+
+[data-theme="coral"] {
+  --bg-primary:    #FDF6EC;
+  --bg-secondary:  #F5EBD9;
+  --bg-card:       #FFFBF2;
+  --user-bubble:   rgba(210, 95, 75, 0.08);
+
+  --accent:        #2B4858;
+  --accent-light:  #1F3848;
+  --accent-pink:   #D25F4B;
+  --accent-pink-light: #D25F4B;
+  --accent-pink-soft:  rgba(210, 95, 75, 0.1);
+
+  --text-primary:   #2A2520;
+  --text-secondary: #5C5248;
+  --text-tertiary:  #8C8074;
+
+  --border:         rgba(210, 165, 100, 0.22);
+  --shadow-color:   rgba(42, 37, 32, 0.08);
+
+  --status-ok:      #6A9070;
+  --status-error:   #B04540;
+  --status-warn:    #C09430;
+
+  --hana-text:      #3A3530;
+  --tool-bg:        rgba(43, 72, 88, 0.06);
+  --sidebar-bg:     #F5EBD9;
+
+  --overlay-subtle: rgba(0, 0, 0, 0.03);
+  --overlay-light:  rgba(0, 0, 0, 0.05);
+  --overlay-medium: rgba(0, 0, 0, 0.08);
+  --overlay-strong: rgba(0, 0, 0, 0.15);
+}

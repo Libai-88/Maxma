@@ -31,10 +31,12 @@ _PROJECT_ROOT = str(DATA_DIR)
 # 白名单 YAML 路径
 _WHITELIST_PATH = PATH_WHITELIST_YAML_PATH
 
-# 默认白名单条目：仅暴露 anthropic_skills、macros 和 uploads 目录
+# 默认白名单条目：暴露 anthropic_skills、macros、uploads 目录 + 项目根目录
 _DEFAULT_WHITELIST_PATH = str(ANTHROPIC_SKILLS_DIR)
 _DEFAULT_MACROS_WHITELIST_PATH = str(MACROS_DIR)
 _DEFAULT_UPLOADS_PATH = str(UPLOADS_DIR)
+# 项目根目录（开发模式为项目根，打包模式为用户数据目录）
+_DEFAULT_PROJECT_ROOT_PATH = str(DATA_DIR)
 
 # MaxmaBlocker 相关常量
 _BLOCKER_YAML_PATH = MAXMA_BLOCKER_YAML_PATH
@@ -199,9 +201,22 @@ def _default_uploads_entry() -> dict:
     }
 
 
+def _default_project_root_entry() -> dict:
+    return {
+        "path": os.path.normpath(str(_DEFAULT_PROJECT_ROOT_PATH)),
+        "description": "项目数据目录（自动生成）",
+        "recursive": True,
+    }
+
+
 def _default_entries() -> list[dict]:
     """返回所有自动生成的默认白名单条目。"""
-    return [_default_entry(), _default_macros_entry(), _default_uploads_entry()]
+    return [
+        _default_entry(),
+        _default_macros_entry(),
+        _default_uploads_entry(),
+        _default_project_root_entry(),
+    ]
 
 
 def _write_whitelist(entries: list) -> None:
@@ -321,6 +336,9 @@ def check_path_whitelisted(target_path: str) -> str | None:
 
         4) 无匹配
            没有任何条目匹配 → 阻断。
+
+    Windows 大小写不敏感：Windows 文件系统大小写不敏感，路径比较
+    统一转小写后再比较，避免 D:\\ 和 d:\\ 误判为不同路径。
     """
     if not target_path:
         return None
@@ -331,6 +349,13 @@ def check_path_whitelisted(target_path: str) -> str | None:
     if not whitelist:
         return f"路径不在白名单中: {target_path}（白名单为空或未配置）"
 
+    # Windows 文件系统大小写不敏感，统一转小写比较
+    is_windows = os.name == "nt"
+    if is_windows:
+        abs_target_cmp = abs_target.lower()
+    else:
+        abs_target_cmp = abs_target
+
     has_recursive_parent = False
 
     for allowed_prefix, recursive in whitelist:
@@ -338,12 +363,22 @@ def check_path_whitelisted(target_path: str) -> str | None:
         prefix_stripped = allowed_prefix.rstrip(os.sep)
         separator = prefix_stripped + os.sep
 
+        # Windows 大小写不敏感比较
+        if is_windows:
+            prefix_cmp = prefix_stripped.lower()
+            separator_cmp = separator.lower()
+            allowed_cmp = allowed_prefix.lower()
+        else:
+            prefix_cmp = prefix_stripped
+            separator_cmp = separator
+            allowed_cmp = allowed_prefix
+
         # 优先级 1: 精确匹配 → 不受 recursive 标志影响
-        if abs_target in (allowed_prefix, prefix_stripped):
+        if abs_target_cmp in (allowed_cmp, prefix_cmp):
             return None
 
         # 目标不在当前条目的路径树下 → 跳过，检查下一项
-        if not abs_target.startswith(separator):
+        if not abs_target_cmp.startswith(separator_cmp):
             continue
 
         # 目标在当前条目的子目录中

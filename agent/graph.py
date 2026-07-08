@@ -35,6 +35,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import ToolNode
 from typing_extensions import Annotated, TypedDict
 
+from agent.approval_tool_node import ApprovalToolNode
 from agent.planner import (
     classify_and_plan,
     parse_plan_steps,
@@ -198,7 +199,20 @@ def build_agent(
             enable_executor = True
 
     llm_with_tools = model.bind_tools(tools) if tools else model
-    tool_node = ToolNode(tools) if tools else None
+    # 使用审批工具节点（可配置开关）；关闭时回退到原始 ToolNode
+    if tools:
+        try:
+            from config.settings import get_settings
+            _settings = get_settings()
+        except Exception:
+            _settings = None
+        if _settings is not None and _settings.approval_gateway_enabled:
+            tool_node = ApprovalToolNode(tools)
+            logger.info("ApprovalToolNode enabled")
+        else:
+            tool_node = ToolNode(tools)
+    else:
+        tool_node = None
 
     # ── 节点函数（闭包捕获 model / llm_with_tools）──
 

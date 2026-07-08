@@ -334,6 +334,29 @@ function handleEventForChannel(sid: string, event: ServerEvent) {
     return
   }
 
+  // context_compressed：上下文压缩完成通知（可能在无活跃轮次时到达，如手动压缩）
+  if (event.type === 'context_compressed') {
+    const payload = event.payload
+    // 更新上下文用量占比（后端 context_usage_after 为 0-1 浮点数，转为百分比）
+    if (payload.context_usage_after !== undefined && ch.contextUsage) {
+      ch.contextUsage = {
+        ...ch.contextUsage,
+        usage_percent: Math.round(payload.context_usage_after * 1000) / 10,
+      }
+    }
+    // 在当前 turn 事件流中追加压缩通知
+    if (ch.currentTurn) {
+      ch.currentTurn.events.push({
+        kind: 'system',
+        detail: 'context_compressed',
+        content: `上下文已压缩：移除 ${payload.removed_count ?? 0} 条消息` +
+          (payload.summary_preview ? `，摘要：${payload.summary_preview}` : ''),
+        timestamp: Date.now(),
+      })
+    }
+    return
+  }
+
   // sub_session_created 可能在任何时候到达（主 Agent 调用 call_sub_agent）
   if (event.type === 'sub_session_created') {
     const subId = event.payload.sub_session_id
@@ -396,6 +419,15 @@ function handleEventForChannel(sid: string, event: ServerEvent) {
       const lastThink = findLastThinking(turn.events)
       if (lastThink && !lastThink.becameAnswer) {
         lastThink.consumed = true
+      }
+      // ApprovalToolNode 场景：ask_user(approval) 事件先到达时已创建占位 tool event，
+      // 此时 tool_start 到达应更新该 event 的 input（后端 tool_start 携带的 input 更准确），
+      // 而不是重复 push 一个新的 tool event。
+      const existingApprovalTool = findRunningTool(turn.events, event.payload.tool_name)
+      if (existingApprovalTool && existingApprovalTool.interaction?.mode === 'approval') {
+        console.log('[useChat] tool_start: 复用已存在的 approval 占位 tool event，更新 input')
+        existingApprovalTool.input = event.payload.input
+        break
       }
       turn.events.push({
         kind: 'tool',
@@ -504,30 +536,50 @@ function handleEventForChannel(sid: string, event: ServerEvent) {
 
     case 'ask_user': {
       const ae = event as AskUserEvent
+      const mode = ae.payload.mode
       ch.isAwaitingUser = true
       ch._awaitingToolName = ae.payload.tool_name
       console.log('[useChat] received ask_user event:', {
         tool_name: ae.payload.tool_name,
         question: ae.payload.question?.slice(0, 50),
-        mode: ae.payload.mode,
+        mode,
         interaction_id: ae.payload.interaction_id,
         session: sid,
       })
-      const runningTool = findRunningTool(turn.events, ae.payload.tool_name)
+      let runningTool = findRunningTool(turn.events, ae.payload.tool_name)
       console.log('[useChat] findRunningTool result:', runningTool ? {
         name: runningTool.name,
         status: runningTool.status,
         has_interaction: !!runningTool.interaction,
       } : 'NOT FOUND')
+      // ApprovalToolNode 场景：ask_user 事件先于 tool_start 到达（工具尚未执行，等待审批），
+      // 此时 runningTool 不存在，需先创建一个 running 状态的 tool event 承载 interaction 数据，
+      // 待用户批准后 ApprovalToolNode 才执行工具，后续 tool_start/tool_end 会通过 findRunningTool
+      // 找到这个已存在的 event 并填充 output/elapsed。
+      if (!runningTool && mode === 'approval') {
+        console.log('[useChat] approval mode: runningTool 不存在，创建占位 tool event 承载 interaction')
+        turn.events.push({
+          kind: 'tool',
+          name: ae.payload.tool_name,
+          input: ae.payload.tool_input ? JSON.stringify(ae.payload.tool_input, null, 2) : '',
+          output: null,
+          elapsed: null,
+          status: 'running',
+        })
+        runningTool = findRunningTool(turn.events, ae.payload.tool_name)
+      }
       if (runningTool) {
         runningTool.interaction = {
           question: ae.payload.question,
-          mode: ae.payload.mode,
+          mode,
           options: ae.payload.options,
           interactionId: ae.payload.interaction_id,
           submitted: false,
           code: ae.payload.code,
-          detail: (ae.payload as Record<string, unknown>).detail as string | undefined,
+          detail: ae.payload.detail,
+          // 审批模式特有字段
+          risk_level: mode === 'approval' ? ae.payload.risk_level : undefined,
+          tool_input: mode === 'approval' ? ae.payload.tool_input : undefined,
         }
       }
       break

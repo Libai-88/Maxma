@@ -69,17 +69,52 @@ export interface ContextUsageEvent {
   payload: ContextUsage
 }
 
+/** 会话上下文压缩事件（手动压缩或自动压缩完成时推送） */
+export interface ContextCompressedEvent {
+  type: 'context_compressed'
+  payload: {
+    compressed: boolean
+    removed_count?: number
+    summary_preview?: string
+    before_tokens?: number
+    after_tokens?: number
+    /** 压缩前/后上下文占比（0-1 浮点数） */
+    context_usage_before?: number
+    context_usage_after?: number
+  }
+}
+
 /** ask_user 交互工具向用户展示的问题和选项 */
 export interface AskUserEvent {
   type: 'ask_user'
   payload: {
     tool_name: string
     question: string
-    mode: 'qa' | 'single_choice' | 'multi_choice' | 'confirm'
-    options: string[]
+    /** 交互模式：qa/single_choice/multi_choice/confirm 为普通询问；approval 为工具执行审批 */
+    mode: 'qa' | 'single_choice' | 'multi_choice' | 'confirm' | 'approval'
+    /** 普通模式为 string[]；approval 模式为 {label,value}[] */
+    options: string[] | { label: string; value: string }[]
     interaction_id: string
     code?: string
+    /** approval 模式：审批原因/说明 */
+    detail?: string
+    /** approval 模式：风险等级 */
+    risk_level?: 'low' | 'medium' | 'high'
+    /** approval 模式：工具调用参数 */
+    tool_input?: Record<string, unknown>
   }
+}
+
+/** 审批请求事件 payload（mode='approval' 时 AskUserEvent.payload 的结构参考） */
+export interface ApprovalRequestPayload {
+  tool_name: string
+  interaction_id: string
+  mode: 'approval'
+  question: string
+  detail: string
+  risk_level: 'low' | 'medium' | 'high'
+  tool_input: Record<string, unknown>
+  options: { label: string; value: string }[]
 }
 
 /** plan_proposed — Planner 生成计划后等待用户确认 */
@@ -228,6 +263,7 @@ export type ServerEvent =
   | ErrorEvent
   | PongEvent
   | ContextUsageEvent
+  | ContextCompressedEvent
   | AskUserEvent
   | PlanProposedEvent
   | PlanStepStartEvent
@@ -296,12 +332,18 @@ export interface ThinkingBlock {
 /** ask_user 交互工具在前端存储的交互数据 */
 export interface AskUserInteraction {
   question: string
-  mode: 'qa' | 'single_choice' | 'multi_choice' | 'confirm'
-  options: string[]
+  /** 交互模式：qa/single_choice/multi_choice/confirm 为普通询问；approval 为工具执行审批 */
+  mode: 'qa' | 'single_choice' | 'multi_choice' | 'confirm' | 'approval'
+  /** 普通模式为 string[]；approval 模式为 {label,value}[] */
+  options: string[] | { label: string; value: string }[]
   interactionId: string
   submitted: boolean
   code?: string
   detail?: string
+  /** approval 模式：风险等级 */
+  risk_level?: 'low' | 'medium' | 'high'
+  /** approval 模式：工具调用参数 */
+  tool_input?: Record<string, unknown>
 }
 
 export interface ToolCall {
@@ -326,7 +368,16 @@ export interface MemoryToolEvent {
   status: 'running' | 'done' | 'error'
 }
 
-export type TurnEvent = ThinkingBlock | ToolCall | MemoryToolEvent
+/** 系统通知事件（如上下文压缩通知，渲染在轮次事件流中） */
+export interface SystemTurnEvent {
+  kind: 'system'
+  /** 子类型，如 context_compressed */
+  detail?: string
+  content: string
+  timestamp: number
+}
+
+export type TurnEvent = ThinkingBlock | ToolCall | MemoryToolEvent | SystemTurnEvent
 
 export interface ChatTurn {
   id: string
@@ -824,4 +875,34 @@ export interface AuditLogStats {
 
 export interface AuditLogListResponse {
   records: AuditLogRecord[]
+}
+
+// === 活动中心 Activity ===
+
+export interface ActivityRecord {
+  timestamp: number
+  category: string
+  event_type: string
+  session_id: string
+  turn_id: string
+  tool_name: string
+  level: string
+  message: string
+  payload: Record<string, unknown>
+}
+
+export interface ActivityRecentResponse {
+  records: ActivityRecord[]
+  total: number
+}
+
+export interface ActivityStatsResponse {
+  total: number
+  by_category: Record<string, number>
+  started_at: number
+  uptime_seconds: number
+}
+
+export interface ActivityClearResponse {
+  cleared: number
 }

@@ -545,6 +545,7 @@ async def _run_agent_turn(
     session.auto_approve = auto_approve
     interaction.current_session_id.set(session.session_id)
     ws_callback = WebSocketCallback(ws)  # WebUI 回调函数系统
+    ws_callback.session_id = session.session_id  # 供 Activity Hub 记录使用
 
     # ── 多模态：自动描述用户附带的图片 ──────────────────────────
     user_message = await _process_image_refs(user_message)
@@ -664,8 +665,15 @@ async def _run_agent_turn(
     # 上下文窗口保护：当对话历史过长时自动截断，防止超出模型上下文限制
     from api.context_usage import count_tokens
     system_prompt_tokens = count_tokens(system_prompt)
+
+    # 包装 ws.send_json 为符合 ws_callback 签名的异步回调
+    async def _compress_ws_callback(msg: dict):
+        await ws.send_json(msg)
+
     await maybe_trim_checkpoint(
-        agent_maxma, config, system_prompt_tokens, current_max_tokens, llm=llm
+        agent_maxma, config, system_prompt_tokens, current_max_tokens,
+        llm=llm,
+        ws_callback=_compress_ws_callback,
     )
 
     # 2. [执行轮次] 流式执行 Agent 图，副作用推送最终回答，另有config回调副作用

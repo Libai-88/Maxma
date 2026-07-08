@@ -92,9 +92,13 @@
       :can-send="connected"
       :initial-provider-id="selectedProviderId"
       :initial-model-name="selectedModelName"
+      :quoted-selections="quotedSelections"
+      :quote-candidate="quoteCandidate"
       @send="onSend"
       @stop="cancel"
       @model-change="onModelChange"
+      @commit-quote="commitCandidate"
+      @remove-quote="removeQuote"
     />
     <div v-else class="sub-agent-readonly-bar">
       <span class="sub-agent-readonly-text">🔒 子 Agent 会话 — 只读</span>
@@ -112,6 +116,7 @@ import ContextUsageBadge from '@/components/ContextUsageBadge.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import TaskTrackerBar from '@/components/TaskTrackerBar.vue'
 import { useChat } from '@/composables/useChat'
+import { useSelectionQuote } from '@/composables/useSelectionQuote'
 import { useHealthStore } from '@/stores/health'
 import { useProviderStore } from '@/stores/provider'
 import { useSessionStore } from '@/stores/session'
@@ -127,6 +132,14 @@ const {
   contextUsage, taskTrackerData, send, cancel, sendUserResponse, sendPlanResponse, removeTurns,
   privateMode, setPrivateMode, autoApprove, setAutoApprove
 } = useChat(sessionId)
+
+const {
+  quoteCandidate,
+  quotedSelections,
+  commitCandidate,
+  removeQuote,
+  clearQuotes,
+} = useSelectionQuote()
 
 // 持久化 provider/model 选择到 localStorage，刷新后恢复
 const SELECTED_PROVIDER_KEY = 'maxma_selected_provider'
@@ -184,7 +197,14 @@ function addCitation(ref: ParsedRef) {
 }
 
 function onSend(text: string, refs: ParsedRef[], providerId?: string, modelName?: string) {
-  send(text, refs, providerId, modelName)
+  // 将选区引用作为 refs 的一部分传给后端
+  const quoteRefs: ParsedRef[] = quotedSelections.value.map(q => ({
+    type: 'selection' as any,
+    label: q.source,
+    preview: q.text,
+  } as ParsedRef))
+  send(text, [...refs, ...quoteRefs], providerId, modelName)
+  clearQuotes()
 }
 
 function handleToolAction(payload: { action: string; data?: unknown }) {

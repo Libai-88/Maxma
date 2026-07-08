@@ -246,6 +246,10 @@ hiddenimports = [
     "api.routes.metrics",
     # Task 4：MCP 测试路由（server.py 顶层注册路由时延迟导入）
     "api.routes.mcp_test",
+    # Phase 3：Activity Hub + 会话压缩路由（server.py 延迟导入）
+    "api.activity_hub",
+    "api.routes.activity",
+    "api.routes.session_compress",
 
     # ── SQLite 数据层（Phase 1 新增，动态导入） ──
     "api.db.core",
@@ -276,6 +280,10 @@ hiddenimports = [
     "agent.step_state",
     # 阶段 5.2：死循环检测器（graph.should_continue + loop_breaker_node 延迟导入）
     "agent.loop_detector",
+    # Phase 3：审批网关 + 会话压缩（graph.py 延迟导入 ApprovalToolNode）
+    "agent.approval_gateway",
+    "agent.approval_tool_node",
+    "agent.context_manager",
 
     # ── Memory 模块 ──
     "memory.memory_manager",

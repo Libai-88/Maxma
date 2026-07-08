@@ -1,0 +1,36 @@
+/* web/src/themes/high-contrast.css
+ * 无障碍高对比浅色主题 — 降暖黄、提对比度
+ */
+
+[data-theme="high-contrast"] {
+  --bg-primary:    #FAF8F7;
+  --bg-secondary:  #F0EEEC;
+  --bg-card:       #FFFFFF;
+  --user-bubble:   rgba(0, 0, 0, 0.06);
+
+  --accent:        #1A3A4A;
+  --accent-light:  #0D2A3A;
+  --accent-pink:   #C03B3B;
+  --accent-pink-light: #C03B3B;
+  --accent-pink-soft:  rgba(192, 59, 59, 0.1);
+
+  --text-primary:   #1A1A1A;
+  --text-secondary: #4A4A4A;
+  --text-tertiary:  #6A6A6A;
+
+  --border:         rgba(0, 0, 0, 0.25);
+  --shadow-color:   rgba(0, 0, 0, 0.12);
+
+  --status-ok:      #2D7A33;
+  --status-error:   #A02020;
+  --status-warn:    #8A5A1A;
+
+  --hana-text:      #1A2A3A;
+  --tool-bg:        rgba(0, 0, 0, 0.04);
+  --sidebar-bg:     #F0EEEC;
+
+  --overlay-subtle: rgba(0, 0, 0, 0.03);
+  --overlay-light:  rgba(0, 0, 0, 0.05);
+  --overlay-medium: rgba(0, 0, 0, 0.08);
+  --overlay-strong: rgba(0, 0, 0, 0.15);
+}

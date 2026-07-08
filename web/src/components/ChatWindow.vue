@@ -44,7 +44,29 @@
                 )
               "
             >
-              <ToolBubbleRouter :tool-call="ev" @action="forwardAction" />
+              <!-- 审批请求（mode === 'approval'）且工具未完成：渲染 ApprovalBubble
+                   - 审批等待中：显示允许/拒绝按钮
+                   - 用户拒绝后：tool status 永远为 running，ApprovalBubble 显示 "已拒绝"
+                   - 用户批准后工具执行完成（status='done'）：由 ToolBubbleRouter 渲染工具结果 -->
+              <ApprovalBubble
+                v-if="ev.interaction?.mode === 'approval' && ev.status === 'running'"
+                :tool-name="ev.name"
+                :detail="ev.interaction?.detail || ''"
+                :risk-level="ev.interaction?.risk_level || 'medium'"
+                :tool-input="ev.interaction?.tool_input"
+                :interaction-id="ev.interaction?.interactionId || ''"
+                @action="forwardAction"
+              />
+              <!-- 普通工具调用或审批后工具执行结果 -->
+              <ToolBubbleRouter v-else :tool-call="ev" @action="forwardAction" />
+            </div>
+            <!-- 系统通知（如上下文压缩通知），轻量内联提示 -->
+            <div
+              v-else-if="ev.kind === 'system'"
+              class="system-event-bubble"
+            >
+              <span class="system-event-icon">ℹ︎</span>
+              <span class="system-event-text">{{ ev.content }}</span>
             </div>
           </template>
           <!-- finalAnswer：仅在已完成（非流式）轮次中展示 -->
@@ -177,6 +199,7 @@
 <script setup lang="ts">
 import type { ChatTurn } from '@/types'
 import type { ParsedRef } from '@/utils/references'
+import { api } from '@/api'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { ContextMenuItem } from './ContextMenu.vue'
 import ContextMenu from './ContextMenu.vue'
@@ -184,6 +207,7 @@ import MessageBubble from './MessageBubble.vue'
 import ThinkingBlock from './ThinkingBlock.vue'
 import ToolBubbleRouter from './ToolBubbleRouter.vue'
 import PlanCard from './PlanCard.vue'
+import ApprovalBubble from './ApprovalBubble.vue'
 import { toolDisplayName } from './tools/_shared/displayNames'
 
 const props = defineProps<{
@@ -194,21 +218,35 @@ const props = defineProps<{
   errorTraceId: string | null
 }>()
 
-// 错误日志一键复制
+// 错误日志一键复制（调用后端 ErrorCollector 获取完整报告）
 const copySuccess = ref(false)
 async function copyErrorLog() {
-  const now = new Date()
-  const ts = now.toISOString().replace('T', ' ').substring(0, 19)
-  const lines = [
-    'MaxmaHere 错误报告',
-    '========================================',
-    `时间: ${ts}`,
-    `Trace ID: ${props.errorTraceId || 'N/A'}`,
-    `错误类别: ${props.errorCategory || 'system_error'}`,
-    `错误信息: ${props.error || 'N/A'}`,
-    '========================================',
-  ]
-  const text = lines.join('\n')
+  let text: string
+  try {
+    // 优先调用后端获取完整错误报告（含内存收集 + 日志扫描 + 系统信息）
+    text = await api.getErrorLogText()
+    // 在报告末尾追加当前对话上下文的错误信息，便于定位
+    if (props.error || props.errorTraceId) {
+      text += '\n\n--- 当前对话错误上下文 ---\n'
+      if (props.errorCategory) text += `错误类别: ${props.errorCategory}\n`
+      if (props.errorTraceId) text += `Trace ID: ${props.errorTraceId}\n`
+      if (props.error) text += `错误信息: ${props.error}\n`
+    }
+  } catch {
+    // 后端不可用时降级为本地拼接
+    const now = new Date()
+    const ts = now.toISOString().replace('T', ' ').substring(0, 19)
+    const lines = [
+      'MaxmaHere 错误报告（降级模式 - 后端不可用）',
+      '========================================',
+      `时间: ${ts}`,
+      `Trace ID: ${props.errorTraceId || 'N/A'}`,
+      `错误类别: ${props.errorCategory || 'system_error'}`,
+      `错误信息: ${props.error || 'N/A'}`,
+      '========================================',
+    ]
+    text = lines.join('\n')
+  }
   try {
     await navigator.clipboard.writeText(text)
   } catch {
@@ -522,6 +560,25 @@ function closeContextMenu() {
 }
 .empty-reply-placeholder {
   opacity: 0.7;
+}
+.system-event-bubble {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  margin: 2px 0;
+  border-left: 2px solid var(--border);
+  background: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
+  border-radius: 4px;
+  font-size: 0.82em;
+  color: var(--text-secondary);
+}
+.system-event-icon {
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+.system-event-text {
+  line-height: 1.5;
 }
 .empty-state {
   position: relative;

@@ -1,0 +1,46 @@
+/* web/src/themes/midnight.css
+ * 深色主题 — 深青蓝底 + 暖玫瑰 accent
+ * 灵感：雨夜窗外，沉静深邃
+ */
+
+[data-theme="midnight"] {
+  /* ── 背景 ── */
+  --bg-primary:    #3B4A54;
+  --bg-secondary:  #34424B;
+  --bg-card:       #445560;
+  --user-bubble:   rgba(170, 121, 141, 0.10);
+
+  /* ── 主色调（柔粉） ── */
+  --accent:        #C99AAF;
+  --accent-light:  #D8AFC0;
+  --accent-pink:   #EAB2A0;
+  --accent-pink-light: #EAB2A0;
+  --accent-pink-soft:  rgba(234, 178, 160, 0.12);
+
+  /* ── 文字 ── */
+  --text-primary:   #E1EAF0;
+  --text-secondary: #B7C5CE;
+  --text-tertiary:  #A3B5C0;
+
+  /* ── 边框与阴影 ── */
+  --border:         rgba(170, 121, 141, 0.16);
+  --shadow-color:   rgba(0, 0, 0, 0.36);
+
+  /* ── 状态色 ── */
+  --status-ok:      #8CC790;
+  --status-error:   #C77070;
+  --status-warn:    #D4A574;
+
+  /* ── 聊天专用 ── */
+  --hana-text:      #DCE6EC;
+  --tool-bg:        rgba(67, 91, 102, 0.20);
+
+  /* ── 侧边栏 ── */
+  --sidebar-bg:     #34424B;
+
+  /* ── 遮罩层（深色主题反转） ── */
+  --overlay-subtle: rgba(255, 255, 255, 0.03);
+  --overlay-light:  rgba(255, 255, 255, 0.05);
+  --overlay-medium: rgba(255, 255, 255, 0.08);
+  --overlay-strong: rgba(255, 255, 255, 0.15);
+}
