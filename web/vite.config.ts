@@ -27,6 +27,7 @@ export default defineConfig(({ mode }) => {
         input: {
           main: fileURLToPath(new URL('./index.html', import.meta.url)),
           'quick-chat': fileURLToPath(new URL('./quick-chat.html', import.meta.url)),
+          splash: fileURLToPath(new URL('./splash.html', import.meta.url)),
         },
         output: {
           manualChunks: {
