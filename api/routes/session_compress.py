@@ -10,7 +10,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Request
 
-from agent.context_manager import maybe_trim_checkpoint
+from agent.context_manager import fresh_compact, maybe_trim_checkpoint
 from agent.graph import build_agent
 from agent.prompts import build_system_prompt
 from api.context_usage import count_tokens
@@ -80,4 +80,36 @@ async def compress_session(session_id: str, request: Request) -> dict:
         return result
     except Exception as e:
         logger.exception("Manual compress failed for session %s", session_id)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{session_id}/fresh-compact")
+async def trigger_fresh_compact(session_id: str, request: Request) -> dict:
+    """显式触发会话上下文刷新。
+
+    与累积式压缩不同，fresh-compact 从原始消息重新生成摘要，
+    丢弃旧的累积摘要，避免信息损失累积。适用于用户主动切换话题
+    或检测到摘要被引用过多时。
+    """
+    session_manager = request.app.state.session_manager
+    session = await session_manager.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    app_state = request.app.state
+    llm = getattr(app_state, "llm", None)
+    if llm is None:
+        raise HTTPException(status_code=503, detail="LLM 未就绪，请先配置 Provider")
+
+    checkpointer = session.checkpointer
+
+    try:
+        result = await fresh_compact(
+            thread_id=session_id,
+            llm=llm,
+            checkpointer=checkpointer,
+        )
+        return result
+    except Exception as e:
+        logger.exception("Fresh compact failed for session %s", session_id)
         raise HTTPException(status_code=500, detail=str(e))

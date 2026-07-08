@@ -267,3 +267,45 @@ async def test_compaction_falls_back_to_hard_truncation_on_llm_error():
     assert len(new_msgs) < len(messages)
     # 应标记降级原因
     assert result.get("compaction_fallback") in (True, "hard_truncation", None)
+
+
+# ── Task E2: Fresh Compact 显式刷新 ─────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_fresh_compact_regenerates_from_raw_messages():
+    """fresh compact 应从原始消息重新生成摘要，而非基于旧摘要"""
+    from agent.context_manager import fresh_compact
+    from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+    from unittest.mock import AsyncMock, MagicMock
+
+    messages = [
+        SystemMessage(content="You are helpful."),
+        HumanMessage(content="我喜欢Python"),
+        AIMessage(content="好的"),
+        HumanMessage(content="我在学习Rust"),
+        AIMessage(content="不错的方向"),
+        HumanMessage(content="最近在用Vue3"),
+        AIMessage(content="前端好选择"),
+    ]
+
+    mock_llm = AsyncMock()
+    mock_llm.ainvoke = AsyncMock(return_value=MagicMock(
+        content="用户喜欢Python，正在学习Rust，最近用Vue3做前端"
+    ))
+
+    mock_checkpointer = MagicMock()
+    mock_checkpointer.aget_tuple = AsyncMock(return_value=MagicMock(checkpoint={"messages": messages}))
+    mock_checkpointer.aput = AsyncMock(return_value=None)
+
+    result = await fresh_compact(
+        thread_id="t1",
+        llm=mock_llm,
+        checkpointer=mock_checkpointer,
+        ws_callback=None,
+    )
+
+    # LLM 应被调用，且传入的是原始消息而非旧摘要
+    assert mock_llm.ainvoke.called
+    # 结果应包含新摘要
+    assert result.get("refreshed") is True

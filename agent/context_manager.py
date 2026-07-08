@@ -666,3 +666,111 @@ def retrieve_from_episodic(
     except Exception as e:
         logger.warning(f"[episodic] retrieve_from_episodic failed: {e}")
         return ""
+
+
+# ── Fresh Compact：显式刷新（避免累积摘要信息损失）──────────────
+
+
+async def fresh_compact(
+    *,
+    thread_id: str,
+    llm,
+    checkpointer,
+    ws_callback=None,
+) -> dict:
+    """显式刷新：从 checkpointer 读取原始消息，重新生成摘要。
+
+    与 maybe_trim_checkpoint 的累积压缩不同，fresh_compact 总是从
+    原始消息重新生成摘要，避免累积信息损失。
+
+    触发场景：
+    1. 用户主动点击"刷新上下文"
+    2. 检测到摘要被引用超过 N 次（信息损失累积）
+    3. 用户明确切换话题
+    """
+    if checkpointer is None:
+        return {"refreshed": False, "reason": "no checkpointer"}
+
+    try:
+        tuple_data = await checkpointer.aget_tuple(
+            {"configurable": {"thread_id": thread_id}}
+        )
+    except Exception as e:
+        logger.error(f"fresh_compact: failed to get tuple: {e}")
+        return {"refreshed": False, "reason": f"checkpointer error: {e}"}
+
+    if tuple_data is None:
+        return {"refreshed": False, "reason": "no checkpoint found"}
+
+    messages = tuple_data.checkpoint.get("messages", [])
+    if not messages:
+        return {"refreshed": False, "reason": "no messages"}
+
+    # 分离 SystemMessage
+    static_prefix = [m for m in messages if isinstance(m, SystemMessage)]
+    dynamic = [m for m in messages if not isinstance(m, SystemMessage)]
+
+    if len(dynamic) < 4:
+        return {"refreshed": False, "reason": "too few messages to compact"}
+
+    # 从原始动态消息生成摘要（不依赖旧摘要）
+    # 保留最近 6 条不压缩
+    to_compress = dynamic[:-6]
+    retain = dynamic[-6:]
+
+    summary_prompt = _build_summary_prompt(to_compress)
+    try:
+        from langchain_core.messages import HumanMessage as _HM
+        response = await llm.ainvoke([_HM(content=summary_prompt)])
+        summary_text = response.content if hasattr(response, 'content') else str(response)
+        if not isinstance(summary_text, str):
+            summary_text = str(summary_text)
+    except Exception as e:
+        logger.warning(f"fresh_compact: LLM failed, using hard truncation: {e}")
+        old_text = "\n\n".join(
+            (m.content if isinstance(m.content, str) else str(m.content))
+            for m in to_compress
+        )
+        head, tail = truncate_text_head_tail(old_text, max_bytes=4096)
+        summary_text = f"{head}\n{tail}"
+
+    summary_msg = HumanMessage(content=f"[会话历史摘要-刷新]\n{summary_text}")
+    new_messages = static_prefix + [summary_msg] + retain
+
+    # 写回 checkpointer
+    try:
+        await checkpointer.aput(
+            {"configurable": {"thread_id": thread_id}},
+            {"messages": new_messages},
+            {"source": "fresh_compact"},
+        )
+    except Exception as e:
+        logger.error(f"fresh_compact: failed to write back: {e}")
+        return {"refreshed": False, "reason": f"write back failed: {e}"}
+
+    if ws_callback:
+        try:
+            await ws_callback({
+                "type": "context_refreshed",
+                "retained_count": len(retain),
+                "summary_length": len(summary_text),
+            })
+        except Exception:
+            pass
+
+    return {
+        "refreshed": True,
+        "new_message_count": len(new_messages),
+        "summary_length": len(summary_text),
+    }
+
+
+def _build_summary_prompt(messages) -> str:
+    """构建摘要 prompt。"""
+    lines = ["请总结以下对话的关键信息（事实、决策、用户偏好）：\n"]
+    for m in messages:
+        role = getattr(m, 'type', 'unknown')
+        content = m.content if isinstance(m.content, str) else str(m.content)
+        lines.append(f"[{role}] {content[:500]}")
+    lines.append("\n输出格式：\n## Facts\n- 事实1\n- 事实2\n\n## Timeline\n- 事件1")
+    return "\n".join(lines)
