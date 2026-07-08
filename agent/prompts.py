@@ -11,6 +11,8 @@ from memory.narrative import get_narrative
 from memory.user_init import ensure_user_md
 from api.yaml_store import dump_yaml_atomic, yaml_file_lock
 
+from agent.persona_loader import load_persona, build_persona_prompt
+
 logger = logging.getLogger(__name__)
 
 
@@ -30,6 +32,20 @@ def get_active_persona_file() -> str:
         except Exception:
             logger.warning("failed to load active_persona.yaml", exc_info=True)
     return _DEFAULT_PERSONA_FILE
+
+
+def _persona_name_from_soul(soul_file: str) -> str:
+    """从活跃 SOUL 文件名推导三层人设的 name。
+
+    "SOUL.md" → "default"；"SOUL.饱饱.md" → "饱饱"。
+    persona_loader 在具名模板不存在时会回退到 *_default.md。
+    """
+    stem = Path(soul_file).stem  # "SOUL" or "SOUL.饱饱"
+    if stem.startswith("SOUL."):
+        return stem[len("SOUL."):]
+    if stem == "SOUL":
+        return "default"
+    return stem
 
 
 def set_active_persona(filename: str) -> None:
@@ -108,6 +124,14 @@ def _current_fingerprint() -> str:
         parts.append(f"{name}:{_file_hash(PERSONAS_DIR / name)}")
     # 额外记录 active_persona.yaml 自身，切换人格时触发缓存刷新
     parts.append(f"active:{_file_hash(ACTIVE_PERSONA_PATH)}")
+
+    # 三层人设模板（Yuan/Identity/Ishiki）——模板变化时刷新缓存
+    from agent.persona_loader import PERSONA_DIR
+    persona_name = _persona_name_from_soul(active_soul)
+    for layer in ("identity", "yuan", "ishiki"):
+        named_path = PERSONA_DIR / f"{layer}_{persona_name}.md"
+        target_path = named_path if named_path.exists() else PERSONA_DIR / f"{layer}_default.md"
+        parts.append(f"persona:{layer}:{_file_hash(target_path)}")
 
     # 4 层架构：语义记忆 JSON
     from app_paths import SEMANTIC_MEMORY_PATH
@@ -196,6 +220,13 @@ def _rebuild(fingerprint: str) -> None:
         # 未配置称呼时保留占位符，但替换为通用称呼避免 LLM 困惑
         soul_content = soul_content.replace("{{USER_NAME}}", "你")
 
+    # ── 三层人设（Yuan/Identity/Ishiki）──
+    # 静态前缀，放在 system prompt 最前面（cache 友好）。
+    # persona_loader 在具名模板不存在时回退到 *_default.md。
+    persona_name = _persona_name_from_soul(active_soul_file)
+    persona = load_persona(persona_name, user_name=user_name or "用户")
+    persona_prompt = build_persona_prompt(persona)
+
     # ── parts（用于 token 细分展示）──
     # 按变化频率从低到高排列：稳定内容在前，频繁变化的放最后。
     # 只调用一次 I/O 密集型函数，两处复用
@@ -211,6 +242,8 @@ def _rebuild(fingerprint: str) -> None:
     # 这样 Anthropic/OpenAI prompt caching 可以缓存更长的前缀，
     # 记忆变化时不会导致 skills/macros 等稳定部分的缓存失效。
     _cached_parts = [
+        {"key": "persona", "label": "三层人设",
+         "content": persona_prompt},
         {"key": "behavior_rules", "label": "系统行为规则",
          "content": "## 行为规则\n" + agents_md_content},
         {"key": "personality", "label": "性格人设",
@@ -228,8 +261,10 @@ def _rebuild(fingerprint: str) -> None:
     ]
 
     # ── 完整 prompt ──
-    # 与 _cached_parts 保持一致顺序：稳定内容在前，记忆放最后
+    # 与 _cached_parts 保持一致顺序：persona 在最前（静态前缀），记忆放最后
     full_parts = [
+        persona_prompt,
+        "",
         "## 行为规则",
         agents_md_content,
         "",
