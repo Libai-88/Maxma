@@ -82,6 +82,20 @@ class TestHealthSummary:
         assert "llm" in summary.degraded_components
         assert "mcp_tools" in summary.degraded_components
 
+    def test_error_status_treated_as_degraded(self):
+        """组件 status='error' 也应被视为降级。"""
+        health_data = {
+            "status": "degraded",
+            "llm": {"status": "error"},
+            "memory": {"status": "ok"},
+            "native_tools": {"status": "ok"},
+            "mcp_tools": {"status": "degraded"},
+        }
+        summary = collect_health_summary(health_data)
+        assert "llm" in summary.degraded_components
+        assert "mcp_tools" in summary.degraded_components
+        assert "memory" not in summary.degraded_components
+
 
 class TestBuildDiagnosticReport:
     def test_report_contains_sections(self):

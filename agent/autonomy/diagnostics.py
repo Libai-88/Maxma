@@ -96,7 +96,7 @@ def collect_health_summary(health_data: dict) -> HealthSummary:
 
     for component in ("llm", "memory", "native_tools", "mcp_tools"):
         comp_data = health_data.get(component, {})
-        if isinstance(comp_data, dict) and comp_data.get("status") == "degraded":
+        if isinstance(comp_data, dict) and comp_data.get("status") != "ok":
             degraded.append(component)
 
     return HealthSummary(

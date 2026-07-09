@@ -17,7 +17,7 @@ from memory.narrative import MEMORY_PATH
 
 
 class ComponentHealth(BaseModel):
-    status: Literal["ok", "error"]
+    status: Literal["ok", "degraded", "error"]
     latency_ms: float | None = None
     detail: str | None = None
 
