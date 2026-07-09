@@ -71,7 +71,7 @@ def _build_self_improve_prompt(report: dict) -> str:
 {issues_text if issues_text else "无问题"}
 
 ### 最近错误消息
-{chr(10).join(report.get('error_summary', {}).get('recent_messages', [])[:5])}
+{"\n".join(report.get('error_summary', {}).get('recent_messages', [])[:5])}
 
 ## 你的任务
 
