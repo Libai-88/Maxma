@@ -538,36 +538,6 @@ def build_system_prompt() -> str:
         return _cached_prompt
 
 
-def build_verifier_prompt() -> str:
-    """构建 verifier 答案充分性评分提示词。
-
-    职责：取用户问题 + agent 答案 + 检索证据，判定答案是否充分回答了问题。
-    返回严格 JSON。
-
-    Returns:
-        系统提示词字符串
-    """
-    return """你是 Maxma 的答案验证者（Verifier）。你的任务是判定 Agent 的答案是否充分回答了用户的问题。
-
-判定标准：
-- "sufficient"：答案直接回答了用户问题，关键信息完整，无明显遗漏或矛盾
-- "insufficient"：答案遗漏了问题的关键部分、答非所问、或包含无法从证据支撑的断言
-
-判定原则：
-- 宽容为主：只要答案合理地回应了问题的核心，就判 sufficient
-- 仅在明确遗漏关键信息时才判 insufficient
-- gaps 字段列出具体缺失点（如"未回答价格部分"），供 agent 补充
-
-输出格式：严格 JSON，无多余文本、无 markdown 代码块标记。
-{"verdict":"<sufficient|insufficient>","gaps":["<缺失点1>","<缺失点2>"],"rationale":"<简短理由>"}
-
-注意：
-- 只输出 JSON，不要任何解释或前后缀
-- sufficient 时 gaps 为空数组 []
-- insufficient 时 gaps 至少包含一个具体缺失点
-- 无法判断时判 sufficient（不阻塞用户）"""
-
-
 def build_coordinator_prompt(persona_context: str = "") -> str:
     """构建 coordinator 路由分类提示词。
 
@@ -601,3 +571,33 @@ def build_coordinator_prompt(persona_context: str = "") -> str:
 - specialist 路由必须填 specialist 字段
 - direct 和 main 路由省略 specialist 字段
 - 不确定时选 "main"（更安全）"""
+
+
+def build_verifier_prompt() -> str:
+    """构建 verifier 答案充分性评分提示词。
+
+    职责：取用户问题 + agent 答案 + 检索证据，判定答案是否充分回答了问题。
+    返回严格 JSON。
+
+    Returns:
+        系统提示词字符串
+    """
+    return """你是 Maxma 的答案验证者（Verifier）。你的任务是判定 Agent 的答案是否充分回答了用户的问题。
+
+判定标准：
+- "sufficient"：答案直接回答了用户问题，关键信息完整，无明显遗漏或矛盾
+- "insufficient"：答案遗漏了问题的关键部分、答非所问、或包含无法从证据支撑的断言
+
+判定原则：
+- 宽容为主：只要答案合理地回应了问题的核心，就判 sufficient
+- 仅在明确遗漏关键信息时才判 insufficient
+- gaps 字段列出具体缺失点（如"未回答价格部分"），供 agent 补充
+
+输出格式：严格 JSON，无多余文本、无 markdown 代码块标记。
+{"verdict":"<sufficient|insufficient>","gaps":["<缺失点1>","<缺失点2>"],"rationale":"<简短理由>"}
+
+注意：
+- 只输出 JSON，不要任何解释或前后缀
+- sufficient 时 gaps 为空数组 []
+- insufficient 时 gaps 至少包含一个具体缺失点
+- 无法判断时判 sufficient（不阻塞用户）"""
