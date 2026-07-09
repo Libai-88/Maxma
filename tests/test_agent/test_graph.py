@@ -5,6 +5,7 @@ import json
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langgraph.graph import END
 
 from agent.executor import (
     detect_tool_failure,
@@ -781,7 +782,7 @@ class TestExecutorRouter:
         router = make_executor_router()
         plan_steps = [{"description": "step1", "index": 0}]
         state = _make_state(plan_steps=plan_steps, current_step_index=1)
-        assert router(state) == "END"
+        assert router(state) == END
 
     def test_replan_request_routes_to_planner(self):
         router = make_executor_router()
