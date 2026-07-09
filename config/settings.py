@@ -103,6 +103,16 @@ class Settings(BaseSettings):
     loop_detection_enabled: bool = True  # 是否启用死循环检测
     loop_detection_threshold: int = 3  # 连续重复次数阈值，达到后终止
 
+    # ── 编排层特性开关（默认关闭，安全滚动）──
+    # Coordinator：意图路由协调者节点（coordinator → planner → agent）
+    coordinator_enabled: bool = False
+    # Verifier：答案充分性验证节点（agent → verifier → END/agent 重试）
+    verifier_enabled: bool = False
+    # Verifier 最大重试次数（达到上限后放行，即使仍 insufficient）
+    verifier_max_retries: int = 2
+    # DelegationScope：SubAgent 委托范围单调收窄强制
+    delegation_scope_enforced: bool = False
+
     model_config = {
         "env_file": str(ENV_FILE_PATH),
         "env_file_encoding": "utf-8",

@@ -27,3 +27,31 @@ class TestPortSettings:
         monkeypatch.setenv("MAXMA_WEB_PORT", "also-not")
         with pytest.raises(ValueError):
             reload_settings()
+
+
+class TestOrchestrationFlags:
+    """编排层特性开关测试。"""
+
+    def test_coordinator_flag_defaults_off(self):
+        from config.settings import get_settings
+        s = get_settings()
+        assert hasattr(s, "coordinator_enabled")
+        assert s.coordinator_enabled is False
+
+    def test_verifier_flag_defaults_off(self):
+        from config.settings import get_settings
+        s = get_settings()
+        assert hasattr(s, "verifier_enabled")
+        assert s.verifier_enabled is False
+
+    def test_verifier_max_retries_default(self):
+        from config.settings import get_settings
+        s = get_settings()
+        assert hasattr(s, "verifier_max_retries")
+        assert s.verifier_max_retries == 2
+
+    def test_delegation_scope_enforced_defaults_off(self):
+        from config.settings import get_settings
+        s = get_settings()
+        assert hasattr(s, "delegation_scope_enforced")
+        assert s.delegation_scope_enforced is False
