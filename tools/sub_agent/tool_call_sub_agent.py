@@ -11,6 +11,7 @@ from langchain_core.runnables import RunnableConfig
 
 from api import interaction
 from tools.base import ToolBase, format_success, format_error, register_tool
+from tools.sub_agent.tool_parallel import _filter_tools_by_scope, _compute_effective_scope
 
 logger = logging.getLogger(__name__)
 
@@ -191,9 +192,33 @@ class CallSubAgentTool(ToolBase):
         system_prompt = build_system_prompt()
         # 4 层架构：子 Agent 也启用情景记忆检索
         episodic_mm = getattr(app_state, "episodic_mm", None)
+
+        # DelegationScope 收窄：delegation_scope_enforced 启用时过滤子 Agent 工具
+        effective_tools = app_state.tools
+        try:
+            from config.settings import get_settings
+            if get_settings().delegation_scope_enforced:
+                parent_tool_names = [t.name for t in app_state.tools]
+                parent_paths = []
+                try:
+                    from tools.path_security import get_whitelisted_paths
+                    parent_paths = get_whitelisted_paths()
+                except Exception:
+                    pass
+                effective_scope = _compute_effective_scope(
+                    parent_tools=parent_tool_names,
+                    parent_paths=parent_paths,
+                    child_requested_tools=parent_tool_names,
+                )
+                effective_tool_names = _filter_tools_by_scope(parent_tool_names, effective_scope)
+                effective_tools = [t for t in app_state.tools if t.name in set(effective_tool_names)]
+        except Exception as e:
+            logger.warning("[call_sub_agent] scope 计算失败，使用全量工具: %s", e)
+            effective_tools = app_state.tools
+
         agent = build_agent(
             model=app_state.llm,
-            tools=app_state.tools,
+            tools=effective_tools,
             system_prompt=system_prompt,
             checkpointer=sub.checkpointer,
             episodic_mm=episodic_mm,
