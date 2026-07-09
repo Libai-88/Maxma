@@ -77,3 +77,31 @@ class TestRetrievalFlags:
         s = get_settings()
         assert hasattr(s, "rag_grade_threshold")
         assert s.rag_grade_threshold == 0.3
+
+
+class TestAutonomyFlags:
+    """自治层特性开关测试。"""
+
+    def test_autonomy_enabled_defaults_off(self):
+        from config.settings import get_settings
+        s = get_settings()
+        assert hasattr(s, "autonomy_enabled")
+        assert s.autonomy_enabled is False
+
+    def test_autonomy_interval_default(self):
+        from config.settings import get_settings
+        s = get_settings()
+        assert hasattr(s, "autonomy_interval_seconds")
+        assert s.autonomy_interval_seconds == 3600
+
+    def test_autonomy_self_improve_defaults_off(self):
+        from config.settings import get_settings
+        s = get_settings()
+        assert hasattr(s, "autonomy_self_improve_enabled")
+        assert s.autonomy_self_improve_enabled is False
+
+    def test_autonomy_max_agent_timeout_default(self):
+        from config.settings import get_settings
+        s = get_settings()
+        assert hasattr(s, "autonomy_max_agent_timeout")
+        assert s.autonomy_max_agent_timeout == 300

@@ -121,6 +121,16 @@ class Settings(BaseSettings):
     # RAG grading 阈值：相关文档比例低于此值时触发 Tavily 回退
     rag_grade_threshold: float = 0.3
 
+    # ── 自治层特性开关（默认关闭，安全滚动）──
+    # 自治调度器：周期性后台自诊断 + 自改进
+    autonomy_enabled: bool = False
+    # 自治调度器执行间隔（秒），默认 1 小时
+    autonomy_interval_seconds: int = 3600
+    # 自改进：允许自治 Agent 创建/更新 Skills
+    autonomy_self_improve_enabled: bool = False
+    # 自治 Agent 单次执行最大超时（秒）
+    autonomy_max_agent_timeout: int = 300
+
     model_config = {
         "env_file": str(ENV_FILE_PATH),
         "env_file_encoding": "utf-8",
