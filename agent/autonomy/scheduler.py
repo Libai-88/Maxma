@@ -322,12 +322,20 @@ async def _run_self_improve(app: Any, report: dict) -> str:
     """
     from agent.autonomy.runner import run_self_improvement_agent
     from config.settings import get_settings
+    from app_paths import DATA_DIR
 
     settings = get_settings()
     timeout = settings.autonomy_max_agent_timeout
+
+    # 构造 transcript 路径
+    transcript_dir = DATA_DIR / "transcripts" / "autonomy"
+    transcript_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    transcript_path = transcript_dir / f"autonomy-{timestamp}.jsonl"
 
     return await run_self_improvement_agent(
         app=app,
         diagnostic_report=report,
         timeout=timeout,
+        transcript_path=transcript_path,
     )

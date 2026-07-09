@@ -16,6 +16,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import traceback
+from pathlib import Path
 from typing import Any
 
 from langchain_core.messages import HumanMessage
@@ -111,6 +113,7 @@ async def run_self_improvement_agent(
     app: Any,
     diagnostic_report: dict,
     timeout: int = 300,
+    transcript_path: Path | str | None = None,
 ) -> str:
     """执行自改进 Agent 会话。
 
@@ -118,6 +121,7 @@ async def run_self_improvement_agent(
         app: FastAPI 应用实例
         diagnostic_report: 诊断报告 dict
         timeout: 最大执行时间（秒）
+        transcript_path: 可选，如果指定则把对话写入 JSONL transcript
 
     Returns:
         Agent 执行结果文本
@@ -141,7 +145,19 @@ async def run_self_improvement_agent(
     session = await session_manager.create()
     session_id = session.session_id
 
+    # 初始化 transcript writer（如果指定了路径）
+    from api.transcript.jsonl_writer import TranscriptWriter
+    writer = TranscriptWriter(transcript_path) if transcript_path else None
+
     try:
+        if writer:
+            writer.append_metadata({
+                "run_id": session_id,
+                "trigger": "autonomy",
+                "action": "self_improve",
+                "timeout": timeout,
+            })
+
         # 构建系统提示词
         system_prompt = getattr(app.state, "system_prompt", "") or ""
         system_prompt = (
@@ -167,6 +183,9 @@ async def run_self_improvement_agent(
         # 构建提示词
         prompt = _build_self_improve_prompt(diagnostic_report)
 
+        if writer:
+            writer.append_raw("human", prompt)
+
         # 执行
         logger.info("[autonomy:runner] 启动自改进 Agent (session=%s, timeout=%ds)", session_id, timeout)
         output = await asyncio.wait_for(
@@ -182,15 +201,46 @@ async def run_self_improvement_agent(
 
         result = _extract_final_answer(output) or "自改进任务已执行，但没有生成文本结果"
         logger.info("[autonomy:runner] 自改进完成 (session=%s): %s", session_id, result[:200])
+
+        if writer:
+            writer.append_raw("ai", result)
+
         return result
 
     except asyncio.TimeoutError:
         logger.warning("[autonomy:runner] 自改进超时 (session=%s, timeout=%ds)", session_id, timeout)
+        # 上报到 ErrorCollector（延迟导入，防止打包初始化顺序问题）
+        try:
+            from api.diagnostics import error_collector
+            error_collector.add_error(
+                level="WARNING",
+                category="autonomy",
+                message=f"自改进超时 (session={session_id}, timeout={timeout}s)",
+                session_id=session_id,
+            )
+        except Exception:
+            logger.debug("[autonomy:runner] ErrorCollector 上报失败（超时）", exc_info=True)
         return f"自改进任务超时（{timeout}s），已终止"
     except Exception as e:
         logger.warning("[autonomy:runner] 自改进异常 (session=%s): %s", session_id, e)
+        # 上报到 ErrorCollector（延迟导入，防止打包初始化顺序问题）
+        try:
+            from api.diagnostics import error_collector
+            error_collector.add_error(
+                level="ERROR",
+                category="autonomy",
+                message=f"自改进异常 (session={session_id}): {e}",
+                session_id=session_id,
+                exception="".join(
+                    traceback.format_exception(type(e), e, e.__traceback__)
+                ),
+            )
+        except Exception:
+            logger.debug("[autonomy:runner] ErrorCollector 上报失败（异常）", exc_info=True)
         raise
     finally:
+        if writer:
+            writer.close()
         delete_fn = getattr(session_manager, "delete", None)
         if callable(delete_fn):
             await delete_fn(session_id)
