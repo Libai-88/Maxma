@@ -85,6 +85,9 @@ class HookManager:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._on_trigger: Any = None  # 触发回调（注入 Agent 会话）
         self._lock = threading.RLock()
+        # 事件去重缓存（应对 webhook 重试/文件监听爆发）
+        from platform.event_dedup import EventDedupCache
+        self._dedup_cache = EventDedupCache(ttl_seconds=60, max_size=1000)
 
     def set_trigger_callback(self, callback):
         """设置触发时的回调函数。
@@ -99,6 +102,20 @@ class HookManager:
         """设置事件循环（用于线程安全的异步调度）。"""
         with self._lock:
             self._loop = loop
+
+    def _make_dedup_key(self, trigger_type: str, detail: str) -> str:
+        """生成事件去重 key。
+
+        Args:
+            trigger_type: 触发类型（file_change/webhook/schedule）
+            detail: 触发详情（文件路径或 payload）
+
+        Returns:
+            去重 key 字符串
+        """
+        import hashlib
+        detail_hash = hashlib.md5(detail.encode("utf-8")).hexdigest()[:16]
+        return f"{trigger_type}:{detail_hash}"
 
     # ── 持久化 ──────────────────────────────────────────────
 
@@ -308,6 +325,12 @@ class HookManager:
                 event_type = event.event_type
                 detail = f"{event_type}: {src}"
 
+                # 事件去重检查
+                dedup_key = manager._make_dedup_key("file_change", src)
+                if not manager._dedup_cache.is_new(dedup_key):
+                    logger.debug("[hooks] file_change deduped: %s", src)
+                    return
+
                 # 异步触发
                 h = manager.get_hook(hook_id)
                 if h and h.enabled:
@@ -432,6 +455,11 @@ class HookManager:
         if not hook or hook.hook_type != "webhook":
             return False
         if not hook.enabled:
+            return False
+        # webhook 去重
+        dedup_key = self._make_dedup_key("webhook", payload)
+        if not self._dedup_cache.is_new(dedup_key):
+            logger.debug("[hooks] webhook deduped")
             return False
         self._fire_trigger(hook, "webhook", payload[:200])
         return True
