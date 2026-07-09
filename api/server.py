@@ -254,6 +254,12 @@ async def _load_const_sessions(app: FastAPI):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from agent.lifecycle.disposable import DisposableStore, to_disposable
+
+    # Disposable 资源集合 — 统一管理生命周期
+    _disposables = DisposableStore()
+    app.state._disposables = _disposables
+
     # 1. 初始化 Provider 管理器（SQLite 存储，兼容旧 YAML 导入）
     from api.db.core import initialize_database
     from api.db.providers import ProviderDbStore
@@ -327,6 +333,7 @@ async def lifespan(app: FastAPI):
             logger.warning("[llm] No LLM configured — chat will be read-only until a provider is added")
             app.state.llm = None
     app.state._llm_init_task = asyncio.create_task(_init_llm_background())
+    _disposables.add(to_disposable(lambda: app.state._llm_init_task.cancel() if not app.state._llm_init_task.done() else None))
 
     # 从 YAML 配置加载 MCP 工具
     app.state.mcp_tools = await init_mcp_tools()
@@ -366,6 +373,7 @@ async def lifespan(app: FastAPI):
                 )
 
     app.state._cleanup_task = asyncio.create_task(_periodic_cleanup())
+    _disposables.add(to_disposable(lambda: app.state._cleanup_task.cancel() if not app.state._cleanup_task.done() else None))
 
     # 4.5 启动指标持久化 flush 任务（定期将内存快照写入 SQLite）
     from api.metrics import get_metrics
@@ -430,7 +438,27 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("[autonomy] 自治调度器未启用（autonomy_enabled=False）")
 
+    # === 注册 Idle Queue 任务（Tier 3，不阻塞启动）===
+    from api.bootstrap.idle_queue import register_idle_task
+
+    # const 会话重试加载（如果 LLM 初始化时未就绪）
+    async def _retry_const_sessions():
+        await asyncio.sleep(5)  # 等 LLM 初始化
+        if getattr(app.state, "llm", None) is not None:
+            await _load_const_sessions(app)
+
+    register_idle_task("retry-const-sessions", _retry_const_sessions)
+
+    # === 启动 Idle Queue drain（非阻塞）===
+    from api.bootstrap.idle_queue import start_idle_drain
+    asyncio.create_task(start_idle_drain())
+
     yield
+
+    # 优先通过 DisposableStore 释放（逆序）
+    _disposables = getattr(app.state, "_disposables", None)
+    if _disposables:
+        _disposables.dispose()
 
     # 关闭：后台 LLM 初始化任务
     llm_task = getattr(app.state, "_llm_init_task", None)
