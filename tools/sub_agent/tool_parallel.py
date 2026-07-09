@@ -17,6 +17,49 @@ logger = logging.getLogger(__name__)
 _MAX_PARALLEL_TASKS = 5
 _PARALLEL_TIMEOUT = 180  # 秒
 
+from agent.delegation_scope import DelegationScope, intersect, from_parent_context
+
+
+def _filter_tools_by_scope(tool_names: list[str], scope: DelegationScope) -> list[str]:
+    """按 DelegationScope 过滤工具名列表，仅保留 scope 内的工具。
+
+    Args:
+        tool_names: 子 Agent 请求的工具名列表
+        scope: 收窄后的有效 scope
+
+    Returns:
+        过滤后的工具名列表（保持原顺序）
+    """
+    if not scope.allowed_tools:
+        return []
+    return [name for name in tool_names if name in scope.allowed_tools]
+
+
+def _compute_effective_scope(
+    parent_tools: list[str],
+    parent_paths: list[str],
+    child_requested_tools: list[str],
+) -> DelegationScope:
+    """计算 SubAgent 的有效委托范围。
+
+    Args:
+        parent_tools: 父 Agent 可用的工具列表
+        parent_paths: 父 Agent 路径白名单
+        child_requested_tools: 子 Agent 请求的工具列表
+
+    Returns:
+        有效 DelegationScope
+    """
+    parent_scope = from_parent_context(
+        allowed_tools=parent_tools,
+        allowed_paths=parent_paths,
+    )
+    child_request = DelegationScope(
+        allowed_tools=frozenset(child_requested_tools),
+        allowed_paths=frozenset(parent_paths),
+    )
+    return intersect(parent_scope, child_request)
+
 
 class ParallelExecuteInput(BaseModel):
     get_doc: bool = Field(default=False, description="设为 true 以获取使用说明")
@@ -186,9 +229,35 @@ class ParallelExecuteTool(ToolBase):
         system_prompt = build_system_prompt()
         # 4 层架构：子 Agent 也启用情景记忆检索
         episodic_mm = getattr(app_state, "episodic_mm", None)
+
+        # DelegationScope 收窄：delegation_scope_enforced 启用时过滤子 Agent 工具
+        effective_tools = app_state.tools
+        try:
+            from config.settings import get_settings
+            if get_settings().delegation_scope_enforced:
+                parent_tool_names = [t.name for t in app_state.tools]
+                parent_paths = []
+                try:
+                    from tools.path_security import get_whitelisted_paths
+                    parent_paths = get_whitelisted_paths()
+                except Exception:
+                    pass
+                effective_scope = _compute_effective_scope(
+                    parent_tools=parent_tool_names,
+                    parent_paths=parent_paths,
+                    child_requested_tools=parent_tool_names,
+                )
+                effective_tool_names = _filter_tools_by_scope(parent_tool_names, effective_scope)
+                effective_tools = [t for t in app_state.tools if t.name in set(effective_tool_names)]
+                logger.info("[parallel_execute] scope enforced: %d/%d tools retained",
+                            len(effective_tools), len(app_state.tools))
+        except Exception as e:
+            logger.warning("[parallel_execute] scope 计算失败，使用全量工具: %s", e)
+            effective_tools = app_state.tools
+
         agent = build_agent(
             model=app_state.llm,
-            tools=app_state.tools,
+            tools=effective_tools,
             system_prompt=system_prompt,
             checkpointer=sub.checkpointer,
             episodic_mm=episodic_mm,

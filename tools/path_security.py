@@ -307,6 +307,19 @@ def _load_path_whitelist() -> list[tuple[str, bool]]:
         return []
 
 
+def get_whitelisted_paths() -> list[str]:
+    """读取当前路径白名单，返回所有已配置的允许路径列表。
+
+    供 DelegationScope 等模块获取父 Agent 的路径白名单，用于子 Agent 权限收窄。
+    失败时返回空列表（fail-closed：scope 会进一步收窄为空）。
+    """
+    try:
+        entries = _load_path_whitelist()
+        return [path for path, _recursive in entries]
+    except Exception:
+        return []
+
+
 def check_path_whitelisted(target_path: str) -> str | None:
     """检查 *target_path* 是否位于白名单设置的任一前缀下。
 
