@@ -70,38 +70,66 @@
         </span>
         <ContextUsageBadge :usage="contextUsage" :selected-model="selectedModelName" />
         <TaskTrackerBar :data="taskTrackerData as any" />
+        <button
+          class="workbench-toggle-btn"
+          :class="{ active: workbench.isOpen.value }"
+          @click="workbench.toggle()"
+          title="工作台"
+        >
+          &#9776;
+        </button>
     </header>
 
-    <ChatWindow
-      :turns="turns"
-      :current-turn="currentTurn"
-      :error="error"
-      :error-category="errorCategory"
-      :error-trace-id="errorTraceId"
-      @action="handleToolAction"
-      @cite="addCitation"
-      @toggle-private="setPrivateMode(!privateMode)"
-      @plan-respond="sendPlanResponse"
-    />
+    <div class="chat-workbench-layout">
+      <div class="chat-main-column">
+        <ChatWindow
+          :turns="turns"
+          :current-turn="currentTurn"
+          :error="error"
+          :error-category="errorCategory"
+          :error-trace-id="errorTraceId"
+          @action="handleToolAction"
+          @cite="addCitation"
+          @toggle-private="setPrivateMode(!privateMode)"
+          @plan-respond="sendPlanResponse"
+          @pin="handlePin"
+        />
 
-    <ChatInput
-      v-if="!isSubagent"
-      ref="chatInputRef"
-      :is-streaming="isStreaming"
-      :disabled="false"
-      :can-send="connected"
-      :initial-provider-id="selectedProviderId"
-      :initial-model-name="selectedModelName"
-      :quoted-selections="quotedSelections"
-      :quote-candidate="quoteCandidate"
-      @send="onSend"
-      @stop="cancel"
-      @model-change="onModelChange"
-      @commit-quote="commitCandidate"
-      @remove-quote="removeQuote"
-    />
-    <div v-else class="sub-agent-readonly-bar">
-      <span class="sub-agent-readonly-text">🔒 子 Agent 会话 — 只读</span>
+        <ChatInput
+          v-if="!isSubagent"
+          ref="chatInputRef"
+          :is-streaming="isStreaming"
+          :disabled="false"
+          :can-send="connected"
+          :initial-provider-id="selectedProviderId"
+          :initial-model-name="selectedModelName"
+          :quoted-selections="quotedSelections"
+          :quote-candidate="quoteCandidate"
+          @send="onSend"
+          @stop="cancel"
+          @model-change="onModelChange"
+          @commit-quote="commitCandidate"
+          @remove-quote="removeQuote"
+        />
+        <div v-else class="sub-agent-readonly-bar">
+          <span class="sub-agent-readonly-text">🔒 子 Agent 会话 — 只读</span>
+        </div>
+      </div>
+
+      <WorkbenchPanel
+        :is-open="workbench.isOpen.value"
+        :active-tab="workbench.activeTab.value"
+        :card-count="workbench.cards.value.length"
+        @close="workbench.close()"
+        @set-tab="workbench.setTab"
+      >
+        <template #reasoning>
+          <div class="workbench-placeholder">推理时间线（Task 3 实现）</div>
+        </template>
+        <template #canvas>
+          <div class="workbench-placeholder">Canvas 画布（Task 4 实现）</div>
+        </template>
+      </WorkbenchPanel>
     </div>
     </template>
   </div>
@@ -115,8 +143,10 @@ import ChatWindow from '@/components/ChatWindow.vue'
 import ContextUsageBadge from '@/components/ContextUsageBadge.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import TaskTrackerBar from '@/components/TaskTrackerBar.vue'
+import WorkbenchPanel from '@/components/workbench/WorkbenchPanel.vue'
 import { useChat } from '@/composables/useChat'
 import { useSelectionQuote } from '@/composables/useSelectionQuote'
+import { useWorkbench } from '@/composables/useWorkbench'
 import { useHealthStore } from '@/stores/health'
 import { useProviderStore } from '@/stores/provider'
 import { useSessionStore } from '@/stores/session'
@@ -132,6 +162,8 @@ const {
   contextUsage, taskTrackerData, send, cancel, sendUserResponse, sendPlanResponse, removeTurns,
   privateMode, setPrivateMode, autoApprove, setAutoApprove
 } = useChat(sessionId)
+
+const workbench = useWorkbench()
 
 const {
   quoteCandidate,
@@ -214,6 +246,10 @@ function handleToolAction(payload: { action: string; data?: unknown }) {
   } else if (payload.action === 'undo') {
     handleUndo()
   }
+}
+
+function handlePin(payload: { type: 'code' | 'table' | 'summary'; title: string; content: string; sourceTool?: string }) {
+  workbench.addCard(payload)
 }
 
 async function handleUndo() {
@@ -436,6 +472,46 @@ async function handleUndo() {
 }
 .btn.primary:hover {
   opacity: 0.85;
+}
+
+.chat-workbench-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chat-main-column {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.workbench-toggle-btn {
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  color: var(--text-secondary, #666);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-left: auto;
+}
+
+.workbench-toggle-btn:hover {
+  background: var(--bg-hover, #f0f0f0);
+}
+
+.workbench-toggle-btn.active {
+  color: var(--accent-color, #1a73e8);
+}
+
+.workbench-placeholder {
+  color: var(--text-secondary, #999);
+  text-align: center;
+  padding: 40px 16px;
+  font-size: 13px;
 }
 
 </style>
