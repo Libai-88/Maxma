@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from api.providers import ProviderConfig
+from api.security.credential_mask import mask_sensitive_fields
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +82,8 @@ def _config_with_health(request: Request, config) -> dict:
         except KeyError:
             data["last_check_time"] = 0.0
             data["consecutive_failures"] = 0
-    return data
+    # 统一掩码层兜底（防止 to_safe_dict 遗漏的敏感字段）
+    return mask_sensitive_fields(data)
 
 
 async def _maybe_initialize_llm(request: Request, force: bool = False) -> None:
