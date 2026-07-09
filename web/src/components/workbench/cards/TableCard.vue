@@ -4,7 +4,21 @@
       <span class="card-title">{{ card.title }}</span>
       <button class="card-remove" @click="$emit('remove')">&times;</button>
     </div>
-    <div class="card-body" v-html="renderedTable"></div>
+    <div class="card-body">
+      <table v-if="tableData">
+        <thead>
+          <tr>
+            <th v-for="header in tableData.headers" :key="header">{{ header }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="(row, rowIndex) in tableData.rows" :key="rowIndex">
+            <td v-for="(cell, cellIndex) in row" :key="cellIndex">{{ cell }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <pre v-else>{{ card.content }}</pre>
+    </div>
   </div>
 </template>
 
@@ -15,18 +29,25 @@ import { computed } from 'vue'
 const props = defineProps<{ card: CanvasCard }>()
 defineEmits<{ remove: [] }>()
 
-const renderedTable = computed(() => {
+interface TableData {
+  headers: string[]
+  rows: string[][]
+}
+
+const tableData = computed<TableData | null>(() => {
   try {
     const data = JSON.parse(props.card.content)
     if (Array.isArray(data) && data.length > 0) {
       const headers = Object.keys(data[0])
-      const rows = data.map((row: Record<string, unknown>) => headers.map(h => String(row[h] ?? '')))
-      const thead = headers.map(h => `<th>${h}</th>`).join('')
-      const tbody = rows.map((r: string[]) => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')
-      return `<table><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>`
+      const rows = data.map((row: Record<string, unknown>) =>
+        headers.map(h => String(row[h] ?? ''))
+      )
+      return { headers, rows }
     }
-  } catch { /* not JSON */ }
-  return `<pre>${props.card.content}</pre>`
+  } catch {
+    /* not JSON — fall through to <pre> */
+  }
+  return null
 })
 </script>
 
