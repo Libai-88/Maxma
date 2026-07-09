@@ -591,6 +591,13 @@ def create_app() -> FastAPI:
     async def health(full: bool = False):
         return await get_health_report(app, probe_remote=full)
 
+    # 自治调度器状态（前端监控 + 外部健康检查）
+    @app.get("/api/autonomy/status")
+    async def get_autonomy_status():
+        """获取自治调度器运行状态。"""
+        from agent.autonomy.scheduler import get_autonomy_status as _get_status
+        return _get_status()
+
     # ── 全局异常处理器 ──────────────────────────────────────────
     # 捕获所有未处理的异常，记录到 ErrorCollector 供一键导出，
     # 同时写入日志（带 exc_info），避免错误丢失。
