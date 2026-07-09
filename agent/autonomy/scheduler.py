@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime
 from typing import Any, Optional
 
 from agent.autonomy.diagnostics import (
@@ -34,11 +35,17 @@ logger = logging.getLogger(__name__)
 _scheduler_task: Optional[asyncio.Task] = None
 _scheduler_loop: Optional[asyncio.AbstractEventLoop] = None
 
+# 状态追踪（供 REST API 查询）
+_last_tick_at: Optional[str] = None
+_last_tick_report: Optional[dict] = None
+_tick_count: int = 0
+
 
 def start_autonomy(
     app: Any,
     interval_seconds: int = 3600,
     self_improve_enabled: bool = False,
+    initial_delay: int = 30,
 ) -> Optional[asyncio.Task]:
     """启动后台自治调度器。
 
@@ -48,6 +55,7 @@ def start_autonomy(
         app: FastAPI 应用实例（需 app.state.llm / app.state.session_manager）
         interval_seconds: 执行间隔（秒）
         self_improve_enabled: 是否允许自改进（创建/更新 Skills）
+        initial_delay: 首次 tick 前的延迟（秒），让系统稳定
 
     Returns:
         已启动的 asyncio.Task，或 None（LLM 未就绪时）
@@ -64,13 +72,23 @@ def start_autonomy(
     if _scheduler_task is not None and not _scheduler_task.done():
         _scheduler_task.cancel()
 
-    _scheduler_loop = asyncio.get_event_loop()
+    _scheduler_loop = asyncio.get_running_loop()
 
     async def _autonomy_loop():
-        logger.info("[autonomy] 调度器已启动，间隔 %ds，自改进=%s", interval_seconds, self_improve_enabled)
+        global _last_tick_at, _last_tick_report, _tick_count
+        logger.info(
+            "[autonomy] 调度器已启动，间隔 %ds，自改进=%s，初始延迟 %ds",
+            interval_seconds, self_improve_enabled, initial_delay,
+        )
+        # 初始延迟：让系统稳定后再开始诊断
+        if initial_delay > 0:
+            await asyncio.sleep(initial_delay)
         while True:
             try:
-                await _run_tick(app, self_improve_enabled=self_improve_enabled)
+                report = await _run_tick(app, self_improve_enabled=self_improve_enabled)
+                _last_tick_at = datetime.now().isoformat()
+                _last_tick_report = report
+                _tick_count += 1
             except asyncio.CancelledError:
                 logger.info("[autonomy] 调度器被取消")
                 break
@@ -95,6 +113,24 @@ async def stop_autonomy() -> None:
     _scheduler_task = None
     _scheduler_loop = None
     logger.info("[autonomy] 调度器已停止")
+
+
+def get_autonomy_status() -> dict:
+    """获取调度器运行状态（供 REST API 查询）。"""
+    running = _scheduler_task is not None and not _scheduler_task.done()
+    return {
+        "running": running,
+        "last_tick_at": _last_tick_at,
+        "last_tick_report_summary": (
+            {
+                "issues_count": len(_last_tick_report.get("issues", [])),
+                "error_total": _last_tick_report.get("error_summary", {}).get("total", 0),
+                "health_status": _last_tick_report.get("health_summary", {}).get("overall_status", "unknown"),
+            }
+            if _last_tick_report else None
+        ),
+        "tick_count": _tick_count,
+    }
 
 
 def _get_error_collector() -> Any:

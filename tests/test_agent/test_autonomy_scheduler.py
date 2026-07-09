@@ -19,9 +19,15 @@ def _reset_scheduler():
     from agent.autonomy import scheduler
     scheduler._scheduler_task = None
     scheduler._scheduler_loop = None
+    scheduler._last_tick_at = None
+    scheduler._last_tick_report = None
+    scheduler._tick_count = 0
     yield
     scheduler._scheduler_task = None
     scheduler._scheduler_loop = None
+    scheduler._last_tick_at = None
+    scheduler._last_tick_report = None
+    scheduler._tick_count = 0
 
 
 class TestSchedulerLifecycle:
@@ -173,3 +179,47 @@ class TestSchedulerTick:
             report = await _run_tick(mock_app)
 
             assert "error" in report
+
+
+class TestSchedulerStatus:
+    @pytest.mark.asyncio
+    async def test_get_status_when_stopped(self):
+        """调度器未启动时 status.running=False。"""
+        from agent.autonomy.scheduler import get_autonomy_status
+        status = get_autonomy_status()
+        assert status["running"] is False
+        assert status["last_tick_at"] is None
+
+    @pytest.mark.asyncio
+    async def test_get_status_when_running(self):
+        """调度器启动后 status.running=True。"""
+        from agent.autonomy import scheduler
+        from agent.autonomy.scheduler import start_autonomy, stop_autonomy, get_autonomy_status
+
+        mock_app = MagicMock()
+        mock_app.state.llm = MagicMock()
+
+        start_autonomy(mock_app, interval_seconds=1)
+        await asyncio.sleep(0.1)
+
+        status = get_autonomy_status()
+        assert status["running"] is True
+
+        await stop_autonomy()
+
+    @pytest.mark.asyncio
+    async def test_initial_delay_before_first_tick(self):
+        """initial_delay 秒内不执行第一次 tick。"""
+        from agent.autonomy import scheduler
+        from agent.autonomy.scheduler import start_autonomy, stop_autonomy
+
+        mock_app = MagicMock()
+        mock_app.state.llm = MagicMock()
+
+        start_autonomy(mock_app, interval_seconds=10, initial_delay=5)
+        await asyncio.sleep(0.2)
+
+        # initial_delay=5, 短暂等待后不应有 tick 执行
+        assert scheduler._tick_count == 0
+
+        await stop_autonomy()
