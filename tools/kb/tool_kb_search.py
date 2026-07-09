@@ -23,6 +23,10 @@ class KbSearchInput(BaseModel):
         le=1.0,
         description="相似度阈值（默认 0.3，低于此值的结果被过滤）",
     )
+    use_correction: bool = Field(
+        default=False,
+        description="启用纠正式检索（CRAG-lite）：检索后评分相关性，不相关时自动回退到网络搜索",
+    )
 
 
 @register_tool
@@ -41,6 +45,7 @@ class KbSearchTool(ToolBase):
         query: str = "",
         top_k: int = 5,
         threshold: float = 0.3,
+        use_correction: bool = False,
     ) -> str:
         if get_doc:
             return self._load_doc()
@@ -51,7 +56,41 @@ class KbSearchTool(ToolBase):
         from memory.kb.retriever import KBRetriever
 
         retriever = KBRetriever()
-        results = retriever.retrieve(query=query, top_k=top_k, threshold=threshold)
+
+        if use_correction:
+            import asyncio
+
+            from config.settings import get_settings
+            crag_enabled = get_settings().crag_enabled
+
+            # best-effort 获取 LLM（grading 用）；不可用时传 None，
+            # retrieve_with_correction 在 crag_enabled=False 或 grading 失败时会优雅降级
+            model = None
+            try:
+                from api import interaction
+                ws = interaction.current_ws.get()
+                model = getattr(ws.app.state, "llm", None)
+            except Exception:
+                model = None
+
+            coro = retriever.retrieve_with_correction(
+                model=model,
+                query=query,
+                crag_enabled=crag_enabled,
+                top_k=top_k,
+                threshold=threshold,
+            )
+            try:
+                asyncio.get_running_loop()
+                # 已在事件循环中（如 FastAPI），用独立线程的新循环跑协程
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    results = pool.submit(asyncio.run, coro).result()
+            except RuntimeError:
+                # 无运行中的事件循环，直接 asyncio.run
+                results = asyncio.run(coro)
+        else:
+            results = retriever.retrieve(query=query, top_k=top_k, threshold=threshold)
 
         if not results:
             return format_success({
