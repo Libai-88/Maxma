@@ -67,8 +67,8 @@ describe('useWorkbench', () => {
     it('removes a card by id', () => {
       wb.addCard({ type: 'summary', title: 'Card 1', content: 'content' })
       wb.addCard({ type: 'summary', title: 'Card 2', content: 'content' })
-      const firstId = wb.cards.value[0].id
-      wb.removeCard(firstId)
+      const card1Id = wb.cards.value.find(c => c.title === 'Card 1')!.id
+      wb.removeCard(card1Id)
       expect(wb.cards.value).toHaveLength(1)
       expect(wb.cards.value[0].title).toBe('Card 2')
     })
@@ -149,6 +149,44 @@ describe('useWorkbench', () => {
       const answerEntries = entries.filter(e => e.kind === 'answer')
       expect(answerEntries).toHaveLength(3)
       expect(answerEntries[0].label).toBe('answer 2')
+    })
+  })
+
+  describe('pin-to-canvas flow', () => {
+    it('adding a code card auto-opens canvas tab', () => {
+      expect(wb.isOpen.value).toBe(false)
+      expect(wb.activeTab.value).toBe('reasoning')
+
+      wb.addCard({
+        type: 'code',
+        title: 'run_python',
+        content: 'print("hello")',
+        sourceTool: 'run_python',
+      })
+
+      expect(wb.isOpen.value).toBe(true)
+      expect(wb.activeTab.value).toBe('canvas')
+      expect(wb.cards.value).toHaveLength(1)
+      expect(wb.cards.value[0].sourceTool).toBe('run_python')
+    })
+
+    it('multiple pins stack with newest first', () => {
+      wb.addCard({ type: 'code', title: 'A', content: 'a' })
+      wb.addCard({ type: 'summary', title: 'B', content: 'b' })
+      wb.addCard({ type: 'table', title: 'C', content: '[]' })
+
+      expect(wb.cards.value).toHaveLength(3)
+      expect(wb.cards.value[0].title).toBe('C') // newest first
+      expect(wb.cards.value[2].title).toBe('A') // oldest last
+    })
+
+    it('remove card keeps panel open', () => {
+      wb.addCard({ type: 'code', title: 'A', content: 'a' })
+      const id = wb.cards.value[0].id
+      wb.removeCard(id)
+
+      expect(wb.cards.value).toHaveLength(0)
+      expect(wb.isOpen.value).toBe(true) // panel stays open
     })
   })
 })

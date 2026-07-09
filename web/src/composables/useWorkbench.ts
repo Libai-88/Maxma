@@ -52,7 +52,7 @@ export function useWorkbench() {
       sourceTurnId: params.sourceTurnId,
       createdAt: Date.now(),
     }
-    cards.value = [...cards.value, card]
+    cards.value = [card, ...cards.value]
     // 自动打开面板并切换到 canvas 标签
     open()
     setTab('canvas')
