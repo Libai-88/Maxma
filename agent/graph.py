@@ -33,7 +33,7 @@ from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import ToolNode
-from typing_extensions import Annotated, TypedDict
+from typing_extensions import Annotated, NotRequired, TypedDict
 
 from agent.approval_tool_node import ApprovalToolNode
 from agent.planner import (
@@ -163,6 +163,9 @@ class AgentState(TypedDict):
     # 原始计划文本（供 replan 使用）（覆盖式）
     plan_text: str
 
+    # ── 编排层：coordinator 路由结果 ──
+    coordinator_route: NotRequired[str]  # "direct" | "specialist" | "main"
+
 
 def build_agent(
     model: BaseChatModel,
@@ -173,6 +176,7 @@ def build_agent(
     episodic_mm=None,
     enable_executor: bool | None = None,
     enable_hitl: bool = True,
+    coordinator_enabled: bool | None = None,
     # 回调注入：Agent 不直接持有这些模块的引用，通过回调间接访问
     on_plan_confirmation: Callable | None = None,
     on_activity_event: Callable | None = None,
@@ -212,6 +216,13 @@ def build_agent(
         except Exception:
             enable_executor = True
 
+    if coordinator_enabled is None:
+        try:
+            from config.settings import get_settings
+            coordinator_enabled = get_settings().coordinator_enabled
+        except Exception:
+            coordinator_enabled = False
+
     llm_with_tools = model.bind_tools(tools) if tools else model
     # 使用审批工具节点（可配置开关）；关闭时回退到原始 ToolNode
     if tools:
@@ -229,6 +240,36 @@ def build_agent(
         tool_node = None
 
     # ── 节点函数（闭包捕获 model / llm_with_tools）──
+
+    async def coordinator_node(state: AgentState) -> dict:
+        """协调者节点：分类用户意图，决定路由。
+
+        路由结果写入 state.coordinator_route，供后续条件边使用。
+        简单输入短路（不调用 LLM）。任何异常安全回退到 MAIN。
+        """
+        from agent.coordinator import classify_intent, RouteTarget
+
+        messages = state["messages"]
+        if not messages:
+            return {"coordinator_route": "main"}
+
+        user_text = ""
+        for msg in reversed(messages):
+            if isinstance(msg, HumanMessage):
+                user_text = _extract_text_content(msg.content)
+                break
+
+        if not user_text:
+            return {"coordinator_route": "main"}
+
+        try:
+            decision = await classify_intent(model, user_text)
+            route = decision.target.value
+            logger.info("[coordinator] route=%s rationale=%s", route, decision.rationale[:80])
+            return {"coordinator_route": route}
+        except Exception as e:
+            logger.warning("[coordinator] 分类失败，回退到 main: %s", e)
+            return {"coordinator_route": "main"}
 
     async def planner_node(state: AgentState) -> dict:
         """规划节点：单次 LLM 调用判断复杂度 + 生成计划。
@@ -456,6 +497,8 @@ def build_agent(
 
     # 添加节点（model 节点命名为 "agent" 以兼容 WebSocket 回调）
     graph.add_node("planner", planner_node)
+    if coordinator_enabled:
+        graph.add_node("coordinator", coordinator_node)
     if episodic_mm is not None:
         graph.add_node("episodic_retriever", episodic_retriever_node)
 
@@ -512,8 +555,12 @@ def build_agent(
     if tool_node is not None:
         graph.add_node("tools", tool_node)
 
-    # 入口 → planner
-    graph.set_entry_point("planner")
+    # 入口：coordinator 启用时先走 coordinator → planner，否则直接 planner
+    if coordinator_enabled:
+        graph.set_entry_point("coordinator")
+        graph.add_edge("coordinator", "planner")
+    else:
+        graph.set_entry_point("planner")
 
     # planner → episodic_retriever → executor/agent（条件：episodic_mm 可用）
     if episodic_mm is not None:
