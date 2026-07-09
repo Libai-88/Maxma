@@ -55,3 +55,25 @@ class TestOrchestrationFlags:
         s = get_settings()
         assert hasattr(s, "delegation_scope_enforced")
         assert s.delegation_scope_enforced is False
+
+
+class TestRetrievalFlags:
+    """检索层特性开关测试。"""
+
+    def test_crag_enabled_defaults_off(self):
+        from config.settings import get_settings
+        s = get_settings()
+        assert hasattr(s, "crag_enabled")
+        assert s.crag_enabled is False
+
+    def test_query_rewrite_enabled_defaults_off(self):
+        from config.settings import get_settings
+        s = get_settings()
+        assert hasattr(s, "query_rewrite_enabled")
+        assert s.query_rewrite_enabled is False
+
+    def test_rag_grade_threshold_default(self):
+        from config.settings import get_settings
+        s = get_settings()
+        assert hasattr(s, "rag_grade_threshold")
+        assert s.rag_grade_threshold == 0.3

@@ -113,6 +113,14 @@ class Settings(BaseSettings):
     # DelegationScope：SubAgent 委托范围单调收窄强制
     delegation_scope_enforced: bool = False
 
+    # ── 检索层特性开关（默认关闭，安全滚动）──
+    # CRAG-lite：检索分级 + Tavily 自动回退
+    crag_enabled: bool = False
+    # 查询重写：对话式查询在 embed 前重写为自包含查询
+    query_rewrite_enabled: bool = False
+    # RAG grading 阈值：相关文档比例低于此值时触发 Tavily 回退
+    rag_grade_threshold: float = 0.3
+
     model_config = {
         "env_file": str(ENV_FILE_PATH),
         "env_file_encoding": "utf-8",
