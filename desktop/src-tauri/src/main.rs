@@ -27,7 +27,8 @@ use windows::Win32::System::JobObjects::{
 use windows::Win32::System::Threading::OpenProcess;
 use windows::Win32::System::Threading::{PROCESS_SET_QUOTA, PROCESS_TERMINATE};
 use windows::Win32::UI::Shell::{
-    FileOpenDialog, IFileOpenDialog, FOS_FORCEFILESYSTEM, FOS_PICKFOLDERS, SIGDN_FILESYSPATH,
+    FileOpenDialog, IFileOpenDialog, FileSaveDialog, IFileSaveDialog,
+    FOS_FORCEFILESYSTEM, FOS_PICKFOLDERS, SIGDN_FILESYSPATH,
 };
 
 /// 最大崩溃重启次数
@@ -129,6 +130,68 @@ fn get_api_port(state: tauri::State<'_, AppState>) -> u16 {
 #[tauri::command]
 fn select_path(kind: String) -> Option<String> {
     open_windows_file_dialog(kind == "folder").ok().flatten()
+}
+
+/// 打开 Windows 原生保存文件对话框，将文本内容写入用户选择的路径。
+/// 返回保存的文件路径；用户取消时返回 None；出错时返回 Err。
+#[tauri::command]
+fn save_text_file(content: String, default_filename: String) -> Result<Option<String>, String> {
+    save_text_file_dialog(&content, &default_filename)
+}
+
+fn save_text_file_dialog(content: &str, default_filename: &str) -> Result<Option<String>, String> {
+    unsafe {
+        let hr = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        let initialized = hr.is_ok();
+        if !initialized && hr.0 != 0x80010106u32 as i32 {
+            hr.ok().map_err(|e| format!("COM 初始化失败: {}", e))?;
+        }
+
+        let result = (|| {
+            let dialog: IFileSaveDialog =
+                CoCreateInstance(&FileSaveDialog, None, CLSCTX_INPROC_SERVER)
+                    .map_err(|e| format!("创建保存对话框失败: {}", e))?;
+
+            let title = wide("保存错误日志");
+            dialog.SetTitle(PCWSTR(title.as_ptr()))
+                .map_err(|e| format!("设置标题失败: {}", e))?;
+
+            let options = dialog.GetOptions()
+                .map_err(|e| format!("获取选项失败: {}", e))?
+                | FOS_FORCEFILESYSTEM;
+            dialog.SetOptions(options)
+                .map_err(|e| format!("设置选项失败: {}", e))?;
+
+            let filename = wide(default_filename);
+            dialog.SetFileName(PCWSTR(filename.as_ptr()))
+                .map_err(|e| format!("设置文件名失败: {}", e))?;
+
+            let ext = wide("txt");
+            dialog.SetDefaultExtension(PCWSTR(ext.as_ptr()))
+                .map_err(|e| format!("设置扩展名失败: {}", e))?;
+
+            if dialog.Show(None).is_err() {
+                return Ok(None); // 用户取消
+            }
+
+            let item = dialog.GetResult()
+                .map_err(|e| format!("获取结果失败: {}", e))?;
+            let display_name = item.GetDisplayName(SIGDN_FILESYSPATH)
+                .map_err(|e| format!("获取路径失败: {}", e))?;
+            let path = pwstr_to_string(display_name.as_ptr());
+            CoTaskMemFree(Some(display_name.as_ptr() as _));
+
+            std::fs::write(&path, content.as_bytes())
+                .map_err(|e| format!("写入文件失败: {}", e))?;
+
+            Ok(Some(path))
+        })();
+
+        if initialized {
+            CoUninitialize();
+        }
+        result
+    }
 }
 
 /// Tauri 命令：切换 Quick Chat 窗口可见性
@@ -458,7 +521,7 @@ fn main() {
                 })
                 .build()
         )
-        .invoke_handler(tauri::generate_handler![select_path, get_api_port, toggle_quick_chat])
+        .invoke_handler(tauri::generate_handler![select_path, get_api_port, toggle_quick_chat, save_text_file])
         .setup(move |app| {
             let shutting_down = Arc::new(AtomicBool::new(false));
             let restart_count = Arc::new(AtomicU32::new(0));

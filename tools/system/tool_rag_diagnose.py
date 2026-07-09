@@ -25,7 +25,7 @@ RAG_FAILURE_PATTERNS: dict[str, dict] = {
     "P02": {
         "name": "对话式查询 embed 效果差",
         "symptoms": ["那个东西", "它支持", "之前聊的", "上下文", "指代", "代词"],
-        "fix": "启用查询重写（query_rewrite_enabled），将对话式查询重写为自包含查询后再 embed。",
+        "fix": "将对话式查询重写为自包含查询后再 embed（补全指代词、添加上下文）。",
     },
     "P03": {
         "name": "低相关度结果",

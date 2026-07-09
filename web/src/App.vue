@@ -37,31 +37,33 @@
           </button>
         </div>
       </nav>
-      <Transition name="popup">
-        <div v-if="showSettingsMenu" ref="settingsPopupRef" class="settings-popup" :style="{ top: popupTop, left: popupLeft }" @click.stop>
-          <div class="popup-header">设置</div>
-          <router-link to="/providers" class="popup-item" @click="closeSettingsMenu">模型 MODELS</router-link>
-          <router-link to="/mcp" class="popup-item" @click="closeSettingsMenu">MCP 服务</router-link>
-          <router-link to="/skills" class="popup-item" @click="closeSettingsMenu">Skills & 宏</router-link>
-          <router-link to="/soul" class="popup-item" @click="closeSettingsMenu">人设 SOUL</router-link>
-          <router-link to="/user" class="popup-item" @click="closeSettingsMenu">用户 USER</router-link>
-          <router-link to="/path-whitelist" class="popup-item" @click="closeSettingsMenu">路径白名单</router-link>
-          <router-link to="/maxma-blocker" class="popup-item" @click="closeSettingsMenu">拒止锚</router-link>
-          <router-link to="/env-vars" class="popup-item" @click="closeSettingsMenu">环境变量</router-link>
-          <router-link to="/event-hooks" class="popup-item" @click="closeSettingsMenu">事件钩子</router-link>
-          <router-link to="/privacy" class="popup-item" @click="closeSettingsMenu">隐私仪表盘</router-link>
-          <router-link to="/metrics" class="popup-item" @click="closeSettingsMenu">运行指标</router-link>
-          <router-link to="/audit-log" class="popup-item" @click="closeSettingsMenu">审计日志</router-link>
-          <div class="popup-divider"></div>
-          <ThemePicker />
-          <button class="popup-item popup-action" :class="{ exporting: exportingErrorLog }" :disabled="exportingErrorLog" @click="handleExportErrorLog">
-            {{ exportingErrorLog ? '导出中...' : '导出错误日志' }}
-          </button>
-          <button class="popup-item popup-action" :class="{ restarting }" :disabled="restarting" @click="handleRestart">
-            {{ restarting ? '重启中...' : '重启服务' }}
-          </button>
-        </div>
-      </Transition>
+      <Teleport to="body">
+        <Transition name="popup">
+          <div v-if="showSettingsMenu" ref="settingsPopupRef" class="settings-popup" :style="{ top: popupTop, left: popupLeft, maxHeight: popupMaxHeight }" @click.stop>
+            <div class="popup-header">设置</div>
+            <router-link to="/appearance" class="popup-item" @click="closeSettingsMenu">外观 APPEARANCE</router-link>
+            <router-link to="/providers" class="popup-item" @click="closeSettingsMenu">模型 MODELS</router-link>
+            <router-link to="/mcp" class="popup-item" @click="closeSettingsMenu">MCP 服务</router-link>
+            <router-link to="/skills" class="popup-item" @click="closeSettingsMenu">Skills & 宏</router-link>
+            <router-link to="/soul" class="popup-item" @click="closeSettingsMenu">人设 SOUL</router-link>
+            <router-link to="/user" class="popup-item" @click="closeSettingsMenu">用户 USER</router-link>
+            <router-link to="/path-whitelist" class="popup-item" @click="closeSettingsMenu">路径白名单</router-link>
+            <router-link to="/maxma-blocker" class="popup-item" @click="closeSettingsMenu">拒止锚</router-link>
+            <router-link to="/env-vars" class="popup-item" @click="closeSettingsMenu">环境变量</router-link>
+            <router-link to="/event-hooks" class="popup-item" @click="closeSettingsMenu">事件钩子</router-link>
+            <router-link to="/privacy" class="popup-item" @click="closeSettingsMenu">隐私仪表盘</router-link>
+            <router-link to="/metrics" class="popup-item" @click="closeSettingsMenu">运行指标</router-link>
+            <router-link to="/audit-log" class="popup-item" @click="closeSettingsMenu">审计日志</router-link>
+            <div class="popup-divider"></div>
+            <button class="popup-item popup-action" :class="{ exporting: exportingErrorLog }" :disabled="exportingErrorLog" @click="handleExportErrorLog">
+              {{ exportingErrorLog ? '导出中...' : '导出错误日志' }}
+            </button>
+            <button class="popup-item popup-action" :class="{ restarting }" :disabled="restarting" @click="handleRestart">
+              {{ restarting ? '重启中...' : '重启服务' }}
+            </button>
+          </div>
+        </Transition>
+      </Teleport>
       <SessionSidebar
         :sessions="sessions"
         :active-id="sessionId"
@@ -106,13 +108,14 @@ import { api } from '@/api';
 import { computed, ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useTheme } from '@/composables/useTheme'
-import ThemePicker from '@/components/ThemePicker.vue'
+
 import LeavesOverlay from '@/components/LeavesOverlay.vue'
 import MediaViewer from '@/components/MediaViewer.vue'
 import FloatSidebar from '@/components/FloatSidebar.vue'
 import { useFloatSidebar } from '@/composables/useFloatSidebar'
 import { usePaperTexture } from '@/composables/usePaperTexture'
 import RegionalErrorBoundary from '@/components/ui/RegionalErrorBoundary.vue'
+import { invoke } from '@tauri-apps/api/core'
 
 const { effectiveCollapsed, toggleSidebar } = useSidebar()
 
@@ -123,6 +126,7 @@ const settingsTriggerRef = ref<HTMLElement | null>(null)
 const settingsPopupRef = ref<HTMLElement | null>(null)
 const popupTop = ref('0px')
 const popupLeft = ref('228px')
+const popupMaxHeight = ref('')
 const restarting = ref(false)
 const exportingErrorLog = ref(false)
 const { isDark: isNightMode } = useTheme()
@@ -135,16 +139,14 @@ async function handleExportErrorLog() {
     const text = await api.getErrorLogText()
     const ts = new Date().toISOString().replace(/[:T]/g, '-').substring(0, 19)
     const filename = `maxma-error-report-${ts}.txt`
-    // 触发浏览器下载
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    // 调用 Tauri 原生保存对话框，让用户选择保存位置
+    const result = await invoke<string | null>('save_text_file', {
+      content: text,
+      defaultFilename: filename,
+    })
+    if (result) {
+      alert(`错误日志已保存到:\n${result}`)
+    }
   } catch (e) {
     alert('导出错误日志失败: ' + (e instanceof Error ? e.message : String(e)))
   } finally {
@@ -185,6 +187,10 @@ function updatePopupPosition() {
     const rect = settingsTriggerRef.value.getBoundingClientRect()
     popupTop.value = `${rect.top}px`
     popupLeft.value = `${rect.right + 8}px`
+    // 动态计算可用高度：视口高度 - popup 顶部位置 - 底部留白 16px
+    // 避免固定 max-height 导致 popup 超出视口底部被裁切
+    const available = window.innerHeight - rect.top - 16
+    popupMaxHeight.value = `${Math.max(160, available)}px`
   }
 }
 
@@ -516,7 +522,9 @@ html, body {
   box-shadow: var(--shadow-lg);
   min-width: 170px;
   padding: 6px;
-  overflow: hidden;
+  /* maxHeight 由 JS 动态设置（基于触发按钮在视口中的位置），避免固定值裁切 */
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .popup-header {

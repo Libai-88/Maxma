@@ -29,12 +29,23 @@
         {{ serifFont ? '开' : '关' }}
       </button>
     </div>
+    <div class="font-toggle">
+      <span class="font-toggle-label">纸质纹理</span>
+      <button
+        class="font-toggle-btn"
+        :class="{ on: paperTexture }"
+        @click="togglePaperTexture"
+      >
+        {{ paperTexture ? '开' : '关' }}
+      </button>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useTheme } from '@/composables/useTheme'
+import { usePaperTexture } from '@/composables/usePaperTexture'
 
 const { storedTheme, setTheme, THEMES } = useTheme()
 
@@ -45,6 +56,8 @@ function toggleSerif() {
   localStorage.setItem('maxma.fontSerif', serifFont.value ? 'on' : 'off')
   document.body.classList.toggle('font-sans', !serifFont.value)
 }
+
+const { enabled: paperTexture, toggle: togglePaperTexture } = usePaperTexture()
 </script>
 
 <style scoped>

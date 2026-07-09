@@ -66,12 +66,6 @@ class TestRetrievalFlags:
         assert hasattr(s, "crag_enabled")
         assert s.crag_enabled is False
 
-    def test_query_rewrite_enabled_defaults_off(self):
-        from config.settings import get_settings
-        s = get_settings()
-        assert hasattr(s, "query_rewrite_enabled")
-        assert s.query_rewrite_enabled is False
-
     def test_rag_grade_threshold_default(self):
         from config.settings import get_settings
         s = get_settings()
