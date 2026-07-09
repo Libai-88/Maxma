@@ -72,7 +72,7 @@
         <TaskTrackerBar :data="taskTrackerData as any" />
         <button
           class="workbench-toggle-btn"
-          :class="{ active: workbench.isOpen.value }"
+          :class="{ active: workbench.isOpen }"
           @click="workbench.toggle()"
           title="工作台"
         >
@@ -117,9 +117,9 @@
       </div>
 
       <WorkbenchPanel
-        :is-open="workbench.isOpen.value"
-        :active-tab="workbench.activeTab.value"
-        :card-count="workbench.cards.value.length"
+        :is-open="workbench.isOpen"
+        :active-tab="workbench.activeTab"
+        :card-count="workbench.cards.length"
         @close="workbench.close()"
         @set-tab="workbench.setTab"
       >
@@ -128,7 +128,7 @@
         </template>
         <template #canvas>
           <CanvasContainer
-            :cards="workbench.cards.value"
+            :cards="workbench.cards"
             @remove="workbench.removeCard"
           />
         </template>
@@ -151,7 +151,7 @@ import ReasoningTimeline from '@/components/workbench/ReasoningTimeline.vue'
 import CanvasContainer from '@/components/workbench/CanvasContainer.vue'
 import { useChat } from '@/composables/useChat'
 import { useSelectionQuote } from '@/composables/useSelectionQuote'
-import { useWorkbench } from '@/composables/useWorkbench'
+import { useWorkbenchStore } from '@/stores/workbench'
 import { useHealthStore } from '@/stores/health'
 import { useProviderStore } from '@/stores/provider'
 import { useSessionStore } from '@/stores/session'
@@ -168,7 +168,7 @@ const {
   privateMode, setPrivateMode, autoApprove, setAutoApprove
 } = useChat(sessionId)
 
-const workbench = useWorkbench()
+const workbench = useWorkbenchStore()
 
 const allTurns = computed(() => {
   const result = [...turns.value]

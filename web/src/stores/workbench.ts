@@ -1,24 +1,25 @@
-/** 工作台状态管理 — 面板开关 + Canvas 卡片 + 推理时间线派生。
-
-职责：
-- 管理 WorkbenchPanel 的展开/关闭、标签切换
-- 管理 Canvas 卡片的增删
-- 从 ChatTurn[] 派生 ReasoningEntry[] 时间线
-
-不管理 WS 通信，不修改 ChatTurn 数据。纯前端状态。
-*/
+/**
+ * 工作台状态管理 — Pinia store（单例）。
+ *
+ * 职责：
+ * - 管理 WorkbenchPanel 的展开/关闭、标签切换
+ * - 管理 Canvas 卡片的增删
+ * - 从 ChatTurn[] 派生 ReasoningEntry[] 时间线
+ *
+ * 不管理 WS 通信，不修改 ChatTurn 数据。纯前端状态。
+ */
 import { ref } from 'vue'
-import type { Ref } from 'vue'
+import { defineStore } from 'pinia'
 import type { ChatTurn } from '@/types'
 import type { CanvasCard, CanvasCardType, ReasoningEntry, WorkbenchTab } from '@/types/workbench'
 
 /** 最大保留的 turn 数量（推理时间线） */
 const MAX_TURNS = 3
 
-export function useWorkbench() {
-  const isOpen: Ref<boolean> = ref(false)
-  const activeTab: Ref<WorkbenchTab> = ref('reasoning')
-  const cards: Ref<CanvasCard[]> = ref([])
+export const useWorkbenchStore = defineStore('workbench', () => {
+  const isOpen = ref(false)
+  const activeTab = ref<WorkbenchTab>('reasoning')
+  const cards = ref<CanvasCard[]>([])
 
   function open() {
     isOpen.value = true
@@ -53,7 +54,6 @@ export function useWorkbench() {
       createdAt: Date.now(),
     }
     cards.value = [card, ...cards.value]
-    // 自动打开面板并切换到 canvas 标签
     open()
     setTab('canvas')
   }
@@ -69,7 +69,6 @@ export function useWorkbench() {
     for (const turn of recentTurns) {
       for (const event of turn.events) {
         if (event.kind === 'thinking') {
-          // 跳过已消费的中间思考块
           if (event.consumed) continue
           entries.push({
             id: `${turn.id}-thinking-${entries.length}`,
@@ -89,7 +88,6 @@ export function useWorkbench() {
           })
         }
       }
-      // 最终答案
       if (turn.finalAnswer) {
         entries.push({
           id: `${turn.id}-answer`,
@@ -115,4 +113,4 @@ export function useWorkbench() {
     removeCard,
     buildReasoningTimeline,
   }
-}
+})

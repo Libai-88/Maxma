@@ -39,13 +39,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ChatTurn } from '@/types'
-import { useWorkbench } from '@/composables/useWorkbench'
+import { useWorkbenchStore } from '@/stores/workbench'
 
 const props = defineProps<{
   turns: ChatTurn[]
 }>()
 
-const workbench = useWorkbench()
+const workbench = useWorkbenchStore()
 
 const entries = computed(() => workbench.buildReasoningTimeline(props.turns))
 
