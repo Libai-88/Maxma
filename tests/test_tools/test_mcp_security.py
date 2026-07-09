@@ -26,16 +26,28 @@ class TestValidateStdioCommand:
             "powershell",
             "bash",
             "sh",
+        ],
+    )
+    def test_shell_commands_are_whitelisted(self, command):
+        """shell 类命令在白名单中，直接通过。"""
+        assert validate_stdio_command(command) is None
+
+    @pytest.mark.parametrize(
+        "command",
+        [
             "curl",
             "wget",
             "rm",
             "del",
+            "malicious_command",
         ],
     )
-    def test_arbitrary_commands_are_rejected(self, command):
-        result = validate_stdio_command(command)
-        assert result is not None
-        assert "不在白名单中" in result
+    def test_non_whitelisted_commands_pass_but_warn(self, command, caplog):
+        """非白名单命令不阻断（返回 None），但记录 WARNING 日志。"""
+        with caplog.at_level("WARNING", logger="tools.mcp_security"):
+            result = validate_stdio_command(command)
+        assert result is None  # 不阻断
+        assert any("不在推荐白名单中" in rec.message for rec in caplog.records)
 
     @pytest.mark.parametrize(
         "command",

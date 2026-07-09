@@ -63,7 +63,7 @@ def validate_stdio_command(command: str | None) -> str | None:
     """校验 stdio 命令是否在白名单中。
 
     安全策略：
-    - 拒绝空命令、含路径分隔符的命令、相对路径命令（防目录遍历）
+    - 硬拒绝：空命令、含路径分隔符的命令、相对路径命令（防目录遍历）
     - 白名单内的命令直接通过
     - 白名单外的命令记录警告日志但不拒绝（用户自主决策）
 
@@ -71,7 +71,9 @@ def validate_stdio_command(command: str | None) -> str | None:
         command: 用户配置的命令字符串。
 
     Returns:
-        错误信息（如果存在安全问题），None 表示有效。
+        None 表示通过（白名单内或白名单外但不阻断）。
+        非 None 字符串表示硬错误（阻断配置保存）。
+        白名单外命令的警告通过日志记录，不影响返回值。
     """
     if not command or not command.strip():
         return "stdio 命令不能为空"
@@ -91,7 +93,7 @@ def validate_stdio_command(command: str | None) -> str | None:
     if basename.lower().endswith(".exe"):
         basename = basename[:-4]
 
-    # 白名单校验：白名单外命令记录警告但不拒绝
+    # 白名单校验：白名单外命令记录警告但不阻断
     allowed_lower = {c.lower() for c in _ALLOWED_STDIO_COMMANDS}
     if basename.lower() not in allowed_lower:
         logger.warning(
@@ -102,6 +104,27 @@ def validate_stdio_command(command: str | None) -> str | None:
         )
 
     return None
+
+
+def is_command_whitelisted(command: str | None) -> bool:
+    """检查命令是否在推荐白名单中（不阻断，仅用于 UI 提示）。
+
+    Args:
+        command: 用户配置的命令字符串。
+
+    Returns:
+        True 表示在白名单中，False 表示不在（需用户注意）。
+    """
+    if not command or not command.strip():
+        return False
+
+    cmd = command.strip()
+    basename = cmd
+    if basename.lower().endswith(".exe"):
+        basename = basename[:-4]
+
+    allowed_lower = {c.lower() for c in _ALLOWED_STDIO_COMMANDS}
+    return basename.lower() in allowed_lower
 
 
 # ═══════════════════════════════════════════════════════════════════════

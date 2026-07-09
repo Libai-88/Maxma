@@ -31,16 +31,18 @@ class TestTestConnection:
         assert "命令" in data["detail"]
 
     @pytest.mark.asyncio
-    async def test_returns_400_on_non_whitelisted_command(self, client):
-        """非白名单命令返回 400。"""
+    async def test_non_whitelisted_command_passes_validation_but_fails_startup(self, client):
+        """非白名单命令通过校验（软约束），但启动失败返回 200 + success=False。"""
         resp = await client.post("/api/mcp/test-connection", json={
-            "command": "malicious_command",
+            "command": "malicious_command_xyz",
             "args": [],
             "env": {},
         })
-        assert resp.status_code == 400
+        # 非白名单命令不阻断校验，进入子进程启动阶段
+        assert resp.status_code == 200
         data = resp.json()
-        assert "白名单" in data["detail"] or "whitelist" in data["detail"].lower()
+        assert data["success"] is False
+        assert data["error"] is not None
 
     @pytest.mark.asyncio
     async def test_returns_200_on_valid_command(self, client):

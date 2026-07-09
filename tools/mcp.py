@@ -86,8 +86,12 @@ class StdioServerConfig(_BaseServerMixin):
 
     def to_connection(self) -> dict[str, Any]:
         # 阶段 5.3：命令解析 + 环境变量注入（嵌入式运行时支持）
+        import os
+
         resolved_command = resolve_mcp_command(self.command)
-        merged_env = build_mcp_env(self.env if self.env is not None else {})
+        # 合并 os.environ 确保子进程有 PATH/SystemRoot 等关键变量
+        # build_mcp_env 负责注入运行时特定变量（PLAYWRIGHT_BROWSERS_PATH 等）
+        merged_env = {**os.environ, **build_mcp_env(self.env if self.env is not None else {})}
 
         conn: dict[str, Any] = {
             "transport": "stdio",
