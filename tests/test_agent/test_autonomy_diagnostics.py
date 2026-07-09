@@ -23,7 +23,7 @@ class TestErrorSummary:
     def test_empty_errors(self):
         """无错误时返回空摘要。"""
         mock_collector = MagicMock()
-        mock_collector.get_errors.return_value = []
+        mock_collector.get_all.return_value = []
         summary = collect_error_summary(mock_collector)
         assert summary.total == 0
         assert summary.by_category == {}
@@ -31,7 +31,7 @@ class TestErrorSummary:
     def test_categorizes_errors(self):
         """按类别分类错误。"""
         mock_collector = MagicMock()
-        mock_collector.get_errors.return_value = [
+        mock_collector.get_all.return_value = [
             {"category": "tool_error", "message": "kb_search failed", "timestamp": "2026-07-09T10:00:00"},
             {"category": "tool_error", "message": "run_python failed", "timestamp": "2026-07-09T10:01:00"},
             {"category": "llm_error", "message": "API timeout", "timestamp": "2026-07-09T10:02:00"},
@@ -48,7 +48,7 @@ class TestErrorSummary:
             for i in range(10)
         ]
         mock_collector = MagicMock()
-        mock_collector.get_errors.return_value = errors
+        mock_collector.get_all.return_value = errors
         summary = collect_error_summary(mock_collector, max_recent=5)
         assert len(summary.recent_messages) == 5
         assert summary.recent_messages[0] == "error 9"  # 最新在前

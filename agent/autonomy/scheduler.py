@@ -106,11 +106,11 @@ def _get_error_collector() -> Any:
         return None
 
 
-def _get_health_data() -> dict:
+def _get_health_data(app) -> dict:
     """获取健康检查数据（同步读取，不调用 HTTP）。"""
     try:
         from api.health import check_health_sync
-        return check_health_sync()
+        return check_health_sync(app)
     except Exception:
         # 回退：返回最小健康数据
         return {
@@ -145,7 +145,7 @@ async def _run_tick(
         )
 
         # 2. 收集健康
-        health_data = _get_health_data()
+        health_data = _get_health_data(app)
         health_summary = collect_health_summary(health_data)
 
         # 3. 构建报告

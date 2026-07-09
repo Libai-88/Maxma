@@ -20,6 +20,13 @@ logger = logging.getLogger(__name__)
 DiagnosticReport = dict
 
 
+def _get_err_field(err, name, default=""):
+    """从 dict 或 dataclass 错误记录中提取字段。"""
+    if isinstance(err, dict):
+        return err.get(name, default)
+    return getattr(err, name, default)
+
+
 @dataclass
 class ErrorSummary:
     """错误摘要。"""
@@ -49,7 +56,7 @@ def collect_error_summary(
         ErrorSummary
     """
     try:
-        errors = error_collector.get_errors()
+        errors = error_collector.get_all()
     except Exception as e:
         logger.warning("[autonomy:diagnostics] 收集错误失败: %s", e)
         return ErrorSummary(total=0, by_category={}, recent_messages=[])
@@ -59,12 +66,12 @@ def collect_error_summary(
 
     by_category: dict[str, int] = {}
     for err in errors:
-        cat = err.get("category", "unknown")
+        cat = _get_err_field(err, "category", "unknown")
         by_category[cat] = by_category.get(cat, 0) + 1
 
     # 最近消息（最新在前）
     recent = [
-        err.get("message", "")
+        _get_err_field(err, "message", "")
         for err in reversed(errors[-max_recent:])
     ]
 

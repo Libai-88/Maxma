@@ -416,6 +416,20 @@ async def lifespan(app: FastAPI):
     app.state.hook_manager = hook_manager
     logger.info("[hooks] 事件钩子管理器已启动，%d 个钩子", len(hook_manager.list_hooks()))
 
+    # 7. 启动自治调度器（默认关闭，需在 .env 中设置 autonomy_enabled=true）
+    from config.settings import get_settings as _get_autonomy_settings
+    _autonomy_settings = _get_autonomy_settings()
+    if _autonomy_settings.autonomy_enabled:
+        from agent.autonomy.scheduler import start_autonomy
+        start_autonomy(
+            app,
+            interval_seconds=_autonomy_settings.autonomy_interval_seconds,
+            self_improve_enabled=_autonomy_settings.autonomy_self_improve_enabled,
+        )
+        logger.info("[autonomy] 自治调度器已启动")
+    else:
+        logger.info("[autonomy] 自治调度器未启用（autonomy_enabled=False）")
+
     yield
 
     # 关闭：后台 LLM 初始化任务
@@ -448,6 +462,10 @@ async def lifespan(app: FastAPI):
     # 关闭事件钩子
     hook_manager.stop_all()
     logger.info("[hooks] 事件钩子管理器已停止")
+
+    # 停止自治调度器
+    from agent.autonomy.scheduler import stop_autonomy
+    await stop_autonomy()
 
     await close_mcp()
     await balance.close_async_client()
