@@ -10,7 +10,7 @@
       <span class="tool-elapsed" v-if="toolCall.elapsed !== null">
         {{ toolCall.elapsed }}s
       </span>
-      <PinButton @pin="$emit('pin', { type: 'summary', title: toolCall.name, content: toolCall.output || toolCall.input })" />
+      <PinButton @pin="$emit('pin', getPinPayload())" />
     </div>
     <div class="tool-body-wrapper" ref="bodyWrapper">
       <div class="tool-body" ref="bodyInner">
@@ -142,6 +142,29 @@ const outputDisplay = computed<SectionDisplay>(() => {
   if (kv) return kv
   return detectCodeDisplay(props.toolCall.output)
 })
+
+// ── Pin payload detection ──
+function getPinPayload(): { type: 'code' | 'table' | 'summary'; title: string; content: string; sourceTool?: string } {
+  const name = props.toolCall.name
+  const output = props.toolCall.output || ''
+  const input = props.toolCall.input || ''
+
+  // 代码类工具 → code card
+  if (name === 'run_python' || name === 'file_edit' || name === 'file_write') {
+    return { type: 'code', title: name, content: input, sourceTool: name }
+  }
+
+  // JSON 数组输出 → table card
+  try {
+    const parsed = JSON.parse(output)
+    if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'object') {
+      return { type: 'table', title: name, content: output, sourceTool: name }
+    }
+  } catch { /* not JSON */ }
+
+  // 默认 → summary card
+  return { type: 'summary', title: name, content: output || input, sourceTool: name }
+}
 
 // ── Expand / collapse ──
 function toggle() {
