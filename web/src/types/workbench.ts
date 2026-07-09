@@ -42,12 +42,3 @@ export interface ReasoningEntry {
   timestamp: number
 }
 
-/** 工作台状态 */
-export interface WorkbenchState {
-  /** 面板是否展开 */
-  isOpen: boolean
-  /** 当前标签页 */
-  activeTab: WorkbenchTab
-  /** Canvas 卡片列表 */
-  cards: CanvasCard[]
-}

@@ -62,10 +62,6 @@ export function useWorkbench() {
     cards.value = cards.value.filter(c => c.id !== id)
   }
 
-  function clearCards() {
-    cards.value = []
-  }
-
   function buildReasoningTimeline(turns: ChatTurn[]): ReasoningEntry[] {
     const recentTurns = turns.slice(-MAX_TURNS)
     const entries: ReasoningEntry[] = []
@@ -117,7 +113,6 @@ export function useWorkbench() {
     setTab,
     addCard,
     removeCard,
-    clearCards,
     buildReasoningTimeline,
   }
 }
