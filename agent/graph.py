@@ -166,6 +166,10 @@ class AgentState(TypedDict):
     # ── 编排层：coordinator 路由结果 ──
     coordinator_route: NotRequired[str]  # "direct" | "specialist" | "main"
 
+    # ── 编排层：verifier 状态 ──
+    verifier_retries: NotRequired[int]  # 当前已重试次数
+    verifier_verdict: NotRequired[str]  # "sufficient" | "insufficient" | ""
+
 
 def build_agent(
     model: BaseChatModel,
@@ -177,6 +181,8 @@ def build_agent(
     enable_executor: bool | None = None,
     enable_hitl: bool = True,
     coordinator_enabled: bool | None = None,
+    verifier_enabled: bool | None = None,
+    verifier_max_retries: int | None = None,
     # 回调注入：Agent 不直接持有这些模块的引用，通过回调间接访问
     on_plan_confirmation: Callable | None = None,
     on_activity_event: Callable | None = None,
@@ -222,6 +228,19 @@ def build_agent(
             coordinator_enabled = get_settings().coordinator_enabled
         except Exception:
             coordinator_enabled = False
+
+    if verifier_enabled is None:
+        try:
+            from config.settings import get_settings
+            verifier_enabled = get_settings().verifier_enabled
+        except Exception:
+            verifier_enabled = False
+    if verifier_max_retries is None:
+        try:
+            from config.settings import get_settings
+            verifier_max_retries = get_settings().verifier_max_retries
+        except Exception:
+            verifier_max_retries = 2
 
     llm_with_tools = model.bind_tools(tools) if tools else model
     # 使用审批工具节点（可配置开关）；关闭时回退到原始 ToolNode
@@ -461,6 +480,68 @@ def build_agent(
             return {"messages": break_msgs}
         return {}
 
+    async def verifier_node(state: AgentState) -> dict:
+        """验证节点：评分 agent 最终答案的充分性。
+
+        sufficient 或重试耗尽 → END（由 should_continue_from_verifier 路由）
+        insufficient 且仍有重试 → 注入 gap SystemMessage，路由回 agent
+        """
+        from agent.verifier import grade_answer, Verdict
+
+        messages = state["messages"]
+        if not messages:
+            return {"verifier_verdict": "sufficient"}
+
+        # 取最后一条无 tool_calls 的 AIMessage 作为答案
+        answer = ""
+        for msg in reversed(messages):
+            if isinstance(msg, AIMessage) and not getattr(msg, "tool_calls", None):
+                answer = msg.content if isinstance(msg.content, str) else str(msg.content)
+                break
+
+        # 取用户原始问题
+        question = ""
+        for msg in reversed(messages):
+            if isinstance(msg, HumanMessage):
+                question = _extract_text_content(msg.content)
+                break
+
+        retries = state.get("verifier_retries", 0)
+
+        try:
+            verdict = await grade_answer(model, question, answer)
+        except Exception as e:
+            logger.warning("[verifier] 评分失败，放行: %s", e)
+            return {"verifier_verdict": "sufficient"}
+
+        if verdict.is_sufficient():
+            logger.info("[verifier] sufficient, 放行")
+            return {"verifier_verdict": "sufficient"}
+
+        # insufficient
+        if retries >= verifier_max_retries:
+            logger.info("[verifier] insufficient 但重试耗尽 (%d/%d), 放行", retries, verifier_max_retries)
+            return {"verifier_verdict": "sufficient"}
+
+        # 注入 gap，路由回 agent
+        gaps_text = "; ".join(verdict.gaps) if verdict.gaps else "答案不够充分"
+        gap_msg = SystemMessage(
+            content=f"[验证反馈] 你的回答还不够充分：{gaps_text}。请补充这些内容后重新回答。"
+        )
+        logger.info("[verifier] insufficient (retry %d/%d), gaps: %s", retries + 1, verifier_max_retries, gaps_text)
+        return {
+            "messages": [gap_msg],
+            "verifier_retries": retries + 1,
+            "verifier_verdict": "insufficient",
+        }
+
+    def should_continue_from_verifier(state: AgentState) -> str:
+        """verifier 后路由：sufficient → END；insufficient → agent。"""
+        verdict = state.get("verifier_verdict", "sufficient")
+        if verdict == "insufficient":
+            return "agent"
+        return END
+
     def should_continue(state: AgentState) -> str:
         """路由：最后一条 AI 消息有 tool_calls → 执行工具，否则结束或回 executor。
 
@@ -486,9 +567,13 @@ def build_agent(
                 if detect_loop(state["messages"], threshold=ld_threshold):
                     return "loop_breaker"
             return "tools"
-        # 无 tool_calls：executor 模式下回 executor 推进步骤，否则结束
+        # 无 tool_calls
+        # executor 模式下回 executor 推进步骤
         if enable_executor and state.get("plan_steps"):
             return "executor"
+        # verifier 启用时路由到 verifier，否则直接结束
+        if verifier_enabled:
+            return "verifier"
         return END
 
     # ── 构建图 ──
@@ -552,6 +637,8 @@ def build_agent(
     graph.add_node("agent", agent_node)
     # 阶段 5.2：循环终止节点（检测到死循环时注入终止消息后结束）
     graph.add_node("loop_breaker", loop_breaker_node)
+    if verifier_enabled:
+        graph.add_node("verifier", verifier_node)
     if tool_node is not None:
         graph.add_node("tools", tool_node)
 
@@ -584,35 +671,58 @@ def build_agent(
             {"agent": "agent", "planner": "planner", END: END},
         )
 
-        # agent → tools | loop_breaker | executor | END（条件路由）
+        # agent → tools | loop_breaker | executor | verifier | END（条件路由）
         # loop_breaker → END（死循环终止后直接结束）
         if tool_node is not None:
+            _agent_targets = {"tools": "tools", "loop_breaker": "loop_breaker", "executor": "executor", END: END}
+            if verifier_enabled:
+                _agent_targets["verifier"] = "verifier"
             graph.add_conditional_edges(
                 "agent",
                 should_continue,
-                {"tools": "tools", "loop_breaker": "loop_breaker", "executor": "executor", END: END},
+                _agent_targets,
             )
             # tools → agent（工具执行后回到模型继续推理）
             graph.add_edge("tools", "agent")
         else:
+            _agent_targets = {"loop_breaker": "loop_breaker", "executor": "executor", END: END}
+            if verifier_enabled:
+                _agent_targets["verifier"] = "verifier"
             graph.add_conditional_edges(
                 "agent",
                 should_continue,
-                {"loop_breaker": "loop_breaker", "executor": "executor", END: END},
+                _agent_targets,
             )
         graph.add_edge("loop_breaker", END)
     else:
-        # 非 executor 模式（子 Agent）：agent → tools | loop_breaker | END
+        # 非 executor 模式（子 Agent）：agent → tools | loop_breaker | verifier | END
         if tool_node is not None:
+            _agent_targets = {"tools": "tools", "loop_breaker": "loop_breaker", END: END}
+            if verifier_enabled:
+                _agent_targets["verifier"] = "verifier"
             graph.add_conditional_edges(
                 "agent",
                 should_continue,
-                {"tools": "tools", "loop_breaker": "loop_breaker", END: END},
+                _agent_targets,
             )
             graph.add_edge("tools", "agent")
         else:
-            graph.add_edge("agent", END)
+            if verifier_enabled:
+                graph.add_conditional_edges(
+                    "agent",
+                    should_continue,
+                    {"loop_breaker": "loop_breaker", "verifier": "verifier", END: END},
+                )
+            else:
+                graph.add_edge("agent", END)
         graph.add_edge("loop_breaker", END)
+
+    if verifier_enabled:
+        graph.add_conditional_edges(
+            "verifier",
+            should_continue_from_verifier,
+            {"agent": "agent", END: END},
+        )
 
     return graph.compile(checkpointer=checkpointer)
 
