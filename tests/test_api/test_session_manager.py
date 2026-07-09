@@ -15,21 +15,50 @@ def _load_session_manager_module():
     spec = importlib.util.spec_from_file_location("session_manager_under_test", module_path)
     module = importlib.util.module_from_spec(spec)
 
-    # Mock heavy/optional dependencies that may fail in the test environment
+    # Mock heavy/optional dependencies，加载完成后恢复（避免污染全局 sys.modules）
+    _saved_modules = {}  # pkg_name -> (was_injected: bool, original_module_or_None)
+    _saved_attrs = {}    # (pkg_name, attr) -> original_value
+
     for pkg_name in [
         "langgraph.checkpoint.memory",
         "langgraph.graph.state",
     ]:
-        if pkg_name not in sys.modules:
+        if pkg_name in sys.modules:
+            # 模块已加载：保存并替换属性，不替换模块本身
+            _saved_modules[pkg_name] = (False, None)
+        else:
+            # 模块未加载：注入 fake 模块，加载后删除
+            _saved_modules[pkg_name] = (True, None)
             sys.modules[pkg_name] = types.ModuleType(pkg_name)
 
+    # 保存原始属性值，然后设置 fake 属性
     fake_langgraph_checkpoint = sys.modules["langgraph.checkpoint.memory"]
+    _saved_attrs[("langgraph.checkpoint.memory", "MemorySaver")] = getattr(
+        fake_langgraph_checkpoint, "MemorySaver", None
+    )
     fake_langgraph_checkpoint.MemorySaver = object
 
     fake_langgraph_graph = sys.modules["langgraph.graph.state"]
+    _saved_attrs[("langgraph.graph.state", "CompiledStateGraph")] = getattr(
+        fake_langgraph_graph, "CompiledStateGraph", None
+    )
     fake_langgraph_graph.CompiledStateGraph = object
 
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        # 恢复：删除注入的 fake 模块，恢复已有模块的原始属性
+        for pkg_name, (was_injected, _) in _saved_modules.items():
+            if was_injected:
+                sys.modules.pop(pkg_name, None)
+        for (pkg_name, attr), original in _saved_attrs.items():
+            if pkg_name in sys.modules:
+                mod = sys.modules[pkg_name]
+                if original is not None:
+                    setattr(mod, attr, original)
+                else:
+                    delattr(mod, attr)
+
     return module
 
 
