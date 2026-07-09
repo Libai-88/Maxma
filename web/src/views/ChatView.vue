@@ -124,7 +124,7 @@
         @set-tab="workbench.setTab"
       >
         <template #reasoning>
-          <div class="workbench-placeholder">推理时间线（Task 3 实现）</div>
+          <ReasoningTimeline :turns="allTurns" />
         </template>
         <template #canvas>
           <div class="workbench-placeholder">Canvas 画布（Task 4 实现）</div>
@@ -144,6 +144,7 @@ import ContextUsageBadge from '@/components/ContextUsageBadge.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import TaskTrackerBar from '@/components/TaskTrackerBar.vue'
 import WorkbenchPanel from '@/components/workbench/WorkbenchPanel.vue'
+import ReasoningTimeline from '@/components/workbench/ReasoningTimeline.vue'
 import { useChat } from '@/composables/useChat'
 import { useSelectionQuote } from '@/composables/useSelectionQuote'
 import { useWorkbench } from '@/composables/useWorkbench'
@@ -164,6 +165,14 @@ const {
 } = useChat(sessionId)
 
 const workbench = useWorkbench()
+
+const allTurns = computed(() => {
+  const result = [...turns.value]
+  if (currentTurn.value) {
+    result.push(currentTurn.value)
+  }
+  return result
+})
 
 const {
   quoteCandidate,
