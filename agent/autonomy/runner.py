@@ -24,19 +24,23 @@ from agent.graph import build_agent
 
 logger = logging.getLogger(__name__)
 
-# 交互工具黑名单（headless 模式不可用）
-_INTERACTIVE_TOOL_PATTERNS = {"ask_user", "approval"}
+# Headless 自改进 Agent 允许的工具白名单（fail-closed：仅这些工具可用）
+# 安全原则：无用户交互的后台 Agent 只能诊断 + 管理 Skills，不能执行代码/写文件/改配置
+_ALLOWED_HEADLESS_TOOLS: frozenset[str] = frozenset({
+    "manage_skills",    # 创建/更新 Skills（核心自改进能力）
+    "system_diagnose",  # 系统级故障诊断
+    "rag_diagnose",     # RAG 故障诊断
+    "kb_search",        # 知识库检索（查找已有文档）
+})
 
 
-def _filter_interactive_tools(tools: list) -> list:
-    """过滤掉交互式工具（ask_user_* 等）。"""
-    filtered = []
-    for tool in tools:
-        tool_name = getattr(tool, "name", "")
-        if any(pattern in tool_name for pattern in _INTERACTIVE_TOOL_PATTERNS):
-            continue
-        filtered.append(tool)
-    return filtered
+def _filter_tools_for_headless(tools: list) -> list:
+    """按白名单过滤工具（fail-closed：仅白名单内工具可用）。
+
+    Headless 自改进 Agent 无用户交互，不能执行代码/写文件/改配置。
+    只允许诊断工具和 Skills 管理工具。
+    """
+    return [t for t in tools if getattr(t, "name", "") in _ALLOWED_HEADLESS_TOOLS]
 
 
 def _build_self_improve_prompt(report: dict) -> str:
@@ -131,7 +135,7 @@ async def run_self_improvement_agent(
 
     # 获取工具列表并过滤交互工具
     all_tools = getattr(app.state, "tools", []) or []
-    tools = _filter_interactive_tools(all_tools)
+    tools = _filter_tools_for_headless(all_tools)
 
     # 创建临时会话
     session = await session_manager.create()

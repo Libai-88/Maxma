@@ -123,3 +123,57 @@ class TestRunSelfImprovementAgent:
 
             # 无论是否异常，会话都应被清理
             mock_app.state.session_manager.delete.assert_called_once_with("test-session-err")
+
+
+class TestFilterInteractiveTools:
+    def test_whitelisted_tools_retained(self):
+        """白名单内工具被保留。"""
+        from agent.autonomy.runner import _filter_tools_for_headless
+
+        mock_tools = []
+        for name in ["manage_skills", "system_diagnose", "rag_diagnose", "kb_search"]:
+            t = MagicMock()
+            t.name = name
+            mock_tools.append(t)
+
+        result = _filter_tools_for_headless(mock_tools)
+        assert len(result) == 4
+
+    def test_dangerous_tools_filtered_out(self):
+        """危险工具（run_python/file_write/git_commit）被过滤。"""
+        from agent.autonomy.runner import _filter_tools_for_headless
+
+        mock_tools = []
+        for name in ["run_python", "file_write", "git_commit", "manage_mcp", "manage_skills"]:
+            t = MagicMock()
+            t.name = name
+            mock_tools.append(t)
+
+        result = _filter_tools_for_headless(mock_tools)
+        result_names = [getattr(t, "name", "") for t in result]
+        assert "manage_skills" in result_names
+        assert "run_python" not in result_names
+        assert "file_write" not in result_names
+        assert "git_commit" not in result_names
+        assert "manage_mcp" not in result_names
+
+    def test_interactive_tools_filtered_out(self):
+        """交互工具（ask_user_*）被过滤。"""
+        from agent.autonomy.runner import _filter_tools_for_headless
+
+        mock_tools = []
+        for name in ["ask_user_question", "ask_user_approval", "manage_skills"]:
+            t = MagicMock()
+            t.name = name
+            mock_tools.append(t)
+
+        result = _filter_tools_for_headless(mock_tools)
+        result_names = [getattr(t, "name", "") for t in result]
+        assert "manage_skills" in result_names
+        assert "ask_user_question" not in result_names
+        assert "ask_user_approval" not in result_names
+
+    def test_empty_input_returns_empty(self):
+        """空输入返回空列表。"""
+        from agent.autonomy.runner import _filter_tools_for_headless
+        assert _filter_tools_for_headless([]) == []
