@@ -12,7 +12,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from tools.base import ToolBase, format_error, format_success, register_tool
+from tools.base import register_tool
+from tools.base_diagnose import DiagnoseToolBase, diagnose_by_patterns
 
 
 # ── P01-P12 诊断模式数据库 ──
@@ -81,37 +82,8 @@ RAG_FAILURE_PATTERNS: dict[str, dict] = {
 
 
 def diagnose_failure(failure_description: str) -> dict:
-    """诊断 RAG 故障，返回最匹配的模式。
-
-    Args:
-        failure_description: 故障描述文本
-
-    Returns:
-        {"primary_pattern": "P0x", "pattern_name": str, "minimal_fix": str, "confidence": float}
-    """
-    text = failure_description.lower()
-
-    best_match = "P12"
-    best_score = 0
-
-    for key, pattern in RAG_FAILURE_PATTERNS.items():
-        score = 0
-        for symptom in pattern["symptoms"]:
-            if symptom.lower() in text:
-                score += 1
-        max_possible = max(len(pattern["symptoms"]), 1)
-        normalized = score / max_possible
-        if normalized > best_score:
-            best_score = normalized
-            best_match = key
-
-    pattern = RAG_FAILURE_PATTERNS[best_match]
-    return {
-        "primary_pattern": best_match,
-        "pattern_name": pattern["name"],
-        "minimal_fix": pattern["fix"],
-        "confidence": round(best_score, 2),
-    }
+    """诊断 RAG 故障，返回最匹配的模式。"""
+    return diagnose_by_patterns(failure_description, RAG_FAILURE_PATTERNS, "P12")
 
 
 class RagDiagnoseInput(BaseModel):
@@ -122,7 +94,7 @@ class RagDiagnoseInput(BaseModel):
 
 
 @register_tool
-class RagDiagnoseTool(ToolBase):
+class RagDiagnoseTool(DiagnoseToolBase):
     """RAG 失败诊断工具：将故障描述映射到 P01-P12 诊断模式 + 最小修复建议。"""
 
     name: str = "rag_diagnose"
@@ -133,23 +105,5 @@ class RagDiagnoseTool(ToolBase):
         "[调用积极性: 用户报告检索/向量库问题时主动调用] [get_doc: 无]"
     )
     args_schema: type[BaseModel] = RagDiagnoseInput
-
-    def _run(self, failure_description: str = "") -> str:
-        if not failure_description.strip():
-            return format_error("failure_description 不能为空")
-
-        result = diagnose_failure(failure_description)
-
-        formatted = (
-            f"诊断模式: {result['primary_pattern']} - {result['pattern_name']}\n"
-            f"置信度: {result['confidence']}\n"
-            f"修复建议: {result['minimal_fix']}"
-        )
-
-        return format_success({
-            "primary_pattern": result["primary_pattern"],
-            "pattern_name": result["pattern_name"],
-            "minimal_fix": result["minimal_fix"],
-            "confidence": result["confidence"],
-            "formatted": formatted,
-        })
+    _patterns = RAG_FAILURE_PATTERNS
+    _fallback_key = "P12"
