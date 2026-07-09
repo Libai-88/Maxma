@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import traceback
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
 
@@ -39,6 +41,58 @@ _scheduler_loop: Optional[asyncio.AbstractEventLoop] = None
 _last_tick_at: Optional[str] = None
 _last_tick_report: Optional[dict] = None
 _tick_count: int = 0
+
+# === 指数退避 + 自动禁用（参考 Halo scheduler DESIGN.md §2.3）===
+
+MAX_CONSECUTIVE_FAILURES = 5
+MAX_BACKOFF_INTERVAL = 86400  # 24 小时上限
+
+
+@dataclass
+class BackoffState:
+    """调度器退避状态。
+
+    - consecutive_failures: 连续失败次数
+    - base_interval: 基础间隔（秒）
+    - max_interval: 最大间隔上限（秒）
+    - disabled: 是否被自动禁用
+    """
+
+    base_interval: int = 3600
+    max_interval: int = MAX_BACKOFF_INTERVAL
+    consecutive_failures: int = 0
+    disabled: bool = False
+
+    def record_failure(self) -> None:
+        """记录一次失败，增加退避。"""
+        self.consecutive_failures += 1
+        if self.consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+            self.disabled = True
+            logger.warning(
+                "[autonomy] 调度器连续失败 %d 次，已自动禁用",
+                self.consecutive_failures,
+            )
+
+    def record_success(self) -> None:
+        """记录一次成功，重置退避。"""
+        self.consecutive_failures = 0
+        self.disabled = False
+
+    def is_disabled(self) -> bool:
+        """是否已被自动禁用。"""
+        return self.disabled
+
+
+def compute_next_interval(state: BackoffState) -> int:
+    """计算下一次执行间隔（指数退避）。
+
+    策略：base * 2^failures，封顶 max_interval。
+    """
+    if state.consecutive_failures == 0:
+        return state.base_interval
+    # 指数退避：base * 2^failures
+    interval = state.base_interval * (2 ** state.consecutive_failures)
+    return min(interval, state.max_interval)
 
 
 def start_autonomy(
@@ -83,19 +137,36 @@ def start_autonomy(
         # 初始延迟：让系统稳定后再开始诊断
         if initial_delay > 0:
             await asyncio.sleep(initial_delay)
+
+        backoff = BackoffState(
+            base_interval=interval_seconds,
+            max_interval=MAX_BACKOFF_INTERVAL,
+        )
+
         while True:
+            if backoff.is_disabled():
+                logger.warning("[autonomy] 调度器已自动禁用，停止循环")
+                break
             try:
                 report = await _run_tick(app, self_improve_enabled=self_improve_enabled)
                 _last_tick_at = datetime.now().isoformat()
                 _last_tick_report = report
                 _tick_count += 1
+                backoff.record_success()
             except asyncio.CancelledError:
                 logger.info("[autonomy] 调度器被取消")
                 break
             except Exception as e:
                 logger.warning("[autonomy] tick 异常（不杀死循环）: %s", e)
+                backoff.record_failure()
 
-            await asyncio.sleep(interval_seconds)
+            next_interval = compute_next_interval(backoff)
+            if next_interval != interval_seconds:
+                logger.info(
+                    "[autonomy] 退避间隔: %ds（连续失败 %d 次）",
+                    next_interval, backoff.consecutive_failures,
+                )
+            await asyncio.sleep(next_interval)
 
     _scheduler_task = _scheduler_loop.create_task(_autonomy_loop())
     return _scheduler_task
@@ -201,10 +272,38 @@ async def _run_tick(
                     await _run_self_improve(app, report)
                 except Exception as e:
                     logger.warning("[autonomy] 自改进执行失败: %s", e)
+                    # 上报到 ErrorCollector（延迟导入已在 _get_error_collector 内）
+                    try:
+                        collector = _get_error_collector()
+                        if collector is not None:
+                            collector.add_error(
+                                level="WARNING",
+                                category="autonomy",
+                                message=f"自改进执行失败: {e}",
+                                exception="".join(
+                                    traceback.format_exception(type(e), e, e.__traceback__)
+                                ),
+                            )
+                    except Exception:
+                        logger.debug("[autonomy] ErrorCollector 上报失败（自改进失败）", exc_info=True)
 
         return report
     except Exception as e:
         logger.warning("[autonomy] tick 异常: %s", e)
+        # 上报到 ErrorCollector（延迟导入已在 _get_error_collector 内）
+        try:
+            collector = _get_error_collector()
+            if collector is not None:
+                collector.add_error(
+                    level="ERROR",
+                    category="autonomy",
+                    message=f"tick 异常: {e}",
+                    exception="".join(
+                        traceback.format_exception(type(e), e, e.__traceback__)
+                    ),
+                )
+        except Exception:
+            logger.debug("[autonomy] ErrorCollector 上报失败（tick 异常）", exc_info=True)
         return {"error": str(e), "generated_at": None}
 
 
