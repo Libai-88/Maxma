@@ -181,7 +181,7 @@ def validate_tool_registry(tools: list[BaseTool] | None = None) -> None:
 
 # 工具名称到分类的映射
 TOOL_CATEGORIES: dict[str, list[str]] = {
-    "system": ["run_python", "project_info", "context_strategy", "forget", "create_persona", "rag_diagnose"],
+    "system": ["run_python", "project_info", "context_strategy", "forget", "create_persona", "rag_diagnose", "system_diagnose"],
     "todo": [
         "todo_add", "todo_list", "todo_complete", "todo_uncomplete",
         "todo_delete", "todo_update", "todo_query",
