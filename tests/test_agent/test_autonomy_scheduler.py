@@ -100,7 +100,7 @@ class TestSchedulerTick:
         mock_app.state.llm = MagicMock()
 
         mock_collector = MagicMock()
-        mock_collector.get_errors.return_value = []
+        mock_collector.get_all.return_value = []
 
         mock_health_data = {"status": "ok", "llm": {"status": "ok"}, "memory": {"status": "ok"},
                            "native_tools": {"status": "ok"}, "mcp_tools": {"status": "ok"}}
@@ -123,7 +123,7 @@ class TestSchedulerTick:
         mock_app.state.llm = MagicMock()
 
         mock_collector = MagicMock()
-        mock_collector.get_errors.return_value = [
+        mock_collector.get_all.return_value = [
             {"category": "llm_error", "message": "API timeout", "timestamp": "2026-07-09T10:00:00"}
         ]
 
@@ -148,7 +148,7 @@ class TestSchedulerTick:
         mock_app.state.llm = MagicMock()
 
         mock_collector = MagicMock()
-        mock_collector.get_errors.return_value = [
+        mock_collector.get_all.return_value = [
             {"category": "llm_error", "message": "API timeout", "timestamp": "2026-07-09T10:00:00"}
         ]
 

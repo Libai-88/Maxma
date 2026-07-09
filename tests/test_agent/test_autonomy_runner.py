@@ -49,22 +49,26 @@ class TestRunSelfImprovementAgent:
         mock_session.checkpointer = MagicMock()
         mock_app.state.session_manager.create.return_value = mock_session
 
+        # 构建真实 AI 消息（type='ai'），让 _extract_final_answer 走主路径
+        mock_msg = MagicMock()
+        mock_msg.content = "Self-improvement complete"
+        mock_msg.type = "ai"
+
         mock_graph = MagicMock()
         mock_graph.ainvoke = AsyncMock(return_value={
-            "messages": [MagicMock(content="Self-improvement complete")]
+            "messages": [mock_msg]
         })
 
         with patch("agent.autonomy.runner.build_agent", return_value=mock_graph):
-            with patch("agent.autonomy.runner._extract_final_answer", return_value="Self-improvement complete"):
-                result = await run_self_improvement_agent(
-                    app=mock_app,
-                    diagnostic_report=sample_report,
-                    timeout=30,
-                )
+            result = await run_self_improvement_agent(
+                app=mock_app,
+                diagnostic_report=sample_report,
+                timeout=30,
+            )
 
-                mock_app.state.session_manager.create.assert_called_once()
-                mock_app.state.session_manager.delete.assert_called_once_with("test-session-123")
-                assert "Self-improvement" in result
+            mock_app.state.session_manager.create.assert_called_once()
+            mock_app.state.session_manager.delete.assert_called_once_with("test-session-123")
+            assert "Self-improvement" in result
 
     @pytest.mark.asyncio
     async def test_llm_not_ready_raises(self, mock_app, sample_report):
