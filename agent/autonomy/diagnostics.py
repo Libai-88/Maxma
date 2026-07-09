@@ -140,7 +140,7 @@ def prioritize_issues(
                 "category": category,
                 "description": f"类别 {category} 出现 {count} 次错误",
             })
-        elif count > 0 and not any(i["component"] == "tools" for i in issues):
+        elif count > 0:
             issues.append({
                 "priority": "low",
                 "component": "tools",

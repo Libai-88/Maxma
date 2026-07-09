@@ -133,3 +133,41 @@ class TestPrioritizeIssues:
         assert len(issues) == 1
         assert issues[0]["priority"] == "medium"
         assert issues[0]["category"] == "tool_error"
+
+    def test_multiple_low_priority_categories_all_included(self):
+        """多个低优先级类别（<3次）都被包含，不被静默丢弃。"""
+        error_summary = ErrorSummary(
+            total=4,
+            by_category={"file_error": 2, "network_error": 1, "config_error": 1},
+            recent_messages=["err1", "err2", "err3", "err4"],
+        )
+        health_summary = HealthSummary(overall_status="ok", degraded_components=[])
+        issues = prioritize_issues(error_summary, health_summary)
+        # 三个低优先级类别都应出现
+        categories = [i["category"] for i in issues]
+        assert "file_error" in categories
+        assert "network_error" in categories
+        assert "config_error" in categories
+        assert len(issues) == 3
+        for issue in issues:
+            assert issue["priority"] == "low"
+
+    def test_mixed_medium_and_low_priority_all_included(self):
+        """中优先级（>=3次）和低优先级（<3次）混合时全部包含。"""
+        error_summary = ErrorSummary(
+            total=8,
+            by_category={"tool_error": 5, "file_error": 2, "network_error": 1},
+            recent_messages=["err"] * 8,
+        )
+        health_summary = HealthSummary(overall_status="ok", degraded_components=[])
+        issues = prioritize_issues(error_summary, health_summary)
+        categories = [i["category"] for i in issues]
+        assert "tool_error" in categories
+        assert "file_error" in categories
+        assert "network_error" in categories
+        # tool_error 是 medium，其余是 low
+        for issue in issues:
+            if issue["category"] == "tool_error":
+                assert issue["priority"] == "medium"
+            else:
+                assert issue["priority"] == "low"
