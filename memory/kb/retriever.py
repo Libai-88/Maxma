@@ -132,3 +132,121 @@ class KBRetriever:
                 text = text[:300] + "…"
             lines.append(f"   {text}")
         return "\n".join(lines)
+
+    async def retrieve_with_correction(
+        self,
+        model,
+        query: str,
+        crag_enabled: bool = False,
+        top_k: Optional[int] = None,
+        threshold: Optional[float] = None,
+        conversation_context: str = "",
+    ) -> list[dict]:
+        """纠正式检索（CRAG-lite）。
+
+        流程：retrieve → grade → (全不相关时) Tavily 回退
+        crag_enabled=False 时退化为普通 retrieve（加 source="kb" 标签）。
+
+        Args:
+            model: LLM 模型（用于 grading）
+            query: 查询文本
+            crag_enabled: 是否启用纠正式检索
+            top_k: 可选，覆盖默认 top_k
+            threshold: 可选，覆盖默认阈值
+            conversation_context: 对话上下文（供查询重写用，本版本暂未启用）
+
+        Returns:
+            结果列表，每项额外包含 source 字段（"kb" 或 "web"）
+        """
+        # 禁用时退化为普通检索
+        if not crag_enabled:
+            results = self.retrieve(query, top_k=top_k, threshold=threshold)
+            for r in results:
+                r["source"] = "kb"
+            return results
+
+        # Step 1: 普通检索
+        raw_results = self.retrieve(query, top_k=top_k, threshold=threshold)
+
+        # Step 2: KB 无结果 → 直接 Tavily 回退
+        if not raw_results:
+            logger.info("[crag] KB 无结果，触发 Tavily 回退")
+            web_results = await self._tavily_fallback(query, max_results=top_k or self._top_k)
+            for r in web_results:
+                r["source"] = "web"
+            return web_results
+
+        # Step 3: grading
+        try:
+            from memory.kb.grading import grade_documents, filter_relevant
+
+            grades = await grade_documents(model, query, raw_results)
+            relevant = filter_relevant(raw_results, grades)
+
+            relevant_ratio = len(relevant) / len(raw_results) if raw_results else 0
+            logger.info("[crag] grading: %d/%d relevant (ratio=%.2f)", len(relevant), len(raw_results), relevant_ratio)
+
+            if relevant:
+                for r in relevant:
+                    r["source"] = "kb"
+                return relevant
+        except Exception as e:
+            logger.warning("[crag] grading 失败，返回原始 KB 结果: %s", e)
+            for r in raw_results:
+                r["source"] = "kb"
+            return raw_results
+
+        # Step 4: 全不相关 → Tavily 回退
+        logger.info("[crag] KB 结果全不相关，触发 Tavily 回退")
+        web_results = await self._tavily_fallback(query, max_results=top_k or self._top_k)
+        for r in web_results:
+            r["source"] = "web"
+        return web_results
+
+    async def _tavily_fallback(self, query: str, max_results: int = 5) -> list[dict]:
+        """Tavily 网络搜索回退。
+
+        KB 无结果或全不相关时调用。失败时返回空列表（不阻塞）。
+
+        Args:
+            query: 搜索查询
+            max_results: 最大结果数
+
+        Returns:
+            结果列表，格式与 retrieve() 一致
+        """
+        try:
+            from config.settings import get_settings
+
+            settings = get_settings()
+            api_key = getattr(settings, "tavily_api_key", None)
+            if not api_key:
+                logger.warning("[crag] TAVILY_API_KEY 未配置，无法回退")
+                return []
+
+            from tavily import TavilyClient
+
+            client = TavilyClient(api_key=api_key)
+            response = client.search(
+                query=query,
+                max_results=max_results,
+                search_depth="basic",
+                include_answer=False,
+            )
+
+            results = []
+            for hit in response.get("results", []):
+                results.append({
+                    "chunk_id": f"web_{hit.get('url', '')[:50]}",
+                    "text": hit.get("content", hit.get("snippet", "")),
+                    "source_doc_id": "",
+                    "source_filename": hit.get("title", "web_result")[:100],
+                    "source_path": hit.get("url", ""),
+                    "similarity": 1.0,
+                    "score_percent": 100.0,
+                })
+            logger.info("[crag] Tavily 回退返回 %d 条结果", len(results))
+            return results
+        except Exception as e:
+            logger.warning("[crag] Tavily 回退失败: %s", e)
+            return []
