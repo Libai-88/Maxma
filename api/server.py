@@ -556,6 +556,10 @@ def create_app() -> FastAPI:
     # 诊断与错误日志导出
     app.include_router(diagnostics_router.router, prefix="/api")
 
+    # Transcript 读取
+    from api.routes import transcripts as transcripts_router_mod
+    app.include_router(transcripts_router_mod.router, prefix="/api")
+
     # Activity Hub —— 活动事件中心（REST + SSE）
     from api.routes import activity as activity_router
     app.include_router(activity_router.router, prefix="/api")
