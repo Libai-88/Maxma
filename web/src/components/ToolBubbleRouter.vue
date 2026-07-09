@@ -4,8 +4,9 @@
     v-if="bubbleComponent"
     :tool-call="toolCall"
     @action="handleAction"
+    @pin="$emit('pin', $event)"
   />
-  <ToolCallCard v-else :tool-call="toolCall" />
+  <ToolCallCard v-else :tool-call="toolCall" @pin="$emit('pin', $event)" />
 </template>
 
 <script setup lang="ts">
@@ -15,7 +16,10 @@ import ToolCallCard from './ToolCallCard.vue'
 import { getBubbleComponent } from './tools/registry'
 
 const props = defineProps<{ toolCall: ToolCall }>()
-const emit = defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()
+const emit = defineEmits<{
+  (e: 'action', p: { action: string; data?: unknown }): void
+  (e: 'pin', payload: { type: 'code' | 'table' | 'summary'; title: string; content: string; sourceTool?: string }): void
+}>()
 
 const bubbleComponent = computed(() => {
   const comp = getBubbleComponent(props.toolCall.name)

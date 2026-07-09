@@ -10,6 +10,7 @@
       <span class="tool-elapsed" v-if="toolCall.elapsed !== null">
         {{ toolCall.elapsed }}s
       </span>
+      <PinButton @pin="$emit('pin', { type: 'summary', title: toolCall.name, content: toolCall.output || toolCall.input })" />
     </div>
     <div class="tool-body-wrapper" ref="bodyWrapper">
       <div class="tool-body" ref="bodyInner">
@@ -52,8 +53,13 @@
 import { ref, watch, nextTick, computed } from 'vue'
 import type { ToolCall } from '@/types'
 import RenderMarkdown from './RenderMarkdown.vue'
+import PinButton from '@/components/workbench/PinButton.vue'
 
 const props = defineProps<{ toolCall: ToolCall }>()
+
+defineEmits<{
+  pin: [payload: { type: 'code' | 'table' | 'summary'; title: string; content: string; sourceTool?: string }]
+}>()
 
 const isOpen = ref(false)
 const bodyWrapper = ref<HTMLElement | null>(null)

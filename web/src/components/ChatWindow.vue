@@ -58,7 +58,7 @@
                 @action="forwardAction"
               />
               <!-- 普通工具调用或审批后工具执行结果 -->
-              <ToolBubbleRouter v-else :tool-call="ev" @action="forwardAction" />
+              <ToolBubbleRouter v-else :tool-call="ev" @action="forwardAction" @pin="$emit('pin', $event)" />
             </div>
             <!-- 系统通知（如上下文压缩通知），轻量内联提示 -->
             <div
@@ -269,6 +269,7 @@ const emit = defineEmits<{
   (e: 'cite', ref: ParsedRef): void
   (e: 'togglePrivate'): void
   (e: 'planRespond', planId: string, action: 'approve' | 'modify' | 'reject', modifiedPlan?: string): void
+  (e: 'pin', payload: { type: 'code' | 'table' | 'summary'; title: string; content: string; sourceTool?: string }): void
 }>()
 
 function forwardAction(payload: { action: string; data?: unknown }) {
