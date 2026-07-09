@@ -127,7 +127,10 @@
           <ReasoningTimeline :turns="allTurns" />
         </template>
         <template #canvas>
-          <div class="workbench-placeholder">Canvas 画布（Task 4 实现）</div>
+          <CanvasContainer
+            :cards="workbench.cards.value"
+            @remove="workbench.removeCard"
+          />
         </template>
       </WorkbenchPanel>
     </div>
@@ -145,6 +148,7 @@ import StatusBadge from '@/components/StatusBadge.vue'
 import TaskTrackerBar from '@/components/TaskTrackerBar.vue'
 import WorkbenchPanel from '@/components/workbench/WorkbenchPanel.vue'
 import ReasoningTimeline from '@/components/workbench/ReasoningTimeline.vue'
+import CanvasContainer from '@/components/workbench/CanvasContainer.vue'
 import { useChat } from '@/composables/useChat'
 import { useSelectionQuote } from '@/composables/useSelectionQuote'
 import { useWorkbench } from '@/composables/useWorkbench'
