@@ -1,95 +1,357 @@
 # MaxmaHere 交接文档
 
-## 任务背景
+> **写给完全没有上下文的新 Agent**：请通读本文档再动手。本文档是项目唯一权威的交接入口，覆盖项目全貌、已完成工作、生产级差距、下一步方向、必须避免的坑、必须遵守的命令规范。
 
-用户的目标是对自研 Agent 项目 `D:\Maxma\MaxmaHere` 做专业工程评审，并按评审结论持续优化。工作已从“评审发现问题”推进到两轮高优先级修复与长期记忆可靠性建设。
+---
 
-当前没有正在进行的实现任务。下一位接手者应先盘点现有工作区改动，再决定下一项优化；不要假设工作区干净。
+## 一、Maxma 是什么
 
-## 已完成工作
+MaxmaHere（简称 Maxma）是一个**本地优先的 AI 工作站**——在用户桌面运行的、以 LangGraph ReAct Agent 为核心的智能助手应用。它不是 Web SaaS，而是**打包成 Tauri 桌面应用**分发的本地软件，后端是 Python sidecar，前端是 Vue 3 SPA。
 
-### 第一轮：安全、兼容性与工程基线
+### 技术栈
 
-- 路径安全：修复 `tools/path_security.py` 的符号链接 / Windows junction（reparse point）逃逸风险。访问前应按真实路径校验，创建新文件时还需校验其父目录。
-- Python 与测试基线：修复 `agent/autonomy/runner.py` 中 Python 3.11 不支持的 f-string 语法；将会遮蔽标准库的本地 `platform` 包迁移为 `maxma_platform`，并扩展 `.github/workflows/pytest.yml` 覆盖 Python 3.11、3.13 与编译/关键静态检查。
-- API：`api/middleware/rate_limit.py` 的限流豁免收窄到 `GET` / `HEAD`，写操作重新受保护。
-- 聊天上下文：`agent/runtime_context.py` 对 Provider/MCP 配置文字施加数量、单项长度、总量限制，并清洗控制字符和结构分隔符，降低提示词污染与成本失控风险。
+| 层 | 技术 | 版本 |
+|---|---|---|
+| Agent 核心 | LangChain + LangGraph | LC >= 0.3 / LG >= 0.2 |
+| 后端 | FastAPI + uvicorn | >= 0.110 |
+| 前端 | Vue 3 + Vite 5 + Pinia + TypeScript | Vue ^3.4 |
+| 桌面壳 | Tauri 2 + Rust 2021 | v2.6.6 |
+| 持久化 | AsyncSqliteSaver (WAL) + SQLite | langgraph-checkpoint-sqlite |
+| 向量/RAG | ChromaDB + ONNX Runtime + transformers | paraphrase-multilingual-MiniLM-L12-v2 |
+| 打包 | PyInstaller (后端) + Tauri NSIS (桌面) | — |
+| Python | 3.13 (开发) / >= 3.11 (声明) | 隔离 .venv |
+| 测试 | pytest + asyncio(auto) | ~120 文件 / ~1246 用例 |
 
-### 第二轮：Agent 运行闭环与记忆一致性
+### 顶层目录结构
 
-- 委派：新增 `tools/sub_agent/delegation_context.py`。子 Agent 会继承父轮已选定的 Provider、模型、工具/路径权限、预算和审批策略；后台任务也走 Provider 故障转移，且不会因父会话后来打开自动审批而被提权。
-- Provider 故障转移：`agent/graph.py` 在切换至备用 Provider 后，工具调用后的续答会继续使用备用 Provider，避免跳回已失败的 Provider。
-- 记忆投影：`memory/episodic.py` 默认按 session 隔离；失败或取消的模型轮次不再投影到情景/长期记忆。`memory/narrative.py` 按 `(session_id, turn_id)` 持久去重，失败可重试而不会正常重复写入。
+```
+D:\Maxma\MaxmaHere\
+├── agent/              LangGraph Agent 核心（graph/planner/executor/coordinator/verifier/autonomy/stream_repair/lifecycle/persona/memory）
+├── api/                FastAPI 后端（routes/middleware/providers/db/security/transcript/bootstrap）
+├── memory/             记忆系统（narrative/episodic/semantic/ltm_outbox/rag/kb/pii_guard）
+├── tools/              16 个工具子包（git/files/memory/network/todo/sub_agent/system/config...）
+├── maxma_platform/    平台层（event_dedup/keep_alive）— 从 platform 重命名以避免标准库遮蔽
+├── config/             人设(personas/) + 贴纸(stickers/)
+├── web/                Vue 3 前端 SPA
+├── desktop/            Tauri 桌面壳（src-tauri/）
+├── build/              构建脚本（.bat/.ps1/.spec）
+├── tests/              测试套件（13 个子目录）
+├── docs/               架构文档（00-12 编号系列 + ROADMAP + superpowers/plans）
+├── dev_docs/           开发约定（git-conventions.md 等）
+├── anthropic_skills/   13 个内置 Skills
+├── scripts/            辅助脚本
+├── app_paths.py        路径常量集中点
+├── main.py             Python 入口
+├── version.py           版本号 (v2.6.6)
+├── pyproject.toml      Python 项目配置 + 依赖声明
+├── requirements-lock.txt  uv 锁定的完整依赖
+└── pytest.bat          测试入口（固定走 .venv）
+```
 
-### 第三部分：长期记忆事务 outbox
+### 核心架构
 
-为解决“完成账本无限增长”和“外部 YAML 写入后任务状态未完成导致重试语义重复”的问题，实现了：
+1. **Agent 图**：`planner → executor → agent ↔ tools`，带 HITL 计划确认、循环检测、Provider 故障转移
+2. **记忆系统**：4 层——工作记忆(Push 注入) / 情景记忆(session 隔离) / 语义记忆(事实三元组) / 长期记忆(LTM，经事务 outbox 写入 memory.yaml)
+3. **人设系统**：三层结构（Identity/Yuan/Ishiki），yuan 模板输出 `<mood>` 内部状态标签（由 `_strip_mood_tags` 在 agent_node 返回前剥离）
+4. **自治层**：可选的后台自诊断 + 自改进 Agent（默认关闭）
+5. **桌面集成**：Tauri 管理后端 sidecar 生命周期（Job Object 继承 + 端口选择 + 健康检查）
 
-- `memory/ltm_outbox.py`：SQLite 事务 outbox、租约、失败退避、取消后的即时重排、持久去重。
-- 完成记录按数量/时间保留并压缩归档，且不会删除 `pending` / `claimed` 工作项。
-- `memory/narrative.py`：YAML 原子落盘、目标级单写者租约、fencing token。旧 worker 即使失租或被取消，也不能覆盖新 owner 的 YAML、完成任务或影响新 owner。
-- 受控 YAML 操作在“YAML 已成功写入、但 outbox 尚未标记完成”后重放时不会重复应用。
+---
 
-关键路径：
+## 二、已完成工作
 
-- `memory/ltm_outbox.py`
-- `memory/memory_manager.py`
-- `memory/narrative.py`
-- `memory/episodic.py`
-- `agent/graph.py`
-- `tools/sub_agent/delegation_context.py`
+### 2.1 Halo 启发增强（两轮，共 24 个 Task）
 
-## 已创建提交
+参考开源项目 Halo 2.1.12 的设计，完成了两轮增强：
 
-唯一由本轮工作创建的提交是：
+**第一轮：架构层增强（13 Task，已全部合并）**
+- Disposable 资源管理（`agent/lifecycle/disposable.py`）
+- 启动分层（`api/bootstrap/idle_queue.py`，Tier 3 空闲任务队列）
+- 事件去重缓存（`maxma_platform/event_dedup.py`，TTL + FIFO）
+- 凭据掩码统一层（`api/security/credential_mask.py`）
+- JSONL Transcript（`api/transcript/jsonl_writer.py`）
+- 调度器指数退避（连续失败 5 次自动禁用，封顶 24h）
 
-`0d2764d feat(memory): add durable transactional LTM outbox`
+**第二轮：功能性增强（11 Task，已全部合并）**
+- 流式修复管道（`agent/stream_repair/`）：空 turn 占位 + tool JSON 修复 + usage 回填
+- report_to_user 完成信号（`agent/autonomy/completion_signal.py`）：后台 run 唯一权威完成信号 + 自动 continue 10 次
+- Escalation run 边界（`agent/autonomy/escalation.py`）：headless 后台任务请求用户输入
+- 工作记忆 Push 注入（`agent/memory/working_memory.py`）：双层 # now + # History
+- Keep-alive TTL 安全网（`maxma_platform/keep_alive.py`）：24h 惰性剪枝孤儿 reason
 
-该提交严格只包含以下 5 个文件，不包含任何其他工作区变更：
+### 2.2 工程评审修复（三轮）
 
-- `memory/ltm_outbox.py`
-- `memory/memory_manager.py`
-- `memory/narrative.py`
-- `tests/test_memory/test_ltm_outbox.py`
-- `tests/test_memory/test_narrative.py`
+- **安全基线**：`platform` → `maxma_platform` 重命名消除标准库遮蔽；`path_security` 修复 reparse point 逃逸；`rate_limit` 豁免收窄到 GET/HEAD；`runtime_context` 配置文字限长
+- **Agent 闭环**：`delegation_context` 子 Agent 权限继承；`graph.py` Provider 故障转移续答；`episodic` session 隔离 + 失败轮次不投影
+- **长期记忆事务**：`memory/ltm_outbox.py` outbox + 租约 + fencing token；YAML 原子替换 + 单写者
 
-该提交仅在本地，未推送远端。
+### 2.3 Bug 修复（最新）
 
-## 验证证据
+- **mood 标签泄漏**：`yuan_default.md` 人格模板输出的 `<mood>` 标签未剥离，泄漏到用户回复。修复：`agent/graph.py` 添加 `_strip_mood_tags()`
+- **LTM 401 无限重试**：CRUD agent 遇 401 认证错误无限重试。修复：`memory/narrative.py` 添加 `_is_unrecoverable_error()` + `_MAX_LTM_RETRIES=5`
 
-此前两轮完整/关键验证结果：
+### 2.4 工作区整理
 
-- 第一轮：后端全量测试 `1255 passed, 9 skipped`；Python 3.11 编译、前端类型检查、关键静态检查和差异格式检查通过。
-- 第二轮：后端全量测试 `1288 passed, 9 skipped`；Python 编译、前端类型检查和差异格式检查通过。
-- 长期记忆提交：格式化、Ruff、编译、差异检查通过；outbox 测试 17 项及关键 narrative 测试 3 项通过。
+- 清理 13 个已完成计划文档 + 过时 CODE_REVIEW.md + 编译产物
+- 完善 `.gitignore`：`dist-portable/`、`/resources/`、`*.exe`
+- 全量回归测试：1246 passed / 0 failed / 9 skipped（零回归）
 
-注意：在该 Windows 环境中，直接运行某些“全量 `pytest -q`”命令会长时间无输出并超时。验证时曾以按模块/目录分组的方式替代，分组结果通过。下次运行测试时应先使用带进度或超时的命令定位慢组，不能把“无输出超时”简单报告成测试失败，也不要无限等待。
+---
 
-## 工作区状态与提交纪律
+## 三、距离生产级的差距
 
-工作区仍有大量早于上述提交的既有改动、未跟踪源码和构建产物，它们**不属于** `0d2764d`。此外，`maxma_platform` 重命名相关有 3 个无关的已暂存文件。
+### 3.1 已达到生产级标准的部分
 
-因此：
+- ✅ Agent 核心图（planner/executor/agent/tools）稳定，经充分测试
+- ✅ 记忆系统 4 层架构完整，事务 outbox 保证一致性
+- ✅ Provider 故障转移 + 循环检测 + HITL 审批网关
+- ✅ 桌面打包流程（PyInstaller + Tauri NSIS）可用
+- ✅ 测试覆盖率高（~1246 用例，零回归）
+- ✅ 路径安全 + 凭据掩码 + XSS 防护
 
-- 不得执行 `git add -A`、`git commit -a` 或任何会把全部暂存区带入提交的命令。
-- 新提交必须先审查 `git status` 与 `git diff --cached`，并使用 `git commit --only <精确文件路径...>` 保证提交边界。
-- 不要回滚或清理不属于当前任务的改动；先确认其归属和用途。
-- 前端 `pnpm` 类型检查曾生成未跟踪文件；运行后必须复查 `git status`，不要误提交生成物。
+### 3.2 仍有差距的部分
 
-## 建议的下一步
+| 差距 | 严重度 | 说明 |
+|---|---|---|
+| LTM 错误处理仍需打磨 | 中 | 已修复 401 无限重试和最大重试限制，但连接错误（网络不可达）的处理策略仍是简单放弃，理想情况应区分暂时性错误和永久性错误 |
+| Feature flag 未充分验证 | 中 | `coordinator_enabled`/`verifier_enabled`/`stream_repair_enabled` 等默认关闭的特性，未在真实使用场景中充分验证 |
+| Provider 配置用户体验 | 中 | 用户配置的 API key 无效时，LTM 后台 agent 静默失败，前端无明确提示 |
+| 打包体积 | 低 | maxma-server.exe 201MB + Playwright Chromium 688MB + ONNX 模型 448MB，总便携版 ~1.7GB |
+| Node 版本未锁定 | 低 | web/ 无 .nvmrc 或 engines 字段 |
+| Rust 版本未锁定 | 低 | 无 rust-toolchain.toml |
 
-1. 盘点 `git status`、未跟踪文件与暂存区，将每项归属为用户历史改动、已完成但未提交的修复、生成物或待删除物；在未确认前不批量暂存。
-2. 解决全仓 Ruff 遗留问题，并为 API 慢测试建立可见进度、分组或超时诊断，稳定 CI 的全量基线。
-3. 在已有 session 隔离与 outbox 基础上，评审下一代“结构化记忆投影”设计：明确事件 schema、幂等键、投影版本、重放/迁移策略及可观测性，再实施。不要直接扩充自由文本记忆逻辑。
+---
 
-## 绝对不要再踩的坑
+## 四、下一步方向
 
-- Windows 上 SQLite 连接不能只依赖 `with sqlite3.connect(...)`：异常/提前返回路径必须确认连接实际 `close()`，否则会保留文件锁并让后续测试或 worker 卡住。
-- 外部 YAML/文件写入是跨系统副作用，不等于跨 SQLite + 文件系统的 ACID 事务；必须通过 outbox、幂等操作和重放语义处理崩溃窗口。
-- 仅有 lease 不足以保证正确性：没有 fencing token 的旧 owner 可在租约失效后继续写入，覆盖新 owner 的结果。
-- `asyncio.CancelledError` 不应假设会被 `except Exception` 捕获；取消路径必须显式处理并安全释放/重排工作。
-- 禁止直接覆盖 YAML：使用原子临时文件替换，并在并发写入下配合目标级单写者控制。
-- 不要忽略无 `turn_id` 的旧调用路径：需要保留明确的 legacy 兼容行为，并防止它与新幂等键语义冲突。
-- 全量 `pytest -q` 在本环境无输出挂起时，改用带进度的分组执行来定位；不要无限等待或据此误判全部测试失败。
-- `pnpm` 类型检查可能产生未跟踪文件，验证后必须检查工作区。
-- 提交必须用 `git commit --only` 和精确路径；绝不能 `git add -A`，尤其是在这个长期脏工作区中。
+### 高优先级
+
+1. **LTM 错误处理精细化**：区分暂时性错误（网络抖动，应重试）和永久性错误（认证失败，应跳过），对暂时性错误实施指数退避而非直接放弃
+2. **Provider 健康度反馈**：当 LTM agent 因 API key 无效失败时，在前端或日志中给出明确诊断，而非静默失败
+3. **Feature flag 逐步开启验证**：制定计划逐步开启 `stream_repair_enabled`（对国产模型用户最有价值）→ `coordinator_enabled` → `verifier_enabled`，每步收集稳定性数据
+
+### 中优先级
+
+4. **打包体积优化**：评估是否可以按需下载 Playwright/ONNX 模型，而非全量打包
+5. **Node/Rust 版本锁定**：添加 `.nvmrc` 和 `rust-toolchain.toml`
+6. **前端错误展示**：将后端错误分类传递到前端，区分网络错误/认证错误/服务不可用
+
+### 低优先级
+
+7. **自治层启用验证**：在 `autonomy_enabled=False` 前提下充分测试后，逐步开启自改进
+8. **CRAG 检索分级**：`crag_enabled` 默认关闭，需评估检索准确率提升效果
+
+---
+
+## 五、绝对不能再踩的坑
+
+### 5.1 环境与依赖
+
+| 坑 | 后果 | 正确做法 |
+|---|---|---|
+| **用全局 Python 跑测试** | ImportError（缺依赖） | 用 `pytest.bat` 或 `.venv\Scripts\python.exe -m pytest` |
+| **混合 Python 版本到全局 site-packages** | 扩展模块兼容性崩溃 | 用隔离的 `.venv`（Python 3.13） |
+| **使用 Python 3.11 不支持的 f-string 语法** | CI 3.11 矩阵编译失败 | CI 覆盖 3.11 + 3.13，语法必须两者兼容 |
+| **使用 `platform` 作为本地包名** | 遮蔽标准库，zstandard/httpx 崩溃 | 已迁移为 `maxma_platform`，不要改回 |
+| **嵌入式 Python 未设置 PIP_TARGET / 未移除 PYTHONUSERBASE** | 外部包污染打包环境 | 按打包脚本中的环境变量设置执行 |
+| **`tools/interaction/__init__.py` 为空** | PyInstaller 漏掉子模块 | 用 `collect_submodules("tools")` 或显式 hiddenimports |
+
+### 5.2 网络与代理
+
+| 坑 | 后果 | 正确做法 |
+|---|---|---|
+| **本地代理(Clash/V2Ray)拦截 127.0.0.1:8000 请求** | Tauri 健康检查假失败，app 闪退 | Tauri + Python sidecar 必须设 `NO_PROXY=127.0.0.1,localhost,::1`；健康检查用 `reqwest` 的 `.no_proxy()` |
+| **ONNX 模型从 HuggingFace 下载** | WattToolkit 代理返回 401 | 必须用 ModelScope.cn 源 |
+| **构建脚本输出中文** | GBK 控制台编码问题 | 构建脚本（bat/ps1）必须英文输出 |
+
+### 5.3 测试
+
+| 坑 | 后果 | 正确做法 |
+|---|---|---|
+| **Windows 上 `pytest -q` 全量无输出挂起** | 误判为测试失败 | 按目录分组执行：`pytest.bat tests/test_memory -v` |
+| **Windows SQLite 连接不显式 close** | 文件锁残留，后续测试卡住 | 异常/提前返回路径必须显式 `close()` |
+| **模块级 mock 用 sys.modules 注入不清理** | 永久状态污染 | 用 try/finally 保存并还原原始模块属性 |
+| **测试参数钳制导致断言失败** | 如 `ttl_seconds=0.05` 被 `max(1.0, ...)` 钳制 | 实现代码不要无原则钳制参数，直接赋值 |
+
+### 5.4 提交纪律
+
+| 坑 | 后果 | 正确做法 |
+|---|---|---|
+| **`git add -A` / `git commit -a`** | 工作区长期脏（构建产物/用户改动），会污染提交边界 | 用 `git add <精确路径>` 或 `git commit --only <精确路径>` |
+| **pnpm 类型检查后未复查 git status** | 误提交生成物 | 验证后复查 `git status` |
+| **回滚非本任务的改动** | 丢失他人工作 | 先确认归属和用途 |
+
+### 5.5 数据一致性
+
+| 坑 | 后果 | 正确做法 |
+|---|---|---|
+| **跨 SQLite + 文件系统直接写 YAML** | 崩溃窗口数据丢失 | 必须经 outbox + 幂等操作 + 重放语义 |
+| **只有 lease 没有 fencing token** | 旧 owner 覆盖新 owner | 必须配合 fencing token |
+| **`asyncio.CancelledError` 不被 `except Exception` 捕获** | 取消路径泄漏资源 | 显式处理 `CancelledError` |
+| **Chromadb metadata 值为嵌套 dict** | upsert 失败，零索引块 | metadata 值必须是标量(str/int/float/bool/None) |
+| **LTM CRUD agent 遇 401 无限重试** | 4 分钟 30 条相同错误日志 | 已修复：`_is_unrecoverable_error()` + `_MAX_LTM_RETRIES=5` |
+
+---
+
+## 六、必须遵守的命令规范
+
+### 6.1 测试
+
+```cmd
+# 标准入口（内部固定走 .venv）
+pytest.bat
+
+# 按目录执行（推荐，避免全量挂起）
+pytest.bat tests/test_memory -v
+pytest.bat tests/test_agent -v
+
+# 直接调用 venv
+.venv\Scripts\python.exe -m pytest tests/test_memory -v
+
+# 静态检查（CI 必跑）
+.venv\Scripts\python.exe -m ruff check --select=E9,F63,F7 agent api config maxma_platform memory tools tests
+
+# 编译检查（CI 必跑）
+.venv\Scripts\python.exe -m compileall -q agent api config maxma_platform memory tools
+```
+
+### 6.2 构建
+
+```cmd
+# 完整桌面打包（严格 4 步，不可跳步/乱序）
+build\build-desktop.bat
+
+# 仅后端 sidecar
+build\build-server.bat
+
+# PyInstaller 直接打包
+.venv\Scripts\python.exe -m PyInstaller build\maxma-server.spec --clean --noconfirm
+
+# 部署到 dist-portable
+copy /y "dist\maxma-server.exe" "dist-portable\maxma-server.exe"
+copy /y "dist\maxma-server.exe" "desktop\src-tauri\binaries\maxma-server-x86_64-pc-windows-msvc.exe"
+
+# 前端构建
+cd web && npm run build
+```
+
+**构建 4 步顺序**（`build-desktop.bat` 内部执行）：
+1. `build-server.bat`（PyInstaller 打包 + 冒烟测试）
+2. `prepare-runtime.ps1`（Node.js + Python embeddable + uv）
+3. `prepare-assets.ps1`（Playwright Chromium + ONNX 模型，**模型源必须是 ModelScope.cn**）
+4. `cargo tauri build`
+
+### 6.3 运行
+
+```cmd
+# 一键启动（双服务）
+start.bat
+
+# 后端单独
+.venv\Scripts\python.exe main.py web
+
+# 前端单独
+cd web && npm run dev
+```
+
+### 6.4 Git 提交
+
+```cmd
+# 提交前必查
+git status
+git diff --cached
+
+# 精确路径提交（不要 git add -A）
+git add <精确文件路径>
+git commit -m "type: subject" -m "body"
+
+# 推送
+git push
+
+# 创建 PR
+gh pr create
+gh pr merge --squash --delete-branch
+```
+
+**Conventional Commits 类型**：`feat/fix/hotfix/refactor/perf/docs/chore/test/exp/release`
+**分支命名**：`<type>/<short-desc>`（如 `feature/openhanako-alignment`）
+**详细规范**：`dev_docs/conventions/git-conventions.md`
+
+### 6.5 依赖管理
+
+```cmd
+# 更新锁文件（需要 uv）
+update-lock.bat
+
+# 锁文件生成原理
+uv pip compile pyproject.toml --extra dev -o requirements-lock.txt
+```
+
+---
+
+## 七、Feature Flag 清单
+
+所有 flag 定义在 `config/settings.py`。
+
+### 默认关闭（需显式开启）
+
+| Flag | 默认 | 含义 |
+|---|---|---|
+| `coordinator_enabled` | False | 编排层意图路由协调者 |
+| `verifier_enabled` | False | 答案充分性验证 |
+| `delegation_scope_enforced` | False | 子Agent委派范围强制 |
+| `crag_enabled` | False | CRAG 检索分级 |
+| `autonomy_enabled` | False | 自治层周期诊断 |
+| `autonomy_self_improve_enabled` | False | 自治Agent创建/更新Skills |
+| `stream_repair_enabled` | False | 流式响应修复管道 |
+| `mcp_force_tls` | False | 生产模式强制HTTPS/WSS |
+
+### 默认开启
+
+| Flag | 默认 | 含义 |
+|---|---|---|
+| `executor_enable_by_default` | True | plan-and-execute 默认启用 |
+| `sandbox_network_isolation` | True | Python 沙箱网络隔离 |
+| `approval_gateway_enabled` | True | LLM 审批网关 |
+| `mcp_rate_limit_enabled` | True | MCP 调用速率限制 |
+| `persistence_enabled` | True | SQLite 持久化 checkpointer |
+| `loop_detection_enabled` | True | 死循环检测（阈值 3 次） |
+
+### 自治层工具白名单
+
+即使 `autonomy_self_improve_enabled=True`，自治 Agent 仅允许：
+- `manage_skills`（创建/更新 Skills）
+- 只读工具：`system_diagnose` / `rag_diagnose` / `file_read` / `project_info` / `list_memories`
+
+---
+
+## 八、关键工程约定
+
+1. **路径安全**：文件工具必须用绝对路径，经 `check_path_access()` 校验（先 MaxmaBlocker、后白名单）
+2. **并发安全**：WebSocket registry/session 管理用 thread/async 锁；全局 async 状态用 `asyncio.Lock`；健康监控用 `threading.Lock`
+3. **数据库**：初始化必须含版本控制保证幂等；会话持久化用 `AsyncSqliteSaver` + WAL，不可用时回退 `MemorySaver`
+4. **YAML 写入**：必须用原子临时文件替换（`yaml_store.py` 的 `dump_yaml_atomic`），并发下配合单写者
+5. **Vue 渲染**：必须用模板渲染，禁用 `v-html` 处理动态内容（防 XSS）
+6. **Tauri capabilities**：不得包含未识别权限
+7. **健康状态词汇**：统一 `ok` / `degraded` / `error`
+8. **Scheduler**：必须用 `asyncio.get_running_loop()`，不得用 `asyncio.get_event_loop()`
+9. **PyInstaller spec**：必须显式 `hiddenimports` 函数体内导入的模块 + `collect_submodules("tools")`
+10. **路径常量**：集中在 `app_paths.py`，不要散落
+
+---
+
+## 九、当前状态快照
+
+| 项 | 值 |
+|---|---|
+| 分支 | `feature/openhanako-alignment` |
+| 远程 | `https://github.com/Libai-88/Maxma` |
+| 最新 commit | `3e02558` fix: add max retry limit for LTM CRUD agent |
+| 版本 | v2.6.6 |
+| 测试 | 1246 passed / 0 failed / 9 skipped |
+| 便携版 | `dist-portable/` 就绪（MaxmaHere.exe 25MB + maxma-server.exe 201MB + resources ~1.5GB） |
+| 工作区 | 干净（`git status` 无输出） |
+
+---
+
+*最后更新：2026-07-10*
