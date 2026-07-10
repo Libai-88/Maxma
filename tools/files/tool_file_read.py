@@ -5,6 +5,7 @@ import os
 from pydantic import BaseModel, Field
 
 from tools.base import ToolBase, check_path_access, format_error, format_success, register_tool
+from tools.path_security import resolve_path_for_access
 
 # 修复：无大小限制 → 读取 100MB 日志文件会撑爆 LLM 上下文窗口且消耗大量内存。
 # 1MB 上限对大多数代码/配置文件足够；超大文件应提示用户用 file_search 精确查找。
@@ -36,6 +37,8 @@ class FileReadTool(ToolBase):
         err = check_path_access(file_path)
         if err:
             return format_error(err)
+
+        file_path = resolve_path_for_access(file_path)
 
         if not os.path.exists(file_path):
             return format_error(f"文件不存在: {file_path}")

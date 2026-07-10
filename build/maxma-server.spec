@@ -293,6 +293,12 @@ hiddenimports = [
     "agent.capability_policy",
     "agent.llm_reviewer",
     "agent.execution_lease",
+    # 自治层（scheduler/runner/diagnostics 在 lifespan 和路由中延迟导入，
+    # PyInstaller 静态分析会遗漏；scheduler.py 内部还延迟导入 runner）
+    "agent.autonomy",
+    "agent.autonomy.scheduler",
+    "agent.autonomy.runner",
+    "agent.autonomy.diagnostics",
 
     # ── Memory 模块 ──
     "memory.memory_manager",

@@ -6,6 +6,7 @@ import os
 from pydantic import BaseModel, Field
 
 from tools.base import ToolBase, check_path_access, format_error, format_success, register_tool
+from tools.path_security import resolve_path_for_access
 
 
 class FileSearchInput(BaseModel):
@@ -77,10 +78,20 @@ class FileSearchTool(ToolBase):
         if err:
             return format_error(err)
 
+        directory_path = resolve_path_for_access(directory_path)
+
         items = []
         for item in os.listdir(directory_path):
             item_path = os.path.join(directory_path, item)
-            st = os.stat(item_path)
+            # 目录本身在白名单内不代表其子项链接的真实落点也在白名单内。
+            # 跳过这类链接，避免通过目录枚举或递归搜索泄露目录外元数据。
+            if check_path_access(item_path):
+                continue
+            item_path = resolve_path_for_access(item_path)
+            try:
+                st = os.stat(item_path)
+            except OSError:
+                continue
             items.append({
                 "name": item,
                 "path": item_path,
@@ -116,6 +127,8 @@ class FileSearchTool(ToolBase):
         if err:
             return format_error(err)
 
+        directory = resolve_path_for_access(directory)
+
         if not os.path.exists(directory):
             return format_error(f"搜索目录不存在: {directory}")
 
@@ -126,6 +139,9 @@ class FileSearchTool(ToolBase):
         )
         found = []
         for fp in glob.glob(search_path, recursive=recursive):
+            if check_path_access(fp):
+                continue
+            fp = resolve_path_for_access(fp)
             if file_filter == "files_only" and not os.path.isfile(fp):
                 continue
             if file_filter == "directories_only" and not os.path.isdir(fp):
@@ -137,7 +153,10 @@ class FileSearchTool(ToolBase):
             ):
                 continue
 
-            st = os.stat(fp)
+            try:
+                st = os.stat(fp)
+            except OSError:
+                continue
             found.append({
                 "path": fp,
                 "name": os.path.basename(fp),

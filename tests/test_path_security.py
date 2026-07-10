@@ -11,6 +11,7 @@ other dependencies that may be broken in the test environment).
 import builtins
 import importlib.util
 import os
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -60,6 +61,39 @@ def _create_blocker(directory: Path, name: str = "MaxmaBlocker") -> Path:
     blocker = directory / name
     blocker.write_text("", encoding="utf-8")
     return blocker
+
+
+def _create_directory_link(link: Path, target: Path) -> None:
+    """Create a directory symlink, skipping where the host forbids it.
+
+    Windows may require Developer Mode or a privilege for symlink creation.  The
+    production check still covers its junction/reparse-point behaviour through
+    ``realpath``; this test is skipped only when the test host cannot create a
+    link fixture at all.
+    """
+    try:
+        os.symlink(target, link, target_is_directory=True)
+        return
+    except (NotImplementedError, OSError) as exc:
+        symlink_error = exc
+
+    # A directory junction is the common unprivileged reparse point on Windows.
+    # It exercises the same production ``realpath`` defence when Developer Mode
+    # is unavailable and ``os.symlink`` therefore fails.
+    if os.name == "nt":
+        command = f'mklink /J "{link}" "{target}"'
+        result = subprocess.run(
+            # ``link`` and ``target`` are pytest-created paths, not user input.
+            # shell=True is needed here because ``mklink`` is a cmd built-in.
+            command,
+            shell=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            return
+
+    pytest.skip(f"directory links are unavailable on this host: {symlink_error}")
 
 
 # ====================================================================
@@ -238,6 +272,53 @@ class TestCheckPathWhitelisted:
         assert result is not None
         assert "\u767d\u540d\u5355\u4e3a\u7a7a" in result
 
+    def test_symlink_to_outside_is_blocked(self, tmp_path, monkeypatch):
+        """A link under an allowed directory cannot expose an outside file."""
+        allowed = tmp_path / "allowed"
+        outside = tmp_path / "outside"
+        allowed.mkdir()
+        outside.mkdir()
+        secret = outside / "secret.txt"
+        secret.write_text("secret", encoding="utf-8")
+        _create_directory_link(allowed / "linked_outside", outside)
+
+        monkeypatch.setattr(
+            ps, "_load_path_whitelist", lambda: [(str(allowed), True)]
+        )
+
+        result = check_path_whitelisted(str(allowed / "linked_outside" / "secret.txt"))
+        assert result is not None
+        assert "\u4e0d\u5728\u767d\u540d\u5355\u4e2d" in result
+
+    def test_new_file_below_symlink_to_outside_is_blocked(self, tmp_path, monkeypatch):
+        """A not-yet-created file still resolves existing linked parents."""
+        allowed = tmp_path / "allowed"
+        outside = tmp_path / "outside"
+        allowed.mkdir()
+        outside.mkdir()
+        _create_directory_link(allowed / "linked_outside", outside)
+
+        monkeypatch.setattr(
+            ps, "_load_path_whitelist", lambda: [(str(allowed), True)]
+        )
+
+        result = check_path_whitelisted(str(allowed / "linked_outside" / "new.txt"))
+        assert result is not None
+
+    def test_link_to_an_allowed_location_remains_allowed(self, tmp_path, monkeypatch):
+        """Canonicalisation does not reject safe links within the allowlist."""
+        allowed = tmp_path / "allowed"
+        destination = allowed / "destination"
+        allowed.mkdir()
+        destination.mkdir()
+        _create_directory_link(allowed / "linked_inside", destination)
+
+        monkeypatch.setattr(
+            ps, "_load_path_whitelist", lambda: [(str(allowed), True)]
+        )
+
+        assert check_path_whitelisted(str(allowed / "linked_inside" / "new.txt")) is None
+
 
 # ====================================================================
 # check_path_access
@@ -286,6 +367,23 @@ class TestCheckPathAccess:
 
         assert check_path_access(str(allowed)) is None
 
+    def test_link_to_blocked_destination_checks_real_ancestors(self, tmp_path, monkeypatch):
+        """A blocker at a link destination cannot be bypassed via its alias."""
+        allowed = tmp_path / "allowed"
+        outside = tmp_path / "outside"
+        allowed.mkdir()
+        outside.mkdir()
+        _create_blocker(outside)
+        _create_directory_link(allowed / "linked_outside", outside)
+
+        monkeypatch.setattr(
+            ps, "_load_path_whitelist", lambda: [(str(tmp_path), True)]
+        )
+
+        result = check_path_access(str(allowed / "linked_outside" / "new.txt"))
+        assert result is not None
+        assert "MaxmaBlocker" in result
+
 
 # ====================================================================
 # get_safe_builtins
@@ -324,6 +422,22 @@ class TestGetSafeBuiltins:
         """open() is replaced with the whitelisted wrapper."""
         safe = get_safe_builtins()
         assert safe["open"] is ps._whitelisted_open
+
+    def test_open_uses_resolved_path_after_validation(self, tmp_path, monkeypatch):
+        """The safe open wrapper must not reopen the unchecked link alias."""
+        allowed = tmp_path / "allowed"
+        outside = tmp_path / "outside"
+        allowed.mkdir()
+        outside.mkdir()
+        secret = outside / "secret.txt"
+        secret.write_text("secret", encoding="utf-8")
+        _create_directory_link(allowed / "linked_outside", outside)
+        monkeypatch.setattr(
+            ps, "_load_path_whitelist", lambda: [(str(allowed), True)]
+        )
+
+        with pytest.raises(PermissionError):
+            ps._whitelisted_open(allowed / "linked_outside" / "secret.txt")
 
     def test_builtins_key_is_self_referencing(self):
         """__builtins__ in the returned dict points to the dict itself."""

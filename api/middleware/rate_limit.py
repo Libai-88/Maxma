@@ -190,7 +190,32 @@ class TokenBucketRegistry:
 
 # 不限流的路径（健康检查、静态资源等）
 _RATE_LIMIT_SKIP_PATHS = {"/api/health", "/api/auth/token", "/favicon.ico"}
-_RATE_LIMIT_SKIP_PREFIXES = ("/assets/", "/static/", "/api/stickers")
+_RATE_LIMIT_SKIP_PREFIXES = (
+    "/assets/",
+    "/static/",
+    "/api/stickers",
+    # 前端启动时并发加载的只读列表查询，不应被限流
+    # 否则 capacity=10/60s 会导致部分 load 请求 429，菜单显示"无匹配"
+    "/api/tools",
+    "/api/skills",
+    "/api/macros",
+    "/api/providers",
+    "/api/sessions",
+    "/api/personas",
+    "/api/persona",
+    "/api/narrative",
+    "/api/moment",
+    "/api/memories",
+    "/api/news",
+    "/api/path-whitelist",
+    "/api/maxma-blocker",
+    "/api/env-vars",
+    "/api/deepseek-balance",
+    "/api/metrics",
+    "/api/audit-log",
+    "/api/activity",
+    "/api/diagnostics",
+)
 
 
 class RateLimitMiddleware:
@@ -226,9 +251,12 @@ class RateLimitMiddleware:
 
         path = scope.get("path", "")
 
-        # 跳过不限流的路径
-        if path in _RATE_LIMIT_SKIP_PATHS or any(
-            path.startswith(p) for p in _RATE_LIMIT_SKIP_PREFIXES
+        # 只读请求才可跳过限流。路径前缀本身不足以表达安全性：同一路由
+        # 可能同时提供 GET 查询和 POST/PUT/DELETE 写操作，后者必须消耗配额。
+        method = scope.get("method", "GET").upper()
+        if method in {"GET", "HEAD"} and (
+            path in _RATE_LIMIT_SKIP_PATHS
+            or any(path.startswith(p) for p in _RATE_LIMIT_SKIP_PREFIXES)
         ):
             return await self.app(scope, receive, send)
 

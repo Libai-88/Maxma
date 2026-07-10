@@ -6,6 +6,7 @@ import shutil
 from pydantic import BaseModel, Field
 
 from tools.base import ToolBase, check_path_access, format_error, format_success, register_tool
+from tools.path_security import resolve_path_for_access
 
 
 class FileManageInput(BaseModel):
@@ -114,6 +115,8 @@ class FileManageTool(ToolBase):
         err = self._check(directory_path)
         if err:
             return err
+
+        directory_path = resolve_path_for_access(directory_path)
 
         os.makedirs(directory_path, exist_ok=True)
         return format_success({

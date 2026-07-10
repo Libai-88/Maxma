@@ -16,7 +16,7 @@ from agent.autonomy.completion_signal import (
 )
 from agent.autonomy.escalation import EscalationStore, ESCALATION_TIMEOUT_HOURS
 from agent.memory.working_memory import WorkingMemoryStore
-from platform.keep_alive import KeepAliveManager
+from maxma_platform.keep_alive import KeepAliveManager
 
 
 @pytest.fixture(autouse=True)
@@ -38,7 +38,7 @@ def test_all_functional_modules_importable():
     import agent.autonomy.completion_signal
     import agent.autonomy.escalation
     import agent.memory.working_memory
-    import platform.keep_alive
+    import maxma_platform.keep_alive
 
 
 def test_stream_repair_pipeline_fixes_glm_empty_turn():

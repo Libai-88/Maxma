@@ -4,12 +4,15 @@ import asyncio
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock
+from types import SimpleNamespace
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from agent.context_manager import (
     _summarize_old_messages,
+    commit_to_episodic,
     maybe_trim_checkpoint,
+    retrieve_from_episodic,
     should_trim_context,
 )
 
@@ -137,6 +140,82 @@ class TestSummarizeOldMessages:
 
         assert r"C:\work\foo.py" in summary
         assert r"- C:\a" not in summary
+
+
+class TestEpisodicCommit:
+    @pytest.mark.asyncio
+    async def test_commits_checkpoint_with_turn_identifiers(self):
+        graph = MagicMock()
+        graph.aget_state = AsyncMock(
+            return_value=SimpleNamespace(
+                values={
+                    "messages": [
+                        HumanMessage(content="帮我检查这个项目"),
+                        AIMessage(content="我会先查看结构。"),
+                    ]
+                }
+            )
+        )
+        episodic_mm = MagicMock()
+        episodic_mm.add_episode.return_value = "ep_1234"
+
+        episode_id = await commit_to_episodic(
+            graph,
+            {"configurable": {"thread_id": "session-1"}},
+            episodic_mm,
+            session_id="session-1",
+            turn_id="turn-1",
+        )
+
+        assert episode_id == "ep_1234"
+        episodic_mm.add_episode.assert_called_once()
+        kwargs = episodic_mm.add_episode.call_args.kwargs
+        assert kwargs["session_id"] == "session-1"
+        assert kwargs["turn_id"] == "turn-1"
+        assert kwargs["message_count"] == 2
+
+    @pytest.mark.asyncio
+    async def test_commit_failure_is_contained(self, caplog):
+        graph = MagicMock()
+        graph.aget_state = AsyncMock(
+            return_value=SimpleNamespace(values={"messages": [HumanMessage(content="x")]})
+        )
+        episodic_mm = MagicMock()
+        episodic_mm.add_episode.side_effect = OSError("disk unavailable")
+
+        result = await commit_to_episodic(
+            graph,
+            {"configurable": {"thread_id": "session-1"}},
+            episodic_mm,
+            session_id="session-1",
+            turn_id="turn-1",
+        )
+
+        assert result is None
+        assert "session=session-1 turn=turn-1" in caplog.text
+
+
+class TestEpisodicRetrievalBoundary:
+    def test_automatic_retrieval_requires_current_session(self):
+        episodic_mm = MagicMock()
+
+        result = retrieve_from_episodic("历史问题", episodic_mm)
+
+        assert result == ""
+        episodic_mm.retrieve.assert_not_called()
+
+    def test_explicit_cross_session_retrieval_is_opt_in(self):
+        episodic_mm = MagicMock()
+        episodic_mm.retrieve.return_value = [
+            {"timestamp": "2026-07-10", "summary": "跨会话历史", "similarity": 0.9}
+        ]
+
+        result = retrieve_from_episodic(
+            "历史问题", episodic_mm, include_cross_session=True
+        )
+
+        assert "跨会话历史" in result
+        assert episodic_mm.retrieve.call_args.kwargs["session_id"] is None
 
 
 class TestMaybeTrimCheckpoint:

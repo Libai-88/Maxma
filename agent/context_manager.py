@@ -629,14 +629,22 @@ async def commit_to_episodic(
             message_count=message_count,
         )
         logger.info(
-            "[episodic] committed episode %s for thread %s (%d messages)",
+            "[episodic] committed episode %s for session=%s turn=%s thread=%s (%d messages)",
             episode_id,
+            session_id or "?",
+            turn_id or "?",
             config.get("configurable", {}).get("thread_id", "?"),
             message_count,
         )
         return episode_id
     except Exception as e:
-        logger.warning(f"[episodic] commit_to_episodic failed: {e}", exc_info=True)
+        logger.warning(
+            "[episodic] commit failed for session=%s turn=%s: %s",
+            session_id or "?",
+            turn_id or "?",
+            e,
+            exc_info=True,
+        )
         return None
 
 
@@ -644,6 +652,9 @@ def retrieve_from_episodic(
     query: str,
     episodic_mm,
     top_k: int = 3,
+    *,
+    session_id: str = "",
+    include_cross_session: bool = False,
 ) -> str:
     """按向量检索历史情景记忆，返回可读文本（供注入系统提示词）。
 
@@ -651,14 +662,23 @@ def retrieve_from_episodic(
         query: 检索查询文本（通常是用户最近一条消息）
         episodic_mm: EpisodicMemoryManager 实例
         top_k: 返回的最大结果数
+        session_id: 当前会话 ID。自动注入必须提供该值。
+        include_cross_session: 仅供有意的手动历史查询使用；默认 False。
 
     Returns:
         格式化的情景记忆文本；若无结果返回空字符串
     """
     if episodic_mm is None or not query:
         return ""
+    if not session_id and not include_cross_session:
+        logger.warning("[episodic] refusing unscoped automatic retrieval")
+        return ""
     try:
-        results = episodic_mm.retrieve(query=query, top_k=top_k)
+        results = episodic_mm.retrieve(
+            query=query,
+            top_k=top_k,
+            session_id=None if include_cross_session else session_id,
+        )
         if not results:
             return ""
         lines = ["## 相关历史对话"]

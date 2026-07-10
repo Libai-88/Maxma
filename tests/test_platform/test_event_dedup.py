@@ -1,7 +1,7 @@
 """事件去重缓存测试 — 应对 webhook 重试/文件监听爆发。"""
 import time
 import pytest
-from platform.event_dedup import EventDedupCache
+from maxma_platform.event_dedup import EventDedupCache
 
 
 def test_first_event_is_new():

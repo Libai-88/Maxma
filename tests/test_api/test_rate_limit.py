@@ -175,6 +175,14 @@ def rate_limit_app():
     async def health():
         return {"status": "healthy"}
 
+    @app.head("/api/health")
+    async def health_head():
+        return None
+
+    @app.post("/api/health")
+    async def mutate_health():
+        return {"status": "mutated"}
+
     app.add_middleware(RateLimitMiddleware, capacity=3, refill_rate=0.5)
     return app
 
@@ -219,11 +227,18 @@ class TestRateLimitMiddleware:
         assert "remaining" in err["details"]
 
     def test_health_path_skipped(self, rate_limit_client):
-        """/api/health 不限流。"""
-        # 健康检查可以连续调用超过容量
+        """/api/health 的 GET/HEAD 不限流。"""
+        # 只读健康检查可以连续调用超过容量。
         for _ in range(10):
             resp = rate_limit_client.get("/api/health")
             assert resp.status_code == 200
+            assert rate_limit_client.head("/api/health").status_code == 200
+
+    def test_write_method_on_skipped_path_is_still_limited(self, rate_limit_client):
+        """白名单路径只豁免 GET/HEAD，写方法仍然消耗令牌。"""
+        for _ in range(3):
+            assert rate_limit_client.post("/api/health").status_code == 200
+        assert rate_limit_client.post("/api/health").status_code == 429
 
     def test_different_ip_independent(self):
         """不同 IP 的限流独立（直接测试 TokenBucketRegistry）。"""

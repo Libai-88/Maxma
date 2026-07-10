@@ -23,6 +23,24 @@ from api.yaml_store import dump_yaml_atomic, load_yaml
 logger = logging.getLogger(__name__)
 
 
+def resolve_path_for_access(target_path: str | os.PathLike[str]) -> str:
+    """返回用于访问控制和文件操作的规范实际路径。
+
+    ``abspath()`` 和 ``normpath()`` 只能消除 ``..`` 等词法片段，不能识别
+    白名单目录中的符号链接或 Windows junction / 其他 reparse point。``realpath``
+    会解析路径中已存在的链接组件；即使目标文件尚未创建，也会解析其已存在的
+    父目录。因此新文件写入 ``allowed\\link\\new.txt`` 时会按 ``link`` 的真实
+    落点进行授权，而不是只按表面路径授权。
+
+    调用文件系统 API 时也应使用本函数的返回值，避免校验原路径后再通过链接
+    打开另一个位置。
+    """
+    path = os.fspath(target_path)
+    if isinstance(path, bytes):
+        path = os.fsdecode(path)
+    return os.path.normpath(os.path.realpath(os.path.abspath(path)))
+
+
 # ── 路径常量 ────────────────────────────────────────────────
 
 # 项目根目录：开发模式为项目根，打包模式为用户数据目录
@@ -75,7 +93,9 @@ def check_maxma_blocker(target_path: str) -> str | None:
     if not target_path:
         return None
 
-    abs_path = os.path.abspath(target_path)
+    # 检查真实落点的祖先目录。否则 ``allowed/link/secret`` 会只检查
+    # ``allowed`` 的 MaxmaBlocker，而跳过链接目标路径中的拒止锚。
+    abs_path = resolve_path_for_access(target_path)
     p = Path(abs_path)
 
     # 收集待检查的所有目录层级
@@ -296,7 +316,7 @@ def _load_path_whitelist() -> list[tuple[str, bool]]:
         result: list[tuple[str, bool]] = []
         for entry in entries:
             if isinstance(entry, dict) and "path" in entry:
-                normalized = os.path.normpath(os.path.abspath(entry["path"]))
+                normalized = resolve_path_for_access(entry["path"])
                 recursive = entry.get("recursive", True)
                 if isinstance(recursive, bool):
                     result.append((normalized, recursive))
@@ -356,7 +376,9 @@ def check_path_whitelisted(target_path: str) -> str | None:
     if not target_path:
         return None
 
-    abs_target = os.path.normpath(os.path.abspath(target_path))
+    # 对目标和白名单根目录都解析链接。只解析其中一边会在白名单目录本身是
+    # 链接时产生误判；两边都使用实际落点才能阻止经链接离开授权树。
+    abs_target = resolve_path_for_access(target_path)
     whitelist = _load_path_whitelist()
 
     if not whitelist:
@@ -372,6 +394,7 @@ def check_path_whitelisted(target_path: str) -> str | None:
     has_recursive_parent = False
 
     for allowed_prefix, recursive in whitelist:
+        allowed_prefix = resolve_path_for_access(allowed_prefix)
         # 去掉末尾分隔符，避免 root 路径（如 T:\）拼接 os.sep 产生双分隔符
         prefix_stripped = allowed_prefix.rstrip(os.sep)
         separator = prefix_stripped + os.sep
@@ -428,13 +451,14 @@ def _whitelisted_open(
     """
     import builtins as _real_builtins
 
-    # 仅对字符串路径进行检查，跳过已打开的文件描述符
+    # 仅对路径进行检查，跳过已打开的文件描述符。
     file_str = file
     if isinstance(file, os.PathLike):
         file_str = os.fspath(file)
-    if isinstance(file_str, str):
+    if isinstance(file_str, (str, bytes)):
+        safe_path = resolve_path_for_access(file_str)
         # 1. MaxmaBlocker 优先
-        blocked = check_maxma_blocker(file_str)
+        blocked = check_maxma_blocker(safe_path)
         if blocked:
             raise PermissionError(
                 "🚫 安全阻断：操作已被 MaxmaBlocker 阻断。\n"
@@ -442,9 +466,11 @@ def _whitelisted_open(
                 "请立即停止当前任务。"
             )
         # 2. 白名单次之
-        blocked = check_path_whitelisted(file_str)
+        blocked = check_path_whitelisted(safe_path)
         if blocked:
             raise PermissionError(blocked)
+        # 使用已解析的实际路径打开，避免校验后再沿原始链接路径访问。
+        file = safe_path
 
     return _real_builtins.open(
         file, mode, buffering, encoding, errors, newline, closefd, opener

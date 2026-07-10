@@ -1,7 +1,7 @@
 """Keep-alive TTL 安全网测试。"""
 import time
 import pytest
-from platform.keep_alive import KeepAliveManager
+from maxma_platform.keep_alive import KeepAliveManager
 
 
 def test_register_returns_disposer():

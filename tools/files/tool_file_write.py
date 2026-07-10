@@ -5,6 +5,7 @@ import os
 from pydantic import BaseModel, Field
 
 from tools.base import ToolBase, check_path_access, format_error, format_success, register_tool
+from tools.path_security import resolve_path_for_access
 
 
 class FileWriteInput(BaseModel):
@@ -37,6 +38,10 @@ class FileWriteTool(ToolBase):
         err = check_path_access(file_path)
         if err:
             return format_error(err)
+
+        # 操作实际落点而非已校验的链接别名，防止白名单内链接在校验后
+        # 将新文件创建到目录外。
+        file_path = resolve_path_for_access(file_path)
 
         directory = os.path.dirname(file_path)
         if directory and not os.path.exists(directory):

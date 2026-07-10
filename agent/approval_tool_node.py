@@ -61,12 +61,20 @@ class ApprovalToolNode:
         except Exception:
             session_id = ""
 
-        # 获取 auto_approve 状态
-        from api.interaction import get_session_auto_approve
-        try:
-            auto_approve = get_session_auto_approve(session_id)
-        except Exception:
-            auto_approve = False
+        # A delegated child captures approval policy when it is created.  Its
+        # parent may subsequently change session settings, but that must not
+        # broaden a running child's authority.
+        from tools.sub_agent.delegation_context import current_delegation_context
+
+        delegation_context = current_delegation_context()
+        if delegation_context is not None:
+            auto_approve = delegation_context.auto_approve
+        else:
+            from api.interaction import get_session_auto_approve
+            try:
+                auto_approve = get_session_auto_approve(session_id)
+            except Exception:
+                auto_approve = False
 
         tool_messages: list[ToolMessage] = []
 

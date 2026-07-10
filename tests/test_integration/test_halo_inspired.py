@@ -8,7 +8,7 @@ from agent.lifecycle.disposable import DisposableStore, to_disposable
 from api.bootstrap.idle_queue import register_idle_task, start_idle_drain, clear_idle_queue
 from api.security.credential_mask import mask_sensitive_fields, MASK_SENTINEL
 from api.transcript.jsonl_writer import TranscriptWriter
-from platform.event_dedup import EventDedupCache
+from maxma_platform.event_dedup import EventDedupCache
 from agent.autonomy.scheduler import BackoffState, compute_next_interval
 
 
@@ -18,7 +18,7 @@ def test_all_modules_importable():
     import api.bootstrap
     import api.security
     import api.transcript
-    import platform.event_dedup
+    import maxma_platform.event_dedup
 
 
 def test_idle_queue_and_disposable_together():

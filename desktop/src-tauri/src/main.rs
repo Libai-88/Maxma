@@ -88,7 +88,7 @@ fn cleanup_stale_sidecar() {
     // 如果确实 kill 了进程（taskkill 返回 0），等待端口释放
     if let Ok(o) = output {
         if o.status.success() {
-            println!("[tauri] cleanup_stale_sidecar: killed stale maxma-server.exe, waiting for port release...");
+            write_startup_log("[tauri] cleanup_stale_sidecar: killed stale maxma-server.exe, waiting for port release...");
             // 等待最多 5 秒让内核释放 socket 端口
             for _ in 0..50 {
                 if port_manager::is_port_available(port_manager::DEFAULT_API_PORT) {
@@ -104,6 +104,93 @@ fn cleanup_stale_sidecar() {
 fn server_log_path() -> Option<PathBuf> {
     let appdata = std::env::var("APPDATA").ok()?;
     Some(PathBuf::from(appdata).join("MaxmaHere").join("logs").join("server.log"))
+}
+
+/// 获取 Tauri 主进程启动日志路径：%APPDATA%/MaxmaHere/logs/tauri.log
+fn tauri_log_path() -> Option<PathBuf> {
+    let appdata = std::env::var("APPDATA").ok()?;
+    Some(PathBuf::from(appdata).join("MaxmaHere").join("logs").join("tauri.log"))
+}
+
+/// 打开 Tauri 启动日志文件（追加模式）。
+/// 每次启动在文件头部写入分隔线。如果文件超过 5MB，自动轮转（保留 1 个备份）。
+fn open_tauri_log() -> Option<BufWriter<File>> {
+    let path = tauri_log_path()?;
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    // 轮转：超过 5MB 时重命名旧文件
+    if let Ok(meta) = std::fs::metadata(&path) {
+        if meta.len() > 5 * 1024 * 1024 {
+            let backup = path.with_extension("log.old");
+            let _ = std::fs::rename(&path, &backup);
+        }
+    }
+    let file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .ok()?;
+    let mut writer = BufWriter::new(file);
+    // 写入启动分隔线
+    use std::io::Write;
+    let sep = "=".repeat(60);
+    let _ = writeln!(
+        writer,
+        "\n{}\nMaxmaHere Tauri 启动 @ {}\n{}",
+        sep, chrono_now_string(), sep
+    );
+    let _ = writer.flush();
+    Some(writer)
+}
+
+/// 获取当前时间的简单字符串（不依赖 chrono crate）。
+fn chrono_now_string() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    // 简单格式：Unix 时间戳
+    format!("epoch:{}", secs)
+}
+
+/// 全局启动日志 writer（线程安全）。
+/// 所有 println!/eprintln! 替换为 write_startup_log，确保即使 panic 也有记录。
+static STARTUP_LOG: std::sync::OnceLock<std::sync::Mutex<Option<BufWriter<File>>>> =
+    std::sync::OnceLock::new();
+
+/// 写入一行启动日志。如果日志未初始化则静默丢弃（不 panic）。
+fn write_startup_log(msg: &str) {
+    if let Some(mutex) = STARTUP_LOG.get() {
+        if let Ok(mut guard) = mutex.lock() {
+            if let Some(w) = guard.as_mut() {
+                use std::io::Write;
+                let _ = writeln!(w, "{}", msg);
+                let _ = w.flush();
+            }
+        }
+    }
+}
+
+/// 安装 panic hook：panic 时将信息写入启动日志，然后调用默认 hook。
+fn install_panic_hook() {
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let msg = format!("[PANIC] {}", info);
+        write_startup_log(&msg);
+        // 同时写入 server.log 位置（方便统一查看）
+        if let Some(path) = server_log_path() {
+            use std::io::Write;
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&path) {
+                let _ = writeln!(f, "[tauri-panic] {}", info);
+            }
+        }
+        default_hook(info);
+    }));
 }
 
 /// 打开 sidecar 日志文件（追加模式）。失败则返回 None，日志仅打印到控制台。
@@ -280,14 +367,14 @@ fn wait_for_server(port: u16) -> bool {
     for i in 0..HEALTH_TIMEOUT_SECS {
         if let Ok(resp) = client.get(&url).send() {
             if resp.status().is_success() {
-                println!("[tauri] 后端就绪 ({}s)", i + 1);
+                write_startup_log(&format!("[tauri] 后端就绪 ({}s)", i + 1));
                 return true;
             }
         }
         std::thread::sleep(Duration::from_secs(1));
     }
 
-    eprintln!("[tauri] 后端启动超时 ({}s)", HEALTH_TIMEOUT_SECS);
+    write_startup_log(&format!("[tauri] 后端启动超时 ({}s)", HEALTH_TIMEOUT_SECS));
     false
 }
 
@@ -305,7 +392,10 @@ fn spawn_sidecar_with_monitor(
     let sidecar = app
         .shell()
         .sidecar("maxma-server")
-        .expect("Failed to get sidecar");
+        .unwrap_or_else(|e| {
+            write_startup_log(&format!("[tauri] FATAL: 获取 sidecar 失败: {}", e));
+            panic!("Failed to get sidecar: {}", e);
+        });
 
     // 通过环境变量将端口传给 sidecar（Python 端从 settings.maxma_api_port 读取）
     // 同时注入 MAXMA_RESOURCES_DIR 让 Python 后端能定位嵌入式运行时
@@ -313,6 +403,8 @@ fn spawn_sidecar_with_monitor(
         .path()
         .resource_dir()
         .unwrap_or_else(|_| std::path::PathBuf::from("."));
+
+    write_startup_log(&format!("[tauri] sidecar resource_dir={}", resource_dir.display()));
 
     let sidecar = sidecar
         .env("MAXMA_API_PORT", port.to_string())
@@ -325,9 +417,12 @@ fn spawn_sidecar_with_monitor(
 
     let (mut rx, child) = sidecar
         .spawn()
-        .expect("Failed to start maxma-server sidecar");
+        .unwrap_or_else(|e| {
+            write_startup_log(&format!("[tauri] FATAL: 启动 sidecar 失败: {}", e));
+            panic!("Failed to start maxma-server sidecar: {}", e);
+        });
 
-    println!("[tauri] sidecar (pid={}) 已启动，自动继承 Job Object", child.pid());
+    write_startup_log(&format!("[tauri] sidecar (pid={}) 已启动，自动继承 Job Object", child.pid()));
 
     // 存储 child handle 以便窗口关闭时 kill
     {
@@ -357,12 +452,12 @@ fn spawn_sidecar_with_monitor(
                     write_server_log(&log_writer, "[stderr] ", trimmed);
                 }
                 CommandEvent::Error(err) => {
-                    eprintln!("[tauri] sidecar 错误: {}", err);
+                    write_startup_log(&format!("[tauri] sidecar 错误: {}", err));
                     write_server_log(&log_writer, "[error] ", &err);
                 }
                 CommandEvent::Terminated(status) => {
                     let msg = format!("后端进程退出 (code={:?})", status.code);
-                    eprintln!("[tauri] {}", msg);
+                    write_startup_log(&format!("[tauri] {}", msg));
                     write_server_log(&log_writer, "[exit] ", &msg);
                     exited = true;
                     let _ = app.emit(
@@ -382,7 +477,7 @@ fn spawn_sidecar_with_monitor(
             let count = restart_count.fetch_add(1, Ordering::Relaxed);
             if count < MAX_RESTARTS {
                 let msg = format!("尝试重启后端 ({}/{})", count + 1, MAX_RESTARTS);
-                eprintln!("[tauri] {}", msg);
+                write_startup_log(&format!("[tauri] {}", msg));
                 write_server_log(&log_writer, "[restart] ", &msg);
                 let _ = app.emit(
                     "server-restarting",
@@ -395,7 +490,7 @@ fn spawn_sidecar_with_monitor(
                 spawn_sidecar_with_monitor(app, restart_count, shutting_down, child_store, port, log_writer);
             } else {
                 let msg = format!("已达最大重启次数 ({})，放弃重启", MAX_RESTARTS);
-                eprintln!("[tauri] {}", msg);
+                write_startup_log(&format!("[tauri] {}", msg));
                 write_server_log(&log_writer, "[restart] ", &msg);
                 let _ = app.emit(
                     "server-disconnected-permanent",
@@ -427,6 +522,13 @@ struct AppState {
 }
 
 fn main() {
+    // ── 最先初始化启动日志 + panic hook ──
+    // 无论后续步骤成功与否，日志文件都会有记录。
+    let startup_log = open_tauri_log();
+    let _ = STARTUP_LOG.set(std::sync::Mutex::new(startup_log));
+    install_panic_hook();
+    write_startup_log("[tauri] === 进程启动 ===");
+
     // 关键：禁用系统代理对本地回环的拦截。
     // Clash/V2Ray 等本地代理软件会拦截 127.0.0.1 的请求，导致
     // Tauri 主进程的健康检查、Tauri HTTP 插件、Python sidecar 的请求全部失败。
@@ -448,22 +550,23 @@ fn main() {
     } else {
         std::env::set_var("no_proxy", no_proxy);
     }
-    println!("[tauri] NO_PROXY={}", no_proxy);
+    write_startup_log(&format!("[tauri] NO_PROXY={}", no_proxy));
 
     // 启动前清理可能残留的旧版 maxma-server.exe 进程
     // 场景：旧版本（无 Job Object）被 NSIS 强杀后 sidecar 成为孤儿进程，
     // 或主进程崩溃后 sidecar 残留。新版启动时先 taskkill 清理，避免端口/文件冲突。
     cleanup_stale_sidecar();
+    write_startup_log("[tauri] 清理残留 sidecar 完成");
 
     // 启动前选择可用端口（冲突时自动回退到 8001-8010）
     let selected_port = match port_manager::pick_available_port() {
         Some(p) => p,
         None => {
-            eprintln!("[tauri] 无可用端口（8000-8010 全部被占用），退出");
+            write_startup_log("[tauri] FATAL: 无可用端口（8000-8010 全部被占用），退出");
             std::process::exit(1);
         }
     };
-    println!("[tauri] 选中端口: {}", selected_port);
+    write_startup_log(&format!("[tauri] 选中端口: {}", selected_port));
 
     // 打开 sidecar 日志文件
     let log_writer = Arc::new(Mutex::new(open_server_log()));
@@ -480,14 +583,14 @@ fn main() {
     match create_kill_on_close_job() {
         Ok(job) => {
             match assign_current_process_to_job(job) {
-                Ok(()) => println!("[tauri] 主进程已加入 Job Object，后代进程将自动继承"),
-                Err(e) => eprintln!("[tauri] 警告：主进程加入 Job Object 失败: {}，sidecar 清理将依赖窗口事件", e),
+                Ok(()) => write_startup_log("[tauri] 主进程已加入 Job Object，后代进程将自动继承"),
+                Err(e) => write_startup_log(&format!("[tauri] 警告：主进程加入 Job Object 失败: {}，sidecar 清理将依赖窗口事件", e)),
             }
             // 存入 static 变量，确保 Job 句柄存活到进程退出
             let _ = JOB_HANDLE_RAW.set(job.0 as isize);
         }
         Err(e) => {
-            eprintln!("[tauri] 警告：创建 Job Object 失败: {}，sidecar 清理将依赖窗口事件", e);
+            write_startup_log(&format!("[tauri] 警告：创建 Job Object 失败: {}，sidecar 清理将依赖窗口事件", e));
         }
     }
 
@@ -548,7 +651,7 @@ fn main() {
             let handle = app.handle().clone();
             std::thread::spawn(move || {
                 if !wait_for_server(selected_port) {
-                    eprintln!("[tauri] 后端启动失败，通知前端");
+                    write_startup_log("[tauri] 后端启动失败，通知前端");
                     let _ = handle.emit("server-startup-failed", serde_json::Value::Null);
                 }
             });
@@ -565,7 +668,7 @@ fn main() {
                 let child_state = window.state::<SidecarChild>();
                 if let Ok(mut guard) = child_state.0.lock() {
                     if let Some(child) = guard.take() {
-                        println!("[tauri] 窗口关闭，正在终止后端...");
+                        write_startup_log("[tauri] 窗口关闭，正在终止后端...");
                         child.kill().ok();
                     }
                 };

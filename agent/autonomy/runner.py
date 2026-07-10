@@ -57,6 +57,9 @@ def _build_self_improve_prompt(report: dict) -> str:
     )
     health_text = report.get("health_summary", {}).get("overall_status", "unknown")
     degraded = ", ".join(report.get("health_summary", {}).get("degraded_components", []))
+    recent_messages_text = "\n".join(
+        report.get("error_summary", {}).get("recent_messages", [])[:5]
+    )
 
     return f"""[自治自改进任务]
 
@@ -74,7 +77,7 @@ def _build_self_improve_prompt(report: dict) -> str:
 {issues_text if issues_text else "无问题"}
 
 ### 最近错误消息
-{"\n".join(report.get('error_summary', {}).get('recent_messages', [])[:5])}
+{recent_messages_text}
 
 ## 你的任务
 

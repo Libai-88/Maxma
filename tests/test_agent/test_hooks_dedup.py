@@ -1,7 +1,7 @@
 """事件钩子去重集成测试。"""
 import pytest
 from agent.hooks import HookManager
-from platform.event_dedup import EventDedupCache
+from maxma_platform.event_dedup import EventDedupCache
 
 
 def test_file_change_hook_dedup_within_ttl():

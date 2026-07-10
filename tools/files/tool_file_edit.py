@@ -15,6 +15,7 @@ from tools.base import (
     format_success,
     register_tool,
 )
+from tools.path_security import resolve_path_for_access
 
 
 class FileEditInput(BaseModel):
@@ -89,6 +90,9 @@ class FileEditTool(ToolBase):
         if err:
             return format_error(err)
         # ────────────────────────────────────────────────────────────
+
+        # 后续全部读写使用已解析的真实落点，不能重新沿已校验的链接别名访问。
+        file_path = resolve_path_for_access(file_path)
 
         if not os.path.exists(file_path):
             return format_error(f"文件不存在: {file_path}")

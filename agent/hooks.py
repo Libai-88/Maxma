@@ -86,7 +86,7 @@ class HookManager:
         self._on_trigger: Any = None  # 触发回调（注入 Agent 会话）
         self._lock = threading.RLock()
         # 事件去重缓存（应对 webhook 重试/文件监听爆发）
-        from platform.event_dedup import EventDedupCache
+        from maxma_platform.event_dedup import EventDedupCache
         self._dedup_cache = EventDedupCache(ttl_seconds=60, max_size=1000)
 
     def set_trigger_callback(self, callback):
