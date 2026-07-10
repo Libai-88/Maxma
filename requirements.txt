@@ -485,3 +485,5 @@ zai-sdk==0.2.3
     # via maxmahere (pyproject.toml)
 zstandard==0.25.0
     # via langsmith
+json-repair>=0.1.0
+    # 手动添加：流式响应修复管道 tool 参数 JSON 修复
