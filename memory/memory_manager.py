@@ -3,8 +3,11 @@ import logging
 import os
 import re
 import secrets
+import tempfile
 import threading
-from typing import Optional
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Any, Optional
 
 import portalocker
 import yaml
@@ -22,6 +25,32 @@ MAX_HISTORY_LENGTH = 5
 # `if x in _auto_reindexed` 检查并重复执行 reindex。现在用 threading.Lock 保护。
 _auto_reindexed: set[str] = set()
 _auto_reindexed_lock = threading.Lock()
+
+# Narrative projections install a SQLite-backed guard here.  It is deliberately
+# a context-local capability so regular API CRUD is unaffected, while every
+# projection mutation (including its YAML idempotency fence) is fenced.
+_projection_mutation_guard: ContextVar[Any | None] = ContextVar(
+    "memory_projection_mutation_guard", default=None
+)
+
+
+@contextmanager
+def projection_mutation_scope(guard: Any | None):
+    token = _projection_mutation_guard.set(guard)
+    try:
+        yield
+    finally:
+        _projection_mutation_guard.reset(token)
+
+
+@contextmanager
+def _projection_mutation_guarded():
+    guard = _projection_mutation_guard.get()
+    if guard is None:
+        yield
+    else:
+        with guard():
+            yield
 
 
 def NOW() -> str:
@@ -112,6 +141,11 @@ class MemoryItem:
 
 
 class MemoryManager:
+    # This is deliberately stored inside the YAML document, not SQLite.  A
+    # memory mutation and its idempotency fence are therefore one locked YAML
+    # write: after a crash, replay can prove that the target side effect ran.
+    _PROJECTION_OPERATIONS_KEY = "_maxma_ltm_projection_operations"
+
     def __init__(self, yaml_file: str):
         self._yaml_file = yaml_file
         self._ensure_file_exists()
@@ -125,8 +159,52 @@ class MemoryManager:
         if dir_path:
             os.makedirs(dir_path, exist_ok=True)
         if not os.path.exists(self._yaml_file):
-            with open(self._yaml_file, "w", encoding="utf-8") as f:
-                yaml.dump({}, f, default_flow_style=False, allow_unicode=True)
+            self._atomic_write_yaml({})
+
+    def _atomic_write_yaml(self, data: dict[str, Any]) -> None:
+        """Durably replace the YAML document without exposing a partial file.
+
+        The temporary file lives beside the target so ``os.replace`` is atomic
+        on the same filesystem.  The file is flushed before replacement; on
+        platforms which allow it we also flush the parent directory metadata.
+        """
+        directory = os.path.dirname(os.path.abspath(self._yaml_file))
+        fd, temporary_path = tempfile.mkstemp(
+            dir=directory,
+            prefix=f".{os.path.basename(self._yaml_file)}.",
+            suffix=".tmp",
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as file:
+                yaml.dump(data, file, default_flow_style=False, allow_unicode=True)
+                file.flush()
+                os.fsync(file.fileno())
+            os.replace(temporary_path, self._yaml_file)
+            temporary_path = ""
+            self._fsync_parent_directory(directory)
+        finally:
+            if temporary_path:
+                try:
+                    os.unlink(temporary_path)
+                except FileNotFoundError:
+                    pass
+
+    @staticmethod
+    def _fsync_parent_directory(directory: str) -> None:
+        """Best-effort directory fsync (unsupported by Windows and some FSs)."""
+        flags = os.O_RDONLY
+        if hasattr(os, "O_DIRECTORY"):
+            flags |= os.O_DIRECTORY
+        try:
+            fd = os.open(directory, flags)
+        except OSError:
+            return
+        try:
+            os.fsync(fd)
+        except OSError:
+            pass
+        finally:
+            os.close(fd)
 
     def _maybe_migrate_old_ids(self) -> None:
         """将 YAML 中旧版 UUID key 原地迁移为短十六进制 ID。调用方必须已持有文件锁。"""
@@ -144,18 +222,24 @@ class MemoryManager:
         for k, v in data.items():
             if k not in old_keys:
                 new_data[k] = v
-        with open(self._yaml_file, "w", encoding="utf-8") as f:
-            yaml.dump(new_data, f, default_flow_style=False, allow_unicode=True)
+        self._atomic_write_yaml(new_data)
         print(f"[memory] migrated {len(old_keys)} UUID keys to short hex IDs")
 
-    def _read_all(self) -> dict[str, "MemoryItem"]:
+    def _read_document(
+        self,
+    ) -> tuple[dict[str, "MemoryItem"], dict[str, dict[str, Any]]]:
         """读取完整文件。调用方必须已持有文件锁。"""
         self._maybe_migrate_old_ids()
         with open(self._yaml_file, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
         if not isinstance(data, dict):
-            logger.warning("[memory] invalid top-level YAML structure in %s", self._yaml_file)
-            return {}
+            logger.warning(
+                "[memory] invalid top-level YAML structure in %s", self._yaml_file
+            )
+            return {}, {}
+
+        raw_operations = data.pop(self._PROJECTION_OPERATIONS_KEY, {})
+        operations = raw_operations if isinstance(raw_operations, dict) else {}
 
         items: dict[str, MemoryItem] = {}
         for item_id, raw in data.items():
@@ -176,13 +260,62 @@ class MemoryManager:
                     self._yaml_file,
                     exc,
                 )
-        return items
+        return items, operations
 
-    def _write_all(self, items: dict[str, "MemoryItem"]) -> None:
+    def _read_all(self) -> dict[str, "MemoryItem"]:
+        """Read memory items while hiding internal projection metadata."""
+        return self._read_document()[0]
+
+    def _write_all(
+        self,
+        items: dict[str, "MemoryItem"],
+        operations: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
         """覆写完整文件。调用方必须已持有文件锁。"""
         data_dict = {id: item.__dict__ for id, item in items.items()}
-        with open(self._yaml_file, "w", encoding="utf-8") as f:
-            yaml.dump(data_dict, f, default_flow_style=False, allow_unicode=True)
+        if operations is None:
+            # Ordinary CRUD must preserve fences installed by a projection.
+            with open(self._yaml_file, "r", encoding="utf-8") as f:
+                raw = yaml.safe_load(f) or {}
+            candidate = (
+                raw.get(self._PROJECTION_OPERATIONS_KEY, {})
+                if isinstance(raw, dict)
+                else {}
+            )
+            operations = candidate if isinstance(candidate, dict) else {}
+        if operations:
+            data_dict[self._PROJECTION_OPERATIONS_KEY] = operations
+        self._atomic_write_yaml(data_dict)
+
+    def get_projection_operation(
+        self, operation_id: str | None
+    ) -> dict[str, Any] | None:
+        if not operation_id:
+            return None
+        with portalocker.Lock(self._lock_path, timeout=5):
+            _, operations = self._read_document()
+            value = operations.get(operation_id)
+            return dict(value) if isinstance(value, dict) else None
+
+    def prune_projection_operations(self, keep_identities: set[tuple[str, str]]) -> int:
+        """Bound target-side idempotency fences without touching active work."""
+        with portalocker.Lock(self._lock_path, timeout=5):
+            with _projection_mutation_guarded():
+                items, operations = self._read_document()
+                retained = {
+                    operation_id: value
+                    for operation_id, value in operations.items()
+                    if isinstance(value, dict)
+                    and (
+                        str(value.get("session_id", "")),
+                        str(value.get("turn_id", "")),
+                    )
+                    in keep_identities
+                }
+                removed = len(operations) - len(retained)
+                if removed:
+                    self._write_all(items, retained)
+                return removed
 
     @staticmethod
     def _generate_id() -> str:
@@ -192,7 +325,15 @@ class MemoryManager:
     def _lock_path(self) -> str:
         return self._yaml_file + ".lock"
 
-    def add(self, description: str, theme: str, ttl: Optional[int] = None) -> str:
+    def add(
+        self,
+        description: str,
+        theme: str,
+        ttl: Optional[int] = None,
+        *,
+        projection_operation_id: str | None = None,
+        projection_identity: tuple[str, str] | None = None,
+    ) -> str:
         """添加一条新记忆。
 
         Args:
@@ -201,30 +342,72 @@ class MemoryManager:
             ttl: 可选 TTL（秒），None 表示永久；>0 时按此秒数计算过期时间
         """
         with portalocker.Lock(self._lock_path, timeout=5):
-            items = self._read_all()
-            new_id = self._generate_id()
-            expires_at = _compute_expires_at(ttl) if ttl and ttl > 0 else None
-            items[new_id] = MemoryItem(
-                description,
-                theme,
-                ttl=ttl if ttl and ttl > 0 else None,
-                expires_at=expires_at,
-            )
-            self._write_all(items)
+            with _projection_mutation_guarded():
+                items, operations = self._read_document()
+                existing = (
+                    operations.get(projection_operation_id)
+                    if projection_operation_id
+                    else None
+                )
+                if isinstance(existing, dict) and isinstance(
+                    existing.get("result_id"), str
+                ):
+                    return str(existing["result_id"])
+                new_id = self._generate_id()
+                expires_at = _compute_expires_at(ttl) if ttl and ttl > 0 else None
+                items[new_id] = MemoryItem(
+                    description,
+                    theme,
+                    ttl=ttl if ttl and ttl > 0 else None,
+                    expires_at=expires_at,
+                )
+                if projection_operation_id and projection_identity:
+                    operations[projection_operation_id] = {
+                        "session_id": projection_identity[0],
+                        "turn_id": projection_identity[1],
+                        "action": "add",
+                        "result_id": new_id,
+                    }
+                self._write_all(items, operations)
         # 同步索引到向量库（best-effort，不影响主操作）
         from memory.rag.indexer import index_memory
+
         index_memory(new_id, description, theme)
         return new_id
 
-    def delete(self, id: str) -> str:
+    def delete(
+        self,
+        id: str,
+        *,
+        projection_operation_id: str | None = None,
+        projection_identity: tuple[str, str] | None = None,
+    ) -> str:
         with portalocker.Lock(self._lock_path, timeout=5):
-            items = self._read_all()
-            if id not in items:
-                raise ValueError(f"MemoryManager: Memory item with ID {id} not found")
-            removed = items.pop(id)
-            self._write_all(items)
+            with _projection_mutation_guarded():
+                items, operations = self._read_document()
+                existing = (
+                    operations.get(projection_operation_id)
+                    if projection_operation_id
+                    else None
+                )
+                if isinstance(existing, dict) and existing.get("action") == "delete":
+                    return str(existing.get("description", ""))
+                if id not in items:
+                    raise ValueError(
+                        f"MemoryManager: Memory item with ID {id} not found"
+                    )
+                removed = items.pop(id)
+                if projection_operation_id and projection_identity:
+                    operations[projection_operation_id] = {
+                        "session_id": projection_identity[0],
+                        "turn_id": projection_identity[1],
+                        "action": "delete",
+                        "description": removed.description,
+                    }
+                self._write_all(items, operations)
         # 从向量库移除（best-effort）
         from memory.rag.indexer import remove_memory
+
         remove_memory(id)
         return removed.description
 
@@ -235,6 +418,9 @@ class MemoryManager:
         merged_description: str,
         merged_theme: str,
         reason: str,
+        *,
+        projection_operation_id: str | None = None,
+        projection_identity: tuple[str, str] | None = None,
     ):
         # 长度校验：合并后的内容不得超过 MAX_DESC_LENGTH
         if len(merged_description) > MAX_DESC_LENGTH:
@@ -242,16 +428,31 @@ class MemoryManager:
                 f"合并后的记忆内容超过 {MAX_DESC_LENGTH} 字限制（当前 {len(merged_description)} 字）"
             )
         with portalocker.Lock(self._lock_path, timeout=5):
-            items = self._read_all()
-            if id1 not in items or id2 not in items:
-                raise ValueError(
-                    f"MemoryManager: Memory items with IDs {id1} and {id2} not found"
+            with _projection_mutation_guarded():
+                items, operations = self._read_document()
+                existing = (
+                    operations.get(projection_operation_id)
+                    if projection_operation_id
+                    else None
                 )
-            items[id1].merge(items[id2], reason, merged_description, merged_theme)
-            items.pop(id2)
-            self._write_all(items)
+                if isinstance(existing, dict) and existing.get("action") == "merge":
+                    return
+                if id1 not in items or id2 not in items:
+                    raise ValueError(
+                        f"MemoryManager: Memory items with IDs {id1} and {id2} not found"
+                    )
+                items[id1].merge(items[id2], reason, merged_description, merged_theme)
+                items.pop(id2)
+                if projection_operation_id and projection_identity:
+                    operations[projection_operation_id] = {
+                        "session_id": projection_identity[0],
+                        "turn_id": projection_identity[1],
+                        "action": "merge",
+                    }
+                self._write_all(items, operations)
         # 同步向量库：移除 id2，更新 id1
         from memory.rag.indexer import index_memory, remove_memory
+
         remove_memory(id2)
         index_memory(id1, merged_description, merged_theme)
 
@@ -262,6 +463,9 @@ class MemoryManager:
         new_description: Optional[str] = None,
         new_theme: Optional[str] = None,
         new_ttl: Optional[int] = None,
+        *,
+        projection_operation_id: str | None = None,
+        projection_identity: tuple[str, str] | None = None,
     ):
         """更新一条记忆。
 
@@ -273,13 +477,30 @@ class MemoryManager:
             new_ttl: 新 TTL（None 表示保留原过期时间；0 表示改为永久；>0 表示重置）
         """
         with portalocker.Lock(self._lock_path, timeout=5):
-            items = self._read_all()
-            if id not in items:
-                raise ValueError(f"MemoryManager: Memory item with ID {id} not found")
-            items[id].update(reason, new_description, new_theme, new_ttl)
-            self._write_all(items)
+            with _projection_mutation_guarded():
+                items, operations = self._read_document()
+                existing = (
+                    operations.get(projection_operation_id)
+                    if projection_operation_id
+                    else None
+                )
+                if isinstance(existing, dict) and existing.get("action") == "update":
+                    return
+                if id not in items:
+                    raise ValueError(
+                        f"MemoryManager: Memory item with ID {id} not found"
+                    )
+                items[id].update(reason, new_description, new_theme, new_ttl)
+                if projection_operation_id and projection_identity:
+                    operations[projection_operation_id] = {
+                        "session_id": projection_identity[0],
+                        "turn_id": projection_identity[1],
+                        "action": "update",
+                    }
+                self._write_all(items, operations)
         # 同步索引到向量库（best-effort）
         from memory.rag.indexer import index_memory
+
         index_memory(id, items[id].description, items[id].theme)
 
     def show(self, include_expired: bool = False):
@@ -375,21 +596,26 @@ class MemoryManager:
         """
         expired_ids: list[str] = []
         with portalocker.Lock(self._lock_path, timeout=5):
-            items = self._read_all()
-            for id, item in items.items():
-                if _is_expired(item.expires_at):
-                    expired_ids.append(id)
-            if not expired_ids:
-                return 0
-            for id in expired_ids:
-                items.pop(id, None)
-            self._write_all(items)
+            with _projection_mutation_guarded():
+                items = self._read_all()
+                for id, item in items.items():
+                    if _is_expired(item.expires_at):
+                        expired_ids.append(id)
+                if not expired_ids:
+                    return 0
+                for id in expired_ids:
+                    items.pop(id, None)
+                self._write_all(items)
         # 同步向量库（best-effort）
         from memory.rag.indexer import remove_memory
+
         for id in expired_ids:
             remove_memory(id)
-        logger.info("[memory] purged %d expired item(s) from %s",
-                    len(expired_ids), self._yaml_file)
+        logger.info(
+            "[memory] purged %d expired item(s) from %s",
+            len(expired_ids),
+            self._yaml_file,
+        )
         return len(expired_ids)
 
     def search(
@@ -423,19 +649,26 @@ class MemoryManager:
                 # 关键词匹配（在 description 和 theme 中搜索）
                 if keyword:
                     kw = keyword.lower()
-                    if kw not in item.description.lower() and kw not in item.theme.lower():
+                    if (
+                        kw not in item.description.lower()
+                        and kw not in item.theme.lower()
+                    ):
                         continue
-                results.append({
-                    "id": id,
-                    "description": item.description,
-                    "theme": item.theme,
-                    "latest_update_time": item.latest_update_time,
-                })
+                results.append(
+                    {
+                        "id": id,
+                        "description": item.description,
+                        "theme": item.theme,
+                        "latest_update_time": item.latest_update_time,
+                    }
+                )
             # 按更新时间倒序
             results.sort(key=lambda x: x["latest_update_time"], reverse=True)
             return results[:limit]
 
-    def find_similar(self, description: str, theme: str = "", threshold: float = 0.6) -> list[dict]:
+    def find_similar(
+        self, description: str, theme: str = "", threshold: float = 0.6
+    ) -> list[dict]:
         """查找与给定描述相似的已有记忆条目。
 
         优先使用 chromadb 向量检索（语义相似度）；
@@ -484,6 +717,7 @@ class MemoryManager:
                 return None  # embedding 失败，回退
 
             from config.settings import get_settings
+
             settings = get_settings()
 
             # 元数据过滤（按 theme）
@@ -504,12 +738,14 @@ class MemoryManager:
                 if theme and r["metadata"].get("theme") == theme:
                     similarity = min(1.0, similarity + 0.15)
                 if similarity >= threshold:
-                    results.append({
-                        "id": r["id"],
-                        "description": r["document"],
-                        "theme": r["metadata"].get("theme", ""),
-                        "similarity": round(similarity, 3),
-                    })
+                    results.append(
+                        {
+                            "id": r["id"],
+                            "description": r["document"],
+                            "theme": r["metadata"].get("theme", ""),
+                            "similarity": round(similarity, 3),
+                        }
+                    )
 
             results.sort(key=lambda x: x["similarity"], reverse=True)
             return results
@@ -528,9 +764,9 @@ class MemoryManager:
         def _tokenize(text: str) -> set[str]:
             text = text.lower().strip()
             tokens = set()
-            for word in re.findall(r'[a-zA-Z]+', text):
+            for word in re.findall(r"[a-zA-Z]+", text):
                 tokens.add(word.lower())
-            chinese_chars = re.findall(r'[\u4e00-\u9fff]', text)
+            chinese_chars = re.findall(r"[\u4e00-\u9fff]", text)
             for i in range(len(chinese_chars) - 1):
                 tokens.add(chinese_chars[i] + chinese_chars[i + 1])
             for ch in chinese_chars:
@@ -558,12 +794,14 @@ class MemoryManager:
                 similarity = min(1.0, similarity + 0.15)
 
             if similarity >= threshold:
-                results.append({
-                    "id": id,
-                    "description": item.description,
-                    "theme": item.theme,
-                    "similarity": round(similarity, 3),
-                })
+                results.append(
+                    {
+                        "id": id,
+                        "description": item.description,
+                        "theme": item.theme,
+                        "similarity": round(similarity, 3),
+                    }
+                )
 
         results.sort(key=lambda x: x["similarity"], reverse=True)
         return results
@@ -584,6 +822,7 @@ class MemoryManager:
 
         try:
             from memory.rag.vector_store import COLLECTION_LONG_TERM, get_vector_store
+
             store = get_vector_store()
             if store is None:
                 return
@@ -599,9 +838,12 @@ class MemoryManager:
             return
 
         from memory.rag.indexer import reindex_all
+
         count = reindex_all(items)
         if count > 0:
-            logger.info("[rag] auto-reindexed %d memories from %s", count, self._yaml_file)
+            logger.info(
+                "[rag] auto-reindexed %d memories from %s", count, self._yaml_file
+            )
 
     def reindex(self) -> int:
         """全量重建向量索引（公开方法，供手动迁移或修复使用）。
@@ -614,4 +856,5 @@ class MemoryManager:
         if not items:
             return 0
         from memory.rag.indexer import reindex_all
+
         return reindex_all(items)

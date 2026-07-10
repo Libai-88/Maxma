@@ -10,6 +10,7 @@ import pytest
 import agent.prompts as prompts
 import memory.narrative as narrative
 from memory.memory_manager import MemoryManager
+from memory.ltm_outbox import OutboxRetentionPolicy
 from memory.narrative import LongTermMemoryInterface
 
 
@@ -54,6 +55,60 @@ def _populate_mm(path: Path, items: list[tuple[str, str]]) -> None:
 def _patch_persona_memory_path(monkeypatch, path: Path) -> None:
     """让 get_narrative 读取测试指定的记忆文件。"""
     monkeypatch.setattr(prompts, "get_persona_memory_path", lambda: path)
+
+
+@pytest.mark.asyncio
+async def test_legacy_session_without_turn_id_keeps_at_least_once_behavior(
+    tmp_path, monkeypatch
+):
+    """Legacy callers may identify a session but not a turn; never slice None."""
+    path = tmp_path / "memory.yaml"
+    fake_agent = _fake_agent_factory()
+    monkeypatch.setattr(narrative, "create_react_agent", lambda **kw: fake_agent)
+    socket = MagicMock()
+    socket.send_json = AsyncMock()
+    ltm = LongTermMemoryInterface(path)
+    ltm.start_listening(MagicMock(), ws_registry={"session-a": socket})
+
+    await ltm.send_history(
+        [{"role": "user", "content": "legacy"}], session_id="session-a"
+    )
+    await ltm.stop_listening()
+
+    assert fake_agent.ainvoke.call_count == 1
+    assert socket.send_json.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_crash_after_yaml_side_effect_replay_does_not_duplicate_target(
+    tmp_path, monkeypatch
+):
+    """A durable YAML fence makes a recovered outbox job safe to replay."""
+    path = tmp_path / "memory.yaml"
+    calls = 0
+
+    async def invoke_then_crash(_input, config=None):
+        nonlocal calls
+        calls += 1
+        narrative.create_memory.invoke({"content": "用户喜欢蓝色。", "section": "品味"})
+        if calls == 1:
+            raise RuntimeError("simulated crash after target side effect")
+        return {"messages": []}
+
+    fake_agent = MagicMock()
+    fake_agent.ainvoke = AsyncMock(side_effect=invoke_then_crash)
+    monkeypatch.setattr(narrative, "create_react_agent", lambda **kw: fake_agent)
+    ltm = LongTermMemoryInterface(path, outbox_retry_base_seconds=0)
+    ltm.start_listening(MagicMock())
+    messages = [{"role": "user", "content": "我喜欢蓝色"}]
+    await ltm.send_history(messages, session_id="session-a", turn_id="turn-1")
+    await ltm._queue.join()
+    await ltm.send_history(messages, session_id="session-a", turn_id="turn-1")
+    await ltm.stop_listening()
+
+    assert calls == 2
+    entries = MemoryManager(str(path)).show()
+    assert [item["description"] for item in entries].count("用户喜欢蓝色。") == 1
 
 
 # ── TestFormatMessages ────────────────────────────────────────
@@ -361,6 +416,17 @@ class TestLongTermMemoryInterface:
         ltm = LongTermMemoryInterface(path)
         assert ltm.get_narrative() == ""
 
+    def test_outbox_retention_is_configurable(self, tmp_path):
+        policy = OutboxRetentionPolicy(
+            completed_keep_recent=2,
+            completed_max_records=3,
+            completed_max_age_seconds=60,
+            archive_max_records=4,
+            archive_max_age_seconds=120,
+        )
+        ltm = LongTermMemoryInterface(tmp_path / "memory.yaml", outbox_retention=policy)
+        assert ltm._outbox.retention == policy
+
     # ── 生命周期安全 ──────────────────────────────────────────
 
     @pytest.mark.asyncio
@@ -544,6 +610,96 @@ class TestLongTermMemoryInterface:
         mm = _mm_from_path(path)
         assert mm.show() == []
 
+    # ── 有标识轮次的幂等投影 ──────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_duplicate_identified_turn_is_projected_once(
+        self, tmp_path, monkeypatch
+    ):
+        """同一轮的重试在排队或消费期间只能调用一次 Agent。"""
+        path = tmp_path / "memory.yaml"
+        fake_agent = _fake_agent_factory()
+        monkeypatch.setattr(narrative, "create_react_agent", lambda **kw: fake_agent)
+
+        ltm = LongTermMemoryInterface(path)
+        ltm.start_listening(MagicMock())
+        messages = [{"role": "user", "content": "请记住这个偏好"}]
+        await ltm.send_history(messages, session_id="session-a", turn_id="turn-1")
+        await ltm.send_history(messages, session_id="session-a", turn_id="turn-1")
+        await ltm.stop_listening()
+
+        assert fake_agent.ainvoke.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_failed_identified_turn_can_be_retried(self, tmp_path, monkeypatch):
+        """失败不会写完成标记，后续同一 turn 的重试仍可成功。"""
+        path = tmp_path / "memory.yaml"
+        attempts = 0
+
+        async def invoke_then_succeed(_input, config=None):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise RuntimeError("temporary provider failure")
+            return {"messages": []}
+
+        fake_agent = MagicMock()
+        fake_agent.ainvoke = AsyncMock(side_effect=invoke_then_succeed)
+        monkeypatch.setattr(narrative, "create_react_agent", lambda **kw: fake_agent)
+
+        ltm = LongTermMemoryInterface(path)
+        ltm.start_listening(MagicMock())
+        messages = [{"role": "user", "content": "可重试的记忆"}]
+        await ltm.send_history(messages, session_id="session-a", turn_id="turn-1")
+        await ltm._queue.join()
+        await ltm.send_history(messages, session_id="session-a", turn_id="turn-1")
+        await ltm.stop_listening()
+
+        assert fake_agent.ainvoke.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_different_identified_turns_are_all_projected(
+        self, tmp_path, monkeypatch
+    ):
+        """同一会话的不同轮次不应互相去重。"""
+        path = tmp_path / "memory.yaml"
+        fake_agent = _fake_agent_factory()
+        monkeypatch.setattr(narrative, "create_react_agent", lambda **kw: fake_agent)
+
+        ltm = LongTermMemoryInterface(path)
+        ltm.start_listening(MagicMock())
+        await ltm.send_history(
+            [{"role": "user", "content": "第一轮"}], "session-a", "turn-1"
+        )
+        await ltm.send_history(
+            [{"role": "user", "content": "第二轮"}], "session-a", "turn-2"
+        )
+        await ltm.stop_listening()
+
+        assert fake_agent.ainvoke.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_completed_turn_stays_deduplicated_after_restart(
+        self, tmp_path, monkeypatch
+    ):
+        """完成清单落盘后，重启消费者也不会重复投影同一轮。"""
+        path = tmp_path / "memory.yaml"
+        fake_agent = _fake_agent_factory()
+        monkeypatch.setattr(narrative, "create_react_agent", lambda **kw: fake_agent)
+        messages = [{"role": "user", "content": "持久去重"}]
+
+        first = LongTermMemoryInterface(path)
+        first.start_listening(MagicMock())
+        await first.send_history(messages, session_id="session-a", turn_id="turn-1")
+        await first.stop_listening()
+
+        restarted = LongTermMemoryInterface(path)
+        restarted.start_listening(MagicMock())
+        await restarted.send_history(messages, session_id="session-a", turn_id="turn-1")
+        await restarted.stop_listening()
+
+        assert fake_agent.ainvoke.call_count == 1
+
     @pytest.mark.asyncio
     async def test_agent_produces_no_entries_preserves_original(
         self, tmp_path, monkeypatch
@@ -603,3 +759,39 @@ class TestLongTermMemoryInterface:
         assert fake_agent.ainvoke.call_count == 2
         assert ltm._consumer_task is None
         assert ltm._queue is None
+
+    @pytest.mark.asyncio
+    async def test_cancelling_identified_projection_releases_matching_lease(
+        self, tmp_path, monkeypatch
+    ):
+        """Cancellation returns the durable job to pending without waiting for expiry."""
+        path = tmp_path / "memory.yaml"
+        entered = asyncio.Event()
+
+        async def wait_for_cancellation(_input, config=None):
+            entered.set()
+            await asyncio.Event().wait()
+
+        fake_agent = MagicMock()
+        fake_agent.ainvoke = AsyncMock(side_effect=wait_for_cancellation)
+        monkeypatch.setattr(narrative, "create_react_agent", lambda **kw: fake_agent)
+
+        ltm = LongTermMemoryInterface(path, outbox_lease_seconds=30)
+        ltm.start_listening(MagicMock())
+        await ltm.send_history(
+            [{"role": "user", "content": "会被取消"}], "session-a", "turn-1"
+        )
+        await asyncio.wait_for(entered.wait(), timeout=1)
+
+        consumer = ltm._consumer_task
+        assert consumer is not None
+        consumer.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await consumer
+
+        state = ltm._outbox.get("session-a", "turn-1")
+        assert state is not None
+        assert state["status"] == "pending"
+        # A fresh claimant can acquire immediately; cancellation did not leave
+        # the target-wide writer lease behind until its old expiry time.
+        assert ltm._outbox.claim_next() is not None

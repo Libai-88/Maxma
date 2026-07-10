@@ -1,8 +1,12 @@
 """记忆叙事模块 — 每轮对话后将裸消息送给 LLM，增量更新 memory.yaml。"""
 
 import asyncio
+import hashlib
+import json
 import logging
 import uuid
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -12,18 +16,30 @@ from langchain_core.tools import tool
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.prebuilt import create_react_agent
 
+from app_paths import MEMORY_CONFIG_PATH
 from memory.memory_callback import MemoryToolCallback
-from memory.memory_manager import MAX_DESC_LENGTH, MemoryManager
+from memory.memory_manager import (
+    MAX_DESC_LENGTH,
+    MemoryManager,
+    projection_mutation_scope,
+)
+from memory.ltm_outbox import (
+    LongTermMemoryOutbox,
+    OutboxRetentionPolicy,
+    ProjectionFenceLost,
+    ProjectionWriterLease,
+)
 
 logger = logging.getLogger(__name__)
+
+# Backwards-compatible module export used by api.health.
+MEMORY_PATH = MEMORY_CONFIG_PATH
 
 
 def _sanitize(text: str) -> str:
     """将多行文本折叠为单行，防止破坏 YAML 格式。"""
     return text.replace("\n", " ").replace("\r", " ")
 
-
-from app_paths import PERSONAS_DIR, MEMORY_CONFIG_PATH as MEMORY_PATH
 
 _CORE_PRINCIPLES = """核心原则：
 0. 对于记忆来讲，主观印象第一，客观事实第二。科技、事实等固定的客观事实必须简洁简练，不要尝试在记忆里写大量知识性质的东西。相反地，用户的喜好等主观印象可以相对正常地描写。每个记忆条目最长不超过三句话。
@@ -88,11 +104,48 @@ UPDATE_SYSTEM = _UPDATE_PREFIX + _CORE_PRINCIPLES
 # ── 模块级 MemoryManager 引用 ──────────────────────────────
 
 _current_mm: Optional[MemoryManager] = None
+_projection_identity: ContextVar[tuple[str, str] | None] = ContextVar(
+    "ltm_projection_identity", default=None
+)
 
 
 def _set_current_mm(mm: Optional[MemoryManager]) -> None:
     global _current_mm
     _current_mm = mm
+
+
+@contextmanager
+def _projection_scope(session_id: str | None, turn_id: str | None, mutation_guard=None):
+    """Give tool calls stable per-turn operation IDs for target-side fencing."""
+    identity = (
+        (session_id, turn_id)
+        if session_id is not None and turn_id is not None
+        else None
+    )
+    identity_token = _projection_identity.set(identity)
+    try:
+        with projection_mutation_scope(mutation_guard):
+            yield
+    finally:
+        _projection_identity.reset(identity_token)
+
+
+def _projection_operation(
+    action: str, arguments: dict[str, object]
+) -> tuple[str | None, tuple[str, str] | None]:
+    identity = _projection_identity.get()
+    if identity is None:
+        return None, None
+    # The action and canonical arguments, rather than call ordinal, make a
+    # replay safe even when an LLM takes a different read-only/tool-call path.
+    payload = json.dumps(
+        [identity[0], identity[1], action, arguments],
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    return f"ltm-op-{digest}", identity
 
 
 # ── 格式化辅助 ──────────────────────────────────────────────
@@ -185,6 +238,7 @@ def get_narrative() -> str:
 
     # 获取当前人格的记忆路径
     from agent.prompts import get_persona_memory_path
+
     memory_path = get_persona_memory_path()
 
     if not memory_path.exists():
@@ -248,6 +302,12 @@ def create_memory(content: str, section: str, ttl: Optional[int] = None) -> str:
         )
     if _current_mm is None:
         return "错误：记忆管理器未初始化。"
+    operation_id, identity = _projection_operation(
+        "create", {"content": content, "section": section, "ttl": ttl}
+    )
+    existing = _current_mm.get_projection_operation(operation_id)
+    if existing is not None and isinstance(existing.get("result_id"), str):
+        return f"已创建 [{existing['result_id']}] ({section}): {content}"
     # 智能合并检测：查找相似条目
     similar = _current_mm.find_similar(content, theme=section, threshold=0.65)
     if similar:
@@ -257,7 +317,13 @@ def create_memory(content: str, section: str, ttl: Optional[int] = None) -> str:
             f"「{top['description']}」（相似度 {top['similarity']:.0%}）。"
             f"请使用 update_memory 更新该条目，或使用 merge_memories 合并，而非新建。"
         )
-    new_id = _current_mm.add(description=content, theme=section, ttl=ttl)
+    new_id = _current_mm.add(
+        description=content,
+        theme=section,
+        ttl=ttl,
+        projection_operation_id=operation_id,
+        projection_identity=identity,
+    )
     return f"已创建 [{new_id}] ({section}): {content}"
 
 
@@ -287,8 +353,19 @@ def update_memory(id: str, content: str, reason: str) -> str:
         )
     if _current_mm is None:
         return "错误：记忆管理器未初始化。"
+    operation_id, identity = _projection_operation(
+        "update", {"id": id, "content": content, "reason": reason}
+    )
+    if _current_mm.get_projection_operation(operation_id) is not None:
+        return f"已更新 [{id}]: {content}"
     try:
-        _current_mm.update(id, reason=reason, new_description=content)
+        _current_mm.update(
+            id,
+            reason=reason,
+            new_description=content,
+            projection_operation_id=operation_id,
+            projection_identity=identity,
+        )
     except ValueError:
         return f"错误：未找到 ID 为 {id} 的记忆条目。请先调用 read_memories 确认 ID。"
     return f"已更新 [{id}]: {content}"
@@ -304,8 +381,17 @@ def delete_memory(id: str, reason: str) -> str:
     """
     if _current_mm is None:
         return "错误：记忆管理器未初始化。"
+    operation_id, identity = _projection_operation(
+        "delete", {"id": id, "reason": reason}
+    )
+    if _current_mm.get_projection_operation(operation_id) is not None:
+        return f"已删除 [{id}]"
     try:
-        removed = _current_mm.delete(id)
+        removed = _current_mm.delete(
+            id,
+            projection_operation_id=operation_id,
+            projection_identity=identity,
+        )
     except ValueError:
         return f"错误：未找到 ID 为 {id} 的记忆条目。请先调用 read_memories 确认 ID。"
     return f"已删除 [{id}]: {removed}"
@@ -332,8 +418,28 @@ def merge_memories(id1: str, id2: str, content: str, section: str, reason: str) 
         )
     if _current_mm is None:
         return "错误：记忆管理器未初始化。"
+    operation_id, identity = _projection_operation(
+        "merge",
+        {
+            "id1": id1,
+            "id2": id2,
+            "content": content,
+            "section": section,
+            "reason": reason,
+        },
+    )
+    if _current_mm.get_projection_operation(operation_id) is not None:
+        return f"已合并 [{id2}] → [{id1}] ({section}): {content}"
     try:
-        _current_mm.merge(id1, id2, content, section, reason)
+        _current_mm.merge(
+            id1,
+            id2,
+            content,
+            section,
+            reason,
+            projection_operation_id=operation_id,
+            projection_identity=identity,
+        )
     except ValueError:
         return f"错误：未找到 ID 为 {id1} 或 {id2} 的记忆条目。请先调用 read_memories 确认 ID。"
     return f"已合并 [{id2}] → [{id1}] ({section}): {content}"
@@ -370,9 +476,32 @@ class LongTermMemoryInterface:
     具备自恢复能力：若后台消费者协程意外退出，下次 send_history 时会自动重启。
     """
 
-    def __init__(self, memory_path: str | Path) -> None:
+    def __init__(
+        self,
+        memory_path: str | Path,
+        *,
+        outbox_retention: OutboxRetentionPolicy | None = None,
+        outbox_lease_seconds: float = 300,
+        outbox_retry_base_seconds: float = 1,
+        outbox_retry_max_seconds: float = 300,
+    ) -> None:
         self._memory_path = Path(memory_path)
         self._mm = MemoryManager(yaml_file=str(self._memory_path))
+        self._outbox = LongTermMemoryOutbox(
+            self._memory_path.with_suffix(
+                self._memory_path.suffix + ".ltm-outbox.sqlite3"
+            ),
+            retention=outbox_retention,
+            projection_target=self._memory_path,
+            lease_seconds=outbox_lease_seconds,
+            retry_base_seconds=outbox_retry_base_seconds,
+            retry_max_seconds=outbox_retry_max_seconds,
+        )
+        # Preserve durable de-duplication for installations upgraded from the
+        # JSON ledger. New completions are only ever written to SQLite.
+        self._outbox.import_legacy_ledger(
+            self._memory_path.with_suffix(self._memory_path.suffix + ".ltm-turns.json")
+        )
         self._llm = None
         self._queue: asyncio.Queue | None = None
         self._consumer_task: asyncio.Task | None = None
@@ -412,7 +541,9 @@ class LongTermMemoryInterface:
         当 send_history 被调用时，此方法会重新拉起消费者。
         """
         if self._llm is None:
-            logger.warning("[ltm] _ensure_consumer: _llm is None, cannot start consumer")
+            logger.warning(
+                "[ltm] _ensure_consumer: _llm is None, cannot start consumer"
+            )
             return
         if self.is_listening:
             return
@@ -421,7 +552,12 @@ class LongTermMemoryInterface:
             if self._queue is None:
                 self._queue = asyncio.Queue()
             self._consumer_task = asyncio.create_task(self._consumer(self._llm))
-            logger.info("[ltm] consumer (re)started, task=%s", self._consumer_task.get_name())
+            # Wake the new consumer so durable work left by a prior process is
+            # claimed without waiting for another user message.
+            self._queue.put_nowait("outbox_wakeup")
+            logger.info(
+                "[ltm] consumer (re)started, task=%s", self._consumer_task.get_name()
+            )
         except Exception as e:
             logger.error("[ltm] _ensure_consumer failed: %s", e, exc_info=True)
 
@@ -438,14 +574,24 @@ class LongTermMemoryInterface:
         if not turn_messages:
             return
         self._ensure_consumer()
-        if self._queue is not None:
-            await self._queue.put((session_id, turn_id, list(turn_messages)))
+        if self._queue is None:
+            logger.warning(
+                "[ltm] queue is None after _ensure_consumer, dropping history"
+            )
+            return
+        if session_id and turn_id:
+            created = self._outbox.enqueue(session_id, turn_id, list(turn_messages))
+            await self._queue.put("outbox_wakeup")
             logger.debug(
-                "[ltm] queue.put session=%s turn_id=%s queue_size≈%d",
-                session_id, turn_id, self._queue.qsize(),
+                "[ltm] outbox.%s session=%s turn_id=%s",
+                "enqueue" if created else "wake",
+                session_id,
+                turn_id,
             )
         else:
-            logger.warning("[ltm] queue is None after _ensure_consumer, dropping history")
+            # Older callers without a turn ID intentionally keep historic
+            # at-least-once in-memory behavior and are not conflated.
+            await self._queue.put((session_id, turn_id, list(turn_messages), None))
 
     async def stop_listening(self) -> None:
         """发送 None 哨兵并等待消费者排空队列。
@@ -464,6 +610,43 @@ class LongTermMemoryInterface:
         self._queue = None
         self._consumer_task = None
 
+    async def _lease_heartbeat(
+        self, job, stop: asyncio.Event, lease_lost: asyncio.Event
+    ) -> None:
+        """Keep a long-running LLM projection exclusively owned by this worker."""
+        interval = max(0.01, self._outbox.lease_seconds / 3)
+        while True:
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=interval)
+                return
+            except asyncio.TimeoutError:
+                if not self._outbox.renew(job):
+                    lease_lost.set()
+                    logger.warning(
+                        "[ltm] projection lease lost session=%s turn_id=%s",
+                        job.session_id,
+                        job.turn_id,
+                    )
+                    return
+
+    async def _legacy_lease_heartbeat(
+        self,
+        lease: ProjectionWriterLease,
+        stop: asyncio.Event,
+        lease_lost: asyncio.Event,
+    ) -> None:
+        """Keep a legacy in-memory projection behind the shared writer lease."""
+        interval = max(0.01, self._outbox.lease_seconds / 3)
+        while True:
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=interval)
+                return
+            except asyncio.TimeoutError:
+                if not self._outbox.renew_projection_writer(lease):
+                    lease_lost.set()
+                    logger.warning("[ltm] legacy projection writer lease lost")
+                    return
+
     async def _consumer(self, llm) -> None:
         """后台消费者协程：从队列取消息，调用 CRUD Agent，写入 memory.yaml。"""
         logger.info("[ltm] _consumer coroutine started")
@@ -472,135 +655,237 @@ class LongTermMemoryInterface:
             if self._queue is None:
                 logger.warning("[ltm] consumer exiting: queue is None")
                 break
-            item = await self._queue.get()
-            if item is None:
-                logger.info("[ltm] consumer received sentinel, shutting down")
-                break
-            session_id, turn_id, turn_messages = item
-            logger.info(
-                "[ltm] consumer got session=%s turn_id=%s msgs=%d",
-                session_id, turn_id, len(turn_messages),
-            )
-
-            # 无论后续成功与否，先通知前端「开始处理」
-            if self._ws_registry is not None and session_id:
-                ws = self._ws_registry.get(session_id)
-                if ws is not None:
-                    try:
-                        await ws.send_json(
-                            {
-                                "type": "memory_start",
-                                "payload": {"turn_id": turn_id or ""},
-                            }
-                        )
-                        logger.debug(
-                            "[ltm] memory_start sent session=%s turn_id=%s",
-                            session_id[:8], turn_id[:8],
-                        )
-                    except Exception:
-                        pass
-
-            try:
-                _set_current_mm(self._mm)
-                items = self._mm.show()
-                messages_text = _format_messages(turn_messages)
-
-                if items:
-                    system_prompt = UPDATE_SYSTEM
-                    user_prompt = f"## 新一轮对话\n{messages_text}"
-                else:
-                    system_prompt = COLD_START_SYSTEM
-                    user_prompt = messages_text
-
-                now = datetime.now()
-                weekday_cn = [
-                    "星期一",
-                    "星期二",
-                    "星期三",
-                    "星期四",
-                    "星期五",
-                    "星期六",
-                    "星期日",
-                ][now.weekday()]
-                date_prefix = (
-                    f"\n\n--- 会话日期: {now.strftime('%Y-%m-%d')} {weekday_cn} ---"
+            queue = self._queue
+            heartbeat_stop: asyncio.Event | None = None
+            heartbeat_task: asyncio.Task | None = None
+            legacy_writer_lease: ProjectionWriterLease | None = None
+            lease_lost: asyncio.Event | None = None
+            # Drain durable work before waiting. This both recovers tasks left
+            # by a crashed process and avoids a wakeup-per-row requirement.
+            job = self._outbox.claim_next()
+            queue_item = False
+            if job is not None:
+                session_id, turn_id, turn_messages = (
+                    job.session_id,
+                    job.turn_id,
+                    job.payload,
                 )
-                user_prompt = user_prompt + date_prefix
-
-                crud_tools = [
-                    create_memory,
-                    read_memories,
-                    update_memory,
-                    delete_memory,
-                    merge_memories,
-                    search_memories,
-                ]
-
-                agent = create_react_agent(
-                    model=llm,
-                    tools=crud_tools,
-                    prompt=system_prompt,
-                    checkpointer=MemorySaver(),
-                )
-
-                # 创建回调：推送 CRUD 工具调用到前端对应轮次
-                callbacks: list = []
-                if self._ws_registry is not None and session_id:
-                    logger.debug(
-                        "[ltm] creating MemoryToolCallback session=%s turn_id=%s",
-                        session_id[:8], turn_id[:8],
-                    )
-                    memory_cb = MemoryToolCallback(
-                        self._ws_registry,
-                        session_id,
-                        turn_id or "",
-                    )
-                    callbacks.append(memory_cb)
-
-                logger.info("[ltm] invoking CRUD agent...")
-                from langchain_core.runnables import RunnableConfig
-                thread_suffix = turn_id or uuid.uuid4().hex[:8]
-                thread_id = f"ltm-{session_id or 'anon'}-{thread_suffix}"
-                config: RunnableConfig = {
-                    "configurable": {"thread_id": thread_id},
-                    "callbacks": callbacks,
-                }
-                await agent.ainvoke(
-                    {"messages": [HumanMessage(content=user_prompt)]},
-                    config=config,
-                )
-                logger.info("[ltm] CRUD agent done")
-                # 顺手清理已过期条目（best-effort，不阻塞主流程）
+            else:
                 try:
-                    purged = self._mm.purge_expired()
-                    if purged > 0:
-                        logger.info("[ltm] purged %d expired item(s)", purged)
-                except Exception as e:
-                    logger.warning("[ltm] purge_expired failed: %s", e)
-                invalidate_narrative_cache()
+                    item = await asyncio.wait_for(
+                        queue.get(), timeout=self._outbox.next_ready_delay()
+                    )
+                except asyncio.TimeoutError:
+                    continue
+                queue_item = True
+            try:
+                if job is None and item is None:
+                    logger.info("[ltm] consumer received sentinel, shutting down")
+                    break
+                if job is None and item == "outbox_wakeup":
+                    continue
+                if job is None:
+                    session_id, turn_id, turn_messages, _ = item
+                    legacy_writer_lease = self._outbox.acquire_projection_writer()
+                    if legacy_writer_lease is None:
+                        # Legacy work has no durable task identity, so preserve
+                        # its historical at-least-once delivery by retrying the
+                        # same queue item after the identified writer releases.
+                        await queue.put(item)
+                        await asyncio.sleep(0.05)
+                        continue
+                logger.info(
+                    "[ltm] consumer got session=%s turn_id=%s msgs=%d",
+                    session_id,
+                    turn_id,
+                    len(turn_messages),
+                )
 
-            except Exception as e:
-                logger.error("[ltm] CRUD agent error: %s", e, exc_info=True)
-            finally:
-                # 无论异常与否，都通知前端本轮记忆处理完成
+                # 无论后续成功与否，先通知前端「开始处理」
                 if self._ws_registry is not None and session_id:
                     ws = self._ws_registry.get(session_id)
                     if ws is not None:
                         try:
                             await ws.send_json(
                                 {
-                                    "type": "memory_done",
+                                    "type": "memory_start",
                                     "payload": {"turn_id": turn_id or ""},
                                 }
                             )
                             logger.debug(
-                                "[ltm] memory_done sent session=%s turn_id=%s",
-                                session_id[:8], turn_id[:8],
+                                "[ltm] memory_start sent session=%s turn_id=%s",
+                                session_id[:8],
+                                (turn_id or "")[:8],
                             )
-                        except Exception as e:
-                            logger.warning("[ltm] memory_done send error: %s", e)
-                    else:
-                        logger.warning(
-                            "[ltm] ws_registry.get returned None for session=%s",
-                            session_id[:8],
+                        except Exception:
+                            pass
+
+                try:
+                    heartbeat_stop = asyncio.Event()
+                    lease_lost = asyncio.Event()
+                    heartbeat_task = (
+                        asyncio.create_task(
+                            self._lease_heartbeat(job, heartbeat_stop, lease_lost)
                         )
+                        if job is not None
+                        else asyncio.create_task(
+                            self._legacy_lease_heartbeat(
+                                legacy_writer_lease, heartbeat_stop, lease_lost
+                            )
+                        )
+                    )
+                    _set_current_mm(self._mm)
+                    items = self._mm.show()
+                    messages_text = _format_messages(turn_messages)
+
+                    if items:
+                        system_prompt = UPDATE_SYSTEM
+                        user_prompt = f"## 新一轮对话\n{messages_text}"
+                    else:
+                        system_prompt = COLD_START_SYSTEM
+                        user_prompt = messages_text
+
+                    now = datetime.now()
+                    weekday_cn = [
+                        "星期一",
+                        "星期二",
+                        "星期三",
+                        "星期四",
+                        "星期五",
+                        "星期六",
+                        "星期日",
+                    ][now.weekday()]
+                    user_prompt += (
+                        f"\n\n--- 会话日期: {now.strftime('%Y-%m-%d')} {weekday_cn} ---"
+                    )
+
+                    crud_tools = [
+                        create_memory,
+                        read_memories,
+                        update_memory,
+                        delete_memory,
+                        merge_memories,
+                        search_memories,
+                    ]
+                    agent = create_react_agent(
+                        model=llm,
+                        tools=crud_tools,
+                        prompt=system_prompt,
+                        checkpointer=MemorySaver(),
+                    )
+
+                    callbacks: list = []
+                    if self._ws_registry is not None and session_id:
+                        logger.debug(
+                            "[ltm] creating MemoryToolCallback session=%s turn_id=%s",
+                            session_id[:8],
+                            (turn_id or "")[:8],
+                        )
+                        callbacks.append(
+                            MemoryToolCallback(
+                                self._ws_registry, session_id, turn_id or ""
+                            )
+                        )
+
+                    logger.info("[ltm] invoking CRUD agent...")
+                    from langchain_core.runnables import RunnableConfig
+
+                    thread_suffix = turn_id or uuid.uuid4().hex[:8]
+                    config: RunnableConfig = {
+                        "configurable": {
+                            "thread_id": f"ltm-{session_id or 'anon'}-{thread_suffix}"
+                        },
+                        "callbacks": callbacks,
+                    }
+                    projection_lease = job or legacy_writer_lease
+                    assert projection_lease is not None
+                    with _projection_scope(
+                        session_id,
+                        turn_id,
+                        lambda: self._outbox.projection_fence(projection_lease),
+                    ):
+                        await agent.ainvoke(
+                            {"messages": [HumanMessage(content=user_prompt)]},
+                            config=config,
+                        )
+                        if lease_lost.is_set():
+                            raise ProjectionFenceLost(
+                                "projection lease lost while the agent was running"
+                            )
+                        logger.info("[ltm] CRUD agent done")
+                        try:
+                            purged = self._mm.purge_expired()
+                            if purged > 0:
+                                logger.info("[ltm] purged %d expired item(s)", purged)
+                        except ProjectionFenceLost:
+                            raise
+                        except Exception as exc:
+                            logger.warning("[ltm] purge_expired failed: %s", exc)
+                    invalidate_narrative_cache()
+                    if job is not None:
+                        if not self._outbox.complete(job):
+                            logger.warning(
+                                "[ltm] completion lease lost session=%s turn_id=%s",
+                                session_id,
+                                turn_id,
+                            )
+                        else:
+                            # Keep only fences for pending/claimed/completed rows
+                            # and their retained archive tombstones. This bounds
+                            # YAML metadata without weakening crash recovery.
+                            self._mm.prune_projection_operations(
+                                self._outbox.retained_identities()
+                            )
+
+                except asyncio.CancelledError:
+                    # Cancellation must relinquish only this matching lease;
+                    # otherwise shutdown leaves work unavailable until expiry.
+                    if job is not None:
+                        self._outbox.release_cancelled(job)
+                    raise
+                except Exception as e:
+                    logger.error("[ltm] CRUD agent error: %s", e, exc_info=True)
+                    if job is not None:
+                        self._outbox.fail(session_id, turn_id, job.lease_token, str(e))
+                finally:
+                    if heartbeat_stop is not None:
+                        heartbeat_stop.set()
+                    if heartbeat_task is not None:
+                        heartbeat_task.cancel()
+                        try:
+                            await heartbeat_task
+                        except asyncio.CancelledError:
+                            pass
+                    # 无论异常与否，都通知前端本轮记忆处理完成
+                    if self._ws_registry is not None and session_id:
+                        ws = self._ws_registry.get(session_id)
+                        if ws is not None:
+                            try:
+                                await ws.send_json(
+                                    {
+                                        "type": "memory_done",
+                                        "payload": {"turn_id": turn_id or ""},
+                                    }
+                                )
+                                logger.debug(
+                                    "[ltm] memory_done sent session=%s turn_id=%s",
+                                    session_id[:8],
+                                    (turn_id or "")[:8],
+                                )
+                            except Exception as e:
+                                logger.warning("[ltm] memory_done send error: %s", e)
+                        else:
+                            logger.warning(
+                                "[ltm] ws_registry.get returned None for session=%s",
+                                session_id[:8],
+                            )
+            finally:
+                if legacy_writer_lease is not None:
+                    try:
+                        self._outbox.release_projection_writer(legacy_writer_lease)
+                    except Exception as exc:
+                        logger.warning(
+                            "[ltm] legacy writer lease release failed: %s", exc
+                        )
+                if queue_item:
+                    queue.task_done()
