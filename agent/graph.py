@@ -23,6 +23,7 @@
 import asyncio
 import logging
 import re
+import time
 from typing import Callable, Optional
 
 from langchain_core.language_models import BaseChatModel
@@ -170,6 +171,21 @@ class AgentState(TypedDict):
     verifier_retries: NotRequired[int]  # 当前已重试次数
     verifier_verdict: NotRequired[str]  # "sufficient" | "insufficient" | ""
 
+    # ── Provider failover 审计字段 ──
+    # 每次 agent 节点的实际调用结果。覆盖式写入避免长期会话无限增长，
+    # checkpointer 的节点历史仍保留每次调用的完整轨迹。
+    llm_provider_id: NotRequired[str]
+    llm_model_name: NotRequired[str]
+    llm_failover_trace: NotRequired[list[dict[str, str]]]
+    # Explicit result of the latest model invocation.  Consumers must use this
+    # metadata instead of parsing user-visible fallback text.
+    llm_invocation_succeeded: NotRequired[bool]
+    # A provider choice must remain stable while the current user turn is
+    # executing tools.  The marker prevents this transient choice leaking into
+    # the next user turn restored from the same checkpointer.
+    llm_selected_provider_id: NotRequired[str]
+    llm_selection_turn_marker: NotRequired[str]
+
 
 def build_agent(
     model: BaseChatModel,
@@ -188,6 +204,11 @@ def build_agent(
     on_activity_event: Callable | None = None,
     # 运行时配置摘要（B6）：注入到 episodic_context，让 agent 感知自身配置
     runtime_context: str | None = None,
+    # 自动情景记忆检索的会话边界。缺失时宁可不注入，也不能跨会话泄露。
+    episodic_session_id: str | None = None,
+    # 可选注入，正常 WebSocket 对话会从 ws.app.state 自动获取。
+    # 保留显式入口，供无 WebSocket 的受控执行环境使用。
+    provider_manager=None,
 ) -> CompiledStateGraph:
     """构建带规划节点的 ReAct Agent 图。
 
@@ -245,6 +266,59 @@ def build_agent(
             verifier_max_retries = 2
 
     llm_with_tools = model.bind_tools(tools) if tools else model
+
+    if provider_manager is None and ws is not None:
+        provider_manager = getattr(getattr(getattr(ws, "app", None), "state", None), "provider_manager", None)
+
+    def _current_turn_has_tool_effects(messages: list[BaseMessage]) -> bool:
+        """Whether this turn has reached a tool result.
+
+        Tool execution may be non-idempotent.  Once a ToolMessage exists after
+        the latest user input, never replay an LLM request through another
+        provider in that turn.  Older turns do not block a new turn's failover.
+        """
+        latest_human_index = -1
+        for index in range(len(messages) - 1, -1, -1):
+            if isinstance(messages[index], HumanMessage):
+                latest_human_index = index
+                break
+        if latest_human_index < 0:
+            return True
+        return any(
+            message.__class__.__name__ == "ToolMessage"
+            for message in messages[latest_human_index + 1 :]
+        )
+
+    def _current_turn_marker(messages: list[BaseMessage]) -> str:
+        """Return a stable marker for the latest user turn.
+
+        LangChain message IDs are optional, so use the number of human
+        messages as a deterministic fallback.  This is sufficient to keep a
+        selected fallback across ``agent -> tools -> agent`` while ensuring a
+        later user input starts from the configured primary model again.
+        """
+        human_messages = [message for message in messages if isinstance(message, HumanMessage)]
+        if not human_messages:
+            return ""
+        message_id = getattr(human_messages[-1], "id", None)
+        if isinstance(message_id, str) and message_id:
+            return f"message:{message_id}"
+        return f"human-count:{len(human_messages)}"
+
+    def _model_name_for_audit(llm: BaseChatModel, provider) -> str:
+        for attribute in ("model_name", "model"):
+            value = getattr(llm, attribute, None)
+            if isinstance(value, str) and value:
+                return value
+        return provider.default_model if provider is not None else ""
+
+    def _build_provider_llm(provider):
+        fallback_llm = provider.create_llm(
+            provider.default_model,
+            temperature=0.7,
+            streaming=True,
+        )
+        return fallback_llm.bind_tools(tools) if tools else fallback_llm
     # 使用审批工具节点（可配置开关）；关闭时回退到原始 ToolNode
     if tools:
         try:
@@ -420,7 +494,12 @@ def build_agent(
         try:
             from agent.context_manager import retrieve_from_episodic
 
-            context_text = retrieve_from_episodic(query, episodic_mm, top_k=3)
+            context_text = retrieve_from_episodic(
+                query,
+                episodic_mm,
+                top_k=3,
+                session_id=episodic_session_id or "",
+            )
         except Exception as e:
             logger.warning("[episodic_retriever] retrieve failed: %s", e)
             context_text = ""
@@ -463,15 +542,140 @@ def build_agent(
                 content=f"{prepend_text}\n\n---\n\n{original_content}"
             )
         messages = [SystemMessage(content=system_prompt)] + msgs
+        current_turn_marker = _current_turn_marker(msgs)
+        selected_provider_id = ""
+        active_llm = llm_with_tools
+        active_provider = None
+        previous_selection_matches_turn = (
+            state.get("llm_selection_turn_marker") == current_turn_marker
+        )
+        if previous_selection_matches_turn and provider_manager is not None:
+            candidate_provider_id = state.get("llm_selected_provider_id", "")
+            if candidate_provider_id:
+                try:
+                    # Continue with the provider that already produced this
+                    # turn's tool call.  Its health may have changed since the
+                    # prior node, but changing providers after tool execution
+                    # could replay a non-idempotent operation.
+                    active_provider = provider_manager.get(candidate_provider_id)
+                    active_llm = _build_provider_llm(active_provider)
+                    selected_provider_id = candidate_provider_id
+                except KeyError:
+                    logger.warning(
+                        "[agent_node] selected provider no longer exists: %s",
+                        candidate_provider_id,
+                    )
+        if active_provider is None and provider_manager is not None:
+            try:
+                active_provider = provider_manager.find_provider_for_llm(model)
+                if active_provider is not None:
+                    selected_provider_id = active_provider.config.id
+            except Exception as e:
+                logger.warning("[agent_node] 无法识别当前模型所属提供商: %s", type(e).__name__)
+
+        initial_model_name = _model_name_for_audit(model, active_provider)
+        tool_effects_present = _current_turn_has_tool_effects(msgs)
+        attempted_provider_ids: set[str] = set()
+        trace: list[dict[str, str]] = []
+
+        # A provider marked unhealthy by a prior turn is skipped before this
+        # invocation.  This remains before any current-turn tool side effect.
+        if (
+            active_provider is not None
+            and active_provider.is_unhealthy
+            and not tool_effects_present
+            and provider_manager is not None
+        ):
+            attempted_provider_ids.add(active_provider.config.id)
+            fallback_provider = provider_manager.get_fallback(attempted_provider_ids)
+            if fallback_provider is not None:
+                trace.append({
+                    "provider_id": active_provider.config.id,
+                    "model_name": _model_name_for_audit(active_llm, active_provider),
+                    "outcome": "skipped_unhealthy",
+                })
+                active_provider = fallback_provider
+                active_llm = _build_provider_llm(active_provider)
+                selected_provider_id = active_provider.config.id
+
         try:
-            response = await llm_with_tools.ainvoke(messages)
+            while True:
+                provider_id = active_provider.config.id if active_provider is not None else ""
+                model_name = (
+                    initial_model_name
+                    if active_llm is llm_with_tools
+                    else _model_name_for_audit(active_llm, active_provider)
+                )
+                if provider_id:
+                    attempted_provider_ids.add(provider_id)
+                started_at = time.monotonic()
+                try:
+                    response = await active_llm.ainvoke(messages)
+                except Exception as e:
+                    retryable = False
+                    if active_provider is not None and provider_manager is not None:
+                        from api.providers.manager import is_retryable_provider_error
+
+                        retryable = is_retryable_provider_error(e)
+                        if retryable:
+                            provider_manager.mark_unhealthy(
+                                active_provider.config.id,
+                                detail=f"LLM invocation failed: {type(e).__name__}",
+                            )
+                    trace.append({
+                        "provider_id": provider_id,
+                        "model_name": model_name,
+                        "outcome": "retryable_error" if retryable else "error",
+                        "error_type": type(e).__name__,
+                    })
+                    if (
+                        not retryable
+                        or tool_effects_present
+                        or provider_manager is None
+                        or active_provider is None
+                    ):
+                        raise
+
+                    fallback_provider = provider_manager.get_fallback(attempted_provider_ids)
+                    if fallback_provider is None:
+                        raise
+                    logger.warning(
+                        "[agent_node] provider failover %s/%s -> %s/%s",
+                        active_provider.config.id,
+                        model_name or "<unknown>",
+                        fallback_provider.config.id,
+                        fallback_provider.default_model or "<unknown>",
+                    )
+                    active_provider = fallback_provider
+                    active_llm = _build_provider_llm(active_provider)
+                    selected_provider_id = active_provider.config.id
+                    continue
+
+                latency_ms = (time.monotonic() - started_at) * 1000
+                if active_provider is not None and provider_manager is not None:
+                    provider_manager.mark_healthy(active_provider.config.id, latency_ms=latency_ms)
+                trace.append({
+                    "provider_id": provider_id,
+                    "model_name": model_name,
+                    "outcome": "success",
+                })
+                break
         except Exception as e:
-            logger.error("[agent_node] LLM 调用失败: %s", e, exc_info=True)
+            logger.error("[agent_node] LLM 调用失败: %s", type(e).__name__, exc_info=True)
             # 优雅降级：返回错误提示，避免整个 Graph 崩溃
             err_msg = AIMessage(
                 content=f"（调用模型时出错：{type(e).__name__}: {str(e)[:200]}。请稍后重试或检查提供商配置。）"
             )
-            return {"messages": [err_msg], "episodic_context": ""}
+            return {
+                "messages": [err_msg],
+                "episodic_context": "",
+                "llm_provider_id": trace[-1]["provider_id"] if trace else "",
+                "llm_model_name": trace[-1]["model_name"] if trace else "",
+                "llm_failover_trace": trace,
+                "llm_invocation_succeeded": False,
+                "llm_selected_provider_id": selected_provider_id,
+                "llm_selection_turn_marker": current_turn_marker,
+            }
 
         # 流式响应修复管道（通过 feature flag 控制，默认关闭）
         # 修复国产模型（GLM/DeepSeek/Moonshot）的不规范输出：
@@ -484,7 +688,16 @@ def build_agent(
         except Exception as e:
             logger.warning("[agent_node] 流式修复管道异常: %s", e)
 
-        return {"messages": [response], "episodic_context": ""}
+        return {
+            "messages": [response],
+            "episodic_context": "",
+            "llm_provider_id": trace[-1]["provider_id"] if trace else "",
+            "llm_model_name": trace[-1]["model_name"] if trace else "",
+            "llm_failover_trace": trace,
+            "llm_invocation_succeeded": True,
+            "llm_selected_provider_id": selected_provider_id,
+            "llm_selection_turn_marker": current_turn_marker,
+        }
 
     async def loop_breaker_node(state: AgentState) -> dict:
         """循环终止节点：注入 ToolMessage + SystemMessage 后结束。

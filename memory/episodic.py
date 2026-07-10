@@ -101,7 +101,8 @@ class EpisodicMemoryManager:
             ttl: 可选 TTL（秒）；None 时使用管理器默认 TTL
 
         Returns:
-            新建的 episode ID
+            新建的 episode ID；若同一 ``(session_id, turn_id)`` 已投影过，
+            返回既有 episode ID。
         """
         effective_ttl = ttl if ttl is not None else self._default_ttl
         expires_at = _compute_expires_at(effective_ttl) if effective_ttl else None
@@ -117,6 +118,24 @@ class EpisodicMemoryManager:
         }
         with portalocker.Lock(self._lock_path, timeout=5):
             data = self._read_all()
+            # 自动投影可能因连接断开或调用方重试而重复执行。仅当两个
+            # 标识都存在时去重，避免改变没有关联标识的手动录入语义。
+            if session_id and turn_id:
+                for existing_id, existing_record in data.items():
+                    if (
+                        existing_record.get("session_id") == session_id
+                        and existing_record.get("turn_id") == turn_id
+                    ):
+                        logger.info(
+                            "[episodic] duplicate projection for session=%s turn=%s; "
+                            "keeping episode %s",
+                            session_id,
+                            turn_id,
+                            existing_id,
+                        )
+                        return existing_id
+            while episode_id in data:
+                episode_id = self._generate_id()
             data[episode_id] = record
             self._write_all(data)
         # 同步向量库（best-effort）
@@ -169,6 +188,7 @@ class EpisodicMemoryManager:
         query: str,
         top_k: int = 5,
         include_expired: bool = False,
+        session_id: Optional[str] = None,
     ) -> list[dict]:
         """按语义相似度检索历史 episode。
 
@@ -178,6 +198,7 @@ class EpisodicMemoryManager:
             query: 查询文本
             top_k: 返回的最大结果数
             include_expired: True 时包含已过期条目
+            session_id: 限定到指定会话；None 时不限制（供显式跨会话查询使用）
 
         Returns:
             episode 字典列表，每项含 id/summary/timestamp/similarity/session_id
@@ -197,6 +218,7 @@ class EpisodicMemoryManager:
                 collection=COLLECTION_EPISODIC,
                 query_embeddings=embeddings,
                 n_results=top_k * 2,  # 多取一些用于过滤已过期
+                where={"session_id": session_id} if session_id else None,
             )
             # 加载 JSON 获取完整记录
             with portalocker.Lock(self._lock_path, timeout=5):
@@ -208,6 +230,10 @@ class EpisodicMemoryManager:
                 if not record:
                     continue
                 if not include_expired and _is_expired(record.get("expires_at")):
+                    continue
+                # JSON 是权威记录。即使向量索引滞后或由旧版本写入，也绝不能
+                # 让其他会话的内容混入当前会话的自动上下文。
+                if session_id and record.get("session_id") != session_id:
                     continue
                 similarity = max(0.0, 1.0 - r["distance"])
                 results.append({

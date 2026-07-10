@@ -58,6 +58,9 @@
             <button class="popup-item popup-action" :class="{ exporting: exportingErrorLog }" :disabled="exportingErrorLog" @click="handleExportErrorLog">
               {{ exportingErrorLog ? '导出中...' : '导出错误日志' }}
             </button>
+            <button class="popup-item popup-action" :class="{ exporting: managingLogs }" :disabled="managingLogs" @click="handleManageLogs">
+              {{ managingLogs ? '处理中...' : '日志管理' }}
+            </button>
             <button class="popup-item popup-action" :class="{ restarting }" :disabled="restarting" @click="handleRestart">
               {{ restarting ? '重启中...' : '重启服务' }}
             </button>
@@ -129,6 +132,7 @@ const popupLeft = ref('228px')
 const popupMaxHeight = ref('')
 const restarting = ref(false)
 const exportingErrorLog = ref(false)
+const managingLogs = ref(false)
 const { isDark: isNightMode } = useTheme()
 
 async function handleExportErrorLog() {
@@ -151,6 +155,28 @@ async function handleExportErrorLog() {
     alert('导出错误日志失败: ' + (e instanceof Error ? e.message : String(e)))
   } finally {
     exportingErrorLog.value = false
+  }
+}
+
+async function handleManageLogs() {
+  if (managingLogs.value) return
+  managingLogs.value = true
+  closeSettingsMenu()
+  try {
+    const info = await api.getLogFiles()
+    const fileList = info.files.map((f: { name: string; size_mb: number }) => `  ${f.name}: ${f.size_mb.toFixed(2)} MB`).join('\n')
+    const totalMB = (info.total_mb ?? 0).toFixed(2)
+    const confirmClean = window.confirm(
+      `日志文件占用情况：\n${fileList}\n\n总计: ${totalMB} MB\n\n是否清理旧日志轮转文件（保留当前日志）？`
+    )
+    if (confirmClean) {
+      const result = await api.clearOldLogs()
+      alert(`已清理 ${result.deleted_count ?? 0} 个旧日志文件，释放 ${(result.freed_mb ?? 0).toFixed(2)} MB 空间`)
+    }
+  } catch (e) {
+    alert('日志管理失败: ' + (e instanceof Error ? e.message : String(e)))
+  } finally {
+    managingLogs.value = false
   }
 }
 
@@ -283,6 +309,7 @@ watch(health, (newHealth, oldHealth) => {
 @import '@/themes/delve.css';
 @import '@/themes/deep-think.css';
 @import '@/themes/absolutely.css';
+@import '@/themes/dawn.css';
 @import '@/themes/midnight-contrast.css';
 
 *,

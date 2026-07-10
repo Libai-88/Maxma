@@ -8,16 +8,22 @@ import traceback
 
 from pydantic import BaseModel, Field
 
+from agent.delegation_scope import DelegationScope, intersect, from_parent_context
 from api import interaction
 from tools.base import ToolBase, format_success, format_error, register_tool
+from tools.sub_agent.delegation_context import (
+    activate_delegation_context,
+    bind_model_budget,
+    create_delegation_context,
+    prepare_delegated_tools,
+    reset_delegation_context,
+)
 
 logger = logging.getLogger(__name__)
 
 # 复用 call_sub_agent 的深度追踪逻辑
 _MAX_PARALLEL_TASKS = 5
 _PARALLEL_TIMEOUT = 180  # 秒
-
-from agent.delegation_scope import DelegationScope, intersect, from_parent_context
 
 
 def _filter_tools_by_scope(tool_names: list[str], scope: DelegationScope) -> list[str]:
@@ -137,6 +143,9 @@ class ParallelExecuteTool(ToolBase):
             logger.debug("Failed to parse parent_session_id from WebSocket URL", exc_info=True)
 
         # 为每个任务创建 sub-session
+        # All parallel children receive the same immutable deadline and trace.
+        # They cannot race to discover a different global model or capability.
+        delegation_context = create_delegation_context(app_state, parent_session_id)
         sub_sessions = []
         for item in task_list:
             task_desc = item["task"].strip()
@@ -145,6 +154,7 @@ class ParallelExecuteTool(ToolBase):
                 task=task_desc,
                 parent_session_id=parent_session_id,
             )
+            sub.delegation_context = delegation_context
             sub_sessions.append({
                 "sub": sub,
                 "task": task_desc,
@@ -173,15 +183,18 @@ class ParallelExecuteTool(ToolBase):
             task_desc = entry["task"]
             name = entry["name"]
             try:
-                answer = await asyncio.wait_for(
-                    sub._pending_result, timeout=_PARALLEL_TIMEOUT
-                )
+                wait_timeout = delegation_context.frontend_wait_seconds(_PARALLEL_TIMEOUT)
+                if wait_timeout <= 0:
+                    raise asyncio.TimeoutError
+                answer = await asyncio.wait_for(sub._pending_result, timeout=wait_timeout)
                 return {"name": name, "task": task_desc, "status": "ok", "answer": answer}
             except asyncio.TimeoutError:
                 # 超时 → 尝试后台执行
                 if not sub._pending_result.done():
                     try:
-                        answer = await self._run_background(sub, task_desc, app_state)
+                        answer = await self._run_background(
+                            sub, task_desc, app_state, delegation_context
+                        )
                         return {"name": name, "task": task_desc, "status": "ok", "answer": answer}
                     except Exception as bg_err:
                         return {"name": name, "task": task_desc, "status": "error", "error": str(bg_err)}
@@ -219,49 +232,38 @@ class ParallelExecuteTool(ToolBase):
             "results": results,
         })
 
-    async def _run_background(self, sub, task: str, app_state) -> str:
+    async def _run_background(self, sub, task: str, app_state, delegation_context=None) -> str:
         """后端直接执行（无前端连接时的回退路径）。"""
         from agent.graph import build_agent
         from agent.prompts import build_system_prompt
         from langchain_core.messages import HumanMessage
         from langchain_core.runnables import RunnableConfig
 
+        context = delegation_context or getattr(sub, "delegation_context", None)
+        if context is None:
+            context = create_delegation_context(app_state, getattr(sub, "parent_session_id", None))
+        if context.remaining_seconds() <= 0:
+            raise TimeoutError("子 Agent 的委托时间预算已耗尽")
+
         system_prompt = build_system_prompt()
         # 4 层架构：子 Agent 也启用情景记忆检索
         episodic_mm = getattr(app_state, "episodic_mm", None)
 
-        # DelegationScope 收窄：delegation_scope_enforced 启用时过滤子 Agent 工具
-        effective_tools = app_state.tools
-        try:
-            from config.settings import get_settings
-            if get_settings().delegation_scope_enforced:
-                parent_tool_names = [t.name for t in app_state.tools]
-                parent_paths = []
-                try:
-                    from tools.path_security import get_whitelisted_paths
-                    parent_paths = get_whitelisted_paths()
-                except Exception:
-                    pass
-                effective_scope = _compute_effective_scope(
-                    parent_tools=parent_tool_names,
-                    parent_paths=parent_paths,
-                    child_requested_tools=parent_tool_names,
-                )
-                effective_tool_names = _filter_tools_by_scope(parent_tool_names, effective_scope)
-                effective_tools = [t for t in app_state.tools if t.name in set(effective_tool_names)]
-                logger.info("[parallel_execute] scope enforced: %d/%d tools retained",
-                            len(effective_tools), len(app_state.tools))
-        except Exception as e:
-            logger.warning("[parallel_execute] scope 计算失败，使用全量工具: %s", e)
-            effective_tools = app_state.tools
+        effective_tools = prepare_delegated_tools(app_state.tools, context)
+        model = bind_model_budget(context)
+        if model is None:
+            raise RuntimeError("子 Agent 未继承到可用模型")
 
         agent = build_agent(
-            model=app_state.llm,
+            model=model,
             tools=effective_tools,
             system_prompt=system_prompt,
             checkpointer=sub.checkpointer,
             episodic_mm=episodic_mm,
             enable_executor=False,  # 子 Agent 不启用 executor，防止递归爆炸
+            # The fallback run has no child WebSocket, so failover must be
+            # supplied directly instead of relying on build_agent's WS lookup.
+            provider_manager=getattr(app_state, "provider_manager", None),
         )
         inputs = {"messages": [HumanMessage(content=task)]}
         config: RunnableConfig = {
@@ -270,21 +272,24 @@ class ParallelExecuteTool(ToolBase):
         }
 
         final_answer = ""
+        context_token = activate_delegation_context(context)
+        session_token = interaction.current_session_id.set(sub.session_id)
         try:
-            async for event in agent.astream_events(
-                inputs, config=config, version="v2"
-            ):
-                if (
-                    event.get("event") == "on_chain_end"
-                    and event.get("name") == "agent"
+            async with asyncio.timeout(context.remaining_seconds()):
+                async for event in agent.astream_events(
+                    inputs, config=config, version="v2"
                 ):
-                    output: dict = event["data"].get("output", {})
-                    messages = output.get("messages", [])
-                    if messages:
-                        last = messages[-1]
-                        final_answer = (
-                            last.content if hasattr(last, "content") else str(last)
-                        )
+                    if (
+                        event.get("event") == "on_chain_end"
+                        and event.get("name") == "agent"
+                    ):
+                        output: dict = event["data"].get("output", {})
+                        messages = output.get("messages", [])
+                        if messages:
+                            last = messages[-1]
+                            final_answer = (
+                                last.content if hasattr(last, "content") else str(last)
+                            )
 
             if not final_answer:
                 try:
@@ -302,10 +307,17 @@ class ParallelExecuteTool(ToolBase):
                                 final_answer = candidate
                 except Exception:
                     logger.debug("Failed to read fallback final_answer from sub-agent checkpoint", exc_info=True)
+        except TimeoutError as e:
+            raise TimeoutError("子 Agent 超过委托时间预算") from e
         except Exception as e:
             print(f"[parallel_execute] _run_background failed: {e}", file=sys.stderr)
             traceback.print_exc(file=sys.stderr)
             raise
+        finally:
+            try:
+                reset_delegation_context(context_token)
+            finally:
+                interaction.current_session_id.reset(session_token)
 
         if final_answer:
             sub.message_count += 2

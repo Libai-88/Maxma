@@ -1,0 +1,114 @@
+/* web/src/themes/dawn.css
+ * 晨曦主题 — 粉桃 / 奶油黄 / 米白 / 淡青 四色渐变
+ * 灵感：清晨天际，朝霞薄雾，温柔清爽
+ */
+
+[data-theme="dawn"] {
+  /* ── 背景基色（纯色，用于卡片/代码块等需要纯色的元素） ── */
+  --bg-primary:    #FCFBE6;  /* 米白，渐变中间色 */
+  --bg-secondary:  #EAF5F6;  /* 淡青，侧边栏 */
+  --bg-card:       #FFFEFA;  /* 近白带暖，浮于渐变之上 */
+  --user-bubble:   rgba(232, 130, 111, 0.08);
+
+  /* ── 主色调 ── */
+  --accent:        #6B9BA5;  /* 淡青深色，克制主操作色 */
+  --accent-pink:   #E8826F;  /* 粉桃深色，温暖强调 */
+  --accent-pink-light: #E8826F;
+  --accent-pink-soft:  rgba(232, 130, 111, 0.1);
+
+  /* ── 文字（深棕灰，保证渐变背景上的可读性） ── */
+  --text-primary:   #3A3530;
+  --text-secondary: #6A6258;
+  --text-tertiary:  #9A9088;
+
+  /* ── 边框与阴影 ── */
+  --border:         rgba(232, 130, 111, 0.2);
+  --shadow-color:   rgba(58, 53, 48, 0.08);
+
+  /* ── 状态色 ── */
+  --status-ok:      #7AAE8A;
+  --status-error:   #D06A60;
+  --status-warn:    #C9A050;
+
+  /* ── 聊天专用 ── */
+  --hana-text:      #4A5A60;
+  --tool-bg:        rgba(107, 155, 165, 0.06);
+  --sidebar-bg:     rgba(234, 245, 246, 0.85);  /* 半透明淡青，透出渐变 */
+
+  /* ── 遮罩层 ── */
+  --overlay-subtle: rgba(0, 0, 0, 0.03);
+  --overlay-light:  rgba(0, 0, 0, 0.05);
+  --overlay-medium: rgba(0, 0, 0, 0.08);
+  --overlay-strong: rgba(0, 0, 0, 0.15);
+
+  /* RGB 拆分（用于 rgba(var(--accent-rgb), 0.08)） */
+  --accent-rgb: 107, 155, 165;
+  --green-rgb: 76, 175, 80;
+  --coral-rgb: 255, 127, 80;
+  --danger-rgb: 244, 67, 54;
+
+  /* 聊天专用语义色 */
+  --hana-text: #5a7080;
+  --mood-bg: rgba(var(--accent-rgb), 0.06);
+  --mood-text: #6a8090;
+  --mood-border: rgba(var(--accent-rgb), 0.15);
+  --tool-bg: rgba(var(--accent-rgb), 0.04);
+  --tool-text: #4a6070;
+  --user-bg: rgba(var(--accent-rgb), 0.08);
+  --drop-overlay-bg: rgba(var(--accent-rgb), 0.12);
+  --attach-bg: rgba(var(--accent-rgb), 0.05);
+
+  /* 修复 --accent-light 语义冲突 */
+  --accent-light: #568590;
+  --accent-hover: #568590;
+}
+
+/* ── 渐变背景：粉桃 → 奶油黄 → 米白 → 淡青 ──
+ * 覆盖 App.vue 中 html, body { background: var(--bg-primary); }
+ * 使用 165deg 让渐变从左上到右下，更有晨光感
+ */
+[data-theme="dawn"] body {
+  background: linear-gradient(
+    165deg,
+    #FDC9C6 0%,
+    #FFEEBB 32%,
+    #FCFBE6 64%,
+    #EAF5F6 100%
+  ) fixed;
+  background-color: #FCFBE6;  /* 渐变加载前的回退色 */
+}
+
+/* 侧边栏半透明，让渐变透出来，同时保持内容可读 */
+[data-theme="dawn"] .sidebar {
+  background: rgba(234, 245, 246, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* 主内容区保持透明，继承 body 渐变 */
+[data-theme="dawn"] .app-layout {
+  background: transparent;
+}
+
+/* 卡片在渐变背景上需要更明显的边界 */
+[data-theme="dawn"] .msg-card,
+[data-theme="dawn"] .ds-card,
+[data-theme="dawn"] .input-wrapper,
+[data-theme="dawn"] .hover-card {
+  background: var(--bg-card);
+  box-shadow: 0 2px 12px var(--shadow-color);
+}
+
+/* 纸质纹理兼容：开启纹理时 body 渐变仍作为底色，纹理叠加上去 */
+[data-theme="dawn"] body.paper-texture {
+  background-image: var(--paper-texture-url), linear-gradient(
+    165deg,
+    #FDC9C6 0%,
+    #FFEEBB 32%,
+    #FCFBE6 64%,
+    #EAF5F6 100%
+  );
+  background-repeat: repeat, no-repeat;
+  background-size: auto, cover;
+  background-attachment: fixed, fixed;
+}

@@ -3,7 +3,9 @@
 import re
 
 import pytest
+import yaml
 
+import memory.memory_manager as memory_manager_module
 from memory.memory_manager import MemoryManager, MemoryItem
 
 
@@ -140,6 +142,55 @@ class TestMemoryManager:
         id1 = mm.add(description="A", theme="身份")
         with pytest.raises(ValueError, match="not found"):
             mm.merge(id1, "bad-id", "desc", "主题", "原因")
+
+    def test_atomic_write_preserves_original_when_replace_fails(
+        self, tmp_path, monkeypatch
+    ):
+        path = tmp_path / "memory.yaml"
+        mm = MemoryManager(yaml_file=str(path))
+        mm.add(description="已持久化", theme="身份")
+        original = path.read_text(encoding="utf-8")
+
+        def fail_replace(_source, _destination):
+            raise OSError("simulated crash before replacement")
+
+        monkeypatch.setattr(memory_manager_module.os, "replace", fail_replace)
+        with pytest.raises(OSError, match="simulated crash"):
+            mm.add(description="不应写入", theme="身份")
+
+        assert path.read_text(encoding="utf-8") == original
+        assert [item["description"] for item in mm.show()] == ["已持久化"]
+        assert not list(tmp_path.glob(".memory.yaml.*.tmp"))
+
+    def test_atomic_write_preserves_document_and_fence_when_dump_fails(
+        self, tmp_path, monkeypatch
+    ):
+        path = tmp_path / "memory.yaml"
+        mm = MemoryManager(yaml_file=str(path))
+        mm.add(
+            "已持久化",
+            "身份",
+            projection_operation_id="existing-fence",
+            projection_identity=("session-a", "turn-1"),
+        )
+        original = path.read_text(encoding="utf-8")
+
+        def fail_dump(*_args, **_kwargs):
+            raise OSError("simulated write failure")
+
+        monkeypatch.setattr(memory_manager_module.yaml, "dump", fail_dump)
+        with pytest.raises(OSError, match="simulated write failure"):
+            mm.add(
+                "不应写入",
+                "身份",
+                projection_operation_id="new-fence",
+                projection_identity=("session-a", "turn-2"),
+            )
+
+        assert path.read_text(encoding="utf-8") == original
+        recovered = yaml.safe_load(path.read_text(encoding="utf-8"))
+        assert "existing-fence" in recovered[mm._PROJECTION_OPERATIONS_KEY]
+        assert "new-fence" not in recovered[mm._PROJECTION_OPERATIONS_KEY]
 
 
 class TestMemoryManagerGrouping:

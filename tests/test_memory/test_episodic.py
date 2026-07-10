@@ -98,6 +98,33 @@ class TestAddEpisode:
         assert data[0]["ttl"] is None
         assert data[0]["expires_at"] is None
 
+    def test_add_is_idempotent_for_session_and_turn(self, tmp_path):
+        """自动投影重试不能为同一个 chat turn 创建多个快照。"""
+        em = EpisodicMemoryManager(json_file=str(tmp_path / "e.json"))
+        first_id = em.add_episode(
+            summary="首次摘要", session_id="session-1", turn_id="turn-1"
+        )
+        duplicate_id = em.add_episode(
+            summary="重试时不应覆盖", session_id="session-1", turn_id="turn-1"
+        )
+
+        assert duplicate_id == first_id
+        episodes = em.list_episodes()
+        assert len(episodes) == 1
+        assert episodes[0]["summary"] == "首次摘要"
+
+    def test_same_turn_id_is_not_deduplicated_across_sessions(self, tmp_path):
+        em = EpisodicMemoryManager(json_file=str(tmp_path / "e.json"))
+        first_id = em.add_episode(
+            summary="会话一", session_id="session-1", turn_id="turn-1"
+        )
+        second_id = em.add_episode(
+            summary="会话二", session_id="session-2", turn_id="turn-1"
+        )
+
+        assert second_id != first_id
+        assert len(em.list_episodes()) == 2
+
 
 class TestListAndDelete:
     """list_episodes / delete_episode 测试。"""
@@ -214,6 +241,28 @@ class TestRetrieveDegradation:
         assert results[0]["summary"] == "用户询问天气"
         # similarity = 1 - 0.1 = 0.9
         assert results[0]["similarity"] == pytest.approx(0.9, abs=0.01)
+
+    def test_retrieve_filters_to_requested_session(self, tmp_path):
+        """自动检索不能把另一会话的相似记录注入当前上下文。"""
+        em = EpisodicMemoryManager(json_file=str(tmp_path / "e.json"))
+        current_id = em.add_episode(summary="当前会话的项目计划", session_id="current")
+        other_id = em.add_episode(summary="其他会话的私有计划", session_id="other")
+        mock_engine = MagicMock()
+        mock_engine.embed.return_value = [[0.1, 0.2, 0.3]]
+        mock_store = MagicMock()
+        # 即使底层索引返回了不匹配记录，JSON 权威层也会再次过滤。
+        mock_store.query.return_value = [
+            {"id": other_id, "document": "其他会话的私有计划", "metadata": {}, "distance": 0.01},
+            {"id": current_id, "document": "当前会话的项目计划", "metadata": {}, "distance": 0.1},
+        ]
+        with (
+            patch("memory.rag.embedding.get_embedding_engine", return_value=mock_engine),
+            patch("memory.rag.vector_store.get_vector_store", return_value=mock_store),
+        ):
+            results = em.retrieve(query="计划", session_id="current")
+
+        assert [item["id"] for item in results] == [current_id]
+        assert mock_store.query.call_args.kwargs["where"] == {"session_id": "current"}
 
     def test_retrieve_filters_expired(self, tmp_path):
         path = tmp_path / "e.json"

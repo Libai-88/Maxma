@@ -1,5 +1,5 @@
 // web/src/composables/useTheme.ts
-// 主题切换 composable — 12 选项（auto + 11 主题）
+// 主题切换 composable — 13 选项（auto + 12 主题）
 // 替代 useNightMode.ts 的主题选择职责
 
 import { ref, computed, watch } from 'vue'
@@ -16,6 +16,7 @@ export type ThemeId =
   | 'delve'
   | 'deep-think'
   | 'absolutely'
+  | 'dawn'
   | 'midnight-contrast'
 
 /** 主题元信息 */
@@ -98,6 +99,13 @@ export const THEMES: ThemeMeta[] = [
     description: '暖奶油 + 哑光赤陶',
     isDark: false,
     preview: { bg: '#F4F3EE', accent: '#A54B37', text: '#2E2A26' },
+  },
+  {
+    id: 'dawn',
+    name: '晨曦',
+    description: '粉桃奶黄渐变，清晨薄雾',
+    isDark: false,
+    preview: { bg: 'linear-gradient(135deg, #FDC9C6 0%, #FFEEBB 35%, #FCFBE6 65%, #EAF5F6 100%)', accent: '#E8826F', text: '#3A3530' },
   },
   {
     id: 'midnight-contrast',

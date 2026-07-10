@@ -613,6 +613,16 @@ export const api = {
       method: 'DELETE',
     }),
 
+  /** 获取日志文件列表及大小 */
+  getLogFiles: () =>
+    request<{ status: string; logs_dir: string; files: Array<{ name: string; size_bytes: number; size_mb: number; path: string }>; count: number; total_bytes: number; total_mb: number }>('/diagnostics/logs'),
+
+  /** 清理旧日志轮转文件（保留当前日志） */
+  clearOldLogs: () =>
+    request<{ status: string; deleted_count: number; freed_bytes: number; freed_mb: number; deleted_files: string[] }>('/diagnostics/logs', {
+      method: 'DELETE',
+    }),
+
   // ── Activity 活动中心 ──
 
   /** 获取最近的活动记录 */

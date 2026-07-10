@@ -13,7 +13,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from agent.graph import build_agent
 from agent.prompts import build_system_prompt, get_system_prompt_parts
-from agent.context_manager import maybe_trim_checkpoint
+from agent.context_manager import commit_to_episodic, maybe_trim_checkpoint
 from api import interaction
 from api.callbacks.websocket_callback import WebSocketCallback
 from api.const_session_store import save_const_session, serialize_messages
@@ -34,6 +34,18 @@ router = APIRouter()
 _LOCAL_REF_PREFIX = "local:"
 
 
+def _effective_auto_approve(session: SessionState, requested: object) -> bool:
+    """Prevent a delegated session from exceeding its parent's approval policy."""
+    context = (
+        getattr(session, "delegation_context", None)
+        if getattr(session, "is_subagent", False)
+        else None
+    )
+    if context is None:
+        return bool(requested)
+    return bool(requested) and bool(context.auto_approve)
+
+
 def _get_provider_context(app_state) -> tuple[int, str]:
     """从 ProviderManager 获取默认 context_window 和 model_name。"""
     mgr = getattr(app_state, "provider_manager", None)
@@ -41,6 +53,43 @@ def _get_provider_context(app_state) -> tuple[int, str]:
         for provider in mgr.iter_enabled():
             return provider.config.context_window, provider.default_model
     return 256_000, ""
+
+
+def _build_runtime_context_for_agent(
+    app_state, turn_tools, current_model_name: str | None
+) -> str:
+    """生成运行时配置摘要，注入到 agent 的 episodic_context。
+
+    让 agent 每轮都能"看到"自己的配置全貌（providers/MCP/工具统计），
+    减少执行路径的不确定性。失败时返回空字符串，不阻塞主流程。
+    """
+    try:
+        from agent.runtime_context import build_runtime_context
+
+        provider_manager = getattr(app_state, "provider_manager", None)
+        native_count = sum(
+            1
+            for t in turn_tools
+            if not t.name.split("_")[0].islower() or "_" not in t.name
+        )
+        # 更准确的统计：MCP 工具名通常带 server_id 前缀
+        from tools import TOOL_CATEGORIES
+
+        all_native_names: set[str] = set()
+        for names in TOOL_CATEGORIES.values():
+            all_native_names.update(names)
+        native_count = sum(1 for t in turn_tools if t.name in all_native_names)
+        mcp_count = len(turn_tools) - native_count
+
+        return build_runtime_context(
+            provider_manager=provider_manager,
+            mcp_tool_count=mcp_count,
+            native_tool_count=native_count,
+            current_model_name=current_model_name,
+        )
+    except Exception as e:
+        logger.warning("[chat] 运行时配置摘要生成失败: %s", e)
+        return ""
 
 
 async def _process_image_refs(user_message: str) -> str:
@@ -65,7 +114,7 @@ async def _process_image_refs(user_message: str) -> str:
     if refs_end == -1:
         return user_message
 
-    refs_json = user_message[refs_start + len("__refs__"):refs_end]
+    refs_json = user_message[refs_start + len("__refs__") : refs_end]
     try:
         refs_list = json.loads(refs_json)
     except (json.JSONDecodeError, ValueError):
@@ -107,7 +156,7 @@ def _resolve_local_image_ref(image_ref: str) -> Path:
     """将前端图片 ref 解析为已通过路径安全检查的本地路径。"""
     path_text = image_ref.strip()
     if path_text.startswith(_LOCAL_REF_PREFIX):
-        path_text = path_text[len(_LOCAL_REF_PREFIX):].strip()
+        path_text = path_text[len(_LOCAL_REF_PREFIX) :].strip()
     if not path_text:
         raise ValueError("图片路径为空")
 
@@ -151,7 +200,10 @@ async def _describe_image(image_path: str) -> str:
                 "role": "user",
                 "content": [
                     {"type": "image_url", "image_url": {"url": data_url}},
-                    {"type": "text", "text": "请简洁描述这张图片的主要内容，包括关键元素、场景和文字（如果有）。控制在 100 字以内。"},
+                    {
+                        "type": "text",
+                        "text": "请简洁描述这张图片的主要内容，包括关键元素、场景和文字（如果有）。控制在 100 字以内。",
+                    },
                 ],
             }
         ],
@@ -190,8 +242,8 @@ async def _get_recent_ai_messages(session, config, limit: int = 5) -> list[str]:
         # 从后往前取 AI 消息（排除最后一条，因为那是当前回复）
         ai_messages = []
         for msg in reversed(messages[:-1]):
-            if hasattr(msg, 'type') and msg.type == 'ai':
-                content = msg.content if hasattr(msg, 'content') else str(msg)
+            if hasattr(msg, "type") and msg.type == "ai":
+                content = msg.content if hasattr(msg, "content") else str(msg)
                 if content:
                     ai_messages.append(content)
                     if len(ai_messages) >= limit:
@@ -238,7 +290,9 @@ async def _stream_turn(
                     if candidate:
                         final_answer = candidate
         except Exception:
-            logger.debug("Failed to read fallback final_answer from checkpoint", exc_info=True)
+            logger.debug(
+                "Failed to read fallback final_answer from checkpoint", exc_info=True
+            )
 
     # 二级兜底：如果 final_answer 仍为空（如 executor 跳过最后一步后图直接结束，
     # LLM 未生成文字回复），从 checkpoint 中提取最后一个工具错误，
@@ -252,13 +306,21 @@ async def _stream_turn(
                 for msg in reversed(messages):
                     if not isinstance(msg, ToolMessage):
                         continue
-                    content = msg.content if isinstance(msg.content, str) else str(msg.content)
-                    if '"success": false' not in content and '"success":false' not in content:
+                    content = (
+                        msg.content
+                        if isinstance(msg.content, str)
+                        else str(msg.content)
+                    )
+                    if (
+                        '"success": false' not in content
+                        and '"success":false' not in content
+                    ):
                         continue
                     # 提取错误信息
                     tool_err_msg = "工具执行失败"
                     try:
                         import json as _json
+
                         parsed = _json.loads(content)
                         if isinstance(parsed, dict) and parsed.get("success") is False:
                             tool_err_msg = parsed.get("error", tool_err_msg)
@@ -272,7 +334,9 @@ async def _stream_turn(
                     )
                     break
         except Exception:
-            logger.debug("Failed to extract tool error fallback from checkpoint", exc_info=True)
+            logger.debug(
+                "Failed to extract tool error fallback from checkpoint", exc_info=True
+            )
 
     # 三级兜底：所有提取均失败时，给用户一个明确的提示而非空白
     if not final_answer:
@@ -302,7 +366,9 @@ async def _calculate_context_usage(
         else:
             counting_messages = []
     except Exception:
-        logger.debug("Failed to read checkpoint for context usage estimation", exc_info=True)
+        logger.debug(
+            "Failed to read checkpoint for context usage estimation", exc_info=True
+        )
         counting_messages = []
 
     return estimate_context_usage(
@@ -342,37 +408,44 @@ async def _maybe_notify_plan_degraded(graph, config, ws: WebSocket) -> None:
     skipped: list[dict] = []
     failed: list[dict] = []
     from agent.step_state import StepStatus
+
     for step_dict in plan_steps:
         idx = step_dict.get("index", 0)
         status_val = step_status.get(str(idx))
         if status_val == StepStatus.SKIPPED.value:
-            skipped.append({
-                "index": idx,
-                "description": step_dict.get("description", ""),
-            })
+            skipped.append(
+                {
+                    "index": idx,
+                    "description": step_dict.get("description", ""),
+                }
+            )
         elif status_val == StepStatus.FAILED.value:
-            failed.append({
-                "index": idx,
-                "description": step_dict.get("description", ""),
-            })
+            failed.append(
+                {
+                    "index": idx,
+                    "description": step_dict.get("description", ""),
+                }
+            )
 
     if not skipped and not failed:
         return  # 正常完成，无需通知
 
     try:
-        await ws.send_json({
-            "type": "plan_degraded",
-            "payload": {
-                "skipped_steps": skipped,
-                "failed_steps": failed,
-                "failure_count": failure_count,
-                "replan_count": replan_count,
-                "message": (
-                    f"执行计划以降级模式完成：{len(skipped)} 个步骤被跳过，"
-                    f"{len(failed)} 个步骤失败。结果可能不完整，建议检查或重新提问。"
-                ),
-            },
-        })
+        await ws.send_json(
+            {
+                "type": "plan_degraded",
+                "payload": {
+                    "skipped_steps": skipped,
+                    "failed_steps": failed,
+                    "failure_count": failure_count,
+                    "replan_count": replan_count,
+                    "message": (
+                        f"执行计划以降级模式完成：{len(skipped)} 个步骤被跳过，"
+                        f"{len(failed)} 个步骤失败。结果可能不完整，建议检查或重新提问。"
+                    ),
+                },
+            }
+        )
     except Exception:
         logger.debug("[degraded] ws send failed", exc_info=True)
 
@@ -449,7 +522,10 @@ async def _inject_cancel_tool_messages(session, config, ws: WebSocket) -> None:
                 }
             )
         except Exception:
-            logger.debug("Failed to send tool_error via WebSocket (connection may be closed)", exc_info=True)
+            logger.debug(
+                "Failed to send tool_error via WebSocket (connection may be closed)",
+                exc_info=True,
+            )
 
     # 生成取消 ToolMessage 并写入 checkpoint
     cancel_msgs = []
@@ -475,9 +551,7 @@ async def _inject_cancel_tool_messages(session, config, ws: WebSocket) -> None:
 import re as _re
 
 # 匹配 Windows / Unix 绝对路径
-_PATH_PATTERN = _re.compile(
-    r"(?:[A-Za-z]:[\\/]|[\\/])(?:[\w .\-]+[\\/])*[\w .\-]+"
-)
+_PATH_PATTERN = _re.compile(r"(?:[A-Za-z]:[\\/]|[\\/])(?:[\w .\-]+[\\/])*[\w .\-]+")
 
 
 def _detect_project_path(message: str) -> str | None:
@@ -487,10 +561,18 @@ def _detect_project_path(message: str) -> str | None:
         p = m.rstrip("\\/").rstrip()
         # 检查是否是目录
         from pathlib import Path as _Path
+
         if _Path(p).is_dir():
             # 检查是否像项目根目录（含 .git 或 package.json 或 pyproject.toml 等）
-            markers = [".git", "package.json", "pyproject.toml", "Cargo.toml",
-                       "go.mod", "requirements.txt", "setup.py"]
+            markers = [
+                ".git",
+                "package.json",
+                "pyproject.toml",
+                "Cargo.toml",
+                "go.mod",
+                "requirements.txt",
+                "setup.py",
+            ]
             if any((_Path(p) / marker).exists() for marker in markers):
                 return p
     return None
@@ -510,6 +592,7 @@ def _get_project_context(session: SessionState, user_message: str) -> str | None
     # 扫描项目
     try:
         from agent.project_scanner import scan_project
+
         ctx = scan_project(project_path)
         text = ctx.to_prompt_text()
         # 缓存到 session
@@ -518,8 +601,80 @@ def _get_project_context(session: SessionState, user_message: str) -> str | None
         return text
     except Exception as e:
         import logging
+
         logging.getLogger(__name__).warning("[project_scanner] 扫描失败: %s", e)
         return None
+
+
+async def _project_completed_turn_to_episodic(
+    *,
+    graph,
+    config: dict,
+    episodic_mm,
+    session_id: str,
+    turn_id: str,
+) -> None:
+    """Best-effort 将一个成功的 chat turn 投影到情景记忆。
+
+    调用发生在客户端收到 ``done`` 事件后。情景记忆故障因此不会改变
+    已完成对话的结果；存储层以 ``(session_id, turn_id)`` 保证重试幂等。
+    """
+    if episodic_mm is None:
+        return
+    try:
+        episode_id = await commit_to_episodic(
+            graph,
+            config,
+            episodic_mm,
+            session_id=session_id,
+            turn_id=turn_id,
+        )
+        if episode_id is None:
+            logger.warning(
+                "[episodic] projection produced no episode for session=%s turn=%s",
+                session_id,
+                turn_id,
+            )
+    except Exception:
+        logger.exception(
+            "[episodic] projection failed after completed response for session=%s turn=%s",
+            session_id,
+            turn_id,
+        )
+
+
+def _new_turn_id(turn_id: object = None) -> str:
+    """Return a validated client id or create one before execution begins."""
+    if isinstance(turn_id, str):
+        candidate = turn_id.strip()
+        if candidate and len(candidate) <= 128:
+            return candidate
+    return uuid.uuid4().hex
+
+
+async def _is_memory_eligible_turn(graph, config: dict) -> bool:
+    """Read the graph's explicit model outcome before persisting a turn.
+
+    Provider failures are intentionally rendered as helpful AI messages by the
+    graph.  Their text is not a reliable persistence signal, particularly
+    across locales and provider implementations, so only an explicit success
+    marker allows automatic episodic/LTM projection.
+    """
+    try:
+        state = await graph.aget_state(config)
+        values = getattr(state, "values", {}) if state is not None else {}
+        succeeded = values.get("llm_invocation_succeeded")
+        if succeeded is True:
+            return True
+        if succeeded is False:
+            logger.info("[memory] skipping failed model turn")
+        else:
+            logger.warning("[memory] skipping turn without model outcome metadata")
+    except Exception:
+        logger.warning(
+            "[memory] skipping turn with unreadable model outcome", exc_info=True
+        )
+    return False
 
 
 async def _run_agent_turn(
@@ -530,6 +685,7 @@ async def _run_agent_turn(
     auto_approve: bool = False,
     provider_id: str | None = None,
     model_name: str | None = None,
+    turn_id: str | None = None,
 ):
     """
     在指定的session中编排一轮 Agent 对话。
@@ -542,10 +698,14 @@ async def _run_agent_turn(
     # 1. [准备环境] 从 WebSocket 获取应用状态
     app_state = ws.app.state
     current_task = asyncio.current_task()
-    session.auto_approve = auto_approve
+    # The memory id is assigned before any model work.  Callers can pass a
+    # stable client/request id when retrying after reconnect; otherwise this
+    # invocation gets one stable id for its full lifetime.
+    turn_id = _new_turn_id(turn_id)
     interaction.current_session_id.set(session.session_id)
     ws_callback = WebSocketCallback(ws)  # WebUI 回调函数系统
     ws_callback.session_id = session.session_id  # 供 Activity Hub 记录使用
+    ws_callback.turn_id = turn_id
 
     # ── 多模态：自动描述用户附带的图片 ──────────────────────────
     user_message = await _process_image_refs(user_message)
@@ -554,15 +714,30 @@ async def _run_agent_turn(
     # 获取默认上下文窗口大小和模型名（一次性解构，避免重复调用）
     default_max_tokens, fallback_model_name = _get_provider_context(app_state)
 
+    # 子会话在创建时带有不可变的 DelegationContext。前端连接后也必须
+    # 消费它，不能让客户端 payload 或之后的全局 provider 配置改变父任务
+    # 已授权的模型、工具或预算。普通会话保持原有选择逻辑。
+    delegation_context = (
+        getattr(session, "delegation_context", None)
+        if getattr(session, "is_subagent", False)
+        else None
+    )
+    delegation_helpers = None
+    auto_approve = _effective_auto_approve(session, auto_approve)
+    session.auto_approve = auto_approve
+    interaction.set_session_auto_approve(session.session_id, auto_approve)
+
     # 动态 LLM 选择（Phase 2：每次消息独立指定提供商/模型）
     # 阶段 3.3：指定 provider 失败时尝试 fallback 链（按 priority 排序）
     current_max_tokens = default_max_tokens
+    current_provider_id = ""
     if provider_id and model_name and hasattr(app_state, "provider_manager"):
         try:
             provider = app_state.provider_manager.get(provider_id)
             llm = provider.create_llm(model_name, temperature=0.7, streaming=True)
             current_model_name = model_name
             current_max_tokens = provider.config.context_window
+            current_provider_id = provider.config.id
         except KeyError:
             # 阶段 3.3：尝试 fallback 到下一个可用 provider
             fallback_provider = app_state.provider_manager.get_fallback(
@@ -585,6 +760,7 @@ async def _run_agent_turn(
                 )
                 current_model_name = fallback_provider.default_model
                 current_max_tokens = fallback_provider.config.context_window
+                current_provider_id = fallback_provider.config.id
             else:
                 logger.warning(
                     "[chat:%s] requested provider/model fallback: provider_id=%r model=%r not found; "
@@ -610,6 +786,35 @@ async def _run_agent_turn(
         llm = app_state.llm
         current_model_name = None
 
+    if delegation_context is not None:
+        from tools.sub_agent.delegation_context import (
+            activate_delegation_context,
+            bind_model_budget,
+            prepare_delegated_tools,
+            reset_delegation_context,
+        )
+
+        delegation_helpers = (
+            activate_delegation_context,
+            prepare_delegated_tools,
+            reset_delegation_context,
+        )
+        if delegation_context.remaining_seconds() <= 0:
+            error = RuntimeError("子 Agent 的委托时间预算已耗尽")
+            if (
+                session._pending_result is not None
+                and not session._pending_result.done()
+            ):
+                session._pending_result.set_exception(error)
+            await ws.send_json(
+                format_ws_error(ErrorCode.AGENT_ERROR, "子 Agent 的委托时间预算已耗尽")
+            )
+            return
+        llm = bind_model_budget(delegation_context)
+        current_model_name = delegation_context.model_name or current_model_name
+        if delegation_context.max_tokens > 0:
+            current_max_tokens = min(current_max_tokens, delegation_context.max_tokens)
+
     if llm is None:
         error_collector.add_error(
             level="ERROR",
@@ -625,6 +830,32 @@ async def _run_agent_turn(
         )
         return
 
+    # A normal parent turn also activates a context.  This makes a top-level
+    # delegation inherit the model actually selected for this request rather
+    # than rediscovering app_state.llm inside the tool.
+    if delegation_context is None:
+        from tools.sub_agent.delegation_context import (
+            activate_delegation_context,
+            create_delegation_context,
+            reset_delegation_context,
+        )
+
+        execution_context = create_delegation_context(
+            app_state,
+            session.session_id,
+            model=llm,
+            provider_id=current_provider_id,
+            model_name=current_model_name,
+            auto_approve=auto_approve,
+        )
+        delegation_helpers = (
+            activate_delegation_context,
+            None,
+            reset_delegation_context,
+        )
+    else:
+        execution_context = delegation_context
+
     system_prompt = build_system_prompt()
 
     # ── 项目上下文自动感知 ──────────────────────────────────────
@@ -638,9 +869,19 @@ async def _run_agent_turn(
     # DeepSeek prompt cache（tools 字段是 prompt 前缀的一部分）。
     # 全量工具带来的额外 token 会被缓存，成本远低于缓存 miss。
     mcp_tools = getattr(ws.app.state, "mcp_tools", None) or []
-    turn_tools = merge_tool_lists(get_all_tools(), list(mcp_tools), log_collisions=False)
+    turn_tools = merge_tool_lists(
+        get_all_tools(), list(mcp_tools), log_collisions=False
+    )
+    if delegation_context is not None:
+        # This is the execution boundary, not merely prompt-time filtering.
+        # ScopedTool validates path arguments immediately before each call.
+        turn_tools = delegation_helpers[1](turn_tools, delegation_context)
     # 4 层架构：注入情景记忆管理器，启用 episodic_retriever 节点
     episodic_mm = getattr(ws.app.state, "episodic_mm", None)
+    # B6：生成运行时配置摘要，让 agent 感知自身的 providers/MCP/工具配置全貌
+    runtime_context_text = _build_runtime_context_for_agent(
+        app_state, turn_tools, current_model_name
+    )
     agent_maxma = build_agent(
         model=llm,
         tools=turn_tools,
@@ -648,6 +889,8 @@ async def _run_agent_turn(
         checkpointer=session.checkpointer,
         ws=ws,
         episodic_mm=episodic_mm,
+        runtime_context=runtime_context_text,
+        episodic_session_id=session.session_id,
     )
     session._graph = agent_maxma
     # project_ctx prepend 到 user_message（不修改 system_prompt，保持缓存稳定）
@@ -664,6 +907,7 @@ async def _run_agent_turn(
 
     # 上下文窗口保护：当对话历史过长时自动截断，防止超出模型上下文限制
     from api.context_usage import count_tokens
+
     system_prompt_tokens = count_tokens(system_prompt)
 
     # 包装 ws.send_json 为符合 ws_callback 签名的异步回调
@@ -671,12 +915,19 @@ async def _run_agent_turn(
         await ws.send_json(msg)
 
     await maybe_trim_checkpoint(
-        agent_maxma, config,
+        agent_maxma,
+        config,
         llm=llm,
         ws_callback=_compress_ws_callback,
-        token_counter=lambda msgs: system_prompt_tokens + sum(
-            count_tokens(m.content if isinstance(m.content, str) else str(m.content)) + 4
-            for m in msgs
+        token_counter=lambda msgs: (
+            system_prompt_tokens
+            + sum(
+                count_tokens(
+                    m.content if isinstance(m.content, str) else str(m.content)
+                )
+                + 4
+                for m in msgs
+            )
         ),
         max_tokens=current_max_tokens,
     )
@@ -684,6 +935,8 @@ async def _run_agent_turn(
     # 2. [执行轮次] 流式执行 Agent 图，副作用推送最终回答，另有config回调副作用
     final_answer = ""
     _run_error: str | None = None
+    turn_completed = False
+    context_token = None
     try:
         # turn 开始时推送当前上下文用量（含刚加入的 user message）
         initial_turn_usage = await _calculate_context_usage(
@@ -694,16 +947,34 @@ async def _run_agent_turn(
         )
         await ws.send_json({"type": "context_usage", "payload": initial_turn_usage})
 
-        final_answer = await _stream_turn(
-            agent_maxma,
-            inputs,
-            config,
-            ws,
-            session,
-            system_prompt,
-            model_name=current_model_name,
-            max_tokens=current_max_tokens,
-        )
+        context_token = delegation_helpers[0](execution_context)
+        if delegation_context is not None:
+            async with asyncio.timeout(delegation_context.remaining_seconds()):
+                final_answer = await _stream_turn(
+                    agent_maxma,
+                    inputs,
+                    config,
+                    ws,
+                    session,
+                    system_prompt,
+                    model_name=current_model_name,
+                    max_tokens=current_max_tokens,
+                )
+        else:
+            final_answer = await _stream_turn(
+                agent_maxma,
+                inputs,
+                config,
+                ws,
+                session,
+                system_prompt,
+                model_name=current_model_name,
+                max_tokens=current_max_tokens,
+            )
+        # This records execution outcome, rather than inferring it from a
+        # localized fallback/error string.  The graph writes the marker even
+        # when it turns a provider failure into a user-facing AI message.
+        turn_completed = await _is_memory_eligible_turn(agent_maxma, config)
 
         # 阶段 2.3：重规划失败 N 次后优雅降级通知
         # 当 plan 以降级状态完成（有步骤被跳过/失败）时，向前端推送 plan_degraded 事件
@@ -711,13 +982,16 @@ async def _run_agent_turn(
         try:
             await _maybe_notify_plan_degraded(agent_maxma, config, ws)
         except Exception:
-            logger.debug("[degraded] failed to notify plan degraded state", exc_info=True)
+            logger.debug(
+                "[degraded] failed to notify plan degraded state", exc_info=True
+            )
 
         if final_answer:
             # 表情包处理：分层决策架构
             # 1. LLM 主动输出 [表情包:情绪] → 直接解析
             # 2. LLM 未输出 → 决策器判断是否补发
             from tools.sticker_utils import process_stickers
+
             ai_recent = await _get_recent_ai_messages(session, config, limit=5)
             processed_answer, _ = process_stickers(
                 final_answer,
@@ -748,16 +1022,18 @@ async def _run_agent_turn(
             interrupt_msg = AIMessage(
                 content="（回复已中断——可能因网络断开或切换页面。请重新提问以继续。）"
             )
-            await graph.aupdate_state(config, {"messages": [interrupt_msg]}, as_node="agent")
+            await agent_maxma.aupdate_state(
+                config, {"messages": [interrupt_msg]}, as_node="agent"
+            )
         except Exception as e:
             logger.warning("[cancel] failed to inject interrupt AIMessage: %s", e)
 
-        await ws.send_json(
-            format_ws_error(ErrorCode.CANCELLED, "生成已取消")
-        )
+        await ws.send_json(format_ws_error(ErrorCode.CANCELLED, "生成已取消"))
     except Exception as e:
         # 清理可能挂起的用户交互 Future，防止阻塞后续交互
-        await interaction.cancel_session(session.session_id, "Agent 执行出错，交互已取消")
+        await interaction.cancel_session(
+            session.session_id, "Agent 执行出错，交互已取消"
+        )
         _run_error = str(e)
         trace_id = uuid.uuid4().hex[:8]
         logger.error(
@@ -780,6 +1056,8 @@ async def _run_agent_turn(
             )
         )
     finally:
+        if context_token is not None:
+            delegation_helpers[2](context_token)
         if session._active_task is current_task:
             session._active_task = None
         context_usage = await _calculate_context_usage(
@@ -788,7 +1066,6 @@ async def _run_agent_turn(
             max_tokens=current_max_tokens,
             model_name=current_model_name or "",
         )
-        turn_id = uuid.uuid4().hex
         await ws.send_json(
             {  # [向前端通信] 3. 推送 turn 结束 + 上下文用量 + turn_id（用于记忆事件关联）
                 "type": "done",
@@ -809,13 +1086,25 @@ async def _run_agent_turn(
     else:
         # Agent 出错：graph.ainvoke 已把 HumanMessage 写入 checkpointer，但没有 AI 回复
         session.message_count += 1
-    if not private_mode:
-        # 增量发送：只传本轮消息给记忆消费者，避免每轮重复处理全量历史
+    memory_eligible = turn_completed and bool(final_answer)
+    if not private_mode and memory_eligible:
+        if final_answer:
+            await _project_completed_turn_to_episodic(
+                graph=agent_maxma,
+                config=config,
+                episodic_mm=episodic_mm,
+                session_id=session.session_id,
+                turn_id=turn_id,
+            )
+        # 增量发送：只传成功轮次给记忆消费者，避免错误提示污染 LTM。
         messages_for_memory = [
             {"role": "user", "content": user_message},
             {"role": "assistant", "content": final_answer},
         ]
-        logger.info("[ltm] calling send_history, messages=%d (incremental)", len(messages_for_memory))
+        logger.info(
+            "[ltm] calling send_history, messages=%d (incremental)",
+            len(messages_for_memory),
+        )
         try:
             await app_state.ltm.send_history(
                 messages_for_memory,
@@ -882,7 +1171,9 @@ async def _run_agent_turn(
             )
 
 
-async def _resume_sub_agent(ws: WebSocket, session: SessionState) -> asyncio.Task | None:
+async def _resume_sub_agent(
+    ws: WebSocket, session: SessionState
+) -> asyncio.Task | None:
     """WebSocket 重连时，若会话有未完成的 sub-agent 任务则自动恢复执行。"""
     if session._sub_agent_task is None or session._pending_result is None:
         return None
@@ -972,7 +1263,9 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                         await ws.send_json({"type": "error", "payload": rate_err})
                         continue
 
-                    auto_approve = payload.get("auto_approve", False)
+                    auto_approve = _effective_auto_approve(
+                        session, payload.get("auto_approve", False)
+                    )
                     interaction.current_ws.set(ws)  # 供工具函数通过 WebSocket 推送交互
                     interaction.current_session_id.set(session_id)
                     interaction.set_session_auto_approve(session_id, auto_approve)
@@ -986,6 +1279,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                             auto_approve=auto_approve,
                             provider_id=payload.get("provider_id"),
                             model_name=payload.get("model_name"),
+                            turn_id=payload.get("turn_id"),
                         )
                     )
                     session._active_task = agent_task  # 供外部 REST 接口查询活跃状态
@@ -1021,10 +1315,10 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                     payload = msg.get("payload")
                     if not isinstance(payload, dict):
                         continue
-                    auto_approve_val = payload.get("auto_approve", False)
-                    interaction.set_session_auto_approve(
-                        session_id, auto_approve_val
+                    auto_approve_val = _effective_auto_approve(
+                        session, payload.get("auto_approve", False)
                     )
+                    interaction.set_session_auto_approve(session_id, auto_approve_val)
                     session.auto_approve = auto_approve_val
 
     except WebSocketDisconnect:

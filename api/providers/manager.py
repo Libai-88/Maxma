@@ -11,12 +11,50 @@ import logging
 import threading
 import time
 from collections.abc import Iterator
-from typing import Optional
+from typing import Any, Optional
 
 from api.providers import HealthStatus, Provider, ProviderConfig
 from api.providers.store import ProviderConfigStore
 
 logger = logging.getLogger(__name__)
+
+
+def is_retryable_provider_error(error: BaseException) -> bool:
+    """Return whether a failed model request can safely be retried elsewhere.
+
+    Provider fallback is deliberately limited to transport failures and transient
+    upstream responses.  Local validation/programming errors must remain visible
+    to the caller instead of being hidden behind an unrelated provider.
+    """
+    if isinstance(error, (TimeoutError, ConnectionError, OSError)):
+        return True
+
+    status_code = getattr(error, "status_code", None)
+    if status_code is None:
+        response = getattr(error, "response", None)
+        status_code = getattr(response, "status_code", None)
+    if isinstance(status_code, int):
+        return status_code in {408, 409, 425, 429} or status_code >= 500
+
+    # Keep this dependency-free: OpenAI and httpx expose different exception
+    # types across supported versions, but their transient transport errors use
+    # stable class names.
+    error_name = type(error).__name__
+    if error_name in {
+        "APIConnectionError",
+        "APITimeoutError",
+        "RateLimitError",
+        "ServiceUnavailableError",
+        "InternalServerError",
+        "ConnectError",
+        "ReadTimeout",
+        "WriteTimeout",
+        "PoolTimeout",
+    }:
+        return True
+
+    cause = error.__cause__ or error.__context__
+    return bool(cause and cause is not error and is_retryable_provider_error(cause))
 
 
 class ProviderManager:
@@ -122,6 +160,50 @@ class ProviderManager:
                     continue
                 return provider
         return None
+
+    def find_provider_for_llm(self, llm: Any) -> Optional[Provider]:
+        """Best-effort mapping from a configured ChatModel to its provider.
+
+        A provider is identified by the model name and, when exposed by the
+        LangChain client, its base URL.  A model-only match is accepted only when
+        it is unique, so an ambiguous model name can never mark the wrong
+        provider unhealthy.
+        """
+        model_name = self._llm_attribute_text(llm, "model_name", "model")
+        base_url = self._llm_attribute_text(
+            llm, "openai_api_base", "base_url", "api_base"
+        )
+        if not model_name:
+            return None
+
+        normalized_base_url = self._normalize_base_url(base_url)
+        with self._lock:
+            candidates = [
+                provider
+                for provider in self._providers.values()
+                if model_name in provider.available_models
+            ]
+            if normalized_base_url:
+                for provider in candidates:
+                    if self._normalize_base_url(provider.config.base_url) == normalized_base_url:
+                        return provider
+            if len(candidates) == 1:
+                return candidates[0]
+        return None
+
+    @staticmethod
+    def _llm_attribute_text(llm: Any, *names: str) -> str:
+        for name in names:
+            value = getattr(llm, name, None)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return ""
+
+    @staticmethod
+    def _normalize_base_url(value: Any) -> str:
+        if value is None:
+            return ""
+        return str(value).strip().rstrip("/").lower()
 
     def mark_unhealthy(self, provider_id: str, detail: str = "") -> None:
         """标记 provider 为不健康状态（health_status=error）。

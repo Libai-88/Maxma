@@ -11,7 +11,13 @@ from langchain_core.runnables import RunnableConfig
 
 from api import interaction
 from tools.base import ToolBase, format_success, format_error, register_tool
-from tools.sub_agent.tool_parallel import _filter_tools_by_scope, _compute_effective_scope
+from tools.sub_agent.delegation_context import (
+    activate_delegation_context,
+    bind_model_budget,
+    create_delegation_context,
+    prepare_delegated_tools,
+    reset_delegation_context,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -102,10 +108,15 @@ class CallSubAgentTool(ToolBase):
             logger.debug("Failed to parse parent_session_id from WebSocket URL", exc_info=True)
 
         # 1. 创建 sub-session
+        delegation_context = create_delegation_context(app_state, parent_session_id)
         sub = await sm.create_sub_session(
             task=task,
             parent_session_id=parent_session_id,
         )
+        # SessionManager is intentionally unaware of execution policy.  Keep the
+        # immutable context on the child session so the fallback runner has the
+        # exact snapshot created at delegation time.
+        sub.delegation_context = delegation_context
         print(
             f"[call_sub_agent] sub-session created: {sub.session_id}", file=sys.stderr
         )
@@ -134,7 +145,10 @@ class CallSubAgentTool(ToolBase):
         try:
             # 等待前端连接并触发 auto-start（最多等 10 秒）
             try:
-                final_answer = await asyncio.wait_for(sub._pending_result, timeout=120)
+                wait_timeout = delegation_context.frontend_wait_seconds(120)
+                if wait_timeout <= 0:
+                    raise asyncio.TimeoutError
+                final_answer = await asyncio.wait_for(sub._pending_result, timeout=wait_timeout)
                 print(
                     f"[call_sub_agent] pending_result resolved, answer len={len(final_answer)}",
                     file=sys.stderr,
@@ -147,7 +161,7 @@ class CallSubAgentTool(ToolBase):
                 # 如果前端一直未连接，后端直接执行（无 WS streaming）
                 if not sub._pending_result.done():
                     # 尝试后台执行
-                    final_answer = await self._run_background(sub, task, app_state)
+                    final_answer = await self._run_background(sub, task, app_state, delegation_context)
                     print(
                         f"[call_sub_agent] background done, answer len={len(final_answer)}",
                         file=sys.stderr,
@@ -179,7 +193,7 @@ class CallSubAgentTool(ToolBase):
             traceback.print_exc(file=sys.stderr)
             return format_error(f"子 Agent 执行失败: {str(e)}")
 
-    async def _run_background(self, sub, task: str, app_state) -> str:
+    async def _run_background(self, sub, task: str, app_state, delegation_context=None) -> str:
         """后端直接执行（无前端连接时的回退路径）。"""
         print(
             f"[call_sub_agent] _run_background starting for {sub.session_id}",
@@ -189,60 +203,56 @@ class CallSubAgentTool(ToolBase):
         from agent.prompts import build_system_prompt
         from langchain_core.messages import HumanMessage
 
+        context = delegation_context or getattr(sub, "delegation_context", None)
+        if context is None:
+            context = create_delegation_context(app_state, getattr(sub, "parent_session_id", None))
+        if context.remaining_seconds() <= 0:
+            raise TimeoutError("子 Agent 的委托时间预算已耗尽")
+
         system_prompt = build_system_prompt()
         # 4 层架构：子 Agent 也启用情景记忆检索
         episodic_mm = getattr(app_state, "episodic_mm", None)
 
-        # DelegationScope 收窄：delegation_scope_enforced 启用时过滤子 Agent 工具
-        effective_tools = app_state.tools
-        try:
-            from config.settings import get_settings
-            if get_settings().delegation_scope_enforced:
-                parent_tool_names = [t.name for t in app_state.tools]
-                parent_paths = []
-                try:
-                    from tools.path_security import get_whitelisted_paths
-                    parent_paths = get_whitelisted_paths()
-                except Exception:
-                    pass
-                effective_scope = _compute_effective_scope(
-                    parent_tools=parent_tool_names,
-                    parent_paths=parent_paths,
-                    child_requested_tools=parent_tool_names,
-                )
-                effective_tool_names = _filter_tools_by_scope(parent_tool_names, effective_scope)
-                effective_tools = [t for t in app_state.tools if t.name in set(effective_tool_names)]
-        except Exception as e:
-            logger.warning("[call_sub_agent] scope 计算失败，使用全量工具: %s", e)
-            effective_tools = app_state.tools
+        effective_tools = prepare_delegated_tools(app_state.tools, context)
+        model = bind_model_budget(context)
+        if model is None:
+            raise RuntimeError("子 Agent 未继承到可用模型")
 
         agent = build_agent(
-            model=app_state.llm,
+            model=model,
             tools=effective_tools,
             system_prompt=system_prompt,
             checkpointer=sub.checkpointer,
             episodic_mm=episodic_mm,
             enable_executor=False,  # 子 Agent 不启用 executor，防止递归爆炸
+            # Background work has no child WebSocket from which build_agent can
+            # discover failover support. Pass the manager explicitly when the
+            # host application provides one; None is the supported safe
+            # degradation for minimal/test application state.
+            provider_manager=getattr(app_state, "provider_manager", None),
         )
         inputs = {"messages": [HumanMessage(content=task)]}
         config: RunnableConfig = {"configurable": {"thread_id": sub.session_id}, "recursion_limit": 72}
 
         final_answer = ""
+        context_token = activate_delegation_context(context)
+        session_token = interaction.current_session_id.set(sub.session_id)
         try:
-            async for event in agent.astream_events(
-                inputs, config=config, version="v2"
-            ):
-                if (
-                    event.get("event") == "on_chain_end"
-                    and event.get("name") == "agent"
+            async with asyncio.timeout(context.remaining_seconds()):
+                async for event in agent.astream_events(
+                    inputs, config=config, version="v2"
                 ):
-                    output: dict = event["data"].get("output", {})
-                    messages = output.get("messages", [])
-                    if messages:
-                        last = messages[-1]
-                        final_answer = (
-                            last.content if hasattr(last, "content") else str(last)
-                        )
+                    if (
+                        event.get("event") == "on_chain_end"
+                        and event.get("name") == "agent"
+                    ):
+                        output: dict = event["data"].get("output", {})
+                        messages = output.get("messages", [])
+                        if messages:
+                            last = messages[-1]
+                            final_answer = (
+                                last.content if hasattr(last, "content") else str(last)
+                            )
 
             # 事件未捕获到 final_answer 时，从 checkpoint 兜底提取
             if not final_answer:
@@ -261,12 +271,19 @@ class CallSubAgentTool(ToolBase):
                                 final_answer = candidate
                 except Exception:
                     logger.debug("Failed to read fallback final_answer from sub-agent checkpoint", exc_info=True)
+        except TimeoutError as e:
+            raise TimeoutError("子 Agent 超过委托时间预算") from e
         except Exception as e:
             print(
                 f"[call_sub_agent] _run_background agent failed: {e}", file=sys.stderr
             )
             traceback.print_exc(file=sys.stderr)
             raise
+        finally:
+            try:
+                reset_delegation_context(context_token)
+            finally:
+                interaction.current_session_id.reset(session_token)
 
         print(
             f"[call_sub_agent] _run_background got answer: {final_answer[:100] if final_answer else '(empty)'}",

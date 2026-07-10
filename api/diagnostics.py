@@ -178,6 +178,8 @@ class ErrorCollector:
         return {
             "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             "system_info": system_info,
+            "autonomy_status": self._collect_autonomy_status(),
+            "tauri_startup_log": self._read_tauri_startup_log(),
             "errors": merged,
             "stats": {
                 "memory_error_count": len(memory_errors),
@@ -211,6 +213,39 @@ class ErrorCollector:
         lines.append(f"  工作目录:     {info.get('cwd', 'N/A')}")
         lines.append(f"  日志目录:     {info.get('logs_dir', 'N/A')}")
         lines.append(f"  数据目录:     {info.get('data_dir', 'N/A')}")
+        lines.append("")
+
+        # 自治层状态
+        autonomy = report.get("autonomy_status", {})
+        lines.append("─" * 72)
+        lines.append("【自治层状态】")
+        lines.append("─" * 72)
+        if autonomy.get("available", False):
+            lines.append(f"  调度器运行:   {autonomy.get('running', False)}")
+            lines.append(f"  最近 tick:    {autonomy.get('last_tick_at', 'N/A')}")
+            lines.append(f"  tick 次数:    {autonomy.get('tick_count', 0)}")
+            summary = autonomy.get("last_tick_report_summary") or {}
+            if summary:
+                lines.append(f"  上次问题数:   {summary.get('issues_count', 0)}")
+                lines.append(f"  上次错误数:   {summary.get('error_total', 0)}")
+                lines.append(f"  上次健康态:   {summary.get('health_status', 'N/A')}")
+        else:
+            lines.append(f"  不可用: {autonomy.get('reason', 'unknown')}")
+        lines.append("")
+
+        # Tauri 启动日志
+        tauri_log = report.get("tauri_startup_log") or {}
+        lines.append("─" * 72)
+        lines.append("【Tauri 启动日志】")
+        lines.append("─" * 72)
+        if tauri_log.get("available", False):
+            lines.append(f"  文件路径:     {tauri_log.get('path', 'N/A')}")
+            lines.append(f"  行数:         {tauri_log.get('line_count', 0)}")
+            lines.append("  内容（最后 100 行）:")
+            for line in (tauri_log.get("lines") or []):
+                lines.append(f"    {line}")
+        else:
+            lines.append(f"  不可用: {tauri_log.get('reason', 'unknown')}")
         lines.append("")
 
         # 统计
@@ -324,6 +359,74 @@ class ErrorCollector:
             except (OSError, PermissionError):
                 continue
         return errors
+
+    def _collect_autonomy_status(self) -> dict:
+        """收集自治层调度器状态（延迟导入，防止循环依赖）。"""
+        try:
+            from agent.autonomy.scheduler import get_autonomy_status
+            status = get_autonomy_status()
+            # 标记为可用，并保留原始字段
+            result = {"available": True}
+            result.update(status)
+            return result
+        except Exception as e:
+            logger.debug("[diagnostics] 收集 autonomy 状态失败: %s", e, exc_info=True)
+            return {"available": False, "reason": str(e)}
+
+    def _read_tauri_startup_log(self, max_lines: int = 100) -> dict:
+        """读取 Tauri 启动日志的最后 N 行。
+
+        日志文件路径：LOGS_DIR / tauri.log（打包模式下位于 %APPDATA%/MaxmaHere/logs/）。
+        """
+        tauri_log_path = LOGS_DIR / "tauri.log"
+        try:
+            if not tauri_log_path.exists():
+                return {"available": False, "reason": "tauri.log 不存在"}
+
+            # 读取文件最后 max_lines 行（避免大文件内存爆炸）
+            try:
+                with open(tauri_log_path, "r", encoding="utf-8", errors="replace") as f:
+                    tail = deque(f, maxlen=max_lines)
+                lines = list(tail)
+            except (OSError, PermissionError) as e:
+                return {"available": False, "reason": f"读取失败: {e}"}
+
+            return {
+                "available": True,
+                "path": str(tauri_log_path),
+                "line_count": len(lines),
+                "lines": lines,
+            }
+        except Exception as e:
+            logger.debug("[diagnostics] 读取 tauri.log 失败: %s", e, exc_info=True)
+            return {"available": False, "reason": str(e)}
+
+    @staticmethod
+    def get_log_files_info() -> list[dict]:
+        """返回日志目录中所有日志文件的信息（名称、大小、路径）。"""
+        info_list: list[dict] = []
+        try:
+            if not LOGS_DIR.exists():
+                return info_list
+            for entry in sorted(LOGS_DIR.iterdir(), key=lambda p: p.name):
+                if not entry.is_file():
+                    continue
+                if entry.suffix.lower() != ".log" and not entry.name.lower().startswith("maxma.log") and not entry.name.lower().startswith("tauri.log"):
+                    # 只收集 .log 文件及 maxma.log.* / tauri.log.* 轮转文件
+                    continue
+                try:
+                    size_bytes = entry.stat().st_size
+                except OSError:
+                    size_bytes = 0
+                info_list.append({
+                    "name": entry.name,
+                    "size_bytes": size_bytes,
+                    "size_mb": round(size_bytes / (1024 * 1024), 2),
+                    "path": str(entry),
+                })
+        except Exception as e:
+            logger.debug("[diagnostics] 收集日志文件信息失败: %s", e, exc_info=True)
+        return info_list
 
     def _collect_system_info(self) -> dict:
         """收集系统信息（便于开发者复现问题）。"""

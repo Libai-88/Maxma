@@ -58,6 +58,7 @@ def _load_chat_module():
 
     context_manager = types.ModuleType("agent.context_manager")
     context_manager.maybe_trim_checkpoint = lambda *args, **kwargs: None
+    context_manager.commit_to_episodic = lambda *args, **kwargs: None
     add_module("agent.context_manager", context_manager)
 
     interaction = types.ModuleType("api.interaction")
@@ -186,3 +187,51 @@ def test_process_image_refs_preserves_local_ref_for_describer(monkeypatch):
     assert seen_refs == [image_ref]
     assert "[图片 screenshot: a window]" in processed
     assert "__refs__" in processed
+
+
+def test_completed_turn_episodic_projection_delegates_without_llm(monkeypatch):
+    calls = []
+
+    async def fake_commit(graph, config, episodic_mm, **kwargs):
+        calls.append((graph, config, episodic_mm, kwargs))
+        return "ep_1234"
+
+    monkeypatch.setattr(chat, "commit_to_episodic", fake_commit)
+
+    asyncio.run(
+        chat._project_completed_turn_to_episodic(
+            graph="graph",
+            config={"configurable": {"thread_id": "session-1"}},
+            episodic_mm="manager",
+            session_id="session-1",
+            turn_id="turn-1",
+        )
+    )
+
+    assert calls == [
+        (
+            "graph",
+            {"configurable": {"thread_id": "session-1"}},
+            "manager",
+            {"session_id": "session-1", "turn_id": "turn-1"},
+        )
+    ]
+
+
+def test_completed_turn_episodic_projection_contains_failure(monkeypatch, caplog):
+    async def fake_commit(*args, **kwargs):
+        raise RuntimeError("memory write failed")
+
+    monkeypatch.setattr(chat, "commit_to_episodic", fake_commit)
+
+    asyncio.run(
+        chat._project_completed_turn_to_episodic(
+            graph="graph",
+            config={},
+            episodic_mm="manager",
+            session_id="session-1",
+            turn_id="turn-1",
+        )
+    )
+
+    assert "projection failed after completed response" in caplog.text
