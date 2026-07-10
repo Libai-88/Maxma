@@ -299,6 +299,46 @@ hiddenimports = [
     "agent.autonomy.scheduler",
     "agent.autonomy.runner",
     "agent.autonomy.diagnostics",
+    # Halo 功能性增强：完成信号 + escalation 边界
+    "agent.autonomy.completion_signal",
+    "agent.autonomy.escalation",
+
+    # ── Halo 架构增强：流式修复管道 ──
+    "agent.stream_repair",
+    "agent.stream_repair.empty_turn",
+    "agent.stream_repair.tool_json_repair",
+    "agent.stream_repair.usage_backfill",
+    "agent.stream_repair.pipeline",
+
+    # ── Halo 架构增强：Disposable 资源管理 ──
+    "agent.lifecycle",
+    "agent.lifecycle.disposable",
+
+    # ── Halo 功能性增强：工作记忆 Push 注入 ──
+    "agent.memory",
+    "agent.memory.working_memory",
+
+    # ── Halo 架构增强：运行时上下文限制 ──
+    "agent.runtime_context",
+
+    # ── 编排层（coordinator/verifier/delegation_scope 延迟导入） ──
+    "agent.coordinator",
+    "agent.verifier",
+    "agent.delegation_scope",
+
+    # ── maxma_platform（从 platform 重命名，避免标准库遮蔽） ──
+    "maxma_platform",
+    "maxma_platform.event_dedup",
+    "maxma_platform.keep_alive",
+
+    # ── Halo 架构增强：启动分层 + 凭据掩码 + JSONL Transcript ──
+    "api.bootstrap",
+    "api.bootstrap.idle_queue",
+    "api.security",
+    "api.security.credential_mask",
+    "api.transcript",
+    "api.transcript.jsonl_writer",
+    "api.routes.transcripts",
 
     # ── Memory 模块 ──
     "memory.memory_manager",
@@ -329,9 +369,20 @@ hiddenimports = [
     "memory.memory_scheduler",
     "memory.pinned_store",
     "memory.pii_guard",
+    # 长期记忆事务 outbox
+    "memory.ltm_outbox",
 
     # ── 路径安全 ──
     "tools.path_security",
+
+    # ── Halo 功能性增强：report_to_user 工具 + 诊断基类 ──
+    "tools.system.tool_report_to_user",
+    "tools.system.tool_rag_diagnose",
+    "tools.system.tool_system_diagnose",
+    "tools.system.sandbox_runner",
+    "tools.base_diagnose",
+    # ── 委派上下文（子 Agent 权限继承） ──
+    "tools.sub_agent.delegation_context",
 
     # ── MCP 模块（Stage 4：MCP 工具管理 + 安全 + 限流） ──
     # tools.mcp 被 api.routes.mcp 顶层导入，但 init_mcp_tools() 内有大量延迟导入
@@ -349,6 +400,8 @@ hiddenimports = [
     "cryptography",
     "cryptography.fernet",
     "zai",
+    # json_repair（流式修复管道修复破损 tool JSON）
+    "json_repair",
 
     # ── 版本 ──
     "version",

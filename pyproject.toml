@@ -32,6 +32,8 @@ dependencies = [
     "watchdog>=3.0.0",
     "cryptography>=41.0.0",
     "zai-sdk",
+    # 流式修复管道：修复国产模型破损 tool JSON
+    "json-repair>=0.1.0",
     # RAG 子系统：向量检索 + ONNX 嵌入（不依赖 torch，体积优化 ~600MB）
     "chromadb>=0.5.0",
     "onnxruntime>=1.16.0",
