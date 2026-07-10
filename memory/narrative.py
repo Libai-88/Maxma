@@ -52,6 +52,10 @@ def _is_unrecoverable_error(exc: Exception) -> bool:
     return False
 
 
+# LTM CRUD agent 最大重试次数（超过后放弃，避免无限循环）
+_MAX_LTM_RETRIES = 5
+
+
 # Backwards-compatible module export used by api.health.
 MEMORY_PATH = MEMORY_CONFIG_PATH
 
@@ -872,6 +876,14 @@ class LongTermMemoryInterface:
                         )
                         if job is not None:
                             self._outbox.complete(job)
+                    elif job is not None and job.attempts >= _MAX_LTM_RETRIES:
+                        # 超过最大重试次数，放弃避免无限循环（如网络连接错误）
+                        logger.error(
+                            "[ltm] CRUD agent max retries (%d) reached, giving up: %s",
+                            _MAX_LTM_RETRIES,
+                            e,
+                        )
+                        self._outbox.complete(job)
                     else:
                         logger.error("[ltm] CRUD agent error: %s", e, exc_info=True)
                         if job is not None:
