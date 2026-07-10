@@ -134,3 +134,13 @@ desktop/src-tauri/resources/runtime/*
 !desktop/src-tauri/resources/runtime/.gitkeep
 desktop/src-tauri/resources/assets/*
 !desktop/src-tauri/resources/assets/.gitkeep
+
+# 便携版打包产物（PyInstaller + Tauri 构建输出）
+dist-portable/
+
+# 根目录运行时资源（构建时下载的 Node/Python/uv/Playwright/ONNX 模型）
+/resources/
+
+# 编译产物（PyInstaller/Tauri 构建的 exe，不应进版本控制）
+*.exe
+!desktop/src-tauri/icons/*.exe
