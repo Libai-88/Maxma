@@ -33,6 +33,7 @@ _ALLOWED_HEADLESS_TOOLS: frozenset[str] = frozenset({
     "system_diagnose",  # 系统级故障诊断
     "rag_diagnose",     # RAG 故障诊断
     "kb_search",        # 知识库检索（查找已有文档）
+    "report_to_user",   # 完成信号（每个后台 run 必须调用）
 })
 
 
@@ -186,18 +187,63 @@ async def run_self_improvement_agent(
         if writer:
             writer.append_raw("human", prompt)
 
-        # 执行
-        logger.info("[autonomy:runner] 启动自改进 Agent (session=%s, timeout=%ds)", session_id, timeout)
-        output = await asyncio.wait_for(
-            graph.ainvoke(
-                {"messages": [HumanMessage(content=prompt)]},
-                config={
-                    "configurable": {"thread_id": session_id},
-                    "recursion_limit": 80,
-                },
-            ),
-            timeout=timeout,
+        # 执行 + 自动 continue（如果未调用 report_to_user）
+        from agent.autonomy.completion_signal import (
+            detect_completion_signal,
+            should_auto_continue,
+            build_auto_continue_message,
+            MAX_AUTO_CONTINUES,
         )
+
+        messages_input = [HumanMessage(content=prompt)]
+
+        auto_continue_count = 0
+        output = None
+
+        logger.info("[autonomy:runner] 启动自改进 Agent (session=%s, timeout=%ds)", session_id, timeout)
+
+        while True:
+            output = await asyncio.wait_for(
+                graph.ainvoke(
+                    {"messages": messages_input},
+                    config={
+                        "configurable": {"thread_id": session_id},
+                        "recursion_limit": 80,
+                    },
+                ),
+                timeout=timeout,
+            )
+
+            # 检测完成信号
+            output_messages = output.get("messages", []) if isinstance(output, dict) else []
+            outcome = detect_completion_signal(output_messages)
+            outcome.auto_continue_count = auto_continue_count
+
+            if outcome.signal_detected:
+                logger.info(
+                    "[autonomy:runner] 完成信号检测到: type=%s",
+                    outcome.report_type,
+                )
+                break
+
+            if not should_auto_continue(outcome):
+                logger.warning(
+                    "[autonomy:runner] 达到最大 continue 次数 (%d)，强制结束",
+                    MAX_AUTO_CONTINUES,
+                )
+                break
+
+            # 自动 continue
+            auto_continue_count += 1
+            continue_msg = build_auto_continue_message(auto_continue_count)
+            logger.info(
+                "[autonomy:runner] 自动 continue #%d/%d",
+                auto_continue_count, MAX_AUTO_CONTINUES,
+            )
+            if writer:
+                writer.append_raw("human", continue_msg)
+
+            messages_input = [HumanMessage(content=continue_msg)]
 
         result = _extract_final_answer(output) or "自改进任务已执行，但没有生成文本结果"
         logger.info("[autonomy:runner] 自改进完成 (session=%s): %s", session_id, result[:200])
