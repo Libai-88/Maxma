@@ -52,6 +52,41 @@ from agent.executor import (
 
 logger = logging.getLogger(__name__)
 
+# 匹配人格模板输出的 <mood>...</mood> 内部状态块（含可选的属性）
+_MOOD_TAG_RE = re.compile(r"<mood[^>]*>.*?</mood>\s*", re.DOTALL | re.IGNORECASE)
+# 兜底：匹配未闭合标签时，从 <mood> 到行尾或到下一个非 mood 行
+_MOOD_UNCLOSED_RE = re.compile(
+    r"<mood[^>]*>.*?(?=\n[^<\s]|\Z)", re.DOTALL | re.IGNORECASE
+)
+
+
+def _strip_mood_tags(message: AIMessage) -> AIMessage:
+    """剥离人格模板的 <mood> 内部状态标签。
+
+    yuan_default.md 指示 LLM 在回复开头输出 <mood> 心境记录，
+    这些是内部状态，用户不应看到。此函数在 agent_node 返回前剥离它们。
+    """
+    content = getattr(message, "content", None)
+    if not content or not isinstance(content, str):
+        return message
+    stripped = _MOOD_TAG_RE.sub("", content)
+    # 如果标签未闭合，尝试兜底正则
+    if "<mood" in stripped:
+        stripped = _MOOD_UNCLOSED_RE.sub("", stripped)
+    stripped = stripped.lstrip("\n").strip()
+    if stripped == content.strip():
+        return message  # 无变化，返回原对象避免不必要的拷贝
+    if not stripped:
+        stripped = " "  # 保持非空（避免空 turn）
+    return AIMessage(
+        content=stripped,
+        tool_calls=getattr(message, "tool_calls", []) or [],
+        additional_kwargs=getattr(message, "additional_kwargs", {}) or {},
+        response_metadata=getattr(message, "response_metadata", {}) or {},
+        id=getattr(message, "id", None),
+    )
+
+
 _SIMPLE_CHAT_RE = re.compile(
     r"^(?:你好(?:呀)?|您好|hello|hi|hey|在吗|在不在|谢谢(?:你)?|thanks|thank you|"
     r"好的|ok|okay|收到|明白|再见|拜拜|早上好|中午好|晚上好|辛苦了|哈哈+|嗯+|喂)"
@@ -687,6 +722,9 @@ def build_agent(
             response = apply_stream_repairs(response, messages)
         except Exception as e:
             logger.warning("[agent_node] 流式修复管道异常: %s", e)
+
+        # 剥离人格模板的 <mood> 内部状态标签（用户不应看到心境记录）
+        response = _strip_mood_tags(response)
 
         return {
             "messages": [response],

@@ -32,6 +32,26 @@ from memory.ltm_outbox import (
 
 logger = logging.getLogger(__name__)
 
+
+def _is_unrecoverable_error(exc: Exception) -> bool:
+    """判断异常是否不可恢复（重试无意义）。
+
+    认证错误（401）、权限错误（403）属于配置问题，
+    重试只会产生相同的错误，应跳过避免无限循环。
+    """
+    exc_name = type(exc).__name__
+    # openai.AuthenticationError / openai.PermissionDeniedError
+    if exc_name in ("AuthenticationError", "PermissionDeniedError"):
+        return True
+    # 检查异常消息中的 HTTP 状态码
+    msg = str(exc)
+    if "401" in msg and "api_key" in msg.lower():
+        return True
+    if "403" in msg and ("permission" in msg.lower() or "forbidden" in msg.lower()):
+        return True
+    return False
+
+
 # Backwards-compatible module export used by api.health.
 MEMORY_PATH = MEMORY_CONFIG_PATH
 
@@ -844,9 +864,18 @@ class LongTermMemoryInterface:
                         self._outbox.release_cancelled(job)
                     raise
                 except Exception as e:
-                    logger.error("[ltm] CRUD agent error: %s", e, exc_info=True)
-                    if job is not None:
-                        self._outbox.fail(session_id, turn_id, job.lease_token, str(e))
+                    # 认证类错误不可恢复，重试无意义，直接标记完成避免无限循环
+                    if _is_unrecoverable_error(e):
+                        logger.error(
+                            "[ltm] CRUD agent unrecoverable error (skipping retry): %s",
+                            e,
+                        )
+                        if job is not None:
+                            self._outbox.complete(job)
+                    else:
+                        logger.error("[ltm] CRUD agent error: %s", e, exc_info=True)
+                        if job is not None:
+                            self._outbox.fail(session_id, turn_id, job.lease_token, str(e))
                 finally:
                     if heartbeat_stop is not None:
                         heartbeat_stop.set()
