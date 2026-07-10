@@ -129,6 +129,9 @@ class Settings(BaseSettings):
     # 自治 Agent 单次执行最大超时（秒）
     autonomy_max_agent_timeout: int = 300
 
+    # 流式响应修复管道（默认关闭，接入国产 model 时建议开启）
+    stream_repair_enabled: bool = False
+
     model_config = {
         "env_file": str(ENV_FILE_PATH),
         "env_file_encoding": "utf-8",

@@ -9,7 +9,18 @@
 与 Maxma 现有 LangGraph 的关系：
 - 在 agent_node 返回 AIMessage 之后做后处理
 - 不修改 graph 结构，不影响 ReAct 循环路由逻辑
+- 通过 stream_repair_enabled feature flag 控制（默认关闭）
 """
 from agent.stream_repair.empty_turn import is_empty_turn, inject_placeholder_if_needed
+from agent.stream_repair.tool_json_repair import repair_tool_calls_json
+from agent.stream_repair.usage_backfill import estimate_tokens, backfill_usage_if_missing
+from agent.stream_repair.pipeline import apply_stream_repairs
 
-__all__ = ["is_empty_turn", "inject_placeholder_if_needed"]
+__all__ = [
+    "is_empty_turn",
+    "inject_placeholder_if_needed",
+    "repair_tool_calls_json",
+    "estimate_tokens",
+    "backfill_usage_if_missing",
+    "apply_stream_repairs",
+]

@@ -186,6 +186,8 @@ def build_agent(
     # 回调注入：Agent 不直接持有这些模块的引用，通过回调间接访问
     on_plan_confirmation: Callable | None = None,
     on_activity_event: Callable | None = None,
+    # 运行时配置摘要（B6）：注入到 episodic_context，让 agent 感知自身配置
+    runtime_context: str | None = None,
 ) -> CompiledStateGraph:
     """构建带规划节点的 ReAct Agent 图。
 
@@ -437,16 +439,28 @@ def build_agent(
         不再追加 episodic_context 等动态内容。episodic_context 改为
         prepend 到最新的 HumanMessage（本地修改，不持久化到 state），
         这样 SystemMessage + 消息历史前缀可以命中缓存。
+
+        B6 优化：runtime_context（运行时配置摘要）也 prepend 到 HumanMessage，
+        让 agent 每轮都能感知自身的 providers/MCP/工具配置全貌，
+        减少执行路径的不确定性（避免"第一次能过第二次卡"的问题）。
         """
         messages = state["messages"]
         episodic_context = state.get("episodic_context", "") or ""
         # 系统提示词保持完全稳定，不追加动态内容（有利于 DeepSeek prompt cache）
-        # episodic_context 改为 prepend 到最新 HumanMessage（本地修改，不持久化）
+        # episodic_context + runtime_context 改为 prepend 到最新 HumanMessage（本地修改，不持久化）
+        # runtime_context 让 agent 每轮都能"看到"自己的配置全貌
+        context_parts: list[str] = []
+        if runtime_context:
+            context_parts.append(runtime_context)
+        if episodic_context:
+            context_parts.append(f"[相关情景记忆]\n{episodic_context}")
+        prepend_text = "\n\n".join(context_parts)
+
         msgs = list(messages)
-        if episodic_context and msgs and isinstance(msgs[-1], HumanMessage):
+        if prepend_text and msgs and isinstance(msgs[-1], HumanMessage):
             original_content = msgs[-1].content
             msgs[-1] = HumanMessage(
-                content=f"[相关情景记忆]\n{episodic_context}\n\n---\n\n{original_content}"
+                content=f"{prepend_text}\n\n---\n\n{original_content}"
             )
         messages = [SystemMessage(content=system_prompt)] + msgs
         try:
@@ -458,6 +472,18 @@ def build_agent(
                 content=f"（调用模型时出错：{type(e).__name__}: {str(e)[:200]}。请稍后重试或检查提供商配置。）"
             )
             return {"messages": [err_msg], "episodic_context": ""}
+
+        # 流式响应修复管道（通过 feature flag 控制，默认关闭）
+        # 修复国产模型（GLM/DeepSeek/Moonshot）的不规范输出：
+        # - 空 turn 占位注入
+        # - tool 参数 JSON 修复
+        # - usage 回填
+        try:
+            from agent.stream_repair.pipeline import apply_stream_repairs
+            response = apply_stream_repairs(response, messages)
+        except Exception as e:
+            logger.warning("[agent_node] 流式修复管道异常: %s", e)
+
         return {"messages": [response], "episodic_context": ""}
 
     async def loop_breaker_node(state: AgentState) -> dict:
