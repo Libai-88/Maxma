@@ -21,7 +21,7 @@ from unittest.mock import patch
 import pytest
 
 from api.providers import HealthStatus, Provider, ProviderConfig
-from api.providers.health_monitor import _check_provider_health
+from api.providers.health_monitor import _check_provider_health, _health_check_loop
 from api.providers.manager import ProviderManager
 
 
@@ -572,6 +572,35 @@ class TestCheckProviderHealth:
         mgr = _build_manager([_make_config("p1")])
         # 不抛 KeyError 即可
         await _check_provider_health(mgr, "nonexistent")
+
+
+@pytest.mark.asyncio
+async def test_health_monitor_keeps_invalid_credentials_as_error_before_threshold():
+    """A 401 is actionable configuration failure, not a transient blip."""
+    mgr = _build_manager([_make_config("p1")])
+    provider = mgr.get("p1")
+    provider.set_health_result(HealthStatus(status="error", detail="401 Unauthorized"))
+    stop_event = asyncio.Event()
+    task = asyncio.create_task(
+        _health_check_loop(
+            mgr,
+            check_interval=0,
+            recovery_interval=300,
+            unhealthy_threshold=3,
+            stop_event=stop_event,
+        )
+    )
+    try:
+        for _ in range(20):
+            if provider.health_status is not None:
+                break
+            await asyncio.sleep(0.01)
+        assert provider.health_status is not None
+        assert provider.health_status.status == "error"
+        assert provider.health_status.detail == "401 Unauthorized"
+    finally:
+        stop_event.set()
+        await task
 
 
 # ── 10. 端到端 fallback 场景 ───────────────────────────────────

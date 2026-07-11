@@ -9,46 +9,114 @@ import hashlib
 import logging
 import os
 import platform
-import struct
+
+from api.security.credential_envelope import (
+    CredentialEnvelopeError,
+    create_credential_envelope,
+    decrypt_credential_envelope,
+    is_credential_envelope,
+    is_legacy_encrypted,
+)
 
 logger = logging.getLogger(__name__)
 
 # 加密标记前缀 — 用于识别已加密的值
 _ENCRYPTED_PREFIX = "enc:"
 _ENV_FERNET_KEY = "MAXMAHERE_FERNET_KEY"
+_ENV_FERNET_PREVIOUS_KEYS = "MAXMAHERE_FERNET_PREVIOUS_KEYS"
 
 
 def is_encrypted(value: str) -> bool:
-    """检查值是否已加密。"""
-    return isinstance(value, str) and value.startswith(_ENCRYPTED_PREFIX)
+    """Return whether ``value`` is a legacy or current encrypted credential."""
+    return is_legacy_encrypted(value) or is_credential_envelope(value)
 
 
 def encrypt_value(plaintext: str) -> str:
-    """加密字符串，返回带前缀的密文。
+    """Encrypt a credential in the current versioned storage envelope.
 
-    Windows: 使用 DPAPI
-    其他: 使用 Fernet（密钥从机器特征派生）
+    Existing ``enc:`` values are upgraded when they can be decrypted.  An
+    unreadable legacy ciphertext is deliberately left untouched so a failed
+    migration cannot destroy the user's only recoverable configuration.
     """
-    if not plaintext or is_encrypted(plaintext):
+    if not plaintext or is_credential_envelope(plaintext):
         return plaintext
-
-    if platform.system() == "Windows":
-        return _encrypt_dpapi(plaintext)
-    else:
-        return _encrypt_fernet(plaintext)
+    if is_legacy_encrypted(plaintext):
+        legacy_value = plaintext
+        plaintext = _decrypt_legacy_value(legacy_value)
+        if not plaintext:
+            return legacy_value
+    algorithm, key_id = credential_storage_metadata()
+    return create_credential_envelope(
+        plaintext,
+        encrypt_payload=_encrypt_legacy_value,
+        algorithm=algorithm,
+        key_id=key_id,
+    )
 
 
 def decrypt_value(ciphertext: str) -> str:
     """解密字符串。如果不是加密值，原样返回。"""
     if not ciphertext or not is_encrypted(ciphertext):
         return ciphertext
+    if is_credential_envelope(ciphertext):
+        algorithm, _key_id = credential_storage_metadata()
+        try:
+            return decrypt_credential_envelope(
+                ciphertext,
+                decrypt_payload=_decrypt_legacy_value,
+                supported_algorithm=algorithm,
+            )
+        except CredentialEnvelopeError as exc:
+            logger.warning("Credential envelope cannot be decrypted: %s", exc)
+            return ""
+    return _decrypt_legacy_value(ciphertext)
 
+
+def credential_storage_metadata() -> tuple[str, str]:
+    """Return non-secret backend metadata embedded in new envelopes.
+
+    DPAPI owns its master key and supports Windows account recovery.  Fernet's
+    key id is only a short fingerprint, never key material; previous Fernet
+    keys may be supplied through ``MAXMAHERE_FERNET_PREVIOUS_KEYS`` during a
+    controlled rotation.
+    """
+    if platform.system() == "Windows":
+        return "dpapi-current-user", "windows-dpapi-current-user-v1"
+    key = _get_machine_key()
+    source = "env" if os.environ.get(_ENV_FERNET_KEY) else "machine"
+    return "fernet", f"fernet-{source}-{hashlib.sha256(key).hexdigest()[:16]}"
+
+
+def migrate_credential_value(value: str) -> tuple[str, str, bool]:
+    """Read a credential and return ``(plaintext, stored_value, migrated)``.
+
+    The caller owns the transaction or atomic file replacement.  No rewrite is
+    proposed for a corrupt ciphertext, and a current envelope is never changed
+    as a side effect of a read.
+    """
+    if not value:
+        return value, value, False
+    if is_credential_envelope(value):
+        return decrypt_value(value), value, False
+    if is_legacy_encrypted(value):
+        plaintext = decrypt_value(value)
+        if not plaintext:
+            return plaintext, value, False
+        return plaintext, encrypt_value(plaintext), True
+    return value, encrypt_value(value), True
+
+
+def _encrypt_legacy_value(plaintext: str) -> str:
+    if platform.system() == "Windows":
+        return _encrypt_dpapi(plaintext)
+    return _encrypt_fernet(plaintext)
+
+
+def _decrypt_legacy_value(ciphertext: str) -> str:
     encoded = ciphertext[len(_ENCRYPTED_PREFIX):]
-
     if platform.system() == "Windows":
         return _decrypt_dpapi(encoded)
-    else:
-        return _decrypt_fernet(encoded)
+    return _decrypt_fernet(encoded)
 
 
 # ── Windows DPAPI ──────────────────────────────────────────
@@ -136,6 +204,27 @@ def _get_machine_key() -> bytes:
     return hashlib.sha256(seed.encode()).digest()
 
 
+def _get_fernet_keys() -> list[bytes]:
+    """Return the active key followed by explicitly retained rotation keys."""
+    keys = [_get_machine_key()]
+    previous_values = os.environ.get(_ENV_FERNET_PREVIOUS_KEYS, "")
+    for encoded in previous_values.split(","):
+        encoded = encoded.strip()
+        if not encoded:
+            continue
+        try:
+            key = base64.urlsafe_b64decode(encoded.encode("ascii"))
+        except Exception:
+            logger.warning("Ignoring invalid previous Fernet key configuration")
+            continue
+        if len(key) != 32:
+            logger.warning("Ignoring previous Fernet key with invalid length")
+            continue
+        if key not in keys:
+            keys.append(key)
+    return keys
+
+
 def _encrypt_fernet(plaintext: str) -> str:
     """使用 Fernet 对称加密。"""
     try:
@@ -154,10 +243,15 @@ def _decrypt_fernet(encoded: str) -> str:
     """使用 Fernet 对称解密。"""
     try:
         from cryptography.fernet import Fernet
-        key = base64.urlsafe_b64encode(_get_machine_key())
-        f = Fernet(key)
-        decrypted = f.decrypt(encoded.encode("ascii"))
-        return decrypted.decode("utf-8")
+        for raw_key in _get_fernet_keys():
+            try:
+                f = Fernet(base64.urlsafe_b64encode(raw_key))
+                decrypted = f.decrypt(encoded.encode("ascii"))
+                return decrypted.decode("utf-8")
+            except Exception:
+                continue
+        logger.warning("Fernet decryption failed with active and retained keys")
+        return ""
     except ImportError:
         logger.warning("cryptography not installed, cannot decrypt")
         return ""

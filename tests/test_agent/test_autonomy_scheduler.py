@@ -10,9 +10,6 @@ import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from agent.autonomy.diagnostics import ErrorSummary, HealthSummary
-
-
 @pytest.fixture(autouse=True)
 def _reset_scheduler():
     """每个测试前后重置调度器状态。"""
@@ -74,7 +71,6 @@ class TestSchedulerLifecycle:
         mock_app.state.llm = MagicMock()
 
         start_autonomy(mock_app, interval_seconds=1)
-        task1 = scheduler._scheduler_task
         start_autonomy(mock_app, interval_seconds=1)
         task2 = scheduler._scheduler_task
 
@@ -97,6 +93,40 @@ class TestSchedulerLifecycle:
 
 
 class TestSchedulerTick:
+    @pytest.mark.asyncio
+    async def test_stuck_tick_is_cancelled_and_reported_for_recovery(self):
+        """超过恢复阈值的 tick 会被取消，外层循环可继续退避。"""
+        from agent.autonomy.scheduler import StuckAutonomyTickError, _run_tick_with_timeout
+
+        cancelled = asyncio.Event()
+
+        async def blocked_tick(_app, self_improve_enabled=False):
+            try:
+                await asyncio.sleep(60)
+            finally:
+                cancelled.set()
+
+        with patch("agent.autonomy.scheduler._run_tick", side_effect=blocked_tick):
+            with pytest.raises(StuckAutonomyTickError, match="recovery threshold"):
+                await _run_tick_with_timeout(MagicMock(), False, timeout_seconds=0.01)
+
+        assert cancelled.is_set()
+
+    @pytest.mark.asyncio
+    async def test_tick_timeout_wrapper_preserves_shutdown_cancellation(self):
+        """应用关闭取消调度器时，不将 CancelledError 误记为卡死。"""
+        from agent.autonomy.scheduler import _run_tick_with_timeout
+
+        async def blocked_tick(_app, self_improve_enabled=False):
+            await asyncio.sleep(60)
+
+        with patch("agent.autonomy.scheduler._run_tick", side_effect=blocked_tick):
+            task = asyncio.create_task(_run_tick_with_timeout(MagicMock(), False, timeout_seconds=60))
+            await asyncio.sleep(0)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+
     @pytest.mark.asyncio
     async def test_tick_collects_diagnostics(self):
         """tick 调用诊断函数收集数据。"""
@@ -193,7 +223,6 @@ class TestSchedulerStatus:
     @pytest.mark.asyncio
     async def test_get_status_when_running(self):
         """调度器启动后 status.running=True。"""
-        from agent.autonomy import scheduler
         from agent.autonomy.scheduler import start_autonomy, stop_autonomy, get_autonomy_status
 
         mock_app = MagicMock()

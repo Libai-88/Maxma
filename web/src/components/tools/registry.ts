@@ -1,20 +1,30 @@
-import type { Component } from 'vue'
-import TodoBubble from './TodoBubble.vue'
-import TaskTrackerBubble from './TaskTrackerBubble.vue'
-import PythonBubble from './PythonBubble.vue'
-import FilesBubble from './FilesBubble.vue'
-import FileEditBubble from './FileEditBubble.vue'
-import TarotBubble from './TarotBubble.vue'
-import MapBubble from './MapBubble.vue'
-import WeatherBubble from './WeatherBubble.vue'
-import HolidayBubble from './HolidayBubble.vue'
-import ImageBubble from './ImageBubble.vue'
-import TavilySearchBubble from './TavilySearchBubble.vue'
-import TavilyExtractBubble from './TavilyExtractBubble.vue'
-import AskUserBubble from './AskUserBubble.vue'
-import MemoryBubble from './MemoryBubble.vue'
-import GitStatusBubble from './GitStatusBubble.vue'
-import GitDiffBubble from './GitDiffBubble.vue'
+import { defineAsyncComponent, type Component } from 'vue'
+
+type BubbleLoader = () => Promise<{ default: Component }>
+
+function lazyBubble(loader: BubbleLoader): Component {
+  return defineAsyncComponent({
+    loader,
+    suspensible: false,
+  })
+}
+
+const TodoBubble = lazyBubble(() => import('./TodoBubble.vue'))
+const TaskTrackerBubble = lazyBubble(() => import('./TaskTrackerBubble.vue'))
+const PythonBubble = lazyBubble(() => import('./PythonBubble.vue'))
+const FilesBubble = lazyBubble(() => import('./FilesBubble.vue'))
+const FileEditBubble = lazyBubble(() => import('./FileEditBubble.vue'))
+const TarotBubble = lazyBubble(() => import('./TarotBubble.vue'))
+const MapBubble = lazyBubble(() => import('./MapBubble.vue'))
+const WeatherBubble = lazyBubble(() => import('./WeatherBubble.vue'))
+const HolidayBubble = lazyBubble(() => import('./HolidayBubble.vue'))
+const ImageBubble = lazyBubble(() => import('./ImageBubble.vue'))
+const TavilySearchBubble = lazyBubble(() => import('./TavilySearchBubble.vue'))
+const TavilyExtractBubble = lazyBubble(() => import('./TavilyExtractBubble.vue'))
+const AskUserBubble = lazyBubble(() => import('./AskUserBubble.vue'))
+const MemoryBubble = lazyBubble(() => import('./MemoryBubble.vue'))
+const GitStatusBubble = lazyBubble(() => import('./GitStatusBubble.vue'))
+const GitDiffBubble = lazyBubble(() => import('./GitDiffBubble.vue'))
 
 /** 工具注册表：tool_name → 专属气泡组件 */
 const registry: Record<string, Component> = {

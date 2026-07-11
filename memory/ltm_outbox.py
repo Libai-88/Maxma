@@ -11,13 +11,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import random
 import sqlite3
 import time
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 @dataclass(frozen=True)
@@ -81,6 +82,8 @@ class LongTermMemoryOutbox:
         lease_seconds: float = 300,
         retry_base_seconds: float = 1,
         retry_max_seconds: float = 300,
+        clock: Callable[[], float] | None = None,
+        random_source: Callable[[], float] | None = None,
     ) -> None:
         if lease_seconds <= 0:
             raise ValueError("lease_seconds must be positive")
@@ -92,6 +95,8 @@ class LongTermMemoryOutbox:
         self.lease_seconds = lease_seconds
         self.retry_base_seconds = retry_base_seconds
         self.retry_max_seconds = retry_max_seconds
+        self._clock = clock or time.time
+        self._random_source = random_source or random.random
         self._initialize()
 
     def _connect(self) -> sqlite3.Connection:
@@ -123,12 +128,14 @@ class LongTermMemoryOutbox:
                     session_id TEXT NOT NULL,
                     turn_id TEXT NOT NULL,
                     payload TEXT NOT NULL,
-                    status TEXT NOT NULL CHECK(status IN ('pending', 'claimed', 'completed')),
+                    status TEXT NOT NULL CHECK(status IN ('pending', 'claimed', 'completed', 'abandoned')),
                     attempts INTEGER NOT NULL DEFAULT 0,
                     available_at REAL NOT NULL,
                     lease_token TEXT,
                     lease_expires_at REAL,
                     last_error TEXT,
+                    failure_code TEXT,
+                    retry_delay_seconds REAL NOT NULL DEFAULT 0,
                     created_at REAL NOT NULL,
                     updated_at REAL NOT NULL,
                     completed_at REAL,
@@ -144,6 +151,8 @@ class LongTermMemoryOutbox:
                     turn_id TEXT NOT NULL,
                     payload_sha256 TEXT NOT NULL,
                     attempts INTEGER NOT NULL,
+                    terminal_status TEXT NOT NULL DEFAULT 'completed',
+                    failure_code TEXT,
                     created_at REAL NOT NULL,
                     completed_at REAL NOT NULL,
                     archived_at REAL NOT NULL,
@@ -179,6 +188,87 @@ class LongTermMemoryOutbox:
                     "ALTER TABLE ltm_projection_writer "
                     "ADD COLUMN fencing_token INTEGER NOT NULL DEFAULT 0"
                 )
+            self._migrate_outbox_schema(conn)
+            self._migrate_archive_schema(conn)
+
+    @staticmethod
+    def _create_outbox_indexes(conn: sqlite3.Connection) -> None:
+        conn.executescript(
+            """
+            CREATE INDEX IF NOT EXISTS idx_ltm_outbox_ready
+                ON ltm_outbox(status, available_at, created_at);
+            CREATE INDEX IF NOT EXISTS idx_ltm_outbox_completed
+                ON ltm_outbox(status, completed_at DESC);
+            """
+        )
+
+    def _migrate_outbox_schema(self, conn: sqlite3.Connection) -> None:
+        """Upgrade the initial three-state outbox without dropping queued work."""
+        schema_row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'ltm_outbox'"
+        ).fetchone()
+        schema = str(schema_row["sql"] if schema_row is not None else "")
+        columns = {
+            str(row["name"])
+            for row in conn.execute("PRAGMA table_info(ltm_outbox)")
+        }
+        if "abandoned" in schema and {
+            "failure_code",
+            "retry_delay_seconds",
+        }.issubset(columns):
+            return
+
+        conn.execute("DROP INDEX IF EXISTS idx_ltm_outbox_ready")
+        conn.execute("DROP INDEX IF EXISTS idx_ltm_outbox_completed")
+        conn.execute("ALTER TABLE ltm_outbox RENAME TO ltm_outbox_legacy")
+        conn.executescript(
+            """
+            CREATE TABLE ltm_outbox (
+                session_id TEXT NOT NULL,
+                turn_id TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                status TEXT NOT NULL CHECK(status IN ('pending', 'claimed', 'completed', 'abandoned')),
+                attempts INTEGER NOT NULL DEFAULT 0,
+                available_at REAL NOT NULL,
+                lease_token TEXT,
+                lease_expires_at REAL,
+                last_error TEXT,
+                failure_code TEXT,
+                retry_delay_seconds REAL NOT NULL DEFAULT 0,
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL,
+                completed_at REAL,
+                PRIMARY KEY (session_id, turn_id)
+            );
+            """
+        )
+        conn.execute(
+            """INSERT INTO ltm_outbox (
+                   session_id, turn_id, payload, status, attempts, available_at,
+                   lease_token, lease_expires_at, last_error, created_at, updated_at,
+                   completed_at
+               )
+               SELECT session_id, turn_id, payload, status, attempts, available_at,
+                      lease_token, lease_expires_at, last_error, created_at, updated_at,
+                      completed_at
+               FROM ltm_outbox_legacy"""
+        )
+        conn.execute("DROP TABLE ltm_outbox_legacy")
+        self._create_outbox_indexes(conn)
+
+    @staticmethod
+    def _migrate_archive_schema(conn: sqlite3.Connection) -> None:
+        columns = {
+            str(row["name"])
+            for row in conn.execute("PRAGMA table_info(ltm_outbox_archive)")
+        }
+        if "terminal_status" not in columns:
+            conn.execute(
+                "ALTER TABLE ltm_outbox_archive "
+                "ADD COLUMN terminal_status TEXT NOT NULL DEFAULT 'completed'"
+            )
+        if "failure_code" not in columns:
+            conn.execute("ALTER TABLE ltm_outbox_archive ADD COLUMN failure_code TEXT")
 
     @staticmethod
     def _next_fencing_token(conn: sqlite3.Connection, target_key: str) -> int:
@@ -225,7 +315,7 @@ class LongTermMemoryOutbox:
                     else {}
                 )
                 completed = raw.get("completed", []) if isinstance(raw, dict) else []
-                now = time.time()
+                now = self._clock()
                 for key in completed:
                     try:
                         session_id, turn_id = json.loads(key)
@@ -259,7 +349,7 @@ class LongTermMemoryOutbox:
         existing pending row makes it immediately eligible, while claimed and
         completed rows remain untouched.
         """
-        now = time.time()
+        now = self._clock()
         payload = self._payload_json(messages)
         with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -290,7 +380,7 @@ class LongTermMemoryOutbox:
 
     def claim_next(self) -> OutboxJob | None:
         """Lease one ready task under ``BEGIN IMMEDIATE`` for cross-process safety."""
-        now = time.time()
+        now = self._clock()
         lease_token = uuid.uuid4().hex
         with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -361,6 +451,8 @@ class LongTermMemoryOutbox:
                     row["turn_id"],
                     lease_token,
                     "invalid durable payload",
+                    failure_code="invalid_durable_payload",
+                    fencing_token=fencing_token,
                 )
                 return None
             return OutboxJob(
@@ -380,7 +472,7 @@ class LongTermMemoryOutbox:
         this same target lease as identified outbox jobs while invoking the LLM
         and updating YAML.
         """
-        now = time.time()
+        now = self._clock()
         lease_token = uuid.uuid4().hex
         with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -419,7 +511,7 @@ class LongTermMemoryOutbox:
     def renew_projection_writer(self, lease: ProjectionWriterLease | str) -> bool:
         """Renew a legacy projection's target-wide writer lease."""
         lease_token, fencing_token = self._lease_values(lease)
-        now = time.time()
+        now = self._clock()
         with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             cursor = conn.execute(
@@ -453,7 +545,7 @@ class LongTermMemoryOutbox:
 
     def renew(self, job: OutboxJob) -> bool:
         """Extend the job and target-writer lease while projection is running."""
-        now = time.time()
+        now = self._clock()
         expires_at = now + self.lease_seconds
         with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -481,7 +573,7 @@ class LongTermMemoryOutbox:
         YAML replacement.  Therefore a new claimant cannot pass this check
         between validation and the filesystem side effect.
         """
-        now = time.time()
+        now = self._clock()
         with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             writer = conn.execute(
@@ -514,13 +606,14 @@ class LongTermMemoryOutbox:
 
     def complete(self, job: OutboxJob) -> bool:
         """Mark a claimed task completed only when its lease token still matches."""
-        now = time.time()
+        now = self._clock()
         with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             cursor = conn.execute(
                 """UPDATE ltm_outbox
                    SET status = 'completed', lease_token = NULL, lease_expires_at = NULL,
-                       completed_at = ?, updated_at = ?, last_error = NULL
+                   completed_at = ?, updated_at = ?, last_error = NULL,
+                       failure_code = NULL, retry_delay_seconds = 0
                    WHERE session_id = ? AND turn_id = ? AND status = 'claimed'
                      AND lease_token = ? AND lease_expires_at > ?
                      AND EXISTS (
@@ -552,29 +645,72 @@ class LongTermMemoryOutbox:
             return True
         return False
 
-    def fail(self, session_id: str, turn_id: str, lease_token: str, error: str) -> bool:
-        """Release a matching lease with exponential backoff for a later retry."""
-        now = time.time()
+    def fail(
+        self,
+        session_id: str,
+        turn_id: str,
+        lease_token: str,
+        error: str,
+        *,
+        failure_code: str | None = None,
+        fencing_token: int | None = None,
+    ) -> bool:
+        """Release a matching lease with bounded decorrelated-jitter retry.
+
+        Supplying a fencing token makes the retry release subject to the same
+        target-writer ownership check as completion.  The positional signature
+        remains compatible with existing outbox callers.
+        """
+        now = self._clock()
         with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
-                """SELECT attempts FROM ltm_outbox
+                """SELECT attempts, retry_delay_seconds FROM ltm_outbox
                    WHERE session_id = ? AND turn_id = ? AND status = 'claimed' AND lease_token = ?""",
                 (session_id, turn_id, lease_token),
             ).fetchone()
             if row is None:
                 conn.commit()
                 return False
-            delay = min(
-                self.retry_max_seconds,
-                self.retry_base_seconds * (2 ** max(0, int(row["attempts"]) - 1)),
+            delay = self._retry_delay(
+                attempts=int(row["attempts"]),
+                previous_delay=float(row["retry_delay_seconds"] or 0),
             )
+            ownership_clause = ""
+            ownership_params: tuple[Any, ...] = ()
+            if fencing_token is not None:
+                ownership_clause = """
+                   AND lease_expires_at > ?
+                   AND EXISTS (
+                       SELECT 1 FROM ltm_projection_writer
+                       WHERE target_key = ? AND lease_token = ? AND fencing_token = ?
+                         AND lease_expires_at > ?
+                   )"""
+                ownership_params = (
+                    now,
+                    self._target_key,
+                    lease_token,
+                    fencing_token,
+                    now,
+                )
             cursor = conn.execute(
                 """UPDATE ltm_outbox
                    SET status = 'pending', lease_token = NULL, lease_expires_at = NULL,
-                       available_at = ?, updated_at = ?, last_error = ?
-                   WHERE session_id = ? AND turn_id = ? AND status = 'claimed' AND lease_token = ?""",
-                (now + delay, now, error[:1_000], session_id, turn_id, lease_token),
+                       available_at = ?, updated_at = ?, last_error = ?, failure_code = ?,
+                       retry_delay_seconds = ?
+                   WHERE session_id = ? AND turn_id = ? AND status = 'claimed' AND lease_token = ?"""
+                + ownership_clause,
+                (
+                    now + delay,
+                    now,
+                    error[:1_000],
+                    failure_code,
+                    delay,
+                    session_id,
+                    turn_id,
+                    lease_token,
+                    *ownership_params,
+                ),
             )
             if cursor.rowcount:
                 conn.execute(
@@ -583,6 +719,69 @@ class LongTermMemoryOutbox:
                 )
             conn.commit()
             return cursor.rowcount == 1
+
+    def _retry_delay(self, *, attempts: int, previous_delay: float) -> float:
+        """Return a capped decorrelated exponential-jitter delay.
+
+        The exponential ceiling prevents a long tail of hot retries.  Drawing
+        from ``[base, ceiling]`` decorrelates workers that fail at once, while
+        retaining the previous draw in the next ceiling avoids lockstep retries.
+        """
+        if self.retry_base_seconds == 0:
+            return 0.0
+        exponential_ceiling = min(
+            self.retry_max_seconds,
+            self.retry_base_seconds * (2 ** max(0, attempts - 1)),
+        )
+        ceiling = min(
+            self.retry_max_seconds,
+            max(self.retry_base_seconds, exponential_ceiling, previous_delay * 3),
+        )
+        sample = min(1.0, max(0.0, float(self._random_source())))
+        return self.retry_base_seconds + sample * (ceiling - self.retry_base_seconds)
+
+    def abandon(self, job: OutboxJob, reason_code: str, error: str) -> bool:
+        """Durably record an unretryable or exhausted task behind its fence."""
+        now = self._clock()
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            cursor = conn.execute(
+                """UPDATE ltm_outbox
+                   SET status = 'abandoned', lease_token = NULL, lease_expires_at = NULL,
+                       completed_at = ?, updated_at = ?, last_error = ?, failure_code = ?,
+                       retry_delay_seconds = 0
+                   WHERE session_id = ? AND turn_id = ? AND status = 'claimed'
+                     AND lease_token = ? AND lease_expires_at > ?
+                     AND EXISTS (
+                        SELECT 1 FROM ltm_projection_writer
+                        WHERE target_key = ? AND lease_token = ? AND fencing_token = ?
+                          AND lease_expires_at > ?
+                     )""",
+                (
+                    now,
+                    now,
+                    error[:1_000],
+                    reason_code[:128],
+                    job.session_id,
+                    job.turn_id,
+                    job.lease_token,
+                    now,
+                    self._target_key,
+                    job.lease_token,
+                    job.fencing_token,
+                    now,
+                ),
+            )
+            if cursor.rowcount:
+                conn.execute(
+                    "DELETE FROM ltm_projection_writer WHERE target_key = ? AND lease_token = ?",
+                    (self._target_key, job.lease_token),
+                )
+            conn.commit()
+        if cursor.rowcount:
+            self.cleanup()
+            return True
+        return False
 
     def release_cancelled(
         self, job: OutboxJob, error: str = "projection cancelled"
@@ -594,7 +793,7 @@ class LongTermMemoryOutbox:
         fence are checked in the same transaction before either is released.
         This prevents a stale worker from releasing a newer claimant's job.
         """
-        now = time.time()
+        now = self._clock()
         with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             cursor = conn.execute(
@@ -633,7 +832,7 @@ class LongTermMemoryOutbox:
 
     def next_ready_delay(self, default_seconds: float = 1.0) -> float:
         """Return a bounded wait until pending work becomes claimable."""
-        now = time.time()
+        now = self._clock()
         with self._connection() as conn:
             row = conn.execute(
                 "SELECT MIN(available_at) AS ready_at FROM ltm_outbox WHERE status = 'pending'"
@@ -648,13 +847,14 @@ class LongTermMemoryOutbox:
         Pending and claimed rows remain durable.  After archive expiry, an old
         ``(session_id, turn_id)`` may deliberately be enqueued again.
         """
-        now = time.time() if now is None else now
+        now = self._clock() if now is None else now
         policy = self.retention
         with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             completed = conn.execute(
-                """SELECT session_id, turn_id, payload, attempts, created_at, completed_at
-                   FROM ltm_outbox WHERE status = 'completed'
+                """SELECT session_id, turn_id, payload, attempts, status, failure_code,
+                          created_at, completed_at
+                   FROM ltm_outbox WHERE status IN ('completed', 'abandoned')
                    ORDER BY completed_at DESC, session_id, turn_id"""
             ).fetchall()
             archive_rows: list[sqlite3.Row] = []
@@ -669,20 +869,25 @@ class LongTermMemoryOutbox:
                 digest = hashlib.sha256(row["payload"].encode("utf-8")).hexdigest()
                 conn.execute(
                     """INSERT OR IGNORE INTO ltm_outbox_archive
-                       (session_id, turn_id, payload_sha256, attempts, created_at, completed_at, archived_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                       (session_id, turn_id, payload_sha256, attempts, terminal_status,
+                        failure_code, created_at, completed_at, archived_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (
                         row["session_id"],
                         row["turn_id"],
                         digest,
                         row["attempts"],
+                        row["status"],
+                        row["failure_code"],
                         row["created_at"],
                         row["completed_at"],
                         now,
                     ),
                 )
                 conn.execute(
-                    "DELETE FROM ltm_outbox WHERE session_id = ? AND turn_id = ? AND status = 'completed'",
+                    """DELETE FROM ltm_outbox
+                       WHERE session_id = ? AND turn_id = ?
+                         AND status IN ('completed', 'abandoned')""",
                     (row["session_id"], row["turn_id"]),
                 )
             archive = conn.execute(
@@ -733,6 +938,71 @@ class LongTermMemoryOutbox:
         result = {row["status"]: row["count"] for row in rows}
         result["archive"] = archived
         return result
+
+    def dead_letters(self, limit: int = 100) -> list[dict[str, Any]]:
+        """Return terminal failures without exposing stored conversation payloads."""
+        if limit < 1:
+            return []
+        with self._connection() as conn:
+            rows = conn.execute(
+                """SELECT session_id, turn_id, attempts, failure_code, last_error,
+                          completed_at, updated_at
+                   FROM ltm_outbox
+                   WHERE status = 'abandoned'
+                   ORDER BY completed_at DESC, session_id, turn_id
+                   LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def diagnostic_summary(self) -> dict[str, Any]:
+        """Return the latest safe LTM state for a health surface.
+
+        Conversation payloads and upstream exception text stay inside the
+        outbox.  Consumers receive only stable reason codes and timestamps.
+        """
+        with self._connection() as conn:
+            row = conn.execute(
+                """SELECT status, failure_code, available_at, updated_at
+                   FROM ltm_outbox
+                   WHERE status IN ('pending', 'claimed', 'abandoned')
+                   ORDER BY updated_at DESC, session_id, turn_id
+                   LIMIT 1"""
+            ).fetchone()
+        if row is None:
+            return {
+                "status": "ok",
+                "reason_code": None,
+                "retry_at": None,
+                "updated_at": None,
+                "summary": "Long-term memory is healthy.",
+            }
+
+        status = str(row["status"])
+        reason_code = row["failure_code"]
+        if status == "abandoned":
+            return {
+                "status": "error",
+                "reason_code": reason_code or "terminal_failure",
+                "retry_at": None,
+                "updated_at": row["updated_at"],
+                "summary": "Long-term memory needs attention.",
+            }
+        if status == "pending" and reason_code:
+            return {
+                "status": "degraded",
+                "reason_code": reason_code,
+                "retry_at": row["available_at"],
+                "updated_at": row["updated_at"],
+                "summary": "Long-term memory will retry.",
+            }
+        return {
+            "status": "ok",
+            "reason_code": None,
+            "retry_at": None,
+            "updated_at": row["updated_at"],
+            "summary": "Long-term memory is processing updates.",
+        }
 
     def retained_identities(self) -> set[tuple[str, str]]:
         """Rows/tombstones whose YAML operation fences must not be compacted."""

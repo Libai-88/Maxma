@@ -3,10 +3,10 @@
 import logging
 from pathlib import Path
 
-from app_paths import PROJECT_ROOT
+from app_paths import PROJECT_ROOT, PROVIDER_CREDENTIAL_BACKUP_PATH, PROVIDERS_YAML_PATH
 from api.providers import ProviderConfig
-from api.yaml_store import dump_yaml_atomic, load_yaml, yaml_file_lock
-from tools.crypto import decrypt_value, encrypt_value, is_encrypted
+from api.yaml_store import dump_yaml_atomic, dump_yaml_backup_once, load_yaml, yaml_file_lock
+from tools.crypto import decrypt_value, encrypt_value, is_encrypted, migrate_credential_value
 
 
 logger = logging.getLogger(__name__)
@@ -15,8 +15,13 @@ logger = logging.getLogger(__name__)
 class ProviderConfigStore:
     """读写 providers.yaml，对 api_key 做落盘加密。"""
 
-    def __init__(self, path: str | Path):
+    def __init__(self, path: str | Path, *, migration_backup_path: str | Path | None = None):
         self.path = Path(path)
+        self.migration_backup_path = (
+            Path(migration_backup_path)
+            if migration_backup_path is not None
+            else self._default_migration_backup_path()
+        )
 
     def load_all(self) -> list[ProviderConfig]:
         """返回所有配置（不论 enabled 与否）。"""
@@ -57,7 +62,33 @@ class ProviderConfigStore:
             return []
         raw = load_yaml(self.path, default={}) or {}
         providers = raw.get("providers", []) if isinstance(raw, dict) else []
-        return [self._deserialize_config(item) for item in providers]
+        migrated = False
+        migrated_items = []
+        configs = []
+        for item in providers:
+            item_for_storage = dict(item)
+            data = dict(item)
+            api_key = data.get("api_key", "")
+            if api_key:
+                plaintext, stored_value, did_migrate = migrate_credential_value(api_key)
+                if did_migrate:
+                    item_for_storage["api_key"] = stored_value
+                    migrated = True
+                if plaintext or not is_encrypted(api_key):
+                    data["api_key"] = plaintext
+                else:
+                    logger.warning(
+                        "Failed to decrypt provider api_key for provider_id=%s",
+                        data.get("id", ""),
+                    )
+            migrated_items.append(item_for_storage)
+            configs.append(self._config_from_data(data))
+
+        if migrated:
+            updated_raw = dict(raw)
+            updated_raw["providers"] = migrated_items
+            self._backup_then_write_migration(updated_raw)
+        return configs
 
     def _write_all_unlocked(self, configs: list[ProviderConfig]) -> None:
         data = {"providers": [self._serialize_config(c) for c in configs]}
@@ -136,10 +167,41 @@ class ProviderConfigStore:
                 logger.warning("Failed to decrypt provider api_key for provider_id=%s", data.get("id", ""))
             else:
                 data["api_key"] = decrypted
+        return self._config_from_data(data)
+
+    @staticmethod
+    def _config_from_data(data: dict) -> ProviderConfig:
         # 向后兼容：旧 YAML 无 priority 字段时默认 0
         if "priority" not in data:
             data["priority"] = 0
         return ProviderConfig(**data)
+
+    def _default_migration_backup_path(self) -> Path:
+        try:
+            if self.path.resolve() == PROVIDERS_YAML_PATH.resolve():
+                return PROVIDER_CREDENTIAL_BACKUP_PATH
+        except OSError:
+            pass
+        return self.path.with_suffix(self.path.suffix + ".v1-pre-envelope.bak")
+
+    def _backup_then_write_migration(self, updated_raw: dict) -> None:
+        """Keep the pre-migration file before atomically replacing it.
+
+        The backup uses the newly encrypted representation, so it remains a
+        recoverable configuration copy without introducing a second plaintext
+        file.  If it cannot be created, the migration is aborted and the caller
+        still receives the decrypted in-memory configuration.
+        """
+        backup_path = self.migration_backup_path
+        try:
+            if not backup_path.exists():
+                dump_yaml_backup_once(backup_path, updated_raw)
+            if not backup_path.exists():
+                raise OSError("credential migration backup was not created")
+            dump_yaml_atomic(self.path, updated_raw)
+            logger.info("Migrated provider credential envelope in YAML storage")
+        except OSError as exc:
+            logger.warning("Provider credential YAML migration deferred: %s", exc)
 
     def _normalize_raw_data(self, raw: dict) -> dict:
         providers = raw.get("providers", []) if isinstance(raw, dict) else []

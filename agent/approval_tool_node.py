@@ -14,6 +14,7 @@ from langchain_core.messages import AIMessage, ToolMessage
 from langgraph.prebuilt import ToolNode
 
 from agent.approval_gateway import approval_gateway, ApprovalDecision
+from agent.permission_policy import AuthorizationAction, PermissionMode
 from api.activity_hub import activity_hub
 
 logger = logging.getLogger(__name__)
@@ -69,12 +70,16 @@ class ApprovalToolNode:
         delegation_context = current_delegation_context()
         if delegation_context is not None:
             auto_approve = delegation_context.auto_approve
+            permission_mode = getattr(delegation_context, "permission_mode", None)
+            allowed_tools = delegation_context.allowed_tools
         else:
             from api.interaction import get_session_auto_approve
             try:
                 auto_approve = get_session_auto_approve(session_id)
             except Exception:
                 auto_approve = False
+            permission_mode = None
+            allowed_tools = None
 
         tool_messages: list[ToolMessage] = []
 
@@ -83,7 +88,29 @@ class ApprovalToolNode:
             tool_input = tool_call.get("args", {}) or {}
             tool_call_id = tool_call["id"]
 
-            if approval_gateway.needs_approval(tool_name, session_id, auto_approve):
+            authorization = approval_gateway.authorize(
+                tool_name,
+                session_id,
+                auto_approve,
+                permission_mode=permission_mode,
+                allowed_tools=allowed_tools,
+            )
+
+            if authorization.action is AuthorizationAction.DENY:
+                tool_messages.append(ToolMessage(
+                    content=f"[权限拒绝] 工具 {tool_name} 未获当前权限模式允许（{authorization.reason_code}）。",
+                    tool_call_id=tool_call_id,
+                ))
+                activity_hub.add(
+                    category="approval",
+                    event_type="authorization_denied",
+                    session_id=session_id,
+                    tool_name=tool_name,
+                    level="warn",
+                    message=f"权限策略拒绝工具：{tool_name}",
+                    payload={"reason_code": authorization.reason_code},
+                )
+            elif authorization.action is AuthorizationAction.ASK:
                 # 需要审批
                 decision = await self._request_approval(
                     tool_name, tool_input, session_id, tool_call_id
@@ -166,13 +193,15 @@ class ApprovalToolNode:
         from config.settings import get_settings
         from api.interaction import register, resolve, current_ws
 
-        # 无 WebSocket 上下文（如事件钩子场景）时直接放行，避免静默拒绝
+        # A required approval without a connected user must fail closed.  A
+        # headless/background caller can still use a policy mode that allows
+        # the operation; it may not bypass an explicit confirmation request.
         try:
             current_ws.get()
         except LookupError:
-            return ApprovalDecision.AUTO_APPROVED
+            return ApprovalDecision.REJECTED
         except Exception:
-            return ApprovalDecision.AUTO_APPROVED
+            return ApprovalDecision.REJECTED
 
         settings = get_settings()
 

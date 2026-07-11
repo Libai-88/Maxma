@@ -15,6 +15,7 @@ from typing import Any, Optional
 
 from api.providers import HealthStatus, Provider, ProviderConfig
 from api.providers.store import ProviderConfigStore
+from api.runtime_status import RuntimeStatus
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +162,58 @@ class ProviderManager:
                 return provider
         return None
 
+    def select_for_role(self, role) -> tuple[Provider, str] | None:
+        """Select a healthy provider/model for a declarative role rule.
+
+        The caller owns feature-flag and explicit-user-selection precedence.
+        This method is intentionally pure selection: it never persists a new
+        default, probes a provider, or chooses a model outside its configured
+        list.  Ranking is deterministic so the same configuration produces the
+        same result across requests.
+        """
+        if role is None:
+            return None
+
+        required_capabilities = {str(item).strip().lower() for item in getattr(role, "required_capabilities", ()) if str(item).strip()}
+        preferred_provider_ids = tuple(getattr(role, "preferred_provider_ids", ()) or ())
+        preferred_models = tuple(getattr(role, "preferred_models", ()) or ())
+        provider_rank = {provider_id: index for index, provider_id in enumerate(preferred_provider_ids)}
+        model_rank = {model_name: index for index, model_name in enumerate(preferred_models)}
+        min_context_window = max(0, int(getattr(role, "min_context_window", 0) or 0))
+        max_cost_tier = getattr(role, "max_cost_tier", None)
+
+        candidates: list[tuple[tuple, Provider, str]] = []
+        with self._lock:
+            providers = list(self._providers.values())
+        for provider in providers:
+            if provider.is_unhealthy or provider.config.context_window < min_context_window:
+                continue
+            config_capabilities = {
+                str(capability).strip().lower()
+                for capability in getattr(provider.config, "capabilities", [])
+                if str(capability).strip()
+            }
+            if required_capabilities and not required_capabilities.issubset(config_capabilities):
+                continue
+            cost_tier = getattr(provider.config, "cost_tier", 0)
+            if max_cost_tier is not None and cost_tier > max_cost_tier:
+                continue
+            for model_name in provider.available_models:
+                ranking = (
+                    provider_rank.get(provider.config.id, len(provider_rank)),
+                    model_rank.get(model_name, len(model_rank)),
+                    cost_tier,
+                    provider.config.priority,
+                    provider.config.id,
+                    model_name,
+                )
+                candidates.append((ranking, provider, model_name))
+
+        if not candidates:
+            return None
+        _, provider, model_name = min(candidates, key=lambda item: item[0])
+        return provider, model_name
+
     def find_provider_for_llm(self, llm: Any) -> Optional[Provider]:
         """Best-effort mapping from a configured ChatModel to its provider.
 
@@ -286,10 +339,23 @@ class ProviderManager:
             result = {}
             for pid, provider in self._providers.items():
                 hs = provider.health_status
+                runtime = (
+                    RuntimeStatus.health(
+                        hs.status,
+                        hs.detail,
+                        updated_at=provider.last_check_time or None,
+                    )
+                    if hs
+                    else None
+                )
                 result[pid] = {
                     "status": hs.status if hs else "unknown",
                     "latency_ms": hs.latency_ms if hs else None,
-                    "detail": hs.detail if hs else None,
+                    "detail": runtime.public_detail() if runtime else None,
+                    "reason_code": runtime.reason_code if runtime else None,
+                    "retry_at": runtime.retry_at if runtime else None,
+                    "updated_at": runtime.updated_at if runtime else None,
+                    "summary": runtime.summary if runtime else None,
                     "last_check_time": provider.last_check_time,
                     "consecutive_failures": provider.consecutive_failures,
                     "priority": provider.config.priority,

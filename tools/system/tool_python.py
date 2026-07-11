@@ -21,6 +21,10 @@ from pydantic import BaseModel, Field
 
 from api import interaction
 from tools.base import ToolBase, format_error, format_success, register_tool
+from tools.system.sandbox_policy import (
+    DEFAULT_PYTHON_SANDBOX_REQUEST,
+    PYTHON_SANDBOX_CAPABILITIES,
+)
 
 # 沙箱配置
 DEFAULT_TIMEOUT = 30  # 默认超时（秒）
@@ -267,11 +271,18 @@ def _run_in_sandbox(code: str, timeout: int = DEFAULT_TIMEOUT) -> dict:
     Returns:
         dict with keys: stdout, stderr, exit_code, timed_out
     """
+    runner = None
+    proc = None
     try:
         from tools.system.sandbox_runner import get_sandbox_runner
 
+        # Make the compute-only boundary explicit.  This is deliberately
+        # fail-closed if a future caller adds a capability without review.
+        PYTHON_SANDBOX_CAPABILITIES.require(DEFAULT_PYTHON_SANDBOX_REQUEST)
+
         # 获取 OS 级隔离运行器（首次调用时执行能力探测）
         runner = get_sandbox_runner(memory_mb=MAX_MEMORY_MB)
+        isolation = runner.isolation_report()
 
         # 选择子进程 Python 解释器：
         # - 打包模式：使用嵌入式 Python（PYTHON_EMBED_EXE），避免触发 PyInstaller
@@ -319,6 +330,7 @@ def _run_in_sandbox(code: str, timeout: int = DEFAULT_TIMEOUT) -> dict:
                 "stderr": f"代码执行超时（{timeout} 秒），已强制终止",
                 "exit_code": -1,
                 "timed_out": True,
+                "sandbox": isolation,
             }
 
         # 解析子进程输出
@@ -333,6 +345,7 @@ def _run_in_sandbox(code: str, timeout: int = DEFAULT_TIMEOUT) -> dict:
                 "stderr": result.get("stderr", ""),
                 "exit_code": result.get("exit_code", proc.returncode),
                 "timed_out": False,
+                "sandbox": isolation,
             }
         except (json.JSONDecodeError, ValueError):
             # 如果输出不是 JSON，直接返回原始输出
@@ -341,6 +354,7 @@ def _run_in_sandbox(code: str, timeout: int = DEFAULT_TIMEOUT) -> dict:
                 "stderr": stderr.decode('utf-8', errors='replace'),
                 "exit_code": proc.returncode,
                 "timed_out": False,
+                "sandbox": isolation,
             }
 
     except Exception as e:
@@ -350,6 +364,9 @@ def _run_in_sandbox(code: str, timeout: int = DEFAULT_TIMEOUT) -> dict:
             "exit_code": -1,
             "timed_out": False,
         }
+    finally:
+        if runner is not None and proc is not None:
+            runner.cleanup_process(proc)
 
 
 class RunPythonInput(BaseModel):

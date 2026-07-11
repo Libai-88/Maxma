@@ -22,6 +22,10 @@ class SessionState:
     checkpointer: Any = field(default=None)
     _graph: CompiledStateGraph | None = field(default=None, repr=False)
     auto_approve: bool = False
+    # Keep the selected permission state on the session.  This is deliberately
+    # limited to a mode and timestamp so const-session persistence stays secret-free.
+    permission_mode: str = "ask"
+    permission_mode_updated_at: float = field(default_factory=time.time)
 
     # ── Sub-agent 字段 ─────────────────────────────────────
     is_subagent: bool = False
@@ -50,6 +54,33 @@ class SessionState:
                 from langgraph.checkpoint.memory import MemorySaver
                 self.checkpointer = MemorySaver()
 
+        # Older const-session metadata has no permission mode.  Invalid stored
+        # values fail closed to the compatible, confirmation-first default.
+        try:
+            from agent.permission_policy import parse_permission_mode
+
+            self.permission_mode = parse_permission_mode(self.permission_mode).value
+        except (ImportError, ValueError):
+            self.permission_mode = "ask"
+
+    def persistent_metadata(self) -> dict[str, Any]:
+        """Return the non-secret metadata supported by const-session storage."""
+        return {
+            "created_at": self.created_at,
+            "last_active": self.last_active,
+            "message_count": self.message_count,
+            "permission_mode": self.permission_mode,
+            "permission_mode_updated_at": self.permission_mode_updated_at,
+        }
+
+    def set_permission_mode(self, permission_mode: str) -> str:
+        """Validate and update the selected mode before it is persisted."""
+        from agent.permission_policy import parse_permission_mode
+
+        self.permission_mode = parse_permission_mode(permission_mode).value
+        self.permission_mode_updated_at = time.time()
+        return self.permission_mode
+
 
 class SessionManager:
     def __init__(self, ttl_seconds: int = 1800):
@@ -63,6 +94,14 @@ class SessionManager:
         async with self._lock:
             self._sessions[session_id] = session
         return session
+
+    def set_deferred_run_manager(self, manager: Any) -> None:
+        """Bind the optional Phase-2 dispatcher without importing its module."""
+        self._deferred_run_manager = manager
+
+    def set_workflow_run_manager(self, manager: Any) -> None:
+        """Bind the opt-in workflow dispatcher without importing its module."""
+        self._workflow_run_manager = manager
 
     async def create_sub_session(
         self,
@@ -118,6 +157,22 @@ class SessionManager:
             try:
                 await task
             except (asyncio.CancelledError, Exception):
+                pass
+        run_manager = getattr(self, "_deferred_run_manager", None)
+        if run_manager is not None:
+            try:
+                await run_manager.cancel_parent(session_id)
+            except Exception:
+                # Session deletion must remain available even if a durable
+                # dispatcher has already been shut down during application exit.
+                pass
+        workflow_manager = getattr(self, "_workflow_run_manager", None)
+        if workflow_manager is not None:
+            try:
+                await workflow_manager.cancel_parent(session_id, "parent_session_closed")
+            except Exception:
+                # A session must still be removable while a workflow runtime is
+                # stopping or has already released its journal connection.
                 pass
         return True
 

@@ -1,10 +1,23 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { api } from '@/api'
 import type { HealthResponse } from '@/types'
 
 export const useHealthStore = defineStore('health', () => {
   const health = ref<HealthResponse | null>(null)
+  // Stable reason codes are safe to render; raw diagnostic text remains optional.
+  const componentStatuses = computed(() => {
+    if (!health.value) return []
+    const base = [
+      ['llm', health.value.llm],
+      ['memory', health.value.memory],
+      ['native_tools', health.value.native_tools],
+      ['mcp_tools', health.value.mcp_tools],
+    ] as const
+    const providers = Object.entries(health.value.providers ?? {})
+      .map(([name, component]) => [`provider:${name}`, component] as const)
+    return [...base, ...providers]
+  })
   let _timer: ReturnType<typeof setInterval> | null = null
 
   async function refresh() {
@@ -30,5 +43,5 @@ export const useHealthStore = defineStore('health', () => {
     if (_timer !== null) { clearInterval(_timer); _timer = null }
   }
 
-  return { health, refresh, startPolling, stopPolling }
+  return { health, componentStatuses, refresh, startPolling, stopPolling }
 })

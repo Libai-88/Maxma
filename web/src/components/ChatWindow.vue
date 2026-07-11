@@ -24,6 +24,11 @@
             :plan="turn.planCard"
             @respond="onPlanRespond"
           />
+          <SubAgentCard
+            v-if="turn.deferredRunIds?.length"
+            :session-id="sessionId"
+            :run-ids="turn.deferredRunIds"
+          />
           <template v-for="(ev, i) in turn.events" :key="i">
             <div
               v-if="ev.kind === 'thinking' && !ev.consumed"
@@ -208,9 +213,12 @@ import ThinkingBlock from './ThinkingBlock.vue'
 import ToolBubbleRouter from './ToolBubbleRouter.vue'
 import PlanCard from './PlanCard.vue'
 import ApprovalBubble from './ApprovalBubble.vue'
+import SubAgentCard from './SubAgentCard.vue'
 import { toolDisplayName } from './tools/_shared/displayNames'
+import { chatSessionAliveCache } from '@/composables/sessionAliveCache'
 
 const props = defineProps<{
+  sessionId: string
   turns: ChatTurn[]
   currentTurn: ChatTurn | null
   error: string | null
@@ -355,6 +363,23 @@ function scrollToBottom() {
   })
 }
 
+watch(
+  () => props.sessionId,
+  (sessionId, previousSessionId) => {
+    if (previousSessionId && windowRef.value) {
+      chatSessionAliveCache.rememberScroll(previousSessionId, windowRef.value.scrollTop)
+    }
+    if (!sessionId) return
+    nextTick(() => {
+      const el = windowRef.value
+      if (!el) return
+      const savedScrollTop = chatSessionAliveCache.restoreScroll(sessionId)
+      el.scrollTop = savedScrollTop ?? el.scrollHeight
+    })
+  },
+  { immediate: true },
+)
+
 function scrollToTurn(index: number) {
   const el = windowRef.value?.querySelector(`[data-user-msg-idx="${index}"]`)
   if (el) {
@@ -445,6 +470,9 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  if (props.sessionId && windowRef.value) {
+    chatSessionAliveCache.rememberScroll(props.sessionId, windowRef.value.scrollTop)
+  }
   if (typeTimer) clearTimeout(typeTimer)
   if (typingTimer) clearTimeout(typingTimer)
   document.removeEventListener('keydown', onPrivateKeydown)

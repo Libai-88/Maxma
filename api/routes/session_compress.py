@@ -14,6 +14,7 @@ from agent.context_manager import fresh_compact, maybe_trim_checkpoint
 from agent.graph import build_agent
 from agent.prompts import build_system_prompt
 from api.context_usage import count_tokens
+from config.settings import get_settings
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 logger = logging.getLogger(__name__)
@@ -76,6 +77,7 @@ async def compress_session(session_id: str, request: Request) -> dict:
                 for m in msgs
             ),
             max_tokens=current_max_tokens,
+            cache_preserving=get_settings().cache_preserving_compaction_enabled,
         )
         return result
     except Exception as e:

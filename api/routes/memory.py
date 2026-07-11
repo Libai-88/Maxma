@@ -216,6 +216,10 @@ class SearchBody(BaseModel):
     layers: Optional[list[str]] = None  # 默认 ["long", "episodic", "semantic"]
     top_k: int = Field(default=5, ge=1, le=50)
     threshold: float = Field(default=0.6, ge=0.0, le=1.0)
+    # The optional ``facts`` layer requires this constraint; without it the
+    # coordinator returns no exact facts instead of crossing session bounds.
+    session_id: Optional[str] = None
+    fact_tags: Optional[list[str]] = None
 
 
 @router.post("/memories/search")
@@ -229,5 +233,7 @@ async def search_memories_across_layers(body: SearchBody, request: Request):
         layers=body.layers,
         top_k=body.top_k,
         threshold=body.threshold,
+        session_id=body.session_id,
+        fact_tags=body.fact_tags,
     )
     return {"results": results}

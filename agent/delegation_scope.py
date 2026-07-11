@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from agent.permission_policy import PermissionMode, narrow_permission_mode
+
 
 @dataclass(frozen=True)
 class DelegationScope:
@@ -23,6 +25,7 @@ class DelegationScope:
     allowed_paths: frozenset[str] = field(default_factory=frozenset)
     max_tokens: int = 0
     time_limit_seconds: int = 0
+    permission_mode: PermissionMode = PermissionMode.ASK
 
     def is_empty(self) -> bool:
         """范围是否为空（无工具且无路径且无预算）。"""
@@ -59,6 +62,7 @@ def intersect(parent: DelegationScope, child_request: DelegationScope) -> Delega
         allowed_paths=frozenset(paths),
         max_tokens=min(parent.max_tokens, child_request.max_tokens) if parent.max_tokens and child_request.max_tokens else 0,
         time_limit_seconds=min(parent.time_limit_seconds, child_request.time_limit_seconds) if parent.time_limit_seconds and child_request.time_limit_seconds else 0,
+        permission_mode=narrow_permission_mode(parent.permission_mode, child_request.permission_mode),
     )
 
 
@@ -67,6 +71,7 @@ def from_parent_context(
     allowed_paths: list[str],
     max_tokens: int = 8000,
     time_limit_seconds: int = 180,
+    permission_mode: PermissionMode | str = PermissionMode.ASK,
 ) -> DelegationScope:
     """从父 Agent 上下文构造父范围。
 
@@ -84,4 +89,5 @@ def from_parent_context(
         allowed_paths=frozenset(allowed_paths),
         max_tokens=max_tokens,
         time_limit_seconds=time_limit_seconds,
+        permission_mode=PermissionMode(permission_mode),
     )

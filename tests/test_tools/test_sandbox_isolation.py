@@ -30,7 +30,6 @@ import pytest
 # 触发工具导入
 from tools.system.sandbox_runner import (
     SandboxRunner,
-    _runner,
     get_sandbox_runner,
 )
 from tools.system.tool_python import _run_in_sandbox
@@ -163,6 +162,25 @@ class TestSandboxRunnerCommandBuilding:
             pytest.skip("未探测到 jobobject 模式")
         # 阶段 3.4 实现已改为不使用 CREATE_SUSPENDED（Python 关闭线程句柄）
         assert runner.get_popen_kwargs() == {}
+
+    def test_isolation_report_never_claims_a_restricted_token(self):
+        """Job Object memory containment is not a Windows restricted token."""
+        runner = SandboxRunner(memory_mb=256)
+        report = runner.isolation_report()
+
+        assert report["effective"]["restricted_process_token"] is False
+        assert "no_restricted_process_token" in report["limitations"]
+
+    def test_jobobject_report_only_claims_guaranteed_capabilities(self):
+        runner = SandboxRunner(memory_mb=256)
+        runner._level = SandboxRunner.LEVEL_JOBOBJECT
+
+        report = runner.isolation_report()
+
+        assert report["status"] == "degraded"
+        assert report["effective"]["memory_limit"] is True
+        assert report["effective"]["process_tree_cleanup"] is True
+        assert report["effective"]["os_network_isolation"] is False
 
 
 # ── 单例工厂 ──────────────────────────────────────────────────
@@ -340,6 +358,8 @@ class TestWindowsJobObject:
             stdout, _ = proc.communicate(timeout=10)
             assert b"done" in stdout
         finally:
+            runner.cleanup_process(proc)
+            assert not hasattr(proc, "_sandbox_job_handle")
             if proc.poll() is None:
                 proc.kill()
                 proc.wait()
@@ -366,6 +386,7 @@ class TestWindowsJobObject:
             # 超内存的进程应非零退出
             assert proc.returncode != 0 or b"allocated" not in stdout
         finally:
+            runner.cleanup_process(proc)
             if proc.poll() is None:
                 proc.kill()
                 proc.wait()

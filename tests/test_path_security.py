@@ -49,6 +49,7 @@ sys.modules["path_security"] = ps
 check_maxma_blocker = ps.check_maxma_blocker
 check_path_whitelisted = ps.check_path_whitelisted
 check_path_access = ps.check_path_access
+require_path_access = ps.require_path_access
 get_safe_builtins = ps.get_safe_builtins
 
 
@@ -383,6 +384,22 @@ class TestCheckPathAccess:
         result = check_path_access(str(allowed / "linked_outside" / "new.txt"))
         assert result is not None
         assert "MaxmaBlocker" in result
+
+
+class TestPathGuard:
+    """New filesystem operations should receive a canonical path or fail."""
+
+    def test_require_returns_canonical_checked_path(self, tmp_path, monkeypatch):
+        allowed = tmp_path / "allowed"
+        allowed.mkdir()
+        nested = allowed / "nested" / "new.txt"
+        monkeypatch.setattr(ps, "_load_path_whitelist", lambda: [(str(allowed), True)])
+
+        assert require_path_access(nested) == ps.resolve_path_for_access(nested)
+
+    def test_require_denies_empty_path(self):
+        with pytest.raises(PermissionError):
+            require_path_access("")
 
 
 # ====================================================================

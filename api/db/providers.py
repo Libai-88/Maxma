@@ -7,13 +7,14 @@ Provider 配置的 SQLite 存储层 — 替代 YAML 的 ProviderConfigStore。
 
 import json
 import logging
-from pathlib import Path
+import os
+import sqlite3
 from typing import Any
 
-from api.db.core import transaction, row_to_dict, rows_to_dicts
+from api.db.core import transaction
 from api.providers import ProviderConfig
-from app_paths import PROVIDERS_YAML_PATH
-from tools.crypto import decrypt_value, encrypt_value, is_encrypted
+from app_paths import PROVIDER_DB_CREDENTIAL_BACKUP_PATH, PROVIDERS_YAML_PATH
+from tools.crypto import decrypt_value, encrypt_value, is_encrypted, migrate_credential_value
 
 logger = logging.getLogger(__name__)
 
@@ -24,18 +25,21 @@ class ProviderDbStore:
     def load_all(self) -> list[ProviderConfig]:
         """返回所有配置（不论 enabled 与否）。"""
         with transaction() as db:
+            db.execute("BEGIN IMMEDIATE")
             rows = db.execute(
                 "SELECT * FROM providers ORDER BY created_at"
             ).fetchall()
-        return [self._row_to_config(r) for r in rows]
+            return self._migrate_rows_in_transaction(db, rows)
 
     def get(self, provider_id: str) -> ProviderConfig | None:
         """按 id 查找配置。"""
         with transaction() as db:
+            db.execute("BEGIN IMMEDIATE")
             row = db.execute(
                 "SELECT * FROM providers WHERE id = ?", (provider_id,)
             ).fetchone()
-        return self._row_to_config(row) if row else None
+            configs = self._migrate_rows_in_transaction(db, [row] if row else [])
+            return configs[0] if configs else None
 
     def save(self, config: ProviderConfig) -> None:
         """新增或更新配置。API Key 落盘前加密存储。"""
@@ -112,13 +116,75 @@ class ProviderDbStore:
             return 0
 
     @staticmethod
-    def _row_to_config(row: Any) -> ProviderConfig:
+    def _create_migration_backup(db: sqlite3.Connection) -> bool:
+        """Snapshot SQLite before rewriting a legacy credential format.
+
+        This runs while the caller holds ``BEGIN IMMEDIATE``.  A failed backup
+        means no migration is applied, but normal credential reads continue.
+        """
+        backup_path = PROVIDER_DB_CREDENTIAL_BACKUP_PATH
+        if backup_path.exists():
+            return True
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
+        db_path = db.execute("PRAGMA database_list").fetchone()[2]
+        source = sqlite3.connect(db_path)
+        destination = sqlite3.connect(str(backup_path))
+        try:
+            # ``Connection.backup`` on the active write transaction can wait
+            # forever on SQLite.  A second read connection sees the last
+            # committed state while BEGIN IMMEDIATE prevents another writer
+            # from racing the following envelope update.
+            source.backup(destination)
+            try:
+                os.chmod(backup_path, 0o600)
+            except OSError:
+                pass
+            return True
+        except sqlite3.Error as exc:
+            logger.warning("Provider credential database migration deferred: %s", exc)
+            return False
+        finally:
+            destination.close()
+            source.close()
+            if not backup_path.exists():
+                try:
+                    backup_path.unlink()
+                except OSError:
+                    pass
+
+    def _migrate_rows_in_transaction(
+        self, db: sqlite3.Connection, rows: list[Any]
+    ) -> list[ProviderConfig]:
+        """Return decrypted configs and rewrite old values in the same commit."""
+        configs: list[ProviderConfig] = []
+        rewrites: list[tuple[str, str]] = []
+        for row in rows:
+            api_key_raw = row["api_key"]
+            api_key, stored_value, did_migrate = migrate_credential_value(api_key_raw)
+            configs.append(self._row_to_config(row, api_key=api_key))
+            if did_migrate:
+                rewrites.append((stored_value, row["id"]))
+
+        if rewrites:
+            if self._create_migration_backup(db):
+                db.executemany(
+                    "UPDATE providers SET api_key = ?, updated_at = julianday('now') WHERE id = ?",
+                    rewrites,
+                )
+                logger.info("Migrated %d provider credential envelope(s) in SQLite", len(rewrites))
+            else:
+                logger.warning("Provider credential migration skipped until a backup can be created")
+        return configs
+
+    @staticmethod
+    def _row_to_config(row: Any, *, api_key: str | None = None) -> ProviderConfig:
         models = json.loads(row["models"]) if isinstance(row["models"], str) else (row["models"] or [])
         # priority 列在 v3 迁移后存在；用 keys() 兼容旧数据库快照
         priority = row["priority"] if "priority" in row.keys() else 0
         # 读取时解密 API Key（兼容历史明文数据：未加密则原样返回）
-        api_key_raw = row["api_key"]
-        api_key = decrypt_value(api_key_raw) if is_encrypted(api_key_raw) else api_key_raw
+        if api_key is None:
+            api_key_raw = row["api_key"]
+            api_key = decrypt_value(api_key_raw) if is_encrypted(api_key_raw) else api_key_raw
         return ProviderConfig(
             id=row["id"],
             provider_type=row["provider_type"],

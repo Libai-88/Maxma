@@ -14,7 +14,7 @@ from pathlib import Path
 import yaml
 
 from app_paths import (
-    DATA_DIR, BUNDLE_DIR, UPLOADS_DIR,
+    DATA_DIR, UPLOADS_DIR,
     PATH_WHITELIST_YAML_PATH, MAXMA_BLOCKER_YAML_PATH,
     ANTHROPIC_SKILLS_DIR, MACROS_DIR, API_DATA_DIR,
 )
@@ -430,6 +430,37 @@ def check_path_whitelisted(target_path: str) -> str | None:
     return f"路径不在白名单中: {target_path}"
 
 
+class PathGuard:
+    """Canonical, fail-closed path guard for filesystem tool implementations.
+
+    ``check_path_access`` remains the compatibility API for callers that need
+    an error string.  New code should use ``require`` so the validated canonical
+    path is also the path used for the filesystem operation.
+    """
+
+    def require(self, target_path: str | os.PathLike[str]) -> str:
+        if not target_path:
+            raise PermissionError("路径不能为空，已拒绝访问")
+
+        safe_path = resolve_path_for_access(target_path)
+        error = check_path_access(safe_path)
+        if error:
+            raise PermissionError(error)
+        return safe_path
+
+
+PATH_GUARD = PathGuard()
+
+
+def require_path_access(target_path: str | os.PathLike[str]) -> str:
+    """Return a validated canonical path or raise ``PermissionError``.
+
+    This is the preferred entry point for new filesystem operations because it
+    prevents a check-then-use mismatch through symlinks or junctions.
+    """
+    return PATH_GUARD.require(target_path)
+
+
 # ── exec() 安全 builtins（维持日常功能，仅拦截 open） ──────
 
 
@@ -452,25 +483,11 @@ def _whitelisted_open(
     import builtins as _real_builtins
 
     # 仅对路径进行检查，跳过已打开的文件描述符。
-    file_str = file
-    if isinstance(file, os.PathLike):
-        file_str = os.fspath(file)
+    file_str = os.fspath(file) if isinstance(file, os.PathLike) else file
     if isinstance(file_str, (str, bytes)):
-        safe_path = resolve_path_for_access(file_str)
-        # 1. MaxmaBlocker 优先
-        blocked = check_maxma_blocker(safe_path)
-        if blocked:
-            raise PermissionError(
-                "🚫 安全阻断：操作已被 MaxmaBlocker 阻断。\n"
-                f"MaxmaBlocker 文件位于: {blocked}\n"
-                "请立即停止当前任务。"
-            )
-        # 2. 白名单次之
-        blocked = check_path_whitelisted(safe_path)
-        if blocked:
-            raise PermissionError(blocked)
-        # 使用已解析的实际路径打开，避免校验后再沿原始链接路径访问。
-        file = safe_path
+        # Use the checked canonical path for the actual open, rather than
+        # re-opening a link alias after it was authorised.
+        file = require_path_access(file_str)
 
     return _real_builtins.open(
         file, mode, buffering, encoding, errors, newline, closefd, opener

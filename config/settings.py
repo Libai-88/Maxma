@@ -8,6 +8,7 @@ LLM 提供商配置（API key、base_url、model、context_window）
 import threading
 
 from app_paths import ENV_FILE_PATH
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
@@ -82,6 +83,8 @@ class Settings(BaseSettings):
     provider_health_check_interval_seconds: int = 60  # 健康 provider 的检查间隔（秒）
     provider_recovery_check_interval_seconds: int = 300  # unhealthy provider 的恢复探测间隔（秒）
     provider_unhealthy_threshold: int = 3  # 连续失败次数达此值才标记 error（避免单次抖动）
+    # Provider/LTM 的面向用户诊断提示；关闭时保留既有健康状态 UI。
+    provider_diagnostics_enabled: bool = False
 
     # 阶段 4.3：MCP transport URL 白名单 + TLS 校验
     mcp_allowed_url_hosts: list[str] = ["localhost", "127.0.0.1"]  # 允许的 URL host 白名单
@@ -92,6 +95,9 @@ class Settings(BaseSettings):
     mcp_rate_limit_per_minute: int = 60  # 每服务器每分钟最大调用数
     mcp_rate_limit_burst: int = 10  # 突发上限（令牌桶容量）
     mcp_rate_limit_enabled: bool = True  # 是否启用 MCP 限流
+
+    # 阶段 1：MCP OAuth 刷新与受限重连生命周期；默认保留既有一次性初始化路径
+    mcp_connection_lifecycle_enabled: bool = False
 
     # 阶段 5.1：进程级持久化 checkpointer
     # 启用后使用 SqliteSaver 持久化会话状态到磁盘，进程重启可恢复
@@ -104,6 +110,8 @@ class Settings(BaseSettings):
     loop_detection_threshold: int = 3  # 连续重复次数阈值，达到后终止
 
     # ── 编排层特性开关（默认关闭，安全滚动）──
+    # Owner, evidence and rollback signals: dev_docs/capability-matrix.md.
+    # A false value preserves the pre-flag path; use reload_settings() after config edits.
     # Coordinator：意图路由协调者节点（coordinator → planner → agent）
     coordinator_enabled: bool = False
     # Verifier：答案充分性验证节点（agent → verifier → END/agent 重试）
@@ -112,6 +120,24 @@ class Settings(BaseSettings):
     verifier_max_retries: int = 2
     # DelegationScope：SubAgent 委托范围单调收窄强制
     delegation_scope_enforced: bool = False
+    # Async SubAgent：异步委托与结果回收；默认保持同步委托路径
+    async_subagent_enabled: bool = False
+    # 子 Agent 结果仅在用户展开卡片后读取；依赖 async_subagent_enabled。
+    subagent_stream_on_demand_enabled: bool = False
+    # Four-mode permission policy remains opt-in until session/UI wiring is enabled.
+    permission_modes_enabled: bool = False
+    # AUTO mode never gains local-write capability without an explicit tool name.
+    permission_auto_allowed_tools: list[str] = Field(default_factory=list)
+    # Structured workbench cards stay opt-in until approval and audit wiring is enabled.
+    interactive_artifacts_enabled: bool = False
+    # Registered, read-only workflow journal. This remains disabled until the
+    # async dispatcher and four-mode permission policy are both enabled.
+    workflow_enabled: bool = False
+
+    # 阶段 6.1：可见、用户确认的思考深度选择与声明式模型角色路由。
+    # 两者均默认关闭；路由不会覆盖用户在聊天输入框显式选择的模型。
+    think_path_enabled: bool = False
+    declarative_model_routing_enabled: bool = False
 
     # ── 检索层特性开关（默认关闭，安全滚动）──
     # CRAG-lite：检索分级 + Tavily 自动回退
@@ -120,6 +146,7 @@ class Settings(BaseSettings):
     rag_grade_threshold: float = 0.3
 
     # ── 自治层特性开关（默认关闭，安全滚动）──
+    # autonomy_* remains off until the phase-6 permission/audit gate.
     # 自治调度器：周期性后台自诊断 + 自改进
     autonomy_enabled: bool = False
     # 自治调度器执行间隔（秒），默认 1 小时
@@ -130,7 +157,21 @@ class Settings(BaseSettings):
     autonomy_max_agent_timeout: int = 300
 
     # 流式响应修复管道（默认关闭，接入国产 model 时建议开启）
+    # Trial before coordinator/verifier; enable only one high-risk flag at a time.
     stream_repair_enabled: bool = False
+
+    # ── 已交付能力的渐进启用开关（默认关闭）──
+    # LTM 的永久错误分类和抖动退避。关闭时保留旧的统一重试路径。
+    ltm_retry_policy_enabled: bool = False
+    # 在上下文摘要中记录 cache-safe 边界元数据；关闭时保持旧摘要格式。
+    cache_preserving_compaction_enabled: bool = False
+    # 只有显式开启时，MemoryTicker 才会执行编译器。
+    memory_ticker_enabled: bool = False
+    # FactStore 的 FTS5/CJK 精确事实检索作为现有语义检索的补充，默认不创建
+    # 额外的 SQLite 运行时或改变跨层检索结果。
+    fact_store_retrieval_enabled: bool = False
+    # 前端还需要 VITE_COMPACT_TOOL_RESULTS_ENABLED=true 才会折叠展示。
+    compact_tool_results_enabled: bool = False
 
     model_config = {
         "env_file": str(ENV_FILE_PATH),

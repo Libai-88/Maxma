@@ -54,6 +54,7 @@
             <router-link to="/privacy" class="popup-item" @click="closeSettingsMenu">隐私仪表盘</router-link>
             <router-link to="/metrics" class="popup-item" @click="closeSettingsMenu">运行指标</router-link>
             <router-link to="/audit-log" class="popup-item" @click="closeSettingsMenu">审计日志</router-link>
+            <button v-if="onboardingEnabled" class="popup-item popup-action" @click="restartOnboarding">重新开始引导</button>
             <div class="popup-divider"></div>
             <button class="popup-item popup-action" :class="{ exporting: exportingErrorLog }" :disabled="exportingErrorLog" @click="handleExportErrorLog">
               {{ exportingErrorLog ? '导出中...' : '导出错误日志' }}
@@ -78,7 +79,8 @@
         @constify="handleConstify"
         @unconstify="handleUnconstify"
       />
-      <HealthPanel :health="health!" v-if="health" />
+      <PulsePanel v-if="health && pulseEnabled" :health="health" />
+      <HealthPanel v-else-if="health" :health="health" />
     </aside>
     <!-- 悬停滑入侧边栏 -->
     <FloatSidebar />
@@ -95,15 +97,23 @@
     <LeavesOverlay />
     <!-- 全屏媒体查看器 -->
     <MediaViewer />
+    <OnboardingView
+      v-if="onboarding.shouldShow"
+      :health="health"
+      @open-providers="openProviderSetup"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import HealthPanel from '@/components/HealthPanel.vue';
+import PulsePanel from '@/components/PulsePanel.vue';
+import OnboardingView from '@/views/OnboardingView.vue';
 import Icon from '@/components/Icon.vue';
 import SessionSidebar from '@/components/SessionSidebar.vue';
 import { useChatStore } from '@/stores/chat';
 import { useHealthStore } from '@/stores/health';
+import { onboardingEnabled, useOnboardingStore } from '@/stores/onboarding';
 import { storeToRefs } from 'pinia';
 import { useSessionStore } from '@/stores/session';
 import { useSidebar } from '@/composables/useSidebar';
@@ -117,10 +127,13 @@ import MediaViewer from '@/components/MediaViewer.vue'
 import FloatSidebar from '@/components/FloatSidebar.vue'
 import { useFloatSidebar } from '@/composables/useFloatSidebar'
 import { usePaperTexture } from '@/composables/usePaperTexture'
+import { useGlobalShortcut } from '@/composables/useGlobalShortcut'
 import RegionalErrorBoundary from '@/components/ui/RegionalErrorBoundary.vue'
 import { invoke } from '@tauri-apps/api/core'
 
 const { effectiveCollapsed, toggleSidebar } = useSidebar()
+const pulseEnabled = import.meta.env.VITE_PULSE_ENABLED === 'true'
+const onboarding = useOnboardingStore()
 
 const { onEnter: onFloatSidebarEnter, onLeave: onFloatSidebarLeave } = useFloatSidebar()
 
@@ -208,6 +221,11 @@ function closeSettingsMenu() {
   showSettingsMenu.value = false
 }
 
+function restartOnboarding() {
+  onboarding.restart()
+  closeSettingsMenu()
+}
+
 function updatePopupPosition() {
   if (settingsTriggerRef.value) {
     const rect = settingsTriggerRef.value.getBoundingClientRect()
@@ -253,6 +271,11 @@ function handleSwitchSession(id: string) {
   router.push('/')
 }
 
+function openProviderSetup() {
+  onboarding.complete()
+  router.push('/providers')
+}
+
 function handleConstify(id: string, name: string) {
   if (name && name.trim()) {
     sessionStore.constifySession(id, name.trim())
@@ -269,6 +292,10 @@ const sessionStore = useSessionStore()
 const { sessionId, sessions } = storeToRefs(sessionStore)
 const { createSession, switchSession, deleteSession } = sessionStore
 
+useGlobalShortcut({ key: 'n', mod: true, allowInEditable: true }, () => {
+  void createSession().then(() => router.push('/'))
+})
+
 const chatStore = useChatStore()
 const { allSessionStatuses } = storeToRefs(chatStore)
 
@@ -279,6 +306,7 @@ onMounted(async () => {
   // 初始化 Session 状态（从 localStorage 恢复或创建新会话）
   await sessionStore.initIfNeeded()
   healthStore.startPolling()
+  onboarding.initialize()
 
   // 初始化纸质纹理 body class
   const { enabled: paperTextureEnabled } = usePaperTexture()

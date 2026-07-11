@@ -4,7 +4,32 @@
 export type WorkbenchTab = 'reasoning' | 'canvas'
 
 /** Canvas 卡片类型 */
-export type CanvasCardType = 'code' | 'table' | 'summary'
+export type CanvasCardType =
+  | 'code'
+  | 'table'
+  | 'summary'
+  | 'confirmation'
+  | 'choice'
+  | 'html'
+  | 'json'
+  | 'markdown'
+
+export interface ArtifactAction {
+  id: string
+  label: string
+  token: string
+  style: 'primary' | 'secondary' | 'danger'
+}
+
+/** A server-issued, schema-validated card. It never contains HTML or scripts. */
+export interface InteractiveArtifact {
+  version: 1
+  id: string
+  type: 'confirmation' | 'choice'
+  title: string
+  body: string
+  actions: ArtifactAction[]
+}
 
 /** Canvas 卡片 — 从消息流 pin 到画布的结构化内容 */
 export interface CanvasCard {
@@ -22,6 +47,20 @@ export interface CanvasCard {
   sourceTurnId?: string
   /** 创建时间戳 */
   createdAt: number
+  /** Pinned cards are restored when the desktop app is reopened. */
+  pinned?: boolean
+  /** Interactive artifacts are rendered by a local, allow-listed component. */
+  artifact?: InteractiveArtifact
+}
+
+/** A local tab is a safe projection of a card, never independently executable content. */
+export interface CanvasWorkspaceTab {
+  id: string
+  cardId: string
+  title: string
+  type: CanvasCardType
+  pinned: boolean
+  sourceTurnId?: string
 }
 
 /** 推理时间线条目 — 从 ChatTurn.events 派生 */
@@ -41,4 +80,3 @@ export interface ReasoningEntry {
   /** 时间戳 */
   timestamp: number
 }
-

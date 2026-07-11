@@ -1,5 +1,7 @@
 import type { ParsedRef } from '@/utils/references'
 
+import type { InteractiveArtifact } from './workbench'
+
 // === WebSocket 服务端 → 客户端事件 ===
 
 export interface ThinkingStartEvent {
@@ -204,6 +206,22 @@ export interface SubSessionCreatedEvent {
   }
 }
 
+/** Browser receives only an opaque run ID for an async delegation. */
+export interface DeferredSubagentSubmittedEvent {
+  type: 'deferred_subagent_submitted'
+  payload: {
+    run_id: string
+    parent_session_id: string | null
+    status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+  }
+}
+
+/** A structured card. The client renders only local allow-listed components. */
+export interface ArtifactEvent {
+  type: 'artifact'
+  payload: InteractiveArtifact
+}
+
 /** memory_tool_start — 后台记忆 consumer 开始调用 CRUD 工具 */
 export interface MemoryToolStartEvent {
   type: 'memory_tool_start'
@@ -264,6 +282,7 @@ export type ServerEvent =
   | PongEvent
   | ContextUsageEvent
   | ContextCompressedEvent
+  | ArtifactEvent
   | AskUserEvent
   | PlanProposedEvent
   | PlanStepStartEvent
@@ -271,6 +290,7 @@ export type ServerEvent =
   | PlanStepErrorEvent
   | PlanCompletedEvent
   | SubSessionCreatedEvent
+  | DeferredSubagentSubmittedEvent
   | MemoryStartEvent
   | MemoryToolStartEvent
   | MemoryToolEndEvent
@@ -287,6 +307,8 @@ export interface ChatMessage {
     auto_approve?: boolean
     provider_id?: string
     model_name?: string
+    /** A fixed, user-confirmed ThinkPath ID; the server validates it again. */
+    think_path_id?: 'light' | 'standard' | 'deep'
   }
 }
 
@@ -317,7 +339,16 @@ export interface UpdateAutoApproveMessage {
   }
 }
 
-export type ClientMessage = ChatMessage | CancelMessage | PingMessage | UserResponseMessage | UpdateAutoApproveMessage
+export interface ArtifactActionMessage {
+  type: 'artifact_action'
+  payload: {
+    artifact_id: string
+    action_id: string
+    token: string
+  }
+}
+
+export type ClientMessage = ChatMessage | CancelMessage | PingMessage | UserResponseMessage | UpdateAutoApproveMessage | ArtifactActionMessage
 
 // === 前端 UI 状态类型 ===
 
@@ -388,6 +419,8 @@ export interface ChatTurn {
   finalAnswer: string | null
   /** 后端生成的 turn_id，用于关联后台记忆 consumer 的事件 */
   turnId?: string
+  /** Opaque IDs only; delegated task text and scope never enter the UI cache. */
+  deferredRunIds?: string[]
   /** 计划卡片（plan_proposed 事件） */
   planCard?: PlanCard
 }
@@ -419,6 +452,72 @@ export interface ConstifyResponse {
 
 export interface ListSessionsResponse {
   sessions: SessionInfo[]
+}
+
+/** Additional session-scoped restriction; it never replaces server-side safeguards. */
+export type PermissionMode = 'read_only' | 'ask' | 'operate' | 'auto'
+
+/** Server-owned feature flag and effective permission mode for one session. */
+export interface SessionPermissionModeResponse {
+  session_id: string
+  permission_modes_enabled: boolean
+  permission_mode: PermissionMode
+  permission_mode_updated_at: number
+  available_permission_modes: PermissionMode[]
+}
+
+export type DeferredRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+
+/** Browser-safe projection returned by the deferred-runs API. */
+export interface DeferredRun {
+  run_id: string
+  parent_turn_id: string | null
+  status: DeferredRunStatus
+  result_ref: string | null
+  result: string | null
+  cancel_reason: 'cancelled_by_user' | 'parent_session_closed' | 'cancelled' | null
+  deadline_at: number | null
+  attempts: number
+  created_at: number
+  updated_at: number
+  error_code?: 'deferred_run_failed'
+}
+
+export interface ListDeferredRunsResponse {
+  runs: DeferredRun[]
+}
+
+/** Browser-safe, server-owned workflow state. Checkpoints and handler details stay server-side. */
+export type WorkflowRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+
+export interface WorkflowStepSummary {
+  step_id: string
+  position: number
+  status: WorkflowRunStatus
+  attempts: number
+  checkpoint: Record<string, unknown> | null
+}
+
+export interface WorkflowRun {
+  run_id: string
+  parent_turn_id: string | null
+  workflow_id: string
+  workflow_version: number
+  status: WorkflowRunStatus
+  current_step_id: string | null
+  failure_code: string | null
+  cancel_reason: 'cancelled_by_user' | 'parent_session_closed' | 'cancelled' | null
+  created_at: number
+  updated_at: number
+  steps?: WorkflowStepSummary[]
+}
+
+export interface WorkflowDefinitionsResponse {
+  workflow_ids: string[]
+}
+
+export interface ListWorkflowRunsResponse {
+  runs: WorkflowRun[]
 }
 
 export interface NarrativeResponse {
@@ -503,9 +602,13 @@ export interface ContextUsage {
 // === 健康检查 ===
 
 export interface ComponentHealth {
-  status: 'ok' | 'error'
+  status: 'ok' | 'degraded' | 'error'
   latency_ms: number | null
   detail: string | null
+  reason_code?: string | null
+  retry_at?: number | null
+  updated_at?: number | null
+  summary?: string | null
 }
 
 export interface HealthResponse {
@@ -516,6 +619,11 @@ export interface HealthResponse {
   native_tools: ComponentHealth
   mcp_tools: ComponentHealth
   anthropic_skills_count: number
+  providers?: Record<string, ComponentHealth>
+  ltm?: ComponentHealth & { provider_id?: string | null }
+  provider_diagnostics_enabled?: boolean
+  /** Server-owned feature capability for the optional ThinkPath chooser. */
+  think_path_enabled?: boolean
   timestamp: number
 }
 
@@ -536,6 +644,10 @@ export interface ProviderConfig {
   health_status?: 'ok' | 'degraded' | 'error' | 'unknown'
   health_detail?: string | null
   health_latency_ms?: number | null
+  health_reason_code?: string | null
+  health_retry_at?: number | null
+  health_updated_at?: number | null
+  health_summary?: string | null
   last_check_time?: number
   consecutive_failures?: number
 }
@@ -548,6 +660,10 @@ export interface TestConnectionResponse {
   status: 'ok' | 'error'
   latency_ms: number | null
   detail: string | null
+  reason_code?: string | null
+  retry_at?: number | null
+  updated_at?: number | null
+  summary?: string | null
 }
 
 // 阶段 3.3：按需健康检查响应（POST /providers/{id}/health）
@@ -555,6 +671,10 @@ export interface ProviderHealthCheckResponse {
   status: 'ok' | 'degraded' | 'error'
   latency_ms: number | null
   detail: string | null
+  reason_code?: string | null
+  retry_at?: number | null
+  updated_at?: number | null
+  summary?: string | null
   last_check_time: number
   consecutive_failures: number
 }

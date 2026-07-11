@@ -26,8 +26,11 @@ from api.cors_config import build_cors_origins
 from api.logging_config import setup_logging
 from api.providers.manager import ProviderManager
 from api.providers.store import ProviderConfigStore
-from app_paths import PROVIDERS_YAML_PATH
+from app_paths import AUTONOMY_SCHEDULES_PATH, PROVIDERS_YAML_PATH, WORKFLOW_JOURNAL_PATH
 from api.routes import chat, files, memory, sessions, balance, providers
+from api.routes import deferred_runs as deferred_runs_router
+from api.routes import workflows as workflows_router
+from api.routes import autonomy as autonomy_router
 from api.routes import path_whitelist as path_whitelist_router
 from api.routes import persona as persona_router
 from api.routes import maxma_blocker as maxma_blocker_router
@@ -45,6 +48,7 @@ from api.routes import audit_log as audit_log_router
 from api.routes import diagnostics as diagnostics_router
 from api.session_manager import SessionManager, SessionState
 from api.ws_registry import WebSocketRegistry
+from config.settings import get_settings
 from agent.graph import build_agent
 from memory.episodic import EpisodicMemoryManager
 from memory.memory_manager import MemoryManager
@@ -242,6 +246,8 @@ async def _load_const_sessions(app: FastAPI):
             created_at=metadata.get("created_at", time.time()),
             last_active=metadata.get("last_active", time.time()),
             message_count=metadata.get("message_count", 0),
+            permission_mode=metadata.get("permission_mode", "ask"),
+            permission_mode_updated_at=metadata.get("permission_mode_updated_at", time.time()),
             checkpointer=shared_checkpointer,
             is_const=True,
             const_name=const_name,
@@ -306,8 +312,28 @@ async def lifespan(app: FastAPI):
     app.state.system_prompt = get_system_prompt()
     app.state.native_tools = get_tools()
     app.state.session_manager = SessionManager()
+    # The workflow API is always registered but runtime construction remains
+    # opt-in. A disabled flag therefore has no journal or execution side effect.
+    workflow_settings = get_settings()
+    if (
+        workflow_settings.workflow_enabled
+        and workflow_settings.async_subagent_enabled
+        and workflow_settings.permission_modes_enabled
+    ):
+        from tools.workflow.journal import WorkflowJournalStore
+        from tools.workflow.registry import DEFAULT_WORKFLOW_REGISTRY
+        from tools.workflow.run_manager import WorkflowRunManager
+
+        app.state.workflow_run_manager = WorkflowRunManager(
+            WorkflowJournalStore(WORKFLOW_JOURNAL_PATH), DEFAULT_WORKFLOW_REGISTRY
+        )
+        app.state.session_manager.set_workflow_run_manager(app.state.workflow_run_manager)
+        app.state.workflow_run_manager.recover()
     app.state.ws_registry = WebSocketRegistry()
-    app.state.ltm = LongTermMemoryInterface(MEMORY_PATH)
+    app.state.ltm = LongTermMemoryInterface(
+        MEMORY_PATH,
+        retry_policy_enabled=get_settings().ltm_retry_policy_enabled,
+    )
 
     # 阶段 5.1：初始化持久化 checkpointer（必须在 _load_const_sessions 之前）
     # - 启用 SQLite 持久化：进程重启后可恢复会话状态
@@ -381,7 +407,6 @@ async def lifespan(app: FastAPI):
 
     # 4.6 启动 TTL 遗忘机制后台清理任务（定期清理 memory.yaml 中已过期条目）
     from memory.ttl import schedule_purge as schedule_ttl_purge
-    from config.settings import get_settings
     from app_paths import EPISODIC_MEMORY_PATH, SEMANTIC_MEMORY_PATH
     _settings = get_settings()
     # 初始化 4 层记忆：长期/情景/语义管理器 + 协调器
@@ -393,17 +418,35 @@ async def lifespan(app: FastAPI):
     _semantic_mm = SemanticMemoryManager(json_file=str(SEMANTIC_MEMORY_PATH))
     app.state.episodic_mm = _episodic_mm
     app.state.semantic_mm = _semantic_mm
+    _fact_store = None
+    _fact_retriever = None
+    if _settings.fact_store_retrieval_enabled:
+        from app_paths import FACT_STORE_PATH
+        from memory.fact_retrieval import SupplementaryFactRetriever
+        from memory.fact_store import FactStore
+
+        _fact_store = FactStore(db_path=str(FACT_STORE_PATH))
+        _fact_retriever = SupplementaryFactRetriever(_fact_store, enabled=True)
+        app.state.fact_store = _fact_store
+        logger.info("[memory] FactStore supplementary retrieval enabled")
     app.state.memory_coordinator = MemoryCoordinator(
         long_term_mm=_long_term_mm,
         episodic_mm=_episodic_mm,
         semantic_mm=_semantic_mm,
+        fact_retriever=_fact_retriever,
     )
     logger.info(
-        "[memory] 4 层记忆架构已初始化：long_term + episodic + semantic",
+        "[memory] memory layers initialized: long_term + episodic + semantic%s",
+        " + facts" if _fact_retriever is not None else "",
     )
+    ttl_managers = [_long_term_mm, _episodic_mm, _semantic_mm]
+    if _fact_retriever is not None:
+        # FactStore exposes the same purge contract; keeping it in the common
+        # scheduler means expired FTS rows cannot accumulate after rollout.
+        ttl_managers.append(_fact_retriever)
     schedule_ttl_purge(
         _settings.ttl_purge_interval_seconds,
-        [_long_term_mm, _episodic_mm, _semantic_mm],
+        ttl_managers,
     )
     logger.info(
         "[ttl] 后台清理任务已启动，间隔 %d 秒", _settings.ttl_purge_interval_seconds,
@@ -428,6 +471,21 @@ async def lifespan(app: FastAPI):
     from config.settings import get_settings as _get_autonomy_settings
     _autonomy_settings = _get_autonomy_settings()
     if _autonomy_settings.autonomy_enabled:
+        # User-created Scout schedules are a separate, deliberately
+        # read-only capability.  Their durable store uses the regular audit
+        # writer and the runner refuses to replay in-flight work after restart.
+        from agent.audit_log import log_event
+        from agent.autonomy.governance import AutonomyScheduleStore
+        from agent.autonomy.scout import ScoutScheduleRunner, run_scout_lease
+
+        app.state.autonomy_schedule_store = AutonomyScheduleStore(
+            AUTONOMY_SCHEDULES_PATH, audit=log_event
+        )
+        app.state.autonomy_scout_runner = ScoutScheduleRunner(
+            app.state.autonomy_schedule_store,
+            lambda lease: run_scout_lease(app, lease),
+        )
+        app.state.autonomy_scout_runner.start()
         from agent.autonomy.scheduler import start_autonomy
         start_autonomy(
             app,
@@ -494,10 +552,21 @@ async def lifespan(app: FastAPI):
     # 停止自治调度器
     from agent.autonomy.scheduler import stop_autonomy
     await stop_autonomy()
+    scout_runner = getattr(app.state, "autonomy_scout_runner", None)
+    if scout_runner is not None:
+        await scout_runner.shutdown()
 
     await close_mcp()
+
+    workflow_manager = getattr(app.state, "workflow_run_manager", None)
+    if workflow_manager is not None:
+        await workflow_manager.shutdown()
     await balance.close_async_client()
     await app.state.ltm.stop_listening()
+
+    fact_store = getattr(app.state, "fact_store", None)
+    if fact_store is not None:
+        fact_store.close()
 
     # 关闭 Playwright 浏览器（如果已启动）
     try:
@@ -529,6 +598,9 @@ def create_app() -> FastAPI:
 
     # REST 路由
     app.include_router(sessions.router, prefix="/api")
+    app.include_router(deferred_runs_router.router, prefix="/api")
+    app.include_router(workflows_router.router, prefix="/api")
+    app.include_router(autonomy_router.router, prefix="/api")
     app.include_router(memory.router, prefix="/api")
     app.include_router(files.router, prefix="/api")
     app.include_router(balance.router, prefix="/api")

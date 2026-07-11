@@ -325,6 +325,10 @@ ${props.html}
 
 /** 窗口消息监听：处理 iframe 高度上报和错误上报 */
 function handleMessage(event: MessageEvent) {
+  // `srcdoc` has a unique opaque origin, so origin comparisons are not useful.
+  // Source identity is the relevant boundary: only our own sandbox iframe may
+  // resize itself or report errors into the parent UI.
+  if (event.source !== iframeRef.value?.contentWindow) return
   if (event.data?.type === 'sandbox-resize' && typeof event.data.height === 'number') {
     iframeHeight.value = event.data.height
     return

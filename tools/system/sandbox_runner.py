@@ -1,7 +1,8 @@
 """SandboxRunner — OS 级沙箱隔离平台抽象层（阶段 3.4）。
 
-在现有 subprocess + builtins 白名单 + AST 变换基础上，叠加 OS 级隔离层
-（资源限制 + 网络隔离 + 文件系统隔离），实现纵深防御。
+在现有 subprocess + builtins 白名单 + AST 变换基础上，按平台叠加可用的
+OS 资源限制。网络和文件系统的 OS 级隔离只在 firejail 可用时成立；其他
+平台必须通过 ``isolation_report()`` 如实报告降级能力。
 
 能力探测 + 优雅降级链：
     firejail (Linux) → setrlimit (Unix) → Job Object (Windows) → 纯 subprocess
@@ -19,8 +20,9 @@
     cmd = runner.build_command([sys.executable, "-c", wrapper_code])
     kwargs = runner.get_popen_kwargs()
     proc = subprocess.Popen(cmd, **kwargs, ...)
-    runner.on_process_started(proc)  # Windows Job Object 模式下恢复线程
+    runner.on_process_started(proc)  # Windows Job Object 模式下分配进程
     stdout, stderr = proc.communicate(...)
+    runner.cleanup_process(proc)
 """
 
 from __future__ import annotations
@@ -29,7 +31,6 @@ import logging
 import platform
 import shutil
 import subprocess
-import sys
 import threading
 from pathlib import Path
 
@@ -51,6 +52,7 @@ class SandboxRunner:
 
     # Windows Job Object 常量（通过 ctypes 调用，避免 pywin32 依赖）
     _JOB_OBJECT_LIMIT_PROCESS_MEMORY = 0x100
+    _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
     _JobObjectExtendedLimitInformation = 9
 
     def __init__(
@@ -169,6 +171,45 @@ class SandboxRunner:
             return {"preexec_fn": self._make_preexec_fn()}
         return {}
 
+    def isolation_report(self) -> dict[str, object]:
+        """Report guarantees actually established by this runner.
+
+        Job Objects provide resource containment and child-process cleanup, but
+        they do not by themselves create a restricted token or block network
+        access.  Callers can surface this report without overstating isolation.
+        """
+        memory_limited = self._level in {
+            self.LEVEL_FIREJAIL,
+            self.LEVEL_SETRLIMIT,
+            self.LEVEL_JOBOBJECT,
+        }
+        process_tree_cleanup = self._level == self.LEVEL_JOBOBJECT
+        os_network_isolated = (
+            self._level == self.LEVEL_FIREJAIL and self.network_isolation
+        )
+        limitations: list[str] = []
+        if not os_network_isolated:
+            limitations.append("no_os_network_isolation")
+        if self._level != self.LEVEL_FIREJAIL:
+            limitations.append("no_os_filesystem_isolation")
+        if self._level != self.LEVEL_JOBOBJECT:
+            limitations.append("no_windows_job_cleanup")
+        # A restricted Windows token needs a carefully designed identity and
+        # ACL model.  Until that exists, reporting false is safer than a partial
+        # ctypes implementation that can lock users out or appear secure.
+        limitations.append("no_restricted_process_token")
+        return {
+            "status": "ok" if self._level == self.LEVEL_FIREJAIL else "degraded",
+            "level": self._level,
+            "effective": {
+                "memory_limit": memory_limited,
+                "process_tree_cleanup": process_tree_cleanup,
+                "os_network_isolation": os_network_isolated,
+                "restricted_process_token": False,
+            },
+            "limitations": limitations,
+        }
+
     # ── Unix: resource.setrlimit ─────────────────────────────
 
     def _make_preexec_fn(self):
@@ -275,6 +316,7 @@ class SandboxRunner:
             info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
             info.BasicLimitInformation.LimitFlags = (
                 self._JOB_OBJECT_LIMIT_PROCESS_MEMORY
+                | self._JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
             )
             info.ProcessMemoryLimit = mem_bytes
             info.JobMemoryLimit = mem_bytes
@@ -314,6 +356,28 @@ class SandboxRunner:
 
         # 保存 job_handle 防止 GC（进程结束时 OS 自动清理 job）
         proc._sandbox_job_handle = job_handle  # type: ignore[attr-defined]
+
+    def cleanup_process(self, proc: subprocess.Popen) -> None:
+        """Release per-process OS isolation resources after process completion.
+
+        Closing a Windows Job Object configured with KILL_ON_JOB_CLOSE removes
+        any surviving child processes.  This must run after ``communicate`` so
+        normal output collection is unaffected.
+        """
+        job_handle = getattr(proc, "_sandbox_job_handle", None)
+        if not job_handle:
+            return
+        try:
+            import ctypes
+
+            ctypes.windll.kernel32.CloseHandle(job_handle)  # type: ignore[attr-defined]
+        except (AttributeError, OSError):
+            logger.warning("Unable to close Windows sandbox Job Object", exc_info=True)
+        finally:
+            try:
+                delattr(proc, "_sandbox_job_handle")
+            except AttributeError:
+                pass
 
 
 # ── 模块级单例 ────────────────────────────────────────────────

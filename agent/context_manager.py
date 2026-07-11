@@ -6,6 +6,8 @@
 - ``retrieve_from_episodic``: 按向量检索历史情景记忆
 """
 
+import hashlib
+import json
 import logging
 import re
 from dataclasses import dataclass, field
@@ -26,6 +28,81 @@ MIN_RECENT_TURNS_DEFAULT = 5
 MIN_RECENT_TURNS_MIN = 3
 # 纯文本场景多保留
 MIN_RECENT_TURNS_MAX = 6
+
+# New compaction callers can store this metadata alongside a summary message.
+# The current chat path intentionally does not opt in yet: the Phase-3 flag is
+# default-off until the UI/state migration is ready.
+COMPACTION_METADATA_KEY = "maxma_compaction"
+COMPACTION_SUMMARY_VERSION = 1
+
+
+@dataclass(frozen=True)
+class CachePreservingCompaction:
+    """A serializable compaction result with a byte-stable cache prefix."""
+
+    fixed_prefix: tuple[BaseMessage, ...]
+    summary_message: SystemMessage
+    retained_messages: tuple[BaseMessage, ...]
+    metadata: dict[str, object]
+
+    @property
+    def messages(self) -> list[BaseMessage]:
+        return [*self.fixed_prefix, self.summary_message, *self.retained_messages]
+
+
+def _message_digest(messages: Sequence[BaseMessage]) -> str:
+    """Hash message structure without retaining it in compaction metadata."""
+    serialized = [
+        {
+            "type": getattr(message, "type", "unknown"),
+            "content": message.content if isinstance(message.content, str) else str(message.content),
+            "tool_calls": getattr(message, "tool_calls", None),
+        }
+        for message in messages
+    ]
+    raw = json.dumps(serialized, ensure_ascii=False, sort_keys=True, default=str, separators=(",", ":"))
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def build_cache_preserving_compaction(
+    *,
+    fixed_prefix: Sequence[BaseMessage],
+    source_messages: Sequence[BaseMessage],
+    retained_messages: Sequence[BaseMessage],
+    summary_text: str,
+    token_counter,
+) -> CachePreservingCompaction:
+    """Build a cache-safe summary message and its replay metadata.
+
+    ``fixed_prefix`` is supplied by the caller rather than inferred from all
+    system messages.  That keeps system prompt/persona/tool definitions byte
+    stable while making a summary a separate, explicitly dynamic segment.
+    Tool result bodies are deliberately excluded from the metadata; the caller
+    must pass a summary produced by the existing safe summarizer.
+    """
+    if not summary_text.strip():
+        raise ValueError("summary_text must not be empty")
+
+    prefix = tuple(fixed_prefix)
+    source = tuple(source_messages)
+    retained = tuple(retained_messages)
+    source_turn_boundary = _count_turns(source)
+    metadata: dict[str, object] = {
+        "summary_version": COMPACTION_SUMMARY_VERSION,
+        "fixed_prefix_sha256": _message_digest(prefix),
+        "source_sha256": _message_digest(source),
+        "retained_sha256": _message_digest(retained),
+        "source_turn_boundary": source_turn_boundary,
+        "source_message_count": len(source),
+        "retained_message_count": len(retained),
+        "source_token_count": int(token_counter([*prefix, *source, *retained])),
+    }
+    summary_message = SystemMessage(
+        content=f"[上下文压缩 v{COMPACTION_SUMMARY_VERSION}] {summary_text.strip()}",
+        additional_kwargs={COMPACTION_METADATA_KEY: metadata},
+    )
+    metadata["result_token_count"] = int(token_counter([*prefix, summary_message, *retained]))
+    return CachePreservingCompaction(prefix, summary_message, retained, metadata)
 
 
 def truncate_text_head_tail(text: str, max_bytes: int = 4096) -> tuple[str, str]:
@@ -387,6 +464,7 @@ async def maybe_trim_checkpoint(
     ws_callback=None,
     token_counter=None,
     max_tokens=None,
+    cache_preserving: bool = False,
 ) -> dict:
     """检查 checkpoint 中的消息是否需要截断，如需则更新（cache-preserving 版本）。
 
@@ -492,11 +570,21 @@ async def maybe_trim_checkpoint(
         if file_ops:
             summary_text = append_file_ops_to_summary(summary_text, file_ops)
 
-        # 构造摘要消息
-        summary_message = SystemMessage(content=f"[上下文压缩] {summary_text}")
-
-        # 重组：静态前缀 + 摘要 + 保留的近期消息
-        new_messages = static_prefix + [summary_message] + retained_messages
+        # The legacy format remains byte-for-byte compatible while the rollout
+        # flag is off. The opt-in path stores only a cache-safe boundary.
+        if cache_preserving:
+            compaction = build_cache_preserving_compaction(
+                fixed_prefix=static_prefix,
+                source_messages=old_messages,
+                retained_messages=retained_messages,
+                summary_text=summary_text,
+                token_counter=token_counter,
+            )
+            summary_message = compaction.summary_message
+            new_messages = compaction.messages
+        else:
+            summary_message = SystemMessage(content=f"[上下文压缩] {summary_text}")
+            new_messages = static_prefix + [summary_message] + retained_messages
 
         # 更新 checkpointer（如果提供）
         if checkpointer is not None:

@@ -111,6 +111,61 @@ async def test_crash_after_yaml_side_effect_replay_does_not_duplicate_target(
     assert [item["description"] for item in entries].count("用户喜欢蓝色。") == 1
 
 
+@pytest.mark.asyncio
+async def test_authentication_failure_becomes_terminal_outbox_record(tmp_path, monkeypatch):
+    """A bad key must stop LTM retries while leaving an inspectable outcome."""
+    path = tmp_path / "memory.yaml"
+
+    class AuthenticationError(RuntimeError):
+        status_code = 401
+
+    fake_agent = MagicMock()
+    fake_agent.ainvoke = AsyncMock(side_effect=AuthenticationError("invalid api key"))
+    monkeypatch.setattr(narrative, "create_react_agent", lambda **kw: fake_agent)
+
+    ltm = LongTermMemoryInterface(path, outbox_retry_base_seconds=0)
+    ltm.start_listening(MagicMock())
+    await ltm.send_history(
+        [{"role": "user", "content": "bad credentials"}], "session-a", "turn-1"
+    )
+    assert ltm._queue is not None
+    await ltm._queue.join()
+    state = ltm._outbox.get("session-a", "turn-1")
+    assert state is not None
+    assert state["status"] == "abandoned"
+    assert state["failure_code"] == "authentication_failed"
+    await ltm.stop_listening()
+    assert fake_agent.ainvoke.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_disabled_retry_policy_keeps_legacy_retry_path(tmp_path, monkeypatch):
+    """The rollout flag must not make authentication failures terminal yet."""
+    path = tmp_path / "memory.yaml"
+
+    class AuthenticationError(RuntimeError):
+        status_code = 401
+
+    fake_agent = MagicMock()
+    fake_agent.ainvoke = AsyncMock(side_effect=AuthenticationError("invalid api key"))
+    monkeypatch.setattr(narrative, "create_react_agent", lambda **kw: fake_agent)
+
+    ltm = LongTermMemoryInterface(
+        path, outbox_retry_base_seconds=60, retry_policy_enabled=False
+    )
+    ltm.start_listening(MagicMock())
+    await ltm.send_history(
+        [{"role": "user", "content": "bad credentials"}], "session-a", "turn-1"
+    )
+    assert ltm._queue is not None
+    await ltm._queue.join()
+    state = ltm._outbox.get("session-a", "turn-1")
+    assert state is not None
+    assert state["status"] == "pending"
+    assert state["failure_code"] == "authentication_failed"
+    await ltm.stop_listening()
+
+
 # ── TestFormatMessages ────────────────────────────────────────
 
 

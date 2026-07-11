@@ -6,6 +6,13 @@
 > - **Awesome LLM Apps**（`D:\Maxma\awesome-llm-apps-main`）：100+ LLM 应用模板集合
 > - **OpenHanako 0.357.17**（`D:\Maxma\openhanako-0.357.17`）：Electron + React + Hono 桌面 AI 助手
 
+## 执行状态
+
+本报告保留调研结论；逐项实施归属、阶段、开关、验收与回滚信号统一记录在
+[`dev_docs/capability-matrix.md`](dev_docs/capability-matrix.md)。架构决策位于
+[`dev_docs/adr/`](dev_docs/adr/)。状态矩阵是后续实施的唯一更新入口，避免在
+本报告和执行计划之间维护两份可能漂移的清单。
+
 ---
 
 ## 一、后端架构与功能设计

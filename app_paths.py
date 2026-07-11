@@ -76,16 +76,28 @@ CONST_SESSIONS_DIR = API_DATA_DIR / "const-sessions"
 MEMORY_CONFIG_PATH = PERSONAS_DATA_DIR / "memory.yaml"
 EPISODIC_MEMORY_PATH = API_DATA_DIR / "episodic_memory.json"  # 情景记忆 JSON 存储
 SEMANTIC_MEMORY_PATH = API_DATA_DIR / "semantic_memory.json"  # 语义记忆 JSON 存储
+FACT_STORE_PATH = API_DATA_DIR / "facts.db"  # FTS5/CJK 补充事实检索（默认不开启）
+MEMORY_TICKER_STATE_PATH = API_DATA_DIR / "memory_ticker_state.json"
 SOUL_MD_PATH = PERSONAS_DATA_DIR / "SOUL.md"
 USER_MD_PATH = PERSONAS_DATA_DIR / "USER.md"
 ACTIVE_PERSONA_PATH = PERSONAS_DATA_DIR / "active_persona.yaml"
 ENV_FILE_PATH = DATA_DIR / ".env"
 MCP_CONFIG_PATH = API_DATA_DIR / "mcp_servers.yaml"
+WORKFLOW_JOURNAL_PATH = API_DATA_DIR / "workflow_journal.sqlite"
 PROVIDERS_YAML_PATH = API_DATA_DIR / "providers.yaml"
+# Migration backups are intentionally separate from the live configuration.
+# They are created once, before a legacy credential is rewritten in-place.
+CREDENTIAL_MIGRATION_BACKUP_DIR = API_DATA_DIR / "credential-migration-backups"
+PROVIDER_CREDENTIAL_BACKUP_PATH = CREDENTIAL_MIGRATION_BACKUP_DIR / "providers.yaml.v1-migration.bak"
+PROVIDER_DB_CREDENTIAL_BACKUP_PATH = CREDENTIAL_MIGRATION_BACKUP_DIR / "maxma.db.v1-migration.bak"
 NEWS_YAML_PATH = API_DATA_DIR / "news.yaml"
 PATH_WHITELIST_YAML_PATH = API_DATA_DIR / "path_whitelist.yaml"
 MAXMA_BLOCKER_YAML_PATH = API_DATA_DIR / "maxma_blocker.yaml"
 EVENT_HOOKS_YAML_PATH = API_DATA_DIR / "event_hooks.yaml"
+# User-created, read-only autonomous Scout schedules.  This is deliberately
+# separate from event hooks: schedules retain a frozen permission/budget
+# snapshot and must not inherit hook actions after creation.
+AUTONOMY_SCHEDULES_PATH = API_DATA_DIR / "autonomy_schedules.json"
 
 # 项目根目录（仅开发模式使用，打包模式下无意义）
 PROJECT_ROOT: Path = BUNDLE_DIR if not _is_frozen() else DATA_DIR
@@ -150,7 +162,7 @@ def ensure_data_dirs():
     同时确保 MCP 配置文件存在：首次运行时创建空 YAML（servers: []），
     避免打包模式下 MCP_CONFIG_PATH 指向不存在的文件导致加载失败。
     """
-    for d in [API_DATA_DIR, LOGS_DIR, UPLOADS_DIR, CONST_SESSIONS_DIR, PERSONAS_DATA_DIR, SKILLS_DATA_DIR, MACROS_DATA_DIR, VECTOR_DB_DIR, KB_DIR]:
+    for d in [API_DATA_DIR, LOGS_DIR, UPLOADS_DIR, CONST_SESSIONS_DIR, PERSONAS_DATA_DIR, SKILLS_DATA_DIR, MACROS_DATA_DIR, VECTOR_DB_DIR, KB_DIR, CREDENTIAL_MIGRATION_BACKUP_DIR]:
         d.mkdir(parents=True, exist_ok=True)
 
     # 首次运行时创建空的 MCP 配置文件（打包模式下 %APPDATA% 内默认不存在）

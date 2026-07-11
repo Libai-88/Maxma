@@ -46,6 +46,28 @@
             上下文窗口: {{ (p.context_window ?? 256000).toLocaleString() }} tokens
           </div>
 
+          <div
+            v-if="diagnosticsEnabled && diagnosticFor(p)"
+            class="provider-diagnostic"
+            :class="diagnosticFor(p)?.status"
+          >
+            <div class="diagnostic-copy">
+              <span>{{ diagnosticMessage(diagnosticFor(p)!) }}</span>
+              <span v-if="retryMessage(diagnosticFor(p)?.retry_at)" class="diagnostic-retry">
+                {{ retryMessage(diagnosticFor(p)?.retry_at) }}
+              </span>
+            </div>
+            <button
+              class="diagnostic-recheck"
+              type="button"
+              :disabled="rechecking[p.id]"
+              title="重新检测提供商连接"
+              @click="recheckProvider(p.id)"
+            >
+              {{ rechecking[p.id] ? '检测中...' : '重新检测' }}
+            </button>
+          </div>
+
           <!-- 测试结果 -->
           <Transition name="fade">
             <div v-if="testResult?.[p.id]" class="test-result" :class="testResult[p.id].status">
@@ -133,8 +155,10 @@
 
 <script setup lang="ts">
 import { api } from '@/api'
-import type { ProviderConfig, TestConnectionResponse } from '@/types'
+import type { ComponentHealth, ProviderConfig, TestConnectionResponse } from '@/types'
 import { useProviderStore } from '@/stores/provider'
+import { useHealthStore } from '@/stores/health'
+import { diagnosticMessage, retryMessage } from '@/utils/providerDiagnostics'
 import { computed, onMounted, ref } from 'vue'
 
 // ── 预设提供商列表 ──
@@ -154,6 +178,24 @@ const mode = ref<'list' | 'add' | 'edit'>('list')
 const providerStore = useProviderStore()
 const providers = computed(() => providerStore.allProviders)
 const loading = computed(() => providerStore.loading)
+const healthStore = useHealthStore()
+const diagnosticsEnabled = computed(() => healthStore.health?.provider_diagnostics_enabled === true)
+const rechecking = ref<Record<string, boolean>>({})
+
+function diagnosticFor(provider: ProviderConfig): ComponentHealth | null {
+  const ltm = healthStore.health?.ltm
+  if (ltm?.provider_id === provider.id && ltm.status !== 'ok') return ltm
+  if (provider.health_status !== 'degraded' && provider.health_status !== 'error') return null
+  return {
+    status: provider.health_status,
+    latency_ms: provider.health_latency_ms ?? null,
+    detail: provider.health_detail ?? null,
+    reason_code: provider.health_reason_code,
+    retry_at: provider.health_retry_at,
+    updated_at: provider.health_updated_at,
+    summary: provider.health_summary,
+  }
+}
 
 // ── 表单 ──
 const form = ref({ id: '', provider_type: 'deepseek', label: '', api_key: '', base_url: '', context_window: 256000 })
@@ -341,6 +383,18 @@ async function testProvider(id: string) {
   }
 }
 
+async function recheckProvider(id: string) {
+  rechecking.value[id] = true
+  try {
+    await api.checkProviderHealth(id)
+    await Promise.all([providerStore.refresh(), healthStore.refresh()])
+  } catch (e: any) {
+    formError.value = e.message
+  } finally {
+    rechecking.value[id] = false
+  }
+}
+
 async function discoverProvider(id: string) {
   try {
     await api.discoverModelsForExisting(id)
@@ -522,6 +576,42 @@ onMounted(loadProviders)
   font-size: 12px;
   color: #9ca3af;
 }
+
+.provider-diagnostic {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-left: 3px solid #d97706;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.provider-diagnostic.error {
+  border-left-color: var(--status-error);
+  background: #fef2f2;
+  color: #991b1b;
+}
+.diagnostic-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.diagnostic-retry { color: var(--text-secondary); }
+.diagnostic-recheck {
+  flex: 0 0 auto;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.diagnostic-recheck:disabled { opacity: 0.55; cursor: wait; }
 
 /* ── 测试结果 ── */
 .fade-enter-active, .fade-leave-active {

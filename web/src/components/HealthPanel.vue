@@ -17,6 +17,7 @@
 
 <script setup lang="ts">
 import type { ComponentHealth, HealthResponse } from '@/types';
+import { diagnosticMessage, retryMessage } from '@/utils/providerDiagnostics';
 import { computed } from 'vue';
 
 const props = defineProps<{ health: HealthResponse }>()
@@ -42,12 +43,20 @@ function makeItem(label: string, c: ComponentHealth): HealthItem {
   const ok = c.status === 'ok'
   const parts: string[] = []
   if (c.latency_ms != null) parts.push(`${c.latency_ms.toFixed(0)}ms`)
-  if (c.detail != null) parts.push(c.detail)
+  const diagnostic = props.health.provider_diagnostics_enabled
+    ? diagnosticMessage(c)
+    : null
+  if (diagnostic != null) parts.push(diagnostic)
+  const retry = props.health.provider_diagnostics_enabled
+    ? retryMessage(c.retry_at)
+    : null
+  if (retry != null) parts.push(retry)
+  if (ok && c.detail != null) parts.push(c.detail)
   return {
     name: label,
     label,
-    statusClass: ok ? 'ok' : 'error',
-    tooltip: `${label}: ${ok ? '正常' : '异常'}${parts.length ? ' — ' + parts.join(' | ') : ''}`,
+    statusClass: c.status,
+    tooltip: `${label}: ${ok ? '正常' : c.status === 'degraded' ? '降级' : '异常'}${parts.length ? ' — ' + parts.join(' | ') : ''}`,
   }
 }
 </script>
@@ -94,6 +103,10 @@ function makeItem(label: string, c: ComponentHealth): HealthItem {
 
 .dot.error {
   background: var(--status-error);
+}
+
+.dot.degraded {
+  background: #d97706;
 }
 
 .label {

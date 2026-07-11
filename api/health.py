@@ -9,9 +9,10 @@ import time
 from typing import Literal
 
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator, model_validator
 
 from app_paths import ANTHROPIC_SKILLS_DIR
+from api.runtime_status import RuntimeStatus, sanitize_user_detail
 from memory.memory_manager import MemoryManager
 from memory.narrative import MEMORY_PATH
 
@@ -20,6 +21,57 @@ class ComponentHealth(BaseModel):
     status: Literal["ok", "degraded", "error"]
     latency_ms: float | None = None
     detail: str | None = None
+    reason_code: str | None = None
+    retry_at: float | None = None
+    updated_at: float | None = None
+    summary: str | None = None
+
+    @field_validator("detail")
+    @classmethod
+    def _sanitize_detail(cls, value: str | None) -> str | None:
+        return sanitize_user_detail(value)
+
+    @model_validator(mode="after")
+    def _fill_runtime_fields(self) -> "ComponentHealth":
+        runtime = RuntimeStatus.health(
+            self.status,
+            self.detail,
+            retry_at=self.retry_at,
+            updated_at=self.updated_at,
+        )
+        if self.reason_code is None:
+            self.reason_code = runtime.reason_code
+        if self.updated_at is None:
+            self.updated_at = runtime.updated_at
+        if self.summary is None:
+            self.summary = runtime.summary
+        return self
+
+    @classmethod
+    def from_runtime(
+        cls,
+        status: Literal["ok", "degraded", "error"],
+        *,
+        latency_ms: float | None = None,
+        technical_detail: str | None = None,
+        retry_at: float | None = None,
+    ) -> "ComponentHealth":
+        runtime = RuntimeStatus.health(status, technical_detail, retry_at=retry_at)
+        return cls(
+            status=status,
+            latency_ms=latency_ms,
+            detail=runtime.public_detail(),
+            reason_code=runtime.reason_code,
+            retry_at=runtime.retry_at,
+            updated_at=runtime.updated_at,
+            summary=runtime.summary,
+        )
+
+
+class LtmDiagnostic(ComponentHealth):
+    """Safe LTM status, optionally associated with a known configured provider."""
+
+    provider_id: str | None = None
 
 
 class HealthResponse(BaseModel):
@@ -31,6 +83,11 @@ class HealthResponse(BaseModel):
     mcp_tools: ComponentHealth
     anthropic_skills_count: int = 0
     providers: dict[str, ComponentHealth] = {}
+    ltm: LtmDiagnostic | None = None
+    provider_diagnostics_enabled: bool = False
+    # Client capability, not a client-side opt-in: false preserves the legacy
+    # composer and prevents a stale browser from advertising unavailable paths.
+    think_path_enabled: bool = False
     timestamp: float
 
 
@@ -89,7 +146,52 @@ async def check_llm(app: FastAPI, probe_remote: bool = False) -> ComponentHealth
     )
 
 
-async def check_memory(app: FastAPI) -> ComponentHealth:
+def get_ltm_diagnostic(app: FastAPI) -> LtmDiagnostic | None:
+    """Read the LTM's deliberately redacted diagnostic aggregate, if present."""
+    ltm = getattr(app.state, "ltm", None)
+    get_summary = getattr(ltm, "get_diagnostic_summary", None)
+    if not callable(get_summary):
+        return None
+    try:
+        summary = get_summary()
+    except Exception:
+        # A diagnostic path must not make the health endpoint unavailable.
+        return None
+    if not isinstance(summary, dict):
+        return None
+    status = summary.get("status")
+    if status not in {"ok", "degraded", "error"}:
+        return None
+    return LtmDiagnostic(
+        status=status,
+        reason_code=summary.get("reason_code"),
+        retry_at=summary.get("retry_at"),
+        updated_at=summary.get("updated_at"),
+        summary=summary.get("summary"),
+    )
+
+
+def associate_ltm_provider(app: FastAPI, diagnostic: LtmDiagnostic | None) -> LtmDiagnostic | None:
+    """Associate diagnostics only when the active LLM maps to one provider uniquely."""
+    if diagnostic is None or diagnostic.status == "ok":
+        return diagnostic
+    manager = getattr(app.state, "provider_manager", None)
+    llm = getattr(app.state, "llm", None)
+    finder = getattr(manager, "find_provider_for_llm", None)
+    if llm is None or not callable(finder):
+        return diagnostic
+    try:
+        provider = finder(llm)
+    except Exception:
+        return diagnostic
+    if provider is None:
+        return diagnostic
+    return diagnostic.model_copy(update={"provider_id": provider.config.id})
+
+
+async def check_memory(
+    app: FastAPI, diagnostic: LtmDiagnostic | None = None
+) -> ComponentHealth:
     start = time.monotonic()
     try:
         memory_path = MEMORY_PATH
@@ -109,6 +211,16 @@ async def check_memory(app: FastAPI) -> ComponentHealth:
         if not consumer_running:
             parts.append("后台消费者异常")
         status: Literal["ok", "error"] = "ok" if consumer_running else "error"
+
+        if diagnostic is not None and diagnostic.status != "ok":
+            return ComponentHealth(
+                status="degraded",
+                latency_ms=round((time.monotonic() - start) * 1000, 1),
+                reason_code=diagnostic.reason_code,
+                retry_at=diagnostic.retry_at,
+                updated_at=diagnostic.updated_at,
+                summary=diagnostic.summary,
+            )
 
         elapsed = (time.monotonic() - start) * 1000
         return ComponentHealth(
@@ -188,10 +300,10 @@ async def check_health_providers(
         result = await provider.check_health()
         return (
             provider.provider_name,
-            ComponentHealth(
-                status=result.status,
+            ComponentHealth.from_runtime(
+                result.status,
                 latency_ms=result.latency_ms,
-                detail=result.detail,
+                technical_detail=result.detail,
             ),
         )
 
@@ -202,9 +314,18 @@ async def check_health_providers(
 
 async def get_health_report(app: FastAPI, probe_remote: bool = False) -> HealthResponse:
     from version import __version__
+    from config.settings import get_settings
 
+    settings = get_settings()
     llm = await check_llm(app, probe_remote=probe_remote)
-    memory = await check_memory(app)
+    ltm = associate_ltm_provider(app, get_ltm_diagnostic(app))
+    # Keep the pre-diagnostics health conclusion unchanged until the feature
+    # flag is enabled. The new LTM field remains additive and available for
+    # explicitly opted-in clients.
+    memory = await check_memory(
+        app,
+        diagnostic=ltm if settings.provider_diagnostics_enabled else None,
+    )
     native_tools = await check_native_tools(app)
     mcp_tools = await check_mcp_tools(app)
     providers = await check_health_providers(app, probe_remote=probe_remote)
@@ -228,6 +349,9 @@ async def get_health_report(app: FastAPI, probe_remote: bool = False) -> HealthR
         mcp_tools=mcp_tools,
         anthropic_skills_count=skills_count,
         providers=providers,
+        ltm=ltm,
+        provider_diagnostics_enabled=settings.provider_diagnostics_enabled,
+        think_path_enabled=settings.think_path_enabled,
         timestamp=time.time(),
     )
 

@@ -15,8 +15,8 @@ import logging
 import time
 from typing import Optional
 
-from api.providers import HealthStatus
 from api.providers.manager import ProviderManager
+from api.runtime_status import reason_code_for
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +109,20 @@ async def _health_check_loop(
                 # 在 ProviderManager._lock 内原子读取这两个字段。
                 failures, hs = provider_manager.get_failure_snapshot(pid)
                 if failures > 0 and failures < unhealthy_threshold:
-                    if hs is not None and hs.status == "error":
+                    reason_code = (
+                        reason_code_for(hs.status, hs.detail)
+                        if hs is not None
+                        else None
+                    )
+                    # Invalid credentials/configuration cannot recover through
+                    # a transient-failure threshold. Preserve the concrete
+                    # diagnosis for the provider card and fallback selection.
+                    if (
+                        hs is not None
+                        and hs.status == "error"
+                        and reason_code
+                        not in {"authentication_failed", "invalid_configuration"}
+                    ):
                         provider_manager.mark_degraded(
                             pid,
                             detail=f"consecutive_failures={failures} < threshold={unhealthy_threshold}",

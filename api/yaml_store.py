@@ -91,3 +91,37 @@ def dump_yaml_atomic(path: str | Path, data: Any) -> None:
     finally:
         if os.path.exists(tmp_name):
             os.unlink(tmp_name)
+
+
+def dump_yaml_backup_once(path: str | Path, data: Any) -> bool:
+    """Publish an encrypted migration backup once without overwriting it."""
+    backup_path = Path(path)
+    if backup_path.exists():
+        return False
+    backup_path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(
+        dir=str(backup_path.parent),
+        prefix=f".{backup_path.name}.",
+        suffix=".tmp",
+        text=True,
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as destination:
+            yaml.dump(data, destination, allow_unicode=True, default_flow_style=False)
+            destination.flush()
+            os.fsync(destination.fileno())
+        # Hard-link publication fails if another process created the first
+        # backup after our exists() check, which preserves the older backup.
+        try:
+            os.link(tmp_name, backup_path)
+        except FileExistsError:
+            return False
+        os.unlink(tmp_name)
+        try:
+            os.chmod(backup_path, 0o600)
+        except OSError:
+            pass
+        return True
+    finally:
+        if os.path.exists(tmp_name):
+            os.unlink(tmp_name)

@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from api.providers import ProviderConfig
 from api.security.credential_mask import mask_sensitive_fields
+from api.runtime_status import RuntimeStatus
 
 logger = logging.getLogger(__name__)
 
@@ -72,16 +73,29 @@ def _config_with_health(request: Request, config) -> dict:
         data["last_check_time"] = 0.0
         data["consecutive_failures"] = 0
     else:
-        data["health_status"] = hs.status
-        data["health_detail"] = hs.detail
-        data["health_latency_ms"] = hs.latency_ms
         try:
             provider = mgr.get(config.id)
-            data["last_check_time"] = provider.last_check_time
-            data["consecutive_failures"] = provider.consecutive_failures
+            last_check_time = provider.last_check_time
+            consecutive_failures = provider.consecutive_failures
         except KeyError:
-            data["last_check_time"] = 0.0
-            data["consecutive_failures"] = 0
+            # A reload can remove the enabled runtime provider between the two
+            # reads; keep the configuration response safe and internally consistent.
+            last_check_time = 0.0
+            consecutive_failures = 0
+        runtime = RuntimeStatus.health(
+            hs.status,
+            hs.detail,
+            updated_at=last_check_time or None,
+        )
+        data["health_status"] = hs.status
+        data["health_detail"] = runtime.public_detail()
+        data["health_latency_ms"] = hs.latency_ms
+        data["health_reason_code"] = runtime.reason_code
+        data["health_retry_at"] = runtime.retry_at
+        data["health_updated_at"] = runtime.updated_at
+        data["health_summary"] = runtime.summary
+        data["last_check_time"] = last_check_time
+        data["consecutive_failures"] = consecutive_failures
     # 统一掩码层兜底（防止 to_safe_dict 遗漏的敏感字段）
     return mask_sensitive_fields(data)
 
@@ -217,10 +231,15 @@ async def test_connection(body: TestConnectionBody):
     """测试任意凭据的连接（前端向导填写凭据后调用）。"""
     provider = _build_temp_provider(body)
     result = await provider.check_health()
+    runtime = RuntimeStatus.health(result.status, result.detail)
     return {
         "status": result.status,
         "latency_ms": result.latency_ms,
-        "detail": result.detail,
+        "detail": runtime.public_detail(),
+        "reason_code": runtime.reason_code,
+        "retry_at": runtime.retry_at,
+        "updated_at": runtime.updated_at,
+        "summary": runtime.summary,
     }
 
 
@@ -233,10 +252,15 @@ async def test_existing_provider(provider_id: str, request: Request):
     except KeyError:
         raise HTTPException(status_code=404, detail="Provider not found or not enabled")
     result = await provider.check_health()
+    runtime = RuntimeStatus.health(result.status, result.detail)
     return {
         "status": result.status,
         "latency_ms": result.latency_ms,
-        "detail": result.detail,
+        "detail": runtime.public_detail(),
+        "reason_code": runtime.reason_code,
+        "retry_at": runtime.retry_at,
+        "updated_at": runtime.updated_at,
+        "summary": runtime.summary,
     }
 
 
@@ -275,10 +299,19 @@ async def check_provider_health(provider_id: str, request: Request):
         last_check_time = 0.0
         consecutive_failures = 0
 
+    runtime = RuntimeStatus.health(
+        result.status,
+        result.detail,
+        updated_at=last_check_time or None,
+    )
     return {
         "status": result.status,
         "latency_ms": result.latency_ms,
-        "detail": result.detail,
+        "detail": runtime.public_detail(),
+        "reason_code": runtime.reason_code,
+        "retry_at": runtime.retry_at,
+        "updated_at": runtime.updated_at,
+        "summary": runtime.summary,
         "last_check_time": last_check_time,
         "consecutive_failures": consecutive_failures,
     }

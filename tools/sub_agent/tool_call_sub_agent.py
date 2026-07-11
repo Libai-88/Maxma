@@ -2,8 +2,10 @@
 
 import asyncio
 import contextvars
+from dataclasses import replace
 import logging
 import sys
+import time
 import traceback
 
 from pydantic import BaseModel, Field
@@ -18,6 +20,8 @@ from tools.sub_agent.delegation_context import (
     prepare_delegated_tools,
     reset_delegation_context,
 )
+from tools.sub_agent.deferred_result_store import DeferredResultStore
+from tools.sub_agent.run_manager import DeferredRunManager
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +113,19 @@ class CallSubAgentTool(ToolBase):
 
         # 1. 创建 sub-session
         delegation_context = create_delegation_context(app_state, parent_session_id)
+        async_enabled = _async_subagent_enabled()
+        if async_enabled:
+            # The first async release deliberately permits no tools.  A durable
+            # task can then be retried after a restart without replaying an
+            # external side effect; later permission modes may widen this only
+            # with an explicit idempotency contract.
+            delegation_context = replace(
+                delegation_context,
+                allowed_tools=frozenset(),
+                allowed_paths=frozenset(),
+                enforce_scope=True,
+                auto_approve=False,
+            )
         sub = await sm.create_sub_session(
             task=task,
             parent_session_id=parent_session_id,
@@ -121,23 +138,84 @@ class CallSubAgentTool(ToolBase):
             f"[call_sub_agent] sub-session created: {sub.session_id}", file=sys.stderr
         )
 
-        # 2. 通知前端（通过主 WS）
-        print("[call_sub_agent] sending sub_session_created via WS", file=sys.stderr)
-        await ws.send_json(
-            {
-                "type": "sub_session_created",
-                "payload": {
+        # The legacy UI connects to ``sub_session_created`` and starts the
+        # child itself.  Do not emit it in deferred mode: that would race the
+        # durable dispatcher and allow a non-lease-owned duplicate execution.
+        if not async_enabled:
+            print("[call_sub_agent] sending sub_session_created via WS", file=sys.stderr)
+            await ws.send_json(
+                {
+                    "type": "sub_session_created",
+                    "payload": {
+                        "sub_session_id": sub.session_id,
+                        "parent_session_id": parent_session_id,
+                        "task": task,
+                        "name": name[:100] if name else "",
+                    },
+                }
+            )
+            print(
+                "[call_sub_agent] sub_session_created sent, awaiting pending_result...",
+                file=sys.stderr,
+            )
+
+        if async_enabled:
+            manager = _get_deferred_run_manager(app_state)
+            manager.recover(
+                lambda recovered_run: self._recovered_executor(
+                    recovered_run, app_state, sm
+                )
+            )
+            run = manager.store.submit(
+                parent_session_id=parent_session_id,
+                parent_turn_id=delegation_context.parent_turn_id,
+                task=task,
+                input_summary=_task_summary(task),
+                delegation_snapshot=_context_snapshot(delegation_context),
+                deadline_at=time.time() + delegation_context.remaining_seconds(),
+                retryable=True,
+            )
+            try:
+                from agent.audit_log import log_subagent_run_event
+
+                log_subagent_run_event(
+                    run.run_id,
+                    "submitted",
+                    parent_session_id=run.parent_session_id,
+                    parent_turn_id=run.parent_turn_id,
+                )
+            except Exception:
+                logger.debug("Failed to audit deferred sub-agent submission", exc_info=True)
+
+            async def execute(_run) -> str:
+                return await self._run_background(
+                    sub, task, app_state, delegation_context
+                )
+
+            manager.submit(run, execute)
+            if _subagent_stream_on_demand_enabled():
+                # The card's REST reads remain lazy; this event only supplies
+                # a handle to the parent turn when the opt-in UI is enabled.
+                await ws.send_json(
+                    {
+                        "type": "deferred_subagent_submitted",
+                        "payload": {
+                            "run_id": run.run_id,
+                            "parent_session_id": parent_session_id,
+                            "sub_session_id": sub.session_id,
+                            "status": run.status,
+                            "name": name[:100] if name else "",
+                        },
+                    }
+                )
+            return format_success(
+                {
+                    "run_id": run.run_id,
                     "sub_session_id": sub.session_id,
-                    "parent_session_id": parent_session_id,
-                    "task": task,
-                    "name": name[:100] if name else "",
-                },
-            }
-        )
-        print(
-            "[call_sub_agent] sub_session_created sent, awaiting pending_result...",
-            file=sys.stderr,
-        )
+                    "status": "queued" if run.status == "queued" else run.status,
+                    "summary": "子 Agent 已在后台执行；可通过 run_id 查询结果。",
+                }
+            )
 
         # 3. 等待 sub-agent 执行完成
         #    sub-agent 由前端连接 sub-session WS 后自动启动
@@ -297,3 +375,124 @@ class CallSubAgentTool(ToolBase):
             sub._pending_result.set_exception(RuntimeError("子 Agent 未能产生有效回答"))
 
         return final_answer
+
+    def _recovered_executor(self, run, app_state, session_manager):
+        """Build a safe retry closure from a durable, serializable snapshot."""
+        async def execute(_claimed_run) -> str:
+            context = _restore_context_from_snapshot(run.delegation_snapshot, run, app_state)
+            sub = await session_manager.create_sub_session(
+                task=run.task,
+                parent_session_id=run.parent_session_id,
+            )
+            sub.delegation_context = context
+            return await self._run_background(sub, run.task, app_state, context)
+
+        return execute
+
+
+def _async_subagent_enabled() -> bool:
+    try:
+        from config.settings import get_settings
+
+        # getattr keeps the legacy synchronous path when a pre-Phase-2
+        # settings object is still in use during an incremental deployment.
+        return bool(getattr(get_settings(), "async_subagent_enabled", False))
+    except Exception:
+        return False
+
+
+def _subagent_stream_on_demand_enabled() -> bool:
+    """Expose lazy child-run UI only after async delegation is enabled."""
+    if not _async_subagent_enabled():
+        return False
+    try:
+        from config.settings import get_settings
+
+        return bool(get_settings().subagent_stream_on_demand_enabled)
+    except Exception:
+        return False
+
+
+def _get_deferred_run_manager(app_state) -> DeferredRunManager:
+    manager = getattr(app_state, "deferred_subagent_run_manager", None)
+    if manager is not None:
+        return manager
+    from app_paths import API_DATA_DIR
+
+    manager = DeferredRunManager(
+        DeferredResultStore(API_DATA_DIR / "deferred_subagent_runs.sqlite")
+    )
+    setattr(app_state, "deferred_subagent_run_manager", manager)
+    session_manager = getattr(app_state, "session_manager", None)
+    bind = getattr(session_manager, "set_deferred_run_manager", None)
+    if callable(bind):
+        bind(manager)
+    return manager
+
+
+def _context_snapshot(context) -> dict[str, object]:
+    """Persist only serializable execution identity, never a model/client object."""
+    return {
+        "provider_id": context.provider_id,
+        "model_name": context.model_name,
+        "allowed_tools": sorted(context.allowed_tools),
+        "allowed_paths": sorted(context.allowed_paths),
+        "max_tokens": context.max_tokens,
+        "time_limit_seconds": context.time_limit_seconds,
+        "trace_id": context.trace_id,
+        "parent_turn_id": context.parent_turn_id,
+        "enforce_scope": context.enforce_scope,
+        "auto_approve": context.auto_approve,
+    }
+
+
+def _task_summary(task: str) -> str:
+    normalized = " ".join(task.split())
+    return normalized[:500]
+
+
+def _restore_context_from_snapshot(snapshot: dict[str, object], run, app_state):
+    """Rebind the exact persisted provider/model pair; never silently fallback."""
+    provider_id = str(snapshot.get("provider_id") or "")
+    model_name = str(snapshot.get("model_name") or "")
+    model = None
+    if provider_id and model_name:
+        manager = getattr(app_state, "provider_manager", None)
+        if manager is None:
+            raise RuntimeError("provider_snapshot_unavailable")
+        try:
+            provider = manager.get(provider_id)
+            model = provider.create_llm(model_name, temperature=0.7, streaming=True)
+        except (KeyError, AttributeError, TypeError, ValueError) as exc:
+            raise RuntimeError("provider_snapshot_unavailable") from exc
+    else:
+        candidate = getattr(app_state, "llm", None)
+        if candidate is None or (model_name and _model_name(candidate) != model_name):
+            raise RuntimeError("provider_snapshot_unavailable")
+        model = candidate
+
+    from tools.sub_agent.delegation_context import DelegationContext
+
+    remaining = max(0.0, float(run.deadline_at or time.time()) - time.time())
+    return DelegationContext(
+        model=model,
+        provider_id=provider_id,
+        model_name=model_name,
+        allowed_tools=frozenset(),
+        allowed_paths=frozenset(),
+        max_tokens=int(snapshot.get("max_tokens") or 0),
+        time_limit_seconds=int(remaining),
+        trace_id=str(snapshot.get("trace_id") or ""),
+        parent_turn_id=run.parent_turn_id,
+        deadline_monotonic=time.monotonic() + remaining,
+        enforce_scope=True,
+        auto_approve=False,
+    )
+
+
+def _model_name(model) -> str:
+    for attribute in ("model_name", "model"):
+        value = getattr(model, attribute, None)
+        if isinstance(value, str) and value:
+            return value
+    return ""

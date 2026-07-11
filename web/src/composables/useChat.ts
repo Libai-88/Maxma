@@ -1,11 +1,14 @@
 import { computed, watch, onUnmounted, ref, type Ref } from 'vue'
-import type { ClientMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, AskUserEvent, PlanProposedEvent, PlanStepStartEvent, PlanStepEndEvent, PlanStepErrorEvent, PlanCompletedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent } from '@/types'
+import type { ClientMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, AskUserEvent, ArtifactEvent, PlanProposedEvent, PlanStepStartEvent, PlanStepEndEvent, PlanStepErrorEvent, PlanCompletedEvent, DeferredSubagentSubmittedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent } from '@/types'
+import type { ThinkPathId } from '@/utils/thinkPath'
 import { useChatStore } from '@/stores/chat'
 import { useSessionStore } from '@/stores/session'
 import { buildFlatMessage, buildTimestamp, parseReferences } from '@/utils/references'
 import type { ParsedRef } from '@/utils/references'
 import { getToken, ensureTokenLoaded, resetToken, api } from '@/api'
 import { ensurePortLoaded, waitForBackend, getWsBase } from '@/utils/env'
+import { chatSessionAliveCache } from '@/composables/sessionAliveCache'
+import { useWorkbenchStore } from '@/stores/workbench'
 /** 匹配旧格式尾缀（用于 localStorage 迁移） */
 const TIME_SUFFIX_RE = /（\d{4}-\d{2}-\d{2} \w{3} \d{2}:\d{2}）$/
 
@@ -124,6 +127,7 @@ export function disconnectSession(sid: string) {
   ch.connected = false
   ch.initialized = false
   chatStore.removeChannel(sid)
+  chatSessionAliveCache.remove(sid)
 }
 
 // Lazy store accessors — Pinia 在模块加载时尚未安装，只能在运行时调用
@@ -381,6 +385,17 @@ function handleEventForChannel(sid: string, event: ServerEvent) {
     return
   }
 
+  // Deferred mode deliberately sends only an opaque ID. The card resolves the
+  // browser-safe run projection lazily instead of caching task/scope details.
+  if (event.type === 'deferred_subagent_submitted') {
+    const submitted = event as DeferredSubagentSubmittedEvent
+    const runId = submitted.payload.run_id
+    if (ch.currentTurn && runId && !ch.currentTurn.deferredRunIds?.includes(runId)) {
+      ch.currentTurn.deferredRunIds = [...(ch.currentTurn.deferredRunIds ?? []), runId]
+    }
+    return
+  }
+
   // memory_tool_* / memory_start / memory_done 可能在 done 事件之后到达（currentTurn 已清空），
   // 必须在 const turn = ch.currentTurn 守卫之前处理，通过 turn_id 自行查找目标。
   if (event.type === 'memory_start' || event.type === 'memory_tool_start' || event.type === 'memory_tool_end'
@@ -581,6 +596,16 @@ function handleEventForChannel(sid: string, event: ServerEvent) {
           risk_level: mode === 'approval' ? ae.payload.risk_level : undefined,
           tool_input: mode === 'approval' ? ae.payload.tool_input : undefined,
         }
+      }
+      break
+    }
+
+    case 'artifact': {
+      // Artifacts are only accepted by the strict store guard and only shown
+      // for the active session, preventing a background session from moving
+      // a user's workbench focus.
+      if (sid === getSessionStore().sessionId) {
+        useWorkbenchStore().addArtifact((event as ArtifactEvent).payload)
       }
       break
     }
@@ -841,7 +866,8 @@ export function useChat(sessionId: Ref<string>) {
     }
   }
 
-  // Session 切换：只确保新 Session 的 WS 连接，不断开旧的
+  // Keep at most five inactive sessions alive. Streaming and approval-waiting
+  // sessions are protected so a cache eviction never cancels user-visible work.
   watch(
     sessionId,
     async (newId, oldId) => {
@@ -849,10 +875,16 @@ export function useChat(sessionId: Ref<string>) {
       if (oldId) {
         console.log(`[useChat:watch] 在切换前持久化旧会话 "${oldId}"`)
         persistTurns(oldId)
-        const oldChannel = getChatStore().channels.get(oldId)
-        if (oldChannel && !oldChannel.isStreaming && !oldChannel.isAwaitingUser) {
-          disconnectSession(oldId)
-        }
+      }
+      const evictedSessionId = newId
+        ? chatSessionAliveCache.touch(newId, { scrollTop: 0 }, (candidateId) => {
+          const candidate = getChatStore().channels.get(candidateId)
+          return !candidate?.isStreaming && !candidate?.isAwaitingUser
+        })
+        : null
+      if (evictedSessionId) {
+        persistTurns(evictedSessionId)
+        disconnectSession(evictedSessionId)
       }
       activeChannelRef.value = getOrCreateChannel(newId)
       ensureConnected(newId)
@@ -890,9 +922,10 @@ export function useChat(sessionId: Ref<string>) {
     for (const sid of Array.from(getChatStore().channels.keys())) {
       disconnectSession(sid)
     }
+    chatSessionAliveCache.clear()
   })
 
-  function send(text: string, refs: ParsedRef[] = [], providerId?: string, modelName?: string) {
+  function send(text: string, refs: ParsedRef[] = [], providerId?: string, modelName?: string, thinkPathId?: ThinkPathId) {
     const ch = activeChannel.value
     if (!ch.ws || ch.ws.readyState !== WebSocket.OPEN) {
       console.warn(`[useChat:send] WebSocket 未就绪, readyState=${ch.ws?.readyState}, session=${sessionId.value}`)
@@ -916,7 +949,14 @@ export function useChat(sessionId: Ref<string>) {
 
     const payload: ClientMessage = {
       type: 'chat',
-      payload: { message: flatMsg, private: ch.privateMode, auto_approve: ch.autoApprove, provider_id: providerId, model_name: modelName },
+      payload: {
+        message: flatMsg,
+        private: ch.privateMode,
+        auto_approve: ch.autoApprove,
+        provider_id: providerId,
+        model_name: modelName,
+        ...(thinkPathId ? { think_path_id: thinkPathId } : {}),
+      },
     }
     ch.ws.send(JSON.stringify(payload))
   }
@@ -936,6 +976,17 @@ export function useChat(sessionId: Ref<string>) {
       payload: { interaction_id: interactionId, response },
     }
     ch.ws.send(JSON.stringify(payload))
+  }
+
+  function sendArtifactAction(artifactId: string, actionId: string, token: string): boolean {
+    const ch = activeChannel.value
+    if (!ch.ws || ch.ws.readyState !== WebSocket.OPEN) return false
+    const payload: ClientMessage = {
+      type: 'artifact_action',
+      payload: { artifact_id: artifactId, action_id: actionId, token },
+    }
+    ch.ws.send(JSON.stringify(payload))
+    return true
   }
 
   function sendPlanResponse(planId: string, action: 'approve' | 'modify' | 'reject', modifiedPlan?: string) {
@@ -971,7 +1022,7 @@ export function useChat(sessionId: Ref<string>) {
   return {
     connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId,
     contextUsage, taskTrackerData,
-    send, cancel, sendUserResponse, sendPlanResponse, removeTurns,
+    send, cancel, sendUserResponse, sendArtifactAction, sendPlanResponse, removeTurns,
     privateMode, setPrivateMode,
     autoApprove, setAutoApprove,
   }

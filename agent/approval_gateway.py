@@ -11,6 +11,13 @@ from enum import Enum
 from typing import Any, Optional
 
 from config.settings import get_settings
+from agent.permission_policy import (
+    AuthorizationAction,
+    AuthorizationDecision,
+    PermissionMode,
+    ToolRisk,
+    authorize_tool,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +55,40 @@ class ApprovalGateway:
             cls._instance = cls()
         return cls._instance
 
+    def authorize(
+        self,
+        tool_name: str,
+        session_id: str,
+        auto_approve: bool = False,
+        *,
+        permission_mode: PermissionMode | str | None = None,
+        allowed_tools: frozenset[str] | None = None,
+    ) -> AuthorizationDecision:
+        """Return the authorization action without executing the tool.
+
+        Until ``permission_modes_enabled`` is introduced in settings and
+        enabled, this exactly preserves the legacy approval-list behavior.
+        ``getattr`` keeps older persisted configurations compatible.
+        """
+        settings = get_settings()
+        if not getattr(settings, "permission_modes_enabled", False):
+            if not settings.approval_gateway_enabled or auto_approve:
+                return AuthorizationDecision(AuthorizationAction.ALLOW, "legacy_auto_approved", ToolRisk.UNKNOWN)
+            if tool_name in settings.approval_required_tools:
+                return AuthorizationDecision(AuthorizationAction.ASK, "legacy_approval_required", ToolRisk.UNKNOWN)
+            return AuthorizationDecision(AuthorizationAction.ALLOW, "legacy_not_required", ToolRisk.UNKNOWN)
+
+        mode = permission_mode
+        if mode is None:
+            mode = PermissionMode.AUTO if auto_approve else PermissionMode.ASK
+        auto_allowed_tools = frozenset(getattr(settings, "permission_auto_allowed_tools", ()))
+        return authorize_tool(
+            tool_name,
+            mode,
+            allowed_tools=allowed_tools,
+            auto_allowed_tools=auto_allowed_tools,
+        )
+
     def needs_approval(self, tool_name: str, session_id: str, auto_approve: bool = False) -> bool:
         """判断工具是否需要审批。
 
@@ -57,15 +98,7 @@ class ApprovalGateway:
         3. 工具在 approval_required_tools 列表中 → True
         4. 其他 → False
         """
-        # 实时获取 settings，确保 reload_settings 后立即生效
-        settings = get_settings()
-        if not settings.approval_gateway_enabled:
-            return False
-
-        if auto_approve:
-            return False
-
-        return tool_name in settings.approval_required_tools
+        return self.authorize(tool_name, session_id, auto_approve).action is AuthorizationAction.ASK
 
     def create_request(
         self,

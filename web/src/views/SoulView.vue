@@ -2,6 +2,9 @@
   <div class="md-editor-view">
     <div class="header">
       <h2>{{ pageTitle }} <span class="subtitle">{{ pageSubtitle }}</span></h2>
+      <button class="save-button" :disabled="saving || content === savedContent" @click="saveContent">
+        {{ saving ? '保存中...' : '保存' }}
+      </button>
       <!-- 人格选择器：始终显示（即使只有一个人格） -->
       <div class="persona-selector" v-if="personasLoaded">
         <select v-model="activeFile" @change="onPersonaChange" :disabled="loading">
@@ -14,6 +17,7 @@
       <span class="save-indicator" :class="saveState">
         {{ saveStateText }}
       </span>
+      <span v-if="saveError" class="save-error">保存失败：{{ saveError }}</span>
       <span v-if="!saveState && content && content !== savedContent" class="save-hint">点击编辑区域外来保存</span>
     </div>
     <div v-if="loading" class="loading">加载中...</div>
@@ -100,6 +104,7 @@ const personas = ref<PersonaInfo[]>([])
 const personasLoaded = ref(false)
 const activeFile = ref('SOUL.md')
 const loadError = ref('')
+const saveError = ref('')
 
 // 创建新人格
 const showCreateDialog = ref(false)
@@ -185,8 +190,10 @@ function retryLoad() {
 }
 
 async function saveContent() {
+  if (saving.value || content.value === savedContent.value) return
   saving.value = true
   saveState.value = 'saving'
+  saveError.value = ''
   try {
     // 如果当前编辑的不是默认 SOUL.md，需要通过 variant 保存
     const variant = activeFile.value !== 'SOUL.md' ? activeFile.value : undefined
@@ -196,6 +203,7 @@ async function saveContent() {
     setTimeout(() => { saveState.value = '' }, 2000)
   } catch (e: any) {
     console.error(`保存 ${TYPE} 失败`, e)
+    saveError.value = e?.message || String(e)
   } finally {
     saving.value = false
   }
@@ -292,11 +300,26 @@ onMounted(async () => {
   color: var(--status-ok);
 }
 
+.save-button {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.save-button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.save-button:disabled { cursor: not-allowed; opacity: .5; }
+
 .save-hint {
   font-size: 12px;
   color: var(--text-tertiary);
   opacity: 0.8;
 }
+
+.save-error { color: var(--status-error, #c0392b); font-size: 12px; }
 
 .loading {
   color: var(--text-secondary);

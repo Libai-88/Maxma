@@ -6,13 +6,18 @@ import sys
 import logging
 import traceback
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from agent.graph import build_agent
+from agent.model_routing import resolve_model_role
 from agent.prompts import build_system_prompt, get_system_prompt_parts
+from agent.think_path import ThinkPath, get_think_path
+from app_paths import CONFIG_DIR
 from agent.context_manager import commit_to_episodic, maybe_trim_checkpoint
 from api import interaction
 from api.callbacks.websocket_callback import WebSocketCallback
@@ -23,6 +28,7 @@ from api.metrics import get_metrics
 from api.middleware.rate_limit import get_ws_rate_limiter
 from api.diagnostics import error_collector
 from api.session_manager import SessionState
+from config.settings import get_settings
 from tools import get_all_tools, merge_tool_lists
 from tools.base import format_error
 from tools.path_security import check_path_access
@@ -32,6 +38,80 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _LOCAL_REF_PREFIX = "local:"
+_MODEL_ROLES_PATH = CONFIG_DIR / "model_roles.yaml"
+
+
+@dataclass(frozen=True)
+class ThinkPathExecution:
+    """Validated, opt-in execution preference for one chat turn.
+
+    The browser can only submit a fixed ThinkPath id.  Resolving its role and
+    selecting a provider happens server-side, so a client cannot smuggle an
+    arbitrary provider role, model capability, or cost preference into a chat
+    request.
+    """
+
+    path: ThinkPath | None = None
+    provider: Any | None = None
+    model_name: str | None = None
+
+
+def _resolve_think_path_execution(
+    think_path_id: object,
+    *,
+    think_path_enabled: bool,
+    declarative_model_routing_enabled: bool,
+    has_explicit_model_selection: bool,
+    provider_manager: Any | None,
+    model_roles_path: Path = _MODEL_ROLES_PATH,
+) -> ThinkPathExecution:
+    """Resolve a visible ThinkPath without weakening model-selection rules.
+
+    A path is ignored unless its feature flag is on.  Explicit provider/model
+    choices always win, and an unavailable/malformed declarative rule leaves
+    the normal default route untouched.  This helper performs no I/O besides
+    reading the local role configuration and never changes provider state.
+    """
+    if not think_path_enabled:
+        return ThinkPathExecution()
+
+    path = get_think_path(think_path_id if isinstance(think_path_id, str) else None)
+    if path is None:
+        return ThinkPathExecution()
+
+    if (
+        not declarative_model_routing_enabled
+        or has_explicit_model_selection
+        or provider_manager is None
+    ):
+        return ThinkPathExecution(path=path)
+
+    try:
+        role = resolve_model_role(model_roles_path, path.role)
+        selected = provider_manager.select_for_role(role)
+    except Exception:
+        # Role routing is an optional convenience.  A bad local rule or an
+        # unexpected provider implementation must never reject the message.
+        logger.warning("[chat] ThinkPath model routing unavailable", exc_info=True)
+        return ThinkPathExecution(path=path)
+
+    if selected is None:
+        return ThinkPathExecution(path=path)
+    provider, model_name = selected
+    if not isinstance(model_name, str) or not model_name.strip():
+        return ThinkPathExecution(path=path)
+    return ThinkPathExecution(path=path, provider=provider, model_name=model_name)
+
+
+def _think_path_runtime_context(path: ThinkPath | None) -> str:
+    """Return trusted, fixed execution guidance for a selected path only."""
+    if path is None:
+        return ""
+    return (
+        "[本轮执行偏好（用户已确认）]\n"
+        f"采用“{path.label}”路径：{path.description}\n"
+        f"预期深度：{path.depth}；预估成本：{path.estimated_cost}。"
+    )
 
 
 def _effective_auto_approve(session: SessionState, requested: object) -> bool:
@@ -685,6 +765,7 @@ async def _run_agent_turn(
     auto_approve: bool = False,
     provider_id: str | None = None,
     model_name: str | None = None,
+    think_path_id: str | None = None,
     turn_id: str | None = None,
 ):
     """
@@ -786,6 +867,45 @@ async def _run_agent_turn(
         llm = app_state.llm
         current_model_name = None
 
+    # ThinkPath is a user-confirmed depth preference, not an opaque prompt
+    # classifier.  It may opt into declarative routing only when the user did
+    # not already select a provider/model in this same request.
+    settings = get_settings()
+    think_path_execution = _resolve_think_path_execution(
+        think_path_id,
+        think_path_enabled=settings.think_path_enabled,
+        declarative_model_routing_enabled=settings.declarative_model_routing_enabled,
+        has_explicit_model_selection=bool(provider_id or model_name),
+        provider_manager=getattr(app_state, "provider_manager", None),
+    )
+    if think_path_execution.provider is not None:
+        try:
+            routed_provider = think_path_execution.provider
+            routed_model_name = think_path_execution.model_name
+            llm = routed_provider.create_llm(
+                routed_model_name,
+                temperature=0.7,
+                streaming=True,
+            )
+            current_provider_id = routed_provider.config.id
+            current_model_name = routed_model_name
+            current_max_tokens = routed_provider.config.context_window
+            logger.info(
+                "[chat:%s] ThinkPath %s selected provider=%s model=%s",
+                session.session_id[:8],
+                think_path_execution.path.id if think_path_execution.path else "",
+                current_provider_id,
+                current_model_name,
+            )
+        except Exception:
+            # Do not turn an optional selection preference into a chat outage.
+            # The previously selected/default LLM remains intact.
+            logger.warning(
+                "[chat:%s] ThinkPath route creation failed; using normal selection",
+                session.session_id[:8],
+                exc_info=True,
+            )
+
     if delegation_context is not None:
         from tools.sub_agent.delegation_context import (
             activate_delegation_context,
@@ -882,6 +1002,11 @@ async def _run_agent_turn(
     runtime_context_text = _build_runtime_context_for_agent(
         app_state, turn_tools, current_model_name
     )
+    think_path_context = _think_path_runtime_context(think_path_execution.path)
+    if think_path_context:
+        runtime_context_text = "\n\n".join(
+            part for part in (think_path_context, runtime_context_text) if part
+        )
     agent_maxma = build_agent(
         model=llm,
         tools=turn_tools,
@@ -930,6 +1055,7 @@ async def _run_agent_turn(
             )
         ),
         max_tokens=current_max_tokens,
+        cache_preserving=settings.cache_preserving_compaction_enabled,
     )
 
     # 2. [执行轮次] 流式执行 Agent 图，副作用推送最终回答，另有config回调副作用
@@ -1126,11 +1252,7 @@ async def _run_agent_turn(
                 if cpt
                 else []
             )
-            metadata = {
-                "created_at": session.created_at,
-                "last_active": session.last_active,
-                "message_count": session.message_count,
-            }
+            metadata = session.persistent_metadata()
             serialized = serialize_messages(raw_messages)
             for item in reversed(serialized):
                 if item.get("type") == "ai":
@@ -1279,6 +1401,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                             auto_approve=auto_approve,
                             provider_id=payload.get("provider_id"),
                             model_name=payload.get("model_name"),
+                            think_path_id=payload.get("think_path_id"),
                             turn_id=payload.get("turn_id"),
                         )
                     )
@@ -1290,6 +1413,35 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                     response = payload.get("response", "")
                     if interaction_id:
                         await interaction.resolve(interaction_id, response)
+
+                case "artifact_action":
+                    # Artifact actions are never tool calls.  They can only
+                    # resolve an already-pending interaction after the signed,
+                    # session-bound token has been validated.
+                    from config.settings import get_settings
+
+                    if not get_settings().interactive_artifacts_enabled:
+                        continue
+                    try:
+                        from api.artifacts.schema import (
+                            ArtifactActionResponse,
+                            artifact_action_authorizer,
+                        )
+
+                        response = ArtifactActionResponse.model_validate(
+                            msg.get("payload", {})
+                        )
+                        authorized = artifact_action_authorizer.authorize(
+                            response, session_id=session_id
+                        )
+                    except (TypeError, ValueError):
+                        continue
+                    if authorized is None:
+                        continue
+                    if await interaction.resolve(
+                        authorized.interaction_id, authorized.action_id
+                    ):
+                        artifact_action_authorizer.consume(authorized)
 
                 case "plan_response":
                     payload = msg.get("payload", {})

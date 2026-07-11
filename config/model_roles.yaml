@@ -1,0 +1,9 @@
+# Declarative model-role preferences.  Provider configuration may optionally
+# expose `capabilities` and `cost_tier`; rules with no matching healthy model
+# deliberately fall back to the current default rather than forcing a route.
+roles:
+  fast:
+    max_cost_tier: 1
+  general: {}
+  analysis:
+    min_context_window: 32768

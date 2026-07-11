@@ -24,6 +24,7 @@ MAX_RECORDS = 5000
 
 # 事件类型常量（阶段 4.2）
 EVENT_MCP_CALL = "mcp_call"
+EVENT_SUBAGENT_RUN = "subagent_run"
 
 
 def _ensure_dir():
@@ -247,6 +248,38 @@ def log_mcp_call(
         status=status,
         extra=extra,
     )
+
+
+def log_subagent_run_event(
+    run_id: str,
+    lifecycle: str,
+    *,
+    parent_session_id: str | None = None,
+    parent_turn_id: str | None = None,
+    status: str = "ok",
+) -> None:
+    """Record an async child lifecycle transition without task content."""
+    log_event(
+        event_type=EVENT_SUBAGENT_RUN,
+        target=f"deferred_subagent/{run_id}",
+        detail=lifecycle,
+        status=status,
+        extra={
+            "run_id": run_id,
+            "lifecycle": lifecycle,
+            "parent_session_id": parent_session_id or "",
+            "parent_turn_id": parent_turn_id or "",
+        },
+    )
+
+
+def read_subagent_run_events(run_id: str, limit: int = 100) -> list[dict]:
+    """Return lifecycle records for one run ID, newest first."""
+    return [
+        record
+        for record in read_log(limit=MAX_RECORDS, event_type=EVENT_SUBAGENT_RUN)
+        if (record.get("extra") or {}).get("run_id") == run_id
+    ][:max(1, min(limit, 100))]
 
 
 def get_mcp_summary() -> list[dict]:

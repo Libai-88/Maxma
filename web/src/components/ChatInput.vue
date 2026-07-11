@@ -89,6 +89,12 @@
           @paste="onPaste"
         ></textarea>
       </div>
+      <ThinkPathChooser
+        v-model="selectedThinkPathId"
+        :enabled="thinkPathEnabled"
+        :text="text"
+        :disabled="disabled || isStreaming"
+      />
       <hr class="input-divider" />
       <div class="input-bottom-bar">
         <div class="input-left-group">
@@ -212,6 +218,7 @@ import Icon from '@/components/Icon.vue'
 import StickerPicker from '@/components/StickerPicker.vue'
 import StickerContextMenu from '@/components/StickerContextMenu.vue'
 import QuotedSelectionCard from '@/components/QuotedSelectionCard.vue'
+import ThinkPathChooser from '@/components/ThinkPathChooser.vue'
 import type { QuotedSelection, QuoteCandidate } from '@/composables/useSelectionQuote'
 import { computeFloatingInputPosition } from '@/utils/floatingPosition'
 import type { ProviderConfig, SkillInfo, MacroInfo, ToolInfo } from '@/types'
@@ -220,6 +227,7 @@ import { useStickerSegments, type StickerSegment } from '@/composables/useSticke
 import type { ParsedRef, ImageRef } from '@/utils/references'
 import { REF_CHIP_CONFIG } from '@/utils/references'
 import { getApiBase, isTauri, tauriFetch } from '@/utils/env'
+import type { ThinkPathId } from '@/utils/thinkPath'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
 const props = withDefaults(defineProps<{
@@ -228,6 +236,8 @@ const props = withDefaults(defineProps<{
   canSend: boolean
   initialProviderId?: string
   initialModelName?: string
+  /** Server-owned capability flag; false leaves the composer on the legacy path. */
+  thinkPathEnabled?: boolean
   quotedSelections?: QuotedSelection[]
   quoteCandidate?: QuoteCandidate | null
 }>(), {
@@ -236,7 +246,7 @@ const props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{
-  send: [text: string, refs: ParsedRef[], providerId?: string, modelName?: string]
+  send: [text: string, refs: ParsedRef[], providerId?: string, modelName?: string, thinkPathId?: ThinkPathId]
   stop: []
   modelChange: [providerId: string, modelName: string]
   commitQuote: []
@@ -244,6 +254,7 @@ const emit = defineEmits<{
 }>()
 
 const text = ref('')
+const selectedThinkPathId = ref<ThinkPathId | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const inputContainerRef = ref<HTMLDivElement | null>(null)
 const refs = ref<ParsedRef[]>([])
@@ -952,9 +963,18 @@ async function onDrop(e: DragEvent) {
 function handleSend() {
   const msg = text.value.trim()
   if ((!msg && imageRefs.value.length === 0) || props.disabled || !props.canSend) return
-
-  emit('send', msg, refs.value, selectedProviderId.value || undefined, selectedModelName.value || undefined)
+  emit(
+    'send',
+    msg,
+    refs.value,
+    selectedProviderId.value || undefined,
+    selectedModelName.value || undefined,
+    selectedThinkPathId.value || undefined,
+  )
   text.value = ''
+  // ThinkPath is intentionally one-shot: it is a confirmed preference for this
+  // request, never an invisible session-level routing policy.
+  selectedThinkPathId.value = null
   // 释放图片预览 URL
   for (const r of refs.value) {
     if (r.type === 'image' && r.preview.startsWith('blob:')) {

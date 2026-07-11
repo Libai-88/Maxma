@@ -85,7 +85,7 @@ D:\Maxma\MaxmaHere\
 - **Agent 闭环**：`delegation_context` 子 Agent 权限继承；`graph.py` Provider 故障转移续答；`episodic` session 隔离 + 失败轮次不投影
 - **长期记忆事务**：`memory/ltm_outbox.py` outbox + 租约 + fencing token；YAML 原子替换 + 单写者
 
-### 2.3 Bug 修复（最新）
+### 2.3 Bug 修复（截至 2026-07-10）
 
 - **mood 标签泄漏**：`yuan_default.md` 人格模板输出的 `<mood>` 标签未剥离，泄漏到用户回复。修复：`agent/graph.py` 添加 `_strip_mood_tags()`
 - **LTM 401 无限重试**：CRUD agent 遇 401 认证错误无限重试。修复：`memory/narrative.py` 添加 `_is_unrecoverable_error()` + `_MAX_LTM_RETRIES=5`
@@ -95,6 +95,34 @@ D:\Maxma\MaxmaHere\
 - 清理 13 个已完成计划文档 + 过时 CODE_REVIEW.md + 编译产物
 - 完善 `.gitignore`：`dist-portable/`、`/resources/`、`*.exe`
 - 全量回归测试：1246 passed / 0 failed / 9 skipped（零回归）
+
+### 2.5 PLAN-1：跨项目设计吸收（已完成应用层实现）
+
+`PLAN-1.md` 的阶段 0-6 已完成代码、测试和文档交付，新增能力默认通过 feature flag 保守关闭，避免改变既有用户路径。主要成果如下：
+
+- **可靠性与诊断**：LTM 具有永久/暂时错误分类、全抖动指数退避、终态统计；Provider/LTM 健康诊断可向前端提供脱敏 reason code；Provider 凭据采用带版本的加密信封和幂等迁移；MCP 连接具备刷新、重连与状态生命周期。
+- **执行与安全**：异步子 Agent 使用持久化 deferred-result/run store，支持取消、超时、重启恢复、权限/Provider 快照及父子流隔离；新增四档会话权限 `read_only / ask / operate / auto`，审批和审计是额外限制层，不能绕过工具、路径或沙盒硬边界。
+- **记忆与会话**：实现保缓存前缀的会话压缩、可断点 memory ticker、FactStore 的 FTS5/CJK 混合检索，以及有上限的会话 UI 缓存。
+- **交互与工作台**：实现工具结果折叠、流式分段、快捷键、Pulse 状态面板、受 schema 约束的确认/选择卡、Workflow journal、Canvas 多标签、渐进式首次引导。
+- **有限自治与路由**：实现 ThinkPath、声明式 Provider/角色路由、Scout/Scheduler 治理。高风险能力仍默认关闭，并受预算、权限、审计和白名单约束。
+
+PLAN-1 并不声称已完成 Windows 的系统级隔离：当前有应用层路径/能力/网络策略和 Job Object 清理，但**没有**受限令牌、ACL 或系统级网络隔离。不得将其描述为完整 Windows 沙盒。
+
+### 2.6 2026-07-11 便携版构建状态（可测试）
+
+PLAN-1 新增 Workflow 初始化后，`api/server.py` 的 `lifespan` 内部重复导入 `get_settings`，意外把已有的模块级导入变为函数局部名，并在较早调用处触发 `UnboundLocalError`。已移除该重复内部导入；11 个聚焦 API/启动回归测试通过。
+
+已按 `build\\build-desktop.bat` 的既定四步流程完成新构建。新 PyInstaller sidecar 的 `build\\smoke-test-server.ps1` 已通过，验证了认证 token、`/api/health`、`/api/providers` 和 `/api/mcp/servers`。Tauri 构建与 NSIS 安装包也已完成；以下文件是当前可供用户测试的产物：
+
+| 产物 | 大小 | 生成时间 |
+|---|---:|---|
+| `dist\\maxma-server.exe` | 211,561,107 bytes | 2026-07-11 14:48:12 |
+| `desktop\\src-tauri\\binaries\\maxma-server-x86_64-pc-windows-msvc.exe` | 211,561,107 bytes | 2026-07-11 14:48:12 |
+| `desktop\\src-tauri\\target\\release\\bundle\\nsis\\MaxmaHere_2.6.6_x64-setup.exe` | 889,891,506 bytes | 2026-07-11 15:20:01 |
+| `dist-portable\\MaxmaHere.exe` | 26,508,800 bytes | 2026-07-11 15:20:01 |
+| `dist-portable\\maxma-server.exe` | 211,561,107 bytes | 2026-07-11 14:48:12 |
+
+`dist-portable\\` 已复制新桌面 exe 与新 sidecar，可作为当前 PLAN-1 测试包。仍需用户进行桌面层人工冒烟：启动 `dist-portable\\MaxmaHere.exe`，完成一次普通聊天和一次安全拒绝/确认操作，确认关闭应用后 sidecar 被清理。
 
 ---
 
@@ -113,9 +141,9 @@ D:\Maxma\MaxmaHere\
 
 | 差距 | 严重度 | 说明 |
 |---|---|---|
-| LTM 错误处理仍需打磨 | 中 | 已修复 401 无限重试和最大重试限制，但连接错误（网络不可达）的处理策略仍是简单放弃，理想情况应区分暂时性错误和永久性错误 |
-| Feature flag 未充分验证 | 中 | `coordinator_enabled`/`verifier_enabled`/`stream_repair_enabled` 等默认关闭的特性，未在真实使用场景中充分验证 |
-| Provider 配置用户体验 | 中 | 用户配置的 API key 无效时，LTM 后台 agent 静默失败，前端无明确提示 |
+| Windows 系统级沙盒 | 中 | 当前只有应用层策略和 Job Object 清理；缺少受限令牌、网络隔离和 ACL 隔离 |
+| Windows 全量记忆测试 | 中 | 全量 memory 测试在本机 Windows 环境可能超时或无输出挂起；维持按目录/按文件详细运行，不能把超时误报为产品回归 |
+| Feature flag 的真实灰度 | 中 | PLAN-1 已覆盖开关语义与自动化测试，但 `coordinator_enabled`/`verifier_enabled`/`stream_repair_enabled` 等仍需在真实用户场景一次只开启一个地观察 |
 | 打包体积 | 低 | maxma-server.exe 201MB + Playwright Chromium 688MB + ONNX 模型 448MB，总便携版 ~1.7GB |
 | Node 版本未锁定 | 低 | web/ 无 .nvmrc 或 engines 字段 |
 | Rust 版本未锁定 | 低 | 无 rust-toolchain.toml |
@@ -126,20 +154,19 @@ D:\Maxma\MaxmaHere\
 
 ### 高优先级
 
-1. **LTM 错误处理精细化**：区分暂时性错误（网络抖动，应重试）和永久性错误（认证失败，应跳过），对暂时性错误实施指数退避而非直接放弃
-2. **Provider 健康度反馈**：当 LTM agent 因 API key 无效失败时，在前端或日志中给出明确诊断，而非静默失败
-3. **Feature flag 逐步开启验证**：制定计划逐步开启 `stream_repair_enabled`（对国产模型用户最有价值）→ `coordinator_enabled` → `verifier_enabled`，每步收集稳定性数据
+1. **对新便携版进行人工冒烟**：启动 `dist-portable\\MaxmaHere.exe`，验证 token、health、providers、MCP、一次普通聊天和一次安全拒绝/确认操作，以及关闭后的 sidecar 清理；不得仅凭 exe 存在认定成功。
+2. **Feature flag 逐步开启验证**：在可用便携版上按 `stream_repair_enabled` → `coordinator_enabled` → `verifier_enabled` 灰度，一次只开一个并收集延迟、错误、重复工具调用数据。
 
 ### 中优先级
 
-4. **打包体积优化**：评估是否可以按需下载 Playwright/ONNX 模型，而非全量打包
-5. **Node/Rust 版本锁定**：添加 `.nvmrc` 和 `rust-toolchain.toml`
-6. **前端错误展示**：将后端错误分类传递到前端，区分网络错误/认证错误/服务不可用
+3. **Windows 系统级隔离设计**：在明确桌面身份与权限模型后，评估受限令牌、ACL 和网络隔离；在此之前保持现有应用层策略的准确表述。
+4. **打包体积优化**：评估是否可以按需下载 Playwright/ONNX 模型，而非全量打包。
+5. **Node/Rust 版本锁定**：添加 `.nvmrc` 和 `rust-toolchain.toml`。
 
 ### 低优先级
 
-7. **自治层启用验证**：在 `autonomy_enabled=False` 前提下充分测试后，逐步开启自改进
-8. **CRAG 检索分级**：`crag_enabled` 默认关闭，需评估检索准确率提升效果
+6. **自治层启用验证**：在 `autonomy_enabled=False` 前提下充分测试后，逐步开启自改进
+7. **CRAG 检索分级**：`crag_enabled` 默认关闭，需评估检索准确率提升效果
 
 ---
 
@@ -346,12 +373,20 @@ uv pip compile pyproject.toml --extra dev -o requirements-lock.txt
 |---|---|
 | 分支 | `feature/openhanako-alignment` |
 | 远程 | `https://github.com/Libai-88/Maxma` |
-| 最新 commit | `3e02558` fix: add max retry limit for LTM CRUD agent |
+| 最新 commit | `b291175` docs: add FIND.md cross-project exploration report |
 | 版本 | v2.6.6 |
-| 测试 | 1246 passed / 0 failed / 9 skipped |
-| 便携版 | `dist-portable/` 就绪（MaxmaHere.exe 25MB + maxma-server.exe 201MB + resources ~1.5GB） |
-| 工作区 | 干净（`git status` 无输出） |
+| PLAN-1 | 阶段 0-6 应用层功能完成；Windows 系统级沙盒明确未完成 |
+| 验证 | API `295 passed`；Agent `350 passed`；记忆/工具/沙盒/路径/委派 `137 passed, 9 skipped`；前端 `44 passed`；生产前端构建、Python 编译、静态检查和差异格式检查通过 |
+| 便携版 | **已构建，可测试**：`dist-portable\\MaxmaHere.exe`（26,508,800 bytes，2026-07-11 15:20:01）+ `dist-portable\\maxma-server.exe`（211,561,107 bytes，2026-07-11 14:48:12）；sidecar smoke 的 auth/health/providers/MCP 均通过，NSIS 包已生成 |
+| 工作区 | **脏，且绝大多数为 PLAN-1 尚未提交变更**。保留全部改动；只精确暂存自己确认过的路径，绝不 `git add -A` / `git commit -a` |
+
+### 下一位 Agent 的最短接手顺序
+
+1. 先运行 `git status --short`，确认并保留当前大量 PLAN-1 未提交文件；不要尝试清理或回滚它们。
+2. 先以 `dist-portable\\MaxmaHere.exe` 完成桌面人工冒烟；失败时保留 `logs/`、错误报告和版本/时间戳，避免覆盖当前验收证据。
+3. 维持 Windows 测试分目录详细运行。全量 memory 测试可能超时或无输出挂起，不能以此单一现象判断产品回归；不要将系统级沙盒限制标记为已解决。
+4. 后续源码改动影响 sidecar、前端或 Tauri 时，重新执行 `build\\build-desktop.bat`，并同时核验 `desktop\\src-tauri\\binaries\\`、NSIS 输出和 `dist-portable\\` 的时间戳。
 
 ---
 
-*最后更新：2026-07-10*
+*最后更新：2026-07-11*

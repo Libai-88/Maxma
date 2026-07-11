@@ -1,10 +1,16 @@
 """REST API — 人设文件 (SOUL.md / USER.md) 读写 + 多人格管理。"""
 
 import logging
+import os
+import re
+import tempfile
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from app_paths import PERSONAS_DATA_DIR as PERSONAS_DIR
+from api.yaml_store import yaml_file_lock
 from agent.prompts import (
     get_active_persona_file,
     set_active_persona,
@@ -17,6 +23,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 VALID_TYPES = {"soul": "SOUL.md", "user": "USER.md"}
+_PERSONA_FILENAME_RE = re.compile(r"^SOUL\.[\w\u4e00-\u9fff\-]+\.md$")
 
 
 class PersonaResponse(BaseModel):
@@ -52,6 +59,39 @@ class CreatePersonaRequest(BaseModel):
     memory: str = "shared"
 
 
+def _get_persona_variant_path(variant: str) -> Path:
+    """Return a verified custom SOUL file path.
+
+    Keep this check shared by read, write, and activation endpoints.  Besides
+    preventing traversal, it prevents a malformed active_persona.yaml from
+    turning a normal SOUL page into an empty or unrelated file.
+    """
+    if not _PERSONA_FILENAME_RE.fullmatch(variant):
+        raise HTTPException(status_code=400, detail="无效的人格文件名")
+    path = PERSONAS_DIR / variant
+    if not path.resolve().is_relative_to(PERSONAS_DIR.resolve()):
+        raise HTTPException(status_code=400, detail="非法路径")
+    return path
+
+
+def _write_text_atomically(path: Path, content: str) -> None:
+    """Persist an editor update without exposing a partially written file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with yaml_file_lock(path):
+        fd, temp_name = tempfile.mkstemp(
+            dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp", text=True
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_name, path)
+        finally:
+            if os.path.exists(temp_name):
+                os.unlink(temp_name)
+
+
 @router.get("/persona", response_model=PersonaResponse)
 async def get_persona(
     type: str = Query(..., description="soul 或 user"),
@@ -63,14 +103,7 @@ async def get_persona(
             status_code=400, detail=f"无效 type: {type}，仅支持 soul/user"
         )
     if t == "soul" and variant:
-        # 安全校验：防止路径穿越
-        import re
-        if not re.match(r'^SOUL\.[\w\u4e00-\u9fff\-]+\.md$', variant):
-            raise HTTPException(status_code=400, detail="无效的人格文件名")
-        path = PERSONAS_DIR / variant
-        # 二次校验：确保路径在 PERSONAS_DIR 内
-        if not path.resolve().is_relative_to(PERSONAS_DIR.resolve()):
-            raise HTTPException(status_code=400, detail="非法路径")
+        path = _get_persona_variant_path(variant)
         if not path.exists():
             raise HTTPException(status_code=404, detail=f"人格文件不存在: {variant}")
         content = path.read_text(encoding="utf-8")
@@ -94,15 +127,14 @@ async def update_persona(
             status_code=400, detail=f"无效 type: {type}，仅支持 soul/user"
         )
     if t == "soul" and variant:
-        import re
-        if not re.match(r'^SOUL\.[\w\u4e00-\u9fff\-]+\.md$', variant):
-            raise HTTPException(status_code=400, detail="无效的人格文件名")
-        path = PERSONAS_DIR / variant
-        if not path.resolve().is_relative_to(PERSONAS_DIR.resolve()):
-            raise HTTPException(status_code=400, detail="非法路径")
+        path = _get_persona_variant_path(variant)
     else:
         path = PERSONAS_DIR / VALID_TYPES[t]
-    path.write_text(body.content, encoding="utf-8")
+    try:
+        _write_text_atomically(path, body.content)
+    except OSError as exc:
+        logger.exception("保存 %s 失败", path.name)
+        raise HTTPException(status_code=500, detail="保存失败，请检查磁盘空间和目录权限") from exc
     invalidate_prompt_cache()
     return PersonaResponse(content=body.content, type=t)
 
@@ -120,8 +152,7 @@ async def list_available_personas():
 @router.put("/personas/active")
 async def switch_active_persona(body: SwitchPersonaRequest):
     """切换当前活跃人格。"""
-    # 验证文件存在
-    path = PERSONAS_DIR / body.file
+    path = _get_persona_variant_path(body.file) if body.file != "SOUL.md" else PERSONAS_DIR / body.file
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"人格文件不存在: {body.file}")
     set_active_persona(body.file)

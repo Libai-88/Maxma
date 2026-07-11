@@ -46,6 +46,13 @@ import type {
   ActivityRecentResponse,
   ActivityStatsResponse,
   ActivityClearResponse,
+  DeferredRun,
+  ListDeferredRunsResponse,
+  PermissionMode,
+  SessionPermissionModeResponse,
+  ListWorkflowRunsResponse,
+  WorkflowDefinitionsResponse,
+  WorkflowRun,
 } from '@/types'
 import { ensurePortLoaded, getApiBase, tauriFetch } from '@/utils/env'
 
@@ -165,6 +172,65 @@ export const api = {
 
   deleteSession: (id: string) =>
     request<{ status: string }>(`/sessions/${id}`, { method: 'DELETE' }),
+
+  getSessionPermissionMode: (sessionId: string) =>
+    request<SessionPermissionModeResponse>(
+      `/sessions/${encodeURIComponent(sessionId)}/permission-mode`,
+    ),
+
+  setSessionPermissionMode: (sessionId: string, permissionMode: PermissionMode) =>
+    request<SessionPermissionModeResponse>(
+      `/sessions/${encodeURIComponent(sessionId)}/permission-mode`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ permission_mode: permissionMode }),
+      },
+    ),
+
+  // Server-side feature flag controls availability. No client-side opt-in is needed.
+  listDeferredRuns: (sessionId: string) =>
+    request<ListDeferredRunsResponse>(`/sessions/${encodeURIComponent(sessionId)}/deferred-runs`),
+
+  getDeferredRun: (sessionId: string, runId: string) =>
+    request<DeferredRun>(
+      `/sessions/${encodeURIComponent(sessionId)}/deferred-runs/${encodeURIComponent(runId)}`,
+    ),
+
+  cancelDeferredRun: (sessionId: string, runId: string) =>
+    request<DeferredRun>(
+      `/sessions/${encodeURIComponent(sessionId)}/deferred-runs/${encodeURIComponent(runId)}/cancel`,
+      { method: 'POST' },
+    ),
+
+  // Workflows are server-flagged and registry-backed; callers can only select a listed ID.
+  listWorkflowDefinitions: () =>
+    request<WorkflowDefinitionsResponse>('/workflows/definitions'),
+
+  listWorkflowRuns: (sessionId: string) =>
+    request<ListWorkflowRunsResponse>(`/sessions/${encodeURIComponent(sessionId)}/workflows`),
+
+  startWorkflow: (sessionId: string, workflowId: string, parentTurnId?: string) =>
+    request<WorkflowRun>(`/sessions/${encodeURIComponent(sessionId)}/workflows`, {
+      method: 'POST',
+      body: JSON.stringify({ workflow_id: workflowId, ...(parentTurnId ? { parent_turn_id: parentTurnId } : {}) }),
+    }),
+
+  getWorkflowRun: (sessionId: string, runId: string) =>
+    request<WorkflowRun>(
+      `/sessions/${encodeURIComponent(sessionId)}/workflows/${encodeURIComponent(runId)}`,
+    ),
+
+  cancelWorkflowRun: (sessionId: string, runId: string) =>
+    request<WorkflowRun>(
+      `/sessions/${encodeURIComponent(sessionId)}/workflows/${encodeURIComponent(runId)}/cancel`,
+      { method: 'POST' },
+    ),
+
+  resumeWorkflowRun: (sessionId: string, runId: string) =>
+    request<WorkflowRun>(
+      `/sessions/${encodeURIComponent(sessionId)}/workflows/${encodeURIComponent(runId)}/resume`,
+      { method: 'POST' },
+    ),
 
   getNarrative: () =>
     request<NarrativeResponse>('/narrative'),

@@ -21,6 +21,10 @@ class ProviderConfig:
     context_window: int = 256_000
     # 阶段 3.3：优先级（数字越小优先级越高，0 = 最高），用于 fallback 排序
     priority: int = 0
+    # 阶段 6.1：声明式模型路由的可选元数据。未配置时保持现有 priority
+    # 选择语义；这些字段仅描述能力和相对成本，绝不包含密钥或上游计费数据。
+    capabilities: list[str] = field(default_factory=list)
+    cost_tier: int = 0
 
     def to_dict(self) -> dict:
         return asdict(self)

@@ -19,6 +19,10 @@ export const useProviderStore = defineStore('provider', () => {
   const enabledProviders = computed(() => allProviders.value.filter(p => p.enabled))
   /** 是否有已启用的 provider */
   const hasProviders = computed(() => enabledProviders.value.length > 0)
+  /** Providers with a safe runtime reason code that UI surfaces can consume. */
+  const providersNeedingAttention = computed(() => allProviders.value.filter(provider =>
+    provider.health_status === 'degraded' || provider.health_status === 'error',
+  ))
   /** 加载状态 */
   const loading = ref(false)
   /** 是否已成功加载过至少一次 */
@@ -73,6 +77,7 @@ export const useProviderStore = defineStore('provider', () => {
     allProviders,
     enabledProviders,
     hasProviders,
+    providersNeedingAttention,
     loading,
     loaded,
     loadProviders,

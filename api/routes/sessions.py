@@ -1,6 +1,7 @@
 """REST API — 会话 CRUD + Const 固定会话。"""
 
 import logging
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -15,6 +16,49 @@ router = APIRouter()
 
 class ConstifyRequest(BaseModel):
     name: str
+
+
+PermissionModeValue = Literal["read_only", "ask", "operate", "auto"]
+_PERMISSION_MODES: tuple[PermissionModeValue, ...] = (
+    "read_only",
+    "ask",
+    "operate",
+    "auto",
+)
+
+
+class PermissionModeRequest(BaseModel):
+    """Browser-facing request for the session's additional permission layer."""
+
+    permission_mode: PermissionModeValue
+
+
+def _permission_modes_enabled() -> bool:
+    """Read the opt-in flag at request time so settings reloads take effect."""
+    try:
+        from config.settings import get_settings
+
+        return bool(get_settings().permission_modes_enabled)
+    except Exception:
+        # Permission mode controls must never accidentally become writable if
+        # settings cannot be loaded.
+        return False
+
+
+def _permission_mode_metadata(session, *, enabled: bool) -> dict[str, object]:
+    """Return the small, non-secret contract consumed by the session UI.
+
+    A disabled feature reports the compatible confirmation-first mode instead
+    of a stale, more permissive saved value.  This reflects the mode effective
+    at the approval boundary while the feature flag is off.
+    """
+    return {
+        "session_id": session.session_id,
+        "permission_modes_enabled": enabled,
+        "permission_mode": session.permission_mode if enabled else "ask",
+        "permission_mode_updated_at": session.permission_mode_updated_at,
+        "available_permission_modes": list(_PERMISSION_MODES) if enabled else [],
+    }
 
 
 @router.post("/sessions")
@@ -45,6 +89,43 @@ async def get_session(session_id: str, request: Request):
         "is_const": session.is_const,
         "const_name": session.const_name,
     }
+
+
+@router.get("/sessions/{session_id}/permission-mode")
+async def get_session_permission_mode(session_id: str, request: Request):
+    """Get the effective permission mode for one authenticated session."""
+    sm = request.app.state.session_manager
+    session = await sm.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return _permission_mode_metadata(session, enabled=_permission_modes_enabled())
+
+
+@router.put("/sessions/{session_id}/permission-mode")
+async def set_session_permission_mode(
+    session_id: str,
+    body: PermissionModeRequest,
+    request: Request,
+):
+    """Persist a validated permission mode when the opt-in feature is active."""
+    sm = request.app.state.session_manager
+    session = await sm.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    if not _permission_modes_enabled():
+        # The flag preserves the legacy approval semantics, so an inactive
+        # endpoint must not leave a latent elevated value on the session.
+        raise HTTPException(status_code=409, detail="Permission modes are unavailable")
+
+    try:
+        session.set_permission_mode(body.permission_mode)
+    except ValueError:
+        # The request model normally catches this first.  Keep the boundary
+        # fail-closed if an alternative SessionState implementation rejects it.
+        raise HTTPException(status_code=422, detail="Unsupported permission mode") from None
+
+    return _permission_mode_metadata(session, enabled=True)
 
 
 @router.get("/sessions/{session_id}/messages")
@@ -135,11 +216,7 @@ async def undo_session_messages(session_id: str, request: Request, n: int = 1):
             raw_messages = (
                 cpt.checkpoint.get("channel_values", {}).get("messages", []) if cpt else []
             )
-            metadata = {
-                "created_at": session.created_at,
-                "last_active": session.last_active,
-                "message_count": session.message_count,
-            }
+            metadata = session.persistent_metadata()
             save_const_session(
                 session_id,
                 session.const_name,
@@ -241,11 +318,7 @@ async def constify_session(session_id: str, body: ConstifyRequest, request: Requ
 
     from api.const_session_store import save_const_session, serialize_messages
 
-    metadata = {
-        "created_at": session.created_at,
-        "last_active": session.last_active,
-        "message_count": session.message_count,
-    }
+    metadata = session.persistent_metadata()
     serialized = serialize_messages(raw_messages)
     save_const_session(session.session_id, body.name, metadata, serialized)
 

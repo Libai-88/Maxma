@@ -29,12 +29,13 @@ import logging
 from typing import Optional
 
 from memory.episodic import EpisodicMemoryManager
+from memory.fact_retrieval import SupplementaryFactRetriever
 from memory.memory_manager import MemoryManager
 from memory.semantic import SemanticMemoryManager
 
 logger = logging.getLogger(__name__)
 
-VALID_LAYERS = {"short", "long", "episodic", "semantic"}
+VALID_LAYERS = {"short", "long", "episodic", "semantic", "facts"}
 
 
 class MemoryCoordinator:
@@ -51,10 +52,12 @@ class MemoryCoordinator:
         long_term_mm: Optional[MemoryManager] = None,
         episodic_mm: Optional[EpisodicMemoryManager] = None,
         semantic_mm: Optional[SemanticMemoryManager] = None,
+        fact_retriever: Optional[SupplementaryFactRetriever] = None,
     ):
         self.long_term_mm = long_term_mm
         self.episodic_mm = episodic_mm
         self.semantic_mm = semantic_mm
+        self.fact_retriever = fact_retriever
 
     def retrieve(
         self,
@@ -62,6 +65,8 @@ class MemoryCoordinator:
         layers: Optional[list[str]] = None,
         top_k: int = 5,
         threshold: float = 0.6,
+        session_id: str | None = None,
+        fact_tags: list[str] | None = None,
     ) -> dict:
         """跨层检索记忆。
 
@@ -83,6 +88,8 @@ class MemoryCoordinator:
         """
         if layers is None:
             layers = ["long", "episodic", "semantic"]
+            if self.fact_retriever is not None and self.fact_retriever.enabled:
+                layers.append("facts")
         # 校验层名
         invalid = set(layers) - VALID_LAYERS
         if invalid:
@@ -119,6 +126,25 @@ class MemoryCoordinator:
                 logger.warning("[coordinator] semantic retrieve failed: %s", e)
                 results["semantic"] = []
 
+        if "facts" in layers and self.fact_retriever is not None:
+            try:
+                # Exact conversational facts are never cross-session by
+                # default. A system-level admin aggregation belongs in a
+                # separate, audited API rather than this prompt-facing path.
+                results["facts"] = (
+                    self.fact_retriever.retrieve(
+                        query,
+                        limit=top_k,
+                        session_id=session_id,
+                        tags=fact_tags,
+                    )
+                    if session_id
+                    else []
+                )
+            except Exception as e:
+                logger.warning("[coordinator] supplementary facts retrieve failed: %s", e)
+                results["facts"] = []
+
         return results
 
     def retrieve_text(
@@ -127,6 +153,8 @@ class MemoryCoordinator:
         layers: Optional[list[str]] = None,
         top_k: int = 5,
         threshold: float = 0.6,
+        session_id: str | None = None,
+        fact_tags: list[str] | None = None,
     ) -> str:
         """检索并格式化为可读文本（供注入系统提示词）。
 
@@ -139,7 +167,10 @@ class MemoryCoordinator:
             ## 语义记忆
             - subject predicate object (相似度 92%)
         """
-        results = self.retrieve(query, layers, top_k, threshold)
+        results = self.retrieve(
+            query, layers, top_k, threshold,
+            session_id=session_id, fact_tags=fact_tags,
+        )
         lines: list[str] = []
 
         if results.get("long"):
@@ -172,6 +203,14 @@ class MemoryCoordinator:
                 )
             lines.append("")
 
+        if results.get("facts"):
+            lines.append("## 补充事实记忆")
+            for item in results["facts"]:
+                tags = ", ".join(str(tag) for tag in item.get("tags", []))
+                tag_suffix = f" [{tags}]" if tags else ""
+                lines.append(f"- {item.get('content', '')}{tag_suffix}")
+            lines.append("")
+
         return "\n".join(lines).strip()
 
     def purge_all_expired(self) -> dict[str, int]:
@@ -199,4 +238,10 @@ class MemoryCoordinator:
             except Exception as e:
                 logger.warning("[coordinator] semantic purge failed: %s", e)
                 purged["semantic"] = 0
+        if self.fact_retriever is not None and self.fact_retriever.enabled:
+            try:
+                purged["facts"] = self.fact_retriever.purge_expired()
+            except Exception as e:
+                logger.warning("[coordinator] supplementary facts purge failed: %s", e)
+                purged["facts"] = 0
         return purged

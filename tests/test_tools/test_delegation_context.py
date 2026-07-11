@@ -517,18 +517,19 @@ async def test_delegation_context_freezes_approval_policy(monkeypatch):
     async def fake_request(*_args, **_kwargs):
         return ApprovalDecision.REJECTED
 
-    def fake_needs_approval(tool_name, session_id, auto_approve):
+    def fake_authorize(tool_name, session_id, auto_approve, **_kwargs):
         observed.update(
             tool_name=tool_name,
             session_id=session_id,
             auto_approve=auto_approve,
         )
-        return True
+        from agent.approval_gateway import AuthorizationAction, AuthorizationDecision, ToolRisk
+        return AuthorizationDecision(AuthorizationAction.ASK, "test", ToolRisk.LOCAL_WRITE)
 
     node = ApprovalToolNode([])
     node._inner_node = SimpleNamespace(ainvoke=fake_invoke)
     monkeypatch.setattr(node, "_request_approval", fake_request)
-    monkeypatch.setattr(approval_gateway, "needs_approval", fake_needs_approval)
+    monkeypatch.setattr(approval_gateway, "authorize", fake_authorize)
 
     session_token = interaction.current_session_id.set("parent-session")
     context_token = context_module.activate_delegation_context(

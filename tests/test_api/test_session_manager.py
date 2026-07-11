@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from api import const_session_store
+
 
 def _load_session_manager_module():
     module_path = Path(__file__).resolve().parents[2] / "api" / "session_manager.py"
@@ -99,6 +101,52 @@ async def test_get_or_create_creates_new_session(manager):
 
     assert session.session_id == "sid-1"
     assert manager._sessions["sid-1"] is session
+
+
+@pytest.mark.asyncio
+async def test_session_permission_metadata_defaults_to_confirmation_first_and_is_secret_free(manager):
+    session = await manager.create()
+
+    metadata = session.persistent_metadata()
+
+    assert metadata["permission_mode"] == "ask"
+    assert isinstance(metadata["permission_mode_updated_at"], float)
+    assert set(metadata) == {
+        "created_at",
+        "last_active",
+        "message_count",
+        "permission_mode",
+        "permission_mode_updated_at",
+    }
+
+
+@pytest.mark.asyncio
+async def test_invalid_persisted_permission_mode_falls_back_to_confirmation_first(manager):
+    session = session_manager_module.SessionState(
+        session_id="persisted-session",
+        permission_mode="invalid-mode",
+    )
+
+    assert session.permission_mode == "ask"
+
+
+@pytest.mark.asyncio
+async def test_selected_permission_mode_round_trips_through_const_metadata(manager, monkeypatch, tmp_path):
+    monkeypatch.setattr(const_session_store, "_CONST_DIR", tmp_path)
+    session = await manager.create()
+    session.set_permission_mode("operate")
+
+    const_session_store.save_const_session(
+        session.session_id,
+        "Saved session",
+        session.persistent_metadata(),
+        [],
+    )
+    persisted = const_session_store.load_const_session_by_id(session.session_id)
+
+    assert persisted is not None
+    assert persisted["metadata"]["permission_mode"] == "operate"
+    assert persisted["metadata"]["permission_mode_updated_at"] == session.permission_mode_updated_at
 
 
 @pytest.mark.asyncio

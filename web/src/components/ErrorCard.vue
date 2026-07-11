@@ -11,20 +11,27 @@
     </div>
     <div class="error-card__actions">
       <button v-if="retryable" class="error-card__btn" @click="$emit('retry')">重试</button>
-      <button class="error-card__btn" @click="$emit('dismiss')">关闭</button>
+      <button v-if="diagnosticText" class="error-card__btn" @click="copyDiagnostic">
+        {{ copied ? '已复制' : '复制诊断' }}
+      </button>
+      <button v-if="dismissible" class="error-card__btn" @click="$emit('dismiss')">关闭</button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   message: string
   category?: string
   traceId?: string
   retryable?: boolean
-}>()
+  diagnosticText?: string
+  dismissible?: boolean
+}>(), {
+  dismissible: true,
+})
 
 defineEmits<{ retry: []; dismiss: [] }>()
 
@@ -36,6 +43,7 @@ const icon = computed(() => {
     case 'permission': return '🚫'
     case 'not_found': return '🔍'
     case 'rate_limit': return '⏳'
+    case 'warning': return '⚠️'
     default: return '⚠️'
   }
 })
@@ -48,6 +56,7 @@ const title = computed(() => {
     case 'permission': return '权限不足'
     case 'not_found': return '未找到'
     case 'rate_limit': return '请求过于频繁'
+    case 'warning': return '操作需要处理'
     default: return '发生错误'
   }
 })
@@ -60,9 +69,30 @@ const suggestion = computed(() => {
     case 'permission': return '请确认路径是否在白名单中'
     case 'not_found': return '请确认目标路径或资源是否存在'
     case 'rate_limit': return '请稍候片刻再重试'
+    case 'warning': return '可稍后重试，或复制诊断信息继续排查'
     default: return '如果问题持续，请尝试重启服务'
   }
 })
+
+const copied = ref(false)
+
+async function copyDiagnostic() {
+  if (!props.diagnosticText) return
+  try {
+    await navigator.clipboard.writeText(props.diagnosticText)
+  } catch {
+    const textarea = document.createElement('textarea')
+    textarea.value = props.diagnosticText
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+  }
+  copied.value = true
+  window.setTimeout(() => { copied.value = false }, 2_000)
+}
 </script>
 
 <style scoped>
@@ -77,6 +107,7 @@ const suggestion = computed(() => {
 .error-card--timeout { border-color: color-mix(in srgb, #f97316 30%, transparent); background: color-mix(in srgb, #f97316 10%, var(--bg-card)); }
 .error-card--auth { border-color: color-mix(in srgb, var(--status-error) 30%, transparent); background: color-mix(in srgb, var(--status-error) 8%, var(--bg-card)); }
 .error-card--rate_limit { border-color: color-mix(in srgb, #a855f7 30%, transparent); background: color-mix(in srgb, #a855f7 10%, var(--bg-card)); }
+.error-card--warning { border-color: color-mix(in srgb, #d97706 36%, transparent); background: color-mix(in srgb, #d97706 10%, var(--bg-card)); }
 
 .error-card__header {
   display: flex;

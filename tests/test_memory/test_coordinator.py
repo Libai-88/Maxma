@@ -12,6 +12,8 @@ import pytest
 
 from memory.coordinator import MemoryCoordinator, VALID_LAYERS
 from memory.episodic import EpisodicMemoryManager
+from memory.fact_retrieval import SupplementaryFactRetriever
+from memory.fact_store import FactStore
 from memory.memory_manager import MemoryManager
 from memory.rag import embedding, vector_store
 from memory.semantic import SemanticMemoryManager
@@ -57,7 +59,7 @@ class TestInit:
         assert c.semantic_mm is None
 
     def test_valid_layers_constant(self):
-        assert VALID_LAYERS == {"short", "long", "episodic", "semantic"}
+        assert VALID_LAYERS == {"short", "long", "episodic", "semantic", "facts"}
 
 
 class TestRetrieveDefault:
@@ -110,6 +112,62 @@ class TestRetrieveWithSemantic:
         results = c.retrieve(query="喜欢", layers=["semantic"])
         assert len(results["semantic"]) == 1
         assert results["semantic"][0]["object"] == "古典音乐"
+
+
+class TestRetrieveWithSupplementaryFacts:
+    def test_enabled_facts_are_default_hybrid_layer_and_session_scoped(self, tmp_path):
+        store = FactStore(db_path=str(tmp_path / "facts.db"))
+        try:
+            store.add(content="会话 A 喜欢古典音乐", session_id="a", tags=["preference"])
+            store.add(content="会话 B 喜欢摇滚", session_id="b", tags=["preference"])
+            coordinator = MemoryCoordinator(
+                fact_retriever=SupplementaryFactRetriever(store, enabled=True)
+            )
+
+            results = coordinator.retrieve("古典", session_id="a")
+
+            assert results["facts"]
+            assert {item["session_id"] for item in results["facts"]} == {"a"}
+        finally:
+            store.close()
+
+    def test_disabled_facts_remain_absent_from_default_layers(self, tmp_path):
+        store = FactStore(db_path=str(tmp_path / "facts.db"))
+        try:
+            store.add(content="用户喜欢古典音乐", session_id="a")
+            coordinator = MemoryCoordinator(
+                fact_retriever=SupplementaryFactRetriever(store, enabled=False)
+            )
+
+            assert "facts" not in coordinator.retrieve("古典", session_id="a")
+            assert coordinator.retrieve("古典", layers=["facts"], session_id="a") == {"facts": []}
+        finally:
+            store.close()
+
+    def test_enabled_facts_require_an_explicit_session_constraint(self, tmp_path):
+        store = FactStore(db_path=str(tmp_path / "facts.db"))
+        try:
+            store.add(content="会话 A 喜欢古典音乐", session_id="a")
+            coordinator = MemoryCoordinator(
+                fact_retriever=SupplementaryFactRetriever(store, enabled=True)
+            )
+
+            assert coordinator.retrieve("古典")["facts"] == []
+        finally:
+            store.close()
+
+    def test_tag_only_fact_keeps_text_match_ahead_of_tag_candidate(self, tmp_path):
+        store = FactStore(db_path=str(tmp_path / "facts.db"))
+        try:
+            tagged_id = store.add(content="无关内容", session_id="a", tags=["topic"])
+            text_id = store.add(content="主题匹配", session_id="a")
+            retriever = SupplementaryFactRetriever(store, enabled=True)
+
+            results = retriever.retrieve("主题", tags=["topic"], session_id="a")
+
+            assert [item["id"] for item in results] == [text_id, tagged_id]
+        finally:
+            store.close()
 
 
 class TestRetrieveText:

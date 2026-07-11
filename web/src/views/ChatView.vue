@@ -68,6 +68,7 @@
             </div>
           </div>
         </span>
+        <SessionPermissionModeControl :session-id="sessionId" />
         <ContextUsageBadge :usage="contextUsage" :selected-model="selectedModelName" />
         <TaskTrackerBar :data="taskTrackerData as any" />
         <button
@@ -83,6 +84,7 @@
     <div class="chat-workbench-layout">
       <div class="chat-main-column">
         <ChatWindow
+          :session-id="sessionId"
           :turns="turns"
           :current-turn="currentTurn"
           :error="error"
@@ -94,6 +96,7 @@
           @plan-respond="sendPlanResponse"
           @pin="handlePin"
         />
+        <WorkflowCard v-if="!isSubagent" :session-id="sessionId" />
 
         <ChatInput
           v-if="!isSubagent"
@@ -103,6 +106,7 @@
           :can-send="connected"
           :initial-provider-id="selectedProviderId"
           :initial-model-name="selectedModelName"
+          :think-path-enabled="health?.think_path_enabled === true"
           :quoted-selections="quotedSelections"
           :quote-candidate="quoteCandidate"
           @send="onSend"
@@ -130,6 +134,7 @@
           <CanvasContainer
             :cards="workbench.cards"
             @remove="workbench.removeCard"
+            @artifact-action="handleArtifactAction"
           />
         </template>
       </WorkbenchPanel>
@@ -144,6 +149,8 @@ import { api } from '@/api'
 import ChatInput from '@/components/ChatInput.vue'
 import ChatWindow from '@/components/ChatWindow.vue'
 import ContextUsageBadge from '@/components/ContextUsageBadge.vue'
+import SessionPermissionModeControl from '@/components/SessionPermissionModeControl.vue'
+import WorkflowCard from '@/components/WorkflowCard.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import TaskTrackerBar from '@/components/TaskTrackerBar.vue'
 import WorkbenchPanel from '@/components/workbench/WorkbenchPanel.vue'
@@ -156,6 +163,7 @@ import { useHealthStore } from '@/stores/health'
 import { useProviderStore } from '@/stores/provider'
 import { useSessionStore } from '@/stores/session'
 import type { ParsedRef } from '@/utils/references'
+import type { ThinkPathId } from '@/utils/thinkPath'
 import { storeToRefs } from 'pinia'
 import { computed, onMounted, ref } from 'vue'
 
@@ -164,7 +172,7 @@ const { sessionId, sessions } = storeToRefs(sessionStore)
 const { health } = storeToRefs(useHealthStore())
 const {
   connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId,
-  contextUsage, taskTrackerData, send, cancel, sendUserResponse, sendPlanResponse, removeTurns,
+  contextUsage, taskTrackerData, send, cancel, sendUserResponse, sendArtifactAction, sendPlanResponse, removeTurns,
   privateMode, setPrivateMode, autoApprove, setAutoApprove
 } = useChat(sessionId)
 
@@ -241,14 +249,14 @@ function addCitation(ref: ParsedRef) {
   chatInputRef.value?.addRef(ref)
 }
 
-function onSend(text: string, refs: ParsedRef[], providerId?: string, modelName?: string) {
+function onSend(text: string, refs: ParsedRef[], providerId?: string, modelName?: string, thinkPathId?: ThinkPathId) {
   // 将选区引用作为 refs 的一部分传给后端
   const quoteRefs: ParsedRef[] = quotedSelections.value.map(q => ({
     type: 'selection' as any,
     label: q.source,
     preview: q.text,
   } as ParsedRef))
-  send(text, [...refs, ...quoteRefs], providerId, modelName)
+  send(text, [...refs, ...quoteRefs], providerId, modelName, thinkPathId)
   clearQuotes()
 }
 
@@ -263,6 +271,12 @@ function handleToolAction(payload: { action: string; data?: unknown }) {
 
 function handlePin(payload: { type: 'code' | 'table' | 'summary'; title: string; content: string; sourceTool?: string }) {
   workbench.addCard(payload)
+}
+
+function handleArtifactAction(payload: { artifactId: string; actionId: string; token: string }) {
+  if (sendArtifactAction(payload.artifactId, payload.actionId, payload.token)) {
+    workbench.markArtifactActionSubmitted(payload.artifactId, payload.actionId)
+  }
 }
 
 async function handleUndo() {

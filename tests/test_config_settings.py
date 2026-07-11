@@ -99,3 +99,108 @@ class TestAutonomyFlags:
         s = get_settings()
         assert hasattr(s, "autonomy_max_agent_timeout")
         assert s.autonomy_max_agent_timeout == 300
+
+
+class TestStreamRepairFlags:
+    """流式修复开关默认关闭；启用路径由 test_stream_repair 覆盖。"""
+
+    def test_stream_repair_enabled_defaults_off(self):
+        from config.settings import get_settings
+
+        settings = get_settings()
+        assert hasattr(settings, "stream_repair_enabled")
+        assert settings.stream_repair_enabled is False
+
+
+class TestProviderDiagnosticsFlag:
+    def test_provider_diagnostics_enabled_defaults_off(self):
+        from config.settings import get_settings
+
+        settings = get_settings()
+        assert hasattr(settings, "provider_diagnostics_enabled")
+        assert settings.provider_diagnostics_enabled is False
+
+
+class TestMCPConnectionLifecycleFlag:
+    """MCP lifecycle remains an opt-in rollout until transport hooks mature."""
+
+    def test_mcp_connection_lifecycle_defaults_off(self, monkeypatch):
+        monkeypatch.delenv("MCP_CONNECTION_LIFECYCLE_ENABLED", raising=False)
+
+        settings = Settings(_env_file=None)
+
+        assert settings.mcp_connection_lifecycle_enabled is False
+
+    def test_mcp_connection_lifecycle_reads_explicit_environment_value(self, monkeypatch):
+        monkeypatch.setenv("MCP_CONNECTION_LIFECYCLE_ENABLED", "true")
+
+        settings = Settings(_env_file=None)
+
+        assert settings.mcp_connection_lifecycle_enabled is True
+
+
+class TestAsyncSubagentFlag:
+    """Async delegation remains opt-in until the result store is available."""
+
+    def test_async_subagent_enabled_defaults_off(self, monkeypatch):
+        monkeypatch.delenv("ASYNC_SUBAGENT_ENABLED", raising=False)
+
+        settings = Settings(_env_file=None)
+
+        assert settings.async_subagent_enabled is False
+
+    def test_async_subagent_enabled_reads_explicit_environment_value(self, monkeypatch):
+        monkeypatch.setenv("ASYNC_SUBAGENT_ENABLED", "true")
+
+        settings = Settings(_env_file=None)
+
+        assert settings.async_subagent_enabled is True
+
+
+class TestPlanOneRolloutFlags:
+    def test_plan_one_rollout_flags_default_off(self, monkeypatch):
+        for name in (
+            "LTM_RETRY_POLICY_ENABLED",
+            "CACHE_PRESERVING_COMPACTION_ENABLED",
+            "MEMORY_TICKER_ENABLED",
+            "FACT_STORE_RETRIEVAL_ENABLED",
+            "COMPACT_TOOL_RESULTS_ENABLED",
+            "SUBAGENT_STREAM_ON_DEMAND_ENABLED",
+        ):
+            monkeypatch.delenv(name, raising=False)
+
+        settings = Settings(_env_file=None)
+
+        assert settings.ltm_retry_policy_enabled is False
+        assert settings.cache_preserving_compaction_enabled is False
+        assert settings.memory_ticker_enabled is False
+        assert settings.fact_store_retrieval_enabled is False
+        assert settings.compact_tool_results_enabled is False
+        assert settings.subagent_stream_on_demand_enabled is False
+
+
+class TestPermissionModeSettings:
+    """Permission modes remain explicitly opt-in and AUTO starts unprivileged."""
+
+    def test_permission_modes_enabled_defaults_off(self, monkeypatch):
+        monkeypatch.delenv("PERMISSION_MODES_ENABLED", raising=False)
+
+        settings = Settings(_env_file=None)
+
+        assert settings.permission_modes_enabled is False
+
+    def test_permission_auto_allowed_tools_defaults_to_empty_list(self, monkeypatch):
+        monkeypatch.delenv("PERMISSION_AUTO_ALLOWED_TOOLS", raising=False)
+
+        settings = Settings(_env_file=None)
+
+        assert settings.permission_auto_allowed_tools == []
+
+    def test_permission_settings_read_explicit_environment_values(self, monkeypatch):
+        monkeypatch.setenv("PERMISSION_MODES_ENABLED", "true")
+        monkeypatch.setenv("PERMISSION_AUTO_ALLOWED_TOOLS", '["file_write"]')
+
+        settings = Settings(_env_file=None)
+
+        assert settings.permission_modes_enabled is True
+        assert settings.permission_auto_allowed_tools == ["file_write"]

@@ -9,7 +9,6 @@ import fnmatch
 import functools
 import logging
 import time
-from pathlib import Path
 from typing import Annotated, Any, Literal, Union
 
 import yaml
@@ -19,6 +18,13 @@ from pydantic import BaseModel, Field, field_validator
 
 from agent.audit_log import log_mcp_call
 from app_paths import MCP_CONFIG_PATH
+from tools.mcp_connection_lifecycle import (
+    MCPOAuthCredential,
+    MCPConnectionLifecycle,
+    OAuthRefresher,
+    redact_mcp_identifier,
+    redact_mcp_telemetry,
+)
 from tools.mcp_rate_limiter import get_mcp_rate_limiter
 from tools.mcp_runtime import build_mcp_env, resolve_mcp_command
 from tools.mcp_security import validate_stdio_command, validate_transport_url, validate_tls_config
@@ -31,6 +37,13 @@ _client: MultiServerMCPClient | None = None
 _tools: list[BaseTool] | None = None
 _config: list["MCPServerConfig"] | None = None
 _last_error: str | None = None
+
+# The current adapter does not expose a persistent OAuth transport.  These
+# optional hooks let a future protected credential store opt into proactive
+# refresh without putting tokens in YAML, logs, or this module's state.
+_connection_lifecycle = MCPConnectionLifecycle()
+_oauth_credential_provider: Any = None
+_oauth_refresher: OAuthRefresher | None = None
 
 # 重载回调：由 server.py 在启动时注入，工具修改 YAML 后调用此回调触发异步重载
 _reload_callback: Any = None
@@ -49,6 +62,59 @@ def trigger_reload() -> None:
             _reload_callback()
         except Exception as exc:
             print(f"[mcp] 重载回调调用失败: {exc}")
+
+
+def set_mcp_oauth_hooks(
+    credential_provider: Any = None,
+    refresher: OAuthRefresher | None = None,
+) -> None:
+    """Register protected OAuth hooks for the optional lifecycle feature.
+
+    ``credential_provider`` is an async callable accepting ``server_id`` and
+    returning an :class:`MCPOAuthCredential` or ``None``.  It must keep the
+    token itself in its credential store; the lifecycle only needs expiry.
+    """
+    global _oauth_credential_provider, _oauth_refresher
+    _oauth_credential_provider = credential_provider
+    _oauth_refresher = refresher
+
+
+def _connection_lifecycle_enabled() -> bool:
+    """Read the optional feature flag without requiring a settings migration.
+
+    The flag is deliberately absent until the settings owner introduces it;
+    this preserves the existing one-shot client behaviour by default.
+    """
+    try:
+        from config.settings import get_settings
+
+        return bool(getattr(get_settings(), "mcp_connection_lifecycle_enabled", False))
+    except Exception:
+        return False
+
+
+async def _refresh_oauth_if_configured(server_id: str) -> bool:
+    """Refresh a registered protected credential when its expiry is near.
+
+    Returns ``False`` only for a configured OAuth credential that cannot be
+    safely used.  Servers without an OAuth integration keep the legacy path.
+    """
+    if _oauth_credential_provider is None:
+        return True
+    try:
+        credential = await _oauth_credential_provider(server_id)
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        _connection_lifecycle.mark_error(server_id, "oauth_credential_unavailable")
+        return False
+    if credential is None:
+        return True
+    if not isinstance(credential, MCPOAuthCredential):
+        _connection_lifecycle.mark_error(server_id, "oauth_credential_invalid")
+        return False
+    await _connection_lifecycle.refresh_if_due(server_id, credential, _oauth_refresher)
+    return _connection_lifecycle.get_state(server_id).status != "error"
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -368,14 +434,44 @@ def _wrap_tool_with_safety(tool: BaseTool, server_id: str) -> BaseTool:
     """
     original_run = tool._run
     original_arun = tool._arun
+    telemetry_server_id = redact_mcp_identifier(server_id, "server")
+    telemetry_tool_name = redact_mcp_identifier(tool.name, "tool")
 
     def _make_args_summary(*args, **kwargs) -> str:
         parts = []
         if args:
-            parts.append(_summarize(args, max_len=300))
+            parts.append(
+                redact_mcp_telemetry(
+                    _summarize(args, max_len=300),
+                    server_id=server_id,
+                    tool_name=tool.name,
+                    max_length=300,
+                )
+            )
         if kwargs:
-            parts.append(_summarize(kwargs, max_len=300))
+            parts.append(
+                redact_mcp_telemetry(
+                    _summarize(kwargs, max_len=300),
+                    server_id=server_id,
+                    tool_name=tool.name,
+                    max_length=300,
+                )
+            )
         return " | ".join(parts) if parts else ""
+
+    def _safe_error(exc: BaseException) -> str:
+        return redact_mcp_telemetry(
+            exc,
+            server_id=server_id,
+            tool_name=tool.name,
+        )
+
+    def _safe_result(result: Any) -> str:
+        return redact_mcp_telemetry(
+            _summarize(result),
+            server_id=server_id,
+            tool_name=tool.name,
+        )
 
     def _run_with_safety(*args, **kwargs):
         limiter = get_mcp_rate_limiter()
@@ -383,8 +479,8 @@ def _wrap_tool_with_safety(tool: BaseTool, server_id: str) -> BaseTool:
         if not allowed:
             # 限流：写审计日志并返回结构化错误（不抛异常）
             log_mcp_call(
-                server_id=server_id,
-                tool_name=tool.name,
+                server_id=telemetry_server_id,
+                tool_name=telemetry_tool_name,
                 args_summary=_make_args_summary(*args, **kwargs),
                 status="rate_limited",
                 error=f"rate limit: retry_after={info['retry_after']}s",
@@ -406,20 +502,20 @@ def _wrap_tool_with_safety(tool: BaseTool, server_id: str) -> BaseTool:
             except RuntimeError:
                 # 无事件循环，直接同步写
                 log_mcp_call(
-                    server_id=server_id,
-                    tool_name=tool.name,
+                    server_id=telemetry_server_id,
+                    tool_name=telemetry_tool_name,
                     args_summary=_make_args_summary(*args, **kwargs),
-                    result_summary=_summarize(result),
+                    result_summary=_safe_result(result),
                     duration_ms=duration_ms,
                     status="ok",
                 )
             else:
                 # 在事件循环中（不应发生在 _run，但兜底）
                 log_mcp_call(
-                    server_id=server_id,
-                    tool_name=tool.name,
+                    server_id=telemetry_server_id,
+                    tool_name=telemetry_tool_name,
                     args_summary=_make_args_summary(*args, **kwargs),
-                    result_summary=_summarize(result),
+                    result_summary=_safe_result(result),
                     duration_ms=duration_ms,
                     status="ok",
                 )
@@ -427,12 +523,12 @@ def _wrap_tool_with_safety(tool: BaseTool, server_id: str) -> BaseTool:
         except Exception as exc:
             duration_ms = int((time.monotonic() - start) * 1000)
             log_mcp_call(
-                server_id=server_id,
-                tool_name=tool.name,
+                server_id=telemetry_server_id,
+                tool_name=telemetry_tool_name,
                 args_summary=_make_args_summary(*args, **kwargs),
                 duration_ms=duration_ms,
                 status="error",
-                error=str(exc),
+                error=_safe_error(exc),
             )
             raise
 
@@ -441,8 +537,8 @@ def _wrap_tool_with_safety(tool: BaseTool, server_id: str) -> BaseTool:
         allowed, info = limiter.try_acquire(server_id)
         if not allowed:
             log_mcp_call(
-                server_id=server_id,
-                tool_name=tool.name,
+                server_id=telemetry_server_id,
+                tool_name=telemetry_tool_name,
                 args_summary=_make_args_summary(*args, **kwargs),
                 status="rate_limited",
                 error=f"rate limit: retry_after={info['retry_after']}s",
@@ -461,10 +557,10 @@ def _wrap_tool_with_safety(tool: BaseTool, server_id: str) -> BaseTool:
             # 异步写日志避免阻塞 Agent 主循环
             await asyncio.to_thread(
                 log_mcp_call,
-                server_id=server_id,
-                tool_name=tool.name,
+                server_id=telemetry_server_id,
+                tool_name=telemetry_tool_name,
                 args_summary=_make_args_summary(*args, **kwargs),
-                result_summary=_summarize(result),
+                result_summary=_safe_result(result),
                 duration_ms=duration_ms,
                 status="ok",
             )
@@ -473,12 +569,12 @@ def _wrap_tool_with_safety(tool: BaseTool, server_id: str) -> BaseTool:
             duration_ms = int((time.monotonic() - start) * 1000)
             await asyncio.to_thread(
                 log_mcp_call,
-                server_id=server_id,
-                tool_name=tool.name,
+                server_id=telemetry_server_id,
+                tool_name=telemetry_tool_name,
                 args_summary=_make_args_summary(*args, **kwargs),
                 duration_ms=duration_ms,
                 status="error",
-                error=str(exc),
+                error=_safe_error(exc),
             )
             raise
 
@@ -532,20 +628,27 @@ async def init_mcp_tools() -> list[BaseTool]:
     # 按 server 逐个加载，隔离失败
     for cfg in enabled:
         try:
-            connection = cfg.to_connection()
-        except Exception as exc:
-            msg = f"服务器 '{cfg.server_id}' 连接构建失败: {exc}"
-            server_errors.append(msg)
-            logger.warning(msg)
-            continue
+            async def _load_one_server() -> tuple[MultiServerMCPClient, list[BaseTool]]:
+                connection = cfg.to_connection()
+                # 为每个 server 单独创建 client，隔离失败
+                single_client = MultiServerMCPClient(
+                    connections={cfg.server_id: connection},
+                    tool_name_prefix=True,
+                )
+                return single_client, await single_client.get_tools()
 
-        try:
-            # 为每个 server 单独创建 client，隔离失败
-            single_client = MultiServerMCPClient(
-                connections={cfg.server_id: connection},
-                tool_name_prefix=True,
-            )
-            server_raw_tools = await single_client.get_tools()
+            if _connection_lifecycle_enabled():
+                if not await _refresh_oauth_if_configured(cfg.server_id):
+                    safe_server_id = redact_mcp_identifier(cfg.server_id, "server")
+                    server_errors.append(
+                        f"服务器 '{safe_server_id}' OAuth 凭据无法刷新，请检查凭据配置"
+                    )
+                    continue
+                single_client, server_raw_tools = await _connection_lifecycle.reconnect(
+                    cfg.server_id, _load_one_server
+                )
+            else:
+                single_client, server_raw_tools = await _load_one_server()
             clients.append(single_client)
 
             # 阶段 4.1：应用 allowlist/blocklist 过滤
@@ -577,7 +680,9 @@ async def init_mcp_tools() -> list[BaseTool]:
                     cfg.server_id, kept,
                 )
         except Exception as exc:
-            msg = f"服务器 '{cfg.server_id}' 工具加载失败: {exc}"
+            safe_server_id = redact_mcp_identifier(cfg.server_id, "server")
+            safe_error = redact_mcp_telemetry(exc, server_id=cfg.server_id)
+            msg = f"服务器 '{safe_server_id}' 工具加载失败: {safe_error}"
             server_errors.append(msg)
             logger.warning(msg)
             # 继续加载其他 server，不中断
@@ -606,6 +711,7 @@ async def close_mcp():
     _tools = None
     _config = None
     _last_error = None
+    _connection_lifecycle.clear()
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -641,7 +747,7 @@ async def reload_mcp() -> list[BaseTool]:
             if result is None:
                 result = []
             return result
-        except Exception as exc:
+        except Exception:
             # 恢复旧状态
             _client = old_client
             _tools = old_tools
@@ -672,6 +778,14 @@ def get_mcp_servers_info() -> list[dict[str, Any]]:
         # tls_verify 仅对 URL 类 transport 有意义
         if c.transport in ("sse", "streamable_http", "websocket"):
             info["tls_verify"] = getattr(c, "tls_verify", True)
+        if _connection_lifecycle_enabled():
+            state = _connection_lifecycle.get_state(c.server_id)
+            info["connection"] = {
+                "status": state.status,
+                "reason_code": state.reason_code,
+                "retry_at": state.retry_at,
+                "attempts": state.attempts,
+            }
         if _tools:
             prefix = f"{c.server_id}_"
             info["tool_count"] = sum(1 for t in _tools if t.name.startswith(prefix))
@@ -683,7 +797,9 @@ def get_mcp_servers_info() -> list[dict[str, Any]]:
 
 def get_mcp_error() -> str | None:
     """返回最近一次的错误信息（无错误则返回 None）。"""
-    return _last_error
+    if _last_error is None:
+        return None
+    return "MCP configuration or connection failed; review the affected server configuration."
 
 
 def get_mcp_server_tools(server_id: str) -> list[str]:

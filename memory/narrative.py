@@ -4,10 +4,12 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 import uuid
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import Optional
 
@@ -33,23 +35,99 @@ from memory.ltm_outbox import (
 logger = logging.getLogger(__name__)
 
 
-def _is_unrecoverable_error(exc: Exception) -> bool:
-    """判断异常是否不可恢复（重试无意义）。
+class LTMErrorKind(StrEnum):
+    """Stable, non-sensitive reason codes for durable LTM failures."""
 
-    认证错误（401）、权限错误（403）属于配置问题，
-    重试只会产生相同的错误，应跳过避免无限循环。
-    """
-    exc_name = type(exc).__name__
-    # openai.AuthenticationError / openai.PermissionDeniedError
-    if exc_name in ("AuthenticationError", "PermissionDeniedError"):
-        return True
-    # 检查异常消息中的 HTTP 状态码
-    msg = str(exc)
-    if "401" in msg and "api_key" in msg.lower():
-        return True
-    if "403" in msg and ("permission" in msg.lower() or "forbidden" in msg.lower()):
-        return True
-    return False
+    AUTHENTICATION_FAILED = "authentication_failed"
+    PERMISSION_DENIED = "permission_denied"
+    INVALID_REQUEST = "invalid_request"
+    INVALID_CONFIGURATION = "invalid_configuration"
+    RATE_LIMITED = "rate_limited"
+    TEMPORARY_UNAVAILABLE = "temporary_unavailable"
+    NETWORK_ERROR = "network_error"
+    UNKNOWN = "unknown_error"
+
+    @property
+    def permanent(self) -> bool:
+        return self in {
+            self.AUTHENTICATION_FAILED,
+            self.PERMISSION_DENIED,
+            self.INVALID_REQUEST,
+            self.INVALID_CONFIGURATION,
+        }
+
+
+def _error_status_code(exc: BaseException) -> int | None:
+    """Read HTTP status from supported client errors without importing clients."""
+    status_code = getattr(exc, "status_code", None)
+    if status_code is None:
+        response = getattr(exc, "response", None)
+        status_code = getattr(response, "status_code", None)
+    if isinstance(status_code, int):
+        return status_code
+    return None
+
+
+def classify_ltm_error(exc: BaseException) -> LTMErrorKind:
+    """Classify failures before an LTM retry without depending on provider SDKs."""
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        status_code = _error_status_code(current)
+        if status_code == 401:
+            return LTMErrorKind.AUTHENTICATION_FAILED
+        if status_code == 403:
+            return LTMErrorKind.PERMISSION_DENIED
+        if status_code in {400, 413, 422}:
+            return LTMErrorKind.INVALID_REQUEST
+        if status_code == 404:
+            return LTMErrorKind.INVALID_CONFIGURATION
+        if status_code == 429:
+            return LTMErrorKind.RATE_LIMITED
+        if status_code in {408, 409, 425} or (status_code is not None and status_code >= 500):
+            return LTMErrorKind.TEMPORARY_UNAVAILABLE
+
+        error_name = type(current).__name__
+        if error_name == "AuthenticationError":
+            return LTMErrorKind.AUTHENTICATION_FAILED
+        if error_name == "PermissionDeniedError":
+            return LTMErrorKind.PERMISSION_DENIED
+        if error_name in {"BadRequestError", "UnprocessableEntityError"}:
+            return LTMErrorKind.INVALID_REQUEST
+        if error_name in {"NotFoundError", "ConfigurationError"}:
+            return LTMErrorKind.INVALID_CONFIGURATION
+        if error_name == "RateLimitError":
+            return LTMErrorKind.RATE_LIMITED
+        if isinstance(current, (TimeoutError, ConnectionError, OSError)) or error_name in {
+            "APIConnectionError",
+            "APITimeoutError",
+            "ServiceUnavailableError",
+            "InternalServerError",
+            "ConnectError",
+            "ReadTimeout",
+            "WriteTimeout",
+            "PoolTimeout",
+        }:
+            return LTMErrorKind.NETWORK_ERROR
+
+        # Legacy SDKs can surface only a text message. Restrict this fallback
+        # to unambiguous status/credential wording rather than broad substring
+        # matching that would turn arbitrary model output into control flow.
+        message = str(current).lower()
+        if re.search(r"(?<!\\d)401(?!\\d)", message) and "api" in message:
+            return LTMErrorKind.AUTHENTICATION_FAILED
+        if re.search(r"(?<!\\d)403(?!\\d)", message) and (
+            "permission" in message or "forbidden" in message
+        ):
+            return LTMErrorKind.PERMISSION_DENIED
+        current = current.__cause__ or current.__context__
+    return LTMErrorKind.UNKNOWN
+
+
+def _is_unrecoverable_error(exc: Exception) -> bool:
+    """Compatibility predicate retained for callers that only need permanence."""
+    return classify_ltm_error(exc).permanent
 
 
 # LTM CRUD agent 最大重试次数（超过后放弃，避免无限循环）
@@ -508,6 +586,7 @@ class LongTermMemoryInterface:
         outbox_lease_seconds: float = 300,
         outbox_retry_base_seconds: float = 1,
         outbox_retry_max_seconds: float = 300,
+        retry_policy_enabled: bool | None = None,
     ) -> None:
         self._memory_path = Path(memory_path)
         self._mm = MemoryManager(yaml_file=str(self._memory_path))
@@ -530,6 +609,9 @@ class LongTermMemoryInterface:
         self._queue: asyncio.Queue | None = None
         self._consumer_task: asyncio.Task | None = None
         self._ws_registry = None
+        # ``None`` preserves direct-library callers' historical behavior.
+        # The app passes the default-off rollout setting explicitly.
+        self._retry_policy_enabled = retry_policy_enabled
 
     @property
     def is_listening(self) -> bool:
@@ -547,6 +629,10 @@ class LongTermMemoryInterface:
             return ""
         mm = MemoryManager(yaml_file=str(self._memory_path))
         return _format_narrative(mm.show())
+
+    def get_diagnostic_summary(self) -> dict[str, object]:
+        """Expose a payload-free LTM status summary for runtime health checks."""
+        return self._outbox.diagnostic_summary()
 
     def start_listening(self, llm, ws_registry=None) -> None:
         """保存 LLM 引用并确保后台消费者正在运行。
@@ -868,26 +954,36 @@ class LongTermMemoryInterface:
                         self._outbox.release_cancelled(job)
                     raise
                 except Exception as e:
-                    # 认证类错误不可恢复，重试无意义，直接标记完成避免无限循环
-                    if _is_unrecoverable_error(e):
+                    error_kind = classify_ltm_error(e)
+                    retry_policy_enabled = self._retry_policy_enabled is not False
+                    if job is not None and retry_policy_enabled and error_kind.permanent:
                         logger.error(
-                            "[ltm] CRUD agent unrecoverable error (skipping retry): %s",
-                            e,
+                            "[ltm] CRUD agent terminal error code=%s; abandoning projection",
+                            error_kind.value,
                         )
-                        if job is not None:
-                            self._outbox.complete(job)
-                    elif job is not None and job.attempts >= _MAX_LTM_RETRIES:
-                        # 超过最大重试次数，放弃避免无限循环（如网络连接错误）
+                        self._outbox.abandon(job, error_kind.value, str(e))
+                    elif job is not None and retry_policy_enabled and job.attempts >= _MAX_LTM_RETRIES:
                         logger.error(
-                            "[ltm] CRUD agent max retries (%d) reached, giving up: %s",
+                            "[ltm] CRUD agent retry budget exhausted after %d attempts code=%s",
                             _MAX_LTM_RETRIES,
-                            e,
+                            error_kind.value,
                         )
-                        self._outbox.complete(job)
+                        self._outbox.abandon(job, "retry_budget_exhausted", str(e))
                     else:
-                        logger.error("[ltm] CRUD agent error: %s", e, exc_info=True)
+                        logger.error(
+                            "[ltm] CRUD agent retryable error code=%s",
+                            error_kind.value,
+                            exc_info=True,
+                        )
                         if job is not None:
-                            self._outbox.fail(session_id, turn_id, job.lease_token, str(e))
+                            self._outbox.fail(
+                                session_id,
+                                turn_id,
+                                job.lease_token,
+                                str(e),
+                                failure_code=error_kind.value,
+                                fencing_token=job.fencing_token,
+                            )
                 finally:
                     if heartbeat_stop is not None:
                         heartbeat_stop.set()
