@@ -1087,16 +1087,23 @@ async def _run_agent_turn(
                     max_tokens=current_max_tokens,
                 )
         else:
-            final_answer = await _stream_turn(
-                agent_maxma,
-                inputs,
-                config,
-                ws,
-                session,
-                system_prompt,
-                model_name=current_model_name,
-                max_tokens=current_max_tokens,
-            )
+            _turn_timeout = 600
+            try:
+                from config.settings import get_settings
+                _turn_timeout = get_settings().turn_timeout
+            except Exception:
+                pass
+            async with asyncio.timeout(_turn_timeout):
+                final_answer = await _stream_turn(
+                    agent_maxma,
+                    inputs,
+                    config,
+                    ws,
+                    session,
+                    system_prompt,
+                    model_name=current_model_name,
+                    max_tokens=current_max_tokens,
+                )
         # This records execution outcome, rather than inferring it from a
         # localized fallback/error string.  The graph writes the marker even
         # when it turns a provider failure into a user-facing AI message.

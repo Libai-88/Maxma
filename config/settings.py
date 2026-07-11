@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     circuit_breaker_recovery_timeout: int = 60  # 熔断后冷却时间（秒），过后进入 half-open
     circuit_breaker_half_open_max_calls: int = 1  # half-open 状态下允许的探测调用数
 
+    # LLM 调用超时（秒）。到达超时后放弃当前调用，防止 provider 卡死导致前端无限"思考中"。
+    llm_invoke_timeout: int = 120
+    # 单轮对话整体超时（秒），覆盖所有工具调用+LLM 调用的总时长。
+    turn_timeout: int = 600
+
     # 阶段 3.6：LLM 审批网关 —— 工具执行前的统一审批决策层
     approval_required_tools: list[str] = [
         "run_python",

@@ -645,7 +645,19 @@ def build_agent(
                     attempted_provider_ids.add(provider_id)
                 started_at = time.monotonic()
                 try:
-                    response = await active_llm.ainvoke(messages)
+                    _llm_timeout = 120
+                    try:
+                        from config.settings import get_settings
+                        _llm_timeout = get_settings().llm_invoke_timeout
+                    except Exception:
+                        pass
+                    response = await asyncio.wait_for(
+                        active_llm.ainvoke(messages), timeout=_llm_timeout
+                    )
+                except asyncio.TimeoutError:
+                    raise TimeoutError(
+                        f"LLM 调用超时（{_llm_timeout}s），provider={provider_id}"
+                    )
                 except Exception as e:
                     retryable = False
                     if active_provider is not None and provider_manager is not None:

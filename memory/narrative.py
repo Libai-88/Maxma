@@ -914,9 +914,16 @@ class LongTermMemoryInterface:
                         turn_id,
                         lambda: self._outbox.projection_fence(projection_lease),
                     ):
-                        await agent.ainvoke(
-                            {"messages": [HumanMessage(content=user_prompt)]},
-                            config=config,
+                        # 超时保护：langgraph 的 arun_with_retry 在 401 等错误上
+                        # 会内部重试多次，绕过 _MAX_LTM_RETRIES。加 90s 超时
+                        # 确保即使 langgraph 疯狂重试，最终也会被超时打断，
+                        # 由下方 except 块分类错误并 abandon/fail。
+                        await asyncio.wait_for(
+                            agent.ainvoke(
+                                {"messages": [HumanMessage(content=user_prompt)]},
+                                config=config,
+                            ),
+                            timeout=90,
                         )
                         if lease_lost.is_set():
                             raise ProjectionFenceLost(
