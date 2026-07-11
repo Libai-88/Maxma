@@ -660,18 +660,30 @@ fn main() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
-                // 标记正在关闭，防止触发重启逻辑
-                let state = window.state::<ShuttingDown>();
-                state.0.store(true, Ordering::Relaxed);
+                // 仅主窗口关闭时才执行 sidecar 清理和应用退出。
+                // quick-chat 窗口的 Destroyed（如用户点击其原生关闭按钮）不触发清理，
+                // 避免误杀后端导致主窗口失去服务。
+                if window.label() == "main" {
+                    // 标记正在关闭，防止触发重启逻辑
+                    let state = window.state::<ShuttingDown>();
+                    state.0.store(true, Ordering::Relaxed);
 
-                // 显式 kill sidecar 进程
-                let child_state = window.state::<SidecarChild>();
-                if let Ok(mut guard) = child_state.0.lock() {
-                    if let Some(child) = guard.take() {
-                        write_startup_log("[tauri] 窗口关闭，正在终止后端...");
-                        child.kill().ok();
-                    }
-                };
+                    // 显式 kill sidecar 进程（PyInstaller bootloader）
+                    let child_state = window.state::<SidecarChild>();
+                    if let Ok(mut guard) = child_state.0.lock() {
+                        if let Some(child) = guard.take() {
+                            write_startup_log("[tauri] 主窗口关闭，正在终止后端...");
+                            child.kill().ok();
+                        }
+                    };
+
+                    // 关键：必须退出整个 Tauri 进程。
+                    // 否则隐藏的 quick-chat 窗口会让进程继续存活，
+                    // Job Object 句柄不释放，KILL_ON_JOB_CLOSE 不触发，
+                    // PyInstaller onefile 的 Python 子进程成为孤儿，占用端口阻塞下次启动。
+                    write_startup_log("[tauri] 主窗口已关闭，退出应用以释放 Job Object...");
+                    window.app_handle().exit(0);
+                }
             }
         })
         .run(tauri::generate_context!())

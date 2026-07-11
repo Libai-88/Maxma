@@ -27,6 +27,16 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
       },
+      // 关键：去重 CodeMirror 核心包，确保运行时只有一份 @codemirror/state 实例。
+      // 否则 vue-codemirror 和直接 import 的 @codemirror/view 各自打包一份 state，
+      // EditorView.lineWrapping（FacetProvider）的 instanceof 检查失败，
+      // 抛出 "Unrecognized extension value in extension set ([object Object])"。
+      dedupe: [
+        '@codemirror/state',
+        '@codemirror/view',
+        '@codemirror/language',
+        '@codemirror/commands',
+      ],
     },
     build: {
       rollupOptions: {
@@ -44,6 +54,10 @@ export default defineConfig(({ mode }) => {
               'vue-codemirror',
               '@codemirror/lang-markdown',
               '@codemirror/theme-one-dark',
+              '@codemirror/view',
+              '@codemirror/state',
+              '@codemirror/language',
+              '@codemirror/commands',
             ],
           },
         },
