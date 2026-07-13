@@ -4,12 +4,16 @@ Explicit re-exports so PyInstaller and static analysis can resolve
 these modules at build time rather than discovering them dynamically.
 """
 
-from tools.interaction.tool_approve_user import ApproveUserTool
-from tools.interaction.tool_confirm_user import ConfirmUserTool
-from tools.interaction.tool_tool_confirmation import ToolConfirmationTool
+from tools.interaction.tool_ask_confirm import AskUserConfirmTool
+from tools.interaction.tool_ask_qa import AskUserQATool
+from tools.interaction.tool_ask_user import AskUserTool
+from tools.interaction.tool_multi_choice import AskUserMultiChoiceTool
+from tools.interaction.tool_single_choice import AskUserSingleChoiceTool
 
 __all__ = [
-    "ApproveUserTool",
-    "ConfirmUserTool",
-    "ToolConfirmationTool",
+    "AskUserConfirmTool",
+    "AskUserQATool",
+    "AskUserTool",
+    "AskUserMultiChoiceTool",
+    "AskUserSingleChoiceTool",
 ]
