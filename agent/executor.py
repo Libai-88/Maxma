@@ -958,6 +958,7 @@ def make_executor_router(max_replans: int = 2):
 
         # 全部完成 → END
         if current_index >= plan.step_count:
+            return END
 
         # 检查是否需要重规划
         step_status = state.get("step_status", {})
