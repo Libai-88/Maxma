@@ -373,15 +373,29 @@ class ProviderManager:
         return self._store.get(provider_id)
 
     def save_config(self, config: ProviderConfig) -> None:
-        """保存配置并在加载缓冲。"""
+        """保存配置并在加载缓冲。load_all 失败时回滚 store。"""
         self._store.save(config)
-        self.load_all()
+        try:
+            self.load_all()
+        except Exception:
+            logger.error("save_config: load_all 失败，回滚 store 保存", exc_info=True)
+            self._store.delete(config.id)
+            raise
 
     def delete_config(self, provider_id: str) -> bool:
-        """删除配置并在加载缓冲。"""
+        """删除配置并在加载缓冲。load_all 失败时回滚 store。"""
+        # 保存原配置用于回滚
+        original = self._store.get(provider_id)
         result = self._store.delete(provider_id)
         if result:
-            self.load_all()
+            try:
+                self.load_all()
+            except Exception:
+                logger.error("delete_config: load_all 失败，回滚 store 保存", exc_info=True)
+                if original is not None:
+                    self._store.save(original)
+                self.load_all()
+                raise
         return result
 
     # ── Provider 工厂 ──────────────────────────────────

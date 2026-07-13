@@ -56,7 +56,7 @@ def _build_fts_query(query: str) -> str:
     """将用户查询转为 FTS 查询（词法 token + CJK n-grams，OR 连接）。"""
     tokens = re.findall(r'\w+', query)
     cjk_grams = _cjk_ngrams(query).split()
-    all_tokens = tokens + cjk_grams
+    all_tokens = list(dict.fromkeys(tokens + cjk_grams))
     if not all_tokens:
         return query
     # FTS5 OR 查询
@@ -178,11 +178,24 @@ class FactStore:
                 ).fetchone()
                 if existing is not None:
                     return str(existing["id"])
-            self._conn.execute(
-                "INSERT INTO facts (id, content, tags, source, session_id, created_at, updated_at, ttl, expires_at, idempotency_key) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (fact_id, content, tags_json, source, session_id, now, now, ttl, expires_at, idempotency_key)
-            )
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                self._conn.execute(
+                    "INSERT INTO facts (id, content, tags, source, session_id, created_at, updated_at, ttl, expires_at, idempotency_key) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (fact_id, content, tags_json, source, session_id, now, now, ttl, expires_at, idempotency_key)
+                )
+            except Exception:
+                # 跨进程竞态：另一个进程已插入同 idempotency_key 的行，回退查询
+                self._conn.execute("ROLLBACK")
+                if idempotency_key:
+                    existing = self._conn.execute(
+                        "SELECT id FROM facts WHERE idempotency_key = ?",
+                        (idempotency_key,),
+                    ).fetchone()
+                    if existing is not None:
+                        return str(existing["id"])
+                raise
             if self._fts_available:
                 search_text = _build_search_text(content, tags or [])
                 self._conn.execute(

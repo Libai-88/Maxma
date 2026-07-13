@@ -18,11 +18,6 @@ PII_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("[BANK_CARD]", re.compile(r'\b\d{16,19}\b')),
 ]
 
-# 合并的正则
-PII_PATTERN = re.compile('|'.join(
-    f'(?P<pattern_{i}>{p.pattern})' for i, (_, p) in enumerate(PII_PATTERNS)
-))
-
 
 def scrub_pii(text: str, *, max_length: int = 500) -> str:
     """脱敏文本中的 PII 信息。

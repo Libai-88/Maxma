@@ -160,7 +160,6 @@ class TestAsyncSubagentFlag:
 class TestPlanOneRolloutFlags:
     def test_plan_one_rollout_flags_default_off(self, monkeypatch):
         for name in (
-            "LTM_RETRY_POLICY_ENABLED",
             "CACHE_PRESERVING_COMPACTION_ENABLED",
             "MEMORY_TICKER_ENABLED",
             "FACT_STORE_RETRIEVAL_ENABLED",
@@ -171,7 +170,8 @@ class TestPlanOneRolloutFlags:
 
         settings = Settings(_env_file=None)
 
-        assert settings.ltm_retry_policy_enabled is False
+        # ltm_retry_policy_enabled 现在是安全修复，默认开启
+        assert settings.ltm_retry_policy_enabled is True
         assert settings.cache_preserving_compaction_enabled is False
         assert settings.memory_ticker_enabled is False
         assert settings.fact_store_retrieval_enabled is False

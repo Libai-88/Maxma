@@ -13,6 +13,7 @@ import importlib.util
 import sys
 import types
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -25,16 +26,6 @@ def _load_tool_python_module():
     spec = importlib.util.spec_from_file_location("tool_python_meta_test", module_path)
     module = importlib.util.module_from_spec(spec)
 
-    # Save originals so we can restore sys.modules after loading (避免污染其他测试)
-    _saved = {}
-    for _name in ("api", "api.interaction", "tools.base", "tools"):
-        _saved[_name] = sys.modules.get(_name)
-
-    if "api" not in sys.modules:
-        sys.modules["api"] = types.ModuleType("api")
-    if "api.interaction" not in sys.modules:
-        sys.modules["api.interaction"] = types.ModuleType("api.interaction")
-
     fake_tools_base = types.ModuleType("tools.base")
 
     class _FakeToolBase:
@@ -44,16 +35,15 @@ def _load_tool_python_module():
     fake_tools_base.format_error = lambda message: {"ok": False, "error": message}
     fake_tools_base.format_success = lambda data: {"ok": True, "data": data}
     fake_tools_base.register_tool = lambda cls: cls
-    sys.modules["tools.base"] = fake_tools_base
 
-    spec.loader.exec_module(module)
+    mock_modules: dict[str, types.ModuleType] = {
+        "api": types.ModuleType("api"),
+        "api.interaction": types.ModuleType("api.interaction"),
+        "tools.base": fake_tools_base,
+    }
 
-    # 恢复 sys.modules，避免空 stub 模块污染后续测试
-    for _name, _prev in _saved.items():
-        if _prev is not None:
-            sys.modules[_name] = _prev
-        else:
-            sys.modules.pop(_name, None)
+    with patch.dict(sys.modules, mock_modules, clear=False):
+        spec.loader.exec_module(module)
 
     return module
 

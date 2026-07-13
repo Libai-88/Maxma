@@ -92,46 +92,48 @@ class ErrorRecoveryManager:
         self._circuit_breakers: dict[str, CircuitBreaker] = {}
         self._lock = threading.Lock()
 
-    # ── 阶段 3.1：CircuitBreaker 集成 ──────────────────────
+    # ── CircuitBreaker session isolation (PLAN-2) ────────────────
 
-    def get_circuit_breaker(self, tool_name: str) -> CircuitBreaker:
-        """获取（或创建）指定工具的熔断器实例。
+    def _cb_key(self, tool_name: str, session_id: str | None = None) -> str:
+        """Generate circuit breaker key with optional session_id prefix."""
+        return f"{tool_name}:{session_id}" if session_id else tool_name
 
-        每个工具独立一个 CircuitBreaker，首次访问时按 settings 配置创建。
+    def get_circuit_breaker(self, tool_name: str, session_id: str | None = None) -> CircuitBreaker:
+        """Per-tool CircuitBreaker accessor with optional session isolation.
+
+        When session_id is provided the internal key includes it so that
+        parallel graph instances don't share circuit breaker state.
         """
+        key = self._cb_key(tool_name, session_id)
         with self._lock:
-            if tool_name not in self._circuit_breakers:
-                self._circuit_breakers[tool_name] = create_circuit_breaker_from_settings()
-            return self._circuit_breakers[tool_name]
+            if key not in self._circuit_breakers:
+                self._circuit_breakers[key] = create_circuit_breaker_from_settings()
+            return self._circuit_breakers[key]
 
-    def is_tool_circuit_open(self, tool_name: str) -> bool:
-        """检查工具的熔断器是否处于 open 状态（硬熔断，不含 half-open）。
-
-        executor 在工具失败后调用此方法，若返回 True 则强制触发重规划
-        （继续调用该工具无意义）。half-open 状态允许探测调用，不算硬熔断。
-        如需判断是否允许调用，使用 can_tool_execute。
-        """
-        cb = self.get_circuit_breaker(tool_name)
+    def is_tool_circuit_open(self, tool_name: str, session_id: str | None = None) -> bool:
+        cb = self.get_circuit_breaker(tool_name, session_id)
         return cb.is_open()
 
-    def can_tool_execute(self, tool_name: str) -> bool:
-        """检查工具是否可执行（熔断器允许调用）。
-
-        与 is_tool_circuit_open 的区别：此方法在 half-open 状态下会消耗探测配额。
-        executor 在调用工具前应使用此方法。
-        """
-        cb = self.get_circuit_breaker(tool_name)
+    def can_tool_execute(self, tool_name: str, session_id: str | None = None) -> bool:
+        cb = self.get_circuit_breaker(tool_name, session_id)
         return cb.can_execute()
 
-    def get_all_circuit_stats(self) -> dict[str, dict]:
-        """获取所有工具的熔断器统计（用于监控/前端展示）。"""
+    def get_all_circuit_stats(self, session_id: str | None = None) -> dict[str, dict]:
         with self._lock:
+            if session_id:
+                prefix = f"{session_id}:"
+                return {
+                    name: cb.get_stats()
+                    for name, cb in self._circuit_breakers.items()
+                    if name.startswith(prefix) or ":" not in name
+                }
             return {
                 name: cb.get_stats()
                 for name, cb in self._circuit_breakers.items()
             }
 
-    def record_failure(self, tool_name: str, error: str) -> Optional[RecoverySuggestion]:
+
+    def record_failure(self, tool_name: str, error: str, session_id: str | None = None) -> Optional[RecoverySuggestion]:
         """记录一次工具失败。如果连续失败达到阈值，返回恢复建议。
 
         阶段 3.1：同步驱动 CircuitBreaker.record_failure（在自身锁外调用，
@@ -157,12 +159,12 @@ class ErrorRecoveryManager:
                     self._recovery_history = self._recovery_history[-200:]
 
         # 阶段 3.1：同步驱动 CircuitBreaker（在锁外调用避免嵌套锁）
-        cb = self.get_circuit_breaker(tool_name)
+        cb = self.get_circuit_breaker(tool_name, session_id)
         cb.record_failure(error)
 
         return suggestion
 
-    def record_success(self, tool_name: str) -> None:
+    def record_success(self, tool_name: str, session_id: str | None = None) -> None:
         """记录一次工具成功，重置连续失败计数。
 
         阶段 3.1：同步驱动 CircuitBreaker.record_success。
@@ -173,7 +175,7 @@ class ErrorRecoveryManager:
                 self._records[tool_name].recovery_suggested = False
 
         # 阶段 3.1：同步驱动 CircuitBreaker（在锁外调用避免嵌套锁）
-        cb = self.get_circuit_breaker(tool_name)
+        cb = self.get_circuit_breaker(tool_name, session_id)
         cb.record_success()
 
     def get_failure_count(self, tool_name: str) -> int:

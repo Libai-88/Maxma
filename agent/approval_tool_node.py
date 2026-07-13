@@ -283,20 +283,17 @@ class ApprovalToolNode:
             response = await asyncio.wait_for(future, timeout=settings.approval_timeout)
         except TimeoutError:
             # 超时后清理挂起的 Future，防止内存泄漏
-            from api.interaction import cleanup
-            try:
-                await cleanup(resolved_id)
-            except Exception:
-                pass
             return ApprovalDecision.TIMEOUT
         except Exception as e:
             logger.error("Approval wait failed: %s", e)
+            return ApprovalDecision.REJECTED
+        finally:
+            # 确保 Future 始终被清理（防 ws.send_json → resolve 双重异常路径）
             from api.interaction import cleanup
             try:
                 await cleanup(resolved_id)
             except Exception:
                 pass
-            return ApprovalDecision.REJECTED
 
         # 判断响应（兼容多种 yes 表达）
         if isinstance(response, str) and response.lower() in (

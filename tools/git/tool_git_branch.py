@@ -6,7 +6,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from tools.base import ToolBase, format_error, format_success, register_tool
-from tools.git._utils import validate_git_arg
+from tools.git._utils import validate_git_arg, validate_repo_path
 
 
 class GitBranchInput(BaseModel):
@@ -40,9 +40,9 @@ class GitBranchTool(ToolBase):
         if get_doc:
             return self._load_doc()
 
-        cwd = repo_path.strip() if repo_path.strip() else None
-        if cwd and not Path(cwd).is_dir():
-            return format_error(f"目录不存在: {cwd}")
+        cwd, err = validate_repo_path(repo_path) if repo_path.strip() else (None, None)
+        if err:
+            return format_error(err)
 
         action = action.strip().lower()
 

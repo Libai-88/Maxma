@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -41,6 +42,16 @@ def should_verify(answer: str) -> bool:
     避免无意义 LLM 调用并直接放行。
     """
     return len(answer.strip()) >= _MIN_ANSWER_LENGTH_TO_VERIFY
+
+
+def _llm_timeout() -> float:
+    """获取 LLM 调用超时（秒），回退默认 120s。"""
+    try:
+        from config.settings import get_settings
+
+        return get_settings().llm_invoke_timeout
+    except Exception:
+        return 120.0
 
 
 async def grade_answer(
@@ -75,7 +86,10 @@ async def grade_answer(
         prompt = build_verifier_prompt()
         user_msg = _build_user_msg(question, answer, evidence)
         messages = [SystemMessage(content=prompt), HumanMessage(content=user_msg)]
-        response = await model.ainvoke(messages)
+        response = await asyncio.wait_for(
+            model.ainvoke(messages),
+            timeout=_llm_timeout(),
+        )
         content = (
             response.content
             if isinstance(response.content, str)

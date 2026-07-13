@@ -167,11 +167,17 @@ class DeferredResultStore:
             conn.commit()
         return self._row_to_run(row)
 
-    def get(self, run_id: str) -> DeferredRun | None:
+    def get(self, run_id: str, parent_session_id: str | None = None) -> DeferredRun | None:
         with self._connection() as conn:
-            row = conn.execute(
-                "SELECT * FROM deferred_subagent_runs WHERE run_id = ?", (run_id,)
-            ).fetchone()
+            if parent_session_id:
+                row = conn.execute(
+                    "SELECT * FROM deferred_subagent_runs WHERE run_id = ? AND parent_session_id = ?",
+                    (run_id, parent_session_id),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT * FROM deferred_subagent_runs WHERE run_id = ?", (run_id,)
+                ).fetchone()
         return self._row_to_run(row) if row is not None else None
 
     def list_parent_runs(self, parent_session_id: str, limit: int = 100) -> list[DeferredRun]:

@@ -74,10 +74,13 @@ class FileManageTool(ToolBase):
         if err:
             return err
 
-        if os.path.isfile(file_path):
-            os.remove(file_path)
-        elif os.path.isdir(file_path):
-            shutil.rmtree(file_path)
+        # 使用 resolve 后的规范路径（TOCTOU 保护）
+        resolved = resolve_path_for_access(file_path)
+
+        if os.path.isfile(resolved):
+            os.remove(resolved)
+        elif os.path.isdir(resolved):
+            shutil.rmtree(resolved)
         else:
             return format_error(f"未知的文件类型: {file_path}")
 
@@ -101,7 +104,11 @@ class FileManageTool(ToolBase):
             if err:
                 return format_error(err)
 
-        os.rename(file_path, new_path)
+        # 使用 resolve 后的规范路径（TOCTOU 保护）
+        file_path_resolved = resolve_path_for_access(file_path)
+        new_path_resolved = resolve_path_for_access(new_path)
+
+        os.rename(file_path_resolved, new_path_resolved)
         return format_success({
             "message": f"已重命名: {file_path} → {new_path}",
             "old_path": file_path,

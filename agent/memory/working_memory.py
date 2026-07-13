@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -66,28 +67,33 @@ class WorkingMemoryStore:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._path.write_text(content, encoding="utf-8")
 
-    def read_now_section(self) -> str:
+    def read_now_section(self, content: str | None = None) -> str:
         """读取 # now 块的内容。
 
         从第一个 `# now` 到下一个 `#` 级标题（或文件末尾）。
+        可接受预读取的 content 参数避免二次 I/O。
         """
-        content = self.read_content()
+        if content is None:
+            content = self.read_content()
         if not content:
             return ""
 
-        # 找 # now
-        now_idx = content.find("# now")
-        if now_idx == -1:
+        # 找 # now（必须行首，避免匹配内容中的提及）
+        now_match = re.search(r"^# now\b", content, re.MULTILINE)
+        if not now_match:
             return ""
+        now_idx = now_match.start()
 
         # 找下一个 # 级标题（以 # 开头但不是 ##）
         # 从 # now 之后搜索
         after_now = content[now_idx + 5:]  # 跳过 "# now"
         next_h1_idx = -1
-        for i, line in enumerate(after_now.split("\n")):
+        pos = 0
+        for line in after_now.split("\n"):
             if line.startswith("# ") and not line.startswith("## "):
-                next_h1_idx = after_now.index(line)
+                next_h1_idx = pos
                 break
+            pos += len(line) + 1  # +1 for the newline
 
         if next_h1_idx == -1:
             return content[now_idx:]
@@ -118,7 +124,7 @@ class WorkingMemoryStore:
             return f"## 工作记忆\n\n{content}"
 
         # 大文件：只返回 # now 块 + # History 标题大纲
-        now_section = self.read_now_section()
+        now_section = self.read_now_section(content)
 
         # 提取 # History 的标题大纲
         history_headings = []
@@ -160,7 +166,9 @@ class WorkingMemoryStore:
         else:
             # 在 # History 标题之后插入
             # 找到 # History 行的末尾
-            line_end = content.index("\n", history_idx)
+            line_end = content.find("\n", history_idx)
+            if line_end == -1:
+                line_end = len(content)
             content = content[:line_end + 1] + "\n" + new_heading + content[line_end + 1:]
 
         self.write_content(content)

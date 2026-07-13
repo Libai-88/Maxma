@@ -82,7 +82,10 @@ class AuthMiddleware:
         if scope["type"] == "websocket":
             protocols = scope.get("subprotocols", [])
             if protocols:
-                return str(protocols[0])
+                token = str(protocols[0])
+                # 验证 token 格式：最小长度 8，不以 '-' 开头（防参数注入）
+                if len(token) >= 8 and not token.startswith("-"):
+                    return token
 
         return ""
 

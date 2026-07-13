@@ -27,6 +27,14 @@ def _reset_scheduler():
     scheduler._tick_count = 0
 
 
+async def _poll_task_started(scheduler) -> bool:
+    for _ in range(50):
+        if scheduler._scheduler_task is not None:
+            return True
+        await asyncio.sleep(0.1)
+    return False
+
+
 class TestSchedulerLifecycle:
     @pytest.mark.asyncio
     async def test_start_creates_task(self):
@@ -55,7 +63,7 @@ class TestSchedulerLifecycle:
         mock_app.state.llm = MagicMock()
 
         start_autonomy(mock_app, interval_seconds=1)
-        await asyncio.sleep(0.1)
+        await _poll_task_started(scheduler)
         await stop_autonomy()
 
         # stop_autonomy sets _scheduler_task to None
@@ -229,7 +237,7 @@ class TestSchedulerStatus:
         mock_app.state.llm = MagicMock()
 
         start_autonomy(mock_app, interval_seconds=1)
-        await asyncio.sleep(0.1)
+        await _poll_task_started(scheduler)
 
         status = get_autonomy_status()
         assert status["running"] is True

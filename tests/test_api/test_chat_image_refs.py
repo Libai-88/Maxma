@@ -6,6 +6,7 @@ import json
 import sys
 import types
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -15,109 +16,81 @@ def _load_chat_module():
     spec = importlib.util.spec_from_file_location("chat_under_test", module_path)
     module = importlib.util.module_from_spec(spec)
 
-    fake_modules: dict[str, types.ModuleType] = {}
+    # 构建 mock 模块字典，用 patch.dict 原子注入 sys.modules
+    mock_modules: dict[str, types.ModuleType] = {}
 
-    def add_module(name: str, module_obj: types.ModuleType):
-        if name not in fake_modules:
-            fake_modules[name] = sys.modules.get(name)
-        sys.modules[name] = module_obj
-
-    def ensure_package(name: str):
-        if name not in sys.modules:
-            pkg = types.ModuleType(name)
+    def _make_pkg(name: str, attrs: dict | None = None) -> types.ModuleType:
+        pkg = types.ModuleType(name)
+        if attrs:
+            for k, v in attrs.items():
+                setattr(pkg, k, v)
+        if "." not in name:
             pkg.__path__ = []
-            fake_modules[name] = None
-            sys.modules[name] = pkg
+        return pkg
 
-    ensure_package("langchain_core")
-    ensure_package("agent")
-    ensure_package("api")
-    ensure_package("api.callbacks")
-    ensure_package("tools")
+    mock_modules["fastapi"] = _make_pkg("fastapi", {
+        "APIRouter": lambda: types.SimpleNamespace(websocket=lambda *a, **k: (lambda fn: fn)),
+        "WebSocket": object,
+        "WebSocketDisconnect": type("WebSocketDisconnect", (Exception,), {}),
+    })
+    mock_modules["langchain_core.messages"] = _make_pkg("langchain_core.messages", {
+        "AIMessage": object,
+        "HumanMessage": object,
+        "ToolMessage": object,
+    })
+    mock_modules["agent.graph"] = _make_pkg("agent.graph", {"build_agent": lambda *a, **k: None})
+    mock_modules["agent.prompts"] = _make_pkg("agent.prompts", {
+        "build_system_prompt": lambda: "",
+        "get_system_prompt_parts": lambda: {},
+    })
+    mock_modules["agent.context_manager"] = _make_pkg("agent.context_manager", {
+        "maybe_trim_checkpoint": lambda *a, **k: None,
+        "commit_to_episodic": lambda *a, **k: None,
+    })
+    mock_modules["api.interaction"] = _make_pkg("api.interaction", {
+        "current_ws": types.SimpleNamespace(set=lambda value: None),
+        "current_session_id": types.SimpleNamespace(get=lambda: "", set=lambda value: None),
+        "set_session_auto_approve": lambda *a, **k: None,
+        "cancel_session": lambda *a, **k: None,
+        "clear_session_settings": lambda *a, **k: None,
+        "resolve": lambda *a, **k: True,
+    })
+    mock_modules["api.callbacks.websocket_callback"] = _make_pkg("api.callbacks.websocket_callback", {
+        "WebSocketCallback": object,
+    })
+    mock_modules["api.const_session_store"] = _make_pkg("api.const_session_store", {
+        "save_const_session": lambda *a, **k: None,
+        "serialize_messages": lambda *a, **k: [],
+    })
+    mock_modules["api.context_usage"] = _make_pkg("api.context_usage", {
+        "estimate_context_usage": lambda *a, **k: {},
+    })
+    mock_modules["api.errors"] = _make_pkg("api.errors", {
+        "ErrorCode": types.SimpleNamespace(
+            CANCELLED="cancelled", AGENT_ERROR="agent_error", NO_LLM="no_llm"
+        ),
+        "format_ws_error": lambda *a, **k: {},
+    })
+    mock_modules["api.session_manager"] = _make_pkg("api.session_manager", {"SessionState": object})
+    mock_modules["tools"] = _make_pkg("tools", {
+        "select_tools_for_query": lambda *a, **k: [],
+        "get_all_tools": lambda *a, **k: [],
+        "merge_tool_lists": lambda primary, secondary, **k: list(primary) + list(secondary or []),
+    })
+    mock_modules["tools.base"] = _make_pkg("tools.base", {
+        "format_error": lambda message: {"ok": False, "error": message},
+    })
+    mock_modules["tools.path_security"] = _make_pkg("tools.path_security", {
+        "check_path_access": lambda path: None,
+    })
 
-    fastapi = types.ModuleType("fastapi")
-    fastapi.APIRouter = lambda: types.SimpleNamespace(websocket=lambda *a, **k: (lambda fn: fn))
-    fastapi.WebSocket = object
-    fastapi.WebSocketDisconnect = type("WebSocketDisconnect", (Exception,), {})
-    add_module("fastapi", fastapi)
+    # 中间包也需要在 sys.modules 中（Python 包导入会检查父级）
+    for parent in ("langchain_core", "agent", "api", "api.callbacks"):
+        if parent not in sys.modules:
+            mock_modules[parent] = _make_pkg(parent)
 
-    langchain_messages = types.ModuleType("langchain_core.messages")
-    langchain_messages.AIMessage = object
-    langchain_messages.HumanMessage = object
-    langchain_messages.ToolMessage = object
-    add_module("langchain_core.messages", langchain_messages)
-
-    agent_graph = types.ModuleType("agent.graph")
-    agent_graph.build_agent = lambda *args, **kwargs: None
-    add_module("agent.graph", agent_graph)
-
-    agent_prompts = types.ModuleType("agent.prompts")
-    agent_prompts.build_system_prompt = lambda: ""
-    agent_prompts.get_system_prompt_parts = lambda: {}
-    add_module("agent.prompts", agent_prompts)
-
-    context_manager = types.ModuleType("agent.context_manager")
-    context_manager.maybe_trim_checkpoint = lambda *args, **kwargs: None
-    context_manager.commit_to_episodic = lambda *args, **kwargs: None
-    add_module("agent.context_manager", context_manager)
-
-    interaction = types.ModuleType("api.interaction")
-    interaction.current_ws = types.SimpleNamespace(set=lambda value: None)
-    interaction.current_session_id = types.SimpleNamespace(get=lambda: "", set=lambda value: None)
-    interaction.set_session_auto_approve = lambda *args, **kwargs: None
-    interaction.cancel_session = lambda *args, **kwargs: None
-    interaction.clear_session_settings = lambda *args, **kwargs: None
-    interaction.resolve = lambda *args, **kwargs: True
-    add_module("api.interaction", interaction)
-
-    ws_callback = types.ModuleType("api.callbacks.websocket_callback")
-    ws_callback.WebSocketCallback = object
-    add_module("api.callbacks.websocket_callback", ws_callback)
-
-    const_session = types.ModuleType("api.const_session_store")
-    const_session.save_const_session = lambda *args, **kwargs: None
-    const_session.serialize_messages = lambda *args, **kwargs: []
-    add_module("api.const_session_store", const_session)
-
-    context_usage = types.ModuleType("api.context_usage")
-    context_usage.estimate_context_usage = lambda *args, **kwargs: {}
-    add_module("api.context_usage", context_usage)
-
-    errors = types.ModuleType("api.errors")
-    errors.ErrorCode = types.SimpleNamespace(CANCELLED="cancelled", AGENT_ERROR="agent_error", NO_LLM="no_llm")
-    errors.format_ws_error = lambda *args, **kwargs: {}
-    add_module("api.errors", errors)
-
-    session_manager = types.ModuleType("api.session_manager")
-    session_manager.SessionState = object
-    add_module("api.session_manager", session_manager)
-
-    tools = types.ModuleType("tools")
-    tools.select_tools_for_query = lambda *args, **kwargs: []
-    tools.get_all_tools = lambda *args, **kwargs: []
-    tools.merge_tool_lists = lambda primary, secondary, **kwargs: list(primary) + [
-        t for t in (secondary or [])
-    ]
-    add_module("tools", tools)
-
-    tools_base = types.ModuleType("tools.base")
-    tools_base.format_error = lambda message: {"ok": False, "error": message}
-    add_module("tools.base", tools_base)
-
-    tools_path_security = types.ModuleType("tools.path_security")
-    tools_path_security.check_path_access = lambda path: None
-    add_module("tools.path_security", tools_path_security)
-
-    sys.modules["api"].interaction = interaction
-
-    try:
+    with patch.dict(sys.modules, mock_modules, clear=False):
         spec.loader.exec_module(module)
-    finally:
-        for name, previous in fake_modules.items():
-            if previous is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = previous
 
     return module
 

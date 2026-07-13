@@ -8,6 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+_MAX_READ_SIZE_BYTES = 100 * 1024  # 100KB 限制
+
 from tools.base import (
     ToolBase,
     check_path_access,  # 统一的安全检查入口（MaxmaBlocker + 白名单）
@@ -118,6 +120,10 @@ class FileEditTool(ToolBase):
     # ── Read ──────────────────────────────────────────────────────
 
     def _read(self, file_path: str, offset: int = 0, limit: int = 0) -> str:
+        # 检查文件大小
+        file_size = os.path.getsize(file_path)
+        if file_size > _MAX_READ_SIZE_BYTES:
+            return format_error(f"文件过大（{file_size} bytes），最大读取 {_MAX_READ_SIZE_BYTES} bytes，请缩小读取范围")
         with open(file_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
 

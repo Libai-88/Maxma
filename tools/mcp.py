@@ -701,17 +701,19 @@ async def init_mcp_tools() -> list[BaseTool]:
 
 
 async def close_mcp():
-    """释放 MCP 客户端资源。
+    """释放 MCP 客户端资源，断开连接，清理生命周期状态。
 
-    MultiServerMCPClient v0.2.2 没有 close() 方法（会话是短暂的，
-    每次工具调用创建/销毁），这里仅重置模块级状态。
+    MultiServerMCPClient v0.3.0 的会话是短暂的一次性连接
+    （每次工具调用创建/销毁），但 stdio transport 启动的子进程
+    不会被自动清理。此处尽力断开 OAuth 连接并清除生命周期状态。
     """
     global _client, _tools, _config, _last_error
+    _connection_lifecycle.clear()
+    # 释放客户端引用（GC 回收时会清理短暂会话）
     _client = None
     _tools = None
     _config = None
     _last_error = None
-    _connection_lifecycle.clear()
 
 
 # ═══════════════════════════════════════════════════════════════════════

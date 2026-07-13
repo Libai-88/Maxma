@@ -79,14 +79,19 @@ def classify_ltm_error(exc: BaseException) -> LTMErrorKind:
             return LTMErrorKind.AUTHENTICATION_FAILED
         if status_code == 403:
             return LTMErrorKind.PERMISSION_DENIED
-        if status_code in {400, 413, 422}:
+        if status_code in {400, 405, 411, 413, 414, 415, 416, 417, 422, 431}:
             return LTMErrorKind.INVALID_REQUEST
-        if status_code == 404:
+        if status_code in {404, 410}:
             return LTMErrorKind.INVALID_CONFIGURATION
+        if status_code == 451:
+            return LTMErrorKind.PERMISSION_DENIED
         if status_code == 429:
             return LTMErrorKind.RATE_LIMITED
-        if status_code in {408, 409, 425} or (status_code is not None and status_code >= 500):
+        if status_code in {408, 409, 423, 425} or (status_code is not None and status_code >= 500):
             return LTMErrorKind.TEMPORARY_UNAVAILABLE
+        # 其他 4xx（非 408/409/423/425/429）fail-closed：归类为永久错误
+        if status_code is not None and 400 <= status_code < 500:
+            return LTMErrorKind.INVALID_REQUEST
 
         error_name = type(current).__name__
         if error_name == "AuthenticationError":
@@ -963,7 +968,10 @@ class LongTermMemoryInterface:
                 except Exception as e:
                     error_kind = classify_ltm_error(e)
                     retry_policy_enabled = self._retry_policy_enabled is not False
-                    if job is not None and retry_policy_enabled and error_kind.permanent:
+                    # 无论 flag 如何，永久错误和重试预算耗尽都 abandon
+                    is_permanent = error_kind.permanent
+                    budget_exhausted = job is not None and job.attempts >= _MAX_LTM_RETRIES
+                    if job is not None and (is_permanent or budget_exhausted):
                         logger.error(
                             "[ltm] CRUD agent terminal error code=%s; abandoning projection",
                             error_kind.value,

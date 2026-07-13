@@ -9,6 +9,7 @@ ag2_adaptive_research_team 的 triage 路由思想。
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -62,6 +63,16 @@ def _should_skip_coordinator(user_text: str) -> bool:
     return False
 
 
+def _llm_timeout() -> float:
+    """获取 LLM 调用超时（秒），回退默认 120s。"""
+    try:
+        from config.settings import get_settings
+
+        return get_settings().llm_invoke_timeout
+    except Exception:
+        return 120.0
+
+
 async def classify_intent(
     model: BaseChatModel,
     user_text: str,
@@ -92,7 +103,10 @@ async def classify_intent(
 
         prompt = build_coordinator_prompt(persona_context=persona_context)
         messages = [SystemMessage(content=prompt), HumanMessage(content=user_text)]
-        response = await model.ainvoke(messages)
+        response = await asyncio.wait_for(
+            model.ainvoke(messages),
+            timeout=_llm_timeout(),
+        )
         content = response.content if isinstance(response.content, str) else str(response.content)
 
         decision = _parse_routing_json(content)

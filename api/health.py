@@ -129,7 +129,11 @@ async def check_llm(app: FastAPI, probe_remote: bool = False) -> ComponentHealth
         )
 
     for provider in providers:
-        result = await provider.check_health()
+        try:
+            result = await asyncio.wait_for(provider.check_health(), timeout=5.0)
+        except asyncio.TimeoutError:
+            logger.warning("[health] Provider %s health check timed out", provider.provider_name)
+            continue
         if result.status == "ok":
             elapsed = (time.monotonic() - start) * 1000
             return ComponentHealth(
@@ -297,7 +301,10 @@ async def check_health_providers(
         }
 
     async def _check_one(provider) -> tuple[str, ComponentHealth]:
-        result = await provider.check_health()
+        try:
+            result = await asyncio.wait_for(provider.check_health(), timeout=5.0)
+        except asyncio.TimeoutError:
+            return (provider.provider_name, ComponentHealth(status="error", detail="health check timed out", latency_ms=5000.0))
         return (
             provider.provider_name,
             ComponentHealth.from_runtime(

@@ -54,9 +54,10 @@ logger = logging.getLogger(__name__)
 
 # 匹配人格模板输出的 <mood>...</mood> 内部状态块（含可选的属性）
 _MOOD_TAG_RE = re.compile(r"<mood[^>]*>.*?</mood>\s*", re.DOTALL | re.IGNORECASE)
+_MAX_FAILOVER_ATTEMPTS = 5
 # 兜底：匹配未闭合标签时，从 <mood> 到行尾或到下一个非 mood 行
 _MOOD_UNCLOSED_RE = re.compile(
-    r"<mood[^>]*>.*?(?=\n[^<\s]|\Z)", re.DOTALL | re.IGNORECASE
+    r"<mood[^>]*>.*?(?=\n[^<\s]|\Z)", re.IGNORECASE
 )
 
 
@@ -318,7 +319,7 @@ def build_agent(
                 latest_human_index = index
                 break
         if latest_human_index < 0:
-            return True
+            return False
         return any(
             message.__class__.__name__ == "ToolMessage"
             for message in messages[latest_human_index + 1 :]
@@ -444,7 +445,12 @@ def build_agent(
             # 显式重置旧 step_status：merge_dicts reducer 不会因返回 {} 而清空，
             # 需要把旧 key 显式设为 PENDING 以避免新计划命中旧状态
             old_step_status = state.get("step_status", {})
-            reset_status = {k: StepStatus.PENDING.value for k in old_step_status}
+            new_step_count = len(plan_steps)
+            reset_status = {k: StepStatus.PENDING.value for k in old_step_status if int(k) < new_step_count}
+            # 清理超出新计划长度的旧步骤状态
+            for k in list(old_step_status):
+                if int(k) >= new_step_count:
+                    reset_status.pop(k, None)
             return {
                 "plan_steps": [s.to_dict() for s in plan_steps],
                 "plan_text": plan,
@@ -634,6 +640,7 @@ def build_agent(
                 selected_provider_id = active_provider.config.id
 
         try:
+            failover_count = 0
             while True:
                 provider_id = active_provider.config.id if active_provider is not None else ""
                 model_name = (
@@ -687,12 +694,19 @@ def build_agent(
                     if fallback_provider is None:
                         raise
                     logger.warning(
-                        "[agent_node] provider failover %s/%s -> %s/%s",
+                        "[agent_node] provider failover %s/%s -> %s/%s (attempt %d)",
                         active_provider.config.id,
                         model_name or "<unknown>",
                         fallback_provider.config.id,
                         fallback_provider.default_model or "<unknown>",
+                        failover_count + 1,
                     )
+                    failover_count += 1
+                    if failover_count >= _MAX_FAILOVER_ATTEMPTS:
+                        raise RuntimeError(
+                            f"Provider failover exhausted after {_MAX_FAILOVER_ATTEMPTS} attempts"
+                            f" (tried: {', '.join(attempted_provider_ids)})"
+                        )
                     active_provider = fallback_provider
                     active_llm = _build_provider_llm(active_provider)
                     selected_provider_id = active_provider.config.id

@@ -43,6 +43,10 @@ ps.__dict__["_AUTO_BLOCKER_PATH"] = str(_fake_api_data)
 
 _spec.loader.exec_module(ps)
 
+# 注册清理：测试进程退出时删除临时目录
+import atexit
+atexit.register(_tempfile._crmtree, _fake_root)
+
 # Register so monkeypatch string-references work
 sys.modules["path_security"] = ps
 

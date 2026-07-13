@@ -57,11 +57,18 @@ def intersect(parent: DelegationScope, child_request: DelegationScope) -> Delega
     # 空集拒绝：工具或路径交集为空则整体收窄为空（fail-closed）
     if not tools or not paths:
         return DelegationScope()
+    # 单调收窄：0 = "未设置"，取有效最小值（fail-closed 到父级上限）
+    _p_max = parent.max_tokens or float("inf")
+    _c_max = child_request.max_tokens or float("inf")
+    max_tokens = int(min(_p_max, _c_max)) if (_p_max != float("inf") or _c_max != float("inf")) else 0
+    _p_time = parent.time_limit_seconds or float("inf")
+    _c_time = child_request.time_limit_seconds or float("inf")
+    time_limit_seconds = int(min(_p_time, _c_time)) if (_p_time != float("inf") or _c_time != float("inf")) else 0
     return DelegationScope(
         allowed_tools=frozenset(tools),
         allowed_paths=frozenset(paths),
-        max_tokens=min(parent.max_tokens, child_request.max_tokens) if parent.max_tokens and child_request.max_tokens else 0,
-        time_limit_seconds=min(parent.time_limit_seconds, child_request.time_limit_seconds) if parent.time_limit_seconds and child_request.time_limit_seconds else 0,
+        max_tokens=max_tokens,
+        time_limit_seconds=time_limit_seconds,
         permission_mode=narrow_permission_mode(parent.permission_mode, child_request.permission_mode),
     )
 

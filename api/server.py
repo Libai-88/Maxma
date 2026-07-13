@@ -558,6 +558,13 @@ async def lifespan(app: FastAPI):
 
     await close_mcp()
 
+    # 停止 WS rate limiter 清理后台任务
+    try:
+        from api.middleware.rate_limit import get_ws_rate_limiter
+        await get_ws_rate_limiter()._registry.stop_cleanup_task()
+    except Exception:
+        logger.warning("[rate_limit] stop cleanup failed", exc_info=True)
+
     workflow_manager = getattr(app.state, "workflow_run_manager", None)
     if workflow_manager is not None:
         await workflow_manager.shutdown()
@@ -728,7 +735,7 @@ def create_app() -> FastAPI:
         )
         return _JSONResponse(
             status_code=500,
-            content={"detail": "Internal Server Error", "error_type": type(exc).__name__},
+            content={"detail": "Internal Server Error"},
         )
 
     # 中间件执行顺序以“最后 add 的最先执行”为准。

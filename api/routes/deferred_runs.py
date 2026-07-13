@@ -41,8 +41,8 @@ async def _require_parent_session(request: Request, session_id: str) -> None:
 async def _get_parent_run(request: Request, session_id: str, run_id: str) -> tuple[Any, DeferredRun]:
     await _require_parent_session(request, session_id)
     manager = _require_runtime(request)
-    run = manager.store.get(run_id)
-    if run is None or run.parent_session_id != session_id:
+    run = manager.store.get(run_id, parent_session_id=session_id)
+    if run is None:
         # Keep non-membership indistinguishable from an unknown ID to avoid a
         # session being used to probe another session's work.
         raise HTTPException(status_code=404, detail="Deferred run not found")
@@ -107,7 +107,7 @@ async def cancel_deferred_run(session_id: str, run_id: str, request: Request):
     manager, run = await _get_parent_run(request, session_id, run_id)
     if run.status in {"queued", "running"}:
         await manager.cancel(run_id, "cancelled_by_user")
-        run = manager.store.get(run_id)
+        run = manager.store.get(run_id, parent_session_id=session_id)
         if run is None:  # Defensive: the durable row must not disappear mid-request.
             raise HTTPException(status_code=404, detail="Deferred run not found")
     return _public_run(run)

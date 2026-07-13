@@ -17,6 +17,7 @@ from api.security.credential_envelope import (
     is_credential_envelope,
     is_legacy_encrypted,
 )
+from api.yaml_store import dump_yaml_atomic
 
 logger = logging.getLogger(__name__)
 
@@ -281,8 +282,7 @@ def encrypt_providers_yaml(yaml_path) -> int:
             count += 1
 
     if count > 0:
-        with open(yaml_path, "w", encoding="utf-8") as f:
-            yaml.dump(data, f, allow_unicode=True, default_flow_style=False)
+        dump_yaml_atomic(yaml_path, data)
 
     return count
 

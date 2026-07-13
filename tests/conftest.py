@@ -92,3 +92,22 @@ def minimal_app(auth_token: str) -> FastAPI:
 def client(minimal_app: FastAPI) -> TestClient:
     """Starlette TestClient 实例。"""
     return TestClient(minimal_app)
+
+
+@pytest.fixture(autouse=True)
+def _reset_global_state():
+    """每个测试自动重置全局单例/计数器，防止跨测试泄漏。"""
+    # Metrics 单例重置
+    try:
+        from api.metrics import _metrics, _metrics_lock
+        with _metrics_lock:
+            _metrics = None
+    except Exception:
+        pass
+    # WS rate limiter 重置
+    try:
+        from api.rate_limit import _ws_counters
+        _ws_counters.clear()
+    except Exception:
+        pass
+    yield

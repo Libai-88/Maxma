@@ -53,8 +53,6 @@ import json
 from pathlib import Path
 
 import requests
-import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ModelScope API endpoints
 API_BASE = 'https://modelscope.cn/api/v1/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2'
@@ -80,7 +78,6 @@ REQUIRED_FILES = [
 
 target_dir = Path(r'$ModelDir')
 session = requests.Session()
-session.verify = False
 
 print(f'[download] paraphrase-multilingual-MiniLM-L12-v2 -> {target_dir}')
 

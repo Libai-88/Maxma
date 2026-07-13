@@ -328,7 +328,8 @@ async def discover_models(body: TestConnectionBody):
         model_names = sorted(m.id for m in models.data)
         return {"models": model_names}
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        logger.error("Model discovery failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=400, detail="模型发现失败，请检查 API Key 和 Base URL")
 
 
 @router.post("/providers/{provider_id}/discover-models")
@@ -346,9 +347,7 @@ async def discover_models_for_existing(provider_id: str, request: Request):
         models = await client.models.list()
         model_names = sorted(m.id for m in models.data)
 
-        config.models = model_names
-        mgr.save_config(config)
-
         return {"models": model_names}
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        logger.error("Model discovery failed for provider %s: %s", provider_id, exc, exc_info=True)
+        raise HTTPException(status_code=400, detail="模型发现失败，请检查 API Key 和 Base URL")

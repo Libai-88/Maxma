@@ -73,7 +73,7 @@ def mask_sensitive_fields(data: Any) -> Any:
     if isinstance(data, dict):
         result: Dict[str, Any] = {}
         for k, v in data.items():
-            if is_sensitive_key(k) and v:
+            if is_sensitive_key(k) and v is not None:
                 result[k] = MASK_SENTINEL
             else:
                 result[k] = mask_sensitive_fields(v)

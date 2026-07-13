@@ -166,8 +166,8 @@ class Settings(BaseSettings):
     stream_repair_enabled: bool = False
 
     # ── 已交付能力的渐进启用开关（默认关闭）──
-    # LTM 的永久错误分类和抖动退避。关闭时保留旧的统一重试路径。
-    ltm_retry_policy_enabled: bool = False
+    # LTM 的永久错误分类和抖动退避。开启后 401/403 等永久错误不再重试。
+    ltm_retry_policy_enabled: bool = True
     # 在上下文摘要中记录 cache-safe 边界元数据；关闭时保持旧摘要格式。
     cache_preserving_compaction_enabled: bool = False
     # 只有显式开启时，MemoryTicker 才会执行编译器。
@@ -181,7 +181,7 @@ class Settings(BaseSettings):
     model_config = {
         "env_file": str(ENV_FILE_PATH),
         "env_file_encoding": "utf-8",
-        "extra": "ignore",
+        "extra": "forbid",
     }
 
 

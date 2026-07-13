@@ -32,8 +32,10 @@ async def _check_provider_health(provider_manager: ProviderManager, provider_id:
     健康检查超时则标记 degraded（非 error，避免完全禁用）。
     健康检查异常则标记 error。
     """
+    import copy
+
     try:
-        provider = provider_manager.get(provider_id)
+        provider = copy.deepcopy(provider_manager.get(provider_id))
     except KeyError:
         return
 

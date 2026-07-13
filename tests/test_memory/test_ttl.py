@@ -16,6 +16,24 @@ from memory.memory_manager import (
 )
 
 
+async def _poll_purge_count(mm, min_count: int = 1, timeout: float = 5.0) -> None:
+    """轮询等待 purge_expired 被调用至少 min_count 次。"""
+    for _ in range(int(timeout / 0.1)):
+        if mm.purge_count >= min_count:
+            return
+        await asyncio.sleep(0.1)
+    raise AssertionError(f"purge_count did not reach {min_count} (got {mm.purge_count})")
+
+
+async def _poll_call_count(mm, min_count: int = 1, timeout: float = 5.0) -> None:
+    """轮询等待 call_count 至少 min_count 次。"""
+    for _ in range(int(timeout / 0.1)):
+        if mm.call_count >= min_count:
+            return
+        await asyncio.sleep(0.1)
+    raise AssertionError(f"call_count did not reach {min_count} (got {mm.call_count})")
+
+
 # ── _compute_expires_at / _is_expired ────────────────────────────
 
 
@@ -312,8 +330,8 @@ class TestTtlScheduler:
         fake_mm = _FakeMM()
         try:
             ttl_module.schedule_purge(interval_seconds=0.05, mm_list=[fake_mm])
-            # 等待至少执行一次
-            loop.run_until_complete(asyncio.sleep(0.2))
+            # 轮询等待 purge 至少执行一次（替代固定 sleep）
+            loop.run_until_complete(_poll_purge_count(fake_mm, min_count=1, timeout=5))
             assert fake_mm.purge_count >= 1
         finally:
             loop.run_until_complete(ttl_module.stop_purge())
@@ -336,7 +354,7 @@ class TestTtlScheduler:
         failing_mm = _FailingMM()
         try:
             ttl_module.schedule_purge(interval_seconds=0.05, mm_list=[failing_mm])
-            loop.run_until_complete(asyncio.sleep(0.2))
+            loop.run_until_complete(_poll_call_count(failing_mm, min_count=2, timeout=5))
             # 应至少被调用 2 次（第 1 次异常后继续）
             assert failing_mm.call_count >= 2
         finally:

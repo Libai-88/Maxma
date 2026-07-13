@@ -263,7 +263,6 @@ async def _describe_image(image_path: str) -> str:
     data_url = f"data:{mime};base64,{image_b64}"
 
     # 调用 GLM-5V-Turbo
-    from config.settings import get_settings
     from zai import ZhipuAiClient
 
     settings = get_settings()
@@ -1089,7 +1088,6 @@ async def _run_agent_turn(
         else:
             _turn_timeout = 600
             try:
-                from config.settings import get_settings
                 _turn_timeout = get_settings().turn_timeout
             except Exception:
                 pass
@@ -1425,7 +1423,6 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                     # Artifact actions are never tool calls.  They can only
                     # resolve an already-pending interaction after the signed,
                     # session-bound token has been validated.
-                    from config.settings import get_settings
 
                     if not get_settings().interactive_artifacts_enabled:
                         continue

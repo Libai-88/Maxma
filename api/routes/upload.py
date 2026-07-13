@@ -33,8 +33,14 @@ ALLOWED_EXTENSIONS = {
 
 
 def _sanitize_filename(name: str) -> str:
-    """净化文件名，防止路径穿越。"""
-    return Path(name).name
+    """净化文件名，防止路径穿越和特殊字符注入。"""
+    name = Path(name).name
+    # 只保留字母数字 ._- 字符，移除 Unicode 控制字符、空格、保留名等
+    safe = re.sub(r"[^a-zA-Z0-9._-]", "", name)
+    # Windows 保留名（CON/NUL/LPT1 等）在前面加下划线避免冲突
+    if safe.upper() in {"CON", "NUL", "PRN", "AUX"} or safe.upper().startswith(("COM", "LPT")):
+        safe = f"_{safe}"
+    return safe or "unnamed_file"
 
 @router.post("/upload")
 async def upload_file(request: Request, file: UploadFile = File(...)):

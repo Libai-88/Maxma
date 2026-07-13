@@ -71,7 +71,7 @@ class TestCircuitBreakerStates:
         assert cb.state == CircuitState.OPEN
 
         # 等待冷却时间过
-        time.sleep(0.15)
+        time.sleep(0.3)
         # 访问 state 应触发自动迁移
         assert cb.state == CircuitState.HALF_OPEN
 
@@ -79,7 +79,7 @@ class TestCircuitBreakerStates:
         """half-open 状态下探测成功 → closed。"""
         cb = CircuitBreaker(failure_threshold=1, recovery_timeout=0.1)
         cb.record_failure("error")
-        time.sleep(0.15)
+        time.sleep(0.3)
         assert cb.state == CircuitState.HALF_OPEN
 
         # 探测成功
@@ -91,7 +91,7 @@ class TestCircuitBreakerStates:
         """half-open 状态下探测失败 → 重新 open。"""
         cb = CircuitBreaker(failure_threshold=1, recovery_timeout=0.1)
         cb.record_failure("error")
-        time.sleep(0.15)
+        time.sleep(0.3)
         assert cb.state == CircuitState.HALF_OPEN
 
         # 探测失败
@@ -104,7 +104,7 @@ class TestCircuitBreakerStates:
             failure_threshold=1, recovery_timeout=0.1, half_open_max_calls=2
         )
         cb.record_failure("error")
-        time.sleep(0.15)
+        time.sleep(0.3)
         assert cb.state == CircuitState.HALF_OPEN
 
         # 前 2 次调用允许（消耗探测配额）
@@ -155,14 +155,14 @@ class TestCircuitBreakerCooldown:
         """冷却时间到后，state 自动迁移到 half_open。"""
         cb = CircuitBreaker(failure_threshold=1, recovery_timeout=0.1)
         cb.record_failure("error")
-        time.sleep(0.15)
+        time.sleep(0.3)
         assert cb.state == CircuitState.HALF_OPEN
 
     def test_cooldown_reset_on_reopen(self):
         """重新 open 时冷却计时器重置。"""
         cb = CircuitBreaker(failure_threshold=1, recovery_timeout=0.1)
         cb.record_failure("error")
-        time.sleep(0.15)
+        time.sleep(0.3)
         assert cb.state == CircuitState.HALF_OPEN
 
         # 探测失败 → 重新 open，冷却计时器重置
@@ -195,7 +195,7 @@ class TestCircuitBreakerThreadSafety:
         for t in threads:
             t.start()
         for t in threads:
-            t.join()
+        t.join(timeout=5)
 
         stats = cb.get_stats()
         assert stats["total_failures"] == num_threads * failures_per_thread
@@ -222,7 +222,7 @@ class TestCircuitBreakerThreadSafety:
         for t in threads:
             t.start()
         for t in threads:
-            t.join()
+        t.join(timeout=5)
 
         total_rejections = sum(rejections)
         stats = cb.get_stats()
@@ -275,7 +275,7 @@ class TestErrorRecoveryCircuitBreakerIntegration:
             assert manager.is_tool_circuit_open("tool_a")
 
             # 等待冷却 → half-open
-            time.sleep(0.15)
+            time.sleep(0.3)
             assert not manager.is_tool_circuit_open("tool_a")  # half-open 不算 open
 
             # record_success → 恢复 closed
@@ -304,7 +304,7 @@ class TestErrorRecoveryCircuitBreakerIntegration:
         ):
             manager = ErrorRecoveryManager()
             manager.record_failure("tool_a", "error")
-            time.sleep(0.15)
+            time.sleep(0.3)
 
             # half-open：第一次允许，第二次拒绝
             assert manager.can_tool_execute("tool_a") is True

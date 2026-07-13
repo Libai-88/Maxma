@@ -53,8 +53,9 @@ def detect_loop(
 ) -> bool:
     """检测消息历史中是否存在死循环。
 
-    检查最近 threshold 条带 tool_calls 的 AIMessage，
-    若它们的签名完全相同，判定为死循环。
+    检查：
+    1. 最近 threshold 条带 tool_calls 的 AIMessage，签名全部相同 → 完全匹配
+    2. 最近 threshold 条中 distinct 签名数 ≤ 2 且序列呈交替模式 → 交替循环
 
     Args:
         messages: 完整消息历史
@@ -75,16 +76,31 @@ def detect_loop(
     if len(ai_with_tools) < threshold:
         return False
 
-    # 取最近 threshold 条，检查签名是否全部相同
+    # 取最近 threshold 条，检查签名是否全部相同（完全匹配）
     recent = ai_with_tools[-threshold:]
     first_sig = tool_call_signature(recent[0].tool_calls)
     if not first_sig:
-        # 空签名（无 tool_calls）不视为循环
         return False
-    return all(
+    if all(
         tool_call_signature(m.tool_calls) == first_sig
         for m in recent[1:]
-    )
+    ):
+        return True
+
+    # 交替模式检测：最近 threshold 条中 distinct 签名 ≤ 2 且重复交替 ≥ 2 轮
+    if threshold >= 4:
+        sigs = [tool_call_signature(m.tool_calls) for m in recent]
+        distinct = set(sigs)
+        if len(distinct) == 2 and None not in distinct:
+            # 检查是否交替：第 0=第 2=第 4, 第 1=第 3=第 5
+            for start in range(len(sigs) - 2):
+                if sigs[start] == sigs[start + 2]:
+                    continue
+                break
+            else:
+                return True
+
+    return False
 
 
 def get_loop_break_messages(last_message: AIMessage) -> list[BaseMessage]:
