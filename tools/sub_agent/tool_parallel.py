@@ -234,9 +234,11 @@ class ParallelExecuteTool(ToolBase):
 
     async def _run_background(self, sub, task: str, app_state, delegation_context=None) -> str:
         """后端直接执行（无前端连接时的回退路径）。"""
-        from agent.graph import build_agent
-        from agent.prompts import build_system_prompt
-        from langchain_core.messages import HumanMessage
+        # LangGraph 已移除，parallel 后台执行需通过 sidecar
+        raise RuntimeError(
+            "parallel_execute 后台执行已迁移到 oh-my-pi sidecar，"
+            "LangGraph build_agent 不再可用"
+        )
         from langchain_core.runnables import RunnableConfig
 
         context = delegation_context or getattr(sub, "delegation_context", None)

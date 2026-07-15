@@ -277,7 +277,11 @@ class CallSubAgentTool(ToolBase):
             f"[call_sub_agent] _run_background starting for {sub.session_id}",
             file=sys.stderr,
         )
-        from agent.graph import build_agent
+        # LangGraph 已移除，sub_agent 后台执行需通过 sidecar
+        raise RuntimeError(
+            "sub_agent 后台执行已迁移到 oh-my-pi sidecar，"
+            "LangGraph build_agent 不再可用"
+        )
         from agent.prompts import build_system_prompt
         from langchain_core.messages import HumanMessage
 

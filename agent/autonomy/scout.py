@@ -13,10 +13,7 @@ import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from langchain_core.messages import HumanMessage
-
 from agent.autonomy.governance import AutonomyLease, AutonomyScheduleStore
-from agent.graph import build_agent
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +21,7 @@ ScoutExecutor = Callable[[AutonomyLease], Awaitable[None]]
 
 
 async def run_scout_lease(app: Any, lease: AutonomyLease) -> None:
-    """Run exactly one lease through an isolated read-only agent session.
+    """Run exactly one lease through an isolated read-only sidecar session.
 
     The provider/model are selected from the schedule snapshot rather than
     the mutable default.  Provider configuration that has since disappeared
@@ -33,6 +30,16 @@ async def run_scout_lease(app: Any, lease: AutonomyLease) -> None:
     """
     if lease.role != "scout":
         raise RuntimeError("unsupported autonomous role")
+
+    sidecar_mgr = getattr(app.state, "sidecar_manager", None)
+    if sidecar_mgr is None:
+        raise RuntimeError("sidecar manager is unavailable")
+
+    await sidecar_mgr.start()
+    client = sidecar_mgr.client
+    if client is None:
+        raise RuntimeError("sidecar client is unavailable")
+
     manager = getattr(app.state, "provider_manager", None)
     if manager is None:
         raise RuntimeError("provider manager is unavailable")
@@ -48,47 +55,50 @@ async def run_scout_lease(app: Any, lease: AutonomyLease) -> None:
     model_name = lease.scope.model_name or provider.default_model
     if not model_name or model_name not in provider.available_models:
         raise RuntimeError("scheduled model is unavailable")
-    llm = provider.create_llm(model_name)
 
-    session_manager = getattr(app.state, "session_manager", None)
-    if session_manager is None:
-        raise RuntimeError("session manager is unavailable")
-    selected_tools = [
-        tool for tool in (getattr(app.state, "tools", None) or getattr(app.state, "native_tools", []) or [])
-        if getattr(tool, "name", "") in lease.scope.allowed_tools
-    ]
-    if not selected_tools:
-        raise RuntimeError("no permitted Scout tools are currently available")
+    model_str = f"{lease.scope.provider_id}/{model_name}"
 
-    session = await session_manager.create()
+    # 构建只读系统提示词
+    system_prompt = getattr(app.state, "system_prompt", "") or ""
+    system_prompt += (
+        "\n\n[Read-only Scout mode]\n"
+        "This task was explicitly scheduled by the user. You may only use "
+        "the supplied read-only tools. Do not modify files, configuration, "
+        "skills, providers, schedules, or send anything externally. "
+        "Return concise findings for later user review."
+    )
+
+    # 创建临时 sidecar 会话
+    result = await client.call("create_session", {
+        "model": model_str,
+        "system_prompt": system_prompt,
+        "cwd": ".",
+    })
+    sidecar_sid = result["session_id"]
+
     try:
-        system_prompt = getattr(app.state, "system_prompt", "") or ""
-        system_prompt += (
-            "\n\n[Read-only Scout mode]\n"
-            "This task was explicitly scheduled by the user. You may only use "
-            "the supplied read-only tools. Do not modify files, configuration, "
-            "skills, providers, schedules, or send anything externally. "
-            "Return concise findings for later user review."
-        )
-        graph = build_agent(
-            model=llm,
-            tools=selected_tools,
-            system_prompt=system_prompt,
-            checkpointer=session.checkpointer,
-            episodic_mm=getattr(app.state, "episodic_mm", None),
-            enable_hitl=False,
-        )
-        session._graph = graph
         prompt = "[User-created Scout goal]\n" + lease.goal
-        await asyncio.wait_for(
-            graph.ainvoke(
-                {"messages": [HumanMessage(content=prompt)]},
-                config={"configurable": {"thread_id": session.session_id}, "recursion_limit": 48},
-            ),
-            timeout=lease.scope.max_seconds,
-        )
+
+        done_event = asyncio.Event()
+
+        def _on_event(params: dict) -> None:
+            event = params.get("event", {})
+            if event.get("type") == "done":
+                done_event.set()
+
+        client.on("event", _on_event, session_id=sidecar_sid)
+
+        await client.call("prompt", {
+            "session_id": sidecar_sid,
+            "message": prompt,
+        })
+
+        await asyncio.wait_for(done_event.wait(), timeout=lease.scope.max_seconds)
     finally:
-        await session_manager.delete(session.session_id)
+        try:
+            await client.call("destroy_session", {"session_id": sidecar_sid})
+        except Exception:
+            logger.debug("[scout] destroy_session failed", exc_info=True)
 
 
 class ScoutScheduleRunner:

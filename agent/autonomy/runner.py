@@ -1,8 +1,7 @@
 """自治层自改进 Runner — 无 WS 的 headless Agent 执行。
 
-模式：参考 server.py 的 _run_event_hook_action。
-- 创建临时会话
-- 构建 Agent（禁用 HITL，过滤交互工具）
+模式：通过 oh-my-pi sidecar 创建临时会话执行自治任务。
+- 创建临时 sidecar 会话
 - 注入诊断报告作为提示词
 - 超时控制 + finally 清理会话
 
@@ -19,10 +18,6 @@ import logging
 import traceback
 from pathlib import Path
 from typing import Any
-
-from langchain_core.messages import HumanMessage
-
-from agent.graph import build_agent
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +114,7 @@ async def run_self_improvement_agent(
     timeout: int = 300,
     transcript_path: Path | str | None = None,
 ) -> str:
-    """执行自改进 Agent 会话。
+    """执行自改进 Agent 会话（通过 oh-my-pi sidecar）。
 
     Args:
         app: FastAPI 应用实例
@@ -131,166 +126,81 @@ async def run_self_improvement_agent(
         Agent 执行结果文本
 
     Raises:
-        RuntimeError: LLM 未就绪
+        RuntimeError: sidecar 不可用
     """
-    llm = getattr(app.state, "llm", None)
-    if llm is None:
-        raise RuntimeError("LLM 未就绪，无法执行自改进")
+    sidecar_mgr = getattr(app.state, "sidecar_manager", None)
+    if sidecar_mgr is None:
+        raise RuntimeError("Sidecar 未初始化，无法执行自改进")
 
-    session_manager = getattr(app.state, "session_manager", None)
-    if session_manager is None:
-        raise RuntimeError("SessionManager 未初始化")
+    await sidecar_mgr.start()
+    client = sidecar_mgr.client
+    if client is None:
+        raise RuntimeError("Sidecar client 不可用")
 
-    # 获取工具列表并过滤交互工具
-    all_tools = getattr(app.state, "tools", []) or []
-    tools = _filter_tools_for_headless(all_tools)
+    # 构建系统提示词
+    system_prompt = getattr(app.state, "system_prompt", "") or ""
+    system_prompt = (
+        system_prompt
+        + "\n\n[自治自改进模式]\n"
+        + "当前任务由自治调度器自动触发，没有可交互的聊天 WebSocket。"
+        + "不要请求用户确认或等待用户输入。"
+        + "你可以使用 manage_skills 工具创建或更新 Skills 来改进系统。"
+    )
 
-    # 创建临时会话
-    session = await session_manager.create()
-    session_id = session.session_id
+    # 构建提示词
+    prompt = _build_self_improve_prompt(diagnostic_report)
 
-    # 初始化 transcript writer（如果指定了路径）
-    from api.transcript.jsonl_writer import TranscriptWriter
-    writer = TranscriptWriter(transcript_path) if transcript_path else None
+    # 确定模型
+    provider_mgr = getattr(app.state, "provider_manager", None)
+    model_str = "openai/gpt-4o"
+    if provider_mgr is not None and provider_mgr.count > 0:
+        for provider in provider_mgr.iter_enabled():
+            model_str = f"{provider.provider_id}/{provider.default_model or 'gpt-4o'}"
+            break
+
+    # 创建临时 sidecar 会话
+    result = await client.call("create_session", {
+        "model": model_str,
+        "system_prompt": system_prompt,
+        "cwd": ".",
+    })
+    sidecar_sid = result["session_id"]
+
+    logger.info("[autonomy:runner] 启动自改进 sidecar session (timeout=%ds)", timeout)
 
     try:
-        if writer:
-            writer.append_metadata({
-                "run_id": session_id,
-                "trigger": "autonomy",
-                "action": "self_improve",
-                "timeout": timeout,
-            })
+        # 收集最终回答
+        final_answer = ""
+        done_event = asyncio.Event()
 
-        # 构建系统提示词
-        system_prompt = getattr(app.state, "system_prompt", "") or ""
-        system_prompt = (
-            system_prompt
-            + "\n\n[自治自改进模式]\n"
-            + "当前任务由自治调度器自动触发，没有可交互的聊天 WebSocket。"
-            + "不要请求用户确认或等待用户输入。"
-            + "你可以使用 manage_skills 工具创建或更新 Skills 来改进系统。"
-        )
+        def _on_event(params: dict) -> None:
+            nonlocal final_answer
+            event = params.get("event", {})
+            etype = event.get("type", "")
+            if etype == "answer":
+                final_answer = event.get("payload", {}).get("content", "")
+            elif etype == "done":
+                done_event.set()
 
-        # 构建 Agent
-        episodic_mm = getattr(app.state, "episodic_mm", None)
-        graph = build_agent(
-            model=llm,
-            tools=tools,
-            system_prompt=system_prompt,
-            checkpointer=session.checkpointer,
-            episodic_mm=episodic_mm,
-            enable_hitl=False,
-        )
-        session._graph = graph
+        client.on("event", _on_event, session_id=sidecar_sid)
 
-        # 构建提示词
-        prompt = _build_self_improve_prompt(diagnostic_report)
+        # 发送 prompt
+        await client.call("prompt", {
+            "session_id": sidecar_sid,
+            "message": prompt,
+        })
 
-        if writer:
-            writer.append_raw("human", prompt)
+        # 等待完成
+        await asyncio.wait_for(done_event.wait(), timeout=timeout)
 
-        # 执行 + 自动 continue（如果未调用 report_to_user）
-        from agent.autonomy.completion_signal import (
-            detect_completion_signal,
-            should_auto_continue,
-            build_auto_continue_message,
-            MAX_AUTO_CONTINUES,
-        )
-
-        messages_input = [HumanMessage(content=prompt)]
-
-        auto_continue_count = 0
-        output = None
-
-        logger.info("[autonomy:runner] 启动自改进 Agent (session=%s, timeout=%ds)", session_id, timeout)
-
-        while True:
-            output = await asyncio.wait_for(
-                graph.ainvoke(
-                    {"messages": messages_input},
-                    config={
-                        "configurable": {"thread_id": session_id},
-                        "recursion_limit": 80,
-                    },
-                ),
-                timeout=timeout,
-            )
-
-            # 检测完成信号
-            output_messages = output.get("messages", []) if isinstance(output, dict) else []
-            outcome = detect_completion_signal(output_messages)
-            outcome.auto_continue_count = auto_continue_count
-
-            if outcome.signal_detected:
-                logger.info(
-                    "[autonomy:runner] 完成信号检测到: type=%s",
-                    outcome.report_type,
-                )
-                break
-
-            if not should_auto_continue(outcome):
-                logger.warning(
-                    "[autonomy:runner] 达到最大 continue 次数 (%d)，强制结束",
-                    MAX_AUTO_CONTINUES,
-                )
-                break
-
-            # 自动 continue
-            auto_continue_count += 1
-            continue_msg = build_auto_continue_message(auto_continue_count)
-            logger.info(
-                "[autonomy:runner] 自动 continue #%d/%d",
-                auto_continue_count, MAX_AUTO_CONTINUES,
-            )
-            if writer:
-                writer.append_raw("human", continue_msg)
-
-            messages_input = [HumanMessage(content=continue_msg)]
-
-        result = _extract_final_answer(output) or "自改进任务已执行，但没有生成文本结果"
-        logger.info("[autonomy:runner] 自改进完成 (session=%s): %s", session_id, result[:200])
-
-        if writer:
-            writer.append_raw("ai", result)
-
-        return result
+        return final_answer or "（自改进任务完成，无输出）"
 
     except asyncio.TimeoutError:
-        logger.warning("[autonomy:runner] 自改进超时 (session=%s, timeout=%ds)", session_id, timeout)
-        # 上报到 ErrorCollector（延迟导入，防止打包初始化顺序问题）
-        try:
-            from api.diagnostics import error_collector
-            error_collector.add_error(
-                level="WARNING",
-                category="autonomy",
-                message=f"自改进超时 (session={session_id}, timeout={timeout}s)",
-                session_id=session_id,
-            )
-        except Exception:
-            logger.debug("[autonomy:runner] ErrorCollector 上报失败（超时）", exc_info=True)
-        return f"自改进任务超时（{timeout}s），已终止"
-    except Exception as e:
-        logger.warning("[autonomy:runner] 自改进异常 (session=%s): %s", session_id, e)
-        # 上报到 ErrorCollector（延迟导入，防止打包初始化顺序问题）
-        try:
-            from api.diagnostics import error_collector
-            error_collector.add_error(
-                level="ERROR",
-                category="autonomy",
-                message=f"自改进异常 (session={session_id}): {e}",
-                session_id=session_id,
-                exception="".join(
-                    traceback.format_exception(type(e), e, e.__traceback__)
-                ),
-            )
-        except Exception:
-            logger.debug("[autonomy:runner] ErrorCollector 上报失败（异常）", exc_info=True)
-        raise
+        logger.warning("[autonomy:runner] 自改进超时 (%ds)", timeout)
+        return "（自改进任务超时）"
     finally:
-        if writer:
-            writer.close()
-        delete_fn = getattr(session_manager, "delete", None)
-        if callable(delete_fn):
-            await delete_fn(session_id)
-        logger.info("[autonomy:runner] 会话已清理 (session=%s)", session_id)
+        # 清理临时会话
+        try:
+            await client.call("destroy_session", {"session_id": sidecar_sid})
+        except Exception:
+            logger.debug("[autonomy:runner] destroy_session failed", exc_info=True)

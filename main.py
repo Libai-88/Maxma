@@ -1,4 +1,4 @@
-"""MaxmaHere — LangGraph ReAct AI Agent Web 入口。"""
+"""MaxmaHere — oh-my-pi AI Agent Desktop Backend (FastAPI + Bun sidecar)."""
 
 import os
 import sys
