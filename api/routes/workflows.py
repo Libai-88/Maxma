@@ -32,9 +32,14 @@ def _workflow_enabled() -> bool:
         return False
 
 
+class _WorkflowDisabled(HTTPException):
+    def __init__(self):
+        super().__init__(status_code=404, detail="Workflows are unavailable")
+
+
 def _require_runtime(request: Request):
     if not _workflow_enabled():
-        raise HTTPException(status_code=404, detail="Workflows are unavailable")
+        raise _WorkflowDisabled()
     manager = getattr(request.app.state, "workflow_run_manager", None)
     if manager is None:
         raise HTTPException(status_code=503, detail="Workflow runtime is unavailable")
@@ -96,12 +101,16 @@ def _public_cancel_reason(run: WorkflowRun) -> str | None:
 
 @router.get("/workflows/definitions")
 async def list_workflow_definitions(request: Request):
+    if not _workflow_enabled():
+        return {"workflow_ids": []}
     manager = _require_runtime(request)
     return {"workflow_ids": list(manager.registry.list_ids())}
 
 
 @router.post("/sessions/{session_id}/workflows")
 async def start_workflow(session_id: str, body: WorkflowStartRequest, request: Request):
+    if not _workflow_enabled():
+        raise HTTPException(status_code=404, detail="Workflows are unavailable")
     await _require_parent_session(request, session_id)
     manager = _require_runtime(request)
     try:
@@ -120,6 +129,8 @@ async def start_workflow(session_id: str, body: WorkflowStartRequest, request: R
 
 @router.get("/sessions/{session_id}/workflows")
 async def list_workflows(session_id: str, request: Request, limit: int = 50):
+    if not _workflow_enabled():
+        return {"runs": []}
     await _require_parent_session(request, session_id)
     manager = _require_runtime(request)
     runs = manager.store.list_parent_runs(session_id, limit=limit)
