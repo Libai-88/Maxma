@@ -191,7 +191,7 @@ async def get_messages(session_id: str, request: Request, limit: int = 50):
     return {"session_id": session_id, "messages": messages, "total": len(messages)}
 
 
-async def _sync_const_session_after_undo(session, deleted: int):
+async def _sync_const_session_after_undo(session, deleted: int, *, sidecar_mgr=None):
     """Sync const session YAML after undo. sidecar 模式下从 sidecar 获取消息。"""
     if session.is_const and deleted > 0:
         from api.const_session_store import save_const_session
@@ -207,11 +207,13 @@ async def _sync_const_session_after_undo(session, deleted: int):
             if not sidecar_sid:
                 return
 
-            mgr = getattr(session, "_app_state", None)
-            if mgr is None:
+            # 优先使用传入的 sidecar_mgr，其次检查 session 上的引用
+            if sidecar_mgr is None:
+                sidecar_mgr = getattr(session, "_sidecar_mgr", None)
+            if sidecar_mgr is None:
                 return
-            sidecar_mgr = getattr(mgr, "sidecar_manager", None)
-            if sidecar_mgr is None or sidecar_mgr.client is None:
+            await sidecar_mgr.start()
+            if sidecar_mgr.client is None:
                 return
 
             result = await sidecar_mgr.client.call("get_messages", {
@@ -261,6 +263,8 @@ async def undo_session_messages(session_id: str, request: Request, n: int = 1):
         await mgr.start()
         client = mgr.client
         if client is not None:
+            # 注入 sidecar manager 到 session
+            session._sidecar_mgr = mgr
             # 优先从 SessionMap（持久化 SQLite）查找 sidecar session ID
             from api.pi_bridge.session_adapter import SessionMap
             with SessionMap() as smap:
@@ -275,7 +279,7 @@ async def undo_session_messages(session_id: str, request: Request, n: int = 1):
                     })
                     deleted = result.get("removed", 0)
                     session.message_count = max(0, session.message_count - deleted)
-                    await _sync_const_session_after_undo(session, deleted)
+                    await _sync_const_session_after_undo(session, deleted, sidecar_mgr=mgr)
                     return {"deleted_count": deleted}
                 except Exception:
                     logger.debug("[undo] sidecar undo failed for %s", session_id, exc_info=True)

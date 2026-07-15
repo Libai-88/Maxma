@@ -294,17 +294,26 @@ async def _describe_image(image_path: str) -> str:
 async def _get_messages_from_sidecar(
     session: "SessionState",
     limit: int = 50,
+    *,
+    sidecar_mgr=None,
 ) -> list[dict]:
     """从 sidecar 获取消息历史。sidecar 不可用时返回空列表。
 
     通过 SessionMap（SQLite 持久化）查找 sidecar session ID，
     然后调用 get_messages RPC 获取消息列表。
+
+    Args:
+        session: 会话状态
+        limit: 最大消息数
+        sidecar_mgr: SidecarManager 实例（必须由调用方传入）
     """
-    app_state = getattr(session, "_app_state", None)
-    if app_state is None:
+    if sidecar_mgr is None:
+        sidecar_mgr = getattr(session, "_sidecar_mgr", None)
+    if sidecar_mgr is None:
         return []
-    sidecar_mgr = getattr(app_state, "sidecar_manager", None)
-    if sidecar_mgr is None or sidecar_mgr.client is None:
+    await sidecar_mgr.start()
+    client = sidecar_mgr.client
+    if client is None:
         return []
     # 从 SessionMap 获取 sidecar session ID（持久化，重启后仍可用）
     from api.pi_bridge.session_adapter import SessionMap
@@ -315,7 +324,7 @@ async def _get_messages_from_sidecar(
     if not sidecar_sid:
         return []
     try:
-        result = await sidecar_mgr.client.call("get_messages", {
+        result = await client.call("get_messages", {
             "session_id": sidecar_sid,
             "limit": limit,
         })
@@ -359,6 +368,9 @@ async def _stream_turn_sidecar(
     await mgr.start()
     client = mgr.client
     assert client is not None, "Sidecar client not available"
+    # 注入 sidecar manager 到 session，供下游函数（消息历史、context usage、
+    # const 保存、情景记忆等）通过 session._sidecar_mgr 访问
+    session._sidecar_mgr = mgr
 
     # 2. Look up sidecar session (persistent SessionMap, fallback to in-memory)
     from api.pi_bridge.session_adapter import SessionMap
@@ -743,11 +755,11 @@ async def _project_completed_turn_to_episodic(
             summary = "\n".join(summary_parts)
             if not summary:
                 return
-            # 写入情景记忆
-            episode_id = await episodic_mm.add_episode(
+            # 写入情景记忆（add_episode 是同步方法）
+            episode_id = episodic_mm.add_episode(
+                summary=summary,
                 session_id=session_id,
                 turn_id=turn_id,
-                summary=summary,
             )
             if episode_id is None:
                 logger.debug(
