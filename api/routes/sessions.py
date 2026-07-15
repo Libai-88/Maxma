@@ -352,6 +352,25 @@ async def delete_session(session_id: str, request: Request):
 
         delete_const_session(session_id)
 
+    # BUG8 fix: 清理 sidecar session（防止内存泄漏）
+    sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
+    if sidecar_mgr is not None and sidecar_mgr.client is not None:
+        from api.pi_bridge.session_adapter import SessionMap
+        with SessionMap() as smap:
+            sidecar_sid = smap.get_sidecar_id(session_id)
+        if not sidecar_sid and session is not None:
+            sidecar_sid = getattr(session, "_sidecar_session_id", None)
+        if sidecar_sid:
+            try:
+                await sidecar_mgr.client.call("destroy_session", {
+                    "session_id": sidecar_sid,
+                })
+            except Exception:
+                logger.debug("[delete] sidecar destroy failed for %s", sidecar_sid[:8], exc_info=True)
+        # 清理 SessionMap 映射
+        with SessionMap() as smap:
+            smap.remove(session_id)
+
     if not await sm.delete(session_id):
         raise HTTPException(status_code=404, detail="Session not found")
     return {"status": "deleted"}

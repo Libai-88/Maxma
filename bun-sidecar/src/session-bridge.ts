@@ -340,6 +340,8 @@ rl.on("line", async (line: string) => {
             type: "error",
             payload: { code: "PROMPT_ERROR", message: String(err) },
           });
+          // BUG3 fix: always send done after error so Python doesn't hang
+          sendEvent(sessionId, { type: "done", payload: {} });
         }));
 
       send(id, { ok: true });
@@ -355,6 +357,8 @@ rl.on("line", async (line: string) => {
       }
 
       record.session.agent.abort("Cancelled by user");
+      // BUG4 fix: send done event so Python's turn_done.wait() unblocks
+      sendEvent(sessionId, { type: "done", payload: {} });
 
       send(id, { ok: true });
       return;

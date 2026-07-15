@@ -374,10 +374,27 @@ async def _stream_turn_sidecar(
 
     # 2. Look up sidecar session (persistent SessionMap, fallback to in-memory)
     from api.pi_bridge.session_adapter import SessionMap
-    with SessionMap() as _session_map:
-        sidecar_sid = _session_map.get_sidecar_id(session.session_id)
+    with SessionMap() as sm:
+        sidecar_sid = sm.get_sidecar_id(session.session_id)
     if not sidecar_sid:
         sidecar_sid = getattr(session, "_sidecar_session_id", None)
+
+    # 验证 sidecar session 是否仍然有效（服务器重启后旧 ID 过期）
+    sidecar_valid = False
+    if sidecar_sid:
+        try:
+            await client.call("get_messages", {
+                "session_id": sidecar_sid, "limit": 0,
+            })
+            sidecar_valid = True
+        except Exception:
+            logger.info(
+                "[sidecar] Stale session %s — clearing mapping",
+                sidecar_sid[:8],
+            )
+            sidecar_sid = None
+            with SessionMap() as sm:
+                sm.remove(session.session_id)
 
     if not sidecar_sid:
         if current_provider_id:
@@ -386,10 +403,11 @@ async def _stream_turn_sidecar(
             model_str = current_model_name or "gpt-4o"
 
         # 首次创建 sidecar session，system_prompt 含人设/规则/技能
-        # 如果是重启后重建，从 SessionMap 恢复最近对话上下文
+        # 从 SessionMap 恢复最近对话上下文（用于重启后重建）
         _sidecar_system_prompt = system_prompt
         try:
-            _past_turns = _session_map.get_recent_turns(session.session_id, count=5)
+            with SessionMap() as sm:
+                _past_turns = sm.get_recent_turns(session.session_id, count=5)
             if _past_turns:
                 _history_lines = []
                 for t in _past_turns:
@@ -415,7 +433,8 @@ async def _stream_turn_sidecar(
         })
         sidecar_sid = result["session_id"]
         session._sidecar_session_id = sidecar_sid
-        _session_map.set_mapping(session.session_id, sidecar_sid)
+        with SessionMap() as sm:
+            sm.set_mapping(session.session_id, sidecar_sid)
         logger.info(
             "[sidecar] Created session %s for Maxma session %s",
             sidecar_sid[:8], session.session_id[:8],
@@ -515,6 +534,23 @@ async def _stream_turn_sidecar(
             return
         turn_done.set()
 
+    async def _on_error(sid: str, event: dict):
+        """BUG5 fix: forward sidecar error events to the frontend."""
+        if sid != sidecar_sid:
+            return
+        payload = event.get("payload", {})
+        logger.warning(
+            "[sidecar] Error event for session %s: %s",
+            sidecar_sid[:8], payload.get("message", payload),
+        )
+        await ws.send_json({
+            "type": "error",
+            "payload": {
+                "code": payload.get("code", "SIDECAR_ERROR"),
+                "message": payload.get("message", "Sidecar error"),
+            },
+        })
+
     # Register all event handlers
     unsubs = []
     for evt_type, handler in [
@@ -524,6 +560,7 @@ async def _stream_turn_sidecar(
         ("tool_error", _on_tool_error),
         ("answer", _on_answer),
         ("done", _on_done),
+        ("error", _on_error),
     ]:
         unsub = client.on(evt_type, handler)
         unsubs.append(unsub)
