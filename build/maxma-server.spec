@@ -20,7 +20,7 @@ project_root = Path(SPECPATH).parent  # SPECPATH = build/ 目录的父目录
 
 # 收集所有工具目录下的 TOOL.md 文档
 _tool_docs = []
-_tools_root = project_root / "tools"
+_tools_root = project_root / "tools"  # tools/ 已删除
 if _tools_root.exists():
     for md in _tools_root.rglob("TOOL.md"):
         _tool_docs.append((str(md), str(md.relative_to(project_root).parent)))
@@ -38,6 +38,10 @@ datas = [
     (str(project_root / "agent" / "persona"), "agent/persona"),
     # 工具文档（TOOL.md）
     *_tool_docs,
+    # oh-my-pi sidecar（Bun TypeScript 源码 + node_modules）
+    # 生产模式需要 bun.exe + sidecar 源码来启动 agent 引擎
+    (str(project_root / "bun-sidecar" / "src"), "bun-sidecar/src"),
+    (str(project_root / "bun-sidecar" / "package.json"), "bun-sidecar"),
 ]
 
 # 过滤掉不存在的目录
@@ -73,7 +77,7 @@ def safe_collect_submodules(package_name):
 
 framework_hiddenimports = []
 for package_name in (
-    "langgraph",
+    # "langgraph" — langgraph 已移除，由 oh-my-pi 替代
     "langchain_openai",
     # Stage 1 RAG 子系统：chromadb / transformers / onnxruntime 动态导入
     # 注意：不收集 sentence_transformers / torch（已改用 ONNX Runtime 直推）
@@ -86,7 +90,7 @@ for package_name in (
     "tavily",
     # 自动收集 tools 下所有子模块，避免 pkgutil.walk_packages 在 PyInstaller
     # 打包后遗漏动态注册的工具（如 tool_ask_user 曾遗漏导致启动校验失败）
-    "tools",
+    # "tools" — tools/ 目录已删除，工具已重写为 TS AgentTool
 ):
     framework_hiddenimports.extend(safe_collect_submodules(package_name))
 
@@ -116,13 +120,13 @@ hiddenimports = [
     "langchain_openai.chat_models",
     "langchain_core.messages",
     "langchain_core.runnables",
-    "langgraph.checkpoint.memory",
+    # "langgraph.checkpoint.memory" — langgraph 已移除
     # 阶段 5.1：SQLite 持久化 checkpointer（langgraph.checkpoint.sqlite.aio
     # 已被 collect_submodules("langgraph") 覆盖，但 aiosqlite 是独立包需显式声明）
-    "langgraph.checkpoint.sqlite",
-    "langgraph.checkpoint.sqlite.aio",
+    # "langgraph.checkpoint.sqlite" — langgraph 已移除
+    # "langgraph.checkpoint.sqlite.aio" — langgraph 已移除
     "aiosqlite",
-    "langgraph.stream",
+    # "langgraph.stream" — langgraph 已移除
     "openai",
 
     # 第三方库
@@ -144,80 +148,80 @@ hiddenimports = [
     "idna",
 
     # ── 工具模块（tools/__init__.py 中延迟导入） ──
-    "tools.system.tool_python",
-    "tools.system.tool_project_info",
-    "tools.system.tool_context_strategy",
-    "tools.system.tool_forget",
-    "tools.system.tool_create_persona",
-    "tools.todo.tool_add",
-    "tools.todo.tool_list",
-    "tools.todo.tool_complete",
-    "tools.todo.tool_uncomplete",
-    "tools.todo.tool_delete",
-    "tools.todo.tool_update",
-    "tools.todo.tool_query",
-    "tools.todo.tool_list_projects",
-    "tools.todo.tool_list_sections",
-    "tools.todo.tool_list_labels",
-    "tools.map.tool_nearby",
-    "tools.map.tool_geocode",
-    "tools.map.tool_transit",
-    "tools.map.tool_cycling",
-    "tools.map.tool_fuzzy_addr",
-    "tools.network.tool_weather",
-    "tools.network.tool_holiday",
-    "tools.network.tool_image_understand",
-    "tools.network.tavily",
-    "tools.network.tavily.tool_search",
-    "tools.network.tavily.tool_extract",
-    "tools.network.playwright_tools",
-    "tools.network.playwright_tools.browser_manager",
-    "tools.files.tool_file_read",
-    "tools.files.tool_file_write",
-    "tools.files.tool_file_manage",
-    "tools.files.tool_file_search",
-    "tools.files.tool_file_edit",
-    "tools.task.tool_tracker",
-    "tools.sub_agent.tool_call_sub_agent",
-    "tools.sub_agent.tool_parallel",
-    "tools.quick_task.tool_quick_task",
-    "tools.interaction.tool_ask_qa",
+    # "tools.system.tool_python", — 已删除
+    # "tools.system.tool_project_info", — 已删除
+    # "tools.system.tool_context_strategy", — 已删除
+    # "tools.system.tool_forget", — 已删除
+    # "tools.system.tool_create_persona", — 已删除
+    # "tools.todo.tool_add", — 已删除
+    # "tools.todo.tool_list", — 已删除
+    # "tools.todo.tool_complete", — 已删除
+    # "tools.todo.tool_uncomplete", — 已删除
+    # "tools.todo.tool_delete", — 已删除
+    # "tools.todo.tool_update", — 已删除
+    # "tools.todo.tool_query", — 已删除
+    # "tools.todo.tool_list_projects", — 已删除
+    # "tools.todo.tool_list_sections", — 已删除
+    # "tools.todo.tool_list_labels", — 已删除
+    # "tools.map.tool_nearby", — 已删除
+    # "tools.map.tool_geocode", — 已删除
+    # "tools.map.tool_transit", — 已删除
+    # "tools.map.tool_cycling", — 已删除
+    # "tools.map.tool_fuzzy_addr", — 已删除
+    # "tools.network.tool_weather", — 已删除
+    # "tools.network.tool_holiday", — 已删除
+    # "tools.network.tool_image_understand", — 已删除
+    # "tools.network.tavily", — 已删除
+    # "tools.network.tavily.tool_search", — 已删除
+    # "tools.network.tavily.tool_extract", — 已删除
+    # "tools.network.playwright_tools", — 已删除
+    # "tools.network.playwright_tools.browser_manager", — 已删除
+    # "tools.files.tool_file_read", — 已删除
+    # "tools.files.tool_file_write", — 已删除
+    # "tools.files.tool_file_manage", — 已删除
+    # "tools.files.tool_file_search", — 已删除
+    # "tools.files.tool_file_edit", — 已删除
+    # "tools.task.tool_tracker", — 已删除
+    # "tools.sub_agent.tool_call_sub_agent", — 已删除
+    # "tools.sub_agent.tool_parallel", — 已删除
+    # "tools.quick_task.tool_quick_task", — 已删除
+    # "tools.interaction.tool_ask_qa", — 已删除
     "tools.interaction.tool_ask_user",  # ask_user_for_info 工具（曾遗漏导致打包后启动失败）
-    "tools.interaction.tool_single_choice",
-    "tools.interaction.tool_multi_choice",
-    "tools.interaction.tool_ask_confirm",
-    "tools.entertainment.tool_tarot",
-    "tools.memory.tool_list_memories",
-    "tools.memory.tool_read_memories",
-    "tools.memory.tool_create_memory",
-    "tools.memory.tool_update_memory",
-    "tools.memory.tool_delete_memory",
-    "tools.memory.tool_merge_memories",
-    "tools.memory.tool_search_memories",
+    # "tools.interaction.tool_single_choice", — 已删除
+    # "tools.interaction.tool_multi_choice", — 已删除
+    # "tools.interaction.tool_ask_confirm", — 已删除
+    # "tools.entertainment.tool_tarot", — 已删除
+    # "tools.memory.tool_list_memories", — 已删除
+    # "tools.memory.tool_read_memories", — 已删除
+    # "tools.memory.tool_create_memory", — 已删除
+    # "tools.memory.tool_update_memory", — 已删除
+    # "tools.memory.tool_delete_memory", — 已删除
+    # "tools.memory.tool_merge_memories", — 已删除
+    # "tools.memory.tool_search_memories", — 已删除
     # Stage 1 子任务 1.2：4 层记忆架构新增工具
-    "tools.memory.tool_search_episodic",
-    "tools.memory.tool_search_semantic",
+    # "tools.memory.tool_search_episodic", — 已删除
+    # "tools.memory.tool_search_semantic", — 已删除
     # Stage 1 子任务 1.4：通用知识库工具
-    "tools.kb.tool_kb_search",
-    "tools.kb.tool_kb_add",
+    # "tools.kb.tool_kb_search", — 已删除
+    # "tools.kb.tool_kb_add", — 已删除
     # 知识库文档加载器依赖（PyInstaller 静态分析可能遗漏函数级 import）
     "PyPDF2",
     "docx",
     "lxml",
-    "tools.config.tool_manage_mcp",
-    "tools.config.tool_manage_skills",
-    "tools.config.tool_manage_macros",
-    "tools.config.tool_manage_providers",
-    "tools.config.tool_manage_env_vars",
-    "tools.config.tool_manage_whitelist",
-    "tools.git.tool_git_status",
-    "tools.git.tool_git_diff",
-    "tools.git.tool_git_log",
-    "tools.git.tool_git_commit",
-    "tools.git.tool_git_branch",
-    "tools.git.tool_git_push",
-    "tools.git.tool_git_pr",
-    "tools.crypto",
+    # "tools.config.tool_manage_mcp", — 已删除
+    # "tools.config.tool_manage_skills", — 已删除
+    # "tools.config.tool_manage_macros", — 已删除
+    # "tools.config.tool_manage_providers", — 已删除
+    # "tools.config.tool_manage_env_vars", — 已删除
+    # "tools.config.tool_manage_whitelist", — 已删除
+    # "tools.git.tool_git_status", — 已删除
+    # "tools.git.tool_git_diff", — 已删除
+    # "tools.git.tool_git_log", — 已删除
+    # "tools.git.tool_git_commit", — 已删除
+    # "tools.git.tool_git_branch", — 已删除
+    # "tools.git.tool_git_push", — 已删除
+    # "tools.git.tool_git_pr", — 已删除
+    # "tools.crypto", — 已删除
 
     # ── API 模块（函数内延迟导入） ──
     "api.context_usage",
@@ -265,34 +269,22 @@ hiddenimports = [
     "langchain_core.messages.RemoveMessage",
 
     # ── Agent 模块 ──
-    "agent.graph",
     "agent.prompts",
-    "agent.planner",
     "agent.hooks",
     "agent.audit_log",
     "agent.error_recovery",
-    "agent.performance",
     "agent.project_scanner",
     # Phase 3.1：工具熔断器（ErrorRecoveryManager 内延迟导入）
     "agent.circuit_breaker",
-    # Stage 2 子任务 2.1：Plan-and-Execute 重构新增模块
-    # executor.py 含 executor_node/StepStateMachine/detect_tool_failure（大量延迟导入）
-    # step_state.py 含 PlanStep/StepStatus/ExecutionPlan/merge_dicts reducer（LangGraph 动态特性）
-    "agent.executor",
-    "agent.step_state",
-    # 阶段 5.2：死循环检测器（graph.should_continue + loop_breaker_node 延迟导入）
-    "agent.loop_detector",
-    # Phase 3：审批网关 + 会话压缩（graph.py 延迟导入 ApprovalToolNode）
-    "agent.approval_gateway",
-    "agent.approval_tool_node",
     "agent.context_manager",
     # Phase B/C/D/E：openhanako 对齐新增模块
     "agent.persona_loader",
-    "agent.execution_boundary",
-    "agent.session_health",
-    "agent.capability_policy",
-    "agent.llm_reviewer",
-    "agent.execution_lease",
+    "agent.runtime_context",
+    # 新增：模型路由 + ThinkPath + 权限策略
+    "agent.model_routing",
+    "agent.think_path",
+    "agent.permission_policy",
+    "agent.delegation_scope",
     # 自治层（scheduler/runner/diagnostics 在 lifespan 和路由中延迟导入，
     # PyInstaller 静态分析会遗漏；scheduler.py 内部还延迟导入 runner）
     "agent.autonomy",
@@ -303,13 +295,6 @@ hiddenimports = [
     "agent.autonomy.completion_signal",
     "agent.autonomy.escalation",
 
-    # ── Halo 架构增强：流式修复管道 ──
-    "agent.stream_repair",
-    "agent.stream_repair.empty_turn",
-    "agent.stream_repair.tool_json_repair",
-    "agent.stream_repair.usage_backfill",
-    "agent.stream_repair.pipeline",
-
     # ── Halo 架构增强：Disposable 资源管理 ──
     "agent.lifecycle",
     "agent.lifecycle.disposable",
@@ -318,13 +303,14 @@ hiddenimports = [
     "agent.memory",
     "agent.memory.working_memory",
 
-    # ── Halo 架构增强：运行时上下文限制 ──
-    "agent.runtime_context",
-
-    # ── 编排层（coordinator/verifier/delegation_scope 延迟导入） ──
-    "agent.coordinator",
-    "agent.verifier",
-    "agent.delegation_scope",
+    # ── oh-my-pi sidecar 桥接层（Phase 1 新增）──
+    "api.pi_bridge",
+    "api.pi_bridge.sidecar_manager",
+    "api.pi_bridge.rpc_client",
+    "api.pi_bridge.session_adapter",
+    "api.pi_bridge.security_adapter",
+    "api.pi_bridge.approval_adapter",
+    "api.pi_bridge.ws_event_mapper",
 
     # ── maxma_platform（从 platform 重命名，避免标准库遮蔽） ──
     "maxma_platform",
@@ -373,26 +359,26 @@ hiddenimports = [
     "memory.ltm_outbox",
 
     # ── 路径安全 ──
-    "tools.path_security",
+    # "tools.path_security", — 已删除
 
     # ── Halo 功能性增强：report_to_user 工具 + 诊断基类 ──
-    "tools.system.tool_report_to_user",
-    "tools.system.tool_rag_diagnose",
-    "tools.system.tool_system_diagnose",
-    "tools.system.sandbox_runner",
-    "tools.base_diagnose",
+    # "tools.system.tool_report_to_user", — 已删除
+    # "tools.system.tool_rag_diagnose", — 已删除
+    # "tools.system.tool_system_diagnose", — 已删除
+    # "tools.system.sandbox_runner", — 已删除
+    # "tools.base_diagnose", — 已删除
     # ── 委派上下文（子 Agent 权限继承） ──
-    "tools.sub_agent.delegation_context",
+    # "tools.sub_agent.delegation_context", — 已删除
 
     # ── MCP 模块（Stage 4：MCP 工具管理 + 安全 + 限流） ──
     # tools.mcp 被 api.routes.mcp 顶层导入，但 init_mcp_tools() 内有大量延迟导入
-    "tools.mcp",
+    # "tools.mcp", — 已删除
     # tools.mcp_security 被 tools.mcp 顶层导入（validate_stdio_command 等）
-    "tools.mcp_security",
+    # "tools.mcp_security", — 已删除
     # 阶段 4.4：MCP 限流器（tools.mcp._wrap_tool_with_safety 内延迟导入）
-    "tools.mcp_rate_limiter",
+    # "tools.mcp_rate_limiter", — 已删除
     # Task 2：MCP 运行时管理器（tools.mcp._init_mcp_tools 内延迟导入）
-    "tools.mcp_runtime",
+    # "tools.mcp_runtime", — 已删除
 
     # ── 第三方库 ──
     "portalocker",

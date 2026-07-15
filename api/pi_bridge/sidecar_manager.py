@@ -34,7 +34,17 @@ _DEFAULT_BUN_PATH = "D:/NodeGlobal/node_modules/bun/bin/bun.exe"
 
 
 def _resolve_bun_path() -> str:
-    """从配置读取 Bun 路径，fallback 到默认值。"""
+    """从配置读取 Bun 路径，fallback 到默认值。
+
+    生产模式（PyInstaller _MEIPASS）：查找捆绑的 bun.exe。
+    开发模式：使用配置文件或默认路径。
+    """
+    # 生产模式：PyInstaller 打包后 bun.exe 在 _MEIPASS 目录
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        bundled_bun = Path(meipass) / "bun-sidecar" / "bun.exe"
+        if bundled_bun.exists():
+            return str(bundled_bun)
     try:
         from config.settings import get_settings
         s = get_settings()
