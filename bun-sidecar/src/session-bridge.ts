@@ -27,6 +27,7 @@ import { registerCustomTools } from "./tools/index";
 interface SessionRecord {
   session: AgentSession;
   unsubscribe: () => void;
+  promptQueue: Promise<void>;  // serializes concurrent prompt calls
 }
 
 // ---------------------------------------------------------------------------
@@ -315,7 +316,7 @@ rl.on("line", async (line: string) => {
       const sessionId = randomUUID();
 
       const unsubscribe = subscribeSession(sessionId, session);
-      sessions.set(sessionId, { session, unsubscribe });
+      sessions.set(sessionId, { session, unsubscribe, promptQueue: Promise.resolve() });
 
       send(id, { session_id: sessionId });
       return;
@@ -330,14 +331,16 @@ rl.on("line", async (line: string) => {
         return;
       }
 
-      // Fire-and-forget — the response returns immediately.
-      // Events stream asynchronously via the subscriber.
-      record.session.prompt(message).catch((err: unknown) => {
-        sendEvent(sessionId, {
-          type: "error",
-          payload: { code: "PROMPT_ERROR", message: String(err) },
-        });
-      });
+      // Serialize: chain onto the previous prompt so they run sequentially.
+      // A failed prompt does not block the next one (.catch resets the chain).
+      record.promptQueue = record.promptQueue
+        .catch(() => {})
+        .then(() => record.session.prompt(message).catch((err: unknown) => {
+          sendEvent(sessionId, {
+            type: "error",
+            payload: { code: "PROMPT_ERROR", message: String(err) },
+          });
+        }));
 
       send(id, { ok: true });
       return;
@@ -425,3 +428,24 @@ rl.on("line", async (line: string) => {
     sendError(id, String(err));
   }
 });
+
+// ---------------------------------------------------------------------------
+// Graceful shutdown
+// ---------------------------------------------------------------------------
+
+async function shutdown() {
+  for (const [sid, record] of sessions) {
+    try {
+      record.unsubscribe();
+      await record.session.dispose();
+    } catch {
+      // best-effort cleanup
+    }
+  }
+  sessions.clear();
+  rl.close();
+  process.exit(0);
+}
+
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
