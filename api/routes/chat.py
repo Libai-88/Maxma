@@ -11,16 +11,14 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, ToolMessage
 
-from agent.graph import build_agent
 from agent.model_routing import resolve_model_role
 from agent.prompts import build_system_prompt, get_system_prompt_parts
 from agent.think_path import ThinkPath, get_think_path
 from app_paths import CONFIG_DIR
-from agent.context_manager import commit_to_episodic, maybe_trim_checkpoint
+from agent.context_manager import commit_to_episodic
 from api import interaction
-from api.callbacks.websocket_callback import WebSocketCallback
 from api.const_session_store import save_const_session, serialize_messages
 from api.context_usage import estimate_context_usage
 from api.errors import ErrorCode, format_ws_error
@@ -293,133 +291,253 @@ async def _describe_image(image_path: str) -> str:
     return response.choices[0].message.content or "(无法描述)"
 
 
-def _get_final_answer(event) -> str:
-    """
-    从 on_chain_end 事件提取原始 final_answer，
-    返回 content。
-    """
-    output = event["data"].get("output", {})
-    messages = output.get("messages", [])
-    if not messages:
-        return ""
-    raw_final_answer = messages[-1]  # 最后一条message为Final Answer
-    final_answer = (
-        raw_final_answer.content
-        if hasattr(raw_final_answer, "content")
-        else str(raw_final_answer)
-    )
-    return final_answer
+async def _get_messages_from_sidecar(
+    session: "SessionState",
+    limit: int = 50,
+) -> list[dict]:
+    """从 sidecar 获取消息历史。sidecar 不可用时返回空列表。
 
-
-async def _get_recent_ai_messages(session, config, limit: int = 5) -> list[str]:
-    """从 checkpoint 获取最近 N 条 AI 消息内容。"""
+    通过 SessionMap（SQLite 持久化）查找 sidecar session ID，
+    然后调用 get_messages RPC 获取消息列表。
+    """
+    app_state = getattr(session, "_app_state", None)
+    if app_state is None:
+        return []
+    sidecar_mgr = getattr(app_state, "sidecar_manager", None)
+    if sidecar_mgr is None or sidecar_mgr.client is None:
+        return []
+    # 从 SessionMap 获取 sidecar session ID（持久化，重启后仍可用）
+    from api.pi_bridge.session_adapter import SessionMap
+    with SessionMap() as sm:
+        sidecar_sid = sm.get_sidecar_id(session.session_id)
+    if not sidecar_sid:
+        sidecar_sid = getattr(session, "_sidecar_session_id", None)
+    if not sidecar_sid:
+        return []
     try:
-        cpt = await session.checkpointer.aget_tuple(config)
-        if cpt is None:
-            return []
-        messages = cpt.checkpoint.get("channel_values", {}).get("messages", [])
-        # 从后往前取 AI 消息（排除最后一条，因为那是当前回复）
-        ai_messages = []
-        for msg in reversed(messages[:-1]):
-            if hasattr(msg, "type") and msg.type == "ai":
-                content = msg.content if hasattr(msg, "content") else str(msg)
-                if content:
-                    ai_messages.append(content)
-                    if len(ai_messages) >= limit:
-                        break
-        return ai_messages
+        result = await sidecar_mgr.client.call("get_messages", {
+            "session_id": sidecar_sid,
+            "limit": limit,
+        })
+        return result.get("messages", [])
     except Exception:
+        logger.debug("[sidecar] get_messages failed", exc_info=True)
         return []
 
 
-async def _stream_turn(
-    graph,
-    inputs,
-    config,
-    ws,
-    session,
-    system_prompt,
-    model_name: str | None = None,
-    max_tokens: int = 256_000,
+async def _get_recent_ai_messages(session, config, limit: int = 5) -> list[str]:
+    """从 sidecar 获取最近 N 条 AI 消息内容（用于贴纸情感分析）。
+
+    sidecar 模式下 config 为 None，改为从 sidecar RPC 获取消息历史。
+    """
+    messages = await _get_messages_from_sidecar(session, limit=limit * 3)
+    ai_msgs = [m.get("content", "") for m in messages if m.get("role") == "assistant"]
+    return ai_msgs[-limit:]
+
+
+async def _stream_turn_sidecar(
+    ws: WebSocket,
+    session: SessionState,
+    user_message_for_llm: str,
+    system_prompt: str,
+    current_provider_id: str,
+    current_model_name: str | None,
 ) -> str:
-    """流式执行 Agent 图，返回最终回答。"""
+    """Execute a turn using oh-my-pi sidecar (Bun subprocess).
+
+    Returns final_answer string for post-processing (stickers, memory, etc.).
+    Intermediate events (token, tool_start, tool_end, tool_error) are streamed
+    to the frontend via WS in real-time.
+
+    The answer and done events are NOT sent here — the existing post-processing
+    pipeline in _run_agent_turn handles those (including sticker processing).
+    """
+    app_state = ws.app.state
+
+    # 1. Ensure sidecar is running
+    mgr = app_state.sidecar_manager
+    await mgr.start()
+    client = mgr.client
+    assert client is not None, "Sidecar client not available"
+
+    # 2. Look up sidecar session (persistent SessionMap, fallback to in-memory)
+    from api.pi_bridge.session_adapter import SessionMap
+    with SessionMap() as _session_map:
+        sidecar_sid = _session_map.get_sidecar_id(session.session_id)
+    if not sidecar_sid:
+        sidecar_sid = getattr(session, "_sidecar_session_id", None)
+
+    if not sidecar_sid:
+        if current_provider_id:
+            model_str = f"{current_provider_id}/{current_model_name or 'gpt-4o'}"
+        else:
+            model_str = current_model_name or "gpt-4o"
+
+        # 首次创建 sidecar session，system_prompt 含人设/规则/技能
+        # 如果是重启后重建，从 SessionMap 恢复最近对话上下文
+        _sidecar_system_prompt = system_prompt
+        try:
+            _past_turns = _session_map.get_recent_turns(session.session_id, count=5)
+            if _past_turns:
+                _history_lines = []
+                for t in _past_turns:
+                    _history_lines.append(f"用户: {t.get('user', '')}")
+                    _history_lines.append(f"助理: {t.get('assistant', '')}")
+                _history_text = "\n".join(_history_lines)
+                _sidecar_system_prompt = (
+                    f"{system_prompt}\n\n"
+                    f"[历史对话上下文（共 {len(_past_turns)} 轮）]\n"
+                    f"{_history_text}\n"
+                )
+                logger.info(
+                    "[sidecar] Restored %d past turns for session %s",
+                    len(_past_turns), session.session_id[:8],
+                )
+        except Exception:
+            logger.debug("[sidecar] Failed to restore past turns", exc_info=True)
+
+        result = await client.call("create_session", {
+            "model": model_str,
+            "system_prompt": _sidecar_system_prompt,
+            "cwd": ".",
+        })
+        sidecar_sid = result["session_id"]
+        session._sidecar_session_id = sidecar_sid
+        _session_map.set_mapping(session.session_id, sidecar_sid)
+        logger.info(
+            "[sidecar] Created session %s for Maxma session %s",
+            sidecar_sid[:8], session.session_id[:8],
+        )
+
+    # 3. 情景记忆：每轮对话以用户消息为查询检索相关历史，注入到 user_message
+    _user_message_for_llm = user_message_for_llm
+    try:
+        _episodic_mm = getattr(app_state, "episodic_mm", None)
+        if _episodic_mm is not None and user_message_for_llm:
+            from agent.context_manager import retrieve_from_episodic
+            _episodic_context = retrieve_from_episodic(
+                user_message_for_llm,
+                _episodic_mm,
+                top_k=3,
+                session_id=session.session_id,
+            )
+            if _episodic_context:
+                _user_message_for_llm = (
+                    f"[相关情景记忆]\n{_episodic_context}\n\n"
+                    f"---\n\n{user_message_for_llm}"
+                )
+    except Exception:
+        logger.warning("[sidecar] Episodic retrieval failed", exc_info=True)
+
+    # 3. Register event handlers to forward intermediate events to WS
     final_answer = ""
-    async for event in graph.astream_events(inputs, config=config, version="v2"):
-        if event.get("event") == "on_chain_end" and event.get("name") == "agent":
-            final_answer = _get_final_answer(event)
-        # 一轮工具执行完毕，ToolMessage 已写入 checkpoint，推送上下文用量
-        if event.get("event") == "on_chain_end" and event.get("name") == "tools":
-            usage = await _calculate_context_usage(
-                session,
-                system_prompt,
-                max_tokens=max_tokens,
-                model_name=model_name or "",
-            )
-            await ws.send_json({"type": "context_usage", "payload": usage})
+    turn_done = asyncio.Event()
 
-    # 事件未捕获到 final_answer 时，从 checkpoint 兜底提取
-    if not final_answer:
+    async def _on_token(sid: str, event: dict):
+        if sid != sidecar_sid:
+            return
         try:
-            cpt = await session.checkpointer.aget_tuple(config)
-            if cpt is not None:
-                messages = cpt.checkpoint.get("channel_values", {}).get("messages", [])
-                if messages:
-                    last = messages[-1]
-                    candidate = last.content if hasattr(last, "content") else str(last)
-                    if candidate:
-                        final_answer = candidate
+            await ws.send_json({
+                "type": "token",
+                "payload": {"token": event.get("payload", {}).get("token", "")},
+            })
         except Exception:
-            logger.debug(
-                "Failed to read fallback final_answer from checkpoint", exc_info=True
-            )
+            pass
 
-    # 二级兜底：如果 final_answer 仍为空（如 executor 跳过最后一步后图直接结束，
-    # LLM 未生成文字回复），从 checkpoint 中提取最后一个工具错误，
-    # 包装为用户可见的提示，确保这一轮对话不会被"吞掉"。
-    if not final_answer:
+    async def _on_tool_start(sid: str, event: dict):
+        if sid != sidecar_sid:
+            return
         try:
-            cpt = await session.checkpointer.aget_tuple(config)
-            if cpt is not None:
-                messages = cpt.checkpoint.get("channel_values", {}).get("messages", [])
-                # 从后往前找最后一个含错误标记的 ToolMessage
-                for msg in reversed(messages):
-                    if not isinstance(msg, ToolMessage):
-                        continue
-                    content = (
-                        msg.content
-                        if isinstance(msg.content, str)
-                        else str(msg.content)
-                    )
-                    if (
-                        '"success": false' not in content
-                        and '"success":false' not in content
-                    ):
-                        continue
-                    # 提取错误信息
-                    tool_err_msg = "工具执行失败"
-                    try:
-                        import json as _json
-
-                        parsed = _json.loads(content)
-                        if isinstance(parsed, dict) and parsed.get("success") is False:
-                            tool_err_msg = parsed.get("error", tool_err_msg)
-                    except (ValueError, TypeError):
-                        tool_err_msg = content[:200]
-                    tool_name = getattr(msg, "name", "") or "工具"
-                    final_answer = (
-                        f"抱歉，这一轮处理没能完成。\n\n"
-                        f"**{tool_name}** 报告：{tool_err_msg}\n\n"
-                        f"你可以调整后重试，或者告诉我换个方式处理。"
-                    )
-                    break
+            payload = event.get("payload", {})
+            await ws.send_json({
+                "type": "tool_start",
+                "payload": {
+                    "tool_name": payload.get("tool_name", ""),
+                    "input": payload.get("input", ""),
+                },
+            })
         except Exception:
-            logger.debug(
-                "Failed to extract tool error fallback from checkpoint", exc_info=True
-            )
+            pass
 
-    # 三级兜底：所有提取均失败时，给用户一个明确的提示而非空白
-    if not final_answer:
-        final_answer = "（这一轮处理未生成文字回复，请查看工具执行结果或重新提问。）"
+    async def _on_tool_end(sid: str, event: dict):
+        if sid != sidecar_sid:
+            return
+        try:
+            payload = event.get("payload", {})
+            await ws.send_json({
+                "type": "tool_end",
+                "payload": {
+                    "tool_name": payload.get("tool_name", ""),
+                    "output": payload.get("output", ""),
+                    "elapsed": payload.get("elapsed", 0),
+                },
+            })
+        except Exception:
+            pass
+
+    async def _on_tool_error(sid: str, event: dict):
+        if sid != sidecar_sid:
+            return
+        try:
+            payload = event.get("payload", {})
+            await ws.send_json({
+                "type": "tool_error",
+                "payload": {
+                    "tool_name": payload.get("tool_name", ""),
+                    "error": payload.get("error", ""),
+                },
+            })
+        except Exception:
+            pass
+
+    async def _on_answer(sid: str, event: dict):
+        nonlocal final_answer
+        if sid != sidecar_sid:
+            return
+        # Extract the answer but do NOT send to WS — the existing post-processing
+        # in _run_agent_turn handles sticker processing + answer push.
+        final_answer = event.get("payload", {}).get("content", "")
+
+    async def _on_done(sid: str, event: dict):
+        if sid != sidecar_sid:
+            return
+        turn_done.set()
+
+    # Register all event handlers
+    unsubs = []
+    for evt_type, handler in [
+        ("token", _on_token),
+        ("tool_start", _on_tool_start),
+        ("tool_end", _on_tool_end),
+        ("tool_error", _on_tool_error),
+        ("answer", _on_answer),
+        ("done", _on_done),
+    ]:
+        unsub = client.on(evt_type, handler)
+        unsubs.append(unsub)
+
+    # 4. Execute prompt via sidecar
+    try:
+        await client.call("prompt", {
+            "session_id": sidecar_sid,
+            "message": _user_message_for_llm,
+        })
+        # Wait for done event (sidecar signals completion)
+        await asyncio.wait_for(turn_done.wait(), timeout=600)
+    except asyncio.TimeoutError:
+        logger.warning("[sidecar] Turn timed out for session %s", sidecar_sid)
+        if not final_answer:
+            final_answer = "（Sidecar 处理超时，请重试）"
+    except Exception as e:
+        logger.exception("[sidecar] Turn failed for session %s", sidecar_sid)
+        if not final_answer:
+            final_answer = f"（Sidecar 处理出错：{e}）"
+    finally:
+        for unsub in unsubs:
+            try:
+                unsub()
+            except Exception:
+                pass
 
     return final_answer
 
@@ -431,125 +549,34 @@ async def _calculate_context_usage(
     max_tokens: int = 256_000,
     model_name: str = "",
 ) -> dict:
+    """估算上下文用量。sidecar 模式下从消息历史估算。
+
+    从 sidecar 获取消息列表，用字符数粗略估算 token 用量。
+    返回字典包括估算用量、最大用量、占比、消息数。
     """
-    从 checkpointer 拉取消息列表，估算上下文用量。
-    返回字典，包括现用量、最大用量、占比、模型名称。
-    """
-    try:
-        cpt = await session.checkpointer.aget_tuple(
-            {"configurable": {"thread_id": session.session_id}}
-        )
-        if cpt is not None:
-            channel_values = cpt.checkpoint.get("channel_values", {})
-            counting_messages = channel_values.get("messages", [])
-        else:
-            counting_messages = []
-    except Exception:
-        logger.debug(
-            "Failed to read checkpoint for context usage estimation", exc_info=True
-        )
-        counting_messages = []
-
-    return estimate_context_usage(
-        messages=counting_messages,
-        system_prompt=system_prompt,
-        max_tokens=max_tokens,
-        model_name=model_name,
-        system_prompt_parts=get_system_prompt_parts(),
-    )
-
-
-async def _maybe_notify_plan_degraded(graph, config, ws: WebSocket) -> None:
-    """阶段 2.3：检测 plan 是否以降级状态完成，向前端推送 plan_degraded 事件。
-
-    降级状态：plan_steps 中有步骤被 SKIPPED 或 FAILED（重规划失败 N 次后跳过步骤）。
-    前端收到此事件后可提示用户"结果可能不完整"，并展示被跳过的步骤列表。
-
-    幂等：仅在 is_degraded=True 时推送；无 plan 或 plan 正常完成时不推送。
-    """
-    try:
-        state = await graph.aget_state(config)
-    except Exception:
-        return
-    if state is None:
-        return
-
-    values = state.values or {}
-    plan_steps = values.get("plan_steps") or []
-    if not plan_steps:
-        return  # 无计划，简单任务不处理
-
-    step_status = values.get("step_status") or {}
-    failure_count = values.get("failure_count", 0)
-    replan_count = values.get("replan_count", 0)
-
-    # 收集被跳过/失败的步骤
-    skipped: list[dict] = []
-    failed: list[dict] = []
-    from agent.step_state import StepStatus
-
-    for step_dict in plan_steps:
-        idx = step_dict.get("index", 0)
-        status_val = step_status.get(str(idx))
-        if status_val == StepStatus.SKIPPED.value:
-            skipped.append(
-                {
-                    "index": idx,
-                    "description": step_dict.get("description", ""),
-                }
-            )
-        elif status_val == StepStatus.FAILED.value:
-            failed.append(
-                {
-                    "index": idx,
-                    "description": step_dict.get("description", ""),
-                }
-            )
-
-    if not skipped and not failed:
-        return  # 正常完成，无需通知
-
-    try:
-        await ws.send_json(
-            {
-                "type": "plan_degraded",
-                "payload": {
-                    "skipped_steps": skipped,
-                    "failed_steps": failed,
-                    "failure_count": failure_count,
-                    "replan_count": replan_count,
-                    "message": (
-                        f"执行计划以降级模式完成：{len(skipped)} 个步骤被跳过，"
-                        f"{len(failed)} 个步骤失败。结果可能不完整，建议检查或重新提问。"
-                    ),
-                },
-            }
-        )
-    except Exception:
-        logger.debug("[degraded] ws send failed", exc_info=True)
+    messages = await _get_messages_from_sidecar(session, limit=200)
+    total_chars = sum(len(m.get("content", "")) for m in messages)
+    total_chars += len(system_prompt or "")
+    # 粗略估算：混合中英文约 2 字符/token
+    estimated_tokens = int(total_chars / 2)
+    return {
+        "estimated_tokens": estimated_tokens,
+        "max_tokens": max_tokens,
+        "percentage": min(100, int(estimated_tokens / max(max_tokens, 1) * 100)),
+        "message_count": len(messages),
+        "model_name": model_name,
+    }
 
 
 async def _inject_cancel_tool_messages(session, config, ws: WebSocket) -> None:
-    """为 checkpoint 中孤立的 tool_calls 注入统一格式的正常 ToolMessage，
-    并通知前端使对应工具气泡进入错误状态。
+    """为 checkpoint 中孤立的 tool_calls 注入统一格式的正常 ToolMessage。
 
-    由 CancelledError 处理器调用，确保取消后 checkpoint 状态一致，
-    下一条消息不会触发 "tool_calls without corresponding ToolMessage" 错误。
-
-    注入的 ToolMessage 使用 status="success"（默认），content 套用 format_error()
-    统一错误响应格式，使 LLM 在下一轮能正确识别工具调用已被取消。
-
-    前端 tool_error 事件：如果对应工具气泡尚在 'running' 状态，则标记为 'error'；
-    若工具从未启动过（无对应气泡）则事件被前端静默忽略。
-
-    与 time_traveler.py 的 undo_rounds() 使用同一模式（graph.aupdate_state）。
-    注意必需传入 as_node="tools"，否则 aupdate_state 评估路由时会从 model 节点的
-    model_to_tools 条件边走，检测到人造 ToolMessage 后返回 "model" 但该边目的地
-    不含 "model" 导致 KeyError 使写入失败。
+    sidecar 模式下 session._graph 为 None，取消由 sidecar 的 cancel RPC 处理，
+    无需手动清理 checkpoint。直接返回。
     """
     graph = session._graph
     if graph is None:
-        return
+        return  # sidecar 模式：cancel 由 sidecar 处理，无需 checkpoint 清理
 
     try:
         state = await graph.aget_state(config)
@@ -687,20 +714,49 @@ def _get_project_context(session: SessionState, user_message: str) -> str | None
 
 async def _project_completed_turn_to_episodic(
     *,
-    graph,
-    config: dict,
+    user_message: str = "",
+    assistant_message: str = "",
     episodic_mm,
     session_id: str,
     turn_id: str,
+    graph=None,
+    config: dict | None = None,
 ) -> None:
     """Best-effort 将一个成功的 chat turn 投影到情景记忆。
 
-    调用发生在客户端收到 ``done`` 事件后。情景记忆故障因此不会改变
-    已完成对话的结果；存储层以 ``(session_id, turn_id)`` 保证重试幂等。
+    sidecar 模式下 graph/config 为 None，直接使用传入的 user_message 和
+    assistant_message 构造摘要，不再从 checkpoint 读取消息列表。
     """
     if episodic_mm is None:
         return
     try:
+        # sidecar 模式：graph 为 None，使用直接传入的消息
+        if graph is None:
+            # 构造简单的摘要文本用于情景记忆
+            summary_parts = []
+            if user_message:
+                user_preview = user_message[:200] + ("..." if len(user_message) > 200 else "")
+                summary_parts.append(f"用户: {user_preview}")
+            if assistant_message:
+                asst_preview = assistant_message[:300] + ("..." if len(assistant_message) > 300 else "")
+                summary_parts.append(f"助理: {asst_preview}")
+            summary = "\n".join(summary_parts)
+            if not summary:
+                return
+            # 写入情景记忆
+            episode_id = await episodic_mm.add_episode(
+                session_id=session_id,
+                turn_id=turn_id,
+                summary=summary,
+            )
+            if episode_id is None:
+                logger.debug(
+                    "[episodic] no episode created for session=%s turn=%s",
+                    session_id, turn_id,
+                )
+            return
+
+        # LangGraph 路径（保留兼容，理论上 sidecar 模式不会到达）
         episode_id = await commit_to_episodic(
             graph,
             config,
@@ -783,10 +839,6 @@ async def _run_agent_turn(
     # invocation gets one stable id for its full lifetime.
     turn_id = _new_turn_id(turn_id)
     interaction.current_session_id.set(session.session_id)
-    ws_callback = WebSocketCallback(ws)  # WebUI 回调函数系统
-    ws_callback.session_id = session.session_id  # 供 Activity Hub 记录使用
-    ws_callback.turn_id = turn_id
-
     # ── 多模态：自动描述用户附带的图片 ──────────────────────────
     user_message = await _process_image_refs(user_message)
     # ────────────────────────────────────────────────────────────
@@ -1006,56 +1058,17 @@ async def _run_agent_turn(
         runtime_context_text = "\n\n".join(
             part for part in (think_path_context, runtime_context_text) if part
         )
-    agent_maxma = build_agent(
-        model=llm,
-        tools=turn_tools,
-        system_prompt=system_prompt,
-        checkpointer=session.checkpointer,
-        ws=ws,
-        episodic_mm=episodic_mm,
-        runtime_context=runtime_context_text,
-        episodic_session_id=session.session_id,
-    )
-    session._graph = agent_maxma
+
     # project_ctx prepend 到 user_message（不修改 system_prompt，保持缓存稳定）
     if project_ctx:
         user_message_for_llm = f"[项目上下文]\n{project_ctx}\n\n---\n\n{user_message}"
     else:
         user_message_for_llm = user_message
-    inputs = {"messages": [HumanMessage(content=user_message_for_llm)]}
-    config = {
-        "configurable": {"thread_id": session.session_id},
-        "callbacks": [ws_callback],
-        "recursion_limit": 120,
-    }
 
-    # 上下文窗口保护：当对话历史过长时自动截断，防止超出模型上下文限制
-    from api.context_usage import count_tokens
-
-    system_prompt_tokens = count_tokens(system_prompt)
-
-    # 包装 ws.send_json 为符合 ws_callback 签名的异步回调
-    async def _compress_ws_callback(msg: dict):
-        await ws.send_json(msg)
-
-    await maybe_trim_checkpoint(
-        agent_maxma,
-        config,
-        llm=llm,
-        ws_callback=_compress_ws_callback,
-        token_counter=lambda msgs: (
-            system_prompt_tokens
-            + sum(
-                count_tokens(
-                    m.content if isinstance(m.content, str) else str(m.content)
-                )
-                + 4
-                for m in msgs
-            )
-        ),
-        max_tokens=current_max_tokens,
-        cache_preserving=settings.cache_preserving_compaction_enabled,
-    )
+    # oh-my-pi sidecar: no LangGraph state
+    config = None
+    agent_maxma = None
+    session._graph = None
 
     # 2. [执行轮次] 流式执行 Agent 图，副作用推送最终回答，另有config回调副作用
     final_answer = ""
@@ -1075,15 +1088,13 @@ async def _run_agent_turn(
         context_token = delegation_helpers[0](execution_context)
         if delegation_context is not None:
             async with asyncio.timeout(delegation_context.remaining_seconds()):
-                final_answer = await _stream_turn(
-                    agent_maxma,
-                    inputs,
-                    config,
+                final_answer = await _stream_turn_sidecar(
                     ws,
                     session,
+                    user_message_for_llm,
                     system_prompt,
-                    model_name=current_model_name,
-                    max_tokens=current_max_tokens,
+                    current_provider_id,
+                    current_model_name,
                 )
         else:
             _turn_timeout = 600
@@ -1092,30 +1103,25 @@ async def _run_agent_turn(
             except Exception:
                 pass
             async with asyncio.timeout(_turn_timeout):
-                final_answer = await _stream_turn(
-                    agent_maxma,
-                    inputs,
-                    config,
+                final_answer = await _stream_turn_sidecar(
                     ws,
                     session,
+                    user_message_for_llm,
                     system_prompt,
-                    model_name=current_model_name,
-                    max_tokens=current_max_tokens,
+                    current_provider_id,
+                    current_model_name,
                 )
-        # This records execution outcome, rather than inferring it from a
-        # localized fallback/error string.  The graph writes the marker even
-        # when it turns a provider failure into a user-facing AI message.
-        turn_completed = await _is_memory_eligible_turn(agent_maxma, config)
+        # Sidecar mode: no graph state to inspect, trust the returned answer
+        turn_completed = bool(final_answer)
 
-        # 阶段 2.3：重规划失败 N 次后优雅降级通知
-        # 当 plan 以降级状态完成（有步骤被跳过/失败）时，向前端推送 plan_degraded 事件
-        # 让用户知道结果可能不完整，可考虑手动介入或重新提问
-        try:
-            await _maybe_notify_plan_degraded(agent_maxma, config, ws)
-        except Exception:
-            logger.debug(
-                "[degraded] failed to notify plan degraded state", exc_info=True
-            )
+        # 保存本轮对话到 SessionMap（用于侧边栏重启后恢复上下文）
+        if final_answer and not private_mode:
+            try:
+                from api.pi_bridge.session_adapter import SessionMap
+                with SessionMap() as sm:
+                    sm.append_turn(session.session_id, user_message, final_answer)
+            except Exception:
+                logger.debug("[sidecar] Failed to save turn to SessionMap", exc_info=True)
 
         if final_answer:
             # 表情包处理：分层决策架构
@@ -1140,24 +1146,23 @@ async def _run_agent_turn(
         # 清理 interaction 挂起 Future
         await interaction.cancel_session(session.session_id)
 
-        # 修复 checkpoint：为孤立 tool_calls 注入取消 ToolMessage，并通知前端
+        # sidecar 模式：通过 cancel RPC 中止 sidecar 中的生成
         try:
-            await _inject_cancel_tool_messages(session, config, ws)
+            sidecar_mgr = getattr(ws.app.state, "sidecar_manager", None)
+            if sidecar_mgr and sidecar_mgr.client:
+                from api.pi_bridge.session_adapter import SessionMap
+                with SessionMap() as sm:
+                    sidecar_sid = sm.get_sidecar_id(session.session_id)
+                if not sidecar_sid:
+                    sidecar_sid = getattr(session, "_sidecar_session_id", None)
+                if sidecar_sid:
+                    await sidecar_mgr.client.call("cancel", {"session_id": sidecar_sid})
         except Exception as e:
-            logger.warning("[cancel] checkpoint cleanup error: %s", e)
+            logger.debug("[cancel] sidecar cancel RPC failed: %s", e)
 
-        # 向 checkpoint 注入一条"被中断"的 AIMessage，确保前端 loadHistoryFromBackend
-        # 能取到非空 finalAnswer，避免用户感知为"整轮对话被吞掉"。
-        # 注意：必须用 as_node="agent" 写入，否则 aupdate_state 路由会出错。
-        try:
-            interrupt_msg = AIMessage(
-                content="（回复已中断——可能因网络断开或切换页面。请重新提问以继续。）"
-            )
-            await agent_maxma.aupdate_state(
-                config, {"messages": [interrupt_msg]}, as_node="agent"
-            )
-        except Exception as e:
-            logger.warning("[cancel] failed to inject interrupt AIMessage: %s", e)
+        # 注：原 LangGraph 路径的 checkpoint 清理和 interrupt AIMessage 注入
+        # 在 sidecar 模式下不再需要 — cancel RPC 已中止生成，
+        # sidecar 内部维护消息状态的一致性。
 
         await ws.send_json(format_ws_error(ErrorCode.CANCELLED, "生成已取消"))
     except Exception as e:
@@ -1221,8 +1226,8 @@ async def _run_agent_turn(
     if not private_mode and memory_eligible:
         if final_answer:
             await _project_completed_turn_to_episodic(
-                graph=agent_maxma,
-                config=config,
+                user_message=user_message,
+                assistant_message=final_answer,
                 episodic_mm=episodic_mm,
                 session_id=session.session_id,
                 turn_id=turn_id,
@@ -1249,23 +1254,27 @@ async def _run_agent_turn(
     # 4. [Const 会话] 自动持久化到磁盘 YAML
     if final_answer and session.is_const:
         try:
-            cpt = await session.checkpointer.aget_tuple(
-                {"configurable": {"thread_id": session.session_id}}
-            )
-            raw_messages = (
-                cpt.checkpoint.get("channel_values", {}).get("messages", [])
-                if cpt
-                else []
-            )
-            metadata = session.persistent_metadata()
-            serialized = serialize_messages(raw_messages)
-            for item in reversed(serialized):
-                if item.get("type") == "ai":
-                    item["content"] = final_answer
-                    break
-            save_const_session(
-                session.session_id, session.const_name, metadata, serialized
-            )
+            # sidecar 模式：从 sidecar 获取消息历史
+            messages = await _get_messages_from_sidecar(session, limit=200)
+            if messages:
+                # 转换为 serialize_messages 兼容格式
+                serialized = []
+                for m in messages:
+                    role = m.get("role", "unknown")
+                    content = m.get("content", "")
+                    if role == "user":
+                        serialized.append({"type": "human", "content": content})
+                    elif role == "assistant":
+                        serialized.append({"type": "ai", "content": content})
+                # 确保最后一条 AI 消息是 final_answer
+                for item in reversed(serialized):
+                    if item.get("type") == "ai":
+                        item["content"] = final_answer
+                        break
+                metadata = session.persistent_metadata()
+                save_const_session(
+                    session.session_id, session.const_name, metadata, serialized
+                )
         except Exception as e:
             print(
                 f"[const] 自动保存会话 {session.session_id[:8]} 失败: {e}",

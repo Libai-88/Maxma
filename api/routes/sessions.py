@@ -129,12 +129,13 @@ async def set_session_permission_mode(
 
 
 @router.get("/sessions/{session_id}/messages")
-async def get_messages(session_id: str, request: Request):
+async def get_messages(session_id: str, request: Request, limit: int = 50):
     sm = request.app.state.session_manager
     session = await sm.get(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
+    # const 会话：从 YAML 文件读取
     if session.is_const:
         from api.const_session_store import load_const_session_by_id
 
@@ -154,86 +155,133 @@ async def get_messages(session_id: str, request: Request):
                     ],
                 }
 
-    try:
-        cpt = await session.checkpointer.aget_tuple(
-            {"configurable": {"thread_id": session.session_id}}
-        )
-        msgs = (
-            cpt.checkpoint.get("channel_values", {}).get("messages", []) if cpt else []
-        )
-    except Exception:
-        logger.debug("Failed to read messages from checkpoint for session %s", session_id, exc_info=True)
-        msgs = []
-    return {
-        "session_id": session_id,
-        "messages": [{"role": m.type, "content": m.content} for m in msgs],
-    }
+    # sidecar 模式：从 sidecar RPC 获取消息
+    sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
+    if sidecar_mgr is not None:
+        await sidecar_mgr.start()
+        client = sidecar_mgr.client
+        if client is not None:
+            from api.pi_bridge.session_adapter import SessionMap
+            with SessionMap() as smap:
+                sidecar_sid = smap.get_sidecar_id(session_id)
+            if not sidecar_sid:
+                sidecar_sid = getattr(session, "_sidecar_session_id", None)
+            if sidecar_sid:
+                try:
+                    result = await client.call("get_messages", {
+                        "session_id": sidecar_sid,
+                        "limit": limit,
+                    })
+                    return {
+                        "session_id": session_id,
+                        "messages": result.get("messages", []),
+                        "total": result.get("total", 0),
+                    }
+                except Exception:
+                    logger.debug("[messages] sidecar fetch failed for %s", session_id, exc_info=True)
+
+    # fallback: 从 SessionMap 的 recent turns 获取
+    from api.pi_bridge.session_adapter import SessionMap
+    with SessionMap() as smap:
+        turns = smap.get_recent_turns(session_id, count=limit)
+    messages = []
+    for t in turns:
+        messages.append({"role": "user", "content": t.get("user", "")})
+        messages.append({"role": "assistant", "content": t.get("assistant", "")})
+    return {"session_id": session_id, "messages": messages, "total": len(messages)}
+
+
+async def _sync_const_session_after_undo(session, deleted: int):
+    """Sync const session YAML after undo. sidecar 模式下从 sidecar 获取消息。"""
+    if session.is_const and deleted > 0:
+        from api.const_session_store import save_const_session
+
+        try:
+            # 从 sidecar 获取当前消息列表
+            from api.pi_bridge.session_adapter import SessionMap
+            sidecar_sid = None
+            with SessionMap() as smap:
+                sidecar_sid = smap.get_sidecar_id(session.session_id)
+            if not sidecar_sid:
+                sidecar_sid = getattr(session, "_sidecar_session_id", None)
+            if not sidecar_sid:
+                return
+
+            mgr = getattr(session, "_app_state", None)
+            if mgr is None:
+                return
+            sidecar_mgr = getattr(mgr, "sidecar_manager", None)
+            if sidecar_mgr is None or sidecar_mgr.client is None:
+                return
+
+            result = await sidecar_mgr.client.call("get_messages", {
+                "session_id": sidecar_sid,
+                "limit": 200,
+            })
+            messages = result.get("messages", [])
+            serialized = []
+            for m in messages:
+                role = m.get("role", "unknown")
+                content = m.get("content", "")
+                if role == "user":
+                    serialized.append({"type": "human", "content": content})
+                elif role == "assistant":
+                    serialized.append({"type": "ai", "content": content})
+            metadata = session.persistent_metadata()
+            save_const_session(
+                session.session_id,
+                session.const_name,
+                metadata,
+                serialized,
+            )
+            logger.info(
+                "[undo] const 会话 %s 已同步更新 YAML (deleted=%d, msg_count=%d)",
+                session.session_id, deleted, session.message_count,
+            )
+        except Exception:
+            logger.warning(
+                "[undo] const 会话 %s 撤回后同步 YAML 失败",
+                session.session_id, exc_info=True,
+            )
 
 
 @router.post("/sessions/{session_id}/undo")
 async def undo_session_messages(session_id: str, request: Request, n: int = 1):
     """撤回最近 n 轮对话（默认撤回最后一轮）。"""
-    from api.time_traveler import undo_rounds
-
+    if n < 1:
+        return {"deleted_count": 0}
     sm = request.app.state.session_manager
     session = await sm.get(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    config = {"configurable": {"thread_id": session_id}}
-    # 修复：const 会话从 YAML 重建时 _graph=None（_run_agent_turn 才会设置 _graph），
-    # 导致用户在尚未发消息的 const 会话上点"撤回"会 400 报错。
-    # 此处按需构建临时 graph（仅用于 aget_state/aupdate_state 操作 checkpointer）。
-    graph = session._graph
-    if graph is None:
-        llm = getattr(request.app.state, "llm", None)
-        if llm is None:
-            raise HTTPException(
-                status_code=503, detail="LLM 未就绪，无法执行撤回操作"
-            )
-        from agent.graph import build_agent
+    # ── Sidecar path ──────────────────────────────────────────────
+    mgr = getattr(request.app.state, "sidecar_manager", None)
+    if mgr is not None:
+        await mgr.start()
+        client = mgr.client
+        if client is not None:
+            # 优先从 SessionMap（持久化 SQLite）查找 sidecar session ID
+            from api.pi_bridge.session_adapter import SessionMap
+            with SessionMap() as smap:
+                sidecar_sid = smap.get_sidecar_id(session_id)
+            if not sidecar_sid:
+                sidecar_sid = getattr(session, "_sidecar_session_id", None)
+            if sidecar_sid:
+                try:
+                    result = await client.call("undo", {
+                        "session_id": sidecar_sid,
+                        "steps": n,
+                    })
+                    deleted = result.get("removed", 0)
+                    session.message_count = max(0, session.message_count - deleted)
+                    await _sync_const_session_after_undo(session, deleted)
+                    return {"deleted_count": deleted}
+                except Exception:
+                    logger.debug("[undo] sidecar undo failed for %s", session_id, exc_info=True)
 
-        tools = getattr(request.app.state, "tools", []) or []
-        system_prompt = getattr(request.app.state, "system_prompt", "") or ""
-        graph = build_agent(
-            model=llm,
-            tools=tools,
-            system_prompt=system_prompt,
-            checkpointer=session.checkpointer,
-        )
-        session._graph = graph  # 缓存供后续 undo 复用
-    deleted = await undo_rounds(graph, config, n=n)
-    session.message_count = max(0, session.message_count - deleted)
-
-    # 修复：const 会话撤回后需同步更新 YAML，否则下次启动恢复的是撤回前的消息
-    if session.is_const and deleted > 0:
-        from api.const_session_store import save_const_session, serialize_messages
-
-        try:
-            cpt = await session.checkpointer.aget_tuple(
-                {"configurable": {"thread_id": session.session_id}}
-            )
-            raw_messages = (
-                cpt.checkpoint.get("channel_values", {}).get("messages", []) if cpt else []
-            )
-            metadata = session.persistent_metadata()
-            save_const_session(
-                session_id,
-                session.const_name,
-                metadata,
-                serialize_messages(raw_messages),
-            )
-            logger.info(
-                "[undo] const 会话 %s 已同步更新 YAML (deleted=%d, msg_count=%d)",
-                session_id, deleted, session.message_count,
-            )
-        except Exception:
-            logger.warning(
-                "[undo] const 会话 %s 撤回后同步 YAML 失败",
-                session_id, exc_info=True,
-            )
-
-    return {"deleted_count": deleted}
+    # sidecar 不可用时的降级响应
+    raise HTTPException(status_code=503, detail="Undo 需要 sidecar 连接")
 
 
 @router.get("/sessions/{session_id}/context-usage")
@@ -251,25 +299,41 @@ async def get_context_usage(session_id: str, request: Request):
             model_name = provider.default_model
             break
 
-    system_prompt = request.app.state.system_prompt
-    try:
-        cpt = await session.checkpointer.aget_tuple(
-            {"configurable": {"thread_id": session.session_id}}
-        )
-        counting_messages = (
-            cpt.checkpoint.get("channel_values", {}).get("messages", []) if cpt else []
-        )
-    except Exception:
-        logger.debug("Failed to read checkpoint for context usage in session %s", session_id, exc_info=True)
-        counting_messages = []
-    usage = estimate_context_usage(
-        messages=counting_messages,
-        system_prompt=system_prompt,
-        max_tokens=max_tokens,
-        model_name=model_name,
-        system_prompt_parts=get_system_prompt_parts(),
-    )
-    usage["session_id"] = session_id
+    system_prompt = request.app.state.system_prompt or ""
+
+    # sidecar 模式：从 sidecar 获取消息估算用量
+    counting_messages = []
+    sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
+    if sidecar_mgr is not None:
+        await sidecar_mgr.start()
+        client = sidecar_mgr.client
+        if client is not None:
+            from api.pi_bridge.session_adapter import SessionMap
+            with SessionMap() as smap:
+                sidecar_sid = smap.get_sidecar_id(session_id)
+            if not sidecar_sid:
+                sidecar_sid = getattr(session, "_sidecar_session_id", None)
+            if sidecar_sid:
+                try:
+                    result = await client.call("get_messages", {
+                        "session_id": sidecar_sid,
+                        "limit": 200,
+                    })
+                    counting_messages = result.get("messages", [])
+                except Exception:
+                    logger.debug("Failed to get messages for context usage in session %s", session_id, exc_info=True)
+
+    total_chars = sum(len(m.get("content", "")) for m in counting_messages)
+    total_chars += len(system_prompt)
+    estimated_tokens = int(total_chars / 2)
+    usage = {
+        "estimated_tokens": estimated_tokens,
+        "max_tokens": max_tokens,
+        "percentage": min(100, int(estimated_tokens / max(max_tokens, 1) * 100)),
+        "message_count": len(counting_messages),
+        "model_name": model_name,
+        "session_id": session_id,
+    }
     return usage
 
 
@@ -304,22 +368,37 @@ async def constify_session(session_id: str, body: ConstifyRequest, request: Requ
     if session._active_task is not None and not session._active_task.done():
         raise HTTPException(status_code=409, detail="Agent 仍在运行中，无法固定会话")
 
-    # 从 checkpointer 提取消息
-    try:
-        cpt = await session.checkpointer.aget_tuple(
-            {"configurable": {"thread_id": session.session_id}}
-        )
-        raw_messages = (
-            cpt.checkpoint.get("channel_values", {}).get("messages", []) if cpt else []
-        )
-    except Exception:
-        logger.debug("Failed to read checkpoint for constify in session %s", session_id, exc_info=True)
-        raw_messages = []
+    # 从 sidecar 提取消息
+    serialized = []
+    sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
+    if sidecar_mgr is not None:
+        await sidecar_mgr.start()
+        client = sidecar_mgr.client
+        if client is not None:
+            from api.pi_bridge.session_adapter import SessionMap
+            with SessionMap() as smap:
+                sidecar_sid = smap.get_sidecar_id(session_id)
+            if not sidecar_sid:
+                sidecar_sid = getattr(session, "_sidecar_session_id", None)
+            if sidecar_sid:
+                try:
+                    result = await client.call("get_messages", {
+                        "session_id": sidecar_sid,
+                        "limit": 200,
+                    })
+                    for m in result.get("messages", []):
+                        role = m.get("role", "unknown")
+                        content = m.get("content", "")
+                        if role == "user":
+                            serialized.append({"type": "human", "content": content})
+                        elif role == "assistant":
+                            serialized.append({"type": "ai", "content": content})
+                except Exception:
+                    logger.debug("Failed to get messages for constify in session %s", session_id, exc_info=True)
 
-    from api.const_session_store import save_const_session, serialize_messages
+    from api.const_session_store import save_const_session
 
     metadata = session.persistent_metadata()
-    serialized = serialize_messages(raw_messages)
     save_const_session(session.session_id, body.name, metadata, serialized)
 
     # 标记为 const
@@ -341,26 +420,36 @@ async def generate_session_title(session_id: str, request: Request):
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # 从 checkpointer 提取消息
-    try:
-        cpt = await session.checkpointer.aget_tuple(
-            {"configurable": {"thread_id": session.session_id}}
-        )
-        messages = (
-            cpt.checkpoint.get("channel_values", {}).get("messages", []) if cpt else []
-        )
-    except Exception:
-        logger.debug("Failed to read checkpoint for title generation in session %s", session_id, exc_info=True)
-        messages = []
+    # 从 sidecar 提取消息
+    messages = []
+    sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
+    if sidecar_mgr is not None:
+        await sidecar_mgr.start()
+        client = sidecar_mgr.client
+        if client is not None:
+            from api.pi_bridge.session_adapter import SessionMap
+            with SessionMap() as smap:
+                sidecar_sid = smap.get_sidecar_id(session_id)
+            if not sidecar_sid:
+                sidecar_sid = getattr(session, "_sidecar_session_id", None)
+            if sidecar_sid:
+                try:
+                    result = await client.call("get_messages", {
+                        "session_id": sidecar_sid,
+                        "limit": 20,
+                    })
+                    messages = result.get("messages", [])
+                except Exception:
+                    logger.debug("Failed to get messages for title generation in session %s", session_id, exc_info=True)
 
     if not messages:
         raise HTTPException(status_code=400, detail="没有消息可供生成标题")
 
-    # 构建对话文本（仅 human/ai，截断长内容）
+    # 构建对话文本（截断长内容）
     conversation_lines = []
     for m in messages:
-        role = "user" if m.type == "human" else "assistant"
-        content = (m.content[:600] if hasattr(m, "content") else str(m))[:600]
+        role = m.get("role", "unknown")
+        content = m.get("content", "")[:600]
         conversation_lines.append(f"[{role}]\n{content}")
     conversation_text = "\n\n".join(conversation_lines)
 

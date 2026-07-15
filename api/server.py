@@ -10,14 +10,13 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
 import time
 
 from agent.hooks import HookUnsupportedError
 from api.auth import load_or_create_token
 from api.const_session_store import (
-    deserialize_messages,
     load_all_const_sessions,
 )
 from api.dependencies import get_llm, get_system_prompt, get_tools
@@ -49,7 +48,6 @@ from api.routes import diagnostics as diagnostics_router
 from api.session_manager import SessionManager, SessionState
 from api.ws_registry import WebSocketRegistry
 from config.settings import get_settings
-from agent.graph import build_agent
 from memory.episodic import EpisodicMemoryManager
 from memory.memory_manager import MemoryManager
 from memory.narrative import MEMORY_PATH, LongTermMemoryInterface
@@ -143,16 +141,6 @@ async def _run_event_hook_action(app: FastAPI, hook, trigger_detail: str) -> str
         tools = _hook_tools_for_action(app_state, hook.action, trigger_detail)
         # 4 层架构：注入情景记忆管理器（事件钩子场景也启用 episodic 检索）
         episodic_mm = getattr(app_state, "episodic_mm", None)
-        graph = build_agent(
-            model=llm,
-            tools=tools,
-            system_prompt=system_prompt,
-            checkpointer=session.checkpointer,
-            episodic_mm=episodic_mm,
-            enable_hitl=False,  # 事件钩子无 ws，禁用 HITL 避免阻塞
-        )
-        session._graph = graph
-
         prompt = (
             "[事件钩子触发]\n"
             f"钩子名称：{hook.name}\n"
@@ -162,18 +150,16 @@ async def _run_event_hook_action(app: FastAPI, hook, trigger_detail: str) -> str
             f"{hook.action}"
         )
         timeout = float(hook.config.get("timeout", 600))
-        output = await asyncio.wait_for(
-            graph.ainvoke(
-                {"messages": [HumanMessage(content=prompt)]},
-                config={
-                    "configurable": {"thread_id": session.session_id},
-                    "recursion_limit": 120,
-                },
-            ),
+        response = await asyncio.wait_for(
+            llm.ainvoke([
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=prompt),
+            ]),
             timeout=timeout,
         )
+        final_answer = response.content if hasattr(response, "content") else str(response)
         return (
-            _extract_hook_final_answer(output)
+            final_answer
             or "事件钩子动作已执行，但没有生成文本结果"
         )
     finally:
@@ -190,28 +176,24 @@ def _build_event_hook_callback(app: FastAPI):
 
 
 async def _load_const_sessions(app: FastAPI):
-    """从 YAML 重建所有 const 固定会话到内存 SessionManager。
+    """从 YAML 重建所有 const 固定会话的元数据到内存 SessionManager。
 
-    阶段 5.1：改用全局持久化 checkpointer（AsyncSqliteSaver）。
-    - thread_id = const session_id 天然隔离，无需为每个 const 会话单独建 saver
-    - 进程重启后，SQLite 中已存在的 checkpoint 可直接恢复，aupdate_state 幂等覆盖
+    sidecar 模式下，const session 的消息由 oh-my-pi 管理（通过 JSONL 持久化）。
+    此函数只恢复元数据（is_const, const_name, message_count），不重建消息历史。
+    消息在用户首次访问时通过 sidecar RPC 按需加载。
     """
     sm = app.state.session_manager
     const_list = load_all_const_sessions()
     if not const_list:
         return
 
-    # 使用 getattr 避免 AttributeError：app.state.llm 是在 _init_llm_background()
-    # 异步任务中设置的，_load_const_sessions 可能在该任务完成前就被调用
-    llm = getattr(app.state, 'llm', None)
-    if llm is None:
-        logger.warning("[const] Skipping %d const session(s) — no LLM available yet", len(const_list))
-        return
-
-    from api.checkpointer_factory import get_persistent_checkpointer
-
-    # 共享全局 checkpointer（thread_id 区分会话）
-    shared_checkpointer = get_persistent_checkpointer()
+    # 尝试获取 checkpointer（可选，sidecar 模式下不需要）
+    shared_checkpointer = None
+    try:
+        from api.checkpointer_factory import get_persistent_checkpointer
+        shared_checkpointer = get_persistent_checkpointer()
+    except Exception:
+        logger.debug("[const] No checkpointer available — sidecar-only mode for const sessions")
 
     loaded = 0
     for const_data in const_list:
@@ -221,26 +203,8 @@ async def _load_const_sessions(app: FastAPI):
 
         metadata = const_data.get("metadata", {})
         const_name = const_data.get("const_name", "")
-        messages = const_data.get("messages", [])
 
-        # 用共享 checkpointer 重建会话状态
-        try:
-            reconstructed = deserialize_messages(messages)
-            if reconstructed:
-                agent = build_agent(
-                    model=llm,
-                    tools=app.state.tools,
-                    system_prompt=app.state.system_prompt,
-                    checkpointer=shared_checkpointer,
-                )
-                await agent.aupdate_state(
-                    {"configurable": {"thread_id": sid}},
-                    {"messages": reconstructed},
-                )
-        except Exception as e:
-            logger.warning("[const] 重建会话 %s 失败: %s", sid, e)
-            continue
-
+        # sidecar 模式：只恢复元数据，消息由 sidecar 按需管理
         session = SessionState(
             session_id=sid,
             created_at=metadata.get("created_at", time.time()),
@@ -248,12 +212,14 @@ async def _load_const_sessions(app: FastAPI):
             message_count=metadata.get("message_count", 0),
             permission_mode=metadata.get("permission_mode", "ask"),
             permission_mode_updated_at=metadata.get("permission_mode_updated_at", time.time()),
-            checkpointer=shared_checkpointer,
+            checkpointer=shared_checkpointer,  # 可能为 None
             is_const=True,
             const_name=const_name,
         )
         sm._sessions[sid] = session
         loaded += 1
+        logger.info("[const] Loaded const session %s (name=%s, msg_count=%d)",
+                    sid[:8], const_name, metadata.get("message_count", 0))
 
     logger.info("[const] 已加载 %d/%d 个固定会话", loaded, len(const_list))
 
@@ -335,13 +301,18 @@ async def lifespan(app: FastAPI):
         retry_policy_enabled=get_settings().ltm_retry_policy_enabled,
     )
 
-    # 阶段 5.1：初始化持久化 checkpointer（必须在 _load_const_sessions 之前）
+    # 阶段 5.1：初始化持久化 checkpointer（sidecar 模式下可选）
     # - 启用 SQLite 持久化：进程重启后可恢复会话状态
-    # - 失败时自动回退到 MemorySaver（仅内存，重启丢失）
-    from api.checkpointer_factory import init_persistent_checkpointer
-    await init_persistent_checkpointer()
-    from api.checkpointer_factory import get_checkpointer_info
-    logger.info("[checkpointer] %s", get_checkpointer_info())
+    # - langgraph 未安装时跳过，sidecar 模式下不需要 checkpointer
+    try:
+        from api.checkpointer_factory import init_persistent_checkpointer
+        await init_persistent_checkpointer()
+        from api.checkpointer_factory import get_checkpointer_info
+        logger.info("[checkpointer] %s", get_checkpointer_info())
+    except ImportError:
+        logger.info("[checkpointer] langgraph not available — using sidecar-only mode")
+    except Exception:
+        logger.warning("[checkpointer] init failed — using sidecar-only mode", exc_info=True)
 
     # 后台初始化 LLM（不阻塞 lifespan，让 API 立即就绪）
     async def _init_llm_background():
@@ -467,6 +438,11 @@ async def lifespan(app: FastAPI):
     app.state.hook_manager = hook_manager
     logger.info("[hooks] 事件钩子管理器已启动，%d 个钩子", len(hook_manager.list_hooks()))
 
+    # 6.5 初始化 oh-my-pi sidecar 管理器（懒启动，首次调用时自动拉起 Bun 进程）
+    from api.pi_bridge.sidecar_manager import SidecarManager
+    app.state.sidecar_manager = SidecarManager()
+    logger.info("[sidecar] SidecarManager 已创建")
+
     # 7. 启动自治调度器（默认关闭，需在 .env 中设置 autonomy_enabled=true）
     from config.settings import get_settings as _get_autonomy_settings
     _autonomy_settings = _get_autonomy_settings()
@@ -570,6 +546,12 @@ async def lifespan(app: FastAPI):
         await workflow_manager.shutdown()
     await balance.close_async_client()
     await app.state.ltm.stop_listening()
+
+    # 停止 oh-my-pi sidecar（如果已启动）
+    sidecar_mgr = getattr(app.state, "sidecar_manager", None)
+    if sidecar_mgr:
+        await sidecar_mgr.stop()
+        logger.info("[sidecar] SidecarManager 已停止")
 
     fact_store = getattr(app.state, "fact_store", None)
     if fact_store is not None:
