@@ -7,7 +7,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from langgraph.graph.state import CompiledStateGraph
+from typing import Any
 
 
 @dataclass
@@ -20,7 +20,7 @@ class SessionState:
     # 阶段 5.1：使用持久化 checkpointer（AsyncSqliteSaver 或 MemorySaver 回退）
     # default_factory 延迟导入避免循环依赖，且保证测试环境无 SQLite 时可用
     checkpointer: Any = field(default=None)
-    _graph: CompiledStateGraph | None = field(default=None, repr=False)
+    _graph: Any | None = field(default=None, repr=False)
     auto_approve: bool = False
     # Keep the selected permission state on the session.  This is deliberately
     # limited to a mode and timestamp so const-session persistence stays secret-free.
@@ -51,8 +51,11 @@ class SessionState:
                 from api.checkpointer_factory import get_persistent_checkpointer
                 self.checkpointer = get_persistent_checkpointer()
             except Exception:
-                from langgraph.checkpoint.memory import MemorySaver
-                self.checkpointer = MemorySaver()
+                try:
+                    from langgraph.checkpoint.memory import MemorySaver
+                    self.checkpointer = MemorySaver()
+                except ImportError:
+                    self.checkpointer = None
 
         # Older const-session metadata has no permission mode.  Invalid stored
         # values fail closed to the compatible, confirmation-first default.

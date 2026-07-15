@@ -59,16 +59,24 @@ async def init_persistent_checkpointer() -> Any:
 
     if not enabled:
         logger.info("[checkpointer] 持久化已禁用，使用 MemorySaver")
-        from langgraph.checkpoint.memory import MemorySaver
+        try:
+                    from langgraph.checkpoint.memory import MemorySaver
+        except ImportError:
+            MemorySaver = None
+
         with _checkpointer_lock:
             if _checkpointer is None:
-                _checkpointer = MemorySaver()
+                _checkpointer = MemorySaver() if MemorySaver else None
         return _checkpointer
 
     db_path = _resolve_db_path()
     try:
         import aiosqlite
-        from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+        try:
+                    from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+        except ImportError:
+            MemorySaver = None
+
 
         conn = await aiosqlite.connect(db_path)
         # WAL 模式提升并发写入性能
@@ -92,10 +100,14 @@ async def init_persistent_checkpointer() -> Any:
         logger.warning(
             "[checkpointer] SQLite 初始化失败，回退到 MemorySaver: %s", e
         )
-        from langgraph.checkpoint.memory import MemorySaver
+        try:
+                    from langgraph.checkpoint.memory import MemorySaver
+        except ImportError:
+            MemorySaver = None
+
         with _checkpointer_lock:
             if _checkpointer is None:
-                _checkpointer = MemorySaver()
+                _checkpointer = MemorySaver() if MemorySaver else None
         return _checkpointer
 
 
@@ -113,13 +125,21 @@ def get_persistent_checkpointer() -> Any:
             try:
                 from config.settings import get_settings
                 if not get_settings().persistence_enabled:
-                    from langgraph.checkpoint.memory import MemorySaver
+                    try:
+                                            from langgraph.checkpoint.memory import MemorySaver
+                    except ImportError:
+                        MemorySaver = None
+
                     _checkpointer = MemorySaver()
                     return _checkpointer
             except Exception:
                 pass
             # 默认回退：MemorySaver（init_persistent_checkpointer 尚未调用）
-            from langgraph.checkpoint.memory import MemorySaver
+            try:
+                            from langgraph.checkpoint.memory import MemorySaver
+            except ImportError:
+                MemorySaver = None
+
             _checkpointer = MemorySaver()
     return _checkpointer
 

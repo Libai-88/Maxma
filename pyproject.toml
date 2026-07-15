@@ -1,20 +1,21 @@
 [project]
 name = "maxmahere"
 dynamic = ["version"]
-description = "MaxmaHere — LangChain-based ReAct AI Agent"
+description = "MaxmaHere — oh-my-pi AI Agent Desktop Client"
 requires-python = ">=3.11"
 
 dependencies = [
     "langchain>=0.3.0",
     "langchain-openai>=0.3.0",
     "langchain-mcp-adapters>=0.2.0",
-    "langgraph>=0.2.0",
-    "langgraph-checkpoint-sqlite>=2.0.0",
+	    # langgraph 已由 oh-my-pi 替代，如需遗留模式手动安装
+	    # "langgraph>=0.2.0",
+	    # "langgraph-checkpoint-sqlite>=2.0.0",
     "aiosqlite>=0.20.0",
     "pydantic-settings>=2.0.0",
     "filelock>=3.13.0",
-    "todoist-api-python>=2.0.0",
-    "uapi-sdk-python>=0.1.17",
+	    # todoist 和 uapi 工具已重写为 TypeScript AgentTool，由 oh-my-pi sidecar 执行
+	    # Python 端不再需要这些 SDK
     "python-dotenv>=1.0.0",
     "beautifulsoup4>=4.12.0",
     "PyPDF2>=3.0.0",

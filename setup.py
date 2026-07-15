@@ -1,5 +1,8 @@
 """MaxmaHere — 首次设置脚本
 用法: python setup.py
+
+注意：oh-my-pi sidecar 需要 Bun 运行时，请先安装 Bun：
+  powershell -c "irm bun.sh/install.ps1 | iex"
 """
 
 import os

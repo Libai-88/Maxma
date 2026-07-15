@@ -126,7 +126,7 @@ export function getBackendOrigin(): string {
 export function getWsBase(): string {
   return detectTauri()
     ? `ws://127.0.0.1:${currentApiPort()}`
-    : `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}`
+    : `ws://127.0.0.1:${currentApiPort()}`
 }
 
 /**

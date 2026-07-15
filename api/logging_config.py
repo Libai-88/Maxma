@@ -136,7 +136,6 @@ def setup_logging() -> None:
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("openai").setLevel(logging.WARNING)
     logging.getLogger("langchain").setLevel(logging.WARNING)
-    logging.getLogger("langgraph").setLevel(logging.WARNING)
     logging.getLogger("playwright").setLevel(logging.WARNING)
 
     logging.info(

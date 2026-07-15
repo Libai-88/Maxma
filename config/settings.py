@@ -47,9 +47,6 @@ class Settings(BaseSettings):
 
     # 阶段 2：Plan-and-execute executor 配置
     plan_confirm_timeout: int = 120  # HITL 计划确认超时（秒）
-    replan_threshold: int = 2  # 触发重规划的最小失败次数
-    executor_max_replans: int = 2  # 最大重规划次数（防止无限循环）
-    executor_enable_by_default: bool = True  # build_agent 默认是否启用 executor 节点
 
     # 阶段 3.4：Python 沙箱 OS 级隔离配置
     sandbox_memory_mb: int = 512  # 沙箱最大内存（MB），MAX_MEMORY_MB 由此值驱动
@@ -177,6 +174,9 @@ class Settings(BaseSettings):
     fact_store_retrieval_enabled: bool = False
     # 前端还需要 VITE_COMPACT_TOOL_RESULTS_ENABLED=true 才会折叠展示。
     compact_tool_results_enabled: bool = False
+
+    # Bun 可执行文件路径（Windows 需全路径）
+    sidecar_bun_path: str = "D:/NodeGlobal/node_modules/bun/bin/bun.exe"
 
     model_config = {
         "env_file": str(ENV_FILE_PATH),

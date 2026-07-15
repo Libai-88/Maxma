@@ -15,8 +15,16 @@ from typing import Optional
 
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.prebuilt import create_react_agent
+
+# langgraph 可选（已由 oh-my-pi 替代）
+try:
+    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.prebuilt import create_react_agent
+    _HAS_LANGGRAPH = True
+except ImportError:
+    MemorySaver = None  # type: ignore
+    create_react_agent = None  # type: ignore
+    _HAS_LANGGRAPH = False
 
 from app_paths import MEMORY_CONFIG_PATH
 from memory.memory_callback import MemoryToolCallback
@@ -882,6 +890,10 @@ class LongTermMemoryInterface:
                         merge_memories,
                         search_memories,
                     ]
+                    if not _HAS_LANGGRAPH:
+                        logger.info("[ltm] langgraph not available, skipping CRUD agent")
+                        continue
+
                     agent = create_react_agent(
                         model=llm,
                         tools=crud_tools,
