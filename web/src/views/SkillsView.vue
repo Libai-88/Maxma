@@ -33,26 +33,45 @@
         </template>
       </div>
       <div v-else class="card-grid">
-        <div v-for="item in currentList" :key="item.id" class="skill-card" @click="startEdit(item)">
-          <div class="card-header">
-            <span class="card-label">{{ item.name }}</span>
-            <span class="source-badge" :class="item.source">{{ item.source === 'builtin' ? '内置' : '自定义' }}</span>
-          </div>
-          <div v-if="item.description" class="card-desc">{{ item.description }}</div>
-          <div class="card-footer">
-            <span class="card-id">{{ item.id }}</span>
-            <div class="card-actions" @click.stop>
-              <button class="action-btn" @click.stop="startEdit(item)">编辑</button>
-              <button
-                v-if="item.source === 'user'"
-                class="action-btn danger"
-                :disabled="deletingId === item.id"
-                @click.stop="deleteItem(item.id)"
-              >{{ deletingId === item.id ? '删除中...' : '删除' }}</button>
-              <span v-else class="readonly-hint">只读</span>
+        <template v-for="item in currentList" :key="item.id || item.name">
+          <!-- Skills 卡片（新 API 格式） -->
+          <div v-if="activeTab === 'skills'" class="skill-card">
+            <div class="card-header">
+              <span class="card-label">{{ item.name }}</span>
+              <span class="source-badge" :class="item.enabled ? 'builtin' : 'user'">{{ item.enabled ? '已启用' : '已禁用' }}</span>
+              <button class="toggle-btn" :class="{ active: item.enabled }" @click="toggleSkill(item.name)">
+                {{ item.enabled ? '启用' : '禁用' }}
+              </button>
+            </div>
+            <div class="card-footer">
+              <span class="card-id">{{ item.name }}</span>
+              <div class="card-actions" @click.stop>
+                <button class="action-btn" @click.stop="viewSkill(item.name)">查看内容</button>
+              </div>
             </div>
           </div>
-        </div>
+          <!-- Macros 卡片（旧 API 格式） -->
+          <div v-else class="skill-card" @click="startEdit(item)">
+            <div class="card-header">
+              <span class="card-label">{{ item.name }}</span>
+              <span class="source-badge" :class="item.source">{{ item.source === 'builtin' ? '内置' : '自定义' }}</span>
+            </div>
+            <div v-if="item.description" class="card-desc">{{ item.description }}</div>
+            <div class="card-footer">
+              <span class="card-id">{{ item.id }}</span>
+              <div class="card-actions" @click.stop>
+                <button class="action-btn" @click.stop="startEdit(item)">编辑</button>
+                <button
+                  v-if="item.source === 'user'"
+                  class="action-btn danger"
+                  :disabled="deletingId === item.id"
+                  @click.stop="deleteItem(item.id)"
+                >{{ deletingId === item.id ? '删除中...' : '删除' }}</button>
+                <span v-else class="readonly-hint">只读</span>
+              </div>
+            </div>
+          </div>
+        </template>
       </div>
     </template>
 
@@ -112,6 +131,17 @@
       </template>
     </form>
 
+    <!-- ── 内容查看模态 ── -->
+    <div v-if="showContent" class="content-modal-overlay" @click.self="showContent = false">
+      <div class="content-modal">
+        <div class="content-modal-header">
+          <span>Skill 内容</span>
+          <button class="content-modal-close" @click="showContent = false">✕</button>
+        </div>
+        <pre class="content-modal-body">{{ skillContent }}</pre>
+      </div>
+    </div>
+
     <!-- ── 全局提示 ── -->
     <div v-if="globalMessage" class="global-message" :class="globalMessageClass">
       {{ globalMessage }}
@@ -145,8 +175,12 @@ const globalMessageClass = ref('')
 const editingId = ref('')
 const editingSource = ref<'builtin' | 'user'>('user')
 
-const skills = ref<SkillInfo[]>([])
+const skills = ref<any[]>([])
 const macros = ref<MacroInfo[]>([])
+
+// ── 查看内容 ──
+const skillContent = ref('')
+const showContent = ref(false)
 
 // 请求序列号：用于取消竞态请求（startEdit/loadData 快速重复触发）
 let loadSeq = 0
@@ -199,13 +233,14 @@ async function loadData() {
   loadError.value = false
   globalMessage.value = ''
   try {
-    const [skillsRes, macrosRes] = await Promise.all([
+    const [skillsData, macrosRes] = await Promise.all([
       api.listSkills(),
-      api.listMacros(),
+      api.listMacros().catch(() => ({ macros: [] })),
     ])
     // 竞态保护：丢弃过期响应
     if (mySeq !== loadSeq) return
-    skills.value = skillsRes.skills
+    // 新 skills API 直接返回数组
+    skills.value = Array.isArray(skillsData) ? skillsData : (skillsData as any)?.skills || []
     macros.value = macrosRes.macros
   } catch (e: any) {
     if (mySeq !== loadSeq) return
@@ -367,6 +402,24 @@ async function deleteItem(id: string) {
   } finally {
     deletingId.value = ''
   }
+}
+
+// ── Skills 启用/禁用 ──
+async function toggleSkill(name: string) {
+  try {
+    await fetch(`/api/skills/${name}/toggle`, { method: 'POST' })
+    await loadData()
+  } catch {}
+}
+
+// ── 查看 Skill 内容 ──
+async function viewSkill(name: string) {
+  try {
+    const res = await fetch(`/api/skills/${name}`)
+    const data = await res.json()
+    skillContent.value = data.content || ''
+    showContent.value = true
+  } catch {}
 }
 
 onMounted(loadData)
@@ -676,5 +729,80 @@ onUnmounted(() => {
 .global-message.error {
   background: #ffebee;
   color: #d32f2f;
+}
+	/* ── Skills 启用/禁用按钮 ── */
+.toggle-btn {
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border, #e5e7eb);
+  background: var(--bg-secondary, #f9fafb);
+  color: var(--text-secondary, #6b7280);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.toggle-btn:hover {
+  border-color: var(--accent);
+}
+.toggle-btn.active {
+  background: #e8f5e9;
+  color: #2e7d32;
+  border-color: #2e7d32;
+}
+
+/* ── 内容查看模态 ── */
+.content-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.content-modal {
+  max-width: 640px;
+  max-height: 80vh;
+  width: 90%;
+  background: var(--bg-card, #fff);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+.content-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  font-size: 14px;
+  font-weight: 600;
+}
+.content-modal-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-tertiary, #9ca3af);
+  font-size: 16px;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.content-modal-close:hover {
+  background: #fee2e2;
+  color: #ef4444;
+}
+.content-modal-body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-primary, #1f2937);
+  margin: 0;
 }
 </style>

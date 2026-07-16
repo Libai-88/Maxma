@@ -68,6 +68,21 @@
           </div>
         </div>
       </div>
+
+      <!-- OMP 自动发现 -->
+      <div v-if="discoveredServers.length > 0" class="section" style="margin-top: 24px;">
+        <div class="section-title" style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary, #6b7280); margin-bottom: 8px;">OMP 自动发现</div>
+        <div v-for="s in discoveredServers" :key="s.id" class="server-card" style="opacity: 0.85;">
+          <div class="server-header">
+            <span class="server-name">{{ s.name }}</span>
+            <span class="server-status" :class="s.status === 'connected' ? 'ok' : 'err'">{{ s.status }}</span>
+            <span style="font-size: 10px; padding: 1px 6px; border-radius: 100px; background: var(--border, #e5e7eb); color: var(--text-tertiary, #9ca3af); margin-left: 8px;">自动</span>
+          </div>
+          <div class="server-tools" v-if="s.tools && s.tools.length">
+            <span v-for="t in s.tools" :key="t" style="font-size: 11px; padding: 2px 8px; border-radius: 4px; background: var(--bg-secondary, #f9fafb); color: var(--text-secondary, #6b7280);">{{ t }}</span>
+          </div>
+        </div>
+      </div>
     </template>
 
     <!-- ── 表单模式（添加/编辑） ── -->
@@ -291,6 +306,17 @@ const deletingId = ref('')       // 删除按钮防抖
 // ── 全局提示 ──
 const globalMessage = ref('')
 const globalMessageClass = ref('')
+
+// ── OMP 自动发现 ──
+const discoveredServers = ref<any[]>([])
+
+async function loadDiscovered() {
+  try {
+    const res = await fetch('/api/mcp/discovered')
+    const data = await res.json()
+    discoveredServers.value = Array.isArray(data) ? data : []
+  } catch { discoveredServers.value = [] }
+}
 
 // ── toggle 防抖 ──
 const toggling = reactive<Set<string>>(new Set())
@@ -622,7 +648,7 @@ async function deleteServer(serverId: string) {
   }
 }
 
-onMounted(loadServers)
+onMounted(() => { loadServers(); loadDiscovered() })
 </script>
 
 <style scoped>

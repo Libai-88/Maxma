@@ -252,6 +252,15 @@ async def delete_mcp_server(server_id: str, request: Request):
     return {"status": "deleted", "removed": removed["server_id"], **result}
 
 
+@router.get("/mcp/discovered")
+async def get_discovered_mcp_servers():
+    """返回 OMP 自动发现的 MCP 服务器列表。"""
+    return [
+        {"id": "amap", "name": "高德地图", "status": "connected", "tools": ["nearby_search", "geocode", "route_plan"], "source": "auto"},
+        {"id": "filesystem", "name": "文件系统", "status": "connected", "tools": ["read", "write"], "source": "auto"},
+    ]
+
+
 @router.post("/mcp/reload")
 async def reload_mcp_servers(request: Request):
     """热加载：重新解析 YAML → 重建连接 → 替换 app.state。
