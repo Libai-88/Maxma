@@ -94,6 +94,9 @@ class JsonRpcClient:
             raise TimeoutError(
                 f"RPC call '{method}' timed out after {timeout}s"
             )
+        except Exception:
+            self._pending.pop(msg_id, None)
+            raise
 
     def on(self, event_type: str, handler: Callable) -> Callable[[], None]:
         """Register an event handler.

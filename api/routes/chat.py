@@ -367,7 +367,8 @@ async def _stream_turn_sidecar(
     mgr = app_state.sidecar_manager
     await mgr.start()
     client = mgr.client
-    assert client is not None, "Sidecar client not available"
+    if client is None:
+        raise RuntimeError("Sidecar client not available after start()")
     # 注入 sidecar manager 到 session，供下游函数（消息历史、context usage、
     # const 保存、情景记忆等）通过 session._sidecar_mgr 访问
     session._sidecar_mgr = mgr
@@ -543,13 +544,16 @@ async def _stream_turn_sidecar(
             "[sidecar] Error event for session %s: %s",
             sidecar_sid[:8], payload.get("message", payload),
         )
-        await ws.send_json({
-            "type": "error",
-            "payload": {
-                "code": payload.get("code", "SIDECAR_ERROR"),
-                "message": payload.get("message", "Sidecar error"),
-            },
-        })
+        try:
+            await ws.send_json({
+                "type": "error",
+                "payload": {
+                    "code": payload.get("code", "SIDECAR_ERROR"),
+                    "message": payload.get("message", "Sidecar error"),
+                },
+            })
+        except Exception:
+            pass
 
     # Register all event handlers
     unsubs = []
@@ -616,89 +620,6 @@ async def _calculate_context_usage(
         "model_name": model_name,
     }
 
-
-async def _inject_cancel_tool_messages(session, config, ws: WebSocket) -> None:
-    """为 checkpoint 中孤立的 tool_calls 注入统一格式的正常 ToolMessage。
-
-    sidecar 模式下 session._graph 为 None，取消由 sidecar 的 cancel RPC 处理，
-    无需手动清理 checkpoint。直接返回。
-    """
-    graph = session._graph
-    if graph is None:
-        return  # sidecar 模式：cancel 由 sidecar 处理，无需 checkpoint 清理
-
-    try:
-        state = await graph.aget_state(config)
-    except Exception:
-        logger.debug("Failed to get graph state for cancel cleanup", exc_info=True)
-        return  # checkpoint 不可读时静默跳过
-
-    messages = state.values.get("messages", [])
-    if not messages:
-        return
-
-    # 从后往前找最后一个 AIMessage
-    last_ai = None
-    for i in range(len(messages) - 1, -1, -1):
-        if isinstance(messages[i], AIMessage):
-            last_ai = messages[i]
-            break
-
-    if last_ai is None:
-        return
-
-    tool_calls = getattr(last_ai, "tool_calls", [])
-    if not tool_calls:
-        return
-
-    # 收集其后所有 ToolMessage 的 tool_call_id 集合
-    try:
-        idx = messages.index(last_ai)
-    except ValueError:
-        return
-    following = messages[idx + 1 :]
-
-    tool_msg_ids = {m.tool_call_id for m in following if isinstance(m, ToolMessage)}
-
-    orphaned = [tc for tc in tool_calls if tc["id"] not in tool_msg_ids]
-    if not orphaned:
-        return  # checkpoint 已一致
-
-    # 通知前端：使运行的工具体进入错误状态
-    for tc in orphaned:
-        try:
-            await ws.send_json(
-                {
-                    "type": "tool_error",
-                    "payload": {
-                        "tool_name": tc["name"],
-                        "error": "用户取消了该工具调用",
-                    },
-                }
-            )
-        except Exception:
-            logger.debug(
-                "Failed to send tool_error via WebSocket (connection may be closed)",
-                exc_info=True,
-            )
-
-    # 生成取消 ToolMessage 并写入 checkpoint
-    cancel_msgs = []
-    for tc in orphaned:
-        cancel_msgs.append(
-            ToolMessage(
-                content=format_error("用户取消了该工具调用"),
-                name=tc["name"],
-                tool_call_id=tc["id"],
-            )
-        )
-    try:
-        await graph.aupdate_state(config, {"messages": cancel_msgs}, as_node="tools")
-    except Exception as e:
-        print(
-            f"[cancel] aupdate_state failed: {type(e).__name__}: {e}", file=sys.stderr
-        )
-        raise
 
 
 # ── 项目上下文自动感知 ──────────────────────────────────────────
@@ -835,30 +756,6 @@ def _new_turn_id(turn_id: object = None) -> str:
             return candidate
     return uuid.uuid4().hex
 
-
-async def _is_memory_eligible_turn(graph, config: dict) -> bool:
-    """Read the graph's explicit model outcome before persisting a turn.
-
-    Provider failures are intentionally rendered as helpful AI messages by the
-    graph.  Their text is not a reliable persistence signal, particularly
-    across locales and provider implementations, so only an explicit success
-    marker allows automatic episodic/LTM projection.
-    """
-    try:
-        state = await graph.aget_state(config)
-        values = getattr(state, "values", {}) if state is not None else {}
-        succeeded = values.get("llm_invocation_succeeded")
-        if succeeded is True:
-            return True
-        if succeeded is False:
-            logger.info("[memory] skipping failed model turn")
-        else:
-            logger.warning("[memory] skipping turn without model outcome metadata")
-    except Exception:
-        logger.warning(
-            "[memory] skipping turn with unreadable model outcome", exc_info=True
-        )
-    return False
 
 
 async def _run_agent_turn(
