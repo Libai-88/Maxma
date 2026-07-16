@@ -8,6 +8,11 @@ import type { ToolDefinition } from "@oh-my-pi/pi-coding-agent";
 import { z } from "zod/v4";
 import { todoistTools } from "./todoist";
 import manageSkillsTool from "./config/manage_skills";
+import manageMacrosTool from "./config/manage_macros";
+import manageProvidersTool from "./config/manage_providers";
+import manageMCPTool from "./config/manage_mcp";
+import manageEnvVarsTool from "./config/manage_env_vars";
+import manageWhitelistTool from "./config/manage_whitelist";
 
 // ── Weather Tool ────────────────────────────────────────
 
@@ -153,6 +158,11 @@ export function registerCustomTools(): ToolDefinition[] {
     holidayTool,
     tarotTool,
     manageSkillsTool,
+    manageMacrosTool,
+    manageProvidersTool,
+    manageMCPTool,
+    manageEnvVarsTool,
+    manageWhitelistTool,
     ...todoistTools,
   ];
 }
