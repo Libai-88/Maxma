@@ -166,9 +166,7 @@ def _build_provider_line(
 def _build_mcp_line(mcp_tool_count: int) -> str:
     """构建 MCP 服务器摘要行。"""
     try:
-        from tools.mcp import get_mcp_servers_info
-
-        servers = get_mcp_servers_info()
+        servers = []
         if not servers:
             if mcp_tool_count > 0:
                 return f"已加载 {mcp_tool_count} 个工具（配置信息不可用）"
@@ -216,9 +214,9 @@ def _build_tool_line(native_count: int, mcp_count: int) -> str:
 def _build_category_overview() -> str:
     """构建工具分类概览（只列出有工具的分类）。"""
     try:
-        from tools import TOOL_CATEGORIES, get_all_tools
+        TOOL_CATEGORIES: dict = {}
+        all_tools: list = []
 
-        all_tools = get_all_tools()
         tool_names = {t.name for t in all_tools}
 
         active_categories: list[str] = []

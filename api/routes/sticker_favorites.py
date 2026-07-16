@@ -74,6 +74,34 @@ class StickerItem(BaseModel):
     path: str
 
 
+def _detect_emotion_from_text(text: str):
+    """Inline stub — emotion detection disabled after tools/ removal."""
+    return None
+
+
+def _get_time_period() -> str:
+    """Inline stub — simple time-of-day period."""
+    import datetime
+    hour = datetime.datetime.now().hour
+    if 0 <= hour < 6:
+        return "late_night"
+    elif 6 <= hour < 12:
+        return "morning"
+    elif 12 <= hour < 18:
+        return "work"
+    return "evening"
+
+
+def _select_sticker(category: str, options: dict | None = None) -> str | None:
+    """Inline stub — returns first .webp in category dir."""
+    cat_dir = STICKERS_DIR / category
+    if not cat_dir.is_dir():
+        return None
+    for f in cat_dir.glob("*.webp"):
+        return f"{category}/{f.name}"
+    return None
+
+
 def _sticker_exists(category: str, filename: str) -> bool:
     """检查内置或自定义表情是否存在。"""
     _validate_sticker_ref(category, filename)
@@ -88,11 +116,7 @@ async def get_favorites():
     """获取收藏列表。"""
     data = _load_yaml_safe(FAVORITES_PATH)
     favorites = data.get('favorites', [])
-    try:
-        from tools.sticker_preferences import get_preferences
-        prefs = get_preferences()
-    except Exception:
-        prefs = None
+    prefs = None
 
     # 补充 path 字段
     result = []
@@ -100,7 +124,7 @@ async def get_favorites():
         item_copy = dict(item)
         sticker_path = f"{item.get('category', '')}/{item.get('filename', '')}"
         item_copy['path'] = sticker_path
-        item_copy['usage_count'] = prefs.get_usage_count(sticker_path) if prefs else 0
+        item_copy['usage_count'] = 0
         result.append(item_copy)
     return {"favorites": result}
 
@@ -130,9 +154,6 @@ async def add_favorite(req: FavoriteRequest):
     data['favorites'] = favorites
     _save_yaml_safe(FAVORITES_PATH, data)
 
-    from tools.sticker_preference_hooks import on_favorite_added
-    on_favorite_added(req.category, req.filename)
-    
     return FavoriteResponse(success=True, message="已收藏")
 
 
@@ -152,9 +173,6 @@ async def remove_favorite(filename: str, category: str):
     data['favorites'] = new_favorites
     _save_yaml_safe(FAVORITES_PATH, data)
 
-    from tools.sticker_preference_hooks import on_favorite_removed
-    on_favorite_removed(category, filename)
-    
     return FavoriteResponse(success=True, message="已取消收藏")
 
 
@@ -164,12 +182,6 @@ async def record_sticker_usage(req: FavoriteRequest):
     if not _sticker_exists(req.category, req.filename):
         raise HTTPException(status_code=404, detail="表情不存在")
 
-    from tools.sticker_preference_hooks import on_sticker_used
-    from tools.sticker_selector import add_recent_sticker
-
-    on_sticker_used(req.category, req.filename)
-    add_recent_sticker(req.category, req.filename)
-
     return FavoriteResponse(success=True, message="已记录使用")
 
 
@@ -178,9 +190,6 @@ async def record_sticker_skip(req: FavoriteRequest):
     """记录用户明确减少推荐某个表情。"""
     if not _sticker_exists(req.category, req.filename):
         raise HTTPException(status_code=404, detail="表情不存在")
-
-    from tools.sticker_preference_hooks import on_sticker_skipped
-    on_sticker_skipped(req.category, req.filename)
 
     return FavoriteResponse(success=True, message="已减少推荐")
 
@@ -209,16 +218,12 @@ async def get_recommendations(
     limit: int = Query(default=4, ge=1, le=12),
 ):
     """基于当前输入文本推荐少量表情，不写入最近使用。"""
-    from tools.emotion_detector import detect_emotion_from_text
-    from tools.shared.time_utils import get_time_period
-    from tools.sticker_selector import select_sticker
-
     categories: list[str] = []
-    emotion = detect_emotion_from_text(text)
+    emotion = _detect_emotion_from_text(text)
     if emotion:
         categories.append(emotion.category)
 
-    time_period = get_time_period()
+    time_period = _get_time_period()
     if time_period == "late_night":
         categories.extend(["爱心", "委屈", "日常"])
     elif time_period == "morning":
@@ -239,7 +244,7 @@ async def get_recommendations(
     recommendations: list[StickerItem] = []
     for category in deduped_categories:
         for _ in range(4):
-            path = select_sticker(category, {"record_recent": False, "recent_limit": 10})
+            path = _select_sticker(category, {"record_recent": False, "recent_limit": 10})
             if not path or path in seen:
                 continue
             seen.add(path)

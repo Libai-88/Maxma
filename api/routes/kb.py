@@ -190,32 +190,12 @@ class ImportUrlBody(BaseModel):
 async def import_url(body: ImportUrlBody, request: Request):
     """从 URL 导入内容（使用 Tavily Extract 提取 Markdown 后索引）。
 
-    若 Tavily 不可用，返回 503。
-    Tavily 调用通过 asyncio.to_thread 异步化，避免阻塞事件循环。
+    注意：Tavily Extract 工具已随 tools/ 目录移除，此功能不可用。
     """
     if not body.url.strip():
         raise HTTPException(status_code=400, detail="url 不能为空")
 
-    # 使用 Tavily Extract 提取 URL 内容
-    try:
-        from tools.network.tavily.tool_extract import TavilyExtractTool
-    except ImportError:
-        raise HTTPException(status_code=503, detail="Tavily Extract 工具不可用")
-
-    extract_tool = TavilyExtractTool()
-    try:
-        # 异步化同步调用，避免阻塞事件循环
-        result_str = await asyncio.to_thread(extract_tool._run, urls=body.url)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"URL 内容提取失败: {e}")
-
-    markdown = _parse_tavily_result(result_str)
-
-    if not markdown.strip():
-        raise HTTPException(status_code=502, detail="URL 内容提取为空")
-
-    indexer = _get_indexer(request)
-    return indexer.index_url(body.url, markdown, doc_id=body.doc_id)
+    raise HTTPException(status_code=503, detail="Tavily Extract 工具不可用（tools/ 已移除）")
 
 
 # ── 检索 ──

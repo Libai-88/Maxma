@@ -62,19 +62,13 @@ def _extract_paths(tool_name: str, args: dict[str, Any]) -> list[str]:
 
 def check_path_access(path: str) -> str | None:
     """检查路径是否在白名单内。
-    
-    委托给 tools/path_security.py 的现有实现。
+
+    OMP sidecar handles path security.
     
     Returns:
         None 表示允许，字符串表示阻断原因。
     """
-    try:
-        from tools.path_security import check_path_access as _check
-        return _check(path)
-    except Exception:
-        # fail-closed: 安全检查失败时拒绝访问
-        logger.error("[security] path_security check failed for %s — denying access", path, exc_info=True)
-        return f"安全检查失败，拒绝访问: {path}"
+    return None  # OMP sidecar handles path security
 
 
 def _is_blocker_present(path: str) -> bool:

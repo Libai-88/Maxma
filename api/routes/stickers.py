@@ -20,14 +20,21 @@ mimetypes.add_type("image/webp", ".webp")
 @router.get("/stickers/random/{category}")
 async def get_random_sticker(category: str):
     """从指定分类随机返回一个表情路径。"""
+    import random
     import re
-    from tools.sticker_selector import select_sticker
 
     # 安全校验
     if not re.match(r'^[\w\u4e00-\u9fff\-]+$', category):
         raise HTTPException(status_code=400, detail="非法分类名")
 
-    path = select_sticker(category)
+    cat_dir = STICKERS_DIR / category
+    if not cat_dir.is_dir():
+        raise HTTPException(status_code=404, detail="该分类无表情")
+    stickers = sorted(cat_dir.glob("*.webp"))
+    if not stickers:
+        raise HTTPException(status_code=404, detail="该分类无表情")
+    pick = random.choice(stickers)
+    path = f"{category}/{pick.name}"
     if not path:
         raise HTTPException(status_code=404, detail="该分类无表情")
 
@@ -82,5 +89,15 @@ async def get_sticker(category: str, filename: str):
 @router.get("/stickers")
 async def list_stickers():
     """列出所有表情分类及数量（用于调试/管理）。"""
-    from tools.sticker_utils import get_sticker_categories
-    return {"categories": get_sticker_categories()}
+    categories = {}
+    if STICKERS_DIR.is_dir():
+        for cat_dir in sorted(STICKERS_DIR.iterdir()):
+            if cat_dir.is_dir():
+                count = len(list(cat_dir.glob("*.webp")))
+                if count:
+                    categories[cat_dir.name] = count
+    if CUSTOM_STICKERS_DIR.is_dir():
+        count = len(list(CUSTOM_STICKERS_DIR.glob("*.webp")))
+        if count:
+            categories["custom"] = count
+    return {"categories": categories}

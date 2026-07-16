@@ -146,13 +146,6 @@ def _build_runtime_context_for_agent(
             for t in turn_tools
             if not t.name.split("_")[0].islower() or "_" not in t.name
         )
-        # 更准确的统计：MCP 工具名通常带 server_id 前缀
-        from tools import TOOL_CATEGORIES
-
-        all_native_names: set[str] = set()
-        for names in TOOL_CATEGORIES.values():
-            all_native_names.update(names)
-        native_count = sum(1 for t in turn_tools if t.name in all_native_names)
         mcp_count = len(turn_tools) - native_count
 
         return build_runtime_context(
@@ -761,6 +754,49 @@ def _new_turn_id(turn_id: object = None) -> str:
 
 
 
+# ── 子 Agent 委托上下文桩（tools/ 已删除，功能降级） ──────────
+
+from dataclasses import dataclass
+from typing import Any
+
+
+@dataclass
+class _StubDelegationContext:
+    """最小化委托上下文，替代 tools.sub_agent.delegation_context。"""
+    model: Any = None
+    provider_id: str = ""
+    model_name: str = ""
+    auto_approve: bool = False
+    remaining_seconds: float = 999999.0
+    max_tokens: int = 0
+
+
+def _stub_activate_delegation_context(ctx):
+    return 1
+
+
+def _stub_reset_delegation_context(token):
+    pass
+
+
+def _stub_prepare_delegated_tools(tools, ctx):
+    return tools
+
+
+def _stub_bind_model_budget(ctx):
+    return ctx.model
+
+
+def _stub_create_delegation_context(app_state, session_id, *, model, provider_id, model_name, auto_approve):
+    return _StubDelegationContext(
+        model=model,
+        provider_id=provider_id,
+        model_name=model_name,
+        auto_approve=auto_approve,
+    )
+
+
+
 async def _run_agent_turn(
     ws: WebSocket,
     session: SessionState,
@@ -907,17 +943,10 @@ async def _run_agent_turn(
             )
 
     if delegation_context is not None:
-        from tools.sub_agent.delegation_context import (
-            activate_delegation_context,
-            bind_model_budget,
-            prepare_delegated_tools,
-            reset_delegation_context,
-        )
-
         delegation_helpers = (
-            activate_delegation_context,
-            prepare_delegated_tools,
-            reset_delegation_context,
+            _stub_activate_delegation_context,
+            _stub_prepare_delegated_tools,
+            _stub_reset_delegation_context,
         )
         if delegation_context.remaining_seconds() <= 0:
             error = RuntimeError("子 Agent 的委托时间预算已耗尽")
@@ -930,7 +959,7 @@ async def _run_agent_turn(
                 format_ws_error(ErrorCode.AGENT_ERROR, "子 Agent 的委托时间预算已耗尽")
             )
             return
-        llm = bind_model_budget(delegation_context)
+        llm = _stub_bind_model_budget(delegation_context)
         current_model_name = delegation_context.model_name or current_model_name
         if delegation_context.max_tokens > 0:
             current_max_tokens = min(current_max_tokens, delegation_context.max_tokens)
@@ -954,13 +983,7 @@ async def _run_agent_turn(
     # delegation inherit the model actually selected for this request rather
     # than rediscovering app_state.llm inside the tool.
     if delegation_context is None:
-        from tools.sub_agent.delegation_context import (
-            activate_delegation_context,
-            create_delegation_context,
-            reset_delegation_context,
-        )
-
-        execution_context = create_delegation_context(
+        execution_context = _stub_create_delegation_context(
             app_state,
             session.session_id,
             model=llm,
@@ -969,9 +992,9 @@ async def _run_agent_turn(
             auto_approve=auto_approve,
         )
         delegation_helpers = (
-            activate_delegation_context,
+            _stub_activate_delegation_context,
             None,
-            reset_delegation_context,
+            _stub_reset_delegation_context,
         )
     else:
         execution_context = delegation_context
@@ -1069,22 +1092,10 @@ async def _run_agent_turn(
                 logger.debug("[sidecar] Failed to save turn to SessionMap", exc_info=True)
 
         if final_answer:
-            # 表情包处理：分层决策架构
-            # 1. LLM 主动输出 [表情包:情绪] → 直接解析
-            # 2. LLM 未输出 → 决策器判断是否补发
-            from tools.sticker_utils import process_stickers
-
-            ai_recent = await _get_recent_ai_messages(session, config, limit=5)
-            processed_answer, _ = process_stickers(
-                final_answer,
-                user_message=user_message,
-                ai_recent_messages=ai_recent,
-            )
-            final_answer = processed_answer
             await ws.send_json(
                 {  # [向前端通信] 1. 向客户端推送最终答案
                     "type": "answer",
-                    "payload": {"content": processed_answer},
+                    "payload": {"content": final_answer},
                 }
             )
     except asyncio.CancelledError:
