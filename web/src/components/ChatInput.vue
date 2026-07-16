@@ -76,6 +76,11 @@
           @remove="$emit('removeQuote', q.id)"
         />
       </div>
+      <div class="input-toolbar">
+        <ModelSelector />
+        <div class="toolbar-spacer"></div>
+        <ContextUsageBadge />
+      </div>
       <div class="input-body">
         <textarea
           ref="textareaRef"
@@ -229,6 +234,9 @@ import { REF_CHIP_CONFIG } from '@/utils/references'
 import { getApiBase, isTauri, tauriFetch } from '@/utils/env'
 import type { ThinkPathId } from '@/utils/thinkPath'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import ModelSelector from './ModelSelector.vue'
+import ContextUsageBadge from './ContextUsageBadge.vue'
+import { useChatStore } from '@/stores/chat'
 
 const props = withDefaults(defineProps<{
   isStreaming: boolean
@@ -246,7 +254,7 @@ const props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{
-  send: [text: string, refs: ParsedRef[], providerId?: string, modelName?: string, thinkPathId?: ThinkPathId]
+  send: [text: string, refs: ParsedRef[], providerId?: string, modelName?: string, thinkPathId?: ThinkPathId, model?: string, temperature?: number, maxTokens?: number]
   stop: []
   modelChange: [providerId: string, modelName: string]
   commitQuote: []
@@ -711,6 +719,7 @@ function calcCursorPixelPos(textarea: HTMLTextAreaElement, pos: number): { x: nu
 // ── LLM 选择器 ──
 // provider 列表来自全局 store（含重试），消除此前各组件独立请求导致的状态不一致
 const providerStore = useProviderStore()
+const chatStore = useChatStore()
 const providers = computed(() => providerStore.enabledProviders)
 const selectedProviderId = ref('')
 const selectedModelName = ref('')
@@ -970,6 +979,9 @@ function handleSend() {
     selectedProviderId.value || undefined,
     selectedModelName.value || undefined,
     selectedThinkPathId.value || undefined,
+    chatStore.currentModel,
+    chatStore.temperature,
+    chatStore.maxTokens,
   )
   text.value = ''
   // ThinkPath is intentionally one-shot: it is a confirmed preference for this
@@ -1059,6 +1071,13 @@ function onResizeEnd(e: PointerEvent) {
 </script>
 
 <style scoped>
+.input-toolbar {
+  display: flex; align-items: center;
+  padding: 4px 8px; gap: 8px;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+.toolbar-spacer { flex: 1; }
+
 .chat-input-wrapper {
   padding: 12px 24px 16px;
   background: var(--bg-card);
