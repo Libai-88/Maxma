@@ -157,7 +157,7 @@
         <div class="empty-state-overlay"></div>
         <div class="empty-state-content">
           <div class="empty-state-text">
-            <p class="empty-title">MaxmaHere</p>
+            <p class="empty-title">开始和 Maxma 对话吧</p>
             <p class="empty-desc">
               <span class="typewriter">{{ displayedWord }}<span class="typewriter-cursor">|</span></span>
             </p>
@@ -245,7 +245,7 @@ async function copyErrorLog() {
     const now = new Date()
     const ts = now.toISOString().replace('T', ' ').substring(0, 19)
     const lines = [
-      'MaxmaHere 错误报告（降级模式 - 后端不可用）',
+      'Maxma 暂时连接不上',
       '========================================',
       `时间: ${ts}`,
       `Trace ID: ${props.errorTraceId || 'N/A'}`,

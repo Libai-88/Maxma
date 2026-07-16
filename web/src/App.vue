@@ -10,12 +10,12 @@
     <aside class="sidebar" :class="{ collapsed: effectiveCollapsed }" @click="onSidebarClick">
       <div class="sidebar-header">
         <h1 class="logo">
-          <img src="@/assets/images/brand/logo-hero-opt.jpg" alt="MaxmaHere" class="logo-img" />
-          <span class="logo-text">MaxmaHere</span>
+          <img src="@/assets/images/brand/logo-hero-opt.jpg" alt="Maxma" class="logo-img" />
+          <span class="logo-text">Maxma</span>
         </h1>
       </div>
       <div class="sidebar-icon-collapsed">
-        <img src="@/assets/images/brand/favicon.png" alt="MaxmaHere" class="logo-favicon" />
+        <img src="@/assets/images/brand/favicon.png" alt="Maxma" class="logo-favicon" />
       </div>
       <nav class="sidebar-nav">
         <router-link to="/" class="nav-item">
@@ -195,7 +195,7 @@ async function handleManageLogs() {
 
 async function handleRestart() {
   if (restarting.value) return
-  if (!window.confirm('确定要重启 MaxmaHere 服务吗？正在进行的对话可能会中断。')) return
+  if (!window.confirm('确定要重启 Maxma 吗？正在进行的对话可能会中断。')) return
   restarting.value = true
   closeSettingsMenu()
   api.restart()

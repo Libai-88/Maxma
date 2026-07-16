@@ -2,7 +2,7 @@
 <template>
   <div class="qc-app">
     <header class="qc-header">
-      <img src="@/assets/images/brand/favicon.png" alt="MaxmaHere" class="qc-logo" />
+      <img src="@/assets/images/brand/favicon.png" alt="Maxma" class="qc-logo" />
       <span class="qc-title">Quick Chat</span>
       <button class="qc-close" @click="hideWindow" title="关闭">✕</button>
     </header>
