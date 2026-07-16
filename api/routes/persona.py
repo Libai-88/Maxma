@@ -223,3 +223,56 @@ async def create_new_persona(body: CreatePersonaRequest):
         "memory_mode": body.memory,
         "tools": body.tools or "(全部)",
     }
+
+
+@router.get("/persona/profile")
+async def get_persona_profile():
+    """返回当前活跃人格的展示信息（从 SOUL.md + USER.md 解析）。"""
+    soul_path = PERSONAS_DIR / "SOUL.md"
+    user_path = PERSONAS_DIR / "USER.md"
+
+    name = "Maxma"
+    description = "温暖体贴又有点调皮的大姐姐"
+    scene = "吵闹的小公寓，窗外有一条马路"
+    style = "playful · 直接 · 温暖"
+    nickname = "你"
+    greeting = "你来啦。"
+
+    # Parse SOUL.md for name and description
+    if soul_path.exists():
+        text = soul_path.read_text("utf-8")
+        m = re.search(r'^#\s+(.+)', text, re.MULTILINE)
+        if m:
+            name = m.group(1).strip()
+        parts = re.split(r'\n#+\s+', text)
+        if len(parts) > 0:
+            lines = [l.strip() for l in parts[0].split('\n') if l.strip() and not l.startswith('#')]
+            if lines:
+                description = lines[0][:50]
+        scene_m = re.search(r'默认居住在一个(.+?)(?:\n|$)', text)
+        if scene_m:
+            scene = scene_m.group(1).strip()
+        style_hints = []
+        for kw in ['playful', '直接', '温暖', '调皮', '可爱']:
+            if kw.lower() in text.lower():
+                style_hints.append(kw)
+        if style_hints:
+            style = ' · '.join(style_hints[:3])
+
+    if user_path.exists():
+        user_text = user_path.read_text("utf-8")
+        nn = re.search(r'\*\*称呼\*\*\s*[：:]\s*(.+)', user_text)
+        if nn:
+            nickname = nn.group(1).strip()
+
+    greeting = f"{nickname}，你来啦。"
+
+    return {
+        "name": name,
+        "description": description,
+        "nickname": nickname,
+        "scene": scene,
+        "style": style,
+        "greeting": greeting,
+        "avatar": "✦",
+    }
