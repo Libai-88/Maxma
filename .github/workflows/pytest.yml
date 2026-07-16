@@ -28,10 +28,10 @@ jobs:
           python -m pip install -r requirements-lock.txt
 
       - name: Compile Python sources
-        run: python -m compileall -q agent api config maxma_platform memory tools
+        run: python -m compileall -q agent api config tests
 
       - name: Run critical static checks
-        run: python -m ruff check --select=E9,F63,F7 agent api config maxma_platform memory tools tests
+        run: python -m ruff check --select=E9,F63,F7 agent api config tests
 
       - name: Run backend tests
         run: python -m pytest -q

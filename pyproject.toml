@@ -5,59 +5,26 @@ description = "MaxmaHere — oh-my-pi AI Agent Desktop Client"
 requires-python = ">=3.11"
 
 dependencies = [
-    "langchain>=0.3.0",
-    "langchain-openai>=0.3.0",
-    "langchain-mcp-adapters>=0.2.0",
-	    # langgraph 已由 oh-my-pi 替代，如需遗留模式手动安装
-	    # "langgraph>=0.2.0",
-	    # "langgraph-checkpoint-sqlite>=2.0.0",
-    "aiosqlite>=0.20.0",
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.27.0",
     "pydantic-settings>=2.0.0",
-    "filelock>=3.13.0",
-	    # todoist 和 uapi 工具已重写为 TypeScript AgentTool，由 oh-my-pi sidecar 执行
-	    # Python 端不再需要这些 SDK
     "python-dotenv>=1.0.0",
+    "pyyaml>=6.0",
+    "cryptography>=41.0.0",
+    "httpx>=0.27.0",
+    "requests>=2.31.0",
+    "aiosqlite>=0.20.0",
     "beautifulsoup4>=4.12.0",
     "PyPDF2>=3.0.0",
     "python-docx>=1.1.0",
-    "requests>=2.31.0",
-    "fastapi>=0.110.0",
-    "uvicorn[standard]>=0.27.0",
-    "tiktoken>=0.7.0",
-    "httpx>=0.27.0",
-    "moviepy>=1.0.3",
-    "playwright>=1.40.0",
-    "portalocker>=3.0.0",
-    "pyyaml>=6.0",
-    "tavily-python>=0.7.0",
+    "filelock>=3.13.0",
     "watchdog>=3.0.0",
-    "cryptography>=41.0.0",
-    "zai-sdk",
-    # 流式修复管道：修复国产模型破损 tool JSON
-    "json-repair>=0.1.0",
-    # RAG 子系统：向量检索 + ONNX 嵌入（不依赖 torch，体积优化 ~600MB）
-    "chromadb>=0.5.0",
-    "onnxruntime>=1.16.0",
-    "transformers>=4.40.0",
 ]
 
 [project.urls]
 Homepage = "https://github.com/Libai-88/Maxma"
 Repository = "https://github.com/Libai-88/Maxma.git"
 Issues = "https://github.com/Libai-88/Maxma/issues"
-
-[project.optional-dependencies]
-dev = [
-    "pre-commit>=4.0.0",
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.24.0",
-    "pytest-mock>=3.12.0",
-    "ruff>=0.11.0",
-    "pyinstaller>=6.0.0",
-    # RAG 模型导出工具：仅当需要将非 ONNX 预置模型导出为 ONNX 格式时临时安装
-    # 运行时/打包时不需要（paraphrase-multilingual-MiniLM-L12-v2 官方已预置 ONNX）
-    # 安装命令: pip install 'optimum[onnxruntime]>=1.20.0'
-]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
