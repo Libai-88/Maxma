@@ -22,7 +22,9 @@
     </div>
     <!-- 正常聊天界面 -->
     <template v-else>
-    <header class="chat-header">
+    <ChatHeader>
+      <template #extra>
+        <ModelSelector />
         <StatusBadge :connected="connected" :health="health" />
         <span class="private-trigger hover-trigger">
           <button
@@ -79,24 +81,28 @@
         >
           &#9776;
         </button>
-    </header>
+      </template>
+    </ChatHeader>
 
     <div class="chat-workbench-layout">
       <div class="chat-main-column">
-        <ChatWindow
-          :session-id="sessionId"
-          :turns="turns"
-          :current-turn="currentTurn"
-          :error="error"
-          :error-category="errorCategory"
-          :error-trace-id="errorTraceId"
-          @action="handleToolAction"
-          @cite="addCitation"
-          @toggle-private="setPrivateMode(!privateMode)"
-          @plan-respond="sendPlanResponse"
-          @pin="handlePin"
-        />
-        <WorkflowCard v-if="!isSubagent" :session-id="sessionId" />
+        <template v-if="hasMessages">
+          <ChatWindow
+            :session-id="sessionId"
+            :turns="turns"
+            :current-turn="currentTurn"
+            :error="error"
+            :error-category="errorCategory"
+            :error-trace-id="errorTraceId"
+            @action="handleToolAction"
+            @cite="addCitation"
+            @toggle-private="setPrivateMode(!privateMode)"
+            @plan-respond="sendPlanResponse"
+            @pin="handlePin"
+          />
+          <WorkflowCard v-if="!isSubagent" :session-id="sessionId" />
+        </template>
+        <WelcomeScreen v-else @start="handleQuickStart" />
 
         <ChatInput
           v-if="!isSubagent"
@@ -156,12 +162,16 @@ import TaskTrackerBar from '@/components/TaskTrackerBar.vue'
 import WorkbenchPanel from '@/components/workbench/WorkbenchPanel.vue'
 import ReasoningTimeline from '@/components/workbench/ReasoningTimeline.vue'
 import CanvasContainer from '@/components/workbench/CanvasContainer.vue'
+import WelcomeScreen from '@/components/WelcomeScreen.vue'
+import ChatHeader from '@/components/ChatHeader.vue'
+import ModelSelector from '@/components/ModelSelector.vue'
 import { useChat } from '@/composables/useChat'
 import { useSelectionQuote } from '@/composables/useSelectionQuote'
 import { useWorkbenchStore } from '@/stores/workbench'
 import { useHealthStore } from '@/stores/health'
 import { useProviderStore } from '@/stores/provider'
 import { useSessionStore } from '@/stores/session'
+import { usePersonaStore } from '@/stores/persona'
 import type { ParsedRef } from '@/utils/references'
 import type { ThinkPathId } from '@/utils/thinkPath'
 import { storeToRefs } from 'pinia'
@@ -177,6 +187,8 @@ const {
 } = useChat(sessionId)
 
 const workbench = useWorkbenchStore()
+
+const hasMessages = computed(() => turns.value.length > 0)
 
 const allTurns = computed(() => {
   const result = [...turns.value]
@@ -224,7 +236,10 @@ async function retryLoadProviders() {
   }
 }
 
+const personaStore = usePersonaStore()
+
 onMounted(async () => {
+  personaStore.fetchProfile()
   // 通过全局 store 加载 provider 列表（含重试），消除 ChatView/ChatInput 状态不一致
   await loadProvidersWithStatus()
 })
@@ -289,6 +304,10 @@ async function handleUndo() {
     console.error('撤回失败:', e)
   }
 }
+
+function handleQuickStart(message: string) {
+  onSend(message, [])
+}
 </script>
 
 <style scoped>
@@ -297,14 +316,6 @@ async function handleUndo() {
   display: flex;
   flex-direction: column;
   min-height: 0;
-}
-.chat-header {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 12px 24px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-card);
 }
 .private-toggle,
 .auto-approve-toggle {
