@@ -1,6 +1,7 @@
 """文件上传 API — 用户上传文件供 Agent 读取和分析。"""
 
 import os
+import re
 import time
 import uuid
 from pathlib import Path
@@ -38,7 +39,9 @@ def _sanitize_filename(name: str) -> str:
     # 只保留字母数字 ._- 字符，移除 Unicode 控制字符、空格、保留名等
     safe = re.sub(r"[^a-zA-Z0-9._-]", "", name)
     # Windows 保留名（CON/NUL/LPT1 等）在前面加下划线避免冲突
-    if safe.upper() in {"CON", "NUL", "PRN", "AUX"} or safe.upper().startswith(("COM", "LPT")):
+    # 注意：Windows 会忽略扩展名匹配保留设备名，所以取第一个点之前的部分比较
+    stem = safe.split(".", 1)[0].upper()
+    if stem in {"CON", "NUL", "PRN", "AUX"} or stem.startswith(("COM", "LPT")):
         safe = f"_{safe}"
     return safe or "unnamed_file"
 
