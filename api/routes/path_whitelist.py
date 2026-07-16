@@ -92,6 +92,26 @@ async def check_path_blocked(path: str = Query(..., description="要检查的路
         - ``reason``: 阻挡原因（仅 blocked=True 时有值）
         - ``blocker_path``: 拒止锚所在目录（仅拒止锚阻挡时有值）
     """
+    from api.pi_bridge.security_adapter import _find_blocker_path, check_path_access
+
+    # 先检查白名单
+    blocked_reason = check_path_access(path)
+    if blocked_reason:
+        return {
+            "blocked": True,
+            "reason": blocked_reason,
+            "blocker_path": None,
+        }
+
+    # 再检查 MaxmaBlocker
+    blocker_path = _find_blocker_path(path)
+    if blocker_path is not None:
+        return {
+            "blocked": True,
+            "reason": f"路径包含 MaxmaBlocker 拒止锚: {blocker_path}",
+            "blocker_path": blocker_path,
+        }
+
     return {
         "blocked": False,
         "reason": None,
