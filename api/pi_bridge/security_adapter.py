@@ -122,13 +122,33 @@ def check_path_access(path: str) -> str | None:
 
 
 def _is_blocker_present(path: str) -> bool:
-    """检查路径或其父目录中是否存在 .maxma_blocker。"""
+    """检查路径或其父目录中是否存在 .maxma_blocker（fail-closed）。
+
+    路径解析失败时视为存在 blocker（fail-closed），防止攻击者构造
+    畸形路径绕过 MaxmaBlocker 检查。
+    """
+    return _find_blocker_path(path) is not None
+
+
+def _find_blocker_path(path: str) -> str | None:
+    """查找路径或其父目录中的 .maxma_blocker，返回拒止锚所在目录路径。
+
+    路径解析失败时返回 path 本身（fail-closed：视为存在 blocker）。
+
+    Returns:
+        拒止锚所在目录的字符串路径，或 None（未发现 blocker）。
+    """
+    # NUL 字节是路径注入向量，显式拒绝（不依赖 resolve 的平台相关行为）
+    if "\x00" in path:
+        logger.warning("[security] 路径包含 NUL 字节（fail-closed）: %r", path)
+        return str(path)  # fail-closed: 视为存在 blocker
     try:
-        p = Path(path).resolve()
-        for parent in [p] + list(p.parents):
-            if (parent / ".maxma_blocker").exists():
-                logger.warning("[security] MaxmaBlocker found at %s", parent)
-                return True
-    except Exception:
-        pass
-    return False
+        p = Path(path).resolve(strict=False)
+    except (OSError, ValueError) as exc:
+        logger.warning("[security] 路径解析失败（fail-closed）%s: %s", path, exc)
+        return str(path)  # fail-closed: 视为存在 blocker
+    for parent in [p] + list(p.parents):
+        if (parent / ".maxma_blocker").exists():
+            logger.warning("[security] MaxmaBlocker found at %s", parent)
+            return str(parent)
+    return None
