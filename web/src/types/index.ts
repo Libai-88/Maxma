@@ -307,6 +307,8 @@ export interface ChatMessage {
     auto_approve?: boolean
     provider_id?: string
     model_name?: string
+    temperature?: number
+    max_tokens?: number
     /** A fixed, user-confirmed ThinkPath ID; the server validates it again. */
     think_path_id?: 'light' | 'standard' | 'deep'
   }

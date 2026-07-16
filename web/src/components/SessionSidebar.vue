@@ -111,6 +111,8 @@
       </div>
     </div>
 
+    <ModelSettingsPanel />
+
     <Transition name="card">
       <div v-if="hoveredSession" :key="hoveredSession.session_id" ref="hoverCardRef" class="session-hover-card" :style="cardStyle">
         <div class="card-row">
@@ -214,6 +216,7 @@
 <script setup lang="ts">
 import ContextMenu from '@/components/ContextMenu.vue';
 import Icon from '@/components/Icon.vue';
+import ModelSettingsPanel from './ModelSettingsPanel.vue';
 import { useSessionStore } from '@/stores/session';
 import type { SessionInfo } from '@/types';
 import { computed, nextTick, ref, watch } from 'vue';

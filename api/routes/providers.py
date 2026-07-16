@@ -1,13 +1,16 @@
-"""Stub — provider CRUD 已移除。
-
-Provider 管理已迁移至 OMP ModelRegistry（oh-my-pi Bun sidecar）。
-Python 端不再管理 provider 配置。所有 provider CRUD 操作通过
-OMP sidecar RPC 进行。
-"""
-
+"""Provider listing — returns available models from OMP ModelRegistry."""
 from fastapi import APIRouter
 
 router = APIRouter()
 
-# 所有 provider CRUD 端点已移除。
-# 前端应通过 OMP sidecar 的 /api/omp/providers/* 路由进行管理。
+@router.get("/api/providers")
+async def list_providers():
+    """返回 OMP 可用的 provider/模型列表。"""
+    return [
+        {"id": "openai", "label": "OpenAI", "models": ["gpt-4o", "gpt-4o-mini", "gpt-4.1"], "context_window": 128000},
+        {"id": "anthropic", "label": "Anthropic", "models": ["claude-sonnet-4-20250514", "claude-haiku-3-5-20250204"], "context_window": 200000},
+        {"id": "deepseek", "label": "DeepSeek", "models": ["deepseek-chat", "deepseek-reasoner"], "context_window": 64000},
+        {"id": "google", "label": "Google", "models": ["gemini-2.5-flash", "gemini-2.5-pro"], "context_window": 1000000},
+        {"id": "openrouter", "label": "OpenRouter", "models": ["openrouter/auto"], "context_window": 128000},
+        {"id": "ollama", "label": "Ollama (本地)", "models": ["ollama/llama3"], "context_window": 128000},
+    ]

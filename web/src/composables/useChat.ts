@@ -335,6 +335,14 @@ function handleEventForChannel(sid: string, event: ServerEvent) {
   // context_usage 可以在无活跃轮次时接收（如连接初始化）
   if (event.type === 'context_usage') {
     ch.contextUsage = event.payload
+    const p = event.payload as unknown as Record<string, unknown>
+    getChatStore().updateContextUsage({
+      estimatedTokens: (p.estimated_tokens as number) || 0,
+      maxTokens: (p.max_tokens as number) || 128000,
+      percentage: (p.percentage as number) || 0,
+      messageCount: (p.message_count as number) || 0,
+      modelName: (p.model_name as string) || '',
+    })
     return
   }
 
@@ -947,6 +955,7 @@ export function useChat(sessionId: Ref<string>) {
     }
     ch.currentTurn = turn
 
+    const cs = getChatStore()
     const payload: ClientMessage = {
       type: 'chat',
       payload: {
@@ -955,6 +964,8 @@ export function useChat(sessionId: Ref<string>) {
         auto_approve: ch.autoApprove,
         provider_id: providerId,
         model_name: modelName,
+        temperature: cs.temperature,
+        max_tokens: cs.maxTokens,
         ...(thinkPathId ? { think_path_id: thinkPathId } : {}),
       },
     }
