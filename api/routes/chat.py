@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from langchain_core.messages import AIMessage, ToolMessage
 
 from agent.model_routing import resolve_model_role
 from agent.prompts import build_system_prompt, get_system_prompt_parts
@@ -579,10 +578,20 @@ async def _stream_turn_sidecar(
         await asyncio.wait_for(turn_done.wait(), timeout=600)
     except asyncio.TimeoutError:
         logger.warning("[sidecar] Turn timed out for session %s", sidecar_sid)
+        # BUG-2 fix: cancel sidecar work to prevent resource leak
+        try:
+            await client.call("cancel", {"session_id": sidecar_sid})
+        except Exception:
+            pass
         if not final_answer:
             final_answer = "（Sidecar 处理超时，请重试）"
     except Exception as e:
         logger.exception("[sidecar] Turn failed for session %s", sidecar_sid)
+        # BUG-2 fix: cancel sidecar work on error
+        try:
+            await client.call("cancel", {"session_id": sidecar_sid})
+        except Exception:
+            pass
         if not final_answer:
             final_answer = f"（Sidecar 处理出错：{e}）"
     finally:
@@ -1138,36 +1147,34 @@ async def _run_agent_turn(
             )
         )
     finally:
-        if context_token is not None:
-            delegation_helpers[2](context_token)
-        if session._active_task is current_task:
-            session._active_task = None
-        context_usage = await _calculate_context_usage(
-            session,
-            system_prompt,
-            max_tokens=current_max_tokens,
-            model_name=current_model_name or "",
-        )
-        await ws.send_json(
-            {  # [向前端通信] 3. 推送 turn 结束 + 上下文用量 + turn_id（用于记忆事件关联）
-                "type": "done",
-                "payload": {
+        # BUG-3 fix: protect finally block to avoid masking original exceptions
+        try:
+            if context_token is not None:
+                delegation_helpers[2](context_token)
+            if session._active_task is current_task:
+                session._active_task = None
+            context_usage = await _calculate_context_usage(
+                session,
+                system_prompt,
+                max_tokens=current_max_tokens,
+                model_name=current_model_name or "",
+            )
+            await ws.send_json(
+                {  # [向前端通信] 3. 推送 turn 结束 + 上下文用量 + turn_id（用于记忆事件关联）
+                    "type": "done",
+                    "payload": {
                     "turn_id": turn_id,
                     "context_usage": context_usage,
                 },
             }
         )
+        except Exception:
+            pass  # WS 已断开或 context_usage 计算失败时静默跳过
 
     # 3. [后处理] 增加消息计数器，将对话记录入长期记忆
-    # 修复：此前仅在 final_answer 非空时 +=2，错误轮次仍写 checkpointer（至少写入 HumanMessage）
-    # 但计数不增 → message_count 与 checkpointer 实际消息数漂移，导致：
-    # 1) undo 端点 max(0, count - deleted) 计算错误
-    # 2) const 会话 YAML metadata.message_count 不准，重启后显示错误
     if final_answer:
         session.message_count += 2  # human + ai
-    else:
-        # Agent 出错：graph.ainvoke 已把 HumanMessage 写入 checkpointer，但没有 AI 回复
-        session.message_count += 1
+    # sidecar 模式下错误轮次不增计数（sidecar 可能未保存用户消息）
     memory_eligible = turn_completed and bool(final_answer)
     if not private_mode and memory_eligible:
         if final_answer:

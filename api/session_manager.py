@@ -39,21 +39,21 @@ class SessionState:
     _project_context: str | None = field(default=None, repr=False)
     _project_path: str | None = field(default=None, repr=False)
 
-    def __post_init__(self) -> None:
-        """初始化后处理：若未显式提供 checkpointer，使用持久化 checkpointer 单例。
+    # ── oh-my-pi sidecar 字段 ─────────────────────────────────
+    _sidecar_mgr: Any = field(default=None, repr=False)
+    _sidecar_session_id: str | None = field(default=None, repr=False)
 
-        工厂不可导入时（如测试环境）回退到 MemorySaver。
+    def __post_init__(self) -> None:
+        """初始化后处理：若未显式提供 checkpointer，尝试获取持久化实例。
+
+        sidecar 模式下 checkpointer 不再必需，获取失败时静默设为 None。
         """
         if self.checkpointer is None:
             try:
                 from api.checkpointer_factory import get_persistent_checkpointer
                 self.checkpointer = get_persistent_checkpointer()
             except Exception:
-                try:
-                    from langgraph.checkpoint.memory import MemorySaver
-                    self.checkpointer = MemorySaver()
-                except ImportError:
-                    self.checkpointer = None
+                self.checkpointer = None
 
         # Older const-session metadata has no permission mode.  Invalid stored
         # values fail closed to the compatible, confirmation-first default.

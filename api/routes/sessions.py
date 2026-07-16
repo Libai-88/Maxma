@@ -172,9 +172,16 @@ async def get_messages(session_id: str, request: Request, limit: int = 50):
                         "session_id": sidecar_sid,
                         "limit": limit,
                     })
+                    # 规范化 role 格式：sidecar 用 "user"/"assistant"，前端期望 "human"/"ai"
+                    _role_map = {"user": "human", "assistant": "ai"}
+                    raw_msgs = result.get("messages", [])
+                    normalized = [
+                        {**m, "role": _role_map.get(m.get("role", ""), m.get("role", ""))}
+                        for m in raw_msgs
+                    ]
                     return {
                         "session_id": session_id,
-                        "messages": result.get("messages", []),
+                        "messages": normalized,
                         "total": result.get("total", 0),
                     }
                 except Exception:
@@ -186,8 +193,8 @@ async def get_messages(session_id: str, request: Request, limit: int = 50):
         turns = smap.get_recent_turns(session_id, count=limit)
     messages = []
     for t in turns:
-        messages.append({"role": "user", "content": t.get("user", "")})
-        messages.append({"role": "assistant", "content": t.get("assistant", "")})
+        messages.append({"role": "human", "content": t.get("user", "")})
+        messages.append({"role": "ai", "content": t.get("assistant", "")})
     return {"session_id": session_id, "messages": messages, "total": len(messages)}
 
 
