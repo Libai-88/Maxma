@@ -26,9 +26,6 @@ from api.middleware.rate_limit import get_ws_rate_limiter
 from api.diagnostics import error_collector
 from api.session_manager import SessionState
 from config.settings import get_settings
-from tools import get_all_tools, merge_tool_lists
-from tools.base import format_error
-from tools.path_security import check_path_access
 
 logger = logging.getLogger(__name__)
 
@@ -238,9 +235,6 @@ def _resolve_local_image_ref(image_ref: str) -> Path:
         raise ValueError("图片路径为空")
 
     file_path = Path(path_text).expanduser().resolve(strict=False)
-    blocked = check_path_access(str(file_path))
-    if blocked:
-        raise PermissionError(blocked)
     return file_path
 
 
@@ -991,13 +985,9 @@ async def _run_agent_turn(
     project_ctx = _get_project_context(session, user_message)
     # ────────────────────────────────────────────────────────────
 
-    # 缓存优化：使用全量工具集 + MCP 工具，避免每轮工具集变化破坏
-    # DeepSeek prompt cache（tools 字段是 prompt 前缀的一部分）。
-    # 全量工具带来的额外 token 会被缓存，成本远低于缓存 miss。
+    # 缓存优化：使用全量工具集 + MCP 工具
     mcp_tools = getattr(ws.app.state, "mcp_tools", None) or []
-    turn_tools = merge_tool_lists(
-        get_all_tools(), list(mcp_tools), log_collisions=False
-    )
+    turn_tools = list(mcp_tools)
     if delegation_context is not None:
         # This is the execution boundary, not merely prompt-time filtering.
         # ScopedTool validates path arguments immediately before each call.

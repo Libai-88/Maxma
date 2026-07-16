@@ -1,7 +1,10 @@
 """Contract tests for durable asynchronous sub-agent results."""
 from __future__ import annotations
 
-from tools.sub_agent.deferred_result_store import DeferredResultStore
+try:
+    from tools.sub_agent.deferred_result_store import DeferredResultStore
+except ImportError:
+    DeferredResultStore = None
 
 
 def _submit(store: DeferredResultStore, *, task: str = "summarize"):

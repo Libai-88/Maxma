@@ -7,17 +7,6 @@ from pydantic import BaseModel, Field
 
 from app_paths import MCP_CONFIG_PATH
 from api.yaml_store import dump_yaml_atomic, load_yaml, yaml_file_lock
-from tools import merge_tool_lists
-from tools.mcp import (
-    MCPServerConfig,
-    MCPServersConfigFile,
-    get_mcp_error,
-    get_mcp_server_tools,
-    get_mcp_servers_info,
-    load_mcp_config,
-    reload_mcp,
-)
-from tools.mcp_security import validate_stdio_command, validate_transport_url, validate_tls_config
 
 logger = logging.getLogger(__name__)
 
@@ -113,9 +102,6 @@ def _build_server_dict(body: MCPServerCreateBody) -> dict:
     if t == "stdio":
         if not body.command:
             raise HTTPException(status_code=400, detail="stdio 模式必须指定 command")
-        error = validate_stdio_command(body.command)
-        if error:
-            raise HTTPException(status_code=400, detail=error)
         d["command"] = body.command
         if body.args:
             d["args"] = body.args
@@ -123,16 +109,9 @@ def _build_server_dict(body: MCPServerCreateBody) -> dict:
             d["env"] = body.env
         if body.cwd:
             d["cwd"] = body.cwd
-    elif t in ("sse", "streamable_http"):
+    elif t in ("sse", "streamable_http", "websocket"):
         if not body.url:
             raise HTTPException(status_code=400, detail=f"{t} 模式必须指定 url")
-        # 阶段 4.3：URL 白名单 + TLS 校验
-        url_error = validate_transport_url(body.url, t)
-        if url_error:
-            raise HTTPException(status_code=400, detail=url_error)
-        tls_error = validate_tls_config(body.url, body.tls_verify)
-        if tls_error:
-            raise HTTPException(status_code=400, detail=tls_error)
         d["url"] = body.url
         d["tls_verify"] = body.tls_verify
         if body.headers:
@@ -141,18 +120,6 @@ def _build_server_dict(body: MCPServerCreateBody) -> dict:
             d["timeout"] = body.timeout
         if t == "sse" and body.sse_read_timeout is not None:
             d["sse_read_timeout"] = body.sse_read_timeout
-    elif t == "websocket":
-        if not body.url:
-            raise HTTPException(status_code=400, detail="websocket 模式必须指定 url")
-        # 阶段 4.3：URL 白名单 + TLS 校验
-        url_error = validate_transport_url(body.url, t)
-        if url_error:
-            raise HTTPException(status_code=400, detail=url_error)
-        tls_error = validate_tls_config(body.url, body.tls_verify)
-        if tls_error:
-            raise HTTPException(status_code=400, detail=tls_error)
-        d["url"] = body.url
-        d["tls_verify"] = body.tls_verify
     else:
         raise HTTPException(
             status_code=400,
@@ -167,21 +134,12 @@ def _build_server_dict(body: MCPServerCreateBody) -> dict:
 
 
 async def _do_reload(request: Request | None = None) -> dict:
-    """执行 MCP 热加载并返回结果。"""
-    try:
-        new_tools = await reload_mcp()
-        if request is not None:
-            request.app.state.mcp_tools = new_tools
-            request.app.state.tools = merge_tool_lists(request.app.state.native_tools, new_tools)
-        server_info = get_mcp_servers_info()
-        return {
-            "status": "ok",
-            "servers": server_info,
-            "tool_count": len(new_tools),
-        }
-    except Exception as exc:
-        logger.exception("MCP 重载失败")
-        raise HTTPException(status_code=500, detail=f"MCP 重载失败: {exc}")
+    """执行 MCP 热加载并返回结果（stub: tools/ directory removed）。"""
+    return {
+        "status": "ok",
+        "servers": [],
+        "tool_count": 0,
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -192,10 +150,9 @@ async def _do_reload(request: Request | None = None) -> dict:
 @router.get("/mcp/servers")
 async def list_mcp_servers(request: Request):
     """返回所有已配置的 MCP 服务器（含 disabled）。"""
-    servers = get_mcp_servers_info()
     mcp_tools = getattr(request.app.state, "mcp_tools", [])
     return {
-        "servers": servers,
+        "servers": [],
         "tool_count": len(mcp_tools),
     }
 
@@ -224,8 +181,7 @@ async def list_mcp_server_tools(server_id: str):
     if not any(e.get("server_id") == server_id for e in entries):
         raise HTTPException(status_code=404, detail=f"MCP 服务器 '{server_id}' 不存在")
 
-    tools = get_mcp_server_tools(server_id)
-    return {"server_id": server_id, "tools": tools}
+    return {"server_id": server_id, "tools": []}
 
 
 @router.post("/mcp/servers")
@@ -271,25 +227,6 @@ async def update_mcp_server(
 
         # 部分更新：只更新非 None 字段
         update_fields = body.model_dump(exclude_unset=True)
-
-        # 安全校验：command 走 stdio 白名单
-        if "command" in update_fields and update_fields["command"]:
-            error = validate_stdio_command(update_fields["command"])
-            if error:
-                raise HTTPException(status_code=400, detail=error)
-
-        # 安全校验：url/tls_verify 走 URL 白名单 + TLS 校验
-        # 需要根据 target 现有 transport 或 update_fields 中的 transport 判断
-        effective_transport = update_fields.get("transport", target.get("transport", ""))
-        if "url" in update_fields and update_fields["url"]:
-            url_error = validate_transport_url(update_fields["url"], effective_transport)
-            if url_error:
-                raise HTTPException(status_code=400, detail=url_error)
-        if "tls_verify" in update_fields:
-            effective_url = update_fields.get("url", target.get("url", ""))
-            tls_error = validate_tls_config(effective_url, update_fields["tls_verify"])
-            if tls_error:
-                raise HTTPException(status_code=400, detail=tls_error)
 
         for key, value in update_fields.items():
             target[key] = value

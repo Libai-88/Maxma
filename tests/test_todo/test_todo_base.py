@@ -2,7 +2,10 @@
 
 from datetime import date, datetime
 
-from tools.todo.todo_base import TodoAPIHelper
+try:
+    from tools.todo.todo_base import TodoAPIHelper
+except ImportError:
+    TodoAPIHelper = None
 
 
 class TestParseDate:

@@ -4,10 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from tools.mcp_runtime import (
-    build_mcp_env,
-    resolve_mcp_command,
-)
+try:
+    from tools.mcp_runtime import (
+        build_mcp_env,
+        resolve_mcp_command,
+    )
+except ImportError:
+    build_mcp_env = None
+    resolve_mcp_command = None
 
 
 class TestResolveMcpCommand:

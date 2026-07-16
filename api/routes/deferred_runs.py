@@ -5,7 +5,6 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
-from tools.sub_agent.deferred_result_store import DeferredRun
 
 router = APIRouter()
 
@@ -38,7 +37,7 @@ async def _require_parent_session(request: Request, session_id: str) -> None:
         raise HTTPException(status_code=404, detail="Session not found")
 
 
-async def _get_parent_run(request: Request, session_id: str, run_id: str) -> tuple[Any, DeferredRun]:
+async def _get_parent_run(request: Request, session_id: str, run_id: str) -> tuple[Any, Any]:
     await _require_parent_session(request, session_id)
     manager = _require_runtime(request)
     run = manager.store.get(run_id, parent_session_id=session_id)
@@ -49,7 +48,7 @@ async def _get_parent_run(request: Request, session_id: str, run_id: str) -> tup
     return manager, run
 
 
-def _public_run(run: DeferredRun) -> dict[str, object]:
+def _public_run(run) -> dict[str, object]:
     """Return the intentionally small browser-facing contract.
 
     Delegation snapshots can contain local paths, tool scopes and provider
@@ -75,7 +74,7 @@ def _public_run(run: DeferredRun) -> dict[str, object]:
     return response
 
 
-def _public_cancel_reason(run: DeferredRun) -> str | None:
+def _public_cancel_reason(run) -> str | None:
     if run.status != "cancelled":
         return None
     # Only API-owned reason codes cross this boundary.  Store callers may add

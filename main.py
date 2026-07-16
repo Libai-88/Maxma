@@ -120,7 +120,7 @@ def main():
         host="127.0.0.1",
         port=settings.maxma_api_port,
         reload=dev_mode,
-        reload_dirs=["agent", "api", "tools", "memory"] if dev_mode else None,
+        reload_dirs=["agent", "api", "memory"] if dev_mode else None,
     )
 
 

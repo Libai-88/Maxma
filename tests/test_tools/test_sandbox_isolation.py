@@ -28,11 +28,16 @@ from unittest import mock
 import pytest
 
 # 触发工具导入
-from tools.system.sandbox_runner import (
-    SandboxRunner,
-    get_sandbox_runner,
-)
-from tools.system.tool_python import _run_in_sandbox
+try:
+    from tools.system.sandbox_runner import (
+        SandboxRunner,
+        get_sandbox_runner,
+    )
+    from tools.system.tool_python import _run_in_sandbox
+except ImportError:
+    SandboxRunner = None
+    get_sandbox_runner = None
+    _run_in_sandbox = None
 
 
 SYSTEM = platform.system()

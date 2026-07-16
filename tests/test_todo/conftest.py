@@ -4,8 +4,12 @@ from unittest.mock import MagicMock, PropertyMock
 
 import pytest
 
-from tools.base import SharedAPIClient
-from tools.todo.todo_base import TodoAPIHelper
+try:
+    from tools.base import SharedAPIClient
+    from tools.todo.todo_base import TodoAPIHelper
+except ImportError:
+    SharedAPIClient = None
+    TodoAPIHelper = None
 
 
 @pytest.fixture

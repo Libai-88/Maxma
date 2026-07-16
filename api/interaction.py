@@ -9,7 +9,6 @@ import asyncio
 import contextvars
 import uuid
 
-from tools.base import format_error
 
 # 当前连接对应的 WebSocket 实例（在 chat.py 中设置）
 current_ws: contextvars.ContextVar = contextvars.ContextVar("current_ws")
@@ -101,7 +100,7 @@ async def cancel_all(reason: str | None = None, session_id: str | None = None):
     """
     if reason is None:
         reason = "用户取消了该工具调用"
-    formatted = format_error(reason)
+    formatted = reason
     async with _lock:
         if session_id:
             interaction_ids = list(_pending_by_session.get(session_id, set()))

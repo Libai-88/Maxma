@@ -4,7 +4,6 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from tools.workflow.journal import WorkflowRun, WorkflowStep
 
 
 router = APIRouter()
@@ -61,7 +60,7 @@ async def _get_parent_run(request: Request, session_id: str, run_id: str):
     return manager, run
 
 
-def _public_step(step: WorkflowStep) -> dict[str, object]:
+def _public_step(step: Any) -> dict[str, object]:
     # Checkpoints are structured, bounded, and only emitted after successful
     # writes; handler internals, exception data, and lease data never cross API.
     return {
@@ -73,7 +72,7 @@ def _public_step(step: WorkflowStep) -> dict[str, object]:
     }
 
 
-def _public_run(run: WorkflowRun, steps: list[WorkflowStep] | None = None) -> dict[str, object]:
+def _public_run(run: Any, steps: list[Any] | None = None) -> dict[str, object]:
     payload: dict[str, object] = {
         "run_id": run.run_id,
         "parent_turn_id": run.parent_turn_id,
@@ -91,7 +90,7 @@ def _public_run(run: WorkflowRun, steps: list[WorkflowStep] | None = None) -> di
     return payload
 
 
-def _public_cancel_reason(run: WorkflowRun) -> str | None:
+def _public_cancel_reason(run: Any) -> str | None:
     if run.status != "cancelled":
         return None
     return run.cancel_reason if run.cancel_reason in {

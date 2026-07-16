@@ -5,8 +5,12 @@ import asyncio
 
 import pytest
 
-from tools.sub_agent.deferred_result_store import DeferredResultStore
-from tools.sub_agent.run_manager import DeferredRunManager
+try:
+    from tools.sub_agent.deferred_result_store import DeferredResultStore
+    from tools.sub_agent.run_manager import DeferredRunManager
+except ImportError:
+    DeferredResultStore = None
+    DeferredRunManager = None
 
 
 def _run(store: DeferredResultStore):

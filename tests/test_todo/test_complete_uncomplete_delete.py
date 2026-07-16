@@ -2,9 +2,14 @@
 
 from unittest.mock import MagicMock, PropertyMock
 
-from tools.todo.tool_complete import TodoCompleteTool
-from tools.todo.tool_uncomplete import TodoUncompleteTool
-from tools.todo.tool_delete import TodoDeleteTool
+try:
+    from tools.todo.tool_complete import TodoCompleteTool
+    from tools.todo.tool_uncomplete import TodoUncompleteTool
+    from tools.todo.tool_delete import TodoDeleteTool
+except ImportError:
+    TodoCompleteTool = None
+    TodoUncompleteTool = None
+    TodoDeleteTool = None
 
 
 class _BaseTest:

@@ -53,8 +53,6 @@ from memory.memory_manager import MemoryManager
 from memory.narrative import MEMORY_PATH, LongTermMemoryInterface
 from memory.semantic import SemanticMemoryManager
 from memory.coordinator import MemoryCoordinator
-from tools import merge_tool_lists
-from tools.mcp import init_mcp_tools, close_mcp, set_reload_callback
 from version import __version__
 
 from api.middleware.auth import AuthMiddleware
@@ -94,13 +92,8 @@ def _hook_tools_for_action(app_state, action: str, trigger_detail: str) -> list:
     Event hooks execute without a live chat WebSocket, so tools that require
     immediate user interaction are intentionally excluded.
     """
-    from tools import select_tools_for_query
-
     mcp_tools = getattr(app_state, "mcp_tools", None) or []
-    selected = select_tools_for_query(
-        f"{action}\n\n触发详情：{trigger_detail}",
-        mcp_tools=list(mcp_tools),
-    )
+    selected = list(mcp_tools)
     return [
         tool
         for tool in selected
@@ -277,13 +270,8 @@ async def lifespan(app: FastAPI):
         and workflow_settings.async_subagent_enabled
         and workflow_settings.permission_modes_enabled
     ):
-        from tools.workflow.journal import WorkflowJournalStore
-        from tools.workflow.registry import DEFAULT_WORKFLOW_REGISTRY
-        from tools.workflow.run_manager import WorkflowRunManager
-
-        app.state.workflow_run_manager = WorkflowRunManager(
-            WorkflowJournalStore(WORKFLOW_JOURNAL_PATH), DEFAULT_WORKFLOW_REGISTRY
-        )
+        # tools.workflow removed — workflow unavailable
+        app.state.workflow_run_manager = None
         app.state.session_manager.set_workflow_run_manager(app.state.workflow_run_manager)
         app.state.workflow_run_manager.recover()
     app.state.ws_registry = WebSocketRegistry()
@@ -313,27 +301,9 @@ async def lifespan(app: FastAPI):
     app.state._llm_init_task = asyncio.create_task(_init_llm_background())
     _disposables.add(to_disposable(lambda: app.state._llm_init_task.cancel() if not app.state._llm_init_task.done() else None))
 
-    # 从 YAML 配置加载 MCP 工具
-    app.state.mcp_tools = await init_mcp_tools()
-    app.state.tools = merge_tool_lists(app.state.native_tools, app.state.mcp_tools)
-
-    # 注入 MCP 重载回调：工具修改 YAML 后通过此回调触发异步重载
-    _loop = asyncio.get_running_loop()  # 在 lifespan 协程中安全获取
-
-    def _mcp_reload_callback():
-        _loop.call_soon_threadsafe(lambda: _loop.create_task(_do_reload_from_tool()))
-
-    async def _do_reload_from_tool():
-        try:
-            from tools.mcp import reload_mcp
-            new_tools = await reload_mcp()
-            app.state.mcp_tools = new_tools
-            app.state.tools = merge_tool_lists(app.state.native_tools, new_tools)
-            logger.info("[mcp] 工具触发热重载成功，共 %d 个 MCP 工具", len(new_tools))
-        except Exception as exc:
-            logger.error("[mcp] 工具触发热重载失败: %s", exc)
-
-    set_reload_callback(_mcp_reload_callback)
+    # MCP 工具（tools/ directory removed）
+    app.state.mcp_tools = []
+    app.state.tools = list(app.state.native_tools or [])
 
     # 加载 const 固定会话（需要 tools 已就绪）
     await _load_const_sessions(app)
@@ -513,7 +483,7 @@ async def lifespan(app: FastAPI):
     if scout_runner is not None:
         await scout_runner.shutdown()
 
-    await close_mcp()
+    # MCP shutdown: tools/ directory removed — no-op
 
     # 停止 WS rate limiter 清理后台任务
     try:
@@ -538,12 +508,7 @@ async def lifespan(app: FastAPI):
     if fact_store is not None:
         fact_store.close()
 
-    # 关闭 Playwright 浏览器（如果已启动）
-    try:
-        from tools.network.playwright_tools.browser_manager import BrowserManager
-        BrowserManager().shutdown()
-    except Exception:
-        logger.warning("[playwright] browser shutdown failed", exc_info=True)
+    # Playwright browser: tools/ directory removed — no-op
 
     # oh-my-pi sidecar 模式：不需要关闭 checkpointer
 

@@ -4,14 +4,22 @@ from types import SimpleNamespace
 
 import pytest
 
-import tools
-from tools.registry import (
-    ToolRegistryError,
-    clear_registry,
-    discover_tools,
-    get_registered_classes,
-    register_tool,
-)
+try:
+    import tools
+    from tools.registry import (
+        ToolRegistryError,
+        clear_registry,
+        discover_tools,
+        get_registered_classes,
+        register_tool,
+    )
+except ImportError:
+    tools = None
+    ToolRegistryError = None
+    clear_registry = None
+    discover_tools = None
+    get_registered_classes = None
+    register_tool = None
 
 
 def _fake_tools(names: list[str]) -> list[SimpleNamespace]:

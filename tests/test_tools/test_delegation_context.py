@@ -9,16 +9,23 @@ import pytest
 from langchain_core.messages import AIMessage
 from pydantic import BaseModel
 
-from tools.sub_agent import delegation_context as context_module
-from tools.sub_agent.delegation_context import DelegationContext, ScopedTool, create_delegation_context
-from tools.tool_base import ToolBase
+try:
+    from tools.sub_agent import delegation_context as context_module
+    from tools.sub_agent.delegation_context import DelegationContext, ScopedTool, create_delegation_context
+    from tools.tool_base import ToolBase
+except ImportError:
+    context_module = None
+    DelegationContext = None
+    ScopedTool = None
+    create_delegation_context = None
+    ToolBase = None
 
 
 class _PathInput(BaseModel):
     file_path: str = ""
 
 
-class _PathTool(ToolBase):
+class _PathTool(ToolBase if ToolBase is not None else object):
     name: str = "file_read"
     description: str = "test path tool"
     args_schema: type[BaseModel] = _PathInput

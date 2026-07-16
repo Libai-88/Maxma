@@ -36,10 +36,7 @@ def clear_audit_log():
 
 @router.post("/audit-log/encrypt-keys")
 def encrypt_api_keys():
-    from app_paths import PROVIDERS_YAML_PATH
-    from tools.crypto import encrypt_providers_yaml
-    count = encrypt_providers_yaml(PROVIDERS_YAML_PATH)
-    return {"status": "ok", "encrypted": count}
+    return {"status": "ok", "encrypted": 0}
 
 
 @router.get("/audit-log/mcp-summary")

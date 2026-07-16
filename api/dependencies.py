@@ -2,13 +2,6 @@
 
 from agent.prompts import build_system_prompt
 
-# tools/ 目录已删除（工具已重写为 oh-my-pi AgentTool）
-# Python 端不再需要 get_all_tools()
-try:
-    from tools import get_all_tools as _get_all_tools
-except ImportError:
-    _get_all_tools = lambda: []
-
 _system_prompt: str | None = None
 _tools: list | None = None
 
@@ -53,5 +46,5 @@ def get_system_prompt() -> str:
 def get_tools() -> list:
     global _tools
     if _tools is None:
-        _tools = _get_all_tools()
+        _tools = []
     return _tools

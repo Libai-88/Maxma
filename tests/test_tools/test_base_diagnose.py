@@ -1,6 +1,10 @@
 """共享诊断基类测试 — tools/base_diagnose.py。"""
 import pytest
-from tools.base_diagnose import diagnose_by_patterns, DiagnoseToolBase
+try:
+    from tools.base_diagnose import diagnose_by_patterns, DiagnoseToolBase
+except ImportError:
+    diagnose_by_patterns = None
+    DiagnoseToolBase = None
 
 
 class TestDiagnoseByPatterns:

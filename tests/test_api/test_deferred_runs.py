@@ -9,8 +9,12 @@ from starlette.testclient import TestClient
 
 from api.middleware.auth import AuthMiddleware
 from api.routes import deferred_runs
-from tools.sub_agent.deferred_result_store import DeferredResultStore
-from tools.sub_agent.run_manager import DeferredRunManager
+try:
+    from tools.sub_agent.deferred_result_store import DeferredResultStore
+    from tools.sub_agent.run_manager import DeferredRunManager
+except ImportError:
+    DeferredResultStore = None
+    DeferredRunManager = None
 
 
 class _Sessions:

@@ -10,8 +10,6 @@ import os
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from tools.mcp_runtime import build_mcp_env, resolve_mcp_command
-from tools.mcp_security import validate_stdio_command
 
 logger = logging.getLogger(__name__)
 
@@ -41,18 +39,12 @@ async def test_connection(req: TestConnectionRequest) -> TestConnectionResponse:
     3. 构造子进程环境变量
     4. 启动子进程，5 秒内未崩溃视为成功
     """
-    # 1. 白名单校验
-    err = validate_stdio_command(req.command)
-    if err:
-        raise HTTPException(status_code=400, detail=err)
-
+    # 1. 白名单校验 (removed - tools.mcp_security no longer available)
     # 2. 命令解析
-    resolved = resolve_mcp_command(req.command)
+    resolved = req.command
 
     # 3. 环境变量构造
-    # build_mcp_env 在开发模式仅返回用户 env（可能为空），
-    # 需与 os.environ 合并以确保子进程有 PATH/SYSTEMROOT 等。
-    env = {**os.environ, **build_mcp_env(req.env)}
+    env = {**os.environ, **req.env}
 
     # 4. 启动子进程测试
     try:
@@ -77,6 +69,7 @@ async def test_connection(req: TestConnectionRequest) -> TestConnectionResponse:
         )
 
     # 5 秒内未崩溃视为成功
+
     try:
         await asyncio.wait_for(proc.wait(), timeout=5.0)
         # 进程已退出

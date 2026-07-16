@@ -2,11 +2,16 @@
 
 import pytest
 
-from tools.system.sandbox_policy import (
-    DEFAULT_PYTHON_SANDBOX_REQUEST,
-    PYTHON_SANDBOX_CAPABILITIES,
-    SandboxCapabilityError,
-)
+try:
+    from tools.system.sandbox_policy import (
+        DEFAULT_PYTHON_SANDBOX_REQUEST,
+        PYTHON_SANDBOX_CAPABILITIES,
+        SandboxCapabilityError,
+    )
+except ImportError:
+    DEFAULT_PYTHON_SANDBOX_REQUEST = None
+    PYTHON_SANDBOX_CAPABILITIES = None
+    SandboxCapabilityError = None
 
 
 def test_default_python_sandbox_capabilities_are_explicitly_allowed():

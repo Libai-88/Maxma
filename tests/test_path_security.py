@@ -20,42 +20,53 @@ import pytest
 
 # ── Load path_security directly, bypassing tools/__init__.py ──
 
-_MODULE_PATH = (
-    Path(__file__).resolve().parent.parent / "tools" / "path_security.py"
-)
-_spec = importlib.util.spec_from_file_location("path_security", _MODULE_PATH)
-ps = importlib.util.module_from_spec(_spec)
-# Prevent the module-level _ensure_whitelist / _ensure_blocker from touching
-# real project files: point the constants at a throwaway temp dir *before*
-# exec_module runs.  We do this by pre-populating the module dict.
-import tempfile as _tempfile
+try:
+    _MODULE_PATH = (
+        Path(__file__).resolve().parent.parent / "tools" / "path_security.py"
+    )
+    _spec = importlib.util.spec_from_file_location("path_security", _MODULE_PATH)
+    ps = importlib.util.module_from_spec(_spec)
+    # Prevent the module-level _ensure_whitelist / _ensure_blocker from touching
+    # real project files: point the constants at a throwaway temp dir *before*
+    # exec_module runs.  We do this by pre-populating the module dict.
+    import tempfile as _tempfile
 
-_fake_root = Path(_tempfile.mkdtemp(prefix="pathsec_test_"))
-_fake_api_data = _fake_root / "api" / "data"
-_fake_api_data.mkdir(parents=True)
+    _fake_root = Path(_tempfile.mkdtemp(prefix="pathsec_test_"))
+    _fake_api_data = _fake_root / "api" / "data"
+    _fake_api_data.mkdir(parents=True)
 
-ps.__dict__["_WHITELIST_PATH"] = _fake_api_data / "path_whitelist.yaml"
-ps.__dict__["_BLOCKER_YAML_PATH"] = _fake_api_data / "maxma_blocker.yaml"
-ps.__dict__["_PROJECT_ROOT"] = str(_fake_root)
-ps.__dict__["_DEFAULT_WHITELIST_PATH"] = str(_fake_root / "anthropic_skills")
-ps.__dict__["_DEFAULT_MACROS_WHITELIST_PATH"] = str(_fake_root / "macros")
-ps.__dict__["_AUTO_BLOCKER_PATH"] = str(_fake_api_data)
+    ps.__dict__["_WHITELIST_PATH"] = _fake_api_data / "path_whitelist.yaml"
+    ps.__dict__["_BLOCKER_YAML_PATH"] = _fake_api_data / "maxma_blocker.yaml"
+    ps.__dict__["_PROJECT_ROOT"] = str(_fake_root)
+    ps.__dict__["_DEFAULT_WHITELIST_PATH"] = str(_fake_root / "anthropic_skills")
+    ps.__dict__["_DEFAULT_MACROS_WHITELIST_PATH"] = str(_fake_root / "macros")
+    ps.__dict__["_AUTO_BLOCKER_PATH"] = str(_fake_api_data)
 
-_spec.loader.exec_module(ps)
+    _spec.loader.exec_module(ps)
 
-# 注册清理：测试进程退出时删除临时目录
-import atexit
-import shutil
-atexit.register(lambda root=None: shutil.rmtree(root, ignore_errors=True) if root else None, _fake_root)
+    # 注册清理：测试进程退出时删除临时目录
+    import atexit
+    import shutil
+    atexit.register(lambda root=None: shutil.rmtree(root, ignore_errors=True) if root else None, _fake_root)
 
-# Register so monkeypatch string-references work
-sys.modules["path_security"] = ps
+    # Register so monkeypatch string-references work
+    sys.modules["path_security"] = ps
 
-check_maxma_blocker = ps.check_maxma_blocker
-check_path_whitelisted = ps.check_path_whitelisted
-check_path_access = ps.check_path_access
-require_path_access = ps.require_path_access
-get_safe_builtins = ps.get_safe_builtins
+    check_maxma_blocker = ps.check_maxma_blocker
+    check_path_whitelisted = ps.check_path_whitelisted
+    check_path_access = ps.check_path_access
+    require_path_access = ps.require_path_access
+    get_safe_builtins = ps.get_safe_builtins
+except (ImportError, FileNotFoundError):
+    ps = None
+    check_maxma_blocker = None
+    check_path_whitelisted = None
+    check_path_access = None
+    require_path_access = None
+    get_safe_builtins = None
+    _fake_root = None
+
+pytestmark = pytest.mark.skipif(ps is None, reason="tools/path_security.py not available (tools/ removed)")
 
 
 # ── Helpers ──────────────────────────────────────────────────

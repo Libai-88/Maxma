@@ -1,7 +1,10 @@
 # tests/test_tools/test_report_to_user.py
 """report_to_user 工具测试。"""
 import pytest
-from tools.system.tool_report_to_user import ReportToUserTool
+try:
+    from tools.system.tool_report_to_user import ReportToUserTool
+except ImportError:
+    ReportToUserTool = None
 
 
 def test_tool_name():

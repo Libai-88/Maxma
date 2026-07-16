@@ -14,11 +14,16 @@ import time
 
 import pytest
 
-from tools.mcp_rate_limiter import (
-    MCPRateLimiter,
-    get_mcp_rate_limiter,
-    reset_mcp_rate_limiter,
-)
+try:
+    from tools.mcp_rate_limiter import (
+        MCPRateLimiter,
+        get_mcp_rate_limiter,
+        reset_mcp_rate_limiter,
+    )
+except ImportError:
+    MCPRateLimiter = None
+    get_mcp_rate_limiter = None
+    reset_mcp_rate_limiter = None
 
 
 class TestBasics:

@@ -2,7 +2,10 @@
 
 from unittest.mock import MagicMock, PropertyMock
 
-from tools.todo.tool_list_sections import TodoListSectionsTool
+try:
+    from tools.todo.tool_list_sections import TodoListSectionsTool
+except ImportError:
+    TodoListSectionsTool = None
 
 
 def _make_tool(mock_api, mock_client):

@@ -9,9 +9,14 @@ from starlette.testclient import TestClient
 
 from api.middleware.auth import AuthMiddleware
 from api.routes import workflows
-from tools.workflow.journal import WorkflowJournalStore
-from tools.workflow.registry import DEFAULT_WORKFLOW_REGISTRY
-from tools.workflow.run_manager import WorkflowRunManager
+try:
+    from tools.workflow.journal import WorkflowJournalStore
+    from tools.workflow.registry import DEFAULT_WORKFLOW_REGISTRY
+    from tools.workflow.run_manager import WorkflowRunManager
+except ImportError:
+    WorkflowJournalStore = None
+    DEFAULT_WORKFLOW_REGISTRY = None
+    WorkflowRunManager = None
 
 
 class _Sessions:

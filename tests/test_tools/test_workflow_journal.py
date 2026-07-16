@@ -5,13 +5,20 @@ import asyncio
 
 import pytest
 
-from tools.workflow.journal import WorkflowJournalStore
-from tools.workflow.registry import (
-    RegisteredWorkflow,
-    RegisteredWorkflowStep,
-    WorkflowRegistry,
-)
-from tools.workflow.run_manager import WorkflowRunManager
+try:
+    from tools.workflow.journal import WorkflowJournalStore
+    from tools.workflow.registry import (
+        RegisteredWorkflow,
+        RegisteredWorkflowStep,
+        WorkflowRegistry,
+    )
+    from tools.workflow.run_manager import WorkflowRunManager
+except ImportError:
+    WorkflowJournalStore = None
+    RegisteredWorkflow = None
+    RegisteredWorkflowStep = None
+    WorkflowRegistry = None
+    WorkflowRunManager = None
 
 
 async def _success(context):

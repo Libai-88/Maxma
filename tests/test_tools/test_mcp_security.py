@@ -2,11 +2,16 @@
 
 import pytest
 
-from tools.mcp_security import (
-    validate_stdio_command,
-    validate_tls_config,
-    validate_transport_url,
-)
+try:
+    from tools.mcp_security import (
+        validate_stdio_command,
+        validate_tls_config,
+        validate_transport_url,
+    )
+except ImportError:
+    validate_stdio_command = None
+    validate_tls_config = None
+    validate_transport_url = None
 
 
 class TestValidateStdioCommand:

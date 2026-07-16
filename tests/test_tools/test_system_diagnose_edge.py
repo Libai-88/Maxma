@@ -1,10 +1,14 @@
 """system_diagnose 边界情况测试 — 验证 S01-S08 模式匹配。"""
 import pytest
 
-from tools.system.tool_system_diagnose import (
-    SYSTEM_FAILURE_PATTERNS,
-    diagnose_system_failure,
-)
+try:
+    from tools.system.tool_system_diagnose import (
+        SYSTEM_FAILURE_PATTERNS,
+        diagnose_system_failure,
+    )
+except ImportError:
+    SYSTEM_FAILURE_PATTERNS = None
+    diagnose_system_failure = None
 
 
 class TestSystemDiagnosePatterns:

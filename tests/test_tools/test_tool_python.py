@@ -52,10 +52,16 @@ def _load_tool_python_module():
     return module
 
 
-tool_python = _load_tool_python_module()
-_run_in_sandbox = tool_python._run_in_sandbox
-_check_metaprogramming_safety = tool_python._check_metaprogramming_safety
-MetaprogrammingError = tool_python.MetaprogrammingError
+try:
+    tool_python = _load_tool_python_module()
+    _run_in_sandbox = tool_python._run_in_sandbox
+    _check_metaprogramming_safety = tool_python._check_metaprogramming_safety
+    MetaprogrammingError = tool_python.MetaprogrammingError
+except (FileNotFoundError, ImportError):
+    tool_python = None
+    _run_in_sandbox = None
+    _check_metaprogramming_safety = None
+    MetaprogrammingError = None
 
 
 class TestRunInSandbox:

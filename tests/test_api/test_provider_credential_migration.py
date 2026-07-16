@@ -10,7 +10,10 @@ import yaml
 
 from api.providers.store import ProviderConfigStore
 from api.security.credential_envelope import is_credential_envelope, parse_credential_envelope
-from tools import crypto
+try:
+    from tools import crypto
+except ImportError:
+    crypto = None
 
 
 _TEST_KEY = "provider-credential-migration-test-key"

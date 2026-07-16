@@ -10,7 +10,10 @@
 
 import pytest
 
-from tools.mcp import _filter_tool_by_name
+try:
+    from tools.mcp import _filter_tool_by_name
+except ImportError:
+    _filter_tool_by_name = None
 
 
 class TestNoFilter:

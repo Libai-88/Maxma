@@ -4,12 +4,18 @@ import asyncio
 
 import pytest
 
-from tools.mcp_connection_lifecycle import (
-    MCPOAuthCredential,
-    MCPConnectionLifecycle,
-    redact_mcp_identifier,
-    redact_mcp_telemetry,
-)
+try:
+    from tools.mcp_connection_lifecycle import (
+        MCPOAuthCredential,
+        MCPConnectionLifecycle,
+        redact_mcp_identifier,
+        redact_mcp_telemetry,
+    )
+except ImportError:
+    MCPOAuthCredential = None
+    MCPConnectionLifecycle = None
+    redact_mcp_identifier = None
+    redact_mcp_telemetry = None
 
 
 class TestOAuthRefresh:

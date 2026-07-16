@@ -2,7 +2,10 @@
 
 from unittest.mock import MagicMock, PropertyMock
 
-from tools.todo.tool_update import TodoUpdateTool
+try:
+    from tools.todo.tool_update import TodoUpdateTool
+except ImportError:
+    TodoUpdateTool = None
 
 
 def _make_tool(mock_api, mock_client):
