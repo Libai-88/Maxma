@@ -26,7 +26,7 @@ from api.logging_config import setup_logging
 from api.providers.manager import ProviderManager
 from api.providers.store import ProviderConfigStore
 from app_paths import AUTONOMY_SCHEDULES_PATH, PROVIDERS_YAML_PATH, WORKFLOW_JOURNAL_PATH
-from api.routes import chat, files, memory, sessions, balance, providers
+from api.routes import chat, files, sessions, balance, providers
 from api.routes import deferred_runs as deferred_runs_router
 from api.routes import workflows as workflows_router
 from api.routes import autonomy as autonomy_router
@@ -48,11 +48,6 @@ from api.routes import diagnostics as diagnostics_router
 from api.session_manager import SessionManager, SessionState
 from api.ws_registry import WebSocketRegistry
 from config.settings import get_settings
-from memory.episodic import EpisodicMemoryManager
-from memory.memory_manager import MemoryManager
-from memory.narrative import MEMORY_PATH, LongTermMemoryInterface
-from memory.semantic import SemanticMemoryManager
-from memory.coordinator import MemoryCoordinator
 from version import __version__
 
 from api.middleware.auth import AuthMiddleware
@@ -132,8 +127,6 @@ async def _run_event_hook_action(app: FastAPI, hook, trigger_detail: str) -> str
             + "如果动作需要人工确认，请说明无法在后台执行。"
         )
         tools = _hook_tools_for_action(app_state, hook.action, trigger_detail)
-        # 4 层架构：注入情景记忆管理器（事件钩子场景也启用 episodic 检索）
-        episodic_mm = getattr(app_state, "episodic_mm", None)
         prompt = (
             "[事件钩子触发]\n"
             f"钩子名称：{hook.name}\n"
@@ -275,10 +268,6 @@ async def lifespan(app: FastAPI):
         app.state.session_manager.set_workflow_run_manager(app.state.workflow_run_manager)
         app.state.workflow_run_manager.recover()
     app.state.ws_registry = WebSocketRegistry()
-    app.state.ltm = LongTermMemoryInterface(
-        MEMORY_PATH,
-        retry_policy_enabled=get_settings().ltm_retry_policy_enabled,
-    )
 
     # oh-my-pi sidecar 模式：不需要 checkpointer
     logger.debug("[checkpointer] sidecar-only mode — skip checkpointer init")
@@ -289,11 +278,6 @@ async def lifespan(app: FastAPI):
             llm = get_llm(provider_manager)
             app.state.llm = llm
             logger.info("[llm] LLM 后台初始化完成")
-            # LLM 就绪后启动长期记忆
-            app.state.ltm.start_listening(
-                llm, ws_registry=app.state.ws_registry,
-            )
-            logger.info("[ltm] 长期记忆监听器已启动")
         except RuntimeError as e:
             logger.warning("[llm] %s", e)
             logger.warning("[llm] No LLM configured — chat will be read-only until a provider is added")
@@ -326,53 +310,6 @@ async def lifespan(app: FastAPI):
     # 4.5 启动指标持久化 flush 任务（定期将内存快照写入 SQLite）
     from api.metrics import get_metrics
     get_metrics().start_flush_task()
-
-    # 4.6 启动 TTL 遗忘机制后台清理任务（定期清理 memory.yaml 中已过期条目）
-    from memory.ttl import schedule_purge as schedule_ttl_purge
-    from app_paths import EPISODIC_MEMORY_PATH, SEMANTIC_MEMORY_PATH
-    _settings = get_settings()
-    # 初始化 4 层记忆：长期/情景/语义管理器 + 协调器
-    _long_term_mm = MemoryManager(yaml_file=str(MEMORY_PATH))
-    _episodic_mm = EpisodicMemoryManager(
-        json_file=str(EPISODIC_MEMORY_PATH),
-        default_ttl=_settings.default_episodic_ttl,
-    )
-    _semantic_mm = SemanticMemoryManager(json_file=str(SEMANTIC_MEMORY_PATH))
-    app.state.episodic_mm = _episodic_mm
-    app.state.semantic_mm = _semantic_mm
-    _fact_store = None
-    _fact_retriever = None
-    if _settings.fact_store_retrieval_enabled:
-        from app_paths import FACT_STORE_PATH
-        from memory.fact_retrieval import SupplementaryFactRetriever
-        from memory.fact_store import FactStore
-
-        _fact_store = FactStore(db_path=str(FACT_STORE_PATH))
-        _fact_retriever = SupplementaryFactRetriever(_fact_store, enabled=True)
-        app.state.fact_store = _fact_store
-        logger.info("[memory] FactStore supplementary retrieval enabled")
-    app.state.memory_coordinator = MemoryCoordinator(
-        long_term_mm=_long_term_mm,
-        episodic_mm=_episodic_mm,
-        semantic_mm=_semantic_mm,
-        fact_retriever=_fact_retriever,
-    )
-    logger.info(
-        "[memory] memory layers initialized: long_term + episodic + semantic%s",
-        " + facts" if _fact_retriever is not None else "",
-    )
-    ttl_managers = [_long_term_mm, _episodic_mm, _semantic_mm]
-    if _fact_retriever is not None:
-        # FactStore exposes the same purge contract; keeping it in the common
-        # scheduler means expired FTS rows cannot accumulate after rollout.
-        ttl_managers.append(_fact_retriever)
-    schedule_ttl_purge(
-        _settings.ttl_purge_interval_seconds,
-        ttl_managers,
-    )
-    logger.info(
-        "[ttl] 后台清理任务已启动，间隔 %d 秒", _settings.ttl_purge_interval_seconds,
-    )
 
     # 5. 初始化认证 Token（SQLite 存储）
     from api.db.auth import load_or_create_token as load_token_db
@@ -468,10 +405,6 @@ async def lifespan(app: FastAPI):
     from api.metrics import get_metrics
     await get_metrics().stop_flush_task()
 
-    # 停止 TTL 遗忘机制后台清理任务
-    from memory.ttl import stop_purge as stop_ttl_purge
-    await stop_ttl_purge()
-
     # 关闭事件钩子
     hook_manager.stop_all()
     logger.info("[hooks] 事件钩子管理器已停止")
@@ -496,17 +429,12 @@ async def lifespan(app: FastAPI):
     if workflow_manager is not None:
         await workflow_manager.shutdown()
     await balance.close_async_client()
-    await app.state.ltm.stop_listening()
 
     # 停止 oh-my-pi sidecar（如果已启动）
     sidecar_mgr = getattr(app.state, "sidecar_manager", None)
     if sidecar_mgr:
         await sidecar_mgr.stop()
         logger.info("[sidecar] SidecarManager 已停止")
-
-    fact_store = getattr(app.state, "fact_store", None)
-    if fact_store is not None:
-        fact_store.close()
 
     # Playwright browser: tools/ directory removed — no-op
 
@@ -534,7 +462,6 @@ def create_app() -> FastAPI:
     app.include_router(deferred_runs_router.router, prefix="/api")
     app.include_router(workflows_router.router, prefix="/api")
     app.include_router(autonomy_router.router, prefix="/api")
-    app.include_router(memory.router, prefix="/api")
     app.include_router(files.router, prefix="/api")
     app.include_router(balance.router, prefix="/api")
 

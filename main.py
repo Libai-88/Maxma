@@ -12,7 +12,6 @@ from api.logging_config import setup_logging
 from api.server import create_app
 from app_paths import ensure_data_dirs
 from config.settings import get_settings
-from memory.user_init import ensure_all
 
 
 def _start_parent_watchdog():
@@ -109,8 +108,6 @@ def main():
     # 确保所有用户数据目录存在（打包模式下首次运行时自动创建）
     ensure_data_dirs()
 
-    ensure_all()
-
     app = create_app()
 
     settings = get_settings()
@@ -120,7 +117,7 @@ def main():
         host="127.0.0.1",
         port=settings.maxma_api_port,
         reload=dev_mode,
-        reload_dirs=["agent", "api", "memory"] if dev_mode else None,
+        reload_dirs=["agent", "api"] if dev_mode else None,
     )
 
 

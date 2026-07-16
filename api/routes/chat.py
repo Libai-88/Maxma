@@ -16,7 +16,6 @@ from agent.model_routing import resolve_model_role
 from agent.prompts import build_system_prompt, get_system_prompt_parts
 from agent.think_path import ThinkPath, get_think_path
 from app_paths import CONFIG_DIR
-from agent.context_manager import commit_to_episodic
 from api import interaction
 from api.const_session_store import save_const_session, serialize_messages
 from api.context_usage import estimate_context_usage
@@ -320,16 +319,6 @@ async def _get_messages_from_sidecar(
         return []
 
 
-async def _get_recent_ai_messages(session, config, limit: int = 5) -> list[str]:
-    """从 sidecar 获取最近 N 条 AI 消息内容（用于贴纸情感分析）。
-
-    sidecar 模式下 config 为 None，改为从 sidecar RPC 获取消息历史。
-    """
-    messages = await _get_messages_from_sidecar(session, limit=limit * 3)
-    ai_msgs = [m.get("content", "") for m in messages if m.get("role") == "assistant"]
-    return ai_msgs[-limit:]
-
-
 async def _stream_turn_sidecar(
     ws: WebSocket,
     session: SessionState,
@@ -426,26 +415,6 @@ async def _stream_turn_sidecar(
             "[sidecar] Created session %s for Maxma session %s",
             sidecar_sid[:8], session.session_id[:8],
         )
-
-    # 3. 情景记忆：每轮对话以用户消息为查询检索相关历史，注入到 user_message
-    _user_message_for_llm = user_message_for_llm
-    try:
-        _episodic_mm = getattr(app_state, "episodic_mm", None)
-        if _episodic_mm is not None and user_message_for_llm:
-            from agent.context_manager import retrieve_from_episodic
-            _episodic_context = retrieve_from_episodic(
-                user_message_for_llm,
-                _episodic_mm,
-                top_k=3,
-                session_id=session.session_id,
-            )
-            if _episodic_context:
-                _user_message_for_llm = (
-                    f"[相关情景记忆]\n{_episodic_context}\n\n"
-                    f"---\n\n{user_message_for_llm}"
-                )
-    except Exception:
-        logger.warning("[sidecar] Episodic retrieval failed", exc_info=True)
 
     # 3. Register event handlers to forward intermediate events to WS
     final_answer = ""
@@ -559,7 +528,7 @@ async def _stream_turn_sidecar(
     try:
         await client.call("prompt", {
             "session_id": sidecar_sid,
-            "message": _user_message_for_llm,
+            "message": user_message_for_llm,
         })
         # Wait for done event (sidecar signals completion)
         await asyncio.wait_for(turn_done.wait(), timeout=600)
@@ -676,72 +645,6 @@ def _get_project_context(session: SessionState, user_message: str) -> str | None
 
         logging.getLogger(__name__).warning("[project_scanner] 扫描失败: %s", e)
         return None
-
-
-async def _project_completed_turn_to_episodic(
-    *,
-    user_message: str = "",
-    assistant_message: str = "",
-    episodic_mm,
-    session_id: str,
-    turn_id: str,
-    graph=None,
-    config: dict | None = None,
-) -> None:
-    """Best-effort 将一个成功的 chat turn 投影到情景记忆。
-
-    sidecar 模式下 graph/config 为 None，直接使用传入的 user_message 和
-    assistant_message 构造摘要，不再从 checkpoint 读取消息列表。
-    """
-    if episodic_mm is None:
-        return
-    try:
-        # sidecar 模式：graph 为 None，使用直接传入的消息
-        if graph is None:
-            # 构造简单的摘要文本用于情景记忆
-            summary_parts = []
-            if user_message:
-                user_preview = user_message[:200] + ("..." if len(user_message) > 200 else "")
-                summary_parts.append(f"用户: {user_preview}")
-            if assistant_message:
-                asst_preview = assistant_message[:300] + ("..." if len(assistant_message) > 300 else "")
-                summary_parts.append(f"助理: {asst_preview}")
-            summary = "\n".join(summary_parts)
-            if not summary:
-                return
-            # 写入情景记忆（add_episode 是同步方法）
-            episode_id = episodic_mm.add_episode(
-                summary=summary,
-                session_id=session_id,
-                turn_id=turn_id,
-            )
-            if episode_id is None:
-                logger.debug(
-                    "[episodic] no episode created for session=%s turn=%s",
-                    session_id, turn_id,
-                )
-            return
-
-        # LangGraph 路径（保留兼容，理论上 sidecar 模式不会到达）
-        episode_id = await commit_to_episodic(
-            graph,
-            config,
-            episodic_mm,
-            session_id=session_id,
-            turn_id=turn_id,
-        )
-        if episode_id is None:
-            logger.warning(
-                "[episodic] projection produced no episode for session=%s turn=%s",
-                session_id,
-                turn_id,
-            )
-    except Exception:
-        logger.exception(
-            "[episodic] projection failed after completed response for session=%s turn=%s",
-            session_id,
-            turn_id,
-        )
 
 
 def _new_turn_id(turn_id: object = None) -> str:
@@ -1015,9 +918,7 @@ async def _run_agent_turn(
         # This is the execution boundary, not merely prompt-time filtering.
         # ScopedTool validates path arguments immediately before each call.
         turn_tools = delegation_helpers[1](turn_tools, delegation_context)
-    # 4 层架构：注入情景记忆管理器，启用 episodic_retriever 节点
-    episodic_mm = getattr(ws.app.state, "episodic_mm", None)
-    # B6：生成运行时配置摘要，让 agent 感知自身的 providers/MCP/工具配置全貌
+    # 缓存优化：使用全量工具集 + MCP 工具
     runtime_context_text = _build_runtime_context_for_agent(
         app_state, turn_tools, current_model_name
     )
@@ -1172,38 +1073,9 @@ async def _run_agent_turn(
         except Exception:
             pass  # WS 已断开或 context_usage 计算失败时静默跳过
 
-    # 3. [后处理] 增加消息计数器，将对话记录入长期记忆
+    # 3. [后处理] 增加消息计数器
     if final_answer:
         session.message_count += 2  # human + ai
-    # sidecar 模式下错误轮次不增计数（sidecar 可能未保存用户消息）
-    memory_eligible = turn_completed and bool(final_answer)
-    if not private_mode and memory_eligible:
-        if final_answer:
-            await _project_completed_turn_to_episodic(
-                user_message=user_message,
-                assistant_message=final_answer,
-                episodic_mm=episodic_mm,
-                session_id=session.session_id,
-                turn_id=turn_id,
-            )
-        # 增量发送：只传成功轮次给记忆消费者，避免错误提示污染 LTM。
-        messages_for_memory = [
-            {"role": "user", "content": user_message},
-            {"role": "assistant", "content": final_answer},
-        ]
-        logger.info(
-            "[ltm] calling send_history, messages=%d (incremental)",
-            len(messages_for_memory),
-        )
-        try:
-            await app_state.ltm.send_history(
-                messages_for_memory,
-                session_id=session.session_id,
-                turn_id=turn_id,
-            )
-            logger.info("[ltm] send_history completed")
-        except Exception as e:
-            logger.error("[ltm] send_history failed: %s", e, exc_info=True)
 
     # 4. [Const 会话] 自动持久化到磁盘 YAML
     if final_answer and session.is_const:

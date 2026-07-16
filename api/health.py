@@ -13,8 +13,6 @@ from pydantic import BaseModel, field_validator, model_validator
 
 from app_paths import ANTHROPIC_SKILLS_DIR
 from api.runtime_status import RuntimeStatus, sanitize_user_detail
-from memory.memory_manager import MemoryManager
-from memory.narrative import MEMORY_PATH
 
 
 class ComponentHealth(BaseModel):
@@ -151,90 +149,20 @@ async def check_llm(app: FastAPI, probe_remote: bool = False) -> ComponentHealth
 
 
 def get_ltm_diagnostic(app: FastAPI) -> LtmDiagnostic | None:
-    """Read the LTM's deliberately redacted diagnostic aggregate, if present."""
-    ltm = getattr(app.state, "ltm", None)
-    get_summary = getattr(ltm, "get_diagnostic_summary", None)
-    if not callable(get_summary):
-        return None
-    try:
-        summary = get_summary()
-    except Exception:
-        # A diagnostic path must not make the health endpoint unavailable.
-        return None
-    if not isinstance(summary, dict):
-        return None
-    status = summary.get("status")
-    if status not in {"ok", "degraded", "error"}:
-        return None
-    return LtmDiagnostic(
-        status=status,
-        reason_code=summary.get("reason_code"),
-        retry_at=summary.get("retry_at"),
-        updated_at=summary.get("updated_at"),
-        summary=summary.get("summary"),
-    )
+    """LTM 已移除，返回 None。"""
+    return None
 
 
 def associate_ltm_provider(app: FastAPI, diagnostic: LtmDiagnostic | None) -> LtmDiagnostic | None:
-    """Associate diagnostics only when the active LLM maps to one provider uniquely."""
-    if diagnostic is None or diagnostic.status == "ok":
-        return diagnostic
-    manager = getattr(app.state, "provider_manager", None)
-    llm = getattr(app.state, "llm", None)
-    finder = getattr(manager, "find_provider_for_llm", None)
-    if llm is None or not callable(finder):
-        return diagnostic
-    try:
-        provider = finder(llm)
-    except Exception:
-        return diagnostic
-    if provider is None:
-        return diagnostic
-    return diagnostic.model_copy(update={"provider_id": provider.config.id})
+    """LTM 已移除，返回 None。"""
+    return None
 
 
 async def check_memory(
     app: FastAPI, diagnostic: LtmDiagnostic | None = None
 ) -> ComponentHealth:
-    start = time.monotonic()
-    try:
-        memory_path = MEMORY_PATH
-        if not memory_path.exists():
-            elapsed = (time.monotonic() - start) * 1000
-            return ComponentHealth(
-                status="error", latency_ms=round(elapsed, 1), detail="记忆文件不存在"
-            )
-
-        mm = MemoryManager(yaml_file=str(memory_path))
-        items = mm.show()
-
-        ltm = app.state.ltm
-        consumer_running = ltm.is_listening if hasattr(ltm, "is_listening") else False
-
-        parts = [f"{len(items)} 条记忆"]
-        if not consumer_running:
-            parts.append("后台消费者异常")
-        status: Literal["ok", "error"] = "ok" if consumer_running else "error"
-
-        if diagnostic is not None and diagnostic.status != "ok":
-            return ComponentHealth(
-                status="degraded",
-                latency_ms=round((time.monotonic() - start) * 1000, 1),
-                reason_code=diagnostic.reason_code,
-                retry_at=diagnostic.retry_at,
-                updated_at=diagnostic.updated_at,
-                summary=diagnostic.summary,
-            )
-
-        elapsed = (time.monotonic() - start) * 1000
-        return ComponentHealth(
-            status=status, latency_ms=round(elapsed, 1), detail="，".join(parts)
-        )
-    except Exception as e:
-        elapsed = (time.monotonic() - start) * 1000
-        return ComponentHealth(
-            status="error", latency_ms=round(elapsed, 1), detail=str(e)
-        )
+    """检查记忆系统状态（memory/ 包已移除，始终返回 ok）。"""
+    return ComponentHealth(status="ok", latency_ms=0.0, detail="memory/ 包已移除，由 OMP recall/reflect/retain 替代")
 
 
 async def check_native_tools(app: FastAPI) -> ComponentHealth:
@@ -389,13 +317,8 @@ def check_health_sync(app) -> dict:
             if llm is None:
                 llm_status = "degraded"
 
-        # 记忆状态
+        # 记忆状态（memory/ 包已移除，始终 ok）
         memory_status = "ok"
-        ltm = getattr(app.state, "ltm", None)
-        if ltm is not None:
-            consumer_running = getattr(ltm, "is_listening", False)
-            if not consumer_running:
-                memory_status = "degraded"
 
         # 原生工具
         native_tools = getattr(app.state, "native_tools", [])

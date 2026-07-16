@@ -7,8 +7,6 @@ import threading
 from pathlib import Path
 
 from app_paths import ANTHROPIC_SKILLS_DIR, MACROS_DIR, SKILLS_DATA_DIR, MACROS_DATA_DIR, PERSONAS_DATA_DIR as PERSONAS_DIR, ACTIVE_PERSONA_PATH
-from memory.narrative import get_narrative
-from memory.user_init import ensure_user_md
 from api.yaml_store import dump_yaml_atomic, yaml_file_lock
 
 from agent.persona_loader import load_persona, build_persona_prompt
@@ -133,10 +131,6 @@ def _current_fingerprint() -> str:
         target_path = named_path if named_path.exists() else PERSONA_DIR / f"{layer}_default.md"
         parts.append(f"persona:{layer}:{_file_hash(target_path)}")
 
-    # 4 层架构：语义记忆 JSON
-    from app_paths import SEMANTIC_MEMORY_PATH
-    parts.append(f"semantic:{_file_hash(SEMANTIC_MEMORY_PATH)}")
-
     # 动态扫描 skills / macros（同时扫描内置目录和用户数据目录，按 canonical path 去重）
     seen: set[str] = set()
     for skills_dir in (ANTHROPIC_SKILLS_DIR, SKILLS_DATA_DIR):
@@ -174,40 +168,21 @@ def _current_fingerprint() -> str:
     return "|".join(parts)
 
 
-def _scan_semantic_facts() -> str:
-    """扫描语义记忆层（SemanticMemoryManager）的所有事实，格式化为系统提示词片段。
-
-    4 层架构：把语义记忆（结构化事实三元组）作为系统提示词的一部分注入，
-    让 LLM 能直接引用已确认的事实（如用户偏好、项目截止日期等）。
-    无事实或文件不存在时返回空字符串。
-    """
-    try:
-        from app_paths import SEMANTIC_MEMORY_PATH
-        from memory.semantic import SemanticMemoryManager
-
-        if not SEMANTIC_MEMORY_PATH.exists():
-            return ""
-        sm = SemanticMemoryManager(json_file=str(SEMANTIC_MEMORY_PATH))
-        facts = sm.list_facts()
-        if not facts:
-            return ""
-        lines = ["## 语义记忆（结构化事实）"]
-        for fact in facts:
-            lines.append(
-                f"- {fact.get('subject', '')} {fact.get('predicate', '')} "
-                f"{fact.get('object', '')}"
-            )
-        return "\n".join(lines)
-    except Exception as e:
-        logger.warning("[prompts] _scan_semantic_facts failed: %s", e)
-        return ""
+def _ensure_user_md() -> None:
+    """若 USER.md 不存在，从模板复制。"""
+    import shutil
+    template = PERSONAS_DIR / "USER.example.md"
+    target = PERSONAS_DIR / "USER.md"
+    if not target.exists() and template.exists():
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(template, target)
 
 
 def _rebuild(fingerprint: str) -> None:
     """重新构建缓存的系统提示词和 parts。"""
     global _cached_fingerprint, _cached_prompt, _cached_parts
 
-    ensure_user_md()
+    _ensure_user_md()
 
     # 解析用户称呼，用于替换 SOUL.md 中的 {{USER_NAME}}
     user_md_raw = _read_if_exists("USER.md")
@@ -232,10 +207,7 @@ def _rebuild(fingerprint: str) -> None:
     # 只调用一次 I/O 密集型函数，两处复用
     skills_content = _scan_anthropic_skills()
     macros_content = _scan_macros()
-    narrative_content = get_narrative()
     agents_md_content = _read_persona("AGENTS.md")
-    # 4 层架构：语义记忆事实三元组（结构化知识库）
-    semantic_facts_content = _scan_semantic_facts()
 
     # 拆分系统 prompt，将稳定内容（skills/macros 等保持不变的部分）
     # 放在前面，动态内容（记忆）放在末尾，
@@ -254,10 +226,6 @@ def _rebuild(fingerprint: str) -> None:
          "content": skills_content},
         {"key": "macros", "label": "宏清单",
          "content": macros_content},
-        {"key": "long_term_memory", "label": "长期记忆",
-         "content": "## 我对用户的记忆\n" + narrative_content},
-        {"key": "semantic_memory", "label": "语义记忆",
-         "content": semantic_facts_content},
     ]
 
     # ── 完整 prompt ──
@@ -277,12 +245,7 @@ def _rebuild(fingerprint: str) -> None:
         skills_content,
         "",
         macros_content,
-        "",
-        "## 我对用户的记忆",
-        narrative_content,
     ]
-    if semantic_facts_content:
-        full_parts.extend(["", semantic_facts_content])
     _cached_prompt = "\n".join(full_parts)
     _cached_fingerprint = fingerprint
 
@@ -391,8 +354,7 @@ def get_persona_memory_path() -> Path:
         persona_id = Path(active_file).stem  # e.g. "SOUL.饱饱"
         return PERSONAS_DIR / f"memory_{persona_id}.yaml"
     # 共享记忆
-    from app_paths import MEMORY_CONFIG_PATH
-    return MEMORY_CONFIG_PATH
+    return PERSONAS_DIR / "memory.yaml"
 
 
 def get_persona_allowed_tools() -> set[str] | None:
