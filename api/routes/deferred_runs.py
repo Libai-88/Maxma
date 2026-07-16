@@ -116,6 +116,10 @@ async def cancel_deferred_run(session_id: str, run_id: str, request: Request):
 async def get_deferred_run_audit(session_id: str, run_id: str, request: Request):
     """Read a run's redacted lifecycle, scoped to its live parent session."""
     _, run = await _get_parent_run(request, session_id, run_id)
-    from agent.audit_log import read_subagent_run_events
-
-    return {"run_id": run.run_id, "events": read_subagent_run_events(run.run_id)}
+    # audit_log module removed — OMP replaces audit
+    try:
+        from agent.audit_log import read_subagent_run_events
+        events = read_subagent_run_events(run.run_id)
+    except ImportError:
+        events = []
+    return {"run_id": run.run_id, "events": events}

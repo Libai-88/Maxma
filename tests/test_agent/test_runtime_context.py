@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+try:
+    import agent.runtime_context
+except ImportError:
+    import pytest
+    pytest.skip('agent.runtime_context module removed — OMP replaces it', allow_module_level=True)
 import sys
 from types import ModuleType, SimpleNamespace
 from unittest.mock import patch

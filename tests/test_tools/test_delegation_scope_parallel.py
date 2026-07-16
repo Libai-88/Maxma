@@ -1,9 +1,23 @@
+# GUARD: agent.delegation_scope
+try:
+    import agent.delegation_scope
+except ImportError:
+    import pytest
+    pytest.skip("agent.delegation_scope module removed — OMP replaces it", allow_module_level=True)
+
 """DelegationScope 应用于 parallel_execute 的测试。
 
 测试策略：
 - 验证 delegation_scope_enforced=False 时行为不变（向后兼容）
 - 验证 enforcement 启用时，子 agent 的工具集被收窄
 """
+
+import pytest
+try:
+    import agent.delegation_scope
+except ImportError:
+    pytest.skip("agent.delegation_scope module removed — OMP replaces it", allow_module_level=True)
+
 import pytest
 
 from agent.delegation_scope import DelegationScope, intersect

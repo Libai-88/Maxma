@@ -1,3 +1,10 @@
+# GUARD: agent.delegation_scope
+try:
+    import agent.delegation_scope
+except ImportError:
+    import pytest
+    pytest.skip("agent.delegation_scope module removed — OMP replaces it", allow_module_level=True)
+
 """DelegationScope 应用于 call_sub_agent 的测试。
 
 复用 tool_parallel 的 _filter_tools_by_scope 逻辑，验证单 subagent 路径同样收窄。

@@ -49,12 +49,8 @@ class SessionState:
         """
         # Older const-session metadata has no permission mode.  Invalid stored
         # values fail closed to the compatible, confirmation-first default.
-        try:
-            from agent.permission_policy import parse_permission_mode
-
-            self.permission_mode = parse_permission_mode(self.permission_mode).value
-        except (ImportError, ValueError):
-            self.permission_mode = "ask"
+        # permission_policy module removed — OMP replaces permission policy
+        self.permission_mode = "ask"
 
     def persistent_metadata(self) -> dict[str, Any]:
         """Return the non-secret metadata supported by const-session storage."""
@@ -67,10 +63,14 @@ class SessionState:
         }
 
     def set_permission_mode(self, permission_mode: str) -> str:
-        """Validate and update the selected mode before it is persisted."""
-        from agent.permission_policy import parse_permission_mode
-
-        self.permission_mode = parse_permission_mode(permission_mode).value
+        """Validate and update the selected mode before it is persisted.
+        
+        permission_policy module removed — OMP replaces permission policy.
+        """
+        valid_modes = {"read_only", "ask", "operate", "auto"}
+        if permission_mode not in valid_modes:
+            raise ValueError(f"Unsupported permission mode: {permission_mode}")
+        self.permission_mode = permission_mode
         self.permission_mode_updated_at = time.time()
         return self.permission_mode
 

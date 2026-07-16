@@ -1,3 +1,10 @@
+# GUARD: agent.autonomy.escalation
+try:
+    import agent.autonomy.escalation
+except ImportError:
+    import pytest
+    pytest.skip("agent.autonomy.escalation module removed — OMP replaces it", allow_module_level=True)
+
 # tests/test_agent/test_escalation.py
 """Escalation run 边界测试。"""
 import pytest
@@ -10,6 +17,13 @@ from agent.autonomy.escalation import (
 
 def test_escalation_record_creation():
     """创建 escalation 记录。"""
+
+import pytest
+try:
+    import agent.autonomy
+except ImportError:
+    pytest.skip("agent.autonomy module removed — OMP replaces it", allow_module_level=True)
+
     record = EscalationRecord(
         escalation_id="esc-1",
         run_id="run-1",

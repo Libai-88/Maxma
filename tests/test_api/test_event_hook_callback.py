@@ -1,3 +1,10 @@
+# GUARD: agent.hooks
+try:
+    import agent.hooks
+except ImportError:
+    import pytest
+    pytest.skip("agent.hooks module removed — OMP replaces it", allow_module_level=True)
+
 """Tests for API event-hook callback wiring."""
 
 from types import SimpleNamespace
@@ -81,3 +88,10 @@ async def test_event_hook_action_uses_agent_entrypoint(monkeypatch):
     assert calls["inputs"]["messages"][0].content.startswith("[事件钩子触发]")
     assert calls["config"]["configurable"]["thread_id"] == "session-1"
     assert deleted_sessions == ["session-1"]
+
+
+import pytest
+try:
+    import agent.hooks
+except ImportError:
+    pytest.skip("agent.hooks module removed — OMP replaces it", allow_module_level=True)

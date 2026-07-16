@@ -1,3 +1,17 @@
+# GUARD: agent.think_path
+try:
+    import agent.think_path
+except ImportError:
+    import pytest
+    pytest.skip("agent.think_path module removed — OMP replaces it", allow_module_level=True)
+
+
+import pytest
+try:
+    import agent.think_path
+except ImportError:
+    pytest.skip("agent.think_path module removed — OMP replaces it", allow_module_level=True)
+
 from agent.think_path import get_think_path, get_think_paths, should_offer_think_paths
 
 

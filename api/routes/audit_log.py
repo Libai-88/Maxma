@@ -1,16 +1,11 @@
-"""API 路由 — 审计日志查看与管理。"""
+"""API 路由 — 审计日志查看与管理（已移除，由 OMP 替代）。"""
 
 from fastapi import APIRouter, Query
 
-from agent.audit_log import (
-    EVENT_MCP_CALL,
-    clear_log,
-    get_mcp_summary,
-    get_stats,
-    read_log,
-)
-
 router = APIRouter()
+
+# audit_log module removed — OMP replaces audit subsystem.
+# All endpoints return 404 with a descriptive message.
 
 
 @router.get("/audit-log")
@@ -19,31 +14,44 @@ def list_audit_log(
     event_type: str = Query("", description="按事件类型过滤"),
     since: str = Query("", description="时间过滤 (ISO 格式)"),
 ):
-    records = read_log(limit=limit, event_type=event_type, since=since)
-    return {"records": records}
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=404,
+        content={"detail": "Audit log unavailable — OMP replaces audit subsystem"},
+    )
 
 
 @router.get("/audit-log/stats")
 def audit_log_stats():
-    return {"stats": get_stats()}
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=404,
+        content={"detail": "Audit log unavailable — OMP replaces audit subsystem"},
+    )
 
 
 @router.post("/audit-log/clear")
 def clear_audit_log():
-    deleted = clear_log()
-    return {"status": "ok", "deleted": deleted}
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=404,
+        content={"detail": "Audit log unavailable — OMP replaces audit subsystem"},
+    )
 
 
 @router.post("/audit-log/encrypt-keys")
 def encrypt_api_keys():
-    return {"status": "ok", "encrypted": 0}
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=404,
+        content={"detail": "Audit log unavailable — OMP replaces audit subsystem"},
+    )
 
 
 @router.get("/audit-log/mcp-summary")
 def mcp_audit_summary():
-    """阶段 4.2：聚合统计每个 server_id+tool_name 的 MCP 调用情况。
-
-    返回 list of dict，每项含 server_id / tool_name / total / ok / error /
-    rate_limited / avg_duration_ms / success_rate / last_call_at。
-    """
-    return {"summary": get_mcp_summary(), "event_type": EVENT_MCP_CALL}
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=404,
+        content={"detail": "Audit log unavailable — OMP replaces audit subsystem"},
+    )

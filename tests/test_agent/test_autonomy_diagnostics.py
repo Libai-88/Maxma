@@ -1,9 +1,23 @@
+# GUARD: agent.autonomy.diagnostics
+try:
+    import agent.autonomy.diagnostics
+except ImportError:
+    import pytest
+    pytest.skip("agent.autonomy.diagnostics module removed — OMP replaces it", allow_module_level=True)
+
 """自治层诊断函数单元测试 — agent/autonomy/diagnostics.py。
 
 测试策略：
 - mock ErrorCollector 和 health 数据
 - 覆盖：错误汇总、健康状态分类、诊断报告生成、优先级排序
 """
+
+import pytest
+try:
+    import agent.autonomy
+except ImportError:
+    pytest.skip("agent.autonomy module removed — OMP replaces it", allow_module_level=True)
+
 import pytest
 from unittest.mock import MagicMock, patch
 from datetime import datetime

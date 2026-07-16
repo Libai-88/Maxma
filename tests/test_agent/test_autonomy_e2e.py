@@ -1,8 +1,22 @@
+# GUARD: agent.autonomy.diagnostics
+try:
+    import agent.autonomy.diagnostics
+except ImportError:
+    import pytest
+    pytest.skip("agent.autonomy.diagnostics module removed — OMP replaces it", allow_module_level=True)
+
 """自治层端到端集成测试。
 
 验证完整流程：诊断收集 → 报告生成 → 调度器 tick → 自改进 Runner（mocked），
 以及全部关闭时不执行任何操作。
 """
+
+import pytest
+try:
+    import agent.autonomy
+except ImportError:
+    pytest.skip("agent.autonomy module removed — OMP replaces it", allow_module_level=True)
+
 import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch

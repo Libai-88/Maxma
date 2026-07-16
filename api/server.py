@@ -21,11 +21,11 @@ from api.dependencies import get_system_prompt, get_tools
 from api.health import get_health_report
 from api.cors_config import build_cors_origins
 from api.logging_config import setup_logging
-from app_paths import AUTONOMY_SCHEDULES_PATH, WORKFLOW_JOURNAL_PATH
+from app_paths import WORKFLOW_JOURNAL_PATH
 from api.routes import chat, files, sessions, balance
 from api.routes import deferred_runs as deferred_runs_router
 from api.routes import workflows as workflows_router
-from api.routes import autonomy as autonomy_router
+# autonomy router removed — OMP replaces autonomy subsystem
 from api.routes import path_whitelist as path_whitelist_router
 from api.routes import persona as persona_router
 from api.routes import maxma_blocker as maxma_blocker_router
@@ -38,7 +38,7 @@ from api.routes import env_vars as env_vars_router
 from api.routes import tool_stats as tool_stats_router
 from api.routes import upload as upload_router
 from api.routes import metrics as metrics_router
-from api.routes import event_hooks as event_hooks_router
+# event_hooks router removed — OMP replaces event hooks subsystem
 from api.routes import audit_log as audit_log_router
 from api.routes import diagnostics as diagnostics_router
 from api.session_manager import SessionManager, SessionState
@@ -95,12 +95,6 @@ async def _load_const_sessions(app: FastAPI):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from agent.lifecycle.disposable import DisposableStore, to_disposable
-
-    # Disposable 资源集合 — 统一管理生命周期
-    _disposables = DisposableStore()
-    app.state._disposables = _disposables
-
     # 1. 初始化共享资源
     app.state.system_prompt = get_system_prompt()
     app.state.native_tools = get_tools()
@@ -144,7 +138,6 @@ async def lifespan(app: FastAPI):
                 )
 
     app.state._cleanup_task = asyncio.create_task(_periodic_cleanup())
-    _disposables.add(to_disposable(lambda: app.state._cleanup_task.cancel() if not app.state._cleanup_task.done() else None))
 
     # 2.5 启动指标持久化 flush 任务（定期将内存快照写入 SQLite）
     from api.metrics import get_metrics
@@ -155,49 +148,14 @@ async def lifespan(app: FastAPI):
     app.state.auth_token = load_token_db()
     logger.info("[auth] token: %s...%s", app.state.auth_token[:4], app.state.auth_token[-4:])
 
-    # 4. 初始化事件钩子管理器
-    from agent.hooks import get_hook_manager
-    hook_manager = get_hook_manager()
-    hook_manager.set_loop(asyncio.get_running_loop())
-    # 后台事件钩子执行已移至 OMP sidecar，Python 端不再提供 LangGraph 执行回调
-    hook_manager.load()
-    hook_manager.start_all()
-    app.state.hook_manager = hook_manager
-    logger.info("[hooks] 事件钩子管理器已启动，%d 个钩子", len(hook_manager.list_hooks()))
+    # 4. 事件钩子管理器已移除 — OMP 管理事件钩子
 
     # 4.5 初始化 oh-my-pi sidecar 管理器（懒启动，首次调用时自动拉起 Bun 进程）
     from api.pi_bridge.sidecar_manager import SidecarManager
     app.state.sidecar_manager = SidecarManager()
     logger.info("[sidecar] SidecarManager 已创建")
 
-    # 5. 启动自治调度器（默认关闭，需在 .env 中设置 autonomy_enabled=true）
-    from config.settings import get_settings as _get_autonomy_settings
-    _autonomy_settings = _get_autonomy_settings()
-    if _autonomy_settings.autonomy_enabled:
-        # User-created Scout schedules are a separate, deliberately
-        # read-only capability.  Their durable store uses the regular audit
-        # writer and the runner refuses to replay in-flight work after restart.
-        from agent.audit_log import log_event
-        from agent.autonomy.governance import AutonomyScheduleStore
-        from agent.autonomy.scout import ScoutScheduleRunner, run_scout_lease
-
-        app.state.autonomy_schedule_store = AutonomyScheduleStore(
-            AUTONOMY_SCHEDULES_PATH, audit=log_event
-        )
-        app.state.autonomy_scout_runner = ScoutScheduleRunner(
-            app.state.autonomy_schedule_store,
-            lambda lease: run_scout_lease(app, lease),
-        )
-        app.state.autonomy_scout_runner.start()
-        from agent.autonomy.scheduler import start_autonomy
-        start_autonomy(
-            app,
-            interval_seconds=_autonomy_settings.autonomy_interval_seconds,
-            self_improve_enabled=_autonomy_settings.autonomy_self_improve_enabled,
-        )
-        logger.info("[autonomy] 自治调度器已启动")
-    else:
-        logger.info("[autonomy] 自治调度器未启用（autonomy_enabled=False）")
+    # 5. 自治调度器已移除 — OMP 替代自治子系统
 
     # === 注册 Idle Queue 任务（Tier 3，不阻塞启动）===
     from api.bootstrap.idle_queue import register_idle_task
@@ -215,11 +173,6 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # 优先通过 DisposableStore 释放（逆序）
-    _disposables = getattr(app.state, "_disposables", None)
-    if _disposables:
-        _disposables.dispose()
-
     app.state._cleanup_task.cancel()
     try:
         await app.state._cleanup_task
@@ -229,17 +182,6 @@ async def lifespan(app: FastAPI):
     # 停止指标 flush 任务（执行最终 flush）
     from api.metrics import get_metrics
     await get_metrics().stop_flush_task()
-
-    # 关闭事件钩子
-    hook_manager.stop_all()
-    logger.info("[hooks] 事件钩子管理器已停止")
-
-    # 停止自治调度器
-    from agent.autonomy.scheduler import stop_autonomy
-    await stop_autonomy()
-    scout_runner = getattr(app.state, "autonomy_scout_runner", None)
-    if scout_runner is not None:
-        await scout_runner.shutdown()
 
     # MCP shutdown: tools/ directory removed — no-op
 
@@ -286,7 +228,7 @@ def create_app() -> FastAPI:
     app.include_router(sessions.router, prefix="/api")
     app.include_router(deferred_runs_router.router, prefix="/api")
     app.include_router(workflows_router.router, prefix="/api")
-    app.include_router(autonomy_router.router, prefix="/api")
+    # autonomy router removed — OMP replaces autonomy subsystem
     app.include_router(files.router, prefix="/api")
     app.include_router(balance.router, prefix="/api")
 
@@ -329,8 +271,7 @@ def create_app() -> FastAPI:
     # 运行时指标
     app.include_router(metrics_router.router, prefix="/api")
 
-    # 事件钩子
-    app.include_router(event_hooks_router.router, prefix="/api")
+    # 事件钩子已移除 — OMP 管理事件钩子
 
     # 审计日志
     app.include_router(audit_log_router.router, prefix="/api")
@@ -377,12 +318,7 @@ def create_app() -> FastAPI:
     async def health(full: bool = False):
         return await get_health_report(app, probe_remote=full)
 
-    # 自治调度器状态（前端监控 + 外部健康检查）
-    @app.get("/api/autonomy/status")
-    async def get_autonomy_status():
-        """获取自治调度器运行状态。"""
-        from agent.autonomy.scheduler import get_autonomy_status as _get_status
-        return _get_status()
+    # 自治调度器状态已移除 — OMP 替代自治子系统
 
     # ── 全局异常处理器 ──────────────────────────────────────────
     import traceback as _traceback

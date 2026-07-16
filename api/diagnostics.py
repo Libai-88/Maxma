@@ -361,17 +361,8 @@ class ErrorCollector:
         return errors
 
     def _collect_autonomy_status(self) -> dict:
-        """收集自治层调度器状态（延迟导入，防止循环依赖）。"""
-        try:
-            from agent.autonomy.scheduler import get_autonomy_status
-            status = get_autonomy_status()
-            # 标记为可用，并保留原始字段
-            result = {"available": True}
-            result.update(status)
-            return result
-        except Exception as e:
-            logger.debug("[diagnostics] 收集 autonomy 状态失败: %s", e, exc_info=True)
-            return {"available": False, "reason": str(e)}
+        """收集自治层调度器状态（已移除 — OMP 替代）。"""
+        return {"available": False, "reason": "Autonomy subsystem removed — OMP replaces it"}
 
     def _read_tauri_startup_log(self, max_lines: int = 100) -> dict:
         """读取 Tauri 启动日志的最后 N 行。

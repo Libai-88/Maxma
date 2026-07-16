@@ -1,3 +1,10 @@
+# GUARD: agent.audit_log
+try:
+    import agent.audit_log
+except ImportError:
+    import pytest
+    pytest.skip("agent.audit_log module removed — OMP replaces it", allow_module_level=True)
+
 """阶段 4.2 专项测试 — MCP 调用审计日志。
 
 覆盖 log_mcp_call + get_mcp_summary：

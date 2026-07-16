@@ -524,8 +524,13 @@ def _get_project_context(session: SessionState, user_message: str) -> str | None
         return None
 
     try:
-        from agent.project_scanner import scan_project
+        try:
+            from agent.project_scanner import scan_project
+        except ImportError:
+            scan_project = None
 
+        if scan_project is None:
+            return None
         ctx = scan_project(project_path)
         text = ctx.to_prompt_text()
         session._project_context = text

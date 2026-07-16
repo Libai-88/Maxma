@@ -1,3 +1,10 @@
+# GUARD: agent.autonomy.runner
+try:
+    import agent.autonomy.runner
+except ImportError:
+    import pytest
+    pytest.skip("agent.autonomy.runner module removed — OMP replaces it", allow_module_level=True)
+
 """自治层自改进 Runner 单元测试 — agent/autonomy/runner.py。
 
 测试策略：
@@ -6,6 +13,13 @@
 - 验证超时处理
 - 验证 LLM 未就绪时的安全回退
 """
+
+import pytest
+try:
+    import agent.autonomy
+except ImportError:
+    pytest.skip("agent.autonomy module removed — OMP replaces it", allow_module_level=True)
+
 import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch

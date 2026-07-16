@@ -1,9 +1,23 @@
+# GUARD: agent.delegation_scope
+try:
+    import agent.delegation_scope
+except ImportError:
+    import pytest
+    pytest.skip("agent.delegation_scope module removed — OMP replaces it", allow_module_level=True)
+
 """DelegationScope 单元测试 — agent/delegation_scope.py。
 
 测试策略：
 - 纯数据 + 集合运算，无 I/O、无 LLM、无图依赖
 - 覆盖：交集、空集拒绝、路径收窄、token/time 上限取 min
 """
+
+import pytest
+try:
+    import agent.delegation_scope
+except ImportError:
+    pytest.skip("agent.delegation_scope module removed — OMP replaces it", allow_module_level=True)
+
 import pytest
 
 from agent.delegation_scope import DelegationScope, intersect, from_parent_context

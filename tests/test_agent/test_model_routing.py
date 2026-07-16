@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+try:
+    import agent.model_routing
+except ImportError:
+    import pytest
+    pytest.skip('agent.model_routing module removed — OMP replaces it', allow_module_level=True)
 from api.providers import HealthStatus, Provider, ProviderConfig
 from api.providers.manager import ProviderManager
 from agent.model_routing import ModelRole, load_model_roles, resolve_model_role
@@ -113,3 +118,14 @@ def test_role_selection_skips_error_provider_and_returns_none_without_match():
     manager.mark_unhealthy("primary", "test")
 
     assert manager.select_for_role(ModelRole(name="analysis", required_capabilities=("reasoning",))) is None
+
+
+import pytest
+try:
+    import agent.model_routing
+except ImportError:
+    pytest.skip("agent.model_routing module removed — OMP replaces it", allow_module_level=True)
+try:
+    import agent.think_path
+except ImportError:
+    pytest.skip("agent.think_path module removed — OMP replaces it", allow_module_level=True)

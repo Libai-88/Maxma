@@ -1,3 +1,10 @@
+# GUARD: agent.lifecycle.disposable
+try:
+    import agent.lifecycle.disposable
+except ImportError:
+    import pytest
+    pytest.skip("agent.lifecycle.disposable module removed — OMP replaces it", allow_module_level=True)
+
 """Disposable 资源管理原语测试 — VSCode 风格的资源生命周期管理。"""
 import pytest
 from agent.lifecycle.disposable import (
@@ -18,6 +25,13 @@ def test_to_disposable_calls_fn_on_dispose():
 
 def test_disposable_idempotent():
     """dispose 多次只执行一次清理。"""
+
+import pytest
+try:
+    import agent.lifecycle
+except ImportError:
+    pytest.skip("agent.lifecycle module removed — OMP replaces it", allow_module_level=True)
+
     called = []
     d = to_disposable(lambda: called.append(True))
     d.dispose()

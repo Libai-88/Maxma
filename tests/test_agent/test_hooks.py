@@ -1,3 +1,10 @@
+# GUARD: agent.hooks
+try:
+    import agent.hooks
+except ImportError:
+    import pytest
+    pytest.skip("agent.hooks module removed — OMP replaces it", allow_module_level=True)
+
 """Tests for agent/hooks.py — 事件钩子停止、回收与触发状态测试。"""
 
 import pytest
@@ -100,3 +107,10 @@ async def test_execute_trigger_marks_unsupported_error():
     history = manager.get_history()
     assert history[0]["status"] == "unsupported"
     assert history[0]["result"] == "not available"
+
+
+import pytest
+try:
+    import agent.hooks
+except ImportError:
+    pytest.skip("agent.hooks module removed — OMP replaces it", allow_module_level=True)
