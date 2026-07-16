@@ -11,6 +11,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from app_paths import PATH_WHITELIST_YAML_PATH
+from api.yaml_store import load_yaml
+
 logger = logging.getLogger(__name__)
 
 
@@ -60,15 +63,62 @@ def _extract_paths(tool_name: str, args: dict[str, Any]) -> list[str]:
     return paths
 
 
-def check_path_access(path: str) -> str | None:
-    """检查路径是否在白名单内。
+def _load_whitelist() -> list[tuple[str, bool]]:
+    """从 path_whitelist.yaml 加载白名单条目。
 
-    OMP sidecar handles path security.
-    
+    Returns:
+        (path, recursive) 元组列表。
+    """
+    if not PATH_WHITELIST_YAML_PATH.exists():
+        return []
+    raw = load_yaml(PATH_WHITELIST_YAML_PATH, default={}) or {}
+    entries = raw.get("whitelist", []) or []
+    result: list[tuple[str, bool]] = []
+    for e in entries:
+        if isinstance(e, dict) and "path" in e:
+            recursive = e.get("recursive", True)
+            result.append((str(e["path"]), bool(recursive)))
+    return result
+
+
+def check_path_access(path: str) -> str | None:
+    """检查路径是否在白名单内（fail-secure）。
+
+    空白名单拒绝所有访问。路径解析失败也拒绝。
+
     Returns:
         None 表示允许，字符串表示阻断原因。
     """
-    return None  # OMP sidecar handles path security
+    if not path:
+        return "路径为空，拒绝访问"
+
+    whitelist = _load_whitelist()
+    if not whitelist:
+        return "白名单为空，拒绝所有访问"
+
+    try:
+        resolved = Path(path).resolve(strict=False)
+    except (OSError, ValueError) as exc:
+        logger.warning("[security] 路径解析失败（fail-closed）%s: %s", path, exc)
+        return f"路径解析失败，拒绝访问: {exc}"
+
+    for allowed_raw, recursive in whitelist:
+        try:
+            allowed = Path(allowed_raw).resolve(strict=False)
+        except (OSError, ValueError):
+            continue
+
+        if resolved == allowed:
+            return None  # 精确匹配
+
+        if recursive:
+            try:
+                resolved.relative_to(allowed)
+                return None  # 在递归白名单目录下
+            except ValueError:
+                pass
+
+    return f"路径 '{path}' 不在白名单中"
 
 
 def _is_blocker_present(path: str) -> bool:
