@@ -495,64 +495,6 @@ async def fresh_compact(
     """
     return {"refreshed": False, "reason": "oh-my-pi sidecar mode"}
 
-    # 分离 SystemMessage
-    static_prefix = [m for m in messages if isinstance(m, SystemMessage)]
-    dynamic = [m for m in messages if not isinstance(m, SystemMessage)]
-
-    if len(dynamic) < 4:
-        return {"refreshed": False, "reason": "too few messages to compact"}
-
-    # 从原始动态消息生成摘要（不依赖旧摘要）
-    # 保留最近 6 条不压缩
-    to_compress = dynamic[:-6]
-    retain = dynamic[-6:]
-
-    summary_prompt = _build_summary_prompt(to_compress)
-    try:
-        from langchain_core.messages import HumanMessage as _HM
-        response = await llm.ainvoke([_HM(content=summary_prompt)])
-        summary_text = response.content if hasattr(response, 'content') else str(response)
-        if not isinstance(summary_text, str):
-            summary_text = str(summary_text)
-    except Exception as e:
-        logger.warning(f"fresh_compact: LLM failed, using hard truncation: {e}")
-        old_text = "\n\n".join(
-            (m.content if isinstance(m.content, str) else str(m.content))
-            for m in to_compress
-        )
-        head, tail = truncate_text_head_tail(old_text, max_bytes=4096)
-        summary_text = f"{head}\n{tail}"
-
-    summary_msg = HumanMessage(content=f"[会话历史摘要-刷新]\n{summary_text}")
-    new_messages = static_prefix + [summary_msg] + retain
-
-    # 写回 checkpointer
-    try:
-        await checkpointer.aput(
-            {"configurable": {"thread_id": thread_id}},
-            {"messages": new_messages},
-            {"source": "fresh_compact"},
-        )
-    except Exception as e:
-        logger.error(f"fresh_compact: failed to write back: {e}")
-        return {"refreshed": False, "reason": f"write back failed: {e}"}
-
-    if ws_callback:
-        try:
-            await ws_callback({
-                "type": "context_refreshed",
-                "retained_count": len(retain),
-                "summary_length": len(summary_text),
-            })
-        except Exception:
-            pass
-
-    return {
-        "refreshed": True,
-        "new_message_count": len(new_messages),
-        "summary_length": len(summary_text),
-    }
-
 
 def _build_summary_prompt(messages) -> str:
     """构建摘要 prompt（引导 LLM 输出 5 段结构化格式）。"""

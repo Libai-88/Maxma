@@ -1,0 +1,26 @@
+name: Security Checks
+
+on: [push, pull_request]
+
+jobs:
+  ruff-undefined-names:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install ruff
+      - name: Check for undefined names (F821) — catches missing imports like `re`
+        run: ruff check --select=F821 agent api config tests
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan for leaked secrets in all files (including docs)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

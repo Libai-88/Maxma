@@ -4,6 +4,7 @@
 并持久化跟踪列表到 maxma_blocker.yaml。"""
 
 import os
+from pathlib import Path
 
 import yaml
 from fastapi import APIRouter, HTTPException

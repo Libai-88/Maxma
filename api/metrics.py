@@ -16,7 +16,10 @@ import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from api.db.metrics import MetricsDbStore
 
 logger = logging.getLogger(__name__)
 
