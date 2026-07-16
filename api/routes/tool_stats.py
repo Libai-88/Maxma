@@ -37,6 +37,6 @@ _CUSTOM_TOOLS = [
     {"name": "manage_whitelist", "label": "Manage Whitelist", "description": "管理路径白名单", "category": "config", "builtin": False},
 ]
 
-@router.get("/api/tools")
+@router.get("/tools")
 async def list_tools():
     return _BUILTIN_TOOLS + _CUSTOM_TOOLS

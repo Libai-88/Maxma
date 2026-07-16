@@ -3,7 +3,7 @@ from fastapi import APIRouter
 
 router = APIRouter()
 
-@router.get("/api/providers")
+@router.get("/providers")
 async def list_providers():
     """返回 OMP 可用的 provider/模型列表。"""
     return [
