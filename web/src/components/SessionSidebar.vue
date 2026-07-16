@@ -113,6 +113,12 @@
 
     <ModelSettingsPanel />
 
+    <button class="nav-item" @click="showToolPanel = !showToolPanel">
+      <span class="nav-icon">🧰</span>
+      <span class="nav-label">工具</span>
+    </button>
+    <ToolPanel v-if="showToolPanel" />
+
     <Transition name="card">
       <div v-if="hoveredSession" :key="hoveredSession.session_id" ref="hoverCardRef" class="session-hover-card" :style="cardStyle">
         <div class="card-row">
@@ -217,6 +223,7 @@
 import ContextMenu from '@/components/ContextMenu.vue';
 import Icon from '@/components/Icon.vue';
 import ModelSettingsPanel from './ModelSettingsPanel.vue';
+import ToolPanel from './ToolPanel.vue';
 import { useSessionStore } from '@/stores/session';
 import type { SessionInfo } from '@/types';
 import { computed, nextTick, ref, watch } from 'vue';
@@ -229,6 +236,8 @@ const props = defineProps<{
   sessionStatuses?: Record<string, { connected: boolean; isStreaming: boolean; isAwaitingUser: boolean }>
   collapsed?: boolean
 }>()
+
+const showToolPanel = ref(false)
 
 const emit = defineEmits<{
   create: []
@@ -550,6 +559,38 @@ function confirmDelete() {
 .btn-new:hover {
   background: var(--accent);
   color: #fff;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.nav-item:hover {
+  background: var(--bg-card);
+}
+.nav-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+.nav-label {
+  font-weight: 500;
+}
+.session-sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 6px;
+}
+.session-sidebar.collapsed .nav-label {
+  display: none;
 }
 .session-list {
   display: flex;
