@@ -16,7 +16,11 @@ export const useToolsStore = defineStore('tools', () => {
   async function fetchTools() {
     loading.value = true
     try {
-      const res = await fetch('/api/tools')
+      const { getToken } = await import('../api/index')
+      const token = getToken()
+      const headers: Record<string, string> = {}
+      if (token) headers['X-Maxma-Token'] = token
+      const res = await fetch('/api/tools', { headers })
       const data = await res.json()
       tools.value = Array.isArray(data) ? data : []
     } catch {

@@ -16,7 +16,11 @@ export const useMemoryStore = defineStore('memory', () => {
   async function fetchFacts() {
     loading.value = true
     try {
-      const res = await fetch('/api/memory')
+      const { getToken } = await import('../api/index')
+      const token = getToken()
+      const headers: Record<string, string> = {}
+      if (token) headers['X-Maxma-Token'] = token
+      const res = await fetch('/api/memory', { headers })
       const data = await res.json()
       facts.value = Array.isArray(data) ? data : []
     } catch { facts.value = [] }
@@ -25,7 +29,11 @@ export const useMemoryStore = defineStore('memory', () => {
 
   async function deleteFact(id: string) {
     try {
-      await fetch(`/api/memory/${id}`, { method: 'DELETE' })
+      const { getToken } = await import('../api/index')
+      const token = getToken()
+      const headers: Record<string, string> = {}
+      if (token) headers['X-Maxma-Token'] = token
+      await fetch(`/api/memory/${id}`, { method: 'DELETE', headers })
       facts.value = facts.value.filter(f => f.id !== id)
     } catch {}
   }
