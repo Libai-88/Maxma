@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from api.auth import load_or_create_token
 from api.cors_config import build_cors_origins
 from api.routes import chat, sessions, persona, skills, memory, mcp, tool_stats, providers
+from api.routes import restart as restart_router
 from api.routes import stickers as stickers_router
 from api.routes import sticker_favorites as sticker_favorites_router
 from api.routes import sticker_upload as sticker_upload_router
@@ -79,6 +80,7 @@ def create_app() -> FastAPI:
     app.include_router(stickers_router.router, prefix="/api")
     app.include_router(sticker_favorites_router.router, prefix="/api")
     app.include_router(sticker_upload_router.router, prefix="/api")
+    app.include_router(restart_router.router, prefix="/api")
 
     # Auth token endpoint — desktop app fetches token at runtime
     @app.get("/api/auth/token")
