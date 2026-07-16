@@ -93,3 +93,52 @@ class TestCheckPathAccess:
         )
         result = security_adapter.check_path_access(str(allowed / "link" / "secret.txt"))
         assert result is not None
+
+
+# ── _is_blocker_present / _find_blocker_path ────────────────
+
+
+class TestIsBlockerPresent:
+    """_is_blocker_present(path) -> bool. _find_blocker_path(path) -> str | None."""
+
+    def test_no_blocker_returns_false(self, tmp_path):
+        target = tmp_path / "clean"
+        target.mkdir()
+        assert security_adapter._is_blocker_present(str(target)) is False
+
+    def test_blocker_in_target_dir_detected(self, tmp_path):
+        target = tmp_path / "blocked"
+        target.mkdir()
+        (target / ".maxma_blocker").write_text("", encoding="utf-8")
+        assert security_adapter._is_blocker_present(str(target)) is True
+
+    def test_blocker_in_parent_detected(self, tmp_path):
+        parent = tmp_path / "parent"
+        child = parent / "child"
+        child.mkdir(parents=True)
+        (parent / ".maxma_blocker").write_text("", encoding="utf-8")
+        assert security_adapter._is_blocker_present(str(child)) is True
+
+    def test_find_blocker_returns_path(self, tmp_path):
+        target = tmp_path / "blocked"
+        target.mkdir()
+        (target / ".maxma_blocker").write_text("", encoding="utf-8")
+        result = security_adapter._find_blocker_path(str(target))
+        assert result is not None
+        assert Path(result).name == "blocked"
+
+    def test_find_blocker_returns_none_when_clean(self, tmp_path):
+        target = tmp_path / "clean"
+        target.mkdir()
+        assert security_adapter._find_blocker_path(str(target)) is None
+
+    def test_malformed_path_fail_closed(self):
+        """Resolve failure must fail-closed (block), not fail-open (allow)."""
+        # NUL bytes in path cause OSError on Windows resolve
+        result = security_adapter._is_blocker_present("foo\x00bar")
+        assert result is True  # fail-closed: blocker "found"
+
+    def test_malformed_path_find_returns_path(self):
+        """_find_blocker_path on malformed path returns non-None (fail-closed)."""
+        result = security_adapter._find_blocker_path("foo\x00bar")
+        assert result is not None
