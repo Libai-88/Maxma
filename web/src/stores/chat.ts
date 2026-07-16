@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
-import { computed, reactive } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import type { ChatTurn, ContextUsage } from '@/types'
+import type { ModelInfo, ContextUsage as UIUsage } from '../types/chat'
 
 export const TURNS_KEY_PREFIX = 'maxma_turns_'
 
@@ -38,6 +39,21 @@ function createChannel(): SessionChannel {
 
 export const useChatStore = defineStore('chat', () => {
   const channels = reactive(new Map<string, SessionChannel>())
+
+  // --- New state ---
+  const currentModel = ref('gpt-4o')
+  const availableModels = ref<ModelInfo[]>([])
+  const temperature = ref(0.7)
+  const maxTokens = ref(4096)
+  const thinkingEnabled = ref(false)
+  const contextUsage = ref<UIUsage>({
+    estimatedTokens: 0,
+    maxTokens: 128000,
+    percentage: 0,
+    messageCount: 0,
+    modelName: '',
+  })
+  // --- End new state ---
 
   const allSessionStatuses = computed(() => {
     const map: Record<string, { connected: boolean; isStreaming: boolean; isAwaitingUser: boolean }> = {}
@@ -87,11 +103,45 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  // --- New actions ---
+  function setModel(modelId: string) { currentModel.value = modelId }
+  function setTemperature(val: number) { temperature.value = Math.max(0, Math.min(2, val)) }
+  function setMaxTokens(val: number) { maxTokens.value = Math.max(256, Math.min(256000, val)) }
+  function toggleThinking(enabled: boolean) { thinkingEnabled.value = enabled }
+  function updateContextUsage(usage: UIUsage) { contextUsage.value = usage }
+
+  async function fetchAvailableModels() {
+    try {
+      const res = await fetch('/api/providers')
+      const data = await res.json()
+      const models: ModelInfo[] = []
+      if (Array.isArray(data)) {
+        for (const p of data) {
+          if (Array.isArray(p.models)) {
+            for (const m of p.models) {
+              models.push({
+                id: `${p.id}/${m}`,
+                provider: p.id,
+                name: m,
+                contextWindow: p.context_window || 128000,
+              })
+            }
+          }
+        }
+      }
+      availableModels.value = models
+    } catch { /* Use defaults */ }
+  }
+  // --- End new actions ---
+
   return {
     channels, allSessionStatuses, TURNS_KEY_PREFIX,
     getOrCreateChannel, removeChannel,
     removeTurnsFromStorage, saveTurnsToStorage, loadTurnsFromStorage,
     cleanupOrphanedCaches,
+    // --- New exports ---
+    currentModel, availableModels, temperature, maxTokens, thinkingEnabled, contextUsage,
+    setModel, setTemperature, setMaxTokens, toggleThinking, updateContextUsage, fetchAvailableModels,
   }
 })
 
