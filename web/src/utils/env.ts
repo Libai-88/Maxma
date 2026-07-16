@@ -124,9 +124,7 @@ export function getBackendOrigin(): string {
 
 /** WebSocket 基础路径（不含 /ws/chat/... 后缀） */
 export function getWsBase(): string {
-  return detectTauri()
-    ? `ws://127.0.0.1:${currentApiPort()}`
-    : `ws://127.0.0.1:${currentApiPort()}`
+  return `ws://localhost:${currentApiPort()}`
 }
 
 /**

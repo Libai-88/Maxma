@@ -187,14 +187,6 @@ async def _load_const_sessions(app: FastAPI):
     if not const_list:
         return
 
-    # 尝试获取 checkpointer（可选，sidecar 模式下不需要）
-    shared_checkpointer = None
-    try:
-        from api.checkpointer_factory import get_persistent_checkpointer
-        shared_checkpointer = get_persistent_checkpointer()
-    except Exception:
-        logger.debug("[const] No checkpointer available — sidecar-only mode for const sessions")
-
     loaded = 0
     for const_data in const_list:
         sid = const_data.get("session_id")
@@ -212,7 +204,6 @@ async def _load_const_sessions(app: FastAPI):
             message_count=metadata.get("message_count", 0),
             permission_mode=metadata.get("permission_mode", "ask"),
             permission_mode_updated_at=metadata.get("permission_mode_updated_at", time.time()),
-            checkpointer=shared_checkpointer,  # 可能为 None
             is_const=True,
             const_name=const_name,
         )
@@ -301,18 +292,8 @@ async def lifespan(app: FastAPI):
         retry_policy_enabled=get_settings().ltm_retry_policy_enabled,
     )
 
-    # 阶段 5.1：初始化持久化 checkpointer（sidecar 模式下可选）
-    # - 启用 SQLite 持久化：进程重启后可恢复会话状态
-    # - langgraph 未安装时跳过，sidecar 模式下不需要 checkpointer
-    try:
-        from api.checkpointer_factory import init_persistent_checkpointer
-        await init_persistent_checkpointer()
-        from api.checkpointer_factory import get_checkpointer_info
-        logger.info("[checkpointer] %s", get_checkpointer_info())
-    except ImportError:
-        logger.info("[checkpointer] langgraph not available — using sidecar-only mode")
-    except Exception:
-        logger.warning("[checkpointer] init failed — using sidecar-only mode", exc_info=True)
+    # oh-my-pi sidecar 模式：不需要 checkpointer
+    logger.debug("[checkpointer] sidecar-only mode — skip checkpointer init")
 
     # 后台初始化 LLM（不阻塞 lifespan，让 API 立即就绪）
     async def _init_llm_background():
@@ -564,9 +545,7 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.warning("[playwright] browser shutdown failed", exc_info=True)
 
-    # 阶段 5.1：关闭持久化 checkpointer（释放 SQLite 连接）
-    from api.checkpointer_factory import close_persistent_checkpointer
-    await close_persistent_checkpointer()
+    # oh-my-pi sidecar 模式：不需要关闭 checkpointer
 
 
 def create_app() -> FastAPI:

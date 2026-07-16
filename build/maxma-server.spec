@@ -265,9 +265,6 @@ hiddenimports = [
     # Stage 1 子任务 1.6：metrics SQLite 持久化
     "api.db.metrics",
 
-    # ── langchain_core.messages 子类（动态 import，PyInstaller 可能遗漏） ──
-    "langchain_core.messages.RemoveMessage",
-
     # ── Agent 模块 ──
     "agent.prompts",
     "agent.hooks",

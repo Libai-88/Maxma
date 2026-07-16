@@ -1,6 +1,6 @@
 # tests/test_memory/test_pii_guard.py
 import pytest
-from memory.pii_guard import scrub_pii, PII_PATTERN
+from memory.pii_guard import scrub_pii, PII_PATTERNS
 
 def test_scrub_email():
     assert scrub_pii("联系我: test@example.com") == "联系我: [EMAIL]"

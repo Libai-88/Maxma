@@ -9,16 +9,12 @@ import time
 import traceback
 
 from pydantic import BaseModel, Field
-from langchain_core.runnables import RunnableConfig
 
+from agent.prompts import build_system_prompt
 from api import interaction
 from tools.base import ToolBase, format_success, format_error, register_tool
 from tools.sub_agent.delegation_context import (
-    activate_delegation_context,
-    bind_model_budget,
     create_delegation_context,
-    prepare_delegated_tools,
-    reset_delegation_context,
 )
 from tools.sub_agent.deferred_result_store import DeferredResultStore
 from tools.sub_agent.run_manager import DeferredRunManager
@@ -272,18 +268,14 @@ class CallSubAgentTool(ToolBase):
             return format_error(f"子 Agent 执行失败: {str(e)}")
 
     async def _run_background(self, sub, task: str, app_state, delegation_context=None) -> str:
-        """后端直接执行（无前端连接时的回退路径）。"""
+        """后端直接执行（无前端连接时的回退路径）。
+
+        使用 oh-my-pi sidecar 执行子任务，不再依赖 LangGraph。
+        """
         print(
             f"[call_sub_agent] _run_background starting for {sub.session_id}",
             file=sys.stderr,
         )
-        # LangGraph 已移除，sub_agent 后台执行需通过 sidecar
-        raise RuntimeError(
-            "sub_agent 后台执行已迁移到 oh-my-pi sidecar，"
-            "LangGraph build_agent 不再可用"
-        )
-        from agent.prompts import build_system_prompt
-        from langchain_core.messages import HumanMessage
 
         context = delegation_context or getattr(sub, "delegation_context", None)
         if context is None:
@@ -292,80 +284,77 @@ class CallSubAgentTool(ToolBase):
             raise TimeoutError("子 Agent 的委托时间预算已耗尽")
 
         system_prompt = build_system_prompt()
-        # 4 层架构：子 Agent 也启用情景记忆检索
-        episodic_mm = getattr(app_state, "episodic_mm", None)
 
-        effective_tools = prepare_delegated_tools(app_state.tools, context)
-        model = bind_model_budget(context)
-        if model is None:
-            raise RuntimeError("子 Agent 未继承到可用模型")
+        # 使用 oh-my-pi sidecar 执行
+        sidecar_mgr = getattr(app_state, "sidecar_manager", None)
+        if sidecar_mgr is None:
+            raise RuntimeError("子 Agent 不可用：SidecarManager 未初始化")
 
-        agent = build_agent(
-            model=model,
-            tools=effective_tools,
-            system_prompt=system_prompt,
-            checkpointer=sub.checkpointer,
-            episodic_mm=episodic_mm,
-            enable_executor=False,  # 子 Agent 不启用 executor，防止递归爆炸
-            # Background work has no child WebSocket from which build_agent can
-            # discover failover support. Pass the manager explicitly when the
-            # host application provides one; None is the supported safe
-            # degradation for minimal/test application state.
-            provider_manager=getattr(app_state, "provider_manager", None),
-        )
-        inputs = {"messages": [HumanMessage(content=task)]}
-        config: RunnableConfig = {"configurable": {"thread_id": sub.session_id}, "recursion_limit": 72}
+        await sidecar_mgr.start()
+        client = sidecar_mgr.client
+        if client is None:
+            raise RuntimeError("子 Agent 不可用：Sidecar client 未就绪")
 
-        final_answer = ""
-        context_token = activate_delegation_context(context)
-        session_token = interaction.current_session_id.set(sub.session_id)
+        model_str = ""
+        if context.provider_id and context.model_name:
+            model_str = f"{context.provider_id}/{context.model_name}"
+
         try:
-            async with asyncio.timeout(context.remaining_seconds()):
-                async for event in agent.astream_events(
-                    inputs, config=config, version="v2"
-                ):
-                    if (
-                        event.get("event") == "on_chain_end"
-                        and event.get("name") == "agent"
-                    ):
-                        output: dict = event["data"].get("output", {})
-                        messages = output.get("messages", [])
-                        if messages:
-                            last = messages[-1]
-                            final_answer = (
-                                last.content if hasattr(last, "content") else str(last)
-                            )
+            # 创建 sidecar session
+            result = await client.call("create_session", {
+                "model": model_str or "gpt-4o",
+                "system_prompt": system_prompt,
+                "cwd": ".",
+            })
+            sidecar_sid = result["session_id"]
 
-            # 事件未捕获到 final_answer 时，从 checkpoint 兜底提取
-            if not final_answer:
+            # 执行 prompt，等待结果
+            turn_done = asyncio.Event()
+            final_answer = ""
+
+            async def _on_answer(sid: str, event: dict):
+                nonlocal final_answer
+                if sid != sidecar_sid:
+                    return
+                final_answer = event.get("payload", {}).get("content", "")
+
+            async def _on_done(sid: str, event: dict):
+                if sid != sidecar_sid:
+                    return
+                turn_done.set()
+
+            unsub_answer = client.on("answer", _on_answer)
+            unsub_done = client.on("done", _on_done)
+
+            try:
+                await client.call("prompt", {
+                    "session_id": sidecar_sid,
+                    "message": task,
+                })
+                timeout = context.remaining_seconds() or 600
+                await asyncio.wait_for(turn_done.wait(), timeout=timeout)
+            except asyncio.TimeoutError:
+                logger.warning("[call_sub_agent] sidecar timed out for sub %s", sub.session_id[:8])
                 try:
-                    cpt = await sub.checkpointer.aget_tuple(config)
-                    if cpt is not None:
-                        messages = cpt.checkpoint.get("channel_values", {}).get(
-                            "messages", []
-                        )
-                        if messages:
-                            last = messages[-1]
-                            candidate = (
-                                last.content if hasattr(last, "content") else str(last)
-                            )
-                            if candidate:
-                                final_answer = candidate
+                    await client.call("cancel", {"session_id": sidecar_sid})
                 except Exception:
-                    logger.debug("Failed to read fallback final_answer from sub-agent checkpoint", exc_info=True)
-        except TimeoutError as e:
-            raise TimeoutError("子 Agent 超过委托时间预算") from e
+                    pass
+                if not final_answer:
+                    raise TimeoutError("子 Agent 超过委托时间预算")
+            finally:
+                unsub_answer()
+                unsub_done()
+
+            # 清理 sidecar session
+            try:
+                await client.call("destroy_session", {"session_id": sidecar_sid})
+            except Exception:
+                pass
+
         except Exception as e:
-            print(
-                f"[call_sub_agent] _run_background agent failed: {e}", file=sys.stderr
-            )
+            print(f"[call_sub_agent] _run_background failed: {e}", file=sys.stderr)
             traceback.print_exc(file=sys.stderr)
             raise
-        finally:
-            try:
-                reset_delegation_context(context_token)
-            finally:
-                interaction.current_session_id.reset(session_token)
 
         print(
             f"[call_sub_agent] _run_background got answer: {final_answer[:100] if final_answer else '(empty)'}",

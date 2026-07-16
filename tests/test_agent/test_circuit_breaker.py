@@ -195,7 +195,7 @@ class TestCircuitBreakerThreadSafety:
         for t in threads:
             t.start()
         for t in threads:
-        t.join(timeout=5)
+            t.join(timeout=5)
 
         stats = cb.get_stats()
         assert stats["total_failures"] == num_threads * failures_per_thread
@@ -222,7 +222,7 @@ class TestCircuitBreakerThreadSafety:
         for t in threads:
             t.start()
         for t in threads:
-        t.join(timeout=5)
+            t.join(timeout=5)
 
         total_rejections = sum(rejections)
         stats = cb.get_stats()

@@ -13,7 +13,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Optional, Sequence
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, RemoveMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 
 from api.context_usage import count_tokens
 
@@ -457,7 +457,7 @@ def trim_messages(
 
 async def maybe_trim_checkpoint(
     state,
-    config: dict,
+    config: dict | None = None,
     *,
     llm=None,
     checkpointer=None,
@@ -466,197 +466,15 @@ async def maybe_trim_checkpoint(
     max_tokens=None,
     cache_preserving: bool = False,
 ) -> dict:
-    """检查 checkpoint 中的消息是否需要截断，如需则更新（cache-preserving 版本）。
+    """检查对话历史是否需要截断。
 
-    保留 SystemMessage 作为静态前缀（保护 prompt cache），
-    只对动态消息（Human/AI/Tool）执行截断和摘要。
-
-    Args:
-        state: 状态 dict，至少包含 ``messages`` 键；也可传入 LangGraph
-            agent（具有 ``aget_state``），此时会自动拉取 state 并将其作为
-            checkpointer。
-        config: LangGraph config (含 thread_id)
-        llm: 可选 LLM 实例，用于生成高质量摘要
-        checkpointer: 可选 LangGraph compiled agent，用于更新 checkpoint 状态
-        ws_callback: 可选 WS 回调协程，签名 ``async def(msg: dict) -> None``，
-            压缩成功时用于推送 ``context_compressed`` 事件
-        token_counter: 可选的 token 计数函数，签名 ``f(messages) -> int``
-        max_tokens: 模型上下文窗口上限
+    oh-my-pi sidecar 模式下，上下文压缩由 sidecar 内部管理。
+    此函数保留为向后兼容存根，始终返回未压缩。
 
     Returns:
-        dict，至少包含 ``"compressed"`` 字段；压缩成功时附带
-        ``messages``/``removed_count``/``summary_preview``/
-        ``context_usage_before``/``context_usage_after`` 等详情
+        dict，包含 ``"compressed": False``。
     """
-    try:
-        # 向后兼容：如果传入的是 LangGraph agent，自动拉取 state
-        if hasattr(state, "aget_state"):
-            if checkpointer is None:
-                checkpointer = state
-            state_obj = await state.aget_state(config)
-            if state_obj is None:
-                return {"compressed": False}
-            messages = state_obj.values.get("messages", [])
-        else:
-            messages = state.get("messages", []) if hasattr(state, "get") else []
-
-        if not messages:
-            return {"compressed": False}
-
-        # 判断是否需要截断
-        if token_counter is None or not max_tokens:
-            return {"compressed": False}
-
-        total_tokens = token_counter(messages)
-        usage_ratio_before = total_tokens / max_tokens if max_tokens else 0
-        if usage_ratio_before <= TRIM_THRESHOLD:
-            return {"compressed": False}
-
-        # 分离静态前缀（SystemMessage）和动态消息，保护 prompt cache 前缀
-        static_prefix: list[BaseMessage] = []
-        dynamic_messages: list[BaseMessage] = []
-        for m in messages:
-            if isinstance(m, SystemMessage):
-                static_prefix.append(m)
-            else:
-                dynamic_messages.append(m)
-
-        if not dynamic_messages:
-            return {"compressed": False, "reason": "no dynamic messages"}
-
-        # 计算保留轮次，但不强制要求消息数达到 min_turns*2 —— 当 token
-        # 占比已超阈值时（由调用方通过 token_counter 判定），即使消息
-        # 较少也应压缩。只需保证至少有 2 轮（1 轮压缩 + 1 轮保留）。
-        actual_turns = _count_turns(dynamic_messages)
-        if actual_turns < 2:
-            return {"compressed": False}
-
-        min_turns = _calc_min_turns(dynamic_messages)
-        # 确保 min_turns 不超过 actual_turns-1，以便总能找到截断边界
-        min_turns = min(min_turns, max(1, actual_turns - 1))
-
-        boundary = _find_trim_boundary(dynamic_messages, min_turns)
-        if boundary == 0:
-            return {"compressed": False}
-
-        old_messages = dynamic_messages[:boundary]
-        retained_messages = dynamic_messages[boundary:]
-
-        # 使用 LLM 摘要（如果可用）；LLM 失败时降级为 head+tail 硬截断
-        compaction_fallback = None
-        if llm is not None:
-            try:
-                summary_text = await _llm_summarize(old_messages, llm, raise_on_error=True)
-            except Exception as e:
-                logger.warning(
-                    f"LLM summary failed, falling back to hard truncation: {e}"
-                )
-                # 降级：把较早的动态消息拼成文本做 head+tail 硬截断
-                old_text = "\n\n".join(
-                    (m.content if isinstance(m.content, str) else str(m.content))
-                    for m in old_messages
-                )
-                head, tail = truncate_text_head_tail(old_text, max_bytes=4096)
-                summary_text = f"[会话历史摘要-降级]\n{head}\n{tail}"
-                compaction_fallback = "hard_truncation"
-        else:
-            summary_text = _summarize_old_messages(old_messages)
-
-        if not summary_text:
-            return {"compressed": False}
-
-        # 追加文件操作上下文（保留本次会话操作过哪些文件的元信息）
-        file_ops = extract_file_operations(dynamic_messages)
-        if file_ops:
-            summary_text = append_file_ops_to_summary(summary_text, file_ops)
-
-        # The legacy format remains byte-for-byte compatible while the rollout
-        # flag is off. The opt-in path stores only a cache-safe boundary.
-        if cache_preserving:
-            compaction = build_cache_preserving_compaction(
-                fixed_prefix=static_prefix,
-                source_messages=old_messages,
-                retained_messages=retained_messages,
-                summary_text=summary_text,
-                token_counter=token_counter,
-            )
-            summary_message = compaction.summary_message
-            new_messages = compaction.messages
-        else:
-            summary_message = SystemMessage(content=f"[上下文压缩] {summary_text}")
-            new_messages = static_prefix + [summary_message] + retained_messages
-
-        # 更新 checkpointer（如果提供）
-        if checkpointer is not None:
-            update_msgs: list[BaseMessage] = []
-            for msg in old_messages:
-                msg_id = getattr(msg, "id", None)
-                if msg_id:
-                    update_msgs.append(RemoveMessage(id=msg_id))
-            update_msgs.append(summary_message)
-
-            await checkpointer.aupdate_state(
-                config,
-                {"messages": update_msgs},
-            )
-            logger.info(
-                f"Checkpoint trimmed for thread {config.get('configurable', {}).get('thread_id', '?')}: "
-                f"{len(old_messages)} dynamic messages removed, summary added"
-            )
-
-        # 估算压缩后上下文占比
-        after_tokens = token_counter(new_messages)
-        usage_ratio_after = after_tokens / max_tokens if max_tokens else 0
-
-        # 构建压缩详情
-        compress_detail = {
-            "compressed": True,
-            "messages": new_messages,
-            "removed_count": len(old_messages),
-            "summary_preview": summary_text[:200] if summary_text else "",
-            "context_usage_before": usage_ratio_before,
-            "context_usage_after": usage_ratio_after,
-        }
-        if compaction_fallback:
-            compress_detail["compaction_fallback"] = compaction_fallback
-
-        # 通过 WS 回调推送压缩事件（推送失败不影响压缩结果）
-        if ws_callback:
-            try:
-                await ws_callback({
-                    "type": "context_compressed",
-                    "payload": {
-                        "compressed": True,
-                        "removed_count": len(old_messages),
-                        "summary_preview": summary_text[:200] if summary_text else "",
-                        "context_usage_before": usage_ratio_before,
-                        "context_usage_after": usage_ratio_after,
-                    },
-                })
-            except Exception:
-                logger.debug("ws_callback push context_compressed failed", exc_info=True)
-
-        # 记录到 Activity Hub（失败不影响压缩结果）
-        try:
-            from api.activity_hub import activity_hub
-            activity_hub.add(
-                category="compression",
-                event_type="context_compressed",
-                session_id=config.get("configurable", {}).get("thread_id", ""),
-                message=f"上下文压缩：移除 {len(old_messages)} 条消息",
-                payload={
-                    "removed_count": len(old_messages),
-                    "summary_preview": summary_text[:200] if summary_text else "",
-                },
-            )
-        except Exception:
-            logger.debug("activity_hub record context_compressed failed", exc_info=True)
-
-        return compress_detail
-
-    except Exception as e:
-        logger.warning(f"Failed to trim checkpoint: {e}", exc_info=True)
-        return {"compressed": False}
+    return {"compressed": False}
 
 
 # ── 4 层记忆架构：情景记忆层接口 ──────────────────────────────
@@ -788,37 +606,19 @@ def retrieve_from_episodic(
 async def fresh_compact(
     *,
     thread_id: str,
-    llm,
-    checkpointer,
+    llm=None,
+    checkpointer=None,
     ws_callback=None,
 ) -> dict:
-    """显式刷新：从 checkpointer 读取原始消息，重新生成摘要。
+    """显式刷新：上下文压缩。
 
-    与 maybe_trim_checkpoint 的累积压缩不同，fresh_compact 总是从
-    原始消息重新生成摘要，避免累积信息损失。
+    oh-my-pi sidecar 模式下，上下文压缩由 sidecar 内部管理。
+    保留为存根。
 
-    触发场景：
-    1. 用户主动点击"刷新上下文"
-    2. 检测到摘要被引用超过 N 次（信息损失累积）
-    3. 用户明确切换话题
+    Returns:
+        dict，包含 ``"refreshed": False``。
     """
-    if checkpointer is None:
-        return {"refreshed": False, "reason": "no checkpointer"}
-
-    try:
-        tuple_data = await checkpointer.aget_tuple(
-            {"configurable": {"thread_id": thread_id}}
-        )
-    except Exception as e:
-        logger.error(f"fresh_compact: failed to get tuple: {e}")
-        return {"refreshed": False, "reason": f"checkpointer error: {e}"}
-
-    if tuple_data is None:
-        return {"refreshed": False, "reason": "no checkpoint found"}
-
-    messages = tuple_data.checkpoint.get("messages", [])
-    if not messages:
-        return {"refreshed": False, "reason": "no messages"}
+    return {"refreshed": False, "reason": "oh-my-pi sidecar mode"}
 
     # 分离 SystemMessage
     static_prefix = [m for m in messages if isinstance(m, SystemMessage)]

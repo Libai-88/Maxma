@@ -45,7 +45,8 @@ _spec.loader.exec_module(ps)
 
 # 注册清理：测试进程退出时删除临时目录
 import atexit
-atexit.register(_tempfile._crmtree, _fake_root)
+import shutil
+atexit.register(lambda root=None: shutil.rmtree(root, ignore_errors=True) if root else None, _fake_root)
 
 # Register so monkeypatch string-references work
 sys.modules["path_security"] = ps

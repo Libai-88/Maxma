@@ -1,62 +1,57 @@
-"""TimeTraveler — 对话轮次撤回工具。
+"""TimeTraveler — 对话轮次撤回工具（oh-my-pi sidecar 版本）。
 
-基于 LangGraph 的 RemoveMessage 机制，通过 CompiledStateGraph.update_state
-删除 MemorySaver 检查点中指定轮次的对话消息。
+通过 sidecar 的 undo RPC 方法撤回指定轮次的对话消息。
+不再依赖 LangGraph RemoveMessage 机制。
 """
 
-from langchain_core.messages import RemoveMessage
+import logging
+
+logger = logging.getLogger(__name__)
 
 
-async def undo_rounds(graph, config, n: int = 1) -> int:
-    """撤回最近 n 轮对话，返回删除的消息条数。
+async def undo_rounds(sidecar_mgr, sidecar_session_id: str, n: int = 1) -> int:
+    """撤回最近 n 轮对话。
+
+    通过 sidecar 的 undo RPC 方法实现。
+    委托给 sidecar session 管理消息状态。
 
     Args:
-        graph: CompiledStateGraph 实例（需持有会话的 checkpointer）。
-        config: LangGraph 配置，至少包含 {"configurable": {"thread_id": ...}}。
-        n: 要撤回的轮次数，默认 1。
+        sidecar_mgr: SidecarManager 实例（需已启动）
+        sidecar_session_id: oh-my-pi sidecar 中的 session ID
+        n: 要撤回的轮次数，默认 1
 
     Returns:
-        实际删除的消息条数。
+        实际删除的估计消息条数。
     """
-    if n < 1:
+    if n < 1 or not sidecar_mgr or not sidecar_session_id:
         return 0
 
-    state = await graph.aget_state(config)
-    messages = state.values.get("messages", [])
-
-    if not messages:
+    client = sidecar_mgr.client
+    if client is None:
+        logger.warning("[time_traveler] sidecar client not available")
         return 0
 
-    # 找出所有 HumanMessage 的位置
-    human_indices = [i for i, m in enumerate(messages) if m.type == "human"]
-
-    if not human_indices:
+    try:
+        result = await client.call("undo", {
+            "session_id": sidecar_session_id,
+            "steps": n,
+        })
+        removed = result.get("removed", 0)
+        logger.info(
+            "[time_traveler] undo %d step(s): removed %d message(s)",
+            n, removed,
+        )
+        return removed
+    except Exception as e:
+        logger.warning("[time_traveler] sidecar undo failed: %s", e)
         return 0
 
-    if len(human_indices) < n:
-        # 不够 n 轮就全部删除
-        to_delete = messages
-    else:
-        # 倒数第 n 个 human 的位置就是切割点
-        cutoff = human_indices[-n]
-        to_delete = messages[cutoff:]
 
-    # 提交删除指令 — RemoveMessage 会被 add_messages reducer 识别并删除对应 id 的消息
-    remove_msgs = []
-    for m in to_delete:
-        msg_id = getattr(m, "id", None)
-        if msg_id:
-            remove_msgs.append(RemoveMessage(id=msg_id))
-    if remove_msgs:
-        await graph.aupdate_state(config, {"messages": remove_msgs})
-    return len(to_delete)
-
-
-async def undo_last_round(graph, config) -> int:
+async def undo_last_round(sidecar_mgr, sidecar_session_id: str) -> int:
     """撤回最近一轮对话。"""
-    return await undo_rounds(graph, config, n=1)
+    return await undo_rounds(sidecar_mgr, sidecar_session_id, n=1)
 
 
-async def undo_all(graph, config) -> int:
+async def undo_all(sidecar_mgr, sidecar_session_id: str) -> int:
     """撤回所有轮次，清空对话历史。"""
-    return await undo_rounds(graph, config, n=10**9)
+    return await undo_rounds(sidecar_mgr, sidecar_session_id, n=100)

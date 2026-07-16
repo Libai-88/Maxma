@@ -15,9 +15,7 @@ class SessionState:
     last_active: float = field(default_factory=time.time)
     message_count: int = 0
     _active_task: asyncio.Task | None = field(default=None, repr=False)
-    # 阶段 5.1：使用持久化 checkpointer（AsyncSqliteSaver 或 MemorySaver 回退）
-    # default_factory 延迟导入避免循环依赖，且保证测试环境无 SQLite 时可用
-    checkpointer: Any = field(default=None)
+    # oh-my-pi sidecar 模式下不需要 checkpointer
     _graph: Any | None = field(default=None, repr=False)
     auto_approve: bool = False
     # Keep the selected permission state on the session.  This is deliberately
@@ -44,17 +42,11 @@ class SessionState:
     _sidecar_session_id: str | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
-        """初始化后处理：若未显式提供 checkpointer，尝试获取持久化实例。
+        """初始化后处理。
 
-        sidecar 模式下 checkpointer 不再必需，获取失败时静默设为 None。
+        oh-my-pi sidecar 模式下不需要 checkpointer。
+        Invalid stored permission mode 回退到默认值。
         """
-        if self.checkpointer is None:
-            try:
-                from api.checkpointer_factory import get_persistent_checkpointer
-                self.checkpointer = get_persistent_checkpointer()
-            except Exception:
-                self.checkpointer = None
-
         # Older const-session metadata has no permission mode.  Invalid stored
         # values fail closed to the compatible, confirmation-first default.
         try:

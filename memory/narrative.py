@@ -16,15 +16,8 @@ from typing import Optional
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
 
-# langgraph 可选（已由 oh-my-pi 替代）
-try:
-    from langgraph.checkpoint.memory import MemorySaver
-    from langgraph.prebuilt import create_react_agent
-    _HAS_LANGGRAPH = True
-except ImportError:
-    MemorySaver = None  # type: ignore
-    create_react_agent = None  # type: ignore
-    _HAS_LANGGRAPH = False
+# langgraph 已由 oh-my-pi sidecar 替代
+_HAS_LANGGRAPH = False
 
 from app_paths import MEMORY_CONFIG_PATH
 from memory.memory_callback import MemoryToolCallback
@@ -894,67 +887,17 @@ class LongTermMemoryInterface:
                         logger.info("[ltm] langgraph not available, skipping CRUD agent")
                         continue
 
-                    agent = create_react_agent(
-                        model=llm,
-                        tools=crud_tools,
-                        prompt=system_prompt,
-                        checkpointer=MemorySaver(),
-                    )
-
-                    callbacks: list = []
-                    if self._ws_registry is not None and session_id:
-                        logger.debug(
-                            "[ltm] creating MemoryToolCallback session=%s turn_id=%s",
-                            session_id[:8],
-                            (turn_id or "")[:8],
-                        )
-                        callbacks.append(
-                            MemoryToolCallback(
-                                self._ws_registry, session_id, turn_id or ""
-                            )
-                        )
-
-                    logger.info("[ltm] invoking CRUD agent...")
-                    from langchain_core.runnables import RunnableConfig
-
-                    thread_suffix = turn_id or uuid.uuid4().hex[:8]
-                    config: RunnableConfig = {
-                        "configurable": {
-                            "thread_id": f"ltm-{session_id or 'anon'}-{thread_suffix}"
-                        },
-                        "callbacks": callbacks,
-                    }
-                    projection_lease = job or legacy_writer_lease
-                    assert projection_lease is not None
-                    with _projection_scope(
-                        session_id,
-                        turn_id,
-                        lambda: self._outbox.projection_fence(projection_lease),
-                    ):
-                        # 超时保护：langgraph 的 arun_with_retry 在 401 等错误上
-                        # 会内部重试多次，绕过 _MAX_LTM_RETRIES。加 90s 超时
-                        # 确保即使 langgraph 疯狂重试，最终也会被超时打断，
-                        # 由下方 except 块分类错误并 abandon/fail。
-                        await asyncio.wait_for(
-                            agent.ainvoke(
-                                {"messages": [HumanMessage(content=user_prompt)]},
-                                config=config,
-                            ),
-                            timeout=90,
-                        )
-                        if lease_lost.is_set():
-                            raise ProjectionFenceLost(
-                                "projection lease lost while the agent was running"
-                            )
-                        logger.info("[ltm] CRUD agent done")
-                        try:
-                            purged = self._mm.purge_expired()
-                            if purged > 0:
-                                logger.info("[ltm] purged %d expired item(s)", purged)
-                        except ProjectionFenceLost:
-                            raise
-                        except Exception as exc:
-                            logger.warning("[ltm] purge_expired failed: %s", exc)
+                    # CRUD agent 已由 oh-my-pi sidecar 替代
+                    # 直接通过 memory tools 读写 YAML
+                    logger.info("[ltm] oh-my-pi mode: LTM CRUD agent skipped")
+                    try:
+                        purged = self._mm.purge_expired()
+                        if purged > 0:
+                            logger.info("[ltm] purged %d expired item(s)", purged)
+                    except ProjectionFenceLost:
+                        raise
+                    except Exception as exc:
+                        logger.warning("[ltm] purge_expired failed: %s", exc)
                     invalidate_narrative_cache()
                     if job is not None:
                         if not self._outbox.complete(job):
@@ -964,9 +907,6 @@ class LongTermMemoryInterface:
                                 turn_id,
                             )
                         else:
-                            # Keep only fences for pending/claimed/completed rows
-                            # and their retained archive tombstones. This bounds
-                            # YAML metadata without weakening crash recovery.
                             self._mm.prune_projection_operations(
                                 self._outbox.retained_identities()
                             )

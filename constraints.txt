@@ -1,0 +1,8 @@
+# 阻止安装 langgraph — 已由 oh-my-pi sidecar 替代
+langgraph==0
+langgraph-checkpoint==0
+langgraph-checkpoint-sqlite==0
+langgraph-prebuilt==0
+langgraph-sdk==0
+langgraph-api==0
+langgraph-cli==0
