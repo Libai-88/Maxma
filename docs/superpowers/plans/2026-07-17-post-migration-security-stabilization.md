@@ -747,7 +747,7 @@ New string: `p.api_key = '<redacted-rotate-this-key>'`
 
 - [ ] **Step 5: Verify no tokens remain**
 
-Run: `cd d:\Maxma\MaxmaHere && findstr /S /R "<redacted-token-1> <redacted-token-2> sk-80c22ad320e6991e" docs\*.md`
+Run: `cd d:\Maxma\MaxmaHere && findstr /S /R "<redacted-token-1> <redacted-token-2> <redacted-api-key>" docs\*.md`
 Expected: No matches found (all redacted).
 
 - [ ] **Step 6: Commit**
