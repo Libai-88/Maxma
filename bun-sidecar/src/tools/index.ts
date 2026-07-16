@@ -7,6 +7,7 @@
 import type { ToolDefinition } from "@oh-my-pi/pi-coding-agent";
 import { z } from "zod/v4";
 import { todoistTools } from "./todoist";
+import manageSkillsTool from "./config/manage_skills";
 
 // ── Weather Tool ────────────────────────────────────────
 
@@ -151,6 +152,7 @@ export function registerCustomTools(): ToolDefinition[] {
     weatherTool,
     holidayTool,
     tarotTool,
+    manageSkillsTool,
     ...todoistTools,
   ];
 }
