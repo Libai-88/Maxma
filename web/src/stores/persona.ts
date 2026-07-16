@@ -26,7 +26,11 @@ export const usePersonaStore = defineStore('persona', () => {
   async function fetchProfile() {
     loading.value = true
     try {
-      const res = await fetch('/api/persona/profile')
+      const { getToken } = await import('../api/index')
+      const token = getToken()
+      const headers: Record<string, string> = {}
+      if (token) headers['X-Maxma-Token'] = token
+      const res = await fetch('/api/persona/profile', { headers })
       const data = await res.json()
       if (data) profile.value = data
     } catch { /* use defaults */ }

@@ -112,7 +112,11 @@ export const useChatStore = defineStore('chat', () => {
 
   async function fetchAvailableModels() {
     try {
-      const res = await fetch('/api/providers')
+      const { getToken } = await import('../api/index')
+      const token = getToken()
+      const headers: Record<string, string> = {}
+      if (token) headers['X-Maxma-Token'] = token
+      const res = await fetch('/api/providers', { headers })
       const data = await res.json()
       const models: ModelInfo[] = []
       if (Array.isArray(data)) {
