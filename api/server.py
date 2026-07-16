@@ -16,10 +16,29 @@ from fastapi.staticfiles import StaticFiles
 from api.auth import load_or_create_token
 from api.cors_config import build_cors_origins
 from api.routes import chat, sessions, persona, skills, memory, mcp, tool_stats, providers
+from api.routes import activity as activity_router
+from api.routes import audit_log as audit_log_router
+from api.routes import autonomy as autonomy_router
+from api.routes import balance as balance_router
+from api.routes import deferred_runs as deferred_runs_router
+from api.routes import diagnostics as diagnostics_router
+from api.routes import env_vars as env_vars_router
+from api.routes import event_hooks as event_hooks_router
+from api.routes import files as files_router
+from api.routes import kb as kb_router
+from api.routes import maxma_blocker as maxma_blocker_router
+from api.routes import mcp_test as mcp_test_router
+from api.routes import metrics as metrics_router
+from api.routes import news as news_router
+from api.routes import path_whitelist as path_whitelist_router
 from api.routes import restart as restart_router
+from api.routes import session_compress as session_compress_router
 from api.routes import stickers as stickers_router
 from api.routes import sticker_favorites as sticker_favorites_router
 from api.routes import sticker_upload as sticker_upload_router
+from api.routes import transcripts as transcripts_router
+from api.routes import upload as upload_router
+from api.routes import workflows as workflows_router
 from api.session_manager import SessionManager
 from api.ws_registry import WebSocketRegistry
 from api.pi_bridge.sidecar_manager import SidecarManager
@@ -81,6 +100,25 @@ def create_app() -> FastAPI:
     app.include_router(sticker_favorites_router.router, prefix="/api")
     app.include_router(sticker_upload_router.router, prefix="/api")
     app.include_router(restart_router.router, prefix="/api")
+    app.include_router(activity_router.router, prefix="/api")
+    app.include_router(audit_log_router.router, prefix="/api")
+    app.include_router(autonomy_router.router, prefix="/api")
+    app.include_router(balance_router.router, prefix="/api")
+    app.include_router(deferred_runs_router.router, prefix="/api")
+    app.include_router(diagnostics_router.router, prefix="/api")
+    app.include_router(env_vars_router.router, prefix="/api")
+    app.include_router(event_hooks_router.router, prefix="/api")
+    app.include_router(files_router.router, prefix="/api")
+    app.include_router(kb_router.router, prefix="/api")
+    app.include_router(maxma_blocker_router.router, prefix="/api")
+    app.include_router(mcp_test_router.router)
+    app.include_router(metrics_router.router, prefix="/api")
+    app.include_router(news_router.router, prefix="/api")
+    app.include_router(path_whitelist_router.router, prefix="/api")
+    app.include_router(session_compress_router.router, prefix="/api")
+    app.include_router(transcripts_router.router, prefix="/api")
+    app.include_router(upload_router.router, prefix="/api")
+    app.include_router(workflows_router.router, prefix="/api")
 
     # Auth token endpoint — desktop app fetches token at runtime
     @app.get("/api/auth/token")
