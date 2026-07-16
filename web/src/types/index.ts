@@ -425,6 +425,8 @@ export interface ChatTurn {
   deferredRunIds?: string[]
   /** 计划卡片（plan_proposed 事件） */
   planCard?: PlanCard
+  /** 情绪匹配的贴纸 URL */
+  stickerUrl?: string
 }
 
 // === 会话与 API 类型 ===

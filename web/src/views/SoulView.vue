@@ -1,5 +1,6 @@
 <template>
   <div class="md-editor-view">
+    <PersonaCard style="margin-bottom: 16px;" />
     <div class="header">
       <h2>{{ pageTitle }} <span class="subtitle">{{ pageSubtitle }}</span></h2>
       <button class="save-button" :disabled="saving || content === savedContent" @click="saveContent">
@@ -75,6 +76,7 @@ import { Codemirror } from 'vue-codemirror'
 import { markdown } from '@codemirror/lang-markdown'
 import { EditorView } from '@codemirror/view'
 import { api } from '@/api'
+import PersonaCard from '../components/PersonaCard.vue'
 
 const props = defineProps<{
   title?: string

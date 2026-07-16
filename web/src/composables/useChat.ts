@@ -9,6 +9,7 @@ import { getToken, ensureTokenLoaded, resetToken, api } from '@/api'
 import { ensurePortLoaded, waitForBackend, getWsBase } from '@/utils/env'
 import { chatSessionAliveCache } from '@/composables/sessionAliveCache'
 import { useWorkbenchStore } from '@/stores/workbench'
+import { detectEmotion, getStickerUrl } from './stickerUtils'
 /** 匹配旧格式尾缀（用于 localStorage 迁移） */
 const TIME_SUFFIX_RE = /（\d{4}-\d{2}-\d{2} \w{3} \d{2}:\d{2}）$/
 
@@ -506,6 +507,21 @@ function handleEventForChannel(sid: string, event: ServerEvent) {
         lastThink.tokens = event.payload.content
       }
       turn.finalAnswer = event.payload.content
+      // Emotion → sticker matching
+      if (event.payload?.content) {
+        const emotion = detectEmotion(event.payload.content)
+        if (emotion) {
+          // Fire-and-forget: fetch a sticker for this emotion, don't block message display
+          fetch(getStickerUrl(emotion))
+            .then(r => r.json())
+            .then(data => {
+              if (data?.path) {
+                turn.stickerUrl = `/api/stickers/${data.path}`
+              }
+            })
+            .catch(() => {})
+        }
+      }
       break
     }
 
