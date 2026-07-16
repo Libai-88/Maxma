@@ -150,13 +150,8 @@ async def run_self_improvement_agent(
     # 构建提示词
     prompt = _build_self_improve_prompt(diagnostic_report)
 
-    # 确定模型
-    provider_mgr = getattr(app.state, "provider_manager", None)
+    # OMP ModelRegistry 管理所有 provider，使用默认模型
     model_str = "openai/gpt-4o"
-    if provider_mgr is not None and provider_mgr.count > 0:
-        for provider in provider_mgr.iter_enabled():
-            model_str = f"{provider.provider_id}/{provider.default_model or 'gpt-4o'}"
-            break
 
     # 创建临时 sidecar 会话
     result = await client.call("create_session", {

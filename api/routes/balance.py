@@ -1,4 +1,6 @@
-"""DeepSeek 余额查询 — 从 ProviderManager 获取凭据"""
+"""DeepSeek 余额查询 — 从环境变量获取凭据"""
+
+import os
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
@@ -34,26 +36,18 @@ async def close_async_client() -> None:
 
 
 def _find_deepseek_api_key(request: Request) -> str:
-    """在已配置的 provider 中查找 DeepSeek API key。
+    """在环境变量中查找 DeepSeek API key。
 
-    通过 base_url 中是否包含 deepseek.com 来判断，
-    不依赖用户填写的 id/label 名称。
+    OMP ModelRegistry 管理所有 provider，Python 端通过 DEEPSEEK_API_KEY
+    环境变量获取凭据以查询余额。
     """
-    mgr = getattr(request.app.state, "provider_manager", None)
-    if mgr is None:
-        raise HTTPException(status_code=400, detail="Provider manager not initialized")
-
-    for config in mgr.list_configs():
-        if not config.api_key:
-            continue
-        base = (config.base_url or "").lower()
-        if "deepseek.com" in base:
-            return str(config.api_key)
-
-    raise HTTPException(
-        status_code=400,
-        detail="DeepSeek provider not configured. Add one via the providers panel.",
-    )
+    api_key = os.getenv("DEEPSEEK_API_KEY", "")
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="DeepSeek API key not configured. Set DEEPSEEK_API_KEY in .env.",
+        )
+    return api_key
 
 
 @router.get("/deepseek-balance")

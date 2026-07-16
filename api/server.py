@@ -10,23 +10,19 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from langchain_core.messages import HumanMessage, SystemMessage
 
 import time
 
-from agent.hooks import HookUnsupportedError
 from api.auth import load_or_create_token
 from api.const_session_store import (
     load_all_const_sessions,
 )
-from api.dependencies import get_llm, get_system_prompt, get_tools
+from api.dependencies import get_system_prompt, get_tools
 from api.health import get_health_report
 from api.cors_config import build_cors_origins
 from api.logging_config import setup_logging
-from api.providers.manager import ProviderManager
-from api.providers.store import ProviderConfigStore
-from app_paths import AUTONOMY_SCHEDULES_PATH, PROVIDERS_YAML_PATH, WORKFLOW_JOURNAL_PATH
-from api.routes import chat, files, sessions, balance, providers
+from app_paths import AUTONOMY_SCHEDULES_PATH, WORKFLOW_JOURNAL_PATH
+from api.routes import chat, files, sessions, balance
 from api.routes import deferred_runs as deferred_runs_router
 from api.routes import workflows as workflows_router
 from api.routes import autonomy as autonomy_router
@@ -55,110 +51,6 @@ from api.middleware.rate_limit import RateLimitMiddleware
 from api.middleware.request_log import RequestLogMiddleware
 
 logger = logging.getLogger(__name__)
-
-
-def _migrate_provider_from_env(store) -> object | None:
-    """从 .env 读取 DeepSeek 配置写入 SQLite（向后兼容）。"""
-    import os
-    api_key = os.getenv("DEEPSEEK_API_KEY", "")
-    if not api_key:
-        return None
-    base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
-    model_name = os.getenv("MODEL_NAME", "deepseek-v4-flash")
-    context_window_str = os.getenv("MODEL_CONTEXT_WINDOW", "256000")
-    from api.providers import ProviderConfig
-    config = ProviderConfig(
-        id="deepseek-main",
-        provider_type="openai",
-        label="DeepSeek",
-        api_key=api_key,
-        base_url=base_url,
-        models=[model_name],
-        enabled=True,
-        context_window=int(context_window_str),
-    )
-    store.save(config)
-    return config
-
-
-def _hook_tools_for_action(app_state, action: str, trigger_detail: str) -> list:
-    """Select tools for a headless event-hook run.
-
-    Event hooks execute without a live chat WebSocket, so tools that require
-    immediate user interaction are intentionally excluded.
-    """
-    mcp_tools = getattr(app_state, "mcp_tools", None) or []
-    selected = list(mcp_tools)
-    return [
-        tool
-        for tool in selected
-        if not str(getattr(tool, "name", "")).startswith("ask_user_")
-    ]
-
-
-def _extract_hook_final_answer(output) -> str:
-    messages = output.get("messages", []) if isinstance(output, dict) else []
-    if not messages:
-        return ""
-    last = messages[-1]
-    content = last.content if hasattr(last, "content") else str(last)
-    return str(content or "")
-
-
-async def _run_event_hook_action(app: FastAPI, hook, trigger_detail: str) -> str:
-    """Run one event-hook action through the normal LangGraph Agent entrypoint."""
-    app_state = app.state
-    llm = getattr(app_state, "llm", None)
-    if llm is None:
-        raise HookUnsupportedError("事件钩子执行不可用：未配置 LLM Provider")
-
-    session_manager = getattr(app_state, "session_manager", None)
-    if session_manager is None:
-        raise HookUnsupportedError("事件钩子执行不可用：会话管理器未初始化")
-
-    session = await session_manager.create()
-    try:
-        system_prompt = getattr(app_state, "system_prompt", "") or get_system_prompt()
-        system_prompt = (
-            system_prompt
-            + "\n\n[事件钩子执行模式]\n"
-            + "当前任务由后台事件钩子自动触发，没有可交互的聊天 WebSocket。"
-            + "不要请求用户确认或等待用户输入；"
-            + "如果动作需要人工确认，请说明无法在后台执行。"
-        )
-        tools = _hook_tools_for_action(app_state, hook.action, trigger_detail)
-        prompt = (
-            "[事件钩子触发]\n"
-            f"钩子名称：{hook.name}\n"
-            f"钩子类型：{hook.hook_type}\n"
-            f"触发详情：{trigger_detail}\n\n"
-            "[预设动作]\n"
-            f"{hook.action}"
-        )
-        timeout = float(hook.config.get("timeout", 600))
-        response = await asyncio.wait_for(
-            llm.ainvoke([
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=prompt),
-            ]),
-            timeout=timeout,
-        )
-        final_answer = response.content if hasattr(response, "content") else str(response)
-        return (
-            final_answer
-            or "事件钩子动作已执行，但没有生成文本结果"
-        )
-    finally:
-        delete_session = getattr(session_manager, "delete", None)
-        if callable(delete_session):
-            await delete_session(session.session_id)
-
-
-def _build_event_hook_callback(app: FastAPI):
-    async def _callback(hook, trigger_detail: str) -> str:
-        return await _run_event_hook_action(app, hook, trigger_detail)
-
-    return _callback
 
 
 async def _load_const_sessions(app: FastAPI):
@@ -209,49 +101,7 @@ async def lifespan(app: FastAPI):
     _disposables = DisposableStore()
     app.state._disposables = _disposables
 
-    # 1. 初始化 Provider 管理器（SQLite 存储，兼容旧 YAML 导入）
-    from api.db.core import initialize_database
-    from api.db.providers import ProviderDbStore
-
-    initialize_database()  # 确保 DB schema 已创建
-
-    provider_store = ProviderDbStore()
-    # 首次迁移：从旧 YAML 导入已有配置
-    migrated_count = provider_store.migrate_from_yaml()
-    if migrated_count:
-        logger.info("[provider] migrated %d provider(s) from YAML", migrated_count)
-    # 迁移 .env 中的 DeepSeek 配置（纯新安装场景）
-    if provider_store.is_empty:
-        migrated = _migrate_provider_from_env(provider_store)
-        if migrated:
-            logger.info("[provider] migrated %s from .env", migrated.label)
-
-    provider_manager = ProviderManager(provider_store)
-    provider_manager.load_all()
-    app.state.provider_manager = provider_manager
-    logger.info("[provider] loaded %d provider(s)", provider_manager.count)
-
-    # 阶段 3.3：启动 provider 健康监控后台任务
-    # - 健康 provider 每 check_interval 秒检查一次
-    # - unhealthy provider 每 recovery_interval 秒重新探测
-    # - 连续失败达 unhealthy_threshold 才标记 error（避免单次抖动）
-    from api.providers.health_monitor import start_health_monitor
-    from config.settings import get_settings as _get_settings_for_health
-    _health_settings = _get_settings_for_health()
-    start_health_monitor(
-        provider_manager,
-        check_interval=_health_settings.provider_health_check_interval_seconds,
-        recovery_interval=_health_settings.provider_recovery_check_interval_seconds,
-        unhealthy_threshold=_health_settings.provider_unhealthy_threshold,
-    )
-    logger.info(
-        "[health_monitor] 已启动（check=%ds, recovery=%ds, threshold=%d）",
-        _health_settings.provider_health_check_interval_seconds,
-        _health_settings.provider_recovery_check_interval_seconds,
-        _health_settings.provider_unhealthy_threshold,
-    )
-
-    # 2. 其他共享资源（不阻塞启动 — LLM 在后台初始化）
+    # 1. 初始化共享资源
     app.state.system_prompt = get_system_prompt()
     app.state.native_tools = get_tools()
     app.state.session_manager = SessionManager()
@@ -272,27 +122,16 @@ async def lifespan(app: FastAPI):
     # oh-my-pi sidecar 模式：不需要 checkpointer
     logger.debug("[checkpointer] sidecar-only mode — skip checkpointer init")
 
-    # 后台初始化 LLM（不阻塞 lifespan，让 API 立即就绪）
-    async def _init_llm_background():
-        try:
-            llm = get_llm(provider_manager)
-            app.state.llm = llm
-            logger.info("[llm] LLM 后台初始化完成")
-        except RuntimeError as e:
-            logger.warning("[llm] %s", e)
-            logger.warning("[llm] No LLM configured — chat will be read-only until a provider is added")
-            app.state.llm = None
-    app.state._llm_init_task = asyncio.create_task(_init_llm_background())
-    _disposables.add(to_disposable(lambda: app.state._llm_init_task.cancel() if not app.state._llm_init_task.done() else None))
+    # OMP ModelRegistry 管理所有 provider，Python 端不再需要 LLM 初始化
 
     # MCP 工具（tools/ directory removed）
     app.state.mcp_tools = []
     app.state.tools = list(app.state.native_tools or [])
 
-    # 加载 const 固定会话（需要 tools 已就绪）
+    # 加载 const 固定会话
     await _load_const_sessions(app)
 
-    # 4. 启动定时 session 清理任务（每 5 分钟清理超过 TTL 的不活跃会话）
+    # 2. 启动定时 session 清理任务（每 5 分钟清理超过 TTL 的不活跃会话）
     async def _periodic_cleanup():
         while True:
             await asyncio.sleep(300)  # 5 分钟
@@ -307,31 +146,31 @@ async def lifespan(app: FastAPI):
     app.state._cleanup_task = asyncio.create_task(_periodic_cleanup())
     _disposables.add(to_disposable(lambda: app.state._cleanup_task.cancel() if not app.state._cleanup_task.done() else None))
 
-    # 4.5 启动指标持久化 flush 任务（定期将内存快照写入 SQLite）
+    # 2.5 启动指标持久化 flush 任务（定期将内存快照写入 SQLite）
     from api.metrics import get_metrics
     get_metrics().start_flush_task()
 
-    # 5. 初始化认证 Token（SQLite 存储）
+    # 3. 初始化认证 Token（SQLite 存储）
     from api.db.auth import load_or_create_token as load_token_db
     app.state.auth_token = load_token_db()
     logger.info("[auth] token: %s...%s", app.state.auth_token[:4], app.state.auth_token[-4:])
 
-    # 6. 初始化事件钩子管理器
+    # 4. 初始化事件钩子管理器
     from agent.hooks import get_hook_manager
     hook_manager = get_hook_manager()
     hook_manager.set_loop(asyncio.get_running_loop())
-    hook_manager.set_trigger_callback(_build_event_hook_callback(app))
+    # 后台事件钩子执行已移至 OMP sidecar，Python 端不再提供 LangGraph 执行回调
     hook_manager.load()
     hook_manager.start_all()
     app.state.hook_manager = hook_manager
     logger.info("[hooks] 事件钩子管理器已启动，%d 个钩子", len(hook_manager.list_hooks()))
 
-    # 6.5 初始化 oh-my-pi sidecar 管理器（懒启动，首次调用时自动拉起 Bun 进程）
+    # 4.5 初始化 oh-my-pi sidecar 管理器（懒启动，首次调用时自动拉起 Bun 进程）
     from api.pi_bridge.sidecar_manager import SidecarManager
     app.state.sidecar_manager = SidecarManager()
     logger.info("[sidecar] SidecarManager 已创建")
 
-    # 7. 启动自治调度器（默认关闭，需在 .env 中设置 autonomy_enabled=true）
+    # 5. 启动自治调度器（默认关闭，需在 .env 中设置 autonomy_enabled=true）
     from config.settings import get_settings as _get_autonomy_settings
     _autonomy_settings = _get_autonomy_settings()
     if _autonomy_settings.autonomy_enabled:
@@ -365,9 +204,8 @@ async def lifespan(app: FastAPI):
 
     # const 会话重试加载（如果 LLM 初始化时未就绪）
     async def _retry_const_sessions():
-        await asyncio.sleep(5)  # 等 LLM 初始化
-        if getattr(app.state, "llm", None) is not None:
-            await _load_const_sessions(app)
+        await asyncio.sleep(5)
+        await _load_const_sessions(app)
 
     register_idle_task("retry-const-sessions", _retry_const_sessions)
 
@@ -381,19 +219,6 @@ async def lifespan(app: FastAPI):
     _disposables = getattr(app.state, "_disposables", None)
     if _disposables:
         _disposables.dispose()
-
-    # 关闭：后台 LLM 初始化任务
-    llm_task = getattr(app.state, "_llm_init_task", None)
-    if llm_task and not llm_task.done():
-        llm_task.cancel()
-        try:
-            await llm_task
-        except asyncio.CancelledError:
-            pass
-
-    # 阶段 3.3：停止 provider 健康监控后台任务
-    from api.providers.health_monitor import stop_health_monitor
-    await stop_health_monitor()
 
     app.state._cleanup_task.cancel()
     try:
@@ -467,9 +292,6 @@ def create_app() -> FastAPI:
 
     # WebSocket 路由（无 /api 前缀）
     app.include_router(chat.router)
-
-    # Provider CRUD 路由
-    app.include_router(providers.router, prefix="/api")
 
     # MCP 服务器配置查看与热加载
     app.include_router(mcp_router.router, prefix="/api")
@@ -563,8 +385,6 @@ def create_app() -> FastAPI:
         return _get_status()
 
     # ── 全局异常处理器 ──────────────────────────────────────────
-    # 捕获所有未处理的异常，记录到 ErrorCollector 供一键导出，
-    # 同时写入日志（带 exc_info），避免错误丢失。
     import traceback as _traceback
     from fastapi.responses import JSONResponse as _JSONResponse
     from fastapi import Request as _Request
@@ -591,16 +411,9 @@ def create_app() -> FastAPI:
             content={"detail": "Internal Server Error"},
         )
 
-    # 中间件执行顺序以“最后 add 的最先执行”为准。
-    # 注册顺序（add 顺序）与实际执行顺序（后 add 先执行）：
-    #   add 顺序: Auth → RateLimit → RequestLog
-    #   执行顺序: RequestLog → RateLimit → Auth → 路由
-    # 限流在 Auth 之前，避免被拒绝的鉴权请求也消耗限流配额。
-    # 阶段 3.2：新增 RateLimitMiddleware（HTTP 按 IP 限流）
+    # 中间件执行顺序以"最后 add 的最先执行"为准。
     app.add_middleware(AuthMiddleware)
     app.add_middleware(RateLimitMiddleware)
-
-    # 请求日志放在最外层，确保包括被鉴权拒绝的请求也会被记录。
     app.add_middleware(RequestLogMiddleware)
 
     # 生产模式：挂载前端静态文件（必须在所有 API 路由之后）

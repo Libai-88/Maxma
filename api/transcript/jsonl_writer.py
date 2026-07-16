@@ -18,8 +18,6 @@ import time
 from pathlib import Path
 from typing import Any, List, Optional
 
-from langchain_core.messages import BaseMessage
-
 logger = logging.getLogger(__name__)
 
 
@@ -40,11 +38,11 @@ class TranscriptWriter:
         # 确保父目录存在
         self._path.parent.mkdir(parents=True, exist_ok=True)
 
-    def append_message(self, message: BaseMessage) -> None:
+    def append_message(self, message) -> None:
         """追加一条消息到 transcript。
 
         Args:
-            message: LangChain BaseMessage（HumanMessage/AIMessage 等）
+            message: 消息对象（需有 type 和 content 属性）
         """
         entry = self._serialize_message(message)
         self._append_jsonl(entry)
@@ -90,12 +88,12 @@ class TranscriptWriter:
                 f.write(line + "\n")
 
     @staticmethod
-    def _serialize_message(message: BaseMessage) -> dict:
-        """把 LangChain BaseMessage 序列化为 dict。"""
+    def _serialize_message(message) -> dict:
+        """把消息对象序列化为 dict。"""
         entry: dict[str, Any] = {
             "type": "message",
-            "role": message.type,
-            "content": message.content,
+            "role": getattr(message, "type", "unknown"),
+            "content": getattr(message, "content", str(message)),
             "timestamp": time.time(),
         }
         # 保留 tool_calls（AIMessage）

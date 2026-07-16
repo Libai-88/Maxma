@@ -81,10 +81,6 @@ class Settings(BaseSettings):
     rate_limit_ws_capacity: int = 6  # WebSocket 限流桶容量（按 session）
     rate_limit_ws_window_seconds: int = 60  # WebSocket 限流时间窗口（秒）
 
-    # 阶段 3.3：Provider 健康监控配置
-    provider_health_check_interval_seconds: int = 60  # 健康 provider 的检查间隔（秒）
-    provider_recovery_check_interval_seconds: int = 300  # unhealthy provider 的恢复探测间隔（秒）
-    provider_unhealthy_threshold: int = 3  # 连续失败次数达此值才标记 error（避免单次抖动）
     # Provider/LTM 的面向用户诊断提示；关闭时保留既有健康状态 UI。
     provider_diagnostics_enabled: bool = False
 

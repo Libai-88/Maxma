@@ -13,10 +13,6 @@
 import logging
 import re
 from itertools import islice
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from api.providers.manager import ProviderManager
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +45,6 @@ _CATEGORY_NAMES = {
 
 
 def build_runtime_context(
-    provider_manager: "ProviderManager | None" = None,
     mcp_tool_count: int = 0,
     native_tool_count: int = 0,
     current_model_name: str | None = None,
@@ -57,7 +52,6 @@ def build_runtime_context(
     """生成运行时配置摘要文本。
 
     参数：
-        provider_manager: Provider 管理器实例，None 时跳过 provider 信息
         mcp_tool_count: 当前已加载的 MCP 工具数量
         native_tool_count: 原生工具数量
         current_model_name: 当前使用的模型名称（可选）
@@ -69,8 +63,8 @@ def build_runtime_context(
     """
     lines: list[str] = []
 
-    # ── 模型提供商 ──
-    provider_line = _build_provider_line(provider_manager, current_model_name)
+    # ── 模型提供商 — OMP ModelRegistry 管理
+    provider_line = _build_provider_line(current_model_name)
     if provider_line:
         lines.append(f"- 模型提供商: {provider_line}")
 
@@ -127,40 +121,14 @@ def _bounded_count(value: object) -> int:
         return 0
 
 
-def _build_provider_line(
-    provider_manager: "ProviderManager | None",
-    current_model_name: str | None,
-) -> str:
-    """构建 provider 摘要行。"""
-    if provider_manager is None:
-        return ""
+def _build_provider_line(current_model_name: str | None) -> str:
+    """构建 provider 摘要行。
 
-    try:
-        # 不物化完整列表：配置损坏或外部实现异常时，也不能放大单轮开销。
-        providers = list(islice(provider_manager.iter_enabled(), MAX_PROVIDER_ENTRIES))
-        if not providers:
-            return "无可用提供商"
-
-        parts: list[str] = []
-        active_model = _safe_identifier(current_model_name, fallback="")
-        for p in providers:
-            model = _safe_identifier(getattr(p, "default_model", None), fallback="未知模型")
-            provider_id = _safe_identifier(
-                getattr(getattr(p, "config", None), "id", None), fallback="未知提供商"
-            )
-            # 标记当前活跃的 provider（如果 current_model_name 匹配）
-            tag = ""
-            if active_model and active_model == model:
-                tag = "(活跃)"
-            elif current_model_name is None and len(parts) == 0:
-                # 没有指定模型时，第一个 provider 视为活跃
-                tag = "(活跃)"
-            parts.append(f"{provider_id}/{model}{tag}")
-
-        return ", ".join(parts)
-    except Exception as e:
-        logger.debug("[runtime_context] provider 摘要生成失败: %s", e)
-        return ""
+    OMP ModelRegistry 管理所有 provider，Python 端仅报告当前模型信息。
+    """
+    if current_model_name:
+        return f"OMP ModelRegistry (current: {_safe_identifier(current_model_name)})"
+    return "OMP ModelRegistry"
 
 
 def _build_mcp_line(mcp_tool_count: int) -> str:
@@ -172,7 +140,6 @@ def _build_mcp_line(mcp_tool_count: int) -> str:
                 return f"已加载 {mcp_tool_count} 个工具（配置信息不可用）"
             return "无"
 
-        # 同样只检查一个有限前缀，避免异常 MCP 配置在每轮请求中被完整遍历。
         enabled = [
             s
             for s in islice(servers, MAX_MCP_SERVER_ENTRIES)
@@ -221,7 +188,6 @@ def _build_category_overview() -> str:
 
         active_categories: list[str] = []
         for cat, names in islice(TOOL_CATEGORIES.items(), MAX_CATEGORY_ENTRIES):
-            # 统计该分类下实际加载的工具数
             count = sum(1 for n in names if n in tool_names)
             if count > 0:
                 display = _safe_identifier(_CATEGORY_NAMES.get(cat, cat), fallback="其他")

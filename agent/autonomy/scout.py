@@ -40,23 +40,11 @@ async def run_scout_lease(app: Any, lease: AutonomyLease) -> None:
     if client is None:
         raise RuntimeError("sidecar client is unavailable")
 
-    manager = getattr(app.state, "provider_manager", None)
-    if manager is None:
-        raise RuntimeError("provider manager is unavailable")
-    if not lease.scope.provider_id:
-        raise RuntimeError("Scout schedules require a provider snapshot")
-    try:
-        provider = manager.get(lease.scope.provider_id)
-    except KeyError as exc:
-        raise RuntimeError("scheduled provider is unavailable") from exc
-    if provider.is_unhealthy:
-        raise RuntimeError("scheduled provider is unhealthy")
-
-    model_name = lease.scope.model_name or provider.default_model
-    if not model_name or model_name not in provider.available_models:
-        raise RuntimeError("scheduled model is unavailable")
-
-    model_str = f"{lease.scope.provider_id}/{model_name}"
+    # OMP ModelRegistry 管理所有 provider
+    # Scout 使用 lease 中快照的 provider/model 信息
+    provider_id = lease.scope.provider_id or "openai"
+    model_name = lease.scope.model_name or "gpt-4o"
+    model_str = f"{provider_id}/{model_name}"
 
     # 构建只读系统提示词
     system_prompt = getattr(app.state, "system_prompt", "") or ""

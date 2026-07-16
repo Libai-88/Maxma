@@ -24,7 +24,7 @@ def _ensure_dir() -> Path:
 
 
 def serialize_messages(raw_messages: list) -> list[dict]:
-    """将 LangChain BaseMessage 对象列表转为可序列化的纯 dict 列表。"""
+    """将消息对象列表转为可序列化的纯 dict 列表。"""
     result = []
     for msg in raw_messages:
         entry: dict = {
@@ -41,38 +41,6 @@ def serialize_messages(raw_messages: list) -> list[dict]:
             entry["additional_kwargs"] = msg.additional_kwargs
         result.append(entry)
     return result
-
-
-def deserialize_messages(data: list[dict]) -> list:
-    """将纯 dict 列表重建为 LangChain BaseMessage 对象。"""
-    from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-
-    reconstructed: list = []
-    for m in data:
-        msg_type = m.get("type", "human")
-        content = m.get("content", "")
-        match msg_type:
-            case "human":
-                reconstructed.append(HumanMessage(content=content))
-            case "ai":
-                kwargs: dict = {"content": content}
-                if "tool_calls" in m:
-                    kwargs["tool_calls"] = m["tool_calls"]
-                if "additional_kwargs" in m:
-                    kwargs["additional_kwargs"] = m["additional_kwargs"]
-                reconstructed.append(AIMessage(**kwargs))
-            case "tool":
-                reconstructed.append(
-                    ToolMessage(
-                        content=content,
-                        tool_call_id=m.get("tool_call_id", ""),
-                        name=m.get("name", ""),
-                    )
-                )
-            case _:
-                # fallback: treat as human message
-                reconstructed.append(HumanMessage(content=content))
-    return reconstructed
 
 
 # ── 文件 I/O ──────────────────────────────────────────────────

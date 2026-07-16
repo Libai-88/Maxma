@@ -135,7 +135,7 @@ def setup_logging() -> None:
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("openai").setLevel(logging.WARNING)
-    logging.getLogger("langchain").setLevel(logging.WARNING)
+    # LangChain 已从运行时移除，保留日志级别设置向后兼容
     logging.getLogger("playwright").setLevel(logging.WARNING)
 
     logging.info(

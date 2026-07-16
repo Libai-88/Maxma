@@ -301,14 +301,9 @@ async def get_context_usage(session_id: str, request: Request):
     session = await sm.get(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    mgr = getattr(request.app.state, "provider_manager", None)
+    # OMP ModelRegistry 管理所有 provider，Python 端使用默认值
     max_tokens = 256_000
     model_name = ""
-    if mgr is not None and mgr.count > 0:
-        for provider in mgr.iter_enabled():
-            max_tokens = provider.config.context_window
-            model_name = provider.default_model
-            break
 
     system_prompt = request.app.state.system_prompt or ""
 
