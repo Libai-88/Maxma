@@ -1,184 +1,210 @@
 <template>
   <div class="chat-window" ref="windowRef">
-    <div class="messages-list">
-      <!-- 所有轮次（已完成 + 正在流式）合并在同一列表中，:key="turn.id" 确保
-           组件实例在 turn 从当前轮过渡到已完成时不销毁重建，避免 iframe 闪烁 -->
-      <template v-for="(turn, mergedIdx) in mergedTurns" :key="turn.id">
-        <div
-          class="cite-source"
-          :data-user-msg-idx="turnsIndex(mergedIdx)"
-          @contextmenu.prevent="onBubbleContextMenu($event, 'user_message', turn.userMessage, '用户', turnsIndex(mergedIdx))"
+    <!-- 虚拟列表：DynamicScroller 仅渲染视口内/附近的轮次，长对话性能大幅提升。
+         #default 槽渲染每个轮次；#after 槽放错误/打字指示器；#empty 槽放空状态。
+         :key="turn.id" 仍由 key-field="id" 提供，确保组件实例在流式→已完成过渡时不销毁重建。 -->
+    <DynamicScroller
+      ref="scrollerRef"
+      class="messages-list"
+      :items="mergedTurns"
+      :min-item-size="200"
+      key-field="id"
+      @scroll="onScrollerScroll"
+    >
+      <template #default="{ item: turn, index: mergedIdx, active }">
+        <DynamicScrollerItem
+          :item="turn"
+          :active="active"
+          :index="mergedIdx"
+          :size-dependencies="[
+            turn.finalAnswer,
+            turn.events.length,
+            turn.userMessage,
+            turn.memoryEvents ? turn.memoryEvents.length : 0,
+          ]"
         >
-          <MessageBubble
-            role="user"
-            :content="turn.userMessage"
-            :refs="turn.refs"
-            :read-status="isStreamingTurn(turn) ? 'pending' : 'read'"
-          />
-        </div>
-        <!-- 助手侧：events + finalAnswer + 记忆日志，hover 时才显示记忆日志 -->
-        <div class="assistant-side">
-          <!-- 计划确认卡片 -->
-          <PlanCard
-            v-if="turn.planCard"
-            :plan="turn.planCard"
-            @respond="onPlanRespond"
-          />
-          <SubAgentCard
-            v-if="turn.deferredRunIds?.length"
-            :session-id="sessionId"
-            :run-ids="turn.deferredRunIds"
-          />
-          <template v-for="(ev, i) in turn.events" :key="i">
+          <div class="turn-wrapper">
             <div
-              v-if="ev.kind === 'thinking' && !ev.consumed"
               class="cite-source"
-              @contextmenu.prevent="onBubbleContextMenu($event, 'thinking', ev.tokens, '思考过程')"
+              :data-user-msg-idx="turnsIndex(mergedIdx)"
+              @contextmenu.prevent="onBubbleContextMenu($event, 'user_message', turn.userMessage, '用户', turnsIndex(mergedIdx))"
             >
-              <ThinkingBlock :block="ev" />
-            </div>
-            <div
-              v-else-if="ev.kind === 'tool'"
-              class="cite-source"
-              @contextmenu.prevent="
-                onBubbleContextMenu(
-                  $event,
-                  'tool_result',
-                  ev.output || ev.input || '',
-                  ev.name,
-                )
-              "
-            >
-              <!-- 审批请求（mode === 'approval'）且工具未完成：渲染 ApprovalBubble
-                   - 审批等待中：显示允许/拒绝按钮
-                   - 用户拒绝后：tool status 永远为 running，ApprovalBubble 显示 "已拒绝"
-                   - 用户批准后工具执行完成（status='done'）：由 ToolBubbleRouter 渲染工具结果 -->
-              <ApprovalBubble
-                v-if="ev.interaction?.mode === 'approval' && ev.status === 'running'"
-                :tool-name="ev.name"
-                :detail="ev.interaction?.detail || ''"
-                :risk-level="ev.interaction?.risk_level || 'medium'"
-                :tool-input="ev.interaction?.tool_input"
-                :interaction-id="ev.interaction?.interactionId || ''"
-                @action="forwardAction"
+              <MessageBubble
+                role="user"
+                :content="turn.userMessage"
+                :refs="turn.refs"
+                :read-status="isStreamingTurn(turn) ? 'pending' : 'read'"
               />
-              <!-- 普通工具调用或审批后工具执行结果 -->
-              <ToolBubbleRouter v-else :tool-call="ev" @action="forwardAction" @pin="$emit('pin', $event)" />
             </div>
-            <!-- 系统通知（如上下文压缩通知），轻量内联提示 -->
-            <div
-              v-else-if="ev.kind === 'system'"
-              class="system-event-bubble"
-            >
-              <span class="system-event-icon">ℹ︎</span>
-              <span class="system-event-text">{{ ev.content }}</span>
+            <!-- 助手侧：events + finalAnswer + 记忆日志，hover 时才显示记忆日志 -->
+            <div class="assistant-side">
+              <!-- 计划确认卡片 -->
+              <PlanCard
+                v-if="turn.planCard"
+                :plan="turn.planCard"
+                @respond="onPlanRespond"
+              />
+              <SubAgentCard
+                v-if="turn.deferredRunIds?.length"
+                :session-id="sessionId"
+                :run-ids="turn.deferredRunIds"
+              />
+              <template v-for="(ev, i) in turn.events" :key="i">
+                <div
+                  v-if="ev.kind === 'thinking' && !ev.consumed"
+                  class="cite-source"
+                  @contextmenu.prevent="onBubbleContextMenu($event, 'thinking', ev.tokens, '思考过程')"
+                >
+                  <ThinkingBlock :block="ev" />
+                </div>
+                <div
+                  v-else-if="ev.kind === 'tool'"
+                  class="cite-source"
+                  @contextmenu.prevent="
+                    onBubbleContextMenu(
+                      $event,
+                      'tool_result',
+                      ev.output || ev.input || '',
+                      ev.name,
+                    )
+                  "
+                >
+                  <!-- 审批请求（mode === 'approval'）且工具未完成：渲染 ApprovalBubble
+                       - 审批等待中：显示允许/拒绝按钮
+                       - 用户拒绝后：tool status 永远为 running，ApprovalBubble 显示 "已拒绝"
+                       - 用户批准后工具执行完成（status='done'）：由 ToolBubbleRouter 渲染工具结果 -->
+                  <ApprovalBubble
+                    v-if="ev.interaction?.mode === 'approval' && ev.status === 'running'"
+                    :tool-name="ev.name"
+                    :detail="ev.interaction?.detail || ''"
+                    :risk-level="ev.interaction?.risk_level || 'medium'"
+                    :tool-input="ev.interaction?.tool_input"
+                    :interaction-id="ev.interaction?.interactionId || ''"
+                    @action="forwardAction"
+                  />
+                  <!-- 普通工具调用或审批后工具执行结果 -->
+                  <ToolBubbleRouter v-else :tool-call="ev" @action="forwardAction" @pin="$emit('pin', $event)" />
+                </div>
+                <!-- 系统通知（如上下文压缩通知），轻量内联提示 -->
+                <div
+                  v-else-if="ev.kind === 'system'"
+                  class="system-event-bubble"
+                >
+                  <span class="system-event-icon">ℹ︎</span>
+                  <span class="system-event-text">{{ ev.content }}</span>
+                </div>
+              </template>
+              <!-- finalAnswer：仅在已完成（非流式）轮次中展示 -->
+              <div
+                v-if="turn.finalAnswer && !hasAnswerBlock(turn) && !isStreamingTurn(turn)"
+                class="cite-source"
+                @contextmenu.prevent="onBubbleContextMenu($event, 'assistant_message', turn.finalAnswer, 'AI')"
+              >
+                <MessageBubble role="assistant" :content="turn.finalAnswer" />
+              </div>
+              <!-- 占位提示：finalAnswer 为空但轮次已完成（非流式）且有工具事件时，
+                   显示一个轻量提示，避免用户感知为"整轮被吞掉" -->
+              <div
+                v-else-if="!turn.finalAnswer && !hasAnswerBlock(turn) && !isStreamingTurn(turn) && turn.events?.length"
+                class="cite-source empty-reply-placeholder"
+              >
+                <MessageBubble role="assistant" content="（这一轮处理未生成文字回复，请查看上方工具执行结果或重新提问。）" />
+              </div>
+              <!-- 后台记忆更新日志（小字，轮次底部）—— 默认隐藏，hover 才显示 -->
+              <div v-if="turn.memoryEvents?.length" class="memory-tool-log">
+                <div
+                  v-for="(me, i) in turn.memoryEvents"
+                  :key="i"
+                  class="memory-tool-entry"
+                  :class="{ 'is-running': me.status === 'running' }"
+                >
+                  <span class="memory-tool-icon">
+                    <span v-if="me.status === 'running'" class="memory-spinner"></span>
+                    <span v-else-if="me.status === 'done'" class="memory-check">&#10003;</span>
+                    <span v-else class="memory-cross">&#10007;</span>
+                  </span>
+                  <!-- memory_review = 未触发任何修改，显示简洁文字 -->
+                  <template v-if="me.name === 'memory_review'">
+                    <span class="memory-tool-name">记忆检查</span>
+                    <span class="memory-tool-status">无需修改</span>
+                  </template>
+                  <!-- memory_processing = 后台 consumer 正在处理中 -->
+                  <template v-else-if="me.name === 'memory_processing'">
+                    <span class="memory-tool-name">记忆处理</span>
+                    <span class="memory-tool-status">处理中...</span>
+                  </template>
+                  <template v-else>
+                    <span class="memory-tool-name">{{ toolDisplayName(me.name) }}</span>
+                    <span v-if="me.status === 'running'" class="memory-tool-status">处理中...</span>
+                    <span v-else-if="me.status === 'done' && me.output" class="memory-tool-output" :title="me.output">{{ me.output }}</span>
+                    <span v-else-if="me.status === 'error'" class="memory-tool-status is-error">失败</span>
+                    <span v-if="me.elapsed !== null" class="memory-tool-elapsed">{{ me.elapsed.toFixed(1) }}s</span>
+                  </template>
+                </div>
+              </div>
             </div>
-          </template>
-          <!-- finalAnswer：仅在已完成（非流式）轮次中展示 -->
-          <div
-            v-if="turn.finalAnswer && !hasAnswerBlock(turn) && !isStreamingTurn(turn)"
-            class="cite-source"
-            @contextmenu.prevent="onBubbleContextMenu($event, 'assistant_message', turn.finalAnswer, 'AI')"
-          >
-            <MessageBubble role="assistant" :content="turn.finalAnswer" />
           </div>
-          <!-- 占位提示：finalAnswer 为空但轮次已完成（非流式）且有工具事件时，
-               显示一个轻量提示，避免用户感知为"整轮被吞掉" -->
-          <div
-            v-else-if="!turn.finalAnswer && !hasAnswerBlock(turn) && !isStreamingTurn(turn) && turn.events?.length"
-            class="cite-source empty-reply-placeholder"
-          >
-            <MessageBubble role="assistant" content="（这一轮处理未生成文字回复，请查看上方工具执行结果或重新提问。）" />
-          </div>
-          <!-- 后台记忆更新日志（小字，轮次底部）—— 默认隐藏，hover 才显示 -->
-          <div v-if="turn.memoryEvents?.length" class="memory-tool-log">
-            <div
-              v-for="(me, i) in turn.memoryEvents"
-              :key="i"
-              class="memory-tool-entry"
-              :class="{ 'is-running': me.status === 'running' }"
-            >
-              <span class="memory-tool-icon">
-                <span v-if="me.status === 'running'" class="memory-spinner"></span>
-                <span v-else-if="me.status === 'done'" class="memory-check">&#10003;</span>
-                <span v-else class="memory-cross">&#10007;</span>
+        </DynamicScrollerItem>
+      </template>
+
+      <template #after>
+        <!-- 错误提示 -->
+        <div v-if="error" class="error-banner" :class="'error-' + (errorCategory || 'system')">
+          <span class="error-icon">
+            <template v-if="errorCategory === 'user_error'">️</template>
+            <template v-else-if="errorCategory === 'tool_error'"></template>
+            <template v-else-if="errorCategory === 'rate_limit'"></template>
+            <template v-else-if="errorCategory === 'cancelled'">⛔</template>
+            <template v-else>❌</template>
+          </span>
+          <span class="error-message">{{ error }}</span>
+          <span v-if="errorTraceId" class="error-trace-id">Trace: {{ errorTraceId }}</span>
+          <button class="error-copy-btn" @click="copyErrorLog" :title="'复制错误日志'">
+            <span v-if="copySuccess" class="copy-success">✓</span>
+            <span v-else class="copy-icon"></span>
+          </button>
+        </div>
+
+        <!-- 流式输出打字指示器 -->
+        <div v-if="showTypingIndicator" class="typing-indicator">
+          <span class="typing-label">饱饱正在输入</span>
+          <span class="typing-dots">
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+          </span>
+        </div>
+      </template>
+
+      <template #empty>
+        <!-- 空状态 -->
+        <div v-if="turns.length === 0 && !currentTurn" class="empty-state">
+          <div class="empty-state-overlay"></div>
+          <div class="empty-state-content">
+            <div class="empty-state-text">
+              <p class="empty-title">开始和 Maxma 对话吧</p>
+              <p class="empty-desc">
+                <span class="typewriter">{{ displayedWord }}<span class="typewriter-cursor">|</span></span>
+              </p>
+            </div>
+            <div class="quick-hints" data-qh>
+              <span class="quick-hint">
+                <span class="quick-hint-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg></span>
+                单击开关侧栏
               </span>
-              <!-- memory_review = 未触发任何修改，显示简洁文字 -->
-              <template v-if="me.name === 'memory_review'">
-                <span class="memory-tool-name">记忆检查</span>
-                <span class="memory-tool-status">无需修改</span>
-              </template>
-              <!-- memory_processing = 后台 consumer 正在处理中 -->
-              <template v-else-if="me.name === 'memory_processing'">
-                <span class="memory-tool-name">记忆处理</span>
-                <span class="memory-tool-status">处理中...</span>
-              </template>
-              <template v-else>
-                <span class="memory-tool-name">{{ toolDisplayName(me.name) }}</span>
-                <span v-if="me.status === 'running'" class="memory-tool-status">处理中...</span>
-                <span v-else-if="me.status === 'done' && me.output" class="memory-tool-output" :title="me.output">{{ me.output }}</span>
-                <span v-else-if="me.status === 'error'" class="memory-tool-status is-error">失败</span>
-                <span v-if="me.elapsed !== null" class="memory-tool-elapsed">{{ me.elapsed.toFixed(1) }}s</span>
-              </template>
+              <span class="quick-hint" @click="togglePrivate">
+                <span class="quick-hint-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+                <span><kbd>Ctrl</kbd> + <kbd>K</kbd> 切换私密模式</span>
+              </span>
+              <span class="quick-hint"> <!-- will be wired to new-session -->
+                <span class="quick-hint-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></span>
+                点击 <kbd>+</kbd> 新建会话
+              </span>
             </div>
           </div>
         </div>
       </template>
-
-      <!-- 错误提示 -->
-      <div v-if="error" class="error-banner" :class="'error-' + (errorCategory || 'system')">
-        <span class="error-icon">
-          <template v-if="errorCategory === 'user_error'">️</template>
-          <template v-else-if="errorCategory === 'tool_error'"></template>
-          <template v-else-if="errorCategory === 'rate_limit'"></template>
-          <template v-else-if="errorCategory === 'cancelled'">⛔</template>
-          <template v-else>❌</template>
-        </span>
-        <span class="error-message">{{ error }}</span>
-        <span v-if="errorTraceId" class="error-trace-id">Trace: {{ errorTraceId }}</span>
-        <button class="error-copy-btn" @click="copyErrorLog" :title="'复制错误日志'">
-          <span v-if="copySuccess" class="copy-success">✓</span>
-          <span v-else class="copy-icon"></span>
-        </button>
-      </div>
-
-      <!-- 流式输出打字指示器 -->
-      <div v-if="showTypingIndicator" class="typing-indicator">
-        <span class="typing-label">饱饱正在输入</span>
-        <span class="typing-dots">
-          <span class="typing-dot"></span>
-          <span class="typing-dot"></span>
-          <span class="typing-dot"></span>
-        </span>
-      </div>
-
-      <!-- 空状态 -->
-      <div v-if="turns.length === 0 && !currentTurn" class="empty-state">
-        <div class="empty-state-overlay"></div>
-        <div class="empty-state-content">
-          <div class="empty-state-text">
-            <p class="empty-title">开始和 Maxma 对话吧</p>
-            <p class="empty-desc">
-              <span class="typewriter">{{ displayedWord }}<span class="typewriter-cursor">|</span></span>
-            </p>
-          </div>
-          <div class="quick-hints" data-qh>
-            <span class="quick-hint">
-              <span class="quick-hint-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg></span>
-              单击开关侧栏
-            </span>
-            <span class="quick-hint" @click="togglePrivate">
-              <span class="quick-hint-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
-              <span><kbd>Ctrl</kbd> + <kbd>K</kbd> 切换私密模式</span>
-            </span>
-            <span class="quick-hint"> <!-- will be wired to new-session -->
-              <span class="quick-hint-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></span>
-              点击 <kbd>+</kbd> 新建会话
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
+    </DynamicScroller>
 
     <!-- 用户消息滚动标记 -->
     <div class="scroll-marks" v-if="turns.length > 0">
@@ -216,6 +242,9 @@ import ApprovalBubble from './ApprovalBubble.vue'
 import SubAgentCard from './SubAgentCard.vue'
 import { toolDisplayName } from './tools/_shared/displayNames'
 import { chatSessionAliveCache } from '@/composables/sessionAliveCache'
+// 虚拟列表：仅渲染视口内/附近的轮次，长对话性能大幅提升
+import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
+import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 
 const props = defineProps<{
   sessionId: string
@@ -289,7 +318,15 @@ function onPlanRespond(planId: string, action: 'approve' | 'modify' | 'reject', 
 }
 
 const windowRef = ref<HTMLElement | null>(null)
+// DynamicScroller 组件实例引用，用于调用 scrollToBottom/scrollToItem/scrollToPosition
+const scrollerRef = ref<{
+  scrollToBottom: () => void
+  scrollToItem: (index: number, options?: { align?: string; smooth?: boolean; offset?: number }) => void
+  scrollToPosition: (position: number, options?: { align?: string; smooth?: boolean; offset?: number }) => void
+} | null>(null)
 const SCROLL_BOTTOM_THRESHOLD = 100
+// 通过 @scroll 事件维护 "是否接近底部" 的响应式状态，替代原先直接读取 windowRef.scrollTop
+const isNearBottomRef = ref(true)
 const typingDelayElapsed = ref(false)
 let typingTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -304,10 +341,17 @@ const showTypingIndicator = computed(() =>
   Boolean(props.currentTurn) && typingDelayElapsed.value && !currentTurnHasVisibleActivity.value
 )
 
+/** DynamicScroller 根元素的 scroll 事件：维护 isNearBottomRef 状态。
+ *  Vue 3 中组件未声明的 @scroll 会透传到根 DOM 元素作为原生监听器。 */
+function onScrollerScroll(e: Event) {
+  const el = e.target as HTMLElement
+  if (!el) return
+  isNearBottomRef.value =
+    el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_BOTTOM_THRESHOLD
+}
+
 function isNearBottom(): boolean {
-  const el = windowRef.value
-  if (!el) return true
-  return el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_BOTTOM_THRESHOLD
+  return isNearBottomRef.value
 }
 
 function hasAnswerBlock(turn: ChatTurn): boolean {
@@ -356,35 +400,39 @@ watch(
 
 function scrollToBottom() {
   nextTick(() => {
-    const el = windowRef.value
-    if (el) {
-      el.scrollTop = el.scrollHeight
-    }
+    scrollerRef.value?.scrollToBottom()
   })
 }
 
 watch(
   () => props.sessionId,
   (sessionId, previousSessionId) => {
-    if (previousSessionId && windowRef.value) {
-      chatSessionAliveCache.rememberScroll(previousSessionId, windowRef.value.scrollTop)
+    // 保存上一个会话的滚动位置（用 onScrollerScroll 维护的 isNearBottomRef 推断 scrollTop）
+    if (previousSessionId) {
+      // 读取 DynamicScroller 根 DOM 元素的 scrollTop 用于持久化
+      const scrollerEl = (scrollerRef.value as unknown as { $el?: HTMLElement } | null)?.$el
+      if (scrollerEl) {
+        chatSessionAliveCache.rememberScroll(previousSessionId, scrollerEl.scrollTop)
+      }
     }
     if (!sessionId) return
     nextTick(() => {
-      const el = windowRef.value
-      if (!el) return
       const savedScrollTop = chatSessionAliveCache.restoreScroll(sessionId)
-      el.scrollTop = savedScrollTop ?? el.scrollHeight
+      if (savedScrollTop != null && savedScrollTop > 0) {
+        scrollerRef.value?.scrollToPosition(savedScrollTop)
+      } else {
+        scrollerRef.value?.scrollToBottom()
+      }
     })
   },
   { immediate: true },
 )
 
 function scrollToTurn(index: number) {
-  const el = windowRef.value?.querySelector(`[data-user-msg-idx="${index}"]`)
-  if (el) {
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
+  // scroll-marks 的 index 是 props.turns 中的索引，
+  // 由于 mergedTurns 前 props.turns.length 项与 props.turns 一一对应，
+  // 可直接将 index 作为 DynamicScroller 的 item index 调用 scrollToItem
+  scrollerRef.value?.scrollToItem(index, { align: 'start', smooth: true })
 }
 
 watch(() => props.turns.length, () => {
@@ -470,8 +518,12 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  if (props.sessionId && windowRef.value) {
-    chatSessionAliveCache.rememberScroll(props.sessionId, windowRef.value.scrollTop)
+  if (props.sessionId) {
+    // 读取 DynamicScroller 根 DOM 元素的 scrollTop 用于持久化
+    const scrollerEl = (scrollerRef.value as unknown as { $el?: HTMLElement } | null)?.$el
+    if (scrollerEl) {
+      chatSessionAliveCache.rememberScroll(props.sessionId, scrollerEl.scrollTop)
+    }
   }
   if (typeTimer) clearTimeout(typeTimer)
   if (typingTimer) clearTimeout(typingTimer)
@@ -564,24 +616,27 @@ function closeContextMenu() {
 <style scoped>
 .chat-window {
   flex: 1;
-  overflow-y: auto;
+  /* overflow-y 移除：DynamicScroller 自身是滚动容器 */
   padding: 20px 24px;
   background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
 }
+/* DynamicScroller 根元素：作为滚动容器 */
 .messages-list {
+  flex: 1;
   max-width: 768px;
+  width: 100%;
   margin: 0 auto;
+}
+/* 每个轮次的用户消息和助手回复：包在 turn-wrapper 中以维持 gap */
+.turn-wrapper {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  padding-bottom: 6px;  /* 维持轮次之间的间距 */
 }
-/* 每个轮次的用户消息和助手回复：跳过屏幕外内容的渲染，提升长对话性能 */
-.messages-list > .cite-source,
-.messages-list > .assistant-side {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 150px;  /* 估算高度，减少布局偏移 */
-}
-.messages-list:has(.empty-state) {
+.empty-state {
   height: 100%;
 }
 .cite-source {
