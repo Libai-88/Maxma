@@ -43,11 +43,11 @@
           <!-- 连接信息 -->
           <div class="card-connection">
             <template v-if="s.transport === 'stdio'">
-              <span class="mono">{{ (s as any).command || '-' }}</span>
-              <span v-if="(s as any).args?.length" class="mono args">{{ (s as any).args.join(' ') }}</span>
+              <span class="mono">{{ s.command || '-' }}</span>
+              <span v-if="s.args?.length" class="mono args">{{ s.args.join(' ') }}</span>
             </template>
             <template v-else>
-              <span class="mono url">{{ (s as any).url || '-' }}</span>
+              <span class="mono url">{{ s.url || '-' }}</span>
             </template>
           </div>
 
@@ -284,14 +284,17 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { api } from '@/api'
-import type { MCPServerInfo, MCPTransport } from '@/types'
+import { toErrorMessage } from '@/utils/error'
+import type { MCPServerConfig, MCPServerCreateBody, MCPTransport } from '@/types'
 
 type Mode = 'list' | 'add' | 'edit'
 
 // ── 列表状态 ──
 const loading = ref(true)
 const loadError = ref('')
-const servers = ref<MCPServerInfo[]>([])
+// 列表接口返回的是 MCPServerInfo[]，但后端实际会带上 stdio/URL 等扩展字段
+// （用于卡片连接信息展示），故用 MCPServerConfig[] 表达更准确的运行时形状。
+const servers = ref<MCPServerConfig[]>([])
 const mode = ref<Mode>('list')
 
 // ── 表单状态 ──
@@ -308,13 +311,20 @@ const globalMessage = ref('')
 const globalMessageClass = ref('')
 
 // ── OMP 自动发现 ──
-const discoveredServers = ref<any[]>([])
+// OMP 自动发现接口返回结构无后端契约约束，本地用最小形状描述用于渲染。
+interface DiscoveredServer {
+  id: string
+  name: string
+  status: string
+  tools?: string[]
+}
+const discoveredServers = ref<DiscoveredServer[]>([])
 
 async function loadDiscovered() {
   try {
     const res = await fetch('/api/mcp/discovered')
-    const data = await res.json()
-    discoveredServers.value = Array.isArray(data) ? data : []
+    const data = await res.json() as unknown
+    discoveredServers.value = Array.isArray(data) ? (data as DiscoveredServer[]) : []
   } catch { discoveredServers.value = [] }
 }
 
@@ -418,9 +428,10 @@ async function loadServers() {
   loadError.value = ''
   try {
     const res = await api.listMcpServers()
-    servers.value = res.servers || []
-  } catch (e: any) {
-    loadError.value = e?.message || String(e)
+    // 后端实际返回带 stdio/URL 等扩展字段，这里做一次显式类型断言。
+    servers.value = (res.servers || []) as MCPServerConfig[]
+  } catch (e: unknown) {
+    loadError.value = toErrorMessage(e)
   } finally {
     loading.value = false
   }
@@ -438,7 +449,7 @@ function startAdd() {
 }
 
 // ── 编辑（带竞态保护 + 加载状态） ──
-async function startEdit(server: MCPServerInfo) {
+async function startEdit(server: MCPServerConfig) {
   const mySeq = ++editSeq
   loadingDetailId.value = server.server_id
   saveMessage.value = ''
@@ -457,17 +468,17 @@ async function startEdit(server: MCPServerInfo) {
       transport: full.transport,
       enabled: full.enabled,
       description: full.description || '',
-      command: (full as any).command || '',
-      args: (full as any).args || [],
-      envEntries: objToEntries((full as any).env),
-      cwd: (full as any).cwd || '',
-      url: (full as any).url || '',
-      headersEntries: objToEntries((full as any).headers),
-      timeout: (full as any).timeout,
-      sse_read_timeout: (full as any).sse_read_timeout,
-      tls_verify: (full as any).tls_verify !== false,
-      allowed_tools: (full as any).allowed_tools || [],
-      blocked_tools: (full as any).blocked_tools || [],
+      command: full.command || '',
+      args: full.args || [],
+      envEntries: objToEntries(full.env),
+      cwd: full.cwd || '',
+      url: full.url || '',
+      headersEntries: objToEntries(full.headers),
+      timeout: full.timeout,
+      sse_read_timeout: full.sse_read_timeout,
+      tls_verify: full.tls_verify !== false,
+      allowed_tools: full.allowed_tools || [],
+      blocked_tools: full.blocked_tools || [],
     })
     editingId.value = server.server_id
     mode.value = 'edit'
@@ -481,9 +492,9 @@ async function startEdit(server: MCPServerInfo) {
       if (mySeq !== editSeq) return
       availableTools.value = []
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     if (mySeq !== editSeq) return
-    showGlobal('加载服务器详情失败: ' + (e?.message || String(e)), 'error')
+    showGlobal('加载服务器详情失败: ' + toErrorMessage(e), 'error')
   } finally {
     if (mySeq === editSeq) {
       loadingDetailId.value = ''
@@ -527,8 +538,8 @@ async function handleTestConnection() {
       saveMessage.value = result.error || '连接失败'
       saveMessageClass.value = 'error'
     }
-  } catch (e: any) {
-    saveMessage.value = '请求失败: ' + (e?.message || String(e))
+  } catch (e: unknown) {
+    saveMessage.value = '请求失败: ' + toErrorMessage(e)
     saveMessageClass.value = 'error'
   } finally {
     testing.value = false
@@ -559,7 +570,9 @@ async function handleSave() {
   saveMessage.value = ''
   saveMessageClass.value = ''
   try {
-    const body: any = {
+    // body 既用于 create 也用于 update；MCPServerCreateBody 是 MCPServerUpdateBody 的结构超集，
+    // 因此可以同时传给 api.createMcpServer 和 api.updateMcpServer（结构兼容）。
+    const body: MCPServerCreateBody = {
       server_id: form.server_id.trim(),
       transport: form.transport,
       enabled: form.enabled,
@@ -602,8 +615,8 @@ async function handleSave() {
       loadServers()
       saving.value = false
     }, 800)
-  } catch (e: any) {
-    saveMessage.value = '失败: ' + (e?.message || String(e))
+  } catch (e: unknown) {
+    saveMessage.value = '失败: ' + toErrorMessage(e)
     saveMessageClass.value = 'error'
     saving.value = false  // 失败立即释放
   }
@@ -618,8 +631,8 @@ async function toggleServer(serverId: string, enabled: boolean) {
     const s = servers.value.find((x) => x.server_id === serverId)
     if (s) s.enabled = enabled
     showGlobal(enabled ? `已启用 ${serverId}` : `已停用 ${serverId}`, 'ok')
-  } catch (e: any) {
-    showGlobal('操作失败: ' + (e?.message || String(e)), 'error')
+  } catch (e: unknown) {
+    showGlobal('操作失败: ' + toErrorMessage(e), 'error')
     // 失败时刷新列表以恢复真实状态
     loadServers()
   } finally {
@@ -636,13 +649,13 @@ async function deleteServer(serverId: string) {
     const res = await api.deleteMcpServer(serverId)
     // 优先利用后端返回的列表刷新（确保 tool_count 等同步）
     if (res?.servers) {
-      servers.value = res.servers
+      servers.value = res.servers as MCPServerConfig[]
     } else {
       servers.value = servers.value.filter((s) => s.server_id !== serverId)
     }
     showGlobal(`已删除 ${serverId}`, 'ok')
-  } catch (e: any) {
-    showGlobal('删除失败: ' + (e?.message || String(e)), 'error')
+  } catch (e: unknown) {
+    showGlobal('删除失败: ' + toErrorMessage(e), 'error')
   } finally {
     deletingId.value = ''
   }
