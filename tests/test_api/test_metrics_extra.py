@@ -13,10 +13,12 @@ Does NOT modify the existing tests/test_api/test_metrics.py.
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import pytest
 
+from api.db.metrics import MetricsDbStore
 from api.metrics import Metrics, _Histogram
 
 
@@ -33,10 +35,12 @@ class _MetricsBase:
 
     def teardown_method(self) -> None:
         # sync 清理：无法 await，直接 cancel 残留任务
-        task = Metrics._flush_task
+        task = Metrics()._flush_task
         if task is not None and not task.done():
             task.cancel()
         Metrics()._flush_task = None
+        # 清除可能被 start_flush_task 设置的实例级 _flush_interval，恢复类默认
+        Metrics().__dict__.pop("_flush_interval", None)
         Metrics()._db = None
         Metrics().reset()
 
@@ -284,3 +288,129 @@ class TestPersistSnapshotFailure(_MetricsBase):
         snap = m.get_snapshot()
         assert snap["http"]["total_requests"] == 1
         assert snap["tools"]["total_calls"] == 1
+
+
+# ── flush task lifecycle: start / _flush_loop / stop (lines 292-321) ──
+
+
+class TestFlushTaskLifecycle(_MetricsBase):
+    """start_flush_task / _flush_loop / stop_flush_task 异步生命周期。"""
+
+    async def test_start_then_stop_persists(self, tmp_path: Path) -> None:
+        """启动 → 幂等 → 跑几轮 → 停止 → 历史落盘。"""
+        m = Metrics()
+        Metrics()._db = MetricsDbStore(tmp_path / "flush.db")
+        m.record_request("GET", "/x", 200, 10.0)
+
+        # 初始无运行任务
+        assert Metrics()._flush_task is None or Metrics()._flush_task.done()
+
+        m.start_flush_task(interval_seconds=0.01)
+        first_task = Metrics()._flush_task
+        assert first_task is not None
+        assert not first_task.done()
+
+        # 幂等 — 第二次调用不应重复创建任务
+        m.start_flush_task(interval_seconds=0.01)
+        assert Metrics()._flush_task is first_task
+
+        # 让 loop 跑几轮
+        await asyncio.sleep(0.05)
+
+        # 停止（cancel + 最终 flush）
+        await m.stop_flush_task()
+
+        assert Metrics()._flush_task is None
+
+        # 至少有一次 persist 发生（loop 周期或最终 flush）
+        history = m.get_history(window_seconds=3600)
+        assert len(history) >= 1
+        assert history[-1]["http"]["total_requests"] == 1
+
+    async def test_start_flush_task_sets_interval(self, tmp_path: Path) -> None:
+        """首次启动应记录 interval；第二次（幂等）不覆盖。"""
+        m = Metrics()
+        Metrics()._db = MetricsDbStore(tmp_path / "interval.db")
+
+        m.start_flush_task(interval_seconds=7)
+        assert Metrics()._flush_interval == 7
+
+        # 幂等调用不改变 interval（直接 return）
+        m.start_flush_task(interval_seconds=99)
+        assert Metrics()._flush_interval == 7
+
+        await m.stop_flush_task()
+
+    async def test_flush_loop_tolerates_persist_error(self, monkeypatch) -> None:
+        """_flush_loop 中 persist_snapshot 抛错应被捕获，任务继续存活。"""
+        m = Metrics()
+        calls: list[int] = []
+
+        def boom() -> None:
+            calls.append(1)
+            raise RuntimeError("persist failed")
+
+        monkeypatch.setattr(m, "persist_snapshot", boom)
+
+        m.start_flush_task(interval_seconds=0.01)
+        await asyncio.sleep(0.05)
+
+        # loop 应已调用 persist_snapshot 至少一次，且任务仍存活（异常被吞）
+        assert len(calls) >= 1
+        assert not Metrics()._flush_task.done()
+
+        # stop — 最终 flush 也会调用 boom 并被捕获（行 320-321）
+        await m.stop_flush_task()
+
+        assert Metrics()._flush_task is None
+        # 最终 flush 至少再调用一次 boom
+        assert len(calls) >= 2
+
+    async def test_stop_without_running_task_does_final_flush(
+        self, tmp_path: Path
+    ) -> None:
+        """无运行任务时 stop_flush_task 仅执行最终 flush。"""
+        m = Metrics()
+        Metrics()._db = MetricsDbStore(tmp_path / "stop.db")
+        Metrics()._flush_task = None
+        m.record_request("GET", "/y", 200, 5.0)
+
+        # 无任务 → 跳过 cancel 分支，直接最终 flush
+        await m.stop_flush_task()
+
+        # 最终 flush 应已落盘一条快照
+        history = m.get_history(window_seconds=3600)
+        assert len(history) >= 1
+        assert history[-1]["http"]["total_requests"] == 1
+
+    async def test_stop_already_done_task(self, tmp_path: Path) -> None:
+        """任务已完成时 stop_flush_task 跳过 cancel 分支，仍做最终 flush。
+
+        注意：stop_flush_task 只在 cancel 分支内清空 _flush_task；
+        任务已 done 时跳过该分支，因此 _flush_task 仍指向已完成的任务。
+        """
+        m = Metrics()
+        Metrics()._db = MetricsDbStore(tmp_path / "done.db")
+        m.record_request("GET", "/z", 200, 3.0)
+
+        m.start_flush_task(interval_seconds=0.01)
+        task = Metrics()._flush_task
+        # 手动让任务自然结束 — cancel 并 await 使其 done
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        assert task.done()
+        # _flush_task 仍指向已完成的任务（未清 None）
+        assert Metrics()._flush_task is task
+
+        # stop_flush_task: done() 为 True → 跳过 cancel 分支，做最终 flush
+        await m.stop_flush_task()
+        # _flush_task 未被清空（stop 只在 cancel 分支内清 None），但最终 flush 已执行
+        assert Metrics()._flush_task is task
+
+        # 最终 flush 应已落盘
+        history = m.get_history(window_seconds=3600)
+        assert len(history) >= 1
+        assert history[-1]["http"]["total_requests"] == 1
