@@ -694,7 +694,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
 }
 .btn.primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--bg-primary);
   border-color: var(--accent);
 }
 .btn:disabled {
@@ -754,7 +754,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
   font-weight: 600;
   text-transform: uppercase;
 }
-.transport-badge.stdio { background: #e8f5e9; color: #2e7d32; }
+.transport-badge.stdio { background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card)); color: var(--status-ok); }
 .transport-badge.sse { background: #e3f2fd; color: #1565c0; }
 .transport-badge.streamable_http { background: #fff3e0; color: #e65100; }
 .transport-badge.websocket { background: #f3e5f5; color: #7b1fa2; }
@@ -764,7 +764,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
   height: 22px;
   border-radius: 11px;
   border: none;
-  background: #ccc;
+  background: var(--border);
   cursor: pointer;
   position: relative;
   transition: background 0.2s;
@@ -779,7 +779,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--bg-primary);
   top: 2px;
   left: 2px;
   transition: transform 0.2s;
@@ -827,8 +827,8 @@ onMounted(() => { loadServers(); loadDiscovered() })
   font-size: 11px;
   padding: 1px 6px;
   border-radius: 3px;
-  background: #f5f5f5;
-  color: #999;
+  background: var(--bg-secondary);
+  color: var(--text-tertiary);
 }
 
 .card-actions {
@@ -853,10 +853,10 @@ onMounted(() => { loadServers(); loadDiscovered() })
   cursor: not-allowed;
 }
 .action-btn.danger {
-  color: #d32f2f;
+  color: var(--status-error);
 }
 .action-btn.danger:hover {
-  border-color: #d32f2f;
+  border-color: var(--status-error);
 }
 
 /* ── 表单 ── */
@@ -934,8 +934,8 @@ select.input {
   flex-shrink: 0;
 }
 .kv-remove:hover {
-  border-color: #d32f2f;
-  color: #d32f2f;
+  border-color: var(--status-error);
+  color: var(--status-error);
 }
 .kv-add {
   padding: 6px 12px;
@@ -963,7 +963,7 @@ select.input {
   font-size: 13px;
 }
 .save-msg.ok { color: var(--status-ok); }
-.save-msg.error { color: #d32f2f; }
+.save-msg.error { color: var(--status-error); }
 
 /* ── 全局提示 ── */
 .global-message {
@@ -978,12 +978,12 @@ select.input {
   box-shadow: 0 2px 12px rgba(0,0,0,0.15);
 }
 .global-message.ok {
-  background: #e8f5e9;
-  color: #2e7d32;
+  background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card));
+  color: var(--status-ok);
 }
 .global-message.error {
-  background: #ffebee;
-  color: #d32f2f;
+  background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
+  color: var(--status-error);
 }
 
 /* ── 阶段 4.1：chips 输入（allowlist / blocklist） ── */
@@ -1004,14 +1004,14 @@ select.input {
   gap: 4px;
   padding: 3px 8px;
   border-radius: 4px;
-  background: #e3f2fd;
-  color: #1565c0;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-card));
+  color: var(--accent);
   font-size: 12px;
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
 }
 .chip.chip-danger {
-  background: #ffebee;
-  color: #c62828;
+  background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
+  color: var(--status-error);
 }
 .chip-remove {
   border: none;
@@ -1050,8 +1050,8 @@ select.input {
   color: var(--accent);
 }
 .tool-pick-danger:hover {
-  border-color: #d32f2f;
-  color: #d32f2f;
+  border-color: var(--status-error);
+  color: var(--status-error);
 }
 
 /* ── OMP 自动发现区 ── */
@@ -1068,7 +1068,7 @@ select.input {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--text-secondary, #6b7280);
+  color: var(--text-secondary);
   margin-bottom: 8px;
 }
 
@@ -1080,8 +1080,8 @@ select.input {
   font-size: 10px;
   padding: 1px 6px;
   border-radius: 100px;
-  background: var(--border, #e5e7eb);
-  color: var(--text-tertiary, #9ca3af);
+  background: var(--border);
+  color: var(--text-tertiary);
   margin-left: 8px;
 }
 
@@ -1089,7 +1089,7 @@ select.input {
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 4px;
-  background: var(--bg-secondary, #f9fafb);
-  color: var(--text-secondary, #6b7280);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
 }
 </style>

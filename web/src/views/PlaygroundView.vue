@@ -863,8 +863,8 @@ function logAction(payload: { action: string; data?: unknown }) {
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 100px;
-  background: #fef3c7;
-  color: #d97706;
+  background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card));
+  color: var(--status-warn);
   font-weight: 600;
 }
 
@@ -965,13 +965,13 @@ function logAction(payload: { action: string; data?: unknown }) {
 }
 
 .chip.registered {
-  background: #dcfce7;
-  color: #166534;
+  background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card));
+  color: var(--status-ok);
 }
 
 .chip.fallback {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
 }
 
 /* ── Main ── */
@@ -1022,7 +1022,7 @@ function logAction(payload: { action: string; data?: unknown }) {
 .state-btn.active {
   border-color: var(--accent);
   color: var(--accent);
-  background: #eff6ff;
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-card));
   font-weight: 600;
 }
 

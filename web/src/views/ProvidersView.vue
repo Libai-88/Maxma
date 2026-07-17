@@ -457,7 +457,7 @@ onMounted(loadProviders)
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn.primary {
   background: var(--accent);
-  color: white;
+  color: var(--bg-primary);
   border-color: var(--accent);
 }
 .btn.sm { padding: 4px 10px; font-size: 12px; }
@@ -477,7 +477,7 @@ onMounted(loadProviders)
 }
 
 .provider-card {
-  background: #ffffff;
+  background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 20px;
@@ -501,12 +501,12 @@ onMounted(loadProviders)
 .card-label {
   font-size: 16px;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--text-primary);
 }
 .card-type-badge {
   font-size: 10px;
   font-weight: 600;
-  color: #9ca3af;
+  color: var(--text-tertiary);
   letter-spacing: 0.5px;
 }
 
@@ -516,7 +516,7 @@ onMounted(loadProviders)
   height: 20px;
   border-radius: 10px;
   border: none;
-  background: #d1d5db;
+  background: var(--border);
   cursor: pointer;
   flex-shrink: 0;
   position: relative;
@@ -530,12 +530,12 @@ onMounted(loadProviders)
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #ffffff;
+  background: var(--bg-primary);
   transition: transform 0.2s;
   box-shadow: var(--shadow-xs);
 }
 .toggle-btn.active {
-  background: #1f2937;
+  background: var(--accent);
 }
 .toggle-btn.active::after {
   transform: translateX(16px);
@@ -544,7 +544,7 @@ onMounted(loadProviders)
 /* ── API URL ── */
 .card-url {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--text-tertiary);
   word-break: break-all;
   line-height: 1.4;
 }
@@ -557,7 +557,7 @@ onMounted(loadProviders)
 }
 .card-models-title {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--text-tertiary);
   font-weight: 500;
 }
 .card-models-tags {
@@ -568,19 +568,19 @@ onMounted(loadProviders)
 .model-tag {
   font-size: 11px;
   padding: 3px 8px;
-  background: #f3f4f6;
+  background: var(--bg-secondary);
   border-radius: 6px;
-  color: #6b7280;
+  color: var(--text-secondary);
   font-family: 'SF Mono', 'Consolas', monospace;
 }
 .model-tag.empty {
-  color: #d1d5db;
+  color: var(--text-tertiary);
   font-family: inherit;
 }
 
 .card-context-window {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--text-tertiary);
 }
 
 .provider-diagnostic {
@@ -589,16 +589,16 @@ onMounted(loadProviders)
   justify-content: space-between;
   gap: 10px;
   padding: 8px 10px;
-  border-left: 3px solid #d97706;
-  background: #fffbeb;
-  color: #92400e;
+  border-left: 3px solid var(--status-warn);
+  background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card));
+  color: var(--status-warn);
   font-size: 12px;
   line-height: 1.4;
 }
 .provider-diagnostic.error {
   border-left-color: var(--status-error);
-  background: #fef2f2;
-  color: #991b1b;
+  background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
+  color: var(--status-error);
 }
 .diagnostic-copy {
   min-width: 0;
@@ -633,8 +633,8 @@ onMounted(loadProviders)
   padding: 6px 10px;
   border-radius: 6px;
 }
-.test-result.ok { background: #ecfdf5; color: #065f46; }
-.test-result.error { background: #fef2f2; color: #991b1b; }
+.test-result.ok { background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card)); color: var(--status-ok); }
+.test-result.error { background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card)); color: var(--status-error); }
 
 /* ── 操作按钮 ── */
 .card-actions {
@@ -643,10 +643,10 @@ onMounted(loadProviders)
 }
 .action-btn {
   padding: 6px 14px;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: #ffffff;
-  color: #6b7280;
+  background: var(--bg-card);
+  color: var(--text-secondary);
   font-size: 12px;
   cursor: pointer;
   transition: opacity 0.15s;
@@ -696,8 +696,8 @@ select.input { cursor: pointer; }
   padding: 8px 12px;
   border-radius: 6px;
 }
-.msg.ok { background: #d1fae5; color: #065f46; }
-.msg.error { background: #fee2e2; color: #991b1b; }
+.msg.ok { background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card)); color: var(--status-ok); }
+.msg.error { background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card)); color: var(--status-error); }
 
 .model-list {
   display: flex;
