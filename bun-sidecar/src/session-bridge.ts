@@ -517,7 +517,7 @@ if (import.meta.main) {
         const keepCount = Math.max(0, originalLen - steps * 2);
         const remaining = record.session.state.messages.slice(0, keepCount);
         const removed = originalLen - keepCount;
-        record.session.replace_messages(remaining);
+        record.session.agent.replaceMessages(remaining);
         send(id, { removed });
         return;
       }
