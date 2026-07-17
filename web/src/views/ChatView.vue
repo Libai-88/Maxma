@@ -3,7 +3,7 @@
     <!-- 后端不可用：provider 加载失败 -->
     <div v-if="providerLoadFailed" class="no-provider-overlay">
       <div class="no-provider-card">
-        <div class="no-provider-icon">⚠️</div>
+        <div class="no-provider-icon no-provider-icon--warn" v-html="warningIconSvg"></div>
         <h3>无法加载模型配置</h3>
         <p>后端服务可能未就绪，请稍后重试。</p>
         <button class="btn primary" :disabled="providerRetrying" @click="retryLoadProviders">
@@ -14,7 +14,7 @@
     <!-- 无提供商引导卡片 -->
     <div v-else-if="!hasProviders" class="no-provider-overlay">
       <div class="no-provider-card">
-        <div class="no-provider-icon">⚙️</div>
+        <div class="no-provider-icon no-provider-icon--gear" v-html="gearIconSvg"></div>
         <h3>暂无已配置的 LLM 提供商</h3>
         <p>请添加一个 API 提供商以开始对话。MaxmaHere 支持任何 OpenAI 兼容 API。</p>
         <router-link to="/providers" class="btn primary">前往模型设置</router-link>
@@ -165,6 +165,8 @@ import CanvasContainer from '@/components/workbench/CanvasContainer.vue'
 import WelcomeScreen from '@/components/WelcomeScreen.vue'
 import ChatHeader from '@/components/ChatHeader.vue'
 import ModelSelector from '@/components/ModelSelector.vue'
+import warningIconRaw from '@/assets/icons/status/warning.svg?raw'
+import gearIconRaw from '@/assets/icons/status/gear.svg?raw'
 import { useChat } from '@/composables/useChat'
 import { useSelectionQuote } from '@/composables/useSelectionQuote'
 import { useWorkbenchStore } from '@/stores/workbench'
@@ -189,6 +191,10 @@ const {
 const workbench = useWorkbenchStore()
 
 const hasMessages = computed(() => turns.value.length > 0)
+
+// 状态图标 SVG（剥掉 <?xml?> 声明，与 Icon.vue 处理方式一致）
+const warningIconSvg = computed(() => warningIconRaw.replace(/<\?xml[^>]*\?>/, '').trim())
+const gearIconSvg = computed(() => gearIconRaw.replace(/<\?xml[^>]*\?>/, '').trim())
 
 const allTurns = computed(() => {
   const result = [...turns.value]
@@ -482,9 +488,20 @@ function handleQuickStart(message: string) {
   box-shadow: var(--shadow-sm);
 }
 .no-provider-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 16px;
+  line-height: 0;
 }
+.no-provider-icon :deep(svg) {
+  width: 100%;
+  height: 100%;
+}
+.no-provider-icon--warn { color: var(--status-warn); }
+.no-provider-icon--gear { color: var(--text-tertiary); }
 .no-provider-card h3 {
   font-size: 1.2em;
   font-weight: 700;
