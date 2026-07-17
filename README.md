@@ -168,10 +168,12 @@ Maxma 自动记录事实和对话历史，通过 ChromaDB 检索注入到 agent 
 # 后端测试
 pytest -q
 
-# Sidecar 测试
-python api/pi_bridge/test_integration.py
-python api/pi_bridge/test_tools_e2e.py
-python api/pi_bridge/test_session_map.py
+# Sidecar 测试（手动 E2E，需先启动 bun-sidecar）
+python scripts/manual_tests/test_integration.py
+python scripts/manual_tests/test_tools_e2e.py
+
+# SessionMap 单元测试（已纳入 pytest 套件）
+pytest tests/test_pi_bridge/test_session_adapter.py -q
 
 # 前端
 cd web && npm run dev
