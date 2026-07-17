@@ -18,7 +18,6 @@
         :extensions="extensions"
         :disabled="saving"
         :placeholder="placeholder"
-        :style="{ height: '100%' }"
         :autofocus="false"
         :indent-with-tab="true"
         :tab-size="2"

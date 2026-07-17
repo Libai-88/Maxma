@@ -32,7 +32,6 @@
         :extensions="extensions"
         :disabled="saving"
         :placeholder="pagePlaceholder"
-        :style="{ height: '100%' }"
         :autofocus="false"
         :indent-with-tab="true"
         :tab-size="2"

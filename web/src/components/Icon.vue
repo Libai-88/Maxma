@@ -1,5 +1,5 @@
 <template>
-  <span class="icon" v-html="svgContent" :style="{ width: size + 'px', height: size + 'px' }"></span>
+  <span class="icon" :class="`icon--${size}`" v-html="svgContent"></span>
 </template>
 
 <script setup lang="ts">
@@ -23,7 +23,7 @@ import stopRaw from '@/assets/icons/chat-input/stop.svg?raw'
 
 const props = withDefaults(defineProps<{
   name: string
-  size?: number
+  size?: 12 | 14 | 16 | 18 | 20
 }>(), {
   size: 16,
 })
@@ -81,4 +81,9 @@ const svgContent = computed(() => {
   width: 100%;
   height: 100%;
 }
+.icon--12 { width: 12px; height: 12px; }
+.icon--14 { width: 14px; height: 14px; }
+.icon--16 { width: 16px; height: 16px; }
+.icon--18 { width: 18px; height: 18px; }
+.icon--20 { width: 20px; height: 20px; }
 </style>
