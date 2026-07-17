@@ -82,4 +82,74 @@ describe("orchestratePrompt — error path (BUG3)", () => {
   });
 });
 
+describe("orchestratePrompt — natural completion via agent_end", () => {
+  test("agent_end during prompt emits done exactly once; finally is a no-op", async () => {
+    const { session, emit } = makeFakeSession({
+      promptImpl: async () => { emit({ type: "agent_end" }); },
+    });
+    const guard = createDoneGuard();
+    const events: Record<string, unknown>[] = [];
+
+    // Simulate the real subscriber: map events through mapPiEventToMaxma with the guard.
+    session.subscribe((e: any) => {
+      const mapped = mapPiEventToMaxma(e, guard);
+      if (mapped) events.push(mapped);
+    });
+
+    await orchestratePrompt(session as any, "hi", guard, (e) => events.push(e), 60_000);
+
+    expect(guard.done).toBe(true);
+    const doneCount = events.filter((e) => e.type === "done").length;
+    expect(doneCount).toBe(1);
+  });
+});
+
+describe("orchestratePrompt — timeout circuit breaker", () => {
+  test("hanging prompt triggers timeout error + done + abort", async () => {
+    // Simulate real agent behavior: prompt never resolves on its own, but
+    // agent.abort() causes the in-flight prompt to reject.
+    let rejectPrompt!: (err: unknown) => void;
+    const promptImpl = () =>
+      new Promise<void>((_resolve, reject) => { rejectPrompt = reject; });
+    const abortCalls: string[] = [];
+    const { session } = makeFakeSession({
+      promptImpl,
+      abortImpl: () => {
+        abortCalls.push("aborted");
+        rejectPrompt(new Error("Aborted: Prompt timeout"));
+      },
+    });
+    const events: Record<string, unknown>[] = [];
+    const guard = createDoneGuard();
+
+    // Use a tiny timeout so the test is fast.
+    await orchestratePrompt(session as any, "hi", guard, (e) => events.push(e), 50);
+
+    expect(guard.done).toBe(true);
+    expect(abortCalls).toEqual(["aborted"]);
+    const types = events.map((e) => e.type);
+    expect(types).toContain("error");
+    expect(types).toContain("done");
+    const errEvt = events.find((e) => e.type === "error") as any;
+    expect(errEvt.payload.code).toBe("PROMPT_TIMEOUT");
+  });
+
+  test("timeout does not double-send done if agent_end already fired", async () => {
+    const { session, emit } = makeFakeSession({
+      promptImpl: async () => { emit({ type: "agent_end" }); },
+    });
+    const guard = createDoneGuard();
+    const events: Record<string, unknown>[] = [];
+    session.subscribe((e: any) => {
+      const mapped = mapPiEventToMaxma(e, guard);
+      if (mapped) events.push(mapped);
+    });
+
+    await orchestratePrompt(session as any, "hi", guard, (e) => events.push(e), 10_000);
+
+    const doneCount = events.filter((e) => e.type === "done").length;
+    expect(doneCount).toBe(1);
+  });
+});
+
 
