@@ -290,8 +290,71 @@
 ## 执行顺序
 
 1. ✅ Part A（已完成）：当前状态验证
-2. Part B Task B1-B12：逐个修复未使用变量/导入
-3. Part B 提交：每 3-5 文件一次 commit
-4. Part C（已完成）：视觉一致性检查（结论：无需修复）
-5. Part D：最终验证（vue-tsc + vitest + vite build）
-6. 清理临时文件 tsconfig.unused-check.json
+2. ✅ Part B Task B1-B12：逐个修复未使用变量/导入
+3. ✅ Part B 提交：3 个 commit
+4. ✅ Part C（已完成）：视觉一致性检查（结论：无需修复）
+5. ✅ Part D：最终验证（vue-tsc + vitest + vite build 全通过）
+6. ✅ 清理临时文件 tsconfig.unused-check.json
+
+---
+
+## 执行结果（2026-07-17 实测）
+
+### Part B — 修复结果
+
+**12 个范围内 TS6133/TS6196 错误全部修复**：
+
+| Task | 文件 | 修复内容 |
+|------|------|----------|
+| B1 | `src/api/index.ts` | 删除未使用的 `AuditLogRecord` 类型导入（TS6196） |
+| B2 | `src/components/AutocompletePanel.vue` | `const emit = defineEmits<…>()` → `defineEmits<…>()`（模板用 `$emit`，TS6133） |
+| B3 | `src/components/RenderMarkdown.vue` | 从 vue 导入中删除 `onUnmounted`（TS6133） |
+| B4 | `src/components/StickerInline.vue` | `const props = defineProps<…>()` → `defineProps<…>()`（模板直接用字段，TS6133） |
+| B5 | `src/components/tools/AskUserBubble.vue` | 从 vue 导入中删除 `onMounted`（TS6133） |
+| B6 | `src/components/tools/HolidayBubble.vue` | `const emit = defineEmits<…>()` → `defineEmits<…>()`（TS6133） |
+| B7 | `src/components/tools/ImageBubble.vue` | 同上（TS6133） |
+| B8 | `src/components/tools/MemoryBubble.vue` | 同上（TS6133） |
+| B9 | `src/components/tools/TarotBubble.vue` | 同上（TS6133） |
+| B10 | `src/components/ui/DsTooltip.vue` | 从 vue 导入中删除 `watch`（TS6133） |
+| B11 | `src/views/KbView.vue` | 删除从未调用的 `schedule()` 函数（TS6133） |
+| B12 | `src/views/McpView.vue` | v-for `(arg, i)` → `(_arg, i)`（TS6133，模板未用 arg） |
+
+**noUnusedLocals 验证**: 17 → 5 错误（范围内 12 个全清；剩余 5 个为其他 agent 范围：ChatInput ×3、DsSelect ×1、ProvidersView ×1）
+
+### Commits
+
+| Hash | Message |
+|------|---------|
+| `766fe27` | fix(web): remove unused imports/vars in api, AutocompletePanel, RenderMarkdown, StickerInline |
+| `170f3f2` | fix(web/tools): remove unused emit bindings and onMounted import in 5 bubble components |
+| `a2469cd` | fix(web): remove unused watch import, dead schedule fn, unused v-for arg in DsTooltip/KbView/McpView |
+
+### Part C — 视觉一致性结论
+
+- 内联 `style="..."`: **0 处**（clean）
+- `:style=` 绑定: 1 处（DsSelect.vue，Agent 40 范围，合理用法）
+- 硬编码颜色: 范围内全部为 tint 色（success/error/diff/分类徽章），按指示保留
+- **无需修复**
+
+### Part D — 最终验证
+
+| 验证项 | 命令 | 结果 |
+|--------|------|------|
+| vue-tsc（默认） | `npx vue-tsc --noEmit` | ✅ EXIT=0，**0 错误** |
+| vitest | `npx vitest run` | ✅ **17 文件 / 49 测试全通过**（9.13s） |
+| vite build | `npx vite build` | ✅ **构建成功**（578 模块，10.20s） |
+
+构建中的两个 warning 均为**预先存在**，与本次改动无关：
+1. `api/index.ts` 被动态+静态混合导入（pre-existing chunking 提示）
+2. codemirror/markdown-vendor chunk 超过 500 kB（pre-existing chunk size 提示）
+
+### 临时文件清理
+
+- ✅ `web/tsconfig.unused-check.json`（noUnusedLocals 评估用临时配置）已删除，未提交
+
+### 偏差说明
+
+1. **noUnusedLocals 未永久开启**: 当前 `tsconfig.json` 的 `noUnusedLocals`/`noUnusedParameters` 仍为 `false`（Agent 44 独占范围，不可修改）。范围内 12 个错误已全部修复，待 Agent 44 修复 ChatInput.vue（3 个）和 ProvidersView.vue（1 个）+ Agent 40 修复 DsSelect.vue（1 个）后即可安全开启。
+2. **console.log 未清理**: Part A 记录了 63 行 console.log，但多数在范围外文件（useChat.ts/env.ts/SoulView.vue/StickerPicker.vue/splash/main.ts 等）。范围内仅 api/index.ts（1 行）、AskUserBubble.vue（1 行）、WeatherBubble.vue（1 行），但 Part B 任务聚焦 TS6133/TS6196，未越界清理 console.log（遵循"只做直接要求的改动"原则）。
+3. **KbView.vue 的 schedule 函数移除**: 删除了从未调用的 `schedule()` 函数。保留了 `timers` 数组和 `onUnmounted` 清理逻辑（虽然成为 dead code，但不在 TS6133 报错范围内，未做额外重构）。
+4. **并发 agent 干扰**: 执行期间 Agent 44 并发修改了 `ModelSelector.vue` 和 `modelSelector.spec.ts`（git status 可见），这些改动不属于本 agent，未被提交。
