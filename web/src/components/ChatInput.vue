@@ -72,7 +72,7 @@
           v-for="q in quotedSelections"
           :key="q.id"
           :quote="q"
-          @remove="$emit('removeQuote', q.id)"
+          @remove="chatInput.removeQuote(q.id)"
         />
       </div>
       <div class="input-toolbar">
@@ -164,7 +164,7 @@
             >
               <Icon name="send" :size="16" />
             </button>
-            <button v-else class="btn-stop" @click="$emit('stop')">
+            <button v-else class="btn-stop" @click="chatInput.stop()">
               <Icon name="stop" :size="12" />
             </button>
           </div>
@@ -207,7 +207,7 @@
         v-if="quoteCandidate"
         ref="quoteFloatRef"
         class="quote-float-btn"
-        @click="$emit('commitQuote')"
+        @click="chatInput.commitQuote()"
         title="引用选中文本"
       >
         + 引用
@@ -224,11 +224,11 @@ import StickerPicker from '@/components/StickerPicker.vue'
 import StickerContextMenu from '@/components/StickerContextMenu.vue'
 import QuotedSelectionCard from '@/components/QuotedSelectionCard.vue'
 import ThinkPathChooser from '@/components/ThinkPathChooser.vue'
-import type { QuotedSelection, QuoteCandidate } from '@/composables/useSelectionQuote'
 import { computeFloatingInputPosition } from '@/utils/floatingPosition'
 import type { ProviderConfig, SkillInfo, MacroInfo, ToolInfo } from '@/types'
 import { useProviderStore } from '@/stores/provider'
 import { useStickerSegments, type StickerSegment } from '@/composables/useStickerSegments'
+import { useChatInputInjected } from '@/composables/useChatInput'
 import type { ParsedRef, ImageRef } from '@/utils/references'
 import { REF_CHIP_CONFIG } from '@/utils/references'
 import { getApiBase, isTauri, tauriFetch } from '@/utils/env'
@@ -239,28 +239,16 @@ import ModelSelector from './ModelSelector.vue'
 import ContextUsageBadge from './ContextUsageBadge.vue'
 import { useChatStore } from '@/stores/chat'
 
-const props = withDefaults(defineProps<{
-  isStreaming: boolean
-  disabled: boolean
-  canSend: boolean
-  initialProviderId?: string
-  initialModelName?: string
-  /** Server-owned capability flag; false leaves the composer on the legacy path. */
-  thinkPathEnabled?: boolean
-  quotedSelections?: QuotedSelection[]
-  quoteCandidate?: QuoteCandidate | null
-}>(), {
-  quotedSelections: () => [],
-  quoteCandidate: null,
-})
-
-const emit = defineEmits<{
-  send: [text: string, refs: ParsedRef[], providerId?: string, modelName?: string, thinkPathId?: ThinkPathId, model?: string, temperature?: number, maxTokens?: number]
-  stop: []
-  modelChange: [providerId: string, modelName: string]
-  commitQuote: []
-  removeQuote: [id: string]
-}>()
+// ChatView 通过 provide 注入 useChatInput 实例；ChatInput 直接读写状态、调用方法
+const chatInput = useChatInputInjected()
+const {
+  isStreaming,
+  disabled,
+  canSend,
+  thinkPathEnabled,
+  quotedSelections,
+  quoteCandidate,
+} = chatInput
 
 const text = ref('')
 const selectedThinkPathId = ref<ThinkPathId | null>(null)
@@ -269,13 +257,13 @@ const inputContainerRef = ref<HTMLDivElement | null>(null)
 const refs = ref<ParsedRef[]>([])
 const loading = ref(false)
 const inputPlaceholder = computed(() =>
-  props.canSend
+  canSend.value
     ? '输入消息…… @技能 · #工具 · !宏'
     : '后端连接中，可先输入内容，连接完成后发送……'
 )
 const sendButtonTitle = computed(() => {
   if (noProvider.value) return '请先在模型设置中添加 LLM 提供商'
-  if (!props.canSend) return '后端连接中，暂时还不能发送'
+  if (!canSend.value) return '后端连接中，暂时还不能发送'
   return ''
 })
 
@@ -283,10 +271,10 @@ const sendButtonTitle = computed(() => {
 const quoteFloatRef = ref<HTMLElement | null>(null)
 watchEffect(() => {
   const el = quoteFloatRef.value
-  if (!el || !props.quoteCandidate) return
+  if (!el || !quoteCandidate.value) return
   // CSP-safe CSSOM: position quote float btn via style.setProperty (was :style binding)
   const result = computeFloatingInputPosition(
-    props.quoteCandidate.rect,
+    quoteCandidate.value.rect,
     { width: 100, height: 32 },
     window.innerWidth,
     window.innerHeight,
@@ -720,11 +708,12 @@ function calcCursorPixelPos(textarea: HTMLTextAreaElement, pos: number): { x: nu
 
 // ── LLM 选择器 ──
 // provider 列表来自全局 store（含重试），消除此前各组件独立请求导致的状态不一致
+// selectedProviderId/selectedModelName 直接复用 useChatInput 的 ref（与 ChatView 同一引用）
 const providerStore = useProviderStore()
 const chatStore = useChatStore()
 const providers = computed(() => providerStore.enabledProviders)
-const selectedProviderId = ref('')
-const selectedModelName = ref('')
+const selectedProviderId = chatInput.providerId
+const selectedModelName = chatInput.modelName
 const currentModels = ref<string[]>([])
 const noProvider = computed(() => providers.value.length === 0)
 const providerOptions = computed(() =>
@@ -740,29 +729,31 @@ function selectProvider(value: string | number) {
   const p = providers.value.find(p => p.id === id)
   currentModels.value = p?.models ?? []
   selectedModelName.value = currentModels.value[0] || ''
-  emit('modelChange', selectedProviderId.value, selectedModelName.value)
+  chatInput.onModelChange(selectedProviderId.value, selectedModelName.value)
 }
 
 function selectModel(value: string | number) {
   const name = String(value)
   selectedModelName.value = name
-  emit('modelChange', selectedProviderId.value, selectedModelName.value)
+  chatInput.onModelChange(selectedProviderId.value || '', name)
 }
 
 // 从 store 加载 provider 列表并设置默认选中
 async function loadProviders() {
   await providerStore.loadProviders()
-  // 优先使用父组件传入的初始值（跨对话持久化）
-  if (props.initialProviderId) {
-    const provider = providers.value.find(p => p.id === props.initialProviderId)
+  // 优先使用 ChatView 传入的初始值（跨对话持久化，存于 composable 的 providerId/modelName）
+  const initialProviderId = selectedProviderId.value
+  const initialModelName = selectedModelName.value
+  if (initialProviderId) {
+    const provider = providers.value.find(p => p.id === initialProviderId)
     if (provider) {
       selectedProviderId.value = provider.id
       currentModels.value = provider.models ?? []
-      selectedModelName.value = props.initialModelName && currentModels.value.includes(props.initialModelName)
-        ? props.initialModelName
+      selectedModelName.value = initialModelName && currentModels.value.includes(initialModelName)
+        ? initialModelName
         : (currentModels.value[0] || '')
-      // 同步回父组件，确保父组件持有的状态与实际选中一致
-      emit('modelChange', selectedProviderId.value, selectedModelName.value)
+      // 同步回 ChatView（触发 onModelChange 回调持久化到 localStorage）
+      chatInput.onModelChange(selectedProviderId.value, selectedModelName.value)
       return
     }
   }
@@ -775,7 +766,8 @@ async function loadProviders() {
 // 监听 store 中 provider 列表变化（例如 ProvidersView 增删改后刷新 store）
 watch(providers, (newList) => {
   // 如果有初始值且初始值有效，让 loadProviders 处理初始选择，避免竞态覆盖
-  if (props.initialProviderId && newList.find(p => p.id === props.initialProviderId) && !selectedProviderId.value) {
+  const initialProviderId = selectedProviderId.value
+  if (initialProviderId && newList.find(p => p.id === initialProviderId) && !selectedProviderId.value) {
     return
   }
   if (selectedProviderId.value) {
@@ -788,9 +780,9 @@ watch(providers, (newList) => {
       if (modelsChanged) {
         currentModels.value = newModels
         // selectedModelName 不在新 models 中时重置为第一个
-        if (!newModels.includes(selectedModelName.value)) {
+        if (!newModels.includes(selectedModelName.value || '')) {
           selectedModelName.value = newModels[0] || ''
-          emit('modelChange', selectedProviderId.value, selectedModelName.value)
+          chatInput.onModelChange(selectedProviderId.value || '', selectedModelName.value)
         }
       }
     } else {
@@ -819,7 +811,7 @@ function getFileName(fp: string): string {
 }
 
 function toggleMenu() {
-  if (props.disabled) return
+  if (disabled.value) return
   showMenu.value = !showMenu.value
 }
 
@@ -968,13 +960,10 @@ async function onDrop(e: DragEvent) {
 
 function handleSend() {
   const msg = text.value.trim()
-  if ((!msg && imageRefs.value.length === 0) || props.disabled || !props.canSend) return
-  emit(
-    'send',
+  if ((!msg && imageRefs.value.length === 0) || disabled.value || !canSend.value) return
+  chatInput.send(
     msg,
     refs.value,
-    selectedProviderId.value || undefined,
-    selectedModelName.value || undefined,
     selectedThinkPathId.value || undefined,
     chatStore.currentModel,
     chatStore.temperature,
