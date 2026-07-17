@@ -145,11 +145,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, defineAsyncComponent } from 'vue'
 import type { ToolCall } from '@/types'
 import BubbleChrome from './_shared/BubbleChrome.vue'
 import MaxmaBlockerError from './_shared/MaxmaBlockerError.vue'
-import FileDiffView from './FileDiffView.vue'
+
+const FileDiffView = defineAsyncComponent(() => import('./FileDiffView.vue'))
 
 const props = defineProps<{ toolCall: ToolCall }>()
 const emit = defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()
