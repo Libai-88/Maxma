@@ -49,7 +49,7 @@ const renderedHtml = computed(() => {
     const msg = e instanceof Error ? e.message : String(e)
     console.error(`[RenderMarkdown] marked.parse 错误 (第 ${renderErrorCount} 次):`, msg)
     console.error('  内容预览:', props.content.slice(0, 200))
-    return `<p style="color:var(--status-error)">⚠ Markdown 渲染错误: ${msg}</p>`
+    return `<p class="md-render-error">⚠ Markdown 渲染错误: ${msg}</p>`
   }
 })
 
@@ -60,7 +60,7 @@ const sandboxHtml = computed(() => {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     console.error('[RenderMarkdown] raw render 错误:', msg)
-    return `<p style="color:var(--status-error)">⚠ Markdown 渲染错误: ${msg}</p>`
+    return `<p class="md-render-error">⚠ Markdown 渲染错误: ${msg}</p>`
   }
 })
 
@@ -76,3 +76,10 @@ const useSandbox = computed(() => {
   }
 })
 </script>
+
+<style>
+/* CSP-safe: class-based styling for v-html error fallback (was inline style) */
+.md-render-error {
+  color: var(--status-error);
+}
+</style>
