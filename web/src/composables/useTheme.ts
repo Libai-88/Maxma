@@ -125,14 +125,19 @@ const AUTO_DARK: ThemeId = 'midnight'
 const storedTheme = ref<ThemeId>(loadStoredTheme())
 
 /** 系统是否暗色 */
-const systemIsDark = ref(
-  window.matchMedia('(prefers-color-scheme: dark)').matches
-)
+const systemMql = window.matchMedia('(prefers-color-scheme: dark)')
+const systemIsDark = ref(systemMql.matches)
 
 // 监听系统主题变化
-window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+function onSystemThemeChange(e: MediaQueryListEvent) {
   systemIsDark.value = e.matches
-})
+}
+systemMql.addEventListener('change', onSystemThemeChange)
+
+/** 移除系统主题变化监听器（用于清理 / HMR / 测试） */
+export function cleanupThemeListener() {
+  systemMql.removeEventListener('change', onSystemThemeChange)
+}
 
 /** 当前实际生效的主题（auto 解析后） */
 const activeTheme = computed<ThemeId>(() => {
