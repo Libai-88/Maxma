@@ -13,7 +13,6 @@
       sandbox="allow-scripts allow-modals"
       class="html-sandbox-iframe"
       :class="{ 'is-loaded': iframeLoaded, 'is-loading': !iframeLoaded }"
-      :style="{ height: iframeHeight + 'px' }"
       title="sandboxed-content"
       @load="onIframeLoad"
     />
@@ -21,7 +20,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watchEffect } from 'vue'
 
 const props = withDefaults(defineProps<{
   html: string
@@ -31,6 +30,12 @@ const container = ref<HTMLElement | null>(null)
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 const iframeHeight = ref(200)
 const iframeLoaded = ref(false)
+
+// CSP-safe CSSOM: set iframe height via style.setProperty (was :style binding)
+watchEffect(() => {
+  const el = iframeRef.value
+  if (el) el.style.setProperty('height', `${iframeHeight.value}px`)
+}, { flush: 'post' })
 
 interface SandboxError {
   type: string

@@ -17,10 +17,10 @@
       >
         <img
           v-if="currentItem"
+          ref="imageRef"
           :src="currentItem.src"
           :alt="currentItem.alt || ''"
           class="mv-image"
-          :style="{ transform: transformStyle, transition: isDragging ? 'none' : 'transform 0.1s ease-out' }"
           draggable="false"
           @click.stop
         />
@@ -42,7 +42,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, watch, onMounted, onUnmounted, nextTick, watchEffect } from 'vue'
 import { useMediaViewer } from '@/composables/useMediaViewer'
 import { useMediaTransform } from '@/composables/useMediaTransform'
 
@@ -50,8 +50,17 @@ const { isOpen, currentItem, items, currentIndex, close, next, prev } = useMedia
 const { transform, transformStyle, isDragging, reset, computeFitScale, setScale, onWheel: doWheel, onPointerDown: doPointerDown, onPointerMove: doPointerMove, onPointerUp: doPointerUp, onDoubleClick: doDoubleClick, onKeyZoom } = useMediaTransform()
 
 const rootRef = ref<HTMLElement | null>(null)
+const imageRef = ref<HTMLImageElement | null>(null)
 const controlsHidden = ref(false)
 let idleTimer: ReturnType<typeof setTimeout> | null = null
+
+// CSP-safe CSSOM: set image transform + transition via style.setProperty (was :style binding)
+watchEffect(() => {
+  const el = imageRef.value
+  if (!el) return
+  el.style.setProperty('transform', transformStyle.value)
+  el.style.setProperty('transition', isDragging.value ? 'none' : 'transform 0.1s ease-out')
+}, { flush: 'post' })
 
 function showControls() {
   controlsHidden.value = false

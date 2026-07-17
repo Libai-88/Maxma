@@ -2,7 +2,6 @@
   <div
     class="sticker-picker"
     :class="{ visible }"
-    :style="pickerStyle"
     ref="pickerRootRef"
     @click.stop
   >
@@ -147,7 +146,6 @@ const searchInputRef = ref<HTMLInputElement | null>(null)
 const isDragOver = ref(false)
 const isUploading = ref(false)
 const favoriteSort = ref<'recent' | 'usage'>('recent')
-const pickerStyle = ref<Record<string, string>>({})
 const highlightedStickerIndex = ref(0)
 const dismissedSuggestionQuery = ref('')
 
@@ -425,10 +423,9 @@ function updatePickerPosition() {
     } else if (rect.right > window.innerWidth - 12) {
       shift = window.innerWidth - 12 - rect.right
     }
-    pickerStyle.value = {
-      transform: shift ? `translateX(${shift}px)` : '',
-      maxWidth: 'calc(100vw - 24px)',
-    }
+    // CSP-safe CSSOM: was reactive :style pickerStyle
+    root.style.setProperty('transform', shift ? `translateX(${shift}px)` : '')
+    root.style.setProperty('max-width', 'calc(100vw - 24px)')
   })
 }
 

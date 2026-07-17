@@ -7,7 +7,6 @@
         ref="tooltipRef"
         class="ds-tooltip"
         :class="`ds-tooltip--${placement}`"
-        :style="tooltipStyle"
         role="tooltip"
         :id="tooltipId"
       >
@@ -31,7 +30,6 @@ const props = withDefaults(defineProps<{
 
 const visible = ref(false)
 const tooltipRef = ref<HTMLElement | null>(null)
-const tooltipStyle = ref<Record<string, string>>({})
 const tooltipId = `tt-${Math.random().toString(36).slice(2, 9)}`
 let showTimer: ReturnType<typeof setTimeout> | null = null
 let triggerEl: HTMLElement | null = null
@@ -64,10 +62,9 @@ function updatePosition() {
     right: { top: triggerRect.top + (triggerRect.height - tipRect.height) / 2, left: triggerRect.right + gap },
   }
   const pos = positions[actualPlacement]
-  tooltipStyle.value = {
-    top: `${Math.max(4, Math.min(window.innerHeight - tipRect.height - 4, pos.top))}px`,
-    left: `${Math.max(4, Math.min(window.innerWidth - tipRect.width - 4, pos.left))}px`,
-  }
+  // CSP-safe CSSOM: was reactive :style tooltipStyle
+  tooltipRef.value.style.setProperty('top', `${Math.max(4, Math.min(window.innerHeight - tipRect.height - 4, pos.top))}px`)
+  tooltipRef.value.style.setProperty('left', `${Math.max(4, Math.min(window.innerWidth - tipRect.width - 4, pos.left))}px`)
 }
 
 function show(e: Event) {

@@ -120,7 +120,7 @@
     <ToolPanel v-if="showToolPanel" />
 
     <Transition name="card">
-      <div v-if="hoveredSession" :key="hoveredSession.session_id" ref="hoverCardRef" class="session-hover-card" :style="cardStyle">
+      <div v-if="hoveredSession" :key="hoveredSession.session_id" ref="hoverCardRef" class="session-hover-card">
         <div class="card-row">
           <span class="card-label">ID</span>
           <span class="card-value">{{ hoveredSession.session_id }}</span>
@@ -162,7 +162,6 @@
           v-if="constifyTarget"
           ref="constifyCardRef"
           class="constify-card"
-          :style="constifyCardStyle"
           @click.stop
         >
           <div class="constify-card-title">固定会话</div>
@@ -226,7 +225,7 @@ import ModelSettingsPanel from './ModelSettingsPanel.vue';
 import ToolPanel from './ToolPanel.vue';
 import { useSessionStore } from '@/stores/session';
 import type { SessionInfo } from '@/types';
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch, watchEffect } from 'vue';
 
 const sessionStore = useSessionStore()
 
@@ -328,16 +327,16 @@ function adjustCardPosition(buttonRect: DOMRect) {
   }
 }
 
-const cardStyle = computed(() => {
-  if (!hoveredSession.value) return {}
-  return {
-    position: 'fixed' as const,
-    top: `${cardTop.value}px`,
-    left: `${cardLeft.value}px`,
-    zIndex: 100,
-    pointerEvents: 'none' as const,
-  }
-})
+// CSP-safe CSSOM: position hover card via style.setProperty (was :style cardStyle)
+watchEffect(() => {
+  const el = hoverCardRef.value
+  if (!el || !hoveredSession.value) return
+  el.style.setProperty('position', 'fixed')
+  el.style.setProperty('top', `${cardTop.value}px`)
+  el.style.setProperty('left', `${cardLeft.value}px`)
+  el.style.setProperty('z-index', '100')
+  el.style.setProperty('pointer-events', 'none')
+}, { flush: 'post' })
 
 // ── 右键菜单 ──────────────────────────────────────────────────
 
@@ -372,15 +371,20 @@ const generating = ref(false)
 /** 鼠标右键触发时的目标元素 rect，用于定位卡片 */
 let constifyAnchorRect: DOMRect | null = null
 
-const constifyCardStyle = computed(() => {
-  if (!constifyTarget.value) return { display: 'none' }
-  return {
-    position: 'fixed' as const,
-    top: `${constifyCardTop.value}px`,
-    left: `${constifyCardLeft.value}px`,
-    zIndex: 1001,
+// CSP-safe CSSOM: position constify card via style.setProperty (was :style constifyCardStyle)
+watchEffect(() => {
+  const el = constifyCardRef.value
+  if (!el) return
+  if (!constifyTarget.value) {
+    el.style.setProperty('display', 'none')
+    return
   }
-})
+  el.style.setProperty('display', '')
+  el.style.setProperty('position', 'fixed')
+  el.style.setProperty('top', `${constifyCardTop.value}px`)
+  el.style.setProperty('left', `${constifyCardLeft.value}px`)
+  el.style.setProperty('z-index', '1001')
+}, { flush: 'post' })
 
 function adjustConstifyCardPosition() {
   const cardEl = constifyCardRef.value
