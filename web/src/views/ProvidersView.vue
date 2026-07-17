@@ -401,15 +401,6 @@ async function recheckProvider(id: string) {
   }
 }
 
-async function discoverProvider(id: string) {
-  try {
-    await api.discoverModelsForExisting(id)
-    await providerStore.refresh()
-  } catch (e: unknown) {
-    alert('拉取失败: ' + toErrorMessage(e))
-  }
-}
-
 async function toggleProvider(id: string, enabled: boolean) {
   try {
     await api.updateProvider(id, { enabled })

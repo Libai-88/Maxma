@@ -27,7 +27,6 @@
         readonly
         @click="openList"
         @keydown="onKeyDown"
-        @focus="onInputFocus"
         @blur="onInputBlur"
       />
       <button
@@ -149,7 +148,6 @@ const listboxId = `ds-select-listbox-${Math.random().toString(36).slice(2, 9)}`
 const open = ref(false)
 const activeIndex = ref(-1)
 const popupStyle = ref<Record<string, string>>({})
-let inputFocusedBeforeList = false
 let typeAheadBuffer = ''
 let typeAheadTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -261,10 +259,6 @@ function onOutsideClick(e: MouseEvent) {
   if (listboxRef.value?.contains(t)) return
   // caret 按钮的点击会自行处理 toggle，此处不再关闭
   closeList(false)
-}
-
-function onInputFocus() {
-  inputFocusedBeforeList = true
 }
 
 function onInputBlur() {

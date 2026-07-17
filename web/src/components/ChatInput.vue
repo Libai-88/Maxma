@@ -224,7 +224,7 @@ import StickerContextMenu from '@/components/StickerContextMenu.vue'
 import QuotedSelectionCard from '@/components/QuotedSelectionCard.vue'
 import ThinkPathChooser from '@/components/ThinkPathChooser.vue'
 import { computeFloatingInputPosition } from '@/utils/floatingPosition'
-import type { ProviderConfig, SkillInfo, MacroInfo, ToolInfo } from '@/types'
+import type { SkillInfo, MacroInfo, ToolInfo } from '@/types'
 import { useProviderStore } from '@/stores/provider'
 import { useStickerSegments, type StickerSegment } from '@/composables/useStickerSegments'
 import { useChatInputInjected } from '@/composables/useChatInput'
@@ -232,7 +232,7 @@ import type { ParsedRef, ImageRef } from '@/utils/references'
 import { REF_CHIP_CONFIG } from '@/utils/references'
 import { getApiBase, isTauri, tauriFetch } from '@/utils/env'
 import type { ThinkPathId } from '@/utils/thinkPath'
-import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch, watchEffect } from 'vue'
 import DsSelect from './ui/DsSelect.vue'
 import ModelSelector from './ModelSelector.vue'
 import ContextUsageBadge from './ContextUsageBadge.vue'
@@ -686,12 +686,10 @@ function calcCursorPixelPos(textarea: HTMLTextAreaElement, pos: number): { x: nu
 
   const textareaRect = textarea.getBoundingClientRect()
   const mirrorRect = mirror.getBoundingClientRect()
-  const lineHeight = parseInt(style.lineHeight) || 24
 
   // 计算光标所在行相对于 mirror 顶部的位置
   const lines = mirror.textContent!.split('\n')
   const lastLine = lines[lines.length - 1]
-  const linePixel = (lines.length - 1) * lineHeight
 
   // 用 span 精确测量最后一行的宽度
   const span = document.createElement('span')
