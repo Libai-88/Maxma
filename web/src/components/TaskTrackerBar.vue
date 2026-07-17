@@ -16,14 +16,14 @@
       <span v-if="activeForm" class="bar-active-form">{{ activeForm }}</span>
 
       <span class="bar-progress-track">
-        <span class="bar-progress-fill" :style="{ width: progressPercent + '%' }"></span>
+        <span ref="fillRef" class="bar-progress-fill"></span>
       </span>
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watchEffect } from 'vue'
 
 interface TaskTrackerTodo {
   content: string
@@ -49,6 +49,14 @@ const progressPercent = computed(() => {
   if (!props.data || props.data.total <= 0) return 0
   return Math.round((props.data.completed / props.data.total) * 100)
 })
+
+// CSP-safe CSSOM: set width via element.style.setProperty
+const fillRef = ref<HTMLElement>()
+watchEffect(() => {
+  const el = fillRef.value
+  const p = progressPercent.value
+  if (el) el.style.setProperty('width', `${p}%`)
+}, { flush: 'post' })
 
 const activeForm = computed(() => {
   if (!props.data) return ''
