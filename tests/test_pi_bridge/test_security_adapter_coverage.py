@@ -176,3 +176,80 @@ class TestCheckToolSecurity:
         result = security_adapter.check_tool_security("bash", {"command": "ls"})
         assert result is None
         assert call_count["n"] == 0
+
+
+# ── _load_whitelist ────────────────────────────────────────
+
+
+class TestLoadWhitelist:
+    """_load_whitelist reads PATH_WHITELIST_YAML_PATH; missing file => []."""
+
+    def test_missing_file_returns_empty(self, tmp_path, monkeypatch) -> None:
+        missing = tmp_path / "no_such.yaml"
+        monkeypatch.setattr(security_adapter, "PATH_WHITELIST_YAML_PATH", missing)
+        assert security_adapter._load_whitelist() == []
+
+    def test_empty_yaml_returns_empty(self, tmp_path, monkeypatch) -> None:
+        f = tmp_path / "wl.yaml"
+        f.write_text("", encoding="utf-8")
+        monkeypatch.setattr(security_adapter, "PATH_WHITELIST_YAML_PATH", f)
+        assert security_adapter._load_whitelist() == []
+
+    def test_valid_entries_with_recursive(self, tmp_path, monkeypatch) -> None:
+        f = tmp_path / "wl.yaml"
+        f.write_text(
+            "whitelist:\n"
+            "  - path: /a\n"
+            "  - path: /b\n"
+            "    recursive: false\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(security_adapter, "PATH_WHITELIST_YAML_PATH", f)
+        result = security_adapter._load_whitelist()
+        assert result == [("/a", True), ("/b", False)]
+
+    def test_default_recursive_is_true(self, tmp_path, monkeypatch) -> None:
+        f = tmp_path / "wl.yaml"
+        f.write_text("whitelist:\n  - path: /x\n", encoding="utf-8")
+        monkeypatch.setattr(security_adapter, "PATH_WHITELIST_YAML_PATH", f)
+        result = security_adapter._load_whitelist()
+        assert result == [("/x", True)]
+
+    def test_non_dict_entries_skipped(self, tmp_path, monkeypatch) -> None:
+        f = tmp_path / "wl.yaml"
+        f.write_text(
+            "whitelist:\n  - 'just a string'\n  - 42\n  - path: /ok\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(security_adapter, "PATH_WHITELIST_YAML_PATH", f)
+        result = security_adapter._load_whitelist()
+        assert result == [("/ok", True)]
+
+    def test_entry_without_path_key_skipped(self, tmp_path, monkeypatch) -> None:
+        f = tmp_path / "wl.yaml"
+        f.write_text(
+            "whitelist:\n  - recursive: true\n  - path: /ok\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(security_adapter, "PATH_WHITELIST_YAML_PATH", f)
+        result = security_adapter._load_whitelist()
+        assert result == [("/ok", True)]
+
+    def test_empty_whitelist_key_returns_empty(self, tmp_path, monkeypatch) -> None:
+        f = tmp_path / "wl.yaml"
+        f.write_text("whitelist: []\n", encoding="utf-8")
+        monkeypatch.setattr(security_adapter, "PATH_WHITELIST_YAML_PATH", f)
+        assert security_adapter._load_whitelist() == []
+
+    def test_missing_whitelist_key_returns_empty(self, tmp_path, monkeypatch) -> None:
+        f = tmp_path / "wl.yaml"
+        f.write_text("other: data\n", encoding="utf-8")
+        monkeypatch.setattr(security_adapter, "PATH_WHITELIST_YAML_PATH", f)
+        assert security_adapter._load_whitelist() == []
+
+    def test_unicode_path_preserved(self, tmp_path, monkeypatch) -> None:
+        f = tmp_path / "wl.yaml"
+        f.write_text("whitelist:\n  - path: /数据/中文\n", encoding="utf-8")
+        monkeypatch.setattr(security_adapter, "PATH_WHITELIST_YAML_PATH", f)
+        result = security_adapter._load_whitelist()
+        assert result == [("/数据/中文", True)]
