@@ -77,9 +77,9 @@ uv pip sync requirements-lock.txt
 
 ---
 
-## Part A — 重新生成 requirements-lock.txt 移除遗留依赖
+## Part A — 重新生成 requirements-lock.txt 移除遗留依赖 ✅ 已完成
 
-### Task A1: 重新生成 requirements-lock.txt
+### Task A1: 重新生成 requirements-lock.txt ✅
 **命令**（与 `update-lock.bat` 一致）:
 ```
 cd d:\Maxma\MaxmaHere
@@ -88,7 +88,7 @@ uv pip compile pyproject.toml --extra dev -o requirements-lock.txt
 - 验证：新 `requirements-lock.txt` 中不再出现 `chromadb`、`json-repair`、`langchain`（主包，非 `langchain-core`）、`langchain-mcp-adapters`、`langchain-openai`、`moviepy`、`onnxruntime`、`playwright`、`tavily-python`、`transformers`、`zai-sdk` 及其专属传递依赖（如 `kubernetes`、`bcrypt`、`mmh3`、`pypika`、`imageio`、`proglog`、`safetensors`、`tokenizers`、`cachetools` 等）。
 - `langchain-core` 应保留（在 pyproject.toml 的 dependencies 中）。
 
-### Task A2: 同步 .venv 并验证
+### Task A2: 同步 .venv 并验证 ✅
 ```
 cd d:\Maxma\MaxmaHere
 uv pip sync requirements-lock.txt
@@ -97,7 +97,9 @@ uv pip sync requirements-lock.txt
 - 若 `uv pip sync` 移除了 .venv 中的遗留包，pytest 应仍通过（因为代码不 import 它们）。
 - 验证标准：pytest 全部通过（或与基线一致）。
 
-### Task A3: 提交
+### Task A3: 提交 ✅
+- commit: `79d4df6`
+- pytest: 1122 passed, 7 skipped
 - 文件：`requirements-lock.txt`
 - commit message: `chore(deps): regenerate lock file to drop 11 legacy LangGraph-era deps`
 
@@ -105,32 +107,29 @@ uv pip sync requirements-lock.txt
 
 ## Part B — 修复 bun-sidecar node_modules 类型错误
 
-### Task B1: 获取 tsc 错误基线
-```
-cd d:\Maxma\MaxmaHere\bun-sidecar
-bunx tsc --noEmit
-```
-- 记录错误数量和分类。
+### 执行结果
 
-### Task B2: 安装 @types/bun（方案 A）
-```
-cd d:\Maxma\MaxmaHere\bun-sidecar
-bun add -d @types/bun
-```
-- 验证：`bunx tsc --noEmit` 错误减少或消除。
+#### 方案 A（安装 @types/bun）— 已尝试并放弃
+- 执行 `bun add -d @types/bun` 后，node_modules 错误消失，但暴露出 ~80 个 src/ 错误
+- 根因分析：`@oh-my-pi/pi-coding-agent` 的 `ToolDefinition<TParams extends TSchema>` 使用 `@sinclair/typebox` 的 `TSchema`，而 src/ 代码传入 Zod schema
+- 进一步调查发现：这些 src/ 错误是由 `zod/v4` → `zod` 导入改动导致的，**不是预先存在的**
+- 原始 `zod/v4` 导入与 `ToolDefinition` 类型兼容，无需修改
+- 决定：移除 @types/bun，回退所有 src/ 改动，改用方案 B
 
-### Task B3: 若仍有 node_modules 错误，启用 skipLibCheck（方案 B）
-**文件**: `d:\Maxma\MaxmaHere\bun-sidecar\tsconfig.json`
-在 `compilerOptions` 中添加 `"skipLibCheck": true`。
-- 验证：`bunx tsc --noEmit` 错误消除（src/ 下无错误）。
+#### 方案 B（启用 skipLibCheck）— ✅ 最终方案
+- **文件**: `d:\Maxma\MaxmaHere\bun-sidecar\tsconfig.json`
+- 在 `compilerOptions` 中添加 `"skipLibCheck": true`
+- 这是 TypeScript 社区处理 node_modules 类型问题的标准做法
+- 只跳过 `.d.ts` 文件检查，不影响 src/ 代码的类型安全
 
-### Task B4: 验证 bun test + 提交
-```
-cd d:\Maxma\MaxmaHere\bun-sidecar
-bun test
-```
-- 验证标准：`bun test` 全部通过。
-- commit message: `fix(sidecar): add @types/bun and enable skipLibCheck to resolve node_modules tsc errors`
+#### 验证结果
+- `bunx tsc --noEmit`: **0 错误** (exit code 0)
+- `bun test`: **12 pass, 0 fail**
+- git diff: 仅 `tsconfig.json` 一行变更
+
+### Task B4: 提交
+- 文件：`bun-sidecar/tsconfig.json`
+- commit message: `fix(sidecar): enable skipLibCheck to resolve node_modules tsc errors`
 
 ---
 
