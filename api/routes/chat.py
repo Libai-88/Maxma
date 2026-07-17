@@ -176,8 +176,8 @@ async def _stream_turn_sidecar(
                     await ws.send_json(
                         {"type": "error", "payload": {"code": payload.get("code", "SIDECAR_ERROR"), "message": payload.get("message", "Sidecar error")}}
                     )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("[sidecar] Failed to forward %s event to WS: %s", evt_type, e)
         return handler
 
     async def _on_answer(sid: str, event: dict):
@@ -208,8 +208,8 @@ async def _stream_turn_sidecar(
         )
         try:
             await client.call("cancel", {"session_id": sidecar_sid})
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("[sidecar] Failed to cancel after timeout for session %s: %s", sidecar_sid[:8], e)
         if not final_answer:
             final_answer = "（Sidecar 处理超时，请重试）"
     except Exception as e:
@@ -218,16 +218,16 @@ async def _stream_turn_sidecar(
         )
         try:
             await client.call("cancel", {"session_id": sidecar_sid})
-        except Exception:
-            pass
+        except Exception as cancel_err:
+            logger.warning("[sidecar] Failed to cancel after error for session %s: %s", sidecar_sid[:8], cancel_err)
         if not final_answer:
             final_answer = f"（Sidecar 处理出错：{e}）"
     finally:
         for unsub in unsubs:
             try:
                 unsub()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("[sidecar] Failed to unsubscribe handler: %s", e)
 
     return final_answer
 
