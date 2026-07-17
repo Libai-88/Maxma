@@ -6,8 +6,17 @@
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <Transition name="ds-modal" appear>
-      <div v-if="modelValue" class="ds-modal">
-        <h3 v-if="title" class="ds-modal__title">{{ title }}</h3>
+      <div
+        v-if="modelValue"
+        ref="dialogRef"
+        class="ds-modal"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="title ? titleId : undefined"
+        :aria-describedby="describedby || undefined"
+        tabindex="-1"
+      >
+        <h3 v-if="title" :id="titleId" class="ds-modal__title">{{ title }}</h3>
         <div class="ds-modal__body">
           <slot />
         </div>
@@ -20,17 +29,26 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import DsOverlay from './DsOverlay.vue'
 
 withDefaults(defineProps<{
   modelValue: boolean
   title?: string
   backdrop?: 'dim' | 'blur' | 'none'
+  /** 透传 aria-describedby，指向额外描述元素的 id */
+  describedby?: string
 }>(), {
   backdrop: 'dim',
 })
 
 defineEmits<{ 'update:modelValue': [value: boolean] }>()
+
+// 稳定的唯一 id（项目 vue ^3.4，未使用 useId；Math.random 已足够稳定）
+const titleId = `ds-modal-title-${Math.random().toString(36).slice(2, 9)}`
+const dialogRef = ref<HTMLElement | null>(null)
+
+defineExpose({ dialogRef })
 </script>
 
 <style scoped>
@@ -44,6 +62,10 @@ defineEmits<{ 'update:modelValue': [value: boolean] }>()
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* 模态内滚动链不外溢 */
+  overscroll-behavior: contain;
+  /* dialog 可作为焦点兜底，但不显示 outline */
+  outline: none;
 }
 .ds-modal__title {
   margin: 0;
@@ -57,6 +79,7 @@ defineEmits<{ 'update:modelValue': [value: boolean] }>()
   padding: var(--space-6);
   overflow-y: auto;
   flex: 1;
+  overscroll-behavior: contain;
 }
 .ds-modal__actions {
   display: flex;
@@ -80,5 +103,16 @@ defineEmits<{ 'update:modelValue': [value: boolean] }>()
 .ds-modal-leave-to {
   opacity: 0;
   transform: scale(0.98);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-modal-enter-active,
+  .ds-modal-leave-active {
+    transition: opacity var(--duration-instant) linear;
+  }
+  .ds-modal-enter-from,
+  .ds-modal-leave-to {
+    transform: none;
+  }
 }
 </style>
