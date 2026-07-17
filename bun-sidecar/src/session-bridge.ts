@@ -259,6 +259,72 @@ export function mapPiEventToMaxma(
 }
 
 // ---------------------------------------------------------------------------
+// Per-prompt done guard + orchestration
+// ---------------------------------------------------------------------------
+
+export interface DoneGuard {
+  done: boolean;
+}
+
+export function createDoneGuard(): DoneGuard {
+  return { done: false };
+}
+
+/**
+ * Run session.prompt(message) with a guaranteed done-event emission.
+ *
+ * Semantics:
+ *   - If the subscriber fires `agent_end` during the call, it marks `guard.done`
+ *     and emits `done` itself; the finally block then becomes a no-op.
+ *   - If prompt() throws, emit a `PROMPT_ERROR` event (unless done was already
+ *     emitted), then emit `done` via the finally block.
+ *   - If the prompt exceeds `timeoutMs`, emit `PROMPT_TIMEOUT` error + `done`
+ *     and abort the agent.
+ *
+ * The `sink` callback is invoked for every emitted event and is responsible
+ * for the session_id envelope (callers bind it).
+ */
+export async function orchestratePrompt(
+  session: AgentSession,
+  message: string,
+  guard: DoneGuard,
+  sink: (event: Record<string, unknown>) => void,
+  timeoutMs: number = 600_000,
+): Promise<void> {
+  const timeoutId = setTimeout(() => {
+    if (guard.done) return;
+    guard.done = true;
+    sink({
+      type: "error",
+      payload: { code: "PROMPT_TIMEOUT", message: `Prompt exceeded ${timeoutMs}ms limit` },
+    });
+    sink({ type: "done", payload: {} });
+    try {
+      session.agent.abort("Prompt timeout");
+    } catch {
+      // best-effort abort
+    }
+  }, timeoutMs);
+
+  try {
+    await session.prompt(message);
+  } catch (err) {
+    if (!guard.done) {
+      sink({
+        type: "error",
+        payload: { code: "PROMPT_ERROR", message: String(err) },
+      });
+    }
+  } finally {
+    clearTimeout(timeoutId);
+    if (!guard.done) {
+      guard.done = true;
+      sink({ type: "done", payload: {} });
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main event subscriber
 // ---------------------------------------------------------------------------
 

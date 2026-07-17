@@ -1,5 +1,9 @@
 import { describe, test, expect } from "bun:test";
-import { mapPiEventToMaxma } from "../src/session-bridge";
+import {
+  mapPiEventToMaxma,
+  createDoneGuard,
+  orchestratePrompt,
+} from "../src/session-bridge";
 
 describe("module import smoke test", () => {
   test("mapPiEventToMaxma is exported and callable", () => {
@@ -28,4 +32,54 @@ describe("mapPiEventToMaxma done guard", () => {
     expect(out).toEqual({ type: "done", payload: {} });
   });
 });
+
+// Fake AgentSession factory for orchestratePrompt tests.
+function makeFakeSession(opts: {
+  promptImpl?: (msg: string) => Promise<void>;
+  abortImpl?: () => void;
+} = {}) {
+  const subscribers: Array<(event: any) => void> = [];
+  const session: any = {
+    prompt: opts.promptImpl ?? (async () => {}),
+    subscribe: (cb: (event: any) => void) => {
+      subscribers.push(cb);
+      return () => {
+        const i = subscribers.indexOf(cb);
+        if (i >= 0) subscribers.splice(i, 1);
+      };
+    },
+    agent: { abort: opts.abortImpl ?? (() => {}) },
+  };
+  return { session, emit: (e: any) => subscribers.forEach((cb) => cb(e)) };
+}
+
+describe("orchestratePrompt — error path (BUG3)", () => {
+  test("prompt() throwing emits error + done, marks guard", async () => {
+    const { session } = makeFakeSession({
+      promptImpl: async () => { throw new Error("boom"); },
+    });
+    const events: Record<string, unknown>[] = [];
+    const guard = createDoneGuard();
+
+    await orchestratePrompt(session as any, "hi", guard, (e) => events.push(e), 60_000);
+
+    expect(guard.done).toBe(true);
+    expect(events).toEqual([
+      { type: "error", payload: { code: "PROMPT_ERROR", message: "Error: boom" } },
+      { type: "done", payload: {} },
+    ]);
+  });
+
+  test("prompt() resolving without agent_end still emits done (safety net)", async () => {
+    const { session } = makeFakeSession({ promptImpl: async () => {} });
+    const events: Record<string, unknown>[] = [];
+    const guard = createDoneGuard();
+
+    await orchestratePrompt(session as any, "hi", guard, (e) => events.push(e), 60_000);
+
+    expect(guard.done).toBe(true);
+    expect(events).toEqual([{ type: "done", payload: {} }]);
+  });
+});
+
 
