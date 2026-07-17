@@ -26,7 +26,7 @@
         >
           <div class="session-item-main">
             <span class="session-id">
-              <Icon name="pin" :size="12" style="margin-right: 3px; flex-shrink: 0;" />
+              <Icon name="pin" :size="12" class="pin-icon" />
               <span class="const-name-text">{{ s.const_name || '未命名' }}</span>
               <span v-if="s.is_subagent" class="sub-badge" title="子 Agent 会话（只读）">sub</span>
             </span>
@@ -665,6 +665,10 @@ function confirmDelete() {
   display: flex;
   align-items: center;
   gap: 2px;
+}
+.pin-icon {
+  margin-right: 3px;
+  flex-shrink: 0;
 }
 .const-name-text {
   overflow: hidden;
