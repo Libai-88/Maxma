@@ -189,3 +189,120 @@ class TestCreateProvider:
         resp = client.post("/providers", json=body)
         assert resp.status_code == 409
         assert "dup" in resp.json()["detail"]
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Step C: GET / PUT / DELETE /providers/{id}
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _seed_provider(yaml_path, provider_id="deepseek", **overrides):
+    """写一个 provider 到 yaml，返回该 provider dict。"""
+    base = {
+        "id": provider_id,
+        "provider_type": "openai",
+        "label": "DeepSeek",
+        "api_key": "sk-seed",
+        "base_url": "https://api.deepseek.com/v1",
+        "models": ["deepseek-chat"],
+        "enabled": True,
+        "context_window": 64000,
+    }
+    base.update(overrides)
+    _write_yaml(yaml_path, [base])
+    return base
+
+
+class TestGetProvider:
+    def test_get_provider_by_id(self, client, yaml_path):
+        """从 yaml 读取指定 id 的 provider。"""
+        _seed_provider(yaml_path, "deepseek")
+        resp = client.get("/providers/deepseek")
+        assert resp.status_code == 200
+        result = resp.json()
+        assert result["id"] == "deepseek"
+        assert result["label"] == "DeepSeek"
+        assert result["api_key"] == "sk-seed"
+
+    def test_get_provider_404(self, client, yaml_path):
+        """不存在返回 404。"""
+        _seed_provider(yaml_path, "deepseek")
+        resp = client.get("/providers/ghost")
+        assert resp.status_code == 404
+        assert "ghost" in resp.json()["detail"]
+
+    def test_get_provider_404_when_yaml_empty(self, client, yaml_path):
+        """yaml 为空时 GET /{id} 返回 404（不 fallback 到默认）。"""
+        _write_yaml(yaml_path, [])
+        resp = client.get("/providers/openai")
+        assert resp.status_code == 404
+
+
+class TestUpdateProvider:
+    def test_update_provider_partial(self, client, yaml_path):
+        """部分更新：只改提供的字段，保留其他字段。"""
+        _seed_provider(yaml_path, "deepseek", api_key="sk-old", label="OldLabel")
+        resp = client.put(
+            "/providers/deepseek",
+            json={"api_key": "sk-new", "enabled": False},
+        )
+        assert resp.status_code == 200
+        result = resp.json()
+        assert result["api_key"] == "sk-new"  # 已更新
+        assert result["enabled"] is False  # 已更新
+        assert result["label"] == "OldLabel"  # 保留未提供字段
+        assert result["id"] == "deepseek"  # id 不可改
+        # 持久化
+        from api.yaml_store import load_yaml
+
+        persisted = load_yaml(yaml_path, default={})["providers"][0]
+        assert persisted["api_key"] == "sk-new"
+        assert persisted["label"] == "OldLabel"
+
+    def test_update_provider_404(self, client, yaml_path):
+        """更新不存在的 provider 返回 404。"""
+        _seed_provider(yaml_path, "deepseek")
+        resp = client.put("/providers/ghost", json={"label": "Ghost"})
+        assert resp.status_code == 404
+
+    def test_update_provider_id_ignored(self, client, yaml_path):
+        """请求体中带 id 字段不应改变 provider id。"""
+        _seed_provider(yaml_path, "deepseek")
+        # ProviderUpdateBody 没有 id 字段，会被 Pydantic 忽略（默认 ignore extra）
+        resp = client.put(
+            "/providers/deepseek",
+            json={"label": "New", "id": "hacked"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["id"] == "deepseek"  # id 未被改变
+
+
+class TestDeleteProvider:
+    def test_delete_provider_success(self, client, yaml_path):
+        """删除 provider：返回 {status: ok}，yaml 中移除。"""
+        _seed_provider(yaml_path, "deepseek")
+        _seed_provider(yaml_path, "openai", label="OpenAI")  # 注意会覆盖
+        # 重新写两个
+        _write_yaml(
+            yaml_path,
+            [
+                {"id": "deepseek", "provider_type": "openai", "label": "DeepSeek",
+                 "api_key": "k1", "base_url": "u1", "models": [], "enabled": True},
+                {"id": "openai", "provider_type": "openai", "label": "OpenAI",
+                 "api_key": "k2", "base_url": "u2", "models": [], "enabled": True},
+            ],
+        )
+        resp = client.delete("/providers/deepseek")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok"}
+        # yaml 中已移除 deepseek
+        remaining = client.get("/providers").json()["providers"]
+        ids = [p["id"] for p in remaining]
+        assert "deepseek" not in ids
+        assert "openai" in ids
+
+    def test_delete_provider_404(self, client, yaml_path):
+        """删除不存在的 provider 返回 404。"""
+        _seed_provider(yaml_path, "deepseek")
+        resp = client.delete("/providers/ghost")
+        assert resp.status_code == 404

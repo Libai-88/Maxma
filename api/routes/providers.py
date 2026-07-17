@@ -202,3 +202,75 @@ async def create_provider(body: ProviderCreateBody) -> dict[str, Any]:
         items.append(provider)
         _save_providers(items)
     return provider
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 端点 3: GET /providers/{id}
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@router.get("/providers/{provider_id}")
+async def get_provider(provider_id: str) -> dict[str, Any]:
+    """获取指定 id 的 provider 详情。不存在返回 404。"""
+    with yaml_file_lock(PROVIDERS_YAML_PATH):
+        items = _load_providers()
+        target = _find_provider(items, provider_id)
+    if target is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"provider '{provider_id}' 不存在",
+        )
+    return target
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 端点 4: PUT /providers/{id}
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@router.put("/providers/{provider_id}")
+async def update_provider(
+    provider_id: str,
+    body: ProviderUpdateBody,
+) -> dict[str, Any]:
+    """部分更新 provider 配置（仅更新提供的字段，id 不可改）。
+
+    - 读取现有 provider（不存在 404）
+    - 合并更新（exclude_unset 保证不覆盖未提供字段）
+    - 原子写入 yaml
+    - 返回更新后的 provider
+    """
+    with yaml_file_lock(PROVIDERS_YAML_PATH):
+        items = _load_providers()
+        target = _find_provider(items, provider_id)
+        if target is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"provider '{provider_id}' 不存在",
+            )
+        update_fields = body.model_dump(exclude_unset=True)
+        for key, value in update_fields.items():
+            target[key] = value
+        _save_providers(items)
+    return target
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 端点 5: DELETE /providers/{id}
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@router.delete("/providers/{provider_id}")
+async def delete_provider(provider_id: str) -> dict[str, str]:
+    """删除 provider 配置。不存在返回 404。"""
+    with yaml_file_lock(PROVIDERS_YAML_PATH):
+        items = _load_providers()
+        target = _find_provider(items, provider_id)
+        if target is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"provider '{provider_id}' 不存在",
+            )
+        new_items = [e for e in items if e.get("id") != provider_id]
+        _save_providers(new_items)
+    return {"status": "ok"}
