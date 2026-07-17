@@ -380,3 +380,60 @@ async def discover_models(body: DiscoverModelsBody) -> dict[str, list[str]]:
     """
     _ok, _latency, _detail, models = await _http_get_models(body.base_url, body.api_key)
     return {"models": models}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 端点 8: POST /providers/{id}/test
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@router.post("/providers/{provider_id}/test")
+async def test_existing_provider(provider_id: str) -> dict[str, Any]:
+    """测试已存在的 provider 连接（从 yaml 读取 api_key/base_url）。
+
+    provider 不存在 → 404。其余行为同 POST /providers/test。
+    """
+    with yaml_file_lock(PROVIDERS_YAML_PATH):
+        items = _load_providers()
+        target = _find_provider(items, provider_id)
+    if target is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"provider '{provider_id}' 不存在",
+        )
+    ok, latency_ms, detail, _models = await _http_get_models(
+        target.get("base_url", ""),
+        target.get("api_key", ""),
+    )
+    return {
+        "status": "ok" if ok else "error",
+        "latency_ms": latency_ms,
+        "detail": detail,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 端点 9: POST /providers/{id}/discover-models
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@router.post("/providers/{provider_id}/discover-models")
+async def discover_models_for_existing(provider_id: str) -> dict[str, list[str]]:
+    """发现已存在 provider 的可用模型（从 yaml 读取 api_key/base_url）。
+
+    provider 不存在 → 404。其余行为同 POST /providers/discover-models
+    （异常/HTTP 错误返回 {models: []}）。
+    """
+    with yaml_file_lock(PROVIDERS_YAML_PATH):
+        items = _load_providers()
+        target = _find_provider(items, provider_id)
+    if target is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"provider '{provider_id}' 不存在",
+        )
+    _ok, _latency, _detail, models = await _http_get_models(
+        target.get("base_url", ""),
+        target.get("api_key", ""),
+    )
+    return {"models": models}

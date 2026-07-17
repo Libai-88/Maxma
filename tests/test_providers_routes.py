@@ -441,3 +441,104 @@ class TestDiscoverModels:
             json={"api_key": "sk-x", "base_url": "https://api.example.com/v1"},
         )
         assert resp.json() == {"models": []}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Step E: POST /providers/{id}/test + /providers/{id}/discover-models
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _seed_full_provider(yaml_path, provider_id="deepseek"):
+    """写一个带 api_key 和 base_url 的 provider，供 test/discover 端点使用。"""
+    _write_yaml(
+        yaml_path,
+        [
+            {
+                "id": provider_id,
+                "provider_type": "openai",
+                "label": "DeepSeek",
+                "api_key": "sk-from-yaml",
+                "base_url": "https://api.deepseek.com/v1",
+                "models": ["deepseek-chat"],
+                "enabled": True,
+                "context_window": 64000,
+            }
+        ],
+    )
+
+
+class TestTestExistingProvider:
+    def test_test_existing_provider_uses_yaml_config(self, client, yaml_path, monkeypatch):
+        """从 yaml 读取 provider 配置，用其 api_key/base_url 测试连接。"""
+        _seed_full_provider(yaml_path, "deepseek")
+        captured = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["url"] = str(request.url)
+            captured["auth"] = request.headers.get("authorization")
+            return httpx.Response(200, json={"data": [{"id": "m1"}]})
+
+        _patch_http(monkeypatch, handler)
+        resp = client.post("/providers/deepseek/test")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "ok"
+        # 使用了 yaml 中的 base_url
+        assert captured["url"] == "https://api.deepseek.com/v1/models"
+        # 使用了 yaml 中的 api_key
+        assert captured["auth"] == "Bearer sk-from-yaml"
+
+    def test_test_existing_provider_404(self, client, yaml_path):
+        """provider 不存在 → 404。"""
+        _seed_full_provider(yaml_path, "deepseek")
+        resp = client.post("/providers/ghost/test")
+        assert resp.status_code == 404
+        assert "ghost" in resp.json()["detail"]
+
+    def test_test_existing_provider_network_error(self, client, yaml_path, monkeypatch):
+        """网络异常 → status:error。"""
+        _seed_full_provider(yaml_path, "deepseek")
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectError("refused")
+
+        _patch_http(monkeypatch, handler)
+        resp = client.post("/providers/deepseek/test")
+        body = resp.json()
+        assert body["status"] == "error"
+        assert body["latency_ms"] is None
+
+
+class TestDiscoverModelsForExisting:
+    def test_discover_models_for_existing_provider(self, client, yaml_path, monkeypatch):
+        """从 yaml 读取配置，发现模型列表。"""
+        _seed_full_provider(yaml_path, "deepseek")
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={"data": [{"id": "deepseek-chat"}, {"id": "deepseek-reasoner"}]},
+            )
+
+        _patch_http(monkeypatch, handler)
+        resp = client.post("/providers/deepseek/discover-models")
+        assert resp.status_code == 200
+        assert resp.json() == {"models": ["deepseek-chat", "deepseek-reasoner"]}
+
+    def test_discover_models_for_existing_404(self, client, yaml_path):
+        """provider 不存在 → 404。"""
+        _seed_full_provider(yaml_path, "deepseek")
+        resp = client.post("/providers/ghost/discover-models")
+        assert resp.status_code == 404
+
+    def test_discover_models_for_existing_error_returns_empty(self, client, yaml_path, monkeypatch):
+        """网络异常 → 返回空列表（不报错）。"""
+        _seed_full_provider(yaml_path, "deepseek")
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            raise httpx.TimeoutException("timed out")
+
+        _patch_http(monkeypatch, handler)
+        resp = client.post("/providers/deepseek/discover-models")
+        assert resp.status_code == 200
+        assert resp.json() == {"models": []}
