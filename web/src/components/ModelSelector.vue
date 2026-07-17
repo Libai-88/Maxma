@@ -29,7 +29,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useChatStore } from '../stores/chat'
 
 const store = useChatStore()
@@ -54,7 +54,9 @@ function selectModel(id: string) { store.setModel(id); isOpen.value = false }
 function formatCtx(ctx: number): string { return ctx >= 1000 ? `${(ctx / 1000).toFixed(0)}k` : `${ctx}` }
 
 onMounted(() => { if (store.availableModels.length === 0) store.fetchAvailableModels() })
-if (typeof document !== 'undefined') document.addEventListener('click', () => { isOpen.value = false })
+function onDocumentClick() { isOpen.value = false }
+onMounted(() => document.addEventListener('click', onDocumentClick))
+onUnmounted(() => document.removeEventListener('click', onDocumentClick))
 </script>
 
 <style scoped>
