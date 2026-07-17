@@ -28,6 +28,7 @@ interface SessionRecord {
   session: AgentSession;
   unsubscribe: () => void;
   promptQueue: Promise<void>;  // serializes concurrent prompt calls
+  currentGuard: DoneGuard | null;  // active per-prompt done sentinel
 }
 
 // ---------------------------------------------------------------------------
@@ -331,9 +332,10 @@ export async function orchestratePrompt(
 function subscribeSession(
   sessionId: string,
   session: AgentSession,
+  record: SessionRecord,
 ): () => void {
   return session.subscribe((event: any) => {
-    const mapped = mapPiEventToMaxma(event as Record<string, unknown>);
+    const mapped = mapPiEventToMaxma(event as Record<string, unknown>, record.currentGuard);
     if (mapped) {
       sendEvent(sessionId, mapped);
     }
@@ -398,8 +400,14 @@ if (import.meta.main) {
         const { session } = await createAgentSession(createOptions as any);
         const sessionId = randomUUID();
 
-        const unsubscribe = subscribeSession(sessionId, session);
-        sessions.set(sessionId, { session, unsubscribe, promptQueue: Promise.resolve() });
+        const record: SessionRecord = {
+          session,
+          unsubscribe: () => {},
+          promptQueue: Promise.resolve(),
+          currentGuard: null,
+        };
+        record.unsubscribe = subscribeSession(sessionId, session, record);
+        sessions.set(sessionId, record);
 
         send(id, { session_id: sessionId });
         return;
@@ -416,16 +424,27 @@ if (import.meta.main) {
 
         // Serialize: chain onto the previous prompt so they run sequentially.
         // A failed prompt does not block the next one (.catch resets the chain).
+        // orchestratePrompt guarantees the `done` event is emitted exactly once
+        // on every path (natural agent_end, error, abort, or 600s timeout),
+        // replacing the old manual BUG3 done-event patch.
         record.promptQueue = record.promptQueue
           .catch(() => {})
-          .then(() => record.session.prompt(message).catch((err: unknown) => {
-            sendEvent(sessionId, {
-              type: "error",
-              payload: { code: "PROMPT_ERROR", message: String(err) },
-            });
-            // BUG3 fix: always send done after error so Python doesn't hang
-            sendEvent(sessionId, { type: "done", payload: {} });
-          }));
+          .then(async () => {
+            const guard = createDoneGuard();
+            record.currentGuard = guard;
+            try {
+              await orchestratePrompt(
+                record.session,
+                message,
+                guard,
+                (e) => sendEvent(sessionId, e),
+              );
+            } finally {
+              if (record.currentGuard === guard) {
+                record.currentGuard = null;
+              }
+            }
+          });
 
         send(id, { ok: true });
         return;
