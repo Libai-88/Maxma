@@ -107,19 +107,6 @@
         <ChatInput
           v-if="!isSubagent"
           ref="chatInputRef"
-          :is-streaming="isStreaming"
-          :disabled="false"
-          :can-send="connected"
-          :initial-provider-id="selectedProviderId"
-          :initial-model-name="selectedModelName"
-          :think-path-enabled="health?.think_path_enabled === true"
-          :quoted-selections="quotedSelections"
-          :quote-candidate="quoteCandidate"
-          @send="onSend"
-          @stop="cancel"
-          @model-change="onModelChange"
-          @commit-quote="commitCandidate"
-          @remove-quote="removeQuote"
         />
         <div v-else class="sub-agent-readonly-bar">
           <span class="sub-agent-readonly-text">🔒 子 Agent 会话 — 只读</span>
@@ -169,6 +156,7 @@ import warningIconRaw from '@/assets/icons/status/warning.svg?raw'
 import gearIconRaw from '@/assets/icons/status/gear.svg?raw'
 import { useChat } from '@/composables/useChat'
 import { useSelectionQuote } from '@/composables/useSelectionQuote'
+import { provideChatInput } from '@/composables/useChatInput'
 import { useWorkbenchStore } from '@/stores/workbench'
 import { useHealthStore } from '@/stores/health'
 import { useProviderStore } from '@/stores/provider'
@@ -211,6 +199,9 @@ const {
   removeQuote,
   clearQuotes,
 } = useSelectionQuote()
+
+// 服务端 think_path 能力开关（包成 ref 以便传入 useChatInput）
+const thinkPathEnabled = computed(() => health.value?.think_path_enabled === true)
 
 // 持久化 provider/model 选择到 localStorage，刷新后恢复
 const SELECTED_PROVIDER_KEY = 'maxma_selected_provider'
@@ -257,6 +248,22 @@ function onModelChange(providerId: string, modelName: string) {
   localStorage.setItem(SELECTED_PROVIDER_KEY, providerId)
   localStorage.setItem(SELECTED_MODEL_KEY, modelName)
 }
+
+// ── ChatInput 状态收敛：创建 useChatInput 实例并 provide 给 ChatInput ──
+provideChatInput({
+  isStreaming,
+  canSend: connected,
+  initialProviderId: selectedProviderId,
+  initialModelName: selectedModelName,
+  thinkPathEnabled,
+  quotedSelections,
+  quoteCandidate,
+  onSend,
+  onStop: cancel,
+  onModelChange,
+  onCommitQuote: commitCandidate,
+  onRemoveQuote: removeQuote,
+})
 
 const isSubagent = computed(() => {
   return sessions.value.some(
