@@ -150,7 +150,7 @@ const activeTheme = computed<ThemeId>(() => {
 /** 当前是否暗色（供 StickerInline 等使用） */
 const isDark = computed(() => {
   const t = activeTheme.value
-  return t === 'midnight' || t === 'midnight-contrast'
+  return THEMES.find(m => m.id === t)?.isDark ?? false
 })
 
 function loadStoredTheme(): ThemeId {
