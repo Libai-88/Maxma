@@ -112,3 +112,80 @@ class TestListProviders:
         assert len(providers) > 0
         ids = [p["id"] for p in providers]
         assert "openai" in ids  # fallback 生效
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Step B: POST /providers (create)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestCreateProvider:
+    def test_create_provider_success(self, client, yaml_path):
+        """创建 provider：返回完整对象，持久化到 yaml。"""
+        body = {
+            "id": "deepseek",
+            "provider_type": "openai",
+            "label": "DeepSeek",
+            "api_key": "sk-xxx",
+            "base_url": "https://api.deepseek.com/v1",
+            "models": ["deepseek-chat", "deepseek-reasoner"],
+            "enabled": True,
+            "context_window": 64000,
+        }
+        resp = client.post("/providers", json=body)
+        assert resp.status_code == 200
+        result = resp.json()
+        # 返回完整 provider 对象
+        assert result["id"] == "deepseek"
+        assert result["label"] == "DeepSeek"
+        assert result["api_key"] == "sk-xxx"
+        assert result["models"] == ["deepseek-chat", "deepseek-reasoner"]
+        assert result["enabled"] is True
+        # yaml 已持久化
+        from api.yaml_store import load_yaml
+
+        persisted = load_yaml(yaml_path, default={})
+        assert persisted["providers"][0]["id"] == "deepseek"
+        # GET 也能读到
+        assert client.get("/providers").json()["providers"][0]["id"] == "deepseek"
+
+    def test_create_provider_defaults(self, client, yaml_path):
+        """未传 enabled/provider_type/models 时补默认值。"""
+        body = {
+            "id": "minimal",
+            "label": "Minimal",
+            "api_key": "k",
+            "base_url": "https://api.minimal.com/v1",
+        }
+        resp = client.post("/providers", json=body)
+        assert resp.status_code == 200
+        result = resp.json()
+        assert result["enabled"] is True  # 默认 True
+        assert result["provider_type"] == "openai"  # 默认 openai
+        assert result["models"] == []  # 默认空列表
+
+    def test_create_provider_duplicate_id_409(self, client, yaml_path):
+        """id 重复时返回 409。"""
+        _write_yaml(
+            yaml_path,
+            [
+                {
+                    "id": "dup",
+                    "provider_type": "openai",
+                    "label": "Dup",
+                    "api_key": "k",
+                    "base_url": "https://api.dup.com/v1",
+                    "models": [],
+                    "enabled": True,
+                }
+            ],
+        )
+        body = {
+            "id": "dup",
+            "label": "Dup2",
+            "api_key": "k2",
+            "base_url": "https://api.dup2.com/v1",
+        }
+        resp = client.post("/providers", json=body)
+        assert resp.status_code == 409
+        assert "dup" in resp.json()["detail"]

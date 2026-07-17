@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 
 from app_paths import PROVIDERS_YAML_PATH
 from api.yaml_store import dump_yaml_atomic, load_yaml, yaml_file_lock
@@ -118,6 +119,36 @@ def _find_provider(items: list[dict[str, Any]], provider_id: str) -> dict[str, A
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# Pydantic 请求体模型
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class ProviderCreateBody(BaseModel):
+    """创建 provider 的请求体（id 必填，其余可选，由后端补默认值）。"""
+
+    id: str = Field(..., description="provider 唯一标识，不可重复")
+    provider_type: str = Field("openai", description="provider 类型，默认 openai 兼容")
+    label: str = Field("", description="显示名称")
+    api_key: str = Field("", description="API 密钥")
+    base_url: str = Field("", description="API 基础 URL")
+    models: list[str] = Field(default_factory=list, description="支持的模型 id 列表")
+    enabled: bool = Field(True, description="是否启用")
+    context_window: int | None = Field(None, description="上下文窗口大小")
+
+
+class ProviderUpdateBody(BaseModel):
+    """更新 provider 的请求体（所有字段可选，仅更新提供字段）。"""
+
+    provider_type: str | None = None
+    label: str | None = None
+    api_key: str | None = None
+    base_url: str | None = None
+    models: list[str] | None = None
+    enabled: bool | None = None
+    context_window: int | None = None
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # 端点 1: GET /providers
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -134,3 +165,40 @@ async def list_providers() -> dict[str, Any]:
     if not items:
         return {"providers": _DEFAULT_PROVIDERS}
     return {"providers": items}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 端点 2: POST /providers (create)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@router.post("/providers")
+async def create_provider(body: ProviderCreateBody) -> dict[str, Any]:
+    """创建新的 provider 配置。
+
+    - 校验 id 不重复（409）
+    - 补全默认值（enabled=True, provider_type='openai', models=[]）
+    - 原子写入 yaml
+    - 返回完整 provider 对象
+    """
+    with yaml_file_lock(PROVIDERS_YAML_PATH):
+        items = _load_providers()
+        if _find_provider(items, body.id) is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"provider id '{body.id}' 已存在",
+            )
+        provider: dict[str, Any] = {
+            "id": body.id,
+            "provider_type": body.provider_type,
+            "label": body.label,
+            "api_key": body.api_key,
+            "base_url": body.base_url,
+            "models": list(body.models),
+            "enabled": body.enabled,
+        }
+        if body.context_window is not None:
+            provider["context_window"] = body.context_window
+        items.append(provider)
+        _save_providers(items)
+    return provider
