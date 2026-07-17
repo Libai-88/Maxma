@@ -19,21 +19,21 @@
       </div>
       <nav class="sidebar-nav">
         <router-link to="/" class="nav-item">
-          <Icon name="chat" :size="18" /> <span class="nav-label">对话&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CHATTING</span>
+          <Icon name="chat" :size="18" /> <span class="nav-label"><span class="nav-zh">对话</span><span class="nav-en">CHATTING</span></span>
         </router-link>
         <router-link to="/memory" class="nav-item">
-          <Icon name="memory" :size="18" /> <span class="nav-label">记忆&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;MEMORY</span>
+          <Icon name="memory" :size="18" /> <span class="nav-label"><span class="nav-zh">记忆</span><span class="nav-en">MEMORY</span></span>
         </router-link>
         <router-link to="/kb" class="nav-item">
-          <Icon name="memory" :size="18" /> <span class="nav-label">知识库&nbsp;&nbsp;&nbsp;&nbsp;KB</span>
+          <Icon name="memory" :size="18" /> <span class="nav-label"><span class="nav-zh">知识库</span><span class="nav-en">KB</span></span>
         </router-link>
         <router-link to="/activity" class="nav-item">
-          <Icon name="memory" :size="18" /> <span class="nav-label">活动&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ACTIVITY</span>
+          <Icon name="memory" :size="18" /> <span class="nav-label"><span class="nav-zh">活动</span><span class="nav-en">ACTIVITY</span></span>
         </router-link>
         <router-link to="/playground" class="nav-item pg-nav">动态 NEWS</router-link>
         <div class="settings-area" ref="settingsTriggerRef">
           <button class="nav-item settings-btn" :class="{ active: showSettingsMenu }" @click="toggleSettingsMenu">
-            <Icon name="settings" :size="18" /> <span class="nav-label">设置&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SETTINGS</span>
+            <Icon name="settings" :size="18" /> <span class="nav-label"><span class="nav-zh">设置</span><span class="nav-en">SETTINGS</span></span>
           </button>
         </div>
       </nav>
@@ -41,19 +41,28 @@
         <Transition name="popup">
           <div v-if="showSettingsMenu" ref="settingsPopupRef" class="settings-popup" @click.stop>
             <div class="popup-header">设置</div>
-            <router-link to="/appearance" class="popup-item" @click="closeSettingsMenu">外观 APPEARANCE</router-link>
-            <router-link to="/providers" class="popup-item" @click="closeSettingsMenu">模型 MODELS</router-link>
-            <router-link to="/mcp" class="popup-item" @click="closeSettingsMenu">MCP 服务</router-link>
-            <router-link to="/skills" class="popup-item" @click="closeSettingsMenu">Skills & 宏</router-link>
-            <router-link to="/soul" class="popup-item" @click="closeSettingsMenu">人设 SOUL</router-link>
-            <router-link to="/user" class="popup-item" @click="closeSettingsMenu">用户 USER</router-link>
-            <router-link to="/path-whitelist" class="popup-item" @click="closeSettingsMenu">路径白名单</router-link>
-            <router-link to="/maxma-blocker" class="popup-item" @click="closeSettingsMenu">拒止锚</router-link>
-            <router-link to="/env-vars" class="popup-item" @click="closeSettingsMenu">环境变量</router-link>
-            <router-link to="/event-hooks" class="popup-item" @click="closeSettingsMenu">事件钩子</router-link>
-            <router-link to="/privacy" class="popup-item" @click="closeSettingsMenu">隐私仪表盘</router-link>
-            <router-link to="/metrics" class="popup-item" @click="closeSettingsMenu">运行指标</router-link>
-            <router-link to="/audit-log" class="popup-item" @click="closeSettingsMenu">审计日志</router-link>
+            <div class="popup-section">
+              <div class="popup-section-header">扩展 EXTENSIONS</div>
+              <router-link to="/providers" class="popup-item" @click="closeSettingsMenu">模型 MODELS</router-link>
+              <router-link to="/mcp" class="popup-item" @click="closeSettingsMenu">MCP 服务</router-link>
+              <router-link to="/skills" class="popup-item" @click="closeSettingsMenu">Skills & 宏</router-link>
+              <router-link to="/soul" class="popup-item" @click="closeSettingsMenu">人设 SOUL</router-link>
+              <router-link to="/user" class="popup-item" @click="closeSettingsMenu">用户 USER</router-link>
+            </div>
+            <div class="popup-section">
+              <div class="popup-section-header">运维 OPERATIONS</div>
+              <router-link to="/path-whitelist" class="popup-item" @click="closeSettingsMenu">路径白名单</router-link>
+              <router-link to="/maxma-blocker" class="popup-item" @click="closeSettingsMenu">拒止锚</router-link>
+              <router-link to="/env-vars" class="popup-item" @click="closeSettingsMenu">环境变量</router-link>
+              <router-link to="/event-hooks" class="popup-item" @click="closeSettingsMenu">事件钩子</router-link>
+              <router-link to="/privacy" class="popup-item" @click="closeSettingsMenu">隐私仪表盘</router-link>
+              <router-link to="/metrics" class="popup-item" @click="closeSettingsMenu">运行指标</router-link>
+              <router-link to="/audit-log" class="popup-item" @click="closeSettingsMenu">审计日志</router-link>
+            </div>
+            <div class="popup-section">
+              <div class="popup-section-header">系统 SYSTEM</div>
+              <router-link to="/appearance" class="popup-item" @click="closeSettingsMenu">外观 APPEARANCE</router-link>
+            </div>
             <button v-if="onboardingEnabled" class="popup-item popup-action" @click="restartOnboarding">重新开始引导</button>
             <div class="popup-divider"></div>
             <button class="popup-item popup-action" :class="{ exporting: exportingErrorLog }" :disabled="exportingErrorLog" @click="handleExportErrorLog">
@@ -531,10 +540,18 @@ html, body {
 }
 
 .nav-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   transition: opacity 0.2s ease 0.05s, transform 0.25s ease 0.05s;
   overflow: hidden;
   white-space: nowrap;
   max-width: 200px;
+}
+.nav-en {
+  font-size: 0.75em;
+  color: var(--text-tertiary);
+  letter-spacing: 0.5px;
 }
 
 .pg-nav {
@@ -598,6 +615,19 @@ html, body {
   color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.popup-section + .popup-section {
+  margin-top: 4px;
+}
+
+.popup-section-header {
+  padding: 8px 12px 4px;
+  font-size: 0.7em;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
 }
 
 .popup-item {
