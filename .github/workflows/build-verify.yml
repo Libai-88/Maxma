@@ -1,0 +1,50 @@
+name: Build Verify
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+jobs:
+  pyinstaller-build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build frontend
+        run: |
+          cd web
+          npm ci
+          npm run build
+
+      - name: Create virtualenv and install dependencies
+        run: |
+          python -m venv .venv
+          .venv\Scripts\python.exe -m pip install --upgrade pip
+          .venv\Scripts\python.exe -m pip install -r requirements-lock.txt
+          .venv\Scripts\python.exe -m pip install pyinstaller
+
+      - name: Package server with PyInstaller
+        run: .venv\Scripts\python.exe -m PyInstaller build\maxma-server.spec --clean --noconfirm
+
+      - name: Verify build artifact
+        run: |
+          if (-not (Test-Path "dist\maxma-server.exe")) {
+            Write-Error "Build artifact dist\maxma-server.exe not found"
+            exit 1
+          }
+          Write-Host "Build artifact verified: dist\maxma-server.exe"
