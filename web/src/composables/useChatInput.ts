@@ -61,12 +61,21 @@ export interface UseChatInputReturn {
   onModelChange: (providerId: string, modelName: string) => void
   commitQuote: () => void
   removeQuote: (id: string) => void
+  // ── 文本操作（可独立使用，不依赖 ChatView/ChatInput 接线） ──
+  /** 清空输入文本（典型场景：发送后调用） */
+  clearText: () => void
+  /** 追加文本到输入框末尾（典型场景：引用插入、快捷输入） */
+  appendText: (suffix: string) => void
+  /** 显式设置输入文本（典型场景：外部程序化填入） */
+  setText: (next: string) => void
 }
 
 /**
  * ChatInput 状态收敛 composable。
  *
- * ⚠️ 骨架：当前仅为占位实现，未被 ChatView/ChatInput 引用。
+ * ⚠️ 骨架：当前未被 ChatView/ChatInput 引用。
+ *   - send/stop/onModelChange/commitQuote/removeQuote 为占位实现（未接线时打印 warning）
+ *   - clearText/appendText/setText 为真实实现，可独立使用（不依赖回调接线）
  * 接入工作由 Agent 33/35 协调完成（不在本 agent 独占文件范围内）。
  */
 export function useChatInput(options: UseChatInputOptions = {}): UseChatInputReturn {
@@ -169,6 +178,19 @@ export function useChatInput(options: UseChatInputOptions = {}): UseChatInputRet
     }
   }
 
+  // ── 文本操作：可独立使用，不依赖回调接线 ──
+  function clearText() {
+    localText.value = ''
+  }
+
+  function appendText(suffix: string) {
+    localText.value += suffix
+  }
+
+  function setText(next: string) {
+    localText.value = next
+  }
+
   return {
     text: localText,
     isStreaming,
@@ -185,5 +207,8 @@ export function useChatInput(options: UseChatInputOptions = {}): UseChatInputRet
     onModelChange,
     commitQuote,
     removeQuote,
+    clearText,
+    appendText,
+    setText,
   }
 }
