@@ -192,13 +192,17 @@ class TestCreateMacro:
         )
         assert resp.status_code == 409
 
-    def test_create_already_exists_builtin(self, isolated_env):
-        """builtin 已有同名宏时也拒绝创建（避免冲突）。"""
+    def test_create_shadows_builtin(self, isolated_env):
+        """builtin 已有同名宏时，允许在 user 目录创建覆盖副本（与 PUT 提升一致）。"""
         _write_macro(isolated_env["builtin_dir"], "b_exists", "# B\nb")
         resp = isolated_env["client"].post(
             "/macros", json={"name": "b_exists", "content": "x"}
         )
-        assert resp.status_code == 409
+        assert resp.status_code == 200
+        assert resp.json()["source"] == "user"
+        # user 目录有副本，builtin 原文件仍在
+        assert (isolated_env["user_dir"] / "b_exists" / "MACRO.md").exists()
+        assert (isolated_env["builtin_dir"] / "b_exists" / "MACRO.md").exists()
 
     def test_create_default_description(self, isolated_env):
         """未提供 description 时用 name 作为默认描述。"""
