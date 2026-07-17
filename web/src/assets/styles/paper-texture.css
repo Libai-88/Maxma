@@ -1,0 +1,39 @@
+/* ── 纸质纹理系统：三层叠加 ──
+ * 全局纸纹样式，原位于 App.vue，抽出便于主题管理。
+ * 依赖 CSS 变量（由主题文件提供）：
+ *   --paper-texture-url, --paper-texture-size,
+ *   --paper-texture-opacity, --paper-texture-card-blend-mode
+ * 由 App.vue <style> 块 @import 引入。
+ * body.paper-texture class 由 usePaperTexture composable 在 onMounted 时切换。
+ */
+
+/* ① Surface 层：铺底元素直接叠纹理 */
+body.paper-texture,
+body.paper-texture .sidebar,
+body.paper-texture .chat-header {
+  background-image: var(--paper-texture-url);
+  background-repeat: repeat;
+  background-size: var(--paper-texture-size);
+  background-attachment: fixed;
+}
+
+/* ② Card 层：bg-card 元素用 lighten 混合 */
+body.paper-texture .msg-card,
+body.paper-texture .ds-card,
+body.paper-texture .input-wrapper,
+body.paper-texture .hover-card,
+body.paper-texture .no-provider-card {
+  background-image: var(--paper-texture-url);
+  background-blend-mode: var(--paper-texture-card-blend-mode);
+}
+
+/* ③ 亮度补偿：暖白叠层抵消纹理变暗（暗色主题跳过） */
+html:not([data-theme="midnight"]):not([data-theme="midnight-contrast"])
+body.paper-texture::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: rgba(255, 253, 247, var(--paper-texture-opacity));
+  pointer-events: none;
+}

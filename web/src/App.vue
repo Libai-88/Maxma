@@ -31,52 +31,11 @@
           <Icon name="memory" :size="18" /> <span class="nav-label"><span class="nav-zh">活动</span><span class="nav-en">ACTIVITY</span></span>
         </router-link>
         <router-link to="/playground" class="nav-item pg-nav">动态 NEWS</router-link>
-        <div class="settings-area" ref="settingsTriggerRef">
-          <button class="nav-item settings-btn" :class="{ active: showSettingsMenu }" @click="toggleSettingsMenu">
-            <Icon name="settings" :size="18" /> <span class="nav-label"><span class="nav-zh">设置</span><span class="nav-en">SETTINGS</span></span>
-          </button>
-        </div>
+        <AppSettingsMenu
+          :onboarding-enabled="onboardingEnabled"
+          @restart-onboarding="restartOnboarding"
+        />
       </nav>
-      <Teleport to="body">
-        <Transition name="popup">
-          <div v-if="showSettingsMenu" ref="settingsPopupRef" class="settings-popup" @click.stop>
-            <div class="popup-header">设置</div>
-            <div class="popup-section">
-              <div class="popup-section-header">扩展 EXTENSIONS</div>
-              <router-link to="/providers" class="popup-item" @click="closeSettingsMenu">模型 MODELS</router-link>
-              <router-link to="/mcp" class="popup-item" @click="closeSettingsMenu">MCP 服务</router-link>
-              <router-link to="/skills" class="popup-item" @click="closeSettingsMenu">Skills & 宏</router-link>
-              <router-link to="/soul" class="popup-item" @click="closeSettingsMenu">人设 SOUL</router-link>
-              <router-link to="/user" class="popup-item" @click="closeSettingsMenu">用户 USER</router-link>
-            </div>
-            <div class="popup-section">
-              <div class="popup-section-header">运维 OPERATIONS</div>
-              <router-link to="/path-whitelist" class="popup-item" @click="closeSettingsMenu">路径白名单</router-link>
-              <router-link to="/maxma-blocker" class="popup-item" @click="closeSettingsMenu">拒止锚</router-link>
-              <router-link to="/env-vars" class="popup-item" @click="closeSettingsMenu">环境变量</router-link>
-              <router-link to="/event-hooks" class="popup-item" @click="closeSettingsMenu">事件钩子</router-link>
-              <router-link to="/privacy" class="popup-item" @click="closeSettingsMenu">隐私仪表盘</router-link>
-              <router-link to="/metrics" class="popup-item" @click="closeSettingsMenu">运行指标</router-link>
-              <router-link to="/audit-log" class="popup-item" @click="closeSettingsMenu">审计日志</router-link>
-            </div>
-            <div class="popup-section">
-              <div class="popup-section-header">系统 SYSTEM</div>
-              <router-link to="/appearance" class="popup-item" @click="closeSettingsMenu">外观 APPEARANCE</router-link>
-            </div>
-            <button v-if="onboardingEnabled" class="popup-item popup-action" @click="restartOnboarding">重新开始引导</button>
-            <div class="popup-divider"></div>
-            <button class="popup-item popup-action" :class="{ exporting: exportingErrorLog }" :disabled="exportingErrorLog" @click="handleExportErrorLog">
-              {{ exportingErrorLog ? '导出中...' : '导出错误日志' }}
-            </button>
-            <button class="popup-item popup-action" :class="{ exporting: managingLogs }" :disabled="managingLogs" @click="handleManageLogs">
-              {{ managingLogs ? '处理中...' : '日志管理' }}
-            </button>
-            <button class="popup-item popup-action" :class="{ restarting }" :disabled="restarting" @click="handleRestart">
-              {{ restarting ? '重启中...' : '重启服务' }}
-            </button>
-          </div>
-        </Transition>
-      </Teleport>
       <SessionSidebar
         :sessions="sessions"
         :active-id="sessionId"
@@ -120,16 +79,15 @@ import PulsePanel from '@/components/PulsePanel.vue';
 import OnboardingView from '@/views/OnboardingView.vue';
 import Icon from '@/components/Icon.vue';
 import SessionSidebar from '@/components/SessionSidebar.vue';
+import AppSettingsMenu from '@/components/AppSettingsMenu.vue';
 import { useChatStore } from '@/stores/chat';
 import { useHealthStore } from '@/stores/health';
 import { onboardingEnabled, useOnboardingStore } from '@/stores/onboarding';
 import { storeToRefs } from 'pinia';
 import { useSessionStore } from '@/stores/session';
 import { useSidebar } from '@/composables/useSidebar';
-import { api } from '@/api';
-import { computed, ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
-import { useTheme } from '@/composables/useTheme'
+import { onMounted, watch } from 'vue';
+import { useRouter } from 'vue-router';
 
 import LeavesOverlay from '@/components/LeavesOverlay.vue'
 import MediaViewer from '@/components/MediaViewer.vue'
@@ -138,7 +96,6 @@ import { useFloatSidebar } from '@/composables/useFloatSidebar'
 import { usePaperTexture } from '@/composables/usePaperTexture'
 import { useGlobalShortcut } from '@/composables/useGlobalShortcut'
 import RegionalErrorBoundary from '@/components/ui/RegionalErrorBoundary.vue'
-import { invoke } from '@tauri-apps/api/core'
 
 const { effectiveCollapsed, toggleSidebar } = useSidebar()
 const pulseEnabled = import.meta.env.VITE_PULSE_ENABLED === 'true'
@@ -146,134 +103,9 @@ const onboarding = useOnboardingStore()
 
 const { onEnter: onFloatSidebarEnter, onLeave: onFloatSidebarLeave } = useFloatSidebar()
 
-const showSettingsMenu = ref(false)
-const settingsTriggerRef = ref<HTMLElement | null>(null)
-const settingsPopupRef = ref<HTMLElement | null>(null)
-const restarting = ref(false)
-const exportingErrorLog = ref(false)
-const managingLogs = ref(false)
-const { isDark: isNightMode } = useTheme()
-
-async function handleExportErrorLog() {
-  if (exportingErrorLog.value) return
-  exportingErrorLog.value = true
-  closeSettingsMenu()
-  try {
-    const text = await api.getErrorLogText()
-    const ts = new Date().toISOString().replace(/[:T]/g, '-').substring(0, 19)
-    const filename = `maxma-error-report-${ts}.txt`
-    // 调用 Tauri 原生保存对话框，让用户选择保存位置
-    const result = await invoke<string | null>('save_text_file', {
-      content: text,
-      defaultFilename: filename,
-    })
-    if (result) {
-      alert(`错误日志已保存到:\n${result}`)
-    }
-  } catch (e) {
-    alert('导出错误日志失败: ' + (e instanceof Error ? e.message : String(e)))
-  } finally {
-    exportingErrorLog.value = false
-  }
-}
-
-async function handleManageLogs() {
-  if (managingLogs.value) return
-  managingLogs.value = true
-  closeSettingsMenu()
-  try {
-    const info = await api.getLogFiles()
-    const fileList = info.files.map((f: { name: string; size_mb: number }) => `  ${f.name}: ${f.size_mb.toFixed(2)} MB`).join('\n')
-    const totalMB = (info.total_mb ?? 0).toFixed(2)
-    const confirmClean = window.confirm(
-      `日志文件占用情况：\n${fileList}\n\n总计: ${totalMB} MB\n\n是否清理旧日志轮转文件（保留当前日志）？`
-    )
-    if (confirmClean) {
-      const result = await api.clearOldLogs()
-      alert(`已清理 ${result.deleted_count ?? 0} 个旧日志文件，释放 ${(result.freed_mb ?? 0).toFixed(2)} MB 空间`)
-    }
-  } catch (e) {
-    alert('日志管理失败: ' + (e instanceof Error ? e.message : String(e)))
-  } finally {
-    managingLogs.value = false
-  }
-}
-
-let restartPollTimer: ReturnType<typeof setTimeout> | null = null
-
-async function handleRestart() {
-  if (restarting.value) return
-  if (!window.confirm('确定要重启 Maxma 吗？正在进行的对话可能会中断。')) return
-  restarting.value = true
-  closeSettingsMenu()
-  api.restart()
-  const poll = async () => {
-    for (let i = 0; i < 60; i++) {
-      await new Promise(r => { restartPollTimer = setTimeout(r, 2000) })
-      restartPollTimer = null
-      try {
-        await api.health()
-        location.reload(); return
-      } catch { /* still down */ }
-    }
-    restarting.value = false
-  }
-  poll()
-}
-
-onUnmounted(() => {
-  if (restartPollTimer) {
-    clearTimeout(restartPollTimer)
-    restartPollTimer = null
-  }
-})
-
-function toggleSettingsMenu() {
-  showSettingsMenu.value = !showSettingsMenu.value
-  nextTick(() => updatePopupPosition())
-}
-
-function closeSettingsMenu() {
-  showSettingsMenu.value = false
-}
-
 function restartOnboarding() {
   onboarding.restart()
-  closeSettingsMenu()
 }
-
-function updatePopupPosition() {
-  const el = settingsPopupRef.value
-  const trigger = settingsTriggerRef.value
-  if (!el || !trigger) return
-  // CSP-safe CSSOM: position settings popup via style.setProperty (was :style binding)
-  const rect = trigger.getBoundingClientRect()
-  el.style.setProperty('top', `${rect.top}px`)
-  el.style.setProperty('left', `${rect.right + 8}px`)
-  // 动态计算可用高度：视口高度 - popup 顶部位置 - 底部留白 16px
-  // 避免固定 max-height 导致 popup 超出视口底部被裁切
-  const available = window.innerHeight - rect.top - 16
-  el.style.setProperty('max-height', `${Math.max(160, available)}px`)
-}
-
-function onDocumentClick(e: MouseEvent) {
-  if (!showSettingsMenu.value) return
-  const trigger = settingsTriggerRef.value
-  const popup = settingsPopupRef.value
-  if (trigger && popup &&
-      !trigger.contains(e.target as Node) &&
-      !popup.contains(e.target as Node)) {
-    closeSettingsMenu()
-  }
-}
-
-onMounted(() => {
-  document.addEventListener('click', onDocumentClick)
-})
-
-onUnmounted(() => {
-  document.removeEventListener('click', onDocumentClick)
-})
 
 function onSidebarClick(e: MouseEvent) {
   if (e.target === e.currentTarget) {
@@ -282,7 +114,6 @@ function onSidebarClick(e: MouseEvent) {
 }
 
 const router = useRouter()
-const route = useRoute()
 
 function handleSwitchSession(id: string) {
   switchSession(id)
@@ -346,6 +177,8 @@ watch(health, (newHealth, oldHealth) => {
 @import '@/assets/styles/tokens.css';
 @import '@/assets/styles/animations.css';
 @import '@/assets/styles/design-system.css';
+@import '@/assets/styles/markdown.css';
+@import '@/assets/styles/paper-texture.css';
 @import '@/themes/warm-paper.css';
 @import '@/themes/midnight.css';
 @import '@/themes/high-contrast.css';
@@ -396,38 +229,6 @@ watch(health, (newHealth, oldHealth) => {
 }
 *::-webkit-scrollbar-thumb:hover {
   background: var(--text-secondary);
-}
-
-/* ── 纸质纹理系统：三层叠加 ── */
-/* ① Surface 层：铺底元素直接叠纹理 */
-body.paper-texture,
-body.paper-texture .sidebar,
-body.paper-texture .chat-header {
-  background-image: var(--paper-texture-url);
-  background-repeat: repeat;
-  background-size: var(--paper-texture-size);
-  background-attachment: fixed;
-}
-
-/* ② Card 层：bg-card 元素用 lighten 混合 */
-body.paper-texture .msg-card,
-body.paper-texture .ds-card,
-body.paper-texture .input-wrapper,
-body.paper-texture .hover-card,
-body.paper-texture .no-provider-card {
-  background-image: var(--paper-texture-url);
-  background-blend-mode: var(--paper-texture-card-blend-mode);
-}
-
-/* ③ 亮度补偿：暖白叠层抵消纹理变暗（暗色主题跳过） */
-html:not([data-theme="midnight"]):not([data-theme="midnight-contrast"])
-body.paper-texture::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background: rgba(255, 253, 247, var(--paper-texture-opacity));
-  pointer-events: none;
 }
 
 html, body {
@@ -568,140 +369,6 @@ html, body {
   opacity: 1;
 }
 
-/* ── Settings trigger ── */
-.settings-area {
-  margin-top: auto;
-}
-
-.settings-btn {
-  width: 100%;
-  border: none;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 0.9em;
-  background: transparent;
-}
-
-.settings-btn.active {
-  background: var(--bg-card);
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.settings-btn:hover {
-  background: var(--bg-card);
-  color: var(--text-primary);
-}
-
-/* ── Settings popup ── */
-.settings-popup {
-  position: fixed;
-  z-index: 200;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
-  min-width: 170px;
-  padding: 6px;
-  /* maxHeight 由 JS 动态设置（基于触发按钮在视口中的位置），避免固定值裁切 */
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.popup-header {
-  padding: 8px 12px 6px;
-  font-size: 0.75em;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.popup-section + .popup-section {
-  margin-top: 4px;
-}
-
-.popup-section-header {
-  padding: 8px 12px 4px;
-  font-size: 0.7em;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-}
-
-.popup-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 6px;
-  color: var(--text-secondary);
-  text-decoration: none;
-  font-size: 0.9em;
-  transition: background 0.15s, color 0.15s;
-}
-
-.popup-item:hover {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-}
-
-.popup-item.router-link-active {
-  color: var(--accent);
-  font-weight: 600;
-  background: var(--bg-secondary);
-}
-
-.popup-divider {
-  height: 1px;
-  background: var(--border);
-  margin: 4px 0;
-}
-
-.popup-action {
-  width: 100%;
-  border: none;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 0.9em;
-  background: transparent;
-  color: #dc2626;
-}
-.popup-action.neutral {
-  color: var(--text-secondary);
-}
-.popup-action.neutral:hover {
-  color: var(--text-primary);
-}
-.popup-action:hover:not(:disabled) {
-  background: var(--bg-secondary);
-  color: #b91c1c;
-}
-.popup-action:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.popup-action.restarting {
-  color: #f59e0b;
-}
-.popup-action.exporting {
-  color: #3b82f6;
-}
-
-/* ── Popup transition ── */
-.popup-enter-active {
-  transition: opacity 0.12s ease, transform 0.12s ease;
-}
-.popup-leave-active {
-  transition: opacity 0.08s ease, transform 0.08s ease;
-}
-.popup-enter-from,
-.popup-leave-to {
-  opacity: 0;
-  transform: translateX(-6px);
-}
-
 .main {
   flex: 1;
   display: flex;
@@ -802,126 +469,8 @@ html, body {
   pointer-events: none;
 }
 
-.sidebar > :not(.settings-popup) {
+.sidebar > * {
   position: relative;
   z-index: 1;
-}
-
-/* ── Shared markdown rendered content ── */
-.markdown-body {
-  font-size: 1.05em; /* 相对于父元素（消息气泡）的字体大小 */
-  line-height: 1.6;
-  color: var(--text-primary);
-  word-break: break-word;
-}
-
-.markdown-body h1,
-.markdown-body h2,
-.markdown-body h3,
-.markdown-body h4,
-.markdown-body h5,
-.markdown-body h6 {
-  margin: 16px 0 8px;
-  font-weight: 600;
-  line-height: 1.3;
-}
-.markdown-body h1 { font-size: 1.5em; }
-.markdown-body h2 { font-size: 1.3em; }
-.markdown-body h3 { font-size: 1.15em; }
-.markdown-body h4 { font-size: 1em; }
-.markdown-body h5 { font-size: 0.9em; }
-.markdown-body h6 { font-size: 0.85em; color: var(--text-secondary); }
-
-.markdown-body > *:first-child { margin-top: 0; }
-.markdown-body > *:last-child  { margin-bottom: 0; }
-
-.markdown-body p {
-  margin: 8px 0;
-}
-
-.markdown-body ul,
-.markdown-body ol {
-  padding-left: 20px;
-  margin: 8px 0;
-}
-
-.markdown-body li {
-  margin: 4px 0;
-}
-
-.markdown-body code {
-  background: var(--bg-primary);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 0.9em;
-  font-family: 'SF Mono', 'Consolas', monospace;
-}
-
-.markdown-body pre {
-  background: var(--bg-primary);
-  padding: 12px;
-  border-radius: 8px;
-  overflow-x: auto;
-  margin: 8px 0;
-}
-
-.markdown-body pre code {
-  background: none;
-  padding: 0;
-  border-radius: 0;
-  font-size: 0.85em;
-}
-
-.markdown-body blockquote {
-  border-left: 3px solid var(--accent);
-  padding: 4px 12px;
-  margin: 8px 0;
-  color: var(--text-secondary);
-}
-
-.markdown-body table {
-  border-collapse: collapse;
-  margin: 8px 0;
-  width: 100%;
-}
-
-.markdown-body th,
-.markdown-body td {
-  border: 1px solid var(--border);
-  padding: 6px 12px;
-  text-align: left;
-}
-
-.markdown-body th {
-  background: var(--bg-secondary);
-  font-weight: 600;
-}
-
-.markdown-body a {
-  color: var(--accent);
-  text-decoration: underline;
-}
-.markdown-body a:hover {
-  opacity: 0.8;
-}
-
-.markdown-body strong {
-  font-weight: 600;
-}
-
-.markdown-body hr {
-  border: none;
-  border-top: 1px solid var(--border);
-  margin: 16px 0;
-}
-
-.markdown-body img {
-  max-width: 100%;
-  border-radius: 8px;
-}
-
-.markdown-body input[type="checkbox"] {
-  margin-right: 6px;
-  accent-color: var(--accent);
 }
 </style>

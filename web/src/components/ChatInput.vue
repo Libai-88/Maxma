@@ -125,25 +125,26 @@
           </div>
         </div>
         <div class="input-right-group">
-          <div class="dropdown">
-            <button class="dropdown-trigger" :class="{ empty: providers.length === 0 }" @click.stop="toggleDropdown('provider')">
-              {{ providers.length === 0 ? '未配置模型' : (providers.find(p => p.id === selectedProviderId)?.label || '选择提供商') }}
-              <span class="dropdown-arrow">▾</span>
-            </button>
-            <div v-if="openDropdown === 'provider'" class="dropdown-menu">
-              <button v-if="providers.length === 0" class="dropdown-option disabled">暂无可用的提供商，请先在模型设置中添加</button>
-              <button v-for="p in providers" :key="p.id" class="dropdown-option" :class="{ selected: selectedProviderId === p.id }" @click="selectProvider(p.id)">{{ p.label }}</button>
-            </div>
-          </div>
-          <div v-if="currentModels.length" class="dropdown">
-            <button class="dropdown-trigger" @click.stop="toggleDropdown('model')">
-              {{ selectedModelName || '选择模型' }}
-              <span class="dropdown-arrow">▾</span>
-            </button>
-            <div v-if="openDropdown === 'model'" class="dropdown-menu">
-              <button v-for="m in currentModels" :key="m" class="dropdown-option" :class="{ selected: selectedModelName === m }" @click="selectModel(m)">{{ m }}</button>
-            </div>
-          </div>
+          <DsSelect
+            class="provider-select"
+            :class="{ empty: providers.length === 0 }"
+            :model-value="selectedProviderId"
+            :options="providerOptions"
+            :placeholder="providers.length === 0 ? '未配置模型' : '选择提供商'"
+            :aria-label="'LLM 提供商'"
+            size="sm"
+            @update:model-value="selectProvider"
+          />
+          <DsSelect
+            v-if="currentModels.length"
+            class="model-select"
+            :model-value="selectedModelName"
+            :options="modelOptions"
+            :placeholder="'选择模型'"
+            :aria-label="'模型'"
+            size="sm"
+            @update:model-value="selectModel"
+          />
           <span class="input-separator"></span>
           <div class="input-actions">
             <button
@@ -233,6 +234,7 @@ import { REF_CHIP_CONFIG } from '@/utils/references'
 import { getApiBase, isTauri, tauriFetch } from '@/utils/env'
 import type { ThinkPathId } from '@/utils/thinkPath'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
+import DsSelect from './ui/DsSelect.vue'
 import ModelSelector from './ModelSelector.vue'
 import ContextUsageBadge from './ContextUsageBadge.vue'
 import { useChatStore } from '@/stores/chat'
@@ -724,33 +726,28 @@ const providers = computed(() => providerStore.enabledProviders)
 const selectedProviderId = ref('')
 const selectedModelName = ref('')
 const currentModels = ref<string[]>([])
-const openDropdown = ref<'provider' | 'model' | null>(null)
 const noProvider = computed(() => providers.value.length === 0)
+const providerOptions = computed(() =>
+  providers.value.map(p => ({ value: p.id, label: p.label }))
+)
+const modelOptions = computed(() =>
+  currentModels.value.map(m => ({ value: m, label: m }))
+)
 
-function toggleDropdown(name: 'provider' | 'model') {
-  openDropdown.value = openDropdown.value === name ? null : name
-}
-
-function selectProvider(id: string) {
+function selectProvider(value: string | number) {
+  const id = String(value)
   selectedProviderId.value = id
-  openDropdown.value = null
   const p = providers.value.find(p => p.id === id)
   currentModels.value = p?.models ?? []
   selectedModelName.value = currentModels.value[0] || ''
   emit('modelChange', selectedProviderId.value, selectedModelName.value)
 }
 
-function selectModel(name: string) {
+function selectModel(value: string | number) {
+  const name = String(value)
   selectedModelName.value = name
-  openDropdown.value = null
   emit('modelChange', selectedProviderId.value, selectedModelName.value)
 }
-
-function onDocumentClick() {
-  openDropdown.value = null
-}
-onMounted(() => document.addEventListener('click', onDocumentClick))
-onUnmounted(() => document.removeEventListener('click', onDocumentClick))
 
 // 从 store 加载 provider 列表并设置默认选中
 async function loadProviders() {
@@ -1090,94 +1087,64 @@ function onResizeEnd(e: PointerEvent) {
   position: relative;
 }
 
-/* ── 自定义 Dropdown ── */
-.dropdown {
-  position: relative;
-  display: inline-block;
-}
-.dropdown-trigger {
-  font-size: 0.75em;
-  padding: 4px 8px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-family: inherit;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: all 0.15s;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+/* ── LLM 提供商/模型选择器（基于 DsSelect，覆盖 input 样式以保持紧凑视觉）── */
+.provider-select,
+.model-select {
+  width: auto;
   max-width: 160px;
   flex-shrink: 1;
   min-width: 0;
 }
-.dropdown-trigger:hover {
+.provider-select :deep(.ds-select__input),
+.model-select :deep(.ds-select__input) {
+  height: 24px;
+  padding: 0 24px 0 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.75em;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.provider-select :deep(.ds-select__input:hover),
+.model-select :deep(.ds-select__input:hover) {
   border-color: var(--border);
   background: var(--bg-secondary);
   color: var(--text-primary);
 }
-.dropdown-trigger.empty {
+.provider-select.empty :deep(.ds-select__input) {
   color: var(--status-error);
   opacity: 0.7;
 }
-.dropdown-trigger:focus-visible {
+.provider-select :deep(.ds-select__input:focus-visible),
+.model-select :deep(.ds-select__input:focus-visible) {
   outline: 1.5px solid var(--accent);
   outline-offset: 2px;
+  box-shadow: none;
+  border-color: transparent;
 }
-.dropdown-option.disabled {
-  color: var(--text-secondary);
-  font-style: italic;
-  cursor: default;
-  font-size: 0.8em;
-  white-space: normal;
-  line-height: 1.4;
-}
-.dropdown-arrow {
-  font-size: 0.6em;
-  line-height: 1;
-  opacity: 0.5;
-  flex-shrink: 0;
-}
-.dropdown-menu {
-  position: absolute;
-  bottom: calc(100% + 4px);
-  right: 0;
-  z-index: 200;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: var(--shadow-lg);
-  min-width: 140px;
-  max-height: 200px;
-  overflow-y: auto;
-  padding: 4px;
-}
-.dropdown-option {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 6px 10px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-primary);
-  font-size: 0.85em;
-  cursor: pointer;
-  font-family: inherit;
-  white-space: nowrap;
-  transition: background 0.1s;
-}
-.dropdown-option:hover {
+.provider-select :deep(.ds-select--open .ds-select__input),
+.model-select :deep(.ds-select--open .ds-select__input) {
+  border-color: var(--accent);
   background: var(--bg-secondary);
+  color: var(--text-primary);
+  box-shadow: none;
 }
-.dropdown-option.selected {
-  color: var(--accent);
-  font-weight: 600;
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
+.provider-select :deep(.ds-select__caret),
+.model-select :deep(.ds-select__caret) {
+  width: 20px;
+  height: 24px;
+  color: var(--text-tertiary);
+  opacity: 0.5;
+}
+.provider-select :deep(.ds-select--open .ds-select__caret),
+.model-select :deep(.ds-select--open .ds-select__caret) {
+  color: var(--text-primary);
+  opacity: 1;
 }
 
 /* 引用标签条 */
