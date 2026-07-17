@@ -34,7 +34,7 @@ const props = withDefaults(defineProps<{
   iconName: 'sparkles',
 })
 
-const emit = defineEmits<{
+defineEmits<{
   select: [item: { name: string; description: string }]
   close: []
   'update:activeIndex': [index: number]

@@ -4,7 +4,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted } from 'vue'
+import { computed } from 'vue'
 import { renderMarkdown, renderMarkdownRaw, contentNeedsIsolation } from '@/utils/markdown'
 import HtmlSandbox from './HtmlSandbox.vue'
 import { useMediaViewer } from '@/composables/useMediaViewer'

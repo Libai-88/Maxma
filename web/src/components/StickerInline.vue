@@ -32,7 +32,7 @@ import type { StickerSegment } from '@/composables/useStickerSegments'
 import { useNightModeState } from '@/composables/useNightMode'
 import { useFPSMonitor, useStickerPerformance } from '@/composables/useStickerPerformance'
 
-const props = defineProps<{ sticker: StickerSegment }>()
+defineProps<{ sticker: StickerSegment }>()
 
 defineEmits<{
   preview: [sticker: StickerSegment]

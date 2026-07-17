@@ -40,7 +40,6 @@ import type {
   KbSearchResult,
   MetricsSnapshot,
   MetricsHistoryResponse,
-  AuditLogRecord,
   AuditLogStats,
   AuditLogListResponse,
   ActivityRecentResponse,
