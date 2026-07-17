@@ -15,7 +15,7 @@
       </div>
       <div v-else-if="step === 2" class="step-content">
         <p>选择你偏好的界面主题和工作方式。</p>
-        <div class="theme-options"><button v-for="theme in quickThemes" :key="theme.id" type="button" class="theme-option" :class="{ selected: storedTheme === theme.id }" @click="setTheme(theme.id)"><span class="theme-swatch" :style="{ background: theme.preview.bg }"></span>{{ theme.name }}</button></div>
+        <div class="theme-options"><button v-for="theme in quickThemes" :key="theme.id" type="button" class="theme-option" :class="{ selected: storedTheme === theme.id }" @click="setTheme(theme.id)"><span class="theme-swatch" :class="`swatch--${theme.id}`"></span>{{ theme.name }}</button></div>
         <label>工作区<select v-model="workspace"><option value="personal">个人对话</option><option value="project">项目工作</option></select></label>
       </div>
       <div v-else class="step-content"><p>从左侧创建或切换会话；模型、记忆和工具状态会在运行状态中汇总显示。</p><p>没有配置模型时，你仍可查看已有的会话与本地内容。</p></div>
@@ -55,5 +55,8 @@ h2 { margin: 3px 0 0; font-size: 21px; color: var(--text-primary); }.eyebrow { c
 .skip, .primary, .secondary, .theme-option { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; font: inherit; font-size: 13px; cursor: pointer; }.skip, .secondary, .theme-option { background: transparent; color: var(--text-secondary); }.primary { background: var(--accent); border-color: var(--accent); color: var(--bg-primary); }.primary:focus-visible, .secondary:focus-visible, .skip:focus-visible, .theme-option:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .stepper { display: flex; gap: 6px; padding: 18px 24px 0; }.stepper span { display: block; height: 3px; flex: 1; background: var(--border); }.stepper .active, .stepper .complete { background: var(--accent); }
 .step-content { display: grid; gap: 16px; min-height: 236px; padding: 24px; color: var(--text-secondary); line-height: 1.6; }.step-content p { margin: 0; }label { display: grid; gap: 6px; color: var(--text-primary); font-size: 13px; }input, select { width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-primary); color: var(--text-primary); font: inherit; padding: 9px 10px; }input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }.health-note { border-left: 3px solid var(--border); padding-left: 10px; }.health-note.ok { border-color: var(--status-ok); }.health-note.attention { border-color: #d97706; }.theme-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }.theme-option { display: grid; gap: 6px; text-align: left; }.theme-option.selected { border-color: var(--accent); color: var(--text-primary); }.theme-swatch { display: block; height: 30px; border: 1px solid var(--border); border-radius: 3px; }
+.swatch--warm-paper { background: #F8F4ED; }
+.swatch--midnight { background: #3B4A54; }
+.swatch--high-contrast { background: #FAF8F7; }
 @media (max-width: 520px) { .onboarding-backdrop { padding: 12px; }.onboarding-header, .onboarding-footer, .step-content { padding-left: 18px; padding-right: 18px; }.theme-options { grid-template-columns: 1fr; } }
 </style>

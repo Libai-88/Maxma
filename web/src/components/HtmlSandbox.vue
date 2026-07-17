@@ -11,15 +11,9 @@
       ref="iframeRef"
       :srcdoc="iframeContent"
       sandbox="allow-scripts allow-modals"
-      :style="{
-        width: '100%',
-        height: iframeHeight + 'px',
-        border: 'none',
-        display: 'block',
-        overflow: 'hidden',
-        visibility: iframeLoaded ? 'visible' : 'hidden',
-        position: iframeLoaded ? 'relative' : 'absolute',
-      }"
+      class="html-sandbox-iframe"
+      :class="{ 'is-loaded': iframeLoaded, 'is-loading': !iframeLoaded }"
+      :style="{ height: iframeHeight + 'px' }"
       title="sandboxed-content"
       @load="onIframeLoad"
     />
@@ -370,6 +364,21 @@ onUnmounted(() => {
   position: relative;
   width: 100%;
   min-height: 40px;
+}
+
+.html-sandbox-iframe {
+  width: 100%;
+  border: none;
+  display: block;
+  overflow: hidden;
+}
+.html-sandbox-iframe.is-loading {
+  visibility: hidden;
+  position: absolute;
+}
+.html-sandbox-iframe.is-loaded {
+  visibility: visible;
+  position: relative;
 }
 
 .sandbox-loading {
