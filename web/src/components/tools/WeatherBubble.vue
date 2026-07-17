@@ -345,7 +345,7 @@ const displayOutput = computed(() => {
 
 .bubble-error {
   font-size: 13px;
-  color: #b91c1c;
+  color: var(--status-error);
   padding: 4px 0;
 }
 
@@ -387,7 +387,7 @@ const displayOutput = computed(() => {
 }
 .lf-time {
   font-size: 10px;
-  color: var(--text-tertiary, #bbb);
+  color: var(--text-tertiary);
   letter-spacing: 0.3px;
 }
 .lf-header-icon {
@@ -429,7 +429,7 @@ const displayOutput = computed(() => {
   color: var(--text-secondary);
 }
 .lf-cond-row .divider {
-  color: var(--text-tertiary, #ddd);
+  color: var(--text-tertiary);
   font-weight: 300;
 }
 .lf-cond-icon {
@@ -541,10 +541,10 @@ const displayOutput = computed(() => {
   line-height: 1.5;
   background: var(--bg-primary);
 }
-.lf-alert-item.alert-level-red { border-color: #dc2626; background: rgba(220,38,38,0.04); }
+.lf-alert-item.alert-level-red { border-color: var(--status-error); background: rgba(220,38,38,0.04); }
 .lf-alert-item.alert-level-orange { border-color: #ea580c; background: rgba(234,88,12,0.04); }
 .lf-alert-item.alert-level-yellow { border-color: #ca8a04; background: rgba(202,138,4,0.04); }
-.lf-alert-item.alert-level-blue { border-color: #2563eb; background: rgba(37,99,235,0.04); }
+.lf-alert-item.alert-level-blue { border-color: var(--status-info); background: rgba(37,99,235,0.04); }
 .lf-alert-item.alert-level-unknown { border-color: var(--border); }
 .alert-header {
   display: flex;
@@ -619,9 +619,9 @@ const displayOutput = computed(() => {
   opacity: 0.25;
 }
 .p-bar.p-level-暴雨 { color: #7c3aed; width: 100%; }
-.p-bar.p-level-大雨 { color: #dc2626; width: 72%; }
+.p-bar.p-level-大雨 { color: var(--status-error); width: 72%; }
 .p-bar.p-level-中雨 { color: #ea580c; width: 44%; }
-.p-bar.p-level-小雨 { color: #2563eb; width: 22%; }
+.p-bar.p-level-小雨 { color: var(--status-info); width: 22%; }
 .p-bar.p-level-微量 { color: var(--border); width: 10%; }
 .p-intensity {
   font-size: 10px;
@@ -629,9 +629,9 @@ const displayOutput = computed(() => {
   min-width: 2em;
 }
 .p-intensity.p-level-暴雨 { color: #7c3aed; }
-.p-intensity.p-level-大雨 { color: #dc2626; }
+.p-intensity.p-level-大雨 { color: var(--status-error); }
 .p-intensity.p-level-中雨 { color: #ea580c; }
-.p-intensity.p-level-小雨 { color: #2563eb; }
+.p-intensity.p-level-小雨 { color: var(--status-info); }
 .p-intensity.p-level-微量 { color: var(--text-tertiary); }
 .p-duration {
   font-size: 10px;

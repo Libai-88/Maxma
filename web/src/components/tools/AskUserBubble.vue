@@ -389,14 +389,14 @@ function submitConfirm() {
   border: none;
   border-radius: 6px;
   background: var(--accent);
-  color: #fff;
+  color: var(--bg-primary);
   font-size: 13px;
   cursor: pointer;
   font-family: inherit;
   transition: background 0.15s;
 }
 .btn-submit:hover:not(:disabled) {
-  background: #1d4ed8;
+  opacity: 0.9;
 }
 .btn-submit:disabled {
   opacity: 0.4;
@@ -415,7 +415,7 @@ function submitConfirm() {
 /* 错误 */
 .ask-error {
   font-size: 13px;
-  color: #b91c1c;
+  color: var(--status-error);
   padding: 4px 0;
 }
 
@@ -433,8 +433,8 @@ function submitConfirm() {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #4caf50;
-  color: #fff;
+  background: var(--status-ok);
+  color: var(--bg-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -477,12 +477,12 @@ function submitConfirm() {
 }
 .confirm-warning-icon {
   font-size: 16px;
-  color: #dc2626;
+  color: var(--status-error);
 }
 .confirm-warning-text {
   font-size: 13px;
   font-weight: 600;
-  color: #b91c1c;
+  color: var(--status-error);
 }
 .confirm-detail {
   font-size: 13px;
@@ -513,8 +513,8 @@ function submitConfirm() {
 }
 .btn-confirm-submit {
   padding: 8px 16px;
-  background: #dc2626;
-  color: #fff;
+  background: var(--status-error);
+  color: var(--bg-primary);
   border: none;
   border-radius: 6px;
   font-size: 13px;
@@ -524,7 +524,7 @@ function submitConfirm() {
   align-self: flex-start;
 }
 .btn-confirm-submit:hover:not(:disabled) {
-  background: #b91c1c;
+  opacity: 0.9;
 }
 .btn-confirm-submit:disabled {
   opacity: 0.5;

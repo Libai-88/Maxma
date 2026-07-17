@@ -79,6 +79,6 @@ function toggle() {
 .pulse-label { color: var(--text-secondary); font-size: 12px; }
 .pulse-detail { overflow: hidden; color: var(--text-tertiary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .pulse-dot { width: 7px; height: 7px; flex: 0 0 7px; border-radius: 50%; }
-.pulse-dot.ok { background: var(--status-ok); }.pulse-dot.degraded { background: #d97706; }.pulse-dot.error { background: var(--status-error); }
+.pulse-dot.ok { background: var(--status-ok); }.pulse-dot.degraded { background: var(--status-warn); }.pulse-dot.error { background: var(--status-error); }
 .pulse-updated { margin: 2px 0 0 15px; }
 </style>

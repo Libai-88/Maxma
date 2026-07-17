@@ -53,8 +53,8 @@ defineEmits<{
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--bg-secondary, #f8f9fa);
-  border-left: 1px solid var(--border-color, #e0e0e0);
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
   overflow: hidden;
 }
 
@@ -65,8 +65,8 @@ defineEmits<{
   padding: 0 12px;
   height: 44px;
   min-height: 44px;
-  border-bottom: 1px solid var(--border-color, #e0e0e0);
-  background: var(--bg-primary, #fff);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-primary);
 }
 
 .workbench-tabs {
@@ -78,7 +78,7 @@ defineEmits<{
   padding: 6px 14px;
   border: none;
   background: transparent;
-  color: var(--text-secondary, #666);
+  color: var(--text-secondary);
   font-size: 13px;
   cursor: pointer;
   border-radius: 6px;
@@ -89,12 +89,12 @@ defineEmits<{
 }
 
 .workbench-tab:hover {
-  background: var(--bg-hover, #f0f0f0);
+  background: var(--bg-secondary);
 }
 
 .workbench-tab.active {
-  background: var(--accent-bg, #e8f0fe);
-  color: var(--accent-color, #1a73e8);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-card));
+  color: var(--accent);
   font-weight: 600;
 }
 
@@ -108,15 +108,15 @@ defineEmits<{
   font-size: 10px;
   font-weight: 700;
   border-radius: 8px;
-  background: var(--accent-color, #1a73e8);
-  color: #fff;
+  background: var(--accent);
+  color: var(--bg-primary);
 }
 
 .workbench-close {
   border: none;
   background: transparent;
   font-size: 20px;
-  color: var(--text-secondary, #666);
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 4px 8px;
   border-radius: 4px;
@@ -124,7 +124,7 @@ defineEmits<{
 }
 
 .workbench-close:hover {
-  background: var(--bg-hover, #f0f0f0);
+  background: var(--bg-secondary);
 }
 
 .workbench-body {

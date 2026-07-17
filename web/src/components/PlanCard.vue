@@ -263,24 +263,24 @@ function submitEdit() {
   height: 22px;
   border-radius: 50%;
   background: var(--accent);
-  color: white;
+  color: var(--bg-primary);
   font-size: 11px;
   font-weight: 700;
   flex-shrink: 0;
   margin-top: 1px;
 }
 
-.step-num.step-done { background: #16a34a; }
-.step-num.step-failed { background: #dc2626; }
+.step-num.step-done { background: var(--status-ok); }
+.step-num.step-failed { background: var(--status-error); }
 .step-num.step-skipped { background: #9ca3af; }
-.step-num.step-running { background: #2563eb; }
+.step-num.step-running { background: var(--status-info); }
 
 .step-spinner {
   display: inline-block;
   width: 12px;
   height: 12px;
   border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: white;
+  border-top-color: var(--bg-primary);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
