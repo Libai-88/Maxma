@@ -329,7 +329,7 @@ onMounted(async () => {
 watch(health, (newHealth, oldHealth) => {
   if (!oldHealth && newHealth) {
     // 从 null（离线）变为有值（在线），刷新会话列表
-    sessionStore.refreshSessions().catch(() => {})
+    sessionStore.refreshSessions().catch((err) => console.warn('[App] refreshSessions failed:', err))
   }
 })
 </script>
