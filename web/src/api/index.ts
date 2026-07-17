@@ -54,6 +54,21 @@ import type {
   WorkflowDefinitionsResponse,
   WorkflowRun,
 } from '@/types'
+import type {
+  EventHook,
+  EventHookCreateBody,
+  EventHookHistoryResponse,
+  EventHookMutationResponse,
+  EventHookUpdateBody,
+  ListEventHooksResponse,
+} from '@/types/event-hooks'
+import type {
+  CreatePersonaBody,
+  CreatePersonaResponse,
+  ListPersonasResponse,
+  SwitchPersonaResponse,
+} from '@/types/persona'
+import type { McpAuditSummaryResponse } from '@/types/audit-log'
 import { ensurePortLoaded, getApiBase, tauriFetch } from '@/utils/env'
 
 // 注意：BASE 在 ensurePortLoaded() 完成后可能因端口冲突回退而变化，
@@ -413,16 +428,16 @@ export const api = {
     }),
 
   listPersonas: () =>
-    request<{ personas: { id: string; file: string; name: string; description: string; active: boolean }[]; active_file: string }>('/personas'),
+    request<ListPersonasResponse>('/personas'),
 
   switchPersona: (file: string) =>
-    request<{ status: string; active_file: string }>('/personas/active', {
+    request<SwitchPersonaResponse>('/personas/active', {
       method: 'PUT',
       body: JSON.stringify({ file }),
     }),
 
-  createPersona: (body: { name: string; description?: string; tools?: string; memory?: string }) =>
-    request<{ status: string; file: string; memory_mode: string; tools: string }>('/personas', {
+  createPersona: (body: CreatePersonaBody) =>
+    request<CreatePersonaResponse>('/personas', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
@@ -536,25 +551,25 @@ export const api = {
 
   // 阶段 4.2：MCP 调用审计聚合统计
   getMcpAuditSummary: () =>
-    request<{ summary: any[]; event_type: string }>('/audit-log/mcp-summary'),
+    request<McpAuditSummaryResponse>('/audit-log/mcp-summary'),
 
   uploadImage,
 
   // Event Hooks
   listHooks: () =>
-    request<{ hooks: any[] }>('/event-hooks'),
+    request<ListEventHooksResponse>('/event-hooks'),
 
   getHook: (hookId: string) =>
-    request<any>(`/event-hooks/${hookId}`),
+    request<EventHook>(`/event-hooks/${hookId}`),
 
-  createHook: (body: { name: string; hook_type: string; config: Record<string, any>; action: string }) =>
-    request<{ status: string; hook: any }>('/event-hooks', {
+  createHook: (body: EventHookCreateBody) =>
+    request<EventHookMutationResponse>('/event-hooks', {
       method: 'POST',
       body: JSON.stringify(body),
     }),
 
-  updateHook: (hookId: string, body: Record<string, any>) =>
-    request<{ status: string; hook: any }>(`/event-hooks/${hookId}`, {
+  updateHook: (hookId: string, body: EventHookUpdateBody) =>
+    request<EventHookMutationResponse>(`/event-hooks/${hookId}`, {
       method: 'PUT',
       body: JSON.stringify(body),
     }),
@@ -563,7 +578,7 @@ export const api = {
     request<{ status: string }>(`/event-hooks/${hookId}`, { method: 'DELETE' }),
 
   getHookHistory: (limit: number = 50) =>
-    request<{ history: any[] }>(`/event-hooks/history?limit=${limit}`),
+    request<EventHookHistoryResponse>(`/event-hooks/history?limit=${limit}`),
 
   // Audit Log
   getAuditLog: (params: string = '?limit=50') =>
