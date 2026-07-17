@@ -14,7 +14,7 @@
   /* ── 主色调（远山青） ── */
   --accent:        #537D96;
   --accent-pink:   #EC8F8D;
-  --accent-pink-light: #EC8F8D;
+  --accent-pink-light: var(--accent-pink);
   --accent-pink-soft:  rgba(236, 143, 141, 0.1);
 
   /* ── 文字（5 档墨色） ── */
@@ -52,11 +52,9 @@
   --danger-rgb: 244, 67, 54;
 
   /* 聊天专用语义色 */
-  --hana-text: #5a7a8a;
   --mood-bg: rgba(var(--accent-rgb), 0.06);
   --mood-text: #6b8a9a;
   --mood-border: rgba(var(--accent-rgb), 0.15);
-  --tool-bg: rgba(var(--accent-rgb), 0.04);
   --tool-text: #4a6a7a;
   --user-bg: rgba(var(--accent-rgb), 0.08);
   --drop-overlay-bg: rgba(var(--accent-rgb), 0.12);
