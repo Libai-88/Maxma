@@ -328,3 +328,41 @@ Run: `.venv\Scripts\python.exe -m ruff check --select=E9,F63,F7,F821 tests`
 | api/middleware/rate_limit.py | 130 | `if loop is None: return` — dead code; `asyncio.get_running_loop()` either returns a loop or raises RuntimeError, never None |
 | api/routes/stickers.py | 39 | `if not path:` — dead code; `path = f"{category}/{pick.name}"` is always non-empty |
 | api/routes/stickers.py | 65, 77 | Path traversal 403 — defensive dead code; regex `^[\w\-]+\.webp$` already prevents `..` and `/` |
+| api/server.py | 167-170 | `root_fallback` route handler is dead code; `spa_fallback` route `/{path:path}` is registered first and intercepts the `/` path before `root_fallback` can match. Existing tests in `test_server_extra.py` confirm `/` is served by `spa_fallback`. |
+| api/artifacts/schema.py | 71 | `raise ValueError("artifact payload exceeds the size limit")` is effectively dead code; `body: str = Field(max_length=4000)` rejects oversized payloads at Pydantic validation layer before reaching the `model_validator`, so the 16KB check is unreachable with current field constraints (max ~11KB serialized). |
+
+---
+
+## Final Coverage Report
+
+**Before:** 5453 statements, 73 uncovered, 99%
+**After:** 5453 statements, 9 uncovered, 99.83%
+
+**Net reduction:** 64 uncovered lines (73 → 9), an 87.7% reduction in uncovered lines.
+Coverage gain: +0.83 percentage points (99% → 99.83%), exceeding the 99.5% goal.
+
+**Final uncovered lines (all documented as uncoverable):**
+
+| Module | Stmts | Miss | Cover | Missing |
+|--------|-------|------|-------|---------|
+| api/artifacts/schema.py | 99 | 1 | 99% | 71 |
+| api/middleware/rate_limit.py | 181 | 1 | 99% | 130 |
+| api/routes/stickers.py | 60 | 3 | 95% | 39, 65, 77 |
+| api/server.py | 117 | 4 | 97% | 167-170 |
+| **TOTAL** | **5453** | **9** | **99%** | |
+
+**Test results:** 1752 passed, 7 skipped in 27.60s
+**Ruff check:** All checks passed
+
+**New test files created (8):**
+1. `tests/test_api/test_diagnostics_routes_push.py` — 4 tests (diagnostics cleanup edge cases)
+2. `tests/test_api/test_artifact_schema_push.py` — 6 tests (artifact validation + authorizer edge cases)
+3. `tests/test_api/test_yaml_store_push.py` — 3 tests (atomic write/backup error paths)
+4. `tests/test_api/test_auth_push.py` — 1 test (OSError on token read)
+5. `tests/test_api/test_interaction_push.py` — 4 tests (auto_approve + cancel edge cases)
+6. `tests/test_api/test_rate_limit_push.py` — 8 tests (cleanup task + WS scope + singleton)
+7. `tests/test_agent/test_prompts_push.py` — 6 tests (resolve OSError + dedup)
+8. `tests/test_agent/test_persona_loader_push.py` — 3 tests (missing default + no frontmatter)
+9. `tests/test_api/test_const_session_store_push.py` — 1 test (load exception)
+10. `tests/test_api/test_request_log_push.py` — 2 tests (WS passthrough + 5xx log)
+11. `tests/test_pi_bridge/test_rpc_client_push.py` — 1 test (read loop crash)
