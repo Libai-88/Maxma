@@ -1,125 +1,125 @@
 /* web/src/assets/styles/animations.css
  * 全部 @keyframes 定义 — 单一真相来源
- * 命名前缀 hana-*，与 openhanako 保持一致
+ * 命名前缀 maxma-*
  */
 
 /* ── Spin ── */
-@keyframes hana-spin {
+@keyframes maxma-spin {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
 }
 
-@keyframes hana-globe-spin {
+@keyframes maxma-globe-spin {
   from { transform: rotateY(0deg); }
   to   { transform: rotateY(360deg); }
 }
 
 /* ── Fade ── */
-@keyframes hana-fade-in {
+@keyframes maxma-fade-in {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
-@keyframes hana-fade-out {
+@keyframes maxma-fade-out {
   from { opacity: 1; }
   to   { opacity: 0; }
 }
 
 /* ── Fade + Slide Y（位移量由 --slide-y 控制，默认 4px） ── */
-@keyframes hana-fade-up {
+@keyframes maxma-fade-up {
   from { opacity: 0; transform: translateY(var(--slide-y, 4px)); }
   to   { opacity: 1; transform: translateY(0); }
 }
-@keyframes hana-fade-down {
+@keyframes maxma-fade-down {
   from { opacity: 1; transform: translateY(0); }
   to   { opacity: 0; transform: translateY(var(--slide-y, 4px)); }
 }
 
 /* ── Chat Stream ── */
-@keyframes hana-stream-tail-in {
+@keyframes maxma-stream-tail-in {
   from { opacity: 0.18; }
   to   { opacity: 1; }
 }
-@keyframes hana-chat-soft-down-in {
+@keyframes maxma-chat-soft-down-in {
   from { opacity: 0; transform: translateY(-3px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-@keyframes hana-chat-soft-up-in {
+@keyframes maxma-chat-soft-up-in {
   from { opacity: 0; transform: translateY(3px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-@keyframes hana-tool-bar-in {
+@keyframes maxma-tool-bar-in {
   from { opacity: 0; transform: scaleY(0); }
   to   { opacity: 1; transform: scaleY(1); }
 }
 
 /* ── Scale + Popout ── */
-@keyframes hana-scale-in {
+@keyframes maxma-scale-in {
   from { opacity: 0; transform: scale(0.96) translateY(8px); }
   to   { opacity: 1; transform: scale(1) translateY(0); }
 }
-@keyframes hana-popout {
+@keyframes maxma-popout {
   from { opacity: 0; transform: scale(0.92); }
   to   { opacity: 1; transform: scale(1); }
 }
 
 /* ── Slide X（浮窗） ── */
-@keyframes hana-slide-in-left {
+@keyframes maxma-slide-in-left {
   from { opacity: 0; transform: translateX(-20px) scale(0.97); }
   to   { opacity: 1; transform: translateX(0) scale(1); }
 }
-@keyframes hana-slide-out-left {
+@keyframes maxma-slide-out-left {
   from { opacity: 1; transform: translateX(0) scale(1); }
   to   { opacity: 0; transform: translateX(-12px) scale(0.97); }
 }
 
 /* ── Slide Y（面板从上方进出） ── */
-@keyframes hana-slide-in-top {
+@keyframes maxma-slide-in-top {
   from { opacity: 0; transform: translateY(-6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-@keyframes hana-slide-out-top {
+@keyframes maxma-slide-out-top {
   from { opacity: 1; transform: translateY(0); }
   to   { opacity: 0; transform: translateY(-6px); }
 }
 
 /* ── 卡片从顶部滑入 ── */
-@keyframes hana-card-slide-down {
+@keyframes maxma-card-slide-down {
   from { transform: translateY(-110%); opacity: 0; }
   to   { transform: translateY(0);     opacity: 1; }
 }
 
 /* ── Pulse / Expand / Hint ── */
-@keyframes hana-pulse {
+@keyframes maxma-pulse {
   0%, 100% { opacity: var(--pulse-lo, 0.3); }
   50%      { opacity: var(--pulse-hi, 1); }
 }
-@keyframes hana-expand {
+@keyframes maxma-expand {
   from { max-height: 0; opacity: 0; }
   to   { max-height: 800px; opacity: 1; }
 }
-@keyframes hana-hint-fade {
+@keyframes maxma-hint-fade {
   0%, 60% { opacity: 1; }
   100%    { opacity: 0; }
 }
 
 /* ── Rise + Clip（确认栏） ── */
-@keyframes hana-rise {
+@keyframes maxma-rise {
   from { opacity: 0; transform: translateY(24px); clip-path: inset(100% 0 0 0); }
   to   { opacity: 1; transform: translateY(0);     clip-path: inset(0 0 0 0); }
 }
-@keyframes hana-retract {
+@keyframes maxma-retract {
   from { opacity: 1; transform: translateY(0);     clip-path: inset(0 0 0 0); }
   to   { opacity: 0; transform: translateY(24px); clip-path: inset(100% 0 0 0); }
 }
 
 /* ── 打字机省略号 ── */
-@keyframes hana-typewriter-dots {
+@keyframes maxma-typewriter-dots {
   0%, 100% { content: '\00a0'; }
   25%      { content: '.'; }
   50%      { content: '..'; }
   75%      { content: '...'; }
 }
-@keyframes hana-cycling-dots {
+@keyframes maxma-cycling-dots {
   0%, 100% { content: '.'; }
   33%      { content: '..'; }
   66%      { content: '...'; }
@@ -137,21 +137,21 @@
   }
 
   /* 位移类动画直接跳到终态 */
-  .hana-fade-up,
-  .hana-fade-down,
-  .hana-slide-in-left,
-  .hana-slide-out-left,
-  .hana-slide-in-top,
-  .hana-slide-out-top {
+  .maxma-fade-up,
+  .maxma-fade-down,
+  .maxma-slide-in-left,
+  .maxma-slide-out-left,
+  .maxma-slide-in-top,
+  .maxma-slide-out-top {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;
   }
 
   /* 旋转/脉动停止 */
-  .hana-spin,
-  .hana-globe-spin,
-  .hana-pulse {
+  .maxma-spin,
+  .maxma-globe-spin,
+  .maxma-pulse {
     animation: none !important;
   }
 
