@@ -332,7 +332,9 @@ export async function orchestratePrompt(
  *   - guard active & already done → no-op (agent_end / timeout already emitted done)
  *   - no guard (idle)           → emit `done` once for legacy compatibility
  *
- * Replaces the old BUG4 manual `sendEvent(..., { type: "done" })` patch.
+ * The active prompt's try/finally would also emit `done` via the guard, but we
+ * mark + emit here so cancel is resolved promptly even if the abort does not
+ * propagate synchronously.
  */
 export function handleCancelGuard(
   guard: DoneGuard | null,
@@ -443,8 +445,7 @@ if (import.meta.main) {
         // Serialize: chain onto the previous prompt so they run sequentially.
         // A failed prompt does not block the next one (.catch resets the chain).
         // orchestratePrompt guarantees the `done` event is emitted exactly once
-        // on every path (natural agent_end, error, abort, or 600s timeout),
-        // replacing the old manual BUG3 done-event patch.
+        // on every path (natural agent_end, error, abort, or 600s timeout).
         record.promptQueue = record.promptQueue
           .catch(() => {})
           .then(async () => {
@@ -479,7 +480,7 @@ if (import.meta.main) {
         record.session.agent.abort("Cancelled by user");
         // The active prompt's finally block would also emit done via the guard,
         // but we mark + emit here so cancel is resolved promptly even if the
-        // abort does not propagate synchronously. Replaces the old BUG4 patch.
+        // abort does not propagate synchronously.
         handleCancelGuard(record.currentGuard, (e) => sendEvent(sessionId, e));
 
         send(id, { ok: true });
