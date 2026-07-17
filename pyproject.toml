@@ -21,6 +21,15 @@ dependencies = [
     "watchdog>=3.0.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=5.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.5.0",
+    "mypy>=1.10.0",
+]
+
 [project.urls]
 Homepage = "https://github.com/Libai-88/Maxma"
 Repository = "https://github.com/Libai-88/Maxma.git"
