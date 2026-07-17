@@ -7,43 +7,45 @@
     class="ds-select"
     :class="[`ds-select--${size}`, { 'ds-select--disabled': disabled, 'ds-select--open': open }]"
   >
-    <input
-      ref="inputRef"
-      class="ds-select__input"
-      role="combobox"
-      :id="id"
-      :aria-label="ariaLabel"
-      aria-autocomplete="list"
-      :aria-expanded="open ? 'true' : 'false'"
-      :aria-controls="listboxId"
-      :aria-activedescendant="open && activeOptionId ? activeOptionId : undefined"
-      :aria-disabled="disabled ? 'true' : undefined"
-      :placeholder="placeholder"
-      :value="selectedLabel"
-      :disabled="disabled"
-      autocomplete="off"
-      spellcheck="false"
-      readonly
-      @click="openList"
-      @keydown="onKeyDown"
-      @focus="onInputFocus"
-      @blur="onInputBlur"
-    />
-    <button
-      type="button"
-      class="ds-select__caret"
-      :aria-label="open ? '关闭选项列表' : '展开选项列表'"
-      aria-haspopup="listbox"
-      :aria-expanded="open ? 'true' : 'false'"
-      tabindex="-1"
-      :disabled="disabled"
-      @click="toggle"
-    >
-      <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" focusable="false">
-        <path d="M3 6l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.6"
-              stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </button>
+    <slot name="trigger" :open="open" :toggle="toggle">
+      <input
+        ref="inputRef"
+        class="ds-select__input"
+        role="combobox"
+        :id="id"
+        :aria-label="ariaLabel"
+        aria-autocomplete="list"
+        :aria-expanded="open ? 'true' : 'false'"
+        :aria-controls="listboxId"
+        :aria-activedescendant="open && activeOptionId ? activeOptionId : undefined"
+        :aria-disabled="disabled ? 'true' : undefined"
+        :placeholder="placeholder"
+        :value="selectedLabel"
+        :disabled="disabled"
+        autocomplete="off"
+        spellcheck="false"
+        readonly
+        @click="openList"
+        @keydown="onKeyDown"
+        @focus="onInputFocus"
+        @blur="onInputBlur"
+      />
+      <button
+        type="button"
+        class="ds-select__caret"
+        :aria-label="open ? '关闭选项列表' : '展开选项列表'"
+        aria-haspopup="listbox"
+        :aria-expanded="open ? 'true' : 'false'"
+        tabindex="-1"
+        :disabled="disabled"
+        @click="toggle"
+      >
+        <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" focusable="false">
+          <path d="M3 6l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.6"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </slot>
     <Teleport to="body">
       <Transition name="ds-select">
         <ul
@@ -55,24 +57,53 @@
           :style="popupStyle"
           @mousedown.prevent="onListMouseDown"
         >
-          <li
-            v-for="(opt, i) in options"
-            :key="opt.value"
-            :id="`${listboxId}-opt-${i}`"
-            role="option"
-            :aria-selected="opt.value === modelValue ? 'true' : 'false'"
-            :aria-disabled="opt.disabled ? 'true' : undefined"
-            :class="[
-              'ds-select__option',
-              {
-                'is-active': i === activeIndex,
-                'is-selected': opt.value === modelValue,
-                'is-disabled': opt.disabled,
-              },
-            ]"
-            @click="onOptionClick(opt)"
-            @mousemove="onOptionHover(i)"
-          >{{ opt.label }}</li>
+          <template v-if="groupKey">
+            <template v-for="group in groupedOptions" :key="`g-${group.key}`">
+              <li role="presentation" class="ds-select__group-header">{{ group.key }}</li>
+              <li
+                v-for="item in group.items"
+                :key="item.opt.value"
+                :id="`${listboxId}-opt-${item.index}`"
+                role="option"
+                :aria-selected="item.opt.value === modelValue ? 'true' : 'false'"
+                :aria-disabled="item.opt.disabled ? 'true' : undefined"
+                :class="[
+                  'ds-select__option',
+                  {
+                    'is-active': item.index === activeIndex,
+                    'is-selected': item.opt.value === modelValue,
+                    'is-disabled': item.opt.disabled,
+                  },
+                ]"
+                @click="onOptionClick(item.opt)"
+                @mousemove="onOptionHover(item.index)"
+              >
+                <slot name="option" :option="item.opt" :active="item.index === activeIndex" :selected="item.opt.value === modelValue">{{ item.opt.label }}</slot>
+              </li>
+            </template>
+          </template>
+          <template v-else>
+            <li
+              v-for="(opt, i) in options"
+              :key="opt.value"
+              :id="`${listboxId}-opt-${i}`"
+              role="option"
+              :aria-selected="opt.value === modelValue ? 'true' : 'false'"
+              :aria-disabled="opt.disabled ? 'true' : undefined"
+              :class="[
+                'ds-select__option',
+                {
+                  'is-active': i === activeIndex,
+                  'is-selected': opt.value === modelValue,
+                  'is-disabled': opt.disabled,
+                },
+              ]"
+              @click="onOptionClick(opt)"
+              @mousemove="onOptionHover(i)"
+            >
+              <slot name="option" :option="opt" :active="i === activeIndex" :selected="opt.value === modelValue">{{ opt.label }}</slot>
+            </li>
+          </template>
         </ul>
       </Transition>
     </Teleport>
@@ -86,6 +117,8 @@ interface DsSelectOption {
   value: string | number
   label: string
   disabled?: boolean
+  /** 允许任意附加字段，供 groupKey 取值或 option slot 使用 */
+  [key: string]: unknown
 }
 
 const props = withDefaults(defineProps<{
@@ -96,6 +129,8 @@ const props = withDefaults(defineProps<{
   id?: string
   ariaLabel?: string
   size?: 'sm' | 'md'
+  /** 可选：按 option 上此字段分组渲染；不传则平铺。分组标题渲染为不可选的 presentation li。 */
+  groupKey?: string
 }>(), {
   disabled: false,
   size: 'md',
@@ -127,6 +162,25 @@ const selectedLabel = computed(() => {
 const activeOptionId = computed(() => {
   if (activeIndex.value < 0) return ''
   return `${listboxId}-opt-${activeIndex.value}`
+})
+
+/**
+ * 按 props.groupKey 把 options 聚合成分组（仅 groupKey 存在时使用）。
+ * 保留 options 数组中的首次出现顺序；每项含 opt 及其在原数组中的 index（供 activeIndex/aria 拼接 ID）。
+ * option 上 groupKey 字段缺失时归入 '其他' 分组。
+ */
+const groupedOptions = computed<{ key: string; items: { opt: DsSelectOption; index: number }[] }[]>(() => {
+  const key = props.groupKey
+  if (!key) return []
+  const map = new Map<string, { opt: DsSelectOption; index: number }[]>()
+  props.options.forEach((opt, index) => {
+    const raw = opt[key]
+    const k = raw == null || raw === '' ? '其他' : String(raw)
+    const arr = map.get(k)
+    if (arr) arr.push({ opt, index })
+    else map.set(k, [{ opt, index }])
+  })
+  return Array.from(map, ([key, items]) => ({ key, items }))
 })
 
 /** 找到当前选中项的索引，用于打开 listbox 时定位激活项 */
@@ -461,6 +515,20 @@ defineExpose({ openList, closeList, toggle })
 }
 .ds-select__option.is-disabled.is-active {
   background: transparent;
+}
+
+.ds-select__group-header {
+  padding: 6px 12px 4px;
+  font-size: 0.7em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  font-weight: 600;
+  user-select: none;
+  cursor: default;
+}
+.ds-select__group-header:first-child {
+  padding-top: 2px;
 }
 
 /* Transition */
