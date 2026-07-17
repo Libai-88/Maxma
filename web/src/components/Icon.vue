@@ -1,5 +1,12 @@
 <template>
-  <span class="icon" :class="`icon--${size}`" v-html="svgContent"></span>
+  <span
+    class="icon"
+    :class="`icon--${size}`"
+    :aria-hidden="decorative ? 'true' : undefined"
+    :aria-label="!decorative ? ariaLabel : undefined"
+    :role="!decorative && ariaLabel ? 'img' : undefined"
+    v-html="svgContent"
+  ></span>
 </template>
 
 <script setup lang="ts">
@@ -24,8 +31,15 @@ import stopRaw from '@/assets/icons/chat-input/stop.svg?raw'
 const props = withDefaults(defineProps<{
   name: string
   size?: 12 | 14 | 16 | 18 | 20
+  /** 装饰性图标（默认 true）：渲染 aria-hidden="true"，对屏幕阅读器隐藏 */
+  decorative?: boolean
+  /** 当 decorative=false 时使用，作为图标的可访问名称 */
+  ariaLabel?: string
+  /** 生成 <title> 子元素插入到 svg 内，用于原生 tooltip + 屏幕阅读器 */
+  title?: string
 }>(), {
   size: 16,
+  decorative: true,
 })
 
 const svgContents: Record<string, string> = {
@@ -65,7 +79,24 @@ const svgContents: Record<string, string> = {
 const svgContent = computed(() => {
   const raw = svgContents[props.name]
   if (!raw) return ''
-  return raw.replace(/<\?xml[^>]*\?>/, '').trim()
+  let svg = raw.replace(/<\?xml[^>]*\?>/, '').trim()
+  if (props.title) {
+    // 转义 XML 特殊字符，防止破坏 svg
+    const escaped = props.title
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;')
+    const titleEl = `<title>${escaped}</title>`
+    // 已有 <title> 时替换；否则作为 <svg> 第一个子元素插入
+    if (/<title[\s>]/i.test(svg)) {
+      svg = svg.replace(/<title[^>]*>[\s\S]*?<\/title>/i, titleEl)
+    } else {
+      svg = svg.replace(/<svg\b([^>]*)>/i, `<svg$1>${titleEl}`)
+    }
+  }
+  return svg
 })
 </script>
 
