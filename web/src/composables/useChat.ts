@@ -519,7 +519,7 @@ function handleEventForChannel(sid: string, event: ServerEvent) {
                 turn.stickerUrl = `/api/stickers/${data.path}`
               }
             })
-            .catch(() => {})
+            .catch((err) => console.warn('[useChat] sticker fetch failed:', err))
         }
       }
       break
