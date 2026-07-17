@@ -171,7 +171,7 @@ class SidecarManager:
                 try:
                     await self._stderr_task
                 except asyncio.CancelledError:
-                    pass
+                    logger.debug("[sidecar] Stderr forwarding task cancelled during stop()")
             self._stderr_task = None
 
         # Process termination outside lock (I/O bound, no shared state)
