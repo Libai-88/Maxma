@@ -70,12 +70,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { Codemirror } from 'vue-codemirror'
-import { markdown } from '@codemirror/lang-markdown'
-import { EditorView } from '@codemirror/view'
 import { api } from '@/api'
 import PersonaCard from '../components/PersonaCard.vue'
+import { useMarkdownPersist } from '@/composables/useMarkdownPersist'
 
 const props = defineProps<{
   title?: string
@@ -96,16 +95,29 @@ interface PersonaInfo {
   active: boolean
 }
 
-const content = ref('')
-const savedContent = ref('')
-const loading = ref(true)
-const saving = ref(false)
-const saveState = ref<'saved' | 'saving' | ''>('')
+// personas 状态需先于 composable 声明：getVariant 闭包读取 activeFile
 const personas = ref<PersonaInfo[]>([])
 const personasLoaded = ref(false)
 const activeFile = ref('SOUL.md')
-const loadError = ref('')
-const saveError = ref('')
+
+const {
+  content,
+  savedContent,
+  loading,
+  saving,
+  saveState,
+  saveError,
+  loadError,
+  extensions,
+  saveStateText,
+  loadContent,
+  saveContent,
+  onBlur,
+  retryLoad,
+} = useMarkdownPersist({
+  type: TYPE,
+  getVariant: () => activeFile.value !== 'SOUL.md' ? activeFile.value : undefined,
+})
 
 // 创建新人格
 const showCreateDialog = ref(false)
@@ -139,17 +151,6 @@ async function doCreate() {
   }
 }
 
-const extensions = [
-  markdown(),
-  EditorView.lineWrapping,
-]
-
-const saveStateText = computed(() => {
-  if (saveState.value === 'saving') return '保存中...'
-  if (saveState.value === 'saved') return '已保存'
-  return ''
-})
-
 async function loadPersonas() {
   console.log('[SoulView] loadPersonas start, type=', TYPE)
   try {
@@ -162,51 +163,6 @@ async function loadPersonas() {
     console.error('[SoulView] loadPersonas FAIL', e)
     personas.value = []
     personasLoaded.value = true  // 即使失败也标记为已加载，避免选择器永远不显示
-  }
-}
-
-async function loadContent() {
-  loading.value = true
-  loadError.value = ''
-  console.log('[SoulView] loadContent start, type=', TYPE, 'activeFile=', activeFile.value)
-  try {
-    const variant = activeFile.value !== 'SOUL.md' ? activeFile.value : undefined
-    console.log('[SoulView] getPersona variant=', variant)
-    const res = await api.getPersona(TYPE, variant)
-    console.log('[SoulView] getPersona OK, length=', res.content.length)
-    content.value = res.content
-    savedContent.value = res.content
-  } catch (e: any) {
-    const msg = e?.message || String(e)
-    console.error('[SoulView] loadContent FAIL', msg)
-    loadError.value = msg
-    content.value = ''
-  } finally {
-    loading.value = false
-  }
-}
-
-function retryLoad() {
-  loadContent()
-}
-
-async function saveContent() {
-  if (saving.value || content.value === savedContent.value) return
-  saving.value = true
-  saveState.value = 'saving'
-  saveError.value = ''
-  try {
-    // 如果当前编辑的不是默认 SOUL.md，需要通过 variant 保存
-    const variant = activeFile.value !== 'SOUL.md' ? activeFile.value : undefined
-    await api.updatePersona(TYPE, content.value, variant)
-    savedContent.value = content.value
-    saveState.value = 'saved'
-    setTimeout(() => { saveState.value = '' }, 2000)
-  } catch (e: any) {
-    console.error(`保存 ${TYPE} 失败`, e)
-    saveError.value = e?.message || String(e)
-  } finally {
-    saving.value = false
   }
 }
 
@@ -227,12 +183,6 @@ async function onPersonaChange() {
     return
   }
   await loadContent()
-}
-
-function onBlur() {
-  if (content.value !== savedContent.value) {
-    saveContent()
-  }
 }
 
 onMounted(async () => {
