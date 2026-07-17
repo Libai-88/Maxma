@@ -1,5 +1,5 @@
 <template>
-  <div class="bar-chart" :style="{ height: `${height}px` }">
+  <div ref="rootRef" class="bar-chart">
     <div v-if="items.length === 0" class="bar-empty">无数据</div>
     <template v-else>
       <div
@@ -13,7 +13,7 @@
           <div
             class="bar-fill"
             :class="{ 'bar-fill-error': item.kind === 'error' }"
-            :style="{ width: `${item.percent}%` }"
+            :ref="(el) => setFillRef(el, idx)"
           ></div>
         </div>
         <div class="bar-value">{{ item.display }}</div>
@@ -23,7 +23,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watchEffect, type ComponentPublicInstance } from 'vue'
 
 const props = withDefaults(defineProps<{
   items: Array<{ label: string; value: number; display?: string; kind?: 'default' | 'error' }>
@@ -47,6 +47,23 @@ const normalizedItems = computed(() =>
     percent: maxVal.value > 0 ? Math.max(2, (item.value / maxVal.value) * 100) : 0,
   })),
 )
+
+// CSP-safe CSSOM: set height + per-bar width via element.style.setProperty
+// (inline style attribute would be blocked by CSP 'unsafe-inline' removal)
+const rootRef = ref<HTMLElement>()
+const fillEls: HTMLElement[] = []
+const setFillRef = (el: Element | ComponentPublicInstance | null, idx: number) => {
+  if (el) fillEls[idx] = el as HTMLElement
+}
+
+watchEffect(() => {
+  const root = rootRef.value
+  if (root) root.style.setProperty('height', `${props.height}px`)
+  normalizedItems.value.forEach((item, idx) => {
+    const el = fillEls[idx]
+    if (el) el.style.setProperty('width', `${item.percent}%`)
+  })
+}, { flush: 'post' })
 </script>
 
 <style scoped>

@@ -3,7 +3,7 @@
     <span class="usage-icon">📊</span>
     <span class="usage-text">{{ displayText }}</span>
     <div class="usage-bar">
-      <div class="usage-bar-fill" :style="{ width: barPercent + '%' }"></div>
+      <div ref="fillRef" class="usage-bar-fill"></div>
     </div>
     <span class="usage-pct">{{ usage.percentage.toFixed(1) }}%</span>
     <div v-if="showDetail" class="usage-tooltip">
@@ -16,7 +16,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watchEffect } from 'vue'
 import { useChatStore } from '../stores/chat'
 
 const store = useChatStore()
@@ -30,6 +30,14 @@ const statusClass = computed(() => {
   if (usage.value.percentage > 70) return 'status-warn'
   return ''
 })
+
+// CSP-safe CSSOM: set width via element.style.setProperty
+const fillRef = ref<HTMLElement>()
+watchEffect(() => {
+  const el = fillRef.value
+  const p = barPercent.value
+  if (el) el.style.setProperty('width', `${p}%`)
+}, { flush: 'post' })
 
 function formatNum(n: number): string {
   if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M'
