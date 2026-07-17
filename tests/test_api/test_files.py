@@ -1,5 +1,7 @@
 """Tests for api/routes/files.py."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 from fastapi import HTTPException
 
@@ -39,11 +41,18 @@ class TestSelectFile:
     async def test_allowed_in_development(self, monkeypatch):
         monkeypatch.setenv("MAXMA_ENV", "development")
 
-        # We don't actually open the GUI dialog; just verify it doesn't
-        # raise the 403 runtime-mode error.
+        # Mock tkinter so the test never opens a real GUI file dialog,
+        # which would hang forever in non-interactive / headless envs.
+        # This verifies the runtime-mode check + return shape without GUI.
         try:
-            await select_file()
-        except HTTPException as e:
-            assert e.status_code != 403
+            import tkinter  # noqa: F401
         except ImportError:
             pytest.skip("tkinter not available")
+
+        with patch("tkinter.Tk", return_value=MagicMock()), patch(
+            "tkinter.filedialog.askopenfilename",
+            return_value="/tmp/test_file.txt",
+        ):
+            result = await select_file()
+
+        assert result == {"path": "/tmp/test_file.txt"}
