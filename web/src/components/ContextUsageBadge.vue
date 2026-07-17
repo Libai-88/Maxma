@@ -53,7 +53,7 @@ function formatNum(n: number): string {
 .usage-bar { width: 40px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
 .usage-bar-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s ease; }
 .status-warn .usage-bar-fill { background: var(--status-warn); }
-.status-critical .usage-bar-fill { background: #ef4444; }
+.status-critical .usage-bar-fill { background: var(--status-error); }
 .usage-pct { font-size: 10px; min-width: 32px; text-align: right; }
 .usage-tooltip { position: absolute; top: calc(100% + 6px); right: 0; z-index: 100; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; min-width: 200px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
 .tooltip-row { display: flex; justify-content: space-between; gap: 24px; padding: 3px 0; font-size: 12px; }

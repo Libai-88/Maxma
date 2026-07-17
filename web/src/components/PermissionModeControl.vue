@@ -307,7 +307,7 @@ function confirmPendingMode() {
 .confirm-change {
   border-color: var(--status-warn);
   background: var(--status-warn);
-  color: #fff;
+  color: var(--bg-primary);
 }
 
 @media (max-width: 600px) {

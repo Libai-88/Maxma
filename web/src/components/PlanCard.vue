@@ -153,8 +153,8 @@ function submitEdit() {
 }
 
 .plan-card.approved {
-  border-color: #86efac;
-  background: #f0fdf4;
+  border-color: color-mix(in srgb, var(--status-ok) 40%, var(--border));
+  background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card));
 }
 
 .plan-card.modified {
@@ -163,8 +163,8 @@ function submitEdit() {
 }
 
 .plan-card.rejected {
-  border-color: #fca5a5;
-  background: #fef2f2;
+  border-color: color-mix(in srgb, var(--status-error) 40%, var(--border));
+  background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
   opacity: 0.7;
 }
 
@@ -174,13 +174,13 @@ function submitEdit() {
 }
 
 .plan-card.failed {
-  border-color: #fca5a5;
-  background: #fef2f2;
+  border-color: color-mix(in srgb, var(--status-error) 40%, var(--border));
+  background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
 }
 
 .plan-card.replanning {
-  border-color: #fbbf24;
-  background: #fffbeb;
+  border-color: color-mix(in srgb, var(--status-warn) 40%, var(--border));
+  background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card));
 }
 
 /* ── 头部 ── */
@@ -211,13 +211,13 @@ function submitEdit() {
   font-weight: 500;
 }
 
-.pending .plan-status { background: #fef3c7; color: #92400e; }
-.approved .plan-status { background: #dcfce7; color: #166534; }
+.pending .plan-status { background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card)); color: var(--status-warn); }
+.approved .plan-status { background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card)); color: var(--status-ok); }
 .modified .plan-status { background: #dbeafe; color: #1e40af; }
-.rejected .plan-status { background: #fee2e2; color: #991b1b; }
+.rejected .plan-status { background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card)); color: var(--status-error); }
 .running .plan-status { background: #dbeafe; color: #1e40af; }
-.failed .plan-status { background: #fee2e2; color: #991b1b; }
-.replanning .plan-status { background: #fef3c7; color: #92400e; }
+.failed .plan-status { background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card)); color: var(--status-error); }
+.replanning .plan-status { background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card)); color: var(--status-warn); }
 
 /* ── 步骤列表 ── */
 .plan-steps {
@@ -247,7 +247,7 @@ function submitEdit() {
 }
 
 .plan-step.step-failed {
-  background: color-mix(in srgb, #fca5a5 12%, transparent);
+  background: color-mix(in srgb, var(--status-error) 12%, transparent);
 }
 
 .plan-step.step-skipped {
@@ -304,9 +304,9 @@ function submitEdit() {
 }
 
 .step-badge.running { background: #dbeafe; color: #1e40af; }
-.step-badge.done { background: #dcfce7; color: #166534; }
-.step-badge.failed { background: #fee2e2; color: #991b1b; }
-.step-badge.skipped { background: #f3f4f6; color: #6b7280; }
+.step-badge.done { background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card)); color: var(--status-ok); }
+.step-badge.failed { background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card)); color: var(--status-error); }
+.step-badge.skipped { background: var(--bg-secondary); color: var(--text-secondary); }
 
 /* ── 重规划/失败提示 ── */
 .plan-replan-hint,
@@ -321,13 +321,13 @@ function submitEdit() {
 }
 
 .plan-replan-hint {
-  background: #fffbeb;
-  color: #92400e;
+  background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card));
+  color: var(--status-warn);
 }
 
 .plan-failed-hint {
-  background: #fef2f2;
-  color: #991b1b;
+  background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
+  color: var(--status-error);
 }
 
 .replan-icon {
@@ -378,13 +378,13 @@ function submitEdit() {
 }
 
 .plan-btn.approve {
-  background: #16a34a;
-  color: white;
-  border-color: #16a34a;
+  background: var(--status-ok);
+  color: var(--bg-primary);
+  border-color: var(--status-ok);
 }
 
 .plan-btn.approve:hover {
-  background: #15803d;
+  opacity: 0.9;
 }
 
 .plan-btn.edit {
@@ -398,12 +398,12 @@ function submitEdit() {
 
 .plan-btn.reject {
   background: var(--bg-card);
-  color: #dc2626;
-  border-color: #fca5a5;
+  color: var(--status-error);
+  border-color: color-mix(in srgb, var(--status-error) 40%, var(--border));
 }
 
 .plan-btn.reject:hover {
-  background: #fef2f2;
+  background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
 }
 
 .plan-btn.cancel {
