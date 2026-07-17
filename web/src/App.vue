@@ -193,6 +193,8 @@ async function handleManageLogs() {
   }
 }
 
+let restartPollTimer: ReturnType<typeof setTimeout> | null = null
+
 async function handleRestart() {
   if (restarting.value) return
   if (!window.confirm('确定要重启 Maxma 吗？正在进行的对话可能会中断。')) return
@@ -201,7 +203,8 @@ async function handleRestart() {
   api.restart()
   const poll = async () => {
     for (let i = 0; i < 60; i++) {
-      await new Promise(r => setTimeout(r, 2000))
+      await new Promise(r => { restartPollTimer = setTimeout(r, 2000) })
+      restartPollTimer = null
       try {
         await api.health()
         location.reload(); return
@@ -211,6 +214,13 @@ async function handleRestart() {
   }
   poll()
 }
+
+onUnmounted(() => {
+  if (restartPollTimer) {
+    clearTimeout(restartPollTimer)
+    restartPollTimer = null
+  }
+})
 
 function toggleSettingsMenu() {
   showSettingsMenu.value = !showSettingsMenu.value
