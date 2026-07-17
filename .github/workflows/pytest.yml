@@ -26,6 +26,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-lock.txt
+          python -m pip install pytest pytest-cov
 
       - name: Compile Python sources
         run: python -m compileall -q agent api config tests
@@ -33,5 +34,12 @@ jobs:
       - name: Run critical static checks
         run: python -m ruff check --select=E9,F63,F7 agent api config tests
 
-      - name: Run backend tests
-        run: python -m pytest -q
+      - name: Run backend tests with coverage
+        run: python -m pytest -q --cov=api --cov=agent --cov-report=xml --cov-fail-under=50
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
