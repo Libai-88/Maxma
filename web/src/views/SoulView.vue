@@ -1,6 +1,6 @@
 <template>
   <div class="md-editor-view">
-    <PersonaCard style="margin-bottom: 16px;" />
+    <PersonaCard class="persona-card-spacing" />
     <div class="header">
       <h2>{{ pageTitle }} <span class="subtitle">{{ pageSubtitle }}</span></h2>
       <button class="save-button" :disabled="saving || content === savedContent" @click="saveContent">
@@ -492,5 +492,9 @@ onMounted(async () => {
 .create-btn.save:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.persona-card-spacing {
+  margin-bottom: 16px;
 }
 </style>
