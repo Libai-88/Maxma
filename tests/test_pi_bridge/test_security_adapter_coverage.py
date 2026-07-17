@@ -253,3 +253,106 @@ class TestLoadWhitelist:
         monkeypatch.setattr(security_adapter, "PATH_WHITELIST_YAML_PATH", f)
         result = security_adapter._load_whitelist()
         assert result == [("/数据/中文", True)]
+
+
+# ── check_path_access: resolve-failure branches ────────────
+
+
+class TestCheckPathAccessResolveFailure:
+    """Lines 101-103 (input path resolve fail) & 108-109 (whitelist entry resolve fail).
+
+    On Python 3.13 Windows, Path(...).resolve(strict=False) tolerates NUL bytes,
+    so we mock Path.resolve to force OSError/ValueError for the fail-closed branches.
+    """
+
+    def test_input_path_resolve_failure_fails_closed(self, monkeypatch) -> None:
+        """Input path resolve failure -> fail-closed block with '解析失败' message."""
+        monkeypatch.setattr(
+            security_adapter, "_load_whitelist", lambda: [("/tmp", True)]
+        )
+        with patch.object(Path, "resolve", side_effect=OSError("mocked")):
+            result = security_adapter.check_path_access("/some/path")
+        assert result is not None
+        assert "解析失败" in result
+
+    def test_input_path_resolve_valueerror_fails_closed(self, monkeypatch) -> None:
+        """ValueError from resolve is also caught -> fail-closed."""
+        monkeypatch.setattr(
+            security_adapter, "_load_whitelist", lambda: [("/tmp", True)]
+        )
+        with patch.object(Path, "resolve", side_effect=ValueError("mocked")):
+            result = security_adapter.check_path_access("/some/path")
+        assert result is not None
+        assert "解析失败" in result
+
+    def test_whitelist_entry_resolve_failure_skipped(self, tmp_path, monkeypatch) -> None:
+        """A whitelist entry that fails to resolve is skipped (continue).
+        The valid entry still matches the input path."""
+        allowed = tmp_path / "allowed"
+        allowed.mkdir()
+        real_resolve = Path.resolve
+
+        def fake_resolve(self, strict=False):
+            if "unresolvable" in str(self):
+                raise OSError("mocked bad entry")
+            return real_resolve(self, strict=strict)
+
+        monkeypatch.setattr(
+            security_adapter,
+            "_load_whitelist",
+            lambda: [("unresolvable_bad", True), (str(allowed), True)],
+        )
+        with patch.object(Path, "resolve", fake_resolve):
+            result = security_adapter.check_path_access(str(allowed))
+        assert result is None
+
+    def test_all_whitelist_entries_unresolvable_blocks(self, monkeypatch) -> None:
+        """If every whitelist entry fails to resolve, path is not matched -> blocked."""
+        real_resolve = Path.resolve
+
+        def fake_resolve(self, strict=False):
+            if "unresolvable" in str(self):
+                raise OSError("mocked")
+            return real_resolve(self, strict=strict)
+
+        monkeypatch.setattr(
+            security_adapter,
+            "_load_whitelist",
+            lambda: [("unresolvable_a", True), ("unresolvable_b", False)],
+        )
+        with patch.object(Path, "resolve", fake_resolve):
+            result = security_adapter.check_path_access("/some/valid/path")
+        assert result is not None
+        assert "白名单" in result
+
+
+# ── _find_blocker_path: non-NUL resolve failure (147-149) ──
+
+
+class TestFindBlockerResolveFailure:
+    """Line 147-149: Path.resolve raises (non-NUL) -> fail-closed return path."""
+
+    def test_resolve_oserror_fail_closed(self) -> None:
+        """When resolve raises OSError (not NUL), _find_blocker_path returns the
+        path string itself (fail-closed: treat as blocker present)."""
+        with patch.object(
+            Path, "resolve", side_effect=OSError("mocked resolve failure")
+        ):
+            result = security_adapter._find_blocker_path("/some/valid/looking/path")
+        assert result is not None
+        assert result == "/some/valid/looking/path"
+
+    def test_resolve_valueerror_fail_closed(self) -> None:
+        with patch.object(
+            Path, "resolve", side_effect=ValueError("mocked")
+        ):
+            result = security_adapter._find_blocker_path("/another/path")
+        assert result is not None
+        assert result == "/another/path"
+
+    def test_resolve_failure_is_blocker_present_true(self) -> None:
+        """_is_blocker_present returns True when resolve fails (fail-closed)."""
+        with patch.object(
+            Path, "resolve", side_effect=OSError("mocked")
+        ):
+            assert security_adapter._is_blocker_present("/any/path") is True
