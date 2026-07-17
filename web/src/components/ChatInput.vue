@@ -220,7 +220,6 @@
 import { api } from '@/api'
 import AutocompletePanel from '@/components/AutocompletePanel.vue'
 import Icon from '@/components/Icon.vue'
-import StickerPicker from '@/components/StickerPicker.vue'
 import StickerContextMenu from '@/components/StickerContextMenu.vue'
 import QuotedSelectionCard from '@/components/QuotedSelectionCard.vue'
 import ThinkPathChooser from '@/components/ThinkPathChooser.vue'
@@ -233,11 +232,14 @@ import type { ParsedRef, ImageRef } from '@/utils/references'
 import { REF_CHIP_CONFIG } from '@/utils/references'
 import { getApiBase, isTauri, tauriFetch } from '@/utils/env'
 import type { ThinkPathId } from '@/utils/thinkPath'
-import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import DsSelect from './ui/DsSelect.vue'
 import ModelSelector from './ModelSelector.vue'
 import ContextUsageBadge from './ContextUsageBadge.vue'
 import { useChatStore } from '@/stores/chat'
+
+// 表情选择器体积较大且仅在用户点击表情按钮时才需要，懒加载以减小初始 chunk
+const StickerPicker = defineAsyncComponent(() => import('@/components/StickerPicker.vue'))
 
 // ChatView 通过 provide 注入 useChatInput 实例；ChatInput 直接读写状态、调用方法
 const chatInput = useChatInputInjected()
