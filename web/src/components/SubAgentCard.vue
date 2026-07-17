@@ -191,7 +191,7 @@ onUnmounted(stopPolling)
 .run-status { font-size: 12px; font-weight: 600; }
 .run-status.queued { color: var(--text-secondary); }
 .run-status.running { color: var(--accent); }
-.run-status.succeeded { color: var(--status-success, #198754); }
+.run-status.succeeded { color: var(--status-ok); }
 .run-status.failed, .run-status.cancelled { color: var(--text-secondary); }
 .cancel-run {
   margin-left: auto;

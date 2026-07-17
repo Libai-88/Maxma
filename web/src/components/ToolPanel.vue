@@ -48,20 +48,20 @@ onMounted(() => { if (store.tools.length === 0) store.fetchTools() })
 
 <style scoped>
 .tool-panel { padding: 12px; }
-.panel-header { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary, #6b7280); margin-bottom: 8px; }
+.panel-header { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); margin-bottom: 8px; }
 .search-box { margin-bottom: 8px; }
-.search-input { width: 100%; padding: 6px 8px; border: 1px solid var(--border, #e5e7eb); border-radius: 6px; font-size: 12px; background: var(--bg-primary, #fff); color: var(--text-primary, #1f2937); outline: none; box-sizing: border-box; }
-.search-input:focus { border-color: var(--accent, #000); }
-.loading { padding: 24px; text-align: center; font-size: 12px; color: var(--text-tertiary, #9ca3af); }
+.search-input { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; background: var(--bg-primary); color: var(--text-primary); outline: none; box-sizing: border-box; }
+.search-input:focus { border-color: var(--accent); }
+.loading { padding: 24px; text-align: center; font-size: 12px; color: var(--text-tertiary); }
 .tool-list { overflow-y: auto; max-height: 400px; }
 .tool-group { margin-bottom: 8px; }
-.group-label { padding: 4px 0; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-tertiary, #9ca3af); }
+.group-label { padding: 4px 0; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-tertiary); }
 .tool-item { padding: 6px 8px; border-radius: 6px; cursor: pointer; }
-.tool-item:hover { background: var(--bg-secondary, #f9fafb); }
+.tool-item:hover { background: var(--bg-secondary); }
 .tool-header { display: flex; align-items: center; gap: 6px; }
-.tool-name { font-size: 13px; color: var(--text-primary, #1f2937); font-weight: 500; }
-.tool-badge { font-size: 9px; padding: 1px 6px; border-radius: 100px; background: var(--border, #e5e7eb); color: var(--text-tertiary, #9ca3af); text-transform: uppercase; letter-spacing: 0.3px; }
-.tool-badge.custom { background: #000; color: #fff; }
-.tool-desc { margin-top: 4px; font-size: 11px; color: var(--text-secondary, #6b7280); line-height: 1.4; padding-left: 4px; }
-.empty { padding: 24px; text-align: center; color: var(--text-tertiary, #9ca3af); font-size: 12px; }
+.tool-name { font-size: 13px; color: var(--text-primary); font-weight: 500; }
+.tool-badge { font-size: 9px; padding: 1px 6px; border-radius: 100px; background: var(--border); color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.3px; }
+.tool-badge.custom { background: var(--accent); color: var(--bg-primary); }
+.tool-desc { margin-top: 4px; font-size: 11px; color: var(--text-secondary); line-height: 1.4; padding-left: 4px; }
+.empty { padding: 24px; text-align: center; color: var(--text-tertiary); font-size: 12px; }
 </style>

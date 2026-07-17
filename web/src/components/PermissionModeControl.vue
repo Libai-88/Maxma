@@ -274,7 +274,7 @@ function confirmPendingMode() {
 
 .permission-confirmation {
   margin-top: 9px;
-  border-left: 3px solid var(--status-warn, #d97706);
+  border-left: 3px solid var(--status-warn);
   padding: 8px 0 0 9px;
   color: var(--text-primary);
   font-size: 12px;
@@ -305,8 +305,8 @@ function confirmPendingMode() {
 }
 
 .confirm-change {
-  border-color: var(--status-warn, #d97706);
-  background: var(--status-warn, #d97706);
+  border-color: var(--status-warn);
+  background: var(--status-warn);
   color: #fff;
 }
 

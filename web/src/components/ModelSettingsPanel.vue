@@ -32,14 +32,14 @@ function formatNum(n: number): string { return n >= 1000 ? (n / 1000).toFixed(0)
 
 <style scoped>
 .model-settings { padding: 12px; }
-.settings-header { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary, #6b7280); margin-bottom: 12px; }
+.settings-header { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary); margin-bottom: 12px; }
 .setting-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; gap: 12px; }
-.setting-row + .setting-row { border-top: 1px solid var(--border, #e5e7eb); }
-.setting-label { font-size: 13px; color: var(--text-primary, #1f2937); min-width: 90px; }
+.setting-row + .setting-row { border-top: 1px solid var(--border); }
+.setting-label { font-size: 13px; color: var(--text-primary); min-width: 90px; }
 .setting-control { display: flex; align-items: center; gap: 8px; }
-.setting-slider { width: 120px; height: 4px; appearance: none; background: var(--border, #e5e7eb); border-radius: 2px; outline: none; cursor: pointer; }
-.setting-slider::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; background: var(--accent, #000); border-radius: 50%; cursor: pointer; }
-.setting-value { min-width: 40px; text-align: right; font-size: 12px; font-family: 'SF Mono', monospace; color: var(--text-primary, #1f2937); }
-.toggle-btn { padding: 4px 12px; border: 1px solid var(--border, #e5e7eb); border-radius: 6px; background: transparent; font-size: 12px; color: var(--text-secondary, #6b7280); cursor: pointer; }
-.toggle-btn.active { background: #000; color: #fff; border-color: #000; }
+.setting-slider { width: 120px; height: 4px; appearance: none; background: var(--border); border-radius: 2px; outline: none; cursor: pointer; }
+.setting-slider::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; background: var(--accent); border-radius: 50%; cursor: pointer; }
+.setting-value { min-width: 40px; text-align: right; font-size: 12px; font-family: 'SF Mono', monospace; color: var(--text-primary); }
+.toggle-btn { padding: 4px 12px; border: 1px solid var(--border); border-radius: 6px; background: transparent; font-size: 12px; color: var(--text-secondary); cursor: pointer; }
+.toggle-btn.active { background: var(--accent); color: var(--bg-primary); border-color: var(--accent); }
 </style>

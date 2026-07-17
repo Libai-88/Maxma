@@ -86,7 +86,7 @@ watch(() => props.sessionId, sessionId => { void load(sessionId) }, { immediate:
 <style scoped>
 .permission-mode-error {
   max-width: 240px;
-  color: var(--status-warn, #b45309);
+  color: var(--status-warn);
   font-size: 12px;
   line-height: 1.35;
 }
