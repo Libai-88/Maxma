@@ -14,96 +14,40 @@
           <br>
           右键点击临时会话来固定保存
         </div>
-        <div
-          v-for="(s, ci) in constSessions"
+        <SessionItem
+          v-for="s in constSessions"
           :key="s.session_id"
-          class="session-item is-const"
-          :class="{ active: s.session_id === activeId }"
-          @click="$emit('switch', s.session_id)"
-          @contextmenu.prevent="onSessionContextMenu($event, s)"
-          @mouseenter="onSessionMouseEnter($event, s)"
+          :session="s"
+          :is-active="s.session_id === activeId"
+          :status="(sessionStatuses ?? {})[s.session_id]"
+          :is-const="true"
+          :collapsed="collapsed"
+          @switch="$emit('switch', $event)"
+          @contextmenu="onSessionContextMenu"
+          @mouseenter="onSessionMouseEnter"
           @mouseleave="onSessionMouseLeave"
-        >
-          <div class="session-item-main">
-            <span class="session-id">
-              <Icon name="pin" :size="12" class="pin-icon" />
-              <span class="const-name-text">{{ s.const_name || '未命名' }}</span>
-              <span v-if="s.is_subagent" class="sub-badge" title="子 Agent 会话（只读）">sub</span>
-            </span>
-            <span class="session-count">{{ formatRelativeTime(s.last_active ?? s.created_at) }} · {{ s.message_count }} 条消息</span>
-          </div>
-          <div class="session-item-right">
-            <span
-              v-if="(sessionStatuses ?? {})[s.session_id]?.isAwaitingUser"
-              class="status-dot awaiting-user"
-              title="等待用户输入"
-            />
-            <span
-              v-else-if="(sessionStatuses ?? {})[s.session_id]?.isStreaming"
-              class="status-dot streaming"
-              title="Agent 运行中"
-            />
-            <span
-              v-else-if="(sessionStatuses ?? {})[s.session_id]?.connected"
-              class="status-dot connected"
-              title="已连接"
-            />
-            <button
-              class="btn-delete"
-              @click.stop="showDeleteConfirm(s)"
-              title="删除会话"
-            >
-              &times;
-            </button>
-          </div>
-        </div>
+          @delete="showDeleteConfirm"
+        />
       </div>
 
       <!-- ── 临时会话 ── -->
       <div class="temp-section">
         <div class="section-label">临时会话</div>
-        <div
-          v-for="(s, index) in tempSessions"
+        <SessionItem
+          v-for="s in tempSessions"
           :key="s.session_id"
-          class="session-item"
-          :class="{ active: s.session_id === activeId }"
-          @click="$emit('switch', s.session_id)"
-          @contextmenu.prevent="onSessionContextMenu($event, s)"
-          @mouseenter="onSessionMouseEnter($event, s)"
+          :session="s"
+          :is-active="s.session_id === activeId"
+          :status="(sessionStatuses ?? {})[s.session_id]"
+          :is-const="false"
+          :display-index="getSessionDisplayIndex(s)"
+          :collapsed="collapsed"
+          @switch="$emit('switch', $event)"
+          @contextmenu="onSessionContextMenu"
+          @mouseenter="onSessionMouseEnter"
           @mouseleave="onSessionMouseLeave"
-        >
-          <div class="session-item-main">
-            <span class="session-id">
-              Session #{{ getSessionDisplayIndex(s) }}
-              <span v-if="s.is_subagent" class="sub-badge" title="子 Agent 会话（只读）">sub</span>
-            </span>
-            <span class="session-count">{{ formatRelativeTime(s.last_active ?? s.created_at) }} · {{ s.message_count }} 条消息</span>
-          </div>
-          <div class="session-item-right">
-            <span
-              v-if="(sessionStatuses ?? {})[s.session_id]?.isAwaitingUser"
-              class="status-dot awaiting-user"
-              title="等待用户输入"
-            />
-            <span
-              v-else-if="(sessionStatuses ?? {})[s.session_id]?.isStreaming"
-              class="status-dot streaming"
-              title="Agent 运行中"
-            />
-            <span
-              v-else-if="(sessionStatuses ?? {})[s.session_id]?.connected"
-              class="status-dot connected"
-              title="已连接"
-            />
-            <button
-              class="btn-delete"
-              @click.stop="showDeleteConfirm(s)"
-              title="删除会话"
-            >
-              &times;
-            </button>
-          </div>
-        </div>
+          @delete="showDeleteConfirm"
+        />
       </div>
 
       <div v-if="sessions.length === 0" class="no-sessions">
@@ -222,6 +166,7 @@
 import ContextMenu from '@/components/ContextMenu.vue';
 import Icon from '@/components/Icon.vue';
 import ModelSettingsPanel from './ModelSettingsPanel.vue';
+import SessionItem from './SessionItem.vue';
 import ToolPanel from './ToolPanel.vue';
 import { useSessionStore } from '@/stores/session';
 import type { SessionInfo } from '@/types';
@@ -622,99 +567,7 @@ function confirmDelete() {
   line-height: 1.4;
 }
 
-/* ── Session items ── */
-.session-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  cursor: pointer;
-  text-align: left;
-  font-family: inherit;
-  transition: background 0.15s;
-}
-.session-item:hover {
-  background: var(--bg-card);
-}
-.session-item.active {
-  background: var(--bg-card);
-  box-shadow: var(--shadow);
-}
-
-/* Const 会话外观 — pin 图标已提供视觉区分，无需侧边条 */
-.session-item.is-const {
-  background: color-mix(in srgb, var(--accent) 4%, transparent);
-}
-/* active const sessions should have a clean white bg */
-.session-item.is-const.active {
-  background: var(--bg-card);
-}
-
-.session-item-main {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  transition: opacity 0.2s ease 0.05s, transform 0.25s ease 0.05s;
-  overflow: hidden;
-  max-height: 80px;
-}
-.session-id {
-  font-size: 0.9em;
-  font-weight: 500;
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-.pin-icon {
-  margin-right: 3px;
-  flex-shrink: 0;
-}
-.const-name-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.sub-badge {
-  display: inline-block;
-  margin-left: 4px;
-  padding: 0 4px;
-  font-size: 0.65em;
-  font-weight: 600;
-  color: var(--text-secondary);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  vertical-align: middle;
-}
-.session-count {
-  font-size: 0.75em;
-  color: var(--text-secondary);
-}
-.btn-delete {
-  width: 22px;
-  height: 22px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 16px;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.15s ease 0.05s, transform 0.25s ease 0.05s, color 0.15s;
-  overflow: hidden;
-  max-width: 22px;
-}
-.session-item:hover .btn-delete {
-  opacity: 1;
-}
-.btn-delete:hover {
-  color: var(--status-error);
-}
+/* ── Session items 样式已迁移至 SessionItem.vue ── */
 .no-sessions {
   font-size: 0.8em;
   color: var(--text-secondary);
@@ -722,38 +575,6 @@ function confirmDelete() {
   transition: opacity 0.2s ease 0.05s;
   overflow: hidden;
   max-height: 40px;
-}
-
-.session-item-right {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.status-dot.connected {
-  background: var(--status-ok);
-}
-
-.status-dot.streaming {
-  background: var(--status-ok);
-  animation: pulse 1.2s ease-in-out infinite;
-}
-
-.status-dot.awaiting-user {
-  background: var(--status-warn);
-  animation: pulse 1.2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(1.3); }
 }
 
 /* ── Hover card ── */
@@ -813,29 +634,7 @@ function confirmDelete() {
   padding: 0;
   margin: 0;
 }
-.session-sidebar.collapsed .session-item {
-  justify-content: center;
-  padding: 6px;
-}
-.session-sidebar.collapsed .session-item-main {
-  max-height: 0;
-  max-width: 0;
-  min-width: 0;
-  opacity: 0;
-  overflow: hidden;
-  transform: translateX(-24px);
-  padding: 0;
-  margin: 0;
-}
-.session-sidebar.collapsed .btn-delete {
-  max-width: 0;
-  opacity: 0;
-  overflow: hidden;
-  transform: translateX(-24px);
-  padding: 0;
-  margin: 0;
-  border: none;
-}
+/* session-item 的 collapsed 样式由 SessionItem 内部处理（通过 collapsed prop） */
 .session-sidebar.collapsed .no-sessions {
   max-height: 0;
   opacity: 0;
@@ -851,10 +650,6 @@ function confirmDelete() {
   overflow: hidden;
   padding: 0;
   margin: 0;
-}
-/* collapsed 时隐藏 const 左侧边框 */
-.session-sidebar.collapsed .session-item.is-const {
-  border-left: none;
 }
 
 /* ── 固定会话卡片 ── */
