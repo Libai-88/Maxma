@@ -159,7 +159,7 @@ function parseModel(modelStr: string): Model {
 // Pi event → Maxma event mapping
 // ---------------------------------------------------------------------------
 
-function mapPiEventToMaxma(
+export function mapPiEventToMaxma(
   piEvent: Record<string, unknown>,
 ): Record<string, unknown> | null {
   // Handle AgentEvent types directly
@@ -276,169 +276,8 @@ function subscribeSession(
 // RPC handler
 // ---------------------------------------------------------------------------
 
-rl.on("line", async (line: string) => {
-  let req: any;
-  try {
-    req = JSON.parse(line);
-  } catch {
-    sendError(null, "Parse error");
-    return;
-  }
-
-  const { method, params, id } = req;
-
-  try {
-    if (method === "create_session") {
-      const modelStr: string = params?.model ?? "openai/gpt-4o";
-      const model = parseModel(modelStr);
-      const cwd: string = params?.cwd ?? process.cwd();
-      const systemPrompt: string | undefined = params?.system_prompt;
-      const tools: string[] | undefined = params?.tools as string[] | undefined;
-      
-      const createOptions: Record<string, unknown> = {
-        model,
-        cwd,
-      };
-      if (systemPrompt !== undefined) {
-        createOptions.systemPrompt = systemPrompt;
-      }
-      if (tools !== undefined && Array.isArray(tools) && tools.length > 0) {
-        createOptions.toolNames = tools;
-      }
-
-      // Register custom Maxma tools
-      const customTools = registerCustomTools();
-      if (customTools.length > 0) {
-        createOptions.customTools = customTools;
-      }
-
-      const { session } = await createAgentSession(createOptions as any);
-      const sessionId = randomUUID();
-
-      const unsubscribe = subscribeSession(sessionId, session);
-      sessions.set(sessionId, { session, unsubscribe, promptQueue: Promise.resolve() });
-
-      send(id, { session_id: sessionId });
-      return;
-    }
-
-    if (method === "prompt") {
-      const sessionId: string = params?.session_id;
-      const message: string = params?.message ?? "";
-      const record = sessions.get(sessionId);
-      if (!record) {
-        sendError(id, `Session not found: ${sessionId}`);
-        return;
-      }
-
-      // Serialize: chain onto the previous prompt so they run sequentially.
-      // A failed prompt does not block the next one (.catch resets the chain).
-      record.promptQueue = record.promptQueue
-        .catch(() => {})
-        .then(() => record.session.prompt(message).catch((err: unknown) => {
-          sendEvent(sessionId, {
-            type: "error",
-            payload: { code: "PROMPT_ERROR", message: String(err) },
-          });
-          // BUG3 fix: always send done after error so Python doesn't hang
-          sendEvent(sessionId, { type: "done", payload: {} });
-        }));
-
-      send(id, { ok: true });
-      return;
-    }
-
-    if (method === "cancel") {
-      const sessionId: string = params?.session_id;
-      const record = sessions.get(sessionId);
-      if (!record) {
-        sendError(id, `Session not found: ${sessionId}`);
-        return;
-      }
-
-      record.session.agent.abort("Cancelled by user");
-      // BUG4 fix: send done event so Python's turn_done.wait() unblocks
-      sendEvent(sessionId, { type: "done", payload: {} });
-
-      send(id, { ok: true });
-      return;
-    }
-
-    if (method === "destroy_session") {
-      const sessionId: string = params?.session_id;
-      const record = sessions.get(sessionId);
-      if (!record) {
-        sendError(id, `Session not found: ${sessionId}`);
-        return;
-      }
-
-      record.unsubscribe();
-      await record.session.dispose();
-      sessions.delete(sessionId);
-
-      send(id, { ok: true });
-      return;
-    }
-
-    if (method === "undo") {
-      const sessionId: string = params?.session_id as string;
-      const steps: number = (params?.steps as number) ?? 1;
-      const record = sessions.get(sessionId);
-      if (!record) {
-        sendError(id, `Session not found: ${sessionId}`);
-        return;
-      }
-
-      // Truncate the last N assistant+user message pairs (copy-first to avoid mutating internal state)
-      const originalLen = record.session.state.messages.length;
-      const keepCount = Math.max(0, originalLen - steps * 2);
-      const remaining = record.session.state.messages.slice(0, keepCount);
-      const removed = originalLen - keepCount;
-      record.session.replace_messages(remaining);
-      send(id, { removed });
-      return;
-    }
-
-    if (method === "get_messages") {
-      const sessionId: string = params?.session_id as string;
-      const limit: number = (params?.limit as number) ?? 50;
-      const record = sessions.get(sessionId);
-      if (!record) {
-        sendError(id, `Session not found: ${sessionId}`);
-        return;
-      }
-
-      const messages = record.session.state.messages;
-      const total = messages.length;
-      const sliced = messages.slice(-limit);
-      const result = sliced.map((m: any) => {
-        let content = "";
-        if (typeof m.content === "string") {
-          content = m.content;
-        } else if (Array.isArray(m.content)) {
-          content = m.content
-            .filter((b: any) => b?.type === "text")
-            .map((b: any) => b.text ?? "")
-            .join("");
-        }
-        return { role: m.role ?? "unknown", content };
-      });
-      send(id, { messages: result, total });
-      return;
-    }
-
-    sendError(id, `Unknown method: ${method}`);
-  } catch (err) {
-    sendError(id, String(err));
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Graceful shutdown
-// ---------------------------------------------------------------------------
-
 async function shutdown() {
-  for (const [sid, record] of sessions) {
+  for (const [_sid, record] of sessions) {
     try {
       record.unsubscribe();
       await record.session.dispose();
@@ -451,5 +290,164 @@ async function shutdown() {
   process.exit(0);
 }
 
-process.on("SIGTERM", shutdown);
-process.on("SIGINT", shutdown);
+if (import.meta.main) {
+  rl.on("line", async (line: string) => {
+    let req: any;
+    try {
+      req = JSON.parse(line);
+    } catch {
+      sendError(null, "Parse error");
+      return;
+    }
+
+    const { method, params, id } = req;
+
+    try {
+      if (method === "create_session") {
+        const modelStr: string = params?.model ?? "openai/gpt-4o";
+        const model = parseModel(modelStr);
+        const cwd: string = params?.cwd ?? process.cwd();
+        const systemPrompt: string | undefined = params?.system_prompt;
+        const tools: string[] | undefined = params?.tools as string[] | undefined;
+
+        const createOptions: Record<string, unknown> = {
+          model,
+          cwd,
+        };
+        if (systemPrompt !== undefined) {
+          createOptions.systemPrompt = systemPrompt;
+        }
+        if (tools !== undefined && Array.isArray(tools) && tools.length > 0) {
+          createOptions.toolNames = tools;
+        }
+
+        // Register custom Maxma tools
+        const customTools = registerCustomTools();
+        if (customTools.length > 0) {
+          createOptions.customTools = customTools;
+        }
+
+        const { session } = await createAgentSession(createOptions as any);
+        const sessionId = randomUUID();
+
+        const unsubscribe = subscribeSession(sessionId, session);
+        sessions.set(sessionId, { session, unsubscribe, promptQueue: Promise.resolve() });
+
+        send(id, { session_id: sessionId });
+        return;
+      }
+
+      if (method === "prompt") {
+        const sessionId: string = params?.session_id;
+        const message: string = params?.message ?? "";
+        const record = sessions.get(sessionId);
+        if (!record) {
+          sendError(id, `Session not found: ${sessionId}`);
+          return;
+        }
+
+        // Serialize: chain onto the previous prompt so they run sequentially.
+        // A failed prompt does not block the next one (.catch resets the chain).
+        record.promptQueue = record.promptQueue
+          .catch(() => {})
+          .then(() => record.session.prompt(message).catch((err: unknown) => {
+            sendEvent(sessionId, {
+              type: "error",
+              payload: { code: "PROMPT_ERROR", message: String(err) },
+            });
+            // BUG3 fix: always send done after error so Python doesn't hang
+            sendEvent(sessionId, { type: "done", payload: {} });
+          }));
+
+        send(id, { ok: true });
+        return;
+      }
+
+      if (method === "cancel") {
+        const sessionId: string = params?.session_id;
+        const record = sessions.get(sessionId);
+        if (!record) {
+          sendError(id, `Session not found: ${sessionId}`);
+          return;
+        }
+
+        record.session.agent.abort("Cancelled by user");
+        // BUG4 fix: send done event so Python's turn_done.wait() unblocks
+        sendEvent(sessionId, { type: "done", payload: {} });
+
+        send(id, { ok: true });
+        return;
+      }
+
+      if (method === "destroy_session") {
+        const sessionId: string = params?.session_id;
+        const record = sessions.get(sessionId);
+        if (!record) {
+          sendError(id, `Session not found: ${sessionId}`);
+          return;
+        }
+
+        record.unsubscribe();
+        await record.session.dispose();
+        sessions.delete(sessionId);
+
+        send(id, { ok: true });
+        return;
+      }
+
+      if (method === "undo") {
+        const sessionId: string = params?.session_id as string;
+        const steps: number = (params?.steps as number) ?? 1;
+        const record = sessions.get(sessionId);
+        if (!record) {
+          sendError(id, `Session not found: ${sessionId}`);
+          return;
+        }
+
+        // Truncate the last N assistant+user message pairs (copy-first to avoid mutating internal state)
+        const originalLen = record.session.state.messages.length;
+        const keepCount = Math.max(0, originalLen - steps * 2);
+        const remaining = record.session.state.messages.slice(0, keepCount);
+        const removed = originalLen - keepCount;
+        record.session.replace_messages(remaining);
+        send(id, { removed });
+        return;
+      }
+
+      if (method === "get_messages") {
+        const sessionId: string = params?.session_id as string;
+        const limit: number = (params?.limit as number) ?? 50;
+        const record = sessions.get(sessionId);
+        if (!record) {
+          sendError(id, `Session not found: ${sessionId}`);
+          return;
+        }
+
+        const messages = record.session.state.messages;
+        const total = messages.length;
+        const sliced = messages.slice(-limit);
+        const result = sliced.map((m: any) => {
+          let content = "";
+          if (typeof m.content === "string") {
+            content = m.content;
+          } else if (Array.isArray(m.content)) {
+            content = m.content
+              .filter((b: any) => b?.type === "text")
+              .map((b: any) => b.text ?? "")
+              .join("");
+          }
+          return { role: m.role ?? "unknown", content };
+        });
+        send(id, { messages: result, total });
+        return;
+      }
+
+      sendError(id, `Unknown method: ${method}`);
+    } catch (err) {
+      sendError(id, String(err));
+    }
+  });
+
+  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", shutdown);
+}
