@@ -27,14 +27,14 @@
             :class="{ reversed: card.status === '逆位' }"
           >
             <div class="card-position">{{ card.position }}</div>
-            <div class="card-face" :style="{ borderColor: suitColor(card.suit) }">
+            <div class="card-face" :ref="(el) => setCssProp(el, 'border-color', suitColor(card.suit))">
               <div class="card-name">{{ card.name }}</div>
               <div class="card-name-en">{{ card.name_en }}</div>
               <div class="card-status" :class="card.status === '正位' ? 'upright' : 'reversed'">
                 {{ card.status }}
               </div>
               <div class="card-tags">
-                <span class="tag" :style="{ background: suitColor(card.suit) + '22', color: suitColor(card.suit) }">
+                <span class="tag" :ref="(el) => setTagColors(el, suitColor(card.suit))">
                   {{ card.suit }}
                 </span>
                 <span class="tag">{{ card.element }}</span>
@@ -56,7 +56,7 @@
             :class="{ reversed: card.status === '逆位' }"
           >
             <span class="card-row-num">{{ i + 1 }}</span>
-            <div class="card-row-face" :style="{ borderLeftColor: suitColor(card.suit) }">
+            <div class="card-row-face" :ref="(el) => setCssProp(el, 'border-left-color', suitColor(card.suit))">
               <div class="card-row-top">
                 <span class="card-row-name">{{ card.name }}</span>
                 <span class="card-row-name-en">{{ card.name_en }}</span>
@@ -80,12 +80,23 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, type ComponentPublicInstance } from 'vue'
 import type { ToolCall } from '@/types'
 import BubbleChrome from './_shared/BubbleChrome.vue'
 
 const props = defineProps<{ toolCall: ToolCall }>()
 const emit = defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()
+
+// CSP-safe CSSOM helpers: apply style property via setProperty (replaces :style binding)
+function setCssProp(el: Element | ComponentPublicInstance | null, prop: string, value: string) {
+  if (el instanceof HTMLElement) el.style.setProperty(prop, value)
+}
+function setTagColors(el: Element | ComponentPublicInstance | null, color: string) {
+  if (el instanceof HTMLElement) {
+    el.style.setProperty('background', color + '22')
+    el.style.setProperty('color', color)
+  }
+}
 
 const SUIT_COLORS: Record<string, string> = {
   '大阿尔卡纳': '#b8860b',

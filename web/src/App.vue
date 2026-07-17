@@ -39,7 +39,7 @@
       </nav>
       <Teleport to="body">
         <Transition name="popup">
-          <div v-if="showSettingsMenu" ref="settingsPopupRef" class="settings-popup" :style="{ top: popupTop, left: popupLeft, maxHeight: popupMaxHeight }" @click.stop>
+          <div v-if="showSettingsMenu" ref="settingsPopupRef" class="settings-popup" @click.stop>
             <div class="popup-header">设置</div>
             <router-link to="/appearance" class="popup-item" @click="closeSettingsMenu">外观 APPEARANCE</router-link>
             <router-link to="/providers" class="popup-item" @click="closeSettingsMenu">模型 MODELS</router-link>
@@ -140,9 +140,6 @@ const { onEnter: onFloatSidebarEnter, onLeave: onFloatSidebarLeave } = useFloatS
 const showSettingsMenu = ref(false)
 const settingsTriggerRef = ref<HTMLElement | null>(null)
 const settingsPopupRef = ref<HTMLElement | null>(null)
-const popupTop = ref('0px')
-const popupLeft = ref('228px')
-const popupMaxHeight = ref('')
 const restarting = ref(false)
 const exportingErrorLog = ref(false)
 const managingLogs = ref(false)
@@ -237,15 +234,17 @@ function restartOnboarding() {
 }
 
 function updatePopupPosition() {
-  if (settingsTriggerRef.value) {
-    const rect = settingsTriggerRef.value.getBoundingClientRect()
-    popupTop.value = `${rect.top}px`
-    popupLeft.value = `${rect.right + 8}px`
-    // 动态计算可用高度：视口高度 - popup 顶部位置 - 底部留白 16px
-    // 避免固定 max-height 导致 popup 超出视口底部被裁切
-    const available = window.innerHeight - rect.top - 16
-    popupMaxHeight.value = `${Math.max(160, available)}px`
-  }
+  const el = settingsPopupRef.value
+  const trigger = settingsTriggerRef.value
+  if (!el || !trigger) return
+  // CSP-safe CSSOM: position settings popup via style.setProperty (was :style binding)
+  const rect = trigger.getBoundingClientRect()
+  el.style.setProperty('top', `${rect.top}px`)
+  el.style.setProperty('left', `${rect.right + 8}px`)
+  // 动态计算可用高度：视口高度 - popup 顶部位置 - 底部留白 16px
+  // 避免固定 max-height 导致 popup 超出视口底部被裁切
+  const available = window.innerHeight - rect.top - 16
+  el.style.setProperty('max-height', `${Math.max(160, available)}px`)
 }
 
 function onDocumentClick(e: MouseEvent) {

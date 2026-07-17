@@ -17,13 +17,13 @@
       </div>
 
       <!-- 版本演进时间轴 -->
-      <div v-if="versionNodes.length > 0" class="version-timeline" :style="tlBounds">
+      <div v-if="versionNodes.length > 0" ref="timelineRef" class="version-timeline">
         <div class="tl-track"></div>
         <div
           v-for="node in versionNodes"
           :key="node.version"
           class="tl-node"
-          :style="{ top: node.top + 'px' }"
+          :ref="(el) => setCssProp(el, 'top', node.top + 'px')"
         >
           <div class="tl-dot"></div>
           <span class="tl-label">{{ node.version }}</span>
@@ -37,13 +37,28 @@
 import { api } from '@/api'
 import type { NewsEntry } from '@/types'
 import NewsCard from '@/components/NewsCard.vue'
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, watchEffect, type ComponentPublicInstance } from 'vue'
 
 const news = ref<NewsEntry[]>([])
 const loading = ref(false)
 const cardGridRef = ref<HTMLElement | null>(null)
+const timelineRef = ref<HTMLElement | null>(null)
 const tlBounds = ref<{ top: string; height: string }>()
 const versionNodes = ref<{ version: string; top: number }[]>([])
+
+// CSP-safe CSSOM helper: apply style property via setProperty (replaces :style binding)
+function setCssProp(el: Element | ComponentPublicInstance | null, prop: string, value: string) {
+  if (el instanceof HTMLElement) el.style.setProperty(prop, value)
+}
+
+// CSP-safe CSSOM: position timeline via style.setProperty (was :style tlBounds)
+watchEffect(() => {
+  const el = timelineRef.value
+  const bounds = tlBounds.value
+  if (!el || !bounds) return
+  el.style.setProperty('top', bounds.top)
+  el.style.setProperty('height', bounds.height)
+}, { flush: 'post' })
 
 let observer: ResizeObserver | null = null
 
