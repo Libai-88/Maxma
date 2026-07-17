@@ -106,7 +106,7 @@ function makeItem(label: string, c: ComponentHealth): HealthItem {
 }
 
 .dot.degraded {
-  background: #d97706;
+  background: var(--status-warn);
 }
 
 .label {

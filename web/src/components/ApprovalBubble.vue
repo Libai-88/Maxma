@@ -104,14 +104,14 @@ function onReject() {
 }
 
 .approval-bubble.risk-high {
-  border-left: 3px solid var(--status-error, #dc2626);
-  background: color-mix(in srgb, var(--status-error, #dc2626) 5%, var(--bg-card));
+  border-left: 3px solid var(--status-error);
+  background: color-mix(in srgb, var(--status-error) 5%, var(--bg-card));
 }
 .approval-bubble.risk-medium {
-  border-left: 3px solid var(--status-warn, #d97706);
+  border-left: 3px solid var(--status-warn);
 }
 .approval-bubble.risk-low {
-  border-left: 3px solid var(--status-ok, #16a34a);
+  border-left: 3px solid var(--status-ok);
 }
 
 .approval-header {
@@ -149,16 +149,16 @@ function onReject() {
   margin-left: auto;
 }
 .risk-tag-high {
-  color: var(--status-error, #dc2626);
-  background: color-mix(in srgb, var(--status-error, #dc2626) 12%, transparent);
+  color: var(--status-error);
+  background: color-mix(in srgb, var(--status-error) 12%, transparent);
 }
 .risk-tag-medium {
-  color: var(--status-warn, #d97706);
-  background: color-mix(in srgb, var(--status-warn, #d97706) 12%, transparent);
+  color: var(--status-warn);
+  background: color-mix(in srgb, var(--status-warn) 12%, transparent);
 }
 .risk-tag-low {
-  color: var(--status-ok, #16a34a);
-  background: color-mix(in srgb, var(--status-ok, #16a34a) 12%, transparent);
+  color: var(--status-ok);
+  background: color-mix(in srgb, var(--status-ok) 12%, transparent);
 }
 
 .approval-detail {
@@ -207,19 +207,19 @@ function onReject() {
 }
 
 .btn-approve {
-  background: var(--status-ok, #16a34a);
-  color: #fff;
+  background: var(--status-ok);
+  color: var(--bg-primary);
 }
 .btn-approve:hover {
-  background: #15803d;
+  opacity: 0.9;
 }
 
 .btn-reject {
-  background: var(--status-error, #dc2626);
-  color: #fff;
+  background: var(--status-error);
+  color: var(--bg-primary);
 }
 .btn-reject:hover {
-  background: #b91c1c;
+  opacity: 0.9;
 }
 
 .approval-responded {
@@ -227,13 +227,13 @@ function onReject() {
 }
 
 .approval-approved {
-  color: var(--status-ok, #16a34a);
+  color: var(--status-ok);
   font-weight: 500;
   font-size: 0.88em;
 }
 
 .approval-rejected {
-  color: var(--status-error, #dc2626);
+  color: var(--status-error);
   font-weight: 500;
   font-size: 0.88em;
 }

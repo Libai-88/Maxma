@@ -146,7 +146,7 @@ watchEffect(() => {
 <style>
 /* v-html 渲染的加粗匹配字符 */
 .ac-item-name strong {
-  color: var(--accent, #2563eb);
+  color: var(--accent);
   font-weight: 700;
 }
 </style>

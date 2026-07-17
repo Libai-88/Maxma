@@ -103,11 +103,11 @@ async function copyDiagnostic() {
   padding: 12px 16px;
   margin: 8px 0;
 }
-.error-card--network { border-color: color-mix(in srgb, #3b82f6 30%, transparent); background: color-mix(in srgb, #3b82f6 10%, var(--bg-card)); }
-.error-card--timeout { border-color: color-mix(in srgb, #f97316 30%, transparent); background: color-mix(in srgb, #f97316 10%, var(--bg-card)); }
+.error-card--network { border-color: color-mix(in srgb, var(--status-info) 30%, transparent); background: color-mix(in srgb, var(--status-info) 10%, var(--bg-card)); }
+.error-card--timeout { border-color: color-mix(in srgb, var(--status-warn) 30%, transparent); background: color-mix(in srgb, var(--status-warn) 10%, var(--bg-card)); }
 .error-card--auth { border-color: color-mix(in srgb, var(--status-error) 30%, transparent); background: color-mix(in srgb, var(--status-error) 8%, var(--bg-card)); }
 .error-card--rate_limit { border-color: color-mix(in srgb, #a855f7 30%, transparent); background: color-mix(in srgb, #a855f7 10%, var(--bg-card)); }
-.error-card--warning { border-color: color-mix(in srgb, #d97706 36%, transparent); background: color-mix(in srgb, #d97706 10%, var(--bg-card)); }
+.error-card--warning { border-color: color-mix(in srgb, var(--status-warn) 36%, transparent); background: color-mix(in srgb, var(--status-warn) 10%, var(--bg-card)); }
 
 .error-card__header {
   display: flex;
@@ -119,23 +119,23 @@ async function copyDiagnostic() {
 .error-card__title {
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-primary, #1f2937);
+  color: var(--text-primary);
 }
 .error-card__trace {
   font-size: 11px;
-  color: var(--text-tertiary, #9ca3af);
+  color: var(--text-tertiary);
   font-family: monospace;
   margin-left: auto;
 }
 .error-card__message {
   font-size: 13px;
-  color: var(--text-secondary, #6b7280);
+  color: var(--text-secondary);
   line-height: 1.5;
   margin-bottom: 8px;
 }
 .error-card__suggestion {
   font-size: 12px;
-  color: var(--text-secondary, #6b7280);
+  color: var(--text-secondary);
   padding: 6px 10px;
   background: rgba(0, 0, 0, 0.03);
   border-radius: 4px;
@@ -143,7 +143,7 @@ async function copyDiagnostic() {
 }
 .suggestion-label {
   font-weight: 500;
-  color: var(--text-primary, #1f2937);
+  color: var(--text-primary);
 }
 .error-card__actions {
   display: flex;
@@ -152,16 +152,16 @@ async function copyDiagnostic() {
 }
 .error-card__btn {
   padding: 4px 12px;
-  border: 1px solid var(--border, #e5e7eb);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--bg-primary, #fff);
-  color: var(--text-secondary, #6b7280);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
   font-size: 12px;
   cursor: pointer;
   transition: all 0.15s;
 }
 .error-card__btn:hover {
-  border-color: var(--accent, #000);
-  color: var(--text-primary, #1f2937);
+  border-color: var(--accent);
+  color: var(--text-primary);
 }
 </style>

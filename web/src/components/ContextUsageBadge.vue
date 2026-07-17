@@ -47,16 +47,16 @@ function formatNum(n: number): string {
 </script>
 
 <style scoped>
-.context-usage-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 6px; font-size: 11px; color: var(--text-secondary, #6b7280); cursor: default; position: relative; font-family: 'SF Mono', 'Consolas', monospace; white-space: nowrap; }
-.context-usage-badge:hover { background: var(--bg-secondary, #f9fafb); }
+.context-usage-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 6px; font-size: 11px; color: var(--text-secondary); cursor: default; position: relative; font-family: 'SF Mono', 'Consolas', monospace; white-space: nowrap; }
+.context-usage-badge:hover { background: var(--bg-secondary); }
 .usage-icon { font-size: 13px; }
-.usage-bar { width: 40px; height: 4px; background: var(--border, #e5e7eb); border-radius: 2px; overflow: hidden; }
-.usage-bar-fill { height: 100%; background: var(--accent, #000); border-radius: 2px; transition: width 0.3s ease; }
-.status-warn .usage-bar-fill { background: #f59e0b; }
+.usage-bar { width: 40px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.usage-bar-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s ease; }
+.status-warn .usage-bar-fill { background: var(--status-warn); }
 .status-critical .usage-bar-fill { background: #ef4444; }
 .usage-pct { font-size: 10px; min-width: 32px; text-align: right; }
-.usage-tooltip { position: absolute; top: calc(100% + 6px); right: 0; z-index: 100; background: var(--bg-card, #fff); border: 1px solid var(--border, #e5e7eb); border-radius: 8px; padding: 10px 14px; min-width: 200px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
+.usage-tooltip { position: absolute; top: calc(100% + 6px); right: 0; z-index: 100; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; min-width: 200px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
 .tooltip-row { display: flex; justify-content: space-between; gap: 24px; padding: 3px 0; font-size: 12px; }
-.tooltip-row span:first-child { color: var(--text-secondary, #6b7280); }
-.tooltip-row span:last-child { color: var(--text-primary, #1f2937); font-weight: 500; }
+.tooltip-row span:first-child { color: var(--text-secondary); }
+.tooltip-row span:last-child { color: var(--text-primary); font-weight: 500; }
 </style>
