@@ -161,6 +161,7 @@ function parseModel(modelStr: string): Model {
 
 export function mapPiEventToMaxma(
   piEvent: Record<string, unknown>,
+  guard?: { done: boolean } | null,
 ): Record<string, unknown> | null {
   // Handle AgentEvent types directly
   const type = piEvent.type as string;
@@ -250,6 +251,7 @@ export function mapPiEventToMaxma(
   }
 
   if (type === "agent_end") {
+    if (guard) guard.done = true;
     return { type: "done", payload: {} };
   }
 
