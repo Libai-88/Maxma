@@ -77,7 +77,6 @@ hiddenimports = [
     "api.pi_bridge.ws_event_mapper",
     "api.auth",
     "api.const_session_store",
-    "api.time_traveler",
     "api.db.core",
     "api.db.auth",
 ]
