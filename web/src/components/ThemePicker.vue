@@ -12,9 +12,18 @@
         @click="setTheme(t.id)"
         :title="t.description"
       >
-        <div class="theme-preview" :style="{ background: t.preview.bg }">
-          <span class="theme-preview-accent" :style="{ background: t.preview.accent }"></span>
-          <span class="theme-preview-text" :style="{ color: t.preview.text }">Aa</span>
+        <div
+          class="theme-preview"
+          :ref="(el) => setCssProp(el, 'background', t.preview.bg)"
+        >
+          <span
+            class="theme-preview-accent"
+            :ref="(el) => setCssProp(el, 'background', t.preview.accent)"
+          ></span>
+          <span
+            class="theme-preview-text"
+            :ref="(el) => setCssProp(el, 'color', t.preview.text)"
+          >Aa</span>
         </div>
         <div class="theme-name">{{ t.name }}</div>
       </button>
@@ -43,11 +52,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, type ComponentPublicInstance } from 'vue'
 import { useTheme } from '@/composables/useTheme'
 import { usePaperTexture } from '@/composables/usePaperTexture'
 
 const { storedTheme, setTheme, THEMES } = useTheme()
+
+// CSP-safe CSSOM helper: apply style property via setProperty (replaces :style binding)
+function setCssProp(el: Element | ComponentPublicInstance | null, prop: string, value: string) {
+  if (el instanceof HTMLElement) el.style.setProperty(prop, value)
+}
 
 const serifFont = ref(localStorage.getItem('maxma.fontSerif') !== 'off')
 
