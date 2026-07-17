@@ -159,6 +159,7 @@ import type { ComponentHealth, ProviderConfig, TestConnectionResponse } from '@/
 import { useProviderStore } from '@/stores/provider'
 import { useHealthStore } from '@/stores/health'
 import { diagnosticMessage, retryMessage } from '@/utils/providerDiagnostics'
+import { toErrorMessage } from '@/utils/error'
 import { computed, onMounted, ref } from 'vue'
 
 // ── 预设提供商列表 ──
@@ -237,8 +238,8 @@ async function handleTest() {
     } else {
       formError.value = res.detail || '连接失败'
     }
-  } catch (e: any) {
-    formError.value = e.message
+  } catch (e: unknown) {
+    formError.value = toErrorMessage(e)
   } finally {
     testing.value = false
   }
@@ -273,8 +274,8 @@ async function handleDiscover() {
     // 之前未发现的新模型，默认选中
     // 之前已发现且用户选中的模型，保持选中
     selectedModels.value = models.filter(m => previousDiscovered.has(m) ? previousSelection.has(m) : true)
-  } catch (e: any) {
-    formError.value = e.message
+  } catch (e: unknown) {
+    formError.value = toErrorMessage(e)
   } finally {
     discovering.value = false
   }
@@ -335,7 +336,7 @@ async function handleSave() {
   saving.value = true
   formError.value = ''
   try {
-    const body: any = {
+    const body: Partial<ProviderConfig> = {
       id: form.value.id || form.value.label.toLowerCase().replace(/\s+/g, '-'),
       provider_type: 'openai',
       label: form.value.label,
@@ -347,7 +348,12 @@ async function handleSave() {
     }
     if (isEditing.value) {
       // PUT — only send changed fields
-      const updateBody: any = { label: body.label, base_url: body.base_url, models: body.models, context_window: body.context_window }
+      const updateBody: Partial<ProviderConfig> = {
+        label: body.label,
+        base_url: body.base_url,
+        models: body.models,
+        context_window: body.context_window,
+      }
       if (form.value.api_key) updateBody.api_key = form.value.api_key
       await api.updateProvider(editingId.value, updateBody)
     } else {
@@ -356,8 +362,8 @@ async function handleSave() {
     mode.value = 'list'
     // 用 refresh() 强制刷新 store，让 ChatInput 等消费方立即感知变化
     await providerStore.refresh()
-  } catch (e: any) {
-    formError.value = e.message
+  } catch (e: unknown) {
+    formError.value = toErrorMessage(e)
   } finally {
     saving.value = false
   }
@@ -369,8 +375,8 @@ async function deleteProvider(id: string) {
     await api.deleteProvider(id)
     // 用 refresh() 强制刷新 store，让 ChatInput 等消费方感知删除
     await providerStore.refresh()
-  } catch (e: any) {
-    alert('删除失败: ' + e.message)
+  } catch (e: unknown) {
+    alert('删除失败: ' + toErrorMessage(e))
   }
 }
 
@@ -378,8 +384,8 @@ async function testProvider(id: string) {
   try {
     const res = await api.testExistingProvider(id)
     testResult.value[id] = res
-  } catch (e: any) {
-    testResult.value[id] = { status: 'error', latency_ms: null, detail: e.message }
+  } catch (e: unknown) {
+    testResult.value[id] = { status: 'error', latency_ms: null, detail: toErrorMessage(e) }
   }
 }
 
@@ -388,8 +394,8 @@ async function recheckProvider(id: string) {
   try {
     await api.checkProviderHealth(id)
     await Promise.all([providerStore.refresh(), healthStore.refresh()])
-  } catch (e: any) {
-    formError.value = e.message
+  } catch (e: unknown) {
+    formError.value = toErrorMessage(e)
   } finally {
     rechecking.value[id] = false
   }
@@ -399,8 +405,8 @@ async function discoverProvider(id: string) {
   try {
     await api.discoverModelsForExisting(id)
     await providerStore.refresh()
-  } catch (e: any) {
-    alert('拉取失败: ' + e.message)
+  } catch (e: unknown) {
+    alert('拉取失败: ' + toErrorMessage(e))
   }
 }
 
@@ -410,8 +416,8 @@ async function toggleProvider(id: string, enabled: boolean) {
     // 同步刷新全局 store，让 ChatInput 等消费方感知到 enabled 变化
     // providers 是 computed，会自动更新，无需手动修改
     await providerStore.refresh()
-  } catch (e: any) {
-    alert('切换失败: ' + e.message)
+  } catch (e: unknown) {
+    alert('切换失败: ' + toErrorMessage(e))
   }
 }
 
