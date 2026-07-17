@@ -294,8 +294,8 @@ onMounted(loadEntries)
   font-size: 13px;
 }
 .msg.error {
-  background: #fee2e2;
-  color: #991b1b;
+  background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
+  color: var(--status-error);
 }
 
 /* ── 规则说明 ── */
@@ -362,7 +362,7 @@ onMounted(loadEntries)
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-primary {
   background: var(--accent);
-  color: white;
+  color: var(--bg-primary);
   border-color: var(--accent);
 }
 .btn-danger {
@@ -379,12 +379,12 @@ onMounted(loadEntries)
   margin-top: 4px;
 }
 .recursive-yes {
-  background: #dcfce7;
-  color: #166534;
+  background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card));
+  color: var(--status-ok);
 }
 .recursive-no {
-  background: #fef3c7;
-  color: #92400e;
+  background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card));
+  color: var(--status-warn);
 }
 
 /* ── Toggle 开关 ── */
@@ -414,12 +414,12 @@ onMounted(loadEntries)
   left: 2px;
   width: 18px;
   height: 18px;
-  background: white;
+  background: var(--bg-primary);
   border-radius: 50%;
   transition: transform 0.2s;
 }
 .toggle-input:checked + .toggle-slider {
-  background: var(--accent, #3b82f6);
+  background: var(--accent);
 }
 .toggle-input:checked + .toggle-slider::after {
   transform: translateX(18px);

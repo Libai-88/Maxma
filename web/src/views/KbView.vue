@@ -459,7 +459,7 @@ onMounted(() => {
 }
 .btn.primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--bg-primary);
   border-color: var(--accent);
 }
 .btn.primary:hover:not(:disabled) {
@@ -606,12 +606,12 @@ onMounted(() => {
   flex-shrink: 0;
 }
 .result-score.high {
-  background: color-mix(in srgb, #16a34a 12%, var(--bg-card));
-  color: #16a34a;
+  background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card));
+  color: var(--status-ok);
 }
 .result-score.mid {
-  background: color-mix(in srgb, #d97706 12%, var(--bg-card));
-  color: #d97706;
+  background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card));
+  color: var(--status-warn);
 }
 .result-score.low {
   background: var(--bg-secondary);

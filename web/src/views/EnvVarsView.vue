@@ -333,8 +333,8 @@ onMounted(loadVars)
 }
 
 .msg.success {
-  background: color-mix(in srgb, #22c55e 10%, var(--bg-card));
-  color: #16a34a;
+  background: color-mix(in srgb, var(--status-ok) 10%, var(--bg-card));
+  color: var(--status-ok);
 }
 
 /* ── 按钮 ── */
@@ -354,7 +354,7 @@ onMounted(loadVars)
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-primary {
   background: var(--accent);
-  color: white;
+  color: var(--bg-primary);
   border-color: var(--accent);
 }
 

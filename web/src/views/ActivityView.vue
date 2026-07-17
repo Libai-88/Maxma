@@ -125,7 +125,7 @@ onUnmounted(() => {
   color: var(--text-tertiary);
 }
 .activity-status.online {
-  color: var(--status-ok, #16a34a);
+  color: var(--status-ok);
 }
 
 .activity-stats {
@@ -178,10 +178,10 @@ onUnmounted(() => {
   border-bottom: none;
 }
 .activity-item.level-warn {
-  background: color-mix(in srgb, var(--status-warn, #d97706) 5%, transparent);
+  background: color-mix(in srgb, var(--status-warn) 5%, transparent);
 }
 .activity-item.level-error {
-  background: color-mix(in srgb, var(--status-error, #dc2626) 5%, transparent);
+  background: color-mix(in srgb, var(--status-error) 5%, transparent);
 }
 
 .activity-item-time {
@@ -201,9 +201,9 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 .activity-item-category.cat-tool { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
-.activity-item-category.cat-turn { background: color-mix(in srgb, var(--status-ok, #16a34a) 15%, transparent); color: var(--status-ok, #16a34a); }
-.activity-item-category.cat-compression { background: color-mix(in srgb, var(--status-warn, #d97706) 15%, transparent); color: var(--status-warn, #d97706); }
-.activity-item-category.cat-approval { background: color-mix(in srgb, var(--status-error, #dc2626) 15%, transparent); color: var(--status-error, #dc2626); }
+.activity-item-category.cat-turn { background: color-mix(in srgb, var(--status-ok) 15%, transparent); color: var(--status-ok); }
+.activity-item-category.cat-compression { background: color-mix(in srgb, var(--status-warn) 15%, transparent); color: var(--status-warn); }
+.activity-item-category.cat-approval { background: color-mix(in srgb, var(--status-error) 15%, transparent); color: var(--status-error); }
 
 .activity-item-content {
   flex: 1;
