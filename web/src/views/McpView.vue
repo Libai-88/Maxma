@@ -12,7 +12,7 @@
       <div v-if="loading" class="loading">加载中...</div>
       <div v-else-if="loadError" class="empty">
         加载失败: {{ loadError }}
-        <div style="margin-top: 12px">
+        <div class="retry-row">
           <button class="btn primary" @click="loadServers">重试</button>
         </div>
       </div>
@@ -70,16 +70,16 @@
       </div>
 
       <!-- OMP 自动发现 -->
-      <div v-if="discoveredServers.length > 0" class="section" style="margin-top: 24px;">
-        <div class="section-title" style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary, #6b7280); margin-bottom: 8px;">OMP 自动发现</div>
-        <div v-for="s in discoveredServers" :key="s.id" class="server-card" style="opacity: 0.85;">
+      <div v-if="discoveredServers.length > 0" class="section omp-section">
+        <div class="section-title">OMP 自动发现</div>
+        <div v-for="s in discoveredServers" :key="s.id" class="server-card">
           <div class="server-header">
             <span class="server-name">{{ s.name }}</span>
             <span class="server-status" :class="s.status === 'connected' ? 'ok' : 'err'">{{ s.status }}</span>
-            <span style="font-size: 10px; padding: 1px 6px; border-radius: 100px; background: var(--border, #e5e7eb); color: var(--text-tertiary, #9ca3af); margin-left: 8px;">自动</span>
+            <span class="auto-tag">自动</span>
           </div>
           <div class="server-tools" v-if="s.tools && s.tools.length">
-            <span v-for="t in s.tools" :key="t" style="font-size: 11px; padding: 2px 8px; border-radius: 4px; background: var(--bg-secondary, #f9fafb); color: var(--text-secondary, #6b7280);">{{ t }}</span>
+            <span v-for="t in s.tools" :key="t" class="tool-tag">{{ t }}</span>
           </div>
         </div>
       </div>
@@ -1039,5 +1039,44 @@ select.input {
 .tool-pick-danger:hover {
   border-color: #d32f2f;
   color: #d32f2f;
+}
+
+/* ── OMP 自动发现区 ── */
+.retry-row {
+  margin-top: 12px;
+}
+
+.omp-section {
+  margin-top: 24px;
+}
+
+.section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary, #6b7280);
+  margin-bottom: 8px;
+}
+
+.server-card {
+  opacity: 0.85;
+}
+
+.auto-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 100px;
+  background: var(--border, #e5e7eb);
+  color: var(--text-tertiary, #9ca3af);
+  margin-left: 8px;
+}
+
+.tool-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--bg-secondary, #f9fafb);
+  color: var(--text-secondary, #6b7280);
 }
 </style>
