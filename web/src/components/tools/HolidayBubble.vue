@@ -129,7 +129,7 @@ import type { ToolCall } from '@/types'
 import BubbleChrome from './_shared/BubbleChrome.vue'
 
 const props = defineProps<{ toolCall: ToolCall }>()
-const emit = defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()
+defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()
 
 // ── 数据源 ──
 const td = computed<Record<string, any>>(() => {

@@ -31,7 +31,7 @@ import BubbleChrome from './_shared/BubbleChrome.vue'
 import RenderMarkdown from '@/components/RenderMarkdown.vue'
 
 const props = defineProps<{ toolCall: ToolCall }>()
-const emit = defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()
+defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()
 
 const td = computed<Record<string, any>>(() => {
   if (props.toolCall.toolData) return props.toolCall.toolData as Record<string, any>

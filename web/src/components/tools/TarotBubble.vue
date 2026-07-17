@@ -85,7 +85,7 @@ import type { ToolCall } from '@/types'
 import BubbleChrome from './_shared/BubbleChrome.vue'
 
 const props = defineProps<{ toolCall: ToolCall }>()
-const emit = defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()
+defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()
 
 // CSP-safe CSSOM helpers: apply style property via setProperty (replaces :style binding)
 function setCssProp(el: Element | ComponentPublicInstance | null, prop: string, value: string) {

@@ -147,7 +147,7 @@
 
 <script setup lang="ts">
 import type { ToolCall } from '@/types';
-import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue';
+import { computed, onUnmounted, ref, watch, watchEffect } from 'vue';
 import BubbleChrome from './_shared/BubbleChrome.vue';
 
 const props = defineProps<{ toolCall: ToolCall }>()
