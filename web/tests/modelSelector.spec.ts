@@ -30,11 +30,13 @@ describe('ModelSelector', () => {
     const wrapper = mount(ModelSelector)
     const dsSelect = wrapper.findComponent(DsSelect)
     expect(dsSelect.exists()).toBe(true)
-    // options 平铺所有 availableModels，label 为 model.name
+    // options 平铺所有 availableModels，含 provider 与 contextWindow（供 groupKey 分组与 ctx 显示）
     expect(dsSelect.props('options')).toEqual([
-      { value: 'm1', label: 'Model 1' },
-      { value: 'm2', label: 'Model 2' },
+      { value: 'm1', label: 'Model 1', provider: 'p', contextWindow: 8000 },
+      { value: 'm2', label: 'Model 2', provider: 'p', contextWindow: 128000 },
     ])
+    // 按 provider 分组
+    expect(dsSelect.props('groupKey')).toBe('provider')
     // 当前选中值绑定 store.currentModel
     expect(dsSelect.props('modelValue')).toBe('m1')
     // input 显示选中 model 的 name
