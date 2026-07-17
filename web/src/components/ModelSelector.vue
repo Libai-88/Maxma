@@ -1,85 +1,76 @@
 <template>
-  <div class="model-selector" @click.stop="toggleOpen">
-    <button class="model-trigger">
-      <span class="model-icon" v-html="modelIconSvg"></span>
-      <span class="model-name">{{ displayName }}</span>
-      <span class="model-arrow" :class="{ open: isOpen }">▾</span>
-    </button>
-    <Teleport to="body">
-      <div v-if="isOpen" class="model-dropdown" @click.stop>
-        <div class="dropdown-header">
-          选择模型
-          <button class="close-btn" @click="isOpen = false">✕</button>
-        </div>
-        <div class="model-list">
-          <div v-for="group in groupedModels" :key="group.provider" class="provider-group">
-            <div class="provider-label">{{ group.provider }}</div>
-            <div v-for="model in group.models" :key="model.id"
-              class="model-item" :class="{ active: model.id === store.currentModel }"
-              @click="selectModel(model.id)">
-              <span class="model-item-name">{{ model.name }}</span>
-              <span class="model-item-ctx">{{ formatCtx(model.contextWindow) }}</span>
-            </div>
-          </div>
-          <div v-if="groupedModels.length === 0" class="empty-state">暂无可用模型</div>
-        </div>
-      </div>
-    </Teleport>
+  <div class="model-selector">
+    <DsSelect
+      :model-value="store.currentModel"
+      :options="modelOptions"
+      :placeholder="displayName || '选择模型'"
+      :aria-label="'模型选择器'"
+      size="sm"
+      @update:model-value="onSelectModel"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useChatStore } from '../stores/chat'
-import modelIconRaw from '../assets/icons/sidebar/model.svg?raw'
+import DsSelect from './ui/DsSelect.vue'
 
 const store = useChatStore()
-const isOpen = ref(false)
-
-// 剥掉 <?xml?> 声明，与 Icon.vue 处理方式一致
-const modelIconSvg = computed(() => modelIconRaw.replace(/<\?xml[^>]*\?>/, '').trim())
 
 const displayName = computed(() => {
   const found = store.availableModels.find(m => m.id === store.currentModel)
-  return found?.name || store.currentModel
+  return found?.name || ''
 })
 
-const groupedModels = computed(() => {
-  const groups = new Map<string, typeof store.availableModels>()
-  for (const m of store.availableModels) {
-    if (!groups.has(m.provider)) groups.set(m.provider, [])
-    groups.get(m.provider)!.push(m)
-  }
-  return Array.from(groups.entries()).map(([provider, models]) => ({ provider, models }))
-})
+const modelOptions = computed(() =>
+  store.availableModels.map(m => ({ value: m.id, label: m.name }))
+)
 
-function toggleOpen() { isOpen.value = !isOpen.value }
-function selectModel(id: string) { store.setModel(id); isOpen.value = false }
-function formatCtx(ctx: number): string { return ctx >= 1000 ? `${(ctx / 1000).toFixed(0)}k` : `${ctx}` }
+function onSelectModel(value: string | number) {
+  store.setModel(String(value))
+}
 
 onMounted(() => { if (store.availableModels.length === 0) store.fetchAvailableModels() })
-function onDocumentClick() { isOpen.value = false }
-onMounted(() => document.addEventListener('click', onDocumentClick))
-onUnmounted(() => document.removeEventListener('click', onDocumentClick))
 </script>
 
 <style scoped>
-.model-selector { position: relative; display: inline-block; }
-.model-trigger { display: flex; align-items: center; gap: 4px; padding: 4px 8px; border: 1px solid var(--border, #e5e7eb); border-radius: 6px; background: transparent; font-size: 12px; color: var(--text-secondary, #6b7280); cursor: pointer; white-space: nowrap; }
-.model-trigger:hover { background: var(--bg-secondary, #f9fafb); }
-.model-icon { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; line-height: 0; flex-shrink: 0; }
-.model-icon :deep(svg) { width: 100%; height: 100%; }
-.model-arrow { font-size: 10px; transition: transform 0.2s; }
-.model-arrow.open { transform: rotate(180deg); }
-.model-dropdown { position: fixed; z-index: 1000; width: 320px; max-height: 400px; background: var(--bg-card, #fff); border: 1px solid var(--border, #e5e7eb); border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); overflow: hidden; display: flex; flex-direction: column; }
-.dropdown-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary, #6b7280); border-bottom: 1px solid var(--border, #e5e7eb); }
-.close-btn { background: none; border: none; cursor: pointer; color: var(--text-tertiary, #9ca3af); font-size: 14px; }
-.model-list { overflow-y: auto; padding: 6px 0; }
-.provider-label { padding: 6px 14px 2px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-tertiary, #9ca3af); }
-.model-item { display: flex; justify-content: space-between; align-items: center; padding: 7px 14px; cursor: pointer; font-size: 13px; color: var(--text-primary, #1f2937); }
-.model-item:hover { background: var(--bg-secondary, #f9fafb); }
-.model-item.active { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); font-weight: 600; }
-.model-item-ctx { font-size: 11px; color: var(--text-tertiary, #9ca3af); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-.model-item.active .model-item-ctx { color: var(--text-tertiary); }
-.empty-state { padding: 24px; text-align: center; color: var(--text-tertiary, #9ca3af); font-size: 13px; }
+.model-selector {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* 覆盖 DsSelect input 样式，使其与原紧凑 trigger 视觉一致 */
+.model-selector :deep(.ds-select) {
+  width: auto;
+}
+.model-selector :deep(.ds-select__input) {
+  height: 24px;
+  padding: 0 24px 0 8px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary, #6b7280);
+  font-size: 12px;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: background var(--duration-fast, 0.15s) var(--ease-out, ease-out),
+              border-color var(--duration-fast, 0.15s) var(--ease-out, ease-out);
+}
+.model-selector :deep(.ds-select__input:hover) {
+  background: var(--bg-secondary, #f9fafb);
+}
+.model-selector :deep(.ds-select--open .ds-select__input) {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+.model-selector :deep(.ds-select__caret) {
+  width: 20px;
+  height: 24px;
+  color: var(--text-tertiary, #9ca3af);
+}
+.model-selector :deep(.ds-select--open .ds-select__caret) {
+  color: var(--text-primary);
+}
 </style>
