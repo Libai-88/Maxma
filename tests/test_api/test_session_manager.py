@@ -198,3 +198,74 @@ async def test_cleanup_expired_does_not_remove_active_task_while_still_running(m
     # 给事件循环一次机会，让取消请求在任务中传播
     await asyncio.sleep(0)
     assert task.cancelled()
+
+
+# ── Silent-except logging tests ────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_delete_logs_warning_when_active_task_raises(manager, caplog):
+    """delete() should log a warning when awaiting the cancelled active task raises."""
+    import logging
+
+    session = await manager.create()
+
+    async def failing_task():
+        try:
+            await asyncio.sleep(100)
+        except asyncio.CancelledError:
+            raise RuntimeError("task boom")
+
+    task = asyncio.create_task(failing_task())
+    await asyncio.sleep(0)  # Let the task start and reach sleep(100)
+    session._active_task = task
+
+    with caplog.at_level(logging.WARNING):
+        await manager.delete(session.session_id)
+
+    assert any(
+        "task" in r.message.lower() or "取消" in r.message
+        for r in caplog.records
+        if r.levelno >= logging.WARNING
+    )
+
+
+@pytest.mark.asyncio
+async def test_delete_logs_warning_when_run_manager_raises(manager, caplog):
+    """delete() should log a warning when run_manager.cancel_parent raises."""
+    import logging
+
+    class FailingRunManager:
+        async def cancel_parent(self, session_id):
+            raise RuntimeError("run_manager boom")
+
+    session = await manager.create()
+    manager._deferred_run_manager = FailingRunManager()
+
+    with caplog.at_level(logging.WARNING):
+        result = await manager.delete(session.session_id)
+
+    assert result is True
+    assert any(
+        "run" in r.message.lower() or "durable" in r.message.lower()
+        for r in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_delete_logs_warning_when_workflow_manager_raises(manager, caplog):
+    """delete() should log a warning when workflow_manager.cancel_parent raises."""
+    import logging
+
+    class FailingWorkflowManager:
+        async def cancel_parent(self, session_id, reason):
+            raise RuntimeError("workflow boom")
+
+    session = await manager.create()
+    manager._workflow_run_manager = FailingWorkflowManager()
+
+    with caplog.at_level(logging.WARNING):
+        result = await manager.delete(session.session_id)
+
+    assert result is True
+    assert any("workflow" in r.message.lower() for r in caplog.records)

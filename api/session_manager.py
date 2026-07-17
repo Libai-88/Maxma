@@ -1,11 +1,14 @@
 """会话状态管理 — 多会话隔离 + TTL 过期清理。"""
 
 import asyncio
+import logging
 import threading
 import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -149,24 +152,26 @@ class SessionManager:
             task.cancel()
             try:
                 await task
-            except (asyncio.CancelledError, Exception):
-                pass
+            except asyncio.CancelledError:
+                logger.debug("[session] Active task cancelled for %s", session_id)
+            except Exception as e:
+                logger.warning("[session] Failed to cancel active task for %s: %s", session_id, e)
         run_manager = getattr(self, "_deferred_run_manager", None)
         if run_manager is not None:
             try:
                 await run_manager.cancel_parent(session_id)
-            except Exception:
+            except Exception as e:
                 # Session deletion must remain available even if a durable
                 # dispatcher has already been shut down during application exit.
-                pass
+                logger.warning("[session] run_manager.cancel_parent failed for %s: %s", session_id, e)
         workflow_manager = getattr(self, "_workflow_run_manager", None)
         if workflow_manager is not None:
             try:
                 await workflow_manager.cancel_parent(session_id, "parent_session_closed")
-            except Exception:
+            except Exception as e:
                 # A session must still be removable while a workflow runtime is
                 # stopping or has already released its journal connection.
-                pass
+                logger.warning("[session] workflow_manager.cancel_parent failed for %s: %s", session_id, e)
         return True
 
     async def list_sessions(self) -> list[dict]:
