@@ -44,7 +44,7 @@ def get_approval_level(tool_name: str) -> str:
         tool_name: 工具名称
         
     Returns:
-        "read" / "write" / "interactive" / "auto"（默认自动）
+        "read" / "write" / "interactive" / "ask"（默认询问）
     """
     return TOOL_APPROVAL_MAP.get(tool_name, "ask")
 
