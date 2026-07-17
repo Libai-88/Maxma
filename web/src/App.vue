@@ -86,17 +86,17 @@ import { onboardingEnabled, useOnboardingStore } from '@/stores/onboarding';
 import { storeToRefs } from 'pinia';
 import { useSessionStore } from '@/stores/session';
 import { useSidebar } from '@/composables/useSidebar';
-import { onMounted, watch } from 'vue';
+import { defineAsyncComponent, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
 import LeavesOverlay from '@/components/LeavesOverlay.vue'
-import MediaViewer from '@/components/MediaViewer.vue'
 import FloatSidebar from '@/components/FloatSidebar.vue'
 import { useFloatSidebar } from '@/composables/useFloatSidebar'
 import { usePaperTexture } from '@/composables/usePaperTexture'
 import { useGlobalShortcut } from '@/composables/useGlobalShortcut'
 import RegionalErrorBoundary from '@/components/ui/RegionalErrorBoundary.vue'
 
+const MediaViewer = defineAsyncComponent(() => import('@/components/MediaViewer.vue'))
 const { effectiveCollapsed, toggleSidebar } = useSidebar()
 const pulseEnabled = import.meta.env.VITE_PULSE_ENABLED === 'true'
 const onboarding = useOnboardingStore()
