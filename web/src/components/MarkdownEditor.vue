@@ -28,11 +28,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { onMounted } from 'vue'
 import { Codemirror } from 'vue-codemirror'
-import { markdown } from '@codemirror/lang-markdown'
-import { EditorView } from '@codemirror/view'
-import { api } from '@/api'
+import { useMarkdownPersist } from '@/composables/useMarkdownPersist'
 
 const props = defineProps<{
   type: 'soul' | 'user'
@@ -41,60 +39,19 @@ const props = defineProps<{
   placeholder?: string
 }>()
 
-const content = ref('')
-const savedContent = ref('')  // 记住上次保存的内容
-const loading = ref(true)
-const saving = ref(false)
-const saveState = ref<'saved' | 'saving' | ''>('')
-const saveError = ref('')
-
-const extensions = [
-  markdown(),
-  EditorView.lineWrapping,
-]
-
-const saveStateText = computed(() => {
-  if (saveState.value === 'saving') return '保存中...'
-  if (saveState.value === 'saved') return '已保存'
-  return ''
-})
-
-async function loadContent() {
-  loading.value = true
-  try {
-    const res = await api.getPersona(props.type)
-    content.value = res.content
-    savedContent.value = res.content
-  } catch (e: any) {
-    console.error(`加载 ${props.type} 失败`, e)
-  } finally {
-    loading.value = false
-  }
-}
-
-async function saveContent() {
-  if (saving.value || content.value === savedContent.value) return
-  saving.value = true
-  saveState.value = 'saving'
-  saveError.value = ''
-  try {
-    await api.updatePersona(props.type, content.value)
-    savedContent.value = content.value
-    saveState.value = 'saved'
-    setTimeout(() => { saveState.value = '' }, 2000)
-  } catch (e: any) {
-    console.error(`保存 ${props.type} 失败`, e)
-    saveError.value = e?.message || String(e)
-  } finally {
-    saving.value = false
-  }
-}
-
-function onBlur() {
-  if (content.value !== savedContent.value) {
-    saveContent()
-  }
-}
+const {
+  content,
+  savedContent,
+  loading,
+  saving,
+  saveState,
+  saveError,
+  extensions,
+  saveStateText,
+  loadContent,
+  saveContent,
+  onBlur,
+} = useMarkdownPersist({ type: props.type })
 
 onMounted(loadContent)
 </script>
