@@ -1,5 +1,6 @@
 """MaxmaHere — oh-my-pi AI Agent Desktop Backend (FastAPI + Bun sidecar)."""
 
+import logging
 import os
 import sys
 import threading
@@ -12,6 +13,8 @@ from api.logging_config import setup_logging
 from api.server import create_app
 from app_paths import ensure_data_dirs
 from config.settings import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 def _start_parent_watchdog():
@@ -82,8 +85,8 @@ def _start_parent_watchdog():
 
         t = threading.Thread(target=_watch, daemon=True, name="parent-watchdog")
         t.start()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("[watchdog] 父进程监控安装失败: %s", e)
 
 
 def main():
