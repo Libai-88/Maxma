@@ -82,11 +82,41 @@
 - Update this plan with final numbers (done section below).
 - Final commit if needed.
 
-## Completion (filled in after execution)
+## Completion (measured 2026-07-17)
 
-| Module | Before | After |
-|---|---|---|
-| api/bootstrap/idle_queue.py | 0% | TBD |
-| api/checkpointer_factory.py | 0% | TBD |
-| api/time_traveler.py | 0% | TBD |
-| api/logging_config.py | 59% | TBD |
+| Module | Stmts | Before | After |
+|---|---|---|---|
+| api/bootstrap/idle_queue.py | 36 | 0% | 100% |
+| api/checkpointer_factory.py | 11 | 0% | 100% |
+| api/time_traveler.py | 21 | 0% | 100% |
+| api/logging_config.py | 74 | 59% | 100% |
+| **TOTAL** | **144** | — | **100%** |
+
+Full suite: 1529 passed, 7 skipped, 0 failures (no regressions).
+ruff `E9,F63,F7,F821`: all checks passed on the 4 new test files.
+
+### New test files (67 new tests)
+- `tests/test_api/test_bootstrap_idle_queue.py` — 16 tests
+- `tests/test_api/test_checkpointer_factory.py` — 13 tests
+- `tests/test_api/test_time_traveler.py` — 17 tests
+- `tests/test_api/test_logging_config_extra.py` — 21 tests
+
+### Commits
+- `80924de` test(bootstrap): cover idle_queue module (0% -> 100%)
+- `2b3a2d1` test(api): cover checkpointer_factory no-op stub (0% -> 100%)
+- `3668579` test(api): cover time_traveler undo module (0% -> 100%)
+- `f240737` test(api): cover logging_config setup_logging and context injection (59% -> 100%)
+
+### Dead-code / semi-live findings
+- `api/checkpointer_factory.py` — LangGraph-era no-op stub, intentionally retained
+  ("保留为兼容导入的零操作存根"). **No internal Python importers** (only docs/plans
+  reference it). Recommend removal once the compatibility window closes.
+- `api/time_traveler.py` — bundled in `build/maxma-server.spec` `hiddenimports` but
+  **no current Python importers**. The `/sessions/{id}/undo` route
+  (`api/routes/sessions.py:257`) implements undo **inline** via `client.call("undo", …)`
+  rather than calling this module. Recommend either refactoring the route to reuse
+  `time_traveler.undo_rounds`, or removing the module + its `hiddenimports` entry.
+- `api/bootstrap/idle_queue.py` — exported as the public surface of `api.bootstrap`
+  (`__init__.py`), but no current callers in `api/server.py` / `main.py`. Intended
+  usage (retry-const-sessions, metrics flush, ttl purge) only appears in design
+  docs/plans. Live public API — kept and tested.
