@@ -144,7 +144,7 @@ class TestRateLimitMiddleware:
         async def write():
             return {"written": True}
 
-        app.add_middleware(RateLimitMiddleware, capacity=2, refill_rate=100.0)
+        app.add_middleware(RateLimitMiddleware, capacity=2, refill_rate=0.1)
         return app
 
     def test_skip_health_check(self, app_with_middleware):
