@@ -6,8 +6,10 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -148,6 +150,22 @@ class ProviderUpdateBody(BaseModel):
     context_window: int | None = None
 
 
+class TestConnectionBody(BaseModel):
+    """测试连接的请求体。"""
+
+    api_key: str = Field("", description="API 密钥")
+    base_url: str = Field("", description="API 基础 URL")
+    provider_type: str | None = Field(None, description="provider 类型（保留字段，当前不改变行为）")
+
+
+class DiscoverModelsBody(BaseModel):
+    """发现模型的请求体。"""
+
+    api_key: str = Field("", description="API 密钥")
+    base_url: str = Field("", description="API 基础 URL")
+    provider_type: str | None = Field(None, description="provider 类型（保留字段，当前不改变行为）")
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # 端点 1: GET /providers
 # ═══════════════════════════════════════════════════════════════════════
@@ -274,3 +292,91 @@ async def delete_provider(provider_id: str) -> dict[str, str]:
         new_items = [e for e in items if e.get("id") != provider_id]
         _save_providers(new_items)
     return {"status": "ok"}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# HTTP 连接测试 / 模型发现辅助
+# ═══════════════════════════════════════════════════════════════════════
+
+# 测试可注入的 http transport（默认 None 用真实网络）。仅用于测试 mock。
+_injectable_transport: httpx.BaseTransport | None = None
+
+# 连接测试 / 模型发现的超时（秒）。不真正调用 LLM，只请求 /models 端点。
+_HTTP_TIMEOUT = 10.0
+
+
+async def _http_get_models(
+    base_url: str,
+    api_key: str,
+) -> tuple[bool, int | None, str | None, list[str]]:
+    """GET {base_url}/models，返回 (ok, latency_ms, detail, models)。
+
+    - ok=True 表示请求成功且 HTTP < 400，latency_ms 为整数毫秒。
+    - ok=False 时 latency_ms 可能为 None（网络异常）或整数（HTTP 错误），detail 含错误描述。
+    - models 始终为 list[str]（解析 OpenAI 兼容 `data[].id`，异常或无数据返回空）。
+
+    不真正调用 LLM，仅测试 base_url 的可达性并尝试列出模型。
+    """
+    url = base_url.rstrip("/") + "/models"
+    headers: dict[str, str] = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    client_kwargs: dict[str, Any] = {"timeout": _HTTP_TIMEOUT}
+    if _injectable_transport is not None:
+        client_kwargs["transport"] = _injectable_transport
+    start = time.monotonic()
+    try:
+        async with httpx.AsyncClient(**client_kwargs) as client:
+            resp = await client.get(url, headers=headers)
+    except Exception as e:  # noqa: BLE001 — 网络错误统一处理，向前端返回 detail
+        return (False, None, str(e), [])
+    latency_ms = int((time.monotonic() - start) * 1000)
+    if resp.status_code >= 400:
+        return (False, latency_ms, f"HTTP {resp.status_code}", [])
+    try:
+        data = resp.json()
+    except Exception:  # noqa: BLE001 — JSON 解析失败视为无可发现模型
+        return (True, latency_ms, None, [])
+    models: list[str] = []
+    if isinstance(data, dict):
+        items = data.get("data")
+        if isinstance(items, list):
+            for m in items:
+                if isinstance(m, dict) and m.get("id") is not None:
+                    models.append(str(m["id"]))
+    return (True, latency_ms, None, models)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 端点 6: POST /providers/test
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@router.post("/providers/test")
+async def test_connection(body: TestConnectionBody) -> dict[str, Any]:
+    """测试 provider 连接可达性（不调用 LLM，仅 GET {base_url}/models）。
+
+    返回 TestConnectionResponse: {status, latency_ms, detail}。
+    网络异常 → status=error, latency_ms=null, detail=错误信息。
+    """
+    ok, latency_ms, detail, _models = await _http_get_models(body.base_url, body.api_key)
+    return {
+        "status": "ok" if ok else "error",
+        "latency_ms": latency_ms,
+        "detail": detail,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 端点 7: POST /providers/discover-models
+# ═══════════════════════════════════════════════════════════════════════
+
+
+@router.post("/providers/discover-models")
+async def discover_models(body: DiscoverModelsBody) -> dict[str, list[str]]:
+    """发现 provider 可用模型（GET {base_url}/models，解析 data[].id）。
+
+    异常或 HTTP 错误均返回 {models: []}（不报错，让前端显示"未发现模型"）。
+    """
+    _ok, _latency, _detail, models = await _http_get_models(body.base_url, body.api_key)
+    return {"models": models}

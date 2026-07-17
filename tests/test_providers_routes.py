@@ -306,3 +306,138 @@ class TestDeleteProvider:
         _seed_provider(yaml_path, "deepseek")
         resp = client.delete("/providers/ghost")
         assert resp.status_code == 404
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Step D: POST /providers/test + /providers/discover-models
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _patch_http(monkeypatch, handler):
+    """注入 httpx.MockTransport 到 providers 模块，模拟 /models 响应。
+
+    handler: 接收 httpx.Request，返回 httpx.Response；或抛异常模拟网络错误。
+    """
+    transport = httpx.MockTransport(handler)
+    monkeypatch.setattr(providers_mod, "_injectable_transport", transport)
+    return transport
+
+
+class TestTestConnection:
+    def test_test_connection_ok(self, client, monkeypatch):
+        """200 响应 → status:ok, latency_ms >= 0。"""
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"data": [{"id": "m1"}]})
+
+        _patch_http(monkeypatch, handler)
+        resp = client.post(
+            "/providers/test",
+            json={"api_key": "sk-x", "base_url": "https://api.example.com/v1"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "ok"
+        assert isinstance(body["latency_ms"], int)
+        assert body["latency_ms"] >= 0
+        assert body["detail"] is None
+
+    def test_test_connection_network_error(self, client, monkeypatch):
+        """网络异常 → status:error, latency_ms:null, detail 非空。"""
+        def handler(request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectError("connection refused")
+
+        _patch_http(monkeypatch, handler)
+        resp = client.post(
+            "/providers/test",
+            json={"api_key": "sk-x", "base_url": "https://api.example.com/v1"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "error"
+        assert body["latency_ms"] is None
+        assert body["detail"] is not None
+        assert "connection refused" in body["detail"]
+
+    def test_test_connection_http_error_status(self, client, monkeypatch):
+        """HTTP 4xx/5xx → status:error, detail 含状态码。"""
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(401, json={"error": "unauthorized"})
+
+        _patch_http(monkeypatch, handler)
+        resp = client.post(
+            "/providers/test",
+            json={"api_key": "bad", "base_url": "https://api.example.com/v1"},
+        )
+        body = resp.json()
+        assert body["status"] == "error"
+        assert "401" in body["detail"]
+
+    def test_test_connection_appends_models_path(self, client, monkeypatch):
+        """请求 URL 应为 {base_url}/models（base_url 末尾斜杠不影响）。"""
+        captured = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["url"] = str(request.url)
+            return httpx.Response(200, json={"data": []})
+
+        _patch_http(monkeypatch, handler)
+        client.post(
+            "/providers/test",
+            json={"api_key": "k", "base_url": "https://api.example.com/v1/"},
+        )
+        assert captured["url"] == "https://api.example.com/v1/models"
+
+
+class TestDiscoverModels:
+    def test_discover_models_ok(self, client, monkeypatch):
+        """200 响应 → 返回 model id 列表。"""
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={"data": [{"id": "gpt-4o"}, {"id": "gpt-4o-mini"}]},
+            )
+
+        _patch_http(monkeypatch, handler)
+        resp = client.post(
+            "/providers/discover-models",
+            json={"api_key": "sk-x", "base_url": "https://api.example.com/v1"},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {"models": ["gpt-4o", "gpt-4o-mini"]}
+
+    def test_discover_models_error_returns_empty(self, client, monkeypatch):
+        """异常 → 返回 {models: []}（不报错）。"""
+        def handler(request: httpx.Request) -> httpx.Response:
+            raise httpx.TimeoutException("timed out")
+
+        _patch_http(monkeypatch, handler)
+        resp = client.post(
+            "/providers/discover-models",
+            json={"api_key": "sk-x", "base_url": "https://api.example.com/v1"},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {"models": []}
+
+    def test_discover_models_no_data_field(self, client, monkeypatch):
+        """响应无 data 字段 → 返回空列表。"""
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"object": "list"})
+
+        _patch_http(monkeypatch, handler)
+        resp = client.post(
+            "/providers/discover-models",
+            json={"api_key": "sk-x", "base_url": "https://api.example.com/v1"},
+        )
+        assert resp.json() == {"models": []}
+
+    def test_discover_models_http_error_returns_empty(self, client, monkeypatch):
+        """HTTP 4xx → 返回空列表（不报错）。"""
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(500, json={"error": "server"})
+
+        _patch_http(monkeypatch, handler)
+        resp = client.post(
+            "/providers/discover-models",
+            json={"api_key": "sk-x", "base_url": "https://api.example.com/v1"},
+        )
+        assert resp.json() == {"models": []}
