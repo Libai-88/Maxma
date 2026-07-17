@@ -75,10 +75,7 @@ class TestCreateServer:
         )
         assert resp.status_code == 200
         body = resp.json()
-        # NOTE: source bug — _do_reload() returns {"status": "ok", ...} which,
-        # via `**result` spread, overwrites the intended "status": "created".
-        # Asserting actual behavior; see plan report for the recorded bug.
-        assert body["status"] == "ok"
+        assert body["status"] == "created"
         assert body["server"] == {
             "server_id": "s1",
             "transport": "stdio",
@@ -206,6 +203,7 @@ class TestUpdateServer:
         assert srv["description"] == "updated"
         assert srv["command"] == "cat"
         assert srv["transport"] == "stdio"  # unchanged
+        assert resp.json()["status"] == "updated"
 
     def test_update_unset_fields_ignored(self, app_client):
         app_client.post(
@@ -230,8 +228,7 @@ class TestDeleteServer:
         )
         resp = app_client.delete("/mcp/servers/s1")
         assert resp.status_code == 200
-        # NOTE: same source bug as create — status overwritten to "ok" by **result.
-        assert resp.json()["status"] == "ok"
+        assert resp.json()["status"] == "deleted"
         assert resp.json()["removed"] == "s1"
         # confirm gone
         assert app_client.get("/mcp/servers/s1").status_code == 404

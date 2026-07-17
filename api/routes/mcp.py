@@ -201,7 +201,7 @@ async def create_mcp_server(body: MCPServerCreateBody, request: Request):
         _save_raw(entries)
     logger.info(f"[mcp] 创建服务器: {body.server_id} ({body.transport})")
     result = await _do_reload(request)
-    return {"status": "created", "server": server_dict, **result}
+    return {**result, "status": "created", "server": server_dict}
 
 
 @router.put("/mcp/servers/{server_id}")
@@ -234,7 +234,7 @@ async def update_mcp_server(
         _save_raw(entries)
     logger.info(f"[mcp] 更新服务器: {server_id}")
     result = await _do_reload(request)
-    return {"status": "updated", "server": target, **result}
+    return {**result, "status": "updated", "server": target}
 
 
 @router.delete("/mcp/servers/{server_id}")
@@ -249,7 +249,7 @@ async def delete_mcp_server(server_id: str, request: Request):
         _save_raw(new_entries)
     logger.info(f"[mcp] 删除服务器: {server_id}")
     result = await _do_reload(request)
-    return {"status": "deleted", "removed": removed["server_id"], **result}
+    return {**result, "status": "deleted", "removed": removed["server_id"]}
 
 
 @router.get("/mcp/discovered")
