@@ -63,7 +63,7 @@ export const useSessionStore = defineStore('session', () => {
 
   async function createSession() {
     await _createSession()
-    await refreshSessions().catch(() => {})
+    await refreshSessions().catch((err) => console.warn('[session] refreshSessions after create failed:', err))
   }
 
   async function switchSession(id: string) {
@@ -75,25 +75,25 @@ export const useSessionStore = defineStore('session', () => {
     await api.deleteSession(id)
     removeTurnsFromStorage(id)
     if (sessionId.value === id) {
-      await refreshSessions().catch(() => {})
+      await refreshSessions().catch((err) => console.warn('[session] refreshSessions after delete failed:', err))
       if (sessions.value.length > 0) {
         await switchSession(sessions.value[0].session_id)
       } else {
         await createSession()
       }
     } else {
-      await refreshSessions().catch(() => {})
+      await refreshSessions().catch((err) => console.warn('[session] refreshSessions after delete failed:', err))
     }
   }
 
   async function constifySession(id: string, name: string) {
     await api.constifySession(id, name)
-    await refreshSessions().catch(() => {})
+    await refreshSessions().catch((err) => console.warn('[session] refreshSessions after constify failed:', err))
   }
 
   async function unconstifySession(id: string) {
     await api.unconstifySession(id)
-    await refreshSessions().catch(() => {})
+    await refreshSessions().catch((err) => console.warn('[session] refreshSessions after unconstify failed:', err))
   }
 
   async function generateSessionTitle(id: string): Promise<string> {
