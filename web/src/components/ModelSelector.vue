@@ -1,7 +1,7 @@
 <template>
   <div class="model-selector" @click.stop="toggleOpen">
     <button class="model-trigger">
-      <span class="model-icon">🤖</span>
+      <span class="model-icon" v-html="modelIconSvg"></span>
       <span class="model-name">{{ displayName }}</span>
       <span class="model-arrow" :class="{ open: isOpen }">▾</span>
     </button>
@@ -31,9 +31,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useChatStore } from '../stores/chat'
+import modelIconRaw from '../assets/icons/sidebar/model.svg?raw'
 
 const store = useChatStore()
 const isOpen = ref(false)
+
+// 剥掉 <?xml?> 声明，与 Icon.vue 处理方式一致
+const modelIconSvg = computed(() => modelIconRaw.replace(/<\?xml[^>]*\?>/, '').trim())
 
 const displayName = computed(() => {
   const found = store.availableModels.find(m => m.id === store.currentModel)
@@ -63,7 +67,8 @@ onUnmounted(() => document.removeEventListener('click', onDocumentClick))
 .model-selector { position: relative; display: inline-block; }
 .model-trigger { display: flex; align-items: center; gap: 4px; padding: 4px 8px; border: 1px solid var(--border, #e5e7eb); border-radius: 6px; background: transparent; font-size: 12px; color: var(--text-secondary, #6b7280); cursor: pointer; white-space: nowrap; }
 .model-trigger:hover { background: var(--bg-secondary, #f9fafb); }
-.model-icon { font-size: 14px; }
+.model-icon { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; line-height: 0; flex-shrink: 0; }
+.model-icon :deep(svg) { width: 100%; height: 100%; }
 .model-arrow { font-size: 10px; transition: transform 0.2s; }
 .model-arrow.open { transform: rotate(180deg); }
 .model-dropdown { position: fixed; z-index: 1000; width: 320px; max-height: 400px; background: var(--bg-card, #fff); border: 1px solid var(--border, #e5e7eb); border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); overflow: hidden; display: flex; flex-direction: column; }
@@ -73,8 +78,8 @@ onUnmounted(() => document.removeEventListener('click', onDocumentClick))
 .provider-label { padding: 6px 14px 2px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-tertiary, #9ca3af); }
 .model-item { display: flex; justify-content: space-between; align-items: center; padding: 7px 14px; cursor: pointer; font-size: 13px; color: var(--text-primary, #1f2937); }
 .model-item:hover { background: var(--bg-secondary, #f9fafb); }
-.model-item.active { background: #000; color: #fff; font-weight: 600; }
-.model-item-ctx { font-size: 11px; color: var(--text-tertiary, #9ca3af); font-family: 'SF Mono', monospace; }
-.model-item.active .model-item-ctx { color: rgba(255,255,255,0.6); }
+.model-item.active { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); font-weight: 600; }
+.model-item-ctx { font-size: 11px; color: var(--text-tertiary, #9ca3af); font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.model-item.active .model-item-ctx { color: var(--text-tertiary); }
 .empty-state { padding: 24px; text-align: center; color: var(--text-tertiary, #9ca3af); font-size: 13px; }
 </style>
