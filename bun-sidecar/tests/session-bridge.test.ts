@@ -3,6 +3,7 @@ import {
   mapPiEventToMaxma,
   createDoneGuard,
   orchestratePrompt,
+  handleCancelGuard,
 } from "../src/session-bridge";
 
 describe("module import smoke test", () => {
@@ -151,5 +152,30 @@ describe("orchestratePrompt — timeout circuit breaker", () => {
     expect(doneCount).toBe(1);
   });
 });
+
+describe("handleCancelGuard", () => {
+  test("with active, unfinished guard: marks guard and emits done", () => {
+    const guard = createDoneGuard();
+    const events: Record<string, unknown>[] = [];
+    handleCancelGuard(guard, (e) => events.push(e));
+    expect(guard.done).toBe(true);
+    expect(events).toEqual([{ type: "done", payload: {} }]);
+  });
+
+  test("with already-done guard: no-op (no double done)", () => {
+    const guard = createDoneGuard();
+    guard.done = true;
+    const events: Record<string, unknown>[] = [];
+    handleCancelGuard(guard, (e) => events.push(e));
+    expect(events).toEqual([]);
+  });
+
+  test("with null guard: emits done once (legacy, no prompt in flight)", () => {
+    const events: Record<string, unknown>[] = [];
+    handleCancelGuard(null, (e) => events.push(e));
+    expect(events).toEqual([{ type: "done", payload: {} }]);
+  });
+});
+
 
 

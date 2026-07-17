@@ -325,6 +325,24 @@ export async function orchestratePrompt(
   }
 }
 
+/**
+ * Resolve the cancel RPC against the currently-active prompt guard.
+ *
+ *   - guard active & not done   → mark done, emit `done` (prompt's finally becomes a no-op)
+ *   - guard active & already done → no-op (agent_end / timeout already emitted done)
+ *   - no guard (idle)           → emit `done` once for legacy compatibility
+ *
+ * Replaces the old BUG4 manual `sendEvent(..., { type: "done" })` patch.
+ */
+export function handleCancelGuard(
+  guard: DoneGuard | null,
+  sink: (event: Record<string, unknown>) => void,
+): void {
+  if (guard && guard.done) return;
+  if (guard) guard.done = true;
+  sink({ type: "done", payload: {} });
+}
+
 // ---------------------------------------------------------------------------
 // Main event subscriber
 // ---------------------------------------------------------------------------
@@ -459,8 +477,10 @@ if (import.meta.main) {
         }
 
         record.session.agent.abort("Cancelled by user");
-        // BUG4 fix: send done event so Python's turn_done.wait() unblocks
-        sendEvent(sessionId, { type: "done", payload: {} });
+        // The active prompt's finally block would also emit done via the guard,
+        // but we mark + emit here so cancel is resolved promptly even if the
+        // abort does not propagate synchronously. Replaces the old BUG4 patch.
+        handleCancelGuard(record.currentGuard, (e) => sendEvent(sessionId, e));
 
         send(id, { ok: true });
         return;
