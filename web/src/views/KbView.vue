@@ -202,10 +202,6 @@ const store = useKbStore()
 
 // ── setTimeout 统一清理 ──
 const timers: number[] = []
-function schedule(fn: () => void, delay: number) {
-  const id = window.setTimeout(fn, delay)
-  timers.push(id)
-}
 onUnmounted(() => {
   while (timers.length) {
     window.clearTimeout(timers.pop())

@@ -129,7 +129,7 @@
         <div class="form-section">
           <label class="form-label">参数</label>
           <div class="kv-list">
-            <div v-for="(arg, i) in form.args" :key="i" class="kv-row">
+            <div v-for="(_arg, i) in form.args" :key="i" class="kv-row">
               <input v-model="form.args[i]" class="input mono" placeholder="参数" />
               <button type="button" class="kv-remove" @click="form.args.splice(i, 1)">✕</button>
             </div>
