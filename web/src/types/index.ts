@@ -538,62 +538,6 @@ export interface HealthResponse {
   timestamp: number
 }
 
-// === 提供商管理 ===
-
-export interface ProviderConfig {
-  id: string
-  provider_type: string
-  label: string
-  api_key: string
-  base_url: string
-  models: string[]
-  enabled: boolean
-  context_window?: number
-  // 阶段 3.3：优先级（数字越小优先级越高，0 = 最高），用于 fallback 排序
-  priority?: number
-  // 阶段 3.3：运行时健康状态（由后台 health_monitor 维护，未持久化）
-  health_status?: 'ok' | 'degraded' | 'error' | 'unknown'
-  health_detail?: string | null
-  health_latency_ms?: number | null
-  health_reason_code?: string | null
-  health_retry_at?: number | null
-  health_updated_at?: number | null
-  health_summary?: string | null
-  last_check_time?: number
-  consecutive_failures?: number
-}
-
-export interface ListProvidersResponse {
-  providers: ProviderConfig[]
-}
-
-export interface TestConnectionResponse {
-  status: 'ok' | 'error'
-  latency_ms: number | null
-  detail: string | null
-  reason_code?: string | null
-  retry_at?: number | null
-  updated_at?: number | null
-  summary?: string | null
-}
-
-// 阶段 3.3：按需健康检查响应（POST /providers/{id}/health）
-export interface ProviderHealthCheckResponse {
-  status: 'ok' | 'degraded' | 'error'
-  latency_ms: number | null
-  detail: string | null
-  reason_code?: string | null
-  retry_at?: number | null
-  updated_at?: number | null
-  summary?: string | null
-  last_check_time: number
-  consecutive_failures: number
-}
-
-export interface DiscoverModelsResponse {
-  models: string[]
-}
-
 // === 内置工具 ===
 
 export interface ToolInfo {
@@ -648,33 +592,10 @@ export interface UpdateEnvVarResponse {
   masked_value: string
 }
 
-// === 审计日志 AuditLog ===
-
-export interface AuditLogRecord {
-  timestamp: string
-  epoch: number
-  type: string
-  target: string
-  detail: string
-  data_size: number
-  status: string
-  extra?: Record<string, any>
-}
-
-export interface AuditLogStats {
-  total: number
-  by_type: Record<string, number>
-  by_status: Record<string, number>
-  top_targets: Array<{ target: string; count: number }>
-}
-
-export interface AuditLogListResponse {
-  records: AuditLogRecord[]
-}
-
 // === Re-export 已按域拆分的类型（保持向后兼容） ===
 // 以下类型的定义已迁移到独立的域文件，此处通过 re-export 保证
 // 现有 `import { X } from '@/types'` 用法不破坏。
+export * from './provider'
 export * from './session'
 export * from './workflow'
 export * from './mcp'
@@ -683,3 +604,4 @@ export * from './skills'
 export * from './metrics'
 export * from './kb'
 export * from './activity'
+export * from './audit-log'

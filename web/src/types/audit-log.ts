@@ -1,16 +1,33 @@
 /**
  * Audit Log（审计日志）类型定义
  *
- * 现有 AuditLogRecord / AuditLogStats / AuditLogListResponse 仍定义在 types/index.ts，
- * 此处以 re-export 形式集中暴露，新代码应优先从本文件导入审计相关类型。
- * 本文件补充 MCP 调用审计聚合统计的响应类型（getMcpAuditSummary）。
+ * 本文件是 AuditLog 类型的源头（real definitions），types/index.ts 通过
+ * `export * from './audit-log'` 聚合再导出，保证 `import { X } from '@/types'` 向后兼容。
  */
 
-export type {
-  AuditLogRecord,
-  AuditLogStats,
-  AuditLogListResponse,
-} from './index'
+// === 审计日志 AuditLog ===
+
+export interface AuditLogRecord {
+  timestamp: string
+  epoch: number
+  type: string
+  target: string
+  detail: string
+  data_size: number
+  status: string
+  extra?: Record<string, any>
+}
+
+export interface AuditLogStats {
+  total: number
+  by_type: Record<string, number>
+  by_status: Record<string, number>
+  top_targets: Array<{ target: string; count: number }>
+}
+
+export interface AuditLogListResponse {
+  records: AuditLogRecord[]
+}
 
 /**
  * MCP 调用审计聚合统计响应（GET /audit-log/mcp-summary）。
