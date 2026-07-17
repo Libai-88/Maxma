@@ -1,5 +1,5 @@
-import type { Component } from 'vue'
-import CodeCard from './cards/CodeCard.vue'
+import { defineAsyncComponent, type Component } from 'vue'
+const CodeCard = defineAsyncComponent(() => import('./cards/CodeCard.vue'))
 import TableCard from './cards/TableCard.vue'
 import SummaryCard from './cards/SummaryCard.vue'
 import ConfirmationCard from './cards/ConfirmationCard.vue'
