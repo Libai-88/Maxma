@@ -113,7 +113,7 @@ class JsonRpcClient:
             try:
                 self._handlers[event_type].remove(handler)
             except ValueError:
-                pass
+                logger.debug("[rpc] Handler not found for unsubscribe (event_type=%s)", event_type)
 
         return _unsubscribe
 
@@ -125,7 +125,7 @@ class JsonRpcClient:
             try:
                 await self._read_task
             except asyncio.CancelledError:
-                pass
+                logger.debug("[rpc] Read task cancelled during stop()")
             self._read_task = None
         # Cancel remaining pending futures
         for fut in self._pending.values():
