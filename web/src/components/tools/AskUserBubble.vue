@@ -105,9 +105,9 @@
       <!-- 倒计时进度条 -->
       <div v-if="showCountdown" class="countdown-bar">
         <div
+          ref="countdownFillRef"
           class="countdown-fill"
           :class="{ urgent: countdownPercent < 20 }"
-          :style="{ width: countdownPercent + '%' }"
         ></div>
         <span class="countdown-text" :class="{ urgent: countdownPercent < 20 }">
           {{ countdownSeconds }}s
@@ -147,7 +147,7 @@
 
 <script setup lang="ts">
 import type { ToolCall } from '@/types';
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue';
 import BubbleChrome from './_shared/BubbleChrome.vue';
 
 const props = defineProps<{ toolCall: ToolCall }>()
@@ -177,6 +177,13 @@ const countdownPercent = computed(() => {
 const countdownSeconds = computed(() => {
   return Math.max(0, Math.ceil(countdownRemaining.value))
 })
+
+// CSP-safe CSSOM: set countdown fill width via style.setProperty
+const countdownFillRef = ref<HTMLElement>()
+watchEffect(() => {
+  const el = countdownFillRef.value
+  if (el) el.style.setProperty('width', `${countdownPercent.value}%`)
+}, { flush: 'post' })
 
 function startCountdown() {
   stopCountdown()

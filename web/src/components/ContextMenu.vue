@@ -9,8 +9,8 @@
       <Transition name="menu-pop">
         <div
           v-if="visible"
+          ref="menuRef"
           class="context-menu"
-          :style="{ left: position.x + 'px', top: position.y + 'px' }"
           @click.stop
           @contextmenu.stop
         >
@@ -31,7 +31,7 @@
 
 <script setup lang="ts">
 import Icon from '@/components/Icon.vue'
-import { onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, ref, watchEffect } from 'vue'
 
 export interface ContextMenuItem {
   label: string
@@ -54,6 +54,16 @@ const emit = defineEmits<{
   select: [action: string]
   close: []
 }>()
+
+const menuRef = ref<HTMLElement | null>(null)
+
+// CSP-safe CSSOM: position menu via style.setProperty (was :style binding)
+watchEffect(() => {
+  const el = menuRef.value
+  if (!el || !props.visible) return
+  el.style.setProperty('left', `${props.position.x}px`)
+  el.style.setProperty('top', `${props.position.y}px`)
+}, { flush: 'post' })
 
 function select(action: string) {
   emit('select', action)

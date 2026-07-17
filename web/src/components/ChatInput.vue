@@ -17,7 +17,6 @@
       ref="inputContainerRef"
       class="chat-input"
       :class="{ 'is-resizing': isResizing, 'is-dragover': isDragover }"
-      :style="containerStyle"
       @dragenter.prevent="onDragEnter"
       @dragover.prevent="onDragOver"
       @dragleave.prevent="onDragLeave"
@@ -205,8 +204,8 @@
     <Transition name="quote-pop">
       <button
         v-if="quoteCandidate"
+        ref="quoteFloatRef"
         class="quote-float-btn"
-        :style="quoteFloatStyle"
         @click="$emit('commitQuote')"
         title="引用选中文本"
       >
@@ -233,7 +232,7 @@ import type { ParsedRef, ImageRef } from '@/utils/references'
 import { REF_CHIP_CONFIG } from '@/utils/references'
 import { getApiBase, isTauri, tauriFetch } from '@/utils/env'
 import type { ThinkPathId } from '@/utils/thinkPath'
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import ModelSelector from './ModelSelector.vue'
 import ContextUsageBadge from './ContextUsageBadge.vue'
 import { useChatStore } from '@/stores/chat'
@@ -279,8 +278,11 @@ const sendButtonTitle = computed(() => {
 })
 
 // 选区引用浮层定位
-const quoteFloatStyle = computed(() => {
-  if (!props.quoteCandidate) return {}
+const quoteFloatRef = ref<HTMLElement | null>(null)
+watchEffect(() => {
+  const el = quoteFloatRef.value
+  if (!el || !props.quoteCandidate) return
+  // CSP-safe CSSOM: position quote float btn via style.setProperty (was :style binding)
   const result = computeFloatingInputPosition(
     props.quoteCandidate.rect,
     { width: 100, height: 32 },
@@ -288,12 +290,10 @@ const quoteFloatStyle = computed(() => {
     window.innerHeight,
     'top',
   )
-  return {
-    left: `${result.left}px`,
-    top: `${result.top}px`,
-    transformOrigin: result.origin,
-  }
-})
+  el.style.setProperty('left', `${result.left}px`)
+  el.style.setProperty('top', `${result.top}px`)
+  el.style.setProperty('transform-origin', result.origin)
+}, { flush: 'post' })
 
 // ── 表情选择器状态 ──
 const showStickerPicker = ref(false)
@@ -1016,11 +1016,17 @@ const handleRef = ref<HTMLDivElement | null>(null)
 const DEFAULT_INPUT_HEIGHT = 117
 const initialHeight = ref(DEFAULT_INPUT_HEIGHT)
 
-const containerStyle = computed(() => {
-  const minHeight = initialHeight.value + 'px'
-  if (customHeight.value === null) return { minHeight }
-  return { height: customHeight.value + 'px', minHeight }
-})
+// CSP-safe CSSOM: set container height/minHeight via style.setProperty (was :style binding)
+watchEffect(() => {
+  const el = inputContainerRef.value
+  if (!el) return
+  el.style.setProperty('min-height', `${initialHeight.value}px`)
+  if (customHeight.value !== null) {
+    el.style.setProperty('height', `${customHeight.value}px`)
+  } else {
+    el.style.removeProperty('height')
+  }
+}, { flush: 'post' })
 
 /** 组件挂载后捕获输入框的初始默认高度，作为拖拽下限 */
 onMounted(() => {

@@ -1,8 +1,8 @@
 <template>
   <div
     v-if="visible"
+    ref="menuRef"
     class="sticker-context-menu"
-    :style="{ left: position.x + 'px', top: position.y + 'px' }"
     @click.stop
   >
     <button class="menu-item" @click="onToggleFavorite">
@@ -21,7 +21,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, watchEffect } from 'vue'
 import { getApiBase, tauriFetch } from '@/utils/env'
 
 interface Sticker {
@@ -43,6 +43,16 @@ const emit = defineEmits<{
 
 const isFavorited = ref(false)
 const loading = ref(false)
+
+const menuRef = ref<HTMLElement | null>(null)
+
+// CSP-safe CSSOM: position menu via style.setProperty (was :style binding)
+watchEffect(() => {
+  const el = menuRef.value
+  if (!el || !props.visible) return
+  el.style.setProperty('left', `${props.position.x}px`)
+  el.style.setProperty('top', `${props.position.y}px`)
+}, { flush: 'post' })
 
 // 检查是否已收藏
 async function checkFavoriteStatus() {

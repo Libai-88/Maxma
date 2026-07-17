@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <div v-if="visible" class="ac-backdrop" @click="$emit('close')" />
-    <div v-if="visible" ref="panelRef" class="ac-panel" :style="panelStyle">
+    <div v-if="visible" ref="panelRef" class="ac-panel">
       <div
         v-for="(s, i) in items"
         :key="s.name"
@@ -21,7 +21,7 @@
 
 <script setup lang="ts">
 import Icon from '@/components/Icon.vue'
-import { computed, nextTick, ref, watch } from 'vue'
+import { nextTick, ref, watch, watchEffect } from 'vue'
 
 const props = withDefaults(defineProps<{
   items: { name: string; description: string }[]
@@ -74,10 +74,13 @@ function highlightName(name: string): string {
   return safe.replace(re, '<strong>$1</strong>')
 }
 
-const panelStyle = computed(() => ({
-  left: props.position.x + 'px',
-  bottom: `${window.innerHeight - props.position.y + 28}px`,
-}))
+// CSP-safe CSSOM: position panel via style.setProperty (was :style binding)
+watchEffect(() => {
+  const el = panelRef.value
+  if (!el || !props.visible) return
+  el.style.setProperty('left', `${props.position.x}px`)
+  el.style.setProperty('bottom', `${window.innerHeight - props.position.y + 28}px`)
+}, { flush: 'post' })
 </script>
 
 <style scoped>

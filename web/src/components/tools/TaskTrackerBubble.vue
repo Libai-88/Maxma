@@ -16,7 +16,7 @@
 
         <!-- 进度条 -->
         <div class="progress-track">
-          <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
+          <div ref="progressFillRef" class="progress-fill"></div>
         </div>
 
         <!-- 汇总 -->
@@ -62,7 +62,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watchEffect } from 'vue'
 import type { ToolCall } from '@/types'
 import BubbleChrome from './_shared/BubbleChrome.vue'
 
@@ -84,6 +84,13 @@ const progressPercent = computed(() => {
   if (total <= 0) return 0
   return Math.min(100, Math.round((done / total) * 100))
 })
+
+// CSP-safe CSSOM: set progress fill width via style.setProperty
+const progressFillRef = ref<HTMLElement>()
+watchEffect(() => {
+  const el = progressFillRef.value
+  if (el) el.style.setProperty('width', `${progressPercent.value}%`)
+}, { flush: 'post' })
 </script>
 
 <style scoped>
