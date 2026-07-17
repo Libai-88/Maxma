@@ -1,18 +1,17 @@
 // web/src/composables/useChatInput.ts
 //
-// useChatInput — ChatInput 状态收敛 composable（骨架）
+// useChatInput — ChatInput 状态收敛 composable
 //
-// 当前状态：骨架文件，未接入 ChatView.vue / ChatInput.vue。
-//   - ChatView.vue 当前向 ChatInput 传 8 个 props + 5 个 emits，状态分散
-//   - 本 composable 预留统一的输入状态接口，供后续 Agent 33/35 协调接入
-//   - 接入前不要调用本 composable；下面方法为占位实现
+// 已接入 ChatView.vue / ChatInput.vue：
+//   - ChatView 在 setup 中调用 useChatInput({...}) 创建实例并 provide
+//   - ChatInput 通过 inject(CHAT_INPUT_KEY) 取出实例，直接读写状态、调用方法
+//   - send/stop/onModelChange/commitQuote/removeQuote 通过回调上抛到 ChatView
+//   - clearText/appendText/setText 可独立使用（操作内部 text ref）
 //
-// 接入计划（不在本次范围内）：
-//   1. ChatView 用 useChatInput() 收敛 isStreaming/canSend/providerId/modelName/... 状态
-//   2. ChatInput 改为接收单个 composable 返回对象（或保留 props 但从 composable 取值）
-//   3. send/stop/modelChange/commitQuote/removeQuote 由 composable 通过回调上抛
+// 提供 CHAT_INPUT_KEY（InjectionKey）+ provideChatInput/useChatInputInjected 辅助，
+// 保证 provide/inject 类型安全。
 
-import { ref, computed, type Ref, type ComputedRef } from 'vue'
+import { ref, computed, provide, inject, type Ref, type ComputedRef, type InjectionKey } from 'vue'
 import type { QuotedSelection, QuoteCandidate } from '@/composables/useSelectionQuote'
 import type { ParsedRef } from '@/utils/references'
 import type { ThinkPathId } from '@/utils/thinkPath'
@@ -73,10 +72,10 @@ export interface UseChatInputReturn {
 /**
  * ChatInput 状态收敛 composable。
  *
- * ⚠️ 骨架：当前未被 ChatView/ChatInput 引用。
- *   - send/stop/onModelChange/commitQuote/removeQuote 为占位实现（未接线时打印 warning）
- *   - clearText/appendText/setText 为真实实现，可独立使用（不依赖回调接线）
- * 接入工作由 Agent 33/35 协调完成（不在本 agent 独占文件范围内）。
+ * 已接入：ChatView 创建实例并 provide，ChatInput inject 后直接使用。
+ *   - send/stop/onModelChange/commitQuote/removeQuote 调用 ChatView 提供的回调
+ *   - 未提供回调时打印 warning（防御性，便于排查接线遗漏）
+ *   - clearText/appendText/setText 操作内部 text ref，可独立使用
  */
 export function useChatInput(options: UseChatInputOptions = {}): UseChatInputReturn {
   const {
@@ -211,4 +210,31 @@ export function useChatInput(options: UseChatInputOptions = {}): UseChatInputRet
     appendText,
     setText,
   }
+}
+
+// ── provide/inject 辅助：保证 ChatView → ChatInput 类型安全传递 ──
+
+/** ChatInput composable 实例的注入键 */
+export const CHAT_INPUT_KEY: InjectionKey<UseChatInputReturn> = Symbol('chatInput')
+
+/**
+ * 由 ChatView 调用：创建 useChatInput 实例并 provide 给后代。
+ * 返回原实例，便于 ChatView 自身也持有引用。
+ */
+export function provideChatInput(options: UseChatInputOptions = {}): UseChatInputReturn {
+  const instance = useChatInput(options)
+  provide(CHAT_INPUT_KEY, instance)
+  return instance
+}
+
+/**
+ * 由 ChatInput（及其后代组件）调用：取出最近祖先 provide 的 useChatInput 实例。
+ * 若未找到则抛错（避免静默失效）。
+ */
+export function useChatInputInjected(): UseChatInputReturn {
+  const instance = inject(CHAT_INPUT_KEY)
+  if (!instance) {
+    throw new Error('[useChatInput] useChatInputInjected() called outside of a provider tree — ChatView must call provideChatInput() first')
+  }
+  return instance
 }
