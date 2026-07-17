@@ -120,20 +120,20 @@
   line-height: 1.4;
 }
 .ds-badge--ok {
-  background: color-mix(in srgb, #16a34a 10%, var(--bg-card));
-  color: #16a34a;
+  background: color-mix(in srgb, var(--status-ok) 10%, var(--bg-card));
+  color: var(--status-ok);
 }
 .ds-badge--warn {
-  background: color-mix(in srgb, #d97706 10%, var(--bg-card));
-  color: #d97706;
+  background: color-mix(in srgb, var(--status-warn) 10%, var(--bg-card));
+  color: var(--status-warn);
 }
 .ds-badge--error {
-  background: color-mix(in srgb, #dc2626 10%, var(--bg-card));
-  color: #dc2626;
+  background: color-mix(in srgb, var(--status-error) 10%, var(--bg-card));
+  color: var(--status-error);
 }
 .ds-badge--info {
-  background: color-mix(in srgb, #2563eb 10%, var(--bg-card));
-  color: #2563eb;
+  background: color-mix(in srgb, var(--status-info) 10%, var(--bg-card));
+  color: var(--status-info);
 }
 .ds-badge--neutral {
   background: var(--bg-secondary);

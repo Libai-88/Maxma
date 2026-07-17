@@ -63,6 +63,12 @@
   --titlebar-h: 44px;
   --chat-column-width: 720px;
 
+  /* ── 状态色（默认值，由各主题覆盖） ── */
+  --status-ok:    #16a34a;
+  --status-warn:  #d97706;
+  --status-error: #dc2626;
+  --status-info:  #2563eb;
+
   /* ── 遮罩层（主题可覆盖） ── */
   --overlay-subtle: rgba(0, 0, 0, 0.03);
   --overlay-light:  rgba(0, 0, 0, 0.05);
