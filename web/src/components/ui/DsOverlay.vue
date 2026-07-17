@@ -7,7 +7,6 @@
         ref="rootRef"
         class="ds-overlay"
         :class="[`ds-overlay--${variant}`, { 'ds-overlay--contained': contained }]"
-        :style="{ zIndex }"
         @click.self="onBackdropClick"
         @keydown.esc="onEsc"
       >
@@ -24,13 +23,11 @@ const props = withDefaults(defineProps<{
   modelValue: boolean
   variant?: 'dim' | 'blur' | 'none'
   contained?: boolean
-  zIndex?: number
   closeOnEsc?: boolean
   closeOnBackdrop?: boolean
 }>(), {
   variant: 'dim',
   contained: false,
-  zIndex: 1000,
   closeOnEsc: true,
   closeOnBackdrop: true,
 })
@@ -100,6 +97,7 @@ onUnmounted(() => {
 .ds-overlay {
   position: fixed;
   inset: 0;
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;

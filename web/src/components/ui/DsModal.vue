@@ -6,7 +6,7 @@
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <Transition name="ds-modal" appear>
-      <div v-if="modelValue" class="ds-modal" :style="{ width: maxWidth }">
+      <div v-if="modelValue" class="ds-modal">
         <h3 v-if="title" class="ds-modal__title">{{ title }}</h3>
         <div class="ds-modal__body">
           <slot />
@@ -25,10 +25,8 @@ import DsOverlay from './DsOverlay.vue'
 withDefaults(defineProps<{
   modelValue: boolean
   title?: string
-  maxWidth?: string
   backdrop?: 'dim' | 'blur' | 'none'
 }>(), {
-  maxWidth: '480px',
   backdrop: 'dim',
 })
 
@@ -41,6 +39,7 @@ defineEmits<{ 'update:modelValue': [value: boolean] }>()
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xl);
+  width: 480px;
   max-height: 80vh;
   display: flex;
   flex-direction: column;

@@ -66,7 +66,7 @@
             <div class="precip-ranges" v-if="precipData && precipData.ranges.length">
               <div v-for="(range, i) in precipData.ranges" :key="i" class="precip-range-item">
                 <span class="p-time">{{ fmtTime(range.start) }} – {{ fmtTime(range.end) }}</span>
-                <span class="p-bar" :style="{ width: pBarWidth(range) + '%' }"
+                <span class="p-bar"
                       :class="'p-level-' + range.intensity"></span>
                 <span class="p-intensity" :class="'p-level-' + range.intensity">{{ range.intensity }}</span>
                 <span class="p-duration">{{ range.duration_minutes }}′</span>
@@ -311,12 +311,6 @@ function fmtTime(iso: string): string {
   // "2026-06-28T18:00:03+08:00" → "18:00"
   const m = iso.match(/T(\d{2}:\d{2})/)
   return m ? m[1] : iso
-}
-
-function pBarWidth(range: { max_precip: number; intensity: string }): number {
-  // 强度映射到宽度百分比
-  const map: Record<string, number> = { 暴雨: 100, 大雨: 72, 中雨: 44, 小雨: 22, 微量: 10 }
-  return map[range.intensity] || 10
 }
 
 function formatDay(day: string): string {
@@ -624,11 +618,11 @@ const displayOutput = computed(() => {
   background: currentColor;
   opacity: 0.25;
 }
-.p-bar.p-level-暴雨 { color: #7c3aed; }
-.p-bar.p-level-大雨 { color: #dc2626; }
-.p-bar.p-level-中雨 { color: #ea580c; }
-.p-bar.p-level-小雨 { color: #2563eb; }
-.p-bar.p-level-微量 { color: var(--border); }
+.p-bar.p-level-暴雨 { color: #7c3aed; width: 100%; }
+.p-bar.p-level-大雨 { color: #dc2626; width: 72%; }
+.p-bar.p-level-中雨 { color: #ea580c; width: 44%; }
+.p-bar.p-level-小雨 { color: #2563eb; width: 22%; }
+.p-bar.p-level-微量 { color: var(--border); width: 10%; }
 .p-intensity {
   font-size: 10px;
   font-weight: 500;
