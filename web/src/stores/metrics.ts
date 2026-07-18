@@ -15,8 +15,8 @@ export const useMetricsStore = defineStore('metrics', () => {
     error.value = null
     try {
       snapshot.value = await api.getMetrics()
-    } catch (e: any) {
-      error.value = e?.message || String(e)
+    } catch (e: unknown) {
+      error.value = e instanceof Error ? e.message : String(e)
       snapshot.value = null
     } finally {
       loading.value = false
@@ -26,8 +26,8 @@ export const useMetricsStore = defineStore('metrics', () => {
   async function loadHistory(windowSeconds: number = 3600) {
     try {
       history.value = await api.getMetricsHistory(windowSeconds)
-    } catch (e: any) {
-      error.value = e?.message || String(e)
+    } catch (e: unknown) {
+      error.value = e instanceof Error ? e.message : String(e)
       history.value = null
     }
   }

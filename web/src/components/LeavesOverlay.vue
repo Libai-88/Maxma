@@ -3,22 +3,52 @@
   <div
     v-if="enabled"
     class="leaves-overlay"
+    :style="overlayStyle"
     aria-hidden="true"
-    @click="onToggle"
-    title="点击切换树阴光影"
   >
     <div class="leaves-layer leaves-layer--1"></div>
     <div class="leaves-layer leaves-layer--2"></div>
     <div class="leaves-layer leaves-layer--3"></div>
-    <div class="leaves-compensation"></div>
+    <div class="leaves-compensation" :style="compensationStyle"></div>
+    <button
+      type="button"
+      class="leaves-toggle"
+      :title="enabled ? '点击关闭树阴光影' : '点击开启树阴光影'"
+      aria-label="切换树阴光影"
+      @click.stop="onToggle"
+    >
+      <span class="leaves-toggle-icon">🍂</span>
+    </button>
   </div>
+  <button
+    v-else
+    type="button"
+    class="leaves-toggle leaves-toggle--off"
+    title="点击开启树阴光影"
+    aria-label="开启树阴光影"
+    @click.stop="onToggle"
+  >
+    <span class="leaves-toggle-icon">🍂</span>
+  </button>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useTheme } from '@/composables/useTheme'
 
 const STORAGE_KEY = 'maxma.leaves_overlay'
 const enabled = ref(true)
+
+const { isDark } = useTheme()
+
+const overlayStyle = computed(() => ({
+  mixBlendMode: isDark.value ? 'screen' as const : 'multiply' as const,
+  opacity: isDark.value ? 0.12 : 0.28,
+}))
+
+const compensationStyle = computed(() => ({
+  background: isDark.value ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 253, 247, 0.12)',
+}))
 
 onMounted(() => {
   try {
@@ -37,11 +67,8 @@ function onToggle() {
 .leaves-overlay {
   position: fixed;
   inset: 0;
-  pointer-events: auto;
+  pointer-events: none;
   z-index: 0;
-  mix-blend-mode: multiply;
-  opacity: 0.28;
-  cursor: pointer;
 }
 
 .leaves-layer {
@@ -88,6 +115,45 @@ function onToggle() {
   background: rgba(255, 253, 247, 0.12);
   mix-blend-mode: normal;
   pointer-events: none;
+}
+
+/* 角落 toggle 按钮：唯一接收 pointer events 的元素 */
+.leaves-toggle {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 10;
+  pointer-events: auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.12));
+  background: var(--bg-card, rgba(255, 255, 255, 0.7));
+  color: var(--text-secondary, #666);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  opacity: 0.45;
+  transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  backdrop-filter: blur(4px);
+}
+
+.leaves-toggle:hover {
+  opacity: 1;
+  border-color: var(--accent, #4a90e2);
+}
+
+.leaves-toggle--off {
+  opacity: 0.35;
+}
+
+.leaves-toggle-icon {
+  pointer-events: none;
+  user-select: none;
 }
 
 @keyframes leaves-drift-1 {

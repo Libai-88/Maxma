@@ -268,6 +268,8 @@ onMounted(async () => {
   white-space: nowrap;
 }
 .qc-stop-btn:hover {
+  background: transparent;
+  background: transparent;
   background: color-mix(in srgb, var(--status-error) 10%, transparent);
 }
 

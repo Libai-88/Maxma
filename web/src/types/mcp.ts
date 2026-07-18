@@ -71,6 +71,14 @@ export interface MCPServerUpdateBody {
   tls_verify?: boolean
 }
 
+// OMP 自动发现的 MCP 服务器
+export interface DiscoveredServer {
+  id: string
+  name: string
+  status: string
+  tools?: string[]
+}
+
 // 阶段 4.1：列出某个 MCP 服务器所有工具名（供前端勾选 allowlist）
 export interface MCPServerToolsResponse {
   server_id: string

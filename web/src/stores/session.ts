@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { api } from '@/api'
-import { removeTurnsFromStorage, TURNS_KEY_PREFIX } from '@/stores/chat'
+import { useChatStore, TURNS_KEY_PREFIX } from '@/stores/chat'
 import type { SessionInfo } from '@/types'
 
 const STORAGE_KEY = 'maxma_session_id'
@@ -72,8 +72,13 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   async function deleteSession(id: string) {
-    await api.deleteSession(id)
-    removeTurnsFromStorage(id)
+    try {
+      await api.deleteSession(id)
+    } catch (e) {
+      console.warn('[session] deleteSession failed:', e)
+      return
+    }
+    useChatStore().removeTurnsFromStorage(id)
     if (sessionId.value === id) {
       await refreshSessions().catch((err) => console.warn('[session] refreshSessions after delete failed:', err))
       if (sessions.value.length > 0) {
@@ -87,18 +92,33 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   async function constifySession(id: string, name: string) {
-    await api.constifySession(id, name)
+    try {
+      await api.constifySession(id, name)
+    } catch (e) {
+      console.warn('[session] constifySession failed:', e)
+      return
+    }
     await refreshSessions().catch((err) => console.warn('[session] refreshSessions after constify failed:', err))
   }
 
   async function unconstifySession(id: string) {
-    await api.unconstifySession(id)
+    try {
+      await api.unconstifySession(id)
+    } catch (e) {
+      console.warn('[session] unconstifySession failed:', e)
+      return
+    }
     await refreshSessions().catch((err) => console.warn('[session] refreshSessions after unconstify failed:', err))
   }
 
   async function generateSessionTitle(id: string): Promise<string> {
-    const res = await api.generateSessionTitle(id)
-    return res.title
+    try {
+      const res = await api.generateSessionTitle(id)
+      return res.title
+    } catch (e) {
+      console.warn('[session] generateSessionTitle failed:', e)
+      return ''
+    }
   }
 
   function cleanupOrphanedCaches() {
@@ -109,12 +129,18 @@ export const useSessionStore = defineStore('session', () => {
       console.warn('[session] cleanupOrphanedCaches: sessions 列表为空，跳过清理（可能是后端不可用）')
       return
     }
+    // 先收集要删除的 key，再统一删除。直接在遍历中 removeItem 会导致
+    // localStorage 索引位移，连续的孤儿缓存会被跳过（每隔一个漏删一个）。
+    const keysToRemove: string[] = []
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
       if (key && key.startsWith(TURNS_KEY_PREFIX)) {
         const sid = key.slice(TURNS_KEY_PREFIX.length)
-        if (sid && !validIds.has(sid)) localStorage.removeItem(key)
+        if (sid && !validIds.has(sid)) keysToRemove.push(key)
       }
+    }
+    for (const key of keysToRemove) {
+      localStorage.removeItem(key)
     }
   }
 

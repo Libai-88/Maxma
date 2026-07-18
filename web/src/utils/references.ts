@@ -62,7 +62,14 @@ export interface ImageRef {
   preview: string
 }
 
-export type ParsedRef = FileRef | FolderRef | CiteRef | WebLinkRef | SkillRef | ToolRef | MacroRef | ImageRef
+/** 选区引用（引用对话中已发送消息的文本片段） */
+export interface SelectionRef {
+  type: 'selection'
+  label: string
+  preview: string
+}
+
+export type ParsedRef = FileRef | FolderRef | CiteRef | WebLinkRef | SkillRef | ToolRef | MacroRef | ImageRef | SelectionRef
 
 /**
  * 引用 chip 渲染配置，每种 type 自注册 icon 名与 tooltip 函数。
@@ -85,6 +92,10 @@ export const REF_CHIP_CONFIG: Record<string, RefChipConfig> = {
   cite: {
     icon: 'cite-speech',
     tooltip: (r: ParsedRef) => (r as CiteRef).text,
+  },
+  selection: {
+    icon: 'cite',
+    tooltip: (r: ParsedRef) => (r as SelectionRef).preview,
   },
   web_link: {
     icon: 'link',

@@ -25,8 +25,8 @@ export const useAuditLogStore = defineStore('auditLog', () => {
       if (since) params.set('since', since)
       const res = await api.getAuditLog(`?${params.toString()}`)
       records.value = res.records
-    } catch (e: any) {
-      error.value = e?.message || String(e)
+    } catch (e: unknown) {
+      error.value = e instanceof Error ? e.message : String(e)
       records.value = []
     } finally {
       loading.value = false
@@ -37,8 +37,8 @@ export const useAuditLogStore = defineStore('auditLog', () => {
     try {
       const res = await api.getAuditStats()
       stats.value = res.stats
-    } catch (e: any) {
-      error.value = e?.message || String(e)
+    } catch (e: unknown) {
+      error.value = e instanceof Error ? e.message : String(e)
     }
   }
 
@@ -47,14 +47,24 @@ export const useAuditLogStore = defineStore('auditLog', () => {
   }
 
   async function clearAll() {
-    const res = await api.clearAuditLog()
-    await refreshAll()
-    return res.deleted
+    try {
+      const res = await api.clearAuditLog()
+      await refreshAll()
+      return res.deleted
+    } catch (e) {
+      console.warn('[auditLog] clearAll failed:', e)
+      return 0
+    }
   }
 
   async function encryptKeys() {
-    const res = await api.encryptApiKeys()
-    return res.encrypted
+    try {
+      const res = await api.encryptApiKeys()
+      return res.encrypted
+    } catch (e) {
+      console.warn('[auditLog] encryptKeys failed:', e)
+      return 0
+    }
   }
 
   return {

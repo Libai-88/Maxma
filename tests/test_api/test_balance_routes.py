@@ -92,6 +92,10 @@ class _FakeResponse:
     def json(self):
         return self._data
 
+    def raise_for_status(self):
+        """模拟 httpx.Response.raise_for_status() — 成功响应时不抛异常。"""
+        pass
+
 
 class _FakeAsyncClient:
     """模拟 httpx.AsyncClient.get。"""

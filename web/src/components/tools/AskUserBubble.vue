@@ -203,13 +203,6 @@ function stopCountdown() {
   }
 }
 
-// 交互数据到达时启动倒计时
-watch(() => interactionData.value.interactionId, (id) => {
-  if (id) startCountdown()
-})
-
-onUnmounted(() => stopCountdown())
-
 const interactionData = computed(() => {
   // AskUserBubble 只处理 qa/single_choice/multi_choice/confirm 模式，
   // approval 模式由 ApprovalBubble 渲染，因此 options 始终为 string[]。
@@ -225,15 +218,17 @@ const interactionData = computed(() => {
         submitted: false,
         detail: '',
       }
-  console.log('[AskUserBubble] interactionData computed:', {
-    status: props.toolCall.status,
-    submitted: submitted.value,
-    hasInteraction: !!props.toolCall.interaction,
-    interactionId: result.interactionId,
-    mode: result.mode,
-  })
   return result
 })
+
+// 交互数据到达时启动倒计时（必须在 interactionData 声明之后，否则触发 TDZ ReferenceError）
+// immediate: 组件挂载时若 interactionId 已存在（如从历史会话恢复），需立即启动倒计时，
+// 否则只有 interactionId 变化时才会启动，导致历史会话恢复场景下倒计时永远不开始。
+watch(() => interactionData.value.interactionId, (id) => {
+  if (id) startCountdown()
+}, { immediate: true })
+
+onUnmounted(() => stopCountdown())
 
 /** 工具完成时从 output JSON 解析出 { question, answer } */
 const doneData = computed(() => {
@@ -369,6 +364,8 @@ function submitConfirm() {
 }
 .choice-option.selected {
   border-color: var(--accent);
+  background: transparent;
+  background: transparent;
   background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 .choice-radio,

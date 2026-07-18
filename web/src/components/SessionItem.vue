@@ -2,7 +2,11 @@
   <div
     class="session-item"
     :class="{ active: isActive, 'is-const': isConst, collapsed }"
+    tabindex="0"
+    role="button"
     @click="$emit('switch', session.session_id)"
+    @keydown.enter="$emit('switch', session.session_id)"
+    @keydown.space.prevent="$emit('switch', session.session_id)"
     @contextmenu.prevent="$emit('contextmenu', $event, session)"
     @mouseenter="$emit('mouseenter', $event, session)"
     @mouseleave="$emit('mouseleave')"
@@ -101,19 +105,48 @@ function formatRelativeTime(ts: number): string {
   cursor: pointer;
   text-align: left;
   font-family: inherit;
+  position: relative;
   transition: background 0.15s;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .session-item {
+    animation: session-slide-in 0.25s ease-out both;
+  }
+}
+@keyframes session-slide-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 .session-item:hover {
   background: var(--bg-card);
+}
+.session-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 .session-item.active {
   background: var(--bg-card);
   box-shadow: var(--shadow);
 }
+.session-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  background: var(--accent);
+  border-radius: 0 2px 2px 0;
+}
 
 /* Const 会话外观 — pin 图标已提供视觉区分，无需侧边条 */
 .session-item.is-const {
+  background: transparent;
+  background: transparent;
   background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+.session-item.is-const.active::before {
+  display: none;
 }
 /* active const sessions should have a clean white bg */
 .session-item.is-const.active {
@@ -202,18 +235,14 @@ function formatRelativeTime(ts: number): string {
 
 .status-dot.streaming {
   background: var(--status-ok);
-  animation: pulse 1.2s ease-in-out infinite;
+  animation: maxma-pulse 1.2s ease-in-out infinite;
 }
 
 .status-dot.awaiting-user {
   background: var(--status-warn);
-  animation: pulse 1.2s ease-in-out infinite;
+  animation: maxma-pulse 1.2s ease-in-out infinite;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(1.3); }
-}
 
 /* ── Collapsed icon-only mode ── */
 .session-item.collapsed {

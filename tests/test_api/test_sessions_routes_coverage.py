@@ -269,7 +269,12 @@ class TestGenerateTitleSidecarIdFallback:
         resp = app_with_sidecar["client"].post("/sessions/s1/generate-title")
         assert resp.status_code == 200
         assert resp.json()["title"] == "标题"
-        # 验证 client.call 使用了 from-session
-        called_args = client.call.call_args
-        params = called_args.args[1] if called_args.args else called_args.kwargs.get("params")
-        assert params["session_id"] == "from-session"
+        # 验证 get_messages 调用使用了 from-session（第一次 call 是 get_messages）
+        # 修复：原测试用 call_args（最后一次调用，是 chat 方法），其 params 无
+        # session_id 字段，导致 KeyError。应检查 call_args_list[0]（get_messages）。
+        assert len(client.call.call_args_list) >= 1
+        first_call = client.call.call_args_list[0]
+        first_method = first_call.args[0] if first_call.args else first_call.kwargs.get("method")
+        assert first_method == "get_messages"
+        first_params = first_call.args[1] if len(first_call.args) > 1 else first_call.kwargs.get("params")
+        assert first_params["session_id"] == "from-session"

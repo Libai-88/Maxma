@@ -151,5 +151,5 @@ async def delete_custom_sticker(filename: str):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="表情不存在")
 
-    file_path.unlink()
+    file_path.unlink(missing_ok=True)
     return {"success": True, "message": "已删除"}

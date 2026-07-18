@@ -7,8 +7,11 @@ This module only:
 3. Documents the full event types for the bridge protocol
 """
 
+import logging
 from collections.abc import Mapping
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # ── Known Event Types ────────────────────────────────────
 # These match both the TS sidecar output and the Maxma frontend WS protocol.
@@ -34,9 +37,6 @@ def validate_event(event: Mapping[str, Any]) -> bool:
     Returns False if the event is malformed, True otherwise.
     Does NOT raise exceptions — just logs warnings.
     """
-    import logging
-    logger = logging.getLogger(__name__)
-
     if not isinstance(event, Mapping):
         logger.warning("Event is not a dict: %r", type(event))
         return False

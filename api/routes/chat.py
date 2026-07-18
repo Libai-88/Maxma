@@ -13,6 +13,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from agent.prompts import build_system_prompt
 from api.const_session_store import save_const_session
+from api.middleware.rate_limit import get_ws_rate_limiter
 from api.pi_bridge.session_adapter import SessionMap
 from api.session_manager import SessionState
 
@@ -325,6 +326,15 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                 continue
             user_message = str(payload.get("message", "")).strip()
             if not user_message:
+                continue
+
+            # Per-session rate limiting — prevent message flooding from
+            # exhausting sidecar resources. WsSessionRateLimiter is the
+            # per-session token bucket defined in rate_limit.py; the ASGI
+            # middleware cannot throttle messages inside a long-lived WS.
+            allowed, rate_limit_error = get_ws_rate_limiter().try_consume(session_id)
+            if not allowed:
+                await ws.send_json({"type": "error", "payload": rate_limit_error})
                 continue
 
             system_prompt = build_system_prompt()

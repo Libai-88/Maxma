@@ -15,6 +15,17 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/mcp", tags=["mcp"])
 
+# 子进程环境变量黑名单 — 与 mcp.py 保持同步
+_BLOCKED_ENV_KEYS: frozenset[str] = frozenset({
+    "LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT", "LD_DEBUG",
+    "DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH",
+    "PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "PYTHONPYCACHEPREFIX",
+    "PATH", "IFS", "BASH_ENV", "ENV",
+    "COMSPEC", "SHELL", "PATHEXT",
+    "NODE_PATH", "NODE_OPTIONS",
+    "HOME", "USERPROFILE", "TMPDIR", "TMP", "TEMP",
+})
+
 
 class TestConnectionRequest(BaseModel):
     """测试连接请求。"""
@@ -36,14 +47,20 @@ async def test_connection(req: TestConnectionRequest) -> TestConnectionResponse:
 
     1. 校验命令白名单
     2. 解析命令到嵌入式运行时绝对路径
-    3. 构造子进程环境变量
+    3. 校验并构造子进程环境变量
     4. 启动子进程，5 秒内未崩溃视为成功
     """
     # 1. 白名单校验 (removed - tools.mcp_security no longer available)
     # 2. 命令解析
     resolved = req.command
 
-    # 3. 环境变量构造
+    # 3. 环境变量校验 + 构造
+    blocked = [k for k in req.env if k.upper() in _BLOCKED_ENV_KEYS]
+    if blocked:
+        raise HTTPException(
+            status_code=400,
+            detail=f"环境变量包含禁止设置的敏感 key: {', '.join(blocked)}",
+        )
     env = {**os.environ, **req.env}
 
     # 4. 启动子进程测试

@@ -10,13 +10,16 @@
         <div
           v-if="visible"
           ref="menuRef"
+          role="menu"
           class="context-menu"
           @click.stop
           @contextmenu.stop
         >
           <button
-            v-for="item in items"
+            v-for="(item, idx) in items"
             :key="item.action"
+            role="menuitem"
+            :data-index="idx"
             class="context-menu-item"
             @click="select(item.action)"
           >
@@ -65,6 +68,17 @@ watchEffect(() => {
   el.style.setProperty('top', `${props.position.y}px`)
 }, { flush: 'post' })
 
+function getMenuItems(): HTMLElement[] {
+  if (!menuRef.value) return []
+  return Array.from(menuRef.value.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+}
+
+function focusItem(index: number) {
+  const items = getMenuItems()
+  const target = items[index]
+  if (target) target.focus()
+}
+
 function select(action: string) {
   emit('select', action)
 }
@@ -74,8 +88,52 @@ function close() {
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && props.visible) {
-    close()
+  if (!props.visible) return
+  switch (e.key) {
+    case 'Escape':
+      close()
+      break
+    case 'ArrowDown':
+      e.preventDefault()
+      {
+        const items = getMenuItems()
+        const current = document.activeElement
+        const idx = current ? items.indexOf(current as HTMLElement) : -1
+        const next = (idx + 1) % items.length
+        focusItem(next)
+      }
+      break
+    case 'ArrowUp':
+      e.preventDefault()
+      {
+        const items = getMenuItems()
+        const current = document.activeElement
+        const idx = current ? items.indexOf(current as HTMLElement) : -1
+        const prev = (idx - 1 + items.length) % items.length
+        focusItem(prev)
+      }
+      break
+    case 'Home':
+      e.preventDefault()
+      focusItem(0)
+      break
+    case 'End':
+      e.preventDefault()
+      {
+        const items = getMenuItems()
+        if (items.length > 0) focusItem(items.length - 1)
+      }
+      break
+    case 'Enter':
+    case ' ':
+      e.preventDefault()
+      {
+        const current = document.activeElement as HTMLElement | null
+        if (current && current.getAttribute('role') === 'menuitem') {
+          current.click()
+        }
+      }
+      break
   }
 }
 
@@ -99,9 +157,12 @@ onUnmounted(() => {
   position: fixed;
   z-index: 1001;
   min-width: 120px;
+  background: transparent;
+  background: transparent;
   background: color-mix(in srgb, var(--bg-card) 70%, transparent);
   backdrop-filter: blur(12px) saturate(1.2);
   -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  border: 1px solid transparent;
   border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
   border-radius: 8px;
   overflow: hidden;
@@ -137,6 +198,8 @@ onUnmounted(() => {
 }
 
 .context-menu-item:hover {
+  background: transparent;
+  background: transparent;
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 

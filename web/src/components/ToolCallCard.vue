@@ -1,5 +1,5 @@
 <template>
-  <div class="tool-card" :class="[toolCall.status, { open: isOpen }]">
+  <div v-if="toolCall" class="tool-card" :class="[toolCall.status, { open: isOpen }]">
     <div class="tool-header" @click="toggle" role="button" :aria-expanded="isOpen">
       <span class="tool-icon">
         <span v-if="toolCall.status === 'running'" class="spinner-sm"></span>
@@ -32,6 +32,7 @@
         <!-- 结果 section -->
         <div class="tool-section" v-if="toolCall.output">
           <div class="tool-section-title">结果</div>
+          <!-- KV pairs (flat JSON object) -->
           <template v-if="outputDisplay.type === 'kv'">
             <div class="kv-list">
               <div class="kv-row" v-for="(item, idx) in outputDisplay.pairs" :key="idx">
@@ -41,8 +42,29 @@
               </div>
             </div>
           </template>
+          <!-- Image preview (browser screenshot etc.) -->
+          <div v-else-if="outputDisplay.type === 'image'" class="image-preview">
+            <img :src="outputDisplay.url" :alt="outputDisplay.alt" @click="openImage(outputDisplay.url)" />
+          </div>
+          <!-- Diff syntax highlighting (git diff, file edits) -->
+          <div v-else-if="outputDisplay.type === 'diff'" class="diff-block">
+            <div v-for="(line, i) in outputDisplay.lines" :key="i"
+                 class="diff-line" :class="'diff-' + line.kind">
+              <span class="diff-text">{{ line.text }}</span>
+            </div>
+          </div>
+          <!-- Collapsible JSON (arrays / nested objects) -->
+          <div v-else-if="outputDisplay.type === 'json'" class="json-block">
+            <div class="json-header" @click="jsonExpanded = !jsonExpanded" role="button">
+              <span class="json-toggle">{{ jsonExpanded ? '▼' : '▶' }}</span>
+              <span class="json-summary">{{ outputDisplay.summary }}</span>
+            </div>
+            <pre v-if="jsonExpanded" class="code-block json-expanded">{{ outputDisplay.raw }}</pre>
+          </div>
+          <!-- Markdown rendered output -->
+          <RenderMarkdown v-else-if="outputDisplay.type === 'markdown'" :content="toolCall.output || ''" />
+          <!-- Plain code block (fallback) -->
           <pre v-else-if="outputDisplay.type === 'code'" class="code-block">{{ outputDisplay.raw }}</pre>
-          <RenderMarkdown v-if="outputDisplay.type === 'markdown'" :content="toolCall.output || ''" />
         </div>
       </div>
     </div>
@@ -54,6 +76,7 @@ import { ref, watch, nextTick, computed } from 'vue'
 import type { ToolCall } from '@/types'
 import RenderMarkdown from './RenderMarkdown.vue'
 import PinButton from '@/components/workbench/PinButton.vue'
+import { useMediaViewer } from '@/composables/useMediaViewer'
 
 const props = defineProps<{ toolCall: ToolCall }>()
 
@@ -88,7 +111,34 @@ interface MarkdownDisplay {
   type: 'markdown'
 }
 
-type SectionDisplay = KvDisplay | CodeDisplay | MarkdownDisplay
+/** 图片预览（截图等） */
+interface ImageDisplay {
+  type: 'image'
+  url: string
+  alt: string
+}
+
+/** Diff 行类型 */
+interface DiffLine {
+  text: string
+  kind: 'header' | 'add' | 'del' | 'context' | 'hunk'
+}
+
+/** 带语法高亮的 Diff 展示 */
+interface DiffDisplay {
+  type: 'diff'
+  lines: DiffLine[]
+  raw: string
+}
+
+/** 可折叠的 JSON 展示（嵌套对象/数组） */
+interface JsonDisplay {
+  type: 'json'
+  raw: string
+  summary: string
+}
+
+type SectionDisplay = KvDisplay | CodeDisplay | MarkdownDisplay | ImageDisplay | DiffDisplay | JsonDisplay
 
 function parseJsonKv(raw: string): KvDisplay | null {
   // LangChain may pass Python-style dict strings (True/False/None, single quotes)
@@ -115,7 +165,108 @@ function parseJsonKv(raw: string): KvDisplay | null {
   return null
 }
 
-function detectCodeDisplay(raw: string): CodeDisplay {
+/** 检测输出是否为 Markdown 格式 */
+function isMarkdown(raw: string): boolean {
+  const trimmed = raw.trim()
+  if (!trimmed) return false
+  // 强信号：一个匹配即足够
+  if (/^#{1,6}\s/m.test(trimmed)) return true       // 标题
+  if (/^```/m.test(trimmed)) return true              // 代码围栏
+  if (/^\|.+\|/m.test(trimmed)) return true           // 表格行
+  if (/^>\s/m.test(trimmed)) return true              // 引用
+  // 弱信号：需要至少两个匹配
+  let score = 0
+  if (/\*\*.*\*\*|__.*__/.test(trimmed)) score++     // 粗体
+  if (/\[.+\]\(.+\)/.test(trimmed)) score++           // 链接
+  if (/^[-*+]\s/m.test(trimmed)) score++              // 无序列表
+  if (/^\d+\.\s/m.test(trimmed)) score++              // 有序列表
+  if (/^---$/m.test(trimmed)) score++                 // 分隔线
+  return score >= 2
+}
+
+/** 检测输出是否为图片（base64 data URI 或图片 URL） */
+function detectImageDisplay(raw: string): ImageDisplay | null {
+  const trimmed = raw.trim()
+  if (trimmed.startsWith('data:image/')) {
+    return { type: 'image', url: trimmed, alt: 'Tool result screenshot' }
+  }
+  // 检查是否整个输出是一个图片 URL
+  const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'avif', 'svg']
+  try {
+    const url = new URL(trimmed)
+    const ext = url.pathname.split('.').pop()?.toLowerCase()
+    if (ext && imageExtensions.includes(ext)) {
+      return { type: 'image', url: trimmed, alt: 'Tool result image' }
+    }
+  } catch {
+    // 不是有效 URL
+  }
+  return null
+}
+
+/** 检测输出是否为 git diff 格式 */
+function detectDiffDisplay(raw: string): DiffDisplay | null {
+  const lines = raw.split('\n')
+  // 必须包含 diff 头部或 hunk 标记
+  const hasDiffHeader = lines.some(l => l.startsWith('diff --git'))
+  const hasHunk = lines.some(l => l.startsWith('@@'))
+  const hasAddDel = lines.some(l =>
+    (l.startsWith('+') && !l.startsWith('+++ ')) ||
+    (l.startsWith('-') && !l.startsWith('--- '))
+  )
+  if (!hasDiffHeader && !(hasHunk && hasAddDel)) return null
+  // 至少 3 行 diff 特征
+  let diffCount = 0
+  for (const line of lines) {
+    if (line.startsWith('diff --git') || line.startsWith('--- ') ||
+        line.startsWith('+++ ') || line.startsWith('@@') ||
+        (line.startsWith('+') && !line.startsWith('+++ ')) ||
+        (line.startsWith('-') && !line.startsWith('--- '))) {
+      diffCount++
+    }
+  }
+  if (diffCount < 3) return null
+  const parsedLines: DiffLine[] = lines.map(line => {
+    if (line.startsWith('diff --git') || line.startsWith('index ')) {
+      return { text: line, kind: 'header' }
+    }
+    if (line.startsWith('--- ') || line.startsWith('+++ ')) {
+      return { text: line, kind: 'header' }
+    }
+    if (line.startsWith('@@')) {
+      return { text: line, kind: 'hunk' }
+    }
+    if (line.startsWith('+')) {
+      return { text: line, kind: 'add' }
+    }
+    if (line.startsWith('-')) {
+      return { text: line, kind: 'del' }
+    }
+    return { text: line, kind: 'context' }
+  })
+  return { type: 'diff', lines: parsedLines, raw }
+}
+
+/** 检测输出是否为可折叠的 JSON（数组或嵌套对象） */
+function detectJsonDisplay(raw: string): JsonDisplay | null {
+  const trimmed = raw.trim()
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return null
+  try {
+    const parsed = JSON.parse(trimmed)
+    // 扁平对象由 parseJsonKv 处理，这里处理数组和嵌套对象
+    const summary = Array.isArray(parsed)
+      ? `Array(${parsed.length})`
+      : `Object(${Object.keys(parsed).length} keys)`
+    return { type: 'json', raw: trimmed, summary }
+  } catch {
+    return null
+  }
+}
+
+function detectCodeDisplay(raw: string): CodeDisplay | MarkdownDisplay {
+  if (isMarkdown(raw)) {
+    return { type: 'markdown' }
+  }
   const lines = raw.split('\n').length
   const trimmed = raw.trimStart()
   let lang = 'TEXT'
@@ -135,13 +286,35 @@ const inputDisplay = computed<SectionDisplay>(() => {
 })
 
 const outputDisplay = computed<SectionDisplay>(() => {
-  if (!props.toolCall.output) {
-    return { type: 'markdown' }
-  }
-  const kv = parseJsonKv(props.toolCall.output)
+  const raw = props.toolCall.output
+  if (!raw) return { type: 'markdown' }
+  // 1) 图片预览
+  const img = detectImageDisplay(raw)
+  if (img) return img
+  // 2) Diff 语法高亮
+  const diff = detectDiffDisplay(raw)
+  if (diff) return diff
+  // 3) 扁平 JSON → KV 键值对
+  const kv = parseJsonKv(raw)
   if (kv) return kv
-  return detectCodeDisplay(props.toolCall.output)
+  // 4) 嵌套 JSON → 可折叠展示
+  const json = detectJsonDisplay(raw)
+  if (json) return json
+  // 5) Markdown 或纯文本代码块
+  return detectCodeDisplay(raw)
 })
+
+// ── JSON 折叠状态（每次输出变化时重置） ──
+const jsonExpanded = ref(false)
+watch(() => props.toolCall.output, () => {
+  jsonExpanded.value = false
+})
+
+// ── 图片预览 ──
+const { open: openMediaViewer } = useMediaViewer()
+function openImage(url: string) {
+  openMediaViewer([{ src: url, alt: 'Tool result' }], 0)
+}
 
 // ── Pin payload detection ──
 function getPinPayload(): { type: 'code' | 'table' | 'summary'; title: string; content: string; sourceTool?: string } {
@@ -206,9 +379,16 @@ watch(() => props.toolCall.output, () => {
   background: var(--bg-card);
   box-shadow: var(--shadow);
   overflow: hidden;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .tool-card:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+  }
 }
 .tool-card.running {
-  border-color: var(--accent-light);
+  border-color: var(--accent-dark);
 }
 .tool-card.error {
   border-color: #fecaca;
@@ -235,10 +415,7 @@ watch(() => props.toolCall.output, () => {
   border: 2px solid var(--border);
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-@keyframes spin {
-  to { transform: rotate(360deg); }
+  animation: maxma-spin 0.8s linear infinite;
 }
 .tool-name {
   font-weight: 600;
@@ -340,6 +517,102 @@ watch(() => props.toolCall.output, () => {
   word-break: break-word;
   max-height: 200px;
   overflow-y: auto;
+}
+
+/* ── Image preview ── */
+.image-preview {
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg-primary);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  max-height: 300px;
+  cursor: zoom-in;
+}
+.image-preview img {
+  max-width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+  display: block;
+}
+
+/* ── Diff syntax highlighting ── */
+.diff-block {
+  background: var(--bg-primary);
+  border-radius: 6px;
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+.diff-line {
+  padding: 0 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  min-height: 18px;
+}
+.diff-header {
+  color: var(--text-secondary);
+  font-weight: 600;
+  background: var(--bg-secondary);
+}
+.diff-hunk {
+  color: #6366f1;
+  background: rgba(99, 102, 241, 0.08);
+  font-weight: 500;
+}
+.diff-add {
+  color: #16a34a;
+  background: rgba(22, 163, 74, 0.08);
+}
+.diff-del {
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.08);
+}
+.diff-context {
+  color: var(--text-primary);
+}
+
+/* ── Collapsible JSON ── */
+.json-block {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.json-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  user-select: none;
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  transition: background 0.15s ease;
+}
+.json-header:hover {
+  background: var(--bg-secondary);
+}
+.json-toggle {
+  font-size: 10px;
+  color: var(--text-secondary);
+  width: 12px;
+  flex-shrink: 0;
+  text-align: center;
+}
+.json-summary {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.json-expanded {
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 6px 6px;
+  max-height: 300px;
 }
 
 /* ── Compact markdown overrides inside tool cards ── */

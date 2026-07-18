@@ -1,5 +1,5 @@
 // web/src/composables/useFloatSidebar.ts
-import { ref } from 'vue'
+import { onUnmounted, ref } from 'vue'
 
 const HOVER_DELAY = 200 // ms
 
@@ -14,6 +14,11 @@ function clearEnter() {
 }
 function clearLeave() {
   if (_leaveTimer) { clearTimeout(_leaveTimer); _leaveTimer = null }
+}
+
+function clearAllTimers() {
+  clearEnter()
+  clearLeave()
 }
 
 function onEnter() {
@@ -37,11 +42,14 @@ function onLeave() {
 }
 
 function forceClose() {
-  clearEnter()
-  clearLeave()
+  clearAllTimers()
   isVisible.value = false
 }
 
 export function useFloatSidebar() {
+  onUnmounted(() => {
+    clearAllTimers()
+  })
+
   return { isVisible, onEnter, onLeave, forceClose }
 }

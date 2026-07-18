@@ -23,8 +23,9 @@ class Settings(BaseSettings):
     # 单轮对话整体超时（秒），覆盖所有工具调用+LLM 调用的总时长。
     turn_timeout: int = 600
 
-    # Bun 可执行文件路径（Windows 需全路径）
-    sidecar_bun_path: str = "D:/NodeGlobal/node_modules/bun/bin/bun.exe"
+    # Bun 可执行文件路径（默认 "bun" 依赖 PATH 解析；Windows 需确保 bun.exe 在 PATH 中，
+    # 或通过 .env 文件设置 MAXMA_BUN_PATH 环境变量指定全路径）
+    sidecar_bun_path: str = "bun"
 
     model_config = {
         "env_file": str(ENV_FILE_PATH),

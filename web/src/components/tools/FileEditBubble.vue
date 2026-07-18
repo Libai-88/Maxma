@@ -89,7 +89,7 @@
               class="edit-result-item"
               :class="r.status"
             >
-              <span class="eri-icon">{{ r.status === 'ok' ? '&#10003;' : '&#10007;' }}</span>
+              <span class="eri-icon">{{ r.status === 'ok' ? '✓' : '✗' }}</span>
               <span class="eri-index">#{{ i + 1 }}</span>
               <span class="eri-msg">{{ r.message || r.replaced_count + ' 处替换' }}</span>
             </div>
@@ -196,7 +196,8 @@ const multiClass = computed(() => {
 })
 
 const multiIcon = computed(() => {
-  return (td.value.failed_count as number) > 0 ? '&#9888;' : '&#10003;'
+  // 文本插值 {{ }} 不会解码 HTML 实体，必须返回 Unicode 字符
+  return (td.value.failed_count as number) > 0 ? '⚠' : '✓'
 })
 
 const multiTitle = computed(() => {
@@ -626,7 +627,7 @@ function copyContent() {
 
 .action-btn:hover {
   background: var(--bg-secondary);
-  border-color: var(--accent-light);
+  border-color: var(--accent-dark);
 }
 
 /* ── 降级 ── */

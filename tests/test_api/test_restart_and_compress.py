@@ -54,11 +54,50 @@ class _FakeSessionManager:
         return self._session
 
 
+class _FakeSidecarClient:
+    """Mock sidecar client — returns success for compact RPC."""
+
+    async def call(self, method, params):
+        if method == "compact":
+            return {"compressed": True, "removed_count": 5, "detail": "压缩完成"}
+        raise Exception(f"Unknown method: {method}")
+
+
+class _FakeSidecarManager:
+    """Mock sidecar manager with a working client."""
+
+    def __init__(self):
+        self.client = _FakeSidecarClient()
+
+    async def start(self):
+        pass
+
+
+class _FakeSessionMap:
+    """Mock SessionMap — returns a fixed sidecar session ID."""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass
+
+    def get_sidecar_id(self, maxma_id):
+        return "fake-sidecar-sid"
+
+
 class TestSessionCompress:
     @pytest.fixture
-    def app_with_session(self):
+    def app_with_session(self, monkeypatch):
         app = FastAPI()
         app.state.session_manager = _FakeSessionManager(_FakeSession())
+        app.state.sidecar_manager = _FakeSidecarManager()
+        # SessionMap is imported at module level in session_compress.py;
+        # patch the symbol on that module so `with SessionMap() as sm:` resolves
+        # to the fake and returns a non-empty sidecar session ID.
+        monkeypatch.setattr(
+            "api.routes.session_compress.SessionMap", _FakeSessionMap
+        )
         app.include_router(compress_router)
         return TestClient(app)
 
@@ -74,7 +113,7 @@ class TestSessionCompress:
         assert resp.status_code == 200
         body = resp.json()
         assert body["compressed"] is True
-        assert body["method"] == "automatic"
+        assert body["method"] == "sidecar"
 
     def test_compress_404(self, app_without_session):
         resp = app_without_session.post("/sessions/ghost/compress")

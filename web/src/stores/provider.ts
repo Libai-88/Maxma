@@ -27,6 +27,8 @@ export const useProviderStore = defineStore('provider', () => {
   const loading = ref(false)
   /** 是否已成功加载过至少一次 */
   const loaded = ref(false)
+  /** 最后一次加载失败的错误信息 */
+  const errorMessage = ref('')
   /** 进行中的加载 promise（并发调用时复用，避免竞态） */
   let _loadingPromise: Promise<void> | null = null
 
@@ -52,6 +54,7 @@ export const useProviderStore = defineStore('provider', () => {
               await new Promise(r => setTimeout(r, 200 * Math.pow(2, attempt)))
             } else {
               // 最后一次仍失败：保留现有数据（首次加载时为空数组）
+              errorMessage.value = e instanceof Error ? e.message : String(e)
               console.warn('[providerStore] 加载 provider 列表失败（已重试', retries, '次）:', e)
             }
           }
@@ -70,6 +73,7 @@ export const useProviderStore = defineStore('provider', () => {
     if (_loadingPromise) await _loadingPromise
     _loadingPromise = null
     loading.value = false
+    errorMessage.value = ''
     await loadProviders(0)
   }
 
@@ -80,6 +84,7 @@ export const useProviderStore = defineStore('provider', () => {
     providersNeedingAttention,
     loading,
     loaded,
+    errorMessage,
     loadProviders,
     refresh,
   }

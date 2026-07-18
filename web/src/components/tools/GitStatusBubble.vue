@@ -64,7 +64,7 @@
             <div class="file-list">
               <div v-for="(f, i) in untrackedFiles" :key="'t'+i" class="file-row">
                 <span class="file-status-badge untracked">?</span>
-                <span class="file-name">{{ f }}</span>
+                <span class="file-name">{{ f.file }}</span>
               </div>
             </div>
           </div>
@@ -180,7 +180,9 @@ const unstagedFiles = computed(() => {
 })
 const untrackedFiles = computed(() => {
   const arr = td.value.untracked
-  return Array.isArray(arr) ? arr : []
+  if (!Array.isArray(arr)) return []
+  // 统一为对象数组，兼容字符串数组与对象数组两种后端返回格式
+  return arr.map(f => typeof f === 'string' ? { file: f } : f)
 })
 
 // git_branch 解析
@@ -559,17 +561,10 @@ function statusIcon(status: string): string {
   border: 2px solid var(--border);
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: spin 0.6s linear infinite;
+  animation: maxma-spin 0.6s linear infinite;
   flex-shrink: 0;
 }
 
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.bubble-error {
-  font-size: 13px;
-  color: #b91c1c;
-  padding: 4px 0;
-}
 
 .raw-output {
   font-family: 'SF Mono', 'Consolas', monospace;

@@ -32,8 +32,8 @@ export interface UseChatInputOptions {
   /** 待确认的引用候选（对应 ChatInput.quoteCandidate） */
   quoteCandidate?: Ref<QuoteCandidate | null>
 
-  // ── 事件回调（接入时由 ChatView 提供） ──
-  onSend?: (text: string, refs: ParsedRef[], providerId?: string, modelName?: string, thinkPathId?: ThinkPathId, model?: string, temperature?: number, maxTokens?: number) => void
+      // ── 事件回调（接入时由 ChatView 提供） ──
+      onSend?: (text: string, refs: ParsedRef[], providerId?: string, modelName?: string, thinkPathId?: ThinkPathId) => void
   onStop?: () => void
   onModelChange?: (providerId: string, modelName: string) => void
   onCommitQuote?: () => void
@@ -54,8 +54,8 @@ export interface UseChatInputReturn {
   // ── 派生 ──
   /** 是否可提交：有文本且未在流式输出且可发送 */
   canSubmit: ComputedRef<boolean>
-  // ── 方法（骨架占位，接入前不会真正触发事件） ──
-  send: (text: string, refs?: ParsedRef[], thinkPathId?: ThinkPathId, model?: string, temperature?: number, maxTokens?: number) => void
+      // ── 方法（骨架占位，接入前不会真正触发事件） ──
+      send: (text: string, refs?: ParsedRef[], thinkPathId?: ThinkPathId) => void
   stop: () => void
   onModelChange: (providerId: string, modelName: string) => void
   commitQuote: () => void
@@ -119,29 +119,23 @@ export function useChatInput(options: UseChatInputOptions = {}): UseChatInputRet
     localText.value.trim().length > 0 && !isStreaming.value && canSend.value && !disabled.value
   )
 
-  function send(
-    text: string,
-    refs: ParsedRef[] = [],
-    thinkPathId?: ThinkPathId,
-    model?: string,
-    temperature?: number,
-    maxTokens?: number,
-  ) {
-    if (onSend) {
-      onSend(
-        text,
-        refs,
-        providerId.value ?? undefined,
-        modelName.value ?? undefined,
-        thinkPathId,
-        model,
-        temperature,
-        maxTokens,
-      )
-    } else {
-      console.warn('[useChatInput] send() called but onSend callback not wired — skeleton mode')
-    }
-  }
+      function send(
+        text: string,
+        refs: ParsedRef[] = [],
+        thinkPathId?: ThinkPathId,
+      ) {
+        if (onSend) {
+          onSend(
+            text,
+            refs,
+            providerId.value ?? undefined,
+            modelName.value ?? undefined,
+            thinkPathId,
+          )
+        } else {
+          console.warn('[useChatInput] send() called but onSend callback not wired — skeleton mode')
+        }
+      }
 
   function stop() {
     if (onStop) {

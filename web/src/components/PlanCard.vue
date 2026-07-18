@@ -149,11 +149,13 @@ function submitEdit() {
 
 .plan-card.pending {
   border-color: var(--accent);
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--accent) 4%, var(--bg-card));
 }
 
 .plan-card.approved {
   border-color: color-mix(in srgb, var(--status-ok) 40%, var(--border));
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card));
 }
 
@@ -164,6 +166,7 @@ function submitEdit() {
 
 .plan-card.rejected {
   border-color: color-mix(in srgb, var(--status-error) 40%, var(--border));
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
   opacity: 0.7;
 }
@@ -175,11 +178,13 @@ function submitEdit() {
 
 .plan-card.failed {
   border-color: color-mix(in srgb, var(--status-error) 40%, var(--border));
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
 }
 
 .plan-card.replanning {
   border-color: color-mix(in srgb, var(--status-warn) 40%, var(--border));
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card));
 }
 
@@ -239,6 +244,8 @@ function submitEdit() {
 }
 
 .plan-step.step-running {
+  background: transparent;
+  background: transparent;
   background: color-mix(in srgb, #93c5fd 12%, transparent);
 }
 
@@ -247,6 +254,8 @@ function submitEdit() {
 }
 
 .plan-step.step-failed {
+  background: transparent;
+  background: transparent;
   background: color-mix(in srgb, var(--status-error) 12%, transparent);
 }
 
@@ -282,12 +291,9 @@ function submitEdit() {
   border: 2px solid rgba(255, 255, 255, 0.3);
   border-top-color: var(--bg-primary);
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  animation: maxma-spin 0.8s linear infinite;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
 
 .step-text {
   color: var(--text-primary);
@@ -321,18 +327,20 @@ function submitEdit() {
 }
 
 .plan-replan-hint {
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card));
   color: var(--status-warn);
 }
 
 .plan-failed-hint {
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
   color: var(--status-error);
 }
 
 .replan-icon {
   display: inline-block;
-  animation: spin 1.5s linear infinite;
+  animation: maxma-spin 1.5s linear infinite;
 }
 
 /* ── 编辑区 ── */
@@ -403,6 +411,7 @@ function submitEdit() {
 }
 
 .plan-btn.reject:hover {
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
 }
 

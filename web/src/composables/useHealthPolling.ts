@@ -1,4 +1,4 @@
-import { onMounted, watch } from 'vue'
+import { onMounted, onUnmounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useHealthStore } from '@/stores/health'
 import { useSessionStore } from '@/stores/session'
@@ -16,6 +16,10 @@ export function useHealthPolling() {
 
   onMounted(() => {
     healthStore.startPolling()
+  })
+
+  onUnmounted(() => {
+    healthStore.stopPolling()
   })
 
   watch(health, (newHealth, oldHealth) => {

@@ -4,9 +4,22 @@
  * WebView2 不允许从 tauri://localhost 向 http:// 发起原生 fetch()，
  * 因此 Tauri 环境下使用 @tauri-apps/plugin-http（经 Rust reqwest 发出请求）。
  * 浏览器环境下使用原生 fetch，行为不变。
+ *
+ * 注意：@tauri-apps/plugin-http 使用动态 import（惰性加载），
+ * 避免在浏览器模式下的模块初始化阶段强制加载 Tauri 专有包。
  */
 
-import { fetch as tauriHttpFetch } from '@tauri-apps/plugin-http'
+/** @tauri-apps/plugin-http 的 fetch 引用（惰性初始化） */
+let _tauriFetchImpl: ((input: string | URL | Request, init?: RequestInit) => Promise<Response>) | null = null
+
+/** 获取 Tauri HTTP fetch 实现（动态导入，仅在 Tauri 模式下调用） */
+async function getTauriFetch(): Promise<(input: string | URL | Request, init?: RequestInit) => Promise<Response>> {
+  if (!_tauriFetchImpl) {
+    const mod = await import('@tauri-apps/plugin-http')
+    _tauriFetchImpl = mod.fetch
+  }
+  return _tauriFetchImpl
+}
 
 /** 默认后端端口（与 main.py uvicorn.run 保持一致） */
 const DEFAULT_API_PORT = 8000
@@ -136,19 +149,69 @@ export function tauriFetch(
   init?: RequestInit,
 ): Promise<Response> {
   if (detectTauri()) {
-    return tauriHttpFetch(input, init)
+    // 惰性加载 Tauri HTTP 插件，避免浏览器模式下强制解析 Tauri 专有包
+    return getTauriFetch().then(fn => fn(input, init))
   }
   return fetch(input, init)
 }
 
 /**
+ * 安全的 URL 协议白名单 — 只允许 HTTP/HTTPS/mailto 等安全协议。
+ * 禁止 javascript: data: vbscript: file: 等危险协议。
+ */
+const ALLOWED_PROTOCOLS = /^(https?:|mailto:|tel:|sms:)/i
+
+function isSafeUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return ALLOWED_PROTOCOLS.test(parsed.protocol)
+  } catch {
+    // URL 解析失败（如相对路径）视为不安全
+    return false
+  }
+}
+
+/**
  * 在系统浏览器中打开外部链接。
  * Tauri 环境下通过 shell 插件打开，浏览器环境下用 window.open。
+ * 对 javascript: data: 等危险协议直接拒绝。
  */
 export function openExternal(url: string): void {
+  if (!isSafeUrl(url)) {
+    console.warn('[env] 拒绝打开不安全的 URL:', url)
+    return
+  }
   if (detectTauri() && (window as any).__TAURI_INTERNALS__) {
-    ;(window as any).__TAURI_INTERNALS__.invoke('plugin:shell|open', { path: url })
+    ;(window as any).__TAURI_INTERNALS__.invoke('plugin:shell|open', { path: url }).catch((err: unknown) => {
+      console.warn('[env] openExternal failed:', err)
+    })
   } else {
     window.open(url, '_blank', 'noopener,noreferrer')
   }
+}
+
+/**
+ * 安全地生成 UUID v4。
+ * 优先使用 crypto.randomUUID()，在不支持的旧环境（非 HTTPS、旧浏览器）中
+ * 回退到 crypto.getRandomValues() 手动构造，保证始终可用。
+ */
+export function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  // 降级方案：使用 crypto.getRandomValues 构造 UUID v4
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const bytes = new Uint8Array(16)
+    crypto.getRandomValues(bytes)
+    // UUID v4: 版本位 4 (第 7-8 字节), 变体位 10xx (第 9 字节)
+    bytes[6] = (bytes[6] & 0x0f) | 0x40
+    bytes[8] = (bytes[8] & 0x3f) | 0x80
+    const hex = Array.from(bytes, (b: number) => b.toString(16).padStart(2, '0')).join('')
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+  }
+  // 终极降级：Math.random（极低概率碰撞，仅用于无法使用 crypto 的极端环境）
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16)
+  })
 }

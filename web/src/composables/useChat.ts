@@ -1,19 +1,20 @@
 import { computed, watch, onUnmounted, ref, type Ref } from 'vue'
 import type { ClientMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, AskUserEvent, ArtifactEvent, PlanProposedEvent, PlanStepStartEvent, PlanStepEndEvent, PlanStepErrorEvent, PlanCompletedEvent, DeferredSubagentSubmittedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent } from '@/types'
 import type { ThinkPathId } from '@/utils/thinkPath'
-import { useChatStore } from '@/stores/chat'
+import { useChatStore, TURNS_KEY_PREFIX } from '@/stores/chat'
 import { useSessionStore } from '@/stores/session'
 import { buildFlatMessage, buildTimestamp, parseReferences } from '@/utils/references'
 import type { ParsedRef } from '@/utils/references'
 import { getToken, ensureTokenLoaded, resetToken, api } from '@/api'
-import { ensurePortLoaded, waitForBackend, getWsBase } from '@/utils/env'
+import { ensurePortLoaded, waitForBackend, getWsBase, generateUUID, tauriFetch } from '@/utils/env'
 import { chatSessionAliveCache } from '@/composables/sessionAliveCache'
 import { useWorkbenchStore } from '@/stores/workbench'
 import { detectEmotion, getStickerUrl } from './stickerUtils'
+
+/** 追踪当前 useChat 实例创建的子会话 ID，用于组件卸载时清理孤儿 WS。 */
+const _childSessionIds = new Set<string>()
 /** 匹配旧格式尾缀（用于 localStorage 迁移） */
 const TIME_SUFFIX_RE = /（\d{4}-\d{2}-\d{2} \w{3} \d{2}:\d{2}）$/
-
-export const TURNS_KEY_PREFIX = 'maxma_turns_'
 
 /** 将旧格式 turn（userMessage 含 __refs__ 和时间尾缀）迁移为新格式 */
 function migrateLegacyTurn(turn: any): ChatTurn {
@@ -108,10 +109,6 @@ function saveTurnsToStorage(sid: string, data: ChatTurn[]) {
   }
 }
 
-export function removeTurnsFromStorage(sid: string) {
-  localStorage.removeItem(TURNS_KEY_PREFIX + sid)
-}
-
 export function disconnectSession(sid: string) {
   const chatStore = useChatStore()
   const ch = chatStore.channels.get(sid)
@@ -193,15 +190,24 @@ function isValidSessionId(sid: string): boolean {
   return SID_RE.test(sid)
 }
 
-/** 计算指数退避延迟（毫秒）：1s → 2s → 4s → 8s → ... → 最大 30s */
+/** 计算指数退避延迟（毫秒）：1s → 2s → 4s → 8s → ... → 最大 30s，附加 ±25% jitter 防止 thundering herd */
 function getReconnectDelay(attempts: number): number {
   const base = 1000
   const maxDelay = 30000
-  return Math.min(base * Math.pow(2, attempts), maxDelay)
+  const raw = Math.min(base * Math.pow(2, attempts), maxDelay)
+  // ±25% jitter：最终延迟在 0.75x ~ 1.25x 之间随机
+  const jitter = 0.75 + Math.random() * 0.5
+  return Math.round(raw * jitter)
 }
 
 /** 最大重连次数，超过后停止重连 */
 const MAX_RECONNECT_ATTEMPTS = 20
+
+/** 检查通道是否仍有效（未被关闭/移除），防止 await 间隙操作失效。 */
+function isChannelStillValid(sid: string): boolean {
+  const ch = getChatStore().channels.get(sid)
+  return !!ch && ch.initialized
+}
 
 async function connectSession(sid: string) {
   if (!isValidSessionId(sid)) {
@@ -216,16 +222,22 @@ async function connectSession(sid: string) {
 
   // 确保端口已加载（Tauri 环境下 sidecar 端口可能不是默认 8000）
   await ensurePortLoaded()
+  if (!isChannelStillValid(sid)) return
 
   // 等待后端就绪（PyInstaller onefile 启动可能需要数秒，孤儿 sidecar 被清理后
   // 新 sidecar 需要时间启动）。waitForBackend 在后端已就绪时立即返回，仅在后端
   // 未启动时重试等待，避免前端在后端启动期间反复失败。
   await waitForBackend()
+  if (!isChannelStillValid(sid)) return
 
   // 确保 Token 已加载（桌面应用运行时获取）
   await ensureTokenLoaded()
+  if (!isChannelStillValid(sid)) return
+
   const token = getToken()
   if (!token) {
+    const ch = getChatStore().channels.get(sid)
+    if (!ch) return
     ch.connected = false
     ch.error = '连接失败：未能获取认证令牌'
     if (ch.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
@@ -236,65 +248,86 @@ async function connectSession(sid: string) {
     ch.reconnectTimer = setTimeout(() => connectSession(sid), delay)
     return
   }
+  // 最终校验：通道在 await 后可能已被移除
+  if (!isChannelStillValid(sid)) return
+  const chFinal = getOrCreateChannel(sid)
+  // 防止 await 间隙其它调用已创建 WS
+  if (chFinal.ws && (chFinal.ws.readyState === WebSocket.OPEN || chFinal.ws.readyState === WebSocket.CONNECTING)) {
+    return
+  }
   const url = `${getWsBase()}/ws/chat/${sid}`
-  ch.ws = new WebSocket(url, [token])
+  chFinal.ws = new WebSocket(url, [token])
+  const ws = chFinal.ws  // 本地引用，避免后续代码重复解引用
 
-  ch.ws.onopen = () => {
-    ch.connected = true
-    ch.reconnectAttempts = 0  // 连接成功，重置退避计数
-    ch.error = null  // 清除连接错误状态
-    if (ch.reconnectTimer) {
-      clearTimeout(ch.reconnectTimer)
-      ch.reconnectTimer = null
+  ws.onopen = () => {
+    chFinal.connected = true
+    chFinal.reconnectAttempts = 0  // 连接成功，重置退避计数
+    chFinal.error = null  // 清除连接错误状态
+    if (chFinal.reconnectTimer) {
+      clearTimeout(chFinal.reconnectTimer)
+      chFinal.reconnectTimer = null
     }
     console.log(`[useChat] WS connected: session=${sid}`)
     // 修复：重连后若上一轮 currentTurn 仍卡住（WS 中断时未收到 done/error），
     // 必须清理否则 isStreaming 永久为 true，且中断的轮次数据会因下次 send 被覆盖而丢失。
     // 后端 WS 断开时已 cancel agent_task，所以这个 currentTurn 永远等不到 done 事件。
-    if (ch.isStreaming && ch.currentTurn) {
-      const interrupted = ch.currentTurn
+    if (chFinal.isStreaming && chFinal.currentTurn) {
+      const interrupted = chFinal.currentTurn
       console.warn(`[useChat] 重连检测到中断的轮次 (turn.id=${interrupted.id}), 推入 turns 并重置状态`)
       // 保留已生成的部分内容（用户能看到中断点），标记未完成
       if (!interrupted.finalAnswer) {
         interrupted.finalAnswer = '（连接中断，回复未完成）'
       }
-      ch.turns.push(interrupted)
-      ch.currentTurn = null
-      ch.isStreaming = false
-      ch.isAwaitingUser = false
-      ch._awaitingToolName = null
-      if (!ch.privateMode) {
+      chFinal.turns.push(interrupted)
+      chFinal.currentTurn = null
+      chFinal.isStreaming = false
+      chFinal.isAwaitingUser = false
+      chFinal._awaitingToolName = null
+      if (!chFinal.privateMode) {
         persistTurns(sid)
       }
     }
   }
 
-  ch.ws.onclose = (event) => {
-    ch.connected = false
+  ws.onclose = (event) => {
+    chFinal.connected = false
     // 认证失败（Token 过期/轮换）— 刷新 Token 后重连
     if (event.code === 4001) {
       console.log(`[useChat] WS auth failure (4001), refreshing token...`)
       resetToken()  // 强制下次请求重新获取 Token
     }
+    // 正常关闭（code 1000）— 不重连，视为有意断开
+    if (event.code === 1000) {
+      console.log(`[useChat] WS normal close (1000), session=${sid}, not reconnecting`)
+      return
+    }
     // 超过最大重连次数，停止重连
-    if (ch.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    if (chFinal.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
       console.error(`[useChat] WS 已达最大重连次数 (${MAX_RECONNECT_ATTEMPTS})，停止重连`)
-      ch.error = '连接失败：已达最大重连次数，请刷新页面重试'
+      chFinal.error = '连接失败：已达最大重连次数，请刷新页面重试'
       return
     }
     // 指数退避重连
-    const delay = getReconnectDelay(ch.reconnectAttempts)
-    ch.reconnectAttempts++
-    console.log(`[useChat] WS closed: session=${sid}, reconnecting in ${delay}ms (attempt ${ch.reconnectAttempts})`)
-    ch.reconnectTimer = setTimeout(() => connectSession(sid), delay)
+    const delay = getReconnectDelay(chFinal.reconnectAttempts)
+    chFinal.reconnectAttempts++
+    // 握手失败（code 1006 异常关闭，未收到任何 close frame）降级为 debug，
+    // 避免在 sidecar 未启动时污染控制台（浏览器自身仍会打印资源加载 error，无法抑制）
+    const logFn = event.code === 1006 ? console.debug : console.log
+    logFn(`[useChat] WS closed: session=${sid}, code=${event.code}, reconnecting in ${delay}ms (attempt ${chFinal.reconnectAttempts})`)
+    chFinal.reconnectTimer = setTimeout(() => connectSession(sid), delay)
   }
 
-  ch.ws.onerror = () => {
+  ws.onerror = () => {
     // onerror 后通常会触发 onclose，退避重连在 onclose 中处理
-    console.warn(`[useChat] WS error: session=${sid}`)
+    // 握手阶段失败（readyState 仍为 CONNECTING）降级为 debug，避免 sidecar 未启动时噪声
+    if (ws.readyState === WebSocket.CONNECTING) {
+      console.debug(`[useChat] WS handshake error (CONNECTING): session=${sid}`)
+    } else {
+      console.warn(`[useChat] WS error: session=${sid}`)
+    }
   }
 
-  ch.ws.onmessage = (event) => {
+  ws.onmessage = (event: MessageEvent) => {
     try {
       const msg: ServerEvent = JSON.parse(event.data)
       console.log('[useChat] WS event received:', msg.type, 'session:', sid, msg.type === 'ask_user' ? {
@@ -335,14 +368,14 @@ function handleEventForChannel(sid: string, event: ServerEvent) {
 
   // context_usage 可以在无活跃轮次时接收（如连接初始化）
   if (event.type === 'context_usage') {
-    ch.contextUsage = event.payload
-    const p = event.payload as unknown as Record<string, unknown>
+    const p = event.payload as ContextUsage
+    ch.contextUsage = p
     getChatStore().updateContextUsage({
-      estimatedTokens: (p.estimated_tokens as number) || 0,
-      maxTokens: (p.max_tokens as number) || 128000,
-      percentage: (p.percentage as number) || 0,
-      messageCount: (p.message_count as number) || 0,
-      modelName: (p.model_name as string) || '',
+      estimatedTokens: p.estimated_tokens ?? 0,
+      maxTokens: p.max_tokens ?? 128000,
+      percentage: p.percentage ?? 0,
+      messageCount: p.message_count ?? 0,
+      modelName: p.model_name ?? '',
     })
     return
   }
@@ -377,12 +410,15 @@ function handleEventForChannel(sid: string, event: ServerEvent) {
     void refreshSessions()
     ensureConnected(subId)
 
+    // 追踪子会话，用于组件卸载时清理孤儿 WS
+    _childSessionIds.add(subId)
+
     // 初始化子会话的 currentTurn，否则子 Agent 推送的所有事件都被丢弃
     const subCh = getOrCreateChannel(subId)
     subCh.parentSessionId = parentId
     subCh.isStreaming = true
     subCh.currentTurn = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       userMessage: event.payload.task || '(子 Agent 任务)',
       refs: [],
       events: [],
@@ -496,6 +532,8 @@ function handleEventForChannel(sid: string, event: ServerEvent) {
       const tc = findRunningTool(turn.events, event.payload.tool_name)
       if (tc) {
         tc.status = 'error'
+        tc.output = event.payload.error ?? null
+        tc.elapsed = event.payload.elapsed ?? null
       }
       break
     }
@@ -511,10 +549,18 @@ function handleEventForChannel(sid: string, event: ServerEvent) {
       if (event.payload?.content) {
         const emotion = detectEmotion(event.payload.content)
         if (emotion) {
-          // Fire-and-forget: fetch a sticker for this emotion, don't block message display
-          fetch(getStickerUrl(emotion))
-            .then(r => r.json())
-            .then(data => {
+          // Fire-and-forget: fetch a sticker for this emotion, don't block message display.
+          // 必须使用 tauriFetch：Tauri WebView2 不允许从 tauri://localhost 向 http:// 发起
+          // 原生 fetch，会静默失败导致 stickerUrl 永远为空。与红队 R3 #1 修复的 store bug 同模式。
+          tauriFetch(getStickerUrl(emotion))
+            .then((r) => {
+              if (!r.ok) {
+                console.warn('[useChat] sticker fetch non-ok response:', r.status)
+                return null
+              }
+              return r.json()
+            })
+            .then((data) => {
               if (data?.path) {
                 turn.stickerUrl = `/api/stickers/${data.path}`
               }
@@ -940,13 +986,24 @@ export function useChat(sessionId: Ref<string>) {
   )
 
   onUnmounted(() => {
-    // 组件真正卸载时（非 keep-alive deactivated）断开所有 WS。
+    // 组件真正卸载时（非 keep-alive deactivated）断开当前会话的 WS。
     // 注意：keep-alive 场景下切换路由触发的是 onDeactivated 而非 onUnmounted，
     // 所以 ChatView 被 keep-alive 缓存时，WS 不会被关闭，流式回复可以继续。
-    for (const sid of Array.from(getChatStore().channels.keys())) {
+    // 只断开当前会话的 WS，而非全部，避免影响到 keep-alive 缓存的其他会话。
+    const sid = sessionId.value
+    if (sid) {
       disconnectSession(sid)
     }
+    // 清理子会话孤儿 WS（sub_session_created 创建的）
+    for (const childId of _childSessionIds) {
+      if (childId !== sid) {
+        disconnectSession(childId)
+      }
+    }
+    _childSessionIds.clear()
     chatSessionAliveCache.clear()
+    // 组件卸载时释放内存中的 turns 缓存（localStorage 中的持久化数据保留）
+    turnsCache.clear()
   })
 
   function send(text: string, refs: ParsedRef[] = [], providerId?: string, modelName?: string, thinkPathId?: ThinkPathId) {
@@ -962,7 +1019,7 @@ export function useChat(sessionId: Ref<string>) {
     const flatMsg = buildFlatMessage(text, timestamp, refs)
 
     const turn: ChatTurn = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       userMessage: text,
       refs,
       events: [],

@@ -4,10 +4,11 @@
  */
 
 .markdown-body {
-  font-size: 1.05em; /* 相对于父元素（消息气泡）的字体大小 */
+  font-size: 1.05em;
   line-height: 1.6;
   color: var(--text-primary);
   word-break: break-word;
+  max-width: 65ch;
 }
 
 .markdown-body h1,
@@ -19,9 +20,10 @@
   margin: 16px 0 8px;
   font-weight: 600;
   line-height: 1.3;
+  text-wrap: balance;
 }
-.markdown-body h1 { font-size: 1.5em; }
-.markdown-body h2 { font-size: 1.3em; }
+.markdown-body h1 { font-size: 1.5em; letter-spacing: -0.5px; }
+.markdown-body h2 { font-size: 1.3em; letter-spacing: -0.3px; }
 .markdown-body h3 { font-size: 1.15em; }
 .markdown-body h4 { font-size: 1em; }
 .markdown-body h5 { font-size: 0.9em; }

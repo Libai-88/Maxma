@@ -863,6 +863,7 @@ function logAction(payload: { action: string; data?: unknown }) {
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 100px;
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card));
   color: var(--status-warn);
   font-weight: 600;
@@ -965,6 +966,7 @@ function logAction(payload: { action: string; data?: unknown }) {
 }
 
 .chip.registered {
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card));
   color: var(--status-ok);
 }
@@ -1015,13 +1017,14 @@ function logAction(payload: { action: string; data?: unknown }) {
 }
 
 .state-btn:hover {
-  border-color: var(--accent-light);
+  border-color: var(--accent-dark);
   color: var(--text-primary);
 }
 
 .state-btn.active {
   border-color: var(--accent);
   color: var(--accent);
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--accent) 8%, var(--bg-card));
   font-weight: 600;
 }
@@ -1035,7 +1038,7 @@ function logAction(payload: { action: string; data?: unknown }) {
 
 .state-dot.running {
   background: var(--accent);
-  animation: pulse 1.2s ease-in-out infinite;
+  animation: maxma-pulse 1.2s ease-in-out infinite;
 }
 
 .state-dot.done {
@@ -1046,10 +1049,6 @@ function logAction(payload: { action: string; data?: unknown }) {
   background: var(--status-error);
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
 
 /* ── Preview ── */
 .preview-area {

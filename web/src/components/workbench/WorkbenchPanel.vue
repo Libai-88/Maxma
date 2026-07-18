@@ -93,6 +93,7 @@ defineEmits<{
 }
 
 .workbench-tab.active {
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--accent) 12%, var(--bg-card));
   color: var(--accent);
   font-weight: 600;

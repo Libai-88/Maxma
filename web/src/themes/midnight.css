@@ -8,7 +8,7 @@
   --bg-primary:    #3B4A54;
   --bg-secondary:  #34424B;
   --bg-card:       #445560;
-  --user-bubble:   rgba(170, 121, 141, 0.10);
+  --user-bubble:   rgba(170, 121, 141, 0.18);
 
   /* ── 主色调（柔粉） ── */
   --accent:        #C99AAF;
@@ -32,7 +32,6 @@
   --status-info:    #8AB4D8;
 
   /* ── 聊天专用 ── */
-  --hana-text:      #DCE6EC;
   --tool-bg:        rgba(67, 91, 102, 0.20);
 
   /* ── 侧边栏 ── */
@@ -61,7 +60,10 @@
   --drop-overlay-bg: rgba(201, 154, 175, 0.15);
   --attach-bg: rgba(201, 154, 175, 0.08);
 
-  /* 修复 --accent-light 语义冲突 */
-  --accent-light: #D8AFC0;
+  /* 侧边栏背景：深青蓝渐变 */
+  --sidebar-bg-image: linear-gradient(135deg, #2A3840 0%, #3B4A54 50%, #2F3E48 100%);
+
+  /* --accent-dark: accent 的深色变体，用于边框和 hover 状态 */
+  --accent-dark: #D8AFC0;
   --accent-hover: #b88a9f;
 }

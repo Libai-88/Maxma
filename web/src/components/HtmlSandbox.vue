@@ -54,7 +54,7 @@ function getThemeCssVars(): string[] {
   const names = [
     '--bg-primary', '--bg-secondary', '--bg-card',
     '--text-primary', '--text-secondary', '--text-tertiary',
-    '--accent', '--accent-light', '--border',
+    '--accent', '--accent-dark', '--border',
     '--user-bubble',
     '--status-ok', '--status-error', '--status-warn',
     '--shadow', '--shadow-xs', '--shadow-sm', '--shadow-md', '--shadow-lg', '--shadow-xl', '--radius',

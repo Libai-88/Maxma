@@ -111,10 +111,7 @@ const stickerSegments = computed(() => segments.value.filter((seg): seg is Stick
   border: 2px solid var(--border);
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-@keyframes spin {
-  to { transform: rotate(360deg); }
+  animation: maxma-spin 0.8s linear infinite;
 }
 .thinking-body {
   padding: 8px 14px 12px;

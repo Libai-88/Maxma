@@ -52,6 +52,8 @@ defineEmits<{ remove: [] }>()
 }
 .quoted-remove:hover {
   color: var(--status-error);
+  background: transparent;
+  background: transparent;
   background: color-mix(in srgb, var(--status-error) 10%, transparent);
 }
 

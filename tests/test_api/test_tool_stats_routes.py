@@ -1,9 +1,9 @@
-"""Tests for api/routes/tool_stats.py — GET /tools."""
+"""Tests for api/routes/tools.py — GET /tools."""
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from api.routes.tool_stats import _BUILTIN_TOOLS, _CUSTOM_TOOLS, router
+from api.routes.tools import _BUILTIN_TOOLS, _CUSTOM_TOOLS, router
 
 
 def test_list_tools_returns_builtin_plus_custom():

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, reactive, ref } from 'vue'
 import type { ChatTurn, ContextUsage } from '@/types'
-import type { ModelInfo, ContextUsage as UIUsage } from '../types/chat'
+import type { ModelInfo, ChatContextUsage } from '../types/chat'
 
 export const TURNS_KEY_PREFIX = 'maxma_turns_'
 
@@ -46,7 +46,7 @@ export const useChatStore = defineStore('chat', () => {
   const temperature = ref(0.7)
   const maxTokens = ref(4096)
   const thinkingEnabled = ref(false)
-  const contextUsage = ref<UIUsage>({
+  const contextUsage = ref<ChatContextUsage>({
     estimatedTokens: 0,
     maxTokens: 128000,
     percentage: 0,
@@ -78,14 +78,6 @@ export const useChatStore = defineStore('chat', () => {
     localStorage.removeItem(TURNS_KEY_PREFIX + sid)
   }
 
-  function saveTurnsToStorage(sid: string, data: ChatTurn[]) {
-    try {
-      localStorage.setItem(TURNS_KEY_PREFIX + sid, JSON.stringify(data))
-    } catch (e) {
-      console.error(`[chat:save] localStorage 保存失败:`, e)
-    }
-  }
-
   function loadTurnsFromStorage(sid: string): ChatTurn[] | null {
     try {
       const raw = localStorage.getItem(TURNS_KEY_PREFIX + sid)
@@ -94,12 +86,18 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function cleanupOrphanedCaches(validIds: Set<string>) {
+    // 先收集要删除的 key，再统一删除。直接在遍历中 removeItem 会导致
+    // localStorage 索引位移，连续的孤儿缓存会被跳过（每隔一个漏删一个）。
+    const keysToRemove: string[] = []
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
       if (key && key.startsWith(TURNS_KEY_PREFIX)) {
         const sid = key.slice(TURNS_KEY_PREFIX.length)
-        if (sid && !validIds.has(sid)) localStorage.removeItem(key)
+        if (sid && !validIds.has(sid)) keysToRemove.push(key)
       }
+    }
+    for (const key of keysToRemove) {
+      localStorage.removeItem(key)
     }
   }
 
@@ -108,19 +106,16 @@ export const useChatStore = defineStore('chat', () => {
   function setTemperature(val: number) { temperature.value = Math.max(0, Math.min(2, val)) }
   function setMaxTokens(val: number) { maxTokens.value = Math.max(256, Math.min(256000, val)) }
   function toggleThinking(enabled: boolean) { thinkingEnabled.value = enabled }
-  function updateContextUsage(usage: UIUsage) { contextUsage.value = usage }
+  function updateContextUsage(usage: ChatContextUsage) { contextUsage.value = usage }
 
   async function fetchAvailableModels() {
     try {
-      const { getToken } = await import('../api/index')
-      const token = getToken()
-      const headers: Record<string, string> = {}
-      if (token) headers['X-Maxma-Token'] = token
-      const res = await fetch('/api/providers', { headers })
-      const data = await res.json()
+      const { api } = await import('@/api')
+      const data = await api.listProviders()
       const models: ModelInfo[] = []
-      if (Array.isArray(data)) {
-        for (const p of data) {
+      const providers = Array.isArray(data) ? data : (data as Record<string, unknown>).providers
+      if (Array.isArray(providers)) {
+        for (const p of providers) {
           if (Array.isArray(p.models)) {
             for (const m of p.models) {
               models.push({
@@ -141,7 +136,7 @@ export const useChatStore = defineStore('chat', () => {
   return {
     channels, allSessionStatuses, TURNS_KEY_PREFIX,
     getOrCreateChannel, removeChannel,
-    removeTurnsFromStorage, saveTurnsToStorage, loadTurnsFromStorage,
+    removeTurnsFromStorage, loadTurnsFromStorage,
     cleanupOrphanedCaches,
     // --- New exports ---
     currentModel, availableModels, temperature, maxTokens, thinkingEnabled, contextUsage,
@@ -149,7 +144,3 @@ export const useChatStore = defineStore('chat', () => {
   }
 })
 
-/** 便捷工具函数：从 localStorage 移除指定会话的 turns 缓存 */
-export function removeTurnsFromStorage(sid: string) {
-  localStorage.removeItem(TURNS_KEY_PREFIX + sid)
-}

@@ -6,7 +6,7 @@
   --bg-primary:    #F3F5F7;
   --bg-secondary:  #E8ECF0;
   --bg-card:       #F8FAFC;
-  --user-bubble:   rgba(89, 120, 145, 0.08);
+  --user-bubble:   rgba(89, 120, 145, 0.14);
 
   --accent:        #597891;
   --accent-pink:   #C99AAF;
@@ -25,7 +25,6 @@
   --status-warn:    #B89060;
   --status-info:    #5A7A9A;
 
-  --hana-text:      #3A4A5C;
   --tool-bg:        rgba(89, 120, 145, 0.06);
   --sidebar-bg:     #E8ECF0;
 
@@ -51,7 +50,7 @@
   --drop-overlay-bg: rgba(var(--accent-rgb), 0.12);
   --attach-bg: rgba(var(--accent-rgb), 0.05);
 
-  /* 修复 --accent-light 语义冲突 */
-  --accent-light: #466A85;
+  /* --accent-dark: accent 的深色变体，用于边框和 hover 状态 */
+  --accent-dark: #466A85;
   --accent-hover: #466A85;
 }

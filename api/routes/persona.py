@@ -208,7 +208,8 @@ async def create_new_persona(body: CreatePersonaRequest):
     filepath.write_text(full_content, encoding="utf-8")
 
     # 如果配置了独立记忆，创建空的记忆文件
-    if body.memory == "persona":
+    # 兼容前端 PersonaMemoryMode: 'shared' | 'isolated'
+    if body.memory in ("persona", "isolated"):
         persona_id = filepath.stem
         memory_path = PERSONAS_DIR / f"memory_{persona_id}.yaml"
         if not memory_path.exists():

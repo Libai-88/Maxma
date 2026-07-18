@@ -180,6 +180,31 @@ export function mapPiEventToMaxma(
       };
     }
 
+    // thinking_start / thinking_delta / thinking_end — map reasoning
+    // content so the frontend can render ThinkingBlocks.
+    // Follow the same text_delta → token pattern for the delta text.
+
+    if (aeType === "thinking_start") {
+      return {
+        type: "thinking_start",
+        payload: {},
+      };
+    }
+
+    if (aeType === "thinking_delta") {
+      return {
+        type: "token",
+        payload: { token: assistantEvent.delta ?? "" },
+      };
+    }
+
+    if (aeType === "thinking_end") {
+      return {
+        type: "thinking_end",
+        payload: { content: assistantEvent.content ?? "" },
+      };
+    }
+
     // NOTE: toolcall_start/toolcall_end from message_update are pre-execution
     // events (LLM deciding to call a tool). The actual execution data comes
     // from tool_execution_start/tool_execution_end below, which carry full
@@ -500,6 +525,11 @@ if (import.meta.main) {
         sessions.delete(sessionId);
 
         send(id, { ok: true });
+        return;
+      }
+
+      if (method === "get_health") {
+        send(id, { status: "ok", message: "sidecar running" });
         return;
       }
 

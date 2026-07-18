@@ -136,12 +136,9 @@ function formatElapsed(ms: number): string {
   border: 2px solid var(--border-color, #ccc);
   border-top-color: var(--accent-color, #1a73e8);
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  animation: maxma-spin 0.8s linear infinite;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
 
 .timeline-content {
   flex: 1;

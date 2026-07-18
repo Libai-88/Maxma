@@ -148,17 +148,10 @@ const fallbackText = computed(() => {
   border: 2px solid var(--border);
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: spin 0.6s linear infinite;
+  animation: maxma-spin 0.6s linear infinite;
   flex-shrink: 0;
 }
 
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.bubble-error {
-  font-size: 13px;
-  color: #b91c1c;
-  padding: 4px 0;
-}
 
 .bubble-empty {
   font-size: 13px;

@@ -304,3 +304,50 @@ class TestDeleteMacro:
         # builtin 原文件仍在
         assert (isolated_env["builtin_dir"] / "bp" / "MACRO.md").exists()
         assert not (isolated_env["user_dir"] / "bp").exists()
+
+
+# ───────────────────────── Path Traversal Security ─────────────────────────
+
+
+class TestMacroPathTraversalSecurity:
+    """验证宏名称/ID 校验能阻止路径穿越攻击。"""
+
+    def test_create_rejects_dotdot_name(self, isolated_env):
+        """POST /macros name='..' 应 400 拒绝，防止在 user 目录上级创建文件。"""
+        resp = isolated_env["client"].post(
+            "/macros", json={"name": "..", "content": "evil"}
+        )
+        assert resp.status_code == 400
+        assert "字母" in resp.json()["detail"] or "连字符" in resp.json()["detail"]
+
+    def test_create_rejects_slash_name(self, isolated_env):
+        """POST /macros name='a/b' 应 400 拒绝，防止路径穿越。"""
+        resp = isolated_env["client"].post(
+            "/macros", json={"name": "a/b", "content": "evil"}
+        )
+        assert resp.status_code == 400
+
+    def test_get_rejects_invalid_id(self, isolated_env):
+        """GET /macros/{id} 含非法字符（如点号）应 400 拒绝。
+
+        注：Starlette 在路由前会对 URL 中的 '..' 做归一化，因此 '..' 不会
+        到达处理函数。此处改用点号 '.' 验证 _validate_macro_id 防御层生效，
+        阻止含路径相关字符的 ID 进入文件系统操作。
+        """
+        resp = isolated_env["client"].get("/macros/evil.macro")
+        assert resp.status_code == 400
+        assert "字母" in resp.json()["detail"] or "连字符" in resp.json()["detail"]
+
+    def test_delete_rejects_invalid_id(self, isolated_env):
+        """DELETE /macros/{id} 含非法字符应 400 拒绝，防止 rmtree 越权。"""
+        resp = isolated_env["client"].delete("/macros/evil.macro")
+        assert resp.status_code == 400
+        assert "字母" in resp.json()["detail"] or "连字符" in resp.json()["detail"]
+
+    def test_put_rejects_invalid_id(self, isolated_env):
+        """PUT /macros/{id} 含非法字符应 400 拒绝，防止越权写入。"""
+        resp = isolated_env["client"].put(
+            "/macros/evil.macro", json={"content": "evil"}
+        )
+        assert resp.status_code == 400
+        assert "字母" in resp.json()["detail"] or "连字符" in resp.json()["detail"]

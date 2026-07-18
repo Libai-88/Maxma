@@ -80,6 +80,7 @@ function clear() {
   padding: 9px;
   border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
   border-radius: 11px;
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--accent) 5%, var(--bg-card));
 }
 .think-path-heading {
@@ -109,6 +110,7 @@ function clear() {
 }
 .think-path-option:hover:not(:disabled), .think-path-option.selected {
   border-color: var(--accent);
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--accent) 9%, var(--bg-card));
 }
 .think-path-option:active:not(:disabled) { transform: scale(.98); }

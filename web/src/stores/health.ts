@@ -19,10 +19,14 @@ export const useHealthStore = defineStore('health', () => {
     return [...base, ...providers]
   })
   let _timer: ReturnType<typeof setInterval> | null = null
+  let _fetching = false
 
   async function refresh() {
+    if (_fetching) return
+    _fetching = true
     try { health.value = await api.health() }
     catch { health.value = null }
+    finally { _fetching = false }
   }
 
   function startPolling(intervalMs = 30000) {
@@ -31,6 +35,7 @@ export const useHealthStore = defineStore('health', () => {
     // 快速探测：前 3 次 3s 间隔
     let fastPolls = 0
     _timer = setInterval(() => {
+      if (_fetching) return
       if (fastPolls < 3) { fastPolls++; refresh() }
       else {
         clearInterval(_timer!)

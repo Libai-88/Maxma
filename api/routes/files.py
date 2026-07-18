@@ -76,7 +76,7 @@ async def select_file(type: str = "file"):
             root.destroy()
             return path if path else None
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         path = await loop.run_in_executor(None, _open_dialog)
         return {"path": path}
     except ImportError:

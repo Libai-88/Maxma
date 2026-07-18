@@ -24,9 +24,9 @@
           <div v-for="(item, i) in items" :key="i" class="ts-item">
             <div class="ts-item-head">
               <span class="ts-rank">{{ i + 1 }}</span>
-              <a class="ts-link" :href="item.url" target="_blank" rel="noopener noreferrer" @click.prevent="openUrl(item.url)">{{ item.title || item.url }}</a>
+              <a class="ts-link" :href="item.url || '#'" target="_blank" rel="noopener noreferrer" @click.prevent="openUrl(item.url)">{{ item.title || item.url || '未命名' }}</a>
             </div>
-            <div class="ts-url">{{ item.url }}</div>
+            <div v-if="item.url" class="ts-url">{{ item.url }}</div>
             <p class="ts-snippet">{{ item.content }}</p>
             <div class="ts-meta">
               <span v-if="item.score != null" class="ts-tag">相关度 {{ (item.score * 100).toFixed(0) }}%</span>
@@ -53,6 +53,7 @@ import { computed, ref } from 'vue'
 import type { ToolCall } from '@/types'
 import BubbleChrome from './_shared/BubbleChrome.vue'
 import { openExternal } from '@/utils/env'
+import { hasObjectKeys } from './_shared/displayNames'
 
 const props = defineProps<{ toolCall: ToolCall }>()
 const emit = defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()
@@ -73,7 +74,7 @@ const td = computed<Record<string, any>>(() => {
   return {}
 })
 
-const hasData = computed(() => Object.keys(td.value).length > 0)
+const hasData = computed(() => hasObjectKeys(td.value))
 
 const queryText = computed(() => td.value.query || '')
 const answerText = computed(() => td.value.answer || '')
@@ -96,12 +97,12 @@ const fallback = computed(() => props.toolCall.output
 .bubble-running {
   padding: 12px 0;
   font-size: 13px;
-  color: #888;
+  color: var(--text-tertiary);
 }
 .bubble-error {
   padding: 8px 0;
   font-size: 13px;
-  color: #666;
+  color: var(--text-secondary);
 }
 
 .ts {
@@ -117,14 +118,14 @@ const fallback = computed(() => props.toolCall.output
   align-items: center;
   gap: 8px;
   padding: 10px 14px;
-  background: #f5f5f5;
+  background: var(--bg-secondary);
   border-radius: 6px;
   flex-wrap: wrap;
 }
 .ts-query-text {
   font-size: 14px;
   font-weight: 600;
-  color: #000;
+  color: var(--text-primary);
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -133,7 +134,7 @@ const fallback = computed(() => props.toolCall.output
 }
 .ts-stats {
   font-size: 11px;
-  color: #888;
+  color: var(--text-tertiary);
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -141,21 +142,21 @@ const fallback = computed(() => props.toolCall.output
 /* ── AI 摘要 ── */
 .ts-answer {
   padding: 12px 14px;
-  background: #f5f5f5;
-  border: 1px solid #ddd;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
   border-radius: 6px;
 }
 .ts-answer-label {
   font-size: 10px;
   font-weight: 700;
-  color: #666;
+  color: var(--text-secondary);
   letter-spacing: .8px;
   text-transform: uppercase;
   margin-bottom: 6px;
 }
 .ts-answer-body {
   font-size: 13px;
-  color: #222;
+  color: var(--text-primary);
   line-height: 1.7;
 }
 
@@ -168,11 +169,11 @@ const fallback = computed(() => props.toolCall.output
 
 .ts-item {
   padding: 10px 12px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--border);
   border-radius: 6px;
   transition: border-color .15s;
 }
-.ts-item:hover { border-color: #000; }
+.ts-item:hover { border-color: var(--accent); }
 
 .ts-item-head {
   display: flex;
@@ -183,7 +184,7 @@ const fallback = computed(() => props.toolCall.output
 .ts-rank {
   font-size: 11px;
   font-weight: 700;
-  color: #000;
+  color: var(--text-primary);
   flex-shrink: 0;
   min-width: 18px;
   text-align: center;
@@ -192,7 +193,7 @@ const fallback = computed(() => props.toolCall.output
 .ts-link {
   font-size: 14px;
   font-weight: 600;
-  color: #000;
+  color: var(--text-primary);
   cursor: pointer;
   text-decoration: none;
   line-height: 1.4;
@@ -204,7 +205,7 @@ const fallback = computed(() => props.toolCall.output
 
 .ts-url {
   font-size: 11px;
-  color: #888;
+  color: var(--text-tertiary);
   margin: 2px 0 0 26px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -213,7 +214,7 @@ const fallback = computed(() => props.toolCall.output
 
 .ts-snippet {
   font-size: 13px;
-  color: #444;
+  color: var(--text-secondary);
   line-height: 1.5;
   margin: 4px 0 0 26px;
   display: -webkit-box;
@@ -233,15 +234,15 @@ const fallback = computed(() => props.toolCall.output
 .ts-tag {
   font-size: 10px;
   padding: 1px 6px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border);
   border-radius: 2px;
-  color: #555;
+  color: var(--text-secondary);
   font-weight: 600;
 }
 
 .ts-date {
   font-size: 11px;
-  color: #999;
+  color: var(--text-tertiary);
 }
 
 /* ── 全文折叠 ── */
@@ -251,25 +252,25 @@ const fallback = computed(() => props.toolCall.output
 
 .ts-raw-btn {
   font-size: 11px;
-  color: #555;
+  color: var(--text-secondary);
   background: none;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border);
   border-radius: 3px;
   padding: 2px 8px;
   cursor: pointer;
   transition: background .15s;
 }
-.ts-raw-btn:hover { background: #eee; }
+.ts-raw-btn:hover { background: var(--bg-secondary); }
 
 .ts-raw-body {
   margin-top: 8px;
   padding: 10px 12px;
-  background: #fafafa;
-  border: 1px solid #e0e0e0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
   border-radius: 4px;
   font-size: 12px;
   line-height: 1.7;
-  color: #333;
+  color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 400px;
@@ -280,7 +281,7 @@ const fallback = computed(() => props.toolCall.output
 .ts-empty {
   text-align: center;
   padding: 28px 16px;
-  color: #999;
+  color: var(--text-tertiary);
   font-size: 13px;
 }
 
@@ -288,11 +289,11 @@ const fallback = computed(() => props.toolCall.output
 .raw-output {
   font-family: 'SF Mono', 'Consolas', monospace;
   font-size: 12px;
-  color: #333;
+  color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-word;
   padding: 8px 12px;
-  background: #fafafa;
+  background: var(--bg-secondary);
   border-radius: 4px;
 }
 </style>

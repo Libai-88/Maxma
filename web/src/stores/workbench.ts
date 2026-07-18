@@ -12,11 +12,14 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { ChatTurn } from '@/types'
 import type { CanvasCard, CanvasCardType, CanvasWorkspaceTab, InteractiveArtifact, ReasoningEntry, WorkbenchTab } from '@/types/workbench'
+import { generateUUID } from '@/utils/env'
 
 /** 最大保留的 turn 数量（推理时间线） */
 const MAX_TURNS = 3
 const WORKSPACE_STORAGE_KEY = 'maxmahere.canvas-workspace.v1'
 const MAX_PERSISTED_CARDS = 24
+/** 单张卡片内容的最大长度（UTF-16 code units，非字节数）。
+ *  262144 code units ≈ 256 KB UTF-8 文本，但对 CJK/emoji 不精确。 */
 const MAX_CARD_CONTENT_LENGTH = 262_144
 
 const CARD_TYPES: ReadonlySet<CanvasCardType> = new Set([
@@ -70,7 +73,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     sourceTurnId?: string
   }): string {
     const card: CanvasCard = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       type: params.type,
       title: params.title,
       content: params.content,

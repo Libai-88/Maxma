@@ -72,6 +72,9 @@ providers.yaml
 providers.yaml.legacy-*.bak
 api/data/providers.yaml
 
+# 凭据加密密钥（api_key 加密端点生成，绝对不能提交）
+api/data/credential.key
+
 # 路径白名单（自动生成，每用户本地配置）
 api/data/path_whitelist.yaml
 
@@ -144,3 +147,26 @@ dist-portable/
 # 编译产物（PyInstaller/Tauri 构建的 exe，不应进版本控制）
 *.exe
 !desktop/src-tauri/icons/*.exe
+
+# 临时测试脚本/产物（开发期间探索性测试，非正式测试套件）
+web/round*.cjs
+web/tests/comprehensive_test.py
+web/tests/playwright/
+web/tests/screenshots/
+web/test-results/
+
+# 临时日志/覆盖率/测试输出文件
+cov_*.txt
+providers_test.log
+test_result.xml
+web/tsc-*.txt
+web/vitest_*.log
+web/vitest_output.txt
+
+# Windows 误创建的 nul 文件（重定向到 NUL 的副作用）
+web/nul
+web/src/NUL
+
+# LTM outbox SQLite 临时文件（WAL 模式运行时生成）
+config/personas/*.sqlite3-shm
+config/personas/*.sqlite3-wal

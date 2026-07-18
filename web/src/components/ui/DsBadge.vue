@@ -1,5 +1,5 @@
 <template>
-  <span class="ds-badge" :class="`ds-badge--${type}`">
+  <span class="ds-badge" :class="`ds-badge--${type}`" role="status">
     <slot />
   </span>
 </template>

@@ -127,17 +127,10 @@ import { computed } from 'vue'
 import type { ToolCall } from '@/types'
 import type { WeatherData, WeatherForecastItem, MinutePrecipSummary } from './weather-types'
 import BubbleChrome from './_shared/BubbleChrome.vue'
+import { hasObjectKeys } from './_shared/displayNames'
 
 const props = defineProps<{ toolCall: ToolCall }>()
 defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()
-
-const rawOutput = props.toolCall.output
-if (rawOutput) {
-  try {
-    const parsed = JSON.parse(rawOutput)
-    console.log('[WeatherBubble] raw output data keys:', Object.keys(parsed.data || {}), 'forecast:', JSON.stringify(parsed.data?.forecast?.slice(0, 2)))
-  } catch {}
-}
 
 // ── 数据源 ──
 const td = computed<WeatherData | null>(() => {
@@ -151,7 +144,7 @@ const td = computed<WeatherData | null>(() => {
   return null
 })
 
-const hasData = computed(() => td.value !== null && Object.keys(td.value).length > 0)
+const hasData = computed(() => hasObjectKeys(td.value))
 
 // ── 核心字段 ──
 const cityName = computed(() => td.value?.city || '未知城市')

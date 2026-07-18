@@ -2,7 +2,7 @@
 // 统一 MarkdownEditor.vue 与 SoulView.vue 的 Markdown 持久化逻辑：
 // 加载 / 保存 / 失焦自动保存 / saveState 三态 / Codemirror 配置 / loadError 重试
 
-import { ref, computed, type Ref, type ComputedRef } from 'vue'
+import { ref, computed, onUnmounted, type Ref, type ComputedRef } from 'vue'
 import { markdown } from '@codemirror/lang-markdown'
 import { EditorView } from '@codemirror/view'
 import type { Extension } from '@codemirror/state'
@@ -74,6 +74,16 @@ export function useMarkdownPersist(options: UseMarkdownPersistOptions): UseMarkd
 
   const isDirty = computed(() => content.value !== savedContent.value)
 
+  // 保存状态 2 秒后自动清除的定时器，组件卸载时清理
+  let _saveStateTimer: ReturnType<typeof setTimeout> | null = null
+
+  onUnmounted(() => {
+    if (_saveStateTimer) {
+      clearTimeout(_saveStateTimer)
+      _saveStateTimer = null
+    }
+  })
+
   async function loadContent() {
     loading.value = true
     loadError.value = ''
@@ -82,8 +92,8 @@ export function useMarkdownPersist(options: UseMarkdownPersistOptions): UseMarkd
       const res = await api.getPersona(type, variant)
       content.value = res.content
       savedContent.value = res.content
-    } catch (e: any) {
-      const msg = e?.message || String(e)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
       console.error(`加载 ${type} 失败`, e)
       loadError.value = msg
       content.value = ''
@@ -102,10 +112,11 @@ export function useMarkdownPersist(options: UseMarkdownPersistOptions): UseMarkd
       await api.updatePersona(type, content.value, variant)
       savedContent.value = content.value
       saveState.value = 'saved'
-      setTimeout(() => { saveState.value = '' }, 2000)
-    } catch (e: any) {
+      if (_saveStateTimer) clearTimeout(_saveStateTimer)
+      _saveStateTimer = setTimeout(() => { saveState.value = ''; _saveStateTimer = null }, 2000)
+    } catch (e: unknown) {
       console.error(`保存 ${type} 失败`, e)
-      saveError.value = e?.message || String(e)
+      saveError.value = e instanceof Error ? e.message : String(e)
     } finally {
       saving.value = false
     }

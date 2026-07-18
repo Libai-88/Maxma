@@ -106,9 +106,19 @@ const { enabled: paperTexture, toggle: togglePaperTexture } = usePaperTexture()
 .theme-card:hover {
   background: var(--overlay-subtle, rgba(0, 0, 0, 0.03));
 }
+@media (prefers-reduced-motion: no-preference) {
+  .theme-card:hover {
+    transform: scale(1.06);
+    box-shadow: 0 4px 12px var(--shadow-color);
+  }
+}
 .theme-card.active {
   border-color: var(--accent);
   background: var(--overlay-light, rgba(0, 0, 0, 0.05));
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.theme-card.active .theme-preview {
+  border-color: var(--accent);
 }
 .theme-preview {
   width: 100%;

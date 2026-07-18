@@ -108,6 +108,28 @@ class TestDeleteUpload:
         assert resp.status_code == 404
         assert "不存在" in resp.json()["detail"]
 
+    def test_delete_upload_rejects_glob_injection(self, app_and_client):
+        """file_id 含通配符 * 时必须 400 拒绝，否则 glob(*_*) 会批量删除所有上传文件。"""
+        (app, client) = app_and_client
+        upload_dir = upload_mod.UPLOAD_DIR
+        # 预置两个文件，确保 glob 攻击有目标可命中
+        _write_meta(upload_dir, "aaa111", "file1.txt")
+        _write_meta(upload_dir, "bbb222", "file2.txt")
+
+        resp = client.delete("/uploads/*")
+        assert resp.status_code == 400
+        assert "非法" in resp.json()["detail"]
+        # 两个文件均应存活
+        assert (upload_dir / "aaa111_file1.txt").exists()
+        assert (upload_dir / "bbb222_file2.txt").exists()
+
+    def test_delete_upload_rejects_path_traversal(self, app_and_client):
+        """file_id 含路径分隔符时必须 400 拒绝，防止路径穿越越权删除。"""
+        (_, client) = app_and_client
+        resp = client.delete("/uploads/..%5C..%5Csecret")
+        assert resp.status_code == 400
+        assert "非法" in resp.json()["detail"]
+
 
 class TestUploadErrorPaths:
     def test_upload_rejects_empty_filename(self, app_and_client):

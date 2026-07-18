@@ -41,7 +41,7 @@
               </div>
               <div class="card-line"></div>
               <div class="card-keywords">
-                <span v-for="(kw, ki) in card.keywords.slice(0, 3)" :key="ki" class="kw">{{ kw }}</span>
+                <span v-for="(kw, ki) in (card.keywords || []).slice(0, 3)" :key="ki" class="kw">{{ kw }}</span>
               </div>
             </div>
           </div>
@@ -67,7 +67,7 @@
               <div class="card-row-bottom">
                 <span class="card-row-suit">{{ card.suit }}</span>
                 <span class="card-row-pos">{{ card.position }}</span>
-                <span class="card-row-kw">{{ card.keywords.slice(0, 2).join(' · ') }}</span>
+                <span class="card-row-kw">{{ (card.keywords || []).slice(0, 2).join(' · ') }}</span>
               </div>
             </div>
           </div>
@@ -158,17 +158,10 @@ const displayOutput = computed(() => {
   border: 2px solid var(--border);
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: spin 0.6s linear infinite;
+  animation: maxma-spin 0.6s linear infinite;
   flex-shrink: 0;
 }
 
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.bubble-error {
-  font-size: 13px;
-  color: #b91c1c;
-  padding: 4px 0;
-}
 
 /* ── 问句与元信息 ── */
 .tarot-question {

@@ -94,7 +94,7 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
     content = b"".join(chunks)
 
     # 生成唯一文件名
-    file_id = uuid.uuid4().hex[:8]
+    file_id = uuid.uuid4().hex
     safe_name = f"{file_id}_{original_name}"
     file_path = UPLOAD_DIR / safe_name
 
@@ -149,6 +149,11 @@ async def list_uploads():
 @router.delete("/uploads/{file_id}")
 async def delete_upload(file_id: str):
     """删除已上传的文件。"""
+    # 安全校验：file_id 必须为纯字母数字（UUID hex 或测试用短 ID），
+    # 防止 glob 通配符（*、?、[）注入导致批量删除所有上传文件，
+    # 以及路径穿越（/、\、..）导致越权删除任意文件。
+    if not re.match(r'^[a-zA-Z0-9]+$', file_id):
+        raise HTTPException(status_code=400, detail="非法 file_id")
     deleted = False
     # 删除元数据文件以找到原始文件名
     meta_path = UPLOAD_DIR / f"{file_id}.meta"
@@ -162,8 +167,8 @@ async def delete_upload(file_id: str):
         actual_file = UPLOAD_DIR / f"{file_id}_{original_name}"
         if actual_file.exists():
             actual_file.unlink()
-            deleted = True
         meta_path.unlink()
+        deleted = True  # meta 文件已清理即视为成功
     else:
         # 尝试直接删除
         for f in UPLOAD_DIR.glob(f"{file_id}_*"):

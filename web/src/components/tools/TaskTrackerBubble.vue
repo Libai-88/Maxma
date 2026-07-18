@@ -39,7 +39,7 @@
         <!-- 待办清单 -->
         <div class="todo-items">
           <div
-            v-for="(todo, i) in (toolCall.toolData.todos as any[])"
+            v-for="(todo, i) in (toolCall.toolData.todos as TodoItem[])"
             :key="i"
             class="todo-row"
             :class="'todo-' + todo.status"
@@ -66,13 +66,24 @@ import { computed, ref, watchEffect } from 'vue'
 import type { ToolCall } from '@/types'
 import BubbleChrome from './_shared/BubbleChrome.vue'
 
+interface TodoItem {
+  id?: string
+  title?: string
+  content?: string
+  description?: string
+  status?: string
+  priority?: string
+  assignee?: string
+  activeForm?: string
+}
+
 const props = defineProps<{ toolCall: ToolCall }>()
 defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()
 
 const currentActiveForm = computed(() => {
-  const todos = props.toolCall.toolData?.todos as any[] | undefined
+  const todos = props.toolCall.toolData?.todos as TodoItem[] | undefined
   if (!todos) return ''
-  const current = todos.find((t: any) => t.status === 'in_progress')
+  const current = todos.find((t: TodoItem) => t.status === 'in_progress')
   return current?.activeForm || ''
 })
 
@@ -103,14 +114,14 @@ watchEffect(() => {
 /* ── 黑白进度条 ── */
 .progress-track {
   height: 4px;
-  background: #e0e0e0;
+  background: var(--border);
   border-radius: 2px;
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  background: #000;
+  background: var(--accent);
   border-radius: 2px;
   transition: width 0.3s ease;
 }
@@ -125,7 +136,7 @@ watchEffect(() => {
 }
 
 .stat {
-  color: #999;
+  color: var(--text-tertiary);
 }
 
 .stat .num {
@@ -134,27 +145,27 @@ watchEffect(() => {
 
 .stat.done .num {
   font-weight: 700;
-  color: #000;
+  color: var(--text-primary);
 }
 
 .stat.current {
   font-weight: 600;
-  color: #000;
+  color: var(--text-primary);
 }
 
 .stat.current .num {
-  color: #000;
+  color: var(--text-primary);
 }
 
 .stat.total {
   margin-left: auto;
-  color: #ccc;
+  color: var(--border);
 }
 
 .stat-active {
   margin-left: 4px;
   font-weight: 400;
-  color: #666;
+  color: var(--text-secondary);
   font-size: 11px;
 }
 
@@ -176,7 +187,7 @@ watchEffect(() => {
   gap: 8px;
   padding: 6px 4px;
   font-size: 13px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--border);
 }
 
 .todo-row:last-child {
@@ -192,54 +203,54 @@ watchEffect(() => {
 }
 
 .icon-completed {
-  color: #999;
+  color: var(--text-tertiary);
   font-weight: 400;
 }
 
 .icon-in_progress {
-  color: #000;
+  color: var(--text-primary);
   font-weight: 700;
 }
 
 .icon-pending {
-  color: #ccc;
+  color: var(--border);
 }
 
 /* ── 任务内容 ── */
 .todo-completed .todo-content {
-  color: #bbb;
+  color: var(--text-tertiary);
   text-decoration: line-through;
 }
 
 .todo-in_progress .todo-content {
   font-weight: 600;
-  color: #000;
+  color: var(--text-primary);
 }
 
 .todo-pending .todo-content {
-  color: #999;
+  color: var(--text-tertiary);
 }
 
 /* ── 降级输出 ── */
 .raw-output {
   font-family: 'SF Mono', 'Consolas', monospace;
   font-size: 12px;
-  color: #333;
+  color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-word;
   margin: 0;
   padding: 8px 12px;
-  background: #f8f8f8;
+  background: var(--bg-secondary);
   border-radius: 4px;
 }
 
 .bubble-running {
-  color: #666;
+  color: var(--text-secondary);
   font-size: 13px;
 }
 
 .bubble-error {
-  color: #c00;
+  color: var(--status-error);
   font-size: 13px;
 }
 </style>

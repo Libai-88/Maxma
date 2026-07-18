@@ -42,11 +42,19 @@ const ALLOWED_URL_SCHEMES = new Set([
   'http:', 'https:', 'mailto:', 'tel:', 'data:', 'ftp:', 'ftps:',
 ])
 
+/** Known-safe data: URI MIME types (image/* only — other types may contain
+ *  executable content or render HTML/JS in the browser). */
+const SAFE_DATA_MIME_TYPES = /^data:image\/(png|jpeg|jpg|gif|webp|bmp|avif);/i
+
 function isDangerousUrl(value: string): boolean {
   const trimmed = value.trim().toLowerCase()
-  // 拦截 javascript:、vbscript:、data:text/html 等危险协议
-  if (/^(javascript|vbscript|data:text\/html|data:image\/svg\+xml)/i.test(trimmed)) {
+  // 拦截 javascript:、vbscript: 等已知危险伪协议
+  if (/^(javascript|vbscript)/i.test(trimmed)) {
     return true
+  }
+  // data: URI 严格白名单：仅允许 image/*（png/jpeg/gif/webp/bmp/avif）
+  if (/^data:/i.test(trimmed)) {
+    return !SAFE_DATA_MIME_TYPES.test(trimmed)
   }
   // 显式协议但不在白名单内
   const match = trimmed.match(/^([a-z][a-z0-9+.-]*:)/i)

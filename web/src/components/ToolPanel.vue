@@ -34,7 +34,7 @@ const filteredGroups = computed(() => {
   if (!search.value) return store.categories
   const q = search.value.toLowerCase()
   return store.categories
-    .map(g => ({ ...g, tools: g.tools.filter(t => t.name.includes(q) || t.label?.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q)) }))
+    .map(g => ({ ...g, tools: g.tools.filter(t => t.name.toLowerCase().includes(q) || t.label?.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q)) }))
     .filter(g => g.tools.length > 0)
 })
 

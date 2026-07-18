@@ -25,13 +25,13 @@
 <script setup lang="ts">
 import { computed, ref, watchEffect } from 'vue'
 
-interface TaskTrackerTodo {
+export interface TaskTrackerTodo {
   content: string
   status: string
   activeForm: string | null
 }
 
-interface TaskTrackerData {
+export interface TaskTrackerData {
   total: number
   completed: number
   in_progress?: number
@@ -97,7 +97,7 @@ const statusLabel = computed(() => {
   font-size: 12px;
   user-select: none;
   flex-shrink: 0;
-  border: 1.5px solid #0000001e;
+  border: 1.5px solid var(--border);
   border-radius: 6px;
   padding: 4px 12px;
   box-shadow: var(--shadow-xs);
@@ -110,51 +110,51 @@ const statusLabel = computed(() => {
 
 .bar-label {
   font-weight: 600;
-  color: #999;
+  color: var(--text-tertiary);
 }
 
 .bar-idle {
-  color: #bbb;
+  color: var(--text-tertiary);
   font-style: italic;
 }
 
 .bar-progress-text {
   font-variant-numeric: tabular-nums;
-  color: #666;
+  color: var(--text-secondary);
 }
 
 .bar-num-done {
   font-weight: 700;
-  color: #000;
+  color: var(--text-primary);
 }
 
 .bar-num-total {
-  color: #999;
+  color: var(--text-tertiary);
 }
 
 .bar-sep {
-  color: #ccc;
+  color: var(--border);
 }
 
 .bar-in-progress-label {
-  color: #000;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
 .bar-active-form {
-  color: #666;
+  color: var(--text-secondary);
   font-size: 11px;
 }
 
 .bar-active-form::before {
   content: '· ';
-  color: #ccc;
+  color: var(--border);
 }
 
 .bar-progress-track {
   width: 60px;
   height: 6px;
-  background: #d0d0d0;
+  background: var(--border);
   border-radius: 3px;
   overflow: hidden;
   flex-shrink: 0;
@@ -164,7 +164,7 @@ const statusLabel = computed(() => {
 .bar-progress-fill {
   height: 100%;
   min-width: 8px;
-  background: #000;
+  background: var(--accent);
   border-radius: 3px;
   transition: width 0.3s ease;
 }

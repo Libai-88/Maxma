@@ -29,6 +29,7 @@ import { computed } from 'vue'
 import type { ToolCall } from '@/types'
 import BubbleChrome from './_shared/BubbleChrome.vue'
 import RenderMarkdown from '@/components/RenderMarkdown.vue'
+import { hasObjectKeys } from './_shared/displayNames'
 
 const props = defineProps<{ toolCall: ToolCall }>()
 defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()
@@ -44,7 +45,7 @@ const td = computed<Record<string, any>>(() => {
   return {}
 })
 
-const hasData = computed(() => Object.keys(td.value).length > 0)
+const hasData = computed(() => hasObjectKeys(td.value))
 const response = computed(() => td.value.response || '')
 
 const displayOutput = computed(() => {

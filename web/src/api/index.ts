@@ -2,11 +2,7 @@ import type {
   CreateSessionResponse,
   ListSessionsResponse,
   SessionInfo,
-  NarrativeResponse,
-  MomentResponse,
-  VignetteResponse,
   ContextUsage,
-  DeepSeekBalanceResponse,
   HealthResponse,
   ListProvidersResponse,
   ListNewsResponse,
@@ -30,14 +26,13 @@ import type {
   MCPServerUpdateBody,
   ListMCPServersResponse,
   MCPServerToolsResponse,
+  DiscoveredServer,
   SkillDetail,
   SkillCreateBody,
   SkillUpdateBody,
   MacroDetail,
   MacroCreateBody,
   MacroUpdateBody,
-  KbDocument,
-  KbSearchResult,
   MetricsSnapshot,
   MetricsHistoryResponse,
   AuditLogStats,
@@ -54,20 +49,11 @@ import type {
   WorkflowRun,
 } from '@/types'
 import type {
-  EventHook,
-  EventHookCreateBody,
-  EventHookHistoryResponse,
-  EventHookMutationResponse,
-  EventHookUpdateBody,
-  ListEventHooksResponse,
-} from '@/types/event-hooks'
-import type {
   CreatePersonaBody,
   CreatePersonaResponse,
   ListPersonasResponse,
   SwitchPersonaResponse,
 } from '@/types/persona'
-import type { McpAuditSummaryResponse } from '@/types/audit-log'
 import { ensurePortLoaded, getApiBase, tauriFetch } from '@/utils/env'
 
 // 注意：BASE 在 ensurePortLoaded() 完成后可能因端口冲突回退而变化，
@@ -80,6 +66,8 @@ let token = ''
 /** Token 是否已从运行时接口获取 */
 let tokenFetchedAtRuntime = false
 let tokenLoadPromise: Promise<void> | null = null
+/** 版本号计数器，防止 resetToken() 与 ensureTokenLoaded() 的 finally 块竞态 */
+let tokenLoadVersion = 0
 
 export function getToken(): string {
   return token
@@ -89,36 +77,67 @@ export function getToken(): string {
  * 运行时获取 Token（桌面应用模式）。
  * 当构建时未注入 Token 时，首次 API 调用会触发此函数。
  * 导出为 ensureTokenLoaded 供 WebSocket 连接前调用。
+ * 失败后自动重试最多 3 次（间隔 1s 递增），全部失败则抛出错误，
+ * 防止静默失败导致未认证请求发出。
  */
 export async function ensureTokenLoaded(): Promise<void> {
   if (tokenFetchedAtRuntime) return
+  const myVersion = tokenLoadVersion
   if (!tokenLoadPromise) {
+    const capturedVersion = tokenLoadVersion
     tokenLoadPromise = (async () => {
-      try {
-        // 先加载运行时端口（Tauri 端口冲突回退），再构造请求 URL
-        await ensurePortLoaded()
-        BASE = getApiBase()
-        const res = await tauriFetch(`${BASE}/auth/token`)
-        if (res.ok) {
-          const data = await res.json()
-          token = data.token || ''
-          tokenFetchedAtRuntime = true
-          console.log('[api] Token acquired at runtime')
+      // 先加载运行时端口（Tauri 端口冲突回退），再构造请求 URL
+      await ensurePortLoaded()
+      BASE = getApiBase()
+      let lastError: unknown
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const res = await tauriFetch(`${BASE}/auth/token`)
+          // 版本已变化 — resetToken() 在此期间被调用，此次 fetch 结果已过时，静默丢弃
+          if (tokenLoadVersion !== capturedVersion) {
+            console.log('[api] Token fetch result discarded due to resetToken()')
+            return
+          }
+          if (res.ok) {
+            const data = await res.json()
+            token = data.token || ''
+            tokenFetchedAtRuntime = true
+            console.log('[api] Token acquired at runtime')
+            return
+          } else {
+            lastError = new Error(`Token fetch returned ${res.status}`)
+          }
+        } catch (e) {
+          lastError = e
+          console.warn(`[api] Failed to fetch token at runtime (attempt ${attempt}/3):`, e)
         }
-      } catch (e) {
-        console.warn('[api] Failed to fetch token at runtime:', e)
-      } finally {
-        tokenLoadPromise = null
+        if (attempt < 3) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * attempt))
+        }
       }
+      // 版本检查：resetToken() 期间发生的最终失败也无需抛错（新 promise 会处理）
+      if (tokenLoadVersion !== capturedVersion) return
+      // 所有重试失败，抛出错误而非静默失败
+      throw new Error(
+        `获取认证 Token 失败: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
+      )
     })()
   }
-  await tokenLoadPromise
+  try {
+    await tokenLoadPromise
+  } finally {
+    // 仅在版本未变化时清除 promise，防止 resetToken() 后旧 finally 误清新创建的 promise
+    if (tokenLoadVersion === myVersion) {
+      tokenLoadPromise = null
+    }
+  }
 }
 
 /** 强制清除 Token 缓存，下次请求时重新获取（用于 auth 失败后刷新） */
 export function resetToken(): void {
   tokenFetchedAtRuntime = false
   token = ''
+  tokenLoadVersion++  // 递增版本号，使 in-flight finally 跳过清除 tokenLoadPromise
   tokenLoadPromise = null
 }
 
@@ -139,12 +158,13 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     ...options,
   })
   if (!res.ok) {
-    let detail = `API ${url} 返回 ${res.status}`
+    const userMsg = `API 请求失败 (${res.status})`
     try {
       const body = await res.json()
-      if (body.detail) detail += `: ${body.detail}`
+      // 将后端详情输出到 console 便于调试，不向用户暴露内部细节
+      if (body.detail) console.warn(`[api] ${url} detail:`, body.detail)
     } catch { /* ignore parse errors */ }
-    throw new Error(detail)
+    throw new Error(userMsg)
   }
   return res.json()
 }
@@ -166,7 +186,9 @@ async function uploadImage(file: File): Promise<{ file_id: string; filename: str
     body: form,
   })
   if (!res.ok) {
-    throw new Error(`图片上传失败: ${res.status}`)
+    let detail = `图片上传失败: ${res.status}`
+    try { const body = await res.json(); if (body.detail) detail += `: ${body.detail}` } catch { /* ignore */ }
+    throw new Error(detail)
   }
   return res.json()
 }
@@ -179,13 +201,13 @@ export const api = {
     request<ListSessionsResponse>('/sessions'),
 
   getSession: (id: string) =>
-    request<SessionInfo>(`/sessions/${id}`),
+    request<SessionInfo>(`/sessions/${encodeURIComponent(id)}`),
 
   getMessages: (id: string) =>
-    request<{ session_id: string; messages: { role: string; content: string }[] }>(`/sessions/${id}/messages`),
+    request<{ session_id: string; messages: { role: string; content: string }[] }>(`/sessions/${encodeURIComponent(id)}/messages`),
 
   deleteSession: (id: string) =>
-    request<{ status: string }>(`/sessions/${id}`, { method: 'DELETE' }),
+    request<{ status: string }>(`/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
   getSessionPermissionMode: (sessionId: string) =>
     request<SessionPermissionModeResponse>(
@@ -246,26 +268,11 @@ export const api = {
       { method: 'POST' },
     ),
 
-  getNarrative: () =>
-    request<NarrativeResponse>('/narrative'),
-
-  getMoment: () =>
-    request<MomentResponse>('/moment'),
-
-  getMemories: () =>
-    request<VignetteResponse>('/memories'),
-
-  updateMemory: (id: string, content: string, section: string) =>
-    request<{ status: string }>(`/memories/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify({ content, section }),
-    }),
-
   getContextUsage: (sessionId: string) =>
-    request<ContextUsage & { session_id: string }>(`/sessions/${sessionId}/context-usage`),
+    request<ContextUsage & { session_id: string }>(`/sessions/${encodeURIComponent(sessionId)}/context-usage`),
 
   undoMessages: (sessionId: string, n: number = 1) =>
-    request<{ deleted_count: number }>(`/sessions/${sessionId}/undo?n=${n}`, { method: 'POST' }),
+    request<{ deleted_count: number }>(`/sessions/${encodeURIComponent(sessionId)}/undo?n=${n}`, { method: 'POST' }),
 
   /** 手动触发会话上下文压缩 */
   compressSession: (sessionId: string) =>
@@ -275,10 +282,7 @@ export const api = {
       summary_preview?: string
       context_usage_before?: number
       context_usage_after?: number
-    }>(`/sessions/${sessionId}/compress`, { method: 'POST' }),
-
-  getDeepSeekBalance: () =>
-    request<DeepSeekBalanceResponse>('/deepseek-balance'),
+    }>(`/sessions/${encodeURIComponent(sessionId)}/compress`, { method: 'POST' }),
 
   health: () =>
     request<HealthResponse>('/health'),
@@ -403,17 +407,17 @@ export const api = {
 
   // ── Const 固定会话 ──
 
-  constifySession: (id: string, name: string) =>
-    request<ConstifyResponse>(`/sessions/${id}/const`, {
+  constifySession: (sessionId: string, name: string) =>
+    request<ConstifyResponse>(`/sessions/${encodeURIComponent(sessionId)}/const`, {
       method: 'POST',
       body: JSON.stringify({ name }),
     }),
 
-  unconstifySession: (id: string) =>
-    request<{ status: string }>(`/sessions/${id}/const`, { method: 'DELETE' }),
+  unconstifySession: (sessionId: string) =>
+    request<{ status: string }>(`/sessions/${encodeURIComponent(sessionId)}/const`, { method: 'DELETE' }),
 
-  generateSessionTitle: (id: string) =>
-    request<{ title: string }>(`/sessions/${id}/generate-title`, { method: 'POST' }),
+  generateSessionTitle: (sessionId: string) =>
+    request<{ title: string }>(`/sessions/${encodeURIComponent(sessionId)}/generate-title`, { method: 'POST' }),
 
   // ── Persona 人设 ──
 
@@ -541,6 +545,10 @@ export const api = {
   listMcpServerTools: (serverId: string) =>
     request<MCPServerToolsResponse>(`/mcp/servers/${encodeURIComponent(serverId)}/tools`),
 
+  // 获取 OMP 自动发现的 MCP 服务器
+  listMcpDiscovered: () =>
+    request<DiscoveredServer[]>('/mcp/discovered'),
+
   // 测试 MCP 服务器连接（stdio 命令解析 + 子进程启动探测）
   testMcpConnection: (body: { command: string; args: string[]; env: Record<string, string> }) =>
     request<{ success: boolean; error: string | null; resolved_command: string }>('/mcp/test-connection', {
@@ -548,36 +556,7 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  // 阶段 4.2：MCP 调用审计聚合统计
-  getMcpAuditSummary: () =>
-    request<McpAuditSummaryResponse>('/audit-log/mcp-summary'),
-
   uploadImage,
-
-  // Event Hooks
-  listHooks: () =>
-    request<ListEventHooksResponse>('/event-hooks'),
-
-  getHook: (hookId: string) =>
-    request<EventHook>(`/event-hooks/${hookId}`),
-
-  createHook: (body: EventHookCreateBody) =>
-    request<EventHookMutationResponse>('/event-hooks', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-
-  updateHook: (hookId: string, body: EventHookUpdateBody) =>
-    request<EventHookMutationResponse>(`/event-hooks/${hookId}`, {
-      method: 'PUT',
-      body: JSON.stringify(body),
-    }),
-
-  deleteHook: (hookId: string) =>
-    request<{ status: string }>(`/event-hooks/${hookId}`, { method: 'DELETE' }),
-
-  getHookHistory: (limit: number = 50) =>
-    request<EventHookHistoryResponse>(`/event-hooks/history?limit=${limit}`),
 
   // Audit Log
   getAuditLog: (params: string = '?limit=50') =>
@@ -590,7 +569,7 @@ export const api = {
     request<{ status: string; deleted: number }>('/audit-log/clear', { method: 'POST' }),
 
   encryptApiKeys: () =>
-    request<{ status: string; encrypted: number }>('/audit-log/encrypt-keys', {
+    request<{ status: string; encrypted: number }>('/providers/encrypt-keys', {
       method: 'POST',
     }),
 
@@ -601,45 +580,6 @@ export const api = {
 
   getMetricsHistory: (windowSeconds: number = 3600) =>
     request<MetricsHistoryResponse>(`/metrics/history?window=${windowSeconds}`),
-
-  // ── Knowledge Base 知识库 ──
-
-  listKbDocuments: () =>
-    request<{ items: KbDocument[] }>('/kb/documents'),
-
-  getKbDocument: (docId: string) =>
-    request<KbDocument>(`/kb/documents/${encodeURIComponent(docId)}`),
-
-  deleteKbDocument: (docId: string) =>
-    request<{ status: string; doc_id: string }>(`/kb/documents/${encodeURIComponent(docId)}`, { method: 'DELETE' }),
-
-  uploadKbDocument: (file: File, docId?: string) => {
-    const form = new FormData()
-    form.append('file', file)
-    const headers: Record<string, string> = {}
-    if (token) headers['X-Maxma-Token'] = token
-    if (docId) form.append('doc_id', docId)
-    return tauriFetch(`${BASE}/kb/documents`, { method: 'POST', headers, body: form })
-      .then(res => { if (!res.ok) throw new Error(`上传失败: ${res.status}`); return res.json() })
-  },
-
-  indexKbText: (body: { content: string; doc_id: string; filename?: string; source?: string }) =>
-    request<{ doc_id: string; chunks: number; status: string }>('/kb/documents/text', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-
-  importKbUrl: (body: { url: string; doc_id?: string }) =>
-    request<{ doc_id: string; chunks: number; status: string }>('/kb/documents/url', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-
-  searchKb: (body: { query: string; top_k?: number; threshold?: number }) =>
-    request<{ query: string; count: number; items: KbSearchResult[] }>('/kb/search', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
 
   // ── 诊断与错误日志导出 ──
 
@@ -686,12 +626,6 @@ export const api = {
     }
     return await res.text()
   },
-
-  /** 清空内存缓冲区中的错误记录 */
-  clearErrorLog: () =>
-    request<{ status: string; deleted: number }>('/diagnostics/error-log', {
-      method: 'DELETE',
-    }),
 
   /** 获取日志文件列表及大小 */
   getLogFiles: () =>

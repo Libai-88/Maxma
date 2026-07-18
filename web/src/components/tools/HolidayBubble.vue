@@ -127,6 +127,7 @@
 import { computed } from 'vue'
 import type { ToolCall } from '@/types'
 import BubbleChrome from './_shared/BubbleChrome.vue'
+import { hasObjectKeys } from './_shared/displayNames'
 
 const props = defineProps<{ toolCall: ToolCall }>()
 defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()
@@ -143,7 +144,7 @@ const td = computed<Record<string, any>>(() => {
   return {}
 })
 
-const hasData = computed(() => Object.keys(td.value).length > 0)
+const hasData = computed(() => hasObjectKeys(td.value))
 
 // ── 查询模式 ──
 const isDateMode = computed(() => td.value.mode === 'day')
@@ -246,17 +247,10 @@ const displayOutput = computed(() => {
   border: 2px solid var(--border);
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: spin 0.6s linear infinite;
+  animation: maxma-spin 0.6s linear infinite;
   flex-shrink: 0;
 }
 
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.bubble-error {
-  font-size: 13px;
-  color: #b91c1c;
-  padding: 4px 0;
-}
 
 /* ── 主容器 ── */
 .holiday-result {

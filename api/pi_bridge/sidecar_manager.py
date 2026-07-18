@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -27,10 +28,13 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-SIDECAR_DIR = Path(__file__).resolve().parent.parent.parent / "bun-sidecar"
+SIDECAR_DIR = Path(
+    os.environ.get("MAXMA_SIDECAR_DIR")
+    or (Path(__file__).resolve().parent.parent.parent / "bun-sidecar")
+)
 SIDECAR_ENTRY = SIDECAR_DIR / "src" / "session-bridge.ts"
 # 当 settings 未初始化时的默认值
-_DEFAULT_BUN_PATH = "D:/NodeGlobal/node_modules/bun/bin/bun.exe"
+_DEFAULT_BUN_PATH = "bun"
 
 
 def _resolve_bun_path() -> str:

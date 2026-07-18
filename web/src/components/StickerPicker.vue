@@ -119,7 +119,7 @@
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { getApiBase, tauriFetch } from '@/utils/env'
 
-interface Sticker {
+export interface Sticker {
   category: string
   filename: string
   path: string
@@ -674,6 +674,8 @@ function dedupeStickersByPath(stickers: Sticker[]): Sticker[] {
 .recommended-strip {
   padding: 10px 12px;
   border-bottom: 1px solid var(--border);
+  background: transparent;
+  background: transparent;
   background: color-mix(in srgb, var(--accent) 4%, transparent);
 }
 
@@ -740,6 +742,8 @@ function dedupeStickersByPath(stickers: Sticker[]): Sticker[] {
 
 .sort-row button.active {
   border-color: var(--accent);
+  background: transparent;
+  background: transparent;
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--text-primary);
 }
@@ -756,6 +760,8 @@ function dedupeStickersByPath(stickers: Sticker[]): Sticker[] {
 }
 
 .picker-grid.drag-over {
+  background: transparent;
+  background: transparent;
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   border: 2px dashed var(--accent);
   border-radius: 8px;
@@ -778,8 +784,10 @@ function dedupeStickersByPath(stickers: Sticker[]): Sticker[] {
 }
 
 .sticker-item.highlighted {
+  outline: 2px solid transparent;
   outline: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
   outline-offset: 1px;
+  background: var(--bg-secondary);
   background: color-mix(in srgb, var(--accent) 10%, var(--bg-secondary));
 }
 

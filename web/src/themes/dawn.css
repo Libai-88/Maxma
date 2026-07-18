@@ -8,7 +8,7 @@
   --bg-primary:    #FCFBE6;  /* 米白，渐变中间色 */
   --bg-secondary:  #EAF5F6;  /* 淡青，侧边栏 */
   --bg-card:       #FFFEFA;  /* 近白带暖，浮于渐变之上 */
-  --user-bubble:   rgba(232, 130, 111, 0.08);
+  --user-bubble:   rgba(232, 130, 111, 0.14);
 
   /* ── 主色调 ── */
   --accent:        #6B9BA5;  /* 淡青深色，克制主操作色 */
@@ -32,7 +32,6 @@
   --status-info:    #6B9BA5;
 
   /* ── 聊天专用 ── */
-  --hana-text:      #4A5A60;
   --tool-bg:        rgba(107, 155, 165, 0.06);
   --sidebar-bg:     rgba(234, 245, 246, 0.85);  /* 半透明淡青，透出渐变 */
 
@@ -59,8 +58,8 @@
   --drop-overlay-bg: rgba(var(--accent-rgb), 0.12);
   --attach-bg: rgba(var(--accent-rgb), 0.05);
 
-  /* 修复 --accent-light 语义冲突 */
-  --accent-light: #568590;
+  /* --accent-dark: accent 的深色变体，用于边框和 hover 状态 */
+  --accent-dark: #568590;
   --accent-hover: #568590;
 }
 

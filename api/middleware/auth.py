@@ -32,9 +32,23 @@ class AuthMiddleware:
         if scope.get("type") == "http" and scope.get("method") == "OPTIONS":
             return await self.app(scope, receive, send)
 
-        # 白名单：健康检查 + Token 获取（桌面应用启动时需要）+ 表情包（img 标签无法携带自定义头）
-        if path == "/api/health" or path == "/api/auth/token" or path.startswith("/api/stickers"):
+        # 白名单：健康检查 + Token 获取（桌面应用启动时需要）
+        if path == "/api/health" or path == "/api/auth/token":
             return await self.app(scope, receive, send)
+
+        # 表情包静态资源（img 标签无法携带自定义头）仅放行 GET/HEAD 读操作。
+        # 仅放行真正的图片资源路径（/api/stickers/{category}/{filename}）和
+        # 随机表情路径（/api/stickers/random/{category}，前端 useChat 用裸
+        # fetch 调用、无法携带自定义头）。其他 /api/stickers/* 下的 GET 端点
+        # （favorites/recent/recommendations/index/custom 等）返回用户数据，
+        # 前端通过 tauriFetch 调用、可携带 token，必须鉴权，防止越权读取。
+        if path.startswith("/api/stickers/"):
+            subpath = path[len("/api/stickers/"):]
+            parts = [p for p in subpath.split("/") if p]
+            method = scope.get("method", "GET").upper()
+            if method in {"GET", "HEAD"} and len(parts) >= 2:
+                return await self.app(scope, receive, send)
+            # POST/PUT/DELETE 或单段路径（如 favorites、recent）仍需鉴权
 
         # 提取并校验 Token
         token = self._extract_token(scope)

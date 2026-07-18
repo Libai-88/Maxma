@@ -27,7 +27,7 @@
   gap: var(--space-8);
   padding: 8px 16px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: var(--bg-primary);
   color: var(--text-primary);
   font-size: var(--fs-body);
@@ -35,9 +35,18 @@
   cursor: pointer;
   transition: background var(--duration-fast) var(--ease-out),
               border-color var(--duration-fast) var(--ease-out),
-              color var(--duration-fast) var(--ease-out);
+              color var(--duration-fast) var(--ease-out),
+              transform 0.15s ease;
   line-height: 1;
   white-space: nowrap;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ds-btn:hover {
+    transform: translateY(-1px);
+  }
+  .ds-btn:active {
+    transform: scale(0.98);
+  }
 }
 .ds-btn:focus-visible {
   outline: 2px solid var(--accent);
@@ -64,6 +73,7 @@
   border-color: var(--status-error);
 }
 .ds-btn--danger:hover:not(:disabled) {
+  background: var(--bg-primary);
   background: color-mix(in srgb, var(--status-error) 8%, var(--bg-primary));
 }
 .ds-btn--sm {
@@ -76,7 +86,7 @@
   width: 100%;
   padding: 8px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   font-size: var(--fs-body);
   font-family: var(--font-body);
   color: var(--text-primary);
@@ -104,7 +114,7 @@
   transition: border-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
 }
 .ds-card:hover {
-  border-color: var(--accent-light);
+  border-color: var(--accent-dark);
   box-shadow: var(--shadow-sm);
 }
 
@@ -120,18 +130,22 @@
   line-height: 1.4;
 }
 .ds-badge--ok {
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-ok) 10%, var(--bg-card));
   color: var(--status-ok);
 }
 .ds-badge--warn {
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-warn) 10%, var(--bg-card));
   color: var(--status-warn);
 }
 .ds-badge--error {
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-error) 10%, var(--bg-card));
   color: var(--status-error);
 }
 .ds-badge--info {
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-info) 10%, var(--bg-card));
   color: var(--status-info);
 }
@@ -140,20 +154,14 @@
   color: var(--text-secondary);
 }
 
-/* ── 模态弹窗 ── */
-.ds-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
+/* ── 模态弹窗 ──
+ * 基础全局样式。DsModal 组件使用 scoped CSS 覆盖细粒度样式，
+ * 此处仅保留共享的 .ds-modal、.ds-modal__title、.ds-modal__actions。
+ */
 .ds-modal {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: var(--space-24);
   width: 400px;
   max-width: 90vw;
@@ -170,23 +178,4 @@
   justify-content: flex-end;
   gap: var(--space-8);
   margin-top: var(--space-16);
-}
-
-/* ── 工具类 ── */
-.ds-flex { display: flex; }
-.ds-flex-col { display: flex; flex-direction: column; }
-.ds-flex-center { display: flex; align-items: center; justify-content: center; }
-.ds-flex-between { display: flex; align-items: center; justify-content: space-between; }
-.ds-gap-xs { gap: var(--space-4); }
-.ds-gap-sm { gap: var(--space-8); }
-.ds-gap-md { gap: var(--space-12); }
-.ds-gap-lg { gap: var(--space-16); }
-.ds-text-secondary { color: var(--text-secondary); }
-.ds-text-sm { font-size: var(--fs-caption); }
-.ds-text-xs { font-size: var(--fs-hint); }
-.ds-mono { font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; }
-.ds-truncate {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }

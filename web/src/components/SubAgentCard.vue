@@ -97,7 +97,9 @@ function schedulePolling() {
 }
 
 function isUnavailableError(error: unknown): boolean {
-  return error instanceof Error && /(?:\\s|^)404(?:\\s|$)/.test(error.message)
+  // 匹配错误消息中的 404 状态码。使用 \b 词边界以适配
+  // "API 请求失败 (404)" 这类括号包裹格式（括号是非单词字符，与数字间存在词边界）。
+  return error instanceof Error && /\b404\b/.test(error.message)
 }
 
 async function refresh() {

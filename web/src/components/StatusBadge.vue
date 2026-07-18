@@ -34,6 +34,7 @@
 
 <script setup lang="ts">
 import type { ComponentHealth, HealthResponse } from '@/types';
+import { safeComponentHealth } from '@/utils/componentHealth';
 import { computed } from 'vue';
 
 const props = defineProps<{
@@ -60,13 +61,22 @@ const items = computed(() => {
   return result
 })
 
-function makeItem(name: string, c: ComponentHealth) {
+function makeItem(name: string, c: ComponentHealth | null | undefined) {
+  const safe = safeComponentHealth(c)
+  if (!safe) {
+    return {
+      name,
+      ok: false,
+      latency: null,
+      info: '数据不可用',
+    }
+  }
   const parts: string[] = []
-  if (c.detail) parts.push(c.detail)
+  if (safe.detail) parts.push(safe.detail)
   return {
     name,
-    ok: c.status === 'ok',
-    latency: c.latency_ms != null ? `${c.latency_ms.toFixed(0)} ms` : null,
+    ok: safe.status === 'ok',
+    latency: safe.latency_ms != null ? `${safe.latency_ms.toFixed(0)} ms` : null,
     info: parts.join(' | ') || null,
   }
 }

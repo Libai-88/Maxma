@@ -16,7 +16,7 @@
   --space-40: 2.5rem;     /* 40px */
 
   /* ── 字号层级 ── */
-  --fs-title:   1rem;       /* 区块标题 */
+  --fs-title:   1.05rem;    /* 区块标题 */
   --fs-body:    0.9rem;     /* 正文 */
   --fs-ui:      0.82rem;    /* 次级 UI */
   --fs-caption: 0.78rem;    /* 控件 */

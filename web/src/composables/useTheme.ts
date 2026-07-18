@@ -128,15 +128,20 @@ const storedTheme = ref<ThemeId>(loadStoredTheme())
 const systemMql = window.matchMedia('(prefers-color-scheme: dark)')
 const systemIsDark = ref(systemMql.matches)
 
-// 监听系统主题变化
+// 监听系统主题变化（使用 systemMql 自身属性标记，避免 HMR 重复注册）
 function onSystemThemeChange(e: MediaQueryListEvent) {
   systemIsDark.value = e.matches
 }
-systemMql.addEventListener('change', onSystemThemeChange)
+// 在 MediaQueryList 对象上挂载标记，此对象在 HMR 中存活，可防重复注册
+if (!(systemMql as Record<string, unknown>)._themeListenerAttached) {
+  systemMql.addEventListener('change', onSystemThemeChange)
+  ;(systemMql as Record<string, unknown>)._themeListenerAttached = true
+}
 
 /** 移除系统主题变化监听器（用于清理 / HMR / 测试） */
 export function cleanupThemeListener() {
   systemMql.removeEventListener('change', onSystemThemeChange)
+  ;(systemMql as Record<string, unknown>)._themeListenerAttached = false
 }
 
 /** 当前实际生效的主题（auto 解析后） */
@@ -150,7 +155,11 @@ const activeTheme = computed<ThemeId>(() => {
 /** 当前是否暗色（供 StickerInline 等使用） */
 const isDark = computed(() => {
   const t = activeTheme.value
-  return THEMES.find(m => m.id === t)?.isDark ?? false
+  const found = THEMES.find(m => m.id === t)
+  if (!found) {
+    console.warn(`[useTheme] 主题 ID "${t}" 未在 THEMES 表中找到，回退到 isDark=false`)
+  }
+  return found?.isDark ?? false
 })
 
 function loadStoredTheme(): ThemeId {

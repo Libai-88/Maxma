@@ -112,6 +112,19 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
 
+/** requestAnimationFrame 节流包装，避免 scroll/resize 高频触发 layout */
+function rafThrottle<T extends (...args: unknown[]) => void>(fn: T): T {
+  let ticking = false
+  return ((...args: unknown[]) => {
+    if (ticking) return
+    ticking = true
+    requestAnimationFrame(() => {
+      ticking = false
+      fn(...args)
+    })
+  }) as T
+}
+
 interface DsSelectOption {
   value: string | number
   label: string
@@ -136,7 +149,7 @@ const props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{
-  'update:modelValue': [value: string | number]
+  'update:modelValue': [value: string | number | null]
   open: []
   close: []
 }>()
@@ -213,8 +226,8 @@ function openList() {
   activeIndex.value = sel >= 0 ? sel : firstEnabled
   emit('open')
   nextTick(updatePopupPosition)
-  window.addEventListener('scroll', updatePopupPosition, true)
-  window.addEventListener('resize', updatePopupPosition)
+  window.addEventListener('scroll', throttledUpdate, true)
+  window.addEventListener('resize', throttledUpdate)
   document.addEventListener('mousedown', onOutsideClick, true)
 }
 
@@ -223,8 +236,8 @@ function closeList(restoreFocus = true) {
   open.value = false
   activeIndex.value = -1
   emit('close')
-  window.removeEventListener('scroll', updatePopupPosition, true)
-  window.removeEventListener('resize', updatePopupPosition)
+  window.removeEventListener('scroll', throttledUpdate, true)
+  window.removeEventListener('resize', throttledUpdate)
   document.removeEventListener('mousedown', onOutsideClick, true)
   if (restoreFocus && inputRef.value) {
     // 让 input 重新获得焦点，便于继续键盘操作
@@ -252,6 +265,7 @@ function updatePopupPosition() {
     'max-width': `${Math.min(window.innerWidth - 8, r.width * 1.5)}px`,
   }
 }
+const throttledUpdate = rafThrottle(updatePopupPosition)
 
 function onOutsideClick(e: MouseEvent) {
   const t = e.target as Node
@@ -391,8 +405,8 @@ watch(() => props.modelValue, () => {
 })
 
 onUnmounted(() => {
-  window.removeEventListener('scroll', updatePopupPosition, true)
-  window.removeEventListener('resize', updatePopupPosition)
+  window.removeEventListener('scroll', throttledUpdate, true)
+  window.removeEventListener('resize', throttledUpdate)
   document.removeEventListener('mousedown', onOutsideClick, true)
   if (typeAheadTimer) clearTimeout(typeAheadTimer)
 })
@@ -433,6 +447,7 @@ defineExpose({ openList, closeList, toggle })
 .ds-select__input:focus-visible,
 .ds-select__input:focus {
   border-color: var(--accent);
+  box-shadow: none;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent);
   cursor: text;
 }
@@ -495,9 +510,13 @@ defineExpose({ openList, closeList, toggle })
   user-select: none;
   line-height: 1.4;
   scroll-margin: 4px;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 .ds-select__option.is-active {
   background: var(--bg-secondary);
+}
+.ds-select__option:hover {
+  background: var(--overlay-subtle);
 }
 .ds-select__option.is-selected {
   color: var(--accent);

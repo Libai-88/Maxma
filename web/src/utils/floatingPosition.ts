@@ -66,14 +66,18 @@ export function computeFloatingInputPosition(
   left = Math.max(VIEWPORT_PADDING, Math.min(left, viewportW - width - VIEWPORT_PADDING))
   top = Math.max(VIEWPORT_PADDING, Math.min(top, viewportH - height - VIEWPORT_PADDING))
 
-  // 如果 preferredPlacement 被截断，调整 origin
+  // 如果 preferredPlacement 被截断，翻转方向
   if (preferredPlacement === 'top' && top > anchorRect.top - height) {
     origin = 'center top'
     top = anchorRect.bottom + 8
+    // 翻转后重新 clamp，避免新位置仍超出视口
+    top = Math.max(VIEWPORT_PADDING, Math.min(top, viewportH - height - VIEWPORT_PADDING))
   }
   if (preferredPlacement === 'bottom' && top < anchorRect.bottom) {
     origin = 'center bottom'
     top = anchorRect.top - height - 8
+    // 翻转后重新 clamp，避免新位置仍超出视口
+    top = Math.max(VIEWPORT_PADDING, Math.min(top, viewportH - height - VIEWPORT_PADDING))
   }
 
   return { left, top, origin }

@@ -29,7 +29,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { StickerSegment } from '@/composables/useStickerSegments'
-import { useNightModeState } from '@/composables/useNightMode'
+import { useTheme } from '@/composables/useTheme'
 import { useFPSMonitor, useStickerPerformance } from '@/composables/useStickerPerformance'
 
 defineProps<{ sticker: StickerSegment }>()
@@ -44,7 +44,7 @@ const posterSrc = ref('')
 
 const { isVisible } = useStickerPerformance(rootRef)
 const { isLowPerformance } = useFPSMonitor()
-const { isNightMode } = useNightModeState()
+const { isDark: isNightMode } = useTheme()
 
 const shouldUsePoster = computed(() =>
   Boolean(posterSrc.value) && (!isVisible.value || isLowPerformance.value || isNightMode.value)

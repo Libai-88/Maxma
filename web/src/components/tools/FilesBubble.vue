@@ -103,7 +103,7 @@
               :key="i"
               class="item-row"
             >
-              <span class="item-icon">{{ item.type === 'directory' ? '&#128193;' : '&#128196;' }}</span>
+              <span class="item-icon">{{ item.type === 'directory' ? '📁' : '📄' }}</span>
               <span class="item-name">{{ item.name }}</span>
               <span class="item-size" v-if="item.size_bytes != null">{{ formatSize(item.size_bytes) }}</span>
             </div>
@@ -252,7 +252,7 @@ const totalItems = computed(() => {
 
 const dirName = computed(() => {
   const path = (td.value.directory_path as string) || (td.value.search_directory as string) || ''
-  const parts = path.split('/').filter(Boolean)
+  const parts = path.split(/[/\\]/).filter(Boolean)
   return parts[parts.length - 1] || path
 })
 
@@ -577,7 +577,7 @@ function copyContent() {
 
 .action-btn:hover {
   background: var(--bg-secondary);
-  border-color: var(--accent-light);
+  border-color: var(--accent-dark);
 }
 
 /* ── 运行中 / 错误 / 降级 ── */
@@ -596,17 +596,10 @@ function copyContent() {
   border: 2px solid var(--border);
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: spin 0.6s linear infinite;
+  animation: maxma-spin 0.6s linear infinite;
   flex-shrink: 0;
 }
 
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.bubble-error {
-  font-size: 13px;
-  color: #b91c1c;
-  padding: 4px 0;
-}
 
 .raw-output {
   font-family: 'SF Mono', 'Consolas', monospace;

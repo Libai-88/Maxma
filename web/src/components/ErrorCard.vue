@@ -99,6 +99,7 @@ async function copyDiagnostic() {
 .error-card {
   border: 1px solid var(--border);
   border-radius: var(--radius, 10px);
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-error) 8%, var(--bg-card));
   padding: 12px 16px;
   margin: 8px 0;

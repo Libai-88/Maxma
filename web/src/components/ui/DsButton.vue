@@ -21,7 +21,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { watchEffect } from 'vue'
 
 const props = withDefaults(defineProps<{
   variant?: 'default' | 'primary' | 'danger' | 'ghost' | 'subtle' | 'success'
@@ -51,8 +51,8 @@ function onClick(e: MouseEvent) {
 }
 
 // 仅用于在 dev 模式下提醒：iconOnly 必须配 ariaLabel
-// 在生产构建中被 tree-shake（运行时不输出）
-void computed(() => {
+// 生产构建中不会执行此 warn
+watchEffect(() => {
   if (props.iconOnly && !props.ariaLabel) {
     // eslint-disable-next-line no-console
     console.warn('[DsButton] iconOnly 模式必须提供 ariaLabel')
@@ -70,6 +70,10 @@ void computed(() => {
   color: var(--text-secondary);
 }
 .ds-btn--ghost:hover:not(:disabled) {
+  /* color-mix 回退：不支持时使用半透明黑；现代浏览器走第二行 */
+  background: rgba(0, 0, 0, 0.06);
+  background: transparent;
+  background: transparent;
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
   border-color: transparent;
   color: var(--text-primary);
@@ -81,6 +85,9 @@ void computed(() => {
   color: var(--text-primary);
 }
 .ds-btn--subtle:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.1);
+  background: transparent;
+  background: transparent;
   background: color-mix(in srgb, var(--text-primary) 10%, transparent);
 }
 

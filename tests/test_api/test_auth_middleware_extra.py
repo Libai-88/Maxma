@@ -136,15 +136,60 @@ async def test_auth_token_endpoint_whitelist():
 
 @pytest.mark.asyncio
 async def test_stickers_prefix_whitelist():
-    """/api/stickers 前缀白名单放行。"""
+    """图片资源路径 /api/stickers/{category}/{filename} 白名单放行。"""
     inner = _InnerApp()
     mw = AuthMiddleware(inner)
     rec = _Recorder()
 
-    scope = _http_scope(path="/api/stickers/smile.png", app_ref=_AppRef())
+    scope = _http_scope(path="/api/stickers/smile/happy.webp", app_ref=_AppRef())
     await mw(scope, _http_receive, rec)
 
     assert len(inner.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_stickers_random_whitelist():
+    """随机表情路径 /api/stickers/random/{category} 白名单放行（前端用裸 fetch）。"""
+    inner = _InnerApp()
+    mw = AuthMiddleware(inner)
+    rec = _Recorder()
+
+    scope = _http_scope(path="/api/stickers/random/开心", app_ref=_AppRef())
+    await mw(scope, _http_receive, rec)
+
+    assert len(inner.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_stickers_sensitive_get_requires_auth():
+    """敏感端点 /api/stickers/favorites (GET) 必须鉴权，不能被前缀白名单放行。"""
+    inner = _InnerApp()
+    mw = AuthMiddleware(inner)
+    rec = _Recorder()
+
+    scope = _http_scope(path="/api/stickers/favorites", app_ref=_AppRef())
+    await mw(scope, _http_receive, rec)
+
+    assert len(inner.calls) == 0
+    starts = [m for m in rec.messages if m.get("type") == "http.response.start"]
+    assert len(starts) == 1
+    assert starts[0]["status"] == 401
+
+
+@pytest.mark.asyncio
+async def test_stickers_recent_requires_auth():
+    """/api/stickers/recent (GET) 必须鉴权。"""
+    inner = _InnerApp()
+    mw = AuthMiddleware(inner)
+    rec = _Recorder()
+
+    scope = _http_scope(path="/api/stickers/recent", app_ref=_AppRef())
+    await mw(scope, _http_receive, rec)
+
+    assert len(inner.calls) == 0
+    starts = [m for m in rec.messages if m.get("type") == "http.response.start"]
+    assert len(starts) == 1
+    assert starts[0]["status"] == 401
 
 
 # ── HTTP 401 reject (行 96-100) ──

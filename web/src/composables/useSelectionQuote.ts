@@ -19,6 +19,10 @@ const quotedSelections = ref<QuotedSelection[]>([])
 
 let selectionChangeTimer: ReturnType<typeof setTimeout> | null = null
 
+/** 引用计数器：跟踪 useSelectionQuote 活跃实例数 */
+let instanceCount = 0
+let listenersRegistered = false
+
 function getSelectionSource(): string {
   // 通过 data-source 属性或最近的 cite-source 元素判断来源
   const selection = window.getSelection()
@@ -113,13 +117,22 @@ function clearQuotes() {
 }
 
 export function useSelectionQuote() {
+  // 单次注册监听器：使用引用计数避免 HMR 或重复调用导致重复监听
   onMounted(() => {
-    document.addEventListener('selectionchange', onSelectionChange)
-    document.addEventListener('mouseup', onMouseUp)
+    instanceCount++
+    if (!listenersRegistered) {
+      document.addEventListener('selectionchange', onSelectionChange)
+      document.addEventListener('mouseup', onMouseUp)
+      listenersRegistered = true
+    }
   })
   onUnmounted(() => {
-    document.removeEventListener('selectionchange', onSelectionChange)
-    document.removeEventListener('mouseup', onMouseUp)
+    instanceCount--
+    if (instanceCount <= 0 && listenersRegistered) {
+      document.removeEventListener('selectionchange', onSelectionChange)
+      document.removeEventListener('mouseup', onMouseUp)
+      listenersRegistered = false
+    }
     if (selectionChangeTimer) clearTimeout(selectionChangeTimer)
   })
 

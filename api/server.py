@@ -15,7 +15,10 @@ from fastapi.staticfiles import StaticFiles
 
 from api.auth import load_or_create_token
 from api.cors_config import build_cors_origins
-from api.routes import chat, sessions, persona, skills, memory, mcp, tool_stats, providers
+from api.middleware import RequestLogMiddleware
+from api.middleware.auth import AuthMiddleware
+from api.routes import chat, sessions, persona, skills, memory, mcp, tools, providers
+from api.routes import macros as macros_router
 from api.routes import activity as activity_router
 from api.routes import audit_log as audit_log_router
 from api.routes import autonomy as autonomy_router
@@ -86,6 +89,12 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # 认证中间件 — 校验 X-Maxma-Token header（HTTP）或 WebSocket subprotocol。
+    # 必须在 CORS 之后 add（LIFO 栈：后 add 先执行），使 CORS 预检请求先于 Auth 处理；
+    # /api/health 和 /api/auth/token 在白名单中放行，桌面端启动时先取 token 再带 header。
+    app.add_middleware(AuthMiddleware)
+    # 请求日志 + 指标采集中间件 — 记录每个 HTTP 请求的方法/路径/状态码/耗时到 Metrics 单例
+    app.add_middleware(RequestLogMiddleware)
 
     # REST routes
     app.include_router(sessions.router, prefix="/api")
@@ -94,8 +103,9 @@ def create_app() -> FastAPI:
     app.include_router(skills.router, prefix="/api")
     app.include_router(memory.router, prefix="/api")
     app.include_router(mcp.router, prefix="/api")
-    app.include_router(tool_stats.router, prefix="/api")
+    app.include_router(tools.router, prefix="/api")
     app.include_router(providers.router, prefix="/api")
+    app.include_router(macros_router.router, prefix="/api")
     app.include_router(stickers_router.router, prefix="/api")
     app.include_router(sticker_favorites_router.router, prefix="/api")
     app.include_router(sticker_upload_router.router, prefix="/api")

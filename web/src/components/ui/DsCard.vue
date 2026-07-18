@@ -10,7 +10,7 @@ defineProps<{ hoverable?: boolean }>()
 
 <style scoped>
 .ds-card--hover:hover {
-  border-color: var(--accent-light);
+  border-color: var(--accent-dark);
   box-shadow: var(--shadow-sm);
 }
 </style>

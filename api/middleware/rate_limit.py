@@ -217,6 +217,12 @@ _RATE_LIMIT_SKIP_PREFIXES = (
     "/api/diagnostics",
 )
 
+# 可信代理 IP 列表（配置项，生产环境应设置为实际的反向代理 IP）
+_TRUSTED_PROXIES: frozenset[str] = frozenset({
+    "127.0.0.1",          # 本地代理
+    "::1",                # 本地代理 IPv6
+})
+
 
 class RateLimitMiddleware:
     """ASGI 中间件 — HTTP 请求按 IP 限流。
@@ -271,11 +277,22 @@ class RateLimitMiddleware:
 
     @staticmethod
     def _get_client_ip(scope) -> str:
-        """从 ASGI scope 提取客户端 IP。"""
+        """从 ASGI scope 提取客户端 IP。
+
+        优先使用 TCP 直连地址（scope.client），仅在配置了可信代理列表时
+        信任 X-Forwarded-For 头，防止客户端伪造 IP 绕过限流。
+        """
         client = scope.get("client")
         if client:
-            return str(client[0])
-        # 代理场景：X-Forwarded-For
+            peer_ip = str(client[0])
+            # 仅当直连 IP 在已知代理列表内时才信任 X-Forwarded-For
+            if peer_ip in _TRUSTED_PROXIES:
+                headers = dict(scope.get("headers", []))
+                xff = headers.get(b"x-forwarded-for", b"")
+                if xff:
+                    return str(xff.decode().split(",")[0].strip())
+            return peer_ip
+        # 无 scope.client（非标准 ASGI server）时 fallback
         headers = dict(scope.get("headers", []))
         xff = headers.get(b"x-forwarded-for", b"")
         if xff:

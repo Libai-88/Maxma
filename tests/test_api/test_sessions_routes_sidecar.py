@@ -438,6 +438,43 @@ class TestUndoWithSidecar:
             {"type": "ai", "content": "a"},
         ]
 
+    def test_undo_const_syncs_yaml_with_updated_message_count(self, app_with_sidecar, monkeypatch):
+        """const 会话 undo 后，YAML 持久化的 metadata.message_count 应反映
+        扣减后的新值，而非旧值（避免内存与磁盘状态不一致）。
+        """
+        app = app_with_sidecar["app"]
+        sm = app.state.session_manager
+        session = _FakeSession(session_id="s1", message_count=5, is_const=True, const_name="c1")
+        sm._sessions["s1"] = session
+
+        _patch_session_map(monkeypatch, sidecar_id="sc-1")
+
+        saved = {"meta": None}
+
+        def fake_save(sid, name, meta, msgs):
+            saved["meta"] = meta
+
+        monkeypatch.setattr("api.const_session_store.save_const_session", fake_save)
+
+        client = app_with_sidecar["rpc_client"]
+
+        async def fake_call(method, params=None, **kwargs):
+            if method == "undo":
+                return {"removed": 2}
+            if method == "get_messages":
+                return {"messages": []}
+            return {}
+
+        client.call = fake_call
+
+        resp = app_with_sidecar["client"].post("/sessions/s1/undo?n=2")
+        assert resp.status_code == 200
+        # 内存中的 message_count 已扣减
+        assert session.message_count == 3
+        # YAML 持久化的 metadata 也应是扣减后的值
+        assert saved["meta"] is not None
+        assert saved["meta"]["message_count"] == 3
+
     def test_undo_sidecar_exception_returns_503(self, app_with_sidecar, monkeypatch):
         app = app_with_sidecar["app"]
         sm = app.state.session_manager

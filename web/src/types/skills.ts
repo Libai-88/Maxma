@@ -6,6 +6,7 @@ export interface SkillInfo {
   description: string
   path: string
   source: 'builtin' | 'user'
+  enabled?: boolean
 }
 
 export interface SkillDetail {
@@ -38,6 +39,7 @@ export interface MacroInfo {
   description: string
   path: string
   source: 'builtin' | 'user'
+  enabled?: boolean
 }
 
 export interface MacroDetail {

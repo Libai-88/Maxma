@@ -10,7 +10,7 @@
 }
 
 .tool-bubble.running {
-  border-color: var(--accent-light);
+  border-color: var(--accent-dark);
 }
 
 .tool-bubble.error {
@@ -99,7 +99,7 @@
 
 .action-btn:hover {
   background: var(--bg-secondary);
-  border-color: var(--accent-light);
+  border-color: var(--accent-dark);
 }
 
 .action-btn.primary {

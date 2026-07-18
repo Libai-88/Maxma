@@ -1,5 +1,5 @@
 // web/src/composables/useMediaTransform.ts
-import { ref, computed } from 'vue'
+import { ref, computed, readonly } from 'vue'
 
 interface Transform {
   scale: number
@@ -20,7 +20,7 @@ export function useMediaTransform() {
   let dragStartY = 0
   let dragStartTx = 0
   let dragStartTy = 0
-  let hasMoved = false
+  const hasMoved = ref(false)
 
   const transformStyle = computed(() =>
     `translate(${transform.value.x}px, ${transform.value.y}px) scale(${transform.value.scale})`
@@ -63,7 +63,7 @@ export function useMediaTransform() {
   function onPointerDown(e: PointerEvent) {
     if (e.button !== 0) return
     isDragging.value = true
-    hasMoved = false
+    hasMoved.value = false
     dragStartX = e.clientX
     dragStartY = e.clientY
     dragStartTx = transform.value.x
@@ -76,7 +76,7 @@ export function useMediaTransform() {
     const dx = e.clientX - dragStartX
     const dy = e.clientY - dragStartY
     if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
-      hasMoved = true
+      hasMoved.value = true
     }
     transform.value.x = dragStartTx + dx
     transform.value.y = dragStartTy + dy
@@ -90,8 +90,10 @@ export function useMediaTransform() {
   /** 双击：在 fit 和 1x 之间切换 */
   function onDoubleClick(fitScale: number) {
     if (transform.value.scale > fitScale * 1.1) {
-      reset()
+      // 已放大超出 fit → 回到 fit
+      transform.value = { scale: fitScale, x: 0, y: 0 }
     } else {
+      // 在 fit 或更小 → 放大到 1x
       transform.value = { scale: 1, x: 0, y: 0 }
     }
   }
@@ -107,7 +109,7 @@ export function useMediaTransform() {
     transform,
     isDragging,
     transformStyle,
-    hasMoved: computed(() => hasMoved),
+    hasMoved: readonly(hasMoved),
     reset,
     computeFitScale,
     setScale,

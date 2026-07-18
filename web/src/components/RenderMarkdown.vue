@@ -9,6 +9,11 @@ import { renderMarkdown, renderMarkdownRaw, contentNeedsIsolation } from '@/util
 import HtmlSandbox from './HtmlSandbox.vue'
 import { useMediaViewer } from '@/composables/useMediaViewer'
 
+// 按需加载 KaTeX CSS（仅在首次渲染 Markdown 组件时注入）
+import('katex/dist/katex.min.css').catch((err) => {
+  console.warn('[RenderMarkdown] KaTeX CSS 加载失败，数学公式可能显示异常:', err)
+})
+
 const { open } = useMediaViewer()
 
 function onImageClick(e: MouseEvent) {
@@ -72,7 +77,7 @@ const useSandbox = computed(() => {
     return contentNeedsIsolation(props.content)
   } catch (e) {
     console.error('[RenderMarkdown] contentNeedsIsolation 检测异常:', e)
-    return false // 降级：不启用沙箱
+    return true // 无法确定时启用沙箱（安全降级）
   }
 })
 </script>

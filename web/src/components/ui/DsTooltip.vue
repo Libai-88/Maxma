@@ -78,6 +78,16 @@ function show(e: Event) {
   }, props.delay)
 }
 
+/** 键盘焦点展示（无 delay，即时响应） */
+function showImmediate(e: Event) {
+  triggerEl = e.currentTarget as HTMLElement
+  if (showTimer) clearTimeout(showTimer)
+  visible.value = true
+  nextTick(updatePosition)
+  window.addEventListener('scroll', onScroll, true)
+  window.addEventListener('resize', onScroll)
+}
+
 function hide() {
   if (showTimer) { clearTimeout(showTimer); showTimer = null }
   visible.value = false
@@ -87,7 +97,7 @@ function hide() {
 
 function onScroll() { if (visible.value) updatePosition() }
 
-defineExpose({ show, hide })
+defineExpose({ show, showImmediate, hide })
 
 onUnmounted(() => {
   if (showTimer) clearTimeout(showTimer)

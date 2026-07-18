@@ -17,14 +17,14 @@
 
         <div v-if="pages.length" class="te-tabs">
           <button v-for="(p, i) in pages" :key="i" class="te-tab" :class="{ active: tab === i }" @click="tab = i">
-            {{ p.title || p.url.slice(0, 28) + '…' }}
+            {{ p.title || (p.url ? p.url.slice(0, 28) + '…' : '未命名') }}
           </button>
         </div>
 
         <div v-if="page" class="te-card">
           <div class="te-card-head">
-            <a class="te-card-title" :href="page.url" target="_blank" rel="noopener noreferrer" @click.prevent="openUrl(page.url)">{{ page.title || page.url }}</a>
-            <div class="te-card-url">{{ page.url }}</div>
+            <a class="te-card-title" :href="page.url || '#'" target="_blank" rel="noopener noreferrer" @click.prevent="openUrl(page.url)">{{ page.title || page.url || '未命名' }}</a>
+            <div v-if="page.url" class="te-card-url">{{ page.url }}</div>
           </div>
 
           <div v-if="page.images?.length" class="te-imgs">
@@ -64,6 +64,7 @@ import { computed, ref } from 'vue'
 import type { ToolCall } from '@/types'
 import { openExternal } from '@/utils/env'
 import BubbleChrome from './_shared/BubbleChrome.vue'
+import { hasObjectKeys } from './_shared/displayNames'
 
 const props = defineProps<{ toolCall: ToolCall }>()
 const emit = defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()
@@ -79,7 +80,7 @@ const td = computed<Record<string, any>>(() => {
   return {}
 })
 
-const hasData = computed(() => Object.keys(td.value).length > 0)
+const hasData = computed(() => hasObjectKeys(td.value))
 const responseTime = computed(() => td.value.response_time ?? 0)
 
 const pages = computed<Array<Record<string, any>>>(() => Array.isArray(td.value.results) ? td.value.results : [])

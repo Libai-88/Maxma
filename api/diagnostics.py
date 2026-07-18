@@ -319,7 +319,7 @@ class ErrorCollector:
             if not log_file.exists():
                 continue
             try:
-                with open(log_file, "r", encoding="utf-8") as f:
+                with open(log_file, "r", encoding="utf-8", errors="replace") as f:
                     for line_num, line in enumerate(f, 1):
                         line = line.strip()
                         if not line:

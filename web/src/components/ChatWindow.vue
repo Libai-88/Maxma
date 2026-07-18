@@ -151,9 +151,9 @@
         <!-- 错误提示 -->
         <div v-if="error" class="error-banner" :class="'error-' + (errorCategory || 'system')">
           <span class="error-icon">
-            <template v-if="errorCategory === 'user_error'">️</template>
-            <template v-else-if="errorCategory === 'tool_error'"></template>
-            <template v-else-if="errorCategory === 'rate_limit'"></template>
+            <template v-if="errorCategory === 'user_error'">⚠️</template>
+            <template v-else-if="errorCategory === 'tool_error'">🔧</template>
+            <template v-else-if="errorCategory === 'rate_limit'">⏳</template>
             <template v-else-if="errorCategory === 'cancelled'">⛔</template>
             <template v-else>❌</template>
           </span>
@@ -163,6 +163,16 @@
             <span v-if="copySuccess" class="copy-success">✓</span>
             <span v-else class="copy-icon"></span>
           </button>
+        </div>
+
+        <!-- 骨架屏：AI 正在生成回复 -->
+        <div v-if="showSkeleton" class="message-skeleton" aria-label="AI 正在生成回复">
+          <div class="skeleton-avatar"></div>
+          <div class="skeleton-lines">
+            <div class="skeleton-line skeleton-line--1"></div>
+            <div class="skeleton-line skeleton-line--2"></div>
+            <div class="skeleton-line skeleton-line--3"></div>
+          </div>
         </div>
 
         <!-- 流式输出打字指示器 -->
@@ -178,7 +188,7 @@
 
       <template #empty>
         <!-- 空状态 -->
-        <div v-if="turns.length === 0 && !currentTurn" class="empty-state">
+        <div v-if="turns.length === 0 && !currentTurn" class="empty-state" :style="emptyStateStyle">
           <div class="empty-state-overlay"></div>
           <div class="empty-state-content">
             <div class="empty-state-text">
@@ -232,6 +242,7 @@ import type { ChatTurn } from '@/types'
 import type { ParsedRef } from '@/utils/references'
 import { api } from '@/api'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useTheme } from '@/composables/useTheme'
 import type { ContextMenuItem } from './ContextMenu.vue'
 import ContextMenu from './ContextMenu.vue'
 import MessageBubble from './MessageBubble.vue'
@@ -246,17 +257,29 @@ import { chatSessionAliveCache } from '@/composables/sessionAliveCache'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   sessionId: string
   turns: ChatTurn[]
   currentTurn: ChatTurn | null
   error: string | null
   errorCategory: 'user_error' | 'tool_error' | 'system_error' | 'rate_limit' | 'cancelled' | null
   errorTraceId: string | null
-}>()
+}>(), {
+  turns: () => [],
+  currentTurn: null,
+  error: null,
+  errorCategory: null,
+  errorTraceId: null,
+})
 
 // 错误日志一键复制（调用后端 ErrorCollector 获取完整报告）
+const { isDark } = useTheme()
 const copySuccess = ref(false)
+
+const emptyStateStyle = computed(() => ({
+  '--empty-bg-image': `url('@/assets/images/brand/empty-bg-${isDark.value ? 'night' : 'day'}.jpg')`,
+}))
+
 async function copyErrorLog() {
   let text: string
   try {
@@ -339,6 +362,10 @@ const currentTurnHasVisibleActivity = computed(() => {
 
 const showTypingIndicator = computed(() =>
   Boolean(props.currentTurn) && typingDelayElapsed.value && !currentTurnHasVisibleActivity.value
+)
+
+const showSkeleton = computed(() =>
+  Boolean(props.currentTurn) && !currentTurnHasVisibleActivity.value
 )
 
 /** DynamicScroller 根元素的 scroll 事件：维护 isNearBottomRef 状态。
@@ -652,6 +679,8 @@ function closeContextMenu() {
   padding: 6px 12px;
   margin: 2px 0;
   border-left: 2px solid var(--border);
+  background: transparent;
+  background: transparent;
   background: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
   border-radius: 4px;
   font-size: 0.82em;
@@ -672,7 +701,7 @@ function closeContextMenu() {
   height: 100%;
   padding: 0 48px 40px 48px;
   gap: 16px;
-  background-image: url('@/assets/images/brand/empty-bg-day.jpg');
+  background-image: var(--empty-bg-image, url('@/assets/images/brand/empty-bg-day.jpg'));
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -820,6 +849,8 @@ function closeContextMenu() {
 }
 .error-copy-btn:hover {
   opacity: 1;
+  background: transparent;
+  background: transparent;
   background: color-mix(in srgb, currentColor 10%, transparent);
 }
 .error-copy-btn .copy-icon {
@@ -837,37 +868,48 @@ function closeContextMenu() {
 }
 /* 用户错误：黄色警告 */
 .error-banner.error-user_error {
+  background: var(--bg-card);
   background: color-mix(in srgb, #f59e0b 10%, var(--bg-card));
+  border: 1px solid transparent;
   border: 1px solid color-mix(in srgb, #f59e0b 30%, transparent);
   color: var(--status-warn);
 }
 /* 工具错误：橙色 */
 .error-banner.error-tool_error {
+  background: var(--bg-card);
   background: color-mix(in srgb, #f97316 10%, var(--bg-card));
+  border: 1px solid transparent;
   border: 1px solid color-mix(in srgb, #f97316 30%, transparent);
   color: #f97316;
 }
 /* 系统错误：红色 */
 .error-banner.error-system_error {
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-error) 10%, var(--bg-card));
+  border: 1px solid transparent;
   border: 1px solid color-mix(in srgb, var(--status-error) 25%, transparent);
   color: var(--status-error);
 }
 /* 限流错误：蓝色 */
 .error-banner.error-rate_limit {
+  background: var(--bg-card);
   background: color-mix(in srgb, #3b82f6 10%, var(--bg-card));
+  border: 1px solid transparent;
   border: 1px solid color-mix(in srgb, #3b82f6 25%, transparent);
   color: #3b82f6;
 }
 /* 取消：灰色 */
 .error-banner.error-cancelled {
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--text-secondary) 8%, var(--bg-card));
   border: 1px solid var(--border);
   color: var(--text-secondary);
 }
 /* 默认/系统错误 */
 .error-banner.error-system {
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-error) 10%, var(--bg-card));
+  border: 1px solid transparent;
   border: 1px solid color-mix(in srgb, var(--status-error) 25%, transparent);
   color: var(--status-error);
 }
@@ -916,7 +958,7 @@ function closeContextMenu() {
 }
 
 .scroll-mark:active {
-  background: var(--accent-light);
+  background: var(--accent-dark);
 }
 
 /* ── 助手侧容器：默认隐藏记忆日志，hover 整个区域才显示 ── */
@@ -1062,10 +1104,60 @@ function closeContextMenu() {
   }
 }
 
+/* ── 骨架屏：AI 回复加载占位 ── */
+.message-skeleton {
+  display: flex;
+  gap: 12px;
+  padding: 12px 24px;
+  align-items: flex-start;
+}
+.skeleton-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  flex-shrink: 0;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+.skeleton-lines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+}
+.skeleton-line {
+  height: 12px;
+  border-radius: 6px;
+  background: var(--bg-card);
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+.skeleton-line--1 { width: 85%; }
+.skeleton-line--2 { width: 65%; }
+.skeleton-line--3 { width: 40%; }
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+/* ── 空状态文字浮动动画 ── */
+.empty-desc {
+  animation: empty-float 3s ease-in-out infinite;
+}
+@keyframes empty-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .typewriter-cursor,
   .memory-spinner,
-  .typing-dot {
+  .typing-dot,
+  .message-skeleton * {
+    animation: none;
+  }
+  .empty-desc {
     animation: none;
   }
 

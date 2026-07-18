@@ -1,7 +1,7 @@
 <template>
   <div class="appearance-view">
     <div class="header">
-      <h2>外观</h2>
+      <h2>外观 APPEARANCE</h2>
     </div>
 
     <!-- 主题 -->

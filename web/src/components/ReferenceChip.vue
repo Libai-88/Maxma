@@ -28,6 +28,8 @@ const tooltip = computed(() => cfg.value?.tooltip(props.chip) ?? props.chip.labe
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
+  background: transparent;
+  background: transparent;
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
   border-radius: 5px;
   font-size: 11px;

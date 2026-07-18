@@ -4,6 +4,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="MaxmaHere Splash" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self';" />
   <title>MaxmaHere</title>
   <style>
     body {
@@ -13,26 +15,40 @@
       justify-content: center;
       height: 100vh;
       font-family: 'Songti SC', 'Georgia', serif;
-      background: #F4F0E4;
+      background: linear-gradient(135deg, #F8F4ED 0%, #F0E8DA 50%, #EAE0D0 100%);
       border-radius: 12px;
-      animation: fadeIn 0.3s ease-out;
       -webkit-app-region: drag;
       user-select: none;
     }
     .splash-sakura {
       width: 64px;
       height: 64px;
-      animation: spin 4s linear infinite;
+      animation: spin 4s linear infinite, fadeInUp 0.8s ease-out both;
     }
     .splash-text {
       position: absolute;
-      bottom: 32px;
+      bottom: 48px;
       font-size: 13px;
       color: #888;
       letter-spacing: 2px;
+      animation: fadeIn 0.6s ease-out, pulseText 3s ease-in-out infinite;
+    }
+    .splash-tagline {
+      position: absolute;
+      bottom: 16px;
+      font-size: 11px;
+      color: rgba(83, 125, 150, 0.35);
+      letter-spacing: 3px;
+      animation: fadeIn 0.8s ease-out;
     }
     @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes fadeInUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes pulseText { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) {
+      .splash-sakura { animation: none; }
+      .splash-text { animation: fadeIn 0.3s ease-out; }
+    }
   </style>
 </head>
 <body>
@@ -48,6 +64,6 @@
     <ellipse cx="19" cy="19" rx="10" ry="7" fill="#537D96" opacity="0.3" transform="rotate(45 19 19)"/>
   </svg>
   <div class="splash-text">MaxmaHere</div>
-  <script type="module" src="/src/splash/main.ts"></script>
+  <div class="splash-tagline">温润如纸 · 智能如你</div>
 </body>
 </html>

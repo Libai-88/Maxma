@@ -17,6 +17,19 @@ router = APIRouter()
 
 _FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n?(.*)$", re.DOTALL)
 
+# 宏 ID/名称安全校验：仅允许字母、数字、下划线、连字符，
+# 防止路径穿越（..、/、\）导致越权创建/删除/覆盖任意目录的文件。
+_MACRO_ID_RE = re.compile(r'^[A-Za-z0-9_\-]+$')
+
+
+def _validate_macro_id(macro_id: str) -> None:
+    """校验宏 ID/名称，拒绝路径穿越和特殊字符。"""
+    if not macro_id or not _MACRO_ID_RE.match(macro_id):
+        raise HTTPException(
+            status_code=400,
+            detail="宏名称只能包含字母、数字、下划线和连字符",
+        )
+
 
 def _parse_frontmatter_fields(fm_text: str) -> dict[str, str]:
     """解析 frontmatter 键值对（name: "x" / description: "y"）。"""
@@ -100,6 +113,7 @@ async def list_macros():
 @router.get("/macros/{macro_id}")
 async def get_macro(macro_id: str):
     """获取单个宏详情（含 content），user 优先于 builtin。"""
+    _validate_macro_id(macro_id)
     found = _find_macro(macro_id)
     if not found:
         raise HTTPException(404, f"Macro '{macro_id}' not found")
@@ -120,6 +134,7 @@ async def create_macro(body: dict):
     name = (body.get("name") or "").strip()
     if not name:
         raise HTTPException(400, "name is required")
+    _validate_macro_id(name)
     macro_dir = MACROS_DATA_DIR / name
     macro_file = macro_dir / "MACRO.md"
     if macro_file.exists():
@@ -140,6 +155,7 @@ async def create_macro(body: dict):
 @router.put("/macros/{macro_id}")
 async def update_macro(macro_id: str, body: dict):
     """更新宏。部分字段更新，未提供则保留原值。builtin 宏提升到 user 目录。"""
+    _validate_macro_id(macro_id)
     found = _find_macro(macro_id)
     if not found:
         raise HTTPException(404, f"Macro '{macro_id}' not found")
@@ -163,6 +179,7 @@ async def update_macro(macro_id: str, body: dict):
 @router.delete("/macros/{macro_id}")
 async def delete_macro(macro_id: str):
     """删除 user 宏。builtin 宏不可删除（403）。"""
+    _validate_macro_id(macro_id)
     macro_dir = MACROS_DATA_DIR / macro_id
     macro_file = macro_dir / "MACRO.md"
     if macro_file.exists():

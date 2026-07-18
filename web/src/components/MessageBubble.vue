@@ -3,7 +3,7 @@
     <div class="bubble" :class="role">
       <div
         class="bubble-content"
-        :class="{ collapsed: isCollapsed }"
+        :class="{ collapsed: isCollapsible && isCollapsed }"
         ref="contentEl"
       >
         <template v-for="(seg, i) in segments" :key="i">
@@ -178,6 +178,7 @@ watch(() => props.content, () => {
   gap: 4px;
   margin-top: 8px;
   padding-top: 6px;
+  border-top: 1px solid transparent;
   border-top: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
 }
 

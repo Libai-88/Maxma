@@ -9,8 +9,38 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-import portalocker
 import yaml
+
+# portalocker 在 Windows 上需要 pywin32 的 C 扩展（pywintypes），
+# 如果缺失则运行时崩溃。延迟检测：仅在首次使用时验证。
+_HAS_PORTALOCKER_CACHED: bool | None = None
+
+
+def _check_portalocker() -> bool:
+    """检查 portalocker 是否真正可用（而非仅模块级别可 import）。"""
+    global _HAS_PORTALOCKER_CACHED
+    if _HAS_PORTALOCKER_CACHED is not None:
+        return _HAS_PORTALOCKER_CACHED
+    try:
+        import portalocker
+        # 尝试实际创建 Lock 实例来验证运行时可用性
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".lock", delete=False) as f:
+            lock_path = f.name
+        try:
+            with portalocker.Lock(lock_path, timeout=1):
+                pass
+            _HAS_PORTALOCKER_CACHED = True
+        except Exception:
+            _HAS_PORTALOCKER_CACHED = False
+        finally:
+            try:
+                os.unlink(lock_path)
+            except OSError:
+                pass
+    except ImportError:
+        _HAS_PORTALOCKER_CACHED = False
+    return _HAS_PORTALOCKER_CACHED
 
 
 def _lock_path(path: str | Path) -> Path:
@@ -40,19 +70,24 @@ def _get_inproc_lock(path_str: str) -> threading.Lock:
 def yaml_file_lock(path: str | Path, timeout: int = 5) -> Iterator[None]:
     """对 YAML 文件关联的 lock 文件加锁。
 
-    双重保障：
+    双重保障（portalocker 可用时）：
     1. 进程内 threading.Lock —— 防止同进程多协程/线程并发写
     2. portalocker（OS 文件锁）—— 防止多进程并发写
 
-    注意：portalocker 在同进程内可重入（不互斥），所以必须叠加进程内锁。
+    portalocker 不可用时（Windows 缺少 pywin32），仅使用进程内锁，
+    在单进程开发模式下仍然安全。
     """
     path_str = str(Path(path))
     inproc_lock = _get_inproc_lock(path_str)
     inproc_lock.acquire()
     try:
-        lock_path = _lock_path(path)
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-        with portalocker.Lock(str(lock_path), timeout=timeout):
+        if _check_portalocker():
+            import portalocker
+            lock_path = _lock_path(path)
+            lock_path.parent.mkdir(parents=True, exist_ok=True)
+            with portalocker.Lock(str(lock_path), timeout=timeout):
+                yield
+        else:
             yield
     finally:
         inproc_lock.release()

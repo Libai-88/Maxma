@@ -7,12 +7,6 @@
         <router-link to="/" class="fs-nav-item" @click="forceClose">
           <Icon name="chat" :size="18" /> <span>对话</span>
         </router-link>
-        <router-link to="/memory" class="fs-nav-item" @click="forceClose">
-          <Icon name="memory" :size="18" /> <span>记忆</span>
-        </router-link>
-        <router-link to="/kb" class="fs-nav-item" @click="forceClose">
-          <Icon name="memory" :size="18" /> <span>知识库</span>
-        </router-link>
       </nav>
       <SessionSidebar
         :sessions="sessions"

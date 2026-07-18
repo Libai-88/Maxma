@@ -76,6 +76,37 @@ const DISPLAY_NAMES: Record<string, string> = {
   git_branch: '分支管理',
   git_push: '推送远程',
   git_pr: '创建 PR',
+
+  /* OMP / Coding Agent built-in tools */
+  bash: 'Shell 执行',
+  read: '读取文件',
+  write: '写入文件',
+  edit: '文件编辑',
+  search: '搜索',
+  glob: '文件查找',
+  grep: '文本搜索',
+  lsp: 'LSP 代码分析',
+  browser: '浏览器操作',
+  eval: '代码评估',
+  task: '任务管理',
+  todo: '待办管理',
+  goal: '目标管理',
+  resolve: '依赖解析',
+  fetch: '网络请求',
+  ssh: 'SSH 连接',
+  job: '作业管理',
+  inspect_image: '图片分析',
+  generate_image: '图片生成',
+  web_search: '网络搜索',
+  memory_recall: '记忆召回',
+  memory_reflect: '记忆反思',
+  memory_retain: '记忆保留',
+  report_finding: '报告发现',
+  report_tool_issue: '报告工具问题',
+  yield: '任务让出',
+  irc: 'IRC 通信',
+  ast_grep: 'AST 搜索',
+  ast_edit: 'AST 编辑',
 }
 export function toolDisplayName(name: string): string {
   if (DISPLAY_NAMES[name]) return DISPLAY_NAMES[name]
@@ -84,3 +115,12 @@ export function toolDisplayName(name: string): string {
 
 /** 所有已知工具名称列表（供 Playground 使用） */
 export const ALL_TOOL_NAMES = Object.keys(DISPLAY_NAMES)
+
+/**
+ * 检查一个对象是否存在且有至少一个自有键。
+ * 用于替代各工具气泡中重复的 computed(() => Object.keys(td.value).length > 0) 模式。
+ * 注意：调用方仍需包裹 computed()，但此函数统一了 null 安全性与检查语义。
+ */
+export function hasObjectKeys(obj: Record<string, unknown> | null | undefined): boolean {
+  return !!obj && Object.keys(obj).length > 0
+}

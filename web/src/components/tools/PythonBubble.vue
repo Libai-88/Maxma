@@ -214,7 +214,7 @@ function copyCode() {
 
 .py-copy-btn:hover {
   color: var(--text-primary);
-  border-color: var(--accent-light);
+  border-color: var(--accent-dark);
 }
 
 .py-code-block {
@@ -253,7 +253,7 @@ function copyCode() {
 }
 
 .py-code-block :deep(.py-kw)      { color: var(--accent); font-style: italic; }
-.py-code-block :deep(.py-builtin) { color: var(--accent-light); }
+.py-code-block :deep(.py-builtin) { color: var(--accent-dark); }
 .py-code-block :deep(.py-str)     { color: #40a02b; }
 .py-code-block :deep(.py-comment) { color: var(--text-secondary); font-style: italic; }
 .py-code-block :deep(.py-num)     { color: #fe640b; }
@@ -359,6 +359,8 @@ function copyCode() {
 
 .btn-reject:hover {
   border-color: var(--text-secondary);
+  background: transparent;
+  background: transparent;
   background: color-mix(in srgb, var(--border) 20%, transparent);
 }
 
@@ -368,6 +370,8 @@ function copyCode() {
 }
 
 .btn-approve:hover {
+  background: #fff;
+  background: #fff;
   background: color-mix(in srgb, var(--accent) 90%, #fff);
 }
 </style>
