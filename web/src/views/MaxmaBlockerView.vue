@@ -7,6 +7,22 @@
         <button class="btn btn-primary" @click="startAdd">添加</button>
       </div>
 
+      <details class="intro-card" open>
+        <summary>什么是拒止锚？什么时候需要用到？</summary>
+        <div class="intro-body">
+          <p>拒止锚（MaxmaBlocker）是 Maxma 的<strong>强制阻断标记</strong>——在某个目录中放置一个名为 <code>MaxmaBlocker</code> 的标记文件后，AI 的所有文件类工具就再也无法读写该目录及其所有子目录，<strong>无论白名单是否放行</strong>。</p>
+          <p>可以把它理解为 AI 的"禁区铁门"：白名单是"邀请函"，拒止锚是"上锁"——上了锁的房间，邀请函也进不去。</p>
+          <p><strong>典型使用场景</strong>：</p>
+          <ul>
+            <li>🔒 <strong>含敏感信息的财务 / 证件目录</strong>——银行流水、身份证扫描件、合同等，即使误加入白名单也不会被 AI 读取。</li>
+            <li>📔 <strong>私人日记 / 心理咨询笔记目录</strong>——属于绝对隐私，不应被 AI 工具触碰。</li>
+            <li>🔑 <strong>密钥 / 凭证目录</strong>——<code>.ssh</code>、<code>.aws</code>、GPG 密钥等，避免任何 AI 误读。</li>
+            <li>🧪 <strong>正在实验 / 不稳定的项目目录</strong>——避免 AI 误改或误读未完成的代码。</li>
+          </ul>
+          <p class="intro-note">📋 与<router-link to="/path-whitelist">路径白名单</router-link>配合使用：白名单授权"可以做什么"，拒止锚划定"绝对不能做什么"。</p>
+        </div>
+      </details>
+
       <details class="rule-card">
         <summary class="rule-summary">规则说明</summary>
         <div class="rule-body">
@@ -21,8 +37,11 @@
       </details>
 
       <div v-if="loading" class="loading">加载中...</div>
-      <div v-else-if="entries.length === 0" class="empty">
-        <p>尚未添加任何拒止锚。</p>
+      <div v-else-if="entries.length === 0" class="empty-state">
+        <div class="empty-icon">🛡️</div>
+        <h3>还没有任何拒止锚</h3>
+        <p class="empty-desc">当前 AI 仅受白名单约束。如果有不希望 AI 触及的敏感目录（财务 / 私人笔记 / 密钥），点击下方添加拒止锚，将目录强制阻断。</p>
+        <button class="btn btn-primary" @click="startAdd">+ 添加拒止锚</button>
       </div>
       <div v-else class="entry-list">
         <div v-for="(entry, i) in entries" :key="i" class="entry-card">
@@ -47,8 +66,7 @@
             <input
               v-model="formPath"
               class="input mono"
-              placeholder="选择或输入目录路径"
-              readonly
+              placeholder="输入或选择目录路径"
             />
             <button class="btn" @click="pickDir">选择目录</button>
           </div>
@@ -91,8 +109,8 @@ async function loadEntries() {
   try {
     const res = await api.listBlockers()
     entries.value = res.entries
-  } catch (e: any) {
-    console.error('加载拒止锚失败', e)
+    } catch (e: unknown) {
+      console.error('加载拒止锚失败', e)
   } finally {
     loading.value = false
   }
@@ -116,7 +134,7 @@ async function pickDir() {
       formPath.value = res.path
       formError.value = ''
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     formError.value = '选择目录失败'
   }
 }
@@ -129,8 +147,8 @@ async function handleSave() {
     await api.addBlocker({ path: formPath.value.trim(), description: formDesc.value.trim() })
     await loadEntries()
     showForm.value = false
-  } catch (e: any) {
-    formError.value = e.message || '创建失败'
+  } catch (e: unknown) {
+    formError.value = e instanceof Error ? e.message : '创建失败'
   } finally {
     saving.value = false
   }
@@ -141,7 +159,7 @@ async function confirmDelete(i: number) {
   try {
     await api.deleteBlocker(i)
     entries.value.splice(i, 1)
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('删除失败', e)
   }
 }
@@ -177,6 +195,85 @@ onMounted(loadEntries)
   color: var(--text-secondary);
   padding: 40px 0;
 }
+
+/* ── Novice 引导卡片 ── */
+.intro-card {
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-card);
+  background: color-mix(in srgb, var(--status-error, #ef4444) 5%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--status-error, #ef4444) 25%, var(--border));
+  overflow: hidden;
+}
+.intro-card > summary {
+  padding: 12px 16px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+.intro-card > summary::-webkit-details-marker { display: none; }
+.intro-card > summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 8px;
+  color: var(--text-tertiary);
+  transition: transform 0.15s;
+}
+.intro-card[open] > summary::before { transform: rotate(90deg); }
+.intro-body {
+  padding: 0 16px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.75;
+}
+.intro-body p { margin: 6px 0; }
+.intro-body strong { color: var(--text-primary); }
+.intro-body ul { margin: 6px 0; padding-left: 22px; }
+.intro-body li { margin-bottom: 4px; }
+.intro-body code {
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 12px;
+  background: var(--bg-secondary);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.intro-note {
+  margin-top: 10px !important;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 6px 6px 0;
+  font-size: 12.5px;
+}
+
+/* ── 空状态 ── */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  border: 1.5px dashed var(--border);
+  border-radius: 12px;
+  background: var(--bg-card);
+  background: color-mix(in srgb, var(--status-error, #ef4444) 3%, var(--bg-card));
+}
+.empty-icon { font-size: 42px; margin-bottom: 12px; }
+.empty-state h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 8px;
+}
+.empty-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin: 0 auto 16px;
+  max-width: 440px;
+}
+
 /* ── 规则说明 ── */
 .rule-card {
   margin-bottom: 16px;

@@ -16,6 +16,11 @@ export interface ProviderConfig {
   models: string[]
   enabled: boolean
   context_window?: number
+  max_tokens?: number
+  temperature?: number
+  top_p?: number
+  extra_headers?: Record<string, string>
+  timeout?: number
   // 阶段 3.3：优先级（数字越小优先级越高，0 = 最高），用于 fallback 排序
   priority?: number
   // 阶段 3.3：运行时健康状态（由后台 health_monitor 维护，未持久化）
@@ -59,4 +64,13 @@ export interface ProviderHealthCheckResponse {
 
 export interface DiscoverModelsResponse {
   models: string[]
+}
+
+/** Provider preset entry used by ProvidersView.vue form dropdown. */
+export interface ProviderPreset {
+  id: string
+  label: string
+  base_url: string
+  /** 标记为推荐（用于新手引导）：DeepSeek/OpenAI/Qwen/Ollama 等 */
+  recommended?: boolean
 }

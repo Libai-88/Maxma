@@ -34,7 +34,7 @@ def _workflow_enabled() -> bool:
 
 class _WorkflowDisabled(HTTPException):
     def __init__(self):
-        super().__init__(status_code=404, detail="Workflows are unavailable")
+        super().__init__(status_code=404, detail="工作流功能未启用")
 
 
 def _require_runtime(request: Request):
@@ -42,14 +42,14 @@ def _require_runtime(request: Request):
         raise _WorkflowDisabled()
     manager = getattr(request.app.state, "workflow_run_manager", None)
     if manager is None:
-        raise HTTPException(status_code=503, detail="Workflow runtime is unavailable")
+        raise HTTPException(status_code=503, detail="工作流运行时不可用")
     return manager
 
 
 async def _require_parent_session(request: Request, session_id: str) -> None:
     session_manager = getattr(request.app.state, "session_manager", None)
     if session_manager is None or await session_manager.get(session_id) is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="会话不存在")
 
 
 async def _get_parent_run(request: Request, session_id: str, run_id: str):
@@ -57,7 +57,7 @@ async def _get_parent_run(request: Request, session_id: str, run_id: str):
     manager = _require_runtime(request)
     run = manager.store.get(run_id)
     if run is None or run.parent_session_id != session_id:
-        raise HTTPException(status_code=404, detail="Workflow run not found")
+        raise HTTPException(status_code=404, detail="工作流运行不存在")
     return manager, run
 
 
@@ -110,14 +110,14 @@ async def list_workflow_definitions(request: Request):
 @router.post("/sessions/{session_id}/workflows")
 async def start_workflow(session_id: str, body: WorkflowStartRequest, request: Request):
     if not _workflow_enabled():
-        raise HTTPException(status_code=404, detail="Workflows are unavailable")
+        raise HTTPException(status_code=404, detail="工作流功能未启用")
     await _require_parent_session(request, session_id)
     manager = _require_runtime(request)
     try:
         definition = manager.registry.require(body.workflow_id)
     except KeyError:
         # Do not disclose future/internal definitions through arbitrary IDs.
-        raise HTTPException(status_code=422, detail="Unsupported workflow") from None
+        raise HTTPException(status_code=422, detail="不支持的工作流") from None
     run = manager.store.submit(
         parent_session_id=session_id,
         parent_turn_id=body.parent_turn_id,
@@ -149,15 +149,17 @@ async def cancel_workflow(session_id: str, run_id: str, request: Request):
     if run.status in {"queued", "running"}:
         await manager.cancel(run_id)
         run = manager.store.get(run_id)
-    return _public_run(run, manager.store.list_steps(run_id))
+        if run is None:  # Defensive: the durable row must not disappear mid-request.
+            raise HTTPException(status_code=404, detail="工作流运行不存在")
+    return _public_run(run, manager.store.list_steps(run.run_id))
 
 
 @router.post("/sessions/{session_id}/workflows/{run_id}/resume")
 async def resume_workflow(session_id: str, run_id: str, request: Request):
     manager, run = await _get_parent_run(request, session_id, run_id)
     if run.status != "failed" or not manager.resume(run_id):
-        raise HTTPException(status_code=409, detail="Workflow cannot be resumed safely")
+        raise HTTPException(status_code=409, detail="工作流无法安全恢复")
     refreshed = manager.store.get(run_id)
     if refreshed is None:
-        raise HTTPException(status_code=404, detail="Workflow run not found")
-    return _public_run(refreshed, manager.store.list_steps(run_id))
+        raise HTTPException(status_code=404, detail="工作流运行不存在")
+    return _public_run(refreshed, manager.store.list_steps(refreshed.run_id))

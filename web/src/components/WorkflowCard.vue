@@ -97,8 +97,28 @@ function workflowLabel(workflowId: string): string {
   return workflowId === 'session-review' ? '会话检查' : workflowId
 }
 
+/**
+ * 将内部 step_id 转为 Novice 友好的中文标签。
+ * - 已知 step_id 直接映射为中文短语
+ * - 未知 step_id 将 snake_case 转为空格分隔，避免直接暴露技术标识符
+ */
+function stepLabel(stepId: string): string {
+  const KNOWN: Record<string, string> = {
+    review_session: '复查会话',
+    summarize_context: '压缩上下文',
+    extract_topics: '提取主题',
+    update_memory: '更新记忆',
+    plan: '规划',
+    execute: '执行',
+    verify: '校验',
+  }
+  if (KNOWN[stepId]) return KNOWN[stepId]
+  // 兜底：将 snake_case 转为空格分隔，去掉技术感
+  return stepId.replace(/_/g, ' ')
+}
+
 function phaseText(run: WorkflowRun): string {
-  if (run.current_step_id) return `当前步骤：${run.current_step_id}`
+  if (run.current_step_id) return `当前步骤：${stepLabel(run.current_step_id)}`
   if (run.status === 'succeeded') return '所有已注册步骤已完成'
   if (run.status === 'cancelled') return run.cancel_reason === 'parent_session_closed' ? '父会话已关闭' : '已由用户取消'
   if (run.status === 'failed') return '未能安全完成，可在可恢复时继续'

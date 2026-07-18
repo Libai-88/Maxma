@@ -6,14 +6,21 @@
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any
 
 import httpx
+from cryptography.fernet import Fernet
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from app_paths import PROVIDERS_YAML_PATH
+from app_paths import API_DATA_DIR, PROVIDERS_YAML_PATH
+from api.security.credential_envelope import (
+    create_credential_envelope,
+    is_credential_envelope,
+    is_legacy_encrypted,
+)
 from api.yaml_store import dump_yaml_atomic, load_yaml, yaml_file_lock
 
 router = APIRouter()
@@ -128,9 +135,9 @@ def _find_provider(items: list[dict[str, Any]], provider_id: str) -> dict[str, A
 class ProviderCreateBody(BaseModel):
     """创建 provider 的请求体（id 必填，其余可选，由后端补默认值）。"""
 
-    id: str = Field(..., description="provider 唯一标识，不可重复")
+    id: str = Field(..., min_length=1, description="provider 唯一标识，不可重复")
     provider_type: str = Field("openai", description="provider 类型，默认 openai 兼容")
-    label: str = Field("", description="显示名称")
+    label: str = Field("", min_length=1, description="显示名称")
     api_key: str = Field("", description="API 密钥")
     base_url: str = Field("", description="API 基础 URL")
     models: list[str] = Field(default_factory=list, description="支持的模型 id 列表")
@@ -206,11 +213,15 @@ async def create_provider(body: ProviderCreateBody) -> dict[str, Any]:
                 status_code=409,
                 detail=f"provider id '{body.id}' 已存在",
             )
+        # 自动加密 api_key（若为明文且非空）
+        api_key = body.api_key
+        if api_key and not (is_credential_envelope(api_key) or is_legacy_encrypted(api_key)):
+            api_key = _encrypt_api_key(api_key)
         provider: dict[str, Any] = {
             "id": body.id,
             "provider_type": body.provider_type,
             "label": body.label,
-            "api_key": body.api_key,
+            "api_key": api_key,
             "base_url": body.base_url,
             "models": list(body.models),
             "enabled": body.enabled,
@@ -267,6 +278,11 @@ async def update_provider(
                 detail=f"provider '{provider_id}' 不存在",
             )
         update_fields = body.model_dump(exclude_unset=True)
+        # 自动加密 api_key（若为明文且非空）
+        if "api_key" in update_fields:
+            val = update_fields["api_key"]
+            if val and not (is_credential_envelope(val) or is_legacy_encrypted(val)):
+                update_fields["api_key"] = _encrypt_api_key(val)
         for key, value in update_fields.items():
             target[key] = value
         _save_providers(items)
@@ -329,10 +345,10 @@ async def _http_get_models(
         async with httpx.AsyncClient(**client_kwargs) as client:
             resp = await client.get(url, headers=headers)
     except Exception as e:  # noqa: BLE001 — 网络错误统一处理，向前端返回 detail
-        return (False, None, str(e), [])
+        return (False, None, f"网络请求失败：{e}", [])
     latency_ms = int((time.monotonic() - start) * 1000)
     if resp.status_code >= 400:
-        return (False, latency_ms, f"HTTP {resp.status_code}", [])
+        return (False, latency_ms, f"服务器返回 HTTP {resp.status_code}", [])
     try:
         data = resp.json()
     except Exception:  # noqa: BLE001 — JSON 解析失败视为无可发现模型
@@ -437,3 +453,118 @@ async def discover_models_for_existing(provider_id: str) -> dict[str, list[str]]
         target.get("api_key", ""),
     )
     return {"models": models}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 端点 10: POST /providers/encrypt-keys
+# ═══════════════════════════════════════════════════════════════════════
+#
+# 将 providers.yaml 中明文 api_key 字段就地加密（幂等）。
+# 替代已移除的 POST /audit-log/encrypt-keys 端点。
+# 加密格式：encv1:<envelope>（由 api.security.credential_envelope 封装），
+# 内部 ciphertext 用 Fernet 加密，key 持久化到 API_DATA_DIR/credential.key。
+
+
+_CREDENTIAL_KEY_PATH = API_DATA_DIR / "credential.key"
+# 加密 envelope 中记录的算法与 key_id 标识（用于将来解密时挑选后端）。
+_ENVELOPE_ALGORITHM = "fernet"
+_ENVELOPE_KEY_ID = "default"
+
+
+def _get_or_create_fernet_key() -> bytes:
+    """读取或生成持久化 Fernet key。
+
+    key 文件存放在 API_DATA_DIR/credential.key，首次调用时生成并写入。
+    文件权限收紧到 0600（best-effort，Windows 上 no-op）。
+    """
+    if _CREDENTIAL_KEY_PATH.exists():
+        return _CREDENTIAL_KEY_PATH.read_bytes()
+    _CREDENTIAL_KEY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    key = Fernet.generate_key()
+    # 原子写入：先写临时文件再 rename，避免其他进程读到半截 key
+    tmp_path = _CREDENTIAL_KEY_PATH.with_suffix(".key.tmp")
+    tmp_path.write_bytes(key)
+    try:
+        os.chmod(tmp_path, 0o600)
+    except OSError:
+        pass
+    os.replace(tmp_path, _CREDENTIAL_KEY_PATH)
+    return key
+
+
+def _encrypt_api_key(plaintext: str) -> str:
+    """加密单个 api_key 明文，返回 encv1:<envelope> 字符串。
+
+    流程：Fernet 加密 → base64 ascii → 拼成 enc:<ct> legacy 字符串 →
+    create_credential_envelope 封装为 encv1:<envelope>。
+    """
+    fernet = Fernet(_get_or_create_fernet_key())
+    ciphertext = fernet.encrypt(plaintext.encode("utf-8")).decode("ascii")
+
+    def _encrypt_payload(_payload: str) -> str:
+        # ciphertext 已基于 plaintext 计算，直接拼装 legacy 形式
+        return "enc:" + ciphertext
+
+    return create_credential_envelope(
+        plaintext,
+        encrypt_payload=_encrypt_payload,
+        algorithm=_ENVELOPE_ALGORITHM,
+        key_id=_ENVELOPE_KEY_ID,
+    )
+
+
+@router.post("/providers/{provider_id}/health")
+async def check_provider_health(provider_id: str) -> dict[str, Any]:
+    """检查已存在的 provider 健康状态（即时 HTTP ping）。
+
+    与 test_existing_provider 行为一致，但返回 ProviderHealthCheckResponse 格式
+    （含 last_check_time, consecutive_failures 字段供前端健康监控面板使用）。
+
+    provider 不存在 → 404。
+    """
+    with yaml_file_lock(PROVIDERS_YAML_PATH):
+        items = _load_providers()
+        target = _find_provider(items, provider_id)
+    if target is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"provider '{provider_id}' 不存在",
+        )
+    ok, latency_ms, detail, _models = await _http_get_models(
+        target.get("base_url", ""),
+        target.get("api_key", ""),
+    )
+    now = time.time()
+    return {
+        "status": "ok" if ok else "error",
+        "latency_ms": latency_ms,
+        "detail": detail,
+        "last_check_time": now,
+        "consecutive_failures": 0 if ok else 1,
+    }
+
+
+@router.post("/providers/encrypt-keys")
+async def encrypt_api_keys() -> dict[str, Any]:
+    """加密 providers.yaml 中所有明文 api_key 字段（幂等）。
+
+    - 跳过空字符串、已加密（encv1: 或 enc: 前缀）的值。
+    - 仅当本次实际加密了至少 1 个 key 时才写回 yaml。
+    - 返回 ``{"status": "ok", "encrypted": N}``，N 为本次新加密的数量。
+    """
+    with yaml_file_lock(PROVIDERS_YAML_PATH):
+        items = _load_providers()
+        encrypted_count = 0
+        for entry in items:
+            if not isinstance(entry, dict):
+                continue
+            value = entry.get("api_key")
+            if not isinstance(value, str) or not value:
+                continue
+            if is_credential_envelope(value) or is_legacy_encrypted(value):
+                continue
+            entry["api_key"] = _encrypt_api_key(value)
+            encrypted_count += 1
+        if encrypted_count > 0:
+            _save_providers(items)
+    return {"status": "ok", "encrypted": encrypted_count}

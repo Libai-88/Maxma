@@ -10,25 +10,102 @@
         <div class="popup-header">设置</div>
         <div class="popup-section">
           <div class="popup-section-header">扩展 EXTENSIONS</div>
-          <router-link to="/providers" class="popup-item" @click="closeSettingsMenu">模型 MODELS</router-link>
-          <router-link to="/mcp" class="popup-item" @click="closeSettingsMenu">MCP 服务</router-link>
-          <router-link to="/skills" class="popup-item" @click="closeSettingsMenu">Skills &amp; 宏</router-link>
-          <router-link to="/soul" class="popup-item" @click="closeSettingsMenu">人设 SOUL</router-link>
-          <router-link to="/user" class="popup-item" @click="closeSettingsMenu">用户 USER</router-link>
+          <router-link to="/providers" class="popup-item" @click="closeSettingsMenu">
+            <div class="popup-item-content">
+              <span class="popup-item-title">模型 MODELS</span>
+              <span class="popup-item-sub">配置 AI 语言模型与接入密钥</span>
+            </div>
+          </router-link>
+          <router-link to="/mcp" class="popup-item" @click="closeSettingsMenu">
+            <div class="popup-item-content">
+              <span class="popup-item-title">MCP 服务</span>
+              <span class="popup-item-sub">连接和管理 AI 工具与外部服务</span>
+            </div>
+          </router-link>
+          <router-link to="/skills" class="popup-item" @click="closeSettingsMenu">
+            <div class="popup-item-content">
+              <span class="popup-item-title">Skills &amp; 宏</span>
+              <span class="popup-item-sub">管理自动化命令与快捷指令</span>
+            </div>
+          </router-link>
+          <router-link to="/soul" class="popup-item" @click="closeSettingsMenu">
+            <div class="popup-item-content">
+              <span class="popup-item-title">人设 SOUL</span>
+              <span class="popup-item-sub">设定 AI 助手的角色与对话风格</span>
+            </div>
+          </router-link>
+          <router-link to="/user" class="popup-item" @click="closeSettingsMenu">
+            <div class="popup-item-content">
+              <span class="popup-item-title">用户 USER</span>
+              <span class="popup-item-sub">管理用户账户与偏好设置</span>
+            </div>
+          </router-link>
+          <router-link to="/memory" class="popup-item" @click="closeSettingsMenu">
+            <div class="popup-item-content">
+              <span class="popup-item-title">记忆 MEMORY</span>
+              <span class="popup-item-sub">查看与管理 AI 自动记录的长期事实</span>
+            </div>
+          </router-link>
+          <router-link to="/kb" class="popup-item" @click="closeSettingsMenu">
+            <div class="popup-item-content">
+              <span class="popup-item-title">知识库 KB</span>
+              <span class="popup-item-sub">了解 AI 如何管理知识，无需手动上传文档</span>
+            </div>
+          </router-link>
         </div>
         <div class="popup-section">
           <div class="popup-section-header">运维 OPERATIONS</div>
-          <router-link to="/path-whitelist" class="popup-item" @click="closeSettingsMenu">路径白名单</router-link>
-          <router-link to="/maxma-blocker" class="popup-item" @click="closeSettingsMenu">拒止锚</router-link>
-          <router-link to="/env-vars" class="popup-item" @click="closeSettingsMenu">环境变量</router-link>
-          <router-link to="/event-hooks" class="popup-item" @click="closeSettingsMenu">事件钩子</router-link>
-          <router-link to="/privacy" class="popup-item" @click="closeSettingsMenu">隐私仪表盘</router-link>
-          <router-link to="/metrics" class="popup-item" @click="closeSettingsMenu">运行指标</router-link>
-          <router-link to="/audit-log" class="popup-item" @click="closeSettingsMenu">审计日志</router-link>
+          <router-link to="/path-whitelist" class="popup-item" @click="closeSettingsMenu">
+            <div class="popup-item-content">
+              <span class="popup-item-title">路径白名单</span>
+              <span class="popup-item-sub">限定 AI 可访问的文件目录</span>
+            </div>
+          </router-link>
+          <router-link to="/maxma-blocker" class="popup-item" @click="closeSettingsMenu">
+            <div class="popup-item-content">
+              <span class="popup-item-title">拒止锚</span>
+              <span class="popup-item-sub">在敏感目录强制阻断 AI 文件访问</span>
+            </div>
+          </router-link>
+          <router-link to="/env-vars" class="popup-item" @click="closeSettingsMenu">
+            <div class="popup-item-content">
+              <span class="popup-item-title">环境变量</span>
+              <span class="popup-item-sub">管理应用运行所需的配置项</span>
+            </div>
+          </router-link>
+          <router-link to="/privacy" class="popup-item" @click="closeSettingsMenu">
+            <div class="popup-item-content">
+              <span class="popup-item-title">隐私仪表盘</span>
+              <span class="popup-item-sub">查看与控制数据收集与隐私设置</span>
+            </div>
+          </router-link>
+          <router-link to="/metrics" class="popup-item" @click="closeSettingsMenu">
+            <div class="popup-item-content">
+              <span class="popup-item-title">运行指标</span>
+              <span class="popup-item-sub">监控系统性能与资源使用</span>
+            </div>
+          </router-link>
+          <router-link to="/audit-log" class="popup-item" @click="closeSettingsMenu">
+            <div class="popup-item-content">
+              <span class="popup-item-title">审计日志</span>
+              <span class="popup-item-sub">查看工具调用、权限使用与敏感操作历史</span>
+            </div>
+          </router-link>
         </div>
         <div class="popup-section">
           <div class="popup-section-header">系统 SYSTEM</div>
-          <router-link to="/appearance" class="popup-item" @click="closeSettingsMenu">外观 APPEARANCE</router-link>
+          <router-link to="/appearance" class="popup-item" @click="closeSettingsMenu">
+            <div class="popup-item-content">
+              <span class="popup-item-title">外观 APPEARANCE</span>
+              <span class="popup-item-sub">自定义主题颜色与界面布局</span>
+            </div>
+          </router-link>
+          <router-link to="/help" class="popup-item" @click="closeSettingsMenu">
+            <div class="popup-item-content">
+              <span class="popup-item-title">帮助 HELP</span>
+              <span class="popup-item-sub">了解 Maxma 能力、快速上手与常见问题</span>
+            </div>
+          </router-link>
         </div>
         <button v-if="onboardingEnabled" class="popup-item popup-action" @click="restartOnboarding">重新开始引导</button>
         <div class="popup-divider"></div>
@@ -41,6 +118,19 @@
         <button class="popup-item popup-action" :class="{ restarting }" :disabled="restarting" @click="handleRestart">
           {{ restarting ? '重启中...' : '重启服务' }}
         </button>
+        <div class="popup-divider"></div>
+        <div class="quick-actions-section">
+          <div class="quick-actions-title">⚡ 快捷操作</div>
+          <button class="popup-item popup-action neutral" @click="handleClearSession">清空当前会话</button>
+          <button class="popup-item popup-action neutral" @click="handleScrollToTop">回到顶部</button>
+        </div>
+        <div class="popup-divider"></div>
+        <div class="shortcuts-section">
+          <div class="shortcuts-title">⌨ 快捷键</div>
+          <div class="shortcut-item"><kbd>Ctrl+N</kbd> 新建会话</div>
+          <div class="shortcut-item"><kbd>Ctrl+K</kbd> 切换私密模式</div>
+          <div class="shortcut-item"><kbd>Ctrl+Esc</kbd> 切换侧栏</div>
+        </div>
       </div>
     </Transition>
   </Teleport>
@@ -51,6 +141,8 @@ import Icon from '@/components/Icon.vue';
 import { api } from '@/api';
 import { invoke } from '@tauri-apps/api/core';
 import { onMounted, onUnmounted, nextTick, ref } from 'vue';
+import { useSessionStore } from '@/stores/session';
+import { useChatStore } from '@/stores/chat';
 
 defineProps<{
   /** 是否启用「重新开始引导」按钮（来自 stores/onboarding.onboardingEnabled） */
@@ -67,6 +159,29 @@ const settingsPopupRef = ref<HTMLElement | null>(null)
 const restarting = ref(false)
 const exportingErrorLog = ref(false)
 const managingLogs = ref(false)
+
+const sessionStore = useSessionStore()
+const chatStore = useChatStore()
+
+function handleClearSession() {
+  const sid = sessionStore.sessionId
+  if (!sid) return
+  if (!window.confirm('确定要清空当前会话的所有消息吗？此操作不可撤销。')) return
+  // 清空内存中的对话轮次
+  const ch = chatStore.channels.get(sid)
+  if (ch) {
+    ch.turns.splice(0, ch.turns.length)
+    ch.currentTurn = null
+  }
+  // 清除 localStorage 持久化缓存
+  chatStore.removeTurnsFromStorage(sid)
+  closeSettingsMenu()
+}
+
+function handleScrollToTop() {
+  window.scrollTo(0, 0)
+  closeSettingsMenu()
+}
 
 async function handleExportErrorLog() {
   if (exportingErrorLog.value) return
@@ -294,12 +409,34 @@ onUnmounted(() => {
 }
 
 .popup-item.router-link-active {
-  color: var(--accent);
-  font-weight: 600;
-  background: var(--bg-secondary);
-}
-
-.popup-divider {
+	  background: var(--bg-secondary);
+	}
+.popup-item.router-link-active .popup-item-title {
+	  color: var(--accent);
+	  font-weight: 600;
+	}
+	
+	.popup-item-content {
+	  display: flex;
+	  flex-direction: column;
+	  gap: 1px;
+	}
+	
+	.popup-item-title {
+	  font-size: 0.9em;
+	  color: var(--text-secondary);
+	  line-height: 1.4;
+	}
+	
+	.popup-item-sub {
+	  font-size: 0.65em;
+	  color: var(--text-tertiary);
+	  line-height: 1.35;
+	  font-weight: 400;
+	  white-space: nowrap;
+	}
+	
+	.popup-divider {
   height: 1px;
   background: var(--border);
   margin: 4px 0;
@@ -346,5 +483,57 @@ onUnmounted(() => {
 .popup-leave-to {
   opacity: 0;
   transform: translateX(-6px);
+}
+
+/* ── 快捷键指南 ── */
+.shortcuts-section {
+  padding: 8px 14px 4px;
+}
+.shortcuts-title {
+  font-size: 0.7em;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+.shortcut-item {
+  font-size: 0.75em;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+
+/* ── 快捷操作 ── */
+.quick-actions-section {
+  padding: 4px 6px;
+}
+.quick-actions-title {
+  font-size: 0.7em;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 6px 2px;
+}
+.shortcut-item kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  font-size: 0.85em;
+  font-family: var(--font-mono);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  margin-right: 4px;
+  min-width: 20px;
+  text-align: center;
+  transition: background var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .shortcut-item kbd:hover {
+    background: var(--bg-secondary);
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg-secondary));
+    border-color: var(--accent-dark);
+    box-shadow: 0 1px 4px var(--shadow-color);
+  }
 }
 </style>

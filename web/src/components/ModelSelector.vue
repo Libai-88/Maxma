@@ -14,7 +14,7 @@
         <span
           v-if="option.contextWindow"
           class="model-option-ctx"
-          :title="`${option.contextWindow} tokens`"
+          :title="ctxTooltip(option.contextWindow)"
         >{{ formatCtx(Number(option.contextWindow)) }}</span>
       </template>
     </DsSelect>
@@ -46,6 +46,18 @@ const modelOptions = computed(() =>
 function formatCtx(tokens: number): string {
   if (tokens >= 1000) return `${Math.round(tokens / 1000)}k`
   return String(tokens)
+}
+
+/** Novice 友好的 contextWindow tooltip：解释「上下文窗口」是什么、约等于多少字 */
+function ctxTooltip(raw: unknown): string {
+  const tokens = Number(raw)
+  if (!Number.isFinite(tokens) || tokens <= 0) return '上下文窗口未知'
+  // 粗略估算：1 token ≈ 0.6 个汉字（OpenAI 经验值，仅供 Novice 直观理解）
+  const approxChars = Math.round(tokens * 0.6)
+  const charsLabel = approxChars >= 10000
+    ? `${Math.round(approxChars / 10000)} 万字`
+    : `${approxChars} 字`
+  return `上下文窗口：${formatCtx(tokens)}（约 ${charsLabel}）— 模型一次对话能处理的最大文本长度，包括你的输入和 AI 的回复。`
 }
 
 function onSelectModel(value: string | number) {

@@ -4,6 +4,17 @@
       <span>会话 Sessions</span>
       <button class="btn-new" @click="$emit('create')" title="新会话">+</button>
     </div>
+
+    <!-- Novice 引导：会话类型与右键操作（可折叠，默认展开） -->
+    <details class="session-intro-card" open>
+      <summary>会话类型与操作</summary>
+      <div class="session-intro-body">
+        <p><strong>临时会话</strong>：当前对话用，关闭后不保留。</p>
+        <p><strong>已保存</strong>：右键临时会话选「固定会话」可持久保存，可重命名。</p>
+        <p class="session-intro-tip">💡 鼠标悬停会话可查看消息数与活跃时间。</p>
+      </div>
+    </details>
+
     <div class="session-list">
 
       <!-- ── 已保存（固定会话）── -->
@@ -84,7 +95,7 @@
         </div>
         <div class="card-divider" v-if="hoveredSession.last_active"></div>
         <div class="card-row">
-          <span class="card-label">Agent</span>
+          <span class="card-label">状态</span>
           <span class="card-value">{{ getAgentStatus(hoveredSession.session_id) }}</span>
         </div>
       </div>
@@ -507,7 +518,7 @@ function confirmDelete() {
 }
 .btn-new:hover {
   background: var(--accent);
-  color: #fff;
+  color: var(--bg-primary);
 }
 .nav-item {
   display: flex;
@@ -558,6 +569,49 @@ function confirmDelete() {
   text-transform: uppercase;
   letter-spacing: 0.4px;
   padding: 4px 12px 2px;
+}
+
+/* ── Novice 引导 intro-card ── */
+.session-intro-card {
+  margin: 0 6px 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+  font-size: 0.72em;
+  color: var(--text-secondary);
+}
+.session-intro-card > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-primary);
+  list-style: none;
+  user-select: none;
+}
+.session-intro-card > summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 6px;
+  color: var(--text-tertiary);
+  transition: transform 0.15s;
+}
+.session-intro-card[open] > summary::before {
+  transform: rotate(90deg);
+}
+.session-intro-body {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  line-height: 1.5;
+}
+.session-intro-body p {
+  margin: 0;
+}
+.session-intro-tip {
+  color: var(--text-tertiary);
+  font-size: 0.95em;
 }
 
 .section-hint {
@@ -644,12 +698,14 @@ function confirmDelete() {
 }
 /* collapsed 时隐藏分区 label 和提示 */
 .session-sidebar.collapsed .section-label,
-.session-sidebar.collapsed .section-hint {
+.session-sidebar.collapsed .section-hint,
+.session-sidebar.collapsed .session-intro-card {
   max-height: 0;
   opacity: 0;
   overflow: hidden;
   padding: 0;
   margin: 0;
+  border: none;
 }
 
 /* ── 固定会话卡片 ── */
@@ -714,6 +770,8 @@ function confirmDelete() {
 }
 
 .constify-gen-btn:hover:not(:disabled) {
+  background: transparent;
+  background: transparent;
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--accent);
   border-color: var(--accent);
@@ -755,13 +813,15 @@ function confirmDelete() {
 }
 
 .constify-btn.cancel:hover {
+  background: transparent;
+  background: transparent;
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--text-primary);
 }
 
 .constify-btn.confirm {
   background: var(--accent);
-  color: #fff;
+  color: var(--bg-primary);
 }
 
 .constify-btn.confirm:hover:not(:disabled) {
@@ -856,7 +916,7 @@ function confirmDelete() {
 
 .delete-confirm-btn.confirm {
   background: var(--status-error, #dc2626);
-  color: #fff;
+  color: var(--bg-primary);
 }
 
 .delete-confirm-btn.confirm:hover {

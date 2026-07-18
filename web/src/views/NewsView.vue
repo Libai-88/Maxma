@@ -1,16 +1,36 @@
 <template>
-  <div class="news-view">
+  <div class="news-view" ref="newsViewRef">
     <!-- 标题栏 -->
     <div class="header">
-      <h2>更新动态</h2>
-      <span class="news-count" v-if="!loading">共 {{ news.length }} 条更新</span>
+      <h2>更新动态 News</h2>
+      <span class="news-count" v-if="!loading && !loadError">共 {{ news.length }} 条更新</span>
     </div>
 
     <div class="news-body">
       <!-- 卡片列表 -->
       <div class="news-content">
-        <div v-if="loading" class="loading">加载中...</div>
-        <div v-else-if="news.length === 0" class="empty">暂无更新动态</div>
+        <!-- 骨架屏：加载中显示 3 个占位卡片，避免「只剩文字加载中」的廉价感 -->
+        <div v-if="loading" class="skeleton-grid">
+          <div v-for="i in 3" :key="i" class="skeleton-card">
+            <div class="skeleton-line skeleton-title"></div>
+            <div class="skeleton-line skeleton-text"></div>
+            <div class="skeleton-line skeleton-text short"></div>
+          </div>
+        </div>
+        <!-- 加载失败：明确告诉用户「加载失败」而非误显示「暂无更新」 -->
+        <div v-else-if="loadError" class="empty">
+          <div class="empty-icon">⚠️</div>
+          <div class="empty-title">加载失败</div>
+          <div class="empty-desc">
+            无法获取更新动态，可能是后端未启动或网络异常。<br>
+            <button class="retry-btn" @click="loadNews">重试</button>
+          </div>
+        </div>
+        <div v-else-if="news.length === 0" class="empty">
+          <div class="empty-icon">📰</div>
+          <div class="empty-title">暂无更新动态</div>
+          <div class="empty-desc">Maxma 新版本与功能更新会在这里展示。</div>
+        </div>
         <div v-else class="card-grid" ref="cardGridRef">
           <NewsCard v-for="entry in news" :key="entry.id" :entry="entry" />
         </div>
@@ -41,6 +61,8 @@ import { onMounted, onUnmounted, ref, watchEffect, type ComponentPublicInstance 
 
 const news = ref<NewsEntry[]>([])
 const loading = ref(false)
+const loadError = ref(false)
+const newsViewRef = ref<HTMLElement | null>(null)
 const cardGridRef = ref<HTMLElement | null>(null)
 const timelineRef = ref<HTMLElement | null>(null)
 const tlBounds = ref<{ top: string; height: string }>()
@@ -102,12 +124,14 @@ function updateTimelineBounds() {
 
 async function loadNews() {
   loading.value = true
+  loadError.value = false
   try {
     const res = await api.listNews()
     news.value = res.news.sort((a, b) => b.pr_number - a.pr_number)
     requestAnimationFrame(updateTimelineBounds)
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('加载更新动态失败', e)
+    loadError.value = true
   } finally {
     loading.value = false
   }
@@ -116,7 +140,9 @@ async function loadNews() {
 onMounted(() => {
   loadNews()
   observer = new ResizeObserver(updateTimelineBounds)
-  observer.observe(document.querySelector('.news-view')!)
+  if (newsViewRef.value) {
+    observer.observe(newsViewRef.value)
+  }
 })
 
 onUnmounted(() => {
@@ -163,6 +189,61 @@ onUnmounted(() => {
   text-align: center;
   color: var(--text-secondary);
   padding: 40px 0;
+}
+.empty-icon { font-size: 36px; margin-bottom: 12px; }
+.empty-title { font-size: 1em; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
+.empty-desc { font-size: 0.85em; color: var(--text-tertiary); line-height: 1.6; }
+.retry-btn {
+  margin-top: 12px;
+  padding: 6px 16px;
+  font-size: 0.85em;
+  font-family: inherit;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.retry-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── 骨架屏 ── */
+.skeleton-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.skeleton-card {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-card);
+}
+.skeleton-line {
+  height: 12px;
+  background: linear-gradient(
+    90deg,
+    var(--bg-secondary) 0%,
+    color-mix(in srgb, var(--bg-secondary) 50%, var(--bg-card)) 50%,
+    var(--bg-secondary) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+.skeleton-title { height: 18px; width: 60%; margin-bottom: 12px; }
+.skeleton-text { width: 100%; }
+.skeleton-text.short { width: 70%; margin-bottom: 0; }
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line { animation: none; }
 }
 
 .card-grid {

@@ -13,11 +13,35 @@
     </div>
     <!-- 无提供商引导卡片 -->
     <div v-else-if="!hasProviders" class="no-provider-overlay">
-      <div class="no-provider-card">
+      <div class="no-provider-card no-provider-card--enhanced">
         <div class="no-provider-icon no-provider-icon--gear" v-html="gearIconSvg"></div>
-        <h3>暂无已配置的 LLM 提供商</h3>
-        <p>请添加一个 API 提供商以开始对话。MaxmaHere 支持任何 OpenAI 兼容 API。</p>
-        <router-link to="/providers" class="btn primary">前往模型设置</router-link>
+        <h3>开始使用 Maxma</h3>
+        <p class="no-provider-lead">Maxma 通过「模型提供商」连接到 AI 大模型。只需填一次 API Key，就能开始对话。</p>
+
+        <!-- 快速上手 3 步引导（面向 Novice 画像） -->
+        <ol class="no-provider-steps">
+          <li>
+            <span class="step-no">1</span>
+            <span class="step-text">点击下方按钮进入「模型 MODELS」设置页</span>
+          </li>
+          <li>
+            <span class="step-no">2</span>
+            <span class="step-text">选择一个提供商（推荐 DeepSeek 性价比高、Qwen 国内免费额度、OpenAI 体验最佳）</span>
+          </li>
+          <li>
+            <span class="step-no">3</span>
+            <span class="step-text">填入 API Key 并保存，回到此页即可开始对话</span>
+          </li>
+        </ol>
+
+        <div class="no-provider-actions">
+          <router-link to="/providers" class="btn primary">前往模型设置</router-link>
+          <router-link to="/help" class="btn">了解更多</router-link>
+        </div>
+
+        <p class="no-provider-note">
+          💡 不知道选哪个？DeepSeek 注册即送免费额度，OpenAI 兼容 API 都能直接接入。
+        </p>
       </div>
     </div>
     <!-- 正常聊天界面 -->
@@ -30,6 +54,7 @@
           <button
             class="private-toggle"
             :class="{ active: privateMode }"
+            :aria-pressed="privateMode"
             @click="setPrivateMode(!privateMode)"
           >
             <span class="private-indicator"></span>
@@ -52,6 +77,7 @@
           <button
             class="auto-approve-toggle"
             :class="{ active: autoApprove }"
+            :aria-pressed="autoApprove"
             @click="setAutoApprove(!autoApprove)"
           >
             <span class="auto-approve-indicator"></span>
@@ -72,7 +98,7 @@
         </span>
         <SessionPermissionModeControl :session-id="sessionId" />
         <ContextUsageBadge :usage="contextUsage" :selected-model="selectedModelName" />
-        <TaskTrackerBar :data="taskTrackerData as any" />
+        <TaskTrackerBar :data="taskTrackerData as unknown as TaskTrackerData | null" />
         <button
           class="workbench-toggle-btn"
           :class="{ active: workbench.isOpen }"
@@ -145,7 +171,7 @@ import ContextUsageBadge from '@/components/ContextUsageBadge.vue'
 import SessionPermissionModeControl from '@/components/SessionPermissionModeControl.vue'
 import WorkflowCard from '@/components/WorkflowCard.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
-import TaskTrackerBar from '@/components/TaskTrackerBar.vue'
+import TaskTrackerBar, { type TaskTrackerData } from '@/components/TaskTrackerBar.vue'
 import WorkbenchPanel from '@/components/workbench/WorkbenchPanel.vue'
 import ReasoningTimeline from '@/components/workbench/ReasoningTimeline.vue'
 import CanvasContainer from '@/components/workbench/CanvasContainer.vue'
@@ -162,10 +188,11 @@ import { useHealthStore } from '@/stores/health'
 import { useProviderStore } from '@/stores/provider'
 import { useSessionStore } from '@/stores/session'
 import { usePersonaStore } from '@/stores/persona'
-import type { ParsedRef } from '@/utils/references'
+import type { ParsedRef, SelectionRef } from '@/utils/references'
 import type { ThinkPathId } from '@/utils/thinkPath'
 import { storeToRefs } from 'pinia'
 import { computed, onMounted, ref } from 'vue'
+import { useGlobalShortcut } from '@/composables/useGlobalShortcut'
 
 const sessionStore = useSessionStore()
 const { sessionId, sessions } = storeToRefs(sessionStore)
@@ -241,6 +268,9 @@ onMounted(async () => {
   await loadProvidersWithStatus()
 })
 
+// Ctrl+K 切换私密模式
+useGlobalShortcut({ key: 'k', mod: true }, () => { setPrivateMode(!privateMode.value) })
+
 function onModelChange(providerId: string, modelName: string) {
   selectedProviderId.value = providerId
   selectedModelName.value = modelName
@@ -250,7 +280,8 @@ function onModelChange(providerId: string, modelName: string) {
 }
 
 // ── ChatInput 状态收敛：创建 useChatInput 实例并 provide 给 ChatInput ──
-provideChatInput({
+// 保留实例引用，便于 handleQuickStart 复用 ChatInput 的 providerId/modelName 状态
+const chatInputInstance = provideChatInput({
   isStreaming,
   canSend: connected,
   initialProviderId: selectedProviderId,
@@ -279,11 +310,11 @@ function addCitation(ref: ParsedRef) {
 
 function onSend(text: string, refs: ParsedRef[], providerId?: string, modelName?: string, thinkPathId?: ThinkPathId) {
   // 将选区引用作为 refs 的一部分传给后端
-  const quoteRefs: ParsedRef[] = quotedSelections.value.map(q => ({
-    type: 'selection' as any,
-    label: q.source,
-    preview: q.text,
-  } as ParsedRef))
+    const quoteRefs: SelectionRef[] = quotedSelections.value.map(q => ({
+      type: 'selection',
+      label: q.source,
+      preview: q.text,
+    }))
   send(text, [...refs, ...quoteRefs], providerId, modelName, thinkPathId)
   clearQuotes()
 }
@@ -319,7 +350,9 @@ async function handleUndo() {
 }
 
 function handleQuickStart(message: string) {
-  onSend(message, [])
+  // 通过 ChatInput 实例的 send 方法发送，确保使用 ChatInput 当前选中的 provider/model，
+  // 而非直接调用 onSend（会丢失用户在 ModelSelector 中的选择）
+  chatInputInstance.send(message)
 }
 </script>
 
@@ -353,6 +386,8 @@ function handleQuickStart(message: string) {
 }
 .private-toggle.active {
   border-color: var(--status-warn);
+  background: transparent;
+  background: transparent;
   background: color-mix(in srgb, var(--status-warn) 10%, transparent);
   color: var(--status-warn);
 }
@@ -398,6 +433,8 @@ function handleQuickStart(message: string) {
 /* 自动模式（autoApprove = true） */
 .auto-approve-toggle.active {
   border-color: var(--status-warn);
+  background: transparent;
+  background: transparent;
   background: color-mix(in srgb, var(--status-warn) 10%, transparent);
   color: var(--status-warn);
 }
@@ -536,6 +573,80 @@ function handleQuickStart(message: string) {
   opacity: 0.85;
 }
 
+/* ── 增强版无提供商引导卡片（面向 Novice 画像） ── */
+.no-provider-card--enhanced {
+  max-width: 480px;
+  padding: 36px 32px 28px;
+}
+.no-provider-lead {
+  margin-bottom: 20px !important;
+}
+.no-provider-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 24px;
+  text-align: left;
+  display: grid;
+  gap: 10px;
+}
+.no-provider-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-primary) 60%, transparent);
+}
+.no-provider-steps .step-no {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--bg-primary);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+.no-provider-steps .step-text {
+  flex: 1;
+  font-size: 0.9em;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.no-provider-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+.no-provider-actions .btn {
+  display: inline-block;
+  padding: 10px 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  text-decoration: none;
+  font-size: 0.9em;
+  font-weight: 500;
+  transition: opacity 0.15s, border-color 0.15s;
+}
+.no-provider-actions .btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.no-provider-note {
+  font-size: 0.8em !important;
+  color: var(--text-tertiary);
+  margin: 0 !important;
+  line-height: 1.5;
+}
+
 .chat-workbench-layout {
   display: flex;
   flex: 1;
@@ -562,11 +673,11 @@ function handleQuickStart(message: string) {
 }
 
 .workbench-toggle-btn:hover {
-  background: var(--bg-hover, #f0f0f0);
+  background: var(--bg-secondary);
 }
 
 .workbench-toggle-btn.active {
-  color: var(--accent-color, #1a73e8);
+  color: var(--accent);
 }
 
 .workbench-placeholder {

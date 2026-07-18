@@ -3,9 +3,24 @@
     <!-- ── 列表模式 ── -->
     <template v-if="mode === 'list'">
       <div class="header">
-        <h2>路径白名单</h2>
+        <h2>路径白名单 Path Whitelist</h2>
         <button class="btn btn-primary" @click="startAdd">添加</button>
       </div>
+
+      <details class="intro-card" open>
+        <summary>什么是路径白名单？我需要配置吗？</summary>
+        <div class="intro-body">
+          <p>路径白名单是 Maxma 的<strong>文件访问授权清单</strong>——只有显式列在白名单中的目录，AI 才能在工具调用中读写其中的文件。</p>
+          <p><strong>不配置会怎样</strong>？默认情况下 AI 无法访问任何本地目录，所有文件类工具调用都会被拒绝。要让 AI 能读你的项目代码、整理你的文档、操作你的笔记，必须先把对应目录加入白名单。</p>
+          <p><strong>建议添加的目录</strong>：</p>
+          <ul>
+            <li>📝 <strong>工作文档目录</strong>（如 <code>Documents</code> / <code>桌面</code>）——让 AI 能整理、检索、改写文档。</li>
+            <li>💻 <strong>代码项目目录</strong>（如 <code>Code/projects</code>）——让 AI 能阅读、修改、调试你的代码。</li>
+            <li>📔 <strong>笔记目录</strong>（如 Obsidian 库 / Logseq 库）——让 AI 能搜索和补充你的知识库。</li>
+          </ul>
+          <p class="intro-warn">⚠️ 不建议直接添加整盘根目录（如 <code>C:\</code> 或 <code>/</code>）——这会让 AI 能访问系统所有文件，违反最小权限原则。如需保护敏感目录，使用<router-link to="/maxma-blocker">拒止锚</router-link>叠加阻断。</p>
+        </div>
+      </details>
 
       <details class="rule-card">
         <summary class="rule-summary">规则说明</summary>
@@ -22,7 +37,12 @@
       </details>
 
       <div v-if="loading" class="loading">加载中...</div>
-      <div v-else-if="entries.length === 0" class="empty">尚未添加任何路径。</div>
+      <div v-else-if="entries.length === 0" class="empty-state">
+        <div class="empty-icon">📂</div>
+        <h3>还没有任何白名单路径</h3>
+        <p class="empty-desc">AI 目前无法访问任何本地目录。点击下方「添加」选择一个常用目录（文档 / 代码 / 笔记）让 AI 开始协助你。</p>
+        <button class="btn btn-primary" @click="startAdd">+ 添加第一个目录</button>
+      </div>
       <div v-else class="entry-list">
         <div v-for="(entry, i) in entries" :key="i" class="entry-card">
           <div class="entry-body">
@@ -73,6 +93,11 @@
             <span class="toggle-slider"></span>
             <span class="toggle-label">{{ formRecursive ? '允许访问所有子目录' : '仅允许访问此目录（不含子目录）' }}</span>
           </label>
+          <div class="form-hint">
+            <strong>{{ formRecursive ? '✅ 已开启继承' : '⛔ 已关闭继承' }}</strong>：
+            <template v-if="formRecursive">AI 可访问此目录及其下所有子目录的文件。适用于<strong>项目根目录 / 笔记库根目录</strong>——AI 能完整检索整个目录树。</template>
+            <template v-else>AI 只能访问此目录下的直接文件，无法进入任何子目录。适用于<strong>只让 AI 整理某个具体文件夹</strong>，避免它触及子目录中的其他内容。</template>
+          </div>
         </div>
         <div v-if="formError" class="msg error">{{ formError }}</div>
         <div class="form-actions">
@@ -106,7 +131,7 @@ async function loadEntries() {
   try {
     const res = await api.listWhitelist()
     entries.value = res.entries
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('加载白名单失败', e)
   } finally {
     loading.value = false
@@ -160,8 +185,8 @@ async function handleSave() {
     }
     await loadEntries()
     mode.value = 'list'
-  } catch (e: any) {
-    formError.value = e.message || '保存失败'
+  } catch (e: unknown) {
+    formError.value = e instanceof Error ? e.message : '保存失败'
   } finally {
     saving.value = false
   }
@@ -172,7 +197,7 @@ async function confirmDelete(i: number) {
   try {
     await api.deleteWhitelistEntry(i)
     entries.value.splice(i, 1)
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('删除失败', e)
   }
 }
@@ -202,6 +227,96 @@ onMounted(loadEntries)
   color: var(--text-secondary);
   padding: 40px 0;
 }
+
+/* ── Novice 引导卡片 ── */
+.intro-card {
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-card);
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--accent) 25%, var(--border));
+  overflow: hidden;
+}
+.intro-card > summary {
+  padding: 12px 16px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+.intro-card > summary::-webkit-details-marker { display: none; }
+.intro-card > summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 8px;
+  color: var(--text-tertiary);
+  transition: transform 0.15s;
+}
+.intro-card[open] > summary::before { transform: rotate(90deg); }
+.intro-body {
+  padding: 0 16px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.75;
+}
+.intro-body p { margin: 6px 0; }
+.intro-body strong { color: var(--text-primary); }
+.intro-body ul { margin: 6px 0; padding-left: 22px; }
+.intro-body li { margin-bottom: 4px; }
+.intro-body code {
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 12px;
+  background: var(--bg-secondary);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.intro-warn {
+  margin-top: 10px !important;
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--status-warn, #eab308) 10%, var(--bg-primary));
+  border-left: 3px solid var(--status-warn, #eab308);
+  border-radius: 0 6px 6px 0;
+  font-size: 12.5px;
+}
+
+/* ── 空状态 ── */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  border: 1.5px dashed var(--border);
+  border-radius: 12px;
+  background: var(--bg-card);
+  background: color-mix(in srgb, var(--accent) 3%, var(--bg-card));
+}
+.empty-icon { font-size: 42px; margin-bottom: 12px; }
+.empty-state h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 8px;
+}
+.empty-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin: 0 auto 16px;
+  max-width: 420px;
+}
+
+/* ── 表单提示 ── */
+.form-hint {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+.form-hint strong { color: var(--text-primary); }
 .entry-list {
   display: flex;
   flex-direction: column;
@@ -294,6 +409,7 @@ onMounted(loadEntries)
   font-size: 13px;
 }
 .msg.error {
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
   color: var(--status-error);
 }
@@ -379,10 +495,12 @@ onMounted(loadEntries)
   margin-top: 4px;
 }
 .recursive-yes {
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card));
   color: var(--status-ok);
 }
 .recursive-no {
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card));
   color: var(--status-warn);
 }

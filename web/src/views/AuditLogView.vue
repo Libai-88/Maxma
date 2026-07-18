@@ -1,443 +1,304 @@
 <template>
-  <div class="audit-view">
+  <div class="audit-log-view">
     <div class="header">
-      <h2>审计日志</h2>
-      <div class="header-actions">
-        <span v-if="loading" class="badge-muted">加载中…</span>
-        <span v-else-if="error" class="badge-error" :title="error">获取失败</span>
-        <span v-else class="badge-muted">共 {{ stats.total }} 条</span>
-        <button class="btn-small" @click="refresh">刷新</button>
-      </div>
+      <h2>审计日志 Audit Log</h2>
+      <p class="header-sub">了解 Maxma 记录了什么、在哪里查看、如何清除。</p>
     </div>
 
-    <!-- 统计区 -->
-    <section class="card">
-      <h3>统计</h3>
-      <div class="stat-grid">
-        <div class="stat">
-          <div class="stat-value">{{ stats.total }}</div>
-          <div class="stat-label">总记录数</div>
-        </div>
-        <div class="stat" v-for="(count, type) in stats.by_type" :key="`type-${type}`">
-          <div class="stat-value">{{ count }}</div>
-          <div class="stat-label">{{ type }}</div>
-        </div>
-        <div class="stat" v-for="(count, status) in stats.by_status" :key="`status-${status}`">
-          <div class="stat-value" :class="statusClass(status)">{{ count }}</div>
-          <div class="stat-label">{{ status }}</div>
-        </div>
+    <!-- 引导：OMP 内置审计说明 -->
+    <section class="card intro-card">
+      <div class="intro-head">
+        <span class="intro-icon">📋</span>
+        <h3>审计能力由 OMP 引擎内置管理</h3>
       </div>
-      <div v-if="stats.top_targets?.length > 0" class="sub-section">
-        <div class="sub-title">高频目标 Top {{ stats.top_targets.length }}</div>
-        <BarChartMini :items="topTargetItems" :height="160" />
+      <p class="intro-desc">
+        Maxma 的 Agent 引擎（OMP / oh-my-pi）在运行过程中会自动记录关键事件，
+        包括工具调用、网络请求、配置变更与文件访问等。你不需要手动开启或维护审计——
+        事件由引擎自动产生与归档。
+      </p>
+      <ul class="intro-list">
+        <li><strong>记录什么</strong>：模型调用、工具调用（含参数与结果摘要）、网络出口、敏感配置变更。</li>
+        <li><strong>不记录什么</strong>：对话正文内容、SOUL.md / USER.md 的具体文本、API Key 明文。</li>
+        <li><strong>存储位置</strong>：本地 <code>logs/audit.jsonl</code>（详见<router-link to="/privacy">隐私仪表盘</router-link>）。</li>
+      </ul>
+    </section>
+
+    <!-- 操作引导 -->
+    <section class="card">
+      <h3>查看与操作</h3>
+      <p class="section-desc">下面是查看审计记录、导出日志与清除数据的常用入口。</p>
+      <div class="action-grid">
+        <router-link to="/privacy" class="action-card">
+          <div class="action-icon">🛡️</div>
+          <div class="action-body">
+            <div class="action-title">前往隐私仪表盘</div>
+            <div class="action-sub">查看网络活动统计、最近审计日志、清除审计记录</div>
+          </div>
+          <div class="action-arrow">↗</div>
+        </router-link>
+
+        <button class="action-card" @click="exportErrorLog" :disabled="exporting">
+          <div class="action-icon">📦</div>
+          <div class="action-body">
+            <div class="action-title">{{ exporting ? '导出中...' : '导出运行日志' }}</div>
+            <div class="action-sub">包含应用错误日志，便于反馈问题或离线审计</div>
+          </div>
+          <div class="action-arrow">↗</div>
+        </button>
+
+        <router-link to="/metrics" class="action-card">
+          <div class="action-icon">📊</div>
+          <div class="action-body">
+            <div class="action-title">查看运行指标</div>
+            <div class="action-sub">HTTP 请求、工具调用、LLM 调用的实时统计与历史趋势</div>
+          </div>
+          <div class="action-arrow">↗</div>
+        </router-link>
       </div>
     </section>
 
-    <!-- 过滤栏 -->
+    <!-- FAQ -->
     <section class="card">
-      <h3>日志记录</h3>
-      <div class="filter-row">
-        <select v-model="filterType" @change="loadRecords">
-          <option value="">全部类型</option>
-          <option v-for="t in availableTypes" :key="t" :value="t">{{ t }}</option>
-        </select>
-        <input
-          v-model="filterSince"
-          type="date"
-          class="date-input"
-          @change="loadRecords"
-        />
-        <select v-model="filterLimit" @change="loadRecords">
-          <option :value="50">最近 50 条</option>
-          <option :value="100">最近 100 条</option>
-          <option :value="200">最近 200 条</option>
-          <option :value="500">最近 500 条</option>
-        </select>
-        <button class="btn-small" @click="loadRecords">应用</button>
-      </div>
-
-      <!-- 日志列表 -->
-      <div v-if="loading && records.length === 0" class="loading-text">加载中…</div>
-      <div v-else-if="records.length === 0" class="empty-text">暂无日志记录</div>
-      <div v-else class="log-list">
-        <div v-for="(entry, idx) in records" :key="idx" class="log-entry" :class="`status-${entry.status}`">
-          <div class="log-row">
-            <span class="log-time">{{ formatTime(entry.timestamp) }}</span>
-            <span class="log-type" :class="`type-${entry.type}`">{{ entry.type }}</span>
-            <span class="log-status" :class="`status-${entry.status}`">{{ entry.status }}</span>
-            <span v-if="entry.data_size > 0" class="log-size">{{ formatSize(entry.data_size) }}</span>
-          </div>
-          <div class="log-target" :title="entry.target">{{ entry.target || '—' }}</div>
-          <div v-if="entry.detail" class="log-detail">{{ entry.detail }}</div>
-          <div v-if="entry.extra && Object.keys(entry.extra).length > 0" class="log-extra">
-            <code>{{ JSON.stringify(entry.extra) }}</code>
-          </div>
+      <h3>常见问题</h3>
+      <details class="faq-item">
+        <summary>审计日志和运行指标有什么区别？</summary>
+        <div class="faq-body">
+          <strong>审计日志</strong>关注"谁在什么时候做了什么"——按事件类型（API 调用 / 文件访问 / 配置变更）记录可追溯条目，
+          适合安全审计与事后追查。<br>
+          <strong>运行指标</strong>关注"系统表现如何"——聚合统计 HTTP 请求数 / 延迟、工具调用错误率、LLM Token 消耗等，
+          适合性能监控与健康检查。
         </div>
-      </div>
-    </section>
-
-    <!-- 操作区 -->
-    <section class="card">
-      <h3>数据管理</h3>
-      <div class="action-row">
-        <button class="btn-action danger" :disabled="actionLoading" @click="handleClear">
-          {{ actionLoading ? '处理中…' : '清空审计日志' }}
-        </button>
-        <button class="btn-action" :disabled="actionLoading" @click="handleEncrypt">
-          {{ actionLoading ? '处理中…' : '加密 API 密钥' }}
-        </button>
-      </div>
-      <div v-if="actionMessage" class="action-message" :class="actionMessageType">
-        {{ actionMessage }}
-      </div>
+      </details>
+      <details class="faq-item">
+        <summary>为什么这里没有直接展示日志条目？</summary>
+        <div class="faq-body">
+          当前版本的审计日志查看能力统一在<router-link to="/privacy">隐私仪表盘</router-link>中：
+          支持「全部 / API 调用 / 文件访问 / 配置变更」类型筛选，最近 50 条记录按时间倒序展示。
+          当后端切换到 OMP 模式后，部分审计能力由引擎内部托管，前端展示会降级为只读 banner。
+        </div>
+      </details>
+      <details class="faq-item">
+        <summary>如何彻底清除已产生的审计记录？</summary>
+        <div class="faq-body">
+          前往<router-link to="/privacy">隐私仪表盘</router-link>的「数据管理」区块，点击「清除审计日志」。
+          注意：此操作仅清除审计数据库，不会影响对话历史或已加密的 API 密钥。
+        </div>
+      </details>
+      <details class="faq-item">
+        <summary>API 密钥会被记录在日志里吗？</summary>
+        <div class="faq-body">
+          不会。审计事件按设计仅记录"事件类型 + 目标 + 状态 + 时间戳"，不捕获请求/响应体中的密钥或对话内容。
+          API 密钥本身存储在 <code>.env</code> 或 <code>providers.yaml</code>，可在隐私仪表盘点击「加密 API 密钥」进行静态加密。
+        </div>
+      </details>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { storeToRefs } from 'pinia'
-import { useAuditLogStore } from '@/stores/auditLog'
-import BarChartMini from '@/components/BarChartMini.vue'
+import { ref } from 'vue'
+import { api } from '@/api'
+import { invoke } from '@tauri-apps/api/core'
 
-const auditStore = useAuditLogStore()
-const { records, stats, loading, error } = storeToRefs(auditStore)
+const exporting = ref(false)
 
-const filterType = ref('')
-const filterSince = ref('')
-const filterLimit = ref(100)
-const actionLoading = ref(false)
-const actionMessage = ref('')
-const actionMessageType = ref<'ok' | 'error'>('ok')
-
-const availableTypes = computed(() => {
-  const types = Object.keys(stats.value.by_type || {})
-  return types.sort()
-})
-
-const topTargetItems = computed(() =>
-  (stats.value.top_targets || []).map(t => ({
-    label: t.target,
-    value: t.count,
-  })),
-)
-
-async function loadRecords() {
-  await auditStore.loadRecords({
-    limit: filterLimit.value,
-    eventType: filterType.value,
-    since: filterSince.value || '',
-  })
-  await auditStore.loadStats()
-}
-
-async function refresh() {
-  await auditStore.refreshAll({
-    limit: filterLimit.value,
-    eventType: filterType.value,
-    since: filterSince.value || '',
-  })
-}
-
-async function handleClear() {
-  if (!confirm('确定清空所有审计日志？此操作不可恢复。')) return
-  actionLoading.value = true
-  actionMessage.value = ''
+async function exportErrorLog() {
+  if (exporting.value) return
+  exporting.value = true
   try {
-    const deleted = await auditStore.clearAll()
-    actionMessage.value = `已清空 ${deleted} 条记录`
-    actionMessageType.value = 'ok'
-  } catch (e: any) {
-    actionMessage.value = `清空失败: ${e?.message || String(e)}`
-    actionMessageType.value = 'error'
+    const text = await api.getErrorLogText()
+    const ts = new Date().toISOString().replace(/[:T]/g, '-').substring(0, 19)
+    const filename = `maxma-audit-log-${ts}.txt`
+    const result = await invoke<string | null>('save_text_file', {
+      content: text,
+      defaultFilename: filename,
+    })
+    if (result) {
+      alert(`审计日志已保存到:\n${result}`)
+    }
+  } catch (e) {
+    alert('导出失败: ' + (e instanceof Error ? e.message : String(e)))
   } finally {
-    actionLoading.value = false
+    exporting.value = false
   }
 }
-
-async function handleEncrypt() {
-  actionLoading.value = true
-  actionMessage.value = ''
-  try {
-    const count = await auditStore.encryptKeys()
-    actionMessage.value = `已加密 ${count} 个 API 密钥`
-    actionMessageType.value = 'ok'
-  } catch (e: any) {
-    actionMessage.value = `加密失败: ${e?.message || String(e)}`
-    actionMessageType.value = 'error'
-  } finally {
-    actionLoading.value = false
-  }
-}
-
-function formatTime(ts: string): string {
-  if (!ts) return '—'
-  const d = new Date(ts)
-  if (isNaN(d.getTime())) return ts
-  return d.toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  })
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes}B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`
-  return `${(bytes / 1024 / 1024).toFixed(2)}MB`
-}
-
-function statusClass(status: string): string {
-  if (status === 'ok') return 'text-ok'
-  if (status === 'error') return 'text-error'
-  if (status === 'blocked') return 'text-warn'
-  return ''
-}
-
-onMounted(() => {
-  refresh()
-})
 </script>
 
 <style scoped>
-.audit-view {
-  padding: 24px 32px;
-  max-width: 1100px;
-  margin: 0 auto;
+.audit-log-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
-  height: 100%;
+  padding: 24px 32px;
+  max-width: 880px;
+  margin: 0 auto;
+  width: 100%;
 }
 .header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   margin-bottom: 20px;
-  flex-wrap: wrap;
-  gap: 12px;
 }
 .header h2 {
-  font-size: 20px;
-  font-weight: 600;
+  margin: 0 0 4px;
+  font-size: 1.1em;
+  font-weight: 700;
   color: var(--text-primary);
+}
+.header-sub {
   margin: 0;
-}
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 13px;
+  font-size: 0.85em;
   color: var(--text-secondary);
+  line-height: 1.6;
 }
-.badge-muted {
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-.badge-error {
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--status-error) 12%, transparent);
-  color: var(--status-error);
-  font-size: 12px;
-}
-.btn-small {
-  padding: 4px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  font-size: 12px;
-  cursor: pointer;
-}
-.btn-small:hover { border-color: var(--accent); color: var(--text-primary); }
 
 .card {
   margin-bottom: 16px;
-  padding: 16px;
+  padding: 18px 20px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--bg-card);
 }
 .card h3 {
-  font-size: 15px;
+  margin: 0 0 8px;
+  font-size: 0.95em;
   font-weight: 600;
   color: var(--text-primary);
-  margin: 0 0 12px;
+}
+.section-desc {
+  margin: 0 0 14px;
+  font-size: 0.8em;
+  color: var(--text-secondary);
+  line-height: 1.6;
 }
 
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 10px;
-  margin-bottom: 12px;
+/* ── 引导卡片 ── */
+.intro-card {
+  background: var(--bg-card);
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
 }
-.stat {
-  padding: 10px 12px;
+.intro-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.intro-icon { font-size: 28px; }
+.intro-head h3 { margin: 0; font-size: 1em; }
+.intro-desc {
+  margin: 0 0 12px;
+  font-size: 0.85em;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+.intro-list {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 0.82em;
+  color: var(--text-secondary);
+  line-height: 1.8;
+}
+.intro-list li { margin-bottom: 2px; }
+.intro-list strong { color: var(--text-primary); font-weight: 600; }
+.intro-list code {
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 0.85em;
+  background: var(--bg-secondary);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+/* ── 操作卡片网格 ── */
+.action-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+.action-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--bg-primary);
-  text-align: center;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s, background 0.15s;
+  font: inherit;
+  text-align: left;
 }
-.stat-value {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text-primary);
-  line-height: 1.2;
+.action-card:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg-primary));
 }
-.stat-value.text-ok { color: #22c55e; }
-.stat-value.text-error { color: var(--status-error); }
-.stat-value.text-warn { color: var(--status-warn); }
-.stat-label {
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin-top: 2px;
-}
-
-.sub-section { margin-top: 12px; }
-.sub-title {
-  font-size: 12px;
+.action-card:disabled { opacity: 0.55; cursor: wait; }
+.action-icon { font-size: 24px; flex-shrink: 0; }
+.action-body { flex: 1; min-width: 0; }
+.action-title {
+  font-size: 0.88em;
   font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: 6px;
-}
-
-.filter-row {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-.filter-row select,
-.date-input {
-  padding: 4px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-primary);
   color: var(--text-primary);
-  font-size: 12px;
+  margin-bottom: 2px;
 }
-
-.log-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 500px;
-  overflow-y: auto;
-}
-.log-entry {
-  padding: 8px 10px;
-  border-radius: 6px;
-  background: var(--bg-primary);
-  border-left: 3px solid var(--border);
-}
-.log-entry.status-ok { border-left-color: #22c55e; }
-.log-entry.status-error { border-left-color: var(--status-error); }
-.log-entry.status-blocked { border-left-color: var(--status-warn); }
-.log-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  font-size: 12px;
-  flex-wrap: wrap;
-}
-.log-time {
+.action-sub {
+  font-size: 0.75em;
   color: var(--text-secondary);
-  font-family: monospace;
+  line-height: 1.5;
+}
+.action-arrow {
+  color: var(--text-tertiary);
+  font-size: 1.1em;
   flex-shrink: 0;
 }
-.log-type {
-  padding: 1px 6px;
-  border-radius: 3px;
-  background: var(--bg-secondary);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-.log-status {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 1px 6px;
-  border-radius: 3px;
-}
-.log-status.status-ok { color: #22c55e; background: color-mix(in srgb, #22c55e 12%, transparent); }
-.log-status.status-error { color: var(--status-error); background: color-mix(in srgb, var(--status-error) 12%, transparent); }
-.log-status.status-blocked { color: var(--status-warn); background: color-mix(in srgb, var(--status-warn) 12%, transparent); }
-.log-size {
-  color: var(--text-tertiary);
-  font-size: 11px;
-  font-family: monospace;
-}
-.log-target {
-  font-size: 12px;
-  color: var(--text-primary);
-  margin-top: 2px;
-  font-family: monospace;
-  word-break: break-all;
-}
-.log-detail {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-top: 2px;
-}
-.log-extra {
-  margin-top: 4px;
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-.log-extra code {
-  font-family: monospace;
-  background: var(--bg-secondary);
-  padding: 2px 4px;
-  border-radius: 3px;
-}
 
-.action-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+/* ── FAQ ── */
+.faq-item {
+  border-top: 1px solid var(--border);
+  padding: 10px 0;
 }
-.btn-action {
-  padding: 8px 16px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-size: 13px;
+.faq-item:first-of-type { border-top: none; padding-top: 0; }
+.faq-item summary {
   cursor: pointer;
-  transition: all 0.15s;
+  font-size: 0.88em;
+  font-weight: 500;
+  color: var(--text-primary);
+  list-style: none;
+  user-select: none;
+  padding: 4px 0;
+  position: relative;
+  padding-left: 18px;
 }
-.btn-action:hover:not(:disabled) { border-color: var(--accent); }
-.btn-action.danger { color: var(--status-error); }
-.btn-action.danger:hover:not(:disabled) {
-  border-color: var(--status-error);
-  background: color-mix(in srgb, var(--status-error) 8%, var(--bg-card));
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary::before {
+  content: '▸';
+  position: absolute;
+  left: 0;
+  color: var(--text-tertiary);
+  transition: transform 0.15s;
 }
-.btn-action:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.action-message {
+.faq-item[open] summary::before {
+  transform: rotate(90deg);
+}
+.faq-body {
   margin-top: 8px;
-  font-size: 13px;
-  padding: 6px 12px;
-  border-radius: 6px;
+  padding: 4px 0 6px 18px;
+  font-size: 0.82em;
+  color: var(--text-secondary);
+  line-height: 1.75;
 }
-.action-message.ok {
-  color: #22c55e;
-  background: color-mix(in srgb, #22c55e 10%, var(--bg-card));
-}
-.action-message.error {
-  color: var(--status-error);
-  background: color-mix(in srgb, var(--status-error) 10%, var(--bg-card));
+.faq-body strong { color: var(--text-primary); }
+.faq-body code {
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 0.85em;
+  background: var(--bg-secondary);
+  padding: 1px 5px;
+  border-radius: 3px;
 }
 
-.loading-text, .empty-text {
-  color: var(--text-secondary);
-  font-size: 13px;
-  padding: 16px 0;
-  text-align: center;
+@media (max-width: 640px) {
+  .audit-log-view { padding: 16px; }
+  .action-grid { grid-template-columns: 1fr; }
 }
 </style>

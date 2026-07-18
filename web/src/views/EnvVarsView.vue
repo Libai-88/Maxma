@@ -3,13 +3,15 @@
     <!-- ── 列表模式 ── -->
     <template v-if="mode === 'list'">
       <div class="header">
-        <h2>工具环境变量</h2>
+        <h2>工具环境变量 Env Vars</h2>
       </div>
 
       <details class="info-card">
         <summary class="info-summary">说明</summary>
         <div class="info-body">
           <p>此处管理工具运行所需的第三方服务 API Key 与凭据。值已做脱敏显示，修改后无需重启服务即可生效。</p>
+          <p>仅支持预置的 API key 配置，不支持自定义 key。每张卡片右侧附「申请」外链，可直达服务商控制台获取 Key。</p>
+          <p>设置后无需重启，下次工具调用即生效；若工具未自动识别，可前往「设置 → 重启服务」。</p>
         </div>
       </details>
 
@@ -20,6 +22,14 @@
             <div class="var-label-row">
               <span class="var-label">{{ item.label }}</span>
               <span class="var-key">{{ item.key }}</span>
+              <a
+                v-if="item.apply_url"
+                :href="item.apply_url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="var-apply-link"
+                title="前往服务商控制台申请 API Key"
+              >前往申请 ↗</a>
             </div>
             <div class="var-desc">{{ item.description }}</div>
             <div class="var-value-row">
@@ -101,8 +111,8 @@ async function loadVars() {
   try {
     const res = await api.listEnvVars()
     items.value = res.env_vars
-  } catch (e: any) {
-    console.error('加载环境变量失败', e)
+    } catch (e: unknown) {
+      console.error('加载环境变量失败', e)
   } finally {
     loading.value = false
   }
@@ -136,8 +146,8 @@ async function handleSave() {
     item.value = res.masked_value
     item.is_set = true
     setTimeout(() => cancelForm(), 1200)
-  } catch (e: any) {
-    formError.value = e.message || '保存失败'
+  } catch (e: unknown) {
+    formError.value = e instanceof Error ? e.message : '保存失败'
   } finally {
     saving.value = false
   }
@@ -246,6 +256,22 @@ onMounted(loadVars)
   font-family: 'SF Mono', 'Consolas', monospace;
 }
 
+.var-apply-link {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: 4px;
+  font-weight: 500;
+  transition: background 0.15s, border-color 0.15s;
+}
+.var-apply-link:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-color: var(--accent);
+}
+
 .var-desc {
   font-size: 12px;
   color: var(--text-secondary);
@@ -328,11 +354,13 @@ onMounted(loadVars)
 }
 
 .msg.error {
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-error) 10%, var(--bg-card));
   color: var(--status-error);
 }
 
 .msg.success {
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-ok) 10%, var(--bg-card));
   color: var(--status-ok);
 }

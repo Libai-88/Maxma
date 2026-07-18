@@ -19,6 +19,11 @@ export interface ThinkingEndEvent {
   payload: { timestamp: number }
 }
 
+export interface ThinkingDeltaEvent {
+  type: 'thinking_delta'
+  payload: { delta: string }
+}
+
 export interface ToolStartEvent {
   type: 'tool_start'
   payload: { tool_name: string; input: string }
@@ -31,7 +36,7 @@ export interface ToolEndEvent {
 
 export interface ToolErrorEvent {
   type: 'tool_error'
-  payload: { tool_name: string; error: string }
+  payload: { tool_name: string; error: string; elapsed?: number }
 }
 
 export interface AnswerEvent {
@@ -273,6 +278,7 @@ export type ServerEvent =
   | ThinkingStartEvent
   | TokenEvent
   | ThinkingEndEvent
+  | ThinkingDeltaEvent
   | ToolStartEvent
   | ToolEndEvent
   | ToolErrorEvent
@@ -503,10 +509,14 @@ export interface TokenBreakdown {
 }
 
 export interface ContextUsage {
-  current_tokens: number
+  estimated_tokens?: number
   max_tokens: number
-  usage_percent: number
+  percentage?: number
+  message_count?: number
   model_name: string
+  /** 兼容旧格式：由后端 context_compressed 事件映射 */
+  current_tokens?: number
+  usage_percent?: number
   breakdown?: TokenBreakdown
 }
 
@@ -578,6 +588,7 @@ export interface EnvVarItem {
   key: string
   label: string
   description: string
+  apply_url: string
   value: string
   is_set: boolean
 }
@@ -602,6 +613,5 @@ export * from './mcp'
 export * from './news'
 export * from './skills'
 export * from './metrics'
-export * from './kb'
 export * from './activity'
 export * from './audit-log'

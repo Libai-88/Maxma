@@ -79,7 +79,7 @@ async def get_session(session_id: str, request: Request):
     sm = request.app.state.session_manager
     session = await sm.get(session_id)
     if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="会话不存在")
     return {
         "session_id": session.session_id,
         "message_count": session.message_count,
@@ -97,7 +97,7 @@ async def get_session_permission_mode(session_id: str, request: Request):
     sm = request.app.state.session_manager
     session = await sm.get(session_id)
     if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="会话不存在")
     return _permission_mode_metadata(session, enabled=_permission_modes_enabled())
 
 
@@ -111,19 +111,19 @@ async def set_session_permission_mode(
     sm = request.app.state.session_manager
     session = await sm.get(session_id)
     if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="会话不存在")
 
     if not _permission_modes_enabled():
         # The flag preserves the legacy approval semantics, so an inactive
         # endpoint must not leave a latent elevated value on the session.
-        raise HTTPException(status_code=409, detail="Permission modes are unavailable")
+        raise HTTPException(status_code=409, detail="权限模式功能未启用")
 
     try:
         session.set_permission_mode(body.permission_mode)
     except ValueError:
         # The request model normally catches this first.  Keep the boundary
         # fail-closed if an alternative SessionState implementation rejects it.
-        raise HTTPException(status_code=422, detail="Unsupported permission mode") from None
+        raise HTTPException(status_code=422, detail="不支持的权限模式") from None
 
     return _permission_mode_metadata(session, enabled=True)
 
@@ -133,7 +133,7 @@ async def get_messages(session_id: str, request: Request, limit: int = 50):
     sm = request.app.state.session_manager
     session = await sm.get(session_id)
     if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="会话不存在")
 
     # const 会话：从 YAML 文件读取
     if session.is_const:
@@ -262,7 +262,7 @@ async def undo_session_messages(session_id: str, request: Request, n: int = 1):
     sm = request.app.state.session_manager
     session = await sm.get(session_id)
     if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="会话不存在")
 
     # ── Sidecar path ──────────────────────────────────────────────
     mgr = getattr(request.app.state, "sidecar_manager", None)
@@ -285,8 +285,17 @@ async def undo_session_messages(session_id: str, request: Request, n: int = 1):
                         "steps": n,
                     })
                     deleted = result.get("removed", 0)
+
+                    # 先更新内存状态，再同步 const YAML。
+                    # 顺序保证：_sync_const_session_after_undo 通过
+                    # persistent_metadata() 读取 session.message_count，
+                    # 必须先更新 message_count 才能将新值持久化到 YAML，
+                    # 否则 YAML 会保存旧值造成内存与磁盘状态不一致。
                     session.message_count = max(0, session.message_count - deleted)
-                    await _sync_const_session_after_undo(session, deleted, sidecar_mgr=mgr)
+
+                    if session.is_const and deleted > 0:
+                        await _sync_const_session_after_undo(session, deleted, sidecar_mgr=mgr)
+
                     return {"deleted_count": deleted}
                 except Exception:
                     logger.debug("[undo] sidecar undo failed for %s", session_id, exc_info=True)
@@ -300,12 +309,12 @@ async def get_context_usage(session_id: str, request: Request):
     sm = request.app.state.session_manager
     session = await sm.get(session_id)
     if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="会话不存在")
     # OMP ModelRegistry 管理所有 provider，Python 端使用默认值
     max_tokens = 256_000
     model_name = ""
 
-    system_prompt = request.app.state.system_prompt or ""
+    system_prompt = getattr(request.app.state, "system_prompt", "") or ""
 
     # sidecar 模式：从 sidecar 获取消息估算用量
     counting_messages = []
@@ -329,6 +338,7 @@ async def get_context_usage(session_id: str, request: Request):
                 except Exception:
                     logger.debug("Failed to get messages for context usage in session %s", session_id, exc_info=True)
 
+    # 粗略 token 估算：约 2 字符 ≈ 1 token
     total_chars = sum(len(m.get("content", "")) for m in counting_messages)
     total_chars += len(system_prompt)
     estimated_tokens = int(total_chars / 2)
@@ -376,7 +386,7 @@ async def delete_session(session_id: str, request: Request):
                 smap.remove(session_id)
 
     if not await sm.delete(session_id):
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="会话不存在")
     return {"status": "deleted"}
 
 
@@ -389,7 +399,7 @@ async def constify_session(session_id: str, body: ConstifyRequest, request: Requ
     sm = request.app.state.session_manager
     session = await sm.get(session_id)
     if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="会话不存在")
 
     # Agent 运行中禁止固定
     if session._active_task is not None and not session._active_task.done():
@@ -445,7 +455,7 @@ async def generate_session_title(session_id: str, request: Request):
     sm = request.app.state.session_manager
     session = await sm.get(session_id)
     if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="会话不存在")
 
     # 从 sidecar 提取消息
     messages = []
@@ -497,20 +507,47 @@ async def generate_session_title(session_id: str, request: Request):
 
     prompt = f"{system_prompt}\n\n对话内容：\n{conversation_text}\n\n标题："
 
-    try:
-        llm = request.app.state.llm
-        response = await llm.ainvoke(prompt)
-        title = (
-            response.content.strip().strip('"').strip("'")
-            if hasattr(response, "content")
-            else str(response).strip()
-        )
-        title = title[:50]
-        if not title:
-            title = "未命名会话"
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"标题生成失败: {e}")
+    title = None
 
+    # 优先通过 sidecar RPC 调用 LLM（经过 OMP ModelRegistry 整体 Provider 路由）
+    if sidecar_mgr is not None:
+        await sidecar_mgr.start()
+        client = sidecar_mgr.client
+        if client is not None:
+            try:
+                result = await client.call("chat", {
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": f"对话内容：\n{conversation_text}\n\n标题："},
+                    ],
+                    "max_tokens": 50,
+                })
+                raw = result.get("content", "") or ""
+                title = raw.strip().strip('"').strip("'")
+            except Exception as e:
+                logger.warning("[generate-title] sidecar RPC 失败，尝试直连: %s", e)
+
+    # fallback：直连 LLM（当 sidecar 不可用或返回空内容时）
+    if not title:
+        try:
+            llm = getattr(request.app.state, "llm", None)
+            if llm is None:
+                raise HTTPException(
+                    status_code=503,
+                    detail="标题生成需要 sidecar 连接，但 sidecar 不可用",
+                )
+            response = await llm.ainvoke(prompt)
+            title = (
+                response.content.strip().strip('"').strip("'")
+                if hasattr(response, "content")
+                else str(response).strip()
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"标题生成失败: {e}")
+
+    title = title[:50] if title else "未命名会话"
     return {"title": title}
 
 

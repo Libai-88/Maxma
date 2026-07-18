@@ -17,6 +17,7 @@
 
 <script setup lang="ts">
 import type { ComponentHealth, HealthResponse } from '@/types';
+import { safeComponentHealth } from '@/utils/componentHealth';
 import { diagnosticMessage, retryMessage } from '@/utils/providerDiagnostics';
 import { computed } from 'vue';
 
@@ -32,31 +33,40 @@ interface HealthItem {
 const items = computed<HealthItem[]>(() => {
   const h = props.health
   return [
-    makeItem('LLM', h.llm),
-    makeItem('MEMORY', h.memory),
-    makeItem('TOOLS', h.native_tools),
-    makeItem('MCP', h.mcp_tools),
+    makeItem('AI 模型', h.llm),
+    makeItem('记忆', h.memory),
+    makeItem('工具', h.native_tools),
+    makeItem('MCP 服务', h.mcp_tools),
   ]
 })
 
-function makeItem(label: string, c: ComponentHealth): HealthItem {
-  const ok = c.status === 'ok'
+function makeItem(label: string, c: ComponentHealth | null | undefined): HealthItem {
+  const safe = safeComponentHealth(c)
+  if (!safe) {
+    return {
+      name: label,
+      label,
+      statusClass: 'unknown',
+      tooltip: `${label}: 数据不可用`,
+    }
+  }
+  const ok = safe.status === 'ok'
   const parts: string[] = []
-  if (c.latency_ms != null) parts.push(`${c.latency_ms.toFixed(0)}ms`)
+  if (safe.latency_ms != null) parts.push(`${safe.latency_ms.toFixed(0)}ms`)
   const diagnostic = props.health.provider_diagnostics_enabled
-    ? diagnosticMessage(c)
+    ? diagnosticMessage(safe)
     : null
   if (diagnostic != null) parts.push(diagnostic)
   const retry = props.health.provider_diagnostics_enabled
-    ? retryMessage(c.retry_at)
+    ? retryMessage(safe.retry_at)
     : null
   if (retry != null) parts.push(retry)
-  if (ok && c.detail != null) parts.push(c.detail)
+  if (ok && safe.detail != null) parts.push(safe.detail)
   return {
     name: label,
     label,
-    statusClass: c.status,
-    tooltip: `${label}: ${ok ? '正常' : c.status === 'degraded' ? '降级' : '异常'}${parts.length ? ' — ' + parts.join(' | ') : ''}`,
+    statusClass: safe.status,
+    tooltip: `${label}: ${ok ? '正常' : safe.status === 'degraded' ? '降级' : '异常'}${parts.length ? ' — ' + parts.join(' | ') : ''}`,
   }
 }
 </script>
@@ -72,7 +82,6 @@ function makeItem(label: string, c: ComponentHealth): HealthItem {
   font-size: 11px;
   font-weight: 600;
   color: var(--text-secondary);
-  text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 8px;
 }
@@ -107,6 +116,10 @@ function makeItem(label: string, c: ComponentHealth): HealthItem {
 
 .dot.degraded {
   background: var(--status-warn);
+}
+
+.dot.unknown {
+  background: var(--text-tertiary, #999);
 }
 
 .label {

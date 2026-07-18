@@ -45,7 +45,7 @@ def _find_deepseek_api_key(request: Request) -> str:
     if not api_key:
         raise HTTPException(
             status_code=400,
-            detail="DeepSeek API key not configured. Set DEEPSEEK_API_KEY in .env.",
+            detail="DeepSeek API key 未配置，请在 .env 中设置 DEEPSEEK_API_KEY",
         )
     return api_key
 
@@ -60,11 +60,15 @@ async def get_deepseek_balance(request: Request):
     client = _get_async_client()
     try:
         response = await client.get(DEEPSEEK_BALANCE_URL, headers=headers)
+        # 修复：未调用 raise_for_status()，导致 except HTTPStatusError 成为死代码。
+        # 当 DeepSeek 返回 401/403/5xx 时，错误 JSON 会被当作余额数据静默返回给前端。
+        response.raise_for_status()
         data = response.json()
     except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="DeepSeek API timeout")
+        raise HTTPException(status_code=504, detail="DeepSeek API 请求超时")
     except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=500, detail=f"DeepSeek API error: {e}")
+        status = e.response.status_code if e.response is not None else 0
+        raise HTTPException(status_code=500, detail=f"DeepSeek API 错误：HTTP {status}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"DeepSeek API error: {e}")
+        raise HTTPException(status_code=500, detail=f"DeepSeek API 错误：{e}")
     return data

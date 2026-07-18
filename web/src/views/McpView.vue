@@ -3,8 +3,8 @@
     <!-- ── 标题栏 ── -->
     <div class="header">
       <h2>MCP 服务</h2>
-      <button v-if="mode === 'list'" class="btn primary" @click="startAdd">+ 添加 MCP 服务器</button>
-      <button v-else class="btn" @click="cancelForm">← 返回列表</button>
+      <button v-if="mode === 'list'" class="ds-btn ds-btn--primary" @click="startAdd">+ 添加 MCP 服务器</button>
+      <button v-else class="ds-btn" @click="cancelForm">← 返回列表</button>
     </div>
 
     <!-- ── 列表模式 ── -->
@@ -13,12 +13,88 @@
       <div v-else-if="loadError" class="empty">
         加载失败: {{ loadError }}
         <div class="retry-row">
-          <button class="btn primary" @click="loadServers">重试</button>
+          <button class="ds-btn ds-btn--primary" @click="loadServers">重试</button>
         </div>
       </div>
-      <div v-else-if="servers.length === 0" class="empty">
-        尚未配置任何 MCP 服务器。点击上方按钮添加。
-        <div class="empty-hint">MCP（Model Context Protocol）让 Maxma 能调用外部工具和服务。</div>
+      <div v-else-if="servers.length === 0" class="empty enhanced-empty">
+        <!-- Hero -->
+        <div class="empty-hero">
+          <svg class="empty-hero-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <!-- Server -->
+            <rect x="8" y="6" width="32" height="36" rx="4" />
+            <circle cx="24" cy="18" r="3.5" />
+            <path d="M24 30v-6" />
+            <path d="M16 32h4M28 32h4" />
+            <!-- Connection lines -->
+            <path d="M24 6V2M24 42v4" />
+          </svg>
+          <div class="empty-hero-text">
+            <h3>开始使用 MCP 服务器</h3>
+            <p>MCP 是一种让 Maxma 与外部工具和服务安全连接的通用方式。通过添加 MCP 服务器，你的 AI 就能读取文件、查询信息、运行命令，能力大幅扩展。</p>
+          </div>
+        </div>
+
+        <!-- Guide cards -->
+        <div class="guide-cards">
+          <div class="guide-card">
+            <svg class="guide-card-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 4v4M10 8h12v6a6 6 0 0 1-6 6 6 6 0 0 1-6-6V8Z" />
+              <path d="M16 20v6" />
+              <path d="M10 26h12" />
+            </svg>
+            <h4>什么是 MCP？</h4>
+            <p>MCP 相当于 AI 与各种工具之间的"翻译官"。有了 MCP 服务器，Maxma 就能跟你的文件、数据库、网页等各种工具和服务"对话"，就像跟人交流一样自然。</p>
+          </div>
+          <div class="guide-card">
+            <svg class="guide-card-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 6a4 4 0 0 0-4 4v12a4 4 0 0 0 4 4h2a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2Z" />
+              <path d="M10 6a4 4 0 0 0-4 4v12a4 4 0 0 0 4 4h2a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2Z" />
+              <path d="M8 12h2M22 12h2" />
+            </svg>
+            <h4>常见用途</h4>
+            <p>例如：读写和搜索本地文件、运行代码查看结果、获取网页内容、查询数据、管理代码版本、处理图片等。只要有命令行接口的工具或服务，都可以变成 MCP 服务器为 AI 所用。</p>
+          </div>
+          <div class="guide-card">
+            <svg class="guide-card-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="16" cy="16" r="10" />
+              <path d="M14 11l6 5-6 5" />
+            </svg>
+            <h4>快速开始</h4>
+            <p><strong>1.</strong> 点击下方按钮添加服务器<br><strong>2.</strong> 给服务器取个名字、选好连接方式<br><strong>3.</strong> 填好必要信息，保存后即可启用</p>
+          </div>
+        </div>
+
+        <!-- Role guidance -->
+        <div class="role-guidance">
+          <div class="role-card">
+            <span class="role-badge">开发者</span>
+            <span>了解命令行操作的话，点击下方「添加 MCP 服务器」自由配置</span>
+          </div>
+          <div class="role-card">
+            <span class="role-badge">普通用户</span>
+            <span>想快速体验的话，点击下方「添加示例服务器」一键上手</span>
+          </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="empty-actions">
+          <button class="ds-btn ds-btn--primary" @click="startAdd">+ 添加 MCP 服务器</button>
+          <button class="ds-btn" @click="startAddWithExample">添加示例服务器</button>
+        </div>
+
+        <!-- 模板快速入口：覆盖常用 MCP 服务器，让 Novice 不必查找文档 -->
+        <div class="preset-templates">
+          <div class="preset-templates-title">📦 常用 MCP 模板（点击一键填入）：</div>
+          <div class="preset-template-list">
+            <button
+              v-for="t in mcpTemplates"
+              :key="t.id"
+              type="button"
+              class="ds-btn preset-template-btn"
+              @click="startAddWithTemplate(t)"
+            >{{ t.label }}</button>
+          </div>
+        </div>
       </div>
       <div v-else class="card-grid">
         <div v-for="s in servers" :key="s.server_id" class="mcp-card">
@@ -87,6 +163,17 @@
 
     <!-- ── 表单模式（添加/编辑） ── -->
     <form v-else class="wizard-form" @submit.prevent="handleSave">
+      <!-- 模板快速入口（仅新增模式：让 Novice 不必从零填表） -->
+      <div v-if="!isEditing" class="form-templates">
+        <span class="form-templates-label">📦 套用模板：</span>
+        <button
+          v-for="t in mcpTemplates"
+          :key="t.id"
+          type="button"
+          class="form-template-btn"
+          @click="startAddWithTemplate(t)"
+        >{{ t.label }}</button>
+      </div>
       <!-- 基本信息 -->
       <div class="form-section">
         <label class="form-label">服务器 ID</label>
@@ -97,14 +184,26 @@
           :disabled="isEditing"
           required
         />
-        <div class="form-hint">唯一标识符，用作工具名前缀（如 github_search）</div>
+        <div class="form-hint">给服务器取一个唯一的名字，会用作 AI 调用功能时的前缀（比如取名 github，工具名就是 github_search）</div>
       </div>
 
       <div class="form-section">
-        <label class="form-label">传输方式</label>
+        <label class="form-label">
+          传输方式
+          <span
+            class="help-icon"
+            tabindex="0"
+            role="button"
+            aria-label="传输方式帮助"
+            @mouseenter="showHelp($event, HELP_TRANSPORT)"
+            @mouseleave="helpTip?.hide()"
+            @focus="showHelp($event, HELP_TRANSPORT)"
+            @blur="helpTip?.hide()"
+          >?</span>
+        </label>
         <select v-model="form.transport" class="input" :disabled="isEditing" required>
-          <option value="stdio">stdio（本地子进程）</option>
-          <option value="sse">SSE（服务器推送事件）</option>
+          <option value="stdio">stdio（本地程序）</option>
+          <option value="sse">SSE（服务端推送消息）</option>
           <option value="streamable_http">Streamable HTTP</option>
           <option value="websocket">WebSocket</option>
         </select>
@@ -118,22 +217,49 @@
       <!-- stdio 专用字段 -->
       <template v-if="form.transport === 'stdio'">
         <div class="form-section">
-          <label class="form-label">命令</label>
+          <label class="form-label">
+            命令
+            <span
+              class="help-icon"
+              tabindex="0"
+              role="button"
+              aria-label="命令帮助"
+            @mouseenter="showHelp($event, HELP_COMMAND)"
+            @mouseleave="helpTip?.hide()"
+            @focus="showHelp($event, HELP_COMMAND)"
+              @blur="helpTip?.hide()"
+            >?</span>
+          </label>
           <input v-model="form.command" class="input mono" placeholder="例如: npx, python, node" required />
           <div class="form-hint">
-            推荐命令：npx / node / python / uvx / go / cargo / docker / git / bash 等。
-            其他命令需自行确保安全（不可包含路径分隔符）。
+            常用命令：npx（运行 Node.js 工具）、python（运行 Python 脚本）、node（运行 JavaScript）、git（代码管理）、docker（容器）等。
+            其他命令需确保安全可信（不可包含路径分隔符）。
           </div>
         </div>
 
         <div class="form-section">
-          <label class="form-label">参数</label>
+          <label class="form-label">
+            参数
+            <span
+              class="help-icon"
+              tabindex="0"
+              role="button"
+              aria-label="参数帮助"
+            @mouseenter="showHelp($event, HELP_ARGS)"
+            @mouseleave="helpTip?.hide()"
+            @focus="showHelp($event, HELP_ARGS)"
+              @blur="helpTip?.hide()"
+            >?</span>
+          </label>
           <div class="kv-list">
             <div v-for="(_arg, i) in form.args" :key="i" class="kv-row">
-              <input v-model="form.args[i]" class="input mono" placeholder="参数" />
+              <input v-model="form.args[i]" class="input mono" placeholder="如: -y 或 --port=8080" />
               <button type="button" class="kv-remove" @click="form.args.splice(i, 1)">✕</button>
             </div>
             <button type="button" class="kv-add" @click="form.args.push('')">+ 添加参数</button>
+          </div>
+          <div class="form-hint">
+            例如 npx -y @modelcontextprotocol/server-filesystem D:\我的文件夹 这个命令，-y 和后面的路径各占一行。
           </div>
         </div>
 
@@ -161,8 +287,8 @@
           <label class="form-label">URL</label>
           <input v-model="form.url" class="input mono" placeholder="例如: http://localhost:3000/mcp" required />
           <div class="form-hint">
-            仅允许 host 白名单（localhost / 127.0.0.1 / 0.0.0.0 / ::1）。
-            SSE/HTTP 用 http/https，WebSocket 用 ws/wss。
+            仅允许连接到本机地址（localhost / 127.0.0.1 / 0.0.0.0 / ::1）。
+            SSE/HTTP 用 http:// 开头，WebSocket 用 ws:// 或 wss:// 开头。
           </div>
         </div>
 
@@ -201,7 +327,19 @@
 
       <!-- 阶段 4.1：工具级 allowlist / blocklist -->
       <div class="form-section">
-        <label class="form-label">允许的工具（allowlist，可选）</label>
+        <label class="form-label">
+          允许的工具（allowlist，可选）
+          <span
+            class="help-icon"
+            tabindex="0"
+            role="button"
+            aria-label="Allowlist 帮助"
+            @mouseenter="showHelp($event, HELP_ALLOWLIST)"
+            @mouseleave="helpTip?.hide()"
+            @focus="showHelp($event, HELP_ALLOWLIST)"
+            @blur="helpTip?.hide()"
+          >?</span>
+        </label>
         <div class="chips-list">
           <span v-for="(t, i) in form.allowed_tools" :key="'a'+i" class="chip">
             {{ t }}
@@ -215,7 +353,7 @@
           />
         </div>
         <div class="form-hint">
-          留空 = 允许全部。配置后仅允许的工具可用。支持通配符（* 匹配任意字符）。
+          留空 = 允许全部功能。填写后只有列表中的功能可用。支持通配符（* 匹配任意字符）。
         </div>
         <div v-if="availableTools.length" class="form-hint">
           已加载工具（点击添加）：
@@ -226,10 +364,25 @@
             @click="addChip(form.allowed_tools!, t)"
           >{{ t }}</span>
         </div>
+        <div v-else class="form-hint form-hint--info">
+          💡 此服务器的工具由 AI 动态加载，暂不在此预列。如需查看可用工具，请在对话中询问 AI「列出当前可用的 MCP 工具」；如需精确控制，可在此手动填入工具名（如 <code>github_*</code>）。
+        </div>
       </div>
 
       <div class="form-section">
-        <label class="form-label">屏蔽的工具（blocklist，可选）</label>
+        <label class="form-label">
+          屏蔽的工具（blocklist，可选）
+          <span
+            class="help-icon"
+            tabindex="0"
+            role="button"
+            aria-label="Blocklist 帮助"
+            @mouseenter="showHelp($event, HELP_BLOCKLIST)"
+            @mouseleave="helpTip?.hide()"
+            @focus="showHelp($event, HELP_BLOCKLIST)"
+            @blur="helpTip?.hide()"
+          >?</span>
+        </label>
         <div class="chips-list">
           <span v-for="(t, i) in form.blocked_tools" :key="'b'+i" class="chip chip-danger">
             {{ t }}
@@ -243,7 +396,7 @@
           />
         </div>
         <div class="form-hint">
-          blocklist 优先于 allowlist。被屏蔽的工具不会出现在 LLM 可见工具列表中。
+          屏蔽优先于允许——被屏蔽的功能即使也在允许列表中也不会被 AI 使用。
         </div>
         <div v-if="availableTools.length" class="form-hint">
           已加载工具（点击屏蔽）：
@@ -261,13 +414,13 @@
         <button
           v-if="form.transport === 'stdio'"
           type="button"
-          class="btn"
+          class="ds-btn"
           :disabled="testing || saving"
           @click="handleTestConnection"
         >
           {{ testing ? '测试中...' : '测试连接' }}
         </button>
-        <button type="submit" class="btn primary" :disabled="saving || testing">
+        <button type="submit" class="ds-btn ds-btn--primary" :disabled="saving || testing">
           {{ saving ? '保存中...' : (isEditing ? '保存修改' : '创建服务器') }}
         </button>
         <span v-if="saveMessage" class="save-msg" :class="saveMessageClass">{{ saveMessage }}</span>
@@ -278,6 +431,9 @@
     <div v-if="globalMessage" class="global-message" :class="globalMessageClass">
       {{ globalMessage }}
     </div>
+
+    <!-- ── 术语帮助提示 ── -->
+    <DsTooltip ref="helpTip" :content="helpContent" placement="right" :delay="300" />
   </div>
 </template>
 
@@ -285,7 +441,8 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { api } from '@/api'
 import { toErrorMessage } from '@/utils/error'
-import type { MCPServerConfig, MCPServerCreateBody, MCPTransport } from '@/types'
+import type { MCPServerConfig, MCPServerCreateBody, MCPTransport, DiscoveredServer } from '@/types'
+import DsTooltip from '@/components/ui/DsTooltip.vue'
 
 type Mode = 'list' | 'add' | 'edit'
 
@@ -310,22 +467,31 @@ const deletingId = ref('')       // 删除按钮防抖
 const globalMessage = ref('')
 const globalMessageClass = ref('')
 
+// ── 术语帮助提示 ──
+const helpTip = ref<InstanceType<typeof DsTooltip>>()
+const helpContent = ref('')
+
+// 帮助文本常量（避免模板内嵌重复字面量）
+	const HELP_TRANSPORT = '选择 MCP 服务器与 Maxma 的连接方式：\n\nstdio — 在本机启动一个程序（最常用），适合安装在本地的工具\nSSE — 通过长连接接收服务端推送的消息\nStreamable HTTP — 基于 HTTP 协议，支持数据流式传输\nWebSocket — 双向实时通信，适合需要持续交互的服务'
+
+	const HELP_COMMAND = '需要运行的命令行程序（仅 stdio 模式需要填写）。\n\n常用选项：npx（运行 Node.js 工具）、python（运行 Python 脚本）、node（运行 JavaScript）、docker（运行容器）等。\n\n系统会检查命令是否在安全白名单中，不在名单中的命令会被禁止执行。'
+
+	const HELP_ARGS = '传给命令行程序的额外参数，每行一个，按顺序传递。\n\n举个例子，运行这条命令：\n  npx -y @modelcontextprotocol/server-filesystem D:\我的文件夹\n\n在参数列表里就要填三行：\n  第 1 行：-y\n  第 2 行：@modelcontextprotocol/server-filesystem\n  第 3 行：D:\我的文件夹'
+
+	const HELP_ALLOWLIST = '允许列表：限制该服务器只开放指定的功能。\n\n留空 = 该服务器的所有功能都可以被 AI 使用。\n填入后，只有名单里的功能才会被 AI 看到和调用。\n支持通配符 *，比如 github_* 表示所有以 github_ 开头的功能。'
+
+	const HELP_BLOCKLIST = '屏蔽列表：禁止该服务器使用指定的功能。\n\n屏蔽的优先级高于允许列表——即使某个功能同时在允许列表中，也会被屏蔽。\n被屏蔽的功能不会被 AI 看到和使用。\n支持通配符 *。'
+
 // ── OMP 自动发现 ──
-// OMP 自动发现接口返回结构无后端契约约束，本地用最小形状描述用于渲染。
-interface DiscoveredServer {
-  id: string
-  name: string
-  status: string
-  tools?: string[]
-}
 const discoveredServers = ref<DiscoveredServer[]>([])
 
 async function loadDiscovered() {
+  const mySeq = ++loadDiscoveredSeq
   try {
-    const res = await fetch('/api/mcp/discovered')
-    const data = await res.json() as unknown
-    discoveredServers.value = Array.isArray(data) ? (data as DiscoveredServer[]) : []
-  } catch { discoveredServers.value = [] }
+    const data = await api.listMcpDiscovered()
+    if (mySeq !== loadDiscoveredSeq) return
+    discoveredServers.value = Array.isArray(data) ? data : []
+  } catch { if (mySeq === loadDiscoveredSeq) discoveredServers.value = [] }
 }
 
 // ── toggle 防抖 ──
@@ -336,7 +502,13 @@ const availableTools = ref<string[]>([])
 const newAllowedTool = ref('')
 const newBlockedTool = ref('')
 
-// ── 竞态保护：编辑请求序列号 ──
+// ── 竞态保护：数据加载序列号 ──
+// 每个独立的异步加载流程使用独立的序列号。之前 loadServers 和 loadDiscovered 共享
+// 同一个 loadSeq，导致 onMounted 中两者并发触发时，后启动的会让前一个的响应被
+// 丢弃（如 loadServers 先 ++loadSeq=1，loadDiscovered 再 ++loadSeq=2，loadServers
+// 的响应回来后 1 !== 2 直接 return，导致 servers 列表永远为空）。
+let loadServersSeq = 0
+let loadDiscoveredSeq = 0
 let editSeq = 0
 
 // ── setTimeout 统一清理 ──
@@ -422,24 +594,131 @@ function showGlobal(msg: string, cls: 'ok' | 'error', autoClearMs = 2500) {
   }
 }
 
+// ── 帮助提示 ──
+function showHelp(e: Event, text: string) {
+  helpContent.value = text
+  helpTip.value?.show(e)
+}
+
 // ── 列表加载 ──
 async function loadServers() {
+  const mySeq = ++loadServersSeq
   loading.value = true
   loadError.value = ''
   try {
     const res = await api.listMcpServers()
-    // 后端实际返回带 stdio/URL 等扩展字段，这里做一次显式类型断言。
+    if (mySeq !== loadServersSeq) return
     servers.value = (res.servers || []) as MCPServerConfig[]
   } catch (e: unknown) {
-    loadError.value = toErrorMessage(e)
+    if (mySeq === loadServersSeq) loadError.value = toErrorMessage(e)
   } finally {
-    loading.value = false
+    if (mySeq === loadServersSeq) loading.value = false
   }
 }
 
 // ── 新增 ──
 function startAdd() {
   Object.assign(form, emptyForm())
+  availableTools.value = []
+  newAllowedTool.value = ''
+  newBlockedTool.value = ''
+  saveMessage.value = ''
+  saveMessageClass.value = ''
+  mode.value = 'add'
+}
+
+// ── 新增（预填示例） ──
+function startAddWithExample() {
+  Object.assign(form, {
+    ...emptyForm(),
+    server_id: 'filesystem',
+    transport: 'stdio' as MCPTransport,
+    description: '让 AI 能够读取、写入和管理你电脑上的本地文件',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-filesystem', '/path/to/allowed/dir'],
+  })
+  availableTools.value = []
+  newAllowedTool.value = ''
+  newBlockedTool.value = ''
+  saveMessage.value = ''
+  saveMessageClass.value = ''
+  mode.value = 'add'
+}
+
+// ── 常用 MCP 服务器模板：覆盖最常见的 Novice / Power 用户场景 ──
+// 点击模板后预填表单，用户只需修改路径 / Token 即可保存
+interface McpTemplate {
+  id: string
+  label: string
+  server_id: string
+  description: string
+  command: string
+  args: string[]
+  envEntries?: KVEntry[]
+}
+
+const mcpTemplates: McpTemplate[] = [
+  {
+    id: 'filesystem',
+    label: '📁 文件系统',
+    server_id: 'filesystem',
+    description: '让 AI 能读取、写入、搜索你电脑上的本地文件',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-filesystem', '/path/to/allowed/dir'],
+  },
+  {
+    id: 'playwright',
+    label: '🌐 浏览器自动化',
+    server_id: 'playwright',
+    description: '通过 Playwright 控制浏览器，AI 可以打开网页、点击、截图、提取内容（官方 Microsoft 包）',
+    command: 'npx',
+    args: ['-y', '@playwright/mcp'],
+  },
+  {
+    id: 'fetch',
+    label: '🔎 网页抓取',
+    server_id: 'fetch',
+    description: '让 AI 能抓取任意 URL 的网页内容并转为 Markdown',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-fetch'],
+  },
+  {
+    id: 'git',
+    label: '🔀 Git 仓库',
+    server_id: 'git',
+    description: '让 AI 能查看 Git 仓库状态、diff、log、创建分支、提交等。⚠️ 需先安装 uv（pip install uv），uvx 是 uv 自带的命令',
+    command: 'uvx',
+    args: ['mcp-server-git', '--repository', '/path/to/your/repo'],
+  },
+  {
+    id: 'memory',
+    label: '🧠 持久记忆',
+    server_id: 'memory',
+    description: '基于知识图谱的长期记忆，AI 能跨会话记住实体和关系',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-memory'],
+  },
+  {
+    id: 'github',
+    label: '🐙 GitHub',
+    server_id: 'github',
+    description: '让 AI 能查看 GitHub 仓库、Issue、PR、搜索代码',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-github'],
+    envEntries: [{ key: 'GITHUB_PERSONAL_ACCESS_TOKEN', value: '' }],
+  },
+]
+
+function startAddWithTemplate(t: McpTemplate) {
+  Object.assign(form, {
+    ...emptyForm(),
+    server_id: t.server_id,
+    transport: 'stdio' as MCPTransport,
+    description: t.description,
+    command: t.command,
+    args: [...t.args],
+    envEntries: t.envEntries ? t.envEntries.map(e => ({ ...e })) : [],
+  })
   availableTools.value = []
   newAllowedTool.value = ''
   newBlockedTool.value = ''
@@ -508,6 +787,7 @@ function cancelForm() {
   saveMessage.value = ''
   saveMessageClass.value = ''
   loadingDetailId.value = ''
+  Object.assign(form, emptyForm())  // 清除表单数据，防止下次打开编辑时残留
 }
 
 // ── 测试连接（仅 stdio） ──
@@ -570,8 +850,7 @@ async function handleSave() {
   saveMessage.value = ''
   saveMessageClass.value = ''
   try {
-    // body 既用于 create 也用于 update；MCPServerCreateBody 是 MCPServerUpdateBody 的结构超集，
-    // 因此可以同时传给 api.createMcpServer 和 api.updateMcpServer（结构兼容）。
+    // body 公共字段（create / update 共用）
     const body: MCPServerCreateBody = {
       server_id: form.server_id.trim(),
       transport: form.transport,
@@ -602,6 +881,7 @@ async function handleSave() {
       await api.createMcpServer(body)
       saveMessage.value = '创建成功'
     } else {
+      // update 时 server_id / transport 仅由 URL 确定，body 中多余字段后端自动忽略
       await api.updateMcpServer(editingId.value, body)
       saveMessage.value = '保存成功'
     }
@@ -683,25 +963,6 @@ onMounted(() => { loadServers(); loadDiscovered() })
   font-weight: 700;
 }
 
-.btn {
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  font-size: 14px;
-  cursor: pointer;
-}
-.btn.primary {
-  background: var(--accent);
-  color: var(--bg-primary);
-  border-color: var(--accent);
-}
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .loading, .empty {
   color: var(--text-secondary);
   padding: 40px 0;
@@ -711,6 +972,166 @@ onMounted(() => { loadServers(); loadDiscovered() })
   font-size: 13px;
   margin-top: 8px;
   opacity: 0.7;
+}
+
+/* ── 增强空状态引导 ── */
+.enhanced-empty {
+  padding: 48px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+}
+
+.empty-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-width: 480px;
+}
+
+.empty-hero-icon {
+  width: 64px;
+  height: 64px;
+  color: var(--accent);
+  opacity: 0.7;
+}
+
+.empty-hero-text h3 {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 8px;
+}
+
+.empty-hero-text p {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.guide-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  max-width: 720px;
+  width: 100%;
+}
+
+.guide-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  transition: transform var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .guide-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+}
+
+.guide-card-icon {
+  width: 40px;
+  height: 40px;
+  color: var(--accent);
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+.guide-card h4 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.guide-card p {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+	.empty-actions {
+	  display: flex;
+	  gap: 12px;
+	  align-items: center;
+	}
+
+	/* ── 分角色引导 ── */
+	.role-guidance {
+	  display: flex;
+	  gap: 16px;
+	  max-width: 720px;
+	  width: 100%;
+	}
+	.role-card {
+	  flex: 1;
+	  display: flex;
+	  align-items: center;
+	  gap: 10px;
+	  padding: 12px 16px;
+	  border-radius: var(--radius-lg);
+	  border: 1px solid var(--border);
+	  background: var(--bg-card);
+	  font-size: 13px;
+	  line-height: 1.5;
+	  color: var(--text-secondary);
+	}
+	.role-badge {
+	  flex-shrink: 0;
+	  font-size: 11px;
+	  font-weight: 600;
+	  padding: 2px 10px;
+	  border-radius: 100px;
+	  background: color-mix(in srgb, var(--accent) 10%, var(--bg-card));
+	  color: var(--accent);
+	  letter-spacing: 0.3px;
+	}
+	.role-card:last-child .role-badge {
+	  background: color-mix(in srgb, var(--status-ok) 10%, var(--bg-card));
+	  color: var(--status-ok);
+	}
+
+/* ── 帮助图标 ── */
+.help-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--text-tertiary);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 600;
+  cursor: help;
+  margin-left: 4px;
+  transition: border-color var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out),
+              background var(--duration-fast) var(--ease-out);
+  user-select: none;
+  vertical-align: middle;
+  position: relative;
+  top: -1px;
+}
+.help-icon:hover,
+.help-icon:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-primary));
+  outline: none;
 }
 
 /* ── 卡片网格 ── */
@@ -723,17 +1144,40 @@ onMounted(() => { loadServers(); loadDiscovered() })
 .mcp-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 16px;
+  border-radius: var(--radius-lg);
+  padding: var(--space-16);
   display: flex;
   flex-direction: column;
   gap: 10px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .mcp-card:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+  }
+}
+/* 启用状态左侧高亮条 */
+.mcp-card:has(.toggle-btn.active) {
+  border-left: 3px solid var(--status-ok);
 }
 
 .card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+.card-header::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--status-ok);
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+.mcp-card:not(:has(.toggle-btn.active)) .card-header::before {
+  background: var(--text-tertiary);
 }
 
 .card-title-row {
@@ -755,9 +1199,9 @@ onMounted(() => { loadServers(); loadDiscovered() })
   text-transform: uppercase;
 }
 .transport-badge.stdio { background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card)); color: var(--status-ok); }
-.transport-badge.sse { background: #e3f2fd; color: #1565c0; }
-.transport-badge.streamable_http { background: #fff3e0; color: #e65100; }
-.transport-badge.websocket { background: #f3e5f5; color: #7b1fa2; }
+.transport-badge.sse { background: color-mix(in srgb, var(--accent) 12%, var(--bg-card)); color: var(--accent); }
+.transport-badge.streamable_http { background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card)); color: var(--status-warn); }
+.transport-badge.websocket { background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card)); color: var(--status-error); }
 
 .toggle-btn {
   width: 40px;
@@ -883,6 +1327,23 @@ onMounted(() => { loadServers(); loadDiscovered() })
   font-size: 12px;
   color: var(--text-tertiary);
 }
+/* Novice 引导：信息型提示，区别于普通说明文字 */
+.form-hint--info {
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  line-height: 1.5;
+}
+.form-hint--info code {
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 11px;
+  padding: 1px 4px;
+  background: var(--bg-secondary);
+  border-radius: 3px;
+  color: var(--text-primary);
+}
 
 .input {
   padding: 8px 12px;
@@ -978,10 +1439,12 @@ select.input {
   box-shadow: 0 2px 12px rgba(0,0,0,0.15);
 }
 .global-message.ok {
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card));
   color: var(--status-ok);
 }
 .global-message.error {
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
   color: var(--status-error);
 }
@@ -1004,12 +1467,14 @@ select.input {
   gap: 4px;
   padding: 3px 8px;
   border-radius: 4px;
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--accent) 12%, var(--bg-card));
   color: var(--accent);
   font-size: 12px;
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
 }
 .chip.chip-danger {
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
   color: var(--status-error);
 }
@@ -1088,8 +1553,86 @@ select.input {
 .tool-tag {
   font-size: 11px;
   padding: 2px 8px;
+	  border-radius: 4px;
+	  background: var(--bg-secondary);
+	  color: var(--text-secondary);
+	}
+
+/* ── 响应式 ── */
+@media (max-width: 640px) {
+  .guide-cards {
+    grid-template-columns: 1fr;
+  }
+  .empty-actions {
+    flex-direction: column;
+  }
+}
+
+/* ── 模板快速入口（空状态） ── */
+.preset-templates {
+  max-width: 720px;
+  width: 100%;
+  margin-top: 8px;
+}
+.preset-templates-title {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-bottom: 8px;
+  text-align: center;
+}
+.preset-template-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+.preset-template-btn {
+  padding: 6px 12px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.preset-template-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+/* ── 表单顶部模板入口 ── */
+.form-templates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-primary) 60%, transparent);
+}
+.form-templates-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: 600;
+  margin-right: 4px;
+}
+.form-template-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--bg-secondary);
   color: var(--text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.form-template-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 </style>

@@ -21,16 +21,10 @@
         <router-link to="/" class="nav-item">
           <Icon name="chat" :size="18" /> <span class="nav-label"><span class="nav-zh">对话</span><span class="nav-en">CHATTING</span></span>
         </router-link>
-        <router-link to="/memory" class="nav-item">
-          <Icon name="memory" :size="18" /> <span class="nav-label"><span class="nav-zh">记忆</span><span class="nav-en">MEMORY</span></span>
-        </router-link>
-        <router-link to="/kb" class="nav-item">
-          <Icon name="memory" :size="18" /> <span class="nav-label"><span class="nav-zh">知识库</span><span class="nav-en">KB</span></span>
-        </router-link>
         <router-link to="/activity" class="nav-item">
           <Icon name="memory" :size="18" /> <span class="nav-label"><span class="nav-zh">活动</span><span class="nav-en">ACTIVITY</span></span>
         </router-link>
-        <router-link to="/playground" class="nav-item pg-nav">动态 NEWS</router-link>
+        <router-link to="/news" class="nav-item pg-nav">动态 NEWS</router-link>
         <AppSettingsMenu
           :onboarding-enabled="onboardingEnabled"
           @restart-onboarding="restartOnboarding"
@@ -103,6 +97,10 @@ const onboarding = useOnboardingStore()
 
 const { onEnter: onFloatSidebarEnter, onLeave: onFloatSidebarLeave } = useFloatSidebar()
 
+// 初始化纸质纹理 — 在顶层调用 composable，确保 reactive context 正确
+const { enabled: paperTextureEnabled } = usePaperTexture()
+document.body.classList.toggle('paper-texture', paperTextureEnabled.value)
+
 function restartOnboarding() {
   onboarding.restart()
 }
@@ -145,6 +143,9 @@ useGlobalShortcut({ key: 'n', mod: true, allowInEditable: true }, () => {
   void createSession().then(() => router.push('/'))
 })
 
+// Ctrl+Escape 切换侧边栏折叠
+useGlobalShortcut({ key: 'Escape', mod: true }, () => { toggleSidebar() })
+
 const chatStore = useChatStore()
 const { allSessionStatuses } = storeToRefs(chatStore)
 
@@ -154,10 +155,6 @@ onMounted(async () => {
   // 初始化 Session 状态（从 localStorage 恢复或创建新会话）
   await sessionStore.initIfNeeded()
   onboarding.initialize()
-
-  // 初始化纸质纹理 body class
-  const { enabled: paperTextureEnabled } = usePaperTexture()
-  document.body.classList.toggle('paper-texture', paperTextureEnabled.value)
 })
 </script>
 
@@ -195,8 +192,28 @@ onMounted(async () => {
 }
 
 ::selection {
+  background: var(--accent);
   background: color-mix(in srgb, var(--accent) 20%, transparent);
   color: var(--text-primary);
+}
+
+/* ── Focus-visible 兜底（排除原生表单控件） ── */
+:focus-visible:not(input):not(textarea):not(select):not([contenteditable]) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── 主题切换过渡动画（仅布局容器，不泛化到所有元素） ── */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    transition: background-color 0.3s ease;
+  }
+  body,
+  .app-layout,
+  .sidebar,
+  .main {
+    transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+  }
 }
 
 /* ── Scrollbar ── */
@@ -278,6 +295,7 @@ html, body {
   color: var(--accent);
   letter-spacing: -0.3px;
   margin: 0;
+  transition: opacity 0.2s ease;
 }
 
 .logo-img {
@@ -286,10 +304,21 @@ html, body {
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .logo:hover .logo-img {
+    transform: scale(1.06);
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+  .logo:hover .logo-text {
+    opacity: 0.8;
+  }
 }
 
 .logo-text {
   white-space: nowrap;
+  transition: opacity 0.2s ease;
 }
 
 .logo-favicon {
@@ -297,6 +326,12 @@ html, body {
   height: 28px;
   border-radius: 50%;
   object-fit: cover;
+  transition: transform 0.2s ease;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sidebar.collapsed .logo-favicon:hover {
+    transform: scale(1.1);
+  }
 }
 
 .sidebar-nav {
@@ -326,6 +361,11 @@ html, body {
   background: var(--bg-card);
   color: var(--accent);
   font-weight: 600;
+}
+
+.nav-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .nav-label {
@@ -433,12 +473,12 @@ html, body {
   margin: 0;
 }
 
-/* ── Sidebar background image with blur + white overlay ── */
+/* ── Sidebar background image with blur + overlay ── */
 .sidebar::before {
   content: '';
   position: absolute;
   inset: -5%;
-  background-image: url('/images/sidebar-bg.jpg');
+  background-image: var(--sidebar-bg-image, url('/images/sidebar-bg.jpg'));
   background-size: cover;
   background-position: left center;
   background-repeat: no-repeat;
@@ -452,7 +492,8 @@ html, body {
   content: '';
   position: absolute;
   inset: 0;
-  background: color-mix(in srgb, var(--bg-primary) 85%, transparent);
+  background: var(--bg-primary);
+  background: color-mix(in srgb, var(--bg-primary) 88%, transparent);
   z-index: 0;
   pointer-events: none;
 }

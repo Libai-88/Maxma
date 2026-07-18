@@ -22,30 +22,113 @@
           <button class="btn primary retry-btn" @click="loadData">重试</button>
         </div>
       </div>
-      <div v-else-if="currentList.length === 0" class="empty">
-        <template v-if="activeTab === 'skills'">
-          尚未创建任何 Skill。点击上方按钮新建。
-          <div class="empty-hint">Skills 是可复用的任务指令模板，Maxma 在需要时会自动读取并遵循。</div>
-        </template>
-        <template v-else>
-          尚未创建任何宏。点击上方按钮新建。
-          <div class="empty-hint">宏是可复用的指令片段，可嵌入到对话或 Skill 中使用。</div>
-        </template>
+      <div v-else-if="currentList.length === 0" class="empty enhanced-empty">
+        <!-- Hero -->
+        <div class="empty-hero">
+          <svg class="empty-hero-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M24 6l4 12h12l-9.5 7 3.5 12L24 30l-10 7 3.5-12L8 18h12L24 6z" />
+          </svg>
+          <div class="empty-hero-text">
+            <h3 v-if="activeTab === 'skills'">开始使用 Skills 技能</h3>
+            <h3 v-else>开始使用宏 Macros</h3>
+            <p v-if="activeTab === 'skills'">
+              Skills 是可复用的任务指令模板（Markdown 格式）。当你下达任务时，Maxma 会根据上下文自动加载相关 Skill，
+              让 AI 遵循你预设的工作流、规范或角色定位，无需每次重复说明。
+            </p>
+            <p v-else>
+              宏是可复用的指令片段，可嵌入到对话或 Skill 中使用。适合保存常用 prompt、格式模板、固定回复等。
+            </p>
+          </div>
+        </div>
+
+        <!-- Guide cards：面向 Novice 的概念解释 -->
+        <div class="guide-cards" v-if="activeTab === 'skills'">
+          <div class="guide-card">
+            <svg class="guide-card-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M8 4h12l6 6v18a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
+              <path d="M20 4v6h6" />
+              <path d="M10 16h12M10 20h12M10 24h8" />
+            </svg>
+            <h4>什么是 Skill？</h4>
+            <p>Skill 是一份 Markdown 文档，描述了"AI 在某类任务中应该怎么做"。例如「写周报时先列任务再总结」「代码评审时按安全/性能/可读性分项检查」等。AI 会在合适时机自动读取并遵循。</p>
+          </div>
+          <div class="guide-card">
+            <svg class="guide-card-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="16" cy="16" r="12" />
+              <path d="M16 8v8l5 3" />
+            </svg>
+            <h4>何时触发？</h4>
+            <p>Maxma 会根据你的对话内容、任务类型自动匹配最相关的 Skill。例如你说"帮我写周报"时，会自动加载 <code>weekly-report</code> Skill；不需要你手动 @。</p>
+          </div>
+          <div class="guide-card">
+            <svg class="guide-card-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 8h24M4 16h24M4 24h16" />
+              <circle cx="26" cy="24" r="3" fill="currentColor" stroke="none" />
+            </svg>
+            <h4>典型示例</h4>
+            <p><strong>code-review</strong>：代码评审清单<br><strong>weekly-report</strong>：周报写作规范<br><strong>commit-message</strong>：提交信息格式<br><strong>translator</strong>：翻译风格指南</p>
+          </div>
+        </div>
+
+        <div class="guide-cards" v-else>
+          <div class="guide-card">
+            <svg class="guide-card-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M8 4h12l6 6v18a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
+              <path d="M20 4v6h6" />
+            </svg>
+            <h4>什么是宏？</h4>
+            <p>宏是一段可复用的指令片段，比 Skill 更轻量。适合保存「常用 prompt」「格式模板」「固定回复」，可在对话或 Skill 中通过引用复用。</p>
+          </div>
+          <div class="guide-card">
+            <svg class="guide-card-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 8l-8 8 8 8M20 8l8 8-8 8" />
+            </svg>
+            <h4>典型示例</h4>
+            <p><strong>json-output</strong>：要求 AI 输出 JSON<br><strong>concise</strong>：要求简洁回复<br><strong>chinese</strong>：要求中文输出<br><strong>step-by-step</strong>：要求分步思考</p>
+          </div>
+        </div>
+
+        <!-- Role guidance：面向不同画像的建议 -->
+        <div class="role-guidance">
+          <div class="role-card">
+            <span class="role-badge">新手</span>
+            <span>无需手动创建，Maxma 内置常用 Skill，开箱即用；想自定义时点击下方「+ 新建」</span>
+          </div>
+          <div class="role-card">
+            <span class="role-badge">极客</span>
+            <span>用 Markdown + YAML frontmatter 编写，支持变量、条件、引用宏；与 Claude Skills 格式兼容</span>
+          </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="empty-actions">
+          <button class="btn primary" @click="startAdd">+ 新建 {{ activeTab === 'skills' ? 'Skill' : '宏' }}</button>
+          <router-link to="/help" class="btn">了解更多</router-link>
+        </div>
       </div>
       <div v-else class="card-grid">
         <template v-for="item in currentList" :key="item.id || item.name">
           <!-- Skills 卡片（新 API 格式） -->
-          <div v-if="activeTab === 'skills'" class="skill-card">
+          <div v-if="activeTab === 'skills'" class="skill-card" @click="startEdit(item)">
             <div class="card-header">
               <span class="card-label">{{ item.name }}</span>
-              <span class="source-badge" :class="item.enabled ? 'builtin' : 'user'">{{ item.enabled ? '已启用' : '已禁用' }}</span>
-              <button class="toggle-btn" :class="{ active: item.enabled }" @click="toggleSkill(item.name)">
+              <span class="source-badge" :class="item.source">{{ item.source === 'builtin' ? '内置' : '自定义' }}</span>
+              <button class="toggle-btn" :class="{ active: item.enabled }" @click.stop="toggleSkill(item.name)">
                 {{ item.enabled ? '启用' : '禁用' }}
               </button>
             </div>
+            <div v-if="item.description" class="card-desc">{{ item.description }}</div>
             <div class="card-footer">
               <span class="card-id">{{ item.name }}</span>
               <div class="card-actions" @click.stop>
+                <button class="action-btn" @click.stop="startEdit(item)">编辑</button>
+                <button
+                  v-if="item.source === 'user'"
+                  class="action-btn danger"
+                  :disabled="deletingId === item.id"
+                  @click.stop="deleteItem(item.id)"
+                >{{ deletingId === item.id ? '删除中...' : '删除' }}</button>
+                <span v-else class="readonly-hint">只读</span>
                 <button class="action-btn" @click.stop="viewSkill(item.name)">查看内容</button>
               </div>
             </div>
@@ -89,7 +172,7 @@
           :disabled="isEditing"
           required
         />
-        <div class="form-hint">唯一标识符，将作为目录名使用。仅允许字母、数字、连字符、下划线、空格、点（首字符不能为空格或点）</div>
+        <div class="form-hint">唯一标识符，将作为目录名使用。仅允许字母、数字、连字符、下划线</div>
       </div>
 
       <div class="form-section">
@@ -151,14 +234,18 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
-import { api } from '@/api'
-import type { SkillInfo, MacroInfo } from '@/types'
+import { api, getToken } from '@/api'
+import { tauriFetch } from '@/utils/env'
+import type { ListSkillsResponse, SkillInfo, MacroInfo } from '@/types'
 
 type Tab = 'skills' | 'macros'
 type Mode = 'list' | 'add' | 'edit'
 
-// 与后端 _SAFE_ID 同步：首字符不能是空格或点，1-64 字符，允许字母/数字/连字符/下划线/空格/点
-const ID_PATTERN = /^[A-Za-z0-9_-][A-Za-z0-9_\- .]{0,63}$/
+// 与后端 _SKILL_ID_RE / _MACRO_ID_RE 同步：仅允许字母/数字/连字符/下划线（无长度限制）。
+// 之前的 ID_PATTERN 允许空格和点，与后端正则不一致，会导致前端通过但后端 400 拒绝。
+// 红队 R3 修复引入 {1,64} 长度限制，但后端使用 `+` 量词不限制长度，造成前端拒绝
+// 后端接受的 65+ 字符 ID。此处移除长度限制以与后端契约保持一致。
+const ID_PATTERN = /^[A-Za-z0-9_\-]+$/
 
 const loading = ref(true)
 const loadingDetail = ref(false)
@@ -175,7 +262,7 @@ const globalMessageClass = ref('')
 const editingId = ref('')
 const editingSource = ref<'builtin' | 'user'>('user')
 
-const skills = ref<any[]>([])
+const skills = ref<SkillInfo[]>([])
 const macros = ref<MacroInfo[]>([])
 
 // ── 查看内容 ──
@@ -239,16 +326,16 @@ async function loadData() {
     ])
     // 竞态保护：丢弃过期响应
     if (mySeq !== loadSeq) return
-    // 新 skills API 直接返回数组
-    skills.value = Array.isArray(skillsData) ? skillsData : (skillsData as any)?.skills || []
+    // 新 skills API 直接返回数组，旧格式通过 .skills 读取
+    skills.value = Array.isArray(skillsData) ? skillsData : (skillsData as ListSkillsResponse).skills || []
     macros.value = macrosRes.macros
-  } catch (e: any) {
+  } catch (e: unknown) {
     if (mySeq !== loadSeq) return
     loadError.value = true
     // 失败时清空旧数据，避免显示陈旧列表误导用户
     skills.value = []
     macros.value = []
-    globalMessage.value = '加载失败: ' + (e?.message || String(e))
+    globalMessage.value = '加载失败: ' + (e instanceof Error ? e.message : String(e))
     globalMessageClass.value = 'error'
   } finally {
     if (mySeq === loadSeq) {
@@ -281,9 +368,9 @@ async function startEdit(item: SkillInfo | MacroInfo) {
       description: detail.description,
       content: detail.content,
     })
-  } catch (e: any) {
+  } catch (e: unknown) {
     if (mySeq !== editSeq) return
-    globalMessage.value = '加载详情失败: ' + (e?.message || String(e))
+    globalMessage.value = '加载详情失败: ' + (e instanceof Error ? e.message : String(e))
     globalMessageClass.value = 'error'
     mode.value = 'list'
   } finally {
@@ -303,7 +390,7 @@ function validateForm(): string | null {
     return '名称不能为空'
   }
   if (!ID_PATTERN.test(form.name)) {
-    return '名称仅允许字母、数字、连字符、下划线、空格、点（首字符不能为空格或点，1-64 字符）'
+    return '名称仅允许字母、数字、连字符、下划线'
   }
   return null
 }
@@ -369,8 +456,8 @@ async function handleSave() {
       loadData()
       saving.value = false
     }, 800)
-  } catch (e: any) {
-    saveMessage.value = '失败: ' + (e?.message || String(e))
+  } catch (e: unknown) {
+    saveMessage.value = '失败: ' + (e instanceof Error ? e.message : String(e))
     saveMessageClass.value = 'error'
     saving.value = false
   }
@@ -396,8 +483,8 @@ async function deleteItem(id: string) {
       globalMessageClass.value = ''
     }, 2000)
     loadData()
-  } catch (e: any) {
-    globalMessage.value = '删除失败: ' + (e?.message || String(e))
+  } catch (e: unknown) {
+    globalMessage.value = '删除失败: ' + (e instanceof Error ? e.message : String(e))
     globalMessageClass.value = 'error'
   } finally {
     deletingId.value = ''
@@ -407,19 +494,31 @@ async function deleteItem(id: string) {
 // ── Skills 启用/禁用 ──
 async function toggleSkill(name: string) {
   try {
-    await fetch(`/api/skills/${name}/toggle`, { method: 'POST' })
+    const headers: Record<string, string> = {}
+    const t = getToken()
+    if (t) headers['X-Maxma-Token'] = t
+    // 修复：Tauri 环境下必须使用 tauriFetch（原生 fetch 会被 WebView2 拦截）；
+    // 并检查 res.ok，避免后端 4xx/5xx 时前端误以为成功并刷新列表。
+    const res = await tauriFetch(`/api/skills/${name}/toggle`, { method: 'POST', headers })
+    if (!res.ok) {
+      console.warn('[SkillsView] toggleSkill failed: HTTP', res.status)
+      return
+    }
     await loadData()
-  } catch {}
+  } catch (e) {
+    console.warn('[SkillsView] toggleSkill failed:', e instanceof Error ? e.message : String(e))
+  }
 }
 
 // ── 查看 Skill 内容 ──
 async function viewSkill(name: string) {
   try {
-    const res = await fetch(`/api/skills/${name}`)
-    const data = await res.json()
-    skillContent.value = data.content || ''
+    const detail = await api.getSkill(name)
+    skillContent.value = detail.content || ''
     showContent.value = true
-  } catch {}
+  } catch (e) {
+    console.warn('[SkillsView] viewSkill failed:', e instanceof Error ? e.message : String(e))
+  }
 }
 
 onMounted(loadData)
@@ -542,7 +641,7 @@ onUnmounted(() => {
 }
 
 .skill-card:hover {
-  border-color: var(--accent-light);
+  border-color: var(--accent-dark);
   box-shadow: var(--shadow-sm);
 }
 
@@ -804,5 +903,128 @@ onUnmounted(() => {
   word-break: break-word;
   color: var(--text-primary, #1f2937);
   margin: 0;
+}
+
+/* ── 空状态增强（面向 Novice / Power Office 画像） ── */
+.enhanced-empty {
+  text-align: left;
+  padding: 32px 28px !important;
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+.empty-hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.empty-hero-icon {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  color: var(--accent);
+}
+.empty-hero-text h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+.empty-hero-text p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+/* ── 引导卡片 ── */
+.guide-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+@media (max-width: 900px) {
+  .guide-cards { grid-template-columns: 1fr; }
+}
+.guide-card {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-card);
+}
+.guide-card-icon {
+  width: 28px;
+  height: 28px;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+.guide-card h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.guide-card p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.guide-card code,
+.guide-card strong {
+  font-size: 12px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.guide-card code {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  background: var(--bg-secondary);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+/* ── 角色引导 ── */
+.role-guidance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding: 12px 14px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md, 8px);
+  background: color-mix(in srgb, var(--bg-secondary, #f9fafb) 50%, transparent);
+}
+.role-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.role-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--bg-primary, #fff);
+  letter-spacing: 0.3px;
+}
+
+/* ── 操作按钮 ── */
+.empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.empty-actions .btn {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
 }
 </style>

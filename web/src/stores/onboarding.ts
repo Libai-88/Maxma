@@ -52,7 +52,11 @@ export function saveOnboardingSnapshot(snapshot: OnboardingSnapshot, storage: St
   }
 }
 
-export const onboardingEnabled = import.meta.env.VITE_ONBOARDING_ENABLED === 'true'
+// Onboarding 默认启用：未设置环境变量时为 true，仅在显式设置为 'false' 时关闭。
+// 这样新用户（特别是 Novice 画像）开箱即可看到首次引导，无需配置 .env。
+// 如果发行方想关闭引导，可在构建时显式设置 VITE_ONBOARDING_ENABLED=false。
+const rawOnboardingFlag = import.meta.env.VITE_ONBOARDING_ENABLED
+export const onboardingEnabled = rawOnboardingFlag === undefined ? true : rawOnboardingFlag === 'true'
 
 export const useOnboardingStore = defineStore('onboarding', () => {
   const snapshot = ref<OnboardingSnapshot>(copyDefaults())
@@ -66,7 +70,10 @@ export const useOnboardingStore = defineStore('onboarding', () => {
   }
 
   function persist() {
-    saveOnboardingSnapshot(snapshot.value)
+    const ok = saveOnboardingSnapshot(snapshot.value)
+    if (!ok) {
+      console.warn('[onboarding] Failed to persist onboarding snapshot to localStorage')
+    }
   }
 
   function updatePreferences(preferences: Partial<OnboardingPreferences>) {

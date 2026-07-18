@@ -1,5 +1,15 @@
 <template>
   <div class="chat-input-wrapper">
+    <div v-if="connectionError" class="chat-connection-error">
+      <span class="chat-connection-error-icon">⚠</span>
+      <span class="chat-connection-error-text">{{ connectionError }}</span>
+      <button class="chat-connection-error-close" @click="connectionError = null">✕</button>
+    </div>
+    <div v-if="imageError" class="chat-image-error">
+      <span class="chat-image-error-icon">🖼</span>
+      <span class="chat-image-error-text">{{ imageError }}</span>
+      <button class="chat-image-error-close" @click="imageError = null">✕</button>
+    </div>
     <div v-if="showLinkInput" class="link-input-bar">
       <input
         ref="linkInputRef"
@@ -103,7 +113,16 @@
       <div class="input-bottom-bar">
         <div class="input-left-group">
           <div class="btn-add-file-wrapper">
-          <button class="btn-add-file" :disabled="disabled" @click="toggleMenu">
+          <button
+            class="btn-add-file"
+            :disabled="disabled"
+            :class="{ active: showMenu }"
+            :title="disabled ? '附件（当前不可用）' : '添加附件：文件、文件夹、图片或链接'"
+            :aria-label="showMenu ? '关闭附件菜单' : '添加附件：文件、文件夹、图片或链接'"
+            :aria-expanded="showMenu"
+            aria-haspopup="menu"
+            @click="toggleMenu"
+          >
             <span v-if="loading" class="btn-add-file-spin">⟳</span>
             <Icon v-else name="attach" :size="18" />
           </button>
@@ -168,6 +187,7 @@
               <Icon name="stop" :size="12" />
             </button>
           </div>
+          <span class="shortcut-hint">Enter 发送 · Shift+Enter 换行</span>
         </div>
       </div>
     </div>
@@ -228,11 +248,12 @@ import type { SkillInfo, MacroInfo, ToolInfo } from '@/types'
 import { useProviderStore } from '@/stores/provider'
 import { useStickerSegments, type StickerSegment } from '@/composables/useStickerSegments'
 import { useChatInputInjected } from '@/composables/useChatInput'
-import type { ParsedRef, ImageRef } from '@/utils/references'
+import type { FileRef, FolderRef, ParsedRef, ImageRef } from '@/utils/references'
 import { REF_CHIP_CONFIG } from '@/utils/references'
 import { getApiBase, isTauri, tauriFetch } from '@/utils/env'
 import type { ThinkPathId } from '@/utils/thinkPath'
-import { computed, defineAsyncComponent, nextTick, onMounted, ref, watch, watchEffect } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
+import type { Sticker } from '@/components/StickerPicker.vue'
 import DsSelect from './ui/DsSelect.vue'
 import ModelSelector from './ModelSelector.vue'
 import ContextUsageBadge from './ContextUsageBadge.vue'
@@ -253,6 +274,11 @@ const {
 } = chatInput
 
 const text = ref('')
+// WebSocket 未连接时发送消息的可见错误反馈（sidecar 未启动等场景）
+const connectionError = ref<string | null>(null)
+const imageError = ref<string | null>(null)
+let _imageErrorTimer: ReturnType<typeof setTimeout> | null = null
+let _connectionErrorTimer: ReturnType<typeof setTimeout> | null = null
 const selectedThinkPathId = ref<ThinkPathId | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const inputContainerRef = ref<HTMLDivElement | null>(null)
@@ -260,7 +286,7 @@ const refs = ref<ParsedRef[]>([])
 const loading = ref(false)
 const inputPlaceholder = computed(() =>
   canSend.value
-    ? '输入消息…… @技能 · #工具 · !宏'
+    ? '输入消息…… 输入 @ 选择技能 · 输入 # 选择工具 · 输入 ! 选择宏'
     : '后端连接中，可先输入内容，连接完成后发送……'
 )
 const sendButtonTitle = computed(() => {
@@ -291,32 +317,28 @@ watchEffect(() => {
 const showStickerPicker = ref(false)
 const contextMenuVisible = ref(false)
 const contextMenuPosition = ref({ x: 0, y: 0 })
-const contextMenuSticker = ref<any>(null)
+const contextMenuSticker = ref<Sticker | null>(null)
 const stickerPickerRef = ref<InstanceType<typeof StickerPicker> | null>(null)
 const parsedInputSegments = useStickerSegments(text)
 const stickerSegments = computed(() =>
   parsedInputSegments.value.filter((seg): seg is StickerSegment => seg.type === 'sticker')
 )
 
-function toggleStickerPicker() {
-  console.log('[ChatInput] toggleStickerPicker called, current:', showStickerPicker.value)
-  showStickerPicker.value = !showStickerPicker.value
-  console.log('[ChatInput] showStickerPicker now:', showStickerPicker.value)
-}
-
-async function onStickerSelect(sticker: any) {
-  console.log('[ChatInput] onStickerSelect called with:', sticker)
-  // 直接用用户选择的具体表情，不再调 random API
-  const stickerTag = `<sticker:${sticker.path}>`
-  text.value += stickerTag
-  recordStickerUsage(sticker)
-  console.log('[ChatInput] Inserted sticker tag:', stickerTag)
-  showStickerPicker.value = false
-  nextTick(() => {
-    textareaRef.value?.focus()
-    autoResize()
-  })
-}
+	function toggleStickerPicker() {
+	  showStickerPicker.value = !showStickerPicker.value
+	}
+	
+	async function onStickerSelect(sticker: Sticker) {
+		  // 直接用用户选择的具体表情，不再调 random API
+		  const stickerTag = `<sticker:${sticker.path}>`
+		  text.value += stickerTag
+		  recordStickerUsage(sticker)
+		  showStickerPicker.value = false
+		  nextTick(() => {
+		    textareaRef.value?.focus()
+		    autoResize()
+		  })
+		}
 
 function removeStickerSegment(sticker: StickerSegment) {
   const currentSticker = stickerSegments.value.find(seg => seg.occurrenceKey === sticker.occurrenceKey) || sticker
@@ -327,7 +349,7 @@ function removeStickerSegment(sticker: StickerSegment) {
   })
 }
 
-async function recordStickerUsage(sticker: any) {
+async function recordStickerUsage(sticker: Sticker) {
   try {
     await tauriFetch(`${getApiBase()}/stickers/usage`, {
       method: 'POST',
@@ -342,7 +364,7 @@ async function recordStickerUsage(sticker: any) {
   }
 }
 
-function onStickerContextMenu(event: MouseEvent, sticker: any) {
+function onStickerContextMenu(event: MouseEvent, sticker: Sticker) {
   contextMenuSticker.value = sticker
   contextMenuPosition.value = { x: event.clientX, y: event.clientY }
   contextMenuVisible.value = true
@@ -581,6 +603,8 @@ async function loadMacros() {
 
 /** 检测 @ / # 触发 */
 watch(text, () => {
+  // 用户开始输入时清除连接错误提示
+  if (connectionError.value) connectionError.value = null
   const el = textareaRef.value
   if (!el || el !== document.activeElement) return
   const val = text.value
@@ -832,23 +856,30 @@ async function _pick(type: 'file' | 'folder') {
     const path = await selectLocalPath(type)
     if (path) {
       const refType = type === 'folder' ? 'folder' : 'file'
-      const idx = refs.value.length
       refs.value.push({ type: refType, path, label: getFileName(path) } as ParsedRef)
-      console.log('[ChatInput] _pick: pushed ref idx=%d type=%s path=%s', idx, refType, path)
+      console.log('[ChatInput] _pick: pushed ref type=%s path=%s', refType, path)
 
-      // 异步检查路径是否被拒止锚或白名单阻挡
-      api.checkPathBlocked(path).then(result => {
-        console.log('[ChatInput] checkPathBlocked result for', path, result)
-        if (result.blocked) {
-          // 通过 refs.value[idx] 操作以触发响应式更新
-          const entry = refs.value[idx] as any
-          entry.blocked = true
-          entry.blockedReason = result.reason
-          console.log('[ChatInput] marked ref %d as blocked, reason: %s', idx, result.reason)
-        }
-      }).catch(err => {
-        console.warn('[ChatInput] checkPathBlocked failed:', err)
-      })
+	      // 异步检查路径是否被拒止锚或白名单阻挡
+	      try {
+	        const result = await api.checkPathBlocked(path)
+	        console.log('[ChatInput] checkPathBlocked result for', path, result)
+	        if (result.blocked) {
+	          // 使用唯一 path 定位条目（避免数组索引竞态：用户可能在 await 期间通过 ✕ 删除了条目）
+	          const idx = refs.value.findIndex(r =>
+	            (r.type === 'file' || r.type === 'folder') && r.path === path
+	          )
+	          if (idx === -1) {
+	            console.log('[ChatInput] ref for path %s already removed, skipping', path)
+	            return
+	          }
+	          const entry = refs.value[idx] as FileRef | FolderRef
+	          entry.blocked = true
+	          entry.blockedReason = result.reason ?? undefined
+	          console.log('[ChatInput] marked ref %s as blocked, reason: %s', path, result.reason)
+	        }
+	      } catch (err) {
+	        console.warn('[ChatInput] checkPathBlocked failed:', err)
+	      }
     }
   } catch {
     // 静默失败
@@ -902,24 +933,42 @@ async function handleImageFile(file: File) {
     return
   }
 
-  // 本地预览 URL
+  // 本地预览 URL（每个文件唯一，可用作上传完成后的条目定位标识）
   const preview = URL.createObjectURL(file)
   const label = file.name || 'image'
 
   // 先添加为占位（path 为空），上传完成后更新
-  const idx = refs.value.length
   refs.value.push({ type: 'image', label, path: '', preview } as ImageRef)
 
   try {
     const result = await api.uploadImage(file)
-    // 上传成功，更新 path
+    // 上传成功，通过唯一的 preview URL 定位条目（避免数组索引竞态：用户可能在 await 期间通过 ✕ 删除了占位）
+    const idx = refs.value.findIndex(r => r.type === 'image' && (r as ImageRef).preview === preview)
+    if (idx === -1) {
+      // 用户在上传完成前已移除该占位，释放预览 URL 后直接返回
+      URL.revokeObjectURL(preview)
+      return
+    }
     const entry = refs.value[idx] as ImageRef
     entry.path = result.path
     console.log('[ChatInput] image uploaded:', result.path)
   } catch (e) {
     console.error('[ChatInput] image upload failed:', e)
-    // 上传失败，移除该引用并释放 preview URL
-    refs.value.splice(idx, 1)
+    // 上传失败，显示用户可见的错误提示
+    const errMsg = e instanceof Error ? e.message : '图片上传失败，请重试'
+      imageError.value = errMsg
+      if (_imageErrorTimer) clearTimeout(_imageErrorTimer)
+      _imageErrorTimer = setTimeout(() => {
+        if (_imageErrorTimer && imageError.value === errMsg) {
+          imageError.value = null
+          _imageErrorTimer = null
+        }
+      }, 5000)
+    // 通过 preview URL 定位条目移除
+    const idx = refs.value.findIndex(r => r.type === 'image' && (r as ImageRef).preview === preview)
+    if (idx !== -1) {
+      refs.value.splice(idx, 1)
+    }
     URL.revokeObjectURL(preview)
   }
 }
@@ -960,14 +1009,30 @@ async function onDrop(e: DragEvent) {
 
 function handleSend() {
   const msg = text.value.trim()
-  if ((!msg && imageRefs.value.length === 0) || disabled.value || !canSend.value) return
+  if (!msg && imageRefs.value.length === 0) return
+  if (disabled.value) return
+  // WebSocket 未连接时给出醒目反馈，而非静默吞掉用户输入
+  if (!canSend.value) {
+    connectionError.value = '无法连接到 AI 引擎（sidecar 未启动），请检查后端配置'
+    if (_connectionErrorTimer) clearTimeout(_connectionErrorTimer)
+    _connectionErrorTimer = setTimeout(() => {
+      // 防御性检查：仅在定时器未被新的 handleSend 覆盖且当前错误消息仍是本条时清除
+      if (_connectionErrorTimer && connectionError.value === '无法连接到 AI 引擎（sidecar 未启动），请检查后端配置') {
+        connectionError.value = null
+        _connectionErrorTimer = null
+      }
+    }, 5000)
+    return
+  }
+  // 同步头部的 ModelSelector（chatStore.currentModel）与 ChatInput 实际选中的模型，
+  // 避免用户在不同位置选择了不同模型时，发送出去的值与显示的值不一致。
+  if (selectedModelName.value) {
+    chatStore.setModel(selectedModelName.value)
+  }
   chatInput.send(
     msg,
     refs.value,
     selectedThinkPathId.value || undefined,
-    chatStore.currentModel,
-    chatStore.temperature,
-    chatStore.maxTokens,
   )
   text.value = ''
   // ThinkPath is intentionally one-shot: it is a confirmed preference for this
@@ -999,6 +1064,8 @@ const isResizing = ref(false)
 const resizeStartY = ref(0)
 const resizeStartHeight = ref(0)
 const handleRef = ref<HTMLDivElement | null>(null)
+/** 当前正在拖拽的 pointer ID，用于 releasePointerCapture 时校验一致性 */
+let activePointerId = -1
 const DEFAULT_INPUT_HEIGHT = 117
 const initialHeight = ref(DEFAULT_INPUT_HEIGHT)
 
@@ -1026,6 +1093,7 @@ function startResize(e: PointerEvent) {
   const handle = e.currentTarget as HTMLDivElement
   handle.setPointerCapture(e.pointerId)
   handleRef.value = handle
+  activePointerId = e.pointerId
 
   isResizing.value = true
   resizeStartY.value = e.clientY
@@ -1044,12 +1112,16 @@ function startResize(e: PointerEvent) {
 }
 
 function onResizeMove(e: PointerEvent) {
+  // 只处理与当前拖拽匹配的 pointer（避免多指触控干扰）
+  if (e.pointerId !== activePointerId) return
   const delta = resizeStartY.value - e.clientY
   const newHeight = Math.max(initialHeight.value, Math.min(600, resizeStartHeight.value + delta))
   customHeight.value = newHeight
 }
 
 function onResizeEnd(e: PointerEvent) {
+  // 只处理与当前拖拽匹配的 pointer
+  if (e.pointerId !== activePointerId) return
   isResizing.value = false
   const handle = handleRef.value
   if (handle) {
@@ -1058,11 +1130,99 @@ function onResizeEnd(e: PointerEvent) {
     handle.removeEventListener('pointerup', onResizeEnd)
     handle.removeEventListener('pointercancel', onResizeEnd)
     handleRef.value = null
+    activePointerId = -1
   }
 }
-</script>
+
+		onUnmounted(() => {
+		  if (_connectionErrorTimer) clearTimeout(_connectionErrorTimer)
+		  _connectionErrorTimer = null
+		  if (_imageErrorTimer) clearTimeout(_imageErrorTimer)
+		  _imageErrorTimer = null
+		})
+	</script>
 
 <style scoped>
+/* 连接错误横幅 — WebSocket 未连接时发送消息的可见反馈 */
+.chat-connection-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  margin-bottom: 8px;
+  border: 1px solid transparent;
+  border: 1px solid color-mix(in srgb, var(--status-error) 40%, transparent);
+  border-radius: 10px;
+  background: var(--bg-card);
+  background: color-mix(in srgb, var(--status-error) 10%, var(--bg-card));
+  color: var(--status-error);
+  font-size: 0.85em;
+  animation: chat-error-in 0.2s ease-out;
+}
+.chat-connection-error-icon {
+  font-size: 1.1em;
+  flex-shrink: 0;
+}
+.chat-connection-error-text {
+  flex: 1;
+  font-weight: 500;
+}
+.chat-connection-error-close {
+  border: none;
+  background: transparent;
+  color: var(--status-error);
+  cursor: pointer;
+  font-size: 1em;
+  padding: 0 4px;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+.chat-connection-error-close:hover {
+  opacity: 1;
+}
+@keyframes chat-error-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 图片上传错误横幅 */
+.chat-image-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  margin-bottom: 8px;
+  border: 1px solid transparent;
+  border: 1px solid color-mix(in srgb, #f97316 40%, transparent);
+  border-radius: 10px;
+  background: var(--bg-card);
+  background: color-mix(in srgb, #f97316 10%, var(--bg-card));
+  color: #f97316;
+  font-size: 0.85em;
+  animation: chat-error-in 0.2s ease-out;
+}
+.chat-image-error-icon {
+  font-size: 1.1em;
+  flex-shrink: 0;
+}
+.chat-image-error-text {
+  flex: 1;
+  font-weight: 500;
+}
+.chat-image-error-close {
+  border: none;
+  background: transparent;
+  color: #f97316;
+  cursor: pointer;
+  font-size: 1em;
+  padding: 0 4px;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+.chat-image-error-close:hover {
+  opacity: 1;
+}
+
 .input-toolbar {
   display: flex; align-items: center;
   padding: 4px 8px; gap: 8px;
@@ -1161,7 +1321,7 @@ function onResizeEnd(e: PointerEvent) {
   transition: border-color 0.15s, background 0.15s;
 }
 .file-tag:hover {
-  border-color: var(--accent-light);
+  border-color: var(--accent-dark);
   background: var(--bg-primary);
 }
 .file-tag-name {
@@ -1187,6 +1347,8 @@ function onResizeEnd(e: PointerEvent) {
 .file-tag-source {
   font-size: 0.65em;
   color: var(--text-secondary);
+  background: transparent;
+  background: transparent;
   background: color-mix(in srgb, var(--accent) 6%, transparent);
   padding: 1px 6px;
   border-radius: 100px;
@@ -1197,6 +1359,7 @@ function onResizeEnd(e: PointerEvent) {
 .file-tag-blocked {
   font-size: 0.65em;
   color: var(--status-error);
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
   padding: 0 5px;
   border-radius: 3px;
@@ -1205,6 +1368,7 @@ function onResizeEnd(e: PointerEvent) {
 }
 .file-tag.blocked {
   border-color: var(--status-error);
+  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-error) 8%, var(--bg-card));
 }
 .file-tag.blocked .file-tag-name {
@@ -1219,6 +1383,7 @@ function onResizeEnd(e: PointerEvent) {
   padding: 3px 8px 3px 3px;
   border: 1px solid color-mix(in srgb, var(--accent-pink) 36%, var(--border));
   border-radius: 999px;
+  background: var(--bg-secondary);
   background: color-mix(in srgb, var(--accent-pink) 8%, var(--bg-secondary));
   font-size: 0.75em;
   color: var(--text-primary);
@@ -1228,6 +1393,7 @@ function onResizeEnd(e: PointerEvent) {
 
 .sticker-tag:hover {
   border-color: var(--accent-pink);
+  background: var(--bg-secondary);
   background: color-mix(in srgb, var(--accent-pink) 12%, var(--bg-secondary));
 }
 
@@ -1277,7 +1443,7 @@ function onResizeEnd(e: PointerEvent) {
   transition: border-color 0.15s;
 }
 .image-tag:hover {
-  border-color: var(--accent-light);
+  border-color: var(--accent-dark);
 }
 .image-tag-preview {
   width: 28px;
@@ -1310,6 +1476,8 @@ function onResizeEnd(e: PointerEvent) {
 /* ── 拖拽图片高亮 ── */
 .chat-input.is-dragover {
   border-color: var(--accent);
+  background: transparent;
+  background: transparent;
   background: color-mix(in srgb, var(--accent) 4%, transparent);
 }
 
@@ -1422,17 +1590,33 @@ function onResizeEnd(e: PointerEvent) {
   margin-top: -2px;
 }
 .resize-handle-grip {
-  width: 32px;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--border);
-  transition: background 0.15s, width 0.2s;
-  opacity: 0.5;
+  position: relative;
+  width: 28px;
+  height: 12px;
+  opacity: 0.4;
+  transition: opacity 0.15s;
 }
+.resize-handle-grip::before,
+.resize-handle-grip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--text-tertiary);
+  transition: background 0.15s, width 0.2s;
+}
+.resize-handle-grip::before { top: 2px; }
+.resize-handle-grip::after { bottom: 2px; }
 .resize-handle:hover .resize-handle-grip {
-  background: var(--accent);
-  width: 56px;
   opacity: 1;
+}
+.resize-handle:hover .resize-handle-grip::before,
+.resize-handle:hover .resize-handle-grip::after {
+  background: var(--accent);
+  width: 28px;
 }
 
 .chat-input {
@@ -1450,6 +1634,7 @@ function onResizeEnd(e: PointerEvent) {
 }
 .chat-input.is-resizing {
   border-color: var(--accent);
+  box-shadow: none;
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 .chat-input:focus-within {
@@ -1484,17 +1669,17 @@ function onResizeEnd(e: PointerEvent) {
   background: var(--bg-secondary);
   color: var(--text-primary);
 }
+.btn-add-file.active:not(:disabled) {
+  background: var(--bg-secondary);
+  color: var(--accent);
+}
 .btn-add-file:disabled {
   opacity: 0.4;
   cursor: default;
 }
 .btn-add-file-spin {
   display: inline-block;
-  animation: spin 0.8s linear infinite;
-}
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  animation: maxma-spin 0.8s linear infinite;
 }
 
 /* 添加文件菜单 */
@@ -1532,6 +1717,8 @@ function onResizeEnd(e: PointerEvent) {
   transition: background 0.12s;
 }
 .add-file-menu-item:hover {
+  background: transparent;
+  background: transparent;
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
@@ -1576,6 +1763,16 @@ function onResizeEnd(e: PointerEvent) {
   max-height: 160px;
   overflow-y: auto;
   padding: 4px 2px 4px 10px;
+}
+.input-area:focus {
+  box-shadow: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
+  border-radius: 4px;
+}
+.input-area:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 4px;
 }
 .input-area::placeholder {
   color: #9ca3af;
@@ -1645,6 +1842,8 @@ function onResizeEnd(e: PointerEvent) {
   font-size: 0.8em;
 }
 .btn-stop:hover {
+  background: #000;
+  background: #000;
   background: color-mix(in srgb, var(--status-error) 80%, #000);
 }
 
@@ -1684,6 +1883,15 @@ function onResizeEnd(e: PointerEvent) {
 @keyframes quote-pop-in {
   from { opacity: 0; transform: scale(0.8); }
   to { opacity: 1; transform: scale(1); }
+}
+
+.shortcut-hint {
+  font-size: 0.7em;
+  color: var(--text-tertiary);
+  opacity: 0.55;
+  user-select: none;
+  text-align: center;
+  padding: 2px 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

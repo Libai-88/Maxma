@@ -22,10 +22,10 @@ def _async_subagent_enabled() -> bool:
 def _require_runtime(request: Request):
     if not _async_subagent_enabled():
         # Do not expose a partially deployed feature through its REST surface.
-        raise HTTPException(status_code=404, detail="Deferred sub-agent runs are unavailable")
+        raise HTTPException(status_code=404, detail="延迟子代理运行功能未启用")
     manager = getattr(request.app.state, "deferred_subagent_run_manager", None)
     if manager is None:
-        raise HTTPException(status_code=503, detail="Deferred sub-agent runtime is unavailable")
+        raise HTTPException(status_code=503, detail="延迟子代理运行时不可用")
     return manager
 
 
@@ -34,7 +34,7 @@ async def _require_parent_session(request: Request, session_id: str) -> None:
     if manager is None or await manager.get(session_id) is None:
         # A valid bearer token is necessary but not sufficient: a run must also
         # belong to a live parent session selected by the caller.
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="会话不存在")
 
 
 async def _get_parent_run(request: Request, session_id: str, run_id: str) -> tuple[Any, Any]:
@@ -44,7 +44,7 @@ async def _get_parent_run(request: Request, session_id: str, run_id: str) -> tup
     if run is None:
         # Keep non-membership indistinguishable from an unknown ID to avoid a
         # session being used to probe another session's work.
-        raise HTTPException(status_code=404, detail="Deferred run not found")
+        raise HTTPException(status_code=404, detail="延迟运行不存在")
     return manager, run
 
 
@@ -108,7 +108,7 @@ async def cancel_deferred_run(session_id: str, run_id: str, request: Request):
         await manager.cancel(run_id, "cancelled_by_user")
         run = manager.store.get(run_id, parent_session_id=session_id)
         if run is None:  # Defensive: the durable row must not disappear mid-request.
-            raise HTTPException(status_code=404, detail="Deferred run not found")
+            raise HTTPException(status_code=404, detail="延迟运行不存在")
     return _public_run(run)
 
 

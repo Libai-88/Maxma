@@ -19,22 +19,27 @@ ENV_VAR_META: dict[str, dict[str, str]] = {
     "ZHIPUAI_API_KEY": {
         "label": "智谱 AI",
         "description": "GLM-5V-Turbo 图片理解工具",
+        "apply_url": "https://open.bigmodel.cn/usercenter/apikeys",
     },
     "TODOIST_API_TOKEN": {
         "label": "Todoist",
         "description": "Todoist 任务管理",
+        "apply_url": "https://todoist.com/app/settings/integrations/developer",
     },
     "UAPIS_API_KEY": {
         "label": "UAPI",
         "description": "天气/娱乐等 API 服务",
+        "apply_url": "https://uapis.cn/console",
     },
     "AMAP_API_KEY": {
         "label": "高德地图",
         "description": "地图 POI 搜索、地理编码、路线规划",
+        "apply_url": "https://lbs.amap.com/dev/key/app",
     },
     "TAVILY_API_KEY": {
         "label": "Tavily",
         "description": "网络搜索与内容提取",
+        "apply_url": "https://app.tavily.com/api-key",
     },
 }
 
@@ -62,6 +67,7 @@ class EnvVarItem(BaseModel):
     key: str
     label: str
     description: str
+    apply_url: str = ""  # 申请入口外链（空字符串表示无预设申请入口）
     value: str  # 已脱敏
     is_set: bool
 
@@ -98,6 +104,7 @@ async def list_env_vars():
                 key=key,
                 label=meta["label"],
                 description=meta["description"],
+                apply_url=meta.get("apply_url", ""),
                 value=_mask_value(raw) if raw else "",
                 is_set=bool(raw),
             )

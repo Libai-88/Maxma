@@ -36,11 +36,11 @@ import { computed } from 'vue'
 const props = defineProps<{ entry: NewsEntry }>()
 
 const typeLabelMap: Record<string, string> = {
-  feat: 'Feature',
-  enhance: 'Enhancement',
-  fix: 'Fix',
-  refactor: 'Refactor',
-  docs: 'Docs',
+  feat: '新功能',
+  enhance: '增强',
+  fix: '修复',
+  refactor: '重构',
+  docs: '文档',
 }
 
 const typeLabel = computed(() => typeLabelMap[props.entry.type] ?? props.entry.type)
@@ -54,9 +54,9 @@ const paragraphs = computed(() => {
 
 <style scoped>
 .news-card {
-  background: #ffffff;
+  background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 20px;
   box-shadow: var(--shadow-sm);
   display: flex;
@@ -81,14 +81,14 @@ const paragraphs = computed(() => {
 .card-en-title {
   font-size: 17px;
   font-weight: 700;
-  color: #1f2937;
+  color: var(--text-primary);
   line-height: 1.3;
 }
 
 .card-subtitle {
   font-size: 13px;
   font-weight: 400;
-  color: #9ca3af;
+  color: var(--text-tertiary);
   line-height: 1.4;
   margin-top: -2px;
 }
@@ -101,34 +101,39 @@ const paragraphs = computed(() => {
   border-radius: 100px;
   flex-shrink: 0;
   white-space: nowrap;
-  background: #f3f4f6;
-  color: #9ca3af;
+  background: var(--bg-secondary);
+  color: var(--text-tertiary);
   transition: background 0.2s, color 0.2s;
 }
 
+/* 各类型的 hover 颜色使用 overlay 方案，确保与主题兼容 */
 .news-card:hover .card-type-badge.type-feat {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--bg-card);
+  background: color-mix(in srgb, var(--status-ok) 20%, var(--bg-card));
+  color: var(--status-ok);
 }
 
 .news-card:hover .card-type-badge.type-enhance {
-  background: #dbeafe;
-  color: #1e40af;
+  background: var(--bg-card);
+  background: color-mix(in srgb, var(--status-info) 20%, var(--bg-card));
+  color: var(--status-info);
 }
 
 .news-card:hover .card-type-badge.type-fix {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--bg-card);
+  background: color-mix(in srgb, var(--status-warn) 20%, var(--bg-card));
+  color: var(--status-warn);
 }
 
 .news-card:hover .card-type-badge.type-refactor {
-  background: #f3e8ff;
-  color: #6b21a8;
+  background: var(--bg-card);
+  background: color-mix(in srgb, var(--accent) 20%, var(--bg-card));
+  color: var(--accent);
 }
 
 .news-card:hover .card-type-badge.type-docs {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
 }
 
 .version-badge {
@@ -136,8 +141,8 @@ const paragraphs = computed(() => {
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 6px;
-  background: #1f2937;
-  color: #ffffff;
+  background: var(--text-primary);
+  color: var(--bg-primary);
   flex-shrink: 0;
   font-family: 'SF Mono', 'Consolas', monospace;
 }
@@ -150,7 +155,7 @@ const paragraphs = computed(() => {
 
 .desc-para {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--text-secondary);
   line-height: 1.6;
   margin: 0;
 }
@@ -164,9 +169,9 @@ const paragraphs = computed(() => {
 .model-tag {
   font-size: 11px;
   padding: 3px 8px;
-  background: #f3f4f6;
+  background: var(--bg-secondary);
   border-radius: 6px;
-  color: #6b7280;
+  color: var(--text-tertiary);
   font-family: 'SF Mono', 'Consolas', monospace;
 }
 

@@ -26,18 +26,53 @@
       <p>加载失败：{{ loadError }}</p>
       <button @click="retryLoad">重试</button>
     </div>
-    <div v-else class="editor-wrapper">
-      <Codemirror
-        v-model="content"
-        :extensions="extensions"
-        :disabled="saving"
-        :placeholder="pagePlaceholder"
-        :autofocus="false"
-        :indent-with-tab="true"
-        :tab-size="2"
-        @blur="onBlur"
-      />
-    </div>
+    <template v-else>
+      <!-- 写作指引 + 模板：让 Novice 知道 SOUL.md 是什么、该怎么写 -->
+      <details class="md-guide">
+        <summary class="md-guide-summary">📝 写作指引与模板</summary>
+        <div class="md-guide-body">
+          <p>
+            <strong>SOUL.md</strong> 是当前人格的「角色设定文件」，定义 AI 在对话中扮演谁、用什么语气、有什么能力边界。
+            AI 每次对话时会自动读取，写得越具体，AI 表现越稳定。
+          </p>
+          <p>
+            与 <strong>USER.md</strong>（定义用户）不同，<strong>SOUL.md</strong> 定义的是 <em>AI 自己</em>。
+          </p>
+          <p>建议写：</p>
+          <ul>
+            <li><strong>身份</strong>：AI 是谁？（如「我是 Maxma，一只温柔的桌面伙伴」）</li>
+            <li><strong>风格</strong>：语气、措辞偏好、回答长度倾向</li>
+            <li><strong>能力边界</strong>：擅长什么、不擅长什么、什么场景应拒绝</li>
+            <li><strong>禁忌</strong>：不要做什么（如「不要自夸」「不要说教」）</li>
+          </ul>
+          <p>格式为 <code>Markdown</code>，可以切换不同人格分别配置；点击下方模板可一键填入。</p>
+          <div class="md-guide-templates">
+            <div class="md-guide-templates-title">点击使用模板（将覆盖当前内容）：</div>
+            <div class="md-guide-template-list">
+              <button
+                v-for="t in soulTemplates"
+                :key="t.label"
+                type="button"
+                class="md-template-btn"
+                @click="applySoulTemplate(t.content)"
+              >{{ t.label }}</button>
+            </div>
+          </div>
+        </div>
+      </details>
+      <div class="editor-wrapper">
+        <Codemirror
+          v-model="content"
+          :extensions="extensions"
+          :disabled="saving"
+          :placeholder="pagePlaceholder"
+          :autofocus="false"
+          :indent-with-tab="true"
+          :tab-size="2"
+          @blur="onBlur"
+        />
+      </div>
+    </template>
 
     <!-- 创建新人格弹窗 -->
     <div v-if="showCreateDialog" class="create-overlay" @click.self="showCreateDialog = false">
@@ -128,6 +163,77 @@ const createForm = ref({
   memory: 'shared',
 })
 
+// ── SOUL 模板：让 Novice 一键填入可用起点 ──
+const soulTemplates = [
+  {
+    label: '🐱 温柔桌面伙伴',
+    content: `# 身份
+
+我是 Maxma，一只温柔、有点小聪明的桌面伙伴。我的目标是帮用户把事情想清楚、做明白，而不是炫技或卖弄。
+
+## 风格
+- 语气温柔、克制，像朋友间讨论问题
+- 简洁优先；除非用户要求展开，否则回答不超过 300 字
+- 不用感叹号、不卖萌、不吹捧自己
+
+## 能力
+- 帮用户梳理思路、起草文档、写代码、查信息
+- 不确定时坦诚说「我不确定」，并建议用户怎么验证
+
+## 禁忌
+- 不要说教、不要鸡汤
+- 不要假设用户的操作系统或工具链
+- 不要自夸「我是一个强大的 AI」
+`,
+  },
+  {
+    label: '💼 专业工作助手',
+    content: `# 身份
+
+我是 Maxma，一名冷静、靠谱的工作助手。我擅长把模糊的需求拆解成可执行的步骤，给出直接可用的产出。
+
+## 风格
+- 专业、简洁，避免口语化
+- 代码要可直接运行，包含必要 import 和边界处理
+- 文档要分点列出，先结论后细节
+
+## 能力
+- 写文档、起草邮件、整理会议纪要、写代码、做数据分析
+- 优先使用标准库 / 主流工具，不引入无谓依赖
+
+## 禁忌
+- 不要给「看起来厉害但跑不动」的代码
+- 不要给鸡汤式建议
+- 不要假设用户用 macOS
+`,
+  },
+  {
+    label: '🎨 创意灵感搭子',
+    content: `# 身份
+
+我是 Maxma，一个爱发散、爱联结的创意搭子。我擅长从看似无关的事物中找到联系，给用户新鲜的视角。
+
+## 风格
+- 活泼但不浮夸，敢于给具体方案而不是空话
+- 多给几个方向，每个方向简短说明
+- 鼓励用户先发散再收敛
+
+## 能力
+- 起名字、写文案、做方案、设计活动、出点子
+- 用类比、隐喻、跨领域借鉴打开思路
+
+## 禁忌
+- 不要给「多读书多看报」式空泛建议
+- 不要每个回答都给"3 个建议"
+`,
+  },
+]
+
+function applySoulTemplate(t: string) {
+  if (!window.confirm('应用此模板将覆盖当前编辑器内容，确定吗？（未保存的内容会丢失）')) return
+  content.value = t
+}
+
 async function doCreate() {
   if (!createForm.value.name.trim() || creating.value) return
   creating.value = true
@@ -143,19 +249,17 @@ async function doCreate() {
     await loadPersonas()
     activeFile.value = res.file
     await onPersonaChange()
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('[SoulView] createPersona FAIL', e)
-    alert('创建失败: ' + (e?.message || String(e)))
+    alert('创建失败: ' + (e instanceof Error ? e.message : String(e)))
   } finally {
     creating.value = false
   }
 }
 
 async function loadPersonas() {
-  console.log('[SoulView] loadPersonas start, type=', TYPE)
   try {
     const res = await api.listPersonas()
-    console.log('[SoulView] loadPersonas OK, count=', res.personas.length, 'active=', res.active_file)
     personas.value = res.personas
     activeFile.value = res.active_file
     personasLoaded.value = true
@@ -171,15 +275,13 @@ async function onPersonaChange() {
   if (content.value !== savedContent.value) {
     await saveContent()
   }
-  console.log('[SoulView] switching persona to:', activeFile.value)
   try {
     await api.switchPersona(activeFile.value)
-    console.log('[SoulView] persona switched OK')
     // 更新 personas 列表中的 active 状态
     personas.value.forEach(p => { p.active = p.file === activeFile.value })
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('[SoulView] switchPersona FAIL', e)
-    loadError.value = '切换人格失败: ' + (e?.message || String(e))
+    loadError.value = '切换人格失败: ' + (e instanceof Error ? e.message : String(e))
     return
   }
   await loadContent()
@@ -333,6 +435,82 @@ onMounted(async () => {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
     'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   font-size: 15px;
+}
+
+/* ── 引导卡片 ── */
+.md-guide {
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 8px);
+  background: var(--bg-card);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.md-guide-summary {
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+.md-guide-summary::-webkit-details-marker { display: none; }
+.md-guide-summary::after {
+  content: '▸';
+  float: right;
+  color: var(--text-tertiary);
+  transition: transform 0.15s;
+}
+.md-guide[open] .md-guide-summary::after {
+  transform: rotate(90deg);
+}
+.md-guide-body {
+  padding: 0 14px 12px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+.md-guide-body p { margin: 0 0 8px; }
+.md-guide-body ul { margin: 0 0 8px; padding-left: 18px; }
+.md-guide-body li { margin-bottom: 4px; }
+.md-guide-body strong { color: var(--text-primary); font-weight: 600; }
+.md-guide-body code {
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 12px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--bg-secondary);
+}
+.md-guide-templates {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+.md-guide-templates-title {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-bottom: 6px;
+}
+.md-guide-template-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.md-template-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.md-template-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 /* ── 创建新人格按钮 ── */

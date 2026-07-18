@@ -1,6 +1,7 @@
 """REST API — MCP 服务器配置 CRUD + 热加载。"""
 
 import logging
+import os
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -13,6 +14,38 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 MCP_YAML_PATH = MCP_CONFIG_PATH
+
+# 子进程环境变量黑名单 — 禁止通过 API 设置的敏感系统变量
+# 这些变量可被用于代码注入、库劫持、路径劫持等攻击
+_BLOCKED_ENV_KEYS: frozenset[str] = frozenset({
+    # Linux / macOS 动态库注入
+    "LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT", "LD_DEBUG",
+    "DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH",
+    # Python 模块劫持
+    "PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "PYTHONPYCACHEPREFIX",
+    # 命令路径劫持
+    "PATH", "IFS", "BASH_ENV", "ENV",
+    # Shell 劫持 (Windows)
+    "COMSPEC", "SHELL", "PATHEXT",
+    # Node.js
+    "NODE_PATH", "NODE_OPTIONS",
+    # 通用危险变量
+    "HOME", "USERPROFILE", "TMPDIR", "TMP", "TEMP",
+})
+
+
+def _validate_env_vars(env: dict[str, str]) -> None:
+    """校验环境变量字典，拒绝黑名单中的敏感 key。
+
+    防止通过 MCP 服务器配置 API 设置可导致子进程代码注入的环境变量。
+    校验在 API 层执行，确保无论在 create 还是 update 路径都无法绕过。
+    """
+    blocked = [k for k in env if k.upper() in _BLOCKED_ENV_KEYS]
+    if blocked:
+        raise HTTPException(
+            status_code=400,
+            detail=f"环境变量包含禁止设置的敏感 key: {', '.join(blocked)}",
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -106,6 +139,7 @@ def _build_server_dict(body: MCPServerCreateBody) -> dict:
         if body.args:
             d["args"] = body.args
         if body.env:
+            _validate_env_vars(body.env)
             d["env"] = body.env
         if body.cwd:
             d["cwd"] = body.cwd
@@ -134,11 +168,28 @@ def _build_server_dict(body: MCPServerCreateBody) -> dict:
 
 
 async def _do_reload(request: Request | None = None) -> dict:
-    """执行 MCP 热加载并返回结果（stub: tools/ directory removed）。"""
+    """执行 MCP 热加载并返回已配置的服务器列表。
+
+    返回 YAML 中实际配置的服务器列表（不做子进程探测）。
+    tools/ 包已移除，tool_count 从 app.state.mcp_tools 读取。
+    """
+    with yaml_file_lock(MCP_YAML_PATH):
+        entries = _load_raw()
+    mcp_tools = getattr(request.app.state, "mcp_tools", []) if request else []
+    servers = []
+    for entry in entries:
+        if isinstance(entry, dict):
+            servers.append({
+                "id": entry.get("server_id", ""),
+                "name": entry.get("name", entry.get("server_id", "")),
+                "status": entry.get("enabled", True) and "unknown" or "disabled",
+                "transport": entry.get("transport", "unknown"),
+                "command": entry.get("command", ""),
+            })
     return {
         "status": "ok",
-        "servers": [],
-        "tool_count": 0,
+        "servers": servers,
+        "tool_count": len(mcp_tools),
     }
 
 
@@ -150,9 +201,11 @@ async def _do_reload(request: Request | None = None) -> dict:
 @router.get("/mcp/servers")
 async def list_mcp_servers(request: Request):
     """返回所有已配置的 MCP 服务器（含 disabled）。"""
+    with yaml_file_lock(MCP_YAML_PATH):
+        entries = _load_raw()
     mcp_tools = getattr(request.app.state, "mcp_tools", [])
     return {
-        "servers": [],
+        "servers": entries,
         "tool_count": len(mcp_tools),
     }
 
@@ -181,7 +234,12 @@ async def list_mcp_server_tools(server_id: str):
     if not any(e.get("server_id") == server_id for e in entries):
         raise HTTPException(status_code=404, detail=f"MCP 服务器 '{server_id}' 不存在")
 
-    return {"server_id": server_id, "tools": []}
+    # tools/ 包已移除，工具由 OMP sidecar 管理
+    return {
+        "server_id": server_id,
+        "tools": [],
+        "note": "工具由 OMP sidecar 动态管理，请在对话中让 AI 列出或调用它们",
+    }
 
 
 @router.post("/mcp/servers")
@@ -204,6 +262,30 @@ async def create_mcp_server(body: MCPServerCreateBody, request: Request):
     return {**result, "status": "created", "server": server_dict}
 
 
+def _validate_update_against_transport(target: dict, update_fields: dict) -> None:
+    """对 update 执行与 create 等价的 transport 级校验。
+
+    防止通过 update 端点绕过 create 端点的安全校验（如 stdio 缺 command、
+    sse 缺 url 等）。
+    """
+    transport = update_fields.get("transport", target.get("transport", ""))
+    if transport in ("sse", "streamable_http", "websocket"):
+        # url 必须存在：要么来自 update 字段，要么已存在于 target
+        url = update_fields.get("url", target.get("url", ""))
+        if not url:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{transport} 模式必须指定 url",
+            )
+    elif transport == "stdio":
+        cmd = update_fields.get("command", target.get("command", ""))
+        if not cmd:
+            raise HTTPException(
+                status_code=400,
+                detail="stdio 模式必须指定 command",
+            )
+
+
 @router.put("/mcp/servers/{server_id}")
 async def update_mcp_server(
     server_id: str,
@@ -212,8 +294,8 @@ async def update_mcp_server(
 ):
     """更新现有 MCP 服务器配置（部分更新）。
 
-    安全校验：command 走 stdio 白名单；url/tls_verify 走 URL 白名单 + TLS 校验。
-    防止用户通过 update 端点绕过 create 端点的安全校验。
+    安全校验：与 create 端点执行等价的 transport 级校验，
+    防止用户通过 update 端点绕过 create 端点的安全校验链。
     """
     with yaml_file_lock(MCP_YAML_PATH):
         entries = _load_raw()
@@ -227,6 +309,13 @@ async def update_mcp_server(
 
         # 部分更新：只更新非 None 字段
         update_fields = body.model_dump(exclude_unset=True)
+
+        # 执行与 create 等价的 transport 级校验
+        _validate_update_against_transport(target, update_fields)
+
+        # 校验环境变量黑名单（update 路径也必须校验，防止绕过 create 的校验）
+        if "env" in update_fields and update_fields["env"] is not None:
+            _validate_env_vars(update_fields["env"])
 
         for key, value in update_fields.items():
             target[key] = value
