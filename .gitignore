@@ -41,6 +41,9 @@ env/
 web/node_modules/
 web/dist/
 
+# Bun sidecar dependencies
+bun-sidecar/node_modules/
+
 # OS
 Thumbs.db
 .DS_Store
