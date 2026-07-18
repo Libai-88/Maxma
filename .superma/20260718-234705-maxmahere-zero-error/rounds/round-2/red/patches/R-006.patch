@@ -1,0 +1,16 @@
+diff --git a/build/build-server.bat b/build/build-server.bat
+--- a/build/build-server.bat
++++ b/build/build-server.bat
+@@ -13,8 +13,11 @@
+ call build\setup-dev-env.bat
+ if errorlevel 1 exit /b 1
+ 
++REM 端口配置：优先读取环境变量，未设置则使用默认值
++if "%MAXMA_API_PORT%"=="" set "MAXMA_API_PORT=8000"
++
+ REM Clean up stale backend before smoke test
+-powershell -NoProfile -ExecutionPolicy Bypass -File build\port-guard.ps1 -PortsStr "8000" >nul 2>&1
++powershell -NoProfile -ExecutionPolicy Bypass -File build\port-guard.ps1 -PortsStr "%MAXMA_API_PORT%" >nul 2>&1
+ 
+ set "DIST_EXE=dist\maxma-server.exe"
+ set "TAURI_BIN_DIR=desktop\src-tauri\binaries"

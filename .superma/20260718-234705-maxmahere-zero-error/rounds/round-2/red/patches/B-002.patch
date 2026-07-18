@@ -1,0 +1,11 @@
+diff --git a/build/maxma-server.spec b/build/maxma-server.spec
+--- a/build/maxma-server.spec
++++ b/build/maxma-server.spec
+@@ -30,6 +30,7 @@
+     # 生产模式需要 bun.exe + sidecar 源码来启动 agent 引擎
+     (str(project_root / "bun-sidecar" / "src"), "bun-sidecar/src"),
+     (str(project_root / "bun-sidecar" / "package.json"), "bun-sidecar"),
++    (str(project_root / "bun-sidecar" / "node_modules"), "bun-sidecar/node_modules"),
+ ]
+ 
+ # 检查并警告缺失的数据文件，避免静默跳过导致运行时错误

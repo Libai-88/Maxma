@@ -320,26 +320,26 @@ def test_get_log_files_info_handles_stat_oserror(isolated_logs_dir, monkeypatch)
     """Lines 410-411: if entry.stat() raises OSError during size collection,
     size_bytes falls back to 0.
 
-    Path.is_file() also calls stat() internally, so we must let the first call
-    (from is_file) succeed and only raise on the second call (from size_bytes
-    = entry.stat().st_size).
+    Python 3.14+ changed Path.is_file() to call os.path.isfile() directly
+    instead of self.stat(). We monkeypatch Path.is_file to return True
+    unconditionally and Path.stat to raise OSError so the test works across
+    all Python versions.
     """
     log_file = isolated_logs_dir / "maxma.log"
     log_file.write_bytes(b"data")
 
-    real_stat = Path.stat
-    call_counts: dict[str, int] = {}
+    # Ensure is_file() returns True regardless of Python version
+    monkeypatch.setattr(Path, "is_file", lambda self: True)
 
-    def _stat_raising_on_second(self, *args, **kwargs):
-        key = str(self)
-        call_counts[key] = call_counts.get(key, 0) + 1
-        # Raise OSError only on the second stat() call for maxma.log
-        # (first call is from is_file(), second from size collection).
-        if self.name == "maxma.log" and call_counts[key] >= 2:
+    # Make Path.stat raise OSError for our target file
+    real_stat = Path.stat
+
+    def _stat_raising(self, *args, **kwargs):
+        if self.name == "maxma.log":
             raise OSError("stat denied")
         return real_stat(self, *args, **kwargs)
 
-    monkeypatch.setattr(Path, "stat", _stat_raising_on_second)
+    monkeypatch.setattr(Path, "stat", _stat_raising)
 
     info = ErrorCollector.get_log_files_info()
     entry = next(f for f in info if f["name"] == "maxma.log")

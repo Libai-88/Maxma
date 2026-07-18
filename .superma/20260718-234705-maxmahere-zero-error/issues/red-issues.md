@@ -7,3 +7,6 @@
 | R-003 | low | Red | 1 | verified | MCP tools endpoint returns extra note field not in test assertion |
 | R-004 | low | Red | 1 | verified | Sidecar manager test incorrectly requires absolute default bun path |
 | R-005 | medium | Red | 1 | verified | PyInstaller spec silently drops missing data files without warning |
+| R-006 | medium | Red | 2 | verified | build-server.bat port-guard hardcodes port 8000 ignoring MAXMA_API_PORT |
+| R-007 | medium | Red | 2 | verified | build-server.bat npm build has no node_modules guard |
+| R-008 | medium | Red | 2 | verified | build-server.bat does not ensure bun-sidecar dependencies are current |

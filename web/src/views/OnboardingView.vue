@@ -83,7 +83,7 @@ const quickThemes = THEMES.filter(theme => ['warm-paper', 'midnight', 'high-cont
 const displayName = ref(onboarding.snapshot.preferences.displayName)
 const language = ref(onboarding.snapshot.preferences.language)
 const workspace = ref(onboarding.snapshot.preferences.workspace)
-const providerReady = computed(() => props.health?.llm.status === 'ok')
+	const providerReady = computed(() => props.health?.llm?.status === 'ok')
 watch([displayName, language, workspace], () => onboarding.updatePreferences({ displayName: displayName.value, language: language.value, workspace: workspace.value }))
 function skip() { onboarding.complete() }
 function next() { if (step.value === titles.length - 1) onboarding.complete(); else step.value += 1 }

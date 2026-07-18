@@ -1,0 +1,18 @@
+diff --git a/web/src/components/ModelSelector.vue b/web/src/components/ModelSelector.vue
+index 66d6f81..a516a88 100644
+--- a/web/src/components/ModelSelector.vue
++++ b/web/src/components/ModelSelector.vue
+@@ -60,9 +60,10 @@ function ctxTooltip(raw: unknown): string {
+   return `上下文窗口：${formatCtx(tokens)}（约 ${charsLabel}）— 模型一次对话能处理的最大文本长度，包括你的输入和 AI 的回复。`
+ }
+ 
+-function onSelectModel(value: string | number) {
+-  store.setModel(String(value))
+-}
++	function onSelectModel(value: string | number | null) {
++	  if (value == null) return
++	  store.setModel(String(value))
++	}
+ 
+ onMounted(() => { if (store.availableModels.length === 0) store.fetchAvailableModels() })
+ </script>

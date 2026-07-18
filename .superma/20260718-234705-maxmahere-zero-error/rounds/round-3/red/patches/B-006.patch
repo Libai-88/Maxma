@@ -1,0 +1,19 @@
+diff --git a/web/vite.config.ts b/web/vite.config.ts
+index e4f24f6..7feb496 100644
+--- a/web/vite.config.ts
++++ b/web/vite.config.ts
+@@ -39,11 +39,9 @@ export default defineConfig(({ mode }) => {
+       ],
+     },
+     build: {
+-      minify: 'terser',
+-      terserOptions: {
+-        compress: {
+-          drop_console: true,
+-        },
++      minify: 'esbuild',
++      esbuild: {
++        drop: ['console'],
+       },
+       rollupOptions: {
+         input: {

@@ -39,11 +39,9 @@ export default defineConfig(({ mode }) => {
       ],
     },
     build: {
-      minify: 'terser',
-      terserOptions: {
-        compress: {
-          drop_console: true,
-        },
+      minify: 'esbuild',
+      esbuild: {
+        drop: ['console'],
       },
       rollupOptions: {
         input: {
@@ -77,6 +75,9 @@ export default defineConfig(({ mode }) => {
           target: `ws://localhost:${apiPort}`,
           ws: true,
           changeOrigin: true,
+          // 必须显式处理 WebSocket 子协议，否则浏览器收到空的
+          // Sec-WebSocket-Protocol 响应头，拒绝建立连接。
+          handleProtocols: (protocols: string[]) => protocols[0],
         },
       },
     },

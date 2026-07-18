@@ -1,0 +1,12 @@
+diff --git a/desktop/src-tauri/tauri.conf.json b/desktop/src-tauri/tauri.conf.json
+index b489822..69382ae 100644
+--- a/desktop/src-tauri/tauri.conf.json
++++ b/desktop/src-tauri/tauri.conf.json
+@@ -23,6 +23,7 @@
+       },
+       {
+         "label": "quick-chat",
++        "url": "quick-chat.html",
+         "title": "Quick Chat",
+         "width": 480,
+         "height": 640,

@@ -24,6 +24,7 @@ interface SessionChannel {
   parentSessionId: string | null
   privateMode: boolean
   autoApprove: boolean
+  _pingTimer: ReturnType<typeof setInterval> | null  // 心跳 ping 定时器
 }
 
 function createChannel(): SessionChannel {
@@ -33,7 +34,7 @@ function createChannel(): SessionChannel {
     errorTraceId: null, contextUsage: null, taskTrackerData: null,
     reconnectTimer: null, reconnectAttempts: 0, initialized: false,
     _awaitingToolName: null, parentSessionId: null,
-    privateMode: false, autoApprove: false,
+    privateMode: false, autoApprove: false, _pingTimer: null,
   }
 }
 
@@ -113,7 +114,7 @@ export const useChatStore = defineStore('chat', () => {
       const { api } = await import('@/api')
       const data = await api.listProviders()
       const models: ModelInfo[] = []
-      const providers = Array.isArray(data) ? data : (data as Record<string, unknown>).providers
+	      const providers = Array.isArray(data) ? data : (data as unknown as Record<string, unknown>).providers
       if (Array.isArray(providers)) {
         for (const p of providers) {
           if (Array.isArray(p.models)) {

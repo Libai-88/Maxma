@@ -1,0 +1,17 @@
+diff --git a/build/build-server.bat b/build/build-server.bat
+--- a/build/build-server.bat
++++ b/build/build-server.bat
+@@ -41,7 +41,13 @@
+ %PYTHON_EXE% -c "import PyInstaller" 2>nul && set "HAS_PYI=1"
+ if "%HAS_PYI%"=="0" (
+     echo [INFO] PyInstaller 未安装，正在安装...
++    REM 检查 uv 是否已安装（参考 setup-dev.bat 的防御性检查）
++    where uv >nul 2>&1
++    if errorlevel 1 (
++        echo [ERR] 未找到 uv。请先安装 uv：
++        echo       powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 ^| iex"
++        exit /b 1
++    )
+     uv pip install pyinstaller
+     if errorlevel 1 (
+         echo [ERROR] PyInstaller 安装失败

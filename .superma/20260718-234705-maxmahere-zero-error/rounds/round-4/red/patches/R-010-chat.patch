@@ -1,0 +1,13 @@
+diff --git a/web/src/stores/chat.ts b/web/src/stores/chat.ts
+index d948ebe..e283a82 100644
+--- a/web/src/stores/chat.ts
++++ b/web/src/stores/chat.ts
+@@ -113,7 +113,7 @@ export const useChatStore = defineStore('chat', () => {
+       const { api } = await import('@/api')
+       const data = await api.listProviders()
+       const models: ModelInfo[] = []
+-      const providers = Array.isArray(data) ? data : (data as Record<string, unknown>).providers
++	      const providers = Array.isArray(data) ? data : (data as unknown as Record<string, unknown>).providers
+       if (Array.isArray(providers)) {
+         for (const p of providers) {
+           if (Array.isArray(p.models)) {

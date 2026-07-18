@@ -1,0 +1,21 @@
+diff --git a/api/pi_bridge/rpc_client.py b/api/pi_bridge/rpc_client.py
+index f892321..4659bc7 100644
+--- a/api/pi_bridge/rpc_client.py
++++ b/api/pi_bridge/rpc_client.py
+@@ -3,6 +3,7 @@
+ from __future__ import annotations
+ 
+ import asyncio
++import inspect
+ import json
+ import logging
+ from collections.abc import Callable
+@@ -181,7 +182,7 @@ class JsonRpcClient:
+             session_id = params.get("session_id", "")
+             for handler in handlers:
+                 try:
+-                    if asyncio.iscoroutinefunction(handler):
++                    if inspect.iscoroutinefunction(handler):
+                         await handler(session_id, event)
+                     else:
+                         handler(session_id, event)

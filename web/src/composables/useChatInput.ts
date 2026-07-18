@@ -33,7 +33,7 @@ export interface UseChatInputOptions {
   quoteCandidate?: Ref<QuoteCandidate | null>
 
       // ── 事件回调（接入时由 ChatView 提供） ──
-      onSend?: (text: string, refs: ParsedRef[], providerId?: string, modelName?: string, thinkPathId?: ThinkPathId) => void
+      onSend?: (text: string, refs: ParsedRef[], providerId?: string, modelName?: string, thinkPathId?: ThinkPathId) => boolean
   onStop?: () => void
   onModelChange?: (providerId: string, modelName: string) => void
   onCommitQuote?: () => void
@@ -55,7 +55,7 @@ export interface UseChatInputReturn {
   /** 是否可提交：有文本且未在流式输出且可发送 */
   canSubmit: ComputedRef<boolean>
       // ── 方法（骨架占位，接入前不会真正触发事件） ──
-      send: (text: string, refs?: ParsedRef[], thinkPathId?: ThinkPathId) => void
+      send: (text: string, refs?: ParsedRef[], thinkPathId?: ThinkPathId) => boolean
   stop: () => void
   onModelChange: (providerId: string, modelName: string) => void
   commitQuote: () => void
@@ -123,18 +123,18 @@ export function useChatInput(options: UseChatInputOptions = {}): UseChatInputRet
         text: string,
         refs: ParsedRef[] = [],
         thinkPathId?: ThinkPathId,
-      ) {
+      ): boolean {
         if (onSend) {
-          onSend(
+          return onSend(
             text,
             refs,
             providerId.value ?? undefined,
             modelName.value ?? undefined,
             thinkPathId,
-          )
-        } else {
-          console.warn('[useChatInput] send() called but onSend callback not wired — skeleton mode')
+          ) ?? false
         }
+        console.warn('[useChatInput] send() called but onSend callback not wired — skeleton mode')
+        return false
       }
 
   function stop() {

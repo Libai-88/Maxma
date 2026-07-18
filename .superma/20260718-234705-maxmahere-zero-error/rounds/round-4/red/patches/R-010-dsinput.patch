@@ -1,0 +1,13 @@
+diff --git a/web/src/components/ui/DsInput.vue b/web/src/components/ui/DsInput.vue
+index ae58884..9996964 100644
+--- a/web/src/components/ui/DsInput.vue
++++ b/web/src/components/ui/DsInput.vue
+@@ -29,7 +29,7 @@
+ <script setup lang="ts">
+ import { ref } from 'vue'
+ 
+-const props = defineProps<{
++defineProps<{
+   modelValue?: string
+   type?: string
+   placeholder?: string

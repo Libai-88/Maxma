@@ -117,6 +117,11 @@ export function disconnectSession(sid: string) {
     clearTimeout(ch.reconnectTimer)
     ch.reconnectTimer = null
   }
+  // 清理心跳 ping 定时器（修复 R-005）
+  if (ch._pingTimer) {
+    clearInterval(ch._pingTimer)
+    ch._pingTimer = null
+  }
   if (ch.ws) {
     ch.ws.onclose = null
     ch.ws.close()
@@ -160,6 +165,7 @@ interface SessionChannel {
   parentSessionId: string | null  // sub-agent 用：完成时切回主会话
   privateMode: boolean
   autoApprove: boolean
+  _pingTimer: ReturnType<typeof setInterval> | null  // 心跳 ping 定时器
 }
 
 // Lazy export — 运行时才访问 Store（Pinia 在模块加载时尚未安装）
@@ -227,8 +233,25 @@ async function connectSession(sid: string) {
   // 等待后端就绪（PyInstaller onefile 启动可能需要数秒，孤儿 sidecar 被清理后
   // 新 sidecar 需要时间启动）。waitForBackend 在后端已就绪时立即返回，仅在后端
   // 未启动时重试等待，避免前端在后端启动期间反复失败。
-  await waitForBackend()
+  // 修复 R-003：检查 waitForBackend 返回值，后端未就绪时放弃本次连接并调度重连。
+  const backendReady = await waitForBackend()
   if (!isChannelStillValid(sid)) return
+  if (!backendReady) {
+    console.warn(`[useChat] 后端未就绪 (sid=${sid}), 延迟重连`)
+    const ch = getOrCreateChannel(sid)
+    ch.error = '连接失败：后端服务未就绪'
+    ch.connected = false
+    if (ch.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      const delay = getReconnectDelay(ch.reconnectAttempts)
+      ch.reconnectAttempts++
+      ch.reconnectTimer = setTimeout(() => {
+        connectSession(sid).catch(err => {
+          console.error(`[useChat] 重连失败 (sid=${sid}):`, err)
+        })
+      }, delay)
+    }
+    return
+  }
 
   // 确保 Token 已加载（桌面应用运行时获取）
   await ensureTokenLoaded()
@@ -259,15 +282,33 @@ async function connectSession(sid: string) {
   chFinal.ws = new WebSocket(url, [token])
   const ws = chFinal.ws  // 本地引用，避免后续代码重复解引用
 
-  ws.onopen = () => {
-    chFinal.connected = true
-    chFinal.reconnectAttempts = 0  // 连接成功，重置退避计数
-    chFinal.error = null  // 清除连接错误状态
-    if (chFinal.reconnectTimer) {
-      clearTimeout(chFinal.reconnectTimer)
-      chFinal.reconnectTimer = null
-    }
-    console.log(`[useChat] WS connected: session=${sid}`)
+    ws.onopen = () => {
+      chFinal.connected = true
+      chFinal.reconnectAttempts = 0  // 连接成功，重置退避计数
+      chFinal.error = null  // 清除连接错误状态
+      if (chFinal.reconnectTimer) {
+        clearTimeout(chFinal.reconnectTimer)
+        chFinal.reconnectTimer = null
+      }
+      console.log(`[useChat] WS connected: session=${sid}`)
+      // 修复 R-005：启动心跳 ping 定时器，每 30s 发送 ping 检测静默断开。
+      // 浏览器 TCP keepalive 默认超时过长（可达 2h+），靠 close 事件触发重连
+      // 在网络异常断开时无法及时恢复。应用层心跳确保 in-flight 连接
+      // 在 30s + RTT 内被检测到失效并发起重连。
+      if (chFinal._pingTimer) clearInterval(chFinal._pingTimer)
+      chFinal._pingTimer = setInterval(() => {
+        const ch = getChatStore().channels.get(sid)
+        if (ch?.ws && ch.ws.readyState === WebSocket.OPEN) {
+          ch.ws.send(JSON.stringify({ type: 'ping' }))
+        } else {
+          // 连接已断开，清除定时器
+          const chInner = getChatStore().channels.get(sid)
+          if (chInner?._pingTimer) {
+            clearInterval(chInner._pingTimer)
+            chInner._pingTimer = null
+          }
+        }
+      }, 30000)
     // 修复：重连后若上一轮 currentTurn 仍卡住（WS 中断时未收到 done/error），
     // 必须清理否则 isStreaming 永久为 true，且中断的轮次数据会因下次 send 被覆盖而丢失。
     // 后端 WS 断开时已 cancel agent_task，所以这个 currentTurn 永远等不到 done 事件。
@@ -291,6 +332,11 @@ async function connectSession(sid: string) {
 
   ws.onclose = (event) => {
     chFinal.connected = false
+    // 清理心跳 ping 定时器（修复 R-005）
+    if (chFinal._pingTimer) {
+      clearInterval(chFinal._pingTimer)
+      chFinal._pingTimer = null
+    }
     // 认证失败（Token 过期/轮换）— 刷新 Token 后重连
     if (event.code === 4001) {
       console.log(`[useChat] WS auth failure (4001), refreshing token...`)
@@ -314,7 +360,16 @@ async function connectSession(sid: string) {
     // 避免在 sidecar 未启动时污染控制台（浏览器自身仍会打印资源加载 error，无法抑制）
     const logFn = event.code === 1006 ? console.debug : console.log
     logFn(`[useChat] WS closed: session=${sid}, code=${event.code}, reconnecting in ${delay}ms (attempt ${chFinal.reconnectAttempts})`)
-    chFinal.reconnectTimer = setTimeout(() => connectSession(sid), delay)
+    // 修复 R-002：捕获重连 timer 中 connectSession 的未处理 rejection
+    chFinal.reconnectTimer = setTimeout(() => {
+      connectSession(sid).catch(err => {
+        console.error(`[useChat] 重连失败 (sid=${sid}):`, err)
+        const ch = getChatStore().channels.get(sid)
+        if (ch && !ch.error) {
+          ch.error = `重连失败：${err instanceof Error ? err.message : String(err)}`
+        }
+      })
+    }, delay)
   }
 
   ws.onerror = () => {
@@ -357,7 +412,15 @@ export function ensureConnected(sid: string) {
   }
   console.log(`[useChat:ensureConnected] 初始化会话 ${sid} 的 WebSocket 连接`)
   ch.initialized = true
-  connectSession(sid)
+  // 修复 R-002：捕获 connectSession 的未处理 rejection，设置错误状态
+  connectSession(sid).catch(err => {
+    console.error(`[useChat] connectSession 失败 (sid=${sid}):`, err)
+    const ch = getChatStore().channels.get(sid)
+    if (ch) {
+      ch.error = `连接失败：${err instanceof Error ? err.message : String(err)}`
+      ch.connected = false
+    }
+  })
 }
 
 // ── 事件路由 ──────────────────────────────────────────────
@@ -1006,11 +1069,11 @@ export function useChat(sessionId: Ref<string>) {
     turnsCache.clear()
   })
 
-  function send(text: string, refs: ParsedRef[] = [], providerId?: string, modelName?: string, thinkPathId?: ThinkPathId) {
+  function send(text: string, refs: ParsedRef[] = [], providerId?: string, modelName?: string, thinkPathId?: ThinkPathId): boolean {
     const ch = activeChannel.value
     if (!ch.ws || ch.ws.readyState !== WebSocket.OPEN) {
       console.warn(`[useChat:send] WebSocket 未就绪, readyState=${ch.ws?.readyState}, session=${sessionId.value}`)
-      return
+      return false
     }
     ch.isStreaming = true
     ch.error = null
@@ -1043,6 +1106,7 @@ export function useChat(sessionId: Ref<string>) {
       },
     }
     ch.ws.send(JSON.stringify(payload))
+    return true
   }
 
   function cancel() {

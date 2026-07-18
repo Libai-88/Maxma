@@ -1,0 +1,45 @@
+From: Red Team <red@superma>
+Date: Sun, 19 Jul 2026 01:39:46 +0800
+Subject: [PATCH R-003] Fix waitForBackend() return value ignored
+
+Problem: connectSession() calls waitForBackend() but discards the return
+value. If the backend times out after 90s (now 90s per R-006 fix), the
+connection attempt continues regardless, triggering an unnecessary failed
+WS connection and re-entry into the reconnection cycle.
+
+Fix: Check the return value. If backend is not ready, set error state on
+the channel and schedule a reconnection instead of proceeding blindly.
+
+---
+ web/src/composables/useChat.ts | 21 ++++++++++++++++++++-
+ 1 file changed, 20 insertions(+), 1 deletion(-)
+
+diff --git a/web/src/composables/useChat.ts b/web/src/composables/useChat.ts
+index ee50ad4..2d8d470 100644
+--- a/web/src/composables/useChat.ts
++++ b/web/src/composables/useChat.ts
+@@ -227,8 +227,27 @@ async function connectSession(sid: string) {
+   // Wait for backend readiness (PyInstaller onefile startup may take 30-90s)
+-  await waitForBackend()
++  // Fixed R-003: check waitForBackend() return value, abort on timeout
++  const backendReady = await waitForBackend()
+   if (!isChannelStillValid(sid)) return
++  if (!backendReady) {
++    console.warn('[useChat] Backend not ready (sid=${sid}), deferring reconnect')
++    const ch = getOrCreateChannel(sid)
++    ch.error = 'Connection failed: backend not ready'
++    ch.connected = false
++    if (ch.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
++      const delay = getReconnectDelay(ch.reconnectAttempts)
++      ch.reconnectAttempts++
++      ch.reconnectTimer = setTimeout(() => {
++        connectSession(sid).catch(err => {
++          console.error('[useChat] Reconnect failed (sid=${sid}):', err)
++        })
++      }, delay)
++    }
++    return
++  }
+ 
+   // Ensure token is loaded
+   await ensureTokenLoaded()

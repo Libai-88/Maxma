@@ -535,7 +535,7 @@ async function handleSave() {
         'x-maxma-token', 'host', 'content-length', 'transfer-encoding',
         'connection', 'upgrade', 'proxy-connection',
       ]
-      const blocked = Object.keys(extraHeaders).find(
+	      const blocked = Object.keys(extraHeaders ?? {}).find(
         (k) => DANGEROUS_HEADERS.includes(k.toLowerCase())
       )
       if (blocked) {

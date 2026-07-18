@@ -308,15 +308,16 @@ function addCitation(ref: ParsedRef) {
   chatInputRef.value?.addRef(ref)
 }
 
-function onSend(text: string, refs: ParsedRef[], providerId?: string, modelName?: string, thinkPathId?: ThinkPathId) {
+function onSend(text: string, refs: ParsedRef[], providerId?: string, modelName?: string, thinkPathId?: ThinkPathId): boolean {
   // 将选区引用作为 refs 的一部分传给后端
     const quoteRefs: SelectionRef[] = quotedSelections.value.map(q => ({
       type: 'selection',
       label: q.source,
       preview: q.text,
     }))
-  send(text, [...refs, ...quoteRefs], providerId, modelName, thinkPathId)
+  const sent = send(text, [...refs, ...quoteRefs], providerId, modelName, thinkPathId)
   clearQuotes()
+  return sent
 }
 
 function handleToolAction(payload: { action: string; data?: unknown }) {

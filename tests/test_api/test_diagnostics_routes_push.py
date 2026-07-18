@@ -61,23 +61,29 @@ def test_cleanup_skips_directory_entries(isolated_env):
 
 
 def test_cleanup_stat_oserror_sets_zero_size(isolated_env, monkeypatch):
-    """Lines 117-118: if entry.stat() raises OSError, size falls back to 0."""
+    """Lines 117-118: if entry.stat() raises OSError, size falls back to 0.
+
+    Python 3.14+ changed Path.is_file() to call os.path.isfile() directly
+    instead of self.stat(). We monkeypatch Path.is_file to return True
+    unconditionally and Path.stat to raise OSError so the test works across
+    all Python versions.
+    """
     d = isolated_env["logs_dir"]
     rot = d / "maxma.log.1"
     rot.write_bytes(b"data")
 
-    real_stat = Path.stat
-    call_counts: dict[str, int] = {}
+    # Ensure is_file() returns True regardless of Python version
+    monkeypatch.setattr(Path, "is_file", lambda self: True)
 
-    def _stat_raising_on_second(self, *args, **kwargs):
-        key = str(self)
-        call_counts[key] = call_counts.get(key, 0) + 1
-        # is_file() calls stat first (succeeds), then size collection calls again (raises)
-        if self.name == "maxma.log.1" and call_counts[key] >= 2:
+    # Make Path.stat raise OSError for our target file
+    real_stat = Path.stat
+
+    def _stat_raising(self, *args, **kwargs):
+        if self.name == "maxma.log.1":
             raise OSError("stat denied")
         return real_stat(self, *args, **kwargs)
 
-    monkeypatch.setattr(Path, "stat", _stat_raising_on_second)
+    monkeypatch.setattr(Path, "stat", _stat_raising)
 
     resp = isolated_env["client"].delete("/diagnostics/logs")
     assert resp.status_code == 200

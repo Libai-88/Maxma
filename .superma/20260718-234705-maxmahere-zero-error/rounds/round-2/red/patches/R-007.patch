@@ -1,0 +1,14 @@
+diff --git a/build/build-server.bat b/build/build-server.bat
+--- a/build/build-server.bat
++++ b/build/build-server.bat
+@@ -70,6 +70,10 @@
+ REM 构建前端
+ echo [1/4] 构建前端...
++if not exist "web\node_modules" (
++    echo [ERR] Frontend dependencies not found. Run:
++    echo        cd web ^&^& npm install
++    exit /b 1
++)
+ cd web
+ call npm run build 2>&1
+ if errorlevel 1 (

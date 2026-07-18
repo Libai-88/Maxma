@@ -23,6 +23,7 @@
       },
       {
         "label": "quick-chat",
+        "url": "quick-chat.html",
         "title": "Quick Chat",
         "width": 480,
         "height": 640,

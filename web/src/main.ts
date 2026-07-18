@@ -10,5 +10,18 @@ app.use(createPinia())
 app.use(router)
 app.config.errorHandler = (err, _instance, info) => {
   console.error('[GlobalError]', err, '\nInfo:', info)
+  // 修复 R-007：派发自定义 DOM 事件，供 App.vue 或全局组件捕获后显示用户可见的通知。
+  // 不直接操作 DOM 或 store，避免错误处理本身引发二次错误。
+  try {
+    window.dispatchEvent(new CustomEvent('maxma:error', {
+      detail: {
+        message: err instanceof Error ? err.message : String(err),
+        info,
+        timestamp: Date.now(),
+      },
+    }))
+  } catch {
+    // 错误通知的发送本身失败时不处理，避免无限递归
+  }
 }
 app.mount('#app')

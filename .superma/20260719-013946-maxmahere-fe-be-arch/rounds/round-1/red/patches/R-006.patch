@@ -1,0 +1,19 @@
+diff --git a/web/src/utils/env.ts b/web/src/utils/env.ts
+index 8b6ad94..2f361e6 100644
+--- a/web/src/utils/env.ts
++++ b/web/src/utils/env.ts
+@@ -90,12 +90,12 @@ export async function ensurePortLoaded(): Promise<void> {
+  * 在 Tauri 环境下，sidecar 启动可能需要 30-90 秒（PyInstaller onefile 解压 +
+  * 数据库加载），此函数会反复重试直到后端就绪或超时。
+  *
+- * @param maxAttempts 最大重试次数（默认 30 次，每次间隔 2 秒，共 60 秒）
++ * @param maxAttempts 最大重试次数（默认 45 次，每次间隔 2 秒，共 90 秒 — 覆盖 sidecar 最大启动时间）
+  * @param intervalMs 重试间隔（毫秒，默认 2000）
+  * @returns true 如果后端就绪，false 如果超时
+  */
+ export async function waitForBackend(
+-  maxAttempts: number = 30,
++  maxAttempts: number = 45,
+   intervalMs: number = 2000,
+ ): Promise<boolean> {
+   await ensurePortLoaded()

@@ -1,0 +1,15 @@
+diff --git a/build/smoke-test-server.ps1 b/build/smoke-test-server.ps1
+--- a/build/smoke-test-server.ps1
++++ b/build/smoke-test-server.ps1
+@@ -6,6 +6,10 @@
+ 
+ $ErrorActionPreference = "Stop"
+ 
++# 支持 MAXMA_API_PORT 环境变量覆盖默认端口
++if ($env:MAXMA_API_PORT) {
++    $Port = [int]::Parse($env:MAXMA_API_PORT)
++}
++
+ function Get-ResolvedExePath {
+     param(
+         [string]$Root,

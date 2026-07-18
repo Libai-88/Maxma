@@ -51,9 +51,15 @@ export const useActivityStore = defineStore('activity', () => {
     connecting.value = true
     try {
       // 构造 SSE URL：EventSource 不支持自定义头，token 通过 query 传递
+      // 安全说明：Token 暴露在 URL 查询参数中（可见于服务器日志、浏览器开发者工具），
+      // 这是 EventSource API 限制的已知妥协。桌面端（Tauri）环境下攻击面局限于本地。
+      // 改进建议：后端可增加对 short-lived SSE ticket 的支持，前端先请求一次性凭证再用其建立流。
       const base = getBackendOrigin()
       const token = getToken()
       const url = `${base}/api/activity/stream${token ? `?token=${encodeURIComponent(token)}` : ''}`
+      if (token) {
+        console.warn('[activity] SSE token exposed in URL query parameter — visible in server logs and dev tools')
+      }
       eventSource = new EventSource(url)
       eventSource.addEventListener('activity', (ev: MessageEvent) => {
         try {

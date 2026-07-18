@@ -747,17 +747,19 @@ const modelOptions = computed(() =>
   currentModels.value.map(m => ({ value: m, label: m }))
 )
 
-function selectProvider(value: string | number) {
-  const id = String(value)
-  selectedProviderId.value = id
-  const p = providers.value.find(p => p.id === id)
-  currentModels.value = p?.models ?? []
-  selectedModelName.value = currentModels.value[0] || ''
-  chatInput.onModelChange(selectedProviderId.value, selectedModelName.value)
-}
-
-function selectModel(value: string | number) {
-  const name = String(value)
+	function selectProvider(value: string | number | null) {
+	  if (value == null) return
+	  const id = String(value)
+	  selectedProviderId.value = id
+	  const p = providers.value.find(p => p.id === id)
+	  currentModels.value = p?.models ?? []
+	  selectedModelName.value = currentModels.value[0] || ''
+	  chatInput.onModelChange(selectedProviderId.value, selectedModelName.value)
+	}
+	
+	function selectModel(value: string | number | null) {
+	  if (value == null) return
+	  const name = String(value)
   selectedModelName.value = name
   chatInput.onModelChange(selectedProviderId.value || '', name)
 }
@@ -1029,11 +1031,24 @@ function handleSend() {
   if (selectedModelName.value) {
     chatStore.setModel(selectedModelName.value)
   }
-  chatInput.send(
+  // 修复 R-001：检查 send() 返回值，发送失败时不清空输入框，
+  // 避免 WebSocket 在 canSend 检查与 send() 调用之间断开的 TOCTOU 竞态导致消息静默丢失。
+  const sent = chatInput.send(
     msg,
     refs.value,
     selectedThinkPathId.value || undefined,
   )
+  if (!sent) {
+    connectionError.value = '消息发送失败：WebSocket 连接已断开，请重试'
+    if (_connectionErrorTimer) clearTimeout(_connectionErrorTimer)
+    _connectionErrorTimer = setTimeout(() => {
+      if (_connectionErrorTimer && connectionError.value === '消息发送失败：WebSocket 连接已断开，请重试') {
+        connectionError.value = null
+        _connectionErrorTimer = null
+      }
+    }, 5000)
+    return
+  }
   text.value = ''
   // ThinkPath is intentionally one-shot: it is a confirmed preference for this
   // request, never an invisible session-level routing policy.

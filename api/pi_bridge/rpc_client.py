@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 from collections.abc import Callable
@@ -181,7 +182,7 @@ class JsonRpcClient:
             session_id = params.get("session_id", "")
             for handler in handlers:
                 try:
-                    if asyncio.iscoroutinefunction(handler):
+                    if inspect.iscoroutinefunction(handler):
                         await handler(session_id, event)
                     else:
                         handler(session_id, event)

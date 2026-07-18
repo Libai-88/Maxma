@@ -144,7 +144,7 @@ const td = computed<WeatherData | null>(() => {
   return null
 })
 
-const hasData = computed(() => hasObjectKeys(td.value))
+	const hasData = computed(() => hasObjectKeys(td.value as unknown as Record<string, unknown> | null | undefined))
 
 // ── 核心字段 ──
 const cityName = computed(() => td.value?.city || '未知城市')
