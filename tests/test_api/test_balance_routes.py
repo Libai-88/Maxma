@@ -31,7 +31,7 @@ class TestFindDeepSeekApiKey:
         with pytest.raises(HTTPException) as exc:
             balance_mod._find_deepseek_api_key(request=None)
         assert exc.value.status_code == 400
-        assert "DeepSeek API key not configured" in exc.value.detail
+        assert "DeepSeek API key 未配置" in exc.value.detail
 
     def test_present_key_returned(self, monkeypatch):
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test-123")
@@ -118,7 +118,7 @@ class TestGetDeepseekBalanceRoute:
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         resp = app_client.get("/deepseek-balance")
         assert resp.status_code == 400
-        assert "DeepSeek API key not configured" in resp.json()["detail"]
+        assert "DeepSeek API key 未配置" in resp.json()["detail"]
 
     def test_success_returns_data(self, app_client, monkeypatch):
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-success")
@@ -141,7 +141,7 @@ class TestGetDeepseekBalanceRoute:
 
         resp = app_client.get("/deepseek-balance")
         assert resp.status_code == 504
-        assert "timeout" in resp.json()["detail"].lower()
+        assert "请求超时" in resp.json()["detail"]
 
     def test_http_status_error_returns_500(self, app_client, monkeypatch):
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-status")
@@ -154,7 +154,7 @@ class TestGetDeepseekBalanceRoute:
 
         resp = app_client.get("/deepseek-balance")
         assert resp.status_code == 500
-        assert "DeepSeek API error" in resp.json()["detail"]
+        assert "DeepSeek API 错误" in resp.json()["detail"]
 
     def test_generic_exception_returns_500(self, app_client, monkeypatch):
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-boom")
@@ -163,4 +163,4 @@ class TestGetDeepseekBalanceRoute:
 
         resp = app_client.get("/deepseek-balance")
         assert resp.status_code == 500
-        assert "DeepSeek API error" in resp.json()["detail"]
+        assert "DeepSeek API 错误" in resp.json()["detail"]

@@ -1,0 +1,23 @@
+diff --git a/build/maxma-server.spec b/build/maxma-server.spec
+index 9812f5b..fdc7472 100644
+--- a/build/maxma-server.spec
++++ b/build/maxma-server.spec
+@@ -10,6 +10,7 @@ MaxmaHere PyInstaller spec — 将后端打包为独立可执行文件。
+ """
+ 
+ import os
++import sys
+ from pathlib import Path
+ 
+ block_cipher = None
+@@ -32,6 +33,10 @@ datas = [
+     (str(project_root / "bun-sidecar" / "package.json"), "bun-sidecar"),
+ ]
+ 
++# 检查并警告缺失的数据文件，避免静默跳过导致运行时错误
++_missing = [(src, dst) for src, dst in datas if not Path(src).exists()]
++for src, dst in _missing:
++    print(f"[WARN] 数据目录不存在，打包后将缺失该资源: {src} -> {dst}", file=sys.stderr)
+ # 过滤掉不存在的目录
+ datas = [(src, dst) for src, dst in datas if Path(src).exists()]
+ 

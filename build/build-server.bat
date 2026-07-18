@@ -12,8 +12,11 @@ cd /d "%~dp0\.."
 call build\setup-dev-env.bat
 if errorlevel 1 exit /b 1
 
+REM 端口配置：优先读取环境变量，未设置则使用默认值
+if "%MAXMA_API_PORT%"=="" set "MAXMA_API_PORT=8000"
+
 REM Clean up stale backend before smoke test
-powershell -NoProfile -ExecutionPolicy Bypass -File build\port-guard.ps1 -PortsStr "8000" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -File build\port-guard.ps1 -PortsStr "%MAXMA_API_PORT%" >nul 2>&1
 
 set "DIST_EXE=dist\maxma-server.exe"
 set "TAURI_BIN_DIR=desktop\src-tauri\binaries"
@@ -41,6 +44,13 @@ set "HAS_PYI=0"
 %PYTHON_EXE% -c "import PyInstaller" 2>nul && set "HAS_PYI=1"
 if "%HAS_PYI%"=="0" (
     echo [INFO] PyInstaller 未安装，正在安装...
+    REM 检查 uv 是否已安装（参考 setup-dev.bat 的防御性检查）
+    where uv >nul 2>&1
+    if errorlevel 1 (
+        echo [ERR] 未找到 uv。请先安装 uv：
+        echo       powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 ^| iex"
+        exit /b 1
+    )
     uv pip install pyinstaller
     if errorlevel 1 (
         echo [ERROR] PyInstaller 安装失败
@@ -59,6 +69,11 @@ if exist "%DIST_EXE%" (
 
 REM 构建前端
 echo [1/4] 构建前端...
+if not exist "web\node_modules" (
+    echo [ERR] Frontend dependencies not found. Run:
+    echo        cd web ^&^& npm install
+    exit /b 1
+)
 cd web
 call npm run build 2>&1
 if errorlevel 1 (
@@ -66,6 +81,19 @@ if errorlevel 1 (
     exit /b 1
 )
 cd ..
+
+REM 确保 bun-sidecar 依赖已安装
+echo [INFO] 检查 bun-sidecar 依赖...
+if exist "bun-sidecar\package.json" (
+    where bun >nul 2>&1
+    if not errorlevel 1 (
+        cd bun-sidecar
+        bun install --frozen-lockfile 2>nul || bun install 2>nul
+        cd ..
+    ) else (
+        echo [WARN] bun 未安装，跳过 bun-sidecar 依赖安装（若 node_modules 已存在则可忽略）
+    )
+)
 
 REM 打包后端
 echo [2/4] 打包后端...

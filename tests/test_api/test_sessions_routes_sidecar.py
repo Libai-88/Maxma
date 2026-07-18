@@ -167,7 +167,7 @@ class TestSetPermissionMode422:
             json={"permission_mode": "operate"},
         )
         assert resp.status_code == 422
-        assert "Unsupported" in resp.json()["detail"]
+        assert "不支持的权限模式" in resp.json()["detail"]
 
 
 # ---------------------------------------------------------------------------

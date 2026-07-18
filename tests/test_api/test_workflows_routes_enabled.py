@@ -140,7 +140,7 @@ class TestRequireRuntimeHelpers:
     def test_workflow_disabled_default_detail(self):
         exc = _WorkflowDisabled()
         assert exc.status_code == 404
-        assert exc.detail == "Workflows are unavailable"
+        assert exc.detail == "工作流功能未启用"
 
     def test_require_runtime_disabled_raises(self, monkeypatch):
         monkeypatch.setattr(wf_mod, "_workflow_enabled", lambda: False)
@@ -220,7 +220,7 @@ class TestEnabledRoutes:
             "/sessions/sess1/workflows", json={"workflow_id": "nope"}
         )
         assert resp.status_code == 422
-        assert resp.json()["detail"] == "Unsupported workflow"
+        assert resp.json()["detail"] == "不支持的工作流"
 
     def test_start_workflow_session_not_found(self, enabled_app):
         client, _, _ = enabled_app

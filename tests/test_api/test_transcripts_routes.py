@@ -96,12 +96,12 @@ class TestReadTranscript:
     def test_invalid_category_400(self, isolated_env):
         resp = isolated_env["client"].get("/transcripts/evil/x.jsonl")
         assert resp.status_code == 400
-        assert "Invalid category" in resp.json()["detail"]
+        assert "无效的类别" in resp.json()["detail"]
 
     def test_invalid_filename_dotdot_400(self, isolated_env):
         resp = isolated_env["client"].get("/transcripts/autonomy/..x.jsonl")
         assert resp.status_code == 400
-        assert "Invalid filename" in resp.json()["detail"]
+        assert "无效的文件名" in resp.json()["detail"]
 
     def test_invalid_filename_slash_400(self, isolated_env):
         # 路由参数本身不能含 /，%2F 解码后路由不匹配 → 404（非 400）
@@ -112,7 +112,7 @@ class TestReadTranscript:
     def test_file_not_found_404(self, isolated_env):
         resp = isolated_env["client"].get("/transcripts/autonomy/ghost.jsonl")
         assert resp.status_code == 404
-        assert "Transcript not found" in resp.json()["detail"]
+        assert "记录文件不存在" in resp.json()["detail"]
 
     def test_read_success_returns_messages(self, isolated_env):
         root = isolated_env["root"] / "transcripts" / "autonomy"

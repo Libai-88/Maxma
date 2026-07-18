@@ -55,7 +55,11 @@ class TestListServerTools:
         )
         resp = app_client.get("/mcp/servers/s1/tools")
         assert resp.status_code == 200
-        assert resp.json() == {"server_id": "s1", "tools": []}
+        assert resp.json() == {
+            "server_id": "s1",
+            "tools": [],
+            "note": "工具由 OMP sidecar 动态管理，请在对话中让 AI 列出或调用它们",
+        }
 
 
 class TestCreateServer:

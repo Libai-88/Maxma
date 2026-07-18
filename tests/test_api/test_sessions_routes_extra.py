@@ -163,7 +163,7 @@ class TestGetSession:
     def test_get_not_found_404(self, app_client):
         resp = app_client["client"].get("/sessions/ghost")
         assert resp.status_code == 404
-        assert "not found" in resp.json()["detail"].lower()
+        assert "会话不存在" in resp.json()["detail"]
 
 
 class TestPermissionModeRoutes:

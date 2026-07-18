@@ -7,6 +7,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# 支持 MAXMA_API_PORT 环境变量覆盖默认端口
+if ($env:MAXMA_API_PORT) {
+    $Port = [int]::Parse($env:MAXMA_API_PORT)
+}
+
 function Get-ResolvedExePath {
     param(
         [string]$Root,

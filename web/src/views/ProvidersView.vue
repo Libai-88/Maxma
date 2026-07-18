@@ -207,9 +207,10 @@
 	          <label class="form-label">Top P</label>
 	          <input v-model.number="form.top_p" class="input mono" type="number" step="0.05" min="0" max="1" placeholder="1.0" />
 	        </div>
-		      </div>
-          <div class="form-group">
-            <div class="form-group-title">高级设置</div>
+			      </div>
+            </div>
+	          <div class="form-group">
+	            <div class="form-group-title">高级设置</div>
 		        <div class="form-section">
 		          <label class="form-label">超时 (秒)</label>
 		          <input v-model.number="form.timeout" class="input mono" type="number" min="1" placeholder="60" />
