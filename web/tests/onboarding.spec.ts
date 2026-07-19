@@ -3,7 +3,7 @@ import { ONBOARDING_STORAGE_KEY, loadOnboardingSnapshot, onboardingEnabled, save
 
 describe('onboarding persistence', () => {
   beforeEach(() => localStorage.clear())
-  it('is disabled unless explicitly enabled at build time', () => expect(onboardingEnabled).toBe(false))
+  it('is enabled by default when no build-time flag is set', () => expect(onboardingEnabled).toBe(true))
   it('starts incomplete without stored state', () => expect(loadOnboardingSnapshot()).toMatchObject({ completed: false, preferences: { language: 'zh-CN', workspace: 'personal' } }))
   it('persists completion and local-only preferences', () => {
     saveOnboardingSnapshot({ completed: true, preferences: { displayName: 'Ada', language: 'en', workspace: 'project' } })
