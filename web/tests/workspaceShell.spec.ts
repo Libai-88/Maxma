@@ -139,6 +139,12 @@ describe('workspace shell', () => {
     expect(workflowSource).toContain('workflowIds.value.length > 0 || runs.value.length > 0')
   })
 
+  it('renders the conversation stream while the first turn is still current', () => {
+    const chatViewSource = readFileSync(resolve(process.cwd(), 'src/views/ChatView.vue'), 'utf8')
+
+    expect(chatViewSource).toMatch(/const hasMessages = computed\(\(\) => turns\.value\.length > 0 \|\| currentTurn\.value\)/)
+  })
+
   it('keeps real WelcomeScreen starts wired to ChatView and removes actionless shells', () => {
     const welcomeSource = readFileSync(resolve(process.cwd(), 'src/components/WelcomeScreen.vue'), 'utf8')
     const chatViewSource = readFileSync(resolve(process.cwd(), 'src/views/ChatView.vue'), 'utf8')

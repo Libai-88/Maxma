@@ -187,7 +187,7 @@ const workbench = useWorkbenchStore()
 const moreMenuOpen = ref(false)
 const moreMenuTrigger = ref<HTMLButtonElement | null>(null)
 
-const hasMessages = computed(() => turns.value.length > 0)
+const hasMessages = computed(() => turns.value.length > 0 || currentTurn.value)
 
 // 状态图标 SVG（剥掉 <?xml?> 声明，与 Icon.vue 处理方式一致）
 const warningIconSvg = computed(() => warningIconRaw.replace(/<\?xml[^>]*\?>/, '').trim())
