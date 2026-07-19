@@ -233,12 +233,11 @@ onMounted(loadEntries)
   margin-bottom: 16px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: var(--bg-card);
   background: color-mix(in srgb, var(--accent) 5%, var(--bg-card));
-  border-color: color-mix(in srgb, var(--accent) 25%, var(--border));
-  overflow: hidden;
-}
-.intro-card > summary {
+	  border-color: color-mix(in srgb, var(--accent) 25%, var(--border));
+	  overflow: hidden;
+	}
+	.intro-card > summary {
   padding: 12px 16px;
   font-size: 13.5px;
   font-weight: 600;
@@ -288,12 +287,11 @@ onMounted(loadEntries)
   padding: 40px 20px;
   border: 1.5px dashed var(--border);
   border-radius: 12px;
-  background: var(--bg-card);
   background: color-mix(in srgb, var(--accent) 3%, var(--bg-card));
-}
-.empty-icon { font-size: 42px; margin-bottom: 12px; }
-.empty-state h3 {
-  font-size: 16px;
+	}
+	.empty-icon { font-size: 42px; margin-bottom: 12px; }
+	.empty-state h3 {
+	  font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
   margin: 0 0 8px;
@@ -409,10 +407,9 @@ onMounted(loadEntries)
   font-size: 13px;
 }
 .msg.error {
-  background: var(--bg-card);
-  background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
-  color: var(--status-error);
-}
+	  background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
+	  color: var(--status-error);
+	}
 
 /* ── 规则说明 ── */
 .rule-card {
@@ -447,20 +444,20 @@ onMounted(loadEntries)
   margin-bottom: 4px;
 }
 .rule-note {
-  margin-top: 8px;
-  padding: 8px 10px;
-  background: #f0f5ff;
-  border-radius: 6px;
-  color: #1a4a8a;
-  font-size: 12px;
-}
-.rule-note code {
-  font-family: 'SF Mono', 'Consolas', monospace;
-  font-size: 12px;
-  background: #dbeafe;
-  padding: 1px 5px;
-  border-radius: 3px;
-}
+	  margin-top: 8px;
+	  padding: 8px 10px;
+	  background: color-mix(in srgb, var(--status-info) 12%, var(--bg-card));
+	  border-radius: 6px;
+	  color: var(--text-secondary);
+	  font-size: 12px;
+	}
+	.rule-note code {
+	  font-family: 'SF Mono', 'Consolas', monospace;
+	  font-size: 12px;
+	  background: color-mix(in srgb, var(--status-info) 20%, var(--bg-secondary));
+	  padding: 1px 5px;
+	  border-radius: 3px;
+	}
 
 /* ── 按钮 ── */
 .btn {
@@ -517,14 +514,14 @@ onMounted(loadEntries)
   display: none;
 }
 .toggle-slider {
-  position: relative;
-  width: 40px;
-  height: 22px;
-  background: #d1d5db;
-  border-radius: 11px;
-  transition: background 0.2s;
-  flex-shrink: 0;
-}
+	  position: relative;
+	  width: 40px;
+	  height: 22px;
+	  background: var(--border-strong, #d1d5db);
+	  border-radius: 11px;
+	  transition: background 0.2s;
+	  flex-shrink: 0;
+	}
 .toggle-slider::after {
   content: '';
   position: absolute;

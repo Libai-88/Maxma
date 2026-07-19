@@ -105,16 +105,16 @@ const { enabled: paperTexture, toggle: togglePaperTexture } = usePaperTexture()
   margin-bottom: 32px;
 }
 .section h3 {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 4px;
-}
-.section-desc {
-  font-size: 0.78rem;
-  color: var(--text-tertiary);
-  margin-bottom: 14px;
-}
+	  font-size: 1rem;
+	  font-weight: 600;
+	  color: var(--text-primary);
+	  margin-bottom: 4px;
+	}
+	.section-desc {
+	  font-size: 0.85rem;
+	  color: var(--text-tertiary);
+	  margin-bottom: 14px;
+	}
 
 /* 主题网格 */
 .theme-grid {
@@ -164,7 +164,7 @@ const { enabled: paperTexture, toggle: togglePaperTexture } = usePaperTexture()
   font-family: var(--font-serif);
 }
 .theme-name {
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   color: var(--text-secondary);
 }
 .theme-card.active .theme-name {
@@ -192,7 +192,7 @@ const { enabled: paperTexture, toggle: togglePaperTexture } = usePaperTexture()
   font-weight: 500;
 }
 .toggle-desc {
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   color: var(--text-tertiary);
   margin-top: 2px;
 }
@@ -203,7 +203,7 @@ const { enabled: paperTexture, toggle: togglePaperTexture } = usePaperTexture()
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   cursor: pointer;
   transition: all var(--duration-fast) var(--ease-out);
   min-width: 48px;

@@ -1140,6 +1140,9 @@ onMounted(() => { loadServers(); loadDiscovered() })
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 16px;
 }
+@media (max-width: 640px) {
+  .card-grid { grid-template-columns: 1fr; }
+}
 
 .mcp-card {
   background: var(--bg-card);
@@ -1192,7 +1195,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
 }
 
 .transport-badge {
-  font-size: 11px;
+  font-size: 12px;
   padding: 2px 8px;
   border-radius: 4px;
   font-weight: 600;
@@ -1236,7 +1239,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
 }
 
 .card-desc {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-secondary);
 }
 
@@ -1248,7 +1251,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
 }
 .card-connection .mono {
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
 }
 .card-connection .args {
@@ -1268,7 +1271,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
   color: var(--text-secondary);
 }
 .disabled-tag {
-  font-size: 11px;
+  font-size: 12px;
   padding: 1px 6px;
   border-radius: 3px;
   background: var(--bg-secondary);
@@ -1286,7 +1289,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
   border: 1px solid var(--border);
   background: var(--bg-secondary);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
 }
 .action-btn:hover {
@@ -1318,13 +1321,13 @@ onMounted(() => { loadServers(); loadDiscovered() })
 }
 
 .form-label {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-secondary);
 }
 
 .form-hint {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-tertiary);
 }
 /* Novice 引导：信息型提示，区别于普通说明文字 */
@@ -1338,7 +1341,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
 }
 .form-hint--info code {
   font-family: 'SF Mono', 'Consolas', monospace;
-  font-size: 11px;
+  font-size: 12px;
   padding: 1px 4px;
   background: var(--bg-secondary);
   border-radius: 3px;
@@ -1505,7 +1508,7 @@ select.input {
   border-radius: 3px;
   background: var(--bg-secondary);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 12px;
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
   cursor: pointer;
   border: 1px solid var(--border);
@@ -1529,7 +1532,7 @@ select.input {
 }
 
 .section-title {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -1542,7 +1545,7 @@ select.input {
 }
 
 .auto-tag {
-  font-size: 10px;
+  font-size: 11px;
   padding: 1px 6px;
   border-radius: 100px;
   background: var(--border);
@@ -1551,7 +1554,7 @@ select.input {
 }
 
 .tool-tag {
-  font-size: 11px;
+  font-size: 12px;
   padding: 2px 8px;
 	  border-radius: 4px;
 	  background: var(--bg-secondary);

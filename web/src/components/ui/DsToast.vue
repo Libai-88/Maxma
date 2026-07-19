@@ -186,9 +186,9 @@ defineExpose({ dismiss, pause, resume })
 }
 .ds-toast--error .ds-toast__icon { color: var(--status-error, #dc2626); }
 .ds-toast--warning {
-  border-left-color: #d97706;
-}
-.ds-toast--warning .ds-toast__icon { color: #d97706; }
+	  border-left-color: var(--status-warn);
+	}
+	.ds-toast--warning .ds-toast__icon { color: var(--status-warn); }
 
 .ds-toast__icon {
   flex-shrink: 0;

@@ -122,11 +122,11 @@ watch(() => props.content, () => {
   box-shadow: var(--shadow);
 }
 .bubble.user {
-  background: var(--user-bubble);
-  color: var(--text-primary);
-  border: 1px solid rgba(0, 0, 0, 0.2);
-  border-bottom-right-radius: 4px;
-}
+	  background: var(--user-bubble);
+	  color: var(--text-primary);
+	  border: 1px solid var(--border);
+	  border-bottom-right-radius: 4px;
+	}
 .bubble.assistant {
   background: var(--bg-card);
   color: var(--text-primary);
@@ -202,9 +202,9 @@ watch(() => props.content, () => {
 }
 
 .read-status.read .read-dot {
-  background: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
-}
+	  background: var(--status-info);
+	  box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-info) 12%, transparent);
+	}
 
 @media (prefers-reduced-motion: reduce) {
   .message-row {

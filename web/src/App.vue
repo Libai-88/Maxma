@@ -218,10 +218,9 @@ onMounted(async () => {
 	}
 
 ::selection {
-  background: var(--accent);
-  background: color-mix(in srgb, var(--accent) 20%, transparent);
-  color: var(--text-primary);
-}
+	  background: color-mix(in srgb, var(--accent) 20%, transparent);
+	  color: var(--text-primary);
+	}
 
 /* ── Focus-visible 兜底（排除原生表单控件） ── */
 :focus-visible:not(input):not(textarea):not(select):not([contenteditable]) {
@@ -266,7 +265,8 @@ html, body {
   height: 100%;
   font-family: var(--font-body);
   /* 响应式字体：15px 基准，随视口宽度自适应缩放（1920px≈16px, 2560px≈18px） */
-  font-size: clamp(15px, 14px + 0.2vw, 18px);
+	  font-size: clamp(16px, 15px + 0.2vw, 18px);
+  line-height: 1.6;
   color: var(--text-primary);
   background: var(--bg-primary);
 }
@@ -367,16 +367,16 @@ html, body {
 }
 
 .nav-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: var(--radius);
-  color: var(--text-secondary);
-  text-decoration: none;
-  font-size: 0.9em;
-  transition: background 0.15s, color 0.15s;
-}
+	  display: flex;
+	  align-items: center;
+	  gap: 8px;
+	  padding: 10px 14px;
+	  border-radius: var(--radius);
+	  color: var(--text-secondary);
+	  text-decoration: none;
+	  font-size: 0.95em;
+	  transition: background 0.15s, color 0.15s;
+	}
 
 .nav-item:hover {
   background: var(--bg-card);
@@ -518,13 +518,12 @@ html, body {
   content: '';
   position: absolute;
   inset: 0;
-  background: var(--bg-primary);
   background: color-mix(in srgb, var(--bg-primary) 88%, transparent);
-  z-index: 0;
-  pointer-events: none;
-}
-
-.sidebar > * {
+	  z-index: 0;
+	  pointer-events: none;
+	}
+	
+	.sidebar > * {
   position: relative;
   z-index: 1;
 }

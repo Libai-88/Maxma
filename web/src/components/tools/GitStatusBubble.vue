@@ -288,19 +288,19 @@ function statusIcon(status: string): string {
 }
 
 .group-badge.staged {
-  background: #dcfce7;
-  color: #166534;
-}
+	  background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card));
+	  color: var(--status-ok);
+	}
 
-.group-badge.unstaged {
-  background: #fef3c7;
-  color: #92400e;
-}
+	.group-badge.unstaged {
+	  background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card));
+	  color: var(--status-warn);
+	}
 
-.group-badge.untracked {
-  background: #e0e7ff;
-  color: #3730a3;
-}
+	.group-badge.untracked {
+	  background: color-mix(in srgb, var(--status-info) 12%, var(--bg-card));
+	  color: var(--status-info);
+	}
 
 .group-count {
   font-size: 11px;
@@ -346,30 +346,30 @@ function statusIcon(status: string): string {
 }
 
 .file-status-badge.added {
-  background: #dcfce7;
-  color: #166534;
-}
+	  background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card));
+	  color: var(--status-ok);
+	}
 
-.file-status-badge.modified {
-  background: #fef3c7;
-  color: #92400e;
-}
+	.file-status-badge.modified {
+	  background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card));
+	  color: var(--status-warn);
+	}
 
-.file-status-badge.deleted {
-  background: #fee2e2;
-  color: #991b1b;
-}
+	.file-status-badge.deleted {
+	  background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
+	  color: var(--status-error);
+	}
 
-.file-status-badge.renamed,
-.file-status-badge.copied {
-  background: #e0e7ff;
-  color: #3730a3;
-}
+	.file-status-badge.renamed,
+	.file-status-badge.copied {
+	  background: color-mix(in srgb, var(--status-info) 12%, var(--bg-card));
+	  color: var(--status-info);
+	}
 
-.file-status-badge.untracked {
-  background: #e0e7ff;
-  color: #3730a3;
-}
+	.file-status-badge.untracked {
+	  background: color-mix(in srgb, var(--status-info) 12%, var(--bg-card));
+	  color: var(--status-info);
+	}
 
 .file-name {
   font-family: 'SF Mono', 'Consolas', monospace;

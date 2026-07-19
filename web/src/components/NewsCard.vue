@@ -108,28 +108,24 @@ const paragraphs = computed(() => {
 
 /* 各类型的 hover 颜色使用 overlay 方案，确保与主题兼容 */
 .news-card:hover .card-type-badge.type-feat {
-  background: var(--bg-card);
-  background: color-mix(in srgb, var(--status-ok) 20%, var(--bg-card));
-  color: var(--status-ok);
-}
-
-.news-card:hover .card-type-badge.type-enhance {
-  background: var(--bg-card);
-  background: color-mix(in srgb, var(--status-info) 20%, var(--bg-card));
-  color: var(--status-info);
-}
-
-.news-card:hover .card-type-badge.type-fix {
-  background: var(--bg-card);
-  background: color-mix(in srgb, var(--status-warn) 20%, var(--bg-card));
-  color: var(--status-warn);
-}
-
-.news-card:hover .card-type-badge.type-refactor {
-  background: var(--bg-card);
-  background: color-mix(in srgb, var(--accent) 20%, var(--bg-card));
-  color: var(--accent);
-}
+	  background: color-mix(in srgb, var(--status-ok) 20%, var(--bg-card));
+	  color: var(--status-ok);
+	}
+	
+	.news-card:hover .card-type-badge.type-enhance {
+	  background: color-mix(in srgb, var(--status-info) 20%, var(--bg-card));
+	  color: var(--status-info);
+	}
+	
+	.news-card:hover .card-type-badge.type-fix {
+	  background: color-mix(in srgb, var(--status-warn) 20%, var(--bg-card));
+	  color: var(--status-warn);
+	}
+	
+	.news-card:hover .card-type-badge.type-refactor {
+	  background: color-mix(in srgb, var(--accent) 20%, var(--bg-card));
+	  color: var(--accent);
+	}
 
 .news-card:hover .card-type-badge.type-docs {
   background: var(--bg-secondary);

@@ -486,16 +486,16 @@ function confirmDelete() {
   gap: 8px;
 }
 .sidebar-section-header {
-	  display: flex;
-	  align-items: center;
-	  justify-content: space-between;
-	  font-size: 0.75em;
-	  font-weight: 600;
-	  font-family: var(--font-display);
-	  color: var(--text-secondary);
-	  text-transform: uppercase;
-	  letter-spacing: 0.5px;
-	}
+		  display: flex;
+		  align-items: center;
+		  justify-content: space-between;
+		  font-size: 0.85em;
+		  font-weight: 600;
+		  font-family: var(--font-display);
+		  color: var(--text-secondary);
+		  text-transform: uppercase;
+		  letter-spacing: 0.5px;
+		}
 .sidebar-section-header span {
   transition: opacity 0.2s ease 0.05s, transform 0.25s ease 0.05s;
   overflow: hidden;
@@ -522,20 +522,20 @@ function confirmDelete() {
   color: var(--bg-primary);
 }
 .nav-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-primary);
-  font-size: 13px;
-  cursor: pointer;
-  text-align: left;
-  font-family: inherit;
-  transition: background 0.15s;
-}
+	  display: flex;
+	  align-items: center;
+	  gap: 8px;
+	  padding: 10px 14px;
+	  border: none;
+	  border-radius: 6px;
+	  background: transparent;
+	  color: var(--text-primary);
+	  font-size: 14px;
+	  cursor: pointer;
+	  text-align: left;
+	  font-family: inherit;
+	  transition: background 0.15s;
+	}
 .nav-item:hover {
   background: var(--bg-card);
 }
@@ -564,26 +564,26 @@ function confirmDelete() {
 
 /* ── Section label ── */
 .section-label {
-	  font-size: 0.7em;
-	  font-weight: 600;
-	  font-family: var(--font-display);
-	  color: var(--text-tertiary, #9ca3af);
-	  text-transform: uppercase;
-	  letter-spacing: 0.4px;
-	  padding: 4px 12px 2px;
-	}
+		  font-size: 0.78em;
+		  font-weight: 600;
+		  font-family: var(--font-display);
+		  color: var(--text-tertiary, #9ca3af);
+		  text-transform: uppercase;
+		  letter-spacing: 0.4px;
+		  padding: 6px 12px 4px;
+		}
 
 /* ── Novice 引导 intro-card ── */
 .session-intro-card {
-  margin: 0 6px 6px;
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: transparent;
-  background: color-mix(in srgb, var(--accent) 4%, transparent);
-  font-size: 0.72em;
-  color: var(--text-secondary);
-}
+	  margin: 0 6px 8px;
+	  padding: 8px 12px;
+	  border: 1px solid var(--border);
+	  border-radius: 8px;
+	  background: transparent;
+	  background: color-mix(in srgb, var(--accent) 4%, transparent);
+	  font-size: 0.8em;
+	  color: var(--text-secondary);
+	}
 .session-intro-card > summary {
   cursor: pointer;
   font-weight: 600;
@@ -617,11 +617,11 @@ function confirmDelete() {
 }
 
 .section-hint {
-  font-size: 0.75em;
-  color: var(--text-tertiary, #9ca3af);
-  padding: 6px 12px 8px;
-  line-height: 1.4;
-}
+	  font-size: 0.82em;
+	  color: var(--text-tertiary, #9ca3af);
+	  padding: 6px 12px 10px;
+	  line-height: 1.5;
+	}
 
 /* ── Session items 样式已迁移至 SessionItem.vue ── */
 .no-sessions {

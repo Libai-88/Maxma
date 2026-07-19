@@ -16,11 +16,11 @@
   --space-40: 2.5rem;     /* 40px */
 
   /* ── 字号层级 ── */
-  --fs-title:   1.05rem;    /* 区块标题 */
-  --fs-body:    0.9rem;     /* 正文 */
-  --fs-ui:      0.82rem;    /* 次级 UI */
-  --fs-caption: 0.78rem;    /* 控件 */
-  --fs-hint:    0.7rem;     /* 提示/badge */
+	  --fs-title:   1.15rem;    /* 区块标题 */
+	  --fs-body:    0.95rem;     /* 正文 */
+	  --fs-ui:      0.88rem;    /* 次级 UI */
+	  --fs-caption: 0.84rem;    /* 控件 */
+	  --fs-hint:    0.78rem;     /* 提示/badge */
 
   /* ── 圆角 ── */
   --radius-sm: 5px;

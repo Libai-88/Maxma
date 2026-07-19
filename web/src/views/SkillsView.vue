@@ -571,7 +571,7 @@ onUnmounted(() => {
   border: none;
   background: var(--bg-secondary);
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 14px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
@@ -627,6 +627,9 @@ onUnmounted(() => {
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 16px;
 }
+@media (max-width: 640px) {
+  .card-grid { grid-template-columns: 1fr; }
+}
 
 .skill-card {
   background: var(--bg-card);
@@ -672,7 +675,7 @@ onUnmounted(() => {
 }
 
 .card-desc {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-secondary);
   line-height: 1.5;
   display: -webkit-box;
@@ -689,7 +692,7 @@ onUnmounted(() => {
 }
 
 .card-id {
-  font-size: 12px;
+  font-size: 13px;
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
   color: var(--text-tertiary);
 }
@@ -706,7 +709,7 @@ onUnmounted(() => {
   border: 1px solid var(--border);
   background: var(--bg-secondary);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
 }
 .action-btn:hover {
@@ -720,7 +723,7 @@ onUnmounted(() => {
 }
 
 .readonly-hint {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-tertiary);
   padding: 4px 8px;
 }
@@ -740,13 +743,13 @@ onUnmounted(() => {
 }
 
 .form-label {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-secondary);
 }
 
 .form-hint {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-tertiary);
 }
 
@@ -836,7 +839,7 @@ onUnmounted(() => {
   border: 1px solid var(--border, #e5e7eb);
   background: var(--bg-secondary, #f9fafb);
   color: var(--text-secondary, #6b7280);
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
@@ -969,13 +972,13 @@ onUnmounted(() => {
 }
 .guide-card p {
   margin: 0;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.6;
 }
 .guide-card code,
 .guide-card strong {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-primary);
   font-weight: 600;
 }
@@ -1002,11 +1005,11 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
 }
 .role-badge {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 8px;

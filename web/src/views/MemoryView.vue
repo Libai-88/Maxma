@@ -205,7 +205,7 @@ onMounted(() => { store.fetchFacts() })
 .fact-list { display: flex; flex-direction: column; gap: 8px; }
 .fact-card { padding: 12px 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-card); }
 .fact-content { font-size: 14px; color: var(--text-primary); margin-bottom: 8px; line-height: 1.5; }
-.fact-meta { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--text-tertiary); }
+.fact-meta { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-tertiary); }
 .fact-cat { padding: 1px 8px; border-radius: 100px; background: var(--bg-secondary); text-transform: uppercase; letter-spacing: 0.3px; cursor: help; }
 .fact-confidence {
   font-family: 'SF Mono', monospace;

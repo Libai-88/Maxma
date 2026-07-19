@@ -681,10 +681,10 @@ onMounted(loadProviders)
 }
 
 .card-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-}
+	  display: grid;
+	  grid-template-columns: repeat(3, 1fr);
+	  gap: 20px;
+	}
 @media (max-width: 1100px) {
   .card-grid { grid-template-columns: repeat(2, 1fr); }
 }
@@ -759,11 +759,11 @@ onMounted(loadProviders)
 
 /* ── API URL ── */
 .card-url {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  word-break: break-all;
-  line-height: 1.4;
-}
+	  font-size: 13px;
+	  color: var(--text-tertiary);
+	  word-break: break-all;
+	  line-height: 1.5;
+	}
 
 /* ── 模型列表区 ── */
 .card-models-section {
@@ -772,32 +772,32 @@ onMounted(loadProviders)
   gap: 8px;
 }
 .card-models-title {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  font-weight: 500;
-}
-.card-models-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.model-tag {
-  font-size: 11px;
-  padding: 3px 8px;
-  background: var(--bg-secondary);
-  border-radius: 6px;
-  color: var(--text-secondary);
-  font-family: 'SF Mono', 'Consolas', monospace;
-}
+	  font-size: 13px;
+	  color: var(--text-tertiary);
+	  font-weight: 500;
+	}
+	.card-models-tags {
+	  display: flex;
+	  flex-wrap: wrap;
+	  gap: 8px;
+	}
+	.model-tag {
+	  font-size: 12px;
+	  padding: 4px 10px;
+	  background: var(--bg-secondary);
+	  border-radius: 6px;
+	  color: var(--text-secondary);
+	  font-family: 'SF Mono', 'Consolas', monospace;
+	}
 .model-tag.empty {
   color: var(--text-tertiary);
   font-family: inherit;
 }
 
 .card-context-window {
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
+	  font-size: 13px;
+	  color: var(--text-tertiary);
+	}
 /* 上下文窗口的汉字估算后缀（面向 Novice：让 tokens 数字具备直观体感） */
 .context-approx {
   color: var(--text-tertiary);
@@ -874,18 +874,18 @@ onMounted(loadProviders)
   margin-top: auto;
 }
 .action-btn {
-  padding: 6px 14px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  font-size: 12px;
-  cursor: pointer;
-  transition: opacity 0.15s;
-}
-.action-btn:hover {
-  opacity: 0.7;
-}
+	  padding: 7px 16px;
+	  border: 1px solid var(--border);
+	  border-radius: 6px;
+	  background: var(--bg-card);
+	  color: var(--text-secondary);
+	  font-size: 13px;
+	  cursor: pointer;
+	  transition: opacity 0.15s;
+	}
+	.action-btn:hover {
+	  opacity: 0.7;
+	}
 
 /* ── Form ── */
 .wizard-form {
@@ -900,10 +900,10 @@ onMounted(loadProviders)
   gap: 4px;
 }
 .form-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
+	  font-size: 14px;
+	  font-weight: 600;
+	  color: var(--text-primary);
+	}
 .input {
   padding: 8px 12px;
   border: 1px solid var(--border);

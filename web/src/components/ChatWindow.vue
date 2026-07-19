@@ -709,12 +709,12 @@ function closeContextMenu() {
   overflow: hidden;
 }
 .empty-state-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to bottom, transparent 35%, rgba(255, 255, 255, 0.55) 100%);
-  pointer-events: none;
-  z-index: 0;
-}
+	  position: absolute;
+	  inset: 0;
+	  background: linear-gradient(to bottom, transparent 35%, color-mix(in srgb, var(--bg-primary) 55%, transparent) 100%);
+	  pointer-events: none;
+	  z-index: 0;
+	}
 .empty-state-content {
   position: relative;
   z-index: 1;
@@ -735,15 +735,15 @@ function closeContextMenu() {
   font-weight: 700;
   font-family: var(--font-display);
   letter-spacing: -0.5px;
-  color: var(--accent);
-  text-shadow: 0 2px 16px rgba(255, 255, 255, 0.6);
-}
-.empty-desc {
-	  font-size: 1.3em;
 	  color: var(--accent);
-	  font-weight: 500;
-	  text-shadow: 0 1px 12px rgba(255, 255, 255, 0.6);
+	  text-shadow: 0 2px 16px color-mix(in srgb, var(--accent) 15%, transparent);
 	}
+	.empty-desc {
+		  font-size: 1.3em;
+		  color: var(--accent);
+		  font-weight: 500;
+		  text-shadow: 0 1px 12px color-mix(in srgb, var(--accent) 15%, transparent);
+		}
 .typewriter {
   display: inline-block;
   min-width: 1ch;
@@ -766,7 +766,7 @@ function closeContextMenu() {
   gap: 10px;
   opacity: .65;
   transition: opacity .2s;
-  text-shadow: 0 1px 8px rgba(255, 255, 255, 0.5);
+	  text-shadow: 0 1px 8px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 .quick-hints:hover {
   opacity: .9;

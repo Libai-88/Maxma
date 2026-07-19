@@ -1322,19 +1322,19 @@ function onResizeEnd(e: PointerEvent) {
   display: none;
 }
 .file-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 2px 8px 2px 6px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 100px;
-  font-size: 0.75em;
-  color: var(--text-primary);
-  max-width: 100%;
-  overflow: hidden;
-  transition: border-color 0.15s, background 0.15s;
-}
+	  display: inline-flex;
+	  align-items: center;
+	  gap: 4px;
+	  padding: 3px 10px 3px 8px;
+	  background: var(--bg-secondary);
+	  border: 1px solid var(--border);
+	  border-radius: 100px;
+	  font-size: 0.82em;
+	  color: var(--text-primary);
+	  max-width: 100%;
+	  overflow: hidden;
+	  transition: border-color 0.15s, background 0.15s;
+	}
 .file-tag:hover {
 	  border-color: var(--border-accent, var(--accent-hover, var(--accent)));
 	  background: var(--bg-primary);
@@ -1899,13 +1899,13 @@ function onResizeEnd(e: PointerEvent) {
 }
 
 .shortcut-hint {
-  font-size: 0.7em;
-  color: var(--text-tertiary);
-  opacity: 0.55;
-  user-select: none;
-  text-align: center;
-  padding: 2px 0;
-}
+	  font-size: 0.78em;
+	  color: var(--text-tertiary);
+	  opacity: 0.55;
+	  user-select: none;
+	  text-align: center;
+	  padding: 2px 0;
+	}
 
 @media (prefers-reduced-motion: reduce) {
   .quote-pop-enter-active,

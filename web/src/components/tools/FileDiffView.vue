@@ -124,14 +124,14 @@ function lineText(line: string): string {
 }
 
 .stat.additions {
-  background: #dcfce7;
-  color: #166534;
-}
+	  background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card));
+	  color: var(--status-ok);
+	}
 
-.stat.deletions {
-  background: #fee2e2;
-  color: #991b1b;
-}
+	.stat.deletions {
+	  background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
+	  color: var(--status-error);
+	}
 
 .diff-file {
   font-size: 11px;
@@ -163,28 +163,28 @@ function lineText(line: string): string {
 }
 
 .diff-line.file-header {
-  background: #f0f4f8;
-  color: var(--text-secondary);
-  font-weight: 600;
-  padding: 4px 10px;
-  border-bottom: 1px solid var(--border);
-}
+	  background: var(--bg-secondary);
+	  color: var(--text-secondary);
+	  font-weight: 600;
+	  padding: 4px 10px;
+	  border-bottom: 1px solid var(--border);
+	}
 
-.diff-line.hunk-header {
-  background: #eff6ff;
-  color: #1d4ed8;
-  padding: 2px 10px;
-}
+	.diff-line.hunk-header {
+	  background: color-mix(in srgb, var(--status-info) 12%, var(--bg-card));
+	  color: var(--status-info);
+	  padding: 2px 10px;
+	}
 
-.diff-line.addition {
-  background: #dcfce7;
-  color: #166534;
-}
+	.diff-line.addition {
+	  background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card));
+	  color: var(--status-ok);
+	}
 
-.diff-line.deletion {
-  background: #fee2e2;
-  color: #991b1b;
-}
+	.diff-line.deletion {
+	  background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
+	  color: var(--status-error);
+	}
 
 .diff-line.context {
   color: var(--text-primary);

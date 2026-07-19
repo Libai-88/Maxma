@@ -553,7 +553,7 @@ onMounted(async () => {
   padding: 24px;
   width: 380px;
   max-width: 90vw;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+	  box-shadow: var(--shadow-xl);
 }
 .create-dialog h3 {
   font-size: 16px;

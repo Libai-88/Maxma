@@ -326,15 +326,14 @@ function formatTokens(n: number): string {
 }
 
 /* ── 引导卡片 ── */
-.metrics-guide {
-  margin-bottom: 16px;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-card);
-  background: color-mix(in srgb, var(--accent) 5%, var(--bg-card));
-  border-color: color-mix(in srgb, var(--accent) 25%, var(--border));
-}
+	.metrics-guide {
+	  margin-bottom: 16px;
+	  padding: 0;
+	  border: 1px solid var(--border);
+	  border-radius: 10px;
+	  background: color-mix(in srgb, var(--accent) 5%, var(--bg-card));
+	  border-color: color-mix(in srgb, var(--accent) 25%, var(--border));
+	}
 .metrics-guide > summary {
   padding: 12px 16px;
   font-size: 13px;

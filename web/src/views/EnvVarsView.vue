@@ -251,14 +251,14 @@ onMounted(loadVars)
 }
 
 .var-key {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-tertiary);
   font-family: 'SF Mono', 'Consolas', monospace;
 }
 
 .var-apply-link {
   margin-left: auto;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--accent);
   text-decoration: none;
   padding: 2px 8px;
@@ -273,7 +273,7 @@ onMounted(loadVars)
 }
 
 .var-desc {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
   margin-bottom: 6px;
 }
@@ -388,6 +388,6 @@ onMounted(loadVars)
 
 .btn-sm {
   padding: 4px 10px;
-  font-size: 12px;
+  font-size: 13px;
 }
 </style>

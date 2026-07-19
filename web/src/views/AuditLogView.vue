@@ -214,6 +214,9 @@ async function exportErrorLog() {
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 10px;
 }
+@media (max-width: 640px) {
+  .action-grid { grid-template-columns: 1fr; }
+}
 .action-card {
   display: flex;
   align-items: center;

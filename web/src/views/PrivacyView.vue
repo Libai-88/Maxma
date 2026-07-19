@@ -385,6 +385,9 @@ onMounted(() => {
   grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   gap: 8px;
 }
+@media (max-width: 640px) {
+  .storage-grid { grid-template-columns: 1fr; }
+}
 .storage-card {
   display: flex;
   align-items: center;

@@ -420,13 +420,13 @@ onUnmounted(() => {
 }
 
 .activity-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.85em;
-}
+	  display: flex;
+	  align-items: center;
+	  gap: 12px;
+	  padding: 10px 14px;
+	  border-bottom: 1px solid var(--border);
+	  font-size: 0.9em;
+	}
 .activity-item:last-child {
   border-bottom: none;
 }

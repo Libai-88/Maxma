@@ -560,18 +560,18 @@ watch(() => props.toolCall.output, () => {
   background: var(--bg-secondary);
 }
 .diff-hunk {
-  color: #6366f1;
-  background: rgba(99, 102, 241, 0.08);
-  font-weight: 500;
-}
-.diff-add {
-  color: #16a34a;
-  background: rgba(22, 163, 74, 0.08);
-}
-.diff-del {
-  color: #dc2626;
-  background: rgba(220, 38, 38, 0.08);
-}
+	  color: var(--status-info);
+	  background: color-mix(in srgb, var(--status-info) 8%, transparent);
+	  font-weight: 500;
+	}
+	.diff-add {
+	  color: var(--status-ok);
+	  background: color-mix(in srgb, var(--status-ok) 8%, transparent);
+	}
+	.diff-del {
+	  color: var(--status-error);
+	  background: color-mix(in srgb, var(--status-error) 8%, transparent);
+	}
 .diff-context {
   color: var(--text-primary);
 }

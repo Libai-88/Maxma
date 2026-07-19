@@ -318,7 +318,7 @@ const dataPath = 'api/data/'
 }
 .header-sub {
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-secondary);
 }
 
@@ -337,7 +337,7 @@ const dataPath = 'api/data/'
 }
 .section p {
   margin: 0 0 10px;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.7;
   color: var(--text-secondary);
 }
@@ -345,7 +345,7 @@ const dataPath = 'api/data/'
 .section strong { color: var(--text-primary); font-weight: 600; }
 .section code {
   font-family: 'SF Mono', 'Consolas', monospace;
-  font-size: 12px;
+  font-size: 13px;
   padding: 1px 5px;
   border-radius: 3px;
   background: var(--bg-secondary);
@@ -382,7 +382,7 @@ const dataPath = 'api/data/'
   margin-bottom: 4px;
 }
 .capability-desc {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.5;
 }
@@ -421,7 +421,7 @@ const dataPath = 'api/data/'
   margin-bottom: 4px;
 }
 .step-desc {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.6;
 }
@@ -473,14 +473,14 @@ const dataPath = 'api/data/'
 .faq-item p {
   margin: 0;
   padding: 0 14px 12px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.7;
 }
 .faq-item p :deep(strong) { color: var(--text-primary); font-weight: 600; }
 .faq-item p :deep(code) {
   font-family: 'SF Mono', 'Consolas', monospace;
-  font-size: 11px;
+  font-size: 12px;
   padding: 1px 4px;
   border-radius: 3px;
   background: var(--bg-secondary);
@@ -504,11 +504,11 @@ const dataPath = 'api/data/'
   background: var(--bg-secondary);
   font-weight: 700;
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: 13px;
 }
 .compare-cell {
   padding: 8px 12px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.5;
   border-right: 1px solid var(--border);
@@ -521,7 +521,7 @@ const dataPath = 'api/data/'
 }
 @media (max-width: 700px) {
   .compare-row { grid-template-columns: 1fr 1fr; }
-  .compare-cell { font-size: 11px; padding: 6px 8px; }
+  .compare-cell { font-size: 12px; padding: 6px 8px; }
   .compare-header-row .compare-cell:nth-child(n+3) { display: none; }
   .compare-row:not(.compare-header-row) .compare-cell:nth-child(n+3) {
     grid-column: 1 / -1;
@@ -532,7 +532,7 @@ const dataPath = 'api/data/'
 /* ── About ── */
 .about-section .about-links {
   margin-top: 12px;
-  font-size: 12px;
+  font-size: 13px;
 }
 .link-sep {
   margin: 0 8px;

@@ -126,10 +126,10 @@ const examples = computed(() => [
 }
 .welcome-avatar { font-size: 48px; margin-bottom: 12px; }
 .welcome-name { font-size: 24px; font-weight: 600; color: var(--text-primary, #1f2937); margin: 0 0 16px; }
-.welcome-scene { font-size: 14px; color: var(--text-secondary, #6b7280); line-height: 1.7; margin: 0 0 8px; }
-.welcome-greeting { font-size: 16px; color: var(--text-primary, #1f2937); font-weight: 500; margin: 0 0 24px; }
+.welcome-scene { font-size: 15px; color: var(--text-secondary, #6b7280); line-height: 1.7; margin: 0 0 10px; }
+.welcome-greeting { font-size: 17px; color: var(--text-primary, #1f2937); font-weight: 500; margin: 0 0 28px; }
 .welcome-actions { display: flex; gap: 12px; justify-content: center; margin-bottom: 28px; }
-.action-btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border: 1px solid var(--border, #e5e7eb); border-radius: 6px; background: var(--bg-card, #fff); font-size: 14px; color: var(--text-primary, #1f2937); cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s; }
+.action-btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; border: 1px solid var(--border, #e5e7eb); border-radius: 8px; background: var(--bg-card, #fff); font-size: 15px; color: var(--text-primary, #1f2937); cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s; }
 .action-btn:hover {
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--accent);
@@ -170,13 +170,13 @@ const examples = computed(() => [
   background: color-mix(in srgb, var(--bg-card) 60%, transparent);
 }
 .capability-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
+	  display: inline-flex;
+	  align-items: center;
+	  gap: 6px;
+	  font-size: 13px;
+	  color: var(--text-secondary);
+	  white-space: nowrap;
+	}
 .capability-icon { font-size: 14px; line-height: 1; }
 .capability-label { letter-spacing: 0.2px; }
 
@@ -197,18 +197,18 @@ const examples = computed(() => [
   justify-content: center;
 }
 .example-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 12px;
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  font-size: 13px;
-  cursor: pointer;
-  transition: border-color 0.15s, color 0.15s, background 0.15s, transform 0.15s;
-}
+	  display: inline-flex;
+	  align-items: center;
+	  gap: 6px;
+	  padding: 8px 14px;
+	  border: 1px solid var(--border);
+	  border-radius: 20px;
+	  background: var(--bg-card);
+	  color: var(--text-secondary);
+	  font-size: 14px;
+	  cursor: pointer;
+	  transition: border-color 0.15s, color 0.15s, background 0.15s, transform 0.15s;
+	}
 .example-chip:hover {
   border-color: var(--accent);
   color: var(--accent);

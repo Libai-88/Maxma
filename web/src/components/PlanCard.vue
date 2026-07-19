@@ -160,21 +160,21 @@ function submitEdit() {
 }
 
 .plan-card.modified {
-  border-color: #93c5fd;
-  background: #eff6ff;
-}
+	  border-color: color-mix(in srgb, var(--status-info) 40%, var(--border));
+	  background: color-mix(in srgb, var(--status-info) 12%, var(--bg-card));
+	}
 
-.plan-card.rejected {
-  border-color: color-mix(in srgb, var(--status-error) 40%, var(--border));
-  background: var(--bg-card);
-  background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
-  opacity: 0.7;
-}
+	.plan-card.rejected {
+	  border-color: color-mix(in srgb, var(--status-error) 40%, var(--border));
+	  background: var(--bg-card);
+	  background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
+	  opacity: 0.7;
+	}
 
-.plan-card.running {
-  border-color: #93c5fd;
-  background: #eff6ff;
-}
+	.plan-card.running {
+	  border-color: color-mix(in srgb, var(--status-info) 40%, var(--border));
+	  background: color-mix(in srgb, var(--status-info) 12%, var(--bg-card));
+	}
 
 .plan-card.failed {
   border-color: color-mix(in srgb, var(--status-error) 40%, var(--border));

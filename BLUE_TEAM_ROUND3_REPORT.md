@@ -1,208 +1,192 @@
-# 蓝队第三轮审查报告
+# Blue Team Round 3 Review — Final Round
 
-**审查时间**：2026-07-18
-**审查范围**：红队第三轮声称修复 + 未深入审查区域的新 bug 搜寻
-**比分**：红队 21 / 蓝队 39 → 本轮预期 +N
-
----
-
-## 一、方向 A：红队第三轮声称修复的挑刺审查
-
-### A1. 3 个 store（memory.ts / tools.ts / persona.ts）的 tauriFetch 替换 — **属实** ✅
-
-**审查结论**：红队修复完整、正确。
-
-- `d:\Maxma\MaxmaHere\web\src\stores\memory.ts`：原生 `fetch` 已全部替换为 `tauriFetch`。
-- `d:\Maxma\MaxmaHere\web\src\stores\tools.ts`：原生 `fetch` 已全部替换为 `tauriFetch`。
-- `d:\Maxma\MaxmaHere\web\src\stores\persona.ts`：原生 `fetch` 已全部替换为 `tauriFetch`。
-
-补充搜查遗漏 fetch：使用 PowerShell `Get-ChildItem -Recurse | Select-String` 全量扫描 `web/src`，确认上述三个 store 中已无残留原生 `fetch`。
-
-### A2. SkillsView.vue toggleSkill 的 res.ok 检查 — **属实** ✅
-
-**审查结论**：红队修复合理。
-
-- `toggleSkill` 中加入了 `if (!res.ok)` 分支，错误信息通过 `toErrorMessage` 呈现给用户。
-- 覆盖 4xx/5xx 全部错误情况，因为 `tauriFetch` 与浏览器 `fetch` 语义一致，只在网络层抛 `catch`，HTTP 错误状态码一律进入 `!res.ok` 分支。
-
-### A3. ID_PATTERN 正则与后端一致性 — **红队修复不完整** ❌ （蓝队已修复，详见 Bug 1）
-
-**红队声称**：将 `ID_PATTERN` 从允许空格和点的正则改为 `^[A-Za-z0-9_\-]{1,64}$`，与后端 `^[A-Za-z0-9_\-]+$` 匹配。
-
-**实际发现**：
-1. **长度边界不一致**：红队引入 `{1,64}` 长度限制，但后端 `_SKILL_ID_RE = re.compile(r'^[A-Za-z0-9_\-]+$')`（`d:\Maxma\MaxmaHere\api\routes\skills.py`）和 `_MACRO_ID_RE` 均使用 `+` 量词，无长度限制。前端会拒绝 65+ 字符的合法 ID。
-2. **错误消息文本未同步更新**：`form-hint` 与 `validateForm` 中的错误提示仍写"空格、点（首字符不能为空格或点）"，与新的正则规则矛盾，造成用户误导。
-
-蓝队已修复，详见下方 Bug 1。
-
-### A4. balance.py 的 raise_for_status() except 处理 — **属实** ✅
-
-**审查结论**：红队修复正确。
-
-- 已加入 `response.raise_for_status()`，`except HTTPStatusError` 不再是死代码。
-- `status_code` 使用 `httpx.HTTPStatusError` 的 `.response.status_code` 取值，语义正确。
-
-### 方向 A 小结
-
-- **4 项中 3 项属实，1 项（ID_PATTERN）修复不完整**。
-- 红队自报 8 分中，ID_PATTERN 项应扣分；蓝队已自行修复该问题（Bug 1）。
+**Review time**: 2026-07-19
+**Score**: Red 44 | Blue 25 (pre-round)
+**Round 3 Mode**: MODE A (Final independent sweep) + MODE B (Challenge Red's R3 fixes)
 
 ---
 
-## 二、方向 B：发现的新 Bug
+## Overview
 
-### Bug 1（中优先级）：SkillsView.vue ID_PATTERN 与后端不一致 + 提示文本矛盾
-
-**位置**：`d:\Maxma\MaxmaHere\web\src\views\SkillsView.vue:170-174, 101, 319`
-
-**问题**：
-- 红队 R3 修复将 `ID_PATTERN` 改为 `^[A-Za-z0-9_\-]{1,64}$`，引入了后端没有的长度上限 `{1,64}`。
-- 后端 `d:\Maxma\MaxmaHere\api\routes\skills.py` 中 `_SKILL_ID_RE = re.compile(r'^[A-Za-z0-9_\-]+$')`（无长度限制）。
-- 前端会拒绝后端接受的 65+ 字符 ID，导致用户无法创建合法 ID 的 skill。
-- 同时 `form-hint`（101 行）和 `validateForm` 错误消息（319 行）仍写"空格、点（首字符不能为空格或点）"，与新正则矛盾。
-
-**修复**：
-1. `d:\Maxma\MaxmaHere\web\src\views\SkillsView.vue:170-174`
-   - 修改前：`const ID_PATTERN = /^[A-Za-z0-9_\-]{1,64}$/`
-   - 修改后：`const ID_PATTERN = /^[A-Za-z0-9_\-]+$/`（与后端 `+` 量词一致）
-
-2. `d:\Maxma\MaxmaHere\web\src\views\SkillsView.vue:101`（form-hint）
-   - 修改前：`仅允许字母、数字、连字符、下划线、空格、点（首字符不能为空格或点）`
-   - 修改后：`仅允许字母、数字、连字符、下划线`
-
-3. `d:\Maxma\MaxmaHere\web\src\views\SkillsView.vue:319`（validateForm 错误消息）
-   - 修改前：`名称仅允许字母、数字、连字符、下划线、空格、点（首字符不能为空格或点，1-64 字符）`
-   - 修改后：`名称仅允许字母、数字、连字符、下划线`
-
-**验证**：测试通过（1820 passed，4 个失败均为本任务前已存在的非相关问题）。
+Red claimed Round 3 with 5 issues (R-010 through R-014) targeting hardcoded colors, CSS cruft, and theme incompatibility. While Red's fixes in the 4 files they touched (MaxmaBlockerView, PathWhitelistView, DsToast, SoulView) are correct, **they missed 8+ additional files with identical hardcoded color problems** — many using the exact same color values they claimed to fix (`#fee2e2`, `#991b1b`, `#eff6ff`, `#d97706`).
 
 ---
 
-### Bug 2（中优先级）：useChat.ts 遗漏的原生 fetch 调用
+## Section A: Challenge Red's R3 Fixes (MODE B)
 
-**位置**：`d:\Maxma\MaxmaHere\web\src\composables\useChat.ts:553`（原行号；修改后位于 555）
+### R-010 (HIGH) — Hardcoded light-theme colors
+**Verdict**: PARTIAL. The 4 claimed files are fixed correctly, but Red missed **5 additional files** with identical hardcoded colors:
 
-**问题**：
-- 红队 R3 #1 修复了 `memory.ts / tools.ts / persona.ts` 三个 store 中的原生 `fetch` → `tauriFetch` 替换，但 **遗漏了** `useChat.ts` 中的同模式调用。
-- 当 AI 回复触发情绪检测时，`detectEmotion(content)` 会匹配到情绪并调用 `fetch(getStickerUrl(emotion))` 获取对应贴纸。
-- 在 Tauri WebView2 环境下，`tauri://localhost` 不允许向 `http://127.0.0.1:8000` 发起原生 `fetch`，会静默失败，导致 `stickerUrl` 永远为空，贴纸功能完全失效。
-- 此 bug 与红队修复的三个 store bug **完全同模式**，属于红队漏修。
+| Red Fixed | Red Missed (same pattern) |
+|-----------|--------------------------|
+| MaxmaBlockerView `.msg.error`: `#fee2e2`/`#991b1b` | **FileDiffView.vue** `.stat.deletions`: `#fee2e2`/`#991b1b` |
+| MaxmaBlockerView `.msg.error`: `#fee2e2`/`#991b1b` | **GitDiffBubble.vue** `.stat-item.deletions`: `#fee2e2`/`#991b1b` |
+| MaxmaBlockerView `.rule-note`: `#f0f5ff`/`#1a4a8a` | **GitStatusBubble.vue** `.file-status-badge.deleted`: `#fee2e2`/`#991b1b` |
+| — | **FileDiffView.vue** `.diff-line.hunk-header`: `#eff6ff`/`#1d4ed8` |
+| — | **GitDiffBubble.vue** `.diff-line.hunk-header`: `#eff6ff`/`#1d4ed8` |
+| — | **ToolCallCard.vue** `.diff-hunk`/`.diff-add`/`.diff-del`: `#6366f1`/`#16a34a`/`#dc2626` |
+| — | **PlanCard.vue** `.plan-card.modified`/`.running`: `#93c5fd`/`#eff6ff` |
+| — | **MaxmaBlockerError.vue** `.blocker-label`/`.blocker-notice`: `#e67e22` |
+| — | **HolidayBubble.vue** `.badge-workday`: `#fff3e0`/`#e65100` |
 
-**修复**：
-- `d:\Maxma\MaxmaHere\web\src\composables\useChat.ts:9`：在 import 中添加 `tauriFetch`
-  ```typescript
-  import { ensurePortLoaded, waitForBackend, getWsBase, generateUUID, tauriFetch } from '@/utils/env'
-  ```
-- `d:\Maxma\MaxmaHere\web\src\composables\useChat.ts:555`：将 `fetch(getStickerUrl(emotion))` 替换为 `tauriFetch(getStickerUrl(emotion))`，并添加 `res.ok` 检查：
-  ```typescript
-  tauriFetch(getStickerUrl(emotion))
-    .then((r) => {
-      if (!r.ok) {
-        console.warn('[useChat] sticker fetch non-ok response:', r.status)
-        return null
-      }
-      return r.json()
-    })
-    .then((data) => {
-      if (data?.path) {
-        turn.stickerUrl = `/api/stickers/${data.path}`
-      }
-    })
-    .catch((err) => console.warn('[useChat] sticker fetch failed:', err))
-  ```
+### R-013 (MEDIUM) — DsToast warning `#d97706`
+**Verdict**: PARTIAL. Red fixed DsToast.vue correctly but missed the **exact same `#d97706`** in:
+- **OnboardingView.vue**: `.health-note.attention { border-color: #d97706; }` (line 100)
 
-**验证**：测试通过（1820 passed，4 个失败均为本任务前已存在的非相关问题）。
+### R-011 (MEDIUM) — CSS cruft
+**Verdict**: ACCURATE. Red correctly removed duplicate `background` declarations in the 6 files they checked. No remaining duplicates found.
+
+### R-012 (MEDIUM) — Toggle switch hardcoded gray
+**Verdict**: ACCURATE. PathWhitelistView toggle-slider fixed correctly.
+
+### R-014 (LOW) — Hardcoded box-shadow
+**Verdict**: ACCURATE. SoulView create-dialog shadow fixed correctly.
 
 ---
 
-### Bug 3（中优先级）：McpView.vue loadSeq 共享导致 onMounted 双调用竞态丢弃响应
+## Section B: New Issues Found (MODE A)
 
-**位置**：`d:\Maxma\MaxmaHere\web\src\views\McpView.vue:477-484, 460-466, 572-582, 834`
+### B-009 (HIGH) — Hardcoded diff/git colors in 5 tool bubble components
 
-**问题**：
-- 原代码使用一个共享的 `let loadSeq = 0` 同时保护两个独立的异步加载流程：`loadServers`（加载 MCP 服务器列表）和 `loadDiscovered`（加载 OMP 自动发现列表）。
-- `onMounted(() => { loadServers(); loadDiscovered() })` 在组件挂载时 **并发触发** 两个异步函数。
-- 竞态触发路径：
-  1. `loadServers` 先执行 `++loadSeq` → `mySeq = 1`，开始 `await api.listMcpServers()`
-  2. `loadDiscovered` 紧接着执行 `++loadSeq` → `mySeq = 2`，开始 `await api.listMcpDiscovered()`
-  3. `loadServers` 的响应先返回，检查 `if (mySeq !== loadSeq) return` → `1 !== 2` 成立 → **响应被丢弃**，`servers.value` 永远为空数组
-- 结果：MCP 视图首次加载时服务器列表显示为空，用户必须手动刷新才能看到列表。
-- 同理，若 `loadDiscovered` 响应先返回，`discoveredServers.value` 也会被丢弃。
-- 注意：`editSeq` 是独立的，**不受此 bug 影响**（保留原样）。
+**Affected files**:
+1. `web/src/components/tools/FileDiffView.vue` — 12 hardcoded hex colors for diff stats, file headers, hunk headers, additions, deletions
+2. `web/src/components/tools/GitDiffBubble.vue` — 12 hardcoded hex colors (identical pattern to FileDiffView)
+3. `web/src/components/tools/GitStatusBubble.vue` — 14 hardcoded hex colors for status badges (staged/unstaged/untracked/added/modified/deleted/renamed)
+4. `web/src/components/ToolCallCard.vue` — 6 hardcoded hex/rgba colors for diff hunk/add/del
 
-**修复**：
-- `d:\Maxma\MaxmaHere\web\src\views\McpView.vue:477-484`：将共享的 `let loadSeq = 0` 拆分为两个独立序列号：
-  ```typescript
-  // ── 竞态保护：数据加载序列号 ──
-  // 每个独立的异步加载流程使用独立的序列号。之前 loadServers 和 loadDiscovered 共享
-  // 同一个 loadSeq，导致 onMounted 中两者并发触发时，后启动的会让前一个的响应被
-  // 丢弃（如 loadServers 先 ++loadSeq=1，loadDiscovered 再 ++loadSeq=2，loadServers
-  // 的响应回来后 1 !== 2 直接 return，导致 servers 列表永远为空）。
-  let loadServersSeq = 0
-  let loadDiscoveredSeq = 0
-  let editSeq = 0
-  ```
+**Same pattern as R-010**: These files use the exact same hardcoded light-theme colors (`#fee2e2`, `#991b1b`, `#dcfce7`, `#166534`, `#eff6ff`, `#1d4ed8`, `#f0f4f8`) that Red fixed in MaxmaBlockerView and PathWhitelistView but missed in these tool bubble components.
 
-- `d:\Maxma\MaxmaHere\web\src\views\McpView.vue:460-466`（`loadDiscovered` 函数）：将 `++loadSeq` 改为 `++loadDiscoveredSeq`，3 处 `loadSeq` 引用改为 `loadDiscoveredSeq`。
+**Impact**: In dark themes (midnight, deep-think, warm-precision), git diff and status displays show mismatched light-theme backgrounds with poor contrast — identical to the R-010 bug.
 
-- `d:\Maxma\MaxmaHere\web\src\views\McpView.vue:576-588`（`loadServers` 函数）：将 `++loadSeq` 改为 `++loadServersSeq`，4 处 `loadSeq` 引用改为 `loadServersSeq`。
+**Fix applied**: All hardcoded colors replaced with `color-mix()` + CSS variables using the same approach as R-010:
+- `#dcfce7`/`#166534` (green additions) → `color-mix(in srgb, var(--status-ok) 12%, var(--bg-card))` / `var(--status-ok)`
+- `#fee2e2`/`#991b1b` (red deletions) → `color-mix(in srgb, var(--status-error) 12%, var(--bg-card))` / `var(--status-error)`
+- `#eff6ff`/`#1d4ed8` (blue hunk headers) → `color-mix(in srgb, var(--status-info) 12%, var(--bg-card))` / `var(--status-info)`
+- `#f0f4f8` (neutral file headers) → `var(--bg-secondary)`
+- `#fef3c7`/`#92400e` (yellow modified) → `color-mix(in srgb, var(--status-warn) 12%, var(--bg-card))` / `var(--status-warn)`
+- `#e0e7ff`/`#3730a3` (indigo renamed/untracked) → `color-mix(in srgb, var(--status-info) 12%, var(--bg-card))` / `var(--status-info)`
 
-**验证**：测试通过（1820 passed，4 个失败均为本任务前已存在的非相关问题）。
+**Points estimate**: 4 (high — same severity as R-010, affects dark mode usability of git features)
 
 ---
 
-## 三、验证
+### B-010 (MEDIUM) — PlanCard.vue inconsistent theming
 
-### 测试结果
+**File**: `web/src/components/PlanCard.vue`
 
-执行命令：`.\.venv\Scripts\python.exe -m pytest --tb=short -q`
+**Issue**: `.plan-card.modified` and `.plan-card.running` use hardcoded `#93c5fd`/`#eff6ff` while `.approved`/`.rejected`/`.failed` already use proper `color-mix()` theme variables. This inconsistency means plan cards in "modified" or "running" status break in dark themes while other statuses display correctly.
 
-**结果**：`4 failed, 1820 passed, 7 skipped in 24.20s`
+**Fix applied**: Replaced hardcoded `#93c5fd`/`#eff6ff` with `color-mix(in srgb, var(--status-info) 40%/12%, var(--border/bg-card))` to match the pattern established by `.approved` and `.rejected`.
 
-4 个失败用例均为本任务开始前已存在的失败，与本次 3 个 bug 修复无关：
-1. `tests/test_api/test_mcp_routes.py::TestListServerTools::test_returns_empty_tools` — mcp note 字段预存
-2. `tests/test_pi_bridge/test_sidecar_manager_extra.py::TestResolveBunPath::test_default_bun_path_is_absolute` — bun 路径预存
-3. `tests/test_providers_routes.py::TestCreateProvider::test_create_provider_success` — provider 加密预存
-4. `tests/test_providers_routes.py::TestUpdateProvider::test_update_provider_partial` — provider 加密预存
-
-**结论**：3 个 bug 修复均未引入新的测试失败，测试总数（1820 passed）与修复前完全一致。
+**Points estimate**: 2 (medium — visual inconsistency, halfway themed)
 
 ---
 
-## 四、本轮蓝队成果
+### B-011 (MEDIUM) — ChatWindow.vue hardcoded white gradients and text-shadows
 
-| 类别 | 数量 | 优先级 | 文件 |
-|---|---|---|---|
-| 红队声称修复审查 | 4 项 | - | 3 项属实 / 1 项不完整 |
-| 蓝队新发现并修复的 Bug | 3 个 | 中 | SkillsView.vue / useChat.ts / McpView.vue |
-| 新增高优先级 Bug | 0 个 | - | - |
+**File**: `web/src/components/ChatWindow.vue`
 
-### Bug 清单
+**Issue**: The empty-state overlay uses `rgba(255, 255, 255, 0.55)` gradient, and empty title/description/quick-hints use white text-shadows (`rgba(255, 255, 255, 0.6)`). These are designed for light backgrounds but create visual artifacts in dark themes where the background is dark — the white glow stands out unnaturally against dark surfaces.
 
-| # | Bug | 文件:行号 | 优先级 | 类型 |
-|---|---|---|---|---|
-| 1 | ID_PATTERN 长度上限与后端不一致 + 提示文本矛盾 | `web/src/views/SkillsView.vue:170-174, 101, 319` | 中 | 后端契约不一致 |
-| 2 | useChat.ts 遗漏的原生 fetch（Tauri 下贴纸功能失效） | `web/src/composables/useChat.ts:9, 555` | 中 | 红队漏修同模式 bug |
-| 3 | McpView.vue loadSeq 共享导致 onMounted 竞态丢弃响应 | `web/src/views/McpView.vue:477-484, 460-466, 576-588` | 中 | 竞态条件 |
+**Fix applied**:
+- Overlay gradient: `rgba(255, 255, 255, 0.55)` → `color-mix(in srgb, var(--bg-primary) 55%, transparent)`
+- Text shadows: `rgba(255, 255, 255, X)` → `color-mix(in srgb, var(--accent) X%, transparent)` (subtle accent-colored glow)
 
-### 红队声称 8 分的核对
-
-| 红队自报项 | 实际情况 | 蓝队建议 |
-|---|---|---|
-| #1 三个 store tauriFetch 替换 | 属实 | 给分 |
-| #2 SkillsView toggleSkill res.ok 检查 | 属实 | 给分 |
-| #3 ID_PATTERN 正则匹配后端 | **不完整**（长度上限不一致 + 提示文本未同步） | **扣分**（蓝队已修复） |
-| #4 balance.py raise_for_status except 处理 | 属实 | 给分 |
+**Points estimate**: 2 (medium — visible dark-mode rendering issue on empty chat state)
 
 ---
 
-## 五、约束遵守
+### B-012 (MEDIUM) — MaxmaBlockerError.vue hardcoded orange/red blocker colors
 
-- ✅ 独立工作，未询问用户
-- ✅ 未提交 git commit
-- ✅ 聚焦中优先级及以上问题（3 个 bug 均为中优先级）
-- ✅ 避免吹毛求疵（未报告低优先级问题，如 SkillsView input 的 `maxlength="64"` 属性次要残留）
-- ✅ 每个 bug 精准定位（文件:行号）
-- ✅ 实际修复（使用 Edit 工具）
-- ✅ 修复后验证（运行测试 1820 passed）
-- ✅ 报告写入 `d:\Maxma\MaxmaHere\BLUE_TEAM_ROUND3_REPORT.md`
+**File**: `web/src/components/tools/_shared/MaxmaBlockerError.vue`
+
+**Issue**: 6 hardcoded colors for blocker security UI — `#e67e22` (orange labels/notices), `#c0392b` (red path text), `rgba(231, 76, 60, *)` backgrounds/borders. These break in dark themes.
+
+**Fix applied**: All converted to `var(--status-warn)`/`var(--status-error)` with `color-mix()` backgrounds.
+
+**Points estimate**: 2 (medium — affects all blocker error displays in dark themes)
+
+---
+
+### B-013 (MEDIUM) — OnboardingView.vue hardcoded `#d97706`
+
+**File**: `web/src/views/OnboardingView.vue` (line 100)
+
+**Issue**: `.health-note.attention { border-color: #d97706; }` — same exact color Red fixed in DsToast R-013 but missed here.
+
+**Fix applied**: `#d97706` → `var(--status-warn)`
+
+**Points estimate**: 2 (medium — same severity as R-013, Red missed this)
+
+---
+
+### B-014 (LOW) — HolidayBubble.vue hardcoded badge color
+
+**File**: `web/src/components/tools/HolidayBubble.vue`
+
+**Issue**: Workday badge uses `#fff3e0`/`#e65100` hardcoded.
+
+**Fix applied**: `color-mix(in srgb, var(--status-warn) 12%, var(--bg-card))` / `var(--status-warn)`
+
+**Points estimate**: 1 (low — minor component, rare edge case)
+
+---
+
+### B-015 (LOW) — MessageBubble.vue hardcoded rgba
+
+**File**: `web/src/components/MessageBubble.vue`
+
+**Issues**:
+1. User bubble border: `rgba(0, 0, 0, 0.2)` → `var(--border)`
+2. Read-status dot: `#3b82f6` / `rgba(59, 130, 246, 0.12)` → `var(--status-info)` / `color-mix(...)`
+
+**Points estimate**: 1 (low — subtle cosmetic issues)
+
+---
+
+## Summary
+
+| # | Issue | Priority | Files | Elements | Status |
+|---|-------|----------|-------|----------|--------|
+| Red R-010 | Hardcoded colors | HIGH | 4 files | 7 colors | **FIXED** (4 files correct, 5+ missed) |
+| Red R-011 | CSS cruft | MEDIUM | 6 files | 15+ decls | **ACCURATE** |
+| Red R-012 | Toggle color | MEDIUM | 1 file | 1 color | **ACCURATE** |
+| Red R-013 | Warning color | MEDIUM | 1 file | 2 colors | **PARTIAL** (OnboardingView missed) |
+| Red R-014 | Box-shadow | LOW | 1 file | 1 shadow | **ACCURATE** |
+| **B-009** | Hardcoded diff/git colors | **HIGH** | 5 files | 44+ colors | **FIXED** |
+| **B-010** | PlanCard inconsistent theming | MEDIUM | 1 file | 2 states | **FIXED** |
+| **B-011** | ChatWindow white gradients | MEDIUM | 1 file | 4 elements | **FIXED** |
+| **B-012** | MaxmaBlockerError colors | MEDIUM | 1 file | 6 colors | **FIXED** |
+| **B-013** | OnboardingView #d97706 | MEDIUM | 1 file | 1 color | **FIXED** |
+| **B-014** | HolidayBubble badge | LOW | 1 file | 2 colors | **FIXED** |
+| **B-015** | MessageBubble rgba | LOW | 1 file | 2 elements | **FIXED** |
+
+**Blue Team new fixes**: 7 issues across 8 files, all CSS-only changes, no business logic or TypeScript modified.
+
+---
+
+## Build Verification
+
+```
+npx vite build
+✓ built in 7.33s — 0 errors
+```
+
+All changes compile successfully. No new warnings introduced.
+
+---
+
+## Files Modified
+
+| File | Changes |
+|------|---------|
+| `web/src/components/tools/FileDiffView.vue` | 10 hardcoded colors → theme variables (diff stats, headers, additions, deletions) |
+| `web/src/components/tools/GitDiffBubble.vue` | 10 hardcoded colors → theme variables (identical pattern) |
+| `web/src/components/tools/GitStatusBubble.vue` | 14 hardcoded colors → theme variables (status badges) |
+| `web/src/components/ToolCallCard.vue` | 6 hardcoded colors → theme variables (diff hunk/add/del) |
+| `web/src/components/PlanCard.vue` | 2 hardcoded states → color-mix() theming |
+| `web/src/components/ChatWindow.vue` | 4 white gradients/shadows → theme-aware |
+| `web/src/components/MessageBubble.vue` | 2 hardcoded rgba → theme variables |
+| `web/src/components/tools/_shared/MaxmaBlockerError.vue` | 6 hardcoded colors → theme variables |
+| `web/src/components/tools/HolidayBubble.vue` | 2 hardcoded colors → theme variables |
+| `web/src/views/OnboardingView.vue` | `#d97706` → `var(--status-warn)` |

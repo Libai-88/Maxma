@@ -1,0 +1,629 @@
+diff --git a/web/src/App.vue b/web/src/App.vue
+index a537326..8c0e321 100644
+--- a/web/src/App.vue
++++ b/web/src/App.vue
+@@ -266,7 +266,7 @@ html, body {
+   height: 100%;
+   font-family: var(--font-body);
+   /* 响应式字体：15px 基准，随视口宽度自适应缩放（1920px≈16px, 2560px≈18px） */
+-  font-size: clamp(15px, 14px + 0.2vw, 18px);
++	  font-size: clamp(16px, 15px + 0.2vw, 18px);
+   color: var(--text-primary);
+   background: var(--bg-primary);
+ }
+@@ -367,16 +367,16 @@ html, body {
+ }
+ 
+ .nav-item {
+-  display: flex;
+-  align-items: center;
+-  gap: 8px;
+-  padding: 8px 12px;
+-  border-radius: var(--radius);
+-  color: var(--text-secondary);
+-  text-decoration: none;
+-  font-size: 0.9em;
+-  transition: background 0.15s, color 0.15s;
+-}
++	  display: flex;
++	  align-items: center;
++	  gap: 8px;
++	  padding: 10px 14px;
++	  border-radius: var(--radius);
++	  color: var(--text-secondary);
++	  text-decoration: none;
++	  font-size: 0.95em;
++	  transition: background 0.15s, color 0.15s;
++	}
+ 
+ .nav-item:hover {
+   background: var(--bg-card);
+diff --git a/web/src/assets/styles/tokens.css b/web/src/assets/styles/tokens.css
+index c8a3511..1142b4a 100644
+--- a/web/src/assets/styles/tokens.css
++++ b/web/src/assets/styles/tokens.css
+@@ -16,11 +16,11 @@
+   --space-40: 2.5rem;     /* 40px */
+ 
+   /* ── 字号层级 ── */
+-  --fs-title:   1.05rem;    /* 区块标题 */
+-  --fs-body:    0.9rem;     /* 正文 */
+-  --fs-ui:      0.82rem;    /* 次级 UI */
+-  --fs-caption: 0.78rem;    /* 控件 */
+-  --fs-hint:    0.7rem;     /* 提示/badge */
++	  --fs-title:   1.15rem;    /* 区块标题 */
++	  --fs-body:    0.95rem;     /* 正文 */
++	  --fs-ui:      0.88rem;    /* 次级 UI */
++	  --fs-caption: 0.84rem;    /* 控件 */
++	  --fs-hint:    0.78rem;     /* 提示/badge */
+ 
+   /* ── 圆角 ── */
+   --radius-sm: 5px;
+diff --git a/web/src/components/ChatHeader.vue b/web/src/components/ChatHeader.vue
+index e60545d..229b779 100644
+--- a/web/src/components/ChatHeader.vue
++++ b/web/src/components/ChatHeader.vue
+@@ -23,11 +23,11 @@ const sceneShort = computed(() => {
+ </script>
+ 
+ <style scoped>
+-.chat-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--bg-primary); }
+-.header-left { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+-.header-avatar { font-size: 16px; }
++.chat-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 20px; border-bottom: 1px solid var(--border); background: var(--bg-primary); }
++.header-left { display: flex; align-items: center; gap: 8px; font-size: 14px; }
++.header-avatar { font-size: 18px; }
+ .header-name { font-weight: 600; color: var(--text-primary); }
+ .header-divider { color: var(--text-tertiary); }
+-.header-tags { font-size: 11px; color: var(--text-secondary); }
+-.header-right { display: flex; align-items: center; gap: 8px; }
++.header-tags { font-size: 13px; color: var(--text-secondary); }
++.header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+ </style>
+diff --git a/web/src/components/ChatInput.vue b/web/src/components/ChatInput.vue
+index e693196..7158dc6 100644
+--- a/web/src/components/ChatInput.vue
++++ b/web/src/components/ChatInput.vue
+@@ -1322,19 +1322,19 @@ function onResizeEnd(e: PointerEvent) {
+   display: none;
+ }
+ .file-tag {
+-  display: inline-flex;
+-  align-items: center;
+-  gap: 3px;
+-  padding: 2px 8px 2px 6px;
+-  background: var(--bg-secondary);
+-  border: 1px solid var(--border);
+-  border-radius: 100px;
+-  font-size: 0.75em;
+-  color: var(--text-primary);
+-  max-width: 100%;
+-  overflow: hidden;
+-  transition: border-color 0.15s, background 0.15s;
+-}
++	  display: inline-flex;
++	  align-items: center;
++	  gap: 4px;
++	  padding: 3px 10px 3px 8px;
++	  background: var(--bg-secondary);
++	  border: 1px solid var(--border);
++	  border-radius: 100px;
++	  font-size: 0.82em;
++	  color: var(--text-primary);
++	  max-width: 100%;
++	  overflow: hidden;
++	  transition: border-color 0.15s, background 0.15s;
++	}
+ .file-tag:hover {
+ 	  border-color: var(--border-accent, var(--accent-hover, var(--accent)));
+ 	  background: var(--bg-primary);
+@@ -1899,13 +1899,13 @@ function onResizeEnd(e: PointerEvent) {
+ }
+ 
+ .shortcut-hint {
+-  font-size: 0.7em;
+-  color: var(--text-tertiary);
+-  opacity: 0.55;
+-  user-select: none;
+-  text-align: center;
+-  padding: 2px 0;
+-}
++	  font-size: 0.78em;
++	  color: var(--text-tertiary);
++	  opacity: 0.55;
++	  user-select: none;
++	  text-align: center;
++	  padding: 2px 0;
++	}
+ 
+ @media (prefers-reduced-motion: reduce) {
+   .quote-pop-enter-active,
+diff --git a/web/src/components/SessionItem.vue b/web/src/components/SessionItem.vue
+index 5a9875d..34bbab8 100644
+--- a/web/src/components/SessionItem.vue
++++ b/web/src/components/SessionItem.vue
+@@ -163,13 +163,13 @@ function formatRelativeTime(ts: number): string {
+   max-height: 80px;
+ }
+ .session-id {
+-  font-size: 0.9em;
+-  font-weight: 500;
+-  color: var(--text-primary);
+-  display: flex;
+-  align-items: center;
+-  gap: 2px;
+-}
++	  font-size: 0.95em;
++	  font-weight: 500;
++	  color: var(--text-primary);
++	  display: flex;
++	  align-items: center;
++	  gap: 2px;
++	}
+ .pin-icon {
+   margin-right: 3px;
+   flex-shrink: 0;
+@@ -192,9 +192,9 @@ function formatRelativeTime(ts: number): string {
+   vertical-align: middle;
+ }
+ .session-count {
+-  font-size: 0.75em;
+-  color: var(--text-secondary);
+-}
++	  font-size: 0.82em;
++	  color: var(--text-secondary);
++	}
+ .btn-delete {
+   width: 22px;
+   height: 22px;
+diff --git a/web/src/components/SessionSidebar.vue b/web/src/components/SessionSidebar.vue
+index 9fcd94e..790d71c 100644
+--- a/web/src/components/SessionSidebar.vue
++++ b/web/src/components/SessionSidebar.vue
+@@ -486,16 +486,16 @@ function confirmDelete() {
+   gap: 8px;
+ }
+ .sidebar-section-header {
+-	  display: flex;
+-	  align-items: center;
+-	  justify-content: space-between;
+-	  font-size: 0.75em;
+-	  font-weight: 600;
+-	  font-family: var(--font-display);
+-	  color: var(--text-secondary);
+-	  text-transform: uppercase;
+-	  letter-spacing: 0.5px;
+-	}
++		  display: flex;
++		  align-items: center;
++		  justify-content: space-between;
++		  font-size: 0.85em;
++		  font-weight: 600;
++		  font-family: var(--font-display);
++		  color: var(--text-secondary);
++		  text-transform: uppercase;
++		  letter-spacing: 0.5px;
++		}
+ .sidebar-section-header span {
+   transition: opacity 0.2s ease 0.05s, transform 0.25s ease 0.05s;
+   overflow: hidden;
+@@ -522,20 +522,20 @@ function confirmDelete() {
+   color: var(--bg-primary);
+ }
+ .nav-item {
+-  display: flex;
+-  align-items: center;
+-  gap: 6px;
+-  padding: 8px 12px;
+-  border: none;
+-  border-radius: 6px;
+-  background: transparent;
+-  color: var(--text-primary);
+-  font-size: 13px;
+-  cursor: pointer;
+-  text-align: left;
+-  font-family: inherit;
+-  transition: background 0.15s;
+-}
++	  display: flex;
++	  align-items: center;
++	  gap: 8px;
++	  padding: 10px 14px;
++	  border: none;
++	  border-radius: 6px;
++	  background: transparent;
++	  color: var(--text-primary);
++	  font-size: 14px;
++	  cursor: pointer;
++	  text-align: left;
++	  font-family: inherit;
++	  transition: background 0.15s;
++	}
+ .nav-item:hover {
+   background: var(--bg-card);
+ }
+@@ -564,26 +564,26 @@ function confirmDelete() {
+ 
+ /* ── Section label ── */
+ .section-label {
+-	  font-size: 0.7em;
+-	  font-weight: 600;
+-	  font-family: var(--font-display);
+-	  color: var(--text-tertiary, #9ca3af);
+-	  text-transform: uppercase;
+-	  letter-spacing: 0.4px;
+-	  padding: 4px 12px 2px;
+-	}
++		  font-size: 0.78em;
++		  font-weight: 600;
++		  font-family: var(--font-display);
++		  color: var(--text-tertiary, #9ca3af);
++		  text-transform: uppercase;
++		  letter-spacing: 0.4px;
++		  padding: 6px 12px 4px;
++		}
+ 
+ /* ── Novice 引导 intro-card ── */
+ .session-intro-card {
+-  margin: 0 6px 6px;
+-  padding: 6px 10px;
+-  border: 1px solid var(--border);
+-  border-radius: 8px;
+-  background: transparent;
+-  background: color-mix(in srgb, var(--accent) 4%, transparent);
+-  font-size: 0.72em;
+-  color: var(--text-secondary);
+-}
++	  margin: 0 6px 8px;
++	  padding: 8px 12px;
++	  border: 1px solid var(--border);
++	  border-radius: 8px;
++	  background: transparent;
++	  background: color-mix(in srgb, var(--accent) 4%, transparent);
++	  font-size: 0.8em;
++	  color: var(--text-secondary);
++	}
+ .session-intro-card > summary {
+   cursor: pointer;
+   font-weight: 600;
+@@ -617,11 +617,11 @@ function confirmDelete() {
+ }
+ 
+ .section-hint {
+-  font-size: 0.75em;
+-  color: var(--text-tertiary, #9ca3af);
+-  padding: 6px 12px 8px;
+-  line-height: 1.4;
+-}
++	  font-size: 0.82em;
++	  color: var(--text-tertiary, #9ca3af);
++	  padding: 6px 12px 10px;
++	  line-height: 1.5;
++	}
+ 
+ /* ── Session items 样式已迁移至 SessionItem.vue ── */
+ .no-sessions {
+diff --git a/web/src/components/WelcomeScreen.vue b/web/src/components/WelcomeScreen.vue
+index 1040817..697bbb2 100644
+--- a/web/src/components/WelcomeScreen.vue
++++ b/web/src/components/WelcomeScreen.vue
+@@ -126,10 +126,10 @@ const examples = computed(() => [
+ }
+ .welcome-avatar { font-size: 48px; margin-bottom: 12px; }
+ .welcome-name { font-size: 24px; font-weight: 600; color: var(--text-primary, #1f2937); margin: 0 0 16px; }
+-.welcome-scene { font-size: 14px; color: var(--text-secondary, #6b7280); line-height: 1.7; margin: 0 0 8px; }
+-.welcome-greeting { font-size: 16px; color: var(--text-primary, #1f2937); font-weight: 500; margin: 0 0 24px; }
++.welcome-scene { font-size: 15px; color: var(--text-secondary, #6b7280); line-height: 1.7; margin: 0 0 10px; }
++.welcome-greeting { font-size: 17px; color: var(--text-primary, #1f2937); font-weight: 500; margin: 0 0 28px; }
+ .welcome-actions { display: flex; gap: 12px; justify-content: center; margin-bottom: 28px; }
+-.action-btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border: 1px solid var(--border, #e5e7eb); border-radius: 6px; background: var(--bg-card, #fff); font-size: 14px; color: var(--text-primary, #1f2937); cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s; }
++.action-btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; border: 1px solid var(--border, #e5e7eb); border-radius: 8px; background: var(--bg-card, #fff); font-size: 15px; color: var(--text-primary, #1f2937); cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s; }
+ .action-btn:hover {
+   background: color-mix(in srgb, var(--accent) 8%, transparent);
+   color: var(--accent);
+@@ -170,13 +170,13 @@ const examples = computed(() => [
+   background: color-mix(in srgb, var(--bg-card) 60%, transparent);
+ }
+ .capability-item {
+-  display: inline-flex;
+-  align-items: center;
+-  gap: 6px;
+-  font-size: 12px;
+-  color: var(--text-secondary);
+-  white-space: nowrap;
+-}
++	  display: inline-flex;
++	  align-items: center;
++	  gap: 6px;
++	  font-size: 13px;
++	  color: var(--text-secondary);
++	  white-space: nowrap;
++	}
+ .capability-icon { font-size: 14px; line-height: 1; }
+ .capability-label { letter-spacing: 0.2px; }
+ 
+@@ -197,18 +197,18 @@ const examples = computed(() => [
+   justify-content: center;
+ }
+ .example-chip {
+-  display: inline-flex;
+-  align-items: center;
+-  gap: 6px;
+-  padding: 7px 12px;
+-  border: 1px solid var(--border);
+-  border-radius: 18px;
+-  background: var(--bg-card);
+-  color: var(--text-secondary);
+-  font-size: 13px;
+-  cursor: pointer;
+-  transition: border-color 0.15s, color 0.15s, background 0.15s, transform 0.15s;
+-}
++	  display: inline-flex;
++	  align-items: center;
++	  gap: 6px;
++	  padding: 8px 14px;
++	  border: 1px solid var(--border);
++	  border-radius: 20px;
++	  background: var(--bg-card);
++	  color: var(--text-secondary);
++	  font-size: 14px;
++	  cursor: pointer;
++	  transition: border-color 0.15s, color 0.15s, background 0.15s, transform 0.15s;
++	}
+ .example-chip:hover {
+   border-color: var(--accent);
+   color: var(--accent);
+diff --git a/web/src/views/ActivityView.vue b/web/src/views/ActivityView.vue
+index bcaee3a..4b6f361 100644
+--- a/web/src/views/ActivityView.vue
++++ b/web/src/views/ActivityView.vue
+@@ -420,13 +420,13 @@ onUnmounted(() => {
+ }
+ 
+ .activity-item {
+-  display: flex;
+-  align-items: center;
+-  gap: 12px;
+-  padding: 8px 12px;
+-  border-bottom: 1px solid var(--border);
+-  font-size: 0.85em;
+-}
++	  display: flex;
++	  align-items: center;
++	  gap: 12px;
++	  padding: 10px 14px;
++	  border-bottom: 1px solid var(--border);
++	  font-size: 0.9em;
++	}
+ .activity-item:last-child {
+   border-bottom: none;
+ }
+diff --git a/web/src/views/AppearanceView.vue b/web/src/views/AppearanceView.vue
+index d333970..1c2e370 100644
+--- a/web/src/views/AppearanceView.vue
++++ b/web/src/views/AppearanceView.vue
+@@ -105,16 +105,16 @@ const { enabled: paperTexture, toggle: togglePaperTexture } = usePaperTexture()
+   margin-bottom: 32px;
+ }
+ .section h3 {
+-  font-size: 0.9rem;
+-  font-weight: 600;
+-  color: var(--text-primary);
+-  margin-bottom: 4px;
+-}
+-.section-desc {
+-  font-size: 0.78rem;
+-  color: var(--text-tertiary);
+-  margin-bottom: 14px;
+-}
++	  font-size: 1rem;
++	  font-weight: 600;
++	  color: var(--text-primary);
++	  margin-bottom: 4px;
++	}
++	.section-desc {
++	  font-size: 0.85rem;
++	  color: var(--text-tertiary);
++	  margin-bottom: 14px;
++	}
+ 
+ /* 主题网格 */
+ .theme-grid {
+diff --git a/web/src/views/ChatView.vue b/web/src/views/ChatView.vue
+index 69b360f..288416f 100644
+--- a/web/src/views/ChatView.vue
++++ b/web/src/views/ChatView.vue
+@@ -365,23 +365,23 @@ function handleQuickStart(message: string) {
+   min-height: 0;
+ }
+ .private-toggle,
+-.auto-approve-toggle {
+-  display: inline-flex;
+-  align-items: center;
+-  justify-content: center;
+-  gap: 6px;
+-  min-width: 62px;
+-  height: 26px;
+-  padding: 4px 12px;
+-  border: 1px solid var(--border);
+-  border-radius: 6px;
+-  background: transparent;
+-  color: var(--text-secondary);
+-  font-size: 0.8em;
+-  cursor: pointer;
+-  transition: all 0.15s;
+-  user-select: none;
+-}
++	.auto-approve-toggle {
++	  display: inline-flex;
++	  align-items: center;
++	  justify-content: center;
++	  gap: 6px;
++	  min-width: 68px;
++	  height: 28px;
++	  padding: 4px 14px;
++	  border: 1px solid var(--border);
++	  border-radius: 6px;
++	  background: transparent;
++	  color: var(--text-secondary);
++	  font-size: 0.85em;
++	  cursor: pointer;
++	  transition: all 0.15s;
++	  user-select: none;
++	}
+ .private-toggle:hover {
+   border-color: var(--text-secondary);
+ }
+diff --git a/web/src/views/OnboardingView.vue b/web/src/views/OnboardingView.vue
+index 972565e..cc4f960 100644
+--- a/web/src/views/OnboardingView.vue
++++ b/web/src/views/OnboardingView.vue
+@@ -94,10 +94,10 @@ function openProviders() { emit('openProviders') }
+ .onboarding-backdrop { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(24, 27, 29, 0.44); }
+ .onboarding { width: min(100%, 560px); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-card); box-shadow: var(--shadow-lg); }
+ .onboarding-header, .onboarding-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 22px 24px; }.onboarding-header { border-bottom: 1px solid var(--border); }.onboarding-footer { border-top: 1px solid var(--border); }
+-h2 { margin: 3px 0 0; font-size: 21px; color: var(--text-primary); }.eyebrow { color: var(--text-tertiary); font-size: 11px; letter-spacing: 0.08em; }
+-.skip, .primary, .secondary, .theme-option { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; font: inherit; font-size: 13px; cursor: pointer; }.skip, .secondary, .theme-option { background: transparent; color: var(--text-secondary); }.primary { background: var(--accent); border-color: var(--accent); color: var(--bg-primary); }.primary:focus-visible, .secondary:focus-visible, .skip:focus-visible, .theme-option:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
++h2 { margin: 3px 0 0; font-size: 22px; color: var(--text-primary); }.eyebrow { color: var(--text-tertiary); font-size: 12px; letter-spacing: 0.08em; }
++.skip, .primary, .secondary, .theme-option { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 16px; font: inherit; font-size: 14px; cursor: pointer; }.skip, .secondary, .theme-option { background: transparent; color: var(--text-secondary); }.primary { background: var(--accent); border-color: var(--accent); color: var(--bg-primary); }.primary:focus-visible, .secondary:focus-visible, .skip:focus-visible, .theme-option:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+ .stepper { display: flex; gap: 6px; padding: 18px 24px 0; }.stepper span { display: block; height: 3px; flex: 1; background: var(--border); }.stepper .active, .stepper .complete { background: var(--accent); }
+-.step-content { display: grid; gap: 16px; min-height: 236px; padding: 24px; color: var(--text-secondary); line-height: 1.6; }.step-content p { margin: 0; }label { display: grid; gap: 6px; color: var(--text-primary); font-size: 13px; }input, select { width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-primary); color: var(--text-primary); font: inherit; padding: 9px 10px; }input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }.health-note { border-left: 3px solid var(--border); padding-left: 10px; }.health-note.ok { border-color: var(--status-ok); }.health-note.attention { border-color: #d97706; }.theme-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }.theme-option { display: grid; gap: 6px; text-align: left; }.theme-option.selected { border-color: var(--accent); color: var(--text-primary); }.theme-swatch { display: block; height: 30px; border: 1px solid var(--border); border-radius: 3px; }
++.step-content { display: grid; gap: 18px; min-height: 260px; padding: 28px; color: var(--text-secondary); line-height: 1.7; }.step-content p { margin: 0; }label { display: grid; gap: 6px; color: var(--text-primary); font-size: 14px; }input, select { width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-primary); color: var(--text-primary); font: inherit; padding: 10px 12px; }input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }.health-note { border-left: 3px solid var(--border); padding-left: 10px; }.health-note.ok { border-color: var(--status-ok); }.health-note.attention { border-color: #d97706; }.theme-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }.theme-option { display: grid; gap: 8px; text-align: left; }.theme-option.selected { border-color: var(--accent); color: var(--text-primary); }.theme-swatch { display: block; height: 30px; border: 1px solid var(--border); border-radius: 3px; }
+ /* ── Step 0 价值主张 ── */
+ .intro-block { display: grid; gap: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--bg-primary) 60%, transparent); }
+ .intro-lead { font-size: 13px; color: var(--text-secondary); line-height: 1.7; }
+diff --git a/web/src/views/ProvidersView.vue b/web/src/views/ProvidersView.vue
+index c755067..e49b0b7 100644
+--- a/web/src/views/ProvidersView.vue
++++ b/web/src/views/ProvidersView.vue
+@@ -681,10 +681,10 @@ onMounted(loadProviders)
+ }
+ 
+ .card-grid {
+-  display: grid;
+-  grid-template-columns: repeat(3, 1fr);
+-  gap: 16px;
+-}
++	  display: grid;
++	  grid-template-columns: repeat(3, 1fr);
++	  gap: 20px;
++	}
+ @media (max-width: 1100px) {
+   .card-grid { grid-template-columns: repeat(2, 1fr); }
+ }
+@@ -759,11 +759,11 @@ onMounted(loadProviders)
+ 
+ /* ── API URL ── */
+ .card-url {
+-  font-size: 12px;
+-  color: var(--text-tertiary);
+-  word-break: break-all;
+-  line-height: 1.4;
+-}
++	  font-size: 13px;
++	  color: var(--text-tertiary);
++	  word-break: break-all;
++	  line-height: 1.5;
++	}
+ 
+ /* ── 模型列表区 ── */
+ .card-models-section {
+@@ -772,32 +772,32 @@ onMounted(loadProviders)
+   gap: 8px;
+ }
+ .card-models-title {
+-  font-size: 12px;
+-  color: var(--text-tertiary);
+-  font-weight: 500;
+-}
+-.card-models-tags {
+-  display: flex;
+-  flex-wrap: wrap;
+-  gap: 6px;
+-}
+-.model-tag {
+-  font-size: 11px;
+-  padding: 3px 8px;
+-  background: var(--bg-secondary);
+-  border-radius: 6px;
+-  color: var(--text-secondary);
+-  font-family: 'SF Mono', 'Consolas', monospace;
+-}
++	  font-size: 13px;
++	  color: var(--text-tertiary);
++	  font-weight: 500;
++	}
++	.card-models-tags {
++	  display: flex;
++	  flex-wrap: wrap;
++	  gap: 8px;
++	}
++	.model-tag {
++	  font-size: 12px;
++	  padding: 4px 10px;
++	  background: var(--bg-secondary);
++	  border-radius: 6px;
++	  color: var(--text-secondary);
++	  font-family: 'SF Mono', 'Consolas', monospace;
++	}
+ .model-tag.empty {
+   color: var(--text-tertiary);
+   font-family: inherit;
+ }
+ 
+ .card-context-window {
+-  font-size: 12px;
+-  color: var(--text-tertiary);
+-}
++	  font-size: 13px;
++	  color: var(--text-tertiary);
++	}
+ /* 上下文窗口的汉字估算后缀（面向 Novice：让 tokens 数字具备直观体感） */
+ .context-approx {
+   color: var(--text-tertiary);
+@@ -874,18 +874,18 @@ onMounted(loadProviders)
+   margin-top: auto;
+ }
+ .action-btn {
+-  padding: 6px 14px;
+-  border: 1px solid var(--border);
+-  border-radius: 6px;
+-  background: var(--bg-card);
+-  color: var(--text-secondary);
+-  font-size: 12px;
+-  cursor: pointer;
+-  transition: opacity 0.15s;
+-}
+-.action-btn:hover {
+-  opacity: 0.7;
+-}
++	  padding: 7px 16px;
++	  border: 1px solid var(--border);
++	  border-radius: 6px;
++	  background: var(--bg-card);
++	  color: var(--text-secondary);
++	  font-size: 13px;
++	  cursor: pointer;
++	  transition: opacity 0.15s;
++	}
++	.action-btn:hover {
++	  opacity: 0.7;
++	}
+ 
+ /* ── Form ── */
+ .wizard-form {
+@@ -900,10 +900,10 @@ onMounted(loadProviders)
+   gap: 4px;
+ }
+ .form-label {
+-  font-size: 13px;
+-  font-weight: 600;
+-  color: var(--text-primary);
+-}
++	  font-size: 14px;
++	  font-weight: 600;
++	  color: var(--text-primary);
++	}
+ .input {
+   padding: 8px 12px;
+   border: 1px solid var(--border);

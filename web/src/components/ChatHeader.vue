@@ -23,11 +23,11 @@ const sceneShort = computed(() => {
 </script>
 
 <style scoped>
-.chat-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--bg-primary); }
-.header-left { display: flex; align-items: center; gap: 6px; font-size: 13px; }
-.header-avatar { font-size: 16px; }
+.chat-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 20px; border-bottom: 1px solid var(--border); background: var(--bg-primary); }
+.header-left { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.header-avatar { font-size: 18px; }
 .header-name { font-weight: 600; color: var(--text-primary); }
 .header-divider { color: var(--text-tertiary); }
-.header-tags { font-size: 11px; color: var(--text-secondary); }
-.header-right { display: flex; align-items: center; gap: 8px; }
+.header-tags { font-size: 13px; color: var(--text-secondary); }
+.header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 </style>

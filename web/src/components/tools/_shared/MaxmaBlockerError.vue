@@ -131,54 +131,54 @@ const blockedPaths = computed<string[]>(() => {
 }
 
 .blocker-label {
-  font-size: 10px;
-  font-weight: 600;
-  color: #e67e22;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
+	  font-size: 10px;
+	  font-weight: 600;
+	  color: var(--status-warn);
+	  text-transform: uppercase;
+	  letter-spacing: 0.5px;
+	}
 
-.blocker-path-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  background: rgba(231, 76, 60, 0.06);
-  border: 1px solid rgba(231, 76, 60, 0.15);
-  border-radius: 6px;
-}
+	.blocker-path-item {
+	  display: flex;
+	  align-items: center;
+	  gap: 8px;
+	  padding: 8px 10px;
+	  background: color-mix(in srgb, var(--status-error) 6%, var(--bg-card));
+	  border: 1px solid color-mix(in srgb, var(--status-error) 15%, var(--border));
+	  border-radius: 6px;
+	}
 
-.blocker-path-icon {
-  font-size: 14px;
-  flex-shrink: 0;
-}
+	.blocker-path-icon {
+	  font-size: 14px;
+	  flex-shrink: 0;
+	}
 
-.blocker-path-text {
-  font-family: 'SF Mono', 'Consolas', monospace;
-  font-size: 12px;
-  color: #c0392b;
-  word-break: break-all;
-  background: none;
-  padding: 0;
-}
+	.blocker-path-text {
+	  font-family: 'SF Mono', 'Consolas', monospace;
+	  font-size: 12px;
+	  color: var(--status-error);
+	  word-break: break-all;
+	  background: none;
+	  padding: 0;
+	}
 
-.blocker-notice {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  font-size: 12px;
-  color: #e67e22;
-  line-height: 1.5;
-  padding: 8px 10px;
-  background: rgba(230, 126, 34, 0.08);
-  border-radius: 6px;
-}
+	.blocker-notice {
+	  display: flex;
+	  align-items: flex-start;
+	  gap: 6px;
+	  font-size: 12px;
+	  color: var(--status-warn);
+	  line-height: 1.5;
+	  padding: 8px 10px;
+	  background: color-mix(in srgb, var(--status-warn) 8%, var(--bg-card));
+	  border-radius: 6px;
+	}
 
-.blocker-notice-icon {
-  flex-shrink: 0;
-  font-size: 14px;
-  line-height: 1.3;
-}
+	.blocker-notice-icon {
+	  flex-shrink: 0;
+	  font-size: 14px;
+	  line-height: 1.3;
+	}
 
 /* ── 普通错误（回退） ── */
 .bubble-error {

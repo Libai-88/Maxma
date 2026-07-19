@@ -860,7 +860,7 @@ function logAction(payload: { action: string; data?: unknown }) {
 }
 
 .pg-badge {
-  font-size: 11px;
+  font-size: 12px;
   padding: 2px 8px;
   border-radius: 100px;
   background: var(--bg-card);
@@ -951,14 +951,14 @@ function logAction(payload: { action: string; data?: unknown }) {
 }
 
 .tool-item-id {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-secondary);
   font-family: 'SF Mono', 'Consolas', monospace;
   display: none;
 }
 
 .chip {
-  font-size: 10px;
+  font-size: 11px;
   padding: 1px 6px;
   border-radius: 100px;
   font-weight: 600;
@@ -1163,7 +1163,7 @@ function logAction(payload: { action: string; data?: unknown }) {
 
 .log-data {
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 12px;
   white-space: pre;
   overflow: hidden;
   text-overflow: ellipsis;

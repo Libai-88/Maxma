@@ -381,9 +381,9 @@ const displayOutput = computed(() => {
 }
 
 .badge-workday {
-  background: #fff3e0;
-  color: #e65100;
-}
+	  background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card));
+	  color: var(--status-warn);
+	}
 
 /* ── 日期详情网格 ── */
 .holiday-day-detail {

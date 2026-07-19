@@ -201,9 +201,8 @@ onMounted(loadEntries)
   margin-bottom: 16px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-error, #ef4444) 5%, var(--bg-card));
-  border-color: color-mix(in srgb, var(--status-error, #ef4444) 25%, var(--border));
+	  border-color: color-mix(in srgb, var(--status-error, #ef4444) 25%, var(--border));
   overflow: hidden;
 }
 .intro-card > summary {
@@ -256,11 +255,10 @@ onMounted(loadEntries)
   padding: 40px 20px;
   border: 1.5px dashed var(--border);
   border-radius: 12px;
-  background: var(--bg-card);
   background: color-mix(in srgb, var(--status-error, #ef4444) 3%, var(--bg-card));
-}
-.empty-icon { font-size: 42px; margin-bottom: 12px; }
-.empty-state h3 {
+	}
+	.empty-icon { font-size: 42px; margin-bottom: 12px; }
+	.empty-state h3 {
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
@@ -314,20 +312,20 @@ onMounted(loadEntries)
   border-radius: 3px;
 }
 .rule-note {
-  margin-top: 8px;
-  padding: 8px 10px;
-  background: #f0f5ff;
-  border-radius: 6px;
-  color: #1a4a8a;
-  font-size: 12px;
-}
-.rule-note code {
-  font-family: 'SF Mono', 'Consolas', monospace;
-  font-size: 12px;
-  background: #dbeafe;
-  padding: 1px 5px;
-  border-radius: 3px;
-}
+	  margin-top: 8px;
+	  padding: 8px 10px;
+	  background: color-mix(in srgb, var(--status-info) 12%, var(--bg-card));
+	  border-radius: 6px;
+	  color: var(--text-secondary);
+	  font-size: 12px;
+	}
+	.rule-note code {
+	  font-family: 'SF Mono', 'Consolas', monospace;
+	  font-size: 12px;
+	  background: color-mix(in srgb, var(--status-info) 20%, var(--bg-secondary));
+	  padding: 1px 5px;
+	  border-radius: 3px;
+	}
 
 .entry-list {
   display: flex;
@@ -416,9 +414,9 @@ onMounted(loadEntries)
   font-size: 13px;
 }
 .msg.error {
-  background: #fee2e2;
-  color: #991b1b;
-}
+	  background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
+	  color: var(--status-error);
+	}
 
 /* ── 按钮 ── */
 .btn {

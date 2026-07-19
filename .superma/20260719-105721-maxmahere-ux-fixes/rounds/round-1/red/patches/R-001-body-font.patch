@@ -1,0 +1,40 @@
+diff --git a/web/src/App.vue b/web/src/App.vue
+index a537326..8c0e321 100644
+--- a/web/src/App.vue
++++ b/web/src/App.vue
+@@ -266,7 +266,7 @@ html, body {
+   height: 100%;
+   font-family: var(--font-body);
+   /* 响应式字体：15px 基准，随视口宽度自适应缩放（1920px≈16px, 2560px≈18px） */
+-  font-size: clamp(15px, 14px + 0.2vw, 18px);
++	  font-size: clamp(16px, 15px + 0.2vw, 18px);
+   color: var(--text-primary);
+   background: var(--bg-primary);
+ }
+@@ -367,16 +367,16 @@ html, body {
+ }
+ 
+ .nav-item {
+-  display: flex;
+-  align-items: center;
+-  gap: 8px;
+-  padding: 8px 12px;
+-  border-radius: var(--radius);
+-  color: var(--text-secondary);
+-  text-decoration: none;
+-  font-size: 0.9em;
+-  transition: background 0.15s, color 0.15s;
+-}
++	  display: flex;
++	  align-items: center;
++	  gap: 8px;
++	  padding: 10px 14px;
++	  border-radius: var(--radius);
++	  color: var(--text-secondary);
++	  text-decoration: none;
++	  font-size: 0.95em;
++	  transition: background 0.15s, color 0.15s;
++	}
+ 
+ .nav-item:hover {
+   background: var(--bg-card);

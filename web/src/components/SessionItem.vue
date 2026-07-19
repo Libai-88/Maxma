@@ -163,13 +163,13 @@ function formatRelativeTime(ts: number): string {
   max-height: 80px;
 }
 .session-id {
-  font-size: 0.9em;
-  font-weight: 500;
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
+	  font-size: 0.95em;
+	  font-weight: 500;
+	  color: var(--text-primary);
+	  display: flex;
+	  align-items: center;
+	  gap: 2px;
+	}
 .pin-icon {
   margin-right: 3px;
   flex-shrink: 0;
@@ -192,9 +192,9 @@ function formatRelativeTime(ts: number): string {
   vertical-align: middle;
 }
 .session-count {
-  font-size: 0.75em;
-  color: var(--text-secondary);
-}
+	  font-size: 0.82em;
+	  color: var(--text-secondary);
+	}
 .btn-delete {
   width: 22px;
   height: 22px;

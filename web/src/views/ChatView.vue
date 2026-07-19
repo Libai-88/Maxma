@@ -365,23 +365,23 @@ function handleQuickStart(message: string) {
   min-height: 0;
 }
 .private-toggle,
-.auto-approve-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-width: 62px;
-  height: 26px;
-  padding: 4px 12px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 0.8em;
-  cursor: pointer;
-  transition: all 0.15s;
-  user-select: none;
-}
+	.auto-approve-toggle {
+	  display: inline-flex;
+	  align-items: center;
+	  justify-content: center;
+	  gap: 6px;
+	  min-width: 68px;
+	  height: 28px;
+	  padding: 4px 14px;
+	  border: 1px solid var(--border);
+	  border-radius: 6px;
+	  background: transparent;
+	  color: var(--text-secondary);
+	  font-size: 0.85em;
+	  cursor: pointer;
+	  transition: all 0.15s;
+	  user-select: none;
+	}
 .private-toggle:hover {
   border-color: var(--text-secondary);
 }
