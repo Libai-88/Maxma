@@ -1,0 +1,38 @@
+From: Red Team <red@superma>
+Date: Sun, 19 Jul 2026 01:39:46 +0800
+Subject: [PATCH BC-001] Add missing .catch() at useChat.ts line 271 retry timer
+
+Problem: Red's R-002 fix added .catch() handlers at 3 call sites but missed
+a 4th at line 271 in the "token not available" branch. When getToken() returns
+empty, the code schedules a setTimeout retry. On execution, connectSession()
+calls ensureTokenLoaded() which can throw after 3 retries, producing an
+unhandled promise rejection.
+
+Fix: Wrap the setTimeout callback body with .catch() that logs the error
+and sets channel error state.
+
+---
+ web/src/composables/useChat.ts | 10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/web/src/composables/useChat.ts b/web/src/composables/useChat.ts
+index 2d8d470..454672f 100644
+--- a/web/src/composables/useChat.ts
++++ b/web/src/composables/useChat.ts
+@@ -268,7 +268,15 @@ async function connectSession(sid: string) {
+     }
+     const delay = getReconnectDelay(ch.reconnectAttempts)
+     ch.reconnectAttempts++
+-    ch.reconnectTimer = setTimeout(() => connectSession(sid), delay)
++    ch.reconnectTimer = setTimeout(() => {
++      connectSession(sid).catch(err => {
++        console.error(`[useChat] 重连失败 (sid=${sid}):`, err)
++        const chInner = getChatStore().channels.get(sid)
++        if (chInner && !chInner.error) {
++          chInner.error = `重连失败：${err instanceof Error ? err.message : String(err)}`
++        }
++      })
++    }, delay)
+     return
+   }
+   // 最终校验：通道在 await 后可能已被移除

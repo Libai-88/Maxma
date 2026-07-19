@@ -8,6 +8,8 @@ import { ref, computed, watch } from 'vue'
 export type ThemeId =
   | 'auto'
   | 'warm-paper'
+  | 'warm-precision'
+  | 'study'
   | 'midnight'
   | 'high-contrast'
   | 'grass-aroma'
@@ -43,6 +45,20 @@ export const THEMES: ThemeMeta[] = [
     description: '和纸手抄本，温润文人感',
     isDark: false,
     preview: { bg: '#F8F4ED', accent: '#537D96', text: '#3B3D3F' },
+  },
+  {
+    id: 'warm-precision',
+    name: '暖精工',
+    description: '暖奶油 + 赤陶，精准温暖',
+    isDark: false,
+    preview: { bg: '#FCF9F5', accent: '#C17A5C', text: '#2C2825' },
+  },
+  {
+    id: 'study',
+    name: '书斋',
+    description: '暖纸 + 远山青 + 赤陶，书卷气',
+    isDark: false,
+    preview: { bg: '#F8F4ED', accent: '#537D96', text: '#2A2826' },
   },
   {
     id: 'midnight',
@@ -117,7 +133,7 @@ export const THEMES: ThemeMeta[] = [
 ]
 
 const STORAGE_KEY = 'maxma.theme'
-const DEFAULT_THEME: ThemeId = 'warm-paper'
+const DEFAULT_THEME: ThemeId = 'warm-precision'
 const AUTO_LIGHT: ThemeId = 'warm-paper'
 const AUTO_DARK: ThemeId = 'midnight'
 

@@ -491,7 +491,7 @@ class TestAppendTurnException:
     def test_append_turn_exception_swallowed(self, monkeypatch):
         """lines 348-349: append_turn 抛异常应被 debug 日志吞掉，不影响 done。"""
         # patch _stream_turn_sidecar 返回固定 answer
-        async def fake_stream(ws, session, user_message, system_prompt):
+        async def fake_stream(ws, session, user_message, system_prompt, cancel_event=None):
             return "final-answer"
 
         monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", fake_stream)

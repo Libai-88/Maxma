@@ -1,0 +1,111 @@
+/* web/src/themes/study.css
+ * 书斋主题 — 暖奶油底 + 远山青 + 赤陶印章
+ * 灵感：Claude 的暖白编辑感 + Notion 的衬线极简 + 传统书房
+ * "The Study" — 对话如书稿，工具如典籍
+ *
+ * 默认主题（DEFAULT_THEME = 'study'）
+ * 覆盖 warm-paper.css 的 :root:not([data-theme]) 回退
+ */
+
+[data-theme="study"],
+:root:not([data-theme]) {
+  /* ── 背景（暖纸三叠） ── */
+  --bg-primary:    #F8F4ED;  /* Warm Parchment — 主背景，仿古纸 canvas */
+  --bg-secondary:  #F2EDE4;  /* Warm Sand — 侧边栏/二级表面 surface-soft */
+  --bg-card:       #FCFAF5;  /* Warm Card — 卡片/气泡，比主背景稍亮 surface */
+
+  /* 设计令牌别名（兼容 design-system 命名） */
+  --canvas:       var(--bg-primary);
+  --surface:      var(--bg-card);
+  --surface-soft: var(--bg-secondary);
+
+  /* ── 用户气泡色调 ── */
+  --user-bubble:   rgba(83, 125, 150, 0.14);
+
+  /* ── 主色调（远山青 Sage-Teal） ── */
+  --accent:        #537D96;  /* Sage-Teal — 主操作色，学术感 */
+  --accent-hover:  #456A80;  /* 深色 hover 变体 */
+  --accent-dark:   #456A80;  /* 兼容别名 */
+
+  /* ── 辅色调（暖赤陶 Terracotta） ── */
+  --accent-warm:       #C27A6E;  /* 暖赤陶 — 次要强调色 */
+  --accent-warm-soft:  rgba(194, 122, 110, 0.10);
+
+  /* 旧命名兼容 */
+  --accent-pink:       var(--accent-warm);
+  --accent-pink-light: var(--accent-warm);
+  --accent-pink-soft:  var(--accent-warm-soft);
+
+  /* ── 文字（暖墨四档） ── */
+  --text-primary:   #2A2826;  /* Warm Ink — 正文，暖黑 */
+  --text-secondary: #5C5E64;  /* Warm Gray — 次级文字，暖棕灰 */
+  --text-tertiary:  #9A928A;  /* Warm Mute — 提示文字 */
+
+  /* 设计令牌别名 */
+  --ink:         var(--text-primary);
+  --ink-muted:   var(--text-secondary);
+  --ink-subtle:  var(--text-tertiary);
+
+  /* ── 边框与阴影（暖调） ── */
+  --border:         rgba(100, 80, 70, 0.15);  /* Warm Hairline */
+  --border-strong:  rgba(100, 80, 70, 0.25);  /* 强边框 */
+  --shadow-color:   rgba(50, 40, 30, 0.08);   /* Warm Brown Shadow */
+
+  /* ── 阴影层级（暖棕调，模拟台灯照在纸上） ── */
+  --shadow-xs:  0 1px 3px  var(--shadow-color, rgba(50, 40, 30, 0.04));
+  --shadow-soft: 0 8px 24px var(--shadow-color, rgba(50, 40, 30, 0.06));
+  --shadow-sm:  0 1px 4px  var(--shadow-color, rgba(50, 40, 30, 0.06));
+  --shadow-md:  0 2px 8px  var(--shadow-color, rgba(50, 40, 30, 0.08));
+  --shadow-lg:  0 4px 16px var(--shadow-color, rgba(50, 40, 30, 0.12));
+  --shadow-xl:  0 8px 32px var(--shadow-color, rgba(50, 40, 30, 0.18));
+
+  --shadow-pink: var(--shadow-md);
+
+  /* ── 圆角 ── */
+  --radius-sm:   6px;
+  --radius-md:   8px;
+  --radius-lg:   10px;
+  --radius-xl:   14px;
+  --radius-input: 6px;
+  --radius-card:  10px;
+
+  /* ── 状态色（去饱和度，融于暖调） ── */
+  --status-ok:      #7BAE7F;  /* Sage Green */
+  --status-error:   #9B4A40;  /* Brick Red — 深砖红，非临床红 */
+  --status-warn:    #C99A6A;  /* Warm Amber */
+  --status-info:    #537D96;  /* Matches accent */
+
+  /* ── 聊天专用 ── */
+  --tool-bg:        rgba(83, 125, 150, 0.06);
+  --user-bg:        rgba(var(--accent-rgb), 0.08);
+
+  /* ── 侧边栏 ── */
+  --sidebar-bg:     var(--bg-secondary);
+  --sidebar-width:  240px;
+
+  /* ── 遮罩层（暖色微调） ── */
+  --overlay-subtle: rgba(50, 40, 30, 0.035);
+  --overlay-light:  rgba(50, 40, 30, 0.06);
+  --overlay-medium: rgba(50, 40, 30, 0.09);
+  --overlay-strong: rgba(50, 40, 30, 0.16);
+
+  /* ── RGB 拆分 ── */
+  --accent-rgb:      83, 125, 150;
+  --accent-warm-rgb: 194, 122, 110;
+  --green-rgb:       123, 174, 127;
+  --coral-rgb:       var(--accent-warm-rgb);
+  --danger-rgb:      155, 74, 64;
+
+  /* ── 聊天专用语义色 ── */
+  --hana-text:       #5A7A8A;
+  --mood-bg:         rgba(var(--accent-rgb), 0.06);
+  --mood-text:       #5A7A8A;
+  --mood-border:     rgba(var(--accent-rgb), 0.15);
+  --tool-text:       #4A6A7A;
+  --drop-overlay-bg: rgba(var(--accent-rgb), 0.12);
+  --attach-bg:       rgba(var(--accent-rgb), 0.05);
+
+  /* ── 字体设置（衬线 display + 无衬线 body，由 tokens.css 默认接管） ── */
+  --font-display: var(--font-serif, 'EB Garamond', 'Noto Serif SC', serif);
+  --font-body:    var(--font-ui, 'Inter', -apple-system, sans-serif);
+}

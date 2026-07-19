@@ -166,6 +166,7 @@ interface SessionChannel {
   privateMode: boolean
   autoApprove: boolean
   _pingTimer: ReturnType<typeof setInterval> | null  // 心跳 ping 定时器
+  _lastPongAt: number  // 上次收到 pong 的时间戳（ms），用于检测静默断开
 }
 
 // Lazy export — 运行时才访问 Store（Pinia 在模块加载时尚未安装）
@@ -268,7 +269,15 @@ async function connectSession(sid: string) {
     }
     const delay = getReconnectDelay(ch.reconnectAttempts)
     ch.reconnectAttempts++
-    ch.reconnectTimer = setTimeout(() => connectSession(sid), delay)
+    ch.reconnectTimer = setTimeout(() => {
+      connectSession(sid).catch(err => {
+        console.error(`[useChat] 重连失败 (sid=${sid}):`, err)
+        const chInner = getChatStore().channels.get(sid)
+        if (chInner && !chInner.error) {
+          chInner.error = `重连失败：${err instanceof Error ? err.message : String(err)}`
+        }
+      })
+    }, delay)
     return
   }
   // 最终校验：通道在 await 后可能已被移除
@@ -291,23 +300,33 @@ async function connectSession(sid: string) {
         chFinal.reconnectTimer = null
       }
       console.log(`[useChat] WS connected: session=${sid}`)
-      // 修复 R-005：启动心跳 ping 定时器，每 30s 发送 ping 检测静默断开。
+      // 修复 R-005：初始化 pong 时间戳，启动心跳 ping 定时器，每 30s 发送 ping 检测静默断开。
+      chFinal._lastPongAt = Date.now()
       // 浏览器 TCP keepalive 默认超时过长（可达 2h+），靠 close 事件触发重连
       // 在网络异常断开时无法及时恢复。应用层心跳确保 in-flight 连接
       // 在 30s + RTT 内被检测到失效并发起重连。
       if (chFinal._pingTimer) clearInterval(chFinal._pingTimer)
+      // PONG_TIMEOUT_GRACE：pong 响应的最大允许静默时间（ms）。
+      // 在 PING_INTERVAL (30s) 基础上附加 5s 余量，即超过 35s 未收到 pong 则认为连接已失效。
+      const PONG_TIMEOUT_GRACE = 5000
       chFinal._pingTimer = setInterval(() => {
         const ch = getChatStore().channels.get(sid)
-        if (ch?.ws && ch.ws.readyState === WebSocket.OPEN) {
-          ch.ws.send(JSON.stringify({ type: 'ping' }))
-        } else {
+        if (!ch?.ws || ch.ws.readyState !== WebSocket.OPEN) {
           // 连接已断开，清除定时器
-          const chInner = getChatStore().channels.get(sid)
-          if (chInner?._pingTimer) {
-            clearInterval(chInner._pingTimer)
-            chInner._pingTimer = null
+          const chInner2 = getChatStore().channels.get(sid)
+          if (chInner2?._pingTimer) {
+            clearInterval(chInner2._pingTimer)
+            chInner2._pingTimer = null
           }
+          return
         }
+        // 检查 pong 是否超时（检测单向丢包、后端死锁等无法通过 ws.send 感知的故障）
+        if (Date.now() - ch._lastPongAt > 30000 + PONG_TIMEOUT_GRACE) {
+          console.warn(`[useChat] pong 超时 (sid=${sid}), 主动关闭 WebSocket 触发重连`)
+          ch.ws.close()
+          return
+        }
+        ch.ws.send(JSON.stringify({ type: 'ping' }))
       }, 30000)
     // 修复：重连后若上一轮 currentTurn 仍卡住（WS 中断时未收到 done/error），
     // 必须清理否则 isStreaming 永久为 true，且中断的轮次数据会因下次 send 被覆盖而丢失。
@@ -679,8 +698,14 @@ function handleEventForChannel(sid: string, event: ServerEvent) {
       console.warn(`[useChat] error: ${event.payload.code} (${event.payload.category ?? 'unknown'})`, event.payload.message)
       break
 
-    case 'pong':
+    case 'pong': {
+      // 修复 BC-002：记录最后 pong 到达时间，供心跳定时器检测静默断开
+      const chForPong = getChatStore().channels.get(sid)
+      if (chForPong) {
+        chForPong._lastPongAt = Date.now()
+      }
       break
+    }
 
     case 'ask_user': {
       const ae = event as AskUserEvent

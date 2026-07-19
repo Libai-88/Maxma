@@ -47,16 +47,22 @@
                 'Songti SC', 'STSong', serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
+  /* ── 显示字号（衬线，用于标题/区块） ── */
+  --fs-display-xl: 1.5rem;    /* 24px — 页面标题 */
+  --fs-display-lg: 1.25rem;   /* 20px — 面板标题 */
+  --fs-display-md: 1.125rem;  /* 18px — 卡片标题 */
+  --fs-display-sm: 1rem;      /* 16px — 小节标题 */
+
   /* 字体开关：默认衬线，body.font-sans 时切换为无衬线 */
   --font-display: var(--font-serif);
   --font-body: var(--font-serif);
 
-  /* ── 阴影层级（阴影色由主题定义） ── */
-  --shadow-xs: 0 1px 3px var(--shadow-color, rgba(0, 0, 0, 0.04));
-  --shadow-sm: 0 1px 4px var(--shadow-color, rgba(0, 0, 0, 0.06));
-  --shadow-md: 0 2px 8px var(--shadow-color, rgba(0, 0, 0, 0.08));
-  --shadow-lg: 0 4px 16px var(--shadow-color, rgba(0, 0, 0, 0.12));
-  --shadow-xl: 0 8px 32px var(--shadow-color, rgba(0, 0, 0, 0.18));
+  /* ── 阴影层级（阴影色由主题定义，默认暖棕） ── */
+  --shadow-xs: 0 1px 3px var(--shadow-color, rgba(80, 65, 50, 0.04));
+  --shadow-sm: 0 1px 4px var(--shadow-color, rgba(80, 65, 50, 0.06));
+  --shadow-md: 0 2px 8px var(--shadow-color, rgba(80, 65, 50, 0.08));
+  --shadow-lg: 0 4px 16px var(--shadow-color, rgba(80, 65, 50, 0.12));
+  --shadow-xl: 0 8px 32px var(--shadow-color, rgba(80, 65, 50, 0.18));
 
   /* ── 布局常量 ── */
   --sidebar-width: 240px;
@@ -75,11 +81,11 @@
   --overlay-medium: rgba(0, 0, 0, 0.08);
   --overlay-strong: rgba(0, 0, 0, 0.15);
 
-  /* ── 纸质纹理系统 ── */
+  /* ── 纸质纹理系统（默认开启，可通过主题设置切换） ── */
   --paper-texture-url: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.9 0 0 0 0 0.88 0 0 0 0 0.82 0 0 0 0.08 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   --paper-texture-size: 160px;
   --paper-texture-card-blend-mode: lighten;
-  --paper-texture-opacity: 0.35;
+  --paper-texture-opacity: 0.40;
 }
 
 /* 字体开关：无衬线模式 */

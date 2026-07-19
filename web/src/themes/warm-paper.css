@@ -3,8 +3,7 @@
  * 灵感：和纸手抄本，温润文人感
  */
 
-[data-theme="warm-paper"],
-:root:not([data-theme]) {
+[data-theme="warm-paper"] {
   /* ── 背景 ── */
   --bg-primary:    #F8F4ED;
   --bg-secondary:  #F4F0EA;

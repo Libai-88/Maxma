@@ -7,6 +7,10 @@
       <button class="qc-close" @click="hideWindow" title="关闭">✕</button>
     </header>
 
+    <!-- 全局错误通知（监听 maxma:error 事件） -->
+    <div v-if="globalError.visible" class="qc-error-bar" @click="globalError.visible = false">
+      {{ globalError.message }}
+    </div>
     <div class="qc-messages" ref="messagesRef">
       <div v-if="!turns.length && !currentTurn" class="qc-empty">
         <p>Ctrl+Shift+Space 召唤</p>
@@ -54,7 +58,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, nextTick, watch, reactive } from 'vue'
 import { useChat } from '@/composables/useChat'
 import { useSessionStore } from '@/stores/session'
 import { storeToRefs } from 'pinia'
@@ -67,6 +71,12 @@ const selectedSessionId = ref('')
 const inputText = ref('')
 const messagesRef = ref<HTMLElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
+
+/** 全局错误提示（由 maxma:error 事件驱动） */
+const globalError = reactive({
+  visible: false,
+  message: '',
+})
 
 // useChat 接收 Ref<string>，返回当前会话通道的响应式视图
 const {
@@ -126,6 +136,13 @@ onMounted(async () => {
   }
   // 聚焦输入框
   void nextTick().then(() => textareaRef.value?.focus())
+
+  // 监听全局错误事件，显示可见通知
+  window.addEventListener('maxma:error', ((e: CustomEvent) => {
+    const detail = e.detail
+    globalError.message = detail.message || '发生了意外错误'
+    globalError.visible = true
+  }) as EventListener)
 })
 </script>
 
@@ -171,6 +188,17 @@ onMounted(async () => {
   -webkit-app-region: no-drag;
 }
 .qc-close:hover { background: var(--bg-card); color: var(--status-error); }
+
+.qc-error-bar {
+  padding: 6px 12px;
+  background: var(--status-error, #e74c3c);
+  color: #fff;
+  font-size: 0.8em;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .qc-messages {
   flex: 1;

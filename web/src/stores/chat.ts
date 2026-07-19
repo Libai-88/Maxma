@@ -25,6 +25,7 @@ interface SessionChannel {
   privateMode: boolean
   autoApprove: boolean
   _pingTimer: ReturnType<typeof setInterval> | null  // 心跳 ping 定时器
+  _lastPongAt: number  // 上次收到 pong 的时间戳（ms），用于检测静默断开
 }
 
 function createChannel(): SessionChannel {
@@ -34,7 +35,7 @@ function createChannel(): SessionChannel {
     errorTraceId: null, contextUsage: null, taskTrackerData: null,
     reconnectTimer: null, reconnectAttempts: 0, initialized: false,
     _awaitingToolName: null, parentSessionId: null,
-    privateMode: false, autoApprove: false, _pingTimer: null,
+    privateMode: false, autoApprove: false, _pingTimer: null, _lastPongAt: 0,
   }
 }
 

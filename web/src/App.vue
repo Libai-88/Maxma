@@ -64,6 +64,14 @@
       :health="health"
       @open-providers="openProviderSetup"
     />
+    <!-- 全局错误通知 toast（监听 maxma:error 事件） -->
+    <DsToast
+      v-model:visible="globalErrorToast.visible"
+      :message="globalErrorToast.message"
+      type="error"
+      :duration="6000"
+      dismissible
+    />
   </div>
 </template>
 
@@ -89,6 +97,8 @@ import { usePaperTexture } from '@/composables/usePaperTexture'
 import { useGlobalShortcut } from '@/composables/useGlobalShortcut'
 import { useHealthPolling } from '@/composables/useHealthPolling'
 import RegionalErrorBoundary from '@/components/ui/RegionalErrorBoundary.vue'
+import DsToast from '@/components/ui/DsToast.vue'
+import { reactive } from 'vue'
 
 const MediaViewer = defineAsyncComponent(() => import('@/components/MediaViewer.vue'))
 const { effectiveCollapsed, toggleSidebar } = useSidebar()
@@ -151,10 +161,25 @@ const { allSessionStatuses } = storeToRefs(chatStore)
 
 const { health } = useHealthPolling()
 
+/** 全局错误 toast 状态（由 maxma:error 事件驱动） */
+const globalErrorToast = reactive({
+  visible: false,
+  message: '',
+})
+
 onMounted(async () => {
   // 初始化 Session 状态（从 localStorage 恢复或创建新会话）
   await sessionStore.initIfNeeded()
   onboarding.initialize()
+
+  // 修复 BC-003：监听 maxma:error 事件，显示用户可见的 toast 通知。
+  // 该事件由 main.ts 中的全局 Vue errorHandler 派发。
+  window.addEventListener('maxma:error', ((e: CustomEvent) => {
+    const detail = e.detail
+    globalErrorToast.message = detail.message || '发生了意外错误'
+    globalErrorToast.visible = true
+    console.debug('[App] maxma:error event received, showing toast:', detail.message)
+  }) as EventListener)
 })
 </script>
 

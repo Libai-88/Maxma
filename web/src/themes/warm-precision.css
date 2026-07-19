@@ -1,0 +1,116 @@
+/* web/src/themes/warm-precision.css
+ * 暖精工主题 — 暖奶油底 + 赤陶印章
+ * 完整实现 Warm Precision 设计系统
+ * 灵感：Claude 的暖白编辑感 + Notion 的衬线极简 + Linear 的精工结构
+ * 替代 warm-paper.css 成为默认主题
+ */
+
+[data-theme="warm-precision"],
+:root:not([data-theme]) {
+  /* ═══════════════════════════════════════════════
+   * 1. 四阶表面阶梯 (Four-Step Surface Ladder)
+   * 0 — Canvas  |  1 — Sand  |  2 — Card  |  3 — Raised
+   * ═══════════════════════════════════════════════ */
+  --bg-primary:    #FCF9F5;  /* Warm Cream   — 主画布/输入框背景 */
+  --bg-secondary:  #F5F0EA;  /* Warm Sand    — 侧边栏/二级表面 */
+  --bg-card:       #FEFCF8;  /* Warm Card    — 卡片/气泡/弹窗 */
+  --bg-raised:     #FFFDFA;  /* Warm Raised  — 悬停卡片/模态层 */
+
+  /* ═══════════════════════════════════════════════
+   * 2. 主色调 — 赤陶 Terracotta
+   * ═══════════════════════════════════════════════ */
+  --accent:        #C17A5C;  /* Terracotta       — 主操作色 */
+  --accent-hover:  #A8654A;  /* Terracotta Dark  — 悬停态 */
+  --accent-active: #945840;  /* Terracotta Deep  — 按下态 */
+  --accent-light:  #E8D5C8;  /* Terracotta Tint  — 浅背景 */
+  --accent-soft:   rgba(193, 122, 92, 0.08);  /* Terracotta Soft — 填充悬停 */
+
+  /* 兼容变量（关联到赤陶） */
+  --accent-pink:       #C17A5C;
+  --accent-pink-light: #E8D5C8;
+  --accent-pink-soft:  rgba(193, 122, 92, 0.1);
+  --accent-dark:       #A8654A;
+
+  /* ═══════════════════════════════════════════════
+   * 3. 文字 — 暖墨色四档
+   * ═══════════════════════════════════════════════ */
+  --text-primary:   #2C2825;  /* Warm Ink     — 正文/标题 */
+  --text-secondary: #7A7068;  /* Warm Gray    — 次级/标签 */
+  --text-tertiary:  #A89E94;  /* Warm Mute    — 提示/禁用 */
+
+  /* ═══════════════════════════════════════════════
+   * 4. 边框 — 暖发丝线
+   * ═══════════════════════════════════════════════ */
+  --border:         rgba(200, 180, 160, 0.25);  /* Warm Hairline       — 默认 */
+  --border-strong:  rgba(180, 160, 140, 0.35);  /* Warm Strong         — 输入聚焦 */
+  --border-accent:  rgba(193, 122, 92, 0.4);    /* Accent Border       — 运行态/焦点 */
+
+  /* ═══════════════════════════════════════════════
+   * 5. 阴影 — 暖棕落影（棕色-黑色替代纯黑）
+   * ═══════════════════════════════════════════════ */
+  --shadow-xs:   0 1px 3px rgba(120, 100, 80, 0.06);   /* 发线分离 */
+  --shadow-soft: 0 8px 24px rgba(120, 100, 80, 0.10);  /* 输入框柔光 */
+  --shadow-sm:   0 1px 4px rgba(120, 100, 80, 0.08);   /* 卡片静止 */
+  --shadow-md:   0 2px 8px rgba(120, 100, 80, 0.10);   /* 气泡/活跃 */
+  --shadow-lg:   0 4px 16px rgba(120, 100, 80, 0.14);  /* 下拉/弹窗 */
+  --shadow-xl:   0 8px 32px rgba(120, 100, 80, 0.20);  /* 模态弹窗 */
+
+  /* 通用阴影色（供 tokens.css 中的 shadow-* 变量使用）*/
+  --shadow-color: rgba(120, 100, 80, 0.10);
+
+  /* 快捷别名（供使用 var(--shadow) 的旧组件）*/
+  --shadow: var(--shadow-md);
+
+  /* ═══════════════════════════════════════════════
+   * 6. 圆角
+   * ═══════════════════════════════════════════════ */
+  --radius-input: 6px;
+  --radius-card: 10px;
+
+  /* ═══════════════════════════════════════════════
+   * 7. 状态色 — 去饱和度暖调
+   * ═══════════════════════════════════════════════ */
+  --status-ok:      #8AAA8A;  /* Warm Green  — 正常 */
+  --status-error:   #D06A60;  /* Warm Red    — 错误 */
+  --status-warn:    #C99A6A;  /* Warm Amber  — 警告 */
+  --status-info:    #7A9AAA;  /* Warm Blue   — 信息 */
+
+  /* ═══════════════════════════════════════════════
+   * 8. 聊天专用变量
+   * ═══════════════════════════════════════════════ */
+  --user-bubble:   #FCF9F5;   /* 用户气泡 = 暖奶油（同主画布）*/
+  --tool-bg:       rgba(193, 122, 92, 0.06);
+
+  /* ═══════════════════════════════════════════════
+   * 9. 侧边栏
+   * ═══════════════════════════════════════════════ */
+  --sidebar-bg:    #F5F0EA;   /* Warm Sand — 侧边栏背景 */
+
+  /* ═══════════════════════════════════════════════
+   * 10. 遮罩层（暖色微调）
+   * ═══════════════════════════════════════════════ */
+  --overlay-subtle: rgba(120, 100, 80, 0.04);
+  --overlay-light:  rgba(120, 100, 80, 0.07);
+  --overlay-medium: rgba(120, 100, 80, 0.10);
+  --overlay-strong: rgba(120, 100, 80, 0.18);
+
+  /* ═══════════════════════════════════════════════
+   * 11. RGB 拆分（供 rgba() 使用）
+   * ═══════════════════════════════════════════════ */
+  --accent-rgb:    193, 122, 92;
+  --green-rgb:     138, 170, 138;
+  --coral-rgb:     193, 122, 92;
+  --danger-rgb:    208, 106, 96;
+
+  /* ═══════════════════════════════════════════════
+   * 12. 聊天语义色
+   * ═══════════════════════════════════════════════ */
+  --hana-text:    #8A7064;
+  --mood-bg:      rgba(var(--accent-rgb), 0.06);
+  --mood-text:    #8A7064;
+  --mood-border:  rgba(var(--accent-rgb), 0.18);
+  --tool-text:    #7A5A4E;
+  --user-bg:      rgba(var(--accent-rgb), 0.08);
+  --drop-overlay-bg: rgba(var(--accent-rgb), 0.12);
+  --attach-bg:    rgba(var(--accent-rgb), 0.05);
+}
