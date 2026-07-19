@@ -99,6 +99,41 @@ describe('workspace shell', () => {
     expect(chatInputStyle).toContain('overflow-y: auto')
   })
 
+  it('keeps the conversation stream as the primary responsive scroll boundary', () => {
+    const chatViewSource = readFileSync(resolve(process.cwd(), 'src/views/ChatView.vue'), 'utf8')
+    const chatWindowSource = readFileSync(resolve(process.cwd(), 'src/components/ChatWindow.vue'), 'utf8')
+    const messageBubbleSource = readFileSync(resolve(process.cwd(), 'src/components/MessageBubble.vue'), 'utf8')
+    const workflowSource = readFileSync(resolve(process.cwd(), 'src/components/WorkflowCard.vue'), 'utf8')
+
+    const chatViewStyle = chatViewSource.match(/<style scoped>[\s\S]*?<\/style>/)?.[0] ?? ''
+    const chatWindowStyle = chatWindowSource.match(/<style scoped>[\s\S]*?<\/style>/)?.[0] ?? ''
+    const messageBubbleStyle = messageBubbleSource.match(/<style scoped>[\s\S]*?<\/style>/)?.[0] ?? ''
+
+    expect(chatViewStyle).toContain('.chat-workbench-layout')
+    expect(chatViewStyle).toContain('display: flex')
+    expect(chatViewStyle).toContain('flex: 1')
+    expect(chatViewStyle).toContain('min-width: 0')
+    expect(chatViewStyle).toContain('min-height: 0')
+    expect(chatViewStyle).toContain('overflow: hidden')
+    expect(chatViewStyle).toContain('.chat-main-column')
+
+    expect(chatWindowStyle).toContain('.chat-window')
+    expect(chatWindowStyle).toContain('min-width: 0')
+    expect(chatWindowStyle).toContain('min-height: 0')
+    expect(chatWindowStyle).toContain('.messages-list')
+    expect(chatWindowStyle).toContain('overflow-y: auto')
+    expect(chatWindowStyle).toContain('overflow-x: hidden')
+
+    expect(messageBubbleStyle).toContain('max-width: min(100%, 760px)')
+    expect(messageBubbleStyle).toContain('overflow-wrap: anywhere')
+    expect(chatWindowSource).toContain(':sticker-url="turn.stickerUrl"')
+    expect(messageBubbleSource).toContain('stripStickerDirectives')
+    expect(messageBubbleSource).toContain('<StickerInline')
+
+    expect(workflowSource).toContain('v-if="available"')
+    expect(workflowSource).toContain('workflowIds.value.length > 0 || runs.value.length > 0')
+  })
+
   it('keeps real WelcomeScreen starts wired to ChatView and removes actionless shells', () => {
     const welcomeSource = readFileSync(resolve(process.cwd(), 'src/components/WelcomeScreen.vue'), 'utf8')
     const chatViewSource = readFileSync(resolve(process.cwd(), 'src/views/ChatView.vue'), 'utf8')

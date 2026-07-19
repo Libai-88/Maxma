@@ -100,7 +100,11 @@
                 class="cite-source"
                 @contextmenu.prevent="onBubbleContextMenu($event, 'assistant_message', turn.finalAnswer, 'AI')"
               >
-                <MessageBubble role="assistant" :content="turn.finalAnswer" />
+                <MessageBubble
+                  role="assistant"
+                  :content="turn.finalAnswer"
+                  :sticker-url="turn.stickerUrl"
+                />
               </div>
               <!-- 占位提示：finalAnswer 为空但轮次已完成（非流式）且有工具事件时，
                    显示一个轻量提示，避免用户感知为"整轮被吞掉" -->
@@ -642,19 +646,25 @@ function closeContextMenu() {
 
 <style scoped>
 .chat-window {
-	  flex: 1;
-	  /* overflow-y 移除：DynamicScroller 自身是滚动容器 */
+	  flex: 1 1 auto;
+	  min-width: 0;
+	  min-height: 0;
 	  padding: 20px 24px;
 	  background: var(--bg-primary);
 	  display: flex;
 	  flex-direction: column;
+	  overflow: hidden;
 	}
 /* DynamicScroller 根元素：作为滚动容器 */
 .messages-list {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
   max-width: 768px;
   width: 100%;
   margin: 0 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 /* 每个轮次的用户消息和助手回复：包在 turn-wrapper 中以维持 gap */
 .turn-wrapper {

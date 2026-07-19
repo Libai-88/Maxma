@@ -10,6 +10,11 @@
           <RenderMarkdown v-if="seg.type === 'text'" :content="seg.text" />
           <StickerInline v-else :sticker="seg" @preview="previewSticker" />
         </template>
+        <StickerInline
+          v-if="attachedSticker"
+          :sticker="attachedSticker"
+          @preview="previewSticker"
+        />
       </div>
       <button
         v-if="isCollapsible"
@@ -41,19 +46,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, toRef } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import type { ParsedRef } from '@/utils/references'
 import ReferenceChip from './ReferenceChip.vue'
 import RenderMarkdown from './RenderMarkdown.vue'
 import StickerInline from './StickerInline.vue'
 import StickerPreviewOverlay from './StickerPreviewOverlay.vue'
 import { useStickerSegments, type StickerSegment } from '@/composables/useStickerSegments'
+import { stripStickerDirectives } from '@/composables/stickerUtils'
 
 const props = defineProps<{
   role: 'user' | 'assistant'
   content: string
   refs?: ParsedRef[]
   readStatus?: 'pending' | 'read'
+  stickerUrl?: string
 }>()
 
 const isCollapsed = ref(true)
@@ -64,8 +71,27 @@ const previewIndex = ref(-1)
 const isCollapsible = computed(() => contentHeight.value > 500)
 
 /** 解析内容中的 <sticker:category/filename.webp> 标记，分段返回 */
-const segments = useStickerSegments(toRef(props, 'content'))
-const stickerSegments = computed(() => segments.value.filter((seg): seg is StickerSegment => seg.type === 'sticker'))
+const displayContent = computed(() =>
+  props.stickerUrl ? stripStickerDirectives(props.content) : props.content,
+)
+const segments = useStickerSegments(displayContent)
+const attachedSticker = computed<StickerSegment | null>(() => {
+  if (!props.stickerUrl) return null
+  return {
+    type: 'sticker',
+    src: props.stickerUrl,
+    path: props.stickerUrl,
+    category: '表情',
+    filename: '情绪表情包',
+    occurrenceKey: 'attached-' + props.stickerUrl,
+    start: 0,
+    end: 0,
+  }
+})
+const stickerSegments = computed(() => {
+  const inline = segments.value.filter((seg): seg is StickerSegment => seg.type === 'sticker')
+  return attachedSticker.value ? [...inline, attachedSticker.value] : inline
+})
 
 function previewSticker(sticker: StickerSegment) {
   previewIndex.value = stickerSegments.value.findIndex(
@@ -113,12 +139,13 @@ watch(() => props.content, () => {
 }
 
 .bubble {
-  max-width: 72%;
+  max-width: min(100%, 760px);
   padding: 10px 16px;
   border-radius: 14px;
   font-size: 1em;
   line-height: 1.6;
   word-break: break-word;
+  overflow-wrap: anywhere;
   box-shadow: var(--shadow);
 }
 .bubble.user {

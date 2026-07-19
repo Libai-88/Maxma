@@ -549,6 +549,11 @@ function handleQuickStart(message: string) {
   flex-direction: column;
 }
 
+:deep(.chat-input-wrapper) {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
 .workbench-toggle-btn {
   display: inline-flex;
   align-items: center;

@@ -153,7 +153,7 @@ async function load() {
     ])
     workflowIds.value = definitions.workflow_ids
     runs.value = listedRuns.runs
-    available.value = true
+    available.value = workflowIds.value.length > 0 || runs.value.length > 0
   } catch (error) {
     if (isUnavailableError(error)) hide()
   }
