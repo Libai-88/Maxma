@@ -642,13 +642,13 @@ function closeContextMenu() {
 
 <style scoped>
 .chat-window {
-  flex: 1;
-  /* overflow-y 移除：DynamicScroller 自身是滚动容器 */
-  padding: 20px 24px;
-  background: var(--bg-card);
-  display: flex;
-  flex-direction: column;
-}
+	  flex: 1;
+	  /* overflow-y 移除：DynamicScroller 自身是滚动容器 */
+	  padding: 20px 24px;
+	  background: var(--bg-primary);
+	  display: flex;
+	  flex-direction: column;
+	}
 /* DynamicScroller 根元素：作为滚动容器 */
 .messages-list {
   flex: 1;
@@ -739,11 +739,11 @@ function closeContextMenu() {
   text-shadow: 0 2px 16px rgba(255, 255, 255, 0.6);
 }
 .empty-desc {
-  font-size: 1.3em;
-  color: var(--accent-pink);
-  font-weight: 500;
-  text-shadow: 0 1px 12px rgba(255, 255, 255, 0.6);
-}
+	  font-size: 1.3em;
+	  color: var(--accent);
+	  font-weight: 500;
+	  text-shadow: 0 1px 12px rgba(255, 255, 255, 0.6);
+	}
 .typewriter {
   display: inline-block;
   min-width: 1ch;
@@ -863,41 +863,41 @@ function closeContextMenu() {
   background-position: center;
 }
 .error-copy-btn .copy-success {
-  color: #22c55e;
-  font-weight: bold;
-}
-/* 用户错误：黄色警告 */
+	  color: var(--status-ok);
+	  font-weight: bold;
+	}
+/* 用户错误：暖琥珀警告 */
 .error-banner.error-user_error {
-  background: var(--bg-card);
-  background: color-mix(in srgb, #f59e0b 10%, var(--bg-card));
-  border: 1px solid transparent;
-  border: 1px solid color-mix(in srgb, #f59e0b 30%, transparent);
-  color: var(--status-warn);
-}
-/* 工具错误：橙色 */
-.error-banner.error-tool_error {
-  background: var(--bg-card);
-  background: color-mix(in srgb, #f97316 10%, var(--bg-card));
-  border: 1px solid transparent;
-  border: 1px solid color-mix(in srgb, #f97316 30%, transparent);
-  color: #f97316;
-}
-/* 系统错误：红色 */
-.error-banner.error-system_error {
-  background: var(--bg-card);
-  background: color-mix(in srgb, var(--status-error) 10%, var(--bg-card));
-  border: 1px solid transparent;
-  border: 1px solid color-mix(in srgb, var(--status-error) 25%, transparent);
-  color: var(--status-error);
-}
-/* 限流错误：蓝色 */
-.error-banner.error-rate_limit {
-  background: var(--bg-card);
-  background: color-mix(in srgb, #3b82f6 10%, var(--bg-card));
-  border: 1px solid transparent;
-  border: 1px solid color-mix(in srgb, #3b82f6 25%, transparent);
-  color: #3b82f6;
-}
+	  background: var(--bg-card);
+	  background: color-mix(in srgb, var(--status-warn) 10%, var(--bg-card));
+	  border: 1px solid transparent;
+	  border: 1px solid color-mix(in srgb, var(--status-warn) 30%, transparent);
+	  color: var(--status-warn);
+	}
+	/* 工具错误：暖琥珀 */
+	.error-banner.error-tool_error {
+	  background: var(--bg-card);
+	  background: color-mix(in srgb, var(--status-warn) 10%, var(--bg-card));
+	  border: 1px solid transparent;
+	  border: 1px solid color-mix(in srgb, var(--status-warn) 30%, transparent);
+	  color: var(--status-warn);
+	}
+	/* 系统错误：暖红 */
+	.error-banner.error-system_error {
+	  background: var(--bg-card);
+	  background: color-mix(in srgb, var(--status-error) 10%, var(--bg-card));
+	  border: 1px solid transparent;
+	  border: 1px solid color-mix(in srgb, var(--status-error) 25%, transparent);
+	  color: var(--status-error);
+	}
+	/* 限流错误：暖蓝 */
+	.error-banner.error-rate_limit {
+	  background: var(--bg-card);
+	  background: color-mix(in srgb, var(--status-info) 10%, var(--bg-card));
+	  border: 1px solid transparent;
+	  border: 1px solid color-mix(in srgb, var(--status-info) 25%, transparent);
+	  color: var(--status-info);
+	}
 /* 取消：灰色 */
 .error-banner.error-cancelled {
   background: var(--bg-card);
@@ -1020,12 +1020,12 @@ function closeContextMenu() {
 }
 
 .memory-check {
-  color: #22c55e;
-}
-
-.memory-cross {
-  color: #b91c1c;
-}
+	  color: var(--status-ok);
+	}
+	
+	.memory-cross {
+	  color: var(--status-error);
+	}
 
 .memory-tool-name {
   font-weight: 500;
@@ -1038,8 +1038,8 @@ function closeContextMenu() {
 }
 
 .memory-tool-status.is-error {
-  color: #b91c1c;
-}
+	  color: var(--status-error);
+	}
 
 .memory-tool-output {
   max-width: 180px;
@@ -1078,12 +1078,12 @@ function closeContextMenu() {
 }
 
 .typing-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent-pink);
-  animation: typingBounce 1.4s infinite ease-in-out both;
-}
+	  width: 8px;
+	  height: 8px;
+	  border-radius: 50%;
+	  background: var(--accent);
+	  animation: typingBounce 1.4s infinite ease-in-out both;
+	}
 
 .typing-dots .typing-dot:nth-child(1) {
   animation-delay: -0.32s;

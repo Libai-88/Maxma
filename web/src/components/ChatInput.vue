@@ -1202,41 +1202,41 @@ function onResizeEnd(e: PointerEvent) {
 
 /* 图片上传错误横幅 */
 .chat-image-error {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  margin-bottom: 8px;
-  border: 1px solid transparent;
-  border: 1px solid color-mix(in srgb, #f97316 40%, transparent);
-  border-radius: 10px;
-  background: var(--bg-card);
-  background: color-mix(in srgb, #f97316 10%, var(--bg-card));
-  color: #f97316;
-  font-size: 0.85em;
-  animation: chat-error-in 0.2s ease-out;
-}
+	  display: flex;
+	  align-items: center;
+	  gap: 8px;
+	  padding: 8px 14px;
+	  margin-bottom: 8px;
+	  border: 1px solid transparent;
+	  border: 1px solid color-mix(in srgb, var(--status-error) 40%, transparent);
+	  border-radius: 10px;
+	  background: var(--bg-card);
+	  background: color-mix(in srgb, var(--status-error) 10%, var(--bg-card));
+	  color: var(--status-error);
+	  font-size: 0.85em;
+	  animation: chat-error-in 0.2s ease-out;
+	}
 .chat-image-error-icon {
-  font-size: 1.1em;
-  flex-shrink: 0;
-}
+	  font-size: 1.1em;
+	  flex-shrink: 0;
+	}
 .chat-image-error-text {
-  flex: 1;
-  font-weight: 500;
-}
+	  flex: 1;
+	  font-weight: 500;
+	}
 .chat-image-error-close {
-  border: none;
-  background: transparent;
-  color: #f97316;
-  cursor: pointer;
-  font-size: 1em;
-  padding: 0 4px;
-  opacity: 0.6;
-  transition: opacity 0.15s;
-}
+	  border: none;
+	  background: transparent;
+	  color: var(--status-error);
+	  cursor: pointer;
+	  font-size: 1em;
+	  padding: 0 4px;
+	  opacity: 0.6;
+	  transition: opacity 0.15s;
+	}
 .chat-image-error-close:hover {
-  opacity: 1;
-}
+	  opacity: 1;
+	}
 
 .input-toolbar {
   display: flex; align-items: center;
@@ -1336,9 +1336,9 @@ function onResizeEnd(e: PointerEvent) {
   transition: border-color 0.15s, background 0.15s;
 }
 .file-tag:hover {
-  border-color: var(--accent-dark);
-  background: var(--bg-primary);
-}
+	  border-color: var(--border-accent, var(--accent-hover, var(--accent)));
+	  background: var(--bg-primary);
+	}
 .file-tag-name {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1392,25 +1392,25 @@ function onResizeEnd(e: PointerEvent) {
 
 /* ── 图片引用缩略图 ── */
 .sticker-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 8px 3px 3px;
-  border: 1px solid color-mix(in srgb, var(--accent-pink) 36%, var(--border));
-  border-radius: 999px;
-  background: var(--bg-secondary);
-  background: color-mix(in srgb, var(--accent-pink) 8%, var(--bg-secondary));
-  font-size: 0.75em;
-  color: var(--text-primary);
-  max-width: 180px;
-  transition: border-color 0.15s, background 0.15s;
-}
-
-.sticker-tag:hover {
-  border-color: var(--accent-pink);
-  background: var(--bg-secondary);
-  background: color-mix(in srgb, var(--accent-pink) 12%, var(--bg-secondary));
-}
+	  display: inline-flex;
+	  align-items: center;
+	  gap: 4px;
+	  padding: 3px 8px 3px 3px;
+	  border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--border));
+	  border-radius: 999px;
+	  background: var(--bg-secondary);
+	  background: color-mix(in srgb, var(--accent) 8%, var(--bg-secondary));
+	  font-size: 0.75em;
+	  color: var(--text-primary);
+	  max-width: 180px;
+	  transition: border-color 0.15s, background 0.15s;
+	}
+	
+	.sticker-tag:hover {
+	  border-color: var(--accent);
+	  background: var(--bg-secondary);
+	  background: color-mix(in srgb, var(--accent) 12%, var(--bg-secondary));
+	}
 
 .sticker-tag-preview {
   width: 32px;
@@ -1561,8 +1561,8 @@ function onResizeEnd(e: PointerEvent) {
   border-color: var(--accent);
 }
 .link-input::placeholder {
-  color: #9ca3af;
-}
+	  color: var(--text-tertiary);
+	}
 .link-input-confirm,
 .link-input-cancel {
   width: 28px;
@@ -1588,9 +1588,9 @@ function onResizeEnd(e: PointerEvent) {
   cursor: default;
 }
 .link-input-cancel:hover {
-  border-color: #c97a7a;
-  color: #c97a7a;
-}
+	  border-color: var(--status-error);
+	  color: var(--status-error);
+	}
 
 /* 拖拽调整手柄 */
 .resize-handle {
@@ -1653,9 +1653,9 @@ function onResizeEnd(e: PointerEvent) {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 .chat-input:focus-within {
-  border-color: var(--accent-pink);
-  box-shadow: var(--shadow-soft), 0 0 0 1px var(--accent-pink-soft);
-}
+	  border-color: var(--border-accent, var(--accent));
+	  box-shadow: var(--shadow-soft), 0 0 0 1px var(--accent-soft);
+	}
 
 /* 添加文件按钮 */
 .btn-add-file-wrapper {
@@ -1790,8 +1790,8 @@ function onResizeEnd(e: PointerEvent) {
   border-radius: 4px;
 }
 .input-area::placeholder {
-  color: #9ca3af;
-}
+	  color: var(--text-tertiary);
+	}
 .input-bottom-bar {
   display: flex;
   align-items: center;
@@ -1840,10 +1840,10 @@ function onResizeEnd(e: PointerEvent) {
   color: #fff;
 }
 .btn-send:hover:not(:disabled) {
-  background: var(--accent-pink);
-  transform: scale(1.08);
-  box-shadow: var(--shadow-pink);
-}
+	  background: var(--accent-hover, var(--accent));
+	  transform: scale(1.08);
+	  box-shadow: var(--shadow-md);
+	}
 .btn-send:active:not(:disabled) {
   transform: scale(0.95);
 }
@@ -1857,10 +1857,8 @@ function onResizeEnd(e: PointerEvent) {
   font-size: 0.8em;
 }
 .btn-stop:hover {
-  background: #000;
-  background: #000;
-  background: color-mix(in srgb, var(--status-error) 80%, #000);
-}
+	  background: color-mix(in srgb, var(--status-error) 80%, #000);
+	}
 
 /* ── 选区引用卡片栏 ── */
 .quoted-selections-bar {

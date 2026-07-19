@@ -189,6 +189,7 @@ onMounted(async () => {
 @import '@/assets/styles/design-system.css';
 @import '@/assets/styles/markdown.css';
 @import '@/assets/styles/paper-texture.css';
+@import '@/themes/warm-precision.css';
 @import '@/themes/warm-paper.css';
 @import '@/themes/midnight.css';
 @import '@/themes/high-contrast.css';
@@ -210,11 +211,11 @@ onMounted(async () => {
 }
 
 :root {
-  /* 配色变量由主题文件定义（web/src/themes/*.css），结构 token 由 tokens.css 定义 */
-  --radius: var(--radius-md);
-  --shadow: var(--shadow-md);
-  --shadow-pink: 0 4px 16px var(--shadow-color, rgba(0, 0, 0, 0.18));
-}
+	  /* 配色变量由主题文件定义（web/src/themes/*.css），结构 token 由 tokens.css 定义 */
+	  --radius: var(--radius-md);
+	  --shadow: var(--shadow-md);
+	  --shadow-pink: 0 4px 16px var(--shadow-color, rgba(120, 100, 80, 0.14));
+	}
 
 ::selection {
   background: var(--accent);
@@ -290,8 +291,8 @@ html, body {
 }
 
 .sidebar {
-  width: 220px;
-  min-width: 220px;
+	  width: 240px;
+	  min-width: 240px;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border);
   display: flex;
@@ -383,10 +384,10 @@ html, body {
 }
 
 .nav-item.router-link-active {
-  background: var(--bg-card);
-  color: var(--accent);
-  font-weight: 600;
-}
+	  background: var(--accent-soft, transparent);
+	  color: var(--accent);
+	  font-weight: 600;
+	}
 
 .nav-item:focus-visible {
   outline: 2px solid var(--accent);

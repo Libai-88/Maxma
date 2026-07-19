@@ -53,16 +53,16 @@
   --fs-display-md: 1.125rem;  /* 18px — 卡片标题 */
   --fs-display-sm: 1rem;      /* 16px — 小节标题 */
 
-  /* 字体开关：默认衬线，body.font-sans 时切换为无衬线 */
+  /* 字体开关：显示标题用衬线，正文用无衬线（body.font-sans 时整体切换为无衬线） */
   --font-display: var(--font-serif);
-  --font-body: var(--font-serif);
+  --font-body: var(--font-ui);
 
   /* ── 阴影层级（阴影色由主题定义，默认暖棕） ── */
-  --shadow-xs: 0 1px 3px var(--shadow-color, rgba(80, 65, 50, 0.04));
-  --shadow-sm: 0 1px 4px var(--shadow-color, rgba(80, 65, 50, 0.06));
-  --shadow-md: 0 2px 8px var(--shadow-color, rgba(80, 65, 50, 0.08));
-  --shadow-lg: 0 4px 16px var(--shadow-color, rgba(80, 65, 50, 0.12));
-  --shadow-xl: 0 8px 32px var(--shadow-color, rgba(80, 65, 50, 0.18));
+  --shadow-xs: 0 1px 3px var(--shadow-color, rgba(120, 100, 80, 0.06));
+  --shadow-sm: 0 1px 4px var(--shadow-color, rgba(120, 100, 80, 0.08));
+  --shadow-md: 0 2px 8px var(--shadow-color, rgba(120, 100, 80, 0.10));
+  --shadow-lg: 0 4px 16px var(--shadow-color, rgba(120, 100, 80, 0.14));
+  --shadow-xl: 0 8px 32px var(--shadow-color, rgba(120, 100, 80, 0.20));
 
   /* ── 布局常量 ── */
   --sidebar-width: 240px;

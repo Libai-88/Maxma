@@ -647,9 +647,10 @@ onMounted(loadProviders)
   margin-bottom: 20px;
 }
 .header h2 {
-  font-size: 20px;
-  font-weight: 700;
-}
+	  font-size: 20px;
+	  font-weight: 700;
+	  font-family: var(--font-display);
+	}
 
 /* ── Buttons ── */
 .btn {
@@ -970,15 +971,16 @@ select.input { cursor: pointer; }
   margin-bottom: 16px;
 }
 .form-group-title {
-  font-size: 0.78em;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border);
-}
+	  font-size: 0.78em;
+	  font-weight: 600;
+	  font-family: var(--font-display);
+	  color: var(--text-secondary);
+	  text-transform: uppercase;
+	  letter-spacing: 0.05em;
+	  margin-bottom: 12px;
+	  padding-bottom: 8px;
+	  border-bottom: 1px solid var(--border);
+	}
 .required-mark {
   color: var(--status-error);
   margin-left: 2px;

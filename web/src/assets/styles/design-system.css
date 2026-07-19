@@ -69,10 +69,10 @@
   border-color: var(--accent);
 }
 .ds-btn--primary:hover:not(:disabled) {
-  background: var(--accent-dark, var(--accent));
-  box-shadow: 0 2px 8px var(--shadow-color);
-  opacity: 1;
-}
+	  background: var(--accent-hover, var(--accent-dark, var(--accent)));
+	  box-shadow: 0 2px 8px var(--shadow-color);
+	  opacity: 1;
+	}
 .ds-btn--danger {
   color: var(--status-error);
   border-color: var(--status-error);
@@ -120,9 +120,9 @@
   transition: border-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
 }
 .ds-card:hover {
-  border-color: var(--accent-dark, var(--accent));
-  box-shadow: var(--shadow-sm);
-}
+	  border-color: var(--border-accent, var(--accent));
+	  box-shadow: var(--shadow-sm);
+	}
 
 /* ── 基础徽章 ── */
 .ds-badge {

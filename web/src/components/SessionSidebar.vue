@@ -486,15 +486,16 @@ function confirmDelete() {
   gap: 8px;
 }
 .sidebar-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 0.75em;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
+	  display: flex;
+	  align-items: center;
+	  justify-content: space-between;
+	  font-size: 0.75em;
+	  font-weight: 600;
+	  font-family: var(--font-display);
+	  color: var(--text-secondary);
+	  text-transform: uppercase;
+	  letter-spacing: 0.5px;
+	}
 .sidebar-section-header span {
   transition: opacity 0.2s ease 0.05s, transform 0.25s ease 0.05s;
   overflow: hidden;
@@ -563,13 +564,14 @@ function confirmDelete() {
 
 /* ── Section label ── */
 .section-label {
-  font-size: 0.7em;
-  font-weight: 600;
-  color: var(--text-tertiary, #9ca3af);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  padding: 4px 12px 2px;
-}
+	  font-size: 0.7em;
+	  font-weight: 600;
+	  font-family: var(--font-display);
+	  color: var(--text-tertiary, #9ca3af);
+	  text-transform: uppercase;
+	  letter-spacing: 0.4px;
+	  padding: 4px 12px 2px;
+	}
 
 /* ── Novice 引导 intro-card ── */
 .session-intro-card {
