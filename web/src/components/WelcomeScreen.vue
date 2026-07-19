@@ -251,5 +251,6 @@ const examples = computed(() => [
   .welcome-avatar { line-height: 1; }
   .welcome-actions { flex-direction: column; }
   .action-btn { width: 100%; justify-content: center; }
+  .example-hint { margin-top: 0; }
 }
 </style>
