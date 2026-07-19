@@ -12,14 +12,46 @@ import uuid
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from agent.prompts import build_system_prompt
+from api.routes.providers import _find_provider, _load_providers
 from api.const_session_store import save_const_session
 from api.middleware.rate_limit import get_ws_rate_limiter
 from api.pi_bridge.session_adapter import SessionMap
 from api.session_manager import SessionState
+from api.yaml_store import yaml_file_lock
+from app_paths import PROVIDERS_YAML_PATH
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _resolve_chat_model(provider_id: str, model_name: str) -> dict[str, str]:
+    """Resolve the browser's provider/model selection for the sidecar."""
+    requested_model = model_name.strip() or "gpt-4o"
+    requested_provider = provider_id.strip()
+    with yaml_file_lock(PROVIDERS_YAML_PATH):
+        provider = _find_provider(_load_providers(), requested_provider)
+
+    if provider is None:
+        return {
+            "provider": requested_provider or "openai",
+            "model": requested_model,
+            "base_url": "",
+            "api_key": "",
+            "provider_type": "openai",
+        }
+
+    models = provider.get("models")
+    selected_model = requested_model
+    if isinstance(models, list) and models and selected_model not in models:
+        selected_model = str(models[0])
+    return {
+        "provider": str(provider.get("id") or requested_provider or "openai"),
+        "model": selected_model,
+        "base_url": str(provider.get("base_url") or ""),
+        "api_key": str(provider.get("api_key") or ""),
+        "provider_type": str(provider.get("provider_type") or "openai"),
+    }
 
 
 async def _get_messages_from_sidecar(
@@ -63,6 +95,7 @@ async def _stream_turn_sidecar(
     session: SessionState,
     user_message: str,
     system_prompt: str,
+    model_config: dict[str, str] | None = None,
     cancel_event: asyncio.Event | None = None,
 ) -> str:
     """Execute a turn via oh-my-pi sidecar (Bun subprocess).
@@ -72,6 +105,7 @@ async def _stream_turn_sidecar(
     plan_completed) to the frontend in real-time.
     Returns the final answer string.
     """
+    model_config = model_config or {}
     app_state = ws.app.state
 
     # 1. Ensure sidecar is running
@@ -134,7 +168,7 @@ async def _stream_turn_sidecar(
         result = await client.call(
             "create_session",
             {
-                "model": "gpt-4o",
+                **model_config,
                 "system_prompt": _sidecar_system_prompt,
                 "cwd": ".",
             },
@@ -494,6 +528,10 @@ async def websocket_chat(ws: WebSocket, session_id: str):
 
             system_prompt = build_system_prompt()
             turn_id = payload.get("turn_id")
+            model_config = _resolve_chat_model(
+                str(payload.get("provider_id") or ""),
+                str(payload.get("model_name") or ""),
+            )
 
             # Store context for completion handler
             _turn_user_message = user_message
@@ -508,6 +546,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             turn_task = asyncio.create_task(
                 _stream_turn_sidecar(
                     ws, session, user_message, system_prompt,
+                    model_config=model_config,
                     cancel_event=cancel_event,
                 )
             )
