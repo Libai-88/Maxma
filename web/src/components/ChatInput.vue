@@ -1322,6 +1322,7 @@ function onResizeEnd(e: PointerEvent) {
   flex: 1;
   min-height: 0;
   padding: 10px 14px 0;
+  overflow-y: auto;
 }
 
 /* 过渡分隔线 */
@@ -1458,6 +1459,8 @@ function onResizeEnd(e: PointerEvent) {
 .chat-input {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  max-height: min(42vh, 420px);
   max-width: 768px;
   margin: 0 auto;
   background: var(--bg-card);

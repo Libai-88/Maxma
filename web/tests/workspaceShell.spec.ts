@@ -66,6 +66,51 @@ describe('workspace shell', () => {
     expect((modelSelectorSource.match(/<DsSelect\b/g) ?? [])).toHaveLength(1)
   })
 
+  it('keeps Composer keyboard, send payload, and layout boundaries intact', () => {
+    const chatInputSource = readFileSync(resolve(process.cwd(), 'src/components/ChatInput.vue'), 'utf8')
+    const chatViewSource = readFileSync(resolve(process.cwd(), 'src/views/ChatView.vue'), 'utf8')
+    const chatInputTemplate = chatInputSource.match(/<template>[\s\S]*?<\/template>/)?.[0] ?? ''
+
+    expect((chatInputTemplate.match(/class="input-area"/g) ?? [])).toHaveLength(1)
+    expect(chatInputTemplate).toContain('@keydown="onKeydown"')
+    expect(chatInputSource).toContain('if (e.isComposing || e.keyCode === 229) return')
+    expect(chatInputSource).toContain("if (e.key === 'Enter' && !e.shiftKey)")
+    expect(chatInputSource).toContain('e.preventDefault()')
+    expect(chatInputTemplate).toContain('v-if="!isStreaming"')
+    expect(chatInputTemplate).toContain('class="btn-stop"')
+    expect(chatInputTemplate).toContain('chatInput.stop()')
+    expect(chatInputTemplate).toContain('@click="pickFile"')
+    expect(chatInputTemplate).toContain('@click="pickFolder"')
+    expect(chatInputTemplate).toContain('@click="pickImage"')
+    expect(chatInputTemplate).toContain('@click="startLinkInput"')
+    expect(chatInputTemplate).toContain('class="quoted-selections-bar"')
+    expect(chatInputTemplate).toContain('<ThinkPathChooser')
+    expect(chatInputTemplate).toContain('<AutocompletePanel')
+    expect(chatInputTemplate).toContain('<StickerPicker')
+    expect(chatInputSource).toContain('refs.value')
+    expect(chatInputSource).toContain('selectedThinkPathId.value || undefined')
+    expect(chatViewSource).toContain('send(text, [...refs, ...quoteRefs], providerId, modelName, thinkPathId)')
+    expect(chatInputSource).toContain('text.value += stickerTag')
+
+    const chatInputStyle = chatInputSource.match(/<style scoped>[\s\S]*?<\/style>/)?.[0] ?? ''
+    expect(chatInputStyle).toContain('min-width: 0')
+    expect(chatInputStyle).toContain('max-height: min(42vh, 420px)')
+    expect(chatInputStyle).toContain('.input-body')
+    expect(chatInputStyle).toContain('overflow-y: auto')
+  })
+
+  it('keeps real WelcomeScreen starts wired to ChatView and removes actionless shells', () => {
+    const welcomeSource = readFileSync(resolve(process.cwd(), 'src/components/WelcomeScreen.vue'), 'utf8')
+    const chatViewSource = readFileSync(resolve(process.cwd(), 'src/views/ChatView.vue'), 'utf8')
+
+    expect(welcomeSource).not.toContain('capability-strip')
+    expect(welcomeSource).not.toContain('const capabilities')
+    expect(welcomeSource).toContain('@click="$emit(\'start\', ex.text)"')
+    expect((welcomeSource.match(/\$emit\('start'/g) ?? []).length).toBeGreaterThanOrEqual(3)
+    expect(chatViewSource).toContain('<WelcomeScreen v-else @start="handleQuickStart" />')
+    expect(chatViewSource).toContain('chatInputInstance.send(message)')
+  })
+
   it('shows a short current session title while keeping the full context in title', () => {
     const pinia = createPinia()
     const persona = usePersonaStore(pinia)

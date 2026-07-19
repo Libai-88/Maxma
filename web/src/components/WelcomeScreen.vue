@@ -26,14 +26,6 @@
         </button>
       </div>
 
-      <!-- 能力概览：让新用户立即知道 Maxma 能做什么 -->
-      <section class="capability-strip" aria-label="Maxma 核心能力">
-        <div class="capability-item" v-for="cap in capabilities" :key="cap.label">
-          <span class="capability-icon" aria-hidden="true">{{ cap.icon }}</span>
-          <span class="capability-label">{{ cap.label }}</span>
-        </div>
-      </section>
-
       <!-- 示例提示：分场景给出可点击的具体 prompt，降低上手门槛 -->
       <section class="example-prompts" aria-label="试试这些">
         <div class="example-title">试试这些 ✨</div>
@@ -74,16 +66,6 @@ const sceneText = computed(() => {
   }
   return 'Maxma 正趴在桌上等你。'
 })
-
-// 能力概览条：一眼展示 Maxma 与同类产品的差异化能力
-// 面向 Enthusiast 画像传达"凭什么选 Maxma"，面向 Novice 画像传达功能丰富度
-const capabilities = computed(() => [
-  { icon: '🧠', label: '长期记忆' },
-  { icon: '🛠️', label: 'MCP 外接工具' },
-  { icon: '🎨', label: '人设系统' },
-  { icon: '⚡', label: 'Skills 技能' },
-  { icon: '🔌', label: '40+ 模型' },
-])
 
 // 示例提示：覆盖三类画像的典型场景
 // - tone: 'office' (Power Office User) / 'daily' (Novice) / 'tech' (Enthusiast)
@@ -157,29 +139,6 @@ const examples = computed(() => [
 .action-icon { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; line-height: 0; flex-shrink: 0; }
 .action-icon :deep(svg) { width: 100%; height: 100%; }
 
-/* ── 能力概览条 ── */
-.capability-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 14px;
-  justify-content: center;
-  padding: 14px 16px;
-  margin-bottom: 24px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--bg-card) 60%, transparent);
-}
-.capability-item {
-	  display: inline-flex;
-	  align-items: center;
-	  gap: 6px;
-	  font-size: 13px;
-	  color: var(--text-secondary);
-	  white-space: nowrap;
-	}
-.capability-icon { font-size: 14px; line-height: 1; }
-.capability-label { letter-spacing: 0.2px; }
-
 /* ── 示例提示 ── */
 .example-prompts {
   margin-top: 4px;
@@ -250,11 +209,8 @@ const examples = computed(() => [
   .welcome-actions {
     animation: welcome-fade-in 0.6s ease-out 0.6s both;
   }
-  .capability-strip {
-    animation: welcome-fade-in 0.6s ease-out 0.75s both;
-  }
   .example-prompts {
-    animation: welcome-fade-in 0.6s ease-out 0.9s both;
+    animation: welcome-fade-in 0.6s ease-out 0.75s both;
   }
 }
 @keyframes welcome-fade-in {
@@ -272,6 +228,5 @@ const examples = computed(() => [
 @media (max-width: 480px) {
   .welcome-actions { flex-direction: column; }
   .action-btn { width: 100%; justify-content: center; }
-  .capability-strip { gap: 6px 10px; }
 }
 </style>
