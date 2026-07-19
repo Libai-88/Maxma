@@ -16,6 +16,19 @@ function createTestRouter() {
       { path: '/activity', component: { template: '<div />' } },
       { path: '/appearance', component: { template: '<div />' } },
       { path: '/help', component: { template: '<div />' } },
+      { path: '/providers', component: { template: '<div />' } },
+      { path: '/mcp', component: { template: '<div />' } },
+      { path: '/skills', component: { template: '<div />' } },
+      { path: '/soul', component: { template: '<div />' } },
+      { path: '/user', component: { template: '<div />' } },
+      { path: '/memory', component: { template: '<div />' } },
+      { path: '/kb', component: { template: '<div />' } },
+      { path: '/path-whitelist', component: { template: '<div />' } },
+      { path: '/maxma-blocker', component: { template: '<div />' } },
+      { path: '/env-vars', component: { template: '<div />' } },
+      { path: '/privacy', component: { template: '<div />' } },
+      { path: '/metrics', component: { template: '<div />' } },
+      { path: '/audit-log', component: { template: '<div />' } },
     ],
   })
 }
@@ -27,15 +40,19 @@ describe('workspace shell', () => {
     await router.isReady()
 
     const wrapper = mount(IconRail, {
-      global: { plugins: [router] },
+      props: { onboardingEnabled: true },
+      global: { plugins: [router, createPinia()] },
     })
 
     const nav = wrapper.get('nav[aria-label="主导航"]')
     expect(nav.find('a[href="/"]').exists()).toBe(true)
     expect(nav.find('a[href="/activity"]').exists()).toBe(true)
-    expect(nav.find('a[href="/appearance"]').exists()).toBe(true)
+    expect(nav.find('a[href="/appearance"]').exists()).toBe(false)
     expect(nav.find('a[href="/help"]').exists()).toBe(true)
     expect(nav.find('a[href="/activity"]').attributes('aria-current')).toBe('page')
+
+    const settingsTrigger = wrapper.get('button[aria-label="设置"]')
+    expect(settingsTrigger.attributes('title')).toBe('设置')
 
     const sessionTrigger = wrapper.get('button[aria-label="会话"]')
     expect(sessionTrigger.attributes('title')).toBe('会话')
@@ -49,27 +66,82 @@ describe('workspace shell', () => {
 
     await sessionTrigger.trigger('click')
     expect(wrapper.emitted('toggle-session-drawer')).toHaveLength(1)
+
+    await settingsTrigger.trigger('click')
+    await nextTick()
+    const settingsPopup = document.body.querySelector('.settings-popup')
+    expect(settingsPopup).toBeTruthy()
+    expect(settingsPopup?.querySelector('a[href="/providers"]')).toBeTruthy()
+    expect(settingsPopup?.querySelector('a[href="/mcp"]')).toBeTruthy()
+    expect(settingsPopup?.querySelector('a[href="/skills"]')).toBeTruthy()
+    expect(settingsPopup?.querySelector('a[href="/soul"]')).toBeTruthy()
+    expect(settingsPopup?.querySelector('a[href="/user"]')).toBeTruthy()
+    expect(settingsPopup?.querySelector('a[href="/memory"]')).toBeTruthy()
+    expect(settingsPopup?.querySelector('a[href="/kb"]')).toBeTruthy()
+    expect(settingsPopup?.querySelector('a[href="/audit-log"]')).toBeTruthy()
+    expect(settingsPopup?.querySelector('button')?.textContent).toContain('重新开始引导')
     wrapper.unmount()
   })
 
-  it('opens the session drawer, focuses close, and closes on escape or scrim', async () => {
+  it('opens the session drawer with dialog semantics, traps focus, and restores focus', async () => {
+    const opener = document.createElement('button')
+    opener.type = 'button'
+    document.body.appendChild(opener)
+    opener.focus()
+
+    const wrapper = mount(SessionDrawer, {
+      props: { open: false, sessions: [] },
+      global: { plugins: [createPinia()] },
+      attachTo: document.body,
+    })
+
+    await wrapper.setProps({ open: true })
+    await wrapper.vm.$nextTick()
+    await nextTick()
+    await new Promise(resolve => setTimeout(resolve, 0))
+    const drawer = wrapper.get('aside[aria-label="会话抽屉"]')
+    expect(drawer.attributes('role')).toBe('dialog')
+    expect(drawer.attributes('aria-modal')).toBe('true')
+    expect(drawer.attributes('aria-labelledby')).toBe('session-drawer-title')
+    expect(document.activeElement).toBe(wrapper.get('.session-drawer__close').element)
+
+    const focusable = wrapper.findAll('aside button')
+    expect(focusable.length).toBeGreaterThanOrEqual(2)
+    const first = focusable[0].element
+    const last = focusable[focusable.length - 1].element
+
+    last.focus()
+    await drawer.trigger('keydown', { key: 'Tab' })
+    expect(document.activeElement).toBe(first)
+
+    first.focus()
+    await drawer.trigger('keydown', { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(last)
+
+    const childInput = document.createElement('input')
+    childInput.className = 'constify-input'
+    drawer.element.appendChild(childInput)
+    childInput.focus()
+    childInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    expect(wrapper.emitted('close')).toBeUndefined()
+    childInput.remove()
+
+    await drawer.trigger('keydown', { key: 'Escape' })
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    await wrapper.setProps({ open: false })
+    expect(document.activeElement).toBe(opener)
+    wrapper.unmount()
+    opener.remove()
+  })
+
+  it('closes from the scrim and keeps the existing CRUD actions', async () => {
     const wrapper = mount(SessionDrawer, {
       props: { open: true, sessions: [] },
       global: { plugins: [createPinia()] },
       attachTo: document.body,
     })
-
-    await wrapper.vm.$nextTick()
-    await nextTick()
-    await new Promise(resolve => setTimeout(resolve, 0))
-    expect(wrapper.get('aside[aria-label="会话抽屉"]')).toBeTruthy()
-    expect(document.activeElement).toBe(wrapper.get('.session-drawer__close').element)
-
     await wrapper.get('.session-drawer__scrim').trigger('click')
     expect(wrapper.emitted('close')).toHaveLength(1)
-
-    await wrapper.get('aside[aria-label="会话抽屉"]').trigger('keydown', { key: 'Escape' })
-    expect(wrapper.emitted('close')).toHaveLength(2)
     wrapper.unmount()
   })
 

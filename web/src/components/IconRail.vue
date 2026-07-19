@@ -27,6 +27,11 @@
     </nav>
 
     <div class="icon-rail__footer">
+      <AppSettingsMenu
+        compact
+        :onboarding-enabled="onboardingEnabled"
+        @restart-onboarding="emit('restart-onboarding')"
+      />
       <button
         type="button"
         class="icon-rail__control icon-rail__session-toggle"
@@ -43,15 +48,22 @@
 
 <script setup lang="ts">
 import Icon from '@/components/Icon.vue'
+import AppSettingsMenu from '@/components/AppSettingsMenu.vue'
+
+withDefaults(defineProps<{
+  onboardingEnabled: boolean
+}>(), {
+  onboardingEnabled: false,
+})
 
 const emit = defineEmits<{
   (event: 'toggle-session-drawer'): void
+  (event: 'restart-onboarding'): void
 }>()
 
 const navItems = [
   { to: '/', label: '对话', icon: 'chat' },
   { to: '/activity', label: '活动', icon: 'activity' },
-  { to: '/appearance', label: '设置', icon: 'settings' },
   { to: '/help', label: '帮助', icon: 'help' },
 ] as const
 </script>

@@ -1,6 +1,10 @@
 <template>
   <div class="app-layout">
-    <IconRail @toggle-session-drawer="openSessionDrawer" />
+    <IconRail
+      :onboarding-enabled="onboardingEnabled"
+      @toggle-session-drawer="openSessionDrawer"
+      @restart-onboarding="restartOnboarding"
+    />
     <SessionDrawer
       :open="sessionDrawerOpen"
       :sessions="sessions"
@@ -47,7 +51,7 @@ import OnboardingView from '@/views/OnboardingView.vue';
 import IconRail from '@/components/IconRail.vue';
 import SessionDrawer from '@/components/SessionDrawer.vue';
 import { useChatStore } from '@/stores/chat';
-import { useOnboardingStore } from '@/stores/onboarding';
+import { onboardingEnabled, useOnboardingStore } from '@/stores/onboarding';
 import { storeToRefs } from 'pinia';
 import { useSessionStore } from '@/stores/session';
 import { defineAsyncComponent, onMounted } from 'vue';
@@ -59,7 +63,7 @@ import { useGlobalShortcut } from '@/composables/useGlobalShortcut'
 import { useHealthPolling } from '@/composables/useHealthPolling'
 import RegionalErrorBoundary from '@/components/ui/RegionalErrorBoundary.vue'
 import DsToast from '@/components/ui/DsToast.vue'
-import { reactive, ref, nextTick } from 'vue'
+import { reactive, ref } from 'vue'
 
 const MediaViewer = defineAsyncComponent(() => import('@/components/MediaViewer.vue'))
 const onboarding = useOnboardingStore()
@@ -75,9 +79,6 @@ function openSessionDrawer() {
 
 function closeSessionDrawer() {
   sessionDrawerOpen.value = false
-  void nextTick(() => {
-    document.querySelector<HTMLButtonElement>('button[aria-label="会话"]')?.focus()
-  })
 }
 
 const router = useRouter()
@@ -97,6 +98,10 @@ async function handleSwitchSession(id: string) {
 function openProviderSetup() {
   onboarding.complete()
   router.push('/providers')
+}
+
+function restartOnboarding() {
+  onboarding.restart()
 }
 
 function handleConstify(id: string, name: string) {

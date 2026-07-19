@@ -1,7 +1,15 @@
 <template>
   <div class="settings-area" ref="settingsTriggerRef">
-    <button class="nav-item settings-btn" :class="{ active: showSettingsMenu }" @click="toggleSettingsMenu">
-      <Icon name="settings" :size="18" /> <span class="nav-label"><span class="nav-zh">设置</span><span class="nav-en">SETTINGS</span></span>
+    <button
+      class="nav-item settings-btn"
+      :class="{ active: showSettingsMenu, compact: props.compact }"
+      style="min-width: 44px; min-height: 44px"
+      aria-label="设置"
+      title="设置"
+      @click="toggleSettingsMenu"
+    >
+      <Icon name="settings" :size="18" />
+      <span v-if="!props.compact" class="nav-label"><span class="nav-zh">设置</span><span class="nav-en">SETTINGS</span></span>
     </button>
   </div>
   <Teleport to="body">
@@ -107,7 +115,7 @@
             </div>
           </router-link>
         </div>
-        <button v-if="onboardingEnabled" class="popup-item popup-action" @click="restartOnboarding">重新开始引导</button>
+        <button v-if="props.onboardingEnabled" class="popup-item popup-action" @click="restartOnboarding">重新开始引导</button>
         <div class="popup-divider"></div>
         <button class="popup-item popup-action" :class="{ exporting: exportingErrorLog }" :disabled="exportingErrorLog" @click="handleExportErrorLog">
           {{ exportingErrorLog ? '导出中...' : '导出错误日志' }}
@@ -144,10 +152,14 @@ import { onMounted, onUnmounted, nextTick, ref } from 'vue';
 import { useSessionStore } from '@/stores/session';
 import { useChatStore } from '@/stores/chat';
 
-defineProps<{
+const props = withDefaults(defineProps<{
   /** 是否启用「重新开始引导」按钮（来自 stores/onboarding.onboardingEnabled） */
   onboardingEnabled: boolean
-}>()
+  /** 紧凑模式仅保留图标，适用于图标导航栏 */
+  compact?: boolean
+}>(), {
+  compact: false,
+})
 
 const emit = defineEmits<{
   'restart-onboarding': []
@@ -313,6 +325,8 @@ onUnmounted(() => {
 
 .settings-btn {
   width: 100%;
+  min-width: 44px;
+  min-height: 44px;
   border: none;
   cursor: pointer;
   font-family: inherit;
@@ -325,6 +339,15 @@ onUnmounted(() => {
   border-radius: var(--radius);
   color: var(--text-secondary);
   transition: background 0.15s, color 0.15s;
+}
+
+.settings-btn.compact {
+  width: 48px;
+  min-width: 44px;
+  height: 48px;
+  min-height: 44px;
+  padding: 0;
+  justify-content: center;
 }
 
 .settings-btn.active {

@@ -10,12 +10,15 @@
       <aside
         class="session-drawer"
         aria-label="会话抽屉"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="session-drawer-title"
         tabindex="-1"
       >
         <header class="session-drawer__header">
           <div>
             <p class="session-drawer__eyebrow">Sessions</p>
-            <h2>会话</h2>
+            <h2 id="session-drawer-title">会话</h2>
           </div>
           <button
             ref="closeButton"
@@ -75,6 +78,7 @@ const emit = defineEmits<{
 }>()
 
 const closeButton = ref<HTMLButtonElement | null>(null)
+const previousActiveElement = ref<HTMLElement | null>(null)
 
 function focusCloseButton() {
   if (closeButton.value) {
@@ -85,7 +89,14 @@ function focusCloseButton() {
 }
 
 function close() {
+  restoreFocus()
   emit('close')
+}
+
+function restoreFocus() {
+  const target = previousActiveElement.value
+  previousActiveElement.value = null
+  if (target?.isConnected) target.focus()
 }
 
 function onConstify(id: string, name: string) {
@@ -93,17 +104,55 @@ function onConstify(id: string, name: string) {
 }
 
 function onDocumentKeydown(event: KeyboardEvent) {
-  if (props.open && event.key === 'Escape') close()
+  if (!props.open) return
+
+  if (event.key === 'Escape') {
+    const target = event.target
+    if (target instanceof Element && target.closest('input, .context-menu, .constify-card, [role="menu"]')) {
+      return
+    }
+    close()
+    return
+  }
+
+  if (event.key !== 'Tab' || !closeButton.value) return
+  const drawer = closeButton.value.closest('.session-drawer')
+  if (!drawer) return
+  const focusable = Array.from(drawer.querySelectorAll<HTMLElement>(
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  ))
+  if (focusable.length === 0) return
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first.focus()
+  }
 }
 
 watch(() => props.open, (isOpen) => {
-  if (isOpen) focusCloseButton()
+  if (isOpen) {
+    previousActiveElement.value = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+    focusCloseButton()
+  } else {
+    restoreFocus()
+  }
 })
 
 onMounted(() => {
   document.addEventListener('keydown', onDocumentKeydown)
-  if (props.open) focusCloseButton()
-  if (props.open) window.setTimeout(focusCloseButton, 0)
+  if (props.open) {
+    previousActiveElement.value = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+    focusCloseButton()
+    window.setTimeout(focusCloseButton, 0)
+  }
 })
 
 onUnmounted(() => document.removeEventListener('keydown', onDocumentKeydown))
