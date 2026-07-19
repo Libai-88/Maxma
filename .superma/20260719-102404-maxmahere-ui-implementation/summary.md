@@ -7,7 +7,7 @@
 ## State machine
 
 ```
-state: running
+state: done
 round: 1
 round_state: implementation_phase
 consecutive_empty_rounds: 0
@@ -43,7 +43,14 @@ Theme: 两队各自实现自己的 UI 设计方案，比拼完成度和视觉效
 
 ## User evaluation
 
-| Persona | Red | Blue |
-|---------|-----|------|
-| Visual Review | — | — |
-| **Final** | — | — |
+| Team | Enthusiast | Power User | Novice | **Average** |
+| ---- |:----------:|:----------:|:------:|:-----------:|
+| 🔴 Red  | 8.5 | 8.0 | 7.0 | **7.83** |
+| 🔵 Blue | 8.0 | 7.5 | 8.3 | **7.93** 🏆 |
+
+---
+
+## Final
+
+Champion: **Blue Team** 🏆 with "Warm Precision" (7.93 vs 7.83)
+See `result.md` for full breakdown.
