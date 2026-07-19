@@ -82,6 +82,10 @@
               <span>自动执行</span>
               <span class="session-action-state">{{ autoApprove ? '已开启' : '需确认' }}</span>
             </button>
+            <div v-if="taskTrackerData" class="session-task-status" role="status" aria-label="任务状态">
+              <div class="session-task-heading">任务状态</div>
+              <TaskTrackerBar :data="taskTrackerData as unknown as TaskTrackerData" />
+            </div>
             <SessionPermissionModeControl :session-id="sessionId" />
           </div>
         </div>
@@ -148,6 +152,7 @@ import ChatWindow from '@/components/ChatWindow.vue'
 import SessionPermissionModeControl from '@/components/SessionPermissionModeControl.vue'
 import WorkflowCard from '@/components/WorkflowCard.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
+import TaskTrackerBar, { type TaskTrackerData } from '@/components/TaskTrackerBar.vue'
 import WorkbenchPanel from '@/components/workbench/WorkbenchPanel.vue'
 import ReasoningTimeline from '@/components/workbench/ReasoningTimeline.vue'
 import CanvasContainer from '@/components/workbench/CanvasContainer.vue'
@@ -174,7 +179,7 @@ const { sessionId, sessions } = storeToRefs(sessionStore)
 const { health } = storeToRefs(useHealthStore())
 const {
   connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId,
-  send, cancel, sendUserResponse, sendArtifactAction, sendPlanResponse, removeTurns,
+  taskTrackerData, send, cancel, sendUserResponse, sendArtifactAction, sendPlanResponse, removeTurns,
   privateMode, setPrivateMode, autoApprove, setAutoApprove
 } = useChat(sessionId)
 
@@ -642,6 +647,26 @@ function handleQuickStart(message: string) {
 .session-action-state {
   color: var(--text-secondary);
   font-size: 12px;
+}
+
+.session-task-status {
+  display: grid;
+  gap: 5px;
+  margin: 4px 0 2px;
+  padding: 7px 8px 2px;
+  border-top: 1px solid var(--border);
+}
+
+.session-task-heading {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.session-task-status :deep(.tracker-bar) {
+  width: 100%;
+  margin-left: 0;
+  justify-content: space-between;
 }
 
 .session-actions-menu :deep(.permission-mode-control) {

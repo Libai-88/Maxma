@@ -45,10 +45,15 @@ describe('workspace shell', () => {
 
     expect(headerBlock).not.toContain('<ModelSelector')
     expect(headerBlock).not.toContain('<ContextUsageBadge')
-    expect(headerBlock).not.toContain('<TaskTrackerBar')
     expect(headerBlock).toContain('<StatusBadge')
     expect(headerBlock).toContain('aria-label="更多会话操作"')
     expect(headerBlock).toContain('aria-label="工作台"')
+    expect(headerBlock).toContain('class="session-task-status"')
+    expect(headerBlock).toContain('v-if="taskTrackerData"')
+    const menuStart = headerBlock.indexOf('class="session-actions-menu"')
+    const taskStatusIndex = headerBlock.indexOf('<TaskTrackerBar')
+    expect(menuStart).toBeGreaterThanOrEqual(0)
+    expect(taskStatusIndex).toBeGreaterThan(menuStart)
   })
 
   it('shows a short current session title while keeping the full context in title', () => {
@@ -72,10 +77,10 @@ describe('workspace shell', () => {
     }]
 
     const wrapper = mount(ChatHeader, { global: { plugins: [pinia] } })
-    const context = wrapper.get('.header-context[title]')
-    expect(context.attributes('title')).toContain(longScene)
+    const header = wrapper.get('.header-left')
+    expect(wrapper.find('.header-details').exists()).toBe(false)
+    expect(header.attributes('title')).toContain(longScene)
     expect(wrapper.get('.header-session').text()).toContain('一个很长很长的会话标题')
-    expect(context.get('.header-details').text().length).toBeLessThan(context.attributes('title')!.length)
     wrapper.unmount()
   })
 

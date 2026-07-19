@@ -1,15 +1,11 @@
 <template>
   <div class="chat-header">
-    <div class="header-left" :title="contextDetails">
-      <span class="header-avatar">{{ store.profile.avatar }}</span>
+    <div class="header-left" :title="contextDetails" :aria-label="contextDetails">
+      <span class="header-avatar" aria-hidden="true">{{ store.profile.avatar }}</span>
       <div class="header-context">
         <span class="header-name">{{ store.profile.name }}</span>
         <span class="header-session">{{ sessionTitle }}</span>
       </div>
-      <span class="header-divider">·</span>
-      <span class="header-context" :title="contextDetails">
-        <span class="header-details">{{ contextSummary }}</span>
-      </span>
     </div>
     <div class="header-right">
       <slot name="extra" />
@@ -25,15 +21,6 @@ const store = usePersonaStore()
 const sessionStore = useSessionStore()
 const currentSession = computed(() => sessionStore.sessions.find(session => session.session_id === sessionStore.sessionId))
 const sessionTitle = computed(() => currentSession.value?.const_name || '当前会话')
-const sceneShort = computed(() => {
-  const s = store.profile.scene
-  return s.length > 12 ? s.slice(0, 12) + '…' : s
-})
-const descriptionShort = computed(() => {
-  const description = store.profile.description
-  return description.length > 16 ? description.slice(0, 16) + '…' : description
-})
-const contextSummary = computed(() => `${descriptionShort.value} · ${sceneShort.value}`)
 const contextDetails = computed(() => `${store.profile.name} · ${sessionTitle.value} · ${store.profile.description} · ${store.profile.scene}`)
 </script>
 
@@ -45,8 +32,6 @@ const contextDetails = computed(() => `${store.profile.name} · ${sessionTitle.v
 .header-name, .header-session { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .header-name { font-weight: 600; color: var(--text-primary); }
 .header-session { color: var(--text-secondary); font-size: 12px; }
-.header-divider { color: var(--text-tertiary); }
-.header-details { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--text-secondary); }
 .header-right { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 0; flex: 0 1 auto; flex-wrap: wrap; }
 
 @media (max-width: 720px) {
@@ -57,10 +42,6 @@ const contextDetails = computed(() => `${store.profile.name} · ${sessionTitle.v
 
   .header-left {
     flex: 0 1 auto;
-  }
-
-  .header-details {
-    display: none;
   }
 
   .header-right {
