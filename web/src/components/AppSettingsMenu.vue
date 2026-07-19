@@ -287,14 +287,36 @@ function updatePopupPosition() {
   const el = settingsPopupRef.value
   const trigger = settingsTriggerRef.value
   if (!el || !trigger) return
-  // CSP-safe CSSOM: position settings popup via style.setProperty (was :style binding)
+
   const rect = trigger.getBoundingClientRect()
-  el.style.setProperty('top', `${rect.top}px`)
-  el.style.setProperty('left', `${rect.right + 8}px`)
-  // 动态计算可用高度：视口高度 - popup 顶部位置 - 底部留白 16px
-  // 避免固定 max-height 导致 popup 超出视口底部被裁切
-  const available = window.innerHeight - rect.top - 16
-  el.style.setProperty('max-height', `${Math.max(160, available)}px`)
+  const viewportPadding = 16
+  const gap = 8
+  const availableAbove = Math.max(1, rect.top - viewportPadding)
+  const availableBelow = Math.max(1, window.innerHeight - rect.bottom - viewportPadding)
+  const opensAbove = availableAbove > availableBelow
+
+  // Keep the menu inside the viewport even when the trigger is in the bottom rail.
+  if (opensAbove) {
+    el.style.removeProperty('top')
+    el.style.setProperty('bottom', `${Math.max(viewportPadding, window.innerHeight - rect.top + gap)}px`)
+  } else {
+    el.style.removeProperty('bottom')
+    el.style.setProperty('top', `${rect.bottom + gap}px`)
+  }
+
+  const popupWidth = el.getBoundingClientRect().width || 170
+  const left = Math.min(
+    Math.max(viewportPadding, rect.right + gap),
+    Math.max(viewportPadding, window.innerWidth - popupWidth - viewportPadding),
+  )
+  el.style.setProperty('left', `${left}px`)
+  const available = opensAbove ? availableAbove : availableBelow
+  el.style.setProperty('max-height', `${available}px`)
+  el.style.setProperty('overflow-y', 'auto')
+}
+
+function onViewportChange() {
+  if (showSettingsMenu.value) updatePopupPosition()
 }
 
 function onDocumentClick(e: MouseEvent) {
@@ -310,10 +332,14 @@ function onDocumentClick(e: MouseEvent) {
 
 onMounted(() => {
   document.addEventListener('click', onDocumentClick)
+  window.addEventListener('resize', onViewportChange)
+  window.addEventListener('scroll', onViewportChange, true)
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', onDocumentClick)
+  window.removeEventListener('resize', onViewportChange)
+  window.removeEventListener('scroll', onViewportChange, true)
 })
 </script>
 
