@@ -33,6 +33,7 @@ afterEach(() => {
   mountedWrapper?.unmount()
   mountedWrapper = null
   document.body.querySelectorAll('.settings-popup').forEach(node => node.remove())
+  vi.restoreAllMocks()
   setViewportHeight(defaultInnerHeight)
 })
 
@@ -52,21 +53,25 @@ describe('AppSettingsMenu responsive popup', () => {
       y: 560,
       toJSON: () => ({}),
     } as DOMRect
-    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(triggerRect)
+    const triggerSpy = vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(triggerRect)
 
     await wrapper.get('button[aria-label="设置"]').trigger('click')
     const popup = document.body.querySelector<HTMLElement>('.settings-popup')
     expect(popup).toBeTruthy()
 
-    const top = Number.parseFloat(popup?.style.top ?? '')
     const bottom = Number.parseFloat(popup?.style.bottom ?? '')
-    expect(Number.isNaN(top) || top >= triggerRect.bottom).toBe(true)
+    expect(popup?.style.top).toBe('')
     expect(bottom).toBeGreaterThan(window.innerHeight - triggerRect.top)
 
     const maxHeight = Number.parseFloat(popup?.style.maxHeight ?? '')
     expect(maxHeight).toBeGreaterThan(0)
     expect(maxHeight).toBeLessThanOrEqual(triggerRect.top - 16)
     expect(getComputedStyle(popup as HTMLElement).overflowY).toBe('auto')
+
+    triggerSpy.mockReturnValue({ ...triggerRect, top: 100, bottom: 144 })
+    window.dispatchEvent(new Event('resize'))
+    expect(popup?.style.bottom).toBe('')
+    expect(popup?.style.top).toBe('152px')
 
   })
 })

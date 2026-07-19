@@ -286,33 +286,54 @@ function restartOnboarding() {
 function updatePopupPosition() {
   const el = settingsPopupRef.value
   const trigger = settingsTriggerRef.value
-  if (!el || !trigger) return
+  if (!showSettingsMenu.value || !el || !trigger) return
 
-  const rect = trigger.getBoundingClientRect()
-  const viewportPadding = 16
+  const viewportWidth = window.innerWidth
+  const viewportHeight = window.innerHeight
+  const viewportPadding = 12
   const gap = 8
-  const availableAbove = Math.max(1, rect.top - viewportPadding)
-  const availableBelow = Math.max(1, window.innerHeight - rect.bottom - viewportPadding)
-  const opensAbove = availableAbove > availableBelow
+  const rect = trigger.getBoundingClientRect()
 
-  // Keep the menu inside the viewport even when the trigger is in the bottom rail.
-  if (opensAbove) {
-    el.style.removeProperty('top')
-    el.style.setProperty('bottom', `${Math.max(viewportPadding, window.innerHeight - rect.top + gap)}px`)
-  } else {
-    el.style.removeProperty('bottom')
-    el.style.setProperty('top', `${rect.bottom + gap}px`)
-  }
+  // Measure the unconstrained menu so the side with more room is selected
+  // when the full list cannot fit either above or below the trigger.
+  el.style.removeProperty('max-height')
+  const contentHeight = el.scrollHeight || el.getBoundingClientRect().height
+  const availableAbove = Math.max(0, rect.top - gap - viewportPadding)
+  const availableBelow = Math.max(0, viewportHeight - rect.bottom - gap - viewportPadding)
+  const fitsAbove = contentHeight > 0 && contentHeight <= availableAbove
+  const fitsBelow = contentHeight > 0 && contentHeight <= availableBelow
+  const opensAbove = fitsAbove
+    ? !fitsBelow || availableAbove >= availableBelow
+    : availableAbove >= availableBelow
 
-  const popupWidth = el.getBoundingClientRect().width || 170
+  const available = Math.max(1, Math.floor(opensAbove ? availableAbove : availableBelow))
+  const popupWidth = el.getBoundingClientRect().width || el.offsetWidth
+  const fallbackWidth = Math.min(320, Math.max(1, viewportWidth - viewportPadding * 2))
+  const measuredWidth = popupWidth || fallbackWidth
   const left = Math.min(
     Math.max(viewportPadding, rect.right + gap),
-    Math.max(viewportPadding, window.innerWidth - popupWidth - viewportPadding),
+    Math.max(viewportPadding, viewportWidth - measuredWidth - viewportPadding),
   )
-  el.style.setProperty('left', `${left}px`)
-  const available = opensAbove ? availableAbove : availableBelow
+
+  el.style.removeProperty('top')
+  el.style.removeProperty('bottom')
+  el.style.setProperty('left', `${Math.floor(left)}px`)
   el.style.setProperty('max-height', `${available}px`)
   el.style.setProperty('overflow-y', 'auto')
+
+  if (opensAbove) {
+    const popupBottom = Math.min(
+      viewportHeight - viewportPadding,
+      Math.max(viewportPadding, rect.top - gap),
+    )
+    el.style.setProperty('bottom', `${Math.floor(viewportHeight - popupBottom)}px`)
+  } else {
+    const popupTop = Math.min(
+      viewportHeight - viewportPadding,
+      Math.max(viewportPadding, rect.bottom + gap),
+    )
+    el.style.setProperty('top', `${Math.floor(popupTop)}px`)
+  }
 }
 
 function onViewportChange() {
@@ -411,10 +432,12 @@ onUnmounted(() => {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
-  min-width: 170px;
+  min-width: min(170px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  box-sizing: border-box;
   padding: 6px;
-  /* maxHeight 由 JS 动态设置（基于触发按钮在视口中的位置），避免固定值裁切 */
   overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
 }
 
@@ -482,7 +505,8 @@ onUnmounted(() => {
 	  color: var(--text-tertiary);
 	  line-height: 1.35;
 	  font-weight: 400;
-	  white-space: nowrap;
+	  white-space: normal;
+	  overflow-wrap: anywhere;
 	}
 	
 	.popup-divider {
