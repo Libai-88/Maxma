@@ -1,5 +1,11 @@
 <template>
-  <span class="status-badge hover-trigger" :class="connected ? 'connected' : 'disconnected'">
+  <span
+    class="status-badge hover-trigger"
+    :class="connected ? 'connected' : 'disconnected'"
+    role="status"
+    aria-live="polite"
+    :aria-label="connected ? '后端已连接' : '后端未连接'"
+  >
     <span class="dot"></span>
     {{ connected ? '已连接' : '未连接' }}
     <div v-if="health" class="hover-card card-health">

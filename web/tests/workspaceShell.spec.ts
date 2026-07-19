@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { createPinia } from 'pinia'
 import { nextTick } from 'vue'
 
 import IconRail from '@/components/IconRail.vue'
+import ChatHeader from '@/components/ChatHeader.vue'
 import SessionDrawer from '@/components/SessionDrawer.vue'
 import type { SessionInfo } from '@/types'
+import { usePersonaStore } from '@/stores/persona'
+import { useSessionStore } from '@/stores/session'
 
 function createTestRouter() {
   return createRouter({
@@ -34,6 +39,46 @@ function createTestRouter() {
 }
 
 describe('workspace shell', () => {
+  it('header ownership keeps only active context controls and truncates long titles', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/views/ChatView.vue'), 'utf8')
+    const headerBlock = source.match(/<ChatHeader>[\s\S]*?<\/ChatHeader>/)?.[0] ?? ''
+
+    expect(headerBlock).not.toContain('<ModelSelector')
+    expect(headerBlock).not.toContain('<ContextUsageBadge')
+    expect(headerBlock).not.toContain('<TaskTrackerBar')
+    expect(headerBlock).toContain('<StatusBadge')
+    expect(headerBlock).toContain('aria-label="更多会话操作"')
+    expect(headerBlock).toContain('aria-label="工作台"')
+  })
+
+  it('shows a short current session title while keeping the full context in title', () => {
+    const pinia = createPinia()
+    const persona = usePersonaStore(pinia)
+    const sessions = useSessionStore(pinia)
+    const longScene = '一个非常长的场景描述，用于验证顶部标题不会撑破布局'
+    persona.profile = {
+      ...persona.profile,
+      description: '一段非常长的人设描述，用于验证标题截断',
+      scene: longScene,
+    }
+    sessions.sessionId = 'session-1'
+    sessions.sessions = [{
+      session_id: 'session-1',
+      message_count: 2,
+      created_at: 1,
+      last_active: 2,
+      is_const: true,
+      const_name: '一个很长很长的会话标题用于验证截断行为',
+    }]
+
+    const wrapper = mount(ChatHeader, { global: { plugins: [pinia] } })
+    const context = wrapper.get('.header-context[title]')
+    expect(context.attributes('title')).toContain(longScene)
+    expect(wrapper.get('.header-session').text()).toContain('一个很长很长的会话标题')
+    expect(context.get('.header-details').text().length).toBeLessThan(context.attributes('title')!.length)
+    wrapper.unmount()
+  })
+
   it('icon rail exposes real navigation and a session drawer trigger', async () => {
     const router = createTestRouter()
     await router.push('/activity')

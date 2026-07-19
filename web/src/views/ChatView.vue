@@ -48,65 +48,43 @@
     <template v-else>
     <ChatHeader>
       <template #extra>
-        <ModelSelector />
         <StatusBadge :connected="connected" :health="health" />
-        <span class="private-trigger hover-trigger">
-          <button
-            class="private-toggle"
-            :class="{ active: privateMode }"
-            :aria-pressed="privateMode"
-            @click="setPrivateMode(!privateMode)"
-          >
-            <span class="private-indicator"></span>
-            {{ privateMode ? '私密' : '记忆' }}
-          </button>
-          <div class="hover-card card-private">
-            <div class="card-row">
-              <span class="card-label">私密模式</span>
-              <span class="card-value" :class="privateMode ? 'status-on' : 'status-off'">
-                {{ privateMode ? '已开启' : '已关闭' }}
-              </span>
-            </div>
-            <div class="card-divider"></div>
-            <div class="private-desc">
-              开启后，当前对话不会被保存到长期记忆和本地存储，关闭后恢复正常保存。
-            </div>
-          </div>
-        </span>
-        <span class="auto-approve-trigger hover-trigger">
-          <button
-            class="auto-approve-toggle"
-            :class="{ active: autoApprove }"
-            :aria-pressed="autoApprove"
-            @click="setAutoApprove(!autoApprove)"
-          >
-            <span class="auto-approve-indicator"></span>
-            {{ autoApprove ? '自动' : '检查' }}
-          </button>
-          <div class="hover-card card-auto-approve">
-            <div class="card-row">
-              <span class="card-label">自动执行</span>
-              <span class="card-value" :class="autoApprove ? 'status-warn' : 'status-off'">
-                {{ autoApprove ? '已开启' : '已关闭' }}
-              </span>
-            </div>
-            <div class="card-divider"></div>
-            <div class="auto-approve-desc">
-              {{ autoApprove ? 'Python 代码将直接执行，无需用户确认。点击切换为手动审核模式。' : 'Python 代码执行前需要您确认。点击切换为自动执行模式。' }}
-            </div>
-          </div>
-        </span>
-        <SessionPermissionModeControl :session-id="sessionId" />
-        <ContextUsageBadge :usage="contextUsage" :selected-model="selectedModelName" />
-        <TaskTrackerBar :data="taskTrackerData as unknown as TaskTrackerData | null" />
         <button
           class="workbench-toggle-btn"
           :class="{ active: workbench.isOpen }"
+          type="button"
+          aria-label="工作台"
+          :aria-expanded="workbench.isOpen"
           @click="workbench.toggle()"
           title="工作台"
         >
           &#9776;
         </button>
+        <div class="session-more-menu">
+          <button
+            ref="moreMenuTrigger"
+            class="session-more-trigger"
+            type="button"
+            aria-label="更多会话操作"
+            aria-controls="session-actions-menu"
+            :aria-expanded="moreMenuOpen"
+            @click="moreMenuOpen = !moreMenuOpen"
+          >
+            ···
+          </button>
+          <div v-if="moreMenuOpen" id="session-actions-menu" class="session-actions-menu" role="menu" aria-label="更多会话操作">
+            <div class="session-actions-heading">会话设置</div>
+            <button class="session-action" type="button" role="menuitem" :aria-pressed="privateMode" @click="togglePrivateMode">
+              <span>私密模式</span>
+              <span class="session-action-state">{{ privateMode ? '已开启' : '已关闭' }}</span>
+            </button>
+            <button class="session-action" type="button" role="menuitem" :aria-pressed="autoApprove" @click="toggleAutoApprove">
+              <span>自动执行</span>
+              <span class="session-action-state">{{ autoApprove ? '已开启' : '需确认' }}</span>
+            </button>
+            <SessionPermissionModeControl :session-id="sessionId" />
+          </div>
+        </div>
       </template>
     </ChatHeader>
 
@@ -167,17 +145,14 @@ defineOptions({ name: 'ChatView' })
 import { api } from '@/api'
 import ChatInput from '@/components/ChatInput.vue'
 import ChatWindow from '@/components/ChatWindow.vue'
-import ContextUsageBadge from '@/components/ContextUsageBadge.vue'
 import SessionPermissionModeControl from '@/components/SessionPermissionModeControl.vue'
 import WorkflowCard from '@/components/WorkflowCard.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
-import TaskTrackerBar, { type TaskTrackerData } from '@/components/TaskTrackerBar.vue'
 import WorkbenchPanel from '@/components/workbench/WorkbenchPanel.vue'
 import ReasoningTimeline from '@/components/workbench/ReasoningTimeline.vue'
 import CanvasContainer from '@/components/workbench/CanvasContainer.vue'
 import WelcomeScreen from '@/components/WelcomeScreen.vue'
 import ChatHeader from '@/components/ChatHeader.vue'
-import ModelSelector from '@/components/ModelSelector.vue'
 import warningIconRaw from '@/assets/icons/status/warning.svg?raw'
 import gearIconRaw from '@/assets/icons/status/gear.svg?raw'
 import { useChat } from '@/composables/useChat'
@@ -191,7 +166,7 @@ import { usePersonaStore } from '@/stores/persona'
 import type { ParsedRef, SelectionRef } from '@/utils/references'
 import type { ThinkPathId } from '@/utils/thinkPath'
 import { storeToRefs } from 'pinia'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useGlobalShortcut } from '@/composables/useGlobalShortcut'
 
 const sessionStore = useSessionStore()
@@ -199,11 +174,13 @@ const { sessionId, sessions } = storeToRefs(sessionStore)
 const { health } = storeToRefs(useHealthStore())
 const {
   connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId,
-  contextUsage, taskTrackerData, send, cancel, sendUserResponse, sendArtifactAction, sendPlanResponse, removeTurns,
+  send, cancel, sendUserResponse, sendArtifactAction, sendPlanResponse, removeTurns,
   privateMode, setPrivateMode, autoApprove, setAutoApprove
 } = useChat(sessionId)
 
 const workbench = useWorkbenchStore()
+const moreMenuOpen = ref(false)
+const moreMenuTrigger = ref<HTMLButtonElement | null>(null)
 
 const hasMessages = computed(() => turns.value.length > 0)
 
@@ -267,6 +244,44 @@ onMounted(async () => {
   // 通过全局 store 加载 provider 列表（含重试），消除 ChatView/ChatInput 状态不一致
   await loadProvidersWithStatus()
 })
+
+function closeMoreMenu() {
+  if (!moreMenuOpen.value) return
+  moreMenuOpen.value = false
+  moreMenuTrigger.value?.focus()
+}
+
+function handleMoreMenuPointerdown(event: PointerEvent) {
+  const target = event.target
+  if (target instanceof Element && !target.closest('.session-more-menu')) closeMoreMenu()
+}
+
+function handleMoreMenuKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && moreMenuOpen.value) {
+    event.stopPropagation()
+    closeMoreMenu()
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('pointerdown', handleMoreMenuPointerdown)
+  document.addEventListener('keydown', handleMoreMenuKeydown)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', handleMoreMenuPointerdown)
+  document.removeEventListener('keydown', handleMoreMenuKeydown)
+})
+
+function togglePrivateMode() {
+  setPrivateMode(!privateMode.value)
+  closeMoreMenu()
+}
+
+function toggleAutoApprove() {
+  setAutoApprove(!autoApprove.value)
+  closeMoreMenu()
+}
 
 // Ctrl+K 切换私密模式
 useGlobalShortcut({ key: 'k', mod: true }, () => { setPrivateMode(!privateMode.value) })
@@ -362,145 +377,9 @@ function handleQuickStart(message: string) {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
-}
-.private-toggle,
-	.auto-approve-toggle {
-	  display: inline-flex;
-	  align-items: center;
-	  justify-content: center;
-	  gap: 6px;
-	  min-width: 68px;
-	  height: 28px;
-	  padding: 4px 14px;
-	  border: 1px solid var(--border);
-	  border-radius: 6px;
-	  background: transparent;
-	  color: var(--text-secondary);
-	  font-size: 0.85em;
-	  cursor: pointer;
-	  transition: all 0.15s;
-	  user-select: none;
-	}
-.private-toggle:hover {
-  border-color: var(--text-secondary);
-}
-.private-toggle.active {
-  border-color: var(--status-warn);
-  background: transparent;
-  background: transparent;
-  background: color-mix(in srgb, var(--status-warn) 10%, transparent);
-  color: var(--status-warn);
-}
-.private-toggle:not(.active) .private-indicator {
-  background: var(--accent);
-}
-.private-indicator {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: currentColor;
-}
-.private-trigger {
-  position: relative;
-}
-.hover-card {
-  visibility: hidden;
-  opacity: 0;
-  transform: translateY(-4px);
-  transition: visibility 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
-  pointer-events: none;
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  z-index: 100;
-  min-width: 240px;
-  padding: 8px 12px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: var(--shadow-lg);
-  font-size: 0.8em;
-  line-height: 1.6;
-}
-.private-trigger:hover .hover-card {
-  visibility: visible;
-  opacity: 1;
-  transform: translateY(0);
-}
-.auto-approve-toggle:hover {
-  border-color: var(--text-secondary);
-}
-/* 自动模式（autoApprove = true） */
-.auto-approve-toggle.active {
-  border-color: var(--status-warn);
-  background: transparent;
-  background: transparent;
-  background: color-mix(in srgb, var(--status-warn) 10%, transparent);
-  color: var(--status-warn);
-}
-/* 审核模式（autoApprove = false）指示器 */
-.auto-approve-toggle:not(.active) .auto-approve-indicator {
-  background: var(--accent);
-}
-.auto-approve-indicator {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: currentColor;
-}
-.auto-approve-trigger {
-  position: relative;
-}
-.auto-approve-trigger:hover .hover-card {
-  visibility: visible;
-  opacity: 1;
-  transform: translateY(0);
-}
-.private-desc {
-  font-size: 0.8em;
-  color: var(--text-secondary);
-  line-height: 1.6;
-  white-space: normal;
-  max-width: 240px;
-}
-.status-warn {
-  color: var(--status-warn);
-}
-.status-on {
-  color: var(--status-warn);
-}
-.status-off {
-  color: var(--text-secondary);
-}
-.card-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: center;
-}
-.card-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-secondary);
-}
-.card-value {
-  font-variant-numeric: tabular-nums;
-  color: var(--text-primary);
-  font-weight: 600;
-}
-.card-divider {
-  height: 1px;
-  background: var(--border);
-  margin: 4px 0;
-}
-.auto-approve-desc {
-  font-size: 0.8em;
-  color: var(--text-secondary);
-  line-height: 1.6;
-  white-space: normal;
-  max-width: 240px;
+  overflow: hidden;
 }
 .sub-agent-readonly-bar {
   display: flex;
@@ -651,6 +530,7 @@ function handleQuickStart(message: string) {
 .chat-workbench-layout {
   display: flex;
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
 }
@@ -658,11 +538,18 @@ function handleQuickStart(message: string) {
 .chat-main-column {
   flex: 1;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
 .workbench-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
   border: none;
   background: transparent;
   font-size: 16px;
@@ -681,11 +568,117 @@ function handleQuickStart(message: string) {
   color: var(--accent);
 }
 
+.session-more-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.session-more-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.session-more-trigger:hover,
+.session-more-trigger[aria-expanded='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--bg-secondary);
+}
+
+.session-actions-menu {
+  position: absolute;
+  z-index: 220;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  gap: 4px;
+  width: min(300px, calc(100vw - 24px));
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-lg);
+}
+
+.session-actions-heading {
+  padding: 4px 8px 6px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.session-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.session-action:hover {
+  background: var(--bg-secondary);
+}
+
+.session-action-state {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.session-actions-menu :deep(.permission-mode-control) {
+  display: block;
+  margin-top: 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.session-actions-menu :deep(.permission-trigger) {
+  width: 100%;
+  justify-content: space-between;
+  border: 0;
+  background: transparent;
+}
+
 .workbench-placeholder {
   color: var(--text-secondary, #999);
   text-align: center;
   padding: 40px 16px;
   font-size: 13px;
+}
+
+@media (max-width: 720px) {
+  .chat-header :deep(.header-right) {
+    flex-wrap: nowrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .chat-header :deep(.header-right) {
+    gap: 4px;
+  }
+
+  .session-actions-menu {
+    right: -4px;
+  }
 }
 
 </style>
