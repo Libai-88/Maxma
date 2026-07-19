@@ -3,7 +3,7 @@
     <div v-if="entries.length === 0" class="timeline-empty">
       <span class="empty-icon">&#128161;</span>
       <p>暂无推理记录</p>
-      <p class="empty-hint">与 Agent 对话后，这里会显示思考链路和工具调用时间线</p>
+      <p class="empty-hint">发送消息后显示推理与工具活动</p>
     </div>
     <div v-else class="timeline-list">
       <div
@@ -57,12 +57,15 @@ function formatElapsed(ms: number): string {
 
 <style scoped>
 .reasoning-timeline {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 100%;
 }
 
 .timeline-empty {
   text-align: center;
-  padding: 60px 16px;
+  padding: 28px 12px;
   color: var(--text-secondary, #999);
 }
 
@@ -82,6 +85,7 @@ function formatElapsed(ms: number): string {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
 .timeline-item {
@@ -179,6 +183,7 @@ function formatElapsed(ms: number): string {
   font-size: 12px;
   color: var(--text-secondary, #666);
   line-height: 1.4;
+  overflow-wrap: anywhere;
   word-break: break-word;
   display: -webkit-box;
   -webkit-line-clamp: 3;

@@ -533,6 +533,7 @@ function handleQuickStart(message: string) {
 }
 
 .chat-workbench-layout {
+  position: relative;
   display: flex;
   flex: 1;
   min-width: 0;
@@ -542,6 +543,7 @@ function handleQuickStart(message: string) {
 
 .chat-main-column {
   flex: 1;
+  width: 100%;
   min-width: 0;
   min-height: 0;
   overflow: hidden;

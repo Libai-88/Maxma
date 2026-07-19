@@ -3,7 +3,7 @@
     <div v-if="cards.length === 0" class="canvas-empty">
       <span class="empty-icon">&#128204;</span>
       <p>画布为空</p>
-      <p class="empty-hint">点击工具结果上的图钉按钮，将重要内容固定到画布</p>
+      <p class="empty-hint">固定的内容会显示在这里</p>
     </div>
     <template v-else-if="canvasTabsEnabled">
       <CanvasTabs
@@ -88,12 +88,15 @@ function removeCard(id: string) {
 
 <style scoped>
 .canvas-container {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   min-height: 100%;
 }
 
 .canvas-empty {
   text-align: center;
-  padding: 60px 16px;
+  padding: 28px 12px;
   color: var(--text-secondary, #999);
 }
 
@@ -113,14 +116,17 @@ function removeCard(id: string) {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-width: 0;
 }
 
 .canvas-tab-panel {
   min-width: 0;
+  max-width: 100%;
 }
 
 .canvas-card-wrapper {
   position: relative;
+  min-width: 0;
 }
 
 .canvas-card-fallback {
@@ -130,6 +136,7 @@ function removeCard(id: string) {
   border-radius: 8px;
   font-size: 12px;
   color: var(--text-secondary, #999);
+  overflow-wrap: anywhere;
   display: flex;
   justify-content: space-between;
   align-items: center;

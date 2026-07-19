@@ -1,81 +1,200 @@
 <template>
-  <Transition name="workbench-slide">
-    <div v-if="isOpen" class="workbench-panel">
-      <div class="workbench-header">
-        <div class="workbench-tabs">
-          <button
-            class="workbench-tab"
-            :class="{ active: activeTab === 'reasoning' }"
-            @click="$emit('set-tab', 'reasoning')"
-          >
-            推理
-          </button>
-          <button
-            class="workbench-tab"
-            :class="{ active: activeTab === 'canvas' }"
-            @click="$emit('set-tab', 'canvas')"
-          >
-            画布
-            <span v-if="cardCount > 0" class="tab-badge">{{ cardCount }}</span>
-          </button>
-        </div>
-        <button class="workbench-close" @click="$emit('close')" title="关闭面板">
-          &times;
-        </button>
+  <Teleport to="body">
+    <Transition name="workbench">
+      <div v-if="isOpen" class="workbench-root" data-workbench-root>
+        <button class="workbench-scrim" type="button" aria-label="关闭工作台" @click="emit('close')"></button>
+        <aside
+          ref="panelRef"
+          class="workbench-panel"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="workbench-title"
+          tabindex="-1"
+          @keydown="handleKeydown"
+        >
+          <div class="workbench-header">
+            <div class="workbench-heading">
+              <span id="workbench-title" class="workbench-title">工作台</span>
+              <div class="workbench-tabs" role="tablist" aria-label="工作台视图">
+                <button
+                  id="workbench-tab-reasoning"
+                  class="workbench-tab"
+                  :class="{ active: activeTab === 'reasoning' }"
+                  role="tab"
+                  :aria-selected="activeTab === 'reasoning'"
+                  aria-controls="workbench-panel-body"
+                  type="button"
+                  @click="emit('set-tab', 'reasoning')"
+                >
+                  推理
+                </button>
+                <button
+                  id="workbench-tab-canvas"
+                  class="workbench-tab"
+                  :class="{ active: activeTab === 'canvas' }"
+                  role="tab"
+                  :aria-selected="activeTab === 'canvas'"
+                  aria-controls="workbench-panel-body"
+                  type="button"
+                  @click="emit('set-tab', 'canvas')"
+                >
+                  画布
+                  <span v-if="cardCount > 0" class="tab-badge">{{ cardCount }}</span>
+                </button>
+              </div>
+            </div>
+            <button class="workbench-close" type="button" aria-label="关闭工作台" title="关闭面板" @click="emit('close')">
+              &times;
+            </button>
+          </div>
+          <div id="workbench-panel-body" class="workbench-body" role="tabpanel" :aria-labelledby="`workbench-tab-${activeTab}`">
+            <slot name="reasoning" v-if="activeTab === 'reasoning'"></slot>
+            <slot name="canvas" v-if="activeTab === 'canvas'"></slot>
+          </div>
+        </aside>
       </div>
-      <div class="workbench-body">
-        <slot name="reasoning" v-if="activeTab === 'reasoning'"></slot>
-        <slot name="canvas" v-if="activeTab === 'canvas'"></slot>
-      </div>
-    </div>
-  </Transition>
+    </Transition>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { WorkbenchTab } from '@/types/workbench'
 
-defineProps<{
+const props = defineProps<{
   isOpen: boolean
   activeTab: WorkbenchTab
   cardCount: number
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   close: []
   'set-tab': [tab: WorkbenchTab]
 }>()
+
+const panelRef = ref<HTMLElement | null>(null)
+let previouslyFocused: HTMLElement | null = null
+
+watch(() => props.isOpen, async (isOpen) => {
+  if (isOpen) {
+    previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    await nextTick()
+    panelRef.value?.focus()
+  } else if (previouslyFocused && document.contains(previouslyFocused)) {
+    previouslyFocused.focus()
+    previouslyFocused = null
+  }
+}, { immediate: true })
+
+function focusableElements() {
+  return Array.from(panelRef.value?.querySelectorAll<HTMLElement>(
+    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+  ) ?? []).filter(element => !element.hasAttribute('disabled') && element.offsetParent !== null)
+}
+
+function handleKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    emit('close')
+    return
+  }
+  if (event.key !== 'Tab') return
+
+  const elements = focusableElements()
+  if (elements.length === 0) {
+    event.preventDefault()
+    panelRef.value?.focus()
+    return
+  }
+
+  const first = elements[0]
+  const last = elements[elements.length - 1]
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
+onBeforeUnmount(() => {
+  if (previouslyFocused && document.contains(previouslyFocused)) previouslyFocused.focus()
+})
 </script>
 
 <style scoped>
+.workbench-root {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+
+.workbench-scrim {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: color-mix(in srgb, #000 26%, transparent);
+  cursor: default;
+  pointer-events: auto;
+}
+
 .workbench-panel {
-  width: 380px;
-  min-width: 380px;
+  position: relative;
+  z-index: 1;
+  width: min(420px, calc(100vw - 24px));
+  min-width: 0;
   height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--bg-secondary);
   border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
   overflow: hidden;
+  pointer-events: auto;
+  outline: none;
 }
 
 .workbench-header {
   display: flex;
   align-items: center;
+  gap: 12px;
   justify-content: space-between;
-  padding: 0 12px;
-  height: 44px;
-  min-height: 44px;
+  padding: 10px 12px 8px 16px;
+  min-height: 58px;
   border-bottom: 1px solid var(--border);
   background: var(--bg-primary);
+}
+
+.workbench-heading {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.workbench-title {
+  flex: 0 0 auto;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .workbench-tabs {
   display: flex;
   gap: 4px;
+  min-width: 0;
 }
 
 .workbench-tab {
-  padding: 6px 14px;
+  min-height: 32px;
+  padding: 5px 10px;
   border: none;
   background: transparent;
   color: var(--text-secondary);
@@ -114,6 +233,9 @@ defineEmits<{
 }
 
 .workbench-close {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
   border: none;
   background: transparent;
   font-size: 20px;
@@ -130,19 +252,74 @@ defineEmits<{
 
 .workbench-body {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   overflow-y: auto;
-  padding: 12px;
+  overflow-x: hidden;
+  padding: 14px 16px 20px;
 }
 
-/* 滑入/滑出动画 */
-.workbench-slide-enter-active,
-.workbench-slide-leave-active {
-  transition: transform 0.25s ease, opacity 0.25s ease;
+.workbench-enter-active,
+.workbench-leave-active {
+  transition: opacity 0.2s ease;
 }
 
-.workbench-slide-enter-from,
-.workbench-slide-leave-to {
-  transform: translateX(100%);
+.workbench-enter-active .workbench-scrim,
+.workbench-leave-active .workbench-scrim {
+  transition: opacity 0.2s ease;
+}
+
+.workbench-enter-active .workbench-panel,
+.workbench-leave-active .workbench-panel {
+  transition: transform 0.24s ease;
+}
+
+.workbench-enter-from,
+.workbench-leave-to {
   opacity: 0;
+}
+
+.workbench-enter-from .workbench-scrim,
+.workbench-leave-to .workbench-scrim {
+  opacity: 0;
+}
+
+.workbench-enter-from .workbench-panel,
+.workbench-leave-to .workbench-panel {
+  transform: translateX(100%);
+}
+
+@media (max-width: 720px) {
+  .workbench-root {
+    align-items: flex-end;
+    justify-content: center;
+  }
+
+  .workbench-panel {
+    width: 100%;
+    height: min(82vh, 720px);
+    max-height: calc(100dvh - 12px);
+    border-top: 1px solid var(--border);
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 12px 12px 0 0;
+  }
+
+  .workbench-enter-from .workbench-panel,
+  .workbench-leave-to .workbench-panel {
+    transform: translateY(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workbench-enter-active,
+  .workbench-leave-active,
+  .workbench-enter-active .workbench-scrim,
+  .workbench-leave-active .workbench-scrim,
+  .workbench-enter-active .workbench-panel,
+  .workbench-leave-active .workbench-panel {
+    transition: none;
+  }
 }
 </style>
