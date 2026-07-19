@@ -74,13 +74,15 @@ const navItems = [
   top: 0;
   z-index: 120;
   display: flex;
-  flex: 0 0 64px;
+  flex: 0 0 var(--icon-rail-width, 56px);
   flex-direction: column;
   align-items: center;
-  width: 64px;
-  height: 100vh;
+  width: var(--icon-rail-width, 56px);
+  min-width: var(--icon-rail-width, 56px);
+  height: 100%;
+  max-height: 100dvh;
   min-height: 0;
-  padding: 12px 8px;
+  padding: 8px 4px;
   gap: 20px;
   color: var(--text-secondary);
   background: var(--bg-secondary);
@@ -92,9 +94,9 @@ const navItems = [
   align-items: center;
   justify-content: center;
   width: 48px;
-  min-width: 44px;
+  min-width: var(--touch-target-min, 44px);
   height: 48px;
-  min-height: 44px;
+  min-height: var(--touch-target-min, 44px);
   flex: 0 0 48px;
   color: inherit;
   border: 0;
@@ -146,9 +148,9 @@ const navItems = [
 
 @media (max-width: 640px) {
   .icon-rail {
-    flex-basis: 56px;
-    width: 56px;
-    padding-inline: 4px;
+    flex-basis: var(--icon-rail-width, 56px);
+    width: var(--icon-rail-width, 56px);
+    min-width: var(--icon-rail-width, 56px);
   }
 
   .icon-rail__control {

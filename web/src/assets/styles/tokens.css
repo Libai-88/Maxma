@@ -66,6 +66,11 @@
 
   /* ── 布局常量 ── */
   --sidebar-width: 240px;
+  --icon-rail-width: 56px;
+  --touch-target-min: 44px;
+  --session-drawer-width: 320px;
+  --workbench-width: 420px;
+  --composer-max-width: 768px;
   --titlebar-h: 44px;
   --chat-column-width: 720px;
 

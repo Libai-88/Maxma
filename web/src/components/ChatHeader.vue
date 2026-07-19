@@ -25,14 +25,15 @@ const contextDetails = computed(() => `${store.profile.name} · ${sessionTitle.v
 </script>
 
 <style scoped>
-.chat-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 10px 20px; border-bottom: 1px solid var(--border); background: var(--bg-primary); }
+.chat-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; max-width: 100%; min-width: 0; overflow: hidden; padding: 10px 20px; border-bottom: 1px solid var(--border); background: var(--bg-primary); }
 .header-left { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto; overflow: hidden; font-size: 14px; }
 .header-avatar { font-size: 18px; }
 .header-context { min-width: 0; overflow: hidden; }
 .header-name, .header-session { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .header-name { font-weight: 600; color: var(--text-primary); }
 .header-session { color: var(--text-secondary); font-size: 12px; }
-.header-right { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 0; flex: 0 1 auto; flex-wrap: wrap; }
+.header-right { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 0; max-width: 55%; flex: 0 1 auto; flex-wrap: nowrap; overflow: hidden; }
+.header-right > * { min-width: 0; max-width: 100%; flex: 0 1 auto; }
 
 @media (max-width: 720px) {
   .chat-header {
@@ -41,11 +42,12 @@ const contextDetails = computed(() => `${store.profile.name} · ${sessionTitle.v
   }
 
   .header-left {
-    flex: 0 1 auto;
+    flex: 1 1 auto;
   }
 
   .header-right {
     flex: 1 1 auto;
+    max-width: 55%;
     gap: 6px;
   }
 }

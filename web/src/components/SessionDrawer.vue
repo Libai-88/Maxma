@@ -162,6 +162,9 @@ onUnmounted(() => document.removeEventListener('keydown', onDocumentKeydown))
 .session-drawer-layer {
   position: fixed;
   inset: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
   z-index: 300;
   pointer-events: none;
 }
@@ -182,8 +185,8 @@ onUnmounted(() => document.removeEventListener('keydown', onDocumentKeydown))
   inset: 0 auto 0 0;
   display: flex;
   flex-direction: column;
-  width: clamp(280px, 24vw, 320px);
-  max-width: 100vw;
+  width: min(var(--session-drawer-width, 320px), calc(100vw - var(--icon-rail-width, 56px)));
+  max-width: calc(100% - var(--icon-rail-width, 56px));
   min-height: 0;
   padding: 20px 16px;
   overflow: hidden;
@@ -199,6 +202,7 @@ onUnmounted(() => document.removeEventListener('keydown', onDocumentKeydown))
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
   padding: 4px 4px 16px;
   border-bottom: 1px solid var(--border);
 }
@@ -239,6 +243,7 @@ onUnmounted(() => document.removeEventListener('keydown', onDocumentKeydown))
 }
 
 .session-drawer :deep(.session-sidebar) {
+  min-width: 0;
   min-height: 0;
   flex: 1;
   gap: 12px;
@@ -274,7 +279,7 @@ onUnmounted(() => document.removeEventListener('keydown', onDocumentKeydown))
 
 @media (max-width: 640px) {
   .session-drawer {
-    width: min(320px, calc(100vw - 56px));
+    width: min(var(--session-drawer-width, 320px), calc(100vw - var(--icon-rail-width, 56px)));
   }
 }
 

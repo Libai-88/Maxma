@@ -128,6 +128,9 @@ onBeforeUnmount(() => {
   position: fixed;
   z-index: 1200;
   inset: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
   display: flex;
   justify-content: flex-end;
   pointer-events: none;
@@ -148,7 +151,8 @@ onBeforeUnmount(() => {
 .workbench-panel {
   position: relative;
   z-index: 1;
-  width: min(420px, calc(100vw - 24px));
+  width: min(var(--workbench-width, 420px), 100%);
+  max-width: 100%;
   min-width: 0;
   height: 100%;
   display: flex;
@@ -165,6 +169,8 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+  max-width: 100%;
   justify-content: space-between;
   padding: 10px 12px 8px 16px;
   min-height: 58px;
@@ -177,6 +183,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 16px;
   min-width: 0;
+  overflow: hidden;
 }
 
 .workbench-title {
@@ -190,6 +197,8 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 4px;
   min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .workbench-tab {
@@ -234,8 +243,10 @@ onBeforeUnmount(() => {
 
 .workbench-close {
   flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
+  width: var(--touch-target-min, 44px);
+  min-width: var(--touch-target-min, 44px);
+  height: var(--touch-target-min, 44px);
+  min-height: var(--touch-target-min, 44px);
   border: none;
   background: transparent;
   font-size: 20px;
@@ -289,7 +300,7 @@ onBeforeUnmount(() => {
   transform: translateX(100%);
 }
 
-@media (max-width: 720px) {
+@media (max-width: 767px) {
   .workbench-root {
     align-items: flex-end;
     justify-content: center;
@@ -297,7 +308,8 @@ onBeforeUnmount(() => {
 
   .workbench-panel {
     width: 100%;
-    height: min(82vh, 720px);
+    max-width: 100%;
+    height: min(82dvh, 720px);
     max-height: calc(100dvh - 12px);
     border-top: 1px solid var(--border);
     border-right: 0;

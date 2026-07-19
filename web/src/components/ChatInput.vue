@@ -1121,12 +1121,16 @@ function onResizeEnd(e: PointerEvent) {
 
 .input-toolbar {
   display: flex; align-items: center;
+  min-width: 0; max-width: 100%; flex-wrap: wrap;
   padding: 4px 8px; gap: 8px;
   border-bottom: 1px solid var(--border, #e5e7eb);
 }
 .toolbar-spacer { flex: 1; }
 
 .chat-input-wrapper {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   padding: 12px 24px 16px;
   background: var(--bg-card);
   position: relative;
@@ -1320,9 +1324,12 @@ function onResizeEnd(e: PointerEvent) {
 /* ── 输入区主体 ── */
 .input-body {
   flex: 1;
+  width: 100%;
   min-height: 0;
+  min-width: 0;
   padding: 10px 14px 0;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* 过渡分隔线 */
@@ -1361,6 +1368,8 @@ function onResizeEnd(e: PointerEvent) {
 /* 链接输入条 */
 .link-input-bar {
   display: flex;
+  width: 100%;
+  min-width: 0;
   align-items: center;
   gap: 6px;
   padding: 0 0 8px 0;
@@ -1459,9 +1468,10 @@ function onResizeEnd(e: PointerEvent) {
 .chat-input {
   display: flex;
   flex-direction: column;
+  width: 100%;
   min-width: 0;
   max-height: min(42vh, 420px);
-  max-width: 768px;
+  max-width: var(--composer-max-width, 768px);
   margin: 0 auto;
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -1621,10 +1631,14 @@ function onResizeEnd(e: PointerEvent) {
   align-items: center;
   justify-content: space-between;
   min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+  row-gap: 4px;
   padding: 4px 10px 6px 14px;
 }
 .input-left-group {
   flex: 0 0 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -1632,6 +1646,7 @@ function onResizeEnd(e: PointerEvent) {
 .input-right-group {
   min-width: 0;
   flex: 1 1 auto;
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -1651,8 +1666,10 @@ function onResizeEnd(e: PointerEvent) {
 }
 .btn-send,
 .btn-stop {
-  width: 34px;
-  height: 34px;
+  width: var(--touch-target-min, 44px);
+  min-width: var(--touch-target-min, 44px);
+  height: var(--touch-target-min, 44px);
+  min-height: var(--touch-target-min, 44px);
   border: none;
   border-radius: 50%;
   font-size: 1em;
@@ -1737,6 +1754,14 @@ function onResizeEnd(e: PointerEvent) {
 	}
 
 @media (max-width: 720px) {
+  .chat-input-wrapper {
+    padding-inline: clamp(8px, 3vw, 16px);
+  }
+
+  .chat-input {
+    border-radius: 16px;
+  }
+
   .input-bottom-bar {
     padding-inline: 10px;
   }
@@ -1753,6 +1778,18 @@ function onResizeEnd(e: PointerEvent) {
     display: none;
   }
 
+}
+
+@media (min-width: 721px) and (max-width: 1279px) {
+  .chat-input-wrapper {
+    padding-inline: 16px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .chat-input-wrapper {
+    padding-inline: 24px;
+  }
 }
 
 @media (max-width: 480px) {

@@ -231,8 +231,11 @@ onMounted(async () => {
 
 html, body {
   height: 100%;
+  width: 100%;
+  max-width: 100%;
+  min-height: 100%;
   min-width: 0;
-  overflow-x: hidden;
+  overflow: hidden;
   font-family: var(--font-body);
   /* 响应式字体：15px 基准，随视口宽度自适应缩放（1920px≈16px, 2560px≈18px） */
 	  font-size: clamp(16px, 15px + 0.2vw, 18px);
@@ -243,15 +246,44 @@ html, body {
 
 #app {
   height: 100%;
+  width: 100%;
+  max-width: 100%;
+  min-height: 0;
   min-width: 0;
+  overflow: hidden;
 }
 
 .app-layout {
   display: flex;
-  height: 100%;
+  width: 100%;
+  max-width: 100%;
+  height: 100dvh;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+.app-layout > .icon-rail {
+  flex: 0 0 var(--icon-rail-width);
+  width: var(--icon-rail-width);
+  min-width: var(--icon-rail-width);
+}
+
+.app-layout > .main {
+  flex: 1 1 auto;
+  width: 0;
+  max-width: 100%;
+}
+
+/* Route views and their flex descendants must not enlarge the document. */
+:where(.chat-view, .chat-workbench-layout, .chat-main-column, .chat-window, .chat-input-wrapper) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+:where(.chat-view, .chat-workbench-layout, .chat-main-column) {
+  min-height: 0;
+  overflow-x: hidden;
 }
 
 .sidebar-hover-trigger {
@@ -399,6 +431,8 @@ html, body {
 
 .main {
   flex: 1;
+  width: 0;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   min-width: 0;
