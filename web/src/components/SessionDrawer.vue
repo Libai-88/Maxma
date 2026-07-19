@@ -8,6 +8,7 @@
         @click="close"
       />
       <aside
+        id="session-drawer"
         class="session-drawer"
         aria-label="会话抽屉"
         role="dialog"
@@ -167,6 +168,7 @@ onUnmounted(() => document.removeEventListener('keydown', onDocumentKeydown))
   overflow: hidden;
   z-index: 300;
   pointer-events: none;
+  isolation: isolate;
 }
 
 .session-drawer__scrim {
@@ -191,9 +193,9 @@ onUnmounted(() => document.removeEventListener('keydown', onDocumentKeydown))
   padding: 20px 16px;
   overflow: hidden;
   color: var(--text-primary);
-  background: var(--bg-primary);
   border-right: 1px solid var(--border);
   box-shadow: var(--shadow-xl);
+  background: color-mix(in srgb, var(--bg-card) 92%, var(--bg-primary));
   pointer-events: auto;
 }
 
@@ -205,6 +207,7 @@ onUnmounted(() => document.removeEventListener('keydown', onDocumentKeydown))
   min-width: 0;
   padding: 4px 4px 16px;
   border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
 }
 
 .session-drawer__eyebrow {
@@ -255,6 +258,11 @@ onUnmounted(() => document.removeEventListener('keydown', onDocumentKeydown))
   flex: 1;
   min-height: 0;
   padding-inline: 0;
+}
+
+.session-drawer :deep(button),
+.session-drawer :deep(a) {
+  min-width: 0;
 }
 
 .session-drawer-enter-active,

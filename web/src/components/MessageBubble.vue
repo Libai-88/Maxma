@@ -1,6 +1,6 @@
 <template>
-  <div class="message-row" :class="role">
-    <div class="bubble" :class="role">
+  <article class="message-row" :class="role" :aria-label="role === 'user' ? '我的消息' : 'Maxma 回复'">
+    <div class="bubble" :class="role" role="group">
       <div
         class="bubble-content"
         :class="{ collapsed: isCollapsible && isCollapsed }"
@@ -19,6 +19,9 @@
       <button
         v-if="isCollapsible"
         class="collapse-toggle"
+        type="button"
+        :aria-expanded="!isCollapsed"
+        aria-label="切换消息展开状态"
         @click="isCollapsed = !isCollapsed"
       >
         {{ isCollapsed ? '展开' : '收起' }}
@@ -42,7 +45,7 @@
       :initial-index="previewIndex"
       @close="previewIndex = -1"
     />
-  </div>
+  </article>
 </template>
 
 <script setup lang="ts">
@@ -118,6 +121,7 @@ watch(() => props.content, () => {
 .message-row {
   display: flex;
   padding: 4px 0;
+  min-width: 0;
   animation: messageSlideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .message-row.user {
@@ -147,6 +151,7 @@ watch(() => props.content, () => {
   word-break: break-word;
   overflow-wrap: anywhere;
   box-shadow: var(--shadow);
+  min-width: 0;
 }
 .bubble.user {
 	  background: var(--user-bubble);

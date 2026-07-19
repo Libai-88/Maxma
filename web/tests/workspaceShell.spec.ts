@@ -64,6 +64,11 @@ describe('workspace shell', () => {
     expect(chatInputTemplate).not.toContain('<DsSelect')
     expect((modelSelectorSource.match(/class="composer-model-selector"/g) ?? [])).toHaveLength(1)
     expect((modelSelectorSource.match(/<DsSelect\b/g) ?? [])).toHaveLength(1)
+
+    expect(chatInputTemplate).toContain('role="form"')
+    expect(chatInputTemplate).toContain('role="toolbar"')
+    expect(chatInputTemplate).toContain('aria-label="发送消息"')
+    expect(chatInputTemplate).toContain('aria-live="assertive"')
   })
 
   it('keeps Composer keyboard, send payload, and layout boundaries intact', () => {
@@ -168,6 +173,8 @@ describe('workspace shell', () => {
 
     const wrapper = mount(ChatHeader, { global: { plugins: [pinia] } })
     const header = wrapper.get('.header-left')
+    expect(wrapper.get('header.chat-header').attributes('aria-label')).toBe('当前会话')
+    expect(wrapper.get('.header-right').attributes('aria-live')).toBe('polite')
     expect(wrapper.find('.header-details').exists()).toBe(false)
     expect(header.attributes('title')).toContain(longScene)
     expect(wrapper.get('.header-session').text()).toContain('一个很长很长的会话标题')
@@ -196,6 +203,8 @@ describe('workspace shell', () => {
 
     const sessionTrigger = wrapper.get('button[aria-label="会话"]')
     expect(sessionTrigger.attributes('title')).toBe('会话')
+    expect(sessionTrigger.attributes('aria-controls')).toBe('session-drawer')
+    expect(sessionTrigger.attributes('aria-expanded')).toBe('false')
 
     for (const control of wrapper.findAll('a, button')) {
       expect(control.attributes('aria-label')).toBeTruthy()

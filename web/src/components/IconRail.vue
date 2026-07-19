@@ -38,6 +38,8 @@
         style="min-width: 44px; min-height: 44px"
         aria-label="会话"
         title="会话"
+        aria-controls="session-drawer"
+        :aria-expanded="sessionDrawerOpen"
         @click="emit('toggle-session-drawer')"
       >
         <Icon name="sessions" :size="20" />
@@ -52,8 +54,10 @@ import AppSettingsMenu from '@/components/AppSettingsMenu.vue'
 
 withDefaults(defineProps<{
   onboardingEnabled: boolean
+  sessionDrawerOpen?: boolean
 }>(), {
   onboardingEnabled: false,
+  sessionDrawerOpen: false,
 })
 
 const emit = defineEmits<{

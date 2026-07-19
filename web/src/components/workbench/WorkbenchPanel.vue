@@ -12,10 +12,10 @@
           tabindex="-1"
           @keydown="handleKeydown"
         >
-          <div class="workbench-header">
+          <header class="workbench-header">
             <div class="workbench-heading">
               <span id="workbench-title" class="workbench-title">工作台</span>
-              <div class="workbench-tabs" role="tablist" aria-label="工作台视图">
+              <div class="workbench-tabs" role="tablist" aria-label="工作台视图" aria-orientation="horizontal">
                 <button
                   id="workbench-tab-reasoning"
                   class="workbench-tab"
@@ -46,7 +46,7 @@
             <button class="workbench-close" type="button" aria-label="关闭工作台" title="关闭面板" @click="emit('close')">
               &times;
             </button>
-          </div>
+          </header>
           <div id="workbench-panel-body" class="workbench-body" role="tabpanel" :aria-labelledby="`workbench-tab-${activeTab}`">
             <slot name="reasoning" v-if="activeTab === 'reasoning'"></slot>
             <slot name="canvas" v-if="activeTab === 'canvas'"></slot>
@@ -134,6 +134,7 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: flex-end;
   pointer-events: none;
+  isolation: isolate;
 }
 
 .workbench-scrim {
@@ -157,8 +158,8 @@ onBeforeUnmount(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--bg-secondary);
-  border-left: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-card) 94%, var(--bg-primary));
+  border-left: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
   pointer-events: auto;
@@ -175,7 +176,7 @@ onBeforeUnmount(() => {
   padding: 10px 12px 8px 16px;
   min-height: 58px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg-primary);
+  background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
 }
 
 .workbench-heading {
@@ -202,7 +203,8 @@ onBeforeUnmount(() => {
 }
 
 .workbench-tab {
-  min-height: 32px;
+  min-width: var(--touch-target-min, 44px);
+  min-height: var(--touch-target-min, 44px);
   padding: 5px 10px;
   border: none;
   background: transparent;
@@ -255,6 +257,12 @@ onBeforeUnmount(() => {
   padding: 4px 8px;
   border-radius: 4px;
   line-height: 1;
+}
+
+.workbench-close:focus-visible,
+.workbench-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .workbench-close:hover {

@@ -1,27 +1,28 @@
 <template>
-  <div class="chat-input-wrapper">
-    <div v-if="connectionError" class="chat-connection-error">
+  <div class="chat-input-wrapper" role="form" aria-label="消息输入">
+    <div v-if="connectionError" class="chat-connection-error" role="alert" aria-live="assertive">
       <span class="chat-connection-error-icon">⚠</span>
       <span class="chat-connection-error-text">{{ connectionError }}</span>
-      <button class="chat-connection-error-close" @click="connectionError = null">✕</button>
+      <button type="button" class="chat-connection-error-close" aria-label="关闭连接错误" title="关闭连接错误" @click="connectionError = null">✕</button>
     </div>
-    <div v-if="imageError" class="chat-image-error">
+    <div v-if="imageError" class="chat-image-error" role="alert" aria-live="assertive">
       <span class="chat-image-error-icon">🖼</span>
       <span class="chat-image-error-text">{{ imageError }}</span>
-      <button class="chat-image-error-close" @click="imageError = null">✕</button>
+      <button type="button" class="chat-image-error-close" aria-label="关闭图片错误" title="关闭图片错误" @click="imageError = null">✕</button>
     </div>
-    <div v-if="showLinkInput" class="link-input-bar">
+    <div v-if="showLinkInput" class="link-input-bar" role="group" aria-label="添加链接">
       <input
         ref="linkInputRef"
         v-model="linkUrl"
         type="url"
         class="link-input"
+        aria-label="链接 URL"
         placeholder="输入链接 URL……"
         @keydown.enter.prevent="confirmLink"
         @keydown.escape.prevent="cancelLink"
       />
-      <button class="link-input-confirm" :disabled="!linkUrl.trim()" @click="confirmLink">✓</button>
-      <button class="link-input-cancel" @click="cancelLink">✕</button>
+      <button type="button" class="link-input-confirm" aria-label="确认添加链接" title="确认添加链接" :disabled="!linkUrl.trim()" @click="confirmLink">✓</button>
+      <button type="button" class="link-input-cancel" aria-label="取消添加链接" title="取消添加链接" @click="cancelLink">✕</button>
     </div>
     <div
       ref="inputContainerRef"
@@ -49,7 +50,7 @@
         >
           <img :src="seg.src" class="sticker-tag-preview" :alt="seg.filename" />
           <span class="sticker-tag-name">{{ seg.category || '表情' }}</span>
-          <button class="sticker-tag-remove" @click="removeStickerSegment(seg)">✕</button>
+          <button type="button" class="sticker-tag-remove" :aria-label="`移除表情 ${seg.category || '表情'}`" title="移除表情" @click="removeStickerSegment(seg)">✕</button>
         </span>
         <!-- 图片引用：缩略图预览 -->
         <span
@@ -59,7 +60,7 @@
         >
           <img :src="r.preview" class="image-tag-preview" :alt="r.label" />
           <span class="image-tag-name">{{ r.label }}</span>
-          <button class="image-tag-remove" @click="removeRef(getRefIndex(r))">✕</button>
+          <button type="button" class="image-tag-remove" :aria-label="`移除图片 ${r.label}`" title="移除图片" @click="removeRef(getRefIndex(r))">✕</button>
         </span>
         <!-- 其他引用：文本 chip -->
         <span
@@ -73,7 +74,7 @@
           <span class="file-tag-name">{{ r.label }}</span>
           <span class="file-tag-source">{{ r.type }}</span>
           <span v-if="'blocked' in r && r.blocked" class="file-tag-blocked">blocked</span>
-          <button class="file-tag-remove" @click="removeRef(getNonImageRefIndex(r))">✕</button>
+          <button type="button" class="file-tag-remove" :aria-label="`移除引用 ${r.label}`" title="移除引用" @click="removeRef(getNonImageRefIndex(r))">✕</button>
         </span>
       </TransitionGroup>
       <!-- 已引用选区卡片栏 -->
@@ -85,16 +86,17 @@
           @remove="chatInput.removeQuote(q.id)"
         />
       </div>
-      <div class="input-toolbar">
+      <div class="input-toolbar" role="toolbar" aria-label="消息工具">
         <ModelSelector />
         <div class="toolbar-spacer"></div>
         <ContextUsageBadge />
       </div>
-      <div class="input-body">
+      <div class="input-body" role="group" aria-label="消息内容">
         <textarea
           ref="textareaRef"
           v-model="text"
           class="input-area"
+          aria-label="消息内容"
           :placeholder="inputPlaceholder"
           :disabled="disabled"
           rows="1"
@@ -114,29 +116,31 @@
         <div class="input-left-group">
           <div class="btn-add-file-wrapper">
           <button
+            type="button"
             class="btn-add-file"
             :disabled="disabled"
             :class="{ active: showMenu }"
             :title="disabled ? '附件（当前不可用）' : '添加附件：文件、文件夹、图片或链接'"
             :aria-label="showMenu ? '关闭附件菜单' : '添加附件：文件、文件夹、图片或链接'"
             :aria-expanded="showMenu"
+            aria-controls="add-file-menu"
             aria-haspopup="menu"
             @click="toggleMenu"
           >
             <span v-if="loading" class="btn-add-file-spin">⟳</span>
             <Icon v-else name="attach" :size="18" />
           </button>
-          <div v-if="showMenu" class="add-file-menu" @click.stop>
-            <button class="add-file-menu-item" @click="pickFile">
+          <div v-if="showMenu" id="add-file-menu" class="add-file-menu" role="menu" aria-label="附件类型" @click.stop>
+            <button type="button" class="add-file-menu-item" role="menuitem" @click="pickFile">
               <Icon name="menu-file" :size="14" /> 选择文件
             </button>
-            <button class="add-file-menu-item" @click="pickFolder">
+            <button type="button" class="add-file-menu-item" role="menuitem" @click="pickFolder">
               <Icon name="menu-folder" :size="14" /> 选择文件夹
             </button>
-            <button class="add-file-menu-item" @click="pickImage">
+            <button type="button" class="add-file-menu-item" role="menuitem" @click="pickImage">
               <Icon name="image" :size="14" /> 选择图片
             </button>
-            <button class="add-file-menu-item" @click="startLinkInput">
+            <button type="button" class="add-file-menu-item" role="menuitem" @click="startLinkInput">
               <Icon name="link" :size="14" /> 加入链接
             </button>
           </div>
@@ -147,23 +151,29 @@
           <span class="input-separator"></span>
           <div class="input-actions">
             <button
+              type="button"
               class="btn-sticker"
               :class="{ active: showStickerPicker }"
               @click.stop="toggleStickerPicker"
               title="表情"
+              aria-label="表情"
+              :aria-expanded="showStickerPicker"
+              aria-controls="sticker-picker"
             >
               <Icon name="sticker" :size="18" />
             </button>
             <button
               v-if="!isStreaming"
+              type="button"
               class="btn-send"
+              aria-label="发送消息"
               :disabled="(!text.trim() && imageRefs.length === 0) || disabled || noProvider || !canSend"
               :title="sendButtonTitle"
               @click="handleSend"
             >
               <Icon name="send" :size="16" />
             </button>
-            <button v-else class="btn-stop" @click="chatInput.stop()">
+            <button v-else type="button" class="btn-stop" aria-label="停止生成" title="停止生成" @click="chatInput.stop()">
               <Icon name="stop" :size="12" />
             </button>
           </div>
@@ -175,6 +185,7 @@
     <StickerPicker
       v-if="showStickerPicker"
       ref="stickerPickerRef"
+      id="sticker-picker"
       :visible="showStickerPicker"
       :context-text="text"
       @select="onStickerSelect"
@@ -207,6 +218,8 @@
         v-if="quoteCandidate"
         ref="quoteFloatRef"
         class="quote-float-btn"
+        type="button"
+        aria-label="引用选中文本"
         @click="chatInput.commitQuote()"
         title="引用选中文本"
       >
@@ -1132,7 +1145,7 @@ function onResizeEnd(e: PointerEvent) {
   max-width: 100%;
   min-width: 0;
   padding: 12px 24px 16px;
-  background: var(--bg-card);
+  background: color-mix(in srgb, var(--bg-primary) 42%, transparent);
   position: relative;
 }
 
@@ -1475,9 +1488,9 @@ function onResizeEnd(e: PointerEvent) {
   margin: 0 auto;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 20px;
+  border-radius: var(--radius-lg, 12px);
   padding: 0;
-  box-shadow: var(--shadow-soft);
+  box-shadow: var(--shadow-md);
   transition: border-color 0.2s, box-shadow 0.2s;
   overflow: visible;
 }
@@ -1752,6 +1765,13 @@ function onResizeEnd(e: PointerEvent) {
 	  text-align: center;
 	  padding: 2px 0;
 	}
+
+.chat-input button:focus-visible,
+.link-input:focus-visible,
+.input-area:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 @media (max-width: 720px) {
   .chat-input-wrapper {

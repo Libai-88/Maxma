@@ -2,6 +2,7 @@
   <div class="app-layout">
     <IconRail
       :onboarding-enabled="onboardingEnabled"
+      :session-drawer-open="sessionDrawerOpen"
       @toggle-session-drawer="openSessionDrawer"
       @restart-onboarding="restartOnboarding"
     />
@@ -17,7 +18,7 @@
       @constify="handleConstify"
       @unconstify="handleUnconstify"
     />
-    <main class="main">
+    <main id="main-content" class="main" tabindex="-1" aria-label="对话工作区">
       <RegionalErrorBoundary :reset-keys="[$route.path]">
         <router-view v-slot="{ Component }">
           <keep-alive include="ChatView">
@@ -26,7 +27,7 @@
         </router-view>
       </RegionalErrorBoundary>
     </main>
-    <!-- 树阴光影氛围层 -->
+    <!-- 保留全局媒体与引导层，布局本身不依赖装饰层。 -->
     <LeavesOverlay />
     <!-- 全屏媒体查看器 -->
     <MediaViewer />
@@ -203,7 +204,6 @@ onMounted(async () => {
   }
   body,
   .app-layout,
-  .sidebar,
   .main {
     transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
   }
@@ -261,6 +261,7 @@ html, body {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  background: color-mix(in srgb, var(--bg-primary) 86%, transparent);
 }
 
 .app-layout > .icon-rail {
@@ -438,6 +439,7 @@ html, body {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
 }
 
 .sidebar .health-panel {
