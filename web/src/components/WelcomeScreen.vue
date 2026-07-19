@@ -80,8 +80,25 @@ const examples = computed(() => [
 </script>
 
 <style scoped>
-.welcome-screen { flex: 1; display: flex; align-items: center; justify-content: center; padding: 48px 24px; overflow-y: auto; }
-.welcome-content { text-align: center; max-width: 560px; width: 100%; }
+.welcome-screen {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.welcome-content {
+  width: 100%;
+  max-width: 560px;
+  min-width: 0;
+  box-sizing: border-box;
+  text-align: center;
+}
 .welcome-loading { text-align: center; color: var(--text-secondary); }
 .welcome-loading-spinner {
   display: inline-block;
@@ -226,6 +243,12 @@ const examples = computed(() => [
 
 /* 响应式：窄屏垂直堆叠主操作按钮 */
 @media (max-width: 480px) {
+  .welcome-screen {
+    align-items: flex-start;
+    padding: 28px 16px 32px;
+  }
+  .welcome-content { margin-block: auto; }
+  .welcome-avatar { line-height: 1; }
   .welcome-actions { flex-direction: column; }
   .action-btn { width: 100%; justify-content: center; }
 }
