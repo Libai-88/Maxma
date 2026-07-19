@@ -1,7 +1,7 @@
 import { computed, watch, onUnmounted, ref, type Ref } from 'vue'
 import type { ClientMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, AskUserEvent, ArtifactEvent, PlanProposedEvent, PlanStepStartEvent, PlanStepEndEvent, PlanStepErrorEvent, PlanCompletedEvent, DeferredSubagentSubmittedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent } from '@/types'
 import type { ThinkPathId } from '@/utils/thinkPath'
-import { useChatStore, TURNS_KEY_PREFIX } from '@/stores/chat'
+import { normalizeContextUsage, useChatStore, TURNS_KEY_PREFIX } from '@/stores/chat'
 import { useSessionStore } from '@/stores/session'
 import { buildFlatMessage, buildTimestamp, parseReferences } from '@/utils/references'
 import type { ParsedRef } from '@/utils/references'
@@ -444,33 +444,60 @@ export function ensureConnected(sid: string) {
 
 // ── 事件路由 ──────────────────────────────────────────────
 
-function handleEventForChannel(sid: string, event: ServerEvent) {
+const CONTEXT_USAGE_FIELDS = [
+  'estimated_tokens', 'estimatedTokens', 'current_tokens',
+  'max_tokens', 'maxTokens', 'message_count', 'messageCount',
+  'percentage', 'usage_percent', 'usagePercentage', 'model_name', 'modelName',
+]
+
+function hasContextUsageFields(payload: unknown): boolean {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false
+  const data = payload as Record<string, unknown>
+  return CONTEXT_USAGE_FIELDS.some((field) => field in data)
+}
+
+function syncContextUsage(ch: SessionChannel, payload: unknown) {
+  const store = getChatStore()
+  const normalized = normalizeContextUsage(payload, store.contextUsage)
+  const rawPayload = payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? payload as Record<string, unknown>
+    : {}
+
+  ch.contextUsage = {
+    ...(ch.contextUsage ?? {}),
+    ...rawPayload,
+    estimated_tokens: normalized.estimatedTokens,
+    max_tokens: normalized.maxTokens,
+    percentage: normalized.percentage,
+    message_count: normalized.messageCount,
+    model_name: normalized.modelName,
+  } as ContextUsage
+  store.updateContextUsage(normalized)
+}
+
+export function handleEventForChannel(sid: string, event: ServerEvent) {
   const ch = getChatStore().channels.get(sid)
   if (!ch) return
 
   // context_usage 可以在无活跃轮次时接收（如连接初始化）
   if (event.type === 'context_usage') {
-    const p = event.payload as ContextUsage
-    ch.contextUsage = p
-    getChatStore().updateContextUsage({
-      estimatedTokens: p.estimated_tokens ?? 0,
-      maxTokens: p.max_tokens ?? 128000,
-      percentage: p.percentage ?? 0,
-      messageCount: p.message_count ?? 0,
-      modelName: p.model_name ?? '',
-    })
+    syncContextUsage(ch, event.payload)
     return
   }
 
   // context_compressed：上下文压缩完成通知（可能在无活跃轮次时到达，如手动压缩）
   if (event.type === 'context_compressed') {
     const payload = event.payload
-    // 更新上下文用量占比（后端 context_usage_after 为 0-1 浮点数，转为百分比）
-    if (payload.context_usage_after !== undefined && ch.contextUsage) {
-      ch.contextUsage = {
-        ...ch.contextUsage,
-        usage_percent: Math.round(payload.context_usage_after * 1000) / 10,
-      }
+    // 压缩事件只携带部分字段，合并到现有用量，避免覆盖模型和消息信息。
+    const usagePayload = {
+      ...payload,
+      ...(payload.after_tokens !== undefined ? { estimated_tokens: payload.after_tokens } : {}),
+      ...(payload.context_usage_after !== undefined ? { percentage: payload.context_usage_after } : {}),
+    }
+    if (hasContextUsageFields(usagePayload)) {
+      syncContextUsage(ch, {
+        ...usagePayload,
+      })
     }
     // 在当前 turn 事件流中追加压缩通知
     if (ch.currentTurn) {
@@ -483,6 +510,17 @@ function handleEventForChannel(sid: string, event: ServerEvent) {
       })
     }
     return
+  }
+
+  // done 也可能在 currentTurn 已被清理后到达；上下文用量仍需同步到 Badge。
+  if (event.type === 'done') {
+    const donePayload = event.payload as Record<string, unknown>
+    const usagePayload = donePayload.context_usage
+    if (hasContextUsageFields(usagePayload)) {
+      syncContextUsage(ch, usagePayload)
+    } else if (hasContextUsageFields(donePayload)) {
+      syncContextUsage(ch, donePayload)
+    }
   }
 
   // sub_session_created 可能在任何时候到达（主 Agent 调用 call_sub_agent）
@@ -656,9 +694,6 @@ function handleEventForChannel(sid: string, event: ServerEvent) {
     case 'done':
       ch.isAwaitingUser = false
       ch._awaitingToolName = null
-      if (event.payload.context_usage) {
-        ch.contextUsage = event.payload.context_usage
-      }
       // 存储后端 turn_id，用于关联后台记忆 consumer 的事件
       if (ch.currentTurn && (event.payload as Record<string, unknown>).turn_id) {
         ch.currentTurn.turnId = (event.payload as Record<string, unknown>).turn_id as string

@@ -5,7 +5,7 @@
     <div class="usage-bar">
       <div ref="fillRef" class="usage-bar-fill"></div>
     </div>
-    <span class="usage-pct">{{ usage.percentage.toFixed(1) }}%</span>
+    <span class="usage-pct">{{ percentage.toFixed(1) }}%</span>
     <div v-if="showDetail" class="usage-tooltip">
       <div class="tooltip-header">上下文用量（token ≈ 0.6 个汉字）</div>
       <div class="tooltip-row"><span>模型</span><span>{{ usage.modelName || '-' }}</span></div>
@@ -19,17 +19,18 @@
 
 <script setup lang="ts">
 import { ref, computed, watchEffect } from 'vue'
-import { useChatStore } from '../stores/chat'
+import { normalizeContextUsage, useChatStore } from '../stores/chat'
 
 const store = useChatStore()
 const showDetail = ref(false)
 
 const usage = computed(() => store.contextUsage)
-const barPercent = computed(() => Math.min(usage.value.percentage, 100))
+const percentage = computed(() => normalizeContextUsage(usage.value).percentage)
+const barPercent = computed(() => Math.min(percentage.value, 100))
 const displayText = computed(() => `${formatNum(usage.value.estimatedTokens)} / ${formatNum(usage.value.maxTokens)}`)
 const statusClass = computed(() => {
-  if (usage.value.percentage > 90) return 'status-critical'
-  if (usage.value.percentage > 70) return 'status-warn'
+  if (percentage.value > 90) return 'status-critical'
+  if (percentage.value > 70) return 'status-warn'
   return ''
 })
 

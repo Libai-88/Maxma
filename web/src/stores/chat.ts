@@ -5,6 +5,67 @@ import type { ModelInfo, ChatContextUsage } from '../types/chat'
 
 export const TURNS_KEY_PREFIX = 'maxma_turns_'
 
+const DEFAULT_CONTEXT_USAGE: ChatContextUsage = {
+  estimatedTokens: 0,
+  maxTokens: 128000,
+  percentage: 0,
+  messageCount: 0,
+  modelName: '',
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  if (typeof value !== 'number' && typeof value !== 'string') return undefined
+  const number = Number(value)
+  return Number.isFinite(number) ? number : undefined
+}
+
+function firstFinite(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    const number = finiteNumber(value)
+    if (number !== undefined) return number
+  }
+  return undefined
+}
+
+/** Convert both current WS payload formats into the UI's stable camelCase shape. */
+export function normalizeContextUsage(payload: unknown, previous: ChatContextUsage = DEFAULT_CONTEXT_USAGE): ChatContextUsage {
+  const data = payload && typeof payload === 'object' && !Array.isArray(payload)
+    ? payload as Record<string, unknown>
+    : {}
+
+  const estimatedTokens = Math.max(0, firstFinite(
+    data.estimated_tokens, data.estimatedTokens, data.current_tokens,
+  ) ?? previous.estimatedTokens)
+  const maxTokens = Math.max(1, firstFinite(
+    data.max_tokens, data.maxTokens,
+  ) ?? (previous.maxTokens || DEFAULT_CONTEXT_USAGE.maxTokens))
+  const messageCount = Math.max(0, firstFinite(
+    data.message_count, data.messageCount,
+  ) ?? previous.messageCount)
+  const modelName = typeof data.model_name === 'string' && data.model_name
+    ? data.model_name
+    : typeof data.modelName === 'string' && data.modelName
+      ? data.modelName
+      : previous.modelName
+
+  const rawPercentage = firstFinite(
+    data.percentage, data.usage_percent, data.usagePercentage,
+  )
+  const percentage = rawPercentage === undefined
+    ? (estimatedTokens / maxTokens) * 100
+    : rawPercentage <= 1
+      ? rawPercentage * 100
+      : rawPercentage
+
+  return {
+    estimatedTokens,
+    maxTokens,
+    percentage: Math.min(100, Math.max(0, percentage)),
+    messageCount,
+    modelName,
+  }
+}
+
 interface SessionChannel {
   ws: WebSocket | null
   connected: boolean
@@ -48,13 +109,7 @@ export const useChatStore = defineStore('chat', () => {
   const temperature = ref(0.7)
   const maxTokens = ref(4096)
   const thinkingEnabled = ref(false)
-  const contextUsage = ref<ChatContextUsage>({
-    estimatedTokens: 0,
-    maxTokens: 128000,
-    percentage: 0,
-    messageCount: 0,
-    modelName: '',
-  })
+  const contextUsage = ref<ChatContextUsage>({ ...DEFAULT_CONTEXT_USAGE })
   // --- End new state ---
 
   const allSessionStatuses = computed(() => {
@@ -108,7 +163,9 @@ export const useChatStore = defineStore('chat', () => {
   function setTemperature(val: number) { temperature.value = Math.max(0, Math.min(2, val)) }
   function setMaxTokens(val: number) { maxTokens.value = Math.max(256, Math.min(256000, val)) }
   function toggleThinking(enabled: boolean) { thinkingEnabled.value = enabled }
-  function updateContextUsage(usage: ChatContextUsage) { contextUsage.value = usage }
+  function updateContextUsage(usage: Partial<ChatContextUsage>) {
+    contextUsage.value = normalizeContextUsage(usage, contextUsage.value)
+  }
 
   async function fetchAvailableModels() {
     try {
