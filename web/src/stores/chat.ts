@@ -53,7 +53,7 @@ export function normalizeContextUsage(payload: unknown, previous: ChatContextUsa
   )
   const percentage = rawPercentage === undefined
     ? (estimatedTokens / maxTokens) * 100
-    : rawPercentage <= 1
+    : rawPercentage < 1
       ? rawPercentage * 100
       : rawPercentage
 

@@ -36,6 +36,12 @@ describe('context usage events', () => {
 
     handleEventForChannel('context-session', {
       type: 'context_usage',
+      payload: { percentage: 1 },
+    })
+    expect(useChatStore().contextUsage.percentage).toBe(1)
+
+    handleEventForChannel('context-session', {
+      type: 'context_usage',
       payload: {
         estimated_tokens: 32000,
         max_tokens: 128000,
