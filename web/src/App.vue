@@ -1,5 +1,6 @@
 <template>
   <div class="app-layout">
+    <IconRail @toggle-session-drawer="toggleSessionDrawer" />
     <!-- 折叠时的悬停触发条 -->
     <div
       v-if="effectiveCollapsed"
@@ -80,6 +81,7 @@ import HealthPanel from '@/components/HealthPanel.vue';
 import PulsePanel from '@/components/PulsePanel.vue';
 import OnboardingView from '@/views/OnboardingView.vue';
 import Icon from '@/components/Icon.vue';
+import IconRail from '@/components/IconRail.vue';
 import SessionSidebar from '@/components/SessionSidebar.vue';
 import AppSettingsMenu from '@/components/AppSettingsMenu.vue';
 import { useChatStore } from '@/stores/chat';
@@ -119,6 +121,11 @@ function onSidebarClick(e: MouseEvent) {
   if (e.target === e.currentTarget) {
     toggleSidebar()
   }
+}
+
+// Phase 1 compatibility bridge: the drawer owns this action in the next shell phase.
+function toggleSessionDrawer() {
+  toggleSidebar()
 }
 
 const router = useRouter()
