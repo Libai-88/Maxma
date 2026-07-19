@@ -1,62 +1,8 @@
 <!-- web/src/components/FloatSidebar.vue -->
 <template>
-  <Transition name="float-sidebar">
-    <div v-if="isVisible" class="float-sidebar" @mouseenter="onEnter" @mouseleave="onLeave">
-      <!-- 复用主侧边栏的导航内容 -->
-      <nav class="fs-nav">
-        <router-link to="/" class="fs-nav-item" @click="forceClose">
-          <Icon name="chat" :size="18" /> <span>对话</span>
-        </router-link>
-      </nav>
-      <SessionSidebar
-        :sessions="sessions"
-        :active-id="sessionId"
-        :session-statuses="allSessionStatuses"
-        :collapsed="false"
-        @create="createSession"
-        @switch="onSwitch"
-        @delete="deleteSession"
-        @constify="onConstify"
-        @unconstify="onUnconstify"
-      />
-    </div>
-  </Transition>
+  <!-- SessionDrawer is the single owner of session management. -->
+  <span v-if="false" aria-hidden="true" />
 </template>
-
-<script setup lang="ts">
-import Icon from '@/components/Icon.vue'
-import SessionSidebar from '@/components/SessionSidebar.vue'
-import { useFloatSidebar } from '@/composables/useFloatSidebar'
-import { useSessionStore } from '@/stores/session'
-import { useChatStore } from '@/stores/chat'
-import { storeToRefs } from 'pinia'
-import { useRouter } from 'vue-router'
-
-const { isVisible, onEnter, onLeave, forceClose } = useFloatSidebar()
-
-const sessionStore = useSessionStore()
-const { sessionId, sessions } = storeToRefs(sessionStore)
-const { createSession, switchSession, deleteSession } = sessionStore
-
-const chatStore = useChatStore()
-const { allSessionStatuses } = storeToRefs(chatStore)
-
-const router = useRouter()
-
-function onSwitch(id: string) {
-  switchSession(id)
-  router.push('/')
-  forceClose()
-}
-
-function onConstify(id: string, name: string) {
-  if (name && name.trim()) sessionStore.constifySession(id, name.trim())
-}
-
-function onUnconstify(id: string) {
-  if (window.confirm('确定取消固定此会话？')) sessionStore.unconstifySession(id)
-}
-</script>
 
 <style scoped>
 .float-sidebar {

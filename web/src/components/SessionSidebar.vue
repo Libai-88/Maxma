@@ -2,18 +2,8 @@
   <div class="session-sidebar" :class="{ collapsed }">
     <div class="sidebar-section-header">
       <span>会话 Sessions</span>
-      <button class="btn-new" @click="$emit('create')" title="新会话">+</button>
+      <button class="btn-new" aria-label="新建会话" @click="$emit('create')" title="新会话">+</button>
     </div>
-
-    <!-- Novice 引导：会话类型与右键操作（可折叠，默认展开） -->
-    <details class="session-intro-card" open>
-      <summary>会话类型与操作</summary>
-      <div class="session-intro-body">
-        <p><strong>临时会话</strong>：当前对话用，关闭后不保留。</p>
-        <p><strong>已保存</strong>：右键临时会话选「固定会话」可持久保存，可重命名。</p>
-        <p class="session-intro-tip">💡 鼠标悬停会话可查看消息数与活跃时间。</p>
-      </div>
-    </details>
 
     <div class="session-list">
 
@@ -65,14 +55,6 @@
         暂无会话
       </div>
     </div>
-
-    <ModelSettingsPanel />
-
-    <button class="nav-item" @click="showToolPanel = !showToolPanel">
-      <span class="nav-icon">🧰</span>
-      <span class="nav-label">工具</span>
-    </button>
-    <ToolPanel v-if="showToolPanel" />
 
     <Transition name="card">
       <div v-if="hoveredSession" :key="hoveredSession.session_id" ref="hoverCardRef" class="session-hover-card">
@@ -176,9 +158,7 @@
 <script setup lang="ts">
 import ContextMenu from '@/components/ContextMenu.vue';
 import Icon from '@/components/Icon.vue';
-import ModelSettingsPanel from './ModelSettingsPanel.vue';
 import SessionItem from './SessionItem.vue';
-import ToolPanel from './ToolPanel.vue';
 import { useSessionStore } from '@/stores/session';
 import type { SessionInfo } from '@/types';
 import { computed, nextTick, ref, watch, watchEffect } from 'vue';
@@ -191,8 +171,6 @@ const props = defineProps<{
   sessionStatuses?: Record<string, { connected: boolean; isStreaming: boolean; isAwaitingUser: boolean }>
   collapsed?: boolean
 }>()
-
-const showToolPanel = ref(false)
 
 const emit = defineEmits<{
   create: []
@@ -305,7 +283,7 @@ const ctxMenuItems = computed(() => {
   if (!s) return []
   if (s.is_const) {
     return [
-      { label: '固定会话…', action: 'constify', icon: 'pin' },
+      { label: '重命名', action: 'rename', icon: 'edit' },
       { label: '取消固定', action: 'unconstify' },
     ]
   }
@@ -445,7 +423,7 @@ function onSessionContextMenu(event: MouseEvent, session: SessionInfo) {
 function handleContextMenuSelect(action: string) {
   const s = ctxMenuSession.value
   if (!s) return
-  if (action === 'constify') {
+  if (action === 'constify' || action === 'rename') {
     showConstifyCard(s)
     return  // 不关闭菜单，showConstifyCard 内部会关闭
   } else if (action === 'unconstify') {

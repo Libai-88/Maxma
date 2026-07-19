@@ -1,52 +1,18 @@
 <template>
   <div class="app-layout">
-    <IconRail @toggle-session-drawer="toggleSessionDrawer" />
-    <!-- 折叠时的悬停触发条 -->
-    <div
-      v-if="effectiveCollapsed"
-      class="sidebar-hover-trigger"
-      @mouseenter="onFloatSidebarEnter"
-      @mouseleave="onFloatSidebarLeave"
-    ></div>
-    <aside class="sidebar" :class="{ collapsed: effectiveCollapsed }" @click="onSidebarClick">
-      <div class="sidebar-header">
-        <h1 class="logo">
-          <img src="@/assets/images/brand/logo-hero-opt.jpg" alt="Maxma" class="logo-img" />
-          <span class="logo-text">Maxma</span>
-        </h1>
-      </div>
-      <div class="sidebar-icon-collapsed">
-        <img src="@/assets/images/brand/favicon.png" alt="Maxma" class="logo-favicon" />
-      </div>
-      <nav class="sidebar-nav">
-        <router-link to="/" class="nav-item">
-          <Icon name="chat" :size="18" /> <span class="nav-label"><span class="nav-zh">对话</span><span class="nav-en">CHATTING</span></span>
-        </router-link>
-        <router-link to="/activity" class="nav-item">
-          <Icon name="memory" :size="18" /> <span class="nav-label"><span class="nav-zh">活动</span><span class="nav-en">ACTIVITY</span></span>
-        </router-link>
-        <router-link to="/news" class="nav-item pg-nav">动态 NEWS</router-link>
-        <AppSettingsMenu
-          :onboarding-enabled="onboardingEnabled"
-          @restart-onboarding="restartOnboarding"
-        />
-      </nav>
-      <SessionSidebar
-        :sessions="sessions"
-        :active-id="sessionId"
-        :session-statuses="allSessionStatuses"
-        :collapsed="effectiveCollapsed"
-        @create="createSession"
-        @switch="handleSwitchSession"
-        @delete="deleteSession"
-        @constify="handleConstify"
-        @unconstify="handleUnconstify"
-      />
-      <PulsePanel v-if="health && pulseEnabled" :health="health" />
-      <HealthPanel v-else-if="health" :health="health" />
-    </aside>
-    <!-- 悬停滑入侧边栏 -->
-    <FloatSidebar />
+    <IconRail @toggle-session-drawer="openSessionDrawer" />
+    <SessionDrawer
+      :open="sessionDrawerOpen"
+      :sessions="sessions"
+      :active-id="sessionId"
+      :session-statuses="allSessionStatuses"
+      @close="closeSessionDrawer"
+      @create="handleCreateSession"
+      @switch="handleSwitchSession"
+      @delete="deleteSession"
+      @constify="handleConstify"
+      @unconstify="handleUnconstify"
+    />
     <main class="main">
       <RegionalErrorBoundary :reset-keys="[$route.path]">
         <router-view v-slot="{ Component }">
@@ -77,61 +43,54 @@
 </template>
 
 <script setup lang="ts">
-import HealthPanel from '@/components/HealthPanel.vue';
-import PulsePanel from '@/components/PulsePanel.vue';
 import OnboardingView from '@/views/OnboardingView.vue';
-import Icon from '@/components/Icon.vue';
 import IconRail from '@/components/IconRail.vue';
-import SessionSidebar from '@/components/SessionSidebar.vue';
-import AppSettingsMenu from '@/components/AppSettingsMenu.vue';
+import SessionDrawer from '@/components/SessionDrawer.vue';
 import { useChatStore } from '@/stores/chat';
-import { onboardingEnabled, useOnboardingStore } from '@/stores/onboarding';
+import { useOnboardingStore } from '@/stores/onboarding';
 import { storeToRefs } from 'pinia';
 import { useSessionStore } from '@/stores/session';
-import { useSidebar } from '@/composables/useSidebar';
 import { defineAsyncComponent, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 
 import LeavesOverlay from '@/components/LeavesOverlay.vue'
-import FloatSidebar from '@/components/FloatSidebar.vue'
-import { useFloatSidebar } from '@/composables/useFloatSidebar'
 import { usePaperTexture } from '@/composables/usePaperTexture'
 import { useGlobalShortcut } from '@/composables/useGlobalShortcut'
 import { useHealthPolling } from '@/composables/useHealthPolling'
 import RegionalErrorBoundary from '@/components/ui/RegionalErrorBoundary.vue'
 import DsToast from '@/components/ui/DsToast.vue'
-import { reactive } from 'vue'
+import { reactive, ref, nextTick } from 'vue'
 
 const MediaViewer = defineAsyncComponent(() => import('@/components/MediaViewer.vue'))
-const { effectiveCollapsed, toggleSidebar } = useSidebar()
-const pulseEnabled = import.meta.env.VITE_PULSE_ENABLED === 'true'
 const onboarding = useOnboardingStore()
-
-const { onEnter: onFloatSidebarEnter, onLeave: onFloatSidebarLeave } = useFloatSidebar()
+const sessionDrawerOpen = ref(false)
 
 // 初始化纸质纹理 — 在顶层调用 composable，确保 reactive context 正确
 const { enabled: paperTextureEnabled } = usePaperTexture()
 document.body.classList.toggle('paper-texture', paperTextureEnabled.value)
 
-function restartOnboarding() {
-  onboarding.restart()
+function openSessionDrawer() {
+  sessionDrawerOpen.value = true
 }
 
-function onSidebarClick(e: MouseEvent) {
-  if (e.target === e.currentTarget) {
-    toggleSidebar()
-  }
-}
-
-// Phase 1 compatibility bridge: the drawer owns this action in the next shell phase.
-function toggleSessionDrawer() {
-  toggleSidebar()
+function closeSessionDrawer() {
+  sessionDrawerOpen.value = false
+  void nextTick(() => {
+    document.querySelector<HTMLButtonElement>('button[aria-label="会话"]')?.focus()
+  })
 }
 
 const router = useRouter()
 
-function handleSwitchSession(id: string) {
-  switchSession(id)
+async function handleCreateSession() {
+  await createSession()
+  closeSessionDrawer()
+  await router.push('/')
+}
+
+async function handleSwitchSession(id: string) {
+  await switchSession(id)
+  closeSessionDrawer()
   router.push('/')
 }
 
@@ -159,9 +118,6 @@ const { createSession, switchSession, deleteSession } = sessionStore
 useGlobalShortcut({ key: 'n', mod: true, allowInEditable: true }, () => {
   void createSession().then(() => router.push('/'))
 })
-
-// Ctrl+Escape 切换侧边栏折叠
-useGlobalShortcut({ key: 'Escape', mod: true }, () => { toggleSidebar() })
 
 const chatStore = useChatStore()
 const { allSessionStatuses } = storeToRefs(chatStore)
@@ -270,6 +226,8 @@ onMounted(async () => {
 
 html, body {
   height: 100%;
+  min-width: 0;
+  overflow-x: hidden;
   font-family: var(--font-body);
   /* 响应式字体：15px 基准，随视口宽度自适应缩放（1920px≈16px, 2560px≈18px） */
 	  font-size: clamp(16px, 15px + 0.2vw, 18px);
@@ -280,11 +238,15 @@ html, body {
 
 #app {
   height: 100%;
+  min-width: 0;
 }
 
 .app-layout {
   display: flex;
   height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .sidebar-hover-trigger {
@@ -435,6 +397,8 @@ html, body {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .sidebar .health-panel {
