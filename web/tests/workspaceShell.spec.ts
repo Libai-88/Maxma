@@ -41,7 +41,10 @@ function createTestRouter() {
 describe('workspace shell', () => {
   it('header ownership keeps only active context controls and truncates long titles', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/views/ChatView.vue'), 'utf8')
+    const chatInputSource = readFileSync(resolve(process.cwd(), 'src/components/ChatInput.vue'), 'utf8')
+    const modelSelectorSource = readFileSync(resolve(process.cwd(), 'src/components/ModelSelector.vue'), 'utf8')
     const headerBlock = source.match(/<ChatHeader>[\s\S]*?<\/ChatHeader>/)?.[0] ?? ''
+    const chatInputTemplate = chatInputSource.match(/<template>[\s\S]*?<\/template>/)?.[0] ?? ''
 
     expect(headerBlock).not.toContain('<ModelSelector')
     expect(headerBlock).not.toContain('<ContextUsageBadge')
@@ -54,6 +57,13 @@ describe('workspace shell', () => {
     const taskStatusIndex = headerBlock.indexOf('<TaskTrackerBar')
     expect(menuStart).toBeGreaterThanOrEqual(0)
     expect(taskStatusIndex).toBeGreaterThan(menuStart)
+
+    expect((chatInputTemplate.match(/<ModelSelector\b/g) ?? [])).toHaveLength(1)
+    expect((chatInputTemplate.match(/<ContextUsageBadge\b/g) ?? [])).toHaveLength(1)
+    expect(chatInputTemplate).not.toContain('provider-select')
+    expect(chatInputTemplate).not.toContain('<DsSelect')
+    expect((modelSelectorSource.match(/class="composer-model-selector"/g) ?? [])).toHaveLength(1)
+    expect((modelSelectorSource.match(/<DsSelect\b/g) ?? [])).toHaveLength(1)
   })
 
   it('shows a short current session title while keeping the full context in title', () => {

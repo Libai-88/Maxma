@@ -144,26 +144,6 @@
           </div>
         </div>
         <div class="input-right-group">
-          <DsSelect
-            class="provider-select"
-            :class="{ empty: providers.length === 0 }"
-            :model-value="selectedProviderId"
-            :options="providerOptions"
-            :placeholder="providers.length === 0 ? '未配置模型' : '选择提供商'"
-            :aria-label="'LLM 提供商'"
-            size="sm"
-            @update:model-value="selectProvider"
-          />
-          <DsSelect
-            v-if="currentModels.length"
-            class="model-select"
-            :model-value="selectedModelName"
-            :options="modelOptions"
-            :placeholder="'选择模型'"
-            :aria-label="'模型'"
-            size="sm"
-            @update:model-value="selectModel"
-          />
           <span class="input-separator"></span>
           <div class="input-actions">
             <button
@@ -245,7 +225,6 @@ import QuotedSelectionCard from '@/components/QuotedSelectionCard.vue'
 import ThinkPathChooser from '@/components/ThinkPathChooser.vue'
 import { computeFloatingInputPosition } from '@/utils/floatingPosition'
 import type { SkillInfo, MacroInfo, ToolInfo } from '@/types'
-import { useProviderStore } from '@/stores/provider'
 import { useStickerSegments, type StickerSegment } from '@/composables/useStickerSegments'
 import { useChatInputInjected } from '@/composables/useChatInput'
 import type { FileRef, FolderRef, ParsedRef, ImageRef } from '@/utils/references'
@@ -254,7 +233,6 @@ import { getApiBase, isTauri, tauriFetch } from '@/utils/env'
 import type { ThinkPathId } from '@/utils/thinkPath'
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import type { Sticker } from '@/components/StickerPicker.vue'
-import DsSelect from './ui/DsSelect.vue'
 import ModelSelector from './ModelSelector.vue'
 import ContextUsageBadge from './ContextUsageBadge.vue'
 import { useChatStore } from '@/stores/chat'
@@ -730,103 +708,11 @@ function calcCursorPixelPos(textarea: HTMLTextAreaElement, pos: number): { x: nu
   return { x, y }
 }
 
-// ── LLM 选择器 ──
-// provider 列表来自全局 store（含重试），消除此前各组件独立请求导致的状态不一致
-// selectedProviderId/selectedModelName 直接复用 useChatInput 的 ref（与 ChatView 同一引用）
-const providerStore = useProviderStore()
+// ── Composer 模型状态 ──
+// ModelSelector 负责可见的 provider/model 组合选择；发送仍只读取 useChatInput 的持久化 refs。
 const chatStore = useChatStore()
-const providers = computed(() => providerStore.enabledProviders)
-const selectedProviderId = chatInput.providerId
-const selectedModelName = chatInput.modelName
-const currentModels = ref<string[]>([])
-const noProvider = computed(() => providers.value.length === 0)
-const providerOptions = computed(() =>
-  providers.value.map(p => ({ value: p.id, label: p.label }))
-)
-const modelOptions = computed(() =>
-  currentModels.value.map(m => ({ value: m, label: m }))
-)
+const noProvider = computed(() => chatStore.availableModels.length === 0)
 
-	function selectProvider(value: string | number | null) {
-	  if (value == null) return
-	  const id = String(value)
-	  selectedProviderId.value = id
-	  const p = providers.value.find(p => p.id === id)
-	  currentModels.value = p?.models ?? []
-	  selectedModelName.value = currentModels.value[0] || ''
-	  chatInput.onModelChange(selectedProviderId.value, selectedModelName.value)
-	}
-	
-	function selectModel(value: string | number | null) {
-	  if (value == null) return
-	  const name = String(value)
-  selectedModelName.value = name
-  chatInput.onModelChange(selectedProviderId.value || '', name)
-}
-
-// 从 store 加载 provider 列表并设置默认选中
-async function loadProviders() {
-  await providerStore.loadProviders()
-  // 优先使用 ChatView 传入的初始值（跨对话持久化，存于 composable 的 providerId/modelName）
-  const initialProviderId = selectedProviderId.value
-  const initialModelName = selectedModelName.value
-  if (initialProviderId) {
-    const provider = providers.value.find(p => p.id === initialProviderId)
-    if (provider) {
-      selectedProviderId.value = provider.id
-      currentModels.value = provider.models ?? []
-      selectedModelName.value = initialModelName && currentModels.value.includes(initialModelName)
-        ? initialModelName
-        : (currentModels.value[0] || '')
-      // 同步回 ChatView（触发 onModelChange 回调持久化到 localStorage）
-      chatInput.onModelChange(selectedProviderId.value, selectedModelName.value)
-      return
-    }
-  }
-  // 默认选中第一个已启用的提供商
-  if (providers.value.length > 0 && !selectedProviderId.value) {
-    selectProvider(providers.value[0].id)
-  }
-}
-
-// 监听 store 中 provider 列表变化（例如 ProvidersView 增删改后刷新 store）
-watch(providers, (newList) => {
-  // 如果有初始值且初始值有效，让 loadProviders 处理初始选择，避免竞态覆盖
-  const initialProviderId = selectedProviderId.value
-  if (initialProviderId && newList.find(p => p.id === initialProviderId) && !selectedProviderId.value) {
-    return
-  }
-  if (selectedProviderId.value) {
-    // 当前选中的 provider 还在列表中
-    const p = newList.find(p => p.id === selectedProviderId.value)
-    if (p) {
-      // 更新 currentModels（provider 的 models 可能被修改过）
-      const newModels = p.models ?? []
-      const modelsChanged = JSON.stringify(currentModels.value) !== JSON.stringify(newModels)
-      if (modelsChanged) {
-        currentModels.value = newModels
-        // selectedModelName 不在新 models 中时重置为第一个
-        if (!newModels.includes(selectedModelName.value || '')) {
-          selectedModelName.value = newModels[0] || ''
-          chatInput.onModelChange(selectedProviderId.value || '', selectedModelName.value)
-        }
-      }
-    } else {
-      // 当前选中的 provider 不在新列表中（被删除或禁用），重置选中
-      selectedProviderId.value = ''
-      currentModels.value = []
-      selectedModelName.value = ''
-      if (newList.length > 0) {
-        selectProvider(newList[0].id)
-      }
-    }
-  } else if (!selectedProviderId.value && newList.length > 0) {
-    // 之前没有 provider，现在有了，自动选中第一个
-    selectProvider(newList[0].id)
-  }
-})
-
-onMounted(loadProviders)
 onMounted(loadSkills)
 onMounted(loadTools)
 onMounted(loadMacros)
@@ -1025,11 +911,6 @@ function handleSend() {
       }
     }, 5000)
     return
-  }
-  // 同步头部的 ModelSelector（chatStore.currentModel）与 ChatInput 实际选中的模型，
-  // 避免用户在不同位置选择了不同模型时，发送出去的值与显示的值不一致。
-  if (selectedModelName.value) {
-    chatStore.setModel(selectedModelName.value)
   }
   // 修复 R-001：检查 send() 返回值，发送失败时不清空输入框，
   // 避免 WebSocket 在 canSend 检查与 send() 调用之间断开的 TOCTOU 竞态导致消息静默丢失。
@@ -1249,66 +1130,6 @@ function onResizeEnd(e: PointerEvent) {
   padding: 12px 24px 16px;
   background: var(--bg-card);
   position: relative;
-}
-
-/* ── LLM 提供商/模型选择器（基于 DsSelect，覆盖 input 样式以保持紧凑视觉）── */
-.provider-select,
-.model-select {
-  width: auto;
-  max-width: 160px;
-  flex-shrink: 1;
-  min-width: 0;
-}
-.provider-select :deep(.ds-select__input),
-.model-select :deep(.ds-select__input) {
-  height: 24px;
-  padding: 0 24px 0 8px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 0.75em;
-  font-family: inherit;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s, color 0.15s;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.provider-select :deep(.ds-select__input:hover),
-.model-select :deep(.ds-select__input:hover) {
-  border-color: var(--border);
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-}
-.provider-select.empty :deep(.ds-select__input) {
-  color: var(--status-error);
-  opacity: 0.7;
-}
-.provider-select :deep(.ds-select__input:focus-visible),
-.model-select :deep(.ds-select__input:focus-visible) {
-  outline: 1.5px solid var(--accent);
-  outline-offset: 2px;
-  box-shadow: none;
-  border-color: transparent;
-}
-.provider-select :deep(.ds-select--open .ds-select__input),
-.model-select :deep(.ds-select--open .ds-select__input) {
-  border-color: var(--accent);
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  box-shadow: none;
-}
-.provider-select :deep(.ds-select__caret),
-.model-select :deep(.ds-select__caret) {
-  width: 20px;
-  height: 24px;
-  color: var(--text-tertiary);
-  opacity: 0.5;
-}
-.provider-select :deep(.ds-select--open .ds-select__caret),
-.model-select :deep(.ds-select--open .ds-select__caret) {
-  color: var(--text-primary);
-  opacity: 1;
 }
 
 /* 引用标签条 */
@@ -1796,16 +1617,21 @@ function onResizeEnd(e: PointerEvent) {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  min-width: 0;
   padding: 4px 10px 6px 14px;
 }
 .input-left-group {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 2px;
 }
 .input-right-group {
+  min-width: 0;
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 6px;
 }
 .input-separator {
@@ -1906,6 +1732,35 @@ function onResizeEnd(e: PointerEvent) {
 	  text-align: center;
 	  padding: 2px 0;
 	}
+
+@media (max-width: 720px) {
+  .input-bottom-bar {
+    padding-inline: 10px;
+  }
+
+  .input-right-group {
+    gap: 4px;
+  }
+
+  .shortcut-hint {
+    display: none;
+  }
+
+  .input-toolbar :deep(.context-usage-badge) {
+    display: none;
+  }
+
+}
+
+@media (max-width: 480px) {
+  .input-bottom-bar {
+    padding-inline: 8px;
+  }
+
+  .input-separator {
+    display: none;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .quote-pop-enter-active,

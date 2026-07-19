@@ -1,16 +1,21 @@
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 
-const { storeState, setModelMock, fetchAvailableModelsMock } = vi.hoisted(() => ({
+const { storeState, setModelMock, fetchAvailableModelsMock, chatInputMock } = vi.hoisted(() => ({
   storeState: {
     availableModels: [
-      { id: 'm1', name: 'Model 1', provider: 'p', contextWindow: 8000 },
-      { id: 'm2', name: 'Model 2', provider: 'p', contextWindow: 128000 },
+      { id: 'local/combo', name: 'combo', provider: '本地', contextWindow: 128000 },
+      { id: 'deepseek/deepseek-chat', name: 'deepseek-chat', provider: 'Deepseek', contextWindow: 64000 },
     ],
-    currentModel: 'm1',
+    currentModel: 'local/combo',
   },
   setModelMock: vi.fn(),
   fetchAvailableModelsMock: vi.fn(),
+  chatInputMock: {
+    providerId: { value: '本地' },
+    modelName: { value: 'combo' },
+    onModelChange: vi.fn(),
+  },
 }))
 
 vi.mock('@/stores/chat', () => ({
@@ -22,33 +27,48 @@ vi.mock('@/stores/chat', () => ({
   }),
 }))
 
+vi.mock('@/composables/useChatInput', () => ({
+  useChatInputInjected: () => chatInputMock,
+}))
+
 import ModelSelector from '@/components/ModelSelector.vue'
 import DsSelect from '@/components/ui/DsSelect.vue'
 
 describe('ModelSelector', () => {
-  it('mounts and renders DsSelect with options from store', () => {
+  it('renders one Composer combobox with provider and model in every option label', () => {
     const wrapper = mount(ModelSelector)
+    expect(wrapper.find('.composer-model-selector').exists()).toBe(true)
+    expect(wrapper.findAll('[role="combobox"]')).toHaveLength(1)
     const dsSelect = wrapper.findComponent(DsSelect)
     expect(dsSelect.exists()).toBe(true)
-    // options 平铺所有 availableModels，含 provider 与 contextWindow（供 groupKey 分组与 ctx 显示）
     expect(dsSelect.props('options')).toEqual([
-      { value: 'm1', label: 'Model 1', provider: 'p', contextWindow: 8000 },
-      { value: 'm2', label: 'Model 2', provider: 'p', contextWindow: 128000 },
+      {
+        value: 'local/combo',
+        label: '本地 · combo',
+        providerId: '本地',
+        modelName: 'combo',
+        contextWindow: 128000,
+      },
+      {
+        value: 'deepseek/deepseek-chat',
+        label: 'Deepseek · deepseek-chat',
+        providerId: 'Deepseek',
+        modelName: 'deepseek-chat',
+        contextWindow: 64000,
+      },
     ])
-    // 按 provider 分组
-    expect(dsSelect.props('groupKey')).toBe('provider')
-    // 当前选中值绑定 store.currentModel
-    expect(dsSelect.props('modelValue')).toBe('m1')
-    // input 显示选中 model 的 name
-    expect(dsSelect.find('.ds-select__input').element.getAttribute('value')).toBe('Model 1')
+    expect(dsSelect.props('groupKey')).toBeUndefined()
+    expect(dsSelect.props('modelValue')).toBe('local/combo')
+    expect(dsSelect.find('.ds-select__input').element.getAttribute('value')).toBe('本地 · combo')
     wrapper.unmount()
   })
 
-  it('calls store.setModel when DsSelect emits update:modelValue', async () => {
+  it('maps the selected model id to provider and model for useChatInput', async () => {
     const wrapper = mount(ModelSelector)
     const dsSelect = wrapper.findComponent(DsSelect)
-    await dsSelect.vm.$emit('update:modelValue', 'm2')
-    expect(setModelMock).toHaveBeenCalledWith('m2')
+    await dsSelect.vm.$emit('update:modelValue', 'deepseek/deepseek-chat')
+    expect(chatInputMock.onModelChange).toHaveBeenCalledWith('Deepseek', 'deepseek-chat')
+    expect(setModelMock).toHaveBeenCalledWith('deepseek/deepseek-chat')
     wrapper.unmount()
   })
 
