@@ -271,7 +271,13 @@ onUnmounted(() => {
 
 function toggleSettingsMenu() {
   showSettingsMenu.value = !showSettingsMenu.value
-  nextTick(() => updatePopupPosition())
+  nextTick(() => {
+    updatePopupPosition()
+    // 打开时滚动到顶部，避免上次的滚动位置残留导致看不到顶部菜单
+    if (showSettingsMenu.value && settingsPopupRef.value) {
+      settingsPopupRef.value.scrollTop = 0
+    }
+  })
 }
 
 function closeSettingsMenu() {
@@ -322,6 +328,7 @@ function updatePopupPosition() {
   el.style.setProperty('overflow-y', 'auto')
 
   if (opensAbove) {
+    // popup 底部贴近 trigger 上方，通过 bottom 定位让浏览器自动延展顶部
     const popupBottom = Math.min(
       viewportHeight - viewportPadding,
       Math.max(viewportPadding, rect.top - gap),
@@ -439,6 +446,23 @@ onUnmounted(() => {
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
+}
+
+/* 加粗 popup 滚动条，让用户能注意到可以滚动 */
+.settings-popup::-webkit-scrollbar {
+  width: 10px;
+}
+.settings-popup::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 5px;
+  border: 2px solid var(--bg-card);
+}
+.settings-popup::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+.settings-popup {
+  scrollbar-width: auto;
+  scrollbar-color: var(--border) transparent;
 }
 
 .popup-header {
