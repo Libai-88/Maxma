@@ -9,7 +9,7 @@
       <button class="welcome-error-retry" @click="store.loadProfile()">重试</button>
     </div>
     <div v-else class="welcome-content">
-      <div class="welcome-avatar">{{ store.profile.avatar }}</div>
+      <div class="welcome-avatar"><span aria-hidden="true">{{ store.profile.avatar }}</span></div>
       <h1 class="welcome-name">{{ store.profile.name || 'Maxma' }}</h1>
       <p class="welcome-scene">{{ sceneText }}</p>
       <p class="welcome-greeting">{{ store.profile.greeting || '你好呀，今天想聊些什么？' }}</p>
@@ -28,7 +28,7 @@
 
       <!-- 示例提示：分场景给出可点击的具体 prompt，降低上手门槛 -->
       <section class="example-prompts" aria-label="试试这些">
-        <div class="example-title">试试这些 ✨</div>
+        <div class="example-title">试试这些 <span aria-hidden="true">✨</span></div>
         <div class="example-chips">
           <button
             v-for="ex in examples"
@@ -38,7 +38,7 @@
             @click="$emit('start', ex.text)"
             :title="ex.hint"
           >
-            <span class="example-chip-icon">{{ ex.icon }}</span>
+            <span class="example-chip-icon" aria-hidden="true">{{ ex.icon }}</span>
             <span class="example-chip-text">{{ ex.label }}</span>
           </button>
         </div>

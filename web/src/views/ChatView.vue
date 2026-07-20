@@ -40,7 +40,7 @@
         </div>
 
         <p class="no-provider-note">
-          💡 不知道选哪个？DeepSeek 注册即送免费额度，OpenAI 兼容 API 都能直接接入。
+          <span aria-hidden="true">💡</span> 不知道选哪个？DeepSeek 注册即送免费额度，OpenAI 兼容 API 都能直接接入。
         </p>
       </div>
     </div>
@@ -58,7 +58,7 @@
           @click="workbench.toggle()"
           title="工作台"
         >
-          &#9776;
+          <span aria-hidden="true">&#9776;</span>
         </button>
         <div class="session-more-menu">
           <button
@@ -70,9 +70,9 @@
             :aria-expanded="moreMenuOpen"
             @click="moreMenuOpen = !moreMenuOpen"
           >
-            ···
+            <span aria-hidden="true">···</span>
           </button>
-          <div v-if="moreMenuOpen" id="session-actions-menu" class="session-actions-menu" role="menu" aria-label="更多会话操作">
+          <div v-if="moreMenuOpen" ref="actionsMenuRef" id="session-actions-menu" class="session-actions-menu" role="menu" aria-label="更多会话操作">
             <div class="session-actions-heading">会话设置</div>
             <button class="session-action" type="button" role="menuitem" :aria-pressed="privateMode" @click="togglePrivateMode">
               <span>私密模式</span>
@@ -117,7 +117,7 @@
           ref="chatInputRef"
         />
         <div v-else class="sub-agent-readonly-bar">
-          <span class="sub-agent-readonly-text">🔒 子 Agent 会话 — 只读</span>
+          <span class="sub-agent-readonly-text"><span aria-hidden="true">🔒</span> 子 Agent 会话 — 只读</span>
         </div>
       </div>
 
@@ -171,7 +171,7 @@ import { usePersonaStore } from '@/stores/persona'
 import type { ParsedRef, SelectionRef } from '@/utils/references'
 import type { ThinkPathId } from '@/utils/thinkPath'
 import { storeToRefs } from 'pinia'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useGlobalShortcut } from '@/composables/useGlobalShortcut'
 
 const sessionStore = useSessionStore()
@@ -186,6 +186,7 @@ const {
 const workbench = useWorkbenchStore()
 const moreMenuOpen = ref(false)
 const moreMenuTrigger = ref<HTMLButtonElement | null>(null)
+const actionsMenuRef = ref<HTMLElement | null>(null)
 
 const hasMessages = computed(() => turns.value.length > 0 || currentTurn.value)
 
@@ -256,15 +257,75 @@ function closeMoreMenu() {
   moreMenuTrigger.value?.focus()
 }
 
+function getMenuItems(): HTMLElement[] {
+  if (!actionsMenuRef.value) return []
+  return Array.from(actionsMenuRef.value.querySelectorAll('[role="menuitem"]'))
+    .filter(el => !el.hasAttribute('disabled')) as HTMLElement[]
+}
+
+function focusFirstMenuItem() {
+  nextTick(() => {
+    const items = getMenuItems()
+    items[0]?.focus()
+  })
+}
+
+function moveMenuFocus(direction: 'next' | 'prev' | 'first' | 'last') {
+  const items = getMenuItems()
+  if (!items.length) return
+  const active = document.activeElement
+  let idx = items.findIndex(el => el === active)
+  if (idx < 0) idx = 0
+  let nextIdx = idx
+  if (direction === 'next') {
+    nextIdx = (idx + 1) % items.length
+  } else if (direction === 'prev') {
+    nextIdx = (idx - 1 + items.length) % items.length
+  } else if (direction === 'first') {
+    nextIdx = 0
+  } else if (direction === 'last') {
+    nextIdx = items.length - 1
+  }
+  items[nextIdx].focus()
+}
+
+watch(moreMenuOpen, open => {
+  if (open) focusFirstMenuItem()
+})
+
 function handleMoreMenuPointerdown(event: PointerEvent) {
   const target = event.target
   if (target instanceof Element && !target.closest('.session-more-menu')) closeMoreMenu()
 }
 
 function handleMoreMenuKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape' && moreMenuOpen.value) {
+  if (!moreMenuOpen.value) return
+
+  if (event.key === 'Escape') {
     event.stopPropagation()
     closeMoreMenu()
+    return
+  }
+
+  if (!actionsMenuRef.value?.contains(event.target as Node)) return
+
+  switch (event.key) {
+    case 'ArrowDown':
+      event.preventDefault()
+      moveMenuFocus('next')
+      break
+    case 'ArrowUp':
+      event.preventDefault()
+      moveMenuFocus('prev')
+      break
+    case 'Home':
+      event.preventDefault()
+      moveMenuFocus('first')
+      break
+    case 'End':
+      event.preventDefault()
+      moveMenuFocus('last')
+      break
   }
 }
 

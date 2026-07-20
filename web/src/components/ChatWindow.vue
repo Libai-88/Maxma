@@ -21,6 +21,7 @@
             turn.events.length,
             turn.userMessage,
             turn.memoryEvents ? turn.memoryEvents.length : 0,
+            streamingTokensSignature(turn),
           ]"
         >
           <div class="turn-wrapper">
@@ -163,7 +164,7 @@
           </span>
           <span class="error-message">{{ error }}</span>
           <span v-if="errorTraceId" class="error-trace-id">Trace: {{ errorTraceId }}</span>
-          <button class="error-copy-btn" @click="copyErrorLog" :title="'复制错误日志'">
+          <button class="error-copy-btn" @click="copyErrorLog" :title="'复制错误日志'" aria-label="复制错误日志">
             <span v-if="copySuccess" class="copy-success">✓</span>
             <span v-else class="copy-icon"></span>
           </button>
@@ -206,7 +207,7 @@
                 <span class="quick-hint-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg></span>
                 单击开关侧栏
               </span>
-              <span class="quick-hint" @click="togglePrivate">
+              <span class="quick-hint">
                 <span class="quick-hint-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
                 <span><kbd>Ctrl</kbd> + <kbd>K</kbd> 切换私密模式</span>
               </span>
@@ -222,12 +223,16 @@
 
     <!-- 用户消息滚动标记 -->
     <div class="scroll-marks" v-if="turns.length > 0">
-      <div
+      <button
         v-for="(turn, idx) in turns"
         :key="turn.id"
+        type="button"
         class="scroll-mark"
         @click="scrollToTurn(idx)"
+        @keydown.enter.prevent="scrollToTurn(idx)"
+        @keydown.space.prevent="scrollToTurn(idx)"
         :title="turn.userMessage.slice(0, 60)"
+        aria-label="跳转到该轮次"
       />
     </div>
 
@@ -257,6 +262,8 @@ import ApprovalBubble from './ApprovalBubble.vue'
 import SubAgentCard from './SubAgentCard.vue'
 import { toolDisplayName } from './tools/_shared/displayNames'
 import { chatSessionAliveCache } from '@/composables/sessionAliveCache'
+import emptyBgDay from '@/assets/images/brand/empty-bg-day.jpg'
+import emptyBgNight from '@/assets/images/brand/empty-bg-night.jpg'
 // 虚拟列表：仅渲染视口内/附近的轮次，长对话性能大幅提升
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
@@ -281,7 +288,7 @@ const { isDark } = useTheme()
 const copySuccess = ref(false)
 
 const emptyStateStyle = computed(() => ({
-  '--empty-bg-image': `url('@/assets/images/brand/empty-bg-${isDark.value ? 'night' : 'day'}.jpg')`,
+  '--empty-bg-image': `url("${isDark.value ? emptyBgNight : emptyBgDay}")`,
 }))
 
 async function copyErrorLog() {
@@ -410,6 +417,19 @@ function isStreamingTurn(turn: ChatTurn): boolean {
   return props.currentTurn?.id === turn.id
 }
 
+/** 流式 token 签名：返回所有 thinking block 的 tokens 长度总和。
+ *  用于 DynamicScrollerItem 的 size-dependencies，让虚拟列表在 token
+ *  累加时重新计算 item 高度；同时供 watch 触发自动滚动。 */
+function streamingTokensSignature(turn: ChatTurn): number {
+  let total = 0
+  for (const ev of turn.events) {
+    if (ev.kind === 'thinking' && typeof ev.tokens === 'string') {
+      total += ev.tokens.length
+    }
+  }
+  return total
+}
+
 watch(
   () => props.currentTurn?.id,
   (id) => {
@@ -481,6 +501,14 @@ watch(
     if (isNearBottom()) scrollToBottom()
   }
 )
+// 流式 token 累加时自动滚动到底部（token 事件不改变 events.length，
+// 上面的事件长度 watch 不会触发，必须单独监听 tokens 内容变化）
+watch(
+  () => props.currentTurn ? streamingTokensSignature(props.currentTurn) : 0,
+  () => {
+    if (isNearBottom()) scrollToBottom()
+  }
+)
 
 // ── Typewriter: 调皮互动文案轮播 ──
 const words = [
@@ -527,25 +555,12 @@ function typewriterTick() {
   }
 }
 
-// ── Private mode toggle (Ctrl+K) ──
-function togglePrivate() {
-  emit('togglePrivate')
-}
-
-function onPrivateKeydown(e: KeyboardEvent) {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-    e.preventDefault()
-    togglePrivate()
-  }
-}
-
 onMounted(() => {
   displayedWord.value = words[0]
   charIndex = words[0].length
   wordIndex = 0
   isDeleting = false
   typewriterTick()
-  document.addEventListener('keydown', onPrivateKeydown)
 })
 
 onUnmounted(() => {
@@ -558,7 +573,6 @@ onUnmounted(() => {
   }
   if (typeTimer) clearTimeout(typeTimer)
   if (typingTimer) clearTimeout(typingTimer)
-  document.removeEventListener('keydown', onPrivateKeydown)
 })
 
 // === 引用功能 ===
@@ -711,7 +725,7 @@ function closeContextMenu() {
   height: 100%;
   padding: 0 48px 40px 48px;
   gap: 16px;
-  background-image: var(--empty-bg-image, url('@/assets/images/brand/empty-bg-day.jpg'));
+  background-image: var(--empty-bg-image);
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -944,6 +958,9 @@ function closeContextMenu() {
   position: relative;
   width: 18px;
   height: 4px;
+  border: none;
+  padding: 0;
+  margin: 0;
   border-radius: 2px;
   background: var(--border);
   cursor: pointer;

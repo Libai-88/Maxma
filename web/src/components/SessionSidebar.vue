@@ -138,14 +138,22 @@
     <!-- ── 删除确认对话框 ── -->
     <Teleport to="body">
       <Transition name="fade">
-        <div v-if="deleteConfirmTarget" class="delete-confirm-overlay" @click="cancelDelete">
+        <div
+          v-if="deleteConfirmTarget"
+          class="delete-confirm-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-confirm-title"
+          @click="cancelDelete"
+          @keydown="handleDeleteKeydown"
+        >
           <div class="delete-confirm-card" @click.stop>
-            <div class="delete-confirm-title">确认删除会话</div>
+            <div id="delete-confirm-title" class="delete-confirm-title">确认删除会话</div>
             <div class="delete-confirm-message">
               此会话包含 <strong>{{ deleteConfirmTarget.message_count }}</strong> 条消息，删除后无法恢复。
             </div>
             <div class="delete-confirm-actions">
-              <button class="delete-confirm-btn cancel" @click="cancelDelete">取消</button>
+              <button ref="deleteConfirmCancelBtn" class="delete-confirm-btn cancel" @click="cancelDelete">取消</button>
               <button class="delete-confirm-btn confirm" @click="confirmDelete">删除</button>
             </div>
           </div>
@@ -440,20 +448,75 @@ function closeContextMenu() {
 // ── 删除确认对话框 ──────────────────────────────────────────────
 
 const deleteConfirmTarget = ref<SessionInfo | null>(null)
+const deleteConfirmCancelBtn = ref<HTMLButtonElement | null>(null)
+let deleteTriggerElement: HTMLElement | null = null
 
 function showDeleteConfirm(session: SessionInfo) {
+  deleteTriggerElement = document.activeElement as HTMLElement
   deleteConfirmTarget.value = session
+  nextTick(() => {
+    deleteConfirmCancelBtn.value?.focus()
+  })
+}
+
+function closeDeleteDialog(returnFocus = true) {
+  deleteConfirmTarget.value = null
+  if (returnFocus && deleteTriggerElement?.isConnected) {
+    deleteTriggerElement.focus()
+  }
+  deleteTriggerElement = null
 }
 
 function cancelDelete() {
-  deleteConfirmTarget.value = null
+  closeDeleteDialog(true)
 }
 
 function confirmDelete() {
   if (deleteConfirmTarget.value) {
     emit('delete', deleteConfirmTarget.value.session_id)
   }
-  deleteConfirmTarget.value = null
+  closeDeleteDialog(true)
+}
+
+function getFocusableInDialog(root: HTMLElement): HTMLElement[] {
+  const card = root.querySelector('.delete-confirm-card')
+  if (!card) return []
+  return Array.from(card.querySelectorAll('button:not([disabled])')) as HTMLElement[]
+}
+
+function handleDeleteKeydown(event: KeyboardEvent) {
+  if (!deleteConfirmTarget.value) return
+
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeDeleteDialog(true)
+    return
+  }
+
+  if (event.key !== 'Tab') return
+
+  const overlay = event.currentTarget as HTMLElement
+  const focusable = getFocusableInDialog(overlay)
+  if (!focusable.length) {
+    event.preventDefault()
+    return
+  }
+
+  const current = document.activeElement as HTMLElement
+  const idx = focusable.findIndex(el => el === current)
+  if (idx < 0) {
+    event.preventDefault()
+    focusable[0].focus()
+    return
+  }
+
+  if (!event.shiftKey && idx === focusable.length - 1) {
+    event.preventDefault()
+    focusable[0].focus()
+  } else if (event.shiftKey && idx === 0) {
+    event.preventDefault()
+    focusable[focusable.length - 1].focus()
+  }
 }
 </script>
 
