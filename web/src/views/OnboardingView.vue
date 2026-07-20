@@ -97,23 +97,23 @@ function openProviders() { emit('openProviders') }
 h2 { margin: 3px 0 0; font-size: 22px; color: var(--text-primary); }.eyebrow { color: var(--text-tertiary); font-size: 12px; letter-spacing: 0.08em; }
 .skip, .primary, .secondary, .theme-option { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 16px; font: inherit; font-size: 14px; cursor: pointer; }.skip, .secondary, .theme-option { background: transparent; color: var(--text-secondary); }.primary { background: var(--accent); border-color: var(--accent); color: var(--bg-primary); }.primary:focus-visible, .secondary:focus-visible, .skip:focus-visible, .theme-option:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .stepper { display: flex; gap: 6px; padding: 18px 24px 0; }.stepper span { display: block; height: 3px; flex: 1; background: var(--border); }.stepper .active, .stepper .complete { background: var(--accent); }
-.step-content { display: grid; gap: 18px; min-height: 260px; padding: 28px; color: var(--text-secondary); line-height: 1.7; }.step-content p { margin: 0; }label { display: grid; gap: 6px; color: var(--text-primary); font-size: 14px; }input, select { width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-primary); color: var(--text-primary); font: inherit; padding: 10px 12px; }input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }.health-note { border-left: 3px solid var(--border); padding-left: 10px; }.health-note.ok { border-color: var(--status-ok); }.health-note.attention { border-color: var(--status-warn); }.theme-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }.theme-option { display: grid; gap: 8px; text-align: left; }.theme-option.selected { border-color: var(--accent); color: var(--text-primary); }.theme-swatch { display: block; height: 30px; border: 1px solid var(--border); border-radius: 3px; }
+.step-content { display: grid; gap: 18px; min-height: 260px; padding: 28px; color: var(--text-secondary); line-height: 1.7; background: var(--bg-card); }.step-content p { margin: 0; }label { display: grid; gap: 6px; color: var(--text-primary); font-size: 14px; }input, select { width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-primary); color: var(--text-primary); font: inherit; padding: 10px 12px; }input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }.health-note { border-left: 3px solid var(--border); padding-left: 10px; }.health-note.ok { border-color: var(--status-ok); }.health-note.attention { border-color: var(--status-warn); }.theme-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }.theme-option { display: grid; gap: 8px; text-align: left; }.theme-option.selected { border-color: var(--accent); color: var(--text-primary); }.theme-swatch { display: block; height: 30px; border: 1px solid var(--border); border-radius: 3px; }
 /* ── Step 0 价值主张 ── */
-.intro-block { display: grid; gap: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--bg-primary) 60%, transparent); }
+.intro-block { display: grid; gap: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-secondary); }
 .intro-lead { font-size: 13px; color: var(--text-secondary); line-height: 1.7; }
 .intro-lead strong { color: var(--text-primary); font-weight: 600; }
 .intro-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .intro-chip { display: inline-flex; align-items: center; padding: 3px 10px; font-size: 12px; color: var(--text-secondary); background: var(--bg-secondary); border-radius: 100px; }
 .form-note { font-size: 12px; color: var(--text-tertiary); }
 /* ── Step 1 提示卡片 ── */
-.step-tip { display: flex; gap: 10px; padding: 10px 12px; border: 1px dashed var(--border); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--accent) 4%, transparent); font-size: 12px; line-height: 1.6; }
+.step-tip { display: flex; gap: 10px; padding: 10px 12px; border: 1px dashed var(--border); border-radius: var(--radius-sm); background: var(--bg-secondary); font-size: 12px; line-height: 1.6; }
 .tip-icon { flex-shrink: 0; font-size: 14px; line-height: 1.4; }
 .tip-text { color: var(--text-secondary); }
 .tip-text strong { color: var(--text-primary); font-weight: 600; }
 /* ── Step 3 完成引导 ── */
 .ready-lead { font-size: 15px; color: var(--text-primary); font-weight: 600; }
 .next-steps { display: grid; gap: 10px; }
-.next-step { display: flex; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--bg-primary) 60%, transparent); }
+.next-step { display: flex; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-secondary); }
 .next-step-no { flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: var(--bg-primary); font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
 .next-step-body { flex: 1; min-width: 0; }
 .next-step-title { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 2px; }

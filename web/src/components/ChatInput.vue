@@ -458,9 +458,9 @@ defineExpose({ addRef })
 
 const LINK_RE = /^https?:\/\/[^\s/$.?#].[^\s]*$/i
 
-function startLinkInput(initialUrl?: string) {
+function startLinkInput(initialUrl?: string | MouseEvent) {
   showMenu.value = false
-  linkUrl.value = initialUrl ?? ''
+  linkUrl.value = typeof initialUrl === 'string' ? initialUrl : ''
   linkError.value = null
   showLinkInput.value = true
   nextTick(() => linkInputRef.value?.focus())
