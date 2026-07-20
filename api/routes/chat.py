@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _resolve_chat_model(provider_id: str, model_name: str) -> dict[str, str]:
+def _resolve_chat_model(provider_id: str, model_name: str) -> dict[str, str | int]:
     """Resolve the browser's provider/model selection for the sidecar."""
     requested_model = model_name.strip() or "gpt-4o"
     requested_provider = provider_id.strip()
@@ -39,6 +39,7 @@ def _resolve_chat_model(provider_id: str, model_name: str) -> dict[str, str]:
             "base_url": "",
             "api_key": "",
             "provider_type": "openai",
+            "context_window": 128000,
         }
 
     models = provider.get("models")
@@ -51,6 +52,7 @@ def _resolve_chat_model(provider_id: str, model_name: str) -> dict[str, str]:
         "base_url": str(provider.get("base_url") or ""),
         "api_key": _decrypt_api_key(provider.get("api_key")),
         "provider_type": str(provider.get("provider_type") or "openai"),
+        "context_window": int(provider.get("context_window") or 128000),
     }
 
 
@@ -383,6 +385,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
     _turn_user_message: str = ""
     _turn_system_prompt: str = ""
     _turn_id: str = ""
+    _turn_model_config: dict[str, str | int] = {}
 
     async def _handle_turn_result(
         task: asyncio.Task,
@@ -444,7 +447,12 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                 "type": "done",
                 "payload": {
                     "turn_id": _new_turn_id(tid),
-                    "context_usage": await _calculate_context_usage(session, sp),
+                    "context_usage": await _calculate_context_usage(
+                        session,
+                        sp,
+                        max_tokens=int(_turn_model_config.get("context_window") or 128000),
+                        model_name=str(_turn_model_config.get("model") or ""),
+                    ),
                 },
             }
         )
@@ -571,6 +579,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             _turn_user_message = user_message
             _turn_system_prompt = system_prompt
             _turn_id = turn_id
+            _turn_model_config = model_config
 
             # Reset cancel event for new turn
             cancel_event.clear()

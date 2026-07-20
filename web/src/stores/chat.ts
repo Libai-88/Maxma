@@ -36,17 +36,24 @@ export function normalizeContextUsage(payload: unknown, previous: ChatContextUsa
   const estimatedTokens = Math.max(0, firstFinite(
     data.estimated_tokens, data.estimatedTokens, data.current_tokens,
   ) ?? previous.estimatedTokens)
-  const maxTokens = Math.max(1, firstFinite(
-    data.max_tokens, data.maxTokens,
-  ) ?? (previous.maxTokens || DEFAULT_CONTEXT_USAGE.maxTokens))
-  const messageCount = Math.max(0, firstFinite(
-    data.message_count, data.messageCount,
-  ) ?? previous.messageCount)
-  const modelName = typeof data.model_name === 'string' && data.model_name
+
+  // 稳定 maxTokens：同一模型下窗口上限不应来回跳动；只在首次设置、模型切换或值变大时更新。
+  const rawMaxTokens = firstFinite(data.max_tokens, data.maxTokens)
+  const incomingModelName = typeof data.model_name === 'string' && data.model_name
     ? data.model_name
     : typeof data.modelName === 'string' && data.modelName
       ? data.modelName
-      : previous.modelName
+      : ''
+  const modelChanged = !!incomingModelName && incomingModelName !== previous.modelName
+  let maxTokens = previous.maxTokens || DEFAULT_CONTEXT_USAGE.maxTokens
+  if (rawMaxTokens !== undefined && (modelChanged || rawMaxTokens > maxTokens || !previous.maxTokens)) {
+    maxTokens = Math.max(1, rawMaxTokens)
+  }
+
+  const messageCount = Math.max(0, firstFinite(
+    data.message_count, data.messageCount,
+  ) ?? previous.messageCount)
+  const modelName = incomingModelName || previous.modelName
 
   const rawPercentage = firstFinite(
     data.percentage, data.usage_percent, data.usagePercentage,

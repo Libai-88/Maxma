@@ -735,6 +735,11 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
                 if (STICKER_DIRECTIVE_RE.test(turn.finalAnswer)) {
                   // 将内联指令替换为可渲染的 sticker 标签，保持原位显示
                   turn.finalAnswer = turn.finalAnswer.replace(STICKER_DIRECTIVE_RE, stickerTag)
+                  // 同步更新正在显示的 thinking block，避免流式阶段露出明文指令
+                  const lastThink = findLastThinking(turn.events)
+                  if (lastThink) {
+                    lastThink.tokens = turn.finalAnswer
+                  }
                 } else {
                   turn.stickerUrl = `${getApiBase()}/stickers/${data.path}`
                 }
