@@ -121,13 +121,21 @@ onUnmounted(() => {
   max-width: 280px;
   pointer-events: none;
   word-wrap: break-word;
+  opacity: 1;
+  transition: opacity var(--duration-instant) var(--ease-out),
+              transform var(--duration-instant) var(--ease-out);
+  transform: scale(1);
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.97);
+  }
 }
 
 .ds-tooltip-enter-active {
   transition: opacity var(--duration-instant) var(--ease-out);
 }
 .ds-tooltip-leave-active {
-  transition: opacity var(--duration-instant) var(--ease-in);
+  transition: opacity var(--duration-instant) var(--ease-out);
 }
 .ds-tooltip-enter-from,
 .ds-tooltip-leave-to {

@@ -94,7 +94,8 @@ defineExpose({ dialogRef })
               transform var(--duration-fast) var(--ease-out);
 }
 .ds-modal-leave-active {
-  transition: opacity var(--duration-instant) var(--ease-in);
+  transition: opacity var(--duration-instant) var(--ease-out),
+              transform var(--duration-instant) var(--ease-out);
 }
 .ds-modal-enter-from {
   opacity: 0;
@@ -102,7 +103,7 @@ defineExpose({ dialogRef })
 }
 .ds-modal-leave-to {
   opacity: 0;
-  transform: scale(0.98);
+  transform: scale(0.95) translateY(8px);
 }
 
 @media (prefers-reduced-motion: reduce) {

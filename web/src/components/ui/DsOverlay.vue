@@ -197,6 +197,13 @@ onUnmounted(() => {
   background: var(--overlay-light);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+  transition: backdrop-filter var(--duration-fast) var(--ease-out),
+              -webkit-backdrop-filter var(--duration-fast) var(--ease-out),
+              opacity var(--duration-fast) var(--ease-out);
+  @starting-style {
+    backdrop-filter: blur(0px);
+    -webkit-backdrop-filter: blur(0px);
+  }
 }
 .ds-overlay--none {
   background: transparent;

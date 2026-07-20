@@ -6,33 +6,44 @@ import { readonly, ref, onMounted, onUnmounted, type Ref } from 'vue'
  * 浏览器不能可靠地用 CSS 暂停 animated WebP，所以这里仅负责判断可见性；
  * 渲染组件会在不可见/低 FPS 时切换到静态快照。
  */
-export function useStickerPerformance(targetRef: Ref<Element | null>) {
-  const isVisible = ref(true)
-  let observer: IntersectionObserver | null = null
+// 共享 IntersectionObserver 单例，避免每个 sticker 创建独立观察者
+let sharedObserver: IntersectionObserver | null = null
+const visibilityCallbacks = new Map<Element, (isVisible: boolean) => void>()
 
-  onMounted(() => {
-    if (!targetRef.value) return
-
-    observer = new IntersectionObserver(
+function getSharedObserver(): IntersectionObserver {
+  if (!sharedObserver) {
+    sharedObserver = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
-          isVisible.value = entry.isIntersecting
+          const cb = visibilityCallbacks.get(entry.target)
+          cb?.(entry.isIntersecting)
         }
       },
       {
         // 提前 100px 开始加载，避免用户滚动时看到卡顿
         rootMargin: '100px',
-        threshold: 0.1
+        threshold: 0.1,
       }
     )
+  }
+  return sharedObserver
+}
 
-    observer.observe(targetRef.value)
+export function useStickerPerformance(targetRef: Ref<Element | null>) {
+  const isVisible = ref(true)
+
+  onMounted(() => {
+    if (!targetRef.value) return
+    const el = targetRef.value
+    const observer = getSharedObserver()
+    visibilityCallbacks.set(el, (v) => { isVisible.value = v })
+    observer.observe(el)
   })
 
   onUnmounted(() => {
-    if (observer) {
-      observer.disconnect()
-      observer = null
+    if (targetRef.value) {
+      visibilityCallbacks.delete(targetRef.value)
+      sharedObserver?.unobserve(targetRef.value)
     }
   })
 
@@ -49,9 +60,10 @@ interface FPSMonitorState {
   consumers: number
   frameCount: number
   lastTime: number
-  rafId: number | null
+  timerId: number | null
   threshold: number
   duration: number
+  lastActiveTime: number
 }
 
 const fpsMonitors = new Map<string, FPSMonitorState>()
@@ -70,9 +82,10 @@ function getOrCreateMonitor(threshold: number, duration: number): FPSMonitorStat
     consumers: 0,
     frameCount: 0,
     lastTime: 0,
-    rafId: null,
+    timerId: null,
     threshold,
     duration,
+    lastActiveTime: 0,
   }
   fpsMonitors.set(key, monitor)
   return monitor
@@ -90,7 +103,8 @@ function measureSharedFPS(monitor: FPSMonitorState) {
     monitor.lastTime = now
   }
 
-  monitor.rafId = requestAnimationFrame(() => measureSharedFPS(monitor))
+  // 每秒检测一次，而非每帧（60fps），将 CPU 消耗降低约 98%
+  monitor.timerId = window.setTimeout(() => measureSharedFPS(monitor), 1000)
 }
 
 export function useFPSMonitor(threshold = 30, duration = 3000) {
@@ -98,18 +112,19 @@ export function useFPSMonitor(threshold = 30, duration = 3000) {
 
   onMounted(() => {
     monitor.consumers++
-    if (monitor.rafId === null) {
+    if (monitor.timerId === null) {
       monitor.frameCount = 0
       monitor.lastTime = performance.now()
-      monitor.rafId = requestAnimationFrame(() => measureSharedFPS(monitor))
+      monitor.lastActiveTime = performance.now()
+      monitor.timerId = window.setTimeout(() => measureSharedFPS(monitor), 1000)
     }
   })
 
   onUnmounted(() => {
     monitor.consumers = Math.max(0, monitor.consumers - 1)
-    if (monitor.consumers === 0 && monitor.rafId !== null) {
-      cancelAnimationFrame(monitor.rafId)
-      monitor.rafId = null
+    if (monitor.consumers === 0 && monitor.timerId !== null) {
+      clearTimeout(monitor.timerId)
+      monitor.timerId = null
       monitor.isLowPerformance.value = false
       fpsMonitors.delete(getMonitorKey(threshold, duration))
     }

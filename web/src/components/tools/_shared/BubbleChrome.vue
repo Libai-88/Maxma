@@ -79,4 +79,93 @@ watch(() => props.toolCall.status, (s) => {
 </script>
 
 <style scoped>
+.tool-bubble {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  overflow: hidden;
+  transition: border-color 0.15s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+              box-shadow 0.15s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+}
+.tool-bubble:hover {
+  border-color: var(--border-strong, color-mix(in srgb, var(--accent) 20%, var(--border)));
+  box-shadow: var(--shadow-sm);
+}
+.bubble-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.85em;
+  color: var(--text-secondary);
+  transition: background 0.12s var(--ease-out);
+}
+.bubble-header:hover {
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+.bubble-status {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bubble-name {
+  flex: 1;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.bubble-elapsed {
+  font-size: 0.85em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+}
+.bubble-body-wrapper {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s cubic-bezier(0, 0.3, 0, 1);
+}
+.tool-bubble.open .bubble-body-wrapper {
+  max-height: none;
+}
+.bubble-body {
+  padding: 0 12px 12px;
+  border-top: 1px solid var(--border);
+}
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--accent);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: tool-spin 0.6s linear infinite;
+}
+@keyframes tool-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 状态色彩 */
+.tool-bubble.running {
+  border-left: 3px solid var(--accent);
+}
+.tool-bubble.done {
+  border-left: 3px solid var(--status-ok);
+}
+.tool-bubble.error {
+  border-left: 3px solid var(--status-error);
+}
+
+/* 无障碍 */
+@media (prefers-reduced-motion: reduce) {
+  .bubble-body-wrapper {
+    transition: none;
+  }
+  .spinner {
+    animation-duration: 1.5s;
+  }
+}
 </style>

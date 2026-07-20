@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <article class="message-row" :class="role" :aria-label="role === 'user' ? '我的消息' : 'Maxma 回复'">
     <div class="bubble" :class="role" role="group">
       <div
@@ -122,23 +122,37 @@ watch(() => props.content, () => {
   display: flex;
   padding: 4px 0;
   min-width: 0;
-  animation: messageSlideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.message-row + .message-row {
+  margin-top: 2px;
 }
 .message-row.user {
   justify-content: flex-end;
+  animation: userBubbleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .message-row.assistant {
   justify-content: flex-start;
+  animation: assistantBubbleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-@keyframes messageSlideIn {
+@keyframes userBubbleIn {
   from {
     opacity: 0;
-    transform: translateY(8px) scale(0.96);
+    transform: translateX(16px) scale(0.96);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateX(0) scale(1);
+  }
+}
+@keyframes assistantBubbleIn {
+  from {
+    opacity: 0;
+    transform: translateX(-16px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
   }
 }
 
@@ -152,17 +166,48 @@ watch(() => props.content, () => {
   overflow-wrap: anywhere;
   box-shadow: var(--shadow);
   min-width: 0;
+  transition: transform 0.15s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+              box-shadow 0.15s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
 }
 .bubble.user {
-    background: var(--user-bubble-solid);
+    background: linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--user-bubble-solid) 92%, var(--bg-card)) 0%,
+      var(--user-bubble-solid) 100%
+    );
     color: var(--user-bubble-text);
-    border: 1px solid transparent;
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, white 12%, transparent),
+      0 2px 12px color-mix(in srgb, var(--user-bubble-solid) 18%, transparent),
+      0 1px 3px color-mix(in srgb, var(--user-bubble-solid) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--user-bubble-solid) 20%, transparent);
     border-bottom-right-radius: var(--radius-sm);
   }
 .bubble.assistant {
-  background: var(--bg-card);
+  background: color-mix(in srgb, var(--bg-card) 85%, var(--accent) 2%);
   color: var(--text-primary);
-  border-bottom-left-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--accent) 6%, var(--border));
+  border-bottom-left-radius: var(--radius-sm);
+  box-shadow:
+    0 1px 4px var(--shadow-color),
+    inset 0 1px 0 color-mix(in srgb, var(--bg-primary) 60%, transparent);
+}
+
+@media (pointer: fine) {
+  .bubble:hover {
+    transform: translateY(-1px);
+  }
+  .bubble.user:hover {
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, white 12%, transparent),
+      0 4px 16px color-mix(in srgb, var(--user-bubble-solid) 20%, transparent),
+      0 2px 6px color-mix(in srgb, var(--user-bubble-solid) 10%, transparent);
+  }
+  .bubble.assistant:hover {
+    box-shadow:
+      0 4px 16px var(--shadow-color),
+      inset 0 1px 0 color-mix(in srgb, var(--bg-primary) 60%, transparent);
+  }
 }
 
 /* ── 大输出折叠 ── */
@@ -236,17 +281,30 @@ watch(() => props.content, () => {
 .read-status.read .read-dot {
     background: var(--status-info);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-info) 12%, transparent);
+    animation: readPulse 2s ease-out 1;
   }
+@keyframes readPulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--status-info) 30%, transparent); }
+  100% { box-shadow: 0 0 0 6px transparent; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .message-row {
     animation: none;
   }
 
+  .bubble {
+    transition: none;
+  }
+
   .bubble-content,
   .collapse-toggle,
   .read-dot {
     transition: none;
+  }
+
+  .read-dot {
+    animation: none;
   }
 }
 

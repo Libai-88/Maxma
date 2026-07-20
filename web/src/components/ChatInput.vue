@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="chat-input-wrapper" role="form" aria-label="消息输入">
     <div v-if="connectionError" class="chat-connection-error" role="alert" aria-live="assertive">
       <Icon class="chat-connection-error-icon" name="warning" :size="16" />
@@ -95,9 +95,6 @@
           @remove="chatInput.removeQuote(q.id)"
         />
       </div>
-      <div class="input-toolbar" role="toolbar" aria-label="消息工具">
-        <ModelSelector />
-      </div>
       <div class="input-body" role="group" aria-label="消息内容">
         <textarea
           ref="textareaRef"
@@ -135,8 +132,8 @@
             aria-haspopup="menu"
             @click="toggleMenu"
           >
-            <Icon v-if="loading" name="attach" :size="18" class="btn-add-file-spin" />
-            <Icon v-else name="attach" :size="18" />
+            <Icon v-if="loading" name="attach" :size="16" class="btn-add-file-spin" />
+            <Icon v-else name="attach" :size="16" />
           </button>
           <div v-if="showMenu" ref="addFileMenuRef" id="add-file-menu" class="add-file-menu" role="menu" aria-label="附件类型" @click.stop>
             <button type="button" class="add-file-menu-item" role="menuitem" @click="pickFile">
@@ -154,22 +151,11 @@
           </div>
           <div v-if="showMenu" class="menu-backdrop" @click="closeAddFileMenu(true)"></div>
           </div>
+          <span class="input-separator"></span>
+          <ModelSelector />
         </div>
         <div class="input-right-group">
-          <span class="input-separator"></span>
           <div class="input-actions">
-            <button
-              type="button"
-              class="btn-sticker"
-              :class="{ active: showStickerPicker }"
-              @click.stop="toggleStickerPicker"
-              title="表情"
-              aria-label="表情"
-              :aria-expanded="showStickerPicker"
-              aria-controls="sticker-picker"
-            >
-              <Icon name="sticker" :size="18" />
-            </button>
             <ContextUsageBadge />
             <button
               v-if="!isStreaming"
@@ -186,21 +172,9 @@
               <Icon name="stop" :size="12" />
             </button>
           </div>
-          <span class="shortcut-hint">Enter 发送 · Shift+Enter 换行</span>
         </div>
       </div>
     </div>
-    <!-- 表情选择器 -->
-    <StickerPicker
-      v-if="showStickerPicker"
-      ref="stickerPickerRef"
-      id="sticker-picker"
-      :visible="showStickerPicker"
-      :context-text="text"
-      @select="onStickerSelect"
-      @close="showStickerPicker = false"
-      @contextmenu="onStickerContextMenu"
-    />
     <!-- 表情右键菜单 -->
     <StickerContextMenu
       v-if="contextMenuVisible"
@@ -1201,10 +1175,13 @@ function onResizeEnd(e: PointerEvent) {
   font-size: 1em;
   padding: 0 4px;
   opacity: 0.6;
-  transition: opacity 0.15s;
+  transition: opacity 0.15s, transform 0.1s;
 }
 .chat-connection-error-close:hover {
   opacity: 1;
+}
+.chat-connection-error-close:active {
+  transform: scale(0.92);
 }
 @keyframes chat-error-in {
   from { opacity: 0; transform: translateY(-4px); }
@@ -1248,13 +1225,6 @@ function onResizeEnd(e: PointerEvent) {
 .chat-image-error-close:hover {
     opacity: 1;
   }
-
-.input-toolbar {
-  display: flex; align-items: center;
-  min-width: 0; max-width: 100%; flex-wrap: wrap;
-  padding: 4px 8px; gap: 8px;
-  border-bottom: 1px solid var(--border, #e5e7eb);
-}
 
 .chat-input-wrapper {
   width: 100%;
@@ -1308,10 +1278,13 @@ function onResizeEnd(e: PointerEvent) {
   font-size: 0.85em;
   padding: 0 2px;
   line-height: 1;
-  transition: color 0.15s;
+  transition: color 0.15s, transform 0.1s;
 }
 .file-tag-remove:hover {
   color: var(--status-error);
+}
+.file-tag-remove:active {
+  transform: scale(0.92);
 }
 .file-tag-source {
   font-size: 0.65em;
@@ -1391,11 +1364,14 @@ function onResizeEnd(e: PointerEvent) {
   font-size: 0.85em;
   padding: 0 2px;
   line-height: 1;
-  transition: color 0.15s;
+  transition: color 0.15s, transform 0.1s;
 }
 
 .sticker-tag-remove:hover {
   color: var(--status-error);
+}
+.sticker-tag-remove:active {
+  transform: scale(0.92);
 }
 
 .image-tag {
@@ -1436,10 +1412,13 @@ function onResizeEnd(e: PointerEvent) {
   font-size: 0.85em;
   padding: 0 2px;
   line-height: 1;
-  transition: color 0.15s;
+  transition: color 0.15s, transform 0.1s;
 }
 .image-tag-remove:hover {
   color: var(--status-error);
+}
+.image-tag-remove:active {
+  transform: scale(0.92);
 }
 
 /* ── 拖拽图片高亮 ── */
@@ -1476,14 +1455,14 @@ function onResizeEnd(e: PointerEvent) {
 
 /* TransitionGroup 动画：从下往上缓出弹出，退场缩小淡出 */
 .ref-tag-enter-active {
-  transition: all 0.25s ease-out;
+  transition: opacity 0.25s ease-out, transform 0.25s ease-out;
 }
 .ref-tag-enter-from {
   opacity: 0;
   transform: translateY(12px);
 }
 .ref-tag-leave-active {
-  transition: all 0.2s ease-in;
+  transition: opacity 0.2s ease-out, transform 0.2s ease-out;
   position: absolute !important;
 }
 .ref-tag-leave-to {
@@ -1551,12 +1530,15 @@ function onResizeEnd(e: PointerEvent) {
   align-items: center;
   justify-content: center;
   font-size: 0.9em;
-  transition: all 0.12s;
+  transition: opacity 0.12s, border-color 0.12s, color 0.12s, transform 0.1s;
   flex-shrink: 0;
 }
 .link-input-confirm:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--accent);
+}
+.link-input-confirm:active:not(:disabled) {
+  transform: scale(0.92);
 }
 .link-input-confirm:disabled {
   opacity: 0.4;
@@ -1566,6 +1548,9 @@ function onResizeEnd(e: PointerEvent) {
     border-color: var(--status-error);
     color: var(--status-error);
   }
+.link-input-cancel:active {
+  transform: scale(0.92);
+}
 
 /* 拖拽调整手柄 */
 .resize-handle {
@@ -1652,7 +1637,7 @@ function onResizeEnd(e: PointerEvent) {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s;
+  transition: color 0.15s, background 0.15s, transform 0.1s;
   padding: 0;
   font-family: inherit;
   font-size: 17px;
@@ -1665,6 +1650,9 @@ function onResizeEnd(e: PointerEvent) {
 .btn-add-file.active:not(:disabled) {
   background: var(--bg-secondary);
   color: var(--accent);
+}
+.btn-add-file:active:not(:disabled) {
+  transform: scale(0.92);
 }
 .btn-add-file:disabled {
   opacity: 0.4;
@@ -1707,12 +1695,15 @@ function onResizeEnd(e: PointerEvent) {
   text-align: left;
   font-family: inherit;
   white-space: nowrap;
-  transition: background 0.12s;
+  transition: background 0.12s, transform 0.1s;
 }
 .add-file-menu-item:hover {
   background: transparent;
   background: transparent;
   background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.add-file-menu-item:active {
+  transform: scale(0.96);
 }
 
 /* 表情按钮 */
@@ -1727,7 +1718,7 @@ function onResizeEnd(e: PointerEvent) {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s;
+  transition: color 0.15s, background 0.15s, transform 0.1s;
   padding: 0;
   font-family: inherit;
   font-size: 17px;
@@ -1740,6 +1731,9 @@ function onResizeEnd(e: PointerEvent) {
 .btn-sticker.active {
   background: var(--accent);
   color: white;
+}
+.btn-sticker:active:not(:disabled) {
+  transform: scale(0.92);
 }
 .input-area {
   width: 100%;
@@ -1810,10 +1804,10 @@ function onResizeEnd(e: PointerEvent) {
 }
 .btn-send,
 .btn-stop {
-  width: var(--touch-target-min, 44px);
-  min-width: var(--touch-target-min, 44px);
-  height: var(--touch-target-min, 44px);
-  min-height: var(--touch-target-min, 44px);
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
   border: none;
   border-radius: 50%;
   font-size: 1em;
@@ -1829,11 +1823,14 @@ function onResizeEnd(e: PointerEvent) {
   background: var(--accent);
   color: #fff;
 }
-.btn-send:hover:not(:disabled) {
+@media (pointer: fine) {
+  /* pointer:fine gate */
+  .btn-send:hover:not(:disabled) {
     background: var(--accent-hover, var(--accent));
     transform: scale(1.08);
     box-shadow: var(--shadow-md);
   }
+}
 .btn-send:active:not(:disabled) {
   transform: scale(0.95);
 }
@@ -1849,6 +1846,9 @@ function onResizeEnd(e: PointerEvent) {
 .btn-stop:hover {
     background: color-mix(in srgb, var(--status-error) 80%, #000);
   }
+.btn-stop:active {
+  transform: scale(0.92);
+}
 
 /* ── 选区引用卡片栏 ── */
 .quoted-selections-bar {
@@ -1872,9 +1872,13 @@ function onResizeEnd(e: PointerEvent) {
   cursor: pointer;
   box-shadow: var(--shadow-md);
   white-space: nowrap;
+  transition: transform 0.1s, opacity 0.15s;
 }
 .quote-float-btn:hover {
   opacity: 0.9;
+}
+.quote-float-btn:active {
+  transform: scale(0.96);
 }
 
 .quote-pop-enter-active {
@@ -1887,15 +1891,6 @@ function onResizeEnd(e: PointerEvent) {
   from { opacity: 0; transform: scale(0.8); }
   to { opacity: 1; transform: scale(1); }
 }
-
-.shortcut-hint {
-    font-size: 0.78em;
-    color: var(--text-tertiary);
-    opacity: 0.55;
-    user-select: none;
-    text-align: center;
-    padding: 2px 0;
-  }
 
 .chat-input button:focus-visible,
 .link-input:focus-visible,
@@ -1953,4 +1948,6 @@ function onResizeEnd(e: PointerEvent) {
   .quote-pop-enter-active,
   .quote-pop-leave-active { animation: none; }
 }
+
+/* ── 按压反馈 ── */
 </style>

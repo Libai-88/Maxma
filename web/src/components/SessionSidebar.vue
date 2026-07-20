@@ -556,11 +556,14 @@ function handleDeleteKeydown(event: KeyboardEvent) {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s;
+  transition: background 0.15s, transform 0.1s;
 }
 .btn-new:hover {
   background: var(--accent);
   color: var(--bg-primary);
+}
+.btn-new:active {
+  transform: scale(0.92);
 }
 .nav-item {
 	  display: flex;
@@ -575,10 +578,13 @@ function handleDeleteKeydown(event: KeyboardEvent) {
 	  cursor: pointer;
 	  text-align: left;
 	  font-family: inherit;
-	  transition: background 0.15s;
+	  transition: background 0.15s, transform 0.1s;
 	}
 .nav-item:hover {
   background: var(--bg-card);
+}
+.nav-item:active {
+  transform: scale(0.96);
 }
 .nav-icon {
   font-size: 16px;
@@ -808,7 +814,7 @@ function handleDeleteKeydown(event: KeyboardEvent) {
   background: var(--bg-primary);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s;
   flex-shrink: 0;
 }
 
@@ -818,6 +824,9 @@ function handleDeleteKeydown(event: KeyboardEvent) {
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--accent);
   border-color: var(--accent);
+}
+.constify-gen-btn:active:not(:disabled) {
+  transform: scale(0.92);
 }
 
 .constify-gen-btn:disabled {
@@ -847,7 +856,7 @@ function handleDeleteKeydown(event: KeyboardEvent) {
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  transition: background 0.15s, opacity 0.15s;
+  transition: background 0.15s, opacity 0.15s, transform 0.1s;
 }
 
 .constify-btn.cancel {
@@ -861,6 +870,9 @@ function handleDeleteKeydown(event: KeyboardEvent) {
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--text-primary);
 }
+.constify-btn.cancel:active {
+  transform: scale(0.96);
+}
 
 .constify-btn.confirm {
   background: var(--accent);
@@ -869,6 +881,9 @@ function handleDeleteKeydown(event: KeyboardEvent) {
 
 .constify-btn.confirm:hover:not(:disabled) {
   opacity: 0.85;
+}
+.constify-btn.confirm:active:not(:disabled) {
+  transform: scale(0.96);
 }
 
 .constify-btn.confirm:disabled {
@@ -881,7 +896,7 @@ function handleDeleteKeydown(event: KeyboardEvent) {
   transition: opacity 0.12s ease-out, transform 0.12s ease-out;
 }
 .constify-pop-leave-active {
-  transition: opacity 0.1s ease-in, transform 0.1s ease-in;
+  transition: opacity 0.1s ease-out, transform 0.1s ease-out;
 }
 .constify-pop-enter-from {
   opacity: 0;
@@ -889,7 +904,7 @@ function handleDeleteKeydown(event: KeyboardEvent) {
 }
 .constify-pop-leave-to {
   opacity: 0;
-  transform: translateX(-4px) scale(0.96);
+  transform: translateX(-6px) scale(0.96);
 }
 
 /* ── 删除确认对话框 ── */
@@ -944,7 +959,7 @@ function handleDeleteKeydown(event: KeyboardEvent) {
   border: none;
   border-radius: 6px;
   cursor: pointer;
-  transition: background 0.15s, opacity 0.15s;
+  transition: background 0.15s, opacity 0.15s, transform 0.1s;
 }
 
 .delete-confirm-btn.cancel {
@@ -965,6 +980,9 @@ function handleDeleteKeydown(event: KeyboardEvent) {
 .delete-confirm-btn.confirm:hover {
   opacity: 0.9;
 }
+.delete-confirm-btn:active {
+  transform: scale(0.96);
+}
 
 /* Fade transition */
 .fade-enter-active,
@@ -976,4 +994,6 @@ function handleDeleteKeydown(event: KeyboardEvent) {
 .fade-leave-to {
   opacity: 0;
 }
+
+/* ── 按压反馈 ── */
 </style>

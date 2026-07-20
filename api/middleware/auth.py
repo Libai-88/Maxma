@@ -76,9 +76,10 @@ class AuthMiddleware:
         return await self.app(scope, receive, send)
 
     def _extract_token(self, scope) -> str:
-        """从请求头提取 Token。
+        """从请求头或 query 参数提取 Token。
 
         HTTP / WebSocket 通用路径: X-Maxma-Token 自定义头
+        HTTP 备用路径 (SSE / img 等无法设置自定义头的场景): ?token=xxx query 参数
         WebSocket 专用路径: scope.subprotocols（由 ASGI server/uvicorn 从
         Sec-WebSocket-Protocol 握手头部解析，前端通过 new WebSocket(url, [token])
         传入）。优先使用 subprotocols 字段，比手动解析 raw header 更可靠。
@@ -89,6 +90,18 @@ class AuthMiddleware:
         token_bytes = headers.get(b"x-maxma-token", b"")
         if token_bytes:
             return str(token_bytes.decode())
+
+        # HTTP 备用：token query 参数（EventSource / img 等无法设置自定义头时使用）
+        if scope["type"] == "http":
+            qs = scope.get("query_string", b"").decode("utf-8", errors="replace")
+            if qs:
+                from urllib.parse import parse_qs
+                params = parse_qs(qs)
+                token_list = params.get("token", [])
+                if token_list:
+                    token = str(token_list[0])
+                    if len(token) >= 8 and not token.startswith("-"):
+                        return token
 
         # WebSocket 专用：从 ASGI scope 的 subprotocols 字段提取
         # ASGI server 在握手时自动解析 Sec-WebSocket-Protocol 头部，

@@ -1,4 +1,4 @@
-﻿/* web/src/assets/styles/tokens.css
+/* web/src/assets/styles/tokens.css
  * 全局结构 token — 所有主题共享，不被主题文件覆盖
  * 包含：间距 / 字号 / 圆角 / 动效时长 / 缓动 / 字体族 / 阴影层级
  */
@@ -35,16 +35,32 @@
   --duration-slow:    0.25s;  /* 模态、大块进场 */
 
   /* ── 缓动曲线（全部 cubic-bezier，无 linear/ease） ── */
-  --ease-out:      cubic-bezier(0.16, 1, 0.3, 1);
+  /* 强缓出：UI 元素退场、关闭、收起等需要自然减速的场景 */
+  --ease-out:      cubic-bezier(0.23, 1, 0.32, 1);
+  /* 缓入：一般仅作为 ease-out 的对称补间使用，不推荐独立使用 */
   --ease-in:       cubic-bezier(0.7, 0, 0.84, 0);
-  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  /* 强缓入缓出：屏幕上移动、转场动画、元素在视口中的位移与变换 */
+  --ease-standard: cubic-bezier(0.77, 0, 0.175, 1);
+  /* 柔和缓出：淡入淡出、透明度变化、轻量交互反馈 */
   --ease-smooth:   cubic-bezier(0.22, 0.68, 0, 1);
+  /* iOS 风格抽屉曲线：底部抽屉、侧边栏滑出、面板从边缘推入时使用 */
+  --ease-drawer:   cubic-bezier(0.32, 0.72, 0, 1);
+  /* 弹性弹跳曲线：按钮点击反馈、卡片点赞、通知出现等需要活泼感的交互 */
+  --ease-spring:   cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── 排版间距指引（Apple 原则） ──
+   * 大号标题（--fs-display-*）应使用负 letter-spacing（-0.01em ~ -0.03em）
+   * 小号文字（--fs-caption, --fs-hint）应使用正 letter-spacing（0.01em ~ 0.03em）
+   * 正文（--fs-body）保持 letter-spacing: normal（0）
+   * 大写标签至少 0.05em letter-spacing
+   */
 
   /* ── 字体族 ── */
-  --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue',
-             'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-ui: 'LXGW WenKai Screen', 'Noto Serif SC', 'Source Han Serif SC',
+             'STSong', 'Songti SC', 'SimSun', serif;
   --font-serif: 'EB Garamond', 'Noto Serif SC', 'Source Han Serif SC',
                 'Songti SC', 'STSong', serif;
+  --font-display-art: 'Fraunces', 'EB Garamond', 'Noto Serif SC', serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* ── 显示字号（衬线，用于标题/区块） ── */
@@ -63,6 +79,10 @@
   --shadow-md: 0 2px 8px var(--shadow-color, rgba(120, 100, 80, 0.10));
   --shadow-lg: 0 4px 16px var(--shadow-color, rgba(120, 100, 80, 0.14));
   --shadow-xl: 0 8px 32px var(--shadow-color, rgba(120, 100, 80, 0.20));
+
+  /* ── 表面层级（参考 Linear 表面阶梯） ── */
+  --surface-raised: #FFFFFF;
+  --surface-dark: #2C3033;
 
   /* ── 布局常量 ── */
   --sidebar-width: 240px;
@@ -102,6 +122,14 @@
   --paper-texture-size: 160px;
   --paper-texture-card-blend-mode: lighten;
   --paper-texture-opacity: 0.40;
+
+  /* ── 玻璃面板系统（底色取自 --bg-primary 实现无缝融合） ── */
+  --glass-fill: color-mix(in srgb, var(--bg-primary) 92%, var(--accent) 3%);
+
+  /* ── 背景氛围渐变（由各主题覆盖，用于 body 动态背景） ── */
+  --bg-aura-start: color-mix(in srgb, var(--accent) 6%, var(--bg-primary));
+  --bg-aura-end:   color-mix(in srgb, var(--accent-pink) 4%, var(--bg-primary));
+  --bg-aura-duration: 90s;
 }
 
 /* 字体开关：无衬线模式 */

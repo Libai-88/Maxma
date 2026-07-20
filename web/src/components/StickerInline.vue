@@ -31,8 +31,7 @@
 import { computed, onMounted, ref } from 'vue'
 import type { StickerSegment } from '@/composables/useStickerSegments'
 import { tauriFetch } from '@/utils/env'
-import { useTheme } from '@/composables/useTheme'
-import { useFPSMonitor, useStickerPerformance } from '@/composables/useStickerPerformance'
+import { useStickerPerformance } from '@/composables/useStickerPerformance'
 import Icon from '@/components/Icon.vue'
 
 const props = defineProps<{ sticker: StickerSegment }>()
@@ -80,11 +79,9 @@ onMounted(() => {
 })
 
 const { isVisible } = useStickerPerformance(rootRef)
-const { isLowPerformance } = useFPSMonitor()
-const { isDark: isNightMode } = useTheme()
 
 const shouldUsePoster = computed(() =>
-  Boolean(posterSrc.value) && (!isVisible.value || isLowPerformance.value || isNightMode.value)
+  Boolean(posterSrc.value) && !isVisible.value
 )
 
 function capturePoster() {

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="settings-area" ref="settingsTriggerRef">
     <button
       class="nav-item settings-btn"
@@ -343,8 +343,11 @@ function updatePopupPosition() {
   }
 }
 
-function onViewportChange() {
-  if (showSettingsMenu.value) updatePopupPosition()
+function onViewportChange(e: Event) {
+  if (!showSettingsMenu.value) return
+  // 忽略弹出菜单内部的滚动，避免计算位置导致回弹
+  if (settingsPopupRef.value && e.target instanceof Node && settingsPopupRef.value.contains(e.target)) return
+  updatePopupPosition()
 }
 
 function onDocumentClick(e: MouseEvent) {
@@ -392,7 +395,7 @@ onUnmounted(() => {
   padding: 8px 12px;
   border-radius: var(--radius);
   color: var(--text-secondary);
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, transform 0.1s;
 }
 
 .settings-btn.compact {
@@ -413,6 +416,9 @@ onUnmounted(() => {
 .settings-btn:hover {
   background: var(--bg-card);
   color: var(--text-primary);
+}
+.settings-btn:active {
+  transform: scale(0.96);
 }
 
 .nav-label {
@@ -446,6 +452,7 @@ onUnmounted(() => {
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
+  transform-origin: top right;
 }
 
 /* 加粗 popup 滚动条，让用户能注意到可以滚动 */
@@ -464,6 +471,8 @@ onUnmounted(() => {
   scrollbar-width: auto;
   scrollbar-color: var(--border) transparent;
 }
+
+/* ── 按压反馈 ── */
 
 .popup-header {
   padding: 8px 12px 6px;
@@ -496,12 +505,15 @@ onUnmounted(() => {
   color: var(--text-secondary);
   text-decoration: none;
   font-size: 0.9em;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, transform 0.1s;
 }
 
 .popup-item:hover {
   background: var(--bg-secondary);
   color: var(--text-primary);
+}
+.popup-item:active {
+  transform: scale(0.96);
 }
 
 .popup-item.router-link-active {
@@ -558,6 +570,9 @@ onUnmounted(() => {
   background: var(--bg-secondary);
   color: #b91c1c;
 }
+.popup-action:active:not(:disabled) {
+  transform: scale(0.96);
+}
 .popup-action:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -571,10 +586,10 @@ onUnmounted(() => {
 
 /* ── Popup transition ── */
 .popup-enter-active {
-  transition: opacity 0.12s ease, transform 0.12s ease;
+  transition: opacity 0.12s cubic-bezier(0.16, 1, 0.3, 1), transform 0.12s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .popup-leave-active {
-  transition: opacity 0.08s ease, transform 0.08s ease;
+  transition: opacity 0.08s ease-out, transform 0.08s ease-out;
 }
 .popup-enter-from,
 .popup-leave-to {

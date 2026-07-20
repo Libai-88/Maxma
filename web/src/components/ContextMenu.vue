@@ -194,7 +194,7 @@ onUnmounted(() => {
   text-align: left;
   font-family: inherit;
   white-space: nowrap;
-  transition: background 0.12s;
+  transition: background 0.12s, transform 0.1s;
 }
 
 .context-menu-item:hover {
@@ -202,13 +202,18 @@ onUnmounted(() => {
   background: transparent;
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
+.context-menu-item:active {
+  transform: scale(0.96);
+}
+
+/* ── 按压反馈 ── */
 
 /* 弹出动画 */
 .menu-pop-enter-active {
   transition: opacity 0.06s ease-out, transform 0.06s ease-out;
 }
 .menu-pop-leave-active {
-  transition: opacity 0.08s ease-in, transform 0.08s ease-in;
+  transition: opacity 0.08s ease-out, transform 0.08s ease-out;
 }
 .menu-pop-enter-from {
   opacity: 0;

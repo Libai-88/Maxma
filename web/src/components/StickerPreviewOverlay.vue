@@ -50,11 +50,25 @@ const emit = defineEmits<{
   close: []
 }>()
 
-const currentIndex = ref(props.initialIndex)
+const currentIndex = ref(
+  props.initialIndex >= 0 && props.initialIndex < props.stickers.length
+    ? props.initialIndex
+    : 0
+)
 const isFavorited = ref(false)
 const favoriteLoading = ref(false)
 
-const current = computed(() => props.stickers[currentIndex.value] ?? props.stickers[0])
+const current = computed(() => {
+  const s = props.stickers[currentIndex.value]
+  if (!s) return props.stickers[0] ?? { src: '', category: '', filename: '' } as StickerSegment
+  return s
+})
+
+watch(() => props.stickers.length, (len) => {
+  if (currentIndex.value >= len) {
+    currentIndex.value = 0
+  }
+})
 const canNavigate = computed(() => props.stickers.length > 1)
 
 function go(delta: number) {

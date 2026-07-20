@@ -24,7 +24,7 @@
 import { watchEffect } from 'vue'
 
 const props = withDefaults(defineProps<{
-  variant?: 'default' | 'primary' | 'danger' | 'ghost' | 'subtle' | 'success'
+  variant?: 'default' | 'primary' | 'danger' | 'ghost' | 'subtle' | 'success' | 'glass'
   size?: 'sm' | 'md'
   disabled?: boolean
   loading?: boolean
@@ -91,6 +91,18 @@ watchEffect(() => {
 }
 .ds-btn--success:hover:not(:disabled) {
   opacity: 0.9;
+}
+
+.ds-btn--glass {
+  background: color-mix(in srgb, var(--bg-card) 60%, transparent);
+  backdrop-filter: blur(12px) saturate(1.3);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  border-color: color-mix(in srgb, var(--border) 50%, transparent);
+  box-shadow: 0 1px 4px var(--shadow-color);
+}
+.ds-btn--glass:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bg-card) 75%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .ds-btn--icon-only {

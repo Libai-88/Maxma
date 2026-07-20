@@ -5,6 +5,35 @@ import { api, getToken } from '@/api'
 import { getBackendOrigin } from '@/utils/env'
 import type { ActivityRecord, ActivityStatsResponse } from '@/types'
 
+/**
+ * 简易 SSE 行读取器。将 ReadableStream<Uint8Array> 按 \n 分割成行，
+ * 通过 onLine 回调逐行返回，完全遵循 SSE 协议（text/event-stream）的行格式。
+ * 使用 TextDecoder 处理流式 UTF-8 分片，保证中文等多字节字符不被截断。
+ */
+function createSSELineReader(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  onLine: (line: string) => void,
+  onDone: () => void,
+  onError: (err: unknown) => void,
+) {
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  function pump(): Promise<void> {
+    return reader.read().then(({ done, value }) => {
+      if (done) { onDone(); return }
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      // 最后一个元素可能是不完整的行，保留到下次
+      buffer = lines.pop() ?? ''
+      for (const line of lines) onLine(line)
+      return pump()
+    }).catch(onError)
+  }
+
+  pump()
+}
+
 export const useActivityStore = defineStore('activity', () => {
   const records = ref<ActivityRecord[]>([])
   const stats = ref<ActivityStatsResponse | Record<string, unknown>>({})
@@ -13,16 +42,15 @@ export const useActivityStore = defineStore('activity', () => {
   const connecting = ref(true)
   // 最近一次收到 SSE 事件的时间戳（ms）。组件据此显示「新事件」脉冲，区分静默与活跃流。
   const lastEventAt = ref<number | null>(null)
-  let eventSource: EventSource | null = null
+
+  let abortController: AbortController | null = null
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let pollTimer: ReturnType<typeof setInterval> | null = null
-  // 标记是否为主动关闭（stopStream 触发），用于区分「主动 close」与「真实连接错误」，
-  // 避免组件卸载时 close() 触发 onerror 后启动无意义的降级轮询（产生 net::ERR_ABORTED 噪声）
   let _intentionalClose = false
 
   /** 连接三态：'connecting' | 'online' | 'offline'。供 UI 显示不同视觉反馈。 */
   const connectionState = computed<'connecting' | 'online' | 'offline'>(() => {
     if (connected.value) return 'online'
-    // 未连上且仍在 connecting 阶段（startStream 后 onopen/onerror 任一触发前）→ 显示连接中
     if (connecting.value) return 'connecting'
     return 'offline'
   })
@@ -44,79 +72,132 @@ export const useActivityStore = defineStore('activity', () => {
     }
   }
 
-  function startStream() {
-    if (eventSource) eventSource.close()
-    _intentionalClose = false
-    // 进入 connecting 三态：onopen 成功 → online；onerror 失败 → offline（轮询降级）
-    connecting.value = true
-    try {
-      // 构造 SSE URL：EventSource 不支持自定义头，token 通过 query 传递
-      // 安全说明：Token 暴露在 URL 查询参数中（可见于服务器日志、浏览器开发者工具），
-      // 这是 EventSource API 限制的已知妥协。桌面端（Tauri）环境下攻击面局限于本地。
-      // 改进建议：后端可增加对 short-lived SSE ticket 的支持，前端先请求一次性凭证再用其建立流。
-      const base = getBackendOrigin()
-      const token = getToken()
-      const url = `${base}/api/activity/stream${token ? `?token=${encodeURIComponent(token)}` : ''}`
-      if (token) {
-        console.warn('[activity] SSE token exposed in URL query parameter — visible in server logs and dev tools')
-      }
-      eventSource = new EventSource(url)
-      eventSource.addEventListener('activity', (ev: MessageEvent) => {
+  /** SSE 事件缓冲区：当前正在累积的 event 行和 data 行 */
+  let _currentEventType = ''
+  let _currentData = ''
+
+  function _resetSSEBuffer() {
+    _currentEventType = ''
+    _currentData = ''
+  }
+
+  /** 处理一行 SSE 协议文本 */
+  function _processSSELine(line: string) {
+    if (line.startsWith('event: ')) {
+      _currentEventType = line.slice(7).trim()
+    } else if (line.startsWith('data: ')) {
+      _currentData += line.slice(6)
+    } else if (line === '' && _currentData) {
+      // 空行 = 事件分隔符 → 派发
+      if (_currentEventType === 'activity') {
         try {
-          const record = JSON.parse(ev.data) as ActivityRecord
+          const record = JSON.parse(_currentData) as ActivityRecord
           records.value.push(record)
-          // 标记最近事件时间，供 UI 显示「新事件到达」脉冲
           lastEventAt.value = Date.now()
-          // 限制前端保留 500 条
           if (records.value.length > 500) {
             records.value = records.value.slice(-500)
           }
         } catch { /* noop */ }
+      }
+      _resetSSEBuffer()
+    }
+    // 以 ':' 开头的行是注释，SSE 规范要求忽略
+  }
+
+  async function _connect() {
+    if (_intentionalClose) return
+    connecting.value = true
+    connected.value = false
+
+    try {
+      const base = getBackendOrigin()
+      const token = getToken()
+      abortController = new AbortController()
+
+      const response = await fetch(`${base}/api/activity/stream`, {
+        headers: token ? { 'X-Maxma-Token': token } : undefined,
+        signal: abortController.signal,
       })
-      eventSource.onopen = () => {
-        connected.value = true
-        // onopen 触发后离开 connecting 阶段
-        connecting.value = false
-        // SSE 重连成功后清理降级轮询，避免重复请求
-        if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+
+      if (!response.ok) {
+        throw new Error(`SSE connection failed: ${response.status}`)
       }
-      eventSource.onerror = (event) => {
-        // 主动关闭（stopStream）或连接已 CLOSED 时静默返回，不启动降级轮询
-        // — 浏览器在 CONNECTING 状态下 close() 会触发 net::ERR_ABORTED，此处静默处理
-        const readyState = (event.target as EventSource | null)?.readyState
-        if (_intentionalClose || readyState === EventSource.CLOSED) {
-          return
-        }
-        connected.value = false
-        // onerror 触发后离开 connecting 阶段（进入 offline 轮询降级）
-        connecting.value = false
-        // SSE 断开后降级为轮询
-        if (!pollTimer) {
-          pollTimer = setInterval(() => fetchRecent(100), 5000)
-        }
+
+      const body = response.body
+      if (!body) {
+        throw new Error('SSE response body is null — browser may not support ReadableStream')
       }
-    } catch {
-      // EventSource 不支持时降级为轮询
+
+      connected.value = true
       connecting.value = false
-      if (!pollTimer) {
-        pollTimer = setInterval(() => fetchRecent(100), 5000)
-      }
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+
+      _resetSSEBuffer()
+      const reader = body.getReader()
+
+      createSSELineReader(
+        reader,
+        (line) => _processSSELine(line),
+        () => { /* stream ended */ _onDisconnect(); },
+        (err) => {
+          if (err instanceof DOMException && err.name === 'AbortError') return
+          _onDisconnect()
+        },
+      )
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      if (_intentionalClose) return
+      _onDisconnect()
     }
   }
 
-  function stopStream() {
-    // 标记主动关闭，阻止 onerror 启动降级轮询
-    _intentionalClose = true
-    if (eventSource) {
-      // 移除事件处理器，避免 close() 触发 onerror/onsession 回调
-      eventSource.onerror = null
-      eventSource.onopen = null
-      eventSource.close()
-      eventSource = null
+  function _onDisconnect() {
+    if (_intentionalClose) return
+    connected.value = false
+    connecting.value = false
+
+    // 进入降级轮询
+    if (!pollTimer) {
+      pollTimer = setInterval(() => fetchRecent(100), 5000)
     }
+
+    // 尝试重连（指数退避：1s → 2s → 4s → 8s，最长 30s）
+    let delay = 1000
+    function tryReconnect() {
+      if (_intentionalClose) return
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+      reconnectTimer = setTimeout(() => {
+        if (_intentionalClose) return
+        // 如果轮询还在运行，先清理
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+        _connect()
+      }, delay)
+      delay = Math.min(delay * 2, 30000)
+    }
+    tryReconnect()
+  }
+
+  function startStream() {
+    // 清理旧连接
+    _intentionalClose = false
+    if (abortController) {
+      abortController.abort()
+      abortController = null
+    }
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+    _connect()
+  }
+
+  function stopStream() {
+    _intentionalClose = true
+    if (abortController) {
+      abortController.abort()
+      abortController = null
+    }
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
     connected.value = false
-    // 主动断开后离开 connecting 阶段
     connecting.value = false
   }
 
