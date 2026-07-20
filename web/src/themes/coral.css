@@ -53,4 +53,15 @@
   /* --accent-dark: accent 的深色变体，用于边框和 hover 状态 */
   --accent-dark: #1F3848;
   --accent-hover: #1F3848;
+
+  /* 头部品牌渐变（珊瑚朱 → 古金 → 墨蓝调） */
+  --header-gradient-from: #D25F4B;
+  --header-gradient-mid1: #D4A574;
+  --header-gradient-mid2: #5A7A8A;
+  --header-gradient-to:   #D25F4B;
+  --header-glow: rgba(210, 95, 75, 0.30);
+
+  /* 用户气泡实色 */
+  --user-bubble-solid: #D25F4B;
+  --user-bubble-text:  #FFFBF2;
 }

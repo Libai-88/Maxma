@@ -90,8 +90,13 @@ const { enabled: paperTexture, toggle: togglePaperTexture } = usePaperTexture()
 
 <style scoped>
 .appearance-view {
+  flex: 1;
+  overflow-y: auto;
   padding: 24px 32px;
   max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 .header {
   margin-bottom: 24px;

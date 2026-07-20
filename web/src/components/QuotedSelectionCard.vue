@@ -3,7 +3,7 @@
   <div class="quoted-card">
     <div class="quoted-card-header">
       <span class="quoted-source">{{ quote.source }}</span>
-      <button class="quoted-remove" @click="$emit('remove')" title="移除引用">✕</button>
+      <button class="quoted-remove" @click="$emit('remove')" title="移除引用"><Icon name="close" :size="12" /></button>
     </div>
     <div class="quoted-text">{{ quote.text }}</div>
   </div>
@@ -11,6 +11,7 @@
 
 <script setup lang="ts">
 import type { QuotedSelection } from '@/composables/useSelectionQuote'
+import Icon from '@/components/Icon.vue'
 
 defineProps<{ quote: QuotedSelection }>()
 defineEmits<{ remove: [] }>()

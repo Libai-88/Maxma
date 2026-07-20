@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <article class="message-row" :class="role" :aria-label="role === 'user' ? '我的消息' : 'Maxma 回复'">
     <div class="bubble" :class="role" role="group">
       <div
@@ -154,11 +154,11 @@ watch(() => props.content, () => {
   min-width: 0;
 }
 .bubble.user {
-	  background: var(--user-bubble);
-	  color: var(--text-primary);
-	  border: 1px solid var(--border);
-	  border-bottom-right-radius: 4px;
-	}
+    background: var(--user-bubble-solid);
+    color: var(--user-bubble-text);
+    border: 1px solid transparent;
+    border-bottom-right-radius: var(--radius-sm);
+  }
 .bubble.assistant {
   background: var(--bg-card);
   color: var(--text-primary);
@@ -185,7 +185,7 @@ watch(() => props.content, () => {
   pointer-events: none;
 }
 .bubble.user .bubble-content.collapsed::after {
-  background: linear-gradient(transparent, var(--user-bubble));
+  background: linear-gradient(transparent, var(--user-bubble-solid));
 }
 .collapse-toggle {
   display: block;
@@ -234,9 +234,9 @@ watch(() => props.content, () => {
 }
 
 .read-status.read .read-dot {
-	  background: var(--status-info);
-	  box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-info) 12%, transparent);
-	}
+    background: var(--status-info);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-info) 12%, transparent);
+  }
 
 @media (prefers-reduced-motion: reduce) {
   .message-row {

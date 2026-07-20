@@ -34,7 +34,7 @@
           <button class="mv-btn" @click="resetView" title="重置 (0)">⊙</button>
           <button class="mv-btn" @click="zoomIn" title="放大 (+)">+</button>
           <div class="mv-divider"></div>
-          <button class="mv-btn mv-close" @click="close" title="关闭 (Esc)">✕</button>
+          <button class="mv-btn mv-close" @click="close" title="关闭 (Esc)"><Icon name="close" :size="14" /></button>
         </div>
       </div>
     </Transition>
@@ -45,6 +45,7 @@
 import { ref, watch, onMounted, onUnmounted, nextTick, watchEffect } from 'vue'
 import { useMediaViewer } from '@/composables/useMediaViewer'
 import { useMediaTransform } from '@/composables/useMediaTransform'
+import Icon from '@/components/Icon.vue'
 
 const { isOpen, currentItem, items, currentIndex, close, next, prev } = useMediaViewer()
 const { transform, transformStyle, isDragging, reset, computeFitScale, setScale, onWheel: doWheel, onPointerDown: doPointerDown, onPointerMove: doPointerMove, onPointerUp: doPointerUp, onDoubleClick: doDoubleClick, onKeyZoom } = useMediaTransform()

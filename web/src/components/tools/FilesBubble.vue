@@ -18,7 +18,7 @@
         <!-- ===== 读取文件 ===== -->
         <template v-if="op === 'read_file'">
           <div class="file-header">
-            <span class="file-icon">&#128196;</span>
+            <Icon class="file-icon" name="file-page" :size="14" />
             <div class="file-header-text">
               <div class="file-name">{{ fileName }}</div>
               <div class="file-path">{{ td.file_path }}</div>
@@ -58,7 +58,7 @@
         <!-- ===== 写入文件 ===== -->
         <template v-else-if="op === 'write_file'">
           <div class="write-success">
-            <span class="success-icon">&#10003;</span>
+            <Icon class="success-icon" name="checkmark" :size="14" />
             <div class="write-success-text">
               <div class="write-success-title">写入成功</div>
               <div class="write-success-detail">{{ fileName }}</div>
@@ -82,7 +82,7 @@
         <!-- ===== 文件列表 ===== -->
         <template v-else-if="op === 'list_directory' || op === 'search_files'">
           <div class="dir-header">
-            <span class="dir-icon">&#128193;</span>
+            <Icon class="dir-icon" name="folder" :size="14" />
             <div class="dir-header-text">
               <div class="dir-name">{{ dirName }}</div>
               <div class="dir-path">{{ td.directory_path || td.search_directory }}</div>
@@ -103,7 +103,7 @@
               :key="i"
               class="item-row"
             >
-              <span class="item-icon">{{ item.type === 'directory' ? '📁' : '📄' }}</span>
+              <Icon class="item-icon" :name="item.type === 'directory' ? 'folder' : 'file-page'" :size="12" />
               <span class="item-name">{{ item.name }}</span>
               <span class="item-size" v-if="item.size_bytes != null">{{ formatSize(item.size_bytes) }}</span>
             </div>
@@ -125,7 +125,7 @@
         <!-- ===== 删除文件 ===== -->
         <template v-else-if="op === 'delete_file'">
           <div class="write-success">
-            <span class="success-icon">&#10003;</span>
+            <Icon class="success-icon" name="checkmark" :size="14" />
             <div class="write-success-text">
               <div class="write-success-title">删除成功</div>
               <div class="write-success-detail">{{ td.file_path }}</div>
@@ -145,7 +145,7 @@
         <!-- ===== 重命名文件 ===== -->
         <template v-else-if="op === 'rename_file'">
           <div class="write-success">
-            <span class="success-icon">&#10003;</span>
+            <Icon class="success-icon" name="checkmark" :size="14" />
             <div class="write-success-text">
               <div class="write-success-title">重命名成功</div>
               <div class="write-success-detail">{{ td.file_path }} → {{ td.new_path }}</div>
@@ -156,7 +156,7 @@
         <!-- ===== 创建目录 ===== -->
         <template v-else-if="op === 'create_directory'">
           <div class="write-success">
-            <span class="success-icon">&#10003;</span>
+            <Icon class="success-icon" name="checkmark" :size="14" />
             <div class="write-success-text">
               <div class="write-success-title">目录创建成功</div>
               <div class="write-success-detail">{{ td.directory_path }}</div>
@@ -188,6 +188,7 @@ import { computed } from 'vue'
 import type { ToolCall } from '@/types'
 import BubbleChrome from './_shared/BubbleChrome.vue'
 import MaxmaBlockerError from './_shared/MaxmaBlockerError.vue'
+import Icon from '@/components/Icon.vue'
 
 const props = defineProps<{ toolCall: ToolCall }>()
 const emit = defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()

@@ -7,7 +7,7 @@
     <div v-if="store.loading" class="loading">加载中...</div>
     <div v-else class="tool-list">
       <div v-for="group in filteredGroups" :key="group.category" class="tool-group">
-        <div class="group-label">{{ groupLabel(group.category) }} ({{ group.tools.length }})</div>
+        <div class="group-label"><Icon class="group-label-icon" :name="groupIcon(group.category)" :size="12" />{{ groupLabel(group.category) }} ({{ group.tools.length }})</div>
         <div v-for="tool in group.tools" :key="tool.name" class="tool-item" @click="selected = selected === tool.name ? null : tool.name">
           <div class="tool-header">
             <span class="tool-name">{{ tool.label || tool.name }}</span>
@@ -25,6 +25,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useToolsStore } from '../stores/tools'
+import Icon from './Icon.vue'
 
 const store = useToolsStore()
 const search = ref('')
@@ -39,8 +40,13 @@ const filteredGroups = computed(() => {
 })
 
 function groupLabel(cat: string): string {
-  const labels: Record<string, string> = { file: '📁 文件操作', code: '💻 代码执行', web: '🌐 网络', memory: '🧠 记忆', config: '⚙️ 配置', system: '🔧 系统', mcp: '🔌 MCP', interactive: '💬 交互', fun: '🎮 娱乐' }
+  const labels: Record<string, string> = { file: '文件操作', code: '代码执行', web: '网络', memory: '记忆', config: '配置', system: '系统', mcp: 'MCP', interactive: '交互', fun: '娱乐' }
   return labels[cat] || cat
+}
+
+function groupIcon(cat: string): string {
+  const icons: Record<string, string> = { file: 'folder', code: 'tool', web: 'search', memory: 'memory', config: 'settings', system: 'tool', mcp: 'tool', interactive: 'chat', fun: 'sparkles' }
+  return icons[cat] || 'tool'
 }
 
 onMounted(() => { if (store.tools.length === 0) store.fetchTools() })
@@ -55,7 +61,8 @@ onMounted(() => { if (store.tools.length === 0) store.fetchTools() })
 .loading { padding: 24px; text-align: center; font-size: 12px; color: var(--text-tertiary); }
 .tool-list { overflow-y: auto; max-height: 400px; }
 .tool-group { margin-bottom: 8px; }
-.group-label { padding: 4px 0; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-tertiary); }
+.group-label { display: flex; align-items: center; gap: 5px; padding: 4px 0; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-tertiary); }
+.group-label-icon { opacity: 0.85; }
 .tool-item { padding: 6px 8px; border-radius: 6px; cursor: pointer; }
 .tool-item:hover { background: var(--bg-secondary); }
 .tool-header { display: flex; align-items: center; gap: 6px; }

@@ -3,8 +3,8 @@
     <div class="bubble-header" @click="toggle" role="button" :aria-expanded="isOpen">
       <span class="bubble-status">
         <span v-if="toolCall.status === 'running'" class="spinner"></span>
-        <span v-else-if="toolCall.status === 'done'">&#10003;</span>
-        <span v-else>&#10007;</span>
+        <Icon v-else-if="toolCall.status === 'done'" name="checkmark" :size="14" />
+        <Icon v-else name="close" :size="14" />
       </span>
       <span class="bubble-name">{{ displayName }}</span>
       <span class="bubble-elapsed" v-if="toolCall.elapsed !== null">
@@ -23,6 +23,7 @@
 import { ref, watch, computed, onMounted } from 'vue'
 import type { ToolCall } from '@/types'
 import { toolDisplayName } from './displayNames'
+import Icon from '@/components/Icon.vue'
 
 const props = defineProps<{ toolCall: ToolCall }>()
 

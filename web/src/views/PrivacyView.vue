@@ -274,11 +274,13 @@ onMounted(() => {
 
 <style scoped>
 .privacy-view {
+  flex: 1;
   padding: 24px 32px;
   max-width: 900px;
   margin: 0 auto;
   overflow-y: auto;
-  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
 }
 .header { margin-bottom: 24px; }
 .header h2 { font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0 0 4px; }

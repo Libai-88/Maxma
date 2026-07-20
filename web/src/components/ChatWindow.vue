@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="chat-window" ref="windowRef">
     <!-- 虚拟列表：DynamicScroller 仅渲染视口内/附近的轮次，长对话性能大幅提升。
          #default 槽渲染每个轮次；#after 槽放错误/打字指示器；#empty 槽放空状态。
@@ -91,7 +91,7 @@
                   v-else-if="ev.kind === 'system'"
                   class="system-event-bubble"
                 >
-                  <span class="system-event-icon">ℹ︎</span>
+                  <Icon class="system-event-icon" name="info" :size="14" />
                   <span class="system-event-text">{{ ev.content }}</span>
                 </div>
               </template>
@@ -125,8 +125,8 @@
                 >
                   <span class="memory-tool-icon">
                     <span v-if="me.status === 'running'" class="memory-spinner"></span>
-                    <span v-else-if="me.status === 'done'" class="memory-check">&#10003;</span>
-                    <span v-else class="memory-cross">&#10007;</span>
+                    <Icon v-else-if="me.status === 'done'" class="memory-check" name="checkmark" :size="12" />
+                    <Icon v-else class="memory-cross" name="close" :size="12" />
                   </span>
                   <!-- memory_review = 未触发任何修改，显示简洁文字 -->
                   <template v-if="me.name === 'memory_review'">
@@ -155,17 +155,11 @@
       <template #after>
         <!-- 错误提示 -->
         <div v-if="error" class="error-banner" :class="'error-' + (errorCategory || 'system')">
-          <span class="error-icon">
-            <template v-if="errorCategory === 'user_error'">⚠️</template>
-            <template v-else-if="errorCategory === 'tool_error'">🔧</template>
-            <template v-else-if="errorCategory === 'rate_limit'">⏳</template>
-            <template v-else-if="errorCategory === 'cancelled'">⛔</template>
-            <template v-else>❌</template>
-          </span>
+          <Icon class="error-icon" :name="errorIconName" :size="16" />
           <span class="error-message">{{ error }}</span>
           <span v-if="errorTraceId" class="error-trace-id">Trace: {{ errorTraceId }}</span>
           <button class="error-copy-btn" @click="copyErrorLog" :title="'复制错误日志'" aria-label="复制错误日志">
-            <span v-if="copySuccess" class="copy-success">✓</span>
+            <Icon v-if="copySuccess" class="copy-success" name="checkmark" :size="14" />
             <span v-else class="copy-icon"></span>
           </button>
         </div>
@@ -267,6 +261,7 @@ import emptyBgNight from '@/assets/images/brand/empty-bg-night.jpg'
 // 虚拟列表：仅渲染视口内/附近的轮次，长对话性能大幅提升
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
+import Icon from './Icon.vue'
 
 const props = withDefaults(defineProps<{
   sessionId: string
@@ -286,6 +281,20 @@ const props = withDefaults(defineProps<{
 // 错误日志一键复制（调用后端 ErrorCollector 获取完整报告）
 const { isDark } = useTheme()
 const copySuccess = ref(false)
+
+const errorIconName = computed(() => {
+  switch (props.errorCategory) {
+    case 'user_error': return 'warning'
+    case 'tool_error':
+    case 'system_error':
+      return 'error'
+    case 'rate_limit':
+    case 'cancelled':
+      return 'stop'
+    default:
+      return 'error'
+  }
+})
 
 const emptyStateStyle = computed(() => ({
   '--empty-bg-image': `url("${isDark.value ? emptyBgNight : emptyBgDay}")`,
@@ -660,15 +669,15 @@ function closeContextMenu() {
 
 <style scoped>
 .chat-window {
-	  flex: 1 1 auto;
-	  min-width: 0;
-	  min-height: 0;
-	  padding: 20px 24px;
-	  background: var(--bg-primary);
-	  display: flex;
-	  flex-direction: column;
-	  overflow: hidden;
-	}
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    padding: 20px 24px;
+    background: var(--bg-primary);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
 /* DynamicScroller 根元素：作为滚动容器 */
 .messages-list {
   flex: 1 1 auto;
@@ -713,6 +722,7 @@ function closeContextMenu() {
 .system-event-icon {
   flex-shrink: 0;
   opacity: 0.6;
+  color: var(--text-secondary);
 }
 .system-event-text {
   line-height: 1.5;
@@ -733,12 +743,12 @@ function closeContextMenu() {
   overflow: hidden;
 }
 .empty-state-overlay {
-	  position: absolute;
-	  inset: 0;
-	  background: linear-gradient(to bottom, transparent 35%, color-mix(in srgb, var(--bg-primary) 55%, transparent) 100%);
-	  pointer-events: none;
-	  z-index: 0;
-	}
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, transparent 35%, color-mix(in srgb, var(--bg-primary) 55%, transparent) 100%);
+    pointer-events: none;
+    z-index: 0;
+  }
 .empty-state-content {
   position: relative;
   z-index: 1;
@@ -759,15 +769,15 @@ function closeContextMenu() {
   font-weight: 700;
   font-family: var(--font-display);
   letter-spacing: -0.5px;
-	  color: var(--accent);
-	  text-shadow: 0 2px 16px color-mix(in srgb, var(--accent) 15%, transparent);
-	}
-	.empty-desc {
-		  font-size: 1.3em;
-		  color: var(--accent);
-		  font-weight: 500;
-		  text-shadow: 0 1px 12px color-mix(in srgb, var(--accent) 15%, transparent);
-		}
+    color: var(--accent);
+    text-shadow: 0 2px 16px color-mix(in srgb, var(--accent) 15%, transparent);
+  }
+  .empty-desc {
+      font-size: 1.3em;
+      color: var(--accent);
+      font-weight: 500;
+      text-shadow: 0 1px 12px color-mix(in srgb, var(--accent) 15%, transparent);
+    }
 .typewriter {
   display: inline-block;
   min-width: 1ch;
@@ -790,7 +800,7 @@ function closeContextMenu() {
   gap: 10px;
   opacity: .65;
   transition: opacity .2s;
-	  text-shadow: 0 1px 8px color-mix(in srgb, var(--accent) 12%, transparent);
+    text-shadow: 0 1px 8px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 .quick-hints:hover {
   opacity: .9;
@@ -844,7 +854,6 @@ function closeContextMenu() {
 }
 .error-icon {
   flex-shrink: 0;
-  font-size: 1em;
 }
 .error-message {
   flex: 1;
@@ -887,41 +896,40 @@ function closeContextMenu() {
   background-position: center;
 }
 .error-copy-btn .copy-success {
-	  color: var(--status-ok);
-	  font-weight: bold;
-	}
+  color: var(--status-ok);
+}
 /* 用户错误：暖琥珀警告 */
 .error-banner.error-user_error {
-	  background: var(--bg-card);
-	  background: color-mix(in srgb, var(--status-warn) 10%, var(--bg-card));
-	  border: 1px solid transparent;
-	  border: 1px solid color-mix(in srgb, var(--status-warn) 30%, transparent);
-	  color: var(--status-warn);
-	}
-	/* 工具错误：暖琥珀 */
-	.error-banner.error-tool_error {
-	  background: var(--bg-card);
-	  background: color-mix(in srgb, var(--status-warn) 10%, var(--bg-card));
-	  border: 1px solid transparent;
-	  border: 1px solid color-mix(in srgb, var(--status-warn) 30%, transparent);
-	  color: var(--status-warn);
-	}
-	/* 系统错误：暖红 */
-	.error-banner.error-system_error {
-	  background: var(--bg-card);
-	  background: color-mix(in srgb, var(--status-error) 10%, var(--bg-card));
-	  border: 1px solid transparent;
-	  border: 1px solid color-mix(in srgb, var(--status-error) 25%, transparent);
-	  color: var(--status-error);
-	}
-	/* 限流错误：暖蓝 */
-	.error-banner.error-rate_limit {
-	  background: var(--bg-card);
-	  background: color-mix(in srgb, var(--status-info) 10%, var(--bg-card));
-	  border: 1px solid transparent;
-	  border: 1px solid color-mix(in srgb, var(--status-info) 25%, transparent);
-	  color: var(--status-info);
-	}
+    background: var(--bg-card);
+    background: color-mix(in srgb, var(--status-warn) 10%, var(--bg-card));
+    border: 1px solid transparent;
+    border: 1px solid color-mix(in srgb, var(--status-warn) 30%, transparent);
+    color: var(--status-warn);
+  }
+  /* 工具错误：暖琥珀 */
+  .error-banner.error-tool_error {
+    background: var(--bg-card);
+    background: color-mix(in srgb, var(--status-warn) 10%, var(--bg-card));
+    border: 1px solid transparent;
+    border: 1px solid color-mix(in srgb, var(--status-warn) 30%, transparent);
+    color: var(--status-warn);
+  }
+  /* 系统错误：暖红 */
+  .error-banner.error-system_error {
+    background: var(--bg-card);
+    background: color-mix(in srgb, var(--status-error) 10%, var(--bg-card));
+    border: 1px solid transparent;
+    border: 1px solid color-mix(in srgb, var(--status-error) 25%, transparent);
+    color: var(--status-error);
+  }
+  /* 限流错误：暖蓝 */
+  .error-banner.error-rate_limit {
+    background: var(--bg-card);
+    background: color-mix(in srgb, var(--status-info) 10%, var(--bg-card));
+    border: 1px solid transparent;
+    border: 1px solid color-mix(in srgb, var(--status-info) 25%, transparent);
+    color: var(--status-info);
+  }
 /* 取消：灰色 */
 .error-banner.error-cancelled {
   background: var(--bg-card);
@@ -1047,12 +1055,12 @@ function closeContextMenu() {
 }
 
 .memory-check {
-	  color: var(--status-ok);
-	}
-	
-	.memory-cross {
-	  color: var(--status-error);
-	}
+  color: var(--status-ok);
+}
+
+.memory-cross {
+  color: var(--status-error);
+}
 
 .memory-tool-name {
   font-weight: 500;
@@ -1065,8 +1073,8 @@ function closeContextMenu() {
 }
 
 .memory-tool-status.is-error {
-	  color: var(--status-error);
-	}
+    color: var(--status-error);
+  }
 
 .memory-tool-output {
   max-width: 180px;
@@ -1105,12 +1113,12 @@ function closeContextMenu() {
 }
 
 .typing-dot {
-	  width: 8px;
-	  height: 8px;
-	  border-radius: 50%;
-	  background: var(--accent);
-	  animation: typingBounce 1.4s infinite ease-in-out both;
-	}
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: typingBounce 1.4s infinite ease-in-out both;
+  }
 
 .typing-dots .typing-dot:nth-child(1) {
   animation-delay: -0.32s;

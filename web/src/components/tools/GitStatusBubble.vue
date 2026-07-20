@@ -17,10 +17,10 @@
         <!-- ===== git_status ===== -->
         <template v-if="toolName === 'git_status'">
           <div class="status-header">
-            <span class="status-icon">&#128268;</span>
+            <Icon class="status-icon" name="tool" :size="14" />
             <div class="status-header-text">
               <div class="status-branch" v-if="td.branch">
-                <span class="branch-label">&#128256;</span>
+                <Icon class="branch-label" name="arrow-right" :size="12" />
                 <code class="branch-name">{{ td.branch }}</code>
               </div>
               <div class="status-summary">{{ td.summary || '工作目录干净' }}</div>
@@ -77,7 +77,7 @@
         <!-- ===== git_commit ===== -->
         <template v-else-if="toolName === 'git_commit'">
           <div class="commit-success">
-            <span class="success-icon">&#10003;</span>
+            <Icon class="success-icon" name="checkmark" :size="14" />
             <div class="commit-text">
               <div class="commit-title">{{ td.commit_hash || '' }} {{ td.commit_message }}</div>
               <div class="commit-detail">{{ td.message }}</div>
@@ -91,7 +91,7 @@
             <div class="branch-summary">{{ td.summary }}</div>
             <div v-if="branches.length > 0" class="branch-list">
               <div v-for="(b, i) in branches" :key="i" class="branch-row" :class="{ current: b.current }">
-                <span class="branch-indicator" v-if="b.current">&#9654;</span>
+                <Icon class="branch-indicator" name="arrow-right" :size="10" v-if="b.current" />
                 <span class="branch-indicator" v-else>&nbsp;</span>
                 <code class="branch-name-text">{{ b.name }}</code>
               </div>
@@ -102,7 +102,7 @@
         <!-- ===== git_push ===== -->
         <template v-else-if="toolName === 'git_push'">
           <div class="push-success">
-            <span class="success-icon">&#10003;</span>
+            <Icon class="success-icon" name="checkmark" :size="14" />
             <div class="push-text">
               <div class="push-title">{{ td.message }}</div>
               <div class="push-detail" v-if="td.remote">Remote: {{ td.remote }}</div>
@@ -113,7 +113,7 @@
         <!-- ===== git_pr ===== -->
         <template v-else-if="toolName === 'git_pr'">
           <div class="pr-success">
-            <span class="success-icon">&#10003;</span>
+            <Icon class="success-icon" name="checkmark" :size="14" />
             <div class="pr-text">
               <div class="pr-title">PR 已创建</div>
               <a v-if="td.url" :href="String(td.url)" target="_blank" class="pr-link">{{ td.url }}</a>
@@ -125,7 +125,7 @@
         <!-- ===== git_log ===== -->
         <template v-else-if="toolName === 'git_log'">
           <div class="log-header">
-            <span class="log-icon">&#128203;</span>
+            <Icon class="log-icon" name="file-page" :size="14" />
             <div class="log-summary">{{ td.summary || `${td.count} 条提交` }}</div>
           </div>
           <div v-if="commits.length > 0" class="commit-list">
@@ -150,6 +150,7 @@
 import { computed } from 'vue'
 import type { ToolCall } from '@/types'
 import BubbleChrome from './_shared/BubbleChrome.vue'
+import Icon from '@/components/Icon.vue'
 
 const props = defineProps<{ toolCall: ToolCall }>()
 

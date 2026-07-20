@@ -1,7 +1,7 @@
 <template>
   <div class="plan-card" :class="plan.status">
     <div class="plan-header">
-      <span class="plan-icon">&#128203;</span>
+      <Icon class="plan-icon" name="file-page" :size="16" />
       <span class="plan-title">执行计划</span>
       <span class="plan-status" :class="plan.status">{{ statusText }}</span>
     </div>
@@ -14,8 +14,8 @@
         :class="getStepClass(i)"
       >
         <span class="step-num" :class="getStepClass(i)">
-          <span v-if="getStepStatus(i) === 'done'">&#10003;</span>
-          <span v-else-if="getStepStatus(i) === 'failed'">&#10007;</span>
+          <Icon v-if="getStepStatus(i) === 'done'" name="checkmark" :size="12" />
+          <Icon v-else-if="getStepStatus(i) === 'failed'" name="close" :size="12" />
           <span v-else-if="getStepStatus(i) === 'skipped'">&ndash;</span>
           <span v-else-if="getStepStatus(i) === 'running'" class="step-spinner"></span>
           <template v-else>{{ i + 1 }}</template>
@@ -30,13 +30,13 @@
 
     <!-- 重规划提示 -->
     <div v-if="plan.status === 'replanning'" class="plan-replan-hint">
-      <span class="replan-icon">&#128260;</span>
+      <Icon class="replan-icon" name="sparkles" :size="14" />
       <span>步骤失败，正在重新规划... (第 {{ (plan.replanCount || 0) + 1 }} 次重规划)</span>
     </div>
 
     <!-- 失败信息 -->
     <div v-if="plan.status === 'failed'" class="plan-failed-hint">
-      <span class="failed-icon">&#9888;</span>
+      <Icon class="failed-icon" name="warning" :size="14" />
       <span>步骤执行失败（共 {{ plan.failureCount || 0 }} 次失败）</span>
     </div>
 
@@ -76,6 +76,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { PlanCard } from '@/types'
+import Icon from '@/components/Icon.vue'
 
 const props = defineProps<{
   plan: PlanCard

@@ -28,7 +28,7 @@
 
       <!-- 示例提示：分场景给出可点击的具体 prompt，降低上手门槛 -->
       <section class="example-prompts" aria-label="试试这些">
-        <div class="example-title">试试这些 <span aria-hidden="true">✨</span></div>
+        <div class="example-title">试试这些 <Icon name="sparkles" :size="14" aria-hidden="true" /></div>
         <div class="example-chips">
           <button
             v-for="ex in examples"
@@ -38,7 +38,7 @@
             @click="$emit('start', ex.text)"
             :title="ex.hint"
           >
-            <span class="example-chip-icon" aria-hidden="true">{{ ex.icon }}</span>
+            <Icon class="example-chip-icon" :name="ex.icon" :size="14" aria-hidden="true" />
             <span class="example-chip-text">{{ ex.label }}</span>
           </button>
         </div>
@@ -51,6 +51,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { usePersonaStore } from '../stores/persona'
+import Icon from './Icon.vue'
 import chatBubbleRaw from '../assets/icons/welcome/chat-bubble.svg?raw'
 import searchRaw from '../assets/icons/welcome/search.svg?raw'
 
@@ -70,12 +71,12 @@ const sceneText = computed(() => {
 // 示例提示：覆盖三类画像的典型场景
 // - tone: 'office' (Power Office User) / 'daily' (Novice) / 'tech' (Enthusiast)
 const examples = computed(() => [
-  { icon: '📝', label: '帮我写周报', text: '帮我写一份本周工作周报，要点列出主要完成的事项、遇到的问题和下周计划', tone: 'office', hint: '办公党：让 AI 帮你起草文档' },
-  { icon: '🌐', label: '翻译一段文档', text: '请帮我把一段中文翻译成英文，我会把内容贴进来', tone: 'office', hint: '办公党：跨语言文档处理' },
-  { icon: '🌤️', label: '今天天气怎么样', text: '今天天气怎么样？', tone: 'daily', hint: '新手：试试内置天气工具' },
-  { icon: '✅', label: '管理我的待办', text: '帮我看看今天的待办事项', tone: 'daily', hint: '新手：连接 Todoist 工具' },
-  { icon: '💻', label: '写一段 Python', text: '帮我写一段 Python 脚本，读取当前目录下所有 .csv 文件并合并', tone: 'tech', hint: '极客：让 Agent 直接写代码' },
-  { icon: '🔍', label: '搜索最新资讯', text: '帮我搜索一下最近关于 AI Agent 的最新资讯', tone: 'tech', hint: '极客：调用网络搜索工具' },
+  { icon: 'file-page', label: '帮我写周报', text: '帮我写一份本周工作周报，要点列出主要完成的事项、遇到的问题和下周计划', tone: 'office', hint: '办公党：让 AI 帮你起草文档' },
+  { icon: 'doc-reader', label: '翻译一段文档', text: '请帮我把一段中文翻译成英文，我会把内容贴进来', tone: 'office', hint: '办公党：跨语言文档处理' },
+  { icon: 'weather-partly-cloudy', label: '今天天气怎么样', text: '今天天气怎么样？', tone: 'daily', hint: '新手：试试内置天气工具' },
+  { icon: 'checkmark', label: '管理我的待办', text: '帮我看看今天的待办事项', tone: 'daily', hint: '新手：连接 Todoist 工具' },
+  { icon: 'python', label: '写一段 Python', text: '帮我写一段 Python 脚本，读取当前目录下所有 .csv 文件并合并', tone: 'tech', hint: '极客：让 Agent 直接写代码' },
+  { icon: 'search', label: '搜索最新资讯', text: '帮我搜索一下最近关于 AI Agent 的最新资讯', tone: 'tech', hint: '极客：调用网络搜索工具' },
 ])
 </script>
 
@@ -194,7 +195,7 @@ const examples = computed(() => [
   .example-chip:hover { transform: translateY(-1px); }
   .example-chip:active { transform: scale(0.97); }
 }
-.example-chip-icon { font-size: 14px; line-height: 1; }
+.example-chip-icon { display: inline-flex; width: 14px; height: 14px; color: inherit; }
 .example-chip-text { white-space: nowrap; }
 
 /* 不同画像的色调提示（轻量、不打扰） */

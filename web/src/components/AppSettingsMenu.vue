@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="settings-area" ref="settingsTriggerRef">
     <button
       class="nav-item settings-btn"
@@ -128,13 +128,13 @@
         </button>
         <div class="popup-divider"></div>
         <div class="quick-actions-section">
-          <div class="quick-actions-title">⚡ 快捷操作</div>
+          <div class="quick-actions-title"><Icon name="sparkles" :size="14" />快捷操作</div>
           <button class="popup-item popup-action neutral" @click="handleClearSession">清空当前会话</button>
           <button class="popup-item popup-action neutral" @click="handleScrollToTop">回到顶部</button>
         </div>
         <div class="popup-divider"></div>
         <div class="shortcuts-section">
-          <div class="shortcuts-title">⌨ 快捷键</div>
+          <div class="shortcuts-title"><Icon name="settings" :size="14" />快捷键</div>
           <div class="shortcut-item"><kbd>Ctrl+N</kbd> 新建会话</div>
           <div class="shortcut-item"><kbd>Ctrl+K</kbd> 切换私密模式</div>
           <div class="shortcut-item"><kbd>Ctrl+Esc</kbd> 切换侧栏</div>
@@ -505,35 +505,35 @@ onUnmounted(() => {
 }
 
 .popup-item.router-link-active {
-	  background: var(--bg-secondary);
-	}
+    background: var(--bg-secondary);
+  }
 .popup-item.router-link-active .popup-item-title {
-	  color: var(--accent);
-	  font-weight: 600;
-	}
-	
-	.popup-item-content {
-	  display: flex;
-	  flex-direction: column;
-	  gap: 1px;
-	}
-	
-	.popup-item-title {
-	  font-size: 0.9em;
-	  color: var(--text-secondary);
-	  line-height: 1.4;
-	}
-	
-	.popup-item-sub {
-	  font-size: 0.65em;
-	  color: var(--text-tertiary);
-	  line-height: 1.35;
-	  font-weight: 400;
-	  white-space: normal;
-	  overflow-wrap: anywhere;
-	}
-	
-	.popup-divider {
+    color: var(--accent);
+    font-weight: 600;
+  }
+  
+  .popup-item-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  
+  .popup-item-title {
+    font-size: 0.9em;
+    color: var(--text-secondary);
+    line-height: 1.4;
+  }
+  
+  .popup-item-sub {
+    font-size: 0.65em;
+    color: var(--text-tertiary);
+    line-height: 1.35;
+    font-weight: 400;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  
+  .popup-divider {
   height: 1px;
   background: var(--border);
   margin: 4px 0;
@@ -587,6 +587,9 @@ onUnmounted(() => {
   padding: 8px 14px 4px;
 }
 .shortcuts-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 0.7em;
   color: var(--text-tertiary);
   text-transform: uppercase;
@@ -604,6 +607,9 @@ onUnmounted(() => {
   padding: 4px 6px;
 }
 .quick-actions-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 0.7em;
   color: var(--text-tertiary);
   text-transform: uppercase;

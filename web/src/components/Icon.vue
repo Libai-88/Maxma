@@ -69,7 +69,7 @@ import weatherPartlyCloudyRaw from '@/assets/icons/weather/partly-cloudy.svg?raw
 
 const props = withDefaults(defineProps<{
   name: string
-  size?: 12 | 14 | 16 | 18 | 20
+  size?: 10 | 12 | 14 | 16 | 18 | 20 | 24
   /** 装饰性图标（默认 true）：渲染 aria-hidden="true"，对屏幕阅读器隐藏 */
   decorative?: boolean
   /** 当 decorative=false 时使用，作为图标的可访问名称 */
@@ -115,6 +115,10 @@ const svgContents: Record<string, string> = {
   cite: citeRaw,
   close: closeRaw,
   'arrow-right': arrowRightRaw,
+  'arrow-left': `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="19" y1="12" x2="5" y2="12"/>
+    <polyline points="12 19 5 12 12 5"/>
+  </svg>`,
   bike: bikeRaw,
   bus: busRaw,
   calendar: calendarRaw,
@@ -122,6 +126,17 @@ const svgContents: Record<string, string> = {
   'chevron-down': chevronDownRaw,
   'chevron-right': chevronRightRaw,
   'circle-outline': circleOutlineRaw,
+  clock: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9"/>
+    <polyline points="12 6 12 12 16 14"/>
+  </svg>`,
+  coin: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9"/>
+    <path d="M12 7v1m0 8v1m-4-5h.01M16 12h.01"/>
+  </svg>`,
+  ruler: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 7h18M3 7v10h18V7M7 7v5M11 7v3M15 7v5M19 7v3"/>
+  </svg>`,
   'code-quality': codeQualityRaw,
   cookie: cookieRaw,
   'doc-reader': docReaderRaw,
@@ -156,6 +171,28 @@ const svgContents: Record<string, string> = {
   <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
   <circle cx="8.5" cy="8.5" r="1.5"/>
   <polyline points="21 15 16 10 5 21"/>
+</svg>`,
+  lock: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="5" y="11" width="14" height="10" rx="2" ry="2"/>
+  <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+</svg>`,
+  info: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="12" cy="12" r="9"/>
+  <line x1="12" y1="16" x2="12" y2="12"/>
+  <line x1="12" y1="8" x2="12.01" y2="8"/>
+</svg>`,
+  leaf: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M11 20A7 7 0 0 1 9.8 7.9C13.6 4.2 20 3 20 3s-1.2 6.4-4.9 10.2A7 7 0 0 1 11 20Z"/>
+  <path d="M11 20c0-2 1.5-4 4-4"/>
+</svg>`,
+  star: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+</svg>`,
+  'star-filled': `<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+</svg>`,
+  minus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <line x1="5" y1="12" x2="19" y2="12"/>
 </svg>`,
 }
 
@@ -195,9 +232,11 @@ const svgContent = computed(() => {
   width: 100%;
   height: 100%;
 }
+.icon--10 { width: 10px; height: 10px; }
 .icon--12 { width: 12px; height: 12px; }
 .icon--14 { width: 14px; height: 14px; }
 .icon--16 { width: 16px; height: 16px; }
 .icon--18 { width: 18px; height: 18px; }
 .icon--20 { width: 20px; height: 20px; }
+.icon--24 { width: 24px; height: 24px; }
 </style>

@@ -1,7 +1,7 @@
 <template>
   <div class="reasoning-timeline">
     <div v-if="entries.length === 0" class="timeline-empty">
-      <span class="empty-icon">&#128161;</span>
+      <Icon class="empty-icon" name="sparkles" :size="18" />
       <p>暂无推理记录</p>
       <p class="empty-hint">发送消息后显示推理与工具活动</p>
     </div>
@@ -13,12 +13,12 @@
         :class="entry.kind"
       >
         <div class="timeline-dot" :class="entry.kind">
-          <span v-if="entry.kind === 'thinking'">&#128173;</span>
-          <span v-else-if="entry.kind === 'tool' && entry.status === 'done'">&#10003;</span>
-          <span v-else-if="entry.kind === 'tool' && entry.status === 'error'">&#10007;</span>
+          <Icon v-if="entry.kind === 'thinking'" name="chat" :size="12" />
+          <Icon v-else-if="entry.kind === 'tool' && entry.status === 'done'" name="checkmark" :size="12" />
+          <Icon v-else-if="entry.kind === 'tool' && entry.status === 'error'" name="close" :size="12" />
           <span v-else-if="entry.kind === 'tool' && entry.status === 'running'" class="dot-spinner"></span>
-          <span v-else-if="entry.kind === 'tool'">&#128295;</span>
-          <span v-else-if="entry.kind === 'answer'">&#128172;</span>
+          <Icon v-else-if="entry.kind === 'tool'" name="tool" :size="12" />
+          <Icon v-else-if="entry.kind === 'answer'" name="chat" :size="12" />
         </div>
         <div class="timeline-content">
           <div class="timeline-header">
@@ -40,6 +40,7 @@
 import { computed } from 'vue'
 import type { ChatTurn } from '@/types'
 import { useWorkbenchStore } from '@/stores/workbench'
+import Icon from '@/components/Icon.vue'
 
 const props = defineProps<{
   turns: ChatTurn[]

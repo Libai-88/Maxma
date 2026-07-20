@@ -1,7 +1,7 @@
 <template>
   <div class="canvas-container">
     <div v-if="cards.length === 0" class="canvas-empty">
-      <span class="empty-icon">&#128204;</span>
+      <Icon class="empty-icon" name="pin" :size="20" />
       <p>画布为空</p>
       <p class="empty-hint">固定的内容会显示在这里</p>
     </div>
@@ -55,6 +55,7 @@ import { getCardComponent } from './canvas-registry'
 import CanvasTabs from './CanvasTabs.vue'
 import HtmlSandbox from '@/components/HtmlSandbox.vue'
 import { useWorkbenchStore } from '@/stores/workbench'
+import Icon from '@/components/Icon.vue'
 
 const props = defineProps<{
   cards: CanvasCard[]

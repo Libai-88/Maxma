@@ -6,15 +6,15 @@
     @click.stop
   >
     <button class="menu-item" @click="onToggleFavorite">
-      <span class="menu-icon">{{ isFavorited ? '★' : '☆' }}</span>
+      <Icon class="menu-icon" :name="isFavorited ? 'star-filled' : 'star'" :size="16" />
       <span>{{ isFavorited ? '取消收藏' : '收藏' }}</span>
     </button>
     <button class="menu-item" @click="onCopyPath">
-      <span class="menu-icon">📋</span>
+      <Icon class="menu-icon" name="copy" :size="16" />
       <span>复制路径</span>
     </button>
     <button class="menu-item" @click="onReduceRecommendation">
-      <span class="menu-icon">−</span>
+      <Icon class="menu-icon" name="minus" :size="16" />
       <span>减少推荐</span>
     </button>
   </div>
@@ -23,6 +23,7 @@
 <script setup lang="ts">
 import { ref, watch, watchEffect } from 'vue'
 import { getApiBase, tauriFetch } from '@/utils/env'
+import Icon from '@/components/Icon.vue'
 
 interface Sticker {
   category: string
@@ -178,7 +179,6 @@ watch(() => props.sticker, () => {
 }
 
 .menu-icon {
-  font-size: 1.1em;
   width: 20px;
   text-align: center;
 }

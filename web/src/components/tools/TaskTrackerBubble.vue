@@ -45,9 +45,9 @@
             :class="'todo-' + todo.status"
           >
             <span class="todo-icon" :class="'icon-' + todo.status">
-              <template v-if="todo.status === 'completed'">✓</template>
-              <template v-else-if="todo.status === 'in_progress'">→</template>
-              <template v-else>○</template>
+              <template v-if="todo.status === 'completed'"><Icon name="checkmark" :size="12" /></template>
+              <template v-else-if="todo.status === 'in_progress'"><Icon name="arrow-right" :size="12" /></template>
+              <template v-else><Icon name="circle-outline" :size="12" /></template>
             </span>
 
             <span class="todo-content">{{ todo.content }}</span>
@@ -65,6 +65,7 @@
 import { computed, ref, watchEffect } from 'vue'
 import type { ToolCall } from '@/types'
 import BubbleChrome from './_shared/BubbleChrome.vue'
+import Icon from '@/components/Icon.vue'
 
 interface TodoItem {
   id?: string

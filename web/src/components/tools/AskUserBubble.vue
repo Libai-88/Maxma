@@ -79,7 +79,7 @@
       <!-- 确认模式：危险操作确认 -->
       <div v-else-if="interactionData.mode === 'confirm'" class="confirm-area">
         <div class="confirm-warning">
-          <span class="confirm-warning-icon">&#9888;</span>
+          <Icon class="confirm-warning-icon" name="warning" :size="16" />
           <span class="confirm-warning-text">危险操作</span>
         </div>
         <p v-if="interactionData.detail" class="confirm-detail">{{ interactionData.detail }}</p>
@@ -128,7 +128,7 @@
     <!-- 完成 -->
     <div v-else-if="toolCall.status === 'done'" class="ask-done">
       <div class="ask-done-summary">
-        <div class="ask-done-icon">&#10003;</div>
+        <Icon class="ask-done-icon" name="checkmark" :size="16" />
         <span class="ask-done-label">已收到你的回复</span>
       </div>
       <div v-if="doneData" class="ask-done-detail">
@@ -149,6 +149,7 @@
 import type { ToolCall } from '@/types';
 import { computed, onUnmounted, ref, watch, watchEffect } from 'vue';
 import BubbleChrome from './_shared/BubbleChrome.vue';
+import Icon from '@/components/Icon.vue';
 
 const props = defineProps<{ toolCall: ToolCall }>()
 const emit = defineEmits<{

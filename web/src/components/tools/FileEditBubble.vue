@@ -18,7 +18,7 @@
         <!-- ===== 替换 ===== -->
         <template v-if="op === 'edit'">
           <div class="edit-summary success-banner">
-            <span class="banner-icon">&#9998;</span>
+            <Icon class="banner-icon" name="file-page" :size="14" />
             <div class="banner-text">
               <div class="banner-title">替换成功</div>
               <div class="banner-detail">{{ td.file_path }}</div>
@@ -43,7 +43,7 @@
         <!-- ===== 读取 ===== -->
         <template v-else-if="op === 'read'">
           <div class="file-header">
-            <span class="file-icon">&#128196;</span>
+            <Icon class="file-icon" name="file-page" :size="14" />
             <div class="file-header-text">
               <div class="file-name">{{ fileName }}</div>
               <div class="file-path">{{ td.file_path }}</div>
@@ -71,7 +71,7 @@
         <!-- ===== 多笔编辑 ===== -->
         <template v-else-if="op === 'multi_edit'">
           <div class="multi-summary" :class="multiClass">
-            <span class="multi-icon">{{ multiIcon }}</span>
+            <Icon class="multi-icon" :name="multiIcon" :size="16" />
             <div class="multi-text">
               <div class="multi-title">{{ multiTitle }}</div>
               <div class="multi-detail">{{ td.file_path }}</div>
@@ -89,7 +89,7 @@
               class="edit-result-item"
               :class="r.status"
             >
-              <span class="eri-icon">{{ r.status === 'ok' ? '✓' : '✗' }}</span>
+              <Icon class="eri-icon" :name="r.status === 'ok' ? 'checkmark' : 'close'" :size="12" />
               <span class="eri-index">#{{ i + 1 }}</span>
               <span class="eri-msg">{{ r.message || r.replaced_count + ' 处替换' }}</span>
             </div>
@@ -106,7 +106,7 @@
         <!-- ===== 搜索 ===== -->
         <template v-else-if="op === 'search'">
           <div class="search-header">
-            <span class="search-icon">&#128269;</span>
+            <Icon class="search-icon" name="search" :size="14" />
             <div class="search-header-text">
               <div class="search-pattern">/{{ td.pattern }}/</div>
               <div class="search-file">{{ td.file_path }}</div>
@@ -149,6 +149,7 @@ import { computed, defineAsyncComponent } from 'vue'
 import type { ToolCall } from '@/types'
 import BubbleChrome from './_shared/BubbleChrome.vue'
 import MaxmaBlockerError from './_shared/MaxmaBlockerError.vue'
+import Icon from '@/components/Icon.vue'
 
 const FileDiffView = defineAsyncComponent(() => import('./FileDiffView.vue'))
 
@@ -196,8 +197,7 @@ const multiClass = computed(() => {
 })
 
 const multiIcon = computed(() => {
-  // 文本插值 {{ }} 不会解码 HTML 实体，必须返回 Unicode 字符
-  return (td.value.failed_count as number) > 0 ? '⚠' : '✓'
+  return (td.value.failed_count as number) > 0 ? 'warning' : 'checkmark'
 })
 
 const multiTitle = computed(() => {

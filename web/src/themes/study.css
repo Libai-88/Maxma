@@ -108,4 +108,15 @@
   /* ── 字体设置（衬线 display + 无衬线 body，由 tokens.css 默认接管） ── */
   --font-display: var(--font-serif, 'EB Garamond', 'Noto Serif SC', serif);
   --font-body:    var(--font-ui, 'Inter', -apple-system, sans-serif);
+
+  /* 头部品牌渐变（赤陶印章 → 古金 → 远山青） */
+  --header-gradient-from: #C27A6E;
+  --header-gradient-mid1: #B89A6A;
+  --header-gradient-mid2: #7A9AAA;
+  --header-gradient-to:   #C27A6E;
+  --header-glow: rgba(194, 122, 110, 0.30);
+
+  /* 用户气泡实色 */
+  --user-bubble-solid: #C27A6E;
+  --user-bubble-text:  #FCFAF5;
 }

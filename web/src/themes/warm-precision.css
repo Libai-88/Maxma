@@ -113,4 +113,15 @@
   --user-bg:      rgba(var(--accent-rgb), 0.08);
   --drop-overlay-bg: rgba(var(--accent-rgb), 0.12);
   --attach-bg:    rgba(var(--accent-rgb), 0.05);
+
+  /* 头部品牌渐变（赤陶 → 古金 → 暖杏） */
+  --header-gradient-from: #C17A5C;
+  --header-gradient-mid1: #D4A574;
+  --header-gradient-mid2: #E8C8A8;
+  --header-gradient-to:   #C17A5C;
+  --header-glow: rgba(193, 122, 92, 0.30);
+
+  /* 用户气泡实色 */
+  --user-bubble-solid: #C17A5C;
+  --user-bubble-text:  #FEFCF8;
 }

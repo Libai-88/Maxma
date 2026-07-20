@@ -300,11 +300,13 @@ const dataPath = 'api/data/'
 
 <style scoped>
 .help-view {
+  flex: 1;
   padding: 24px 32px;
   max-width: 960px;
   margin: 0 auto;
   overflow-y: auto;
-  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .header {

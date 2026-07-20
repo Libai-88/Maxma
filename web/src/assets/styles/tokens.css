@@ -1,4 +1,4 @@
-/* web/src/assets/styles/tokens.css
+﻿/* web/src/assets/styles/tokens.css
  * 全局结构 token — 所有主题共享，不被主题文件覆盖
  * 包含：间距 / 字号 / 圆角 / 动效时长 / 缓动 / 字体族 / 阴影层级
  */
@@ -16,11 +16,11 @@
   --space-40: 2.5rem;     /* 40px */
 
   /* ── 字号层级 ── */
-	  --fs-title:   1.15rem;    /* 区块标题 */
-	  --fs-body:    0.95rem;     /* 正文 */
-	  --fs-ui:      0.88rem;    /* 次级 UI */
-	  --fs-caption: 0.84rem;    /* 控件 */
-	  --fs-hint:    0.78rem;     /* 提示/badge */
+    --fs-title:   1.15rem;    /* 区块标题 */
+    --fs-body:    0.95rem;     /* 正文 */
+    --fs-ui:      0.88rem;    /* 次级 UI */
+    --fs-caption: 0.84rem;    /* 控件 */
+    --fs-hint:    0.78rem;     /* 提示/badge */
 
   /* ── 圆角 ── */
   --radius-sm: 5px;
@@ -85,6 +85,17 @@
   --overlay-light:  rgba(0, 0, 0, 0.05);
   --overlay-medium: rgba(0, 0, 0, 0.08);
   --overlay-strong: rgba(0, 0, 0, 0.15);
+
+  /* ── 头部品牌渐变（主题可覆盖） ── */
+  --header-gradient-from: #D4A5A5;
+  --header-gradient-mid1: #C9A876;
+  --header-gradient-mid2: #E8B4BC;
+  --header-gradient-to:   #D4A5A5;
+  --header-glow: rgba(212, 165, 165, 0.35);
+
+  /* ── 用户气泡实色（主题可覆盖） ── */
+  --user-bubble-solid: var(--accent-pink, #D4A5A5);
+  --user-bubble-text:  var(--bg-card, #FFFEFA);
 
   /* ── 纸质纹理系统（默认开启，可通过主题设置切换） ── */
   --paper-texture-url: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.9 0 0 0 0 0.88 0 0 0 0 0.82 0 0 0 0.08 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");

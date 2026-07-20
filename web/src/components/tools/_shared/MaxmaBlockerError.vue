@@ -2,7 +2,7 @@
   <!-- MaxmaBlocker 阻断错误（特殊视觉） -->
   <div v-if="isBlocked" class="blocker-banner">
     <div class="blocker-header">
-      <span class="blocker-shield">🛡️</span>
+      <Icon class="blocker-shield" name="lock" :size="24" />
       <span class="blocker-title">访问已被安全阻断</span>
     </div>
     <div class="blocker-divider" />
@@ -12,13 +12,13 @@
       <div v-if="blockedPaths.length" class="blocker-section">
         <div class="blocker-label">阻断位置</div>
         <div v-for="(p, i) in blockedPaths" :key="i" class="blocker-path-item">
-          <span class="blocker-path-icon">📁</span>
+          <Icon class="blocker-path-icon" name="folder" :size="14" />
           <code class="blocker-path-text">{{ p }}</code>
         </div>
       </div>
 
       <div class="blocker-notice">
-        <span class="blocker-notice-icon">⚠️</span>
+        <Icon class="blocker-notice-icon" name="warning" :size="16" />
         <span>Agent 正在尝试访问以上路径，请等待其说明访问原因及下一步计划。</span>
       </div>
     </div>
@@ -32,6 +32,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import Icon from '@/components/Icon.vue'
 
 const props = defineProps<{
   output: string | null
@@ -89,8 +90,8 @@ const blockedPaths = computed<string[]>(() => {
 }
 
 .blocker-shield {
-  font-size: 22px;
   flex-shrink: 0;
+  color: #c0392b;
 }
 
 .blocker-title {

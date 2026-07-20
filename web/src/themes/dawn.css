@@ -61,6 +61,17 @@
   /* --accent-dark: accent 的深色变体，用于边框和 hover 状态 */
   --accent-dark: #568590;
   --accent-hover: #568590;
+
+  /* 头部品牌渐变（暖粉桃 → 古金 → 玫瑰金） */
+  --header-gradient-from: #E8826F;
+  --header-gradient-mid1: #D4A574;
+  --header-gradient-mid2: #E8B4BC;
+  --header-gradient-to:   #E8826F;
+  --header-glow: rgba(232, 130, 111, 0.35);
+
+  /* 用户气泡实色 */
+  --user-bubble-solid: #E8826F;
+  --user-bubble-text:  #FFFEFA;
 }
 
 /* ── 渐变背景：粉桃 → 奶油黄 → 米白 → 淡青 ──

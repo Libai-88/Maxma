@@ -1,7 +1,7 @@
 <template>
   <div class="error-card" :class="[`error-card--${category}`]">
     <div class="error-card__header">
-      <span class="error-card__icon">{{ icon }}</span>
+      <Icon class="error-card__icon" name="warning" :size="16" />
       <span class="error-card__title">{{ title }}</span>
       <span v-if="traceId" class="error-card__trace">ID: {{ traceId }}</span>
     </div>
@@ -21,6 +21,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import Icon from './Icon.vue'
 
 const props = withDefaults(defineProps<{
   message: string
@@ -34,19 +35,6 @@ const props = withDefaults(defineProps<{
 })
 
 defineEmits<{ retry: []; dismiss: [] }>()
-
-const icon = computed(() => {
-  switch (props.category) {
-    case 'network': return '🌐'
-    case 'auth': return '🔑'
-    case 'timeout': return '⏱️'
-    case 'permission': return '🚫'
-    case 'not_found': return '🔍'
-    case 'rate_limit': return '⏳'
-    case 'warning': return '⚠️'
-    default: return '⚠️'
-  }
-})
 
 const title = computed(() => {
   switch (props.category) {

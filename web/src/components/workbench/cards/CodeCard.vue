@@ -1,11 +1,11 @@
 <template>
   <div class="canvas-card code-card">
     <div class="card-header">
-      <span class="card-icon">&#128187;</span>
+      <Icon class="card-icon" name="python" :size="16" />
       <span class="card-title">{{ card.title }}</span>
       <span v-if="card.sourceTool" class="card-source">{{ card.sourceTool }}</span>
       <button class="card-copy" @click="copyCode" title="复制代码">
-        {{ copied ? '✓' : '⎘' }}
+        <Icon :name="copied ? 'checkmark' : 'copy'" :size="12" />
       </button>
       <button class="card-remove" @click="$emit('remove')" title="移除">&times;</button>
     </div>
@@ -16,6 +16,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { CanvasCard } from '@/types/workbench'
+import Icon from '@/components/Icon.vue'
 
 const props = defineProps<{ card: CanvasCard }>()
 defineEmits<{ remove: [] }>()

@@ -14,15 +14,22 @@ const EMOTION_MAP: Record<string, string> = {
   '日常': '日常',
 }
 
+const STICKER_DIRECTIVE_RE = /\[表情(?:包)?[:：][^\]]+\]/g
+
 /** 从文本中检测情绪，返回贴纸分类名或 null */
 export function detectEmotion(text: string): string | null {
   if (!text) return null
-  const explicitMatch = text.match(/\[表情[:：]([^\]]+)\]/)
+  const explicitMatch = text.match(/\[表情(?:包)?[:：]([^\]]+)\]/)
   if (explicitMatch && EMOTION_MAP[explicitMatch[1]]) return EMOTION_MAP[explicitMatch[1]]
   for (const [keyword, category] of Object.entries(EMOTION_MAP)) {
     if (text.includes(keyword)) return category
   }
   return null
+}
+
+/** Remove the agent-only sticker directive once its image has been resolved. */
+export function stripStickerDirectives(text: string): string {
+  return text.replace(STICKER_DIRECTIVE_RE, '').replace(/\n{2,}/g, '\n').trim()
 }
 
 /** 根据分类名获取随机贴纸 URL */

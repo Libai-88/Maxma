@@ -1,13 +1,18 @@
 <template>
   <HtmlSandbox v-if="useSandbox" :html="sandboxHtml" />
   <div v-else class="markdown-body" v-html="renderedHtml" @click="onImageClick"></div>
+  <p v-if="renderError" class="md-render-error">
+    <Icon name="warning" :size="14" />
+    Markdown 渲染错误: {{ renderError }}
+  </p>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { renderMarkdown, renderMarkdownRaw, contentNeedsIsolation } from '@/utils/markdown'
 import HtmlSandbox from './HtmlSandbox.vue'
 import { useMediaViewer } from '@/composables/useMediaViewer'
+import Icon from '@/components/Icon.vue'
 
 // 按需加载 KaTeX CSS（仅在首次渲染 Markdown 组件时注入）
 import('katex/dist/katex.min.css').catch((err) => {
@@ -43,9 +48,11 @@ const props = withDefaults(defineProps<{
 })
 
 let renderErrorCount = 0
+const renderError = ref<string | null>(null)
 
 const renderedHtml = computed(() => {
   try {
+    renderError.value = null
     // 默认对输出消毒，再交给 v-html，防止 XSS
     const result = renderMarkdown(props.content)
     return result
@@ -54,18 +61,21 @@ const renderedHtml = computed(() => {
     const msg = e instanceof Error ? e.message : String(e)
     console.error(`[RenderMarkdown] marked.parse 错误 (第 ${renderErrorCount} 次):`, msg)
     console.error('  内容预览:', props.content.slice(0, 200))
-    return `<p class="md-render-error">⚠ Markdown 渲染错误: ${msg}</p>`
+    renderError.value = msg
+    return ''
   }
 })
 
 /** 供 iframe 沙箱使用的未消毒 HTML，保留脚本/样式等交互能力。 */
 const sandboxHtml = computed(() => {
   try {
+    renderError.value = null
     return renderMarkdownRaw(props.content)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     console.error('[RenderMarkdown] raw render 错误:', msg)
-    return `<p class="md-render-error">⚠ Markdown 渲染错误: ${msg}</p>`
+    renderError.value = msg
+    return ''
   }
 })
 

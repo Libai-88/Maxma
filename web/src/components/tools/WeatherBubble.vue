@@ -45,7 +45,7 @@
             <div v-for="(alert, i) in td.alerts" :key="i" class="lf-alert-item"
                  :class="'alert-level-' + (alert.level || 'unknown')">
               <div class="alert-header">
-                <span class="alert-icon">&#9888;</span>
+                <Icon class="alert-icon" name="warning" :size="14" />
                 <span class="alert-title">{{ alert.title }}</span>
                 <span class="alert-level-tag">{{ alert.level }}</span>
               </div>
@@ -127,6 +127,7 @@ import { computed } from 'vue'
 import type { ToolCall } from '@/types'
 import type { WeatherData, WeatherForecastItem, MinutePrecipSummary } from './weather-types'
 import BubbleChrome from './_shared/BubbleChrome.vue'
+import Icon from '@/components/Icon.vue'
 import { hasObjectKeys } from './_shared/displayNames'
 
 const props = defineProps<{ toolCall: ToolCall }>()

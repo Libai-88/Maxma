@@ -34,7 +34,11 @@
       </div>
       <div class="td-field">
         <div class="td-label">状态</div>
-        <div class="td-value">{{ task.is_completed ? '✓ 已完成' : '○ 未完成' }}</div>
+        <div class="td-value">
+          <Icon v-if="task.is_completed" name="checkmark" :size="12" />
+          <Icon v-else name="circle-outline" :size="12" />
+          {{ task.is_completed ? '已完成' : '未完成' }}
+        </div>
       </div>
       <div class="td-field" v-if="task.creator_id">
         <div class="td-label">创建者</div>
@@ -61,6 +65,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import Icon from '@/components/Icon.vue'
 
 const props = defineProps<{ toolData?: Record<string, any> }>()
 

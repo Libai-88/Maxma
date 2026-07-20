@@ -8,17 +8,23 @@
           class="nav-link edit-btn"
           title="编辑此条目"
           @click="emitEdit"
-        >&#9998;</button>
+        ><Icon name="file-page" :size="14" /></button>
         <button
           class="nav-link"
           :disabled="currentIndex === 0"
+          :title="'上一条'"
           @click="prev"
-        >←</button>
+        >
+          <Icon name="arrow-left" :size="12" />
+        </button>
         <button
           class="nav-link"
           :disabled="currentIndex === items.length - 1"
+          :title="'下一条'"
           @click="next"
-        >→</button>
+        >
+          <Icon name="arrow-right" :size="12" />
+        </button>
       </span>
     </div>
 
@@ -31,6 +37,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import type { VignetteMemoryItem } from '@/types'
+import Icon from '@/components/Icon.vue'
 
 const props = defineProps<{
   theme: string

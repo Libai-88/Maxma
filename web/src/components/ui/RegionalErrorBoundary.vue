@@ -3,7 +3,7 @@
   <slot v-if="!hasError" />
   <div v-else class="regional-error-boundary">
     <div class="regional-error-card">
-      <div class="regional-error-icon">⚠</div>
+      <Icon class="regional-error-icon" name="warning" :size="24" />
       <p class="regional-error-message">{{ errorMessage }}</p>
       <button class="ds-btn ds-btn--primary" @click="reset">重试</button>
     </div>
@@ -12,6 +12,7 @@
 
 <script setup lang="ts">
 import { ref, onErrorCaptured, watch } from 'vue'
+import Icon from '@/components/Icon.vue'
 
 const props = defineProps<{
   resetKeys?: unknown[]

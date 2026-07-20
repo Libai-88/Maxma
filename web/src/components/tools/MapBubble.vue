@@ -17,7 +17,7 @@
         <!-- ===== nearby_search / fuzzy_address_search  POI 列表 ===== -->
         <template v-if="isPoiTool">
           <div class="map-header">
-            <span class="map-icon">📍</span>
+            <Icon class="map-icon" name="map-pin" :size="16" />
             <div class="map-header-text">
               <div class="map-title">{{ headerTitle }}</div>
               <div class="map-subtitle">{{ poiSubtitle }}</div>
@@ -56,7 +56,7 @@
         <!-- ===== geocode_address 坐标结果 ===== -->
         <template v-else-if="isGeocode">
           <div class="map-header">
-            <span class="map-icon">📍</span>
+            <Icon class="map-icon" name="map-pin" :size="16" />
             <div class="map-header-text">
               <div class="map-title">地理编码</div>
               <div class="map-subtitle">地址 → 坐标</div>
@@ -86,7 +86,7 @@
         <!-- ===== get_transit_route 公交换乘 ===== -->
         <template v-else-if="isTransit">
           <div class="map-header">
-            <span class="map-icon">🚌</span>
+            <Icon class="map-icon" name="bus" :size="16" />
             <div class="map-header-text">
               <div class="map-title">公交换乘</div>
               <div class="map-subtitle">{{ transitRoute }}</div>
@@ -99,21 +99,21 @@
             <div v-for="(route, ri) in transitRoutes" :key="ri" class="route-card">
               <div class="route-card-header">
                 <span class="route-label">方案 {{ ri + 1 }}</span>
-                <span class="route-cost">💰 {{ route.cost }}元</span>
-                <span class="route-duration">⏱ {{ formatDuration(route.duration) }}</span>
-                <span v-if="route.walking_distance" class="route-walk">🚶 {{ route.walking_distance }}m</span>
+                <span class="route-cost"><Icon name="coin" :size="12" /> {{ route.cost }}元</span>
+                <span class="route-duration"><Icon name="clock" :size="12" /> {{ formatDuration(route.duration) }}</span>
+                <span v-if="route.walking_distance" class="route-walk"><Icon name="walk" :size="12" /> {{ route.walking_distance }}m</span>
               </div>
               <div class="route-segments">
                 <div v-for="(seg, si) in route.segments" :key="si" class="segment">
                   <template v-if="seg.walking">
                     <div class="seg-walk">
-                      <span class="seg-icon">🚶</span>
+                      <Icon class="seg-icon" name="walk" :size="12" />
                       <span>步行 {{ seg.walking.distance }}m</span>
                     </div>
                   </template>
                   <template v-if="seg.bus">
                     <div v-for="(line, li) in seg.bus.lines" :key="li" class="seg-bus">
-                      <span class="seg-icon">🚌</span>
+                      <Icon class="seg-icon" name="bus" :size="12" />
                       <span class="seg-line">{{ line.name }}</span>
                       <span class="seg-stops">{{ line.departure_stop }} → {{ line.arrival_stop }}</span>
                       <span class="seg-meta">{{ line.via_num }} 站 · {{ formatDuration(line.duration) }}</span>
@@ -128,7 +128,7 @@
         <!-- ===== get_cycling_route 骑行路线 ===== -->
         <template v-else-if="isCycling">
           <div class="map-header">
-            <span class="map-icon">🚴</span>
+            <Icon class="map-icon" name="bike" :size="16" />
             <div class="map-header-text">
               <div class="map-title">骑行路线</div>
               <div class="map-subtitle">{{ cyclingRoute }}</div>
@@ -141,8 +141,8 @@
             <div v-for="(path, pi) in cyclingPaths" :key="pi" class="route-card">
               <div class="route-card-header">
                 <span class="route-label">路线 {{ pi + 1 }}</span>
-                <span class="route-duration">⏱ {{ formatDuration(path.duration) }}</span>
-                <span class="route-dist">📏 {{ formatDistance(path.distance) }}</span>
+                <span class="route-duration"><Icon name="clock" :size="12" /> {{ formatDuration(path.duration) }}</span>
+                <span class="route-dist"><Icon name="ruler" :size="12" /> {{ formatDistance(path.distance) }}</span>
               </div>
               <div class="cycling-steps" v-if="path.steps && path.steps.length">
                 <div v-for="(step, si) in path.steps.slice(0, 8)" :key="si" class="cycling-step">
@@ -175,6 +175,7 @@ import { computed } from 'vue'
 import type { ToolCall } from '@/types'
 import BubbleChrome from './_shared/BubbleChrome.vue'
 import { hasObjectKeys } from './_shared/displayNames'
+import Icon from '@/components/Icon.vue'
 
 const props = defineProps<{ toolCall: ToolCall }>()
 const emit = defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()
@@ -358,9 +359,10 @@ const displayOutput = computed(() => {
 }
 
 .map-icon {
-  font-size: 22px;
-  line-height: 1.3;
+  width: 22px;
+  height: 22px;
   flex-shrink: 0;
+  color: var(--accent);
 }
 
 .map-header-text {
@@ -582,8 +584,10 @@ const displayOutput = computed(() => {
 }
 
 .seg-icon {
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
-  font-size: 13px;
+  color: var(--text-secondary);
 }
 
 .seg-line {

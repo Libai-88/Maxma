@@ -3,7 +3,7 @@
 <template>
   <div class="approval-bubble" :class="`risk-${riskLevel}`">
     <div class="approval-header">
-      <span class="approval-icon">{{ riskIcon }}</span>
+      <Icon class="approval-icon" :name="riskIcon" :size="16" />
       <span class="approval-title">工具执行审批</span>
       <span class="approval-tool">{{ toolName }}</span>
       <span class="approval-risk-tag" :class="`risk-tag-${riskLevel}`">{{ riskLabel }}</span>
@@ -28,7 +28,8 @@
     </div>
     <div class="approval-responded" v-else>
       <span :class="responded === 'yes' ? 'approval-approved' : 'approval-rejected'">
-        {{ responded === 'yes' ? '✓ 已批准' : '✗ 已拒绝' }}
+        <Icon :name="responded === 'yes' ? 'checkmark' : 'close'" :size="14" />
+        {{ responded === 'yes' ? '已批准' : '已拒绝' }}
       </span>
     </div>
   </div>
@@ -36,6 +37,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import Icon from './Icon.vue'
 
 const props = defineProps<{
   toolName: string
@@ -59,13 +61,13 @@ const riskLabels: Record<string, string> = {
   low: '低风险',
 }
 const riskIcons: Record<string, string> = {
-  high: '⚠️',
-  medium: '⚡',
-  low: 'ℹ️',
+  high: 'warning',
+  medium: 'info',
+  low: 'info',
 }
 
 const riskLabel = riskLabels[props.riskLevel] || '未知'
-const riskIcon = riskIcons[props.riskLevel] || 'ℹ️'
+const riskIcon = riskIcons[props.riskLevel] || 'info'
 
 function onApprove() {
   if (responded.value) return
@@ -124,7 +126,9 @@ function onReject() {
 }
 
 .approval-icon {
-  font-size: 1.1em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .approval-title {

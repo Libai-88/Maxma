@@ -1,7 +1,28 @@
 /// <reference types="vitest" />
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig, loadEnv, type PluginOption } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
+import { selectWebSocketProtocol } from './src/utils/wsProtocol'
+
+// Dev-only plugin: relax CSP meta so Vite HMR client (inline <script>),
+// sourcemap injections, and browser devtools extensions (Vue DevTools etc.)
+// don't get blocked by the production CSP `script-src 'self'`.
+// Only active in serve mode (dev server) — production build keeps strict CSP.
+function relaxDevCsp(): PluginOption {
+  return {
+    name: 'maxma:relax-dev-csp',
+    apply: 'serve',
+    transformIndexHtml(html) {
+      return html.replace(
+        /<meta http-equiv="Content-Security-Policy"[^>]*content="([^"]*)"[^>]*>/,
+        (_, policy: string) =>
+          `<meta http-equiv="Content-Security-Policy" content="${policy
+            .replace(/script-src 'self';/, "script-src 'self' 'unsafe-inline' 'unsafe-eval';")
+            .replace(/connect-src 'self'/, "connect-src 'self' ws: wss: http: https:")}" />`
+      )
+    },
+  }
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
@@ -17,7 +38,7 @@ export default defineConfig(({ mode }) => {
     5173
 
   return {
-    plugins: [vue()],
+    plugins: [vue(), relaxDevCsp()],
     test: {
       environment: 'jsdom',
       globals: true,
@@ -77,7 +98,7 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           // 必须显式处理 WebSocket 子协议，否则浏览器收到空的
           // Sec-WebSocket-Protocol 响应头，拒绝建立连接。
-          handleProtocols: (protocols: string[]) => protocols[0],
+          handleProtocols: selectWebSocketProtocol,
         },
       },
     },

@@ -304,11 +304,13 @@ function formatTokens(n: number): string {
 
 <style scoped>
 .metrics-view {
+  flex: 1;
   padding: 24px 32px;
   max-width: 1100px;
   margin: 0 auto;
   overflow-y: auto;
-  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
 }
 .header {
   display: flex;

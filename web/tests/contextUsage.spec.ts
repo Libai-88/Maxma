@@ -32,7 +32,7 @@ describe('context usage events', () => {
     })
 
     const wrapper = mount(ContextUsageBadge)
-    expect(wrapper.find('.usage-pct').text()).toBe('12.5%')
+    expect(wrapper.find('.ring-text').text()).toBe('13')
 
     handleEventForChannel('context-session', {
       type: 'context_usage',
@@ -51,7 +51,7 @@ describe('context usage events', () => {
       },
     })
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('.usage-pct').text()).toBe('25.0%')
+    expect(wrapper.find('.ring-text').text()).toBe('25')
     wrapper.unmount()
   })
 

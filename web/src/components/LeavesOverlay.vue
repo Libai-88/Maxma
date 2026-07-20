@@ -17,7 +17,7 @@
       aria-label="切换树阴光影"
       @click.stop="onToggle"
     >
-      <span class="leaves-toggle-icon">🍂</span>
+      <Icon class="leaves-toggle-icon" name="leaf" :size="14" />
     </button>
   </div>
   <button
@@ -28,13 +28,14 @@
     aria-label="开启树阴光影"
     @click.stop="onToggle"
   >
-    <span class="leaves-toggle-icon">🍂</span>
+    <Icon class="leaves-toggle-icon" name="leaf" :size="14" />
   </button>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useTheme } from '@/composables/useTheme'
+import Icon from '@/components/Icon.vue'
 
 const STORAGE_KEY = 'maxma.leaves_overlay'
 const enabled = ref(true)

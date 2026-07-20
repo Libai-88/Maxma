@@ -7,7 +7,7 @@
     :aria-label="connected ? '后端已连接' : '后端未连接'"
   >
     <span class="dot"></span>
-    {{ connected ? '已连接' : '未连接' }}
+    <span class="status-text">{{ connected ? '已连接' : '未连接' }}</span>
     <div v-if="health" class="hover-card card-health">
       <div class="health-title">系统状态</div>
       <div
@@ -214,5 +214,11 @@ function makeItem(name: string, c: ComponentHealth | null | undefined) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .status-badge .status-text {
+    display: none;
+  }
 }
 </style>

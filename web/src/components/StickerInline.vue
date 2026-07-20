@@ -22,7 +22,7 @@
       :alt="displayFilename"
       @load="capturePoster"
     />
-    <span v-else class="sticker-loading" aria-hidden="true">✨</span>
+    <Icon v-else class="sticker-loading" name="sparkles" :size="20" />
     <span v-if="shouldUsePoster" class="paused-badge">动图已暂停</span>
   </span>
 </template>
@@ -33,6 +33,7 @@ import type { StickerSegment } from '@/composables/useStickerSegments'
 import { tauriFetch } from '@/utils/env'
 import { useTheme } from '@/composables/useTheme'
 import { useFPSMonitor, useStickerPerformance } from '@/composables/useStickerPerformance'
+import Icon from '@/components/Icon.vue'
 
 const props = defineProps<{ sticker: StickerSegment }>()
 
@@ -127,7 +128,6 @@ function capturePoster() {
 }
 
 .sticker-loading {
-  font-size: 24px;
   animation: stickerLoadingPulse 1.2s ease-in-out infinite;
 }
 

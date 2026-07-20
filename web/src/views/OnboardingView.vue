@@ -8,12 +8,12 @@
         <div class="intro-block">
           <p class="intro-lead"><strong>Maxma</strong> 是一款本地优先的 AI 桌面工作站——把大模型对话、工具调用、长期记忆与人设系统整合在一个应用里，所有数据都保存在你的电脑上。</p>
           <div class="intro-chips" aria-label="核心能力">
-            <span class="intro-chip">💬 多模型对话</span>
-            <span class="intro-chip">🛠️ MCP 工具</span>
-            <span class="intro-chip">⚡ Skills 技能</span>
-            <span class="intro-chip">🧠 长期记忆</span>
-            <span class="intro-chip">🎨 人设系统</span>
-            <span class="intro-chip">🔒 本地优先</span>
+            <span class="intro-chip"><Icon name="chat" :size="12" />多模型对话</span>
+            <span class="intro-chip"><Icon name="tool" :size="12" />MCP 工具</span>
+            <span class="intro-chip"><Icon name="sparkles" :size="12" />Skills 技能</span>
+            <span class="intro-chip"><Icon name="memory" :size="12" />长期记忆</span>
+            <span class="intro-chip"><Icon name="sparkles" :size="12" />人设系统</span>
+            <span class="intro-chip"><Icon name="lock" :size="12" />本地优先</span>
           </div>
         </div>
         <p class="form-note">这些偏好只保存在当前设备，之后可从设置中调整。</p>
@@ -24,7 +24,7 @@
         <p>连接一个模型提供商后，即可开始对话。不会在此页面收集或显示 API Key。</p>
         <p class="health-note" :class="providerReady ? 'ok' : 'attention'">{{ providerReady ? '检测到可用的模型服务。' : '尚未检测到可用的模型服务——可点击下方按钮前往配置。' }}</p>
         <div class="step-tip">
-          <span class="tip-icon">💡</span>
+          <Icon class="tip-icon" name="info" :size="14" />
           <div class="tip-text">不知道选哪个？<strong>DeepSeek</strong> 注册即送免费额度、中文表现优秀；<strong>Ollama</strong> 完全本地运行、无需 API Key。</div>
         </div>
         <button class="secondary" type="button" @click="openProviders">前往模型设置</button>
@@ -36,7 +36,7 @@
       </div>
       <div v-else class="step-content">
         <!-- 完成引导：给出明确的"下一步"指引，避免用户完成后迷失 -->
-        <p class="ready-lead">🎉 准备就绪！现在可以开始使用 Maxma 了。</p>
+        <p class="ready-lead">准备就绪！现在可以开始使用 Maxma 了。</p>
         <div class="next-steps">
           <div class="next-step">
             <span class="next-step-no">1</span>
@@ -72,6 +72,7 @@ import { computed, ref, watch } from 'vue'
 import type { HealthResponse } from '@/types'
 import { THEMES, useTheme } from '@/composables/useTheme'
 import { useOnboardingStore } from '@/stores/onboarding'
+import Icon from '@/components/Icon.vue'
 
 const props = defineProps<{ health: HealthResponse | null }>()
 const emit = defineEmits<{ openProviders: [] }>()
@@ -103,11 +104,11 @@ h2 { margin: 3px 0 0; font-size: 22px; color: var(--text-primary); }.eyebrow { c
 .intro-lead { font-size: 13px; color: var(--text-secondary); line-height: 1.7; }
 .intro-lead strong { color: var(--text-primary); font-weight: 600; }
 .intro-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.intro-chip { display: inline-flex; align-items: center; padding: 3px 10px; font-size: 12px; color: var(--text-secondary); background: var(--bg-secondary); border-radius: 100px; }
+.intro-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; font-size: 12px; color: var(--text-secondary); background: var(--bg-secondary); border-radius: 100px; }
 .form-note { font-size: 12px; color: var(--text-tertiary); }
 /* ── Step 1 提示卡片 ── */
 .step-tip { display: flex; gap: 10px; padding: 10px 12px; border: 1px dashed var(--border); border-radius: var(--radius-sm); background: var(--bg-secondary); font-size: 12px; line-height: 1.6; }
-.tip-icon { flex-shrink: 0; font-size: 14px; line-height: 1.4; }
+.tip-icon { flex-shrink: 0; color: var(--text-secondary); }
 .tip-text { color: var(--text-secondary); }
 .tip-text strong { color: var(--text-primary); font-weight: 600; }
 /* ── Step 3 完成引导 ── */

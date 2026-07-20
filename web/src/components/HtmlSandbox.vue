@@ -4,7 +4,7 @@
       <span class="sandbox-spinner"></span>
     </div>
     <div v-if="sandboxErrors.length > 0" class="sandbox-error-bar">
-      <span class="sandbox-error-icon">⚠</span>
+      <Icon class="sandbox-error-icon" name="warning" :size="14" />
       <span class="sandbox-error-text">沙箱内 {{ sandboxErrors.length }} 个错误 — 见控制台</span>
     </div>
     <iframe
@@ -21,6 +21,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watchEffect } from 'vue'
+import Icon from '@/components/Icon.vue'
 
 const props = withDefaults(defineProps<{
   html: string

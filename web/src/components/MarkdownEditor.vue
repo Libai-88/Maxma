@@ -13,7 +13,7 @@
     </div>
     <!-- 引导卡片：仅在传入 guide 或 templates 时显示 -->
     <details v-if="$slots.guide || templates?.length" class="md-guide">
-      <summary class="md-guide-summary">📝 写作指引与模板</summary>
+      <summary class="md-guide-summary"><Icon class="md-guide-icon" name="file-page" :size="14" />写作指引与模板</summary>
       <div class="md-guide-body">
         <slot name="guide" />
         <div v-if="templates?.length" class="md-guide-templates">
@@ -50,6 +50,7 @@
 import { onMounted } from 'vue'
 import { Codemirror } from 'vue-codemirror'
 import { useMarkdownPersist } from '@/composables/useMarkdownPersist'
+import Icon from '@/components/Icon.vue'
 
 interface MarkdownTemplate {
   label: string
@@ -202,6 +203,9 @@ onMounted(loadContent)
   overflow: hidden;
 }
 .md-guide-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 10px 14px;
   font-size: 13px;
   font-weight: 600;

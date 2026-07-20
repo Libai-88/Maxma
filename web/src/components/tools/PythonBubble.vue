@@ -4,14 +4,14 @@
     <template v-if="toolCall.status === 'running' && isConfirmMode && !submitted">
       <!-- 标题区 -->
       <div class="py-confirm-header">
-        <span class="py-confirm-icon">⚙️</span>
+        <Icon class="py-confirm-icon" name="tool" :size="16" />
         <span class="py-confirm-title">代码执行确认</span>
       </div>
 
       <!-- 代码展示区 -->
       <div class="py-section">
         <div class="py-section-header">
-          <span class="py-section-label">📝 代码</span>
+          <span class="py-section-label"><Icon class="py-section-label" name="file-page" :size="12" /> 代码</span>
           <span class="py-code-length">{{ code.length }} 字符</span>
         </div>
         <div class="py-code-block" v-html="highlightedCode"></div>
@@ -20,7 +20,7 @@
       <!-- 拒绝原因输入框（可选） -->
       <div class="py-section py-reason-section">
         <div class="py-section-header">
-          <span class="py-section-label">✏️ 拒绝原因（可选）</span>
+          <span class="py-section-label"><Icon class="py-section-label" name="file-page" :size="12" /> 拒绝原因（可选）</span>
         </div>
         <textarea
           v-model="rejectionReason"
@@ -61,7 +61,7 @@
     <template v-else-if="toolCall.status === 'done'">
       <div class="py-section">
         <div class="py-section-header">
-          <span class="py-section-label">📝 代码</span>
+          <span class="py-section-label"><Icon class="py-section-label" name="file-page" :size="12" /> 代码</span>
           <button class="py-copy-btn" @click.stop="copyCode">复制</button>
         </div>
         <div class="py-code-block" v-html="highlightedCode"></div>
@@ -69,7 +69,7 @@
 
       <div v-if="stdout" class="py-section">
         <div class="py-section-header">
-          <span class="py-section-label">📤 输出</span>
+          <span class="py-section-label"><Icon class="py-section-label" name="send" :size="12" /> 输出</span>
           <span class="py-stdout-lines">{{ stdoutLineCount }} 行</span>
         </div>
         <pre class="py-stdout">{{ stdout }}</pre>
@@ -84,6 +84,7 @@
 import { computed, ref } from 'vue'
 import type { ToolCall } from '@/types'
 import BubbleChrome from './_shared/BubbleChrome.vue'
+import Icon from '@/components/Icon.vue'
 import { highlightPython } from '@/utils/python-highlight'
 
 const props = defineProps<{ toolCall: ToolCall }>()

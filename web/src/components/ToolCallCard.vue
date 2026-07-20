@@ -3,8 +3,8 @@
     <div class="tool-header" @click="toggle" role="button" :aria-expanded="isOpen">
       <span class="tool-icon">
         <span v-if="toolCall.status === 'running'" class="spinner-sm"></span>
-        <span v-else-if="toolCall.status === 'done'">&#10003;</span>
-        <span v-else>&#10007;</span>
+        <Icon v-else-if="toolCall.status === 'done'" name="checkmark" :size="14" />
+        <Icon v-else name="close" :size="14" />
       </span>
       <span class="tool-name">{{ toolCall.name }}</span>
       <span class="tool-elapsed" v-if="toolCall.elapsed !== null">
@@ -77,6 +77,7 @@ import type { ToolCall } from '@/types'
 import RenderMarkdown from './RenderMarkdown.vue'
 import PinButton from '@/components/workbench/PinButton.vue'
 import { useMediaViewer } from '@/composables/useMediaViewer'
+import Icon from '@/components/Icon.vue'
 
 const props = defineProps<{ toolCall: ToolCall }>()
 
