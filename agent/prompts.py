@@ -6,6 +6,8 @@ import re
 import threading
 from pathlib import Path
 
+import yaml
+
 from app_paths import ANTHROPIC_SKILLS_DIR, MACROS_DIR, SKILLS_DATA_DIR, MACROS_DATA_DIR, PERSONAS_DATA_DIR as PERSONAS_DIR, ACTIVE_PERSONA_PATH
 from api.yaml_store import dump_yaml_atomic, yaml_file_lock
 
@@ -309,39 +311,57 @@ def _parse_user_name(user_md_content: str) -> str:
 
 
 def _parse_frontmatter(text: str) -> dict[str, str]:
-    """简易解析 YAML frontmatter，提取元数据字段（支持多行 | 和 >）。"""
+    """解析 YAML frontmatter，提取元数据字段。
+
+    使用 ``yaml.safe_load`` 解析 ``---`` 之间的内容，正确处理 YAML 引号、
+    转义和多行标量，杜绝行级独立解析带来的 frontmatter 注入风险
+    （如 ``description = 'x"\\nmemory: persona'`` 通过多行单引号标量注入
+    ``memory:`` 键）。
+
+    仅保留 ``name`` / ``description`` / ``tools`` / ``memory`` 四个白名单键。
+    对于 ``|`` 和 ``>`` 块标量，按历史行为将换行合并为空格（保留旧调用方
+    语义）；其它标量（含带换行的引号标量）按 ``yaml.safe_load`` 原样返回。
+
+    缺失或非法 frontmatter 返回 ``{}``，绝不抛异常。
+    """
     m = re.match(r"^---\s*\n(.*?)\n---", text, re.DOTALL)
     if not m:
         return {}
+    block = m.group(1)
+    try:
+        data = yaml.safe_load(block)
+    except yaml.YAMLError:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+
+    # 识别使用 `|` / `>` 块标量指示符的键，按旧行为把换行合并为空格。
+    # yaml.safe_load 对 `>` 已折叠为空格、对 `|` 保留换行；此处统一把
+    # `|` 的换行也合并为空格，保持向后兼容。
+    block_scalar_keys: set[str] = set()
+    for line in block.splitlines():
+        bm = re.match(r"^(\w+)\s*:\s*[|>][-+]?\s*$", line)
+        if bm and bm.group(1) in ("name", "description", "tools", "memory"):
+            block_scalar_keys.add(bm.group(1))
+
     meta: dict[str, str] = {}
-    lines = m.group(1).splitlines()
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        if ":" in line:
-            key, _, val = line.partition(":")
-            key = key.strip()
-            val = val.strip()
-            if key in ("name", "description", "tools", "memory"):
-                if val in ("|", ">"):
-                    # 多行值：合并后续缩进行
-                    parts: list[str] = []
-                    i += 1
-                    while i < len(lines) and (lines[i].startswith("  ") or lines[i].startswith("\t")):
-                        parts.append(lines[i].strip())
-                        i += 1
-                    meta[key] = " ".join(parts)
-                    continue
-                else:
-                    meta[key] = val.strip('"').strip("'")
-        i += 1
+    for key in ("name", "description", "tools", "memory"):
+        if key not in data:
+            continue
+        val = data[key]
+        if val is None:
+            continue
+        sval = str(val)
+        if key in block_scalar_keys:
+            sval = " ".join(sval.splitlines())
+        meta[key] = sval
     return meta
 
 
 def get_persona_memory_path() -> Path:
     """获取当前人格的记忆文件路径。
 
-    如果 SOUL 文件的 frontmatter 中声明了 memory: persona，
+    如果 SOUL 文件的 frontmatter 中声明了 memory: persona（或其别名 isolated），
     则使用独立记忆文件 memory_{persona_id}.yaml；
     否则使用共享的 memory.yaml。
     """
@@ -349,7 +369,11 @@ def get_persona_memory_path() -> Path:
     content = _read_persona(active_file)
     meta = _parse_frontmatter(content)
 
-    if meta.get("memory", "").strip().lower() == "persona":
+    # B-011: accept both "persona" and "isolated" (legacy alias) so that
+    # SOUL files written before the write-time normalization still resolve
+    # to the persona-scoped memory file instead of silently falling back
+    # to shared memory.yaml.
+    if meta.get("memory", "").strip().lower() in ("persona", "isolated"):
         # 独立记忆：memory_{persona_stem}.yaml
         persona_id = Path(active_file).stem  # e.g. "SOUL.饱饱"
         return PERSONAS_DIR / f"memory_{persona_id}.yaml"

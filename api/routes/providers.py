@@ -11,13 +11,15 @@ import time
 from typing import Any
 
 import httpx
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app_paths import API_DATA_DIR, PROVIDERS_YAML_PATH
 from api.security.credential_envelope import (
+    CredentialEnvelopeError,
     create_credential_envelope,
+    decrypt_credential_envelope,
     is_credential_envelope,
     is_legacy_encrypted,
 )
@@ -419,7 +421,7 @@ async def test_existing_provider(provider_id: str) -> dict[str, Any]:
         )
     ok, latency_ms, detail, _models = await _http_get_models(
         target.get("base_url", ""),
-        target.get("api_key", ""),
+        _decrypt_api_key(target.get("api_key", "")),
     )
     return {
         "status": "ok" if ok else "error",
@@ -450,7 +452,7 @@ async def discover_models_for_existing(provider_id: str) -> dict[str, list[str]]
         )
     _ok, _latency, _detail, models = await _http_get_models(
         target.get("base_url", ""),
-        target.get("api_key", ""),
+        _decrypt_api_key(target.get("api_key", "")),
     )
     return {"models": models}
 
@@ -513,6 +515,37 @@ def _encrypt_api_key(plaintext: str) -> str:
     )
 
 
+def _decrypt_api_key(value: object) -> str:
+    """Resolve a stored API key for internal runtime calls only.
+
+    Empty values stay empty, non-encrypted strings remain compatible with
+    existing plaintext configurations, and malformed/unavailable ciphertext
+    is treated as an unavailable credential without exposing its contents.
+    """
+    if not isinstance(value, str) or not value:
+        return ""
+
+    def _decrypt_payload(legacy_value: str) -> str:
+        try:
+            ciphertext = legacy_value[len("enc:"):].encode("ascii")
+            return Fernet(_get_or_create_fernet_key()).decrypt(ciphertext).decode("utf-8")
+        except (InvalidToken, UnicodeDecodeError, ValueError, OSError, TypeError):
+            return ""
+
+    try:
+        if is_credential_envelope(value):
+            return decrypt_credential_envelope(
+                value,
+                decrypt_payload=_decrypt_payload,
+                supported_algorithm=_ENVELOPE_ALGORITHM,
+            )
+        if is_legacy_encrypted(value):
+            return _decrypt_payload(value)
+    except (CredentialEnvelopeError, ValueError, TypeError):
+        return ""
+    return value
+
+
 @router.post("/providers/{provider_id}/health")
 async def check_provider_health(provider_id: str) -> dict[str, Any]:
     """检查已存在的 provider 健康状态（即时 HTTP ping）。
@@ -532,7 +565,7 @@ async def check_provider_health(provider_id: str) -> dict[str, Any]:
         )
     ok, latency_ms, detail, _models = await _http_get_models(
         target.get("base_url", ""),
-        target.get("api_key", ""),
+        _decrypt_api_key(target.get("api_key", "")),
     )
     now = time.time()
     return {
@@ -544,13 +577,15 @@ async def check_provider_health(provider_id: str) -> dict[str, Any]:
     }
 
 
-@router.post("/providers/encrypt-keys")
-async def encrypt_api_keys() -> dict[str, Any]:
+def migrate_plaintext_keys_to_encrypted() -> int:
     """加密 providers.yaml 中所有明文 api_key 字段（幂等）。
 
     - 跳过空字符串、已加密（encv1: 或 enc: 前缀）的值。
     - 仅当本次实际加密了至少 1 个 key 时才写回 yaml。
-    - 返回 ``{"status": "ok", "encrypted": N}``，N 为本次新加密的数量。
+    - 返回本次新加密的 key 数量。
+
+    此函数可在服务器启动 lifespan 中调用，自动迁移历史遗留的明文 api_key
+    （B-009 修复）。函数同步执行，调用方不需要异步上下文。
     """
     with yaml_file_lock(PROVIDERS_YAML_PATH):
         items = _load_providers()
@@ -567,4 +602,16 @@ async def encrypt_api_keys() -> dict[str, Any]:
             encrypted_count += 1
         if encrypted_count > 0:
             _save_providers(items)
+    return encrypted_count
+
+
+@router.post("/providers/encrypt-keys")
+async def encrypt_api_keys() -> dict[str, Any]:
+    """加密 providers.yaml 中所有明文 api_key 字段（幂等）。
+
+    - 跳过空字符串、已加密（encv1: 或 enc: 前缀）的值。
+    - 仅当本次实际加密了至少 1 个 key 时才写回 yaml。
+    - 返回 ``{"status": "ok", "encrypted": N}``，N 为本次新加密的数量。
+    """
+    encrypted_count = migrate_plaintext_keys_to_encrypted()
     return {"status": "ok", "encrypted": encrypted_count}

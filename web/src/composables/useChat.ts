@@ -6,7 +6,7 @@ import { useSessionStore } from '@/stores/session'
 import { buildFlatMessage, buildTimestamp, parseReferences } from '@/utils/references'
 import type { ParsedRef } from '@/utils/references'
 import { getToken, ensureTokenLoaded, resetToken, api } from '@/api'
-import { ensurePortLoaded, waitForBackend, getWsBase, generateUUID, tauriFetch } from '@/utils/env'
+import { ensurePortLoaded, waitForBackend, getWsBase, getApiBase, generateUUID, tauriFetch } from '@/utils/env'
 import { chatSessionAliveCache } from '@/composables/sessionAliveCache'
 import { useWorkbenchStore } from '@/stores/workbench'
 import { detectEmotion, getStickerUrl } from './stickerUtils'
@@ -72,7 +72,11 @@ function saveTurnsToStorage(sid: string, data: ChatTurn[]) {
     // 策略：删除其他会话中最早（按 localStorage 键的写入顺序近似）的缓存，腾出空间后重试一次。
     if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
       console.warn(`[useChat:save] localStorage 配额超限，尝试清理其他会话缓存后重试 (key=${key})`)
-      // 收集除当前 sid 外的所有 turns 缓存键，按"最近未使用"策略删除最旧的
+      // B-014: collect every other session's turns cache key. Eviction is
+      // FIFO by localStorage insertion order (the iteration order returned by
+      // localStorage.key(i) reflects insertion order in modern browsers), NOT
+      // LRU — we do not track access timestamps. The first half of the
+      // oldest-inserted keys is dropped to make room for the current write.
       const otherKeys: string[] = []
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i)
@@ -186,6 +190,29 @@ function persistTurns(sid: string) {
   console.log(`[useChat:persist] 持久化会话 ${sid}: ${snapshot.length} 条 turn`)
   turnsCache.set(sid, snapshot)
   saveTurnsToStorage(sid, snapshot)
+}
+
+async function hydrateTurnSticker(turn: ChatTurn): Promise<boolean> {
+  if (!turn.finalAnswer || turn.stickerUrl) return false
+  const emotion = detectEmotion(turn.finalAnswer)
+  if (!emotion) return false
+
+  try {
+    const response = await tauriFetch(getStickerUrl(emotion))
+    if (!response.ok) return false
+    const data = await response.json()
+    if (!data?.path) return false
+    turn.stickerUrl = getApiBase() + '/stickers/' + data.path
+    return true
+  } catch (err) {
+    console.warn('[useChat] hydrate sticker failed:', err)
+    return false
+  }
+}
+
+async function hydrateTurnStickers(sid: string, turns: ChatTurn[]): Promise<void> {
+  const changed = (await Promise.all(turns.map(hydrateTurnSticker))).some(Boolean)
+  if (changed) persistTurns(sid)
 }
 
 // ── WebSocket 生命周期（每 Session 独立管理） ──────────────
@@ -682,7 +709,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
             })
             .then((data) => {
               if (data?.path) {
-                turn.stickerUrl = `/api/stickers/${data.path}`
+                turn.stickerUrl = `${getApiBase()}/stickers/${data.path}`
               }
             })
             .catch((err) => console.warn('[useChat] sticker fetch failed:', err))
@@ -1053,6 +1080,7 @@ export function useChat(sessionId: Ref<string>) {
         ch.turns.push(...turns)
         turnsCache.set(sid, turns)
         saveTurnsToStorage(sid, turns)
+        void hydrateTurnStickers(sid, turns)
       }
     } catch (e) {
       console.warn(`[useChat:loadHistory] 加载会话 ${sid} 历史失败:`, e)
@@ -1089,6 +1117,7 @@ export function useChat(sessionId: Ref<string>) {
         if (ch.turns.length === 0) {
           console.log(`[useChat:watch] 恢复缓存: 将 ${cached.length} 条 turn 推入通道`)
           ch.turns.push(...cached)
+          void hydrateTurnStickers(newId, cached)
           console.log(`[useChat:watch] 恢复后通道 turns.length = ${ch.turns.length}`)
         } else {
           console.log(`[useChat:watch] 跳过恢复: 通道已有数据`)

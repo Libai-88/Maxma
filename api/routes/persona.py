@@ -5,7 +5,9 @@ import os
 import re
 import tempfile
 from pathlib import Path
+from typing import Literal
 
+import yaml
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
@@ -56,7 +58,9 @@ class CreatePersonaRequest(BaseModel):
     name: str
     description: str = ""
     tools: str = ""
-    memory: str = "shared"
+    # B-012: restrict memory mode to a known enum to prevent frontmatter
+    # injection via arbitrary user-supplied strings.
+    memory: Literal["shared", "persona", "isolated"] = "shared"
 
 
 def _get_persona_variant_path(variant: str) -> Path:
@@ -178,16 +182,28 @@ async def create_new_persona(body: CreatePersonaRequest):
     if filepath.exists():
         raise HTTPException(status_code=409, detail=f"人格文件已存在: {filename}")
 
-    # 构建 frontmatter
-    fm_lines = ["---"]
+    # B-011: normalize "isolated" → "persona" so that get_persona_memory_path's
+    # `== "persona"` check matches regardless of which alias the client used.
+    # This keeps the frontmatter value, memory file creation, and read-time
+    # check all consistent — no silent fallthrough to shared memory.yaml.
+    effective_memory = "persona" if body.memory == "isolated" else body.memory
+
+    # B-012: build frontmatter as a dict and dump with yaml.safe_dump so that
+    # special characters in description/tools/memory (quotes, newlines, colons,
+    # etc.) are properly escaped. F-string interpolation allowed injection of
+    # arbitrary keys (e.g. description='x"\nmemory: persona').
+    fm_dict: dict[str, str] = {}
     if body.description:
-        fm_lines.append(f'description: "{body.description}"')
+        fm_dict["description"] = body.description
     if body.tools:
-        fm_lines.append(f"tools: {body.tools}")
-    if body.memory and body.memory != "shared":
-        fm_lines.append(f"memory: {body.memory}")
-    fm_lines.append("---")
-    fm_lines.append("")
+        fm_dict["tools"] = body.tools
+    if effective_memory != "shared":
+        fm_dict["memory"] = effective_memory
+
+    fm_yaml = yaml.safe_dump(
+        fm_dict, sort_keys=False, default_flow_style=False, allow_unicode=True
+    ).strip()
+    fm_block = f"---\n{fm_yaml}\n---\n\n" if fm_yaml else "---\n---\n\n"
 
     # 构建模板
     content_lines = [
@@ -204,12 +220,12 @@ async def create_new_persona(body: CreatePersonaRequest):
         "",
     ]
 
-    full_content = "\n".join(fm_lines + content_lines)
+    full_content = fm_block + "\n".join(content_lines)
     filepath.write_text(full_content, encoding="utf-8")
 
     # 如果配置了独立记忆，创建空的记忆文件
-    # 兼容前端 PersonaMemoryMode: 'shared' | 'isolated'
-    if body.memory in ("persona", "isolated"):
+    # 兼容前端 PersonaMemoryMode: 'shared' | 'isolated'（已归一化为 'persona'）
+    if effective_memory == "persona":
         persona_id = filepath.stem
         memory_path = PERSONAS_DIR / f"memory_{persona_id}.yaml"
         if not memory_path.exists():
@@ -221,7 +237,7 @@ async def create_new_persona(body: CreatePersonaRequest):
     return {
         "status": "created",
         "file": filename,
-        "memory_mode": body.memory,
+        "memory_mode": effective_memory,
         "tools": body.tools or "(全部)",
     }
 

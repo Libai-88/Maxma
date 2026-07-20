@@ -12,13 +12,13 @@ import uuid
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from agent.prompts import build_system_prompt
-from api.routes.providers import _find_provider, _load_providers
+from api.routes.providers import _decrypt_api_key, _find_provider, _load_providers
 from api.const_session_store import save_const_session
 from api.middleware.rate_limit import get_ws_rate_limiter
 from api.pi_bridge.session_adapter import SessionMap
 from api.session_manager import SessionState
 from api.yaml_store import yaml_file_lock
-from app_paths import PROVIDERS_YAML_PATH
+from app_paths import PROJECT_ROOT, PROVIDERS_YAML_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ def _resolve_chat_model(provider_id: str, model_name: str) -> dict[str, str]:
         "provider": str(provider.get("id") or requested_provider or "openai"),
         "model": selected_model,
         "base_url": str(provider.get("base_url") or ""),
-        "api_key": str(provider.get("api_key") or ""),
+        "api_key": _decrypt_api_key(provider.get("api_key")),
         "provider_type": str(provider.get("provider_type") or "openai"),
     }
 
@@ -170,7 +170,11 @@ async def _stream_turn_sidecar(
             {
                 **model_config,
                 "system_prompt": _sidecar_system_prompt,
-                "cwd": ".",
+                # B-002: forward the actual project root so the agent's logical
+                # cwd resolves to the user's project (not the sidecar's bun-sidecar/
+                # source directory). Must agree with MAXMA_PROJECT_ROOT env var set
+                # in sidecar_manager.py (B-001).
+                "cwd": str(PROJECT_ROOT),
             },
         )
         sidecar_sid = result["session_id"]
@@ -248,12 +252,20 @@ async def _stream_turn_sidecar(
         )
         # Wait for turn_done, cancel_event, or timeout
         if cancel_event:
-            done, _ = await asyncio.wait(
-                [asyncio.create_task(turn_done.wait()),
-                 asyncio.create_task(cancel_event.wait())],
+            wait_tasks = [
+                asyncio.create_task(turn_done.wait()),
+                asyncio.create_task(cancel_event.wait()),
+            ]
+            done, pending = await asyncio.wait(
+                wait_tasks,
                 timeout=600,
                 return_when=asyncio.FIRST_COMPLETED,
             )
+            for pending_task in pending:
+                pending_task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+            if not done:
+                raise asyncio.TimeoutError
             if cancel_event.is_set():
                 logger.info("[sidecar] Turn cancelled for session %s", sidecar_sid[:8])
                 try:
@@ -273,8 +285,7 @@ async def _stream_turn_sidecar(
             await client.call("cancel", {"session_id": sidecar_sid})
         except Exception as e:
             logger.warning("[sidecar] Failed to cancel after timeout for session %s: %s", sidecar_sid[:8], e)
-        if not final_answer:
-            final_answer = "（Sidecar 处理超时，请重试）"
+        raise
     except Exception as e:
         logger.exception(
             "[sidecar] Turn failed for session %s", sidecar_sid[:8]
@@ -385,6 +396,24 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             final_answer = task.result()
         except Exception:
             logger.exception("[ws] Turn task failed for session %s", session_id[:8])
+            try:
+                await ws.send_json(
+                    {
+                        "type": "error",
+                        "payload": {
+                            "code": "SIDECAR_UNAVAILABLE",
+                            "message": "后端处理失败，请稍后重试",
+                        },
+                    }
+                )
+                await ws.send_json(
+                    {
+                        "type": "done",
+                        "payload": {"turn_id": _new_turn_id(_turn_id)},
+                    }
+                )
+            except Exception:
+                logger.debug("[ws] Failed to report turn failure", exc_info=True)
             turn_task = None
             return
 
@@ -436,7 +465,12 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                     return_when=asyncio.FIRST_COMPLETED,
                 )
                 if turn_task in done:
-                    recv_task.cancel()
+                    if not recv_task.done():
+                        recv_task.cancel()
+                    try:
+                        await recv_task
+                    except asyncio.CancelledError:
+                        pass
                     await _handle_turn_result(turn_task)
                     continue
                 raw = recv_task.result()

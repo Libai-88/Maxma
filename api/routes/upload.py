@@ -34,10 +34,26 @@ ALLOWED_EXTENSIONS = {
 
 
 def _sanitize_filename(name: str) -> str:
-    """净化文件名，防止路径穿越和特殊字符注入。"""
+    """净化文件名，防止路径穿越和特殊字符注入。
+
+    B-013: previously used ``[^a-zA-Z0-9._-]`` which stripped all non-ASCII
+    letters/digits, turning e.g. ``报告.pdf`` into ``.pdf`` (a dotfile).
+    Now we keep Unicode word characters (``\\w`` with ``re.UNICODE``) plus
+    ``.``, ``_``, ``-``, while still rejecting path separators (``/`` and
+    ``\\``) explicitly — ``\\w`` already excludes them, but we strip them
+    in a separate pass first so a name like ``a/b\\c.pdf`` cannot survive
+    as ``abc.pdf`` and confuse downstream path joins.
+    """
+    # Take only the basename to drop any directory components.
     name = Path(name).name
-    # 只保留字母数字 ._- 字符，移除 Unicode 控制字符、空格、保留名等
-    safe = re.sub(r"[^a-zA-Z0-9._-]", "", name)
+    # Explicitly strip path separators first (defense in depth; ``\w`` would
+    # already drop them, but this makes the intent obvious and survives any
+    # future regex widening).
+    name = re.sub(r"[\\/]+", "", name)
+    # Keep Unicode letters/digits/underscore (via \w with re.UNICODE), plus
+    # ``.``, ``-``. This preserves CJK/emoji filenames while still removing
+    # spaces, control chars, shell metacharacters, etc.
+    safe = re.sub(r"[^\w.\-]", "", name, flags=re.UNICODE)
     # Windows 保留名（CON/NUL/LPT1 等）在前面加下划线避免冲突
     # 注意：Windows 会忽略扩展名匹配保留设备名，所以取第一个点之前的部分比较
     stem = safe.split(".", 1)[0].upper()

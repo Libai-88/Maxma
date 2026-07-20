@@ -11,6 +11,13 @@ import * as path from "node:path";
 
 const SKILLS_DIR = "anthropic_skills";
 
+// B-001: resolve against MAXMA_PROJECT_ROOT (forwarded by sidecar_manager.py)
+// so the tool reads the real project-level skills directory instead of
+// bun-sidecar/anthropic_skills/.
+function projectRoot(): string {
+  return process.env.MAXMA_PROJECT_ROOT ?? process.cwd();
+}
+
 const params = z.object({
   action: z
     .enum(["list", "get", "enable", "disable"])
@@ -28,7 +35,7 @@ const tool: ToolDefinition<typeof params> = {
     + "每个技能包含独立的指令和流程。",
   parameters: params,
   execute: async (_toolCallId, params) => {
-    const skillsDir = path.resolve(process.cwd(), SKILLS_DIR);
+    const skillsDir = path.resolve(projectRoot(), SKILLS_DIR);
 
     if (params.action === "list") {
       if (!fs.existsSync(skillsDir)) {

@@ -416,6 +416,54 @@ class TestSaveConstSession:
 
 
 # ===========================================================================
+# sidecar turn failure paths
+# ===========================================================================
+
+
+class TestSidecarTurnFailures:
+    async def test_wait_timeout_with_cancel_event_cancels_sidecar(self, monkeypatch):
+        ws = MagicMock()
+        ws.send_json = AsyncMock()
+        client = MagicMock()
+        client.on = MagicMock(side_effect=lambda _event, _handler: lambda: None)
+
+        async def call(method, params):
+            if method == "create_session":
+                return {"session_id": "sc-timeout"}
+            return {}
+
+        client.call = AsyncMock(side_effect=call)
+        manager = MagicMock()
+        manager.start = AsyncMock()
+        manager.client = client
+        ws.app.state.sidecar_manager = manager
+
+        session = MagicMock()
+        session.session_id = "session-timeout"
+        session._sidecar_session_id = None
+        _patch_session_map(monkeypatch, sidecar_id=None, recent_turns=[])
+
+        async def timeout_wait(tasks, *, timeout, return_when):
+            return set(), set(tasks)
+
+        monkeypatch.setattr(chat_mod.asyncio, "wait", timeout_wait)
+        cancel_event = asyncio.Event()
+
+        with pytest.raises(asyncio.TimeoutError):
+            await chat_mod._stream_turn_sidecar(
+                ws,
+                session,
+                "hello",
+                "system",
+                cancel_event=cancel_event,
+            )
+
+        client.call.assert_any_await(
+            "cancel", {"session_id": "sc-timeout"}
+        )
+
+
+# ===========================================================================
 # websocket_chat (via TestClient)
 # ===========================================================================
 
@@ -512,6 +560,34 @@ class TestWebSocketChat:
         # 验证 session message_count 增加
         session = ws_app.state.session_manager._sessions["s1"]
         assert session.message_count == 2
+
+    def test_turn_failure_uses_fixed_safe_message(
+        self, ws_app, monkeypatch, caplog
+    ):
+        async def failing_stream(*args, **kwargs):
+            raise RuntimeError("provider secret details")
+
+        monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", failing_stream)
+
+        with caplog.at_level(logging.ERROR):
+            with TestClient(ws_app).websocket_connect("/ws/chat/s1") as ws:
+                ws.send_text(json.dumps({
+                    "type": "chat",
+                    "payload": {"message": "hello", "turn_id": "turn-1"},
+                }))
+                error = ws.receive_json()
+                done = ws.receive_json()
+
+        assert error == {
+            "type": "error",
+            "payload": {
+                "code": "SIDECAR_UNAVAILABLE",
+                "message": "后端处理失败，请稍后重试",
+            },
+        }
+        assert "provider secret details" not in error["payload"]["message"]
+        assert done["type"] == "done"
+        assert "provider secret details" in caplog.text
 
     def test_happy_path_increments_message_count(
         self, ws_app, monkeypatch

@@ -43,20 +43,20 @@ class TestTestConnection:
             side_effect=FileNotFoundError("no such file"),
         ):
             resp = client.post(
-                "/api/mcp/test-connection", json={"command": "ghost-cmd"}
+                "/api/mcp/test-connection", json={"command": "npx"}
             )
         assert resp.status_code == 200
         body = resp.json()
         assert body["success"] is False
         assert "命令不存在" in body["error"]
-        assert body["resolved_command"] == "ghost-cmd"
+        assert body["resolved_command"] == "npx"
 
     def test_startup_failure(self, client):
         with patch(
             "api.routes.mcp_test.asyncio.create_subprocess_exec",
             side_effect=OSError("boom"),
         ):
-            resp = client.post("/api/mcp/test-connection", json={"command": "x"})
+            resp = client.post("/api/mcp/test-connection", json={"command": "npx"})
         assert resp.status_code == 200
         body = resp.json()
         assert body["success"] is False
@@ -69,13 +69,13 @@ class TestTestConnection:
             return_value=proc,
         ) as mock_exec:
             resp = client.post(
-                "/api/mcp/test-connection", json={"command": "echo", "args": ["hi"]}
+                "/api/mcp/test-connection", json={"command": "npx", "args": ["hi"]}
             )
         assert resp.status_code == 200
         body = resp.json()
         assert body["success"] is True
         assert body["error"] is None
-        assert body["resolved_command"] == "echo"
+        assert body["resolved_command"] == "npx"
         mock_exec.assert_called_once()
 
     def test_non_zero_exit_code(self, client):
@@ -85,7 +85,7 @@ class TestTestConnection:
             return_value=proc,
         ):
             resp = client.post(
-                "/api/mcp/test-connection", json={"command": "failer"}
+                "/api/mcp/test-connection", json={"command": "npx"}
             )
         assert resp.status_code == 200
         body = resp.json()
@@ -101,7 +101,7 @@ class TestTestConnection:
             return_value=proc,
         ):
             resp = client.post(
-                "/api/mcp/test-connection", json={"command": "failer"}
+                "/api/mcp/test-connection", json={"command": "npx"}
             )
         assert resp.status_code == 200
         body = resp.json()
@@ -117,7 +117,7 @@ class TestTestConnection:
             return_value=proc,
         ):
             resp = client.post(
-                "/api/mcp/test-connection", json={"command": "long-running"}
+                "/api/mcp/test-connection", json={"command": "npx"}
             )
         assert resp.status_code == 200
         body = resp.json()
@@ -136,7 +136,7 @@ class TestTestConnection:
             return_value=proc,
         ):
             resp = client.post(
-                "/api/mcp/test-connection", json={"command": "stubborn"}
+                "/api/mcp/test-connection", json={"command": "npx"}
             )
         assert resp.status_code == 200
         body = resp.json()
@@ -152,7 +152,7 @@ class TestTestConnection:
         ) as mock_exec:
             resp = client.post(
                 "/api/mcp/test-connection",
-                json={"command": "echo", "env": {"CUSTOM": "1"}},
+                json={"command": "npx", "env": {"CUSTOM": "1"}},
             )
         assert resp.status_code == 200
         _, kwargs = mock_exec.call_args
@@ -166,10 +166,10 @@ class TestTestConnection:
         ) as mock_exec:
             resp = client.post(
                 "/api/mcp/test-connection",
-                json={"command": "echo", "args": ["a", "b"]},
+                json={"command": "npx", "args": ["a", "b"]},
             )
         assert resp.status_code == 200
         args, _ = mock_exec.call_args
         # first positional arg is resolved command, then *args
-        assert args[0] == "echo"
+        assert args[0] == "npx"
         assert args[1:] == ("a", "b")

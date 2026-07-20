@@ -14,7 +14,7 @@
 
 import { createInterface } from "node:readline";
 import { randomUUID } from "node:crypto";
-import { createAgentSession } from "@oh-my-pi/pi-coding-agent";
+import { createAgentSession, discoverAuthStorage } from "@oh-my-pi/pi-coding-agent";
 import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
 import type { Model } from "@oh-my-pi/pi-ai";
 import type { AgentSession } from "@oh-my-pi/pi-coding-agent";
@@ -37,6 +37,12 @@ interface SessionRecord {
 
 const sessions = new Map<string, SessionRecord>();
 const rl = createInterface({ input: process.stdin });
+let authStoragePromise: ReturnType<typeof discoverAuthStorage> | null = null;
+
+async function getSharedAuthStorage() {
+  if (!authStoragePromise) authStoragePromise = discoverAuthStorage();
+  return authStoragePromise;
+}
 
 // ---------------------------------------------------------------------------
 // JSON-RPC helpers
@@ -73,10 +79,15 @@ function sendEvent(sessionId: string, event: Record<string, unknown>) {
  *   A — Try `getBundledModel(provider, modelId)` from the bundled catalog.
  *   B — Fall back to constructing a minimal Model object manually.
  */
-function parseModel(modelStr: string): Model {
+function parseModel(
+  modelStr: string,
+  options?: { provider?: string; baseUrl?: string; providerType?: string },
+): Model {
   const slashIdx = modelStr.indexOf("/");
-  const provider = slashIdx >= 0 ? modelStr.slice(0, slashIdx) : "";
-  const modelId = slashIdx >= 0 ? modelStr.slice(slashIdx + 1) : modelStr;
+  const parsedProvider = slashIdx >= 0 ? modelStr.slice(0, slashIdx) : "";
+  const parsedModelId = slashIdx >= 0 ? modelStr.slice(slashIdx + 1) : modelStr;
+  const provider = options?.provider ?? parsedProvider;
+  const modelId = options?.provider ? modelStr : parsedModelId;
 
   // Option A: bundled catalog lookup
   if (provider) {
@@ -89,8 +100,7 @@ function parseModel(modelStr: string): Model {
   }
 
   // Option B: manual fallback (minimal Model object from env vars)
-  const baseUrl =
-    process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1";
+  const baseUrl = options?.baseUrl || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
   return {
     id: modelId,
     name: modelId,
@@ -420,7 +430,15 @@ if (import.meta.main) {
     try {
       if (method === "create_session") {
         const modelStr: string = params?.model ?? "openai/gpt-4o";
-        const model = parseModel(modelStr);
+        const provider: string | undefined = params?.provider || undefined;
+        const apiKey: string | undefined = params?.api_key || undefined;
+        const authStorage = await getSharedAuthStorage();
+        if (provider && apiKey) authStorage.setRuntimeApiKey(provider, apiKey);
+        const model = parseModel(modelStr, {
+          provider,
+          baseUrl: params?.base_url,
+          providerType: params?.provider_type,
+        });
         const cwd: string = params?.cwd ?? process.cwd();
         const systemPrompt: string | undefined = params?.system_prompt;
         const tools: string[] | undefined = params?.tools as string[] | undefined;
@@ -428,6 +446,7 @@ if (import.meta.main) {
         const createOptions: Record<string, unknown> = {
           model,
           cwd,
+          authStorage,
         };
         if (systemPrompt !== undefined) {
           createOptions.systemPrompt = systemPrompt;
@@ -542,13 +561,90 @@ if (import.meta.main) {
           return;
         }
 
-        // Truncate the last N assistant+user message pairs (copy-first to avoid mutating internal state)
-        const originalLen = record.session.state.messages.length;
-        const keepCount = Math.max(0, originalLen - steps * 2);
-        const remaining = record.session.state.messages.slice(0, keepCount);
-        const removed = originalLen - keepCount;
-        record.session.agent.replaceMessages(remaining);
-        send(id, { removed });
+        // Walk backwards counting complete `user → assistant` turns.
+        // An assistant turn may include trailing `tool`/`function` messages,
+        // so a turn boundary is the position just before a `user` message
+        // that itself follows a complete assistant turn. We cut at the
+        // boundary that drops exactly `steps` user-initiated turns without
+        // leaving dangling tool_call/tool_result pairs.
+        const messages = record.session.state.messages;
+        const originalLen = messages.length;
+        // BC-002: mirror compact's hasLeadingSystem preservation. A leading
+        // system message must always survive an undo; replaceMessages([])
+        // must never be called (silent state wipe).
+        const hasLeadingSystem = originalLen > 0 &&
+          (messages[0] as any)?.role === "system";
+        let turnsRemoved = 0;
+        let cutIndex = originalLen;
+        // Scan from end to start; every time we step past a `user` message
+        // we count one completed turn (the assistant reply that preceded it
+        // from the caller's perspective is the one we are removing).
+        for (let i = originalLen - 1; i >= 0; i--) {
+          const role = (messages[i] as any)?.role;
+          if (role === "user") {
+            turnsRemoved += 1;
+            cutIndex = i;
+            if (turnsRemoved >= steps) break;
+          }
+        }
+        // No-op when (a) we couldn't find `steps` user turns to remove, or
+        // (b) the cut would land at/before index 0 with no leading system
+        // message to keep — both cases previously produced
+        // replaceMessages([]), silently wiping all conversation state.
+        if (turnsRemoved < steps || (!hasLeadingSystem && cutIndex <= 0)) {
+          send(id, { removed: 0, turns_removed: 0, detail: "no turns to undo" });
+          return;
+        }
+        // Defensive: when a leading system message exists, ensure it is
+        // preserved even if cutIndex would land on index 0.
+        if (hasLeadingSystem && cutIndex < 1) cutIndex = 1;
+        const remaining = messages.slice(0, cutIndex);
+        const removed = originalLen - remaining.length;
+        try {
+          record.session.agent.replaceMessages(remaining);
+        } catch (err) {
+          sendError(id, `undo failed: ${err}`);
+          return;
+        }
+        send(id, { removed, turns_removed: turnsRemoved });
+        return;
+      }
+
+      if (method === "compact") {
+        const sessionId: string = params?.session_id as string;
+        const keepLast: number = (params?.keep_last as number) ?? 20;
+        const record = sessions.get(sessionId);
+        if (!record) {
+          sendError(id, `Session not found: ${sessionId}`);
+          return;
+        }
+
+        // Compact: truncate message history to the last `keepLast` entries,
+        // always preserving a leading system message if present. The LLM
+        // provider APIs require the first message to be `system` (when
+        // present), so we keep it regardless of `keepLast`.
+        const messages = record.session.state.messages;
+        const originalLen = messages.length;
+        const hasLeadingSystem = originalLen > 0 &&
+          (messages[0] as any)?.role === "system";
+        const head = hasLeadingSystem ? [messages[0]] : [];
+        const tailSource = hasLeadingSystem ? messages.slice(1) : messages;
+        const tail = tailSource.slice(-Math.max(0, keepLast));
+        const remaining = head.concat(tail);
+        const removed = originalLen - remaining.length;
+        if (removed > 0) {
+          try {
+            record.session.agent.replaceMessages(remaining);
+          } catch (err) {
+            sendError(id, `compact failed: ${err}`);
+            return;
+          }
+        }
+        send(id, {
+          compressed: removed > 0,
+          removed_count: removed,
+          detail: removed > 0 ? "压缩完成" : "无需压缩",
+        });
         return;
       }
 

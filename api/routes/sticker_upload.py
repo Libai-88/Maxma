@@ -1,6 +1,7 @@
 """API 路由 — 自定义表情上传。"""
 
 import hashlib
+import logging
 import re
 from pathlib import Path
 
@@ -8,6 +9,8 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app_paths import BUNDLE_DIR, DATA_DIR
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -62,8 +65,8 @@ def _convert_to_webp(src: Path, dst: Path) -> bool:
             img.thumbnail((256, 256), Image.LANCZOS)
             img.save(str(dst), 'WEBP', quality=80)
             return True
-    except Exception as e:
-        print(f"[sticker_upload] 转换失败: {e}")
+    except Exception:
+        logger.exception("转换失败")
         return False
 
 

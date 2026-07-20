@@ -67,11 +67,35 @@ async def lifespan(app: FastAPI):
     app.state.sidecar_manager = SidecarManager()
     logger.info("[sidecar] SidecarManager created")
 
+    # 4. Startup migration: encrypt any plaintext api_keys in providers.yaml.
+    # Idempotent — skips already-encrypted (encv1:/enc:) values. B-009 fix.
+    try:
+        from api.routes.providers import migrate_plaintext_keys_to_encrypted
+
+        encrypted_n = migrate_plaintext_keys_to_encrypted()
+        if encrypted_n > 0:
+            logger.info(
+                "[providers] startup migration: encrypted %d plaintext api_key(s)",
+                encrypted_n,
+            )
+    except Exception:
+        logger.exception("[providers] startup migration failed (non-fatal)")
+
     yield
 
     if getattr(app.state, "sidecar_manager", None):
         await app.state.sidecar_manager.stop()
         logger.info("[sidecar] SidecarManager stopped")
+
+    # 关闭 balance.py 共享 httpx.AsyncClient 连接池，避免资源泄漏
+    # （_shared_async_client 是模块级单例，lifespan shutdown 不会自动关闭它）。
+    try:
+        from api.routes.balance import close_async_client
+
+        await close_async_client()
+        logger.info("[balance] shared httpx.AsyncClient closed")
+    except Exception:
+        logger.exception("[balance] failed to close shared httpx.AsyncClient")
 
 
 def create_app() -> FastAPI:

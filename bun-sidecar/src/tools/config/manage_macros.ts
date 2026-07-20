@@ -8,6 +8,29 @@ import * as path from "node:path";
 
 const MACROS_DIR = "macros";
 
+// B-001: resolve against MAXMA_PROJECT_ROOT (forwarded by sidecar_manager.py)
+// so the tool reads the real project-level macros/ instead of bun-sidecar/macros/.
+function projectRoot(): string {
+  return process.env.MAXMA_PROJECT_ROOT ?? process.cwd();
+}
+
+// B-004: mirror api/routes/macros.py _MACRO_ID_RE to prevent path traversal.
+// Reject names containing path separators, '..', or any character outside
+// [A-Za-z0-9_-]. Without this guard, params.name = "../../etc" combined with
+// fs.rmSync(recursive: true) could delete arbitrary directories.
+const MACRO_NAME_RE = /^[A-Za-z0-9_\-]+$/;
+
+function validateName(name: string): string | null {
+  if (!name || !MACRO_NAME_RE.test(name)) return null;
+  return name;
+}
+
+/** Assert resolved path stays within macrosDir (defense-in-depth). */
+function assertWithinMacrosDir(target: string, macrosDir: string): boolean {
+  const base = macrosDir.endsWith(path.sep) ? macrosDir : macrosDir + path.sep;
+  return target === macrosDir || target.startsWith(base);
+}
+
 const params = z.object({
   action: z
     .enum(["list", "get", "create", "update", "delete"])
@@ -23,7 +46,7 @@ const tool: ToolDefinition<typeof params> = {
   description: "管理 macros/ 目录下的可复用指令片段（宏）。可列举所有宏、查看宏内容、创建新宏、更新已有宏、删除宏。",
   parameters: params,
   execute: async (_toolCallId, params) => {
-    const macrosDir = path.resolve(process.cwd(), MACROS_DIR);
+    const macrosDir = path.resolve(projectRoot(), MACROS_DIR);
     if (params.action === "list") {
       if (!fs.existsSync(macrosDir)) return { content: [{ type: "text", text: "macros/ 目录不存在" }] };
       const entries = fs.readdirSync(macrosDir, { withFileTypes: true });
@@ -42,13 +65,19 @@ const tool: ToolDefinition<typeof params> = {
     }
     if (params.action === "get") {
       if (!params.name) return { content: [{ type: "text", text: "请指定宏名称" }], isError: true };
+      // B-004: validate name before any path operation.
+      if (!validateName(params.name)) return { content: [{ type: "text", text: "宏名称只能包含字母、数字、下划线和连字符" }], isError: true };
       const macroPath = path.resolve(macrosDir, params.name, "MACRO.md");
+      if (!assertWithinMacrosDir(path.dirname(macroPath), macrosDir)) return { content: [{ type: "text", text: "宏名称非法" }], isError: true };
       if (!fs.existsSync(macroPath)) return { content: [{ type: "text", text: `宏 "${params.name}" 不存在` }], isError: true };
       return { content: [{ type: "text", text: fs.readFileSync(macroPath, "utf-8") }] };
     }
     if (params.action === "create" || params.action === "update") {
       if (!params.name || !params.content) return { content: [{ type: "text", text: "请指定 name 和 content" }], isError: true };
+      // B-004: validate name before any path operation.
+      if (!validateName(params.name)) return { content: [{ type: "text", text: "宏名称只能包含字母、数字、下划线和连字符" }], isError: true };
       const macroDir = path.resolve(macrosDir, params.name);
+      if (!assertWithinMacrosDir(macroDir, macrosDir)) return { content: [{ type: "text", text: "宏名称非法" }], isError: true };
       const macroPath = path.join(macroDir, "MACRO.md");
       if (params.action === "create" && fs.existsSync(macroPath)) return { content: [{ type: "text", text: `宏 "${params.name}" 已存在` }], isError: true };
       fs.mkdirSync(macroDir, { recursive: true });
@@ -58,7 +87,12 @@ const tool: ToolDefinition<typeof params> = {
     }
     if (params.action === "delete") {
       if (!params.name) return { content: [{ type: "text", text: "请指定宏名称" }], isError: true };
+      // B-004: validate name before any path operation. Especially important
+      // here because fs.rmSync(recursive: true, force: true) could otherwise
+      // delete arbitrary directories.
+      if (!validateName(params.name)) return { content: [{ type: "text", text: "宏名称只能包含字母、数字、下划线和连字符" }], isError: true };
       const macroDir = path.resolve(macrosDir, params.name);
+      if (!assertWithinMacrosDir(macroDir, macrosDir)) return { content: [{ type: "text", text: "宏名称非法" }], isError: true };
       const macroPath = path.join(macroDir, "MACRO.md");
       if (!fs.existsSync(macroPath)) return { content: [{ type: "text", text: `宏 "${params.name}" 不存在` }], isError: true };
       fs.rmSync(macroDir, { recursive: true, force: true });

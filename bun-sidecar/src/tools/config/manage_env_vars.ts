@@ -9,6 +9,12 @@ import * as path from "node:path";
 const ENV_PATH = ".env";
 const SENSITIVE_SUFFIXES = ["API_KEY", "TOKEN", "SECRET", "PASSWORD", "KEY"];
 
+// B-001: resolve against MAXMA_PROJECT_ROOT (forwarded by sidecar_manager.py)
+// so the tool reads the real project-level .env instead of bun-sidecar/.env.
+function projectRoot(): string {
+  return process.env.MAXMA_PROJECT_ROOT ?? process.cwd();
+}
+
 function maskValue(key: string, value: string): string {
   const isSensitive = SENSITIVE_SUFFIXES.some((s) => key.toUpperCase().includes(s));
   if (!isSensitive) return value;
@@ -28,7 +34,7 @@ const tool: ToolDefinition<typeof params> = {
   description: "管理环境变量配置。敏感信息（API Key 等）在列表中会被部分遮蔽。",
   parameters: params,
   execute: async (_toolCallId, params) => {
-    const envPath = path.resolve(process.cwd(), ENV_PATH);
+    const envPath = path.resolve(projectRoot(), ENV_PATH);
     const readEnv = (): Record<string, string> => {
       if (!fs.existsSync(envPath)) return {};
       const vars: Record<string, string> = {};

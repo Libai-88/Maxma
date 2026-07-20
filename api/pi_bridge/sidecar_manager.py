@@ -117,6 +117,23 @@ class SidecarManager:
             logger.info(
                 "Starting sidecar: %s run %s", bun_path, SIDECAR_ENTRY
             )
+
+            # Forward the project root to the sidecar via env var so its config
+            # tools (which read/write paths relative to the project root) resolve
+            # correctly even though the sidecar process runs with cwd=SIDECAR_DIR.
+            # B-001/B-002: previously the sidecar used process.cwd() which pointed
+            # at bun-sidecar/ instead of the actual project root.
+            sidecar_env = dict(os.environ)
+            try:
+                from app_paths import PROJECT_ROOT
+                sidecar_env["MAXMA_PROJECT_ROOT"] = str(PROJECT_ROOT)
+            except Exception:
+                logger.debug(
+                    "[sidecar] app_paths.PROJECT_ROOT unavailable; "
+                    "sidecar will fall back to process.cwd()",
+                    exc_info=True,
+                )
+
             self._process = await asyncio.create_subprocess_exec(
                 bun_path,
                 "run",
@@ -125,6 +142,7 @@ class SidecarManager:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=str(SIDECAR_DIR),
+                env=sidecar_env,
             )
             logger.info(
                 "Sidecar started (pid=%s)", self._process.pid

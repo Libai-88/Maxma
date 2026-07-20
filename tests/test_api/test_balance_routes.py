@@ -2,10 +2,12 @@
 
 覆盖：
 - _find_deepseek_api_key 缺失/存在
-- _get_async_client 创建/复用/重建
+- _get_async_client 创建/复用/重建（async, B-005: serialized by _client_lock）
 - close_async_client 关闭/幂等
 - GET /deepseek-balance 成功/超时/HTTP错误/其他异常
 """
+
+import asyncio
 
 import httpx
 import pytest
@@ -18,7 +20,7 @@ from api.routes.balance import router
 
 @pytest.fixture
 def app_client(monkeypatch):
-    # 重置共享客户端
+    # 重置共享客户端（B-005: lock stays across tests but client is reset）
     monkeypatch.setattr(balance_mod, "_shared_async_client", None)
     app = FastAPI()
     app.include_router(router)
@@ -41,26 +43,23 @@ class TestFindDeepSeekApiKey:
 class TestGetAsyncClient:
     def test_creates_new_client_when_none(self, monkeypatch):
         monkeypatch.setattr(balance_mod, "_shared_async_client", None)
-        c = balance_mod._get_async_client()
+        c = asyncio.run(balance_mod._get_async_client())
         assert isinstance(c, httpx.AsyncClient)
         assert not c.is_closed
         # 复用同一个实例
-        assert balance_mod._get_async_client() is c
+        c2 = asyncio.run(balance_mod._get_async_client())
+        assert c2 is c
         # 清理
-        import asyncio
-
         asyncio.run(c.aclose())
 
     def test_recreates_when_closed(self, monkeypatch):
         # 预置一个已关闭的客户端
         closed_client = httpx.AsyncClient()
-        import asyncio
-
         asyncio.run(closed_client.aclose())
         assert closed_client.is_closed
         monkeypatch.setattr(balance_mod, "_shared_async_client", closed_client)
 
-        new_c = balance_mod._get_async_client()
+        new_c = asyncio.run(balance_mod._get_async_client())
         assert new_c is not closed_client
         assert not new_c.is_closed
         asyncio.run(new_c.aclose())
@@ -69,8 +68,6 @@ class TestGetAsyncClient:
 class TestCloseAsyncClient:
     def test_close_none_is_noop(self, monkeypatch):
         monkeypatch.setattr(balance_mod, "_shared_async_client", None)
-        import asyncio
-
         # 不应抛异常
         asyncio.run(balance_mod.close_async_client())
         assert balance_mod._shared_async_client is None
@@ -78,8 +75,6 @@ class TestCloseAsyncClient:
     def test_close_open_client(self, monkeypatch):
         c = httpx.AsyncClient()
         monkeypatch.setattr(balance_mod, "_shared_async_client", c)
-        import asyncio
-
         asyncio.run(balance_mod.close_async_client())
         assert balance_mod._shared_async_client is None
         assert c.is_closed
@@ -123,7 +118,11 @@ class TestGetDeepseekBalanceRoute:
     def test_success_returns_data(self, app_client, monkeypatch):
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-success")
         fake = _FakeAsyncClient(data={"balance": 100.0})
-        monkeypatch.setattr(balance_mod, "_get_async_client", lambda: fake)
+
+        async def fake_get():
+            return fake
+
+        monkeypatch.setattr(balance_mod, "_get_async_client", fake_get)
 
         resp = app_client.get("/deepseek-balance")
         assert resp.status_code == 200
@@ -137,7 +136,11 @@ class TestGetDeepseekBalanceRoute:
     def test_timeout_returns_504(self, app_client, monkeypatch):
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-timeout")
         fake = _FakeAsyncClient(exc=httpx.TimeoutException("slow"))
-        monkeypatch.setattr(balance_mod, "_get_async_client", lambda: fake)
+
+        async def fake_get():
+            return fake
+
+        monkeypatch.setattr(balance_mod, "_get_async_client", fake_get)
 
         resp = app_client.get("/deepseek-balance")
         assert resp.status_code == 504
@@ -150,7 +153,11 @@ class TestGetDeepseekBalanceRoute:
         resp_obj = httpx.Response(500, request=req)
         exc = httpx.HTTPStatusError("server error", request=req, response=resp_obj)
         fake = _FakeAsyncClient(exc=exc)
-        monkeypatch.setattr(balance_mod, "_get_async_client", lambda: fake)
+
+        async def fake_get():
+            return fake
+
+        monkeypatch.setattr(balance_mod, "_get_async_client", fake_get)
 
         resp = app_client.get("/deepseek-balance")
         assert resp.status_code == 500
@@ -159,7 +166,11 @@ class TestGetDeepseekBalanceRoute:
     def test_generic_exception_returns_500(self, app_client, monkeypatch):
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-boom")
         fake = _FakeAsyncClient(exc=ValueError("boom"))
-        monkeypatch.setattr(balance_mod, "_get_async_client", lambda: fake)
+
+        async def fake_get():
+            return fake
+
+        monkeypatch.setattr(balance_mod, "_get_async_client", fake_get)
 
         resp = app_client.get("/deepseek-balance")
         assert resp.status_code == 500

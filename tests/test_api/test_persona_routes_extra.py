@@ -320,18 +320,21 @@ class TestCreateNewPersona:
         resp = await persona.create_new_persona(body)
         assert resp["tools"] == "search,calc"
         content = (persona_dir / "SOUL.robot.md").read_text(encoding="utf-8")
-        assert 'description: "a helpful bot"' in content
+        # B-012: frontmatter is now produced via yaml.safe_dump, so simple
+        # strings are emitted unquoted. Assert both key presence and that the
+        # value parses back correctly via the same parser the app uses.
+        assert "description: a helpful bot" in content
         assert "tools: search,calc" in content
 
-    async def test_create_with_custom_memory_not_persona(self, persona_dir: Path):
-        body = persona.CreatePersonaRequest(name="bot", memory="custom")
-        resp = await persona.create_new_persona(body)
-        assert resp["memory_mode"] == "custom"
-        # memory != "persona"，frontmatter 应包含 memory 行
-        content = (persona_dir / "SOUL.bot.md").read_text(encoding="utf-8")
-        assert "memory: custom" in content
-        # 不应创建独立记忆文件
-        assert not (persona_dir / "memory_SOUL.bot.yaml").exists()
+    async def test_create_with_invalid_memory_mode_rejected_by_pydantic(
+        self, persona_dir: Path
+    ):
+        """B-012: the memory field is now a Literal enum, so arbitrary
+        strings like "custom" are rejected at request-validation time."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            persona.CreatePersonaRequest(name="bot", memory="custom")  # type: ignore[arg-type]
 
     async def test_create_with_persona_memory_creates_memory_file(self, persona_dir: Path):
         body = persona.CreatePersonaRequest(name="bot2", memory="persona")

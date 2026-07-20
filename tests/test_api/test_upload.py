@@ -15,11 +15,16 @@ client = TestClient(app)
 
 
 class TestSanitizeFilename:
-    def test_strips_unicode_and_spaces(self):
+    def test_strips_spaces(self):
+        # Spaces are not in \w, so they are still stripped — but Unicode
+        # letters/digits are preserved (B-013 regression coverage below).
         assert _sanitize_filename("hello world.txt") == "helloworld.txt"
 
-    def test_strips_chinese_chars(self):
-        assert _sanitize_filename("文件 名.py") == ".py"
+    def test_keeps_unicode_letters(self):
+        # B-013: previously Chinese filenames were stripped to dotfiles
+        # (e.g. "报告.pdf" → ".pdf"). Now Unicode word chars are kept.
+        assert _sanitize_filename("报告.pdf") == "报告.pdf"
+        assert _sanitize_filename("文件 名.py") == "文件名.py"
 
     def test_keeps_allowed_chars(self):
         assert _sanitize_filename("my-file_v1.2.txt") == "my-file_v1.2.txt"
@@ -28,8 +33,21 @@ class TestSanitizeFilename:
         result = _sanitize_filename("CON.txt")
         assert result.startswith("_")
 
+    def test_strips_path_separators(self):
+        # B-013: Path(name).name drops the directory component on every
+        # platform (forward slash is always a separator); the remaining
+        # Unicode filename is then preserved by the widened regex.
+        assert _sanitize_filename("dir/报告.pdf") == "报告.pdf"
+        # Backslash is a path separator on Windows; on POSIX it survives
+        # Path(name).name but is explicitly stripped by the [\\/] regex pass
+        # so that even cross-platform names cannot smuggle a separator.
+        bs = _sanitize_filename("a\\b.pdf")
+        assert "\\" not in bs and "/" not in bs
+
     def test_empty_after_sanitization_returns_default(self):
-        assert _sanitize_filename("中文") == "unnamed_file"
+        # Only truly empty/punctuation-only names fall back to the default.
+        assert _sanitize_filename("") == "unnamed_file"
+        assert _sanitize_filename("   ") == "unnamed_file"
 
 
 class TestUploadRoute:
