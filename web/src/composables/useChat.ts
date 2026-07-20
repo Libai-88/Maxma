@@ -192,6 +192,8 @@ function persistTurns(sid: string) {
   saveTurnsToStorage(sid, snapshot)
 }
 
+const STICKER_DIRECTIVE_RE = /\[表情(?:包)?[:：][^\]]+\]/g
+
 async function hydrateTurnSticker(turn: ChatTurn): Promise<boolean> {
   if (!turn.finalAnswer || turn.stickerUrl) return false
   const emotion = detectEmotion(turn.finalAnswer)
@@ -202,7 +204,13 @@ async function hydrateTurnSticker(turn: ChatTurn): Promise<boolean> {
     if (!response.ok) return false
     const data = await response.json()
     if (!data?.path) return false
-    turn.stickerUrl = getApiBase() + '/stickers/' + data.path
+    const stickerTag = `<sticker:${data.path}>`
+    if (STICKER_DIRECTIVE_RE.test(turn.finalAnswer)) {
+      // 将内联指令替换为可渲染的 sticker 标签，保持原位显示
+      turn.finalAnswer = turn.finalAnswer.replace(STICKER_DIRECTIVE_RE, stickerTag)
+    } else {
+      turn.stickerUrl = getApiBase() + '/stickers/' + data.path
+    }
     return true
   } catch (err) {
     console.warn('[useChat] hydrate sticker failed:', err)
@@ -605,7 +613,18 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       break
 
     case 'token': {
-      const lastThink = findLastThinking(turn.events)
+      let lastThink = findLastThinking(turn.events)
+      // 非推理模型不发 thinking_start，text_delta token 到达时没有 thinking block。
+      // 自动创建一个 becameAnswer=true 的 block 作为流式回复容器，否则 token 被静默丢弃。
+      if (!lastThink) {
+        turn.events.push({
+          kind: 'thinking',
+          tokens: '',
+          done: false,
+          becameAnswer: true,
+        })
+        lastThink = findLastThinking(turn.events)
+      }
       if (lastThink) {
         lastThink.tokens += event.payload.token
       }
@@ -690,6 +709,9 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       if (lastThink) {
         lastThink.becameAnswer = true
         lastThink.tokens = event.payload.content
+        // 非推理模型不发 thinking_end，必须在这里标记 done=true，
+        // 否则 ThinkingBlock 的 spinner 永远转，"思考中" 标签不消失。
+        lastThink.done = true
       }
       turn.finalAnswer = event.payload.content
       // Emotion → sticker matching
@@ -708,8 +730,14 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
               return r.json()
             })
             .then((data) => {
-              if (data?.path) {
-                turn.stickerUrl = `${getApiBase()}/stickers/${data.path}`
+              if (data?.path && turn.finalAnswer) {
+                const stickerTag = `<sticker:${data.path}>`
+                if (STICKER_DIRECTIVE_RE.test(turn.finalAnswer)) {
+                  // 将内联指令替换为可渲染的 sticker 标签，保持原位显示
+                  turn.finalAnswer = turn.finalAnswer.replace(STICKER_DIRECTIVE_RE, stickerTag)
+                } else {
+                  turn.stickerUrl = `${getApiBase()}/stickers/${data.path}`
+                }
               }
             })
             .catch((err) => console.warn('[useChat] sticker fetch failed:', err))
