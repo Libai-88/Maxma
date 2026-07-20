@@ -10,19 +10,28 @@
       <span class="chat-image-error-text">{{ imageError }}</span>
       <button type="button" class="chat-image-error-close" aria-label="关闭图片错误" title="关闭图片错误" @click="imageError = null">✕</button>
     </div>
-    <div v-if="showLinkInput" class="link-input-bar" role="group" aria-label="添加链接">
-      <input
-        ref="linkInputRef"
-        v-model="linkUrl"
-        type="url"
-        class="link-input"
-        aria-label="链接 URL"
-        placeholder="输入链接 URL……"
-        @keydown.enter.prevent="confirmLink"
-        @keydown.escape.prevent="cancelLink"
-      />
-      <button type="button" class="link-input-confirm" aria-label="确认添加链接" title="确认添加链接" :disabled="!linkUrl.trim()" @click="confirmLink">✓</button>
-      <button type="button" class="link-input-cancel" aria-label="取消添加链接" title="取消添加链接" @click="cancelLink">✕</button>
+    <div v-if="showLinkInput" class="link-input-wrapper">
+      <div class="link-input-bar" role="group" aria-label="添加链接">
+        <input
+          ref="linkInputRef"
+          v-model="linkUrl"
+          type="url"
+          class="link-input"
+          :class="{ 'is-error': linkError }"
+          aria-label="链接 URL"
+          placeholder="输入链接 URL……"
+          :aria-invalid="!!linkError"
+          aria-describedby="link-error"
+          @input="linkError = null"
+          @keydown.enter.prevent="confirmLink"
+          @keydown.escape.prevent="cancelLink"
+        />
+        <button type="button" class="link-input-confirm" aria-label="确认添加链接" title="确认添加链接" :disabled="!linkUrl.trim()" @click="confirmLink">✓</button>
+        <button type="button" class="link-input-cancel" aria-label="取消添加链接" title="取消添加链接" @click="cancelLink">✕</button>
+      </div>
+      <div v-if="linkError" id="link-error" class="link-input-error" role="alert">
+        {{ linkError }}
+      </div>
     </div>
     <div
       ref="inputContainerRef"
@@ -116,6 +125,7 @@
         <div class="input-left-group">
           <div class="btn-add-file-wrapper">
           <button
+            ref="addFileButtonRef"
             type="button"
             class="btn-add-file"
             :disabled="disabled"
@@ -130,7 +140,7 @@
             <span v-if="loading" class="btn-add-file-spin">⟳</span>
             <Icon v-else name="attach" :size="18" />
           </button>
-          <div v-if="showMenu" id="add-file-menu" class="add-file-menu" role="menu" aria-label="附件类型" @click.stop>
+          <div v-if="showMenu" ref="addFileMenuRef" id="add-file-menu" class="add-file-menu" role="menu" aria-label="附件类型" @click.stop>
             <button type="button" class="add-file-menu-item" role="menuitem" @click="pickFile">
               <Icon name="menu-file" :size="14" /> 选择文件
             </button>
@@ -144,7 +154,7 @@
               <Icon name="link" :size="14" /> 加入链接
             </button>
           </div>
-          <div v-if="showMenu" class="menu-backdrop" @click="showMenu = false"></div>
+          <div v-if="showMenu" class="menu-backdrop" @click="closeAddFileMenu(true)"></div>
           </div>
         </div>
         <div class="input-right-group">
@@ -270,6 +280,18 @@ const connectionError = ref<string | null>(null)
 const imageError = ref<string | null>(null)
 let _imageErrorTimer: ReturnType<typeof setTimeout> | null = null
 let _connectionErrorTimer: ReturnType<typeof setTimeout> | null = null
+
+function showImageError(msg: string) {
+  imageError.value = msg
+  if (_imageErrorTimer) clearTimeout(_imageErrorTimer)
+  _imageErrorTimer = setTimeout(() => {
+    if (_imageErrorTimer && imageError.value === msg) {
+      imageError.value = null
+      _imageErrorTimer = null
+    }
+  }, 5000)
+}
+
 const selectedThinkPathId = ref<ThinkPathId | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const inputContainerRef = ref<HTMLDivElement | null>(null)
@@ -384,8 +406,11 @@ function getNonImageRefIndex(r: Exclude<ParsedRef, ImageRef>): number {
 const isDragover = ref(false)
 let dragCounter = 0
 const showMenu = ref(false)
+const addFileMenuRef = ref<HTMLDivElement | null>(null)
+const addFileButtonRef = ref<HTMLButtonElement | null>(null)
 const showLinkInput = ref(false)
 const linkUrl = ref('')
+const linkError = ref<string | null>(null)
 const linkInputRef = ref<HTMLInputElement | null>(null)
 
 // ── 供父组件注入新引用（如 ChatWindow 发出的 cite） ──
@@ -433,31 +458,41 @@ defineExpose({ addRef })
 
 const LINK_RE = /^https?:\/\/[^\s/$.?#].[^\s]*$/i
 
-function startLinkInput() {
+function startLinkInput(initialUrl?: string) {
   showMenu.value = false
-  linkUrl.value = ''
+  linkUrl.value = initialUrl ?? ''
+  linkError.value = null
   showLinkInput.value = true
   nextTick(() => linkInputRef.value?.focus())
 }
 
 function confirmLink() {
   const url = linkUrl.value.trim()
-  if (!url) return
+  linkError.value = null
+  if (!url) {
+    linkError.value = '请输入有效链接'
+    return
+  }
   // 如果没有协议前缀，自动补 https://
   const normalized = /^https?:\/\//i.test(url) ? url : 'https://' + url
-  if (!LINK_RE.test(normalized)) return
+  if (!LINK_RE.test(normalized)) {
+    linkError.value = '请输入有效链接'
+    return
+  }
   try {
     const domain = new URL(normalized).hostname.replace(/^www\./, '')
     refs.value.push({ type: 'web_link', url: normalized, label: domain, domain })
     linkUrl.value = ''
+    linkError.value = null
     showLinkInput.value = false
   } catch {
-    // URL 解析失败，不做操作
+    linkError.value = '请输入有效链接'
   }
 }
 
 function cancelLink() {
   linkUrl.value = ''
+  linkError.value = null
   showLinkInput.value = false
 }
 
@@ -489,28 +524,26 @@ function onPaste(e: ClipboardEvent) {
   const text = e.clipboardData?.getData('text/plain')?.trim()
   if (!text) return
 
-  // 已有协议头 → 直接校验完整 URL
+  // 已有协议头 → 弹出链接输入条并预填充，等待用户确认
   if (/^https?:\/\//i.test(text)) {
     try {
       const url = new URL(text)
       if (['http:', 'https:'].includes(url.protocol) && url.hostname.includes('.')) {
         e.preventDefault()
-        const domain = url.hostname.replace(/^www\./, '')
-        refs.value.push({ type: 'web_link', url: text, label: domain, domain } as ParsedRef)
+        startLinkInput(text)
       }
     } catch { /* 走默认粘贴 */ }
     return
   }
 
-  // 无协议头 → 仅当看起来像域名时才补 https:// 并二次校验
+  // 无协议头 → 仅当看起来像域名时才补 https:// 并弹出链接输入条
   if (looksLikeHost(text)) {
     const normalized = 'https://' + text
     try {
       const url = new URL(normalized)
       if (['http:', 'https:'].includes(url.protocol)) {
         e.preventDefault()
-        const domain = url.hostname.replace(/^www\./, '')
-        refs.value.push({ type: 'web_link', url: normalized, label: domain, domain } as ParsedRef)
+        startLinkInput(normalized)
       }
     } catch { /* 走默认粘贴 */ }
   }
@@ -729,6 +762,9 @@ const noProvider = computed(() => chatStore.availableModels.length === 0)
 onMounted(loadSkills)
 onMounted(loadTools)
 onMounted(loadMacros)
+onMounted(() => {
+  document.addEventListener('keydown', onAddFileMenuKeydown)
+})
 
 function getFileName(fp: string): string {
   const parts = fp.replace(/\\/g, '/').split('/')
@@ -739,6 +775,88 @@ function toggleMenu() {
   if (disabled.value) return
   showMenu.value = !showMenu.value
 }
+
+function getAddFileMenuItems(): HTMLElement[] {
+  if (!addFileMenuRef.value) return []
+  return Array.from(addFileMenuRef.value.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+}
+
+function focusAddFileMenuItem(index: number) {
+  const items = getAddFileMenuItems()
+  const target = items[index]
+  if (target) target.focus()
+}
+
+function closeAddFileMenu(returnFocus = true) {
+  if (!showMenu.value) return
+  showMenu.value = false
+  if (returnFocus) {
+    nextTick(() => addFileButtonRef.value?.focus())
+  }
+}
+
+function onAddFileMenuKeydown(e: KeyboardEvent) {
+  if (!showMenu.value) return
+  switch (e.key) {
+    case 'Escape':
+      e.preventDefault()
+      closeAddFileMenu(true)
+      break
+    case 'Tab':
+      e.preventDefault()
+      closeAddFileMenu(true)
+      break
+    case 'ArrowDown':
+      e.preventDefault()
+      {
+        const items = getAddFileMenuItems()
+        const current = document.activeElement
+        const idx = current ? items.indexOf(current as HTMLElement) : -1
+        const next = (idx + 1) % items.length
+        focusAddFileMenuItem(next)
+      }
+      break
+    case 'ArrowUp':
+      e.preventDefault()
+      {
+        const items = getAddFileMenuItems()
+        const current = document.activeElement
+        const idx = current ? items.indexOf(current as HTMLElement) : -1
+        const prev = (idx - 1 + items.length) % items.length
+        focusAddFileMenuItem(prev)
+      }
+      break
+    case 'Home':
+      e.preventDefault()
+      focusAddFileMenuItem(0)
+      break
+    case 'End':
+      e.preventDefault()
+      {
+        const items = getAddFileMenuItems()
+        if (items.length > 0) focusAddFileMenuItem(items.length - 1)
+      }
+      break
+    case 'Enter':
+    case ' ':
+      e.preventDefault()
+      {
+        const current = document.activeElement as HTMLElement | null
+        if (current && current.getAttribute('role') === 'menuitem') {
+          current.click()
+        }
+      }
+      break
+  }
+}
+
+// 菜单打开时聚焦第一个 menuitem
+watch(showMenu, async (val) => {
+  if (val) {
+    await nextTick()
+    focusAddFileMenuItem(0)
+  }
+})
 
 async function pickFile() {
   showMenu.value = false
@@ -857,14 +975,7 @@ async function handleImageFile(file: File) {
     console.error('[ChatInput] image upload failed:', e)
     // 上传失败，显示用户可见的错误提示
     const errMsg = e instanceof Error ? e.message : '图片上传失败，请重试'
-      imageError.value = errMsg
-      if (_imageErrorTimer) clearTimeout(_imageErrorTimer)
-      _imageErrorTimer = setTimeout(() => {
-        if (_imageErrorTimer && imageError.value === errMsg) {
-          imageError.value = null
-          _imageErrorTimer = null
-        }
-      }, 5000)
+    showImageError(errMsg)
     // 通过 preview URL 定位条目移除
     const idx = refs.value.findIndex(r => r.type === 'image' && (r as ImageRef).preview === preview)
     if (idx !== -1) {
@@ -901,10 +1012,16 @@ async function onDrop(e: DragEvent) {
   dragCounter = 0
   const files = e.dataTransfer?.files
   if (!files) return
+  let hasNonImage = false
   for (const file of Array.from(files)) {
     if (file.type.startsWith('image/')) {
       await handleImageFile(file)
+    } else {
+      hasNonImage = true
     }
+  }
+  if (hasNonImage) {
+    showImageError('仅支持拖拽图片文件，其他文件请使用“选择文件”')
   }
 }
 
@@ -1048,6 +1165,7 @@ function onResizeEnd(e: PointerEvent) {
 		  _connectionErrorTimer = null
 		  if (_imageErrorTimer) clearTimeout(_imageErrorTimer)
 		  _imageErrorTimer = null
+		  document.removeEventListener('keydown', onAddFileMenuKeydown)
 		})
 	</script>
 
@@ -1379,15 +1497,21 @@ function onResizeEnd(e: PointerEvent) {
 }
 
 /* 链接输入条 */
+.link-input-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  max-width: 768px;
+  margin: 0 auto;
+  padding: 0 0 8px 0;
+}
 .link-input-bar {
   display: flex;
   width: 100%;
   min-width: 0;
   align-items: center;
   gap: 6px;
-  padding: 0 0 8px 0;
-  max-width: 768px;
-  margin: 0 auto;
 }
 .link-input {
   flex: 1;
@@ -1403,6 +1527,15 @@ function onResizeEnd(e: PointerEvent) {
 }
 .link-input:focus {
   border-color: var(--accent);
+}
+.link-input.is-error,
+.link-input.is-error:focus {
+  border-color: var(--status-error);
+}
+.link-input-error {
+  color: var(--status-error);
+  font-size: 0.8em;
+  padding: 4px 0 0 2px;
 }
 .link-input::placeholder {
 	  color: var(--text-tertiary);
