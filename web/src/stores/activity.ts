@@ -1,8 +1,8 @@
 // web/src/stores/activity.ts
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { api, getToken } from '@/api'
-import { getBackendOrigin } from '@/utils/env'
+import { api, getToken, ensureTokenLoaded } from '@/api'
+import { getBackendOrigin, tauriFetch } from '@/utils/env'
 import type { ActivityRecord, ActivityStatsResponse } from '@/types'
 
 /**
@@ -47,6 +47,9 @@ export const useActivityStore = defineStore('activity', () => {
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let pollTimer: ReturnType<typeof setInterval> | null = null
   let _intentionalClose = false
+  // 重连退避间隔（ms）。必须是 store 级变量：若作为 _onDisconnect 局部变量，
+  // 每次断开都会被重置为 1000，指数退避失效、重连永远间隔 1s。连接成功时重置。
+  let reconnectDelay = 1000
 
   /** 连接三态：'connecting' | 'online' | 'offline'。供 UI 显示不同视觉反馈。 */
   const connectionState = computed<'connecting' | 'online' | 'offline'>(() => {
@@ -111,13 +114,26 @@ export const useActivityStore = defineStore('activity', () => {
 
     try {
       const base = getBackendOrigin()
-      const token = getToken()
       abortController = new AbortController()
 
-      const response = await fetch(`${base}/api/activity/stream`, {
-        headers: token ? { 'X-Maxma-Token': token } : undefined,
+      // 15s 超时：覆盖 ensureTokenLoaded + fetch 全过程
+      // ensureTokenLoaded 首次可能需 6s+（3 次重试），fetch 需 ~1s，合计 ~8-10s
+      const timeoutId = setTimeout(() => abortController?.abort(), 15000)
+
+      // 确保 Token 已加载
+      await ensureTokenLoaded()
+
+      // 再次读取 token（ensureTokenLoaded 可能更新了它）
+      const tokenToUse = getToken()
+
+      // 必须用 tauriFetch 而非原生 fetch：Tauri 桌面端页面 origin 为 tauri://localhost，
+      // WebView2 禁止其向 http:// 发起原生 fetch，会导致 SSE 连接永远失败、
+      // 状态在「连接中/离线」间反复横跳。tauriFetch 在浏览器模式下自动回退为原生 fetch。
+      const response = await tauriFetch(`${base}/api/activity/stream`, {
+        headers: tokenToUse ? { 'X-Maxma-Token': tokenToUse } : undefined,
         signal: abortController.signal,
       })
+      clearTimeout(timeoutId)
 
       if (!response.ok) {
         throw new Error(`SSE connection failed: ${response.status}`)
@@ -130,6 +146,7 @@ export const useActivityStore = defineStore('activity', () => {
 
       connected.value = true
       connecting.value = false
+      reconnectDelay = 1000  // 连接成功，重置退避间隔
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
 
       _resetSSEBuffer()
@@ -145,7 +162,13 @@ export const useActivityStore = defineStore('activity', () => {
         },
       )
     } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') return
+      // 超时 abort = 连接失败，走降级轮询；主动 stopStream 的 abort 静默忽略
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        if (_intentionalClose) return
+        // 超时触发：走降级
+        _onDisconnect()
+        return
+      }
       if (_intentionalClose) return
       _onDisconnect()
     }
@@ -161,8 +184,8 @@ export const useActivityStore = defineStore('activity', () => {
       pollTimer = setInterval(() => fetchRecent(100), 5000)
     }
 
-    // 尝试重连（指数退避：1s → 2s → 4s → 8s，最长 30s）
-    let delay = 1000
+    // 尝试重连（指数退避：1s → 2s → 4s → 8s，最长 30s）。
+    // reconnectDelay 为 store 级变量，跨多次断开持续递增，连接成功后重置。
     function tryReconnect() {
       if (_intentionalClose) return
       if (reconnectTimer) clearTimeout(reconnectTimer)
@@ -171,8 +194,8 @@ export const useActivityStore = defineStore('activity', () => {
         // 如果轮询还在运行，先清理
         if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
         _connect()
-      }, delay)
-      delay = Math.min(delay * 2, 30000)
+      }, reconnectDelay)
+      reconnectDelay = Math.min(reconnectDelay * 2, 30000)
     }
     tryReconnect()
   }
