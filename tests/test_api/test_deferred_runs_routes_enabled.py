@@ -192,27 +192,15 @@ class TestEnabledRoutes:
         resp = client.post("/sessions/sess1/deferred-runs/r1/cancel")
         assert resp.status_code == 404
 
-    def test_get_audit(self, enabled_app, monkeypatch):
+    def test_get_audit(self, enabled_app):
         client, _, _ = enabled_app
-        # Provide a fake read_subagent_run_events via the agent.audit_log module
-        import sys
-        fake_mod = type(sys)("agent.audit_log")
-        fake_mod.read_subagent_run_events = lambda run_id: [{"e": "created"}]
-        monkeypatch.setitem(sys.modules, "agent.audit_log", fake_mod)
+        # audit_log 模块已随 LangGraph 移除，审计由 OMP sidecar 接管；
+        # 端点保留以兼容前端调用，事件列表恒为空。
         resp = client.get("/sessions/sess1/deferred-runs/r1/audit")
         assert resp.status_code == 200
         body = resp.json()
         assert body["run_id"] == "r1"
-        assert body["events"] == [{"e": "created"}]
-
-    def test_get_audit_import_error_returns_empty(self, enabled_app, monkeypatch):
-        client, _, _ = enabled_app
-        # Force ImportError by setting module to None (import of None raises ImportError)
-        import sys
-        monkeypatch.setitem(sys.modules, "agent.audit_log", None)
-        resp = client.get("/sessions/sess1/deferred-runs/r1/audit")
-        assert resp.status_code == 200
-        assert resp.json()["events"] == []
+        assert body["events"] == []
 
     def test_get_audit_run_not_found(self, enabled_app):
         client, _, _ = enabled_app

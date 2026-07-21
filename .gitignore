@@ -44,12 +44,18 @@ web/dist/
 # Bun sidecar dependencies
 bun-sidecar/node_modules/
 
+# 根目录散落的 node_modules（Vite 缓存等，正常应在 web/ 下）
+/node_modules/
+
 # OS
 Thumbs.db
 .DS_Store
 
 # Claude Code
 .claude/
+
+# superpowers skill 临时会话状态
+.superpowers/
 
 # 用户固定会话（Const Session）持久化数据
 api/data/const-sessions/
@@ -127,6 +133,7 @@ checkpoints.sqlite-wal
 # 临时测试/调试输出文件
 pytest_*.txt
 pytest_*.xml
+pytest_*.log
 stderr.log
 stdout.log
 test_output.txt

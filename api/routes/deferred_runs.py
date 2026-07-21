@@ -116,10 +116,6 @@ async def cancel_deferred_run(session_id: str, run_id: str, request: Request):
 async def get_deferred_run_audit(session_id: str, run_id: str, request: Request):
     """Read a run's redacted lifecycle, scoped to its live parent session."""
     _, run = await _get_parent_run(request, session_id, run_id)
-    # audit_log module removed — OMP replaces audit
-    try:
-        from agent.audit_log import read_subagent_run_events
-        events = read_subagent_run_events(run.run_id)
-    except ImportError:
-        events = []
-    return {"run_id": run.run_id, "events": events}
+    # audit_log 模块已随 LangGraph 移除，审计由 OMP sidecar 接管。
+    # 此端点保留以兼容前端调用，事件列表恒为空。
+    return {"run_id": run.run_id, "events": []}

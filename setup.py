@@ -166,9 +166,6 @@ def setup_provider():
     import urllib.request
     from urllib.parse import urlparse
 
-    from api.providers import ProviderConfig
-    from api.providers.store import ProviderConfigStore
-
     print()
     print("  LLM 提供商是对话功能的基础。")
     print("  如果暂时跳过，之后可以随时在网页端 /providers 页面配置。")
@@ -236,20 +233,54 @@ def setup_provider():
     if not provider_id:
         provider_id = "custom-provider"
 
-    # 写入 providers.yaml。复用正式配置存储，确保 API key 落盘前加密。
-    config = ProviderConfig(
-        id=provider_id,
-        provider_type="openai",
-        label=label,
-        api_key=api_key,
-        base_url=base_url,
-        models=models,
-        enabled=True,
-        context_window=256000,
+    # 写入 providers.yaml。复用后端正式配置存储（自动加密 api_key）。
+    # setup.py 运行在系统解释器，而后端依赖（fastapi/cryptography 等）装在 .venv，
+    # 因此通过 .venv 解释器子进程完成保存，避免系统环境缺依赖导致崩溃。
+    provider = {
+        "id": provider_id,
+        "provider_type": "openai",
+        "label": label,
+        "api_key": api_key,
+        "base_url": base_url,
+        "models": models,
+        "enabled": True,
+        "context_window": 256000,
+    }
+    save_script = (
+        "import sys, json\n"
+        "from api.routes.providers import (\n"
+        "    _load_providers, _save_providers, _find_provider, _encrypt_api_key,\n"
+        ")\n"
+        "from api.yaml_store import yaml_file_lock\n"
+        "from app_paths import PROVIDERS_YAML_PATH\n"
+        "data = json.loads(sys.stdin.read())\n"
+        "with yaml_file_lock(PROVIDERS_YAML_PATH):\n"
+        "    items = _load_providers()\n"
+        "    if _find_provider(items, data['id']) is None:\n"
+        "        data['api_key'] = _encrypt_api_key(data['api_key'])\n"
+        "        items.append(data)\n"
+        "        _save_providers(items)\n"
+        "print('SAVED')\n"
     )
-    ProviderConfigStore(PROVIDERS_YAML_PATH).save(config)
-
-    ok(f"提供商「{label}」已保存至 {PROVIDERS_YAML_PATH}")
+    venv_py = os.path.join(PROJECT_ROOT, ".venv", "Scripts", "python.exe")
+    try:
+        r = subprocess.run(
+            [venv_py, "-c", save_script],
+            cwd=PROJECT_ROOT,
+            input=json.dumps(provider, ensure_ascii=False),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        if r.returncode == 0 and "SAVED" in r.stdout:
+            ok(f"提供商「{label}」已保存至 {PROVIDERS_YAML_PATH}")
+        else:
+            detail = (r.stderr or r.stdout or "").strip()
+            print(f"  [!] 自动保存未成功：{detail}")
+            skip("启动后可在网页端 /providers 页面手动添加该提供商")
+    except Exception as e:
+        print(f"  [!] 自动保存未成功：{e}")
+        skip("启动后可在网页端 /providers 页面手动添加该提供商")
     return True
 
 

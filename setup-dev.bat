@@ -46,7 +46,7 @@ if errorlevel 1 (
 echo.
 
 echo [4/4] Running tests to verify environment ...
-.venv\Scripts\python.exe -m pytest tests -p no:langsmith_plugin -q
+.venv\Scripts\python.exe -m pytest tests -q
 if errorlevel 1 (
     echo [ERR] 测试验证失败，请检查上方错误信息。
     pause
@@ -58,7 +58,7 @@ echo ========================================
 echo   开发环境配置完成！
 echo   Python: .venv\Scripts\python.exe
 echo   运行测试: .venv\Scripts\python.exe -m pytest tests
-echo   启动项目: .venv\Scripts\python.exe main.py web
+echo   启动项目: .venv\Scripts\python.exe main.py
 echo ========================================
 echo.
 pause

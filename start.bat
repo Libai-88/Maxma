@@ -38,7 +38,7 @@ if not exist "web\node_modules" (
 )
 
 echo [1/5] Starting backend (FastAPI :%MAXMA_API_PORT%) ...
-start "MaxmaHere Backend" /d "%~dp0" cmd /k ".venv\Scripts\python main.py web"
+start "MaxmaHere Backend" /d "%~dp0" cmd /k ".venv\Scripts\python main.py"
 
 echo [2/5] Waiting for backend ...
 set "READY=0"
