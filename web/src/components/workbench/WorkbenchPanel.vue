@@ -212,7 +212,8 @@ onBeforeUnmount(() => {
   font-size: 13px;
   cursor: pointer;
   border-radius: 6px;
-  transition: all 0.15s;
+  transition: background 0.15s var(--ease-out),
+              color 0.15s var(--ease-out);
   display: flex;
   align-items: center;
   gap: 4px;

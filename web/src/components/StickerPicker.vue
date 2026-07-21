@@ -596,7 +596,8 @@ function dedupeStickersByPath(stickers: Sticker[]): Sticker[] {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s;
+  transition: background 0.15s var(--ease-out),
+              color 0.15s var(--ease-out);
 }
 
 .upload-btn:hover {
@@ -649,7 +650,8 @@ function dedupeStickersByPath(stickers: Sticker[]): Sticker[] {
   font-size: 0.85em;
   cursor: pointer;
   border-radius: 6px;
-  transition: all 0.2s;
+  transition: background 0.2s var(--ease-out),
+              color 0.2s var(--ease-out);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -774,7 +776,8 @@ function dedupeStickersByPath(stickers: Sticker[]): Sticker[] {
   justify-content: center;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background 0.15s var(--ease-out),
+              transform 0.15s var(--ease-out);
   background: var(--bg-secondary);
 }
 

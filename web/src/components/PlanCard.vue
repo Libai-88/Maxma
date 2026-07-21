@@ -383,7 +383,9 @@ function submitEdit() {
   font-weight: 600;
   cursor: pointer;
   font-family: inherit;
-  transition: all 0.15s;
+  transition: border-color 0.15s var(--ease-out),
+              background 0.15s var(--ease-out),
+              color 0.15s var(--ease-out);
 }
 
 .plan-btn.approve {

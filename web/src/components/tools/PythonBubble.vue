@@ -210,7 +210,8 @@ function copyCode() {
   padding: 2px 8px;
   cursor: pointer;
   font-family: inherit;
-  transition: all 0.12s;
+  transition: color 0.12s var(--ease-out),
+              border-color 0.12s var(--ease-out);
 }
 
 .py-copy-btn:hover {
@@ -348,7 +349,9 @@ function copyCode() {
   font-weight: 500;
   cursor: pointer;
   font-family: inherit;
-  transition: all 0.15s;
+  transition: background 0.15s var(--ease-out),
+              border-color 0.15s var(--ease-out),
+              color 0.15s var(--ease-out);
   border: 1px solid transparent;
 }
 

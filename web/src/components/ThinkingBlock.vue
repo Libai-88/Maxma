@@ -47,15 +47,23 @@ function previewSticker(sticker: StickerSegment) {
 
 const STICKER_PLACEHOLDER_RE = /\[表情包(?::[^\]]+)?\]/g
 
+/** 模型思考开头可能出现的角色扮演元标签，对用户无意义，直接剥离 */
+const THINKING_LABELS_RE = /^\s*(?:Vibe|Sparks|Reflections|Will)\s*:.*$/gm
+
+function stripThinkingLabels(text: string): string {
+  return text.replace(THINKING_LABELS_RE, '')
+}
+
 /** 流式阶段隐藏原始 [表情包:xxx] 占位符，避免用户看到明文 */
 const streamingText = computed(() => {
   const text = props.block.tokens
   if (!text) return ''
-  return text.replace(STICKER_PLACEHOLDER_RE, '')
+  return stripThinkingLabels(text.replace(STICKER_PLACEHOLDER_RE, ''))
 })
 
 /** 解析内容中的 <sticker:category/filename.webp> 标记，分段返回 */
-const segments = useStickerSegments(computed(() => props.block.tokens))
+const cleanedTokens = computed(() => stripThinkingLabels(props.block.tokens ?? ''))
+const segments = useStickerSegments(cleanedTokens)
 const stickerSegments = computed(() => segments.value.filter((seg): seg is StickerSegment => seg.type === 'sticker'))
 </script>
 
@@ -66,7 +74,9 @@ const stickerSegments = computed(() => segments.value.filter((seg): seg is Stick
   border-radius: var(--radius);
   background: var(--bg-secondary);
   overflow: hidden;
-  transition: all 0.4s ease;
+  transition: background 0.25s var(--ease-out),
+              border 0.25s var(--ease-out),
+              border-radius 0.25s var(--ease-out);
 }
 .thinking-block.done {
   background: var(--bg-card);
@@ -98,7 +108,9 @@ const stickerSegments = computed(() => segments.value.filter((seg): seg is Stick
   align-items: center;
   gap: 6px;
   max-height: 50px;
-  transition: all 0.4s ease;
+  transition: opacity 0.25s var(--ease-out),
+              max-height 0.25s var(--ease-out),
+              padding 0.25s var(--ease-out);
 }
 .thinking-label {
   display: inline-flex;
@@ -116,7 +128,8 @@ const stickerSegments = computed(() => segments.value.filter((seg): seg is Stick
 .thinking-body {
   padding: 8px 14px 12px;
   border-top: 1px solid var(--border);
-  transition: all 0.4s ease;
+  transition: border-top 0.25s var(--ease-out),
+              padding 0.25s var(--ease-out);
 }
 .thinking-content {
   color: var(--text-primary);

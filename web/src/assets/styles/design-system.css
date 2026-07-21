@@ -42,13 +42,15 @@
   line-height: 1;
   white-space: nowrap;
 }
-@media (prefers-reduced-motion: no-preference) {
+@media (prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine) {
   .ds-btn:hover {
     transform: translateY(-2px);
     box-shadow:
       0 4px 16px var(--shadow-color),
       0 2px 4px var(--shadow-color);
   }
+}
+@media (prefers-reduced-motion: no-preference) {
   .ds-btn:active {
     transform: scale(0.96);
     box-shadow:
@@ -138,11 +140,13 @@
   box-shadow: var(--shadow-xs);
   transition: border-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
 }
-.ds-card:hover {
+@media (hover: hover) and (pointer: fine) {
+  .ds-card:hover {
 	  border-color: var(--border-strong, color-mix(in srgb, var(--accent) 25%, var(--border)));
 	  box-shadow: var(--shadow-md);
 	  background: var(--surface-raised);
 	}
+}
 
 /* ── 基础徽章 ── */
 .ds-badge {

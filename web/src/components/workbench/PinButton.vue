@@ -39,7 +39,8 @@ function handleClick() {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s;
+  transition: background 0.15s var(--ease-out),
+              color 0.15s var(--ease-out);
 }
 
 .pin-btn:hover {

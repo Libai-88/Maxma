@@ -225,7 +225,7 @@ import { useStickerSegments, type StickerSegment } from '@/composables/useSticke
 import { useChatInputInjected } from '@/composables/useChatInput'
 import type { FileRef, FolderRef, ParsedRef, ImageRef } from '@/utils/references'
 import { REF_CHIP_CONFIG } from '@/utils/references'
-import { getApiBase, isTauri, tauriFetch } from '@/utils/env'
+import { isTauri } from '@/utils/env'
 import type { ThinkPathId } from '@/utils/thinkPath'
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import type { Sticker } from '@/components/StickerPicker.vue'
@@ -300,7 +300,6 @@ watchEffect(() => {
 }, { flush: 'post' })
 
 // ── 表情选择器状态 ──
-const showStickerPicker = ref(false)
 const contextMenuVisible = ref(false)
 const contextMenuPosition = ref({ x: 0, y: 0 })
 const contextMenuSticker = ref<Sticker | null>(null)
@@ -310,22 +309,6 @@ const stickerSegments = computed(() =>
   parsedInputSegments.value.filter((seg): seg is StickerSegment => seg.type === 'sticker')
 )
 
-  function toggleStickerPicker() {
-    showStickerPicker.value = !showStickerPicker.value
-  }
-  
-  async function onStickerSelect(sticker: Sticker) {
-      // 直接用用户选择的具体表情，不再调 random API
-      const stickerTag = `<sticker:${sticker.path}>`
-      text.value += stickerTag
-      recordStickerUsage(sticker)
-      showStickerPicker.value = false
-      nextTick(() => {
-        textareaRef.value?.focus()
-        autoResize()
-      })
-    }
-
 function removeStickerSegment(sticker: StickerSegment) {
   const currentSticker = stickerSegments.value.find(seg => seg.occurrenceKey === sticker.occurrenceKey) || sticker
   text.value = text.value.slice(0, currentSticker.start) + text.value.slice(currentSticker.end)
@@ -333,27 +316,6 @@ function removeStickerSegment(sticker: StickerSegment) {
     textareaRef.value?.focus()
     autoResize()
   })
-}
-
-async function recordStickerUsage(sticker: Sticker) {
-  try {
-    await tauriFetch(`${getApiBase()}/stickers/usage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        category: sticker.category,
-        filename: sticker.filename
-      })
-    })
-  } catch (err) {
-    console.warn('[ChatInput] 记录表情使用失败:', err)
-  }
-}
-
-function onStickerContextMenu(event: MouseEvent, sticker: Sticker) {
-  contextMenuSticker.value = sticker
-  contextMenuPosition.value = { x: event.clientX, y: event.clientY }
-  contextMenuVisible.value = true
 }
 
 function onContextMenuRefresh() {
@@ -1812,7 +1774,9 @@ function onResizeEnd(e: PointerEvent) {
   border-radius: 50%;
   font-size: 1em;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+              background-color 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
   font-family: inherit;
   display: flex;
   align-items: center;
@@ -1823,11 +1787,10 @@ function onResizeEnd(e: PointerEvent) {
   background: var(--accent);
   color: #fff;
 }
-@media (pointer: fine) {
-  /* pointer:fine gate */
+@media (hover: hover) and (pointer: fine) {
   .btn-send:hover:not(:disabled) {
     background: var(--accent-hover, var(--accent));
-    transform: scale(1.08);
+    transform: scale(1.04);
     box-shadow: var(--shadow-md);
   }
 }

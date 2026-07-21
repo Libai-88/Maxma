@@ -147,7 +147,9 @@ async function copyDiagnostic() {
   color: var(--text-secondary);
   font-size: 12px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: border-color 0.15s var(--ease-out),
+              background 0.15s var(--ease-out),
+              color 0.15s var(--ease-out);
 }
 .error-card__btn:hover {
   border-color: var(--accent);

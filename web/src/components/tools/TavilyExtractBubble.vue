@@ -154,7 +154,9 @@ const fallback = computed(() => props.toolCall.output
   background: #fff;
   color: #555;
   cursor: pointer;
-  transition: all .15s;
+  transition: border-color 0.15s var(--ease-out),
+              color 0.15s var(--ease-out),
+              background 0.15s var(--ease-out);
   max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;

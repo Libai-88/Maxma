@@ -527,7 +527,8 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s;
+  transition: border-color 0.15s var(--ease-out),
+              color 0.15s var(--ease-out);
   margin-left: 4px;
 }
 .btn-create-persona:hover {
@@ -599,7 +600,9 @@ onMounted(async () => {
   cursor: pointer;
   border: 1px solid var(--border);
   font-family: inherit;
-  transition: all 0.15s;
+  transition: border-color 0.15s var(--ease-out),
+              background 0.15s var(--ease-out),
+              color 0.15s var(--ease-out);
 }
 .create-btn.cancel {
   background: transparent;

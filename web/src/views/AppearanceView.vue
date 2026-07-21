@@ -137,7 +137,9 @@ const { enabled: paperTexture, toggle: togglePaperTexture } = usePaperTexture()
   border-radius: var(--radius-md);
   background: transparent;
   cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-out);
+  transition: border-color var(--duration-fast) var(--ease-out),
+              background var(--duration-fast) var(--ease-out),
+              transform var(--duration-fast) var(--ease-out);
 }
 .theme-card:hover {
   background: var(--overlay-subtle, rgba(0, 0, 0, 0.03));
@@ -210,7 +212,9 @@ const { enabled: paperTexture, toggle: togglePaperTexture } = usePaperTexture()
   color: var(--text-secondary);
   font-size: 0.8rem;
   cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-out);
+  transition: border-color var(--duration-fast) var(--ease-out),
+              background var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
   min-width: 48px;
 }
 .toggle-btn.on {

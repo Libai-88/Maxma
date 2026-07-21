@@ -1012,7 +1012,8 @@ function logAction(payload: { action: string; data?: unknown }) {
   color: var(--text-secondary);
   font-size: 13px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: border-color 0.15s var(--ease-out),
+              color 0.15s var(--ease-out);
   font-family: inherit;
 }
 

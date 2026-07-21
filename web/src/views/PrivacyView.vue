@@ -489,7 +489,9 @@ onMounted(() => {
   color: var(--text-primary);
   font-size: 13px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: border-color 0.15s var(--ease-out),
+              background 0.15s var(--ease-out),
+              color 0.15s var(--ease-out);
 }
 .btn-action:hover:not(:disabled) { border-color: var(--accent); }
 .btn-action:disabled { opacity: 0.5; cursor: not-allowed; }

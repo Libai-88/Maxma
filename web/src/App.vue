@@ -339,7 +339,7 @@ html, body {
   flex-shrink: 0;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
-@media (prefers-reduced-motion: no-preference) {
+@media (prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine) {
   .logo:hover .logo-img {
     transform: scale(1.06);
     box-shadow: 0 0 0 2px var(--accent);
@@ -361,7 +361,7 @@ html, body {
   object-fit: cover;
   transition: transform 0.2s ease;
 }
-@media (prefers-reduced-motion: no-preference) {
+@media (prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine) {
   .sidebar.collapsed .logo-favicon:hover {
     transform: scale(1.1);
   }
@@ -451,7 +451,12 @@ html, body {
 /* ── Collapsible sidebar ── */
 .sidebar {
   position: relative;
-  transition: width 0.25s ease;
+  will-change: width;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sidebar {
+    transition: width 0.25s var(--ease-out);
+  }
 }
 .sidebar.collapsed {
   width: 58px;

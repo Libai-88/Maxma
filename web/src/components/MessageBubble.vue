@@ -128,31 +128,20 @@ watch(() => props.content, () => {
 }
 .message-row.user {
   justify-content: flex-end;
-  animation: userBubbleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --row-slide-x: 12px;
 }
 .message-row.assistant {
   justify-content: flex-start;
-  animation: assistantBubbleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --row-slide-x: -12px;
 }
-
-@keyframes userBubbleIn {
-  from {
+.message-row {
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 0.15s var(--ease-out),
+              transform 0.15s var(--ease-out);
+  @starting-style {
     opacity: 0;
-    transform: translateX(16px) scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0) scale(1);
-  }
-}
-@keyframes assistantBubbleIn {
-  from {
-    opacity: 0;
-    transform: translateX(-16px) scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0) scale(1);
+    transform: translateX(var(--row-slide-x, 12px));
   }
 }
 
@@ -213,7 +202,7 @@ watch(() => props.content, () => {
 /* ── 大输出折叠 ── */
 .bubble-content {
   overflow: hidden;
-  transition: max-height 0.35s cubic-bezier(0, 0.3, 0, 1);
+  transition: max-height 0.25s var(--ease-out);
 }
 .bubble-content.collapsed {
   max-height: 400px;
@@ -242,7 +231,8 @@ watch(() => props.content, () => {
   border: 1px solid var(--border);
   border-radius: 12px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: color 0.2s var(--ease-out),
+              border-color 0.2s var(--ease-out);
 }
 .collapse-toggle:hover {
   color: var(--text-primary);
@@ -288,9 +278,37 @@ watch(() => props.content, () => {
   100% { box-shadow: 0 0 0 6px transparent; }
 }
 
+/* ── 用户气泡内文字修正 ── */
+/* markdown.css 全局设置 .markdown-body { color: var(--text-primary) }，
+   会覆盖 .bubble.user 的 color: var(--user-bubble-text)，
+   导致深色背景主题下文字对比度不足。 */
+.bubble.user :deep(.markdown-body) {
+  color: var(--user-bubble-text);
+}
+.bubble.user :deep(.markdown-body h6) {
+  color: color-mix(in srgb, var(--user-bubble-text) 65%, transparent);
+}
+
+/* 已读/送达状态在用户气泡内应使用 --user-bubble-text 派生色，确保可见 */
+.bubble.user .read-status {
+  color: color-mix(in srgb, var(--user-bubble-text) 58%, transparent);
+}
+.bubble.user .read-status .read-dot {
+  background: color-mix(in srgb, var(--user-bubble-text) 58%, transparent);
+}
+.bubble.user .read-status.read .read-dot {
+  background: var(--status-info);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .message-row {
     animation: none;
+  }
+
+  .message-row {
+    transition: none;
+    opacity: 1;
+    transform: none;
   }
 
   .bubble {

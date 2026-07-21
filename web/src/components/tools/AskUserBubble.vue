@@ -357,7 +357,8 @@ function submitConfirm() {
   border: 1px solid var(--border);
   border-radius: 6px;
   cursor: pointer;
-  transition: all 0.12s;
+  transition: border-color 0.12s var(--ease-out),
+              background 0.12s var(--ease-out);
   background: var(--bg-primary);
 }
 .choice-option:hover {
