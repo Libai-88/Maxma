@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from api.pi_bridge.rpc_client import JsonRpcError
 from api.pi_bridge.session_adapter import SessionMap
+from api.activity_hub import record as record_activity
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 logger = logging.getLogger(__name__)
@@ -40,10 +41,21 @@ async def _try_sidecar_compact(session_id: str, request: Request) -> dict:
             return {"compressed": False, "method": "unavailable", "detail": "未找到对应 sidecar 会话"}
 
         result = await client.call("compact", {"session_id": sidecar_sid})
+        removed = result.get("removed_count")
+        record_activity(
+            "compression", "compact",
+            session_id=session_id,
+            message=f"上下文压缩完成，移除 {removed} 条历史消息",
+            payload={
+                "method": "sidecar",
+                "removed_count": removed,
+                "compressed": result.get("compressed", True),
+            },
+        )
         return {
             "compressed": result.get("compressed", True),
             "method": "sidecar",
-            "removed_count": result.get("removed_count"),
+            "removed_count": removed,
             "detail": result.get("detail", "压缩完成"),
         }
     except JsonRpcError as e:

@@ -21,6 +21,7 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from api.pi_bridge.rpc_client import JsonRpcClient
+from api.activity_hub import record as record_activity
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +148,10 @@ class SidecarManager:
             logger.info(
                 "Sidecar started (pid=%s)", self._process.pid
             )
+            record_activity(
+                "system", "sidecar_start",
+                message=f"OMP sidecar 已启动 (pid={self._process.pid})",
+            )
 
             # Forward stderr in the background
             self._stderr_task = asyncio.create_task(
@@ -202,6 +207,7 @@ class SidecarManager:
             proc.terminate()  # SIGTERM on Unix, WM_CLOSE on Windows
             await asyncio.wait_for(proc.wait(), timeout=5)
             logger.info("Sidecar (pid=%s) stopped gracefully", proc.pid)
+            record_activity("system", "sidecar_stop", message="OMP sidecar 已停止")
         except asyncio.TimeoutError:
             logger.warning(
                 "Sidecar (pid=%s) did not exit in 5s, killing", proc.pid
@@ -209,6 +215,11 @@ class SidecarManager:
             proc.kill()  # TerminateProcess on Windows, SIGKILL on Unix
             await proc.wait()
             logger.info("Sidecar (pid=%s) killed", proc.pid)
+            record_activity(
+                "system", "sidecar_stop",
+                level="warn",
+                message="OMP sidecar 未按时退出，已被强制终止",
+            )
         except ProcessLookupError:
             logger.debug(
                 "Sidecar (pid=%s) already exited", proc.pid

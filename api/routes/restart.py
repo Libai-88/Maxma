@@ -7,6 +7,8 @@ import sys
 
 from fastapi import APIRouter, HTTPException
 
+from api.activity_hub import record as record_activity
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -22,6 +24,8 @@ async def restart_server():
     开发模式下没有 Tauri sidecar 监控，因此保留 Python + main.py 自重启。
     前端检测到服务恢复后应自动刷新页面。
     """
+    record_activity("system", "restart", message="后端服务重启")
+
     if getattr(sys, "frozen", False):
         # 桌面模式：Tauri sidecar 监控会重新拉起进程，只需退出
         sys.exit(0)

@@ -5,11 +5,14 @@
 """
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field, asdict
 from typing import Any, Optional
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -143,3 +146,31 @@ class ActivityHub:
 
 # 模块级单例快捷引用
 activity_hub = ActivityHub.get()
+
+
+# message 字段最大长度 — 防止超长文本（如完整 AI 回复、大段工具输出）撑爆内存环形缓冲
+_MAX_MESSAGE_LEN = 120
+
+
+def record(category: str, event_type: str, **kwargs: Any) -> None:
+    """[遥测安全] 记录一条活动事件 —— 所有事件生产端统一的埋点入口。
+
+    对 activity_hub.add() 的安全包装：
+    - 吞掉所有异常，确保遥测失败绝不影响主业务流程（聊天转发、会话管理等）；
+    - message 字段超过 _MAX_MESSAGE_LEN 时自动截断，避免大文本占用内存缓冲。
+
+    Args:
+        category: 事件类别（turn / tool / plan / compression / approval / memory / system）
+        event_type: 事件子类型（如 turn_start / tool_end / compact / startup）
+        **kwargs: 透传给 ActivityHub.add 的其余字段（session_id / turn_id /
+            tool_name / level / message / payload）
+    """
+    try:
+        msg = kwargs.get("message")
+        if isinstance(msg, str) and len(msg) > _MAX_MESSAGE_LEN:
+            kwargs["message"] = msg[:_MAX_MESSAGE_LEN] + "…"
+        activity_hub.add(category, event_type, **kwargs)
+    except Exception:
+        _logger.debug(
+            "[activity] record failed: %s/%s", category, event_type, exc_info=True
+        )

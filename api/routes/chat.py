@@ -12,6 +12,7 @@ import uuid
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from agent.prompts import build_system_prompt
+from api.activity_hub import record as record_activity
 from api.routes.providers import _decrypt_api_key, _find_provider, _load_providers
 from api.const_session_store import save_const_session
 from api.middleware.rate_limit import get_ws_rate_limiter
@@ -204,19 +205,44 @@ async def _stream_turn_sidecar(
                         {"type": "token", "payload": {"token": payload.get("token", "")}}
                     )
                 elif evt_type == "tool_start":
+                    record_activity(
+                        "tool", "tool_start",
+                        session_id=session.session_id,
+                        tool_name=payload.get("tool_name", ""),
+                        message="调用工具",
+                    )
                     await ws.send_json(
                         {"type": "tool_start", "payload": {"tool_name": payload.get("tool_name", ""), "input": payload.get("input", "")}}
                     )
                 elif evt_type == "tool_end":
+                    record_activity(
+                        "tool", "tool_end",
+                        session_id=session.session_id,
+                        tool_name=payload.get("tool_name", ""),
+                        message="工具执行完成",
+                    )
                     await ws.send_json(
                         {"type": "tool_end", "payload": {"tool_name": payload.get("tool_name", ""), "output": payload.get("output", ""), "elapsed": payload.get("elapsed", 0)}}
                     )
                 elif evt_type == "tool_error":
+                    record_activity(
+                        "tool", "tool_error",
+                        session_id=session.session_id,
+                        tool_name=payload.get("tool_name", ""),
+                        level="error",
+                        message=str(payload.get("error", "")) or "工具执行出错",
+                    )
                     await ws.send_json(
                         {"type": "tool_error", "payload": {"tool_name": payload.get("tool_name", ""), "error": payload.get("error", "")}}
                     )
                 elif evt_type == "error":
                     logger.warning("[sidecar] Error for session %s: %s", sidecar_sid[:8], payload.get("message", payload))
+                    record_activity(
+                        "turn", "error",
+                        session_id=session.session_id,
+                        level="error",
+                        message=str(payload.get("message", "")) or "Sidecar error",
+                    )
                     await ws.send_json(
                         {"type": "error", "payload": {"code": payload.get("code", "SIDECAR_ERROR"), "message": payload.get("message", "Sidecar error")}}
                     )
@@ -247,6 +273,11 @@ async def _stream_turn_sidecar(
     unsubs.append(client.on("done", _on_done))
 
     # 4. Execute prompt via sidecar
+    record_activity(
+        "turn", "turn_start",
+        session_id=session.session_id,
+        message=user_message,
+    )
     try:
         await client.call(
             "prompt",
@@ -399,6 +430,13 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             final_answer = task.result()
         except Exception:
             logger.exception("[ws] Turn task failed for session %s", session_id[:8])
+            record_activity(
+                "turn", "turn_error",
+                session_id=session.session_id,
+                turn_id=_turn_id or "",
+                level="error",
+                message="对话轮次处理失败",
+            )
             try:
                 await ws.send_json(
                     {
@@ -442,19 +480,27 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             if session.is_const:
                 await _save_const_session(session, final_answer)
 
+        context_usage = await _calculate_context_usage(
+            session,
+            sp,
+            max_tokens=int(_turn_model_config.get("context_window") or 128000),
+            model_name=str(_turn_model_config.get("model") or ""),
+        )
         await ws.send_json(
             {
                 "type": "done",
                 "payload": {
                     "turn_id": _new_turn_id(tid),
-                    "context_usage": await _calculate_context_usage(
-                        session,
-                        sp,
-                        max_tokens=int(_turn_model_config.get("context_window") or 128000),
-                        model_name=str(_turn_model_config.get("model") or ""),
-                    ),
+                    "context_usage": context_usage,
                 },
             }
+        )
+        record_activity(
+            "turn", "turn_end",
+            session_id=session.session_id,
+            turn_id=tid or "",
+            message=final_answer or "(本轮无最终回复)",
+            payload={"context_usage": context_usage},
         )
         turn_task = None
 

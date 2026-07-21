@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from api.auth import load_or_create_token
+from api.activity_hub import record as record_activity
 from api.cors_config import build_cors_origins
 from api.middleware import RateLimitMiddleware, RequestLogMiddleware
 from api.middleware.auth import AuthMiddleware
@@ -81,11 +82,18 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("[providers] startup migration failed (non-fatal)")
 
+    record_activity(
+        "system", "startup",
+        message=f"MaxmaHere 后端启动完成 ({__version__})",
+    )
+
     yield
 
     if getattr(app.state, "sidecar_manager", None):
         await app.state.sidecar_manager.stop()
         logger.info("[sidecar] SidecarManager stopped")
+
+    record_activity("system", "shutdown", message="MaxmaHere 后端正在关闭")
 
     # 关闭 balance.py 共享 httpx.AsyncClient 连接池，避免资源泄漏
     # （_shared_async_client 是模块级单例，lifespan shutdown 不会自动关闭它）。
