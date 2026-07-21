@@ -32,6 +32,9 @@ datas = [
     (str(project_root / "bun-sidecar" / "src"), "bun-sidecar/src"),
     (str(project_root / "bun-sidecar" / "package.json"), "bun-sidecar"),
     (str(project_root / "bun-sidecar" / "node_modules"), "bun-sidecar/node_modules"),
+    # Bun 运行时本体：_resolve_bun_path() 在 _MEIPASS/bun-sidecar/bun.exe 查找。
+    # 由 build/prepare-bun.ps1 在构建期下载官方二进制到此路径。
+    (str(project_root / "bun-sidecar" / "bun.exe"), "bun-sidecar"),
 ]
 
 # 检查并警告缺失的数据文件，避免静默跳过导致运行时错误
@@ -40,6 +43,14 @@ for src, dst in _missing:
     print(f"[WARN] 数据目录不存在，打包后将缺失该资源: {src} -> {dst}", file=sys.stderr)
 # 过滤掉不存在的目录
 datas = [(src, dst) for src, dst in datas if Path(src).exists()]
+
+# bun.exe 是打包后端启动 agent 引擎的必需品，缺失则产物不可用 —— 立即失败而非静默跳过
+_bun_exe = project_root / "bun-sidecar" / "bun.exe"
+if not _bun_exe.exists():
+    raise SystemExit(
+        "[ERROR] 缺少 bun-sidecar/bun.exe，打包后端需要捆绑的 Bun 运行时来启动 agent 引擎。\n"
+        "        请先运行: powershell -NoProfile -ExecutionPolicy Bypass -File build\\prepare-bun.ps1"
+    )
 
 site_packages_root = project_root / ".venv" / "Lib" / "site-packages"
 
