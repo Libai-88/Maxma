@@ -190,6 +190,126 @@ class TestCreateProvider:
         assert resp.status_code == 409
         assert "dup" in resp.json()["detail"]
 
+    @pytest.mark.parametrize(
+        "base_url",
+        [
+            "file:///etc/passwd",
+            "gopher://127.0.0.1:6379/",
+            "https://",
+            "https://user:secret@example.com/v1",
+            "http://169.254.169.254/latest/meta-data",
+            "http://metadata.google.internal/computeMetadata/v1",
+        ],
+    )
+    def test_create_provider_rejects_unsafe_base_url(self, client, base_url):
+        """创建 provider 时拒绝危险协议、凭据、非法主机和 metadata 地址。"""
+        resp = client.post(
+            "/providers",
+            json={
+                "id": "unsafe",
+                "label": "Unsafe",
+                "api_key": "sk-x",
+                "base_url": base_url,
+            },
+        )
+        assert resp.status_code == 422
+
+
+class TestProviderUrlSecurity:
+    @pytest.mark.parametrize(
+        "base_url",
+        [
+            "file:///etc/passwd",
+            "gopher://127.0.0.1:6379/",
+            "https://",
+            "https://user:secret@example.com/v1",
+            "http://169.254.169.254/latest/meta-data",
+            "http://metadata.google.internal/computeMetadata/v1",
+        ],
+    )
+    def test_test_connection_rejects_unsafe_base_url(self, client, base_url, monkeypatch):
+        """连接测试在发出请求前拒绝危险或非法 base_url。"""
+        calls = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls.append(request)
+            return httpx.Response(200, json={"data": []})
+
+        _patch_http(monkeypatch, handler)
+        resp = client.post(
+            "/providers/test",
+            json={"api_key": "sk-x", "base_url": base_url},
+        )
+        assert resp.status_code == 422
+        assert calls == []
+
+    @pytest.mark.parametrize(
+        "base_url",
+        [
+            "http://127.0.0.1:11434/v1",
+            "http://localhost:11434/v1",
+            "http://192.168.1.20:1234/v1",
+        ],
+    )
+    def test_test_connection_allows_local_provider_urls(self, client, base_url, monkeypatch):
+        """Ollama 和本机 OpenAI-compatible provider 仍可连通。"""
+        captured = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["url"] = str(request.url)
+            return httpx.Response(200, json={"data": []})
+
+        _patch_http(monkeypatch, handler)
+        resp = client.post(
+            "/providers/test",
+            json={"api_key": "", "base_url": base_url},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+        assert captured["url"].endswith("/models")
+
+    def test_test_connection_does_not_follow_redirect_with_authorization(
+        self, client, monkeypatch
+    ):
+        """重定向只返回受控失败，不把 Authorization 带到第二个地址。"""
+        requests = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(request)
+            return httpx.Response(
+                302,
+                headers={"Location": "https://attacker.example/steal"},
+            )
+
+        _patch_http(monkeypatch, handler)
+        resp = client.post(
+            "/providers/test",
+            json={"api_key": "secret", "base_url": "https://api.example.com/v1"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "error"
+        assert len(requests) == 1
+        assert requests[0].headers["authorization"] == "Bearer secret"
+
+    def test_discover_models_rejects_unsafe_base_url(self, client, monkeypatch):
+        """模型发现也必须在请求前拒绝危险地址。"""
+        calls = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls.append(request)
+            return httpx.Response(200, json={"data": []})
+
+        _patch_http(monkeypatch, handler)
+        resp = client.post(
+            "/providers/discover-models",
+            json={
+                "api_key": "secret",
+                "base_url": "gopher://127.0.0.1:6379/",
+            },
+        )
+        assert resp.status_code == 422
+        assert calls == []
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Step C: GET / PUT / DELETE /providers/{id}
@@ -275,6 +395,15 @@ class TestUpdateProvider:
         )
         assert resp.status_code == 200
         assert resp.json()["id"] == "deepseek"  # id 未被改变
+
+    def test_update_provider_rejects_unsafe_base_url(self, client, yaml_path):
+        """更新 provider 时也不能写入 metadata 地址。"""
+        _seed_provider(yaml_path, "deepseek")
+        resp = client.put(
+            "/providers/deepseek",
+            json={"base_url": "http://169.254.169.254/latest/meta-data"},
+        )
+        assert resp.status_code == 422
 
 
 class TestDeleteProvider:
@@ -507,6 +636,31 @@ class TestTestExistingProvider:
         body = resp.json()
         assert body["status"] == "error"
         assert body["latency_ms"] is None
+
+    def test_test_existing_provider_rejects_unsafe_yaml_url_before_request(
+        self, client, yaml_path, monkeypatch
+    ):
+        """历史配置中的危险地址也必须在运行时拦截。"""
+        _seed_full_provider(
+            yaml_path,
+            "evil",
+        )
+        from api.yaml_store import load_yaml
+
+        stored = load_yaml(yaml_path, default={})
+        stored["providers"][0]["base_url"] = "http://169.254.169.254/latest/meta-data"
+        _write_yaml(yaml_path, stored["providers"])
+        calls = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls.append(request)
+            return httpx.Response(200, json={"data": []})
+
+        _patch_http(monkeypatch, handler)
+        resp = client.post("/providers/evil/test")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "error"
+        assert calls == []
 
 
 class TestDiscoverModelsForExisting:

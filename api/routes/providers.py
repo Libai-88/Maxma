@@ -6,14 +6,16 @@
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import time
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app_paths import API_DATA_DIR, PROVIDERS_YAML_PATH
 from api.security.credential_envelope import (
@@ -129,6 +131,98 @@ def _find_provider(items: list[dict[str, Any]], provider_id: str) -> dict[str, A
     return None
 
 
+# Provider URLs are user-controlled network destinations.  Keep the policy
+# narrow enough for local Ollama/OpenAI-compatible services while blocking
+# protocols, URL forms, and well-known cloud metadata destinations that do
+# not belong in this API.
+_ALLOWED_PROVIDER_URL_SCHEMES = frozenset({"http", "https"})
+_BLOCKED_METADATA_HOSTS = frozenset(
+    {
+        "100.100.100.200",  # Alibaba Cloud metadata
+        "169.254.169.254",  # AWS/GCP/Azure metadata
+        "169.254.170.2",  # AWS ECS task metadata
+        "fd00:ec2::254",  # AWS IMDS IPv6
+        "instance-data.ec2.internal",
+        "metadata",
+        "metadata.azure.com",
+        "metadata.google.com",
+        "metadata.google.internal",
+    }
+)
+
+
+def _invalid_provider_url() -> ValueError:
+    return ValueError("base_url must be an absolute HTTP(S) URL")
+
+
+def _is_metadata_host(hostname: str) -> bool:
+    """Match metadata destinations without banning private/local networks."""
+    host = hostname.rstrip(".").lower()
+    if host in _BLOCKED_METADATA_HOSTS:
+        return True
+    if host.endswith(".metadata.google.internal") or host.endswith(
+        ".instance-data.ec2.internal"
+    ):
+        return True
+
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        # Some URL clients accept a decimal IPv4 integer.  Normalize it so a
+        # metadata address cannot bypass the explicit address checks.
+        if host.isdigit():
+            try:
+                address = ipaddress.IPv4Address(int(host, 10))
+            except (ValueError, OverflowError):
+                return False
+        else:
+            return False
+    return str(address) in _BLOCKED_METADATA_HOSTS
+
+
+def _validate_provider_base_url(base_url: str, *, allow_empty: bool = False) -> str:
+    """Validate a provider base URL before it is stored or requested."""
+    if not isinstance(base_url, str) or not base_url:
+        if allow_empty and base_url == "":
+            return base_url
+        raise _invalid_provider_url()
+    if any(char.isspace() or ord(char) < 0x20 or ord(char) == 0x7F for char in base_url):
+        raise _invalid_provider_url()
+    if "\\" in base_url:
+        raise _invalid_provider_url()
+
+    try:
+        parsed = urlsplit(base_url)
+        scheme = parsed.scheme.lower()
+        hostname = parsed.hostname
+        port = parsed.port
+    except (ValueError, UnicodeError):
+        raise _invalid_provider_url() from None
+
+    if scheme not in _ALLOWED_PROVIDER_URL_SCHEMES or not hostname:
+        raise _invalid_provider_url()
+    if parsed.username is not None or parsed.password is not None:
+        raise _invalid_provider_url()
+    if parsed.query or parsed.fragment:
+        raise _invalid_provider_url()
+    if port is not None and not 1 <= port <= 65535:
+        raise _invalid_provider_url()
+    try:
+        hostname.encode("idna")
+    except UnicodeError:
+        raise _invalid_provider_url() from None
+    if _is_metadata_host(hostname):
+        raise _invalid_provider_url()
+
+    try:
+        address = ipaddress.ip_address(hostname)
+    except ValueError:
+        address = None
+    if address is not None and (address.is_unspecified or address.is_multicast):
+        raise _invalid_provider_url()
+    return base_url
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # Pydantic 请求体模型
 # ═══════════════════════════════════════════════════════════════════════
@@ -141,10 +235,15 @@ class ProviderCreateBody(BaseModel):
     provider_type: str = Field("openai", description="provider 类型，默认 openai 兼容")
     label: str = Field("", min_length=1, description="显示名称")
     api_key: str = Field("", description="API 密钥")
-    base_url: str = Field("", description="API 基础 URL")
+    base_url: str = Field(..., min_length=1, description="API 基础 URL")
     models: list[str] = Field(default_factory=list, description="支持的模型 id 列表")
     enabled: bool = Field(True, description="是否启用")
     context_window: int | None = Field(None, description="上下文窗口大小")
+
+    @field_validator("base_url")
+    @classmethod
+    def validate_base_url(cls, value: str) -> str:
+        return _validate_provider_base_url(value)
 
 
 class ProviderUpdateBody(BaseModel):
@@ -158,21 +257,36 @@ class ProviderUpdateBody(BaseModel):
     enabled: bool | None = None
     context_window: int | None = None
 
+    @field_validator("base_url")
+    @classmethod
+    def validate_base_url(cls, value: str | None) -> str | None:
+        return None if value is None else _validate_provider_base_url(value)
+
 
 class TestConnectionBody(BaseModel):
     """测试连接的请求体。"""
 
     api_key: str = Field("", description="API 密钥")
-    base_url: str = Field("", description="API 基础 URL")
+    base_url: str = Field(..., min_length=1, description="API 基础 URL")
     provider_type: str | None = Field(None, description="provider 类型（保留字段，当前不改变行为）")
+
+    @field_validator("base_url")
+    @classmethod
+    def validate_base_url(cls, value: str) -> str:
+        return _validate_provider_base_url(value)
 
 
 class DiscoverModelsBody(BaseModel):
     """发现模型的请求体。"""
 
     api_key: str = Field("", description="API 密钥")
-    base_url: str = Field("", description="API 基础 URL")
+    base_url: str = Field(..., min_length=1, description="API 基础 URL")
     provider_type: str | None = Field(None, description="provider 类型（保留字段，当前不改变行为）")
+
+    @field_validator("base_url")
+    @classmethod
+    def validate_base_url(cls, value: str) -> str:
+        return _validate_provider_base_url(value)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -335,11 +449,19 @@ async def _http_get_models(
 
     不真正调用 LLM，仅测试 base_url 的可达性并尝试列出模型。
     """
-    url = base_url.rstrip("/") + "/models"
+    try:
+        validated_base_url = _validate_provider_base_url(base_url)
+    except ValueError:
+        return (False, None, "提供商地址无效", [])
+
+    url = validated_base_url.rstrip("/") + "/models"
     headers: dict[str, str] = {}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
-    client_kwargs: dict[str, Any] = {"timeout": _HTTP_TIMEOUT}
+    client_kwargs: dict[str, Any] = {
+        "timeout": _HTTP_TIMEOUT,
+        "follow_redirects": False,
+    }
     if _injectable_transport is not None:
         client_kwargs["transport"] = _injectable_transport
     start = time.monotonic()
@@ -349,7 +471,7 @@ async def _http_get_models(
     except Exception as e:  # noqa: BLE001 — 网络错误统一处理，向前端返回 detail
         return (False, None, f"网络请求失败：{e}", [])
     latency_ms = int((time.monotonic() - start) * 1000)
-    if resp.status_code >= 400:
+    if resp.status_code >= 300:
         return (False, latency_ms, f"服务器返回 HTTP {resp.status_code}", [])
     try:
         data = resp.json()
