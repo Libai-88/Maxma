@@ -7,16 +7,60 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import threading
 from pathlib import Path
 from typing import Any
 
-# SQLite 数据库路径
-SESSION_MAP_DIR = Path.home() / ".maxma"
+try:
+    from app_paths import API_DATA_DIR, _is_frozen
+except ImportError:  # pragma: no cover - supports direct module execution
+    API_DATA_DIR = Path.home() / ".maxma"
+
+    def _is_frozen() -> bool:
+        return False
+
+
+logger = logging.getLogger(__name__)
+
+# SQLite 数据库路径。开发模式保留旧位置，避免改变本地开发数据；冻结模式
+# 与其他用户数据统一放入 %APPDATA%/MaxmaHere/api/data/。
+SESSION_MAP_DIR = API_DATA_DIR if _is_frozen() else Path.home() / ".maxma"
 SESSION_MAP_DB = SESSION_MAP_DIR / "session_map.db"
+LEGACY_SESSION_MAP_DB = Path.home() / ".maxma" / "session_map.db"
 # 保存的最大对话轮次数
 MAX_TURNS = 20
+
+
+def _migrate_legacy_database() -> None:
+    """Copy the legacy session map into the frozen app-data directory once."""
+    if not _is_frozen() or SESSION_MAP_DB.exists() or not LEGACY_SESSION_MAP_DB.exists():
+        return
+    try:
+        SESSION_MAP_DIR.mkdir(parents=True, exist_ok=True)
+        source = sqlite3.connect(str(LEGACY_SESSION_MAP_DB))
+        target = sqlite3.connect(str(SESSION_MAP_DB))
+        try:
+            source.backup(target)
+        finally:
+            target.close()
+            source.close()
+        logger.info("[session-map] migrated legacy database to %s", SESSION_MAP_DB)
+    except (OSError, sqlite3.Error):
+        logger.warning("[session-map] legacy database migration failed", exc_info=True)
+
+
+def _decode_turns(raw: str | None) -> list[dict[str, str]]:
+    """Decode persisted turns without letting one corrupt row break requests."""
+    if not raw:
+        return []
+    try:
+        decoded = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        logger.warning("[session-map] ignoring malformed turns JSON")
+        return []
+    return decoded if isinstance(decoded, list) else []
 
 
 class SessionMap:
@@ -25,7 +69,10 @@ class SessionMap:
     线程安全（SQLite connection 是线程安全的，但 WAL 模式下并发写需序列化）。
     """
     
-    def __init__(self, db_path: str | Path = SESSION_MAP_DB) -> None:
+    def __init__(self, db_path: str | Path | None = None) -> None:
+        if db_path is None:
+            _migrate_legacy_database()
+            db_path = SESSION_MAP_DB
         self._db_path = str(db_path)
         self._lock = threading.Lock()
         # 确保父目录存在
@@ -126,7 +173,7 @@ class SessionMap:
                 "SELECT turns FROM session_map WHERE maxma_id = ?", (maxma_id,)
             ).fetchone()
             if row:
-                turns: list[dict[str, str]] = json.loads(row[0]) if row[0] else []
+                turns = _decode_turns(row[0])
             else:
                 turns = []
             turns.append({
@@ -152,7 +199,7 @@ class SessionMap:
                 (maxma_id,),
             ).fetchone()
             if row and row[0]:
-                turns: list[dict[str, str]] = json.loads(row[0])
+                turns = _decode_turns(row[0])
                 return turns[-count:]
             return []
 

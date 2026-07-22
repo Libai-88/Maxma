@@ -228,6 +228,13 @@ class TestSessionMapGetRecentTurns:
         sm._conn.commit()
         assert sm.get_recent_turns("empty-row", count=5) == []
 
+    def test_get_recent_turns_ignores_malformed_json(self, sm):
+        sm._conn.execute(
+            "INSERT INTO session_map (maxma_id, sidecar_id, turns) VALUES ('broken-row', '', '{')"
+        )
+        sm._conn.commit()
+        assert sm.get_recent_turns("broken-row", count=5) == []
+
 
 class TestSessionMapListAll:
     def test_list_all_orders_by_updated_at_desc(self, db_path):
