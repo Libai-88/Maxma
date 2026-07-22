@@ -136,15 +136,18 @@ class SidecarManager:
             if self.client_running:
                 logger.debug("Sidecar already running, skipping start")
                 return
+            if self.is_running and self._client is None:
+                # A process can be installed by a caller before the RPC client
+                # is attached. Treat that state as already started; restarting
+                # here can terminate a healthy sidecar during initialization.
+                logger.debug("Sidecar process already running, skipping start")
+                return
             if self.is_running and not self.client_running:
                 logger.warning(
                     "[sidecar] RPC client crashed but process alive (pid=%s), restarting",
                     self._process.pid if self._process else "?",
                 )
                 await self._stop_unsafe()
-            elif self.is_running:
-                logger.debug("Sidecar already running, skipping start")
-                return
 
             bun_path = _resolve_bun_path()
             logger.info(
@@ -204,7 +207,7 @@ class SidecarManager:
     async def stop(self) -> None:
         """Stop the sidecar subprocess gracefully."""
         async with self._lock:
-            if not self.is_running:
+            if not self.is_running and self._client is None:
                 logger.debug("Sidecar not running, skipping stop")
                 return
             await self._stop_unsafe()
