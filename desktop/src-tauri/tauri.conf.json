@@ -67,6 +67,10 @@
         "displayLanguageSelector": false,
         "installerIcon": "icons/icon.ico",
         "installerHooks": "nsis/installer-hooks.nsh"
+      },
+      "webviewInstallMode": {
+        "type": "offlineInstaller",
+        "silent": true
       }
     }
   }

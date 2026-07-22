@@ -85,6 +85,7 @@ Assert-TextContains $portable 'if not exist "%PORTABLE_DIR%\maxma-server.exe"' "
 Assert-TextNotContains $portable '"%PORTABLE_DIR%\resources\binaries\%SIDECAR_NAME%"' "portable must not place the sidecar under resource_dir\\binaries"
 Assert-TextNotContains $portable 'mkdir "%PORTABLE_DIR%\binaries"' "portable must not create a sidecar directory outside resource_dir"
 Assert-TextContains $portable 'if exist "%PORTABLE_DIR%\resources\binaries\"' "portable must reject the obsolete resource binaries layout"
+Assert-TextContains $portable "Portable target requires preinstalled Microsoft Edge WebView2 Runtime." "portable must document its WebView2 prerequisite"
 
 $portGuardCall = 'powershell -NoProfile -ExecutionPolicy Bypass -File build\\port-guard\.ps1[^\r\n]*'
 Assert-Regex $dev "$portGuardCall\r?\nif errorlevel 1" "desktop dev must exit when a port-guard call fails"
@@ -131,5 +132,13 @@ $beforeBuild = $config.build.beforeBuildCommand.Replace("\", "/")
 if ($beforeBuild -ne "cd ../web && npm run build") {
     throw "Tauri beforeBuildCommand must resolve web from src-tauri"
 }
+
+$webviewInstallMode = $config.bundle.windows.webviewInstallMode
+if ($null -eq $webviewInstallMode -or $webviewInstallMode.type -ne "offlineInstaller" -or $webviewInstallMode.silent -ne $true) {
+    throw "NSIS must embed the WebView2 offline installer and run it silently"
+}
+Assert-TextContains $main "webview2_runtime_available" "portable runtime must check for WebView2 before creating windows"
+Assert-TextContains $main "Portable builds do not include an offline WebView2 installer" "portable runtime must fail clearly when WebView2 is absent"
+Assert-TextContains $main "resources\\runtime" "Rust resource contract must require the embedded runtime directory"
 
 Write-Output "Build contract tests passed."

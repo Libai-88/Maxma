@@ -70,6 +70,10 @@ if not exist "%TAURI_ROOT%\resources\assets\" (
 )
 
 echo [4/6] Building Tauri application without installer...
+REM Portable builds do not run NSIS, so they cannot install WebView2. The
+REM packaged executable checks the target machine and fails with a clear log
+REM message when the Evergreen WebView2 Runtime is absent.
+echo [INFO] Portable target requires preinstalled Microsoft Edge WebView2 Runtime.
 pushd "%TAURI_ROOT%"
 if errorlevel 1 (
     echo [ERROR] Cannot enter Tauri project directory.

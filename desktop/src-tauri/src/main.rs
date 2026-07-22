@@ -40,6 +40,8 @@ const MAX_RESTARTS: u32 = 3;
 const HEALTH_TIMEOUT_SECS: u64 = 90;
 /// 重启前等待（秒）
 const RESTART_DELAY_SECS: u64 = 2;
+/// Evergreen WebView2 Runtime client id used by Microsoft's installer.
+const WEBVIEW2_CLIENT_ID: &str = "{F3017226-FE2A-4295-8BDF-00DA56F6DDF5}";
 
 /// 创建 Windows Job Object，设置 KILL_ON_JOB_CLOSE 标志。
 /// 主进程任何原因退出（含被 NSIS/taskkill 强杀）时，Job 句柄关闭，
@@ -371,6 +373,45 @@ fn wait_for_server(port: u16) -> bool {
     false
 }
 
+fn webview2_registry_keys() -> [&'static str; 3] {
+    [
+        "HKCU\\Software\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00DA56F6DDF5}",
+        "HKLM\\Software\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00DA56F6DDF5}",
+        "HKLM\\Software\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00DA56F6DDF5}",
+    ]
+}
+
+#[cfg(windows)]
+fn webview2_runtime_available() -> bool {
+    webview2_registry_keys().iter().any(|key| {
+        std::process::Command::new("reg.exe")
+            .args(["query", key, "/v", "pv"])
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false)
+    })
+}
+
+#[cfg(not(windows))]
+fn webview2_runtime_available() -> bool {
+    true
+}
+
+fn report_missing_webview2() -> ! {
+    let message = format!(
+        concat!(
+            "[tauri] FATAL: Microsoft Edge WebView2 Runtime is not installed. ",
+            "Portable builds do not include an offline WebView2 installer; ",
+            "install Evergreen WebView2 Runtime or use the NSIS installer. ",
+            "client_id={}"
+        ),
+        WEBVIEW2_CLIENT_ID
+    );
+    write_startup_log(&message);
+    eprintln!("{}", message);
+    std::process::exit(1);
+}
+
 /// Resolve the resource directory used by the sidecar.
 ///
 /// Tauri normally returns an absolute installed/portable resources path. Some
@@ -381,7 +422,7 @@ fn resolve_resource_dir(
     executable_path: Option<PathBuf>,
 ) -> PathBuf {
     if let Some(path) = tauri_resource_dir.as_ref() {
-        if path.is_absolute() && path != Path::new(".") {
+        if path.is_absolute() && path.is_dir() {
             return path.clone();
         }
     }
@@ -432,6 +473,7 @@ fn build_sidecar_environment(
 
 #[derive(Debug, Clone, Copy)]
 enum SidecarStartupStage {
+    Resources,
     Lookup,
     Spawn,
 }
@@ -439,6 +481,7 @@ enum SidecarStartupStage {
 impl SidecarStartupStage {
     fn as_str(self) -> &'static str {
         match self {
+            Self::Resources => "resources",
             Self::Lookup => "lookup",
             Self::Spawn => "spawn",
         }
@@ -518,6 +561,16 @@ fn spawn_sidecar_with_monitor(
         "[tauri] sidecar resource_dir={}",
         resource_dir.display()
     ));
+
+    if !resource_dir.is_dir() || !resource_dir.join("runtime").is_dir() {
+        report_sidecar_startup_failure(
+            &app,
+            SidecarStartupStage::Resources,
+            &resource_dir,
+            "resource directory or resources\\runtime is missing",
+        );
+        return false;
+    }
 
     let inherited_path = std::env::var_os("PATH");
     let sidecar = build_sidecar_environment(
@@ -655,6 +708,12 @@ fn main() {
     let _ = STARTUP_LOG.set(std::sync::Mutex::new(startup_log));
     install_panic_hook();
     write_startup_log("[tauri] === 进程启动 ===");
+
+    // The no-bundle portable distribution cannot run an installer. Fail early
+    // with an actionable log entry instead of surfacing a blank WebView window.
+    if !webview2_runtime_available() {
+        report_missing_webview2();
+    }
 
     // 关键：禁用系统代理对本地回环的拦截。
     // Clash/V2Ray 等本地代理软件会拦截 127.0.0.1 的请求，导致
@@ -883,15 +942,44 @@ mod tests {
 
     #[test]
     fn resource_dir_prefers_valid_tauri_resource_dir() {
+        let root = std::env::temp_dir().join(format!(
+            "maxmahere-resource-dir-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let expected = root.join("resources");
+        std::fs::create_dir_all(&expected).unwrap();
+
         let resource_dir = resolve_resource_dir(
-            Some(PathBuf::from(r"C:\Program Files\MaxmaHere\resources")),
+            Some(expected.clone()),
             Some(PathBuf::from(r"D:\MaxmaHere\maxma-here.exe")),
         );
 
-        assert_eq!(
-            resource_dir,
-            PathBuf::from(r"C:\Program Files\MaxmaHere\resources")
+        assert_eq!(resource_dir, expected);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn missing_tauri_resource_dir_falls_back_to_executable_sibling() {
+        let resource_dir = resolve_resource_dir(
+            Some(PathBuf::from(r"C:\missing\resources")),
+            Some(PathBuf::from(r"D:\MaxmaHere\maxma-here.exe")),
         );
+
+        assert_eq!(resource_dir, PathBuf::from(r"D:\MaxmaHere\resources"));
+    }
+
+    #[test]
+    fn webview2_registry_keys_cover_user_and_machine_installations() {
+        let keys = webview2_registry_keys();
+
+        assert_eq!(keys.len(), 3);
+        assert!(keys.iter().any(|key| key.starts_with("HKCU\\")));
+        assert!(keys.iter().any(|key| key.starts_with("HKLM\\")));
+        assert!(keys.iter().all(|key| key.contains(WEBVIEW2_CLIENT_ID)));
     }
 
     #[test]
