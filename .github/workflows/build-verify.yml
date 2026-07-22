@@ -25,11 +25,21 @@ jobs:
           cache: "npm"
           cache-dependency-path: web/package-lock.json
 
+      - name: Run packaging safety preflight
+        shell: powershell
+        run: .\build\test-packaging-safety.ps1 -SkipArtifact
+
       - name: Build server through the clean-checkout entry point
         shell: cmd
         env:
           MAXMA_CI: "1"
         run: call build\build-server.bat
+
+      - name: Verify build contracts and sanitized PyInstaller contents
+        shell: powershell
+        run: |
+          .\build\test-build-contract.ps1
+          .\build\test-packaging-safety.ps1 -TocPath "build\maxma-server\PKG-00.toc"
 
       - name: Verify build artifact
         shell: powershell

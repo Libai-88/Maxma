@@ -18,11 +18,18 @@ project_root = Path(SPECPATH).parent  # SPECPATH = build/ 目录的父目录
 
 # ── 数据文件：打包进 _MEIPASS 临时目录的资源 ──
 
+# Keep this manifest explicit.  The project config directory also contains
+# user personas, memory snapshots, lock files, and SQLite WAL files during a
+# developer run.  A recursive config entry would silently publish that data
+# in every one-file executable.
 datas = [
     # 前端构建产物
     (str(project_root / "web" / "dist"), "web/dist"),
-    # 配置文件（personas 目录包含 SOUL.md、USER.md 模板等）
-    (str(project_root / "config"), "config"),
+    # 内置人格说明和首次运行模板；真实 SOUL/USER/memory 不属于 bundle。
+    (str(project_root / "config" / "personas" / "AGENTS.md"), "config/personas"),
+    (str(project_root / "config" / "personas" / "SOUL.example.md"), "config/personas"),
+    (str(project_root / "config" / "personas" / "USER.example.md"), "config/personas"),
+    # 内置贴纸；config/stickers/custom 是用户上传目录，故不打包。
     # Anthropic Skills
     (str(project_root / "anthropic_skills"), "anthropic_skills"),
     # Macros
@@ -37,16 +44,36 @@ datas = [
     (str(project_root / "bun-sidecar" / "bun.exe"), "bun-sidecar"),
 ]
 
+_config_stickers_dir = project_root / "config" / "stickers"
+_sticker_categories = (
+    sorted(
+        path
+        for path in _config_stickers_dir.iterdir()
+        if path.is_dir() and path.name != "custom"
+    )
+    if _config_stickers_dir.is_dir()
+    else []
+)
+datas.extend(
+    (str(category), f"config/stickers/{category.name}")
+    for category in _sticker_categories
+)
+
 # These inputs are required for a runnable backend. Failing while evaluating
 # the spec is safer than producing an executable with silently missing data.
 _required_sources = [
     project_root / "web" / "dist",
-    project_root / "config",
+    project_root / "config" / "personas" / "AGENTS.md",
+    project_root / "config" / "personas" / "SOUL.example.md",
+    project_root / "config" / "personas" / "USER.example.md",
+    project_root / "config" / "stickers",
     project_root / "bun-sidecar" / "src",
     project_root / "bun-sidecar" / "package.json",
     project_root / "bun-sidecar" / "node_modules",
 ]
 _missing_required = [str(path) for path in _required_sources if not path.exists()]
+if not _sticker_categories:
+    _missing_required.append(str(_config_stickers_dir / "<builtin-category>"))
 if _missing_required:
     raise SystemExit(
         "[ERROR] Missing required PyInstaller data:\n" + "\n".join(_missing_required)
