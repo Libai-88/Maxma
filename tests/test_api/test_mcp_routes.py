@@ -353,11 +353,11 @@ class TestDiscoveredAndReload:
         assert "amap" in ids
         assert "filesystem" in ids
 
-    def test_reload_returns_ok(self, app_client):
+    def test_reload_requires_session_rebuild(self, app_client):
         resp = app_client.post("/mcp/reload")
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "ok"
-        assert resp.json()["tool_count"] == 0
+        assert resp.status_code == 409
+        assert resp.json()["detail"]["code"] == "mcp_reload_unsupported"
+        assert "重建会话" in resp.json()["detail"]["message"]
 
     def test_reload_does_not_expose_sensitive_values(self, app_client):
         secret = "mcp-reload-secret"
@@ -372,8 +372,74 @@ class TestDiscoveredAndReload:
         ])
 
         resp = app_client.post("/mcp/reload")
-        assert resp.status_code == 200
+        assert resp.status_code == 409
         assert secret not in resp.text
+
+
+def test_build_omp_mcp_servers_preserves_supported_fields_and_transport_names():
+    entries = [
+        {
+            "server_id": "stdio-server",
+            "transport": "stdio",
+            "enabled": True,
+            "command": "node",
+            "args": ["server.js"],
+            "env": {"TOKEN": "secret", "MODE": "test"},
+            "cwd": "/tmp/mcp",
+            "allowed_tools": ["read"],
+            "blocked_tools": ["write"],
+        },
+        {
+            "server_id": "sse-server",
+            "transport": "sse",
+            "url": "https://example.test/sse",
+            "headers": {"Authorization": "secret", "X-Test": "yes"},
+            "timeout": 12,
+            "sse_read_timeout": 4,
+        },
+        {
+            "server_id": "http-server",
+            "transport": "streamable_http",
+            "url": "https://example.test/mcp",
+            "headers": {"X-Test": "yes"},
+            "tls_verify": False,
+        },
+        {
+            "server_id": "websocket-server",
+            "transport": "websocket",
+            "url": "wss://example.test/mcp",
+        },
+    ]
+
+    result = mcp_mod.build_omp_mcp_servers(entries)
+
+    assert result["mcpServers"]["stdio-server"] == {
+        "type": "stdio",
+        "command": "node",
+        "args": ["server.js"],
+        "env": {"TOKEN": "secret", "MODE": "test"},
+        "cwd": "/tmp/mcp",
+        "enabled": True,
+        "allow": ["read"],
+        "block": ["write"],
+    }
+    assert result["mcpServers"]["sse-server"]["type"] == "sse"
+    assert result["mcpServers"]["sse-server"]["headers"]["Authorization"] == "secret"
+    assert result["mcpServers"]["http-server"]["type"] == "http"
+    assert "tls_verify" not in result["mcpServers"]["http-server"]
+    assert result["mcpServers"]["websocket-server"]["type"] == "websocket"
+    assert result["unsupported"] == {
+        "websocket-server": "OMP SDK does not support websocket MCP transport",
+        "http-server": "OMP SDK does not expose tls_verify for MCP transports",
+        "sse-server": "OMP SDK does not expose sse_read_timeout",
+    }
+
+
+def test_build_omp_mcp_servers_omits_disabled_servers():
+    result = mcp_mod.build_omp_mcp_servers([
+        {"server_id": "disabled", "transport": "stdio", "enabled": False, "command": "echo"},
+    ])
+    assert result == {"mcpServers": {}, "unsupported": {}}
 
 
 class TestLoadRawCorrupted:

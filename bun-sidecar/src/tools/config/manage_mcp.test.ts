@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import manageMcpTool, { redactSensitive } from "./manage_mcp";
+import { createConfiguredMcp, loadConfiguredMcp, mcpReloadUnsupportedResponse } from "../../session-bridge";
 
 const SECRET = "bun-mcp-secret";
 let tempRoots: string[] = [];
@@ -59,4 +60,65 @@ test("manage_mcp get does not expose configured secrets", async () => {
   expect(result.isError).not.toBe(true);
   expect(text).not.toContain(SECRET);
   expect(text).toContain("[REDACTED]");
+});
+
+test("sidecar converts Maxma MCP YAML to the OMP manager config", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "maxma-mcp-bridge-"));
+  tempRoots.push(root);
+  fs.mkdirSync(path.join(root, "api", "data"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "api", "data", "mcp_servers.yaml"),
+    [
+      "mcp_servers:",
+      "- server_id: stdio-server",
+      "  transport: stdio",
+      "  command: node",
+      "  args: [server.js]",
+      "  env:",
+      "    MODE: test",
+      "  allowed_tools: [read]",
+      "  blocked_tools: [write]",
+      "- server_id: sse-server",
+      "  transport: sse",
+      "  url: https://example.test/sse",
+      "  headers:",
+      "    X-Test: yes",
+      "- server_id: http-server",
+      "  transport: streamable_http",
+      "  url: https://example.test/mcp",
+      "- server_id: websocket-server",
+      "  transport: websocket",
+      "  url: wss://example.test/mcp",
+    ].join("\n"),
+  );
+  process.env.MAXMA_PROJECT_ROOT = root;
+
+  const loaded = loadConfiguredMcp();
+  expect(loaded?.configs["stdio-server"]).toMatchObject({
+    type: "stdio",
+    command: "node",
+    args: ["server.js"],
+    env: { MODE: "test" },
+  });
+  expect(loaded?.configs["sse-server"]).toMatchObject({ type: "sse", url: "https://example.test/sse" });
+  expect(loaded?.configs["http-server"]).toMatchObject({ type: "http", url: "https://example.test/mcp" });
+  expect(loaded?.configs["websocket-server"]).toMatchObject({ type: "websocket", url: "wss://example.test/mcp" });
+  expect(loaded?.allowBlock["stdio-server"]).toEqual({ allow: ["read"], block: ["write"] });
+  expect(loaded?.unsupported["websocket-server"]).toContain("does not support");
+});
+
+test("sidecar keeps the old create path when no MCP config exists", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "maxma-mcp-empty-"));
+  tempRoots.push(root);
+  process.env.MAXMA_PROJECT_ROOT = root;
+  expect(loadConfiguredMcp()).toBeUndefined();
+  expect(await createConfiguredMcp(root, {})).toBeUndefined();
+});
+
+test("sidecar reload reports the explicit session-rebuild requirement", () => {
+  expect(mcpReloadUnsupportedResponse()).toEqual({
+    status: "unsupported",
+    code: "mcp_reload_requires_session_rebuild",
+    message: "MCP configuration reload is not exposed through the Maxma API; rebuild the session",
+  });
 });

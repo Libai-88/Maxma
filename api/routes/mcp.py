@@ -176,6 +176,51 @@ def _save_raw(servers: list[dict]) -> None:
     dump_yaml_atomic(MCP_YAML_PATH, {"mcp_servers": servers})
 
 
+def build_omp_mcp_servers(entries: list[dict]) -> dict[str, dict]:
+    """Convert persisted Maxma entries to OMP's native ``mcpServers`` shape.
+
+    This is a data-only conversion used by the sidecar contract tests and by
+    callers that need to inspect the exact OMP-facing shape.  Maxma keeps
+    fields that OMP 16.5.2 does not understand in YAML; they are reported in
+    ``unsupported`` rather than silently presented as connected features.
+    """
+    servers: dict[str, dict] = {}
+    unsupported: dict[str, str] = {}
+    for entry in entries:
+        if not isinstance(entry, dict) or not entry.get("enabled", True):
+            continue
+        server_id = entry.get("server_id")
+        transport = entry.get("transport")
+        if not isinstance(server_id, str) or not server_id:
+            continue
+        config: dict = {"type": transport, "enabled": True}
+        if transport == "stdio":
+            for key in ("command", "args", "env", "cwd"):
+                if key in entry:
+                    config[key] = entry[key]
+        elif transport in ("sse", "streamable_http", "websocket"):
+            if "url" in entry:
+                config["url"] = entry["url"]
+            if "headers" in entry:
+                config["headers"] = entry["headers"]
+            if "timeout" in entry:
+                config["timeout"] = entry["timeout"]
+        if entry.get("allowed_tools") is not None:
+            config["allow"] = entry["allowed_tools"]
+        if entry.get("blocked_tools") is not None:
+            config["block"] = entry["blocked_tools"]
+        if transport == "streamable_http":
+            config["type"] = "http"
+        elif transport == "websocket":
+            unsupported[server_id] = "OMP SDK does not support websocket MCP transport"
+        if "tls_verify" in entry:
+            unsupported.setdefault(server_id, "OMP SDK does not expose tls_verify for MCP transports")
+        if "sse_read_timeout" in entry:
+            unsupported.setdefault(server_id, "OMP SDK does not expose sse_read_timeout")
+        servers[server_id] = config
+    return {"mcpServers": servers, "unsupported": unsupported}
+
+
 def _build_server_dict(body: MCPServerCreateBody) -> dict:
     """根据 transport 类型构建服务器配置 dict。"""
     d: dict = {
@@ -227,11 +272,7 @@ def _build_server_dict(body: MCPServerCreateBody) -> dict:
 
 
 async def _do_reload(request: Request | None = None) -> dict:
-    """执行 MCP 热加载并返回已配置的服务器列表。
-
-    返回 YAML 中实际配置的服务器列表（不做子进程探测）。
-    tools/ 包已移除，tool_count 从 app.state.mcp_tools 读取。
-    """
+    """Return configuration metadata without claiming that servers connected."""
     with yaml_file_lock(MCP_YAML_PATH):
         entries = _load_raw()
     mcp_tools = getattr(request.app.state, "mcp_tools", []) if request else []
@@ -246,7 +287,7 @@ async def _do_reload(request: Request | None = None) -> dict:
                 "command": entry.get("command", ""),
             })
     return {
-        "status": "ok",
+        "status": "configured",
         "servers": _redact_sensitive(servers),
         "tool_count": len(mcp_tools),
     }
@@ -414,8 +455,11 @@ async def get_discovered_mcp_servers():
 
 @router.post("/mcp/reload")
 async def reload_mcp_servers(request: Request):
-    """热加载：重新解析 YAML → 重建连接 → 替换 app.state。
-
-    失败时保留旧工具列表不变。
-    """
-    return await _do_reload(request)
+    """Reject hot reload until the owning sidecar session is rebuilt."""
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "code": "mcp_reload_unsupported",
+            "message": "OMP MCP 配置只在新会话创建时加载；请重建会话后生效",
+        },
+    )

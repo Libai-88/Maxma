@@ -15,6 +15,8 @@
 import { createInterface } from "node:readline";
 import { randomUUID } from "node:crypto";
 import { createAgentSession, discoverAuthStorage, Settings } from "@oh-my-pi/pi-coding-agent";
+import { MCPManager } from "@oh-my-pi/pi-coding-agent/mcp";
+import type { MCPServerConfig } from "@oh-my-pi/pi-coding-agent/mcp";
 import type {
   AgentSession,
   ExtensionUIContext,
@@ -25,6 +27,8 @@ import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
 import type { Model } from "@oh-my-pi/pi-ai";
 import { registerCustomTools } from "./tools/index";
 import type { MaxmaEvent } from "./rpc-types";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -35,6 +39,106 @@ interface SessionRecord {
   unsubscribe: () => void;
   promptQueue: Promise<void>;  // serializes concurrent prompt calls
   currentGuard: DoneGuard | null;  // active per-prompt done sentinel
+  mcpManager?: MCPManager;
+  mcpConfigs?: Record<string, MCPServerConfig>;
+}
+
+type MaxmaMcpEntry = Record<string, unknown> & { server_id?: string; transport?: string };
+
+function mcpConfigPath(): string {
+  return path.resolve(process.env.MAXMA_PROJECT_ROOT ?? process.cwd(), "api/data/mcp_servers.yaml");
+}
+
+/** Convert Maxma's persisted list into OMP's actual MCPManager input. */
+export function loadConfiguredMcp(): {
+  configs: Record<string, MCPServerConfig>;
+  allowBlock: Record<string, { allow?: string[]; block?: string[] }>;
+  unsupported: Record<string, string>;
+} | undefined {
+  const configPath = mcpConfigPath();
+  if (!fs.existsSync(configPath)) return undefined;
+  const bunRuntime = globalThis as typeof globalThis & { Bun: { YAML: { parse(text: string): unknown } } };
+  const parsed = (bunRuntime.Bun.YAML.parse(fs.readFileSync(configPath, "utf8")) ?? {}) as Record<string, unknown>;
+  const entries = Array.isArray(parsed.mcp_servers) ? parsed.mcp_servers as MaxmaMcpEntry[] : [];
+  const configs: Record<string, MCPServerConfig> = {};
+  const allowBlock: Record<string, { allow?: string[]; block?: string[] }> = {};
+  const unsupported: Record<string, string> = {};
+  for (const entry of entries) {
+    const name = typeof entry.server_id === "string" ? entry.server_id : undefined;
+    const transport = entry.transport;
+    if (!name || entry.enabled === false || typeof transport !== "string") continue;
+    const config: Record<string, unknown> = { enabled: true };
+    if (transport === "stdio") {
+      config.type = "stdio";
+      for (const key of ["command", "args", "env", "cwd", "timeout"]) if (key in entry) config[key] = entry[key];
+    } else if (transport === "sse" || transport === "streamable_http" || transport === "websocket") {
+      config.type = transport === "streamable_http" ? "http" : transport;
+      for (const key of ["url", "headers", "timeout"]) if (key in entry) config[key] = entry[key];
+      if (transport === "websocket") unsupported[name] = "OMP SDK does not support websocket MCP transport";
+    } else {
+      unsupported[name] = `Unsupported MCP transport: ${transport}`;
+      continue;
+    }
+    if (entry.allowed_tools !== undefined || entry.blocked_tools !== undefined) {
+      allowBlock[name] = {
+        allow: Array.isArray(entry.allowed_tools) ? entry.allowed_tools as string[] : undefined,
+        block: Array.isArray(entry.blocked_tools) ? entry.blocked_tools as string[] : undefined,
+      };
+      // OMP has no allow/block config fields; retain them locally for tool filtering.
+    }
+    if ("tls_verify" in entry) unsupported[name] ??= "OMP SDK does not expose tls_verify for MCP transports";
+    if ("sse_read_timeout" in entry) unsupported[name] ??= "OMP SDK does not expose sse_read_timeout";
+    configs[name] = config as unknown as MCPServerConfig;
+  }
+  if (Object.keys(configs).length === 0 && Object.keys(unsupported).length === 0) return undefined;
+  return { configs, allowBlock, unsupported };
+}
+
+function filterMcpTools(tools: any[], allowBlock: Record<string, { allow?: string[]; block?: string[] }>): any[] {
+  return tools.filter((tool) => {
+    const server = tool.mcpServerName as string | undefined;
+    const rules = server ? allowBlock[server] : undefined;
+    if (!rules) return true;
+    const toolName = String(tool.mcpToolName ?? tool.name ?? "");
+    if (rules.allow && rules.allow.length > 0 && !rules.allow.includes(toolName)) return false;
+    return !rules.block?.includes(toolName);
+  });
+}
+
+export async function createConfiguredMcp(cwd: string, authStorage: any): Promise<{
+  manager: MCPManager;
+  configs: Record<string, MCPServerConfig>;
+  tools: any[];
+} | undefined> {
+  const loaded = loadConfiguredMcp();
+  if (!loaded) return undefined;
+  const manager = new MCPManager(cwd);
+  manager.setAuthStorage(authStorage);
+  const sourcePath = mcpConfigPath();
+  const sources = Object.fromEntries(Object.keys(loaded.configs).map((name) => [name, {
+    provider: "maxma",
+    providerName: "Maxma MCP configuration",
+    path: sourcePath,
+    level: "project" as const,
+  }]));
+  const result = await manager.connectServers(loaded.configs, sources);
+  for (const [name, message] of Object.entries(loaded.unsupported)) {
+    console.error(`[mcp] ${name}: ${message}`);
+  }
+  for (const [name, message] of result.errors) console.error(`[mcp] ${name}: ${message}`);
+  return { manager, configs: loaded.configs, tools: filterMcpTools(result.tools, loaded.allowBlock) };
+}
+
+export function mcpReloadUnsupportedResponse(): {
+  status: "unsupported";
+  code: "mcp_reload_requires_session_rebuild";
+  message: string;
+} {
+  return {
+    status: "unsupported",
+    code: "mcp_reload_requires_session_rebuild",
+    message: "MCP configuration reload is not exposed through the Maxma API; rebuild the session",
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -578,6 +682,13 @@ if (import.meta.main) {
           createOptions.customTools = customTools;
         }
 
+        const configuredMcp = await createConfiguredMcp(cwd, authStorage);
+        if (configuredMcp) {
+          createOptions.mcpManager = configuredMcp.manager;
+          const existingTools = Array.isArray(createOptions.customTools) ? createOptions.customTools as any[] : [];
+          createOptions.customTools = [...existingTools, ...configuredMcp.tools];
+        }
+
         const sessionId = randomUUID();
         const { session, setToolUIContext } = await createAgentSession(createOptions as any);
         if (needsApproval) {
@@ -629,6 +740,8 @@ if (import.meta.main) {
           unsubscribe: () => {},
           promptQueue: Promise.resolve(),
           currentGuard: null,
+          mcpManager: configuredMcp?.manager,
+          mcpConfigs: configuredMcp?.configs,
         };
         record.unsubscribe = subscribeSession(sessionId, session, record);
         sessions.set(sessionId, record);
@@ -701,6 +814,7 @@ if (import.meta.main) {
 
         record.unsubscribe();
         await record.session.dispose();
+        if (record.mcpManager) await record.mcpManager.disconnectAll();
         sessions.delete(sessionId);
         // Pending approvals are keyed by interaction_id (not session-scoped),
         // so the 5min timeout handles any orphaned promises.
@@ -711,6 +825,19 @@ if (import.meta.main) {
 
       if (method === "get_health") {
         send(id, { status: "ok", message: "sidecar running" });
+        return;
+      }
+
+      if (method === "reload_mcp") {
+        const sessionId: string = params?.session_id;
+        if (!sessions.has(sessionId)) {
+          sendError(id, `Session not found: ${sessionId}`);
+          return;
+        }
+        // The Python API currently returns 409 for reload because it cannot
+        // identify every live sidecar session. Keep this RPC explicit rather
+        // than claiming a YAML write refreshed existing sessions.
+        send(id, mcpReloadUnsupportedResponse());
         return;
       }
 
