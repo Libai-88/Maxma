@@ -17,6 +17,51 @@ function projectRoot(): string {
   return process.env.MAXMA_PROJECT_ROOT ?? process.cwd();
 }
 
+const REDACTED = "[REDACTED]";
+const SENSITIVE_KEYS = new Set([
+  "authorization",
+  "token",
+  "authtoken",
+  "accesstoken",
+  "refreshtoken",
+  "apitoken",
+  "apikey",
+  "xapikey",
+  "clientsecret",
+  "password",
+  "secret",
+  "cookie",
+  "setcookie",
+]);
+const SENSITIVE_CONTAINERS = new Set(["env", "headers"]);
+
+function normalizeSensitiveKey(key: string): string {
+  return key.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+export function redactSensitive(value: unknown, maskAll = false): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => redactSensitive(item, maskAll));
+  }
+  if (value !== null && typeof value === "object") {
+    const redacted: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) {
+      const normalizedKey = normalizeSensitiveKey(key);
+      if (maskAll) {
+        redacted[key] = redactSensitive(item, true);
+      } else if (SENSITIVE_CONTAINERS.has(normalizedKey)) {
+        redacted[key] = redactSensitive(item, true);
+      } else if (SENSITIVE_KEYS.has(normalizedKey)) {
+        redacted[key] = REDACTED;
+      } else {
+        redacted[key] = redactSensitive(item);
+      }
+    }
+    return redacted;
+  }
+  return maskAll ? REDACTED : value;
+}
+
 function parseYaml(text: string): any {
   // Minimal YAML parser for the mcp_servers schema (list of flat dicts).
   // B-010: previously the dedent loop set currentIndent = indent inside the
@@ -129,14 +174,15 @@ const tool: ToolDefinition<typeof params> = {
     const servers = parsed?.mcp_servers ?? parsed?.servers ?? [];
     if (params.action === "list") {
       if (!Array.isArray(servers) || servers.length === 0) return { content: [{ type: "text", text: "没有配置任何 MCP 服务器" }] };
-      const lines = servers.map((s: any) => `- ${s.id || s.name}: ${s.url || s.command || "(unknown)"}`);
+      const safeServers = servers.map((server: any) => redactSensitive(server) as any);
+      const lines = safeServers.map((s: any) => `- ${s.id || s.name}: ${s.url || s.command || "(unknown)"}`);
       return { content: [{ type: "text", text: `## MCP 服务器 (${servers.length} 个)\n\n${lines.join("\n")}` }] };
     }
     if (params.action === "get") {
       if (!params.server_id) return { content: [{ type: "text", text: "请指定 server_id" }], isError: true };
       const server = servers.find((s: any) => (s.id || s.name) === params.server_id);
       if (!server) return { content: [{ type: "text", text: `服务器 "${params.server_id}" 不存在` }], isError: true };
-      return { content: [{ type: "text", text: JSON.stringify(server, null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify(redactSensitive(server), null, 2) }] };
     }
     return { content: [{ type: "text", text: "未知操作" }], isError: true };
   },

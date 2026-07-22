@@ -42,6 +42,39 @@ class TestListAndGetServers:
         assert resp.status_code == 200
         assert resp.json()["server_id"] == "s1"
 
+    def test_list_and_get_redact_nested_sensitive_values(self, app_client):
+        secret = "mcp-list-get-secret"
+        mcp_mod._save_raw([
+            {
+                "server_id": "secure",
+                "transport": "sse",
+                "url": "https://example.test",
+                "env": {
+                    "API_KEY": secret,
+                    "nested": {"Token": secret},
+                },
+                "headers": {
+                    "Authorization": secret,
+                    "nested": {"api-key": secret},
+                },
+            },
+        ])
+
+        list_resp = app_client.get("/mcp/servers")
+        assert list_resp.status_code == 200
+        assert secret not in list_resp.text
+        listed = list_resp.json()["servers"][0]
+        assert listed["env"]["API_KEY"] == "[REDACTED]"
+        assert listed["env"]["nested"]["Token"] == "[REDACTED]"
+        assert listed["headers"]["Authorization"] == "[REDACTED]"
+        assert listed["headers"]["nested"]["api-key"] == "[REDACTED]"
+
+        get_resp = app_client.get("/mcp/servers/secure")
+        assert get_resp.status_code == 200
+        assert secret not in get_resp.text
+        assert get_resp.json()["headers"]["Authorization"] == "[REDACTED]"
+        assert mcp_mod._load_raw()[0]["env"]["API_KEY"] == secret
+
 
 class TestListServerTools:
     def test_server_not_found(self, app_client):
@@ -89,10 +122,11 @@ class TestCreateServer:
             "blocked_tools": ["t2"],
             "command": "echo",
             "args": ["hi"],
-            "env": {"K": "V"},
+            "env": {"K": "[REDACTED]"},
             "cwd": "/tmp",
         }
         assert body["tool_count"] == 0
+        assert mcp_mod._load_raw()[0]["env"] == {"K": "V"}
 
     def test_create_stdio_missing_command_400(self, app_client):
         resp = app_client.post(
@@ -118,9 +152,10 @@ class TestCreateServer:
         srv = resp.json()["server"]
         assert srv["url"] == "http://x"
         assert srv["tls_verify"] is True
-        assert srv["headers"] == {"h": "v"}
+        assert srv["headers"] == {"h": "[REDACTED]"}
         assert srv["timeout"] == 10.0
         assert srv["sse_read_timeout"] == 5.0
+        assert mcp_mod._load_raw()[0]["headers"] == {"h": "v"}
 
     def test_create_streamable_http_success(self, app_client):
         resp = app_client.post(
@@ -219,6 +254,78 @@ class TestUpdateServer:
         srv = resp.json()["server"]
         assert srv["command"] == "echo"
 
+    def test_update_redacts_sensitive_values_and_preserves_unset_secret(self, app_client):
+        secret = "mcp-update-secret"
+        create_resp = app_client.post(
+            "/mcp/servers",
+            json={
+                "server_id": "s1",
+                "transport": "stdio",
+                "command": "echo",
+                "env": {"TOKEN": secret},
+            },
+        )
+        assert secret not in create_resp.text
+
+        resp = app_client.put("/mcp/servers/s1", json={"enabled": False})
+        assert resp.status_code == 200
+        assert secret not in resp.text
+        assert resp.json()["server"]["env"]["TOKEN"] == "[REDACTED]"
+        assert mcp_mod._load_raw()[0]["env"]["TOKEN"] == secret
+
+    def test_update_redacted_placeholder_preserves_existing_secret(self, app_client):
+        secret = "mcp-existing-secret"
+        app_client.post(
+            "/mcp/servers",
+            json={
+                "server_id": "s1",
+                "transport": "stdio",
+                "command": "echo",
+                "env": {"TOKEN": secret},
+            },
+        )
+
+        resp = app_client.put(
+            "/mcp/servers/s1",
+            json={"env": {"TOKEN": "[REDACTED]"}},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["server"]["env"]["TOKEN"] == "[REDACTED]"
+        assert secret not in resp.text
+        assert mcp_mod._load_raw()[0]["env"]["TOKEN"] == secret
+
+    def test_update_redacted_nested_mapping_merges_existing_values(self, app_client):
+        secret = "mcp-nested-secret"
+        mcp_mod._save_raw([
+            {
+                "server_id": "s1",
+                "transport": "stdio",
+                "command": "echo",
+                "env": {
+                    "TOKEN": secret,
+                    "nested": {"API_KEY": secret, "KEEP": "old"},
+                },
+            },
+        ])
+
+        resp = app_client.put(
+            "/mcp/servers/s1",
+            json={
+                "env": {
+                    "TOKEN": "[REDACTED]",
+                    "nested": {"API_KEY": "[REDACTED]", "NEW": "new"},
+                },
+            },
+        )
+        assert resp.status_code == 200
+        stored = mcp_mod._load_raw()[0]
+        assert stored["env"]["TOKEN"] == secret
+        assert stored["env"]["nested"] == {
+            "API_KEY": secret,
+            "KEEP": "old",
+            "NEW": "new",
+        }
+
 
 class TestDeleteServer:
     def test_delete_not_found(self, app_client):
@@ -251,6 +358,22 @@ class TestDiscoveredAndReload:
         assert resp.status_code == 200
         assert resp.json()["status"] == "ok"
         assert resp.json()["tool_count"] == 0
+
+    def test_reload_does_not_expose_sensitive_values(self, app_client):
+        secret = "mcp-reload-secret"
+        mcp_mod._save_raw([
+            {
+                "server_id": "secure",
+                "transport": "stdio",
+                "command": "echo",
+                "env": {"TOKEN": secret},
+                "headers": {"Authorization": secret},
+            },
+        ])
+
+        resp = app_client.post("/mcp/reload")
+        assert resp.status_code == 200
+        assert secret not in resp.text
 
 
 class TestLoadRawCorrupted:

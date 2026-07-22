@@ -34,7 +34,7 @@ _BLOCKED_ENV_KEYS: frozenset[str] = frozenset({
 })
 
 
-def _validate_env_vars(env: dict[str, str]) -> None:
+def _validate_env_vars(env: dict[str, object]) -> None:
     """校验环境变量字典，拒绝黑名单中的敏感 key。
 
     防止通过 MCP 服务器配置 API 设置可导致子进程代码注入的环境变量。
@@ -46,6 +46,65 @@ def _validate_env_vars(env: dict[str, str]) -> None:
             status_code=400,
             detail=f"环境变量包含禁止设置的敏感 key: {', '.join(blocked)}",
         )
+
+
+_REDACTED = "[REDACTED]"
+_SENSITIVE_KEY_NAMES: frozenset[str] = frozenset({
+    "authorization",
+    "token",
+    "authtoken",
+    "accesstoken",
+    "refreshtoken",
+    "apitoken",
+    "apikey",
+    "xapikey",
+    "clientsecret",
+    "password",
+    "secret",
+    "cookie",
+    "setcookie",
+})
+_SENSITIVE_CONTAINER_NAMES: frozenset[str] = frozenset({"env", "headers"})
+
+
+def _normalise_sensitive_key(key: object) -> str:
+    """Normalize key spelling so secret detection is case/separator agnostic."""
+    return "".join(char for char in str(key).casefold() if char.isalnum())
+
+
+def _redact_sensitive(value: object, mask_all: bool = False) -> object:
+    """Return a recursively redacted copy without changing persisted config."""
+    if isinstance(value, dict):
+        redacted: dict[object, object] = {}
+        for key, item in value.items():
+            normalized_key = _normalise_sensitive_key(key)
+            if mask_all:
+                redacted[key] = _redact_sensitive(item, mask_all=True)
+            elif normalized_key in _SENSITIVE_CONTAINER_NAMES:
+                redacted[key] = _redact_sensitive(item, mask_all=True)
+            elif normalized_key in _SENSITIVE_KEY_NAMES:
+                redacted[key] = _REDACTED
+            else:
+                redacted[key] = _redact_sensitive(item)
+        return redacted
+    if isinstance(value, list):
+        return [_redact_sensitive(item, mask_all=mask_all) for item in value]
+    return _REDACTED if mask_all else value
+
+
+def _merge_redacted_mapping(target: object, update: object) -> dict[object, object]:
+    """Merge config mappings without allowing redacted placeholders to overwrite secrets."""
+    merged = dict(target) if isinstance(target, dict) else {}
+    if not isinstance(update, dict):
+        return merged
+    for key, value in update.items():
+        if value == _REDACTED:
+            continue
+        if isinstance(value, dict):
+            merged[key] = _merge_redacted_mapping(merged.get(key), value)
+        else:
+            merged[key] = value
+    return merged
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -65,11 +124,11 @@ class MCPServerCreateBody(BaseModel):
     # stdio 专用
     command: str | None = None
     args: list[str] = []
-    env: dict[str, str] | None = None
+    env: dict[str, object] | None = None
     cwd: str | None = None
     # sse / streamable_http / websocket 专用
     url: str | None = None
-    headers: dict[str, str] | None = None
+    headers: dict[str, object] | None = None
     timeout: float | None = None
     sse_read_timeout: float | None = None
     tls_verify: bool = True
@@ -83,10 +142,10 @@ class MCPServerUpdateBody(BaseModel):
     blocked_tools: list[str] | None = None
     command: str | None = None
     args: list[str] | None = None
-    env: dict[str, str] | None = None
+    env: dict[str, object] | None = None
     cwd: str | None = None
     url: str | None = None
-    headers: dict[str, str] | None = None
+    headers: dict[str, object] | None = None
     timeout: float | None = None
     sse_read_timeout: float | None = None
     tls_verify: bool | None = None
@@ -188,7 +247,7 @@ async def _do_reload(request: Request | None = None) -> dict:
             })
     return {
         "status": "ok",
-        "servers": servers,
+        "servers": _redact_sensitive(servers),
         "tool_count": len(mcp_tools),
     }
 
@@ -205,7 +264,7 @@ async def list_mcp_servers(request: Request):
         entries = _load_raw()
     mcp_tools = getattr(request.app.state, "mcp_tools", [])
     return {
-        "servers": entries,
+        "servers": _redact_sensitive(entries),
         "tool_count": len(mcp_tools),
     }
 
@@ -217,7 +276,7 @@ async def get_mcp_server(server_id: str):
         entries = _load_raw()
     for entry in entries:
         if entry.get("server_id") == server_id:
-            return entry
+            return _redact_sensitive(entry)
     raise HTTPException(status_code=404, detail=f"MCP 服务器 '{server_id}' 不存在")
 
 
@@ -259,7 +318,7 @@ async def create_mcp_server(body: MCPServerCreateBody, request: Request):
         _save_raw(entries)
     logger.info(f"[mcp] 创建服务器: {body.server_id} ({body.transport})")
     result = await _do_reload(request)
-    return {**result, "status": "created", "server": server_dict}
+    return {**result, "status": "created", "server": _redact_sensitive(server_dict)}
 
 
 def _validate_update_against_transport(target: dict, update_fields: dict) -> None:
@@ -318,12 +377,15 @@ async def update_mcp_server(
             _validate_env_vars(update_fields["env"])
 
         for key, value in update_fields.items():
-            target[key] = value
+            if key in {"env", "headers"} and isinstance(value, dict):
+                target[key] = _merge_redacted_mapping(target.get(key), value)
+            else:
+                target[key] = value
 
         _save_raw(entries)
     logger.info(f"[mcp] 更新服务器: {server_id}")
     result = await _do_reload(request)
-    return {**result, "status": "updated", "server": target}
+    return {**result, "status": "updated", "server": _redact_sensitive(target)}
 
 
 @router.delete("/mcp/servers/{server_id}")
