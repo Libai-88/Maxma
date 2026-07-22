@@ -414,16 +414,23 @@ fn report_missing_webview2() -> ! {
 
 /// Resolve the resource directory used by the sidecar.
 ///
-/// Tauri normally returns an absolute installed/portable resources path. Some
-/// startup contexts can return `.` or no path, so use the executable sibling
-/// layout as the stable fallback used by portable builds.
+/// Tauri normally returns an absolute installed resources path. On Windows,
+/// portable builds can instead return the executable directory, with resources
+/// nested below it. Only a directory containing the packaged runtime is valid.
 fn resolve_resource_dir(
     tauri_resource_dir: Option<PathBuf>,
     executable_path: Option<PathBuf>,
 ) -> PathBuf {
+    let has_runtime = |path: &Path| path.is_absolute() && path.join("runtime").is_dir();
+
     if let Some(path) = tauri_resource_dir.as_ref() {
-        if path.is_absolute() && path.is_dir() {
+        if has_runtime(path) {
             return path.clone();
+        }
+
+        let nested_resources = path.join("resources");
+        if has_runtime(&nested_resources) {
+            return nested_resources;
         }
     }
 
@@ -951,11 +958,34 @@ mod tests {
                 .as_nanos()
         ));
         let expected = root.join("resources");
-        std::fs::create_dir_all(&expected).unwrap();
+        std::fs::create_dir_all(expected.join("runtime")).unwrap();
 
         let resource_dir = resolve_resource_dir(
             Some(expected.clone()),
             Some(PathBuf::from(r"D:\MaxmaHere\maxma-here.exe")),
+        );
+
+        assert_eq!(resource_dir, expected);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn resource_dir_uses_resources_when_tauri_returns_executable_directory() {
+        let root = std::env::temp_dir().join(format!(
+            "maxmahere-portable-resource-dir-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let tauri_path = root.join("app");
+        let expected = tauri_path.join("resources");
+        std::fs::create_dir_all(expected.join("runtime")).unwrap();
+
+        let resource_dir = resolve_resource_dir(
+            Some(tauri_path),
+            Some(root.join("app").join("maxma-here.exe")),
         );
 
         assert_eq!(resource_dir, expected);
