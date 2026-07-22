@@ -196,7 +196,7 @@ def build_omp_mcp_servers(entries: list[dict]) -> dict[str, dict]:
             continue
         config: dict = {"type": transport, "enabled": True}
         if transport == "stdio":
-            for key in ("command", "args", "env", "cwd"):
+            for key in ("command", "args", "env", "cwd", "timeout"):
                 if key in entry:
                     config[key] = entry[key]
         elif transport in ("sse", "streamable_http"):

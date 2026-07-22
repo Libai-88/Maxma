@@ -419,6 +419,7 @@ def test_build_omp_mcp_servers_normalizes_only_sdk_fields():
             "args": ["server.js"],
             "env": {"TOKEN": "secret", "MODE": "test"},
             "cwd": "/tmp/mcp",
+            "timeout": 9,
             "allow": ["read"],
             "block": ["write"],
         },
@@ -452,6 +453,7 @@ def test_build_omp_mcp_servers_normalizes_only_sdk_fields():
         "args": ["server.js"],
         "env": {"TOKEN": "secret", "MODE": "test"},
         "cwd": "/tmp/mcp",
+        "timeout": 9,
         "enabled": True,
     }
     assert result["allowBlock"]["stdio-server"] == {

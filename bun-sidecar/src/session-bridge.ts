@@ -41,6 +41,8 @@ interface SessionRecord {
   currentGuard: DoneGuard | null;  // active per-prompt done sentinel
   mcpManager?: MCPManager;
   mcpConfigs?: Record<string, MCPServerConfig>;
+  mcpAllowBlock?: Record<string, { allow?: string[]; block?: string[] }>;
+  mcpToolNames?: string[];
 }
 
 type MaxmaMcpEntry = Record<string, unknown> & { server_id?: string; transport?: string };
@@ -58,12 +60,29 @@ export function loadConfiguredMcp(): {
   const configPath = mcpConfigPath();
   if (!fs.existsSync(configPath)) return undefined;
   const bunRuntime = globalThis as typeof globalThis & { Bun: { YAML: { parse(text: string): unknown } } };
-  const parsed = (bunRuntime.Bun.YAML.parse(fs.readFileSync(configPath, "utf8")) ?? {}) as Record<string, unknown>;
-  const entries = Array.isArray(parsed.mcp_servers) ? parsed.mcp_servers as MaxmaMcpEntry[] : [];
+  let parsed: Record<string, unknown>;
+  try {
+    const value = bunRuntime.Bun.YAML.parse(fs.readFileSync(configPath, "utf8"));
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      console.error("[mcp] configuration root must be an object; ignoring configuration");
+      return undefined;
+    }
+    parsed = value as Record<string, unknown>;
+  } catch {
+    // Parser messages can echo inline secrets, so log only a stable diagnostic.
+    console.error("[mcp] invalid YAML configuration; ignoring configuration");
+    return undefined;
+  }
+  const entries = Array.isArray(parsed.mcp_servers) ? parsed.mcp_servers : [];
   const configs: Record<string, MCPServerConfig> = {};
   const allowBlock: Record<string, { allow?: string[]; block?: string[] }> = {};
   const unsupported: Record<string, string> = {};
-  for (const entry of entries) {
+  for (const [index, rawEntry] of entries.entries()) {
+    if (!rawEntry || typeof rawEntry !== "object" || Array.isArray(rawEntry)) {
+      console.error(`[mcp] ignoring invalid configuration entry at index ${index}`);
+      continue;
+    }
+    const entry = rawEntry as MaxmaMcpEntry;
     const name = typeof entry.server_id === "string" ? entry.server_id : undefined;
     const transport = entry.transport;
     if (!name || entry.enabled === false || typeof transport !== "string") continue;
@@ -100,9 +119,17 @@ export function loadConfiguredMcp(): {
   return { configs, allowBlock, unsupported };
 }
 
-export function filterMcpTools(tools: any[], allowBlock: Record<string, { allow?: string[]; block?: string[] }>): any[] {
+export function filterMcpTools(
+  tools: any[],
+  allowBlock: Record<string, { allow?: string[]; block?: string[] }>,
+  requestedToolNames?: string[],
+): any[] {
+  const requested = requestedToolNames === undefined ? undefined : new Set(requestedToolNames);
   return tools.filter((tool) => {
     const server = tool.mcpServerName as string | undefined;
+    if (server && requested && !requested.has(String(tool.name)) && !requested.has(String(tool.mcpToolName ?? ""))) {
+      return false;
+    }
     const rules = server ? allowBlock[server] : undefined;
     if (!rules) return true;
     const toolName = String(tool.mcpToolName ?? tool.name ?? "");
@@ -115,6 +142,7 @@ export async function createConfiguredMcp(cwd: string, authStorage: any): Promis
   manager: MCPManager;
   configs: Record<string, MCPServerConfig>;
   tools: any[];
+  allowBlock: Record<string, { allow?: string[]; block?: string[] }>;
 } | undefined> {
   const loaded = loadConfiguredMcp();
   if (!loaded) return undefined;
@@ -134,7 +162,7 @@ export async function createConfiguredMcp(cwd: string, authStorage: any): Promis
   }]));
   const result = await manager.connectServers(loaded.configs, sources);
   for (const [name, message] of result.errors) console.error(`[mcp] ${name}: ${message}`);
-  return { manager, configs: loaded.configs, tools: filterMcpTools(result.tools, loaded.allowBlock) };
+  return { manager, configs: loaded.configs, allowBlock: loaded.allowBlock, tools: filterMcpTools(result.tools, loaded.allowBlock) };
 }
 
 export async function buildCreateSessionOptions(
@@ -152,6 +180,8 @@ export async function buildCreateSessionOptions(
   needsApproval: boolean;
   mcpManager?: MCPManager;
   mcpConfigs?: Record<string, MCPServerConfig>;
+  mcpAllowBlock?: Record<string, { allow?: string[]; block?: string[] }>;
+  mcpToolNames?: string[];
 }> {
   const createOptions: Record<string, unknown> = {
     model: input.model,
@@ -175,7 +205,10 @@ export async function buildCreateSessionOptions(
   if (configuredMcp) {
     createOptions.mcpManager = configuredMcp.manager;
     const existingTools = Array.isArray(createOptions.customTools) ? createOptions.customTools as any[] : [];
-    createOptions.customTools = [...existingTools, ...configuredMcp.tools];
+    createOptions.customTools = [
+      ...existingTools,
+      ...filterMcpTools(configuredMcp.tools, configuredMcp.allowBlock, input.tools),
+    ];
   }
 
   return {
@@ -183,7 +216,23 @@ export async function buildCreateSessionOptions(
     needsApproval,
     mcpManager: configuredMcp?.manager,
     mcpConfigs: configuredMcp?.configs,
+    mcpAllowBlock: configuredMcp?.allowBlock,
+    mcpToolNames: input.tools,
   };
+}
+
+/** OMP skips this callback when the manager is supplied by the caller. */
+export function wireMcpToolsChanged(
+  session: AgentSession,
+  manager: MCPManager,
+  allowBlock: Record<string, { allow?: string[]; block?: string[] }>,
+  requestedToolNames?: string[],
+): void {
+  manager.setOnToolsChanged((tools) => {
+    void session.refreshMCPTools(filterMcpTools(tools, allowBlock, requestedToolNames)).catch((error) => {
+      console.error(`[mcp] failed to refresh session tools: ${error instanceof Error ? error.message : "unknown error"}`);
+    });
+  });
 }
 
 export function mcpReloadUnsupportedResponse(): {
@@ -676,6 +725,8 @@ async function shutdown() {
       await record.session.dispose();
     } catch {
       // best-effort cleanup
+    } finally {
+      await record.mcpManager?.disconnectAll().catch(() => {});
     }
   }
   sessions.clear();
@@ -712,7 +763,7 @@ if (import.meta.main) {
         const tools: string[] | undefined = params?.tools as string[] | undefined;
         const permissionMode: string = (params?.permission_mode as string) ?? "ask";
 
-        const { options: createOptions, needsApproval, mcpManager, mcpConfigs } = await buildCreateSessionOptions({
+        const { options: createOptions, needsApproval, mcpManager, mcpConfigs, mcpAllowBlock, mcpToolNames } = await buildCreateSessionOptions({
           model,
           cwd,
           authStorage,
@@ -722,7 +773,15 @@ if (import.meta.main) {
         });
 
         const sessionId = randomUUID();
-        const { session, setToolUIContext } = await createAgentSession(createOptions as any);
+        let session: AgentSession;
+        let setToolUIContext: (uiContext: ExtensionUIContext, hasUI: boolean) => void;
+        try {
+          ({ session, setToolUIContext } = await createAgentSession(createOptions as any));
+        } catch (error) {
+          await mcpManager?.disconnectAll().catch(() => {});
+          throw error;
+        }
+        if (mcpManager) wireMcpToolsChanged(session, mcpManager, mcpAllowBlock ?? {}, mcpToolNames);
         if (needsApproval) {
           const approvalCtx = createApprovalUiContext(sessionId);
           // setToolUIContext only writes to ToolContextStore (for tool-level
@@ -774,6 +833,8 @@ if (import.meta.main) {
           currentGuard: null,
           mcpManager,
           mcpConfigs,
+          mcpAllowBlock,
+          mcpToolNames,
         };
         record.unsubscribe = subscribeSession(sessionId, session, record);
         sessions.set(sessionId, record);
@@ -845,9 +906,12 @@ if (import.meta.main) {
         }
 
         record.unsubscribe();
-        await record.session.dispose();
-        if (record.mcpManager) await record.mcpManager.disconnectAll();
-        sessions.delete(sessionId);
+        try {
+          await record.session.dispose();
+        } finally {
+          await record.mcpManager?.disconnectAll().catch(() => {});
+          sessions.delete(sessionId);
+        }
         // Pending approvals are keyed by interaction_id (not session-scoped),
         // so the 5min timeout handles any orphaned promises.
 

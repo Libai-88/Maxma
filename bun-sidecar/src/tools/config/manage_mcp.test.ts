@@ -11,6 +11,7 @@ import {
   filterMcpTools,
   loadConfiguredMcp,
   mcpReloadUnsupportedResponse,
+  wireMcpToolsChanged,
 } from "../../session-bridge";
 
 const SECRET = "bun-mcp-secret";
@@ -161,6 +162,7 @@ test("create options pass the real MCPManager and filtered MCP tools to the sess
   }, async () => ({
     manager,
     configs: { docs: { type: "stdio", command: "docs" } as any },
+    allowBlock: { docs: { allow: ["read", "write"], block: ["write"] } },
     tools,
   }));
 
@@ -172,6 +174,48 @@ test("create options pass the real MCPManager and filtered MCP tools to the sess
     "docs:read",
     "other:read",
   ]);
+});
+
+test("MCP tools obey the explicit session tool whitelist after SDK customTools merging", () => {
+  const tools = filterMcpTools([
+    { name: "mcp__docs_read", mcpServerName: "docs", mcpToolName: "read" },
+    { name: "mcp__docs_write", mcpServerName: "docs", mcpToolName: "write" },
+    { name: "local_tool" },
+  ], {}, ["mcp__docs_read"]);
+
+  expect(tools.map((tool) => tool.name)).toEqual(["mcp__docs_read", "local_tool"]);
+});
+
+test("manager tool changes refresh the session with the same MCP filters", async () => {
+  let onToolsChanged: ((tools: any[]) => void) | undefined;
+  const manager = { setOnToolsChanged: (handler: (tools: any[]) => void) => { onToolsChanged = handler; } };
+  const refreshed: any[][] = [];
+  const session = { refreshMCPTools: async (tools: any[]) => { refreshed.push(tools); } };
+
+  wireMcpToolsChanged(session as any, manager as any, { docs: { allow: ["read"] } }, ["mcp__docs_read"]);
+  onToolsChanged?.([
+    { name: "mcp__docs_read", mcpServerName: "docs", mcpToolName: "read" },
+    { name: "mcp__docs_write", mcpServerName: "docs", mcpToolName: "write" },
+  ]);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  expect(refreshed).toEqual([[{
+    name: "mcp__docs_read", mcpServerName: "docs", mcpToolName: "read",
+  }]]);
+});
+
+test("invalid YAML and non-object entries do not abort configuration loading", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "maxma-mcp-invalid-"));
+  tempRoots.push(root);
+  fs.mkdirSync(path.join(root, "api", "data"), { recursive: true });
+  const configPath = path.join(root, "api", "data", "mcp_servers.yaml");
+  process.env.MAXMA_PROJECT_ROOT = root;
+
+  fs.writeFileSync(configPath, "mcp_servers: [");
+  expect(loadConfiguredMcp()).toBeUndefined();
+
+  fs.writeFileSync(configPath, "mcp_servers:\n- null\n- hello\n");
+  expect(loadConfiguredMcp()).toBeUndefined();
 });
 
 test("sidecar keeps the old create path when no MCP config exists", async () => {
