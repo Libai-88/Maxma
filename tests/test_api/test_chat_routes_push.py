@@ -147,6 +147,8 @@ class TestStaleSessionValidation:
         assert "create_session" not in methods
         # get_messages 被调用了（校验）
         assert "get_messages" in methods
+        # 复用持久化映射时也要把 sid 放回 session，供断开取消使用
+        assert session._sidecar_session_id == "sc-existing-1"
         # remove 未被调用（不需要清理）
         sm_inst.remove.assert_not_called()
 

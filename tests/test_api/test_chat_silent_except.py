@@ -175,6 +175,36 @@ async def test_cancel_logs_warning_when_client_call_cancel_fails_on_error(caplog
 
 
 @pytest.mark.asyncio
+async def test_turn_error_returns_safe_message_but_logs_detail(caplog):
+    """Prompt exceptions stay detailed in logs but not in the user answer."""
+    handlers = {}
+    ws, session, mock_client = _setup_mocks(handlers)
+
+    async def mock_call(method, params=None, **kwargs):
+        if method == "create_session":
+            return {"session_id": "sidecar-sid-123"}
+        if method == "get_messages":
+            return []
+        if method == "prompt":
+            raise RuntimeError("provider secret details")
+        if method == "cancel":
+            return {}
+        return {}
+
+    mock_client.call = mock_call
+
+    with _patch_session_map():
+        with caplog.at_level(logging.ERROR):
+            result = await chat._stream_turn_sidecar(
+                ws, session, "hello", "system prompt"
+            )
+
+    assert result == "后端处理失败，请稍后重试"
+    assert "provider secret details" not in result
+    assert "provider secret details" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_unsub_logs_warning_when_unsub_fails(caplog):
     """unsub() failure in finally block should log a warning."""
     handlers = {}

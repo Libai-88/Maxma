@@ -8,6 +8,7 @@ websocket_chat 的消息分发与 happy path。
 import asyncio
 import json
 import logging
+import threading
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -588,6 +589,42 @@ class TestWebSocketChat:
         assert "provider secret details" not in error["payload"]["message"]
         assert done["type"] == "done"
         assert "provider secret details" in caplog.text
+
+    def test_disconnect_best_effort_cancels_active_sidecar_turn(
+        self, ws_app, monkeypatch
+    ):
+        started = threading.Event()
+
+        async def pending_stream(*args, **kwargs):
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                raise
+
+        class _CancelRecordingClient:
+            def __init__(self):
+                self.calls = []
+
+            async def call(self, method, params=None):
+                self.calls.append((method, params))
+                return {}
+
+        monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", pending_stream)
+        client = _CancelRecordingClient()
+        ws_app.state.sidecar_manager = _FakeSidecarMgr(client=client)
+        session = _FakeChatSession(session_id="s-disconnect")
+        session._sidecar_session_id = "sc-disconnect"
+        ws_app.state.session_manager._default = session
+
+        with TestClient(ws_app).websocket_connect("/ws/chat/s-disconnect") as ws:
+            ws.send_text(json.dumps({
+                "type": "chat",
+                "payload": {"message": "keep working"},
+            }))
+            assert started.wait(timeout=1)
+
+        assert ("cancel", {"session_id": "sc-disconnect"}) in client.calls
 
     def test_happy_path_increments_message_count(
         self, ws_app, monkeypatch

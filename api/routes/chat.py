@@ -27,6 +27,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+_PUBLIC_TURN_ERROR = "后端处理失败，请稍后重试"
+
 
 async def _get_sidecar_client(sidecar_mgr):
     """Return a sidecar client without treating Mock attributes as APIs.
@@ -49,6 +51,28 @@ async def _get_sidecar_client(sidecar_mgr):
     if client is None:
         raise RuntimeError("Sidecar client not available after start()")
     return client
+
+
+async def _cancel_sidecar_turn(
+    sidecar_mgr,
+    sidecar_session_id: str | None,
+    *,
+    reason: str,
+) -> None:
+    """Best-effort cancellation that also works with legacy client fakes."""
+    if sidecar_mgr is None or not sidecar_session_id:
+        return
+    try:
+        await sidecar_mgr.start()
+        client = await _get_sidecar_client(sidecar_mgr)
+        await client.call("cancel", {"session_id": sidecar_session_id})
+    except Exception:
+        logger.warning(
+            "[sidecar] Failed to cancel after %s for session %s",
+            reason,
+            sidecar_session_id[:8],
+            exc_info=True,
+        )
 
 
 def _resolve_chat_model(provider_id: str, model_name: str) -> dict[str, str | int]:
@@ -224,6 +248,10 @@ async def _stream_turn_sidecar(
             session.session_id[:8],
         )
 
+    # Keep the active sid on the in-memory session even when the persisted
+    # mapping was reused, so disconnect/cancel paths can target this turn.
+    session._sidecar_session_id = sidecar_sid
+
     # 3. Register event handlers to forward intermediate events to WS
     final_answer = ""
     turn_done = asyncio.Event()
@@ -362,7 +390,7 @@ async def _stream_turn_sidecar(
         except Exception as cancel_err:
             logger.warning("[sidecar] Failed to cancel after error for session %s: %s", sidecar_sid[:8], cancel_err)
         if not final_answer:
-            final_answer = f"（Sidecar 处理出错：{e}）"
+            final_answer = _PUBLIC_TURN_ERROR
     finally:
         for unsub in unsubs:
             try:
@@ -680,5 +708,12 @@ async def websocket_chat(ws: WebSocket, session_id: str):
         pass
     finally:
         if turn_task and not turn_task.done():
+            cancel_event.set()
+            await _cancel_sidecar_turn(
+                app_state.sidecar_manager,
+                getattr(session, "_sidecar_session_id", None),
+                reason="WebSocket disconnect",
+            )
             turn_task.cancel()
+            await asyncio.gather(turn_task, return_exceptions=True)
         app_state.ws_registry.unregister(session_id)
