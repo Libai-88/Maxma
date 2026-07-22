@@ -4,7 +4,14 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import manageMcpTool, { redactSensitive } from "./manage_mcp";
-import { createConfiguredMcp, loadConfiguredMcp, mcpReloadUnsupportedResponse } from "../../session-bridge";
+import { MCPManager } from "@oh-my-pi/pi-coding-agent/mcp";
+import {
+  buildCreateSessionOptions,
+  createConfiguredMcp,
+  filterMcpTools,
+  loadConfiguredMcp,
+  mcpReloadUnsupportedResponse,
+} from "../../session-bridge";
 
 const SECRET = "bun-mcp-secret";
 let tempRoots: string[] = [];
@@ -133,6 +140,38 @@ test("create path sends supported configs to OMP and excludes websocket", async 
   expect(configured?.configs["short-lived"]).toMatchObject({ type: "stdio", command: "node" });
   expect(configured?.configs["websocket-server"]).toBeUndefined();
   await configured?.manager.disconnectAll();
+});
+
+test("create options pass the real MCPManager and filtered MCP tools to the session factory", async () => {
+  const manager = new MCPManager(process.cwd());
+  const tools = filterMcpTools([
+    { name: "read", mcpServerName: "docs", mcpToolName: "read" },
+    { name: "write", mcpServerName: "docs", mcpToolName: "write" },
+    { name: "search", mcpServerName: "docs", mcpToolName: "search" },
+    { name: "read", mcpServerName: "other", mcpToolName: "read" },
+  ], {
+    docs: { allow: ["read", "write"], block: ["write"] },
+  });
+
+  const { options } = await buildCreateSessionOptions({
+    model: {} as any,
+    cwd: process.cwd(),
+    authStorage: {},
+    permissionMode: "operate",
+  }, async () => ({
+    manager,
+    configs: { docs: { type: "stdio", command: "docs" } as any },
+    tools,
+  }));
+
+  expect(options.mcpManager).toBe(manager);
+  expect(options.mcpManager).toBeInstanceOf(MCPManager);
+  expect((options.customTools as any[])
+    .filter((tool) => tool.mcpServerName)
+    .map((tool) => `${tool.mcpServerName}:${tool.mcpToolName}`)).toEqual([
+    "docs:read",
+    "other:read",
+  ]);
 });
 
 test("sidecar keeps the old create path when no MCP config exists", async () => {

@@ -75,6 +75,39 @@ class TestListAndGetServers:
         assert get_resp.json()["headers"]["Authorization"] == "[REDACTED]"
         assert mcp_mod._load_raw()[0]["env"]["API_KEY"] == secret
 
+    def test_websocket_url_survives_list_and_get_with_sensitive_headers_redacted(self, app_client):
+        secret = "websocket-header-secret"
+        payload = {
+            "server_id": "websocket-server",
+            "transport": "websocket",
+            "url": "wss://example.test/mcp",
+            "headers": {"Authorization": secret, "X-Trace": "visible"},
+        }
+
+        create_resp = app_client.post("/mcp/servers", json=payload)
+        assert create_resp.status_code == 200
+        assert create_resp.json()["server"]["url"] == payload["url"]
+        assert create_resp.json()["server"]["headers"] == {
+            "Authorization": "[REDACTED]",
+            "X-Trace": "[REDACTED]",
+        }
+
+        list_resp = app_client.get("/mcp/servers")
+        assert list_resp.status_code == 200
+        listed = list_resp.json()["servers"][0]
+        assert listed["transport"] == "websocket"
+        assert listed["url"] == payload["url"]
+        assert listed["headers"]["Authorization"] == "[REDACTED]"
+        assert secret not in list_resp.text
+
+        get_resp = app_client.get("/mcp/servers/websocket-server")
+        assert get_resp.status_code == 200
+        assert get_resp.json()["url"] == payload["url"]
+        assert get_resp.json()["headers"]["Authorization"] == "[REDACTED]"
+        assert secret not in get_resp.text
+        assert mcp_mod._load_raw()[0]["url"] == payload["url"]
+        assert mcp_mod._load_raw()[0]["headers"]["Authorization"] == secret
+
 
 class TestListServerTools:
     def test_server_not_found(self, app_client):

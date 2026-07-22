@@ -100,7 +100,7 @@ export function loadConfiguredMcp(): {
   return { configs, allowBlock, unsupported };
 }
 
-function filterMcpTools(tools: any[], allowBlock: Record<string, { allow?: string[]; block?: string[] }>): any[] {
+export function filterMcpTools(tools: any[], allowBlock: Record<string, { allow?: string[]; block?: string[] }>): any[] {
   return tools.filter((tool) => {
     const server = tool.mcpServerName as string | undefined;
     const rules = server ? allowBlock[server] : undefined;
@@ -135,6 +135,55 @@ export async function createConfiguredMcp(cwd: string, authStorage: any): Promis
   const result = await manager.connectServers(loaded.configs, sources);
   for (const [name, message] of result.errors) console.error(`[mcp] ${name}: ${message}`);
   return { manager, configs: loaded.configs, tools: filterMcpTools(result.tools, loaded.allowBlock) };
+}
+
+export async function buildCreateSessionOptions(
+  input: {
+    model: Model;
+    cwd: string;
+    authStorage: any;
+    systemPrompt?: string;
+    tools?: string[];
+    permissionMode?: string;
+  },
+  createMcp: typeof createConfiguredMcp = createConfiguredMcp,
+): Promise<{
+  options: Record<string, unknown>;
+  needsApproval: boolean;
+  mcpManager?: MCPManager;
+  mcpConfigs?: Record<string, MCPServerConfig>;
+}> {
+  const createOptions: Record<string, unknown> = {
+    model: input.model,
+    cwd: input.cwd,
+    authStorage: input.authStorage,
+  };
+  if (input.systemPrompt !== undefined) createOptions.systemPrompt = input.systemPrompt;
+  if (input.tools !== undefined && input.tools.length > 0) createOptions.toolNames = input.tools;
+
+  const needsApproval = input.permissionMode === "ask" || input.permissionMode === "read_only";
+  createOptions.autoApprove = !needsApproval;
+  if (needsApproval) {
+    createOptions.hasUI = true;
+    createOptions.settings = Settings.isolated({ "tools.approvalMode": "always-ask" });
+  }
+
+  const customTools = registerCustomTools();
+  if (customTools.length > 0) createOptions.customTools = customTools;
+
+  const configuredMcp = await createMcp(input.cwd, input.authStorage);
+  if (configuredMcp) {
+    createOptions.mcpManager = configuredMcp.manager;
+    const existingTools = Array.isArray(createOptions.customTools) ? createOptions.customTools as any[] : [];
+    createOptions.customTools = [...existingTools, ...configuredMcp.tools];
+  }
+
+  return {
+    options: createOptions,
+    needsApproval,
+    mcpManager: configuredMcp?.manager,
+    mcpConfigs: configuredMcp?.configs,
+  };
 }
 
 export function mcpReloadUnsupportedResponse(): {
@@ -663,39 +712,14 @@ if (import.meta.main) {
         const tools: string[] | undefined = params?.tools as string[] | undefined;
         const permissionMode: string = (params?.permission_mode as string) ?? "ask";
 
-        const createOptions: Record<string, unknown> = {
+        const { options: createOptions, needsApproval, mcpManager, mcpConfigs } = await buildCreateSessionOptions({
           model,
           cwd,
           authStorage,
-        };
-        if (systemPrompt !== undefined) {
-          createOptions.systemPrompt = systemPrompt;
-        }
-        if (tools !== undefined && Array.isArray(tools) && tools.length > 0) {
-          createOptions.toolNames = tools;
-        }
-
-        // 工具审批策略。ask/read_only 模式启用前端审批确认（sidecar 发 ask_user 事件 →
-        // 前端弹 ApprovalBubble → user_response 回传决定）；auto/operate 模式自动批准。
-        const needsApproval = permissionMode === "ask" || permissionMode === "read_only";
-        createOptions.autoApprove = !needsApproval;
-        if (needsApproval) {
-          createOptions.hasUI = true;
-          createOptions.settings = Settings.isolated({ "tools.approvalMode": "always-ask" });
-        }
-
-        // Register custom Maxma tools
-        const customTools = registerCustomTools();
-        if (customTools.length > 0) {
-          createOptions.customTools = customTools;
-        }
-
-        const configuredMcp = await createConfiguredMcp(cwd, authStorage);
-        if (configuredMcp) {
-          createOptions.mcpManager = configuredMcp.manager;
-          const existingTools = Array.isArray(createOptions.customTools) ? createOptions.customTools as any[] : [];
-          createOptions.customTools = [...existingTools, ...configuredMcp.tools];
-        }
+          systemPrompt,
+          tools: Array.isArray(tools) ? tools : undefined,
+          permissionMode,
+        });
 
         const sessionId = randomUUID();
         const { session, setToolUIContext } = await createAgentSession(createOptions as any);
@@ -748,8 +772,8 @@ if (import.meta.main) {
           unsubscribe: () => {},
           promptQueue: Promise.resolve(),
           currentGuard: null,
-          mcpManager: configuredMcp?.manager,
-          mcpConfigs: configuredMcp?.configs,
+          mcpManager,
+          mcpConfigs,
         };
         record.unsubscribe = subscribeSession(sessionId, session, record);
         sessions.set(sessionId, record);
