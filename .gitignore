@@ -74,6 +74,7 @@ output/bilibili/
 config/personas/memory.yaml
 *.lock
 !desktop/src-tauri/Cargo.lock
+!bun-sidecar/bun.lock
 *.clean
 
 # Provider credentials (明文 API key)
