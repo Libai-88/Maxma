@@ -56,6 +56,7 @@ $server = Read-ProjectFile "build\build-server.bat"
 $dev = Read-ProjectFile "build\run-desktop-dev.bat"
 $start = Read-ProjectFile "start.bat"
 $main = Read-ProjectFile "desktop\src-tauri\src\main.rs"
+$capabilityText = Read-ProjectFile "desktop\src-tauri\capabilities\default.json"
 $config = (Read-ProjectFile "desktop\src-tauri\tauri.conf.json" | ConvertFrom-Json)
 
 Assert-TextContains $portable "call build\build-server.bat" "portable must reuse the server/PyInstaller build chain"
@@ -76,6 +77,9 @@ $sidecarMatch = [regex]::Match($main, 'sidecar\("([^"]+)"\)')
 if (-not $sidecarMatch.Success -or $sidecarMatch.Groups[1].Value -ne "maxma-server") {
     throw "Rust sidecar lookup must use the configured maxma-server sidecar"
 }
+Assert-TextContains $capabilityText '"url": "http://127.0.0.1:*/*"' "Tauri HTTP capability must allow the selected loopback API port"
+Assert-TextContains $capabilityText '"url": "http://localhost:*/*"' "Tauri HTTP capability must allow localhost API requests"
+Assert-TextNotContains $capabilityText '"url": "http://127.0.0.1:8000/*"' "Tauri HTTP capability must not be limited to the default API port"
 Assert-TextContains $portable '"%PORTABLE_DIR%\resources\binaries\%SIDECAR_NAME%"' "portable must place the target-suffix sidecar under resource_dir\\binaries"
 Assert-TextNotContains $portable '"%PORTABLE_DIR%\maxma-server.exe"' "portable must not add an unverified root sidecar copy"
 Assert-TextNotContains $portable 'mkdir "%PORTABLE_DIR%\binaries"' "portable must not create a sidecar directory outside resource_dir"
@@ -109,6 +113,16 @@ if ($config.build.devUrl -ne "http://127.0.0.1:5173") {
 $beforeDev = $config.build.beforeDevCommand.Replace("\\", "/")
 if ($beforeDev -ne "cd ../../web && npm run dev -- --host 127.0.0.1 --port 5173") {
     throw "Tauri beforeDevCommand must start Vite on the configured dev port"
+}
+
+$csp = [string]$config.app.security.csp
+foreach ($source in @(
+    "http://127.0.0.1:*",
+    "http://localhost:*",
+    "ws://127.0.0.1:*",
+    "ws://localhost:*"
+)) {
+    Assert-TextContains $csp $source "Tauri CSP must allow loopback API and WebSocket ports"
 }
 
 $beforeBuild = $config.build.beforeBuildCommand.Replace("\", "/")

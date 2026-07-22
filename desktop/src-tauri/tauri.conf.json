@@ -39,7 +39,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:8000 http://127.0.0.1:8001 http://127.0.0.1:8002 http://127.0.0.1:8003 http://127.0.0.1:8004 http://127.0.0.1:8005 http://127.0.0.1:8006 http://127.0.0.1:8007 http://127.0.0.1:8008 http://127.0.0.1:8009 http://127.0.0.1:8010 ws://127.0.0.1:8000 ws://127.0.0.1:8001 ws://127.0.0.1:8002 ws://127.0.0.1:8003 ws://127.0.0.1:8004 ws://127.0.0.1:8005 ws://127.0.0.1:8006 ws://127.0.0.1:8007 ws://127.0.0.1:8008 ws://127.0.0.1:8009 ws://127.0.0.1:8010; font-src 'self' https://fonts.gstatic.com; style-src 'self' https://fonts.googleapis.com; img-src 'self' http://127.0.0.1:8000 http://127.0.0.1:8001 http://127.0.0.1:8002 http://127.0.0.1:8003 http://127.0.0.1:8004 http://127.0.0.1:8005 http://127.0.0.1:8006 http://127.0.0.1:8007 http://127.0.0.1:8008 http://127.0.0.1:8009 http://127.0.0.1:8010 data: blob:; media-src 'self' data: blob:;"
+      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*; font-src 'self' https://fonts.gstatic.com; style-src 'self' https://fonts.googleapis.com; img-src 'self' http://127.0.0.1:* http://localhost:* data: blob:; media-src 'self' data: blob:;"
     }
   },
   "bundle": {
