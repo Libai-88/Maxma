@@ -1,6 +1,8 @@
 // @vitest-environment node
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import viteConfig from '../vite.config'
 
 function resolveDevConfig() {
@@ -53,5 +55,12 @@ describe('Vite runtime configuration', () => {
     vi.stubEnv('VITE_MAXMA_WEB_PORT', '')
 
     expect(resolveDevConfig().server?.port).toBe(5173)
+  })
+
+  it('allows Tauri loopback images in both production HTML entrypoints', () => {
+    for (const entry of ['index.html', 'quick-chat.html']) {
+      const html = readFileSync(resolve(process.cwd(), entry), 'utf8')
+      expect(html).toContain("img-src 'self' http://localhost:* http://127.0.0.1:* data: blob:")
+    }
   })
 })
