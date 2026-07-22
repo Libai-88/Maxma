@@ -240,6 +240,27 @@ class TestCreateAppProductionStatic:
         assert resp.status_code == 200
         assert "ROOT" in resp.text
 
+    def test_production_serves_secondary_entry_pages(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("MAXMA_ENV", "production")
+        (tmp_path / "assets").mkdir()
+        (tmp_path / "index.html").write_text("<html><body>MAIN</body></html>")
+        (tmp_path / "quick-chat.html").write_text("<html><body>QUICK</body></html>")
+        (tmp_path / "splash.html").write_text("<html><body>SPLASH</body></html>")
+
+        monkeypatch.setattr("app_paths.WEB_DIST_DIR", tmp_path)
+
+        client = TestClient(create_app())
+        quick = client.get("/quick-chat.html")
+        splash = client.get("/splash.html")
+        assert quick.status_code == 200
+        assert "QUICK" in quick.text
+        assert "MAIN" not in quick.text
+        assert splash.status_code == 200
+        assert "SPLASH" in splash.text
+        assert "MAIN" not in splash.text
+
     def test_production_spa_fallback_returns_not_found_when_no_index(
         self, monkeypatch, tmp_path
     ):

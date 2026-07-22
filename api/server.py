@@ -200,6 +200,22 @@ def create_app() -> FastAPI:
                     name="images",
                 )
 
+            # Vite emits separate entry pages for Quick Chat and the splash
+            # screen. Register them before the SPA fallback so they do not
+            # receive the main index.html by accident.
+            for entry_name in ("quick-chat.html", "splash.html"):
+                entry_path = dist_dir / entry_name
+                if entry_path.exists():
+                    async def serve_entry(entry_path=entry_path):
+                        return FileResponse(entry_path)
+
+                    app.add_api_route(
+                        f"/{entry_name}",
+                        serve_entry,
+                        methods=["GET"],
+                        include_in_schema=False,
+                    )
+
             @app.get("/{path:path}")
             async def spa_fallback(path: str):
                 index_path = dist_dir / "index.html"
