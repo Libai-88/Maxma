@@ -95,9 +95,13 @@ const mergedTurns = computed(() => {
 function onSend() {
   const text = inputText.value.trim()
   if (!text || isStreaming.value) return
+  const sent = send(text, [])
+  if (!sent) {
+    globalError.message = '消息发送失败：WebSocket 连接已断开，请重试'
+    globalError.visible = true
+    return
+  }
   inputText.value = ''
-  // send 通过 WebSocket 同步发送（返回 void），无需 await
-  send(text, [])
   void nextTick().then(scrollToBottom)
 }
 
