@@ -264,17 +264,19 @@ class TestMaxmaBlockerLoadSave:
 class TestMaxmaBlockerMarker:
     def test_create_marker_creates_file(self, tmp_path: Path):
         maxma_blocker._create_marker(str(tmp_path))
-        assert (tmp_path / "MaxmaBlocker").exists()
+        assert (tmp_path / ".maxma_blocker").exists()
 
     def test_create_marker_idempotent(self, tmp_path: Path):
         maxma_blocker._create_marker(str(tmp_path))
         maxma_blocker._create_marker(str(tmp_path))
         # 只有一个文件
-        assert len(list(tmp_path.glob("MaxmaBlocker*"))) == 1
+        assert len(list(tmp_path.glob(".maxma_blocker*"))) == 1
 
-    def test_remove_marker_deletes_file(self, tmp_path: Path):
+    def test_remove_marker_deletes_current_and_legacy_files(self, tmp_path: Path):
+        (tmp_path / ".maxma_blocker").write_text("", encoding="utf-8")
         (tmp_path / "MaxmaBlocker").write_text("", encoding="utf-8")
         maxma_blocker._remove_marker(str(tmp_path))
+        assert not (tmp_path / ".maxma_blocker").exists()
         assert not (tmp_path / "MaxmaBlocker").exists()
 
     def test_remove_marker_ignores_extension(self, tmp_path: Path):
@@ -333,7 +335,8 @@ class TestMaxmaBlockerRoutes:
         assert body["path"] == str(tmp_path)
         assert body["description"] == "test blocker"
         # 标记文件应被创建
-        assert (tmp_path / "MaxmaBlocker").exists()
+        assert (tmp_path / ".maxma_blocker").exists()
+        assert not (tmp_path / "MaxmaBlocker").exists()
         # YAML 应被持久化
         assert blocker_yaml.exists()
 
@@ -360,7 +363,7 @@ class TestMaxmaBlockerRoutes:
         assert resp.json()["status"] == "ok"
         assert resp.json()["removed"]["path"] == str(tmp_path)
         # 标记文件应被删除
-        assert not (tmp_path / "MaxmaBlocker").exists()
+        assert not (tmp_path / ".maxma_blocker").exists()
 
     def test_delete_blocker_out_of_range_404(self, blocker_yaml: Path):
         with self._client() as c:

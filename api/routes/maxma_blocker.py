@@ -73,7 +73,6 @@ def _remove_marker(dir_path: str) -> None:
         name, _ = os.path.splitext(item.name)
         if name.lower() in valid_names:
             item.unlink()
-            return
 
 
 @router.get("/maxma-blocker", response_model=BlockerResponse)
