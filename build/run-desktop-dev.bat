@@ -30,12 +30,7 @@ call build\build-server.bat
 if errorlevel 1 exit /b 1
 
 echo.
-echo [2/4] Starting Vite dev server...
-start "MaxmaHere Vite" /min cmd /c "cd /d %CD%\web && npm run dev -- --host 127.0.0.1 --port %MAXMA_WEB_PORT%"
-
-echo [INFO] Waiting for Vite...
-powershell -NoProfile -ExecutionPolicy Bypass -File build\dev-tools.ps1 -WaitUrl http://127.0.0.1:%MAXMA_WEB_PORT% -TimeoutSec 45
-if errorlevel 1 exit /b 1
+echo [2/4] Vite is started by Tauri beforeDevCommand.
 
 echo.
 echo [3/4] Cleaning ports before Tauri launch...

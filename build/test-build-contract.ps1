@@ -82,6 +82,9 @@ Assert-TextNotContains $portable 'mkdir "%PORTABLE_DIR%\binaries"' "portable mus
 
 $portGuardCall = 'powershell -NoProfile -ExecutionPolicy Bypass -File build\\port-guard\.ps1[^\r\n]*'
 Assert-Regex $dev "$portGuardCall\r?\nif errorlevel 1" "desktop dev must exit when a port-guard call fails"
+Assert-TextContains $dev "Vite is started by Tauri beforeDevCommand" "desktop dev wrapper must delegate Vite startup to Tauri"
+Assert-TextNotContains $dev 'start "MaxmaHere Vite"' "desktop dev wrapper must not start a duplicate Vite process"
+Assert-TextNotContains $dev 'WaitUrl http://127.0.0.1:%MAXMA_WEB_PORT%' "desktop dev wrapper must not wait for a Vite process it no longer owns"
 Assert-Regex $start "$portGuardCall\r?\nif errorlevel 1" "startup must exit when port-guard fails"
 Assert-Regex $start 'if "%READY%"=="0" \(\s*echo \[ERR\] Backend startup timed out\.\s*exit /b 1\s*\)' "startup must exit non-zero when backend readiness times out"
 Assert-Regex $start 'if "%READY%"=="0" \(\s*echo \[ERR\] Frontend startup timed out\.\s*exit /b 1\s*\)' "startup must exit non-zero when frontend readiness times out"
@@ -101,6 +104,11 @@ Assert-TextContains $start "MAXMA_WEB_PORT=1420" "startup must use the Tauri 142
 
 if ($config.build.devUrl -ne "http://127.0.0.1:1420") {
     throw "Tauri devUrl must match the 1420 port"
+}
+
+$beforeDev = $config.build.beforeDevCommand.Replace("\\", "/")
+if ($beforeDev -ne "cd ../../web && npm run dev -- --host 127.0.0.1 --port 1420") {
+    throw "Tauri beforeDevCommand must start Vite on the configured dev port"
 }
 
 $beforeBuild = $config.build.beforeBuildCommand.Replace("\", "/")
