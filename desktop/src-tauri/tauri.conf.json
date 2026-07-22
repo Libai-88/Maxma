@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "../../web/dist",
     "devUrl": "http://127.0.0.1:5173",
-    "beforeDevCommand": "cd ../../web && npm run dev -- --host 127.0.0.1 --port 5173",
-    "beforeBuildCommand": "cd ../../web && npm run build"
+    "beforeDevCommand": "cd ../web && npm run dev -- --host 127.0.0.1 --port 5173",
+    "beforeBuildCommand": "cd ../web && npm run build"
   },
   "app": {
     "windows": [

@@ -113,7 +113,7 @@ if ($config.build.devUrl -ne "http://127.0.0.1:5173") {
 }
 
 $beforeDev = $config.build.beforeDevCommand.Replace("\\", "/")
-if ($beforeDev -ne "cd ../../web && npm run dev -- --host 127.0.0.1 --port 5173") {
+if ($beforeDev -ne "cd ../web && npm run dev -- --host 127.0.0.1 --port 5173") {
     throw "Tauri beforeDevCommand must start Vite on the configured dev port"
 }
 
@@ -128,7 +128,7 @@ foreach ($source in @(
 }
 
 $beforeBuild = $config.build.beforeBuildCommand.Replace("\", "/")
-if ($beforeBuild -ne "cd ../../web && npm run build") {
+if ($beforeBuild -ne "cd ../web && npm run build") {
     throw "Tauri beforeBuildCommand must resolve web from src-tauri"
 }
 
