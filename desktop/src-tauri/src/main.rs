@@ -74,33 +74,6 @@ fn assign_current_process_to_job(job: HANDLE) -> Result<(), windows::core::Error
     }
 }
 
-/// 启动前清理可能残留的旧版 maxma-server.exe 进程。
-/// 场景：旧版本（无 Job Object）被 NSIS 强杀后 sidecar 成为孤儿进程，
-/// 或主进程崩溃后 sidecar 残留。新版启动时先 taskkill 清理。
-/// 使用 /T 标志同时杀死子进程树（PyInstaller onefile bootloader 会启动 Python 子进程）。
-/// 清理后等待端口释放，避免 pick_available_port 误判端口被占用。
-fn cleanup_stale_sidecar() {
-    let output = std::process::Command::new("taskkill")
-        .args(["/T", "/F", "/IM", "maxma-server.exe"])
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .output();
-
-    // 如果确实 kill 了进程（taskkill 返回 0），等待端口释放
-    if let Ok(o) = output {
-        if o.status.success() {
-            write_startup_log("[tauri] cleanup_stale_sidecar: killed stale maxma-server.exe, waiting for port release...");
-            // 等待最多 5 秒让内核释放 socket 端口
-            for _ in 0..50 {
-                if port_manager::is_port_available(port_manager::DEFAULT_API_PORT) {
-                    break;
-                }
-                std::thread::sleep(std::time::Duration::from_millis(100));
-            }
-        }
-    }
-}
-
 /// 获取 sidecar 日志文件路径：%APPDATA%/MaxmaHere/logs/server.log
 fn server_log_path() -> Option<PathBuf> {
     let appdata = std::env::var("APPDATA").ok()?;
@@ -705,12 +678,6 @@ fn main() {
         std::env::set_var("no_proxy", no_proxy);
     }
     write_startup_log(&format!("[tauri] NO_PROXY={}", no_proxy));
-
-    // 启动前清理可能残留的旧版 maxma-server.exe 进程
-    // 场景：旧版本（无 Job Object）被 NSIS 强杀后 sidecar 成为孤儿进程，
-    // 或主进程崩溃后 sidecar 残留。新版启动时先 taskkill 清理，避免端口/文件冲突。
-    cleanup_stale_sidecar();
-    write_startup_log("[tauri] 清理残留 sidecar 完成");
 
     // 启动前选择可用端口（冲突时自动回退到 8001-8010）
     let selected_port = match port_manager::pick_available_port() {

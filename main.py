@@ -17,6 +17,33 @@ from config.settings import get_settings
 logger = logging.getLogger(__name__)
 
 
+def _prepend_embedded_runtime_path() -> None:
+    """Make bundled runtimes discoverable by MCP/native child processes.
+
+    Tauri injects the Node/Python/uv directories into the sidecar environment,
+    but commands launched by FastAPI inherit the Python process environment.
+    In a frozen build Bun lives under PyInstaller's bundle directory, so it
+    must be added here as well.
+    """
+    try:
+        from app_paths import BUNDLE_DIR, RUNTIME_DIR
+    except Exception:
+        return
+
+    candidates = [
+        BUNDLE_DIR / "bun-sidecar",
+        RUNTIME_DIR / "runtime" / "node",
+        RUNTIME_DIR / "runtime" / "python",
+        RUNTIME_DIR / "runtime" / "uv",
+    ]
+    existing = os.environ.get("PATH", "").split(os.pathsep)
+    entries = [str(path) for path in candidates if path.is_dir()]
+    entries.extend(existing)
+    deduplicated = list(dict.fromkeys(entry for entry in entries if entry))
+    if deduplicated:
+        os.environ["PATH"] = os.pathsep.join(deduplicated)
+
+
 def _start_parent_watchdog():
     """启动父进程监控守护线程。
 
@@ -92,6 +119,7 @@ def _start_parent_watchdog():
 def main():
     # 初始化日志系统（在其他模块导入之前）
     setup_logging()
+    _prepend_embedded_runtime_path()
 
     # CLI：轮换 Token
     if "--rotate-token" in sys.argv:
