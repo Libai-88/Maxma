@@ -168,6 +168,15 @@ async def _stream_turn_sidecar(
         except Exception:
             logger.debug("[sidecar] Failed to restore past turns", exc_info=True)
 
+        # 计算生效的权限模式（功能未开启时强制 ask，与 sessions.py 保持一致），
+        # 传给 sidecar 决定工具审批策略。
+        try:
+            from config.settings import get_settings
+            _pm_enabled = bool(get_settings().permission_modes_enabled)
+        except Exception:
+            _pm_enabled = False
+        _effective_permission_mode = session.permission_mode if _pm_enabled else "ask"
+
         result = await client.call(
             "create_session",
             {
@@ -178,6 +187,7 @@ async def _stream_turn_sidecar(
                 # source directory). Must agree with MAXMA_PROJECT_ROOT env var set
                 # in sidecar_manager.py (B-001).
                 "cwd": str(PROJECT_ROOT),
+                "permission_mode": _effective_permission_mode,
             },
         )
         sidecar_sid = result["session_id"]

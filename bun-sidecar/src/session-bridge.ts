@@ -442,6 +442,7 @@ if (import.meta.main) {
         const cwd: string = params?.cwd ?? process.cwd();
         const systemPrompt: string | undefined = params?.system_prompt;
         const tools: string[] | undefined = params?.tools as string[] | undefined;
+        const permissionMode: string = (params?.permission_mode as string) ?? "ask";
 
         const createOptions: Record<string, unknown> = {
           model,
@@ -454,6 +455,16 @@ if (import.meta.main) {
         if (tools !== undefined && Array.isArray(tools) && tools.length > 0) {
           createOptions.toolNames = tools;
         }
+
+        // 工具审批策略。createAgentSession 的 autoApprove 默认 false（工具调用需审批），
+        // 但 sidecar 尚未接入审批事件流（approval 事件未映射进 Maxma 协议、前端无确认
+        // 入口），默认值会让工具永久等待审批、turn 卡死。故当前所有模式统一自动批准。
+        // TODO(approval): 接入审批事件流（sidecar 发审批请求 → 前端确认 → 回传决定）后，
+        // 将 approvalWired 置为 true，ask/read_only 即会发起审批请求等待用户决定。
+        const approvalWired = false;
+        createOptions.autoApprove = approvalWired
+          ? permissionMode === "auto" || permissionMode === "operate"
+          : true;
 
         // Register custom Maxma tools
         const customTools = registerCustomTools();
