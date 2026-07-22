@@ -2,7 +2,7 @@
 
 autonomy.py: 6 个 stub 端点返回 404
 maxma_blocker.py: BlockerEntry CRUD + 标记文件管理
-memory.py: 2 个 stub 端点（list/delete）
+memory.py: 持久化 /memory 端点与 /memories* 兼容端点
 kb.py: 7 个 stub 端点返回 503
 """
 
@@ -11,6 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -69,29 +70,98 @@ class TestAutonomyStubs:
 
 
 class TestMemoryRoutes:
-    def _client(self) -> TestClient:
+    def _client(self, memory_path: Path | None = None) -> TestClient:
         app = FastAPI()
+        if memory_path is not None:
+            app.state.memory_path = memory_path
         app.include_router(memory.router)
         return TestClient(app)
 
-    def test_list_memories_returns_list(self):
-        with self._client() as c:
+    def test_list_memories_reads_persisted_long_term_facts(self, tmp_path: Path):
+        memory_path = tmp_path / "memory.yaml"
+        memory_path.write_text(
+            yaml.safe_dump(
+                {
+                    "fact-1": {
+                        "description": "用户主要使用 Python 和 TypeScript",
+                        "theme": "preference",
+                        "latest_update_time": "2026-07-10 12:30:00",
+                        "expires_at": None,
+                    },
+                    "expired": {
+                        "description": "过期事实",
+                        "theme": "other",
+                        "latest_update_time": "2026-07-01 12:30:00",
+                        "expires_at": "2026-07-02 12:30:00",
+                    },
+                    "_maxma_ltm_projection_operations": {"op-1": {"action": "delete"}},
+                },
+                allow_unicode=True,
+                sort_keys=False,
+            ),
+            encoding="utf-8",
+        )
+
+        with self._client(memory_path) as c:
             resp = c.get("/memory")
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
-        assert len(data) == 3
-        assert data[0]["id"] == "1"
-        assert "content" in data[0]
-        assert "category" in data[0]
+        assert data == [
+            {
+                "id": "fact-1",
+                "content": "用户主要使用 Python 和 TypeScript",
+                "category": "preference",
+                "confidence": 1.0,
+                "updatedAt": "2026-07-10 12:30:00",
+            }
+        ]
 
-    def test_delete_memory_returns_ok(self):
-        with self._client() as c:
-            resp = c.delete("/memory/m1")
+    def test_list_memories_returns_empty_when_persistence_is_missing(self, tmp_path: Path):
+        with self._client(tmp_path / "missing.yaml") as c:
+            resp = c.get("/memory")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_delete_memory_removes_persisted_fact(self, tmp_path: Path):
+        memory_path = tmp_path / "memory.yaml"
+        memory_path.write_text(
+            yaml.safe_dump(
+                {
+                    "fact-1": {
+                        "description": "用户主要使用 Python",
+                        "theme": "skill",
+                        "latest_update_time": "2026-07-10 12:30:00",
+                    },
+                    "_maxma_ltm_projection_operations": {"op-1": {"action": "delete"}},
+                },
+                allow_unicode=True,
+                sort_keys=False,
+            ),
+            encoding="utf-8",
+        )
+
+        with self._client(memory_path) as c:
+            resp = c.delete("/memory/fact-1")
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "deleted"
-        assert body["id"] == "m1"
+        assert body["id"] == "fact-1"
+
+        persisted = yaml.safe_load(memory_path.read_text(encoding="utf-8"))
+        assert "fact-1" not in persisted
+        assert "_maxma_ltm_projection_operations" in persisted
+
+        with self._client(memory_path) as c:
+            assert c.get("/memory").json() == []
+
+    def test_delete_memory_returns_not_found_for_unknown_fact(self, tmp_path: Path):
+        memory_path = tmp_path / "memory.yaml"
+        memory_path.write_text("{}\n", encoding="utf-8")
+
+        with self._client(memory_path) as c:
+            resp = c.delete("/memory/missing")
+        assert resp.status_code == 404
 
 
 # ── kb.py ────────────────────────────────────────────────────
