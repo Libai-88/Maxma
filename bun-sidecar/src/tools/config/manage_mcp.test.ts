@@ -83,6 +83,8 @@ test("sidecar converts Maxma MCP YAML to the OMP manager config", () => {
       "  url: https://example.test/sse",
       "  headers:",
       "    X-Test: yes",
+      "  allow: [list]",
+      "  block: [delete]",
       "- server_id: http-server",
       "  transport: streamable_http",
       "  url: https://example.test/mcp",
@@ -102,9 +104,35 @@ test("sidecar converts Maxma MCP YAML to the OMP manager config", () => {
   });
   expect(loaded?.configs["sse-server"]).toMatchObject({ type: "sse", url: "https://example.test/sse" });
   expect(loaded?.configs["http-server"]).toMatchObject({ type: "http", url: "https://example.test/mcp" });
-  expect(loaded?.configs["websocket-server"]).toMatchObject({ type: "websocket", url: "wss://example.test/mcp" });
+  expect(loaded?.configs["websocket-server"]).toBeUndefined();
   expect(loaded?.allowBlock["stdio-server"]).toEqual({ allow: ["read"], block: ["write"] });
+  expect(loaded?.allowBlock["sse-server"]).toEqual({ allow: ["list"], block: ["delete"] });
   expect(loaded?.unsupported["websocket-server"]).toContain("does not support");
+});
+
+test("create path sends supported configs to OMP and excludes websocket", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "maxma-mcp-mixed-"));
+  tempRoots.push(root);
+  fs.mkdirSync(path.join(root, "api", "data"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "api", "data", "mcp_servers.yaml"),
+    [
+      "mcp_servers:",
+      "- server_id: short-lived",
+      "  transport: stdio",
+      "  command: node",
+      "  args: [\"-e\", \"process.exit(0)\"]",
+      "- server_id: websocket-server",
+      "  transport: websocket",
+      "  url: wss://example.test/mcp",
+    ].join("\n"),
+  );
+  process.env.MAXMA_PROJECT_ROOT = root;
+
+  const configured = await createConfiguredMcp(root, {});
+  expect(configured?.configs["short-lived"]).toMatchObject({ type: "stdio", command: "node" });
+  expect(configured?.configs["websocket-server"]).toBeUndefined();
+  await configured?.manager.disconnectAll();
 });
 
 test("sidecar keeps the old create path when no MCP config exists", async () => {
@@ -112,6 +140,24 @@ test("sidecar keeps the old create path when no MCP config exists", async () => 
   tempRoots.push(root);
   process.env.MAXMA_PROJECT_ROOT = root;
   expect(loadConfiguredMcp()).toBeUndefined();
+  expect(await createConfiguredMcp(root, {})).toBeUndefined();
+});
+
+test("sidecar keeps the old create path when all configured transports are unsupported", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "maxma-mcp-websocket-"));
+  tempRoots.push(root);
+  fs.mkdirSync(path.join(root, "api", "data"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "api", "data", "mcp_servers.yaml"),
+    [
+      "mcp_servers:",
+      "- server_id: websocket-server",
+      "  transport: websocket",
+      "  url: wss://example.test/mcp",
+    ].join("\n"),
+  );
+  process.env.MAXMA_PROJECT_ROOT = root;
+
   expect(await createConfiguredMcp(root, {})).toBeUndefined();
 });
 

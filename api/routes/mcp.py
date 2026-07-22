@@ -177,7 +177,7 @@ def _save_raw(servers: list[dict]) -> None:
 
 
 def build_omp_mcp_servers(entries: list[dict]) -> dict[str, dict]:
-    """Convert persisted Maxma entries to OMP's native ``mcpServers`` shape.
+    """Build the sidecar-facing normalized contract from persisted entries.
 
     This is a data-only conversion used by the sidecar contract tests and by
     callers that need to inspect the exact OMP-facing shape.  Maxma keeps
@@ -186,6 +186,7 @@ def build_omp_mcp_servers(entries: list[dict]) -> dict[str, dict]:
     """
     servers: dict[str, dict] = {}
     unsupported: dict[str, str] = {}
+    allow_block: dict[str, dict[str, list[str]]] = {}
     for entry in entries:
         if not isinstance(entry, dict) or not entry.get("enabled", True):
             continue
@@ -198,27 +199,32 @@ def build_omp_mcp_servers(entries: list[dict]) -> dict[str, dict]:
             for key in ("command", "args", "env", "cwd"):
                 if key in entry:
                     config[key] = entry[key]
-        elif transport in ("sse", "streamable_http", "websocket"):
+        elif transport in ("sse", "streamable_http"):
             if "url" in entry:
                 config["url"] = entry["url"]
             if "headers" in entry:
                 config["headers"] = entry["headers"]
             if "timeout" in entry:
                 config["timeout"] = entry["timeout"]
-        if entry.get("allowed_tools") is not None:
-            config["allow"] = entry["allowed_tools"]
-        if entry.get("blocked_tools") is not None:
-            config["block"] = entry["blocked_tools"]
-        if transport == "streamable_http":
-            config["type"] = "http"
         elif transport == "websocket":
             unsupported[server_id] = "OMP SDK does not support websocket MCP transport"
+            continue
+        allowed_tools = entry.get("allowed_tools", entry.get("allow"))
+        blocked_tools = entry.get("blocked_tools", entry.get("block"))
+        if allowed_tools is not None or blocked_tools is not None:
+            allow_block[server_id] = {}
+            if isinstance(allowed_tools, list):
+                allow_block[server_id]["allow"] = allowed_tools
+            if isinstance(blocked_tools, list):
+                allow_block[server_id]["block"] = blocked_tools
+        if transport == "streamable_http":
+            config["type"] = "http"
         if "tls_verify" in entry:
             unsupported.setdefault(server_id, "OMP SDK does not expose tls_verify for MCP transports")
         if "sse_read_timeout" in entry:
             unsupported.setdefault(server_id, "OMP SDK does not expose sse_read_timeout")
         servers[server_id] = config
-    return {"mcpServers": servers, "unsupported": unsupported}
+    return {"mcpServers": servers, "allowBlock": allow_block, "unsupported": unsupported}
 
 
 def _build_server_dict(body: MCPServerCreateBody) -> dict:

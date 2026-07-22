@@ -71,18 +71,24 @@ export function loadConfiguredMcp(): {
     if (transport === "stdio") {
       config.type = "stdio";
       for (const key of ["command", "args", "env", "cwd", "timeout"]) if (key in entry) config[key] = entry[key];
-    } else if (transport === "sse" || transport === "streamable_http" || transport === "websocket") {
+    } else if (transport === "sse" || transport === "streamable_http") {
       config.type = transport === "streamable_http" ? "http" : transport;
       for (const key of ["url", "headers", "timeout"]) if (key in entry) config[key] = entry[key];
-      if (transport === "websocket") unsupported[name] = "OMP SDK does not support websocket MCP transport";
+    } else if (transport === "websocket") {
+      // Keep the configured server visible in diagnostics, but never hand an
+      // OMP-incompatible type to MCPManager.connectServers.
+      unsupported[name] = "OMP SDK does not support websocket MCP transport";
+      continue;
     } else {
       unsupported[name] = `Unsupported MCP transport: ${transport}`;
       continue;
     }
-    if (entry.allowed_tools !== undefined || entry.blocked_tools !== undefined) {
+    const allowedTools = entry.allowed_tools ?? entry.allow;
+    const blockedTools = entry.blocked_tools ?? entry.block;
+    if (allowedTools !== undefined || blockedTools !== undefined) {
       allowBlock[name] = {
-        allow: Array.isArray(entry.allowed_tools) ? entry.allowed_tools as string[] : undefined,
-        block: Array.isArray(entry.blocked_tools) ? entry.blocked_tools as string[] : undefined,
+        allow: Array.isArray(allowedTools) ? allowedTools as string[] : undefined,
+        block: Array.isArray(blockedTools) ? blockedTools as string[] : undefined,
       };
       // OMP has no allow/block config fields; retain them locally for tool filtering.
     }
@@ -112,6 +118,11 @@ export async function createConfiguredMcp(cwd: string, authStorage: any): Promis
 } | undefined> {
   const loaded = loadConfiguredMcp();
   if (!loaded) return undefined;
+  for (const [name, message] of Object.entries(loaded.unsupported)) {
+    console.error(`[mcp] ${name}: ${message}`);
+  }
+  // An unsupported-only file must retain the old session creation path.
+  if (Object.keys(loaded.configs).length === 0) return undefined;
   const manager = new MCPManager(cwd);
   manager.setAuthStorage(authStorage);
   const sourcePath = mcpConfigPath();
@@ -122,9 +133,6 @@ export async function createConfiguredMcp(cwd: string, authStorage: any): Promis
     level: "project" as const,
   }]));
   const result = await manager.connectServers(loaded.configs, sources);
-  for (const [name, message] of Object.entries(loaded.unsupported)) {
-    console.error(`[mcp] ${name}: ${message}`);
-  }
   for (const [name, message] of result.errors) console.error(`[mcp] ${name}: ${message}`);
   return { manager, configs: loaded.configs, tools: filterMcpTools(result.tools, loaded.allowBlock) };
 }

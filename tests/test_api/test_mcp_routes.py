@@ -376,7 +376,7 @@ class TestDiscoveredAndReload:
         assert secret not in resp.text
 
 
-def test_build_omp_mcp_servers_preserves_supported_fields_and_transport_names():
+def test_build_omp_mcp_servers_normalizes_only_sdk_fields():
     entries = [
         {
             "server_id": "stdio-server",
@@ -386,8 +386,8 @@ def test_build_omp_mcp_servers_preserves_supported_fields_and_transport_names():
             "args": ["server.js"],
             "env": {"TOKEN": "secret", "MODE": "test"},
             "cwd": "/tmp/mcp",
-            "allowed_tools": ["read"],
-            "blocked_tools": ["write"],
+            "allow": ["read"],
+            "block": ["write"],
         },
         {
             "server_id": "sse-server",
@@ -420,6 +420,8 @@ def test_build_omp_mcp_servers_preserves_supported_fields_and_transport_names():
         "env": {"TOKEN": "secret", "MODE": "test"},
         "cwd": "/tmp/mcp",
         "enabled": True,
+    }
+    assert result["allowBlock"]["stdio-server"] == {
         "allow": ["read"],
         "block": ["write"],
     }
@@ -427,7 +429,7 @@ def test_build_omp_mcp_servers_preserves_supported_fields_and_transport_names():
     assert result["mcpServers"]["sse-server"]["headers"]["Authorization"] == "secret"
     assert result["mcpServers"]["http-server"]["type"] == "http"
     assert "tls_verify" not in result["mcpServers"]["http-server"]
-    assert result["mcpServers"]["websocket-server"]["type"] == "websocket"
+    assert "websocket-server" not in result["mcpServers"]
     assert result["unsupported"] == {
         "websocket-server": "OMP SDK does not support websocket MCP transport",
         "http-server": "OMP SDK does not expose tls_verify for MCP transports",
@@ -439,7 +441,7 @@ def test_build_omp_mcp_servers_omits_disabled_servers():
     result = mcp_mod.build_omp_mcp_servers([
         {"server_id": "disabled", "transport": "stdio", "enabled": False, "command": "echo"},
     ])
-    assert result == {"mcpServers": {}, "unsupported": {}}
+    assert result == {"mcpServers": {}, "allowBlock": {}, "unsupported": {}}
 
 
 class TestLoadRawCorrupted:
