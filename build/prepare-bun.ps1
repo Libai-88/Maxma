@@ -24,6 +24,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+if ($BunVersion -notmatch '^\d+\.\d+\.\d+$') {
+    throw "BunVersion must be an exact semantic version (for example 1.3.14)."
+}
+
 $BunUrl = "https://github.com/oven-sh/bun/releases/download/bun-v$BunVersion/bun-windows-x64.zip"
 $ProjectRoot = Resolve-Path "$PSScriptRoot\.."
 $BunSidecarDir = Join-Path $ProjectRoot "bun-sidecar"
@@ -32,8 +36,11 @@ $TargetBunExe = Join-Path $BunSidecarDir "bun.exe"
 function Invoke-DownloadWithCache {
     param([string]$Url, [string]$CachePath)
     if (Test-Path $CachePath) {
-        Write-Host "[cache] hit: $CachePath"
-        return $CachePath
+        if ((Get-Item $CachePath).Length -gt 0) {
+            Write-Host "[cache] hit: $CachePath"
+            return $CachePath
+        }
+        Remove-Item $CachePath -Force
     }
     Write-Host "[download] $Url"
     New-Item -ItemType Directory -Force -Path (Split-Path $CachePath) | Out-Null
@@ -61,12 +68,14 @@ if (-not $bunExe) {
 Copy-Item $bunExe.FullName $TargetBunExe -Force
 Write-Host "[ok] bun.exe -> $TargetBunExe" -ForegroundColor Green
 
-# Verify the binary runs
-try {
-    $ver = & $TargetBunExe --version
-    Write-Host "[ok] bundled bun version: $ver"
-} catch {
-    Write-Host "[warn] could not verify bun.exe version: $_" -ForegroundColor Yellow
+# Verify the binary runs and matches the pinned version.
+$verOutput = & $TargetBunExe --version 2>&1
+$verExitCode = $LASTEXITCODE
+$ver = [string]($verOutput | Select-Object -First 1)
+$ver = $ver.Trim()
+if ($verExitCode -ne 0 -or $ver -ne $BunVersion) {
+    throw "Bundled Bun version mismatch: expected $BunVersion, got '$ver'."
 }
+Write-Host "[ok] bundled bun version: $ver"
 
 Write-Host "=== prepare-bun complete ===" -ForegroundColor Green

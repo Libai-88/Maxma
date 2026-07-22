@@ -66,6 +66,32 @@ build\run-desktop-dev.bat
 
 ---
 
+## 构建与 CI 验证
+
+构建脚本以仓库根目录为工作目录，支持从 clean checkout 直接开始：
+
+```bat
+build\build-server.bat
+```
+
+首次运行会创建 `.venv`，按 `requirements-lock.txt` 安装 Python 依赖；缺少前端依赖时使用 `web\package-lock.json` 执行 `npm ci`。构建还会下载固定版本的 Bun，并使用 `bun.lock` 执行 `bun install --frozen-lockfile`。已有本地环境会被复用，不会改变日常增量构建习惯。
+
+完整桌面安装包需要 Rust、Tauri CLI 和 Visual Studio C++ Build Tools：
+
+```bat
+build\build-desktop.bat
+```
+
+桌面构建通过 `PATH`、`CARGO_HOME`、`RUSTUP_HOME`、`MAXMA_VCVARS` 和 Visual Studio 的 `vswhere` 自动发现工具链，不依赖某台机器的绝对路径。`prepare-runtime.ps1` 与 `prepare-assets.ps1` 只在完整桌面构建中准备嵌入式运行时和大体积资源；CI 的 server build 不会下载这些资源。
+
+构建契约检查：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File build\test-build-contract.ps1
+```
+
+---
+
 ## 技术栈
 
 | 层 | 技术 |

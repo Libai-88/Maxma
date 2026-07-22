@@ -43,6 +43,7 @@ web/dist/
 
 # Bun sidecar dependencies
 bun-sidecar/node_modules/
+/bun-sidecar/bun.exe
 
 # 根目录散落的 node_modules（Vite 缓存等，正常应在 web/ 下）
 /node_modules/

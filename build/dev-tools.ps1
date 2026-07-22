@@ -119,50 +119,124 @@ function Get-UniquePathList {
     return $result
 }
 
+function Resolve-VsEnvironmentScript {
+    $explicitCandidates = @($env:MAXMA_VCVARS, $env:VSDEVCMD)
+    foreach ($candidate in $explicitCandidates) {
+        if ($candidate -and (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
+    }
+
+    $vswhereCandidates = @()
+    $vswhereFromPath = Get-CommandPath "vswhere"
+    if ($vswhereFromPath) {
+        $vswhereCandidates += $vswhereFromPath
+    }
+    if (${env:ProgramFiles(x86)}) {
+        $vswhereCandidates += Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+    }
+    if ($env:ProgramFiles) {
+        $vswhereCandidates += Join-Path $env:ProgramFiles "Microsoft Visual Studio\Installer\vswhere.exe"
+    }
+
+    foreach ($vswhere in ($vswhereCandidates | Select-Object -Unique)) {
+        if (-not (Test-Path -LiteralPath $vswhere -PathType Leaf)) {
+            continue
+        }
+
+        $installationPath = (& $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null | Select-Object -First 1)
+        if ($installationPath) {
+            $installationPath = $installationPath.Trim()
+            foreach ($candidate in @(
+                (Join-Path $installationPath "VC\Auxiliary\Build\vcvars64.bat"),
+                (Join-Path $installationPath "Common7\Tools\VsDevCmd.bat")
+            )) {
+                if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+                    return (Resolve-Path -LiteralPath $candidate).Path
+                }
+            }
+        }
+    }
+
+    throw "Unable to locate Visual Studio build environment. Set MAXMA_VCVARS or install VS Build Tools with the C++ workload."
+}
+
+function Resolve-WindowsSdkBin {
+    param([hashtable]$VsEnvironment)
+
+    $candidates = @()
+    foreach ($base in @($VsEnvironment["WindowsSdkVerBinPath"], $VsEnvironment["WindowsSdkBinPath"])) {
+        if ($base) {
+            $candidates += $base
+            $candidates += Join-Path $base "x64"
+        }
+    }
+
+    if (${env:ProgramFiles(x86)}) {
+        $sdkBinRoot = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\bin"
+        if (Test-Path -LiteralPath $sdkBinRoot -PathType Container) {
+            $candidates += Get-ChildItem -LiteralPath $sdkBinRoot -Directory |
+                Sort-Object Name -Descending |
+                ForEach-Object { Join-Path $_.FullName "x64" }
+        }
+    }
+
+    foreach ($candidate in ($candidates | Select-Object -Unique)) {
+        if (Test-Path (Join-Path $candidate "rc.exe") -PathType Leaf) {
+            return (Resolve-Path $candidate).Path
+        }
+    }
+
+    throw "Unable to locate Windows SDK x64 tools. Install the Windows 10/11 SDK with VS Build Tools."
+}
+
 function Resolve-DevEnvironment {
     param([string]$Root)
 
     $cargoFromPath = Get-CommandPath "cargo"
     $rustupFromPath = Get-CommandPath "rustup"
 
-    $cargoCandidates = @()
-    if ($env:CARGO_HOME) {
-        $cargoCandidates += Join-Path $env:CARGO_HOME "bin"
-    }
-    $cargoCandidates += "D:\Rust\cargo\bin"
-    if ($cargoFromPath) {
-        $cargoCandidates += Split-Path $cargoFromPath -Parent
-    }
-    $cargoBin = Get-FirstExistingPath -Candidates $cargoCandidates -Leaf "cargo.exe"
-
-    if (-not $cargoBin) {
-        throw "Unable to locate cargo.exe. Checked CARGO_HOME, D:\Rust\cargo\bin, and PATH."
+    $cargoPath = $null
+    if ($cargoFromPath -and (Test-Path -LiteralPath $cargoFromPath -PathType Leaf)) {
+        $cargoPath = (Resolve-Path -LiteralPath $cargoFromPath).Path
+    } elseif ($env:CARGO_HOME) {
+        $candidate = Join-Path $env:CARGO_HOME "bin\cargo.exe"
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            $cargoPath = (Resolve-Path -LiteralPath $candidate).Path
+        }
     }
 
-    $cargoHome = Split-Path $cargoBin -Parent
+    if (-not $cargoPath) {
+        throw "Unable to locate cargo.exe. Add Rust's cargo\bin to PATH or set CARGO_HOME."
+    }
+
+    $cargoBin = Split-Path $cargoPath -Parent
+    $cargoHome = if ($env:CARGO_HOME -and (Test-Path -LiteralPath $env:CARGO_HOME -PathType Container)) {
+        (Resolve-Path $env:CARGO_HOME).Path
+    } else {
+        (Split-Path $cargoBin -Parent)
+    }
 
     $rustupCandidates = @()
     if ($env:RUSTUP_HOME) {
         $rustupCandidates += $env:RUSTUP_HOME
     }
-    $rustupCandidates += "D:\Rust\rustup"
     if ($rustupFromPath) {
-        $rustupCandidates += Join-Path (Split-Path (Split-Path $rustupFromPath -Parent) -Parent) "rustup"
+        $reportedRustupHome = (& $rustupFromPath show home 2>$null | Select-Object -First 1)
+        if ($reportedRustupHome) {
+            $rustupCandidates += $reportedRustupHome.Trim()
+        }
+    }
+    if ($env:USERPROFILE) {
+        $rustupCandidates += Join-Path $env:USERPROFILE ".rustup"
     }
     $rustupHome = Get-FirstExistingPath -Candidates $rustupCandidates
 
     if (-not $rustupHome) {
-        throw "Unable to locate RUSTUP_HOME. Checked RUSTUP_HOME, D:\Rust\rustup, and PATH."
+        throw "Unable to locate RUSTUP_HOME. Add rustup to PATH or set RUSTUP_HOME."
     }
 
-    $vcvars64 = Get-FirstExistingPath -Candidates @(
-        "D:\VSBuildTools\VC\Auxiliary\Build\vcvars64.bat",
-        "D:\VSBuildTools\Common7\Tools\VsDevCmd.bat"
-    )
-
-    if (-not $vcvars64) {
-        throw "Unable to locate Visual Studio build environment script under D:\VSBuildTools."
-    }
+    $vcvars64 = Resolve-VsEnvironmentScript
 
     $vsEnv = Import-BatchEnvironment -BatchPath $vcvars64
     $vcToolsInstallDir = $vsEnv["VCToolsInstallDir"]
@@ -176,17 +250,7 @@ function Resolve-DevEnvironment {
         throw "MSVC linker not found: $linker"
     }
 
-    $winSdkBase = $vsEnv["WindowsSdkBinPath"]
-    $winSdkBin = if ($winSdkBase) { Join-Path $winSdkBase "x64" } else { $null }
-    if (-not $winSdkBin -or -not (Test-Path (Join-Path $winSdkBin "rc.exe"))) {
-        $winSdkBin = Get-FirstExistingPath -Candidates @(
-            "C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64"
-        ) -Leaf "rc.exe"
-    }
-
-    if (-not $winSdkBin) {
-        throw "Unable to locate Windows SDK x64 bin directory."
-    }
+    $winSdkBin = Resolve-WindowsSdkBin -VsEnvironment $vsEnv
 
     $systemPathEntries = @(
         (Join-Path $env:SystemRoot "System32"),

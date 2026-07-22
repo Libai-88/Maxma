@@ -25,39 +25,14 @@ jobs:
           cache: "npm"
           cache-dependency-path: web/package-lock.json
 
-      - name: Build frontend
-        run: |
-          cd web
-          npm ci
-          npm run build
-
-      - name: Create virtualenv and install dependencies
-        run: |
-          python -m venv .venv
-          .venv\Scripts\python.exe -m pip install --upgrade pip
-          .venv\Scripts\python.exe -m pip install -r requirements-lock.txt
-          .venv\Scripts\python.exe -m pip install pyinstaller
-
-      - name: Prepare bundled Bun runtime
-        shell: powershell
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File build\prepare-bun.ps1
-
-      - name: Install Bun sidecar dependencies
-        shell: powershell
-        run: |
-          $bun = (Resolve-Path "bun-sidecar\bun.exe").Path
-          Push-Location bun-sidecar
-          try {
-            & $bun install --frozen-lockfile
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          } finally {
-            Pop-Location
-          }
-
-      - name: Package server with PyInstaller
-        run: .venv\Scripts\python.exe -m PyInstaller build\maxma-server.spec --clean --noconfirm
+      - name: Build server through the clean-checkout entry point
+        shell: cmd
+        env:
+          MAXMA_CI: "1"
+        run: call build\build-server.bat
 
       - name: Verify build artifact
+        shell: powershell
         run: |
           if (-not (Test-Path "dist\maxma-server.exe")) {
             Write-Error "Build artifact dist\maxma-server.exe not found"
