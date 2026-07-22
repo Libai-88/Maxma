@@ -92,12 +92,12 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
-      host: '0.0.0.0',
-      port: 1420,
+      host: '127.0.0.1',
+      port: webPort,
       proxy: {
-        '/api': `http://localhost:${apiPort}`,
+        '/api': `http://127.0.0.1:${apiPort}`,
         '/ws': {
-          target: `ws://localhost:${apiPort}`,
+          target: `ws://127.0.0.1:${apiPort}`,
           ws: true,
           changeOrigin: true,
           // 必须显式处理 WebSocket 子协议，否则浏览器收到空的
