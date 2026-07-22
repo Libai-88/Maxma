@@ -118,6 +118,11 @@ const navItems = [
   background: var(--accent-soft, color-mix(in srgb, var(--accent) 12%, transparent));
 }
 
+.icon-rail__control:active {
+  transform: scale(0.92);
+  transition: transform 0.08s ease;
+}
+
 .icon-rail__control:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;

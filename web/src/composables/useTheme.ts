@@ -1,141 +1,99 @@
 // web/src/composables/useTheme.ts
-// 主题切换 composable — 13 选项（auto + 12 主题）
-// 替代 useNightMode.ts 的主题选择职责
+// 主题切换 composable — v2.0 6 主题（2 旗舰 + 2 变体 + 2 保留 + auto）
+// 替代 v1.17 旧主题系统
 
 import { ref, computed, watch } from 'vue'
 
 /** 主题 ID 类型 */
 export type ThemeId =
   | 'auto'
-  | 'warm-paper'
-  | 'warm-precision'
-  | 'study'
+  | 'suying'
+  | 'ultraline'
+  | 'night'
+  | 'kintsugi'
+  | 'grass'
   | 'midnight'
-  | 'high-contrast'
-  | 'grass-aroma'
-  | 'contemplation'
-  | 'coral'
-  | 'delve'
-  | 'deep-think'
-  | 'absolutely'
-  | 'dawn'
-  | 'midnight-contrast'
+
+/** 主题分组 */
+export type ThemeGroup = 'flagship' | 'variant' | 'legacy'
 
 /** 主题元信息 */
 export interface ThemeMeta {
   id: ThemeId
   name: string
   description: string
+  group: ThemeGroup
   isDark: boolean
   preview: { bg: string; accent: string; text: string }
 }
 
-/** 全部主题元信息（供 ThemePicker 渲染） */
+/** v2.0 全部主题元信息 */
 export const THEMES: ThemeMeta[] = [
   {
     id: 'auto',
     name: '自动',
     description: '跟随系统明暗',
+    group: 'flagship',
     isDark: false,
-    preview: { bg: 'linear-gradient(135deg, #F8F4ED 50%, #3B4A54 50%)', accent: '#537D96', text: '#3B3D3F' },
+    preview: { bg: 'linear-gradient(135deg, #F7F4EE 50%, #0D1117 50%)', accent: '#C23B22', text: '#1C1C1C' },
+  },
+  // ══ 旗舰 ══
+  {
+    id: 'suying',
+    name: '素影',
+    description: '宣纸白 + 朱砂印，墨分五色的数字文房',
+    group: 'flagship',
+    isDark: false,
+    preview: { bg: '#F7F4EE', accent: '#C23B22', text: '#1C1C1C' },
   },
   {
-    id: 'warm-paper',
-    name: '暖纸',
-    description: '和纸手抄本，温润文人感',
+    id: 'ultraline',
+    name: '極線',
+    description: '纯白黑蓝 + 1px 法则，不可能更少',
+    group: 'flagship',
     isDark: false,
-    preview: { bg: '#F8F4ED', accent: '#537D96', text: '#3B3D3F' },
+    preview: { bg: '#FFFFFF', accent: '#0066FF', text: '#0D0D0D' },
   },
+  // ══ 变体 ══
   {
-    id: 'warm-precision',
-    name: '暖精工',
-    description: '暖奶油 + 赤陶，精准温暖',
-    isDark: false,
-    preview: { bg: '#FCF9F5', accent: '#C17A5C', text: '#2C2825' },
-  },
-  {
-    id: 'study',
-    name: '书斋',
-    description: '暖纸 + 远山青 + 赤陶，书卷气',
-    isDark: false,
-    preview: { bg: '#F8F4ED', accent: '#537D96', text: '#2A2826' },
-  },
-  {
-    id: 'midnight',
-    name: '青夜',
-    description: '深青蓝底，柔粉印章',
+    id: 'night',
+    name: '夜航',
+    description: '深空蓝黑 + 导航星金，深夜里的导航员',
+    group: 'variant',
     isDark: true,
-    preview: { bg: '#3B4A54', accent: '#C99AAF', text: '#E1EAF0' },
+    preview: { bg: '#0D1117', accent: '#D4A853', text: '#E6EDF3' },
   },
   {
-    id: 'high-contrast',
-    name: '素白',
-    description: '高对比浅色，无障碍',
+    id: 'kintsugi',
+    name: '金継',
+    description: '陶胎灰白 + 金継線，破碎中的完美',
+    group: 'variant',
     isDark: false,
-    preview: { bg: '#FAF8F7', accent: '#1A3A4A', text: '#1A1A1A' },
+    preview: { bg: '#F5F0E8', accent: '#C8A84E', text: '#2C2416' },
   },
+  // ══ 保留 ══
   {
-    id: 'grass-aroma',
-    name: '草香',
-    description: '青草绿调，清晨露水',
+    id: 'grass',
+    name: '青草香',
+    description: '冷绿淡彩，清晨工作台',
+    group: 'legacy',
     isDark: false,
     preview: { bg: '#F5F8F3', accent: '#5B8C5F', text: '#2D3F30' },
   },
   {
-    id: 'contemplation',
-    name: '沉思',
-    description: '灰蓝调，雨天窗外',
-    isDark: false,
-    preview: { bg: '#F3F5F7', accent: '#597891', text: '#2A3340' },
-  },
-  {
-    id: 'coral',
-    name: '珊瑚',
-    description: '墨蓝 + 珊瑚朱',
-    isDark: false,
-    preview: { bg: '#FDF6EC', accent: '#2B4858', text: '#2A2520' },
-  },
-  {
-    id: 'delve',
-    name: '极简',
-    description: '冷调纯白 + 纯黑',
-    isDark: false,
-    preview: { bg: '#FFFFFF', accent: '#202123', text: '#202123' },
-  },
-  {
-    id: 'deep-think',
-    name: '深思',
-    description: '白底 + 克制蓝紫',
-    isDark: false,
-    preview: { bg: '#FCFCFD', accent: '#515FDC', text: '#1A1B2E' },
-  },
-  {
-    id: 'absolutely',
-    name: '赤陶',
-    description: '暖奶油 + 哑光赤陶',
-    isDark: false,
-    preview: { bg: '#F4F3EE', accent: '#A54B37', text: '#2E2A26' },
-  },
-  {
-    id: 'dawn',
-    name: '晨曦',
-    description: '粉桃奶黄渐变，清晨薄雾',
-    isDark: false,
-    preview: { bg: 'linear-gradient(135deg, #FDC9C6 0%, #FFEEBB 35%, #FCFBE6 65%, #EAF5F6 100%)', accent: '#E8826F', text: '#3A3530' },
-  },
-  {
-    id: 'midnight-contrast',
-    name: '青夜·高对比',
-    description: '更深青蓝，高可读',
+    id: 'midnight',
+    name: '青夜',
+    description: '深青蓝底 + 暖玫瑰，不说故事的暗色',
+    group: 'legacy',
     isDark: true,
-    preview: { bg: '#26343D', accent: '#E0BFC8', text: '#F0F4F8' },
+    preview: { bg: '#3B4A54', accent: '#C99AAF', text: '#E1EAF0' },
   },
 ]
 
 const STORAGE_KEY = 'maxma.theme'
-const DEFAULT_THEME: ThemeId = 'warm-precision'
-const AUTO_LIGHT: ThemeId = 'warm-paper'
-const AUTO_DARK: ThemeId = 'midnight'
+const DEFAULT_THEME: ThemeId = 'suying'
+const AUTO_LIGHT: ThemeId = 'suying'
+const AUTO_DARK: ThemeId = 'night'
 
 /** 当前存储的主题设置（auto 或具体主题） */
 const storedTheme = ref<ThemeId>(loadStoredTheme())

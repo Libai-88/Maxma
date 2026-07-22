@@ -70,10 +70,14 @@ watchEffect(() => {
   color: var(--text-secondary);
 }
 .ds-btn--ghost:hover:not(:disabled) {
-	  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
-	  border-color: transparent;
-	  color: var(--text-primary);
-	}
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  border-color: transparent;
+  color: var(--text-primary);
+}
+.ds-btn--ghost:active:not(:disabled) {
+  transform: scale(0.97);
+  transition: transform 0.08s ease;
+}
 
 .ds-btn--subtle {
   background: var(--bg-secondary);
@@ -81,8 +85,12 @@ watchEffect(() => {
   color: var(--text-primary);
 }
 .ds-btn--subtle:hover:not(:disabled) {
-	  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
-	}
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+.ds-btn--subtle:active:not(:disabled) {
+  transform: scale(0.97);
+  transition: transform 0.08s ease;
+}
 
 .ds-btn--success {
   background: var(--status-success, #16a34a);

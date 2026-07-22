@@ -58,20 +58,31 @@ export async function ensurePortLoaded(): Promise<void> {
     portLoadPromise = (async () => {
       try {
         const { invoke } = await import('@tauri-apps/api/core')
-        // 重试 5 次，每次间隔 1 秒
         for (let attempt = 1; attempt <= 5; attempt++) {
           try {
             const port = await invoke<number>('get_api_port')
             if (typeof port === 'number' && port > 0) {
-              runtimeApiPort = port
-              console.log('[env] runtime api port:', port)
-              break
+              // Validate: Tauri may report a port where no backend is actually listening
+              // (e.g. dev mode with venv on 8000, but Tauri picked 8001 after conflict).
+              const ok = await _healthCheck(port)
+              if (ok) {
+                runtimeApiPort = port
+                console.log('[env] runtime api port (validated):', port)
+                break
+              }
+              console.warn(`[env] Tauri reported port ${port} but health check failed, trying default`)
+              runtimeApiPort = DEFAULT_API_PORT
+              const okDefault = await _healthCheck(DEFAULT_API_PORT)
+              if (okDefault) {
+                console.log('[env] fallback to default port:', DEFAULT_API_PORT)
+                break
+              }
             }
           } catch (e) {
             console.warn(`[env] get_api_port attempt ${attempt}/5 failed:`, e)
-            if (attempt < 5) {
-              await new Promise(resolve => setTimeout(resolve, 1000))
-            }
+          }
+          if (attempt < 5) {
+            await new Promise(resolve => setTimeout(resolve, 1000))
           }
         }
       } catch (e) {
@@ -83,6 +94,16 @@ export async function ensurePortLoaded(): Promise<void> {
     })()
   }
   await portLoadPromise
+}
+
+/** Quick health check on a given port, with 2s timeout */
+async function _healthCheck(port: number): Promise<boolean> {
+  try {
+    const resp = await tauriFetch(`http://127.0.0.1:${port}/api/health`, { method: 'GET' })
+    return resp.ok
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -127,7 +148,12 @@ function currentApiPort(): number {
 
 /** 所有 HTTP API 请求的基础路径 */
 export function getApiBase(): string {
-  return detectTauri() ? `http://127.0.0.1:${currentApiPort()}/api` : '/api'
+  // 开发模式：走 Vite 代理（/api → localhost:8000），与浏览器行为一致
+  // 生产模式：直连后端（Tauri HTTP 插件 → Rust reqwest）
+  if (detectTauri() && !import.meta.env.DEV) {
+    return `http://127.0.0.1:${currentApiPort()}/api`
+  }
+  return '/api'
 }
 
 /** 后端原始地址（不含 /api 前缀，用于非 API 路径如 /api/upload → 上传使用 getApiBase） */
@@ -137,7 +163,10 @@ export function getBackendOrigin(): string {
 
 /** WebSocket 基础路径（不含 /ws/chat/... 后缀） */
 export function getWsBase(): string {
-  return detectTauri() ? `ws://127.0.0.1:${currentApiPort()}` : ''
+  if (detectTauri() && !import.meta.env.DEV) {
+    return `ws://127.0.0.1:${currentApiPort()}`
+  }
+  return ''
 }
 
 /**

@@ -2,7 +2,7 @@
   <div class="tool-bubble" :class="[toolCall.status, { open: isOpen }]">
     <div class="bubble-header" @click="toggle" role="button" :aria-expanded="isOpen">
       <span class="bubble-status">
-        <span v-if="toolCall.status === 'running'" class="spinner"></span>
+        <span v-if="toolCall.status === 'running'" class="tool-pulse-dot"></span>
         <Icon v-else-if="toolCall.status === 'done'" name="checkmark" :size="14" />
         <Icon v-else name="close" :size="14" />
       </span>
@@ -88,7 +88,7 @@ watch(() => props.toolCall.status, (s) => {
               box-shadow 0.15s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
 }
 .tool-bubble:hover {
-  border-color: var(--border-strong, color-mix(in srgb, var(--accent) 20%, var(--border)));
+  border-color: var(--accent);
   box-shadow: var(--shadow-sm);
 }
 .bubble-header {
@@ -100,10 +100,10 @@ watch(() => props.toolCall.status, (s) => {
   user-select: none;
   font-size: 0.85em;
   color: var(--text-secondary);
-  transition: background 0.12s var(--ease-out);
+  transition: background 0.12s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
 }
 .bubble-header:hover {
-  background: color-mix(in srgb, var(--accent) 4%, transparent);
+  background: var(--accent-light, color-mix(in srgb, var(--accent) 4%, transparent));
 }
 .bubble-status {
   flex-shrink: 0;
@@ -135,17 +135,14 @@ watch(() => props.toolCall.status, (s) => {
   padding: 0 12px 12px;
   border-top: 1px solid var(--border);
 }
-.spinner {
+/* 运行状态脉动圆点 */
+.tool-pulse-dot {
   display: inline-block;
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--accent);
-  border-top-color: transparent;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  animation: tool-spin 0.6s linear infinite;
-}
-@keyframes tool-spin {
-  to { transform: rotate(360deg); }
+  background: var(--accent);
+  animation: maxma-tool-pulse 1s ease-in-out infinite;
 }
 
 /* 状态色彩 */
@@ -161,11 +158,7 @@ watch(() => props.toolCall.status, (s) => {
 
 /* 无障碍 */
 @media (prefers-reduced-motion: reduce) {
-  .bubble-body-wrapper {
-    transition: none;
-  }
-  .spinner {
-    animation-duration: 1.5s;
-  }
+  .bubble-body-wrapper { transition: none; }
+  .tool-pulse-dot { animation: none; opacity: 0.6; }
 }
 </style>

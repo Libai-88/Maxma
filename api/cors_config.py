@@ -17,13 +17,13 @@ def build_cors_origins() -> list[str]:
     cors_origins = [
         f"http://localhost:{web_port}",
         f"http://127.0.0.1:{web_port}",
+        # Tauri v2 协议 — 开发和生成都需要
+        "tauri://localhost",
+        "https://tauri.localhost",
     ]
     if os.environ.get("MAXMA_ENV") == "production":
         cors_origins += [
             f"http://localhost:{api_port}",
             f"http://127.0.0.1:{api_port}",
-            # Tauri v2 协议
-            "tauri://localhost",
-            "https://tauri.localhost",
         ]
     return cors_origins

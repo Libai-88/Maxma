@@ -130,6 +130,29 @@
   --bg-aura-start: color-mix(in srgb, var(--accent) 6%, var(--bg-primary));
   --bg-aura-end:   color-mix(in srgb, var(--accent-pink) 4%, var(--bg-primary));
   --bg-aura-duration: 90s;
+
+  /* ── 精致细节（v2.1 — 主题可覆盖） ── */
+  --selection-bg:      rgba(0, 0, 0, 0.12);
+  --selection-text:    inherit;
+  --scrollbar-thumb:   rgba(0, 0, 0, 0.18);
+  --scrollbar-track:   transparent;
+  --card-surface:      none;
+  --font-smoothing:    auto;
+}
+
+/* ══ 精致度全局规则 ══ */
+::selection {
+  background: var(--selection-bg);
+  color: var(--selection-text);
+}
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--scrollbar-thumb) 70%, var(--text-primary) 30%); }
+body {
+  -webkit-font-smoothing: var(--font-smoothing);
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 /* 字体开关：无衬线模式 */

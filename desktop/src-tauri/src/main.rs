@@ -637,15 +637,15 @@ fn main() {
                 port: AtomicU16::new(selected_port),
             });
 
-            // 启动 sidecar + 监控（sidecar 作为主进程后代自动继承 Job Object）
-            spawn_sidecar_with_monitor(
-                app.handle().clone(),
-                restart_count,
-                shutting_down,
-                child_store,
-                selected_port,
-                log_writer.clone(),
-            );
+    // 启动 sidecar + 监控（sidecar 作为主进程后代自动继承 Job Object）
+    spawn_sidecar_with_monitor(
+        app.handle().clone(),
+        restart_count,
+        shutting_down,
+        child_store,
+        selected_port,
+        log_writer.clone(),
+    );
 
             // 后台等待后端就绪
             let handle = app.handle().clone();

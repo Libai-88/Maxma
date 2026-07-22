@@ -80,7 +80,7 @@ const onboarding = useOnboardingStore()
 const { storedTheme, setTheme } = useTheme()
 const step = ref(0)
 const titles = ['欢迎使用', '连接模型', '设定工作区', '快速了解']
-const quickThemes = THEMES.filter(theme => ['warm-paper', 'midnight', 'high-contrast'].includes(theme.id))
+const quickThemes = THEMES.filter(theme => ['suying', 'ultraline', 'night'].includes(theme.id))
 const displayName = ref(onboarding.snapshot.preferences.displayName)
 const language = ref(onboarding.snapshot.preferences.language)
 const workspace = ref(onboarding.snapshot.preferences.workspace)
@@ -120,7 +120,9 @@ h2 { margin: 3px 0 0; font-size: 22px; color: var(--text-primary); }.eyebrow { c
 .next-step-title { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 2px; }
 .next-step-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
 .next-step-desc strong { color: var(--text-primary); font-weight: 600; }
-.swatch--warm-paper { background: #F8F4ED; }
+.swatch--suying { background: #F7F4EE; }
+.swatch--ultraline { background: #FFFFFF; }
+.swatch--night { background: #0D1117; }
 .swatch--midnight { background: #3B4A54; }
 .swatch--high-contrast { background: #FAF8F7; }
 @media (max-width: 520px) { .onboarding-backdrop { padding: 12px; }.onboarding-header, .onboarding-footer, .step-content { padding-left: 18px; padding-right: 18px; }.theme-options { grid-template-columns: 1fr; } }

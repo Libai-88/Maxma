@@ -1,0 +1,86 @@
+/* web/src/themes/springfield.css
+ * Springfield 主题 — 清晨草露，深青到新绿的渐变
+ * 色板：008E6B · 46B065 · 81C570 · DCECB5 · FBFFF2
+ */
+
+[data-theme="springfield"] {
+  /* ── 背景 ── */
+  --bg-primary:    #FBFFF2;
+  --bg-secondary:  #F0F8E6;
+  --bg-card:       #FFFFFF;
+  --user-bubble:   rgba(0, 142, 107, 0.12);
+
+  /* ── 主色调（深青） ── */
+  --accent:        #008E6B;
+  --accent-pink:   #46B065;
+  --accent-pink-light: #46B065;
+  --accent-pink-soft:  rgba(70, 176, 101, 0.10);
+
+  /* ── 文字 ── */
+  --text-primary:   #1A2E24;
+  --text-secondary: #4A6B5A;
+  --text-tertiary:  #7A9A8A;
+
+  /* ── 边框与阴影 ── */
+  --border:         rgba(0, 142, 107, 0.14);
+  --shadow-color:   rgba(0, 60, 40, 0.07);
+
+  /* ── 状态色 ── */
+  --status-ok:      #008E6B;
+  --status-error:   #C44A4A;
+  --status-warn:    #C9A040;
+  --status-info:    #008E6B;
+
+  /* ── 聊天专用 ── */
+  --tool-bg:        rgba(0, 142, 107, 0.06);
+
+  /* ── 侧边栏 ── */
+  --sidebar-bg:     #F0F8E6;
+
+  /* ── 遮罩层 ── */
+  --overlay-subtle: rgba(0, 0, 0, 0.03);
+  --overlay-light:  rgba(0, 0, 0, 0.05);
+  --overlay-medium: rgba(0, 0, 0, 0.08);
+  --overlay-strong: rgba(0, 0, 0, 0.15);
+
+  /* RGB 拆分 */
+  --accent-rgb: 0, 142, 107;
+  --green-rgb: 70, 176, 101;
+  --coral-rgb: 255, 127, 80;
+  --danger-rgb: 196, 74, 74;
+
+  /* 聊天专用语义色 */
+  --hana-text: #3a7a5a;
+  --mood-bg: rgba(var(--accent-rgb), 0.06);
+  --mood-text: #4a8a6a;
+  --mood-border: rgba(var(--accent-rgb), 0.15);
+  --tool-text: #2a6a4a;
+  --user-bg: rgba(var(--accent-rgb), 0.08);
+  --drop-overlay-bg: rgba(var(--accent-rgb), 0.12);
+  --attach-bg: rgba(var(--accent-rgb), 0.05);
+
+  /* 深色变体 */
+  --accent-dark: #007A5E;
+  --accent-hover: #007A5E;
+
+  /* 头部品牌渐变（深青 → 新绿 → 嫩绿） */
+  --header-gradient-from: #008E6B;
+  --header-gradient-mid1: #46B065;
+  --header-gradient-mid2: #81C570;
+  --header-gradient-to:   #008E6B;
+  --header-glow: rgba(0, 142, 107, 0.25);
+
+  /* 用户气泡实色 */
+  --user-bubble-solid: #008E6B;
+  --user-bubble-text:  #FBFFF2;
+
+  /* 光斑覆盖层色（青绿色系） */
+  --leaf-color-1: rgba(0, 142, 107, 0.30);
+  --leaf-color-2: rgba(70, 176, 101, 0.25);
+  --leaf-color-3: rgba(129, 197, 112, 0.20);
+  --leaf-color-4: rgba(0, 142, 107, 0.18);
+  --leaf-color-5: rgba(70, 176, 101, 0.15);
+  --leaf-color-6: rgba(129, 197, 112, 0.12);
+  --leaf-color-7: rgba(0, 142, 107, 0.10);
+  --leaf-color-8: rgba(70, 176, 101, 0.08);
+}

@@ -1,0 +1,87 @@
+/* ═══════════════════════════════════════════════
+ * 極線 · Ultraline — 旗舰默认 2
+ * 纯白黑蓝 + 1px 法则 → 不可能更少
+ * v2.0 — 36-Token 契约
+ * ═══════════════════════════════════════════════ */
+
+[data-theme="ultraline"] {
+  /* ── 表面层级（统一纯白） ── */
+  --bg-primary:    #FFFFFF;
+  --bg-secondary:  #FFFFFF;
+  --bg-card:       #FFFFFF;
+  --bg-raised:     #FFFFFF;
+
+  /* ── 文字层级（4 阶） ── */
+  --text-primary:   #0D0D0D;
+  --text-secondary: #595959;
+  --text-tertiary:  #767676;  /* 占位/禁用（WCAG AA ≥4.5:1） */
+  --text-inverse:   #FFFFFF;
+
+  /* ── 强调色 — 讯号蓝（4 阶） ── */
+  --accent:        #0066FF;
+  --accent-hover:  #0052CC;
+  --accent-active: #003D99;
+  --accent-light:  rgba(0, 102, 255, 0.05);
+  --accent-rgb:    0, 102, 255;
+  --accent-dark:   #0052CC;
+
+  /* ── 边框（3 阶） ── */
+  --border:         #E0E0E0;
+  --border-strong:  #C0C0C0;
+  --border-accent:  #0066FF;
+
+  /* ── 状态色（4 阶） ── */
+  --status-ok:    #2DA44E;
+  --status-error: #CF222E;
+  --status-warn:  #BF8700;
+  --status-info:  #0969DA;
+  --green-rgb:    45, 164, 78;
+  --coral-rgb:    207, 34, 46;
+  --danger-rgb:   207, 34, 46;
+
+  /* ── 圆角（極線专属 — 近乎直角） ── */
+  --radius-sm:  2px;
+  --radius-md:  2px;
+  --radius-lg:  4px;
+  --radius-xl:  4px;
+
+  /* ── 阴影（極線专属 — 无阴影或极微弱轮廓） ── */
+  --shadow-sm:    none;
+  --shadow-md:    none;
+  --shadow-lg:    0 0 0 1px rgba(0, 0, 0, 0.05);
+  --shadow-xl:    0 0 0 1px rgba(0, 0, 0, 0.08);
+  --shadow-soft:  none;
+  --shadow-color: rgba(0, 0, 0, 0.04);
+  --shadow-xs:    none;
+
+  /* ── 动效（统一） ── */
+  --duration-instant: 0.1s;
+  --duration-fast:    0.2s;
+  --duration-slow:    0.25s;
+  --ease-out:      cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-standard: cubic-bezier(0.77, 0, 0.175, 1);
+
+  /* ── 布局 ── */
+  --sidebar-width:  200px;
+  --chat-max-width: 700px;
+  --bubble-asym-user:      2px;
+  --bubble-asym-assistant: 0px;
+
+  /* ── 工具/专用 ── */
+  --tool-bg:        transparent;
+  --user-bubble:    transparent;
+  --user-bubble-bg: transparent;
+  --sidebar-bg:     #FFFFFF;
+  --overlay-subtle:  rgba(0, 0, 0, 0.02);
+  --overlay-light:   rgba(0, 0, 0, 0.04);
+  --overlay-medium:  rgba(0, 0, 0, 0.06);
+  --overlay-strong:  rgba(0, 0, 0, 0.12);
+
+  /* ── 精致细节（v2.1） ── */
+  --selection-bg:      rgba(0, 102, 255, 0.15);
+  --selection-text:    #0D0D0D;
+  --scrollbar-thumb:   rgba(0, 0, 0, 0.12);
+  --scrollbar-track:   transparent;
+  --card-surface:      none;
+  --font-smoothing:    antialiased;
+}

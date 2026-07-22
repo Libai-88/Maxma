@@ -2,26 +2,41 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
-// KaTeX CSS 已在 RenderMarkdown.vue 中按需动态加载
 import '@/components/tools/_shared/shared.css'
+import { waitForBackend } from '@/utils/env'
 
-const app = createApp(App)
-app.use(createPinia())
-app.use(router)
-app.config.errorHandler = (err, _instance, info) => {
-  console.error('[GlobalError]', err, '\nInfo:', info)
-  // 修复 R-007：派发自定义 DOM 事件，供 App.vue 或全局组件捕获后显示用户可见的通知。
-  // 不直接操作 DOM 或 store，避免错误处理本身引发二次错误。
-  try {
-    window.dispatchEvent(new CustomEvent('maxma:error', {
-      detail: {
-        message: err instanceof Error ? err.message : String(err),
-        info,
-        timestamp: Date.now(),
-      },
-    }))
-  } catch {
-    // 错误通知的发送本身失败时不处理，避免无限递归
+async function boot() {
+  const app = createApp(App)
+  app.use(createPinia())
+  app.use(router)
+  app.config.errorHandler = (err, _instance, info) => {
+    console.error('[GlobalError]', err, '\nInfo:', info)
+    try {
+      window.dispatchEvent(new CustomEvent('maxma:error', {
+        detail: {
+          message: err instanceof Error ? err.message : String(err),
+          info,
+          timestamp: Date.now(),
+        },
+      }))
+    } catch { /* silent */ }
   }
+
+  // 生产环境：等待后端就绪（Tauri sidecar 启动需 10-30s）
+  // 等待期间 index.html 的 loading 覆盖层保持可见
+  const backendReady = await waitForBackend()
+  if (!backendReady) {
+    const el = document.getElementById('app')
+    if (el) {
+      el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#888"><p>Backend timeout. Restart the app.</p></div>'
+    }
+    return
+  }
+
+  // 隐藏 loading 覆盖层并挂载 Vue
+  const splash = document.getElementById('app-loading')
+  if (splash) splash.remove()
+  app.mount('#app')
 }
-app.mount('#app')
+
+boot()

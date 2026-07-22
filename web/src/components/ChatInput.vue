@@ -161,6 +161,7 @@
               v-if="!isStreaming"
               type="button"
               class="btn-send"
+              :class="{ 'is-success': sendState === 'success', 'is-error': sendState === 'error' }"
               aria-label="发送消息"
               :disabled="(!text.trim() && imageRefs.length === 0) || disabled || noProvider || !canSend"
               :title="sendButtonTitle"
@@ -251,8 +252,14 @@ const text = ref('')
 // WebSocket 未连接时发送消息的可见错误反馈（sidecar 未启动等场景）
 const connectionError = ref<string | null>(null)
 const imageError = ref<string | null>(null)
+const sendState = ref<'idle' | 'success' | 'error'>('idle')
 let _imageErrorTimer: ReturnType<typeof setTimeout> | null = null
 let _connectionErrorTimer: ReturnType<typeof setTimeout> | null = null
+let _sendStateTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearSendStateTimer() {
+  if (_sendStateTimer) { clearTimeout(_sendStateTimer); _sendStateTimer = null }
+}
 
 function showImageError(msg: string) {
   imageError.value = msg
@@ -985,6 +992,10 @@ function handleSend() {
     selectedThinkPathId.value || undefined,
   )
   if (!sent) {
+    // Error shake animation
+    sendState.value = 'error'
+    clearSendStateTimer()
+    _sendStateTimer = setTimeout(() => { sendState.value = 'idle'; _sendStateTimer = null }, 600)
     connectionError.value = '消息发送失败：WebSocket 连接已断开，请重试'
     if (_connectionErrorTimer) clearTimeout(_connectionErrorTimer)
     _connectionErrorTimer = setTimeout(() => {
@@ -995,6 +1006,10 @@ function handleSend() {
     }, 5000)
     return
   }
+  // Success flash
+  sendState.value = 'success'
+  clearSendStateTimer()
+  _sendStateTimer = setTimeout(() => { sendState.value = 'idle'; _sendStateTimer = null }, 800)
   text.value = ''
   // ThinkPath is intentionally one-shot: it is a confirmed preference for this
   // request, never an invisible session-level routing policy.
@@ -1100,6 +1115,7 @@ function onResizeEnd(e: PointerEvent) {
       _connectionErrorTimer = null
       if (_imageErrorTimer) clearTimeout(_imageErrorTimer)
       _imageErrorTimer = null
+      clearSendStateTimer()
       document.removeEventListener('keydown', onAddFileMenuKeydown)
     })
   </script>
@@ -1800,6 +1816,16 @@ function onResizeEnd(e: PointerEvent) {
 .btn-send:disabled {
   opacity: 0.2;
   cursor: default;
+}
+/* 发送成功 — 绿色闪烁 */
+.btn-send.is-success {
+  background: var(--status-ok);
+  animation: maxma-send-success 0.8s var(--ease-standard, cubic-bezier(0.77, 0, 0.175, 1));
+}
+/* 发送失败 — 红色震动 */
+.btn-send.is-error {
+  background: var(--status-error);
+  animation: maxma-send-shake 0.5s var(--ease-out, ease-out);
 }
 .btn-stop {
   background: var(--status-error);

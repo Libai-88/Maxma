@@ -5,11 +5,11 @@ import QuickChatApp from './QuickChatApp.vue'
 import '@/assets/styles/tokens.css'
 import '@/assets/styles/animations.css'
 import '@/assets/styles/design-system.css'
-import '@/themes/warm-paper.css'
-import '@/themes/midnight.css'
+import '@/themes/suying.css'
+import '@/themes/night.css'
 
-// Quick Chat 默认使用 warm-paper 主题
-document.documentElement.setAttribute('data-theme', 'warm-paper')
+// Quick Chat 默认使用素影主题
+document.documentElement.setAttribute('data-theme', 'suying')
 
 const app = createApp(QuickChatApp)
 app.config.errorHandler = (err, _instance, info) => {

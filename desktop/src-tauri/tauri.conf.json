@@ -5,9 +5,9 @@
   "identifier": "com.maxmahere.app",
   "build": {
     "frontendDist": "../../web/dist",
-    "devUrl": "http://127.0.0.1:5173",
+    "devUrl": "http://127.0.0.1:1420",
     "beforeDevCommand": "",
-    "beforeBuildCommand": ""
+    "beforeBuildCommand": "cd web && npm run build"
   },
   "app": {
     "windows": [

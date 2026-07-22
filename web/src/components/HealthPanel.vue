@@ -47,7 +47,7 @@ function makeItem(label: string, c: ComponentHealth | null | undefined): HealthI
       name: label,
       label,
       statusClass: 'unknown',
-      tooltip: `${label}: 数据不可用`,
+      tooltip: `${label}: 状态未获取（后端接口未返回组件详情）`,
     }
   }
   const ok = safe.status === 'ok'

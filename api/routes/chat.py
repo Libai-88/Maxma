@@ -73,8 +73,9 @@ async def _get_messages_from_sidecar(
     if sidecar_mgr is None:
         return []
     await sidecar_mgr.start()
-    client = sidecar_mgr.client
-    if client is None:
+    try:
+        client = await sidecar_mgr.get_client()
+    except RuntimeError:
         return []
     with SessionMap() as sm:
         sidecar_sid = sm.get_sidecar_id(session.session_id)
@@ -114,9 +115,7 @@ async def _stream_turn_sidecar(
     # 1. Ensure sidecar is running
     mgr = app_state.sidecar_manager
     await mgr.start()
-    client = mgr.client
-    if client is None:
-        raise RuntimeError("Sidecar client not available after start()")
+    client = await mgr.get_client()
     session._sidecar_mgr = mgr
 
     # 2. Look up or create sidecar session

@@ -86,6 +86,15 @@ class SidecarManager:
         )
 
     @property
+    def client_running(self) -> bool:
+        """True if both the subprocess AND the RPC client are alive."""
+        return (
+            self.is_running
+            and self._client is not None
+            and self._client.is_running
+        )
+
+    @property
     def stdin(self) -> asyncio.StreamWriter | None:
         """The process's stdin stream, or None if not running."""
         return self._process.stdin if self._process else None
@@ -100,6 +109,20 @@ class SidecarManager:
         """The JSON-RPC client for this sidecar, or None if not started."""
         return self._client
 
+    async def get_client(self) -> JsonRpcClient:
+        """Return a live RPC client, restarting the sidecar if necessary.
+
+        Unlike the raw `client` property, this guarantees that the returned
+        client has `is_running == True`. If the sidecar process is alive but
+        the RPC read loop has crashed, the sidecar is transparently restarted.
+        """
+        if self.client_running:
+            return self._client  # type: ignore[return-value]
+        await self.start()
+        if self._client is None or not self._client.is_running:
+            raise RuntimeError("Sidecar client not available after start()")
+        return self._client
+
     # -- Public API ---------------------------------------------------------
 
     async def start(self) -> None:
@@ -110,7 +133,16 @@ class SidecarManager:
         background task, and a short sleep allows the process to initialise.
         """
         async with self._lock:
-            if self.is_running:
+            if self.client_running:
+                logger.debug("Sidecar already running, skipping start")
+                return
+            if self.is_running and not self.client_running:
+                logger.warning(
+                    "[sidecar] RPC client crashed but process alive (pid=%s), restarting",
+                    self._process.pid if self._process else "?",
+                )
+                await self._stop_unsafe()
+            elif self.is_running:
                 logger.debug("Sidecar already running, skipping start")
                 return
 
@@ -170,60 +202,15 @@ class SidecarManager:
             await asyncio.sleep(0.5)
 
     async def stop(self) -> None:
-        """Stop the sidecar subprocess gracefully.
-
-        Strategy (Windows-aware):
-          0. Stop the JSON-RPC client first.
-          1. Send terminate (WM_CLOSE on Windows, SIGTERM on Unix).
-          2. Wait up to 5 seconds for clean exit.
-          3. On timeout, force-kill (TerminateProcess / SIGKILL).
-          4. Ignore ProcessLookupError (already exited).
-        """
+        """Stop the sidecar subprocess gracefully."""
         async with self._lock:
-            # Stop the JSON-RPC client first (inside lock)
-            if self._client is not None:
-                await self._client.stop()
-                self._client = None
-
             if not self.is_running:
                 logger.debug("Sidecar not running, skipping stop")
                 return
+            await self._stop_unsafe()
 
-            proc = self._process
-            self._process = None  # Prevent re-use during cleanup
-
-            # Cancel stderr forwarding task
-            if self._stderr_task is not None and not self._stderr_task.done():
-                self._stderr_task.cancel()
-                try:
-                    await self._stderr_task
-                except asyncio.CancelledError:
-                    logger.debug("[sidecar] Stderr forwarding task cancelled during stop()")
-            self._stderr_task = None
-
-        # Process termination outside lock (I/O bound, no shared state)
-        assert proc is not None
-        try:
-            proc.terminate()  # SIGTERM on Unix, WM_CLOSE on Windows
-            await asyncio.wait_for(proc.wait(), timeout=5)
-            logger.info("Sidecar (pid=%s) stopped gracefully", proc.pid)
-            record_activity("system", "sidecar_stop", message="OMP sidecar 已停止")
-        except asyncio.TimeoutError:
-            logger.warning(
-                "Sidecar (pid=%s) did not exit in 5s, killing", proc.pid
-            )
-            proc.kill()  # TerminateProcess on Windows, SIGKILL on Unix
-            await proc.wait()
-            logger.info("Sidecar (pid=%s) killed", proc.pid)
-            record_activity(
-                "system", "sidecar_stop",
-                level="warn",
-                message="OMP sidecar 未按时退出，已被强制终止",
-            )
-        except ProcessLookupError:
-            logger.debug(
-                "Sidecar (pid=%s) already exited", proc.pid
-            )
+        # Record activity outside lock
+        logger.info("Sidecar stopped")
 
     async def restart(self) -> None:
         """Restart the sidecar subprocess (stop then start)."""
@@ -232,6 +219,43 @@ class SidecarManager:
         await self.start()
 
     # -- Internal helpers ---------------------------------------------------
+
+    async def _stop_unsafe(self) -> None:
+        """Stop the sidecar WITHOUT acquiring self._lock (caller must hold it).
+
+        Separated from stop() to allow restart logic inside start()'s critical section.
+        """
+        # Stop the JSON-RPC client first
+        if self._client is not None:
+            await self._client.stop()
+            self._client = None
+
+        if not self.is_running:
+            return
+
+        proc = self._process
+        self._process = None
+
+        # Cancel stderr forwarding
+        if self._stderr_task is not None and not self._stderr_task.done():
+            self._stderr_task.cancel()
+            try:
+                await self._stderr_task
+            except asyncio.CancelledError:
+                logger.debug("[sidecar] Stderr forwarding cancelled")
+        self._stderr_task = None
+
+        # Terminate process
+        try:
+            proc.terminate()
+            await asyncio.wait_for(proc.wait(), timeout=5)
+            logger.info("Sidecar (pid=%s) stopped (unsafe path)", proc.pid)
+        except asyncio.TimeoutError:
+            logger.warning("Sidecar (pid=%s) did not exit, killing", proc.pid)
+            proc.kill()
+            await proc.wait()
+        except ProcessLookupError:
+            logger.debug("Sidecar (pid=%s) already exited", proc.pid)
 
     async def _forward_stderr(self) -> None:
         """Read stderr lines from the process and forward them to the logger."""

@@ -32,12 +32,12 @@ export const usePersonaStore = defineStore('persona', () => {
     error.value = null
     try {
       const { getToken } = await import('../api/index')
+      const { getApiBase } = await import('@/utils/env')
       const token = getToken()
       const headers: Record<string, string> = {}
       if (token) headers['X-Maxma-Token'] = token
-      // 修复：Tauri 环境下 WebView2 不允许从 tauri://localhost 向 http:// 发起原生 fetch()，
-      // 必须使用 tauriFetch（内部走 @tauri-apps/plugin-http 的 Rust reqwest）。
-      const res = await tauriFetch('/api/persona/profile', { headers })
+      const BASE = getApiBase()
+      const res = await tauriFetch(`${BASE}/persona/profile`, { headers })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       if (data && typeof data === 'object') profile.value = data

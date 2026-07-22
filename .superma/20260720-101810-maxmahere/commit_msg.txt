@@ -1,0 +1,42 @@
+fix(superma): apply 5-round adversarial bug-hunt contest fixes
+
+Contest run: .superma/20260720-101810-maxmahere (5 rounds, Blue wins 7.02 vs Red 6.68)
+
+Issues fixed (17 total + 3 challenge confirmations):
+
+Round 1 (R-001, R-002):
+- maxma_blocker.py: normalize filename to .maxma_blocker (was MaxmaBlocker)
+  silent security bypass - API created markers invisible to security_adapter
+- server.py: close httpx.AsyncClient singleton on FastAPI shutdown
+
+Round 2 (B-001..B-010):
+- sidecar_manager.py: pass MAXMA_PROJECT_ROOT env var to bun-sidecar
+- chat.py: use str(PROJECT_ROOT) for cwd (was ".")
+- session-bridge.ts: implement compact RPC; fix undo steps*2 arithmetic
+- manage_macros.ts: add name validation + path traversal guard
+- manage_{mcp,skills,env_vars,whitelist}.ts: add projectRoot() helper
+- balance.py: add _client_lock + async _get_async_client
+- memory.py: return 501 instead of fabricated data
+- mcp_test.py: add _ALLOWED_COMMANDS whitelist + arg validation
+- providers.py: add migrate_plaintext_keys_to_encrypted() startup hook
+
+Round 3 (BC-001, BC-002):
+- manage_mcp.ts: preserve sibling list items in parseYaml
+- session-bridge.ts: add hasLeadingSystem check + try/catch + defensive clamp in undo
+
+Round 4 (B-011..B-015):
+- persona.py: normalize memory="isolated" to "persona"; add Literal enum;
+  use yaml.safe_dump for frontmatter (prevents injection)
+- prompts.py: accept "isolated" as alias for "persona" in get_persona_memory_path
+- upload.py: widen _sanitize_filename to preserve Unicode (was stripping non-ASCII)
+- useChat.ts: correct LRU->FIFO comment (was misleading)
+- sticker_upload.py: replace print() with logger.exception
+
+Round 5 (BC-003):
+- prompts.py: replace naive line-by-line _parse_frontmatter with yaml.safe_load
+  production parser was vulnerable to multi-line scalar injection even after
+  B-012 yaml.safe_dump serialization fix
+
+Test suite: 1853 passed, 7 skipped, 0 failed (+18 regression tests)
+
+Full contest report: .superma/20260720-101810-maxmahere/result.md

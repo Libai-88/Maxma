@@ -89,7 +89,8 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
-      port: webPort,
+      host: '0.0.0.0',
+      port: 1420,
       proxy: {
         '/api': `http://localhost:${apiPort}`,
         '/ws': {

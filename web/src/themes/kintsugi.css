@@ -1,0 +1,95 @@
+/* ═══════════════════════════════════════════════
+ * 金継 · Kintsugi Studio — 氛围变体
+ * 陶胎灰白 + 金継線 → 破碎中的完美
+ * v2.0 — 36-Token 契约
+ * ═══════════════════════════════════════════════ */
+
+[data-theme="kintsugi"] {
+  /* ── 表面层级（4 阶 — 陶器色阶） ── */
+  --bg-primary:    #F5F0E8;  /* 陶胎 — 主画布 */
+  --bg-secondary:  #EDE6DB;  /* 阴翳 — 侧边栏 */
+  --bg-card:       #FCFAF5;  /* 釉面 — 卡片/气泡 */
+  --bg-raised:     #FFFDF9;  /* 白釉 — 弹窗/悬停 */
+
+  /* ── 文字层级（4 阶） ── */
+  --text-primary:   #2C2416;  /* 墨黑 — 正文 */
+  --text-secondary: #8C806E;  /* 灰釉 — 辅助 */
+  --text-tertiary:  #8C8070;  /* 淡陶 — 占位/禁用（WCAG AA ≥4.5:1） */
+  --text-inverse:   #FFFFFF;
+
+  /* ── 强调色 — 金箔（4 阶） ── */
+  --accent:        #C8A84E;
+  --accent-hover:  #B8963E;
+  --accent-active: #A08030;
+  --accent-light:  rgba(200, 168, 78, 0.10);
+  --accent-rgb:    200, 168, 78;
+  --accent-dark:   #B8963E;
+
+  /* ── 边框（3 阶） ── */
+  --border:         rgba(216, 207, 192, 0.40);
+  --border-strong:  #C8BFB0;
+  --border-accent:  rgba(200, 168, 78, 0.50);
+
+  /* ── 状态色（4 阶） ── */
+  --status-ok:    #7A9A8A;  /* 青瓷 */
+  --status-error: #B85C3A;  /* 铁锈 */
+  --status-warn:  #C99A5A;
+  --status-info:  #6A8A9A;
+  --green-rgb:    122, 154, 138;
+  --coral-rgb:    184, 92, 58;
+  --danger-rgb:   184, 92, 58;
+
+  /* ── 圆角（4 阶 — 手工不规则感） ── */
+  --radius-sm:  7px;
+  --radius-md:  9px;
+  --radius-lg:  11px;
+  --radius-xl:  14px;
+
+  /* ── 阴影（4 阶 — 暖陶影） ── */
+  --shadow-sm:   0 1px 3px  rgba(44, 36, 22, 0.06);
+  --shadow-md:   0 2px 8px  rgba(44, 36, 22, 0.08);
+  --shadow-lg:   0 4px 16px rgba(44, 36, 22, 0.12);
+  --shadow-xl:   0 8px 32px rgba(44, 36, 22, 0.18);
+  --shadow-soft: 0 8px 24px rgba(44, 36, 22, 0.10);
+  --shadow-color: rgba(44, 36, 22, 0.10);
+  --shadow-xs:   0 1px 2px  rgba(44, 36, 22, 0.04);
+
+  /* ── 动效（统一） ── */
+  --duration-instant: 0.1s;
+  --duration-fast:    0.2s;
+  --duration-slow:    0.25s;
+  --ease-out:      cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-standard: cubic-bezier(0.34, 1.56, 0.64, 1);  /* 金継专属微弹 */
+
+  /* ── 布局 ── */
+  --sidebar-width:  220px;
+  --chat-max-width: 690px;
+  --bubble-asym-user:      5px;
+  --bubble-asym-assistant: 5px;
+
+  /* ── 工具/专用 ── */
+  --tool-bg:        rgba(200, 168, 78, 0.04);
+  --user-bubble:    #FCFAF5;
+  --user-bubble-bg: #FCFAF5;
+  --sidebar-bg:     #EDE6DB;
+  --overlay-subtle:  rgba(44, 36, 22, 0.03);
+  --overlay-light:   rgba(44, 36, 22, 0.05);
+  --overlay-medium:  rgba(44, 36, 22, 0.08);
+  --overlay-strong:  rgba(44, 36, 22, 0.15);
+
+  /* ── 精致细节（v2.1） ── */
+  --selection-bg:      rgba(200, 168, 78, 0.20);
+  --selection-text:    #2C2416;
+  --scrollbar-thumb:   rgba(44, 36, 22, 0.15);
+  --scrollbar-track:   transparent;
+  --card-surface:      linear-gradient(180deg, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0) 100%);
+  --font-smoothing:    antialiased;
+
+  /* ── 阴影升级为双层（v2.1） ── */
+  --shadow-sm:   0 1px 2px rgba(44,36,22,.04), 0 1px 3px rgba(44,36,22,.05);
+  --shadow-md:   0 1px 3px rgba(44,36,22,.04), 0 3px 8px rgba(44,36,22,.06);
+  --shadow-lg:   0 2px 4px rgba(44,36,22,.04), 0 6px 20px rgba(44,36,22,.10);
+  --shadow-xl:   0 2px 8px rgba(44,36,22,.04), 0 12px 40px rgba(44,36,22,.16);
+  --shadow-soft: 0 1px 4px rgba(44,36,22,.03), 0 8px 30px rgba(44,36,22,.08);
+  --shadow-xs:   0 1px 2px  rgba(44,36,22,.03);
+}

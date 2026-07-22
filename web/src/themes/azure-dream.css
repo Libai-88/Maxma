@@ -1,0 +1,86 @@
+/* web/src/themes/azure-dream.css
+ * Azure Dream 主题 — 高级渐变，粉紫到深蓝的优雅过渡
+ * 色板：F3CCDB · E5E5F3 · A8D1E1 · 62A9C8 · 147EBC
+ */
+
+[data-theme="azure-dream"] {
+  /* ── 背景 ── */
+  --bg-primary:    #F6F2FA;
+  --bg-secondary:  #EDE8F5;
+  --bg-card:       #FCFAFF;
+  --user-bubble:   rgba(20, 126, 188, 0.10);
+
+  /* ── 主色调（深海蓝） ── */
+  --accent:        #147EBC;
+  --accent-pink:   #F3CCDB;
+  --accent-pink-light: #F3CCDB;
+  --accent-pink-soft:  rgba(243, 204, 219, 0.15);
+
+  /* ── 文字 ── */
+  --text-primary:   #1A2A3A;
+  --text-secondary: #4A6A7A;
+  --text-tertiary:  #7A9AAA;
+
+  /* ── 边框与阴影 ── */
+  --border:         rgba(20, 126, 188, 0.12);
+  --shadow-color:   rgba(10, 60, 100, 0.06);
+
+  /* ── 状态色 ── */
+  --status-ok:      #62A9C8;
+  --status-error:   #C06060;
+  --status-warn:    #C9A060;
+  --status-info:    #147EBC;
+
+  /* ── 聊天专用 ── */
+  --tool-bg:        rgba(20, 126, 188, 0.06);
+
+  /* ── 侧边栏 ── */
+  --sidebar-bg:     #EDE8F5;
+
+  /* ── 遮罩层 ── */
+  --overlay-subtle: rgba(0, 0, 0, 0.03);
+  --overlay-light:  rgba(0, 0, 0, 0.05);
+  --overlay-medium: rgba(0, 0, 0, 0.08);
+  --overlay-strong: rgba(0, 0, 0, 0.15);
+
+  /* RGB 拆分 */
+  --accent-rgb: 20, 126, 188;
+  --green-rgb: 98, 169, 200;
+  --coral-rgb: 243, 204, 219;
+  --danger-rgb: 192, 96, 96;
+
+  /* 聊天专用语义色 */
+  --hana-text: #3a7a9a;
+  --mood-bg: rgba(var(--accent-rgb), 0.06);
+  --mood-text: #4a8aaa;
+  --mood-border: rgba(var(--accent-rgb), 0.15);
+  --tool-text: #2a5a7a;
+  --user-bg: rgba(var(--accent-rgb), 0.08);
+  --drop-overlay-bg: rgba(var(--accent-rgb), 0.12);
+  --attach-bg: rgba(var(--accent-rgb), 0.05);
+
+  /* 深色变体 */
+  --accent-dark: #106EA8;
+  --accent-hover: #106EA8;
+
+  /* 头部品牌渐变（粉紫 → 雾蓝 → 深海蓝） */
+  --header-gradient-from: #F3CCDB;
+  --header-gradient-mid1: #A8D1E1;
+  --header-gradient-mid2: #62A9C8;
+  --header-gradient-to:   #F3CCDB;
+  --header-glow: rgba(20, 126, 188, 0.20);
+
+  /* 用户气泡实色 */
+  --user-bubble-solid: #147EBC;
+  --user-bubble-text:  #FCFAFF;
+
+  /* 光斑覆盖层色（粉蓝系） */
+  --leaf-color-1: rgba(243, 204, 219, 0.35);
+  --leaf-color-2: rgba(168, 209, 225, 0.30);
+  --leaf-color-3: rgba(229, 229, 243, 0.25);
+  --leaf-color-4: rgba(98, 169, 200, 0.20);
+  --leaf-color-5: rgba(243, 204, 219, 0.20);
+  --leaf-color-6: rgba(168, 209, 225, 0.18);
+  --leaf-color-7: rgba(20, 126, 188, 0.12);
+  --leaf-color-8: rgba(229, 229, 243, 0.15);
+}

@@ -158,18 +158,13 @@ onMounted(async () => {
 @import '@/assets/styles/design-system.css';
 @import '@/assets/styles/markdown.css';
 @import '@/assets/styles/paper-texture.css';
-@import '@/themes/warm-precision.css';
-@import '@/themes/warm-paper.css';
+/* ══ 主题系统 v2.0 — 6 主题（旗舰/变体/保留） ══ */
+@import '@/themes/suying.css';
+@import '@/themes/ultraline.css';
+@import '@/themes/night.css';
+@import '@/themes/kintsugi.css';
+@import '@/themes/grass.css';
 @import '@/themes/midnight.css';
-@import '@/themes/high-contrast.css';
-@import '@/themes/grass-aroma.css';
-@import '@/themes/contemplation.css';
-@import '@/themes/coral.css';
-@import '@/themes/delve.css';
-@import '@/themes/deep-think.css';
-@import '@/themes/absolutely.css';
-@import '@/themes/dawn.css';
-@import '@/themes/midnight-contrast.css';
 
 *,
 *::before,

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { getToken } from '@/api'
-import { tauriFetch } from '@/utils/env'
+import { getApiBase, tauriFetch } from '@/utils/env'
 
 export interface ToolInfo {
   name: string
@@ -21,9 +21,8 @@ export const useToolsStore = defineStore('tools', () => {
       const token = getToken()
       const headers: Record<string, string> = {}
       if (token) headers['X-Maxma-Token'] = token
-      // 修复：Tauri 环境下 WebView2 不允许从 tauri://localhost 向 http:// 发起原生 fetch()，
-      // 必须使用 tauriFetch（内部走 @tauri-apps/plugin-http 的 Rust reqwest）。
-      const res = await tauriFetch('/api/tools', { headers })
+      const BASE = getApiBase()
+      const res = await tauriFetch(`${BASE}/tools`, { headers })
       if (!res.ok) {
         tools.value = []
         return

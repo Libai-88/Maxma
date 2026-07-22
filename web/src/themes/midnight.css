@@ -1,80 +1,114 @@
-/* web/src/themes/midnight.css
- * 深色主题 — 深青蓝底 + 暖玫瑰 accent
- * 灵感：雨夜窗外，沉静深邃
- */
+/* ═══════════════════════════════════════════════
+ * 青夜 · Midnight — 经典保留
+ * 深青蓝底 + 暖玫瑰 accent → 不说故事的暗色模式
+ * v2.0 — 36-Token 契约（从 v1.17 迁移升级）
+ * ═══════════════════════════════════════════════ */
 
 [data-theme="midnight"] {
-  /* ── 背景 ── */
+  /* ── 表面层级（4 阶 — v2.0 新增 bg-raised） ── */
   --bg-primary:    #3B4A54;
   --bg-secondary:  #34424B;
   --bg-card:       #445560;
-  --user-bubble:   rgba(170, 121, 141, 0.18);
+  --bg-raised:     #4D6070;
 
-  /* ── 主色调（柔粉） ── */
-  --accent:        #C99AAF;
-  --accent-pink:   #EAB2A0;
-  --accent-pink-light: #EAB2A0;
-  --accent-pink-soft:  rgba(234, 178, 160, 0.12);
-
-  /* ── 文字 ── */
+  /* ── 文字层级（4 阶 — v2.0 新增 text-inverse） ── */
   --text-primary:   #E1EAF0;
   --text-secondary: #B7C5CE;
   --text-tertiary:  #A3B5C0;
+  --text-inverse:   #3B4A54;
 
-  /* ── 边框与阴影 ── */
-  --border:         rgba(170, 121, 141, 0.16);
-  --shadow-color:   rgba(0, 0, 0, 0.36);
+  /* ── 强调色 — 暖玫瑰（4 阶 — v2.0 新增 accent-active） ── */
+  --accent:        #C99AAF;
+  --accent-hover:  #B8849A;
+  --accent-active: #A37085;
+  --accent-light:  rgba(201, 154, 175, 0.10);
+  --accent-rgb:    201, 154, 175;
+  --accent-dark:   #D8AFC0;
 
-  /* ── 状态色 ── */
-  --status-ok:      #8CC790;
-  --status-error:   #C77070;
-  --status-warn:    #D4A574;
-  --status-info:    #8AB4D8;
+  /* ── 边框（3 阶 — v2.0 新增 border-strong, border-accent） ── */
+  --border:         rgba(201, 154, 175, 0.16);
+  --border-strong:  rgba(201, 154, 175, 0.28);
+  --border-accent:  rgba(201, 154, 175, 0.40);
 
-  /* ── 聊天专用 ── */
-  --tool-bg:        rgba(67, 91, 102, 0.20);
+  /* ── 状态色（4 阶） ── */
+  --status-ok:    #8CC790;
+  --status-error: #C77070;
+  --status-warn:  #D4A574;
+  --status-info:  #8AB4D8;
+  --green-rgb:    129, 199, 132;
+  --coral-rgb:    255, 138, 101;
+  --danger-rgb:   229, 115, 115;
 
-  /* ── 侧边栏 ── */
-  --sidebar-bg:     #34424B;
+  /* ── 圆角（4 阶 — v2.0 新增） ── */
+  --radius-sm:  5px;
+  --radius-md:  8px;
+  --radius-lg:  12px;
+  --radius-xl:  16px;
 
-  /* ── 遮罩层（深色主题反转） ── */
-  --overlay-subtle: rgba(255, 255, 255, 0.03);
-  --overlay-light:  rgba(255, 255, 255, 0.05);
-  --overlay-medium: rgba(255, 255, 255, 0.08);
-  --overlay-strong: rgba(255, 255, 255, 0.15);
+  /* ── 阴影（4 阶 — v2.0 补全） ── */
+  --shadow-sm:   0 1px 4px  rgba(0, 0, 0, 0.28);
+  --shadow-md:   0 2px 8px  rgba(0, 0, 0, 0.32);
+  --shadow-lg:   0 4px 16px rgba(0, 0, 0, 0.36);
+  --shadow-xl:   0 8px 32px rgba(0, 0, 0, 0.42);
+  --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-color: rgba(0, 0, 0, 0.36);
+  --shadow-xs:   0 1px 2px rgba(0, 0, 0, 0.20);
 
-  /* RGB 拆分（用于 rgba(var(--accent-rgb), 0.08)） */
-  --accent-rgb: 201, 154, 175;
-  --green-rgb: 129, 199, 132;
-  --coral-rgb: 255, 138, 101;
-  --danger-rgb: 229, 115, 115;
+  /* ── 动效（5 个 — v2.0 统一新增） ── */
+  --duration-instant: 0.1s;
+  --duration-fast:    0.2s;
+  --duration-slow:    0.25s;
+  --ease-out:      cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-standard: cubic-bezier(0.77, 0, 0.175, 1);
 
-  /* 聊天专用语义色 */
-  --hana-text: #c99aaf;
-  --mood-bg: rgba(201, 154, 175, 0.08);
-  --mood-text: #b88a9f;
-  --mood-border: rgba(201, 154, 175, 0.2);
-  --tool-bg: rgba(201, 154, 175, 0.06);
-  --tool-text: #a97a8f;
-  --user-bg: rgba(201, 154, 175, 0.1);
-  --drop-overlay-bg: rgba(201, 154, 175, 0.15);
-  --attach-bg: rgba(201, 154, 175, 0.08);
+  /* ── 布局（6 个 — v2.0 新增） ── */
+  --sidebar-width:  240px;
+  --chat-max-width: 720px;
+  --bubble-asym-user:      6px;
+  --bubble-asym-assistant: 6px;
 
-  /* 侧边栏背景：深青蓝渐变 */
+  /* ── 工具/专用（保留 v1 兼容变量） ── */
+  --user-bubble:     rgba(170, 121, 141, 0.18);
+  --user-bubble-bg:  rgba(170, 121, 141, 0.18);
+  --user-bubble-solid: #EAB2A0;
+  --user-bubble-text:  #445560;
+  --user-bg:         rgba(201, 154, 175, 0.10);
+  --tool-bg:         rgba(201, 154, 175, 0.06);
+  --tool-text:       #a97a8f;
+  --sidebar-bg:      #34424B;
   --sidebar-bg-image: linear-gradient(135deg, #2A3840 0%, #3B4A54 50%, #2F3E48 100%);
+  --overlay-subtle:  rgba(255, 255, 255, 0.03);
+  --overlay-light:   rgba(255, 255, 255, 0.05);
+  --overlay-medium:  rgba(255, 255, 255, 0.08);
+  --overlay-strong:  rgba(255, 255, 255, 0.15);
 
-  /* --accent-dark: accent 的深色变体，用于边框和 hover 状态 */
-  --accent-dark: #D8AFC0;
-  --accent-hover: #b88a9f;
-
-  /* 头部品牌渐变（暖玫瑰 → 柔粉 → 深青蓝） */
+  /* ── v1 兼容变量（保留但不再用于新组件） ── */
+  --accent-pink:       #EAB2A0;
+  --accent-pink-light: #EAB2A0;
+  --accent-pink-soft:  rgba(234, 178, 160, 0.12);
+  --hana-text:         #c99aaf;
+  --mood-bg:           rgba(201, 154, 175, 0.08);
+  --mood-text:         #b88a9f;
+  --mood-border:       rgba(201, 154, 175, 0.20);
+  --drop-overlay-bg:   rgba(201, 154, 175, 0.15);
+  --attach-bg:         rgba(201, 154, 175, 0.08);
   --header-gradient-from: #EAB2A0;
   --header-gradient-mid1: #C99AAF;
   --header-gradient-mid2: #8AB4D8;
   --header-gradient-to:   #EAB2A0;
   --header-glow: rgba(234, 178, 160, 0.25);
 
-  /* 用户气泡实色 */
-  --user-bubble-solid: #EAB2A0;
-  --user-bubble-text:  #445560;
+  /* ── 精致细节 + 阴影升级（v2.1） ── */
+  --selection-bg:      rgba(201, 154, 175, 0.22);
+  --selection-text:    #E1EAF0;
+  --scrollbar-thumb:   rgba(255, 255, 255, 0.12);
+  --scrollbar-track:   transparent;
+  --card-surface:      none;
+  --font-smoothing:    antialiased;
+  --shadow-sm:   0 1px 2px rgba(0,0,0,.20), 0 1px 4px rgba(0,0,0,.25);
+  --shadow-md:   0 1px 3px rgba(0,0,0,.22), 0 3px 8px rgba(0,0,0,.28);
+  --shadow-lg:   0 2px 4px rgba(0,0,0,.24), 0 6px 20px rgba(0,0,0,.32);
+  --shadow-xl:   0 2px 8px rgba(0,0,0,.26), 0 12px 40px rgba(0,0,0,.38);
+  --shadow-soft: 0 1px 4px rgba(0,0,0,.20), 0 8px 30px rgba(0,0,0,.30);
+  --shadow-xs:   0 1px 2px  rgba(0,0,0,.18);
 }

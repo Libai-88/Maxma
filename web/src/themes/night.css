@@ -1,0 +1,87 @@
+/* ═══════════════════════════════════════════════
+ * 夜航 · Night Voyage — 氛围变体
+ * 深空蓝黑 + 导航星金 → 深夜里的导航员
+ * v2.0 — 36-Token 契约
+ * ═══════════════════════════════════════════════ */
+
+[data-theme="night"] {
+  /* ── 表面层级（4 阶 — 暗色递增） ── */
+  --bg-primary:    #0D1117;  /* 深空 */
+  --bg-secondary:  #161B22;  /* 星云 */
+  --bg-card:       #161B22;  /* 星云 — 卡片表层 */
+  --bg-raised:     #1C2333;  /* 月表 */
+
+  /* ── 文字层级（4 阶） ── */
+  --text-primary:   #E6EDF3;  /* 星光 — 正文 */
+  --text-secondary: #8B949E;  /* 微光 — 辅助 */
+  --text-tertiary:  #484F58;  /* 暗影 — 占位/禁用 */
+  --text-inverse:   #0D1117;  /* 深空 — 亮底暗文 */
+
+  /* ── 强调色 — 导航星金（4 阶） ── */
+  --accent:        #D4A853;
+  --accent-hover:  #C49A3E;
+  --accent-active: #B08830;
+  --accent-light:  rgba(212, 168, 83, 0.08);
+  --accent-rgb:    212, 168, 83;
+  --accent-dark:   #C49A3E;
+
+  /* ── 边框（3 阶） ── */
+  --border:         #21262D;
+  --border-strong:  #30363D;
+  --border-accent:  rgba(212, 168, 83, 0.40);
+
+  /* ── 状态色（4 阶） ── */
+  --status-ok:    #3FB950;  /* 信号绿 */
+  --status-error: #F85149;  /* 警报红 */
+  --status-warn:  #D29922;  /* 琥珀 */
+  --status-info:  #58A6FF;  /* 极光蓝 */
+  --green-rgb:    63, 185, 80;
+  --coral-rgb:    248, 81, 73;
+  --danger-rgb:   248, 81, 73;
+
+  /* ── 圆角（4 阶） ── */
+  --radius-sm:  6px;
+  --radius-md:  8px;
+  --radius-lg:  10px;
+  --radius-xl:  12px;
+
+  /* ── 阴影（4 阶 — 暗色加深） ── */
+  --shadow-sm:   0 1px 0    #21262D;
+  --shadow-md:   0 3px 6px  rgba(0, 0, 0, 0.30);
+  --shadow-lg:   0 8px 24px rgba(0, 0, 0, 0.40);
+  --shadow-xl:   0 12px 48px rgba(0, 0, 0, 0.50);
+  --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-color: rgba(0, 0, 0, 0.40);
+  --shadow-xs:   0 1px 0    rgba(255, 255, 255, 0.04);
+
+  /* ── 动效（统一） ── */
+  --duration-instant: 0.1s;
+  --duration-fast:    0.2s;
+  --duration-slow:    0.25s;
+  --ease-out:      cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-standard: cubic-bezier(0.77, 0, 0.175, 1);
+
+  /* ── 布局 ── */
+  --sidebar-width:  210px;
+  --chat-max-width: 700px;
+  --bubble-asym-user:      4px;
+  --bubble-asym-assistant: 4px;
+
+  /* ── 工具/专用 ── */
+  --tool-bg:        rgba(212, 168, 83, 0.04);
+  --user-bubble:    #1C2333;
+  --user-bubble-bg: #1C2333;
+  --sidebar-bg:     #161B22;
+  --overlay-subtle:  rgba(255, 255, 255, 0.02);
+  --overlay-light:   rgba(255, 255, 255, 0.04);
+  --overlay-medium:  rgba(255, 255, 255, 0.06);
+  --overlay-strong:  rgba(255, 255, 255, 0.12);
+
+  /* ── 精致细节（v2.1） ── */
+  --selection-bg:      rgba(212, 168, 83, 0.22);
+  --selection-text:    #E6EDF3;
+  --scrollbar-thumb:   rgba(255, 255, 255, 0.10);
+  --scrollbar-track:   transparent;
+  --card-surface:      none;
+  --font-smoothing:    antialiased;
+}

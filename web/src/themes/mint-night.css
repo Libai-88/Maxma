@@ -1,0 +1,89 @@
+/* web/src/themes/mint-night.css
+ * Mint Night 主题 — 深青底 + 荧光薄荷绿，赛博植物园
+ * 色板：80E484 · 2B313F · FEFEFE
+ */
+
+[data-theme="mint-night"] {
+  /* ── 背景 ── */
+  --bg-primary:    #2B313F;
+  --bg-secondary:  #232933;
+  --bg-card:       #343B4A;
+  --user-bubble:   rgba(128, 228, 132, 0.12);
+
+  /* ── 主色调（荧光薄荷绿） ── */
+  --accent:        #80E484;
+  --accent-pink:   #F0A080;
+  --accent-pink-light: #F0A080;
+  --accent-pink-soft:  rgba(240, 160, 128, 0.12);
+
+  /* ── 文字 ── */
+  --text-primary:   #FEFEFE;
+  --text-secondary: #B0B8C8;
+  --text-tertiary:  #8890A0;
+
+  /* ── 边框与阴影 ── */
+  --border:         rgba(128, 228, 132, 0.15);
+  --shadow-color:   rgba(0, 0, 0, 0.40);
+
+  /* ── 状态色 ── */
+  --status-ok:      #80E484;
+  --status-error:   #E06060;
+  --status-warn:    #E0A040;
+  --status-info:    #60A0D0;
+
+  /* ── 聊天专用 ── */
+  --tool-bg:        rgba(128, 228, 132, 0.08);
+
+  /* ── 侧边栏 ── */
+  --sidebar-bg:     #232933;
+
+  /* ── 遮罩层（深色主题反转） ── */
+  --overlay-subtle: rgba(255, 255, 255, 0.03);
+  --overlay-light:  rgba(255, 255, 255, 0.05);
+  --overlay-medium: rgba(255, 255, 255, 0.08);
+  --overlay-strong: rgba(255, 255, 255, 0.15);
+
+  /* RGB 拆分 */
+  --accent-rgb: 128, 228, 132;
+  --green-rgb: 128, 228, 132;
+  --coral-rgb: 240, 160, 128;
+  --danger-rgb: 224, 96, 96;
+
+  /* 聊天专用语义色 */
+  --hana-text: #80e484;
+  --mood-bg: rgba(128, 228, 132, 0.08);
+  --mood-text: #70d474;
+  --mood-border: rgba(128, 228, 132, 0.20);
+  --tool-text: #60b464;
+  --user-bg: rgba(128, 228, 132, 0.10);
+  --drop-overlay-bg: rgba(128, 228, 132, 0.15);
+  --attach-bg: rgba(128, 228, 132, 0.08);
+
+  /* 侧边栏背景 */
+  --sidebar-bg-image: linear-gradient(135deg, #1E242F 0%, #2B313F 50%, #232933 100%);
+
+  /* 深色变体 */
+  --accent-dark: #90F494;
+  --accent-hover: #70C474;
+
+  /* 头部品牌渐变（薄荷绿 → 墨绿 → 深蓝） */
+  --header-gradient-from: #80E484;
+  --header-gradient-mid1: #40A064;
+  --header-gradient-mid2: #2B6080;
+  --header-gradient-to:   #80E484;
+  --header-glow: rgba(128, 228, 132, 0.25);
+
+  /* 用户气泡实色 */
+  --user-bubble-solid: #80E484;
+  --user-bubble-text:  #2B313F;
+
+  /* 光斑覆盖层色（深青绿系） */
+  --leaf-color-1: rgba(40, 120, 80, 0.35);
+  --leaf-color-2: rgba(30, 100, 70, 0.30);
+  --leaf-color-3: rgba(35, 110, 75, 0.25);
+  --leaf-color-4: rgba(45, 130, 85, 0.25);
+  --leaf-color-5: rgba(30, 100, 70, 0.20);
+  --leaf-color-6: rgba(40, 120, 80, 0.18);
+  --leaf-color-7: rgba(50, 140, 90, 0.15);
+  --leaf-color-8: rgba(25, 90, 65, 0.15);
+}

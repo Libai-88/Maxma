@@ -171,6 +171,15 @@ class JsonRpcClient:
 
     async def _dispatch(self, msg: dict) -> None:
         """Dispatch an incoming message: event notification or RPC response."""
+        try:
+            await self._dispatch_inner(msg)
+        except Exception:
+            if self._running:
+                logger.exception("[rpc] dispatch error for msg id=%s method=%s", msg.get("id"), msg.get("method", ""))
+            # Don't let a dispatch exception kill the read loop
+
+    async def _dispatch_inner(self, msg: dict) -> None:
+        """Core dispatch logic, separated to allow per-dispatch error isolation."""
         # Event notification (server-pushed, no id)
         if msg.get("method") == "event":
             params = msg.get("params", {})
@@ -196,6 +205,8 @@ class JsonRpcClient:
         msg_id = msg.get("id")
         if msg_id is not None and msg_id in self._pending:
             fut = self._pending.pop(msg_id)
+            if fut.done():
+                return  # already resolved (race condition), skip
             if "error" in msg:
                 error = msg["error"]
                 fut.set_exception(

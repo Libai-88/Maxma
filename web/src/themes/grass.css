@@ -1,0 +1,93 @@
+/* ═══════════════════════════════════════════════
+ * 青草香 · Grass Aroma — 经典保留
+ * 冷绿淡彩 + 清晨露水感
+ * v2.0 — 36-Token 契约（从 v1.17 迁移）
+ * ═══════════════════════════════════════════════ */
+
+[data-theme="grass"] {
+  /* ── 表面层级（4 阶） ── */
+  --bg-primary:    #F5F8F3;
+  --bg-secondary:  #EDF2E9;
+  --bg-card:       #FAFCF8;
+  --bg-raised:     #FFFFFF;
+
+  /* ── 文字层级（4 阶） ── */
+  --text-primary:   #2D3F30;
+  --text-secondary: #5A6B5E;
+  --text-tertiary:  #6E7E72;  /* 占位/禁用（WCAG AA ≥4.5:1） */
+  --text-inverse:   #FFFFFF;
+
+  /* ── 强调色 — 青苔绿（4 阶） ── */
+  --accent:        #5B8C5F;
+  --accent-hover:  #4A7A4E;
+  --accent-active: #3D683F;
+  --accent-light:  rgba(91, 140, 95, 0.08);
+  --accent-rgb:    91, 140, 95;
+  --accent-dark:   #4A7A4E;
+
+  /* ── 边框（3 阶） ── */
+  --border:         rgba(91, 140, 95, 0.18);
+  --border-strong:  rgba(91, 140, 95, 0.28);
+  --border-accent:  rgba(91, 140, 95, 0.40);
+
+  /* ── 状态色（4 阶） ── */
+  --status-ok:    #5B8C5F;
+  --status-error: #A04545;
+  --status-warn:  #C99A5A;
+  --status-info:  #5A8C9A;
+  --green-rgb:    91, 140, 95;
+  --coral-rgb:    232, 160, 122;  /* v1 兼容 */
+  --danger-rgb:   160, 69, 69;
+
+  /* ── 圆角（4 阶） ── */
+  --radius-sm:  5px;
+  --radius-md:  8px;
+  --radius-lg:  12px;
+  --radius-xl:  16px;
+
+  /* ── 阴影（4 阶） ── */
+  --shadow-sm:   0 1px 4px  rgba(45, 63, 48, 0.08);
+  --shadow-md:   0 2px 8px  rgba(45, 63, 48, 0.10);
+  --shadow-lg:   0 4px 16px rgba(45, 63, 48, 0.14);
+  --shadow-xl:   0 8px 32px rgba(45, 63, 48, 0.20);
+  --shadow-soft: 0 8px 24px rgba(45, 63, 48, 0.10);
+  --shadow-color: rgba(45, 63, 48, 0.08);
+  --shadow-xs:   0 1px 2px  rgba(45, 63, 48, 0.04);
+
+  /* ── 动效（统一） ── */
+  --duration-instant: 0.1s;
+  --duration-fast:    0.2s;
+  --duration-slow:    0.25s;
+  --ease-out:      cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-standard: cubic-bezier(0.77, 0, 0.175, 1);
+
+  /* ── 布局 ── */
+  --sidebar-width:  240px;
+  --chat-max-width: 720px;
+  --bubble-asym-user:      6px;
+  --bubble-asym-assistant: 6px;
+
+  /* ── 工具/专用 ── */
+  --tool-bg:        rgba(91, 140, 95, 0.06);
+  --user-bubble:    rgba(122, 174, 127, 0.14);
+  --user-bubble-bg: rgba(122, 174, 127, 0.14);
+  --sidebar-bg:     #EDF2E9;
+  --overlay-subtle:  rgba(45, 63, 48, 0.03);
+  --overlay-light:   rgba(45, 63, 48, 0.05);
+  --overlay-medium:  rgba(45, 63, 48, 0.08);
+  --overlay-strong:  rgba(45, 63, 48, 0.15);
+
+  /* ── 精致细节 + 阴影升级（v2.1） ── */
+  --selection-bg:      rgba(91, 140, 95, 0.18);
+  --selection-text:    #2D3F30;
+  --scrollbar-thumb:   rgba(45, 63, 48, 0.15);
+  --scrollbar-track:   transparent;
+  --card-surface:      none;
+  --font-smoothing:    antialiased;
+  --shadow-sm:   0 1px 2px rgba(45,63,48,.04), 0 1px 3px rgba(45,63,48,.05);
+  --shadow-md:   0 1px 3px rgba(45,63,48,.04), 0 3px 8px rgba(45,63,48,.06);
+  --shadow-lg:   0 2px 4px rgba(45,63,48,.04), 0 6px 20px rgba(45,63,48,.10);
+  --shadow-xl:   0 2px 8px rgba(45,63,48,.04), 0 12px 40px rgba(45,63,48,.16);
+  --shadow-soft: 0 1px 4px rgba(45,63,48,.03), 0 8px 30px rgba(45,63,48,.08);
+  --shadow-xs:   0 1px 2px  rgba(45,63,48,.03);
+}

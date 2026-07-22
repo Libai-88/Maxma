@@ -191,7 +191,7 @@
           <div class="empty-state-overlay"></div>
           <div class="empty-state-content">
             <div class="empty-state-text">
-              <p class="empty-title">开始和 Maxma 对话吧</p>
+              <p class="empty-title">Maxma</p>
               <p class="empty-desc">
                 <span class="typewriter">{{ displayedWord }}<span class="typewriter-cursor">|</span></span>
               </p>
@@ -527,10 +527,10 @@ const words = [
   '快夸我快夸我',
   '你是不是又想我了',
   '来找我玩啦',
-  '等你好久啦',
-  '有什么好玩的事吗',
-  '小猪猪在干嘛呢',
-  '嘿嘿嘿'
+  '今天想聊点什么',
+  '有什么想法需要梳理',
+  '先从一个问题开始',
+  '这里是你思考的空间'
 ]
 const displayedWord = ref(words[0])
 let wordIndex = 0
@@ -1117,7 +1117,7 @@ function closeContextMenu() {
     height: 8px;
     border-radius: 50%;
     background: var(--accent);
-    animation: typingBounce 1.4s infinite ease-in-out both;
+    animation: maxma-bounce-dot 1.4s infinite ease-in-out both;
   }
 
 .typing-dots .typing-dot:nth-child(1) {
@@ -1126,17 +1126,6 @@ function closeContextMenu() {
 
 .typing-dots .typing-dot:nth-child(2) {
   animation-delay: -0.16s;
-}
-
-@keyframes typingBounce {
-  0%, 80%, 100% {
-    transform: scale(0.6);
-    opacity: 0.5;
-  }
-  40% {
-    transform: scale(1);
-    opacity: 1;
-  }
 }
 
 /* ── 骨架屏：AI 回复加载占位 ── */
