@@ -94,6 +94,11 @@ if not exist "%TAURI_ROOT%\resources\" (
 
 REM No-bundle builds do not create an installer directory. Stage the same
 REM resource layout explicitly so resource_dir() resolves to resources\.
+if exist "%TAURI_RELEASE_RESOURCES%\" rmdir /s /q "%TAURI_RELEASE_RESOURCES%"
+if exist "%TAURI_RELEASE_RESOURCES%\" (
+    echo [ERROR] Cannot remove stale Tauri release resources directory.
+    exit /b 1
+)
 if not exist "%TAURI_RELEASE_RESOURCES%\" mkdir "%TAURI_RELEASE_RESOURCES%"
 if errorlevel 1 (
     echo [ERROR] Cannot create Tauri release resources directory.
@@ -173,7 +178,7 @@ if not exist "%PORTABLE_DIR%\resources\binaries\%SIDECAR_NAME%" (
     exit /b 1
 )
 
-echo [6/6] Migrating user configuration...
+echo [6/6] Seeding missing user configuration...
 set "APPDATA_DIR=%APPDATA%\MaxmaHere"
 if not exist "%APPDATA_DIR%\" mkdir "%APPDATA_DIR%"
 if errorlevel 1 exit /b 1
@@ -183,22 +188,38 @@ if not exist "%APPDATA_DIR%\config\personas\" mkdir "%APPDATA_DIR%\config\person
 if errorlevel 1 exit /b 1
 
 if exist "%PROJECT_ROOT%api\data\providers.yaml" (
-    copy /y "%PROJECT_ROOT%api\data\providers.yaml" "%APPDATA_DIR%\api\data\providers.yaml" >nul
-    if errorlevel 1 exit /b 1
+    if not exist "%APPDATA_DIR%\api\data\providers.yaml" (
+        copy /y "%PROJECT_ROOT%api\data\providers.yaml" "%APPDATA_DIR%\api\data\providers.yaml" >nul
+        if errorlevel 1 exit /b 1
+    )
+)
+if exist "%PROJECT_ROOT%api\data\credential.key" (
+    if not exist "%APPDATA_DIR%\api\data\credential.key" (
+        copy /y "%PROJECT_ROOT%api\data\credential.key" "%APPDATA_DIR%\api\data\credential.key" >nul
+        if errorlevel 1 exit /b 1
+    )
 )
 if exist "%PROJECT_ROOT%api\data\mcp_servers.yaml" (
-    copy /y "%PROJECT_ROOT%api\data\mcp_servers.yaml" "%APPDATA_DIR%\api\data\mcp_servers.yaml" >nul
-    if errorlevel 1 exit /b 1
+    if not exist "%APPDATA_DIR%\api\data\mcp_servers.yaml" (
+        copy /y "%PROJECT_ROOT%api\data\mcp_servers.yaml" "%APPDATA_DIR%\api\data\mcp_servers.yaml" >nul
+        if errorlevel 1 exit /b 1
+    )
 )
 if exist "%PROJECT_ROOT%api\data\maxma.db" (
-    copy /y "%PROJECT_ROOT%api\data\maxma.db" "%APPDATA_DIR%\api\data\maxma.db" >nul
-    if errorlevel 1 exit /b 1
+    if not exist "%APPDATA_DIR%\api\data\maxma.db" (
+        copy /y "%PROJECT_ROOT%api\data\maxma.db" "%APPDATA_DIR%\api\data\maxma.db" >nul
+        if errorlevel 1 exit /b 1
+    )
 )
-if exist "%PROJECT_ROOT%config\personas\SOUL.md" (
-    copy /y "%PROJECT_ROOT%config\personas\*.md" "%APPDATA_DIR%\config\personas\" >nul
-    if errorlevel 1 exit /b 1
-    if exist "%PROJECT_ROOT%config\personas\*.yaml" (
-        copy /y "%PROJECT_ROOT%config\personas\*.yaml" "%APPDATA_DIR%\config\personas\" >nul
+for %%F in ("%PROJECT_ROOT%config\personas\*.md") do (
+    if exist "%%~fF" if not exist "%APPDATA_DIR%\config\personas\%%~nxF" (
+        copy /y "%%~fF" "%APPDATA_DIR%\config\personas\%%~nxF" >nul
+        if errorlevel 1 exit /b 1
+    )
+)
+for %%F in ("%PROJECT_ROOT%config\personas\*.yaml") do (
+    if exist "%%~fF" if not exist "%APPDATA_DIR%\config\personas\%%~nxF" (
+        copy /y "%%~fF" "%APPDATA_DIR%\config\personas\%%~nxF" >nul
         if errorlevel 1 exit /b 1
     )
 )
@@ -208,5 +229,4 @@ echo ========================================
 echo   Portable build complete
 echo   Output: %PORTABLE_DIR%
 echo ========================================
-explorer "%PORTABLE_DIR%"
-pause
+endlocal & exit /b 0
