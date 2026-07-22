@@ -195,6 +195,8 @@ async function uploadImage(file: File): Promise<{ file_id: string; filename: str
 }
 
 export const api = {
+  request,
+
   createSession: () =>
     request<CreateSessionResponse>('/sessions', { method: 'POST' }),
 

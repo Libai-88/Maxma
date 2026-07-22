@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { getApiBase, tauriFetch } from '@/utils/env'
+import { api } from '@/api'
 
 export interface MemoryFact {
   id: string
@@ -17,17 +17,7 @@ export const useMemoryStore = defineStore('memory', () => {
   async function fetchFacts() {
     loading.value = true
     try {
-      const { getToken } = await import('../api/index')
-      const token = getToken()
-      const headers: Record<string, string> = {}
-      if (token) headers['X-Maxma-Token'] = token
-      const BASE = getApiBase()
-      const res = await tauriFetch(`${BASE}/memory`, { headers })
-      if (!res.ok) {
-        facts.value = []
-        return
-      }
-      const data = await res.json()
+      const data = await api.request<unknown>('/memory')
       facts.value = Array.isArray(data) ? data : []
     } catch { facts.value = [] }
     finally { loading.value = false }
@@ -35,12 +25,7 @@ export const useMemoryStore = defineStore('memory', () => {
 
   async function deleteFact(id: string) {
     try {
-      const { getToken } = await import('../api/index')
-      const token = getToken()
-      const headers: Record<string, string> = {}
-      if (token) headers['X-Maxma-Token'] = token
-      const res = await tauriFetch(`${getApiBase()}/memory/${id}`, { method: 'DELETE', headers })
-      if (!res.ok) return
+      await api.request(`/memory/${encodeURIComponent(id)}`, { method: 'DELETE' })
       facts.value = facts.value.filter(f => f.id !== id)
     } catch (e) {
       console.warn('[memory] deleteFact failed:', e instanceof Error ? e.message : String(e))

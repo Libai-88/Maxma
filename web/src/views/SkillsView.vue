@@ -234,8 +234,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
-import { api, getToken } from '@/api'
-import { getApiBase, tauriFetch } from '@/utils/env'
+import { api } from '@/api'
 import type { ListSkillsResponse, SkillInfo, MacroInfo } from '@/types'
 
 type Tab = 'skills' | 'macros'
@@ -494,16 +493,7 @@ async function deleteItem(id: string) {
 // ── Skills 启用/禁用 ──
 async function toggleSkill(name: string) {
   try {
-    const headers: Record<string, string> = {}
-    const t = getToken()
-    if (t) headers['X-Maxma-Token'] = t
-    // 修复：Tauri 环境下必须使用 tauriFetch（原生 fetch 会被 WebView2 拦截）；
-    // 并检查 res.ok，避免后端 4xx/5xx 时前端误以为成功并刷新列表。
-    const res = await tauriFetch(`${getApiBase()}/skills/${name}/toggle`, { method: 'POST', headers })
-    if (!res.ok) {
-      console.warn('[SkillsView] toggleSkill failed: HTTP', res.status)
-      return
-    }
+    await api.request(`/skills/${encodeURIComponent(name)}/toggle`, { method: 'POST' })
     await loadData()
   } catch (e) {
     console.warn('[SkillsView] toggleSkill failed:', e instanceof Error ? e.message : String(e))

@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { getToken } from '@/api'
-import { getApiBase, tauriFetch } from '@/utils/env'
+import { api } from '@/api'
 
 export interface ToolInfo {
   name: string
@@ -18,16 +17,7 @@ export const useToolsStore = defineStore('tools', () => {
   async function fetchTools() {
     loading.value = true
     try {
-      const token = getToken()
-      const headers: Record<string, string> = {}
-      if (token) headers['X-Maxma-Token'] = token
-      const BASE = getApiBase()
-      const res = await tauriFetch(`${BASE}/tools`, { headers })
-      if (!res.ok) {
-        tools.value = []
-        return
-      }
-      const data = await res.json()
+      const data = await api.request<unknown>('/tools')
       tools.value = Array.isArray(data) ? data : []
     } catch {
       tools.value = []

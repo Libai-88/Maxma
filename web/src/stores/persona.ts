@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { tauriFetch } from '@/utils/env'
+import { api } from '@/api'
 
 export interface PersonaProfile {
   name: string
@@ -31,15 +31,7 @@ export const usePersonaStore = defineStore('persona', () => {
     loading.value = true
     error.value = null
     try {
-      const { getToken } = await import('../api/index')
-      const { getApiBase } = await import('@/utils/env')
-      const token = getToken()
-      const headers: Record<string, string> = {}
-      if (token) headers['X-Maxma-Token'] = token
-      const BASE = getApiBase()
-      const res = await tauriFetch(`${BASE}/persona/profile`, { headers })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
+      const data = await api.request<PersonaProfile>('/persona/profile')
       if (data && typeof data === 'object') profile.value = data
       _loaded = true
     } catch (e) {
