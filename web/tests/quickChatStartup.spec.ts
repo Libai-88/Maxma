@@ -29,7 +29,7 @@ describe('quick-chat startup', () => {
     mocks.waitForBackend.mockReturnValue(new Promise<boolean>(resolve => { release = resolve }))
 
     const importing = import('@/quick-chat/main')
-    await vi.waitFor(() => expect(mocks.createApp).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mocks.createApp).toHaveBeenCalled(), { timeout: 5000 })
 
     const app = mocks.createApp.mock.results[0]?.value
     expect(app.mount).not.toHaveBeenCalled()

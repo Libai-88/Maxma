@@ -66,7 +66,7 @@ describe('workspace shell', () => {
     expect((modelSelectorSource.match(/<DsSelect\b/g) ?? [])).toHaveLength(1)
 
     expect(chatInputTemplate).toContain('role="form"')
-    expect(chatInputTemplate).toContain('role="toolbar"')
+    expect(chatInputTemplate).toContain('class="input-bottom-bar"')
     expect(chatInputTemplate).toContain('aria-label="发送消息"')
     expect(chatInputTemplate).toContain('aria-live="assertive"')
   })
@@ -91,11 +91,12 @@ describe('workspace shell', () => {
     expect(chatInputTemplate).toContain('class="quoted-selections-bar"')
     expect(chatInputTemplate).toContain('<ThinkPathChooser')
     expect(chatInputTemplate).toContain('<AutocompletePanel')
-    expect(chatInputTemplate).toContain('<StickerPicker')
+    expect(chatInputTemplate).toContain('class="sticker-tag"')
+    expect(chatInputSource).toContain('removeStickerSegment')
     expect(chatInputSource).toContain('refs.value')
     expect(chatInputSource).toContain('selectedThinkPathId.value || undefined')
     expect(chatViewSource).toContain('send(text, [...refs, ...quoteRefs], providerId, modelName, thinkPathId)')
-    expect(chatInputSource).toContain('text.value += stickerTag')
+    expect(chatInputSource).toContain('text.value = text.value.slice(0, currentSticker.start) + text.value.slice(currentSticker.end)')
 
     const chatInputStyle = chatInputSource.match(/<style scoped>[\s\S]*?<\/style>/)?.[0] ?? ''
     expect(chatInputStyle).toContain('min-width: 0')
