@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     # 或通过 .env 文件设置 MAXMA_BUN_PATH 环境变量指定全路径）
     sidecar_bun_path: str = "bun"
 
+    # 权限模式功能开关。关闭时（默认）所有会话强制 ask 语义并由 sidecar 自动批准工具调用，
+    # 保留旧行为；开启后 sidecar 按 permission_mode 分流（auto/operate 自动批准，
+    # ask/read_only 走前端审批确认）。
+    permission_modes_enabled: bool = False
+
     model_config = {
         "env_file": str(ENV_FILE_PATH),
         "env_file_encoding": "utf-8",

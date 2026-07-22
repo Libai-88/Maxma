@@ -10,12 +10,15 @@ import { z } from "zod/v4";
 
 // ── 共享 fetch 封装 ──────────────────────────────────────────
 
+const FETCH_TIMEOUT = 10_000;
+
 const todoistFetch = async (path: string, options?: RequestInit) => {
   const token = process.env.TODOIST_API_TOKEN;
   if (!token) throw new Error("TODOIST_API_TOKEN 未配置");
 
   const res = await fetch(`https://api.todoist.com/rest/v2${path}`, {
     ...options,
+    signal: options?.signal ?? AbortSignal.timeout(FETCH_TIMEOUT),
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",

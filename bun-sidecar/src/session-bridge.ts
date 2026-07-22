@@ -14,11 +14,17 @@
 
 import { createInterface } from "node:readline";
 import { randomUUID } from "node:crypto";
-import { createAgentSession, discoverAuthStorage } from "@oh-my-pi/pi-coding-agent";
+import { createAgentSession, discoverAuthStorage, Settings } from "@oh-my-pi/pi-coding-agent";
+import type {
+  AgentSession,
+  ExtensionUIContext,
+  ExtensionUIDialogOptions,
+  ExtensionUISelectItem,
+} from "@oh-my-pi/pi-coding-agent";
 import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
 import type { Model } from "@oh-my-pi/pi-ai";
-import type { AgentSession } from "@oh-my-pi/pi-coding-agent";
 import { registerCustomTools } from "./tools/index";
+import type { MaxmaEvent } from "./rpc-types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,6 +44,18 @@ interface SessionRecord {
 const sessions = new Map<string, SessionRecord>();
 const rl = createInterface({ input: process.stdin });
 let authStoragePromise: ReturnType<typeof discoverAuthStorage> | null = null;
+
+// ── Tool approval state ───────────────────────────────────
+// Pending approval promises keyed by interaction_id. Resolved by the
+// user_response RPC handler when the frontend replies.
+interface PendingApproval {
+  resolve: (choice: string | undefined) => void;
+  reject: (err: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
+const pendingApprovals = new Map<string, PendingApproval>();
+
+const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000; // 5 min → auto-deny
 
 async function getSharedAuthStorage() {
   if (!authStoragePromise) authStoragePromise = discoverAuthStorage();
@@ -398,6 +416,95 @@ function subscribeSession(
 }
 
 // ---------------------------------------------------------------------------
+// Tool approval UI context
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a minimal ExtensionUIContext for `setToolUIContext`. Only `select` is
+ * real — it emits an `ask_user` event and awaits the matching `user_response`
+ * RPC. All other methods are no-ops because the sidecar has no TUI.
+ *
+ * The oh-my-pi approval wrapper calls
+ *   `ctx.select(formatApprovalPrompt(tool, args, reason), ["Approve", "Deny"])`
+ * and treats `choice === "Approve"` as approved; anything else (including
+ * `undefined` from timeout/throw) is treated as denied.
+ */
+function createApprovalUiContext(sessionId: string): ExtensionUIContext {
+  const ctx: ExtensionUIContext = {
+    select(
+      title: string,
+      _options: ExtensionUISelectItem[],
+      _dialogOptions?: ExtensionUIDialogOptions,
+    ): Promise<string | undefined> {
+      return new Promise<string | undefined>((resolve, reject) => {
+        const interactionId = randomUUID();
+        // The approval wrapper calls select() BEFORE tool_execution_start fires,
+        // so currentToolContext is not populated yet. Parse the tool name from
+        // the formatted title ("Allow tool: <name>\n…").
+        const toolName = title.split("\n")[0]?.replace(/^Allow tool:\s*/, "") ?? "unknown";
+
+        const timer = setTimeout(() => {
+          if (pendingApprovals.has(interactionId)) {
+            pendingApprovals.delete(interactionId);
+            // Timeout → deny (resolve undefined so the wrapper treats as "Deny").
+            resolve(undefined);
+          }
+        }, APPROVAL_TIMEOUT_MS);
+
+        pendingApprovals.set(interactionId, {
+          resolve: (choice) => {
+            clearTimeout(timer);
+            resolve(choice);
+          },
+          reject: (err) => {
+            clearTimeout(timer);
+            reject(err);
+          },
+          timer,
+        });
+
+        const event: MaxmaEvent = {
+          type: "ask_user",
+          payload: {
+            tool_name: toolName,
+            question: title,
+            mode: "approval",
+            options: ["Approve", "Deny"],
+            interaction_id: interactionId,
+            detail: title,
+          },
+        };
+        sendEvent(sessionId, event);
+      });
+    },
+    confirm: (_title: string, _message: string) => Promise.resolve(false),
+    input: (_title: string, _placeholder?: string) => Promise.resolve(undefined),
+    notify: () => {},
+    onTerminalInput: () => () => {},
+    setStatus: () => {},
+    setWorkingMessage: () => {},
+    setWidget: () => {},
+    setFooter: () => {},
+    setHeader: () => {},
+    setTitle: () => {},
+    custom: <T,>() => Promise.resolve(undefined as unknown as T),
+    setEditorText: () => {},
+    pasteToEditor: () => {},
+    getEditorText: () => "",
+    editor: () => Promise.resolve(undefined),
+    addAutocompleteProvider: () => {},
+    setEditorComponent: () => {},
+    theme: {} as any,
+    getAllThemes: () => Promise.resolve([]),
+    getTheme: () => Promise.resolve(undefined),
+    setTheme: () => Promise.resolve({ success: false, error: "not supported" }),
+    getToolsExpanded: () => false,
+    setToolsExpanded: () => {},
+  };
+  return ctx;
+}
+
+// ---------------------------------------------------------------------------
 // RPC handler
 // ---------------------------------------------------------------------------
 
@@ -456,15 +563,14 @@ if (import.meta.main) {
           createOptions.toolNames = tools;
         }
 
-        // 工具审批策略。createAgentSession 的 autoApprove 默认 false（工具调用需审批），
-        // 但 sidecar 尚未接入审批事件流（approval 事件未映射进 Maxma 协议、前端无确认
-        // 入口），默认值会让工具永久等待审批、turn 卡死。故当前所有模式统一自动批准。
-        // TODO(approval): 接入审批事件流（sidecar 发审批请求 → 前端确认 → 回传决定）后，
-        // 将 approvalWired 置为 true，ask/read_only 即会发起审批请求等待用户决定。
-        const approvalWired = false;
-        createOptions.autoApprove = approvalWired
-          ? permissionMode === "auto" || permissionMode === "operate"
-          : true;
+        // 工具审批策略。ask/read_only 模式启用前端审批确认（sidecar 发 ask_user 事件 →
+        // 前端弹 ApprovalBubble → user_response 回传决定）；auto/operate 模式自动批准。
+        const needsApproval = permissionMode === "ask" || permissionMode === "read_only";
+        createOptions.autoApprove = !needsApproval;
+        if (needsApproval) {
+          createOptions.hasUI = true;
+          createOptions.settings = Settings.isolated({ "tools.approvalMode": "always-ask" });
+        }
 
         // Register custom Maxma tools
         const customTools = registerCustomTools();
@@ -472,8 +578,51 @@ if (import.meta.main) {
           createOptions.customTools = customTools;
         }
 
-        const { session } = await createAgentSession(createOptions as any);
         const sessionId = randomUUID();
+        const { session, setToolUIContext } = await createAgentSession(createOptions as any);
+        if (needsApproval) {
+          const approvalCtx = createApprovalUiContext(sessionId);
+          // setToolUIContext only writes to ToolContextStore (for tool-level
+          // hasUI checks). The approval wrapper checks runner.hasUI() which
+          // reads from ExtensionRunner.#uiContext — set via initialize().
+          // We call initialize() with stub actions (sidecar has no TUI/commands)
+          // purely to install our UI context so hasUI() returns true.
+          const runner = session.extensionRunner;
+          if (runner) {
+            runner.initialize(
+              {
+                sendMessage: () => {},
+                sendUserMessage: () => {},
+                appendEntry: () => {},
+                setLabel: () => {},
+                getActiveTools: () => [],
+                getAllTools: () => [],
+                setActiveTools: () => {},
+                getCommands: () => [],
+                setModel: () => {},
+                getThinkingLevel: () => undefined,
+                setThinkingLevel: () => {},
+                getSessionName: () => undefined,
+                setSessionName: async () => {},
+              } as any,
+              {
+                getModel: () => undefined,
+                isIdle: () => true,
+                abort: () => {},
+                hasPendingMessages: () => false,
+                shutdown: () => {},
+                getContextUsage: () => undefined,
+                compact: async () => {},
+                getSystemPrompt: () => [],
+              } as any,
+              undefined,
+              approvalCtx,
+            );
+          }
+          if (setToolUIContext) {
+            setToolUIContext(approvalCtx, true);
+          }
+        }
 
         const record: SessionRecord = {
           session,
@@ -553,6 +702,8 @@ if (import.meta.main) {
         record.unsubscribe();
         await record.session.dispose();
         sessions.delete(sessionId);
+        // Pending approvals are keyed by interaction_id (not session-scoped),
+        // so the 5min timeout handles any orphaned promises.
 
         send(id, { ok: true });
         return;
@@ -684,6 +835,24 @@ if (import.meta.main) {
           return { role: m.role ?? "unknown", content };
         });
         send(id, { messages: result, total });
+        return;
+      }
+
+      if (method === "user_response") {
+        const interactionId: string = params?.interaction_id;
+        const response: string | string[] = params?.response;
+        const pending = pendingApprovals.get(interactionId);
+        if (!pending) {
+          // Stale or unknown — respond ok so the frontend doesn't hang.
+          send(id, { ok: true });
+          return;
+        }
+        pendingApprovals.delete(interactionId);
+        // Frontend sends "yes" (approve) / "no" (deny). Map to the choice the
+        // oh-my-pi wrapper expects: "Approve" / anything-else-as-deny.
+        const choice = response === "yes" ? "Approve" : "Deny";
+        pending.resolve(choice);
+        send(id, { ok: true });
         return;
       }
 

@@ -20,6 +20,9 @@ const weatherParams = z.object({
   city: z.string().describe("城市名称，如 '北京'、'上海'"),
 });
 
+/** 所有外部 API fetch 共用超时时间（毫秒） */
+const FETCH_TIMEOUT = 10_000;
+
 const weatherTool: ToolDefinition<typeof weatherParams> = {
   name: "get_current_weather",
   label: "Get Current Weather",
@@ -32,7 +35,9 @@ const weatherTool: ToolDefinition<typeof weatherParams> = {
     if (!apiKey) {
       // Fallback: use public wttr.in API
       try {
-        const res = await fetch(`https://wttr.in/${encodeURIComponent(city)}?format=%C+%t+%h+%w&lang=zh`);
+        const res = await fetch(`https://wttr.in/${encodeURIComponent(city)}?format=%C+%t+%h+%w&lang=zh`, {
+          signal: AbortSignal.timeout(FETCH_TIMEOUT),
+        });
         const text = await res.text();
         return { content: [{ type: "text", text: `${city} 天气: ${text}` }] };
       } catch (e) {
@@ -41,7 +46,9 @@ const weatherTool: ToolDefinition<typeof weatherParams> = {
     }
 
     try {
-      const res = await fetch(`https://api.help.bj.cn/weather/?id=${encodeURIComponent(city)}&key=${apiKey}`);
+      const res = await fetch(`https://api.help.bj.cn/weather/?id=${encodeURIComponent(city)}&key=${apiKey}`, {
+        signal: AbortSignal.timeout(FETCH_TIMEOUT),
+      });
       const data = await res.json() as Record<string, unknown>;
       return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
     } catch (e) {
@@ -68,7 +75,9 @@ const holidayTool: ToolDefinition<typeof holidayParams> = {
     const apiKey = process.env.UAPIS_API_KEY;
     if (apiKey) {
       try {
-        const res = await fetch(`https://api.help.bj.cn/apis/holiday/${year}?key=${apiKey}`);
+        const res = await fetch(`https://api.help.bj.cn/apis/holiday/${year}?key=${apiKey}`, {
+          signal: AbortSignal.timeout(FETCH_TIMEOUT),
+        });
         const data = await res.json() as Record<string, unknown>;
         return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
       } catch (e) {
@@ -78,7 +87,9 @@ const holidayTool: ToolDefinition<typeof holidayParams> = {
 
     // Public API fallback
     try {
-      const res = await fetch(`https://raw.githubusercontent.com/NateScarlet/holiday-cn/master/${year}.json`);
+      const res = await fetch(`https://raw.githubusercontent.com/NateScarlet/holiday-cn/master/${year}.json`, {
+        signal: AbortSignal.timeout(FETCH_TIMEOUT),
+      });
       const data = await res.json() as Record<string, unknown>;
       return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
     } catch (e) {

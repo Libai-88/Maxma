@@ -4,10 +4,11 @@
   "type": "module",
   "private": true,
   "dependencies": {
-    "@oh-my-pi/pi-coding-agent": "16.5.2",
     "@oh-my-pi/pi-agent-core": "16.5.2",
     "@oh-my-pi/pi-ai": "16.5.2",
     "@oh-my-pi/pi-catalog": "16.5.2",
+    "@oh-my-pi/pi-coding-agent": "16.5.2",
+    "typescript": "^7.0.2",
     "zod": "^3.25.0"
   }
 }

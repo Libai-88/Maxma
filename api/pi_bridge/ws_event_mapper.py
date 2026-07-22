@@ -27,6 +27,7 @@ EVENT_TYPES = frozenset({
     "done",
     "error",
     "context_usage",
+    "ask_user",
 })
 
 # ── Event Schema Check ───────────────────────────────────

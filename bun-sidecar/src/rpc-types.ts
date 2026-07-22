@@ -45,7 +45,8 @@ export type RpcMethodName =
   | "cancel"
   | "destroy_session"
   | "undo"
-  | "get_messages";
+  | "get_messages"
+  | "user_response";
 
 export interface CreateSessionParams {
   model: string;
@@ -102,6 +103,16 @@ export interface GetMessagesResult {
   total: number;
 }
 
+export interface UserResponseParams {
+  session_id: string;
+  interaction_id: string;
+  response: string | string[];
+}
+
+export interface UserResponseResult {
+  ok: true;
+}
+
 // ---------------------------------------------------------------------------
 // Events — Maxma 前端 WS 协议格式
 // ---------------------------------------------------------------------------
@@ -138,4 +149,17 @@ export type MaxmaEvent =
         trace_id?: string;
       };
     }
-  | { type: "context_usage"; payload: Record<string, unknown> };
+  | { type: "context_usage"; payload: Record<string, unknown> }
+  | {
+      type: "ask_user";
+      payload: {
+        tool_name: string;
+        question: string;
+        mode: "approval";
+        options: string[];
+        interaction_id: string;
+        detail?: string;
+        risk_level?: "low" | "medium" | "high";
+        tool_input?: Record<string, unknown>;
+      };
+    };
