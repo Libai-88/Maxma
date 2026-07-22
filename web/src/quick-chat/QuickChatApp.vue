@@ -134,8 +134,11 @@ watch([mergedTurns, () => isStreaming.value], () => {
 })
 
 onMounted(async () => {
-  await sessionStore.initIfNeeded()
-  if (sessions.value.length) {
+  const initialized = await sessionStore.initIfNeeded()
+  if (!initialized) {
+    globalError.message = '会话初始化失败，请检查后端服务后重试'
+    globalError.visible = true
+  } else if (sessions.value.length) {
     selectedSessionId.value = sessions.value[0].session_id
   }
   // 聚焦输入框

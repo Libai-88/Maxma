@@ -47,7 +47,7 @@ describe('Quick Chat sending', () => {
   beforeEach(() => {
     mocks.send.mockReset()
     mocks.cancel.mockReset()
-    mocks.initIfNeeded.mockReset().mockResolvedValue(undefined)
+    mocks.initIfNeeded.mockReset().mockResolvedValue(true)
     mocks.createSession.mockReset().mockResolvedValue(undefined)
   })
 
@@ -76,6 +76,14 @@ describe('Quick Chat sending', () => {
     expect(mocks.send).toHaveBeenCalledWith('send this', [])
     expect((textarea.element as HTMLTextAreaElement).value).toBe('')
     expect(wrapper.find('.qc-error-bar').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('shows a visible error when session initialization fails', async () => {
+    mocks.initIfNeeded.mockResolvedValue(false)
+    const wrapper = mount(QuickChatApp)
+
+    await vi.waitFor(() => expect(wrapper.get('.qc-error-bar').text()).toContain('会话初始化失败'))
     wrapper.unmount()
   })
 })

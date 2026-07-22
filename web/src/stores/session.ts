@@ -10,39 +10,49 @@ export const useSessionStore = defineStore('session', () => {
   const sessionId = ref('')
   const sessions = ref<SessionInfo[]>([])
   let _initialized = false
-  let _initPromise: Promise<void> | null = null
+  let _initPromise: Promise<boolean> | null = null
 
-  async function initIfNeeded(retries = 5, delayMs = 1000) {
-    if (_initialized) return
-    if (_initPromise) { await _initPromise; return }
+  async function initIfNeeded(retries = 5, delayMs = 1000): Promise<boolean> {
+    if (_initialized) return true
+    if (_initPromise) return _initPromise
 
-    for (let attempt = 1; attempt <= retries; attempt++) {
-      try {
-        const stored = localStorage.getItem(STORAGE_KEY)
-        if (stored) {
-          try {
-            await api.getSession(stored)
-            sessionId.value = stored
-          } catch {
+    const promise = (async () => {
+      for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+          const stored = localStorage.getItem(STORAGE_KEY)
+          if (stored) {
+            try {
+              await api.getSession(stored)
+              sessionId.value = stored
+            } catch {
+              await _createSession()
+            }
+          } else {
             await _createSession()
           }
-        } else {
-          await _createSession()
-        }
-        await refreshSessions()
-        cleanupOrphanedCaches()
-        _initialized = true
-        return
-      } catch (e) {
-        console.error(`[session] init failed (attempt ${attempt}/${retries}), retrying in ${delayMs}ms:`, e)
-        _initialized = false
-        if (attempt < retries) {
-          await new Promise(r => setTimeout(r, delayMs))
-          delayMs *= 1.5  // 指数退避
-        } else {
-          console.error('[session] init failed after all retries')
+          await refreshSessions()
+          cleanupOrphanedCaches()
+          _initialized = true
+          return true
+        } catch (e) {
+          console.error(`[session] init failed (attempt ${attempt}/${retries}), retrying in ${delayMs}ms:`, e)
+          _initialized = false
+          if (attempt < retries) {
+            await new Promise(r => setTimeout(r, delayMs))
+            delayMs *= 1.5  // 指数退避
+          } else {
+            console.error('[session] init failed after all retries')
+          }
         }
       }
+      return false
+    })()
+
+    _initPromise = promise
+    try {
+      return await promise
+    } finally {
+      if (_initPromise === promise) _initPromise = null
     }
   }
 

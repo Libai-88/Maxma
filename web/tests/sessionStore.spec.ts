@@ -33,4 +33,17 @@ describe('session store', () => {
     expect(String(msg)).toMatch(/refreshSessions/)
     warnSpy.mockRestore()
   })
+
+  it('reports initialization failure after the final retry', async () => {
+    localStorage.clear()
+    setActivePinia(createPinia())
+    const store = useSessionStore()
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    try {
+      await expect(store.initIfNeeded(1)).resolves.toBe(false)
+    } finally {
+      errorSpy.mockRestore()
+    }
+  })
 })

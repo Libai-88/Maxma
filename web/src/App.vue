@@ -141,7 +141,11 @@ const sidebarBgStyle = { '--sidebar-bg-image': `url("${sidebarBgUrl}")` }
 
 onMounted(async () => {
   // 初始化 Session 状态（从 localStorage 恢复或创建新会话）
-  await sessionStore.initIfNeeded()
+  const initialized = await sessionStore.initIfNeeded()
+  if (!initialized) {
+    globalErrorToast.message = '会话初始化失败，请检查后端服务后重试'
+    globalErrorToast.visible = true
+  }
   onboarding.initialize()
 
   // 修复 BC-003：监听 maxma:error 事件，显示用户可见的 toast 通知。
