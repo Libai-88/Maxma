@@ -2,17 +2,18 @@
 
 mod port_manager;
 
+use std::ffi::OsStr;
 use std::fs::{File, OpenOptions};
 use std::io::BufWriter;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::Emitter;
 use tauri::Manager;
+use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
-use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::System::Com::{
@@ -20,15 +21,15 @@ use windows::Win32::System::Com::{
     COINIT_APARTMENTTHREADED,
 };
 use windows::Win32::System::JobObjects::{
-    AssignProcessToJobObject, CreateJobObjectW, SetInformationJobObject,
-    JobObjectExtendedLimitInformation, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+    AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+    SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
     JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
 };
 use windows::Win32::System::Threading::OpenProcess;
 use windows::Win32::System::Threading::{PROCESS_SET_QUOTA, PROCESS_TERMINATE};
 use windows::Win32::UI::Shell::{
-    FileOpenDialog, IFileOpenDialog, FileSaveDialog, IFileSaveDialog,
-    FOS_FORCEFILESYSTEM, FOS_PICKFOLDERS, SIGDN_FILESYSPATH,
+    FileOpenDialog, FileSaveDialog, IFileOpenDialog, IFileSaveDialog, FOS_FORCEFILESYSTEM,
+    FOS_PICKFOLDERS, SIGDN_FILESYSPATH,
 };
 
 /// 最大崩溃重启次数
@@ -103,13 +104,23 @@ fn cleanup_stale_sidecar() {
 /// 获取 sidecar 日志文件路径：%APPDATA%/MaxmaHere/logs/server.log
 fn server_log_path() -> Option<PathBuf> {
     let appdata = std::env::var("APPDATA").ok()?;
-    Some(PathBuf::from(appdata).join("MaxmaHere").join("logs").join("server.log"))
+    Some(
+        PathBuf::from(appdata)
+            .join("MaxmaHere")
+            .join("logs")
+            .join("server.log"),
+    )
 }
 
 /// 获取 Tauri 主进程启动日志路径：%APPDATA%/MaxmaHere/logs/tauri.log
 fn tauri_log_path() -> Option<PathBuf> {
     let appdata = std::env::var("APPDATA").ok()?;
-    Some(PathBuf::from(appdata).join("MaxmaHere").join("logs").join("tauri.log"))
+    Some(
+        PathBuf::from(appdata)
+            .join("MaxmaHere")
+            .join("logs")
+            .join("tauri.log"),
+    )
 }
 
 /// 打开 Tauri 启动日志文件（追加模式）。
@@ -138,7 +149,9 @@ fn open_tauri_log() -> Option<BufWriter<File>> {
     let _ = writeln!(
         writer,
         "\n{}\nMaxmaHere Tauri 启动 @ {}\n{}",
-        sep, chrono_now_string(), sep
+        sep,
+        chrono_now_string(),
+        sep
     );
     let _ = writer.flush();
     Some(writer)
@@ -240,30 +253,37 @@ fn save_text_file_dialog(content: &str, default_filename: &str) -> Result<Option
                     .map_err(|e| format!("创建保存对话框失败: {}", e))?;
 
             let title = wide("保存错误日志");
-            dialog.SetTitle(PCWSTR(title.as_ptr()))
+            dialog
+                .SetTitle(PCWSTR(title.as_ptr()))
                 .map_err(|e| format!("设置标题失败: {}", e))?;
 
-            let options = dialog.GetOptions()
+            let options = dialog
+                .GetOptions()
                 .map_err(|e| format!("获取选项失败: {}", e))?
                 | FOS_FORCEFILESYSTEM;
-            dialog.SetOptions(options)
+            dialog
+                .SetOptions(options)
                 .map_err(|e| format!("设置选项失败: {}", e))?;
 
             let filename = wide(default_filename);
-            dialog.SetFileName(PCWSTR(filename.as_ptr()))
+            dialog
+                .SetFileName(PCWSTR(filename.as_ptr()))
                 .map_err(|e| format!("设置文件名失败: {}", e))?;
 
             let ext = wide("txt");
-            dialog.SetDefaultExtension(PCWSTR(ext.as_ptr()))
+            dialog
+                .SetDefaultExtension(PCWSTR(ext.as_ptr()))
                 .map_err(|e| format!("设置扩展名失败: {}", e))?;
 
             if dialog.Show(None).is_err() {
                 return Ok(None); // 用户取消
             }
 
-            let item = dialog.GetResult()
+            let item = dialog
+                .GetResult()
                 .map_err(|e| format!("获取结果失败: {}", e))?;
-            let display_name = item.GetDisplayName(SIGDN_FILESYSPATH)
+            let display_name = item
+                .GetDisplayName(SIGDN_FILESYSPATH)
                 .map_err(|e| format!("获取路径失败: {}", e))?;
             let path = pwstr_to_string(display_name.as_ptr());
             CoTaskMemFree(Some(display_name.as_ptr() as _));
@@ -378,6 +398,121 @@ fn wait_for_server(port: u16) -> bool {
     false
 }
 
+/// Resolve the resource directory used by the sidecar.
+///
+/// Tauri normally returns an absolute installed/portable resources path. Some
+/// startup contexts can return `.` or no path, so use the executable sibling
+/// layout as the stable fallback used by portable builds.
+fn resolve_resource_dir(
+    tauri_resource_dir: Option<PathBuf>,
+    executable_path: Option<PathBuf>,
+) -> PathBuf {
+    if let Some(path) = tauri_resource_dir.as_ref() {
+        if path.is_absolute() && path != Path::new(".") {
+            return path.clone();
+        }
+    }
+
+    if let Some(path) = executable_path {
+        if let Some(parent) = path.parent() {
+            return parent.join("resources");
+        }
+    }
+
+    tauri_resource_dir.unwrap_or_else(|| PathBuf::from("resources"))
+}
+
+/// Build the environment shared by every sidecar start/restart.
+///
+/// Embedded runtime directories are first so subprocess lookup never prefers
+/// a host-installed node/python/uv over the packaged runtime.
+fn build_sidecar_environment(
+    resource_dir: &Path,
+    port: u16,
+    parent_pid: u32,
+    inherited_path: Option<&OsStr>,
+) -> Vec<(String, String)> {
+    let mut runtime_paths = vec![
+        resource_dir.join("runtime").join("node"),
+        resource_dir.join("runtime").join("python"),
+        resource_dir.join("runtime").join("uv"),
+    ];
+    if let Some(path) = inherited_path {
+        runtime_paths.extend(std::env::split_paths(path));
+    }
+
+    let path = std::env::join_paths(runtime_paths)
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_default();
+
+    vec![
+        ("MAXMA_ENV".to_string(), "production".to_string()),
+        ("MAXMA_API_PORT".to_string(), port.to_string()),
+        (
+            "MAXMA_RESOURCES_DIR".to_string(),
+            resource_dir.to_string_lossy().into_owned(),
+        ),
+        ("MAXMA_PARENT_PID".to_string(), parent_pid.to_string()),
+        ("PATH".to_string(), path),
+    ]
+}
+
+#[derive(Debug, Clone, Copy)]
+enum SidecarStartupStage {
+    Lookup,
+    Spawn,
+}
+
+impl SidecarStartupStage {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Lookup => "lookup",
+            Self::Spawn => "spawn",
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+struct SidecarStartupFailure {
+    stage: &'static str,
+    path: String,
+    error: String,
+    message: String,
+}
+
+fn sidecar_startup_failure(
+    stage: SidecarStartupStage,
+    path: &Path,
+    error: impl std::fmt::Display,
+) -> SidecarStartupFailure {
+    let stage = stage.as_str();
+    let path = path.display().to_string();
+    let error = error.to_string();
+    let message = format!(
+        "[tauri] FATAL: sidecar {} 失败: path={} OS error: {}",
+        stage, path, error
+    );
+
+    SidecarStartupFailure {
+        stage,
+        path,
+        error,
+        message,
+    }
+}
+
+fn report_sidecar_startup_failure(
+    app: &tauri::AppHandle,
+    stage: SidecarStartupStage,
+    path: &Path,
+    error: impl std::fmt::Display,
+) {
+    let failure = sidecar_startup_failure(stage, path, error);
+    write_startup_log(&failure.message);
+    eprintln!("{}", failure.message);
+    let _ = app.emit("server-startup-failed", failure);
+}
+
 /// 启动 sidecar 并在后台监控其生命周期（日志 + 崩溃检测）。
 /// 注意：主进程已在 main() 中加入 Job Object，sidecar 作为后代进程自动继承 Job 成员资格，
 /// 无需在此处单独 assign（避免了 PyInstaller bootloader 启动 Python 子进程的竞态）。
@@ -388,41 +523,51 @@ fn spawn_sidecar_with_monitor(
     child_store: Arc<Mutex<Option<CommandChild>>>,
     port: u16,
     log_writer: Arc<Mutex<Option<BufWriter<File>>>>,
-) {
-    let sidecar = app
-        .shell()
-        .sidecar("maxma-server")
-        .unwrap_or_else(|e| {
-            write_startup_log(&format!("[tauri] FATAL: 获取 sidecar 失败: {}", e));
-            panic!("Failed to get sidecar: {}", e);
-        });
+) -> bool {
+    let sidecar_path = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(|parent| parent.join("maxma-server.exe")))
+        .unwrap_or_else(|| PathBuf::from("maxma-server.exe"));
+    let sidecar = match app.shell().sidecar("maxma-server") {
+        Ok(sidecar) => sidecar,
+        Err(error) => {
+            report_sidecar_startup_failure(&app, SidecarStartupStage::Lookup, &sidecar_path, error);
+            return false;
+        }
+    };
 
     // 通过环境变量将端口传给 sidecar（Python 端从 settings.maxma_api_port 读取）
     // 同时注入 MAXMA_RESOURCES_DIR 让 Python 后端能定位嵌入式运行时
-    let resource_dir = app
-        .path()
-        .resource_dir()
-        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let resource_dir =
+        resolve_resource_dir(app.path().resource_dir().ok(), std::env::current_exe().ok());
 
-    write_startup_log(&format!("[tauri] sidecar resource_dir={}", resource_dir.display()));
+    write_startup_log(&format!(
+        "[tauri] sidecar resource_dir={}",
+        resource_dir.display()
+    ));
 
-    let sidecar = sidecar
-        .env("MAXMA_API_PORT", port.to_string())
-        .env("MAXMA_RESOURCES_DIR", resource_dir.to_string_lossy().to_string())
-        // 注入 Tauri 主进程 PID，供 Python sidecar 守护线程监控。
-        // PyInstaller onefile 模式下 os.getppid() 返回的是 bootloader PID 而非 Tauri，
-        // 当 Job Object 失效且 Tauri 退出时，bootloader 可能仍存活，
-        // 因此必须让 sidecar 监控 Tauri PID 而非直接父进程。
-        .env("MAXMA_PARENT_PID", std::process::id().to_string());
+    let inherited_path = std::env::var_os("PATH");
+    let sidecar = build_sidecar_environment(
+        &resource_dir,
+        port,
+        std::process::id(),
+        inherited_path.as_deref(),
+    )
+    .into_iter()
+    .fold(sidecar, |command, (key, value)| command.env(key, value));
 
-    let (mut rx, child) = sidecar
-        .spawn()
-        .unwrap_or_else(|e| {
-            write_startup_log(&format!("[tauri] FATAL: 启动 sidecar 失败: {}", e));
-            panic!("Failed to start maxma-server sidecar: {}", e);
-        });
+    let (mut rx, child) = match sidecar.spawn() {
+        Ok(result) => result,
+        Err(error) => {
+            report_sidecar_startup_failure(&app, SidecarStartupStage::Spawn, &sidecar_path, error);
+            return false;
+        }
+    };
 
-    write_startup_log(&format!("[tauri] sidecar (pid={}) 已启动，自动继承 Job Object", child.pid()));
+    write_startup_log(&format!(
+        "[tauri] sidecar (pid={}) 已启动，自动继承 Job Object",
+        child.pid()
+    ));
 
     // 存储 child handle 以便窗口关闭时 kill
     {
@@ -487,7 +632,14 @@ fn spawn_sidecar_with_monitor(
                     }),
                 );
                 std::thread::sleep(Duration::from_secs(RESTART_DELAY_SECS));
-                spawn_sidecar_with_monitor(app, restart_count, shutting_down, child_store, port, log_writer);
+                spawn_sidecar_with_monitor(
+                    app,
+                    restart_count,
+                    shutting_down,
+                    child_store,
+                    port,
+                    log_writer,
+                );
             } else {
                 let msg = format!("已达最大重启次数 ({})，放弃重启", MAX_RESTARTS);
                 write_startup_log(&format!("[tauri] {}", msg));
@@ -501,6 +653,8 @@ fn spawn_sidecar_with_monitor(
             }
         }
     });
+
+    true
 }
 
 /// 将一行日志写入 sidecar 日志文件（若 writer 可用）。
@@ -584,13 +738,19 @@ fn main() {
         Ok(job) => {
             match assign_current_process_to_job(job) {
                 Ok(()) => write_startup_log("[tauri] 主进程已加入 Job Object，后代进程将自动继承"),
-                Err(e) => write_startup_log(&format!("[tauri] 警告：主进程加入 Job Object 失败: {}，sidecar 清理将依赖窗口事件", e)),
+                Err(e) => write_startup_log(&format!(
+                    "[tauri] 警告：主进程加入 Job Object 失败: {}，sidecar 清理将依赖窗口事件",
+                    e
+                )),
             }
             // 存入 static 变量，确保 Job 句柄存活到进程退出
             let _ = JOB_HANDLE_RAW.set(job.0 as isize);
         }
         Err(e) => {
-            write_startup_log(&format!("[tauri] 警告：创建 Job Object 失败: {}，sidecar 清理将依赖窗口事件", e));
+            write_startup_log(&format!(
+                "[tauri] 警告：创建 Job Object 失败: {}，sidecar 清理将依赖窗口事件",
+                e
+            ));
         }
     }
 
@@ -606,7 +766,10 @@ fn main() {
         }))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_shortcut(Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::Space))
+                .with_shortcut(Shortcut::new(
+                    Some(Modifiers::CONTROL | Modifiers::SHIFT),
+                    Code::Space,
+                ))
                 .expect("Failed to create shortcut")
                 .with_handler(|app, _shortcut, event| {
                     if event.state == ShortcutState::Pressed {
@@ -622,9 +785,14 @@ fn main() {
                         }
                     }
                 })
-                .build()
+                .build(),
         )
-        .invoke_handler(tauri::generate_handler![select_path, get_api_port, toggle_quick_chat, save_text_file])
+        .invoke_handler(tauri::generate_handler![
+            select_path,
+            get_api_port,
+            toggle_quick_chat,
+            save_text_file
+        ])
         .setup(move |app| {
             let shutting_down = Arc::new(AtomicBool::new(false));
             let restart_count = Arc::new(AtomicU32::new(0));
@@ -637,17 +805,21 @@ fn main() {
                 port: AtomicU16::new(selected_port),
             });
 
-    // 启动 sidecar + 监控（sidecar 作为主进程后代自动继承 Job Object）
-    spawn_sidecar_with_monitor(
-        app.handle().clone(),
-        restart_count,
-        shutting_down,
-        child_store,
-        selected_port,
-        log_writer.clone(),
-    );
+            // 启动 sidecar + 监控（sidecar 作为主进程后代自动继承 Job Object）
+            let sidecar_started = spawn_sidecar_with_monitor(
+                app.handle().clone(),
+                restart_count,
+                shutting_down,
+                child_store,
+                selected_port,
+                log_writer.clone(),
+            );
 
             // 后台等待后端就绪
+            if !sidecar_started {
+                app.handle().exit(1);
+                return Ok(());
+            }
             let handle = app.handle().clone();
             std::thread::spawn(move || {
                 if !wait_for_server(selected_port) {
@@ -694,3 +866,93 @@ fn main() {
 
 struct ShuttingDown(Arc<AtomicBool>);
 struct SidecarChild(Arc<Mutex<Option<CommandChild>>>);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsStr;
+
+    #[test]
+    fn sidecar_environment_contains_production_port_resources_parent_and_runtime_path() {
+        let resource_dir = PathBuf::from(r"C:\MaxmaHere\resources");
+        let environment = build_sidecar_environment(
+            &resource_dir,
+            8007,
+            1234,
+            Some(OsStr::new(r"C:\Windows\System32")),
+        );
+
+        let value = |key: &str| {
+            environment
+                .iter()
+                .find(|(name, _)| name == key)
+                .map(|(_, value)| value.as_str())
+        };
+
+        assert_eq!(value("MAXMA_ENV"), Some("production"));
+        assert_eq!(value("MAXMA_API_PORT"), Some("8007"));
+        assert_eq!(
+            value("MAXMA_RESOURCES_DIR"),
+            Some(r"C:\MaxmaHere\resources")
+        );
+        assert_eq!(value("MAXMA_PARENT_PID"), Some("1234"));
+
+        let path = std::env::split_paths(OsStr::new(value("PATH").unwrap())).collect::<Vec<_>>();
+        assert_eq!(path[0], resource_dir.join("runtime").join("node"));
+        assert_eq!(path[1], resource_dir.join("runtime").join("python"));
+        assert_eq!(path[2], resource_dir.join("runtime").join("uv"));
+        assert!(path.contains(&PathBuf::from(r"C:\Windows\System32")));
+    }
+
+    #[test]
+    fn resource_dir_falls_back_to_executable_sibling_when_tauri_returns_dot() {
+        let resource_dir = resolve_resource_dir(
+            Some(PathBuf::from(".")),
+            Some(PathBuf::from(r"D:\MaxmaHere\maxma-here.exe")),
+        );
+
+        assert_eq!(resource_dir, PathBuf::from(r"D:\MaxmaHere\resources"));
+    }
+
+    #[test]
+    fn resource_dir_prefers_valid_tauri_resource_dir() {
+        let resource_dir = resolve_resource_dir(
+            Some(PathBuf::from(r"C:\Program Files\MaxmaHere\resources")),
+            Some(PathBuf::from(r"D:\MaxmaHere\maxma-here.exe")),
+        );
+
+        assert_eq!(
+            resource_dir,
+            PathBuf::from(r"C:\Program Files\MaxmaHere\resources")
+        );
+    }
+
+    #[test]
+    fn sidecar_lookup_failure_is_observable_with_path_and_os_error() {
+        let failure = sidecar_startup_failure(
+            SidecarStartupStage::Lookup,
+            Path::new(r"C:\Program Files\MaxmaHere\maxma-server.exe"),
+            "系统找不到指定的文件。 (os error 2)",
+        );
+
+        assert_eq!(failure.stage, "lookup");
+        assert_eq!(failure.path, r"C:\Program Files\MaxmaHere\maxma-server.exe");
+        assert!(failure.error.contains("os error 2"));
+        assert!(failure.message.contains(&failure.path));
+        assert!(failure.message.contains("os error 2"));
+    }
+
+    #[test]
+    fn sidecar_spawn_failure_is_observable_with_path_and_os_error() {
+        let failure = sidecar_startup_failure(
+            SidecarStartupStage::Spawn,
+            Path::new(r"D:\MaxmaHere\maxma-server.exe"),
+            "拒绝访问。 (os error 5)",
+        );
+
+        assert_eq!(failure.stage, "spawn");
+        assert_eq!(failure.path, r"D:\MaxmaHere\maxma-server.exe");
+        assert_eq!(failure.error, "拒绝访问。 (os error 5)");
+        assert!(failure.message.contains("拒绝访问。 (os error 5)"));
+    }
+}

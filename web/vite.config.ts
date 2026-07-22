@@ -38,6 +38,9 @@ export default defineConfig(({ mode }) => {
     5173
 
   return {
+    // Tauri serves the built files through a custom protocol; root-relative
+    // asset URLs would resolve to tauri://localhost/assets/... and 404.
+    base: mode === 'production' ? './' : '/',
     plugins: [vue(), relaxDevCsp()],
     test: {
       environment: 'jsdom',

@@ -1,119 +1,212 @@
 @echo off
 chcp 65001 >nul
-setlocal enabledelayedexpansion
+setlocal EnableExtensions EnableDelayedExpansion
 
-:: ═══════════════════════════════════════════════
-:: MaxmaHere 便携版一键构建脚本
-:: 用法：双击 build-portable.bat 或在终端运行
-:: 输出：MaxmaHere-Portable\ 文件夹
-:: ═══════════════════════════════════════════════
-
-set PROJECT_ROOT=%~dp0
-set PORTABLE_DIR=%PROJECT_ROOT%..\MaxmaHere-Portable
-set NODE=%USERPROFILE%\.workbuddy\binaries\node\versions\22.22.2\node.exe
+REM MaxmaHere portable build. Keep this flow aligned with build-desktop.bat.
+set "PROJECT_ROOT=%~dp0"
+set "PORTABLE_DIR=%PROJECT_ROOT%..\MaxmaHere-Portable"
+set "TAURI_ROOT=%PROJECT_ROOT%desktop\src-tauri"
+set "TAURI_RELEASE_DIR=%TAURI_ROOT%\target\release"
+set "TAURI_RELEASE_RESOURCES=%PROJECT_ROOT%desktop\src-tauri\target\release\resources"
+set "DIST_DIR=%PROJECT_ROOT%web\dist"
+set "SIDECAR_NAME=maxma-server-x86_64-pc-windows-msvc.exe"
+set "SIDECAR_SOURCE=%PROJECT_ROOT%desktop\src-tauri\binaries\maxma-server-x86_64-pc-windows-msvc.exe"
 
 echo.
-echo ╔══════════════════════════════════════╗
-echo ║   MaxmaHere 便携版构建工具 v2.6.6  ║
-echo ╚══════════════════════════════════════╝
+echo ========================================
+echo   MaxmaHere Portable Build
+echo ========================================
 echo.
 
-:: 检查 Node.js
-if not exist "%NODE%" (
-    echo [错误] 未找到 Node.js: %NODE%
-    echo 请确认 .workbuddy 运行时已安装。
-    pause
+cd /d "%PROJECT_ROOT%"
+if errorlevel 1 (
+    echo [ERROR] Cannot enter project root.
     exit /b 1
 )
-echo [1/5] Node.js 已就绪: %NODE%
 
-:: 构建前端
-echo [2/5] 构建前端...
-cd /d "%PROJECT_ROOT%web"
-rmdir /s /q dist 2>nul
-call "%NODE%" node_modules\vite\bin\vite.js build
-if %ERRORLEVEL% neq 0 (
-    echo [错误] 前端构建失败
-    pause
+REM Resolve the normal build environment for the final cargo invocation.
+call build\setup-dev-env.bat
+if errorlevel 1 (
+    echo [ERROR] Development environment setup failed.
     exit /b 1
 )
-echo       前端构建完成
 
-:: 构建 Rust 二进制
-echo [3/5] 构建桌面客户端...
-cd /d "%PROJECT_ROOT%desktop"
-cargo build --release --manifest-path src-tauri\Cargo.toml
-if %ERRORLEVEL% neq 0 (
-    echo [错误] Rust 编译失败
-    pause
+echo [1/6] Building frontend and Python sidecar...
+call build\build-server.bat
+if errorlevel 1 (
+    echo [ERROR] Formal server build failed.
     exit /b 1
 )
-echo       桌面客户端编译完成
 
-:: 组装便携文件夹
-echo [4/5] 组装便携版...
+if not exist "web\dist\" (
+    echo [ERROR] Frontend dist was not produced: %DIST_DIR%
+    exit /b 1
+)
+if not exist "%SIDECAR_SOURCE%" (
+    echo [ERROR] Target-suffix sidecar was not produced: %SIDECAR_SOURCE%
+    exit /b 1
+)
 
-:: 清空旧输出
-rmdir /s /q "%PORTABLE_DIR%" 2>nul
+echo [2/6] Preparing embedded runtime...
+powershell -NoProfile -ExecutionPolicy Bypass -File build\prepare-runtime.ps1
+if errorlevel 1 (
+    echo [ERROR] Embedded runtime preparation failed.
+    exit /b 1
+)
+if not exist "%TAURI_ROOT%\resources\runtime\" (
+    echo [ERROR] Runtime resources were not prepared.
+    exit /b 1
+)
+
+echo [3/6] Preparing bundled assets...
+powershell -NoProfile -ExecutionPolicy Bypass -File build\prepare-assets.ps1
+if errorlevel 1 (
+    echo [ERROR] Asset preparation failed.
+    exit /b 1
+)
+if not exist "%TAURI_ROOT%\resources\assets\" (
+    echo [ERROR] Asset resources were not prepared.
+    exit /b 1
+)
+
+echo [4/6] Building Tauri application without installer...
+pushd "%TAURI_ROOT%"
+if errorlevel 1 (
+    echo [ERROR] Cannot enter Tauri project directory.
+    exit /b 1
+)
+cargo tauri build --no-bundle
+if errorlevel 1 (
+    popd
+    echo [ERROR] Tauri no-bundle build failed.
+    exit /b 1
+)
+popd
+
+if not exist "%TAURI_RELEASE_DIR%\maxma-here.exe" (
+    echo [ERROR] Tauri application was not produced.
+    exit /b 1
+)
+if not exist "%TAURI_ROOT%\resources\" (
+    echo [ERROR] Tauri resources directory is missing.
+    exit /b 1
+)
+
+REM No-bundle builds do not create an installer directory. Stage the same
+REM resource layout explicitly so resource_dir() resolves to resources\.
+if not exist "%TAURI_RELEASE_RESOURCES%\" mkdir "%TAURI_RELEASE_RESOURCES%"
+if errorlevel 1 (
+    echo [ERROR] Cannot create Tauri release resources directory.
+    exit /b 1
+)
+xcopy /e /i /q "%TAURI_ROOT%\resources" "%TAURI_RELEASE_RESOURCES%" >nul
+if errorlevel 1 (
+    echo [ERROR] Failed to stage Tauri release resources.
+    exit /b 1
+)
+if not exist "%TAURI_RELEASE_RESOURCES%\runtime\" (
+    echo [ERROR] Tauri release runtime resources are missing.
+    exit /b 1
+)
+if not exist "%TAURI_RELEASE_RESOURCES%\assets\" (
+    echo [ERROR] Tauri release asset resources are missing.
+    exit /b 1
+)
+
+echo [5/6] Assembling portable layout...
+if exist "%PORTABLE_DIR%\" rmdir /s /q "%PORTABLE_DIR%"
+if exist "%PORTABLE_DIR%\" (
+    echo [ERROR] Cannot remove previous portable output.
+    exit /b 1
+)
 mkdir "%PORTABLE_DIR%"
-
-:: 复制 Rust 二进制
-copy /y "%PROJECT_ROOT%desktop\src-tauri\target\release\maxma-here.exe" "%PORTABLE_DIR%\" >nul
-
-:: 复制侧载服务器（如已构建）
-if exist "%PROJECT_ROOT%desktop\src-tauri\binaries\maxma-server.exe" (
-    copy /y "%PROJECT_ROOT%desktop\src-tauri\binaries\maxma-server.exe" "%PORTABLE_DIR%\" >nul
-) else if exist "%PROJECT_ROOT%desktop\src-tauri\target\release\maxma-server.exe" (
-    copy /y "%PROJECT_ROOT%desktop\src-tauri\target\release\maxma-server.exe" "%PORTABLE_DIR%\" >nul
-) else (
-    echo [警告] 未找到 maxma-server.exe，将不会启动后端
+if errorlevel 1 (
+    echo [ERROR] Cannot create portable output directory.
+    exit /b 1
+)
+copy /y "%TAURI_RELEASE_DIR%\maxma-here.exe" "%PORTABLE_DIR%\maxma-here.exe" >nul
+if errorlevel 1 (
+    echo [ERROR] Failed to copy the Tauri application.
+    exit /b 1
+)
+if not exist "%PORTABLE_DIR%\maxma-here.exe" (
+    echo [ERROR] Portable Tauri application is missing.
+    exit /b 1
 )
 
-:: 复制前端产物
-xcopy /e /i /q "%PROJECT_ROOT%web\dist" "%PORTABLE_DIR%\dist" >nul
+xcopy /e /i /q "%DIST_DIR%" "%PORTABLE_DIR%\dist" >nul
+if errorlevel 1 (
+    echo [ERROR] Failed to copy frontend dist.
+    exit /b 1
+)
+if not exist "%PORTABLE_DIR%\dist\" (
+    echo [ERROR] Portable frontend dist is missing.
+    exit /b 1
+)
 
-:: 复制运行时资源（Node.js + 默认配置）
-xcopy /e /i /q "%PROJECT_ROOT%desktop\src-tauri\resources" "%PORTABLE_DIR%\resources" >nul
+xcopy /e /i /q "%TAURI_RELEASE_RESOURCES%" "%PORTABLE_DIR%\resources" >nul
+if errorlevel 1 (
+    echo [ERROR] Failed to copy Tauri resources.
+    exit /b 1
+)
+if not exist "%PORTABLE_DIR%\resources\runtime\" (
+    echo [ERROR] Portable runtime resources are missing.
+    exit /b 1
+)
+if not exist "%PORTABLE_DIR%\resources\assets\" (
+    echo [ERROR] Portable asset resources are missing.
+    exit /b 1
+)
 
-:: 迁移用户配置（Provider Key / MCP / Persona / 数据库）
-echo [5/5] 迁移用户配置...
-set APPDATA_DIR=%APPDATA%\MaxmaHere
-if not exist "%APPDATA_DIR%" mkdir "%APPDATA_DIR%"
-if not exist "%APPDATA_DIR%\api\data" mkdir "%APPDATA_DIR%\api\data"
-if not exist "%APPDATA_DIR%\config\personas" mkdir "%APPDATA_DIR%\config\personas"
+mkdir "%PORTABLE_DIR%\resources\binaries"
+if errorlevel 1 (
+    echo [ERROR] Cannot create portable resource binaries directory.
+    exit /b 1
+)
+copy /y "%SIDECAR_SOURCE%" "%PORTABLE_DIR%\resources\binaries\%SIDECAR_NAME%" >nul
+if errorlevel 1 (
+    echo [ERROR] Failed to copy the target-suffix sidecar.
+    exit /b 1
+)
+if not exist "%PORTABLE_DIR%\resources\binaries\%SIDECAR_NAME%" (
+    echo [ERROR] Portable target-suffix sidecar is missing from resource_dir.
+    exit /b 1
+)
+
+echo [6/6] Migrating user configuration...
+set "APPDATA_DIR=%APPDATA%\MaxmaHere"
+if not exist "%APPDATA_DIR%\" mkdir "%APPDATA_DIR%"
+if errorlevel 1 exit /b 1
+if not exist "%APPDATA_DIR%\api\data\" mkdir "%APPDATA_DIR%\api\data"
+if errorlevel 1 exit /b 1
+if not exist "%APPDATA_DIR%\config\personas\" mkdir "%APPDATA_DIR%\config\personas"
+if errorlevel 1 exit /b 1
+
 if exist "%PROJECT_ROOT%api\data\providers.yaml" (
     copy /y "%PROJECT_ROOT%api\data\providers.yaml" "%APPDATA_DIR%\api\data\providers.yaml" >nul
-    echo       providers.yaml  OK
+    if errorlevel 1 exit /b 1
 )
 if exist "%PROJECT_ROOT%api\data\mcp_servers.yaml" (
     copy /y "%PROJECT_ROOT%api\data\mcp_servers.yaml" "%APPDATA_DIR%\api\data\mcp_servers.yaml" >nul
-    echo       mcp_servers.yaml  OK
+    if errorlevel 1 exit /b 1
 )
 if exist "%PROJECT_ROOT%api\data\maxma.db" (
     copy /y "%PROJECT_ROOT%api\data\maxma.db" "%APPDATA_DIR%\api\data\maxma.db" >nul
-    echo       maxma.db (设置数据库)  OK
+    if errorlevel 1 exit /b 1
 )
 if exist "%PROJECT_ROOT%config\personas\SOUL.md" (
     copy /y "%PROJECT_ROOT%config\personas\*.md" "%APPDATA_DIR%\config\personas\" >nul
-    copy /y "%PROJECT_ROOT%config\personas\*.yaml" "%APPDATA_DIR%\config\personas\" >nul 2>nul
-    echo       personas  OK
+    if errorlevel 1 exit /b 1
+    if exist "%PROJECT_ROOT%config\personas\*.yaml" (
+        copy /y "%PROJECT_ROOT%config\personas\*.yaml" "%APPDATA_DIR%\config\personas\" >nul
+        if errorlevel 1 exit /b 1
+    )
 )
 
 echo.
-echo ╔══════════════════════════════════════╗
-echo ║  ✓ 构建完成！                       ║
-echo ║                                    ║
-echo ║  便携版位于:                        ║
-echo ║  %PORTABLE_DIR%                     ║
-echo ║                                    ║
-echo ║  使用方式:                          ║
-echo ║  双击 maxma-here.exe 启动           ║
-echo ║                                    ║
-echo ║  首次启动需要十几秒，               ║
-echo ║  请等待窗口出现完整界面。            ║
-echo ╚══════════════════════════════════════╝
-
-:: 打开便携版文件夹
+echo ========================================
+echo   Portable build complete
+echo   Output: %PORTABLE_DIR%
+echo ========================================
 explorer "%PORTABLE_DIR%"
-
 pause

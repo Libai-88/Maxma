@@ -30,7 +30,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import type { StickerSegment } from '@/composables/useStickerSegments'
-import { tauriFetch } from '@/utils/env'
+import { getApiBase, tauriFetch } from '@/utils/env'
 import { useStickerPerformance } from '@/composables/useStickerPerformance'
 import Icon from '@/components/Icon.vue'
 
@@ -59,11 +59,11 @@ const displaySticker = computed<StickerSegment>(() => ({
 async function loadRandomSticker() {
   if (props.sticker.src || !props.sticker.category) return
   try {
-    const res = await tauriFetch(`/api/stickers/random/${encodeURIComponent(props.sticker.category)}`)
+    const res = await tauriFetch(`${getApiBase()}/stickers/random/${encodeURIComponent(props.sticker.category)}`)
     if (!res.ok) return
     const data = await res.json()
     if (data?.path) {
-      resolvedSrc.value = `/api/stickers/${data.path}`
+      resolvedSrc.value = `${getApiBase()}/stickers/${data.path}`
       resolvedPath.value = data.path
       resolvedFilename.value = String(data.path).split('/').pop() || ''
     }

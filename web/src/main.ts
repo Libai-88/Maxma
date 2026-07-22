@@ -24,11 +24,20 @@ async function boot() {
 
   // 生产环境：等待后端就绪（Tauri sidecar 启动需 10-30s）
   // 等待期间 index.html 的 loading 覆盖层保持可见
-  const backendReady = await waitForBackend()
+  let backendReady = false
+  let backendError = ''
+  try {
+    backendReady = await waitForBackend()
+  } catch (err) {
+    backendError = err instanceof Error ? err.message : String(err)
+  }
   if (!backendReady) {
+    const splash = document.getElementById('app-loading')
+    if (splash) splash.remove()
     const el = document.getElementById('app')
     if (el) {
-      el.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#888"><p>Backend timeout. Restart the app.</p></div>'
+      const detail = backendError ? ` (${backendError})` : ''
+      el.innerHTML = `<div role="alert" style="display:flex;align-items:center;justify-content:center;height:100vh;padding:24px;font-family:sans-serif;color:#6f6258;text-align:center"><p>后端服务启动失败，请重启应用后重试。${detail}</p></div>`
     }
     return
   }

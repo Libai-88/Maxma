@@ -1,5 +1,7 @@
 /** 情绪关键词 → 表情包分类映射 */
 
+import { getApiBase } from '@/utils/env'
+
 const EMOTION_MAP: Record<string, string> = {
   '开心': '开心', '高兴': '开心', '哈哈': '开心', '嘻嘻': '开心', '真好': '开心',
   '委屈': '委屈', '难过': '委屈', '伤心': '委屈', '呜呜': '委屈', '哭': '委屈',
@@ -34,5 +36,5 @@ export function stripStickerDirectives(text: string): string {
 
 /** 根据分类名获取随机贴纸 URL */
 export function getStickerUrl(category: string): string {
-  return `/api/stickers/random/${encodeURIComponent(category)}`
+  return `${getApiBase()}/stickers/random/${encodeURIComponent(category)}`
 }

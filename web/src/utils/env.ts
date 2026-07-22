@@ -29,6 +29,10 @@ let runtimeApiPort: number = Number(import.meta.env.VITE_MAXMA_API_PORT) || DEFA
 let portLoaded = false
 let portLoadPromise: Promise<void> | null = null
 
+/** get_api_port 可能要等 Tauri setup 完成，给 sidecar 启动留下充足时间。 */
+const PORT_DISCOVERY_ATTEMPTS = 60
+const PORT_DISCOVERY_INTERVAL_MS = 1000
+
 /** 实时检测是否在 Tauri WebView 中运行 */
 function detectTauri(): boolean {
   if (typeof window === 'undefined') return false
@@ -49,8 +53,9 @@ export function isTauri(): boolean {
  * 前端必须调用此函数获取真实端口，否则会连到错误端口。
  * 浏览器环境下此函数为空操作。
  *
- * 失败时自动重试（最多 5 次，每次间隔 1 秒），因为 Tauri 主进程可能在
- * setup 阶段还未完成端口注册。
+ * 失败时自动重试，因为 Tauri 主进程可能在 setup 阶段还未完成端口注册。
+ * 端口命令只负责报告监听端口，不在这里做健康检查：sidecar 可能已经选定
+ * 回退端口，但仍需要几十秒完成解压和启动。健康状态由 waitForBackend() 轮询。
  */
 export async function ensurePortLoaded(): Promise<void> {
   if (!detectTauri() || portLoaded) return
@@ -58,35 +63,25 @@ export async function ensurePortLoaded(): Promise<void> {
     portLoadPromise = (async () => {
       try {
         const { invoke } = await import('@tauri-apps/api/core')
-        for (let attempt = 1; attempt <= 5; attempt++) {
+        for (let attempt = 1; attempt <= PORT_DISCOVERY_ATTEMPTS; attempt++) {
           try {
             const port = await invoke<number>('get_api_port')
             if (typeof port === 'number' && port > 0) {
-              // Validate: Tauri may report a port where no backend is actually listening
-              // (e.g. dev mode with venv on 8000, but Tauri picked 8001 after conflict).
-              const ok = await _healthCheck(port)
-              if (ok) {
-                runtimeApiPort = port
-                console.log('[env] runtime api port (validated):', port)
-                break
-              }
-              console.warn(`[env] Tauri reported port ${port} but health check failed, trying default`)
-              runtimeApiPort = DEFAULT_API_PORT
-              const okDefault = await _healthCheck(DEFAULT_API_PORT)
-              if (okDefault) {
-                console.log('[env] fallback to default port:', DEFAULT_API_PORT)
-                break
-              }
+              // Keep the selected port even while the sidecar is still booting.
+              runtimeApiPort = port
+              console.log('[env] runtime api port:', port)
+              return
             }
           } catch (e) {
-            console.warn(`[env] get_api_port attempt ${attempt}/5 failed:`, e)
+            console.warn(`[env] get_api_port attempt ${attempt}/${PORT_DISCOVERY_ATTEMPTS} failed:`, e)
           }
-          if (attempt < 5) {
-            await new Promise(resolve => setTimeout(resolve, 1000))
+          if (attempt < PORT_DISCOVERY_ATTEMPTS) {
+            await new Promise(resolve => setTimeout(resolve, PORT_DISCOVERY_INTERVAL_MS))
           }
         }
+        console.warn('[env] get_api_port did not return a valid port; keeping configured port:', runtimeApiPort)
       } catch (e) {
-        console.warn('[env] failed to load runtime port, using default:', e)
+        console.warn('[env] failed to load runtime port; keeping configured port:', e)
       } finally {
         portLoaded = true
         portLoadPromise = null
@@ -94,16 +89,6 @@ export async function ensurePortLoaded(): Promise<void> {
     })()
   }
   await portLoadPromise
-}
-
-/** Quick health check on a given port, with 2s timeout */
-async function _healthCheck(port: number): Promise<boolean> {
-  try {
-    const resp = await tauriFetch(`http://127.0.0.1:${port}/api/health`, { method: 'GET' })
-    return resp.ok
-  } catch {
-    return false
-  }
 }
 
 /**
@@ -148,9 +133,8 @@ function currentApiPort(): number {
 
 /** 所有 HTTP API 请求的基础路径 */
 export function getApiBase(): string {
-  // 开发模式：走 Vite 代理（/api → localhost:8000），与浏览器行为一致
-  // 生产模式：直连后端（Tauri HTTP 插件 → Rust reqwest）
-  if (detectTauri() && !import.meta.env.DEV) {
+  // 浏览器走 Vite 代理；Tauri 必须使用 HTTP 插件可访问的绝对地址。
+  if (detectTauri()) {
     return `http://127.0.0.1:${currentApiPort()}/api`
   }
   return '/api'
@@ -163,10 +147,11 @@ export function getBackendOrigin(): string {
 
 /** WebSocket 基础路径（不含 /ws/chat/... 后缀） */
 export function getWsBase(): string {
-  if (detectTauri() && !import.meta.env.DEV) {
+  if (detectTauri()) {
     return `ws://127.0.0.1:${currentApiPort()}`
   }
-  return ''
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+  return `${protocol}://${window.location.host}`
 }
 
 /**

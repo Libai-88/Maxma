@@ -2,18 +2,23 @@
 
 cd /d "%~dp0"
 
-REM 端口配置：优先读取环境变量，未设置则使用默认值
+REM Port configuration: API remains on 8000; Vite/Tauri use 1420.
 if "%MAXMA_API_PORT%"=="" set "MAXMA_API_PORT=8000"
-if "%MAXMA_WEB_PORT%"=="" set "MAXMA_WEB_PORT=5173"
+if "%MAXMA_WEB_PORT%"=="" set "MAXMA_WEB_PORT=1420"
 
 echo ========================================
 echo   MaxmaHere Startup
 echo ========================================
 echo.
 
-REM Step 0: Clean up stale backend process
-echo [0/5] Cleaning stale processes on port %MAXMA_API_PORT%...
-powershell -NoProfile -ExecutionPolicy Bypass -File build\port-guard.ps1 -PortsStr "%MAXMA_API_PORT%"
+REM Step 0: Clean up stale backend and frontend processes.
+echo [0/5] Cleaning stale processes on ports %MAXMA_API_PORT%, %MAXMA_WEB_PORT%...
+powershell -NoProfile -ExecutionPolicy Bypass -File build\port-guard.ps1 -PortsStr "%MAXMA_API_PORT%,%MAXMA_WEB_PORT%"
+if errorlevel 1 (
+    echo [ERR] Failed to clean stale processes.
+    pause
+    exit /b 1
+)
 echo.
 
 if not exist "main.py" (
@@ -53,13 +58,14 @@ for /L %%i in (1,1,30) do (
 :backend_ready
 
 if "%READY%"=="0" (
-    echo [WARN] Backend startup timed out, continuing ...
+    echo [ERR] Backend startup timed out.
+    exit /b 1
 ) else (
     echo        Backend ready.
 )
 
 echo [3/5] Starting frontend (Vite :%MAXMA_WEB_PORT%) ...
-start "MaxmaHere Frontend" /d "%~dp0web" cmd /k "npm run dev"
+start "MaxmaHere Frontend" /d "%~dp0web" cmd /k "npm run dev -- --host 127.0.0.1 --port %MAXMA_WEB_PORT%"
 
 echo [4/5] Waiting for frontend ...
 set "READY=0"
@@ -72,6 +78,13 @@ for /L %%i in (1,1,20) do (
     ping -n 2 127.0.0.1 >nul
 )
 :frontend_ready
+
+if "%READY%"=="0" (
+    echo [ERR] Frontend startup timed out.
+    exit /b 1
+) else (
+    echo        Frontend ready.
+)
 
 echo [5/5] Opening browser...
 start "" http://localhost:%MAXMA_WEB_PORT%

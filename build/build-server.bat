@@ -17,6 +17,7 @@ if "%MAXMA_API_PORT%"=="" set "MAXMA_API_PORT=8000"
 
 REM Clean up stale backend before smoke test
 powershell -NoProfile -ExecutionPolicy Bypass -File build\port-guard.ps1 -PortsStr "%MAXMA_API_PORT%" >nul 2>&1
+if errorlevel 1 exit /b 1
 
 set "DIST_EXE=dist\maxma-server.exe"
 set "TAURI_BIN_DIR=desktop\src-tauri\binaries"
@@ -38,6 +39,7 @@ if not exist ".venv\Scripts\activate.bat" (
 
 REM 激活虚拟环境
 call .venv\Scripts\activate.bat
+if errorlevel 1 exit /b 1
 
 REM 检查并安装 PyInstaller
 set "HAS_PYI=0"
@@ -62,9 +64,11 @@ REM 清理旧产物（onedir 目录和 exe）
 if exist "%STALE_DIST_DIR%\" (
     echo [INFO] 清理旧目录 %STALE_DIST_DIR%
     rmdir /s /q "%STALE_DIST_DIR%"
+    if errorlevel 1 exit /b 1
 )
 if exist "%DIST_EXE%" (
     del /f /q "%DIST_EXE%"
+    if errorlevel 1 exit /b 1
 )
 
 REM 构建前端
@@ -89,6 +93,10 @@ if exist "bun-sidecar\package.json" (
     if not errorlevel 1 (
         cd bun-sidecar
         bun install --frozen-lockfile 2>nul || bun install 2>nul
+        if errorlevel 1 (
+            echo [ERROR] bun-sidecar preparation failed
+            exit /b 1
+        )
         cd ..
     ) else (
         echo [WARN] bun 未安装，跳过 bun-sidecar 依赖安装（若 node_modules 已存在则可忽略）
@@ -122,7 +130,13 @@ if errorlevel 1 (
 REM 部署
 echo [4/4] 部署到 Tauri binaries...
 if exist "%DIST_EXE%" (
-    if not exist "%TAURI_BIN_DIR%\" mkdir "%TAURI_BIN_DIR%"
+    if not exist "%TAURI_BIN_DIR%\" (
+        mkdir "%TAURI_BIN_DIR%"
+        if errorlevel 1 (
+            echo [ERROR] Failed to create Tauri binaries directory
+            exit /b 1
+        )
+    )
     copy /y "%DIST_EXE%" "%TAURI_BIN_EXE%" >nul
     if errorlevel 1 (
         echo [ERROR] 复制 exe 到 Tauri binaries 失败
@@ -144,3 +158,4 @@ if exist "%DIST_EXE%" (
     echo [ERROR] 未找到产物 %DIST_EXE%
     exit /b 1
 )
+endlocal & exit /b 0

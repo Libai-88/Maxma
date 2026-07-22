@@ -27,7 +27,10 @@ pub fn pick_available_port() -> Option<u16> {
     // 1. 优先使用环境变量指定的端口
     if let Ok(s) = std::env::var("MAXMA_API_PORT") {
         if let Ok(port) = s.parse::<u16>() {
-            if is_port_available(port) {
+            // Port 0 asks the OS for an ephemeral port. It is valid for
+            // TcpListener::bind but cannot be exposed to the frontend as a
+            // stable API endpoint.
+            if port != 0 && is_port_available(port) {
                 return Some(port);
             }
             eprintln!(
@@ -54,6 +57,9 @@ pub fn pick_available_port() -> Option<u16> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_is_port_available_for_unused_port() {
@@ -70,7 +76,33 @@ mod tests {
 
     #[test]
     fn test_pick_available_port_returns_some() {
+        let _guard = ENV_LOCK.lock().unwrap();
         // 在测试环境中应总能找到一个可用端口
+        let previous = std::env::var_os("MAXMA_API_PORT");
+        std::env::remove_var("MAXMA_API_PORT");
         assert!(pick_available_port().is_some());
+        match previous {
+            Some(value) => std::env::set_var("MAXMA_API_PORT", value),
+            None => std::env::remove_var("MAXMA_API_PORT"),
+        }
+    }
+
+    #[test]
+    fn test_pick_available_port_never_returns_zero_from_environment() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let previous = std::env::var_os("MAXMA_API_PORT");
+        std::env::set_var("MAXMA_API_PORT", "0");
+
+        let selected = pick_available_port();
+
+        match previous {
+            Some(value) => std::env::set_var("MAXMA_API_PORT", value),
+            None => std::env::remove_var("MAXMA_API_PORT"),
+        }
+        assert_ne!(
+            selected,
+            Some(0),
+            "port 0 cannot be exposed to the frontend"
+        );
     }
 }

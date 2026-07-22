@@ -1,5 +1,5 @@
 <template>
-  <div class="app-layout">
+  <div class="app-layout" :style="sidebarBgStyle">
     <IconRail
       :onboarding-enabled="onboardingEnabled"
       :session-drawer-open="sessionDrawerOpen"
@@ -135,6 +135,9 @@ const globalErrorToast = reactive({
   visible: false,
   message: '',
 })
+
+const sidebarBgUrl = `${import.meta.env.BASE_URL}images/sidebar-bg.jpg`
+const sidebarBgStyle = { '--sidebar-bg-image': `url("${sidebarBgUrl}")` }
 
 onMounted(async () => {
   // 初始化 Session 状态（从 localStorage 恢复或创建新会话）
@@ -516,7 +519,7 @@ html, body {
   content: '';
   position: absolute;
   inset: -5%;
-  background-image: var(--sidebar-bg-image, url('/images/sidebar-bg.jpg'));
+  background-image: var(--sidebar-bg-image);
   background-size: cover;
   background-position: left center;
   background-repeat: no-repeat;
