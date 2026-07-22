@@ -139,6 +139,16 @@ if not exist "%PORTABLE_DIR%\maxma-here.exe" (
     exit /b 1
 )
 
+copy /y "%SIDECAR_SOURCE%" "%PORTABLE_DIR%\maxma-server.exe" >nul
+if errorlevel 1 (
+    echo [ERROR] Failed to copy the target-suffix sidecar beside the Tauri application.
+    exit /b 1
+)
+if not exist "%PORTABLE_DIR%\maxma-server.exe" (
+    echo [ERROR] Portable root sidecar is missing.
+    exit /b 1
+)
+
 xcopy /e /i /q "%DIST_DIR%" "%PORTABLE_DIR%\dist" >nul
 if errorlevel 1 (
     echo [ERROR] Failed to copy frontend dist.
@@ -163,18 +173,8 @@ if not exist "%PORTABLE_DIR%\resources\assets\" (
     exit /b 1
 )
 
-mkdir "%PORTABLE_DIR%\resources\binaries"
-if errorlevel 1 (
-    echo [ERROR] Cannot create portable resource binaries directory.
-    exit /b 1
-)
-copy /y "%SIDECAR_SOURCE%" "%PORTABLE_DIR%\resources\binaries\%SIDECAR_NAME%" >nul
-if errorlevel 1 (
-    echo [ERROR] Failed to copy the target-suffix sidecar.
-    exit /b 1
-)
-if not exist "%PORTABLE_DIR%\resources\binaries\%SIDECAR_NAME%" (
-    echo [ERROR] Portable target-suffix sidecar is missing from resource_dir.
+if exist "%PORTABLE_DIR%\resources\binaries\" (
+    echo [ERROR] Portable sidecar must be beside maxma-here.exe, not under resources\binaries.
     exit /b 1
 )
 

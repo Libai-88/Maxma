@@ -80,9 +80,11 @@ if (-not $sidecarMatch.Success -or $sidecarMatch.Groups[1].Value -ne "maxma-serv
 Assert-TextContains $capabilityText '"url": "http://127.0.0.1:*/*"' "Tauri HTTP capability must allow the selected loopback API port"
 Assert-TextContains $capabilityText '"url": "http://localhost:*/*"' "Tauri HTTP capability must allow localhost API requests"
 Assert-TextNotContains $capabilityText '"url": "http://127.0.0.1:8000/*"' "Tauri HTTP capability must not be limited to the default API port"
-Assert-TextContains $portable '"%PORTABLE_DIR%\resources\binaries\%SIDECAR_NAME%"' "portable must place the target-suffix sidecar under resource_dir\\binaries"
-Assert-TextNotContains $portable '"%PORTABLE_DIR%\maxma-server.exe"' "portable must not add an unverified root sidecar copy"
+Assert-TextContains $portable 'copy /y "%SIDECAR_SOURCE%" "%PORTABLE_DIR%\maxma-server.exe"' "portable must copy the sidecar beside the no-bundle executable"
+Assert-TextContains $portable 'if not exist "%PORTABLE_DIR%\maxma-server.exe"' "portable must validate the root sidecar lookup path"
+Assert-TextNotContains $portable '"%PORTABLE_DIR%\resources\binaries\%SIDECAR_NAME%"' "portable must not place the sidecar under resource_dir\\binaries"
 Assert-TextNotContains $portable 'mkdir "%PORTABLE_DIR%\binaries"' "portable must not create a sidecar directory outside resource_dir"
+Assert-TextContains $portable 'if exist "%PORTABLE_DIR%\resources\binaries\"' "portable must reject the obsolete resource binaries layout"
 
 $portGuardCall = 'powershell -NoProfile -ExecutionPolicy Bypass -File build\\port-guard\.ps1[^\r\n]*'
 Assert-Regex $dev "$portGuardCall\r?\nif errorlevel 1" "desktop dev must exit when a port-guard call fails"
