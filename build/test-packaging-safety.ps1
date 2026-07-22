@@ -56,6 +56,22 @@ function Assert-NotMatch {
 $spec = Read-ProjectFile "build\maxma-server.spec"
 $portable = Read-ProjectFile "build-portable.bat"
 
+# The frozen backend must retain cffi's extension backend.  Keep this contract
+# narrow so the fix uses PyInstaller's package-aware collection hooks instead
+# of recursively bundling the whole site-packages tree.
+Assert-Contains $spec 'from PyInstaller.utils.hooks import collect_dynamic_libs, collect_submodules' `
+    "PyInstaller spec must use the official cffi collection hooks"
+Assert-Contains $spec 'collect_submodules("cffi")' `
+    "PyInstaller spec must collect cffi submodules"
+Assert-Contains $spec 'collect_dynamic_libs("cffi")' `
+    "PyInstaller spec must collect cffi dynamic libraries"
+Assert-Contains $spec '"_cffi_backend"' `
+    "PyInstaller spec must explicitly freeze the cffi backend extension"
+Assert-Contains $spec 'hiddenimports.extend(cffi_hiddenimports)' `
+    "PyInstaller spec must pass cffi hidden imports to Analysis"
+Assert-Contains $spec 'binaries=local_extension_binaries + cffi_binaries' `
+    "PyInstaller spec must pass cffi binaries to Analysis"
+
 # The PyInstaller manifest must never recurse over the live config tree.
 Assert-NotContains $spec '(str(project_root / "config"), "config")' `
     "PyInstaller spec must not bundle the entire config directory"

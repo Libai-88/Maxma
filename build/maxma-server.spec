@@ -13,6 +13,8 @@ import os
 import sys
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_dynamic_libs, collect_submodules
+
 block_cipher = None
 project_root = Path(SPECPATH).parent  # SPECPATH = build/ 目录的父目录
 
@@ -110,6 +112,11 @@ def collect_local_extension_modules():
 
 local_extension_binaries, local_extension_hiddenimports = collect_local_extension_modules()
 
+# cffi's native backend is a top-level extension in site-packages, while any
+# package-local native libraries are collected through PyInstaller's hook API.
+cffi_hiddenimports = ["_cffi_backend"] + collect_submodules("cffi")
+cffi_binaries = collect_dynamic_libs("cffi")
+
 
 # ── 隐式导入：PyInstaller 无法自动检测的动态导入 ──
 
@@ -138,6 +145,7 @@ hiddenimports = [
 ]
 
 hiddenimports.extend(local_extension_hiddenimports)
+hiddenimports.extend(cffi_hiddenimports)
 
 # ── 排除模块：减小打包体积 ──
 
@@ -172,7 +180,7 @@ excludes = [
 a = Analysis(
     [str(project_root / "main.py")],
     pathex=[str(project_root)],
-    binaries=local_extension_binaries,
+    binaries=local_extension_binaries + cffi_binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
