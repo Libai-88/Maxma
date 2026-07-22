@@ -6,7 +6,11 @@ import { z } from "zod/v4";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-const PROFILE_PATH = "config/providers.yaml";
+const PROFILE_PATH = "api/data/providers.yaml";
+
+function projectRoot(): string {
+  return process.env.MAXMA_PROJECT_ROOT ?? process.cwd();
+}
 
 function parseYaml(text: string): any {
   const lines = text.split("\n");
@@ -73,7 +77,7 @@ const tool: ToolDefinition<typeof params> = {
   description: "管理 LLM Provider 配置。可列举所有已配置的 Provider、查看详情。",
   parameters: params,
   execute: async (_toolCallId, params) => {
-    const profilePath = path.resolve(process.cwd(), PROFILE_PATH);
+    const profilePath = path.resolve(projectRoot(), PROFILE_PATH);
     if (!fs.existsSync(profilePath)) return { content: [{ type: "text", text: "Provider 配置文件不存在" }] };
     const raw = fs.readFileSync(profilePath, "utf-8");
     let config: any;
