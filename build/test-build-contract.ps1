@@ -96,6 +96,7 @@ Assert-Regex $start "$portGuardCall\r?\nif errorlevel 1" "startup must exit when
 Assert-Regex $start 'if "%READY%"=="0" \(\s*echo \[ERR\] Backend startup timed out\.\s*exit /b 1\s*\)' "startup must exit non-zero when backend readiness times out"
 Assert-Regex $start 'if "%READY%"=="0" \(\s*echo \[ERR\] Frontend startup timed out\.\s*exit /b 1\s*\)' "startup must exit non-zero when frontend readiness times out"
 Assert-Regex $server "$portGuardCall[^\r\n]*\r?\nif errorlevel 1 exit /b 1" "server build must exit immediately when port-guard fails"
+Assert-Regex $server 'powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0test-packaging-safety\.ps1" -ProjectRoot "%CD%" -SkipArtifact' "server packaging preflight must use its script directory and project root"
 Assert-Regex $server 'call \.venv\\Scripts\\activate\.bat\s*\r?\nif errorlevel 1 exit /b 1' "server build must stop when venv activation fails"
 Assert-TextContains $server 'set "BUN_EXE=%CD%\bun-sidecar\bun.exe"' "server build must use the bundled Bun runtime"
 Assert-Regex $server '"%BUN_EXE%" install --frozen-lockfile\s*\r?\n\s*if errorlevel 1\s*\(\s*popd\s*\r?\n\s*echo \[ERROR\].*\s*exit /b 1\s*\)' "server build must stop when bundled Bun dependency preparation fails"

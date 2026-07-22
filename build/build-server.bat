@@ -166,7 +166,7 @@ if not exist "bun-sidecar\node_modules\" (
 
 REM 打包后端
 echo [2/4] 打包后端...
-powershell -NoProfile -ExecutionPolicy Bypass -File build\test-packaging-safety.ps1 -SkipArtifact
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0test-packaging-safety.ps1" -ProjectRoot "%CD%" -SkipArtifact
 if errorlevel 1 (
     echo [ERROR] Packaging safety preflight failed
     exit /b 1
@@ -178,7 +178,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-powershell -NoProfile -ExecutionPolicy Bypass -File build\test-packaging-safety.ps1 -TocPath "build\maxma-server\PKG-00.toc"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0test-packaging-safety.ps1" -ProjectRoot "%CD%" -TocPath "build\maxma-server\PKG-00.toc"
 if errorlevel 1 (
     echo [ERROR] Packaging safety artifact check failed
     exit /b 1
