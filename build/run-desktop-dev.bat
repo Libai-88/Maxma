@@ -6,7 +6,11 @@ cd /d "%~dp0\.."
 
 REM 端口配置：优先读取环境变量，未设置则使用默认值
 if "%MAXMA_API_PORT%"=="" set "MAXMA_API_PORT=8000"
-if "%MAXMA_WEB_PORT%"=="" set "MAXMA_WEB_PORT=1420"
+if "%MAXMA_WEB_PORT%"=="" set "MAXMA_WEB_PORT=5173"
+if not "%MAXMA_WEB_PORT%"=="5173" (
+    echo [ERROR] MAXMA_WEB_PORT must be 5173 because Tauri devUrl is fixed at 5173.
+    exit /b 1
+)
 
 REM Step 0: Clean up stale processes on dev ports
 echo [0/4] Cleaning stale processes on ports %MAXMA_API_PORT%, %MAXMA_WEB_PORT% ...

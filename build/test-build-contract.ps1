@@ -98,16 +98,16 @@ Assert-Regex $server 'del /f /q "%DIST_EXE%"\s*\r?\n\s*if errorlevel 1 exit /b 1
 Assert-Regex $server 'endlocal\s*&\s*exit /b 0' "server build must return success explicitly only after all steps pass"
 
 Assert-TextContains $desktop "cargo tauri build" "desktop build must retain the bundled Tauri build"
-Assert-TextContains $dev "MAXMA_WEB_PORT=1420" "desktop dev must use the Tauri 1420 port"
+Assert-TextContains $dev "MAXMA_WEB_PORT=5173" "desktop dev must use the Tauri 5173 port"
+Assert-TextContains $dev 'if not "%MAXMA_WEB_PORT%"=="5173"' "desktop dev must reject a web port that cannot match Tauri devUrl"
 Assert-TextContains $start "MAXMA_API_PORT%,%MAXMA_WEB_PORT%" "startup must guard both configured service ports"
-Assert-TextContains $start "MAXMA_WEB_PORT=1420" "startup must use the Tauri 1420 port"
 
-if ($config.build.devUrl -ne "http://127.0.0.1:1420") {
-    throw "Tauri devUrl must match the 1420 port"
+if ($config.build.devUrl -ne "http://127.0.0.1:5173") {
+    throw "Tauri devUrl must match the 5173 port"
 }
 
 $beforeDev = $config.build.beforeDevCommand.Replace("\\", "/")
-if ($beforeDev -ne "cd ../../web && npm run dev -- --host 127.0.0.1 --port 1420") {
+if ($beforeDev -ne "cd ../../web && npm run dev -- --host 127.0.0.1 --port 5173") {
     throw "Tauri beforeDevCommand must start Vite on the configured dev port"
 }
 
