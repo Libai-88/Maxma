@@ -86,28 +86,34 @@ if errorlevel 1 (
 )
 cd ..
 
-REM 确保 bun-sidecar 依赖已安装
-echo [INFO] 检查 bun-sidecar 依赖...
-if exist "bun-sidecar\package.json" (
-    where bun >nul 2>&1
-    if not errorlevel 1 (
-        cd bun-sidecar
-        bun install --frozen-lockfile 2>nul || bun install 2>nul
-        if errorlevel 1 (
-            echo [ERROR] bun-sidecar preparation failed
-            exit /b 1
-        )
-        cd ..
-    ) else (
-        echo [WARN] bun 未安装，跳过 bun-sidecar 依赖安装（若 node_modules 已存在则可忽略）
-    )
-)
-
 REM 准备打包所需的 bun.exe（下载官方二进制，捆绑进产物供 agent 引擎使用）
 echo [INFO] 准备捆绑的 Bun 运行时 (bun.exe)...
 powershell -NoProfile -ExecutionPolicy Bypass -File build\prepare-bun.ps1
 if errorlevel 1 (
     echo [ERROR] Bun 运行时准备失败
+    exit /b 1
+)
+set "BUN_EXE=%CD%\bun-sidecar\bun.exe"
+if not exist "%BUN_EXE%" (
+    echo [ERROR] Bundled Bun runtime is missing: %BUN_EXE%
+    exit /b 1
+)
+if not exist "bun-sidecar\package.json" (
+    echo [ERROR] bun-sidecar package.json is missing
+    exit /b 1
+)
+REM Use the pinned bundled runtime and lockfile so a missing global Bun cannot produce a partial build.
+echo [INFO] Installing bun-sidecar dependencies with bundled Bun...
+pushd bun-sidecar
+"%BUN_EXE%" install --frozen-lockfile
+if errorlevel 1 (
+    popd
+    echo [ERROR] bun-sidecar dependency installation failed
+    exit /b 1
+)
+popd
+if not exist "bun-sidecar\node_modules\" (
+    echo [ERROR] bun-sidecar node_modules was not produced
     exit /b 1
 )
 

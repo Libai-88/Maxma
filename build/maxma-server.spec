@@ -37,11 +37,23 @@ datas = [
     (str(project_root / "bun-sidecar" / "bun.exe"), "bun-sidecar"),
 ]
 
-# 检查并警告缺失的数据文件，避免静默跳过导致运行时错误
-_missing = [(src, dst) for src, dst in datas if not Path(src).exists()]
-for src, dst in _missing:
-    print(f"[WARN] 数据目录不存在，打包后将缺失该资源: {src} -> {dst}", file=sys.stderr)
-# 过滤掉不存在的目录
+# These inputs are required for a runnable backend. Failing while evaluating
+# the spec is safer than producing an executable with silently missing data.
+_required_sources = [
+    project_root / "web" / "dist",
+    project_root / "config",
+    project_root / "bun-sidecar" / "src",
+    project_root / "bun-sidecar" / "package.json",
+    project_root / "bun-sidecar" / "node_modules",
+]
+_missing_required = [str(path) for path in _required_sources if not path.exists()]
+if _missing_required:
+    raise SystemExit(
+        "[ERROR] Missing required PyInstaller data:\n" + "\n".join(_missing_required)
+    )
+
+# Optional local content may be absent in a clean checkout; omit it explicitly
+# while keeping the required runtime inputs above fail-fast.
 datas = [(src, dst) for src, dst in datas if Path(src).exists()]
 
 # bun.exe 是打包后端启动 agent 引擎的必需品，缺失则产物不可用 —— 立即失败而非静默跳过
