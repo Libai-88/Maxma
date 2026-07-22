@@ -5,6 +5,7 @@ streams intermediate events back to frontend, and saves const sessions.
 """
 
 import asyncio
+import inspect
 import json
 import logging
 import uuid
@@ -17,6 +18,7 @@ from api.routes.providers import _decrypt_api_key, _find_provider, _load_provide
 from api.const_session_store import save_const_session
 from api.middleware.rate_limit import get_ws_rate_limiter
 from api.pi_bridge.session_adapter import SessionMap
+from api.pi_bridge.sidecar_manager import SidecarManager
 from api.session_manager import SessionState
 from api.yaml_store import yaml_file_lock
 from app_paths import PROJECT_ROOT, PROVIDERS_YAML_PATH
@@ -24,6 +26,29 @@ from app_paths import PROJECT_ROOT, PROVIDERS_YAML_PATH
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def _get_sidecar_client(sidecar_mgr):
+    """Return a sidecar client without treating Mock attributes as APIs.
+
+    ``SidecarManager.get_client`` owns the production lifecycle guarantee. A
+    few older tests use lightweight managers exposing only ``client``; plain
+    ``MagicMock`` instances also fabricate a ``get_client`` attribute, so
+    only an actual manager or a method defined by the manager's class may use
+    that lifecycle API.
+    """
+    if isinstance(sidecar_mgr, SidecarManager) or getattr(
+        type(sidecar_mgr), "get_client", None
+    ) is not None:
+        client = sidecar_mgr.get_client()
+        if inspect.isawaitable(client):
+            client = await client
+    else:
+        client = getattr(sidecar_mgr, "client", None)
+
+    if client is None:
+        raise RuntimeError("Sidecar client not available after start()")
+    return client
 
 
 def _resolve_chat_model(provider_id: str, model_name: str) -> dict[str, str | int]:
@@ -74,7 +99,7 @@ async def _get_messages_from_sidecar(
         return []
     await sidecar_mgr.start()
     try:
-        client = await sidecar_mgr.get_client()
+        client = await _get_sidecar_client(sidecar_mgr)
     except RuntimeError:
         return []
     with SessionMap() as sm:
@@ -115,7 +140,7 @@ async def _stream_turn_sidecar(
     # 1. Ensure sidecar is running
     mgr = app_state.sidecar_manager
     await mgr.start()
-    client = await mgr.get_client()
+    client = await _get_sidecar_client(mgr)
     session._sidecar_mgr = mgr
 
     # 2. Look up or create sidecar session
