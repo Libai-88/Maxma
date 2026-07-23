@@ -58,6 +58,12 @@ Thumbs.db
 # superpowers skill 临时会话状态
 .superpowers/
 
+# superma adversarial competition 进程元数据（本地运行产物，不应入库）
+.superma/
+
+# Vite 运行时生成的临时配置时间戳文件（含机器绝对路径，不应入库）
+web/vite.config.ts.timestamp-*.mjs
+
 # 用户固定会话（Const Session）持久化数据
 api/data/const-sessions/
 

@@ -69,19 +69,17 @@ export async function ensurePortLoaded(): Promise<void> {
             if (typeof port === 'number' && port > 0) {
               // Keep the selected port even while the sidecar is still booting.
               runtimeApiPort = port
-              console.log('[env] runtime api port:', port)
               return
             }
-          } catch (e) {
-            console.warn(`[env] get_api_port attempt ${attempt}/${PORT_DISCOVERY_ATTEMPTS} failed:`, e)
+          } catch {
+            // Tauri setup not ready yet; retry on next iteration.
           }
           if (attempt < PORT_DISCOVERY_ATTEMPTS) {
             await new Promise(resolve => setTimeout(resolve, PORT_DISCOVERY_INTERVAL_MS))
           }
         }
-        console.warn('[env] get_api_port did not return a valid port; keeping configured port:', runtimeApiPort)
-      } catch (e) {
-        console.warn('[env] failed to load runtime port; keeping configured port:', e)
+      } catch {
+        // Port discovery unavailable; keep configured port.
       } finally {
         portLoaded = true
         portLoadPromise = null
@@ -110,19 +108,15 @@ export async function waitForBackend(
       const url = `${getApiBase()}/health`
       const resp = await tauriFetch(url, { method: 'GET' })
       if (resp.ok) {
-        console.log(`[env] backend ready (attempt ${attempt})`)
         return true
       }
-    } catch (e) {
-      if (attempt === 1 || attempt % 5 === 0) {
-        console.log(`[env] waiting for backend (attempt ${attempt}/${maxAttempts})`)
-      }
+    } catch {
+      // Backend not ready yet; retry on next iteration.
     }
     if (attempt < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, intervalMs))
     }
   }
-  console.warn(`[env] backend not ready after ${maxAttempts} attempts`)
   return false
 }
 

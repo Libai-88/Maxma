@@ -147,6 +147,11 @@ hiddenimports = [
 hiddenimports.extend(local_extension_hiddenimports)
 hiddenimports.extend(cffi_hiddenimports)
 
+# tools/ 包内子模块在函数体内动态 import，PyInstaller 静态分析无法发现。
+# collect_submodules 自动发现全部子模块，避免打包后 ModuleNotFoundError。
+# 参见 project_memory: PyInstaller spec 必须 collect_submodules("tools")。
+hiddenimports.extend(collect_submodules("tools"))
+
 # ── 排除模块：减小打包体积 ──
 
 excludes = [

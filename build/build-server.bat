@@ -9,7 +9,7 @@ setlocal enabledelayedexpansion
 
 cd /d "%~dp0\.."
 
-REM 端口配置：优先读取环境变量，未设置则使用默认值
+REM Port config: prefer environment variable, fall back to default
 if "%MAXMA_API_PORT%"=="" set "MAXMA_API_PORT=8000"
 
 REM Clean up stale backend before smoke test
@@ -88,9 +88,9 @@ if "%NEEDS_PYI%"=="1" (
     )
 )
 
-REM 清理旧产物（onedir 目录和 exe）
+REM Clean stale artifacts (onedir directory and exe)
 if exist "%STALE_DIST_DIR%\" (
-    echo [INFO] 清理旧目录 %STALE_DIST_DIR%
+    echo [INFO] Cleaning stale directory %STALE_DIST_DIR%
     rmdir /s /q "%STALE_DIST_DIR%"
     if errorlevel 1 exit /b 1
 )
@@ -99,8 +99,8 @@ if exist "%DIST_EXE%" (
     if errorlevel 1 exit /b 1
 )
 
-REM 构建前端
-echo [1/4] 构建前端...
+REM Build frontend
+echo [1/4] Building frontend...
 set "NEEDS_NPM_INSTALL=0"
 if not exist "web\node_modules" set "NEEDS_NPM_INSTALL=1"
 if /i "%MAXMA_CI%"=="1" set "NEEDS_NPM_INSTALL=1"
@@ -128,16 +128,16 @@ if "%NEEDS_NPM_INSTALL%"=="1" (
 cd web
 call npm run build 2>&1
 if errorlevel 1 (
-    echo [ERROR] 前端构建失败
+    echo [ERROR] Frontend build failed
     exit /b 1
 )
 cd ..
 
-REM 准备打包所需的 bun.exe（下载官方二进制，捆绑进产物供 agent 引擎使用）
-echo [INFO] 准备捆绑的 Bun 运行时 (bun.exe)...
+REM Prepare bundled bun.exe (download official binary for agent engine)
+echo [INFO] Preparing bundled Bun runtime (bun.exe)...
 powershell -NoProfile -ExecutionPolicy Bypass -File build\prepare-bun.ps1
 if errorlevel 1 (
-    echo [ERROR] Bun 运行时准备失败
+    echo [ERROR] Bun runtime preparation failed
     exit /b 1
 )
 set "BUN_EXE=%CD%\bun-sidecar\bun.exe"
@@ -164,8 +164,8 @@ if not exist "bun-sidecar\node_modules\" (
     exit /b 1
 )
 
-REM 打包后端
-echo [2/4] 打包后端...
+REM Package backend
+echo [2/4] Packaging backend...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0test-packaging-safety.ps1" -ProjectRoot "%CD%" -SkipArtifact
 if errorlevel 1 (
     echo [ERROR] Packaging safety preflight failed
@@ -174,7 +174,7 @@ if errorlevel 1 (
 %PYINSTALLER_CMD% build\maxma-server.spec --clean --noconfirm
 
 if errorlevel 1 (
-    echo [ERROR] PyInstaller 打包失败
+    echo [ERROR] PyInstaller packaging failed
     exit /b 1
 )
 
@@ -184,15 +184,15 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [3/4] 运行冒烟测试...
+echo [3/4] Running smoke test...
 powershell -NoProfile -ExecutionPolicy Bypass -File build\smoke-test-server.ps1
 if errorlevel 1 (
-    echo [ERROR] 冒烟测试未通过
+    echo [ERROR] Smoke test failed
     exit /b 1
 )
 
-REM 部署
-echo [4/4] 部署到 Tauri binaries...
+REM Deploy
+echo [4/4] Deploying to Tauri binaries...
 if exist "%DIST_EXE%" (
     if not exist "%TAURI_BIN_DIR%\" (
         mkdir "%TAURI_BIN_DIR%"
@@ -203,23 +203,23 @@ if exist "%DIST_EXE%" (
     )
     copy /y "%DIST_EXE%" "%TAURI_BIN_EXE%" >nul
     if errorlevel 1 (
-        echo [ERROR] 复制 exe 到 Tauri binaries 失败
+        echo [ERROR] Failed to copy exe to Tauri binaries
         exit /b 1
     )
 
     echo.
     echo ============================================
-    echo   打包完成
-    echo   产物：%DIST_EXE%
-    echo   Tauri sidecar：%TAURI_BIN_EXE%
+    echo   Build complete
+    echo   Artifact: %DIST_EXE%
+    echo   Tauri sidecar: %TAURI_BIN_EXE%
     echo ============================================
 
-    REM 显示文件大小
+    REM Show file size
     for %%F in ("%DIST_EXE%") do (
-        echo   文件大小：%%~zF bytes
+        echo   File size: %%~zF bytes
     )
 ) else (
-    echo [ERROR] 未找到产物 %DIST_EXE%
+    echo [ERROR] Artifact not found: %DIST_EXE%
     exit /b 1
 )
 endlocal & exit /b 0

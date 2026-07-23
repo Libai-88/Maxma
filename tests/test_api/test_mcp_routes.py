@@ -36,7 +36,7 @@ class TestListAndGetServers:
     def test_get_server_found(self, app_client):
         app_client.post(
             "/mcp/servers",
-            json={"server_id": "s1", "transport": "stdio", "command": "echo"},
+            json={"server_id": "s1", "transport": "stdio", "command": "npx"},
         )
         resp = app_client.get("/mcp/servers/s1")
         assert resp.status_code == 200
@@ -117,7 +117,7 @@ class TestListServerTools:
     def test_returns_empty_tools(self, app_client):
         app_client.post(
             "/mcp/servers",
-            json={"server_id": "s1", "transport": "stdio", "command": "echo"},
+            json={"server_id": "s1", "transport": "stdio", "command": "npx"},
         )
         resp = app_client.get("/mcp/servers/s1/tools")
         assert resp.status_code == 200
@@ -135,7 +135,7 @@ class TestCreateServer:
             json={
                 "server_id": "s1",
                 "transport": "stdio",
-                "command": "echo",
+                "command": "npx",
                 "args": ["hi"],
                 "env": {"K": "V"},
                 "cwd": "/tmp",
@@ -153,7 +153,7 @@ class TestCreateServer:
             "description": "",
             "allowed_tools": ["t1"],
             "blocked_tools": ["t2"],
-            "command": "echo",
+            "command": "npx",
             "args": ["hi"],
             "env": {"K": "[REDACTED]"},
             "cwd": "/tmp",
@@ -220,11 +220,11 @@ class TestCreateServer:
     def test_create_duplicate_409(self, app_client):
         app_client.post(
             "/mcp/servers",
-            json={"server_id": "s1", "transport": "stdio", "command": "echo"},
+            json={"server_id": "s1", "transport": "stdio", "command": "npx"},
         )
         resp = app_client.post(
             "/mcp/servers",
-            json={"server_id": "s1", "transport": "stdio", "command": "echo"},
+            json={"server_id": "s1", "transport": "stdio", "command": "npx"},
         )
         assert resp.status_code == 409
 
@@ -247,7 +247,7 @@ class TestCreateServer:
             json={
                 "server_id": "s7",
                 "transport": "stdio",
-                "command": "echo",
+                "command": "npx",
                 "enabled": False,
             },
         )
@@ -263,29 +263,29 @@ class TestUpdateServer:
     def test_update_partial_fields(self, app_client):
         app_client.post(
             "/mcp/servers",
-            json={"server_id": "s1", "transport": "stdio", "command": "echo"},
+            json={"server_id": "s1", "transport": "stdio", "command": "npx"},
         )
         resp = app_client.put(
             "/mcp/servers/s1",
-            json={"enabled": False, "description": "updated", "command": "cat"},
+            json={"enabled": False, "description": "updated", "command": "node"},
         )
         assert resp.status_code == 200
         srv = resp.json()["server"]
         assert srv["enabled"] is False
         assert srv["description"] == "updated"
-        assert srv["command"] == "cat"
+        assert srv["command"] == "node"
         assert srv["transport"] == "stdio"  # unchanged
         assert resp.json()["status"] == "updated"
 
     def test_update_unset_fields_ignored(self, app_client):
         app_client.post(
             "/mcp/servers",
-            json={"server_id": "s1", "transport": "stdio", "command": "echo"},
+            json={"server_id": "s1", "transport": "stdio", "command": "npx"},
         )
         # Only enabled provided; other fields keep their values
         resp = app_client.put("/mcp/servers/s1", json={"enabled": False})
         srv = resp.json()["server"]
-        assert srv["command"] == "echo"
+        assert srv["command"] == "npx"
 
     def test_update_redacts_sensitive_values_and_preserves_unset_secret(self, app_client):
         secret = "mcp-update-secret"
@@ -294,7 +294,7 @@ class TestUpdateServer:
             json={
                 "server_id": "s1",
                 "transport": "stdio",
-                "command": "echo",
+                "command": "npx",
                 "env": {"TOKEN": secret},
             },
         )
@@ -313,7 +313,7 @@ class TestUpdateServer:
             json={
                 "server_id": "s1",
                 "transport": "stdio",
-                "command": "echo",
+                "command": "npx",
                 "env": {"TOKEN": secret},
             },
         )
@@ -333,7 +333,7 @@ class TestUpdateServer:
             {
                 "server_id": "s1",
                 "transport": "stdio",
-                "command": "echo",
+                "command": "npx",
                 "env": {
                     "TOKEN": secret,
                     "nested": {"API_KEY": secret, "KEEP": "old"},
@@ -368,7 +368,7 @@ class TestDeleteServer:
     def test_delete_success(self, app_client):
         app_client.post(
             "/mcp/servers",
-            json={"server_id": "s1", "transport": "stdio", "command": "echo"},
+            json={"server_id": "s1", "transport": "stdio", "command": "npx"},
         )
         resp = app_client.delete("/mcp/servers/s1")
         assert resp.status_code == 200
@@ -398,7 +398,7 @@ class TestDiscoveredAndReload:
             {
                 "server_id": "secure",
                 "transport": "stdio",
-                "command": "echo",
+                "command": "npx",
                 "env": {"TOKEN": secret},
                 "headers": {"Authorization": secret},
             },
@@ -474,7 +474,7 @@ def test_build_omp_mcp_servers_normalizes_only_sdk_fields():
 
 def test_build_omp_mcp_servers_omits_disabled_servers():
     result = mcp_mod.build_omp_mcp_servers([
-        {"server_id": "disabled", "transport": "stdio", "enabled": False, "command": "echo"},
+        {"server_id": "disabled", "transport": "stdio", "enabled": False, "command": "npx"},
     ])
     assert result == {"mcpServers": {}, "allowBlock": {}, "unsupported": {}}
 
@@ -491,3 +491,51 @@ class TestLoadRawCorrupted:
         (tmp_path / "mcp_servers.yaml").unlink(missing_ok=True)
         resp = app_client.get("/mcp/servers/ghost")
         assert resp.status_code == 404
+
+
+class TestStdioCommandWhitelist:
+    """stdio command 白名单校验（create + update 均强制）。"""
+
+    def test_create_rejects_command_not_in_whitelist(self, app_client):
+        resp = app_client.post(
+            "/mcp/servers",
+            json={"server_id": "evil", "transport": "stdio", "command": "rm"},
+        )
+        assert resp.status_code == 400
+        assert "白名单" in resp.text
+
+    def test_create_accepts_whitelisted_command_with_path(self, app_client):
+        # 绝对路径取 basename 后仍在白名单内
+        resp = app_client.post(
+            "/mcp/servers",
+            json={
+                "server_id": "path-ok",
+                "transport": "stdio",
+                "command": "C:\\nodejs\\npx.cmd",
+            },
+        )
+        assert resp.status_code == 200
+
+    def test_update_rejects_command_not_in_whitelist(self, app_client):
+        app_client.post(
+            "/mcp/servers",
+            json={"server_id": "s1", "transport": "stdio", "command": "npx"},
+        )
+        resp = app_client.put(
+            "/mcp/servers/s1",
+            json={"command": "powershell"},
+        )
+        assert resp.status_code == 400
+        assert "白名单" in resp.text
+
+    def test_update_preserves_existing_command_when_omitted(self, app_client):
+        # update 不带 command 时，沿用 target 已有 command（已在白名单内）
+        app_client.post(
+            "/mcp/servers",
+            json={"server_id": "s1", "transport": "stdio", "command": "npx"},
+        )
+        resp = app_client.put(
+            "/mcp/servers/s1",
+            json={"description": "updated"},
+        )
+        assert resp.status_code == 200

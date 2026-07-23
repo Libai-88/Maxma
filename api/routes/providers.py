@@ -180,11 +180,9 @@ def _is_metadata_host(hostname: str) -> bool:
     return str(address) in _BLOCKED_METADATA_HOSTS
 
 
-def _validate_provider_base_url(base_url: str, *, allow_empty: bool = False) -> str:
+def _validate_provider_base_url(base_url: str) -> str:
     """Validate a provider base URL before it is stored or requested."""
     if not isinstance(base_url, str) or not base_url:
-        if allow_empty and base_url == "":
-            return base_url
         raise _invalid_provider_url()
     if any(char.isspace() or ord(char) < 0x20 or ord(char) == 0x7F for char in base_url):
         raise _invalid_provider_url()

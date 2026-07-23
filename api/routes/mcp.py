@@ -48,6 +48,50 @@ def _validate_env_vars(env: dict[str, object]) -> None:
         )
 
 
+# stdio transport 允许的可执行命令白名单（仅命令名，不含路径）。
+# MCP 服务器子进程只能通过这些常见的运行器启动，防止任意命令执行。
+# Windows 下自动兼容 .exe / .cmd / .bat 后缀。
+_ALLOWED_STDIO_COMMANDS: frozenset[str] = frozenset({
+    # Node.js 生态（MCP 官方示例几乎都是 npx 启动）
+    "npx", "node", "npm", "bun", "bunx", "deno",
+    # Python 生态
+    "python", "python3", "py", "uvx", "uv", "pipx",
+    # Go / Rust / 通用运行器
+    "go", "cargo", "ruby", "java",
+    # 容器隔离
+    "docker", "podman",
+})
+
+
+def _validate_stdio_command(command: str) -> str:
+    """校验 stdio 命令名在白名单内，防止任意可执行文件启动。
+
+    接受裸命令名（如 ``npx``）或绝对/相对路径——后者取 basename 校验。
+    Windows 下自动剥离 .exe / .cmd / .bat 后缀后再比对。
+    """
+    if not isinstance(command, str) or not command.strip():
+        raise HTTPException(status_code=400, detail="stdio 模式必须指定 command")
+    # 取命令本体（剥离路径和引号）
+    bare = command.strip().strip('"').strip("'")
+    # 处理 Windows 路径分隔符
+    basename = bare.rsplit("\\", 1)[-1].rsplit("/", 1)[-1]
+    # 剥离 Windows 可执行文件后缀
+    lower = basename.lower()
+    for ext in (".exe", ".cmd", ".bat"):
+        if lower.endswith(ext):
+            basename = basename[: -len(ext)]
+            break
+    if basename not in _ALLOWED_STDIO_COMMANDS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"stdio 命令 '{basename}' 不在白名单中，"
+                f"允许的命令: {', '.join(sorted(_ALLOWED_STDIO_COMMANDS))}"
+            ),
+        )
+    return command
+
+
 _REDACTED = "[REDACTED]"
 _SENSITIVE_KEY_NAMES: frozenset[str] = frozenset({
     "authorization",
@@ -243,9 +287,7 @@ def _build_server_dict(body: MCPServerCreateBody) -> dict:
 
     t = body.transport
     if t == "stdio":
-        if not body.command:
-            raise HTTPException(status_code=400, detail="stdio 模式必须指定 command")
-        d["command"] = body.command
+        d["command"] = _validate_stdio_command(body.command or "")
         if body.args:
             d["args"] = body.args
         if body.env:
@@ -385,7 +427,10 @@ def _validate_update_against_transport(target: dict, update_fields: dict) -> Non
             )
     elif transport == "stdio":
         cmd = update_fields.get("command", target.get("command", ""))
-        if not cmd:
+        # 若 update 提供了新 command，必须过白名单；否则复用 target 已有 command
+        if update_fields.get("command"):
+            _validate_stdio_command(update_fields["command"])
+        elif not cmd:
             raise HTTPException(
                 status_code=400,
                 detail="stdio 模式必须指定 command",
