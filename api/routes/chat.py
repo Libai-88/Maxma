@@ -18,7 +18,6 @@ from api.routes.providers import _decrypt_api_key, _find_provider, _load_provide
 from api.const_session_store import save_const_session
 from api.middleware.rate_limit import get_ws_rate_limiter
 from api.pi_bridge.session_adapter import SessionMap
-from api.pi_bridge.sidecar_manager import SidecarManager
 from api.session_manager import SessionState
 from api.yaml_store import yaml_file_lock
 from app_paths import PROJECT_ROOT, PROVIDERS_YAML_PATH
@@ -31,23 +30,15 @@ _PUBLIC_TURN_ERROR = "后端处理失败，请稍后重试"
 
 
 async def _get_sidecar_client(sidecar_mgr):
-    """Return a sidecar client without treating Mock attributes as APIs.
+    """Return a sidecar client via the manager's ``get_client()`` lifecycle API.
 
-    ``SidecarManager.get_client`` owns the production lifecycle guarantee. A
-    few older tests use lightweight managers exposing only ``client``; plain
-    ``MagicMock`` instances also fabricate a ``get_client`` attribute, so
-    only an actual manager or a method defined by the manager's class may use
-    that lifecycle API.
+    Supports both sync and async return values. Test doubles must implement
+    ``get_client()`` rather than exposing a ``client`` attribute, so production
+    code stays free of mock-aware type sniffing.
     """
-    if isinstance(sidecar_mgr, SidecarManager) or getattr(
-        type(sidecar_mgr), "get_client", None
-    ) is not None:
-        client = sidecar_mgr.get_client()
-        if inspect.isawaitable(client):
-            client = await client
-    else:
-        client = getattr(sidecar_mgr, "client", None)
-
+    client = sidecar_mgr.get_client()
+    if inspect.isawaitable(client):
+        client = await client
     if client is None:
         raise RuntimeError("Sidecar client not available after start()")
     return client

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 vi.mock('@/api', () => ({
@@ -14,6 +14,7 @@ vi.mock('@/api', () => ({
 }))
 
 vi.mock('@/stores/chat', () => ({
+  useChatStore: vi.fn(() => ({ removeTurnsFromStorage: vi.fn() })),
   removeTurnsFromStorage: vi.fn(),
   TURNS_KEY_PREFIX: 'maxma_turns_',
 }))
@@ -21,8 +22,13 @@ vi.mock('@/stores/chat', () => ({
 import { useSessionStore } from '@/stores/session'
 
 describe('session store', () => {
-  it('logs a warning when refreshSessions fails after createSession', async () => {
+  beforeEach(() => {
+    localStorage.clear()
+    vi.clearAllMocks()
     setActivePinia(createPinia())
+  })
+
+  it('logs a warning when refreshSessions fails after createSession', async () => {
     const store = useSessionStore()
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
@@ -35,8 +41,6 @@ describe('session store', () => {
   })
 
   it('reports initialization failure after the final retry', async () => {
-    localStorage.clear()
-    setActivePinia(createPinia())
     const store = useSessionStore()
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 

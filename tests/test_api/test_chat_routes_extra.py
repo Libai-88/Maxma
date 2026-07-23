@@ -72,11 +72,14 @@ class _FakeWSRegistry:
 
 class _FakeSidecarMgr:
     def __init__(self, client=None):
-        self.client = client
+        self._client = client
         self.started = False
 
     async def start(self):
         self.started = True
+
+    def get_client(self):
+        return self._client
 
 
 def _patch_session_map(monkeypatch, sidecar_id=None, recent_turns=None):
@@ -436,7 +439,7 @@ class TestSidecarTurnFailures:
         client.call = AsyncMock(side_effect=call)
         manager = MagicMock()
         manager.start = AsyncMock()
-        manager.client = client
+        manager.get_client = MagicMock(return_value=client)
         ws.app.state.sidecar_manager = manager
 
         session = MagicMock()

@@ -163,6 +163,64 @@ class TestMemoryRoutes:
             resp = c.delete("/memory/missing")
         assert resp.status_code == 404
 
+    def test_delete_memory_returns_503_when_store_unreadable(self, tmp_path: Path):
+        """Corrupt YAML must surface as 503, not 500."""
+        memory_path = tmp_path / "memory.yaml"
+        memory_path.write_text("not: [valid: yaml: {{{{", encoding="utf-8")
+
+        with self._client(memory_path) as c:
+            resp = c.delete("/memory/whatever")
+        assert resp.status_code == 503
+
+
+class TestMemoryStubs:
+    """The 13 /memories* + /narrative + /moment stubs must return 503.
+
+    These back compatibility routes whose memory/ implementation was removed;
+    OMP owns recall/reflect/retain now. Tests lock in the 503 contract so
+    accidental re-wiring is caught.
+    """
+
+    _DETAIL = "记忆功能不可用（memory/ 包已移除）"
+    _EPISODIC = "情景记忆功能不可用（memory/ 包已移除）"
+    _SEMANTIC = "语义记忆功能不可用（memory/ 包已移除）"
+
+    def _client(self) -> TestClient:
+        app = FastAPI()
+        app.include_router(memory.router)
+        return TestClient(app)
+
+    @pytest.mark.parametrize(
+        ("method", "path", "detail"),
+        [
+            ("GET", "/narrative", _DETAIL),
+            ("GET", "/memories", _DETAIL),
+            ("GET", "/memories/expired", _DETAIL),
+            ("PUT", "/memories/m1", _DETAIL),
+            ("POST", "/memories/purge", _DETAIL),
+            ("GET", "/moment", _DETAIL),
+            ("GET", "/memories/episodic", _EPISODIC),
+            ("POST", "/memories/episodic", _EPISODIC),
+            ("DELETE", "/memories/episodic/ep1", _EPISODIC),
+            ("GET", "/memories/semantic", _SEMANTIC),
+            ("POST", "/memories/semantic", _SEMANTIC),
+            ("DELETE", "/memories/semantic/f1", _SEMANTIC),
+            ("POST", "/memories/search", _DETAIL),
+        ],
+    )
+    def test_stub_returns_503(self, method, path, detail):
+        with self._client() as c:
+            if method == "GET":
+                resp = c.get(path)
+            elif method == "POST":
+                resp = c.post(path)
+            elif method == "PUT":
+                resp = c.put(path)
+            else:
+                resp = c.delete(path)
+        assert resp.status_code == 503
+        assert resp.json()["detail"] == detail
+
 
 # ── kb.py ────────────────────────────────────────────────────
 

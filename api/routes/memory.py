@@ -9,6 +9,7 @@ compatibility.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 import os
@@ -179,10 +180,8 @@ def _write_document(path: Path, document: Mapping[Any, Any]) -> None:
                 pass
 
 
-@router.get("/memory")
-async def list_memories(request: Request) -> list[dict[str, Any]]:
-    """List non-expired durable facts for the legacy Web memory view."""
-    path = _memory_path(request)
+def _list_memories_sync(path: Path) -> list[dict[str, Any]]:
+    """Synchronous critical section: read + project durable facts."""
     with _locked_memory_file(path):
         document = _load_document(path)
     if document is None:
@@ -190,10 +189,19 @@ async def list_memories(request: Request) -> list[dict[str, Any]]:
     return _project_facts(document)
 
 
-@router.delete("/memory/{memory_id}")
-async def delete_memory(memory_id: str, request: Request) -> dict[str, str]:
-    """Delete a durable fact and make the mutation visible to later reads."""
+@router.get("/memory")
+async def list_memories(request: Request) -> list[dict[str, Any]]:
+    """List non-expired durable facts for the legacy Web memory view.
+
+    File I/O (YAML read + portalock) runs in a worker thread via
+    ``asyncio.to_thread`` so the event loop stays responsive under load.
+    """
     path = _memory_path(request)
+    return await asyncio.to_thread(_list_memories_sync, path)
+
+
+def _delete_memory_sync(path: Path, memory_id: str) -> dict[str, str]:
+    """Synchronous critical section: read, mutate, atomically write."""
     with _locked_memory_file(path):
         document = _load_document(path)
         if document is None:
@@ -210,6 +218,17 @@ async def delete_memory(memory_id: str, request: Request) -> dict[str, str]:
         _write_document(path, document)
 
     return {"status": "deleted", "id": memory_id}
+
+
+@router.delete("/memory/{memory_id}")
+async def delete_memory(memory_id: str, request: Request) -> dict[str, str]:
+    """Delete a durable fact and make the mutation visible to later reads.
+
+    File I/O (YAML read/write + portalock + fsync) runs in a worker thread
+    via ``asyncio.to_thread`` so the event loop stays responsive under load.
+    """
+    path = _memory_path(request)
+    return await asyncio.to_thread(_delete_memory_sync, path, memory_id)
 
 
 # The /memories* endpoints are retained as compatibility stubs.  The active

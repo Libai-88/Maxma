@@ -35,7 +35,7 @@ def _setup_mocks(handlers, ws_send_func=None):
 
     mock_mgr = MagicMock()
     mock_mgr.start = AsyncMock()
-    mock_mgr.client = mock_client
+    mock_mgr.get_client = MagicMock(return_value=mock_client)
 
     ws.app.state.sidecar_manager = mock_mgr
 

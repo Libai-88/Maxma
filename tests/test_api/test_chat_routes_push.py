@@ -50,7 +50,7 @@ def _build_ws_session_mgr(handlers, *, sidecar_session_id=None):
 
     mock_mgr = MagicMock()
     mock_mgr.start = AsyncMock()
-    mock_mgr.client = mock_client
+    mock_mgr.get_client = MagicMock(return_value=mock_client)
 
     ws.app.state.sidecar_manager = mock_mgr
 
@@ -95,7 +95,7 @@ class TestStreamTurnSidecarClientNone:
         ws = MagicMock()
         ws.app.state.sidecar_manager = MagicMock()
         ws.app.state.sidecar_manager.start = AsyncMock()
-        ws.app.state.sidecar_manager.client = None  # 关键：client 为 None
+        ws.app.state.sidecar_manager.get_client = MagicMock(return_value=None)  # client 为 None
 
         session = MagicMock()
         session.session_id = "s1"

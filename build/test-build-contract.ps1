@@ -14,6 +14,21 @@ function Read-ProjectFile {
     return Get-Content -LiteralPath $path -Raw
 }
 
+function Assert-WindowsCrLf {
+    param([string]$RelativePath)
+
+    $path = Join-Path $ProjectRoot $RelativePath
+    $bytes = [IO.File]::ReadAllBytes($path)
+    for ($index = 0; $index -lt $bytes.Length; $index++) {
+        if ($bytes[$index] -eq 0x0A -and ($index -eq 0 -or $bytes[$index - 1] -ne 0x0D)) {
+            throw "$RelativePath must not contain bare LF line endings"
+        }
+        if ($bytes[$index] -eq 0x0D -and ($index + 1 -ge $bytes.Length -or $bytes[$index + 1] -ne 0x0A)) {
+            throw "$RelativePath must use CRLF line endings"
+        }
+    }
+}
+
 function Assert-TextContains {
     param(
         [string]$Text,
@@ -53,6 +68,7 @@ function Assert-Regex {
 $portable = Read-ProjectFile "build-portable.bat"
 $desktop = Read-ProjectFile "build\build-desktop.bat"
 $server = Read-ProjectFile "build\build-server.bat"
+$null = Assert-WindowsCrLf "build\build-server.bat"
 $dev = Read-ProjectFile "build\run-desktop-dev.bat"
 $start = Read-ProjectFile "start.bat"
 $main = Read-ProjectFile "desktop\src-tauri\src\main.rs"
