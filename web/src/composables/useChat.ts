@@ -511,6 +511,10 @@ function syncContextUsage(ch: SessionChannel, payload: unknown) {
 }
 
 export function handleEventForChannel(sid: string, event: ServerEvent) {
+  // B4: 本函数处理若干 UNIMPLEMENTED 事件分支（plan_*, memory_*, sub_session_created,
+  // deferred_subagent_submitted, 独立 context_usage, artifact）—— 它们在 sidecar/后端
+  // 无发射端，永不触发，但 UI 状态逻辑已就绪待 bridge 接通。详见 types/index.ts 各接口
+  // UNIMPLEMENTED 注释。context_compressed 经 A3 接通（auto_compaction_end），已非死分支。
   const ch = getChatStore().channels.get(sid)
   if (!ch) return
 

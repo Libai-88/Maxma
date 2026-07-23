@@ -289,15 +289,38 @@ async def _stream_turn_sidecar(
                         {"type": "tool_error", "payload": {"tool_name": payload.get("tool_name", ""), "error": payload.get("error", "")}}
                     )
                 elif evt_type == "error":
-                    logger.warning("[sidecar] Error for session %s: %s", sidecar_sid[:8], payload.get("message", payload))
+                    # 前端 ChatWindow 渲染 errorTraceId（Trace 显示）和 errorCategory
+                    # （样式/图标），但此前 sidecar 只给 code+message，两字段永远 null（A2）。
+                    # 为每条 sidecar error 生成 trace_id，并按 code 映射 category。
+                    _err_code = str(payload.get("code", "SIDECAR_ERROR"))
+                    _err_msg = str(payload.get("message", "")) or "Sidecar error"
+                    _trace_id = uuid.uuid4().hex
+                    _SYSTEM_ERROR_CODES = {
+                        "AGENT_ERROR", "SIDECAR_ERROR", "PROMPT_ERROR",
+                        "PROMPT_TIMEOUT", "SIDECAR_UNAVAILABLE",
+                    }
+                    _category = "system_error" if _err_code in _SYSTEM_ERROR_CODES else "system_error"
+                    logger.warning(
+                        "[sidecar] Error for session %s: %s (trace=%s)",
+                        sidecar_sid[:8], _err_msg, _trace_id,
+                    )
                     record_activity(
                         "turn", "error",
                         session_id=session.session_id,
                         level="error",
-                        message=str(payload.get("message", "")) or "Sidecar error",
+                        trace_id=_trace_id,
+                        message=_err_msg,
                     )
                     await ws.send_json(
-                        {"type": "error", "payload": {"code": payload.get("code", "SIDECAR_ERROR"), "message": payload.get("message", "Sidecar error")}}
+                        {
+                            "type": "error",
+                            "payload": {
+                                "code": _err_code,
+                                "message": _err_msg,
+                                "trace_id": _trace_id,
+                                "category": _category,
+                            },
+                        }
                     )
                 else:
                     # Generic forwarding for ask_user, plan_proposed, plan_step_start,
@@ -319,8 +342,22 @@ async def _stream_turn_sidecar(
     unsubs = []
     for evt_type in ("token", "tool_start", "tool_end", "tool_error", "error"):
         unsubs.append(client.on(evt_type, _make_handler(evt_type)))
-    # Additional event types that just need generic forwarding
-    for evt_type in ("ask_user", "plan_proposed", "plan_step_start", "plan_step_end", "plan_step_error", "plan_completed"):
+    # Generic forwarding for event types that need no per-type enrichment.
+    # ask_user — approval UI round-trip (sidecar createApprovalUiContext.select).
+    # context_compressed — auto-compaction notice (A3: sidecar maps
+    #   auto_compaction_end → context_compressed; frontend updates usage badge).
+    # plan_* — UNIMPLEMENTED: sidecar mapPiEventToMaxma never emits these
+    #   (OMP plan-mode exposes state, not subscribe events). 订阅空转，保留以备
+    #   SDK 深接时无需改后端转发层。
+    for evt_type in (
+        "ask_user",
+        "context_compressed",
+        "plan_proposed",
+        "plan_step_start",
+        "plan_step_end",
+        "plan_step_error",
+        "plan_completed",
+    ):
         unsubs.append(client.on(evt_type, _make_handler(evt_type)))
     unsubs.append(client.on("answer", _on_answer))
     unsubs.append(client.on("done", _on_done))
@@ -477,6 +514,28 @@ async def websocket_chat(ws: WebSocket, session_id: str):
         """Process a completed turn task's result (send answer/done to WS)."""
         nonlocal turn_task
         if task.cancelled():
+            # cancel 分支同时 cancel_event.set() + turn_task.cancel()：后者注入的
+            # CancelledError 是 BaseException，逃过 _stream_turn_sidecar 的 except Exception，
+            # task 以 cancelled=True 结束。若在此直接 return 不发 done，前端 isStreaming 会
+            # 永久卡死。补发一个带 cancelled 标记的 done 闭合状态机（A1）。
+            try:
+                await ws.send_json(
+                    {
+                        "type": "done",
+                        "payload": {
+                            "turn_id": _new_turn_id(_turn_id),
+                            "cancelled": True,
+                        },
+                    }
+                )
+            except Exception:
+                logger.debug("[ws] Failed to report cancellation done", exc_info=True)
+            record_activity(
+                "turn", "turn_cancelled",
+                session_id=session.session_id,
+                turn_id=_turn_id or "",
+                message="对话轮次被取消",
+            )
             turn_task = None
             return
         try:
@@ -614,12 +673,14 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                         try:
                             mgr = app_state.sidecar_manager
                             await mgr.start()
-                            client = mgr.client
-                            if client:
-                                await client.call(
-                                    "cancel",
-                                    {"session_id": session._sidecar_session_id},
-                                )
+                            # A5: 用 get_client() 而非裸 mgr.client —— 当 RPC 读循环已崩
+                            # 但进程仍活着时，mgr.client 可能为 None 或 is_running=False，
+                            # 此处会 RuntimeError；get_client() 会透明重启 sidecar。
+                            client = await _get_sidecar_client(mgr)
+                            await client.call(
+                                "cancel",
+                                {"session_id": session._sidecar_session_id},
+                            )
                         except Exception:
                             logger.debug(
                                 "[ws] Failed to send cancel to sidecar",
@@ -627,30 +688,49 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                             )
                 continue
 
-            # ── Auxiliary messages (forward to sidecar) ──
-            if msg_type in ("user_response", "plan_response", "artifact_action", "update_auto_approve"):
+            # ── Auxiliary messages ──
+            # B1: 仅 user_response 在 sidecar 有 RPC handler（session-bridge.ts:1064）。
+            # plan_response / artifact_action / update_auto_approve 此前被当 RPC 方法名
+            # 透传，但 sidecar dispatcher 只认 10 个方法 → 必返 "Unknown method" 错误，
+            # 后端 logger.debug 吞掉，功能从未生效（黑洞）。接通需 SDK 深改（plan-mode
+            # 事件暴露到 subscribe 流 / ArtifactManager 事件化 / OMP 运行时 approvalMode
+            # 切换），超 bridge 范围。此处不再黑洞转发，避免无谓 RPC + 错误往返。
+            # 前端 send 函数保留（UI 不破坏），后续接通只需在此加分支。
+            if msg_type == "user_response":
                 if session._sidecar_session_id:
                     try:
                         mgr = app_state.sidecar_manager
                         await mgr.start()
-                        client = mgr.client
-                        if client:
-                            await client.call(
-                                msg_type,
-                                {
-                                    "session_id": session._sidecar_session_id,
-                                    **msg.get("payload", {}),
-                                },
-                            )
+                        client = await _get_sidecar_client(mgr)  # A5: 同 cancel
+                        await client.call(
+                            "user_response",
+                            {
+                                "session_id": session._sidecar_session_id,
+                                **msg.get("payload", {}),
+                            },
+                        )
                     except Exception:
                         logger.debug(
-                            "[ws] Failed to forward %s to sidecar",
-                            msg_type,
+                            "[ws] Failed to forward user_response to sidecar",
                             exc_info=True,
                         )
                 continue
 
+            if msg_type in ("plan_response", "artifact_action", "update_auto_approve"):
+                logger.info(
+                    "[ws] %s not wired to sidecar (feature pending; UI remains)",
+                    msg_type,
+                )
+                continue
+
             # ── Chat message ──
+            # payload 字段去向（B2 契约文档化）：
+            #   接入 sidecar: message, provider_id, model_name, turn_id
+            #   未接入（sidecar create_session 不收）: temperature, max_tokens,
+            #     think_path_id（前端 ThinkPathChooser 选择，OMP 未暴露接入点）
+            #   前端本地用: private（控制 localStorage 持久化，后端不需要）,
+            #     auto_approve（会话级语义，per-turn 发但实际由建会时
+            #     permission_mode 决定；update_auto_approve 见 B1 未接通）
             payload = msg.get("payload", {})
             if not isinstance(payload, dict):
                 continue

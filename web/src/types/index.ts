@@ -71,12 +71,17 @@ export interface PongEvent {
   payload: Record<string, never>
 }
 
+/** UNIMPLEMENTED (B4): 独立 context_usage WS 事件无发射端 —— 用量只通过
+ * done.payload.context_usage 内嵌 + REST GET 达前端。useChat 有处理分支但永不触发。 */
 export interface ContextUsageEvent {
   type: 'context_usage'
   payload: ContextUsage
 }
 
-/** 会话上下文压缩事件（手动压缩或自动压缩完成时推送） */
+/** 会话上下文压缩事件。
+ * A3 接通：sidecar auto_compaction_end → context_compressed（auto 压缩时实时推送）。
+ * 手动压缩经 REST 返回，不产此 WS 事件。payload 部分字段（removed_count/after_tokens）
+ * auto_compaction_end 未携带 → undefined；前端已防御。 */
 export interface ContextCompressedEvent {
   type: 'context_compressed'
   payload: {
@@ -106,8 +111,11 @@ export interface AskUserEvent {
     /** approval 模式：审批原因/说明 */
     detail?: string
     /** approval 模式：风险等级 */
+    // B3: sidecar 实际无法填充 —— OMP approval wrapper 仅传格式化 title 给
+    // ctx.select，sidecar 拿不到结构化 risk_level。ApprovalBubble 已对 undefined 降级。
     risk_level?: 'low' | 'medium' | 'high'
     /** approval 模式：工具调用参数 */
+    // B3: 同上，sidecar 无法结构化填充 tool_input。保留字段以备 OMP 暴露后接通。
     tool_input?: Record<string, unknown>
   }
 }
@@ -124,7 +132,8 @@ export interface ApprovalRequestPayload {
   options: { label: string; value: string }[]
 }
 
-/** plan_proposed — Planner 生成计划后等待用户确认 */
+/** UNIMPLEMENTED (B4): sidecar mapPiEventToMaxma 无此分支；OMP plan-mode 在 mode
+ * state 而非 subscribe 事件流。UI（PlanCard）已就绪，接通需 plan-mode 事件暴露。 */
 export interface PlanProposedEvent {
   type: 'plan_proposed'
   payload: {
@@ -134,7 +143,7 @@ export interface PlanProposedEvent {
   }
 }
 
-/** plan_step_start — executor 开始执行某步骤 */
+/** UNIMPLEMENTED (B4): 同 PlanProposedEvent，无发射端。 */
 export interface PlanStepStartEvent {
   type: 'plan_step_start'
   payload: {
@@ -145,7 +154,7 @@ export interface PlanStepStartEvent {
   }
 }
 
-/** plan_step_end — executor 完成某步骤 */
+/** UNIMPLEMENTED (B4): 同 PlanProposedEvent，无发射端。 */
 export interface PlanStepEndEvent {
   type: 'plan_step_end'
   payload: {
@@ -155,7 +164,7 @@ export interface PlanStepEndEvent {
   }
 }
 
-/** plan_step_error — executor 某步骤失败 */
+/** UNIMPLEMENTED (B4): 同 PlanProposedEvent，无发射端。 */
 export interface PlanStepErrorEvent {
   type: 'plan_step_error'
   payload: {
@@ -167,7 +176,7 @@ export interface PlanStepErrorEvent {
   }
 }
 
-/** plan_completed — 全部步骤执行完成 */
+/** UNIMPLEMENTED (B4): 同 PlanProposedEvent，无发射端。 */
 export interface PlanCompletedEvent {
   type: 'plan_completed'
   payload: {
@@ -200,7 +209,9 @@ export interface PlanCard {
   replanCount?: number
 }
 
-/** sub_session_created — 主 Agent 调用 call_sub_agent 后推送 */
+/** UNIMPLEMENTED (B4): sidecar 无发射端。OMP subagent lifecycle 在 rpc-mode
+ * 线框（subagent_lifecycle），不在 AgentSessionEvent subscribe 流；sidecar 用
+ * createAgentSession+subscribe 故永不收到。UI 已就绪待深接（需改用 rpc-mode）。 */
 export interface SubSessionCreatedEvent {
   type: 'sub_session_created'
   payload: {
@@ -211,7 +222,8 @@ export interface SubSessionCreatedEvent {
   }
 }
 
-/** Browser receives only an opaque run ID for an async delegation. */
+/** UNIMPLEMENTED (B4): 无发射端。deferred_runs 仅 REST 且受 feature flag 禁用；
+ * OMP SDK 无对应概念。UI 卡片已就绪，但不可接通（需产品决策）。 */
 export interface DeferredSubagentSubmittedEvent {
   type: 'deferred_subagent_submitted'
   payload: {
@@ -221,13 +233,15 @@ export interface DeferredSubagentSubmittedEvent {
   }
 }
 
-/** A structured card. The client renders only local allow-listed components. */
+/** UNIMPLEMENTED (B4): 无发射端。OMP ArtifactManager 是文件存储细节，非事件。
+ * workbench UI 已就绪并经 artifact 事件喂入设计，但 SDK 无对应事件类型，永不可接通。 */
 export interface ArtifactEvent {
   type: 'artifact'
   payload: InteractiveArtifact
 }
 
-/** memory_tool_start — 后台记忆 consumer 开始调用 CRUD 工具 */
+/** UNIMPLEMENTED (B4): 无发射端/无订阅。OMP memory 跑在 mnemopi 独立 state，
+ * 不经 AgentSessionEvent subscribe 流。UI 已就绪待深接。 */
 export interface MemoryToolStartEvent {
   type: 'memory_tool_start'
   payload: {
@@ -237,7 +251,7 @@ export interface MemoryToolStartEvent {
   }
 }
 
-/** memory_tool_end — 后台记忆 consumer 的 CRUD 工具执行完毕 */
+/** UNIMPLEMENTED (B4): 无发射端/无订阅。同 MemoryToolStartEvent。 */
 export interface MemoryToolEndEvent {
   type: 'memory_tool_end'
   payload: {
@@ -248,7 +262,7 @@ export interface MemoryToolEndEvent {
   }
 }
 
-/** memory_tool_error — 后台记忆 consumer 的 CRUD 工具执行出错 */
+/** UNIMPLEMENTED (B4): 无发射端/无订阅。同 MemoryToolStartEvent。 */
 export interface MemoryToolErrorEvent {
   type: 'memory_tool_error'
   payload: {
@@ -258,7 +272,7 @@ export interface MemoryToolErrorEvent {
   }
 }
 
-/** memory_start — 后台记忆 consumer 开始处理本轮对话 */
+/** UNIMPLEMENTED (B4): 无发射端/无订阅。同 MemoryToolStartEvent。 */
 export interface MemoryStartEvent {
   type: 'memory_start'
   payload: {
@@ -266,7 +280,7 @@ export interface MemoryStartEvent {
   }
 }
 
-/** memory_done — 后台记忆 consumer 处理完毕（无论是否有修改） */
+/** UNIMPLEMENTED (B4): 无发射端/无订阅。同 MemoryToolStartEvent。 */
 export interface MemoryDoneEvent {
   type: 'memory_done'
   payload: {
@@ -274,6 +288,20 @@ export interface MemoryDoneEvent {
   }
 }
 
+/**
+ * ServerEvent 联合 —— 服务端→浏览器 WS 事件。
+ *
+ * B4 契约诚实标注：以下成员在 sidecar/后端无发射端，处理分支永不触发，
+ * 但前端 UI（PlanCard / workbench 等）已就绪待 bridge 接通。保留以备
+ * 接通（部分需 OMP SDK 深改，详见各接口注释）。
+ *   - UNIMPLEMENTED（无发射端）: plan_proposed, plan_step_start/end/error,
+ *     plan_completed, memory_start, memory_tool_start/end/error, memory_done,
+ *     sub_session_created, deferred_subagent_submitted, artifact,
+ *     context_usage（独立事件，仅 done 内嵌 + REST GET 达前端）。
+ *   - context_compressed: A3 接通 —— sidecar auto_compaction_end→context_compressed。
+ *   - 真实通路: thinking_start/end, token, tool_start/end/error, answer,
+ *     done, error, ask_user, pong。
+ */
 export type ServerEvent =
   | ThinkingStartEvent
   | TokenEvent
@@ -309,13 +337,18 @@ export interface ChatMessage {
   type: 'chat'
   payload: {
     message: string
+    /** 前端 privateMode 用：控制 localStorage 持久化，后端不需要（B2）。 */
     private?: boolean
+    /** 会话级语义；per-turn 发但实际由建会时 permission_mode 决定（B2/B1）。 */
     auto_approve?: boolean
     provider_id?: string
     model_name?: string
+    /** 调节 UI（ModelSettingsPanel）从未挂载，始终默认值（B2）。 */
     temperature?: number
+    /** 同 temperature，孤儿 UI，始终默认值（B2）。 */
     max_tokens?: number
-    /** A fixed, user-confirmed ThinkPath ID; the server validates it again. */
+    /** 前端 ThinkPathChooser 选择；sidecar 暂未接入，不发到 OMP（B2 纠正：
+     *  此前注释"the server validates it again"不实，服务端不读取此字段）。 */
     think_path_id?: 'light' | 'standard' | 'deep'
   }
 }
