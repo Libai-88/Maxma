@@ -3,6 +3,12 @@
 工具函数通过 register() 注册一个待交互，返回 interaction_id 和 Future；
 前端通过 user_response 携带同一 ID 送达响应；
 resolve() 唤醒挂起的 Future，工具函数继续执行返回结果。
+
+DEPRECATED at runtime (B4): 本模块无 runtime importer（仅 tests/test_api/
+test_interaction_push.py 使用）。当前 ask_user 审批往返由 Bun sidecar 的
+createApprovalUiContext.select() + user_response RPC handler 实现（见
+bun-sidecar/src/session-bridge.ts），不经此 Python 注册表。保留模块以备
+后端直推交互场景，勿在 runtime 代码新增对本模块的依赖假设它已接通。
 """
 
 import asyncio

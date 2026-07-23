@@ -514,6 +514,29 @@ export function mapPiEventToMaxma(
     };
   }
 
+  if (type === "auto_compaction_end") {
+    // A3: OMP SDK 在上下文压力下自动压缩历史后发此事件（emit-site 19 处）。
+    // 映射到前端的 context_compressed 事件，激活前端已有的用量更新 + 系统通知逻辑
+    // （此前是死分支）。CompactionResult 字段为 summary/shortSummary?/tokensBefore，
+    // 无 after_tokens/removed_count —— 前端已防御 undefined。后续 done 事件会带
+    // 精确 context_usage 更新 badge，此处仅做即时通知。
+    const e = piEvent as any;
+    const result = e.result;  // CompactionResult | undefined
+    const summaryPreview =
+      (result?.shortSummary as string | undefined) ??
+      (result?.summary as string | undefined) ?? "";
+    return {
+      type: "context_compressed",
+      payload: {
+        summary_preview: summaryPreview.slice(0, 200),
+        before_tokens: result?.tokensBefore as number | undefined,
+        action: (e.action as string | undefined) ?? "context-full",
+        skipped: (e.skipped as boolean | undefined) ?? false,
+        aborted: (e.aborted as boolean | undefined) ?? false,
+      },
+    };
+  }
+
   if (type === "agent_end") {
     if (guard) guard.done = true;
     return { type: "done", payload: {} };
@@ -1044,7 +1067,9 @@ if (import.meta.main) {
 
         const messages = record.session.state.messages;
         const total = messages.length;
-        const sliced = messages.slice(-limit);
+        // A4: limit<=0 应返回空（探活语义）。slice(-0)===slice(0) 会返回全量，
+        // 后端用 limit=0 探活时每次搬运整段历史，与零成本探活意图相悖。
+        const sliced = limit <= 0 ? [] : messages.slice(-Math.min(limit, total));
         const result = sliced.map((m: any) => {
           let content = "";
           if (typeof m.content === "string") {
