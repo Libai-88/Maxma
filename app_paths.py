@@ -1,9 +1,11 @@
 """
-应用路径解析 — 兼容开发模式和 PyInstaller 打包模式。
+应用路径解析 — 兼容开发模式、标准打包模式和便携模式。
 
 开发模式：BUNDLE_DIR 和 DATA_DIR 都指向项目根目录。
-打包模式：BUNDLE_DIR 指向 PyInstaller 解压的临时目录（只读），
-          DATA_DIR 指向 %APPDATA%/MaxmaHere/（可写，用户数据持久化）。
+标准打包模式：BUNDLE_DIR 指向 PyInstaller 解压的临时目录（只读），
+              DATA_DIR 指向 %APPDATA%/MaxmaHere/（可写，用户数据持久化）。
+便携模式：检测到可执行文件同目录存在 portable.flag 标记文件时，
+          DATA_DIR 指向可执行文件旁边的 data/（所有用户数据跟随程序）。
 """
 
 import os
@@ -14,6 +16,21 @@ from pathlib import Path
 def _is_frozen() -> bool:
     """是否运行在 PyInstaller 打包环境中。"""
     return getattr(sys, "frozen", False)
+
+
+def _is_portable() -> bool:
+    """检测是否为便携模式。
+
+    判断标准：可执行文件（sys.executable）同目录下存在 portable.flag 标记文件。
+    便携模式下所有用户数据落在可执行文件旁边的 data/ 目录，
+    实现 U 盘即用、不写 %APPDATA%、不留系统痕迹。
+
+    开发模式永远返回 False（开发数据在项目根目录，与便携无关）。
+    """
+    if not _is_frozen():
+        return False
+    exe_dir = Path(sys.executable).resolve().parent
+    return (exe_dir / "portable.flag").exists()
 
 
 def _get_bundle_dir() -> Path:
@@ -31,9 +48,14 @@ def _get_data_dir() -> Path:
     """获取用户数据目录（可写）。
 
     开发模式：项目根目录（与 BUNDLE_DIR 相同）。
-    打包模式：%APPDATA%/MaxmaHere/（Windows）或 ~/.maxmahere/（其他）。
+    便携模式：可执行文件同目录下的 data/（需存在 portable.flag 标记）。
+    标准打包模式：%APPDATA%/MaxmaHere/（Windows）或 ~/.maxmahere/（其他）。
     """
     if _is_frozen():
+        # 便携模式：数据跟随可执行文件，实现真正的 U 盘便携
+        if _is_portable():
+            return Path(sys.executable).resolve().parent / "data"
+        # 标准安装模式：用户数据写入系统应用数据目录
         if sys.platform == "win32":
             base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
         elif sys.platform == "darwin":

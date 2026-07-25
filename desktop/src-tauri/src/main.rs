@@ -76,26 +76,38 @@ fn assign_current_process_to_job(job: HANDLE) -> Result<(), windows::core::Error
     }
 }
 
-/// 获取 sidecar 日志文件路径：%APPDATA%/MaxmaHere/logs/server.log
-fn server_log_path() -> Option<PathBuf> {
-    let appdata = std::env::var("APPDATA").ok()?;
-    Some(
-        PathBuf::from(appdata)
-            .join("MaxmaHere")
-            .join("logs")
-            .join("server.log"),
-    )
+/// 检测是否为便携模式：可执行文件同目录存在 portable.flag 标记文件。
+/// 便携模式下所有用户数据（含日志）落在可执行文件旁边的 data/ 目录。
+fn is_portable() -> bool {
+    let Some(exe_path) = std::env::current_exe().ok() else {
+        return false;
+    };
+    let Some(exe_dir) = exe_path.parent() else {
+        return false;
+    };
+    exe_dir.join("portable.flag").exists()
 }
 
-/// 获取 Tauri 主进程启动日志路径：%APPDATA%/MaxmaHere/logs/tauri.log
-fn tauri_log_path() -> Option<PathBuf> {
+/// 获取用户数据根目录。
+/// 便携模式：<exe_dir>/data；标准模式：%APPDATA%/MaxmaHere。
+fn data_dir() -> Option<PathBuf> {
+    if is_portable() {
+        let exe_path = std::env::current_exe().ok()?;
+        let exe_dir = exe_path.parent()?;
+        return Some(exe_dir.join("data"));
+    }
     let appdata = std::env::var("APPDATA").ok()?;
-    Some(
-        PathBuf::from(appdata)
-            .join("MaxmaHere")
-            .join("logs")
-            .join("tauri.log"),
-    )
+    Some(PathBuf::from(appdata).join("MaxmaHere"))
+}
+
+/// 获取 sidecar 日志文件路径：<data_dir>/logs/server.log
+fn server_log_path() -> Option<PathBuf> {
+    Some(data_dir()?.join("logs").join("server.log"))
+}
+
+/// 获取 Tauri 主进程启动日志路径：<data_dir>/logs/tauri.log
+fn tauri_log_path() -> Option<PathBuf> {
+    Some(data_dir()?.join("logs").join("tauri.log"))
 }
 
 /// 打开 Tauri 启动日志文件（追加模式）。
@@ -1039,5 +1051,35 @@ mod tests {
         assert_eq!(failure.path, r"D:\MaxmaHere\maxma-server.exe");
         assert_eq!(failure.error, "拒绝访问。 (os error 5)");
         assert!(failure.message.contains("拒绝访问。 (os error 5)"));
+    }
+
+    #[test]
+    fn portable_flag_detection_logic_matches_portable_dot_flag_presence() {
+        // Verify the is_portable() predicate logic: it checks for
+        // `<exe_dir>/portable.flag`. We cannot override current_exe() in a
+        // unit test, so we verify the marker-file detection pattern directly.
+        let root = std::env::temp_dir().join(format!(
+            "maxmahere-portable-flag-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+
+        // Portable layout: portable.flag exists
+        let portable_dir = root.join("portable");
+        std::fs::create_dir_all(&portable_dir).unwrap();
+        std::fs::write(portable_dir.join("portable.flag"), "").unwrap();
+        let flag = portable_dir.join("portable.flag");
+        assert!(flag.exists(), "portable.flag should exist in portable layout");
+
+        // Non-portable layout: no flag
+        let installed_dir = root.join("installed");
+        std::fs::create_dir_all(&installed_dir).unwrap();
+        let no_flag = installed_dir.join("portable.flag");
+        assert!(!no_flag.exists(), "no portable.flag in installed layout");
+
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

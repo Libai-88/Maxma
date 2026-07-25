@@ -182,55 +182,61 @@ if exist "%PORTABLE_DIR%\resources\binaries\" (
     exit /b 1
 )
 
-echo [6/6] Seeding missing user configuration...
-set "APPDATA_DIR=%APPDATA%\MaxmaHere"
-if not exist "%APPDATA_DIR%\" mkdir "%APPDATA_DIR%"
-if errorlevel 1 exit /b 1
-if not exist "%APPDATA_DIR%\api\data\" mkdir "%APPDATA_DIR%\api\data"
-if errorlevel 1 exit /b 1
-if not exist "%APPDATA_DIR%\config\personas\" mkdir "%APPDATA_DIR%\config\personas"
-if errorlevel 1 exit /b 1
+echo [6/6] Creating portable mode marker and data directory...
+REM portable.flag 是便携模式的关键标记：app_paths.py 和 main.rs 通过检测此文件
+REM 判断是否将用户数据写入可执行文件旁边的 data/ 目录（而非 %APPDATA%）
+echo. > "%PORTABLE_DIR%\portable.flag"
+if not exist "%PORTABLE_DIR%\portable.flag" (
+    echo [ERROR] Failed to create portable.flag marker.
+    exit /b 1
+)
 
-if exist "%PROJECT_ROOT%api\data\providers.yaml" (
-    if not exist "%APPDATA_DIR%\api\data\providers.yaml" (
-        copy /y "%PROJECT_ROOT%api\data\providers.yaml" "%APPDATA_DIR%\api\data\providers.yaml" >nul
-        if errorlevel 1 exit /b 1
+REM 创建空的 data/ 目录。首次运行时 ensure_data_dirs() 会自动创建所有子目录
+REM （api/data, config/personas, logs, uploads, vector_db 等），
+REM 但预建 data/ 根目录使布局更清晰，也让用户能一眼识别数据存储位置
+if not exist "%PORTABLE_DIR%\data\" (
+    mkdir "%PORTABLE_DIR%\data"
+    if errorlevel 1 (
+        echo [ERROR] Cannot create portable data directory.
+        exit /b 1
     )
 )
-if exist "%PROJECT_ROOT%api\data\credential.key" (
-    if not exist "%APPDATA_DIR%\api\data\credential.key" (
-        copy /y "%PROJECT_ROOT%api\data\credential.key" "%APPDATA_DIR%\api\data\credential.key" >nul
-        if errorlevel 1 exit /b 1
-    )
-)
-if exist "%PROJECT_ROOT%api\data\mcp_servers.yaml" (
-    if not exist "%APPDATA_DIR%\api\data\mcp_servers.yaml" (
-        copy /y "%PROJECT_ROOT%api\data\mcp_servers.yaml" "%APPDATA_DIR%\api\data\mcp_servers.yaml" >nul
-        if errorlevel 1 exit /b 1
-    )
-)
-if exist "%PROJECT_ROOT%api\data\maxma.db" (
-    if not exist "%APPDATA_DIR%\api\data\maxma.db" (
-        copy /y "%PROJECT_ROOT%api\data\maxma.db" "%APPDATA_DIR%\api\data\maxma.db" >nul
-        if errorlevel 1 exit /b 1
-    )
-)
-for %%F in ("%PROJECT_ROOT%config\personas\*.md") do (
-    if exist "%%~fF" if not exist "%APPDATA_DIR%\config\personas\%%~nxF" (
-        copy /y "%%~fF" "%APPDATA_DIR%\config\personas\%%~nxF" >nul
-        if errorlevel 1 exit /b 1
-    )
-)
-for %%F in ("%PROJECT_ROOT%config\personas\*.yaml") do (
-    if exist "%%~fF" if not exist "%APPDATA_DIR%\config\personas\%%~nxF" (
-        copy /y "%%~fF" "%APPDATA_DIR%\config\personas\%%~nxF" >nul
-        if errorlevel 1 exit /b 1
-    )
-)
+
+REM 写入 README 说明文件，帮助用户理解便携版结构
+(
+    echo MaxmaHere Portable
+    echo ================================
+    echo.
+    echo 这是一个便携版（免安装）分发。
+    echo.
+    echo 所有用户数据（配置、数据库、日志、上传等）均存储在 data/ 目录中，
+    echo 与可执行文件位于同一目录下。你可以将整个文件夹移动到任意位置
+    echo （包括 U 盘），数据会跟随应用程序。
+    echo.
+    echo 目录结构：
+    echo   maxma-here.exe      - 主程序
+    echo   maxma-server.exe    - 后端服务
+    echo   portable.flag       - 便携模式标记（请勿删除）
+    echo   data/               - 用户数据目录
+    echo   resources/          - 嵌入式运行时和资源
+    echo   dist/               - 前端副本
+    echo.
+    echo 注意：需要系统已安装 Microsoft Edge WebView2 Runtime。
+    echo.
+    echo 如需切换回标准安装模式（数据写入 %%APPDATA%%），删除 portable.flag 后
+    echo 重新打包即可（推荐使用 NSIS 安装版）。
+) > "%PORTABLE_DIR%\PORTABLE_README.txt" 2>nul
 
 echo.
 echo ========================================
 echo   Portable build complete
 echo   Output: %PORTABLE_DIR%
+echo   Layout:
+echo     maxma-here.exe
+echo     maxma-server.exe
+echo     portable.flag
+echo     data/            ^(user data, auto-populated on first run^)
+echo     resources/       ^(embedded runtime ^& assets^)
+echo     dist/            ^(frontend copy^)
 echo ========================================
 endlocal & exit /b 0
