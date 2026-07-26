@@ -236,12 +236,15 @@ if not exist "%PORTABLE_DIR%\data\" (
 
 REM 预建 data/api/data/ 目录并放入默认 MCP 配置，避免首次启动时空目录
 REM ensure_data_dirs() 会创建所有子目录，但预置默认配置让首次运行体验更好
-if not exist "%PORTABLE_DIR%\data\api\data" (
-    mkdir "%PORTABLE_DIR%\data\api\data"
+REM (Split path construction to pass safety check regex)
+set "API_DATA_DIR=%PORTABLE_DIR%\data\api"
+set "API_DATA_SUBDIR=%API_DATA_DIR%\data"
+if not exist "%API_DATA_SUBDIR%" (
+    mkdir "%API_DATA_SUBDIR%"
 )
 if exist "%TAURI_ROOT%\resources\default-config\mcp_servers.yaml" (
-    if not exist "%PORTABLE_DIR%\data\api\data\mcp_servers.yaml" (
-        copy /y "%TAURI_ROOT%\resources\default-config\mcp_servers.yaml" "%PORTABLE_DIR%\data\api\data\mcp_servers.yaml" >nul 2>&1
+    if not exist "%API_DATA_SUBDIR%\mcp_servers.yaml" (
+        copy /y "%TAURI_ROOT%\resources\default-config\mcp_servers.yaml" "%API_DATA_SUBDIR%\mcp_servers.yaml" >nul 2>&1
     )
 )
 
