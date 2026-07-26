@@ -2,7 +2,7 @@
 
 > 这是当前代码导航，不是历史迁移记录。代码、测试和构建脚本与本文档冲突时，以代码和测试为准。
 >
-> 更新时间：2026-07-23
+> 更新时间：2026-07-26
 
 ## 唯一现行架构入口
 
@@ -51,6 +51,7 @@ web/src/main.ts
 
 - 应用工厂：`api/server.py`
 - 聊天 WS：`api/routes/chat.py`
+- WS 协议常量：`api/ws_protocol.py`（WsEventType / WsMessageType 枚举）
 - 会话管理：`api/session_manager.py`
 - Provider：`api/routes/providers.py`
 - MCP：`api/routes/mcp.py`
@@ -87,8 +88,32 @@ Python 测试：pytest -q
 Sidecar 测试：cd bun-sidecar && bun test
 服务端构建：build\\build-server.bat
 桌面构建：build\\build-desktop.bat
+便携版构建：build-portable.bat
 ```
+
+## 便携版打包（onedir 模式）
+
+PyInstaller 使用 onedir 模式（`build/maxma-server.spec`：`exclude_binaries=True` + `COLLECT()`），
+Python 运行时和依赖持久化在 `_internal/` 目录，启动无需重复解压（1-2 秒后端就绪，
+旧 onefile 模式为 60-90 秒）。健康检查超时相应降至 30 秒（`desktop/src-tauri/src/main.rs`）。
+
+```text
+MaxmaHere-Portable/
+├── maxma-here.exe    Tauri 主程序
+├── maxma-server.exe  PyInstaller bootloader（轻量）
+├── _internal/        Python 运行时 + 依赖（持久化，勿删）
+├── portable.flag     便携模式标记（app_paths.py / main.rs 共同契约）
+├── data/             用户数据
+├── resources/        嵌入式运行时和资源
+└── dist/             前端副本
+```
+
+注意事项：
+- 打包必须使用项目 `.venv`（`.venv\Scripts\python.exe -m PyInstaller build\maxma-server.spec`），
+  使用全局 Python 会引入环境外依赖。
+- Python 侧知识库依赖（chromadb / onnxruntime）已移除（`constraints.txt` 阻断）；
+  `bun-sidecar/node_modules` 内的 ONNX / transformers 等为 oh-my-pi 上游依赖，保留不删。
 
 ## 版本事实
 
-当前仓库基线为 `main` / `0d3c3d2f` / `v2.7.1`。运行时版本来源为 `version.py`；发布前需同步核对前端、Tauri 配置和 Git tag。
+当前仓库基线为 `main` / `a4e16645` / `v2.6.6`。运行时版本来源为 `version.py`；发布前需同步核对前端、Tauri 配置和 Git tag。
