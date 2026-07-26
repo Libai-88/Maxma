@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # 核心配置项列表 — 主流 agent 都具备的基础配置
-# Python API 负责决定暴露哪些路径，sidecar 只做透传
 CORE_SETTING_PATHS = [
     # Compaction — 上下文压缩
     "compaction.enabled",
@@ -55,29 +54,25 @@ CORE_SETTING_PATHS = [
 ]
 
 
-class GetSettingsRequest(BaseModel):
-    paths: list[str] | None = None
-
-
 class SetSettingsRequest(BaseModel):
     path: str
     value: Any
 
 
-async def _rpc_call(method: str, params: dict[str, Any] | None = None) -> Any:
-    """Call sidecar RPC method via the sidecar manager."""
-    from api.server import app
-    sidecar_mgr = getattr(app.state, "sidecar_mgr", None)
+async def _rpc_call(request: Request, method: str, params: dict[str, Any] | None = None) -> Any:
+    """Call sidecar RPC method via the sidecar manager from app state."""
+    sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
     if sidecar_mgr is None:
         raise HTTPException(status_code=503, detail="Sidecar not available")
-    client = sidecar_mgr.get_client()
+    await sidecar_mgr.start()
+    client = sidecar_mgr.client
     if client is None:
         raise HTTPException(status_code=503, detail="Sidecar client not available")
     return await client.call(method, params or {})
 
 
 @router.get("/settings")
-async def get_settings(paths: str | None = None):
+async def get_settings(request: Request, paths: str | None = None):
     """读取 OMP Settings 配置项。
 
     Args:
@@ -89,7 +84,7 @@ async def get_settings(paths: str | None = None):
         path_list = CORE_SETTING_PATHS
 
     try:
-        result = await _rpc_call("get_settings", {"paths": path_list})
+        result = await _rpc_call(request, "get_settings", {"paths": path_list})
         return result.get("settings", {})
     except HTTPException:
         raise
@@ -99,10 +94,10 @@ async def get_settings(paths: str | None = None):
 
 
 @router.put("/settings")
-async def set_settings(body: SetSettingsRequest):
+async def set_settings(request: Request, body: SetSettingsRequest):
     """写入 OMP Settings 配置项。"""
     try:
-        await _rpc_call("set_settings", {
+        await _rpc_call(request, "set_settings", {
             "path": body.path,
             "value": body.value,
         })
