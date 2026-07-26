@@ -14,7 +14,8 @@ _BUILTIN_TOOLS = [
     {"name": "lsp", "label": "LSP", "description": "代码语言服务", "category": "code", "builtin": True},
     {"name": "web_search", "label": "Web Search", "description": "搜索互联网", "category": "web", "builtin": True},
     {"name": "fetch", "label": "Fetch", "description": "获取 URL 内容", "category": "web", "builtin": True},
-    {"name": "browser", "label": "Browser", "description": "浏览器自动化", "category": "web", "builtin": True},
+    # browser 工具已移除：OMP sidecar 中没有实现，调用会导致超时卡住
+    # 用户可以使用 bash 工具调用系统默认浏览器：start <file.html> (Windows)
     {"name": "gh", "label": "GitHub", "description": "GitHub CLI 操作", "category": "system", "builtin": True},
     {"name": "task", "label": "Task", "description": "DAG 子任务编排", "category": "system", "builtin": True},
     {"name": "ask", "label": "Ask User", "description": "向用户提问", "category": "interactive", "builtin": True},
