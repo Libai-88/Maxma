@@ -19,6 +19,7 @@ from api.const_session_store import save_const_session
 from api.middleware.rate_limit import get_ws_rate_limiter
 from api.pi_bridge.session_adapter import SessionMap
 from api.session_manager import SessionState
+from api.ws_protocol import WsEventType, WsMessageType, CLIENT_MESSAGE_TYPES
 from api.yaml_store import yaml_file_lock
 from app_paths import PROJECT_ROOT, PROVIDERS_YAML_PATH
 
@@ -253,11 +254,11 @@ async def _stream_turn_sidecar(
                 return
             try:
                 payload = event.get("payload", {})
-                if evt_type == "token":
+                if evt_type == WsEventType.TOKEN:
                     await ws.send_json(
-                        {"type": "token", "payload": {"token": payload.get("token", "")}}
+                        {"type": WsEventType.TOKEN, "payload": {"token": payload.get("token", "")}}
                     )
-                elif evt_type == "tool_start":
+                elif evt_type == WsEventType.TOOL_START:
                     record_activity(
                         "tool", "tool_start",
                         session_id=session.session_id,
@@ -265,9 +266,9 @@ async def _stream_turn_sidecar(
                         message="调用工具",
                     )
                     await ws.send_json(
-                        {"type": "tool_start", "payload": {"tool_name": payload.get("tool_name", ""), "input": payload.get("input", "")}}
+                        {"type": WsEventType.TOOL_START, "payload": {"tool_name": payload.get("tool_name", ""), "input": payload.get("input", "")}}
                     )
-                elif evt_type == "tool_end":
+                elif evt_type == WsEventType.TOOL_END:
                     record_activity(
                         "tool", "tool_end",
                         session_id=session.session_id,
@@ -275,9 +276,9 @@ async def _stream_turn_sidecar(
                         message="工具执行完成",
                     )
                     await ws.send_json(
-                        {"type": "tool_end", "payload": {"tool_name": payload.get("tool_name", ""), "output": payload.get("output", ""), "elapsed": payload.get("elapsed", 0)}}
+                        {"type": WsEventType.TOOL_END, "payload": {"tool_name": payload.get("tool_name", ""), "output": payload.get("output", ""), "elapsed": payload.get("elapsed", 0)}}
                     )
-                elif evt_type == "tool_error":
+                elif evt_type == WsEventType.TOOL_ERROR:
                     record_activity(
                         "tool", "tool_error",
                         session_id=session.session_id,
@@ -286,39 +287,39 @@ async def _stream_turn_sidecar(
                         message=str(payload.get("error", "")) or "工具执行出错",
                     )
                     await ws.send_json(
-                        {"type": "tool_error", "payload": {"tool_name": payload.get("tool_name", ""), "error": payload.get("error", "")}}
+                        {"type": WsEventType.TOOL_ERROR, "payload": {"tool_name": payload.get("tool_name", ""), "error": payload.get("error", "")}}
                     )
-                elif evt_type == "error":
+                elif evt_type == WsEventType.ERROR:
                     # 前端 ChatWindow 渲染 errorTraceId（Trace 显示）和 errorCategory
                     # （样式/图标），但此前 sidecar 只给 code+message，两字段永远 null（A2）。
                     # 为每条 sidecar error 生成 trace_id，并按 code 映射 category。
-                    _err_code = str(payload.get("code", "SIDECAR_ERROR"))
-                    _err_msg = str(payload.get("message", "")) or "Sidecar error"
-                    _trace_id = uuid.uuid4().hex
-                    _SYSTEM_ERROR_CODES = {
+                    error_code = str(payload.get("code", "SIDECAR_ERROR"))
+                    error_message = str(payload.get("message", "")) or "Sidecar error"
+                    error_trace_id = uuid.uuid4().hex
+                    SYSTEM_ERROR_CODES = {
                         "AGENT_ERROR", "SIDECAR_ERROR", "PROMPT_ERROR",
                         "PROMPT_TIMEOUT", "SIDECAR_UNAVAILABLE",
                     }
-                    _category = "system_error" if _err_code in _SYSTEM_ERROR_CODES else "system_error"
+                    error_category = "system_error" if error_code in SYSTEM_ERROR_CODES else "tool_error"
                     logger.warning(
                         "[sidecar] Error for session %s: %s (trace=%s)",
-                        sidecar_sid[:8], _err_msg, _trace_id,
+                        sidecar_sid[:8], error_message, error_trace_id,
                     )
                     record_activity(
                         "turn", "error",
                         session_id=session.session_id,
                         level="error",
-                        trace_id=_trace_id,
-                        message=_err_msg,
+                        trace_id=error_trace_id,
+                        message=error_message,
                     )
                     await ws.send_json(
                         {
-                            "type": "error",
+                            "type": WsEventType.ERROR,
                             "payload": {
-                                "code": _err_code,
-                                "message": _err_msg,
-                                "trace_id": _trace_id,
-                                "category": _category,
+                                "code": error_code,
+                                "message": error_message,
+                                "trace_id": error_trace_id,
+                                "category": error_category,
                             },
                         }
                     )
@@ -340,7 +341,7 @@ async def _stream_turn_sidecar(
             turn_done.set()
 
     unsubs = []
-    for evt_type in ("token", "tool_start", "tool_end", "tool_error", "error"):
+    for evt_type in (WsEventType.TOKEN, WsEventType.TOOL_START, WsEventType.TOOL_END, WsEventType.TOOL_ERROR, WsEventType.ERROR):
         unsubs.append(client.on(evt_type, _make_handler(evt_type)))
     # Generic forwarding for event types that need no per-type enrichment.
     # ask_user — approval UI round-trip (sidecar createApprovalUiContext.select).
@@ -350,17 +351,17 @@ async def _stream_turn_sidecar(
     #   (OMP plan-mode exposes state, not subscribe events). 订阅空转，保留以备
     #   SDK 深接时无需改后端转发层。
     for evt_type in (
-        "ask_user",
-        "context_compressed",
-        "plan_proposed",
-        "plan_step_start",
-        "plan_step_end",
-        "plan_step_error",
-        "plan_completed",
+        WsEventType.ASK_USER,
+        WsEventType.CONTEXT_COMPRESSED,
+        WsEventType.PLAN_PROPOSED,
+        WsEventType.PLAN_STEP_START,
+        WsEventType.PLAN_STEP_END,
+        WsEventType.PLAN_STEP_ERROR,
+        WsEventType.PLAN_COMPLETED,
     ):
         unsubs.append(client.on(evt_type, _make_handler(evt_type)))
-    unsubs.append(client.on("answer", _on_answer))
-    unsubs.append(client.on("done", _on_done))
+    unsubs.append(client.on(WsEventType.ANSWER, _on_answer))
+    unsubs.append(client.on(WsEventType.DONE, _on_done))
 
     # 4. Execute prompt via sidecar
     record_activity(
@@ -521,7 +522,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             try:
                 await ws.send_json(
                     {
-                        "type": "done",
+                        "type": WsEventType.DONE,
                         "payload": {
                             "turn_id": _new_turn_id(_turn_id),
                             "cancelled": True,
@@ -552,7 +553,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             try:
                 await ws.send_json(
                     {
-                        "type": "error",
+                        "type": WsEventType.ERROR,
                         "payload": {
                             "code": "SIDECAR_UNAVAILABLE",
                             "message": "后端处理失败，请稍后重试",
@@ -561,7 +562,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                 )
                 await ws.send_json(
                     {
-                        "type": "done",
+                        "type": WsEventType.DONE,
                         "payload": {"turn_id": _new_turn_id(_turn_id)},
                     }
                 )
@@ -576,7 +577,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
 
         if final_answer:
             await ws.send_json(
-                {"type": "answer", "payload": {"content": final_answer}}
+                {"type": WsEventType.ANSWER, "payload": {"content": final_answer}}
             )
             session.message_count += 2
 
@@ -600,7 +601,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
         )
         await ws.send_json(
             {
-                "type": "done",
+                "type": WsEventType.DONE,
                 "payload": {
                     "turn_id": _new_turn_id(tid),
                     "context_usage": context_usage,
@@ -652,20 +653,17 @@ async def websocket_chat(ws: WebSocket, session_id: str):
 
             msg_type = msg.get("type")
 
-            if msg_type == "ping":
+            if msg_type == WsMessageType.PING:
                 await ws.send_json({"type": "pong"})
                 continue
 
             # Whitelist of known message types — discard unknown
-            KNOWN_TYPES = {
-                "chat", "cancel", "user_response", "plan_response",
-                "artifact_action", "update_auto_approve",
-            }
-            if msg_type not in KNOWN_TYPES:
+            if msg_type not in CLIENT_MESSAGE_TYPES:
+                logger.debug("[ws] Unknown message type: %s", msg_type)
                 continue
 
             # ── Cancel ──
-            if msg_type == "cancel":
+            if msg_type == WsMessageType.CANCEL:
                 if turn_task and not turn_task.done():
                     cancel_event.set()
                     turn_task.cancel()
@@ -696,7 +694,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             # 事件暴露到 subscribe 流 / ArtifactManager 事件化 / OMP 运行时 approvalMode
             # 切换），超 bridge 范围。此处不再黑洞转发，避免无谓 RPC + 错误往返。
             # 前端 send 函数保留（UI 不破坏），后续接通只需在此加分支。
-            if msg_type == "user_response":
+            if msg_type == WsMessageType.USER_RESPONSE:
                 if session._sidecar_session_id:
                     try:
                         mgr = app_state.sidecar_manager
@@ -740,7 +738,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
 
             allowed, rate_limit_error = get_ws_rate_limiter().try_consume(session_id)
             if not allowed:
-                await ws.send_json({"type": "error", "payload": rate_limit_error})
+                await ws.send_json({"type": WsEventType.ERROR, "payload": rate_limit_error})
                 continue
 
             # If a previous turn is still running, skip this message

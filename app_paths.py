@@ -6,16 +6,31 @@
               DATA_DIR 指向 %APPDATA%/MaxmaHere/（可写，用户数据持久化）。
 便携模式：检测到可执行文件同目录存在 portable.flag 标记文件时，
           DATA_DIR 指向可执行文件旁边的 data/（所有用户数据跟随程序）。
+          首次进入便携模式时，若检测到 %APPDATA%/MaxmaHere 有旧数据，
+          会自动迁移到 data/ 目录（仅迁移一次，幂等）。
 """
 
 import os
+import shutil
 import sys
 from pathlib import Path
+
+# 便携模式标记文件名（与 Tauri main.rs PORTABLE_FLAG_FILENAME 保持一致）
+PORTABLE_FLAG_FILENAME = "portable.flag"
 
 
 def _is_frozen() -> bool:
     """是否运行在 PyInstaller 打包环境中。"""
     return getattr(sys, "frozen", False)
+
+
+def _get_executable_dir() -> Path:
+    """获取当前可执行文件所在目录。
+    
+    开发模式：返回 python.exe 所在目录
+    打包模式：返回 maxma-server.exe 所在目录
+    """
+    return Path(sys.executable).resolve().parent
 
 
 def _is_portable() -> bool:
@@ -29,8 +44,73 @@ def _is_portable() -> bool:
     """
     if not _is_frozen():
         return False
-    exe_dir = Path(sys.executable).resolve().parent
-    return (exe_dir / "portable.flag").exists()
+    exe_dir = _get_executable_dir()
+    return (exe_dir / PORTABLE_FLAG_FILENAME).exists()
+
+
+def _get_legacy_appdata_dir() -> Path | None:
+    """获取旧版标准安装模式的数据目录（%APPDATA%/MaxmaHere）。
+
+    用于便携模式首次运行时的数据迁移。仅在 Windows 上有效。
+    """
+    if sys.platform != "win32":
+        return None
+    base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+    appdata_dir = base / "MaxmaHere"
+    return appdata_dir if appdata_dir.exists() else None
+
+
+def _migrate_from_appdata() -> None:
+    """一次性迁移：将 %APPDATA%/MaxmaHere 中的旧数据复制到便携 data/ 目录。
+
+    触发条件：便携模式 + data/ 目录为空 + %APPDATA%/MaxmaHere 存在且非空。
+    幂等：data/ 目录已有内容时跳过（标记文件 .migrated 防止重复检查）。
+
+    仅复制文件和子目录，不删除源数据（用户可手动清理 %APPDATA%）。
+    """
+    if not _is_portable():
+        return
+
+    # 幂等标记：迁移完成后写入 .migrated，避免每次启动都扫描 %APPDATA%
+    migrated_marker = DATA_DIR / ".migrated"
+    if migrated_marker.exists():
+        return
+
+    legacy_dir = _get_legacy_appdata_dir()
+    if legacy_dir is None:
+        # 没有旧数据，直接标记已迁移（首次安装的便携版无需迁移）
+        migrated_marker.parent.mkdir(parents=True, exist_ok=True)
+        migrated_marker.write_text("no-legacy", encoding="utf-8")
+        return
+
+    # 检查旧目录是否有实质内容（排除空目录）
+    legacy_children = [p for p in legacy_dir.iterdir() if p.name != ".migrated"]
+    if not legacy_children:
+        migrated_marker.parent.mkdir(parents=True, exist_ok=True)
+        migrated_marker.write_text("empty-legacy", encoding="utf-8")
+        return
+
+    # data/ 目录已有内容时不迁移（用户可能已手动放置了数据）
+    data_children = [p for p in DATA_DIR.iterdir() if p.name != ".migrated"] if DATA_DIR.exists() else []
+    if data_children:
+        migrated_marker.parent.mkdir(parents=True, exist_ok=True)
+        migrated_marker.write_text("skipped-data-exists", encoding="utf-8")
+        return
+
+    # 执行迁移：逐项复制
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    for item in legacy_children:
+        dest = DATA_DIR / item.name
+        try:
+            if item.is_dir():
+                shutil.copytree(item, dest, dirs_exist_ok=True)
+            else:
+                shutil.copy2(item, dest)
+        except OSError:
+            # 权限/磁盘满时静默跳过单个文件，不阻塞启动
+            pass
+
+    migrated_marker.write_text(f"migrated-from:{legacy_dir}", encoding="utf-8")
 
 
 def _get_bundle_dir() -> Path:
@@ -74,6 +154,9 @@ BUNDLE_DIR: Path = _get_bundle_dir()
 
 # 用户数据根目录（可写：memory、sessions、uploads、logs 等）
 DATA_DIR: Path = _get_data_dir()
+
+# 便携模式标志（供日志和诊断使用）
+IS_PORTABLE: bool = _is_portable()
 
 # ── 常用子路径快捷方式 ──
 
@@ -148,7 +231,7 @@ def _resolve_runtime_dir() -> Path:
     if _is_frozen():
         # PyInstaller onefile: sys.executable = maxma-server.exe 的真实路径，
         # resources/ 与之同目录（Tauri 安装目录结构）
-        candidates.append(Path(sys.executable).resolve().parent / "resources")
+        candidates.append(_get_executable_dir() / "resources")
 
     for c in candidates:
         try:
@@ -178,11 +261,17 @@ def ensure_data_dirs():
 
     同时确保 MCP 配置文件存在：首次运行时创建空 YAML（servers: []），
     避免打包模式下 MCP_CONFIG_PATH 指向不存在的文件导致加载失败。
+
+    便携模式下，首次运行时会尝试从 %APPDATA%/MaxmaHere 迁移旧数据。
     """
+    # 便携模式首次运行迁移（在创建目录之前，确保旧数据先到位）
+    if IS_PORTABLE:
+        _migrate_from_appdata()
+
     for d in [API_DATA_DIR, LOGS_DIR, UPLOADS_DIR, CONST_SESSIONS_DIR, PERSONAS_DATA_DIR, SKILLS_DATA_DIR, MACROS_DATA_DIR, VECTOR_DB_DIR, KB_DIR, CREDENTIAL_MIGRATION_BACKUP_DIR]:
         d.mkdir(parents=True, exist_ok=True)
 
-    # 首次运行时创建空的 MCP 配置文件（打包模式下 %APPDATA% 内默认不存在）
+    # 首次运行时创建空的 MCP 配置文件（打包模式下 %APPDATA% 或便携 data/ 内默认不存在）
     _ensure_mcp_config()
 
 

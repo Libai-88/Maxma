@@ -1,6 +1,8 @@
 # MaxmaHere 默认 MCP 服务器配置模板
 #
-# 此文件在桌面应用首次运行时复制到 %APPDATA%/MaxmaHere/api/data/mcp_servers.yaml
+# 此文件在桌面应用首次运行时复制到用户数据目录的 api/data/mcp_servers.yaml
+# 标准安装模式：复制到 %APPDATA%/MaxmaHere/api/data/mcp_servers.yaml
+# 便携模式：复制到 <exe_dir>/data/api/data/mcp_servers.yaml
 # 用户可在 Web UI 的 "MCP 管理" 页面修改配置，所有改动会写回上述路径。
 #
 # 字段说明：

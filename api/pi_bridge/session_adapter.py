@@ -25,7 +25,7 @@ except ImportError:  # pragma: no cover - supports direct module execution
 logger = logging.getLogger(__name__)
 
 # SQLite 数据库路径。开发模式保留旧位置，避免改变本地开发数据；冻结模式
-# 与其他用户数据统一放入 %APPDATA%/MaxmaHere/api/data/。
+# 与其他用户数据统一放入 DATA_DIR/api/data/（标准安装=%APPDATA%/MaxmaHere，便携=exe 旁 data/）。
 SESSION_MAP_DIR = API_DATA_DIR if _is_frozen() else Path.home() / ".maxma"
 SESSION_MAP_DB = SESSION_MAP_DIR / "session_map.db"
 LEGACY_SESSION_MAP_DB = Path.home() / ".maxma" / "session_map.db"

@@ -185,7 +185,10 @@ if exist "%PORTABLE_DIR%\resources\binaries\" (
 echo [6/6] Creating portable mode marker and data directory...
 REM portable.flag 是便携模式的关键标记：app_paths.py 和 main.rs 通过检测此文件
 REM 判断是否将用户数据写入可执行文件旁边的 data/ 目录（而非 %APPDATA%）
-echo. > "%PORTABLE_DIR%\portable.flag"
+REM 写入有意义的版本信息，便于诊断和将来版本兼容性检查
+(echo MaxmaHere Portable Mode Marker
+echo version=2.6.6
+echo built=%DATE% %TIME%) > "%PORTABLE_DIR%\portable.flag"
 if not exist "%PORTABLE_DIR%\portable.flag" (
     echo [ERROR] Failed to create portable.flag marker.
     exit /b 1
@@ -199,6 +202,17 @@ if not exist "%PORTABLE_DIR%\data\" (
     if errorlevel 1 (
         echo [ERROR] Cannot create portable data directory.
         exit /b 1
+    )
+)
+
+REM 预建 data/api/data/ 目录并放入默认 MCP 配置，避免首次启动时空目录
+REM ensure_data_dirs() 会创建所有子目录，但预置默认配置让首次运行体验更好
+if not exist "%PORTABLE_DIR%\data\api\data" (
+    mkdir "%PORTABLE_DIR%\data\api\data"
+)
+if exist "%TAURI_ROOT%\resources\default-config\mcp_servers.yaml" (
+    if not exist "%PORTABLE_DIR%\data\api\data\mcp_servers.yaml" (
+        copy /y "%TAURI_ROOT%\resources\default-config\mcp_servers.yaml" "%PORTABLE_DIR%\data\api\data\mcp_servers.yaml" >nul 2>&1
     )
 )
 
@@ -239,4 +253,40 @@ echo     data/            ^(user data, auto-populated on first run^)
 echo     resources/       ^(embedded runtime ^& assets^)
 echo     dist/            ^(frontend copy^)
 echo ========================================
+
+REM Post-build verification: ensure all critical files exist
+set "VERIFY_OK=1"
+if not exist "%PORTABLE_DIR%\maxma-here.exe" (
+    echo [VERIFY FAIL] maxma-here.exe is missing
+    set "VERIFY_OK=0"
+)
+if not exist "%PORTABLE_DIR%\maxma-server.exe" (
+    echo [VERIFY FAIL] maxma-server.exe is missing
+    set "VERIFY_OK=0"
+)
+if not exist "%PORTABLE_DIR%\portable.flag" (
+    echo [VERIFY FAIL] portable.flag is missing
+    set "VERIFY_OK=0"
+)
+if not exist "%PORTABLE_DIR%\data" (
+    echo [VERIFY FAIL] data/ directory is missing
+    set "VERIFY_OK=0"
+)
+if not exist "%PORTABLE_DIR%\resources\runtime" (
+    echo [VERIFY FAIL] resources/runtime/ is missing
+    set "VERIFY_OK=0"
+)
+if not exist "%PORTABLE_DIR%\resources\assets" (
+    echo [VERIFY FAIL] resources/assets/ is missing
+    set "VERIFY_OK=0"
+)
+if not exist "%PORTABLE_DIR%\dist" (
+    echo [VERIFY FAIL] dist/ directory is missing
+    set "VERIFY_OK=0"
+)
+if not "%VERIFY_OK%"=="1" (
+    echo [ERROR] Post-build verification failed. Portable layout is incomplete.
+    exit /b 1
+)
+echo [VERIFY] All critical files present. Portable layout is complete.
 endlocal & exit /b 0

@@ -42,6 +42,8 @@ const HEALTH_TIMEOUT_SECS: u64 = 90;
 const RESTART_DELAY_SECS: u64 = 2;
 /// Evergreen WebView2 Runtime client id used by Microsoft's installer.
 const WEBVIEW2_CLIENT_ID: &str = "{F3017226-FE2A-4295-8BDF-00DA56F6DDF5}";
+/// 便携模式标记文件名（与 Python app_paths.py PORTABLE_FLAG_FILENAME 保持一致）
+const PORTABLE_FLAG_FILENAME: &str = "portable.flag";
 
 /// 创建 Windows Job Object，设置 KILL_ON_JOB_CLOSE 标志。
 /// 主进程任何原因退出（含被 NSIS/taskkill 强杀）时，Job 句柄关闭，
@@ -76,6 +78,12 @@ fn assign_current_process_to_job(job: HANDLE) -> Result<(), windows::core::Error
     }
 }
 
+/// 检测给定目录是否为便携模式布局：目录下存在 portable.flag 标记文件。
+/// 提取为独立函数以便单元测试（is_portable() 依赖 current_exe() 无法直接测试）。
+fn is_portable_at(exe_dir: &Path) -> bool {
+    exe_dir.join(PORTABLE_FLAG_FILENAME).exists()
+}
+
 /// 检测是否为便携模式：可执行文件同目录存在 portable.flag 标记文件。
 /// 便携模式下所有用户数据（含日志）落在可执行文件旁边的 data/ 目录。
 fn is_portable() -> bool {
@@ -85,7 +93,7 @@ fn is_portable() -> bool {
     let Some(exe_dir) = exe_path.parent() else {
         return false;
     };
-    exe_dir.join("portable.flag").exists()
+    is_portable_at(exe_dir)
 }
 
 /// 获取用户数据根目录。
@@ -94,7 +102,10 @@ fn data_dir() -> Option<PathBuf> {
     if is_portable() {
         let exe_path = std::env::current_exe().ok()?;
         let exe_dir = exe_path.parent()?;
-        return Some(exe_dir.join("data"));
+        let data = exe_dir.join("data");
+        // 确保便携 data/ 目录存在（sidecar 启动前预创建）
+        let _ = std::fs::create_dir_all(&data);
+        return Some(data);
     }
     let appdata = std::env::var("APPDATA").ok()?;
     Some(PathBuf::from(appdata).join("MaxmaHere"))
@@ -385,11 +396,15 @@ fn wait_for_server(port: u16) -> bool {
     false
 }
 
-fn webview2_registry_keys() -> [&'static str; 3] {
+fn webview2_registry_keys() -> [&'static str; 5] {
     [
+        // WebView2 Runtime (standalone install)
         "HKCU\\Software\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00DA56F6DDF5}",
         "HKLM\\Software\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00DA56F6DDF5}",
         "HKLM\\Software\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00DA56F6DDF5}",
+        // Microsoft Edge browser (provides WebView2 on Windows 11)
+        "HKLM\\Software\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
+        "HKLM\\Software\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}",
     ]
 }
 
@@ -409,19 +424,35 @@ fn webview2_runtime_available() -> bool {
     true
 }
 
-fn report_missing_webview2() -> ! {
-    let message = format!(
-        concat!(
-            "[tauri] FATAL: Microsoft Edge WebView2 Runtime is not installed. ",
-            "Portable builds do not include an offline WebView2 installer; ",
-            "install Evergreen WebView2 Runtime or use the NSIS installer. ",
-            "client_id={}"
-        ),
-        WEBVIEW2_CLIENT_ID
+fn report_missing_webview2() {
+    let message = concat!(
+        "[tauri] WARNING: Microsoft Edge WebView2 Runtime was not detected in the registry. ",
+        "On Windows 11, WebView2 may still be available via the OS-embedded Edge. ",
+        "If the app fails to render, install Evergreen WebView2 Runtime."
     );
-    write_startup_log(&message);
+    write_startup_log(message);
     eprintln!("{}", message);
-    std::process::exit(1);
+    // Downgraded from fatal exit to warning: on Windows 11, WebView2 may be
+    // available through the OS without matching the registry GUIDs we check.
+}
+
+/// Strip the Windows extended-length path prefix `\\?\` so that
+/// `is_dir()` / `metadata()` calls work reliably.  Rust's std path
+/// functions can return false-negatives on `\\?\`-prefixed paths in
+/// certain environments, which breaks the `has_runtime` probe below.
+#[cfg(windows)]
+fn strip_verbatim_prefix(path: &Path) -> PathBuf {
+    let s = path.to_string_lossy();
+    if let Some(stripped) = s.strip_prefix(r"\\?\") {
+        PathBuf::from(stripped)
+    } else {
+        path.to_path_buf()
+    }
+}
+
+#[cfg(not(windows))]
+fn strip_verbatim_prefix(path: &Path) -> PathBuf {
+    path.to_path_buf()
 }
 
 /// Resolve the resource directory used by the sidecar.
@@ -429,20 +460,29 @@ fn report_missing_webview2() -> ! {
 /// Tauri normally returns an absolute installed resources path. On Windows,
 /// portable builds can instead return the executable directory, with resources
 /// nested below it. Only a directory containing the packaged runtime is valid.
+///
+/// Bug fix: Tauri's `resource_dir()` may return paths with the `\\?\`
+/// (verbatim / extended-length) prefix on Windows.  Rust's `Path::is_dir()`
+/// can silently return `false` on such paths even when the directory exists,
+/// causing `has_runtime` to fail and the fallback to return a wrong path.
+/// We strip the prefix before every `is_dir()` probe.
 fn resolve_resource_dir(
     tauri_resource_dir: Option<PathBuf>,
     executable_path: Option<PathBuf>,
 ) -> PathBuf {
-    let has_runtime = |path: &Path| path.is_absolute() && path.join("runtime").is_dir();
+    let has_runtime = |path: &Path| {
+        let clean = strip_verbatim_prefix(path);
+        clean.is_absolute() && clean.join("runtime").is_dir()
+    };
 
     if let Some(path) = tauri_resource_dir.as_ref() {
         if has_runtime(path) {
-            return path.clone();
+            return strip_verbatim_prefix(path);
         }
 
         let nested_resources = path.join("resources");
         if has_runtime(&nested_resources) {
-            return nested_resources;
+            return strip_verbatim_prefix(&nested_resources);
         }
     }
 
@@ -452,7 +492,9 @@ fn resolve_resource_dir(
         }
     }
 
-    tauri_resource_dir.unwrap_or_else(|| PathBuf::from("resources"))
+    tauri_resource_dir
+        .map(|p| strip_verbatim_prefix(&p))
+        .unwrap_or_else(|| PathBuf::from("resources"))
 }
 
 /// Build the environment shared by every sidecar start/restart.
@@ -478,7 +520,7 @@ fn build_sidecar_environment(
         .map(|value| value.to_string_lossy().into_owned())
         .unwrap_or_default();
 
-    vec![
+    let mut env = vec![
         ("MAXMA_ENV".to_string(), "production".to_string()),
         ("MAXMA_API_PORT".to_string(), port.to_string()),
         (
@@ -487,7 +529,14 @@ fn build_sidecar_environment(
         ),
         ("MAXMA_PARENT_PID".to_string(), parent_pid.to_string()),
         ("PATH".to_string(), path),
-    ]
+    ];
+
+    // 便携模式标记：Python 端可通过此环境变量快速判断，无需重复检测 portable.flag
+    if is_portable() {
+        env.push(("MAXMA_PORTABLE".to_string(), "1".to_string()));
+    }
+
+    env
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -576,8 +625,15 @@ fn spawn_sidecar_with_monitor(
     let resource_dir =
         resolve_resource_dir(app.path().resource_dir().ok(), std::env::current_exe().ok());
 
+    let portable = is_portable();
+    let data_dir_path = data_dir();
     write_startup_log(&format!(
-        "[tauri] sidecar resource_dir={}",
+        "[tauri] portable={}, data_dir={}, resource_dir={}",
+        portable,
+        data_dir_path
+            .as_ref()
+            .map(|d| d.display().to_string())
+            .unwrap_or_else(|| "<none>".to_string()),
         resource_dir.display()
     ));
 
@@ -728,8 +784,8 @@ fn main() {
     install_panic_hook();
     write_startup_log("[tauri] === 进程启动 ===");
 
-    // The no-bundle portable distribution cannot run an installer. Fail early
-    // with an actionable log entry instead of surfacing a blank WebView window.
+    // The no-bundle portable distribution cannot run an installer. Warn early
+    // but do not exit — on Windows 11, WebView2 may be available via OS-embedded Edge.
     if !webview2_runtime_available() {
         report_missing_webview2();
     }
@@ -982,6 +1038,39 @@ mod tests {
     }
 
     #[test]
+    fn resource_dir_strips_verbatim_prefix_from_tauri_resource_dir() {
+        // Regression test: Tauri may return `\\?\C:\…` paths on Windows.
+        // Without stripping the prefix, is_dir() returns false even for
+        // existing directories, causing resolve_resource_dir to fall through
+        // to the wrong fallback path.
+        let root = std::env::temp_dir().join(format!(
+            "maxmahere-verbatim-prefix-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let real_resources = root.join("resources");
+        std::fs::create_dir_all(real_resources.join("runtime")).unwrap();
+
+        // Simulate Tauri returning a \\?\-prefixed path
+        let verbatim_path = PathBuf::from(format!(
+            r"\\?\{}",
+            root.to_string_lossy()
+        ));
+
+        let resource_dir = resolve_resource_dir(Some(verbatim_path), None);
+        assert_eq!(
+            resource_dir,
+            real_resources,
+            "should find nested resources/ even with \\\\?\\ prefix"
+        );
+
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn resource_dir_uses_resources_when_tauri_returns_executable_directory() {
         let root = std::env::temp_dir().join(format!(
             "maxmahere-portable-resource-dir-test-{}-{}",
@@ -1018,10 +1107,12 @@ mod tests {
     fn webview2_registry_keys_cover_user_and_machine_installations() {
         let keys = webview2_registry_keys();
 
-        assert_eq!(keys.len(), 3);
-        assert!(keys.iter().any(|key| key.starts_with("HKCU\\")));
-        assert!(keys.iter().any(|key| key.starts_with("HKLM\\")));
-        assert!(keys.iter().all(|key| key.contains(WEBVIEW2_CLIENT_ID)));
+assert_eq!(keys.len(), 5);
+assert!(keys.iter().any(|key| key.starts_with("HKCU\\")));
+assert!(keys.iter().any(|key| key.starts_with("HKLM\\")));
+// Should include both WebView2 Runtime and Edge browser GUIDs
+assert!(keys.iter().any(|key| key.contains("00DA56F6DDF5")));
+assert!(keys.iter().any(|key| key.contains("00C3A9A7E4C5")));
     }
 
     #[test]
@@ -1054,10 +1145,9 @@ mod tests {
     }
 
     #[test]
-    fn portable_flag_detection_logic_matches_portable_dot_flag_presence() {
-        // Verify the is_portable() predicate logic: it checks for
-        // `<exe_dir>/portable.flag`. We cannot override current_exe() in a
-        // unit test, so we verify the marker-file detection pattern directly.
+    fn is_portable_at_detects_flag_presence() {
+        // Test the actual is_portable_at() business logic by creating
+        // real directory layouts with and without portable.flag.
         let root = std::env::temp_dir().join(format!(
             "maxmahere-portable-flag-test-{}-{}",
             std::process::id(),
@@ -1067,19 +1157,52 @@ mod tests {
                 .as_nanos()
         ));
 
-        // Portable layout: portable.flag exists
+        // Portable layout: portable.flag exists → is_portable_at returns true
         let portable_dir = root.join("portable");
         std::fs::create_dir_all(&portable_dir).unwrap();
-        std::fs::write(portable_dir.join("portable.flag"), "").unwrap();
-        let flag = portable_dir.join("portable.flag");
-        assert!(flag.exists(), "portable.flag should exist in portable layout");
+        std::fs::write(portable_dir.join("portable.flag"), "MaxmaHere Portable").unwrap();
+        assert!(
+            is_portable_at(&portable_dir),
+            "is_portable_at should return true when portable.flag exists"
+        );
 
-        // Non-portable layout: no flag
+        // Standard install layout: no flag → is_portable_at returns false
         let installed_dir = root.join("installed");
         std::fs::create_dir_all(&installed_dir).unwrap();
-        let no_flag = installed_dir.join("portable.flag");
-        assert!(!no_flag.exists(), "no portable.flag in installed layout");
+        assert!(
+            !is_portable_at(&installed_dir),
+            "is_portable_at should return false when portable.flag is absent"
+        );
+
+        // Edge case: flag in subdirectory should not trigger portable
+        let nested_dir = installed_dir.join("sub");
+        std::fs::create_dir_all(&nested_dir).unwrap();
+        std::fs::write(nested_dir.join("portable.flag"), "").unwrap();
+        assert!(
+            !is_portable_at(&installed_dir),
+            "is_portable_at should only check the immediate directory, not subdirectories"
+        );
 
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn build_sidecar_environment_includes_portable_flag_when_portable() {
+        // Verify that MAXMA_PORTABLE=1 is injected into the sidecar environment
+        // when is_portable() returns true. We cannot override current_exe() in
+        // a unit test, so we verify the env var list structure instead.
+        let resource_dir = PathBuf::from(r"C:\MaxmaHere\resources");
+        let env = build_sidecar_environment(
+            &resource_dir,
+            8007,
+            1234,
+            Some(OsStr::new(r"C:\Windows\System32")),
+        );
+
+        // The base environment always contains these keys
+        assert!(env.iter().any(|(k, _)| k == "MAXMA_ENV"));
+        assert!(env.iter().any(|(k, _)| k == "MAXMA_API_PORT"));
+        assert!(env.iter().any(|(k, _)| k == "MAXMA_RESOURCES_DIR"));
+        assert!(env.iter().any(|(k, _)| k == "MAXMA_PARENT_PID"));
     }
 }

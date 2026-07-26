@@ -16,24 +16,9 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
+from api.ws_protocol import SIDECAR_EVENT_TYPES as EVENT_TYPES
+
 logger = logging.getLogger(__name__)
-
-# ── Known Event Types ────────────────────────────────────
-# These match both the TS sidecar output and the Maxma frontend WS protocol.
-
-EVENT_TYPES = frozenset({
-    "thinking_start",
-    "token",
-    "thinking_end",
-    "tool_start",
-    "tool_end",
-    "tool_error",
-    "answer",
-    "done",
-    "error",
-    "context_usage",
-    "ask_user",
-})
 
 # ── Event Schema Check ───────────────────────────────────
 
