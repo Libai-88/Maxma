@@ -295,14 +295,15 @@ class DiscoverModelsBody(BaseModel):
 @router.get("/providers")
 async def list_providers() -> dict[str, Any]:
     """返回所有已配置的 provider。
-
-    yaml 文件不存在或 providers 为空时，返回硬编码默认列表（保持向后兼容，
-    保证首次运行时前端 ChatInput 能看到可用 provider）。
+    
+    yaml 文件不存在或 providers 为空时，返回空列表，让前端显示引导页。
+    旧的默认 provider fallback 已移除，因为：
+    1. 默认 provider 的 api_key 为空，无法使用
+    2. 会误导用户以为已配置，但实际无法调用
+    3. ProvidersView 的空状态引导页提供更好的新手体验
     """
     with yaml_file_lock(PROVIDERS_YAML_PATH):
         items = _load_providers()
-    if not items:
-        return {"providers": _DEFAULT_PROVIDERS}
     return {"providers": items}
 
 
