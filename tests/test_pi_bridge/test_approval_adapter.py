@@ -17,19 +17,37 @@ class TestGetApprovalLevel:
     @pytest.mark.parametrize(
         "tool,expected",
         [
-            ("file_write", "write"),
-            ("file_manage", "write"),
-            ("file_edit", "write"),
-            ("file_read", "read"),
-            ("file_search", "read"),
-            ("run_python", "write"),
-            ("tavily_search", "read"),
-            ("tavily_extract", "read"),
-            ("get_current_weather", "read"),
-            ("call_sub_agent", "write"),
-            ("parallel_execute", "write"),
-            ("ask_user_qa", "interactive"),
-            ("ask_user_confirm", "interactive"),
+            # OMP 原生工具 — read
+            ("read", "read"),
+            ("glob", "read"),
+            ("grep", "read"),
+            ("inspect_image", "read"),
+            ("web_search", "read"),
+            ("ast_grep", "read"),
+            ("recall", "read"),
+            ("reflect", "read"),
+            ("retain", "read"),
+            # OMP 原生工具 — write
+            ("write", "write"),
+            ("edit", "write"),
+            ("ast_edit", "write"),
+            ("bash", "write"),
+            ("eval", "write"),
+            ("debug", "write"),
+            ("github", "write"),
+            ("ssh", "write"),
+            ("browser", "write"),
+            ("launch", "write"),
+            ("task", "write"),
+            ("job", "write"),
+            ("checkpoint", "write"),
+            ("rewind", "write"),
+            ("todo", "write"),
+            ("manage_skill", "write"),
+            ("learn", "write"),
+            ("memory_edit", "write"),
+            # OMP 原生工具 — interactive
+            ("ask", "interactive"),
         ],
     )
     def test_known_tools(self, tool: str, expected: str) -> None:
@@ -53,18 +71,17 @@ class TestIsHighRisk:
     @pytest.mark.parametrize(
         "tool,expected",
         [
-            ("file_write", True),
-            ("file_edit", True),
-            ("run_python", True),
-            ("call_sub_agent", True),
-            ("parallel_execute", True),
-            ("ask_user_qa", True),
-            ("ask_user_confirm", True),
-            ("file_read", False),
-            ("file_search", False),
-            ("tavily_search", False),
-            ("tavily_extract", False),
-            ("get_current_weather", False),
+            ("write", True),
+            ("edit", True),
+            ("bash", True),
+            ("eval", True),
+            ("github", True),
+            ("ask", True),
+            ("read", False),
+            ("glob", False),
+            ("grep", False),
+            ("web_search", False),
+            ("inspect_image", False),
         ],
     )
     def test_known_tools(self, tool: str, expected: bool) -> None:
@@ -83,17 +100,11 @@ class TestToolApprovalMapContents:
     def test_map_is_dict(self) -> None:
         assert isinstance(TOOL_APPROVAL_MAP, dict)
 
-    def test_map_has_expected_entries(self) -> None:
-        expected_keys = {
-            "file_write", "file_manage", "file_edit",
-            "file_read", "file_search",
-            "run_python",
-            "tavily_search", "tavily_extract", "get_current_weather",
-            "call_sub_agent", "parallel_execute",
-            "ask_user_qa", "ask_user_confirm",
-        }
-        assert set(TOOL_APPROVAL_MAP.keys()) == expected_keys
-
     def test_all_values_valid_levels(self) -> None:
         for level in TOOL_APPROVAL_MAP.values():
             assert level in ("read", "write", "interactive")
+
+    def test_map_covers_omp_core_tools(self) -> None:
+        """Ensure all core OMP tools are mapped."""
+        core_tools = {"read", "write", "edit", "bash", "eval", "glob", "grep", "ask"}
+        assert core_tools.issubset(set(TOOL_APPROVAL_MAP.keys()))

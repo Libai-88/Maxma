@@ -458,7 +458,7 @@ def _scan_macros() -> str:
     """扫描 macros/ 下所有 MACRO.md，返回元数据清单。
 
     同时扫描内置目录（BUNDLE_DIR/macros，只读）和用户数据目录
-    （DATA_DIR/macros，可写）。用户通过 manage_macros 工具或 REST API
+    （DATA_DIR/macros，可写）。用户通过 REST API
     创建的宏保存在用户数据目录，必须扫描此目录才能让 LLM 感知。
     单个 MACRO.md 损坏不会影响其他 macro 的展示。
     """

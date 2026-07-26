@@ -279,7 +279,7 @@ def _ensure_mcp_config() -> None:
     """若 MCP_CONFIG_PATH 不存在，创建一个空的 mcp_servers: [] YAML。
 
     注意：YAML key 必须是 `mcp_servers`（与 MCPServersConfigFile pydantic 模型
-    和 tool_manage_mcp / api/routes/mcp 的读写逻辑一致），不能用 `servers`，
+    和 api/routes/mcp 的读写逻辑一致），不能用 `servers`，
     否则手动编辑的配置会被静默忽略。
     """
     if MCP_CONFIG_PATH.exists():

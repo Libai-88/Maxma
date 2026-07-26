@@ -1,4 +1,4 @@
-"""审批适配器 — 映射 Maxma 的审批规则到 oh-my-pi 的工具审批级别。
+"""审批适配器 — 映射 OMP 原生工具到审批级别。
 
 oh-my-pi 的工具可以声明 approval 属性：
 - "read": 读操作，不需要审批
@@ -12,37 +12,51 @@ from __future__ import annotations
 
 from typing import Any
 
-# Maxma 工具名 → oh-my-pi approval 级别
+# OMP 原生工具名 → approval 级别
 # 当 oh-my-pi agent 调用这些工具时，会触发相应级别的用户确认流程
 TOOL_APPROVAL_MAP: dict[str, str] = {
-    # 文件写操作 — 需要审批
-    "file_write": "write",
-    "file_manage": "write",
-    "file_edit": "write",
-    # 文件读操作 — 不需要审批
-    "file_read": "read",
-    "file_search": "read",
+    # 文件读 — 不需要审批
+    "read": "read",
+    "glob": "read",
+    "grep": "read",
+    "inspect_image": "read",
+    "web_search": "read",
+    "ast_grep": "read",
+    "recall": "read",
+    "reflect": "read",
+    "retain": "read",
+    # 文件写 — 需要审批
+    "write": "write",
+    "edit": "write",
+    "ast_edit": "write",
+    # 代码执行 — 需要审批
+    "bash": "write",
+    "eval": "write",
+    "debug": "write",
     # 系统操作 — 需要审批
-    "run_python": "write",
-    # 网络操作 — 读级别
-    "tavily_search": "read",
-    "tavily_extract": "read",
-    "get_current_weather": "read",
-    # 子 Agent — 需要审批
-    "call_sub_agent": "write",
-    "parallel_execute": "write",
+    "github": "write",
+    "ssh": "write",
+    "browser": "write",
+    "launch": "write",
+    "task": "write",
+    "job": "write",
+    "checkpoint": "write",
+    "rewind": "write",
+    "todo": "write",
+    "manage_skill": "write",
+    "learn": "write",
+    "memory_edit": "write",
     # 交互 — 交互级别
-    "ask_user_qa": "interactive",
-    "ask_user_confirm": "interactive",
+    "ask": "interactive",
 }
 
 
 def get_approval_level(tool_name: str) -> str:
     """获取工具的审批级别。
-    
+
     Args:
         tool_name: 工具名称
-        
+
     Returns:
         "read" / "write" / "interactive" / "ask"（默认询问）
     """
