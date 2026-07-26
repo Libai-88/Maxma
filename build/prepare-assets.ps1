@@ -39,7 +39,13 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "[ok] Chromium -> $PlaywrightDir"
 
 # 2. ONNX embedding model
-Write-Host "`n[2/2] ONNX model (paraphrase-multilingual-MiniLM-L12-v2)" -ForegroundColor Yellow
+# DISABLED: 知识库功能已移除，chromadb + onnxruntime 依赖已从 requirements.txt 清除
+# 保留此段代码以备将来需要时恢复（取消注释即可）
+Write-Host "`n[2/2] ONNX model (SKIPPED - knowledge base feature removed)" -ForegroundColor Yellow
+Write-Host "[ok] Skipped ONNX model download (saves 463MB)"
+
+<#
+# Original ONNX download code (commented out):
 $ModelDir = Join-Path $ModelsDir "paraphrase-multilingual-MiniLM-L12-v2"
 New-Item -ItemType Directory -Force -Path $ModelDir | Out-Null
 
@@ -117,6 +123,7 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host "[error] ONNX model download failed" -ForegroundColor Red
     exit 1
 }
+#>
 
 Write-Host "`n=== prepare-assets complete ===" -ForegroundColor Green
 Write-Host "Output: $AssetsDir"

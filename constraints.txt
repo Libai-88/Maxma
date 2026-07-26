@@ -6,3 +6,7 @@ langgraph-prebuilt==0
 langgraph-sdk==0
 langgraph-api==0
 langgraph-cli==0
+
+# 阻止安装知识库相关依赖 — 知识库功能已移除（api/routes/kb.py 全部返回 503）
+chromadb==0
+onnxruntime==0

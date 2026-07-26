@@ -35,9 +35,9 @@ use windows::Win32::UI::Shell::{
 /// 最大崩溃重启次数
 const MAX_RESTARTS: u32 = 3;
 /// 后端健康检查超时（秒）。
-/// PyInstaller onefile 第二次启动时需要解压 + 加载 SQLite/chromadb/ONNX 等数据，
-/// 30s 不够，改为 90s 留足余量。
-const HEALTH_TIMEOUT_SECS: u64 = 90;
+/// 优化后移除 chromadb/onnxruntime (464MB → ~100MB)，解压时间从 60s 降至 10s，
+/// 健康检查超时可安全降至 30 秒。
+const HEALTH_TIMEOUT_SECS: u64 = 30;
 /// 重启前等待（秒）
 const RESTART_DELAY_SECS: u64 = 2;
 /// Evergreen WebView2 Runtime client id used by Microsoft's installer.
