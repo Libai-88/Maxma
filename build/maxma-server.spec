@@ -200,12 +200,13 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
+# PyInstaller onedir 模式：首次启动解压到 _internal/，后续启动直接使用（2-3秒）
+# 替代 onefile 模式（每次启动都解压，5-10秒）
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
-    [],
+    # 移除 a.binaries 和 a.datas 的内嵌，改为 COLLECT 收集到 _internal/
+    exclude_binaries=True,  # ← 关键改动：不嵌入到单一 EXE
     name="maxma-server",
     debug=False,
     bootloader_ignore_signals=False,
@@ -215,4 +216,24 @@ exe = EXE(
     disable_windowed_traceback=False,
     argv_emulation=False,
     icon=None,  # 可后续添加 .ico 图标
+)
+
+# COLLECT: 将二进制和数据文件收集到 dist/maxma-server/_internal/ 目录
+# 便携版布局：MaxmaHere-Portable/
+#   ├── maxma-here.exe       (Tauri 主程序)
+#   ├── maxma-server.exe     (PyInstaller bootloader，轻量)
+#   ├── _internal/           (Python 运行时 + 依赖，一次解压)
+#   │   ├── python313.dll
+#   │   ├── api/
+#   │   ├── config/
+#   │   └── ...
+#   └── resources/           (嵌入式运行时)
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name="maxma-server",
 )

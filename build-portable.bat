@@ -143,13 +143,42 @@ if not exist "%PORTABLE_DIR%\maxma-here.exe" (
     exit /b 1
 )
 
-copy /y "%SIDECAR_SOURCE%" "%PORTABLE_DIR%\maxma-server.exe" >nul
+REM PyInstaller onedir 模式产生 dist/maxma-server/ 目录结构：
+REM   maxma-server/
+REM     ├── maxma-server.exe  (bootloader)
+REM     └── _internal/        (Python 运行时 + 依赖)
+REM 便携版需要整个目录，但为保持根目录简洁，将 maxma-server.exe 提到根，
+REM _internal/ 保留在子目录
+
+set "SIDECAR_BUILD_DIR=%PROJECT_ROOT%desktop\src-tauri\dist\maxma-server"
+if not exist "%SIDECAR_BUILD_DIR%\maxma-server.exe" (
+    echo [ERROR] PyInstaller onedir output missing: %SIDECAR_BUILD_DIR%\maxma-server.exe
+    exit /b 1
+)
+if not exist "%SIDECAR_BUILD_DIR%\_internal\" (
+    echo [ERROR] PyInstaller _internal directory missing: %SIDECAR_BUILD_DIR%\_internal\
+    exit /b 1
+)
+
+REM 复制 maxma-server.exe 到便携版根目录
+copy /y "%SIDECAR_BUILD_DIR%\maxma-server.exe" "%PORTABLE_DIR%\maxma-server.exe" >nul
 if errorlevel 1 (
-    echo [ERROR] Failed to copy the target-suffix sidecar beside the Tauri application.
+    echo [ERROR] Failed to copy maxma-server.exe
     exit /b 1
 )
 if not exist "%PORTABLE_DIR%\maxma-server.exe" (
-    echo [ERROR] Portable root sidecar is missing.
+    echo [ERROR] Portable maxma-server.exe is missing.
+    exit /b 1
+)
+
+REM 复制 _internal/ 目录（Python 运行时和依赖）
+xcopy /e /i /q "%SIDECAR_BUILD_DIR%\_internal" "%PORTABLE_DIR%\_internal" >nul
+if errorlevel 1 (
+    echo [ERROR] Failed to copy _internal directory.
+    exit /b 1
+)
+if not exist "%PORTABLE_DIR%\_internal\" (
+    echo [ERROR] Portable _internal directory is missing.
     exit /b 1
 )
 
@@ -229,7 +258,8 @@ REM 写入 README 说明文件，帮助用户理解便携版结构
     echo.
     echo 目录结构：
     echo   maxma-here.exe      - 主程序
-    echo   maxma-server.exe    - 后端服务
+    echo   maxma-server.exe    - 后端服务（PyInstaller bootloader）
+    echo   _internal/          - Python 运行时和依赖
     echo   portable.flag       - 便携模式标记（请勿删除）
     echo   data/               - 用户数据目录
     echo   resources/          - 嵌入式运行时和资源
@@ -248,6 +278,7 @@ echo   Output: %PORTABLE_DIR%
 echo   Layout:
 echo     maxma-here.exe
 echo     maxma-server.exe
+echo     _internal/       ^(Python runtime, extracted once^)
 echo     portable.flag
 echo     data/            ^(user data, auto-populated on first run^)
 echo     resources/       ^(embedded runtime ^& assets^)
@@ -262,6 +293,10 @@ if not exist "%PORTABLE_DIR%\maxma-here.exe" (
 )
 if not exist "%PORTABLE_DIR%\maxma-server.exe" (
     echo [VERIFY FAIL] maxma-server.exe is missing
+    set "VERIFY_OK=0"
+)
+if not exist "%PORTABLE_DIR%\_internal" (
+    echo [VERIFY FAIL] _internal/ directory is missing
     set "VERIFY_OK=0"
 )
 if not exist "%PORTABLE_DIR%\portable.flag" (
