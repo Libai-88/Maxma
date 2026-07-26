@@ -6,20 +6,14 @@ import type {
   HealthResponse,
   ListProvidersResponse,
   ListNewsResponse,
-  ListSkillsResponse,
   ListToolsResponse,
-  ListMacrosResponse,
   ProviderConfig,
   TestConnectionResponse,
   ProviderHealthCheckResponse,
   DiscoverModelsResponse,
   ConstifyResponse,
-  WhitelistEntry,
-  ListWhitelistResponse,
   BlockerEntry,
   ListBlockerResponse,
-  ListEnvVarsResponse,
-  UpdateEnvVarResponse,
   MCPServerInfo,
   MCPServerConfig,
   MCPServerCreateBody,
@@ -27,12 +21,6 @@ import type {
   ListMCPServersResponse,
   MCPServerToolsResponse,
   DiscoveredServer,
-  SkillDetail,
-  SkillCreateBody,
-  SkillUpdateBody,
-  MacroDetail,
-  MacroCreateBody,
-  MacroUpdateBody,
   MetricsSnapshot,
   MetricsHistoryResponse,
   AuditLogStats,
@@ -357,54 +345,6 @@ export const api = {
   listNews: () =>
     request<ListNewsResponse>('/news'),
 
-  // ── Anthropic Skills & Macros ──
-
-  listSkills: () =>
-    request<ListSkillsResponse>('/skills'),
-
-  getSkill: (id: string) =>
-    request<SkillDetail>(`/skills/${encodeURIComponent(id)}`),
-
-  createSkill: (body: SkillCreateBody) =>
-    request<SkillDetail>('/skills', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-
-  updateSkill: (id: string, body: SkillUpdateBody) =>
-    request<{ id: string; status: string }>(`/skills/${encodeURIComponent(id)}`, {
-      method: 'PUT',
-      body: JSON.stringify(body),
-    }),
-
-  deleteSkill: (id: string) =>
-    request<{ id: string; status: string }>(`/skills/${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-    }),
-
-  listMacros: () =>
-    request<ListMacrosResponse>('/macros'),
-
-  getMacro: (id: string) =>
-    request<MacroDetail>(`/macros/${encodeURIComponent(id)}`),
-
-  createMacro: (body: MacroCreateBody) =>
-    request<MacroDetail>('/macros', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-
-  updateMacro: (id: string, body: MacroUpdateBody) =>
-    request<{ id: string; status: string }>(`/macros/${encodeURIComponent(id)}`, {
-      method: 'PUT',
-      body: JSON.stringify(body),
-    }),
-
-  deleteMacro: (id: string) =>
-    request<{ id: string; status: string }>(`/macros/${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-    }),
-
   listTools: () =>
     request<ListToolsResponse>('/tools'),
 
@@ -448,26 +388,6 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  // ── Path Whitelist 路径白名单 ──
-
-  listWhitelist: () =>
-    request<ListWhitelistResponse>('/path-whitelist'),
-
-  addWhitelistEntry: (entry: { path: string; description: string }) =>
-    request<WhitelistEntry>('/path-whitelist', {
-      method: 'POST',
-      body: JSON.stringify(entry),
-    }),
-
-  updateWhitelistEntry: (index: number, entry: { path: string; description: string }) =>
-    request<WhitelistEntry>(`/path-whitelist/${index}`, {
-      method: 'PUT',
-      body: JSON.stringify(entry),
-    }),
-
-  deleteWhitelistEntry: (index: number) =>
-    request<{ status: string }>(`/path-whitelist/${index}`, { method: 'DELETE' }),
-
   // ── 文件选择器 ──
 
   selectFile: (type: 'file' | 'folder') =>
@@ -496,23 +416,6 @@ export const api = {
 
   deleteBlocker: (index: number) =>
     request<{ status: string }>(`/maxma-blocker/${index}`, { method: 'DELETE' }),
-
-  // ── 工具环境变量 ──
-
-  listEnvVars: () =>
-    request<ListEnvVarsResponse>('/env-vars'),
-
-  updateEnvVar: (key: string, value: string) =>
-    request<UpdateEnvVarResponse>('/env-vars', {
-      method: 'PUT',
-      body: JSON.stringify({ key, value }),
-    }),
-
-  batchUpdateEnvVars: (env_vars: { key: string; value: string }[]) =>
-    request<{ status: string; updated: { key: string; masked_value: string }[] }>('/env-vars/batch', {
-      method: 'PUT',
-      body: JSON.stringify({ env_vars }),
-    }),
 
   // ── MCP 服务器管理 ──
 

@@ -62,40 +62,16 @@ const router = createRouter({
       meta: { title: 'MCP 工具' },
     },
     {
-      path: '/skills',
-      name: 'skills',
-      component: () => import('@/views/SkillsView.vue'),
-      meta: { title: '技能' },
-    },
-    {
       path: '/user',
       name: 'user',
       component: () => import('@/views/UserView.vue'),
       meta: { title: '用户' },
     },
     {
-      path: '/path-whitelist',
-      name: 'path-whitelist',
-      component: () => import('@/views/PathWhitelistView.vue'),
-      meta: { title: '路径白名单' },
-    },
-    {
       path: '/maxma-blocker',
       name: 'maxma-blocker',
       component: () => import('@/views/MaxmaBlockerView.vue'),
       meta: { title: 'Maxma 阻止' },
-    },
-    {
-      path: '/env-vars',
-      name: 'env-vars',
-      component: () => import('@/views/EnvVarsView.vue'),
-      meta: { title: '环境变量' },
-    },
-    {
-      path: '/event-hooks',
-      name: 'event-hooks',
-      component: () => import('@/views/HooksView.vue'),
-      meta: { title: '事件钩子' },
     },
     {
       path: '/privacy',

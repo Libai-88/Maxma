@@ -30,12 +30,6 @@
               <span class="popup-item-sub">连接和管理 AI 工具与外部服务</span>
             </div>
           </router-link>
-          <router-link to="/skills" class="popup-item" @click="closeSettingsMenu">
-            <div class="popup-item-content">
-              <span class="popup-item-title">Skills &amp; 宏</span>
-              <span class="popup-item-sub">管理自动化命令与快捷指令</span>
-            </div>
-          </router-link>
           <router-link to="/soul" class="popup-item" @click="closeSettingsMenu">
             <div class="popup-item-content">
               <span class="popup-item-title">人设 SOUL</span>
@@ -63,22 +57,10 @@
         </div>
         <div class="popup-section">
           <div class="popup-section-header">运维 OPERATIONS</div>
-          <router-link to="/path-whitelist" class="popup-item" @click="closeSettingsMenu">
-            <div class="popup-item-content">
-              <span class="popup-item-title">路径白名单</span>
-              <span class="popup-item-sub">限定 AI 可访问的文件目录</span>
-            </div>
-          </router-link>
           <router-link to="/maxma-blocker" class="popup-item" @click="closeSettingsMenu">
             <div class="popup-item-content">
               <span class="popup-item-title">拒止锚</span>
               <span class="popup-item-sub">在敏感目录强制阻断 AI 文件访问</span>
-            </div>
-          </router-link>
-          <router-link to="/env-vars" class="popup-item" @click="closeSettingsMenu">
-            <div class="popup-item-content">
-              <span class="popup-item-title">环境变量</span>
-              <span class="popup-item-sub">管理应用运行所需的配置项</span>
             </div>
           </router-link>
           <router-link to="/privacy" class="popup-item" @click="closeSettingsMenu">

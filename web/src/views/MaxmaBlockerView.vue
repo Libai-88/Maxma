@@ -19,7 +19,7 @@
             <li>🔑 <strong>密钥 / 凭证目录</strong>——<code>.ssh</code>、<code>.aws</code>、GPG 密钥等，避免任何 AI 误读。</li>
             <li>🧪 <strong>正在实验 / 不稳定的项目目录</strong>——避免 AI 误改或误读未完成的代码。</li>
           </ul>
-          <p class="intro-note">📋 与<router-link to="/path-whitelist">路径白名单</router-link>配合使用：白名单授权"可以做什么"，拒止锚划定"绝对不能做什么"。</p>
+          <p class="intro-note">📋 路径白名单授权"可以做什么"，拒止锚划定"绝对不能做什么"。</p>
         </div>
       </details>
 
@@ -32,7 +32,7 @@
             <li>检查时会从目标目录逐级向上查找，一旦发现任何父目录包含 <code>MaxmaBlocker</code> 文件即强制阻断。</li>
             <li>访问被拒止锚阻断时，白名单中即使有对应的放行条目也不会生效。</li>
           </ul>
-          <p class="rule-note">路径白名单及完整权限规则参见设置页的「<router-link to="/path-whitelist">路径白名单</router-link>」页面。</p>
+          <p class="rule-note">路径白名单及完整权限规则参见设置页的「路径白名单」配置。</p>
         </div>
       </details>
 

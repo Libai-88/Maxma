@@ -65,7 +65,7 @@
             <div class="step-title">按需扩展能力</div>
             <div class="step-desc">
               想让 AI 读写文件？配置 <router-link to="/mcp" class="inline-link">MCP 服务器</router-link>。
-              想让 AI 遵循固定流程？创建 <router-link to="/skills" class="inline-link">Skill</router-link>。
+              想让 AI 遵循固定流程？在对话中让 AI 学习并使用 Skill。
               想让 AI 记住你的偏好？启用 <router-link to="/memory" class="inline-link">长期记忆</router-link>。
             </div>
           </div>
