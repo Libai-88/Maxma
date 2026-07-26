@@ -394,3 +394,15 @@ Error: connect ECONNREFUSED 127.0.0.1:8000
 [2m01:51:34[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.vue, /src/components/AppSettingsMenu.vue, /src/components/SessionSidebar.vue, /src/views/ChatView.vue, /src/components/ChatHeader.vue, /src/components/ChatInput.vue, /src/components/ModelSelector.vue, /src/components/ContextUsageBadge.vue, /src/views/ProvidersView.vue, /src/components/WelcomeScreen.vue, /src/components/SessionPermissionModeControl.vue, /src/components/WorkflowCard.vue, /src/components/ChatWindow.vue, /src/components/SubAgentCard.vue, /src/views/MemoryView.vue, /src/views/ActivityView.vue[22m
 [2m01:52:43[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/router/index.ts[22m
 [2m01:52:56[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/AppSettingsMenu.vue[22m
+[2m02:17:40[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatInput.vue[22m
+[2m02:17:46[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatInput.vue[22m
+[2m02:17:53[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatInput.vue[22m
+[2m02:17:59[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatInput.vue[22m
+[2m02:18:10[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatInput.vue[22m
+[2m02:18:19[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatInput.vue[22m
+[2m02:18:25[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatInput.vue[22m
+[2m02:18:45[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatInput.vue[22m
+[2m02:19:00[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatInput.vue[22m
+[2m02:19:32[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatInput.vue, /src/views/ChatView.vue, /src/components/ReferenceChip.vue[22m
+[2m02:19:37[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatInput.vue, /src/views/ChatView.vue, /src/components/ReferenceChip.vue[22m
+[2m02:19:48[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/ChatInput.vue, /src/views/ChatView.vue, /src/components/ReferenceChip.vue[22m
