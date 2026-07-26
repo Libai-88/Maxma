@@ -217,4 +217,50 @@ export type MaxmaEvent =
         risk_level?: "low" | "medium" | "high";
         tool_input?: Record<string, unknown>;
       };
+    }
+  // OMP auto-retry events
+  | {
+      type: "retry_start";
+      payload: {
+        attempt: number;
+        max_attempts: number;
+        delay_ms: number;
+        error_message: string;
+      };
+    }
+  | {
+      type: "retry_end";
+      payload: {
+        success: boolean;
+        attempt: number;
+        final_error?: string;
+      };
+    }
+  // OMP todo reminder
+  | {
+      type: "todo_reminder";
+      payload: {
+        todos: Array<{ content: string; status: string }>;
+        attempt: number;
+        max_attempts: number;
+      };
+    }
+  // OMP IRC multi-agent message
+  | {
+      type: "irc_message";
+      payload: {
+        from: string;
+        to: string;
+        body: string;
+        id: string;
+      };
+    }
+  // OMP notice (info/warning/error)
+  | {
+      type: "notice";
+      payload: {
+        level: "info" | "warning" | "error";
+        message: string;
+        source?: string;
+      };
     };

@@ -543,6 +543,77 @@ export function mapPiEventToMaxma(
     return { type: "done", payload: {} };
   }
 
+  // OMP auto-retry events
+  if (type === "auto_retry_start") {
+    const e = piEvent as any;
+    return {
+      type: "retry_start",
+      payload: {
+        attempt: e.attempt ?? 0,
+        max_attempts: e.maxAttempts ?? 0,
+        delay_ms: e.delayMs ?? 0,
+        error_message: e.errorMessage ?? "",
+      },
+    };
+  }
+
+  if (type === "auto_retry_end") {
+    const e = piEvent as any;
+    return {
+      type: "retry_end",
+      payload: {
+        success: e.success ?? false,
+        attempt: e.attempt ?? 0,
+        final_error: e.finalError,
+      },
+    };
+  }
+
+  // OMP todo reminder
+  if (type === "todo_reminder") {
+    const e = piEvent as any;
+    return {
+      type: "todo_reminder",
+      payload: {
+        todos: (e.todos ?? []).map((t: any) => ({
+          content: t.content ?? "",
+          status: t.status ?? "pending",
+        })),
+        attempt: e.attempt ?? 0,
+        max_attempts: e.maxAttempts ?? 0,
+      },
+    };
+  }
+
+  // OMP IRC multi-agent message
+  if (type === "irc_message") {
+    const e = piEvent as any;
+    const msg = e.message;
+    if (!msg) return null;
+    return {
+      type: "irc_message",
+      payload: {
+        from: msg.from ?? "",
+        to: msg.to ?? "",
+        body: msg.body ?? "",
+        id: msg.id ?? "",
+      },
+    };
+  }
+
+  // OMP notice
+  if (type === "notice") {
+    const e = piEvent as any;
+    return {
+      type: "notice",
+      payload: {
+        level: e.level ?? "info",
+        message: e.message ?? "",
+        source: e.source,
+      },
+    };
+  }
+
   return null;
 }
 
