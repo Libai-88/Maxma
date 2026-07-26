@@ -252,8 +252,8 @@ PYTHON_EMBED_EXE = RUNTIME_DIR / "runtime" / "python" / "python.exe"
 UV_EXE = RUNTIME_DIR / "runtime" / "uv" / "uv.exe"
 
 # 资源层路径
-PLAYWRIGHT_BROWSERS_PATH = RUNTIME_DIR / "assets" / "playwright"
-ONNX_MODEL_PATH = RUNTIME_DIR / "assets" / "models" / "paraphrase-multilingual-MiniLM-L12-v2"
+# PLAYWRIGHT_BROWSERS_PATH - DEPRECATED: Playwright 已移除，oh-my-pi 使用 Puppeteer 按需下载浏览器
+# ONNX_MODEL_PATH - DEPRECATED: 知识库功能已移除，ONNX 嵌入模型不再需要
 
 
 def ensure_data_dirs():
