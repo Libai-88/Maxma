@@ -260,6 +260,7 @@
 import { api } from '@/api'
 import type { ComponentHealth, ProviderConfig, ProviderPreset, TestConnectionResponse } from '@/types'
 import { useProviderStore } from '@/stores/provider'
+import { useChatStore } from '@/stores/chat'
 import { useHealthStore } from '@/stores/health'
 import { diagnosticMessage, retryMessage } from '@/utils/providerDiagnostics'
 import { toErrorMessage } from '@/utils/error'
@@ -330,6 +331,7 @@ function startAddRecommended(presetId: string) {
 const mode = ref<'list' | 'add' | 'edit'>('list')
 // providers 直接来自 store computed，消除本地 ref 与 store 状态不一致
 const providerStore = useProviderStore()
+const chatStore = useChatStore()
 const providers = computed(() => providerStore.allProviders)
 const loading = computed(() => providerStore.loading)
 const healthStore = useHealthStore()
@@ -580,6 +582,8 @@ async function handleSave() {
     mode.value = 'list'
     // 用 refresh() 强制刷新 store，让 ChatInput 等消费方立即感知变化
     await providerStore.refresh()
+    // 同步刷新 chatStore 的模型列表，确保 ModelSelector 立即显示新模型
+    await chatStore.fetchAvailableModels()
   } catch (e: unknown) {
     formError.value = toErrorMessage(e)
   } finally {
@@ -593,6 +597,8 @@ async function deleteProvider(id: string) {
     await api.deleteProvider(id)
     // 用 refresh() 强制刷新 store，让 ChatInput 等消费方感知删除
     await providerStore.refresh()
+    // 同步刷新 chatStore 的模型列表
+    await chatStore.fetchAvailableModels()
   } catch (e: unknown) {
     alert('删除失败: ' + toErrorMessage(e))
   }

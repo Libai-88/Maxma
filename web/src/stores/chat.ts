@@ -179,9 +179,13 @@ export const useChatStore = defineStore('chat', () => {
       const { api } = await import('@/api')
       const data = await api.listProviders()
       const models: ModelInfo[] = []
-	      const providers = Array.isArray(data) ? data : (data as unknown as Record<string, unknown>).providers
+      const providers = Array.isArray(data) ? data : (data as unknown as Record<string, unknown>).providers
       if (Array.isArray(providers)) {
         for (const p of providers) {
+          // 只包含已启用且有 api_key 的 provider（过滤掉默认模板和未配置的 provider）
+          if (!p.enabled || !p.api_key || p.api_key.trim() === '') {
+            continue
+          }
           if (Array.isArray(p.models)) {
             for (const m of p.models) {
               models.push({
