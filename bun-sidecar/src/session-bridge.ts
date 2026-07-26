@@ -43,6 +43,7 @@ interface SessionRecord {
   mcpConfigs?: Record<string, MCPServerConfig>;
   mcpAllowBlock?: Record<string, { allow?: string[]; block?: string[] }>;
   mcpToolNames?: string[];
+  settings?: Settings;
 }
 
 type MaxmaMcpEntry = Record<string, unknown> & { server_id?: string; transport?: string };
@@ -858,6 +859,7 @@ if (import.meta.main) {
           mcpConfigs,
           mcpAllowBlock,
           mcpToolNames,
+          settings: session.settings,
         };
         record.unsubscribe = subscribeSession(sessionId, session, record);
         sessions.set(sessionId, record);
@@ -1101,6 +1103,40 @@ if (import.meta.main) {
         const choice = response === "yes" ? "Approve" : "Deny";
         pending.resolve(choice);
         send(id, { ok: true });
+        return;
+      }
+
+      // ── Settings RPC ──────────────────────────────────────
+
+      if (method === "get_settings") {
+        const targetSessionId: string | undefined = params?.session_id;
+        const record = targetSessionId ? sessions.get(targetSessionId) : undefined;
+        const settings = record?.settings ?? Settings.instance;
+        const paths: string[] = params?.paths ?? [];
+        const result: Record<string, unknown> = {};
+        for (const p of paths) {
+          try { result[p] = settings.get(p as any); } catch { /* skip invalid path */ }
+        }
+        send(id, { settings: result });
+        return;
+      }
+
+      if (method === "set_settings") {
+        const targetSessionId: string | undefined = params?.session_id;
+        const record = targetSessionId ? sessions.get(targetSessionId) : undefined;
+        const settings = record?.settings ?? Settings.instance;
+        const settingPath: string = params?.path;
+        const value: unknown = params?.value;
+        if (!settingPath) {
+          sendError(id, "Missing required parameter: path");
+          return;
+        }
+        try {
+          settings.set(settingPath as any, value as any);
+          send(id, { ok: true });
+        } catch (err) {
+          sendError(id, `Failed to set setting: ${String(err)}`);
+        }
         return;
       }
 

@@ -86,6 +86,12 @@ const router = createRouter({
       meta: { title: '指标' },
     },
     {
+      path: '/settings',
+      name: 'settings',
+      component: () => import('@/views/SettingsView.vue'),
+      meta: { title: '设置' },
+    },
+    {
       path: '/audit-log',
       name: 'audit-log',
       component: () => import('@/views/AuditLogView.vue'),

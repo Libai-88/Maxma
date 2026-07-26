@@ -46,7 +46,9 @@ export type RpcMethodName =
   | "destroy_session"
   | "undo"
   | "get_messages"
-  | "user_response";
+  | "user_response"
+  | "get_settings"
+  | "set_settings";
 
 export interface CreateSessionParams {
   model: string;
@@ -110,6 +112,29 @@ export interface UserResponseParams {
 }
 
 export interface UserResponseResult {
+  ok: true;
+}
+
+// ---------------------------------------------------------------------------
+// Settings RPC — OMP Settings 读写
+// ---------------------------------------------------------------------------
+
+export interface GetSettingsParams {
+  session_id?: string;
+  paths?: string[];
+}
+
+export interface GetSettingsResult {
+  settings: Record<string, unknown>;
+}
+
+export interface SetSettingsParams {
+  session_id?: string;
+  path: string;
+  value: unknown;
+}
+
+export interface SetSettingsResult {
   ok: true;
 }
 

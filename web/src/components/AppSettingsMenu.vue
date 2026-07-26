@@ -24,6 +24,12 @@
               <span class="popup-item-sub">配置 AI 语言模型与接入密钥</span>
             </div>
           </router-link>
+          <router-link to="/settings" class="popup-item" @click="closeSettingsMenu">
+            <div class="popup-item-content">
+              <span class="popup-item-title">设置 SETTINGS</span>
+              <span class="popup-item-sub">压缩、重试、工具审批等核心配置</span>
+            </div>
+          </router-link>
           <router-link to="/mcp" class="popup-item" @click="closeSettingsMenu">
             <div class="popup-item-content">
               <span class="popup-item-title">MCP 服务</span>

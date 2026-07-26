@@ -19,6 +19,7 @@ from api.cors_config import build_cors_origins
 from api.middleware import RateLimitMiddleware, RequestLogMiddleware
 from api.middleware.auth import AuthMiddleware
 from api.routes import chat, sessions, persona, memory, mcp, tools, providers
+from api.routes import settings as settings_router
 from api.routes import activity as activity_router
 from api.routes import audit_log as audit_log_router
 from api.routes import autonomy as autonomy_router
@@ -135,6 +136,7 @@ def create_app() -> FastAPI:
     app.include_router(mcp.router, prefix="/api")
     app.include_router(tools.router, prefix="/api")
     app.include_router(providers.router, prefix="/api")
+    app.include_router(settings_router.router, prefix="/api")
     app.include_router(stickers_router.router, prefix="/api")
     app.include_router(sticker_favorites_router.router, prefix="/api")
     app.include_router(sticker_upload_router.router, prefix="/api")

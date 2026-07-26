@@ -348,6 +348,19 @@ export const api = {
   listTools: () =>
     request<ListToolsResponse>('/tools'),
 
+  // ── OMP Settings ──
+
+  getSettings: (paths?: string[]) => {
+    const qs = paths ? `?paths=${encodeURIComponent(paths.join(','))}` : ''
+    return request<Record<string, unknown>>(`/settings${qs}`)
+  },
+
+  setSetting: (path: string, value: unknown) =>
+    request<{ ok: boolean }>('/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ path, value }),
+    }),
+
   // ── Const 固定会话 ──
 
   constifySession: (sessionId: string, name: string) =>
