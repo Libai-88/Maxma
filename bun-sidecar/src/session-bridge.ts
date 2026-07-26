@@ -563,6 +563,17 @@ export function mapPiEventToMaxma(
     };
   }
 
+  if (type === "auto_compaction_start") {
+    const e = piEvent as any;
+    return {
+      type: "context_compressing",
+      payload: {
+        reason: (e.reason as string) ?? "threshold",
+        action: (e.action as string) ?? "context-full",
+      },
+    };
+  }
+
   if (type === "agent_end") {
     if (guard) guard.done = true;
     return { type: "done", payload: {} };

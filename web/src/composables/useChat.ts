@@ -551,6 +551,25 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     return
   }
 
+  // context_compressing：上下文压缩开始通知
+  if (event.type === 'context_compressing') {
+    if (ch.currentTurn) {
+      const reasonLabels: Record<string, string> = {
+        threshold: '上下文触达阈值',
+        overflow: '上下文溢出',
+        idle: '空闲超时',
+        incomplete: '不完整状态',
+      }
+      ch.currentTurn.events.push({
+        kind: 'system',
+        detail: 'context_compressing',
+        content: `压缩中：${reasonLabels[event.payload.reason] ?? event.payload.reason}（${event.payload.action}）`,
+        timestamp: Date.now(),
+      })
+    }
+    return
+  }
+
   // done 也可能在 currentTurn 已被清理后到达；上下文用量仍需同步到 Badge。
   if (event.type === 'done') {
     const donePayload = event.payload as Record<string, unknown>
@@ -803,6 +822,68 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       ch.errorTraceId = event.payload.trace_id ?? null
       ch.isStreaming = false
       console.warn(`[useChat] error: ${event.payload.code} (${event.payload.category ?? 'unknown'})`, event.payload.message)
+      break
+
+    case 'retry_start':
+      if (turn) {
+        turn.events.push({
+          kind: 'system',
+          detail: 'retry_start',
+          content: `重试第 ${event.payload.attempt}/${event.payload.max_attempts} 次（延迟 ${event.payload.delay_ms}ms）: ${event.payload.error_message}`,
+          timestamp: Date.now(),
+        })
+      }
+      break
+
+    case 'retry_end': {
+      const msg = event.payload.success
+        ? `重试成功（第 ${event.payload.attempt} 次后恢复）`
+        : `重试失败: ${event.payload.final_error ?? '未知错误'}`
+      if (turn) {
+        turn.events.push({
+          kind: 'system',
+          detail: 'retry_end',
+          content: msg,
+          timestamp: Date.now(),
+        })
+      }
+      break
+    }
+
+    case 'todo_reminder':
+      if (turn) {
+        turn.events.push({
+          kind: 'system',
+          detail: 'todo_reminder',
+          content: `待办提醒 (${event.payload.attempt}/${event.payload.max_attempts}): ${event.payload.todos.map(t => `[${t.status}] ${t.content}`).join('; ')}`,
+          timestamp: Date.now(),
+        })
+      }
+      break
+
+    case 'notice': {
+      const prefix = `[${event.payload.level.toUpperCase()}]`
+      const source = event.payload.source ? ` (${event.payload.source})` : ''
+      if (turn) {
+        turn.events.push({
+          kind: 'system',
+          detail: 'notice',
+          content: `${prefix}${source}: ${event.payload.message}`,
+          timestamp: Date.now(),
+        })
+      }
+      break
+    }
+
+    case 'irc_message':
+      if (turn) {
+        turn.events.push({
+          kind: 'system',
+          detail: 'irc_message',
+          content: `[IRC] ${event.payload.from} → ${event.payload.to}: ${event.payload.body}`,
+          timestamp: Date.now(),
+        })
+      }
       break
 
     case 'pong': {

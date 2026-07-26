@@ -44,6 +44,31 @@ export interface ToolUpdateEvent {
   payload: { tool_name: string; partial_result: string }
 }
 
+export interface RetryStartEvent {
+  type: 'retry_start'
+  payload: { attempt: number; max_attempts: number; delay_ms: number; error_message: string }
+}
+
+export interface RetryEndEvent {
+  type: 'retry_end'
+  payload: { success: boolean; attempt: number; final_error?: string }
+}
+
+export interface TodoReminderEvent {
+  type: 'todo_reminder'
+  payload: { todos: Array<{ content: string; status: string }>; attempt: number; max_attempts: number }
+}
+
+export interface NoticeEvent {
+  type: 'notice'
+  payload: { level: 'info' | 'warning' | 'error'; message: string; source?: string }
+}
+
+export interface IrcMessageEvent {
+  type: 'irc_message'
+  payload: { from: string; to: string; body: string; id: string }
+}
+
 export interface AnswerEvent {
   type: 'answer'
   payload: { content: string }
@@ -99,6 +124,11 @@ export interface ContextCompressedEvent {
     context_usage_before?: number
     context_usage_after?: number
   }
+}
+
+export interface ContextCompressingEvent {
+  type: 'context_compressing'
+  payload: { reason: string; action: string }
 }
 
 /** ask_user 交互工具向用户展示的问题和选项 */
@@ -296,16 +326,21 @@ export interface MemoryDoneEvent {
 /**
  * ServerEvent 联合 —— 服务端→浏览器 WS 事件。
  *
- * B4 契约诚实标注：以下成员在 sidecar/后端无发射端，处理分支永不触发，
- * 但前端 UI（PlanCard / workbench 等）已就绪待 bridge 接通。保留以备
- * 接通（部分需 OMP SDK 深改，详见各接口注释）。
- *   - UNIMPLEMENTED（无发射端）: plan_proposed, plan_step_start/end/error,
- *     plan_completed, memory_start, memory_tool_start/end/error, memory_done,
- *     sub_session_created, deferred_subagent_submitted, artifact,
- *     context_usage（独立事件，仅 done 内嵌 + REST GET 达前端）。
- *   - context_compressed: A3 接通 —— sidecar auto_compaction_end→context_compressed。
- *   - 真实通路: thinking_start/end, token, tool_start/end/error, answer,
- *     done, error, ask_user, pong。
+ * 真实通路:
+ *   - 基础对话: thinking_start/end, token, tool_start/end/error, answer, done, error
+ *   - 推理: thinking_start/end
+ *   - 工具进度: tool_update (tool_execution_update)
+ *   - 审批: ask_user, pong
+ *   - 上下文管理: context_compressed, context_compressing
+ *   - 重试: retry_start, retry_end
+ *   - 运行时通知: notice, todo_reminder, irc_message
+ *   - 用量: context_usage (独立事件), done.payload.context_usage (内嵌)
+ *
+ * UNIMPLEMENTED（sidecar 无发射端，需 OMP SDK 深改）:
+ *   - plan_proposed/plan_step_*: OMP plan-mode 在 mode state 而非 subscribe 事件流
+ *   - memory_*/sub_session_created: 需 OMP rpc-mode 重构
+ *   - deferred_subagent_submitted: 需产品决策
+ *   - artifact: OMP SDK 无此概念
  */
 export type ServerEvent =
   | ThinkingStartEvent
@@ -316,12 +351,18 @@ export type ServerEvent =
   | ToolEndEvent
   | ToolErrorEvent
   | ToolUpdateEvent
+  | RetryStartEvent
+  | RetryEndEvent
+  | TodoReminderEvent
+  | NoticeEvent
+  | IrcMessageEvent
   | AnswerEvent
   | DoneEvent
   | ErrorEvent
   | PongEvent
   | ContextUsageEvent
   | ContextCompressedEvent
+  | ContextCompressingEvent
   | ArtifactEvent
   | AskUserEvent
   | PlanProposedEvent

@@ -208,6 +208,13 @@ export type MaxmaEvent =
       };
     }
   | {
+      type: "context_compressing";
+      payload: {
+        reason: string;
+        action: string;
+      };
+    }
+  | {
       type: "ask_user";
       // B3: risk_level / tool_input 声明 optional 但 sidecar 实际无法填充 ——
       // OMP approval wrapper 调 ctx.select(formatApprovalPrompt(tool,args,reason), ...)
