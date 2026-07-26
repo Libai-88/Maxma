@@ -8,6 +8,8 @@
  *   destroy_session({ session_id })                → { ok: true }
  *   undo({ session_id, steps? })                   → { removed }
  *   get_messages({ session_id, limit? })           → { messages, total }
+ *   get_settings({ paths? })                       → { settings }
+ *   set_settings({ path, value })                  → { ok: true }
  *
  * Events are forwarded as JSON-RPC notifications (method: "event").
  */
@@ -255,6 +257,16 @@ export function mcpReloadUnsupportedResponse(): {
 const sessions = new Map<string, SessionRecord>();
 const rl = createInterface({ input: process.stdin });
 let authStoragePromise: ReturnType<typeof discoverAuthStorage> | null = null;
+let settingsInitialized = false;
+
+/** Ensure the global Settings singleton is initialized before use. */
+async function ensureSettings(): Promise<Settings> {
+  if (!settingsInitialized) {
+    await Settings.init();
+    settingsInitialized = true;
+  }
+  return Settings.instance;
+}
 
 // ── Tool approval state ───────────────────────────────────
 // Pending approval promises keyed by interaction_id. Resolved by the
@@ -1182,7 +1194,7 @@ if (import.meta.main) {
       if (method === "get_settings") {
         const targetSessionId: string | undefined = params?.session_id;
         const record = targetSessionId ? sessions.get(targetSessionId) : undefined;
-        const settings = record?.settings ?? Settings.instance;
+        const settings = record?.settings ?? await ensureSettings();
         const paths: string[] = params?.paths ?? [];
         const result: Record<string, unknown> = {};
         for (const p of paths) {
@@ -1195,7 +1207,7 @@ if (import.meta.main) {
       if (method === "set_settings") {
         const targetSessionId: string | undefined = params?.session_id;
         const record = targetSessionId ? sessions.get(targetSessionId) : undefined;
-        const settings = record?.settings ?? Settings.instance;
+        const settings = record?.settings ?? await ensureSettings();
         const settingPath: string = params?.path;
         const value: unknown = params?.value;
         if (!settingPath) {

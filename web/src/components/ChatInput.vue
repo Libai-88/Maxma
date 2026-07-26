@@ -221,7 +221,7 @@ import StickerContextMenu from '@/components/StickerContextMenu.vue'
 import QuotedSelectionCard from '@/components/QuotedSelectionCard.vue'
 import ThinkPathChooser from '@/components/ThinkPathChooser.vue'
 import { computeFloatingInputPosition } from '@/utils/floatingPosition'
-import type { SkillInfo, MacroInfo, ToolInfo } from '@/types'
+import type { ToolInfo } from '@/types'
 import { useStickerSegments, type StickerSegment } from '@/composables/useStickerSegments'
 import { useChatInputInjected } from '@/composables/useChatInput'
 import type { FileRef, FolderRef, ParsedRef, ImageRef } from '@/utils/references'
@@ -493,7 +493,7 @@ function onPaste(e: ClipboardEvent) {
 
 // ── @ / # 自动补全（统一状态机） ──
 
-type AcMode = 'skill' | 'tool' | 'macro' | null
+type AcMode = 'tool' | null
 
 const acMode = ref<AcMode>(null)
 const acFilterText = ref('')
@@ -502,15 +502,11 @@ const acActiveIndex = ref(0)
 const acTriggerPos = ref(-1)
 const acTriggerChar = ref('')
 
-const skills = ref<SkillInfo[]>([])
 const tools = ref<ToolInfo[]>([])
-const macros = ref<MacroInfo[]>([])
 
 /** 当前模式对应的数据源 */
 const acSource = computed(() =>
-  acMode.value === 'skill' ? skills.value
-  : acMode.value === 'tool' ? tools.value
-  : acMode.value === 'macro' ? macros.value
+  acMode.value === 'tool' ? tools.value
   : []
 )
 
@@ -540,15 +536,6 @@ const acFiltered = computed(() => {
   return scored.map(s => s.item)
 })
 
-async function loadSkills() {
-  try {
-    const res = await api.listSkills()
-    skills.value = res.skills
-  } catch (e) {
-    console.error('[ChatInput] 加载技能失败:', e)
-  }
-}
-
 async function loadTools() {
   try {
     const res = await api.listTools()
@@ -558,16 +545,7 @@ async function loadTools() {
   }
 }
 
-async function loadMacros() {
-  try {
-    const res = await api.listMacros()
-    macros.value = res.macros
-  } catch (e) {
-    console.error('[ChatInput] 加载宏失败:', e)
-  }
-}
-
-/** 检测 @ / # 触发 */
+/** 检测 # 触发 (tool autocomplete) */
 watch(text, () => {
   // 用户开始输入时清除连接错误提示
   if (connectionError.value) connectionError.value = null
@@ -577,10 +555,10 @@ watch(text, () => {
   const cursorPos = el.selectionStart
   const textBeforeCursor = val.slice(0, cursorPos)
 
-  // 检查 @、#、!、！，取最近者
+  // 检查 # 触发 tool autocomplete
   let triggerPos = -1
   let triggerChar = ''
-  for (const ch of ['@', '#', '!', '！'] as const) {
+  for (const ch of ['#'] as const) {
     const idx = textBeforeCursor.lastIndexOf(ch)
     if (idx > triggerPos) {
       triggerPos = idx
@@ -588,7 +566,7 @@ watch(text, () => {
     }
   }
 
-  const mode: AcMode = triggerChar === '@' ? 'skill' : triggerChar === '#' ? 'tool' : (triggerChar === '!' || triggerChar === '！') ? 'macro' : null
+  const mode: AcMode = triggerChar === '#' ? 'tool' : null
 
   if (triggerPos !== -1 && mode) {
     const after = textBeforeCursor.slice(triggerPos + 1)
@@ -651,9 +629,7 @@ function confirmItem() {
 
   // 创建对应类型的引用
   const ref: ParsedRef =
-    acMode.value === 'skill' ? { type: 'skill', name: item.name, label: item.name }
-    : acMode.value === 'macro' ? { type: 'macro', name: item.name, label: item.name }
-    : { type: 'tool', name: item.name, label: item.name }
+    { type: 'tool', name: item.name, label: item.name }
   refs.value.push(ref)
 
   acMode.value = null
@@ -701,9 +677,7 @@ function calcCursorPixelPos(textarea: HTMLTextAreaElement, pos: number): { x: nu
 const chatStore = useChatStore()
 const noProvider = computed(() => chatStore.availableModels.length === 0)
 
-onMounted(loadSkills)
 onMounted(loadTools)
-onMounted(loadMacros)
 onMounted(() => {
   document.addEventListener('keydown', onAddFileMenuKeydown)
 })

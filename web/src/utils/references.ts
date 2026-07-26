@@ -31,23 +31,9 @@ export interface WebLinkRef {
   domain: string
 }
 
-/** Anthropic Skill 引用 */
-export interface SkillRef {
-  type: 'skill'
-  label: string
-  name: string
-}
-
 /** 内置工具引用 */
 export interface ToolRef {
   type: 'tool'
-  label: string
-  name: string
-}
-
-/** 宏引用 */
-export interface MacroRef {
-  type: 'macro'
   label: string
   name: string
 }
@@ -69,7 +55,7 @@ export interface SelectionRef {
   preview: string
 }
 
-export type ParsedRef = FileRef | FolderRef | CiteRef | WebLinkRef | SkillRef | ToolRef | MacroRef | ImageRef | SelectionRef
+export type ParsedRef = FileRef | FolderRef | CiteRef | WebLinkRef | ToolRef | ImageRef | SelectionRef
 
 /**
  * 引用 chip 渲染配置，每种 type 自注册 icon 名与 tooltip 函数。
@@ -101,17 +87,9 @@ export const REF_CHIP_CONFIG: Record<string, RefChipConfig> = {
     icon: 'link',
     tooltip: (r: ParsedRef) => (r as WebLinkRef).url,
   },
-  skill: {
-    icon: 'sparkles',
-    tooltip: (r: ParsedRef) => `技能: ${(r as SkillRef).name}`,
-  },
   tool: {
     icon: 'tool',
     tooltip: (r: ParsedRef) => `工具: ${(r as ToolRef).name}`,
-  },
-  macro: {
-    icon: 'sparkles',
-    tooltip: (r: ParsedRef) => `宏: ${(r as MacroRef).name}`,
   },
   image: {
     icon: 'image',
