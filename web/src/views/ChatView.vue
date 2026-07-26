@@ -168,6 +168,7 @@ import { useHealthStore } from '@/stores/health'
 import { useProviderStore } from '@/stores/provider'
 import { useSessionStore } from '@/stores/session'
 import { usePersonaStore } from '@/stores/persona'
+import { useChatStore } from '@/stores/chat'
 import type { ParsedRef, SelectionRef } from '@/utils/references'
 import type { ThinkPathId } from '@/utils/thinkPath'
 import { storeToRefs } from 'pinia'
@@ -221,6 +222,7 @@ const selectedModelName = ref(localStorage.getItem(SELECTED_MODEL_KEY) || '')
 
 const providerStore = useProviderStore()
 const { hasProviders } = storeToRefs(providerStore)
+const chatStore = useChatStore()
 
 // 后端不可用时的加载失败状态（区分"后端不可用"和"真的无 provider"）
 const providerLoadFailed = ref(false)
@@ -249,6 +251,8 @@ onMounted(async () => {
   personaStore.fetchProfile()
   // 通过全局 store 加载 provider 列表（含重试），消除 ChatView/ChatInput 状态不一致
   await loadProvidersWithStatus()
+  // 加载完 providers 后立即获取可用模型列表，填充模型选择器
+  await chatStore.fetchAvailableModels()
 })
 
 function closeMoreMenu() {
