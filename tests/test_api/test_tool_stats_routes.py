@@ -3,10 +3,10 @@
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from api.routes.tools import _BUILTIN_TOOLS, _CUSTOM_TOOLS, router
+from api.routes.tools import _BUILTIN_TOOLS, router
 
 
-def test_list_tools_returns_builtin_plus_custom():
+def test_list_tools_returns_all_builtin():
     app = FastAPI()
     app.include_router(router)
     client = TestClient(app)
@@ -14,11 +14,10 @@ def test_list_tools_returns_builtin_plus_custom():
     assert resp.status_code == 200
     tools = resp.json()
     assert isinstance(tools, list)
-    assert len(tools) == len(_BUILTIN_TOOLS) + len(_CUSTOM_TOOLS)
-    # builtin 工具在前
+    assert len(tools) == len(_BUILTIN_TOOLS)
+    # 全部为 OMP 原生工具
     names = [t["name"] for t in tools]
-    assert names[: len(_BUILTIN_TOOLS)] == [t["name"] for t in _BUILTIN_TOOLS]
-    assert names[len(_BUILTIN_TOOLS):] == [t["name"] for t in _CUSTOM_TOOLS]
+    assert names == [t["name"] for t in _BUILTIN_TOOLS]
 
 
 def test_list_tools_schema_fields():
@@ -30,10 +29,19 @@ def test_list_tools_schema_fields():
         assert isinstance(tool["builtin"], bool)
 
 
+def test_list_tools_all_builtin_flag():
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    tools = client.get("/tools").json()
+    # 所有工具都标记为 builtin
+    assert all(t["builtin"] for t in tools)
+
+
 def test_list_tools_has_known_categories():
     app = FastAPI()
     app.include_router(router)
     client = TestClient(app)
     cats = {t["category"] for t in client.get("/tools").json()}
     # 已知核心类别
-    assert {"file", "code", "web", "memory", "config"} <= cats
+    assert {"file", "code", "web", "memory", "system", "interactive", "skills"} <= cats
