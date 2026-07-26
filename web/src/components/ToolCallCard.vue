@@ -29,6 +29,12 @@
           <RenderMarkdown v-if="inputDisplay.type === 'markdown'" :content="toolCall.input" />
         </div>
 
+        <!-- 进度 section (tool_execution_update 中间结果) -->
+        <div class="tool-section progress-section" v-if="toolCall.partialResult && toolCall.status === 'running'">
+          <div class="tool-section-title">进度</div>
+          <pre class="progress-text">{{ toolCall.partialResult }}</pre>
+        </div>
+
         <!-- 结果 section -->
         <div class="tool-section" v-if="toolCall.output">
           <div class="tool-section-title">结果</div>
@@ -637,5 +643,25 @@ watch(() => props.toolCall.output, () => {
 }
 .tool-section :deep(.markdown-body) > *:last-child {
   margin-bottom: 0;
+}
+
+/* ── Progress section (tool_execution_update) ── */
+.progress-section {
+  position: relative;
+}
+.progress-text {
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--bg-primary);
+  border-radius: 6px;
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 150px;
+  overflow-y: auto;
+  border-left: 3px solid var(--accent);
 }
 </style>

@@ -708,6 +708,14 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       break
     }
 
+    case 'tool_update': {
+      const tc = findRunningTool(turn.events, event.payload.tool_name)
+      if (tc) {
+        tc.partialResult = (tc.partialResult ?? '') + event.payload.partial_result
+      }
+      break
+    }
+
     case 'answer': {
       const lastThink = findLastThinking(turn.events)
       if (lastThink) {

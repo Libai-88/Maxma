@@ -39,6 +39,11 @@ export interface ToolErrorEvent {
   payload: { tool_name: string; error: string; elapsed?: number }
 }
 
+export interface ToolUpdateEvent {
+  type: 'tool_update'
+  payload: { tool_name: string; partial_result: string }
+}
+
 export interface AnswerEvent {
   type: 'answer'
   payload: { content: string }
@@ -310,6 +315,7 @@ export type ServerEvent =
   | ToolStartEvent
   | ToolEndEvent
   | ToolErrorEvent
+  | ToolUpdateEvent
   | AnswerEvent
   | DoneEvent
   | ErrorEvent
@@ -423,6 +429,7 @@ export interface ToolCall {
   name: string
   input: string
   output: string | null
+  partialResult?: string
   elapsed: number | null
   status: 'running' | 'done' | 'error'
   toolData?: Record<string, unknown>

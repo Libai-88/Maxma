@@ -486,6 +486,19 @@ export function mapPiEventToMaxma(
     };
   }
 
+  if (type === "tool_execution_update") {
+    const e = piEvent as any;
+    return {
+      type: "tool_update",
+      payload: {
+        tool_name: e.toolName ?? "",
+        partial_result: typeof e.partialResult === "string"
+          ? e.partialResult
+          : JSON.stringify(e.partialResult ?? ""),
+      },
+    };
+  }
+
   if (type === "tool_execution_end") {
     const e = piEvent as any;
     const isError = e.isError === true;

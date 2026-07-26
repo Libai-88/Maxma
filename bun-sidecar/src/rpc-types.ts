@@ -165,6 +165,13 @@ export type MaxmaEvent =
       type: "tool_error";
       payload: { tool_name: string; error: string; elapsed: number };
     }
+  | {
+      type: "tool_update";
+      payload: {
+        tool_name: string;
+        partial_result: string;
+      };
+    }
   | { type: "answer"; payload: { content: string } }
   | {
       type: "done";
