@@ -120,7 +120,7 @@ def _current_fingerprint() -> str:
 
     # 固定 personas 文件
     active_soul = get_active_persona_file()
-    for name in ("AGENTS.md", active_soul, "USER.md", "memory.yaml"):
+    for name in ("AGENTS.md", "MAXMA.md", active_soul, "USER.md", "memory.yaml"):
         parts.append(f"{name}:{_file_hash(PERSONAS_DIR / name)}")
     # 额外记录 active_persona.yaml 自身，切换人格时触发缓存刷新
     parts.append(f"active:{_file_hash(ACTIVE_PERSONA_PATH)}")
@@ -215,9 +215,14 @@ def _rebuild(fingerprint: str) -> None:
     # 放在前面，动态内容（记忆）放在末尾，
     # 这样 Anthropic/OpenAI prompt caching 可以缓存更长的前缀，
     # 记忆变化时不会导致 skills/macros 等稳定部分的缓存失效。
+    # MAXMA.md — 产品自述（极简，帮助 Agent 了解自身能力与边界）
+    maxma_content = _read_persona("MAXMA.md")
+
     _cached_parts = [
         {"key": "persona", "label": "三层人设",
          "content": persona_prompt},
+        {"key": "maxma_identity", "label": "Maxma 自述",
+         "content": maxma_content},
         {"key": "behavior_rules", "label": "系统行为规则",
          "content": "## 行为规则\n" + agents_md_content},
         {"key": "personality", "label": "性格人设",
@@ -234,6 +239,8 @@ def _rebuild(fingerprint: str) -> None:
     # 与 _cached_parts 保持一致顺序：persona 在最前（静态前缀），记忆放最后
     full_parts = [
         persona_prompt,
+        "",
+        maxma_content,
         "",
         "## 行为规则",
         agents_md_content,
