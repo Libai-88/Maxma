@@ -198,7 +198,31 @@ export async function buildCreateSessionOptions(
   createOptions.autoApprove = !needsApproval;
   if (needsApproval) {
     createOptions.hasUI = true;
-    createOptions.settings = Settings.isolated({ "tools.approvalMode": "always-ask" });
+    // Inherit global settings and only override approval mode, instead of
+    // creating an empty isolated copy that loses all user preferences.
+    const globalPaths = [
+      "compaction.enabled", "compaction.strategy", "compaction.thresholdPercent",
+      "retry.enabled", "retry.maxRetries", "retry.modelFallback",
+      "tools.discoveryMode", "advisor.enabled",
+      "steeringMode", "interruptMode", "followUpMode",
+      "thinkingBudgets.minimal", "thinkingBudgets.low", "thinkingBudgets.medium",
+      "thinkingBudgets.high", "thinkingBudgets.xhigh", "thinkingBudgets.max",
+      "skills.enabled", "bash.enabled", "lsp.enabled", "git.enabled",
+      "edit.mode", "read.summarize.enabled",
+      "todo.enabled", "glob.enabled", "grep.enabled", "browser.enabled",
+      "github.enabled", "checkpoint.enabled", "inspect_image.enabled",
+    ];
+    const globalOverrides: Record<string, unknown> = {};
+    try {
+      const global = await ensureSettings();
+      for (const p of globalPaths) {
+        try { const v = global.get(p as any); if (v !== undefined) globalOverrides[p] = v; } catch { /* skip */ }
+      }
+    } catch { /* global not available */ }
+    createOptions.settings = Settings.isolated({
+      ...globalOverrides,
+      "tools.approvalMode": "always-ask",
+    });
   }
 
   const customTools = registerCustomTools();
