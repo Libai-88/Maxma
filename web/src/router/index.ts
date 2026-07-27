@@ -28,10 +28,6 @@ const router = createRouter({
       meta: { title: '动态' },
     },
     {
-      path: '/playground',
-      redirect: '/news',
-    },
-    {
       path: '/appearance',
       name: 'appearance',
       component: () => import('@/views/AppearanceView.vue'),
