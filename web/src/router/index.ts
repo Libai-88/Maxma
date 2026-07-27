@@ -94,6 +94,12 @@ const router = createRouter({
       meta: { title: '审计日志' },
     },
     {
+      path: '/capabilities',
+      name: 'capabilities',
+      component: () => import('@/views/CapabilitiesView.vue'),
+      meta: { title: '能力仪表盘' },
+    },
+    {
       path: '/activity',
       name: 'activity',
       component: () => import('@/views/ActivityView.vue'),

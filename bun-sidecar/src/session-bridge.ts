@@ -1303,6 +1303,55 @@ if (import.meta.main) {
         return;
       }
 
+      // ── Capabilities RPC ──────────────────────────────────────
+
+      if (method === "get_discovered_mcp") {
+        // Return MCP server info from all active sessions
+        const discovered: Array<{ name: string; transport: string; tool_count: number; status: string }> = [];
+        for (const [sid, record] of sessions) {
+          if (record.mcpConfigs) {
+            for (const [name, cfg] of Object.entries(record.mcpConfigs)) {
+              discovered.push({
+                name,
+                transport: (cfg as any).type ?? "unknown",
+                tool_count: record.mcpToolNames?.length ?? 0,
+                status: "connected",
+              });
+            }
+          }
+        }
+        send(id, discovered);
+        return;
+      }
+
+      if (method === "get_discovered_skills") {
+        try {
+          const { discoverSkills } = await import("@oh-my-pi/pi-coding-agent");
+          const result = await discoverSkills();
+          const skills = result.skills ?? [];
+          // Return minimal serializable info
+          send(id, skills.map((s: any) => ({
+            name: s.name ?? "unknown",
+            description: s.description ?? "",
+            source: s.source ?? "auto",
+          })));
+        } catch {
+          send(id, []);
+        }
+        return;
+      }
+
+      if (method === "get_discovered_extensions") {
+        try {
+          const { discoverExtensions } = await import("@oh-my-pi/pi-coding-agent");
+          const result = await discoverExtensions();
+          send(id, { loaded: result.loaded ?? 0, extensions: [] });
+        } catch {
+          send(id, { loaded: 0, extensions: [] });
+        }
+        return;
+      }
+
       sendError(id, `Unknown method: ${method}`);
     } catch (err) {
       sendError(id, String(err));

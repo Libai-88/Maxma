@@ -18,6 +18,12 @@
         <div class="popup-header">设置</div>
         <div class="popup-section">
           <div class="popup-section-header">扩展 EXTENSIONS</div>
+          <router-link to="/capabilities" class="popup-item" @click="closeSettingsMenu">
+            <div class="popup-item-content">
+              <span class="popup-item-title">能力仪表盘 CAPABILITIES</span>
+              <span class="popup-item-sub">OMP 全部能力模块概览与运行状态</span>
+            </div>
+          </router-link>
           <router-link to="/providers" class="popup-item" @click="closeSettingsMenu">
             <div class="popup-item-content">
               <span class="popup-item-title">模型 MODELS</span>

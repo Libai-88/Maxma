@@ -22,6 +22,7 @@ from api.routes import chat, sessions, persona, memory, mcp, tools, providers
 from api.routes import settings as settings_router
 from api.routes import activity as activity_router
 from api.routes import balance as balance_router
+from api.routes import capabilities as cmp_capabilities_router
 from api.routes import diagnostics as diagnostics_router
 from api.routes import files as files_router
 from api.routes import maxma_blocker as maxma_blocker_router
@@ -147,6 +148,7 @@ def create_app() -> FastAPI:
     app.include_router(session_compress_router.router, prefix="/api")
     app.include_router(transcripts_router.router, prefix="/api")
     app.include_router(upload_router.router, prefix="/api")
+    app.include_router(cmp_capabilities_router.router, prefix="/api")
 
     # Auth token endpoint — desktop app fetches token at runtime
     @app.get("/api/auth/token")

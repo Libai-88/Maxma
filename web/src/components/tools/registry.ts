@@ -15,6 +15,9 @@ const FileEditBubble = lazyBubble(() => import('./FileEditBubble.vue'))
 const ImageBubble = lazyBubble(() => import('./ImageBubble.vue'))
 const AskUserBubble = lazyBubble(() => import('./AskUserBubble.vue'))
 const MemoryBubble = lazyBubble(() => import('./MemoryBubble.vue'))
+const BrowserBubble = lazyBubble(() => import('./BrowserBubble.vue'))
+const SearchBubble = lazyBubble(() => import('./SearchBubble.vue'))
+const TodoBubble = lazyBubble(() => import('./TodoBubble.vue'))
 
 /**
  * 工具注册表：OMP 原生工具名 → 专属气泡组件
@@ -46,11 +49,19 @@ const registry: Record<string, Component> = {
   'retain': MemoryBubble,
   'recall': MemoryBubble,
   'reflect': MemoryBubble,
+
+  /* OMP 原生工具 — browser (网页浏览) */
+  'browser': BrowserBubble,
+
+  /* OMP 原生工具 — web_search (网络搜索) */
+  'web_search': SearchBubble,
+
+  /* OMP 原生工具 — todo (待办管理) */
+  'todo': TodoBubble,
 }
 
 export function getBubbleComponent(name: string): Component | null {
-  if (registry[name]) return registry[name]
-  return null
+  return registry[name] ?? null
 }
 
 export function getRegisteredTools(): string[] {

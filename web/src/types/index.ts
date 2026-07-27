@@ -690,6 +690,35 @@ export interface UpdateEnvVarResponse {
   masked_value: string
 }
 
+// === Capabilities 能力仪表盘 ===
+
+export interface CapabilitiesResponse {
+  settings: Record<string, unknown>
+  tools: ToolItem[]
+  tool_categories: Record<string, ToolItem[]>
+  mcp_servers: any[]
+  discovered_mcp?: any[]
+  providers: ProviderItem[]
+  env: Record<string, string>
+  system: Record<string, number | boolean>
+}
+
+export interface ToolItem {
+  name: string
+  label: string
+  description: string
+  category: string
+  builtin: boolean
+}
+
+export interface ProviderItem {
+  id: string
+  name: string
+  provider: string
+  model: string
+  enabled: boolean
+}
+
 // === Re-export 已按域拆分的类型（保持向后兼容） ===
 // 以下类型的定义已迁移到独立的域文件，此处通过 re-export 保证
 // 现有 `import { X } from '@/types'` 用法不破坏。

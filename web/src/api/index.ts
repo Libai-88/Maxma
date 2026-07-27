@@ -30,11 +30,11 @@ import type {
   ActivityClearResponse,
   DeferredRun,
   ListDeferredRunsResponse,
-  PermissionMode,
-  SessionPermissionModeResponse,
-  ListWorkflowRunsResponse,
   WorkflowDefinitionsResponse,
   WorkflowRun,
+  PermissionMode,
+  SessionPermissionModeResponse,
+  CapabilitiesResponse,
 } from '@/types'
 import type {
   CreatePersonaBody,
@@ -451,7 +451,7 @@ export const api = {
     }),
 
   deleteMcpServer: (serverId: string) =>
-    request<{ status: string; removed: string; servers: MCPServerInfo[]; tool_count: number }>(`/mcp/servers/${encodeURIComponent(serverId)}`, {
+    request<MCPServerConfig & { status: string; servers: MCPServerInfo[]; tool_count: number }>(`/mcp/servers/${encodeURIComponent(serverId)}`, {
       method: 'DELETE',
     }),
 
@@ -569,6 +569,12 @@ export const api = {
   /** 清空所有活动记录 */
   clearActivity: () =>
     request<ActivityClearResponse>('/activity', { method: 'DELETE' }),
+
+  // ── Capabilities 能力仪表盘 ──
+
+  /** 获取能力仪表盘数据 */
+  getCapabilities: () =>
+    request<CapabilitiesResponse>('/capabilities'),
 }
 
 export { request }

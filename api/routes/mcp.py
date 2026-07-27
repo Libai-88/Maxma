@@ -496,12 +496,21 @@ async def delete_mcp_server(server_id: str, request: Request):
 
 
 @router.get("/mcp/discovered")
-async def get_discovered_mcp_servers():
+async def get_discovered_mcp_servers(request: Request):
     """返回 OMP 自动发现的 MCP 服务器列表。"""
-    return [
-        {"id": "amap", "name": "高德地图", "status": "connected", "tools": ["nearby_search", "geocode", "route_plan"], "source": "auto"},
-        {"id": "filesystem", "name": "文件系统", "status": "connected", "tools": ["read", "write"], "source": "auto"},
-    ]
+    try:
+        sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
+        if sidecar_mgr is None:
+            return []
+        await sidecar_mgr.start()
+        client = sidecar_mgr.client
+        if client is None:
+            return []
+        result = await client.call("get_discovered_mcp", {})
+        return result if isinstance(result, list) else []
+    except Exception as e:
+        logger.warning("[mcp] Failed to fetch discovered MCP: %s", e)
+        return []
 
 
 @router.post("/mcp/reload")
