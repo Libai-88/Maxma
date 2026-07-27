@@ -32,6 +32,20 @@ LEGACY_SESSION_MAP_DB = Path.home() / ".maxma" / "session_map.db"
 # 保存的最大对话轮次数
 MAX_TURNS = 20
 
+# 模块级全局连接（懒初始化，复用避免建连开销）
+_global_map: SessionMap | None = None
+_global_map_lock = threading.Lock()
+
+def get_session_map() -> SessionMap:
+    """返回全局复用 SessionMap 实例（懒初始化 + 线程安全）。"""
+    global _global_map
+    if _global_map is not None:
+        return _global_map
+    with _global_map_lock:
+        if _global_map is None:
+            _global_map = SessionMap()
+    return _global_map
+
 
 def _migrate_legacy_database() -> None:
     """Copy the legacy session map into the frozen app-data directory once."""

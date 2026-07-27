@@ -17,7 +17,7 @@ from api.activity_hub import record as record_activity
 from api.routes.providers import _decrypt_api_key, _find_provider, _load_providers
 from api.const_session_store import save_const_session
 from api.middleware.rate_limit import get_ws_rate_limiter
-from api.pi_bridge.session_adapter import SessionMap
+from api.pi_bridge.session_adapter import get_session_map
 from api.session_manager import SessionState
 from api.ws_protocol import WsEventType, WsMessageType, CLIENT_MESSAGE_TYPES
 from api.yaml_store import yaml_file_lock
@@ -118,7 +118,7 @@ async def _get_messages_from_sidecar(
         client = await _get_sidecar_client(sidecar_mgr)
     except RuntimeError:
         return []
-    with SessionMap() as sm:
+    sm = get_session_map()
         sidecar_sid = sm.get_sidecar_id(session.session_id)
     if not sidecar_sid:
         sidecar_sid = getattr(session, "_sidecar_session_id", None)
@@ -160,7 +160,7 @@ async def _stream_turn_sidecar(
     session._sidecar_mgr = mgr
 
     # 2. Look up or create sidecar session
-    with SessionMap() as sm:
+    sm = get_session_map()
         sidecar_sid = sm.get_sidecar_id(session.session_id)
     if not sidecar_sid:
         sidecar_sid = getattr(session, "_sidecar_session_id", None)
@@ -180,14 +180,14 @@ async def _stream_turn_sidecar(
                 sidecar_sid[:8],
             )
             sidecar_sid = None
-            with SessionMap() as sm:
+            sm = get_session_map()
                 sm.remove(session.session_id)
 
     if not sidecar_sid:
         # Build system prompt with recent past turns for continuity
         _sidecar_system_prompt = system_prompt
         try:
-            with SessionMap() as sm:
+            sm = get_session_map()
                 _past_turns = sm.get_recent_turns(session.session_id, count=5)
             if _past_turns:
                 _history_lines = []
@@ -232,7 +232,7 @@ async def _stream_turn_sidecar(
         )
         sidecar_sid = result["session_id"]
         session._sidecar_session_id = sidecar_sid
-        with SessionMap() as sm:
+        sm = get_session_map()
             sm.set_mapping(session.session_id, sidecar_sid)
         logger.info(
             "[sidecar] Created session %s for Maxma session %s",
@@ -582,7 +582,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             session.message_count += 2
 
             try:
-                with SessionMap() as sm:
+                sm = get_session_map()
                     sm.append_turn(session.session_id, um, final_answer)
             except Exception:
                 logger.debug(

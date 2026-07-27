@@ -11,7 +11,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Request
 
 from api.pi_bridge.rpc_client import JsonRpcError
-from api.pi_bridge.session_adapter import SessionMap
+from api.pi_bridge.session_adapter import get_session_map
 from api.activity_hub import record as record_activity
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -34,7 +34,7 @@ async def _try_sidecar_compact(session_id: str, request: Request) -> dict:
         if client is None:
             return {"compressed": False, "method": "unavailable", "detail": "Sidecar 客户端不可用"}
 
-        with SessionMap() as sm:
+        sm = get_session_map()
             sidecar_sid = sm.get_sidecar_id(session_id)
         if not sidecar_sid:
             # 无映射 → 该会话未通过 sidecar 处理过
