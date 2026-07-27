@@ -229,7 +229,7 @@ describe('workspace shell', () => {
     expect(settingsPopup).toBeTruthy()
     expect(settingsPopup?.querySelector('a[href="/providers"]')).toBeTruthy()
     expect(settingsPopup?.querySelector('a[href="/mcp"]')).toBeTruthy()
-    expect(settingsPopup?.querySelector('a[href="/skills"]')).toBeTruthy()
+    expect(settingsPopup?.querySelector('a[href="/settings"]')).toBeTruthy()
     expect(settingsPopup?.querySelector('a[href="/soul"]')).toBeTruthy()
     expect(settingsPopup?.querySelector('a[href="/user"]')).toBeTruthy()
     expect(settingsPopup?.querySelector('a[href="/memory"]')).toBeTruthy()

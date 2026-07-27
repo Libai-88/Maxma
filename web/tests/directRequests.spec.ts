@@ -59,10 +59,10 @@ describe('runtime-safe direct API consumers', () => {
   })
 
   it('keeps SkillsView free of direct unauthenticated transport calls', () => {
-    const source = readFileSync(resolve(process.cwd(), 'src/views/SkillsView.vue'), 'utf8')
+    const source = readFileSync(resolve(process.cwd(), 'src/views/SettingsView.vue'), 'utf8')
 
     expect(source).toContain("import { api } from '@/api'")
-    expect(source).toContain('api.request(')
+    expect(source).toContain('api.getSettings(')
     expect(source).not.toContain('getToken')
     expect(source).not.toContain('getApiBase')
     expect(source).not.toContain('tauriFetch')
