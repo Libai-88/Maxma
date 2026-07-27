@@ -229,9 +229,3 @@ async def delete_memory(memory_id: str, request: Request) -> dict[str, str]:
     """
     path = _memory_path(request)
     return await asyncio.to_thread(_delete_memory_sync, path, memory_id)
-
-
-@router.post("/memories/search")
-async def search_memories_across_layers(request: Request):
-    """跨层向量检索记忆（不可用）。"""
-    raise HTTPException(status_code=503, detail="记忆功能不可用（memory/ 包已移除）")
