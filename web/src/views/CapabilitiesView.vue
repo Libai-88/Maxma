@@ -149,7 +149,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { api } from '@/api'
-import type { CapabilitiesResponse, ToolItem, ProviderItem } from '@/types'
+import type { ToolItem, ProviderItem } from '@/types'
 
 const loading = ref(true)
 const error = ref('')
@@ -230,7 +230,7 @@ onMounted(load)
 }
 
 .header { margin-bottom: 24px; }
-.header h2 { font-size: 1.3em; font-weight: 600; margin: 0; }
+.header h2 { font-size: var(--fs-display-lg); font-weight: 600; font-family: var(--font-display); letter-spacing: -0.01em; margin: 0; }
 .header-sub { font-size: 0.82em; color: var(--text-tertiary); margin: 4px 0 0; }
 
 .section {

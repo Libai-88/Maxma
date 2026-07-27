@@ -31,6 +31,7 @@ import type {
   DeferredRun,
   ListDeferredRunsResponse,
   WorkflowDefinitionsResponse,
+  ListWorkflowRunsResponse,
   WorkflowRun,
   PermissionMode,
   SessionPermissionModeResponse,

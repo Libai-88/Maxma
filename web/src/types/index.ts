@@ -703,6 +703,13 @@ export interface CapabilitiesResponse {
   system: Record<string, number | boolean>
   memory?: { total: number; categories: Record<string, number>; avg_confidence: number }
   plugins?: any[]
+  config_sources?: {
+    sources: Array<{ name: string; path: string; priority: number; exists: boolean; scope: string; description: string }>
+    active_count: number
+    total_count: number
+    conflicts: Array<{ scope: string; sources: string[]; severity: string; note: string }>
+    resolution_order: string[]
+  }
 }
 
 export interface ToolItem {

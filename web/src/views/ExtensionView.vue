@@ -65,9 +65,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    // Load discovered skills
-    const res = await api.request<SkillInfo[] | { loaded: number; extensions: unknown[] }>('/capabilities')
-    // Skills aren't directly in capabilities yet; try memory route
+    // Load capabilities (skills aren't directly exposed yet; check sidecar status)
     const capsRes = await api.request<any>('/capabilities')
     skills.value = []
     hasSkills.value = false
@@ -85,7 +83,7 @@ onMounted(load)
 <style scoped>
 .ext-view { max-width: 720px; margin: 0 auto; padding: 24px 16px 80px; }
 .header { margin-bottom: 16px; }
-.header h2 { font-size: 1.3em; font-weight: 600; margin: 0; }
+.header h2 { font-size: var(--fs-display-lg); font-weight: 600; font-family: var(--font-display); letter-spacing: -0.01em; margin: 0; }
 .header-sub { font-size: 0.82em; color: var(--text-tertiary); margin: 4px 0 0; }
 .loading, .empty { text-align: center; padding: 40px; color: var(--text-tertiary); }
 .empty-icon { font-size: 2em; margin-bottom: 8px; }
