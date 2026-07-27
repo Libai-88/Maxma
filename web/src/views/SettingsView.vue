@@ -237,12 +237,13 @@ async function loadSettings() {
 }
 
 async function set(path: string, value: unknown) {
+  const prev = settings.value[path]
   settings.value[path] = value
   try {
     await api.setSetting(path, value)
   } catch (e) {
     console.error(`Failed to set ${path}:`, e)
-    await loadSettings() // reload on failure
+    settings.value[path] = prev // rollback without network roundtrip
   }
 }
 

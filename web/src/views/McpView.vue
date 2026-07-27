@@ -1541,7 +1541,52 @@ select.input {
 }
 
 .server-card {
+  background: var(--bg-card, #fff);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 8px 0;
   opacity: 0.85;
+  transition: opacity 0.15s;
+}
+.server-card:hover {
+  opacity: 1;
+}
+.server-card .server-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.server-card .server-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary, #333);
+}
+.server-card .server-status {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 100px;
+}
+.server-card .server-status.ok {
+  background: color-mix(in srgb, var(--status-ok, #4caf50) 15%, transparent);
+  color: var(--status-ok, #4caf50);
+}
+.server-card .server-status.err {
+  background: color-mix(in srgb, var(--status-error, #f44336) 15%, transparent);
+  color: var(--status-error, #f44336);
+}
+.server-card .server-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.server-card .server-tools .tool-tag {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-secondary, #f5f5f5);
+  color: var(--text-secondary, #666);
 }
 
 .auto-tag {
