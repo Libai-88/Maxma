@@ -179,7 +179,7 @@
 
         <div class="form-section">
           <label class="form-label">API Key <span class="required-mark">*</span></label>
-          <input v-model="form.api_key" class="input mono" type="password" autocomplete="current-password" :placeholder="isEditing ? '留空则不修改' : 'sk-...'" />
+          <input v-model="form.api_key" class="input mono" :class="{ 'input-error': fieldErrors.api_key }" type="password" autocomplete="current-password" :placeholder="isEditing ? '留空则不修改' : 'sk-...'" />
         </div>
 
         <div class="form-section">
@@ -519,6 +519,12 @@ async function handleSave() {
     if (!form.value.label.trim()) {
       fieldErrors.label = true
       formError.value = '显示名称不能为空'
+      saving.value = false
+      return
+    }
+    if (!isEditing && !form.value.api_key.trim()) {
+      fieldErrors.api_key = true
+      formError.value = 'API Key 不能为空'
       saving.value = false
       return
     }

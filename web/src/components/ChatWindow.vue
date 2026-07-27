@@ -81,6 +81,7 @@
                     :risk-level="ev.interaction?.risk_level || 'medium'"
                     :tool-input="ev.interaction?.tool_input"
                     :interaction-id="ev.interaction?.interactionId || ''"
+                    :responded="ev.interaction?.responded ?? null"
                     @action="forwardAction"
                   />
                   <!-- 普通工具调用或审批后工具执行结果 -->

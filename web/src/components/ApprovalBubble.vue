@@ -36,7 +36,6 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
 import Icon from './Icon.vue'
 
 const props = defineProps<{
@@ -45,15 +44,15 @@ const props = defineProps<{
   riskLevel: string
   toolInput?: Record<string, unknown>
   interactionId: string
+  /** 审批响应状态，来自父级持久化数据（非 local ref），
+   *  防止 DynamicScroller 销毁重建后丢失。 */
+  responded?: 'yes' | 'no' | null
 }>()
 
 // 与 AskUserBubble 一致，通过 action 事件把 user_response 传递给父组件
 const emit = defineEmits<{
   (e: 'action', p: { action: string; data?: unknown }): void
 }>()
-
-// 本地响应状态：'yes' / 'no' / null（未响应）
-const responded = ref<string | null>(null)
 
 const riskLabels: Record<string, string> = {
   high: '高风险',
@@ -70,9 +69,7 @@ const riskLabel = riskLabels[props.riskLevel] || '未知'
 const riskIcon = riskIcons[props.riskLevel] || 'info'
 
 function onApprove() {
-  if (responded.value) return
-  responded.value = 'yes'
-  // 复用现有 user_response action 通道，与 AskUserBubble 保持一致
+  if (props.responded) return
   emit('action', {
     action: 'user_response',
     data: {
@@ -80,17 +77,25 @@ function onApprove() {
       response: 'yes',
     },
   })
+  // 父级收到 action 后更新 interaction.responded，见 ChatWindow.forwardAction
+  emit('action', {
+    action: 'set_responded',
+    data: { interactionId: props.interactionId, responded: 'yes' as const },
+  })
 }
 
 function onReject() {
-  if (responded.value) return
-  responded.value = 'no'
+  if (props.responded) return
   emit('action', {
     action: 'user_response',
     data: {
       interactionId: props.interactionId,
       response: 'no',
     },
+  })
+  emit('action', {
+    action: 'set_responded',
+    data: { interactionId: props.interactionId, responded: 'no' as const },
   })
 }
 </script>

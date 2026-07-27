@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
+  "main": "src/session-bridge.ts",
+  "scripts": {
+    "start": "bun run src/session-bridge.ts"
+  },
   "dependencies": {
     "@oh-my-pi/pi-agent-core": "16.5.2",
     "@oh-my-pi/pi-ai": "16.5.2",

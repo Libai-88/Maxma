@@ -466,6 +466,9 @@ export interface AskUserInteraction {
   risk_level?: 'low' | 'medium' | 'high'
   /** approval 模式：工具调用参数 */
   tool_input?: Record<string, unknown>
+  /** 用户审批响应，持久化在交互数据中（而非组件 local ref）。
+   *  防止 DynamicScroller 销毁重建后状态丢失。 */
+  responded?: 'yes' | 'no' | null
 }
 
 export interface ToolCall {

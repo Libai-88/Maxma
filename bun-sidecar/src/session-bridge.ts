@@ -280,6 +280,9 @@ const pendingApprovals = new Map<string, PendingApproval>();
 
 const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000; // 5 min → auto-deny
 
+/** Track tool elapsed: toolCallId → start timestamp (ms) */
+const _toolStartTimestamps = new Map<string, number>();
+
 async function getSharedAuthStorage() {
   if (!authStoragePromise) authStoragePromise = discoverAuthStorage();
   return authStoragePromise;
@@ -477,6 +480,8 @@ export function mapPiEventToMaxma(
 
   if (type === "tool_execution_start") {
     const e = piEvent as any;
+    const toolCallId = e.toolCallId as string | undefined;
+    if (toolCallId) _toolStartTimestamps.set(toolCallId, Date.now());
     return {
       type: "tool_start",
       payload: {
@@ -501,6 +506,10 @@ export function mapPiEventToMaxma(
 
   if (type === "tool_execution_end") {
     const e = piEvent as any;
+    const toolCallId = e.toolCallId as string | undefined;
+    const startMs = toolCallId ? _toolStartTimestamps.get(toolCallId) : undefined;
+    if (toolCallId) _toolStartTimestamps.delete(toolCallId);
+    const elapsed = startMs !== undefined ? Math.round((Date.now() - startMs) / 1000) : 0;
     const isError = e.isError === true;
     if (isError) {
       return {
@@ -508,7 +517,7 @@ export function mapPiEventToMaxma(
         payload: {
           tool_name: e.toolName ?? "",
           error: JSON.stringify(e.result ?? {}),
-          elapsed: 0,
+          elapsed,
         },
       };
     }
@@ -517,7 +526,7 @@ export function mapPiEventToMaxma(
       payload: {
         tool_name: e.toolName ?? "",
         output: JSON.stringify(e.result ?? {}),
-        elapsed: 0,
+        elapsed,
       },
     };
   }
@@ -783,10 +792,13 @@ function createApprovalUiContext(sessionId: string): ExtensionUIContext {
     ): Promise<string | undefined> {
       return new Promise<string | undefined>((resolve, reject) => {
         const interactionId = randomUUID();
-        // The approval wrapper calls select() BEFORE tool_execution_start fires,
-        // so currentToolContext is not populated yet. Parse the tool name from
-        // the formatted title ("Allow tool: <name>\n…").
-        const toolName = title.split("\n")[0]?.replace(/^Allow tool:\s*/, "") ?? "unknown";
+        // The approval wrapper calls select() BEFORE tool_execution_start fires.
+        // Parse the tool name from the formatted title ("Allow tool: <name>\n…").
+        // Prefix check is more robust than regex — OMP controls the prefix.
+        const titleLine = title.split("\n")[0] ?? "";
+        const toolName = titleLine.startsWith("Allow tool: ")
+          ? titleLine.slice("Allow tool: ".length)
+          : titleLine;
 
         const timer = setTimeout(() => {
           if (pendingApprovals.has(interactionId)) {

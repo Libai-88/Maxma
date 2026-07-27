@@ -409,6 +409,19 @@ function handleToolAction(payload: { action: string; data?: unknown }) {
   if (payload.action === 'user_response') {
     const d = payload.data as { interactionId: string; response: string | string[] }
     sendUserResponse(d.interactionId, d.response)
+  } else if (payload.action === 'set_responded') {
+    const d = payload.data as { interactionId: string; responded: 'yes' | 'no' }
+    // 持久化审批响应到 interaction 数据中（跨 DynamicScroller 生命周期）
+    for (const ch of chatStore.channels.values()) {
+      for (const turn of [ch.currentTurn, ...ch.turns].filter(Boolean)) {
+        if (!turn) continue
+        for (const ev of turn.events) {
+          if (ev.kind === 'tool' && ev.interaction?.interactionId === d.interactionId) {
+            ev.interaction.responded = d.responded
+          }
+        }
+      }
+    }
   } else if (payload.action === 'undo') {
     handleUndo()
   }

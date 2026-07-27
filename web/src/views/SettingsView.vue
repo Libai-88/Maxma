@@ -176,6 +176,21 @@
             @change="set(`thinkingBudgets.${level}`, Number(($event.target as HTMLInputElement).value))" />
         </div>
       </div>
+
+      <!-- Skills -->
+      <div class="section">
+        <h3>技能包</h3>
+        <p class="section-desc">控制 OMP 技能包的启用状态。</p>
+        <div class="setting-row">
+          <div class="setting-info">
+            <div class="setting-label">启用技能包</div>
+            <div class="setting-desc">加载 .agents/skills/ 和 .claude/skills/ 中的技能。</div>
+          </div>
+          <button class="toggle-btn" :class="{ on: settings['skills.enabled'] }" @click="toggle('skills.enabled')">
+            {{ settings['skills.enabled'] ? '开启' : '关闭' }}
+          </button>
+        </div>
+      </div>
     </template>
   </div>
 </template>
