@@ -126,9 +126,12 @@ export interface ContextCompressedEvent {
   }
 }
 
+export type CompactionReason = 'threshold' | 'overflow' | 'idle' | 'incomplete'
+export type CompactionAction = 'context-full' | 'handoff' | 'shake' | 'snapcompact'
+
 export interface ContextCompressingEvent {
   type: 'context_compressing'
-  payload: { reason: string; action: string }
+  payload: { reason: CompactionReason; action: CompactionAction }
 }
 
 /** ask_user 交互工具向用户展示的问题和选项 */

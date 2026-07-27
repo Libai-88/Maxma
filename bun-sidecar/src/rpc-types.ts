@@ -210,8 +210,8 @@ export type MaxmaEvent =
   | {
       type: "context_compressing";
       payload: {
-        reason: string;
-        action: string;
+        reason: "threshold" | "overflow" | "idle" | "incomplete";
+        action: "context-full" | "handoff" | "shake" | "snapcompact";
       };
     }
   | {

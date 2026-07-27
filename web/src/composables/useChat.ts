@@ -1,5 +1,5 @@
 import { computed, watch, onUnmounted, ref, type Ref } from 'vue'
-import type { ClientMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, AskUserEvent, ArtifactEvent, PlanProposedEvent, PlanStepStartEvent, PlanStepEndEvent, PlanStepErrorEvent, PlanCompletedEvent, DeferredSubagentSubmittedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent } from '@/types'
+import type { ClientMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, CompactionReason, AskUserEvent, ArtifactEvent, PlanProposedEvent, PlanStepStartEvent, PlanStepEndEvent, PlanStepErrorEvent, PlanCompletedEvent, DeferredSubagentSubmittedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent } from '@/types'
 import type { ThinkPathId } from '@/utils/thinkPath'
 import { normalizeContextUsage, useChatStore, TURNS_KEY_PREFIX } from '@/stores/chat'
 import { useSessionStore } from '@/stores/session'
@@ -582,7 +582,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
   // context_compressing：上下文压缩开始通知
   if (event.type === 'context_compressing') {
     if (ch.currentTurn) {
-      const reasonLabels: Record<string, string> = {
+      const reasonLabels: Record<CompactionReason, string> = {
         threshold: '上下文触达阈值',
         overflow: '上下文溢出',
         idle: '空闲超时',
@@ -591,7 +591,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       ch.currentTurn.events.push({
         kind: 'system',
         detail: 'context_compressing',
-        content: `压缩中：${reasonLabels[event.payload.reason] ?? event.payload.reason}（${event.payload.action}）`,
+        content: `压缩中：${reasonLabels[event.payload.reason]}（${event.payload.action}）`,
         timestamp: Date.now(),
       })
     }

@@ -568,8 +568,12 @@ export function mapPiEventToMaxma(
     return {
       type: "context_compressing",
       payload: {
-        reason: (e.reason as string) ?? "threshold",
-        action: (e.action as string) ?? "context-full",
+        reason: ["threshold", "overflow", "idle", "incomplete"].includes(e.reason)
+          ? (e.reason as "threshold" | "overflow" | "idle" | "incomplete")
+          : "threshold",
+        action: ["context-full", "handoff", "shake", "snapcompact"].includes(e.action)
+          ? (e.action as "context-full" | "handoff" | "shake" | "snapcompact")
+          : "context-full",
       },
     };
   }
