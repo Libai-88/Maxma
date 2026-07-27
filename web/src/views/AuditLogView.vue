@@ -140,8 +140,10 @@ async function exportErrorLog() {
 }
 .header h2 {
   margin: 0 0 4px;
-  font-size: 1.1em;
-  font-weight: 700;
+  font-size: var(--fs-display-lg);
+  font-weight: 600;
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
   color: var(--text-primary);
 }
 .header-sub {

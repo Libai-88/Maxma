@@ -91,7 +91,7 @@
 <style scoped>
 .kb-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .header { padding: 24px 32px 16px; border-bottom: 1px solid var(--border); }
-.header h2 { margin: 0 0 4px; font-size: 1.1em; color: var(--text-primary); }
+.header h2 { margin: 0 0 4px; font-size: var(--fs-display-lg); font-weight: 600; font-family: var(--font-display); letter-spacing: -0.01em; color: var(--text-primary); }
 .header-sub { margin: 0; font-size: 0.82em; color: var(--text-secondary); line-height: 1.5; }
 
 .content {

@@ -24,7 +24,7 @@
             streamingTokensSignature(turn),
           ]"
         >
-          <div class="turn-wrapper">
+          <div class="turn-wrapper" :style="turnStaggerStyle(mergedIdx)">
             <div
               class="cite-source"
               :data-user-msg-idx="turnsIndex(mergedIdx)"
@@ -477,6 +477,8 @@ watch(
       }
     }
     if (!sessionId) return
+    // 批量挂载窗口：历史加载/切换会话时多轮次同时挂载，给予交错入场延迟
+    openStaggerWindow()
     nextTick(() => {
       const savedScrollTop = chatSessionAliveCache.restoreScroll(sessionId)
       if (savedScrollTop != null && savedScrollTop > 0) {
@@ -488,6 +490,24 @@ watch(
   },
   { immediate: true },
 )
+
+// ── 交错入场（stagger-sequence：30-50ms/item，封顶防拖沓） ──
+// 窗口开启期间挂载的轮次按索引获得 transition-delay；窗口关闭后
+// 单条到达的新消息与虚拟滚动重挂载均为零延迟，滚动不拖沓。
+const staggerWindowOpen = ref(true)
+let staggerTimer: ReturnType<typeof setTimeout> | null = null
+function openStaggerWindow() {
+  staggerWindowOpen.value = true
+  if (staggerTimer) clearTimeout(staggerTimer)
+  staggerTimer = setTimeout(() => {
+    staggerWindowOpen.value = false
+    staggerTimer = null
+  }, 600)
+}
+function turnStaggerStyle(idx: number): { '--stagger-delay': string } | undefined {
+  if (!staggerWindowOpen.value || idx === 0) return undefined
+  return { '--stagger-delay': `${Math.min(idx, 10) * 40}ms` }
+}
 
 function scrollToTurn(index: number) {
   // scroll-marks 的 index 是 props.turns 中的索引，
@@ -583,6 +603,7 @@ onUnmounted(() => {
   }
   if (typeTimer) clearTimeout(typeTimer)
   if (typingTimer) clearTimeout(typingTimer)
+  if (staggerTimer) clearTimeout(staggerTimer)
 })
 
 // === 引用功能 ===

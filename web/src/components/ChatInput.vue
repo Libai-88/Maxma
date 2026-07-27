@@ -427,6 +427,8 @@ function confirmLink() {
     linkUrl.value = ''
     linkError.value = null
     showLinkInput.value = false
+    // 焦点归还：输入条移除后焦点会落空，归还到正文输入框
+    nextTick(() => textareaRef.value?.focus())
   } catch {
     linkError.value = '请输入有效链接'
   }
@@ -436,6 +438,7 @@ function cancelLink() {
   linkUrl.value = ''
   linkError.value = null
   showLinkInput.value = false
+  nextTick(() => textareaRef.value?.focus())
 }
 
 // ── 粘贴URL自动识别 ──
@@ -1860,6 +1863,13 @@ function onResizeEnd(e: PointerEvent) {
 .input-area:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .chat-input button:focus-visible,
+  .link-input:focus-visible,
+  .input-area:focus-visible {
+    animation: maxma-focus-pulse-in 0.3s var(--ease-standard) both;
+  }
 }
 
 @media (max-width: 720px) {

@@ -9,10 +9,12 @@
       <button class="welcome-error-retry" @click="store.loadProfile()">重试</button>
     </div>
     <div v-else class="welcome-content">
+      <div class="welcome-aura" aria-hidden="true"></div>
       <div class="welcome-avatar"><span aria-hidden="true">{{ store.profile.avatar }}</span></div>
       <h1 class="welcome-name">{{ store.profile.name || 'Maxma' }}</h1>
       <p class="welcome-scene">{{ sceneText }}</p>
       <p class="welcome-greeting">{{ store.profile.greeting || '你好呀，今天想聊些什么？' }}</p>
+      <div class="welcome-rule" aria-hidden="true"></div>
 
       <!-- 主操作：随便聊聊 -->
       <div class="welcome-actions">
@@ -94,12 +96,25 @@ const examples = computed(() => [
   overflow-y: auto;
 }
 .welcome-content {
+  position: relative;
   width: 100%;
   max-width: 560px;
   min-width: 0;
   box-sizing: border-box;
   text-align: center;
 }
+
+/* ── 氛围光晕：朱砂淡彩径向渐变 ── */
+.welcome-aura {
+  position: absolute;
+  inset: -60px -80px;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 55% 45% at 50% 30%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 70%),
+    radial-gradient(ellipse 40% 35% at 65% 60%, color-mix(in srgb, var(--accent-pink, var(--accent)) 4%, transparent), transparent 70%);
+}
+
 .welcome-loading { text-align: center; color: var(--text-secondary); }
 .welcome-loading-spinner {
   display: inline-block;
@@ -112,24 +127,91 @@ const examples = computed(() => [
   margin-bottom: 12px;
 }
 @keyframes welcome-spin { to { transform: rotate(360deg); } }
-.welcome-loading-text { font-size: 14px; margin: 0; }
+.welcome-loading-text { font-size: var(--fs-ui); margin: 0; }
 .welcome-error { text-align: center; color: var(--status-error); }
-.welcome-error-text { font-size: 14px; margin: 0 0 12px; }
+.welcome-error-text { font-size: var(--fs-ui); margin: 0 0 12px; }
 .welcome-error-retry {
   padding: 6px 16px;
   border: 1px solid var(--status-error);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: transparent;
   color: var(--status-error);
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--fs-caption);
+  transition: background var(--duration-fast) var(--ease-out);
 }
-.welcome-avatar { font-size: 48px; margin-bottom: 12px; }
-.welcome-name { font-size: 24px; font-weight: 600; color: var(--text-primary, #1f2937); margin: 0 0 16px; }
-.welcome-scene { font-size: 15px; color: var(--text-secondary, #6b7280); line-height: 1.7; margin: 0 0 10px; }
-.welcome-greeting { font-size: 17px; color: var(--text-primary, #1f2937); font-weight: 500; margin: 0 0 28px; }
-.welcome-actions { display: flex; gap: 12px; justify-content: center; margin-bottom: 28px; }
-.action-btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 24px; border: 1px solid var(--border, #e5e7eb); border-radius: 8px; background: var(--bg-card, #fff); font-size: 15px; color: var(--text-primary, #1f2937); cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s; }
+.welcome-error-retry:hover {
+  background: color-mix(in srgb, var(--status-error) 8%, transparent);
+}
+
+/* ── 头像：光环 + 柔影 ── */
+.welcome-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 76px;
+  height: 76px;
+  margin-bottom: var(--space-16);
+  font-size: 42px;
+  line-height: 1;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  box-shadow:
+    0 0 0 6px color-mix(in srgb, var(--accent) 5%, transparent),
+    var(--shadow-md);
+}
+.welcome-name {
+  font-size: var(--fs-display-xl);
+  font-weight: 600;
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin: 0 0 var(--space-8);
+}
+.welcome-scene {
+  font-size: var(--fs-ui);
+  color: var(--text-tertiary);
+  line-height: 1.7;
+  margin: 0 0 var(--space-8);
+}
+.welcome-greeting {
+  font-size: var(--fs-display-md);
+  font-family: var(--font-display);
+  color: var(--text-secondary);
+  font-weight: 500;
+  margin: 0;
+}
+
+/* ── 墨痕分隔线 ── */
+.welcome-rule {
+  width: 48px;
+  height: 2px;
+  margin: var(--space-24) auto;
+  border-radius: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent) 30%, var(--accent) 70%, transparent);
+  opacity: 0.5;
+}
+
+.welcome-actions { display: flex; gap: var(--space-12); justify-content: center; margin-bottom: var(--space-24); }
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: 12px 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  font-size: var(--fs-body);
+  font-family: var(--font-body);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out),
+              transform var(--duration-instant) var(--ease-spring);
+}
 .action-btn:hover {
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--accent);
@@ -138,17 +220,20 @@ const examples = computed(() => [
 .action-btn--primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: var(--bg-primary);
+  color: var(--text-inverse);
 }
 .action-btn--primary:hover {
-  background: color-mix(in srgb, var(--accent) 88%, #000);
-  color: var(--bg-primary);
-  border-color: color-mix(in srgb, var(--accent) 88%, #000);
+  background: var(--accent-hover);
+  color: var(--text-inverse);
+  border-color: var(--accent-hover);
 }
 @media (prefers-reduced-motion: no-preference) {
   .action-btn:hover {
     transform: translateY(-1px);
     box-shadow: 0 4px 12px var(--shadow-color);
+  }
+  .action-btn--primary:hover {
+    box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 28%, transparent);
   }
   .action-btn:active {
     transform: scale(0.98);
@@ -159,10 +244,10 @@ const examples = computed(() => [
 
 /* ── 示例提示 ── */
 .example-prompts {
-  margin-top: 4px;
+  margin-top: var(--space-4);
 }
 .example-title {
-  font-size: 13px;
+  font-size: var(--fs-caption);
   color: var(--text-tertiary);
   margin-bottom: 10px;
   letter-spacing: 0.3px;
@@ -170,22 +255,25 @@ const examples = computed(() => [
 .example-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-8);
   justify-content: center;
 }
 .example-chip {
-	  display: inline-flex;
-	  align-items: center;
-	  gap: 6px;
-	  padding: 8px 14px;
-	  border: 1px solid var(--border);
-	  border-radius: 20px;
-	  background: var(--bg-card);
-	  color: var(--text-secondary);
-	  font-size: 14px;
-	  cursor: pointer;
-	  transition: border-color 0.15s, color 0.15s, background 0.15s, transform 0.15s;
-	}
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: var(--fs-ui);
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out),
+              background var(--duration-fast) var(--ease-out),
+              transform var(--duration-instant) var(--ease-spring);
+}
 .example-chip:hover {
   border-color: var(--accent);
   color: var(--accent);
@@ -204,8 +292,8 @@ const examples = computed(() => [
 .chip--daily { border-color: var(--border); }
 
 .example-hint {
-  margin: 12px 0 0;
-  font-size: 11px;
+  margin: var(--space-12) 0 0;
+  font-size: var(--fs-hint);
   color: var(--text-tertiary);
   line-height: 1.5;
 }
@@ -213,27 +301,34 @@ const examples = computed(() => [
 /* ── 入场动画（依次浮现） ── */
 @media (prefers-reduced-motion: no-preference) {
   .welcome-avatar {
-    animation: welcome-fade-in 0.6s ease-out both;
+    animation: welcome-fade-in 0.6s var(--ease-out) both;
   }
   .welcome-name {
-    animation: welcome-fade-in 0.6s ease-out 0.15s both;
+    animation: welcome-fade-in 0.6s var(--ease-out) 0.12s both;
   }
   .welcome-scene {
-    animation: welcome-fade-in 0.6s ease-out 0.3s both;
+    animation: welcome-fade-in 0.6s var(--ease-out) 0.24s both;
   }
   .welcome-greeting {
-    animation: welcome-fade-in 0.6s ease-out 0.45s both;
+    animation: welcome-fade-in 0.6s var(--ease-out) 0.36s both;
+  }
+  .welcome-rule {
+    animation: welcome-rule-in 0.5s var(--ease-out) 0.48s both;
   }
   .welcome-actions {
-    animation: welcome-fade-in 0.6s ease-out 0.6s both;
+    animation: welcome-fade-in 0.6s var(--ease-out) 0.56s both;
   }
   .example-prompts {
-    animation: welcome-fade-in 0.6s ease-out 0.75s both;
+    animation: welcome-fade-in 0.6s var(--ease-out) 0.7s both;
   }
 }
 @keyframes welcome-fade-in {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
+}
+@keyframes welcome-rule-in {
+  from { opacity: 0; transform: scaleX(0); }
+  to { opacity: 0.5; transform: scaleX(1); }
 }
 
 /* ── 衬线/无衬线字体切换适配 ── */

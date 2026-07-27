@@ -9,16 +9,59 @@
     <title>Maxma</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=LXGW+WenKai+Screen&family=DM+Sans:opsz,wght@9..40,400;500;700&family=Space+Grotesk:wght@400;500;600;700&family=Inter:opsz,wght@14..32,400;500&family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Work+Sans:ital,wght@0,400;0,500;0,600;1,400&family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=LXGW+WenKai+Screen&family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   </head>
   <body>
     <noscript>请启用 JavaScript 以使用 Maxma。</noscript>
-    <div id="app-loading" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;background:#F4F0E8;z-index:9999;font-family:sans-serif">
-      <div style="width:40px;height:40px;border:3px solid #D0C9B8;border-top-color:#C23B22;border-radius:50%;animation:spin .7s linear infinite;margin-bottom:16px"></div>
-      <p style="color:#8C8C8C;font-size:14px">正在启动后端服务...</p>
-      <p style="color:#B0B0B0;font-size:11px;margin-top:4px">首次启动需要 10-30 秒</p>
+    <div id="app-loading" role="status" aria-label="正在启动">
+      <div class="boot-seal" aria-hidden="true">玛</div>
+      <p class="boot-title">Maxma</p>
+      <p class="boot-status">正在启动后端服务<span class="boot-dots"><i>·</i><i>·</i><i>·</i></span></p>
+      <p class="boot-hint">首次启动需要 10–30 秒</p>
     </div>
-    <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+    <style>
+      #app-loading {
+        position: fixed; inset: 0; z-index: 9999;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        background: radial-gradient(ellipse 80% 60% at 50% 42%, #F8F5EF 0%, #F4F0E8 70%, #EEE9E0 100%);
+        font-family: 'Songti SC', 'STSong', 'SimSun', 'Noto Serif SC', serif;
+      }
+      #app-loading .boot-seal {
+        width: 52px; height: 52px; margin-bottom: 20px;
+        display: flex; align-items: center; justify-content: center;
+        background: #C23B22; color: #F8F5EF;
+        font-size: 26px; font-weight: 700; line-height: 1;
+        border-radius: 10px;
+        box-shadow: 0 2px 12px rgba(194, 59, 34, 0.25), inset 0 1px 0 rgba(255,255,255,0.15);
+        animation: boot-breathe 2.4s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+      }
+      #app-loading .boot-title {
+        margin: 0 0 10px; font-size: 20px; font-weight: 600;
+        letter-spacing: 0.5px; color: #1C1C1C;
+      }
+      #app-loading .boot-status {
+        margin: 0; font-size: 13px; color: #6E6E6E; letter-spacing: 1px;
+      }
+      #app-loading .boot-dots i {
+        font-style: normal;
+        animation: boot-dot 1.4s ease-in-out infinite;
+      }
+      #app-loading .boot-dots i:nth-child(2) { animation-delay: 0.2s; }
+      #app-loading .boot-dots i:nth-child(3) { animation-delay: 0.4s; }
+      #app-loading .boot-hint {
+        margin: 14px 0 0; font-size: 11px; color: #B0A898; letter-spacing: 0.5px;
+      }
+      @keyframes boot-breathe {
+        0%, 100% { transform: scale(1); box-shadow: 0 2px 12px rgba(194,59,34,0.25), inset 0 1px 0 rgba(255,255,255,0.15); }
+        50% { transform: scale(1.06); box-shadow: 0 4px 20px rgba(194,59,34,0.35), inset 0 1px 0 rgba(255,255,255,0.15); }
+      }
+      @keyframes boot-dot {
+        0%, 100% { opacity: 0.25; } 50% { opacity: 1; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #app-loading .boot-seal, #app-loading .boot-dots i { animation: none; }
+      }
+    </style>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

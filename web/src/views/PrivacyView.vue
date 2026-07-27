@@ -283,7 +283,7 @@ onMounted(() => {
   box-sizing: border-box;
 }
 .header { margin-bottom: 24px; }
-.header h2 { font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0 0 4px; }
+.header h2 { font-size: var(--fs-display-lg); font-weight: 600; font-family: var(--font-display); letter-spacing: -0.01em; color: var(--text-primary); margin: 0 0 4px; }
 .header-sub { margin: 0; font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
 
 /* ── 总览引导 ── */

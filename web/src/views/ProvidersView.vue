@@ -659,9 +659,10 @@ onMounted(loadProviders)
   margin-bottom: 20px;
 }
 .header h2 {
-	  font-size: 20px;
-	  font-weight: 700;
+	  font-size: var(--fs-display-lg);
+	  font-weight: 600;
 	  font-family: var(--font-display);
+	  letter-spacing: -0.01em;
 	}
 
 /* ── Buttons ── */

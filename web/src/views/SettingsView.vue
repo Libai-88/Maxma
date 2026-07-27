@@ -266,8 +266,10 @@ onMounted(loadSettings)
 }
 
 .header h2 {
-  font-size: 1.3em;
+  font-size: var(--fs-display-lg);
   font-weight: 600;
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
   margin: 0;
 }
 

@@ -139,6 +139,8 @@ watch(() => props.content, () => {
   transform: translateX(0);
   transition: opacity 0.15s var(--ease-out),
               transform 0.15s var(--ease-out);
+  /* 交错入场延迟：由 ChatWindow 批量挂载时通过 --stagger-delay 注入 */
+  transition-delay: var(--stagger-delay, 0s);
   @starting-style {
     opacity: 0;
     transform: translateX(var(--row-slide-x, 12px));
@@ -153,7 +155,7 @@ watch(() => props.content, () => {
   line-height: 1.6;
   word-break: break-word;
   overflow-wrap: anywhere;
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-sm);
   min-width: 0;
   transition: transform 0.15s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
               box-shadow 0.15s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
@@ -215,7 +217,7 @@ watch(() => props.content, () => {
   left: 0;
   right: 0;
   height: 60px;
-  background: linear-gradient(transparent, var(--bg-card));
+  background: linear-gradient(transparent, color-mix(in srgb, var(--bg-card) 85%, var(--accent) 2%));
   pointer-events: none;
 }
 .bubble.user .bubble-content.collapsed::after {

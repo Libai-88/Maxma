@@ -60,14 +60,15 @@
              'STSong', 'Songti SC', 'SimSun', serif;
   --font-serif: 'EB Garamond', 'Noto Serif SC', 'Source Han Serif SC',
                 'Songti SC', 'STSong', serif;
-  --font-display-art: 'Fraunces', 'EB Garamond', 'Noto Serif SC', serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  /* ── 显示字号（衬线，用于标题/区块） ── */
-  --fs-display-xl: 1.5rem;    /* 24px — 页面标题 */
-  --fs-display-lg: 1.25rem;   /* 20px — 面板标题 */
-  --fs-display-md: 1.125rem;  /* 18px — 卡片标题 */
-  --fs-display-sm: 1rem;      /* 16px — 小节标题 */
+  /* ── 显示字号（衬线，用于标题/区块） ──
+   * 使用时应搭配 font-family: var(--font-display) 和负 letter-spacing
+   */
+  --fs-display-xl: 1.6rem;    /* ~26px — 页面主标题（欢迎屏等焦点场景） */
+  --fs-display-lg: 1.35rem;   /* ~22px — 视图页面标题 */
+  --fs-display-md: 1.15rem;   /* ~18px — 卡片/面板标题 */
+  --fs-display-sm: 1.05rem;   /* ~17px — 小节标题 */
 
   /* 字体开关：显示标题用衬线，正文用无衬线（body.font-sans 时整体切换为无衬线） */
   --font-display: var(--font-serif);

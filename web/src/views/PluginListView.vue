@@ -127,7 +127,7 @@ onMounted(load)
 <style scoped>
 .plugin-view { max-width: 720px; margin: 0 auto; padding: 24px 16px 80px; }
 .header { margin-bottom: 16px; }
-.header h2 { font-size: 1.3em; font-weight: 600; margin: 0; }
+.header h2 { font-size: var(--fs-display-lg); font-weight: 600; font-family: var(--font-display); letter-spacing: -0.01em; margin: 0; }
 .header-sub { font-size: 0.82em; color: var(--text-tertiary); margin: 4px 0 0; }
 
 .toolbar { margin-bottom: 16px; }

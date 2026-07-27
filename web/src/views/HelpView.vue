@@ -313,8 +313,10 @@ const dataPath = 'api/data/'
   margin-bottom: 24px;
 }
 .header h2 {
-  font-size: 22px;
-  font-weight: 700;
+  font-size: var(--fs-display-lg);
+  font-weight: 600;
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
   color: var(--text-primary);
   margin: 0 0 6px;
 }
