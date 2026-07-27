@@ -701,6 +701,7 @@ export interface CapabilitiesResponse {
   providers: ProviderItem[]
   env: Record<string, string>
   system: Record<string, number | boolean>
+  memory?: { total: number; categories: Record<string, number>; avg_confidence: number }
 }
 
 export interface ToolItem {

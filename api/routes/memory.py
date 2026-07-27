@@ -23,6 +23,7 @@ from typing import Any, Iterator
 import portalocker
 import yaml
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
 
 from app_paths import PERSONAS_DATA_DIR
 
@@ -180,24 +181,95 @@ def _write_document(path: Path, document: Mapping[Any, Any]) -> None:
                 pass
 
 
-def _list_memories_sync(path: Path) -> list[dict[str, Any]]:
+def _list_memories_sync(path: Path, q: str | None = None, category: str | None = None, min_confidence: float | None = None) -> list[dict[str, Any]]:
     """Synchronous critical section: read + project durable facts."""
     with _locked_memory_file(path):
         document = _load_document(path)
     if document is None:
         return []
-    return _project_facts(document)
+    facts = _project_facts(document)
+    if q:
+        ql = q.lower()
+        facts = [f for f in facts if ql in f["content"].lower()]
+    if category and category != "all":
+        facts = [f for f in facts if f["category"] == category]
+    if min_confidence is not None:
+        facts = [f for f in facts if f["confidence"] >= min_confidence]
+    return facts
+
+
+def _memory_stats_sync(path: Path) -> dict[str, Any]:
+    """Return memory statistics: total count, by category, avg confidence."""
+    with _locked_memory_file(path):
+        document = _load_document(path)
+    if document is None:
+        return {"total": 0, "categories": {}, "avg_confidence": 0}
+    facts = _project_facts(document)
+    total = len(facts)
+    categories: dict[str, int] = {}
+    conf_sum = 0.0
+    for f in facts:
+        cat = f["category"]
+        categories[cat] = categories.get(cat, 0) + 1
+        conf_sum += f["confidence"]
+    return {
+        "total": total,
+        "categories": categories,
+        "avg_confidence": round(conf_sum / total, 2) if total > 0 else 0,
+    }
 
 
 @router.get("/memory")
-async def list_memories(request: Request) -> list[dict[str, Any]]:
-    """List non-expired durable facts for the legacy Web memory view.
+async def list_memories(
+    request: Request,
+    q: str | None = None,
+    category: str | None = None,
+    min_confidence: float | None = None,
+) -> list[dict[str, Any]]:
+    """List non-expired durable facts for the Web memory view.
 
+    Supports search (q=), category filter, and confidence filter.
     File I/O (YAML read + portalock) runs in a worker thread via
     ``asyncio.to_thread`` so the event loop stays responsive under load.
     """
     path = _memory_path(request)
-    return await asyncio.to_thread(_list_memories_sync, path)
+    return await asyncio.to_thread(_list_memories_sync, path, q, category, min_confidence)
+
+
+@router.get("/memory/stats")
+async def memory_stats(request: Request) -> dict[str, Any]:
+    """Return memory statistics for the capabilities dashboard."""
+    path = _memory_path(request)
+    return await asyncio.to_thread(_memory_stats_sync, path)
+
+
+def _update_memory_sync(path: Path, memory_id: str, content: str | None, category: str | None) -> dict[str, str]:
+    """Synchronous critical section: read, update, atomically write."""
+    with _locked_memory_file(path):
+        document = _load_document(path)
+        if document is None:
+            raise HTTPException(status_code=503, detail="记忆存储不可读")
+
+        matching_key = next(
+            (key for key in document if str(key) == memory_id and str(key) != _PROJECTION_OPERATIONS_KEY),
+            None,
+        )
+        if matching_key is None:
+            raise HTTPException(status_code=404, detail=f"未找到 ID 为 {memory_id} 的记忆")
+
+        entry = document[matching_key]
+        if not isinstance(entry, dict):
+            raise HTTPException(status_code=400, detail="记忆条目格式异常")
+
+        if content is not None:
+            entry["description"] = content
+        if category is not None:
+            entry["theme"] = category
+        document[matching_key] = entry
+
+        _write_document(path, document)
+
+    return {"status": "updated", "id": memory_id}
 
 
 def _delete_memory_sync(path: Path, memory_id: str) -> dict[str, str]:
@@ -229,3 +301,18 @@ async def delete_memory(memory_id: str, request: Request) -> dict[str, str]:
     """
     path = _memory_path(request)
     return await asyncio.to_thread(_delete_memory_sync, path, memory_id)
+
+
+class UpdateMemoryBody(BaseModel):
+    content: str | None = None
+    category: str | None = None
+
+
+@router.put("/memory/{memory_id}")
+async def update_memory(memory_id: str, body: UpdateMemoryBody, request: Request) -> dict[str, str]:
+    """Edit a durable fact's content and/or category.
+
+    File I/O (YAML read/write + portalock + fsync) runs in a worker thread.
+    """
+    path = _memory_path(request)
+    return await asyncio.to_thread(_update_memory_sync, path, memory_id, body.content, body.category)

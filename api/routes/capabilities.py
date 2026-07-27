@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -108,6 +109,15 @@ async def get_capabilities(request: Request):
         }
     except Exception as e:
         logger.warning("[capabilities] Failed to fetch system info: %s", e)
+
+    # 6. 记忆统计
+    try:
+        from api.routes.memory import _memory_stats_sync as _get_mem_stats
+        from api.routes.memory import _memory_path
+        mem_path = _memory_path(request)
+        result["memory"] = await asyncio.to_thread(_get_mem_stats, mem_path)
+    except Exception as e:
+        logger.warning("[capabilities] Failed to fetch memory stats: %s", e)
 
     return result
 

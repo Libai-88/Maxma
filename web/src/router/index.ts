@@ -88,6 +88,12 @@ const router = createRouter({
       meta: { title: '设置' },
     },
     {
+      path: '/plugins',
+      name: 'plugins',
+      component: () => import('@/views/PluginListView.vue'),
+      meta: { title: '插件管理' },
+    },
+    {
       path: '/audit-log',
       name: 'audit-log',
       component: () => import('@/views/AuditLogView.vue'),

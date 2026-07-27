@@ -1352,6 +1352,70 @@ if (import.meta.main) {
         return;
       }
 
+      // ── Plugin RPC ──────────────────────────────────────────
+
+      if (method === "list_plugins") {
+        try {
+          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent");
+          const pm = new PluginManager();
+          const list = await pm.list();
+          send(id, list.map((p: any) => ({
+            name: p.name ?? "",
+            version: p.version ?? "",
+            description: p.description ?? "",
+            enabled: p.enabled !== false,
+            features: p.features ?? [],
+            homepage: p.homepage ?? "",
+          })));
+        } catch (e: any) {
+          send(id, []);
+        }
+        return;
+      }
+
+      if (method === "install_plugin") {
+        try {
+          const spec: string = params?.spec ?? "";
+          if (!spec) { sendError(id, "Missing required parameter: spec"); return; }
+          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent");
+          const pm = new PluginManager();
+          const result = await pm.install(spec);
+          send(id, { ok: true, plugin: result ?? null });
+        } catch (e: any) {
+          sendError(id, `Install failed: ${e.message ?? String(e)}`);
+        }
+        return;
+      }
+
+      if (method === "uninstall_plugin") {
+        try {
+          const name: string = params?.name ?? "";
+          if (!name) { sendError(id, "Missing required parameter: name"); return; }
+          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent");
+          const pm = new PluginManager();
+          await pm.uninstall(name);
+          send(id, { ok: true });
+        } catch (e: any) {
+          sendError(id, `Uninstall failed: ${e.message ?? String(e)}`);
+        }
+        return;
+      }
+
+      if (method === "set_plugin_enabled") {
+        try {
+          const name: string = params?.name ?? "";
+          const enabled: boolean = params?.enabled !== false;
+          if (!name) { sendError(id, "Missing required parameter: name"); return; }
+          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent");
+          const pm = new PluginManager();
+          await pm.setEnabled(name, enabled);
+          send(id, { ok: true });
+        } catch (e: any) {
+          sendError(id, `Failed to toggle plugin: ${e.message ?? String(e)}`);
+        }
+        return;
+      }
+
       sendError(id, `Unknown method: ${method}`);
     } catch (err) {
       sendError(id, String(err));

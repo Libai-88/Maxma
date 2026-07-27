@@ -24,6 +24,12 @@
               <span class="popup-item-sub">OMP 全部能力模块概览与运行状态</span>
             </div>
           </router-link>
+          <router-link to="/plugins" class="popup-item" @click="closeSettingsMenu">
+            <div class="popup-item-content">
+              <span class="popup-item-title">插件管理 PLUGINS</span>
+              <span class="popup-item-sub">安装、卸载与管理 OMP 插件</span>
+            </div>
+          </router-link>
           <router-link to="/providers" class="popup-item" @click="closeSettingsMenu">
             <div class="popup-item-content">
               <span class="popup-item-title">模型 MODELS</span>
