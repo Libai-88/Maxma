@@ -689,6 +689,16 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       break
     }
 
+    case 'thinking_delta': {
+      // 追加推理 token 到当前 thinking block（与 token 事件分开，避免混入答案
+      // 流。thinking_delta 一定是推理过程，不应 auto-create becameAnswer block）。
+      const lastThink = findLastThinking(turn.events)
+      if (lastThink && !lastThink.becameAnswer) {
+        lastThink.tokens += event.payload.delta
+      }
+      break
+    }
+
     case 'thinking_end': {
       const lastThink = findLastThinking(turn.events)
       if (lastThink) {

@@ -444,8 +444,8 @@ export function mapPiEventToMaxma(
 
     if (aeType === "thinking_delta") {
       return {
-        type: "token",
-        payload: { token: assistantEvent.delta ?? "" },
+        type: "thinking_delta",
+        payload: { delta: assistantEvent.delta ?? "" },
       };
     }
 

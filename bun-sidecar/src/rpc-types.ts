@@ -150,6 +150,7 @@ export type MaxmaEvent =
   // A6: payload 与 session-bridge.ts 实发对齐（此前声明 {timestamp:number} 与实发 {} 不符）。
   | { type: "thinking_start"; payload: Record<string, never> }
   | { type: "token"; payload: { token: string } }
+  | { type: "thinking_delta"; payload: { delta: string } }
   | { type: "thinking_end"; payload: { content: string } }
   | { type: "tool_start"; payload: { tool_name: string; input: string } }
   | {
