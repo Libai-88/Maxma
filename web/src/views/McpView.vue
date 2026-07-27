@@ -441,6 +441,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { api } from '@/api'
 import { toErrorMessage } from '@/utils/error'
+import { confirmAction } from '@/composables/useConfirm'
 import type { MCPServerConfig, MCPServerCreateBody, MCPTransport, DiscoveredServer } from '@/types'
 import DsTooltip from '@/components/ui/DsTooltip.vue'
 
@@ -923,7 +924,12 @@ async function toggleServer(serverId: string, enabled: boolean) {
 // ── 删除（防抖 + 利用返回值刷新） ──
 async function deleteServer(serverId: string) {
   if (deletingId.value) return
-  if (!window.confirm(`确定删除 MCP 服务器 "${serverId}" 吗？`)) return
+  if (!await confirmAction({
+    title: '删除 MCP 服务器',
+    message: `确定删除 MCP 服务器 "${serverId}" 吗？`,
+    confirmText: '删除',
+    danger: true,
+  })) return
   deletingId.value = serverId
   try {
     const res = await api.deleteMcpServer(serverId)
@@ -959,8 +965,10 @@ onMounted(() => { loadServers(); loadDiscovered() })
 }
 
 .header h2 {
-  font-size: 20px;
-  font-weight: 700;
+  font-size: var(--fs-display-lg);
+  font-weight: 600;
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
 }
 
 .loading, .empty {

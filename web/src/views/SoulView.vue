@@ -110,6 +110,7 @@ import { Codemirror } from 'vue-codemirror'
 import { api } from '@/api'
 import PersonaCard from '../components/PersonaCard.vue'
 import { useMarkdownPersist } from '@/composables/useMarkdownPersist'
+import { confirmAction } from '@/composables/useConfirm'
 
 const props = defineProps<{
   title?: string
@@ -229,8 +230,13 @@ const soulTemplates = [
   },
 ]
 
-function applySoulTemplate(t: string) {
-  if (!window.confirm('应用此模板将覆盖当前编辑器内容，确定吗？（未保存的内容会丢失）')) return
+async function applySoulTemplate(t: string) {
+  if (!await confirmAction({
+    title: '应用模板',
+    message: '应用此模板将覆盖当前编辑器内容，确定吗？（未保存的内容会丢失）',
+    confirmText: '应用',
+    danger: true,
+  })) return
   content.value = t
 }
 
@@ -313,8 +319,10 @@ onMounted(async () => {
 }
 
 .header h2 {
-  font-size: 20px;
-  font-weight: 700;
+  font-size: var(--fs-display-lg);
+  font-weight: 600;
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
 }
 
 .subtitle {

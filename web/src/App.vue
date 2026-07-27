@@ -44,6 +44,8 @@
       :duration="6000"
       dismissible
     />
+    <!-- 全局确认对话框（替代 window.confirm） -->
+    <ConfirmDialog />
   </div>
 </template>
 
@@ -64,6 +66,8 @@ import { useGlobalShortcut } from '@/composables/useGlobalShortcut'
 import { useHealthPolling } from '@/composables/useHealthPolling'
 import RegionalErrorBoundary from '@/components/ui/RegionalErrorBoundary.vue'
 import DsToast from '@/components/ui/DsToast.vue'
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import { confirmAction } from '@/composables/useConfirm'
 import { reactive, ref } from 'vue'
 
 const MediaViewer = defineAsyncComponent(() => import('@/components/MediaViewer.vue'))
@@ -111,8 +115,8 @@ function handleConstify(id: string, name: string) {
   }
 }
 
-function handleUnconstify(id: string) {
-  if (window.confirm('确定取消固定此会话？')) {
+async function handleUnconstify(id: string) {
+  if (await confirmAction({ message: '确定取消固定此会话？', confirmText: '取消固定' })) {
     sessionStore.unconstifySession(id)
   }
 }

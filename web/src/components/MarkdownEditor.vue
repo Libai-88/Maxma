@@ -50,6 +50,7 @@
 import { onMounted } from 'vue'
 import { Codemirror } from 'vue-codemirror'
 import { useMarkdownPersist } from '@/composables/useMarkdownPersist'
+import { confirmAction } from '@/composables/useConfirm'
 import Icon from '@/components/Icon.vue'
 
 interface MarkdownTemplate {
@@ -66,8 +67,13 @@ const props = defineProps<{
 }>()
 
 // 应用模板：覆盖当前编辑器内容（保存需用户手动点击）
-function applyTemplate(t: string) {
-  if (!window.confirm('应用此模板将覆盖当前编辑器内容，确定吗？（未保存的内容会丢失）')) return
+async function applyTemplate(t: string) {
+  if (!await confirmAction({
+    title: '应用模板',
+    message: '应用此模板将覆盖当前编辑器内容，确定吗？（未保存的内容会丢失）',
+    confirmText: '应用',
+    danger: true,
+  })) return
   content.value = t
 }
 

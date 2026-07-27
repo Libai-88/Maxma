@@ -157,6 +157,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { onMounted, onUnmounted, nextTick, ref } from 'vue';
 import { useSessionStore } from '@/stores/session';
 import { useChatStore } from '@/stores/chat';
+import { confirmAction } from '@/composables/useConfirm';
 
 const props = withDefaults(defineProps<{
   /** 是否启用「重新开始引导」按钮（来自 stores/onboarding.onboardingEnabled） */
@@ -181,10 +182,15 @@ const managingLogs = ref(false)
 const sessionStore = useSessionStore()
 const chatStore = useChatStore()
 
-function handleClearSession() {
+async function handleClearSession() {
   const sid = sessionStore.sessionId
   if (!sid) return
-  if (!window.confirm('确定要清空当前会话的所有消息吗？此操作不可撤销。')) return
+  if (!await confirmAction({
+    title: '清空会话',
+    message: '确定要清空当前会话的所有消息吗？此操作不可撤销。',
+    confirmText: '清空',
+    danger: true,
+  })) return
   // 清空内存中的对话轮次
   const ch = chatStore.channels.get(sid)
   if (ch) {
@@ -232,9 +238,12 @@ async function handleManageLogs() {
     const info = await api.getLogFiles()
     const fileList = info.files.map((f: { name: string; size_mb: number }) => `  ${f.name}: ${f.size_mb.toFixed(2)} MB`).join('\n')
     const totalMB = (info.total_mb ?? 0).toFixed(2)
-    const confirmClean = window.confirm(
-      `日志文件占用情况：\n${fileList}\n\n总计: ${totalMB} MB\n\n是否清理旧日志轮转文件（保留当前日志）？`
-    )
+    const confirmClean = await confirmAction({
+      title: '日志管理',
+      message: `日志文件占用情况：\n${fileList}\n\n总计: ${totalMB} MB\n\n是否清理旧日志轮转文件（保留当前日志）？`,
+      confirmText: '清理',
+      danger: true,
+    })
     if (confirmClean) {
       const result = await api.clearOldLogs()
       alert(`已清理 ${result.deleted_count ?? 0} 个旧日志文件，释放 ${(result.freed_mb ?? 0).toFixed(2)} MB 空间`)
@@ -250,7 +259,12 @@ let restartPollTimer: ReturnType<typeof setTimeout> | null = null
 
 async function handleRestart() {
   if (restarting.value) return
-  if (!window.confirm('确定要重启 Maxma 吗？正在进行的对话可能会中断。')) return
+  if (!await confirmAction({
+    title: '重启应用',
+    message: '确定要重启 Maxma 吗？正在进行的对话可能会中断。',
+    confirmText: '重启',
+    danger: true,
+  })) return
   restarting.value = true
   closeSettingsMenu()
   api.restart()

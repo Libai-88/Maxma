@@ -94,6 +94,7 @@
 <script setup lang="ts">
 import { api } from '@/api'
 import type { BlockerEntry } from '@/types'
+import { confirmAction } from '@/composables/useConfirm'
 import { ref, onMounted } from 'vue'
 
 const showForm = ref(false)
@@ -155,7 +156,12 @@ async function handleSave() {
 }
 
 async function confirmDelete(i: number) {
-  if (!window.confirm(`确定解除对此目录的拒止？\n${entries.value[i].path}\n\nMaxmaBlocker 标记文件将被删除。`)) return
+  if (!await confirmAction({
+    title: '解除拒止',
+    message: `确定解除对此目录的拒止？\n${entries.value[i].path}\n\nMaxmaBlocker 标记文件将被删除。`,
+    confirmText: '解除',
+    danger: true,
+  })) return
   try {
     await api.deleteBlocker(i)
     entries.value.splice(i, 1)
@@ -180,8 +186,10 @@ onMounted(loadEntries)
   margin-bottom: 20px;
 }
 .header h2 {
-  font-size: 20px;
-  font-weight: 700;
+  font-size: var(--fs-display-lg);
+  font-weight: 600;
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
 }
 .subtitle {
   font-weight: 400;

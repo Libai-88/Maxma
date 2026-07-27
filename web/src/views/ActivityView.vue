@@ -95,6 +95,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useActivityStore } from '@/stores/activity'
+import { confirmAction } from '@/composables/useConfirm'
 import type { ActivityStatsResponse } from '@/types'
 
 const store = useActivityStore()
@@ -172,8 +173,13 @@ function formatTime(ts: number): string {
   return d.toLocaleTimeString('zh-CN', { hour12: false })
 }
 
-function handleClear() {
-  if (!window.confirm('确定清空当前活动记录吗？此操作不可撤销（不影响审计日志与已保存的会话）。')) return
+async function handleClear() {
+  if (!await confirmAction({
+    title: '清空活动记录',
+    message: '确定清空当前活动记录吗？此操作不可撤销（不影响审计日志与已保存的会话）。',
+    confirmText: '清空',
+    danger: true,
+  })) return
   store.clear()
 }
 

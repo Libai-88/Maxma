@@ -6,7 +6,7 @@
     </div>
 
     <!-- 统计栏 -->
-    <div class="stats-row" v-if="!loading">
+    <div class="stats-row" v-if="!store.loading">
       <div class="stat-card"><div class="stat-value">{{ stats.total ?? facts.length }}</div><div class="stat-label">总条数</div></div>
       <div class="stat-card"><div class="stat-value">{{ stats.avg_confidence ?? '-' }}</div><div class="stat-label">平均置信度</div></div>
       <div class="stat-card" v-for="(count, cat) in stats.categories ?? {}" :key="cat">
@@ -80,6 +80,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useMemoryStore, type MemoryFact } from '@/stores/memory'
 import { api } from '@/api'
+import { confirmAction } from '@/composables/useConfirm'
 
 const store = useMemoryStore()
 
@@ -165,7 +166,12 @@ async function saveEdit(id: string) {
 }
 
 async function handleDelete(id: string) {
-  if (!confirm('确定删除此记忆？')) return
+  if (!await confirmAction({
+    title: '删除记忆',
+    message: '确定删除此记忆？',
+    confirmText: '删除',
+    danger: true,
+  })) return
   try {
     await api.request(`/memory/${encodeURIComponent(id)}`, { method: 'DELETE' })
     await loadFacts()
@@ -188,7 +194,7 @@ onMounted(async () => {
   padding: 24px 16px 80px;
 }
 .header { margin-bottom: 16px; }
-.header h2 { font-size: 1.3em; font-weight: 600; margin: 0; }
+.header h2 { font-size: var(--fs-display-lg); font-weight: 600; font-family: var(--font-display); letter-spacing: -0.01em; margin: 0; }
 .header-sub { font-size: 0.82em; color: var(--text-tertiary); margin: 4px 0 0; }
 
 /* Stats bar */
