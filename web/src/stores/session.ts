@@ -19,18 +19,18 @@ export const useSessionStore = defineStore('session', () => {
     const promise = (async () => {
       for (let attempt = 1; attempt <= retries; attempt++) {
         try {
+          // 先拉取会话列表判断本地存储的会话是否仍存在，
+          // 避免用 getSession 探针——会话被 TTL 清理后探针会 404，
+          // 在控制台留下红色报错噪音（属正常情况，不应显示为错误）。
+          // refreshSessions 失败会抛错，由外层 catch 重试，语义不变。
+          await refreshSessions()
           const stored = localStorage.getItem(STORAGE_KEY)
-          if (stored) {
-            try {
-              await api.getSession(stored)
-              sessionId.value = stored
-            } catch {
-              await _createSession()
-            }
+          if (stored && sessions.value.some(s => s.session_id === stored)) {
+            sessionId.value = stored
           } else {
             await _createSession()
+            await refreshSessions()
           }
-          await refreshSessions()
           cleanupOrphanedCaches()
           _initialized = true
           return true

@@ -58,6 +58,14 @@
   </section>
 </template>
 
+<script lang="ts">
+// 模块级锁存：后端暂不支持 workflow（无对应路由，请求必 404）。
+// 一旦确认不可用，整个应用会话内不再重复探测，避免每次挂载都
+// 在控制台留下两条 404 噪音。置于此普通 script 块（而非 script setup）
+// 是为了让状态跨组件实例/重挂载共享——setup 内的顶层声明是实例级的。
+let workflowsUnavailable = false
+</script>
+
 <script setup lang="ts">
 import { api } from '@/api'
 import type { WorkflowRun, WorkflowRunStatus } from '@/types'
@@ -76,7 +84,9 @@ const acting = ref(new Set<string>())
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 
 function isUnavailableError(error: unknown): boolean {
-  return error instanceof Error && /(?:\s|^)404(?:\s|$)/.test(error.message)
+  // request 层抛出的消息形如 "API 请求失败 (404)"，状态码带括号，
+  // 旧正则 (?:\s|^)404(?:\s|$) 匹配不到，导致隐藏逻辑从未生效。
+  return error instanceof Error && /\b404\b/.test(error.message)
 }
 
 function isActive(status: WorkflowRunStatus): boolean {
@@ -146,6 +156,7 @@ function hide() {
 }
 
 async function load() {
+  if (workflowsUnavailable) return
   try {
     const [definitions, listedRuns] = await Promise.all([
       api.listWorkflowDefinitions(),
@@ -155,7 +166,10 @@ async function load() {
     runs.value = listedRuns.runs
     available.value = workflowIds.value.length > 0 || runs.value.length > 0
   } catch (error) {
-    if (isUnavailableError(error)) hide()
+    if (isUnavailableError(error)) {
+      workflowsUnavailable = true
+      hide()
+    }
   }
 }
 
