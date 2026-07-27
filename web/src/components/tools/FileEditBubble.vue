@@ -280,7 +280,7 @@ function copyContent() {
 
 .bubble-error {
   font-size: 13px;
-  color: #b91c1c;
+  color: var(--status-error);
   padding: 4px 0;
 }
 
@@ -290,8 +290,8 @@ function copyContent() {
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  background: #e8f5e9;
-  border: 1px solid #b8d8b8;
+  background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--status-ok) 30%, transparent);
   border-radius: 8px;
 }
 
@@ -311,12 +311,12 @@ function copyContent() {
 .banner-title {
   font-size: 14px;
   font-weight: 600;
-  color: #2d5a2d;
+  color: color-mix(in srgb, var(--status-ok) 70%, var(--text-primary));
 }
 
 .banner-detail {
   font-size: 11px;
-  color: #3d7a3d;
+  color: color-mix(in srgb, var(--status-ok) 60%, var(--text-secondary));
   font-family: 'SF Mono', 'Consolas', monospace;
   word-break: break-all;
 }
@@ -434,13 +434,13 @@ function copyContent() {
 }
 
 .multi-summary.all-success {
-  background: #e8f5e9;
-  border: 1px solid #b8d8b8;
+  background: color-mix(in srgb, var(--status-ok) 10%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--status-ok) 30%, transparent);
 }
 
 .multi-summary.has-failures {
-  background: #fff3e0;
-  border: 1px solid #ffe0b2;
+  background: color-mix(in srgb, var(--status-warn) 10%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--status-warn) 30%, transparent);
 }
 
 .multi-icon {
@@ -490,11 +490,11 @@ function copyContent() {
 }
 
 .edit-result-item.ok {
-  color: #2e7d32;
+  color: var(--status-ok);
 }
 
 .edit-result-item.error {
-  color: #c0392b;
+  color: var(--status-error);
 }
 
 .eri-icon {

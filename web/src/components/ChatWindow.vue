@@ -714,7 +714,6 @@ function closeContextMenu() {
   margin: 2px 0;
   border-left: 2px solid var(--border);
   background: transparent;
-  background: transparent;
   background: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
   border-radius: 4px;
   font-size: 0.82em;
@@ -883,7 +882,6 @@ function closeContextMenu() {
 }
 .error-copy-btn:hover {
   opacity: 1;
-  background: transparent;
   background: transparent;
   background: color-mix(in srgb, currentColor 10%, transparent);
 }

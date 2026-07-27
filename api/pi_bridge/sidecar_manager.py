@@ -74,6 +74,7 @@ class SidecarManager:
         self._lock = asyncio.Lock()
         self._stderr_task: asyncio.Task[None] | None = None
         self._client: JsonRpcClient | None = None
+        self._heartbeat_task: asyncio.Task[None] | None = None
 
     # -- Properties ---------------------------------------------------------
 
@@ -201,8 +202,36 @@ class SidecarManager:
             )
             await self._client.start_reading()
 
-            # Brief wait for the process to initialise
-            await asyncio.sleep(0.5)
+            # Poll until sidecar is ready (replace fixed sleep with health check)
+            for attempt in range(30):
+                try:
+                    await self._client.call("get_health", timeout=2.0)
+                    logger.info("[sidecar] ready after ~%sms", attempt * 100)
+                    break
+                except Exception:
+                    if attempt == 29:
+                        logger.warning("[sidecar] health-check timeout after 3s, continuing anyway")
+                    await asyncio.sleep(0.1)
+
+            # Start periodic heartbeat (every 30s)
+            self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+
+    async def _heartbeat_loop(self) -> None:
+        """Periodic health check — detects silent sidecar death between user turns."""
+        while True:
+            await asyncio.sleep(30)
+            if not self.is_running:
+                logger.warning("[sidecar] heartbeat: process dead")
+                break
+            try:
+                if self._client:
+                    await self._client.call("get_health", timeout=5.0)
+            except Exception:
+                logger.warning("[sidecar] heartbeat: no response, process may be hung", exc_info=True)
+                break
+        # If we get here, the sidecar is gone — mark it for transparent restart
+        self._client = None
+        logger.info("[sidecar] heartbeat: marked for restart on next get_client()")
 
     async def stop(self) -> None:
         """Stop the sidecar subprocess gracefully."""
@@ -238,6 +267,15 @@ class SidecarManager:
 
         proc = self._process
         self._process = None
+
+        # Cancel heartbeat
+        if self._heartbeat_task is not None and not self._heartbeat_task.done():
+            self._heartbeat_task.cancel()
+            try:
+                await self._heartbeat_task
+            except asyncio.CancelledError:
+                logger.debug("[sidecar] Heartbeat cancelled")
+        self._heartbeat_task = None
 
         # Cancel stderr forwarding
         if self._stderr_task is not None and not self._stderr_task.done():

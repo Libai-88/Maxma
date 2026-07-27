@@ -147,7 +147,6 @@ function onReject() {
   font-size: 0.8em;
   color: var(--accent);
   background: transparent;
-  background: transparent;
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   padding: 1px 6px;
   border-radius: 3px;
@@ -163,18 +162,15 @@ function onReject() {
 .risk-tag-high {
   color: var(--status-error);
   background: transparent;
-  background: transparent;
   background: color-mix(in srgb, var(--status-error) 12%, transparent);
 }
 .risk-tag-medium {
   color: var(--status-warn);
   background: transparent;
-  background: transparent;
   background: color-mix(in srgb, var(--status-warn) 12%, transparent);
 }
 .risk-tag-low {
   color: var(--status-ok);
-  background: transparent;
   background: transparent;
   background: color-mix(in srgb, var(--status-ok) 12%, transparent);
 }

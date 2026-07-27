@@ -398,7 +398,7 @@ watch(() => props.toolCall.output, () => {
   border-color: var(--accent-dark);
 }
 .tool-card.error {
-  border-color: #fecaca;
+  border-color: color-mix(in srgb, var(--status-error) 30%, var(--border));
 }
 .tool-header {
   padding: 8px 14px;
