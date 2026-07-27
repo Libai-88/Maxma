@@ -48,6 +48,12 @@
               <span class="popup-item-sub">连接和管理 AI 工具与外部服务</span>
             </div>
           </router-link>
+          <router-link to="/extensions" class="popup-item" @click="closeSettingsMenu">
+            <div class="popup-item-content">
+              <span class="popup-item-title">扩展管理 EXTENSIONS</span>
+              <span class="popup-item-sub">查看已发现的 OMP 扩展与 Skills</span>
+            </div>
+          </router-link>
           <router-link to="/soul" class="popup-item" @click="closeSettingsMenu">
             <div class="popup-item-content">
               <span class="popup-item-title">人设 SOUL</span>

@@ -112,6 +112,36 @@
           </div>
         </div>
       </div>
+      <!-- 配置来源 -->
+      <div class="section" v-if="configSources">
+        <h3>配置来源 ({{ configSources.active_count }}/{{ configSources.total_count }} 活跃)</h3>
+        <p class="section-desc">按优先级从高到低排列，高优先级覆盖低优先级。</p>
+        <div class="source-list">
+          <div v-for="s in configSources.sources" :key="s.name"
+            class="source-row" :class="{ active: s.exists, inactive: !s.exists }">
+            <span class="source-priority">#{{ s.priority }}</span>
+            <div class="source-info">
+              <span class="source-name">{{ s.name }}</span>
+              <span class="source-desc">{{ s.description }}</span>
+            </div>
+            <span class="source-scope">{{ s.scope }}</span>
+            <span class="source-status" :class="{ found: s.exists }">
+              {{ s.exists ? '存在' : '未发现' }}
+            </span>
+          </div>
+        </div>
+        <div v-if="configSources.conflicts && configSources.conflicts.length" class="conflict-section">
+          <h4 class="cat-title conflict-title">⚠️ 配置冲突</h4>
+          <div v-for="c in configSources.conflicts" :key="c.scope" class="conflict-card">
+            <div class="conflict-scope">{{ c.scope }}</div>
+            <div class="conflict-sources">{{ c.sources.join(' ↔ ') }}</div>
+            <div class="conflict-note">{{ c.note }}</div>
+          </div>
+        </div>
+        <div v-else-if="configSources.active_count > 1" class="conflict-section">
+          <div class="conflict-clear">✓ 未检测到配置冲突</div>
+        </div>
+      </div>
     </template>
   </div>
 </template>
@@ -133,6 +163,12 @@ const env = ref<Record<string, string>>({})
 const system = ref<Record<string, number | boolean>>({})
 const memory = ref<{ total: number; categories: Record<string, number>; avg_confidence: number } | null>(null)
 const plugins = ref<any[]>([])
+const configSources = ref<{
+  sources: Array<{ name: string; path: string; priority: number; exists: boolean; scope: string; description: string }>
+  active_count: number; total_count: number
+  conflicts: Array<{ scope: string; sources: string[]; severity: string; note: string }>
+  resolution_order: string[]
+} | null>(null)
 
 function formatValue(v: unknown): string {
   if (typeof v === 'boolean') return v ? '开启' : '关闭'
@@ -168,6 +204,7 @@ async function load() {
     env.value = data.env ?? {}
     system.value = data.system ?? {}
     memory.value = data.memory ?? null
+    configSources.value = data.config_sources ?? null
     // Also load plugin count
     try {
       const pdata = await api.request<any[]>('/plugins')
@@ -283,6 +320,30 @@ onMounted(load)
 .mcp-status { font-size: 0.85em; padding: 2px 8px; border-radius: 4px; color: var(--text-tertiary); }
 .mcp-status.enabled { color: #22c55e; }
 .mcp-status.connected { color: #3b82f6; }
+
+/* Config sources */
+.section-desc { font-size: 0.78em; color: var(--text-tertiary); margin: -8px 0 12px; }
+.source-list { display: flex; flex-direction: column; gap: 4px; }
+.source-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 10px; border-radius: 6px; font-size: 0.8em;
+}
+.source-row.active { background: var(--bg-secondary); }
+.source-row.inactive { opacity: 0.45; }
+.source-priority { font-family: var(--font-mono); font-size: 0.85em; color: var(--text-tertiary); min-width: 24px; }
+.source-info { flex: 1; min-width: 0; }
+.source-name { font-weight: 500; color: var(--text-primary); display: block; }
+.source-desc { font-size: 0.9em; color: var(--text-tertiary); display: block; }
+.source-scope { font-size: 0.85em; padding: 2px 6px; border-radius: 4px; background: var(--bg-card); color: var(--text-tertiary); }
+.source-status { font-size: 0.85em; padding: 2px 8px; border-radius: 4px; color: var(--text-tertiary); }
+.source-status.found { color: #22c55e; background: rgba(34,197,94,0.08); }
+.conflict-section { margin-top: 12px; }
+.conflict-title { color: #f59e0b; }
+.conflict-card { padding: 8px 10px; background: rgba(245,158,11,0.06); border: 1px solid rgba(245,158,11,0.2); border-radius: 6px; margin-bottom: 6px; }
+.conflict-scope { font-size: 0.8em; font-weight: 600; color: #f59e0b; }
+.conflict-sources { font-size: 0.85em; color: var(--text-secondary); margin-top: 2px; }
+.conflict-note { font-size: 0.75em; color: var(--text-tertiary); margin-top: 4px; }
+.conflict-clear { font-size: 0.82em; color: #22c55e; padding: 6px 0; }
 
 .loading, .empty {
   text-align: center; padding: 40px; color: var(--text-tertiary);

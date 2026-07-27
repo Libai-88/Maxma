@@ -119,6 +119,12 @@ async def get_capabilities(request: Request):
     except Exception as e:
         logger.warning("[capabilities] Failed to fetch memory stats: %s", e)
 
+    # 7. 配置来源分析
+    try:
+        result["config_sources"] = _analyze_config_sources()
+    except Exception as e:
+        logger.warning("[capabilities] Failed to analyze config sources: %s", e)
+
     return result
 
 
@@ -129,6 +135,82 @@ def _categorize_tools(tools: list[dict]) -> dict[str, list[dict]]:
         cat = t.get("category", "other")
         categories.setdefault(cat, []).append(t)
     return categories
+
+
+def _analyze_config_sources() -> dict[str, Any]:
+    """分析 OMP 配置来源。
+
+    返回按优先级排序的配置源列表，标记哪些实际存在、是否有冲突。
+    """
+    import os
+    home = os.path.expanduser("~")
+    cwd = os.getcwd()
+    maxma_root = os.environ.get("MAXMA_PROJECT_ROOT", cwd)
+
+    sources = [
+        {"name": "环境变量", "path": "OMP_* / MAXMA_* env", "priority": 1, "exists": True,
+         "scope": "global", "description": "运行时环境变量覆盖"},
+        {"name": "CLI 参数", "path": "启动命令行", "priority": 2, "exists": True,
+         "scope": "session", "description": "启动时传入的命令行参数"},
+        {"name": "项目 .omprc", "path": os.path.join(cwd, ".omprc"), "priority": 3,
+         "exists": os.path.exists(os.path.join(cwd, ".omprc")), "scope": "project",
+         "description": "项目级 OMP 配置文件"},
+        {"name": "项目 .omprc.json", "path": os.path.join(cwd, ".omprc.json"), "priority": 4,
+         "exists": os.path.exists(os.path.join(cwd, ".omprc.json")), "scope": "project",
+         "description": "项目级 OMP JSON 配置"},
+        {"name": "项目 .claude", "path": os.path.join(cwd, ".claude"), "priority": 5,
+         "exists": os.path.isdir(os.path.join(cwd, ".claude")), "scope": "project",
+         "description": "Claude Code 项目配置（skills/MCP 等）"},
+        {"name": "项目 .cursor", "path": os.path.join(cwd, ".cursor"), "priority": 6,
+         "exists": os.path.isdir(os.path.join(cwd, ".cursor")), "scope": "project",
+         "description": "Cursor 编辑器项目配置"},
+        {"name": "项目 .github", "path": os.path.join(cwd, ".github"), "priority": 7,
+         "exists": os.path.isdir(os.path.join(cwd, ".github")), "scope": "project",
+         "description": "GitHub 项目配置"},
+        {"name": "项目 .mcp.json", "path": os.path.join(cwd, ".mcp.json"), "priority": 8,
+         "exists": os.path.exists(os.path.join(cwd, ".mcp.json")), "scope": "project",
+         "description": "MCP 服务器配置文件"},
+        {"name": "项目 agents.md", "path": os.path.join(cwd, "AGENTS.md"), "priority": 9,
+         "exists": os.path.exists(os.path.join(cwd, "AGENTS.md")), "scope": "project",
+         "description": "项目上下文说明"},
+        {"name": "用户 ~/.omp", "path": os.path.join(home, ".omp"), "priority": 10,
+         "exists": os.path.isdir(os.path.join(home, ".omp")), "scope": "user",
+         "description": "OMP 全局用户配置"},
+        {"name": "用户 ~/.claude", "path": os.path.join(home, ".claude"), "priority": 11,
+         "exists": os.path.isdir(os.path.join(home, ".claude")), "scope": "user",
+         "description": "Claude Code 全局配置"},
+        {"name": "用户 ~/.cursor", "path": os.path.join(home, ".cursor"), "priority": 12,
+         "exists": os.path.isdir(os.path.join(home, ".cursor")), "scope": "user",
+         "description": "Cursor 编辑器全局配置"},
+        {"name": "Maxma 数据目录", "path": os.path.join(maxma_root, "api/data"), "priority": 13,
+         "exists": os.path.isdir(os.path.join(maxma_root, "api/data")), "scope": "app",
+         "description": "Maxma 应用数据目录"},
+    ]
+
+    # 检测冲突：在多处存在且可能定义相同配置项的情况
+    conflicts = []
+    active_sources = [s for s in sources if s["exists"]]
+    if len(active_sources) > 1:
+        # 检查同 scope 内是否有多个源
+        scope_groups: dict[str, list[str]] = {}
+        for s in active_sources:
+            scope_groups.setdefault(s["scope"], []).append(s["name"])
+        for scope, names in scope_groups.items():
+            if len(names) > 1:
+                conflicts.append({
+                    "scope": scope,
+                    "sources": names,
+                    "severity": "info",
+                    "note": f"同一作用域({scope})存在多个配置源，高优先级覆盖低优先级",
+                })
+
+    return {
+        "sources": sources,
+        "active_count": len(active_sources),
+        "total_count": len(sources),
+        "conflicts": conflicts,
+        "resolution_order": [s["name"] for s in sources],  # 高优先级在前
+    }
 
 
 def _count_sessions(request: Request) -> int:

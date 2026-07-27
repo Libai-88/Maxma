@@ -94,6 +94,12 @@ const router = createRouter({
       meta: { title: '插件管理' },
     },
     {
+      path: '/extensions',
+      name: 'extensions',
+      component: () => import('@/views/ExtensionView.vue'),
+      meta: { title: '扩展管理' },
+    },
+    {
       path: '/audit-log',
       name: 'audit-log',
       component: () => import('@/views/AuditLogView.vue'),
