@@ -154,9 +154,10 @@ onMounted(load)
 .empty-title { font-size: 1em; font-weight: 600; margin-bottom: 4px; }
 .empty-desc { font-size: 0.85em; }
 
-.plugin-list { display: flex; flex-direction: column; gap: 8px; }
+.plugin-list { display: flex; flex-direction: column; gap: 8px; max-height: 600px; overflow-y: auto; }
 .plugin-card {
-  padding: 12px 14px; background: var(--bg-card); border: 1px solid var(--border);
+  padding: 12px 14px; background: var(--bg-card); border: 1px solid var(--border); min-width: 0;
+  overflow: hidden;
   border-radius: var(--radius);
 }
 .plugin-card:hover { border-color: var(--accent-soft); }

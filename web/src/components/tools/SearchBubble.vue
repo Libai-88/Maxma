@@ -61,7 +61,7 @@ const fallbackText = computed(() => {
 .bubble-error { font-size: 13px; color: var(--error-color, #ef4444); padding: 4px 0; }
 .bubble-empty { font-size: 13px; color: var(--text-secondary); padding: 4px 0; }
 .search-query { font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px; }
-.search-results { display: flex; flex-direction: column; gap: 8px; }
+.search-results { display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto; }
 .search-item { padding: 8px; background: var(--bg-secondary); border-radius: 6px; }
 .search-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
 .search-url { font-size: 11px; color: var(--accent); word-break: break-all; margin-top: 2px; }

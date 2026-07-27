@@ -222,10 +222,11 @@ onMounted(async () => {
 .empty-desc { font-size: 0.85em; line-height: 1.6; }
 .empty-link { color: var(--accent); text-decoration: none; display: inline-block; margin-top: 8px; }
 
-.fact-list { display: flex; flex-direction: column; gap: 8px; }
+.fact-list { display: flex; flex-direction: column; gap: 8px; max-height: 600px; overflow-y: auto; }
 .fact-card {
   padding: 12px 14px; background: var(--bg-card); border: 1px solid var(--border);
   border-radius: var(--radius); transition: border-color 0.15s;
+  overflow: hidden;
 }
 .fact-card:hover { border-color: var(--accent-soft, var(--border)); }
 .fact-content { font-size: 0.9em; line-height: 1.6; color: var(--text-primary); word-break: break-word; cursor: pointer; }
