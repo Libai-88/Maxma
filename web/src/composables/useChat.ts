@@ -245,6 +245,34 @@ function getReconnectDelay(attempts: number): number {
 /** 最大重连次数，超过后停止重连 */
 const MAX_RECONNECT_ATTEMPTS = 20
 
+// ── tool_update throttling ──
+// Accumulate partial_result deltas in a non-reactive buffer and flush via
+// requestAnimationFrame.  Prevents rapid tool_execution_update events from
+// triggering a reactive render per event.
+const _toolUpdateBuffers = new Map<string, string>()
+const _toolUpdatePending = new Set<string>()
+let _toolUpdateRafId: number | null = null
+
+function flushToolUpdates() {
+  _toolUpdateRafId = null
+  for (const key of _toolUpdatePending) {
+    const [sid, turnId, toolName] = key.split('\0') as [string, string, string]
+    const ch = getChatStore().channels.get(sid)
+    if (!ch) { _toolUpdateBuffers.delete(key); continue }
+    const turn = ch.turns.find(t => t.id === turnId) ?? ch.currentTurn
+    if (!turn) { _toolUpdateBuffers.delete(key); continue }
+    const tc = turn.events.find(
+      (e): e is ToolCall => e.kind === 'tool' && e.name === toolName && e.status === 'running',
+    )
+    if (tc) {
+      const buf = _toolUpdateBuffers.get(key)
+      if (buf) tc.partialResult = (tc.partialResult ?? '') + buf
+    }
+    _toolUpdateBuffers.delete(key)
+  }
+  _toolUpdatePending.clear()
+}
+
 /** 检查通道是否仍有效（未被关闭/移除），防止 await 间隙操作失效。 */
 function isChannelStillValid(sid: string): boolean {
   const ch = getChatStore().channels.get(sid)
@@ -692,6 +720,14 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     case 'tool_end': {
       const tc = findRunningTool(turn.events, event.payload.tool_name)
       if (tc) {
+        // Flush any remaining buffered partial result before finalizing
+        const key = `${sid}\0${turn.id}\0${event.payload.tool_name}`
+        const buf = _toolUpdateBuffers.get(key)
+        if (buf) {
+          tc.partialResult = (tc.partialResult ?? '') + buf
+          _toolUpdateBuffers.delete(key)
+          _toolUpdatePending.delete(key)
+        }
         tc.output = event.payload.output
         tc.elapsed = event.payload.elapsed
         tc.status = 'done'
@@ -720,6 +756,14 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     case 'tool_error': {
       const tc = findRunningTool(turn.events, event.payload.tool_name)
       if (tc) {
+        // Flush buffered partial result before marking error
+        const key = `${sid}\0${turn.id}\0${event.payload.tool_name}`
+        const buf = _toolUpdateBuffers.get(key)
+        if (buf) {
+          tc.partialResult = (tc.partialResult ?? '') + buf
+          _toolUpdateBuffers.delete(key)
+          _toolUpdatePending.delete(key)
+        }
         tc.status = 'error'
         tc.output = event.payload.error ?? null
         tc.elapsed = event.payload.elapsed ?? null
@@ -730,7 +774,16 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     case 'tool_update': {
       const tc = findRunningTool(turn.events, event.payload.tool_name)
       if (tc) {
-        tc.partialResult = (tc.partialResult ?? '') + event.payload.partial_result
+        // Throttle via rAF: accumulate to non-reactive buffer, flush once per frame
+        const key = `${sid}\0${turn.id}\0${event.payload.tool_name}`
+        const buf = (_toolUpdateBuffers.get(key) ?? '') + event.payload.partial_result
+        _toolUpdateBuffers.set(key, buf)
+        if (!_toolUpdatePending.has(key)) {
+          _toolUpdatePending.add(key)
+        }
+        if (_toolUpdateRafId === null) {
+          _toolUpdateRafId = requestAnimationFrame(flushToolUpdates)
+        }
       }
       break
     }
