@@ -2,6 +2,17 @@
 version: alpha
 name: MaxmaHere-Warm-Precision
 description: A warm-precision design system for MaxmaHere — an AI Agent desktop client. Warm cream canvas, terracotta accent, serif display headings, four-step surface ladder.
+---
+
+> ⚠️ **本文档已被取代（2026-07-28）**
+> 这是 alpha 阶段的设计规格（terracotta `#c17a5c` 配色），仅保留作历史参考。
+> 当前品牌规范的唯一事实源是 **`docs/brand-guidelines.md`**，代码侧活规范是
+> `web/src/assets/styles/tokens.css` + `web/src/themes/*.css`（旗舰主题「素影」：宣纸白 `#F4F0E8` + 朱砂 `#C23B22`）。
+> 请勿按本文档的色值/字号开发新界面。
+
+以下为原始 alpha 规格存档：
+
+```yaml
 colors:
   bg-primary: "#fcf9f5"
   bg-secondary: "#f5f0ea"
@@ -121,7 +132,7 @@ components:
     borderColor: "{colors.border}"
     rounded: "16px"
     padding: "4px 4px 4px 18px"
----
+```
 
 # Design System: MaxmaHere — Warm Precision
 
