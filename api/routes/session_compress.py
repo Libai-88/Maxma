@@ -35,7 +35,7 @@ async def _try_sidecar_compact(session_id: str, request: Request) -> dict:
             return {"compressed": False, "method": "unavailable", "detail": "Sidecar 客户端不可用"}
 
         sm = get_session_map()
-            sidecar_sid = sm.get_sidecar_id(session_id)
+        sidecar_sid = sm.get_sidecar_id(session_id)
         if not sidecar_sid:
             # 无映射 → 该会话未通过 sidecar 处理过
             return {"compressed": False, "method": "unavailable", "detail": "未找到对应 sidecar 会话"}

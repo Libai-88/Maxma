@@ -163,7 +163,7 @@ async def get_messages(session_id: str, request: Request, limit: int = 50):
         if client is not None:
             from api.pi_bridge.session_adapter import get_session_map
             smap = get_session_map()
-                sidecar_sid = smap.get_sidecar_id(session_id)
+            sidecar_sid = smap.get_sidecar_id(session_id)
             if not sidecar_sid:
                 sidecar_sid = getattr(session, "_sidecar_session_id", None)
             if sidecar_sid:
@@ -190,7 +190,7 @@ async def get_messages(session_id: str, request: Request, limit: int = 50):
     # fallback: 从 SessionMap 的 recent turns 获取
     from api.pi_bridge.session_adapter import get_session_map
     smap = get_session_map()
-        turns = smap.get_recent_turns(session_id, count=limit)
+    turns = smap.get_recent_turns(session_id, count=limit)
     messages = []
     for t in turns:
         messages.append({"role": "human", "content": t.get("user", "")})
@@ -208,7 +208,7 @@ async def _sync_const_session_after_undo(session, deleted: int, *, sidecar_mgr=N
             from api.pi_bridge.session_adapter import get_session_map
             sidecar_sid = None
             smap = get_session_map()
-                sidecar_sid = smap.get_sidecar_id(session.session_id)
+            sidecar_sid = smap.get_sidecar_id(session.session_id)
             if not sidecar_sid:
                 sidecar_sid = getattr(session, "_sidecar_session_id", None)
             if not sidecar_sid:
@@ -275,7 +275,7 @@ async def undo_session_messages(session_id: str, request: Request, n: int = 1):
             # 优先从 SessionMap（持久化 SQLite）查找 sidecar session ID
             from api.pi_bridge.session_adapter import get_session_map
             smap = get_session_map()
-                sidecar_sid = smap.get_sidecar_id(session_id)
+            sidecar_sid = smap.get_sidecar_id(session_id)
             if not sidecar_sid:
                 sidecar_sid = getattr(session, "_sidecar_session_id", None)
             if sidecar_sid:
@@ -325,7 +325,7 @@ async def get_context_usage(session_id: str, request: Request):
         if client is not None:
             from api.pi_bridge.session_adapter import get_session_map
             smap = get_session_map()
-                sidecar_sid = smap.get_sidecar_id(session_id)
+            sidecar_sid = smap.get_sidecar_id(session_id)
             if not sidecar_sid:
                 sidecar_sid = getattr(session, "_sidecar_session_id", None)
             if sidecar_sid:
@@ -371,7 +371,7 @@ async def delete_session(session_id: str, request: Request):
         if sidecar_mgr.client is not None:
             from api.pi_bridge.session_adapter import get_session_map
             smap = get_session_map()
-                sidecar_sid = smap.get_sidecar_id(session_id)
+            sidecar_sid = smap.get_sidecar_id(session_id)
             if not sidecar_sid and session is not None:
                 sidecar_sid = getattr(session, "_sidecar_session_id", None)
             if sidecar_sid:
@@ -383,7 +383,7 @@ async def delete_session(session_id: str, request: Request):
                     logger.debug("[delete] sidecar destroy failed for %s", sidecar_sid[:8], exc_info=True)
             # 清理 SessionMap 映射
             smap = get_session_map()
-                smap.remove(session_id)
+            smap.remove(session_id)
 
     if not await sm.delete(session_id):
         raise HTTPException(status_code=404, detail="会话不存在")
@@ -414,7 +414,7 @@ async def constify_session(session_id: str, body: ConstifyRequest, request: Requ
         if client is not None:
             from api.pi_bridge.session_adapter import get_session_map
             smap = get_session_map()
-                sidecar_sid = smap.get_sidecar_id(session_id)
+            sidecar_sid = smap.get_sidecar_id(session_id)
             if not sidecar_sid:
                 sidecar_sid = getattr(session, "_sidecar_session_id", None)
             if sidecar_sid:
@@ -466,7 +466,7 @@ async def generate_session_title(session_id: str, request: Request):
         if client is not None:
             from api.pi_bridge.session_adapter import get_session_map
             smap = get_session_map()
-                sidecar_sid = smap.get_sidecar_id(session_id)
+            sidecar_sid = smap.get_sidecar_id(session_id)
             if not sidecar_sid:
                 sidecar_sid = getattr(session, "_sidecar_session_id", None)
             if sidecar_sid:

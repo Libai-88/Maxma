@@ -119,7 +119,7 @@ async def _get_messages_from_sidecar(
     except RuntimeError:
         return []
     sm = get_session_map()
-        sidecar_sid = sm.get_sidecar_id(session.session_id)
+    sidecar_sid = sm.get_sidecar_id(session.session_id)
     if not sidecar_sid:
         sidecar_sid = getattr(session, "_sidecar_session_id", None)
     if not sidecar_sid:
@@ -161,7 +161,7 @@ async def _stream_turn_sidecar(
 
     # 2. Look up or create sidecar session
     sm = get_session_map()
-        sidecar_sid = sm.get_sidecar_id(session.session_id)
+    sidecar_sid = sm.get_sidecar_id(session.session_id)
     if not sidecar_sid:
         sidecar_sid = getattr(session, "_sidecar_session_id", None)
 
@@ -181,14 +181,14 @@ async def _stream_turn_sidecar(
             )
             sidecar_sid = None
             sm = get_session_map()
-                sm.remove(session.session_id)
+            sm.remove(session.session_id)
 
     if not sidecar_sid:
         # Build system prompt with recent past turns for continuity
         _sidecar_system_prompt = system_prompt
         try:
             sm = get_session_map()
-                _past_turns = sm.get_recent_turns(session.session_id, count=5)
+            _past_turns = sm.get_recent_turns(session.session_id, count=5)
             if _past_turns:
                 _history_lines = []
                 for t in _past_turns:
@@ -233,7 +233,7 @@ async def _stream_turn_sidecar(
         sidecar_sid = result["session_id"]
         session._sidecar_session_id = sidecar_sid
         sm = get_session_map()
-            sm.set_mapping(session.session_id, sidecar_sid)
+        sm.set_mapping(session.session_id, sidecar_sid)
         logger.info(
             "[sidecar] Created session %s for Maxma session %s",
             sidecar_sid[:8],
@@ -583,7 +583,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
 
             try:
                 sm = get_session_map()
-                    sm.append_turn(session.session_id, um, final_answer)
+                sm.append_turn(session.session_id, um, final_answer)
             except Exception:
                 logger.debug(
                     "[sidecar] Failed to save turn to SessionMap",
