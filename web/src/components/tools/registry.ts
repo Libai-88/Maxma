@@ -15,8 +15,6 @@ const FileEditBubble = lazyBubble(() => import('./FileEditBubble.vue'))
 const ImageBubble = lazyBubble(() => import('./ImageBubble.vue'))
 const AskUserBubble = lazyBubble(() => import('./AskUserBubble.vue'))
 const MemoryBubble = lazyBubble(() => import('./MemoryBubble.vue'))
-const GitStatusBubble = lazyBubble(() => import('./GitStatusBubble.vue'))
-const GitDiffBubble = lazyBubble(() => import('./GitDiffBubble.vue'))
 
 /**
  * 工具注册表：OMP 原生工具名 → 专属气泡组件

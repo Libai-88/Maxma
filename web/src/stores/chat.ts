@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, reactive, ref } from 'vue'
-import type { ChatTurn, ContextUsage } from '@/types'
+import type { ChatTurn, ContextUsage, CompactionReason, CompactionAction } from '@/types'
 import type { ModelInfo, ChatContextUsage } from '../types/chat'
 
 export const TURNS_KEY_PREFIX = 'maxma_turns_'
@@ -94,6 +94,8 @@ interface SessionChannel {
   autoApprove: boolean
   _pingTimer: ReturnType<typeof setInterval> | null  // 心跳 ping 定时器
   _lastPongAt: number  // 上次收到 pong 的时间戳（ms），用于检测静默断开
+  /** context_compressing 在 currentTurn 为 null 时缓存，待下一轮创建后回放 */
+  pendingCompaction?: { reason: CompactionReason; action: CompactionAction }
 }
 
 function createChannel(): SessionChannel {

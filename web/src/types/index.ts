@@ -340,10 +340,10 @@ export interface MemoryDoneEvent {
  *   - 用量: context_usage (独立事件), done.payload.context_usage (内嵌)
  *
  * UNIMPLEMENTED（sidecar 无发射端，需 OMP SDK 深改）:
- *   - plan_proposed/plan_step_*: OMP plan-mode 在 mode state 而非 subscribe 事件流
- *   - memory_*/sub_session_created: 需 OMP rpc-mode 重构
- *   - deferred_subagent_submitted: 需产品决策
- *   - artifact: OMP SDK 无此概念
+ *   - plan_proposed / plan_step_*  — OMP plan-mode 在 mode state 而非 subscribe 事件流
+ *   - memory_* / sub_session_created — 需 OMP rpc-mode 重构
+ *   - deferred_subagent_submitted — 需产品决策
+ *   - artifact — OMP SDK 无此概念
  */
 export type ServerEvent =
   | ThinkingStartEvent
