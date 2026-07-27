@@ -465,6 +465,26 @@ function scrollToBottom() {
   })
 }
 
+// ── 交错入场（stagger-sequence：30-50ms/item，封顶防拖沓） ──
+// 窗口开启期间挂载的轮次按索引获得 transition-delay；窗口关闭后
+// 单条到达的新消息与虚拟滚动重挂载均为零延迟，滚动不拖沓。
+// 注意：必须声明在下方 sessionId watcher 之前——watcher 带 immediate:true，
+// 会在 setup 阶段同步调用 openStaggerWindow，若声明在其后会触发 TDZ 错误。
+const staggerWindowOpen = ref(true)
+let staggerTimer: ReturnType<typeof setTimeout> | null = null
+function openStaggerWindow() {
+  staggerWindowOpen.value = true
+  if (staggerTimer) clearTimeout(staggerTimer)
+  staggerTimer = setTimeout(() => {
+    staggerWindowOpen.value = false
+    staggerTimer = null
+  }, 600)
+}
+function turnStaggerStyle(idx: number): { '--stagger-delay': string } | undefined {
+  if (!staggerWindowOpen.value || idx === 0) return undefined
+  return { '--stagger-delay': `${Math.min(idx, 10) * 40}ms` }
+}
+
 watch(
   () => props.sessionId,
   (sessionId, previousSessionId) => {
@@ -490,24 +510,6 @@ watch(
   },
   { immediate: true },
 )
-
-// ── 交错入场（stagger-sequence：30-50ms/item，封顶防拖沓） ──
-// 窗口开启期间挂载的轮次按索引获得 transition-delay；窗口关闭后
-// 单条到达的新消息与虚拟滚动重挂载均为零延迟，滚动不拖沓。
-const staggerWindowOpen = ref(true)
-let staggerTimer: ReturnType<typeof setTimeout> | null = null
-function openStaggerWindow() {
-  staggerWindowOpen.value = true
-  if (staggerTimer) clearTimeout(staggerTimer)
-  staggerTimer = setTimeout(() => {
-    staggerWindowOpen.value = false
-    staggerTimer = null
-  }, 600)
-}
-function turnStaggerStyle(idx: number): { '--stagger-delay': string } | undefined {
-  if (!staggerWindowOpen.value || idx === 0) return undefined
-  return { '--stagger-delay': `${Math.min(idx, 10) * 40}ms` }
-}
 
 function scrollToTurn(index: number) {
   // scroll-marks 的 index 是 props.turns 中的索引，
