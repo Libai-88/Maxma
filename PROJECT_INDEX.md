@@ -2,7 +2,7 @@
 
 > 这是当前代码导航，不是历史迁移记录。代码、测试和构建脚本与本文档冲突时，以代码和测试为准。
 >
-> 更新时间：2026-07-26
+> 更新时间：2026-07-27
 
 ## 唯一现行架构入口
 
@@ -45,8 +45,21 @@ web/src/main.ts
 - 聊天连接：`web/src/composables/useChat.ts`
 - 会话状态：`web/src/stores/session.ts`
 - 聊天状态：`web/src/stores/chat.ts`
-- 工具组件注册：`web/src/components/tools/registry.ts`
+- 记忆状态：`web/src/stores/memory.ts`
+- 工具组件注册：`web/src/components/tools/registry.ts`（覆盖全部 31 个 OMP 内置工具）
+- 图标系统：`web/src/components/Icon.vue`（SVG 图标注册中心）
 - 页面：`web/src/views/`
+  - `ChatView` - 对话主界面
+  - `MemoryView` - 记忆管理（搜索/筛选/行内编辑/统计）
+  - `CapabilitiesView` - 能力仪表盘（配置源优先级/冲突检测/工具/MCP/Provider）
+  - `PluginListView` - 插件管理器（安装/卸载/启禁）
+  - `ExtensionView` - 扩展管理器（扩展/Skills 发现）
+  - `SettingsView` - OMP 设置面板（压缩/重试/工具/推理预算）
+  - 更多：`McpView`、`ProvidersView`、`SoulView`、`PrivacyView` 等
+- 工具气泡组件：`web/src/components/tools/`
+  - 专用气泡：`PythonBubble`、`FilesBubble`、`FileEditBubble`、`ImageBubble`、`AskUserBubble`、`MemoryBubble`、`BrowserBubble`、`SearchBubble`、`TodoBubble`
+  - 通用输出：`GenericOutputBubble`（覆盖 bash/launch/ssh/github/lsp/debug 等 16 个工具）
+  - 共享工具：`_shared/BubbleChrome.vue`、`_shared/displayNames.ts`
 - 设计令牌和主题：`web/src/assets/styles/`、`web/src/themes/`
 
 ## 后端关键位置
@@ -56,18 +69,30 @@ web/src/main.ts
 - WS 协议常量：`api/ws_protocol.py`（WsEventType / WsMessageType 枚举）
 - 会话管理：`api/session_manager.py`
 - Provider：`api/routes/providers.py`
-- MCP：`api/routes/mcp.py`
+- MCP：`api/routes/mcp.py`（含自动发现 `/mcp/discovered`）
+- OMP Settings：`api/routes/settings.py`（读写 OMP 运行时配置）
+- 记忆：`api/routes/memory.py`（CRUD + 搜索/筛选/统计）
+- 能力仪表盘：`api/routes/capabilities.py`（聚合 Settings/工具/MCP/Provider/配置源）
+- 插件管理：`api/routes/plugins.py`（CRUD + 安装/卸载/启禁）
 - 认证：`api/middleware/auth.py`、`api/db/auth.py`
 - 路径安全：`api/pi_bridge/security_adapter.py`、`api/routes/path_whitelist.py`
 - SessionMap：`api/pi_bridge/session_adapter.py`
+- 事件映射：`api/pi_bridge/ws_event_mapper.py`（验证/丰富 sidecar 事件）
 
 ## Sidecar 关键位置
 
 - RPC server：`bun-sidecar/src/session-bridge.ts`
+  - 核心 RPC：`create_session` / `prompt` / `cancel` / `destroy_session` / `undo` / `get_messages`
+  - 审批 RPC：`user_response`
+  - Settings RPC：`get_settings` / `set_settings`
+  - 能力探测 RPC：`get_discovered_mcp` / `get_discovered_skills` / `get_discovered_extensions`
+  - 插件管理 RPC：`list_plugins` / `install_plugin` / `uninstall_plugin` / `set_plugin_enabled`
+  - 事件推送：`mapPiEventToMaxma()` 将 OMP 事件映射为 Maxma WS 事件
+  - 审批 UI：`createApprovalUiContext()` 桥接 OMP 审批到前端 UI
 - RPC 类型：`bun-sidecar/src/rpc-types.ts`
-- Maxma 工具注册：`bun-sidecar/src/tools/index.ts`
-- 配置管理工具：`bun-sidecar/src/tools/config/`
-- Todoist 工具：`bun-sidecar/src/tools/todoist.ts`
+- 事件类型定义：`MaxmaEvent` 联合类型覆盖全部映射事件
+- 自定义工具注册：`bun-sidecar/src/tools/index.ts`（当前返回空数组，全部使用 OMP 原生工具）
+- MCP 配置加载：`bun-sidecar/src/session-bridge.ts` 的 `loadConfiguredMcp()` 和 `createConfiguredMcp()`
 
 ## 安全和契约文档
 
@@ -181,15 +206,27 @@ MaxmaHere-Portable/ (1.6GB 总体积)
 
 ## 版本事实
 
-当前仓库基线为 `main` / `4a1a2154` / `v2.6.6`。运行时版本来源为 `version.py`；发布前需同步核对前端、Tauri 配置和 Git tag。
+当前仓库基线为 `feat/omp-alignment` / `c22feee3` / `v2.6.6`。运行时版本来源为 `version.py`；发布前需同步核对前端、Tauri 配置和 Git tag。
 
-**最近优化**（2026-07-26）：
+**最近增强**（2026-07-27）：
+- ✅ 配置透明度 — 能力仪表盘 `CapabilitiesView` + `GET /api/capabilities`
+- ✅ 工具 UI 覆盖 — 31/31 OMP 内置工具均有专用气泡组件
+- ✅ 记忆系统 UI — 搜索/类别筛选/置信度过滤/行内编辑/统计
+- ✅ 插件管理 — `PluginListView` + RPC 插件安装/卸载/启禁
+- ✅ 扩展管理 — `ExtensionView` + Sidecar 扩展发现 RPC
+- ✅ 配置源可视化 — 13 个来源优先级排列 + 文件实态检测 + 冲突检测
+- ✅ 上下文压缩增强 — `context_compressed` 事件增加 `will_retry`/`error_message`
+
+**前置优化**（2026-07-26）：
 - ✅ 代码质量修复（WS 协议枚举化、错误分类 bug、常量化）
 - ✅ 启动性能优化（60-90秒 → 1-2秒，Phase 1+2）
 - ✅ 便携版体积优化（2.7GB → 1.6GB，Phase 3）
 
 关键 commits：
+- `c22feee3` - 溢出保护：所有新视图增加滚动限制
+- `75d0482d` - 配置源可视化 + 扩展管理视图
+- `3205c4bc` - 记忆系统 + 插件管理 + 工具全覆盖
+- `950f867d` - 四大短板补齐（仪表盘 + 工具气泡 + 能力 RPC）
 - `4a1a2154` - Phase 3: 移除预打包资源改为按需下载
 - `a4e16645` - Phase 2: 切换 PyInstaller 至 onedir 模式
 - `1d0a7adb` - Phase 1: 移除无用知识库依赖
-- `4772506f` - 代码质量修复（审查发现的问题）
