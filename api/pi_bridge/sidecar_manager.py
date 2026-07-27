@@ -217,18 +217,43 @@ class SidecarManager:
             self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
     async def _heartbeat_loop(self) -> None:
-        """Periodic health check — detects silent sidecar death between user turns."""
+        """Periodic health check — detects silent sidecar death between user turns.
+        Also monitors process memory and restarts if over limit."""
+        consecutive_failures = 0
         while True:
             await asyncio.sleep(30)
             if not self.is_running:
                 logger.warning("[sidecar] heartbeat: process dead")
                 break
+
+            # Memory check (best-effort, psutil may not be installed)
+            try:
+                import psutil
+                proc = psutil.Process(self._process.pid)
+                mem_mb = proc.memory_info().rss / 1024 / 1024
+                if mem_mb > 1024:  # 1 GB limit
+                    logger.warning("[sidecar] memory high: %.0f MB, restarting", mem_mb)
+                    await self.stop()
+                    break
+            except ImportError:
+                pass  # psutil not available
+            except (psutil.NoSuchProcess, AttributeError):
+                pass
+
             try:
                 if self._client:
                     await self._client.call("get_health", timeout=5.0)
+                consecutive_failures = 0
             except Exception:
-                logger.warning("[sidecar] heartbeat: no response, process may be hung", exc_info=True)
-                break
+                consecutive_failures += 1
+                logger.warning(
+                    "[sidecar] heartbeat: no response (attempt %d/3)", consecutive_failures,
+                )
+                if consecutive_failures >= 3:
+                    logger.warning("[sidecar] heartbeat: 3 consecutive failures, marking dead")
+                    break
+                continue
+
         # If we get here, the sidecar is gone — mark it for transparent restart
         self._client = None
         logger.info("[sidecar] heartbeat: marked for restart on next get_client()")
