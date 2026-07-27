@@ -281,15 +281,14 @@ export function mcpReloadUnsupportedResponse(): {
 const sessions = new Map<string, SessionRecord>();
 const rl = createInterface({ input: process.stdin });
 let authStoragePromise: ReturnType<typeof discoverAuthStorage> | null = null;
-let settingsInitialized = false;
+let settingsInitPromise: Promise<Settings> | null = null;
 
 /** Ensure the global Settings singleton is initialized before use. */
 async function ensureSettings(): Promise<Settings> {
-  if (!settingsInitialized) {
-    await Settings.init();
-    settingsInitialized = true;
+  if (!settingsInitPromise) {
+    settingsInitPromise = Settings.init().then(() => Settings.instance);
   }
-  return Settings.instance;
+  return settingsInitPromise;
 }
 
 // ── Tool approval state ───────────────────────────────────
