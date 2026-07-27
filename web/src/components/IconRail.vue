@@ -68,6 +68,7 @@ const emit = defineEmits<{
 const navItems = [
   { to: '/', label: '对话', icon: 'chat' },
   { to: '/capabilities', label: '能力仪表盘', icon: 'dashboard' },
+  { to: '/plugins', label: '插件管理', icon: 'puzzle' },
   { to: '/activity', label: '活动', icon: 'activity' },
   { to: '/help', label: '帮助', icon: 'help' },
 ] as const

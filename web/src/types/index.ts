@@ -702,6 +702,7 @@ export interface CapabilitiesResponse {
   env: Record<string, string>
   system: Record<string, number | boolean>
   memory?: { total: number; categories: Record<string, number>; avg_confidence: number }
+  plugins?: any[]
 }
 
 export interface ToolItem {

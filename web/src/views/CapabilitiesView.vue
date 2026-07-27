@@ -33,6 +33,14 @@
             <div class="stat-value">{{ mcp_servers.length + (discovered_mcp?.length ?? 0) }}</div>
             <div class="stat-label">MCP 服务器</div>
           </div>
+          <div class="stat-card">
+            <div class="stat-value">{{ memory?.total ?? 0 }}</div>
+            <div class="stat-label">记忆条数</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">{{ plugins?.length ?? 0 }}</div>
+            <div class="stat-label">已装插件</div>
+          </div>
         </div>
         <div class="env-info" v-if="env.cwd">
           <div class="env-row"><span class="env-key">工作目录</span><span class="env-val">{{ env.cwd }}</span></div>
@@ -123,6 +131,8 @@ const mcp_servers = ref<any[]>([])
 const discovered_mcp = ref<any[] | null>(null)
 const env = ref<Record<string, string>>({})
 const system = ref<Record<string, number | boolean>>({})
+const memory = ref<{ total: number; categories: Record<string, number>; avg_confidence: number } | null>(null)
+const plugins = ref<any[]>([])
 
 function formatValue(v: unknown): string {
   if (typeof v === 'boolean') return v ? '开启' : '关闭'
@@ -157,6 +167,12 @@ async function load() {
     discovered_mcp.value = data.discovered_mcp ?? null
     env.value = data.env ?? {}
     system.value = data.system ?? {}
+    memory.value = data.memory ?? null
+    // Also load plugin count
+    try {
+      const pdata = await api.request<any[]>('/plugins')
+      plugins.value = Array.isArray(pdata) ? pdata : []
+    } catch { plugins.value = [] }
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
   } finally {
