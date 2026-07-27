@@ -604,6 +604,8 @@ export function mapPiEventToMaxma(
         action: e.action ?? "context-full",
         skipped: e.skipped ?? false,
         aborted: e.aborted ?? false,
+        will_retry: e.willRetry ?? false,
+        error_message: e.errorMessage,
       },
     };
   }

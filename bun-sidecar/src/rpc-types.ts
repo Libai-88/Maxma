@@ -197,7 +197,8 @@ export type MaxmaEvent =
   | { type: "context_usage"; payload: Record<string, unknown> }
   // A3: auto_compaction_end → context_compressed。前端已有处理逻辑（用量更新 +
   // 系统通知），此前无发射端。CompactionResult 无 after_tokens/removed_count，
-  // 前端已防御 undefined。
+  // 前端已防御 undefined。willRetry/error_message 来自 OMP AutoCompactionEndEvent，
+  // 告知前端是否即将重试。
   | {
       type: "context_compressed";
       payload: {
@@ -206,6 +207,8 @@ export type MaxmaEvent =
         action?: string;
         skipped?: boolean;
         aborted?: boolean;
+        will_retry?: boolean;
+        error_message?: string;
       };
     }
   | {
