@@ -1,5 +1,5 @@
 import { computed, watch, onUnmounted, ref, type Ref } from 'vue'
-import type { ClientMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, CompactionReason, AskUserEvent, ArtifactEvent, PlanProposedEvent, PlanStepStartEvent, PlanStepEndEvent, PlanStepErrorEvent, PlanCompletedEvent, DeferredSubagentSubmittedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent } from '@/types'
+import type { ClientMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, CompactionReason, CompactionAction, AskUserEvent, ArtifactEvent, PlanProposedEvent, PlanStepStartEvent, PlanStepEndEvent, PlanStepErrorEvent, PlanCompletedEvent, DeferredSubagentSubmittedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent } from '@/types'
 import type { ThinkPathId } from '@/utils/thinkPath'
 import { normalizeContextUsage, useChatStore, TURNS_KEY_PREFIX } from '@/stores/chat'
 import { useSessionStore } from '@/stores/session'
@@ -171,6 +171,8 @@ interface SessionChannel {
   autoApprove: boolean
   _pingTimer: ReturnType<typeof setInterval> | null  // 心跳 ping 定时器
   _lastPongAt: number  // 上次收到 pong 的时间戳（ms），用于检测静默断开
+  /** context_compressing 在 currentTurn 为 null 时缓存，待下一轮创建后回放 */
+  pendingCompaction?: { reason: CompactionReason; action: CompactionAction }
 }
 
 // Lazy export — 运行时才访问 Store（Pinia 在模块加载时尚未安装）
@@ -580,8 +582,11 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
   }
 
   // context_compressing：上下文压缩开始通知
+  // 如果 currentTurn 为 null 则缓存到 ch.pendingCompaction，等下一轮创建后回放。
+  // 例如压缩发生在 turn 边界时，开始事件可能错过 active turn。
   if (event.type === 'context_compressing') {
     if (ch.currentTurn) {
+      ch.pendingCompaction = undefined
       const reasonLabels: Record<CompactionReason, string> = {
         threshold: '上下文触达阈值',
         overflow: '上下文溢出',
@@ -594,6 +599,8 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
         content: `压缩中：${reasonLabels[event.payload.reason]}（${event.payload.action}）`,
         timestamp: Date.now(),
       })
+    } else {
+      ch.pendingCompaction = { reason: event.payload.reason, action: event.payload.action }
     }
     return
   }
@@ -1358,6 +1365,23 @@ export function useChat(sessionId: Ref<string>) {
       finalAnswer: null,
     }
     ch.currentTurn = turn
+
+    // 回放 currentTurn 为 null 时缓存的 pendingCompaction
+    if (ch.pendingCompaction) {
+      const reasonLabels: Record<CompactionReason, string> = {
+        threshold: '上下文触达阈值',
+        overflow: '上下文溢出',
+        idle: '空闲超时',
+        incomplete: '不完整状态',
+      }
+      turn.events.push({
+        kind: 'system',
+        detail: 'context_compressing',
+        content: `压缩中：${reasonLabels[ch.pendingCompaction.reason]}（${ch.pendingCompaction.action}）`,
+        timestamp: Date.now(),
+      })
+      ch.pendingCompaction = undefined
+    }
 
     const cs = getChatStore()
     const payload: ClientMessage = {
