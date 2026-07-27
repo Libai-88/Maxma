@@ -437,18 +437,37 @@ function parseModel(
 // Pi event → Maxma event mapping
 // ---------------------------------------------------------------------------
 
+/** Shape of OMP AgentEvent fields consumed by mapPiEventToMaxma. */
+interface OmpToolEvent {
+  type: string;
+  toolName?: string;
+  toolCallId?: string;
+  args?: Record<string, unknown>;
+  partialResult?: unknown;
+  result?: unknown;
+  isError?: boolean;
+  message?: { content?: string | Array<{ type: string; text?: string }> };
+  intent?: string;
+}
+
+interface OmpAssistantMessageEvent {
+  type: string;
+  delta?: string;
+  content?: string;
+  error?: unknown;
+}
+
 export function mapPiEventToMaxma(
   piEvent: Record<string, unknown>,
   guard?: { done: boolean } | null,
 ): Record<string, unknown> | null {
-  // Handle AgentEvent types directly
   const type = piEvent.type as string;
 
   if (type === "message_update") {
-    const assistantEvent = (piEvent as any).assistantMessageEvent;
+    const assistantEvent = piEvent.assistantMessageEvent as OmpAssistantMessageEvent | undefined;
     if (!assistantEvent) return null;
 
-    const aeType = assistantEvent.type as string;
+    const aeType = assistantEvent.type;
 
     if (aeType === "text_delta") {
       return {
@@ -489,8 +508,9 @@ export function mapPiEventToMaxma(
     // duplicate/empty-named events.
 
     if (aeType === "error") {
+      const errObj = assistantEvent.error as { content?: Array<{ text?: string }> } | undefined;
       const errMsg =
-        (assistantEvent as any).error?.content?.[0]?.text ??
+        errObj?.content?.[0]?.text ??
         "Unknown agent error";
       return {
         type: "error",
@@ -502,9 +522,8 @@ export function mapPiEventToMaxma(
   }
 
   if (type === "tool_execution_start") {
-    const e = piEvent as any;
-    const toolCallId = e.toolCallId as string | undefined;
-    if (toolCallId) _toolStartTimestamps.set(toolCallId, Date.now());
+    const e = piEvent as unknown as OmpToolEvent;
+    if (e.toolCallId) _toolStartTimestamps.set(e.toolCallId, Date.now());
     return {
       type: "tool_start",
       payload: {
@@ -515,7 +534,7 @@ export function mapPiEventToMaxma(
   }
 
   if (type === "tool_execution_update") {
-    const e = piEvent as any;
+    const e = piEvent as unknown as OmpToolEvent;
     return {
       type: "tool_update",
       payload: {
@@ -528,10 +547,9 @@ export function mapPiEventToMaxma(
   }
 
   if (type === "tool_execution_end") {
-    const e = piEvent as any;
-    const toolCallId = e.toolCallId as string | undefined;
-    const startMs = toolCallId ? _toolStartTimestamps.get(toolCallId) : undefined;
-    if (toolCallId) _toolStartTimestamps.delete(toolCallId);
+    const e = piEvent as unknown as OmpToolEvent;
+    const startMs = e.toolCallId ? _toolStartTimestamps.get(e.toolCallId) : undefined;
+    if (e.toolCallId) _toolStartTimestamps.delete(e.toolCallId);
     const elapsed = startMs !== undefined ? Math.round((Date.now() - startMs) / 1000) : 0;
     const isError = e.isError === true;
     if (isError) {
@@ -555,14 +573,15 @@ export function mapPiEventToMaxma(
   }
 
   if (type === "message_end") {
-    const msg = (piEvent as any).message;
+    const msg = (piEvent as unknown as OmpToolEvent).message;
     let content = "";
     if (msg?.content) {
       if (typeof msg.content === "string") {
         content = msg.content;
       } else if (Array.isArray(msg.content)) {
         content = msg.content
-          .map((b: any) => (b?.type === "text" ? b.text : ""))
+          .filter((b): b is { type: string; text: string } => b?.type === "text")
+          .map(b => b.text)
           .join("");
       }
     }
@@ -573,38 +592,34 @@ export function mapPiEventToMaxma(
   }
 
   if (type === "auto_compaction_end") {
-    // A3: OMP SDK 在上下文压力下自动压缩历史后发此事件（emit-site 19 处）。
-    // 映射到前端的 context_compressed 事件，激活前端已有的用量更新 + 系统通知逻辑
-    // （此前是死分支）。CompactionResult 字段为 summary/shortSummary?/tokensBefore，
-    // 无 after_tokens/removed_count —— 前端已防御 undefined。后续 done 事件会带
-    // 精确 context_usage 更新 badge，此处仅做即时通知。
-    const e = piEvent as any;
-    const result = e.result;  // CompactionResult | undefined
+    const e = piEvent as unknown as OmpAutoCompactionEndEvent;
+    const result = e.result;
     const summaryPreview =
-      (result?.shortSummary as string | undefined) ??
-      (result?.summary as string | undefined) ?? "";
+      result?.shortSummary ?? result?.summary ?? "";
     return {
       type: "context_compressed",
       payload: {
         summary_preview: summaryPreview.slice(0, 200),
-        before_tokens: result?.tokensBefore as number | undefined,
-        action: (e.action as string | undefined) ?? "context-full",
-        skipped: (e.skipped as boolean | undefined) ?? false,
-        aborted: (e.aborted as boolean | undefined) ?? false,
+        before_tokens: result?.tokensBefore,
+        action: e.action ?? "context-full",
+        skipped: e.skipped ?? false,
+        aborted: e.aborted ?? false,
       },
     };
   }
 
   if (type === "auto_compaction_start") {
-    const e = piEvent as any;
+    const e = piEvent as unknown as OmpAutoCompactionStartEvent;
+    const reason = e.reason ?? "threshold";
+    const action = e.action ?? "context-full";
     return {
       type: "context_compressing",
       payload: {
-        reason: ["threshold", "overflow", "idle", "incomplete"].includes(e.reason)
-          ? (e.reason as "threshold" | "overflow" | "idle" | "incomplete")
+        reason: ["threshold", "overflow", "idle", "incomplete"].includes(reason)
+          ? (reason as "threshold" | "overflow" | "idle" | "incomplete")
           : "threshold",
-        action: ["context-full", "handoff", "shake", "snapcompact"].includes(e.action)
-          ? (e.action as "context-full" | "handoff" | "shake" | "snapcompact")
+        action: ["context-full", "handoff", "shake", "snapcompact"].includes(action)
+          ? (action as "context-full" | "handoff" | "shake" | "snapcompact")
           : "context-full",
       },
     };
@@ -617,7 +632,7 @@ export function mapPiEventToMaxma(
 
   // OMP auto-retry events
   if (type === "auto_retry_start") {
-    const e = piEvent as any;
+    const e = piEvent as unknown as OmpAutoRetryEvent;
     return {
       type: "retry_start",
       payload: {
@@ -630,7 +645,7 @@ export function mapPiEventToMaxma(
   }
 
   if (type === "auto_retry_end") {
-    const e = piEvent as any;
+    const e = piEvent as unknown as OmpAutoRetryEvent;
     return {
       type: "retry_end",
       payload: {
@@ -643,13 +658,13 @@ export function mapPiEventToMaxma(
 
   // OMP todo reminder
   if (type === "todo_reminder") {
-    const e = piEvent as any;
+    const e = piEvent as unknown as OmpTodoReminderEvent;
     return {
       type: "todo_reminder",
       payload: {
-        todos: (e.todos ?? []).map((t: any) => ({
-          content: t.content ?? "",
-          status: t.status ?? "pending",
+        todos: (e.todos ?? []).map(t => ({
+          content: t?.content ?? "",
+          status: t?.status ?? "pending",
         })),
         attempt: e.attempt ?? 0,
         max_attempts: e.maxAttempts ?? 0,
@@ -659,7 +674,7 @@ export function mapPiEventToMaxma(
 
   // OMP IRC multi-agent message
   if (type === "irc_message") {
-    const e = piEvent as any;
+    const e = piEvent as unknown as OmpIrcMessageEvent;
     const msg = e.message;
     if (!msg) return null;
     return {
@@ -675,7 +690,7 @@ export function mapPiEventToMaxma(
 
   // OMP notice
   if (type === "notice") {
-    const e = piEvent as any;
+    const e = piEvent as unknown as OmpNoticeEvent;
     return {
       type: "notice",
       payload: {
