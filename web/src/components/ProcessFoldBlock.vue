@@ -48,7 +48,7 @@ const props = defineProps<{ toolCall: ToolCall }>()
 
 const expanded = ref(false)
 const copied = ref(false)
-const contentId = `process-fold-${Math.random().toString(36).slice(2)}`
+const contentId = `process-fold-${crypto.randomUUID()}`
 
 const displayName = computed(() => toolDisplayName(props.toolCall.name))
 const rawContent = computed(() => [props.toolCall.input, props.toolCall.output ?? ''].filter(Boolean).join('\n\n'))
