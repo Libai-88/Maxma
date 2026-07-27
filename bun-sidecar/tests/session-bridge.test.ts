@@ -34,6 +34,191 @@ describe("mapPiEventToMaxma done guard", () => {
   });
 });
 
+describe("mapPiEventToMaxma message_update", () => {
+  test("text_delta → token", () => {
+    const out = mapPiEventToMaxma({
+      type: "message_update",
+      assistantMessageEvent: { type: "text_delta", delta: "hello" },
+    });
+    expect(out).toEqual({ type: "token", payload: { token: "hello" } });
+  });
+
+  test("thinking_start", () => {
+    const out = mapPiEventToMaxma({
+      type: "message_update",
+      assistantMessageEvent: { type: "thinking_start" },
+    });
+    expect(out).toEqual({ type: "thinking_start", payload: {} });
+  });
+
+  test("thinking_delta → independent event (not token)", () => {
+    const out = mapPiEventToMaxma({
+      type: "message_update",
+      assistantMessageEvent: { type: "thinking_delta", delta: "reasoning..." },
+    });
+    expect(out).toEqual({ type: "thinking_delta", payload: { delta: "reasoning..." } });
+  });
+
+  test("thinking_end", () => {
+    const out = mapPiEventToMaxma({
+      type: "message_update",
+      assistantMessageEvent: { type: "thinking_end", content: "final thought" },
+    });
+    expect(out).toEqual({ type: "thinking_end", payload: { content: "final thought" } });
+  });
+
+  test("error in assistant message", () => {
+    const out = mapPiEventToMaxma({
+      type: "message_update",
+      assistantMessageEvent: { type: "error", error: { content: [{ text: "API error" }] } },
+    });
+    expect(out).toEqual({ type: "error", payload: { code: "AGENT_ERROR", message: "API error" } });
+  });
+});
+
+describe("mapPiEventToMaxma tool_execution", () => {
+  test("tool_execution_start → tool_start", () => {
+    const out = mapPiEventToMaxma({
+      type: "tool_execution_start",
+      toolName: "bash", args: { cmd: "ls" }, toolCallId: "c1",
+    });
+    expect(out).toMatchObject({
+      type: "tool_start",
+      payload: { tool_name: "bash", input: expect.stringContaining("ls") },
+    });
+  });
+
+  test("tool_execution_update → tool_update", () => {
+    const out = mapPiEventToMaxma({
+      type: "tool_execution_update",
+      toolName: "bash", partialResult: "line1\n", toolCallId: "c1",
+    });
+    expect(out).toEqual({
+      type: "tool_update",
+      payload: { tool_name: "bash", partial_result: "line1\n" },
+    });
+  });
+
+  test("tool_execution_end (success) → tool_end", () => {
+    const out = mapPiEventToMaxma({
+      type: "tool_execution_end",
+      toolName: "bash", result: { exitCode: 0 }, toolCallId: "c2",
+    });
+    expect(out).toMatchObject({
+      type: "tool_end",
+      payload: { tool_name: "bash", elapsed: expect.any(Number) },
+    });
+  });
+
+  test("tool_execution_end (error) → tool_error", () => {
+    const out = mapPiEventToMaxma({
+      type: "tool_execution_end",
+      toolName: "bash", result: { exitCode: 1 }, isError: true,
+    });
+    expect(out).toMatchObject({
+      type: "tool_error",
+      payload: { tool_name: "bash", elapsed: 0 },
+    });
+  });
+});
+
+describe("mapPiEventToMaxma message_end → answer", () => {
+  test("string content", () => {
+    const out = mapPiEventToMaxma({
+      type: "message_end", message: { content: "Hello!" },
+    });
+    expect(out).toEqual({ type: "answer", payload: { content: "Hello!" } });
+  });
+
+  test("array content (text blocks)", () => {
+    const out = mapPiEventToMaxma({
+      type: "message_end",
+      message: { content: [{ type: "text", text: "A " }, { type: "text", text: "B" }] },
+    });
+    expect(out).toEqual({ type: "answer", payload: { content: "A B" } });
+  });
+});
+
+describe("mapPiEventToMaxma compaction", () => {
+  test("auto_compaction_end → context_compressed", () => {
+    const out = mapPiEventToMaxma({
+      type: "auto_compaction_end", action: "snapcompact",
+      result: { shortSummary: "done", tokensBefore: 50000 },
+    });
+    expect(out).toMatchObject({
+      type: "context_compressed",
+      payload: { action: "snapcompact", before_tokens: 50000 },
+    });
+  });
+
+  test("auto_compaction_start → context_compressing", () => {
+    const out = mapPiEventToMaxma({
+      type: "auto_compaction_start", reason: "threshold", action: "snapcompact",
+    });
+    expect(out).toEqual({
+      type: "context_compressing",
+      payload: { reason: "threshold", action: "snapcompact" },
+    });
+  });
+});
+
+describe("mapPiEventToMaxma retry / todo / irc / notice", () => {
+  test("auto_retry_start → retry_start", () => {
+    const out = mapPiEventToMaxma({
+      type: "auto_retry_start",
+      attempt: 1, maxAttempts: 3, delayMs: 1000, errorMessage: "err",
+    });
+    expect(out).toEqual({
+      type: "retry_start",
+      payload: { attempt: 1, max_attempts: 3, delay_ms: 1000, error_message: "err" },
+    });
+  });
+
+  test("todo_reminder", () => {
+    const out = mapPiEventToMaxma({
+      type: "todo_reminder",
+      todos: [{ content: "task", status: "pending" }], attempt: 1, maxAttempts: 3,
+    });
+    expect(out).toEqual({
+      type: "todo_reminder",
+      payload: { todos: [{ content: "task", status: "pending" }], attempt: 1, max_attempts: 3 },
+    });
+  });
+
+  test("irc_message", () => {
+    const out = mapPiEventToMaxma({
+      type: "irc_message",
+      message: { from: "a", to: "b", body: "hi", id: "m1" },
+    });
+    expect(out).toEqual({
+      type: "irc_message",
+      payload: { from: "a", to: "b", body: "hi", id: "m1" },
+    });
+  });
+
+  test("notice", () => {
+    const out = mapPiEventToMaxma({
+      type: "notice", level: "warning", message: "conn lost", source: "mcp",
+    });
+    expect(out).toEqual({
+      type: "notice",
+      payload: { level: "warning", message: "conn lost", source: "mcp" },
+    });
+  });
+});
+
+describe("mapPiEventToMaxma null returns", () => {
+  test("unknown type → null", () => {
+    expect(mapPiEventToMaxma({ type: "bogus" })).toBeNull();
+  });
+  test("message_update without assistantMessageEvent → null", () => {
+    expect(mapPiEventToMaxma({ type: "message_update" })).toBeNull();
+  });
+  test("irc_message without message → null", () => {
+    expect(mapPiEventToMaxma({ type: "irc_message" })).toBeNull();
+  });
+});
+
 // Fake AgentSession factory for orchestratePrompt tests.
 function makeFakeSession(opts: {
   promptImpl?: (msg: string) => Promise<void>;
