@@ -203,12 +203,16 @@ onMounted(async () => {
   outline-offset: 2px;
 }
 
-/* ── 主题切换过渡动画（仅布局容器，不泛化到所有元素） ── */
+/* ── 主题切换过渡动画 ── */
 @media (prefers-reduced-motion: no-preference) {
   html {
     transition: background-color 0.3s ease;
   }
-  body,
+  body {
+    scrollbar-color: var(--border) transparent;
+    transition: background-color 0.25s ease, color 0.25s ease,
+                border-color 0.25s ease, scrollbar-color 0.25s ease;
+  }
   .app-layout,
   .main {
     transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
