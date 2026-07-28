@@ -221,9 +221,10 @@ import StickerContextMenu from '@/components/StickerContextMenu.vue'
 import QuotedSelectionCard from '@/components/QuotedSelectionCard.vue'
 import ThinkPathChooser from '@/components/ThinkPathChooser.vue'
 import { computeFloatingInputPosition } from '@/utils/floatingPosition'
-import type { ToolInfo } from '@/types'
 import { useStickerSegments, type StickerSegment } from '@/composables/useStickerSegments'
 import { useChatInputInjected } from '@/composables/useChatInput'
+import { useAutocomplete } from '@/composables/useAutocomplete'
+import { useResizeHandle } from '@/composables/useResizeHandle'
 import type { FileRef, FolderRef, ParsedRef, ImageRef } from '@/utils/references'
 import { REF_CHIP_CONFIG } from '@/utils/references'
 import { isTauri } from '@/utils/env'
@@ -496,183 +497,35 @@ function onPaste(e: ClipboardEvent) {
 
 // ── @ / # 自动补全（统一状态机） ──
 
-type AcMode = 'tool' | null
-
-const acMode = ref<AcMode>(null)
-const acFilterText = ref('')
-const acPosition = ref({ x: 0, y: 0 })
-const acActiveIndex = ref(0)
-const acTriggerPos = ref(-1)
-const acTriggerChar = ref('')
-
-const tools = ref<ToolInfo[]>([])
-
-/** 当前模式对应的数据源 */
-const acSource = computed(() =>
-  acMode.value === 'tool' ? tools.value
-  : []
-)
-
-/** 筛选 + 排序后的候选项 */
-const acFiltered = computed(() => {
-  const src = acSource.value
-  if (!acFilterText.value) return src
-  const lower = acFilterText.value.toLowerCase()
-
-  const scored = src
-    .map(item => {
-      const nameLower = item.name.toLowerCase()
-      if (!nameLower.includes(lower)) return null
-      const prefix = nameLower.startsWith(lower)
-      const count = prefix ? 1 : nameLower.split(lower).length - 1
-      const score = prefix ? 4 : 2
-      return { item, score, count }
-    })
-    .filter((x): x is NonNullable<typeof x> => x !== null)
-
-  scored.sort((a, b) => {
-    if (a.score !== b.score) return b.score - a.score
-    if (a.count !== b.count) return b.count - a.count
-    return a.item.name.localeCompare(b.item.name)
-  })
-
-  return scored.map(s => s.item)
-})
-
-async function loadTools() {
-  try {
-    const res = await api.listTools()
-    tools.value = res.tools
-  } catch (e) {
-    console.error('[ChatInput] 加载工具失败:', e)
-  }
-}
-
-/** 检测 # 触发 (tool autocomplete) */
-watch(text, () => {
-  // 用户开始输入时清除连接错误提示
-  if (connectionError.value) connectionError.value = null
-  const el = textareaRef.value
-  if (!el || el !== document.activeElement) return
-  const val = text.value
-  const cursorPos = el.selectionStart
-  const textBeforeCursor = val.slice(0, cursorPos)
-
-  // 检查 # 触发 tool autocomplete
-  let triggerPos = -1
-  let triggerChar = ''
-  for (const ch of ['#'] as const) {
-    const idx = textBeforeCursor.lastIndexOf(ch)
-    if (idx > triggerPos) {
-      triggerPos = idx
-      triggerChar = ch
-    }
-  }
-
-  const mode: AcMode = triggerChar === '#' ? 'tool' : null
-
-  if (triggerPos !== -1 && mode) {
-    const after = textBeforeCursor.slice(triggerPos + 1)
-    const charBefore = triggerPos === 0 ? ' ' : textBeforeCursor[triggerPos - 1]
-    if (!/\w/.test(charBefore)) {
-      acMode.value = mode
-      acFilterText.value = after
-      acTriggerPos.value = triggerPos
-      acTriggerChar.value = triggerChar
-      acActiveIndex.value = 0
-      acPosition.value = calcCursorPixelPos(el, cursorPos)
-      return
-    }
-  }
-  acMode.value = null
+const {
+  acMode,
+  acFilterText,
+  acPosition,
+  acActiveIndex,
+  acFiltered,
+  loadTools,
+  handleKeydown: acHandleKeydown,
+  confirmItem,
+} = useAutocomplete({
+  text,
+  textareaRef,
+  refs,
+  connectionError,
+  onConfirm: () => autoResize(),
 })
 
 function onKeydown(e: KeyboardEvent) {
   // IME 组合态（中文输入法选字中）不拦截任何按键
   if (e.isComposing || e.keyCode === 229) return
 
-  if (acMode.value) {
-    const len = acFiltered.value.length
-    if (e.key === 'Tab') {
-      e.preventDefault()
-      confirmItem()
-      return
-    }
-    if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      acActiveIndex.value = ((acActiveIndex.value - 1) % len + len) % len
-      return
-    }
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      acActiveIndex.value = (acActiveIndex.value + 1) % len
-      return
-    }
-    if (e.key === 'Escape') {
-      acMode.value = null
-      return
-    }
-  }
+  // 自动补全面板打开时，委托给 autocomplete 处理
+  if (acHandleKeydown(e)) return
 
   // Enter 发送（仅当面板未打开时）
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
     handleSend()
   }
-}
-
-function confirmItem() {
-  const item = acFiltered.value[acActiveIndex.value]
-  if (!item) return
-
-  // 移除触发符及后续文本
-  const el = textareaRef.value
-  const cursorPos = el?.selectionStart ?? text.value.length
-  text.value = text.value.slice(0, acTriggerPos.value) + text.value.slice(cursorPos)
-
-  // 创建对应类型的引用
-  const ref: ParsedRef =
-    { type: 'tool', name: item.name, label: item.name }
-  refs.value.push(ref)
-
-  acMode.value = null
-  nextTick(() => autoResize())
-}
-
-function calcCursorPixelPos(textarea: HTMLTextAreaElement, pos: number): { x: number; y: number } {
-  const style = getComputedStyle(textarea)
-  const mirror = document.createElement('div')
-  mirror.style.cssText = `
-    position: fixed; top: 0; left: -9999px; visibility: hidden; white-space: pre-wrap;
-    word-wrap: break-word; overflow-wrap: break-word;
-    font: ${style.font}; font-size: ${style.fontSize};
-    letter-spacing: ${style.letterSpacing};
-    width: ${textarea.clientWidth}px;
-    padding: ${style.padding};
-  `
-  mirror.textContent = textarea.value.slice(0, pos) + '.'
-  document.body.appendChild(mirror)
-
-  const textareaRect = textarea.getBoundingClientRect()
-  const mirrorRect = mirror.getBoundingClientRect()
-
-  // 计算光标所在行相对于 mirror 顶部的位置
-  const lines = mirror.textContent!.split('\n')
-  const lastLine = lines[lines.length - 1]
-
-  // 用 span 精确测量最后一行的宽度
-  const span = document.createElement('span')
-  span.textContent = lastLine
-  span.style.cssText = `visibility: hidden; white-space: pre; font: ${style.font}; font-size: ${style.fontSize};`
-  document.body.appendChild(span)
-
-  const x = textareaRect.left + span.getBoundingClientRect().width + parseInt(style.paddingLeft || '0') - 8
-  const y = textareaRect.top + mirrorRect.height - textarea.scrollTop + 4
-
-  document.body.removeChild(mirror)
-  document.body.removeChild(span)
-
-  return { x, y }
 }
 
 // ── Composer 模型状态 ──
@@ -1012,80 +865,7 @@ function autoResize() {
 
 // ── 拖拽调整输入框高度 ──
 
-const customHeight = ref<number | null>(null)
-const isResizing = ref(false)
-const resizeStartY = ref(0)
-const resizeStartHeight = ref(0)
-const handleRef = ref<HTMLDivElement | null>(null)
-/** 当前正在拖拽的 pointer ID，用于 releasePointerCapture 时校验一致性 */
-let activePointerId = -1
-const DEFAULT_INPUT_HEIGHT = 117
-const initialHeight = ref(DEFAULT_INPUT_HEIGHT)
-
-// CSP-safe CSSOM: set container height/minHeight via style.setProperty (was :style binding)
-watchEffect(() => {
-  const el = inputContainerRef.value
-  if (!el) return
-  el.style.setProperty('min-height', `${initialHeight.value}px`)
-  if (customHeight.value !== null) {
-    el.style.setProperty('height', `${customHeight.value}px`)
-  } else {
-    el.style.removeProperty('height')
-  }
-}, { flush: 'post' })
-
-/** 组件挂载后捕获输入框的初始默认高度，作为拖拽下限 */
-onMounted(() => {
-  nextTick(() => {
-    const el = inputContainerRef.value
-    if (el) initialHeight.value = Math.max(DEFAULT_INPUT_HEIGHT, el.clientHeight)
-  })
-})
-
-function startResize(e: PointerEvent) {
-  const handle = e.currentTarget as HTMLDivElement
-  handle.setPointerCapture(e.pointerId)
-  handleRef.value = handle
-  activePointerId = e.pointerId
-
-  isResizing.value = true
-  resizeStartY.value = e.clientY
-  const el = inputContainerRef.value
-  resizeStartHeight.value = el ? el.clientHeight : initialHeight.value
-  if (customHeight.value === null) {
-    customHeight.value = resizeStartHeight.value
-  }
-
-  // 拖拽时清除 textarea 行内高度，让 CSS height: 100% 接管以填充容器
-  if (textareaRef.value) textareaRef.value.style.height = ''
-
-  handle.addEventListener('pointermove', onResizeMove)
-  handle.addEventListener('pointerup', onResizeEnd)
-  handle.addEventListener('pointercancel', onResizeEnd)
-}
-
-function onResizeMove(e: PointerEvent) {
-  // 只处理与当前拖拽匹配的 pointer（避免多指触控干扰）
-  if (e.pointerId !== activePointerId) return
-  const delta = resizeStartY.value - e.clientY
-  const newHeight = Math.max(initialHeight.value, Math.min(600, resizeStartHeight.value + delta))
-  customHeight.value = newHeight
-}
-
-function onResizeEnd(e: PointerEvent) {
-  // 只处理与当前拖拽匹配的 pointer
-  if (e.pointerId !== activePointerId) return
-  isResizing.value = false
-  const handle = handleRef.value
-  if (handle) {
-    handle.releasePointerCapture(e.pointerId)
-    handle.removeEventListener('pointermove', onResizeMove)
-    handle.removeEventListener('pointerup', onResizeEnd)
-    handle.removeEventListener('pointercancel', onResizeEnd)
-    handleRef.value = null
-    activePointerId = -1
-  }
-}
+const { customHeight, isResizing, startResize } = useResizeHandle(inputContainerRef, textareaRef)
 
     onUnmounted(() => {
       if (_connectionErrorTimer) clearTimeout(_connectionErrorTimer)
