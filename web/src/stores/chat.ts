@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, shallowRef } from 'vue'
 import type { ChatTurn, ContextUsage, CompactionReason, CompactionAction } from '@/types'
 import type { ModelInfo, ChatContextUsage } from '../types/chat'
 
@@ -114,7 +114,7 @@ export const useChatStore = defineStore('chat', () => {
 
   // --- New state ---
   const currentModel = ref('gpt-4o')
-  const availableModels = ref<ModelInfo[]>([])
+  const availableModels = shallowRef<ModelInfo[]>([])
   const temperature = ref(0.7)
   const maxTokens = ref(4096)
   const thinkingEnabled = ref(false)

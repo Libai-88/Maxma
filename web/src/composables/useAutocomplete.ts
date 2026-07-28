@@ -6,8 +6,11 @@
  */
 import { ref, computed, watch, nextTick, type Ref } from 'vue'
 import { api } from '@/api'
+import { createLogger } from '@/utils/logger'
 import type { ToolInfo } from '@/types'
 import type { ParsedRef } from '@/utils/references'
+
+const log = createLogger('autocomplete')
 
 type AcMode = 'tool' | null
 
@@ -65,7 +68,7 @@ export function useAutocomplete(options: UseAutocompleteOptions) {
       const res = await api.listTools()
       tools.value = res.tools
     } catch (e) {
-      console.error('[useAutocomplete] 加载工具失败:', e)
+      log.error('加载工具失败:', e)
     }
   }
 
