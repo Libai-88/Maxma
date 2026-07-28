@@ -21,7 +21,7 @@
     <main id="main-content" class="main" tabindex="-1" aria-label="对话工作区">
       <RegionalErrorBoundary :reset-keys="[$route.path]">
         <router-view v-slot="{ Component }">
-          <keep-alive include="ChatView">
+          <keep-alive include="ChatView" :max="5">
             <component :is="Component" />
           </keep-alive>
         </router-view>
