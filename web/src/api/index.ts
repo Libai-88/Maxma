@@ -21,6 +21,11 @@ import type {
   ListMCPServersResponse,
   MCPServerToolsResponse,
   DiscoveredServer,
+  RegistryListResponse,
+  RegistryServerDetail,
+  RegistryInstallResponse,
+  OAuthAuthorizeResponse,
+  OAuthStatusResponse,
   MetricsSnapshot,
   MetricsHistoryResponse,
   AuditLogStats,
@@ -55,6 +60,44 @@ import type {
   SessionSnapshot,
 } from '@/types/collab'
 import { ensurePortLoaded, getApiBase, tauriFetch } from '@/utils/env'
+
+// ── Panel Config 类型 ──
+
+export interface HindsightConfig {
+  enabled: boolean
+  retention_days: number
+  importance_threshold: number
+  processing_mode: 'auto' | 'manual' | 'scheduled'
+  prompt_template: string
+}
+
+export interface TtsConfig {
+  enabled: boolean
+  provider: 'edge-tts' | 'openai-tts' | 'custom'
+  voice: string
+  speed: number
+  pitch: number
+  auto_read: boolean
+}
+
+export interface BrowserToolsConfig {
+  enabled: boolean
+  chrome_path: string
+  headless: boolean
+  viewport_width: number
+  viewport_height: number
+  block_tracking: boolean
+  allowed_domains: string[]
+}
+
+export interface SubAgentConfig {
+  enabled: boolean
+  max_concurrent: number
+  auto_approve: boolean
+  model: string
+  timeout_seconds: number
+  show_progress: boolean
+}
 
 // 注意：BASE 在 ensurePortLoaded() 完成后可能因端口冲突回退而变化，
 // 因此在 ensureTokenLoaded() 中会重新计算。
@@ -373,6 +416,44 @@ export const api = {
       body: JSON.stringify({ path, value }),
     }),
 
+  // ── Panel Configs（Hindsight / TTS / Browser Tools / Sub-agents） ──
+
+  getHindsightConfig: () =>
+    request<HindsightConfig>('/memory/hindsight-config'),
+
+  updateHindsightConfig: (config: Partial<HindsightConfig>) =>
+    request<HindsightConfig>('/memory/hindsight-config', {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    }),
+
+  getTtsConfig: () =>
+    request<TtsConfig>('/settings/tts'),
+
+  updateTtsConfig: (config: Partial<TtsConfig>) =>
+    request<TtsConfig>('/settings/tts', {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    }),
+
+  getBrowserToolsConfig: () =>
+    request<BrowserToolsConfig>('/settings/browser-tools'),
+
+  updateBrowserToolsConfig: (config: Partial<BrowserToolsConfig>) =>
+    request<BrowserToolsConfig>('/settings/browser-tools', {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    }),
+
+  getSubAgentConfig: () =>
+    request<SubAgentConfig>('/settings/sub-agents'),
+
+  updateSubAgentConfig: (config: Partial<SubAgentConfig>) =>
+    request<SubAgentConfig>('/settings/sub-agents', {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    }),
+
   // ── Const 固定会话 ──
 
   constifySession: (sessionId: string, name: string) =>
@@ -486,6 +567,43 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  // ── MCP Registry 市场（Smithery 代理） ──
+
+  getMcpRegistry: (params?: { q?: string; page?: number; page_size?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.q) qs.set('q', params.q)
+    if (params?.page) qs.set('page', String(params.page))
+    if (params?.page_size) qs.set('page_size', String(params.page_size))
+    const query = qs.toString()
+    return request<RegistryListResponse>(`/mcp/registry${query ? `?${query}` : ''}`)
+  },
+
+  getMcpRegistryDetail: (name: string) =>
+    request<RegistryServerDetail>(`/mcp/registry/${encodeURIComponent(name)}`),
+
+  installMcpFromRegistry: (name: string, body?: { server_id?: string; config?: Record<string, unknown> }) =>
+    request<RegistryInstallResponse>('/mcp/registry/install', {
+      method: 'POST',
+      body: JSON.stringify({ name, ...body }),
+    }),
+
+  // ── MCP OAuth 授权 ──
+
+  mcpOAuthAuthorize: (serverName: string, options?: { client_id?: string; auth_endpoint?: string; redirect_uri?: string; scope?: string }) =>
+    request<OAuthAuthorizeResponse>('/mcp/oauth/authorize', {
+      method: 'POST',
+      body: JSON.stringify({ server_name: serverName, ...options }),
+    }),
+
+  mcpOAuthCallback: (code: string, state: string, serverName?: string) =>
+    request<{ status: string; server_name: string; token_type: string; expires_in: number }>('/mcp/oauth/callback', {
+      method: 'POST',
+      body: JSON.stringify({ code, state, server_name: serverName }),
+    }),
+
+  mcpOAuthStatus: (serverName: string) =>
+    request<OAuthStatusResponse>(`/mcp/oauth/status/${encodeURIComponent(serverName)}`),
 
   uploadImage,
 

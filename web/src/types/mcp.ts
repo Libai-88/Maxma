@@ -84,3 +84,62 @@ export interface MCPServerToolsResponse {
   server_id: string
   tools: string[]
 }
+
+// ── Smithery Registry 市场 ──
+
+export interface RegistryServer {
+  name: string
+  display_name: string
+  description: string
+  author: string
+  downloads: number
+  icon_url: string
+  verified: boolean
+}
+
+export interface RegistryListResponse {
+  servers: RegistryServer[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface RegistryServerDetail extends RegistryServer {
+  readme: string
+  config: Record<string, unknown>
+  connection: Record<string, unknown>
+}
+
+export interface RegistryInstallResponse {
+  status: string
+  server: Record<string, unknown>
+  registry_name: string
+  servers: MCPServerInfo[]
+  tool_count: number
+}
+
+// ── OAuth 授权 ──
+
+export interface OAuthAuthorizeResponse {
+  auth_url: string
+  state: string
+  server_name: string
+}
+
+export interface OAuthCallbackResponse {
+  status: string
+  server_name: string
+  token_type: string
+  expires_in: number
+}
+
+export interface OAuthStatusResponse {
+  server_name: string
+  authorized: boolean
+  status: 'not_authorized' | 'active' | 'expired'
+  token_type?: string
+  scope?: string
+  authorized_at?: number
+  expires_at?: number
+  has_refresh_token?: boolean
+}

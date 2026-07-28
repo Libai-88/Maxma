@@ -1,12 +1,16 @@
-"""REST API — MCP 服务器配置 CRUD + 热加载。"""
+"""REST API — MCP 服务器配置 CRUD + 热加载 + Registry + OAuth。"""
 
 import logging
 import os
+import time
+import secrets
+from pathlib import Path
 
+import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from app_paths import MCP_CONFIG_PATH
+from app_paths import MCP_CONFIG_PATH, API_DATA_DIR
 from api.yaml_store import dump_yaml_atomic, load_yaml, yaml_file_lock
 
 logger = logging.getLogger(__name__)
@@ -523,3 +527,384 @@ async def reload_mcp_servers(request: Request):
             "message": "OMP MCP 配置只在新会话创建时加载；请重建会话后生效",
         },
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Smithery Registry 代理
+# ═══════════════════════════════════════════════════════════════════════
+
+SMITHERY_REGISTRY_URL = "https://registry.smithery.ai/servers"
+
+
+@router.get("/mcp/registry")
+async def get_mcp_registry(q: str = "", page: int = 1, page_size: int = 20):
+    """代理 Smithery Registry API，浏览可用的 MCP 服务器。
+
+    服务端转发请求以避免浏览器 CORS 限制。
+    """
+    params: dict = {"page": page, "pageSize": page_size}
+    if q:
+        params["q"] = q
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(SMITHERY_REGISTRY_URL, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Smithery Registry 请求超时")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=502, detail=f"Smithery Registry 返回错误: {e.response.status_code}")
+    except Exception as e:
+        logger.warning("[mcp-registry] Failed to fetch registry: %s", e)
+        raise HTTPException(status_code=502, detail=f"无法连接 Smithery Registry: {e}")
+
+    # 标准化返回格式
+    servers = []
+    raw_servers = data.get("servers", data.get("results", []))
+    if isinstance(raw_servers, list):
+        for item in raw_servers:
+            if not isinstance(item, dict):
+                continue
+            servers.append({
+                "name": item.get("qualifiedName", item.get("name", "")),
+                "display_name": item.get("displayName", item.get("name", "")),
+                "description": item.get("description", ""),
+                "author": item.get("owner", item.get("author", "")),
+                "downloads": item.get("downloads", item.get("useCount", 0)),
+                "icon_url": item.get("iconUrl", item.get("icon", "")),
+                "verified": item.get("verified", False),
+            })
+    return {
+        "servers": servers,
+        "total": data.get("totalCount", data.get("total", len(servers))),
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+@router.get("/mcp/registry/{name:path}")
+async def get_mcp_registry_detail(name: str):
+    """获取 Smithery Registry 中特定服务器的详细信息。"""
+    url = f"{SMITHERY_REGISTRY_URL}/{name}"
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            data = resp.json()
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Smithery Registry 请求超时")
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            raise HTTPException(status_code=404, detail=f"Registry 中未找到 '{name}'")
+        raise HTTPException(status_code=502, detail=f"Smithery Registry 返回错误: {e.response.status_code}")
+    except Exception as e:
+        logger.warning("[mcp-registry] Failed to fetch detail for %s: %s", name, e)
+        raise HTTPException(status_code=502, detail=f"无法连接 Smithery Registry: {e}")
+
+    return {
+        "name": data.get("qualifiedName", data.get("name", name)),
+        "display_name": data.get("displayName", data.get("name", name)),
+        "description": data.get("description", ""),
+        "author": data.get("owner", data.get("author", "")),
+        "downloads": data.get("downloads", data.get("useCount", 0)),
+        "icon_url": data.get("iconUrl", data.get("icon", "")),
+        "verified": data.get("verified", False),
+        "readme": data.get("readme", ""),
+        "config": data.get("config", {}),
+        "connection": data.get("connection", {}),
+    }
+
+
+class RegistryInstallBody(BaseModel):
+    """从 Registry 安装 MCP 服务器的请求体。"""
+    name: str  # Registry 中的服务器名称
+    server_id: str | None = None  # 可选自定义 ID，默认用 registry name
+    config: dict | None = None  # 可选覆盖配置
+
+
+@router.post("/mcp/registry/install")
+async def install_from_registry(body: RegistryInstallBody, request: Request):
+    """从 Smithery Registry 安装 MCP 服务器到本地配置。
+
+    获取 registry 详情后，将服务器配置写入本地 mcp_servers.yaml。
+    """
+    name = body.name
+    if not name:
+        raise HTTPException(status_code=400, detail="name 不能为空")
+
+    # 先获取 registry 详情
+    url = f"{SMITHERY_REGISTRY_URL}/{name}"
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            data = resp.json()
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Smithery Registry 请求超时")
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            raise HTTPException(status_code=404, detail=f"Registry 中未找到 '{name}'")
+        raise HTTPException(status_code=502, detail=f"Smithery Registry 返回错误: {e.response.status_code}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"无法连接 Smithery Registry: {e}")
+
+    # 确定 server_id
+    server_id = body.server_id or \
+                data.get("qualifiedName", name).replace("/", "-").replace("@", "")
+
+    # 从 registry 数据构建本地配置
+    connection = data.get("connection", {})
+    config_override = body.config or {}
+
+    # 判断 transport 类型
+    if connection.get("type") == "http" or connection.get("url"):
+        transport = "streamable_http"
+        server_url = config_override.get("url", connection.get("url", ""))
+        server_dict: dict = {
+            "server_id": server_id,
+            "transport": transport,
+            "enabled": True,
+            "description": data.get("description", f"Installed from Smithery: {name}"),
+            "url": server_url,
+            "tls_verify": True,
+        }
+        if connection.get("headers"):
+            server_dict["headers"] = connection["headers"]
+    else:
+        # 默认 stdio
+        transport = "stdio"
+        command = config_override.get("command", connection.get("command", "npx"))
+        args = config_override.get("args", connection.get("args", []))
+        if not args and name:
+            args = ["-y", f"@smithery/{name}"]
+        server_dict = {
+            "server_id": server_id,
+            "transport": transport,
+            "enabled": True,
+            "description": data.get("description", f"Installed from Smithery: {name}"),
+            "command": command,
+            "args": args,
+        }
+        env = config_override.get("env", connection.get("env"))
+        if env:
+            server_dict["env"] = env
+
+    # 写入本地配置
+    with yaml_file_lock(MCP_YAML_PATH):
+        entries = _load_raw()
+        # 检查 ID 是否重复
+        for entry in entries:
+            if entry.get("server_id") == server_id:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"server_id '{server_id}' 已存在，请使用其他名称或先删除已有配置",
+                )
+        entries.append(server_dict)
+        _save_raw(entries)
+
+    logger.info("[mcp-registry] Installed server from registry: %s (as %s)", name, server_id)
+    result = await _do_reload(request)
+    return {**result, "status": "installed", "server": _redact_sensitive(server_dict), "registry_name": name}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# OAuth 授权流程
+# ═══════════════════════════════════════════════════════════════════════
+
+OAUTH_TOKENS_PATH = API_DATA_DIR / "mcp_oauth_tokens.yaml"
+
+# 内存中暂存 OAuth state（防 CSRF），生产环境应使用 Redis 等持久化
+_oauth_pending_states: dict[str, dict] = {}
+
+
+def _load_oauth_tokens() -> dict:
+    """读取已存储的 OAuth tokens。"""
+    if not OAUTH_TOKENS_PATH.exists():
+        return {}
+    raw = load_yaml(OAUTH_TOKENS_PATH, default={}) or {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _save_oauth_tokens(tokens: dict) -> None:
+    """持久化 OAuth tokens。"""
+    OAUTH_TOKENS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    dump_yaml_atomic(OAUTH_TOKENS_PATH, tokens)
+
+
+class OAuthAuthorizeBody(BaseModel):
+    """发起 OAuth 授权的请求体。"""
+    server_name: str
+    client_id: str | None = None
+    auth_endpoint: str | None = None  # 自定义授权端点
+    redirect_uri: str | None = None
+    scope: str | None = None
+
+
+@router.post("/mcp/oauth/authorize")
+async def mcp_oauth_authorize(body: OAuthAuthorizeBody, request: Request):
+    """发起 MCP 服务器的 OAuth 授权流程。
+
+    生成 state 参数防 CSRF，构建授权 URL 返回给前端。
+    前端在新窗口中打开 auth_url，用户授权后回调到 callback 端点。
+    """
+    server_name = body.server_name
+    if not server_name:
+        raise HTTPException(status_code=400, detail="server_name 不能为空")
+
+    # 生成随机 state
+    state = secrets.token_urlsafe(32)
+
+    # 确定 redirect_uri
+    redirect_uri = body.redirect_uri or f"http://localhost:17321/api/mcp/oauth/callback"
+
+    # 确定授权端点（可从 registry 或自定义）
+    auth_endpoint = body.auth_endpoint or ""
+    if not auth_endpoint:
+        # 尝试从 registry 获取 OAuth 配置
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(f"{SMITHERY_REGISTRY_URL}/{server_name}")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    oauth_config = data.get("oauth", data.get("auth", {}))
+                    auth_endpoint = oauth_config.get("authorization_url", oauth_config.get("authorize_url", ""))
+        except Exception:
+            pass
+
+    if not auth_endpoint:
+        # 使用通用 OAuth 端点格式
+        auth_endpoint = f"https://auth.smithery.ai/authorize"
+
+    # 暂存 state 信息
+    _oauth_pending_states[state] = {
+        "server_name": server_name,
+        "redirect_uri": redirect_uri,
+        "client_id": body.client_id or "maxma-desktop",
+        "created_at": time.time(),
+    }
+
+    # 清理过期 state（超过 10 分钟）
+    now = time.time()
+    expired = [k for k, v in _oauth_pending_states.items() if now - v["created_at"] > 600]
+    for k in expired:
+        del _oauth_pending_states[k]
+
+    # 构建授权 URL
+    from urllib.parse import urlencode
+    params = {
+        "response_type": "code",
+        "client_id": body.client_id or "maxma-desktop",
+        "redirect_uri": redirect_uri,
+        "state": state,
+        "server": server_name,
+    }
+    if body.scope:
+        params["scope"] = body.scope
+
+    auth_url = f"{auth_endpoint}?{urlencode(params)}"
+
+    return {
+        "auth_url": auth_url,
+        "state": state,
+        "server_name": server_name,
+    }
+
+
+class OAuthCallbackBody(BaseModel):
+    """OAuth 回调请求体。"""
+    code: str
+    state: str
+    server_name: str | None = None
+
+
+@router.post("/mcp/oauth/callback")
+async def mcp_oauth_callback(body: OAuthCallbackBody):
+    """处理 OAuth 回调，用 authorization code 换取 access token。"""
+    # 验证 state
+    pending = _oauth_pending_states.get(body.state)
+    if not pending:
+        raise HTTPException(status_code=400, detail="无效或已过期的 state 参数")
+
+    server_name = body.server_name or pending["server_name"]
+    client_id = pending["client_id"]
+    redirect_uri = pending["redirect_uri"]
+
+    # 用 code 换 token
+    token_endpoint = f"https://auth.smithery.ai/token"
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(token_endpoint, json={
+                "grant_type": "authorization_code",
+                "code": body.code,
+                "client_id": client_id,
+                "redirect_uri": redirect_uri,
+            })
+            resp.raise_for_status()
+            token_data = resp.json()
+    except httpx.HTTPStatusError as e:
+        logger.warning("[mcp-oauth] Token exchange failed for %s: %s", server_name, e)
+        raise HTTPException(status_code=502, detail=f"Token 交换失败: {e.response.status_code}")
+    except Exception as e:
+        logger.warning("[mcp-oauth] Token exchange error for %s: %s", server_name, e)
+        raise HTTPException(status_code=502, detail=f"Token 交换失败: {e}")
+
+    # 存储 token
+    tokens = _load_oauth_tokens()
+    tokens[server_name] = {
+        "access_token": token_data.get("access_token", ""),
+        "refresh_token": token_data.get("refresh_token", ""),
+        "token_type": token_data.get("token_type", "Bearer"),
+        "expires_at": time.time() + token_data.get("expires_in", 3600),
+        "scope": token_data.get("scope", ""),
+        "authorized_at": time.time(),
+    }
+    _save_oauth_tokens(tokens)
+
+    # 清除已使用的 state
+    _oauth_pending_states.pop(body.state, None)
+
+    logger.info("[mcp-oauth] OAuth authorized for server: %s", server_name)
+    return {
+        "status": "authorized",
+        "server_name": server_name,
+        "token_type": token_data.get("token_type", "Bearer"),
+        "expires_in": token_data.get("expires_in", 3600),
+    }
+
+
+@router.get("/mcp/oauth/status/{server_name:path}")
+async def mcp_oauth_status(server_name: str):
+    """检查指定 MCP 服务器的 OAuth 授权状态。"""
+    tokens = _load_oauth_tokens()
+    token_info = tokens.get(server_name)
+
+    if not token_info:
+        return {
+            "server_name": server_name,
+            "authorized": False,
+            "status": "not_authorized",
+        }
+
+    # 检查是否过期
+    expires_at = token_info.get("expires_at", 0)
+    is_expired = time.time() > expires_at
+    has_refresh = bool(token_info.get("refresh_token"))
+
+    if is_expired and not has_refresh:
+        return {
+            "server_name": server_name,
+            "authorized": False,
+            "status": "expired",
+            "authorized_at": token_info.get("authorized_at"),
+        }
+
+    return {
+        "server_name": server_name,
+        "authorized": True,
+        "status": "expired" if is_expired else "active",
+        "token_type": token_info.get("token_type", "Bearer"),
+        "scope": token_info.get("scope", ""),
+        "authorized_at": token_info.get("authorized_at"),
+        "expires_at": expires_at,
+        "has_refresh_token": has_refresh,
+    }

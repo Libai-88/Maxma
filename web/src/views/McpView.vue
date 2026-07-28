@@ -7,8 +7,24 @@
       <button v-else class="ds-btn" @click="cancelForm">← 返回列表</button>
     </div>
 
+    <!-- ── Tab 切换（仅列表模式） ── -->
+    <div v-if="mode === 'list'" class="tab-bar">
+      <button
+        class="tab-btn"
+        :class="{ active: activeTab === 'servers' }"
+        @click="activeTab = 'servers'"
+      >服务器</button>
+      <button
+        class="tab-btn"
+        :class="{ active: activeTab === 'marketplace' }"
+        @click="switchToMarketplace"
+      >市场</button>
+    </div>
+
     <!-- ── 列表模式 ── -->
     <template v-if="mode === 'list'">
+      <!-- ═══ 服务器 Tab ═══ -->
+      <template v-if="activeTab === 'servers'">
       <div v-if="loading" class="loading">加载中...</div>
       <div v-else-if="loadError" class="empty">
         加载失败: {{ loadError }}
@@ -159,6 +175,101 @@
           </div>
         </div>
       </div>
+      </template>
+
+      <!-- ═══ 市场 Tab ═══ -->
+      <template v-else-if="activeTab === 'marketplace'">
+        <!-- 搜索栏 -->
+        <div class="marketplace-search">
+          <input
+            v-model="registryQuery"
+            class="input marketplace-search-input"
+            placeholder="搜索 MCP 服务器..."
+            @keydown.enter="searchRegistry"
+          />
+          <button class="ds-btn ds-btn--primary" :disabled="registryLoading" @click="searchRegistry">
+            {{ registryLoading ? '搜索中...' : '搜索' }}
+          </button>
+        </div>
+
+        <!-- 加载状态 -->
+        <div v-if="registryLoading" class="loading">正在加载市场数据...</div>
+        <div v-else-if="registryError" class="empty">
+          加载失败: {{ registryError }}
+          <div class="retry-row">
+            <button class="ds-btn ds-btn--primary" @click="loadRegistry">重试</button>
+          </div>
+        </div>
+
+        <!-- 服务器网格 -->
+        <div v-else-if="registryServers.length > 0" class="marketplace-grid">
+          <div v-for="item in registryServers" :key="item.name" class="registry-card">
+            <div class="registry-card-header">
+              <img
+                v-if="item.icon_url"
+                :src="item.icon_url"
+                class="registry-icon"
+                alt=""
+                @error="($event.target as HTMLImageElement).style.display = 'none'"
+              />
+              <div v-else class="registry-icon-placeholder">{{ (item.display_name || item.name).charAt(0).toUpperCase() }}</div>
+              <div class="registry-card-title">
+                <span class="registry-name">{{ item.display_name || item.name }}</span>
+                <span v-if="item.verified" class="verified-badge" title="已验证">✓</span>
+              </div>
+            </div>
+
+            <div class="registry-desc">{{ item.description || '暂无描述' }}</div>
+
+            <div class="registry-meta">
+              <span v-if="item.author" class="registry-author">{{ item.author }}</span>
+              <span class="registry-downloads">{{ formatDownloads(item.downloads) }} 次安装</span>
+            </div>
+
+            <!-- OAuth 状态 -->
+            <div v-if="oauthStatusMap[item.name]" class="registry-oauth">
+              <span
+                class="oauth-badge"
+                :class="oauthStatusMap[item.name].authorized ? 'authorized' : 'unauthorized'"
+              >{{ oauthStatusMap[item.name].authorized ? '已授权' : '未授权' }}</span>
+            </div>
+
+            <div class="registry-card-actions">
+              <button
+                class="ds-btn ds-btn--primary registry-install-btn"
+                :disabled="installingName === item.name"
+                @click="installFromRegistry(item)"
+              >{{ installingName === item.name ? '安装中...' : '安装' }}</button>
+              <button
+                class="ds-btn registry-oauth-btn"
+                :disabled="authorizingName === item.name"
+                @click="authorizeServer(item)"
+              >{{ authorizingName === item.name ? '授权中...' : '授权' }}</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 空结果 -->
+        <div v-else class="empty">
+          <p>暂无搜索结果</p>
+          <p class="empty-hint">尝试其他关键词，或留空搜索浏览全部服务器</p>
+        </div>
+
+        <!-- 分页 -->
+        <div v-if="registryTotal > registryPageSize" class="marketplace-pagination">
+          <button
+            class="ds-btn"
+            :disabled="registryPage <= 1 || registryLoading"
+            @click="registryPage--; loadRegistry()"
+          >上一页</button>
+          <span class="page-info">{{ registryPage }} / {{ Math.ceil(registryTotal / registryPageSize) }}</span>
+          <button
+            class="ds-btn"
+            :disabled="registryPage >= Math.ceil(registryTotal / registryPageSize) || registryLoading"
+            @click="registryPage++; loadRegistry()"
+          >下一页</button>
+        </div>
+      </template>
     </template>
 
     <!-- ── 表单模式（添加/编辑） ── -->
@@ -493,6 +604,110 @@ async function loadDiscovered() {
     if (mySeq !== loadDiscoveredSeq) return
     discoveredServers.value = Array.isArray(data) ? data : []
   } catch { if (mySeq === loadDiscoveredSeq) discoveredServers.value = [] }
+}
+
+// ── Tab 切换 ──
+const activeTab = ref<'servers' | 'marketplace'>('servers')
+
+// ── 市场（Registry）状态 ──
+const registryServers = ref<import('@/types').RegistryServer[]>([])
+const registryLoading = ref(false)
+const registryError = ref('')
+const registryQuery = ref('')
+const registryPage = ref(1)
+const registryTotal = ref(0)
+const registryPageSize = 20
+const installingName = ref('')
+const authorizingName = ref('')
+
+// OAuth 状态缓存：server_name -> status
+const oauthStatusMap = ref<Record<string, import('@/types').OAuthStatusResponse>>({})
+
+function switchToMarketplace() {
+  activeTab.value = 'marketplace'
+  if (registryServers.value.length === 0 && !registryLoading.value) {
+    loadRegistry()
+  }
+}
+
+async function loadRegistry() {
+  registryLoading.value = true
+  registryError.value = ''
+  try {
+    const res = await api.getMcpRegistry({
+      q: registryQuery.value || undefined,
+      page: registryPage.value,
+      page_size: registryPageSize,
+    })
+    registryServers.value = res.servers || []
+    registryTotal.value = res.total || 0
+    // 异步检查 OAuth 状态
+    checkOAuthStatuses()
+  } catch (e: unknown) {
+    registryError.value = toErrorMessage(e)
+  } finally {
+    registryLoading.value = false
+  }
+}
+
+function searchRegistry() {
+  registryPage.value = 1
+  loadRegistry()
+}
+
+async function installFromRegistry(item: import('@/types').RegistryServer) {
+  if (installingName.value) return
+  installingName.value = item.name
+  try {
+    await api.installMcpFromRegistry(item.name)
+    showGlobal(`已安装 ${item.display_name || item.name}`, 'ok')
+    // 刷新本地服务器列表
+    loadServers()
+  } catch (e: unknown) {
+    showGlobal('安装失败: ' + toErrorMessage(e), 'error')
+  } finally {
+    installingName.value = ''
+  }
+}
+
+async function authorizeServer(item: import('@/types').RegistryServer) {
+  if (authorizingName.value) return
+  authorizingName.value = item.name
+  try {
+    const res = await api.mcpOAuthAuthorize(item.name)
+    // 在新窗口打开授权页面
+    window.open(res.auth_url, '_blank', 'width=600,height=700')
+    showGlobal('已打开授权页面，请在新窗口中完成授权', 'ok', 4000)
+    // 延迟检查授权状态
+    schedule(() => {
+      checkSingleOAuthStatus(item.name)
+    }, 5000)
+  } catch (e: unknown) {
+    showGlobal('授权失败: ' + toErrorMessage(e), 'error')
+  } finally {
+    authorizingName.value = ''
+  }
+}
+
+async function checkOAuthStatuses() {
+  for (const item of registryServers.value) {
+    checkSingleOAuthStatus(item.name)
+  }
+}
+
+async function checkSingleOAuthStatus(serverName: string) {
+  try {
+    const status = await api.mcpOAuthStatus(serverName)
+    oauthStatusMap.value[serverName] = status
+  } catch {
+    // 静默失败，不影响主流程
+  }
+}
+
+function formatDownloads(n: number): string {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M'
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K'
+  return String(n || 0)
 }
 
 // ── toggle 防抖 ──
@@ -1690,5 +1905,206 @@ select.input {
   border-color: var(--accent);
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+/* ── Tab 切换栏 ── */
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0;
+}
+.tab-btn {
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.tab-btn:hover {
+  color: var(--text-primary);
+}
+.tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+/* ── 市场搜索栏 ── */
+.marketplace-search {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  max-width: 560px;
+}
+.marketplace-search-input {
+  flex: 1;
+}
+
+/* ── 市场卡片网格 ── */
+.marketplace-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+@media (max-width: 640px) {
+  .marketplace-grid { grid-template-columns: 1fr; }
+}
+
+.registry-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .registry-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+}
+
+.registry-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.registry-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.registry-icon-placeholder {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-card));
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.registry-card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.registry-name {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.verified-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--status-ok);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.registry-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.registry-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.registry-author {
+  font-weight: 500;
+}
+
+.registry-downloads {
+  opacity: 0.8;
+}
+
+.registry-oauth {
+  display: flex;
+  align-items: center;
+}
+
+.oauth-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 100px;
+}
+.oauth-badge.authorized {
+  background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card));
+  color: var(--status-ok);
+}
+.oauth-badge.unauthorized {
+  background: color-mix(in srgb, var(--text-tertiary) 12%, var(--bg-card));
+  color: var(--text-tertiary);
+}
+
+.registry-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.registry-install-btn {
+  flex: 1;
+}
+
+.registry-oauth-btn {
+  flex-shrink: 0;
+}
+
+/* ── 市场分页 ── */
+.marketplace-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.page-info {
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 </style>
