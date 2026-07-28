@@ -28,6 +28,7 @@ from api.routes import collab as collab_router
 from api.routes import workflows as workflows_router
 from api.routes import rules as rules_router
 from api.routes import automation as automation_router
+from api.routes.automation import start_scheduler, stop_scheduler
 from api.routes import diagnostics as diagnostics_router
 from api.routes import files as files_router
 from api.routes import maxma_blocker as maxma_blocker_router
@@ -85,11 +86,18 @@ async def lifespan(app: FastAPI):
         message=f"MaxmaHere 后端启动完成 ({__version__})",
     )
 
+    # 5. Automation scheduler — background task that checks for due automations
+    app.state.automation_scheduler = start_scheduler()
+    logger.info("[automation] Background scheduler started")
+
     yield
 
     if getattr(app.state, "sidecar_manager", None):
         await app.state.sidecar_manager.stop()
         logger.info("[sidecar] SidecarManager stopped")
+
+    # Stop automation scheduler background task
+    await stop_scheduler()
 
     record_activity("system", "shutdown", message="MaxmaHere 后端正在关闭")
 
