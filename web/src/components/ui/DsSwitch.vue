@@ -16,7 +16,7 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{
+const props = defineProps<{
   modelValue: boolean
   label?: string
   disabled?: boolean
