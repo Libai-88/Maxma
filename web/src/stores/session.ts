@@ -2,7 +2,10 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { api } from '@/api'
 import { useChatStore, TURNS_KEY_PREFIX } from '@/stores/chat'
+import { createLogger } from '@/utils/logger'
 import type { SessionInfo } from '@/types'
+
+const log = createLogger('session')
 
 const STORAGE_KEY = 'maxma_session_id'
 
@@ -35,13 +38,13 @@ export const useSessionStore = defineStore('session', () => {
           _initialized = true
           return true
         } catch (e) {
-          console.error(`[session] init failed (attempt ${attempt}/${retries}), retrying in ${delayMs}ms:`, e)
+          log.error(`init failed (attempt ${attempt}/${retries}), retrying in ${delayMs}ms:`, e)
           _initialized = false
           if (attempt < retries) {
             await new Promise(r => setTimeout(r, delayMs))
             delayMs *= 1.5  // 指数退避
           } else {
-            console.error('[session] init failed after all retries')
+            log.error('init failed after all retries')
           }
         }
       }
@@ -73,7 +76,7 @@ export const useSessionStore = defineStore('session', () => {
 
   async function createSession() {
     await _createSession()
-    await refreshSessions().catch((err) => console.warn('[session] refreshSessions after create failed:', err))
+    await refreshSessions().catch((err) => log.warn('refreshSessions after create failed:', err))
   }
 
   async function switchSession(id: string) {
@@ -85,19 +88,19 @@ export const useSessionStore = defineStore('session', () => {
     try {
       await api.deleteSession(id)
     } catch (e) {
-      console.warn('[session] deleteSession failed:', e)
+      log.warn('deleteSession failed:', e)
       return
     }
     useChatStore().removeTurnsFromStorage(id)
     if (sessionId.value === id) {
-      await refreshSessions().catch((err) => console.warn('[session] refreshSessions after delete failed:', err))
+      await refreshSessions().catch((err) => log.warn('refreshSessions after delete failed:', err))
       if (sessions.value.length > 0) {
         await switchSession(sessions.value[0].session_id)
       } else {
         await createSession()
       }
     } else {
-      await refreshSessions().catch((err) => console.warn('[session] refreshSessions after delete failed:', err))
+      await refreshSessions().catch((err) => log.warn('refreshSessions after delete failed:', err))
     }
   }
 
@@ -105,20 +108,20 @@ export const useSessionStore = defineStore('session', () => {
     try {
       await api.constifySession(id, name)
     } catch (e) {
-      console.warn('[session] constifySession failed:', e)
+      log.warn('constifySession failed:', e)
       return
     }
-    await refreshSessions().catch((err) => console.warn('[session] refreshSessions after constify failed:', err))
+    await refreshSessions().catch((err) => log.warn('refreshSessions after constify failed:', err))
   }
 
   async function unconstifySession(id: string) {
     try {
       await api.unconstifySession(id)
     } catch (e) {
-      console.warn('[session] unconstifySession failed:', e)
+      log.warn('unconstifySession failed:', e)
       return
     }
-    await refreshSessions().catch((err) => console.warn('[session] refreshSessions after unconstify failed:', err))
+    await refreshSessions().catch((err) => log.warn('refreshSessions after unconstify failed:', err))
   }
 
   async function generateSessionTitle(id: string): Promise<string> {
@@ -126,7 +129,7 @@ export const useSessionStore = defineStore('session', () => {
       const res = await api.generateSessionTitle(id)
       return res.title
     } catch (e) {
-      console.warn('[session] generateSessionTitle failed:', e)
+      log.warn('generateSessionTitle failed:', e)
       return ''
     }
   }
@@ -136,7 +139,7 @@ export const useSessionStore = defineStore('session', () => {
     // 防御：sessions 为空时（可能是后端不可用或 refreshSessions 失败），
     // 不清空缓存，避免后端短暂不可用时丢失所有会话历史
     if (validIds.size === 0) {
-      console.warn('[session] cleanupOrphanedCaches: sessions 列表为空，跳过清理（可能是后端不可用）')
+      log.warn('cleanupOrphanedCaches: sessions 列表为空，跳过清理（可能是后端不可用）')
       return
     }
     // 先收集要删除的 key，再统一删除。直接在遍历中 removeItem 会导致

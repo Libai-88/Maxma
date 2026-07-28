@@ -2,6 +2,9 @@ import { onMounted, onUnmounted, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useHealthStore } from '@/stores/health'
 import { useSessionStore } from '@/stores/session'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('healthPolling')
 
 /**
  * 健康轮询协调：启动后端健康轮询，并在后端从离线恢复到在线时兜底刷新会话列表。
@@ -24,7 +27,7 @@ export function useHealthPolling() {
 
   watch(health, (newHealth, oldHealth) => {
     if (!oldHealth && newHealth) {
-      sessionStore.refreshSessions().catch((err) => console.warn('[App] refreshSessions failed:', err))
+      sessionStore.refreshSessions().catch((err) => log.warn('refreshSessions failed:', err))
     }
   })
 

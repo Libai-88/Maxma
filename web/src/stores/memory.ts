@@ -1,6 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { api } from '@/api'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('memory')
 
 export interface MemoryFact {
   id: string
@@ -28,7 +31,7 @@ export const useMemoryStore = defineStore('memory', () => {
       await api.request(`/memory/${encodeURIComponent(id)}`, { method: 'DELETE' })
       facts.value = facts.value.filter(f => f.id !== id)
     } catch (e) {
-      console.warn('[memory] deleteFact failed:', e instanceof Error ? e.message : String(e))
+      log.warn('deleteFact failed:', e instanceof Error ? e.message : String(e))
     }
   }
 

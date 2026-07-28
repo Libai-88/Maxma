@@ -1,7 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { api } from '@/api'
+import { createLogger } from '@/utils/logger'
 import type { AuditLogRecord, AuditLogStats } from '@/types'
+
+const log = createLogger('auditLog')
 
 export const useAuditLogStore = defineStore('auditLog', () => {
   const records = ref<AuditLogRecord[]>([])
@@ -52,7 +55,7 @@ export const useAuditLogStore = defineStore('auditLog', () => {
       await refreshAll()
       return res.deleted
     } catch (e) {
-      console.warn('[auditLog] clearAll failed:', e)
+      log.warn('clearAll failed:', e)
       return 0
     }
   }
@@ -62,7 +65,7 @@ export const useAuditLogStore = defineStore('auditLog', () => {
       const res = await api.encryptApiKeys()
       return res.encrypted
     } catch (e) {
-      console.warn('[auditLog] encryptKeys failed:', e)
+      log.warn('encryptKeys failed:', e)
       return 0
     }
   }

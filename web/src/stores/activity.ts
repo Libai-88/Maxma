@@ -3,7 +3,10 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { api, getToken, ensureTokenLoaded } from '@/api'
 import { getBackendOrigin, tauriFetch } from '@/utils/env'
+import { createLogger } from '@/utils/logger'
 import type { ActivityRecord, ActivityStatsResponse } from '@/types'
+
+const log = createLogger('activity')
 
 /**
  * 简易 SSE 行读取器。将 ReadableStream<Uint8Array> 按 \n 分割成行，
@@ -63,7 +66,7 @@ export const useActivityStore = defineStore('activity', () => {
       const data = await api.getActivityRecent(limit)
       records.value = data.records || []
     } catch (e) {
-      console.error('Failed to fetch activity:', e)
+      log.error('Failed to fetch activity:', e)
     }
   }
 
@@ -71,7 +74,7 @@ export const useActivityStore = defineStore('activity', () => {
     try {
       stats.value = await api.getActivityStats()
     } catch (e) {
-      console.error('Failed to fetch activity stats:', e)
+      log.error('Failed to fetch activity stats:', e)
     }
   }
 
@@ -230,7 +233,7 @@ export const useActivityStore = defineStore('activity', () => {
       records.value = []
       lastEventAt.value = null
     } catch (e) {
-      console.error('Failed to clear activity:', e)
+      log.error('Failed to clear activity:', e)
     }
   }
 

@@ -1,5 +1,8 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('onboarding')
 
 export const ONBOARDING_STORAGE_KEY = 'maxma.onboarding.v1'
 
@@ -72,7 +75,7 @@ export const useOnboardingStore = defineStore('onboarding', () => {
   function persist() {
     const ok = saveOnboardingSnapshot(snapshot.value)
     if (!ok) {
-      console.warn('[onboarding] Failed to persist onboarding snapshot to localStorage')
+      log.warn('Failed to persist onboarding snapshot to localStorage')
     }
   }
 

@@ -15,6 +15,9 @@ import { ref, computed, provide, inject, type Ref, type ComputedRef, type Inject
 import type { QuotedSelection, QuoteCandidate } from '@/composables/useSelectionQuote'
 import type { ParsedRef } from '@/utils/references'
 import type { ThinkPathId } from '@/utils/thinkPath'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('chatInput')
 
 export interface UseChatInputOptions {
   /** 是否正在流式输出（对应 ChatInput.isStreaming） */
@@ -133,7 +136,7 @@ export function useChatInput(options: UseChatInputOptions = {}): UseChatInputRet
             thinkPathId,
           ) ?? false
         }
-        console.warn('[useChatInput] send() called but onSend callback not wired — skeleton mode')
+        log.warn('send() called but onSend callback not wired — skeleton mode')
         return false
       }
 
@@ -141,7 +144,7 @@ export function useChatInput(options: UseChatInputOptions = {}): UseChatInputRet
     if (onStop) {
       onStop()
     } else {
-      console.warn('[useChatInput] stop() called but onStop callback not wired — skeleton mode')
+      log.warn('stop() called but onStop callback not wired — skeleton mode')
     }
   }
 
@@ -151,7 +154,7 @@ export function useChatInput(options: UseChatInputOptions = {}): UseChatInputRet
     if (onModelChangeCb) {
       onModelChangeCb(newProviderId, newModelName)
     } else {
-      console.warn('[useChatInput] onModelChange() called but onModelChange callback not wired — skeleton mode')
+      log.warn('onModelChange() called but onModelChange callback not wired — skeleton mode')
     }
   }
 
@@ -159,7 +162,7 @@ export function useChatInput(options: UseChatInputOptions = {}): UseChatInputRet
     if (onCommitQuote) {
       onCommitQuote()
     } else {
-      console.warn('[useChatInput] commitQuote() called but onCommitQuote callback not wired — skeleton mode')
+      log.warn('commitQuote() called but onCommitQuote callback not wired — skeleton mode')
     }
   }
 
@@ -167,7 +170,7 @@ export function useChatInput(options: UseChatInputOptions = {}): UseChatInputRet
     if (onRemoveQuote) {
       onRemoveQuote(id)
     } else {
-      console.warn('[useChatInput] removeQuote() called but onRemoveQuote callback not wired — skeleton mode')
+      log.warn('removeQuote() called but onRemoveQuote callback not wired — skeleton mode')
     }
   }
 

@@ -7,6 +7,9 @@ import { markdown } from '@codemirror/lang-markdown'
 import { EditorView } from '@codemirror/view'
 import type { Extension } from '@codemirror/state'
 import { api } from '@/api'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('markdownPersist')
 
 export interface UseMarkdownPersistOptions {
   /** 人格类型，决定 API 路径 */
@@ -94,7 +97,7 @@ export function useMarkdownPersist(options: UseMarkdownPersistOptions): UseMarkd
       savedContent.value = res.content
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
-      console.error(`加载 ${type} 失败`, e)
+      log.error(`加载 ${type} 失败`, e)
       loadError.value = msg
       content.value = ''
     } finally {
@@ -115,7 +118,7 @@ export function useMarkdownPersist(options: UseMarkdownPersistOptions): UseMarkd
       if (_saveStateTimer) clearTimeout(_saveStateTimer)
       _saveStateTimer = setTimeout(() => { saveState.value = ''; _saveStateTimer = null }, 2000)
     } catch (e: unknown) {
-      console.error(`保存 ${type} 失败`, e)
+      log.error(`保存 ${type} 失败`, e)
       saveError.value = e instanceof Error ? e.message : String(e)
     } finally {
       saving.value = false

@@ -3,6 +3,9 @@
 // 替代 v1.17 旧主题系统
 
 import { ref, computed, watch } from 'vue'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('theme')
 
 /** 主题 ID 类型 */
 export type ThemeId =
@@ -131,7 +134,7 @@ const isDark = computed(() => {
   const t = activeTheme.value
   const found = THEMES.find(m => m.id === t)
   if (!found) {
-    console.warn(`[useTheme] 主题 ID "${t}" 未在 THEMES 表中找到，回退到 isDark=false`)
+    log.warn(`主题 ID "${t}" 未在 THEMES 表中找到，回退到 isDark=false`)
   }
   return found?.isDark ?? false
 })

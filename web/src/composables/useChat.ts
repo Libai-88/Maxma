@@ -10,6 +10,9 @@ import { ensurePortLoaded, waitForBackend, getWsBase, getApiBase, generateUUID, 
 import { chatSessionAliveCache } from '@/composables/sessionAliveCache'
 import { useWorkbenchStore } from '@/stores/workbench'
 import { detectEmotion, getStickerUrl } from './stickerUtils'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('chat')
 
 /** 追踪当前 useChat 实例创建的子会话 ID，用于组件卸载时清理孤儿 WS。 */
 const _childSessionIds = new Set<string>()
@@ -42,17 +45,17 @@ function loadAllTurnsFromStorage(): Map<string, ChatTurn[]> {
         const data = JSON.parse(raw)
         if (Array.isArray(data)) {
           const migrated = data.map(migrateLegacyTurn)
-          console.log(`[useChat:load] 从 localStorage 加载会话 ${sid}: ${data.length} 条 turn (迁移 ${migrated.length}), 序列化长度 ${raw.length}`)
+          log.debug(`从 localStorage 加载会话 ${sid}: ${data.length} 条 turn (迁移 ${migrated.length}), 序列化长度 ${raw.length}`)
           map.set(sid, migrated)
         } else {
-          console.warn(`[useChat:load] 键 ${key} 的数据不是数组，跳过`)
+          log.warn(`键 ${key} 的数据不是数组，跳过`)
         }
       } catch (e) {
-        console.error(`[useChat:load] 解析 localStorage 键 ${key} 失败:`, e)
+        log.error(`解析 localStorage 键 ${key} 失败:`, e)
       }
     }
   }
-  console.log(`[useChat:load] localStorage 中共 ${keysFound.length} 个 ${TURNS_KEY_PREFIX}* 键, 恢复 ${map.size} 个会话的缓存`)
+  log.debug(`localStorage 中共 ${keysFound.length} 个 ${TURNS_KEY_PREFIX}* 键, 恢复 ${map.size} 个会话的缓存`)
   return map
 }
 
@@ -66,12 +69,12 @@ function saveTurnsToStorage(sid: string, data: ChatTurn[]) {
   }
   try {
     const size = tryWrite()
-    console.log(`[useChat:save] 保存会话 ${sid} 到 localStorage: ${data.length} 条 turn, 约 ${(size / 1024).toFixed(1)} KB, key=${key}`)
+    log.debug(`保存会话 ${sid} 到 localStorage: ${data.length} 条 turn, 约 ${(size / 1024).toFixed(1)} KB, key=${key}`)
   } catch (e) {
     // 修复：配额超限后无清理 → 后续所有保存全部静默失败，用户无感知地丢失持久化。
     // 策略：删除其他会话中最早（按 localStorage 键的写入顺序近似）的缓存，腾出空间后重试一次。
     if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
-      console.warn(`[useChat:save] localStorage 配额超限，尝试清理其他会话缓存后重试 (key=${key})`)
+      log.warn(`localStorage 配额超限，尝试清理其他会话缓存后重试 (key=${key})`)
       // B-014: collect every other session's turns cache key. Eviction is
       // FIFO by localStorage insertion order (the iteration order returned by
       // localStorage.key(i) reflects insertion order in modern browsers), NOT
@@ -90,25 +93,25 @@ function saveTurnsToStorage(sid: string, data: ChatTurn[]) {
         localStorage.removeItem(k)
         const evictedSid = k.slice(TURNS_KEY_PREFIX.length)
         turnsCache.delete(evictedSid)
-        console.warn(`[useChat:save] 配额压力下清理会话 ${evictedSid} 的缓存`)
+        log.warn(`配额压力下清理会话 ${evictedSid} 的缓存`)
       }
       // 重试一次
       try {
         const size = tryWrite()
-        console.log(`[useChat:save] 清理后重试成功: 会话 ${sid}, ${data.length} 条 turn, 约 ${(size / 1024).toFixed(1)} KB`)
+        log.debug(`清理后重试成功: 会话 ${sid}, ${data.length} 条 turn, 约 ${(size / 1024).toFixed(1)} KB`)
       } catch (e2) {
-        console.error(`[useChat:save] 清理后仍无法保存会话 ${sid} (key=${key}):`, e2)
+        log.error(`清理后仍无法保存会话 ${sid} (key=${key}):`, e2)
         // 最后手段：移除当前会话自己的缓存键，避免留下部分写入的脏数据
         try { localStorage.removeItem(key) } catch { /* ignore */ }
       }
     } else {
-      console.error(`[useChat:save] 保存会话 ${sid} 到 localStorage 失败 (key=${key}):`, e)
+      log.error(`保存会话 ${sid} 到 localStorage 失败 (key=${key}):`, e)
       let total = 0
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i)
         if (k) total += k.length + (localStorage.getItem(k) || '').length
       }
-      console.warn(`[useChat:save] localStorage 当前总估算用量: ${(total * 2 / 1024).toFixed(1)} KB`)
+      log.warn(`localStorage 当前总估算用量: ${(total * 2 / 1024).toFixed(1)} KB`)
     }
   }
 }
@@ -185,11 +188,11 @@ function getOrCreateChannel(sid: string): SessionChannel {
 function persistTurns(sid: string) {
   const ch = getChatStore().channels.get(sid)
   if (!ch) {
-    console.warn(`[useChat:persist] 跳过保存 sid="${sid}": 通道不存在`)
+    log.warn(`跳过保存 sid="${sid}": 通道不存在`)
     return
   }
   const snapshot = [...ch.turns]
-  console.log(`[useChat:persist] 持久化会话 ${sid}: ${snapshot.length} 条 turn`)
+  log.debug(`持久化会话 ${sid}: ${snapshot.length} 条 turn`)
   turnsCache.set(sid, snapshot)
   saveTurnsToStorage(sid, snapshot)
 }
@@ -215,7 +218,7 @@ async function hydrateTurnSticker(turn: ChatTurn): Promise<boolean> {
     }
     return true
   } catch (err) {
-    console.warn('[useChat] hydrate sticker failed:', err)
+    log.warn('hydrate sticker failed:', err)
     return false
   }
 }
@@ -283,7 +286,7 @@ function isChannelStillValid(sid: string): boolean {
 
 async function connectSession(sid: string) {
   if (!isValidSessionId(sid)) {
-    console.error(`[useChat] 拒绝连接：非法的 sessionId "${sid}"`)
+    log.error(`拒绝连接：非法的 sessionId "${sid}"`)
     return
   }
   const ch = getOrCreateChannel(sid)
@@ -303,7 +306,7 @@ async function connectSession(sid: string) {
   const backendReady = await waitForBackend()
   if (!isChannelStillValid(sid)) return
   if (!backendReady) {
-    console.warn(`[useChat] 后端未就绪 (sid=${sid}), 延迟重连`)
+    log.warn(`后端未就绪 (sid=${sid}), 延迟重连`)
     const ch = getOrCreateChannel(sid)
     ch.error = '连接失败：后端服务未就绪'
     ch.connected = false
@@ -312,7 +315,7 @@ async function connectSession(sid: string) {
       ch.reconnectAttempts++
       ch.reconnectTimer = setTimeout(() => {
         connectSession(sid).catch(err => {
-          console.error(`[useChat] 重连失败 (sid=${sid}):`, err)
+          log.error(`重连失败 (sid=${sid}):`, err)
         })
       }, delay)
     }
@@ -336,7 +339,7 @@ async function connectSession(sid: string) {
     ch.reconnectAttempts++
     ch.reconnectTimer = setTimeout(() => {
       connectSession(sid).catch(err => {
-        console.error(`[useChat] 重连失败 (sid=${sid}):`, err)
+        log.error(`重连失败 (sid=${sid}):`, err)
         const chInner = getChatStore().channels.get(sid)
         if (chInner && !chInner.error) {
           chInner.error = `重连失败：${err instanceof Error ? err.message : String(err)}`
@@ -364,7 +367,7 @@ async function connectSession(sid: string) {
         clearTimeout(chFinal.reconnectTimer)
         chFinal.reconnectTimer = null
       }
-      console.log(`[useChat] WS connected: session=${sid}`)
+      log.debug(`WS connected: session=${sid}`)
       // 修复 R-005：初始化 pong 时间戳，启动心跳 ping 定时器，每 30s 发送 ping 检测静默断开。
       chFinal._lastPongAt = Date.now()
       // 浏览器 TCP keepalive 默认超时过长（可达 2h+），靠 close 事件触发重连
@@ -387,7 +390,7 @@ async function connectSession(sid: string) {
         }
         // 检查 pong 是否超时（检测单向丢包、后端死锁等无法通过 ws.send 感知的故障）
         if (Date.now() - ch._lastPongAt > 30000 + PONG_TIMEOUT_GRACE) {
-          console.warn(`[useChat] pong 超时 (sid=${sid}), 主动关闭 WebSocket 触发重连`)
+          log.warn(`pong 超时 (sid=${sid}), 主动关闭 WebSocket 触发重连`)
           ch.ws.close()
           return
         }
@@ -398,7 +401,7 @@ async function connectSession(sid: string) {
     // 后端 WS 断开时已 cancel agent_task，所以这个 currentTurn 永远等不到 done 事件。
     if (chFinal.isStreaming && chFinal.currentTurn) {
       const interrupted = chFinal.currentTurn
-      console.warn(`[useChat] 重连检测到中断的轮次 (turn.id=${interrupted.id}), 推入 turns 并重置状态`)
+      log.warn(`重连检测到中断的轮次 (turn.id=${interrupted.id}), 推入 turns 并重置状态`)
       // 保留已生成的部分内容（用户能看到中断点），标记未完成
       if (!interrupted.finalAnswer) {
         interrupted.finalAnswer = '（连接中断，回复未完成）'
@@ -423,17 +426,17 @@ async function connectSession(sid: string) {
     }
     // 认证失败（Token 过期/轮换）— 刷新 Token 后重连
     if (event.code === 4001) {
-      console.log(`[useChat] WS auth failure (4001), refreshing token...`)
+      log.debug(`WS auth failure (4001), refreshing token...`)
       resetToken()  // 强制下次请求重新获取 Token
     }
     // 正常关闭（code 1000）— 不重连，视为有意断开
     if (event.code === 1000) {
-      console.log(`[useChat] WS normal close (1000), session=${sid}, not reconnecting`)
+      log.debug(`WS normal close (1000), session=${sid}, not reconnecting`)
       return
     }
     // 超过最大重连次数，停止重连
     if (chFinal.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-      console.error(`[useChat] WS 已达最大重连次数 (${MAX_RECONNECT_ATTEMPTS})，停止重连`)
+      log.error(`WS 已达最大重连次数 (${MAX_RECONNECT_ATTEMPTS})，停止重连`)
       chFinal.error = '连接失败：已达最大重连次数，请刷新页面重试'
       return
     }
@@ -442,12 +445,11 @@ async function connectSession(sid: string) {
     chFinal.reconnectAttempts++
     // 握手失败（code 1006 异常关闭，未收到任何 close frame）降级为 debug，
     // 避免在 sidecar 未启动时污染控制台（浏览器自身仍会打印资源加载 error，无法抑制）
-    const logFn = event.code === 1006 ? console.debug : console.log
-    logFn(`[useChat] WS closed: session=${sid}, code=${event.code}, reconnecting in ${delay}ms (attempt ${chFinal.reconnectAttempts})`)
+    log.debug(`WS closed: session=${sid}, code=${event.code}, reconnecting in ${delay}ms (attempt ${chFinal.reconnectAttempts})`)
     // 修复 R-002：捕获重连 timer 中 connectSession 的未处理 rejection
     chFinal.reconnectTimer = setTimeout(() => {
       connectSession(sid).catch(err => {
-        console.error(`[useChat] 重连失败 (sid=${sid}):`, err)
+        log.error(`重连失败 (sid=${sid}):`, err)
         const ch = getChatStore().channels.get(sid)
         if (ch && !ch.error) {
           ch.error = `重连失败：${err instanceof Error ? err.message : String(err)}`
@@ -460,45 +462,45 @@ async function connectSession(sid: string) {
     // onerror 后通常会触发 onclose，退避重连在 onclose 中处理
     // 握手阶段失败（readyState 仍为 CONNECTING）降级为 debug，避免 sidecar 未启动时噪声
     if (ws.readyState === WebSocket.CONNECTING) {
-      console.debug(`[useChat] WS handshake error (CONNECTING): session=${sid}`)
+      log.debug(`WS handshake error (CONNECTING): session=${sid}`)
     } else {
-      console.warn(`[useChat] WS error: session=${sid}`)
+      log.warn(`WS error: session=${sid}`)
     }
   }
 
   ws.onmessage = (event: MessageEvent) => {
     try {
       const msg: ServerEvent = JSON.parse(event.data)
-      console.log('[useChat] WS event received:', msg.type, 'session:', sid, msg.type === 'ask_user' ? {
+      log.debug('WS event received:', msg.type, 'session:', sid, msg.type === 'ask_user' ? {
         tool_name: (msg as AskUserEvent).payload.tool_name,
         interaction_id: (msg as AskUserEvent).payload.interaction_id,
       } : '')
       handleEventForChannel(sid, msg)
     } catch (e) {
-      console.error('[useChat] WS message parse/handle error:', e)
+      log.error('WS message parse/handle error:', e)
     }
   }
 }
 
 export function ensureConnected(sid: string) {
   if (!sid) {
-    console.warn(`[useChat:ensureConnected] 跳过空 sid`)
+    log.warn(`跳过空 sid`)
     return
   }
   if (!isValidSessionId(sid)) {
-    console.error(`[useChat:ensureConnected] 拒绝连接：非法的 sessionId "${sid}"`)
+    log.error(`拒绝连接：非法的 sessionId "${sid}"`)
     return
   }
   const ch = getOrCreateChannel(sid)
   if (ch.initialized) {
-    console.log(`[useChat:ensureConnected] 会话 ${sid} 已初始化, 跳过`)
+    log.debug(`会话 ${sid} 已初始化, 跳过`)
     return
   }
-  console.log(`[useChat:ensureConnected] 初始化会话 ${sid} 的 WebSocket 连接`)
+  log.debug(`初始化会话 ${sid} 的 WebSocket 连接`)
   ch.initialized = true
   // 修复 R-002：捕获 connectSession 的未处理 rejection，设置错误状态
   connectSession(sid).catch(err => {
-    console.error(`[useChat] connectSession 失败 (sid=${sid}):`, err)
+    log.error(`connectSession 失败 (sid=${sid}):`, err)
     const ch = getChatStore().channels.get(sid)
     if (ch) {
       ch.error = `连接失败：${err instanceof Error ? err.message : String(err)}`
@@ -706,7 +708,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     }
 
     case 'tool_start': {
-      console.log(`[useChat] tool_start: "${event.payload.tool_name}"`, { input: event.payload.input, session: sid })
+      log.debug(`tool_start: "${event.payload.tool_name}"`, { input: event.payload.input, session: sid })
       // 标记上一个 thinking 块为 consumed（工具调用前的中间思考，UI 不渲染）
       const lastThink = findLastThinking(turn.events)
       if (lastThink && !lastThink.becameAnswer) {
@@ -717,7 +719,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       // 而不是重复 push 一个新的 tool event。
       const existingApprovalTool = findRunningTool(turn.events, event.payload.tool_name)
       if (existingApprovalTool && existingApprovalTool.interaction?.mode === 'approval') {
-        console.log('[useChat] tool_start: 复用已存在的 approval 占位 tool event，更新 input')
+        log.debug('tool_start: 复用已存在的 approval 占位 tool event，更新 input')
         existingApprovalTool.input = event.payload.input
         break
       }
@@ -752,7 +754,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
             ch.taskTrackerData = event.payload.tool_data as Record<string, unknown>
           }
         }
-        console.log(`[useChat] tool_end: "${event.payload.tool_name}"`, {
+        log.debug(`tool_end: "${event.payload.tool_name}"`, {
           output_len: (event.payload.output || '').length,
           output_preview: (event.payload.output || '').slice(0, 100),
           has_tool_data: !!event.payload.tool_data,
@@ -823,7 +825,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
           tauriFetch(getStickerUrl(emotion))
             .then((r) => {
               if (!r.ok) {
-                console.warn('[useChat] sticker fetch non-ok response:', r.status)
+                log.warn('sticker fetch non-ok response:', r.status)
                 return null
               }
               return r.json()
@@ -844,7 +846,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
                 }
               }
             })
-            .catch((err) => console.warn('[useChat] sticker fetch failed:', err))
+            .catch((err) => log.warn('sticker fetch failed:', err))
         }
       }
       break
@@ -856,13 +858,13 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       // 存储后端 turn_id，用于关联后台记忆 consumer 的事件
       if (ch.currentTurn && (event.payload as Record<string, unknown>).turn_id) {
         ch.currentTurn.turnId = (event.payload as Record<string, unknown>).turn_id as string
-        console.log(`[ltm-fe] turnId set on turn.id=${ch.currentTurn.id}: ${ch.currentTurn.turnId}`)
+        log.debug(`turnId set on turn.id=${ch.currentTurn.id}: ${ch.currentTurn.turnId}`)
       }
       if (ch.currentTurn) {
         const turnToFinalize = ch.currentTurn
         const lastThink = findLastThinking(turnToFinalize.events)
         const trackBecame = lastThink?.becameAnswer
-        console.log(`[useChat:done] 会话 ${sid}: becameAnswer=${trackBecame}, events=${turnToFinalize.events.length}, finalAnswer=${turnToFinalize.finalAnswer?.slice(0, 50) ?? 'null'}`)
+        log.debug(`会话 ${sid}: becameAnswer=${trackBecame}, events=${turnToFinalize.events.length}, finalAnswer=${turnToFinalize.finalAnswer?.slice(0, 50) ?? 'null'}`)
         ch.turns.push(turnToFinalize)
         if (ch.currentTurn?.id === turnToFinalize.id) {
           ch.currentTurn = null
@@ -873,7 +875,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
         }
         void refreshSessions()  // 轮次结束，刷新会话列表以更新 message_count
       } else {
-        console.warn(`[useChat:done] 会话 ${sid} 的 done 事件到达时 currentTurn 为 null`)
+        log.warn(`会话 ${sid} 的 done 事件到达时 currentTurn 为 null`)
         ch.isStreaming = false
       }
       // 子 Agent 完成 → 自动切回主会话
@@ -889,7 +891,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       ch.errorCategory = event.payload.category ?? null
       ch.errorTraceId = event.payload.trace_id ?? null
       ch.isStreaming = false
-      console.warn(`[useChat] error: ${event.payload.code} (${event.payload.category ?? 'unknown'})`, event.payload.message)
+      log.warn(`error: ${event.payload.code} (${event.payload.category ?? 'unknown'})`, event.payload.message)
       break
 
     case 'retry_start':
@@ -968,7 +970,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       const mode = ae.payload.mode
       ch.isAwaitingUser = true
       ch._awaitingToolName = ae.payload.tool_name
-      console.log('[useChat] received ask_user event:', {
+      log.debug('received ask_user event:', {
         tool_name: ae.payload.tool_name,
         question: ae.payload.question?.slice(0, 50),
         mode,
@@ -976,7 +978,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
         session: sid,
       })
       let runningTool = findRunningTool(turn.events, ae.payload.tool_name)
-      console.log('[useChat] findRunningTool result:', runningTool ? {
+      log.debug('findRunningTool result:', runningTool ? {
         name: runningTool.name,
         status: runningTool.status,
         has_interaction: !!runningTool.interaction,
@@ -986,7 +988,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       // 待用户批准后 ApprovalToolNode 才执行工具，后续 tool_start/tool_end 会通过 findRunningTool
       // 找到这个已存在的 event 并填充 output/elapsed。
       if (!runningTool && mode === 'approval') {
-        console.log('[useChat] approval mode: runningTool 不存在，创建占位 tool event 承载 interaction')
+        log.debug('approval mode: runningTool 不存在，创建占位 tool event 承载 interaction')
         turn.events.push({
           kind: 'tool',
           name: ae.payload.tool_name,
@@ -1026,7 +1028,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
 
     case 'plan_proposed': {
       const pe = event as PlanProposedEvent
-      console.log('[useChat] received plan_proposed:', {
+      log.debug('received plan_proposed:', {
         plan_id: pe.payload.plan_id,
         steps: pe.payload.steps.length,
         session: sid,
@@ -1116,9 +1118,9 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
 function handleMemoryToolEvent(ch: SessionChannel, sid: string, event: ServerEvent): void {
   if (event.type === 'memory_start') {
     const me = event as MemoryStartEvent
-    console.log(`[ltm-fe] memory_start session=${sid} turn_id=${me.payload.turn_id}`)
+    log.debug(`memory_start session=${sid} turn_id=${me.payload.turn_id}`)
     const targetTurn = findTurnByBackendId(ch, me.payload.turn_id)
-    if (!targetTurn) { console.log(`[ltm-fe] NO turn found for ${me.payload.turn_id}`); return }
+    if (!targetTurn) { log.debug(`NO turn found for ${me.payload.turn_id}`); return }
     if (!targetTurn.memoryEvents) targetTurn.memoryEvents = []
     targetTurn.memoryEvents.push({
       kind: 'memory_tool', name: 'memory_processing', input: '', output: null, elapsed: null, status: 'running',
@@ -1128,9 +1130,9 @@ function handleMemoryToolEvent(ch: SessionChannel, sid: string, event: ServerEve
   if (event.type === 'memory_tool_start') {
     const me = event as MemoryToolStartEvent
     if (me.payload.tool_name === 'read_memories') return  // 纯读取不显示
-    console.log(`[ltm-fe] memory_tool_start session=${sid} turn_id=${me.payload.turn_id} tool=${me.payload.tool_name}`)
+    log.debug(`memory_tool_start session=${sid} turn_id=${me.payload.turn_id} tool=${me.payload.tool_name}`)
     const targetTurn = findTurnByBackendId(ch, me.payload.turn_id)
-    if (!targetTurn) { console.log(`[ltm-fe] NO turn found for ${me.payload.turn_id}`); return }
+    if (!targetTurn) { log.debug(`NO turn found for ${me.payload.turn_id}`); return }
     targetTurn.memoryEvents?.push({
       kind: 'memory_tool', name: me.payload.tool_name, input: me.payload.input,
       output: null, elapsed: null, status: 'running',
@@ -1140,9 +1142,9 @@ function handleMemoryToolEvent(ch: SessionChannel, sid: string, event: ServerEve
   if (event.type === 'memory_tool_end') {
     const me = event as MemoryToolEndEvent
     if (me.payload.tool_name === 'read_memories') return  // 纯读取不显示
-    console.log(`[ltm-fe] memory_tool_end session=${sid} turn_id=${me.payload.turn_id} tool=${me.payload.tool_name}`)
+    log.debug(`memory_tool_end session=${sid} turn_id=${me.payload.turn_id} tool=${me.payload.tool_name}`)
     const targetTurn = findTurnByBackendId(ch, me.payload.turn_id)
-    if (!targetTurn) { console.log(`[ltm-fe] NO turn`); return }
+    if (!targetTurn) { log.debug(`NO turn`); return }
     const mt = findRunningMemoryTool(targetTurn.memoryEvents ?? [], me.payload.tool_name)
     if (mt) { mt.output = me.payload.output; mt.elapsed = me.payload.elapsed; mt.status = 'done' }
     if (ch.turns.includes(targetTurn as ChatTurn)) persistTurns(sid)
@@ -1160,9 +1162,9 @@ function handleMemoryToolEvent(ch: SessionChannel, sid: string, event: ServerEve
   }
   if (event.type === 'memory_done') {
     const me = event as MemoryDoneEvent
-    console.log(`[ltm-fe] memory_done session=${sid} turn_id=${me.payload.turn_id}`)
+    log.debug(`memory_done session=${sid} turn_id=${me.payload.turn_id}`)
     const targetTurn = findTurnByBackendId(ch, me.payload.turn_id)
-    if (!targetTurn) { console.log(`[ltm-fe] NO turn`); return }
+    if (!targetTurn) { log.debug(`NO turn`); return }
     // 移除「处理中」占位条目
     const realEvents = (targetTurn.memoryEvents ?? []).filter(e => e.name !== 'memory_processing')
     targetTurn.memoryEvents = realEvents
@@ -1170,7 +1172,7 @@ function handleMemoryToolEvent(ch: SessionChannel, sid: string, event: ServerEve
       targetTurn.memoryEvents = [{
         kind: 'memory_tool', name: 'memory_review', input: '', output: '', elapsed: null, status: 'done',
       }]
-      console.log(`[ltm-fe] added memory_review`)
+      log.debug(`added memory_review`)
     }
     if (ch.turns.includes(targetTurn as ChatTurn)) persistTurns(sid)
     return
@@ -1218,13 +1220,13 @@ export function useChat(sessionId: Ref<string>) {
   async function loadHistoryFromBackend(sid: string, ch: SessionChannel) {
     // 防御：空 sessionId 或占位符 sessionId 不加载
     if (!sid || sid === '__pending__') {
-      console.log(`[useChat:loadHistory] 跳过空/占位 sessionId: "${sid}"`)
+      log.debug(`跳过空/占位 sessionId: "${sid}"`)
       return
     }
     try {
       const res = await api.getMessages(sid)
       if (!res.messages || res.messages.length === 0) {
-        console.log(`[useChat:loadHistory] 会话 ${sid} 后端无历史消息`)
+        log.debug(`会话 ${sid} 后端无历史消息`)
         return
       }
       // 后端返回 [{role, content}]，按 human 分组配对成 ChatTurn
@@ -1270,14 +1272,14 @@ export function useChat(sessionId: Ref<string>) {
         }
       }
       if (turns.length > 0) {
-        console.log(`[useChat:loadHistory] 从后端加载会话 ${sid}: ${turns.length} 条 turn`)
+        log.debug(`从后端加载会话 ${sid}: ${turns.length} 条 turn`)
         ch.turns.push(...turns)
         turnsCache.set(sid, turns)
         saveTurnsToStorage(sid, turns)
         void hydrateTurnStickers(sid, turns)
       }
     } catch (e) {
-      console.warn(`[useChat:loadHistory] 加载会话 ${sid} 历史失败:`, e)
+      log.warn(`加载会话 ${sid} 历史失败:`, e)
     }
   }
 
@@ -1286,9 +1288,9 @@ export function useChat(sessionId: Ref<string>) {
   watch(
     sessionId,
     async (newId, oldId) => {
-      console.log(`[useChat:watch] sessionId 变化: "${oldId}" → "${newId}"`)
+      log.debug(`sessionId 变化: "${oldId}" → "${newId}"`)
       if (oldId) {
-        console.log(`[useChat:watch] 在切换前持久化旧会话 "${oldId}"`)
+        log.debug(`在切换前持久化旧会话 "${oldId}"`)
         persistTurns(oldId)
       }
       const evictedSessionId = newId
@@ -1307,19 +1309,19 @@ export function useChat(sessionId: Ref<string>) {
       const cached = turnsCache.get(newId)
       const ch = getOrCreateChannel(newId)
       if (cached) {
-        console.log(`[useChat:watch] 找到会话 ${newId} 的缓存: ${cached.length} 条 turn, 通道已有 ${ch.turns.length} 条`)
+        log.debug(`找到会话 ${newId} 的缓存: ${cached.length} 条 turn, 通道已有 ${ch.turns.length} 条`)
         if (ch.turns.length === 0) {
-          console.log(`[useChat:watch] 恢复缓存: 将 ${cached.length} 条 turn 推入通道`)
+          log.debug(`恢复缓存: 将 ${cached.length} 条 turn 推入通道`)
           ch.turns.push(...cached)
           void hydrateTurnStickers(newId, cached)
-          console.log(`[useChat:watch] 恢复后通道 turns.length = ${ch.turns.length}`)
+          log.debug(`恢复后通道 turns.length = ${ch.turns.length}`)
         } else {
-          console.log(`[useChat:watch] 跳过恢复: 通道已有数据`)
+          log.debug(`跳过恢复: 通道已有数据`)
         }
       } else {
-        console.log(`[useChat:watch] 未找到会话 ${newId} 的缓存, sessionId="${sessionId.value}"`)
+        log.debug(`未找到会话 ${newId} 的缓存, sessionId="${sessionId.value}"`)
         const available = Array.from(turnsCache.keys())
-        console.log(`[useChat:watch] turnsCache 可用键:`, available.length ? available : '(空)')
+        log.debug(`turnsCache 可用键:`, available.length ? available : '(空)')
         // 回退：从后端加载历史消息（const 会话从 YAML，普通会话从 checkpointer）
         // 修复：此前前端从未调用 /sessions/{id}/messages，导致 localStorage 无缓存时
         // 旧会话点击后无历史显示
@@ -1355,7 +1357,7 @@ export function useChat(sessionId: Ref<string>) {
   function send(text: string, refs: ParsedRef[] = [], providerId?: string, modelName?: string, thinkPathId?: ThinkPathId): boolean {
     const ch = activeChannel.value
     if (!ch.ws || ch.ws.readyState !== WebSocket.OPEN) {
-      console.warn(`[useChat:send] WebSocket 未就绪, readyState=${ch.ws?.readyState}, session=${sessionId.value}`)
+      log.warn(`WebSocket 未就绪, readyState=${ch.ws?.readyState}, session=${sessionId.value}`)
       return false
     }
     ch.isStreaming = true

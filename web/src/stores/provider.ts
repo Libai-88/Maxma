@@ -1,7 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '@/api'
+import { createLogger } from '@/utils/logger'
 import type { ProviderConfig } from '@/types'
+
+const log = createLogger('provider')
 
 /**
  * Provider 全局状态 store
@@ -55,7 +58,7 @@ export const useProviderStore = defineStore('provider', () => {
             } else {
               // 最后一次仍失败：保留现有数据（首次加载时为空数组）
               errorMessage.value = e instanceof Error ? e.message : String(e)
-              console.warn('[providerStore] 加载 provider 列表失败（已重试', retries, '次）:', e)
+              log.warn('加载 provider 列表失败（已重试', retries, '次）:', e)
             }
           }
         }
