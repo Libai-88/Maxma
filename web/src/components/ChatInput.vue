@@ -1345,6 +1345,12 @@ function onResizeEnd(e: PointerEvent) {
 .image-tag:hover {
   border-color: var(--accent-dark);
 }
+
+/* 暗色主题下增强图片引用边框对比度 */
+:global([data-theme="night"]) .image-tag,
+:global([data-theme="midnight"]) .image-tag {
+  border-color: var(--border-strong, var(--border));
+}
 .image-tag-preview {
   width: 28px;
   height: 28px;
@@ -1863,6 +1869,7 @@ function onResizeEnd(e: PointerEvent) {
 .input-area:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+  animation: maxma-focus-pulse-in .3s var(--ease-out);
 }
 @media (prefers-reduced-motion: no-preference) {
   .chat-input button:focus-visible,

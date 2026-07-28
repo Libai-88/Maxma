@@ -396,6 +396,20 @@ watch(() => props.toolCall.output, () => {
 }
 .tool-card.running {
   border-color: var(--accent-dark);
+  animation: maxma-tool-pulse-border 1.5s ease-in-out infinite;
+}
+.tool-card.running .tool-icon {
+  animation: maxma-tool-pulse-icon 1.5s ease-in-out infinite;
+}
+
+@keyframes maxma-tool-pulse-border {
+  0%, 100% { border-color: var(--accent-dark); }
+  50%      { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+}
+
+@keyframes maxma-tool-pulse-icon {
+  0%, 100% { opacity: 0.7; }
+  50%      { opacity: 1; }
 }
 .tool-card.error {
   border-color: color-mix(in srgb, var(--status-error) 30%, var(--border));

@@ -386,7 +386,7 @@ const showTypingIndicator = computed(() =>
 )
 
 const showSkeleton = computed(() =>
-  Boolean(props.currentTurn) && !currentTurnHasVisibleActivity.value
+  Boolean(props.currentTurn) && !currentTurnHasVisibleActivity.value && !typingDelayElapsed.value
 )
 
 /** DynamicScroller 根元素的 scroll 事件：维护 isNearBottomRef 状态。
