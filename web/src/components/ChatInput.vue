@@ -214,7 +214,6 @@
 </template>
 
 <script setup lang="ts">
-import { api } from '@/api'
 import AutocompletePanel from '@/components/AutocompletePanel.vue'
 import Icon from '@/components/Icon.vue'
 import StickerContextMenu from '@/components/StickerContextMenu.vue'
@@ -225,11 +224,12 @@ import { useStickerSegments, type StickerSegment } from '@/composables/useSticke
 import { useChatInputInjected } from '@/composables/useChatInput'
 import { useAutocomplete } from '@/composables/useAutocomplete'
 import { useResizeHandle } from '@/composables/useResizeHandle'
-import type { FileRef, FolderRef, ParsedRef, ImageRef } from '@/utils/references'
-import { REF_CHIP_CONFIG } from '@/utils/references'
-import { isTauri } from '@/utils/env'
+import { useAttachMenu } from '@/composables/useAttachMenu'
+import { useFileRefs } from '@/composables/useFileRefs'
+import { useImageAttachment } from '@/composables/useImageAttachment'
+import { useLinkInput } from '@/composables/useLinkInput'
 import type { ThinkPathId } from '@/utils/thinkPath'
-import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watchEffect } from 'vue'
 import type { Sticker } from '@/components/StickerPicker.vue'
 import ModelSelector from './ModelSelector.vue'
 import ContextUsageBadge from './ContextUsageBadge.vue'
@@ -250,11 +250,8 @@ const {
 } = chatInput
 
 const text = ref('')
-// WebSocket 未连接时发送消息的可见错误反馈（sidecar 未启动等场景）
 const connectionError = ref<string | null>(null)
-const imageError = ref<string | null>(null)
 const sendState = ref<'idle' | 'success' | 'error'>('idle')
-let _imageErrorTimer: ReturnType<typeof setTimeout> | null = null
 let _connectionErrorTimer: ReturnType<typeof setTimeout> | null = null
 let _sendStateTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -262,21 +259,9 @@ function clearSendStateTimer() {
   if (_sendStateTimer) { clearTimeout(_sendStateTimer); _sendStateTimer = null }
 }
 
-function showImageError(msg: string) {
-  imageError.value = msg
-  if (_imageErrorTimer) clearTimeout(_imageErrorTimer)
-  _imageErrorTimer = setTimeout(() => {
-    if (_imageErrorTimer && imageError.value === msg) {
-      imageError.value = null
-      _imageErrorTimer = null
-    }
-  }, 5000)
-}
-
 const selectedThinkPathId = ref<ThinkPathId | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const inputContainerRef = ref<HTMLDivElement | null>(null)
-const refs = ref<ParsedRef[]>([])
 const loading = ref(false)
 const inputPlaceholder = computed(() =>
   canSend.value
@@ -289,12 +274,63 @@ const sendButtonTitle = computed(() => {
   return ''
 })
 
-// 选区引用浮层定位
+// ── Composables ──
+
+const {
+  refs,
+  imageRefs,
+  nonImageRefs,
+  getRefIndex,
+  getNonImageRefIndex,
+  addRef,
+  removeRef,
+  freezeLeavePos,
+  getRefIcon,
+  getRefTooltip,
+  clearRefs,
+} = useFileRefs()
+
+const {
+  showMenu,
+  addFileMenuRef,
+  addFileButtonRef,
+  toggleMenu,
+  closeAddFileMenu,
+  pickFile,
+  pickFolder,
+} = useAttachMenu({ disabled, refs, loading })
+
+const {
+  isDragover,
+  imageError,
+  pickImage,
+  handleImageFile,
+  onDragEnter,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  cleanup: cleanupImage,
+} = useImageAttachment({ refs, showMenu })
+
+const {
+  showLinkInput,
+  linkUrl,
+  linkError,
+  linkInputRef,
+  startLinkInput,
+  confirmLink,
+  cancelLink,
+  handlePasteLink,
+} = useLinkInput({ refs, showMenu, textareaRef })
+
+defineExpose({ addRef })
+
+// ── 选区引用浮层定位 ──
+
 const quoteFloatRef = ref<HTMLElement | null>(null)
 watchEffect(() => {
   const el = quoteFloatRef.value
   if (!el || !quoteCandidate.value) return
-  // CSP-safe CSSOM: position quote float btn via style.setProperty (was :style binding)
   const result = computeFloatingInputPosition(
     quoteCandidate.value.rect,
     { width: 100, height: 32 },
@@ -308,6 +344,7 @@ watchEffect(() => {
 }, { flush: 'post' })
 
 // ── 表情选择器状态 ──
+
 const contextMenuVisible = ref(false)
 const contextMenuPosition = ref({ x: 0, y: 0 })
 const contextMenuSticker = ref<Sticker | null>(null)
@@ -331,168 +368,21 @@ function onContextMenuRefresh() {
   contextMenuVisible.value = false
 }
 
-// ── 图片引用分离（用于模板中分别渲染缩略图和文本 chip）──
-const imageRefs = computed(() => refs.value.filter((r): r is ImageRef => r.type === 'image'))
-const nonImageRefs = computed(() => refs.value.filter((r): r is Exclude<ParsedRef, ImageRef> => r.type !== 'image'))
-
-/** 获取 ImageRef 在 refs 数组中的真实索引 */
-function getRefIndex(imgRef: ImageRef): number {
-  return refs.value.indexOf(imgRef)
-}
-
-/** 获取 nonImageRef 在 refs 数组中的真实索引 */
-function getNonImageRefIndex(r: Exclude<ParsedRef, ImageRef>): number {
-  return refs.value.indexOf(r as ParsedRef)
-}
-
-// ── 拖拽图片状态 ──
-const isDragover = ref(false)
-let dragCounter = 0
-const showMenu = ref(false)
-const addFileMenuRef = ref<HTMLDivElement | null>(null)
-const addFileButtonRef = ref<HTMLButtonElement | null>(null)
-const showLinkInput = ref(false)
-const linkUrl = ref('')
-const linkError = ref<string | null>(null)
-const linkInputRef = ref<HTMLInputElement | null>(null)
-
-// ── 供父组件注入新引用（如 ChatWindow 发出的 cite） ──
-
-function addRef(r: ParsedRef) {
-  refs.value.push(r)
-}
-
-function removeRef(idx: number) {
-  const ref = refs.value[idx]
-  // 释放图片 blob URL，防止内存泄漏
-  if (ref && ref.type === 'image' && (ref as ImageRef).preview?.startsWith('blob:')) {
-    URL.revokeObjectURL((ref as ImageRef).preview)
-  }
-  refs.value.splice(idx, 1)
-}
-
-/** TransitionGroup before-leave：冻结退场元素的位置，使其脱离 flex 流而不跳跃 */
-function freezeLeavePos(el: Element) {
-  const htmlEl = el as HTMLElement
-  const parent = htmlEl.offsetParent as HTMLElement
-  if (parent) {
-    htmlEl.style.left = htmlEl.offsetLeft + 'px'
-    htmlEl.style.top = htmlEl.offsetTop + 'px'
-  }
-}
-
-/** 从 REF_CHIP_CONFIG 获取图标名 */
-function getRefIcon(r: ParsedRef): string {
-  return REF_CHIP_CONFIG[r.type]?.icon ?? 'file'
-}
-
-/** 从 REF_CHIP_CONFIG 获取 tooltip，受阻时附加原因 */
-function getRefTooltip(r: ParsedRef): string {
-  const base = REF_CHIP_CONFIG[r.type]?.tooltip(r) ?? r.label
-  if ('blocked' in r && r.blocked) {
-    return `${base}\n已阻挡：${r.blockedReason || '路径被阻挡，无法访问'}`
-  }
-  return base
-}
-
-defineExpose({ addRef })
-
-// ── 链接引用 ──
-
-const LINK_RE = /^https?:\/\/[^\s/$.?#].[^\s]*$/i
-
-function startLinkInput(initialUrl?: string | MouseEvent) {
-  showMenu.value = false
-  linkUrl.value = typeof initialUrl === 'string' ? initialUrl : ''
-  linkError.value = null
-  showLinkInput.value = true
-  nextTick(() => linkInputRef.value?.focus())
-}
-
-function confirmLink() {
-  const url = linkUrl.value.trim()
-  linkError.value = null
-  if (!url) {
-    linkError.value = '请输入有效链接'
-    return
-  }
-  // 如果没有协议前缀，自动补 https://
-  const normalized = /^https?:\/\//i.test(url) ? url : 'https://' + url
-  if (!LINK_RE.test(normalized)) {
-    linkError.value = '请输入有效链接'
-    return
-  }
-  try {
-    const domain = new URL(normalized).hostname.replace(/^www\./, '')
-    refs.value.push({ type: 'web_link', url: normalized, label: domain, domain })
-    linkUrl.value = ''
-    linkError.value = null
-    showLinkInput.value = false
-    // 焦点归还：输入条移除后焦点会落空，归还到正文输入框
-    nextTick(() => textareaRef.value?.focus())
-  } catch {
-    linkError.value = '请输入有效链接'
-  }
-}
-
-function cancelLink() {
-  linkUrl.value = ''
-  linkError.value = null
-  showLinkInput.value = false
-  nextTick(() => textareaRef.value?.focus())
-}
-
-// ── 粘贴URL自动识别 ──
-
-/** 判断文本是否看起来像域名/IP，适合补 https:// */
-function looksLikeHost(text: string): boolean {
-  // 允许 localhost、带点的域名、IPv4、IPv6
-  return /^[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)+(:[0-9]+)?(\/|$)/.test(text)
-      || /^localhost(:[0-9]+)?(\/|$)/i.test(text)
-}
+// ── 粘贴处理（图片 + 链接） ──
 
 function onPaste(e: ClipboardEvent) {
-  // ── 剪贴板图片粘贴 ──
   const items = e.clipboardData?.items
   if (items) {
     for (const item of Array.from(items)) {
       if (item.type.startsWith('image/')) {
         e.preventDefault()
         const file = item.getAsFile()
-        if (file) {
-          handleImageFile(file)
-        }
+        if (file) handleImageFile(file)
         return
       }
     }
   }
-
-  const text = e.clipboardData?.getData('text/plain')?.trim()
-  if (!text) return
-
-  // 已有协议头 → 弹出链接输入条并预填充，等待用户确认
-  if (/^https?:\/\//i.test(text)) {
-    try {
-      const url = new URL(text)
-      if (['http:', 'https:'].includes(url.protocol) && url.hostname.includes('.')) {
-        e.preventDefault()
-        startLinkInput(text)
-      }
-    } catch { /* 走默认粘贴 */ }
-    return
-  }
-
-  // 无协议头 → 仅当看起来像域名时才补 https:// 并弹出链接输入条
-  if (looksLikeHost(text)) {
-    const normalized = 'https://' + text
-    try {
-      const url = new URL(normalized)
-      if (['http:', 'https:'].includes(url.protocol)) {
-        e.preventDefault()
-        startLinkInput(normalized)
-      }
-    } catch { /* 走默认粘贴 */ }
-  }
+  handlePasteLink(e)
 }
 
 // ── @ / # 自动补全（统一状态机） ──
@@ -515,13 +405,8 @@ const {
 })
 
 function onKeydown(e: KeyboardEvent) {
-  // IME 组合态（中文输入法选字中）不拦截任何按键
   if (e.isComposing || e.keyCode === 229) return
-
-  // 自动补全面板打开时，委托给 autocomplete 处理
   if (acHandleKeydown(e)) return
-
-  // Enter 发送（仅当面板未打开时）
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
     handleSend()
@@ -529,284 +414,22 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 // ── Composer 模型状态 ──
-// ModelSelector 负责可见的 provider/model 组合选择；发送仍只读取 useChatInput 的持久化 refs。
+
 const chatStore = useChatStore()
 const noProvider = computed(() => chatStore.availableModels.length === 0)
 
 onMounted(loadTools)
-onMounted(() => {
-  document.addEventListener('keydown', onAddFileMenuKeydown)
-})
 
-function getFileName(fp: string): string {
-  const parts = fp.replace(/\\/g, '/').split('/')
-  return parts[parts.length - 1] || fp
-}
-
-function toggleMenu() {
-  if (disabled.value) return
-  showMenu.value = !showMenu.value
-}
-
-function getAddFileMenuItems(): HTMLElement[] {
-  if (!addFileMenuRef.value) return []
-  return Array.from(addFileMenuRef.value.querySelectorAll<HTMLElement>('[role="menuitem"]'))
-}
-
-function focusAddFileMenuItem(index: number) {
-  const items = getAddFileMenuItems()
-  const target = items[index]
-  if (target) target.focus()
-}
-
-function closeAddFileMenu(returnFocus = true) {
-  if (!showMenu.value) return
-  showMenu.value = false
-  if (returnFocus) {
-    nextTick(() => addFileButtonRef.value?.focus())
-  }
-}
-
-function onAddFileMenuKeydown(e: KeyboardEvent) {
-  if (!showMenu.value) return
-  switch (e.key) {
-    case 'Escape':
-      e.preventDefault()
-      closeAddFileMenu(true)
-      break
-    case 'Tab':
-      e.preventDefault()
-      closeAddFileMenu(true)
-      break
-    case 'ArrowDown':
-      e.preventDefault()
-      {
-        const items = getAddFileMenuItems()
-        const current = document.activeElement
-        const idx = current ? items.indexOf(current as HTMLElement) : -1
-        const next = (idx + 1) % items.length
-        focusAddFileMenuItem(next)
-      }
-      break
-    case 'ArrowUp':
-      e.preventDefault()
-      {
-        const items = getAddFileMenuItems()
-        const current = document.activeElement
-        const idx = current ? items.indexOf(current as HTMLElement) : -1
-        const prev = (idx - 1 + items.length) % items.length
-        focusAddFileMenuItem(prev)
-      }
-      break
-    case 'Home':
-      e.preventDefault()
-      focusAddFileMenuItem(0)
-      break
-    case 'End':
-      e.preventDefault()
-      {
-        const items = getAddFileMenuItems()
-        if (items.length > 0) focusAddFileMenuItem(items.length - 1)
-      }
-      break
-    case 'Enter':
-    case ' ':
-      e.preventDefault()
-      {
-        const current = document.activeElement as HTMLElement | null
-        if (current && current.getAttribute('role') === 'menuitem') {
-          current.click()
-        }
-      }
-      break
-  }
-}
-
-// 菜单打开时聚焦第一个 menuitem
-watch(showMenu, async (val) => {
-  if (val) {
-    await nextTick()
-    focusAddFileMenuItem(0)
-  }
-})
-
-async function pickFile() {
-  showMenu.value = false
-  await _pick('file')
-}
-
-async function pickFolder() {
-  showMenu.value = false
-  await _pick('folder')
-}
-
-async function _pick(type: 'file' | 'folder') {
-  if (loading.value) return
-  loading.value = true
-  try {
-    const path = await selectLocalPath(type)
-    if (path) {
-      const refType = type === 'folder' ? 'folder' : 'file'
-      refs.value.push({ type: refType, path, label: getFileName(path) } as ParsedRef)
-      console.log('[ChatInput] _pick: pushed ref type=%s path=%s', refType, path)
-
-        // 异步检查路径是否被拒止锚或白名单阻挡
-        try {
-          const result = await api.checkPathBlocked(path)
-          console.log('[ChatInput] checkPathBlocked result for', path, result)
-          if (result.blocked) {
-            // 使用唯一 path 定位条目（避免数组索引竞态：用户可能在 await 期间通过 ✕ 删除了条目）
-            const idx = refs.value.findIndex(r =>
-              (r.type === 'file' || r.type === 'folder') && r.path === path
-            )
-            if (idx === -1) {
-              console.log('[ChatInput] ref for path %s already removed, skipping', path)
-              return
-            }
-            const entry = refs.value[idx] as FileRef | FolderRef
-            entry.blocked = true
-            entry.blockedReason = result.reason ?? undefined
-            console.log('[ChatInput] marked ref %s as blocked, reason: %s', path, result.reason)
-          }
-        } catch (err) {
-          console.warn('[ChatInput] checkPathBlocked failed:', err)
-        }
-    }
-  } catch {
-    // 静默失败
-  } finally {
-    loading.value = false
-  }
-}
-
-async function selectLocalPath(type: 'file' | 'folder'): Promise<string | null> {
-  if (isTauri()) {
-    const invoke = (window as any).__TAURI_INTERNALS__?.invoke ?? (window as any).__TAURI__?.core?.invoke
-    if (invoke) return await invoke('select_path', { kind: type })
-  }
-
-  const data = await api.selectFile(type)
-  return data.path
-}
-
-// ── 图片处理 ──
-
-const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg']
-const MAX_IMAGE_SIZE = 20 * 1024 * 1024 // 20MB
-
-/** 通过文件选择器选择图片 */
-async function pickImage() {
-  showMenu.value = false
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = 'image/*'
-  input.multiple = true
-  input.onchange = async () => {
-    if (!input.files) return
-    for (const file of Array.from(input.files)) {
-      await handleImageFile(file)
-    }
-  }
-  input.click()
-}
-
-/** 处理单个图片文件：校验 → 上传 → 添加到 refs */
-async function handleImageFile(file: File) {
-  // 校验类型
-  const ext = file.name.split('.').pop()?.toLowerCase() || ''
-  if (!file.type.startsWith('image/') && !IMAGE_EXTS.includes(ext)) {
-    console.warn('[ChatInput] 非图片文件:', file.name)
-    return
-  }
-  // 校验大小
-  if (file.size > MAX_IMAGE_SIZE) {
-    console.warn('[ChatInput] 图片过大:', file.size, file.name)
-    return
-  }
-
-  // 本地预览 URL（每个文件唯一，可用作上传完成后的条目定位标识）
-  const preview = URL.createObjectURL(file)
-  const label = file.name || 'image'
-
-  // 先添加为占位（path 为空），上传完成后更新
-  refs.value.push({ type: 'image', label, path: '', preview } as ImageRef)
-
-  try {
-    const result = await api.uploadImage(file)
-    // 上传成功，通过唯一的 preview URL 定位条目（避免数组索引竞态：用户可能在 await 期间通过 ✕ 删除了占位）
-    const idx = refs.value.findIndex(r => r.type === 'image' && (r as ImageRef).preview === preview)
-    if (idx === -1) {
-      // 用户在上传完成前已移除该占位，释放预览 URL 后直接返回
-      URL.revokeObjectURL(preview)
-      return
-    }
-    const entry = refs.value[idx] as ImageRef
-    entry.path = result.path
-    console.log('[ChatInput] image uploaded:', result.path)
-  } catch (e) {
-    console.error('[ChatInput] image upload failed:', e)
-    // 上传失败，显示用户可见的错误提示
-    const errMsg = e instanceof Error ? e.message : '图片上传失败，请重试'
-    showImageError(errMsg)
-    // 通过 preview URL 定位条目移除
-    const idx = refs.value.findIndex(r => r.type === 'image' && (r as ImageRef).preview === preview)
-    if (idx !== -1) {
-      refs.value.splice(idx, 1)
-    }
-    URL.revokeObjectURL(preview)
-  }
-}
-
-/** 拖拽进入 */
-function onDragEnter(e: DragEvent) {
-  if (!e.dataTransfer?.types.includes('Files')) return
-  dragCounter++
-  isDragover.value = true
-}
-
-/** 拖拽经过 */
-function onDragOver(_e: DragEvent) {
-  // 保持 isDragover 状态，CSS 显示高亮
-}
-
-/** 拖拽离开 */
-function onDragLeave(_e: DragEvent) {
-  dragCounter--
-  if (dragCounter <= 0) {
-    dragCounter = 0
-    isDragover.value = false
-  }
-}
-
-/** 拖拽放下 */
-async function onDrop(e: DragEvent) {
-  isDragover.value = false
-  dragCounter = 0
-  const files = e.dataTransfer?.files
-  if (!files) return
-  let hasNonImage = false
-  for (const file of Array.from(files)) {
-    if (file.type.startsWith('image/')) {
-      await handleImageFile(file)
-    } else {
-      hasNonImage = true
-    }
-  }
-  if (hasNonImage) {
-    showImageError('仅支持拖拽图片文件，其他文件请使用“选择文件”')
-  }
-}
+// ── 发送 ──
 
 function handleSend() {
   const msg = text.value.trim()
   if (!msg && imageRefs.value.length === 0) return
   if (disabled.value) return
-  // WebSocket 未连接时给出醒目反馈，而非静默吞掉用户输入
   if (!canSend.value) {
     connectionError.value = '无法连接到 AI 引擎（sidecar 未启动），请检查后端配置'
     if (_connectionErrorTimer) clearTimeout(_connectionErrorTimer)
     _connectionErrorTimer = setTimeout(() => {
-      // 防御性检查：仅在定时器未被新的 handleSend 覆盖且当前错误消息仍是本条时清除
       if (_connectionErrorTimer && connectionError.value === '无法连接到 AI 引擎（sidecar 未启动），请检查后端配置') {
         connectionError.value = null
         _connectionErrorTimer = null
@@ -814,15 +437,12 @@ function handleSend() {
     }, 5000)
     return
   }
-  // 修复 R-001：检查 send() 返回值，发送失败时不清空输入框，
-  // 避免 WebSocket 在 canSend 检查与 send() 调用之间断开的 TOCTOU 竞态导致消息静默丢失。
   const sent = chatInput.send(
     msg,
     refs.value,
     selectedThinkPathId.value || undefined,
   )
   if (!sent) {
-    // Error shake animation
     sendState.value = 'error'
     clearSendStateTimer()
     _sendStateTimer = setTimeout(() => { sendState.value = 'idle'; _sendStateTimer = null }, 600)
@@ -836,28 +456,18 @@ function handleSend() {
     }, 5000)
     return
   }
-  // Success flash
   sendState.value = 'success'
   clearSendStateTimer()
   _sendStateTimer = setTimeout(() => { sendState.value = 'idle'; _sendStateTimer = null }, 800)
   text.value = ''
-  // ThinkPath is intentionally one-shot: it is a confirmed preference for this
-  // request, never an invisible session-level routing policy.
   selectedThinkPathId.value = null
-  // 释放图片预览 URL
-  for (const r of refs.value) {
-    if (r.type === 'image' && r.preview.startsWith('blob:')) {
-      URL.revokeObjectURL(r.preview)
-    }
-  }
-  refs.value = []
+  clearRefs()
   nextTick(() => autoResize())
 }
 
 function autoResize() {
   const el = textareaRef.value
   if (!el) return
-  // 如果用户手动拖拽过容器高度，不干涉 textarea 高度，交由 flex 布局自动填充
   if (customHeight.value !== null) return
   el.style.height = 'auto'
   el.style.height = Math.min(el.scrollHeight, 160) + 'px'
@@ -867,15 +477,13 @@ function autoResize() {
 
 const { customHeight, isResizing, startResize } = useResizeHandle(inputContainerRef, textareaRef)
 
-    onUnmounted(() => {
-      if (_connectionErrorTimer) clearTimeout(_connectionErrorTimer)
-      _connectionErrorTimer = null
-      if (_imageErrorTimer) clearTimeout(_imageErrorTimer)
-      _imageErrorTimer = null
-      clearSendStateTimer()
-      document.removeEventListener('keydown', onAddFileMenuKeydown)
-    })
-  </script>
+onUnmounted(() => {
+  if (_connectionErrorTimer) clearTimeout(_connectionErrorTimer)
+  _connectionErrorTimer = null
+  clearSendStateTimer()
+  cleanupImage()
+})
+</script>
 
 <style scoped>
 /* 连接错误横幅 — WebSocket 未连接时发送消息的可见反馈 */
