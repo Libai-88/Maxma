@@ -1,23 +1,6 @@
-/* ── MaxmaHere Design System ──
- * 统一的设计令牌（Design Tokens）和基础组件样式。
- * 所有页面和气泡组件应基于此文件中的变量和类构建。
- * 被 App.vue 的 :root 块引用，变量定义保留在 App.vue 中。
+/* ── Design System Components ──
+ * 基础组件类的活规范。结构 token 已全部委托给 tokens.css。
  */
-
-/* ── 间距系统 ── */
-/* 已迁移至 tokens.css（--space-4 / --space-8 / --space-12 / --space-16 / --space-24 / --space-32） */
-
-/* ── 排版 ── */
-:root {
-  --text-2xl: 24px;
-  --leading-tight: 1.3;
-  --leading-normal: 1.6;
-  --leading-relaxed: 1.8;
-}
-/* 文字尺寸已迁移至 tokens.css（--fs-title / --fs-body / --fs-ui / --fs-caption / --fs-hint） */
-
-/* ── 过渡 ── */
-/* 已迁移至 tokens.css（--duration-instant / --duration-fast / --duration-slow + --ease-* 系列） */
 
 /* ── 基础按钮 ── */
 .ds-btn {
