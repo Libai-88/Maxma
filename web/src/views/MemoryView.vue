@@ -15,6 +15,75 @@
       </div>
     </div>
 
+    <!-- Hindsight 配置 -->
+    <div class="hindsight-section" v-if="!store.loading">
+      <div class="hindsight-header" @click="hindsightOpen = !hindsightOpen">
+        <span class="hindsight-title">Hindsight 配置</span>
+        <span class="hindsight-hint">{{ hindsight.enabled ? '已启用' : '已停用' }}</span>
+        <span class="hindsight-caret">{{ hindsightOpen ? '▾' : '▸' }}</span>
+      </div>
+      <div v-if="hindsightOpen" class="hindsight-body">
+        <div class="hs-row">
+          <div class="hs-info">
+            <div class="hs-label">启用 Hindsight 记忆处理</div>
+            <div class="hs-desc">对历史对话进行回顾，提炼并巩固长期记忆。</div>
+          </div>
+          <button class="hs-toggle" :class="{ on: hindsight.enabled }" @click="setHindsight('enabled', !hindsight.enabled)">
+            {{ hindsight.enabled ? '开启' : '关闭' }}
+          </button>
+        </div>
+
+        <div class="hs-row">
+          <div class="hs-info">
+            <div class="hs-label">保留天数</div>
+            <div class="hs-desc">参与回顾处理的对话时间窗口。</div>
+          </div>
+          <div class="hs-control">
+            <input type="range" min="7" max="365" step="1"
+              :value="hindsight.retention_days"
+              @input="setHindsight('retention_days', Number(($event.target as HTMLInputElement).value))" />
+            <span class="hs-value">{{ hindsight.retention_days }}天</span>
+          </div>
+        </div>
+
+        <div class="hs-row">
+          <div class="hs-info">
+            <div class="hs-label">重要性阈值</div>
+            <div class="hs-desc">仅固化重要度达到此阈值的记忆。</div>
+          </div>
+          <div class="hs-control">
+            <input type="range" min="0.1" max="1.0" step="0.05"
+              :value="hindsight.importance_threshold"
+              @input="setHindsight('importance_threshold', Number(($event.target as HTMLInputElement).value))" />
+            <span class="hs-value">{{ hindsight.importance_threshold.toFixed(2) }}</span>
+          </div>
+        </div>
+
+        <div class="hs-row">
+          <div class="hs-info">
+            <div class="hs-label">处理模式</div>
+            <div class="hs-desc">选择 Hindsight 的触发方式。</div>
+          </div>
+          <select class="hs-select" :value="hindsight.processing_mode"
+            @change="setHindsight('processing_mode', ($event.target as HTMLSelectElement).value as HindsightConfig['processing_mode'])">
+            <option value="auto">自动</option>
+            <option value="manual">手动</option>
+            <option value="scheduled">定时</option>
+          </select>
+        </div>
+
+        <div class="hs-row hs-row-block">
+          <div class="hs-info">
+            <div class="hs-label">自定义提示词模板</div>
+            <div class="hs-desc">留空则使用内置模板。</div>
+          </div>
+          <textarea class="hs-textarea" rows="4" :value="hindsight.prompt_template"
+            placeholder="回顾以下对话，提取值得长期保留的事实……"
+            @change="setHindsight('prompt_template', ($event.target as HTMLTextAreaElement).value)" />
+        </div>
+      </div>
+    </div>
+
     <!-- 搜索 + 过滤 -->
     <div class="toolbar">
       <div class="search-box">
@@ -80,6 +149,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useMemoryStore, type MemoryFact } from '@/stores/memory'
 import { api } from '@/api'
+import type { HindsightConfig } from '@/api'
 import { confirmAction } from '@/composables/useConfirm'
 import { createLogger } from '@/utils/logger'
 
@@ -96,6 +166,35 @@ const editCategory = ref('preference')
 const stats = ref<{ total: number; categories: Record<string, number>; avg_confidence: number }>({
   total: 0, categories: {}, avg_confidence: 0,
 })
+
+// ── Hindsight 配置 ──
+const hindsightOpen = ref(false)
+const hindsight = ref<HindsightConfig>({
+  enabled: false,
+  retention_days: 90,
+  importance_threshold: 0.5,
+  processing_mode: 'auto',
+  prompt_template: '',
+})
+
+async function loadHindsightConfig() {
+  try {
+    hindsight.value = { ...hindsight.value, ...(await api.getHindsightConfig()) }
+  } catch (e) {
+    log.warn('[memory] load hindsight config failed:', e)
+  }
+}
+
+async function setHindsight<K extends keyof HindsightConfig>(key: K, value: HindsightConfig[K]) {
+  const prev = hindsight.value[key]
+  hindsight.value[key] = value
+  try {
+    hindsight.value = { ...hindsight.value, ...(await api.updateHindsightConfig({ [key]: value })) }
+  } catch (e) {
+    log.warn(`[memory] set hindsight.${String(key)} failed:`, e)
+    hindsight.value[key] = prev
+  }
+}
 
 const categoryOptions = ['preference', 'event', 'knowledge', 'rule', 'other']
 
@@ -185,7 +284,7 @@ async function handleDelete(id: string) {
 
 onMounted(async () => {
   store.loading = true
-  await loadFacts()
+  await Promise.all([loadFacts(), loadHindsightConfig()])
   store.loading = false
 })
 </script>
@@ -267,4 +366,45 @@ onMounted(async () => {
   background: var(--bg-secondary); color: var(--text-secondary); cursor: pointer; font-size: 0.8em;
 }
 .btn-primary { background: var(--accent); color: white; border-color: var(--accent); }
+
+/* Hindsight 配置 */
+.hindsight-section {
+  margin-bottom: 16px; border: 1px solid var(--border);
+  border-radius: var(--radius); background: var(--bg-card); overflow: hidden;
+}
+.hindsight-header {
+  display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+  cursor: pointer; user-select: none;
+}
+.hindsight-title { font-size: 0.9em; font-weight: 600; }
+.hindsight-hint { font-size: 0.72em; color: var(--text-tertiary); }
+.hindsight-caret { margin-left: auto; font-size: 0.8em; color: var(--text-tertiary); }
+.hindsight-body { padding: 4px 14px 12px; border-top: 1px solid var(--border); }
+.hs-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.hs-row:last-child { border-bottom: none; }
+.hs-row-block { flex-direction: column; align-items: stretch; gap: 8px; }
+.hs-info { flex: 1; min-width: 0; }
+.hs-label { font-size: 0.85em; font-weight: 500; }
+.hs-desc { font-size: 0.72em; color: var(--text-tertiary); margin-top: 2px; }
+.hs-control { display: flex; align-items: center; gap: 8px; }
+.hs-control input[type="range"] { width: 120px; }
+.hs-value { font-size: 0.78em; color: var(--text-secondary); min-width: 44px; text-align: right; }
+.hs-toggle {
+  padding: 4px 12px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg-secondary); color: var(--text-secondary); font-size: 0.78em;
+  cursor: pointer; transition: all 0.15s; white-space: nowrap;
+}
+.hs-toggle.on { background: var(--accent); color: white; border-color: var(--accent); }
+.hs-select {
+  padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg-secondary); color: var(--text-primary); font-size: 0.78em; cursor: pointer;
+}
+.hs-textarea {
+  width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg-secondary); color: var(--text-primary); font-size: 0.82em;
+  font-family: inherit; line-height: 1.6; resize: vertical; box-sizing: border-box;
+}
 </style>

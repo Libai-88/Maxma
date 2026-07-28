@@ -37,6 +37,7 @@ from api.routes import metrics as metrics_router
 from api.routes import news as news_router
 from api.routes import restart as restart_router
 from api.routes import session_compress as session_compress_router
+from api.routes import settings_panels as settings_panels_router
 from api.routes import stickers as stickers_router
 from api.routes import sticker_favorites as sticker_favorites_router
 from api.routes import sticker_upload as sticker_upload_router
@@ -141,6 +142,10 @@ def create_app() -> FastAPI:
     app.include_router(sessions.router, prefix="/api")
     app.include_router(chat.router)
     app.include_router(persona.router, prefix="/api")
+    # settings_panels 必须在 memory 之前注册：其静态路由
+    # PUT /memory/hindsight-config 否则会被 memory 的动态路由
+    # PUT /memory/{memory_id} 抢先匹配（FastAPI 按注册顺序匹配）。
+    app.include_router(settings_panels_router.router, prefix="/api")
     app.include_router(memory.router, prefix="/api")
     app.include_router(mcp.router, prefix="/api")
     app.include_router(tools.router, prefix="/api")
