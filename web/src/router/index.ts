@@ -17,9 +17,7 @@ const router = createRouter({
     },
     {
       path: '/kb',
-      name: 'kb',
-      component: () => import('@/views/KbView.vue'),
-      meta: { title: '知识库' },
+      redirect: '/memory',
     },
     {
       path: '/news',
@@ -101,9 +99,7 @@ const router = createRouter({
     },
     {
       path: '/audit-log',
-      name: 'audit-log',
-      component: () => import('@/views/AuditLogView.vue'),
-      meta: { title: '审计日志' },
+      redirect: '/privacy',
     },
     {
       path: '/capabilities',

@@ -72,10 +72,10 @@
               <span class="popup-item-sub">查看与管理 AI 自动记录的长期事实</span>
             </div>
           </router-link>
-          <router-link to="/kb" class="popup-item" @click="closeSettingsMenu">
+          <router-link to="/memory" class="popup-item" @click="closeSettingsMenu">
             <div class="popup-item-content">
-              <span class="popup-item-title">知识库 KB</span>
-              <span class="popup-item-sub">了解 AI 如何管理知识，无需手动上传文档</span>
+              <span class="popup-item-title">记忆 Memory</span>
+              <span class="popup-item-sub">查看 AI 自动记住的事实，管理长期记忆</span>
             </div>
           </router-link>
         </div>
@@ -99,10 +99,10 @@
               <span class="popup-item-sub">监控系统性能与资源使用</span>
             </div>
           </router-link>
-          <router-link to="/audit-log" class="popup-item" @click="closeSettingsMenu">
+          <router-link to="/privacy" class="popup-item" @click="closeSettingsMenu">
             <div class="popup-item-content">
-              <span class="popup-item-title">审计日志</span>
-              <span class="popup-item-sub">查看工具调用、权限使用与敏感操作历史</span>
+              <span class="popup-item-title">隐私与审计</span>
+              <span class="popup-item-sub">查看数据存储、审计日志与隐私仪表盘</span>
             </div>
           </router-link>
         </div>

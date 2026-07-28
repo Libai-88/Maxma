@@ -14,7 +14,7 @@
           <li><strong>最近审计日志</strong>：按事件类型筛选并查看最近 50 条审计记录（API 调用 / 文件访问 / 配置变更）。</li>
           <li><strong>数据管理</strong>：清除对话历史、清除审计日志、对 API 密钥做静态加密——操作不可撤销，请谨慎。</li>
         </ol>
-        <p class="overview-note">想了解审计能力的整体设计？前往<router-link to="/audit-log">审计日志说明</router-link>。</p>
+        <p class="overview-note">审计管理已整合到此页面中，请直接查看下方各区域。</p>
       </div>
     </details>
 
@@ -23,7 +23,7 @@
       <div class="omp-disabled-title">审计日志功能在 OMP 模式下不可用</div>
       <div class="omp-disabled-detail">
         后端已切换到 OMP（oh-my-pi）架构，审计日志子系统被移除。隐私仪表盘的审计统计与日志区域已隐藏。
-        数据存储位置与数据管理仍可用。完整的审计能力说明请见<router-link to="/audit-log">审计日志</router-link>页面。
+        数据存储位置与数据管理仍可用，请直接查看下方区域。
       </div>
       <div v-if="disabledReason" class="omp-disabled-reason" :title="disabledReason">
         后端响应：{{ disabledReason }}
