@@ -710,6 +710,44 @@ export interface CapabilitiesResponse {
     conflicts: Array<{ scope: string; sources: string[]; severity: string; note: string }>
     resolution_order: string[]
   }
+  // ── Phase 4 能力发现清单（动态计算） ──
+  version?: string
+  features?: CapabilityFeatures
+  sidecar?: SidecarStatus
+  endpoints?: string[]
+}
+
+/** 单个特性的配置形状（各特性字段不同，统一为宽松记录）。 */
+export type CapabilityFeatureConfig = Record<string, unknown> & { enabled?: boolean }
+
+/** 能力发现清单的特性集合。键为特性名，值为该特性的运行时配置。 */
+export interface CapabilityFeatures {
+  mcp?: CapabilityFeatureConfig
+  memory?: CapabilityFeatureConfig
+  tts?: CapabilityFeatureConfig
+  browser_tools?: CapabilityFeatureConfig
+  sub_agents?: CapabilityFeatureConfig
+  automation?: CapabilityFeatureConfig
+  collab?: CapabilityFeatureConfig
+  plugins?: CapabilityFeatureConfig
+  rules?: CapabilityFeatureConfig
+  tools?: CapabilityFeatureConfig
+  models?: CapabilityFeatureConfig
+  [key: string]: CapabilityFeatureConfig | undefined
+}
+
+/** Sidecar 运行状态。 */
+export interface SidecarStatus {
+  status: 'running' | 'stopped' | string
+  version?: string | null
+}
+
+/** 能力发现清单（GET /api/capabilities 的 Phase 4 子集）。 */
+export interface CapabilityManifest {
+  version?: string
+  features: CapabilityFeatures
+  sidecar?: SidecarStatus
+  endpoints?: string[]
 }
 
 export interface ToolItem {

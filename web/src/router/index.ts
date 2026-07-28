@@ -1,4 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useCapabilitiesStore } from '@/stores/capabilities'
+
+// 扩展路由 meta 类型：声明可选的 feature 字段用于能力守卫。
+declare module 'vue-router' {
+  interface RouteMeta {
+    title?: string
+    /** 若指定，导航到该路由前会校验对应后端能力是否启用。 */
+    feature?: string
+  }
+}
 
 const router = createRouter({
   history: createWebHistory(),
@@ -13,7 +23,7 @@ const router = createRouter({
       path: '/memory',
       name: 'memory',
       component: () => import('@/views/MemoryView.vue'),
-      meta: { title: '记忆' },
+      meta: { title: '记忆', feature: 'memory' },
     },
     {
       path: '/kb',
@@ -53,7 +63,7 @@ const router = createRouter({
       path: '/mcp',
       name: 'mcp',
       component: () => import('@/views/McpView.vue'),
-      meta: { title: 'MCP 工具' },
+      meta: { title: 'MCP 工具', feature: 'mcp' },
     },
     {
       path: '/user',
@@ -89,13 +99,13 @@ const router = createRouter({
       path: '/plugins',
       name: 'plugins',
       component: () => import('@/views/PluginListView.vue'),
-      meta: { title: '插件管理' },
+      meta: { title: '插件管理', feature: 'plugins' },
     },
     {
       path: '/plugins/:name',
       name: 'plugin-detail',
       component: () => import('@/views/PluginDetailView.vue'),
-      meta: { title: '插件详情' },
+      meta: { title: '插件详情', feature: 'plugins' },
     },
     {
       path: '/extensions',
@@ -123,19 +133,25 @@ const router = createRouter({
       path: '/collab',
       name: 'collab',
       component: () => import('@/views/CollabView.vue'),
-      meta: { title: '协作' },
+      meta: { title: '协作', feature: 'collab' },
     },
     {
       path: '/rules',
       name: 'rules',
       component: () => import('@/views/RulesView.vue'),
-      meta: { title: '质量规则' },
+      meta: { title: '质量规则', feature: 'rules' },
     },
     {
       path: '/automation',
       name: 'automation',
       component: () => import('@/views/AutomationView.vue'),
-      meta: { title: '自动化' },
+      meta: { title: '自动化', feature: 'automation' },
+    },
+    {
+      path: '/feature-unavailable',
+      name: 'feature-unavailable',
+      component: () => import('@/views/FeatureUnavailableView.vue'),
+      meta: { title: '功能不可用' },
     },
     {
       path: '/:pathMatch(.*)*',
@@ -147,6 +163,23 @@ const router = createRouter({
 })
 
 router.beforeEach((to, _from) => {
+  // 能力守卫：若目标路由声明了 meta.feature 且该能力被禁用，
+  // 重定向到「功能不可用」页面。清单尚未加载时 isFeatureEnabled
+  // 返回乐观默认 true，因此不会阻塞首次导航。
+  if (to.meta?.feature && to.name !== 'feature-unavailable') {
+    const capabilities = useCapabilitiesStore()
+    if (!capabilities.isFeatureEnabled(to.meta.feature)) {
+      return {
+        name: 'feature-unavailable',
+        query: {
+          feature: to.meta.feature,
+          title: (to.meta?.title as string) || to.meta.feature,
+          from: to.fullPath,
+        },
+      }
+    }
+  }
+
   const title = (to.meta?.title as string) || ''
   document.title = title ? `${title} - Maxma` : 'Maxma'
 })

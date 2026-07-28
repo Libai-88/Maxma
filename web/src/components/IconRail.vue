@@ -13,7 +13,7 @@
 
     <nav class="icon-rail__nav" aria-label="主导航">
       <router-link
-        v-for="item in navItems"
+        v-for="item in visibleNavItems"
         :key="item.to"
         :to="item.to"
         class="icon-rail__control icon-rail__nav-item"
@@ -49,8 +49,10 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import Icon from '@/components/Icon.vue'
 import AppSettingsMenu from '@/components/AppSettingsMenu.vue'
+import { useCapabilities } from '@/composables/useCapabilities'
 
 withDefaults(defineProps<{
   onboardingEnabled?: boolean
@@ -65,14 +67,29 @@ const emit = defineEmits<{
   (event: 'restart-onboarding'): void
 }>()
 
-const navItems = [
+const { hasFeature } = useCapabilities()
+
+interface NavItem {
+  to: string
+  label: string
+  icon: string
+  /** 若指定，则仅当该后端能力启用时显示。 */
+  feature?: string
+}
+
+const navItems: NavItem[] = [
   { to: '/', label: '对话', icon: 'chat' },
   { to: '/capabilities', label: '能力仪表盘', icon: 'dashboard' },
-  { to: '/plugins', label: '插件管理', icon: 'puzzle' },
-  { to: '/collab', label: '协作', icon: 'collab' },
+  { to: '/plugins', label: '插件管理', icon: 'puzzle', feature: 'plugins' },
+  { to: '/collab', label: '协作', icon: 'collab', feature: 'collab' },
   { to: '/activity', label: '活动', icon: 'activity' },
   { to: '/help', label: '帮助', icon: 'help' },
-] as const
+]
+
+// 根据能力清单动态隐藏被禁用的导航项（清单未加载时乐观显示全部）。
+const visibleNavItems = computed(() =>
+  navItems.filter(item => !item.feature || hasFeature(item.feature)),
+)
 </script>
 
 <style scoped>

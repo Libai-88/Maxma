@@ -64,6 +64,7 @@ import LeavesOverlay from '@/components/LeavesOverlay.vue'
 import { usePaperTexture } from '@/composables/usePaperTexture'
 import { useGlobalShortcut } from '@/composables/useGlobalShortcut'
 import { useHealthPolling } from '@/composables/useHealthPolling'
+import { initCapabilities } from '@/composables/useCapabilities'
 import RegionalErrorBoundary from '@/components/ui/RegionalErrorBoundary.vue'
 import DsToast from '@/components/ui/DsToast.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
@@ -151,6 +152,9 @@ onMounted(async () => {
     globalErrorToast.visible = true
   }
   onboarding.initialize()
+
+  // Phase 4：启动能力发现 —— 拉取能力清单并开启 5 分钟后台轮询。
+  initCapabilities()
 
   // 修复 BC-003：监听 maxma:error 事件，显示用户可见的 toast 通知。
   // 该事件由 main.ts 中的全局 Vue errorHandler 派发。

@@ -125,7 +125,154 @@ async def get_capabilities(request: Request):
     except Exception as e:
         logger.warning("[capabilities] Failed to analyze config sources: %s", e)
 
+    # 8. 能力发现清单（Phase 4）—— 动态计算的特性总览，
+    #    供前端 useCapabilities / capabilities store 驱动导航与路由守卫。
+    try:
+        result.update(_build_manifest(request, result))
+    except Exception as e:
+        logger.warning("[capabilities] Failed to build capability manifest: %s", e)
+
     return result
+
+
+def _build_manifest(request: Request, gathered: dict[str, Any]) -> dict[str, Any]:
+    """动态计算能力发现清单。
+
+    从真实系统状态推导各特性开关：读取面板配置（tts/browser_tools/sub_agents/
+    hindsight）、统计工具与模型、探测 sidecar 运行状态、枚举已注册路由。
+    任何子步骤失败都回退到安全默认值，绝不抛出异常打断主响应。
+    """
+    from version import __version__
+
+    features: dict[str, Any] = {}
+
+    # 面板配置（持久化于 panel_configs.json）
+    panels = _safe_panel_configs()
+    tts_cfg = panels.get("tts", {})
+    browser_cfg = panels.get("browser_tools", {})
+    subagent_cfg = panels.get("sub_agents", {})
+    hindsight_cfg = panels.get("hindsight", {})
+
+    # MCP —— 路由始终注册；OAuth 与 Registry 端点可用
+    features["mcp"] = {
+        "enabled": True,
+        "oauth": True,
+        "registry": True,
+        "servers": len(gathered.get("mcp_servers", []) or []),
+    }
+
+    # 记忆 —— 核心能力常驻；hindsight 取决于面板配置
+    features["memory"] = {
+        "enabled": True,
+        "hindsight": bool(hindsight_cfg.get("enabled", False)),
+        "episodic": True,
+    }
+
+    # TTS / 语音
+    tts_enabled = bool(tts_cfg.get("enabled", False))
+    features["tts"] = {
+        "enabled": tts_enabled,
+        "providers": [tts_cfg.get("provider", "edge-tts")] if tts_enabled else [],
+    }
+
+    # 浏览器工具
+    features["browser_tools"] = {"enabled": bool(browser_cfg.get("enabled", False))}
+
+    # 子代理
+    features["sub_agents"] = {
+        "enabled": bool(subagent_cfg.get("enabled", False)),
+        "max_concurrent": int(subagent_cfg.get("max_concurrent", 3) or 3),
+    }
+
+    # 自动化 —— 调度器在 lifespan 中启动
+    scheduler = getattr(request.app.state, "automation_scheduler", None)
+    scheduler_running = scheduler is not None and not getattr(scheduler, "done", lambda: True)()
+    features["automation"] = {"enabled": True, "scheduler": scheduler_running}
+
+    # 协作 —— SQLite 持久化（api.db.core）
+    features["collab"] = {"enabled": True, "persistence": "sqlite"}
+
+    # 插件 —— 已启用，暂无公开市场
+    features["plugins"] = {"enabled": True, "marketplace": False}
+
+    # 质量规则 —— 内置 + 自定义
+    features["rules"] = {"enabled": True, "custom_rules": True}
+
+    # 工具统计
+    tools = gathered.get("tools", []) or []
+    builtin_count = sum(1 for t in tools if t.get("builtin", True))
+    custom_count = len(tools) - builtin_count
+    categories = sorted({t.get("category", "other") for t in tools})
+    features["tools"] = {
+        "builtin_count": builtin_count,
+        "custom_count": custom_count,
+        "categories": categories,
+    }
+
+    # 模型 / Provider 统计
+    providers = gathered.get("providers", []) or []
+    provider_names = sorted({p.get("provider") for p in providers if p.get("provider")})
+    features["models"] = {
+        "providers": provider_names,
+        "total_models": len(providers),
+    }
+
+    return {
+        "version": __version__,
+        "features": features,
+        "sidecar": _sidecar_status(request),
+        "endpoints": _list_api_endpoints(request),
+    }
+
+
+def _safe_panel_configs() -> dict[str, dict[str, Any]]:
+    """读取四个面板配置，失败时返回空 dict（不抛异常）。"""
+    try:
+        from api.routes.settings_panels import _get_panel
+
+        return {
+                name: _get_panel(name)
+                for name in ("tts", "browser_tools", "sub_agents", "hindsight")
+            }
+    except Exception as e:
+        logger.warning("[capabilities] Failed to read panel configs: %s", e)
+        return {}
+
+
+def _sidecar_status(request: Request) -> dict[str, Any]:
+    """探测 sidecar 运行状态与版本。"""
+    mgr = getattr(request.app.state, "sidecar_manager", None)
+    running = bool(mgr is not None and getattr(mgr, "is_running", False))
+    return {"status": "running" if running else "stopped", "version": _sidecar_version()}
+
+
+def _sidecar_version() -> str | None:
+    """从 bun-sidecar/package.json 读取版本号，缺失时返回 None。"""
+    try:
+        import json
+
+        from api.pi_bridge.sidecar_manager import SIDECAR_DIR
+
+        pkg = SIDECAR_DIR / "package.json"
+        if pkg.exists():
+            with open(pkg, encoding="utf-8") as f:
+                return json.load(f).get("version")
+    except Exception:
+        pass
+    return None
+
+
+def _list_api_endpoints(request: Request) -> list[str]:
+    """枚举已注册的 /api 路由路径（去重 + 排序）。"""
+    paths: set[str] = set()
+    try:
+        for route in getattr(request.app, "routes", []):
+            path = getattr(route, "path", None)
+            if isinstance(path, str) and path.startswith("/api"):
+                paths.add(path)
+    except Exception:
+        pass
+    return sorted(paths)
 
 
 def _categorize_tools(tools: list[dict]) -> dict[str, list[dict]]:
