@@ -775,7 +775,7 @@ function handleQuickStart(message: string) {
   font-size: 13px;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 767px) {
   .chat-header :deep(.header-right) {
     flex-wrap: nowrap;
   }

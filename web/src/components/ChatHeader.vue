@@ -68,7 +68,7 @@ const contextDetails = computed(() => `${store.profile.name} · ${sessionTitle.v
 .header-right > * { min-width: 0; max-width: 100%; flex: 0 1 auto; }
 .header-right :deep(button) { min-width: var(--touch-target-min, 44px); min-height: var(--touch-target-min, 44px); }
 
-@media (max-width: 720px) {
+@media (max-width: 767px) {
   .chat-header {
     flex-wrap: wrap;
     row-gap: 6px;

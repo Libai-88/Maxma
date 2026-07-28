@@ -1879,7 +1879,7 @@ function onResizeEnd(e: PointerEvent) {
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 767px) {
   .chat-input-wrapper {
     padding-inline: clamp(8px, 3vw, 16px);
   }
@@ -1902,7 +1902,7 @@ function onResizeEnd(e: PointerEvent) {
 
 }
 
-@media (min-width: 721px) and (max-width: 1279px) {
+@media (min-width: 768px) and (max-width: 1279px) {
   .chat-input-wrapper {
     padding-inline: 16px;
   }
