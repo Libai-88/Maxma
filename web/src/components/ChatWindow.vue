@@ -245,9 +245,11 @@
 import type { ChatTurn } from '@/types'
 import type { ParsedRef } from '@/utils/references'
 import { api } from '@/api'
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, toRef, watch } from 'vue'
 import { useTheme } from '@/composables/useTheme'
-import type { ContextMenuItem } from './ContextMenu.vue'
+import { useChatScroll } from '@/composables/useChatScroll'
+import { useTypewriter } from '@/composables/useTypewriter'
+import { useContextMenu } from '@/composables/useContextMenu'
 import ContextMenu from './ContextMenu.vue'
 import MessageBubble from './MessageBubble.vue'
 import ThinkingBlock from './ThinkingBlock.vue'
@@ -256,7 +258,6 @@ import PlanCard from './PlanCard.vue'
 import ApprovalBubble from './ApprovalBubble.vue'
 import SubAgentCard from './SubAgentCard.vue'
 import { toolDisplayName } from './tools/_shared/displayNames'
-import { chatSessionAliveCache } from '@/composables/sessionAliveCache'
 import emptyBgDay from '@/assets/images/brand/empty-bg-day.jpg'
 import emptyBgNight from '@/assets/images/brand/empty-bg-night.jpg'
 // 虚拟列表：仅渲染视口内/附近的轮次，长对话性能大幅提升
@@ -279,7 +280,44 @@ const props = withDefaults(defineProps<{
   errorTraceId: null,
 })
 
-// 错误日志一键复制（调用后端 ErrorCollector 获取完整报告）
+const emit = defineEmits<{
+  (e: 'action', p: { action: string; data?: unknown }): void
+  (e: 'cite', ref: ParsedRef): void
+  (e: 'togglePrivate'): void
+  (e: 'planRespond', planId: string, action: 'approve' | 'modify' | 'reject', modifiedPlan?: string): void
+  (e: 'pin', payload: { type: 'code' | 'table' | 'summary'; title: string; content: string; sourceTool?: string }): void
+}>()
+
+// ── Composables ──
+
+const {
+  scrollerRef,
+  onScrollerScroll,
+  scrollToTurn,
+  streamingTokensSignature,
+  turnStaggerStyle,
+} = useChatScroll({
+  sessionId: toRef(props, 'sessionId'),
+  turns: toRef(props, 'turns'),
+  currentTurn: toRef(props, 'currentTurn'),
+})
+
+const { displayedWord } = useTypewriter()
+
+const {
+  ctxMenuVisible,
+  ctxMenuPos,
+  ctxMenuItems,
+  onBubbleContextMenu,
+  handleContextMenuSelect,
+  closeContextMenu,
+} = useContextMenu({
+  turns: toRef(props, 'turns'),
+  emit,
+})
+
+// ── 错误日志一键复制 ──
+
 const { isDark } = useTheme()
 const copySuccess = ref(false)
 
@@ -304,9 +342,7 @@ const emptyStateStyle = computed(() => ({
 async function copyErrorLog() {
   let text: string
   try {
-    // 优先调用后端获取完整错误报告（含内存收集 + 日志扫描 + 系统信息）
     text = await api.getErrorLogText()
-    // 在报告末尾追加当前对话上下文的错误信息，便于定位
     if (props.error || props.errorTraceId) {
       text += '\n\n--- 当前对话错误上下文 ---\n'
       if (props.errorCategory) text += `错误类别: ${props.errorCategory}\n`
@@ -314,7 +350,6 @@ async function copyErrorLog() {
       if (props.error) text += `错误信息: ${props.error}\n`
     }
   } catch {
-    // 后端不可用时降级为本地拼接
     const now = new Date()
     const ts = now.toISOString().replace('T', ' ').substring(0, 19)
     const lines = [
@@ -331,7 +366,6 @@ async function copyErrorLog() {
   try {
     await navigator.clipboard.writeText(text)
   } catch {
-    // 降级：用临时 textarea
     const ta = document.createElement('textarea')
     ta.value = text
     ta.style.position = 'fixed'
@@ -345,13 +379,7 @@ async function copyErrorLog() {
   setTimeout(() => { copySuccess.value = false }, 2000)
 }
 
-const emit = defineEmits<{
-  (e: 'action', p: { action: string; data?: unknown }): void
-  (e: 'cite', ref: ParsedRef): void
-  (e: 'togglePrivate'): void
-  (e: 'planRespond', planId: string, action: 'approve' | 'modify' | 'reject', modifiedPlan?: string): void
-  (e: 'pin', payload: { type: 'code' | 'table' | 'summary'; title: string; content: string; sourceTool?: string }): void
-}>()
+// ── 事件转发 ──
 
 function forwardAction(payload: { action: string; data?: unknown }) {
   emit('action', payload)
@@ -361,16 +389,8 @@ function onPlanRespond(planId: string, action: 'approve' | 'modify' | 'reject', 
   emit('planRespond', planId, action, modifiedPlan)
 }
 
-const windowRef = ref<HTMLElement | null>(null)
-// DynamicScroller 组件实例引用，用于调用 scrollToBottom/scrollToItem/scrollToPosition
-const scrollerRef = ref<{
-  scrollToBottom: () => void
-  scrollToItem: (index: number, options?: { align?: string; smooth?: boolean; offset?: number }) => void
-  scrollToPosition: (position: number, options?: { align?: string; smooth?: boolean; offset?: number }) => void
-} | null>(null)
-const SCROLL_BOTTOM_THRESHOLD = 100
-// 通过 @scroll 事件维护 "是否接近底部" 的响应式状态，替代原先直接读取 windowRef.scrollTop
-const isNearBottomRef = ref(true)
+// ── 轮次列表 ──
+
 const typingDelayElapsed = ref(false)
 let typingTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -389,57 +409,28 @@ const showSkeleton = computed(() =>
   Boolean(props.currentTurn) && !currentTurnHasVisibleActivity.value && !typingDelayElapsed.value
 )
 
-/** DynamicScroller 根元素的 scroll 事件：维护 isNearBottomRef 状态。
- *  Vue 3 中组件未声明的 @scroll 会透传到根 DOM 元素作为原生监听器。 */
-function onScrollerScroll(e: Event) {
-  const el = e.target as HTMLElement
-  if (!el) return
-  isNearBottomRef.value =
-    el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_BOTTOM_THRESHOLD
-}
-
-function isNearBottom(): boolean {
-  return isNearBottomRef.value
-}
-
 function hasAnswerBlock(turn: ChatTurn): boolean {
   return turn.events.some(e => e.kind === 'thinking' && e.becameAnswer)
 }
 
-/** 合并已完成轮次和当前流式轮次到单个列表，用 turn.id 作为 key，
- *  使组件实例在过渡时不被销毁重建 */
+/** 合并已完成轮次和当前流式轮次到单个列表 */
 const mergedTurns = computed<ChatTurn[]>(() => {
   if (!props.currentTurn) return props.turns
-  // currentTurn 可能已被 pushed 到 turns（becameAnswer 分支），去重
   if (props.turns.some(t => t.id === props.currentTurn!.id)) return props.turns
   return [...props.turns, props.currentTurn]
 })
 
 /** mergedTurns 中第 mergedIdx 项在 props.turns 中的索引（当前轮返回 -1） */
 function turnsIndex(mergedIdx: number): number {
-  // 前 props.turns.length 项索引与 mergedIdx 一致
   if (mergedIdx < props.turns.length) return mergedIdx
   return -1
 }
 
-/** 该轮次是否正在流式生成中 */
 function isStreamingTurn(turn: ChatTurn): boolean {
   return props.currentTurn?.id === turn.id
 }
 
-/** 流式 token 签名：返回所有 thinking block 的 tokens 长度总和。
- *  用于 DynamicScrollerItem 的 size-dependencies，让虚拟列表在 token
- *  累加时重新计算 item 高度；同时供 watch 触发自动滚动。 */
-function streamingTokensSignature(turn: ChatTurn): number {
-  let total = 0
-  for (const ev of turn.events) {
-    if (ev.kind === 'thinking' && typeof ev.tokens === 'string') {
-      total += ev.tokens.length
-    }
-  }
-  return total
-}
-
+// 打字指示器延迟：新 turn 到达后 1.5-3.5s 才显示 "正在输入"
 watch(
   () => props.currentTurn?.id,
   (id) => {
@@ -459,236 +450,9 @@ watch(
   { immediate: true }
 )
 
-function scrollToBottom() {
-  nextTick(() => {
-    scrollerRef.value?.scrollToBottom()
-  })
-}
-
-// ── 交错入场（stagger-sequence：30-50ms/item，封顶防拖沓） ──
-// 窗口开启期间挂载的轮次按索引获得 transition-delay；窗口关闭后
-// 单条到达的新消息与虚拟滚动重挂载均为零延迟，滚动不拖沓。
-// 注意：必须声明在下方 sessionId watcher 之前——watcher 带 immediate:true，
-// 会在 setup 阶段同步调用 openStaggerWindow，若声明在其后会触发 TDZ 错误。
-const staggerWindowOpen = ref(true)
-let staggerTimer: ReturnType<typeof setTimeout> | null = null
-function openStaggerWindow() {
-  staggerWindowOpen.value = true
-  if (staggerTimer) clearTimeout(staggerTimer)
-  staggerTimer = setTimeout(() => {
-    staggerWindowOpen.value = false
-    staggerTimer = null
-  }, 600)
-}
-function turnStaggerStyle(idx: number): { '--stagger-delay': string } | undefined {
-  if (!staggerWindowOpen.value || idx === 0) return undefined
-  return { '--stagger-delay': `${Math.min(idx, 10) * 40}ms` }
-}
-
-watch(
-  () => props.sessionId,
-  (sessionId, previousSessionId) => {
-    // 保存上一个会话的滚动位置（用 onScrollerScroll 维护的 isNearBottomRef 推断 scrollTop）
-    if (previousSessionId) {
-      // 读取 DynamicScroller 根 DOM 元素的 scrollTop 用于持久化
-      const scrollerEl = (scrollerRef.value as unknown as { $el?: HTMLElement } | null)?.$el
-      if (scrollerEl) {
-        chatSessionAliveCache.rememberScroll(previousSessionId, scrollerEl.scrollTop)
-      }
-    }
-    if (!sessionId) return
-    // 批量挂载窗口：历史加载/切换会话时多轮次同时挂载，给予交错入场延迟
-    openStaggerWindow()
-    nextTick(() => {
-      const savedScrollTop = chatSessionAliveCache.restoreScroll(sessionId)
-      if (savedScrollTop != null && savedScrollTop > 0) {
-        scrollerRef.value?.scrollToPosition(savedScrollTop)
-      } else {
-        scrollerRef.value?.scrollToBottom()
-      }
-    })
-  },
-  { immediate: true },
-)
-
-function scrollToTurn(index: number) {
-  // scroll-marks 的 index 是 props.turns 中的索引，
-  // 由于 mergedTurns 前 props.turns.length 项与 props.turns 一一对应，
-  // 可直接将 index 作为 DynamicScroller 的 item index 调用 scrollToItem
-  scrollerRef.value?.scrollToItem(index, { align: 'start', smooth: true })
-}
-
-watch(() => props.turns.length, () => {
-  if (isNearBottom()) scrollToBottom()
-})
-watch(
-  () => props.currentTurn?.events.length,
-  () => {
-    if (isNearBottom()) scrollToBottom()
-  }
-)
-watch(
-  () => props.currentTurn?.finalAnswer,
-  () => {
-    if (isNearBottom()) scrollToBottom()
-  }
-)
-// 流式 token 累加时自动滚动到底部（token 事件不改变 events.length，
-// 上面的事件长度 watch 不会触发，必须单独监听 tokens 内容变化）
-watch(
-  () => props.currentTurn ? streamingTokensSignature(props.currentTurn) : 0,
-  () => {
-    if (isNearBottom()) scrollToBottom()
-  }
-)
-
-// ── Typewriter: 调皮互动文案轮播 ──
-const words = [
-  '想我了没宝宝',
-  '我厉害不',
-  '今天想聊什么呀',
-  '快夸我快夸我',
-  '你是不是又想我了',
-  '来找我玩啦',
-  '今天想聊点什么',
-  '有什么想法需要梳理',
-  '先从一个问题开始',
-  '这里是你思考的空间'
-]
-const displayedWord = ref(words[0])
-let wordIndex = 0
-let charIndex = words[0].length
-let isDeleting = false
-let typeTimer: ReturnType<typeof setTimeout> | null = null
-
-function typewriterTick() {
-  const current = words[wordIndex]
-  if (!isDeleting) {
-    if (charIndex < current.length) {
-      charIndex++
-      displayedWord.value = current.slice(0, charIndex) + (charIndex === current.length ? '.' : '')
-      typeTimer = setTimeout(typewriterTick, 120)
-    } else {
-      // 打出完整词后暂停 1.5s 再开始删除
-      isDeleting = true
-      typeTimer = setTimeout(typewriterTick, 1500)
-    }
-  } else {
-    if (charIndex > 0) {
-      charIndex--
-      displayedWord.value = current.slice(0, charIndex)
-      typeTimer = setTimeout(typewriterTick, 80)
-    } else {
-      isDeleting = false
-      wordIndex = (wordIndex + 1) % words.length
-      charIndex = 0
-      typeTimer = setTimeout(typewriterTick, 120)
-    }
-  }
-}
-
-onMounted(() => {
-  displayedWord.value = words[0]
-  charIndex = words[0].length
-  wordIndex = 0
-  isDeleting = false
-  typewriterTick()
-})
-
 onUnmounted(() => {
-  if (props.sessionId) {
-    // 读取 DynamicScroller 根 DOM 元素的 scrollTop 用于持久化
-    const scrollerEl = (scrollerRef.value as unknown as { $el?: HTMLElement } | null)?.$el
-    if (scrollerEl) {
-      chatSessionAliveCache.rememberScroll(props.sessionId, scrollerEl.scrollTop)
-    }
-  }
-  if (typeTimer) clearTimeout(typeTimer)
   if (typingTimer) clearTimeout(typingTimer)
-  if (staggerTimer) clearTimeout(staggerTimer)
 })
-
-// === 引用功能 ===
-
-const MAX_CITE_LENGTH = 1000
-
-const ctxMenuVisible = ref(false)
-const ctxMenuPos = ref({ x: 0, y: 0 })
-const pendingCitation = ref<{ text: string } | null>(null)
-
-/** 右键点击的用户消息在 turns 中的索引（-1 表示当前正在生成的 turn） */
-const pendingUserMsgIdx = ref<number | null>(null)
-
-const ctxMenuItems = computed((): ContextMenuItem[] => {
-  const items: ContextMenuItem[] = [
-    { label: '引用', action: 'cite', icon: 'cite-speech' },
-    { label: '复制', action: 'copy', icon: 'copy' },
-  ]
-  // 仅在右键最后一条已完成用户消息时显示「撤回」
-  if (
-    pendingUserMsgIdx.value !== null
-    && pendingUserMsgIdx.value === props.turns.length - 1
-    && props.turns.length > 0
-  ) {
-    items.push({ label: '撤回', action: 'undo', icon: 'undo-arrow' })
-  }
-  return items
-})
-
-function onBubbleContextMenu(
-  event: MouseEvent,
-  _sourceType: string,
-  fullText: string,
-  _sourceLabel: string,
-  userMsgIdx?: number,
-) {
-  pendingUserMsgIdx.value = userMsgIdx ?? null
-
-  let citeText = fullText
-
-  // 检查是否有文本选中
-  const selection = window.getSelection()
-  const selectedText = selection?.toString().trim()
-  if (selectedText && selection!.rangeCount > 0) {
-    const range = selection!.getRangeAt(0)
-    const target = event.currentTarget as HTMLElement | null
-    if (target && target.contains(range.commonAncestorContainer)) {
-      citeText = selectedText
-    }
-    selection!.removeAllRanges()
-  }
-
-  if (!citeText) return
-
-  if (citeText.length > MAX_CITE_LENGTH) {
-    citeText = citeText.slice(0, MAX_CITE_LENGTH) + '…'
-  }
-
-  pendingCitation.value = { text: citeText }
-  ctxMenuPos.value = { x: event.clientX, y: event.clientY }
-  ctxMenuVisible.value = true
-}
-
-function handleContextMenuSelect(action: string) {
-  if (action === 'cite' && pendingCitation.value) {
-    const label = pendingCitation.value.text.length > 80
-      ? pendingCitation.value.text.slice(0, 80) + '…'
-      : pendingCitation.value.text
-    const citeRef: ParsedRef = { type: 'cite', text: pendingCitation.value.text, label }
-    emit('cite', citeRef)
-  } else if (action === 'copy' && pendingCitation.value) {
-    navigator.clipboard.writeText(pendingCitation.value.text)
-  } else if (action === 'undo') {
-    emit('action', { action: 'undo', data: { n: 1 } })
-  }
-  closeContextMenu()
-}
-
-function closeContextMenu() {
-  ctxMenuVisible.value = false
-  pendingCitation.value = null
-  pendingUserMsgIdx.value = null
-}
 </script>
 
 <style scoped>
