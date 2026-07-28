@@ -173,18 +173,18 @@ defineExpose({ dismiss, pause, resume })
   line-height: 1.4;
 }
 .ds-toast--info {
-  border-left-color: var(--accent, #2563eb);
+  border-left-color: var(--accent);
   color: var(--text-primary);
 }
-.ds-toast--info .ds-toast__icon { color: var(--accent, #2563eb); }
+.ds-toast--info .ds-toast__icon { color: var(--accent); }
 .ds-toast--success {
-  border-left-color: var(--status-success, #16a34a);
+  border-left-color: var(--status-ok);
 }
-.ds-toast--success .ds-toast__icon { color: var(--status-success, #16a34a); }
+.ds-toast--success .ds-toast__icon { color: var(--status-ok); }
 .ds-toast--error {
-  border-left-color: var(--status-error, #dc2626);
+  border-left-color: var(--status-error);
 }
-.ds-toast--error .ds-toast__icon { color: var(--status-error, #dc2626); }
+.ds-toast--error .ds-toast__icon { color: var(--status-error); }
 .ds-toast--warning {
 	  border-left-color: var(--status-warn);
 	}
