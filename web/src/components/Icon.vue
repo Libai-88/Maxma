@@ -203,6 +203,12 @@ const svgContents: Record<string, string> = {
   puzzle: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
   <path d="M19.44 12.87c0-.46-.07-.83-.2-1.12l2.17-1.71-1.48-2.56-2.7.62c-.34-.3-.73-.52-1.2-.67-.46-.15-.96-.2-1.49-.15l-.86-2.56h-2.95l-.87 2.56c-.52-.05-1.02 0-1.48.15-.47.15-.86.38-1.2.67l-2.7-.62-1.48 2.56 2.17 1.71c-.13.29-.2.66-.2 1.12 0 .46.07.83.2 1.12l-2.17 1.71 1.48 2.56 2.7-.62c.34.3.73.52 1.2.67.46.15.96.2 1.49.15l.87 2.56h2.95l.86-2.56c.53.05 1.03 0 1.49-.15.47-.15.86-.38 1.2-.67l2.7.62 1.48-2.56-2.17-1.71c.13-.29.2-.66.2-1.12zM12 14.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"/>
 </svg>`,
+  collab: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+  <circle cx="9" cy="7" r="4"/>
+  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+</svg>`,
 }
 
 const svgContent = computed(() => {

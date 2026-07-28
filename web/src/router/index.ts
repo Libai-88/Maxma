@@ -92,6 +92,12 @@ const router = createRouter({
       meta: { title: '插件管理' },
     },
     {
+      path: '/plugins/:name',
+      name: 'plugin-detail',
+      component: () => import('@/views/PluginDetailView.vue'),
+      meta: { title: '插件详情' },
+    },
+    {
       path: '/extensions',
       name: 'extensions',
       component: () => import('@/views/ExtensionView.vue'),
@@ -112,6 +118,12 @@ const router = createRouter({
       name: 'activity',
       component: () => import('@/views/ActivityView.vue'),
       meta: { title: '活动' },
+    },
+    {
+      path: '/collab',
+      name: 'collab',
+      component: () => import('@/views/CollabView.vue'),
+      meta: { title: '协作' },
     },
     {
       path: '/:pathMatch(.*)*',

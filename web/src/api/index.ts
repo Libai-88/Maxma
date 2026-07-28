@@ -43,6 +43,17 @@ import type {
   ListPersonasResponse,
   SwitchPersonaResponse,
 } from '@/types/persona'
+import type {
+  Plugin,
+  PluginDetail,
+  InstallPluginRequest,
+  InstallPluginResponse,
+} from '@/types/plugin'
+import type {
+  SessionShare,
+  CreateShareRequest,
+  SessionSnapshot,
+} from '@/types/collab'
 import { ensurePortLoaded, getApiBase, tauriFetch } from '@/utils/env'
 
 // 注意：BASE 在 ensurePortLoaded() 完成后可能因端口冲突回退而变化，
@@ -576,6 +587,70 @@ export const api = {
   /** 获取能力仪表盘数据 */
   getCapabilities: () =>
     request<CapabilitiesResponse>('/capabilities'),
+
+  // ── Plugin 管理 ──
+
+  listPlugins: () =>
+    request<Plugin[]>('/plugins'),
+
+  getPluginDetail: (name: string) =>
+    request<PluginDetail>(`/plugins/${encodeURIComponent(name)}`),
+
+  installPlugin: (body: InstallPluginRequest) =>
+    request<InstallPluginResponse>('/plugins/install', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  uninstallPlugin: (name: string) =>
+    request<{ ok: boolean }>(`/plugins/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    }),
+
+  togglePlugin: (name: string, enabled: boolean) =>
+    request<{ ok: boolean }>(`/plugins/${encodeURIComponent(name)}/toggle`, {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    }),
+
+  updatePluginConfig: (name: string, config: Record<string, unknown>) =>
+    request<{ ok: boolean }>(`/plugins/${encodeURIComponent(name)}/config`, {
+      method: 'PUT',
+      body: JSON.stringify({ config }),
+    }),
+
+  getPluginConfig: (name: string) =>
+    request<{ config: Record<string, unknown> }>(`/plugins/${encodeURIComponent(name)}/config`),
+
+  // ── Collaboration 协作 ──
+
+  listSessionShares: (sessionId: string) =>
+    request<SessionShare[]>(`/sessions/${encodeURIComponent(sessionId)}/shares`),
+
+  createSessionShare: (body: CreateShareRequest) =>
+    request<SessionShare>(`/sessions/${encodeURIComponent(body.session_id)}/shares`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  revokeSessionShare: (shareId: string) =>
+    request<{ ok: boolean }>(`/shares/${encodeURIComponent(shareId)}`, {
+      method: 'DELETE',
+    }),
+
+  listSessionSnapshots: (sessionId: string) =>
+    request<SessionSnapshot[]>(`/sessions/${encodeURIComponent(sessionId)}/snapshots`),
+
+  createSessionSnapshot: (sessionId: string, title: string) =>
+    request<SessionSnapshot>(`/sessions/${encodeURIComponent(sessionId)}/snapshots`, {
+      method: 'POST',
+      body: JSON.stringify({ title }),
+    }),
+
+  deleteSessionSnapshot: (snapshotId: string) =>
+    request<{ ok: boolean }>(`/snapshots/${encodeURIComponent(snapshotId)}`, {
+      method: 'DELETE',
+    }),
 }
 
 export { request }

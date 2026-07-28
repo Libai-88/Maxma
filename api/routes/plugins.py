@@ -25,6 +25,10 @@ class TogglePluginRequest(BaseModel):
     enabled: bool
 
 
+class UpdatePluginConfigRequest(BaseModel):
+    config: dict[str, Any]
+
+
 async def _rpc_call(request: Request, method: str, params: dict[str, Any] | None = None) -> Any:
     """Call sidecar RPC method via the sidecar manager from app state."""
     sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
@@ -89,4 +93,46 @@ async def toggle_plugin(name: str, body: TogglePluginRequest, request: Request):
         raise
     except Exception as e:
         logger.error("Failed to toggle plugin %s: %s", name, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/plugins/{name}")
+async def get_plugin_detail(name: str, request: Request):
+    """获取插件详情（包含 README、依赖、配置 schema 等）。"""
+    try:
+        result = await _rpc_call(request, "get_plugin_detail", {"name": name})
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to get plugin detail %s: %s", name, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/plugins/{name}/config")
+async def get_plugin_config(name: str, request: Request):
+    """获取插件当前配置。"""
+    try:
+        result = await _rpc_call(request, "get_plugin_config", {"name": name})
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to get plugin config %s: %s", name, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/plugins/{name}/config")
+async def update_plugin_config(name: str, body: UpdatePluginConfigRequest, request: Request):
+    """更新插件配置。"""
+    try:
+        result = await _rpc_call(request, "update_plugin_config", {
+            "name": name,
+            "config": body.config,
+        })
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Failed to update plugin config %s: %s", name, e)
         raise HTTPException(status_code=500, detail=str(e))
