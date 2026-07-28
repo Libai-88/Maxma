@@ -651,6 +651,76 @@ export const api = {
     request<{ ok: boolean }>(`/snapshots/${encodeURIComponent(snapshotId)}`, {
       method: 'DELETE',
     }),
+
+  // ── Rules 质量规则管理 ──
+
+  createRule: (body: {
+    id?: string
+    name: string
+    description: string
+    language: string
+    severity: 'error' | 'warning' | 'info'
+    pattern?: string
+    enabled?: boolean
+  }) =>
+    request<{
+      id: string
+      name: string
+      description: string
+      language: string
+      severity: string
+      pattern: string
+      enabled: boolean
+      source: 'custom'
+      editable: true
+    }>('/rules', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  updateRule: (ruleId: string, body: {
+    name?: string
+    description?: string
+    language?: string
+    severity?: 'error' | 'warning' | 'info'
+    pattern?: string
+    enabled?: boolean
+  }) =>
+    request<{
+      id: string
+      name: string
+      description: string
+      language: string
+      severity: string
+      pattern: string
+      enabled: boolean
+      source: 'custom'
+      editable: true
+    }>(`/rules/${encodeURIComponent(ruleId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  deleteRule: (ruleId: string) =>
+    request<{ status: string; id: string }>(`/rules/${encodeURIComponent(ruleId)}`, {
+      method: 'DELETE',
+    }),
+
+  toggleRule: (ruleId: string, enabled: boolean) =>
+    request<{
+      id: string
+      name: string
+      description: string
+      language: string
+      severity: string
+      pattern: string
+      enabled: boolean
+      source: 'builtin' | 'custom'
+      editable: boolean
+    }>(`/rules/${encodeURIComponent(ruleId)}/toggle`, {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled }),
+    }),
 }
 
 export { request }
