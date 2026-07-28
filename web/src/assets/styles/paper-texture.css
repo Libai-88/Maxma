@@ -28,7 +28,7 @@ body.paper-texture .no-provider-card {
 }
 
 /* ③ 亮度补偿：暖白叠层抵消纹理变暗（暗色主题跳过） */
-html:not([data-theme="midnight"]):not([data-theme="midnight-contrast"])
+html:not([data-theme="midnight"])
 body.paper-texture::before {
   content: '';
   position: fixed;

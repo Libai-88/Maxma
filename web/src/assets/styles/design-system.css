@@ -203,3 +203,29 @@
   gap: var(--space-8);
   margin-top: var(--space-16);
 }
+
+/* ── 页面通用头部（品牌化：衬线 + 负间距） ── */
+.view-header { margin-bottom: 24px; }
+.view-header h2 {
+  font-size: var(--fs-display-lg);
+  font-weight: 600;
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+  margin: 0;
+  position: relative;
+}
+.view-header h2::after {
+  content: '';
+  display: block;
+  width: 24px;
+  height: 2px;
+  background: var(--accent);
+  margin-top: 6px;
+  border-radius: 1px;
+  opacity: 0.5;
+}
+.view-header .header-sub {
+  font-size: 0.82em;
+  color: var(--text-tertiary);
+  margin: 6px 0 0;
+}
