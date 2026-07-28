@@ -229,14 +229,12 @@ import { useFileRefs } from '@/composables/useFileRefs'
 import { useImageAttachment } from '@/composables/useImageAttachment'
 import { useLinkInput } from '@/composables/useLinkInput'
 import type { ThinkPathId } from '@/utils/thinkPath'
-import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watchEffect } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watchEffect } from 'vue'
+import type StickerPickerComponent from '@/components/StickerPicker.vue'
 import type { Sticker } from '@/components/StickerPicker.vue'
 import ModelSelector from './ModelSelector.vue'
 import ContextUsageBadge from './ContextUsageBadge.vue'
 import { useChatStore } from '@/stores/chat'
-
-// 表情选择器体积较大且仅在用户点击表情按钮时才需要，懒加载以减小初始 chunk
-const StickerPicker = defineAsyncComponent(() => import('@/components/StickerPicker.vue'))
 
 // ChatView 通过 provide 注入 useChatInput 实例；ChatInput 直接读写状态、调用方法
 const chatInput = useChatInputInjected()
@@ -348,7 +346,7 @@ watchEffect(() => {
 const contextMenuVisible = ref(false)
 const contextMenuPosition = ref({ x: 0, y: 0 })
 const contextMenuSticker = ref<Sticker | null>(null)
-const stickerPickerRef = ref<InstanceType<typeof StickerPicker> | null>(null)
+const stickerPickerRef = ref<InstanceType<typeof StickerPickerComponent> | null>(null)
 const parsedInputSegments = useStickerSegments(text)
 const stickerSegments = computed(() =>
   parsedInputSegments.value.filter((seg): seg is StickerSegment => seg.type === 'sticker')

@@ -321,7 +321,7 @@ ${props.html}
   var delays = [100, 300, 800, 2000];
   delays.forEach(function(d) { setTimeout(reportHeight, d); });
 })();
-<\/script>
+<${'/'}script>
 </body>
 </html>`
 })

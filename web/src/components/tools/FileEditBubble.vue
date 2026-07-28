@@ -157,15 +157,28 @@ const props = defineProps<{ toolCall: ToolCall }>()
 const emit = defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()
 
 // ── 工具数据 ──
-const td = computed<Record<string, any>>(() => {
-  if (props.toolCall.toolData) return props.toolCall.toolData as Record<string, any>
+interface FileEditToolData {
+  operation?: string
+  file_path?: string
+  total_lines?: number
+  offset: number
+  lines?: Array<{ num: number; content: string }>
+  total_edits?: number
+  success_count?: number
+  failed_count: number
+  results?: Array<{ status?: string; message?: string; replaced_count?: number; [key: string]: unknown }>
+  [key: string]: unknown
+}
+
+const td = computed<FileEditToolData>(() => {
+  if (props.toolCall.toolData) return { offset: 0, failed_count: 0, ...props.toolCall.toolData } as FileEditToolData
   if (props.toolCall.output) {
     try {
       const p = JSON.parse(props.toolCall.output)
-      if (p?.data) return p.data as Record<string, any>
+      if (p?.data) return { offset: 0, failed_count: 0, ...p.data } as FileEditToolData
     } catch { /* ignore */ }
   }
-  return {}
+  return { offset: 0, failed_count: 0 }
 })
 
 const op = computed<string>(() => (td.value.operation as string) || '')
@@ -186,7 +199,8 @@ const fileName = computed(() => {
 })
 
 // ── Multi-edit ──
-const multiResults = computed<Array<Record<string, any>>>(() => {
+type EditResultItem = { status?: string; message?: string; replaced_count?: number; [key: string]: unknown }
+const multiResults = computed<Array<EditResultItem>>(() => {
   const raw = td.value.results
   return Array.isArray(raw) ? raw : []
 })

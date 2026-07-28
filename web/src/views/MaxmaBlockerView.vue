@@ -138,7 +138,7 @@ async function pickDir() {
       formPath.value = res.path
       formError.value = ''
     }
-  } catch (e: unknown) {
+  } catch {
     formError.value = '选择目录失败'
   }
 }

@@ -87,7 +87,7 @@ async function refreshFavoriteStatus() {
     const data = await res.json()
     const favorites = data.favorites || []
     isFavorited.value = favorites.some(
-      (item: any) => item.category === current.value.category && item.filename === current.value.filename
+      (item: { category: string; filename: string }) => item.category === current.value.category && item.filename === current.value.filename
     )
   } catch (err) {
     log.warn('[StickerPreviewOverlay] 收藏状态读取失败:', err)

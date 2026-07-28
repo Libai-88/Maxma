@@ -130,6 +130,7 @@
 import { ref, onMounted } from 'vue'
 import { api } from '@/api'
 import { createLogger } from '@/utils/logger'
+import type { AuditLogRecord } from '@/types'
 
 const log = createLogger('PrivacyView')
 
@@ -155,7 +156,7 @@ const auditStats = ref<{ total: number; by_type: Record<string, number>; by_stat
 })
 const statsLoading = ref(false)
 const logFilter = ref('')
-const auditLog = ref<any[]>([])
+const auditLog = ref<AuditLogRecord[]>([])
 const logLoading = ref(false)
 const actionLoading = ref(false)
 const actionMessage = ref('')

@@ -267,11 +267,11 @@ import Icon from './Icon.vue'
 
 const props = withDefaults(defineProps<{
   sessionId: string
-  turns: ChatTurn[]
-  currentTurn: ChatTurn | null
-  error: string | null
-  errorCategory: 'user_error' | 'tool_error' | 'system_error' | 'rate_limit' | 'cancelled' | null
-  errorTraceId: string | null
+  turns?: ChatTurn[]
+  currentTurn?: ChatTurn | null
+  error?: string | null
+  errorCategory?: 'user_error' | 'tool_error' | 'system_error' | 'rate_limit' | 'cancelled' | null
+  errorTraceId?: string | null
 }>(), {
   turns: () => [],
   currentTurn: null,

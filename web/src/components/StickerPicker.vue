@@ -210,7 +210,7 @@ const recommendationReason = computed(() => {
 
 // 过滤后的表情列表
 const filteredStickers = computed(() => {
-  let stickers: Sticker[] = []
+  let stickers: Sticker[]
   
   if (activeTab.value === 'recent') {
     stickers = recentStickers.value

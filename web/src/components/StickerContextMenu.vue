@@ -67,7 +67,7 @@ async function checkFavoriteStatus() {
     const data = await res.json()
     const favorites = data.favorites || []
     isFavorited.value = favorites.some(
-      (f: any) => f.filename === props.sticker?.filename && f.category === props.sticker?.category
+      (f: { filename: string; category: string }) => f.filename === props.sticker?.filename && f.category === props.sticker?.category
     )
   } catch (err) {
     log.error('检查收藏状态失败:', err)

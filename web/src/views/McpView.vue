@@ -477,7 +477,7 @@ const helpContent = ref('')
 
 	const HELP_COMMAND = '需要运行的命令行程序（仅 stdio 模式需要填写）。\n\n常用选项：npx（运行 Node.js 工具）、python（运行 Python 脚本）、node（运行 JavaScript）、docker（运行容器）等。\n\n系统会检查命令是否在安全白名单中，不在名单中的命令会被禁止执行。'
 
-	const HELP_ARGS = '传给命令行程序的额外参数，每行一个，按顺序传递。\n\n举个例子，运行这条命令：\n  npx -y @modelcontextprotocol/server-filesystem D:\我的文件夹\n\n在参数列表里就要填三行：\n  第 1 行：-y\n  第 2 行：@modelcontextprotocol/server-filesystem\n  第 3 行：D:\我的文件夹'
+	const HELP_ARGS = '传给命令行程序的额外参数，每行一个，按顺序传递。\n\n举个例子，运行这条命令：\n  npx -y @modelcontextprotocol/server-filesystem D:\\我的文件夹\n\n在参数列表里就要填三行：\n  第 1 行：-y\n  第 2 行：@modelcontextprotocol/server-filesystem\n  第 3 行：D:\\我的文件夹'
 
 	const HELP_ALLOWLIST = '允许列表：限制该服务器只开放指定的功能。\n\n留空 = 该服务器的所有功能都可以被 AI 使用。\n填入后，只有名单里的功能才会被 AI 看到和调用。\n支持通配符 *，比如 github_* 表示所有以 github_ 开头的功能。'
 

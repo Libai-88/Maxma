@@ -161,7 +161,8 @@ export function useAttachMenu({ disabled, refs, loading }: UseAttachMenuOptions)
 
   async function selectLocalPath(type: 'file' | 'folder'): Promise<string | null> {
     if (isTauri()) {
-      const invoke = (window as any).__TAURI_INTERNALS__?.invoke ?? (window as any).__TAURI__?.core?.invoke
+      const w = window as unknown as { __TAURI_INTERNALS__?: { invoke?: (cmd: string, args: Record<string, unknown>) => Promise<string> }; __TAURI__?: { core?: { invoke?: (cmd: string, args: Record<string, unknown>) => Promise<string> } } }
+      const invoke = w.__TAURI_INTERNALS__?.invoke ?? w.__TAURI__?.core?.invoke
       if (invoke) return await invoke('select_path', { kind: type })
     }
     const data = await api.selectFile(type)

@@ -10,7 +10,7 @@ export interface KbDocument {
   indexed_chunk_count: number
   chunk_ids: string[]
   created_at: string
-  metadata: Record<string, any>
+  metadata: Record<string, unknown>
 }
 
 export interface KbSearchResult {

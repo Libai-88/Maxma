@@ -39,9 +39,9 @@ export interface MetricsHistoryResponse {
   snapshots: Array<{
     timestamp: string
     uptime_seconds: number
-    http: Record<string, any>
-    tools: Record<string, any>
-    llm: Record<string, any>
-    errors: Record<string, any>
+    http: { total_requests?: number; [key: string]: unknown }
+    tools: { total_calls?: number; [key: string]: unknown }
+    llm: { total_tokens_out?: number; [key: string]: unknown }
+    errors: Record<string, number>
   }>
 }

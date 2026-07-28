@@ -20,15 +20,15 @@ const _childSessionIds = new Set<string>()
 const TIME_SUFFIX_RE = /（\d{4}-\d{2}-\d{2} \w{3} \d{2}:\d{2}）$/
 
 /** 将旧格式 turn（userMessage 含 __refs__ 和时间尾缀）迁移为新格式 */
-function migrateLegacyTurn(turn: any): ChatTurn {
+function migrateLegacyTurn(turn: Record<string, unknown>): ChatTurn {
   if (Array.isArray(turn.refs)) {
-    return { memoryEvents: [], ...turn } as ChatTurn
+    return { memoryEvents: [], ...turn } as unknown as ChatTurn
   }
   // 旧格式：从 userMessage 中提取 refs 和时间尾缀
   const prevMsg = (turn.userMessage ?? '') as string
   const { cleanText, refs } = parseReferences(prevMsg || '')
   const text = refs.length > 0 ? cleanText : prevMsg.replace(TIME_SUFFIX_RE, '')
-  return { ...turn, userMessage: text, refs, memoryEvents: [] }
+  return { ...turn, userMessage: text, refs, memoryEvents: [] } as unknown as ChatTurn
 }
 
 // 从 localStorage 恢复所有会话的消息缓存（页面刷新后仍保留）

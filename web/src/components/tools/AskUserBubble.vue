@@ -239,7 +239,7 @@ const doneData = computed(() => {
     if (parsed.success && parsed.data) {
       return parsed.data as { question: string; answer: string | string[] }
     }
-  } catch {}
+  } catch { /* intentional: output not parseable, treat as incomplete */ }
   return null
 })
 

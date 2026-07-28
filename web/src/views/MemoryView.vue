@@ -139,7 +139,7 @@ async function loadFacts() {
 
   // Load stats
   try {
-    stats.value = await api.request<any>('/memory/stats')
+    stats.value = await api.request<{ total: number; categories: Record<string, number>; avg_confidence: number }>('/memory/stats')
   } catch { /* ignore */ }
 }
 

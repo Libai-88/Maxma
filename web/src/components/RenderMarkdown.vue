@@ -8,7 +8,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { renderMarkdown, renderMarkdownRaw, contentNeedsIsolation } from '@/utils/markdown'
 import HtmlSandbox from './HtmlSandbox.vue'
 import { useMediaViewer } from '@/composables/useMediaViewer'
@@ -51,36 +51,39 @@ const props = withDefaults(defineProps<{
 })
 
 let renderErrorCount = 0
-const renderError = ref<string | null>(null)
 
-const renderedHtml = computed(() => {
+const renderResult = computed(() => {
+  let error: string | null = null
+  let html = ''
+  let sandbox = ''
+
   try {
-    renderError.value = null
     // 默认对输出消毒，再交给 v-html，防止 XSS
-    const result = renderMarkdown(props.content)
-    return result
+    html = renderMarkdown(props.content)
   } catch (e) {
     renderErrorCount++
     const msg = e instanceof Error ? e.message : String(e)
     log.error(`[RenderMarkdown] marked.parse 错误 (第 ${renderErrorCount} 次):`, msg)
     log.error('  内容预览:', props.content.slice(0, 200))
-    renderError.value = msg
-    return ''
+    error = msg
   }
-})
 
-/** 供 iframe 沙箱使用的未消毒 HTML，保留脚本/样式等交互能力。 */
-const sandboxHtml = computed(() => {
   try {
-    renderError.value = null
-    return renderMarkdownRaw(props.content)
+    sandbox = renderMarkdownRaw(props.content)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     log.error('[RenderMarkdown] raw render 错误:', msg)
-    renderError.value = msg
-    return ''
+    if (!error) error = msg
   }
+
+  return { html, sandbox, error }
 })
+
+const renderedHtml = computed(() => renderResult.value.html)
+const renderError = computed(() => renderResult.value.error)
+
+/** 供 iframe 沙箱使用的未消毒 HTML，保留脚本/样式等交互能力。 */
+const sandboxHtml = computed(() => renderResult.value.sandbox)
 
 const useSandbox = computed(() => {
   if (props.streaming) return false

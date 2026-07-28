@@ -157,12 +157,22 @@ const settings = ref<Record<string, unknown>>({})
 const tools = ref<ToolItem[]>([])
 const tool_categories = ref<Record<string, ToolItem[]>>({})
 const providers = ref<ProviderItem[]>([])
-const mcp_servers = ref<any[]>([])
-const discovered_mcp = ref<any[] | null>(null)
+
+interface McpServerItem {
+  server_id?: string
+  name?: string
+  transport?: string
+  enabled?: boolean
+  status?: string
+  [key: string]: unknown
+}
+
+const mcp_servers = ref<McpServerItem[]>([])
+const discovered_mcp = ref<McpServerItem[] | null>(null)
 const env = ref<Record<string, string>>({})
 const system = ref<Record<string, number | boolean>>({})
 const memory = ref<{ total: number; categories: Record<string, number>; avg_confidence: number } | null>(null)
-const plugins = ref<any[]>([])
+const plugins = ref<Record<string, unknown>[]>([])
 const configSources = ref<{
   sources: Array<{ name: string; path: string; priority: number; exists: boolean; scope: string; description: string }>
   active_count: number; total_count: number
@@ -207,7 +217,7 @@ async function load() {
     configSources.value = data.config_sources ?? null
     // Also load plugin count
     try {
-      const pdata = await api.request<any[]>('/plugins')
+      const pdata = await api.request<Record<string, unknown>[]>('/plugins')
       plugins.value = Array.isArray(pdata) ? pdata : []
     } catch { plugins.value = [] }
   } catch (e) {

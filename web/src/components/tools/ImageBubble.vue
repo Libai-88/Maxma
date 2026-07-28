@@ -34,12 +34,17 @@ import { hasObjectKeys } from './_shared/displayNames'
 const props = defineProps<{ toolCall: ToolCall }>()
 defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()
 
-const td = computed<Record<string, any>>(() => {
-  if (props.toolCall.toolData) return props.toolCall.toolData as Record<string, any>
+interface ImageToolData {
+  response?: string
+  [key: string]: unknown
+}
+
+const td = computed<ImageToolData>(() => {
+  if (props.toolCall.toolData) return props.toolCall.toolData as ImageToolData
   if (props.toolCall.output) {
     try {
       const p = JSON.parse(props.toolCall.output)
-      if (p?.data) return p.data as Record<string, any>
+      if (p?.data) return p.data as ImageToolData
     } catch { /* ignore */ }
   }
   return {}

@@ -36,7 +36,8 @@ const PORT_DISCOVERY_INTERVAL_MS = 1000
 /** 实时检测是否在 Tauri WebView 中运行 */
 function detectTauri(): boolean {
   if (typeof window === 'undefined') return false
-  return !!(window as any).__TAURI_INTERNALS__ || !!(window as any).__TAURI__
+  const w = window as unknown as Record<string, unknown>
+  return !!w.__TAURI_INTERNALS__ || !!w.__TAURI__
 }
 
 /** True when running inside a Tauri v2 WebView.
@@ -189,8 +190,8 @@ export function openExternal(url: string): void {
     console.warn('[env] 拒绝打开不安全的 URL:', url)
     return
   }
-  if (detectTauri() && (window as any).__TAURI_INTERNALS__) {
-    ;(window as any).__TAURI_INTERNALS__.invoke('plugin:shell|open', { path: url }).catch((err: unknown) => {
+  if (detectTauri() && (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__) {
+    ;(window as unknown as { __TAURI_INTERNALS__: { invoke: (cmd: string, args: Record<string, unknown>) => Promise<void> } }).__TAURI_INTERNALS__.invoke('plugin:shell|open', { path: url }).catch((err: unknown) => {
       console.warn('[env] openExternal failed:', err)
     })
   } else {

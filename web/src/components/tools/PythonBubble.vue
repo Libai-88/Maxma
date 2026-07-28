@@ -107,12 +107,12 @@ const code = computed(() => {
   try {
     const parsed = JSON.parse(raw)
     return typeof parsed.code === 'string' ? parsed.code : ''
-  } catch { }
+  } catch { /* intentional: try alternate parsing below */ }
   try {
     const jsonLike = raw.replace(/'/g, '"')
     const parsed = JSON.parse(jsonLike)
     return typeof parsed.code === 'string' ? parsed.code : ''
-  } catch { }
+  } catch { /* intentional: all parsing failed, return empty */ }
   return ''
 })
 

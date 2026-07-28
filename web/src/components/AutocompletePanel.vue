@@ -24,7 +24,7 @@ import Icon from '@/components/Icon.vue'
 import { nextTick, ref, watch, watchEffect } from 'vue'
 
 const props = withDefaults(defineProps<{
-  items: { name: string; description: string }[]
+  items?: { name: string; description: string }[]
   visible: boolean
   position: { x: number; y: number }
   activeIndex: number

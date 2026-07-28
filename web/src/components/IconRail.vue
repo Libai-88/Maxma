@@ -53,7 +53,7 @@ import Icon from '@/components/Icon.vue'
 import AppSettingsMenu from '@/components/AppSettingsMenu.vue'
 
 withDefaults(defineProps<{
-  onboardingEnabled: boolean
+  onboardingEnabled?: boolean
   sessionDrawerOpen?: boolean
 }>(), {
   onboardingEnabled: false,

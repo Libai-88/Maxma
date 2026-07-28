@@ -15,7 +15,7 @@ export interface AuditLogRecord {
   detail: string
   data_size: number
   status: string
-  extra?: Record<string, any>
+  extra?: Record<string, unknown>
 }
 
 export interface AuditLogStats {

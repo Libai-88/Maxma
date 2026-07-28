@@ -522,7 +522,7 @@ async function handleSave() {
       saving.value = false
       return
     }
-    if (!isEditing && !form.value.api_key.trim()) {
+    if (!isEditing.value && !form.value.api_key.trim()) {
       fieldErrors.api_key = true
       formError.value = 'API Key 不能为空'
       saving.value = false

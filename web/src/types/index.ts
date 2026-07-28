@@ -696,13 +696,13 @@ export interface CapabilitiesResponse {
   settings: Record<string, unknown>
   tools: ToolItem[]
   tool_categories: Record<string, ToolItem[]>
-  mcp_servers: any[]
-  discovered_mcp?: any[]
+  mcp_servers: Record<string, unknown>[]
+  discovered_mcp?: Record<string, unknown>[]
   providers: ProviderItem[]
   env: Record<string, string>
   system: Record<string, number | boolean>
   memory?: { total: number; categories: Record<string, number>; avg_confidence: number }
-  plugins?: any[]
+  plugins?: Record<string, unknown>[]
   config_sources?: {
     sources: Array<{ name: string; path: string; priority: number; exists: boolean; scope: string; description: string }>
     active_count: number
