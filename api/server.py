@@ -26,6 +26,8 @@ from api.routes import capabilities as cmp_capabilities_router
 from api.routes import plugins as plugins_router
 from api.routes import collab as collab_router
 from api.routes import workflows as workflows_router
+from api.routes import rules as rules_router
+from api.routes import automation as automation_router
 from api.routes import diagnostics as diagnostics_router
 from api.routes import files as files_router
 from api.routes import maxma_blocker as maxma_blocker_router
@@ -155,6 +157,8 @@ def create_app() -> FastAPI:
     app.include_router(plugins_router.router, prefix="/api")
     app.include_router(collab_router.router, prefix="/api")
     app.include_router(workflows_router.router, prefix="/api")
+    app.include_router(rules_router.router, prefix="/api")
+    app.include_router(automation_router.router, prefix="/api")
 
     # Auth token endpoint — desktop app fetches token at runtime
     @app.get("/api/auth/token")

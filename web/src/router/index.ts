@@ -126,6 +126,18 @@ const router = createRouter({
       meta: { title: '协作' },
     },
     {
+      path: '/rules',
+      name: 'rules',
+      component: () => import('@/views/RulesView.vue'),
+      meta: { title: '质量规则' },
+    },
+    {
+      path: '/automation',
+      name: 'automation',
+      component: () => import('@/views/AutomationView.vue'),
+      meta: { title: '自动化' },
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       component: () => import('@/views/NotFoundView.vue'),
