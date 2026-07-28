@@ -339,11 +339,11 @@ export interface MemoryDoneEvent {
  *   - 运行时通知: notice, todo_reminder, irc_message
  *   - 用量: context_usage (独立事件), done.payload.context_usage (内嵌)
  *
- * UNIMPLEMENTED（sidecar 无发射端，需 OMP SDK 深改）:
- *   - plan_proposed / plan_step_*  — OMP plan-mode 在 mode state 而非 subscribe 事件流
- *   - memory_* / sub_session_created — 需 OMP rpc-mode 重构
- *   - deferred_subagent_submitted — 需产品决策
- *   - artifact — OMP SDK 无此概念
+ * UNIMPLEMENTED 状态更新（2026-07-28）：
+ *   - plan_* / memory_* / sub_session_created / deferred_subagent_submitted
+ *     已由后端 chat.py 直接 emit，sidecar 透传。前端 handler 已就绪。
+ *   - artifact — 仍 UNIMPLEMENTED（OMP SDK 无此概念）
+ *   - 独立 context_usage — 仍通过 done.payload.context_usage 内嵌送达
  */
 export type ServerEvent =
   | ThinkingStartEvent

@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 # These match both the TS sidecar output and the Maxma frontend WS protocol.
 
 EVENT_TYPES = frozenset({
+    # 原有
     "thinking_start",
     "token",
     "thinking_end",
@@ -28,6 +29,33 @@ EVENT_TYPES = frozenset({
     "error",
     "context_usage",
     "ask_user",
+    # 新增：已有 generic forwarding 但校验未覆盖
+    "context_compressed",
+    "context_compressing",
+    # plan 事件（预留接口，sidecar 暂未发射但后端已订阅转发）
+    "plan_proposed",
+    "plan_step_start",
+    "plan_step_end",
+    "plan_step_error",
+    "plan_completed",
+    # memory 事件（需后端 emit）
+    "memory_start",
+    "memory_tool_start",
+    "memory_tool_end",
+    "memory_tool_error",
+    "memory_done",
+    # sub-agent 事件（sidecar 已可透传）
+    "sub_session_created",
+    "deferred_subagent_submitted",
+    # 其他 sidecar 已透传事件
+    "thinking_delta",
+    "tool_update",
+    "retry_start",
+    "retry_end",
+    "todo_reminder",
+    "notice",
+    "irc_message",
+    "artifact",
 })
 
 # ── Event Schema Check ───────────────────────────────────

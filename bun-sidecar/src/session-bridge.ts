@@ -703,6 +703,31 @@ export function mapPiEventToMaxma(
     };
   }
 
+  // Sub-session creation (call_sub_agent)
+  if (type === "sub_session_created") {
+    const e = piEvent as Record<string, unknown>;
+    return {
+      type: "sub_session_created",
+      payload: {
+        sub_session_id: String(e.sub_session_id ?? ""),
+        parent_session_id: String(e.parent_session_id ?? ""),
+        task: String(e.task ?? ""),
+        name: String(e.name ?? ""),
+      },
+    };
+  }
+
+  // Deferred sub-agent submitted
+  if (type === "deferred_subagent_submitted") {
+    const e = piEvent as Record<string, unknown>;
+    return {
+      type: "deferred_subagent_submitted",
+      payload: {
+        run_id: String(e.run_id ?? ""),
+      },
+    };
+  }
+
   return null;
 }
 

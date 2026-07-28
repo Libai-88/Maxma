@@ -33,8 +33,8 @@ class WsEventType(str, Enum):
     ASK_USER = "ask_user"
     CONTEXT_COMPRESSED = "context_compressed"
 
-    # Plan mode events (UNIMPLEMENTED - 保留接口)
-    # OMP plan-mode 状态在 mode state 而非 subscribe 事件流
+    # Plan mode events (后端 chat.py 已 emit，sidecar 透传)
+    # 注：OMP SDK 不直接暴露 plan-mode 事件流，事件由后端在工具调用生命周期合成 emit
     PLAN_PROPOSED = "plan_proposed"
     PLAN_STEP_START = "plan_step_start"
     PLAN_STEP_END = "plan_step_end"

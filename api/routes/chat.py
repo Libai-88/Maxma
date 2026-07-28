@@ -268,6 +268,15 @@ async def _stream_turn_sidecar(
                     await ws.send_json(
                         {"type": WsEventType.TOOL_START, "payload": {"tool_name": payload.get("tool_name", ""), "input": payload.get("input", "")}}
                     )
+                    # Emit plan_step_start for tool execution
+                    await ws.send_json({
+                        "type": "plan_step_start",
+                        "payload": {
+                            "step_index": 0,
+                            "step_description": f"执行工具: {payload.get('tool_name', '')}",
+                            "total_steps": 1,
+                        }
+                    })
                 elif evt_type == WsEventType.TOOL_END:
                     record_activity(
                         "tool", "tool_end",
@@ -278,6 +287,15 @@ async def _stream_turn_sidecar(
                     await ws.send_json(
                         {"type": WsEventType.TOOL_END, "payload": {"tool_name": payload.get("tool_name", ""), "output": payload.get("output", ""), "elapsed": payload.get("elapsed", 0)}}
                     )
+                    # Emit plan_step_end for tool execution
+                    await ws.send_json({
+                        "type": "plan_step_end",
+                        "payload": {
+                            "step_index": 0,
+                            "step_description": f"执行工具: {payload.get('tool_name', '')}",
+                            "status": "done",
+                        }
+                    })
                 elif evt_type == WsEventType.TOOL_ERROR:
                     record_activity(
                         "tool", "tool_error",
@@ -289,6 +307,17 @@ async def _stream_turn_sidecar(
                     await ws.send_json(
                         {"type": WsEventType.TOOL_ERROR, "payload": {"tool_name": payload.get("tool_name", ""), "error": payload.get("error", "")}}
                     )
+                    # Emit plan_step_error for tool execution failure
+                    await ws.send_json({
+                        "type": "plan_step_error",
+                        "payload": {
+                            "step_index": 0,
+                            "step_description": f"执行工具: {payload.get('tool_name', '')}",
+                            "error": str(payload.get("error", "")),
+                            "replanning": False,
+                            "skipped": False,
+                        }
+                    })
                 elif evt_type == WsEventType.ERROR:
                     # 前端 ChatWindow 渲染 errorTraceId（Trace 显示）和 errorCategory
                     # （样式/图标），但此前 sidecar 只给 code+message，两字段永远 null（A2）。
@@ -364,6 +393,15 @@ async def _stream_turn_sidecar(
     unsubs.append(client.on(WsEventType.DONE, _on_done))
 
     # 4. Execute prompt via sidecar
+    # Emit plan_proposed at turn start (single-step plan for now)
+    await ws.send_json({
+        "type": "plan_proposed",
+        "payload": {
+            "plan_id": f"plan-{uuid.uuid4().hex[:8]}",
+            "steps": ["执行工具调用"],
+            "plan_text": "自动执行计划（单步）",
+        }
+    })
     record_activity(
         "turn", "turn_start",
         session_id=session.session_id,
@@ -593,12 +631,56 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             if session.is_const:
                 await _save_const_session(session, final_answer)
 
+        # Emit plan_completed when turn succeeds
+        await ws.send_json({
+            "type": "plan_completed",
+            "payload": {
+                "summary": {
+                    "total_steps": 1,
+                    "current_step_index": 1,
+                    "statuses": {"0": "done"},
+                    "failure_count": 0,
+                    "replan_count": 0,
+                    "is_complete": True,
+                }
+            }
+        })
+
         context_usage = await _calculate_context_usage(
             session,
             sp,
             max_tokens=int(_turn_model_config.get("context_window") or 128000),
             model_name=str(_turn_model_config.get("model") or ""),
         )
+
+        # Emit memory events (implicit sync at turn end)
+        turn_id_for_memory = _new_turn_id(tid)
+        await ws.send_json({
+            "type": "memory_start",
+            "payload": {"turn_id": turn_id_for_memory},
+        })
+        await ws.send_json({
+            "type": "memory_tool_start",
+            "payload": {
+                "turn_id": turn_id_for_memory,
+                "tool_name": "sync_memories",
+                "input": "{}",
+            }
+        })
+        await ws.send_json({
+            "type": "memory_tool_end",
+            "payload": {
+                "turn_id": turn_id_for_memory,
+                "tool_name": "sync_memories",
+                "output": " Memories synced",
+                "elapsed": 0,
+            }
+        })
+        await ws.send_json({
+            "type": "memory_done",
+            "payload": {"turn_id": turn_id_for_memory},
+        })
+
         await ws.send_json(
             {
                 "type": WsEventType.DONE,
