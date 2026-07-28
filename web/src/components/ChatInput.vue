@@ -1869,7 +1869,6 @@ function onResizeEnd(e: PointerEvent) {
 .input-area:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  animation: maxma-focus-pulse-in .3s var(--ease-out);
 }
 @media (prefers-reduced-motion: no-preference) {
   .chat-input button:focus-visible,
