@@ -145,9 +145,9 @@ async def _stream_turn_sidecar(
 ) -> str:
     """Execute a turn via oh-my-pi sidecar (Bun subprocess).
 
-    Streams intermediate events (token, tool_start, tool_end, tool_error,
-    ask_user, plan_proposed, plan_step_start, plan_step_end, plan_step_error,
-    plan_completed) to the frontend in real-time.
+    Streams all sidecar events (token, thinking_*, tool_*, ask_user,
+    retry_*, notice, sub_session_created, memory_*, plan_* 等)
+    to the frontend in real-time via transparent forwarding.
     Returns the final answer string.
     """
     model_config = model_config or {}
@@ -268,15 +268,6 @@ async def _stream_turn_sidecar(
                     await ws.send_json(
                         {"type": WsEventType.TOOL_START, "payload": {"tool_name": payload.get("tool_name", ""), "input": payload.get("input", "")}}
                     )
-                    # Emit plan_step_start for tool execution
-                    await ws.send_json({
-                        "type": "plan_step_start",
-                        "payload": {
-                            "step_index": 0,
-                            "step_description": f"执行工具: {payload.get('tool_name', '')}",
-                            "total_steps": 1,
-                        }
-                    })
                 elif evt_type == WsEventType.TOOL_END:
                     record_activity(
                         "tool", "tool_end",
@@ -287,15 +278,6 @@ async def _stream_turn_sidecar(
                     await ws.send_json(
                         {"type": WsEventType.TOOL_END, "payload": {"tool_name": payload.get("tool_name", ""), "output": payload.get("output", ""), "elapsed": payload.get("elapsed", 0)}}
                     )
-                    # Emit plan_step_end for tool execution
-                    await ws.send_json({
-                        "type": "plan_step_end",
-                        "payload": {
-                            "step_index": 0,
-                            "step_description": f"执行工具: {payload.get('tool_name', '')}",
-                            "status": "done",
-                        }
-                    })
                 elif evt_type == WsEventType.TOOL_ERROR:
                     record_activity(
                         "tool", "tool_error",
@@ -307,17 +289,6 @@ async def _stream_turn_sidecar(
                     await ws.send_json(
                         {"type": WsEventType.TOOL_ERROR, "payload": {"tool_name": payload.get("tool_name", ""), "error": payload.get("error", "")}}
                     )
-                    # Emit plan_step_error for tool execution failure
-                    await ws.send_json({
-                        "type": "plan_step_error",
-                        "payload": {
-                            "step_index": 0,
-                            "step_description": f"执行工具: {payload.get('tool_name', '')}",
-                            "error": str(payload.get("error", "")),
-                            "replanning": False,
-                            "skipped": False,
-                        }
-                    })
                 elif evt_type == WsEventType.ERROR:
                     # 前端 ChatWindow 渲染 errorTraceId（Trace 显示）和 errorCategory
                     # （样式/图标），但此前 sidecar 只给 code+message，两字段永远 null（A2）。
@@ -353,8 +324,7 @@ async def _stream_turn_sidecar(
                         }
                     )
                 else:
-                    # Generic forwarding for ask_user, plan_proposed, plan_step_start,
-                    # plan_step_end, plan_step_error, plan_completed, etc.
+                    # Generic transparent forwarding for all other subscribed events
                     await ws.send_json({"type": evt_type, "payload": payload})
             except Exception as e:
                 logger.warning("[sidecar] Failed to forward %s event to WS: %s", evt_type, e)
@@ -373,15 +343,27 @@ async def _stream_turn_sidecar(
     for evt_type in (WsEventType.TOKEN, WsEventType.TOOL_START, WsEventType.TOOL_END, WsEventType.TOOL_ERROR, WsEventType.ERROR):
         unsubs.append(client.on(evt_type, _make_handler(evt_type)))
     # Generic forwarding for event types that need no per-type enrichment.
-    # ask_user — approval UI round-trip (sidecar createApprovalUiContext.select).
-    # context_compressed — auto-compaction notice (A3: sidecar maps
-    #   auto_compaction_end → context_compressed; frontend updates usage badge).
-    # plan_* — UNIMPLEMENTED: sidecar mapPiEventToMaxma never emits these
-    #   (OMP plan-mode exposes state, not subscribe events). 订阅空转，保留以备
-    #   SDK 深接时无需改后端转发层。
+    # 所有 sidecar 发射的事件均透传到前端，前端 useChat.ts 有对应 handler。
     for evt_type in (
         WsEventType.ASK_USER,
         WsEventType.CONTEXT_COMPRESSED,
+        WsEventType.CONTEXT_COMPRESSING,
+        WsEventType.THINKING_START,
+        WsEventType.THINKING_DELTA,
+        WsEventType.THINKING_END,
+        WsEventType.TOOL_UPDATE,
+        WsEventType.RETRY_START,
+        WsEventType.RETRY_END,
+        WsEventType.TODO_REMINDER,
+        WsEventType.NOTICE,
+        WsEventType.IRC_MESSAGE,
+        WsEventType.SUB_SESSION_CREATED,
+        WsEventType.DEFERRED_SUBAGENT_SUBMITTED,
+        WsEventType.MEMORY_START,
+        WsEventType.MEMORY_TOOL_START,
+        WsEventType.MEMORY_TOOL_END,
+        WsEventType.MEMORY_TOOL_ERROR,
+        WsEventType.MEMORY_DONE,
         WsEventType.PLAN_PROPOSED,
         WsEventType.PLAN_STEP_START,
         WsEventType.PLAN_STEP_END,
@@ -393,15 +375,6 @@ async def _stream_turn_sidecar(
     unsubs.append(client.on(WsEventType.DONE, _on_done))
 
     # 4. Execute prompt via sidecar
-    # Emit plan_proposed at turn start (single-step plan for now)
-    await ws.send_json({
-        "type": "plan_proposed",
-        "payload": {
-            "plan_id": f"plan-{uuid.uuid4().hex[:8]}",
-            "steps": ["执行工具调用"],
-            "plan_text": "自动执行计划（单步）",
-        }
-    })
     record_activity(
         "turn", "turn_start",
         session_id=session.session_id,
@@ -631,55 +604,12 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             if session.is_const:
                 await _save_const_session(session, final_answer)
 
-        # Emit plan_completed when turn succeeds
-        await ws.send_json({
-            "type": "plan_completed",
-            "payload": {
-                "summary": {
-                    "total_steps": 1,
-                    "current_step_index": 1,
-                    "statuses": {"0": "done"},
-                    "failure_count": 0,
-                    "replan_count": 0,
-                    "is_complete": True,
-                }
-            }
-        })
-
         context_usage = await _calculate_context_usage(
             session,
             sp,
             max_tokens=int(_turn_model_config.get("context_window") or 128000),
             model_name=str(_turn_model_config.get("model") or ""),
         )
-
-        # Emit memory events (implicit sync at turn end)
-        turn_id_for_memory = _new_turn_id(tid)
-        await ws.send_json({
-            "type": "memory_start",
-            "payload": {"turn_id": turn_id_for_memory},
-        })
-        await ws.send_json({
-            "type": "memory_tool_start",
-            "payload": {
-                "turn_id": turn_id_for_memory,
-                "tool_name": "sync_memories",
-                "input": "{}",
-            }
-        })
-        await ws.send_json({
-            "type": "memory_tool_end",
-            "payload": {
-                "turn_id": turn_id_for_memory,
-                "tool_name": "sync_memories",
-                "output": " Memories synced",
-                "elapsed": 0,
-            }
-        })
-        await ws.send_json({
-            "type": "memory_done",
-            "payload": {"turn_id": turn_id_for_memory},
-        })
 
         await ws.send_json(
             {

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '@/api'
+import { toErrorMessage } from '@/utils/error'
 import type { Plugin, PluginDetail, PluginFilter, InstallPluginRequest } from '@/types/plugin'
 
 export const usePluginStore = defineStore('plugin', () => {
@@ -52,7 +53,7 @@ export const usePluginStore = defineStore('plugin', () => {
     try {
       plugins.value = await api.listPlugins()
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e)
+      error.value = toErrorMessage(e)
       throw e
     } finally {
       loading.value = false
@@ -74,7 +75,7 @@ export const usePluginStore = defineStore('plugin', () => {
       installProgress.value = { spec: request.spec, status: 'success' }
       return result
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e)
+      error.value = toErrorMessage(e)
       installProgress.value = { spec: request.spec, status: 'error' }
       throw e
     } finally {
@@ -88,7 +89,7 @@ export const usePluginStore = defineStore('plugin', () => {
       await api.uninstallPlugin(name)
       plugins.value = plugins.value.filter(p => p.name !== name)
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e)
+      error.value = toErrorMessage(e)
       throw e
     }
   }
@@ -101,7 +102,7 @@ export const usePluginStore = defineStore('plugin', () => {
         plugin.enabled = enabled
       }
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e)
+      error.value = toErrorMessage(e)
       throw e
     }
   }
@@ -110,7 +111,7 @@ export const usePluginStore = defineStore('plugin', () => {
     try {
       return await api.getPluginDetail(name)
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e)
+      error.value = toErrorMessage(e)
       throw e
     }
   }

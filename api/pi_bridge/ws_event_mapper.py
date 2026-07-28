@@ -32,19 +32,19 @@ EVENT_TYPES = frozenset({
     # 新增：已有 generic forwarding 但校验未覆盖
     "context_compressed",
     "context_compressing",
-    # plan 事件（预留接口，sidecar 暂未发射但后端已订阅转发）
+    # plan 事件（预留接口，sidecar 暂未发射，后端已订阅转发待 SDK 深接）
     "plan_proposed",
     "plan_step_start",
     "plan_step_end",
     "plan_step_error",
     "plan_completed",
-    # memory 事件（需后端 emit）
+    # memory 事件（sidecar 发射时透传，后端不再伪造）
     "memory_start",
     "memory_tool_start",
     "memory_tool_end",
     "memory_tool_error",
     "memory_done",
-    # sub-agent 事件（sidecar 已可透传）
+    # sub-agent 事件（sidecar 已映射，后端已订阅透传）
     "sub_session_created",
     "deferred_subagent_submitted",
     # 其他 sidecar 已透传事件

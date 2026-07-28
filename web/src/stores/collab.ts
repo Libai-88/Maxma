@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { api } from '@/api'
+import { toErrorMessage } from '@/utils/error'
 import type {
   SessionShare,
   CreateShareRequest,
@@ -32,7 +33,7 @@ export const useCollabStore = defineStore('collab', () => {
     try {
       shares.value = await api.listSessionShares(sessionId)
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e)
+      error.value = toErrorMessage(e)
       throw e
     } finally {
       loading.value = false
@@ -45,7 +46,7 @@ export const useCollabStore = defineStore('collab', () => {
       shares.value.push(share)
       return share
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e)
+      error.value = toErrorMessage(e)
       throw e
     }
   }
@@ -55,7 +56,7 @@ export const useCollabStore = defineStore('collab', () => {
       await api.revokeSessionShare(shareId)
       shares.value = shares.value.filter(s => s.share_id !== shareId)
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e)
+      error.value = toErrorMessage(e)
       throw e
     }
   }
@@ -66,7 +67,7 @@ export const useCollabStore = defineStore('collab', () => {
     try {
       snapshots.value = await api.listSessionSnapshots(sessionId)
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e)
+      error.value = toErrorMessage(e)
       throw e
     } finally {
       loading.value = false
@@ -79,7 +80,7 @@ export const useCollabStore = defineStore('collab', () => {
       snapshots.value.push(snapshot)
       return snapshot
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e)
+      error.value = toErrorMessage(e)
       throw e
     }
   }
@@ -89,7 +90,7 @@ export const useCollabStore = defineStore('collab', () => {
       await api.deleteSessionSnapshot(snapshotId)
       snapshots.value = snapshots.value.filter(s => s.snapshot_id !== snapshotId)
     } catch (e) {
-      error.value = e instanceof Error ? e.message : String(e)
+      error.value = toErrorMessage(e)
       throw e
     }
   }
