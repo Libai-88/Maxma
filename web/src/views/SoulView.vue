@@ -111,6 +111,9 @@ import { api } from '@/api'
 import PersonaCard from '../components/PersonaCard.vue'
 import { useMarkdownPersist } from '@/composables/useMarkdownPersist'
 import { confirmAction } from '@/composables/useConfirm'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('SoulView')
 
 const props = defineProps<{
   title?: string
@@ -256,7 +259,7 @@ async function doCreate() {
     activeFile.value = res.file
     await onPersonaChange()
   } catch (e: unknown) {
-    console.error('[SoulView] createPersona FAIL', e)
+    log.error('[SoulView] createPersona FAIL', e)
     alert('创建失败: ' + (e instanceof Error ? e.message : String(e)))
   } finally {
     creating.value = false
@@ -270,7 +273,7 @@ async function loadPersonas() {
     activeFile.value = res.active_file
     personasLoaded.value = true
   } catch (e) {
-    console.error('[SoulView] loadPersonas FAIL', e)
+    log.error('[SoulView] loadPersonas FAIL', e)
     personas.value = []
     personasLoaded.value = true  // 即使失败也标记为已加载，避免选择器永远不显示
   }
@@ -286,7 +289,7 @@ async function onPersonaChange() {
     // 更新 personas 列表中的 active 状态
     personas.value.forEach(p => { p.active = p.file === activeFile.value })
   } catch (e: unknown) {
-    console.error('[SoulView] switchPersona FAIL', e)
+    log.error('[SoulView] switchPersona FAIL', e)
     loadError.value = '切换人格失败: ' + (e instanceof Error ? e.message : String(e))
     return
   }

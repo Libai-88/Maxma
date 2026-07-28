@@ -81,6 +81,9 @@ import { ref, computed, onMounted } from 'vue'
 import { useMemoryStore, type MemoryFact } from '@/stores/memory'
 import { api } from '@/api'
 import { confirmAction } from '@/composables/useConfirm'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('MemoryView')
 
 const store = useMemoryStore()
 
@@ -161,7 +164,7 @@ async function saveEdit(id: string) {
     editingId.value = null
     await loadFacts()
   } catch (e) {
-    console.warn('[memory] saveEdit failed:', e)
+    log.warn('[memory] saveEdit failed:', e)
   }
 }
 
@@ -176,7 +179,7 @@ async function handleDelete(id: string) {
     await api.request(`/memory/${encodeURIComponent(id)}`, { method: 'DELETE' })
     await loadFacts()
   } catch (e) {
-    console.warn('[memory] delete failed:', e)
+    log.warn('[memory] delete failed:', e)
   }
 }
 

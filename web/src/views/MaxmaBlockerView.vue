@@ -96,6 +96,9 @@ import { api } from '@/api'
 import type { BlockerEntry } from '@/types'
 import { confirmAction } from '@/composables/useConfirm'
 import { ref, onMounted } from 'vue'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('MaxmaBlockerView')
 
 const showForm = ref(false)
 const entries = ref<BlockerEntry[]>([])
@@ -111,7 +114,7 @@ async function loadEntries() {
     const res = await api.listBlockers()
     entries.value = res.entries
     } catch (e: unknown) {
-      console.error('加载拒止锚失败', e)
+      log.error('加载拒止锚失败', e)
   } finally {
     loading.value = false
   }
@@ -166,7 +169,7 @@ async function confirmDelete(i: number) {
     await api.deleteBlocker(i)
     entries.value.splice(i, 1)
   } catch (e: unknown) {
-    console.error('删除失败', e)
+    log.error('删除失败', e)
   }
 }
 

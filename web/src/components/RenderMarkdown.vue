@@ -13,10 +13,13 @@ import { renderMarkdown, renderMarkdownRaw, contentNeedsIsolation } from '@/util
 import HtmlSandbox from './HtmlSandbox.vue'
 import { useMediaViewer } from '@/composables/useMediaViewer'
 import Icon from '@/components/Icon.vue'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('RenderMarkdown')
 
 // 按需加载 KaTeX CSS（仅在首次渲染 Markdown 组件时注入）
 import('katex/dist/katex.min.css').catch((err) => {
-  console.warn('[RenderMarkdown] KaTeX CSS 加载失败，数学公式可能显示异常:', err)
+  log.warn('[RenderMarkdown] KaTeX CSS 加载失败，数学公式可能显示异常:', err)
 })
 
 const { open } = useMediaViewer()
@@ -59,8 +62,8 @@ const renderedHtml = computed(() => {
   } catch (e) {
     renderErrorCount++
     const msg = e instanceof Error ? e.message : String(e)
-    console.error(`[RenderMarkdown] marked.parse 错误 (第 ${renderErrorCount} 次):`, msg)
-    console.error('  内容预览:', props.content.slice(0, 200))
+    log.error(`[RenderMarkdown] marked.parse 错误 (第 ${renderErrorCount} 次):`, msg)
+    log.error('  内容预览:', props.content.slice(0, 200))
     renderError.value = msg
     return ''
   }
@@ -73,7 +76,7 @@ const sandboxHtml = computed(() => {
     return renderMarkdownRaw(props.content)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    console.error('[RenderMarkdown] raw render 错误:', msg)
+    log.error('[RenderMarkdown] raw render 错误:', msg)
     renderError.value = msg
     return ''
   }
@@ -86,7 +89,7 @@ const useSandbox = computed(() => {
   try {
     return contentNeedsIsolation(props.content)
   } catch (e) {
-    console.error('[RenderMarkdown] contentNeedsIsolation 检测异常:', e)
+    log.error('[RenderMarkdown] contentNeedsIsolation 检测异常:', e)
     return true // 无法确定时启用沙箱（安全降级）
   }
 })

@@ -198,6 +198,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { api } from '@/api'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('SettingsView')
 
 const loading = ref(true)
 const loadError = ref('')
@@ -242,7 +245,7 @@ async function set(path: string, value: unknown) {
   try {
     await api.setSetting(path, value)
   } catch (e) {
-    console.error(`Failed to set ${path}:`, e)
+    log.error(`Failed to set ${path}:`, e)
     settings.value[path] = prev // rollback without network roundtrip
   }
 }

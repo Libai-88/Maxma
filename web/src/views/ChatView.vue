@@ -174,6 +174,9 @@ import type { ThinkPathId } from '@/utils/thinkPath'
 import { storeToRefs } from 'pinia'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useGlobalShortcut } from '@/composables/useGlobalShortcut'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('ChatView')
 
 const sessionStore = useSessionStore()
 const { sessionId, sessions } = storeToRefs(sessionStore)
@@ -444,7 +447,7 @@ async function handleUndo() {
       removeTurns(1)
     }
   } catch (e) {
-    console.error('撤回失败:', e)
+    log.error('撤回失败:', e)
   }
 }
 

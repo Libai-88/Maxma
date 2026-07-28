@@ -24,6 +24,9 @@
 import { ref, watch, watchEffect } from 'vue'
 import { getApiBase, tauriFetch } from '@/utils/env'
 import Icon from '@/components/Icon.vue'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('StickerContextMenu')
 
 interface Sticker {
   category: string
@@ -67,7 +70,7 @@ async function checkFavoriteStatus() {
       (f: any) => f.filename === props.sticker?.filename && f.category === props.sticker?.category
     )
   } catch (err) {
-    console.error('检查收藏状态失败:', err)
+    log.error('检查收藏状态失败:', err)
   }
 }
 
@@ -97,7 +100,7 @@ async function onToggleFavorite() {
     }
     emit('refresh')
   } catch (err) {
-    console.error('收藏操作失败:', err)
+    log.error('收藏操作失败:', err)
   } finally {
     loading.value = false
     emit('close')
@@ -112,7 +115,7 @@ function onCopyPath() {
   navigator.clipboard.writeText(path).then(() => {
     emit('close')
   }).catch(err => {
-    console.error('复制失败:', err)
+    log.error('复制失败:', err)
   })
 }
 
@@ -131,7 +134,7 @@ async function onReduceRecommendation() {
     })
     emit('refresh')
   } catch (err) {
-    console.error('减少推荐失败:', err)
+    log.error('减少推荐失败:', err)
   } finally {
     loading.value = false
     emit('close')

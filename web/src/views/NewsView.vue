@@ -58,6 +58,9 @@ import { api } from '@/api'
 import type { NewsEntry } from '@/types'
 import NewsCard from '@/components/NewsCard.vue'
 import { onMounted, onUnmounted, ref, watchEffect, type ComponentPublicInstance } from 'vue'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('NewsView')
 
 const news = ref<NewsEntry[]>([])
 const loading = ref(false)
@@ -130,7 +133,7 @@ async function loadNews() {
     news.value = res.news.sort((a, b) => b.pr_number - a.pr_number)
     requestAnimationFrame(updateTimelineBounds)
   } catch (e: unknown) {
-    console.error('加载更新动态失败', e)
+    log.error('加载更新动态失败', e)
     loadError.value = true
   } finally {
     loading.value = false

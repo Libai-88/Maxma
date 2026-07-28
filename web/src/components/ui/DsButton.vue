@@ -22,6 +22,9 @@
 
 <script setup lang="ts">
 import { watchEffect } from 'vue'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('DsButton')
 
 const props = withDefaults(defineProps<{
   variant?: 'default' | 'primary' | 'danger' | 'ghost' | 'subtle' | 'success' | 'glass'
@@ -54,8 +57,7 @@ function onClick(e: MouseEvent) {
 // 生产构建中不会执行此 warn
 watchEffect(() => {
   if (props.iconOnly && !props.ariaLabel) {
-    // eslint-disable-next-line no-console
-    console.warn('[DsButton] iconOnly 模式必须提供 ariaLabel')
+    log.warn('[DsButton] iconOnly 模式必须提供 ariaLabel')
   }
 })
 </script>

@@ -170,6 +170,9 @@ import SessionItem from './SessionItem.vue';
 import { useSessionStore } from '@/stores/session';
 import type { SessionInfo } from '@/types';
 import { computed, nextTick, ref, watch, watchEffect } from 'vue';
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('SessionSidebar')
 
 const sessionStore = useSessionStore()
 
@@ -378,7 +381,7 @@ async function generateTitle() {
       constifyInputRef.value?.select()
     })
   } catch (e) {
-    console.error('[constify] 标题生成失败:', e)
+    log.error('[constify] 标题生成失败:', e)
   } finally {
     generating.value = false
   }

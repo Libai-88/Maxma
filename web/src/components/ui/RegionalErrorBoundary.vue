@@ -13,6 +13,9 @@
 <script setup lang="ts">
 import { ref, onErrorCaptured, watch } from 'vue'
 import Icon from '@/components/Icon.vue'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('RegionalErrorBoundary')
 
 const props = defineProps<{
   resetKeys?: unknown[]
@@ -24,7 +27,7 @@ const errorMessage = ref('此区域发生错误')
 onErrorCaptured((err) => {
   hasError.value = true
   errorMessage.value = err instanceof Error ? err.message : String(err)
-  console.error('[RegionalErrorBoundary]', err)
+  log.error('[RegionalErrorBoundary]', err)
   return false
 })
 

@@ -40,6 +40,9 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { StickerSegment } from '@/composables/useStickerSegments'
 import { getApiBase, tauriFetch } from '@/utils/env'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('StickerPreviewOverlay')
 
 const props = defineProps<{
   stickers: StickerSegment[]
@@ -87,7 +90,7 @@ async function refreshFavoriteStatus() {
       (item: any) => item.category === current.value.category && item.filename === current.value.filename
     )
   } catch (err) {
-    console.warn('[StickerPreviewOverlay] 收藏状态读取失败:', err)
+    log.warn('[StickerPreviewOverlay] 收藏状态读取失败:', err)
   }
 }
 
@@ -113,7 +116,7 @@ async function toggleFavorite() {
       isFavorited.value = true
     }
   } catch (err) {
-    console.error('[StickerPreviewOverlay] 收藏操作失败:', err)
+    log.error('[StickerPreviewOverlay] 收藏操作失败:', err)
   } finally {
     favoriteLoading.value = false
   }

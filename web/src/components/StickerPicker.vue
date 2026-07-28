@@ -118,6 +118,9 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { getApiBase, tauriFetch } from '@/utils/env'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('StickerPicker')
 
 export interface Sticker {
   category: string
@@ -264,10 +267,10 @@ async function uploadFile(file: File) {
       // 切换到全部 Tab 查看新上传的表情
       activeTab.value = 'all'
     } else {
-      console.error('[StickerPicker] 上传失败:', data)
+      log.error('[StickerPicker] 上传失败:', data)
     }
   } catch (err) {
-    console.error('[StickerPicker] 上传错误:', err)
+    log.error('[StickerPicker] 上传错误:', err)
   } finally {
     isUploading.value = false
   }
@@ -305,13 +308,13 @@ async function onDrop(e: DragEvent) {
 
 // 选择表情
 function selectSticker(sticker: Sticker) {
-  console.log('[StickerPicker] selectSticker called with:', sticker)
+  log.debug('[StickerPicker] selectSticker called with:', sticker)
   emit('select', sticker)
 }
 
 // 右键菜单
 function onContextMenu(event: MouseEvent, sticker: Sticker) {
-  console.log('[StickerPicker] onContextMenu called with:', sticker)
+  log.debug('[StickerPicker] onContextMenu called with:', sticker)
   emit('contextmenu', event, sticker)
 }
 
@@ -408,7 +411,7 @@ async function loadRecommendations() {
     const data = await res.json()
     recommendedStickers.value = data.recommendations || []
   } catch (err) {
-    console.warn('[StickerPicker] 加载推荐表情失败:', err)
+    log.warn('[StickerPicker] 加载推荐表情失败:', err)
   }
 }
 
@@ -431,7 +434,7 @@ function updatePickerPosition() {
 
 // 加载数据
 async function loadData() {
-  console.log('[StickerPicker] loadData called')
+  log.debug('[StickerPicker] loadData called')
   try {
     const [allResult, recentResult, favResult] = await Promise.allSettled([
       tauriFetch(`${getApiBase()}/stickers/index`),
@@ -453,16 +456,16 @@ async function loadData() {
         : { favorites: [] }
 
     if (allResult.status === 'rejected') {
-      console.warn('[StickerPicker] 加载全部表情失败:', allResult.reason)
+      log.warn('[StickerPicker] 加载全部表情失败:', allResult.reason)
     }
     if (recentResult.status === 'rejected') {
-      console.warn('[StickerPicker] 加载最近表情失败:', recentResult.reason)
+      log.warn('[StickerPicker] 加载最近表情失败:', recentResult.reason)
     }
     if (favResult.status === 'rejected') {
-      console.warn('[StickerPicker] 加载收藏表情失败:', favResult.reason)
+      log.warn('[StickerPicker] 加载收藏表情失败:', favResult.reason)
     }
 
-    console.log('[StickerPicker] Loaded stickers:', {
+    log.debug('[StickerPicker] Loaded stickers:', {
       all: Object.keys(allData.index || {}).length,
       recent: recentData.recent?.length || 0,
       favorites: favData.favorites?.length || 0
@@ -474,7 +477,7 @@ async function loadData() {
     await loadRecommendations()
     updatePickerPosition()
   } catch (err) {
-    console.error('[StickerPicker] 加载表情数据失败:', err)
+    log.error('[StickerPicker] 加载表情数据失败:', err)
   }
 }
 

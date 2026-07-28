@@ -33,6 +33,9 @@ import type { StickerSegment } from '@/composables/useStickerSegments'
 import { getApiBase, tauriFetch } from '@/utils/env'
 import { useStickerPerformance } from '@/composables/useStickerPerformance'
 import Icon from '@/components/Icon.vue'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('StickerInline')
 
 const props = defineProps<{ sticker: StickerSegment }>()
 
@@ -68,7 +71,7 @@ async function loadRandomSticker() {
       resolvedFilename.value = String(data.path).split('/').pop() || ''
     }
   } catch (err) {
-    console.warn('[StickerInline] failed to load random sticker:', err)
+    log.warn('[StickerInline] failed to load random sticker:', err)
   }
 }
 

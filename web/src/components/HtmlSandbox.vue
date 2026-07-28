@@ -22,6 +22,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watchEffect } from 'vue'
 import Icon from '@/components/Icon.vue'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('HtmlSandbox')
 
 const props = withDefaults(defineProps<{
   html: string
@@ -68,11 +71,11 @@ function logSandboxError(err: SandboxError) {
 
   const tag = `[Sandbox ${err.type}]`
   console.group(`%c${tag} ${err.message}`, 'color:#ef4444;font-weight:bold')
-  console.error('  消息:', err.message)
-  if (err.stack) console.error('  堆栈:', err.stack)
-  if (err.source) console.error('  来源:', err.source, `(${err.line}:${err.col})`)
-  console.error('  时间:', err.time)
-  console.error('  内容预览 (前 200 字符):', props.html.slice(0, 200))
+  log.error('  消息:', err.message)
+  if (err.stack) log.error('  堆栈:', err.stack)
+  if (err.source) log.error('  来源:', err.source, `(${err.line}:${err.col})`)
+  log.error('  时间:', err.time)
+  log.error('  内容预览 (前 200 字符):', props.html.slice(0, 200))
   console.groupEnd()
 }
 

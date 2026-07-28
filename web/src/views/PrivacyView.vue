@@ -129,6 +129,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { api } from '@/api'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('PrivacyView')
 
 interface StorageItem {
   icon: string
@@ -185,7 +188,7 @@ async function loadStats() {
       disabledReason.value = msg
     } else {
       // 404/路由未注册等预期内失败降级为 debug，避免污染控制台（降级 banner 已处理用户感知）
-      console.debug('Failed to load audit stats:', e)
+      log.debug('Failed to load audit stats:', e)
     }
   } finally {
     statsLoading.value = false
@@ -205,7 +208,7 @@ async function loadAuditLog() {
       disabled.value = true
       disabledReason.value = msg
     } else {
-      console.debug('Failed to load audit log:', e)
+      log.debug('Failed to load audit log:', e)
     }
   } finally {
     logLoading.value = false
@@ -220,7 +223,7 @@ async function clearHistory() {
     const sessions = await api.listSessions()
 	    for (const s of sessions.sessions || []) {
 	      try { await api.deleteSession(s.session_id) } catch (e: unknown) {
-	        console.warn('[PrivacyView] 删除会话失败:', e instanceof Error ? e.message : String(e))
+	        log.warn('[PrivacyView] 删除会话失败:', e instanceof Error ? e.message : String(e))
 	      }
 	    }
     actionMessage.value = `已清除 ${sessions.sessions?.length || 0} 个会话`
