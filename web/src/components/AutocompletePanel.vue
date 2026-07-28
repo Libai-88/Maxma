@@ -31,6 +31,7 @@ const props = withDefaults(defineProps<{
   filterText: string
   iconName?: string
 }>(), {
+  items: () => [],
   iconName: 'sparkles',
 })
 
