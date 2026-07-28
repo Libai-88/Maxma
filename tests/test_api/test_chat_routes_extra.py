@@ -91,14 +91,8 @@ def _patch_session_map(monkeypatch, sidecar_id=None, recent_turns=None):
     inst.append_turn = MagicMock()
     inst.remove = MagicMock()
     inst.set_mapping = MagicMock()
-    factory = lambda *a, **k: inst
-    # chat.py 在模块级别 from ... import SessionMap，所以必须 patch chat_mod 的引用
-    monkeypatch.setattr(chat_mod, "SessionMap", factory)
-    # 同时 patch 源模块，以防有局部 import 路径
-    monkeypatch.setattr(
-        "api.pi_bridge.session_adapter.SessionMap",
-        factory,
-    )
+    # chat.py 在模块级别 from ... import get_session_map，所以必须 patch chat_mod 的引用
+    monkeypatch.setattr(chat_mod, "get_session_map", lambda: inst)
     return inst
 
 

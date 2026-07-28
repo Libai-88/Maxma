@@ -1,9 +1,7 @@
-"""测试 — 补充低覆盖路由模块：autonomy / maxma_blocker / memory / kb。
+"""测试 — 补充低覆盖路由模块：maxma_blocker / memory。
 
-autonomy.py: 6 个 stub 端点返回 404
 maxma_blocker.py: BlockerEntry CRUD + 标记文件管理
 memory.py: 持久化 /memory 端点与 /memories* 兼容端点
-kb.py: 7 个 stub 端点返回 503
 """
 
 from __future__ import annotations
@@ -15,55 +13,7 @@ import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from api.routes import autonomy, kb, maxma_blocker, memory
-
-
-# ── autonomy.py ──────────────────────────────────────────────
-
-
-class TestAutonomyStubs:
-    EXPECTED_DETAIL = "Autonomous Scout schedules are unavailable — OMP replaces autonomy"
-
-    def _client(self) -> TestClient:
-        app = FastAPI()
-        app.include_router(autonomy.router)
-        return TestClient(app)
-
-    def test_list_schedules_returns_404(self):
-        with self._client() as c:
-            resp = c.get("/autonomy/schedules")
-        assert resp.status_code == 404
-        assert resp.json()["detail"] == self.EXPECTED_DETAIL
-
-    def test_create_schedule_returns_404(self):
-        with self._client() as c:
-            resp = c.post("/autonomy/schedules")
-        assert resp.status_code == 404
-        assert resp.json()["detail"] == self.EXPECTED_DETAIL
-
-    def test_get_schedule_returns_404(self):
-        with self._client() as c:
-            resp = c.get("/autonomy/schedules/s1")
-        assert resp.status_code == 404
-        assert resp.json()["detail"] == self.EXPECTED_DETAIL
-
-    def test_pause_schedule_returns_404(self):
-        with self._client() as c:
-            resp = c.post("/autonomy/schedules/s1/pause")
-        assert resp.status_code == 404
-        assert resp.json()["detail"] == self.EXPECTED_DETAIL
-
-    def test_resume_schedule_returns_404(self):
-        with self._client() as c:
-            resp = c.post("/autonomy/schedules/s1/resume")
-        assert resp.status_code == 404
-        assert resp.json()["detail"] == self.EXPECTED_DETAIL
-
-    def test_delete_schedule_returns_404(self):
-        with self._client() as c:
-            resp = c.delete("/autonomy/schedules/s1")
-        assert resp.status_code == 404
-        assert resp.json()["detail"] == self.EXPECTED_DETAIL
+from api.routes import maxma_blocker, memory
 
 
 # ── memory.py ────────────────────────────────────────────────
@@ -173,107 +123,6 @@ class TestMemoryRoutes:
         assert resp.status_code == 503
 
 
-class TestMemoryStubs:
-    """The 13 /memories* + /narrative + /moment stubs must return 503.
-
-    These back compatibility routes whose memory/ implementation was removed;
-    OMP owns recall/reflect/retain now. Tests lock in the 503 contract so
-    accidental re-wiring is caught.
-    """
-
-    _DETAIL = "记忆功能不可用（memory/ 包已移除）"
-    _EPISODIC = "情景记忆功能不可用（memory/ 包已移除）"
-    _SEMANTIC = "语义记忆功能不可用（memory/ 包已移除）"
-
-    def _client(self) -> TestClient:
-        app = FastAPI()
-        app.include_router(memory.router)
-        return TestClient(app)
-
-    @pytest.mark.parametrize(
-        ("method", "path", "detail"),
-        [
-            ("GET", "/narrative", _DETAIL),
-            ("GET", "/memories", _DETAIL),
-            ("GET", "/memories/expired", _DETAIL),
-            ("PUT", "/memories/m1", _DETAIL),
-            ("POST", "/memories/purge", _DETAIL),
-            ("GET", "/moment", _DETAIL),
-            ("GET", "/memories/episodic", _EPISODIC),
-            ("POST", "/memories/episodic", _EPISODIC),
-            ("DELETE", "/memories/episodic/ep1", _EPISODIC),
-            ("GET", "/memories/semantic", _SEMANTIC),
-            ("POST", "/memories/semantic", _SEMANTIC),
-            ("DELETE", "/memories/semantic/f1", _SEMANTIC),
-            ("POST", "/memories/search", _DETAIL),
-        ],
-    )
-    def test_stub_returns_503(self, method, path, detail):
-        with self._client() as c:
-            if method == "GET":
-                resp = c.get(path)
-            elif method == "POST":
-                resp = c.post(path)
-            elif method == "PUT":
-                resp = c.put(path)
-            else:
-                resp = c.delete(path)
-        assert resp.status_code == 503
-        assert resp.json()["detail"] == detail
-
-
-# ── kb.py ────────────────────────────────────────────────────
-
-
-class TestKbStubs:
-    EXPECTED_DETAIL = "知识库功能不可用（memory/ 包已移除）"
-
-    def _client(self) -> TestClient:
-        app = FastAPI()
-        app.include_router(kb.router)
-        return TestClient(app)
-
-    def test_list_documents_returns_503(self):
-        with self._client() as c:
-            resp = c.get("/kb/documents")
-        assert resp.status_code == 503
-        assert resp.json()["detail"] == self.EXPECTED_DETAIL
-
-    def test_get_document_returns_503(self):
-        with self._client() as c:
-            resp = c.get("/kb/documents/d1")
-        assert resp.status_code == 503
-        assert resp.json()["detail"] == self.EXPECTED_DETAIL
-
-    def test_delete_document_returns_503(self):
-        with self._client() as c:
-            resp = c.delete("/kb/documents/d1")
-        assert resp.status_code == 503
-        assert resp.json()["detail"] == self.EXPECTED_DETAIL
-
-    def test_upload_document_returns_503(self):
-        with self._client() as c:
-            resp = c.post("/kb/documents")
-        assert resp.status_code == 503
-        assert resp.json()["detail"] == self.EXPECTED_DETAIL
-
-    def test_index_text_returns_503(self):
-        with self._client() as c:
-            resp = c.post("/kb/documents/text")
-        assert resp.status_code == 503
-        assert resp.json()["detail"] == self.EXPECTED_DETAIL
-
-    def test_import_url_returns_503(self):
-        with self._client() as c:
-            resp = c.post("/kb/documents/url")
-        assert resp.status_code == 503
-        assert resp.json()["detail"] == self.EXPECTED_DETAIL
-
-    def test_search_kb_returns_503(self):
-        with self._client() as c:
-            resp = c.post("/kb/search")
-        assert resp.status_code == 503
-        assert resp.json()["detail"] == self.EXPECTED_DETAIL
 
 
 # ── maxma_blocker.py ─────────────────────────────────────────

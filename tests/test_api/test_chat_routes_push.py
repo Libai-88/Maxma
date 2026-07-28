@@ -64,7 +64,7 @@ def _build_ws_session_mgr(handlers, *, sidecar_session_id=None):
 
 def _patch_session_map(sidecar_id=None, recent_turns=None,
                        append_turn_raises=False, remove_raises=False):
-    """Patch chat_mod.SessionMap 为返回固定 mock 实例的 factory。
+    """Patch chat_mod.get_session_map 为返回固定 mock 实例的 factory。
 
     返回 mock 实例（可用于断言）。
     """
@@ -81,7 +81,7 @@ def _patch_session_map(sidecar_id=None, recent_turns=None,
 
     mock_instance.set_mapping = MagicMock()
     mock_instance.remove = MagicMock() if not remove_raises else mock_instance.remove
-    return patch("api.routes.chat.SessionMap", return_value=mock_instance), mock_instance
+    return patch("api.routes.chat.get_session_map", return_value=mock_instance), mock_instance
 
 
 # ---------------------------------------------------------------------------
@@ -259,7 +259,7 @@ class TestPastTurnsRestore:
 
         captured_create_params = {}
 
-        with patch("api.routes.chat.SessionMap", return_value=mock_instance):
+        with patch("api.routes.chat.get_session_map", return_value=mock_instance):
             async def mock_call(method, params=None, **kwargs):
                 if method == "create_session":
                     captured_create_params.update(params)
@@ -521,7 +521,7 @@ class TestAppendTurnException:
         mock_sm.set_mapping = MagicMock()
         mock_sm.remove = MagicMock()
         mock_sm.append_turn.side_effect = RuntimeError("db locked")
-        monkeypatch.setattr(chat_mod, "SessionMap", lambda *a, **k: mock_sm)
+        monkeypatch.setattr(chat_mod, "get_session_map", lambda: mock_sm)
 
         app = FastAPI()
         app.state.session_manager = _FakeChatSessionManager()

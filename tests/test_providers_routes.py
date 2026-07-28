@@ -61,19 +61,13 @@ def _write_yaml(yaml_path, providers):
 
 class TestListProviders:
     def test_list_fallback_when_yaml_missing(self, client, yaml_path):
-        """yaml 文件不存在时返回硬编码默认列表（向后兼容）。"""
+        """yaml 文件不存在时返回空列表（默认 provider fallback 已移除）。"""
         assert not yaml_path.exists()
         resp = client.get("/providers")
         assert resp.status_code == 200
         providers = resp.json()["providers"]
-        ids = [p["id"] for p in providers]
-        # 现有测试 test_api/test_providers_routes.py 期望的 6 个核心 provider
-        for expected in ("openai", "anthropic", "deepseek", "google", "openrouter", "ollama"):
-            assert expected in ids, f"missing default provider: {expected}"
-        for p in providers:
-            assert "label" in p
-            assert "models" in p and isinstance(p["models"], list)
-            assert "context_window" in p and p["context_window"] > 0
+        # 默认 provider fallback 已移除，见 providers.py list_providers 注释
+        assert providers == []
 
     def test_list_returns_yaml_data_when_present(self, client, yaml_path):
         """yaml 有数据时返回 yaml 内容，不返回硬编码默认。"""
@@ -100,18 +94,13 @@ class TestListProviders:
         assert providers[0]["label"] == "Custom"
 
     def test_list_fallback_when_yaml_empty(self, client, yaml_path):
-        """yaml 存在但 providers 为空列表时也 fallback 到硬编码默认（保留现有行为）。
-
-        任务约束：yaml 不存在或 providers 为空均返回硬编码默认列表，保证首次运行
-        和清空场景下前端 ChatInput 仍能看到可用 provider。
-        """
+        """yaml 存在但 providers 为空列表时返回空列表。"""
         _write_yaml(yaml_path, [])
         resp = client.get("/providers")
         assert resp.status_code == 200
         providers = resp.json()["providers"]
-        assert len(providers) > 0
-        ids = [p["id"] for p in providers]
-        assert "openai" in ids  # fallback 生效
+        # 默认 provider fallback 已移除，空列表就是空
+        assert providers == []
 
 
 # ═══════════════════════════════════════════════════════════════════════

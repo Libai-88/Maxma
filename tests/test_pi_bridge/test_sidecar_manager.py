@@ -17,6 +17,7 @@ async def test_stop_logs_debug_when_stderr_task_cancelled(caplog):
     mgr._client = None
     mgr._process = None
     mgr._stderr_task = None
+    mgr._heartbeat_task = None
 
     # Set up a real stderr task that will be cancelled
     async def mock_stderr_forward():

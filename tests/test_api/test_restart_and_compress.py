@@ -96,7 +96,7 @@ class TestSessionCompress:
         # patch the symbol on that module so `with SessionMap() as sm:` resolves
         # to the fake and returns a non-empty sidecar session ID.
         monkeypatch.setattr(
-            "api.routes.session_compress.SessionMap", _FakeSessionMap
+            "api.routes.session_compress.get_session_map", _FakeSessionMap
         )
         app.include_router(compress_router)
         return TestClient(app)

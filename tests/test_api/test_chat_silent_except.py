@@ -47,7 +47,7 @@ def _setup_mocks(handlers, ws_send_func=None):
 
 
 def _patch_session_map():
-    """Patch SessionMap so get_sidecar_id returns None (forces create_session path)."""
+    """Patch get_session_map so get_sidecar_id returns None (forces create_session path)."""
     mock_instance = MagicMock()
     mock_instance.__enter__ = MagicMock(return_value=mock_instance)
     mock_instance.__exit__ = MagicMock(return_value=False)
@@ -55,7 +55,7 @@ def _patch_session_map():
     mock_instance.get_recent_turns.return_value = []
     mock_instance.remove = MagicMock()
     mock_instance.set_mapping = MagicMock()
-    return patch("api.routes.chat.SessionMap", return_value=mock_instance)
+    return patch("api.routes.chat.get_session_map", return_value=mock_instance)
 
 
 @pytest.mark.asyncio

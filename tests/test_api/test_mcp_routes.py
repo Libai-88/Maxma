@@ -379,7 +379,14 @@ class TestDeleteServer:
 
 
 class TestDiscoveredAndReload:
-    def test_discovered_returns_list(self, app_client):
+    def test_discovered_returns_list(self, app_client, monkeypatch):
+        from unittest.mock import AsyncMock, MagicMock
+        mock_client = MagicMock()
+        mock_client.call = AsyncMock(return_value=[{"id": "amap"}, {"id": "filesystem"}])
+        mock_mgr = MagicMock()
+        mock_mgr.start = AsyncMock()
+        mock_mgr.client = mock_client
+        app_client.app.state.sidecar_manager = mock_mgr
         resp = app_client.get("/mcp/discovered")
         assert resp.status_code == 200
         ids = [s["id"] for s in resp.json()]

@@ -19,7 +19,7 @@ vi.mock('@/api', () => ({
   api: { listWorkflowDefinitions, listWorkflowRuns, startWorkflow, cancelWorkflowRun, resumeWorkflowRun },
 }))
 
-import WorkflowCard from '@/components/WorkflowCard.vue'
+import WorkflowCard, { __resetWorkflowsLock } from '@/components/WorkflowCard.vue'
 
 const runningRun = {
   run_id: 'workflow-run-1',
@@ -41,6 +41,7 @@ describe('WorkflowCard', () => {
     startWorkflow.mockReset()
     cancelWorkflowRun.mockReset()
     resumeWorkflowRun.mockReset()
+    __resetWorkflowsLock()
   })
 
   it('stays hidden when workflows are disabled by the server', async () => {

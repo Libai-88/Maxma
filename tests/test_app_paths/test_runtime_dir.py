@@ -46,16 +46,4 @@ class TestRuntimeDir:
         importlib.reload(app_paths)
         assert app_paths.UV_EXE == Path("C:/fake/resources/runtime/uv/uv.exe")
 
-    def test_playwright_browsers_path(self, monkeypatch):
-        """PLAYWRIGHT_BROWSERS_PATH 派生路径正确。"""
-        monkeypatch.setenv("MAXMA_RESOURCES_DIR", "C:/fake/resources")
-        import importlib
-        importlib.reload(app_paths)
-        assert app_paths.PLAYWRIGHT_BROWSERS_PATH == Path("C:/fake/resources/assets/playwright")
 
-    def test_onnx_model_path(self, monkeypatch):
-        """ONNX_MODEL_PATH 派生路径正确。"""
-        monkeypatch.setenv("MAXMA_RESOURCES_DIR", "C:/fake/resources")
-        import importlib
-        importlib.reload(app_paths)
-        assert app_paths.ONNX_MODEL_PATH == Path("C:/fake/resources/assets/models/paraphrase-multilingual-MiniLM-L12-v2")

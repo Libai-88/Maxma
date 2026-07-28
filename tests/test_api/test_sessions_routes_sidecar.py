@@ -102,11 +102,11 @@ def _make_session_map_mock(sidecar_id=None, recent_turns=None):
 
 
 def _patch_session_map(monkeypatch, sidecar_id=None, recent_turns=None):
-    """patch api.pi_bridge.session_adapter.SessionMap 返回 mock 实例。"""
+    """patch api.pi_bridge.session_adapter.get_session_map 返回 mock 实例。"""
     inst = _make_session_map_mock(sidecar_id=sidecar_id, recent_turns=recent_turns)
     monkeypatch.setattr(
-        "api.pi_bridge.session_adapter.SessionMap",
-        lambda *a, **k: inst,
+        "api.pi_bridge.session_adapter.get_session_map",
+        lambda: inst,
     )
     return inst
 

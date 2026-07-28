@@ -23,22 +23,9 @@ def test_list_providers_returns_all(tmp_path, monkeypatch):
     assert resp.status_code == 200
     body = resp.json()
     assert "providers" in body
-    providers = body["providers"]
-    ids = [p["id"] for p in providers]
-    # 至少包含核心 provider
-    assert "openai" in ids
-    assert "anthropic" in ids
-    assert "deepseek" in ids
-    assert "google" in ids
-    assert "openrouter" in ids
-    assert "ollama" in ids
-    # 每个 provider 必要字段
-    for p in providers:
-        assert "label" in p
-        assert "models" in p
-        assert isinstance(p["models"], list)
-        assert "context_window" in p
-        assert p["context_window"] > 0
+    # yaml 不存在时默认 provider fallback 已移除，返回空列表
+    # 见 providers.py list_providers 注释
+    assert body["providers"] == []
 
 
 def test_list_providers_count_consistent(tmp_path, monkeypatch):

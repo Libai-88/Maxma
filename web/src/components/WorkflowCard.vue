@@ -64,6 +64,10 @@
 // 在控制台留下两条 404 噪音。置于此普通 script 块（而非 script setup）
 // 是为了让状态跨组件实例/重挂载共享——setup 内的顶层声明是实例级的。
 let workflowsUnavailable = false
+
+// 测试专用：vitest 在每个 test 文件内共享模块状态，不加重置机制
+// 则第一个设置锁存的测试会导致同文件后序测试全部跳过。
+export function __resetWorkflowsLock() { workflowsUnavailable = false }
 </script>
 
 <script setup lang="ts">
