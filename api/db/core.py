@@ -30,7 +30,7 @@ DB_PATH = DB_DIR / "maxma.db"
 
 # ── Schema 迁移 ──────────────────────────────────────────
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 5
 
 
 def _migrate_v3_add_priority(conn: sqlite3.Connection) -> None:
@@ -145,6 +145,73 @@ SCHEMA_MIGRATIONS: list[str | Any] = [
     # v3: 阶段 3.3 — providers 表新增 priority 列（用于 fallback 排序）
     # 幂等实现：先检查列是否已存在，避免崩溃重启后重复 ALTER TABLE 报错
     _migrate_v3_add_priority,
+    # v4: 自动化调度器 — automations + automation_run_history 表
+    """
+    CREATE TABLE IF NOT EXISTS automations (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        cron_expr TEXT,
+        interval_seconds INTEGER,
+        action TEXT NOT NULL DEFAULT '{}',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        last_run TEXT,
+        next_run TEXT,
+        run_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS automation_run_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        automation_id TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        finished_at TEXT,
+        status TEXT NOT NULL DEFAULT 'running',
+        result TEXT,
+        FOREIGN KEY (automation_id) REFERENCES automations(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_automation_history_automation_id
+        ON automation_run_history(automation_id, started_at DESC);
+
+    INSERT OR IGNORE INTO schema_version (version, applied_at)
+    VALUES (4, julianday('now'));
+    """,
+    # v5: 协作功能 — collab_shares + collab_snapshots 表
+    """
+    CREATE TABLE IF NOT EXISTS collab_shares (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        share_url TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        expires_at TEXT,
+        revoked INTEGER NOT NULL DEFAULT 0,
+        permission TEXT NOT NULL DEFAULT 'read',
+        created_by TEXT NOT NULL DEFAULT 'current_user',
+        password_protected INTEGER NOT NULL DEFAULT 0,
+        access_count INTEGER NOT NULL DEFAULT 0,
+        max_access INTEGER
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_collab_shares_session
+        ON collab_shares(session_id);
+
+    CREATE TABLE IF NOT EXISTS collab_snapshots (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        title TEXT NOT NULL DEFAULT '',
+        content TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        turn_count INTEGER NOT NULL DEFAULT 0,
+        context_usage TEXT NOT NULL DEFAULT '{}'
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_collab_snapshots_session
+        ON collab_snapshots(session_id);
+
+    INSERT OR IGNORE INTO schema_version (version, applied_at)
+    VALUES (5, julianday('now'));
+    """,
 ]
 
 
