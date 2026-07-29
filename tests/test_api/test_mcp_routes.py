@@ -546,3 +546,72 @@ class TestStdioCommandWhitelist:
             json={"description": "updated"},
         )
         assert resp.status_code == 200
+
+
+class TestOAuthFlow:
+    """OAuth 授权流回归：动态 redirect_uri + GET 浏览器回调 + state 校验。"""
+
+    def test_authorize_builds_dynamic_redirect_uri(self, app_client):
+        resp = app_client.post(
+            "/mcp/oauth/authorize",
+            json={"server_name": "foo", "auth_endpoint": "https://ex.com/auth"},
+        )
+        assert resp.status_code == 200
+        state = resp.json()["state"]
+        redirect_uri = mcp_mod._oauth_pending_states[state]["redirect_uri"]
+        # 不再硬编码 17321 端口，改用请求 base_url
+        assert "17321" not in redirect_uri
+        assert redirect_uri.endswith("/api/mcp/oauth/callback")
+
+    def test_get_callback_invalid_state_returns_400_html(self, app_client):
+        resp = app_client.get(
+            "/mcp/oauth/callback",
+            params={"code": "x", "state": "bogus"},
+        )
+        assert resp.status_code == 400
+        assert "text/html" in resp.headers.get("content-type", "")
+
+    def test_post_callback_invalid_state_400(self, app_client):
+        resp = app_client.post(
+            "/mcp/oauth/callback",
+            json={"code": "x", "state": "bogus"},
+        )
+        assert resp.status_code == 400
+
+    def test_get_callback_success_exchanges_and_stores_token(self, app_client, monkeypatch):
+        from unittest.mock import AsyncMock, MagicMock
+
+        # 先 authorize 拿到合法 state
+        auth = app_client.post(
+            "/mcp/oauth/authorize",
+            json={"server_name": "foo", "auth_endpoint": "https://ex.com/auth"},
+        )
+        state = auth.json()["state"]
+
+        # mock token 端点返回
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json = MagicMock(return_value={
+            "access_token": "AT", "refresh_token": "RT",
+            "token_type": "Bearer", "expires_in": 3600, "scope": "read",
+        })
+        mock_client = MagicMock()
+        mock_client.post = AsyncMock(return_value=mock_resp)
+        mock_ctx = MagicMock()
+        mock_ctx.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_ctx.__aexit__ = AsyncMock(return_value=False)
+        monkeypatch.setattr(mcp_mod.httpx, "AsyncClient", lambda *a, **k: mock_ctx)
+
+        stored = {}
+        monkeypatch.setattr(mcp_mod, "_load_oauth_tokens", lambda: stored)
+        monkeypatch.setattr(mcp_mod, "_save_oauth_tokens", lambda t: stored.update(t))
+
+        resp = app_client.get(
+            "/mcp/oauth/callback",
+            params={"code": "realcode", "state": state},
+        )
+        assert resp.status_code == 200
+        assert "text/html" in resp.headers.get("content-type", "")
+        assert stored["foo"]["access_token"] == "AT"
+        # state 应被消费
+        assert state not in mcp_mod._oauth_pending_states

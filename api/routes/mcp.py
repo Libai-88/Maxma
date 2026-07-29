@@ -7,7 +7,7 @@ import secrets
 from pathlib import Path
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from app_paths import MCP_CONFIG_PATH, API_DATA_DIR
@@ -754,8 +754,10 @@ async def mcp_oauth_authorize(body: OAuthAuthorizeBody, request: Request):
     # 生成随机 state
     state = secrets.token_urlsafe(32)
 
-    # 确定 redirect_uri
-    redirect_uri = body.redirect_uri or f"http://localhost:17321/api/mcp/oauth/callback"
+    # 确定 redirect_uri：默认使用本次请求的实际 base_url（含运行时端口），
+    # 避免硬编码端口与真实监听端口不一致导致回调无法送达。
+    default_redirect = str(request.base_url).rstrip("/") + "/api/mcp/oauth/callback"
+    redirect_uri = body.redirect_uri or default_redirect
 
     # 确定授权端点（可从 registry 或自定义）
     auth_endpoint = body.auth_endpoint or ""
@@ -817,25 +819,27 @@ class OAuthCallbackBody(BaseModel):
     server_name: str | None = None
 
 
-@router.post("/mcp/oauth/callback")
-async def mcp_oauth_callback(body: OAuthCallbackBody):
-    """处理 OAuth 回调，用 authorization code 换取 access token。"""
-    # 验证 state
-    pending = _oauth_pending_states.get(body.state)
+async def _exchange_oauth_code(code: str, state: str, server_name_override: str | None = None) -> dict:
+    """用 authorization code 换取 access token 并持久化。
+
+    验证 state（防 CSRF），调用 token 端点交换，存储 token，清除已用 state。
+    成功返回结构化结果字典；失败抛 HTTPException。
+    供 POST（前端手动提交）与 GET（浏览器重定向）两个回调入口共用。
+    """
+    pending = _oauth_pending_states.get(state)
     if not pending:
         raise HTTPException(status_code=400, detail="无效或已过期的 state 参数")
 
-    server_name = body.server_name or pending["server_name"]
+    server_name = server_name_override or pending["server_name"]
     client_id = pending["client_id"]
     redirect_uri = pending["redirect_uri"]
 
-    # 用 code 换 token
-    token_endpoint = f"https://auth.smithery.ai/token"
+    token_endpoint = "https://auth.smithery.ai/token"
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(token_endpoint, json={
                 "grant_type": "authorization_code",
-                "code": body.code,
+                "code": code,
                 "client_id": client_id,
                 "redirect_uri": redirect_uri,
             })
@@ -848,7 +852,6 @@ async def mcp_oauth_callback(body: OAuthCallbackBody):
         logger.warning("[mcp-oauth] Token exchange error for %s: %s", server_name, e)
         raise HTTPException(status_code=502, detail=f"Token 交换失败: {e}")
 
-    # 存储 token
     tokens = _load_oauth_tokens()
     tokens[server_name] = {
         "access_token": token_data.get("access_token", ""),
@@ -860,8 +863,7 @@ async def mcp_oauth_callback(body: OAuthCallbackBody):
     }
     _save_oauth_tokens(tokens)
 
-    # 清除已使用的 state
-    _oauth_pending_states.pop(body.state, None)
+    _oauth_pending_states.pop(state, None)
 
     logger.info("[mcp-oauth] OAuth authorized for server: %s", server_name)
     return {
@@ -870,6 +872,47 @@ async def mcp_oauth_callback(body: OAuthCallbackBody):
         "token_type": token_data.get("token_type", "Bearer"),
         "expires_in": token_data.get("expires_in", 3600),
     }
+
+
+@router.post("/mcp/oauth/callback")
+async def mcp_oauth_callback(body: OAuthCallbackBody):
+    """处理 OAuth 回调（前端手动 POST code+state），换取 access token。"""
+    return await _exchange_oauth_code(body.code, body.state, body.server_name)
+
+
+@router.get("/mcp/oauth/callback")
+async def mcp_oauth_callback_redirect(
+    code: str = Query(..., description="授权码"),
+    state: str = Query(..., description="CSRF state"),
+    server_name: str | None = Query(None),
+):
+    """处理 OAuth 提供商的浏览器重定向（GET ?code=&state=）。
+
+    OAuth provider 授权后以 GET 重定向回 redirect_uri，浏览器无法发送
+    JSON body，故此端点从 query 参数取 code/state，服务端完成 token 交换，
+    返回一个提示用户关闭窗口的 HTML 页面。前端轮询 status 端点即可感知授权完成。
+    """
+    from fastapi.responses import HTMLResponse
+
+    try:
+        await _exchange_oauth_code(code, state, server_name)
+        message = "授权成功，请关闭此窗口返回应用。"
+        ok = True
+    except HTTPException as e:
+        message = f"授权失败：{e.detail}"
+        ok = False
+
+    color = "#22c55e" if ok else "#ef4444"
+    html = f"""<!DOCTYPE html>
+<html lang="zh"><head><meta charset="utf-8"><title>MCP OAuth</title></head>
+<body style="font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f0f0f;color:#e5e5e5">
+<div style="text-align:center">
+<div style="font-size:48px;color:{color}">{'✓' if ok else '✕'}</div>
+<p style="font-size:16px">{message}</p>
+</div>
+<script>setTimeout(function(){{window.close()}},2500)</script>
+</body></html>"""
+    return HTMLResponse(content=html, status_code=200 if ok else 400)
 
 
 @router.get("/mcp/oauth/status/{server_name:path}")

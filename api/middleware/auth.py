@@ -36,6 +36,17 @@ class AuthMiddleware:
         if path == "/api/health" or path == "/api/auth/token":
             return await self.app(scope, receive, send)
 
+        # OAuth 提供商的浏览器重定向回调（GET）无法携带自定义 Token 头，
+        # 必须放行。安全性由 state 参数保证：state 是 CSRF 随机令牌，
+        # 必须匹配服务端暂存的 pending state，否则 token 交换直接 400。
+        # 仅放行 GET（前端手动提交的 POST /callback 仍需鉴权）。
+        if (
+            path == "/api/mcp/oauth/callback"
+            and scope.get("type") == "http"
+            and scope.get("method", "").upper() == "GET"
+        ):
+            return await self.app(scope, receive, send)
+
         # 表情包静态资源（img 标签无法携带自定义头）仅放行 GET/HEAD 读操作。
         # 仅放行真正的图片资源路径（/api/stickers/{category}/{filename}）和
         # 随机表情路径（/api/stickers/random/{category}，前端 useChat 用裸
