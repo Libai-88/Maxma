@@ -3,14 +3,17 @@
 在目标目录中创建/删除 MaxmaBlocker 标记文件，
 并持久化跟踪列表到 maxma_blocker.yaml。"""
 
+import logging
 import os
 from pathlib import Path
 
 import yaml
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from app_paths import MAXMA_BLOCKER_YAML_PATH
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -101,3 +104,53 @@ async def delete_blocker(index: int):
     _remove_marker(removed["path"])
     _save(entries)
     return {"status": "ok", "removed": removed}
+
+
+def _find_blocker_path(path: str) -> str | None:
+    """查找路径或其父目录中的 .maxma_blocker 标记，返回拒止锚所在目录。
+
+    路径解析失败时返回 path 本身（fail-closed：视为存在 blocker），
+    与安全适配器保持一致的失败闭合语义，避免解析异常导致安全绕过。
+
+    Returns:
+        拒止锚所在目录的字符串路径，或 None（未发现 blocker）。
+    """
+    # NUL 字节是路径注入向量，显式拒绝（不依赖 resolve 的平台相关行为）
+    if "\x00" in path:
+        logger.warning("[security] 路径包含 NUL 字节（fail-closed）: %r", path)
+        return str(path)
+    try:
+        p = Path(path).resolve(strict=False)
+    except (OSError, ValueError) as exc:
+        logger.warning("[security] 路径解析失败（fail-closed）%s: %s", path, exc)
+        return str(path)
+    for parent in [p, *p.parents]:
+        if (parent / BLOCKER_FILENAME).exists():
+            logger.warning("[security] MaxmaBlocker found at %s", parent)
+            return str(parent)
+    return None
+
+
+@router.get("/check-path-blocked")
+async def check_path_blocked(path: str = Query(..., description="要检查的路径")):
+    """检查路径是否被 MaxmaBlocker 拒止锚阻挡（供前端附件气泡标红）。
+
+    向上遍历目标路径及其所有父目录查找 .maxma_blocker 标记文件。
+
+    Returns:
+        - ``blocked``: 是否被阻挡
+        - ``reason``: 阻挡原因（仅 blocked=True 时有值）
+        - ``blocker_path``: 拒止锚所在目录（仅 blocked=True 时有值）
+    """
+    blocker_path = _find_blocker_path(path)
+    if blocker_path is not None:
+        return {
+            "blocked": True,
+            "reason": f"路径包含 MaxmaBlocker 拒止锚: {blocker_path}",
+            "blocker_path": blocker_path,
+        }
+    return {
+        "blocked": False,
+        "reason": None,
+        "blocker_path": None,
+    }

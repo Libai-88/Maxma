@@ -282,3 +282,49 @@ class TestMaxmaBlockerRoutes:
         with self._client() as c:
             resp = c.delete("/maxma-blocker/-1")
         assert resp.status_code == 404
+
+
+class TestCheckPathBlocked:
+    def _client(self) -> TestClient:
+        app = FastAPI()
+        app.include_router(maxma_blocker.router)
+        return TestClient(app)
+
+    def test_unblocked_path_returns_false(self, tmp_path: Path):
+        with self._client() as c:
+            resp = c.get("/check-path-blocked", params={"path": str(tmp_path)})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["blocked"] is False
+        assert body["reason"] is None
+        assert body["blocker_path"] is None
+
+    def test_path_with_marker_returns_blocked(self, tmp_path: Path):
+        (tmp_path / ".maxma_blocker").write_text("", encoding="utf-8")
+        with self._client() as c:
+            resp = c.get("/check-path-blocked", params={"path": str(tmp_path)})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["blocked"] is True
+        assert body["blocker_path"] is not None
+        assert "MaxmaBlocker" in body["reason"]
+
+    def test_parent_marker_blocks_child(self, tmp_path: Path):
+        (tmp_path / ".maxma_blocker").write_text("", encoding="utf-8")
+        child = tmp_path / "sub" / "deep"
+        child.mkdir(parents=True)
+        with self._client() as c:
+            resp = c.get("/check-path-blocked", params={"path": str(child)})
+        assert resp.status_code == 200
+        assert resp.json()["blocked"] is True
+
+    def test_nul_byte_fail_closed(self):
+        with self._client() as c:
+            resp = c.get("/check-path-blocked", params={"path": "a\x00b"})
+        assert resp.status_code == 200
+        assert resp.json()["blocked"] is True
+
+    def test_missing_path_param_422(self):
+        with self._client() as c:
+            resp = c.get("/check-path-blocked")
+        assert resp.status_code == 422
