@@ -18,15 +18,70 @@ import json
 import logging
 import os
 import tempfile
-from typing import Any
+import threading
+from contextlib import contextmanager
+from typing import Any, Iterator
 
-import portalocker
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app_paths import API_DATA_DIR
 
 logger = logging.getLogger(__name__)
+
+# portalocker 在 Windows 上需要 pywin32 的 C 扩展（pywintypes），
+# 如果缺失则运行时崩溃。延迟检测并提供 fallback。
+_portalocker_available: bool | None = None
+_panel_locks: dict[str, threading.Lock] = {}
+_panel_locks_guard = threading.Lock()
+
+
+def _get_panel_lock(path_str: str) -> threading.Lock:
+    """获取或创建指定路径对应的进程内锁。"""
+    with _panel_locks_guard:
+        lock = _panel_locks.get(path_str)
+        if lock is None:
+            lock = threading.Lock()
+            _panel_locks[path_str] = lock
+        return lock
+
+
+@contextmanager
+def _fallback_lock(path: str, timeout: int = 5) -> Iterator[None]:
+    """文件锁兜底实现：优先使用 portalocker，不可用时退化为 threading.Lock。"""
+    global _portalocker_available
+    if _portalocker_available is None:
+        try:
+            import portalocker
+            # 运行时验证 portalocker 是否真正可用（pywintypes 是否就绪）
+            with tempfile.NamedTemporaryFile(suffix=".lock", delete=False) as f:
+                test_path = f.name
+            try:
+                with portalocker.Lock(test_path, timeout=1):
+                    pass
+                _portalocker_available = True
+            except Exception:
+                _portalocker_available = False
+            finally:
+                try:
+                    os.unlink(test_path)
+                except OSError:
+                    pass
+        except ImportError:
+            _portalocker_available = False
+
+    if _portalocker_available:
+        import portalocker
+        with portalocker.Lock(path, timeout=timeout):
+            yield
+    else:
+        # portalocker 不可用时退化为进程内锁
+        lock = _get_panel_lock(path)
+        lock.acquire()
+        try:
+            yield
+        finally:
+            lock.release()
 
 router = APIRouter()
 
@@ -159,7 +214,7 @@ def _save_all(data: dict[str, Any]) -> None:
 
 def _get_panel(panel: str) -> dict[str, Any]:
     """读取单个面板配置，与默认值合并以保证字段完整。"""
-    with portalocker.Lock(str(LOCK_PATH), timeout=5):
+    with _fallback_lock(str(LOCK_PATH)):
         stored = _load_all().get(panel, {})
     if not isinstance(stored, dict):
         stored = {}
@@ -172,7 +227,7 @@ def _put_panel(panel: str, updates: dict[str, Any]) -> dict[str, Any]:
     """合并写入单个面板配置（仅覆盖提供的字段），返回合并后的完整配置。"""
     # 过滤掉 None（未提供的字段保持原值）
     patch = {k: v for k, v in updates.items() if v is not None}
-    with portalocker.Lock(str(LOCK_PATH), timeout=5):
+    with _fallback_lock(str(LOCK_PATH)):
         all_data = _load_all()
         current = all_data.get(panel, {})
         if not isinstance(current, dict):

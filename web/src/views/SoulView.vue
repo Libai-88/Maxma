@@ -260,7 +260,7 @@ async function doCreate() {
     await onPersonaChange()
   } catch (e: unknown) {
     log.error('[SoulView] createPersona FAIL', e)
-    alert('创建失败: ' + (e instanceof Error ? e.message : String(e)))
+    window.dispatchEvent(new CustomEvent('maxma:error', { detail: { message: '创建失败: ' + (e instanceof Error ? e.message : String(e)) } }))
   } finally {
     creating.value = false
   }

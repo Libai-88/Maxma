@@ -500,14 +500,32 @@ async function loadPanelConfigs() {
   catch (e) { log.warn('Failed to load sub-agent config:', e) }
 }
 
+// ── 去重：避免同一个 setting path 短时间内重复请求后端 ──
+const _inflightSettings = new Map<string, Promise<unknown>>()
+
 async function set(path: string, value: unknown) {
+  // 同一个 path 的请求尚未完成时，合并请求（以最后一次 value 为准）
+  const existing = _inflightSettings.get(path)
   const prev = settings.value[path]
   settings.value[path] = value
+
+  let promise: Promise<unknown> | undefined
   try {
-    await api.setSetting(path, value)
+    if (existing) {
+      // 现有请求完成后，再发本次请求（用最新 value）
+      await existing.catch(() => {})
+    }
+    promise = api.setSetting(path, value)
+    _inflightSettings.set(path, promise)
+    await promise
   } catch (e) {
     log.error(`Failed to set ${path}:`, e)
-    settings.value[path] = prev // rollback without network roundtrip
+    settings.value[path] = prev
+  } finally {
+    // 清除本 path 的在途标记，确保下一次同类请求能正常发起
+    if (promise && _inflightSettings.get(path) === promise) {
+      _inflightSettings.delete(path)
+    }
   }
 }
 

@@ -66,7 +66,7 @@ export function useAutocomplete(options: UseAutocompleteOptions) {
   async function loadTools() {
     try {
       const res = await api.listTools()
-      tools.value = res.tools
+      tools.value = Array.isArray(res) ? res : []
     } catch (e) {
       log.error('加载工具失败:', e)
     }

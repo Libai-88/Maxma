@@ -1,0 +1,11 @@
+[
+  {
+    "timestamp": "2026-07-29T23:45:42+0800",
+    "epoch": 1785339942,
+    "type": "test",
+    "target": "manual-test",
+    "detail": "Verification test",
+    "data_size": 0,
+    "status": "ok"
+  }
+]

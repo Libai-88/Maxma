@@ -237,8 +237,8 @@ class RateLimitMiddleware:
     def __init__(
         self,
         app,
-        capacity: float = 10,
-        refill_rate: float = 0.1667,  # 10 per 60s
+        capacity: float = 30,
+        refill_rate: float = 2.0,  # 每秒 2 次，突发 30 次，防止暴力破解同时允许正常用户操作多开关
     ):
         self.app = app
         self._registry = TokenBucketRegistry(

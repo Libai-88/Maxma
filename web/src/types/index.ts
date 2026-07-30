@@ -639,7 +639,10 @@ export interface HealthResponse {
 
 export interface ToolInfo {
   name: string
+  label?: string
   description: string
+  category?: string
+  builtin?: boolean
 }
 
 export interface ListToolsResponse {

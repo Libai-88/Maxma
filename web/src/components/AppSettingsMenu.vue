@@ -72,12 +72,6 @@
               <span class="popup-item-sub">查看与管理 AI 自动记录的长期事实</span>
             </div>
           </router-link>
-          <router-link to="/memory" class="popup-item" @click="closeSettingsMenu">
-            <div class="popup-item-content">
-              <span class="popup-item-title">记忆 Memory</span>
-              <span class="popup-item-sub">查看 AI 自动记住的事实，管理长期记忆</span>
-            </div>
-          </router-link>
         </div>
         <div class="popup-section">
           <div class="popup-section-header">运维 OPERATIONS</div>
@@ -97,12 +91,6 @@
             <div class="popup-item-content">
               <span class="popup-item-title">运行指标</span>
               <span class="popup-item-sub">监控系统性能与资源使用</span>
-            </div>
-          </router-link>
-          <router-link to="/privacy" class="popup-item" @click="closeSettingsMenu">
-            <div class="popup-item-content">
-              <span class="popup-item-title">隐私与审计</span>
-              <span class="popup-item-sub">查看数据存储、审计日志与隐私仪表盘</span>
             </div>
           </router-link>
         </div>
@@ -221,10 +209,10 @@ async function handleExportErrorLog() {
       defaultFilename: filename,
     })
     if (result) {
-      alert(`错误日志已保存到:\n${result}`)
+      window.dispatchEvent(new CustomEvent('maxma:error', { detail: { message: `错误日志已保存到:\n${result}` } }))
     }
   } catch (e) {
-    alert('导出错误日志失败: ' + (e instanceof Error ? e.message : String(e)))
+    window.dispatchEvent(new CustomEvent('maxma:error', { detail: { message: '导出错误日志失败: ' + (e instanceof Error ? e.message : String(e)) } }))
   } finally {
     exportingErrorLog.value = false
   }
@@ -246,10 +234,10 @@ async function handleManageLogs() {
     })
     if (confirmClean) {
       const result = await api.clearOldLogs()
-      alert(`已清理 ${result.deleted_count ?? 0} 个旧日志文件，释放 ${(result.freed_mb ?? 0).toFixed(2)} MB 空间`)
+      window.dispatchEvent(new CustomEvent('maxma:error', { detail: { message: `已清理 ${result.deleted_count ?? 0} 个旧日志文件，释放 ${(result.freed_mb ?? 0).toFixed(2)} MB 空间` } }))
     }
   } catch (e) {
-    alert('日志管理失败: ' + (e instanceof Error ? e.message : String(e)))
+    window.dispatchEvent(new CustomEvent('maxma:error', { detail: { message: '日志管理失败: ' + (e instanceof Error ? e.message : String(e)) } }))
   } finally {
     managingLogs.value = false
   }

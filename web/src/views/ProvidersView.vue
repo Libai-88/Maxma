@@ -607,7 +607,7 @@ async function deleteProvider(id: string) {
     // 同步刷新 chatStore 的模型列表
     await chatStore.fetchAvailableModels()
   } catch (e: unknown) {
-    alert('删除失败: ' + toErrorMessage(e))
+    window.dispatchEvent(new CustomEvent('maxma:error', { detail: { message: '删除失败: ' + toErrorMessage(e) } }))
   }
 }
 
@@ -641,7 +641,7 @@ async function toggleProvider(id: string, enabled: boolean) {
     // providers 是 computed，会自动更新，无需手动修改
     await providerStore.refresh()
   } catch (e: unknown) {
-    alert('切换失败: ' + toErrorMessage(e))
+    window.dispatchEvent(new CustomEvent('maxma:error', { detail: { message: '切换失败: ' + toErrorMessage(e) } }))
   }
 }
 

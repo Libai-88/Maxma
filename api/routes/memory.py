@@ -14,13 +14,13 @@ import logging
 import math
 import os
 import tempfile
+import threading
 from collections.abc import Mapping
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
-import portalocker
 import yaml
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -28,6 +28,58 @@ from pydantic import BaseModel
 from app_paths import PERSONAS_DATA_DIR
 
 logger = logging.getLogger(__name__)
+
+# portalocker 在 Windows 上需要 pywin32 的 C 扩展（pywintypes），
+# 如果缺失则运行时崩溃。延迟检测并提供 fallback。
+_portalocker_available: bool | None = None
+_memory_locks: dict[str, threading.Lock] = {}
+_memory_locks_guard = threading.Lock()
+
+
+def _get_memory_lock(path_str: str) -> threading.Lock:
+    """获取或创建指定路径对应的进程内锁。"""
+    with _memory_locks_guard:
+        lock = _memory_locks.get(path_str)
+        if lock is None:
+            lock = threading.Lock()
+            _memory_locks[path_str] = lock
+        return lock
+
+
+@contextmanager
+def _file_lock(path: str, timeout: int = 5) -> Iterator[None]:
+    """文件锁兜底实现：优先使用 portalocker，不可用时退化为 threading.Lock。"""
+    global _portalocker_available
+    if _portalocker_available is None:
+        try:
+            import portalocker
+            with tempfile.NamedTemporaryFile(suffix=".lock", delete=False) as f:
+                test_path = f.name
+            try:
+                with portalocker.Lock(test_path, timeout=1):
+                    pass
+                _portalocker_available = True
+            except Exception:
+                _portalocker_available = False
+            finally:
+                try:
+                    os.unlink(test_path)
+                except OSError:
+                    pass
+        except ImportError:
+            _portalocker_available = False
+
+    if _portalocker_available:
+        import portalocker
+        with portalocker.Lock(path, timeout=timeout):
+            yield
+    else:
+        lock = _get_memory_lock(path)
+        lock.acquire()
+        try:
+            yield
+        finally:
+            lock.release()
 
 router = APIRouter()
 
@@ -59,7 +111,7 @@ def _memory_path(request: Request) -> Path:
 def _locked_memory_file(path: Path) -> Iterator[None]:
     """Serialize reads and writes with the memory file's sidecar lock."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with portalocker.Lock(str(path) + ".lock", timeout=5):
+    with _file_lock(str(path) + ".lock"):
         yield
 
 

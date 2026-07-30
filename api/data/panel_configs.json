@@ -1,0 +1,34 @@
+{
+  "hindsight": {
+    "enabled": true,
+    "retention_days": 30,
+    "importance_threshold": 0.5,
+    "processing_mode": "auto",
+    "prompt_template": ""
+  },
+  "tts": {
+    "enabled": false,
+    "provider": "openai-tts",
+    "voice": "",
+    "speed": 1.0,
+    "pitch": 1.0,
+    "auto_read": false
+  },
+  "browser_tools": {
+    "enabled": false,
+    "chrome_path": "",
+    "headless": true,
+    "viewport_width": 1280,
+    "viewport_height": 800,
+    "block_tracking": true,
+    "allowed_domains": []
+  },
+  "sub_agents": {
+    "enabled": true,
+    "max_concurrent": 3,
+    "auto_approve": false,
+    "model": "inherit",
+    "timeout_seconds": 120,
+    "show_progress": true
+  }
+}

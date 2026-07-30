@@ -6,7 +6,6 @@ import type {
   HealthResponse,
   ListProvidersResponse,
   ListNewsResponse,
-  ListToolsResponse,
   ProviderConfig,
   TestConnectionResponse,
   ProviderHealthCheckResponse,
@@ -400,8 +399,9 @@ export const api = {
   listNews: () =>
     request<ListNewsResponse>('/news'),
 
+  // 后端 GET /tools 返回裸数组 ToolInfo[]（非 {tools:[]} 包裹）。
   listTools: () =>
-    request<ListToolsResponse>('/tools'),
+    request<import('@/types').ToolInfo[]>('/tools'),
 
   // ── OMP Settings ──
 

@@ -114,10 +114,10 @@ async function exportErrorLog() {
       defaultFilename: filename,
     })
     if (result) {
-      alert(`审计日志已保存到:\n${result}`)
+      window.dispatchEvent(new CustomEvent('maxma:error', { detail: { message: `审计日志已保存到:\n${result}` } }))
     }
   } catch (e) {
-    alert('导出失败: ' + (e instanceof Error ? e.message : String(e)))
+    window.dispatchEvent(new CustomEvent('maxma:error', { detail: { message: '导出失败: ' + (e instanceof Error ? e.message : String(e)) } }))
   } finally {
     exporting.value = false
   }
