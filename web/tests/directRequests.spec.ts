@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/api', () => ({
-  api: { request: mocks.request },
+  api: { request: mocks.request, listTools: () => mocks.request('/tools') },
   getToken: mocks.getToken,
   request: mocks.request,
 }))
