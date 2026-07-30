@@ -1441,6 +1441,83 @@ if (import.meta.main) {
         return;
       }
 
+      if (method === "get_plugin_detail") {
+        try {
+          const name: string = params?.name ?? "";
+          if (!name) { sendError(id, "Missing required parameter: name"); return; }
+          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent");
+          const pm = new PluginManager();
+          const list = await pm.list();
+          const plugin = list.find((p: any) => p.name === name);
+          if (!plugin) { sendError(id, `Plugin not found: ${name}`); return; }
+          send(id, {
+            name: plugin.name ?? "",
+            version: plugin.version ?? "",
+            description: plugin.description ?? "",
+            enabled: plugin.enabled !== false,
+            features: plugin.features ?? [],
+            homepage: plugin.homepage ?? "",
+            author: plugin.author ?? "",
+            repository: plugin.repository ?? "",
+            tags: plugin.tags ?? [],
+            category: plugin.category ?? "other",
+            license: plugin.license ?? "",
+            installed_at: plugin.installed_at ?? "",
+            last_updated: plugin.last_updated ?? "",
+            readme: plugin.readme ?? "",
+            config_schema: plugin.config_schema ?? null,
+          });
+        } catch (e: any) {
+          sendError(id, `Failed to get plugin detail: ${e.message ?? String(e)}`);
+        }
+        return;
+      }
+
+      // Plugin config path: ~/.maxma/plugins_config.json
+      const pluginsConfigPath = path.join(
+        process.env.HOME || process.env.USERPROFILE || ".",
+        ".maxma",
+        "plugins_config.json",
+      );
+
+      if (method === "get_plugin_config") {
+        try {
+          const name: string = params?.name ?? "";
+          if (!name) { sendError(id, "Missing required parameter: name"); return; }
+          let config: Record<string, any> = {};
+          try {
+            const raw = fs.readFileSync(pluginsConfigPath, "utf-8");
+            const all = JSON.parse(raw);
+            config = all[name] ?? {};
+          } catch {}
+          send(id, { config });
+        } catch (e: any) {
+          sendError(id, `Failed to get plugin config: ${e.message ?? String(e)}`);
+        }
+        return;
+      }
+
+      if (method === "update_plugin_config") {
+        try {
+          const name: string = params?.name ?? "";
+          const config: Record<string, any> = params?.config ?? {};
+          if (!name) { sendError(id, "Missing required parameter: name"); return; }
+          const dir = path.dirname(pluginsConfigPath);
+          fs.mkdirSync(dir, { recursive: true });
+          let all: Record<string, any> = {};
+          try {
+            const raw = fs.readFileSync(pluginsConfigPath, "utf-8");
+            all = JSON.parse(raw);
+          } catch {}
+          all[name] = config;
+          fs.writeFileSync(pluginsConfigPath, JSON.stringify(all, null, 2), "utf-8");
+          send(id, { ok: true });
+        } catch (e: any) {
+          sendError(id, `Failed to update plugin config: ${e.message ?? String(e)}`);
+        }
+        return;
+      }
+
       sendError(id, `Unknown method: ${method}`);
     } catch (err) {
       sendError(id, String(err));

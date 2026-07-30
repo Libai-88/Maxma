@@ -108,7 +108,6 @@
             @plan-respond="sendPlanResponse"
             @pin="handlePin"
           />
-          <WorkflowCard v-if="!isSubagent" :session-id="sessionId" />
         </template>
         <WelcomeScreen v-else @start="handleQuickStart" />
 
@@ -150,7 +149,6 @@ import { api } from '@/api'
 import ChatInput from '@/components/ChatInput.vue'
 import ChatWindow from '@/components/ChatWindow.vue'
 import SessionPermissionModeControl from '@/components/SessionPermissionModeControl.vue'
-import WorkflowCard from '@/components/WorkflowCard.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import TaskTrackerBar, { type TaskTrackerData } from '@/components/TaskTrackerBar.vue'
 import WorkbenchPanel from '@/components/workbench/WorkbenchPanel.vue'

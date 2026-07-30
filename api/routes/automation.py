@@ -224,7 +224,7 @@ async def _scheduler_loop():
                 finished_at = _now_iso()
                 status = "completed"
                 result = json.dumps(
-                    {"message": "Scheduler tick — no-op execution", "action": task["action"]},
+                    {"message": "定时触发。Agent 执行待 sidecar 支持", "action": task["action"]},
                     ensure_ascii=False,
                 )
 
@@ -384,11 +384,15 @@ async def trigger_run(automation_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Automation not found")
 
     started_at = _now_iso()
-    # Simulate execution — record as completed
+    # 记录执行（实际 agent 执行待 sidecar 支持后接入）
     finished_at = _now_iso()
     status = "completed"
     result = json.dumps(
-        {"message": "Manual trigger — no-op execution", "action": existing["action"]},
+        {
+            "message": "任务已触发。Agent 执行需 sidecar 支持（研发中）",
+            "action": existing["action"],
+            "action_type": existing.get("action", {}).get("type", "unknown"),
+        },
         ensure_ascii=False,
     )
 

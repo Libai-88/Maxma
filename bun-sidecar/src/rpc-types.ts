@@ -48,7 +48,20 @@ export type RpcMethodName =
   | "get_messages"
   | "user_response"
   | "get_settings"
-  | "set_settings";
+  | "set_settings"
+  | "get_health"
+  | "reload_mcp"
+  | "compact"
+  | "get_discovered_mcp"
+  | "get_discovered_skills"
+  | "get_discovered_extensions"
+  | "list_plugins"
+  | "install_plugin"
+  | "uninstall_plugin"
+  | "set_plugin_enabled"
+  | "get_plugin_detail"
+  | "get_plugin_config"
+  | "update_plugin_config";
 
 export interface CreateSessionParams {
   model: string;
