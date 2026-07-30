@@ -196,6 +196,8 @@ export async function buildCreateSessionOptions(
   };
   if (input.systemPrompt !== undefined) createOptions.systemPrompt = input.systemPrompt;
   if (input.tools !== undefined && input.tools.length > 0) createOptions.toolNames = input.tools;
+  // Base settings: always disable advisor (OMP SDK warns on 401 even when disabled)
+  createOptions.settings = Settings.isolated({"advisor.enabled": false});
 
   const needsApproval = input.permissionMode === "ask" || input.permissionMode === "read_only";
   createOptions.autoApprove = !needsApproval;
@@ -206,7 +208,7 @@ export async function buildCreateSessionOptions(
     const globalPaths = [
       "compaction.enabled", "compaction.strategy", "compaction.thresholdPercent",
       "retry.enabled", "retry.maxRetries", "retry.modelFallback",
-      "tools.discoveryMode", "advisor.enabled",
+      "tools.discoveryMode",
       "steeringMode", "interruptMode", "followUpMode",
       "thinkingBudgets.minimal", "thinkingBudgets.low", "thinkingBudgets.medium",
       "thinkingBudgets.high", "thinkingBudgets.xhigh", "thinkingBudgets.max",
@@ -229,6 +231,7 @@ export async function buildCreateSessionOptions(
     createOptions.settings = Settings.isolated({
       ...globalOverrides,
       "tools.approvalMode": "always-ask",
+      "advisor.enabled": false,
     });
   }
 
