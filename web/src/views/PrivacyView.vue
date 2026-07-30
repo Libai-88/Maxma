@@ -223,7 +223,6 @@ async function clearHistory() {
   actionMessage.value = ''
   try {
     const sessions = await api.listSessions()
-    const total = (sessions.sessions || []).length
     let succeeded = 0
     let failed = 0
     for (const s of sessions.sessions || []) {

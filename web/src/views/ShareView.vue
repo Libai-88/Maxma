@@ -11,7 +11,7 @@
         <h2>分享的会话</h2>
         <router-link to="/" class="back-link">← 返回</router-link>
       </div>
-      <div class="share-info">
+      <div v-if="share" class="share-info">
         <span class="share-badge" :class="`mode-${share.access_mode}`">{{ shareModeLabel(share.access_mode) }}</span>
         <span class="share-date">创建于 {{ formatDate(share.created_at) }}</span>
         <span v-if="share.expires_at" class="share-expires">过期于 {{ formatDate(share.expires_at) }}</span>

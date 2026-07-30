@@ -358,7 +358,7 @@ async def _stream_turn_sidecar(
             }
             mgr = getattr(app_state, "deferred_run_manager", None)
             if mgr:
-                await mgr.add_or_update(session_id, run_data)
+                await mgr.add_or_update(session.session_id, run_data)
         except Exception as e:
             logger.warning("[deferred] Failed to store deferred run: %s", e)
         # Forward to frontend via WebSocket
