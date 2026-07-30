@@ -19,6 +19,8 @@ from api.cors_config import build_cors_origins
 from api.middleware import RateLimitMiddleware, RequestLogMiddleware
 from api.middleware.auth import AuthMiddleware
 from api.routes import chat, sessions, persona, memory, mcp, tools, providers
+from api.routes import deferred_runs as deferred_runs_module
+from api.routes.deferred_runs import DeferredRunManager
 from api.routes import settings as settings_router
 from api.routes import activity as activity_router
 from api.routes import balance as balance_router
@@ -28,6 +30,7 @@ from api.routes import collab as collab_router
 from api.routes import workflows as workflows_router
 from api.routes import rules as rules_router
 from api.routes import automation as automation_router
+from api.routes import audit_log as audit_log_router
 from api.routes.automation import start_scheduler, stop_scheduler
 from api.routes import diagnostics as diagnostics_router
 from api.routes import files as files_router
@@ -87,7 +90,13 @@ async def lifespan(app: FastAPI):
         message=f"MaxmaHere 后端启动完成 ({__version__})",
     )
 
-    # 5. Automation scheduler — background task that checks for due automations
+    # 5. Deferred run manager — in-memory, populated by sidecar WS events
+    app.state.deferred_run_manager = DeferredRunManager()
+    session_manager = app.state.session_manager
+    session_manager.set_deferred_run_manager(app.state.deferred_run_manager)
+    logger.info("[deferred] DeferredRunManager initialized")
+
+    # 6. Automation scheduler — background task that checks for due automations
     app.state.automation_scheduler = start_scheduler()
     logger.info("[automation] Background scheduler started")
 
@@ -172,6 +181,8 @@ def create_app() -> FastAPI:
     app.include_router(workflows_router.router, prefix="/api")
     app.include_router(rules_router.router, prefix="/api")
     app.include_router(automation_router.router, prefix="/api")
+    app.include_router(audit_log_router.router, prefix="/api")
+    app.include_router(deferred_runs_module.router, prefix="/api")
 
     # Auth token endpoint — desktop app fetches token at runtime
     @app.get("/api/auth/token")

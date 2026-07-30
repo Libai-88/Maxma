@@ -339,6 +339,34 @@ async def _stream_turn_sidecar(
         if sid == sidecar_sid:
             turn_done.set()
 
+    async def _on_deferred(sid: str, event: dict):
+        """Store deferred run data from sidecar and forward to WS."""
+        if sid != sidecar_sid:
+            return
+        try:
+            payload = event.get("payload", {})
+            run_data = {
+                "run_id": payload.get("run_id", ""),
+                "parent_turn_id": payload.get("parent_turn_id"),
+                "status": payload.get("status", "queued"),
+                "result_ref": payload.get("result_ref"),
+                "result": payload.get("result"),
+                "cancel_reason": payload.get("cancel_reason"),
+                "deadline_at": payload.get("deadline_at"),
+                "attempts": payload.get("attempts", 0),
+                "error_code": payload.get("error_code"),
+            }
+            mgr = getattr(app_state, "deferred_run_manager", None)
+            if mgr:
+                await mgr.add_or_update(session_id, run_data)
+        except Exception as e:
+            logger.warning("[deferred] Failed to store deferred run: %s", e)
+        # Forward to frontend via WebSocket
+        try:
+            await ws.send_json({"type": WsEventType.DEFERRED_SUBAGENT_SUBMITTED, "payload": event.get("payload", {})})
+        except Exception as e:
+            logger.warning("[deferred] Failed to forward to WS: %s", e)
+
     unsubs = []
     for evt_type in (WsEventType.TOKEN, WsEventType.TOOL_START, WsEventType.TOOL_END, WsEventType.TOOL_ERROR, WsEventType.ERROR):
         unsubs.append(client.on(evt_type, _make_handler(evt_type)))
@@ -358,7 +386,6 @@ async def _stream_turn_sidecar(
         WsEventType.NOTICE,
         WsEventType.IRC_MESSAGE,
         WsEventType.SUB_SESSION_CREATED,
-        WsEventType.DEFERRED_SUBAGENT_SUBMITTED,
         WsEventType.MEMORY_START,
         WsEventType.MEMORY_TOOL_START,
         WsEventType.MEMORY_TOOL_END,
@@ -373,6 +400,7 @@ async def _stream_turn_sidecar(
         unsubs.append(client.on(evt_type, _make_handler(evt_type)))
     unsubs.append(client.on(WsEventType.ANSWER, _on_answer))
     unsubs.append(client.on(WsEventType.DONE, _on_done))
+    unsubs.append(client.on(WsEventType.DEFERRED_SUBAGENT_SUBMITTED, _on_deferred))
 
     # 4. Execute prompt via sidecar
     record_activity(
