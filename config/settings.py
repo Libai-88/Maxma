@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     # 或通过 .env 文件设置 MAXMA_BUN_PATH 环境变量指定全路径）
     sidecar_bun_path: str = "bun"
 
+    # WebSocket 限流配置
+    rate_limit_ws_capacity: int = 60
+    rate_limit_ws_window_seconds: int = 60
+
     # 权限模式功能开关。关闭时（默认）所有会话使用 yolo 模式（自动批准所有工具调用）；
     # 开启后 sidecar 按 permission_mode 分流（auto/operate 自动批准，
     # ask/read_only 走前端审批确认）。

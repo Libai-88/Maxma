@@ -96,7 +96,13 @@ async def lifespan(app: FastAPI):
     session_manager.set_deferred_run_manager(app.state.deferred_run_manager)
     logger.info("[deferred] DeferredRunManager initialized")
 
-    # 6. Automation scheduler — background task that checks for due automations
+    # 6. Health check state: native_tools + mcp_tools
+    from api.routes.tools import _BUILTIN_TOOLS as _HEALTH_TOOLS
+    app.state.native_tools = _HEALTH_TOOLS
+    app.state.mcp_tools = []  # populated dynamically by MCP manager
+    logger.info("[health] native_tools=%d", len(app.state.native_tools))
+
+    # 7. Automation scheduler — background task that checks for due automations
     app.state.automation_scheduler = start_scheduler(sidecar_mgr=app.state.sidecar_manager)
     logger.info("[automation] Background scheduler started")
 

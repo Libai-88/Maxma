@@ -23,7 +23,7 @@ class SessionState:
     auto_approve: bool = False
     # Keep the selected permission state on the session.  This is deliberately
     # limited to a mode and timestamp so const-session persistence stays secret-free.
-    permission_mode: str = "ask"
+    permission_mode: str = "yolo"
     permission_mode_updated_at: float = field(default_factory=time.time)
 
     # ── Sub-agent 字段 ─────────────────────────────────────
@@ -48,12 +48,11 @@ class SessionState:
         """初始化后处理。
 
         oh-my-pi sidecar 模式下不需要 checkpointer。
-        Invalid stored permission mode 回退到默认值。
+        仅在 permission_mode 无效时回退到默认值。
         """
-        # Older const-session metadata has no permission mode.  Invalid stored
-        # values fail closed to the compatible, confirmation-first default.
-        # permission_policy module removed — OMP replaces permission policy
-        self.permission_mode = "ask"
+        VALID_MODES = {"ask", "auto", "operate", "read_only", "yolo"}
+        if self.permission_mode not in VALID_MODES:
+            self.permission_mode = "ask"
 
     def persistent_metadata(self) -> dict[str, Any]:
         """Return the non-secret metadata supported by const-session storage."""

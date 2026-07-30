@@ -778,6 +778,13 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                 )
                 continue
 
+            payload = msg.get("payload", {})
+            if not isinstance(payload, dict):
+                continue
+            user_message = str(payload.get("message", "")).strip()
+            if not user_message:
+                continue
+
             # ═══ 运行时配置注入 ═══
             # AGENTS.md 声明了每轮对话注入 [运行时配置]。若缺失，
             # 模型会反复"索取"此信息，以为前端忘记发送了。
@@ -803,25 +810,9 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                     _rt_lines.append(f"MCP 服务器: {_rt_mcp_count} 个, {_rt_mcp_tools} 个工具")
                 _rt_lines.append(f"可用工具: {_rt_builtin + _rt_mcp_tools} 个({_rt_builtin} 原生 + {_rt_mcp_tools} MCP)")
                 _rt_summary = "\n".join(_rt_lines)
-                # 注入到用户消息前缀（符合 AGENTS.md 契约）
                 user_message = f"{_rt_summary}\n\n{user_message}"
             except Exception:
                 logger.debug("[runtime] Failed to inject runtime config", exc_info=True)
-
-            # ── Chat message ──
-            # payload 字段去向（B2 契约文档化）：
-            #   接入 sidecar: message, provider_id, model_name, turn_id
-            #   未接入（sidecar create_session 不收）: temperature, max_tokens,
-            #     think_path_id（前端 ThinkPathChooser 选择，OMP 未暴露接入点）
-            #   前端本地用: private（控制 localStorage 持久化，后端不需要）,
-            #     auto_approve（会话级语义，per-turn 发但实际由建会时
-            #     permission_mode 决定；update_auto_approve 见 B1 未接通）
-            payload = msg.get("payload", {})
-            if not isinstance(payload, dict):
-                continue
-            user_message = str(payload.get("message", "")).strip()
-            if not user_message:
-                continue
 
             allowed, rate_limit_error = get_ws_rate_limiter().try_consume(session_id)
             if not allowed:
