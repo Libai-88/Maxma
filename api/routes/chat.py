@@ -761,6 +761,37 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                 )
                 continue
 
+            # ═══ 运行时配置注入 ═══
+            # AGENTS.md 声明了每轮对话注入 [运行时配置]。若缺失，
+            # 模型会反复"索取"此信息，以为前端忘记发送了。
+            try:
+                from api.routes.tools import _BUILTIN_TOOLS as _RT_BUILTIN_TOOLS
+                _rt_providers = _load_providers()
+                _rt_active_providers = [p for p in (_rt_providers or []) if p.get("enabled")]
+                _rt_builtin = len(_RT_BUILTIN_TOOLS) if isinstance(_RT_BUILTIN_TOOLS, list) else 0
+                _rt_mcp_servers = getattr(app_state, "mcp_server_info", None)
+                if _rt_mcp_servers is None:
+                    _rt_mcp_count = 0
+                    _rt_mcp_tools = 0
+                elif isinstance(_rt_mcp_servers, list):
+                    _rt_mcp_count = len(_rt_mcp_servers)
+                    _rt_mcp_tools = sum(s.get("tool_count", 0) for s in _rt_mcp_servers)
+                else:
+                    _rt_mcp_count = _rt_mcp_servers.get("count", 0)
+                    _rt_mcp_tools = _rt_mcp_servers.get("tools", 0)
+                _rt_lines = ["[运行时配置]"]
+                _rt_lines.append(f"模型提供商({len(_rt_active_providers)}):")
+                for _rt_p in _rt_active_providers[:3]:
+                    _rt_lines.append(f"  - {_rt_p.get('label', _rt_p.get('id','?'))} ({_rt_p.get('provider_type','?')})")
+                if _rt_mcp_count > 0:
+                    _rt_lines.append(f"MCP 服务器: {_rt_mcp_count} 个, {_rt_mcp_tools} 个工具")
+                _rt_lines.append(f"可用工具: {_rt_builtin + _rt_mcp_tools} 个({_rt_builtin} 原生 + {_rt_mcp_tools} MCP)")
+                _rt_summary = "\n".join(_rt_lines)
+                # 注入到用户消息前缀（符合 AGENTS.md 契约）
+                user_message = f"{_rt_summary}\n\n{user_message}"
+            except Exception:
+                logger.debug("[runtime] Failed to inject runtime config", exc_info=True)
+
             # ── Chat message ──
             # payload 字段去向（B2 契约文档化）：
             #   接入 sidecar: message, provider_id, model_name, turn_id
