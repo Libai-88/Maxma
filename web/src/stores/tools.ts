@@ -17,8 +17,14 @@ export const useToolsStore = defineStore('tools', () => {
   async function fetchTools() {
     loading.value = true
     try {
-      const data = await api.request<unknown>('/tools')
-      tools.value = Array.isArray(data) ? data : []
+      const data: unknown = await api.request<unknown>('/tools')
+      if (Array.isArray(data)) {
+        tools.value = data
+      } else if (data && typeof data === 'object' && 'tools' in data && Array.isArray((data as Record<string, unknown>).tools)) {
+        tools.value = (data as Record<string, unknown>).tools as ToolInfo[]
+      } else {
+        tools.value = []
+      }
     } catch {
       tools.value = []
     } finally {

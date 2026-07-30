@@ -127,6 +127,48 @@ async def create_session_share(session_id: str, body: CreateShareRequest, reques
     }
 
 
+@router.get("/shares/{share_id}")
+async def get_share(share_id: str, request: Request):
+    """获取分享链接的会话信息。"""
+    with transaction() as db:
+        row = db.execute(
+            "SELECT * FROM collab_shares WHERE id = ? AND revoked = 0",
+            (share_id,),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Share not found or revoked")
+        share = _share_row_to_dict(rows_to_dicts([row])[0])
+
+        # 检查过期
+        if share.get("expires_at"):
+            expires = datetime.fromisoformat(share["expires_at"])
+            if expires < datetime.now(timezone.utc):
+                raise HTTPException(status_code=410, detail="Share has expired")
+
+        # 增加访问计数
+        db.execute(
+            "UPDATE collab_shares SET access_count = access_count + 1 WHERE id = ?",
+            (share_id,),
+        )
+
+    # 获取会话消息
+    session_mgr = getattr(request.app.state, "session_manager", None)
+    messages = []
+    if session_mgr:
+        try:
+            session = session_mgr.get_session(share["session_id"])
+            if session:
+                messages = getattr(session, "messages", [])
+        except Exception:
+            pass
+
+    return {
+        "share": share,
+        "session_id": share["session_id"],
+        "messages": messages,
+    }
+
+
 @router.delete("/shares/{share_id}")
 async def revoke_session_share(share_id: str, request: Request):
     """撤销分享链接。"""

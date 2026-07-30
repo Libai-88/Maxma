@@ -258,6 +258,7 @@
 
 <script setup lang="ts">
 import { api } from '@/api'
+import { confirmAction } from '@/composables/useConfirm'
 import type { ComponentHealth, ProviderConfig, ProviderPreset, TestConnectionResponse } from '@/types'
 import { useProviderStore } from '@/stores/provider'
 import { useChatStore } from '@/stores/chat'
@@ -598,7 +599,7 @@ async function handleSave() {
 }
 
 async function deleteProvider(id: string) {
-  if (!confirm(`确定删除提供商「${id}」？`)) return
+  if (!await confirmAction({ title: '删除提供商', message: `确定删除提供商「${id}」？`, confirmText: '删除', danger: true })) return
   try {
     await api.deleteProvider(id)
     // 用 refresh() 强制刷新 store，让 ChatInput 等消费方感知删除
@@ -625,7 +626,9 @@ async function recheckProvider(id: string) {
     await api.checkProviderHealth(id)
     await Promise.all([providerStore.refresh(), healthStore.refresh()])
   } catch (e: unknown) {
-    formError.value = toErrorMessage(e)
+    const msg = toErrorMessage(e)
+    loadError.value = msg
+    setTimeout(() => { if (loadError.value === msg) loadError.value = '' }, 5000)
   } finally {
     rechecking.value[id] = false
   }

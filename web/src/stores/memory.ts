@@ -20,8 +20,14 @@ export const useMemoryStore = defineStore('memory', () => {
   async function fetchFacts() {
     loading.value = true
     try {
-      const data = await api.request<unknown>('/memory')
-      facts.value = Array.isArray(data) ? data : []
+      const data: unknown = await api.request<unknown>('/memory')
+      if (Array.isArray(data)) {
+        facts.value = data
+      } else if (data && typeof data === 'object' && 'facts' in data && Array.isArray((data as Record<string, unknown>).facts)) {
+        facts.value = (data as Record<string, unknown>).facts as MemoryFact[]
+      } else {
+        facts.value = []
+      }
     } catch { facts.value = [] }
     finally { loading.value = false }
   }

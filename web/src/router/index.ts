@@ -136,6 +136,12 @@ const router = createRouter({
       meta: { title: '协作', feature: 'collab' },
     },
     {
+      path: '/share/:id',
+      name: 'share',
+      component: () => import('@/views/ShareView.vue'),
+      meta: { title: '分享的会话' },
+    },
+    {
       path: '/rules',
       name: 'rules',
       component: () => import('@/views/RulesView.vue'),

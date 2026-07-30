@@ -124,7 +124,9 @@ const tools = ref<ToolInfo[]>([])
 const mcpServers = ref<McpServerInfo[]>([])
 const systemStatus = ref<{ sidecar_available: boolean }>({ sidecar_available: false })
 
+// builtin !== false: includes builtin:true AND absent/undefined (which defaults to builtin)
 const builtinTools = computed(() => tools.value.filter(t => t.builtin !== false))
+// only tools with explicit builtin:false are custom
 const customTools = computed(() => tools.value.filter(t => t.builtin === false))
 
 async function load() {

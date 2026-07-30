@@ -123,6 +123,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { api } from '@/api'
+import { confirmAction } from '@/composables/useConfirm'
 import { toErrorMessage } from '@/utils/error'
 
 interface Rule {
@@ -254,7 +255,7 @@ async function handleToggle(rule: Rule) {
 }
 
 async function handleDelete(rule: Rule) {
-  if (!confirm(`确定删除规则「${rule.name}」？`)) return
+  if (!await confirmAction({ title: '删除规则', message: `确定删除规则「${rule.name}」？`, confirmText: '删除', danger: true })) return
   try {
     await api.deleteRule(rule.id)
     await fetchRules()

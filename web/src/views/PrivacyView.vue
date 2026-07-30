@@ -130,6 +130,7 @@
 import { ref, onMounted } from 'vue'
 import { api } from '@/api'
 import { createLogger } from '@/utils/logger'
+import { confirmAction } from '@/composables/useConfirm'
 import type { AuditLogRecord } from '@/types'
 
 const log = createLogger('PrivacyView')
@@ -217,18 +218,33 @@ async function loadAuditLog() {
 }
 
 async function clearHistory() {
-  if (!confirm('确定清除所有对话历史？此操作不可恢复。')) return
+  if (!await confirmAction({ title: '清除对话历史', message: '确定清除所有对话历史？此操作不可恢复。', confirmText: '清除', danger: true })) return
   actionLoading.value = true
   actionMessage.value = ''
   try {
     const sessions = await api.listSessions()
-	    for (const s of sessions.sessions || []) {
-	      try { await api.deleteSession(s.session_id) } catch (e: unknown) {
-	        log.warn('[PrivacyView] 删除会话失败:', e instanceof Error ? e.message : String(e))
-	      }
-	    }
-    actionMessage.value = `已清除 ${sessions.sessions?.length || 0} 个会话`
-    actionMessageType.value = 'ok'
+    const total = (sessions.sessions || []).length
+    let succeeded = 0
+    let failed = 0
+    for (const s of sessions.sessions || []) {
+      try {
+        await api.deleteSession(s.session_id)
+        succeeded++
+      } catch (e: unknown) {
+        failed++
+        log.warn('[PrivacyView] 删除会话失败:', e instanceof Error ? e.message : String(e))
+      }
+    }
+    if (failed === 0) {
+      actionMessage.value = `已清除 ${succeeded} 个会话`
+      actionMessageType.value = 'ok'
+    } else if (succeeded === 0) {
+      actionMessage.value = `清除失败（${failed} 个会话）`
+      actionMessageType.value = 'error'
+    } else {
+      actionMessage.value = `部分完成：已清除 ${succeeded} 个会话，${failed} 个失败`
+      actionMessageType.value = 'error'
+    }
   } catch (e: unknown) {
     actionMessage.value = '清除失败: ' + (e instanceof Error ? e.message : String(e))
     actionMessageType.value = 'error'
@@ -238,7 +254,7 @@ async function clearHistory() {
 }
 
 async function clearAuditLog() {
-  if (!confirm('确定清除所有审计日志？')) return
+  if (!await confirmAction({ title: '清除审计日志', message: '确定清除所有审计日志？', confirmText: '清除', danger: true })) return
   actionLoading.value = true
   actionMessage.value = ''
   try {
