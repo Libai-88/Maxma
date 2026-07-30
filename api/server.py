@@ -97,7 +97,7 @@ async def lifespan(app: FastAPI):
     logger.info("[deferred] DeferredRunManager initialized")
 
     # 6. Automation scheduler — background task that checks for due automations
-    app.state.automation_scheduler = start_scheduler()
+    app.state.automation_scheduler = start_scheduler(sidecar_mgr=app.state.sidecar_manager)
     logger.info("[automation] Background scheduler started")
 
     yield

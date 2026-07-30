@@ -1518,6 +1518,32 @@ if (import.meta.main) {
         return;
       }
 
+      if (method === "headless_prompt") {
+        try {
+          const message: string = params?.message ?? "";
+          if (!message) { sendError(id, "Missing required parameter: message"); return; }
+          const { createAgentSession } = await import("@oh-my-pi/pi-coding-agent");
+          const session = await createAgentSession({
+            hasUI: false,
+            "tools.approvalMode": "yolo",
+          });
+          let answer = "";
+          const unsub = session.subscribe((event: any) => {
+            if (event.type === "answer") {
+              answer = event.payload?.content ?? event.content ?? answer;
+            }
+          });
+          await session.prompt(message);
+          await session.waitForIdle();
+          unsub();
+          await session.dispose();
+          send(id, { answer, status: "completed" });
+        } catch (e: any) {
+          sendError(id, `Headless prompt failed: ${e.message ?? String(e)}`);
+        }
+        return;
+      }
+
       sendError(id, `Unknown method: ${method}`);
     } catch (err) {
       sendError(id, String(err));

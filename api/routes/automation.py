@@ -205,11 +205,28 @@ def db_get_due_automations(now_iso: str) -> list[dict[str, Any]]:
 # ── Background Scheduler ─────────────────────────────────
 
 _scheduler_task: asyncio.Task | None = None
+_scheduler_sidecar_mgr: Any | None = None
 SCHEDULER_INTERVAL_SECONDS = 60
 
 
+async def _call_headless(sidecar_mgr: Any, message: str) -> dict:
+    """Call sidecar's headless_prompt RPC and return the result."""
+    if sidecar_mgr is None:
+        return {"answer": "", "status": "sidecar_unavailable"}
+    await sidecar_mgr.start()
+    client = sidecar_mgr.client
+    if client is None:
+        return {"answer": "", "status": "sidecar_unavailable"}
+    try:
+        result = await client.call("headless_prompt", {"message": message})
+        return result if isinstance(result, dict) else {"answer": str(result), "status": "completed"}
+    except Exception as e:
+        return {"answer": "", "status": "error", "error": str(e)}
+
+
 async def _scheduler_loop():
-    """Background loop: check for due tasks every 60s and record runs."""
+    """Background loop: check for due tasks every 60s and execute via headless sidecar."""
+    global _scheduler_sidecar_mgr
     logger.info("[automation] Scheduler started (interval=%ds)", SCHEDULER_INTERVAL_SECONDS)
     while True:
         try:
@@ -219,24 +236,36 @@ async def _scheduler_loop():
 
             for task in due_tasks:
                 started_at = _now_iso()
-                # "Execute" the task — for now just record a completed run.
-                # Actual agent execution will be wired in later.
+                action = task.get("action", {})
+                message = ""
+                if isinstance(action, dict):
+                    message = action.get("payload", {}).get("text", "") if isinstance(action.get("payload"), dict) else str(action)
+                else:
+                    message = str(action)
+
+                if message:
+                    result_data = await _call_headless(_scheduler_sidecar_mgr, message)
+                    status = result_data.get("status", "completed")
+                    answer = result_data.get("answer", "")
+                else:
+                    result_data = {"message": "无执行内容"}
+                    status = "completed"
+                    answer = ""
+
                 finished_at = _now_iso()
-                status = "completed"
                 result = json.dumps(
-                    {"message": "定时触发。Agent 执行待 sidecar 支持", "action": task["action"]},
+                    {"message": answer or "定时执行完成", "action": task["action"]},
                     ensure_ascii=False,
                 )
 
                 db_record_run(task["id"], started_at, finished_at, status, result)
 
-                # Compute next_run
                 next_run = _compute_next_run(task["interval_seconds"], task["cron_expr"])
                 db_update_automation(task["id"], {"next_run": next_run})
 
                 logger.info(
-                    "[automation] Executed task '%s' (%s), next_run=%s",
-                    task["name"], task["id"], next_run,
+                    "[automation] Executed task '%s' (%s) -> %s, next_run=%s",
+                    task["name"], task["id"], status, next_run,
                 )
 
         except asyncio.CancelledError:
@@ -246,9 +275,10 @@ async def _scheduler_loop():
             logger.exception("[automation] Scheduler loop error (will retry next tick)")
 
 
-def start_scheduler() -> asyncio.Task:
+def start_scheduler(sidecar_mgr: Any | None = None) -> asyncio.Task:
     """Start the background scheduler task. Called during app lifespan startup."""
-    global _scheduler_task
+    global _scheduler_task, _scheduler_sidecar_mgr
+    _scheduler_sidecar_mgr = sidecar_mgr
     if _scheduler_task is None or _scheduler_task.done():
         _scheduler_task = asyncio.create_task(_scheduler_loop(), name="automation-scheduler")
     return _scheduler_task
@@ -378,31 +408,41 @@ async def toggle_automation(automation_id: str, request: Request):
 
 @router.post("/automations/{automation_id}/run")
 async def trigger_run(automation_id: str, request: Request):
-    """立即触发一次执行（手动运行）。"""
+    """立即触发一次执行（手动运行 — 通过 sidecar 无头执行）。"""
     existing = db_get_automation(automation_id)
     if existing is None:
         raise HTTPException(status_code=404, detail="Automation not found")
 
     started_at = _now_iso()
-    # 记录执行（实际 agent 执行待 sidecar 支持后接入）
+    sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
+    action = existing.get("action", {})
+    message = ""
+    if isinstance(action, dict):
+        message = action.get("payload", {}).get("text", "") if isinstance(action.get("payload"), dict) else str(action)
+    else:
+        message = str(action)
+
+    if message and sidecar_mgr:
+        result_data = await _call_headless(sidecar_mgr, message)
+        status = result_data.get("status", "completed")
+        answer = result_data.get("answer", "")
+    else:
+        result_data = {}
+        status = "completed"
+        answer = "（无执行内容）"
+
     finished_at = _now_iso()
-    status = "completed"
     result = json.dumps(
-        {
-            "message": "任务已触发。Agent 执行需 sidecar 支持（研发中）",
-            "action": existing["action"],
-            "action_type": existing.get("action", {}).get("type", "unknown"),
-        },
+        {"message": answer, "action": existing["action"]},
         ensure_ascii=False,
     )
 
     run_id = db_record_run(automation_id, started_at, finished_at, status, result)
 
-    # Recompute next_run from now
     next_run = _compute_next_run(existing["interval_seconds"], existing["cron_expr"])
     db_update_automation(automation_id, {"next_run": next_run})
 
-    logger.info("[automation] Manual run triggered for '%s' (%s)", existing["name"], automation_id)
+    logger.info("[automation] Manual run triggered for '%s' (%s) -> %s", existing["name"], automation_id, status)
     return {
         "ok": True,
         "run_id": run_id,

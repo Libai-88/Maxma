@@ -61,7 +61,8 @@ export type RpcMethodName =
   | "set_plugin_enabled"
   | "get_plugin_detail"
   | "get_plugin_config"
-  | "update_plugin_config";
+  | "update_plugin_config"
+  | "headless_prompt";
 
 export interface CreateSessionParams {
   model: string;
