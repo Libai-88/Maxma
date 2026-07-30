@@ -13,6 +13,7 @@ import uuid
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from agent.prompts import build_system_prompt
+from api.routes.tools import _BUILTIN_TOOLS as _CHAT_BUILTIN_TOOLS
 from api.activity_hub import record as record_activity
 from api.routes.providers import _decrypt_api_key, _find_provider, _load_providers
 from api.const_session_store import save_const_session
@@ -217,6 +218,9 @@ async def _stream_turn_sidecar(
             _pm_enabled = False
         _effective_permission_mode = session.permission_mode if _pm_enabled else "ask"
 
+        # 传入可用工具名列表，让 OMP session 正确注册 function calling
+        _session_tools = [t["name"] for t in _CHAT_BUILTIN_TOOLS if isinstance(t, dict) and t.get("name")]
+
         result = await client.call(
             "create_session",
             {
@@ -228,6 +232,7 @@ async def _stream_turn_sidecar(
                 # in sidecar_manager.py (B-001).
                 "cwd": str(PROJECT_ROOT),
                 "permission_mode": _effective_permission_mode,
+                "tools": _session_tools,
             },
         )
         sidecar_sid = result["session_id"]
@@ -765,10 +770,9 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             # AGENTS.md 声明了每轮对话注入 [运行时配置]。若缺失，
             # 模型会反复"索取"此信息，以为前端忘记发送了。
             try:
-                from api.routes.tools import _BUILTIN_TOOLS as _RT_BUILTIN_TOOLS
                 _rt_providers = _load_providers()
                 _rt_active_providers = [p for p in (_rt_providers or []) if p.get("enabled")]
-                _rt_builtin = len(_RT_BUILTIN_TOOLS) if isinstance(_RT_BUILTIN_TOOLS, list) else 0
+                _rt_builtin = len(_CHAT_BUILTIN_TOOLS) if isinstance(_CHAT_BUILTIN_TOOLS, list) else 0
                 _rt_mcp_servers = getattr(app_state, "mcp_server_info", None)
                 if _rt_mcp_servers is None:
                     _rt_mcp_count = 0
