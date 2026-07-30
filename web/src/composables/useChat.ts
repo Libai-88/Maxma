@@ -1,5 +1,5 @@
 import { computed, watch, onUnmounted, ref, type Ref } from 'vue'
-import type { ClientMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, CompactionReason, CompactionAction, AskUserEvent, ArtifactEvent, PlanProposedEvent, PlanStepStartEvent, PlanStepEndEvent, PlanStepErrorEvent, PlanCompletedEvent, DeferredSubagentSubmittedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent } from '@/types'
+import type { ClientMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, CompactionReason,  AskUserEvent, ArtifactEvent, PlanProposedEvent, PlanStepStartEvent, PlanStepEndEvent, PlanStepErrorEvent, PlanCompletedEvent, DeferredSubagentSubmittedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent } from '@/types'
 import type { ThinkPathId } from '@/utils/thinkPath'
 import { normalizeContextUsage, useChatStore, TURNS_KEY_PREFIX } from '@/stores/chat'
 import { useSessionStore } from '@/stores/session'
@@ -153,30 +153,9 @@ const turnsCache = loadAllTurnsFromStorage()
 
 // ── SessionChannel 定义 ────────────────────────────────────
 
-interface SessionChannel {
-  ws: WebSocket | null
-  connected: boolean
-  isStreaming: boolean
-  isAwaitingUser: boolean
-  turns: ChatTurn[]
-  currentTurn: ChatTurn | null
-  error: string | null
-  errorCategory: 'user_error' | 'tool_error' | 'system_error' | 'rate_limit' | 'cancelled' | null
-  errorTraceId: string | null
-  contextUsage: ContextUsage | null
-  taskTrackerData: Record<string, unknown> | null
-  reconnectTimer: ReturnType<typeof setTimeout> | null
-  reconnectAttempts: number  // 重连次数，用于计算退避延迟
-  initialized: boolean
-  _awaitingToolName: string | null
-  parentSessionId: string | null  // sub-agent 用：完成时切回主会话
-  privateMode: boolean
-  autoApprove: boolean
-  _pingTimer: ReturnType<typeof setInterval> | null  // 心跳 ping 定时器
-  _lastPongAt: number  // 上次收到 pong 的时间戳（ms），用于检测静默断开
-  /** context_compressing 在 currentTurn 为 null 时缓存，待下一轮创建后回放 */
-  pendingCompaction?: { reason: CompactionReason; action: CompactionAction }
-}
+// SessionChannel 定义在 stores/chat.ts，由 @/stores/chat 导出
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type SessionChannel = import('@/stores/chat').SessionChannel
 
 // Lazy export — 运行时才访问 Store（Pinia 在模块加载时尚未安装）
 export function getAllSessionStatuses() { return getChatStore().allSessionStatuses }

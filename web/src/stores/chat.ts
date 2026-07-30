@@ -73,7 +73,7 @@ export function normalizeContextUsage(payload: unknown, previous: ChatContextUsa
   }
 }
 
-interface SessionChannel {
+export interface SessionChannel {
   ws: WebSocket | null
   connected: boolean
   isStreaming: boolean
