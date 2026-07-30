@@ -209,14 +209,18 @@ async def _stream_turn_sidecar(
         except Exception:
             logger.debug("[sidecar] Failed to restore past turns", exc_info=True)
 
-        # 计算生效的权限模式（功能未开启时强制 ask，与 sessions.py 保持一致），
-        # 传给 sidecar 决定工具审批策略。
+        # 计算生效的权限模式传给 sidecar 决定工具审批策略。
+        # permission_modes_enabled 关闭时（默认）用 "yolo"（自动批准所有工具），
+        # 避免 always-ask 阻塞 write/exec 级别工具调用（B-014）。
         try:
             from config.settings import get_settings
             _pm_enabled = bool(get_settings().permission_modes_enabled)
         except Exception:
             _pm_enabled = False
-        _effective_permission_mode = session.permission_mode if _pm_enabled else "ask"
+        if _pm_enabled:
+            _effective_permission_mode = session.permission_mode
+        else:
+            _effective_permission_mode = "yolo"
 
         # 传入可用工具名列表，让 OMP session 正确注册 function calling
         _session_tools = [t["name"] for t in _CHAT_BUILTIN_TOOLS if isinstance(t, dict) and t.get("name")]

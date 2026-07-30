@@ -55,7 +55,7 @@ def _permission_mode_metadata(session, *, enabled: bool) -> dict[str, object]:
     return {
         "session_id": session.session_id,
         "permission_modes_enabled": enabled,
-        "permission_mode": session.permission_mode if enabled else "ask",
+        "permission_mode": session.permission_mode if enabled else "yolo",
         "permission_mode_updated_at": session.permission_mode_updated_at,
         "available_permission_modes": list(_PERMISSION_MODES) if enabled else [],
     }

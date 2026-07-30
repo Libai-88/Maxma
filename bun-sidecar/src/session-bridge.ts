@@ -130,7 +130,10 @@ export function filterMcpTools(
   const requested = requestedToolNames === undefined ? undefined : new Set(requestedToolNames);
   return tools.filter((tool) => {
     const server = tool.mcpServerName as string | undefined;
-    if (server && requested && !requested.has(String(tool.name)) && !requested.has(String(tool.mcpToolName ?? ""))) {
+    // requestedToolNames 是内置工具名列表，不应用于过滤 MCP 工具
+    // MCP 工具名称（如 fetch/puppeteer_navigate）与内置工具名不匹配，
+    // 用同一列表过滤会排掉所有 MCP 工具 → B-014
+    if (!server && requested && !requested.has(String(tool.name))) {
       return false;
     }
     const rules = server ? allowBlock[server] : undefined;
