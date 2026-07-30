@@ -217,7 +217,9 @@ async def _stream_turn_sidecar(
             _pm_enabled = bool(get_settings().permission_modes_enabled)
         except Exception:
             _pm_enabled = False
-        if _pm_enabled:
+        if session.auto_approve:
+            _effective_permission_mode = "yolo"
+        elif _pm_enabled:
             _effective_permission_mode = session.permission_mode
         else:
             _effective_permission_mode = "yolo"
@@ -763,7 +765,13 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                         )
                 continue
 
-            if msg_type in ("plan_response", "artifact_action", "update_auto_approve"):
+            if msg_type == "update_auto_approve":
+                auto_approve = payload.get("auto_approve", False)
+                session.auto_approve = bool(auto_approve)
+                logger.info("[ws] auto_approve updated to %s for session %s", session.auto_approve, session_id[:8])
+                continue
+
+            if msg_type in ("plan_response", "artifact_action"):
                 logger.info(
                     "[ws] %s not wired to sidecar (feature pending; UI remains)",
                     msg_type,

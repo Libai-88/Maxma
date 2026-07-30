@@ -214,6 +214,10 @@ export async function buildCreateSessionOptions(
       "edit.mode", "read.summarize.enabled",
       "todo.enabled", "glob.enabled", "grep.enabled", "browser.enabled",
       "github.enabled", "checkpoint.enabled", "inspect_image.enabled",
+      "launch.enabled", "debug.enabled",
+      "astGrep.enabled", "astEdit.enabled",
+      "web_search.enabled", "ask.enabled",
+      "memory.backend", "autolearn.enabled",
     ];
     const globalOverrides: Record<string, unknown> = {};
     try {
@@ -351,7 +355,7 @@ function sendEvent(sessionId: string, event: Record<string, unknown>) {
  */
 function parseModel(
   modelStr: string,
-  options?: { provider?: string; baseUrl?: string; providerType?: string },
+  options?: { provider?: string; baseUrl?: string; providerType?: string; contextWindow?: number },
 ): Model {
   const slashIdx = modelStr.indexOf("/");
   const parsedProvider = slashIdx >= 0 ? modelStr.slice(0, slashIdx) : "";
@@ -380,7 +384,7 @@ function parseModel(
     reasoning: false,
     input: ["text"] as ("text" | "image")[],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: 128000,
+    contextWindow: options?.contextWindow ?? 128000,
     maxTokens: 4096,
     compat: {
       supportsDeveloperRole: true,
@@ -972,6 +976,7 @@ if (import.meta.main) {
           provider,
           baseUrl: params?.base_url,
           providerType: params?.provider_type,
+          contextWindow: params?.context_window as number | undefined,
         });
         const cwd: string = params?.cwd ?? process.cwd();
         const systemPrompt: string | undefined = params?.system_prompt;
