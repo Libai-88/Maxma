@@ -46,7 +46,12 @@
       </button>
     </slot>
     <Teleport to="body">
-      <Transition name="ds-select">
+      <Transition
+        :css="false"
+        @before-enter="onBeforeEnter"
+        @enter="onEnter"
+        @leave="onLeave"
+      >
         <ul
           v-if="open"
           ref="listboxRef"
@@ -111,6 +116,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
+import { gsap, useGsap } from '@/composables/useGsap'
 
 /** requestAnimationFrame 节流包装，避免 scroll/resize 高频触发 layout */
 function rafThrottle<T extends (...args: unknown[]) => void>(fn: T): T {
@@ -412,6 +418,28 @@ onUnmounted(() => {
 })
 
 defineExpose({ openList, closeList, toggle })
+
+// ── 下拉展开：scaleY 展开 + 选项 stagger（JS 过渡钩子，:css=false） ──
+let onBeforeEnter = (_el: Element) => {}
+let onEnter = (_el: Element, done: () => void) => done()
+let onLeave = (_el: Element, done: () => void) => done()
+
+useGsap((_ctx, contextSafe) => {
+  function beforeEnter(el: Element) {
+    gsap.set(el, { opacity: 0, scaleY: 0.9, y: -6, transformOrigin: 'top center' })
+  }
+  function enter(el: Element, done: () => void) {
+    gsap.to(el, { opacity: 1, scaleY: 1, y: 0, duration: 0.16, ease: 'power2.out', onComplete: done })
+    const opts = gsap.utils.toArray<HTMLElement>('[role="option"]', el as HTMLElement)
+    if (opts.length) gsap.from(opts, { opacity: 0, y: 4, duration: 0.12, ease: 'power1.out', stagger: 0.015 })
+  }
+  function leave(el: Element, done: () => void) {
+    gsap.to(el, { opacity: 0, scaleY: 0.94, y: -4, duration: 0.12, ease: 'power1.in', onComplete: done })
+  }
+  onBeforeEnter = contextSafe(beforeEnter)
+  onEnter = contextSafe(enter)
+  onLeave = contextSafe(leave)
+})
 </script>
 
 <style scoped>
@@ -544,28 +572,5 @@ defineExpose({ openList, closeList, toggle })
   padding-top: 2px;
 }
 
-/* Transition */
-.ds-select-enter-active,
-.ds-select-leave-active {
-  transition: opacity var(--duration-instant) var(--ease-out),
-              transform var(--duration-instant) var(--ease-out);
-}
-.ds-select-enter-from,
-.ds-select-leave-to {
-  opacity: 0;
-  transform: translateY(-4px);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ds-select__caret svg { transition: none; }
-  .ds-select-enter-active,
-  .ds-select-leave-active {
-    transition: opacity var(--duration-instant) linear;
-    transform: none;
-  }
-  .ds-select-enter-from,
-  .ds-select-leave-to {
-    transform: none;
-  }
-}
+/* Transition：下拉展开/收起由 GSAP JS 过渡钩子控制（:css=false） */
 </style>
