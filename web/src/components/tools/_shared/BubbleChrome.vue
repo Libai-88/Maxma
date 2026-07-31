@@ -144,6 +144,8 @@ watch(() => props.toolCall.status, (s) => {
 /* 状态色彩 */
 .tool-bubble.running {
   border-left: 3px solid var(--accent);
+  /* 执行中呼吸光晕（CSS 循环动画，GSAP 不负责） */
+  animation: maxma-tool-glow 1.8s ease-in-out infinite;
 }
 .tool-bubble.done {
   border-left: 3px solid var(--status-ok);

@@ -151,6 +151,12 @@
   50%      { opacity: 1;   transform: scale(1.5); }
 }
 
+/* ── 工具气泡：执行中呼吸光晕 ── */
+@keyframes maxma-tool-glow {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
+  50%      { box-shadow: 0 0 14px 2px color-mix(in srgb, var(--accent) 20%, transparent); }
+}
+
 /* ── 发送按钮：成功闪烁 ── */
 @keyframes maxma-send-success {
   0%   { transform: scale(0.95); }
