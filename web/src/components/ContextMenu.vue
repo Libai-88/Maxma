@@ -6,7 +6,12 @@
       @click="close"
       @contextmenu.prevent="close"
     >
-      <Transition name="menu-pop">
+      <Transition
+        :css="false"
+        @before-enter="onBeforeEnter"
+        @enter="onEnter"
+        @leave="onLeave"
+      >
         <div
           v-if="visible"
           ref="menuRef"
@@ -35,6 +40,7 @@
 <script setup lang="ts">
 import Icon from '@/components/Icon.vue'
 import { onMounted, onUnmounted, ref, watchEffect } from 'vue'
+import { gsap, useGsap } from '@/composables/useGsap'
 
 export interface ContextMenuItem {
   label: string
@@ -144,6 +150,31 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener('keydown', onKeydown)
 })
+
+// ── 弹层动画：锚定左上角的 scale 弹出 + 菜单项 stagger（JS 过渡钩子，:css=false） ──
+let onBeforeEnter = (_el: Element) => {}
+let onEnter = (_el: Element, done: () => void) => done()
+let onLeave = (_el: Element, done: () => void) => done()
+
+useGsap((_ctx, contextSafe) => {
+  function beforeEnter(el: Element) {
+    gsap.set(el, { opacity: 0, scale: 0.92, transformOrigin: '0px 0px' })
+  }
+  function enter(el: Element, done: () => void) {
+    gsap.to(el, { opacity: 1, scale: 1, duration: 0.16, ease: 'power2.out', onComplete: done })
+    const items = gsap.utils.toArray<HTMLElement>('[role="menuitem"]', el as HTMLElement)
+    if (items.length) {
+      gsap.from(items, { y: 6, opacity: 0, duration: 0.16, ease: 'power2.out', stagger: 0.03 })
+    }
+  }
+  function leave(el: Element, done: () => void) {
+    gsap.to(el, { opacity: 0, scale: 0.96, duration: 0.1, ease: 'power1.in', onComplete: done })
+  }
+  // 这些回调在交互时触发，用 contextSafe 包裹以随 ctx.revert() 撤销
+  onBeforeEnter = contextSafe(beforeEnter)
+  onEnter = contextSafe(enter)
+  onLeave = contextSafe(leave)
+})
 </script>
 
 <style scoped>
@@ -206,21 +237,5 @@ onUnmounted(() => {
   transform: scale(0.96);
 }
 
-/* ── 按压反馈 ── */
-
-/* 弹出动画 */
-.menu-pop-enter-active {
-  transition: opacity 0.06s ease-out, transform 0.06s ease-out;
-}
-.menu-pop-leave-active {
-  transition: opacity 0.08s ease-out, transform 0.08s ease-out;
-}
-.menu-pop-enter-from {
-  opacity: 0;
-  transform: scale(0.92);
-}
-.menu-pop-leave-to {
-  opacity: 0;
-  transform: scale(0.92);
-}
+/* 弹出动画由 GSAP JS 过渡钩子控制（:css=false） */
 </style>

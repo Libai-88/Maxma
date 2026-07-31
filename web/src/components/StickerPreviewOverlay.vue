@@ -1,6 +1,6 @@
 <template>
-  <div class="sticker-preview-overlay" @click.self="emit('close')">
-    <button class="preview-close" title="关闭" @click="emit('close')">×</button>
+  <div ref="rootEl" class="sticker-preview-overlay" @click.self="handleClose">
+    <button class="preview-close" title="关闭" @click="handleClose">×</button>
 
     <button
       v-if="canNavigate"
@@ -11,9 +11,9 @@
       ‹
     </button>
 
-    <figure class="preview-card">
+    <figure ref="cardEl" class="preview-card">
       <div class="preview-image-wrap">
-        <img :src="current.src" class="preview-img" :alt="current.filename" />
+        <img ref="imgRef" :src="current.src" class="preview-img" :alt="current.filename" />
       </div>
       <figcaption class="preview-meta">
         <span class="preview-category">{{ current.category || '未分类' }}</span>
@@ -41,6 +41,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { StickerSegment } from '@/composables/useStickerSegments'
 import { getApiBase, tauriFetch } from '@/utils/env'
 import { createLogger } from '@/utils/logger'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const log = createLogger('StickerPreviewOverlay')
 
@@ -58,6 +59,20 @@ const currentIndex = ref(
     ? props.initialIndex
     : 0
 )
+const rootEl = ref<HTMLElement | null>(null)
+const cardEl = ref<HTMLElement | null>(null)
+const imgRef = ref<HTMLImageElement | null>(null)
+
+// 入场：遮罩淡入 + 卡片弹性缩放入场
+useGsap(() => {
+  const root = rootEl.value
+  const card = cardEl.value
+  if (!root) return
+  gsap.fromTo(root, { opacity: 0 }, { opacity: 1, duration: 0.16, ease: 'power2.out' })
+  if (card) {
+    gsap.fromTo(card, { opacity: 0, scale: 0.9, y: 12 }, { opacity: 1, scale: 1, y: 0, duration: 0.24, ease: easeMap.spring })
+  }
+})
 const isFavorited = ref(false)
 const favoriteLoading = ref(false)
 
@@ -76,8 +91,28 @@ const canNavigate = computed(() => props.stickers.length > 1)
 
 function go(delta: number) {
   if (!props.stickers.length) return
-  const next = currentIndex.value + delta
-  currentIndex.value = (next + props.stickers.length) % props.stickers.length
+  const next = (currentIndex.value + delta + props.stickers.length) % props.stickers.length
+  if (next === currentIndex.value) return
+  const img = imgRef.value
+  if (img) {
+    // 旧图滑出 → 切图 → 新图滑入（交叉过渡）
+    gsap.to(img, { opacity: 0, x: delta > 0 ? -20 : 20, duration: 0.12, ease: 'power1.in',
+      onComplete: () => {
+        currentIndex.value = next
+        requestAnimationFrame(() => {
+          gsap.fromTo(img, { opacity: 0, x: delta > 0 ? 20 : -20 }, { opacity: 1, x: 0, duration: 0.16, ease: 'power1.out' })
+        })
+      } })
+  } else {
+    currentIndex.value = next
+  }
+}
+
+// 退场：先淡出再 emit，父组件 v-if 卸载不中断动画
+function handleClose() {
+  const root = rootEl.value
+  if (!root) { emit('close'); return }
+  gsap.to(root, { opacity: 0, duration: 0.15, ease: 'power2.in', onComplete: () => emit('close') })
 }
 
 async function refreshFavoriteStatus() {
@@ -123,7 +158,7 @@ async function toggleFavorite() {
 }
 
 function onKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') emit('close')
+  if (event.key === 'Escape') handleClose()
   if (event.key === 'ArrowLeft') go(-1)
   if (event.key === 'ArrowRight') go(1)
 }
@@ -154,7 +189,6 @@ onUnmounted(() => {
     rgba(12, 13, 16, 0.72);
   backdrop-filter: blur(10px);
   cursor: default;
-  animation: previewFadeIn 0.16s ease;
 }
 
 .preview-card {
@@ -165,7 +199,6 @@ onUnmounted(() => {
   background: rgba(24, 24, 28, 0.78);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.38);
   overflow: hidden;
-  animation: previewScaleIn 0.2s ease;
 }
 
 .preview-image-wrap {
@@ -276,20 +309,5 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.18);
 }
 
-@keyframes previewFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes previewScaleIn {
-  from { opacity: 0; transform: scale(0.94); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sticker-preview-overlay,
-  .preview-card {
-    animation: none;
-  }
-}
+/* 入场/退场/切图动画由 GSAP 控制；reduce-motion 由 useGsap 全局 timeScale 收口 */
 </style>

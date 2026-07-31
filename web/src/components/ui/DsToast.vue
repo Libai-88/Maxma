@@ -4,7 +4,12 @@
 -->
 <template>
   <Teleport to="body">
-    <Transition name="ds-toast">
+    <Transition
+      :css="false"
+      @before-enter="onBeforeEnter"
+      @enter="onEnter"
+      @leave="onLeave"
+    >
       <div
         v-if="visible"
         ref="toastRef"
@@ -50,6 +55,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue'
+import { gsap, useGsap } from '@/composables/useGsap'
 
 type ToastType = 'info' | 'success' | 'error' | 'warning'
 
@@ -149,6 +155,28 @@ onUnmounted(() => {
 })
 
 defineExpose({ dismiss, pause, resume })
+
+// ── Toast 弹层动画：spring 滑入 + 图标弹出（JS 过渡钩子，:css=false） ──
+let onBeforeEnter = (_el: Element) => {}
+let onEnter = (_el: Element, done: () => void) => done()
+let onLeave = (_el: Element, done: () => void) => done()
+
+useGsap((_ctx, contextSafe) => {
+  function beforeEnter(el: Element) {
+    gsap.set(el, { opacity: 0, y: 24, scale: 0.95, transformOrigin: 'bottom right' })
+  }
+  function enter(el: Element, done: () => void) {
+    gsap.to(el, { opacity: 1, y: 0, scale: 1, duration: 0.3, ease: 'back.out(1.4)', onComplete: done })
+    const icon = (el as HTMLElement).querySelector('.ds-toast__icon')
+    if (icon) gsap.from(icon, { scale: 0.4, opacity: 0, duration: 0.2, ease: 'back.out(2)' })
+  }
+  function leave(el: Element, done: () => void) {
+    gsap.to(el, { opacity: 0, y: 12, scale: 0.96, duration: 0.2, ease: 'power2.in', onComplete: done })
+  }
+  onBeforeEnter = contextSafe(beforeEnter)
+  onEnter = contextSafe(enter)
+  onLeave = contextSafe(leave)
+})
 </script>
 
 <style scoped>
@@ -223,29 +251,5 @@ defineExpose({ dismiss, pause, resume })
   outline-offset: 1px;
 }
 
-.ds-toast-enter-active,
-.ds-toast-leave-active {
-  transition: opacity var(--duration-fast) var(--ease-out),
-              transform var(--duration-fast) var(--ease-out);
-}
-.ds-toast-enter-from {
-  opacity: 0;
-  transform: translateY(8px);
-}
-.ds-toast-leave-to {
-  opacity: 0;
-  transform: translateY(8px);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ds-toast-enter-active,
-  .ds-toast-leave-active {
-    transition: opacity var(--duration-instant) linear;
-    transform: none;
-  }
-  .ds-toast-enter-from,
-  .ds-toast-leave-to {
-    transform: none;
-  }
-}
+/* 弹层动画由 GSAP JS 过渡钩子控制（:css=false）；reduce-motion 由 useGsap 全局 timeScale 收口 */
 </style>
