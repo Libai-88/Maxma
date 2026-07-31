@@ -1,6 +1,7 @@
 <template>
   <section
     v-if="enabled && shouldOffer"
+    ref="rootEl"
     class="think-path-chooser"
     aria-label="思考路径"
   >
@@ -40,8 +41,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { THINK_PATH_OPTIONS, shouldOfferThinkPaths, type ThinkPathId } from '@/utils/thinkPath'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const props = withDefaults(defineProps<{
   /** This is server-owned. False preserves the existing composer unchanged. */
@@ -62,6 +64,21 @@ const emit = defineEmits<{
 
 const options = THINK_PATH_OPTIONS
 const shouldOffer = computed(() => shouldOfferThinkPaths(props.text))
+
+const rootEl = ref<HTMLElement | null>(null)
+
+// 面板入场：可展示时从中心 scale pop + fade（仅进入时播放一次）
+useGsap((_ctx, contextSafe) => {
+  watch(() => props.enabled && shouldOffer.value, contextSafe((show) => {
+    if (!show) return
+    const el = rootEl.value
+    if (!el) return
+    gsap.fromTo(el,
+      { opacity: 0, scale: 0.95, y: -6, transformOrigin: 'center center' },
+      { opacity: 1, scale: 1, y: 0, duration: 0.25, ease: easeMap.out },
+    )
+  }), { immediate: true, flush: 'post' })
+})
 
 function select(pathId: ThinkPathId) {
   emit('update:modelValue', pathId)

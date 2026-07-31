@@ -1,5 +1,5 @@
 <template>
-  <div class="md-editor-view">
+  <div ref="rootRef" class="md-editor-view">
     <div class="header">
       <h2>{{ title }} <span class="subtitle">{{ subtitle }}</span></h2>
       <button class="save-button" :disabled="saving || content === savedContent" @click="saveContent">
@@ -47,7 +47,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref, watch } from 'vue'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 import { Codemirror } from 'vue-codemirror'
 import { useMarkdownPersist } from '@/composables/useMarkdownPersist'
 import { confirmAction } from '@/composables/useConfirm'
@@ -90,6 +91,21 @@ const {
   saveContent,
   onBlur,
 } = useMarkdownPersist({ type: props.type })
+
+const rootRef = ref<HTMLElement | null>(null)
+
+// 入场：加载完成后 header + 编辑器 wrapper 浮入（仅 opacity/transform，不影响 Codemirror 初始化）
+useGsap((_ctx, contextSafe) => {
+  watch(loading, contextSafe((isLoading) => {
+    if (isLoading) return
+    const root = rootRef.value
+    if (!root) return
+    const header = root.querySelector<HTMLElement>('.header')
+    if (header) gsap.from(header, { opacity: 0, y: -8, duration: 0.3, ease: easeMap.out })
+    const wrapper = root.querySelector<HTMLElement>('.editor-wrapper')
+    if (wrapper) gsap.from(wrapper, { opacity: 0, y: 8, duration: 0.3, ease: easeMap.out })
+  }), { immediate: true, flush: 'post' })
+})
 
 onMounted(loadContent)
 </script>

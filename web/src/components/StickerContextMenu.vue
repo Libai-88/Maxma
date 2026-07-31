@@ -25,6 +25,7 @@ import { ref, watch, watchEffect } from 'vue'
 import { getApiBase, tauriFetch } from '@/utils/env'
 import Icon from '@/components/Icon.vue'
 import { createLogger } from '@/utils/logger'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const log = createLogger('StickerContextMenu')
 
@@ -49,6 +50,19 @@ const isFavorited = ref(false)
 const loading = ref(false)
 
 const menuRef = ref<HTMLElement | null>(null)
+
+// 弹出面板入场：从锚点（左上）scale pop + fade（visible 变 true 时播放）
+useGsap((_ctx, contextSafe) => {
+  watch(() => props.visible, contextSafe((vis) => {
+    if (!vis) return
+    const el = menuRef.value
+    if (!el) return
+    gsap.fromTo(el,
+      { opacity: 0, scale: 0.95, y: -4, transformOrigin: 'top left' },
+      { opacity: 1, scale: 1, y: 0, duration: 0.18, ease: easeMap.out },
+    )
+  }), { immediate: true, flush: 'post' })
+})
 
 // CSP-safe CSSOM: position menu via style.setProperty (was :style binding)
 watchEffect(() => {

@@ -5,7 +5,7 @@
       <button class="btn-new" aria-label="新建会话" @click="$emit('create')" title="新会话">+</button>
     </div>
 
-    <div class="session-list">
+    <div ref="sessionListRef" class="session-list">
 
       <!-- ── 已保存（固定会话）── -->
       <div class="const-section">
@@ -171,10 +171,25 @@ import { useSessionStore } from '@/stores/session';
 import type { SessionInfo } from '@/types';
 import { computed, nextTick, ref, watch, watchEffect } from 'vue';
 import { createLogger } from '@/utils/logger'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const log = createLogger('SessionSidebar')
 
 const sessionStore = useSessionStore()
+
+const sessionListRef = ref<HTMLElement | null>(null)
+
+// 会话列表项错落入场：会话数量变化时对 .session-item 做 stagger 浮入（仅一次）
+useGsap((_ctx, contextSafe) => {
+  watch(() => props.sessions.length, contextSafe((count) => {
+    if (!count) return
+    const el = sessionListRef.value
+    if (!el) return
+    const items = gsap.utils.toArray<HTMLElement>('.session-item', el)
+    if (!items.length) return
+    gsap.from(items, { opacity: 0, y: 10, duration: 0.3, ease: easeMap.out, stagger: 0.04 })
+  }), { immediate: true, flush: 'post' })
+})
 
 const props = defineProps<{
   sessions: SessionInfo[]

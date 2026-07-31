@@ -5,7 +5,7 @@
     :busy="busy"
     @change="updateMode"
   />
-  <span v-if="errorMessage" class="permission-mode-error" role="status" aria-live="polite">
+  <span v-if="errorMessage" ref="errorRef" class="permission-mode-error" role="status" aria-live="polite">
     {{ errorMessage }}
   </span>
 </template>
@@ -14,11 +14,26 @@
 import { api } from '@/api'
 import type { PermissionMode } from '@/types'
 import { ref, watch } from 'vue'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 import PermissionModeControl from './PermissionModeControl.vue'
 
 const props = defineProps<{
   sessionId: string
 }>()
+
+const errorRef = ref<HTMLElement | null>(null)
+
+// 错误提示出现时淡入滑落
+useGsap((_ctx, contextSafe) => {
+  watch(errorMessage, contextSafe((msg) => {
+    if (!msg) return
+    const el = errorRef.value
+    if (!el) return
+    gsap.fromTo(el,
+      { opacity: 0, y: -4 },
+      { opacity: 1, y: 0, duration: 0.25, ease: easeMap.out, clearProps: 'transform' })
+  }), { flush: 'post' })
+})
 
 const enabled = ref(false)
 const mode = ref<PermissionMode>('ask')

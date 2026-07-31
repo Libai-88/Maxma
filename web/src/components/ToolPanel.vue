@@ -5,7 +5,7 @@
       <input v-model="search" placeholder="搜索工具..." class="search-input" />
     </div>
     <div v-if="store.loading" class="loading">加载中...</div>
-    <div v-else class="tool-list">
+    <div v-else ref="toolListRef" class="tool-list">
       <div v-for="group in filteredGroups" :key="group.category" class="tool-group">
         <div class="group-label"><Icon class="group-label-icon" :name="groupIcon(group.category)" :size="12" />{{ groupLabel(group.category) }} ({{ group.tools.length }})</div>
         <div v-for="tool in group.tools" :key="tool.name" class="tool-item" @click="selected = selected === tool.name ? null : tool.name">
@@ -23,13 +23,27 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useToolsStore } from '../stores/tools'
 import Icon from './Icon.vue'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const store = useToolsStore()
 const search = ref('')
 const selected = ref<string | null>(null)
+const toolListRef = ref<HTMLElement | null>(null)
+
+// 工具分组列表入场：加载完成就绪后对 .tool-group 做 stagger 浮入
+useGsap((_ctx, contextSafe) => {
+  watch(() => !store.loading && toolListRef.value !== null, contextSafe((ok) => {
+    if (!ok) return
+    const el = toolListRef.value
+    if (!el) return
+    const groups = gsap.utils.toArray<HTMLElement>('.tool-group', el)
+    if (!groups.length) return
+    gsap.from(groups, { opacity: 0, y: 10, duration: 0.3, ease: easeMap.out, stagger: 0.05 })
+  }), { immediate: true, flush: 'post' })
+})
 
 const filteredGroups = computed(() => {
   if (!search.value) return store.categories

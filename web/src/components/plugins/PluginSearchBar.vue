@@ -1,5 +1,5 @@
 <template>
-  <div class="plugin-search-bar">
+  <div ref="rootEl" class="plugin-search-bar">
     <div class="search-input-wrapper">
       <input
         v-model="localQuery"
@@ -32,6 +32,19 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { PluginCategory } from '@/types/plugin'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
+
+const rootEl = ref<HTMLElement | null>(null)
+
+// 搜索栏入场：整体轻微下滑放大，筛选控件随后浮现
+useGsap((_ctx) => {
+  const el = rootEl.value
+  if (!el) return
+  const q = gsap.utils.selector(el)
+  gsap.timeline({ defaults: { ease: easeMap.out } })
+    .from(el, { opacity: 0, y: -10, scale: 0.985, duration: 0.35 })
+    .from(q('.filter-controls'), { opacity: 0, y: -6, duration: 0.3 }, '<0.08')
+})
 
 const emit = defineEmits<{
   search: [query: string, category: PluginCategory | undefined, enabled: boolean | undefined]

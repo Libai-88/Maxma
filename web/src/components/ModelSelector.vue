@@ -1,5 +1,5 @@
 <template>
-  <div class="composer-model-selector">
+  <div ref="rootRef" class="composer-model-selector">
     <DsSelect
       :model-value="selectedModelId"
       :options="modelOptions"
@@ -21,13 +21,23 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useChatInputInjected } from '../composables/useChatInput'
 import { useChatStore } from '../stores/chat'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 import DsSelect from './ui/DsSelect.vue'
 
 const store = useChatStore()
 const chatInput = useChatInputInjected()
+
+const rootRef = ref<HTMLElement | null>(null)
+
+// 入场淡入
+useGsap(() => {
+  const el = rootRef.value
+  if (!el) return
+  gsap.from(el, { opacity: 0, y: -6, duration: 0.3, ease: easeMap.out })
+})
 
 const selectedModelId = computed(() => {
   const selected = store.availableModels.find(model =>

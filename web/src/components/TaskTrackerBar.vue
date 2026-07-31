@@ -1,5 +1,5 @@
 <template>
-  <div class="tracker-bar" :class="{ idle: !data }">
+  <div ref="rootRef" class="tracker-bar" :class="{ idle: !data }">
     <template v-if="!data">
       <span class="bar-label">无激活任务</span>
     </template>
@@ -23,7 +23,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watchEffect } from 'vue'
+import { computed, ref, watch, watchEffect } from 'vue'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 export interface TaskTrackerTodo {
   content: string
@@ -64,6 +65,35 @@ const activeForm = computed(() => {
   if (!Array.isArray(todos)) return ''
   const current = todos.find(t => t.status === 'in_progress')
   return current?.activeForm || ''
+})
+
+const rootRef = ref<HTMLElement | null>(null)
+
+// 进度/数字动画：数据到达时进度条 scaleX 展开 + 完成数变化时数字弹性 tick
+useGsap((_ctx, contextSafe) => {
+  let entered = false
+  watch(() => props.data, contextSafe((data) => {
+    if (!data || entered) return
+    entered = true
+    const root = rootRef.value
+    if (!root) return
+    gsap.fromTo(root, { y: -6 }, { y: 0, duration: 0.3, ease: easeMap.out, clearProps: 'transform' })
+    const fill = fillRef.value
+    if (fill) {
+      gsap.fromTo(fill,
+        { scaleX: 0, transformOrigin: 'left center' },
+        { scaleX: 1, duration: 0.5, ease: easeMap.out })
+    }
+  }), { immediate: true, flush: 'post' })
+
+  watch(currentStep, contextSafe((v, old) => {
+    if (v === old || !rootRef.value) return
+    const el = rootRef.value.querySelector<HTMLElement>('.bar-num-done')
+    if (!el) return
+    gsap.fromTo(el,
+      { scale: 1.35, transformOrigin: 'center center' },
+      { scale: 1, duration: 0.28, ease: easeMap.spring, overwrite: 'auto' })
+  }))
 })
 
 const statusLabel = computed(() => {

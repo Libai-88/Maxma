@@ -1,5 +1,5 @@
 <template>
-  <span class="ref-chip" :class="'ref-chip--' + chip.type" :title="tooltip">
+  <span ref="rootRef" class="ref-chip" :class="'ref-chip--' + chip.type" :title="tooltip">
     <span class="ref-chip-icon">
       <Icon :name="iconName" :size="12" />
     </span>
@@ -8,8 +8,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import Icon from '@/components/Icon.vue'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 import type { ParsedRef } from '@/utils/references'
 import { REF_CHIP_CONFIG } from '@/utils/references'
 
@@ -17,9 +18,18 @@ const props = defineProps<{
   chip: ParsedRef
 }>()
 
+const rootRef = ref<HTMLElement | null>(null)
+
 const cfg = computed(() => REF_CHIP_CONFIG[props.chip.type])
 const iconName = computed(() => cfg.value?.icon ?? 'file')
 const tooltip = computed(() => cfg.value?.tooltip(props.chip) ?? props.chip.label)
+
+// 轻量入场 scale pop（v-for 高频复用：仅一次性 from，stagger 由父级控制）
+useGsap(() => {
+  const el = rootRef.value
+  if (!el) return
+  gsap.from(el, { scale: 0.85, opacity: 0, duration: 0.2, ease: easeMap.spring })
+})
 </script>
 
 <style scoped>

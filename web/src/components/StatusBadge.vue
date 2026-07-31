@@ -1,5 +1,6 @@
 <template>
   <span
+    ref="rootRef"
     class="status-badge hover-trigger"
     :class="connected ? 'connected' : 'disconnected'"
     role="status"
@@ -41,12 +42,22 @@
 <script setup lang="ts">
 import type { ComponentHealth, HealthResponse } from '@/types';
 import { safeComponentHealth } from '@/utils/componentHealth';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
+import { gsap, useGsap, easeMap, durationMap } from '@/composables/useGsap';
 
 const props = defineProps<{
   connected: boolean
   health: HealthResponse | null
 }>()
+
+const rootRef = ref<HTMLElement | null>(null)
+
+// 入场弹性 pop
+useGsap(() => {
+  const el = rootRef.value
+  if (!el) return
+  gsap.from(el, { scale: 0.7, opacity: 0, duration: durationMap.slow, ease: easeMap.spring })
+})
 
 const items = computed(() => {
   if (!props.health) return []

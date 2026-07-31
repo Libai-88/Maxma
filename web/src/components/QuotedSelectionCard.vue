@@ -1,6 +1,6 @@
 <!-- web/src/components/QuotedSelectionCard.vue -->
 <template>
-  <div class="quoted-card">
+  <div ref="rootRef" class="quoted-card">
     <div class="quoted-card-header">
       <span class="quoted-source">{{ quote.source }}</span>
       <button class="quoted-remove" @click="$emit('remove')" title="移除引用"><Icon name="close" :size="12" /></button>
@@ -10,11 +10,22 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import type { QuotedSelection } from '@/composables/useSelectionQuote'
 import Icon from '@/components/Icon.vue'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 defineProps<{ quote: QuotedSelection }>()
 defineEmits<{ remove: [] }>()
+
+const rootRef = ref<HTMLElement | null>(null)
+
+// 入场浮入
+useGsap(() => {
+  const el = rootRef.value
+  if (!el) return
+  gsap.from(el, { opacity: 0, y: 12, duration: 0.3, ease: easeMap.out })
+})
 </script>
 
 <style scoped>

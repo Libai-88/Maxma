@@ -119,6 +119,7 @@
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { getApiBase, tauriFetch } from '@/utils/env'
 import { createLogger } from '@/utils/logger'
+import { gsap, useGsap, easeMap, durationMap } from '@/composables/useGsap'
 
 const log = createLogger('StickerPicker')
 
@@ -515,6 +516,23 @@ watch(filteredStickers, (stickers) => {
     highlightedStickerIndex.value = 0
   }
   scrollHighlightedIntoView()
+})
+
+// 入场 pop：visible 变为 true 时面板弹出（从右下角锚点缩放淡入）
+useGsap((_ctx, contextSafe) => {
+  watch(() => props.visible, contextSafe((vis) => {
+    if (!vis) return
+    const el = pickerRootRef.value
+    if (!el) return
+    gsap.fromTo(el,
+      { opacity: 0, scale: 0.97, y: 8, transformOrigin: 'bottom right' },
+      {
+        opacity: 1, scale: 1, y: 0,
+        duration: durationMap.slow, ease: easeMap.smooth,
+        clearProps: 'transform',
+        onComplete: () => updatePickerPosition(),
+      })
+  }))
 })
 
 onMounted(() => {

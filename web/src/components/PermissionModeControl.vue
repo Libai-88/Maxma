@@ -1,5 +1,6 @@
 <template>
   <section
+    ref="rootRef"
     v-if="enabled"
     class="permission-mode-control"
     aria-label="会话权限模式"
@@ -59,6 +60,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { gsap, useGsap, easeMap, durationMap } from '@/composables/useGsap'
 
 export type PermissionMode = 'read_only' | 'ask' | 'operate' | 'auto'
 
@@ -122,6 +124,23 @@ const modeRank: Record<PermissionMode, number> = {
 const open = ref(false)
 const pendingMode = ref<PermissionMode | null>(null)
 const currentMode = computed(() => props.mode)
+
+const rootRef = ref<HTMLElement | null>(null)
+
+// 入场 + 展开面板 pop（面板 v-if 渲染，open 变化后 flush: post 再取 DOM）
+useGsap((_ctx, contextSafe) => {
+  const el = rootRef.value
+  if (el) gsap.from(el, { opacity: 0, y: -6, duration: 0.3, ease: easeMap.out })
+
+  watch(open, contextSafe((isOpen) => {
+    if (!isOpen) return
+    const panel = rootRef.value?.querySelector<HTMLElement>('.permission-panel')
+    if (!panel) return
+    gsap.fromTo(panel,
+      { opacity: 0, scale: 0.96, y: -6, transformOrigin: 'top right' },
+      { opacity: 1, scale: 1, y: 0, duration: durationMap.slow, ease: easeMap.smooth, clearProps: 'transform' })
+  }), { flush: 'post' })
+})
 const currentOption = computed(() => optionFor(currentMode.value))
 
 watch(() => props.enabled, enabled => {

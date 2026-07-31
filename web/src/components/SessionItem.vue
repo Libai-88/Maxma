@@ -106,12 +106,13 @@ function formatRelativeTime(ts: number): string {
   text-align: left;
   font-family: inherit;
   position: relative;
-  transition: background 0.15s, transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
+  transition: background 0.15s, transform 0.2s var(--ease-spring), box-shadow 0.2s var(--ease-out);
 }
 /* 会话项入场由 SessionDrawer 的 GSAP stagger 统一控制，此处不再定义 CSS animation 避免冲突 */
+/* hover 用 CSS 弹性（--ease-spring 带回弹）而非 GSAP：高频 v-for 列表避免每项常驻动画 */
 .session-item:hover {
   background: var(--bg-card);
-  transform: translateX(2px);
+  transform: translateX(3px);
   box-shadow: var(--shadow-sm);
 }
 .session-item:focus-visible {
