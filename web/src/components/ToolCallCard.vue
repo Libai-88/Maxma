@@ -1,5 +1,5 @@
 <template>
-  <div v-if="toolCall" class="tool-card" :class="[toolCall.status, { open: isOpen }]">
+  <div v-if="toolCall" ref="rootEl" class="tool-card" :class="[toolCall.status, { open: isOpen }]">
     <div class="tool-header" @click="toggle" role="button" :aria-expanded="isOpen">
       <span class="tool-icon">
         <span v-if="toolCall.status === 'running'" class="spinner-sm"></span>
@@ -93,6 +93,7 @@ defineEmits<{
 }>()
 
 const isOpen = ref(false)
+const rootEl = ref<HTMLElement | null>(null)
 const bodyWrapper = ref<HTMLElement | null>(null)
 const bodyInner = ref<HTMLElement | null>(null)
 
@@ -384,6 +385,18 @@ watch(() => props.toolCall.status, (s) => {
   if (s === 'running') {
     isOpen.value = true
   }
+})
+
+// 状态图标翻转：running→done/error 时 checkmark/close 弹性翻转入场
+useGsap((_ctx, contextSafe) => {
+  watch(() => props.toolCall.status, contextSafe((s) => {
+    if (s !== 'done' && s !== 'error') return
+    const icon = rootEl.value?.querySelector('.tool-icon')
+    if (!icon) return
+    gsap.fromTo(icon,
+      { scale: 0.4, rotation: -90, autoAlpha: 0 },
+      { scale: 1, rotation: 0, autoAlpha: 1, duration: 0.32, ease: easeMap.spring, overwrite: 'auto' })
+  }))
 })
 </script>
 
