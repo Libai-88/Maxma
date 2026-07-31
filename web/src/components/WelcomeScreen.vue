@@ -1,8 +1,10 @@
 <template>
   <div class="welcome-screen">
-    <div v-if="store.loading" class="welcome-loading">
-      <div class="welcome-loading-spinner"></div>
-      <p class="welcome-loading-text">加载中...</p>
+    <div v-if="store.loading" ref="loadingEl" class="welcome-loading" role="status" aria-live="polite">
+      <BrandSeal size="md" class="welcome-loading-seal" />
+      <div class="welcome-loading-lines">
+        <p v-for="line in loadingLines" :key="line" class="welcome-loading-line">{{ line }}</p>
+      </div>
     </div>
     <div v-else-if="store.error" class="welcome-error">
       <p class="welcome-error-text">加载失败：{{ store.error }}</p>
@@ -54,6 +56,7 @@
 import { computed, ref, watch } from 'vue'
 import { usePersonaStore } from '../stores/persona'
 import Icon from './Icon.vue'
+import BrandSeal from './brand/BrandSeal.vue'
 import { gsap, useGsap, easeMap, lazyLoadPlugin } from '@/composables/useGsap'
 import chatBubbleRaw from '../assets/icons/welcome/chat-bubble.svg?raw'
 import searchRaw from '../assets/icons/welcome/search.svg?raw'
@@ -61,6 +64,21 @@ import searchRaw from '../assets/icons/welcome/search.svg?raw'
 const store = usePersonaStore()
 const emit = defineEmits<{ start: [message: string] }>()
 const contentEl = ref<HTMLElement | null>(null)
+const loadingEl = ref<HTMLElement | null>(null)
+
+// 加载态叙事：品牌印章弹簧弹出 + 三行等待文案依次浮现
+const loadingLines = ['正在翻开笔记本…', '整理最近的记忆…', '马上就好']
+
+useGsap((_ctx, contextSafe) => {
+  watch(() => store.loading, contextSafe((loading) => {
+    if (!loading || !loadingEl.value) return
+    const root = loadingEl.value
+    const q = gsap.utils.selector(root)
+    gsap.timeline({ defaults: { ease: easeMap.out } })
+      .from(q('.welcome-loading-seal'), { scale: 0.4, autoAlpha: 0, rotation: -14, duration: 0.45, ease: easeMap.spring })
+      .from(q('.welcome-loading-line'), { autoAlpha: 0, y: 8, duration: 0.35, stagger: 0.42 }, '-=0.15')
+  }))
+})
 
 // 入场编排：store 加载完成（welcome-content 渲染）后依次浮现
 // 高级编排：aura 光晕扩散 + 头像弹性弹出 + 名字 SplitText 字符级 3D reveal + 区块交错
@@ -168,19 +186,25 @@ const examples = computed(() => [
     radial-gradient(ellipse 40% 35% at 65% 60%, color-mix(in srgb, var(--accent-pink, var(--accent)) 4%, transparent), transparent 70%);
 }
 
-.welcome-loading { text-align: center; color: var(--text-secondary); }
-.welcome-loading-spinner {
-  display: inline-block;
-  width: 28px;
-  height: 28px;
-  border: 2.5px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: welcome-spin 0.7s linear infinite;
-  margin-bottom: 12px;
+.welcome-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-16);
+  color: var(--text-secondary);
+  text-align: center;
 }
-@keyframes welcome-spin { to { transform: rotate(360deg); } }
-.welcome-loading-text { font-size: var(--fs-ui); margin: 0; }
+.welcome-loading-seal { margin-bottom: 4px; }
+.welcome-loading-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.welcome-loading-line {
+  font-size: var(--fs-ui);
+  line-height: 1.5;
+  margin: 0;
+}
 .welcome-error { text-align: center; color: var(--status-error); }
 .welcome-error-text { font-size: var(--fs-ui); margin: 0 0 12px; }
 .welcome-error-retry {
