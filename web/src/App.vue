@@ -31,6 +31,7 @@
       </RegionalErrorBoundary>
     </main>
     <!-- 保留全局媒体与引导层，布局本身不依赖装饰层。 -->
+    <BackgroundGlow />
     <CursorGlow />
     <LeavesOverlay />
     <!-- 全屏媒体查看器 -->
@@ -66,6 +67,7 @@ import { useRouter } from 'vue-router';
 
 import LeavesOverlay from '@/components/LeavesOverlay.vue'
 import CursorGlow from '@/components/CursorGlow.vue'
+import BackgroundGlow from '@/components/BackgroundGlow.vue'
 import { usePaperTexture } from '@/composables/usePaperTexture'
 import { useGlobalShortcut } from '@/composables/useGlobalShortcut'
 import { useHealthPolling } from '@/composables/useHealthPolling'
