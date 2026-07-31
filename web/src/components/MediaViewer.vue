@@ -1,7 +1,12 @@
 <!-- web/src/components/MediaViewer.vue -->
 <template>
   <Teleport to="body">
-    <Transition name="mv-fade">
+    <Transition
+      :css="false"
+      @before-enter="onBeforeEnter"
+      @enter="onEnter"
+      @leave="onLeave"
+    >
       <div
         v-if="isOpen"
         class="mv-root"
@@ -46,6 +51,7 @@ import { ref, watch, onMounted, onUnmounted, nextTick, watchEffect } from 'vue'
 import { useMediaViewer } from '@/composables/useMediaViewer'
 import { useMediaTransform } from '@/composables/useMediaTransform'
 import Icon from '@/components/Icon.vue'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const { isOpen, currentItem, items, currentIndex, close, next, prev } = useMediaViewer()
 const { transform, transformStyle, isDragging, reset, computeFitScale, setScale, onWheel: doWheel, onPointerDown: doPointerDown, onPointerMove: doPointerMove, onPointerUp: doPointerUp, onDoubleClick: doDoubleClick, onKeyZoom } = useMediaTransform()
@@ -124,8 +130,34 @@ watch(isOpen, (open) => {
   }
 })
 
-// 切换图片时重置变换
-watch(currentIndex, () => reset())
+// 切换图片时重置变换 + 新图淡入
+watch(currentIndex, () => {
+  reset()
+  const img = imageRef.value
+  if (img) gsap.fromTo(img, { opacity: 0 }, { opacity: 1, duration: 0.25, ease: easeMap.out })
+})
+
+// ── 打开/关闭过渡：root 淡入淡出 + 图片淡入（不触碰 transform，避免与 CSSOM 状态冲突） ──
+let onBeforeEnter = (_el: Element) => {}
+let onEnter = (_el: Element, done: () => void) => done()
+let onLeave = (_el: Element, done: () => void) => done()
+
+useGsap((_ctx, contextSafe) => {
+  function beforeEnter(el: Element) {
+    gsap.set(el, { opacity: 0 })
+  }
+  function enter(el: Element, done: () => void) {
+    gsap.to(el, { opacity: 1, duration: 0.22, ease: 'power2.out', onComplete: done })
+    const img = (el as HTMLElement).querySelector('img')
+    if (img) gsap.fromTo(img, { opacity: 0 }, { opacity: 1, duration: 0.28, ease: easeMap.out })
+  }
+  function leave(el: Element, done: () => void) {
+    gsap.to(el, { opacity: 0, duration: 0.18, ease: 'power2.in', onComplete: done })
+  }
+  onBeforeEnter = contextSafe(beforeEnter)
+  onEnter = contextSafe(enter)
+  onLeave = contextSafe(leave)
+})
 </script>
 
 <style scoped>
@@ -212,16 +244,5 @@ watch(currentIndex, () => reset())
   margin: 0 4px;
 }
 
-/* 过渡动画 */
-.mv-fade-enter-active, .mv-fade-leave-active {
-  transition: opacity 0.25s ease;
-}
-.mv-fade-enter-from, .mv-fade-leave-to {
-  opacity: 0;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .mv-controls { transition: none; }
-  .mv-fade-enter-active, .mv-fade-leave-active { transition: none; }
-}
+/* 打开/关闭/切图动画由 GSAP JS 过渡钩子控制（:css=false）；缩放仍由 CSSOM transform 管理 */
 </style>
