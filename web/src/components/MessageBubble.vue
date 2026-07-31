@@ -138,11 +138,11 @@ useGsap(async () => {
     })
     if (!split.words?.length) { split.revert(); return }
     gsap.from(split.words, {
-      yPercent: 18,
+      yPercent: 26,
       autoAlpha: 0,
-      duration: 0.32,
+      duration: 0.4,
       ease: easeMap.out,
-      stagger: 0.01,
+      stagger: 0.014,
       delay: 0.05,
       onComplete: () => split.revert(),
     })

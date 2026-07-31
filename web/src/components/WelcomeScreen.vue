@@ -155,7 +155,7 @@ function handleStart(msg: string) {
   if (!root) { emit('start', msg); return }
   contextSafe(() => {
     gsap.to(root.querySelectorAll(':scope > *:not(.welcome-aura)'), {
-      opacity: 0, y: -8, duration: 0.2, stagger: 0.02, overwrite: 'auto',
+      opacity: 0, y: -18, scale: 0.97, duration: 0.24, stagger: 0.028, overwrite: 'auto',
       onComplete: () => emit('start', msg),
     })
   })()

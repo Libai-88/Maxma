@@ -48,8 +48,8 @@ useGsap(() => {
     const r = el.getBoundingClientRect()
     const px = (e.clientX - r.left) / r.width - 0.5
     const py = (e.clientY - r.top) / r.height - 0.5
-    ryTo(px * 7)
-    rxTo(-py * 7)
+    ryTo(px * 12)
+    rxTo(-py * 12)
   })
   el.addEventListener('mouseleave', () => {
     rxTo(0)
