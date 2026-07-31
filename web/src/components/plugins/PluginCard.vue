@@ -1,5 +1,5 @@
 <template>
-  <div class="plugin-card" :class="{ disabled: !plugin.enabled }" @click="emit('open', plugin.name)">
+  <div ref="rootEl" class="plugin-card" :class="{ disabled: !plugin.enabled }" @click="emit('open', plugin.name)">
     <div class="plugin-header">
       <div class="plugin-icon">🧩</div>
       <div class="plugin-info">
@@ -42,7 +42,9 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import type { Plugin } from '@/types/plugin'
+import { useTilt } from '@/composables/useTilt'
 
 defineProps<{
   plugin: Plugin
@@ -54,6 +56,10 @@ const emit = defineEmits<{
   uninstall: [name: string]
   open: [name: string]
 }>()
+
+// 3D 倾斜 hover
+const rootEl = ref<HTMLElement | null>(null)
+useTilt(() => rootEl.value)
 </script>
 
 <style scoped>
@@ -62,7 +68,17 @@ const emit = defineEmits<{
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  transition: all 0.15s;
+  will-change: transform;
+  transition: box-shadow 0.25s ease, border-color 0.25s ease, background 0.2s;
+  box-shadow: var(--shadow-sm);
+}
+.plugin-card:hover {
+  box-shadow: var(--shadow-lg);
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+}
+.plugin-card:active {
+  box-shadow: var(--shadow-md);
+}
   cursor: pointer;
 }
 
