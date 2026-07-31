@@ -1,5 +1,5 @@
 <template>
-  <section v-if="available" class="sub-agent-card">
+  <section ref="cardEl" v-if="available" class="sub-agent-card">
     <button
       class="sub-agent-header"
       type="button"
@@ -43,6 +43,7 @@
 import { api } from '@/api'
 import type { DeferredRun, DeferredRunStatus } from '@/types'
 import { computed, onUnmounted, ref, watch } from 'vue'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const props = defineProps<{
   sessionId: string
@@ -135,6 +136,16 @@ async function toggle() {
     stopPolling()
   }
 }
+
+// 展开时任务列表淡入上浮（flush post 保证 v-if body 已渲染）
+const cardEl = ref<HTMLElement | null>(null)
+useGsap((_ctx, contextSafe) => {
+  watch(expanded, contextSafe((open) => {
+    if (!open || !cardEl.value) return
+    const body = cardEl.value.querySelector('.sub-agent-body')
+    if (body) gsap.fromTo(body, { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.2, ease: easeMap.out })
+  }), { flush: 'post' })
+})
 
 async function cancelRun(runId: string) {
   if (cancelling.value.has(runId)) return

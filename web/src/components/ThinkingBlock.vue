@@ -1,5 +1,5 @@
 <template>
-  <div class="thinking-block" :class="{ done: block.done }">
+  <div ref="rootEl" class="thinking-block" :class="{ done: block.done }">
     <div class="thinking-header">
       <span class="thinking-label">
         <span class="spinner" v-if="!block.done"></span>
@@ -34,6 +34,7 @@ import RenderMarkdown from './RenderMarkdown.vue'
 import StickerInline from './StickerInline.vue'
 import StickerPreviewOverlay from './StickerPreviewOverlay.vue'
 import { useStickerSegments, type StickerSegment } from '@/composables/useStickerSegments'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const props = defineProps<{ block: ThinkingBlockType }>()
 
@@ -65,6 +66,14 @@ const streamingText = computed(() => {
 const cleanedTokens = computed(() => stripThinkingLabels(props.block.tokens ?? ''))
 const segments = useStickerSegments(cleanedTokens)
 const stickerSegments = computed(() => segments.value.filter((seg): seg is StickerSegment => seg.type === 'sticker'))
+
+// 入场：思考块出现时轻淡入上浮（done 折叠仍由 CSS transition 处理）
+const rootEl = ref<HTMLElement | null>(null)
+useGsap(() => {
+  const el = rootEl.value
+  if (!el) return
+  gsap.fromTo(el, { opacity: 0, y: -4 }, { opacity: 1, y: 0, duration: 0.2, ease: easeMap.out })
+})
 </script>
 
 <style scoped>

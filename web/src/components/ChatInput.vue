@@ -159,6 +159,7 @@
             <ContextUsageBadge />
             <button
               v-if="!isStreaming"
+              ref="sendBtnRef"
               type="button"
               class="btn-send"
               :class="{ 'is-success': sendState === 'success', 'is-error': sendState === 'error' }"
@@ -229,7 +230,8 @@ import { useFileRefs } from '@/composables/useFileRefs'
 import { useImageAttachment } from '@/composables/useImageAttachment'
 import { useLinkInput } from '@/composables/useLinkInput'
 import type { ThinkPathId } from '@/utils/thinkPath'
-import { computed, nextTick, onMounted, onUnmounted, ref, watchEffect } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
+import { gsap, useGsap } from '@/composables/useGsap'
 import type StickerPickerComponent from '@/components/StickerPicker.vue'
 import type { Sticker } from '@/components/StickerPicker.vue'
 import ModelSelector from './ModelSelector.vue'
@@ -250,12 +252,33 @@ const {
 const text = ref('')
 const connectionError = ref<string | null>(null)
 const sendState = ref<'idle' | 'success' | 'error'>('idle')
+const sendBtnRef = ref<HTMLElement | null>(null)
 let _connectionErrorTimer: ReturnType<typeof setTimeout> | null = null
 let _sendStateTimer: ReturnType<typeof setTimeout> | null = null
 
 function clearSendStateTimer() {
   if (_sendStateTimer) { clearTimeout(_sendStateTimer); _sendStateTimer = null }
 }
+
+// 发送按钮反馈：成功 spring 弹跳 / 失败抖动（替代 CSS keyframes）
+useGsap((_ctx, contextSafe) => {
+  watch(sendState, contextSafe((s) => {
+    const el = sendBtnRef.value
+    if (!el || s === 'idle') return
+    if (s === 'success') {
+      gsap.fromTo(el,
+        { scale: 0.9 },
+        { scale: 1.12, duration: 0.1, yoyo: true, repeat: 1, ease: 'back.out(2.5)', overwrite: 'auto',
+          onComplete: () => gsap.set(el, { scale: 1 }) })
+    } else {
+      gsap.fromTo(el,
+        { x: 0 },
+        { x: 4, duration: 0.05, yoyo: true, repeat: 3, ease: 'none', overwrite: 'auto',
+          onComplete: () => gsap.set(el, { x: 0 }) })
+    }
+  }))
+})
+
 
 const selectedThinkPathId = ref<ThinkPathId | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
@@ -1186,15 +1209,13 @@ onUnmounted(() => {
   opacity: 0.2;
   cursor: default;
 }
-/* 发送成功 — 绿色闪烁 */
+/* 发送成功 — 绿色（弹跳由 GSAP 控制，替代 CSS keyframes） */
 .btn-send.is-success {
   background: var(--status-ok);
-  animation: maxma-send-success 0.8s var(--ease-standard, cubic-bezier(0.77, 0, 0.175, 1));
 }
-/* 发送失败 — 红色震动 */
+/* 发送失败 — 红色（抖动由 GSAP 控制，替代 CSS keyframes） */
 .btn-send.is-error {
   background: var(--status-error);
-  animation: maxma-send-shake 0.5s var(--ease-out, ease-out);
 }
 .btn-stop {
   background: var(--status-error);

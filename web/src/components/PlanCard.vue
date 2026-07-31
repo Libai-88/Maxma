@@ -1,5 +1,5 @@
 <template>
-  <div class="plan-card" :class="plan.status">
+  <div ref="rootEl" class="plan-card" :class="plan.status">
     <div class="plan-header">
       <Icon class="plan-icon" name="file-page" :size="16" />
       <span class="plan-title">执行计划</span>
@@ -77,6 +77,7 @@
 import { ref, computed } from 'vue'
 import type { PlanCard } from '@/types'
 import Icon from '@/components/Icon.vue'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const props = defineProps<{
   plan: PlanCard
@@ -136,6 +137,17 @@ function submitEdit() {
   }
   isEditing.value = false
 }
+
+// 入场：卡片浮现 + 步骤依次滑入
+const rootEl = ref<HTMLElement | null>(null)
+useGsap(() => {
+  const el = rootEl.value
+  if (!el) return
+  const tl = gsap.timeline()
+  tl.fromTo(el, { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.25, ease: easeMap.out })
+  const steps = gsap.utils.toArray<HTMLElement>('.plan-step', el)
+  if (steps.length) tl.from(steps, { opacity: 0, x: -6, duration: 0.2, ease: easeMap.out, stagger: 0.04 }, '-=0.1')
+})
 </script>
 
 <style scoped>
