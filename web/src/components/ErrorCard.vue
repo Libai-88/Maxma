@@ -1,5 +1,5 @@
 <template>
-  <div class="error-card" :class="[`error-card--${category}`]">
+  <div ref="rootEl" class="error-card" :class="[`error-card--${category}`]">
     <div class="error-card__header">
       <Icon class="error-card__icon" name="warning" :size="16" />
       <span class="error-card__title">{{ title }}</span>
@@ -22,6 +22,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import Icon from './Icon.vue'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const props = withDefaults(defineProps<{
   message: string
@@ -81,6 +82,15 @@ async function copyDiagnostic() {
   copied.value = true
   window.setTimeout(() => { copied.value = false }, 2_000)
 }
+
+// 入场：左滑淡入 + 轻微抖动警示反馈
+const rootEl = ref<HTMLElement | null>(null)
+useGsap(() => {
+  const el = rootEl.value
+  if (!el) return
+  gsap.fromTo(el, { opacity: 0, x: -14 }, { opacity: 1, x: 0, duration: 0.25, ease: easeMap.out })
+  gsap.fromTo(el, { x: 0 }, { x: 3, duration: 0.06, yoyo: true, repeat: 3, ease: 'none' })
+})
 </script>
 
 <style scoped>

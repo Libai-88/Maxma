@@ -1,7 +1,7 @@
 <!-- web/src/components/ThemePicker.vue -->
 <!-- 主题选择器 — 在设置弹窗内展示 12 个主题预览块 -->
 <template>
-  <div class="theme-picker">
+  <div ref="rootEl" class="theme-picker">
     <div class="theme-picker-header">主题</div>
     <div class="theme-grid">
       <button
@@ -9,7 +9,7 @@
         :key="t.id"
         class="theme-card"
         :class="{ active: storedTheme === t.id }"
-        @click="setTheme(t.id)"
+        @click="handleSetTheme(t.id)"
         :title="t.description"
       >
         <div
@@ -52,9 +52,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, type ComponentPublicInstance } from 'vue'
-import { useTheme } from '@/composables/useTheme'
+import { nextTick, ref, type ComponentPublicInstance } from 'vue'
+import { useTheme, type ThemeId } from '@/composables/useTheme'
 import { usePaperTexture } from '@/composables/usePaperTexture'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const { storedTheme, setTheme, THEMES } = useTheme()
 
@@ -72,6 +73,32 @@ function toggleSerif() {
 }
 
 const { enabled: paperTexture, toggle: togglePaperTexture } = usePaperTexture()
+
+// 卡片 stagger 入场 + 选中弹跳反馈
+const rootEl = ref<HTMLElement | null>(null)
+let themePop: (() => void) | null = null
+
+useGsap((_ctx, contextSafe) => {
+  const el = rootEl.value
+  if (el) {
+    const cards = gsap.utils.toArray<HTMLElement>('.theme-card', el)
+    if (cards.length) gsap.from(cards, { opacity: 0, y: 8, duration: 0.3, ease: easeMap.out, stagger: 0.02 })
+  }
+  themePop = contextSafe(() => {
+    const active = rootEl.value?.querySelector<HTMLElement>('.theme-card.active')
+    if (!active) return
+    gsap.fromTo(active,
+      { scale: 0.97 },
+      { scale: 1.05, duration: 0.1, yoyo: true, repeat: 1, ease: 'sine.out', overwrite: 'auto',
+        onComplete: () => { gsap.set(active, { clearProps: 'transform' }) } })
+  })
+})
+
+async function handleSetTheme(id: ThemeId) {
+  setTheme(id)
+  await nextTick()
+  themePop?.()
+}
 </script>
 
 <style scoped>

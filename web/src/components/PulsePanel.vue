@@ -5,7 +5,7 @@
       <span class="pulse-summary">{{ summary }}</span>
       <span class="pulse-chevron" :class="{ expanded: !collapsed }" aria-hidden="true">›</span>
     </button>
-    <div v-if="!collapsed" id="pulse-details" class="pulse-details" aria-live="polite">
+    <div id="pulse-details" ref="detailsEl" class="pulse-details" aria-live="polite">
       <div v-for="item in items" :key="item.id" class="pulse-item">
         <span class="pulse-dot" :class="item.component.status"></span>
         <div class="pulse-copy"><span class="pulse-label">{{ item.label }}</span><span class="pulse-detail">{{ item.detail }}</span></div>
@@ -19,6 +19,7 @@
 import { computed, ref } from 'vue'
 import type { ComponentHealth, HealthResponse } from '@/types'
 import { diagnosticMessage, retryMessage } from '@/utils/providerDiagnostics'
+import { gsap, useGsap, easeMap, durationMap } from '@/composables/useGsap'
 
 const STORAGE_KEY = 'maxma.pulse.collapsed'
 const props = defineProps<{ health: HealthResponse }>()
@@ -59,9 +60,35 @@ function makeItem(id: string, label: string, component: ComponentHealth): PulseI
   return { id, label, component, detail: [status, diagnostic, retry, latency].filter(Boolean).join(' · ') }
 }
 
+const detailsEl = ref<HTMLElement | null>(null)
+let animatePulse: ((open: boolean) => void) | null = null
+
+// 展开/收起高度动画；初始若为展开态（localStorage 恢复），直接置为可见
+useGsap((_ctx, contextSafe) => {
+  const el = detailsEl.value
+  if (el && !collapsed.value) gsap.set(el, { height: 'auto', opacity: 1 })
+  animatePulse = contextSafe((open: boolean) => {
+    if (!detailsEl.value) return
+    const target = detailsEl.value
+    if (open) {
+      const h = target.scrollHeight
+      gsap.set(target, { height: 0, opacity: 0 })
+      gsap.to(target, {
+        height: h, opacity: 1, duration: durationMap.fast, ease: easeMap.out,
+        overwrite: 'auto', onComplete: () => { target.style.height = 'auto' },
+      })
+    } else {
+      gsap.to(target, {
+        height: 0, opacity: 0, duration: durationMap.fast, ease: easeMap.out, overwrite: 'auto',
+      })
+    }
+  })
+})
+
 function toggle() {
   collapsed.value = !collapsed.value
   try { localStorage.setItem(STORAGE_KEY, String(collapsed.value)) } catch { /* no persistent storage */ }
+  animatePulse?.(!collapsed.value)
 }
 </script>
 
@@ -74,7 +101,7 @@ function toggle() {
 .pulse-summary, .pulse-updated { color: var(--text-tertiary); font-size: 11px; }
 .pulse-chevron { color: var(--text-secondary); font-size: 18px; line-height: 1; text-align: right; transition: transform 160ms ease; }
 .pulse-chevron.expanded { transform: rotate(90deg); }
-.pulse-details { display: grid; gap: 8px; padding: 12px 0 2px; }
+.pulse-details { display: grid; gap: 8px; padding: 12px 0 2px; height: 0; opacity: 0; overflow: hidden; /* 展开/收起由 GSAP 控制 */ }
 .pulse-copy { display: grid; gap: 1px; min-width: 0; }
 .pulse-label { color: var(--text-secondary); font-size: 12px; }
 .pulse-detail { overflow: hidden; color: var(--text-tertiary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }

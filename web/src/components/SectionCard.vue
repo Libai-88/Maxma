@@ -1,5 +1,5 @@
 <template>
-  <div class="section-card">
+  <div ref="rootEl" class="section-card">
     <!-- 分区头部 + 导航，合并为一行 -->
     <div class="section-header">
       <span class="section-title">{{ theme }}</span>
@@ -38,6 +38,7 @@
 import { ref, computed, watch } from 'vue'
 import type { VignetteMemoryItem } from '@/types'
 import Icon from '@/components/Icon.vue'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const props = defineProps<{
   theme: string
@@ -83,6 +84,18 @@ function emitEdit() {
     })
   }
 }
+
+// 条目切换时文本淡入上浮（flush post 保证新文本已渲染）
+const rootEl = ref<HTMLElement | null>(null)
+useGsap((_ctx, contextSafe) => {
+  watch(currentIndex, contextSafe(() => {
+    const text = rootEl.value?.querySelector('.item-text')
+    if (!text) return
+    gsap.fromTo(text,
+      { opacity: 0, y: 8 },
+      { opacity: 1, y: 0, duration: 0.2, ease: easeMap.out, overwrite: 'auto' })
+  }), { flush: 'post' })
+})
 </script>
 
 <style scoped>

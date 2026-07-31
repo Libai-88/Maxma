@@ -1,5 +1,5 @@
 <template>
-  <div class="health-panel" v-if="health">
+  <div ref="rootEl" class="health-panel" v-if="health">
     <div class="health-title">系统状态</div>
     <div class="health-items">
       <div
@@ -19,7 +19,8 @@
 import type { ComponentHealth, HealthResponse } from '@/types';
 import { safeComponentHealth } from '@/utils/componentHealth';
 import { diagnosticMessage, retryMessage } from '@/utils/providerDiagnostics';
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
+import { gsap, useGsap } from '@/composables/useGsap';
 
 const props = defineProps<{ health: HealthResponse }>()
 
@@ -69,6 +70,24 @@ function makeItem(label: string, c: ComponentHealth | null | undefined): HealthI
     tooltip: `${label}: ${ok ? '正常' : safe.status === 'degraded' ? '降级' : '异常'}${parts.length ? ' — ' + parts.join(' | ') : ''}`,
   }
 }
+
+// 状态点脉冲：首次挂载 + 状态签名变化时（5 分钟轮询一般无变化，不重复动画）
+const rootEl = ref<HTMLElement | null>(null)
+let lastStatusSig = ''
+useGsap((_ctx, contextSafe) => {
+  watch(() => props.health, contextSafe(() => {
+    const sig = items.value.map(i => i.statusClass).join(',')
+    if (sig === lastStatusSig) return
+    lastStatusSig = sig
+    if (!rootEl.value) return
+    const dots = gsap.utils.toArray<HTMLElement>('.dot', rootEl.value)
+    if (!dots.length) return
+    gsap.fromTo(dots,
+      { scale: 1 },
+      { scale: 1.6, duration: 0.15, yoyo: true, repeat: 1, ease: 'power1.out',
+        stagger: 0.05, overwrite: 'auto' })
+  }))
+})
 </script>
 
 <style scoped>
