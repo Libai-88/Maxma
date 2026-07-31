@@ -54,7 +54,7 @@
 import { computed, ref, watch } from 'vue'
 import { usePersonaStore } from '../stores/persona'
 import Icon from './Icon.vue'
-import { gsap, useGsap, easeMap } from '@/composables/useGsap'
+import { gsap, useGsap, easeMap, lazyLoadPlugin } from '@/composables/useGsap'
 import chatBubbleRaw from '../assets/icons/welcome/chat-bubble.svg?raw'
 import searchRaw from '../assets/icons/welcome/search.svg?raw'
 
@@ -63,19 +63,40 @@ const emit = defineEmits<{ start: [message: string] }>()
 const contentEl = ref<HTMLElement | null>(null)
 
 // 入场编排：store 加载完成（welcome-content 渲染）后依次浮现
+// 高级编排：aura 光晕扩散 + 头像弹性弹出 + 名字 SplitText 字符级 3D reveal + 区块交错
 const { contextSafe } = useGsap(() => {
-  watch(() => store.loading, contextSafe((loading) => {
+  watch(() => store.loading, contextSafe(async (loading) => {
     if (loading || !contentEl.value) return
-    const q = gsap.utils.selector(contentEl.value)
+    const root = contentEl.value
+    const q = gsap.utils.selector(root)
     const tl = gsap.timeline({ defaults: { ease: easeMap.out, duration: 0.5 } })
-    tl.from(q('.welcome-aura'),     { opacity: 0, scale: 0.96, duration: 0.8 })
-      .from(q('.welcome-avatar'),   { opacity: 0, y: 16, scale: 0.9 }, '<0.1')
-      .from(q('.welcome-name'),     { opacity: 0, y: 12 }, '<0.1')
-      .from(q('.welcome-scene'),    { opacity: 0, y: 12 }, '<0.08')
-      .from(q('.welcome-greeting'), { opacity: 0, y: 12 }, '<0.08')
-      .from(q('.welcome-rule'),     { opacity: 0, scaleX: 0 }, '<0.05')
+    tl.from(q('.welcome-aura'),     { opacity: 0, scale: 0.9, duration: 1.4, ease: 'power1.inOut' })
+      .from(q('.welcome-avatar'),   { opacity: 0, y: 18, scale: 0.82, duration: 0.55, ease: easeMap.spring }, '-=0.95')
+      .from(q('.welcome-scene'),    { opacity: 0, y: 12 }, '<0.15')
+      .from(q('.welcome-greeting'), { opacity: 0, y: 12 }, '<0.1')
+      .from(q('.welcome-rule'),     { opacity: 0, scaleX: 0 }, '<0.06')
       .from(q('.welcome-actions'),  { opacity: 0, y: 12 }, '<0.1')
       .from(q('.example-prompts'),  { opacity: 0, y: 16 }, '<0.1')
+
+    // 名字字符级 3D reveal（SplitText 按需加载；一次性动画，播完 revert 保持 DOM 干净）
+    const nameEl = root.querySelector<HTMLElement>('.welcome-name')
+    if (nameEl) {
+      try {
+        const { SplitText } = await lazyLoadPlugin('SplitText')
+        const split = SplitText.create(nameEl, { type: 'chars', charsClass: 'welcome-char', aria: 'auto' })
+        gsap.from(split.chars, {
+          yPercent: 110,
+          autoAlpha: 0,
+          rotateX: -60,
+          transformPerspective: 600,
+          duration: 0.55,
+          delay: 0.25,
+          ease: 'back.out(1.5)',
+          stagger: 0.035,
+          onComplete: () => split.revert(),
+        })
+      } catch { /* SplitText 加载失败则跳过字符动画 */ }
+    }
   }), { immediate: true })
 }, { scope: () => contentEl.value })
 
