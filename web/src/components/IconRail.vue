@@ -157,6 +157,7 @@ const visibleNavItems = computed(() =>
   height: 30px;
   object-fit: cover;
   border-radius: 50%;
+  animation: maxma-brand-breathe 4s ease-in-out infinite;
 }
 
 .icon-rail__nav,

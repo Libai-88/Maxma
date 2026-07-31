@@ -169,6 +169,12 @@
   to   { transform: scaleX(0); }
 }
 
+/* ── 品牌 logo 呼吸光晕 ── */
+@keyframes maxma-brand-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 22%, transparent); }
+  50%      { box-shadow: 0 0 14px 3px color-mix(in srgb, var(--accent) 34%, transparent); }
+}
+
 /* ── 工具气泡：执行中呼吸光晕 ── */
 @keyframes maxma-tool-glow {
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
