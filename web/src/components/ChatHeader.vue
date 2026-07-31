@@ -4,7 +4,7 @@
       <span class="header-avatar" aria-hidden="true">{{ store.profile.avatar }}</span>
       <div class="header-context">
         <h1 class="header-name">{{ store.profile.name }}</h1>
-        <span class="header-session">{{ sessionTitle }}</span>
+        <span ref="titleEl" class="header-session">{{ sessionTitle }}</span>
       </div>
     </div>
     <div class="header-right" aria-live="polite">
@@ -14,14 +14,25 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { usePersonaStore } from '../stores/persona'
 import { useSessionStore } from '../stores/session'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 const store = usePersonaStore()
 const sessionStore = useSessionStore()
 const currentSession = computed(() => sessionStore.sessions.find(session => session.session_id === sessionStore.sessionId))
 const sessionTitle = computed(() => currentSession.value?.const_name || '当前会话')
 const contextDetails = computed(() => `${store.profile.name} · ${sessionTitle.value} · ${store.profile.description} · ${store.profile.scene}`)
+
+// 会话标题切换：淡入上移
+const titleEl = ref<HTMLElement | null>(null)
+useGsap((_ctx, contextSafe) => {
+  watch(sessionTitle, contextSafe(() => {
+    const el = titleEl.value
+    if (!el) return
+    gsap.fromTo(el, { opacity: 0, y: -4 }, { opacity: 1, y: 0, duration: 0.2, ease: easeMap.out })
+  }))
+})
 </script>
 
 <style scoped>
