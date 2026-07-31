@@ -185,6 +185,7 @@ import { useMetricsStore } from '@/stores/metrics'
 import Sparkline from '@/components/Sparkline.vue'
 import BarChartMini from '@/components/BarChartMini.vue'
 import { useReveal } from '@/composables/useReveal'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const metricsStore = useMetricsStore()
 const { snapshot, history, loading, error } = storeToRefs(metricsStore)
@@ -196,6 +197,24 @@ let _timer: ReturnType<typeof setInterval> | null = null
 
 // 统计卡错落入场（数据加载完成后）
 useReveal(() => statGridRef.value, '.stat', { stagger: 0.04 })
+
+// 数字 count-up：纯数值 stat 从 0 滚动到目标（带单位/格式化值跳过）
+useGsap((_ctx, contextSafe) => {
+  watch(() => loading.value, contextSafe((l) => {
+    if (l || !statGridRef.value) return
+    const vals = Array.from(statGridRef.value.querySelectorAll<HTMLElement>('.stat-value'))
+    vals.forEach((el) => {
+      if (el.querySelector('.unit')) return
+      const target = Number(el.textContent)
+      if (!Number.isFinite(target) || target === 0) return
+      const proxy = { v: 0 }
+      gsap.to(proxy, {
+        v: target, duration: 0.8, ease: easeMap.out,
+        onUpdate: () => { el.textContent = Math.round(proxy.v).toString() },
+      })
+    })
+  }))
+})
 
 async function refresh() {
   await metricsStore.refresh()
