@@ -21,7 +21,7 @@
     <main id="main-content" class="main" tabindex="-1" aria-label="对话工作区">
       <RegionalErrorBoundary :reset-keys="[$route.path]">
         <router-view v-slot="{ Component, route }">
-          <Transition :name="`page-${route.meta.transition || 'fade'}`" mode="out-in">
+          <Transition :name="pageTransition" mode="out-in">
             <!-- :key=route.name 保证 keep-alive 缓存稳定（ChatView 切换回来不重建） -->
             <keep-alive include="ChatView" :max="5">
               <component :is="Component" :key="route.name" />
@@ -95,6 +95,16 @@ function closeSessionDrawer() {
 }
 
 const router = useRouter()
+
+// 方向感知页面转场：用 history.state.position 判断前进/后退（Vue Router 每次 push +1、back -1）
+// 首次加载 position===lastPosition → 保持 page-fade，不做方向动画
+const pageTransition = ref('page-fade')
+let lastNavPosition = 0
+router.beforeResolve(() => {
+  const pos = (window.history.state as { position?: number } | null)?.position ?? 0
+  pageTransition.value = pos > lastNavPosition ? 'page-forward' : pos < lastNavPosition ? 'page-back' : 'page-fade'
+  lastNavPosition = pos
+})
 
 async function handleCreateSession() {
   await createSession()
@@ -231,8 +241,13 @@ onMounted(async () => {
 }
 
 /* ── 路由级过渡（router-view Transition） ── */
+/* 方向感知：前进从右滑入、后退从左滑入；direction 未知/首载回退 fade */
 .page-fade-enter-active,
-.page-fade-leave-active {
+.page-fade-leave-active,
+.page-forward-enter-active,
+.page-forward-leave-active,
+.page-back-enter-active,
+.page-back-leave-active {
   transition: opacity 0.2s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
               transform 0.2s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
 }
@@ -244,9 +259,29 @@ onMounted(async () => {
   opacity: 0;
   transform: translateY(-4px);
 }
+.page-forward-enter-from {
+  opacity: 0;
+  transform: translateX(24px);
+}
+.page-forward-leave-to {
+  opacity: 0;
+  transform: translateX(-16px);
+}
+.page-back-enter-from {
+  opacity: 0;
+  transform: translateX(-24px);
+}
+.page-back-leave-to {
+  opacity: 0;
+  transform: translateX(16px);
+}
 @media (prefers-reduced-motion: reduce) {
   .page-fade-enter-active,
-  .page-fade-leave-active {
+  .page-fade-leave-active,
+  .page-forward-enter-active,
+  .page-forward-leave-active,
+  .page-back-enter-active,
+  .page-back-leave-active {
     transition: none;
   }
 }
