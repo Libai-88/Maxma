@@ -38,22 +38,29 @@ const props = defineProps<{ entry: NewsEntry }>()
 
 // 3D 倾斜：鼠标位置驱动 rotationX/rotationY（quickTo 平滑跟手）
 const rootEl = ref<HTMLElement | null>(null)
-useGsap(() => {
+useGsap((ctx) => {
   const el = rootEl.value
   if (!el) return
   gsap.set(el, { transformPerspective: 700 })
   const rxTo = gsap.quickTo(el, 'rotationX', { duration: 0.35, ease: 'power2' })
   const ryTo = gsap.quickTo(el, 'rotationY', { duration: 0.35, ease: 'power2' })
-  el.addEventListener('mousemove', (e) => {
+  const onMove = (e: MouseEvent) => {
     const r = el.getBoundingClientRect()
     const px = (e.clientX - r.left) / r.width - 0.5
     const py = (e.clientY - r.top) / r.height - 0.5
     ryTo(px * 12)
     rxTo(-py * 12)
-  })
-  el.addEventListener('mouseleave', () => {
+  }
+  const onLeave = () => {
     rxTo(0)
     ryTo(0)
+  }
+  el.addEventListener('mousemove', onMove)
+  el.addEventListener('mouseleave', onLeave)
+  // 卸载时移除原生监听（ctx.revert 只回滚动画，不清理 addEventListener）
+  ctx.add(() => {
+    el.removeEventListener('mousemove', onMove)
+    el.removeEventListener('mouseleave', onLeave)
   })
 })
 

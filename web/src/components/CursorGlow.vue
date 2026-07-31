@@ -10,7 +10,7 @@ import { gsap, useGsap } from '@/composables/useGsap'
 const glowRef = ref<HTMLElement | null>(null)
 const enabled = ref(true)
 
-useGsap(() => {
+useGsap((ctx) => {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
     enabled.value = false
     return
@@ -24,6 +24,8 @@ useGsap(() => {
     yTo(e.clientY)
   }
   window.addEventListener('mousemove', onMove)
+  // 卸载时移除 window 监听，避免常驻组件重建时泄漏
+  ctx.add(() => window.removeEventListener('mousemove', onMove))
 })
 </script>
 

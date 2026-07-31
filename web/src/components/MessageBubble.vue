@@ -121,32 +121,36 @@ watch(() => props.content, () => {
 // 过滤：跳过代码块/表格/过短消息，避免破坏复杂 markdown；同一内容只播一次（防虚拟列表重建重播）
 const revealedReplies = new Set<string>()
 
-useGsap(async () => {
-  if (props.role !== 'assistant') return
-  const el = contentEl.value
-  if (!el) return
-  if (props.content.includes('```') || props.content.includes('|') || props.content.length < 24) return
-  if (revealedReplies.has(props.content)) return
-  revealedReplies.add(props.content)
-  try {
-    const { SplitText } = await lazyLoadPlugin('SplitText')
-    const split = SplitText.create(el, {
-      type: 'words',
-      wordsClass: 'reply-word',
-      aria: 'auto',
-      ignore: 'pre, code, table, a, img, svg, video, audio',
-    })
-    if (!split.words?.length) { split.revert(); return }
-    gsap.from(split.words, {
-      yPercent: 26,
-      autoAlpha: 0,
-      duration: 0.4,
-      ease: easeMap.out,
-      stagger: 0.014,
-      delay: 0.05,
-      onComplete: () => split.revert(),
-    })
-  } catch { /* SplitText 加载失败或拆分异常则跳过 */ }
+useGsap((_ctx, contextSafe) => {
+  // contextSafe 包裹：await lazyLoadPlugin 之后创建的 tween 仍被 gsap.context 跟踪，
+  // 组件卸载时能随 ctx.revert() 一并撤销，避免异步恢复后动画泄漏
+  contextSafe(async () => {
+    if (props.role !== 'assistant') return
+    const el = contentEl.value
+    if (!el) return
+    if (props.content.includes('```') || props.content.includes('|') || props.content.length < 24) return
+    if (revealedReplies.has(props.content)) return
+    revealedReplies.add(props.content)
+    try {
+      const { SplitText } = await lazyLoadPlugin('SplitText')
+      const split = SplitText.create(el, {
+        type: 'words',
+        wordsClass: 'reply-word',
+        aria: 'auto',
+        ignore: 'pre, code, table, a, img, svg, video, audio',
+      })
+      if (!split.words?.length) { split.revert(); return }
+      gsap.from(split.words, {
+        yPercent: 26,
+        autoAlpha: 0,
+        duration: 0.4,
+        ease: easeMap.out,
+        stagger: 0.014,
+        delay: 0.05,
+        onComplete: () => split.revert(),
+      })
+    } catch { /* SplitText 加载失败或拆分异常则跳过 */ }
+  })()
 })
 </script>
 
