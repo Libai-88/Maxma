@@ -1,5 +1,5 @@
 <template>
-  <div class="persona-card">
+  <div ref="rootEl" class="persona-card">
     <div class="card-header">当前人格</div>
     <div class="card-body">
       <div class="persona-avatar">
@@ -17,14 +17,21 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { usePersonaStore } from '../stores/persona'
 import avatarImg from '../assets/images/brand/logo-companion-opt.jpg'
+import { useTilt } from '@/composables/useTilt'
 
 const store = usePersonaStore()
+
+// 3D 倾斜 hover
+const rootEl = ref<HTMLElement | null>(null)
+useTilt(() => rootEl.value)
 </script>
 
 <style scoped>
-.persona-card { padding: 20px; border: 1px solid var(--border, #e5e7eb); border-radius: 10px; background: var(--bg-card, #fff); }
+.persona-card { padding: 20px; border: 1px solid var(--border, #e5e7eb); border-radius: 10px; background: var(--bg-card, #fff); will-change: transform; transition: box-shadow 0.25s ease, border-color 0.25s ease; box-shadow: var(--shadow-sm); }
+.persona-card:hover { box-shadow: var(--shadow-lg); border-color: color-mix(in srgb, var(--accent) 24%, var(--border)); }
 .card-header { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary, #6b7280); margin-bottom: 16px; }
 .persona-avatar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .persona-avatar-img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid var(--border, #e5e7eb); }

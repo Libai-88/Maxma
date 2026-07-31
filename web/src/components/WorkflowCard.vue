@@ -1,5 +1,5 @@
 <template>
-  <section v-if="available" class="workflow-card" aria-label="工作流">
+  <section v-if="available" ref="rootEl" class="workflow-card" aria-label="工作流">
     <button
       class="workflow-header"
       type="button"
@@ -74,8 +74,13 @@ export function __resetWorkflowsLock() { workflowsUnavailable = false }
 import { api } from '@/api'
 import type { WorkflowRun, WorkflowRunStatus } from '@/types'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { useTilt } from '@/composables/useTilt'
 
 const props = defineProps<{ sessionId: string }>()
+
+// 3D 倾斜 hover
+const rootEl = ref<HTMLElement | null>(null)
+useTilt(() => rootEl.value, { strength: 5 })
 
 const POLL_INTERVAL_MS = 4_000
 const available = ref(false)
@@ -246,7 +251,8 @@ onUnmounted(stopPolling)
 </script>
 
 <style scoped>
-.workflow-card { width: min(768px, calc(100% - 48px)); margin: 0 auto 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); overflow: hidden; }
+.workflow-card { width: min(768px, calc(100% - 48px)); margin: 0 auto 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); overflow: hidden; will-change: transform; transition: box-shadow 0.25s ease, border-color 0.25s ease; }
+.workflow-card:hover { box-shadow: var(--shadow-lg); border-color: color-mix(in srgb, var(--accent) 24%, var(--border)); }
 .workflow-header { display: flex; align-items: center; width: 100%; min-height: 38px; gap: 8px; padding: 8px 14px; border: 0; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; text-align: left; }
 .workflow-header:hover { background: var(--bg-hover); }.workflow-header:focus-visible, .start-workflow:focus-visible, .run-action:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .workflow-icon { color: var(--accent); font-size: 16px; }.workflow-title, .run-name { color: var(--text-primary); font-size: 13px; font-weight: 600; }.workflow-count, .run-phase, .workflow-note { color: var(--text-secondary); font-size: 12px; }.workflow-toggle, .run-action { margin-left: auto; }
