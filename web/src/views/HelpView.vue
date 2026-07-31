@@ -1,5 +1,5 @@
 <template>
-  <div class="help-view">
+  <div class="help-view" ref="rootEl">
     <div class="header">
       <h2>帮助 & 关于 HELP</h2>
       <p class="header-sub">了解 Maxma 是什么、能做什么、如何开始</p>
@@ -137,7 +137,14 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
+import { useViewEntrance } from '@/composables/useViewEntrance'
+
 defineOptions({ name: 'HelpView' })
+
+const rootEl = ref<HTMLElement | null>(null)
+// 视图入场编排：header 下滑 + 各 section 卡片错落上浮
+useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.section' })
 
 interface Capability {
   icon: string
