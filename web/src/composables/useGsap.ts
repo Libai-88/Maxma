@@ -1,5 +1,8 @@
 import { onMounted, onUnmounted } from 'vue'
 import { gsap } from 'gsap'
+import { CustomEase } from 'gsap/CustomEase'
+
+gsap.registerPlugin(CustomEase)
 
 type AnyFn = (...args: any[]) => any
 
@@ -79,15 +82,23 @@ export function useGsap(
   return { contextSafe, getContext: () => ctx }
 }
 
-/** 与 tokens.css 动效 token 对齐的 GSAP 缓动映射 */
-export const easeMap = {
-  out: 'power3.out',
-  in: 'power3.in',
-  standard: 'power2.inOut',
-  smooth: 'power2.out',
-  drawer: 'power3.out',
-  spring: 'back.out(1.7)',
+/** 与 tokens.css 动效 token 精确对齐的 GSAP 缓动映射（CustomEase 复刻 cubic-bezier 曲线） */
+const easeBeziers = {
+  out: '0.23,1,0.32,1',
+  in: '0.7,0,0.84,0',
+  standard: '0.77,0,0.175,1',
+  smooth: '0.22,0.68,0,1',
+  drawer: '0.32,0.72,0,1',
 } as const
+
+export const easeMap = {
+  out: CustomEase.create('maxma-out', `M0,0 C${easeBeziers.out} 1,1`),
+  in: CustomEase.create('maxma-in', `M0,0 C${easeBeziers.in} 1,1`),
+  standard: CustomEase.create('maxma-standard', `M0,0 C${easeBeziers.standard} 1,1`),
+  smooth: CustomEase.create('maxma-smooth', `M0,0 C${easeBeziers.smooth} 1,1`),
+  drawer: CustomEase.create('maxma-drawer', `M0,0 C${easeBeziers.drawer} 1,1`),
+  spring: 'back.out(1.7)',
+}
 
 export const durationMap = {
   instant: 0.1,
