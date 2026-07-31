@@ -1,5 +1,6 @@
 <template>
   <svg
+    ref="rootRef"
     :width="width"
     :height="height"
     :viewBox="`0 0 ${width} ${height}`"
@@ -42,7 +43,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { gsap, useGsap } from '@/composables/useGsap'
 
 const props = withDefaults(defineProps<{
   data: number[]
@@ -98,6 +100,17 @@ const lastPoint = computed(() =>
 )
 
 const baselineY = computed(() => props.height - padding)
+
+// 初次渲染：折线绘制动画（stroke-dashoffset，无需 DrawSVGPlugin）
+const rootRef = ref<SVGSVGElement | null>(null)
+useGsap(() => {
+  const line = rootRef.value?.querySelector<SVGGeometryElement>('.sparkline-line')
+  if (!line) return
+  const len = line.getTotalLength()
+  gsap.fromTo(line,
+    { strokeDasharray: len, strokeDashoffset: len },
+    { strokeDashoffset: 0, duration: 0.6, ease: 'power1.out' })
+})
 </script>
 
 <style scoped>

@@ -1,5 +1,5 @@
 <template>
-  <div class="model-settings">
+  <div ref="rootEl" class="model-settings">
     <div class="settings-header">模型参数</div>
     <div class="setting-row">
       <label class="setting-label">Temperature</label>
@@ -26,8 +26,25 @@
 
 <script setup lang="ts">
 import { useChatStore } from '../stores/chat'
+import { gsap, useGsap } from '@/composables/useGsap'
+import { watch } from 'vue'
+import { ref } from 'vue'
+
 const store = useChatStore()
 function formatNum(n: number): string { return n >= 1000 ? (n / 1000).toFixed(0) + 'k' : String(n) }
+
+// Thinking 开关切换：按钮弹性弹跳
+const rootEl = ref<HTMLElement | null>(null)
+useGsap((_ctx, contextSafe) => {
+  watch(() => store.thinkingEnabled, contextSafe(() => {
+    const btn = rootEl.value?.querySelector<HTMLElement>('.toggle-btn')
+    if (!btn) return
+    gsap.fromTo(btn,
+      { scale: 0.9 },
+      { scale: 1.06, duration: 0.1, yoyo: true, repeat: 1, ease: 'sine.out', overwrite: 'auto',
+        onComplete: () => gsap.set(btn, { clearProps: 'transform' }) })
+  }))
+})
 </script>
 
 <style scoped>

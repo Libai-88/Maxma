@@ -24,6 +24,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watchEffect, type ComponentPublicInstance } from 'vue'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const props = withDefaults(defineProps<{
   items: Array<{ label: string; value: number; display?: string; kind?: 'default' | 'error' }>
@@ -64,6 +65,20 @@ watchEffect(() => {
     if (el) el.style.setProperty('width', `${item.percent}%`)
   })
 }, { flush: 'post' })
+
+// 初始入场：bars 从 0 宽依次展开（完成后交还 CSSOM 控制，数据更新仍走 CSS transition）
+useGsap(() => {
+  const bars = fillEls.filter(Boolean)
+  if (!bars.length) return
+  gsap.set(bars, { width: 0 })
+  gsap.to(bars, {
+    width: (i: number) => `${normalizedItems.value[i]?.percent ?? 0}%`,
+    duration: 0.4,
+    ease: easeMap.out,
+    stagger: 0.04,
+    onComplete: () => gsap.set(bars, { clearProps: 'width' }),
+  })
+})
 </script>
 
 <style scoped>
