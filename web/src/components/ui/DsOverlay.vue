@@ -1,7 +1,15 @@
 <!-- web/src/components/ui/DsOverlay.vue -->
 <template>
   <Teleport to="body">
-    <Transition name="ds-overlay" appear @after-enter="onAfterEnter" @after-leave="onAfterLeave">
+    <Transition
+      :css="false"
+      appear
+      @before-enter="onBeforeEnter"
+      @enter="onEnter"
+      @leave="onLeave"
+      @after-enter="onAfterEnter"
+      @after-leave="onAfterLeave"
+    >
       <div
         v-if="modelValue"
         ref="rootRef"
@@ -19,6 +27,7 @@
 
 <script setup lang="ts">
 import { ref, watch, nextTick, onUnmounted } from 'vue'
+import { gsap, useGsap } from '@/composables/useGsap'
 
 const props = withDefaults(defineProps<{
   modelValue: boolean
@@ -171,6 +180,34 @@ onUnmounted(() => {
   document.removeEventListener('keydown', onKeyDown, true)
   document.removeEventListener('focusin', onFocusIn, true)
 })
+
+// ── 遮罩动画：opacity 淡入淡出 + blur 变体的 backdrop-filter 渐变（JS 过渡钩子，:css=false） ──
+let onBeforeEnter = (_el: Element) => {}
+let onEnter = (_el: Element, done: () => void) => done()
+let onLeave = (_el: Element, done: () => void) => done()
+
+useGsap((_ctx, contextSafe) => {
+  function beforeEnter(el: Element) {
+    gsap.set(el, { opacity: 0 })
+    if (props.variant === 'blur') {
+      gsap.set(el, { backdropFilter: 'blur(0px)', webkitBackdropFilter: 'blur(0px)' })
+    }
+  }
+  function enter(el: Element, done: () => void) {
+    const vars: gsap.TweenVars = { opacity: 1, duration: 0.2, ease: 'power2.out', onComplete: done }
+    if (props.variant === 'blur') {
+      vars.backdropFilter = 'blur(8px)'
+      vars.webkitBackdropFilter = 'blur(8px)'
+    }
+    gsap.to(el, vars)
+  }
+  function leave(el: Element, done: () => void) {
+    gsap.to(el, { opacity: 0, duration: 0.18, ease: 'power2.in', onComplete: done })
+  }
+  onBeforeEnter = contextSafe(beforeEnter)
+  onEnter = contextSafe(enter)
+  onLeave = contextSafe(leave)
+})
 </script>
 
 <style scoped>
@@ -195,15 +232,7 @@ onUnmounted(() => {
 }
 .ds-overlay--blur {
   background: var(--overlay-light);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  transition: backdrop-filter var(--duration-fast) var(--ease-out),
-              -webkit-backdrop-filter var(--duration-fast) var(--ease-out),
-              opacity var(--duration-fast) var(--ease-out);
-  @starting-style {
-    backdrop-filter: blur(0px);
-    -webkit-backdrop-filter: blur(0px);
-  }
+  /* backdrop-filter 动画由 GSAP JS 过渡钩子控制 */
 }
 .ds-overlay--none {
   background: transparent;
@@ -211,21 +240,5 @@ onUnmounted(() => {
 }
 .ds-overlay--none > * {
   pointer-events: auto;
-}
-
-.ds-overlay-enter-active,
-.ds-overlay-leave-active {
-  transition: opacity var(--duration-fast) var(--ease-out);
-}
-.ds-overlay-enter-from,
-.ds-overlay-leave-to {
-  opacity: 0;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ds-overlay-enter-active,
-  .ds-overlay-leave-active {
-    transition: none;
-  }
 }
 </style>

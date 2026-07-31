@@ -5,7 +5,13 @@
     :variant="backdrop"
     @update:model-value="$emit('update:modelValue', $event)"
   >
-    <Transition name="ds-modal" appear>
+    <Transition
+      :css="false"
+      appear
+      @before-enter="onBeforeEnter"
+      @enter="onEnter"
+      @leave="onLeave"
+    >
       <div
         v-if="modelValue"
         ref="dialogRef"
@@ -31,6 +37,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import DsOverlay from './DsOverlay.vue'
+import { gsap, useGsap } from '@/composables/useGsap'
 
 withDefaults(defineProps<{
   modelValue: boolean
@@ -49,6 +56,33 @@ const titleId = `ds-modal-title-${Math.random().toString(36).slice(2, 9)}`
 const dialogRef = ref<HTMLElement | null>(null)
 
 defineExpose({ dialogRef })
+
+// ── 弹窗动画：scale 弹出 + 内容分层上浮（JS 过渡钩子，:css=false） ──
+let onBeforeEnter = (_el: Element) => {}
+let onEnter = (_el: Element, done: () => void) => done()
+let onLeave = (_el: Element, done: () => void) => done()
+
+useGsap((_ctx, contextSafe) => {
+  function beforeEnter(el: Element) {
+    gsap.set(el, { opacity: 0, scale: 0.95, y: 12 })
+  }
+  function enter(el: Element, done: () => void) {
+    gsap.to(el, { opacity: 1, scale: 1, y: 0, duration: 0.22, ease: 'power3.out', onComplete: done })
+    const node = el as HTMLElement
+    const title = node.querySelector('.ds-modal__title')
+    const body = node.querySelector('.ds-modal__body')
+    const actions = node.querySelector('.ds-modal__actions')
+    if (title) gsap.from(title, { opacity: 0, y: -6, duration: 0.2, ease: 'power2.out' })
+    if (body) gsap.from(body, { opacity: 0, y: 6, duration: 0.2, ease: 'power2.out' })
+    if (actions) gsap.from(actions, { opacity: 0, y: 6, duration: 0.2, ease: 'power2.out' })
+  }
+  function leave(el: Element, done: () => void) {
+    gsap.to(el, { opacity: 0, scale: 0.96, y: 8, duration: 0.15, ease: 'power2.in', onComplete: done })
+  }
+  onBeforeEnter = contextSafe(beforeEnter)
+  onEnter = contextSafe(enter)
+  onLeave = contextSafe(leave)
+})
 </script>
 
 <style scoped>
@@ -89,31 +123,5 @@ defineExpose({ dialogRef })
   border-top: 1px solid var(--border);
 }
 
-.ds-modal-enter-active {
-  transition: opacity var(--duration-fast) var(--ease-out),
-              transform var(--duration-fast) var(--ease-out);
-}
-.ds-modal-leave-active {
-  transition: opacity var(--duration-instant) var(--ease-out),
-              transform var(--duration-instant) var(--ease-out);
-}
-.ds-modal-enter-from {
-  opacity: 0;
-  transform: scale(0.95) translateY(8px);
-}
-.ds-modal-leave-to {
-  opacity: 0;
-  transform: scale(0.95) translateY(8px);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ds-modal-enter-active,
-  .ds-modal-leave-active {
-    transition: opacity var(--duration-instant) linear;
-  }
-  .ds-modal-enter-from,
-  .ds-modal-leave-to {
-    transform: none;
-  }
-}
+/* 弹窗动画由 GSAP JS 过渡钩子控制（:css=false） */
 </style>
