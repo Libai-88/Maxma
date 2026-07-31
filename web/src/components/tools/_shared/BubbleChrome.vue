@@ -30,6 +30,7 @@ const props = defineProps<{ toolCall: ToolCall }>()
 
 const isOpen = ref(false)
 const bodyWrapper = ref<HTMLElement | null>(null)
+const bodyInner = ref<HTMLElement | null>(null)
 
 const displayName = computed(() => toolDisplayName(props.toolCall.name))
 
@@ -50,6 +51,11 @@ useGsap((_ctx, contextSafe) => {
         { maxHeight: h, autoAlpha: 1, duration: durationMap.slow, ease: easeMap.out,
           overwrite: 'auto',
           onComplete: () => { el.style.maxHeight = 'none' } })
+      // 内容区块错落浮现（bodyInner 内的工具 UI 子元素）
+      const sections = bodyInner.value ? Array.from(bodyInner.value.children) : []
+      if (sections.length) {
+        gsap.from(sections, { y: 8, autoAlpha: 0, duration: 0.25, ease: easeMap.out, stagger: 0.04, delay: 0.06, overwrite: 'auto' })
+      }
     } else {
       // 先冻结当前高度（内容可能处于 auto/流式增长中），再收起
       gsap.set(el, { maxHeight: el.scrollHeight })

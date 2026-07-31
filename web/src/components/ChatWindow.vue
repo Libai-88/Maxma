@@ -248,7 +248,7 @@ import { api } from '@/api'
 import { computed, nextTick, onUnmounted, ref, toRef, watch } from 'vue'
 import { useTheme } from '@/composables/useTheme'
 import { useChatScroll } from '@/composables/useChatScroll'
-import { gsap, useGsap, easeMap } from '@/composables/useGsap'
+import { gsap, useGsap } from '@/composables/useGsap'
 import { useTypewriter } from '@/composables/useTypewriter'
 import { useContextMenu } from '@/composables/useContextMenu'
 import ContextMenu from './ContextMenu.vue'
@@ -473,12 +473,16 @@ const { contextSafe } = useGsap(() => {
     if (!root) return
     const rows = Array.from(root.querySelectorAll('.turn-wrapper')).slice(-Math.min(delta, 10))
     if (!rows.length) return
+    // 3D 立起入场：消息从平面轻微 rotateX 立起 + 弹簧（back.out），方向按角色左右滑入
     gsap.from(rows, {
-      opacity: 0,
-      x: (_i, el) => (el.classList.contains('user') ? 12 : -12),
-      duration: 0.25,
-      ease: easeMap.out,
-      stagger: 0.04,
+      autoAlpha: 0,
+      x: (_i, el) => (el.classList.contains('user') ? 14 : -14),
+      rotationX: -14,
+      transformPerspective: 700,
+      y: 10,
+      duration: 0.42,
+      ease: 'back.out(1.4)',
+      stagger: 0.045,
       overwrite: 'auto',
     })
   }))

@@ -365,6 +365,11 @@ useGsap((_ctx, contextSafe) => {
         { maxHeight: h, autoAlpha: 1, duration: durationMap.slow, ease: easeMap.out,
           overwrite: 'auto',
           onComplete: () => { el.style.maxHeight = 'none' } })
+      // 内容区块错落浮现（参数/进度/结果 section）
+      const sections = bodyInner.value ? Array.from(bodyInner.value.children) : []
+      if (sections.length) {
+        gsap.from(sections, { y: 8, autoAlpha: 0, duration: 0.25, ease: easeMap.out, stagger: 0.04, delay: 0.06, overwrite: 'auto' })
+      }
     } else {
       // 先冻结当前高度（内容可能处于 auto/流式增长中），再收起
       gsap.set(el, { maxHeight: el.scrollHeight })
