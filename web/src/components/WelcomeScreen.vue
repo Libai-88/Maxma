@@ -70,7 +70,7 @@ const { contextSafe } = useGsap(() => {
     const root = contentEl.value
     const q = gsap.utils.selector(root)
     const tl = gsap.timeline({ defaults: { ease: easeMap.out, duration: 0.5 } })
-    tl.from(q('.welcome-aura'),     { opacity: 0, scale: 0.9, duration: 1.4, ease: 'power1.inOut' })
+    tl.from(q('.welcome-aura'),     { opacity: 0, duration: 1.4, ease: 'power1.inOut' })
       .from(q('.welcome-avatar'),   { opacity: 0, y: 18, scale: 0.82, duration: 0.55, ease: easeMap.spring }, '-=0.95')
       .from(q('.welcome-scene'),    { opacity: 0, y: 12 }, '<0.15')
       .from(q('.welcome-greeting'), { opacity: 0, y: 12 }, '<0.1')
@@ -162,6 +162,7 @@ const examples = computed(() => [
   inset: -60px -80px;
   z-index: -1;
   pointer-events: none;
+  animation: maxma-aura-breathe 7s ease-in-out infinite;
   background:
     radial-gradient(ellipse 55% 45% at 50% 30%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 70%),
     radial-gradient(ellipse 40% 35% at 65% 60%, color-mix(in srgb, var(--accent-pink, var(--accent)) 4%, transparent), transparent 70%);

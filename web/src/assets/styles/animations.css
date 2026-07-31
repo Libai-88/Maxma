@@ -157,6 +157,12 @@
   50%      { opacity: 0; }
 }
 
+/* ── 欢迎屏 aura 呼吸（慢速缩放） ── */
+@keyframes maxma-aura-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.07); }
+}
+
 /* ── 工具气泡：执行中呼吸光晕 ── */
 @keyframes maxma-tool-glow {
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
