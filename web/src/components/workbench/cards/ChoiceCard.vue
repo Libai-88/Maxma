@@ -1,5 +1,5 @@
 <template>
-  <section class="artifact-card choice-card" aria-live="polite">
+  <section ref="rootEl" class="artifact-card choice-card" aria-live="polite">
     <header>{{ card.title }}</header>
     <p>{{ card.content }}</p>
     <div class="actions">
@@ -19,11 +19,24 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { CanvasCard } from '@/types/workbench'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const props = defineProps<{ card: CanvasCard }>()
 const emit = defineEmits<{ remove: []; 'artifact-action': [payload: { artifactId: string; actionId: string; token: string }] }>()
 const submitted = ref(false)
 const artifact = computed(() => props.card.artifact!)
+
+const rootEl = ref<HTMLElement | null>(null)
+
+// 卡片入场：整卡浮入 + header 轻微下滑
+useGsap((_ctx) => {
+  const el = rootEl.value
+  if (!el) return
+  const q = gsap.utils.selector(el)
+  gsap.timeline({ defaults: { ease: easeMap.out } })
+    .from(el, { opacity: 0, y: 14, scale: 0.97, duration: 0.35 })
+    .from(q('header'), { opacity: 0, y: -8, duration: 0.3 }, '<0.05')
+})
 
 function submit(actionId: string, token: string) {
   if (submitted.value) return
@@ -37,7 +50,9 @@ function submit(actionId: string, token: string) {
 header { font-size: 14px; font-weight: 600; }
 p { margin: 8px 0 12px; white-space: pre-wrap; font-size: 13px; line-height: 1.5; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.artifact-action { border: 1px solid var(--border-color, #d9d9d9); border-radius: 5px; padding: 6px 12px; cursor: pointer; }
+.artifact-action { border: 1px solid var(--border-color, #d9d9d9); border-radius: 5px; padding: 6px 12px; cursor: pointer; transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.artifact-action:hover:not(:disabled) { transform: translateY(-1px) scale(1.03); }
+.artifact-action:active:not(:disabled) { transform: translateY(0) scale(0.97); }
 .primary { background: var(--accent-color, #1a73e8); color: #fff; border-color: var(--accent-color, #1a73e8); }
 .danger { background: #b42318; color: #fff; border-color: #b42318; }
 .secondary { background: var(--bg-secondary, #f5f5f5); color: var(--text-primary, #222); }

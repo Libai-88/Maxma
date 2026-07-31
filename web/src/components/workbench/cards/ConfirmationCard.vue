@@ -1,5 +1,5 @@
 <template>
-  <section class="artifact-card confirmation-card" aria-live="polite">
+  <section ref="rootEl" class="artifact-card confirmation-card" aria-live="polite">
     <header>{{ card.title }}</header>
     <p>{{ card.content }}</p>
     <div class="actions">
@@ -19,11 +19,24 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { CanvasCard } from '@/types/workbench'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const props = defineProps<{ card: CanvasCard }>()
 const emit = defineEmits<{ remove: []; 'artifact-action': [payload: { artifactId: string; actionId: string; token: string }] }>()
 const submitted = ref(false)
 const artifact = computed(() => props.card.artifact!)
+
+const rootEl = ref<HTMLElement | null>(null)
+
+// 卡片入场：整卡浮入 + header 轻微下滑
+useGsap((_ctx) => {
+  const el = rootEl.value
+  if (!el) return
+  const q = gsap.utils.selector(el)
+  gsap.timeline({ defaults: { ease: easeMap.out } })
+    .from(el, { opacity: 0, y: 14, scale: 0.97, duration: 0.35 })
+    .from(q('header'), { opacity: 0, y: -8, duration: 0.3 }, '<0.05')
+})
 
 function submit(actionId: string, token: string) {
   if (submitted.value) return

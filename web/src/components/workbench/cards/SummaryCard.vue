@@ -1,5 +1,5 @@
 <template>
-  <div class="canvas-card summary-card">
+  <div ref="rootEl" class="canvas-card summary-card">
     <div class="card-header">
       <span class="card-title">{{ card.title }}</span>
       <button class="card-remove" @click="$emit('remove')">&times;</button>
@@ -9,10 +9,24 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import type { CanvasCard } from '@/types/workbench'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 defineProps<{ card: CanvasCard }>()
 defineEmits<{ remove: [] }>()
+
+const rootEl = ref<HTMLElement | null>(null)
+
+// 卡片入场：整卡浮入 + header 轻微下滑
+useGsap((_ctx) => {
+  const el = rootEl.value
+  if (!el) return
+  const q = gsap.utils.selector(el)
+  gsap.timeline({ defaults: { ease: easeMap.out } })
+    .from(el, { opacity: 0, y: 14, scale: 0.97, duration: 0.35 })
+    .from(q('.card-header'), { opacity: 0, y: -8, duration: 0.3 }, '<0.05')
+})
 </script>
 
 <style scoped>
