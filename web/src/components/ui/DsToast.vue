@@ -171,12 +171,12 @@ let onLeave = (_el: Element, done: () => void) => done()
 
 useGsap((_ctx, contextSafe) => {
   function beforeEnter(el: Element) {
-    gsap.set(el, { opacity: 0, y: 24, scale: 0.95, transformOrigin: 'bottom right' })
+    gsap.set(el, { opacity: 0, y: 40, scale: 0.9, transformOrigin: 'bottom right' })
   }
   function enter(el: Element, done: () => void) {
-    gsap.to(el, { opacity: 1, y: 0, scale: 1, duration: 0.3, ease: 'back.out(1.4)', onComplete: done })
+    gsap.to(el, { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: 'back.out(2)', onComplete: done })
     const icon = (el as HTMLElement).querySelector('.ds-toast__icon')
-    if (icon) gsap.from(icon, { scale: 0.4, opacity: 0, duration: 0.2, ease: 'back.out(2)' })
+    if (icon) gsap.from(icon, { scale: 0.3, opacity: 0, rotation: -90, duration: 0.3, ease: 'back.out(2.4)' })
   }
   function leave(el: Element, done: () => void) {
     gsap.to(el, { opacity: 0, y: 12, scale: 0.96, duration: 0.2, ease: 'power2.in', onComplete: done })

@@ -465,7 +465,7 @@ useGsap(() => {
   requestAnimationFrame(() => {
     const list = windowRef.value?.querySelector('.messages-list')
     if (!list) return
-    gsap.fromTo(list, { autoAlpha: 0, y: 8 }, { autoAlpha: 1, y: 0, duration: 0.45, ease: 'power2.out' })
+    gsap.fromTo(list, { autoAlpha: 0, y: 22, scale: 0.99 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.55, ease: 'back.out(1.6)' })
   })
 })
 
