@@ -163,6 +163,12 @@
   50%      { transform: scale(1.07); }
 }
 
+/* ── Toast 倒计时进度条 ── */
+@keyframes maxma-toast-progress {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}
+
 /* ── 工具气泡：执行中呼吸光晕 ── */
 @keyframes maxma-tool-glow {
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }

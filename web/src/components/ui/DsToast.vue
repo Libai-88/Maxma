@@ -48,13 +48,14 @@
                   stroke-width="1.6" stroke-linecap="round"/>
           </svg>
         </button>
+        <span v-if="duration > 0" class="ds-toast__progress" aria-hidden="true"></span>
       </div>
     </Transition>
   </Teleport>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, computed, watch, watchEffect, onUnmounted } from 'vue'
 import { gsap, useGsap } from '@/composables/useGsap'
 
 type ToastType = 'info' | 'success' | 'error' | 'warning'
@@ -156,6 +157,13 @@ onUnmounted(() => {
 
 defineExpose({ dismiss, pause, resume })
 
+// 倒计时进度条时长：映射到 CSS var（--toast-duration）
+watchEffect(() => {
+  const el = toastRef.value
+  if (!el) return
+  el.style.setProperty('--toast-duration', `${(props.duration || 4000) / 1000}s`)
+})
+
 // ── Toast 弹层动画：spring 滑入 + 图标弹出（JS 过渡钩子，:css=false） ──
 let onBeforeEnter = (_el: Element) => {}
 let onEnter = (_el: Element, done: () => void) => done()
@@ -199,6 +207,25 @@ useGsap((_ctx, contextSafe) => {
   font-size: var(--fs-ui);
   font-family: var(--font-body);
   line-height: 1.4;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 倒计时进度条：线性 scaleX 缩短，hover 暂停 */
+.ds-toast__progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  width: 100%;
+  transform-origin: left center;
+  background: color-mix(in srgb, var(--accent) 38%, transparent);
+  animation: maxma-toast-progress linear forwards;
+  animation-duration: var(--toast-duration, 4s);
+}
+.ds-toast:hover .ds-toast__progress,
+.ds-toast:focus-within .ds-toast__progress {
+  animation-play-state: paused;
 }
 .ds-toast--info {
   border-left-color: var(--accent);
