@@ -456,6 +456,19 @@ const windowRef = ref<HTMLElement | null>(null)
 let lastMergedHeadId: string | undefined
 let lastMergedLength = 0
 
+// 首次挂载：消息区整体淡入上浮（保证打开即有动画感知；历史消息不逐条重播）
+let initialEntranceDone = false
+useGsap(() => {
+  const root = windowRef.value
+  if (!root || initialEntranceDone) return
+  initialEntranceDone = true
+  requestAnimationFrame(() => {
+    const list = windowRef.value?.querySelector('.messages-list')
+    if (!list) return
+    gsap.fromTo(list, { autoAlpha: 0, y: 8 }, { autoAlpha: 1, y: 0, duration: 0.45, ease: 'power2.out' })
+  })
+})
+
 const { contextSafe } = useGsap(() => {
   watch(() => mergedTurns.value.length, contextSafe(async () => {
     const head = mergedTurns.value[0]?.id

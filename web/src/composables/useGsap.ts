@@ -32,6 +32,10 @@ let reducedMotionRegistered = false
 function ensureReducedMotion() {
   if (reducedMotionRegistered) return
   reducedMotionRegistered = true
+  try {
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    document.documentElement.setAttribute('data-anim-debug', JSON.stringify({ reduce, ver: gsap.version }))
+  } catch { /* debug */ }
   // 全局 prefers-reduced-motion 收口：reduce 时所有 GSAP 动画近乎瞬时完成
   gsap.matchMedia().add('(prefers-reduced-motion: reduce)', () => {
     gsap.globalTimeline.timeScale(1000)

@@ -32,13 +32,13 @@ useGsap(() => {
   position: fixed;
   top: 0;
   left: 0;
-  width: 360px;
-  height: 360px;
-  margin: -180px 0 0 -180px;
+  width: 420px;
+  height: 420px;
+  margin: -210px 0 0 -210px;
   border-radius: 50%;
   pointer-events: none;
   z-index: 1;
-  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 4.5%, transparent) 0%, transparent 65%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 7%, transparent) 0%, transparent 62%);
   will-change: transform;
 }
 </style>
