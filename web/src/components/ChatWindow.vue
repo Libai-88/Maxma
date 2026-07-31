@@ -486,16 +486,18 @@ const { contextSafe } = useGsap(() => {
     if (!root) return
     const rows = Array.from(root.querySelectorAll('.turn-wrapper')).slice(-Math.min(delta, 10))
     if (!rows.length) return
-    // 3D 立起入场：消息从平面轻微 rotateX 立起 + 弹簧（back.out），方向按角色左右滑入
+    // 3D 立起入场：消息从平面 rotateX 立起 + 弹簧（back.out），方向按角色左右滑入
+    // 幅度加大：更深的翻起 + 更明显的横向滑入 + 更长错落，张力但保持可读
     gsap.from(rows, {
       autoAlpha: 0,
-      x: (_i, el) => (el.classList.contains('user') ? 14 : -14),
-      rotationX: -14,
+      x: (_i, el) => (el.classList.contains('user') ? 26 : -26),
+      rotationX: -28,
       transformPerspective: 700,
-      y: 10,
-      duration: 0.42,
-      ease: 'back.out(1.4)',
-      stagger: 0.045,
+      y: 18,
+      scale: 0.98,
+      duration: 0.5,
+      ease: 'back.out(1.8)',
+      stagger: 0.06,
       overwrite: 'auto',
     })
   }))
