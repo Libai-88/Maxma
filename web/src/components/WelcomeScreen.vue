@@ -117,14 +117,15 @@ const { contextSafe } = useGsap(() => {
     if (loading || !contentEl.value) return
     const root = contentEl.value
     const q = gsap.utils.selector(root)
+    // 盖章式入场：头像从上方砸落 + elastic 回弹，文本区块错落放大，张力集中在首屏
     const tl = gsap.timeline({ defaults: { ease: easeMap.out, duration: 0.5 } })
-    tl.from(q('.welcome-aura'),     { opacity: 0, duration: 1.4, ease: 'power1.inOut' })
-      .from(q('.welcome-avatar'),   { opacity: 0, y: 18, scale: 0.82, duration: 0.55, ease: easeMap.spring }, '-=0.95')
-      .from(q('.welcome-scene'),    { opacity: 0, y: 12 }, '<0.15')
-      .from(q('.welcome-greeting'), { opacity: 0, y: 12 }, '<0.1')
-      .from(q('.welcome-rule'),     { opacity: 0, scaleX: 0 }, '<0.06')
-      .from(q('.welcome-actions'),  { opacity: 0, y: 12 }, '<0.1')
-      .from(q('.example-prompts'),  { opacity: 0, y: 16 }, '<0.1')
+    tl.from(q('.welcome-aura'),     { opacity: 0, duration: 1.2, ease: 'power1.inOut' })
+      .from(q('.welcome-avatar'),   { opacity: 0, y: -52, scale: 0.4, rotation: -16, duration: 0.8, ease: 'elastic.out(1, 0.5)' }, '-=0.9')
+      .from(q('.welcome-scene'),    { opacity: 0, y: 20, scale: 0.98 }, '<0.15')
+      .from(q('.welcome-greeting'), { opacity: 0, y: 20, scale: 0.98 }, '<0.1')
+      .from(q('.welcome-rule'),     { opacity: 0, scaleX: 0, duration: 0.5 }, '<0.06')
+      .from(q('.welcome-actions'),  { opacity: 0, y: 28, scale: 0.9, duration: 0.55, ease: easeMap.spring }, '<0.12')
+      .from(q('.example-prompts'),  { opacity: 0, y: 24, duration: 0.5 }, '<0.14')
 
     // 名字字符级 3D reveal（SplitText 按需加载；一次性动画，播完 revert 保持 DOM 干净）
     const nameEl = root.querySelector<HTMLElement>('.welcome-name')
@@ -133,14 +134,14 @@ const { contextSafe } = useGsap(() => {
         const { SplitText } = await lazyLoadPlugin('SplitText')
         const split = SplitText.create(nameEl, { type: 'chars', charsClass: 'welcome-char', aria: 'auto' })
         gsap.from(split.chars, {
-          yPercent: 110,
+          yPercent: 135,
           autoAlpha: 0,
-          rotateX: -60,
-          transformPerspective: 600,
-          duration: 0.55,
+          rotateX: -90,
+          transformPerspective: 720,
+          duration: 0.72,
           delay: 0.25,
-          ease: 'back.out(1.5)',
-          stagger: 0.035,
+          ease: 'back.out(2.6)',
+          stagger: 0.06,
           onComplete: () => split.revert(),
         })
       } catch { /* SplitText 加载失败则跳过字符动画 */ }
