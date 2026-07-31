@@ -68,23 +68,17 @@ useTilt(() => rootEl.value)
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  cursor: pointer;
   will-change: transform;
   transition: box-shadow 0.25s ease, border-color 0.25s ease, background 0.2s;
   box-shadow: var(--shadow-sm);
 }
 .plugin-card:hover {
-  box-shadow: var(--shadow-lg);
   border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+  box-shadow: var(--shadow-lg);
 }
 .plugin-card:active {
   box-shadow: var(--shadow-md);
-}
-  cursor: pointer;
-}
-
-.plugin-card:hover {
-  border-color: var(--accent-soft);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .plugin-card.disabled {
