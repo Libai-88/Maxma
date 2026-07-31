@@ -5,6 +5,7 @@
         <span v-if="toolCall.status === 'running'" class="spinner-sm"></span>
         <Icon v-else-if="toolCall.status === 'done'" name="checkmark" :size="14" />
         <Icon v-else name="close" :size="14" />
+        <span v-if="toolCall.status === 'done'" class="tool-done-ring" aria-hidden="true"></span>
       </span>
       <span class="tool-name">{{ toolCall.name }}</span>
       <span class="tool-elapsed" v-if="toolCall.elapsed !== null">
@@ -387,7 +388,8 @@ watch(() => props.toolCall.status, (s) => {
   }
 })
 
-// 状态图标翻转：running→done/error 时 checkmark/close 弹性翻转入场
+// 状态图标翻转 + 完成庆祝：running→done 时 checkmark 弹性翻转入场，
+// 随后一圈涟漪环扩散淡出（done 专属，error 只做翻转不带庆祝）
 useGsap((_ctx, contextSafe) => {
   watch(() => props.toolCall.status, contextSafe((s) => {
     if (s !== 'done' && s !== 'error') return
@@ -396,6 +398,17 @@ useGsap((_ctx, contextSafe) => {
     gsap.fromTo(icon,
       { scale: 0.4, rotation: -90, autoAlpha: 0 },
       { scale: 1, rotation: 0, autoAlpha: 1, duration: 0.32, ease: easeMap.spring, overwrite: 'auto' })
+    if (s === 'done') {
+      gsap.fromTo(icon,
+        { scale: 1 },
+        { scale: 1.35, duration: 0.18, ease: 'power1.out', yoyo: true, repeat: 1, delay: 0.16, overwrite: 'auto' })
+      const ring = icon.querySelector('.tool-done-ring')
+      if (ring) {
+        gsap.fromTo(ring,
+          { scale: 0.6, autoAlpha: 0.9 },
+          { scale: 2.2, autoAlpha: 0, duration: 0.6, ease: 'power2.out', delay: 0.1 })
+      }
+    }
   }))
 })
 </script>
@@ -447,9 +460,17 @@ useGsap((_ctx, contextSafe) => {
   user-select: none;
 }
 .tool-icon {
+  position: relative;
   font-size: 12px;
   width: 16px;
   text-align: center;
+}
+.tool-done-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 1.5px solid var(--status-ok);
+  pointer-events: none;
 }
 .spinner-sm {
   display: inline-block;
