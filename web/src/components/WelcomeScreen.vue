@@ -8,7 +8,7 @@
       <p class="welcome-error-text">加载失败：{{ store.error }}</p>
       <button class="welcome-error-retry" @click="store.loadProfile()">重试</button>
     </div>
-    <div v-else class="welcome-content">
+    <div v-else ref="contentEl" class="welcome-content">
       <div class="welcome-aura" aria-hidden="true"></div>
       <div class="welcome-avatar"><span aria-hidden="true">{{ store.profile.avatar }}</span></div>
       <h1 class="welcome-name">{{ store.profile.name || 'Maxma' }}</h1>
@@ -18,11 +18,11 @@
 
       <!-- 主操作：随便聊聊 -->
       <div class="welcome-actions">
-        <button class="action-btn action-btn--primary" @click="$emit('start', '随便聊聊')">
+        <button class="action-btn action-btn--primary" @click="handleStart('随便聊聊')">
           <span class="action-icon" v-html="chatBubbleSvg"></span>
           <span>随便聊聊</span>
         </button>
-        <button class="action-btn" @click="$emit('start', '帮我看看最近有什么好玩的')">
+        <button class="action-btn" @click="handleStart('帮我看看最近有什么好玩的')">
           <span class="action-icon" v-html="searchSvg"></span>
           <span>帮我个忙</span>
         </button>
@@ -37,7 +37,7 @@
             :key="ex.text"
             class="example-chip"
             :class="`chip--${ex.tone}`"
-            @click="$emit('start', ex.text)"
+            @click="handleStart(ex.text)"
             :title="ex.hint"
           >
             <Icon class="example-chip-icon" :name="ex.icon" :size="14" aria-hidden="true" />
@@ -51,14 +51,45 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { usePersonaStore } from '../stores/persona'
 import Icon from './Icon.vue'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 import chatBubbleRaw from '../assets/icons/welcome/chat-bubble.svg?raw'
 import searchRaw from '../assets/icons/welcome/search.svg?raw'
 
 const store = usePersonaStore()
-defineEmits<{ start: [message: string] }>()
+const emit = defineEmits<{ start: [message: string] }>()
+const contentEl = ref<HTMLElement | null>(null)
+
+// 入场编排：store 加载完成（welcome-content 渲染）后依次浮现
+const { contextSafe } = useGsap(() => {
+  watch(() => store.loading, contextSafe((loading) => {
+    if (loading || !contentEl.value) return
+    const q = gsap.utils.selector(contentEl.value)
+    const tl = gsap.timeline({ defaults: { ease: easeMap.out, duration: 0.5 } })
+    tl.from(q('.welcome-aura'),     { opacity: 0, scale: 0.96, duration: 0.8 })
+      .from(q('.welcome-avatar'),   { opacity: 0, y: 16, scale: 0.9 }, '<0.1')
+      .from(q('.welcome-name'),     { opacity: 0, y: 12 }, '<0.1')
+      .from(q('.welcome-scene'),    { opacity: 0, y: 12 }, '<0.08')
+      .from(q('.welcome-greeting'), { opacity: 0, y: 12 }, '<0.08')
+      .from(q('.welcome-rule'),     { opacity: 0, scaleX: 0 }, '<0.05')
+      .from(q('.welcome-actions'),  { opacity: 0, y: 12 }, '<0.1')
+      .from(q('.example-prompts'),  { opacity: 0, y: 16 }, '<0.1')
+  }), { immediate: true })
+}, { scope: () => contentEl.value })
+
+// 点击任意入口：其余元素优雅退场后再 emit
+function handleStart(msg: string) {
+  const root = contentEl.value
+  if (!root) { emit('start', msg); return }
+  contextSafe(() => {
+    gsap.to(root.querySelectorAll(':scope > *:not(.welcome-aura)'), {
+      opacity: 0, y: -8, duration: 0.2, stagger: 0.02, overwrite: 'auto',
+      onComplete: () => emit('start', msg),
+    })
+  })()
+}
 
 const chatBubbleSvg = computed(() => chatBubbleRaw.replace(/<\?xml[^>]*\?>/, '').trim())
 const searchSvg = computed(() => searchRaw.replace(/<\?xml[^>]*\?>/, '').trim())
@@ -296,39 +327,6 @@ const examples = computed(() => [
   font-size: var(--fs-hint);
   color: var(--text-tertiary);
   line-height: 1.5;
-}
-
-/* ── 入场动画（依次浮现） ── */
-@media (prefers-reduced-motion: no-preference) {
-  .welcome-avatar {
-    animation: welcome-fade-in 0.6s var(--ease-out) both;
-  }
-  .welcome-name {
-    animation: welcome-fade-in 0.6s var(--ease-out) 0.12s both;
-  }
-  .welcome-scene {
-    animation: welcome-fade-in 0.6s var(--ease-out) 0.24s both;
-  }
-  .welcome-greeting {
-    animation: welcome-fade-in 0.6s var(--ease-out) 0.36s both;
-  }
-  .welcome-rule {
-    animation: welcome-rule-in 0.5s var(--ease-out) 0.48s both;
-  }
-  .welcome-actions {
-    animation: welcome-fade-in 0.6s var(--ease-out) 0.56s both;
-  }
-  .example-prompts {
-    animation: welcome-fade-in 0.6s var(--ease-out) 0.7s both;
-  }
-}
-@keyframes welcome-fade-in {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-@keyframes welcome-rule-in {
-  from { opacity: 0; transform: scaleX(0); }
-  to { opacity: 0.5; transform: scaleX(1); }
 }
 
 /* ── 衬线/无衬线字体切换适配 ── */

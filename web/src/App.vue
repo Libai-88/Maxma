@@ -20,10 +20,13 @@
     />
     <main id="main-content" class="main" tabindex="-1" aria-label="对话工作区">
       <RegionalErrorBoundary :reset-keys="[$route.path]">
-        <router-view v-slot="{ Component }">
-          <keep-alive include="ChatView" :max="5">
-            <component :is="Component" />
-          </keep-alive>
+        <router-view v-slot="{ Component, route }">
+          <Transition :name="`page-${route.meta.transition || 'fade'}`" mode="out-in">
+            <!-- :key=route.name 保证 keep-alive 缓存稳定（ChatView 切换回来不重建） -->
+            <keep-alive include="ChatView" :max="5">
+              <component :is="Component" :key="route.name" />
+            </keep-alive>
+          </Transition>
         </router-view>
       </RegionalErrorBoundary>
     </main>
@@ -220,6 +223,27 @@ onMounted(async () => {
   .app-layout,
   .main {
     transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+  }
+}
+
+/* ── 路由级过渡（router-view Transition） ── */
+.page-fade-enter-active,
+.page-fade-leave-active {
+  transition: opacity 0.2s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+              transform 0.2s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+}
+.page-fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.page-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-fade-enter-active,
+  .page-fade-leave-active {
+    transition: none;
   }
 }
 

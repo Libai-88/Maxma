@@ -24,7 +24,7 @@
             streamingTokensSignature(turn),
           ]"
         >
-          <div class="turn-wrapper" :style="turnStaggerStyle(mergedIdx)">
+          <div class="turn-wrapper">
             <div
               class="cite-source"
               :data-user-msg-idx="turnsIndex(mergedIdx)"
@@ -245,9 +245,10 @@
 import type { ChatTurn } from '@/types'
 import type { ParsedRef } from '@/utils/references'
 import { api } from '@/api'
-import { computed, onUnmounted, ref, toRef, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, toRef, watch } from 'vue'
 import { useTheme } from '@/composables/useTheme'
 import { useChatScroll } from '@/composables/useChatScroll'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 import { useTypewriter } from '@/composables/useTypewriter'
 import { useContextMenu } from '@/composables/useContextMenu'
 import ContextMenu from './ContextMenu.vue'
@@ -295,7 +296,6 @@ const {
   onScrollerScroll,
   scrollToTurn,
   streamingTokensSignature,
-  turnStaggerStyle,
 } = useChatScroll({
   sessionId: toRef(props, 'sessionId'),
   turns: toRef(props, 'turns'),
@@ -449,6 +449,40 @@ watch(
   },
   { immediate: true }
 )
+
+// ── 新消息入场动画（虚拟列表友好：仅对「新增 turn」的 wrapper 做 GSAP from + stagger；
+//    会话切换/全量替换时首项 id 变化，历史消息直接显示不做动画） ──
+const windowRef = ref<HTMLElement | null>(null)
+let lastMergedHeadId: string | undefined
+let lastMergedLength = 0
+
+const { contextSafe } = useGsap(() => {
+  watch(() => mergedTurns.value.length, contextSafe(async () => {
+    const head = mergedTurns.value[0]?.id
+    if (head !== lastMergedHeadId) {
+      lastMergedHeadId = head
+      lastMergedLength = mergedTurns.value.length
+      return
+    }
+    const delta = mergedTurns.value.length - lastMergedLength
+    lastMergedLength = mergedTurns.value.length
+    if (delta <= 0) return
+    await nextTick()
+    await new Promise<void>(r => requestAnimationFrame(() => r()))  // 等虚拟列表渲染新项
+    const root = windowRef.value
+    if (!root) return
+    const rows = Array.from(root.querySelectorAll('.turn-wrapper')).slice(-Math.min(delta, 10))
+    if (!rows.length) return
+    gsap.from(rows, {
+      opacity: 0,
+      x: (_i, el) => (el.classList.contains('user') ? 12 : -12),
+      duration: 0.25,
+      ease: easeMap.out,
+      stagger: 0.04,
+      overwrite: 'auto',
+    })
+  }))
+})
 
 onUnmounted(() => {
   if (typingTimer) clearTimeout(typingTimer)

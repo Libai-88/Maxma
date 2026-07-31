@@ -9,6 +9,7 @@
       />
       <aside
         id="session-drawer"
+        ref="drawerEl"
         class="session-drawer"
         aria-label="会话抽屉"
         role="dialog"
@@ -52,6 +53,7 @@ import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import Icon from '@/components/Icon.vue'
 import SessionSidebar from '@/components/SessionSidebar.vue'
 import type { SessionInfo } from '@/types'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 interface SessionStatus {
   connected: boolean
@@ -144,6 +146,17 @@ watch(() => props.open, (isOpen) => {
     restoreFocus()
   }
 })
+
+// 抽屉打开时会话列表项依次滑入（flush post 保证 v-if 渲染完成后再取 DOM）
+const drawerEl = ref<HTMLElement | null>(null)
+useGsap((_ctx, contextSafe) => {
+  watch(() => props.open, contextSafe((isOpen) => {
+    if (!isOpen || !drawerEl.value) return
+    const items = gsap.utils.toArray<HTMLElement>('.session-item', drawerEl.value)
+    if (!items.length) return
+    gsap.from(items, { opacity: 0, x: -16, duration: 0.3, ease: easeMap.out, stagger: 0.025 })
+  }), { flush: 'post' })
+}, { scope: () => drawerEl.value })
 
 onMounted(() => {
   document.addEventListener('keydown', onDocumentKeydown)

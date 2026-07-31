@@ -137,14 +137,7 @@ watch(() => props.content, () => {
 .message-row {
   opacity: 1;
   transform: translateX(0);
-  transition: opacity 0.15s var(--ease-out),
-              transform 0.15s var(--ease-out);
-  /* 交错入场延迟：由 ChatWindow 批量挂载时通过 --stagger-delay 注入 */
-  transition-delay: var(--stagger-delay, 0s);
-  @starting-style {
-    opacity: 0;
-    transform: translateX(var(--row-slide-x, 12px));
-  }
+  /* 入场动画由 ChatWindow 统一 GSAP 控制（新增 turn 时 from + stagger） */
 }
 
 .bubble {

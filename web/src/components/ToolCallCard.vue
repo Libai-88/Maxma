@@ -78,12 +78,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick, computed } from 'vue'
+import { ref, watch, computed } from 'vue'
 import type { ToolCall } from '@/types'
 import RenderMarkdown from './RenderMarkdown.vue'
 import PinButton from '@/components/workbench/PinButton.vue'
 import { useMediaViewer } from '@/composables/useMediaViewer'
 import Icon from '@/components/Icon.vue'
+import { gsap, useGsap, easeMap, durationMap } from '@/composables/useGsap'
 
 const props = defineProps<{ toolCall: ToolCall }>()
 
@@ -352,29 +353,32 @@ function toggle() {
   isOpen.value = !isOpen.value
 }
 
-watch(isOpen, (open) => {
-  if (!bodyWrapper.value) return
-  if (open) {
-    bodyWrapper.value.style.maxHeight = bodyWrapper.value.scrollHeight + 'px'
-  } else {
-    bodyWrapper.value.style.maxHeight = bodyWrapper.value.scrollHeight + 'px'
-    void bodyWrapper.value.offsetHeight
-    bodyWrapper.value.style.maxHeight = '0px'
-  }
+// 展开/收起由 GSAP 控制（onComplete 设 none 使流式内容自适应，无需 output watcher 重设高度）
+useGsap((_ctx, contextSafe) => {
+  const onOpenChange = contextSafe((open: boolean) => {
+    const el = bodyWrapper.value
+    if (!el) return
+    if (open) {
+      const h = el.scrollHeight
+      gsap.fromTo(el,
+        { maxHeight: 0, autoAlpha: 0 },
+        { maxHeight: h, autoAlpha: 1, duration: durationMap.slow, ease: easeMap.out,
+          overwrite: 'auto',
+          onComplete: () => { el.style.maxHeight = 'none' } })
+    } else {
+      // 先冻结当前高度（内容可能处于 auto/流式增长中），再收起
+      gsap.set(el, { maxHeight: el.scrollHeight })
+      gsap.to(el, { maxHeight: 0, autoAlpha: 0, duration: durationMap.fast,
+        ease: easeMap.out, overwrite: 'auto' })
+    }
+  })
+  watch(isOpen, onOpenChange)
 })
 
 watch(() => props.toolCall.status, (s) => {
   if (s === 'running') {
     isOpen.value = true
   }
-})
-
-watch(() => props.toolCall.output, () => {
-  nextTick(() => {
-    if (isOpen.value && bodyWrapper.value) {
-      bodyWrapper.value.style.maxHeight = bodyWrapper.value.scrollHeight + 'px'
-    }
-  })
 })
 </script>
 
@@ -452,12 +456,8 @@ watch(() => props.toolCall.output, () => {
 .tool-body-wrapper {
   max-height: 0;
   overflow: hidden;
-  transition: max-height 0.3s cubic-bezier(0, 0.3, 0, 1),
-              opacity 0.25s ease;
   opacity: 0;
-}
-.tool-card.open > .tool-body-wrapper {
-  opacity: 1;
+  /* 展开/收起由 GSAP 控制（maxHeight + autoAlpha），onComplete 后设 none 自适应 */
 }
 .tool-body {
   border-top: 1px solid var(--border);

@@ -111,7 +111,7 @@
           <router-link to="/" class="empty-link">→ 返回对话</router-link>
         </div>
       </div>
-      <div v-else class="fact-list">
+      <div v-else ref="factListEl" class="fact-list">
         <div v-for="fact in facts" :key="fact.id" class="fact-card">
           <div v-if="editingId === fact.id" class="fact-edit">
             <textarea v-model="editContent" class="edit-textarea" rows="3" />
@@ -146,18 +146,30 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useMemoryStore, type MemoryFact } from '@/stores/memory'
 import { api } from '@/api'
 import type { HindsightConfig } from '@/api'
 import { confirmAction } from '@/composables/useConfirm'
 import { createLogger } from '@/utils/logger'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const log = createLogger('MemoryView')
 
 const store = useMemoryStore()
 
 const searchQuery = ref('')
+const factListEl = ref<HTMLElement | null>(null)
+
+// 记忆列表错落入场：仅在加载完成/进入视图时播放一次，搜索筛选不重播（避免打扰）
+const { contextSafe } = useGsap(() => {
+  watch(() => store.loading, contextSafe((l) => {
+    if (l || !factListEl.value) return
+    const cards = gsap.utils.toArray<HTMLElement>('.fact-card', factListEl.value)
+    if (!cards.length) return
+    gsap.from(cards, { opacity: 0, y: 12, duration: 0.3, ease: easeMap.out, stagger: 0.05 })
+  }), { immediate: true })
+}, { scope: () => factListEl.value })
 const categoryFilter = ref('all')
 const confidenceFilter = ref('0')
 const editingId = ref<string | null>(null)

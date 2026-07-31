@@ -26,24 +26,6 @@ export function useChatScroll({ sessionId, turns, currentTurn }: UseChatScrollOp
   const SCROLL_BOTTOM_THRESHOLD = 100
   const isNearBottomRef = ref(true)
 
-  // ── 交错入场（stagger-sequence：40ms/item，封顶 10 项） ──
-  const staggerWindowOpen = ref(true)
-  let staggerTimer: ReturnType<typeof setTimeout> | null = null
-
-  function openStaggerWindow() {
-    staggerWindowOpen.value = true
-    if (staggerTimer) clearTimeout(staggerTimer)
-    staggerTimer = setTimeout(() => {
-      staggerWindowOpen.value = false
-      staggerTimer = null
-    }, 600)
-  }
-
-  function turnStaggerStyle(idx: number): { '--stagger-delay': string } | undefined {
-    if (!staggerWindowOpen.value || idx === 0) return undefined
-    return { '--stagger-delay': `${Math.min(idx, 10) * 40}ms` }
-  }
-
   // ── 滚动事件处理 ──
 
   /** DynamicScroller 根元素的 scroll 事件：维护 isNearBottomRef 状态 */
@@ -94,7 +76,6 @@ export function useChatScroll({ sessionId, turns, currentTurn }: UseChatScrollOp
         }
       }
       if (!sid) return
-      openStaggerWindow()
       nextTick(() => {
         const savedScrollTop = chatSessionAliveCache.restoreScroll(sid)
         if (savedScrollTop != null && savedScrollTop > 0) {
@@ -145,19 +126,15 @@ export function useChatScroll({ sessionId, turns, currentTurn }: UseChatScrollOp
         chatSessionAliveCache.rememberScroll(sessionId.value, scrollerEl.scrollTop)
       }
     }
-    if (staggerTimer) clearTimeout(staggerTimer)
   })
 
   return {
     scrollerRef,
     isNearBottomRef,
-    staggerWindowOpen,
     onScrollerScroll,
     isNearBottom,
     scrollToBottom,
     scrollToTurn,
     streamingTokensSignature,
-    turnStaggerStyle,
-    openStaggerWindow,
   }
 }

@@ -24,6 +24,7 @@ import { ref, watch, computed, onMounted } from 'vue'
 import type { ToolCall } from '@/types'
 import { toolDisplayName } from './displayNames'
 import Icon from '@/components/Icon.vue'
+import { gsap, useGsap, easeMap, durationMap } from '@/composables/useGsap'
 
 const props = defineProps<{ toolCall: ToolCall }>()
 
@@ -37,28 +38,26 @@ function toggle() {
   isOpen.value = !isOpen.value
 }
 
-/** 展开气泡并设置动画高度 */
-function openBody() {
-  if (!bodyWrapper.value) return
-  const h = bodyWrapper.value.scrollHeight
-  bodyWrapper.value.style.maxHeight = h + 'px'
-  setTimeout(() => {
-    if (bodyWrapper.value && isOpen.value) {
-      bodyWrapper.value.style.maxHeight = 'none'
+// 展开/收起由 GSAP 控制（无 reflow hack、无硬编码时长、onComplete 设 none 使流式内容自适应）
+useGsap((_ctx, contextSafe) => {
+  const onOpenChange = contextSafe((open: boolean) => {
+    const el = bodyWrapper.value
+    if (!el) return
+    if (open) {
+      const h = el.scrollHeight
+      gsap.fromTo(el,
+        { maxHeight: 0, autoAlpha: 0 },
+        { maxHeight: h, autoAlpha: 1, duration: durationMap.slow, ease: easeMap.out,
+          overwrite: 'auto',
+          onComplete: () => { el.style.maxHeight = 'none' } })
+    } else {
+      // 先冻结当前高度（内容可能处于 auto/流式增长中），再收起
+      gsap.set(el, { maxHeight: el.scrollHeight })
+      gsap.to(el, { maxHeight: 0, autoAlpha: 0, duration: durationMap.fast,
+        ease: easeMap.out, overwrite: 'auto' })
     }
-  }, 350)
-}
-
-watch(isOpen, (open) => {
-  if (!bodyWrapper.value) return
-  if (open) {
-    openBody()
-  } else {
-    // Freeze at current height for smooth collapse
-    bodyWrapper.value.style.maxHeight = bodyWrapper.value.scrollHeight + 'px'
-    void bodyWrapper.value.offsetHeight
-    bodyWrapper.value.style.maxHeight = '0px'
-  }
+  })
+  watch(isOpen, onOpenChange)
 })
 
 // ★ 组件挂载时若已是 running 状态，立即展开（lazy watch 不会因初始值相同而触发）
@@ -126,10 +125,7 @@ watch(() => props.toolCall.status, (s) => {
 .bubble-body-wrapper {
   max-height: 0;
   overflow: hidden;
-  transition: max-height 0.3s cubic-bezier(0, 0.3, 0, 1);
-}
-.tool-bubble.open .bubble-body-wrapper {
-  max-height: none;
+  /* 展开/收起由 GSAP 控制，max-height 由 GSAP 内联设置，onComplete 后设 none 自适应 */
 }
 .bubble-body {
   padding: 0 12px 12px;

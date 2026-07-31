@@ -190,8 +190,7 @@ router.beforeEach((to, _from) => {
   document.title = title ? `${title} - Maxma` : 'Maxma'
 })
 
-router.afterEach((_to) => {
-  window.scrollTo(0, 0)
-})
+// 注：不再使用 window.scrollTo —— body 为 overflow:hidden，滚动容器在各 view 内部；
+// 新 view mount 天然从顶部开始。
 
 export default router

@@ -16,7 +16,7 @@
       <!-- 系统概览卡片 -->
       <div class="section">
         <h3>系统概览</h3>
-        <div class="stats-row">
+        <div ref="statsEl" class="stats-row">
           <div class="stat-card">
             <div class="stat-value">{{ system.session_count ?? 0 }}</div>
             <div class="stat-label">活跃会话</div>
@@ -147,9 +147,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { api } from '@/api'
 import type { ToolItem, ProviderItem } from '@/types'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const loading = ref(true)
 const error = ref('')
@@ -179,6 +180,28 @@ const configSources = ref<{
   conflicts: Array<{ scope: string; sources: string[]; severity: string; note: string }>
   resolution_order: string[]
 } | null>(null)
+const statsEl = ref<HTMLElement | null>(null)
+
+// 数据加载完成后：统计卡片错落入场 + 数字 0→N 滚动
+const { contextSafe } = useGsap(() => {
+  watch(() => loading.value, contextSafe((l) => {
+    if (l || !statsEl.value) return
+    const cards = gsap.utils.toArray<HTMLElement>('.stat-card', statsEl.value)
+    gsap.from(cards, { opacity: 0, y: 16, duration: 0.4, ease: easeMap.out, stagger: 0.06 })
+    cards.forEach((card) => {
+      const valEl = card.querySelector('.stat-value')
+      const target = Number(valEl?.textContent) || 0
+      if (!valEl || target === 0) return
+      const proxy = { v: 0 }
+      gsap.to(proxy, {
+        v: target,
+        duration: 0.8,
+        ease: easeMap.out,
+        onUpdate: () => { valEl.textContent = Math.round(proxy.v).toString() },
+      })
+    })
+  }))
+})
 
 function formatValue(v: unknown): string {
   if (typeof v === 'boolean') return v ? '开启' : '关闭'
