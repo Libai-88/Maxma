@@ -57,7 +57,7 @@
     </div>
 
     <!-- 事件列表 -->
-    <div class="activity-list">
+    <div ref="activityListEl" class="activity-list">
       <div
         v-for="record in displayRecords"
         :key="record.timestamp + '-' + record.event_type + '-' + (record.session_id || record.turn_id || '')"
@@ -97,8 +97,22 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useActivityStore } from '@/stores/activity'
 import { confirmAction } from '@/composables/useConfirm'
 import type { ActivityStatsResponse } from '@/types'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const store = useActivityStore()
+const activityListEl = ref<HTMLElement | null>(null)
+
+// 实时事件流：新事件追加时淡入上浮（初始加载同样生效）
+useGsap((_ctx, contextSafe) => {
+  watch(() => store.records.length, contextSafe(() => {
+    const el = activityListEl.value
+    if (!el) return
+    const items = Array.from(el.querySelectorAll<HTMLElement>('.activity-item'))
+    const fresh = items.slice(-4)
+    if (!fresh.length) return
+    gsap.from(fresh, { opacity: 0, y: 8, duration: 0.25, ease: easeMap.out, stagger: 0.04 })
+  }), { flush: 'post' })
+})
 
 /** 三态标签：连接中 / 实时 / 离线（轮询） */
 const statusLabel = computed(() => {

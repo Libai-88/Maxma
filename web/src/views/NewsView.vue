@@ -59,6 +59,7 @@ import type { NewsEntry } from '@/types'
 import NewsCard from '@/components/NewsCard.vue'
 import { onMounted, onUnmounted, ref, watchEffect, type ComponentPublicInstance } from 'vue'
 import { createLogger } from '@/utils/logger'
+import { useReveal } from '@/composables/useReveal'
 
 const log = createLogger('NewsView')
 
@@ -70,6 +71,9 @@ const cardGridRef = ref<HTMLElement | null>(null)
 const timelineRef = ref<HTMLElement | null>(null)
 const tlBounds = ref<{ top: string; height: string }>()
 const versionNodes = ref<{ version: string; top: number }[]>([])
+
+// 新闻卡片错落入场（加载完成后）
+useReveal(() => cardGridRef.value, '.news-card', { stagger: 0.06 })
 
 // CSP-safe CSSOM helper: apply style property via setProperty (replaces :style binding)
 function setCssProp(el: Element | ComponentPublicInstance | null, prop: string, value: string) {

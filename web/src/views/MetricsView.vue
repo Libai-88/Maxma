@@ -35,7 +35,7 @@
       <section class="card">
         <h3>HTTP 请求</h3>
         <p class="section-desc">前端发往本地后端的 HTTP 请求总量、延迟分布与状态码构成。延迟飙升或 5xx 占比高，通常意味着后端卡顿或异常。</p>
-        <div class="stat-grid">
+        <div ref="statGridRef" class="stat-grid">
           <div class="stat">
             <div class="stat-value">{{ snapshot.http.total_requests }}</div>
             <div class="stat-label">总请求数</div>
@@ -184,13 +184,18 @@ import { storeToRefs } from 'pinia'
 import { useMetricsStore } from '@/stores/metrics'
 import Sparkline from '@/components/Sparkline.vue'
 import BarChartMini from '@/components/BarChartMini.vue'
+import { useReveal } from '@/composables/useReveal'
 
 const metricsStore = useMetricsStore()
 const { snapshot, history, loading, error } = storeToRefs(metricsStore)
 
 const autoRefresh = ref(true)
 const historyWindow = ref(3600)
+const statGridRef = ref<HTMLElement | null>(null)
 let _timer: ReturnType<typeof setInterval> | null = null
+
+// 统计卡错落入场（数据加载完成后）
+useReveal(() => statGridRef.value, '.stat', { stagger: 0.04 })
 
 async function refresh() {
   await metricsStore.refresh()
