@@ -51,6 +51,14 @@
     />
     <!-- 全局确认对话框（替代 window.confirm） -->
     <ConfirmDialog />
+    <!-- Konami Code 惊喜彩蛋：全屏星芒 + 品牌印章，自动消失（pointer-events: none 不挡操作） -->
+    <Transition name="konami">
+      <div v-if="konamiShow" class="konami-overlay" role="status" aria-live="polite">
+        <div class="konami-stars" aria-hidden="true"></div>
+        <BrandSeal size="lg" class="konami-seal" />
+        <p class="konami-msg">✦ 彩蛋达成，愿你今天事事顺心 ✦</p>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -75,7 +83,9 @@ import { initCapabilities } from '@/composables/useCapabilities'
 import RegionalErrorBoundary from '@/components/ui/RegionalErrorBoundary.vue'
 import DsToast from '@/components/ui/DsToast.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
+import BrandSeal from '@/components/brand/BrandSeal.vue'
 import { confirmAction } from '@/composables/useConfirm'
+import { useKonami } from '@/composables/useKonami'
 import { reactive, ref } from 'vue'
 
 const MediaViewer = defineAsyncComponent(() => import('@/components/MediaViewer.vue'))
@@ -138,6 +148,16 @@ async function handleUnconstify(id: string) {
     sessionStore.unconstifySession(id)
   }
 }
+
+// ── Konami Code 惊喜彩蛋：印章 + 星芒环扩散，自动消失 ──
+const konamiShow = ref(false)
+let konamiTimer: ReturnType<typeof setTimeout> | null = null
+useKonami(() => {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  konamiShow.value = true
+  if (konamiTimer) clearTimeout(konamiTimer)
+  konamiTimer = setTimeout(() => { konamiShow.value = false }, 2600)
+})
 
 const sessionStore = useSessionStore()
 const { sessionId, sessions } = storeToRefs(sessionStore)
@@ -620,5 +640,76 @@ html, body {
 	.sidebar > * {
   position: relative;
   z-index: 1;
+}
+
+/* ── Konami Code 彩蛋 ── */
+.konami-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 55%);
+}
+.konami-stars {
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  animation: maxma-konami-ring 0.9s ease-out infinite;
+}
+.konami-stars::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  animation: maxma-konami-ring 0.9s ease-out 0.3s infinite;
+}
+@keyframes maxma-konami-ring {
+  0%   { transform: scale(0.35); opacity: 0.9; }
+  100% { transform: scale(1.6);  opacity: 0; }
+}
+.konami-seal {
+  position: relative;
+  animation: maxma-konami-seal-pop 0.5s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1)) both;
+}
+@keyframes maxma-konami-seal-pop {
+  0%   { transform: scale(0.4) rotate(-18deg); opacity: 0; }
+  100% { transform: scale(1)    rotate(0deg);   opacity: 1; }
+}
+.konami-msg {
+  position: relative;
+  font-family: var(--font-display);
+  font-size: var(--fs-ui);
+  letter-spacing: 0.3px;
+  color: var(--text-primary);
+  animation: maxma-konami-msg-in 0.4s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)) 0.18s both;
+}
+@keyframes maxma-konami-msg-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.konami-enter-active,
+.konami-leave-active {
+  transition: opacity 0.3s ease;
+}
+.konami-enter-from,
+.konami-leave-to {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .konami-stars,
+  .konami-stars::after,
+  .konami-seal,
+  .konami-msg {
+    animation: none;
+  }
 }
 </style>
