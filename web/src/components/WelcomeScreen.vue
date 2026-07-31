@@ -88,7 +88,7 @@ useGsap((ctx, contextSafe) => {
     const btn = contentEl.value.querySelector<HTMLElement>('.action-btn--primary')
     if (!btn) return
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    const strength = 8
+    const strength = 15
     const xTo = gsap.quickTo(btn, 'x', { duration: 0.35, ease: 'power3' })
     const yTo = gsap.quickTo(btn, 'y', { duration: 0.35, ease: 'power3' })
     const onMove = (e: MouseEvent) => {

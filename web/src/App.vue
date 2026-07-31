@@ -55,6 +55,7 @@
     <Transition name="konami">
       <div v-if="konamiShow" class="konami-overlay" role="status" aria-live="polite">
         <div class="konami-stars" aria-hidden="true"></div>
+        <div class="konami-stars konami-stars--2" aria-hidden="true"></div>
         <BrandSeal size="lg" class="konami-seal" />
         <p class="konami-msg">✦ 彩蛋达成，愿你今天事事顺心 ✦</p>
       </div>
@@ -261,15 +262,16 @@ onMounted(async () => {
 }
 
 /* ── 路由级过渡（router-view Transition） ── */
-/* 方向感知：前进从右滑入、后退从左滑入；direction 未知/首载回退 fade */
+/* 方向感知：前进从右滑入、后退从左滑入；direction 未知/首载回退 fade
+   幅度加大：横向位移 + 轻微 scale，形成"推开"的层次感 */
 .page-fade-enter-active,
 .page-fade-leave-active,
 .page-forward-enter-active,
 .page-forward-leave-active,
 .page-back-enter-active,
 .page-back-leave-active {
-  transition: opacity 0.2s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
-              transform 0.2s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+  transition: opacity 0.26s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+              transform 0.26s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
 }
 .page-fade-enter-from {
   opacity: 0;
@@ -281,19 +283,19 @@ onMounted(async () => {
 }
 .page-forward-enter-from {
   opacity: 0;
-  transform: translateX(24px);
+  transform: translateX(44px) scale(0.985);
 }
 .page-forward-leave-to {
   opacity: 0;
-  transform: translateX(-16px);
+  transform: translateX(-28px) scale(0.99);
 }
 .page-back-enter-from {
   opacity: 0;
-  transform: translateX(-24px);
+  transform: translateX(-44px) scale(0.985);
 }
 .page-back-leave-to {
   opacity: 0;
-  transform: translateX(16px);
+  transform: translateX(28px) scale(0.99);
 }
 @media (prefers-reduced-motion: reduce) {
   .page-fade-enter-active,
@@ -672,17 +674,23 @@ html, body {
   border: 1.5px solid color-mix(in srgb, var(--accent) 25%, transparent);
   animation: maxma-konami-ring 0.9s ease-out 0.3s infinite;
 }
+.konami-stars--2 {
+  width: 240px;
+  height: 240px;
+  animation-delay: 0.6s;
+}
 @keyframes maxma-konami-ring {
   0%   { transform: scale(0.35); opacity: 0.9; }
-  100% { transform: scale(1.6);  opacity: 0; }
+  100% { transform: scale(1.8);  opacity: 0; }
 }
 .konami-seal {
   position: relative;
-  animation: maxma-konami-seal-pop 0.5s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1)) both;
+  animation: maxma-konami-seal-pop 0.65s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1)) both;
 }
 @keyframes maxma-konami-seal-pop {
   0%   { transform: scale(0.4) rotate(-18deg); opacity: 0; }
-  100% { transform: scale(1)    rotate(0deg);   opacity: 1; }
+  60%  { transform: scale(1.14) rotate(2deg);  opacity: 1; }
+  100% { transform: scale(1)    rotate(0deg);  opacity: 1; }
 }
 .konami-msg {
   position: relative;

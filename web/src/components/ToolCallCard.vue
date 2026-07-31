@@ -399,14 +399,16 @@ useGsap((_ctx, contextSafe) => {
       { scale: 0.4, rotation: -90, autoAlpha: 0 },
       { scale: 1, rotation: 0, autoAlpha: 1, duration: 0.32, ease: easeMap.spring, overwrite: 'auto' })
     if (s === 'done') {
+      // 双脉冲：图标连弹两次，弹性更强
       gsap.fromTo(icon,
         { scale: 1 },
-        { scale: 1.35, duration: 0.18, ease: 'power1.out', yoyo: true, repeat: 1, delay: 0.16, overwrite: 'auto' })
+        { scale: 1.5, duration: 0.16, ease: 'power2.out', yoyo: true, repeat: 2, delay: 0.16, overwrite: 'auto' })
       const ring = icon.querySelector('.tool-done-ring')
       if (ring) {
+        // 涟漪环旋扩散：放大 + 旋转，消散感更强
         gsap.fromTo(ring,
-          { scale: 0.6, autoAlpha: 0.9 },
-          { scale: 2.2, autoAlpha: 0, duration: 0.6, ease: 'power2.out', delay: 0.1 })
+          { scale: 0.5, autoAlpha: 0.95, rotation: 0 },
+          { scale: 3, autoAlpha: 0, rotation: 45, duration: 0.75, ease: 'power3.out', delay: 0.1 })
       }
     }
   }))
