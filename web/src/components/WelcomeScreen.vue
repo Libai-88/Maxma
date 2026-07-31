@@ -80,6 +80,36 @@ useGsap((_ctx, contextSafe) => {
   }))
 })
 
+// 磁吸微交互：primary 按钮鼠标靠近时轻微吸附跟随、移出回弹（品牌签名手感）
+// quickTo 高频更新，transform 由 GSAP 接管（CSS .magnetic 去掉 transform transition 避免双缓冲）
+useGsap((ctx, contextSafe) => {
+  watch(() => store.loading, contextSafe((loading) => {
+    if (loading || !contentEl.value) return
+    const btn = contentEl.value.querySelector<HTMLElement>('.action-btn--primary')
+    if (!btn) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const strength = 8
+    const xTo = gsap.quickTo(btn, 'x', { duration: 0.35, ease: 'power3' })
+    const yTo = gsap.quickTo(btn, 'y', { duration: 0.35, ease: 'power3' })
+    const onMove = (e: MouseEvent) => {
+      const r = btn.getBoundingClientRect()
+      const nx = (e.clientX - (r.left + r.width / 2)) / (r.width / 2)
+      const ny = (e.clientY - (r.top + r.height / 2)) / (r.height / 2)
+      xTo(nx * strength)
+      yTo(ny * strength)
+    }
+    const onLeave = () => { xTo(0); yTo(0) }
+    btn.classList.add('magnetic')
+    btn.addEventListener('mousemove', onMove)
+    btn.addEventListener('mouseleave', onLeave)
+    ctx.add(() => {
+      btn.classList.remove('magnetic')
+      btn.removeEventListener('mousemove', onMove)
+      btn.removeEventListener('mouseleave', onLeave)
+    })
+  }))
+})
+
 // 入场编排：store 加载完成（welcome-content 渲染）后依次浮现
 // 高级编排：aura 光晕扩散 + 头像弹性弹出 + 名字 SplitText 字符级 3D reveal + 区块交错
 const { contextSafe } = useGsap(() => {
@@ -288,6 +318,13 @@ const examples = computed(() => [
               border-color var(--duration-fast) var(--ease-out),
               box-shadow var(--duration-fast) var(--ease-out),
               transform var(--duration-instant) var(--ease-spring);
+}
+/* 磁吸按钮：transform 由 GSAP quickTo 接管，去掉 transform 过渡避免双缓冲跟手滞后 */
+.action-btn.magnetic {
+  transition-property: background, color, border-color, box-shadow;
+}
+.action-btn.magnetic:hover {
+  transform: none;
 }
 .action-btn:hover {
   background: color-mix(in srgb, var(--accent) 8%, transparent);
