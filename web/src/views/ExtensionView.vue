@@ -1,5 +1,5 @@
 <template>
-  <div class="ext-view">
+  <div class="ext-view" ref="rootEl">
     <div class="header">
       <h2>扩展管理器 EXTENSIONS</h2>
       <p class="header-sub">OMP 工具、MCP 服务器与扩展模块</p>
@@ -96,6 +96,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { api } from '@/api'
+import { useViewEntrance } from '@/composables/useViewEntrance'
 
 interface ToolInfo {
   name: string
@@ -123,6 +124,9 @@ const error = ref('')
 const tools = ref<ToolInfo[]>([])
 const mcpServers = ref<McpServerInfo[]>([])
 const systemStatus = ref<{ sidecar_available: boolean }>({ sidecar_available: false })
+
+const rootEl = ref<HTMLElement | null>(null)
+useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.section', ready: () => !loading.value })
 
 // builtin !== false: includes builtin:true AND absent/undefined (which defaults to builtin)
 const builtinTools = computed(() => tools.value.filter(t => t.builtin !== false))

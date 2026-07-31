@@ -1,5 +1,5 @@
 <template>
-  <div class="settings-view">
+  <div class="settings-view" ref="rootEl">
     <div class="header">
       <h2>设置 SETTINGS</h2>
     </div>
@@ -428,12 +428,16 @@ import { ref, computed, onMounted } from 'vue'
 import { api } from '@/api'
 import type { TtsConfig, BrowserToolsConfig, SubAgentConfig } from '@/api'
 import { createLogger } from '@/utils/logger'
+import { useViewEntrance } from '@/composables/useViewEntrance'
 
 const log = createLogger('SettingsView')
 
 const loading = ref(true)
 const loadError = ref('')
 const settings = ref<Record<string, unknown>>({})
+
+const rootEl = ref<HTMLElement | null>(null)
+useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.section', ready: () => !loading.value })
 
 // ── Panel configs（独立于 OMP Settings，存储在后端 panel_configs.json） ──
 

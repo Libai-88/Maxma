@@ -1,6 +1,6 @@
 <!-- web/src/views/FeatureUnavailableView.vue -->
 <template>
-  <div class="fu-view">
+  <div class="fu-view" ref="rootEl">
     <div class="fu-card">
       <div class="fu-icon">🚧</div>
       <h1 class="fu-title">功能不可用</h1>
@@ -41,11 +41,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCapabilitiesStore } from '@/stores/capabilities'
+import { useViewEntrance } from '@/composables/useViewEntrance'
 
 defineOptions({ name: 'FeatureUnavailableView' })
+
+const rootEl = ref<HTMLElement | null>(null)
+useViewEntrance(() => rootEl.value, { blocks: '.fu-card' })
 
 const route = useRoute()
 const router = useRouter()

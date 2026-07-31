@@ -1,5 +1,6 @@
 <template>
   <MarkdownEditor
+    ref="rootEl"
     type="user"
     title="用户"
     subtitle="USER"
@@ -27,7 +28,13 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
+import type { ComponentPublicInstance } from 'vue'
 import MarkdownEditor from '@/components/MarkdownEditor.vue'
+import { useViewEntrance } from '@/composables/useViewEntrance'
+
+const rootEl = ref<ComponentPublicInstance | null>(null)
+useViewEntrance(() => (rootEl.value?.$el as HTMLElement | null) ?? null, { header: '.header' })
 
 const userTemplates = [
   {

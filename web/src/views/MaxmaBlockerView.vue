@@ -1,5 +1,5 @@
 <template>
-  <div class="blocker-view">
+  <div class="blocker-view" ref="rootEl">
     <!-- ── 列表 ── -->
     <template v-if="!showForm">
       <div class="header">
@@ -97,6 +97,7 @@ import type { BlockerEntry } from '@/types'
 import { confirmAction } from '@/composables/useConfirm'
 import { ref, onMounted } from 'vue'
 import { createLogger } from '@/utils/logger'
+import { useViewEntrance } from '@/composables/useViewEntrance'
 
 const log = createLogger('MaxmaBlockerView')
 
@@ -107,6 +108,9 @@ const saving = ref(false)
 const formError = ref('')
 const formPath = ref('')
 const formDesc = ref('')
+
+const rootEl = ref<HTMLElement | null>(null)
+useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.intro-card, .rule-card, .entry-card', ready: () => !loading.value })
 
 async function loadEntries() {
   loading.value = true

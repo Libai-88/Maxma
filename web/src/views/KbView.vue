@@ -1,5 +1,5 @@
 <template>
-  <div class="kb-view">
+  <div class="kb-view" ref="rootEl">
     <div class="header">
       <h2>知识库 Knowledge Base</h2>
       <p class="header-sub">此页面已合并到 OMP Agent 引擎的自动记忆系统——你不需要手动上传或索引文档。</p>
@@ -87,6 +87,14 @@
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+import { ref } from 'vue'
+import { useViewEntrance } from '@/composables/useViewEntrance'
+
+const rootEl = ref<HTMLElement | null>(null)
+useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.intro-card, .action-grid, .faq-section' })
+</script>
 
 <style scoped>
 .kb-view { flex: 1; display: flex; flex-direction: column; overflow: hidden; }

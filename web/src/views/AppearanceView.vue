@@ -1,5 +1,5 @@
 <template>
-  <div class="appearance-view">
+  <div class="appearance-view" ref="rootEl">
     <div class="header">
       <h2>外观</h2>
     </div>
@@ -103,6 +103,10 @@
 import { computed, ref, type ComponentPublicInstance } from 'vue'
 import { useTheme } from '@/composables/useTheme'
 import { usePaperTexture } from '@/composables/usePaperTexture'
+import { useViewEntrance } from '@/composables/useViewEntrance'
+
+const rootEl = ref<HTMLElement | null>(null)
+useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.section' })
 
 const { storedTheme, setTheme, THEMES } = useTheme()
 

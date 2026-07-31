@@ -1,5 +1,5 @@
 <template>
-  <div class="collab-view">
+  <div class="collab-view" ref="rootEl">
     <div class="header">
       <h2>协作 COLLABORATION</h2>
       <p class="header-sub">管理会话分享、快照与协作访问</p>
@@ -158,6 +158,10 @@ import { useCollabStore } from '@/stores/collab'
 import { useSessionStore } from '@/stores/session'
 import { confirmAction } from '@/composables/useConfirm'
 import type { SessionInfo } from '@/types'
+import { useViewEntrance } from '@/composables/useViewEntrance'
+
+const rootEl = ref<HTMLElement | null>(null)
+useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.section' })
 
 const store = useCollabStore()
 const sessionStore = useSessionStore()

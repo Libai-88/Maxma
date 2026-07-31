@@ -1,5 +1,5 @@
 <template>
-  <div class="share-view">
+  <div class="share-view" ref="rootEl">
     <div v-if="loading" class="loading">加载分享内容...</div>
     <div v-else-if="error" class="error">
       <h2>无法访问分享</h2>
@@ -31,6 +31,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '@/api'
+import { useViewEntrance } from '@/composables/useViewEntrance'
 
 interface ShareData {
   share: { access_mode: string; created_at: string; expires_at?: string }
@@ -43,6 +44,9 @@ const loading = ref(true)
 const error = ref('')
 const share = ref<ShareData['share'] | null>(null)
 const messages = ref<ShareData['messages']>([])
+
+const rootEl = ref<HTMLElement | null>(null)
+useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.message', ready: () => !loading.value })
 
 function shareModeLabel(mode: string): string {
   const labels: Record<string, string> = { read: '只读', comment: '可评论', edit: '可编辑' }

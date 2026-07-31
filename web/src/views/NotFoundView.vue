@@ -1,6 +1,6 @@
 <!-- web/src/views/NotFoundView.vue -->
 <template>
-  <div class="not-found-view">
+  <div class="not-found-view" ref="rootEl">
     <div class="not-found-card">
       <div class="not-found-icon">🧭</div>
       <h1 class="not-found-code">404</h1>
@@ -36,7 +36,13 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
+import { useViewEntrance } from '@/composables/useViewEntrance'
+
 defineOptions({ name: 'NotFoundView' })
+
+const rootEl = ref<HTMLElement | null>(null)
+useViewEntrance(() => rootEl.value, { blocks: '.not-found-card' })
 </script>
 
 <style scoped>

@@ -1,5 +1,5 @@
 <template>
-  <div class="audit-log-view">
+  <div class="audit-log-view" ref="rootEl">
     <div class="header">
       <h2>审计日志 Audit Log</h2>
       <p class="header-sub">了解 Maxma 记录了什么、在哪里查看、如何清除。</p>
@@ -99,6 +99,10 @@
 import { ref } from 'vue'
 import { api } from '@/api'
 import { invoke } from '@tauri-apps/api/core'
+import { useViewEntrance } from '@/composables/useViewEntrance'
+
+const rootEl = ref<HTMLElement | null>(null)
+useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.card' })
 
 const exporting = ref(false)
 

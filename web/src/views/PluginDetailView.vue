@@ -1,5 +1,5 @@
 <template>
-  <div class="plugin-detail-view">
+  <div class="plugin-detail-view" ref="rootEl">
     <div class="header">
       <button class="back-btn" @click="router.push('/plugins')">← 返回插件市场</button>
       <h2>{{ pluginName }}</h2>
@@ -107,6 +107,7 @@ import { confirmAction } from '@/composables/useConfirm'
 import { api } from '@/api'
 import PluginConfigPanel from '@/components/plugins/PluginConfigPanel.vue'
 import type { PluginDetail } from '@/types/plugin'
+import { useViewEntrance } from '@/composables/useViewEntrance'
 
 const route = useRoute()
 const router = useRouter()
@@ -117,6 +118,9 @@ const detail = ref<PluginDetail | null>(null)
 const pluginConfig = ref<Record<string, unknown>>({})
 const loading = ref(true)
 const error = ref('')
+
+const rootEl = ref<HTMLElement | null>(null)
+useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.section', ready: () => !loading.value })
 
 const renderedReadme = computed(() => {
   if (!detail.value?.readme) return ''

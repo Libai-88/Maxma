@@ -1,5 +1,5 @@
 <template>
-  <div class="privacy-view">
+  <div class="privacy-view" ref="rootEl">
     <div class="header">
       <h2>隐私仪表盘 Privacy Dashboard</h2>
       <p class="header-sub">查看 Maxma 把数据存在哪里、监控了哪些网络活动，并执行清除 / 加密等数据管理操作。</p>
@@ -132,8 +132,12 @@ import { api } from '@/api'
 import { createLogger } from '@/utils/logger'
 import { confirmAction } from '@/composables/useConfirm'
 import type { AuditLogRecord } from '@/types'
+import { useViewEntrance } from '@/composables/useViewEntrance'
 
 const log = createLogger('PrivacyView')
+
+const rootEl = ref<HTMLElement | null>(null)
+useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.section' })
 
 interface StorageItem {
   icon: string

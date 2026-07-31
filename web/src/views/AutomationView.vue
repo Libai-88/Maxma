@@ -1,5 +1,5 @@
 <template>
-  <div class="automation-view">
+  <div class="automation-view" ref="rootEl">
     <div class="header">
       <h2>自动化 AUTOMATION</h2>
       <p class="header-sub">定时任务与自动化调度</p>
@@ -62,6 +62,7 @@ import { ref, computed, onMounted } from 'vue'
 import { api } from '@/api'
 import { toErrorMessage } from '@/utils/error'
 import { confirmAction } from '@/composables/useConfirm'
+import { useViewEntrance } from '@/composables/useViewEntrance'
 
 interface AutomationAction {
   type: string
@@ -98,6 +99,9 @@ const form = ref({ name: '', schedule: '', action: '' })
 const running = ref<Set<string>>(new Set())
 const expandedHistory = ref<string | null>(null)
 const historyMap = ref<Record<string, RunHistoryEntry[]>>({})
+
+const rootEl = ref<HTMLElement | null>(null)
+useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.automation-card', ready: () => !loading.value })
 
 const canCreate = computed(() =>
   Boolean(form.value.name.trim() && form.value.schedule.trim() && form.value.action.trim())

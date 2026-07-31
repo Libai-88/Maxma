@@ -1,5 +1,5 @@
 <template>
-  <div class="md-editor-view">
+  <div class="md-editor-view" ref="rootEl">
     <PersonaCard class="persona-card-spacing" />
     <div class="header">
       <h2>{{ pageTitle }} <span class="subtitle">{{ pageSubtitle }}</span></h2>
@@ -112,6 +112,7 @@ import PersonaCard from '../components/PersonaCard.vue'
 import { useMarkdownPersist } from '@/composables/useMarkdownPersist'
 import { confirmAction } from '@/composables/useConfirm'
 import { createLogger } from '@/utils/logger'
+import { useViewEntrance } from '@/composables/useViewEntrance'
 
 const log = createLogger('SoulView')
 
@@ -157,6 +158,9 @@ const {
   type: TYPE,
   getVariant: () => activeFile.value !== 'SOUL.md' ? activeFile.value : undefined,
 })
+
+const rootEl = ref<HTMLElement | null>(null)
+useViewEntrance(() => rootEl.value, { header: '.header', ready: () => !loading.value })
 
 // 创建新人格
 const showCreateDialog = ref(false)

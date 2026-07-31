@@ -1,5 +1,5 @@
 <template>
-  <div class="rules-view">
+  <div class="rules-view" ref="rootEl">
     <div class="header">
       <div class="header-top">
         <div>
@@ -125,6 +125,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { api } from '@/api'
 import { confirmAction } from '@/composables/useConfirm'
 import { toErrorMessage } from '@/utils/error'
+import { useViewEntrance } from '@/composables/useViewEntrance'
 
 interface Rule {
   id: string
@@ -149,6 +150,9 @@ const isEditing = ref(false)
 const editingId = ref('')
 const submitting = ref(false)
 const dialogError = ref('')
+
+const rootEl = ref<HTMLElement | null>(null)
+useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.rule-card', ready: () => !loading.value })
 
 const form = reactive({
   name: '',
