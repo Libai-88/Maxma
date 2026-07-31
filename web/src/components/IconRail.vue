@@ -128,7 +128,7 @@ const visibleNavItems = computed(() =>
   background: transparent;
   text-decoration: none;
   cursor: pointer;
-  transition: color 0.15s ease, background-color 0.15s ease;
+  transition: color 0.15s ease, background-color 0.15s ease, transform 0.22s var(--ease-spring);
 }
 
 .icon-rail__control:hover,
@@ -136,11 +136,11 @@ const visibleNavItems = computed(() =>
 .icon-rail__control.is-active {
   color: var(--accent);
   background: var(--accent-soft, color-mix(in srgb, var(--accent) 12%, transparent));
+  transform: scale(1.08);
 }
 
 .icon-rail__control:active {
   transform: scale(0.92);
-  transition: transform 0.08s ease;
 }
 
 .icon-rail__control:focus-visible {
