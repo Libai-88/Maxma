@@ -57,6 +57,7 @@ import StickerInline from './StickerInline.vue'
 import StickerPreviewOverlay from './StickerPreviewOverlay.vue'
 import { useStickerSegments, type StickerSegment } from '@/composables/useStickerSegments'
 import { stripStickerDirectives } from '@/composables/stickerUtils'
+import { gsap, useGsap, easeMap, lazyLoadPlugin } from '@/composables/useGsap'
 
 const props = defineProps<{
   role: 'user' | 'assistant'
@@ -114,6 +115,38 @@ onMounted(() => {
 
 watch(() => props.content, () => {
   requestAnimationFrame(measureHeight)
+})
+
+// ── AI 回复逐词 reveal（SplitText） ──
+// 过滤：跳过代码块/表格/过短消息，避免破坏复杂 markdown；同一内容只播一次（防虚拟列表重建重播）
+const revealedReplies = new Set<string>()
+
+useGsap(async () => {
+  if (props.role !== 'assistant') return
+  const el = contentEl.value
+  if (!el) return
+  if (props.content.includes('```') || props.content.includes('|') || props.content.length < 24) return
+  if (revealedReplies.has(props.content)) return
+  revealedReplies.add(props.content)
+  try {
+    const { SplitText } = await lazyLoadPlugin('SplitText')
+    const split = SplitText.create(el, {
+      type: 'words',
+      wordsClass: 'reply-word',
+      aria: 'auto',
+      ignore: 'pre, code, table, a, img, svg, video, audio',
+    })
+    if (!split.words?.length) { split.revert(); return }
+    gsap.from(split.words, {
+      yPercent: 18,
+      autoAlpha: 0,
+      duration: 0.32,
+      ease: easeMap.out,
+      stagger: 0.01,
+      delay: 0.05,
+      onComplete: () => split.revert(),
+    })
+  } catch { /* SplitText 加载失败或拆分异常则跳过 */ }
 })
 </script>
 
