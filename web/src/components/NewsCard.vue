@@ -1,5 +1,5 @@
 <template>
-  <div class="news-card">
+  <div ref="rootEl" class="news-card">
     <!-- 标题行：类型徽章 + 英文标题 -->
     <div class="card-header">
       <div class="card-title-row">
@@ -31,9 +31,31 @@
 
 <script setup lang="ts">
 import type { NewsEntry } from '@/types'
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { gsap, useGsap } from '@/composables/useGsap'
 
 const props = defineProps<{ entry: NewsEntry }>()
+
+// 3D 倾斜：鼠标位置驱动 rotationX/rotationY（quickTo 平滑跟手）
+const rootEl = ref<HTMLElement | null>(null)
+useGsap(() => {
+  const el = rootEl.value
+  if (!el) return
+  gsap.set(el, { transformPerspective: 700 })
+  const rxTo = gsap.quickTo(el, 'rotationX', { duration: 0.35, ease: 'power2' })
+  const ryTo = gsap.quickTo(el, 'rotationY', { duration: 0.35, ease: 'power2' })
+  el.addEventListener('mousemove', (e) => {
+    const r = el.getBoundingClientRect()
+    const px = (e.clientX - r.left) / r.width - 0.5
+    const py = (e.clientY - r.top) / r.height - 0.5
+    ryTo(px * 7)
+    rxTo(-py * 7)
+  })
+  el.addEventListener('mouseleave', () => {
+    rxTo(0)
+    ryTo(0)
+  })
+})
 
 const typeLabelMap: Record<string, string> = {
   feat: '新功能',
@@ -62,6 +84,12 @@ const paragraphs = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  will-change: transform;
+  transition: box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.news-card:hover {
+  box-shadow: var(--shadow-lg);
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
 }
 
 .card-header {
