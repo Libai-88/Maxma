@@ -15,6 +15,7 @@
           </template>
         </template>
         <RenderMarkdown v-else :content="streamingText" :streaming="!block.done" />
+        <span v-if="!block.done && !block.becameAnswer" class="stream-caret" aria-hidden="true"></span>
       </div>
     </div>
   </div>
@@ -142,6 +143,18 @@ useGsap(() => {
 }
 .thinking-content {
   color: var(--text-primary);
+}
+
+/* 流式打字光标：内容尾部闪烁竖线 */
+.stream-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  border-radius: 1px;
+  background: var(--accent);
+  animation: maxma-caret-blink 0.9s steps(2, start) infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

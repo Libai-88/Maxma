@@ -151,6 +151,12 @@
   50%      { opacity: 1;   transform: scale(1.5); }
 }
 
+/* ── 流式打字光标 ── */
+@keyframes maxma-caret-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0; }
+}
+
 /* ── 工具气泡：执行中呼吸光晕 ── */
 @keyframes maxma-tool-glow {
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 0%, transparent); }
