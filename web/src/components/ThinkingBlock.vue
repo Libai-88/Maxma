@@ -8,7 +8,15 @@
     </div>
     <div class="thinking-body" v-if="block.tokens">
       <div class="thinking-content">
-        <template v-if="block.becameAnswer">
+        <!-- 流式答案（becameAnswer）：纯文本用 SplitText 增量逐词 reveal，实现打字机生长感；
+             复杂 markdown（代码/表格）降级走 RenderMarkdown 保证格式正确 -->
+        <div
+          v-if="isStreamingAnswer"
+          ref="answerStreamEl"
+          class="answer-stream"
+          aria-label="Maxma 正在输入"
+        ></div>
+        <template v-else-if="block.becameAnswer">
           <template v-for="(seg, i) in segments" :key="i">
             <RenderMarkdown v-if="seg.type === 'text'" :content="seg.text" />
             <StickerInline v-else :sticker="seg" @preview="previewSticker" />
@@ -16,6 +24,7 @@
         </template>
         <RenderMarkdown v-else :content="streamingText" :streaming="!block.done" />
         <span v-if="!block.done && !block.becameAnswer" class="stream-caret" aria-hidden="true"></span>
+        <span v-if="isStreamingAnswer" class="stream-caret" aria-hidden="true"></span>
       </div>
     </div>
   </div>
@@ -29,17 +38,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { ThinkingBlock as ThinkingBlockType } from '@/types'
 import RenderMarkdown from './RenderMarkdown.vue'
 import StickerInline from './StickerInline.vue'
 import StickerPreviewOverlay from './StickerPreviewOverlay.vue'
 import { useStickerSegments, type StickerSegment } from '@/composables/useStickerSegments'
-import { gsap, useGsap, easeMap } from '@/composables/useGsap'
+import { gsap, useGsap, easeMap, lazyLoadPlugin } from '@/composables/useGsap'
 
 const props = defineProps<{ block: ThinkingBlockType }>()
 
 const previewIndex = ref(-1)
+const answerStreamEl = ref<HTMLElement | null>(null)
 
 function previewSticker(sticker: StickerSegment) {
   previewIndex.value = stickerSegments.value.findIndex(
@@ -61,6 +71,88 @@ const streamingText = computed(() => {
   const text = props.block.tokens
   if (!text) return ''
   return stripThinkingLabels(text.replace(STICKER_PLACEHOLDER_RE, ''))
+})
+
+/** 纯文本答案判断：含代码围栏/表格行/标题则降级走 RenderMarkdown，避免 SplitText 拆坏结构 */
+const isPlainAnswer = (text: string): boolean =>
+  !!text && !/```/.test(text) && !/^\s*\|/m.test(text) && !/^\s*#/m.test(text)
+
+const isStreamingAnswer = computed(() =>
+  props.block.becameAnswer && !props.block.done && isPlainAnswer(props.block.tokens ?? '')
+)
+
+// 增量逐词 reveal：token 追加时只对新词做 from，实现打字机生长感
+// SplitText 实例复用，split() 重拆后仅动画 lastWordCount 之后的新词
+// rAF 节流：同帧内多次 token 更新合并为一次重拆，避免高频抖动
+let answerSplit: SplitText | null = null
+let lastWordCount = 0
+let streamRaf = 0
+
+useGsap((ctx, contextSafe) => {
+  const doSplit = contextSafe(async () => {
+    const el = answerStreamEl.value
+    const text = props.block.tokens ?? ''
+    if (!el || !props.block.becameAnswer || props.block.done) return
+    if (!isPlainAnswer(text)) {
+      answerSplit?.revert()
+      answerSplit = null
+      lastWordCount = 0
+      return
+    }
+    el.textContent = stripThinkingLabels(text.replace(STICKER_PLACEHOLDER_RE, ''))
+    const { SplitText } = await lazyLoadPlugin('SplitText')
+    if (answerSplit) {
+      answerSplit.split({ type: 'words', wordsClass: 'answer-word' })
+    } else {
+      answerSplit = SplitText.create(el, { type: 'words', wordsClass: 'answer-word', aria: 'auto' })
+      lastWordCount = 0
+    }
+    const words = answerSplit?.words ?? []
+    const fresh = words.slice(lastWordCount)
+    lastWordCount = words.length
+    if (fresh.length) {
+      gsap.from(fresh, {
+        yPercent: 26,
+        autoAlpha: 0,
+        duration: 0.3,
+        ease: easeMap.out,
+        stagger: 0.015,
+        overwrite: 'auto',
+      })
+    }
+  })
+
+  watch(
+    () => props.block.tokens,
+    () => {
+      if (streamRaf) return
+      streamRaf = requestAnimationFrame(() => {
+        streamRaf = 0
+        void doSplit()
+      })
+    },
+    { immediate: true },
+  )
+
+  // 卸载时取消 pending rAF，避免组件销毁后仍执行 doSplit
+  ctx.add(() => {
+    if (streamRaf) {
+      cancelAnimationFrame(streamRaf)
+      streamRaf = 0
+    }
+  })
+
+  // 答案完成：revert SplitText，切回 RenderMarkdown 完整渲染（含 markdown/sticker）
+  watch(
+    () => props.block.done,
+    contextSafe((done) => {
+      if (done && answerSplit) {
+        answerSplit.revert()
+        answerSplit = null
+        lastWordCount = 0
+      }
+    }),
+  )
 })
 
 /** 解析内容中的 <sticker:category/filename.webp> 标记，分段返回 */
@@ -143,6 +235,13 @@ useGsap(() => {
 }
 .thinking-content {
   color: var(--text-primary);
+}
+.answer-stream {
+  display: inline;
+}
+.answer-stream :deep(.answer-word) {
+  display: inline-block;
+  white-space: pre-wrap;
 }
 
 /* 流式打字光标：内容尾部闪烁竖线 */
