@@ -1,7 +1,7 @@
 <!-- web/src/components/ApprovalBubble.vue -->
 <!-- 工具执行审批气泡：当 ApprovalToolNode 拦截工具调用并推送 mode='approval' 的 ask_user 事件时渲染 -->
 <template>
-  <div class="approval-bubble" :class="`risk-${riskLevel}`">
+  <div ref="rootEl" class="approval-bubble" :class="`risk-${riskLevel}`">
     <div class="approval-header">
       <Icon class="approval-icon" :name="riskIcon" :size="16" />
       <span class="approval-title">工具执行审批</span>
@@ -37,6 +37,9 @@
 
 <script setup lang="ts">
 import Icon from './Icon.vue'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
+import { watch } from 'vue'
+import { ref } from 'vue'
 
 const props = defineProps<{
   toolName: string
@@ -98,6 +101,27 @@ function onReject() {
     data: { interactionId: props.interactionId, responded: 'no' as const },
   })
 }
+
+// 入场：淡入上浮；高风险审批带轻微警示抖动
+const rootEl = ref<HTMLElement | null>(null)
+useGsap(() => {
+  const el = rootEl.value
+  if (!el) return
+  gsap.fromTo(el, { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.25, ease: easeMap.out })
+  if (props.riskLevel === 'high') {
+    gsap.fromTo(el, { x: 0 }, { x: 3, duration: 0.06, yoyo: true, repeat: 3, ease: 'none' })
+  }
+})
+
+// 审批结果状态：徽标弹性弹跳
+useGsap((_ctx, contextSafe) => {
+  watch(() => props.responded, contextSafe((r) => {
+    if (!r || !rootEl.value) return
+    const badge = rootEl.value.querySelector('.approval-responded span')
+    if (!badge) return
+    gsap.fromTo(badge, { scale: 0.8 }, { scale: 1, duration: 0.2, ease: easeMap.spring, overwrite: 'auto' })
+  }), { flush: 'post' })
+})
 </script>
 
 <style scoped>

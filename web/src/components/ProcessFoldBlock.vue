@@ -33,16 +33,17 @@
     </div>
 
     <!-- Large tool UIs are created only when the user asks for the details. -->
-    <div v-if="expanded" :id="contentId" class="process-fold__details">
+    <div v-if="expanded" ref="detailsEl" :id="contentId" class="process-fold__details">
       <slot />
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { ToolCall } from '@/types'
 import { toolDisplayName } from './tools/_shared/displayNames'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const props = defineProps<{ toolCall: ToolCall }>()
 
@@ -66,6 +67,15 @@ const statusLabel = computed(() => props.toolCall.status === 'running' ? '执行
 function toggle() {
   expanded.value = !expanded.value
 }
+
+// 展开详情时内容淡入上浮
+const detailsEl = ref<HTMLElement | null>(null)
+useGsap((_ctx, contextSafe) => {
+  watch(expanded, contextSafe((open) => {
+    if (!open || !detailsEl.value) return
+    gsap.fromTo(detailsEl.value, { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.2, ease: easeMap.out })
+  }), { flush: 'post' })
+})
 
 async function copyRawContent() {
   if (!rawContent.value) return
