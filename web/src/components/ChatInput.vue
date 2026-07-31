@@ -231,7 +231,7 @@ import { useImageAttachment } from '@/composables/useImageAttachment'
 import { useLinkInput } from '@/composables/useLinkInput'
 import type { ThinkPathId } from '@/utils/thinkPath'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
-import { gsap, useGsap } from '@/composables/useGsap'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 import type StickerPickerComponent from '@/components/StickerPicker.vue'
 import type { Sticker } from '@/components/StickerPicker.vue'
 import ModelSelector from './ModelSelector.vue'
@@ -277,6 +277,15 @@ useGsap((_ctx, contextSafe) => {
           onComplete: () => gsap.set(el, { x: 0 }) })
     }
   }))
+})
+
+// 引用浮动按钮：出现时 spring 弹入
+useGsap((_ctx, contextSafe) => {
+  watch(quoteCandidate, contextSafe((val) => {
+    const el = quoteFloatRef.value
+    if (!val || !el) return
+    gsap.fromTo(el, { opacity: 0, scale: 0.6, y: 8 }, { opacity: 1, scale: 1, y: 0, duration: 0.2, ease: easeMap.spring, overwrite: 'auto' })
+  }), { flush: 'post' })
 })
 
 
@@ -1260,16 +1269,7 @@ onUnmounted(() => {
   transform: scale(0.96);
 }
 
-.quote-pop-enter-active {
-  animation: quote-pop-in 0.15s var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
-}
-.quote-pop-leave-active {
-  animation: quote-pop-in 0.1s reverse;
-}
-@keyframes quote-pop-in {
-  from { opacity: 0; transform: scale(0.8); }
-  to { opacity: 1; transform: scale(1); }
-}
+/* 引用浮动按钮入场由 GSAP 控制（spring 弹入），此处不再定义 CSS animation */
 
 .chat-input button:focus-visible,
 .link-input:focus-visible,
