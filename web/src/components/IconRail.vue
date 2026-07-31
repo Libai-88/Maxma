@@ -1,5 +1,5 @@
 <template>
-  <aside class="icon-rail" aria-label="主导航">
+  <aside class="icon-rail" ref="rootEl" aria-label="主导航">
     <router-link
       to="/"
       class="icon-rail__brand icon-rail__control"
@@ -49,10 +49,24 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import Icon from '@/components/Icon.vue'
 import AppSettingsMenu from '@/components/AppSettingsMenu.vue'
 import { useCapabilities } from '@/composables/useCapabilities'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
+
+const rootEl = ref<HTMLElement | null>(null)
+
+// 导航图标入场：品牌印章先弹出，导航项依次弹性浮现（仅首次挂载）
+useGsap(() => {
+  const el = rootEl.value
+  if (!el) return
+  const q = gsap.utils.selector(el)
+  gsap.timeline({ defaults: { ease: easeMap.out } })
+    .from(q('.icon-rail__brand-mark'), { scale: 0.5, rotation: -30, autoAlpha: 0, duration: 0.5, ease: easeMap.spring })
+    .from(q('.icon-rail__nav-item'), { scale: 0.6, autoAlpha: 0, y: -6, duration: 0.35, stagger: 0.05 }, '-=0.2')
+    .from(q('.icon-rail__footer'), { autoAlpha: 0, y: 8, duration: 0.3 }, '-=0.1')
+})
 
 withDefaults(defineProps<{
   onboardingEnabled?: boolean
