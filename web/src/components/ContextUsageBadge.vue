@@ -124,6 +124,15 @@ useGsap((_ctx, contextSafe) => {
       { scale: 1.18, duration: 0.15, yoyo: true, repeat: 1, ease: 'sine.out',
         onComplete: () => gsap.set(triggerRef.value, { clearProps: 'transform' }) })
   }))
+  // 百分比数字变化 tick（弹性弹跳）
+  watch(pctText, contextSafe((v, old) => {
+    if (v === old || !triggerRef.value) return
+    const text = triggerRef.value.querySelector('.ring-text')
+    if (!text) return
+    gsap.fromTo(text,
+      { scale: 1.35, transformOrigin: 'center center' },
+      { scale: 1, duration: 0.28, ease: 'back.out(2.5)', overwrite: 'auto' })
+  }))
 })
 </script>
 

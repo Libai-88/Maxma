@@ -996,7 +996,8 @@ onUnmounted(() => {
 }
 .chat-input:focus-within {
     border-color: var(--border-accent, var(--accent));
-    box-shadow: var(--shadow-soft), 0 0 0 1px var(--accent-soft);
+    box-shadow: var(--shadow-soft), 0 0 0 1px var(--accent-soft),
+                0 0 22px color-mix(in srgb, var(--accent) 12%, transparent);
   }
 
 /* 添加文件按钮 */
