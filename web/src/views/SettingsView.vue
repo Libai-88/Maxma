@@ -600,6 +600,9 @@ onMounted(async () => {
 
 <style scoped>
 .settings-view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   max-width: 640px;
   margin: 0 auto;
   padding: 24px 16px;

@@ -53,9 +53,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { normalizeContextUsage, useChatStore } from '../stores/chat'
 import DsTooltip from './ui/DsTooltip.vue'
+import { gsap, useGsap } from '@/composables/useGsap'
 
 const store = useChatStore()
 const tooltipRef = ref<InstanceType<typeof DsTooltip> | null>(null)
@@ -113,6 +114,17 @@ function approxChars(tokens: number): string {
   if (approx >= 10000) return `${Math.round(approx / 10000)} 万字`
   return `${approx} 字`
 }
+
+// 阈值跨越（70%/90%）时环弹跳提示
+useGsap((_ctx, contextSafe) => {
+  watch(statusClass, contextSafe((cls, prev) => {
+    if (cls === prev || !triggerRef.value) return
+    gsap.fromTo(triggerRef.value,
+      { scale: 1 },
+      { scale: 1.18, duration: 0.15, yoyo: true, repeat: 1, ease: 'sine.out',
+        onComplete: () => gsap.set(triggerRef.value, { clearProps: 'transform' }) })
+  }))
+})
 </script>
 
 <style scoped>
@@ -152,7 +164,7 @@ function approxChars(tokens: number): string {
   stroke: var(--accent);
   stroke-width: 3;
   stroke-linecap: round;
-  transition: stroke-dashoffset 0.3s ease;
+  transition: stroke-dashoffset 0.3s ease, stroke 0.3s ease;
 }
 
 .status-warn .ring-fill {

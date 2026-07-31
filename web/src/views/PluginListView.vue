@@ -51,7 +51,7 @@
           {{ store.plugins.length === 0 ? '在上方输入 npm 包名或 GitHub URL 安装插件。' : '尝试调整搜索条件或过滤器。' }}
         </div>
       </div>
-      <div v-else class="plugin-list">
+      <div v-else ref="listRef" class="plugin-list">
         <PluginCard
           v-for="plugin in store.filteredPlugins"
           :key="plugin.name"
@@ -74,10 +74,15 @@ import { confirmAction } from '@/composables/useConfirm'
 import PluginCard from '@/components/plugins/PluginCard.vue'
 import PluginSearchBar from '@/components/plugins/PluginSearchBar.vue'
 import type { PluginCategory } from '@/types/plugin'
+import { useReveal } from '@/composables/useReveal'
 
 const router = useRouter()
 const store = usePluginStore()
 const installSpec = ref('')
+const listRef = ref<HTMLElement | null>(null)
+
+// 插件卡片错落入场（加载完成后）
+useReveal(() => listRef.value, '.plugin-list > *', { stagger: 0.05 })
 
 onMounted(() => {
   store.loadPlugins()
@@ -129,6 +134,9 @@ function handleSearch(query: string, category: PluginCategory | undefined, enabl
 
 <style scoped>
 .plugin-view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   max-width: 960px;
   margin: 0 auto;
   padding: 24px 16px 80px;

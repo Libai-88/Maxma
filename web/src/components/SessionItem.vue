@@ -108,15 +108,7 @@ function formatRelativeTime(ts: number): string {
   position: relative;
   transition: background 0.15s;
 }
-@media (prefers-reduced-motion: no-preference) {
-  .session-item {
-    animation: session-slide-in 0.25s ease-out both;
-  }
-}
-@keyframes session-slide-in {
-  from { opacity: 0; transform: translateX(-8px); }
-  to { opacity: 1; transform: translateX(0); }
-}
+/* 会话项入场由 SessionDrawer 的 GSAP stagger 统一控制，此处不再定义 CSS animation 避免冲突 */
 .session-item:hover {
   background: var(--bg-card);
 }

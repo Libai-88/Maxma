@@ -84,7 +84,7 @@
           <router-link to="/help" class="btn">什么是 LLM 提供商？</router-link>
         </div>
       </div>
-      <div v-else class="card-grid">
+      <div v-else ref="providerGridRef" class="card-grid">
         <div v-for="p in providers" :key="p.id" class="provider-card" :data-provider-id="p.id">
           <!-- 顶部信息区 -->
           <div class="card-header">
@@ -266,6 +266,7 @@ import { useHealthStore } from '@/stores/health'
 import { diagnosticMessage, retryMessage } from '@/utils/providerDiagnostics'
 import { toErrorMessage } from '@/utils/error'
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useReveal } from '@/composables/useReveal'
 
 // ── 预设提供商列表 ──
 	const presets: ProviderPreset[] = [
@@ -335,6 +336,10 @@ const providerStore = useProviderStore()
 const chatStore = useChatStore()
 const providers = computed(() => providerStore.allProviders)
 const loading = computed(() => providerStore.loading)
+const providerGridRef = ref<HTMLElement | null>(null)
+
+// 提供商卡片错落入场（加载完成后）
+useReveal(() => providerGridRef.value, '.provider-card', { stagger: 0.05 })
 const healthStore = useHealthStore()
 const diagnosticsEnabled = computed(() => healthStore.health?.provider_diagnostics_enabled === true)
 const rechecking = ref<Record<string, boolean>>({})

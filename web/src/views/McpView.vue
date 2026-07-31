@@ -112,7 +112,7 @@
           </div>
         </div>
       </div>
-      <div v-else class="card-grid">
+      <div v-else ref="mcpGridRef" class="card-grid">
         <div v-for="s in servers" :key="s.server_id" class="mcp-card">
           <!-- 顶部信息区 -->
           <div class="card-header">
@@ -555,11 +555,16 @@ import { toErrorMessage } from '@/utils/error'
 import { confirmAction } from '@/composables/useConfirm'
 import type { MCPServerConfig, MCPServerCreateBody, MCPTransport, DiscoveredServer } from '@/types'
 import DsTooltip from '@/components/ui/DsTooltip.vue'
+import { useReveal } from '@/composables/useReveal'
 
 type Mode = 'list' | 'add' | 'edit'
 
 // ── 列表状态 ──
 const loading = ref(true)
+const mcpGridRef = ref<HTMLElement | null>(null)
+
+// MCP 服务器卡片错落入场（加载完成后）
+useReveal(() => mcpGridRef.value, '.mcp-card', { stagger: 0.05 })
 const loadError = ref('')
 // 列表接口返回的是 MCPServerInfo[]，但后端实际会带上 stdio/URL 等扩展字段
 // （用于卡片连接信息展示），故用 MCPServerConfig[] 表达更准确的运行时形状。
