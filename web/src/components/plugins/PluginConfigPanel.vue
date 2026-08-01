@@ -1,5 +1,5 @@
 <template>
-  <div class="config-panel">
+  <div ref="rootEl" class="config-panel">
     <form @submit.prevent="handleSubmit">
       <div v-for="(prop, key) in schema.properties" :key="key" class="form-field">
         <label :for="key" class="form-label">
@@ -60,6 +60,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import type { PluginConfigSchema } from '@/types/plugin'
+import { useButtonFx } from '@/composables/useButtonFx'
 
 const props = defineProps<{
   schema: PluginConfigSchema
@@ -71,6 +72,13 @@ const emit = defineEmits<{
 }>()
 
 const localConfig = ref<Record<string, unknown>>({ ...props.config })
+
+const rootEl = ref<HTMLElement | null>(null)
+
+// 保存（主 CTA）：磁吸 + 弹性
+useButtonFx(() => rootEl.value, '.btn-primary', { magnetic: 10, bounceIcon: false })
+// 重置（危险）：hover 左倾抖动
+useButtonFx(() => rootEl.value, '.form-actions .btn:not(.btn-primary)', { danger: true, bounceIcon: false })
 
 watch(() => props.config, (newConfig) => {
   localConfig.value = { ...newConfig }
@@ -155,7 +163,10 @@ function handleReset() {
   background: var(--bg-secondary);
   cursor: pointer;
   font-size: 0.9em;
-  transition: all 0.15s;
+  /* transform 交给 GSAP（hover 弹性/磁吸/抖动），不参与 CSS 过渡 */
+  transition: background 0.15s var(--ease-out),
+              border-color 0.15s var(--ease-out),
+              color 0.15s var(--ease-out);
 }
 
 .btn-primary {

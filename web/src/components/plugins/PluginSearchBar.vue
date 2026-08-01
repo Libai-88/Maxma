@@ -33,6 +33,7 @@
 import { ref } from 'vue'
 import type { PluginCategory } from '@/types/plugin'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
+import { useButtonFx } from '@/composables/useButtonFx'
 
 const rootEl = ref<HTMLElement | null>(null)
 
@@ -44,6 +45,12 @@ useGsap((_ctx) => {
   gsap.timeline({ defaults: { ease: easeMap.out } })
     .from(el, { opacity: 0, y: -10, scale: 0.985, duration: 0.35 })
     .from(q('.filter-controls'), { opacity: 0, y: -6, duration: 0.3 }, '<0.08')
+})
+
+// 清除按钮：hover 弹性（localQuery 非空才渲染，随其出现/消失重新绑定）
+useButtonFx(() => rootEl.value, '.clear-btn', {
+  bounceIcon: false,
+  watchSources: [() => localQuery],
 })
 
 const emit = defineEmits<{

@@ -1,5 +1,5 @@
 <template>
-  <BubbleChrome :tool-call="toolCall">
+  <BubbleChrome ref="rootRef" :tool-call="toolCall">
     <!-- 运行中 -->
     <div v-if="toolCall.status === 'running'" class="bubble-running">
       <span>{{ runningLabel }}</span>
@@ -184,14 +184,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, type ComponentPublicInstance } from 'vue'
 import type { ToolCall } from '@/types'
 import BubbleChrome from './_shared/BubbleChrome.vue'
 import MaxmaBlockerError from './_shared/MaxmaBlockerError.vue'
 import Icon from '@/components/Icon.vue'
+import { useButtonFx } from '@/composables/useButtonFx'
 
 const props = defineProps<{ toolCall: ToolCall }>()
 const emit = defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()
+
+const rootRef = ref<ComponentPublicInstance | null>(null)
+
+// 复制内容/复制路径按钮：hover 弹性
+useButtonFx(() => (rootRef.value?.$el as HTMLElement | null) ?? null, '.action-btn, .preview-action', {
+  watchSources: [() => props.toolCall.status],
+})
 
 // ── 工具数据 ──
 const td = computed(() => props.toolCall.toolData ?? {})

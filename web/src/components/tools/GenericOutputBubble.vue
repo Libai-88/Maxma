@@ -1,5 +1,5 @@
 <template>
-  <BubbleChrome :tool-call="toolCall">
+  <BubbleChrome ref="rootRef" :tool-call="toolCall">
     <div v-if="toolCall.status === 'running'" class="bubble-running">
       <span class="spinner"></span>
       <span>{{ runningLabel }}</span>
@@ -24,14 +24,22 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, type ComponentPublicInstance } from 'vue'
 import type { ToolCall } from '@/types'
 import BubbleChrome from './_shared/BubbleChrome.vue'
+import { useButtonFx } from '@/composables/useButtonFx'
 
 const props = defineProps<{ toolCall: ToolCall }>()
 defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()
 
 const collapsed = ref(true)
+
+const rootRef = ref<ComponentPublicInstance | null>(null)
+
+// 展开/收起按钮：hover 弹性
+useButtonFx(() => (rootRef.value?.$el as HTMLElement | null) ?? null, '.toggle-btn', {
+  watchSources: [() => props.toolCall.status],
+})
 
 const toolName = computed(() => props.toolCall.name)
 const output = computed(() => props.toolCall.output ?? '')

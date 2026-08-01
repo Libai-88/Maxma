@@ -87,10 +87,13 @@ useGsap((_ctx, contextSafe) => {
   themePop = contextSafe(() => {
     const active = rootEl.value?.querySelector<HTMLElement>('.theme-card.active')
     if (!active) return
+    // 临时禁用 CSS transform 过渡，避免与 GSAP 弹性 pop 抢帧
+    active.style.transition = 'none'
     gsap.fromTo(active,
-      { scale: 0.97 },
-      { scale: 1.05, duration: 0.1, yoyo: true, repeat: 1, ease: 'sine.out', overwrite: 'auto',
-        onComplete: () => { gsap.set(active, { clearProps: 'transform' }) } })
+      { scale: 0.94 },
+      { scale: 1, duration: 0.4, ease: 'back.out(2.5)', overwrite: 'auto',
+        clearProps: 'transform',
+        onComplete: () => { active.style.transition = '' } })
   })
 })
 

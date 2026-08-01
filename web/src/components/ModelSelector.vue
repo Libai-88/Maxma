@@ -25,6 +25,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useChatInputInjected } from '../composables/useChatInput'
 import { useChatStore } from '../stores/chat'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
+import { useButtonFx } from '@/composables/useButtonFx'
 import DsSelect from './ui/DsSelect.vue'
 
 const store = useChatStore()
@@ -37,6 +38,40 @@ useGsap(() => {
   const el = rootRef.value
   if (!el) return
   gsap.from(el, { opacity: 0, y: -6, duration: 0.3, ease: easeMap.out })
+})
+
+// 触发器输入框：hover 弹性 + 按压
+useButtonFx(() => rootRef.value, '.ds-select__input', {
+  hoverScale: 1.04,
+  pressScale: 0.98,
+  bounceIcon: false,
+})
+
+// caret 按钮：hover 弹性 + 图标蹦跳（clearProps 避免覆盖展开态 rotate 180°）
+useGsap((ctx) => {
+  const el = rootRef.value
+  if (!el) return
+  const caret = el.querySelector<HTMLElement>('.ds-select__caret')
+  if (!caret) return
+  const icon = caret.querySelector<SVGSVGElement>('svg')
+  const onEnter = () => {
+    gsap.to(caret, { scale: 1.18, duration: 0.25, ease: 'back.out(2)', overwrite: 'auto' })
+    if (icon) {
+      gsap.fromTo(icon, { scale: 1, rotation: 0 }, {
+        scale: 1.35, rotation: 10, duration: 0.3, ease: 'elastic.out(1, 0.5)',
+        yoyo: true, repeat: 1, overwrite: 'auto', clearProps: 'transform',
+      })
+    }
+  }
+  const onLeave = () => {
+    gsap.to(caret, { scale: 1, duration: 0.25, ease: 'back.out(2)', overwrite: 'auto', clearProps: 'transform' })
+  }
+  caret.addEventListener('mouseenter', onEnter)
+  caret.addEventListener('mouseleave', onLeave)
+  ctx.add(() => {
+    caret.removeEventListener('mouseenter', onEnter)
+    caret.removeEventListener('mouseleave', onLeave)
+  })
 })
 
 const selectedModelId = computed(() => {

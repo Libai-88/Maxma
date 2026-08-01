@@ -1,5 +1,5 @@
 <template>
-  <BubbleChrome :tool-call="toolCall">
+  <BubbleChrome ref="rootRef" :tool-call="toolCall">
     <!-- 确认模式：显示代码和选择按钮 -->
     <template v-if="toolCall.status === 'running' && isConfirmMode && !submitted">
       <!-- 标题区 -->
@@ -81,17 +81,31 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, type ComponentPublicInstance } from 'vue'
 import type { ToolCall } from '@/types'
 import BubbleChrome from './_shared/BubbleChrome.vue'
 import Icon from '@/components/Icon.vue'
 import { highlightPython } from '@/utils/python-highlight'
+import { useButtonFx } from '@/composables/useButtonFx'
 
 const props = defineProps<{ toolCall: ToolCall }>()
 const emit = defineEmits<{ (e: 'action', p: { action: string; data?: unknown }): void }>()
 
 const submitted = ref(false)
 const rejectionReason = ref('')
+
+const rootRef = ref<ComponentPublicInstance | null>(null)
+
+// 确认/复制按钮：hover 弹性（「允许执行」为主 CTA，磁吸）
+useButtonFx(() => (rootRef.value?.$el as HTMLElement | null) ?? null, '.btn-approve', {
+  magnetic: 10,
+  bounceIcon: false,
+  watchSources: [() => props.toolCall.status, () => isConfirmMode.value],
+})
+useButtonFx(() => (rootRef.value?.$el as HTMLElement | null) ?? null, '.btn-reject, .py-copy-btn', {
+  bounceIcon: false,
+  watchSources: [() => props.toolCall.status],
+})
 
 const isConfirmMode = computed(() => {
   return props.toolCall.interaction?.mode === 'confirm'
