@@ -44,6 +44,7 @@ import { api } from '@/api'
 import type { DeferredRun, DeferredRunStatus } from '@/types'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
+import { useButtonFx } from '@/composables/useButtonFx'
 
 const props = defineProps<{
   sessionId: string
@@ -145,6 +146,20 @@ useGsap((_ctx, contextSafe) => {
     const body = cardEl.value.querySelector('.sub-agent-body')
     if (body) gsap.fromTo(body, { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.2, ease: easeMap.out })
   }), { flush: 'post' })
+})
+
+// 取消运行按钮：中断操作 hover 抖动提示
+useGsap((ctx) => {
+  const el = cardEl.value
+  if (!el) return
+  const btns = gsap.utils.toArray<HTMLElement>('.cancel-run', el)
+  btns.forEach((btn) => {
+    const onEnter = () => {
+      gsap.to(btn, { x: -2, duration: 0.08, yoyo: true, repeat: 1, ease: 'power1.out', overwrite: 'auto' })
+    }
+    btn.addEventListener('mouseenter', onEnter)
+    ctx.add(() => btn.removeEventListener('mouseenter', onEnter))
+  })
 })
 
 async function cancelRun(runId: string) {

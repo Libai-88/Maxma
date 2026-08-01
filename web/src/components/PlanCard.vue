@@ -78,6 +78,7 @@ import { ref, computed } from 'vue'
 import type { PlanCard } from '@/types'
 import Icon from '@/components/Icon.vue'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
+import { useButtonFx } from '@/composables/useButtonFx'
 
 const props = defineProps<{
   plan: PlanCard
@@ -147,6 +148,21 @@ useGsap(() => {
   tl.fromTo(el, { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.25, ease: easeMap.out })
   const steps = gsap.utils.toArray<HTMLElement>('.plan-step', el)
   if (steps.length) tl.from(steps, { opacity: 0, x: -6, duration: 0.2, ease: easeMap.out, stagger: 0.04 }, '-=0.1')
+})
+
+// 决策按钮：approve 磁吸 + 弹性；reject/取消 hover 抖动提示（拒绝是不可逆操作）
+useButtonFx(() => rootEl.value, '.plan-btn.approve', { hoverScale: 1.06, magnetic: 8 })
+useGsap((ctx) => {
+  const el = rootEl.value
+  if (!el) return
+  const danger = gsap.utils.toArray<HTMLElement>('.plan-btn.reject, .plan-btn.cancel', el)
+  danger.forEach((btn) => {
+    const onEnter = () => {
+      gsap.to(btn, { x: -3, duration: 0.09, yoyo: true, repeat: 1, ease: 'power1.out', overwrite: 'auto' })
+    }
+    btn.addEventListener('mouseenter', onEnter)
+    ctx.add(() => btn.removeEventListener('mouseenter', onEnter))
+  })
 })
 </script>
 
