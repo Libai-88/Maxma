@@ -73,9 +73,14 @@ const streamingText = computed(() => {
   return stripThinkingLabels(text.replace(STICKER_PLACEHOLDER_RE, ''))
 })
 
-/** 纯文本答案判断：含代码围栏/表格行/标题则降级走 RenderMarkdown，避免 SplitText 拆坏结构 */
+/** 纯文本答案判断：含代码围栏/表格行/标题/表情标记则降级走 RenderMarkdown/segments，
+ * 避免 SplitText 拆坏结构或吞掉表情（表情走 StickerInline 渲染） */
 const isPlainAnswer = (text: string): boolean =>
-  !!text && !/```/.test(text) && !/^\s*\|/m.test(text) && !/^\s*#/m.test(text)
+  !!text &&
+  !/```/.test(text) &&
+  !/^\s*\|/m.test(text) &&
+  !/^\s*#/m.test(text) &&
+  !/<sticker:|\[表情(?:包)?[:：]/.test(text)
 
 const isStreamingAnswer = computed(() =>
   props.block.becameAnswer && !props.block.done && isPlainAnswer(props.block.tokens ?? '')
