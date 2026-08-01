@@ -206,8 +206,8 @@ onUnmounted(() => document.removeEventListener('keydown', onDocumentKeydown))
   inset: 0 auto 0 0;
   display: flex;
   flex-direction: column;
-  width: min(var(--session-drawer-width, 320px), calc(100vw - var(--icon-rail-width, 56px)));
-  max-width: calc(100% - var(--icon-rail-width, 56px));
+  width: min(var(--session-drawer-width, 320px), calc(100vw - var(--icon-rail-width, 84px)));
+  max-width: calc(100% - var(--icon-rail-width, 84px));
   min-height: 0;
   padding: 20px 16px;
   overflow: hidden;
@@ -306,7 +306,7 @@ onUnmounted(() => document.removeEventListener('keydown', onDocumentKeydown))
 
 @media (max-width: 640px) {
   .session-drawer {
-    width: min(var(--session-drawer-width, 320px), calc(100vw - var(--icon-rail-width, 56px)));
+    width: min(var(--session-drawer-width, 320px), calc(100vw - var(--icon-rail-width, 84px)));
   }
 }
 

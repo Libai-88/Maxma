@@ -31,7 +31,7 @@
       </RegionalErrorBoundary>
     </main>
     <!-- 保留全局媒体与引导层，布局本身不依赖装饰层。 -->
-    <BackgroundGlow />
+    <FluidBackground />
     <CursorGlow />
     <LeavesOverlay />
     <!-- 全屏媒体查看器 -->
@@ -76,7 +76,7 @@ import { useRouter } from 'vue-router';
 
 import LeavesOverlay from '@/components/LeavesOverlay.vue'
 import CursorGlow from '@/components/CursorGlow.vue'
-import BackgroundGlow from '@/components/BackgroundGlow.vue'
+import FluidBackground from '@/components/FluidBackground.vue'
 import { usePaperTexture } from '@/composables/usePaperTexture'
 import { useGlobalShortcut } from '@/composables/useGlobalShortcut'
 import { useHealthPolling } from '@/composables/useHealthPolling'
@@ -424,10 +424,8 @@ html, body {
   background: color-mix(in srgb, var(--bg-primary) 86%, transparent);
 }
 
-.app-layout > .icon-rail {
-  flex: 0 0 var(--icon-rail-width);
-  width: var(--icon-rail-width);
-  min-width: var(--icon-rail-width);
+.app-layout {
+  padding-left: var(--icon-rail-width, 84px);
 }
 
 .app-layout > .main {
