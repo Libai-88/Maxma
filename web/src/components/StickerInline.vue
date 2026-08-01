@@ -28,12 +28,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import type { StickerSegment } from '@/composables/useStickerSegments'
 import { getApiBase, tauriFetch } from '@/utils/env'
 import { useStickerPerformance } from '@/composables/useStickerPerformance'
 import Icon from '@/components/Icon.vue'
-import { gsap, useGsap } from '@/composables/useGsap'
 import { createLogger } from '@/utils/logger'
 
 const log = createLogger('StickerInline')
@@ -80,24 +79,6 @@ onMounted(() => {
   if (!props.sticker.src && props.sticker.category) {
     loadRandomSticker()
   }
-})
-
-// 表情出现动画：图片加载完成时弹性 pop + 轻微摆动，让表情"蹦"出来更有存在感。
-// 一次性动画，仅首帧；reduced-motion 由 useGsap 全局收口。
-let appearPlayed = false
-useGsap((_ctx, contextSafe) => {
-  watch(() => displaySrc.value, contextSafe((src) => {
-    if (!src || appearPlayed) return
-    appearPlayed = true
-    const img = imgRef.value
-    if (!img) return
-    gsap.fromTo(img,
-      { scale: 0.3, rotation: -14, autoAlpha: 0 },
-      {
-        scale: 1, rotation: 0, autoAlpha: 1,
-        duration: 0.5, ease: 'elastic.out(1, 0.55)',
-      })
-  }), { flush: 'post' })
 })
 
 const { isVisible } = useStickerPerformance(rootRef)
@@ -161,7 +142,7 @@ function capturePoster() {
   object-fit: contain;
   transition: transform 0.15s ease;
   display: block;
-  /* 出现动画由 GSAP 弹性 pop 接管（见 useGsap 逻辑），移除 CSS 动画避免双重触发 */
+  animation: stickerAppear 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 .sticker-inline:hover .sticker-img {
@@ -187,8 +168,20 @@ function capturePoster() {
   pointer-events: none;
 }
 
+@keyframes stickerAppear {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .sticker-img {
+    animation: none;
     transition: none;
   }
 
