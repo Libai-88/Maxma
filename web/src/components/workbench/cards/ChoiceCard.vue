@@ -34,8 +34,8 @@ useGsap((_ctx) => {
   if (!el) return
   const q = gsap.utils.selector(el)
   gsap.timeline({ defaults: { ease: easeMap.out } })
-    .from(el, { opacity: 0, y: 14, scale: 0.97, duration: 0.35 })
-    .from(q('header'), { opacity: 0, y: -8, duration: 0.3 }, '<0.05')
+    .fromTo(el, { autoAlpha: 0, y: 14, scale: 0.97 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.35 })
+    .fromTo(q('header'), { autoAlpha: 0, y: -8 }, { autoAlpha: 1, y: 0, duration: 0.3 }, '<0.05')
 })
 
 function submit(actionId: string, token: string) {
