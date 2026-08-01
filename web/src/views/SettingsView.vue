@@ -429,6 +429,7 @@ import { api } from '@/api'
 import type { TtsConfig, BrowserToolsConfig, SubAgentConfig } from '@/api'
 import { createLogger } from '@/utils/logger'
 import { useViewEntrance } from '@/composables/useViewEntrance'
+import { useButtonFx } from '@/composables/useButtonFx'
 
 const log = createLogger('SettingsView')
 
@@ -438,6 +439,10 @@ const settings = ref<Record<string, unknown>>({})
 
 const rootEl = ref<HTMLElement | null>(null)
 useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.section', ready: () => !loading.value })
+
+// 功能按钮交互动效：toggle 开关弹性缩放；重试/检测按钮磁吸
+useButtonFx(() => rootEl.value, '.toggle-btn', { hoverScale: 1.08, bounceIcon: true, watchSources: [loading] })
+useButtonFx(() => rootEl.value, '.btn', { hoverScale: 1.08, bounceIcon: true, magnetic: 8, watchSources: [loading] })
 
 // ── Panel configs（独立于 OMP Settings，存储在后端 panel_configs.json） ──
 

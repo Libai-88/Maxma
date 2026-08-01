@@ -113,6 +113,7 @@ import { useMarkdownPersist } from '@/composables/useMarkdownPersist'
 import { confirmAction } from '@/composables/useConfirm'
 import { createLogger } from '@/utils/logger'
 import { useViewEntrance } from '@/composables/useViewEntrance'
+import { useButtonFx } from '@/composables/useButtonFx'
 
 const log = createLogger('SoulView')
 
@@ -162,6 +163,11 @@ const {
 const rootEl = ref<HTMLElement | null>(null)
 useViewEntrance(() => rootEl.value, { header: '.header', ready: () => !loading.value })
 
+// 功能按钮交互动效：保存主 CTA 磁吸 + 弹性；创建人格小按钮磁吸；模板按钮弹性蹦跳
+useButtonFx(() => rootEl.value, '.save-button', { hoverScale: 1.06, magnetic: 10, watchSources: [loading] })
+useButtonFx(() => rootEl.value, '.btn-create-persona', { hoverScale: 1.2, magnetic: 8, watchSources: [personasLoaded] })
+useButtonFx(() => rootEl.value, '.md-template-btn', { hoverScale: 1.08, bounceIcon: true, watchSources: [loading] })
+
 // 创建新人格
 const showCreateDialog = ref(false)
 const creating = ref(false)
@@ -170,6 +176,9 @@ const createForm = ref({
   description: '',
   memory: 'shared',
 })
+
+// 创建弹窗按钮交互动效（弹窗 v-if 渲染，随 showCreateDialog 重新绑定）
+useButtonFx(() => rootEl.value, '.create-btn', { hoverScale: 1.08, bounceIcon: true, watchSources: [showCreateDialog] })
 
 // ── SOUL 模板：让 Novice 一键填入可用起点 ──
 const soulTemplates = [

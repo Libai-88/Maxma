@@ -1,5 +1,5 @@
 <template>
-  <div class="plugin-view">
+  <div class="plugin-view" ref="rootEl">
     <div class="header">
       <h2>插件市场 PLUGIN MARKETPLACE</h2>
       <p class="header-sub">管理 OMP 插件——浏览、安装、配置与卸载</p>
@@ -75,11 +75,16 @@ import PluginCard from '@/components/plugins/PluginCard.vue'
 import PluginSearchBar from '@/components/plugins/PluginSearchBar.vue'
 import type { PluginCategory } from '@/types/plugin'
 import { useReveal } from '@/composables/useReveal'
+import { useButtonFx } from '@/composables/useButtonFx'
 
 const router = useRouter()
 const store = usePluginStore()
 const installSpec = ref('')
 const listRef = ref<HTMLElement | null>(null)
+const rootEl = ref<HTMLElement | null>(null)
+
+// 安装主 CTA：磁吸 + 弹性
+useButtonFx(() => rootEl.value, '.btn', { hoverScale: 1.08, bounceIcon: true, magnetic: 10 })
 
 // 插件卡片错落入场（加载完成后）
 useReveal(() => listRef.value, '.plugin-list > *', { stagger: 0.05 })

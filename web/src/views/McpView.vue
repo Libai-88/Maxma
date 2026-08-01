@@ -1,5 +1,5 @@
 <template>
-  <div class="mcp-view">
+  <div class="mcp-view" ref="rootEl">
     <!-- ── 标题栏 ── -->
     <div class="header">
       <h2>MCP 服务</h2>
@@ -556,12 +556,14 @@ import { confirmAction } from '@/composables/useConfirm'
 import type { MCPServerConfig, MCPServerCreateBody, MCPTransport, DiscoveredServer } from '@/types'
 import DsTooltip from '@/components/ui/DsTooltip.vue'
 import { useReveal } from '@/composables/useReveal'
+import { useButtonFx } from '@/composables/useButtonFx'
 
 type Mode = 'list' | 'add' | 'edit'
 
 // ── 列表状态 ──
 const loading = ref(true)
 const mcpGridRef = ref<HTMLElement | null>(null)
+const rootEl = ref<HTMLElement | null>(null)
 
 // MCP 服务器卡片错落入场（加载完成后）
 useReveal(() => mcpGridRef.value, '.mcp-card', { stagger: 0.05 })
@@ -627,6 +629,15 @@ const authorizingName = ref('')
 
 // OAuth 状态缓存：server_name -> status
 const oauthStatusMap = ref<Record<string, import('@/types').OAuthStatusResponse>>({})
+
+// ── 功能按钮交互动效：主 CTA（primary）磁吸 + 弹性；普通操作弹性蹦跳 ──
+useButtonFx(() => rootEl.value, '.ds-btn:not(.ds-btn--primary)', { hoverScale: 1.06, bounceIcon: true, watchSources: [loading, mode, activeTab, registryLoading] })
+useButtonFx(() => rootEl.value, '.ds-btn--primary', { hoverScale: 1.08, magnetic: 10, watchSources: [loading, mode, activeTab, registryLoading] })
+useButtonFx(() => rootEl.value, '.action-btn:not(.danger)', { hoverScale: 1.06, watchSources: [loading] })
+useButtonFx(() => rootEl.value, '.form-template-btn', { hoverScale: 1.06, bounceIcon: true, watchSources: [mode] })
+
+// 危险操作按钮：hover 轻微左倾抖动提示（attachButtonFx danger 模式）
+useButtonFx(() => rootEl.value, '.action-btn.danger', { danger: true, watchSources: [loading] })
 
 function switchToMarketplace() {
   activeTab.value = 'marketplace'

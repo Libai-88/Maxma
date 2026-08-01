@@ -100,13 +100,49 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, type ComponentPublicInstance } from 'vue'
+import { computed, ref, nextTick, type ComponentPublicInstance } from 'vue'
 import { useTheme } from '@/composables/useTheme'
 import { usePaperTexture } from '@/composables/usePaperTexture'
 import { useViewEntrance } from '@/composables/useViewEntrance'
+import { gsap, useGsap } from '@/composables/useGsap'
 
 const rootEl = ref<HTMLElement | null>(null)
 useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.section' })
+
+// 开关按钮：hover 弹性 + 激活瞬间 scale pop
+useGsap((ctx) => {
+  const el = rootEl.value
+  if (!el) return
+  const btns = gsap.utils.toArray<HTMLElement>('.toggle-btn', el)
+  if (!btns.length) return
+  btns.forEach((btn) => {
+    const pop = (s: number) => gsap.to(btn, { scale: s, duration: 0.25, ease: 'back.out(2)', overwrite: 'auto' })
+    const onEnter = () => pop(1.08)
+    const onLeave = () => pop(1)
+    const onDown = () => gsap.to(btn, { scale: 0.9, duration: 0.12, ease: 'power2.out', overwrite: 'auto' })
+    const onUp = () => pop(1.08)
+    const onClick = () => {
+      // Vue 异步更新 class，nextTick 后才是切换后的状态：仅激活瞬间做 scale pop
+      nextTick(() => {
+        if (btn.classList.contains('on')) {
+          gsap.fromTo(btn, { scale: 1 }, { scale: 1.2, duration: 0.25, ease: 'elastic.out(1, 0.45)', overwrite: 'auto' })
+        }
+      })
+    }
+    btn.addEventListener('mouseenter', onEnter)
+    btn.addEventListener('mouseleave', onLeave)
+    btn.addEventListener('mousedown', onDown)
+    btn.addEventListener('mouseup', onUp)
+    btn.addEventListener('click', onClick)
+    ctx.add(() => {
+      btn.removeEventListener('mouseenter', onEnter)
+      btn.removeEventListener('mouseleave', onLeave)
+      btn.removeEventListener('mousedown', onDown)
+      btn.removeEventListener('mouseup', onUp)
+      btn.removeEventListener('click', onClick)
+    })
+  })
+})
 
 const { storedTheme, setTheme, THEMES } = useTheme()
 

@@ -133,11 +133,16 @@ import { createLogger } from '@/utils/logger'
 import { confirmAction } from '@/composables/useConfirm'
 import type { AuditLogRecord } from '@/types'
 import { useViewEntrance } from '@/composables/useViewEntrance'
+import { useButtonFx } from '@/composables/useButtonFx'
 
 const log = createLogger('PrivacyView')
 
 const rootEl = ref<HTMLElement | null>(null)
 useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.section' })
+
+// 功能按钮交互动效：数据管理操作 hover 弹性 + 图标蹦跳
+useButtonFx(() => rootEl.value, '.btn-action', { hoverScale: 1.06, bounceIcon: true })
+useButtonFx(() => rootEl.value, '.btn-small', { hoverScale: 1.08, bounceIcon: true })
 
 interface StorageItem {
   icon: string
