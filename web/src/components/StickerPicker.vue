@@ -307,9 +307,15 @@ async function onDrop(e: DragEvent) {
   }
 }
 
-// 选择表情
+// 选择表情：选中瞬间弹性放大 + 涟漪环，立即传达「已选」
 function selectSticker(sticker: Sticker) {
   log.debug('[StickerPicker] selectSticker called with:', sticker)
+  const item = gridEl.value?.querySelector<HTMLElement>(`[data-sticker-index="${filteredStickers.value.indexOf(sticker)}"]`)
+  if (item) {
+    gsap.fromTo(item,
+      { scale: 1 },
+      { scale: 1.35, duration: 0.16, ease: 'power2.out', yoyo: true, repeat: 1 })
+  }
   emit('select', sticker)
 }
 
@@ -533,6 +539,42 @@ useGsap((_ctx, contextSafe) => {
         onComplete: () => updatePickerPosition(),
       })
   }))
+
+  // 网格项 3D 倾斜 hover（事件委托到 grid，quickTo 平滑跟手，减少每项常驻监听）
+  const onGridMove = contextSafe((e: MouseEvent) => {
+    const target = (e.target as HTMLElement).closest<HTMLElement>('.sticker-item')
+    if (!target || target.dataset.tiltActive === '1') return
+    target.dataset.tiltActive = '1'
+    gsap.set(target, { transformPerspective: 600 })
+    const rxTo = gsap.quickTo(target, 'rotationX', { duration: 0.3, ease: 'power2' })
+    const ryTo = gsap.quickTo(target, 'rotationY', { duration: 0.3, ease: 'power2' })
+    const onMove = (ev: MouseEvent) => {
+      const r = target.getBoundingClientRect()
+      const px = (ev.clientX - r.left) / r.width - 0.5
+      const py = (ev.clientY - r.top) / r.height - 0.5
+      ryTo(px * 12)
+      rxTo(-py * 12)
+    }
+    const onLeave = () => {
+      rxTo(0)
+      ryTo(0)
+      target.removeEventListener('mousemove', onMove)
+      target.removeEventListener('mouseleave', onLeave)
+      delete target.dataset.tiltActive
+    }
+    target.addEventListener('mousemove', onMove)
+    target.addEventListener('mouseleave', onLeave)
+  })
+
+  watch(() => props.visible, contextSafe((vis) => {
+    const grid = gridEl.value
+    if (!grid) return
+    if (vis) {
+      grid.addEventListener('mousemove', onGridMove)
+    } else {
+      grid.removeEventListener('mousemove', onGridMove)
+    }
+  }), { immediate: true })
 })
 
 onMounted(() => {

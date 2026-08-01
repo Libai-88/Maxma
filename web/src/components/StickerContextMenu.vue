@@ -5,15 +5,15 @@
     class="sticker-context-menu"
     @click.stop
   >
-    <button class="menu-item" @click="onToggleFavorite">
+    <button class="menu-item" @click="onToggleFavorite" @mouseenter="bounceIcon($event)">
       <Icon class="menu-icon" :name="isFavorited ? 'star-filled' : 'star'" :size="16" />
       <span>{{ isFavorited ? '取消收藏' : '收藏' }}</span>
     </button>
-    <button class="menu-item" @click="onCopyPath">
+    <button class="menu-item" @click="onCopyPath" @mouseenter="bounceIcon($event)">
       <Icon class="menu-icon" name="copy" :size="16" />
       <span>复制路径</span>
     </button>
-    <button class="menu-item" @click="onReduceRecommendation">
+    <button class="menu-item" @click="onReduceRecommendation" @mouseenter="bounceIcon($event)">
       <Icon class="menu-icon" name="minus" :size="16" />
       <span>减少推荐</span>
     </button>
@@ -71,6 +71,15 @@ watchEffect(() => {
   el.style.setProperty('left', `${props.position.x}px`)
   el.style.setProperty('top', `${props.position.y}px`)
 }, { flush: 'post' })
+
+// 菜单项 hover：图标弹性蹦跳，反馈「可操作」
+function bounceIcon(e: MouseEvent) {
+  const icon = (e.currentTarget as HTMLElement).querySelector('.menu-icon')
+  if (!icon) return
+  gsap.fromTo(icon,
+    { scale: 1, rotation: 0 },
+    { scale: 1.35, rotation: 10, duration: 0.25, ease: 'elastic.out(1, 0.5)', yoyo: true, repeat: 1 })
+}
 
 // 检查是否已收藏
 async function checkFavoriteStatus() {
