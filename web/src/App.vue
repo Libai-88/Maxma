@@ -107,14 +107,18 @@ function closeSessionDrawer() {
 
 const router = useRouter()
 
-// 方向感知页面转场：用 history.state.position 判断前进/后退（Vue Router 每次 push +1、back -1）
-// 首次加载 position===lastPosition → 保持 page-fade，不做方向动画
+// 差异化页面转场：direction（前进/后退）由 history.position 判断，
+// transition 类型（flip/slide/rise/zoom）由目标路由 meta.transition 决定。
+// 组合为 `page-{type}-{direction}`，实现每个页面不同的入场个性动画。
+// 首次加载 / direction 未知 → 回退 page-fade。
 const pageTransition = ref('page-fade')
 let lastNavPosition = 0
-router.beforeResolve(() => {
+router.beforeResolve((to) => {
   const pos = (window.history.state as { position?: number } | null)?.position ?? 0
-  pageTransition.value = pos > lastNavPosition ? 'page-forward' : pos < lastNavPosition ? 'page-back' : 'page-fade'
+  const type = (to.meta.transition as string | undefined) ?? 'flip'
+  const direction = pos > lastNavPosition ? 'forward' : pos < lastNavPosition ? 'back' : null
   lastNavPosition = pos
+  pageTransition.value = direction ? `page-${type}-${direction}` : 'page-fade'
 })
 
 async function handleCreateSession() {
@@ -262,14 +266,19 @@ onMounted(async () => {
 }
 
 /* ── 路由级过渡（router-view Transition） ── */
-/* 3D 翻转出入场：前进从右翻入、后退从左翻入（rotateY + 位移 + scale 组合）。
-   中角度翻转 + 位移避免整页露背；direction 未知/首载回退 fade */
+/* 差异化转场：transition 类型（flip/slide/rise/zoom）× 方向（forward/back）。
+   每种页面有个性化的入场/出场动画；direction 未知/首载回退 fade。
+   所有转场 reduce-motion 降级为无过渡。 */
 .page-fade-enter-active,
 .page-fade-leave-active,
-.page-forward-enter-active,
-.page-forward-leave-active,
-.page-back-enter-active,
-.page-back-leave-active {
+.page-flip-forward-enter-active, .page-flip-forward-leave-active,
+.page-flip-back-enter-active,   .page-flip-back-leave-active,
+.page-slide-forward-enter-active, .page-slide-forward-leave-active,
+.page-slide-back-enter-active,   .page-slide-back-leave-active,
+.page-rise-forward-enter-active, .page-rise-forward-leave-active,
+.page-rise-back-enter-active,   .page-rise-back-leave-active,
+.page-zoom-forward-enter-active, .page-zoom-forward-leave-active,
+.page-zoom-back-enter-active,   .page-zoom-back-leave-active {
   transition: opacity 0.32s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
               transform 0.32s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
 }
@@ -281,35 +290,81 @@ onMounted(async () => {
   opacity: 0;
   transform: translateY(-4px);
 }
-/* 前进：旧页向左翻转淡出，新页从右翻转进入 */
-.page-forward-enter-from {
+
+/* ── flip：3D 翻转（主内容页，如对话/记忆/动态） ── */
+.page-flip-forward-enter-from {
   opacity: 0;
   transform: perspective(1400px) rotateY(-24deg) translateX(60px) scale(0.96);
   transform-origin: left center;
 }
-.page-forward-leave-to {
+.page-flip-forward-leave-to {
   opacity: 0;
   transform: perspective(1400px) rotateY(16deg) translateX(-40px) scale(0.97);
   transform-origin: right center;
 }
-/* 后退：镜像方向，保持方向感知 */
-.page-back-enter-from {
+.page-flip-back-enter-from {
   opacity: 0;
   transform: perspective(1400px) rotateY(24deg) translateX(-60px) scale(0.96);
   transform-origin: right center;
 }
-.page-back-leave-to {
+.page-flip-back-leave-to {
   opacity: 0;
   transform: perspective(1400px) rotateY(-16deg) translateX(40px) scale(0.97);
   transform-origin: left center;
 }
+
+/* ── slide：水平滑入（设置类，如外观/角色/用户/隐私） ── */
+.page-slide-forward-enter-from {
+  opacity: 0;
+  transform: translateX(48px);
+}
+.page-slide-forward-leave-to {
+  opacity: 0;
+  transform: translateX(-32px);
+}
+.page-slide-back-enter-from {
+  opacity: 0;
+  transform: translateX(-48px);
+}
+.page-slide-back-leave-to {
+  opacity: 0;
+  transform: translateX(32px);
+}
+
+/* ── rise：上升浮入（工具类，如模型/插件/规则/自动化） ── */
+.page-rise-forward-enter-from,
+.page-rise-back-enter-from {
+  opacity: 0;
+  transform: translateY(36px);
+}
+.page-rise-forward-leave-to,
+.page-rise-back-leave-to {
+  opacity: 0;
+  transform: translateY(-24px);
+}
+
+/* ── zoom：缩放淡入（详情/特殊页，如插件详情/分享/404） ── */
+.page-zoom-forward-enter-from,
+.page-zoom-back-enter-from {
+  opacity: 0;
+  transform: scale(0.9);
+}
+.page-zoom-forward-leave-to,
+.page-zoom-back-leave-to {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .page-fade-enter-active,
-  .page-fade-leave-active,
-  .page-forward-enter-active,
-  .page-forward-leave-active,
-  .page-back-enter-active,
-  .page-back-leave-active {
+  .page-fade-enter-active, .page-fade-leave-active,
+  .page-flip-forward-enter-active, .page-flip-forward-leave-active,
+  .page-flip-back-enter-active, .page-flip-back-leave-active,
+  .page-slide-forward-enter-active, .page-slide-forward-leave-active,
+  .page-slide-back-enter-active, .page-slide-back-leave-active,
+  .page-rise-forward-enter-active, .page-rise-forward-leave-active,
+  .page-rise-back-enter-active, .page-rise-back-leave-active,
+  .page-zoom-forward-enter-active, .page-zoom-forward-leave-active,
+  .page-zoom-back-enter-active, .page-zoom-back-leave-active {
     transition: none;
   }
 }
