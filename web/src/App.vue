@@ -21,7 +21,7 @@
     <main id="main-content" class="main" tabindex="-1" aria-label="对话工作区">
       <RegionalErrorBoundary :reset-keys="[$route.path]">
         <router-view v-slot="{ Component, route }">
-          <Transition :name="pageTransition">
+          <Transition :name="pageTransition" mode="out-in">
             <!-- :key=route.name 保证 keep-alive 缓存稳定（ChatView 切换回来不重建） -->
             <keep-alive include="ChatView" :max="5">
               <component :is="Component" :key="route.name" />
@@ -279,21 +279,8 @@ onMounted(async () => {
 .page-rise-back-enter-active,   .page-rise-back-leave-active,
 .page-zoom-forward-enter-active, .page-zoom-forward-leave-active,
 .page-zoom-back-enter-active,   .page-zoom-back-leave-active {
-  position: absolute;
-  inset: 0;
   transition: opacity 0.32s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
               transform 0.32s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
-}
-/* 翻书专属节奏：leave（掀页）稍快，enter（落页）稍慢带回落，营造纸张重量感 */
-.page-flip-forward-leave-active,
-.page-flip-back-leave-active {
-  transition: transform 0.38s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
-              box-shadow 0.38s ease-out;
-}
-.page-flip-forward-enter-active,
-.page-flip-back-enter-active {
-  transition: transform 0.52s var(--ease-smooth, cubic-bezier(0.22, 0.68, 0, 1)),
-              opacity 0.52s var(--ease-smooth, cubic-bezier(0.22, 0.68, 0, 1));
 }
 .page-fade-enter-from {
   opacity: 0;
@@ -304,59 +291,26 @@ onMounted(async () => {
   transform: translateY(-4px);
 }
 
-/* ── flip：翻书式 3D 翻转（主内容页，如对话/记忆/动态） ──
-   真正的双页翻书：新旧页 absolute 叠放于 .main，旧页（上层）像纸片绕左书脊
-   被掀起翻走，新页（下层）同步透出，形成物理翻书的立体感。
-   forward = 前进（下一页），back = 后退（上一页），方向镜像。
-   翻页阴影（-shadow）增强纸片厚度与立体感。 */
-.page-flip-forward-enter-active,
-.page-flip-forward-leave-active,
-.page-flip-back-enter-active,
-.page-flip-back-leave-active {
-  position: absolute;
-  inset: 0;
-  transform-style: preserve-3d;
-  backface-visibility: hidden;
-  overflow: hidden;
-}
-.page-flip-forward-leave-active,
-.page-flip-back-leave-active {
-  z-index: 2; /* 旧页在上层被掀起 */
-}
-.page-flip-forward-enter-active,
-.page-flip-back-enter-active {
-  z-index: 1; /* 新页在下层 */
-}
-/* 前进：旧页（上层）绕左书脊从 0° 掀起到 -88°，像被翻走 */
-.page-flip-forward-leave-from {
-  transform: rotateY(0deg);
+/* ── flip：3D 翻转（主内容页，如对话/记忆/动态） ── */
+.page-flip-forward-enter-from {
+  opacity: 0;
+  transform: perspective(1400px) rotateY(-24deg) translateX(60px) scale(0.96);
   transform-origin: left center;
 }
 .page-flip-forward-leave-to {
-  transform: rotateY(-88deg);
-  transform-origin: left center;
-  box-shadow: -28px 0 60px rgba(0, 0, 0, 0.28);
+  opacity: 0;
+  transform: perspective(1400px) rotateY(16deg) translateX(-40px) scale(0.97);
+  transform-origin: right center;
 }
-/* 前进：新页（下层）从右上方轻微翻入回正，露出时"跃然纸上" */
-.page-flip-forward-enter-from {
-  transform: rotateY(-10deg) translateX(14px) scale(0.99);
-  transform-origin: left center;
-  opacity: 0.85;
-}
-/* 后退：镜像方向（旧页绕右书脊向右翻走，新页从左透出） */
-.page-flip-back-leave-from {
-  transform: rotateY(0deg);
+.page-flip-back-enter-from {
+  opacity: 0;
+  transform: perspective(1400px) rotateY(24deg) translateX(-60px) scale(0.96);
   transform-origin: right center;
 }
 .page-flip-back-leave-to {
-  transform: rotateY(88deg);
-  transform-origin: right center;
-  box-shadow: 28px 0 60px rgba(0, 0, 0, 0.28);
-}
-.page-flip-back-enter-from {
-  transform: rotateY(10deg) translateX(-14px) scale(0.99);
-  transform-origin: right center;
-  opacity: 0.85;
+  opacity: 0;
+  transform: perspective(1400px) rotateY(-16deg) translateX(40px) scale(0.97);
+  transform-origin: left center;
 }
 
 /* ── slide：水平滑入（设置类，如外观/角色/用户/隐私） ── */
@@ -646,10 +600,8 @@ html, body {
   min-height: 0;
   overflow: hidden;
   background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
-  /* 页面转场 3D 透视：router-view 翻书转场提供深度 */
+  /* 页面转场 3D 透视：router-view 翻转出入场提供深度 */
   perspective: 1400px;
-  /* 翻书转场期间新旧页 absolute 叠放需要相对定位容器 */
-  position: relative;
 }
 
 .sidebar .health-panel {
