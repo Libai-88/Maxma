@@ -44,7 +44,6 @@ import { api } from '@/api'
 import type { DeferredRun, DeferredRunStatus } from '@/types'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
-import { useButtonFx } from '@/composables/useButtonFx'
 
 const props = defineProps<{
   sessionId: string
