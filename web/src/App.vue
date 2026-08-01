@@ -262,16 +262,16 @@ onMounted(async () => {
 }
 
 /* ── 路由级过渡（router-view Transition） ── */
-/* 方向感知：前进从右滑入、后退从左滑入；direction 未知/首载回退 fade
-   幅度加大：横向位移 + 轻微 scale，形成"推开"的层次感 */
+/* 3D 翻转出入场：前进从右翻入、后退从左翻入（rotateY + 位移 + scale 组合）。
+   中角度翻转 + 位移避免整页露背；direction 未知/首载回退 fade */
 .page-fade-enter-active,
 .page-fade-leave-active,
 .page-forward-enter-active,
 .page-forward-leave-active,
 .page-back-enter-active,
 .page-back-leave-active {
-  transition: opacity 0.26s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
-              transform 0.26s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+  transition: opacity 0.32s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+              transform 0.32s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
 }
 .page-fade-enter-from {
   opacity: 0;
@@ -281,21 +281,27 @@ onMounted(async () => {
   opacity: 0;
   transform: translateY(-4px);
 }
+/* 前进：旧页向左翻转淡出，新页从右翻转进入 */
 .page-forward-enter-from {
   opacity: 0;
-  transform: translateX(44px) scale(0.985);
+  transform: perspective(1400px) rotateY(-24deg) translateX(60px) scale(0.96);
+  transform-origin: left center;
 }
 .page-forward-leave-to {
   opacity: 0;
-  transform: translateX(-28px) scale(0.99);
+  transform: perspective(1400px) rotateY(16deg) translateX(-40px) scale(0.97);
+  transform-origin: right center;
 }
+/* 后退：镜像方向，保持方向感知 */
 .page-back-enter-from {
   opacity: 0;
-  transform: translateX(-44px) scale(0.985);
+  transform: perspective(1400px) rotateY(24deg) translateX(-60px) scale(0.96);
+  transform-origin: right center;
 }
 .page-back-leave-to {
   opacity: 0;
-  transform: translateX(28px) scale(0.99);
+  transform: perspective(1400px) rotateY(-16deg) translateX(40px) scale(0.97);
+  transform-origin: left center;
 }
 @media (prefers-reduced-motion: reduce) {
   .page-fade-enter-active,
@@ -539,6 +545,8 @@ html, body {
   min-height: 0;
   overflow: hidden;
   background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+  /* 页面转场 3D 透视：router-view 翻转出入场提供深度 */
+  perspective: 1400px;
 }
 
 .sidebar .health-panel {
