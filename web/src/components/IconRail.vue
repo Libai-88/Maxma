@@ -57,15 +57,16 @@ import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const rootEl = ref<HTMLElement | null>(null)
 
-// 导航图标入场：品牌印章先弹出，导航项依次弹性浮现（仅首次挂载）
+// 导航图标入场：导航项依次淡入（避免 scale 动画与 CSS transform transition 双缓冲冲突；
+// 品牌图标保留 CSS 呼吸 animation，GSAP 不接管）。仅首次挂载。
 useGsap(() => {
   const el = rootEl.value
   if (!el) return
   const q = gsap.utils.selector(el)
   gsap.timeline({ defaults: { ease: easeMap.out } })
-    .from(q('.icon-rail__brand-mark'), { scale: 0.5, rotation: -30, autoAlpha: 0, duration: 0.5, ease: easeMap.spring })
-    .from(q('.icon-rail__nav-item'), { scale: 0.6, autoAlpha: 0, y: -6, duration: 0.35, stagger: 0.05 }, '-=0.2')
-    .from(q('.icon-rail__footer'), { autoAlpha: 0, y: 8, duration: 0.3 }, '-=0.1')
+    .from(q('.icon-rail__brand'), { autoAlpha: 0, duration: 0.3 })
+    .from(q('.icon-rail__nav-item'), { autoAlpha: 0, duration: 0.3, stagger: 0.04 }, '-=0.15')
+    .from(q('.icon-rail__footer'), { autoAlpha: 0, duration: 0.25 }, '-=0.15')
 })
 
 withDefaults(defineProps<{
