@@ -18,6 +18,22 @@ const EMOTION_MAP: Record<string, string> = {
 
 const STICKER_DIRECTIVE_RE = /\[表情(?:包)?[:：][^\]]+\]/g
 
+/**
+ * 裸情感词标记正则：匹配 [开心] / [爱心] / [委屈] 等 AI 直接在正文写的情绪标签。
+ * 严格按 EMOTION_MAP 词表生成，只匹配「情绪词」本身，不会误伤 [code] 等 markdown。
+ * 用新的 RegExp 匹配，因全局正则复用需手动重置 lastIndex。
+ */
+export const EMOTION_TAG_RE = new RegExp(
+  `\\[(${Object.keys(EMOTION_MAP).join('|')})\\]`,
+  'g',
+)
+
+/** 判断文本中是否含裸情感词标记（[爱心] 等），不含则 false */
+export function hasEmotionTag(text: string): boolean {
+  EMOTION_TAG_RE.lastIndex = 0
+  return EMOTION_TAG_RE.test(text)
+}
+
 /** 从文本中检测情绪，返回贴纸分类名或 null */
 export function detectEmotion(text: string): string | null {
   if (!text) return null
@@ -31,7 +47,12 @@ export function detectEmotion(text: string): string | null {
 
 /** Remove the agent-only sticker directive once its image has been resolved. */
 export function stripStickerDirectives(text: string): string {
-  return text.replace(STICKER_DIRECTIVE_RE, '').replace(/\n{2,}/g, '\n').trim()
+  const cleaned = text
+    .replace(STICKER_DIRECTIVE_RE, '')
+    .replace(EMOTION_TAG_RE, '')
+    .replace(/\n{2,}/g, '\n')
+    .trim()
+  return cleaned
 }
 
 /**

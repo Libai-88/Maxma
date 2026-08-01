@@ -44,6 +44,7 @@ import RenderMarkdown from './RenderMarkdown.vue'
 import StickerInline from './StickerInline.vue'
 import StickerPreviewOverlay from './StickerPreviewOverlay.vue'
 import { useStickerSegments, type StickerSegment } from '@/composables/useStickerSegments'
+import { hasEmotionTag } from '@/composables/stickerUtils'
 import { gsap, useGsap, easeMap, lazyLoadPlugin } from '@/composables/useGsap'
 
 const props = defineProps<{ block: ThinkingBlockType }>()
@@ -73,14 +74,15 @@ const streamingText = computed(() => {
   return stripThinkingLabels(text.replace(STICKER_PLACEHOLDER_RE, ''))
 })
 
-/** 纯文本答案判断：含代码围栏/表格行/标题/表情标记则降级走 RenderMarkdown/segments，
+/** 纯文本答案判断：含代码围栏/表格行/标题/表情标记（含裸情感词）则降级走 RenderMarkdown/segments，
  * 避免 SplitText 拆坏结构或吞掉表情（表情走 StickerInline 渲染） */
 const isPlainAnswer = (text: string): boolean =>
   !!text &&
   !/```/.test(text) &&
   !/^\s*\|/m.test(text) &&
   !/^\s*#/m.test(text) &&
-  !/<sticker:|\[表情(?:包)?[:：]/.test(text)
+  !/<sticker:|\[表情(?:包)?[:：]/.test(text) &&
+  !hasEmotionTag(text)
 
 const isStreamingAnswer = computed(() =>
   props.block.becameAnswer && !props.block.done && isPlainAnswer(props.block.tokens ?? '')
