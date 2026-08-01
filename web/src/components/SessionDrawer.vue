@@ -54,6 +54,7 @@ import Icon from '@/components/Icon.vue'
 import SessionSidebar from '@/components/SessionSidebar.vue'
 import type { SessionInfo } from '@/types'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
+import { useButtonFx } from '@/composables/useButtonFx'
 
 interface SessionStatus {
   connected: boolean
@@ -157,6 +158,11 @@ useGsap((_ctx, contextSafe) => {
     gsap.from(items, { opacity: 0, x: -16, duration: 0.3, ease: easeMap.out, stagger: 0.025 })
   }), { flush: 'post' })
 }, { scope: () => drawerEl.value })
+
+// 抽屉操作按钮：新建会话磁吸 + 弹性；关闭按钮弹性。
+// 抽屉内容随 v-if 挂载/销毁，用 watchSources 在 open 变化时重绑（WeakSet 去重）。
+useButtonFx(() => drawerEl.value, '.btn-new', { hoverScale: 1.08, bounceIcon: false, pressScale: 0.92, magnetic: 10, watchSources: [() => props.open] })
+useButtonFx(() => drawerEl.value, '.session-drawer__close', { hoverScale: 1.05, bounceIcon: false, pressScale: 0.94, watchSources: [() => props.open] })
 
 onMounted(() => {
   document.addEventListener('keydown', onDocumentKeydown)

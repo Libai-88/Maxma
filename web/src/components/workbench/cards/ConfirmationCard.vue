@@ -20,6 +20,7 @@
 import { computed, ref } from 'vue'
 import type { CanvasCard } from '@/types/workbench'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
+import { useButtonFx } from '@/composables/useButtonFx'
 
 const props = defineProps<{ card: CanvasCard }>()
 const emit = defineEmits<{ remove: []; 'artifact-action': [payload: { artifactId: string; actionId: string; token: string }] }>()
@@ -37,6 +38,10 @@ useGsap((_ctx) => {
     .fromTo(el, { autoAlpha: 0, y: 14, scale: 0.97 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.35 })
     .fromTo(q('header'), { autoAlpha: 0, y: -8 }, { autoAlpha: 1, y: 0, duration: 0.3 }, '<0.05')
 })
+
+// 操作按钮：确认类 hover 弹性；danger 类危险抖动（按钮自身即红底，无需额外变色）
+useButtonFx(() => rootEl.value, '.artifact-action:not(.danger)', { hoverScale: 1.06, bounceIcon: false, pressScale: 0.94 })
+useButtonFx(() => rootEl.value, '.artifact-action.danger', { hoverScale: 1.03, bounceIcon: false, pressScale: 0.95, danger: true })
 
 function submit(actionId: string, token: string) {
   if (submitted.value) return

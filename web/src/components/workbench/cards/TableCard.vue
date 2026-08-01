@@ -26,6 +26,7 @@
 import type { CanvasCard } from '@/types/workbench'
 import { computed, ref } from 'vue'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
+import { useButtonFx } from '@/composables/useButtonFx'
 
 const props = defineProps<{ card: CanvasCard }>()
 defineEmits<{ remove: [] }>()
@@ -41,6 +42,9 @@ useGsap((_ctx) => {
     .fromTo(el, { autoAlpha: 0, y: 14, scale: 0.97 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.35 })
     .fromTo(q('.card-header'), { autoAlpha: 0, y: -8 }, { autoAlpha: 1, y: 0, duration: 0.3 }, '<0.05')
 })
+
+// 移除按钮：危险抖动（变红由 CSS 处理）
+useButtonFx(() => rootEl.value, '.card-remove', { hoverScale: 1.05, bounceIcon: false, pressScale: 0.94, danger: true })
 
 interface TableData {
   headers: string[]
@@ -97,7 +101,8 @@ const tableData = computed<TableData | null>(() => {
 }
 
 .card-remove:hover {
-  background: var(--bg-hover, #f0f0f0);
+  background: color-mix(in srgb, var(--status-error, #e5484d) 12%, transparent);
+  color: var(--status-error, #e5484d);
 }
 
 .card-body {

@@ -1,5 +1,5 @@
 <template>
-  <div class="canvas-container">
+  <div ref="rootEl" class="canvas-container">
     <div v-if="cards.length === 0" class="canvas-empty">
       <Icon class="empty-icon" name="pin" :size="20" />
       <p>画布为空</p>
@@ -49,12 +49,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { CanvasCard } from '@/types/workbench'
 import { getCardComponent } from './canvas-registry'
 import CanvasTabs from './CanvasTabs.vue'
 import HtmlSandbox from '@/components/HtmlSandbox.vue'
 import { useWorkbenchStore } from '@/stores/workbench'
+import { useButtonFx } from '@/composables/useButtonFx'
 import Icon from '@/components/Icon.vue'
 
 const props = defineProps<{
@@ -85,6 +86,10 @@ const activeCard = computed(() =>
 function removeCard(id: string) {
   emit('remove', id)
 }
+
+// 画布无独立工具栏按钮；对未知卡片 fallback 的移除按钮加危险抖动（变红由 CSS 处理）
+const rootEl = ref<HTMLElement | null>(null)
+useButtonFx(() => rootEl.value, '.canvas-card-fallback button', { hoverScale: 1.05, bounceIcon: false, pressScale: 0.94, danger: true })
 </script>
 
 <style scoped>
@@ -141,5 +146,10 @@ function removeCard(id: string) {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.canvas-card-fallback button:hover {
+  color: var(--status-error, #e5484d);
+  background: color-mix(in srgb, var(--status-error, #e5484d) 12%, transparent);
 }
 </style>

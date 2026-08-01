@@ -20,6 +20,7 @@
 import { computed, ref } from 'vue'
 import type { CanvasCard } from '@/types/workbench'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
+import { useButtonFx } from '@/composables/useButtonFx'
 
 const props = defineProps<{ card: CanvasCard }>()
 const emit = defineEmits<{ remove: []; 'artifact-action': [payload: { artifactId: string; actionId: string; token: string }] }>()
@@ -38,6 +39,10 @@ useGsap((_ctx) => {
     .fromTo(q('header'), { autoAlpha: 0, y: -8 }, { autoAlpha: 1, y: 0, duration: 0.3 }, '<0.05')
 })
 
+// 操作按钮：确认类 hover 弹性；danger 类危险抖动（按钮自身即红底，无需额外变色）
+useButtonFx(() => rootEl.value, '.artifact-action:not(.danger)', { hoverScale: 1.06, bounceIcon: false, pressScale: 0.94 })
+useButtonFx(() => rootEl.value, '.artifact-action.danger', { hoverScale: 1.03, bounceIcon: false, pressScale: 0.95, danger: true })
+
 function submit(actionId: string, token: string) {
   if (submitted.value) return
   submitted.value = true
@@ -50,9 +55,7 @@ function submit(actionId: string, token: string) {
 header { font-size: 14px; font-weight: 600; }
 p { margin: 8px 0 12px; white-space: pre-wrap; font-size: 13px; line-height: 1.5; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.artifact-action { border: 1px solid var(--border-color, #d9d9d9); border-radius: 5px; padding: 6px 12px; cursor: pointer; transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1); }
-.artifact-action:hover:not(:disabled) { transform: translateY(-1px) scale(1.03); }
-.artifact-action:active:not(:disabled) { transform: translateY(0) scale(0.97); }
+.artifact-action { border: 1px solid var(--border-color, #d9d9d9); border-radius: 5px; padding: 6px 12px; cursor: pointer; }
 .primary { background: var(--accent-color, #1a73e8); color: #fff; border-color: var(--accent-color, #1a73e8); }
 .danger { background: #b42318; color: #fff; border-color: #b42318; }
 .secondary { background: var(--bg-secondary, #f5f5f5); color: var(--text-primary, #222); }

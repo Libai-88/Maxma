@@ -1,5 +1,5 @@
 <template>
-  <header class="chat-header" aria-label="当前会话">
+  <header ref="headerEl" class="chat-header" aria-label="当前会话">
     <div class="header-left" :title="contextDetails" :aria-label="contextDetails">
       <span class="header-avatar" aria-hidden="true">{{ store.profile.avatar }}</span>
       <div class="header-context">
@@ -18,11 +18,16 @@ import { computed, ref, watch } from 'vue'
 import { usePersonaStore } from '../stores/persona'
 import { useSessionStore } from '../stores/session'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
+import { useButtonFx } from '@/composables/useButtonFx'
 const store = usePersonaStore()
 const sessionStore = useSessionStore()
 const currentSession = computed(() => sessionStore.sessions.find(session => session.session_id === sessionStore.sessionId))
 const sessionTitle = computed(() => currentSession.value?.const_name || '当前会话')
 const contextDetails = computed(() => `${store.profile.name} · ${sessionTitle.value} · ${store.profile.description} · ${store.profile.scene}`)
+
+// 头部功能按钮（槽内 workbench-toggle / more-trigger 等）：hover 弹性 + 轻量磁吸
+const headerEl = ref<HTMLElement | null>(null)
+useButtonFx(() => headerEl.value, '.header-right > button', { hoverScale: 1.06, bounceIcon: false, pressScale: 0.94, magnetic: 8 })
 
 // 会话标题切换：淡入上移
 const titleEl = ref<HTMLElement | null>(null)
