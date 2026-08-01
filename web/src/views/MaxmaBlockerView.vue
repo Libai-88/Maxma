@@ -98,6 +98,7 @@ import { confirmAction } from '@/composables/useConfirm'
 import { ref, onMounted } from 'vue'
 import { createLogger } from '@/utils/logger'
 import { useViewEntrance } from '@/composables/useViewEntrance'
+import { useButtonFx } from '@/composables/useButtonFx'
 
 const log = createLogger('MaxmaBlockerView')
 
@@ -111,6 +112,11 @@ const formDesc = ref('')
 
 const rootEl = ref<HTMLElement | null>(null)
 useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.intro-card, .rule-card, .entry-card', ready: () => !loading.value })
+
+// 按钮交互动效：主操作磁吸；常规弹性；危险（解除拒止/删除）hover 左倾抖动
+useButtonFx(() => rootEl.value, '.btn-primary', { magnetic: 10, watchSources: [showForm, entries] })
+useButtonFx(() => rootEl.value, '.btn:not(.btn-primary):not(.btn-danger)', { watchSources: [showForm] })
+useButtonFx(() => rootEl.value, '.btn-danger', { danger: true, watchSources: [entries] })
 
 async function loadEntries() {
   loading.value = true

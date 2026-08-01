@@ -159,6 +159,7 @@ import { useSessionStore } from '@/stores/session'
 import { confirmAction } from '@/composables/useConfirm'
 import type { SessionInfo } from '@/types'
 import { useViewEntrance } from '@/composables/useViewEntrance'
+import { useButtonFx } from '@/composables/useButtonFx'
 
 const rootEl = ref<HTMLElement | null>(null)
 useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.section' })
@@ -171,6 +172,19 @@ const sessions = ref<SessionInfo[]>([])
 const showCreateShareDialog = ref(false)
 const showCreateSnapshotDialog = ref(false)
 const copyFeedback = ref('')
+
+// 按钮交互动效：主 CTA 磁吸；常规弹性；危险（撤销/删除）hover 左倾抖动
+useButtonFx(() => rootEl.value, '.btn-primary', {
+  magnetic: 10,
+  watchSources: [showCreateShareDialog, showCreateSnapshotDialog],
+})
+useButtonFx(() => rootEl.value, '.btn:not(.btn-primary):not(.btn-danger), .btn-copy, .error-close', {
+  watchSources: [() => store.activeShares.length, () => store.snapshots.length, showCreateShareDialog, showCreateSnapshotDialog, () => store.error],
+})
+useButtonFx(() => rootEl.value, '.btn-danger', {
+  danger: true,
+  watchSources: [() => store.activeShares.length, () => store.snapshots.length],
+})
 
 const shareForm = ref({
   access_mode: 'read' as 'read' | 'comment' | 'edit',

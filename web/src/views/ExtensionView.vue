@@ -97,6 +97,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { api } from '@/api'
 import { useViewEntrance } from '@/composables/useViewEntrance'
+import { useButtonFx } from '@/composables/useButtonFx'
 
 interface ToolInfo {
   name: string
@@ -127,6 +128,9 @@ const systemStatus = ref<{ sidecar_available: boolean }>({ sidecar_available: fa
 
 const rootEl = ref<HTMLElement | null>(null)
 useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.section', ready: () => !loading.value })
+
+// 重试按钮 hover 弹性放大（error 态挂载后由 watchSources 补绑定）
+useButtonFx(() => rootEl.value, '.btn', { watchSources: [error] })
 
 // builtin !== false: includes builtin:true AND absent/undefined (which defaults to builtin)
 const builtinTools = computed(() => tools.value.filter(t => t.builtin !== false))

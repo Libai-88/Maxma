@@ -126,6 +126,7 @@ import { api } from '@/api'
 import { confirmAction } from '@/composables/useConfirm'
 import { toErrorMessage } from '@/utils/error'
 import { useViewEntrance } from '@/composables/useViewEntrance'
+import { useButtonFx } from '@/composables/useButtonFx'
 
 interface Rule {
   id: string
@@ -169,6 +170,16 @@ const filteredRules = computed(() =>
 )
 const enabledCount = computed(() => filteredRules.value.filter(r => r.enabled).length)
 const customCount = computed(() => rules.value.filter(r => r.source === 'custom').length)
+
+// 按钮交互动效：主 CTA 磁吸；语言筛选 hover 弹性 + 选中 pop；toggle 轻微弹性；
+// 编辑弹性；危险（删除）左倾抖动；对话框取消/提交弹性
+useButtonFx(() => rootEl.value, '.btn-create', { magnetic: 10 })
+useButtonFx(() => rootEl.value, '.filter-chip', { clickPop: true, watchSources: [languages] })
+useButtonFx(() => rootEl.value, '.toggle-btn', { hoverScale: 1.06, watchSources: [filteredRules] })
+useButtonFx(() => rootEl.value, '.action-btn.edit', { watchSources: [filteredRules] })
+useButtonFx(() => rootEl.value, '.action-btn.delete', { danger: true, watchSources: [filteredRules] })
+useButtonFx(() => rootEl.value, '.btn-cancel', { watchSources: [dialogVisible] })
+useButtonFx(() => rootEl.value, '.btn-submit', { watchSources: [dialogVisible] })
 
 onMounted(() => {
   fetchRules()

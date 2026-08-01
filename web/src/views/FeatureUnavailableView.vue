@@ -45,11 +45,15 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useCapabilitiesStore } from '@/stores/capabilities'
 import { useViewEntrance } from '@/composables/useViewEntrance'
+import { useButtonFx } from '@/composables/useButtonFx'
 
 defineOptions({ name: 'FeatureUnavailableView' })
 
 const rootEl = ref<HTMLElement | null>(null)
 useViewEntrance(() => rootEl.value, { blocks: '.fu-card' })
+
+// 返回/重试等操作卡 hover 弹性放大（含 2 个 router-link CTA 与重新检测按钮）
+useButtonFx(() => rootEl.value, '.fu-action')
 
 const route = useRoute()
 const router = useRouter()

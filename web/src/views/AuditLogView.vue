@@ -100,9 +100,13 @@ import { ref } from 'vue'
 import { api } from '@/api'
 import { invoke } from '@tauri-apps/api/core'
 import { useViewEntrance } from '@/composables/useViewEntrance'
+import { useButtonFx } from '@/composables/useButtonFx'
 
 const rootEl = ref<HTMLElement | null>(null)
 useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.card' })
+
+// 导出按钮 hover 弹性放大
+useButtonFx(() => rootEl.value, 'button.action-card')
 
 const exporting = ref(false)
 

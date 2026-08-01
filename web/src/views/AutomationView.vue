@@ -63,6 +63,7 @@ import { api } from '@/api'
 import { toErrorMessage } from '@/utils/error'
 import { confirmAction } from '@/composables/useConfirm'
 import { useViewEntrance } from '@/composables/useViewEntrance'
+import { useButtonFx } from '@/composables/useButtonFx'
 
 interface AutomationAction {
   type: string
@@ -102,6 +103,11 @@ const historyMap = ref<Record<string, RunHistoryEntry[]>>({})
 
 const rootEl = ref<HTMLElement | null>(null)
 useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.automation-card', ready: () => !loading.value })
+
+// 按钮交互动效：主操作磁吸 + 弹性；常规操作弹性放大；危险删除 hover 左倾抖动
+useButtonFx(() => rootEl.value, '.btn-primary', { magnetic: 10 })
+useButtonFx(() => rootEl.value, '.btn-icon:not(.btn-danger)', { watchSources: [automations, running] })
+useButtonFx(() => rootEl.value, '.btn-danger', { danger: true, watchSources: [automations] })
 
 const canCreate = computed(() =>
   Boolean(form.value.name.trim() && form.value.schedule.trim() && form.value.action.trim())
