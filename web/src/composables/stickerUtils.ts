@@ -34,6 +34,18 @@ export function stripStickerDirectives(text: string): string {
   return text.replace(STICKER_DIRECTIVE_RE, '').replace(/\n{2,}/g, '\n').trim()
 }
 
+/**
+ * 把正文中的裸情感词标记（[爱心] 等）替换为内联贴纸标签。
+ * 只有拿到了该情感对应的具体贴纸 path 才调用；返回新文本（未变时返回原文本）。
+ */
+export function replaceEmotionTags(text: string, emotion: string, stickerPath: string): string {
+  const tag = `<sticker:${stickerPath}>`
+  // 若正文含该情感的裸标记，全部替换；否则原样返回（避免误插）
+  return text.includes(`[${emotion}]`)
+    ? text.replace(new RegExp(`\\[${emotion}\\]`, 'g'), tag)
+    : text
+}
+
 /** 根据分类名获取随机贴纸 URL */
 export function getStickerUrl(category: string): string {
   return `${getApiBase()}/stickers/random/${encodeURIComponent(category)}`

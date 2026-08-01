@@ -9,7 +9,7 @@ import { getToken, ensureTokenLoaded, resetToken, api } from '@/api'
 import { ensurePortLoaded, waitForBackend, getWsBase, getApiBase, generateUUID, tauriFetch } from '@/utils/env'
 import { chatSessionAliveCache } from '@/composables/sessionAliveCache'
 import { useWorkbenchStore } from '@/stores/workbench'
-import { detectEmotion, getStickerUrl } from './stickerUtils'
+import { detectEmotion, getStickerUrl, replaceEmotionTags } from './stickerUtils'
 import { createLogger } from '@/utils/logger'
 
 const log = createLogger('chat')
@@ -189,9 +189,13 @@ async function hydrateTurnSticker(turn: ChatTurn): Promise<boolean> {
     const data = await response.json()
     if (!data?.path) return false
     const stickerTag = `<sticker:${data.path}>`
-    if (STICKER_DIRECTIVE_RE.test(turn.finalAnswer)) {
-      // 将内联指令替换为可渲染的 sticker 标签，保持原位显示
-      turn.finalAnswer = turn.finalAnswer.replace(STICKER_DIRECTIVE_RE, stickerTag)
+    const next = turn.finalAnswer
+    if (STICKER_DIRECTIVE_RE.test(next)) {
+      // 将内联指令（[表情:xxx]）替换为可渲染的 sticker 标签，保持原位显示
+      turn.finalAnswer = next.replace(STICKER_DIRECTIVE_RE, stickerTag)
+    } else if (next.includes(`[${emotion}]`)) {
+      // 裸情感词标记（[爱心] 等）：替换为内联贴纸
+      turn.finalAnswer = replaceEmotionTags(next, emotion, data.path)
     } else {
       turn.stickerUrl = getApiBase() + '/stickers/' + data.path
     }
@@ -812,16 +816,24 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
             .then((data) => {
               if (data?.path && turn.finalAnswer) {
                 const stickerTag = `<sticker:${data.path}>`
-                if (STICKER_DIRECTIVE_RE.test(turn.finalAnswer)) {
-                  // 将内联指令替换为可渲染的 sticker 标签，保持原位显示
-                  turn.finalAnswer = turn.finalAnswer.replace(STICKER_DIRECTIVE_RE, stickerTag)
-                  // 同步更新正在显示的 thinking block，避免流式阶段露出明文指令
+                let next = turn.finalAnswer
+                if (STICKER_DIRECTIVE_RE.test(next)) {
+                  // 将内联指令（[表情:xxx]）替换为可渲染的 sticker 标签，保持原位显示
+                  next = next.replace(STICKER_DIRECTIVE_RE, stickerTag)
+                } else if (next.includes(`[${emotion}]`)) {
+                  // 裸情感词标记（[爱心] 等）：AI 直接在正文写的情绪标签，替换为内联贴纸
+                  next = replaceEmotionTags(next, emotion, data.path)
+                } else {
+                  // 无显式标记：整条消息末尾附带一个贴纸
+                  turn.stickerUrl = `${getApiBase()}/stickers/${data.path}`
+                }
+                if (next !== turn.finalAnswer) {
+                  turn.finalAnswer = next
+                  // 同步更新正在显示的 thinking block，避免流式阶段露出明文标记
                   const lastThink = findLastThinking(turn.events)
                   if (lastThink) {
-                    lastThink.tokens = turn.finalAnswer
+                    lastThink.tokens = next
                   }
-                } else {
-                  turn.stickerUrl = `${getApiBase()}/stickers/${data.path}`
                 }
               }
             })
