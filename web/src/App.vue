@@ -291,26 +291,39 @@ onMounted(async () => {
   transform: translateY(-4px);
 }
 
-/* ── flip：3D 翻转（主内容页，如对话/记忆/动态） ── */
+/* ── flip：翻书式 3D 翻转（主内容页，如对话/记忆/动态） ──
+   书页翻动质感：旧页绕书脊（右边缘）立起翻走，新页从背面翻入。
+   大角度 rotateY + backface-visibility 避免露背；perspective 由 .main 提供。
+   forward = 前进（下一页），back = 后退（上一页）。 */
+.page-flip-forward-enter-active,
+.page-flip-forward-leave-active,
+.page-flip-back-enter-active,
+.page-flip-back-leave-active {
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+}
+/* 前进：新页如书页从右向左翻入（绕左书脊，从背面 -85° 翻到正面 0°） */
 .page-flip-forward-enter-from {
-  opacity: 0;
-  transform: perspective(1400px) rotateY(-24deg) translateX(60px) scale(0.96);
+  transform: perspective(1000px) rotateY(-85deg) translateX(60px);
   transform-origin: left center;
+  opacity: 0.6;
 }
+/* 前进：旧页如书页向右立起翻走（绕右书脊，从 0° 翻到 85°） */
 .page-flip-forward-leave-to {
-  opacity: 0;
-  transform: perspective(1400px) rotateY(16deg) translateX(-40px) scale(0.97);
+  transform: perspective(1000px) rotateY(85deg) translateX(-60px);
   transform-origin: right center;
+  opacity: 0;
 }
+/* 后退：镜像（新页从右翻入 / 旧页向左立起） */
 .page-flip-back-enter-from {
-  opacity: 0;
-  transform: perspective(1400px) rotateY(24deg) translateX(-60px) scale(0.96);
+  transform: perspective(1000px) rotateY(85deg) translateX(-60px);
   transform-origin: right center;
+  opacity: 0.6;
 }
 .page-flip-back-leave-to {
-  opacity: 0;
-  transform: perspective(1400px) rotateY(-16deg) translateX(40px) scale(0.97);
+  transform: perspective(1000px) rotateY(-85deg) translateX(60px);
   transform-origin: left center;
+  opacity: 0;
 }
 
 /* ── slide：水平滑入（设置类，如外观/角色/用户/隐私） ── */
