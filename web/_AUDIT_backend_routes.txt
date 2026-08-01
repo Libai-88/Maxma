@@ -1,0 +1,196 @@
+BACKEND ROUTES REFERENCE (all mounted under /api prefix unless noted)
+Generated for frontend-backend link audit. All routes below are REAL registered endpoints.
+
+# sessions.py (prefix /api)
+POST   /api/sessions
+GET    /api/sessions
+GET    /api/sessions/{id}
+GET    /api/sessions/{id}/messages
+DELETE /api/sessions/{id}
+GET    /api/sessions/{id}/permission-mode
+PUT    /api/sessions/{id}/permission-mode
+GET    /api/sessions/{id}/deferred-runs
+GET    /api/sessions/{id}/deferred-runs/{run_id}
+POST   /api/sessions/{id}/deferred-runs/{run_id}/cancel
+GET    /api/sessions/{id}/context-usage
+POST   /api/sessions/{id}/undo
+POST   /api/sessions/{id}/const
+DELETE /api/sessions/{id}/const
+POST   /api/sessions/{id}/generate-title
+
+# workflows.py (prefix /api)
+GET    /api/workflows/definitions
+GET    /api/sessions/{id}/workflows
+POST   /api/sessions/{id}/workflows
+GET    /api/sessions/{id}/workflows/{run_id}
+POST   /api/sessions/{id}/workflows/{run_id}/cancel
+POST   /api/sessions/{id}/workflows/{run_id}/resume
+
+# session_compress.py (prefix /api, router prefix /sessions)
+POST   /api/sessions/{id}/compress
+POST   /api/sessions/{id}/fresh-compact
+
+# chat.py (NO /api prefix at include; check its own router prefix)
+WEBSOCKET /ws/chat/{session_id}
+
+# providers.py (prefix /api)
+GET    /api/providers
+GET    /api/providers/{id}
+POST   /api/providers
+PUT    /api/providers/{id}
+DELETE /api/providers/{id}
+POST   /api/providers/test
+POST   /api/providers/discover-models
+POST   /api/providers/{id}/discover-models
+POST   /api/providers/{id}/test
+POST   /api/providers/{id}/health
+POST   /api/providers/encrypt-keys
+
+# mcp.py (router prefix /api/mcp)
+GET    /api/mcp/servers
+GET    /api/mcp/servers/{server_id}
+POST   /api/mcp/servers
+PUT    /api/mcp/servers/{server_id}
+DELETE /api/mcp/servers/{server_id}
+POST   /api/mcp/reload
+GET    /api/mcp/servers/{server_id}/tools
+GET    /api/mcp/discovered
+GET    /api/mcp/registry
+GET    /api/mcp/registry/{name}
+POST   /api/mcp/registry/install
+POST   /api/mcp/oauth/authorize
+POST   /api/mcp/oauth/callback
+GET    /api/mcp/oauth/status/{server_name}
+
+# mcp_test.py (router prefix /api/mcp, NO extra /api at include)
+POST   /api/mcp/test-connection
+
+# memory.py (prefix /api)
+GET    /api/memory
+GET    /api/memory/stats
+GET    /api/memory/hindsight-config  (from settings_panels)
+PUT    /api/memory/hindsight-config  (from settings_panels)
+PUT    /api/memory/{memory_id}
+DELETE /api/memory/{memory_id}
+
+# settings_panels.py (prefix /api)
+GET    /api/memory/hindsight-config
+PUT    /api/memory/hindsight-config
+GET    /api/settings/tts
+PUT    /api/settings/tts
+GET    /api/settings/browser-tools
+PUT    /api/settings/browser-tools
+GET    /api/settings/sub-agents
+PUT    /api/settings/sub-agents
+
+# settings.py (prefix /api)
+GET    /api/settings
+PUT    /api/settings
+
+# persona.py (prefix /api)
+GET    /api/persona
+PUT    /api/persona
+GET    /api/persona/profile
+GET    /api/personas
+POST   /api/personas
+PUT    /api/personas/active
+
+# files.py (prefix /api)
+GET    /api/select-file
+NOTE: NO /api/check-path-blocked route exists (path_whitelist.py source deleted, only .pyc remains, NOT registered in server.py)
+
+# maxma_blocker.py (prefix /api)
+GET    /api/maxma-blocker
+POST   /api/maxma-blocker
+DELETE /api/maxma-blocker/{index}
+
+# tools.py (prefix /api)
+GET    /api/tools
+
+# news.py (prefix /api)
+GET    /api/news
+
+# metrics.py (prefix /api)
+GET    /api/metrics
+GET    /api/metrics/history
+
+# balance.py (prefix /api)
+GET    /api/deepseek-balance
+
+# diagnostics.py (prefix /api)
+GET    /api/diagnostics/error-log
+GET    /api/diagnostics/error-log/text
+GET    /api/diagnostics/logs
+DELETE /api/diagnostics/logs
+
+# activity.py (prefix /api)
+GET    /api/activity/recent
+GET    /api/activity/stats
+GET    /api/activity/stream
+DELETE /api/activity
+
+# capabilities.py (prefix /api)
+GET    /api/capabilities
+
+# plugins.py (prefix /api)
+GET    /api/plugins
+GET    /api/plugins/{name}
+GET    /api/plugins/{name}/config
+PUT    /api/plugins/{name}/config
+PUT    /api/plugins/{name}/toggle
+POST   /api/plugins/install
+DELETE /api/plugins/{name}
+
+# collab.py (prefix /api)
+GET    /api/sessions/{id}/shares
+POST   /api/sessions/{id}/shares
+DELETE /api/shares/{share_id}
+GET    /api/sessions/{id}/snapshots
+POST   /api/sessions/{id}/snapshots
+DELETE /api/snapshots/{snapshot_id}
+
+# rules.py (prefix /api)
+GET    /api/rules
+GET    /api/rules/languages
+POST   /api/rules
+PUT    /api/rules/{rule_id}
+DELETE /api/rules/{rule_id}
+PATCH  /api/rules/{rule_id}/toggle
+
+# automation.py (prefix /api)
+GET    /api/automations
+POST   /api/automations
+PUT    /api/automations/{automation_id}
+DELETE /api/automations/{automation_id}
+PATCH  /api/automations/{automation_id}/toggle
+POST   /api/automations/{automation_id}/run
+GET    /api/automations/{automation_id}/history
+
+# audit_log.py (prefix /api)
+GET    /api/audit-log
+GET    /api/audit-log/stats
+POST   /api/audit-log/append
+POST   /api/audit-log/clear
+
+# upload.py (prefix /api)
+POST   /api/upload
+GET    /api/uploads
+DELETE /api/uploads/{file_id}
+
+# stickers.py / sticker_favorites.py / sticker_upload.py (prefix /api)
+GET    /api/stickers, /api/stickers/index, /api/stickers/custom, /api/stickers/recent,
+       /api/stickers/random/{category}, /api/stickers/recommendations, /api/stickers/{category}/{filename}
+GET/POST/DELETE /api/stickers/favorites
+POST   /api/stickers/skip, /api/stickers/usage, /api/stickers/upload
+DELETE /api/stickers/custom/{filename}
+
+# transcripts.py (prefix /api)
+GET    /api/transcripts
+GET    /api/transcripts/{category}/{filename}
+
+# restart.py (prefix /api)
+POST   /api/restart
+
+# server.py inline
+GET    /api/auth/token
+GET    /api/health

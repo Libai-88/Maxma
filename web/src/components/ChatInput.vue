@@ -36,7 +36,7 @@
     <div
       ref="inputContainerRef"
       class="chat-input"
-      :class="{ 'is-resizing': isResizing, 'is-dragover': isDragover }"
+      :class="{ 'is-resizing': isResizing }"
       @dragenter.prevent="onDragEnter"
       @dragover.prevent="onDragOver"
       @dragleave.prevent="onDragLeave"
@@ -49,43 +49,21 @@
       >
         <div class="resize-handle-grip"></div>
       </div>
-      <TransitionGroup name="ref-tag" tag="div" class="file-refs-bar" @before-leave="freezeLeavePos">
-        <!-- 表情引用：缩略图预览 -->
-        <span
-          v-for="seg in stickerSegments"
-          :key="'sticker-' + seg.occurrenceKey"
-          class="sticker-tag"
-          :title="seg.path"
-        >
-          <img :src="seg.src" class="sticker-tag-preview" :alt="seg.filename" />
-          <span class="sticker-tag-name">{{ seg.category || '表情' }}</span>
-          <button type="button" class="sticker-tag-remove" :aria-label="`移除表情 ${seg.category || '表情'}`" title="移除表情" @click="removeStickerSegment(seg)"><Icon name="close" :size="12" /></button>
-        </span>
-        <!-- 图片引用：缩略图预览 -->
-        <span
-          v-for="(r, idx) in imageRefs"
-          :key="'img-' + idx"
-          class="image-tag"
-        >
-          <img :src="r.preview" class="image-tag-preview" :alt="r.label" />
-          <span class="image-tag-name">{{ r.label }}</span>
-          <button type="button" class="image-tag-remove" :aria-label="`移除图片 ${r.label}`" title="移除图片" @click="removeRef(getRefIndex(r))"><Icon name="close" :size="12" /></button>
-        </span>
-        <!-- 其他引用：文本 chip -->
-        <span
-          v-for="(r, idx) in nonImageRefs"
-          :key="r.type + r.label + idx"
-          class="file-tag"
-          :class="{ blocked: 'blocked' in r && r.blocked }"
-          :title="getRefTooltip(r)"
-        >
-          <span class="file-tag-icon"><Icon :name="getRefIcon(r)" :size="14" /></span>
-          <span class="file-tag-name">{{ r.label }}</span>
-          <span class="file-tag-source">{{ r.type }}</span>
-          <span v-if="'blocked' in r && r.blocked" class="file-tag-blocked">blocked</span>
-          <button type="button" class="file-tag-remove" :aria-label="`移除引用 ${r.label}`" title="移除引用" @click="removeRef(getNonImageRefIndex(r))"><Icon name="close" :size="12" /></button>
-        </span>
-      </TransitionGroup>
+      <Transition name="thinking-wave-fade">
+        <ThinkingWave v-if="isStreaming" />
+      </Transition>
+      <FileUpload :dragover="isDragover" :border="'dashed'" class="file-upload-area">
+        <FileUploadGrid
+          v-if="hasFiles"
+          :stickers="stickerSegments"
+          :images="imageRefs"
+          :files="nonImageRefs"
+          density="compact"
+          @removeSticker="removeStickerSegment"
+          @removeImage="(r) => removeRef(getRefIndex(r))"
+          @removeFile="removeRef"
+        />
+      </FileUpload>
       <!-- 已引用选区卡片栏 -->
       <div v-if="quotedSelections.length" class="quoted-selections-bar">
         <QuotedSelectionCard
@@ -215,6 +193,7 @@
 </template>
 
 <script setup lang="ts">
+import ThinkingWave from '@/components/ThinkingWave.vue'
 import AutocompletePanel from '@/components/AutocompletePanel.vue'
 import Icon from '@/components/Icon.vue'
 import StickerContextMenu from '@/components/StickerContextMenu.vue'
@@ -236,6 +215,8 @@ import type StickerPickerComponent from '@/components/StickerPicker.vue'
 import type { Sticker } from '@/components/StickerPicker.vue'
 import ModelSelector from './ModelSelector.vue'
 import ContextUsageBadge from './ContextUsageBadge.vue'
+import FileUpload from './FileUpload.vue'
+import FileUploadGrid from './FileUploadGrid.vue'
 import { useChatStore } from '@/stores/chat'
 
 // ChatView 通过 provide 注入 useChatInput 实例；ChatInput 直接读写状态、调用方法
@@ -311,12 +292,8 @@ const {
   imageRefs,
   nonImageRefs,
   getRefIndex,
-  getNonImageRefIndex,
   addRef,
   removeRef,
-  freezeLeavePos,
-  getRefIcon,
-  getRefTooltip,
   clearRefs,
 } = useFileRefs()
 
@@ -354,6 +331,12 @@ const {
 } = useLinkInput({ refs, showMenu, textareaRef })
 
 defineExpose({ addRef })
+
+// ── 文件网格状态 ──
+
+const hasFiles = computed(() =>
+  stickerSegments.value.length > 0 || imageRefs.value.length > 0 || nonImageRefs.value.length > 0
+)
 
 // ── 选区引用浮层定位 ──
 
@@ -608,204 +591,14 @@ onUnmounted(() => {
   position: relative;
 }
 
-/* 引用标签条 */
-.file-refs-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  padding: 10px 14px 0;
+/* ── 文件上传区 ── */
+.file-upload-area {
+  margin: 0 14px;
+  padding: 0;
 }
-.file-refs-bar:empty {
+
+.file-upload-area:empty {
   display: none;
-}
-.file-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 3px 10px 3px 8px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 100px;
-    font-size: 0.82em;
-    color: var(--text-primary);
-    max-width: 100%;
-    overflow: hidden;
-    transition: border-color 0.15s, background 0.15s;
-  }
-.file-tag:hover {
-    border-color: var(--border-accent, var(--accent-hover, var(--accent)));
-    background: var(--bg-primary);
-  }
-.file-tag-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 500;
-}
-.file-tag-remove {
-  flex-shrink: 0;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 0.85em;
-  padding: 0 2px;
-  line-height: 1;
-  transition: color 0.15s, transform 0.1s;
-}
-.file-tag-remove:hover {
-  color: var(--status-error);
-}
-.file-tag-remove:active {
-  transform: scale(0.92);
-}
-.file-tag-source {
-  font-size: 0.65em;
-  color: var(--text-secondary);
-  background: transparent;
-  background: transparent;
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
-  padding: 1px 6px;
-  border-radius: 100px;
-  flex-shrink: 0;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-}
-.file-tag-blocked {
-  font-size: 0.65em;
-  color: var(--status-error);
-  background: var(--bg-card);
-  background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
-  padding: 0 5px;
-  border-radius: 3px;
-  flex-shrink: 0;
-  font-weight: 600;
-}
-.file-tag.blocked {
-  border-color: var(--status-error);
-  background: var(--bg-card);
-  background: color-mix(in srgb, var(--status-error) 8%, var(--bg-card));
-}
-.file-tag.blocked .file-tag-name {
-  color: var(--status-error);
-}
-
-/* ── 图片引用缩略图 ── */
-.sticker-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 3px 8px 3px 3px;
-    border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--border));
-    border-radius: 999px;
-    background: var(--bg-secondary);
-    background: color-mix(in srgb, var(--accent) 8%, var(--bg-secondary));
-    font-size: 0.75em;
-    color: var(--text-primary);
-    max-width: 180px;
-    transition: border-color 0.15s, background 0.15s;
-  }
-  
-  .sticker-tag:hover {
-    border-color: var(--accent);
-    background: var(--bg-secondary);
-    background: color-mix(in srgb, var(--accent) 12%, var(--bg-secondary));
-  }
-
-.sticker-tag-preview {
-  width: 32px;
-  height: 32px;
-  object-fit: contain;
-  border-radius: 8px;
-  flex-shrink: 0;
-  background: #fff;
-}
-
-.sticker-tag-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 600;
-}
-
-.sticker-tag-remove {
-  flex-shrink: 0;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 0.85em;
-  padding: 0 2px;
-  line-height: 1;
-  transition: color 0.15s, transform 0.1s;
-}
-
-.sticker-tag-remove:hover {
-  color: var(--status-error);
-}
-.sticker-tag-remove:active {
-  transform: scale(0.92);
-}
-
-.image-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 8px 3px 3px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-secondary);
-  font-size: 0.75em;
-  color: var(--text-primary);
-  max-width: 180px;
-  transition: border-color 0.15s;
-}
-.image-tag:hover {
-  border-color: var(--accent-dark);
-}
-
-/* 暗色主题下增强图片引用边框对比度 */
-:global([data-theme="night"]) .image-tag,
-:global([data-theme="midnight"]) .image-tag {
-  border-color: var(--border-strong, var(--border));
-}
-.image-tag-preview {
-  width: 28px;
-  height: 28px;
-  object-fit: cover;
-  border-radius: 5px;
-  flex-shrink: 0;
-}
-.image-tag-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 500;
-}
-.image-tag-remove {
-  flex-shrink: 0;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 0.85em;
-  padding: 0 2px;
-  line-height: 1;
-  transition: color 0.15s, transform 0.1s;
-}
-.image-tag-remove:hover {
-  color: var(--status-error);
-}
-.image-tag-remove:active {
-  transform: scale(0.92);
-}
-
-/* ── 拖拽图片高亮 ── */
-.chat-input.is-dragover {
-  border-color: var(--accent);
-  background: transparent;
-  background: transparent;
-  background: color-mix(in srgb, var(--accent) 4%, transparent);
 }
 
 /* ── 输入区主体 ── */
@@ -830,26 +623,6 @@ onUnmounted(() => {
 }
 .chat-input:focus-within .input-divider {
   opacity: 1;
-}
-
-/* TransitionGroup 动画：从下往上缓出弹出，退场缩小淡出 */
-.ref-tag-enter-active {
-  transition: opacity 0.25s ease-out, transform 0.25s ease-out;
-}
-.ref-tag-enter-from {
-  opacity: 0;
-  transform: translateY(12px);
-}
-.ref-tag-leave-active {
-  transition: opacity 0.2s ease-out, transform 0.2s ease-out;
-  position: absolute !important;
-}
-.ref-tag-leave-to {
-  opacity: 0;
-  transform: translateY(12px);
-}
-.ref-tag-move {
-  transition: transform 0.25s ease-out;
 }
 
 /* 链接输入条 */
@@ -974,6 +747,7 @@ onUnmounted(() => {
 }
 
 .chat-input {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -989,9 +763,24 @@ onUnmounted(() => {
   transition: border-color 0.2s, box-shadow 0.2s;
   overflow: visible;
 }
+
+@media (prefers-reduced-motion: no-preference) {
+  .chat-input {
+    animation: border-breathe 4s ease-in-out infinite;
+  }
+}
+
+@keyframes border-breathe {
+  0%, 100% {
+    box-shadow: var(--shadow-md);
+  }
+  50% {
+    box-shadow: var(--shadow-md),
+                0 0 18px color-mix(in srgb, var(--accent) 6%, transparent);
+  }
+}
 .chat-input.is-resizing {
   border-color: var(--accent);
-  box-shadow: none;
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 .chat-input:focus-within {
@@ -1329,6 +1118,18 @@ onUnmounted(() => {
   .input-separator {
     display: none;
   }
+}
+
+/* ── 思考波浪动画过渡 ── */
+.thinking-wave-fade-enter-active {
+  transition: opacity 0.5s ease;
+}
+.thinking-wave-fade-leave-active {
+  transition: opacity 0.5s ease;
+}
+.thinking-wave-fade-enter-from,
+.thinking-wave-fade-leave-to {
+  opacity: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {

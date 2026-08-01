@@ -11,9 +11,24 @@
       <button class="welcome-error-retry" @click="store.loadProfile()">重试</button>
     </div>
     <div v-else ref="contentEl" class="welcome-content">
-      <div class="welcome-aura" aria-hidden="true"></div>
-      <div class="welcome-avatar"><span aria-hidden="true">{{ store.profile.avatar }}</span></div>
-      <h1 class="welcome-name">{{ store.profile.name || 'Maxma' }}</h1>
+      <Ripple
+        class="ripple-bg"
+        :base-circle-size="140"
+        :base-circle-opacity="0.12"
+        :circle-opacity-downgrade-ratio="0.015"
+        :wave-speed="60"
+        :space-between-circle="60"
+        :number-of-circles="6"
+      />
+      <div class="welcome-avatar"><SingularityBackground /></div>
+      <h1 class="welcome-name">
+        <TextGlitch
+          :text="store.profile.name || 'Maxma'"
+          :speed="1"
+          :enable-shadows="true"
+          :enable-on-hover="false"
+        />
+      </h1>
       <p class="welcome-scene">{{ sceneText }}</p>
       <p class="welcome-greeting">{{ store.profile.greeting || '你好呀，今天想聊些什么？' }}</p>
       <div class="welcome-rule" aria-hidden="true"></div>
@@ -33,19 +48,18 @@
       <!-- 示例提示：分场景给出可点击的具体 prompt，降低上手门槛 -->
       <section class="example-prompts" aria-label="试试这些">
         <div class="example-title">试试这些 <Icon name="sparkles" :size="14" aria-hidden="true" /></div>
-        <div class="example-chips">
-          <button
+        <AnimatedList :delay="150" class="example-chips">
+          <InteractiveHoverButton
             v-for="ex in examples"
             :key="ex.text"
-            class="example-chip"
-            :class="`chip--${ex.tone}`"
+            :tone="ex.tone"
             @click="handleStart(ex.text)"
             :title="ex.hint"
           >
-            <Icon class="example-chip-icon" :name="ex.icon" :size="14" aria-hidden="true" />
-            <span class="example-chip-text">{{ ex.label }}</span>
-          </button>
-        </div>
+            <Icon :name="ex.icon" :size="14" aria-hidden="true" />
+            <span>{{ ex.label }}</span>
+          </InteractiveHoverButton>
+        </AnimatedList>
         <p class="example-hint">点击任一示例即可开始；也可以在下方输入框直接输入你的问题。</p>
       </section>
     </div>
@@ -57,6 +71,11 @@ import { computed, ref, watch } from 'vue'
 import { usePersonaStore } from '../stores/persona'
 import Icon from './Icon.vue'
 import BrandSeal from './brand/BrandSeal.vue'
+import SingularityBackground from './SingularityBackground.vue'
+import Ripple from './Ripple.vue'
+import TextGlitch from '@/components/TextGlitch.vue'
+import AnimatedList from '@/components/AnimatedList.vue'
+import InteractiveHoverButton from '@/components/InteractiveHoverButton.vue'
 import { gsap, useGsap, easeMap, lazyLoadPlugin } from '@/composables/useGsap'
 import chatBubbleRaw from '../assets/icons/welcome/chat-bubble.svg?raw'
 import searchRaw from '../assets/icons/welcome/search.svg?raw'
@@ -119,8 +138,7 @@ const { contextSafe } = useGsap(() => {
     const q = gsap.utils.selector(root)
     // 盖章式入场：头像从上方砸落 + elastic 回弹，文本区块错落放大，张力集中在首屏
     const tl = gsap.timeline({ defaults: { ease: easeMap.out, duration: 0.5 } })
-    tl.from(q('.welcome-aura'),     { opacity: 0, duration: 1.2, ease: 'power1.inOut' })
-      .from(q('.welcome-avatar'),   { opacity: 0, y: -52, scale: 0.4, rotation: -16, duration: 0.8, ease: 'elastic.out(1, 0.5)' }, '-=0.9')
+    tl.from(q('.welcome-avatar'),   { opacity: 0, y: -52, scale: 0.4, rotation: -16, duration: 0.8, ease: 'elastic.out(1, 0.5)' })
       .from(q('.welcome-scene'),    { opacity: 0, y: 20, scale: 0.98 }, '<0.15')
       .from(q('.welcome-greeting'), { opacity: 0, y: 20, scale: 0.98 }, '<0.1')
       .from(q('.welcome-rule'),     { opacity: 0, scaleX: 0, duration: 0.5 }, '<0.06')
@@ -174,12 +192,12 @@ const sceneText = computed(() => {
 // 示例提示：覆盖三类画像的典型场景
 // - tone: 'office' (Power Office User) / 'daily' (Novice) / 'tech' (Enthusiast)
 const examples = computed(() => [
-  { icon: 'file-page', label: '帮我写周报', text: '帮我写一份本周工作周报，要点列出主要完成的事项、遇到的问题和下周计划', tone: 'office', hint: '办公党：让 AI 帮你起草文档' },
-  { icon: 'doc-reader', label: '翻译一段文档', text: '请帮我把一段中文翻译成英文，我会把内容贴进来', tone: 'office', hint: '办公党：跨语言文档处理' },
-  { icon: 'weather-partly-cloudy', label: '今天天气怎么样', text: '今天天气怎么样？', tone: 'daily', hint: '新手：试试内置天气工具' },
-  { icon: 'checkmark', label: '管理我的待办', text: '帮我看看今天的待办事项', tone: 'daily', hint: '新手：连接 Todoist 工具' },
-  { icon: 'python', label: '写一段 Python', text: '帮我写一段 Python 脚本，读取当前目录下所有 .csv 文件并合并', tone: 'tech', hint: '极客：让 Agent 直接写代码' },
-  { icon: 'search', label: '搜索最新资讯', text: '帮我搜索一下最近关于 AI Agent 的最新资讯', tone: 'tech', hint: '极客：调用网络搜索工具' },
+  { icon: 'file-page', label: '帮我写周报', text: '帮我写一份本周工作周报，要点列出主要完成的事项、遇到的问题和下周计划', tone: 'office' as const, hint: '办公党：让 AI 帮你起草文档' },
+  { icon: 'doc-reader', label: '翻译一段文档', text: '请帮我把一段中文翻译成英文，我会把内容贴进来', tone: 'office' as const, hint: '办公党：跨语言文档处理' },
+  { icon: 'weather-partly-cloudy', label: '今天天气怎么样', text: '今天天气怎么样？', tone: 'daily' as const, hint: '新手：试试内置天气工具' },
+  { icon: 'checkmark', label: '管理我的待办', text: '帮我看看今天的待办事项', tone: 'daily' as const, hint: '新手：连接 Todoist 工具' },
+  { icon: 'python', label: '写一段 Python', text: '帮我写一段 Python 脚本，读取当前目录下所有 .csv 文件并合并', tone: 'tech' as const, hint: '极客：让 Agent 直接写代码' },
+  { icon: 'search', label: '搜索最新资讯', text: '帮我搜索一下最近关于 AI Agent 的最新资讯', tone: 'tech' as const, hint: '极客：调用网络搜索工具' },
 ])
 </script>
 
@@ -205,16 +223,13 @@ const examples = computed(() => [
   text-align: center;
 }
 
-/* ── 氛围光晕：朱砂淡彩径向渐变 ── */
-.welcome-aura {
+.ripple-bg {
   position: absolute;
-  inset: -60px -80px;
+  inset: -80px;
   z-index: -1;
   pointer-events: none;
-  animation: maxma-aura-breathe 7s ease-in-out infinite;
-  background:
-    radial-gradient(ellipse 55% 45% at 50% 30%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 70%),
-    radial-gradient(ellipse 40% 35% at 65% 60%, color-mix(in srgb, var(--accent-pink, var(--accent)) 4%, transparent), transparent 70%);
+  mask-image: linear-gradient(to bottom, white 40%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, white 40%, transparent 100%);
 }
 
 .welcome-loading {
@@ -252,21 +267,20 @@ const examples = computed(() => [
   background: color-mix(in srgb, var(--status-error) 8%, transparent);
 }
 
-/* ── 头像：光环 + 柔影 ── */
+/* ── 头像：3D 图标云 ── */
 .welcome-avatar {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 76px;
-  height: 76px;
+  width: 110px;
+  height: 110px;
   margin-bottom: var(--space-16);
-  font-size: 42px;
-  line-height: 1;
   border-radius: 50%;
-  background: var(--bg-card);
-  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  overflow: hidden;
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
   box-shadow:
-    0 0 0 6px color-mix(in srgb, var(--accent) 5%, transparent),
+    0 0 0 8px color-mix(in srgb, var(--accent) 4%, transparent),
     var(--shadow-md);
 }
 .welcome-name {
@@ -373,38 +387,6 @@ const examples = computed(() => [
   gap: var(--space-8);
   justify-content: center;
 }
-.example-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  font-size: var(--fs-ui);
-  cursor: pointer;
-  transition: border-color var(--duration-fast) var(--ease-out),
-              color var(--duration-fast) var(--ease-out),
-              background var(--duration-fast) var(--ease-out),
-              transform var(--duration-instant) var(--ease-spring);
-}
-.example-chip:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 6%, var(--bg-card));
-}
-@media (prefers-reduced-motion: no-preference) {
-  .example-chip:hover { transform: translateY(-1px); }
-  .example-chip:active { transform: scale(0.97); }
-}
-.example-chip-icon { display: inline-flex; width: 14px; height: 14px; color: inherit; }
-.example-chip-text { white-space: nowrap; }
-
-/* 不同画像的色调提示（轻量、不打扰） */
-.chip--office { border-color: color-mix(in srgb, var(--accent) 24%, var(--border)); }
-.chip--tech { border-color: color-mix(in srgb, var(--status-ok) 24%, var(--border)); }
-.chip--daily { border-color: var(--border); }
 
 .example-hint {
   margin: var(--space-12) 0 0;

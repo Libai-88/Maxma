@@ -2,7 +2,9 @@
 <template>
   <div class="qc-app">
     <header class="qc-header">
-      <img src="@/assets/images/brand/favicon.png" alt="Maxma" class="qc-logo" />
+      <div class="qc-logo-wrap">
+        <LiquidLogo :image-url="logoUrl" />
+      </div>
       <span class="qc-title">Quick Chat</span>
       <button class="qc-close" @click="hideWindow" title="关闭">✕</button>
     </header>
@@ -63,6 +65,8 @@ import { useChat } from '@/composables/useChat'
 import { useSessionStore } from '@/stores/session'
 import { storeToRefs } from 'pinia'
 import RenderMarkdown from '@/components/RenderMarkdown.vue'
+import LiquidLogo from '@/components/LiquidLogo.vue'
+import logoUrl from '@/assets/images/brand/favicon.png'
 
 const sessionStore = useSessionStore()
 const { sessions } = storeToRefs(sessionStore)
@@ -173,10 +177,12 @@ onMounted(async () => {
   border-bottom: 1px solid var(--border);
   -webkit-app-region: drag;
 }
-.qc-logo {
+.qc-logo-wrap {
   width: 20px;
   height: 20px;
   border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
 }
 .qc-title {
   font-size: 0.9em;

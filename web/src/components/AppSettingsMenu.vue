@@ -12,163 +12,97 @@
       <span v-if="!props.compact" class="nav-label"><span class="nav-zh">设置</span><span class="nav-en">SETTINGS</span></span>
     </button>
   </div>
-  <Teleport to="body">
-    <Transition name="popup">
-      <div v-if="showSettingsMenu" ref="settingsPopupRef" class="settings-popup" @click.stop>
-        <div class="popup-header">设置</div>
-        <div class="popup-section">
-          <div class="popup-section-header">扩展 EXTENSIONS</div>
-          <router-link to="/capabilities" class="popup-item" @click="closeSettingsMenu">
-            <div class="popup-item-content">
-              <span class="popup-item-title">能力仪表盘 CAPABILITIES</span>
-              <span class="popup-item-sub">OMP 全部能力模块概览与运行状态</span>
-            </div>
-          </router-link>
-          <router-link to="/plugins" class="popup-item" @click="closeSettingsMenu">
-            <div class="popup-item-content">
-              <span class="popup-item-title">插件管理 PLUGINS</span>
-              <span class="popup-item-sub">安装、卸载与管理 OMP 插件</span>
-            </div>
-          </router-link>
-          <router-link to="/providers" class="popup-item" @click="closeSettingsMenu">
-            <div class="popup-item-content">
-              <span class="popup-item-title">模型 MODELS</span>
-              <span class="popup-item-sub">配置 AI 语言模型与接入密钥</span>
-            </div>
-          </router-link>
-          <router-link to="/settings" class="popup-item" @click="closeSettingsMenu">
-            <div class="popup-item-content">
-              <span class="popup-item-title">设置 SETTINGS</span>
-              <span class="popup-item-sub">压缩、重试、工具审批等核心配置</span>
-            </div>
-          </router-link>
-          <router-link to="/mcp" class="popup-item" @click="closeSettingsMenu">
-            <div class="popup-item-content">
-              <span class="popup-item-title">MCP 服务</span>
-              <span class="popup-item-sub">连接和管理 AI 工具与外部服务</span>
-            </div>
-          </router-link>
-          <router-link to="/extensions" class="popup-item" @click="closeSettingsMenu">
-            <div class="popup-item-content">
-              <span class="popup-item-title">扩展管理 EXTENSIONS</span>
-              <span class="popup-item-sub">查看已发现的 OMP 扩展与 Skills</span>
-            </div>
-          </router-link>
-          <router-link to="/soul" class="popup-item" @click="closeSettingsMenu">
-            <div class="popup-item-content">
-              <span class="popup-item-title">人设 SOUL</span>
-              <span class="popup-item-sub">设定 AI 助手的角色与对话风格</span>
-            </div>
-          </router-link>
-          <router-link to="/user" class="popup-item" @click="closeSettingsMenu">
-            <div class="popup-item-content">
-              <span class="popup-item-title">用户 USER</span>
-              <span class="popup-item-sub">管理用户账户与偏好设置</span>
-            </div>
-          </router-link>
-          <router-link to="/memory" class="popup-item" @click="closeSettingsMenu">
-            <div class="popup-item-content">
-              <span class="popup-item-title">记忆 MEMORY</span>
-              <span class="popup-item-sub">查看与管理 AI 自动记录的长期事实</span>
-            </div>
-          </router-link>
-        </div>
-        <div class="popup-section">
-          <div class="popup-section-header">运维 OPERATIONS</div>
-          <router-link to="/maxma-blocker" class="popup-item" @click="closeSettingsMenu">
-            <div class="popup-item-content">
-              <span class="popup-item-title">拒止锚</span>
-              <span class="popup-item-sub">在敏感目录强制阻断 AI 文件访问</span>
-            </div>
-          </router-link>
-          <router-link to="/privacy" class="popup-item" @click="closeSettingsMenu">
-            <div class="popup-item-content">
-              <span class="popup-item-title">隐私仪表盘</span>
-              <span class="popup-item-sub">查看与控制数据收集与隐私设置</span>
-            </div>
-          </router-link>
-          <router-link to="/metrics" class="popup-item" @click="closeSettingsMenu">
-            <div class="popup-item-content">
-              <span class="popup-item-title">运行指标</span>
-              <span class="popup-item-sub">监控系统性能与资源使用</span>
-            </div>
-          </router-link>
-        </div>
-        <div class="popup-section">
-          <div class="popup-section-header">系统 SYSTEM</div>
-          <router-link to="/appearance" class="popup-item" @click="closeSettingsMenu">
-            <div class="popup-item-content">
-              <span class="popup-item-title">外观 APPEARANCE</span>
-              <span class="popup-item-sub">自定义主题颜色与界面布局</span>
-            </div>
-          </router-link>
-          <router-link to="/help" class="popup-item" @click="closeSettingsMenu">
-            <div class="popup-item-content">
-              <span class="popup-item-title">帮助 HELP</span>
-              <span class="popup-item-sub">了解 Maxma 能力、快速上手与常见问题</span>
-            </div>
-          </router-link>
-        </div>
-        <button v-if="props.onboardingEnabled" class="popup-item popup-action" @click="restartOnboarding">重新开始引导</button>
-        <div class="popup-divider"></div>
-        <button class="popup-item popup-action" :class="{ exporting: exportingErrorLog }" :disabled="exportingErrorLog" @click="handleExportErrorLog">
-          {{ exportingErrorLog ? '导出中...' : '导出错误日志' }}
-        </button>
-        <button class="popup-item popup-action" :class="{ exporting: managingLogs }" :disabled="managingLogs" @click="handleManageLogs">
-          {{ managingLogs ? '处理中...' : '日志管理' }}
-        </button>
-        <button class="popup-item popup-action" :class="{ restarting }" :disabled="restarting" @click="handleRestart">
-          {{ restarting ? '重启中...' : '重启服务' }}
-        </button>
-        <div class="popup-divider"></div>
-        <div class="quick-actions-section">
-          <div class="quick-actions-title"><Icon name="sparkles" :size="14" />快捷操作</div>
-          <button class="popup-item popup-action neutral" @click="handleClearSession">清空当前会话</button>
-          <button class="popup-item popup-action neutral" @click="handleScrollToTop">回到顶部</button>
-        </div>
-        <div class="popup-divider"></div>
-        <div class="shortcuts-section">
-          <div class="shortcuts-title"><Icon name="settings" :size="14" />快捷键</div>
-          <div class="shortcut-item"><kbd>Ctrl+N</kbd> 新建会话</div>
-          <div class="shortcut-item"><kbd>Ctrl+K</kbd> 切换私密模式</div>
-          <div class="shortcut-item"><kbd>Ctrl+Esc</kbd> 切换侧栏</div>
-        </div>
-      </div>
-    </Transition>
-  </Teleport>
+
+  <Carousel3D
+    :items="settingsItems"
+    :visible="showSettingsMenu"
+    @select="onSelectSetting"
+    @close="closeSettingsMenu"
+  >
+    <template #footer>
+      <button class="footer-btn" :class="{ restarting }" :disabled="restarting" @click="handleRestart" title="重启服务">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+          <polyline points="23 4 23 10 17 10"/>
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+        </svg>
+        <span>重启</span>
+      </button>
+      <button class="footer-btn" @click="handleClearSession" title="清空当前会话">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+        </svg>
+        <span>清空</span>
+      </button>
+      <button class="footer-btn" :class="{ exporting: exportingErrorLog }" :disabled="exportingErrorLog" @click="handleExportErrorLog" title="导出错误日志">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        <span>日志</span>
+      </button>
+      <button class="footer-btn" :class="{ managing: managingLogs }" :disabled="managingLogs" @click="handleManageLogs" title="日志管理">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+        </svg>
+        <span>日志</span>
+      </button>
+    </template>
+  </Carousel3D>
 </template>
 
 <script setup lang="ts">
 import Icon from '@/components/Icon.vue';
+import Carousel3D from '@/components/Carousel3D.vue';
+import type { CarouselItem } from '@/components/Carousel3D.vue';
 import { api } from '@/api';
 import { invoke } from '@tauri-apps/api/core';
-import { onMounted, onUnmounted, nextTick, ref } from 'vue';
+import { onUnmounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { useSessionStore } from '@/stores/session';
 import { useChatStore } from '@/stores/chat';
 import { confirmAction } from '@/composables/useConfirm';
 
 const props = withDefaults(defineProps<{
-  /** 是否启用「重新开始引导」按钮（来自 stores/onboarding.onboardingEnabled） */
-  onboardingEnabled: boolean
-  /** 紧凑模式仅保留图标，适用于图标导航栏 */
   compact?: boolean
 }>(), {
   compact: false,
 })
 
-const emit = defineEmits<{
-  'restart-onboarding': []
-}>()
-
+const router = useRouter()
 const showSettingsMenu = ref(false)
 const settingsTriggerRef = ref<HTMLElement | null>(null)
-const settingsPopupRef = ref<HTMLElement | null>(null)
 const restarting = ref(false)
 const exportingErrorLog = ref(false)
 const managingLogs = ref(false)
 
 const sessionStore = useSessionStore()
 const chatStore = useChatStore()
+
+// ── 设置页面列表（旋转木马数据源） ──
+
+const settingsItems: CarouselItem[] = [
+  { icon: 'dashboard', title: '能力仪表盘', subtitle: 'OMP 全部能力模块概览与运行状态', route: '/capabilities' },
+  { icon: 'puzzle', title: '插件管理', subtitle: '安装、卸载与管理 OMP 插件', route: '/plugins' },
+  { icon: 'model', title: '模型', subtitle: '配置 AI 语言模型与接入密钥', route: '/providers' },
+  { icon: 'settings', title: '设置', subtitle: '压缩、重试、工具审批等核心配置', route: '/settings' },
+  { icon: 'mcp', title: 'MCP 服务', subtitle: '连接和管理 AI 工具与外部服务', route: '/mcp' },
+  { icon: 'extensions', title: '扩展管理', subtitle: '查看已发现的 OMP 扩展与 Skills', route: '/extensions' },
+  { icon: 'soul', title: '人设', subtitle: '设定 AI 助手的角色与对话风格', route: '/soul' },
+  { icon: 'user', title: '用户', subtitle: '管理用户账户与偏好设置', route: '/user' },
+  { icon: 'memory', title: '记忆', subtitle: '查看与管理 AI 自动记录的长期事实', route: '/memory' },
+  { icon: 'blocker', title: '拒止锚', subtitle: '在敏感目录强制阻断 AI 文件访问', route: '/maxma-blocker' },
+  { icon: 'privacy', title: '隐私仪表盘', subtitle: '查看与控制数据收集与隐私设置', route: '/privacy' },
+  { icon: 'metrics', title: '运行指标', subtitle: '监控系统性能与资源使用', route: '/metrics' },
+  { icon: 'appearance', title: '外观', subtitle: '自定义主题颜色与界面布局', route: '/appearance' },
+  { icon: 'help', title: '帮助', subtitle: '了解 Maxma 能力、快速上手与常见问题', route: '/help' },
+]
+
+// ── 操作函数 ──
 
 async function handleClearSession() {
   const sid = sessionStore.sessionId
@@ -179,19 +113,12 @@ async function handleClearSession() {
     confirmText: '清空',
     danger: true,
   })) return
-  // 清空内存中的对话轮次
   const ch = chatStore.channels.get(sid)
   if (ch) {
     ch.turns.splice(0, ch.turns.length)
     ch.currentTurn = null
   }
-  // 清除 localStorage 持久化缓存
   chatStore.removeTurnsFromStorage(sid)
-  closeSettingsMenu()
-}
-
-function handleScrollToTop() {
-  window.scrollTo(0, 0)
   closeSettingsMenu()
 }
 
@@ -203,7 +130,6 @@ async function handleExportErrorLog() {
     const text = await api.getErrorLogText()
     const ts = new Date().toISOString().replace(/[:T]/g, '-').substring(0, 19)
     const filename = `maxma-error-report-${ts}.txt`
-    // 调用 Tauri 原生保存对话框，让用户选择保存位置
     const result = await invoke<string | null>('save_text_file', {
       content: text,
       defaultFilename: filename,
@@ -279,107 +205,16 @@ onUnmounted(() => {
 
 function toggleSettingsMenu() {
   showSettingsMenu.value = !showSettingsMenu.value
-  nextTick(() => {
-    updatePopupPosition()
-    // 打开时滚动到顶部，避免上次的滚动位置残留导致看不到顶部菜单
-    if (showSettingsMenu.value && settingsPopupRef.value) {
-      settingsPopupRef.value.scrollTop = 0
-    }
-  })
 }
 
 function closeSettingsMenu() {
   showSettingsMenu.value = false
 }
 
-function restartOnboarding() {
-  emit('restart-onboarding')
-  closeSettingsMenu()
+function onSelectSetting(item: CarouselItem) {
+  showSettingsMenu.value = false
+  router.push(item.route)
 }
-
-function updatePopupPosition() {
-  const el = settingsPopupRef.value
-  const trigger = settingsTriggerRef.value
-  if (!showSettingsMenu.value || !el || !trigger) return
-
-  const viewportWidth = window.innerWidth
-  const viewportHeight = window.innerHeight
-  const viewportPadding = 12
-  const gap = 8
-  const rect = trigger.getBoundingClientRect()
-
-  // Measure the unconstrained menu so the side with more room is selected
-  // when the full list cannot fit either above or below the trigger.
-  el.style.removeProperty('max-height')
-  const contentHeight = el.scrollHeight || el.getBoundingClientRect().height
-  const availableAbove = Math.max(0, rect.top - gap - viewportPadding)
-  const availableBelow = Math.max(0, viewportHeight - rect.bottom - gap - viewportPadding)
-  const fitsAbove = contentHeight > 0 && contentHeight <= availableAbove
-  const fitsBelow = contentHeight > 0 && contentHeight <= availableBelow
-  const opensAbove = fitsAbove
-    ? !fitsBelow || availableAbove >= availableBelow
-    : availableAbove >= availableBelow
-
-  const available = Math.max(1, Math.floor(opensAbove ? availableAbove : availableBelow))
-  const popupWidth = el.getBoundingClientRect().width || el.offsetWidth
-  const fallbackWidth = Math.min(320, Math.max(1, viewportWidth - viewportPadding * 2))
-  const measuredWidth = popupWidth || fallbackWidth
-  const left = Math.min(
-    Math.max(viewportPadding, rect.right + gap),
-    Math.max(viewportPadding, viewportWidth - measuredWidth - viewportPadding),
-  )
-
-  el.style.removeProperty('top')
-  el.style.removeProperty('bottom')
-  el.style.setProperty('left', `${Math.floor(left)}px`)
-  el.style.setProperty('max-height', `${available}px`)
-  el.style.setProperty('overflow-y', 'auto')
-
-  if (opensAbove) {
-    // popup 底部贴近 trigger 上方，通过 bottom 定位让浏览器自动延展顶部
-    const popupBottom = Math.min(
-      viewportHeight - viewportPadding,
-      Math.max(viewportPadding, rect.top - gap),
-    )
-    el.style.setProperty('bottom', `${Math.floor(viewportHeight - popupBottom)}px`)
-  } else {
-    const popupTop = Math.min(
-      viewportHeight - viewportPadding,
-      Math.max(viewportPadding, rect.bottom + gap),
-    )
-    el.style.setProperty('top', `${Math.floor(popupTop)}px`)
-  }
-}
-
-function onViewportChange(e: Event) {
-  if (!showSettingsMenu.value) return
-  // 忽略弹出菜单内部的滚动，避免计算位置导致回弹
-  if (settingsPopupRef.value && e.target instanceof Node && settingsPopupRef.value.contains(e.target)) return
-  updatePopupPosition()
-}
-
-function onDocumentClick(e: MouseEvent) {
-  if (!showSettingsMenu.value) return
-  const trigger = settingsTriggerRef.value
-  const popup = settingsPopupRef.value
-  if (trigger && popup &&
-      !trigger.contains(e.target as Node) &&
-      !popup.contains(e.target as Node)) {
-    closeSettingsMenu()
-  }
-}
-
-onMounted(() => {
-  document.addEventListener('click', onDocumentClick)
-  window.addEventListener('resize', onViewportChange)
-  window.addEventListener('scroll', onViewportChange, true)
-})
-
-onUnmounted(() => {
-  document.removeEventListener('click', onDocumentClick)
-  window.removeEventListener('resize', onViewportChange)
-  window.removeEventListener('scroll', onViewportChange, true)
-})
 </script>
 
 <style scoped>
@@ -445,221 +280,43 @@ onUnmounted(() => {
   letter-spacing: 0.5px;
 }
 
-/* ── Settings popup ── */
-.settings-popup {
-  position: fixed;
-  z-index: 200;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
-  min-width: min(170px, calc(100vw - 24px));
-  max-width: calc(100vw - 24px);
-  box-sizing: border-box;
-  padding: 6px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  overscroll-behavior: contain;
-  transform-origin: top right;
-}
-
-/* 加粗 popup 滚动条，让用户能注意到可以滚动 */
-.settings-popup::-webkit-scrollbar {
-  width: 10px;
-}
-.settings-popup::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 5px;
-  border: 2px solid var(--bg-card);
-}
-.settings-popup::-webkit-scrollbar-thumb:hover {
-  background: var(--text-tertiary);
-}
-.settings-popup {
-  scrollbar-width: auto;
-  scrollbar-color: var(--border) transparent;
-}
-
-/* ── 按压反馈 ── */
-
-.popup-header {
-  padding: 8px 12px 6px;
-  font-size: 0.75em;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.popup-section + .popup-section {
-  margin-top: 4px;
-}
-
-.popup-section-header {
-  padding: 8px 12px 4px;
-  font-size: 0.7em;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-}
-
-.popup-item {
-  display: flex;
+/* ── 底部操作按钮（Carousel footer slot） ── */
+.footer-btn {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 6px;
-  color: var(--text-secondary);
-  text-decoration: none;
-  font-size: 0.9em;
-  transition: background 0.15s, color 0.15s, transform 0.1s;
-}
-
-.popup-item:hover {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-}
-.popup-item:active {
-  transform: scale(0.96);
-}
-
-.popup-item.router-link-active {
-    background: var(--bg-secondary);
-  }
-.popup-item.router-link-active .popup-item-title {
-    color: var(--accent);
-    font-weight: 600;
-  }
-  
-  .popup-item-content {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-  }
-  
-  .popup-item-title {
-    font-size: 0.9em;
-    color: var(--text-secondary);
-    line-height: 1.4;
-  }
-  
-  .popup-item-sub {
-    font-size: 0.65em;
-    color: var(--text-tertiary);
-    line-height: 1.35;
-    font-weight: 400;
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
-  
-  .popup-divider {
-  height: 1px;
-  background: var(--border);
-  margin: 4px 0;
-}
-
-.popup-action {
-  width: 100%;
-  border: none;
-  cursor: pointer;
+  gap: 5px;
+  padding: 6px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
   font-family: inherit;
-  font-size: 0.9em;
-  background: transparent;
-  color: #dc2626;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  white-space: nowrap;
 }
-.popup-action.neutral {
-  color: var(--text-secondary);
+.footer-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
 }
-.popup-action.neutral:hover {
-  color: var(--text-primary);
-}
-.popup-action:hover:not(:disabled) {
-  background: var(--bg-secondary);
-  color: #b91c1c;
-}
-.popup-action:active:not(:disabled) {
+.footer-btn:active:not(:disabled) {
   transform: scale(0.96);
 }
-.popup-action:disabled {
+.footer-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
-.popup-action.restarting {
+.footer-btn.restarting {
   color: #f59e0b;
+  border-color: #f59e0b40;
 }
-.popup-action.exporting {
+.footer-btn.exporting {
   color: #3b82f6;
+  border-color: #3b82f640;
 }
-
-/* ── Popup transition ── */
-.popup-enter-active {
-  transition: opacity 0.12s cubic-bezier(0.16, 1, 0.3, 1), transform 0.12s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.popup-leave-active {
-  transition: opacity 0.08s ease-out, transform 0.08s ease-out;
-}
-.popup-enter-from,
-.popup-leave-to {
-  opacity: 0;
-  transform: translateX(-6px);
-}
-
-/* ── 快捷键指南 ── */
-.shortcuts-section {
-  padding: 8px 14px 4px;
-}
-.shortcuts-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.7em;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 6px;
-}
-.shortcut-item {
-  font-size: 0.75em;
-  color: var(--text-secondary);
-  line-height: 1.8;
-}
-
-/* ── 快捷操作 ── */
-.quick-actions-section {
-  padding: 4px 6px;
-}
-.quick-actions-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.7em;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 4px 6px 2px;
-}
-.shortcut-item kbd {
-  display: inline-block;
-  padding: 1px 5px;
-  font-size: 0.85em;
-  font-family: var(--font-mono);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  margin-right: 4px;
-  min-width: 20px;
-  text-align: center;
-  transition: background var(--duration-fast) var(--ease-out),
-              border-color var(--duration-fast) var(--ease-out),
-              box-shadow var(--duration-fast) var(--ease-out);
-}
-@media (prefers-reduced-motion: no-preference) {
-  .shortcut-item kbd:hover {
-    background: var(--bg-secondary);
-    background: color-mix(in srgb, var(--accent) 8%, var(--bg-secondary));
-    border-color: var(--accent-dark);
-    box-shadow: 0 1px 4px var(--shadow-color);
-  }
+.footer-btn svg {
+  flex-shrink: 0;
 }
 </style>

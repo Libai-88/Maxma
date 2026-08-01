@@ -6,7 +6,7 @@
         <router-link to="/" aria-label="Maxma" title="Maxma">
           <div class="icon">
             <div class="imageBox">
-              <img src="@/assets/images/brand/favicon.png" alt="" />
+              <LiquidLogo :image-url="logoUrl" />
             </div>
           </div>
           <div class="text">Maxma</div>
@@ -77,8 +77,10 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import AppSettingsMenu from '@/components/AppSettingsMenu.vue'
+import LiquidLogo from '@/components/LiquidLogo.vue'
 import { useCapabilities } from '@/composables/useCapabilities'
 import { gsap, easeMap } from '@/composables/useGsap'
+import logoUrl from '@/assets/images/brand/favicon.png'
 
 const rootEl = ref<HTMLElement | null>(null)
 const route = useRoute()

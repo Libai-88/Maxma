@@ -11,18 +11,17 @@
     @blur="onBlur"
     tabindex="0"
   >
-    <svg class="ring-svg" viewBox="0 0 24 24" aria-hidden="true">
-      <circle class="ring-track" cx="12" cy="12" r="9" />
-      <circle
-        class="ring-fill"
-        cx="12"
-        cy="12"
-        r="9"
-        :stroke-dasharray="CIRCUMFERENCE"
-        :stroke-dashoffset="offset"
-      />
-    </svg>
-    <span class="ring-text" aria-hidden="true">{{ pctText }}</span>
+    <AnimatedCircularProgressBar
+      :value="barPercent"
+      :max="100"
+      :min="0"
+      :primary-color="primaryColor"
+      :secondary-color="'var(--border)'"
+      :stroke-width="3"
+      :show-percentage="true"
+      :duration="0.5"
+      :size="24"
+    />
     <DsTooltip ref="tooltipRef" placement="top" :delay="500">
       <template #content>
         <div class="usage-tooltip-content">
@@ -56,6 +55,7 @@
 import { ref, computed, watch } from 'vue'
 import { normalizeContextUsage, useChatStore } from '../stores/chat'
 import DsTooltip from './ui/DsTooltip.vue'
+import AnimatedCircularProgressBar from './AnimatedCircularProgressBar.vue'
 import { gsap, useGsap } from '@/composables/useGsap'
 
 const store = useChatStore()
@@ -67,14 +67,16 @@ const percentage = computed(() => normalizeContextUsage(usage.value).percentage)
 const barPercent = computed(() => Math.min(percentage.value, 100))
 const pctText = computed(() => Math.round(barPercent.value).toString())
 
-const RADIUS = 9
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS
-const offset = computed(() => CIRCUMFERENCE * (1 - barPercent.value / 100))
-
 const statusClass = computed(() => {
   if (percentage.value > 90) return 'status-critical'
   if (percentage.value > 70) return 'status-warn'
   return ''
+})
+
+const primaryColor = computed(() => {
+  if (percentage.value > 90) return 'var(--status-error)'
+  if (percentage.value > 70) return 'var(--status-warn)'
+  return 'var(--accent)'
 })
 
 const statusText = computed(() => {
@@ -154,53 +156,8 @@ useGsap((_ctx, contextSafe) => {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
-.ring-svg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  transform: rotate(-90deg);
-}
-
-.ring-track {
-  fill: none;
-  stroke: var(--border);
-  stroke-width: 3;
-}
-
-.ring-fill {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 3;
-  stroke-linecap: round;
-  transition: stroke-dashoffset 0.3s ease, stroke 0.3s ease;
-}
-
-.status-warn .ring-fill {
-  stroke: var(--status-warn);
-}
-
-.status-critical .ring-fill {
-  stroke: var(--status-error);
-}
-
-.ring-text {
-  position: relative;
-  z-index: 1;
-  font-size: 9px;
-  font-weight: 600;
-  line-height: 1;
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
-}
-
-.status-warn .ring-text,
-.status-critical .ring-text {
-  color: var(--text-primary);
-}
-
 @media (max-width: 480px) {
-  .context-usage-ring .ring-text {
+  .context-usage-ring .acpb-text {
     display: none;
   }
 }
