@@ -19,6 +19,7 @@ import { randomUUID } from "node:crypto";
 import { createAgentSession, discoverAuthStorage, Settings } from "@oh-my-pi/pi-coding-agent";
 import { MCPManager } from "@oh-my-pi/pi-coding-agent/mcp";
 import type { MCPServerConfig } from "@oh-my-pi/pi-coding-agent/mcp";
+import { TASK_SUBAGENT_LIFECYCLE_CHANNEL } from "@oh-my-pi/pi-coding-agent/task";
 import type {
   AgentSession,
   ExtensionUIContext,
@@ -39,6 +40,8 @@ import * as path from "node:path";
 interface SessionRecord {
   session: AgentSession;
   unsubscribe: () => void;
+  unsubLifecycle?: () => void;  // Phase 3.4: EventBus sub-agent lifecycle subscription
+  eventBus?: import("@oh-my-pi/pi-coding-agent/src/utils/event-bus").EventBus;  // Phase 3.4: Shared EventBus
   promptQueue: Promise<void>;  // serializes concurrent prompt calls
   currentGuard: DoneGuard | null;  // active per-prompt done sentinel
   mcpManager?: MCPManager;
@@ -862,6 +865,65 @@ function subscribeSession(
  * and treats `choice === "Approve"` as approved; anything else (including
  * `undefined` from timeout/throw) is treated as denied.
  */
+/**
+ * Parse the OMP approval title to extract structured tool input and risk level.
+ *
+ * OMP formats the title as:
+ *   "Allow tool: {toolName}\n\nArgs:\n{jsonArgs}\n\nReason: {reason}"
+ *
+ * Returns extracted tool_input object and a risk_level estimate.
+ */
+function parseApprovalTitle(title: string): {
+  toolName: string;
+  toolInput: Record<string, unknown> | undefined;
+  riskLevel: "low" | "medium" | "high";
+} {
+  const lines = title.split("\n");
+  const titleLine = lines[0] ?? "";
+  const toolName = titleLine.startsWith("Allow tool: ")
+    ? titleLine.slice("Allow tool: ".length)
+    : titleLine;
+
+  // Extract Args: block (everything after "Args:" until the next known section or end)
+  let toolInput: Record<string, unknown> | undefined;
+  const argsIndex = lines.findIndex((l) => l.trim() === "Args:");
+  if (argsIndex >= 0) {
+    const argsLines: string[] = [];
+    for (let i = argsIndex + 1; i < lines.length; i++) {
+      const trimmed = lines[i].trim();
+      if (trimmed === "" || trimmed.startsWith("Reason:") || trimmed.startsWith("Reasoning:")) break;
+      argsLines.push(lines[i]);
+    }
+    const argsText = argsLines.join("\n").trim();
+    if (argsText) {
+      try {
+        toolInput = JSON.parse(argsText) as Record<string, unknown>;
+      } catch {
+        toolInput = { raw: argsText };
+      }
+    }
+  }
+
+  // Extract Reason: block for risk level estimation
+  const reasonLine = lines.find((l) => l.trim().startsWith("Reason:") || l.trim().startsWith("Reasoning:"));
+  const reason = reasonLine?.replace(/^Reason(ing)?:\s*/i, "").toLowerCase() ?? "";
+
+  // Risk level estimation based on reason content
+  const highRiskKeywords = ["delete", "remove", "rm", "destroy", "dangerous", "overwrite", "force", "reset"];
+  const mediumRiskKeywords = ["write", "edit", "modify", "update", "create", "change", "add", "install", "execute", "run", "bash", "exec"];
+  const hasHigh = highRiskKeywords.some((k) => reason.includes(k));
+  const hasMedium = mediumRiskKeywords.some((k) => reason.includes(k));
+  // Also check tool name for risk signals
+  const toolNameLower = toolName.toLowerCase();
+  const toolHasHigh = ["delete", "remove", "rm", "destroy"].some((k) => toolNameLower.includes(k));
+  const toolHasMedium = ["write", "edit", "modify", "bash", "exec", "run", "create"].some((k) => toolNameLower.includes(k));
+
+  const riskLevel: "low" | "medium" | "high" =
+    hasHigh || toolHasHigh ? "high" : hasMedium || toolHasMedium ? "medium" : "low";
+
+  return { toolName, toolInput, riskLevel };
+}
+
 function createApprovalUiContext(sessionId: string): ExtensionUIContext {
   const ctx: ExtensionUIContext = {
     select(
@@ -871,13 +933,7 @@ function createApprovalUiContext(sessionId: string): ExtensionUIContext {
     ): Promise<string | undefined> {
       return new Promise<string | undefined>((resolve, reject) => {
         const interactionId = randomUUID();
-        // The approval wrapper calls select() BEFORE tool_execution_start fires.
-        // Parse the tool name from the formatted title ("Allow tool: <name>\n…").
-        // Prefix check is more robust than regex — OMP controls the prefix.
-        const titleLine = title.split("\n")[0] ?? "";
-        const toolName = titleLine.startsWith("Allow tool: ")
-          ? titleLine.slice("Allow tool: ".length)
-          : titleLine;
+        const { toolName, toolInput, riskLevel } = parseApprovalTitle(title);
 
         const timer = setTimeout(() => {
           if (pendingApprovals.has(interactionId)) {
@@ -908,6 +964,8 @@ function createApprovalUiContext(sessionId: string): ExtensionUIContext {
             options: ["Approve", "Deny"],
             interaction_id: interactionId,
             detail: title,
+            risk_level: riskLevel,
+            tool_input: toolInput,
           },
         };
         sendEvent(sessionId, event);
@@ -1004,8 +1062,9 @@ if (import.meta.main) {
         const sessionId = randomUUID();
         let session: AgentSession;
         let setToolUIContext: (uiContext: ExtensionUIContext, hasUI: boolean) => void;
+        let eventBus: import("@oh-my-pi/pi-coding-agent/src/utils/event-bus").EventBus | undefined;
         try {
-          ({ session, setToolUIContext } = await createAgentSession(createOptions as any));
+          ({ session, setToolUIContext, eventBus } = await createAgentSession(createOptions as any));
         } catch (error) {
           await mcpManager?.disconnectAll().catch(() => {});
           throw error;
@@ -1067,6 +1126,23 @@ if (import.meta.main) {
           settings: session.settings,
         };
         record.unsubscribe = subscribeSession(sessionId, session, record);
+
+        // Phase 3.4: 通过 EventBus 订阅子 Agent 生命周期事件
+        if (eventBus) {
+          record.eventBus = eventBus;
+          record.unsubLifecycle = eventBus.on(TASK_SUBAGENT_LIFECYCLE_CHANNEL, (data: any) => {
+            sendEvent(sessionId, {
+              type: "sub_session_created",
+              payload: {
+                sub_session_id: data.id ?? "",
+                parent_session_id: sessionId,
+                task: data.description ?? data.task ?? "",
+                name: data.agent ?? "subagent",
+              },
+            });
+          });
+        }
+
         sessions.set(sessionId, record);
 
         send(id, { session_id: sessionId });
@@ -1136,6 +1212,7 @@ if (import.meta.main) {
         }
 
         record.unsubscribe();
+        record.unsubLifecycle?.();  // Phase 3.4: clean up EventBus lifecycle subscription
         try {
           await record.session.dispose();
         } finally {
@@ -1311,6 +1388,172 @@ if (import.meta.main) {
         return;
       }
 
+      // ── Runtime Auto-Approve ──────────────────────────────
+      if (method === "set_auto_approve") {
+        const sessionId: string = params?.session_id as string;
+        const autoApprove: boolean = params?.auto_approve === true;
+        const record = sessions.get(sessionId);
+        if (!record) {
+          sendError(id, `Session not found: ${sessionId}`);
+          return;
+        }
+        try {
+          record.settings!.set("tools.approvalMode" as any, autoApprove ? "yolo" : "always-ask");
+          console.log(`[auto_approve] Session ${sessionId.slice(0, 8)} approvalMode set to ${autoApprove ? "yolo" : "always-ask"}`);
+          send(id, { ok: true });
+        } catch (err) {
+          sendError(id, `Failed to set auto_approve: ${String(err)}`);
+        }
+        return;
+      }
+
+      // ── Plan Action ────────────────────────────────────────
+      if (method === "plan_action") {
+        const sessionId: string = params?.session_id as string;
+        const action: string = params?.action as string;
+        const record = sessions.get(sessionId);
+        if (!record) {
+          sendError(id, `Session not found: ${sessionId}`);
+          return;
+        }
+        try {
+          const planId: string = (params?.plan_id as string) ?? "";
+          const modifiedPlan: string | undefined = params?.modified_plan as string | undefined;
+          if (action === "approve") {
+            record.settings!.set("plan.enabled" as any, true);
+            console.log(`[plan] Session ${sessionId.slice(0, 8)} plan approved (plan_id=${planId})`);
+            // Inject approved plan context into the agent's next turn
+            if (modifiedPlan) {
+              // Append the approved plan as a system context message
+              // The agent will pick it up on the next prompt
+              const msg = {
+                role: "user" as const,
+                content: `[Plan Approved]\nThe following plan has been approved. Execute it step by step:\n\n${modifiedPlan}`,
+                timestamp: Date.now(),
+              };
+              record.session.agent.appendMessage(msg);
+            } else {
+              const msg = {
+                role: "user" as const,
+                content: "[Plan Approved]\nThe plan has been approved. Please proceed with execution.",
+                timestamp: Date.now(),
+              };
+              record.session.agent.appendMessage(msg);
+            }
+          } else if (action === "reject") {
+            console.log(`[plan] Session ${sessionId.slice(0, 8)} plan rejected (plan_id=${planId})`);
+            const msg = {
+              role: "user" as const,
+              content: "[Plan Rejected]\nThe proposed plan has been rejected. Please revise your approach.",
+              timestamp: Date.now(),
+            };
+            record.session.agent.appendMessage(msg);
+          } else if (action === "modify") {
+            console.log(`[plan] Session ${sessionId.slice(0, 8)} plan modified (plan_id=${planId})`);
+            if (modifiedPlan) {
+              const msg = {
+                role: "user" as const,
+                content: `[Plan Modified]\nThe plan has been modified. Please execute the revised plan:\n\n${modifiedPlan}`,
+                timestamp: Date.now(),
+              };
+              record.session.agent.appendMessage(msg);
+            }
+          }
+          send(id, { ok: true });
+        } catch (err) {
+          sendError(id, `Failed to handle plan_action: ${String(err)}`);
+        }
+        return;
+      }
+
+      // ── MCP Reload for Session ─────────────────────────────
+      if (method === "reload_mcp_for_session") {
+        const sessionId: string = params?.session_id as string;
+        const record = sessions.get(sessionId);
+        if (!record) {
+          sendError(id, `Session not found: ${sessionId}`);
+          return;
+        }
+        try {
+          const loaded = loadConfiguredMcp();
+          if (!loaded || Object.keys(loaded.configs).length === 0) {
+            send(id, { status: "noop", detail: "No MCP configuration found" });
+            return;
+          }
+          // Disconnect old MCP if any
+          if (record.mcpManager) {
+            await record.mcpManager.disconnectAll().catch(() => {});
+          }
+          // Create new MCP manager and connect
+          const cwd = process.env.MAXMA_PROJECT_ROOT ?? process.cwd();
+          const newManager = new MCPManager(cwd);
+          const authStorage = await getSharedAuthStorage();
+          newManager.setAuthStorage(authStorage);
+          const sourcePath = mcpConfigPath();
+          const sources = Object.fromEntries(Object.keys(loaded.configs).map((name) => [name, {
+            provider: "maxma",
+            providerName: "Maxma MCP configuration",
+            path: sourcePath,
+            level: "project" as const,
+          }]));
+          const result = await newManager.connectServers(loaded.configs, sources);
+          for (const [name, message] of result.errors) {
+            console.error(`[mcp] ${name}: ${message}`);
+          }
+          const filteredTools = filterMcpTools(result.tools, loaded.allowBlock, record.mcpToolNames);
+          // Update session with new MCP tools
+          await record.session.refreshMCPTools(filteredTools);
+          // Wire tools changed callback
+          wireMcpToolsChanged(record.session, newManager, loaded.allowBlock, record.mcpToolNames);
+          // Update record
+          record.mcpManager = newManager;
+          record.mcpConfigs = loaded.configs;
+          record.mcpAllowBlock = loaded.allowBlock;
+          console.log(`[mcp] Session ${sessionId.slice(0, 8)} MCP reloaded: ${Object.keys(loaded.configs).length} server(s), ${filteredTools.length} tool(s)`);
+          send(id, { status: "reloaded", server_count: Object.keys(loaded.configs).length, tool_count: filteredTools.length });
+        } catch (err) {
+          sendError(id, `Failed to reload MCP: ${String(err)}`);
+        }
+        return;
+      }
+
+      // ── Execute Workflow Step ─────────────────────────────
+      if (method === "execute_workflow_step") {
+        const sessionId: string = params?.session_id as string;
+        const stepDefinition: Record<string, unknown> = params?.step_definition as Record<string, unknown>;
+        const record = sessions.get(sessionId);
+        if (!record) {
+          sendError(id, `Session not found: ${sessionId}`);
+          return;
+        }
+        try {
+          const toolName: string = (stepDefinition?.tool as string) ?? "";
+          const toolArgs: Record<string, unknown> = (stepDefinition?.args as Record<string, unknown>) ?? {};
+          const stepId: string = (stepDefinition?.step_id as string) ?? "unknown";
+          // Emit step start event
+          sendEvent(sessionId, {
+            type: "workflow_step_start",
+            payload: { step_id: stepId, tool_name: toolName },
+          });
+          // Execute the step via the agent
+          const promptMsg = `Execute the following step:\nTool: ${toolName}\nArgs: ${JSON.stringify(toolArgs)}\n\nReturn the result.`;
+          await record.session.prompt(promptMsg);
+          // Emit step end event
+          sendEvent(sessionId, {
+            type: "workflow_step_end",
+            payload: { step_id: stepId, tool_name: toolName, status: "done" },
+          });
+          send(id, { ok: true, step_id: stepId });
+        } catch (err) {
+          sendEvent(sessionId, {
+            type: "workflow_step_error",
+            payload: { step_id: (stepDefinition?.step_id as string) ?? "unknown", error: String(err) },
+          });
+          sendError(id, `Workflow step failed: ${String(err)}`);
+        }
+        return;
+      }
+
       // ── Settings RPC ──────────────────────────────────────
 
       if (method === "get_settings") {
@@ -1387,7 +1630,7 @@ if (import.meta.main) {
         try {
           const { discoverExtensions } = await import("@oh-my-pi/pi-coding-agent");
           const result = await discoverExtensions();
-          send(id, { loaded: result.loaded ?? 0, extensions: [] });
+          send(id, { loaded: (result as any).loaded ?? 0, extensions: [] });
         } catch {
           send(id, { loaded: 0, extensions: [] });
         }
@@ -1398,8 +1641,8 @@ if (import.meta.main) {
 
       if (method === "list_plugins") {
         try {
-          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent");
-          const pm = new PluginManager();
+          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent") as any;
+          const pm = new (PluginManager as any)();
           const list = await pm.list();
           send(id, list.map((p: any) => ({
             name: p.name ?? "",
@@ -1419,8 +1662,8 @@ if (import.meta.main) {
         try {
           const spec: string = params?.spec ?? "";
           if (!spec) { sendError(id, "Missing required parameter: spec"); return; }
-          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent");
-          const pm = new PluginManager();
+          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent") as any;
+          const pm = new (PluginManager as any)();
           const result = await pm.install(spec);
           send(id, { ok: true, plugin: result ?? null });
         } catch (e: any) {
@@ -1433,8 +1676,8 @@ if (import.meta.main) {
         try {
           const name: string = params?.name ?? "";
           if (!name) { sendError(id, "Missing required parameter: name"); return; }
-          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent");
-          const pm = new PluginManager();
+          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent") as any;
+          const pm = new (PluginManager as any)();
           await pm.uninstall(name);
           send(id, { ok: true });
         } catch (e: any) {
@@ -1448,8 +1691,8 @@ if (import.meta.main) {
           const name: string = params?.name ?? "";
           const enabled: boolean = params?.enabled !== false;
           if (!name) { sendError(id, "Missing required parameter: name"); return; }
-          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent");
-          const pm = new PluginManager();
+          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent") as any;
+          const pm = new (PluginManager as any)();
           await pm.setEnabled(name, enabled);
           send(id, { ok: true });
         } catch (e: any) {
@@ -1462,8 +1705,8 @@ if (import.meta.main) {
         try {
           const name: string = params?.name ?? "";
           if (!name) { sendError(id, "Missing required parameter: name"); return; }
-          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent");
-          const pm = new PluginManager();
+          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent") as any;
+          const pm = new (PluginManager as any)();
           const list = await pm.list();
           const plugin = list.find((p: any) => p.name === name);
           if (!plugin) { sendError(id, `Plugin not found: ${name}`); return; }
@@ -1540,9 +1783,9 @@ if (import.meta.main) {
           const message: string = params?.message ?? "";
           if (!message) { sendError(id, "Missing required parameter: message"); return; }
           const { createAgentSession } = await import("@oh-my-pi/pi-coding-agent");
-          const session = await createAgentSession({
+          const { session } = await createAgentSession({
             hasUI: false,
-            "tools.approvalMode": "yolo",
+            autoApprove: true,
           });
           let answer = "";
           const unsub = session.subscribe((event: any) => {

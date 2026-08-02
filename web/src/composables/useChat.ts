@@ -412,6 +412,23 @@ async function connectSession(sid: string) {
       log.debug(`WS auth failure (4001), refreshing token...`)
       resetToken()  // 强制下次请求重新获取 Token
     }
+    // 修复：WS 断开时立即清理中断的轮次，无需等待重连。
+    // 如果不清理，isStreaming 永久为 true，currentTurn 卡住，后续 send() 行为异常。
+    if (chFinal.isStreaming && chFinal.currentTurn) {
+      const interrupted = chFinal.currentTurn
+      log.warn(`WS 断开检测到中断的轮次 (turn.id=${interrupted.id}), 立即推入 turns 并重置状态`)
+      if (!interrupted.finalAnswer) {
+        interrupted.finalAnswer = '（连接中断，回复未完成）'
+      }
+      chFinal.turns.push(interrupted)
+      chFinal.currentTurn = null
+      chFinal.isStreaming = false
+      chFinal.isAwaitingUser = false
+      chFinal._awaitingToolName = null
+      if (!chFinal.privateMode) {
+        persistTurns(sid)
+      }
+    }
     // 正常关闭（code 1000）— 不重连，视为有意断开
     if (event.code === 1000) {
       log.debug(`WS normal close (1000), session=${sid}, not reconnecting`)
@@ -1180,7 +1197,16 @@ export function useChat(sessionId: Ref<string>) {
   // 暴露给 ChatView 的响应式属性（指向当前 Session 通道）
   const connected = computed(() => activeChannel.value.connected)
   const isStreaming = computed(() => activeChannel.value.isStreaming)
-  const turns = computed(() => activeChannel.value.turns)
+  /** 追踪当前会话的已完成轮次列表。
+   *  通过访问 .length 追踪数组变更（push/splice），并返回新数组引用
+   *  确保 ChatWindow 的 mergedTurns computed 和 DynamicScroller 能检测到变化。 */
+  const turns = computed(() => {
+    const arr = activeChannel.value.turns
+    // 访问 .length 以使 Vue 的响应式系统追踪数组内容变更
+    arr.length
+    // 返回新数组引用，确保 DynamicScroller items prop 引用变化可检测
+    return arr.slice()
+  })
   const currentTurn = computed(() => activeChannel.value.currentTurn)
   const error = computed(() => activeChannel.value.error)
   const errorCategory = computed(() => activeChannel.value.errorCategory)

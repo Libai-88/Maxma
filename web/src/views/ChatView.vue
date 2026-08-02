@@ -102,6 +102,7 @@
             :session-id="sessionId"
             :turns="turns"
             :current-turn="currentTurn"
+            :connected="connected"
             :error="error"
             :error-category="errorCategory"
             :error-trace-id="errorTraceId"

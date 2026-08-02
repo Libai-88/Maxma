@@ -148,12 +148,11 @@ export interface AskUserEvent {
     code?: string
     /** approval 模式：审批原因/说明 */
     detail?: string
-    /** approval 模式：风险等级 */
-    // B3: sidecar 实际无法填充 —— OMP approval wrapper 仅传格式化 title 给
-    // ctx.select，sidecar 拿不到结构化 risk_level。ApprovalBubble 已对 undefined 降级。
+    /** approval 模式：风险等级。
+     * 已实现（Phase 2.1）：session-bridge.ts parseApprovalTitle 从格式化 title 解析。 */
     risk_level?: 'low' | 'medium' | 'high'
-    /** approval 模式：工具调用参数 */
-    // B3: 同上，sidecar 无法结构化填充 tool_input。保留字段以备 OMP 暴露后接通。
+    /** approval 模式：工具调用参数。
+     * 已实现（Phase 2.1）：session-bridge.ts parseApprovalTitle 从格式化 title 解析。 */
     tool_input?: Record<string, unknown>
   }
 }
@@ -170,8 +169,7 @@ export interface ApprovalRequestPayload {
   options: { label: string; value: string }[]
 }
 
-/** UNIMPLEMENTED (B4): sidecar mapPiEventToMaxma 无此分支；OMP plan-mode 在 mode
- * state 而非 subscribe 事件流。UI（PlanCard）已就绪，接通需 plan-mode 事件暴露。 */
+/** 已接通：由后端 chat.py 透传 sidecar 的 plan_proposed 事件。 */
 export interface PlanProposedEvent {
   type: 'plan_proposed'
   payload: {
@@ -181,7 +179,7 @@ export interface PlanProposedEvent {
   }
 }
 
-/** UNIMPLEMENTED (B4): 同 PlanProposedEvent，无发射端。 */
+/** 已接通：同 PlanProposedEvent，由后端透传。 */
 export interface PlanStepStartEvent {
   type: 'plan_step_start'
   payload: {
@@ -192,7 +190,7 @@ export interface PlanStepStartEvent {
   }
 }
 
-/** UNIMPLEMENTED (B4): 同 PlanProposedEvent，无发射端。 */
+/** 已接通：同 PlanProposedEvent，由后端透传。 */
 export interface PlanStepEndEvent {
   type: 'plan_step_end'
   payload: {
@@ -202,7 +200,7 @@ export interface PlanStepEndEvent {
   }
 }
 
-/** UNIMPLEMENTED (B4): 同 PlanProposedEvent，无发射端。 */
+/** 已接通：同 PlanProposedEvent，由后端透传。 */
 export interface PlanStepErrorEvent {
   type: 'plan_step_error'
   payload: {
@@ -214,7 +212,7 @@ export interface PlanStepErrorEvent {
   }
 }
 
-/** UNIMPLEMENTED (B4): 同 PlanProposedEvent，无发射端。 */
+/** 已接通：同 PlanProposedEvent，由后端透传。 */
 export interface PlanCompletedEvent {
   type: 'plan_completed'
   payload: {
@@ -247,9 +245,9 @@ export interface PlanCard {
   replanCount?: number
 }
 
-/** UNIMPLEMENTED (B4): sidecar 无发射端。OMP subagent lifecycle 在 rpc-mode
- * 线框（subagent_lifecycle），不在 AgentSessionEvent subscribe 流；sidecar 用
- * createAgentSession+subscribe 故永不收到。UI 已就绪待深接（需改用 rpc-mode）。 */
+/** 已实现（Phase 3.4）：通过 EventBus 订阅 TASK_SUBAGENT_LIFECYCLE_CHANNEL 实现。
+ * session-bridge.ts 在 createAgentSession 后订阅 EventBus，将子任务生命周期
+ * 事件映射为 Maxma 的 sub_session_created 事件。 */
 export interface SubSessionCreatedEvent {
   type: 'sub_session_created'
   payload: {
@@ -260,8 +258,8 @@ export interface SubSessionCreatedEvent {
   }
 }
 
-/** UNIMPLEMENTED (B4): 无发射端。deferred_runs 仅 REST 且受 feature flag 禁用；
- * OMP SDK 无对应概念。UI 卡片已就绪，但不可接通（需产品决策）。 */
+/** 部分实现（Phase 3.4）：后端 deferred_run_manager 已就绪，支持 REST 创建/查询。
+ * 需产品决策是否补全 WebSocket 事件推送。 */
 export interface DeferredSubagentSubmittedEvent {
   type: 'deferred_subagent_submitted'
   payload: {
@@ -271,8 +269,8 @@ export interface DeferredSubagentSubmittedEvent {
   }
 }
 
-/** UNIMPLEMENTED (B4): 无发射端。OMP ArtifactManager 是文件存储细节，非事件。
- * workbench UI 已就绪并经 artifact 事件喂入设计，但 SDK 无对应事件类型，永不可接通。 */
+/** 已实现：后端 TOOL_END 检测文件写入工具后合成（Phase 2.2）。
+ * 事件负载为 InteractiveArtifact（choice 类型），token 中编码文件路径。 */
 export interface ArtifactEvent {
   type: 'artifact'
   payload: InteractiveArtifact
@@ -326,6 +324,54 @@ export interface MemoryDoneEvent {
   }
 }
 
+/** 已实现（Phase 3.5）：由 workflows.py 执行引擎推送。 */
+export interface WorkflowStepStartEvent {
+  type: 'workflow_step_start'
+  payload: {
+    run_id: string
+    step_id: string
+    position: number
+    tool: string
+    args: Record<string, unknown>
+    total_steps: number
+  }
+}
+
+/** 已实现（Phase 3.5）：由 workflows.py 执行引擎推送。 */
+export interface WorkflowStepEndEvent {
+  type: 'workflow_step_end'
+  payload: {
+    run_id: string
+    step_id: string
+    position: number
+    status: string
+    output: string
+  }
+}
+
+/** 已实现（Phase 3.5）：由 workflows.py 执行引擎推送。 */
+export interface WorkflowStepErrorEvent {
+  type: 'workflow_step_error'
+  payload: {
+    run_id: string
+    step_id: string
+    position: number
+    error: string
+  }
+}
+
+/** 已实现（Phase 3.5）：由 workflows.py 执行引擎推送。 */
+export interface WorkflowCompletedEvent {
+  type: 'workflow_completed'
+  payload: {
+    run_id: string
+    status: string
+    current_step?: number
+    total_steps?: number
+    error?: string
+  }
+}
+
 /**
  * ServerEvent 联合 —— 服务端→浏览器 WS 事件。
  *
@@ -339,11 +385,13 @@ export interface MemoryDoneEvent {
  *   - 运行时通知: notice, todo_reminder, irc_message
  *   - 用量: context_usage (独立事件), done.payload.context_usage (内嵌)
  *
- * UNIMPLEMENTED 状态更新（2026-07-28）：
- *   - plan_* / memory_* / sub_session_created / deferred_subagent_submitted
- *     已由后端 chat.py 直接 emit，sidecar 透传。前端 handler 已就绪。
- *   - artifact — 仍 UNIMPLEMENTED（OMP SDK 无此概念）
- *   - 独立 context_usage — 仍通过 done.payload.context_usage 内嵌送达
+ * 实现状态（2026-08-02）：
+ *   - plan_* — 已实现：后端 chat.py 透传 sidecar 的 plan_proposed/step_start/step_end/step_error/completed 事件
+ *   - artifact — 已实现（Phase 2.2）：后端 TOOL_END 检测写文件工具后合成
+ *   - sub_session_created — 已实现（Phase 3.4）：EventBus 订阅 TASK_SUBAGENT_LIFECYCLE_CHANNEL
+ *   - deferred_subagent_submitted — 部分实现：后端 deferred_run_manager 已就绪，需产品决策
+ *   - memory_* — 未实现：OMP memory 跑在独立状态，不通过事件流推送
+ *   - workflow_* — 已实现（Phase 3.5）：workflows.py 执行引擎实时推送进度
  */
 export type ServerEvent =
   | ThinkingStartEvent
@@ -380,6 +428,10 @@ export type ServerEvent =
   | MemoryToolEndEvent
   | MemoryToolErrorEvent
   | MemoryDoneEvent
+  | WorkflowStepStartEvent
+  | WorkflowStepEndEvent
+  | WorkflowStepErrorEvent
+  | WorkflowCompletedEvent
 
 // === WebSocket 客户端 → 服务端消息 ===
 

@@ -519,14 +519,63 @@ async def get_discovered_mcp_servers(request: Request):
 
 @router.post("/mcp/reload")
 async def reload_mcp_servers(request: Request):
-    """Reject hot reload until the owning sidecar session is rebuilt."""
-    raise HTTPException(
-        status_code=409,
-        detail={
-            "code": "mcp_reload_unsupported",
-            "message": "OMP MCP 配置只在新会话创建时加载；请重建会话后生效",
-        },
-    )
+    """Hot-reload MCP configuration for all active sidecar sessions.
+
+    Reads the latest MCP config from YAML and forwards it to every active
+    sidecar session via the ``reload_mcp_for_session`` RPC.
+    """
+    sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
+    session_mgr = getattr(request.app.state, "session_manager", None)
+    if sidecar_mgr is None or session_mgr is None:
+        raise HTTPException(status_code=503, detail="Sidecar or session manager not available")
+
+    # Get all active sessions from the session manager
+    # SessionManager.list_sessions() returns dicts with session_id
+    session_list = await session_mgr.list_sessions()
+    active_sessions = [s for s in session_list if not s.get("is_subagent", False)]
+
+    if not active_sessions:
+        return {
+            "status": "noop",
+            "detail": "没有活跃的会话需要刷新 MCP 配置",
+            "servers": [],
+            "tool_count": 0,
+        }
+
+    await sidecar_mgr.start()
+    client = sidecar_mgr.client
+    if client is None:
+        raise HTTPException(status_code=503, detail="Sidecar client not available")
+
+    # Get the session map to resolve maxma session_id → sidecar session_id
+    from api.pi_bridge.session_adapter import get_session_map
+    smap = get_session_map()
+
+    reloaded_count = 0
+    errors: list[str] = []
+    for s in active_sessions:
+        maxma_sid = s["session_id"]
+        sidecar_sid = smap.get_sidecar_id(maxma_sid)
+        if not sidecar_sid:
+            continue
+        try:
+            result = await client.call("reload_mcp_for_session", {
+                "session_id": sidecar_sid,
+            })
+            if result.get("status") == "reloaded":
+                reloaded_count += 1
+        except Exception as e:
+            errors.append(f"{maxma_sid[:8]}: {e}")
+            logger.warning("[mcp] Failed to reload MCP for session %s: %s", maxma_sid[:8], e)
+
+    return {
+        "status": "reloaded",
+        "reloaded_sessions": reloaded_count,
+        "total_sessions": len(active_sessions),
+        "errors": errors,
+        "servers": [],
+        "tool_count": 0,
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════════

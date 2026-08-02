@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="chat-window" ref="windowRef">
     <!-- 虚拟列表：DynamicScroller 仅渲染视口内/附近的轮次，长对话性能大幅提升。
          #default 槽渲染每个轮次；#after 槽放错误/打字指示器；#empty 槽放空状态。
@@ -10,6 +10,7 @@
       :min-item-size="200"
       key-field="id"
       @scroll="onScrollerScroll"
+      :key="'scroller-' + sessionId + '-' + refreshKey"
     >
       <template #default="{ item: turn, index: mergedIdx, active }">
         <DynamicScrollerItem
@@ -246,6 +247,7 @@ import type { ChatTurn } from '@/types'
 import type { ParsedRef } from '@/utils/references'
 import { api } from '@/api'
 import { computed, nextTick, onUnmounted, ref, toRef, watch } from 'vue'
+import { createLogger } from '@/utils/logger'
 import { useTheme } from '@/composables/useTheme'
 import { useChatScroll } from '@/composables/useChatScroll'
 import { gsap, useGsap } from '@/composables/useGsap'
@@ -266,16 +268,20 @@ import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import Icon from './Icon.vue'
 
+const log = createLogger('ChatWindow')
+
 const props = withDefaults(defineProps<{
   sessionId: string
   turns?: ChatTurn[]
   currentTurn?: ChatTurn | null
+  connected?: boolean
   error?: string | null
   errorCategory?: 'user_error' | 'tool_error' | 'system_error' | 'rate_limit' | 'cancelled' | null
   errorTraceId?: string | null
 }>(), {
   turns: () => [],
   currentTurn: null,
+  connected: false,
   error: null,
   errorCategory: null,
   errorTraceId: null,
@@ -293,7 +299,9 @@ const emit = defineEmits<{
 
 const {
   scrollerRef,
+  isNearBottomRef,
   onScrollerScroll,
+  scrollToBottom,
   scrollToTurn,
   streamingTokensSignature,
 } = useChatScroll({
@@ -413,10 +421,16 @@ function hasAnswerBlock(turn: ChatTurn): boolean {
   return turn.events.some(e => e.kind === 'thinking' && e.becameAnswer)
 }
 
-/** 合并已完成轮次和当前流式轮次到单个列表 */
+/** 合并已完成轮次和当前流式轮次到单个列表。
+ *  始终返回新数组引用，确保 DynamicScroller 能检测到变化
+ *  （vue-virtual-scroller 通过引用检测 items prop 变化，数组原地突变不会触发更新）。 */
 const mergedTurns = computed<ChatTurn[]>(() => {
-  if (!props.currentTurn) return props.turns
-  if (props.turns.some(t => t.id === props.currentTurn!.id)) return props.turns
+  if (!props.currentTurn) {
+    return props.turns.slice()
+  }
+  if (props.turns.some(t => t.id === props.currentTurn!.id)) {
+    return props.turns.slice()
+  }
   return [...props.turns, props.currentTurn]
 })
 
@@ -429,6 +443,34 @@ function turnsIndex(mergedIdx: number): number {
 function isStreamingTurn(turn: ChatTurn): boolean {
   return props.currentTurn?.id === turn.id
 }
+
+// ── WS 重连时强制刷新 DynamicScroller 内部状态 ──
+// 当 WS 从断开(false)恢复为连接(true)时，DynamicScroller 的内部
+// 测量/定位状态可能已损坏（中断轮次推入→状态重置→新轮次流式）。
+// 递增 refreshKey 迫使 DynamicScroller 销毁重建，重置所有内部状态。
+// 注意：必须跳过首次连接（初始连接时 connected 从 false→true 是正常流程，
+// 不需要重建 Scroller），仅在重连（曾连接过后断开再恢复）时触发重建。
+const refreshKey = ref(0)
+let wasConnectedBefore = false
+watch(
+  () => props.connected,
+  (now) => {
+    if (now) {
+      if (wasConnectedBefore) {
+        // 连接恢复（非首次连接），递增 key 强制重建 Scroller
+        refreshKey.value++
+        log.debug(`WS 重连, 刷新 DynamicScroller key (refreshKey=${refreshKey.value})`)
+        // 重置"接近底部"标记，确保后续流式 token 能触发自动滚动
+        isNearBottomRef.value = true
+        // 等待 DynamicScroller 重建完成后滚动到底部
+        nextTick(() => scrollToBottom())
+      } else {
+        // 首次连接，仅标记已连接过，不重建 Scroller
+        wasConnectedBefore = true
+      }
+    }
+  },
+)
 
 // 打字指示器延迟：新 turn 到达后 1.5-3.5s 才显示 "正在输入"
 watch(

@@ -395,11 +395,12 @@ class TestDiscoveredAndReload:
 
     def test_reload_requires_session_rebuild(self, app_client):
         resp = app_client.post("/mcp/reload")
-        assert resp.status_code == 409
-        assert resp.json()["detail"]["code"] == "mcp_reload_unsupported"
-        assert "重建会话" in resp.json()["detail"]["message"]
+        # 无 sidecar_manager / session_manager 时返回 503
+        assert resp.status_code == 503
 
     def test_reload_does_not_expose_sensitive_values(self, app_client):
+        from unittest.mock import AsyncMock, MagicMock
+
         secret = "mcp-reload-secret"
         mcp_mod._save_raw([
             {
@@ -411,8 +412,22 @@ class TestDiscoveredAndReload:
             },
         ])
 
+        # Mock sidecar_manager and session_manager for the new reload behavior
+        mock_mgr = MagicMock()
+        mock_mgr.start = AsyncMock()
+        mock_mgr.client = MagicMock()
+        mock_mgr.client.call = AsyncMock(return_value={"status": "reloaded"})
+        app_client.app.state.sidecar_manager = mock_mgr
+
+        mock_session_mgr = MagicMock()
+        mock_session_mgr.list_sessions = AsyncMock(return_value=[])
+        app_client.app.state.session_manager = mock_session_mgr
+
         resp = app_client.post("/mcp/reload")
-        assert resp.status_code == 409
+        # 新行为：无活跃会话时返回 noop
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "noop"
         assert secret not in resp.text
 
 

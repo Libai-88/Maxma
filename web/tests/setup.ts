@@ -11,3 +11,18 @@ if (!globalThis.localStorage) {
     get length() { return Object.keys(store).length },
   } as Storage
 }
+
+// 模拟 window.matchMedia —— GSAP 在 jsdom 中需要此 API
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }),
+})

@@ -62,7 +62,11 @@ export type RpcMethodName =
   | "get_plugin_detail"
   | "get_plugin_config"
   | "update_plugin_config"
-  | "headless_prompt";
+  | "headless_prompt"
+  | "set_auto_approve"
+  | "reload_mcp_for_session"
+  | "plan_action"
+  | "execute_workflow_step";
 
 export interface CreateSessionParams {
   model: string;
@@ -235,11 +239,8 @@ export type MaxmaEvent =
     }
   | {
       type: "ask_user";
-      // B3: risk_level / tool_input 声明 optional 但 sidecar 实际无法填充 ——
-      // OMP approval wrapper 调 ctx.select(formatApprovalPrompt(tool,args,reason), ...)
-      // 仅传格式化 title 字符串，sidecar 拿不到结构化 tool_input/risk_level。
-      // 前端 ApprovalBubble 需对 undefined 降级（已 fallback）。保留字段以备
-      // OMP 暴露结构化审批上下文后直接填充。
+      // B3 已修复：sidecar 现在通过 parseApprovalTitle 从格式化 title 中解析
+      // risk_level 和 tool_input。保留 optional 以兼容 OMP 未来结构化审批上下文。
       payload: {
         tool_name: string;
         question: string;

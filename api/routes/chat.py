@@ -5,9 +5,13 @@ streams intermediate events back to frontend, and saves const sessions.
 """
 
 import asyncio
+import base64
+import hashlib
 import inspect
 import json
 import logging
+import os
+import re
 import uuid
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -96,6 +100,93 @@ def _resolve_chat_model(provider_id: str, model_name: str) -> dict[str, str | in
         "api_key": _decrypt_api_key(provider.get("api_key")),
         "provider_type": str(provider.get("provider_type") or "openai"),
         "context_window": int(provider.get("context_window") or 128000),
+    }
+
+
+# ── Phase 2.2: Artifact 合成辅助 ──
+
+_FILE_WRITING_TOOLS = frozenset({"write", "edit", "create"})
+
+_MAX_ARTIFACT_BODY = 2000  # body 字符上限（前端 isInteractiveArtifact 限制 4000）
+
+
+def _extract_file_path_from_output(output: str) -> str | None:
+    """从工具输出字符串中提取文件路径。
+
+    侧边栏将工具结果序列化为 JSON，格式如：
+      {"content":[{"type":"text","text":"Successfully wrote 13 bytes to /path/to/file.txt"}],"details":{}}
+    此函数尝试解析 JSON 并提取文件路径。
+    """
+    text = output
+    # 尝试解析 JSON
+    try:
+        data = json.loads(output)
+        if isinstance(data, dict):
+            # 从 content 块提取文本
+            content = data.get("content", [])
+            if isinstance(content, list):
+                texts = [
+                    block.get("text", "")
+                    for block in content
+                    if isinstance(block, dict) and block.get("type") == "text"
+                ]
+                if texts:
+                    text = " ".join(texts)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        pass
+
+    # 匹配 "to /path/to/file" 或 "Edited /path/to/file" 中的路径
+    for pattern in (
+        r'(?:to|at|:)\s*(/[^\s,.;!?\'"]+)',   # Unix 绝对路径
+        r'(?:to|at|:)\s*([A-Za-z]:\\[^\s,.;!?\'"]+)',  # Windows 绝对路径
+    ):
+        for match in re.finditer(pattern, text, re.IGNORECASE):
+            path = match.group(1).strip().rstrip(".,;:!?\"'")
+            if os.path.isfile(path):
+                return os.path.normpath(path)
+
+    # 兜底：扫描输出中所有存在的文件路径
+    for word in text.split():
+        word = word.strip().rstrip(".,;:!?\"'")
+        if os.path.isfile(word):
+            return os.path.normpath(word)
+
+    return None
+
+
+def _build_artifact_payload(file_path: str) -> dict | None:
+    """读取文件并构建 InteractiveArtifact 负载。
+
+    返回符合前端 InteractiveArtifact 类型的 dict，若文件不可读则返回 None。
+    """
+    if not os.path.isfile(file_path):
+        return None
+    try:
+        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+    except (OSError, PermissionError):
+        return None
+
+    file_id = hashlib.md5(file_path.encode("utf-8")).hexdigest()  # 32 字符 hex
+    filename = os.path.basename(file_path)
+    token = base64.b64encode(file_path.encode("utf-8")).decode("ascii")
+
+    # 截断并 sanitize body（不包含 HTML 标签）
+    preview = content[:_MAX_ARTIFACT_BODY]
+    if len(content) > _MAX_ARTIFACT_BODY:
+        preview += "\n\n... (内容已截断)"
+    preview = preview.replace("<", "&lt;").replace(">", "&gt;")
+
+    return {
+        "version": 1,
+        "id": file_id,
+        "type": "choice",
+        "title": filename,
+        "body": preview,
+        "actions": [
+            {"id": "preview", "label": "预览", "token": token, "style": "primary"},
+            {"id": "open", "label": "打开", "token": token, "style": "secondary"},
+        ],
     }
 
 
@@ -295,6 +386,19 @@ async def _stream_turn_sidecar(
                     await ws.send_json(
                         {"type": WsEventType.TOOL_END, "payload": {"tool_name": payload.get("tool_name", ""), "output": payload.get("output", ""), "elapsed": payload.get("elapsed", 0)}}
                     )
+                    # Phase 2.2: 检测文件写入型工具，合成 artifact 事件
+                    tool_name = payload.get("tool_name", "")
+                    if tool_name in _FILE_WRITING_TOOLS:
+                        output = payload.get("output", "")
+                        file_path = _extract_file_path_from_output(output)
+                        if file_path:
+                            artifact = _build_artifact_payload(file_path)
+                            if artifact:
+                                await ws.send_json({"type": WsEventType.ARTIFACT, "payload": artifact})
+                                logger.info(
+                                    "[artifact] Synthesized artifact for %s (tool=%s, session=%s)",
+                                    file_path, tool_name, session.session_id[:8],
+                                )
                 elif evt_type == WsEventType.TOOL_ERROR:
                     record_activity(
                         "tool", "tool_error",
@@ -772,16 +876,80 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                 continue
 
             if msg_type == "update_auto_approve":
-                auto_approve = payload.get("auto_approve", False)
+                _payload = msg.get("payload", {})
+                auto_approve = _payload.get("auto_approve", False)
                 session.auto_approve = bool(auto_approve)
                 logger.info("[ws] auto_approve updated to %s for session %s", session.auto_approve, session_id[:8])
+                # Forward to sidecar if available
+                sidecar_sid = getattr(session, "_sidecar_session_id", None)
+                if sidecar_sid:
+                    try:
+                        mgr = app_state.sidecar_manager
+                        await mgr.start()
+                        client = await _get_sidecar_client(mgr)
+                        await client.call(
+                            "set_auto_approve",
+                            {"session_id": sidecar_sid, "auto_approve": auto_approve},
+                        )
+                        logger.info("[ws] Forwarded auto_approve=%s to sidecar session %s", auto_approve, sidecar_sid[:8])
+                    except Exception:
+                        logger.debug("[ws] Failed to forward auto_approve to sidecar", exc_info=True)
                 continue
 
-            if msg_type in ("plan_response", "artifact_action"):
-                logger.info(
-                    "[ws] %s not wired to sidecar (feature pending; UI remains)",
-                    msg_type,
-                )
+            if msg_type == "plan_response":
+                _payload = msg.get("payload", {})
+                plan_id = _payload.get("plan_id", "")
+                action = _payload.get("action", "")
+                modified_plan = _payload.get("modified_plan")
+                sidecar_sid = getattr(session, "_sidecar_session_id", None)
+                if sidecar_sid:
+                    try:
+                        mgr = app_state.sidecar_manager
+                        await mgr.start()
+                        client = await _get_sidecar_client(mgr)
+                        plan_payload = {
+                            "session_id": sidecar_sid,
+                            "plan_id": plan_id,
+                            "action": action,
+                        }
+                        if modified_plan:
+                            plan_payload["modified_plan"] = modified_plan
+                        await client.call("plan_action", plan_payload)
+                        logger.info("[ws] Forwarded plan_response (action=%s) to sidecar session %s", action, sidecar_sid[:8])
+                    except Exception:
+                        logger.debug("[ws] Failed to forward plan_response to sidecar", exc_info=True)
+                continue
+
+            if msg_type == "artifact_action":
+                _payload = msg.get("payload", {})
+                artifact_id = _payload.get("artifact_id", "")
+                action_id = _payload.get("action_id", "")
+                token = _payload.get("token", "")
+                logger.info("[ws] artifact_action received: artifact=%s action=%s", artifact_id, action_id)
+                # Phase 2.2: 从 token 解码文件路径，读取文件内容
+                file_content = None
+                file_error = None
+                if token:
+                    try:
+                        file_path = base64.b64decode(token).decode("utf-8")
+                        if os.path.isfile(file_path):
+                            with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+                                file_content = f.read()
+                        else:
+                            file_error = "File not found"
+                    except Exception as e:
+                        file_error = str(e)
+                        logger.warning("[artifact] Failed to read file from token: %s", e)
+                await ws.send_json({
+                    "type": "artifact_result",
+                    "payload": {
+                        "artifact_id": artifact_id,
+                        "action_id": action_id,
+                        "status": "completed" if file_content is not None else "error",
+                        "content": file_content,
+                        "error": file_error,
+                    },
+                })
                 continue
 
             payload = msg.get("payload", {})
