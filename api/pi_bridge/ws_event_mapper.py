@@ -5,6 +5,11 @@ This module only:
 1. Validates that events match the known schema
 2. Enriches events with additional context (turn_id, etc.)
 3. Documents the full event types for the bridge protocol
+
+RUNTIME UNUSED (B4): validate_event / enrich_event / make_*_event helpers 仅被
+tests/test_pi_bridge/test_ws_event_mapper.py 调用。runtime 路径中 chat.py 内联
+构建 done/error/context_usage 事件，不经本模块（不被 chat.py import）。保留以备
+未来将事件构造集中化，勿假设 runtime 已接通。
 """
 
 import logging
