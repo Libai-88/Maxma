@@ -82,12 +82,13 @@ async def test_get_or_create_creates_new_session(manager):
 
 
 @pytest.mark.asyncio
-async def test_session_permission_metadata_defaults_to_confirmation_first_and_is_secret_free(manager):
+async def test_session_permission_metadata_defaults_to_yolo_and_is_secret_free(manager):
     session = await manager.create()
 
     metadata = session.persistent_metadata()
 
-    assert metadata["permission_mode"] == "ask"
+    # 默认审批模式为 yolo（5e7f9692 为规避 ask 阻塞工具调用而改动）
+    assert metadata["permission_mode"] == "yolo"
     assert isinstance(metadata["permission_mode_updated_at"], float)
     assert set(metadata) == {
         "created_at",

@@ -120,11 +120,12 @@ class TestPermissionModeMetadata:
             "read_only", "ask", "operate", "auto"
         ]
 
-    def test_disabled_reports_ask(self):
+    def test_disabled_reports_yolo(self):
         s = _FakeSession(permission_mode="operate")
         meta = _permission_mode_metadata(s, enabled=False)
         assert meta["permission_modes_enabled"] is False
-        assert meta["permission_mode"] == "ask"
+        # 功能关闭时实际生效的是 yolo（自动批准，避免阻塞工具调用）
+        assert meta["permission_mode"] == "yolo"
         assert meta["available_permission_modes"] == []
 
 
@@ -173,7 +174,7 @@ class TestPermissionModeRoutes:
         assert resp.status_code == 200
         body = resp.json()
         assert body["permission_modes_enabled"] is False
-        assert body["permission_mode"] == "ask"
+        assert body["permission_mode"] == "yolo"
 
     def test_get_permission_mode_404(self, app_client):
         resp = app_client["client"].get("/sessions/ghost/permission-mode")

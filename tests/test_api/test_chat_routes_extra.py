@@ -549,7 +549,10 @@ class TestWebSocketChat:
             }))
             answer = ws.receive_json()
             assert answer["type"] == "answer"
-            assert answer["payload"]["content"] == "echo:hello"
+            # user_message 会被前缀 [运行时配置] 注入，但用户消息应完整透传
+            content = answer["payload"]["content"]
+            assert content.startswith("echo:")
+            assert content.endswith("hello")
             done = ws.receive_json()
             assert done["type"] == "done"
             assert done["payload"]["turn_id"] == "my-turn-id"
