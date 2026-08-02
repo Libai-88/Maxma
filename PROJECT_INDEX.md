@@ -2,7 +2,7 @@
 
 > 这是当前代码导航，不是历史迁移记录。代码、测试和构建脚本与本文档冲突时，以代码和测试为准。
 >
-> 更新时间：2026-07-27
+> 更新时间：2026-08-02
 
 ## 唯一现行架构入口
 
@@ -48,6 +48,8 @@ web/src/main.ts
 - 记忆状态：`web/src/stores/memory.ts`
 - 工具组件注册：`web/src/components/tools/registry.ts`（覆盖全部 31 个 OMP 内置工具）
 - 图标系统：`web/src/components/Icon.vue`（SVG 图标注册中心）
+- Inspira UI 组件：`web/src/components/inspira/`（40+ 个动画/交互/视觉组件，详见下方）
+- 工具函数：`web/src/lib/utils.ts`（cn() 条件 class 拼接）
 - 页面：`web/src/views/`
   - `ChatView` - 对话主界面
   - `MemoryView` - 记忆管理（搜索/筛选/行内编辑/统计）
@@ -206,9 +208,16 @@ MaxmaHere-Portable/ (1.6GB 总体积)
 
 ## 版本事实
 
-当前仓库基线为 `feat/omp-alignment` / `c22feee3` / `v2.6.6`。运行时版本来源为 `version.py`；发布前需同步核对前端、Tauri 配置和 Git tag。
+当前仓库基线为 `feat/gsap-signature-animations` / `80e1c07f` / `v2.6.6`。运行时版本来源为 `version.py`；发布前需同步核对前端、Tauri 配置和 Git tag。
 
-**最近增强**（2026-07-27）：
+**最近增强**（2026-08-02）：
+- ✅ Inspira UI 全面集成 — 40+ 组件 + 8 页面改造
+  - 新增组件：AuroraBackground, GlareCard, FloatingCard, NumberTicker, Sparkles, AnimatedModal 等 40+ 个 Inspira 组件
+  - 页面改造：SettingsView, CapabilitiesView, MemoryView, NewsView, MetricsView, ActivityView, HelpView, WelcomeScreen
+  - 全局优化：极光背景、光束连接线、流星效果、鼠标感应发光、分层模糊、边框呼吸动画
+  - 修复：移除 Carousel3D 改用 AnimatedModal；修复动画层遮挡开关按钮问题
+
+**前置增强**（2026-07-27）：
 - ✅ 配置透明度 — 能力仪表盘 `CapabilitiesView` + `GET /api/capabilities`
 - ✅ 工具 UI 覆盖 — 31/31 OMP 内置工具均有专用气泡组件
 - ✅ 记忆系统 UI — 搜索/类别筛选/置信度过滤/行内编辑/统计
@@ -223,10 +232,6 @@ MaxmaHere-Portable/ (1.6GB 总体积)
 - ✅ 便携版体积优化（2.7GB → 1.6GB，Phase 3）
 
 关键 commits：
-- `c22feee3` - 溢出保护：所有新视图增加滚动限制
-- `75d0482d` - 配置源可视化 + 扩展管理视图
-- `3205c4bc` - 记忆系统 + 插件管理 + 工具全覆盖
-- `950f867d` - 四大短板补齐（仪表盘 + 工具气泡 + 能力 RPC）
-- `4a1a2154` - Phase 3: 移除预打包资源改为按需下载
-- `a4e16645` - Phase 2: 切换 PyInstaller 至 onedir 模式
-- `1d0a7adb` - Phase 1: 移除无用知识库依赖
+- `80e1c07f` - Inspira UI 全面集成 — 40+ 组件 + 8 页面改造
+- `e047d2d9` - snapshot current state before Inspira UI integration
+- `bca53c84` - 用 Canvas 有机贝塞尔流体背景替换 CSS 模糊液态背景
