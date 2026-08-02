@@ -143,6 +143,8 @@ async def _stream_turn_sidecar(
     system_prompt: str,
     model_config: dict[str, str] | None = None,
     cancel_event: asyncio.Event | None = None,
+    *,
+    use_append: bool = False,
 ) -> str:
     """Execute a turn via oh-my-pi sidecar (Bun subprocess).
 
@@ -227,11 +229,15 @@ async def _stream_turn_sidecar(
         # 传入可用工具名列表，让 OMP session 正确注册 function calling
         _session_tools = [t["name"] for t in _CHAT_BUILTIN_TOOLS if isinstance(t, dict) and t.get("name")]
 
+        # 原生提示词模式：走 OMP append_system_prompt（追加到 OMP 原生 prompt 之后），
+        # 不传 system_prompt，避免整体替换 OMP 原生的 harness prompt。
+        # 品牌模式：传 system_prompt（整体替换，旧行为）。
+        _prompt_field = "append_system_prompt" if use_append else "system_prompt"
         result = await client.call(
             "create_session",
             {
                 **model_config,
-                "system_prompt": _sidecar_system_prompt,
+                _prompt_field: _sidecar_system_prompt,
                 # B-002: forward the actual project root so the agent's logical
                 # cwd resolves to the user's project (not the sidecar's bun-sidecar/
                 # source directory). Must agree with MAXMA_PROJECT_ROOT env var set
@@ -823,7 +829,28 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             if turn_task and not turn_task.done():
                 continue
 
-            system_prompt = build_system_prompt()
+            # 原生提示词模式：用最小功能注入（build_append_prompt）走 append 通道，
+            # 保留 OMP 原生 harness prompt；品牌增强（brand_enhancement）在功能注入后
+            # 追加品牌增强块，只做锦上添花。品牌模式（native_prompt_mode=False）
+            # 回退 build_system_prompt（整体替换，保留兼容）。
+            try:
+                from config.settings import get_settings
+                _settings = get_settings()
+                _native = bool(_settings.native_prompt_mode)
+                _brand_enabled = bool(_settings.brand_enhancement)
+            except Exception:
+                _native = False
+                _brand_enabled = False
+            if _native:
+                from agent.prompts import build_append_prompt, build_brand_prompt
+                system_prompt = build_append_prompt()
+                if _brand_enabled:
+                    system_prompt = f"{system_prompt}\n\n{build_brand_prompt()}"
+                _use_append = True
+            else:
+                system_prompt = build_system_prompt()
+                _use_append = False
+
             turn_id = payload.get("turn_id")
             model_config = _resolve_chat_model(
                 str(payload.get("provider_id") or ""),
@@ -846,6 +873,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                     ws, session, user_message, system_prompt,
                     model_config=model_config,
                     cancel_event=cancel_event,
+                    use_append=_use_append,
                 )
             )
             # Go back to loop top — _handle_turn_result processes completion

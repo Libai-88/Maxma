@@ -231,6 +231,79 @@ def test_ensure_user_md_noop_when_exists(isolated_env: Path) -> None:
 # ── build_system_prompt / get_system_prompt_parts / cache ──────
 
 
+def test_build_append_prompt_contains_chinese_instruction(isolated_env: Path) -> None:
+    p = prompts.build_append_prompt()
+    assert isinstance(p, str)
+    assert p  # non-empty
+    # 中文回复指令始终存在（原生提示词模式的最小注入）
+    assert "中文" in p
+
+
+def test_build_append_prompt_includes_skills_when_present(isolated_env: Path) -> None:
+    skills_dir = Path(prompts.ANTHROPIC_SKILLS_DIR)
+    sk = skills_dir / "demo-skill" / "SKILL.md"
+    sk.parent.mkdir(parents=True, exist_ok=True)
+    sk.write_text("---\nname: demo-skill\ndescription: 演示技能\n---\n用法\n", encoding="utf-8")
+    prompts.invalidate_append_cache()
+    p = prompts.build_append_prompt()
+    assert "demo-skill" in p
+    assert "演示技能" in p
+
+
+def test_build_append_prompt_contains_no_brand_persona(isolated_env: Path) -> None:
+    """原生模式追加段不夹带品牌/persona 内容。"""
+    prompts.invalidate_append_cache()
+    p = prompts.build_append_prompt()
+    # 品牌身份标记不应出现在追加段
+    assert "你的名字是" not in p
+    assert "墨色" not in p
+    assert "你不是 ChatGPT" not in p
+
+
+def test_build_append_prompt_cache_invalidates_on_skills_change(isolated_env: Path) -> None:
+    prompts.invalidate_append_cache()
+    first = prompts.build_append_prompt()
+    skills_dir = Path(prompts.ANTHROPIC_SKILLS_DIR)
+    sk = skills_dir / "later-skill" / "SKILL.md"
+    sk.parent.mkdir(parents=True, exist_ok=True)
+    sk.write_text("---\nname: later-skill\ndescription: 后加技能\n---\n", encoding="utf-8")
+    # 指纹包含 skills 内容，无需手动 invalidate 也会刷新
+    second = prompts.build_append_prompt()
+    assert "later-skill" in second
+    assert first != second
+
+
+def test_build_brand_prompt_contains_guidance(isolated_env: Path) -> None:
+    p = prompts.build_brand_prompt()
+    assert isinstance(p, str)
+    assert p  # non-empty
+    # 产品名 + 中文回复 + 语气引导
+    assert "Maxma" in p
+    assert "中文" in p
+    assert "克制但有温度" in p
+    # 表情指令与情绪词表
+    assert "[表情包:情绪]" in p
+    assert "开心" in p and "爱心" in p and "日常" in p
+
+
+def test_build_brand_prompt_does_not_define_identity(isolated_env: Path) -> None:
+    """品牌增强块不定义 AI 身份，避免与 OMP 原生 ROLE 冲突。"""
+    p = prompts.build_brand_prompt()
+    assert "你的名字是" not in p
+    assert "你不是 ChatGPT" not in p
+    assert "你是 Maxma" not in p
+    assert "墨色" in p  # 墨色仅作为品牌理念（判断有分量但不喧哗），不是名字
+
+
+def test_build_brand_prompt_emotions_align_with_emotion_map(isolated_env: Path) -> None:
+    """品牌块情绪词必须命中前端 EMOTION_MAP 的分类（12 类）。"""
+    p = prompts.build_brand_prompt()
+    emotions = ["开心", "爱心", "委屈", "撒娇", "害羞", "尴尬",
+                "生气", "惊讶", "悲伤", "得意", "无语", "日常"]
+    for emo in emotions:
+        assert emo in p
+
+
 def test_build_system_prompt_returns_content(isolated_env: Path) -> None:
     p = prompts.build_system_prompt()
     assert isinstance(p, str)

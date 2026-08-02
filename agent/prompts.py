@@ -280,10 +280,13 @@ def _ensure_cache() -> None:
 def invalidate_prompt_cache() -> None:
     """强制清空缓存（供外部调用，例如记忆更新后）。"""
     global _cached_fingerprint, _cached_prompt, _cached_parts
+    global _append_cache_fp, _append_cache_prompt
     with _cache_lock:
         _cached_fingerprint = None
         _cached_prompt = ""
         _cached_parts = []
+        _append_cache_fp = None
+        _append_cache_prompt = ""
 
 
 def _read_persona(filename: str) -> str:
@@ -529,6 +532,83 @@ def build_system_prompt() -> str:
     _ensure_cache()
     with _cache_lock:
         return _cached_prompt
+
+
+# ── 原生提示词模式的追加段 ──────────────────────────────────
+
+_append_cache_fp: str | None = None
+_append_cache_prompt: str = ""
+
+
+def build_append_prompt() -> str:
+    """构建原生提示词模式的追加段（append_system_prompt）。
+
+    与 build_system_prompt 的区别：本函数返回的是**最小功能注入**，
+    只包含 OMP 原生 prompt 无法自动发现、但 Maxma 集成必需的信息，
+    不含任何品牌/persona 内容。OMP 通过 appendSystemPrompt 机制将其
+    追加到原生 prompt 之后，原生 ROLE/工程原则/内部 URL/git 上下文
+    完整保留。
+
+    包含：
+    - 中文回复指令（OMP 原生 prompt 为英文，保证中文对话体验）
+    - anthropic_skills/ 清单（OMP 只扫描 .omp/skills/，不扫该目录）
+    - macros 清单
+
+    缓存依赖 skills/macros 内容指纹，与品牌模式共用 _cache_lock。
+    """
+    global _append_cache_fp, _append_cache_prompt
+    fp = _current_fingerprint()
+    if fp == _append_cache_fp:
+        return _append_cache_prompt
+    with _cache_lock:
+        fp = _current_fingerprint()
+        if fp != _append_cache_fp:
+            _parts = ["始终使用中文与用户对话，除非用户明确要求使用其他语言；技术术语可保留英文原文。"]
+            _skills = _scan_anthropic_skills()
+            if _skills:
+                _parts.append(_skills)
+            _macros = _scan_macros()
+            if _macros:
+                _parts.append(_macros)
+            _append_cache_prompt = "\n\n".join(_parts)
+            _append_cache_fp = fp
+    return _append_cache_prompt
+
+
+def invalidate_append_cache() -> None:
+    """强制清空原生模式追加段缓存。"""
+    global _append_cache_fp, _append_cache_prompt
+    with _cache_lock:
+        _append_cache_fp = None
+        _append_cache_prompt = ""
+
+
+# ── 品牌增强块 ───────────────────────────────────────────────
+
+# 情绪词表与 web/src/composables/stickerUtils.ts 的 EMOTION_MAP 严格对齐：
+# 开心/委屈/害羞/尴尬/生气/惊讶/撒娇/悲伤/得意/爱心/日常/无语（12 类，
+# 与 config/stickers/ 目录一一对应）。模型写出的情绪词必须能命中贴纸系统。
+_BRAND_EMOTIONS = "开心、爱心、委屈、撒娇、害羞、尴尬、生气、惊讶、悲伤、得意、无语、日常"
+
+_BRAND_PROMPT = (
+    "# 品牌风格\n"
+    "- 产品叫 Maxma，本地 AI 助手。回复用中文，技术术语保留英文。\n"
+    "- 语气克制但有温度：先给结论再给细节，不寒暄、不推销、不堆感叹号；"
+    "判断有分量但不喧哗（品牌取意「墨色」）。\n"
+    "- 情感表达（可选）：想强调情绪时可写 [表情包:情绪]，"
+    f"情绪词限：{_BRAND_EMOTIONS}。\n"
+)
+
+
+def build_brand_prompt() -> str:
+    """构建品牌增强块。
+
+    仅含轻量风格引导 + 表情指令，**不定义 AI 身份**（避免与 OMP 原生
+    ROLE "helpful assistant in Oh My Pi harness" 冲突），只做锦上添花。
+    由调用方在功能注入（build_append_prompt）之后按 brand_enhancement
+    开关拼接；静态内容，直接返回常量。
+    """
+    return _BRAND_PROMPT
 
 
 def build_coordinator_prompt(persona_context: str = "") -> str:

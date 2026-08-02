@@ -67,6 +67,7 @@ export type RpcMethodName =
 export interface CreateSessionParams {
   model: string;
   system_prompt?: string;
+  append_system_prompt?: string;
   cwd?: string;
   tools?: string[];
 }

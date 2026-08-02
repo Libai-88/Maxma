@@ -6,15 +6,15 @@ def test_load_three_layer_persona():
 
     assert set(persona) == {"identity", "yuan", "ishiki", "metadata"}
     assert "测试用户" in persona["identity"]
-    assert "首席思维伙伴" in persona["identity"]
+    assert "高效执行伙伴" in persona["identity"]
     assert "方法论" in persona["yuan"]
-    assert "温和但不废话" in persona["ishiki"]
+    assert "亲近但不啰嗦" in persona["ishiki"]
 
     metadata = persona["metadata"]
     assert metadata["identity"] == {
         "name": "default",
         "display_name": "Maxma",
-        "tone": "warm-precise",
+        "tone": "action-warm",
     }
     assert metadata["yuan"] == {
         "name": "default",
@@ -22,7 +22,7 @@ def test_load_three_layer_persona():
     }
     assert metadata["ishiki"] == {
         "name": "default",
-        "tone": "warm-precise",
+        "tone": "action-warm",
     }
 
     # Frontmatter is metadata, not part of the prompt body.
@@ -42,7 +42,7 @@ def test_build_system_prompt_combines_three_layers():
 
     assert identity_start < yuan_start < ishiki_start
     assert "测试用户" in prompt
-    assert "首席思维伙伴" in prompt
+    assert "高效执行伙伴" in prompt
     assert "方法论" in prompt
     assert "语气" in prompt
     assert "output_format: structure" not in prompt

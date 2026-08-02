@@ -220,7 +220,40 @@ Maxma 是用户的**首席思维伙伴**——不是搜索引擎、不是执行�
 
 ---
 
-## 7. 设计原则（承自 PRODUCT.md）
+## 7. 提示词增强层（Prompt Enhancement）
+
+品牌软包装在提示词层的落点。**铁律：永不替换 OMP 原生 prompt**，
+只通过 `appendSystemPrompt` 机制追加增强内容（`agent/prompts.py`
+`build_append_prompt` → `build_brand_prompt`）。
+
+### 分层
+
+| 层 | 内容 | 开关 |
+|----|------|------|
+| 功能层 | 中文回复指令 + `anthropic_skills/` / macros 清单 | 永久保留 |
+| 品牌增强层 | 产品名 + 语气引导 + 表情指令 | `brand_enhancement` |
+
+### 品牌增强块规范（`build_brand_prompt`）
+
+1. **只做风格引导，不定义 AI 身份** — 禁止「你是 Maxma 不是 ChatGPT」这类
+   身份替换。OMP 原生 ROLE（"helpful assistant in Oh My Pi harness"）必须
+   完整保留，品牌块只追加风格约束，不覆盖原生人格。
+2. **语气**：克制但有温度，先结论后细节，不寒暄、不推销、不堆感叹号。
+3. **表情指令**：`[表情包:情绪]`。情绪词表与前端
+   `web/src/composables/stickerUtils.ts` 的 `EMOTION_MAP` **严格对齐**
+   （12 类，与 `config/stickers/` 目录一一对应），保证模型写出的情绪词
+   一定能命中贴纸系统。
+4. **墨色**：作为品牌理念（判断有分量但不喧哗），不是 AI 名字。
+
+### 修改纪律
+
+- 品牌增强块内容变化 → 同步更新 `EMOTION_MAP` / `config/stickers/` 目录 / 本文档
+- 任何提示词改动必须验证不破坏 OMP 原生 tool inventory 与内部 URL 体系
+- 开关：`config/settings.py` 的 `brand_enhancement`（与 `native_prompt_mode` 正交）
+
+---
+
+## 8. 设计原则（承自 PRODUCT.md）
 
 1. **对话即界面** — 聊天窗口是产品核心，配置和工具是配角
 2. **克制中的温度** — 纸墨基底保持克制，朱砂点缀赋予个性；不为装饰而装饰

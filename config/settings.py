@@ -36,6 +36,17 @@ class Settings(BaseSettings):
     # ask/read_only 走前端审批确认）。
     permission_modes_enabled: bool = False
 
+    # 原生提示词模式。开启（默认）时系统提示词使用 OMP 原生 prompt +
+    # 最小功能注入（build_append_prompt），永不整体替换 OMP；
+    # 关闭时回退到旧的品牌提示词（build_system_prompt，整体替换，保留兼容）。
+    native_prompt_mode: bool = True
+
+    # 品牌增强开关。与 native_prompt_mode 正交：仅当 native_prompt_mode=True
+    # 时生效，在功能注入（build_append_prompt）之后追加品牌增强块
+    # （build_brand_prompt：产品名/语气引导/表情指令）。
+    # 品牌只做锦上添花，不替换 OMP 原生能力；关闭即回到纯功能注入。
+    brand_enhancement: bool = True
+
     model_config = {
         "env_file": str(ENV_FILE_PATH),
         "env_file_encoding": "utf-8",

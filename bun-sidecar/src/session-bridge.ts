@@ -177,6 +177,7 @@ export async function buildCreateSessionOptions(
     cwd: string;
     authStorage: any;
     systemPrompt?: string;
+    appendSystemPrompt?: string;
     tools?: string[];
     permissionMode?: string;
   },
@@ -194,7 +195,10 @@ export async function buildCreateSessionOptions(
     cwd: input.cwd,
     authStorage: input.authStorage,
   };
+  // systemPrompt 与 appendSystemPrompt 互斥：前者整体替换 OMP 原生 prompt，
+  // 后者追加到原生 prompt 之后。两者同时传入时 OMP 会以 systemPrompt 整体替换。
   if (input.systemPrompt !== undefined) createOptions.systemPrompt = input.systemPrompt;
+  else if (input.appendSystemPrompt !== undefined) createOptions.appendSystemPrompt = input.appendSystemPrompt;
   if (input.tools !== undefined && input.tools.length > 0) createOptions.toolNames = input.tools;
   // Base settings: always disable advisor (OMP SDK warns on 401 even when disabled)
   createOptions.settings = Settings.isolated({"advisor.enabled": false});
@@ -983,6 +987,7 @@ if (import.meta.main) {
         });
         const cwd: string = params?.cwd ?? process.cwd();
         const systemPrompt: string | undefined = params?.system_prompt;
+        const appendSystemPrompt: string | undefined = params?.append_system_prompt;
         const tools: string[] | undefined = params?.tools as string[] | undefined;
         const permissionMode: string = (params?.permission_mode as string) ?? "ask";
 
@@ -991,6 +996,7 @@ if (import.meta.main) {
           cwd,
           authStorage,
           systemPrompt,
+          appendSystemPrompt,
           tools: Array.isArray(tools) ? tools : undefined,
           permissionMode,
         });

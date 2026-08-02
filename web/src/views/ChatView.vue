@@ -97,7 +97,7 @@
     <div class="chat-workbench-layout">
       <div class="chat-main-column">
         <template v-if="hasMessages">
-          <CardSpotlight>
+          <CardSpotlight class="chat-window-host">
             <ChatWindow
             :session-id="sessionId"
             :turns="turns"
@@ -624,6 +624,15 @@ function handleQuickStart(message: string) {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+/* ChatWindow 根元素 .chat-window 依赖 flex:1 伸缩来撑满高度；
+   CardSpotlight 默认是 block 容器，会使其高度退化为内容高度，
+   消息超出后被 overflow:hidden 裁剪、无法滚动。此处改为 flex column。 */
+.chat-window-host {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
 }
 
 .chat-main-column {

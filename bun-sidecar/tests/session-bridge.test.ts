@@ -4,6 +4,7 @@ import {
   createDoneGuard,
   orchestratePrompt,
   handleCancelGuard,
+  buildCreateSessionOptions,
 } from "../src/session-bridge";
 
 describe("module import smoke test", () => {
@@ -335,6 +336,42 @@ describe("orchestratePrompt — timeout circuit breaker", () => {
 
     const doneCount = events.filter((e) => e.type === "done").length;
     expect(doneCount).toBe(1);
+  });
+});
+
+describe("buildCreateSessionOptions — appendSystemPrompt", () => {
+  function build(opts: Record<string, unknown> = {}) {
+    return buildCreateSessionOptions(
+      {
+        model: { id: "openai/gpt-4o" } as any,
+        cwd: "/tmp",
+        authStorage: {} as any,
+        permissionMode: "yolo",
+        ...opts,
+      },
+      (async () => undefined) as any,
+    );
+  }
+
+  test("appendSystemPrompt is passed through when systemPrompt is absent", async () => {
+    const { options } = await build({ appendSystemPrompt: "始终使用中文" });
+    expect(options.appendSystemPrompt).toBe("始终使用中文");
+    expect(options.systemPrompt).toBeUndefined();
+  });
+
+  test("systemPrompt wins and appendSystemPrompt is ignored when both set", async () => {
+    const { options } = await build({
+      systemPrompt: "brand prompt",
+      appendSystemPrompt: "native append",
+    });
+    expect(options.systemPrompt).toBe("brand prompt");
+    expect(options.appendSystemPrompt).toBeUndefined();
+  });
+
+  test("neither set → no prompt fields", async () => {
+    const { options } = await build({});
+    expect(options.systemPrompt).toBeUndefined();
+    expect(options.appendSystemPrompt).toBeUndefined();
   });
 });
 
