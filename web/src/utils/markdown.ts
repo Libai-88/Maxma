@@ -294,6 +294,10 @@ export function contentNeedsIsolation(markdown: string): boolean {
     if (/href\s*=\s*["']\s*javascript:/i.test(line)) return true
     // 检查 <iframe> 嵌入
     if (/<iframe[\s>/]/i.test(line)) return true
+    // 检查 <meta http-equiv="refresh"> 自动跳转（防止注入主文档后浏览器自动导航）
+    if (/<meta[^>]*http-equiv\s*=\s*["']?\s*refresh/i.test(line)) return true
+    // 检查自动跳转脚本（location.href / window.location / window.open 赋值到外部）
+    if (/(?:location\.href|window\.location|document\.location)\s*=/.test(line)) return true
   }
   return false
 }

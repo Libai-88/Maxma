@@ -24,8 +24,10 @@ type PluginName = keyof typeof pluginMap
 export async function lazyLoadPlugin<K extends PluginName>(name: K): Promise<any> {
   const m: Record<string, any> = await pluginMap[name]()
   const plugin = m[name]
-  gsap.registerPlugin(plugin)
-  return plugin
+  if (plugin) gsap.registerPlugin(plugin)
+  // 返回整个模块对象，使调用方可按 `const { SplitText } = await lazyLoadPlugin('SplitText')`
+  // 解构出具名导出（若只返回 plugin 值，调用方解构其 .SplitText 属性会得到 undefined）。
+  return m
 }
 
 let reducedMotionRegistered = false

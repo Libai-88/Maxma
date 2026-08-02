@@ -208,6 +208,48 @@ const iframeContent = computed(() => {
   .markdown-body > *:first-child { margin-top: 0; }
   .markdown-body > *:last-child  { margin-bottom: 0; }
 </style>
+<script>
+(function () {
+  'use strict';
+  /* ── 导航护栏：拦截 AI 输出对 iframe 的脚本式外部导航。
+     sandbox 已阻止顶层导航，但 iframe 内 location.href=/assign()/replace()
+     会导航 iframe 自身到外部地址（用户看到"页面被替换"）。
+     此脚本在 head 阶段（早于 AI 内容）执行，拦截 http(s) 外部地址；
+     用户点击链接（默认导航）不受影响，localhost 放行。 */
+  function isExternalHttp(url) {
+    var s = String(url).trim().replace(/^['"]+|['"]+$/g, '').toLowerCase();
+    if (!/^https?:/i.test(s)) return false;
+    if (/^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?([\/#?]|$)/i.test(s)) return false;
+    return true;
+  }
+  function blockNav(url) {
+    try {
+      parent.postMessage({ type: 'sandbox-error', payload: { category: 'nav-blocked', message: '已阻止 AI 输出的外部跳转: ' + String(url).slice(0, 200), detail: '' } }, '*');
+    } catch (e) {}
+  }
+  var locProto = window.Location && Location.prototype;
+  if (!locProto) return;
+  var hrefDesc = Object.getOwnPropertyDescriptor(locProto, 'href');
+  if (hrefDesc && typeof hrefDesc.set === 'function') {
+    Object.defineProperty(locProto, 'href', {
+      get: hrefDesc.get,
+      set: function (v) {
+        if (isExternalHttp(v)) { blockNav(v); return; }
+        return hrefDesc.set.call(this, v);
+      },
+      configurable: true
+    });
+  }
+  ['assign', 'replace'].forEach(function (m) {
+    if (typeof locProto[m] !== 'function') return;
+    var orig = locProto[m];
+    locProto[m] = function (url) {
+      if (isExternalHttp(url)) { blockNav(url); return; }
+      return orig.call(this, url);
+    };
+  });
+})();
+<${'/'}script>
 </head>
 <body>
 <div class="markdown-body">

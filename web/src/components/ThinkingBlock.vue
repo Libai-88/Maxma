@@ -107,7 +107,16 @@ useGsap((ctx, contextSafe) => {
       return
     }
     el.textContent = stripThinkingLabels(text.replace(STICKER_PLACEHOLDER_RE, ''))
-    const { SplitText } = await lazyLoadPlugin('SplitText')
+    let SplitText: any
+    try {
+      SplitText = await lazyLoadPlugin('SplitText')
+      if (!SplitText || !SplitText.create) throw new Error('SplitText 插件不可用')
+    } catch {
+      // 插件按需加载失败时跳过字符级动画，不阻塞答案渲染
+      answerSplit = null
+      lastWordCount = 0
+      return
+    }
     if (answerSplit) {
       answerSplit.split({ type: 'words', wordsClass: 'answer-word' })
     } else {
