@@ -46,14 +46,16 @@
 
     <!-- 统计概览 -->
     <div class="activity-stats" v-if="statsTotal">
-      <div class="stat-card">
-        <span class="stat-value">{{ statsTotal }}</span>
+      <FloatingCard><GlareCard class="stat-card">
+        <span class="stat-value"><NumberTicker :value="statsTotal" /></span>
         <span class="stat-label">总事件</span>
-      </div>
-      <div class="stat-card" v-for="(count, cat) in statsByCategory" :key="cat">
-        <span class="stat-value">{{ count }}</span>
+      </GlareCard></FloatingCard>
+      <template v-for="(count, cat) in statsByCategory" :key="cat">
+      <FloatingCard><GlareCard class="stat-card">
+        <span class="stat-value"><NumberTicker :value="count" /></span>
         <span class="stat-label">{{ categoryLabel(cat as string) }}</span>
-      </div>
+      </GlareCard></FloatingCard>
+    </template>
     </div>
 
     <!-- 事件列表 -->
@@ -75,18 +77,20 @@
         </div>
       </div>
       <div v-if="!store.records.length" class="activity-empty">
-        <div class="empty-icon">{{ store.connectionState === 'connecting' ? '🔌' : '📋' }}</div>
-        <div class="empty-title">{{ store.connectionState === 'connecting' ? '正在建立实时连接...' : '暂无活动记录' }}</div>
-        <div class="empty-desc">
-          <template v-if="store.connectionState === 'connecting'">
-            首次进入页面时正在与后端建立 SSE 推送连接，通常 1-2 秒内完成。
-            连接成功后，AI 的内部活动会实时出现在这里。
-          </template>
-          <template v-else>
-            开始一段对话或让 AI 执行任务后，这里会实时显示 AI 的内部活动。
-            <router-link to="/" class="empty-link">→ 返回对话</router-link>
-          </template>
-        </div>
+        <Sparkles>
+          <div class="empty-icon">{{ store.connectionState === 'connecting' ? '🔌' : '📋' }}</div>
+          <div class="empty-title">{{ store.connectionState === 'connecting' ? '正在建立实时连接...' : '暂无活动记录' }}</div>
+          <div class="empty-desc">
+            <template v-if="store.connectionState === 'connecting'">
+              首次进入页面时正在与后端建立 SSE 推送连接，通常 1-2 秒内完成。
+              连接成功后，AI 的内部活动会实时出现在这里。
+            </template>
+            <template v-else>
+              开始一段对话或让 AI 执行任务后，这里会实时显示 AI 的内部活动。
+              <router-link to="/" class="empty-link">→ 返回对话</router-link>
+            </template>
+          </div>
+        </Sparkles>
       </div>
     </div>
   </div>
@@ -98,6 +102,10 @@ import { useActivityStore } from '@/stores/activity'
 import { confirmAction } from '@/composables/useConfirm'
 import type { ActivityStatsResponse } from '@/types'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
+import GlareCard from '@/components/inspira/GlareCard.vue'
+import NumberTicker from '@/components/inspira/NumberTicker.vue'
+import Sparkles from '@/components/inspira/Sparkles.vue'
+import FloatingCard from '@/components/inspira/FloatingCard.vue'
 
 const store = useActivityStore()
 const activityListEl = ref<HTMLElement | null>(null)

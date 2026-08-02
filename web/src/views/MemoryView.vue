@@ -7,10 +7,10 @@
 
     <!-- 统计栏 -->
     <div class="stats-row" v-if="!store.loading">
-      <div class="stat-card"><div class="stat-value">{{ stats.total ?? facts.length }}</div><div class="stat-label">总条数</div></div>
-      <div class="stat-card"><div class="stat-value">{{ stats.avg_confidence ?? '-' }}</div><div class="stat-label">平均置信度</div></div>
+      <div class="stat-card"><div class="stat-value"><NumberTicker :value="stats.total ?? facts.length" /></div><div class="stat-label">总条数</div></div>
+      <div class="stat-card"><div class="stat-value"><template v-if="stats.avg_confidence != null"><NumberTicker :value="stats.avg_confidence" :decimal-places="2" /></template><template v-else>-</template></div><div class="stat-label">平均置信度</div></div>
       <div class="stat-card" v-for="(count, cat) in stats.categories ?? {}" :key="cat">
-        <div class="stat-value">{{ count }}</div>
+        <div class="stat-value"><NumberTicker :value="count" /></div>
         <div class="stat-label">{{ categoryLabel(cat) }}</div>
       </div>
     </div>
@@ -87,7 +87,7 @@
     <!-- 搜索 + 过滤 -->
     <div class="toolbar">
       <div class="search-box">
-        <input v-model="searchQuery" type="text" placeholder="搜索记忆内容..." @input="debouncedSearch" />
+        <HaloSearch v-model="searchQuery" placeholder="搜索记忆内容..." @input="debouncedSearch" />
       </div>
       <select v-model="categoryFilter" class="filter-select" @change="loadFacts">
         <option value="all">全部分类</option>
@@ -103,6 +103,7 @@
     <div v-if="store.loading" class="loading">加载中...</div>
     <template v-else>
       <div v-if="facts.length === 0" class="empty">
+        <Sparkles :density="10" />
         <div class="empty-icon">🧠</div>
         <div class="empty-title">{{ searchQuery ? '未匹配到记忆' : '暂无记忆数据' }}</div>
         <div class="empty-desc">
@@ -112,7 +113,7 @@
         </div>
       </div>
       <div v-else ref="factListEl" class="fact-list">
-        <div v-for="fact in facts" :key="fact.id" class="fact-card">
+        <GlareCard v-for="fact in facts" :key="fact.id" class="fact-card">
           <div v-if="editingId === fact.id" class="fact-edit">
             <textarea v-model="editContent" class="edit-textarea" rows="3" />
             <div class="edit-actions">
@@ -139,7 +140,7 @@
               <button class="fact-delete" @click="handleDelete(fact.id)" title="删除">✕</button>
             </div>
           </template>
-        </div>
+        </GlareCard>
       </div>
     </template>
   </div>
@@ -153,6 +154,10 @@ import type { HindsightConfig } from '@/api'
 import { confirmAction } from '@/composables/useConfirm'
 import { createLogger } from '@/utils/logger'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
+import HaloSearch from '@/components/inspira/HaloSearch.vue'
+import GlareCard from '@/components/inspira/GlareCard.vue'
+import NumberTicker from '@/components/inspira/NumberTicker.vue'
+import Sparkles from '@/components/inspira/Sparkles.vue'
 
 const log = createLogger('MemoryView')
 

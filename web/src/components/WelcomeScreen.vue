@@ -1,16 +1,18 @@
 <template>
   <div class="welcome-screen">
-    <div v-if="store.loading" ref="loadingEl" class="welcome-loading" role="status" aria-live="polite">
-      <BrandSeal size="md" class="welcome-loading-seal" />
-      <div class="welcome-loading-lines">
-        <p v-for="line in loadingLines" :key="line" class="welcome-loading-line">{{ line }}</p>
-      </div>
-    </div>
-    <div v-else-if="store.error" class="welcome-error">
+    <MultiStepLoader
+      :loading="store.loading"
+      :steps="loadingSteps"
+      :default-duration="1500"
+      :prevent-close="true"
+      @complete="() => {}"
+    />
+    <div v-if="store.error" class="welcome-error">
       <p class="welcome-error-text">加载失败：{{ store.error }}</p>
       <button class="welcome-error-retry" @click="store.loadProfile()">重试</button>
     </div>
-    <div v-else ref="contentEl" class="welcome-content">
+    <div v-if="!store.loading && !store.error" ref="contentEl" class="welcome-content">
+      <Sparkles :density="8" :size="2" :speed="0.8" />
       <Ripple
         class="ripple-bg"
         :base-circle-size="140"
@@ -29,16 +31,21 @@
           :enable-on-hover="false"
         />
       </h1>
-      <p class="welcome-scene">{{ sceneText }}</p>
-      <p class="welcome-greeting">{{ store.profile.greeting || '你好呀，今天想聊些什么？' }}</p>
+      <p class="welcome-scene"><TextScrollReveal :text="sceneText" /></p>
+      <p class="welcome-greeting">
+        <ColourfulText :text="store.profile.greeting || '你好呀，今天想聊些什么？'" :duration="4" />
+      </p>
+      <p class="welcome-taglines">
+        <SpinningText :texts="taglines" :duration="3.5" />
+      </p>
       <div class="welcome-rule" aria-hidden="true"></div>
 
       <!-- 主操作：随便聊聊 -->
       <div class="welcome-actions">
-        <button class="action-btn action-btn--primary" @click="handleStart('随便聊聊')">
+        <ShimmerButton class="action-btn--primary" @click="handleStart('随便聊聊')">
           <span class="action-icon" v-html="chatBubbleSvg"></span>
           <span>随便聊聊</span>
-        </button>
+        </ShimmerButton>
         <button class="action-btn" @click="handleStart('帮我看看最近有什么好玩的')">
           <span class="action-icon" v-html="searchSvg"></span>
           <span>帮我个忙</span>
@@ -47,7 +54,10 @@
 
       <!-- 示例提示：分场景给出可点击的具体 prompt，降低上手门槛 -->
       <section class="example-prompts" aria-label="试试这些">
-        <div class="example-title">试试这些 <Icon name="sparkles" :size="14" aria-hidden="true" /></div>
+        <div class="example-title">
+          <ColourfulText text="试试这些" :duration="4" :colors="['var(--accent)', '#ffd93d', 'var(--accent)']" />
+          <Icon name="sparkles" :size="14" aria-hidden="true" />
+        </div>
         <AnimatedList :delay="150" class="example-chips">
           <InteractiveHoverButton
             v-for="ex in examples"
@@ -70,12 +80,18 @@
 import { computed, ref, watch } from 'vue'
 import { usePersonaStore } from '../stores/persona'
 import Icon from './Icon.vue'
-import BrandSeal from './brand/BrandSeal.vue'
+import MultiStepLoader from './inspira/MultiStepLoader.vue'
+import type { Step } from './inspira/MultiStepLoader.vue'
 import SingularityBackground from './SingularityBackground.vue'
 import Ripple from './Ripple.vue'
 import TextGlitch from '@/components/TextGlitch.vue'
 import AnimatedList from '@/components/AnimatedList.vue'
 import InteractiveHoverButton from '@/components/InteractiveHoverButton.vue'
+import ShimmerButton from '@/components/inspira/ShimmerButton.vue'
+import TextScrollReveal from '@/components/inspira/TextScrollReveal.vue'
+import SpinningText from '@/components/inspira/SpinningText.vue'
+import Sparkles from '@/components/inspira/Sparkles.vue'
+import ColourfulText from '@/components/inspira/ColourfulText.vue'
 import { gsap, useGsap, easeMap, lazyLoadPlugin } from '@/composables/useGsap'
 import chatBubbleRaw from '../assets/icons/welcome/chat-bubble.svg?raw'
 import searchRaw from '../assets/icons/welcome/search.svg?raw'
@@ -83,21 +99,12 @@ import searchRaw from '../assets/icons/welcome/search.svg?raw'
 const store = usePersonaStore()
 const emit = defineEmits<{ start: [message: string] }>()
 const contentEl = ref<HTMLElement | null>(null)
-const loadingEl = ref<HTMLElement | null>(null)
 
-// 加载态叙事：品牌印章弹簧弹出 + 三行等待文案依次浮现
-const loadingLines = ['正在翻开笔记本…', '整理最近的记忆…', '马上就好']
-
-useGsap((_ctx, contextSafe) => {
-  watch(() => store.loading, contextSafe((loading) => {
-    if (!loading || !loadingEl.value) return
-    const root = loadingEl.value
-    const q = gsap.utils.selector(root)
-    gsap.timeline({ defaults: { ease: easeMap.out } })
-      .from(q('.welcome-loading-seal'), { scale: 0.4, autoAlpha: 0, rotation: -14, duration: 0.45, ease: easeMap.spring })
-      .from(q('.welcome-loading-line'), { autoAlpha: 0, y: 8, duration: 0.35, stagger: 0.42 }, '-=0.15')
-  }))
-})
+const loadingSteps: Step[] = [
+  { text: '正在翻开笔记本…' },
+  { text: '整理最近的记忆…' },
+  { text: '马上就好' },
+]
 
 // 磁吸微交互：primary 按钮鼠标靠近时轻微吸附跟随、移出回弹（品牌签名手感）
 // quickTo 高频更新，transform 由 GSAP 接管（CSS .magnetic 去掉 transform transition 避免双缓冲）
@@ -189,6 +196,23 @@ const sceneText = computed(() => {
   return 'Maxma 正趴在桌上等你。'
 })
 
+const taglines = computed(() => {
+  if (store.profile.scene) {
+    return [
+      `${store.profile.scene}，随时待命`,
+      '灵感迸发，即刻启程',
+      '专注高效，畅所欲言',
+      '智能陪伴，随心所欲',
+    ]
+  }
+  return [
+    '创意无限，随时待命',
+    '灵感迸发，即刻启程',
+    '专注高效，畅所欲言',
+    '智能陪伴，随心所欲',
+  ]
+})
+
 // 示例提示：覆盖三类画像的典型场景
 // - tone: 'office' (Power Office User) / 'daily' (Novice) / 'tech' (Enthusiast)
 const examples = computed(() => [
@@ -232,25 +256,6 @@ const examples = computed(() => [
   -webkit-mask-image: linear-gradient(to bottom, white 40%, transparent 100%);
 }
 
-.welcome-loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-16);
-  color: var(--text-secondary);
-  text-align: center;
-}
-.welcome-loading-seal { margin-bottom: 4px; }
-.welcome-loading-lines {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.welcome-loading-line {
-  font-size: var(--fs-ui);
-  line-height: 1.5;
-  margin: 0;
-}
 .welcome-error { text-align: center; color: var(--status-error); }
 .welcome-error-text { font-size: var(--fs-ui); margin: 0 0 12px; }
 .welcome-error-retry {
@@ -304,6 +309,12 @@ const examples = computed(() => [
   font-weight: 500;
   margin: 0;
 }
+.welcome-taglines {
+  font-size: var(--fs-ui);
+  color: var(--text-tertiary);
+  margin: var(--space-4) 0 0;
+  line-height: 1.7;
+}
 
 /* ── 墨痕分隔线 ── */
 .welcome-rule {
@@ -346,23 +357,10 @@ const examples = computed(() => [
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
 }
-.action-btn--primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--text-inverse);
-}
-.action-btn--primary:hover {
-  background: var(--accent-hover);
-  color: var(--text-inverse);
-  border-color: var(--accent-hover);
-}
 @media (prefers-reduced-motion: no-preference) {
   .action-btn:hover {
     transform: translateY(-1px);
     box-shadow: 0 4px 12px var(--shadow-color);
-  }
-  .action-btn--primary:hover {
-    box-shadow: 0 4px 16px color-mix(in srgb, var(--accent) 28%, transparent);
   }
   .action-btn:active {
     transform: scale(0.98);

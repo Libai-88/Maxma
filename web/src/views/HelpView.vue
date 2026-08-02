@@ -1,7 +1,7 @@
 <template>
   <div class="help-view" ref="rootEl">
     <div class="header">
-      <h2>帮助 & 关于 HELP</h2>
+      <h2><ColourfulText text="帮助 & 关于 HELP" /></h2>
       <p class="header-sub">了解 Maxma 是什么、能做什么、如何开始</p>
     </div>
 
@@ -24,13 +24,13 @@
     <section class="section">
       <h3>核心能力一览</h3>
       <div class="capability-grid">
-        <div class="capability-card" v-for="cap in capabilities" :key="cap.title">
+        <FloatingCard><GlareCard v-for="cap in capabilities" :key="cap.title" class="capability-card">
           <div class="capability-icon">{{ cap.icon }}</div>
           <div class="capability-body">
             <div class="capability-title">{{ cap.title }}</div>
             <div class="capability-desc">{{ cap.desc }}</div>
           </div>
-        </div>
+        </GlareCard></FloatingCard>
       </div>
     </section>
 
@@ -38,37 +38,14 @@
     <section class="section">
       <h3>三步开始使用</h3>
       <ol class="steps">
-        <li>
-          <span class="step-no">1</span>
-          <div class="step-body">
-            <div class="step-title">配置一个 AI 模型</div>
-            <div class="step-desc">
-              前往「模型 MODELS」页面，选择一个提供商（推荐 <strong>DeepSeek</strong> 注册即送免费额度，或 <strong>Ollama</strong> 完全本地运行），
-              填入 API Key 后保存。
-              <router-link to="/providers" class="inline-link">→ 前往模型设置</router-link>
+        <li v-for="(step, idx) in steps" :key="idx">
+          <FloatingCard><GlareCard class="step-card">
+            <span class="step-no">{{ idx + 1 }}</span>
+            <div class="step-body">
+              <div class="step-title">{{ step.title }}</div>
+              <div class="step-desc" v-html="step.desc" />
             </div>
-          </div>
-        </li>
-        <li>
-          <span class="step-no">2</span>
-          <div class="step-body">
-            <div class="step-title">回到对话页开始聊天</div>
-            <div class="step-desc">
-              在对话页输入任何问题，Maxma 会调用所选模型进行回复。可使用上方示例或自由提问。
-              <router-link to="/" class="inline-link">→ 返回对话</router-link>
-            </div>
-          </div>
-        </li>
-        <li>
-          <span class="step-no">3</span>
-          <div class="step-body">
-            <div class="step-title">按需扩展能力</div>
-            <div class="step-desc">
-              想让 AI 读写文件？配置 <router-link to="/mcp" class="inline-link">MCP 服务器</router-link>。
-              想让 AI 遵循固定流程？在对话中让 AI 学习并使用 Skill。
-              想让 AI 记住你的偏好？启用 <router-link to="/memory" class="inline-link">长期记忆</router-link>。
-            </div>
-          </div>
+          </GlareCard></FloatingCard>
         </li>
       </ol>
     </section>
@@ -139,6 +116,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useViewEntrance } from '@/composables/useViewEntrance'
+import GlareCard from '@/components/inspira/GlareCard.vue'
+import ColourfulText from '@/components/inspira/ColourfulText.vue'
+import FloatingCard from '@/components/inspira/FloatingCard.vue'
 
 defineOptions({ name: 'HelpView' })
 
@@ -303,6 +283,26 @@ const comparison: CompareRow[] = [
 ]
 
 const dataPath = 'api/data/'
+
+interface Step {
+  title: string
+  desc: string
+}
+
+const steps: Step[] = [
+  {
+    title: '配置一个 AI 模型',
+    desc: '前往<a href="/providers" class="inline-link">模型设置</a>页面，选择一个提供商（推荐 <strong>DeepSeek</strong> 注册即送免费额度，或 <strong>Ollama</strong> 完全本地运行），填入 API Key 后保存。',
+  },
+  {
+    title: '回到对话页开始聊天',
+    desc: '在对话页输入任何问题，Maxma 会调用所选模型进行回复。可使用上方示例或自由提问。<a href="/" class="inline-link">→ 返回对话</a>',
+  },
+  {
+    title: '按需扩展能力',
+    desc: '想让 AI 读写文件？配置 <a href="/mcp" class="inline-link">MCP 服务器</a>。想让 AI 遵循固定流程？在对话中让 AI 学习并使用 Skill。想让 AI 记住你的偏好？启用 <a href="/memory" class="inline-link">长期记忆</a>。',
+  },
+]
 </script>
 
 <style scoped>
@@ -408,9 +408,10 @@ const dataPath = 'api/data/'
   gap: 12px;
 }
 .steps li {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  list-style: none;
+}
+.steps li + li {
+  margin-top: 12px;
 }
 .step-no {
   flex-shrink: 0;
@@ -424,6 +425,15 @@ const dataPath = 'api/data/'
   display: flex;
   align-items: center;
   justify-content: center;
+}
+.step-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-primary);
 }
 .step-title {
   font-size: 13px;

@@ -5,7 +5,7 @@
       <p class="header-sub">OMP 自动发现与配置的全部能力模块概览</p>
     </div>
 
-    <div v-if="loading" class="loading">加载中...</div>
+    <div v-if="loading" class="loading"><TextGenerateEffect words="加载中..." /></div>
 
     <div v-else-if="error" class="empty">
       <p>加载失败: {{ error }}</p>
@@ -17,30 +17,42 @@
       <div class="section">
         <h3>系统概览</h3>
         <div ref="statsEl" class="stats-row">
-          <div class="stat-card">
-            <div class="stat-value">{{ system.session_count ?? 0 }}</div>
-            <div class="stat-label">活跃会话</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value">{{ tools.length }}</div>
-            <div class="stat-label">可用工具</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value">{{ providers.length }}</div>
-            <div class="stat-label">模型提供商</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value">{{ mcp_servers.length + (discovered_mcp?.length ?? 0) }}</div>
-            <div class="stat-label">MCP 服务器</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value">{{ memory?.total ?? 0 }}</div>
-            <div class="stat-label">记忆条数</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-value">{{ plugins?.length ?? 0 }}</div>
-            <div class="stat-label">已装插件</div>
-          </div>
+          <GlareCard>
+            <div class="stat-card">
+              <div class="stat-value"><NumberTicker :value="Number(system.session_count) || 0" /></div>
+              <div class="stat-label">活跃会话</div>
+            </div>
+          </GlareCard>
+          <GlareCard>
+            <div class="stat-card">
+              <div class="stat-value"><NumberTicker :value="tools.length" /></div>
+              <div class="stat-label">可用工具</div>
+            </div>
+          </GlareCard>
+          <GlareCard>
+            <div class="stat-card">
+              <div class="stat-value"><NumberTicker :value="providers.length" /></div>
+              <div class="stat-label">模型提供商</div>
+            </div>
+          </GlareCard>
+          <GlareCard>
+            <div class="stat-card">
+              <div class="stat-value"><NumberTicker :value="mcp_servers.length + (discovered_mcp?.length ?? 0)" /></div>
+              <div class="stat-label">MCP 服务器</div>
+            </div>
+          </GlareCard>
+          <GlareCard>
+            <div class="stat-card">
+              <div class="stat-value"><NumberTicker :value="memory?.total ?? 0" /></div>
+              <div class="stat-label">记忆条数</div>
+            </div>
+          </GlareCard>
+          <GlareCard>
+            <div class="stat-card">
+              <div class="stat-value"><NumberTicker :value="plugins?.length ?? 0" /></div>
+              <div class="stat-label">已装插件</div>
+            </div>
+          </GlareCard>
         </div>
         <div class="env-info" v-if="env.cwd">
           <div class="env-row"><span class="env-key">工作目录</span><span class="env-val">{{ env.cwd }}</span></div>
@@ -52,12 +64,12 @@
       <div class="section">
         <h3>运行时配置</h3>
         <div v-if="Object.keys(settings).length === 0" class="empty">暂无可用的配置项</div>
-        <div v-else class="setting-grid">
+        <BentoGrid :cols="2">
           <div v-for="(value, key) in settings" :key="key" class="config-item">
             <span class="config-key">{{ key }}</span>
             <span class="config-val">{{ formatValue(value) }}</span>
           </div>
-        </div>
+        </BentoGrid>
       </div>
 
       <!-- 工具类别 -->
@@ -66,9 +78,11 @@
         <div v-for="(catTools, cat) in tool_categories" :key="cat" class="cat-section">
           <h4 class="cat-title">{{ categoryLabel(cat) }} ({{ catTools.length }})</h4>
           <div class="tool-grid">
-            <div v-for="t in catTools" :key="t.name" class="tool-chip" :title="t.description">
-              <span class="tool-name">{{ t.label ?? t.name }}</span>
-            </div>
+            <DirectionAwareHover image-url="">
+              <div v-for="t in catTools" :key="t.name" class="tool-chip" :title="t.description">
+                <span class="tool-name">{{ t.label ?? t.name }}</span>
+              </div>
+            </DirectionAwareHover>
           </div>
         </div>
       </div>
@@ -151,6 +165,11 @@ import { ref, onMounted, watch } from 'vue'
 import { api } from '@/api'
 import type { ToolItem, ProviderItem } from '@/types'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
+import GlareCard from '@/components/inspira/GlareCard.vue'
+import DirectionAwareHover from '@/components/inspira/DirectionAwareHover.vue'
+import BentoGrid from '@/components/inspira/BentoGrid.vue'
+import NumberTicker from '@/components/inspira/NumberTicker.vue'
+import TextGenerateEffect from '@/components/inspira/TextGenerateEffect.vue'
 
 const loading = ref(true)
 const error = ref('')

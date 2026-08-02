@@ -100,7 +100,7 @@ function draw(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, ts: numb
 
   const baseHues: number[] = []
   for (const wave of waves) {
-    const [h, s, l] = hexToHsl(wave.color)
+    const [h] = hexToHsl(wave.color)
     baseHues.push(h)
   }
 
@@ -181,7 +181,7 @@ function draw(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, ts: numb
       const sparkle = peakFactor * (0.5 + 0.5 * Math.sin(time * 3 + s * 1.7 + wi * 2.3))
       const radius = 2 + sparkle * 3
 
-      const [h, sSat, l] = hexToHsl(wave.color)
+      const [h] = hexToHsl(wave.color)
       const sparkleColor = hslToHex((h + hueShift + 15) % 360, 80, 70)
 
       ctx.beginPath()

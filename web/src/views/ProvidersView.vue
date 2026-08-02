@@ -50,20 +50,20 @@
 
         <!-- 推荐提供商卡片：直接点击可一键预填 -->
         <div class="recommend-grid">
-          <button
-            v-for="r in recommendedPresets"
-            :key="r.id"
-            class="recommend-card"
-            :class="`recommend--${r.tone}`"
-            @click="startAddRecommended(r.id)"
-          >
-            <div class="recommend-header">
-              <span class="recommend-name">{{ r.label }}</span>
-              <span class="recommend-badge" :class="`badge--${r.tone}`">{{ r.badge }}</span>
-            </div>
-            <div class="recommend-desc">{{ r.desc }}</div>
-            <div class="recommend-cta">+ 使用此提供商</div>
-          </button>
+          <GlareCard v-for="r in recommendedPresets" :key="r.id">
+            <button
+              class="recommend-card"
+              :class="`recommend--${r.tone}`"
+              @click="startAddRecommended(r.id)"
+            >
+              <div class="recommend-header">
+                <span class="recommend-name">{{ r.label }}</span>
+                <span class="recommend-badge" :class="`badge--${r.tone}`">{{ r.badge }}</span>
+              </div>
+              <div class="recommend-desc">{{ r.desc }}</div>
+              <div class="recommend-cta">+ 使用此提供商</div>
+            </button>
+          </GlareCard>
         </div>
 
         <!-- 角色引导 -->
@@ -85,7 +85,7 @@
         </div>
       </div>
       <div v-else ref="providerGridRef" class="card-grid">
-        <div v-for="p in providers" :key="p.id" class="provider-card" :data-provider-id="p.id">
+        <div v-for="p in providers" :key="p.id" class="provider-card" :data-provider-id="p.id" :class="{ 'card-enabled': p.enabled }">
           <!-- 顶部信息区 -->
           <div class="card-header">
             <div class="card-title-row">
@@ -267,6 +267,7 @@ import { diagnosticMessage, retryMessage } from '@/utils/providerDiagnostics'
 import { toErrorMessage } from '@/utils/error'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useReveal } from '@/composables/useReveal'
+import GlareCard from '@/components/inspira/GlareCard.vue'
 
 // ── 预设提供商列表 ──
 	const presets: ProviderPreset[] = [
@@ -722,6 +723,14 @@ onMounted(loadProviders)
   display: flex;
   flex-direction: column;
   gap: 16px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.provider-card.card-enabled {
+  border-color: var(--status-ok);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--status-ok) 30%, transparent),
+    var(--shadow-sm);
 }
 
 /* ── 顶部信息区 ── */

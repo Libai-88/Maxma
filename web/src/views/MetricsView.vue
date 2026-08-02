@@ -28,30 +28,36 @@
       </div>
     </details>
 
-    <div v-if="!snapshot && loading" class="loading-text">加载中…</div>
-    <div v-else-if="!snapshot" class="empty-text">暂无数据</div>
+    <div v-if="!snapshot && loading" class="loading-text">
+      <TextGenerateEffect words="加载中…" />
+    </div>
+    <div v-else-if="!snapshot" class="empty-text">
+      <Sparkles>
+        <span>暂无数据</span>
+      </Sparkles>
+    </div>
     <template v-else>
       <!-- HTTP 区 -->
       <section class="card">
         <h3>HTTP 请求</h3>
         <p class="section-desc">前端发往本地后端的 HTTP 请求总量、延迟分布与状态码构成。延迟飙升或 5xx 占比高，通常意味着后端卡顿或异常。</p>
         <div ref="statGridRef" class="stat-grid">
-          <div class="stat">
-            <div class="stat-value">{{ snapshot.http.total_requests }}</div>
+          <FloatingCard><GlareCard class="stat">
+            <div class="stat-value"><NumberTicker :value="snapshot.http.total_requests" /></div>
             <div class="stat-label">总请求数</div>
-          </div>
-          <div class="stat">
-            <div class="stat-value">{{ snapshot.http.latency_ms.count }}</div>
+          </GlareCard></FloatingCard>
+          <FloatingCard><GlareCard class="stat">
+            <div class="stat-value"><NumberTicker :value="snapshot.http.latency_ms.count" /></div>
             <div class="stat-label">采样数</div>
-          </div>
-          <div class="stat">
+          </GlareCard></FloatingCard>
+          <FloatingCard><GlareCard class="stat">
             <div class="stat-value">{{ snapshot.http.latency_ms.avg_ms.toFixed(1) }}<span class="unit">ms</span></div>
             <div class="stat-label">平均延迟</div>
-          </div>
-          <div class="stat">
+          </GlareCard></FloatingCard>
+          <FloatingCard><GlareCard class="stat">
             <div class="stat-value">{{ snapshot.http.latency_ms.max_ms.toFixed(1) }}<span class="unit">ms</span></div>
             <div class="stat-label">最大延迟</div>
-          </div>
+          </GlareCard></FloatingCard>
         </div>
         <div class="sub-section">
           <div class="sub-title">状态码分布</div>
@@ -75,20 +81,20 @@
         <h3>工具调用</h3>
         <p class="section-desc">AI 在对话中实际调用的工具（搜索 / 文件读写 / MCP / 内置能力等）的总次数、错误数与按工具的分布。</p>
         <div class="stat-grid">
-          <div class="stat">
-            <div class="stat-value">{{ snapshot.tools.total_calls }}</div>
+          <FloatingCard><GlareCard class="stat">
+            <div class="stat-value"><NumberTicker :value="snapshot.tools.total_calls" /></div>
             <div class="stat-label">总调用数</div>
-          </div>
-          <div class="stat">
+          </GlareCard></FloatingCard>
+          <FloatingCard><GlareCard class="stat">
             <div class="stat-value" :class="{ 'text-error': snapshot.tools.total_errors > 0 }">
-              {{ snapshot.tools.total_errors }}
+              <NumberTicker :value="snapshot.tools.total_errors" />
             </div>
             <div class="stat-label">错误总数</div>
-          </div>
-          <div class="stat">
-            <div class="stat-value">{{ Object.keys(snapshot.tools.by_tool).length }}</div>
+          </GlareCard></FloatingCard>
+          <FloatingCard><GlareCard class="stat">
+            <div class="stat-value"><NumberTicker :value="Object.keys(snapshot.tools.by_tool).length" /></div>
             <div class="stat-label">工具种类</div>
-          </div>
+          </GlareCard></FloatingCard>
         </div>
         <div class="sub-section">
           <div class="sub-title">工具调用排行</div>
@@ -104,22 +110,22 @@
         <h3>LLM 调用</h3>
         <p class="section-desc">调用 AI 语言模型（如 DeepSeek、Ollama）的次数与 Token 消耗。输出 Token 越多，对话越长、API 费用越高。</p>
         <div class="stat-grid">
-          <div class="stat">
-            <div class="stat-value">{{ snapshot.llm.total_calls }}</div>
+          <FloatingCard><GlareCard class="stat">
+            <div class="stat-value"><NumberTicker :value="snapshot.llm.total_calls" /></div>
             <div class="stat-label">调用次数</div>
-          </div>
-          <div class="stat">
+          </GlareCard></FloatingCard>
+          <FloatingCard><GlareCard class="stat">
             <div class="stat-value">{{ formatTokens(snapshot.llm.total_tokens_in) }}</div>
             <div class="stat-label">输入 Tokens</div>
-          </div>
-          <div class="stat">
+          </GlareCard></FloatingCard>
+          <FloatingCard><GlareCard class="stat">
             <div class="stat-value">{{ formatTokens(snapshot.llm.total_tokens_out) }}</div>
             <div class="stat-label">输出 Tokens</div>
-          </div>
-          <div class="stat">
+          </GlareCard></FloatingCard>
+          <FloatingCard><GlareCard class="stat">
             <div class="stat-value">{{ snapshot.llm.latency_ms.avg_ms.toFixed(1) }}<span class="unit">ms</span></div>
             <div class="stat-label">平均延迟</div>
-          </div>
+          </GlareCard></FloatingCard>
         </div>
         <div v-if="Object.keys(snapshot.llm.by_model).length > 0" class="sub-section">
           <div class="sub-title">按模型分布</div>
@@ -137,10 +143,10 @@
         <div v-if="Object.keys(snapshot.errors).length === 0" class="empty-text">暂无错误</div>
         <template v-else>
           <div class="stat-grid">
-            <div class="stat" v-for="(count, category) in snapshot.errors" :key="category">
+            <FloatingCard><GlareCard class="stat" v-for="(count, category) in snapshot.errors" :key="category">
               <div class="stat-value text-error">{{ count }}</div>
               <div class="stat-label">{{ category }}</div>
-            </div>
+            </GlareCard></FloatingCard>
           </div>
         </template>
       </section>
@@ -186,6 +192,11 @@ import Sparkline from '@/components/Sparkline.vue'
 import BarChartMini from '@/components/BarChartMini.vue'
 import { useReveal } from '@/composables/useReveal'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
+import GlareCard from '@/components/inspira/GlareCard.vue'
+import NumberTicker from '@/components/inspira/NumberTicker.vue'
+import Sparkles from '@/components/inspira/Sparkles.vue'
+import TextGenerateEffect from '@/components/inspira/TextGenerateEffect.vue'
+import FloatingCard from '@/components/inspira/FloatingCard.vue'
 
 const metricsStore = useMetricsStore()
 const { snapshot, history, loading, error } = storeToRefs(metricsStore)

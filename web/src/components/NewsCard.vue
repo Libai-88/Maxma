@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootEl" class="news-card">
+  <DirectionAwareHover ref="rootEl" class="news-card">
     <!-- 标题行：类型徽章 + 英文标题 -->
     <div class="card-header">
       <div class="card-title-row">
@@ -26,12 +26,13 @@
     <div class="news-footer">
       <span class="news-pr">#{{ entry.pr_number }}</span>
     </div>
-  </div>
+  </DirectionAwareHover>
 </template>
 
 <script setup lang="ts">
 import type { NewsEntry } from '@/types'
 import { computed, ref } from 'vue'
+import DirectionAwareHover from '@/components/inspira/DirectionAwareHover.vue'
 import { gsap, useGsap } from '@/composables/useGsap'
 
 const props = defineProps<{ entry: NewsEntry }>()

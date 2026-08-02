@@ -13,52 +13,29 @@
     </button>
   </div>
 
-  <Carousel3D
-    :items="settingsItems"
-    :visible="showSettingsMenu"
-    @select="onSelectSetting"
-    @close="closeSettingsMenu"
-  >
-    <template #footer>
-      <button class="footer-btn" :class="{ restarting }" :disabled="restarting" @click="handleRestart" title="重启服务">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
-          <polyline points="23 4 23 10 17 10"/>
-          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-        </svg>
-        <span>重启</span>
-      </button>
-      <button class="footer-btn" @click="handleClearSession" title="清空当前会话">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
-          <polyline points="3 6 5 6 21 6"/>
-          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-        </svg>
-        <span>清空</span>
-      </button>
-      <button class="footer-btn" :class="{ exporting: exportingErrorLog }" :disabled="exportingErrorLog" @click="handleExportErrorLog" title="导出错误日志">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-          <polyline points="7 10 12 15 17 10"/>
-          <line x1="12" y1="15" x2="12" y2="3"/>
-        </svg>
-        <span>日志</span>
-      </button>
-      <button class="footer-btn" :class="{ managing: managingLogs }" :disabled="managingLogs" @click="handleManageLogs" title="日志管理">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-          <line x1="16" y1="13" x2="8" y2="13"/>
-          <line x1="16" y1="17" x2="8" y2="17"/>
-        </svg>
-        <span>日志</span>
-      </button>
-    </template>
-  </Carousel3D>
+  <AnimatedModal v-model:open="showSettingsMenu">
+    <AnimatedModalBody :lock-scroll="true" :show-close="false" @close="closeSettingsMenu">
+      <SettingsModalContent
+        :items="settingsItems"
+        :restarting="restarting"
+        :exporting="exportingErrorLog"
+        :managing="managingLogs"
+        @select="onSelectSetting"
+        @restart="handleRestart"
+        @clear-session="handleClearSession"
+        @export-logs="handleExportErrorLog"
+        @manage-logs="handleManageLogs"
+      />
+    </AnimatedModalBody>
+  </AnimatedModal>
 </template>
 
 <script setup lang="ts">
 import Icon from '@/components/Icon.vue';
-import Carousel3D from '@/components/Carousel3D.vue';
-import type { CarouselItem } from '@/components/Carousel3D.vue';
+import SettingsModalContent from '@/components/SettingsModalContent.vue';
+import type { SettingsItem } from '@/components/SettingsModalContent.vue';
+import AnimatedModal from '@/components/inspira/AnimatedModal.vue';
+import AnimatedModalBody from '@/components/inspira/AnimatedModalBody.vue';
 import { api } from '@/api';
 import { invoke } from '@tauri-apps/api/core';
 import { onUnmounted, ref } from 'vue';
@@ -83,9 +60,9 @@ const managingLogs = ref(false)
 const sessionStore = useSessionStore()
 const chatStore = useChatStore()
 
-// ── 设置页面列表（旋转木马数据源） ──
+// ── 设置页面列表 ──
 
-const settingsItems: CarouselItem[] = [
+const settingsItems: SettingsItem[] = [
   { icon: 'dashboard', title: '能力仪表盘', subtitle: 'OMP 全部能力模块概览与运行状态', route: '/capabilities' },
   { icon: 'puzzle', title: '插件管理', subtitle: '安装、卸载与管理 OMP 插件', route: '/plugins' },
   { icon: 'model', title: '模型', subtitle: '配置 AI 语言模型与接入密钥', route: '/providers' },
@@ -211,7 +188,7 @@ function closeSettingsMenu() {
   showSettingsMenu.value = false
 }
 
-function onSelectSetting(item: CarouselItem) {
+function onSelectSetting(item: SettingsItem) {
   showSettingsMenu.value = false
   router.push(item.route)
 }
@@ -278,45 +255,5 @@ function onSelectSetting(item: CarouselItem) {
   font-size: 0.75em;
   color: var(--text-tertiary);
   letter-spacing: 0.5px;
-}
-
-/* ── 底部操作按钮（Carousel footer slot） ── */
-.footer-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.75);
-  font-size: 12px;
-  font-family: inherit;
-  cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
-  white-space: nowrap;
-}
-.footer-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.14);
-  border-color: rgba(255, 255, 255, 0.3);
-  color: #fff;
-}
-.footer-btn:active:not(:disabled) {
-  transform: scale(0.96);
-}
-.footer-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.footer-btn.restarting {
-  color: #f59e0b;
-  border-color: #f59e0b40;
-}
-.footer-btn.exporting {
-  color: #3b82f6;
-  border-color: #3b82f640;
-}
-.footer-btn svg {
-  flex-shrink: 0;
 }
 </style>

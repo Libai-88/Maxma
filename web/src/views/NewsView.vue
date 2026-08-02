@@ -1,10 +1,12 @@
 <template>
   <div class="news-view" ref="newsViewRef">
     <!-- 标题栏 -->
-    <div class="header">
-      <h2>更新动态 News</h2>
-      <span class="news-count" v-if="!loading && !loadError">共 {{ news.length }} 条更新</span>
-    </div>
+    <BlurReveal>
+      <div class="header">
+        <h2>更新动态 News</h2>
+        <span class="news-count" v-if="!loading && !loadError">共 {{ news.length }} 条更新</span>
+      </div>
+    </BlurReveal>
 
     <div class="news-body">
       <!-- 卡片列表 -->
@@ -32,23 +34,13 @@
           <div class="empty-desc">Maxma 新版本与功能更新会在这里展示。</div>
         </div>
         <div v-else class="card-grid" ref="cardGridRef">
-          <NewsCard v-for="entry in news" :key="entry.id" :entry="entry" />
+          <GlareCard v-for="entry in news" :key="entry.id">
+            <NewsCard :entry="entry" />
+          </GlareCard>
         </div>
       </div>
 
-      <!-- 版本演进时间轴 -->
-      <div v-if="versionNodes.length > 0" ref="timelineRef" class="version-timeline">
-        <div class="tl-track"></div>
-        <div
-          v-for="node in versionNodes"
-          :key="node.version"
-          class="tl-node"
-          :ref="(el) => setCssProp(el, 'top', node.top + 'px')"
-        >
-          <div class="tl-dot"></div>
-          <span class="tl-label">{{ node.version }}</span>
-        </div>
-      </div>
+      <Timeline v-if="timelineItems.length > 0" :items="timelineItems" class="version-timeline" />
     </div>
   </div>
 </template>
@@ -57,9 +49,12 @@
 import { api } from '@/api'
 import type { NewsEntry } from '@/types'
 import NewsCard from '@/components/NewsCard.vue'
-import { onMounted, onUnmounted, ref, watchEffect, type ComponentPublicInstance } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { createLogger } from '@/utils/logger'
 import { useReveal } from '@/composables/useReveal'
+import BlurReveal from '@/components/inspira/BlurReveal.vue'
+import GlareCard from '@/components/inspira/GlareCard.vue'
+import Timeline from '@/components/inspira/Timeline.vue'
 
 const log = createLogger('NewsView')
 
@@ -68,66 +63,25 @@ const loading = ref(false)
 const loadError = ref(false)
 const newsViewRef = ref<HTMLElement | null>(null)
 const cardGridRef = ref<HTMLElement | null>(null)
-const timelineRef = ref<HTMLElement | null>(null)
-const tlBounds = ref<{ top: string; height: string }>()
-const versionNodes = ref<{ version: string; top: number }[]>([])
+
+// 版本时间轴数据
+const timelineItems = computed(() => {
+  const seen = new Set<string>()
+  return news.value
+    .filter(entry => {
+      if (seen.has(entry.version)) return false
+      seen.add(entry.version)
+      return true
+    })
+    .map(entry => ({
+      title: entry.version,
+      description: '',
+      date: '',
+    }))
+})
 
 // 新闻卡片错落入场（加载完成后）
 useReveal(() => cardGridRef.value, '.news-card', { stagger: 0.06 })
-
-// CSP-safe CSSOM helper: apply style property via setProperty (replaces :style binding)
-function setCssProp(el: Element | ComponentPublicInstance | null, prop: string, value: string) {
-  if (el instanceof HTMLElement) el.style.setProperty(prop, value)
-}
-
-// CSP-safe CSSOM: position timeline via style.setProperty (was :style tlBounds)
-watchEffect(() => {
-  const el = timelineRef.value
-  const bounds = tlBounds.value
-  if (!el || !bounds) return
-  el.style.setProperty('top', bounds.top)
-  el.style.setProperty('height', bounds.height)
-}, { flush: 'post' })
-
-let observer: ResizeObserver | null = null
-
-function updateTimelineBounds() {
-  const grid = cardGridRef.value
-  const body = grid?.closest<HTMLElement>('.news-body')
-  if (!body || !grid) return
-
-  const cards = grid.querySelectorAll<HTMLElement>('.news-card')
-  if (cards.length < 2) return
-
-  const bodyRect = body.getBoundingClientRect()
-  const firstRect = cards[0].getBoundingClientRect()
-  const lastRect = cards[cards.length - 1].getBoundingClientRect()
-
-  const top = firstRect.top + firstRect.height / 2 - bodyRect.top
-  const bottom = lastRect.top + lastRect.height / 2 - bodyRect.top
-
-  tlBounds.value = {
-    top: top + 'px',
-    height: (bottom - top) + 'px',
-  }
-
-  // 根据卡片实际 DOM 位置计算版本圆点的 top 值，而非按索引均分
-  const tlTop = bodyRect.top + top
-  const seen = new Set<string>()
-  const nodes: { version: string; top: number }[] = []
-  news.value.forEach((entry, idx) => {
-    if (seen.has(entry.version)) return
-    seen.add(entry.version)
-    const card = cards[idx]
-    if (!card) return
-    const cardRect = card.getBoundingClientRect()
-    nodes.push({
-      version: entry.version,
-      top: cardRect.top + cardRect.height / 2 - tlTop,
-    })
-  })
-  versionNodes.value = nodes
-}
 
 async function loadNews() {
   loading.value = true
@@ -135,7 +89,6 @@ async function loadNews() {
   try {
     const res = await api.listNews()
     news.value = res.news.sort((a, b) => b.pr_number - a.pr_number)
-    requestAnimationFrame(updateTimelineBounds)
   } catch (e: unknown) {
     log.error('加载更新动态失败', e)
     loadError.value = true
@@ -146,14 +99,6 @@ async function loadNews() {
 
 onMounted(() => {
   loadNews()
-  observer = new ResizeObserver(updateTimelineBounds)
-  if (newsViewRef.value) {
-    observer.observe(newsViewRef.value)
-  }
-})
-
-onUnmounted(() => {
-  observer?.disconnect()
 })
 
 </script>
@@ -259,53 +204,5 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 20px;
-}
-
-/* ── 版本时间轴 ── */
-
-.version-timeline {
-  position: absolute;
-  left: calc(75% + 180px);
-  transform: translateX(-50%);
-  width: 80px;
-  pointer-events: none;
-}
-
-.tl-track {
-  position: absolute;
-  left: 50%;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: var(--border);
-  transform: translateX(-50%);
-}
-
-.tl-node {
-  position: absolute;
-  left: 50%;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transform: translateY(-50%);
-}
-
-.tl-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--text-primary);
-  flex-shrink: 0;
-  position: relative;
-  left: -4px;
-}
-
-.tl-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  font-family: 'SF Mono', 'Consolas', monospace;
-  white-space: nowrap;
-  padding-left: 12px;
 }
 </style>

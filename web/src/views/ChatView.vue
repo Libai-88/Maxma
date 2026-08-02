@@ -60,7 +60,8 @@
         >
           <span aria-hidden="true">&#9776;</span>
         </button>
-        <div class="session-more-menu">
+        <GlowBorder :blur="6" :duration="3">
+          <div class="session-more-menu">
           <button
             ref="moreMenuTrigger"
             class="session-more-trigger"
@@ -88,14 +89,16 @@
             </div>
             <SessionPermissionModeControl :session-id="sessionId" />
           </div>
-        </div>
+          </div>
+        </GlowBorder>
       </template>
     </ChatHeader>
 
     <div class="chat-workbench-layout">
       <div class="chat-main-column">
         <template v-if="hasMessages">
-          <ChatWindow
+          <CardSpotlight>
+            <ChatWindow
             :session-id="sessionId"
             :turns="turns"
             :current-turn="currentTurn"
@@ -108,6 +111,7 @@
             @plan-respond="sendPlanResponse"
             @pin="handlePin"
           />
+        </CardSpotlight>
         </template>
         <WelcomeScreen v-else @start="handleQuickStart" />
 
@@ -173,6 +177,8 @@ import { storeToRefs } from 'pinia'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useGlobalShortcut } from '@/composables/useGlobalShortcut'
 import { createLogger } from '@/utils/logger'
+import CardSpotlight from '@/components/inspira/CardSpotlight.vue'
+import GlowBorder from '@/components/inspira/GlowBorder.vue'
 
 const log = createLogger('ChatView')
 

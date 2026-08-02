@@ -10,415 +10,456 @@
       <button class="btn" @click="loadSettings">重试</button>
     </div>
     <template v-else>
+      <AnimatedTabs
+        v-if="!loading && !loadError"
+        :tabs="sectionTabs"
+        v-model="activeSection"
+        class="settings-tabs"
+      />
       <!-- Compaction -->
-      <div class="section">
-        <h3>上下文管理</h3>
-        <p class="section-desc">控制 AI 如何管理对话历史和上下文窗口。</p>
+      <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
+        <div class="section" v-show="activeSection === 'compaction'">
+          <h3>上下文管理</h3>
+          <p class="section-desc">控制 AI 如何管理对话历史和上下文窗口。</p>
 
-        <div class="setting-row">
-          <div class="setting-info">
-            <div class="setting-label">启用上下文压缩</div>
-            <div class="setting-desc">当对话过长时自动压缩历史消息。</div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">启用上下文压缩</div>
+              <div class="setting-desc">当对话过长时自动压缩历史消息。</div>
+            </div>
+            <button class="toggle-btn" :class="{ on: settings['compaction.enabled'] }" @click="toggle('compaction.enabled')">
+              {{ settings['compaction.enabled'] ? '开启' : '关闭' }}
+            </button>
           </div>
-          <button class="toggle-btn" :class="{ on: settings['compaction.enabled'] }" @click="toggle('compaction.enabled')">
-            {{ settings['compaction.enabled'] ? '开启' : '关闭' }}
-          </button>
-        </div>
 
-        <div class="setting-row">
-          <div class="setting-info">
-            <div class="setting-label">压缩策略</div>
-            <div class="setting-desc">选择上下文压缩的方式。</div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">压缩策略</div>
+              <div class="setting-desc">选择上下文压缩的方式。</div>
+            </div>
+            <select class="select" :value="settings['compaction.strategy']" @change="set('compaction.strategy', ($event.target as HTMLSelectElement).value)">
+              <option value="context-full">上下文满时压缩</option>
+              <option value="handoff">交接模式</option>
+              <option value="shake">精简模式</option>
+              <option value="snapcompact">快速压缩</option>
+              <option value="off">关闭</option>
+            </select>
           </div>
-          <select class="select" :value="settings['compaction.strategy']" @change="set('compaction.strategy', ($event.target as HTMLSelectElement).value)">
-            <option value="context-full">上下文满时压缩</option>
-            <option value="handoff">交接模式</option>
-            <option value="shake">精简模式</option>
-            <option value="snapcompact">快速压缩</option>
-            <option value="off">关闭</option>
-          </select>
-        </div>
 
-        <div class="setting-row">
-          <div class="setting-info">
-            <div class="setting-label">压缩阈值</div>
-            <div class="setting-desc">上下文使用率达到此百分比时触发压缩。</div>
-          </div>
-          <div class="setting-control">
-            <input type="range" min="50" max="95" step="5"
-              :value="settings['compaction.thresholdPercent'] ?? 80"
-              @input="set('compaction.thresholdPercent', Number(($event.target as HTMLInputElement).value))" />
-            <span class="range-value">{{ settings['compaction.thresholdPercent'] ?? 80 }}%</span>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">压缩阈值</div>
+              <div class="setting-desc">上下文使用率达到此百分比时触发压缩。</div>
+            </div>
+            <div class="setting-control">
+              <BalanceSlider
+                :min="50" :max="95" :step="5"
+                :model-value="(settings['compaction.thresholdPercent'] ?? 80) as number"
+                @update:model-value="set('compaction.thresholdPercent', $event)"
+                show-value
+                class="setting-balance-slider"
+              />
+            </div>
           </div>
         </div>
-      </div>
+      </GlowingEffect>
 
       <!-- Retry -->
-      <div class="section">
-        <h3>容错</h3>
-        <p class="section-desc">控制 AI 调用失败时的重试行为。</p>
+      <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
+        <div class="section" v-show="activeSection === 'retry'">
+          <h3>容错</h3>
+          <p class="section-desc">控制 AI 调用失败时的重试行为。</p>
 
-        <div class="setting-row">
-          <div class="setting-info">
-            <div class="setting-label">自动重试</div>
-            <div class="setting-desc">调用失败时自动重试。</div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">自动重试</div>
+              <div class="setting-desc">调用失败时自动重试。</div>
+            </div>
+            <button class="toggle-btn" :class="{ on: settings['retry.enabled'] }" @click="toggle('retry.enabled')">
+              {{ settings['retry.enabled'] ? '开启' : '关闭' }}
+            </button>
           </div>
-          <button class="toggle-btn" :class="{ on: settings['retry.enabled'] }" @click="toggle('retry.enabled')">
-            {{ settings['retry.enabled'] ? '开启' : '关闭' }}
-          </button>
-        </div>
 
-        <div class="setting-row" v-if="settings['retry.enabled']">
-          <div class="setting-info">
-            <div class="setting-label">最大重试次数</div>
+          <div class="setting-row" v-if="settings['retry.enabled']">
+            <div class="setting-info">
+              <div class="setting-label">最大重试次数</div>
+            </div>
+            <input type="number" class="input-number" min="1" max="10"
+              :value="settings['retry.maxRetries'] ?? 3"
+              @change="set('retry.maxRetries', Number(($event.target as HTMLInputElement).value))" />
           </div>
-          <input type="number" class="input-number" min="1" max="10"
-            :value="settings['retry.maxRetries'] ?? 3"
-            @change="set('retry.maxRetries', Number(($event.target as HTMLInputElement).value))" />
-        </div>
 
-        <div class="setting-row">
-          <div class="setting-info">
-            <div class="setting-label">模型降级</div>
-            <div class="setting-desc">主模型失败时切换到备用模型。</div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">模型降级</div>
+              <div class="setting-desc">主模型失败时切换到备用模型。</div>
+            </div>
+            <button class="toggle-btn" :class="{ on: settings['retry.modelFallback'] }" @click="toggle('retry.modelFallback')">
+              {{ settings['retry.modelFallback'] ? '开启' : '关闭' }}
+            </button>
           </div>
-          <button class="toggle-btn" :class="{ on: settings['retry.modelFallback'] }" @click="toggle('retry.modelFallback')">
-            {{ settings['retry.modelFallback'] ? '开启' : '关闭' }}
-          </button>
         </div>
-      </div>
+      </GlowingEffect>
 
       <!-- Tools -->
-      <div class="section">
-        <h3>工具</h3>
-        <p class="section-desc">控制 AI 使用工具时的行为。</p>
+      <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
+        <div class="section" v-show="activeSection === 'tools'">
+          <h3>工具</h3>
+          <p class="section-desc">控制 AI 使用工具时的行为。</p>
 
-        <div class="setting-row">
-          <div class="setting-info">
-            <div class="setting-label">工具审批模式</div>
-            <div class="setting-desc">AI 执行工具前是否需要你确认。</div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">工具审批模式</div>
+              <div class="setting-desc">AI 执行工具前是否需要你确认。</div>
+            </div>
+            <select class="select" :value="settings['tools.approvalMode']" @change="set('tools.approvalMode', ($event.target as HTMLSelectElement).value)">
+              <option value="yolo">自动批准（Yolo）</option>
+              <option value="write">写操作需确认</option>
+              <option value="always-ask">始终询问</option>
+            </select>
           </div>
-          <select class="select" :value="settings['tools.approvalMode']" @change="set('tools.approvalMode', ($event.target as HTMLSelectElement).value)">
-            <option value="yolo">自动批准（Yolo）</option>
-            <option value="write">写操作需确认</option>
-            <option value="always-ask">始终询问</option>
-          </select>
-        </div>
 
-        <div class="setting-row">
-          <div class="setting-info">
-            <div class="setting-label">MCP 工具发现</div>
-            <div class="setting-desc">自动发现并加载 MCP 服务器提供的工具。</div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">MCP 工具发现</div>
+              <div class="setting-desc">自动发现并加载 MCP 服务器提供的工具。</div>
+            </div>
+            <select class="select" :value="settings['tools.discoveryMode']" @change="set('tools.discoveryMode', ($event.target as HTMLSelectElement).value)">
+              <option value="all">全部加载</option>
+              <option value="auto">自动发现</option>
+              <option value="off">关闭</option>
+            </select>
           </div>
-          <select class="select" :value="settings['tools.discoveryMode']" @change="set('tools.discoveryMode', ($event.target as HTMLSelectElement).value)">
-            <option value="all">全部加载</option>
-            <option value="auto">自动发现</option>
-            <option value="off">关闭</option>
-          </select>
         </div>
-      </div>
+      </GlowingEffect>
 
       <!-- Advisor -->
-      <div class="section">
-        <h3>顾问</h3>
-        <p class="section-desc">启用第二个 AI 模型作为顾问，被动审查每次对话。</p>
+      <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
+        <div class="section" v-show="activeSection === 'advisor'">
+          <h3>顾问</h3>
+          <p class="section-desc">启用第二个 AI 模型作为顾问，被动审查每次对话。</p>
 
-        <div class="setting-row">
-          <div class="setting-info">
-            <div class="setting-label">启用顾问</div>
-            <div class="setting-desc">配对一个顾问模型来审查 AI 的回复。</div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">启用顾问</div>
+              <div class="setting-desc">配对一个顾问模型来审查 AI 的回复。</div>
+            </div>
+            <button class="toggle-btn" :class="{ on: settings['advisor.enabled'] }" @click="toggle('advisor.enabled')">
+              {{ settings['advisor.enabled'] ? '开启' : '关闭' }}
+            </button>
           </div>
-          <button class="toggle-btn" :class="{ on: settings['advisor.enabled'] }" @click="toggle('advisor.enabled')">
-            {{ settings['advisor.enabled'] ? '开启' : '关闭' }}
-          </button>
         </div>
-      </div>
+      </GlowingEffect>
 
       <!-- Interaction -->
-      <div class="section">
-        <h3>交互</h3>
-        <p class="section-desc">控制消息队列和中断行为。</p>
+      <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
+        <div class="section" v-show="activeSection === 'interaction'">
+          <h3>交互</h3>
+          <p class="section-desc">控制消息队列和中断行为。</p>
 
-        <div class="setting-row">
-          <div class="setting-info">
-            <div class="setting-label">转向模式</div>
-            <div class="setting-desc">连续发送多条消息时的处理方式。</div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">转向模式</div>
+              <div class="setting-desc">连续发送多条消息时的处理方式。</div>
+            </div>
+            <select class="select" :value="settings['steeringMode']" @change="set('steeringMode', ($event.target as HTMLSelectElement).value)">
+              <option value="all">全部接受</option>
+              <option value="one-at-a-time">逐条处理</option>
+            </select>
           </div>
-          <select class="select" :value="settings['steeringMode']" @change="set('steeringMode', ($event.target as HTMLSelectElement).value)">
-            <option value="all">全部接受</option>
-            <option value="one-at-a-time">逐条处理</option>
-          </select>
-        </div>
 
-        <div class="setting-row">
-          <div class="setting-info">
-            <div class="setting-label">中断模式</div>
-            <div class="setting-desc">AI 正在回复时发送新消息的行为。</div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">中断模式</div>
+              <div class="setting-desc">AI 正在回复时发送新消息的行为。</div>
+            </div>
+            <select class="select" :value="settings['interruptMode']" @change="set('interruptMode', ($event.target as HTMLSelectElement).value)">
+              <option value="immediate">立即中断</option>
+              <option value="wait">等待完成</option>
+            </select>
           </div>
-          <select class="select" :value="settings['interruptMode']" @change="set('interruptMode', ($event.target as HTMLSelectElement).value)">
-            <option value="immediate">立即中断</option>
-            <option value="wait">等待完成</option>
-          </select>
         </div>
-      </div>
+      </GlowingEffect>
 
       <!-- Thinking -->
-      <div class="section">
-        <h3>推理预算</h3>
-        <p class="section-desc">控制 AI 在不同推理级别下的 token 预算。</p>
+      <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
+        <div class="section" v-show="activeSection === 'thinking'">
+          <h3>推理预算</h3>
+          <p class="section-desc">控制 AI 在不同推理级别下的 token 预算。</p>
 
-        <div class="setting-row" v-for="level in ['minimal', 'low', 'medium', 'high', 'xhigh', 'max']" :key="level">
-          <div class="setting-info">
-            <div class="setting-label">{{ thinkingLevelLabel(level) }}</div>
+          <div class="setting-row" v-for="level in ['minimal', 'low', 'medium', 'high', 'xhigh', 'max']" :key="level">
+            <div class="setting-info">
+              <div class="setting-label">{{ thinkingLevelLabel(level) }}</div>
+            </div>
+            <input type="number" class="input-number" min="1024" max="131072" step="1024"
+              :value="settings[`thinkingBudgets.${level}`] ?? 32768"
+              @change="set(`thinkingBudgets.${level}`, Number(($event.target as HTMLInputElement).value))" />
           </div>
-          <input type="number" class="input-number" min="1024" max="131072" step="1024"
-            :value="settings[`thinkingBudgets.${level}`] ?? 32768"
-            @change="set(`thinkingBudgets.${level}`, Number(($event.target as HTMLInputElement).value))" />
         </div>
-      </div>
+      </GlowingEffect>
 
       <!-- Skills -->
-      <div class="section">
-        <h3>技能包</h3>
-        <p class="section-desc">控制 OMP 技能包的启用状态。</p>
-        <div class="setting-row">
-          <div class="setting-info">
-            <div class="setting-label">启用技能包</div>
-            <div class="setting-desc">加载 .agents/skills/ 和 .claude/skills/ 中的技能。</div>
+      <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
+        <div class="section" v-show="activeSection === 'skills'">
+          <h3>技能包</h3>
+          <p class="section-desc">控制 OMP 技能包的启用状态。</p>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">启用技能包</div>
+              <div class="setting-desc">加载 .agents/skills/ 和 .claude/skills/ 中的技能。</div>
+            </div>
+            <button class="toggle-btn" :class="{ on: settings['skills.enabled'] }" @click="toggle('skills.enabled')">
+              {{ settings['skills.enabled'] ? '开启' : '关闭' }}
+            </button>
           </div>
-          <button class="toggle-btn" :class="{ on: settings['skills.enabled'] }" @click="toggle('skills.enabled')">
-            {{ settings['skills.enabled'] ? '开启' : '关闭' }}
-          </button>
         </div>
-      </div>
+      </GlowingEffect>
 
       <!-- TTS / 语音 -->
-      <div class="section">
-        <h3>语音</h3>
-        <p class="section-desc">配置文本转语音（TTS）的引擎与朗读行为。</p>
-
-        <div class="setting-row">
-          <div class="setting-info">
-            <div class="setting-label">启用 TTS</div>
-            <div class="setting-desc">开启后可将 AI 回复朗读出来。</div>
-          </div>
-          <button class="toggle-btn" :class="{ on: tts.enabled }" @click="setTts('enabled', !tts.enabled)">
-            {{ tts.enabled ? '开启' : '关闭' }}
-          </button>
-        </div>
-
-        <template v-if="tts.enabled">
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">TTS 引擎</div>
-              <div class="setting-desc">选择语音合成提供商。</div>
-            </div>
-            <select class="select" :value="tts.provider" @change="onTtsProviderChange(($event.target as HTMLSelectElement).value as TtsConfig['provider'])">
-              <option value="edge-tts">Edge TTS</option>
-              <option value="openai-tts">OpenAI TTS</option>
-              <option value="custom">自定义</option>
-            </select>
-          </div>
+      <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
+        <div class="section" v-show="activeSection === 'tts'">
+          <h3>语音</h3>
+          <p class="section-desc">配置文本转语音（TTS）的引擎与朗读行为。</p>
 
           <div class="setting-row">
             <div class="setting-info">
-              <div class="setting-label">语音</div>
-              <div class="setting-desc">根据所选引擎动态加载可用音色。</div>
+              <div class="setting-label">启用 TTS</div>
+              <div class="setting-desc">开启后可将 AI 回复朗读出来。</div>
             </div>
-            <select class="select" :value="tts.voice" @change="setTts('voice', ($event.target as HTMLSelectElement).value)">
-              <option value="">（默认）</option>
-              <option v-for="v in voiceOptions" :key="v" :value="v">{{ v }}</option>
-            </select>
-          </div>
-
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">语速</div>
-            </div>
-            <div class="setting-control">
-              <input type="range" min="0.5" max="2.0" step="0.1"
-                :value="tts.speed"
-                @input="setTts('speed', Number(($event.target as HTMLInputElement).value))" />
-              <span class="range-value">{{ tts.speed.toFixed(1) }}x</span>
-            </div>
-          </div>
-
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">音调</div>
-            </div>
-            <div class="setting-control">
-              <input type="range" min="0.5" max="2.0" step="0.1"
-                :value="tts.pitch"
-                @input="setTts('pitch', Number(($event.target as HTMLInputElement).value))" />
-              <span class="range-value">{{ tts.pitch.toFixed(1) }}x</span>
-            </div>
-          </div>
-
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">自动朗读回复</div>
-              <div class="setting-desc">AI 回复完成后自动播放语音。</div>
-            </div>
-            <button class="toggle-btn" :class="{ on: tts.auto_read }" @click="setTts('auto_read', !tts.auto_read)">
-              {{ tts.auto_read ? '开启' : '关闭' }}
+            <button class="toggle-btn" :class="{ on: tts.enabled }" @click="setTts('enabled', !tts.enabled)">
+              {{ tts.enabled ? '开启' : '关闭' }}
             </button>
           </div>
-        </template>
-      </div>
+
+          <template v-if="tts.enabled">
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">TTS 引擎</div>
+                <div class="setting-desc">选择语音合成提供商。</div>
+              </div>
+              <select class="select" :value="tts.provider" @change="onTtsProviderChange(($event.target as HTMLSelectElement).value as TtsConfig['provider'])">
+                <option value="edge-tts">Edge TTS</option>
+                <option value="openai-tts">OpenAI TTS</option>
+                <option value="custom">自定义</option>
+              </select>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">语音</div>
+                <div class="setting-desc">根据所选引擎动态加载可用音色。</div>
+              </div>
+              <select class="select" :value="tts.voice" @change="setTts('voice', ($event.target as HTMLSelectElement).value)">
+                <option value="">（默认）</option>
+                <option v-for="v in voiceOptions" :key="v" :value="v">{{ v }}</option>
+              </select>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">语速</div>
+              </div>
+              <div class="setting-control">
+                <BalanceSlider
+                  :min="0.5" :max="2.0" :step="0.1"
+                  :model-value="tts.speed"
+                  @update:model-value="setTts('speed', $event)"
+                  show-value
+                  class="setting-balance-slider"
+                />
+              </div>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">音调</div>
+              </div>
+              <div class="setting-control">
+                <BalanceSlider
+                  :min="0.5" :max="2.0" :step="0.1"
+                  :model-value="tts.pitch"
+                  @update:model-value="setTts('pitch', $event)"
+                  show-value
+                  class="setting-balance-slider"
+                />
+              </div>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">自动朗读回复</div>
+                <div class="setting-desc">AI 回复完成后自动播放语音。</div>
+              </div>
+              <button class="toggle-btn" :class="{ on: tts.auto_read }" @click="setTts('auto_read', !tts.auto_read)">
+                {{ tts.auto_read ? '开启' : '关闭' }}
+              </button>
+            </div>
+          </template>
+        </div>
+      </GlowingEffect>
 
       <!-- 浏览器工具 -->
-      <div class="section">
-        <h3>浏览器工具</h3>
-        <p class="section-desc">配置 AI 内置浏览器自动化的运行方式。</p>
+      <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
+        <div class="section" v-show="activeSection === 'browser'">
+          <h3>浏览器工具</h3>
+          <p class="section-desc">配置 AI 内置浏览器自动化的运行方式。</p>
 
-        <div class="setting-row">
-          <div class="setting-info">
-            <div class="setting-label">启用浏览器工具</div>
-            <div class="setting-desc">允许 AI 打开网页、截图与抓取内容。</div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">启用浏览器工具</div>
+              <div class="setting-desc">允许 AI 打开网页、截图与抓取内容。</div>
+            </div>
+            <button class="toggle-btn" :class="{ on: browser.enabled }" @click="setBrowser('enabled', !browser.enabled)">
+              {{ browser.enabled ? '开启' : '关闭' }}
+            </button>
           </div>
-          <button class="toggle-btn" :class="{ on: browser.enabled }" @click="setBrowser('enabled', !browser.enabled)">
-            {{ browser.enabled ? '开启' : '关闭' }}
-          </button>
+
+          <template v-if="browser.enabled">
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">Chrome 可执行文件路径</div>
+                <div class="setting-desc">留空则使用自动检测的浏览器。</div>
+              </div>
+              <div class="setting-control">
+                <input type="text" class="input-text" :value="browser.chrome_path"
+                  placeholder="自动检测"
+                  @change="setBrowser('chrome_path', ($event.target as HTMLInputElement).value)" />
+                <button class="btn" @click="detectChrome">检测</button>
+              </div>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">无头模式</div>
+                <div class="setting-desc">后台运行浏览器，不显示窗口。</div>
+              </div>
+              <button class="toggle-btn" :class="{ on: browser.headless }" @click="setBrowser('headless', !browser.headless)">
+                {{ browser.headless ? '开启' : '关闭' }}
+              </button>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">默认视口</div>
+                <div class="setting-desc">浏览器窗口的宽 × 高（像素）。</div>
+              </div>
+              <div class="setting-control">
+                <input type="number" class="input-number" min="1" max="7680"
+                  :value="browser.viewport_width"
+                  @change="setBrowser('viewport_width', Number(($event.target as HTMLInputElement).value))" />
+                <span class="range-value">×</span>
+                <input type="number" class="input-number" min="1" max="4320"
+                  :value="browser.viewport_height"
+                  @change="setBrowser('viewport_height', Number(($event.target as HTMLInputElement).value))" />
+              </div>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">拦截跟踪 / 分析</div>
+                <div class="setting-desc">屏蔽常见的跟踪与统计分析请求。</div>
+              </div>
+              <button class="toggle-btn" :class="{ on: browser.block_tracking }" @click="setBrowser('block_tracking', !browser.block_tracking)">
+                {{ browser.block_tracking ? '开启' : '关闭' }}
+              </button>
+            </div>
+
+            <div class="setting-row setting-row-block">
+              <div class="setting-info">
+                <div class="setting-label">允许的域名</div>
+                <div class="setting-desc">每行一个域名；留空表示允许全部。</div>
+              </div>
+              <textarea class="textarea" rows="3" :value="browser.allowed_domains.join('\n')"
+                placeholder="example.com&#10;docs.python.org"
+                @change="setBrowser('allowed_domains', ($event.target as HTMLTextAreaElement).value.split('\n').map(s => s.trim()).filter(Boolean))" />
+            </div>
+          </template>
         </div>
-
-        <template v-if="browser.enabled">
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">Chrome 可执行文件路径</div>
-              <div class="setting-desc">留空则使用自动检测的浏览器。</div>
-            </div>
-            <div class="setting-control">
-              <input type="text" class="input-text" :value="browser.chrome_path"
-                placeholder="自动检测"
-                @change="setBrowser('chrome_path', ($event.target as HTMLInputElement).value)" />
-              <button class="btn" @click="detectChrome">检测</button>
-            </div>
-          </div>
-
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">无头模式</div>
-              <div class="setting-desc">后台运行浏览器，不显示窗口。</div>
-            </div>
-            <button class="toggle-btn" :class="{ on: browser.headless }" @click="setBrowser('headless', !browser.headless)">
-              {{ browser.headless ? '开启' : '关闭' }}
-            </button>
-          </div>
-
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">默认视口</div>
-              <div class="setting-desc">浏览器窗口的宽 × 高（像素）。</div>
-            </div>
-            <div class="setting-control">
-              <input type="number" class="input-number" min="1" max="7680"
-                :value="browser.viewport_width"
-                @change="setBrowser('viewport_width', Number(($event.target as HTMLInputElement).value))" />
-              <span class="range-value">×</span>
-              <input type="number" class="input-number" min="1" max="4320"
-                :value="browser.viewport_height"
-                @change="setBrowser('viewport_height', Number(($event.target as HTMLInputElement).value))" />
-            </div>
-          </div>
-
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">拦截跟踪 / 分析</div>
-              <div class="setting-desc">屏蔽常见的跟踪与统计分析请求。</div>
-            </div>
-            <button class="toggle-btn" :class="{ on: browser.block_tracking }" @click="setBrowser('block_tracking', !browser.block_tracking)">
-              {{ browser.block_tracking ? '开启' : '关闭' }}
-            </button>
-          </div>
-
-          <div class="setting-row setting-row-block">
-            <div class="setting-info">
-              <div class="setting-label">允许的域名</div>
-              <div class="setting-desc">每行一个域名；留空表示允许全部。</div>
-            </div>
-            <textarea class="textarea" rows="3" :value="browser.allowed_domains.join('\n')"
-              placeholder="example.com&#10;docs.python.org"
-              @change="setBrowser('allowed_domains', ($event.target as HTMLTextAreaElement).value.split('\n').map(s => s.trim()).filter(Boolean))" />
-          </div>
-        </template>
-      </div>
+      </GlowingEffect>
 
       <!-- 子代理 -->
-      <div class="section">
-        <h3>子代理</h3>
-        <p class="section-desc">控制 AI 派生子代理并行处理任务的行为。</p>
+      <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
+        <div class="section" v-show="activeSection === 'subagent'">
+          <h3>子代理</h3>
+          <p class="section-desc">控制 AI 派生子代理并行处理任务的行为。</p>
 
-        <div class="setting-row">
-          <div class="setting-info">
-            <div class="setting-label">启用子代理</div>
-            <div class="setting-desc">允许主 AI 派生子代理处理子任务。</div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">启用子代理</div>
+              <div class="setting-desc">允许主 AI 派生子代理处理子任务。</div>
+            </div>
+            <button class="toggle-btn" :class="{ on: subagent.enabled }" @click="setSubAgent('enabled', !subagent.enabled)">
+              {{ subagent.enabled ? '开启' : '关闭' }}
+            </button>
           </div>
-          <button class="toggle-btn" :class="{ on: subagent.enabled }" @click="setSubAgent('enabled', !subagent.enabled)">
-            {{ subagent.enabled ? '开启' : '关闭' }}
-          </button>
+
+          <template v-if="subagent.enabled">
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">最大并发数</div>
+                <div class="setting-desc">同时运行的子代理上限。</div>
+              </div>
+              <div class="setting-control">
+                <BalanceSlider
+                  :min="1" :max="10" :step="1"
+                  :model-value="subagent.max_concurrent"
+                  @update:model-value="setSubAgent('max_concurrent', $event)"
+                  show-value
+                  class="setting-balance-slider"
+                />
+              </div>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">自动批准工具调用</div>
+                <div class="setting-desc">子代理调用工具时无需逐一确认。</div>
+              </div>
+              <button class="toggle-btn" :class="{ on: subagent.auto_approve }" @click="setSubAgent('auto_approve', !subagent.auto_approve)">
+                {{ subagent.auto_approve ? '开启' : '关闭' }}
+              </button>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">子代理模型</div>
+                <div class="setting-desc">inherit 表示沿用主对话模型。</div>
+              </div>
+              <select class="select" :value="subagent.model" @change="setSubAgent('model', ($event.target as HTMLSelectElement).value)">
+                <option value="inherit">继承主模型</option>
+                <option value="fast">快速模型</option>
+                <option value="strong">强力模型</option>
+              </select>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">超时时间</div>
+                <div class="setting-desc">单个子代理的最长运行时间。</div>
+              </div>
+              <div class="setting-control">
+                <BalanceSlider
+                  :min="30" :max="600" :step="30"
+                  :model-value="subagent.timeout_seconds"
+                  @update:model-value="setSubAgent('timeout_seconds', $event)"
+                  show-value
+                  class="setting-balance-slider"
+                />
+              </div>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">在对话中显示进度</div>
+                <div class="setting-desc">实时展示子代理的执行状态。</div>
+              </div>
+              <button class="toggle-btn" :class="{ on: subagent.show_progress }" @click="setSubAgent('show_progress', !subagent.show_progress)">
+                {{ subagent.show_progress ? '开启' : '关闭' }}
+              </button>
+            </div>
+          </template>
         </div>
-
-        <template v-if="subagent.enabled">
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">最大并发数</div>
-              <div class="setting-desc">同时运行的子代理上限。</div>
-            </div>
-            <div class="setting-control">
-              <input type="range" min="1" max="10" step="1"
-                :value="subagent.max_concurrent"
-                @input="setSubAgent('max_concurrent', Number(($event.target as HTMLInputElement).value))" />
-              <span class="range-value">{{ subagent.max_concurrent }}</span>
-            </div>
-          </div>
-
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">自动批准工具调用</div>
-              <div class="setting-desc">子代理调用工具时无需逐一确认。</div>
-            </div>
-            <button class="toggle-btn" :class="{ on: subagent.auto_approve }" @click="setSubAgent('auto_approve', !subagent.auto_approve)">
-              {{ subagent.auto_approve ? '开启' : '关闭' }}
-            </button>
-          </div>
-
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">子代理模型</div>
-              <div class="setting-desc">inherit 表示沿用主对话模型。</div>
-            </div>
-            <select class="select" :value="subagent.model" @change="setSubAgent('model', ($event.target as HTMLSelectElement).value)">
-              <option value="inherit">继承主模型</option>
-              <option value="fast">快速模型</option>
-              <option value="strong">强力模型</option>
-            </select>
-          </div>
-
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">超时时间</div>
-              <div class="setting-desc">单个子代理的最长运行时间。</div>
-            </div>
-            <div class="setting-control">
-              <input type="range" min="30" max="600" step="30"
-                :value="subagent.timeout_seconds"
-                @input="setSubAgent('timeout_seconds', Number(($event.target as HTMLInputElement).value))" />
-              <span class="range-value">{{ subagent.timeout_seconds }}s</span>
-            </div>
-          </div>
-
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">在对话中显示进度</div>
-              <div class="setting-desc">实时展示子代理的执行状态。</div>
-            </div>
-            <button class="toggle-btn" :class="{ on: subagent.show_progress }" @click="setSubAgent('show_progress', !subagent.show_progress)">
-              {{ subagent.show_progress ? '开启' : '关闭' }}
-            </button>
-          </div>
-        </template>
-      </div>
+      </GlowingEffect>
     </template>
   </div>
 </template>
@@ -430,6 +471,9 @@ import type { TtsConfig, BrowserToolsConfig, SubAgentConfig } from '@/api'
 import { createLogger } from '@/utils/logger'
 import { useViewEntrance } from '@/composables/useViewEntrance'
 import { useButtonFx } from '@/composables/useButtonFx'
+import GlowingEffect from '@/components/inspira/GlowingEffect.vue'
+import AnimatedTabs from '@/components/inspira/AnimatedTabs.vue'
+import BalanceSlider from '@/components/inspira/BalanceSlider.vue'
 
 const log = createLogger('SettingsView')
 
@@ -457,6 +501,20 @@ const subagent = ref<SubAgentConfig>({
   enabled: false, max_concurrent: 3, auto_approve: false,
   model: 'inherit', timeout_seconds: 120, show_progress: true,
 })
+
+const sectionTabs = [
+  { label: '上下文管理', value: 'compaction' },
+  { label: '容错', value: 'retry' },
+  { label: '工具', value: 'tools' },
+  { label: '顾问', value: 'advisor' },
+  { label: '交互', value: 'interaction' },
+  { label: '推理预算', value: 'thinking' },
+  { label: '技能包', value: 'skills' },
+  { label: '语音', value: 'tts' },
+  { label: '浏览器', value: 'browser' },
+  { label: '子代理', value: 'subagent' },
+]
+const activeSection = ref('compaction')
 
 // 各引擎的常用音色（动态加载占位 — 真实部署可替换为后端枚举）
 const VOICES_BY_PROVIDER: Record<TtsConfig['provider'], string[]> = {

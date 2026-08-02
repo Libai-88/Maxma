@@ -1,10 +1,22 @@
 <template>
   <header ref="headerEl" class="chat-header" aria-label="当前会话">
+    <ProgressiveBlur
+      class="header-blur-bg"
+      direction="bottom"
+      :blur-layers="6"
+      :blur-intensity="0.3"
+    />
     <div class="header-left" :title="contextDetails" :aria-label="contextDetails">
       <span class="header-avatar" aria-hidden="true">{{ store.profile.avatar }}</span>
       <div class="header-context">
         <h1 class="header-name">{{ store.profile.name }}</h1>
-        <span ref="titleEl" class="header-session">{{ sessionTitle }}</span>
+        <span ref="titleEl" class="header-session">
+          <FlipWords
+            :words="flipWords"
+            :duration="4000"
+            class="session-flip-words"
+          />
+        </span>
       </div>
     </div>
     <div class="header-right" aria-live="polite">
@@ -19,11 +31,20 @@ import { usePersonaStore } from '../stores/persona'
 import { useSessionStore } from '../stores/session'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 import { useButtonFx } from '@/composables/useButtonFx'
+import ProgressiveBlur from '@/components/inspira/ProgressiveBlur.vue'
+import FlipWords from '@/components/inspira/FlipWords.vue'
 const store = usePersonaStore()
 const sessionStore = useSessionStore()
 const currentSession = computed(() => sessionStore.sessions.find(session => session.session_id === sessionStore.sessionId))
 const sessionTitle = computed(() => currentSession.value?.const_name || '当前会话')
 const contextDetails = computed(() => `${store.profile.name} · ${sessionTitle.value} · ${store.profile.description} · ${store.profile.scene}`)
+
+const presetFlips = ['当前会话', '快速问答', '持续对话', '智能助手']
+const flipWords = computed(() => {
+  const title = sessionTitle.value
+  const filtered = presetFlips.filter(w => w !== title)
+  return [title, ...filtered].slice(0, 4)
+})
 
 // 头部功能按钮（槽内 workbench-toggle / more-trigger 等）：hover 弹性 + 轻量磁吸
 const headerEl = ref<HTMLElement | null>(null)
@@ -41,7 +62,8 @@ useGsap((_ctx, contextSafe) => {
 </script>
 
 <style scoped>
-.chat-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; max-width: 100%; min-width: 0; overflow: visible; padding: 10px clamp(12px, 2.4vw, 24px); border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent); background: color-mix(in srgb, var(--bg-card) 86%, transparent); box-shadow: var(--shadow-xs); }
+.chat-header { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; max-width: 100%; min-width: 0; overflow: visible; padding: 10px clamp(12px, 2.4vw, 24px); border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent); background: color-mix(in srgb, var(--bg-card) 50%, transparent); box-shadow: var(--shadow-xs); }
+.header-blur-bg { position: absolute; inset: 0; z-index: -1; border-radius: inherit; }
 .header-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 auto; overflow: hidden; font-size: 14px; }
 .header-avatar { font-size: 18px; }
 .header-context { min-width: 0; overflow: hidden; }

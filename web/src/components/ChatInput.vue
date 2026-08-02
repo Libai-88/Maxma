@@ -135,8 +135,8 @@
         <div class="input-right-group">
           <div class="input-actions">
             <ContextUsageBadge />
+            <BorderBeam v-if="!isStreaming">
             <button
-              v-if="!isStreaming"
               ref="sendBtnRef"
               type="button"
               class="btn-send"
@@ -148,6 +148,7 @@
             >
               <Icon name="send" :size="16" />
             </button>
+            </BorderBeam>
             <button v-else type="button" class="btn-stop" aria-label="停止生成" title="停止生成" @click="chatInput.stop()">
               <Icon name="stop" :size="12" />
             </button>
@@ -218,6 +219,7 @@ import ContextUsageBadge from './ContextUsageBadge.vue'
 import FileUpload from './FileUpload.vue'
 import FileUploadGrid from './FileUploadGrid.vue'
 import { useChatStore } from '@/stores/chat'
+import BorderBeam from '@/components/inspira/BorderBeam.vue'
 
 // ChatView 通过 provide 注入 useChatInput 实例；ChatInput 直接读写状态、调用方法
 const chatInput = useChatInputInjected()

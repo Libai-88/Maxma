@@ -1,6 +1,6 @@
 <template>
   <div class="app-layout" :style="sidebarBgStyle">
-    <IconRail
+    <Dock
       :onboarding-enabled="onboardingEnabled"
       :session-drawer-open="sessionDrawerOpen"
       @toggle-session-drawer="openSessionDrawer"
@@ -31,8 +31,10 @@
       </RegionalErrorBoundary>
     </main>
     <!-- 保留全局媒体与引导层，布局本身不依赖装饰层。 -->
+    <AuroraBackground :opacity="0.12" :aurora-count="3" />
     <LiquidBackground />
     <CursorGlow />
+    <SmoothCursor />
     <LeavesOverlay />
     <!-- 全屏媒体查看器 -->
     <MediaViewer />
@@ -65,7 +67,7 @@
 
 <script setup lang="ts">
 import OnboardingView from '@/views/OnboardingView.vue';
-import IconRail from '@/components/IconRail.vue';
+import Dock from '@/components/inspira/Dock.vue';
 import SessionDrawer from '@/components/SessionDrawer.vue';
 import { useChatStore } from '@/stores/chat';
 import { onboardingEnabled, useOnboardingStore } from '@/stores/onboarding';
@@ -76,6 +78,8 @@ import { useRouter } from 'vue-router';
 
 import LeavesOverlay from '@/components/LeavesOverlay.vue'
 import CursorGlow from '@/components/CursorGlow.vue'
+import SmoothCursor from '@/components/inspira/SmoothCursor.vue'
+import AuroraBackground from '@/components/inspira/AuroraBackground.vue'
 import LiquidBackground from '@/components/LiquidBackground.vue'
 import { usePaperTexture } from '@/composables/usePaperTexture'
 import { useGlobalShortcut } from '@/composables/useGlobalShortcut'
