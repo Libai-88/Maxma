@@ -12,7 +12,7 @@ from typing import Literal
 from fastapi import FastAPI
 from pydantic import BaseModel, field_validator, model_validator
 
-from app_paths import ANTHROPIC_SKILLS_DIR
+from app_paths import OMP_SKILLS_DIR
 from api.runtime_status import RuntimeStatus, sanitize_user_detail
 
 logger = logging.getLogger(__name__)
@@ -222,10 +222,10 @@ async def get_health_report(app: FastAPI, probe_remote: bool = False) -> HealthR
     native_tools = await check_native_tools(app)
     mcp_tools = await check_mcp_tools(app)
 
-    # 统计 anthropic_skills 下的 skill 数量
+    # 统计 OMP 原生 .omp/skills 下的 skill 数量
     skills_count = 0
-    if ANTHROPIC_SKILLS_DIR.is_dir():
-        skills_count = len([p for p in ANTHROPIC_SKILLS_DIR.iterdir() if p.is_dir()])
+    if OMP_SKILLS_DIR.is_dir():
+        skills_count = len([p for p in OMP_SKILLS_DIR.iterdir() if p.is_dir()])
 
     all_checks = [llm, memory, native_tools, mcp_tools]
     overall: Literal["ok", "degraded"] = (

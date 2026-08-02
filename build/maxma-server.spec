@@ -33,7 +33,7 @@ datas = [
     (str(project_root / "config" / "personas" / "USER.example.md"), "config/personas"),
     # 内置贴纸；config/stickers/custom 是用户上传目录，故不打包。
     # Anthropic Skills
-    (str(project_root / "anthropic_skills"), "anthropic_skills"),
+    (str(project_root / ".omp" / "skills"), ".omp/skills"),
     # Macros
     (str(project_root / "macros"), "macros"),
     # oh-my-pi sidecar（Bun TypeScript 源码 + node_modules）

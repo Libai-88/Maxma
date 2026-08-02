@@ -114,14 +114,9 @@
 - 使用上述工具时，Agent 可能在等待中处于挂起状态，不要重复调用
 - user_response 由前端 WebSocket 自动处理，Agent 侧不需要额外操作
 
-## Anthropic Skills
+## Skills（OMP 原生）
 
-项目根目录的 `anthropic_skills/` 下存放了可复用的 skill 文件（格式参考 Claude Code Skill），每个子目录包含一份 `SKILL.md` 作为主文档。系统提示词中已列出所有可用 skill 的名称、描述和路径。
-
-当你遇到符合 skill 描述的任务时：
-1. 使用文件读取工具读取对应 `SKILL.md` 的完整内容
-2. 如有需要，继续读取 `agents/`、`references/`、`scripts/` 等子目录中的辅助文件
-3. 按 skill 中的指令执行任务
+技能由 OMP 原生管理：位于 `.omp/skills/` 目录，OMP 会自动发现并在系统提示词中列出。当你遇到符合 skill 描述的任务时，按 OMP 规则通过 `skill://<name>` 读取对应 SKILL.md 的完整内容，再按其中指令执行。
 
 ## 语气
 
@@ -129,4 +124,4 @@
 
 ## 前端 HTML 输出
 
-当你需要输出交互式 HTML/CSS/JS 内容时，先读取 `anthropic_skills/frontend-sandbox/SKILL.md` 获取沙箱渲染规则、设计令牌和排版规范。
+当你需要输出交互式 HTML/CSS/JS 内容时，先通过 `skill://frontend-sandbox` 读取前端沙箱 skill，获取沙箱渲染规则、设计令牌和排版规范。

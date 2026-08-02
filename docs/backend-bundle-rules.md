@@ -21,7 +21,7 @@ spec 当前明确收集：
 - `web/dist`
 - 内置人设模板
 - 内置贴纸分类
-- `anthropic_skills`
+- `.omp/skills`（内置 skills，OMP 原生扫描目录）
 - `macros`
 - `bun-sidecar/src`
 - `bun-sidecar/package.json`

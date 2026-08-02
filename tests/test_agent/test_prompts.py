@@ -28,8 +28,6 @@ def isolated_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """
     personas_dir = tmp_path / "personas"
     personas_dir.mkdir()
-    skills_dir = tmp_path / "skills"
-    skills_dir.mkdir()
     macros_dir = tmp_path / "macros"
     macros_dir.mkdir()
 
@@ -47,8 +45,6 @@ def isolated_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
     monkeypatch.setattr(prompts, "PERSONAS_DIR", personas_dir)
     monkeypatch.setattr(prompts, "ACTIVE_PERSONA_PATH", personas_dir / "active_persona.yaml")
-    monkeypatch.setattr(prompts, "ANTHROPIC_SKILLS_DIR", skills_dir)
-    monkeypatch.setattr(prompts, "SKILLS_DATA_DIR", tmp_path / "user_skills")
     monkeypatch.setattr(prompts, "MACROS_DIR", macros_dir)
     monkeypatch.setattr(prompts, "MACROS_DATA_DIR", tmp_path / "user_macros")
 
@@ -195,16 +191,12 @@ def test_current_fingerprint_changes_on_active_persona(isolated_env: Path) -> No
     assert fp1 != fp2
 
 
-def test_current_fingerprint_includes_skills_and_macros(isolated_env: Path) -> None:
-    # add a SKILL.md and MACRO.md in the scanned dirs
-    sk = prompts.ANTHROPIC_SKILLS_DIR / "my_skill" / "SKILL.md"
-    sk.parent.mkdir(parents=True, exist_ok=True)
-    sk.write_text("---\nname: My Skill\ndescription: does things\n---\nbody\n", encoding="utf-8")
+def test_current_fingerprint_includes_macros(isolated_env: Path) -> None:
+    # add a MACRO.md in the scanned dirs (skills now scanned by OMP native)
     mc = prompts.MACROS_DIR / "my_macro" / "MACRO.md"
     mc.parent.mkdir(parents=True, exist_ok=True)
     mc.write_text("---\nname: My Macro\ndescription: a macro\n---\nbody\n", encoding="utf-8")
     fp = prompts._current_fingerprint()
-    assert "sk:" in fp
     assert "mc:" in fp
 
 
@@ -239,17 +231,6 @@ def test_build_append_prompt_contains_chinese_instruction(isolated_env: Path) ->
     assert "中文" in p
 
 
-def test_build_append_prompt_includes_skills_when_present(isolated_env: Path) -> None:
-    skills_dir = Path(prompts.ANTHROPIC_SKILLS_DIR)
-    sk = skills_dir / "demo-skill" / "SKILL.md"
-    sk.parent.mkdir(parents=True, exist_ok=True)
-    sk.write_text("---\nname: demo-skill\ndescription: 演示技能\n---\n用法\n", encoding="utf-8")
-    prompts.invalidate_append_cache()
-    p = prompts.build_append_prompt()
-    assert "demo-skill" in p
-    assert "演示技能" in p
-
-
 def test_build_append_prompt_contains_no_brand_persona(isolated_env: Path) -> None:
     """原生模式追加段不夹带品牌/persona 内容。"""
     prompts.invalidate_append_cache()
@@ -260,16 +241,15 @@ def test_build_append_prompt_contains_no_brand_persona(isolated_env: Path) -> No
     assert "你不是 ChatGPT" not in p
 
 
-def test_build_append_prompt_cache_invalidates_on_skills_change(isolated_env: Path) -> None:
+def test_build_append_prompt_cache_invalidates_on_macros_change(isolated_env: Path) -> None:
     prompts.invalidate_append_cache()
     first = prompts.build_append_prompt()
-    skills_dir = Path(prompts.ANTHROPIC_SKILLS_DIR)
-    sk = skills_dir / "later-skill" / "SKILL.md"
-    sk.parent.mkdir(parents=True, exist_ok=True)
-    sk.write_text("---\nname: later-skill\ndescription: 后加技能\n---\n", encoding="utf-8")
-    # 指纹包含 skills 内容，无需手动 invalidate 也会刷新
+    mc = prompts.MACROS_DIR / "later-macro" / "MACRO.md"
+    mc.parent.mkdir(parents=True, exist_ok=True)
+    mc.write_text("---\nname: later-macro\ndescription: 后加宏\n---\n", encoding="utf-8")
+    # 指纹包含 macros 内容，无需手动 invalidate 也会刷新
     second = prompts.build_append_prompt()
-    assert "later-skill" in second
+    assert "later-macro" in second
     assert first != second
 
 
@@ -335,7 +315,6 @@ def test_get_system_prompt_parts_structure(isolated_env: Path) -> None:
     assert "persona" in keys
     assert "behavior_rules" in keys
     assert "personality" in keys
-    assert "skills" in keys
     assert "macros" in keys
     for part in parts:
         assert "content" in part and isinstance(part["content"], str)
@@ -466,62 +445,6 @@ def test_get_persona_allowed_tools_empty_returns_none(isolated_env: Path) -> Non
     assert prompts.get_persona_allowed_tools() is None
 
 
-# ── _scan_anthropic_skills ─────────────────────────────────────
-
-
-def test_scan_anthropic_skills_empty(isolated_env: Path) -> None:
-    assert prompts._scan_anthropic_skills() == ""
-
-
-def test_scan_anthropic_skills_with_frontmatter(isolated_env: Path) -> None:
-    sk = prompts.ANTHROPIC_SKILLS_DIR / "research" / "SKILL.md"
-    sk.parent.mkdir(parents=True, exist_ok=True)
-    sk.write_text(
-        "---\nname: Research\ndescription: deep research\n---\nbody\n", encoding="utf-8"
-    )
-    out = prompts._scan_anthropic_skills()
-    assert "## 可用 Anthropic Skills" in out
-    assert "Research" in out
-    assert "deep research" in out
-    assert str(sk).replace("\\", "/") in out
-
-
-def test_scan_anthropic_skills_without_description(isolated_env: Path) -> None:
-    sk = prompts.ANTHROPIC_SKILLS_DIR / "bare" / "SKILL.md"
-    sk.parent.mkdir(parents=True, exist_ok=True)
-    sk.write_text("---\nname: Bare\n---\nbody\n", encoding="utf-8")
-    out = prompts._scan_anthropic_skills()
-    assert "Bare" in out
-    # no description -> no colon after the entry's path on same line
-    assert "deep research" not in out
-
-
-def test_scan_anthropic_skills_skips_corrupt_file(isolated_env: Path) -> None:
-    good = prompts.ANTHROPIC_SKILLS_DIR / "good" / "SKILL.md"
-    good.parent.mkdir(parents=True, exist_ok=True)
-    good.write_text("---\nname: Good\ndescription: ok\n---\nbody\n", encoding="utf-8")
-    bad = prompts.ANTHROPIC_SKILLS_DIR / "bad" / "SKILL.md"
-    bad.parent.mkdir(parents=True, exist_ok=True)
-    bad.write_bytes(b"\xff\xfe\x00invalid utf8")
-    out = prompts._scan_anthropic_skills()
-    assert "Good" in out
-    # corrupt file skipped, no crash
-    assert "bad" not in out.lower() or "Bad" not in out
-
-
-def test_scan_anthropic_skills_dedup_when_same_canonical_path(
-    isolated_env: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # point SKILLS_DATA_DIR at the same dir as ANTHROPIC_SKILLS_DIR -> dedup
-    sk = prompts.ANTHROPIC_SKILLS_DIR / "dup" / "SKILL.md"
-    sk.parent.mkdir(parents=True, exist_ok=True)
-    sk.write_text("---\nname: Dup\ndescription: d\n---\nbody\n", encoding="utf-8")
-    monkeypatch.setattr(prompts, "SKILLS_DATA_DIR", prompts.ANTHROPIC_SKILLS_DIR)
-    out = prompts._scan_anthropic_skills()
-    # entry appears exactly once
-    assert out.count("Dup") == 1
-
-
 # ── _scan_macros ───────────────────────────────────────────────
 
 
@@ -563,20 +486,6 @@ class _BrokenDir:
         raise OSError("simulated scan failure")
 
 
-def test_scan_anthropic_skills_isolates_rglob_oserror(
-    isolated_env: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # ANTHROPIC_SKILLS_DIR's rglob raises -> warning logged, SKILLS_DATA_DIR still scanned
-    user_skills = prompts.SKILLS_DATA_DIR
-    user_skills.mkdir(parents=True, exist_ok=True)
-    sk = user_skills / "ok" / "SKILL.md"
-    sk.parent.mkdir(parents=True, exist_ok=True)
-    sk.write_text("---\nname: OK\n---\nbody\n", encoding="utf-8")
-    monkeypatch.setattr(prompts, "ANTHROPIC_SKILLS_DIR", _BrokenDir("SKILL.md"))
-    out = prompts._scan_anthropic_skills()
-    assert "OK" in out  # the broken dir did not abort the whole scan
-
-
 def test_scan_macros_isolates_rglob_oserror(
     isolated_env: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -593,13 +502,10 @@ def test_scan_macros_isolates_rglob_oserror(
 def test_current_fingerprint_isolates_scan_oserror(
     isolated_env: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # _current_fingerprint scans skills/macros dirs; broken dirs must not crash it
-    monkeypatch.setattr(prompts, "ANTHROPIC_SKILLS_DIR", _BrokenDir("SKILL.md"))
+    # _current_fingerprint scans macros dir; broken dir must not crash it
     monkeypatch.setattr(prompts, "MACROS_DIR", _BrokenDir("MACRO.md"))
     fp = prompts._current_fingerprint()
     assert "AGENTS.md:" in fp  # persona files still hashed
-    # no sk:/mc: entries because both scan dirs raised
-    assert "sk:" not in fp
     assert "mc:" not in fp
 
 

@@ -149,7 +149,7 @@ def _get_data_dir() -> Path:
 
 # ── 公共常量 ──
 
-# 打包资源根目录（只读：前端 dist、anthropic_skills、macros 等）
+# 打包资源根目录（只读：前端 dist、.omp/skills、macros 等）
 BUNDLE_DIR: Path = _get_bundle_dir()
 
 # 用户数据根目录（可写：memory、sessions、uploads、logs 等）
@@ -162,14 +162,12 @@ IS_PORTABLE: bool = _is_portable()
 
 # 打包资源（只读）
 WEB_DIST_DIR = BUNDLE_DIR / "web" / "dist"
-ANTHROPIC_SKILLS_DIR = BUNDLE_DIR / "anthropic_skills"
 MACROS_DIR = BUNDLE_DIR / "macros"
 CONFIG_DIR = BUNDLE_DIR / "config"
 PERSONAS_DIR = CONFIG_DIR / "personas"  # 只读模板目录（打包模式下位于 _MEIPASS）
 
 # 用户数据（可写）
 PERSONAS_DATA_DIR = DATA_DIR / "config" / "personas"  # 可写人设目录（打包模式下位于 %APPDATA%）
-SKILLS_DATA_DIR = DATA_DIR / "anthropic_skills"  # 用户自定义 skills（打包模式下位于 %APPDATA%）
 MACROS_DATA_DIR = DATA_DIR / "macros"  # 用户自定义 macros
 API_DATA_DIR = DATA_DIR / "api" / "data"
 LOGS_DIR = DATA_DIR / "logs"
@@ -201,6 +199,49 @@ AUTONOMY_SCHEDULES_PATH = API_DATA_DIR / "autonomy_schedules.json"
 
 # 项目根目录（仅开发模式使用，打包模式下无意义）
 PROJECT_ROOT: Path = BUNDLE_DIR if not _is_frozen() else DATA_DIR
+
+# ── OMP 原生 skills 目录 ──
+# OMP 从 session cwd（= PROJECT_ROOT）向上扫描 `.omp/skills/`（CONFIG_DIR_NAME）。
+# 跟随 PROJECT_ROOT 自动适配三种部署模式：
+#   开发          PROJECT_ROOT = BUNDLE_DIR（项目根）→ .omp/skills 即在项目根
+#   标准打包/安装 PROJECT_ROOT = DATA_DIR（%APPDATA%）→ .omp/skills 在用户数据目录
+#   便携模式      PROJECT_ROOT = DATA_DIR（exe 旁 data/）→ .omp/skills 在便携 data/
+# OMP_SKILLS_SEED_DIR 是内置 skills 基线，打包/便携模式首次启动拷贝到 OMP_SKILLS_DIR。
+OMP_SKILLS_DIR: Path = PROJECT_ROOT / ".omp" / "skills"
+OMP_SKILLS_SEED_DIR: Path = BUNDLE_DIR / ".omp" / "skills"
+
+
+def ensure_omp_skills_seed() -> None:
+    """确保 OMP 原生 skills 目录就绪（幂等）。
+
+    开发模式 PROJECT_ROOT = BUNDLE_DIR，OMP_SKILLS_DIR 即项目根 .omp/skills，
+    无需拷贝。打包/便携模式 PROJECT_ROOT = DATA_DIR，把内置 seed（BUNDLE_DIR
+    中的 .omp/skills）拷贝到 DATA_DIR/.omp/skills，使 OMP 原生发现机制可用。
+    用 .seeded 标记幂等，避免每次启动重复拷贝。
+    """
+    if PROJECT_ROOT == BUNDLE_DIR:
+        return  # 开发模式：种子目录即生效目录
+    seed = OMP_SKILLS_SEED_DIR
+    target = OMP_SKILLS_DIR
+    if not seed.is_dir() or not any(seed.iterdir()):
+        return
+    marker = target / ".seeded"
+    if marker.exists():
+        return
+    if target.exists() and any(target.iterdir()):
+        marker.write_text("exists", encoding="utf-8")
+        return
+    target.mkdir(parents=True, exist_ok=True)
+    for item in seed.iterdir():
+        dest = target / item.name
+        try:
+            if item.is_dir():
+                shutil.copytree(item, dest, dirs_exist_ok=True)
+            else:
+                shutil.copy2(item, dest)
+        except OSError:
+            continue
+    marker.write_text("seeded", encoding="utf-8")
 
 
 # ── 运行时资源目录（嵌入式运行时 + 大文件） ──
@@ -268,8 +309,11 @@ def ensure_data_dirs():
     if IS_PORTABLE:
         _migrate_from_appdata()
 
-    for d in [API_DATA_DIR, LOGS_DIR, UPLOADS_DIR, CONST_SESSIONS_DIR, PERSONAS_DATA_DIR, SKILLS_DATA_DIR, MACROS_DATA_DIR, VECTOR_DB_DIR, KB_DIR, CREDENTIAL_MIGRATION_BACKUP_DIR]:
+    for d in [API_DATA_DIR, LOGS_DIR, UPLOADS_DIR, CONST_SESSIONS_DIR, PERSONAS_DATA_DIR, MACROS_DATA_DIR, VECTOR_DB_DIR, KB_DIR, CREDENTIAL_MIGRATION_BACKUP_DIR]:
         d.mkdir(parents=True, exist_ok=True)
+
+    # 首次运行确保 OMP 原生 skills 目录就绪（打包/便携模式从内置 seed 拷贝）
+    ensure_omp_skills_seed()
 
     # 首次运行时创建空的 MCP 配置文件（打包模式下 %APPDATA% 或便携 data/ 内默认不存在）
     _ensure_mcp_config()

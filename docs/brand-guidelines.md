@@ -230,8 +230,13 @@ Maxma 是用户的**首席思维伙伴**——不是搜索引擎、不是执行�
 
 | 层 | 内容 | 开关 |
 |----|------|------|
-| 功能层 | 中文回复指令 + `anthropic_skills/` / macros 清单 | 永久保留 |
+| 功能层 | 中文回复指令 + macros 清单 | 永久保留 |
 | 品牌增强层 | 产品名 + 语气引导 + 表情指令 | `brand_enhancement` |
+
+> skills 已迁移到 OMP 原生 `.omp/skills/`（`app_paths.OMP_SKILLS_DIR`），
+> 由 OMP 自动发现并通过 `skill://<name>` 加载，**不在提示词层注入**。
+> 这符合本指南「只增强、不替换 OMP 原生」的铁律。标注处理见
+> `maxma-server.spec` 与 `app_paths.ensure_omp_skills_seed`。
 
 ### 品牌增强块规范（`build_brand_prompt`）
 

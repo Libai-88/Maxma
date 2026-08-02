@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-from app_paths import ANTHROPIC_SKILLS_DIR, MACROS_DIR, SKILLS_DATA_DIR, MACROS_DATA_DIR, PERSONAS_DATA_DIR as PERSONAS_DIR, ACTIVE_PERSONA_PATH
+from app_paths import MACROS_DIR, MACROS_DATA_DIR, PERSONAS_DATA_DIR as PERSONAS_DIR, ACTIVE_PERSONA_PATH
 from api.yaml_store import dump_yaml_atomic, yaml_file_lock
 
 from agent.persona_loader import load_persona, build_persona_prompt
@@ -113,7 +113,7 @@ def _current_fingerprint() -> str:
     """根据所有依赖文件的内容哈希生成指纹字符串。
 
     依赖文件包括 personas 目录下的 AGENTS/活跃人格/USER/memory.yaml，
-    以及 anthropic_skills/ 和 macros/ 下的所有 SKILL.md / MACRO.md，
+    以及 macros/ 下的所有 MACRO.md，
     以及语义记忆 JSON（4 层架构）。
     """
     parts: list[str] = []
@@ -133,24 +133,9 @@ def _current_fingerprint() -> str:
         target_path = named_path if named_path.exists() else PERSONA_DIR / f"{layer}_default.md"
         parts.append(f"persona:{layer}:{_file_hash(target_path)}")
 
-    # 动态扫描 skills / macros（同时扫描内置目录和用户数据目录，按 canonical path 去重）
+    # 动态扫描 macros（同时扫描内置目录和用户数据目录，按 canonical path 去重）
+    # skills 已迁移到 OMP 原生 .omp/skills/，由 OMP 自动发现，不再计入本指纹。
     seen: set[str] = set()
-    for skills_dir in (ANTHROPIC_SKILLS_DIR, SKILLS_DATA_DIR):
-        if skills_dir.is_dir():
-            try:
-                iter_paths = sorted(skills_dir.rglob("SKILL.md"))
-            except (OSError, RecursionError):
-                iter_paths = []
-            for p in iter_paths:
-                try:
-                    canon = str(p.resolve())
-                except OSError:
-                    continue
-                if canon in seen:
-                    continue
-                seen.add(canon)
-                parts.append(f"sk:{p.name}:{_file_hash(p)}")
-
     for macros_dir in (MACROS_DIR, MACROS_DATA_DIR):
         if macros_dir.is_dir():
             try:
@@ -206,15 +191,15 @@ def _rebuild(fingerprint: str) -> None:
 
     # ── parts（用于 token 细分展示）──
     # 按变化频率从低到高排列：稳定内容在前，频繁变化的放最后。
-    # 只调用一次 I/O 密集型函数，两处复用
-    skills_content = _scan_anthropic_skills()
+    # 只调用一次 I/O 密集型函数，两处复用。
+    # skills 已迁移到 OMP 原生 .omp/skills/，由 OMP 自动发现，不再注入。
     macros_content = _scan_macros()
     agents_md_content = _read_persona("AGENTS.md")
 
-    # 拆分系统 prompt，将稳定内容（skills/macros 等保持不变的部分）
+    # 拆分系统 prompt，将稳定内容（macros 等保持不变的部分）
     # 放在前面，动态内容（记忆）放在末尾，
     # 这样 Anthropic/OpenAI prompt caching 可以缓存更长的前缀，
-    # 记忆变化时不会导致 skills/macros 等稳定部分的缓存失效。
+    # 记忆变化时不会导致 macros 等稳定部分的缓存失效。
     # MAXMA.md — 产品自述（极简，帮助 Agent 了解自身能力与边界）
     maxma_content = _read_persona("MAXMA.md")
 
@@ -229,8 +214,6 @@ def _rebuild(fingerprint: str) -> None:
          "content": "## 性格设定\n" + soul_content},
         {"key": "user_self_report", "label": "用户自述",
          "content": "## 用户自述\n" + user_md_raw},
-        {"key": "skills", "label": "Skills 清单",
-         "content": skills_content},
         {"key": "macros", "label": "宏清单",
          "content": macros_content},
     ]
@@ -250,8 +233,6 @@ def _rebuild(fingerprint: str) -> None:
         "",
         "## 用户自述",
         user_md_raw,
-        "",
-        skills_content,
         "",
         macros_content,
     ]
@@ -412,58 +393,6 @@ def get_persona_allowed_tools() -> set[str] | None:
     return allowed if allowed else None
 
 
-def _scan_anthropic_skills() -> str:
-    """扫描内置 + 用户自定义 anthropic_skills/ 下所有 SKILL.md，返回元数据清单。
-
-    开发模式下 ANTHROPIC_SKILLS_DIR 与 SKILLS_DATA_DIR 可能指向同一目录，
-    按 canonical path 去重避免清单里出现重复条目。
-    单个 SKILL.md 损坏不会影响其他 skill 的展示。
-    """
-    entries: list[str] = []
-    seen_paths: set[str] = set()
-    for base_dir in (ANTHROPIC_SKILLS_DIR, SKILLS_DATA_DIR):
-        if not base_dir.is_dir():
-            continue
-        try:
-            iter_paths = sorted(base_dir.rglob("SKILL.md"))
-        except (OSError, RecursionError) as e:
-            logger.warning("[prompts] 扫描 skills 目录失败 %s: %s", base_dir, e)
-            continue
-        for sk_path in iter_paths:
-            try:
-                canonical = str(sk_path.resolve())
-            except OSError:
-                continue
-            if canonical in seen_paths:
-                continue
-            seen_paths.add(canonical)
-            try:
-                content = sk_path.read_text(encoding="utf-8")
-                meta = _parse_frontmatter(content)
-            except (OSError, UnicodeDecodeError) as e:
-                # 错误隔离：跳过损坏文件，不阻断整个系统提示词构建
-                logger.warning("[prompts] 跳过损坏的 SKILL.md %s: %s", sk_path, e)
-                continue
-            rel = sk_path.relative_to(base_dir).parent
-            name = meta.get("name", rel.name)
-            desc = meta.get("description", "")
-            path_str = str(sk_path).replace("\\", "/")
-            if desc:
-                entries.append(f"- [{name}]({path_str}): {desc}")
-            else:
-                entries.append(f"- [{name}]({path_str})")
-    if not entries:
-        return ""
-    lines = [
-        "## 可用 Anthropic Skills",
-        "以下 skill 文件存放在 `anthropic_skills/` 目录中，包含完整的任务指令和流程。",
-        "当你需要执行符合上述描述的任务时，应使用文件读取工具按需读取对应 SKILL.md 的完整内容。",
-        "",
-        *entries,
-    ]
-    return "\n".join(lines)
-
-
 def _scan_macros() -> str:
     """扫描 macros/ 下所有 MACRO.md，返回元数据清单。
 
@@ -551,10 +480,11 @@ def build_append_prompt() -> str:
 
     包含：
     - 中文回复指令（OMP 原生 prompt 为英文，保证中文对话体验）
-    - anthropic_skills/ 清单（OMP 只扫描 .omp/skills/，不扫该目录）
-    - macros 清单
+    - macros 清单（OMP 无宏机制，仍由 Maxma 注入）
+    skills 已迁移到 OMP 原生 `.omp/skills/`，由 OMP 自动发现并在原生
+    prompt 中声明 + skill:// 加载，不再在此注入。
 
-    缓存依赖 skills/macros 内容指纹，与品牌模式共用 _cache_lock。
+    缓存依赖 macros 内容指纹，与品牌模式共用 _cache_lock。
     """
     global _append_cache_fp, _append_cache_prompt
     fp = _current_fingerprint()
@@ -564,9 +494,6 @@ def build_append_prompt() -> str:
         fp = _current_fingerprint()
         if fp != _append_cache_fp:
             _parts = ["始终使用中文与用户对话，除非用户明确要求使用其他语言；技术术语可保留英文原文。"]
-            _skills = _scan_anthropic_skills()
-            if _skills:
-                _parts.append(_skills)
             _macros = _scan_macros()
             if _macros:
                 _parts.append(_macros)

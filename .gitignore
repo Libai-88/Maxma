@@ -188,3 +188,7 @@ web/src/NUL
 # LTM outbox SQLite 临时文件（WAL 模式运行时生成）
 config/personas/*.sqlite3-shm
 config/personas/*.sqlite3-wal
+
+# OMP 原生运行时目录——仅入库内置 skills，其余（配置/profiles/mcp 等运行时生成）忽略
+.omp/*
+!.omp/skills/
