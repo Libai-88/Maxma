@@ -1,3 +1,10 @@
+<#
+    DEPRECATED. 主流程已迁移到项目根 build-portable.bat:
+      - sidecar 由 PyInstaller onedir 输出到 %PROJECT_ROOT%\dist\maxma-server\
+        (maxma-server.exe bootloader + _internal/),本脚本仍按旧的平铺
+        desktop\src-tauri\dist\ 路径组装,产物已过期。
+      - 请改用 build-portable.bat,本脚本保留仅供参考。
+#>
 $PROJECT_ROOT = "D:\Maxma\MaxmaHere"
 $PORTABLE_DIR = "D:\MaxmaHere-Portable"
 $TAURI_RELEASE_DIR = "$PROJECT_ROOT\desktop\src-tauri\target\release"

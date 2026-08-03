@@ -22,7 +22,7 @@ function Get-ResolvedExePath {
         return (Resolve-Path $Candidate).Path
     }
 
-    return (Resolve-Path (Join-Path $Root "dist\maxma-server.exe")).Path
+    return (Resolve-Path (Join-Path $Root "dist\maxma-server\maxma-server.exe")).Path
 }
 
 function Wait-HttpJson {

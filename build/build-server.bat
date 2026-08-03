@@ -16,7 +16,8 @@ REM Clean up stale backend before smoke test
 powershell -NoProfile -ExecutionPolicy Bypass -File build\port-guard.ps1 -PortsStr "%MAXMA_API_PORT%" >nul 2>&1
 if errorlevel 1 exit /b 1
 
-set "DIST_EXE=dist\maxma-server.exe"
+set "DIST_DIR=dist\maxma-server"
+set "DIST_EXE=%DIST_DIR%\maxma-server.exe"
 set "TAURI_BIN_DIR=desktop\src-tauri\binaries"
 set "TAURI_BIN_EXE=%TAURI_BIN_DIR%\maxma-server-x86_64-pc-windows-msvc.exe"
 set "STALE_DIST_DIR=dist\maxma-server"
@@ -88,14 +89,18 @@ if "%NEEDS_PYI%"=="1" (
     )
 )
 
-REM Clean stale artifacts (onedir directory and exe)
+REM Clean stale artifacts (onedir exe, onedir directory, and legacy onefile exe)
+if exist "%DIST_EXE%" (
+    del /f /q "%DIST_EXE%"
+    if errorlevel 1 exit /b 1
+)
 if exist "%STALE_DIST_DIR%\" (
     echo [INFO] Cleaning stale directory %STALE_DIST_DIR%
     rmdir /s /q "%STALE_DIST_DIR%"
     if errorlevel 1 exit /b 1
 )
-if exist "%DIST_EXE%" (
-    del /f /q "%DIST_EXE%"
+if exist "dist\maxma-server.exe" (
+    del /f /q "dist\maxma-server.exe"
     if errorlevel 1 exit /b 1
 )
 
@@ -178,7 +183,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0test-packaging-safety.ps1" -ProjectRoot "%CD%" -TocPath "build\maxma-server\PKG-00.toc"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0test-packaging-safety.ps1" -ProjectRoot "%CD%" -TocPath "build\maxma-server\COLLECT-00.toc"
 if errorlevel 1 (
     echo [ERROR] Packaging safety artifact check failed
     exit /b 1
@@ -194,6 +199,10 @@ if errorlevel 1 (
 REM Deploy
 echo [4/4] Deploying to Tauri binaries...
 if exist "%DIST_EXE%" (
+    if not exist "%DIST_DIR%\_internal\" (
+        echo [ERROR] PyInstaller onedir _internal directory missing: %DIST_DIR%\_internal\
+        exit /b 1
+    )
     if not exist "%TAURI_BIN_DIR%\" (
         mkdir "%TAURI_BIN_DIR%"
         if errorlevel 1 (

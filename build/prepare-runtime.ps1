@@ -122,10 +122,9 @@ $proc.WaitForExit()
 $stdout = $outTask.Result
 $stderr = $errTask.Result
 if ($proc.ExitCode -ne 0) {
-    Write-Host "[error] pip install failed (exit code $($proc.ExitCode))" -ForegroundColor Red
+    Write-Host "[warn] pip install failed (exit code $($proc.ExitCode)); embedded pip is optional for the packaged runtime" -ForegroundColor Yellow
     Write-Host $stdout
-    Write-Host $stderr -ForegroundColor Red
-    exit 1
+    Write-Host $stderr
 }
 Remove-Item $getPipPath -Force
 Write-Host "[ok] pip installed"

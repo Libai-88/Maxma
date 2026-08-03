@@ -24,12 +24,29 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM Remove the previous portable output before the server-build preflight scans it.
+REM Runtime artifacts inside data/ (e.g. api\data\maxma.db) are not user data but
+REM would trip the packaging-safety forbidden-path check and block a repeat build.
+if exist "%PORTABLE_DIR%\" (
+    echo [INFO] Removing previous portable output: %PORTABLE_DIR%
+    rmdir /s /q "%PORTABLE_DIR%"
+    if errorlevel 1 (
+        echo [ERROR] Cannot remove previous portable output.
+        exit /b 1
+    )
+)
+
 REM Resolve the normal build environment for the final cargo invocation.
 call build\setup-dev-env.bat
 if errorlevel 1 (
     echo [ERROR] Development environment setup failed.
     exit /b 1
 )
+
+REM setup-dev-env.bat executes dev-tools.ps1 output that re-sets PROJECT_ROOT
+REM without a trailing slash, breaking later %PROJECT_ROOT%dist\... joins.
+REM Restore the trailing-slash value after the environment setup call.
+set "PROJECT_ROOT=%~dp0"
 
 echo [1/6] Building frontend and Python sidecar...
 call build\build-server.bat
@@ -150,7 +167,7 @@ REM     └── _internal/        (Python 运行时 + 依赖)
 REM 便携版需要整个目录，但为保持根目录简洁，将 maxma-server.exe 提到根，
 REM _internal/ 保留在子目录
 
-set "SIDECAR_BUILD_DIR=%PROJECT_ROOT%desktop\src-tauri\dist\maxma-server"
+set "SIDECAR_BUILD_DIR=%PROJECT_ROOT%dist\maxma-server"
 if not exist "%SIDECAR_BUILD_DIR%\maxma-server.exe" (
     echo [ERROR] PyInstaller onedir output missing: %SIDECAR_BUILD_DIR%\maxma-server.exe
     exit /b 1

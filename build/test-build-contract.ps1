@@ -96,7 +96,7 @@ if (-not $sidecarMatch.Success -or $sidecarMatch.Groups[1].Value -ne "maxma-serv
 Assert-TextContains $capabilityText '"url": "http://127.0.0.1:*/*"' "Tauri HTTP capability must allow the selected loopback API port"
 Assert-TextContains $capabilityText '"url": "http://localhost:*/*"' "Tauri HTTP capability must allow localhost API requests"
 Assert-TextNotContains $capabilityText '"url": "http://127.0.0.1:8000/*"' "Tauri HTTP capability must not be limited to the default API port"
-Assert-TextContains $portable 'copy /y "%SIDECAR_SOURCE%" "%PORTABLE_DIR%\maxma-server.exe"' "portable must copy the sidecar beside the no-bundle executable"
+Assert-TextContains $portable 'copy /y "%SIDECAR_BUILD_DIR%\maxma-server.exe" "%PORTABLE_DIR%\maxma-server.exe"' "portable must copy the onedir bootloader beside the no-bundle executable"
 Assert-TextContains $portable 'if not exist "%PORTABLE_DIR%\maxma-server.exe"' "portable must validate the root sidecar lookup path"
 Assert-TextNotContains $portable '"%PORTABLE_DIR%\resources\binaries\%SIDECAR_NAME%"' "portable must not place the sidecar under resource_dir\\binaries"
 Assert-TextNotContains $portable 'mkdir "%PORTABLE_DIR%\binaries"' "portable must not create a sidecar directory outside resource_dir"
@@ -155,7 +155,7 @@ if ($null -eq $webviewInstallMode -or $webviewInstallMode.type -ne "offlineInsta
     throw "NSIS must embed the WebView2 offline installer and run it silently"
 }
 Assert-TextContains $main "webview2_runtime_available" "portable runtime must check for WebView2 before creating windows"
-Assert-TextContains $main "Portable builds do not include an offline WebView2 installer" "portable runtime must fail clearly when WebView2 is absent"
-Assert-TextContains $main "resources\\runtime" "Rust resource contract must require the embedded runtime directory"
+Assert-TextContains $main "report_missing_webview2" "portable runtime must warn clearly when WebView2 is absent"
+Assert-TextContains $main 'resource_dir.join("runtime")' "Rust resource contract must require the embedded runtime directory"
 
 Write-Output "Build contract tests passed."

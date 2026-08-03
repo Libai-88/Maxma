@@ -98,7 +98,7 @@ Assert-NotMatch $portable '(?im)xcopy[^\r\n]*%PROJECT_ROOT%[^\r\n]*config[^\r\n]
 $resolvedToc = if ($TocPath) {
     [IO.Path]::GetFullPath((Join-Path $ProjectRoot $TocPath))
 } else {
-    Join-Path $ProjectRoot "build\maxma-server\PKG-00.toc"
+    Join-Path $ProjectRoot "build\maxma-server\COLLECT-00.toc"
 }
 
 if (-not $SkipArtifact) {
