@@ -199,23 +199,13 @@ if not exist "%PORTABLE_DIR%\_internal\" (
     exit /b 1
 )
 
-xcopy /e /i /q "%DIST_DIR%" "%PORTABLE_DIR%\dist" >nul
-if errorlevel 1 (
-    echo [ERROR] Failed to copy frontend dist.
-    exit /b 1
-)
-if not exist "%PORTABLE_DIR%\dist\" (
-    echo [ERROR] Portable frontend dist is missing.
-    exit /b 1
-)
-
 xcopy /e /i /q "%TAURI_RELEASE_RESOURCES%" "%PORTABLE_DIR%\resources" >nul
 if errorlevel 1 (
     echo [ERROR] Failed to copy Tauri resources.
     exit /b 1
 )
-if not exist "%PORTABLE_DIR%\resources\runtime\" (
-    echo [ERROR] Portable runtime resources are missing.
+if not exist "%PORTABLE_DIR%\resources\runtime\maxma-engine.exe" (
+    echo [ERROR] Portable sidecar executable maxma-engine.exe is missing.
     exit /b 1
 )
 if not exist "%PORTABLE_DIR%\resources\assets\" (
@@ -283,7 +273,6 @@ REM 写入 README 说明文件，帮助用户理解便携版结构
     echo   portable.flag       - 便携模式标记（请勿删除）
     echo   data/               - 用户数据目录
     echo   resources/          - 嵌入式运行时和资源
-    echo   dist/               - 前端副本
     echo.
     echo 注意：需要系统已安装 Microsoft Edge WebView2 Runtime。
     echo.
@@ -302,7 +291,6 @@ echo     _internal/       ^(Python runtime, extracted once^)
 echo     portable.flag
 echo     data/            ^(user data, auto-populated on first run^)
 echo     resources/       ^(embedded runtime ^& assets^)
-echo     dist/            ^(frontend copy^)
 echo ========================================
 
 REM Post-build verification: ensure all critical files exist
@@ -327,16 +315,12 @@ if not exist "%PORTABLE_DIR%\data" (
     echo [VERIFY FAIL] data/ directory is missing
     set "VERIFY_OK=0"
 )
-if not exist "%PORTABLE_DIR%\resources\runtime" (
-    echo [VERIFY FAIL] resources/runtime/ is missing
+if not exist "%PORTABLE_DIR%\resources\runtime\maxma-engine.exe" (
+    echo [VERIFY FAIL] resources/runtime/maxma-engine.exe is missing
     set "VERIFY_OK=0"
 )
 if not exist "%PORTABLE_DIR%\resources\assets" (
     echo [VERIFY FAIL] resources/assets/ is missing
-    set "VERIFY_OK=0"
-)
-if not exist "%PORTABLE_DIR%\dist" (
-    echo [VERIFY FAIL] dist/ directory is missing
     set "VERIFY_OK=0"
 )
 if not "%VERIFY_OK%"=="1" (

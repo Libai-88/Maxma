@@ -36,14 +36,6 @@ datas = [
     (str(project_root / ".omp" / "skills"), ".omp/skills"),
     # Macros
     (str(project_root / "macros"), "macros"),
-    # oh-my-pi sidecar（Bun TypeScript 源码 + node_modules）
-    # 生产模式需要 bun.exe + sidecar 源码来启动 agent 引擎
-    (str(project_root / "bun-sidecar" / "src"), "bun-sidecar/src"),
-    (str(project_root / "bun-sidecar" / "package.json"), "bun-sidecar"),
-    (str(project_root / "bun-sidecar" / "node_modules"), "bun-sidecar/node_modules"),
-    # Bun 运行时本体：_resolve_bun_path() 在 _MEIPASS/bun-sidecar/bun.exe 查找。
-    # 由 build/prepare-bun.ps1 在构建期下载官方二进制到此路径。
-    (str(project_root / "bun-sidecar" / "bun.exe"), "bun-sidecar"),
 ]
 
 _config_stickers_dir = project_root / "config" / "stickers"
@@ -69,9 +61,6 @@ _required_sources = [
     project_root / "config" / "personas" / "SOUL.example.md",
     project_root / "config" / "personas" / "USER.example.md",
     project_root / "config" / "stickers",
-    project_root / "bun-sidecar" / "src",
-    project_root / "bun-sidecar" / "package.json",
-    project_root / "bun-sidecar" / "node_modules",
 ]
 _missing_required = [str(path) for path in _required_sources if not path.exists()]
 if not _sticker_categories:
@@ -84,14 +73,6 @@ if _missing_required:
 # Optional local content may be absent in a clean checkout; omit it explicitly
 # while keeping the required runtime inputs above fail-fast.
 datas = [(src, dst) for src, dst in datas if Path(src).exists()]
-
-# bun.exe 是打包后端启动 agent 引擎的必需品，缺失则产物不可用 —— 立即失败而非静默跳过
-_bun_exe = project_root / "bun-sidecar" / "bun.exe"
-if not _bun_exe.exists():
-    raise SystemExit(
-        "[ERROR] 缺少 bun-sidecar/bun.exe，打包后端需要捆绑的 Bun 运行时来启动 agent 引擎。\n"
-        "        请先运行: powershell -NoProfile -ExecutionPolicy Bypass -File build\\prepare-bun.ps1"
-    )
 
 site_packages_root = project_root / ".venv" / "Lib" / "site-packages"
 

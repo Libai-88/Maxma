@@ -169,6 +169,23 @@ if not exist "bun-sidecar\node_modules\" (
     exit /b 1
 )
 
+REM Compile the sidecar into a single-file executable. This replaces the
+REM node_modules tree + bun.exe that used to be bundled, shrinking the
+REM portable payload by ~1.1GB.
+echo [INFO] Compiling sidecar single-file executable...
+pushd bun-sidecar
+"%BUN_EXE%" run build-compiled.mjs
+if errorlevel 1 (
+    popd
+    echo [ERROR] Sidecar compilation failed
+    exit /b 1
+)
+popd
+if not exist "desktop\src-tauri\resources\runtime\maxma-engine.exe" (
+    echo [ERROR] Compiled sidecar executable is missing
+    exit /b 1
+)
+
 REM Package backend
 echo [2/4] Packaging backend...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0test-packaging-safety.ps1" -ProjectRoot "%CD%" -SkipArtifact

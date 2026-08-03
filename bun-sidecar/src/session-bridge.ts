@@ -303,7 +303,12 @@ let settingsInitPromise: Promise<Settings> | null = null;
 /** Ensure the global Settings singleton is initialized before use. */
 async function ensureSettings(): Promise<Settings> {
   if (!settingsInitPromise) {
-    settingsInitPromise = Settings.init().then(() => Settings.instance);
+    settingsInitPromise = Settings.init()
+      .then(() => Settings.instance)
+      .catch((err) => {
+        settingsInitPromise = null; // 重置缓存，允许下次重试
+        throw err;
+      });
   }
   return settingsInitPromise;
 }
@@ -1018,7 +1023,9 @@ async function shutdown() {
   process.exit(0);
 }
 
-if (import.meta.main) {
+// bun build --compile 下 import.meta.main 恒为 false(入口被 oh-my-pi 模块图间接引用)。
+// 开发模式(bun run)仍以 import.meta.main 判定;编译模式由 MAXMA_SIDECAR_COMPILED 注入。
+if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
   rl.on("line", async (line: string) => {
     let req: any;
     try {
@@ -1179,6 +1186,12 @@ if (import.meta.main) {
                 record.currentGuard = null;
               }
             }
+          })
+          // 链尾兜底：若无后续 prompt 重置链，此处 rejection 即 unhandled
+          // rejection → Bun 默认 exit(1)，sidecar 进程中途退出。catch 后
+          // 链保持 resolved，错误已由 orchestratePrompt 的 done 机制上报。
+          .catch((err) => {
+            console.error("[prompt] unhandled error in promptQueue:", err);
           });
 
         send(id, { ok: true });
@@ -1399,7 +1412,7 @@ if (import.meta.main) {
         }
         try {
           record.settings!.set("tools.approvalMode" as any, autoApprove ? "yolo" : "always-ask");
-          console.log(`[auto_approve] Session ${sessionId.slice(0, 8)} approvalMode set to ${autoApprove ? "yolo" : "always-ask"}`);
+          console.error(`[auto_approve] Session ${sessionId.slice(0, 8)} approvalMode set to ${autoApprove ? "yolo" : "always-ask"}`);
           send(id, { ok: true });
         } catch (err) {
           sendError(id, `Failed to set auto_approve: ${String(err)}`);
@@ -1421,7 +1434,7 @@ if (import.meta.main) {
           const modifiedPlan: string | undefined = params?.modified_plan as string | undefined;
           if (action === "approve") {
             record.settings!.set("plan.enabled" as any, true);
-            console.log(`[plan] Session ${sessionId.slice(0, 8)} plan approved (plan_id=${planId})`);
+            console.error(`[plan] Session ${sessionId.slice(0, 8)} plan approved (plan_id=${planId})`);
             // Inject approved plan context into the agent's next turn
             if (modifiedPlan) {
               // Append the approved plan as a system context message
@@ -1441,7 +1454,7 @@ if (import.meta.main) {
               record.session.agent.appendMessage(msg);
             }
           } else if (action === "reject") {
-            console.log(`[plan] Session ${sessionId.slice(0, 8)} plan rejected (plan_id=${planId})`);
+            console.error(`[plan] Session ${sessionId.slice(0, 8)} plan rejected (plan_id=${planId})`);
             const msg = {
               role: "user" as const,
               content: "[Plan Rejected]\nThe proposed plan has been rejected. Please revise your approach.",
@@ -1449,7 +1462,7 @@ if (import.meta.main) {
             };
             record.session.agent.appendMessage(msg);
           } else if (action === "modify") {
-            console.log(`[plan] Session ${sessionId.slice(0, 8)} plan modified (plan_id=${planId})`);
+            console.error(`[plan] Session ${sessionId.slice(0, 8)} plan modified (plan_id=${planId})`);
             if (modifiedPlan) {
               const msg = {
                 role: "user" as const,
@@ -1509,7 +1522,7 @@ if (import.meta.main) {
           record.mcpManager = newManager;
           record.mcpConfigs = loaded.configs;
           record.mcpAllowBlock = loaded.allowBlock;
-          console.log(`[mcp] Session ${sessionId.slice(0, 8)} MCP reloaded: ${Object.keys(loaded.configs).length} server(s), ${filteredTools.length} tool(s)`);
+          console.error(`[mcp] Session ${sessionId.slice(0, 8)} MCP reloaded: ${Object.keys(loaded.configs).length} server(s), ${filteredTools.length} tool(s)`);
           send(id, { status: "reloaded", server_count: Object.keys(loaded.configs).length, tool_count: filteredTools.length });
         } catch (err) {
           sendError(id, `Failed to reload MCP: ${String(err)}`);
@@ -1786,6 +1799,8 @@ if (import.meta.main) {
           const { session } = await createAgentSession({
             hasUI: false,
             autoApprove: true,
+            model: params?.model ?? process.env.MAXMA_DEFAULT_MODEL,
+            authStorage: params?.authStorage ?? await getSharedAuthStorage(),
           });
           let answer = "";
           const unsub = session.subscribe((event: any) => {

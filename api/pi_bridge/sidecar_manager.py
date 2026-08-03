@@ -41,21 +41,38 @@ _DEFAULT_BUN_PATH = "bun"
 def _resolve_bun_path() -> str:
     """从配置读取 Bun 路径，fallback 到默认值。
 
-    生产模式（PyInstaller _MEIPASS）：查找捆绑的 bun.exe。
-    开发模式：使用配置文件或默认路径。
+    编译模式优先使用 _resolve_sidecar_exe() 返回的单文件 sidecar；
+    本函数仅作为开发模式（bun run src/session-bridge.ts）的路径来源。
     """
-    # 生产模式：PyInstaller 打包后 bun.exe 在 _MEIPASS 目录
-    meipass = getattr(sys, "_MEIPASS", None)
-    if meipass:
-        bundled_bun = Path(meipass) / "bun-sidecar" / "bun.exe"
-        if bundled_bun.exists():
-            return str(bundled_bun)
     try:
         from config.settings import get_settings
         s = get_settings()
         return s.sidecar_bun_path or _DEFAULT_BUN_PATH
     except Exception:
         return _DEFAULT_BUN_PATH
+
+
+def _resolve_sidecar_exe() -> str | None:
+    """定位编译后的单文件 sidecar（maxma-engine.exe）。
+
+    便携版 / 标准安装：resources/runtime/maxma-engine.exe（由
+    bun-sidecar/build-compiled.mjs 在构建期产出,经 Tauri resources 打包）。
+    找不到时返回 None,调用方回退到 `bun run` 开发模式。
+    """
+    try:
+        from app_paths import RUNTIME_DIR
+        compiled = RUNTIME_DIR / "runtime" / "maxma-engine.exe"
+        if compiled.exists():
+            return str(compiled)
+    except Exception:
+        pass
+    # PyInstaller _MEIPASS 兼容（若 spec 曾把 sidecar 作为数据打包）
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidate = Path(meipass) / "maxma-engine.exe"
+        if candidate.exists():
+            return str(candidate)
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -75,6 +92,10 @@ class SidecarManager:
         self._stderr_task: asyncio.Task[None] | None = None
         self._client: JsonRpcClient | None = None
         self._heartbeat_task: asyncio.Task[None] | None = None
+        # heartbeat 标记：进程存活但 RPC 判定死亡。用于区分 start() 的
+        # "初始化瞬态"（进程装好但 client 未 attach）与"heartbeat 死亡标记"，
+        # 后者需要硬重启而非短路返回（避免永久 wedge）。
+        self._dead = False
 
     # -- Properties ---------------------------------------------------------
 
@@ -138,11 +159,21 @@ class SidecarManager:
                 logger.debug("Sidecar already running, skipping start")
                 return
             if self.is_running and self._client is None:
-                # A process can be installed by a caller before the RPC client
-                # is attached. Treat that state as already started; restarting
-                # here can terminate a healthy sidecar during initialization.
-                logger.debug("Sidecar process already running, skipping start")
-                return
+                if self._dead:
+                    # heartbeat 已判定 RPC 死亡（进程仍活）。此前会短路返回导致
+                    # get_client() 永久抛错（wedge）；现在硬重启以自愈。
+                    logger.warning(
+                        "[sidecar] restarting wedged sidecar (pid=%s)",
+                        self._process.pid if self._process else "?",
+                    )
+                    await self._stop_unsafe()
+                    self._dead = False
+                else:
+                    # A process can be installed by a caller before the RPC client
+                    # is attached. Treat that state as already started; restarting
+                    # here can terminate a healthy sidecar during initialization.
+                    logger.debug("Sidecar process already running, skipping start")
+                    return
             if self.is_running and not self.client_running:
                 logger.warning(
                     "[sidecar] RPC client crashed but process alive (pid=%s), restarting",
@@ -150,14 +181,25 @@ class SidecarManager:
                 )
                 await self._stop_unsafe()
 
-            bun_path = _resolve_bun_path()
-            logger.info(
-                "Starting sidecar: %s run %s", bun_path, SIDECAR_ENTRY
-            )
+            sidecar_exe = _resolve_sidecar_exe()
+            if sidecar_exe:
+                # 编译模式：直接执行单文件 sidecar（自带 Bun runtime），
+                # cwd 用 exe 所在目录（便携版为 resources/runtime,必有）。
+                sidecar_cmd = [sidecar_exe]
+                sidecar_cwd = str(Path(sidecar_exe).parent)
+                logger.info("Starting sidecar: %s", sidecar_exe)
+            else:
+                # 开发模式：bun run src/session-bridge.ts
+                bun_path = _resolve_bun_path()
+                sidecar_cmd = [bun_path, "run", str(SIDECAR_ENTRY)]
+                sidecar_cwd = str(SIDECAR_DIR)
+                logger.info(
+                    "Starting sidecar: %s run %s", bun_path, SIDECAR_ENTRY
+                )
 
             # Forward the project root to the sidecar via env var so its config
             # tools (which read/write paths relative to the project root) resolve
-            # correctly even though the sidecar process runs with cwd=SIDECAR_DIR.
+            # correctly even though the sidecar process runs with cwd=sidecar dir.
             # B-001/B-002: previously the sidecar used process.cwd() which pointed
             # at bun-sidecar/ instead of the actual project root.
             sidecar_env = dict(os.environ)
@@ -172,13 +214,11 @@ class SidecarManager:
                 )
 
             self._process = await asyncio.create_subprocess_exec(
-                bun_path,
-                "run",
-                str(SIDECAR_ENTRY),
+                *sidecar_cmd,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=str(SIDECAR_DIR),
+                cwd=sidecar_cwd,
                 env=sidecar_env,
             )
             logger.info(
@@ -251,6 +291,7 @@ class SidecarManager:
                 )
                 if consecutive_failures >= 3:
                     logger.warning("[sidecar] heartbeat: 3 consecutive failures, marking dead")
+                    self._dead = True
                     break
                 continue
 
