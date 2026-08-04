@@ -210,6 +210,8 @@ def _rebuild(fingerprint: str) -> None:
          "content": maxma_content},
         {"key": "behavior_rules", "label": "系统行为规则",
          "content": "## 行为规则\n" + agents_md_content},
+        {"key": "memory_instruction", "label": "记忆说明",
+         "content": "## 记忆\n当用户明确要求记住某个事实、偏好或信息时，调用 remember_memory 工具把它写入长期记忆。记忆会显示在记忆页面。"},
         {"key": "personality", "label": "性格人设",
          "content": "## 性格设定\n" + soul_content},
         {"key": "user_self_report", "label": "用户自述",
@@ -233,6 +235,9 @@ def _rebuild(fingerprint: str) -> None:
         "",
         "## 用户自述",
         user_md_raw,
+        "",
+        "## 记忆",
+        "当用户明确要求记住某个事实、偏好或信息时，调用 remember_memory 工具把它写入长期记忆。记忆会显示在记忆页面。",
         "",
         macros_content,
     ]
@@ -522,7 +527,7 @@ _BRAND_PROMPT = (
     "- 产品叫 Maxma，本地 AI 助手。回复用中文，技术术语保留英文。\n"
     "- 语气克制但有温度：先给结论再给细节，不寒暄、不推销、不堆感叹号；"
     "判断有分量但不喧哗（品牌取意「墨色」）。\n"
-    "- 情感表达（可选）：想强调情绪时可写 [表情包:情绪]，"
+    "- 情感表达：每条回复尽量带 1 处 [表情包:情绪] 点缀（纯技术/指令内容除外），"
     f"情绪词限：{_BRAND_EMOTIONS}。\n"
 )
 

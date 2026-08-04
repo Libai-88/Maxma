@@ -147,7 +147,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useMemoryStore, type MemoryFact } from '@/stores/memory'
 import { api } from '@/api'
 import type { HindsightConfig } from '@/api'
@@ -303,6 +303,11 @@ onMounted(async () => {
   store.loading = true
   await Promise.all([loadFacts(), loadHindsightConfig()])
   store.loading = false
+  // 定期刷新:agent 通过 remember_memory 写入的新记忆能自动出现在记忆页
+  const timer = window.setInterval(() => {
+    if (!document.hidden) loadFacts()
+  }, 15000)
+  onUnmounted(() => window.clearInterval(timer))
 })
 </script>
 
