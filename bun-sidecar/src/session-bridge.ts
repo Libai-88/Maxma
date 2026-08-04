@@ -204,7 +204,11 @@ export async function buildCreateSessionOptions(
   else if (input.appendSystemPrompt !== undefined) createOptions.appendSystemPrompt = input.appendSystemPrompt;
   if (input.tools !== undefined && input.tools.length > 0) createOptions.toolNames = input.tools;
   // Base settings: always disable advisor (OMP SDK warns on 401 even when disabled)
-  createOptions.settings = Settings.isolated({"advisor.enabled": false});
+  // Memory backend is pinned to "off": the compiled sidecar does not bundle
+  // fastembed/onnxruntime, so memory.backend="mnemopi" would fail at runtime.
+  // Maxma's own memory (persona memory.yaml) is independent of OMP's memory
+  // subsystem, so disabling it loses nothing.
+  createOptions.settings = Settings.isolated({"advisor.enabled": false, "memory.backend": "off"});
 
   const needsApproval = input.permissionMode === "ask" || input.permissionMode === "read_only";
   createOptions.autoApprove = !needsApproval;
@@ -226,7 +230,10 @@ export async function buildCreateSessionOptions(
       "launch.enabled", "debug.enabled",
       "astGrep.enabled", "astEdit.enabled",
       "web_search.enabled", "ask.enabled",
-      "memory.backend", "autolearn.enabled",
+      // "memory.backend" intentionally excluded: mnemopi requires the
+      // un-bundled embedding deps (fastembed/onnxruntime). Maxma's own
+      // memory lives in its persona memory.yaml, not OMP's memory subsystem.
+      "autolearn.enabled",
     ];
     const globalOverrides: Record<string, unknown> = {};
     try {
@@ -239,6 +246,7 @@ export async function buildCreateSessionOptions(
       ...globalOverrides,
       "tools.approvalMode": "always-ask",
       "advisor.enabled": false,
+      "memory.backend": "off",
     });
   }
 
