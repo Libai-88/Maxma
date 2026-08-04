@@ -2245,7 +2245,7 @@ dependencies = [
 
 [[package]]
 name = "maxma-here"
-version = "2.6.6"
+version = "2.6.7"
 dependencies = [
  "log",
  "reqwest 0.12.28",
