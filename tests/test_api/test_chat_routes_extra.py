@@ -579,13 +579,12 @@ class TestWebSocketChat:
                 error = ws.receive_json()
                 done = ws.receive_json()
 
-        assert error == {
-            "type": "error",
-            "payload": {
-                "code": "SIDECAR_UNAVAILABLE",
-                "message": "后端处理失败，请稍后重试",
-            },
-        }
+        assert error["type"] == "error"
+        assert error["payload"]["code"] == "SIDECAR_UNAVAILABLE"
+        assert error["payload"]["message"] == "后端处理失败，请稍后重试"
+        assert error["payload"]["category"] == "system_error"
+        assert isinstance(error["payload"]["trace_id"], str)
+        assert error["payload"]["trace_id"]
         assert "provider secret details" not in error["payload"]["message"]
         assert done["type"] == "done"
         assert "provider secret details" in caplog.text

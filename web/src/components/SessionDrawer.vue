@@ -155,7 +155,14 @@ useGsap((_ctx, contextSafe) => {
     if (!isOpen || !drawerEl.value) return
     const items = gsap.utils.toArray<HTMLElement>('.session-item', drawerEl.value)
     if (!items.length) return
-    gsap.from(items, { opacity: 0, x: -16, duration: 0.3, ease: easeMap.out, stagger: 0.025 })
+    // 同 SessionSidebar：不依赖 opacity 入场，防止大列表时动画被中断停在透明
+    gsap.from(items, {
+      x: -16,
+      duration: 0.3,
+      ease: easeMap.out,
+      stagger: items.length > 20 ? 0 : 0.025,
+      clearProps: 'transform',
+    })
   }), { flush: 'post' })
 }, { scope: () => drawerEl.value })
 

@@ -8,7 +8,15 @@ from pathlib import Path
 
 import yaml
 
-from app_paths import MACROS_DIR, MACROS_DATA_DIR, PERSONAS_DATA_DIR as PERSONAS_DIR, ACTIVE_PERSONA_PATH
+from app_paths import (
+    MACROS_DIR,
+    MACROS_DATA_DIR,
+    PERSONAS_DATA_DIR,                      # 可写用户人设目录（DATA_DIR/config/personas）
+    PERSONAS_DATA_DIR as PERSONAS_DIR,      # 兼容既有代码：prompts 内 PERSONAS_DIR 即用户数据目录
+    PERSONAS_DIR as PERSONAS_TEMPLATES_DIR,  # 只读 bundle 模板目录（BUNDLE_DIR/config/personas），
+                                             # 打包模式下位于 _MEIPASS；用于默认值兜底
+    ACTIVE_PERSONA_PATH,
+)
 from api.yaml_store import dump_yaml_atomic, yaml_file_lock
 
 from agent.persona_loader import load_persona, build_persona_prompt
@@ -56,40 +64,69 @@ def set_active_persona(filename: str) -> None:
 
 
 def list_personas() -> list[dict]:
-    """扫描 PERSONAS_DATA_DIR 下所有 SOUL*.md 文件，返回人格列表。"""
+    """扫描所有 SOUL*.md 文件，返回人格列表。
+
+    同时扫描：
+    - PERSONAS_DIR（BUNDLE_DIR/config/personas，开发模式即项目根，只读模板）：
+      内置 SOUL.example.md 等示例模板；SOUL.example.md 在 dev/conventional
+      模式下供首次启动复制为 SOUL.md，打包后变成内嵌的"种子"。
+    - PERSONAS_DIR（= PERSONAS_DATA_DIR，DATA_DIR/config/personas，用户运行时活跃目录）：
+      用户真正编辑 / 创建的人格文件（含 ensure_personas_seed() 首次启动
+      从 SOUL.example.md 拷贝出的 SOUL.md）。
+    - PERSONAS_TEMPLATES_DIR（BUNDLE_DIR/config/personas，只读 bundle 模板）：
+      内置 SOUL.example.md 等示例模板，作为兜底避免列表为空。
+    两边同名文件按 PERSONAS_DIR 优先，避免重复条目。
+    """
     personas = []
     active_file = get_active_persona_file()
-    for p in sorted(PERSONAS_DIR.glob("SOUL*.md")):
-        if p.name == "SOUL.example.md":
+    seen_files: set[str] = set()
+
+    # 优先扫描用户运行时目录（活跃 SOUL、自建 SOUL.XXX.md），再用 bundle 模板兜底
+    for scan_dir in (PERSONAS_DIR, PERSONAS_TEMPLATES_DIR):
+        if not scan_dir.is_dir():
             continue
-        content = p.read_text(encoding="utf-8")
-        # 从第一个 # 标题提取显示名
-        display_name = p.stem  # 默认用文件名（去掉 .md）
-        for line in content.splitlines():
-            line = line.strip()
-            if line.startswith("# "):
-                display_name = line[2:].strip()
-                break
-        # 提取前 1-2 行非标题内容作为描述
-        desc_lines = []
-        for line in content.splitlines():
-            line = line.strip()
-            if not line or line.startswith("#"):
+        try:
+            iter_paths = sorted(scan_dir.glob("SOUL*.md"))
+        except OSError:
+            continue
+        for p in iter_paths:
+            # 同名文件只记一次（PERSONAS_DIR 已先扫过，TEMPLATES_DIR 里同名的跳过）
+            if p.name in seen_files:
                 continue
-            desc_lines.append(line)
-            if len(desc_lines) >= 1:
-                break
-        description = desc_lines[0] if desc_lines else ""
-        # 截断过长描述
-        if len(description) > 80:
-            description = description[:77] + "..."
-        personas.append({
-            "id": p.stem,
-            "file": p.name,
-            "name": display_name,
-            "description": description,
-            "active": p.name == active_file,
-        })
+            if p.name == "SOUL.example.md":
+                continue
+            seen_files.add(p.name)
+            try:
+                content = p.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            # 从第一个 # 标题提取显示名
+            display_name = p.stem  # 默认用文件名（去掉 .md）
+            for line in content.splitlines():
+                line = line.strip()
+                if line.startswith("# "):
+                    display_name = line[2:].strip()
+                    break
+            # 提取前 1-2 行非标题内容作为描述
+            desc_lines = []
+            for line in content.splitlines():
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                desc_lines.append(line)
+                if len(desc_lines) >= 1:
+                    break
+            description = desc_lines[0] if desc_lines else ""
+            # 截断过长描述
+            if len(description) > 80:
+                description = description[:77] + "..."
+            personas.append({
+                "id": p.stem,
+                "file": p.name,
+                "name": display_name,
+                "description": description,
+                "active": p.name == active_file,
+            })
     return personas
 
 
@@ -118,10 +155,18 @@ def _current_fingerprint() -> str:
     """
     parts: list[str] = []
 
-    # 固定 personas 文件
+    # 固定 personas 文件。打包/便携模式下活跃文件在 PERSONAS_DIR（= PERSONAS_DATA_DIR），
+    # 默认模板可能在 PERSONAS_TEMPLATES_DIR；二者都参与指纹以便 user edit 能 invalidate 缓存。
+    def _persona_hash(name: str) -> str:
+        for base in (PERSONAS_DIR, PERSONAS_TEMPLATES_DIR):
+            p = base / name
+            if p.exists():
+                return _file_hash(p)
+        return ""
+
     active_soul = get_active_persona_file()
     for name in ("AGENTS.md", "MAXMA.md", active_soul, "USER.md", "memory.yaml"):
-        parts.append(f"{name}:{_file_hash(PERSONAS_DIR / name)}")
+        parts.append(f"{name}:{_persona_hash(name)}")
     # 额外记录 active_persona.yaml 自身，切换人格时触发缓存刷新
     parts.append(f"active:{_file_hash(ACTIVE_PERSONA_PATH)}")
 
@@ -156,13 +201,24 @@ def _current_fingerprint() -> str:
 
 
 def _ensure_user_md() -> None:
-    """若 USER.md 不存在，从模板复制。"""
+    """若 USER.md 不存在，从模板复制到 PERSONAS_DIR（= PERSONAS_DATA_DIR，可写）。
+
+    历史原因：早期实现写到 app_paths.PERSONAS_DIR（在 PyInstaller frozen 下是
+    _MEIPASS，只读），导致便携/打包模式下 USER.md 永远起不来。ensure_personas_seed()
+    在 app_paths.py 已经在首次启动时做了同样的 seed 拷贝，这里保留是为了兜底：
+    万一 seed 失败（比如 bundle 里连 USER.example.md 都没带上），再尝试一次。
+    """
     import shutil
-    template = PERSONAS_DIR / "USER.example.md"
+    template = PERSONAS_TEMPLATES_DIR / "USER.example.md"
     target = PERSONAS_DIR / "USER.md"
     if not target.exists() and template.exists():
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(template, target)
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(template, target)
+        except OSError:
+            # PERSONAS_DIR 不存在或不可写时静默失败（开发模式可能 PERSONAS_DIR == PERSONAS_TEMPLATES_DIR
+            # 但 template 不存在；任何场景都不应阻塞 _rebuild）
+            pass
 
 
 def _rebuild(fingerprint: str) -> None:
@@ -276,17 +332,35 @@ def invalidate_prompt_cache() -> None:
 
 
 def _read_persona(filename: str) -> str:
-    path = PERSONAS_DIR / filename
-    if path.exists():
-        return path.read_text(encoding="utf-8")
+    """读取人设文件，优先用户数据目录，回落到 bundle 默认。
+
+    读取顺序：``PERSONAS_DIR``（= ``PERSONAS_DATA_DIR``，用户运行时目录）→
+    ``PERSONAS_TEMPLATES_DIR``（bundle 只读模板）→ ``""``。
+    开发模式下两个目录内容基本一致；打包 / 便携模式下 PERSONAS_DATA_DIR 是
+    ensure_personas_seed() 首次启动播种的活跃文件，TEMPLATES_DIR 是内置模板。
+    """
+    for base in (PERSONAS_DIR, PERSONAS_TEMPLATES_DIR):
+        path = base / filename
+        if path.exists():
+            try:
+                return path.read_text(encoding="utf-8")
+            except OSError:
+                continue
     return ""
 
 
 def _read_if_exists(filename: str) -> str:
-    """读取 personas 文件，不存在返回空字符串（不走缓存）。"""
-    path = PERSONAS_DIR / filename
-    if path.exists():
-        return path.read_text(encoding="utf-8").strip()
+    """读取 personas 文件，不存在返回空字符串（不走缓存）。
+
+    与 ``_read_persona`` 行为一致：先看用户数据目录，再看 bundle 模板。
+    """
+    for base in (PERSONAS_DIR, PERSONAS_TEMPLATES_DIR):
+        path = base / filename
+        if path.exists():
+            try:
+                return path.read_text(encoding="utf-8").strip()
+            except OSError:
+                continue
     return ""
 
 
@@ -370,7 +444,7 @@ def get_persona_memory_path() -> Path:
     # to the persona-scoped memory file instead of silently falling back
     # to shared memory.yaml.
     if meta.get("memory", "").strip().lower() in ("persona", "isolated"):
-        # 独立记忆：memory_{persona_stem}.yaml
+        # 独立记忆：memory_{persona_stem}.yaml（写到 PERSONAS_DIR=用户数据目录，便携/打包模式才可写）
         persona_id = Path(active_file).stem  # e.g. "SOUL.饱饱"
         return PERSONAS_DIR / f"memory_{persona_id}.yaml"
     # 共享记忆

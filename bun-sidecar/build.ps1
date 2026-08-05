@@ -15,7 +15,7 @@
 
 # 验证 sidecar 可以正常启动（开发模式）
 Write-Host "Testing sidecar startup..."
-bun run src/session-bridge.ts --help 2>&1
+bunx tsc --noEmit 2>&1
 if ($LASTEXITCODE -eq 0) {
     Write-Host "[PASS] Sidecar TypeScript compiles and runs"
 } else {

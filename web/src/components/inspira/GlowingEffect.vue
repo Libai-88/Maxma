@@ -38,6 +38,8 @@
       "
     />
   </div>
+  <!-- 插槽内容（设置页等用它包裹实际表单区块，必须渲染） -->
+  <slot />
 </template>
 
 <script setup lang="ts">

@@ -42,13 +42,20 @@ import { onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useSessionStore } from '@/stores/session';
 import { useChatStore } from '@/stores/chat';
+import { invalidateTurnsCache } from '@/composables/useChat';
 import { confirmAction } from '@/composables/useConfirm';
 
 const props = withDefaults(defineProps<{
   compact?: boolean
+  onboardingEnabled?: boolean
 }>(), {
   compact: false,
+  onboardingEnabled: false,
 })
+
+defineEmits<{
+  (e: 'restartOnboarding'): void
+}>()
 
 const router = useRouter()
 const showSettingsMenu = ref(false)
@@ -96,6 +103,7 @@ async function handleClearSession() {
     ch.currentTurn = null
   }
   chatStore.removeTurnsFromStorage(sid)
+  invalidateTurnsCache(sid)
   closeSettingsMenu()
 }
 

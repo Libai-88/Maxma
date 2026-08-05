@@ -22,7 +22,7 @@
             <StickerInline v-else :sticker="seg" @preview="previewSticker" />
           </template>
         </template>
-        <RenderMarkdown v-else :content="streamingText" :streaming="!block.done" />
+        <RenderMarkdown v-else :content="displayText" :streaming="!block.done" />
         <span v-if="!block.done && !block.becameAnswer" class="stream-caret" aria-hidden="true"></span>
         <span v-if="isStreamingAnswer" class="stream-caret" aria-hidden="true"></span>
       </div>
@@ -38,7 +38,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import type { ThinkingBlock as ThinkingBlockType } from '@/types'
 import RenderMarkdown from './RenderMarkdown.vue'
 import StickerInline from './StickerInline.vue'
@@ -72,6 +72,38 @@ const streamingText = computed(() => {
   const text = props.block.tokens
   if (!text) return ''
   return stripThinkingLabels(text.replace(STICKER_PLACEHOLDER_RE, ''))
+})
+
+// 流式 markdown 节流：思考阶段每 token 更新 streamingText 会触发 RenderMarkdown
+// 全量 md.render + sanitizeHtml，累加全文为 O(n²)，长推理会卡死主线程。
+// 这里最多每 80ms 刷新一次显示文本；done 时立即全量渲染，保证内容不丢。
+const displayText = ref('')
+let mdThrottleTimer = 0
+watch(streamingText, (val) => {
+  if (props.block.done) {
+    displayText.value = val
+    return
+  }
+  if (mdThrottleTimer) return
+  mdThrottleTimer = window.setTimeout(() => {
+    mdThrottleTimer = 0
+    displayText.value = streamingText.value
+  }, 80)
+}, { immediate: true })
+watch(() => props.block.done, (done) => {
+  if (done) {
+    if (mdThrottleTimer) {
+      window.clearTimeout(mdThrottleTimer)
+      mdThrottleTimer = 0
+    }
+    displayText.value = streamingText.value
+  }
+})
+onUnmounted(() => {
+  if (mdThrottleTimer) {
+    window.clearTimeout(mdThrottleTimer)
+    mdThrottleTimer = 0
+  }
 })
 
 /** 纯文本答案判断：含代码围栏/表格行/标题/表情标记（含裸情感词）则降级走 RenderMarkdown/segments，

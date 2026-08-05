@@ -35,6 +35,19 @@ router = APIRouter()
 _PUBLIC_TURN_ERROR = "后端处理失败，请稍后重试"
 
 
+class TurnStartError(Exception):
+    """Raised when the sidecar cannot start or create a session.
+
+    Carries a stable error code and a user-safe message so websocket_chat
+    can surface the failure without leaking provider internals.
+    """
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
 async def _get_sidecar_client(sidecar_mgr):
     """Return a sidecar client via the manager's ``get_client()`` lifecycle API.
 
@@ -68,6 +81,36 @@ async def _cancel_sidecar_turn(
             "[sidecar] Failed to cancel after %s for session %s",
             reason,
             sidecar_session_id[:8],
+            exc_info=True,
+        )
+
+
+async def _destroy_sidecar_session(sidecar_mgr, session) -> None:
+    """Best-effort destroy the sidecar session on WS disconnect.
+
+    Keeps the SessionMap mapping (recent turns survive for context restore on
+    reconnect) but frees the sidecar-side session — otherwise every chat leaves
+    a session in the sidecar's `sessions` Map and RSS grows until the 1GB
+    heartbeat restart kicks in repeatedly.
+    """
+    if sidecar_mgr is None:
+        return
+    sidecar_sid = getattr(session, "_sidecar_session_id", None)
+    if not sidecar_sid:
+        return
+    client = getattr(sidecar_mgr, "client", None)
+    if client is None or not getattr(client, "is_running", True):
+        return  # sidecar unavailable — skip (avoid restarting it just to destroy)
+    try:
+        await client.call("destroy_session", {"session_id": sidecar_sid})
+        logger.info(
+            "[sidecar] destroyed sidecar session %s on disconnect",
+            sidecar_sid[:8],
+        )
+    except Exception:
+        logger.debug(
+            "[sidecar] Failed to destroy session %s on disconnect",
+            sidecar_sid[:8],
             exc_info=True,
         )
 
@@ -247,10 +290,21 @@ async def _stream_turn_sidecar(
     model_config = model_config or {}
     app_state = ws.app.state
 
-    # 1. Ensure sidecar is running
+    # 1. Ensure sidecar is running. Failures here (sidecar not ready, RPC
+    # client unavailable) surface as SIDECAR_UNAVAILABLE instead of
+    # propagating as an opaque exception into _handle_turn_result.
     mgr = app_state.sidecar_manager
-    await mgr.start()
-    client = await _get_sidecar_client(mgr)
+    try:
+        await mgr.start()
+        client = await _get_sidecar_client(mgr)
+    except Exception as e:
+        logger.exception(
+            "[sidecar] Failed to start sidecar for session %s",
+            session.session_id[:8],
+        )
+        raise TurnStartError(
+            "SIDECAR_UNAVAILABLE", "Sidecar 未就绪，请检查后端日志"
+        ) from e
     session._sidecar_mgr = mgr
 
     # 2. Look up or create sidecar session
@@ -324,21 +378,35 @@ async def _stream_turn_sidecar(
         # 不传 system_prompt，避免整体替换 OMP 原生的 harness prompt。
         # 品牌模式：传 system_prompt（整体替换，旧行为）。
         _prompt_field = "append_system_prompt" if use_append else "system_prompt"
-        result = await client.call(
-            "create_session",
-            {
-                **model_config,
-                _prompt_field: _sidecar_system_prompt,
-                # B-002: forward the actual project root so the agent's logical
-                # cwd resolves to the user's project (not the sidecar's bun-sidecar/
-                # source directory). Must agree with MAXMA_PROJECT_ROOT env var set
-                # in sidecar_manager.py (B-001).
-                "cwd": str(PROJECT_ROOT),
-                "permission_mode": _effective_permission_mode,
-                "tools": _session_tools,
-            },
-        )
-        sidecar_sid = result["session_id"]
+        try:
+            result = await client.call(
+                "create_session",
+                {
+                    **model_config,
+                    _prompt_field: _sidecar_system_prompt,
+                    # B-002: forward the actual project root so the agent's logical
+                    # cwd resolves to the user's project (not the sidecar's bun-sidecar/
+                    # source directory). Must agree with MAXMA_PROJECT_ROOT env var set
+                    # in sidecar_manager.py (B-001).
+                    "cwd": str(PROJECT_ROOT),
+                    "permission_mode": _effective_permission_mode,
+                    "tools": _session_tools,
+                },
+            )
+        except Exception as e:
+            logger.exception(
+                "[sidecar] create_session failed for session %s",
+                session.session_id[:8],
+            )
+            raise TurnStartError(
+                "PROVIDER_UNAVAILABLE",
+                "模型服务不可用，请检查 Provider 配置",
+            ) from e
+        sidecar_sid = result.get("session_id")
+        if not sidecar_sid:
+            raise TurnStartError(
+                "SIDECAR_UNAVAILABLE", "Sidecar 创建会话失败，请检查后端日志"
+            )
         session._sidecar_session_id = sidecar_sid
         sm = get_session_map()
         sm.set_mapping(session.session_id, sidecar_sid)
@@ -663,6 +731,8 @@ async def websocket_chat(ws: WebSocket, session_id: str):
 
     turn_task: asyncio.Task | None = None
     cancel_event = asyncio.Event()
+    # turn 完成瞬间到达的非 PING 消息暂存于此，处理完 turn 后消费（避免静默丢弃）
+    _deferred_msg: str | None = None
     # Context captured when a turn is started, used when it completes
     _turn_user_message: str = ""
     _turn_system_prompt: str = ""
@@ -701,22 +771,31 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             return
         try:
             final_answer = task.result()
-        except Exception:
+        except Exception as exc:
             logger.exception("[ws] Turn task failed for session %s", session_id[:8])
+            error_code = "SIDECAR_UNAVAILABLE"
+            error_message = _PUBLIC_TURN_ERROR
+            if isinstance(exc, TurnStartError):
+                error_code = exc.code
+                error_message = exc.message
+            error_trace_id = uuid.uuid4().hex
             record_activity(
                 "turn", "turn_error",
                 session_id=session.session_id,
                 turn_id=_turn_id or "",
                 level="error",
-                message="对话轮次处理失败",
+                trace_id=error_trace_id,
+                message=error_message,
             )
             try:
                 await ws.send_json(
                     {
                         "type": WsEventType.ERROR,
                         "payload": {
-                            "code": "SIDECAR_UNAVAILABLE",
-                            "message": "后端处理失败，请稍后重试",
+                            "code": error_code,
+                            "message": error_message,
+                            "category": "system_error",
+                            "trace_id": error_trace_id,
                         },
                     }
                 )
@@ -780,8 +859,12 @@ async def websocket_chat(ws: WebSocket, session_id: str):
 
     try:
         while True:
+            # 消费上一轮 turn 完成瞬间暂存的消息（避免静默丢弃）
+            if _deferred_msg is not None:
+                raw = _deferred_msg
+                _deferred_msg = None
             # Process a completed turn before waiting for new messages
-            if turn_task and turn_task.done():
+            elif turn_task and turn_task.done():
                 await _handle_turn_result(turn_task)
                 continue
 
@@ -793,12 +876,24 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                     return_when=asyncio.FIRST_COMPLETED,
                 )
                 if turn_task in done:
-                    if not recv_task.done():
+                    # 优先处理已到达的 ping 消息，避免 recv_task 取消后前端 pong 超时
+                    if recv_task.done():
+                        try:
+                            raw = recv_task.result()
+                            msg = json.loads(raw)
+                            if isinstance(msg, dict) and msg.get("type") == WsMessageType.PING:
+                                await ws.send_json({"type": "pong"})
+                            else:
+                                # 非 PING 消息暂存，处理完 turn 后消费，避免静默丢弃
+                                _deferred_msg = raw
+                        except (json.JSONDecodeError, Exception):
+                            pass
+                    else:
                         recv_task.cancel()
-                    try:
-                        await recv_task
-                    except asyncio.CancelledError:
-                        pass
+                        try:
+                            await recv_task
+                        except asyncio.CancelledError:
+                            pass
                     await _handle_turn_result(turn_task)
                     continue
                 raw = recv_task.result()
@@ -993,8 +1088,20 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                 await ws.send_json({"type": WsEventType.ERROR, "payload": rate_limit_error})
                 continue
 
-            # If a previous turn is still running, skip this message
+            # If a previous turn is still running, tell the frontend instead of
+            # silently dropping the message (前端 isStreaming 不会因此卡死)
             if turn_task and not turn_task.done():
+                await ws.send_json(
+                    {
+                        "type": WsEventType.ERROR,
+                        "payload": {
+                            "code": "BUSY",
+                            "message": "上一条消息仍在处理中，请稍后",
+                            "category": "system_error",
+                            "trace_id": uuid.uuid4().hex,
+                        },
+                    }
+                )
                 continue
 
             # 原生提示词模式：用最小功能注入（build_append_prompt）走 append 通道，
@@ -1059,4 +1166,8 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             )
             turn_task.cancel()
             await asyncio.gather(turn_task, return_exceptions=True)
+        # 断开即销毁 sidecar session，防止会话在 sidecar 内存累积导致反复内存重启
+        await _destroy_sidecar_session(
+            app_state.sidecar_manager, session
+        )
         app_state.ws_registry.unregister(session_id)

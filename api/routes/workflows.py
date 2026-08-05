@@ -128,6 +128,36 @@ class WorkflowRunState:
 _runs_lock = threading.RLock()
 _runs: dict[str, WorkflowRunState] = {}
 
+# 最大运行记录数 + 清理过期时间（秒）
+_MAX_RUNS = 1000
+_STALE_RUN_TTL = 3600  # 1 小时
+
+
+def _cleanup_stale_runs() -> int:
+    """清理过期（已完成/失败/取消超过 TTL）的运行，返回清理数量。
+
+    在写入新运行时自动触发，避免 _runs 无限增长导致内存泄漏。
+    """
+    now = time.time()
+    stale_ids = [
+        run_id
+        for run_id, run in _runs.items()
+        if run.status in ("succeeded", "failed", "cancelled")
+        and (now - run.updated_at) > _STALE_RUN_TTL
+    ]
+    # 如果清理后仍超过上限，删除最旧的运行（按 updated_at 升序）
+    remaining = len(_runs) - len(stale_ids)
+    if remaining > _MAX_RUNS:
+        extra = remaining - _MAX_RUNS
+        sorted_runs = sorted(
+            [(rid, r.updated_at) for rid, r in _runs.items() if rid not in stale_ids],
+            key=lambda x: x[1],
+        )
+        stale_ids.extend(rid for rid, _ in sorted_runs[:extra])
+    for rid in stale_ids:
+        _runs.pop(rid, None)
+    return len(stale_ids)
+
 
 # ── API 端点 ──
 
@@ -160,7 +190,8 @@ async def list_workflow_runs(session_id: str, request: Request):
         session_runs = [
             run.to_dict()
             for run in _runs.values()
-            if run.parent_turn_id and run.parent_turn_id.startswith(session_id[:8])
+            if run.parent_turn_id == session_id
+            or run.parent_turn_id.startswith(session_id[:8])
         ]
     return {"runs": session_runs}
 
@@ -188,6 +219,7 @@ async def start_workflow(session_id: str, body: StartWorkflowRequest, request: R
 
     with _runs_lock:
         _runs[run_id] = run
+        _cleanup_stale_runs()
 
     # 后台执行
     asyncio.create_task(_execute_workflow(

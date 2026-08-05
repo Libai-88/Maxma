@@ -315,8 +315,78 @@ def ensure_data_dirs():
     # 首次运行确保 OMP 原生 skills 目录就绪（打包/便携模式从内置 seed 拷贝）
     ensure_omp_skills_seed()
 
+    # 首次运行确保内置人设模板就绪（标准打包/便携模式 BUNDLE_DIR 只读，
+    # 必须把 SOUL.md / USER.md / MAXMA.md 等"运行时活跃文件"落到 DATA_DIR，
+    # 否则首次启动 system prompt 完全空、PersonaCard 全靠前端默认值糊弄）
+    ensure_personas_seed()
+
     # 首次运行时创建空的 MCP 配置文件（打包模式下 %APPDATA% 或便携 data/ 内默认不存在）
     _ensure_mcp_config()
+
+
+PERSONAS_SEED_MARKER = ".personas_seeded"
+
+# 内置人设种子：模板 (源) → 运行时活跃 (目标) 映射。
+#
+# 设计约束：
+# 1. test-packaging-safety.ps1 禁止把 SOUL.md / USER.md / *.yaml / *.lock
+#    打入 bundle，所以只能从 *.example.md 派生运行时活跃文件；
+# 2. 在开发模式下 PERSONAS_DIR == PERSONAS_DATA_DIR，重复拷贝会浪费 IO，
+#    也可能覆盖用户已经改过的版本，所以用 .personas_seeded 标记做幂等保护；
+# 3. PERSONAS_DIR 只读时（PyInstaller frozen）必须把目标写到 PERSONAS_DATA_DIR。
+_PERSONAS_SEED: tuple[tuple[str, str], ...] = (
+    # (源模板文件名, 目标活跃文件名)
+    ("SOUL.example.md", "SOUL.md"),
+    ("USER.example.md", "USER.md"),
+    # MAXMA.md 没有同名的 .example，模板即活跃文件，直接平移即可。
+    ("MAXMA.md", "MAXMA.md"),
+    ("AGENTS.md", "AGENTS.md"),
+)
+
+
+def ensure_personas_seed() -> None:
+    """首次运行时把内置人设模板从 BUNDLE_DIR 拷贝到 DATA_DIR。
+
+    开发模式（PROJECT_ROOT == BUNDLE_DIR == DATA_DIR）：直接返回，
+    模板与活跃目录是同一处，无需拷贝。
+
+    打包 / 便携模式：把内置 SOUL.example.md → SOUL.md、USER.example.md → USER.md
+    等"用户运行时活跃文件"从 _MEIPASS 拷贝到 data/config/personas/，
+    用 ``.personas_seeded`` 幂等标记避免重复启动时反复拷贝，也不会覆盖用户已
+    修改的内容。
+    """
+    if PROJECT_ROOT == BUNDLE_DIR:
+        return  # 开发模式无需 seed
+
+    marker = PERSONAS_DATA_DIR / PERSONAS_SEED_MARKER
+    if marker.exists():
+        return
+
+    # 模板源：仅在 PERSONAS_DIR 中查找（开发模式 PERSONAS_DIR == PERSONAS_DATA_DIR，
+    # 但开发模式已在前面 early return）。
+    if not PERSONAS_DIR.is_dir():
+        return
+
+    PERSONAS_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    for src_name, dst_name in _PERSONAS_SEED:
+        src = PERSONAS_DIR / src_name
+        dst = PERSONAS_DATA_DIR / dst_name
+        if not src.exists():
+            continue
+        # 不覆盖：用户已经修改 / 文件存在则跳过（仅在 seed 阶段，不影响后续正常运行）。
+        if dst.exists():
+            continue
+        try:
+            shutil.copy2(src, dst)
+        except OSError:
+            # 权限/磁盘满时静默跳过单个文件，不阻塞启动
+            pass
+
+    try:
+        marker.write_text(f"seeded-from:{PERSONAS_DIR}", encoding="utf-8")
+    except OSError:
+        # 标记写不进也不要影响启动
+        pass
 
 
 def _ensure_mcp_config() -> None:

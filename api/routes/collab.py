@@ -156,7 +156,7 @@ async def get_share(share_id: str, request: Request):
     messages = []
     if session_mgr:
         try:
-            session = session_mgr.get_session(share["session_id"])
+            session = await session_mgr.get(share["session_id"])
             if session:
                 messages = getattr(session, "messages", [])
         except Exception:
@@ -210,7 +210,7 @@ async def create_session_snapshot(session_id: str, body: CreateSnapshotRequest, 
     session_mgr = getattr(request.app.state, "session_manager", None)
     if session_mgr:
         try:
-            session = session_mgr.get_session(session_id)
+            session = await session_mgr.get(session_id)
             if session:
                 turn_count = len(getattr(session, "messages", []))
         except Exception:

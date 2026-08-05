@@ -23,9 +23,10 @@ def test_list_providers_returns_all(tmp_path, monkeypatch):
     assert resp.status_code == 200
     body = resp.json()
     assert "providers" in body
-    # yaml 不存在时默认 provider fallback 已移除，返回空列表
-    # 见 providers.py list_providers 注释
-    assert body["providers"] == []
+    # yaml 不存在时自动注入内置默认供应商 opencode-zen（开箱即用）
+    providers = body["providers"]
+    assert len(providers) == 1
+    assert providers[0]["id"] == "opencode-zen"
 
 
 def test_list_providers_count_consistent(tmp_path, monkeypatch):

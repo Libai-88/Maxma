@@ -29,6 +29,7 @@ datas = [
     (str(project_root / "web" / "dist"), "web/dist"),
     # 内置人格说明和首次运行模板；真实 SOUL/USER/memory 不属于 bundle。
     (str(project_root / "config" / "personas" / "AGENTS.md"), "config/personas"),
+    (str(project_root / "config" / "personas" / "MAXMA.md"), "config/personas"),
     (str(project_root / "config" / "personas" / "SOUL.example.md"), "config/personas"),
     (str(project_root / "config" / "personas" / "USER.example.md"), "config/personas"),
     # 内置贴纸；config/stickers/custom 是用户上传目录，故不打包。
@@ -58,6 +59,7 @@ datas.extend(
 _required_sources = [
     project_root / "web" / "dist",
     project_root / "config" / "personas" / "AGENTS.md",
+    project_root / "config" / "personas" / "MAXMA.md",
     project_root / "config" / "personas" / "SOUL.example.md",
     project_root / "config" / "personas" / "USER.example.md",
     project_root / "config" / "stickers",

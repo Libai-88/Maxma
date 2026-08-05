@@ -300,7 +300,9 @@ class TestStop:
         await client.stop()
         assert fut.done()
         assert isinstance(fut.exception(), RuntimeError)
-        assert "Client stopped" in str(fut.exception())
+        # 真实 read_loop 仍在跑（stdout 阻塞），其 finally 可能与 stop() 兜底竞态：
+        # 最终异常可能是 "Client stopped"(stop 兜底) 或 "Sidecar disconnected"(read_loop finally)，两者均合法
+        assert "Client stopped" in str(fut.exception()) or "Sidecar disconnected" in str(fut.exception())
 
     async def test_stop_when_not_running_is_noop(self):
         client, _, _ = _make_client()

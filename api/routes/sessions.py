@@ -132,6 +132,7 @@ async def set_session_permission_mode(
 async def get_messages(session_id: str, request: Request, limit: int = 50):
     sm = request.app.state.session_manager
     session = await sm.get(session_id)
+    logger.info("[messages] get_messages(%s): session=%s", session_id[:8], session)
     if session is None:
         raise HTTPException(status_code=404, detail="会话不存在")
 
@@ -158,7 +159,12 @@ async def get_messages(session_id: str, request: Request, limit: int = 50):
     # sidecar 模式：从 sidecar RPC 获取消息
     sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
     if sidecar_mgr is not None:
-        await sidecar_mgr.start()
+        try:
+            await sidecar_mgr.start()
+        except Exception:
+            logger.debug("[messages] sidecar start failed for %s, fallback to SessionMap", session_id[:8], exc_info=True)
+            sidecar_mgr = None
+    if sidecar_mgr is not None:
         client = sidecar_mgr.client
         if client is not None:
             from api.pi_bridge.session_adapter import get_session_map
@@ -219,7 +225,11 @@ async def _sync_const_session_after_undo(session, deleted: int, *, sidecar_mgr=N
                 sidecar_mgr = getattr(session, "_sidecar_mgr", None)
             if sidecar_mgr is None:
                 return
-            await sidecar_mgr.start()
+            try:
+                await sidecar_mgr.start()
+            except Exception:
+                logger.debug("[sessions] sidecar start failed, return empty", exc_info=True)
+                return
             if sidecar_mgr.client is None:
                 return
 
@@ -267,8 +277,12 @@ async def undo_session_messages(session_id: str, request: Request, n: int = 1):
     # ── Sidecar path ──────────────────────────────────────────────
     mgr = getattr(request.app.state, "sidecar_manager", None)
     if mgr is not None:
-        await mgr.start()
-        client = mgr.client
+        try:
+            await mgr.start()
+            client = mgr.client
+        except Exception:
+            logger.debug("[sessions] sidecar start failed, skip sidecar path", exc_info=True)
+            client = None
         if client is not None:
             # 注入 sidecar manager 到 session
             session._sidecar_mgr = mgr
@@ -320,8 +334,12 @@ async def get_context_usage(session_id: str, request: Request):
     counting_messages = []
     sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
     if sidecar_mgr is not None:
-        await sidecar_mgr.start()
-        client = sidecar_mgr.client
+        try:
+            await sidecar_mgr.start()
+            client = sidecar_mgr.client
+        except Exception:
+            logger.debug("[sessions] sidecar start failed, skip sidecar path", exc_info=True)
+            client = None
         if client is not None:
             from api.pi_bridge.session_adapter import get_session_map
             smap = get_session_map()
@@ -353,9 +371,13 @@ async def get_context_usage(session_id: str, request: Request):
     return usage
 
 
-@router.delete("/sessions/{session_id}")
-async def delete_session(session_id: str, request: Request):
-    sm = request.app.state.session_manager
+async def _delete_session_inner(
+    sm, sidecar_mgr, session_id: str,
+) -> bool:
+    """删除单个会话的完整清理（const YAML + sidecar session + SessionMap + session manager）。
+
+    供单个删除与批量删除复用。返回会话是否被删除。
+    """
     session = await sm.get(session_id)
 
     # 若为 const 会话，先清理磁盘文件
@@ -364,11 +386,15 @@ async def delete_session(session_id: str, request: Request):
 
         delete_const_session(session_id)
 
-    # BUG8 fix: 清理 sidecar session（防止内存泄漏）
-    sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
+    # 清理 sidecar session（防止内存泄漏）
     if sidecar_mgr is not None:
-        await sidecar_mgr.start()
-        if sidecar_mgr.client is not None:
+        try:
+            await sidecar_mgr.start()
+            client = sidecar_mgr.client
+        except Exception:
+            logger.debug("[delete] sidecar start failed, skip cleanup", exc_info=True)
+            client = None
+        if client is not None:
             from api.pi_bridge.session_adapter import get_session_map
             smap = get_session_map()
             sidecar_sid = smap.get_sidecar_id(session_id)
@@ -376,7 +402,7 @@ async def delete_session(session_id: str, request: Request):
                 sidecar_sid = getattr(session, "_sidecar_session_id", None)
             if sidecar_sid:
                 try:
-                    await sidecar_mgr.client.call("destroy_session", {
+                    await client.call("destroy_session", {
                         "session_id": sidecar_sid,
                     })
                 except Exception:
@@ -385,9 +411,57 @@ async def delete_session(session_id: str, request: Request):
             smap = get_session_map()
             smap.remove(session_id)
 
-    if not await sm.delete(session_id):
+    return await sm.delete(session_id)
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(session_id: str, request: Request):
+    sm = request.app.state.session_manager
+    sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
+    if not await _delete_session_inner(sm, sidecar_mgr, session_id):
         raise HTTPException(status_code=404, detail="会话不存在")
     return {"status": "deleted"}
+
+
+class BatchDeleteRequest(BaseModel):
+    session_ids: list[str]
+
+
+@router.post("/sessions/batch-delete")
+async def batch_delete_sessions(body: BatchDeleteRequest, request: Request):
+    """批量删除多个会话（best-effort，逐条清理）。"""
+    sm = request.app.state.session_manager
+    sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
+    deleted: list[str] = []
+    for sid in body.session_ids:
+        try:
+            if await _delete_session_inner(sm, sidecar_mgr, sid):
+                deleted.append(sid)
+        except Exception:
+            logger.debug("[sessions] batch delete failed for %s", sid, exc_info=True)
+    return {"deleted": deleted, "count": len(deleted)}
+
+
+@router.post("/sessions/clear-temp")
+async def clear_temp_sessions(request: Request):
+    """删除所有非固定（临时）会话。"""
+    sm = request.app.state.session_manager
+    sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
+    deleted: list[str] = []
+    try:
+        sessions = await sm.list_sessions()
+    except Exception:
+        logger.debug("[sessions] list failed for clear-temp", exc_info=True)
+        sessions = []
+    for s in sessions:
+        if s.get("is_const"):
+            continue
+        try:
+            if await _delete_session_inner(sm, sidecar_mgr, s["session_id"]):
+                deleted.append(s["session_id"])
+        except Exception:
+            logger.debug("[sessions] clear-temp failed for %s", s["session_id"], exc_info=True)
+    return {"deleted": deleted, "count": len(deleted)}
 
 
 # ── Const 固定会话 ────────────────────────────────────────────
@@ -409,8 +483,12 @@ async def constify_session(session_id: str, body: ConstifyRequest, request: Requ
     serialized = []
     sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
     if sidecar_mgr is not None:
-        await sidecar_mgr.start()
-        client = sidecar_mgr.client
+        try:
+            await sidecar_mgr.start()
+            client = sidecar_mgr.client
+        except Exception:
+            logger.debug("[sessions] sidecar start failed, skip sidecar path", exc_info=True)
+            client = None
         if client is not None:
             from api.pi_bridge.session_adapter import get_session_map
             smap = get_session_map()
@@ -461,8 +539,12 @@ async def generate_session_title(session_id: str, request: Request):
     messages = []
     sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
     if sidecar_mgr is not None:
-        await sidecar_mgr.start()
-        client = sidecar_mgr.client
+        try:
+            await sidecar_mgr.start()
+            client = sidecar_mgr.client
+        except Exception:
+            logger.debug("[sessions] sidecar start failed, skip sidecar path", exc_info=True)
+            client = None
         if client is not None:
             from api.pi_bridge.session_adapter import get_session_map
             smap = get_session_map()
@@ -511,8 +593,12 @@ async def generate_session_title(session_id: str, request: Request):
 
     # 优先通过 sidecar RPC 调用 LLM（经过 OMP ModelRegistry 整体 Provider 路由）
     if sidecar_mgr is not None:
-        await sidecar_mgr.start()
-        client = sidecar_mgr.client
+        try:
+            await sidecar_mgr.start()
+            client = sidecar_mgr.client
+        except Exception:
+            logger.debug("[sessions] sidecar start failed, skip sidecar path", exc_info=True)
+            client = None
         if client is not None:
             try:
                 result = await client.call("chat", {

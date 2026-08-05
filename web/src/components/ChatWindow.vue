@@ -418,7 +418,10 @@ const showSkeleton = computed(() =>
 )
 
 function hasAnswerBlock(turn: ChatTurn): boolean {
-  return turn.events.some(e => e.kind === 'thinking' && e.becameAnswer)
+  // 只统计"可见"的 becameAnswer 块：若块因工具调用被标记 consumed（UI 不渲染），
+  // 它就不能再挡住 finalAnswer 的展示，否则工具调用后的整条回复会被吞掉
+  // （thinking 块 consumed 不渲染 + hasAnswerBlock=true 又跳过 finalAnswer）。
+  return turn.events.some(e => e.kind === 'thinking' && e.becameAnswer && !e.consumed)
 }
 
 /** 合并已完成轮次和当前流式轮次到单个列表。

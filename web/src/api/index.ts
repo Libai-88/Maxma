@@ -254,6 +254,15 @@ export const api = {
   deleteSession: (id: string) =>
     request<{ status: string }>(`/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
+  batchDeleteSessions: (sessionIds: string[]) =>
+    request<{ deleted: string[], count: number }>(`/sessions/batch-delete`, {
+      method: 'POST',
+      body: JSON.stringify({ session_ids: sessionIds }),
+    }),
+
+  clearTempSessions: () =>
+    request<{ deleted: string[], count: number }>(`/sessions/clear-temp`, { method: 'POST' }),
+
   getSessionPermissionMode: (sessionId: string) =>
     request<SessionPermissionModeResponse>(
       `/sessions/${encodeURIComponent(sessionId)}/permission-mode`,

@@ -40,6 +40,10 @@ class JsonRpcClient:
         self._handlers: dict[str, list[Callable]] = {}
         self._running = False
         self._read_task: asyncio.Task[None] | None = None
+        # 事件队列：read loop 只入队不 await handler，由独立 task 保序消费，
+        # 避免慢事件 handler（如 WS send_json）阻塞读循环导致 RPC 响应迟到。
+        self._event_queue: asyncio.Queue[tuple[str, dict]] = asyncio.Queue()
+        self._event_task: asyncio.Task[None] | None = None
 
     # -- Public API ---------------------------------------------------------
 
@@ -49,6 +53,7 @@ class JsonRpcClient:
             return
         self._running = True
         self._read_task = asyncio.create_task(self._read_loop())
+        self._event_task = asyncio.create_task(self._dispatch_events())
 
     async def call(
         self, method: str, params: dict | None = None, *, timeout: float = 120
@@ -128,6 +133,13 @@ class JsonRpcClient:
             except asyncio.CancelledError:
                 logger.debug("[rpc] Read task cancelled during stop()")
             self._read_task = None
+        if self._event_task is not None and not self._event_task.done():
+            self._event_task.cancel()
+            try:
+                await self._event_task
+            except asyncio.CancelledError:
+                logger.debug("[rpc] Event dispatch task cancelled during stop()")
+            self._event_task = None
         # Cancel remaining pending futures
         for fut in self._pending.values():
             if not fut.done():
@@ -142,22 +154,52 @@ class JsonRpcClient:
     # -- Internal -----------------------------------------------------------
 
     async def _read_loop(self) -> None:
-        """Continuously read JSON lines from stdout and dispatch them."""
+        """Continuously read JSON lines from stdout.
+
+        RPC responses (with id) resolve their pending future inline; event
+        notifications are pushed to a queue and dispatched by _dispatch_events
+        so a slow event handler never blocks this read loop.
+        """
         try:
             while self._running:
                 line = await self._stdout.readline()
                 if not line:
                     break  # EOF: process died
-                line_str = line.decode("utf-8").strip()
+                line_str = line.decode("utf-8", errors="replace").strip()
                 if not line_str:
                     continue
                 try:
                     msg = json.loads(line_str)
-                    await self._dispatch(msg)
                 except json.JSONDecodeError:
                     logger.warning(
                         "[rpc] invalid JSON from sidecar: %s", line_str[:200]
                     )
+                    continue
+                # RPC response (has id) — resolve pending future inline
+                msg_id = msg.get("id")
+                if msg_id is not None and msg_id in self._pending:
+                    fut = self._pending.pop(msg_id)
+                    if not fut.done():
+                        if "error" in msg:
+                            error = msg["error"]
+                            fut.set_exception(
+                                JsonRpcError(
+                                    error.get("message", "RPC error"),
+                                    error.get("data"),
+                                )
+                            )
+                        else:
+                            fut.set_result(msg.get("result", {}))
+                    continue
+                # Event notification — queue for the dispatch task.
+                # event 允许非 dict（对应空 type handler），与旧行为一致。
+                if msg.get("method") == "event":
+                    params = msg.get("params", {})
+                    event = params.get("event", {})
+                    await self._event_queue.put(
+                        (params.get("session_id", ""), event)
+                    )
+                # Unknown messages are ignored
         except Exception:
             if self._running:
                 logger.exception("[rpc] read loop crashed")
@@ -168,27 +210,21 @@ class JsonRpcClient:
                 if not fut.done():
                     fut.set_exception(RuntimeError("Sidecar disconnected"))
             self._pending.clear()
+            # Signal the event dispatch task to stop
+            self._event_queue.put_nowait((None, {}))
 
-    async def _dispatch(self, msg: dict) -> None:
-        """Dispatch an incoming message: event notification or RPC response."""
-        try:
-            await self._dispatch_inner(msg)
-        except Exception:
-            if self._running:
-                logger.exception("[rpc] dispatch error for msg id=%s method=%s", msg.get("id"), msg.get("method", ""))
-            # Don't let a dispatch exception kill the read loop
+    async def _dispatch_events(self) -> None:
+        """Consume the event queue and dispatch handlers in order.
 
-    async def _dispatch_inner(self, msg: dict) -> None:
-        """Core dispatch logic, separated to allow per-dispatch error isolation."""
-        # Event notification (server-pushed, no id)
-        if msg.get("method") == "event":
-            params = msg.get("params", {})
-            event = params.get("event", {})
-            event_type: str = ""
-            if isinstance(event, dict):
-                event_type = event.get("type", "")
+        Runs on its own task so slow handlers (e.g. await ws.send_json) never
+        block the read loop or RPC response resolution.
+        """
+        while True:
+            session_id, event = await self._event_queue.get()
+            if session_id is None:
+                return  # sentinel: read loop ended
+            event_type: str = event.get("type", "") if isinstance(event, dict) else ""
             handlers = self._handlers.get(event_type, [])
-            session_id = params.get("session_id", "")
             for handler in handlers:
                 try:
                     if inspect.iscoroutinefunction(handler):
@@ -199,21 +235,3 @@ class JsonRpcClient:
                     logger.exception(
                         "[rpc] event handler error: type=%s", event_type
                     )
-            return
-
-        # RPC response (has id)
-        msg_id = msg.get("id")
-        if msg_id is not None and msg_id in self._pending:
-            fut = self._pending.pop(msg_id)
-            if fut.done():
-                return  # already resolved (race condition), skip
-            if "error" in msg:
-                error = msg["error"]
-                fut.set_exception(
-                    JsonRpcError(
-                        error.get("message", "RPC error"),
-                        error.get("data"),
-                    )
-                )
-            else:
-                fut.set_result(msg.get("result", {}))

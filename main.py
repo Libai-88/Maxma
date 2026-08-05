@@ -74,6 +74,7 @@ def _start_parent_watchdog():
 
     try:
         import ctypes
+        import ctypes.wintypes
 
         # 优先使用 Tauri 注入的主进程 PID，否则回退到直接父进程
         parent_pid_str = os.environ.get("MAXMA_PARENT_PID", "")
@@ -91,24 +92,71 @@ def _start_parent_watchdog():
         WAIT_TIMEOUT = 258
         WAIT_FAILED = 0xFFFFFFFF
 
+        # 显式声明 ctypes 签名：默认 c_int 会截断 64 位句柄/状态，导致
+        # WAIT_FAILED(0xFFFFFFFF) 被当成 -1 而与常量比较失败（fail-safe 失效）。
+        kernel32.OpenProcess.restype = ctypes.wintypes.HANDLE
+        kernel32.OpenProcess.argtypes = [
+            ctypes.wintypes.DWORD, ctypes.wintypes.BOOL, ctypes.wintypes.DWORD,
+        ]
+        kernel32.WaitForSingleObject.restype = ctypes.wintypes.DWORD
+        kernel32.WaitForSingleObject.argtypes = [
+            ctypes.wintypes.HANDLE, ctypes.wintypes.DWORD,
+        ]
+        kernel32.CloseHandle.restype = ctypes.wintypes.BOOL
+        kernel32.CloseHandle.argtypes = [ctypes.wintypes.HANDLE]
+
+        # 连续检测失败阈值：OpenProcess 返回空 / WAIT_FAILED / 异常等瞬时错误
+        # 不立即判定父进程退出（杀软/EDR 拦截、权限差异、句柄瞬时无效都会误判，
+        # 误杀后 Tauri 会反复重启消耗预算直至永久失联）。累计达阈值才终止。
+        WATCHDOG_FAIL_LIMIT = 5
+
         def _watch():
+            consecutive_failures = 0
             while True:
                 time.sleep(2)
                 try:
                     handle = kernel32.OpenProcess(SYNCHRONIZE, False, ppid)
                     if not handle:
-                        # 无法打开进程（PID 不存在或无权限），视为已退出
-                        print(f"[watchdog] 父进程 (pid={ppid}) 已退出（OpenProcess 返回空），sidecar 自动终止", flush=True)
-                        os._exit(0)
+                        # 无法打开进程：可能是已退出，也可能是权限/瞬时错误。不立即判定，
+                        # 连续多次仍失败才认为父进程已退出。
+                        consecutive_failures += 1
+                        if consecutive_failures >= WATCHDOG_FAIL_LIMIT:
+                            print(
+                                f"[watchdog] 父进程 (pid={ppid}) 连续 {consecutive_failures} 次无法打开，"
+                                "判定已退出，sidecar 自动终止", flush=True
+                            )
+                            os._exit(0)
+                        continue
+                    consecutive_failures = 0
                     status = kernel32.WaitForSingleObject(handle, 0)
                     kernel32.CloseHandle(handle)
-                    if status == WAIT_OBJECT_0 or status == WAIT_FAILED:
-                        print(f"[watchdog] 父进程 (pid={ppid}) 已退出（WaitForSingleObject={status}），sidecar 自动终止", flush=True)
+                    if status == WAIT_OBJECT_0:
+                        # WAIT_OBJECT_0：父进程确认已退出
+                        print(
+                            f"[watchdog] 父进程 (pid={ppid}) 已退出（WaitForSingleObject={status}），"
+                            "sidecar 自动终止", flush=True
+                        )
                         os._exit(0)
+                    if status == WAIT_FAILED:
+                        # WAIT_FAILED 表示调用出错而非进程退出，不误杀，交给连续失败计数
+                        consecutive_failures += 1
+                        if consecutive_failures >= WATCHDOG_FAIL_LIMIT:
+                            print(
+                                f"[watchdog] 父进程 (pid={ppid}) 连续 {consecutive_failures} 次检测失败，"
+                                "sidecar 自动终止", flush=True
+                            )
+                            os._exit(0)
+                        continue
+                    # WAIT_TIMEOUT（258）：父进程仍在运行
                 except Exception as e:
-                    # 检测过程中出错，fail-safe：终止 sidecar 避免孤儿
-                    print(f"[watchdog] 检测异常 ({e})，sidecar 自动终止", flush=True)
-                    os._exit(0)
+                    # 检测异常：不立即 fail-closed（避免瞬时错误误杀），连续累计达阈值才终止
+                    consecutive_failures += 1
+                    if consecutive_failures >= WATCHDOG_FAIL_LIMIT:
+                        print(
+                            f"[watchdog] 检测异常 ({e})，连续 {consecutive_failures} 次，sidecar 自动终止",
+                            flush=True
+                        )
+                        os._exit(0)
 
         t = threading.Thread(target=_watch, daemon=True, name="parent-watchdog")
         t.start()

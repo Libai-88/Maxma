@@ -87,9 +87,16 @@ async def get_capabilities(request: Request):
     try:
         from api.routes.providers import _load_providers
         providers = _load_providers()
+        # providers.yaml 字段为 label/provider_type/models，映射到前端
+        # 仪表盘展示字段（name=label, provider=provider_type, model=models[0]）。
         result["providers"] = [
-            {"id": p.get("id"), "name": p.get("name"), "provider": p.get("provider"),
-             "model": p.get("model"), "enabled": p.get("enabled", True)}
+            {
+                "id": p.get("id"),
+                "name": p.get("label") or p.get("name"),
+                "provider": p.get("provider_type") or p.get("provider"),
+                "model": (p.get("models") or [None])[0] if isinstance(p.get("models"), list) else None,
+                "enabled": p.get("enabled", True),
+            }
             for p in (providers if isinstance(providers, list) else [])
         ]
     except Exception as e:

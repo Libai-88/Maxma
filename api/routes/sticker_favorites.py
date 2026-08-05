@@ -1,6 +1,7 @@
 """API 路由 — 表情收藏管理。"""
 
 import re
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -22,6 +23,10 @@ _CATEGORY_RE = re.compile(r'^[\w\u4e00-\u9fff\-]+$')
 _FILENAME_RE = re.compile(r'^[\w\-]+\.webp$')
 
 
+# 并发 YAML 读写锁（RLock：允许读-改-写在同一把锁内原子完成，load/save 内部可重入）
+_yaml_lock = threading.RLock()
+
+
 def _validate_sticker_ref(category: str, filename: str) -> None:
     """与图片服务保持一致的表情路径校验。"""
     if not _CATEGORY_RE.match(category):
@@ -33,26 +38,28 @@ def _validate_sticker_ref(category: str, filename: str) -> None:
 def _load_yaml_safe(path: Path) -> dict:
     """安全加载 YAML 文件，文件不存在时创建默认文件。"""
     import yaml
-    if not path.exists():
-        # H1: 文件不存在时创建默认文件
-        path.parent.mkdir(parents=True, exist_ok=True)
-        default_data = {'favorites': []} if 'favorite' in str(path) else {'recent': []}
-        with open(path, 'w', encoding='utf-8') as f:
-            yaml.dump(default_data, f, allow_unicode=True, default_flow_style=False)
-        return default_data
-    try:
-        with open(path, 'r', encoding='utf-8') as f:
-            return yaml.safe_load(f) or {}
-    except Exception:
-        return {}
+    with _yaml_lock:
+        if not path.exists():
+            # H1: 文件不存在时创建默认文件
+            path.parent.mkdir(parents=True, exist_ok=True)
+            default_data = {'favorites': []} if 'favorite' in str(path) else {'recent': []}
+            with open(path, 'w', encoding='utf-8') as f:
+                yaml.dump(default_data, f, allow_unicode=True, default_flow_style=False)
+            return default_data
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                return yaml.safe_load(f) or {}
+        except Exception:
+            return {}
 
 
 def _save_yaml_safe(path: Path, data: dict) -> None:
     """安全保存 YAML 文件。"""
     import yaml
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, 'w', encoding='utf-8') as f:
-        yaml.dump(data, f, allow_unicode=True, default_flow_style=False)
+    with _yaml_lock:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as f:
+            yaml.dump(data, f, allow_unicode=True, default_flow_style=False)
 
 
 class FavoriteRequest(BaseModel):
@@ -135,24 +142,26 @@ async def add_favorite(req: FavoriteRequest):
     # 验证文件存在
     if not _sticker_exists(req.category, req.filename):
         raise HTTPException(status_code=404, detail="表情不存在")
-    
-    data = _load_yaml_safe(FAVORITES_PATH)
-    favorites = data.get('favorites', [])
-    
-    # 检查是否已收藏（同时比较 filename 和 category）
-    for fav in favorites:
-        if fav.get('filename') == req.filename and fav.get('category') == req.category:
-            return FavoriteResponse(success=False, message="已在收藏中")
-    
-    # 添加收藏
-    favorites.append({
-        'category': req.category,
-        'filename': req.filename,
-        'added_at': datetime.now().isoformat()
-    })
-    
-    data['favorites'] = favorites
-    _save_yaml_safe(FAVORITES_PATH, data)
+
+    # 读-改-写包在同一把锁内，避免并发 add 丢失更新
+    with _yaml_lock:
+        data = _load_yaml_safe(FAVORITES_PATH)
+        favorites = data.get('favorites', [])
+
+        # 检查是否已收藏（同时比较 filename 和 category）
+        for fav in favorites:
+            if fav.get('filename') == req.filename and fav.get('category') == req.category:
+                return FavoriteResponse(success=False, message="已在收藏中")
+
+        # 添加收藏
+        favorites.append({
+            'category': req.category,
+            'filename': req.filename,
+            'added_at': datetime.now().isoformat()
+        })
+
+        data['favorites'] = favorites
+        _save_yaml_safe(FAVORITES_PATH, data)
 
     return FavoriteResponse(success=True, message="已收藏")
 
@@ -160,18 +169,20 @@ async def add_favorite(req: FavoriteRequest):
 @router.delete("/stickers/favorites", response_model=FavoriteResponse)
 async def remove_favorite(filename: str, category: str):
     """取消收藏。"""
-    data = _load_yaml_safe(FAVORITES_PATH)
-    favorites = data.get('favorites', [])
-    
-    # 移除收藏（同时匹配 filename 和 category）
-    new_favorites = [f for f in favorites 
-                     if not (f.get('filename') == filename and f.get('category') == category)]
-    
-    if len(new_favorites) == len(favorites):
-        return FavoriteResponse(success=False, message="未找到收藏")
-    
-    data['favorites'] = new_favorites
-    _save_yaml_safe(FAVORITES_PATH, data)
+    # 读-改-写包在同一把锁内，避免并发 remove 与 add 互相覆盖
+    with _yaml_lock:
+        data = _load_yaml_safe(FAVORITES_PATH)
+        favorites = data.get('favorites', [])
+
+        # 移除收藏（同时匹配 filename 和 category）
+        new_favorites = [f for f in favorites
+                         if not (f.get('filename') == filename and f.get('category') == category)]
+
+        if len(new_favorites) == len(favorites):
+            return FavoriteResponse(success=False, message="未找到收藏")
+
+        data['favorites'] = new_favorites
+        _save_yaml_safe(FAVORITES_PATH, data)
 
     return FavoriteResponse(success=True, message="已取消收藏")
 

@@ -91,7 +91,7 @@ class SessionMap:
         self._lock = threading.Lock()
         # 确保父目录存在
         Path(self._db_path).parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(self._db_path, timeout=5)
+        self._conn = sqlite3.connect(self._db_path, timeout=5, check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
         # Main table
         self._conn.execute("""
@@ -233,6 +233,30 @@ class SessionMap:
             }
             for r in rows
         ]
+
+    def list_sessions(self) -> list[dict]:
+        """列出所有持久化会话（用于后端重启后恢复会话列表）。
+
+        Returns:
+            session_id, is_const, turn_count, const_name, created_at, updated_at 的列表，
+            按 updated_at 降序排列。
+        """
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT maxma_id, is_const, turns, created_at, updated_at "
+                "FROM session_map ORDER BY updated_at DESC"
+            ).fetchall()
+        result = []
+        for r in rows:
+            turns = _decode_turns(r[2])
+            result.append({
+                "session_id": r[0],
+                "is_const": bool(r[1]),
+                "turn_count": len(turns),
+                "created_at": r[3],
+                "updated_at": r[4],
+            })
+        return result
     
     @property
     def count(self) -> int:
@@ -244,5 +268,10 @@ class SessionMap:
         return row[0] if row else 0
     
     def close(self) -> None:
-        """关闭数据库连接。"""
-        self._conn.close()
+        """关闭数据库连接。若自身是全局复用单例，重置之以便下次懒重建，
+        否则 get_session_map() 会返回已关闭连接导致整个会话映射子系统瘫痪。"""
+        global _global_map
+        with _global_map_lock:
+            self._conn.close()
+            if _global_map is self:
+                _global_map = None

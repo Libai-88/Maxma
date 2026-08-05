@@ -221,18 +221,22 @@ if exist "%PORTABLE_DIR%\resources\binaries\" (
 echo [6/6] Creating portable mode marker and data directory...
 REM portable.flag 是便携模式的关键标记：app_paths.py 和 main.rs 通过检测此文件
 REM 判断是否将用户数据写入可执行文件旁边的 data/ 目录（而非 %APPDATA%）
-REM 写入有意义的版本信息，便于诊断和将来版本兼容性检查
+REM Write meaningful version info for diagnostics and future compatibility checks.
+REM Version is read dynamically from version.py (single source) to avoid stale hardcoding.
+for /f "tokens=2 delims==" %%V in ('findstr /c:"__version__" "%PROJECT_ROOT%version.py"') do set "APP_VERSION=%%V"
+set "APP_VERSION=%APP_VERSION: =%"
+set "APP_VERSION=%APP_VERSION:"=%"
 (echo MaxmaHere Portable Mode Marker
-echo version=2.6.6
+echo version=%APP_VERSION%
 echo built=%DATE% %TIME%) > "%PORTABLE_DIR%\portable.flag"
 if not exist "%PORTABLE_DIR%\portable.flag" (
     echo [ERROR] Failed to create portable.flag marker.
     exit /b 1
 )
 
-REM 创建空的 data/ 目录。首次运行时 ensure_data_dirs() 会自动创建所有子目录
-REM （api/data, config/personas, logs, uploads, vector_db 等），
-REM 但预建 data/ 根目录使布局更清晰，也让用户能一眼识别数据存储位置
+REM Create empty data dir. ensure_data_dirs() auto-creates all subdirs on first run
+REM (api/data, config/personas, logs, uploads, vector_db, etc.)
+REM Pre-create the data root so users can identify the storage location at a glance
 if not exist "%PORTABLE_DIR%\data\" (
     mkdir "%PORTABLE_DIR%\data"
     if errorlevel 1 (
@@ -241,8 +245,8 @@ if not exist "%PORTABLE_DIR%\data\" (
     )
 )
 
-REM 预建 data/api/data/ 目录并放入默认 MCP 配置，避免首次启动时空目录
-REM ensure_data_dirs() 会创建所有子目录，但预置默认配置让首次运行体验更好
+REM Pre-create data/api/data and seed default MCP config for a better first-run UX.
+REM ensure_data_dirs() creates all subdirs; the seeded config improves first run.
 REM (Split path construction to pass safety check regex)
 set "API_DATA_DIR=%PORTABLE_DIR%\data\api"
 set "API_DATA_SUBDIR=%API_DATA_DIR%\data"
@@ -252,6 +256,12 @@ if not exist "%API_DATA_SUBDIR%" (
 if exist "%TAURI_ROOT%\resources\default-config\mcp_servers.yaml" (
     if not exist "%API_DATA_SUBDIR%\mcp_servers.yaml" (
         copy /y "%TAURI_ROOT%\resources\default-config\mcp_servers.yaml" "%API_DATA_SUBDIR%\mcp_servers.yaml" >nul 2>&1
+    )
+)
+REM Seed built-in update log (news.yaml) so /api/news works offline on first run.
+if exist "%TAURI_ROOT%\resources\default-config\news.yaml" (
+    if not exist "%API_DATA_SUBDIR%\news.yaml" (
+        copy /y "%TAURI_ROOT%\resources\default-config\news.yaml" "%API_DATA_SUBDIR%\news.yaml" >nul 2>&1
     )
 )
 
@@ -279,6 +289,10 @@ REM 写入 README 说明文件，帮助用户理解便携版结构
     echo 如需切换回标准安装模式（数据写入 %%APPDATA%%），删除 portable.flag 后
     echo 重新打包即可（推荐使用 NSIS 安装版）。
 ) > "%PORTABLE_DIR%\PORTABLE_README.txt" 2>nul
+
+REM Remove git placeholder files (.gitkeep) that were packaged from the repo.
+REM They are dev-time artifacts only and must not ship in the portable build.
+for /r "%PORTABLE_DIR%" %%F in (.gitkeep) do del "%%F" 2>nul
 
 echo.
 echo ========================================

@@ -1662,7 +1662,7 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
 
       if (method === "list_plugins") {
         try {
-          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent") as any;
+          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent/extensibility/plugins") as any;
           const pm = new (PluginManager as any)();
           const list = await pm.list();
           send(id, list.map((p: any) => ({
@@ -1683,7 +1683,7 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
         try {
           const spec: string = params?.spec ?? "";
           if (!spec) { sendError(id, "Missing required parameter: spec"); return; }
-          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent") as any;
+          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent/extensibility/plugins") as any;
           const pm = new (PluginManager as any)();
           const result = await pm.install(spec);
           send(id, { ok: true, plugin: result ?? null });
@@ -1697,7 +1697,7 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
         try {
           const name: string = params?.name ?? "";
           if (!name) { sendError(id, "Missing required parameter: name"); return; }
-          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent") as any;
+          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent/extensibility/plugins") as any;
           const pm = new (PluginManager as any)();
           await pm.uninstall(name);
           send(id, { ok: true });
@@ -1712,7 +1712,7 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
           const name: string = params?.name ?? "";
           const enabled: boolean = params?.enabled !== false;
           if (!name) { sendError(id, "Missing required parameter: name"); return; }
-          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent") as any;
+          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent/extensibility/plugins") as any;
           const pm = new (PluginManager as any)();
           await pm.setEnabled(name, enabled);
           send(id, { ok: true });
@@ -1726,7 +1726,7 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
         try {
           const name: string = params?.name ?? "";
           if (!name) { sendError(id, "Missing required parameter: name"); return; }
-          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent") as any;
+          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent/extensibility/plugins") as any;
           const pm = new (PluginManager as any)();
           const list = await pm.list();
           const plugin = list.find((p: any) => p.name === name);

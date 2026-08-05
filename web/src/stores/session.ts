@@ -104,6 +104,45 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  async function batchDelete(ids: string[]) {
+    if (!ids.length) return
+    try {
+      await api.batchDeleteSessions(ids)
+    } catch (e) {
+      log.warn('batchDelete failed:', e)
+      return
+    }
+    ids.forEach((id) => useChatStore().removeTurnsFromStorage(id))
+    // 若当前会话被删，切到剩余第一个会话
+    if (sessionId.value && ids.includes(sessionId.value)) {
+      await refreshSessions().catch((err) => log.warn('refreshSessions after batchDelete failed:', err))
+      if (sessions.value.length > 0) {
+        await switchSession(sessions.value[0].session_id)
+      } else {
+        await createSession()
+      }
+    } else {
+      await refreshSessions().catch((err) => log.warn('refreshSessions after batchDelete failed:', err))
+    }
+  }
+
+  async function clearTempSessions() {
+    try {
+      await api.clearTempSessions()
+    } catch (e) {
+      log.warn('clearTempSessions failed:', e)
+      return
+    }
+    await refreshSessions().catch((err) => log.warn('refreshSessions after clearTemp failed:', err))
+    if (sessionId.value && !sessions.value.some((s) => s.session_id === sessionId.value)) {
+      if (sessions.value.length > 0) {
+        await switchSession(sessions.value[0].session_id)
+      } else {
+        await createSession()
+      }
+    }
+  }
+
   async function constifySession(id: string, name: string) {
     try {
       await api.constifySession(id, name)
@@ -160,6 +199,7 @@ export const useSessionStore = defineStore('session', () => {
   return {
     sessionId, sessions,
     initIfNeeded, refreshSessions, createSession, switchSession,
-    deleteSession, constifySession, unconstifySession, generateSessionTitle,
+    deleteSession, batchDelete, clearTempSessions,
+    constifySession, unconstifySession, generateSessionTitle,
   }
 })

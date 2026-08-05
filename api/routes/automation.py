@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 import secrets
@@ -213,8 +214,13 @@ async def _call_headless(sidecar_mgr: Any, message: str) -> dict:
     """Call sidecar's headless_prompt RPC and return the result."""
     if sidecar_mgr is None:
         return {"answer": "", "status": "sidecar_unavailable"}
-    await sidecar_mgr.start()
-    client = sidecar_mgr.client
+    try:
+        await sidecar_mgr.start()
+        client = sidecar_mgr.get_client()
+        if inspect.isawaitable(client):
+            client = await client
+    except Exception:
+        return {"answer": "", "status": "sidecar_unavailable"}
     if client is None:
         return {"answer": "", "status": "sidecar_unavailable"}
     try:

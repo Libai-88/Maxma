@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import ipaddress
+import logging
 import os
 import time
 from typing import Any
@@ -26,6 +27,8 @@ from api.security.credential_envelope import (
     is_legacy_encrypted,
 )
 from api.yaml_store import dump_yaml_atomic, load_yaml, yaml_file_lock
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -295,13 +298,17 @@ class DiscoverModelsBody(BaseModel):
 @router.get("/providers")
 async def list_providers() -> dict[str, Any]:
     """返回所有已配置的 provider。
-    
-    yaml 文件不存在或 providers 为空时，返回空列表，让前端显示引导页。
-    旧的默认 provider fallback 已移除，因为：
-    1. 默认 provider 的 api_key 为空，无法使用
-    2. 会误导用户以为已配置，但实际无法调用
-    3. ProvidersView 的空状态引导页提供更好的新手体验
+
+    首次访问时惰性注入内置默认供应商 opencode-zen（OpenCode 官方免费模型，
+    匿名 key 开箱即用），保证新用户无需任何配置即可获得可用模型。
     """
+    # 开箱即用：幂等注入内置免费供应商（即使 lifespan 注入失败也兜底）
+    try:
+        from api.services.opencode_zen import ensure_opencode_zen_provider
+
+        ensure_opencode_zen_provider()
+    except Exception:
+        logger.exception("[providers] builtin opencode-zen injection failed (non-fatal)")
     with yaml_file_lock(PROVIDERS_YAML_PATH):
         items = _load_providers()
     return {"providers": items}
@@ -736,3 +743,32 @@ async def encrypt_api_keys() -> dict[str, Any]:
     """
     encrypted_count = migrate_plaintext_keys_to_encrypted()
     return {"status": "ok", "encrypted": encrypted_count}
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 端点 11: POST /providers/opencode-zen/sync-models
+# ═══════════════════════════════════════════════════════════════════════
+#
+# 手动触发 OpenCode Zen 官方免费模型列表同步（与后台周期同步共用逻辑）。
+# 开箱即用的免费供应商：https://opencode.ai/zen/v1（匿名 key=public）。
+
+
+@router.post("/providers/opencode-zen/sync-models")
+async def sync_opencode_zen_models_route() -> dict[str, Any]:
+    """同步 OpenCode Zen 官方免费模型列表到本地配置。
+
+    返回 {"status": "ok"|"error", "synced": bool, "models": [...]}。
+    网络不可用 / 上游异常时不报错，返回 status=error 与当前保留模型列表。
+    """
+    try:
+        from api.services.opencode_zen import sync_opencode_zen_models
+
+        result = await sync_opencode_zen_models()
+    except Exception as exc:  # noqa: BLE001 — 同步失败返回 error 而非 500
+        logger.exception("[opencode-zen] manual sync failed")
+        return {"status": "error", "synced": False, "detail": str(exc)}
+    return {
+        "status": "ok" if result.get("synced") else "error",
+        "synced": bool(result.get("synced")),
+        "models": result.get("models", []),
+    }

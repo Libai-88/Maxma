@@ -11,6 +11,18 @@
     @mouseenter="$emit('mouseenter', $event, session)"
     @mouseleave="$emit('mouseleave')"
   >
+    <label
+      v-if="selectable"
+      class="session-checkbox"
+      :title="selected ? '取消选择' : '选择'"
+      @click.stop
+    >
+      <input
+        type="checkbox"
+        :checked="selected"
+        @change="$emit('toggleSelect', session.session_id)"
+      />
+    </label>
     <div class="session-item-main">
       <span class="session-id">
         <template v-if="isConst">
@@ -70,6 +82,9 @@ defineProps<{
   displayIndex?: number
   /** 父级 sidebar 折叠状态，用于内部应用 collapsed 样式 */
   collapsed?: boolean
+  /** 管理模式：显示多选 checkbox */
+  selectable?: boolean
+  selected?: boolean
 }>()
 
 defineEmits<{
@@ -78,6 +93,7 @@ defineEmits<{
   mouseenter: [event: MouseEvent, session: SessionInfo]
   mouseleave: []
   delete: [session: SessionInfo]
+  toggleSelect: [id: string]
 }>()
 
 function formatRelativeTime(ts: number): string {
@@ -148,6 +164,19 @@ function formatRelativeTime(ts: number): string {
   background: var(--bg-card);
 }
 
+.session-checkbox {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.session-checkbox input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
 .session-item-main {
   display: flex;
   flex-direction: column;

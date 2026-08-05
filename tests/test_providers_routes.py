@@ -60,17 +60,21 @@ def _write_yaml(yaml_path, providers):
 
 
 class TestListProviders:
-    def test_list_fallback_when_yaml_missing(self, client, yaml_path):
-        """yaml 文件不存在时返回空列表（默认 provider fallback 已移除）。"""
+    def test_list_injects_builtin_when_yaml_missing(self, client, yaml_path):
+        """yaml 文件不存在时自动注入内置默认供应商 opencode-zen（开箱即用）。"""
         assert not yaml_path.exists()
         resp = client.get("/providers")
         assert resp.status_code == 200
         providers = resp.json()["providers"]
-        # 默认 provider fallback 已移除，见 providers.py list_providers 注释
-        assert providers == []
+        # 内置默认供应商：OpenCode Zen 免费模型（空配置时自动注入）
+        assert len(providers) == 1
+        assert providers[0]["id"] == "opencode-zen"
+        assert providers[0]["enabled"] is True
+        assert providers[0]["base_url"] == "https://opencode.ai/zen/v1"
+        assert providers[0]["models"], "builtin provider should carry free models"
 
     def test_list_returns_yaml_data_when_present(self, client, yaml_path):
-        """yaml 有数据时返回 yaml 内容，不返回硬编码默认。"""
+        """yaml 有数据时返回 yaml 内容 + 自动补齐内置默认供应商。"""
         _write_yaml(
             yaml_path,
             [
@@ -89,18 +93,22 @@ class TestListProviders:
         resp = client.get("/providers")
         assert resp.status_code == 200
         providers = resp.json()["providers"]
-        assert len(providers) == 1
-        assert providers[0]["id"] == "custom"
-        assert providers[0]["label"] == "Custom"
+        # 用户配置保留 + 内置 opencode-zen 自动补齐（老用户升级后同样开箱即用）
+        ids = [p["id"] for p in providers]
+        assert "custom" in ids
+        assert "opencode-zen" in ids
+        custom = next(p for p in providers if p["id"] == "custom")
+        assert custom["label"] == "Custom"
 
-    def test_list_fallback_when_yaml_empty(self, client, yaml_path):
-        """yaml 存在但 providers 为空列表时返回空列表。"""
+    def test_list_injects_builtin_when_yaml_empty(self, client, yaml_path):
+        """yaml 存在但 providers 为空列表时自动注入内置默认供应商。"""
         _write_yaml(yaml_path, [])
         resp = client.get("/providers")
         assert resp.status_code == 200
         providers = resp.json()["providers"]
-        # 默认 provider fallback 已移除，空列表就是空
-        assert providers == []
+        # 空配置同样注入内置 opencode-zen，保证开箱即用
+        assert len(providers) == 1
+        assert providers[0]["id"] == "opencode-zen"
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -135,8 +143,9 @@ class TestCreateProvider:
 
         persisted = load_yaml(yaml_path, default={})
         assert persisted["providers"][0]["id"] == "deepseek"
-        # GET 也能读到
-        assert client.get("/providers").json()["providers"][0]["id"] == "deepseek"
+        # GET 也能读到（内置 opencode-zen 自动补在首位，deepseek 仍在列表中）
+        get_ids = [p["id"] for p in client.get("/providers").json()["providers"]]
+        assert "deepseek" in get_ids
 
     def test_create_provider_defaults(self, client, yaml_path):
         """未传 enabled/provider_type/models 时补默认值。"""

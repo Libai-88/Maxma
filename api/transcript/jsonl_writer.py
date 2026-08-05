@@ -100,7 +100,7 @@ class TranscriptWriter:
         tool_calls = getattr(message, "tool_calls", None)
         if tool_calls:
             entry["tool_calls"] = [
-                {"name": tc["name"], "args": tc["args"], "id": tc.get("id", "")}
+                {"name": tc.get("name", ""), "args": tc.get("args", ""), "id": tc.get("id", "")}
                 for tc in tool_calls
             ]
         # 保留 tool_call_id（ToolMessage）

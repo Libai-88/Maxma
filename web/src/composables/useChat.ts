@@ -14,8 +14,11 @@ import { createLogger } from '@/utils/logger'
 
 const log = createLogger('chat')
 
-/** 追踪当前 useChat 实例创建的子会话 ID，用于组件卸载时清理孤儿 WS。 */
+/** 追踪所有 useChat 实例创建的子会话 ID，用于组件卸载时清理孤儿 WS。
+ *  必须为模块级：handleEventForChannel 是模块级函数（line 628 引用），
+ *  若放实例级会在 sub_session_created 时抛 ReferenceError 崩溃。 */
 const _childSessionIds = new Set<string>()
+
 /** 匹配旧格式尾缀（用于 localStorage 迁移） */
 const TIME_SUFFIX_RE = /（\d{4}-\d{2}-\d{2} \w{3} \d{2}:\d{2}）$/
 
@@ -150,6 +153,11 @@ const switchSession = (id: string) => getSessionStore().switchSession(id)
 // （修复：此前为 new Map()，导致 loadAllTurnsFromStorage 成为死代码，
 //   页面刷新后 turnsCache 为空，旧会话点击后无历史显示）
 const turnsCache = loadAllTurnsFromStorage()
+
+/** 清空会话时失效内存 turnsCache，防止切回会话后已清空的消息复活 */
+export function invalidateTurnsCache(sid: string) {
+  turnsCache.delete(sid)
+}
 
 // ── SessionChannel 定义 ────────────────────────────────────
 
@@ -360,7 +368,7 @@ async function connectSession(sid: string) {
       // PONG_TIMEOUT_GRACE：pong 响应的最大允许静默时间（ms）。
       // 在 PING_INTERVAL (30s) 基础上附加 5s 余量，即超过 35s 未收到 pong 则认为连接已失效。
       const PONG_TIMEOUT_GRACE = 5000
-      chFinal._pingTimer = setInterval(() => {
+      const sendPing = () => {
         const ch = getChatStore().channels.get(sid)
         if (!ch?.ws || ch.ws.readyState !== WebSocket.OPEN) {
           // 连接已断开，清除定时器
@@ -374,11 +382,16 @@ async function connectSession(sid: string) {
         // 检查 pong 是否超时（检测单向丢包、后端死锁等无法通过 ws.send 感知的故障）
         if (Date.now() - ch._lastPongAt > 30000 + PONG_TIMEOUT_GRACE) {
           log.warn(`pong 超时 (sid=${sid}), 主动关闭 WebSocket 触发重连`)
-          ch.ws.close()
+          // 用自定义异常码(4000)关闭：onclose 不会把 code===1000 判为"有意断开"
+          // 而不重连，从而让心跳检测到的死连接真正触发重连。
+          ch.ws.close(4000, 'pong timeout')
           return
         }
         ch.ws.send(JSON.stringify({ type: 'ping' }))
-      }, 30000)
+      }
+      // 连接后立即发送首次 ping，确保健康检测立即生效
+      sendPing()
+      chFinal._pingTimer = setInterval(sendPing, 30000)
     // 修复：重连后若上一轮 currentTurn 仍卡住（WS 中断时未收到 done/error），
     // 必须清理否则 isStreaming 永久为 true，且中断的轮次数据会因下次 send 被覆盖而丢失。
     // 后端 WS 断开时已 cancel agent_task，所以这个 currentTurn 永远等不到 done 事件。
@@ -472,8 +485,8 @@ async function connectSession(sid: string) {
     try {
       const msg: ServerEvent = JSON.parse(event.data)
       log.debug('WS event received:', msg.type, 'session:', sid, msg.type === 'ask_user' ? {
-        tool_name: (msg as AskUserEvent).payload.tool_name,
-        interaction_id: (msg as AskUserEvent).payload.interaction_id,
+        tool_name: (msg as AskUserEvent).payload?.tool_name,
+        interaction_id: (msg as AskUserEvent).payload?.interaction_id,
       } : '')
       handleEventForChannel(sid, msg)
     } catch (e) {
@@ -662,6 +675,13 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     return
   }
 
+  // pong：心跳响应。必须在 turn 守卫之前处理，否则空闲时（currentTurn=null）
+  // _lastPongAt 永不更新 → 心跳误判超时 → 反复关 WS 重连（R-005 回归）。
+  if (event.type === 'pong') {
+    ch._lastPongAt = Date.now()
+    return
+  }
+
   const turn = ch.currentTurn
   if (!turn) return
 
@@ -746,7 +766,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
           _toolUpdatePending.delete(key)
         }
         tc.output = event.payload.output
-        tc.elapsed = event.payload.elapsed
+        tc.elapsed = event.payload.elapsed ?? null
         tc.status = 'done'
         if (event.payload.tool_data) {
           tc.toolData = event.payload.tool_data
@@ -808,6 +828,12 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     case 'answer': {
       const lastThink = findLastThinking(turn.events)
       if (lastThink) {
+        // 关键修复：工具调用（tool_start）会把最后一个 thinking 块标记为
+        // consumed=true（工具调用前的中间思考，UI 不渲染）。当模型最终回复以
+        // answer 事件一次性到达（不走 token 流）时，复用的是同一个块 ——
+        // 必须清除 consumed，否则该块既不渲染、hasAnswerBlock() 又返回 true
+        // 导致 finalAnswer 也被跳过，聊天页整条回复"消失"（活动中心却有记录）。
+        lastThink.consumed = false
         lastThink.becameAnswer = true
         lastThink.tokens = event.payload.content
         // 非推理模型不发 thinking_end，必须在这里标记 done=true，
@@ -886,9 +912,13 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
         log.warn(`会话 ${sid} 的 done 事件到达时 currentTurn 为 null`)
         ch.isStreaming = false
       }
-      // 子 Agent 完成 → 自动切回主会话
+      // 子 Agent 完成 → 仅当用户仍停留在此子会话时才切回父会话，
+      // 避免覆盖用户已切换到其它会话的选择
       if (ch.parentSessionId) {
-        setTimeout(() => switchSession(ch.parentSessionId!), 500)
+        const currentSid = getSessionStore().sessionId
+        if (currentSid === sid) {
+          setTimeout(() => switchSession(ch.parentSessionId!), 500)
+        }
       }
       break
 
@@ -899,6 +929,16 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       ch.errorCategory = event.payload.category ?? null
       ch.errorTraceId = event.payload.trace_id ?? null
       ch.isStreaming = false
+      // 清理当前轮次：error 到达时该 turn 不会再有后续事件，
+      // 若不清空会被下一条 send() 覆盖丢失
+      if (ch.currentTurn) {
+        const interrupted = ch.currentTurn
+        if (!interrupted.finalAnswer) {
+          interrupted.finalAnswer = '（发生错误，回复未完成）'
+        }
+        ch.turns.push(interrupted)
+        ch.currentTurn = null
+      }
       log.warn(`error: ${event.payload.code} (${event.payload.category ?? 'unknown'})`, event.payload.message)
       break
 
@@ -963,15 +1003,6 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
         })
       }
       break
-
-    case 'pong': {
-      // 修复 BC-002：记录最后 pong 到达时间，供心跳定时器检测静默断开
-      const chForPong = getChatStore().channels.get(sid)
-      if (chForPong) {
-        chForPong._lastPongAt = Date.now()
-      }
-      break
-    }
 
     case 'ask_user': {
       const ae = event as AskUserEvent

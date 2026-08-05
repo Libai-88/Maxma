@@ -1,6 +1,6 @@
 [package]
 name = "maxma-here"
-version = "2.6.8"
+version = "2.6.9"
 description = "MaxmaHere Desktop Application"
 authors = ["Libai"]
 edition = "2021"

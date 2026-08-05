@@ -6,16 +6,23 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import uuid
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from app_paths import API_DATA_DIR
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# 用户自定义规则持久化路径
+_USER_RULES_PATH = API_DATA_DIR / "user_rules.json"
 
 # ─── Pydantic Models ───────────────────────────────────────────────────────────
 
@@ -87,8 +94,35 @@ _BUILTIN_RULES: list[dict] = [
     {"id": "sh-set-flags", "language": "shell", "name": "安全标志", "description": "脚本开头必须 set -euo pipefail", "severity": "error", "pattern": "", "enabled": True},
 ]
 
-# 用户自定义规则（内存存储）
+# 用户自定义规则（文件持久化）
 _USER_RULES: list[dict] = []
+
+
+def _load_user_rules() -> None:
+    """从持久化文件加载自定义规则。"""
+    global _USER_RULES
+    if _USER_RULES_PATH.exists():
+        try:
+            with open(_USER_RULES_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                _USER_RULES = data
+        except Exception as e:
+            logger.warning("Failed to load user rules from %s: %s", _USER_RULES_PATH, e)
+
+
+def _save_user_rules() -> None:
+    """将自定义规则持久化到文件。"""
+    _USER_RULES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(_USER_RULES_PATH, "w", encoding="utf-8") as f:
+            json.dump(_USER_RULES, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.warning("Failed to save user rules to %s: %s", _USER_RULES_PATH, e)
+
+
+# 模块加载时自动恢复持久化规则
+_load_user_rules()
 
 
 # ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -164,6 +198,7 @@ async def create_rule(body: RuleCreate, request: Request):
         "enabled": body.enabled,
     }
     _USER_RULES.append(new_rule)
+    _save_user_rules()
     logger.info("Created custom rule: %s", rule_id)
     return {**new_rule, "source": "custom", "editable": True}
 
@@ -182,6 +217,7 @@ async def update_rule(rule_id: str, body: RuleUpdate, request: Request):
         raise HTTPException(status_code=400, detail="未提供任何更新字段")
 
     rule.update(updates)
+    _save_user_rules()
     logger.info("Updated custom rule: %s", rule_id)
     return {**rule, "source": "custom", "editable": True}
 
@@ -197,6 +233,7 @@ async def delete_rule(rule_id: str, request: Request):
         raise HTTPException(status_code=404, detail=f"规则 '{rule_id}' 不存在")
 
     _USER_RULES.pop(idx)
+    _save_user_rules()
     logger.info("Deleted custom rule: %s", rule_id)
     return {"status": "deleted", "id": rule_id}
 

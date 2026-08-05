@@ -6,13 +6,13 @@ use std::ffi::OsStr;
 use std::fs::{File, OpenOptions};
 use std::io::BufWriter;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU16, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
-use tauri_plugin_shell::process::{CommandChild, CommandEvent};
+use tauri_plugin_shell::process::{Command, CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
@@ -32,8 +32,15 @@ use windows::Win32::UI::Shell::{
     FOS_PICKFOLDERS, SIGDN_FILESYSPATH,
 };
 
+/// 启动结果退出码：0=成功，1=setup 失败。
+/// Destroyed 处理器用它保留启动失败的真实退出码，避免被覆盖为 0
+/// （NSIS/运维脚本依赖退出码判断启动成败）。
+static EXIT_CODE: AtomicI32 = AtomicI32::new(0);
+
 /// 最大崩溃重启次数
 const MAX_RESTARTS: u32 = 3;
+/// 单次重启 spawn 失败的最大重试次数（指数退避：2s,4s,6s...）
+const MAX_SPAWN_RETRIES: u32 = 5;
 /// 后端健康检查超时（秒）。
 /// 优化后移除 chromadb/onnxruntime (464MB → ~100MB)，解压时间从 60s 降至 10s，
 /// 健康检查超时可安全降至 30 秒。
@@ -597,17 +604,11 @@ fn report_sidecar_startup_failure(
     let _ = app.emit("server-startup-failed", failure);
 }
 
-/// 启动 sidecar 并在后台监控其生命周期（日志 + 崩溃检测）。
-/// 注意：主进程已在 main() 中加入 Job Object，sidecar 作为后代进程自动继承 Job 成员资格，
-/// 无需在此处单独 assign（避免了 PyInstaller bootloader 启动 Python 子进程的竞态）。
-fn spawn_sidecar_with_monitor(
-    app: tauri::AppHandle,
-    restart_count: Arc<AtomicU32>,
-    shutting_down: Arc<AtomicBool>,
-    child_store: Arc<Mutex<Option<CommandChild>>>,
+/// 创建 sidecar Command 并配置环境变量，返回就绪的 Command（尚未 spawn）。
+fn prepare_sidecar_command(
+    app: &tauri::AppHandle,
     port: u16,
-    log_writer: Arc<Mutex<Option<BufWriter<File>>>>,
-) -> bool {
+) -> Option<Command> {
     let sidecar_path = std::env::current_exe()
         .ok()
         .and_then(|path| path.parent().map(|parent| parent.join("maxma-server.exe")))
@@ -615,8 +616,8 @@ fn spawn_sidecar_with_monitor(
     let sidecar = match app.shell().sidecar("maxma-server") {
         Ok(sidecar) => sidecar,
         Err(error) => {
-            report_sidecar_startup_failure(&app, SidecarStartupStage::Lookup, &sidecar_path, error);
-            return false;
+            report_sidecar_startup_failure(app, SidecarStartupStage::Lookup, &sidecar_path, error);
+            return None;
         }
     };
 
@@ -639,12 +640,12 @@ fn spawn_sidecar_with_monitor(
 
     if !resource_dir.is_dir() || !resource_dir.join("runtime").is_dir() {
         report_sidecar_startup_failure(
-            &app,
+            app,
             SidecarStartupStage::Resources,
             &resource_dir,
             "resource directory or resources\\runtime is missing",
         );
-        return false;
+        return None;
     }
 
     let inherited_path = std::env::var_os("PATH");
@@ -657,10 +658,35 @@ fn spawn_sidecar_with_monitor(
     .into_iter()
     .fold(sidecar, |command, (key, value)| command.env(key, value));
 
-    let (mut rx, child) = match sidecar.spawn() {
+    Some(sidecar)
+}
+
+fn spawn_sidecar_with_monitor(
+    app: tauri::AppHandle,
+    restart_count: Arc<AtomicU32>,
+    shutting_down: Arc<AtomicBool>,
+    child_store: Arc<Mutex<Option<CommandChild>>>,
+    port: u16,
+    log_writer: Arc<Mutex<Option<BufWriter<File>>>>,
+) -> bool {
+    // 首次启动 sidecar
+    let cmd = match prepare_sidecar_command(&app, port) {
+        Some(cmd) => cmd,
+        None => return false,
+    };
+
+    let (mut rx, child) = match cmd.spawn() {
         Ok(result) => result,
         Err(error) => {
-            report_sidecar_startup_failure(&app, SidecarStartupStage::Spawn, &sidecar_path, error);
+            report_sidecar_startup_failure(
+                &app,
+                SidecarStartupStage::Spawn,
+                &std::env::current_exe()
+                    .ok()
+                    .and_then(|p| p.parent().map(|parent| parent.join("maxma-server.exe")))
+                    .unwrap_or_else(|| PathBuf::from("maxma-server.exe")),
+                error,
+            );
             return false;
         }
     };
@@ -672,13 +698,16 @@ fn spawn_sidecar_with_monitor(
 
     // 存储 child handle 以便窗口关闭时 kill
     {
-        let mut store = child_store.lock().unwrap();
-        *store = Some(child);
+        let mut store = child_store.lock().ok().and_then(|mut guard| { *guard = Some(child); Some(()) });
+        if store.is_none() {
+            write_startup_log("[tauri] 警告: child_store 锁已中毒，无法存储子进程句柄");
+        }
     }
 
-    // 后台线程：消费 sidecar 事件流（stdout/stderr/exit）
-    std::thread::spawn(move || {
+    // 后台线程：消费 sidecar 事件流，退出时自动重启（循环替代递归）
+    std::thread::spawn(move || loop {
         let mut exited = false;
+        let mut spawn_retries = 0;
         loop {
             let event = match tauri::async_runtime::block_on(rx.recv()) {
                 Some(ev) => ev,
@@ -719,40 +748,88 @@ fn spawn_sidecar_with_monitor(
         }
 
         // 非正常退出且未达重启上限时自动重启
-        if exited && !shutting_down.load(Ordering::Relaxed) {
-            let count = restart_count.fetch_add(1, Ordering::Relaxed);
-            if count < MAX_RESTARTS {
-                let msg = format!("尝试重启后端 ({}/{})", count + 1, MAX_RESTARTS);
-                write_startup_log(&format!("[tauri] {}", msg));
-                write_server_log(&log_writer, "[restart] ", &msg);
-                let _ = app.emit(
-                    "server-restarting",
-                    serde_json::json!({
-                        "attempt": count + 1,
-                        "max": MAX_RESTARTS
-                    }),
-                );
-                std::thread::sleep(Duration::from_secs(RESTART_DELAY_SECS));
-                spawn_sidecar_with_monitor(
-                    app,
-                    restart_count,
-                    shutting_down,
-                    child_store,
-                    port,
-                    log_writer,
-                );
-            } else {
-                let msg = format!("已达最大重启次数 ({})，放弃重启", MAX_RESTARTS);
-                write_startup_log(&format!("[tauri] {}", msg));
-                write_server_log(&log_writer, "[restart] ", &msg);
-                let _ = app.emit(
-                    "server-disconnected-permanent",
-                    serde_json::json!({
-                        "max_restarts": MAX_RESTARTS
-                    }),
-                );
+        if !exited || shutting_down.load(Ordering::Relaxed) {
+            break;
+        }
+
+        let count = restart_count.fetch_add(1, Ordering::Relaxed);
+        if count >= MAX_RESTARTS {
+            let msg = format!("已达最大重启次数 ({})，放弃重启", MAX_RESTARTS);
+            write_startup_log(&format!("[tauri] {}", msg));
+            write_server_log(&log_writer, "[restart] ", &msg);
+            let _ = app.emit(
+                "server-disconnected-permanent",
+                serde_json::json!({
+                    "max_restarts": MAX_RESTARTS
+                }),
+            );
+            break;
+        }
+
+        let msg = format!("尝试重启后端 ({}/{})", count + 1, MAX_RESTARTS);
+        write_startup_log(&format!("[tauri] {}", msg));
+        write_server_log(&log_writer, "[restart] ", &msg);
+        let _ = app.emit(
+            "server-restarting",
+            serde_json::json!({
+                "attempt": count + 1,
+                "max": MAX_RESTARTS
+            }),
+        );
+        std::thread::sleep(Duration::from_secs(RESTART_DELAY_SECS));
+
+        // 重新启动 sidecar：失败时指数退避重试（端口未释放/瞬时错误），
+        // 避免一次性失败就永久失联；超限才放弃（break 退出监视线程外层 loop）。
+        let restart_result: Option<(_, _)> = loop {
+            match prepare_sidecar_command(&app, port) {
+                Some(cmd) => match cmd.spawn() {
+                    Ok(result) => break Some(result),
+                    Err(error) => {
+                        spawn_retries += 1;
+                        write_startup_log(&format!("[tauri] 重启失败(第{spawn_retries}次): {error}"));
+                        if spawn_retries >= MAX_SPAWN_RETRIES {
+                            let msg = format!("重启多次失败({spawn_retries}次)，放弃");
+                            write_startup_log(&format!("[tauri] {msg}"));
+                            write_server_log(&log_writer, "[restart] ", &msg);
+                            break None;
+                        }
+                        std::thread::sleep(Duration::from_secs(RESTART_DELAY_SECS * spawn_retries as u64));
+                    }
+                },
+                None => {
+                    spawn_retries += 1;
+                    write_startup_log(&format!("[tauri] 重启失败(第{spawn_retries}次): prepare_sidecar_command 返回 None"));
+                    if spawn_retries >= MAX_SPAWN_RETRIES {
+                        let msg = format!("重启多次失败({spawn_retries}次)，放弃");
+                        write_startup_log(&format!("[tauri] {msg}"));
+                        write_server_log(&log_writer, "[restart] ", &msg);
+                        break None;
+                    }
+                    std::thread::sleep(Duration::from_secs(RESTART_DELAY_SECS * spawn_retries as u64));
+                }
+            }
+        };
+
+        let (new_rx, new_child) = match restart_result {
+            Some(result) => result,
+            None => break, // 放弃重启，结束监视线程
+        };
+
+        // spawn 成功后立即更新 child handle（缩小旧死句柄被误 kill 的窗口）
+        let new_pid = new_child.pid();
+        {
+            let store = child_store.lock().ok().and_then(|mut guard| { *guard = Some(new_child); Some(()) });
+            if store.is_none() {
+                write_startup_log("[tauri] 警告: child_store 锁已中毒，无法更新子进程句柄");
             }
         }
+
+        write_startup_log(&format!(
+            "[tauri] sidecar (pid={}) 已重启",
+            new_pid
+        ));
+
+        rx = new_rx;
     });
 
     true
@@ -762,7 +839,7 @@ fn spawn_sidecar_with_monitor(
 fn write_server_log(writer: &Arc<Mutex<Option<BufWriter<File>>>>, prefix: &str, line: &str) {
     let mut guard = match writer.lock() {
         Ok(g) => g,
-        Err(_) => return,
+        Err(poisoned) => poisoned.into_inner(), // 即使中毒也能继续写入
     };
     if let Some(w) = guard.as_mut() {
         use std::io::Write;
@@ -865,29 +942,32 @@ fn main() {
                 let _ = window.set_focus();
             }
         }))
-        .plugin(
-            tauri_plugin_global_shortcut::Builder::new()
-                .with_shortcut(Shortcut::new(
-                    Some(Modifiers::CONTROL | Modifiers::SHIFT),
-                    Code::Space,
-                ))
-                .expect("Failed to create shortcut")
-                .with_handler(|app, _shortcut, event| {
-                    if event.state == ShortcutState::Pressed {
-                        if let Some(window) = app.get_webview_window("quick-chat") {
-                            if window.is_visible().unwrap_or(false) {
-                                let _ = window.hide();
-                            } else {
-                                // 居中显示并聚焦
-                                let _ = window.center();
-                                let _ = window.show();
-                                let _ = window.set_focus();
+        .plugin({
+            // 快捷键注册失败时降级为无快捷键插件（跳过快捷功能），不 panic 崩溃启动
+            let builder = tauri_plugin_global_shortcut::Builder::new();
+            match builder.with_shortcut(Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::Space)) {
+                Ok(b) => b
+                    .with_handler(|app, _shortcut, event| {
+                        if event.state == ShortcutState::Pressed {
+                            if let Some(window) = app.get_webview_window("quick-chat") {
+                                if window.is_visible().unwrap_or(false) {
+                                    let _ = window.hide();
+                                } else {
+                                    // 居中显示并聚焦
+                                    let _ = window.center();
+                                    let _ = window.show();
+                                    let _ = window.set_focus();
+                                }
                             }
                         }
-                    }
-                })
-                .build(),
-        )
+                    })
+                    .build(),
+                Err(e) => {
+                    eprintln!("[tauri] 全局快捷键插件初始化失败，跳过快捷键: {e}");
+                    tauri_plugin_global_shortcut::Builder::new().build()
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             select_path,
             get_api_port,
@@ -918,6 +998,7 @@ fn main() {
 
             // 后台等待后端就绪
             if !sidecar_started {
+                EXIT_CODE.store(1, Ordering::Relaxed);
                 app.handle().exit(1);
                 return Ok(());
             }
@@ -954,8 +1035,8 @@ fn main() {
                     // 否则隐藏的 quick-chat 窗口会让进程继续存活，
                     // Job Object 句柄不释放，KILL_ON_JOB_CLOSE 不触发，
                     // PyInstaller onefile 的 Python 子进程成为孤儿，占用端口阻塞下次启动。
-                    write_startup_log("[tauri] 主窗口已关闭，退出应用以释放 Job Object...");
-                    window.app_handle().exit(0);
+                    write_startup_log("[tauri] 主窗口已关闭，直接退出进程以释放 Job Object...");
+                    std::process::exit(EXIT_CODE.load(Ordering::Relaxed));
                 }
             }
         })

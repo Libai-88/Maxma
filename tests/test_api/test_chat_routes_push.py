@@ -91,7 +91,7 @@ def _patch_session_map(sidecar_id=None, recent_turns=None,
 
 class TestStreamTurnSidecarClientNone:
     async def test_raises_when_client_none_after_start(self):
-        """mgr.start() 后 client 仍为 None 应抛 RuntimeError。"""
+        """mgr.start() 后 client 仍为 None 应抛 TurnStartError(SIDECAR_UNAVAILABLE)。"""
         ws = MagicMock()
         ws.app.state.sidecar_manager = MagicMock()
         ws.app.state.sidecar_manager.start = AsyncMock()
@@ -100,8 +100,9 @@ class TestStreamTurnSidecarClientNone:
         session = MagicMock()
         session.session_id = "s1"
 
-        with pytest.raises(RuntimeError, match="Sidecar client not available"):
+        with pytest.raises(chat_mod.TurnStartError) as excinfo:
             await _stream_turn_sidecar(ws, session, "hello", "system prompt")
+        assert excinfo.value.code == "SIDECAR_UNAVAILABLE"
 
 
 # ---------------------------------------------------------------------------

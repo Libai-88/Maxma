@@ -85,6 +85,23 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("[providers] startup migration failed (non-fatal)")
 
+    # 4.1 Builtin default provider: OpenCode Zen free models (out-of-box).
+    # Injects opencode-zen with the anonymous key (public) so new users can
+    # chat immediately without configuring any API key. Then starts a
+    # background task that keeps the official free-model list in sync.
+    app.state.opencode_zen_sync_task = None
+    try:
+        from api.services.opencode_zen import (
+            ensure_opencode_zen_provider,
+            start_background_sync,
+        )
+
+        ensure_opencode_zen_provider()
+        app.state.opencode_zen_sync_task = await start_background_sync()
+        logger.info("[opencode-zen] builtin default provider ready, background sync started")
+    except Exception:
+        logger.exception("[opencode-zen] startup injection failed (non-fatal)")
+
     record_activity(
         "system", "startup",
         message=f"MaxmaHere 后端启动完成 ({__version__})",
@@ -106,7 +123,27 @@ async def lifespan(app: FastAPI):
     app.state.automation_scheduler = start_scheduler(sidecar_mgr=app.state.sidecar_manager)
     logger.info("[automation] Background scheduler started")
 
+    # 7.1 Metrics history flush — persist in-memory snapshots to SQLite every
+    # 60s so /api/metrics/history returns real history (was never started before).
+    try:
+        from api.metrics import get_metrics
+
+        get_metrics().start_flush_task(interval_seconds=60)
+        logger.info("[metrics] Background history flush started")
+    except Exception:
+        logger.exception("[metrics] Failed to start history flush (non-fatal)")
+
     yield
+
+    # Cancel the OpenCode Zen background sync task (if started)
+    sync_task = getattr(app.state, "opencode_zen_sync_task", None)
+    if sync_task is not None:
+        sync_task.cancel()
+        try:
+            await sync_task
+        except (asyncio.CancelledError, Exception):
+            pass
+        logger.info("[opencode-zen] background sync stopped")
 
     if getattr(app.state, "sidecar_manager", None):
         await app.state.sidecar_manager.stop()
@@ -114,6 +151,14 @@ async def lifespan(app: FastAPI):
 
     # Stop automation scheduler background task
     await stop_scheduler()
+
+    # Stop metrics history flush task (final persist on shutdown)
+    try:
+        from api.metrics import get_metrics
+
+        await get_metrics().stop_flush_task()
+    except Exception:
+        logger.exception("[metrics] Failed to stop history flush (non-fatal)")
 
     record_activity("system", "shutdown", message="MaxmaHere 后端正在关闭")
 

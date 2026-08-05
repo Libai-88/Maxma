@@ -2,7 +2,7 @@
 
 import yaml
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app_paths import NEWS_YAML_PATH
 
@@ -24,6 +24,14 @@ class NewsEntry(BaseModel):
     tags: list[str] = []
     version: str
     pr_number: int | None = None
+
+    @field_validator("pr_number", mode="before")
+    @classmethod
+    def _blank_pr_number_to_none(cls, v: object) -> object:
+        """容错：yaml 中空字符串（''）视为无 PR 号，避免整页加载失败。"""
+        if isinstance(v, str) and v.strip() == "":
+            return None
+        return v
 
 
 class ListNewsResponse(BaseModel):

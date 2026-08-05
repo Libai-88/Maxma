@@ -205,6 +205,59 @@ async def test_turn_error_returns_safe_message_but_logs_detail(caplog):
 
 
 @pytest.mark.asyncio
+async def test_create_session_failure_raises_provider_unavailable(caplog):
+    """create_session 失败应抛出携带 PROVIDER_UNAVAILABLE 的 TurnStartError。"""
+    handlers = {}
+    ws, session, mock_client = _setup_mocks(handlers)
+
+    async def mock_call(method, params=None, **kwargs):
+        if method == "create_session":
+            raise RuntimeError("connection refused to localhost:20128")
+        if method == "get_messages":
+            return []
+        return {}
+
+    mock_client.call = mock_call
+
+    with _patch_session_map():
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(chat.TurnStartError) as excinfo:
+                await chat._stream_turn_sidecar(
+                    ws, session, "hello", "system prompt"
+                )
+
+    assert excinfo.value.code == "PROVIDER_UNAVAILABLE"
+    assert "provider" in excinfo.value.message.lower()
+    assert "connection refused" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_sidecar_start_failure_raises_unavailable(caplog):
+    """sidecar 启动失败应抛出携带 SIDECAR_UNAVAILABLE 的 TurnStartError。"""
+    ws = MagicMock()
+    ws.send_json = AsyncMock()
+
+    mock_mgr = MagicMock()
+    mock_mgr.start = AsyncMock(side_effect=RuntimeError("sidecar crashed"))
+    ws.app.state.sidecar_manager = mock_mgr
+
+    session = MagicMock()
+    session.session_id = "test-session-id"
+    session._sidecar_session_id = None
+
+    with _patch_session_map():
+        with caplog.at_level(logging.ERROR):
+            with pytest.raises(chat.TurnStartError) as excinfo:
+                await chat._stream_turn_sidecar(
+                    ws, session, "hello", "system prompt"
+                )
+
+    assert excinfo.value.code == "SIDECAR_UNAVAILABLE"
+    assert "sidecar" in excinfo.value.message.lower()
+    assert "sidecar crashed" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_unsub_logs_warning_when_unsub_fails(caplog):
     """unsub() failure in finally block should log a warning."""
     handlers = {}

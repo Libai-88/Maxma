@@ -16,15 +16,22 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/mcp", tags=["mcp"])
 
-# 子进程环境变量黑名单 — 与 mcp.py 保持同步
-_BLOCKED_ENV_KEYS: frozenset[str] = frozenset({
-    "LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT", "LD_DEBUG",
-    "DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH",
-    "PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "PYTHONPYCACHEPREFIX",
-    "PATH", "IFS", "BASH_ENV", "ENV",
-    "COMSPEC", "SHELL", "PATHEXT",
-    "NODE_PATH", "NODE_OPTIONS",
-    "HOME", "USERPROFILE", "TMPDIR", "TMP", "TEMP",
+# 子进程环境变量白名单 — 仅透传系统必需变量，防止 API Key 等敏感信息泄露
+_ALLOWED_ENV_KEYS: frozenset[str] = frozenset({
+    k.upper() for k in [
+        "PATH", "TEMP", "TMP", "COMSPEC", "PATHEXT",
+        "SYSTEMROOT", "WINDIR",
+    ]
+})
+
+# 用户显式传入 env 的黑名单：阻止通过环境变量注入恶意加载/启动配置。
+# 系统 env 用白名单（上面），用户自定义 env（如 MCP server 的 API key 配置）保留，
+# 仅过滤危险变量。
+_FORBIDDEN_ENV_KEYS: frozenset[str] = frozenset({
+    k.upper() for k in [
+        "LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES",
+        "NODE_OPTIONS", "PYTHONPATH", "PYTHONSTARTUP", "BUN_OPTIONS",
+    ]
 })
 
 # 命令白名单 — 仅允许常见 MCP server runtime 可执行文件名。
@@ -127,14 +134,15 @@ async def test_connection(req: TestConnectionRequest) -> TestConnectionResponse:
     # 2. args 元字符校验
     safe_args = _validate_args(req.args)
 
-    # 3. 环境变量校验 + 构造
-    blocked = [k for k in req.env if k.upper() in _BLOCKED_ENV_KEYS]
-    if blocked:
-        raise HTTPException(
-            status_code=400,
-            detail=f"环境变量包含禁止设置的敏感 key: {', '.join(blocked)}",
-        )
-    env = {**os.environ, **req.env}
+    # 3. 环境变量白名单构造（仅透传系统必需变量 + 用户显式传入的 env）
+    env = {}
+    for k, v in os.environ.items():
+        if k.upper() in _ALLOWED_ENV_KEYS:
+            env[k] = v
+    # 用户显式传入的 env 合并但过滤危险变量（黑名单），保留自定义配置能力
+    for k, v in (req.env or {}).items():
+        if k.upper() not in _FORBIDDEN_ENV_KEYS:
+            env[k] = v
 
     # 4. 启动子进程测试
     try:

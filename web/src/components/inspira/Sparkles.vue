@@ -7,6 +7,8 @@
       :style="sparkle.style"
     />
   </div>
+  <!-- 插槽内容（活动/指标等页用它包裹空状态提示，必须渲染） -->
+  <slot />
 </template>
 
 <script setup lang="ts">

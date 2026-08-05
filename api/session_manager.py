@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from datetime import datetime
 import threading
 import time
 import uuid
@@ -9,6 +10,16 @@ from dataclasses import dataclass, field
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_sqlite_datetime(dt_str: str | None) -> float:
+    """将 SQLite datetime 字符串（如 '2026-08-02 12:34:56'）转换为 Unix 时间戳。"""
+    if not dt_str:
+        return 0.0
+    try:
+        return datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S").timestamp()
+    except (ValueError, TypeError):
+        return 0.0
 
 
 @dataclass
@@ -78,10 +89,12 @@ class SessionState:
 
 
 class SessionManager:
-    def __init__(self, ttl_seconds: int = 1800):
+    def __init__(self, ttl_seconds: int = 1800, session_map: Any = None):
         self._sessions: dict[str, SessionState] = {}
         self._ttl = ttl_seconds
         self._lock = asyncio.Lock()
+        # 可注入的 SessionMap（测试隔离用）；None 时懒加载全局单例
+        self._session_map = session_map
 
     async def create(self) -> SessionState:
         session_id = uuid.uuid4().hex
@@ -116,12 +129,63 @@ class SessionManager:
             self._sessions[session_id] = session
         return session
 
+    async def _restore_from_session_map(self, session_id: str) -> SessionState | None:
+        """尝试从持久化 SessionMap SQLite 恢复会话（后端重启后保留会话状态）。"""
+        try:
+            from api.const_session_store import load_const_session_by_id
+
+            smap = self._session_map
+            if smap is None:
+                from api.pi_bridge.session_adapter import get_session_map
+                smap = get_session_map()
+            smap_sid = smap.get_sidecar_id(session_id)
+            logger.info(
+                "[session] _restore_from_session_map(%s): smap_sid=%s",
+                session_id[:8], smap_sid[:8] if smap_sid else None,
+            )
+            if smap_sid is None:
+                return None
+            session = SessionState(session_id=session_id)
+            session._sidecar_session_id = smap_sid
+            session.is_const = smap.get_const(session_id)
+            if session.is_const:
+                try:
+                    const_data = load_const_session_by_id(session_id)
+                    if const_data:
+                        session.const_name = const_data.get("const_name", "")
+                except Exception:
+                    pass
+            turns = smap.get_recent_turns(session_id, count=100)
+            session.message_count = len(turns) * 2
+            logger.info(
+                "[session] Restored session %s from SessionMap: turns=%d",
+                session_id[:8], len(turns),
+            )
+            return session
+        except Exception:
+            logger.warning(
+                "[session] Failed to restore session %s from SessionMap",
+                session_id[:8], exc_info=True,
+            )
+            return None
+
     async def get(self, session_id: str) -> SessionState | None:
         async with self._lock:
             session = self._sessions.get(session_id)
         if session is not None:
             session.last_active = time.time()
-        return session
+            return session
+        # 不在内存中时，尝试从持久化 SessionMap 恢复
+        restored = await self._restore_from_session_map(session_id)
+        if restored is not None:
+            async with self._lock:
+                existing = self._sessions.get(session_id)
+                if existing is not None:
+                    existing.last_active = time.time()
+                    return existing
+                self._sessions[session_id] = restored
+            return restored
+        return None
 
     async def get_or_create(self, session_id: str) -> SessionState:
         session = await self.get(session_id)
@@ -177,7 +241,9 @@ class SessionManager:
         async with self._lock:
             sessions = list(self._sessions.values())
         result = []
+        seen_ids = set()
         for s in sessions:
+            seen_ids.add(s.session_id)
             has_active = s._active_task is not None and not s._active_task.done()
             result.append(
                 {
@@ -191,6 +257,43 @@ class SessionManager:
                     "const_name": s.const_name,
                 }
             )
+
+        # 从持久化 SessionMap SQLite 恢复非活跃会话（后端重启后保留）
+        try:
+            smap = self._session_map
+            if smap is None:
+                from api.pi_bridge.session_adapter import get_session_map
+                smap = get_session_map()
+            for sm in smap.list_sessions():
+                if sm["session_id"] in seen_ids:
+                    continue
+                seen_ids.add(sm["session_id"])
+                # 尝试从 const YAML 获取名称
+                const_name = ""
+                if sm["is_const"]:
+                    try:
+                        from api.const_session_store import load_const_session_by_id
+
+                        const_data = load_const_session_by_id(sm["session_id"])
+                        if const_data:
+                            const_name = const_data.get("const_name", "")
+                    except Exception:
+                        pass
+                result.append(
+                    {
+                        "session_id": sm["session_id"],
+                        "message_count": sm["turn_count"] * 2,
+                        "created_at": _parse_sqlite_datetime(sm["created_at"]),
+                        "last_active": _parse_sqlite_datetime(sm["updated_at"]),
+                        "has_active_agent": False,
+                        "is_subagent": False,
+                        "is_const": sm["is_const"],
+                        "const_name": const_name,
+                    }
+                )
+        except Exception:
+            logger.debug("[session] Failed to list sessions from SessionMap", exc_info=True)
+
         result.sort(key=lambda x: x["last_active"] if isinstance(x["last_active"], (int, float)) else 0.0, reverse=True)
         return result
 

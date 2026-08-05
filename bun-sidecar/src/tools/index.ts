@@ -10,7 +10,6 @@
 
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
-import { z } from "zod";
 import type { ToolDefinition } from "@oh-my-pi/pi-coding-agent";
 
 /** Bun.YAML 通过 globalThis 访问,避免依赖 @types/bun。 */
@@ -20,16 +19,32 @@ const bunYaml = (
   }
 ).Bun.YAML;
 
-const rememberSchema = z.object({
-  content: z
-    .string()
-    .min(1)
-    .describe("要持久化的长期记忆内容(事实/偏好/身份/信息)"),
-  category: z
-    .string()
-    .optional()
-    .describe("记忆分类(如 身份/偏好/事实/瞬间)"),
-});
+/**
+ * remember_memory 参数 schema — 必须是「标准 JSON Schema 对象」,不能用 Zod 实例。
+ *
+ * 原因:Maxma 顶层 node_modules/zod 解析为 v3,而 OMP(pi-ai/pi-coding-agent)内部
+ * 使用 zod v4。OMP 的 toolWireSchema 只识别 zod v4 实例(`_zod` 符号 + `.parse`)
+ * 并转换为 JSON Schema;zod v3 实例不被识别,会被原样 JSON.stringify 进请求体,
+ * 泄漏 `_def`/`~standard`/`_cached` 等内部字段,且缺少 `type: "object"`,
+ * 导致严格校验的 OpenAI 兼容网关(如 OpenCode Zen)拒绝请求(400 invalid_request_error)。
+ * 使用 plain JSON Schema 是 OMP 官方支持的一等公民(legacy + extension compat,
+ * wire 层会升级到 draft 2020-12 而非转换)。
+ */
+const rememberSchema = {
+  type: "object",
+  properties: {
+    content: {
+      type: "string",
+      description: "要持久化的长期记忆内容(事实/偏好/身份/信息)",
+    },
+    category: {
+      type: "string",
+      description: "记忆分类(如 身份/偏好/事实/瞬间)",
+    },
+  },
+  required: ["content"],
+  additionalProperties: false,
+} as const;
 
 /** FNV-1a 32-bit → 8 位十六进制,与 Maxma memory.yaml 的 id 格式一致。 */
 function shortHash(input: string): string {
@@ -65,7 +80,7 @@ export function registerCustomTools(): ToolDefinition[] {
       label: "记住记忆",
       description:
         "当用户明确要求\"记住\"某个事实、偏好、身份、习惯或信息时,调用本工具把该内容持久化到长期记忆文件,写入后会在记忆页面显示。仅在用户明确要求记忆时调用,不要自行推断用户意图。",
-      // OMP 的 TSchema 与 zod 泛型不完全兼容,运行时由 OMP 解析;cast 保持类型干净。
+      // plain JSON Schema 对象,避免 zod v3 实例泄漏(见 rememberSchema 注释)。
       parameters: rememberSchema as unknown as ToolDefinition["parameters"],
       approval: "write",
       async execute(

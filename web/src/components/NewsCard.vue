@@ -1,30 +1,33 @@
 <template>
-  <DirectionAwareHover ref="rootEl" class="news-card">
-    <!-- 标题行：类型徽章 + 英文标题 -->
-    <div class="card-header">
-      <div class="card-title-row">
-        <span class="card-type-badge" :class="'type-' + entry.type">{{ typeLabel }}</span>
-        <span class="card-en-title">{{ entry.en_title || entry.title }}</span>
+  <DirectionAwareHover class="news-card">
+    <!-- 3D 倾斜监听的目标元素：ref 绑定到真实 DOM（组件 ref 拿到的是组件实例，不能 addEventListener） -->
+    <div ref="rootEl" class="news-card-inner">
+      <!-- 标题行：类型徽章 + 英文标题 -->
+      <div class="card-header">
+        <div class="card-title-row">
+          <span class="card-type-badge" :class="'type-' + entry.type">{{ typeLabel }}</span>
+          <span class="card-en-title">{{ entry.en_title || entry.title }}</span>
+        </div>
+        <span v-if="entry.version" class="version-badge">{{ entry.version }}</span>
       </div>
-      <span v-if="entry.version" class="version-badge">{{ entry.version }}</span>
-    </div>
 
-    <!-- 中文副标题 -->
-    <div v-if="entry.en_title" class="card-subtitle">{{ entry.title }}</div>
+      <!-- 中文副标题 -->
+      <div v-if="entry.en_title" class="card-subtitle">{{ entry.title }}</div>
 
-    <!-- 描述（分段） -->
-    <div class="news-description">
-      <p v-for="(para, i) in paragraphs" :key="i" class="desc-para">{{ para }}</p>
-    </div>
+      <!-- 描述（分段） -->
+      <div class="news-description">
+        <p v-for="(para, i) in paragraphs" :key="i" class="desc-para">{{ para }}</p>
+      </div>
 
-    <!-- 标签列表 -->
-    <div class="card-models-tags">
-      <span v-for="tag in entry.tags" :key="tag" class="model-tag">{{ tag }}</span>
-    </div>
+      <!-- 标签列表 -->
+      <div class="card-models-tags">
+        <span v-for="tag in entry.tags" :key="tag" class="model-tag">{{ tag }}</span>
+      </div>
 
-    <!-- 底部：PR -->
-    <div class="news-footer">
-      <span class="news-pr">#{{ entry.pr_number }}</span>
+      <!-- 底部：PR -->
+      <div class="news-footer">
+        <span class="news-pr">#{{ entry.pr_number }}</span>
+      </div>
     </div>
   </DirectionAwareHover>
 </template>
@@ -89,11 +92,13 @@ const paragraphs = computed(() => {
   border-radius: var(--radius-lg);
   padding: 20px;
   box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.news-card-inner {
   display: flex;
   flex-direction: column;
   gap: 10px;
   will-change: transform;
-  transition: box-shadow 0.25s ease, border-color 0.25s ease;
 }
 .news-card:hover {
   box-shadow: var(--shadow-lg);

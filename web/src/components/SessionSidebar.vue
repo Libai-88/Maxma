@@ -2,7 +2,15 @@
   <div class="session-sidebar" :class="{ collapsed }">
     <div class="sidebar-section-header">
       <span>会话 Sessions</span>
-      <button class="btn-new" aria-label="新建会话" @click="$emit('create')" title="新会话">+</button>
+      <div class="header-actions">
+        <button
+          v-if="!managing"
+          class="btn-manage"
+          title="批量管理会话"
+          @click="enterManage"
+        >管理</button>
+        <button class="btn-new" aria-label="新建会话" @click="$emit('create')" title="新会话">+</button>
+      </div>
     </div>
 
     <div ref="sessionListRef" class="session-list">
@@ -23,6 +31,9 @@
           :status="(sessionStatuses ?? {})[s.session_id]"
           :is-const="true"
           :collapsed="collapsed"
+          :selectable="managing"
+          :selected="selectedIds.has(s.session_id)"
+          @toggle-select="toggleSelect"
           @switch="$emit('switch', $event)"
           @contextmenu="onSessionContextMenu"
           @mouseenter="onSessionMouseEnter"
@@ -43,6 +54,9 @@
           :is-const="false"
           :display-index="getSessionDisplayIndex(s)"
           :collapsed="collapsed"
+          :selectable="managing"
+          :selected="selectedIds.has(s.session_id)"
+          @toggle-select="toggleSelect"
           @switch="$emit('switch', $event)"
           @contextmenu="onSessionContextMenu"
           @mouseenter="onSessionMouseEnter"
@@ -54,6 +68,21 @@
       <div v-if="sessions.length === 0" class="no-sessions">
         暂无会话
       </div>
+    </div>
+
+    <!-- ── 批量管理模式操作栏 ── -->
+    <div v-if="managing" class="manage-bar">
+      <button class="manage-btn select-all" @click="toggleSelectAll">
+        {{ allSelected ? '取消全选' : '全选' }}
+      </button>
+      <span class="manage-count">已选 {{ selectedIds.size }} 项</span>
+      <button class="manage-btn clear-temp" @click="handleClearTemp">清空临时</button>
+      <button
+        class="manage-btn delete-selected"
+        :disabled="!selectedIds.size"
+        @click="handleBatchDelete"
+      >删除选中</button>
+      <button class="manage-btn done" @click="exitManage">完成</button>
     </div>
 
     <Transition name="card">
@@ -172,12 +201,64 @@ import type { SessionInfo } from '@/types';
 import { computed, nextTick, ref, watch, watchEffect } from 'vue';
 import { createLogger } from '@/utils/logger'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
+import { confirmAction } from '@/composables/useConfirm'
 
 const log = createLogger('SessionSidebar')
 
 const sessionStore = useSessionStore()
 
 const sessionListRef = ref<HTMLElement | null>(null)
+
+// ── 批量管理模式 ──────────────────────────────────────────────
+const managing = ref(false)
+const selectedIds = ref<Set<string>>(new Set())
+
+function enterManage() {
+  managing.value = true
+  selectedIds.value = new Set()
+}
+function exitManage() {
+  managing.value = false
+  selectedIds.value = new Set()
+}
+function toggleSelect(id: string) {
+  const s = new Set(selectedIds.value)
+  if (s.has(id)) s.delete(id)
+  else s.add(id)
+  selectedIds.value = s
+}
+const allSelected = computed(() => {
+  const all = [...constSessions.value, ...tempSessions.value]
+  return all.length > 0 && all.every((s) => selectedIds.value.has(s.session_id))
+})
+function toggleSelectAll() {
+  const all = [...constSessions.value, ...tempSessions.value]
+  selectedIds.value = allSelected.value
+    ? new Set()
+    : new Set(all.map((s) => s.session_id))
+}
+async function handleBatchDelete() {
+  const ids = Array.from(selectedIds.value)
+  if (!ids.length) return
+  if (!await confirmAction({
+    title: '删除选中会话',
+    message: `确定删除选中的 ${ids.length} 个会话吗？此操作不可撤销。`,
+    confirmText: '删除',
+    danger: true,
+  })) return
+  await sessionStore.batchDelete(ids)
+  exitManage()
+}
+async function handleClearTemp() {
+  if (!await confirmAction({
+    title: '清空临时会话',
+    message: '确定删除所有临时（非固定）会话吗？此操作不可撤销。',
+    confirmText: '清空',
+    danger: true,
+  })) return
+  await sessionStore.clearTempSessions()
+  exitManage()
+}
 
 // 会话列表项错落入场：会话数量变化时对 .session-item 做 stagger 浮入（仅一次）
 useGsap((_ctx, contextSafe) => {
@@ -187,7 +268,15 @@ useGsap((_ctx, contextSafe) => {
     if (!el) return
     const items = gsap.utils.toArray<HTMLElement>('.session-item', el)
     if (!items.length) return
-    gsap.from(items, { opacity: 0, y: 10, duration: 0.3, ease: easeMap.out, stagger: 0.04 })
+    // 只做位移动画、不依赖 opacity：大列表 + stagger 时动画时长可能被后续
+    // 刷新/重复触发打断，导致后半段 item 停在 opacity:0（列表空白但可点击）。
+    gsap.from(items, {
+      y: 10,
+      duration: 0.3,
+      ease: easeMap.out,
+      stagger: items.length > 20 ? 0 : 0.04,
+      clearProps: 'transform',
+    })
   }), { immediate: true, flush: 'post' })
 })
 
@@ -562,6 +651,26 @@ function handleDeleteKeydown(event: KeyboardEvent) {
   display: inline-block;
   max-width: 200px;
 }
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-manage {
+  padding: 2px 8px;
+  font-size: 0.72em;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.btn-manage:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
 .btn-new {
   width: 24px;
   height: 24px;
@@ -696,6 +805,50 @@ function handleDeleteKeydown(event: KeyboardEvent) {
   transition: opacity 0.2s ease 0.05s;
   overflow: hidden;
   max-height: 40px;
+}
+
+/* ── 批量管理模式 ── */
+.manage-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 6px 0;
+}
+.manage-btn {
+  padding: 4px 10px;
+  font-size: 0.8em;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s;
+}
+.manage-btn:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.manage-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.manage-btn.delete-selected {
+  color: var(--status-error, #dc2626);
+}
+.manage-btn.delete-selected:hover:not(:disabled) {
+  border-color: var(--status-error, #dc2626);
+  background: color-mix(in srgb, var(--status-error) 10%, transparent);
+}
+.manage-btn.done {
+  color: var(--accent);
+}
+.manage-count {
+  font-size: 0.78em;
+  color: var(--text-tertiary);
+  flex: 1;
+  text-align: right;
 }
 
 /* ── Hover card ── */

@@ -27,8 +27,13 @@ from api.session_manager import SessionManager, SessionState
 
 
 @pytest.fixture
-def manager():
-    return SessionManager(ttl_seconds=1)
+def manager(tmp_path):
+    # 注入隔离的 SessionMap（临时 DB），避免 list_sessions 读到真实用户 DB 破坏测试
+    from api.pi_bridge.session_adapter import SessionMap
+
+    return SessionManager(
+        ttl_seconds=1, session_map=SessionMap(tmp_path / "test_sessions.db")
+    )
 
 
 # ── set_permission_mode validation (line 75) ─────────────────────────
