@@ -30,13 +30,28 @@ _DEFAULT_PERSONA_FILE = "SOUL.md"
 
 
 def get_active_persona_file() -> str:
-    """返回当前活跃人格文件名。未配置时默认 SOUL.md。"""
+    """返回当前活跃人格文件名。未配置时默认 SOUL.md。
+
+    防御：active_persona.yaml 里声明的文件可能已不存在（例如便携版 seed
+    只播种 SOUL.md，而 yaml 是从开发环境迁移来的 ``SOUL.饱饱.md``）。此时若
+    直接返回该文件名，SoulView 会请求一个 404 的文件导致编辑器空白，system
+    prompt 也会缺"性格人设"段。因此先校验文件在 PERSONAS_DIR 或
+    PERSONAS_TEMPLATES_DIR 中真实存在，否则回退默认 SOUL.md。
+    """
     if ACTIVE_PERSONA_PATH.exists():
         try:
             import yaml
             data = yaml.safe_load(ACTIVE_PERSONA_PATH.read_text(encoding="utf-8"))
             if isinstance(data, dict) and "file" in data:
-                return data["file"]
+                candidate = data["file"]
+                for base in (PERSONAS_DIR, PERSONAS_TEMPLATES_DIR):
+                    if (base / candidate).exists():
+                        return candidate
+                # 声明的活跃人格不存在 → 回退默认（并提示，便于诊断）
+                logger.warning(
+                    "active_persona.yaml 指向不存在的文件 %r，回退到 %s",
+                    candidate, _DEFAULT_PERSONA_FILE,
+                )
         except Exception:
             logger.warning("failed to load active_persona.yaml", exc_info=True)
     return _DEFAULT_PERSONA_FILE

@@ -63,6 +63,28 @@ class CreatePersonaRequest(BaseModel):
     memory: Literal["shared", "persona", "isolated"] = "shared"
 
 
+def _is_template_placeholder(text: str) -> bool:
+    """判断 USER.md 的称呼值是否为未填写的模板占位符。
+
+    USER.example.md 中的示例值形如：
+    - 全角括号包裹的提示：``（Agent 对你的称呼）``、``（你的名字）``
+    - 含"Agent"关键字的占位提示
+    真实称呼（如"小美"）不含这些特征。命中返回 True，调用方应回退到"你"。
+    """
+    if not text:
+        return True
+    stripped = text.strip()
+    # 全角括号包裹的模板提示（示例文件中的占位格式）
+    if stripped.startswith("（") and stripped.endswith("）"):
+        return True
+    if stripped.startswith("(") and stripped.endswith(")"):
+        return True
+    # 英文占位关键字（旧模板 "Agent 对你的称呼"）
+    if "agent" in stripped.lower():
+        return True
+    return False
+
+
 def _get_persona_variant_path(variant: str) -> Path:
     """Return a verified custom SOUL file path.
 
@@ -280,7 +302,15 @@ async def get_persona_profile():
         user_text = user_path.read_text("utf-8")
         nn = re.search(r'\*\*称呼\*\*\s*[：:]\s*(.+)', user_text)
         if nn:
-            nickname = nn.group(1).strip()
+            raw_nickname = nn.group(1).strip()
+            # 模板占位符防御：seed 机制会把 USER.example.md 的字面内容复制为
+            # USER.md，若用户尚未填写，称呼字段仍是"（Agent 对你的称呼）"这类
+            # 占位提示。此时应回退到通用称呼"你"，而不是把占位符展示给用户
+            #（曾导致首页 greeting 显示 "(Agent 对你的称呼)，你来啦"）。
+            if _is_template_placeholder(raw_nickname):
+                nickname = "你"
+            else:
+                nickname = raw_nickname
 
     greeting = f"{nickname}，你来啦。"
 
