@@ -64,9 +64,9 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       minify: 'esbuild',
-      esbuild: {
-        drop: ['console'],
-      },
+      // 注意：此前 drop:['console'] 会删除前端全部 console 输出，导致运行时
+      // 错误（如人设/用户编辑器空白）无法通过 F12 排查。保留 console 以便诊断。
+      esbuild: {},
       rollupOptions: {
         input: {
           main: fileURLToPath(new URL('./index.html', import.meta.url)),

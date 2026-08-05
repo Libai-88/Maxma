@@ -430,8 +430,16 @@ onMounted(async () => {
   background: var(--bg-primary);
 }
 
+/* 与 MarkdownEditor.vue 一致：vue-codemirror 容器 display:contents 在 WebView2
+   可能使 .cm-editor 高度塌陷为 0（内容与交互不可见），改为块级盒子 + 保底高度 */
+.editor-wrapper :deep(.v-codemirror) {
+  display: block !important;
+  height: 100%;
+}
+
 .editor-wrapper :deep(.cm-editor) {
   height: 100%;
+  min-height: 240px;
 }
 
 .editor-wrapper :deep(.cm-scroller) {

@@ -31,6 +31,10 @@
       </div>
     </details>
     <div v-if="loading" class="loading">加载中...</div>
+    <div v-else-if="loadError" class="load-error">
+      <p>加载失败：{{ loadError }}</p>
+      <button class="retry-button" @click="retryLoad">重试</button>
+    </div>
     <div v-else class="editor-wrapper">
       <Codemirror
         v-model="content"
@@ -85,11 +89,13 @@ const {
   saving,
   saveState,
   saveError,
+  loadError,
   extensions,
   saveStateText,
   loadContent,
   saveContent,
   onBlur,
+  retryLoad,
 } = useMarkdownPersist({ type: props.type })
 
 const rootRef = ref<HTMLElement | null>(null)
@@ -177,6 +183,27 @@ onMounted(loadContent)
   text-align: center;
 }
 
+.load-error {
+  color: var(--text-secondary);
+  padding: 40px 0;
+  text-align: center;
+}
+.retry-button {
+  margin-top: 12px;
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+.retry-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .editor-wrapper {
   flex: 1;
   border: 1px solid var(--border);
@@ -185,8 +212,19 @@ onMounted(loadContent)
   background: var(--bg-primary);
 }
 
+/* 修复：vue-codemirror 容器默认 display:contents（无盒子），在 WebView2 中
+   .cm-editor 的 height:100% 可能无法正确解析导致编辑器高度塌陷为 0，
+   内容与交互区全部不可见（人设/用户页"空白不可编辑"）。改为正常块级盒子，
+   让 .cm-editor 高度百分比有确定参考。 */
+.editor-wrapper :deep(.v-codemirror) {
+  display: block !important;
+  height: 100%;
+}
+
 .editor-wrapper :deep(.cm-editor) {
   height: 100%;
+  /* 保底高度：即使 flex 布局异常也不会把编辑器压没 */
+  min-height: 240px;
 }
 
 .editor-wrapper :deep(.cm-scroller) {
