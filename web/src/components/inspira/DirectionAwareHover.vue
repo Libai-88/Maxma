@@ -110,7 +110,7 @@ function onMouseLeave() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.5);
+  background: color-mix(in srgb, var(--text-primary) 50%, transparent);
   pointer-events: none;
   transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94),
               opacity 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);

@@ -48,7 +48,7 @@ const overlayStyle = computed(() => ({
 }))
 
 const compensationStyle = computed(() => ({
-  background: isDark.value ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 253, 247, 0.12)',
+  background: isDark.value ? 'color-mix(in srgb, var(--text-primary) 8%, transparent)' : 'color-mix(in srgb, var(--bg-raised) 12%, transparent)',
 }))
 
 onMounted(() => {
@@ -83,9 +83,9 @@ function onToggle() {
 /* 第一层：大叶片光斑，缓慢漂移 */
 .leaves-layer--1 {
   background-image:
-    radial-gradient(ellipse 40% 30% at 20% 30%, rgba(80, 120, 70, 0.4) 0%, transparent 70%),
-    radial-gradient(ellipse 35% 25% at 70% 60%, rgba(60, 100, 50, 0.35) 0%, transparent 70%),
-    radial-gradient(ellipse 30% 20% at 50% 80%, rgba(70, 110, 60, 0.3) 0%, transparent 70%);
+    radial-gradient(ellipse 40% 30% at 20% 30%, color-mix(in srgb, var(--status-ok) 40%, transparent) 0%, transparent 70%),
+    radial-gradient(ellipse 35% 25% at 70% 60%, color-mix(in srgb, var(--status-ok) 35%, transparent) 0%, transparent 70%),
+    radial-gradient(ellipse 30% 20% at 50% 80%, color-mix(in srgb, var(--status-ok) 30%, transparent) 0%, transparent 70%);
   filter: blur(8px);
   animation: leaves-drift-1 25s ease-in-out infinite alternate;
 }
@@ -93,9 +93,9 @@ function onToggle() {
 /* 第二层：中等光斑，不同速度漂移 */
 .leaves-layer--2 {
   background-image:
-    radial-gradient(ellipse 25% 20% at 80% 20%, rgba(90, 130, 75, 0.3) 0%, transparent 65%),
-    radial-gradient(ellipse 20% 15% at 30% 70%, rgba(75, 115, 65, 0.25) 0%, transparent 65%),
-    radial-gradient(ellipse 18% 12% at 60% 40%, rgba(85, 125, 70, 0.2) 0%, transparent 65%);
+    radial-gradient(ellipse 25% 20% at 80% 20%, color-mix(in srgb, var(--status-ok) 30%, transparent) 0%, transparent 65%),
+    radial-gradient(ellipse 20% 15% at 30% 70%, color-mix(in srgb, var(--status-ok) 25%, transparent) 0%, transparent 65%),
+    radial-gradient(ellipse 18% 12% at 60% 40%, color-mix(in srgb, var(--status-ok) 20%, transparent) 0%, transparent 65%);
   filter: blur(6px);
   animation: leaves-drift-2 20s ease-in-out infinite alternate;
 }
@@ -103,8 +103,8 @@ function onToggle() {
 /* 第三层：小光斑，快速闪烁模拟风动 */
 .leaves-layer--3 {
   background-image:
-    radial-gradient(ellipse 15% 10% at 40% 50%, rgba(100, 140, 80, 0.25) 0%, transparent 60%),
-    radial-gradient(ellipse 12% 8% at 75% 35%, rgba(80, 120, 65, 0.2) 0%, transparent 60%);
+    radial-gradient(ellipse 15% 10% at 40% 50%, color-mix(in srgb, var(--status-ok) 25%, transparent) 0%, transparent 60%),
+    radial-gradient(ellipse 12% 8% at 75% 35%, color-mix(in srgb, var(--status-ok) 20%, transparent) 0%, transparent 60%);
   filter: blur(4px);
   animation: leaves-drift-3 15s ease-in-out infinite alternate;
 }
@@ -113,7 +113,7 @@ function onToggle() {
 .leaves-compensation {
   position: absolute;
   inset: 0;
-  background: rgba(255, 253, 247, 0.12);
+  background: color-mix(in srgb, var(--bg-raised) 12%, transparent);
   mix-blend-mode: normal;
   pointer-events: none;
 }
@@ -129,7 +129,7 @@ function onToggle() {
   height: 28px;
   border-radius: 50%;
   border: 1px solid var(--border, rgba(0, 0, 0, 0.12));
-  background: var(--bg-card, rgba(255, 255, 255, 0.7));
+  background: var(--bg-card, color-mix(in srgb, var(--text-inverse) 70%, transparent));
   color: var(--text-secondary, #666);
   cursor: pointer;
   display: inline-flex;

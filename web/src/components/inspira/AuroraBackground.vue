@@ -27,7 +27,7 @@ const props = withDefaults(defineProps<{
   opacity: 0.15,
   speed: 1,
   auroraCount: 3,
-  colors: () => ['#3b82f6', '#8b5cf6', '#06b6d4'],
+  colors: () => ['var(--status-info)', '#8b5cf6', '#06b6d4'],
 })
 
 const auroraStyle = computed(() => ({

@@ -75,7 +75,7 @@ const displayOutput = computed(() => {
 
 .bubble-error {
   font-size: 13px;
-  color: #b91c1c;
+  color: var(--status-error);
   padding: 4px 0;
 }
 

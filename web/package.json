@@ -1,7 +1,7 @@
 {
   "name": "maxmahere-web",
   "private": true,
-  "version": "2.6.9",
+  "version": "2.6.11",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "lint": "eslint src/ --max-warnings=60",
     "lint:fix": "eslint src/ --fix",
+    "lint:colors": "node scripts/check-hardcoded-colors.mjs",
     "format": "prettier --write src/",
     "format:check": "prettier --check src/"
   },

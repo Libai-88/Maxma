@@ -19,5 +19,21 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Run Bun tests
-        run: bun test
+      - name: Run Bun tests with coverage
+        run: bun test --coverage
+
+      - name: Enforce core module coverage threshold (>= 65% lines)
+        shell: bash
+        run: |
+          # 核心逻辑模块（事件映射/审批/MCP解析/模型/状态）必须 ≥65% 行覆盖。
+          # session-bridge.ts 是 RPC 分发薄壳，不设硬门槛。
+          CORE="events\.ts|approval\.ts|mcp\.ts|model\.ts|state\.ts"
+          FAIL=0
+          while read -r FILE COV; do
+            echo "$FILE line coverage: ${COV}%"
+            if [ -z "$COV" ] || [ "$COV" -lt 65 ]; then
+              echo "::error::$FILE coverage ${COV}% is below the 65% threshold"
+              FAIL=1
+            fi
+          done < <(bun test --coverage 2>&1 | grep -E "$CORE" | grep -v "tests\\" | awk -F'|' '{gsub(/ /,"",$1); gsub(/ /,"",$3); print $1, $3}')
+          exit $FAIL

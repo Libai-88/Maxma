@@ -23,162 +23,54 @@ import { TASK_SUBAGENT_LIFECYCLE_CHANNEL } from "@oh-my-pi/pi-coding-agent/task"
 import type {
   AgentSession,
   ExtensionUIContext,
-  ExtensionUIDialogOptions,
-  ExtensionUISelectItem,
 } from "@oh-my-pi/pi-coding-agent";
-import { getBundledModel } from "@oh-my-pi/pi-catalog/models";
 import type { Model } from "@oh-my-pi/pi-ai";
 import { registerCustomTools } from "./tools/index";
-import type { MaxmaEvent } from "./rpc-types";
+import type { RpcRequest } from "./rpc-types";
+import type { EventBus, LocalCreateSessionOptions, AuthStorage, SettingPath } from "./omp-compat";
+import { noopExtensionActions, noopExtensionContextActions, setSetting, loadPluginManager, loadDiscoveredSkills, type OmpSkillEntry, type OmpPluginInfo } from "./omp-compat";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { bridgeState, type DoneGuard, type PendingApproval, type SessionRecord } from "./state";
+import { send, sendError, sendEvent, type BridgeIo } from "./rpc";
+import { createConfiguredMcp, filterMcpTools, wireMcpToolsChanged, mcpReloadUnsupportedResponse, loadConfiguredMcp, mcpConfigPath } from "./mcp";
+import { parseModel } from "./model";
+import { mapPiEventToMaxma, createDoneGuard, orchestratePrompt, handleCancelGuard, computeUndoTurnCut, compactMessages, resolveUserResponse } from "./events";
+import { createApprovalUiContext, parseApprovalTitle } from "./approval";
+
+// Re-export public API so existing imports (tests, rpc_client) keep working.
+export {
+  loadConfiguredMcp,
+  filterMcpTools,
+  createConfiguredMcp,
+  mcpReloadUnsupportedResponse,
+  parseModel,
+  mapPiEventToMaxma,
+  createDoneGuard,
+  orchestratePrompt,
+  handleCancelGuard,
+  computeUndoTurnCut,
+  compactMessages,
+  resolveUserResponse,
+  parseApprovalTitle,
+  createApprovalUiContext,
+  bridgeState,
+  type BridgeIo,
+  type DoneGuard,
+  type PendingApproval,
+  type SessionRecord,
+};
+export type { MaxmaEvent } from "./rpc-types";
 
 // ---------------------------------------------------------------------------
-// Types
+// Session orchestration
 // ---------------------------------------------------------------------------
-
-interface SessionRecord {
-  session: AgentSession;
-  unsubscribe: () => void;
-  unsubLifecycle?: () => void;  // Phase 3.4: EventBus sub-agent lifecycle subscription
-  eventBus?: import("@oh-my-pi/pi-coding-agent/src/utils/event-bus").EventBus;  // Phase 3.4: Shared EventBus
-  promptQueue: Promise<void>;  // serializes concurrent prompt calls
-  currentGuard: DoneGuard | null;  // active per-prompt done sentinel
-  mcpManager?: MCPManager;
-  mcpConfigs?: Record<string, MCPServerConfig>;
-  mcpAllowBlock?: Record<string, { allow?: string[]; block?: string[] }>;
-  mcpToolNames?: string[];
-  settings?: Settings;
-}
-
-type MaxmaMcpEntry = Record<string, unknown> & { server_id?: string; transport?: string };
-
-function mcpConfigPath(): string {
-  return path.resolve(process.env.MAXMA_PROJECT_ROOT ?? process.cwd(), "api/data/mcp_servers.yaml");
-}
-
-/** Convert Maxma's persisted list into OMP's actual MCPManager input. */
-export function loadConfiguredMcp(): {
-  configs: Record<string, MCPServerConfig>;
-  allowBlock: Record<string, { allow?: string[]; block?: string[] }>;
-  unsupported: Record<string, string>;
-} | undefined {
-  const configPath = mcpConfigPath();
-  if (!fs.existsSync(configPath)) return undefined;
-  const bunRuntime = globalThis as typeof globalThis & { Bun: { YAML: { parse(text: string): unknown } } };
-  let parsed: Record<string, unknown>;
-  try {
-    const value = bunRuntime.Bun.YAML.parse(fs.readFileSync(configPath, "utf8"));
-    if (!value || typeof value !== "object" || Array.isArray(value)) {
-      console.error("[mcp] configuration root must be an object; ignoring configuration");
-      return undefined;
-    }
-    parsed = value as Record<string, unknown>;
-  } catch {
-    // Parser messages can echo inline secrets, so log only a stable diagnostic.
-    console.error("[mcp] invalid YAML configuration; ignoring configuration");
-    return undefined;
-  }
-  const entries = Array.isArray(parsed.mcp_servers) ? parsed.mcp_servers : [];
-  const configs: Record<string, MCPServerConfig> = {};
-  const allowBlock: Record<string, { allow?: string[]; block?: string[] }> = {};
-  const unsupported: Record<string, string> = {};
-  for (const [index, rawEntry] of entries.entries()) {
-    if (!rawEntry || typeof rawEntry !== "object" || Array.isArray(rawEntry)) {
-      console.error(`[mcp] ignoring invalid configuration entry at index ${index}`);
-      continue;
-    }
-    const entry = rawEntry as MaxmaMcpEntry;
-    const name = typeof entry.server_id === "string" ? entry.server_id : undefined;
-    const transport = entry.transport;
-    if (!name || entry.enabled === false || typeof transport !== "string") continue;
-    const config: Record<string, unknown> = { enabled: true };
-    if (transport === "stdio") {
-      config.type = "stdio";
-      for (const key of ["command", "args", "env", "cwd", "timeout"]) if (key in entry) config[key] = entry[key];
-    } else if (transport === "sse" || transport === "streamable_http") {
-      config.type = transport === "streamable_http" ? "http" : transport;
-      for (const key of ["url", "headers", "timeout"]) if (key in entry) config[key] = entry[key];
-    } else if (transport === "websocket") {
-      // Keep the configured server visible in diagnostics, but never hand an
-      // OMP-incompatible type to MCPManager.connectServers.
-      unsupported[name] = "OMP SDK does not support websocket MCP transport";
-      continue;
-    } else {
-      unsupported[name] = `Unsupported MCP transport: ${transport}`;
-      continue;
-    }
-    const allowedTools = entry.allowed_tools ?? entry.allow;
-    const blockedTools = entry.blocked_tools ?? entry.block;
-    if (allowedTools !== undefined || blockedTools !== undefined) {
-      allowBlock[name] = {
-        allow: Array.isArray(allowedTools) ? allowedTools as string[] : undefined,
-        block: Array.isArray(blockedTools) ? blockedTools as string[] : undefined,
-      };
-      // OMP has no allow/block config fields; retain them locally for tool filtering.
-    }
-    if ("tls_verify" in entry) unsupported[name] ??= "OMP SDK does not expose tls_verify for MCP transports";
-    if ("sse_read_timeout" in entry) unsupported[name] ??= "OMP SDK does not expose sse_read_timeout";
-    configs[name] = config as unknown as MCPServerConfig;
-  }
-  if (Object.keys(configs).length === 0 && Object.keys(unsupported).length === 0) return undefined;
-  return { configs, allowBlock, unsupported };
-}
-
-export function filterMcpTools(
-  tools: any[],
-  allowBlock: Record<string, { allow?: string[]; block?: string[] }>,
-  requestedToolNames?: string[],
-): any[] {
-  const requested = requestedToolNames === undefined ? undefined : new Set(requestedToolNames);
-  return tools.filter((tool) => {
-    const server = tool.mcpServerName as string | undefined;
-    // requestedToolNames 是内置工具名列表，不应用于过滤 MCP 工具
-    // MCP 工具名称（如 fetch/puppeteer_navigate）与内置工具名不匹配，
-    // 用同一列表过滤会排掉所有 MCP 工具 → B-014
-    if (!server && requested && !requested.has(String(tool.name))) {
-      return false;
-    }
-    const rules = server ? allowBlock[server] : undefined;
-    if (!rules) return true;
-    const toolName = String(tool.mcpToolName ?? tool.name ?? "");
-    if (rules.allow && rules.allow.length > 0 && !rules.allow.includes(toolName)) return false;
-    return !rules.block?.includes(toolName);
-  });
-}
-
-export async function createConfiguredMcp(cwd: string, authStorage: any): Promise<{
-  manager: MCPManager;
-  configs: Record<string, MCPServerConfig>;
-  tools: any[];
-  allowBlock: Record<string, { allow?: string[]; block?: string[] }>;
-} | undefined> {
-  const loaded = loadConfiguredMcp();
-  if (!loaded) return undefined;
-  for (const [name, message] of Object.entries(loaded.unsupported)) {
-    console.error(`[mcp] ${name}: ${message}`);
-  }
-  // An unsupported-only file must retain the old session creation path.
-  if (Object.keys(loaded.configs).length === 0) return undefined;
-  const manager = new MCPManager(cwd);
-  manager.setAuthStorage(authStorage);
-  const sourcePath = mcpConfigPath();
-  const sources = Object.fromEntries(Object.keys(loaded.configs).map((name) => [name, {
-    provider: "maxma",
-    providerName: "Maxma MCP configuration",
-    path: sourcePath,
-    level: "project" as const,
-  }]));
-  const result = await manager.connectServers(loaded.configs, sources);
-  for (const [name, message] of result.errors) console.error(`[mcp] ${name}: ${message}`);
-  return { manager, configs: loaded.configs, allowBlock: loaded.allowBlock, tools: filterMcpTools(result.tools, loaded.allowBlock) };
-}
 
 export async function buildCreateSessionOptions(
   input: {
     model: Model;
     cwd: string;
-    authStorage: any;
+    authStorage: AuthStorage;
     systemPrompt?: string;
     appendSystemPrompt?: string;
     tools?: string[];
@@ -186,18 +78,20 @@ export async function buildCreateSessionOptions(
   },
   createMcp: typeof createConfiguredMcp = createConfiguredMcp,
 ): Promise<{
-  options: Record<string, unknown>;
+  options: LocalCreateSessionOptions;
   needsApproval: boolean;
   mcpManager?: MCPManager;
   mcpConfigs?: Record<string, MCPServerConfig>;
   mcpAllowBlock?: Record<string, { allow?: string[]; block?: string[] }>;
   mcpToolNames?: string[];
 }> {
-  const createOptions: Record<string, unknown> = {
+  // 集中断言：OMP 的 customTools 等字段类型精确，业务层不逐字段对齐，
+  // 升级 OMP 时若签名变化，只需在这里修一处。
+  const createOptions = {
     model: input.model,
     cwd: input.cwd,
     authStorage: input.authStorage,
-  };
+  } as unknown as LocalCreateSessionOptions;
   // systemPrompt 与 appendSystemPrompt 互斥：前者整体替换 OMP 原生 prompt，
   // 后者追加到原生 prompt 之后。两者同时传入时 OMP 会以 systemPrompt 整体替换。
   if (input.systemPrompt !== undefined) createOptions.systemPrompt = input.systemPrompt;
@@ -239,7 +133,7 @@ export async function buildCreateSessionOptions(
     try {
       const global = await ensureSettings();
       for (const p of globalPaths) {
-        try { const v = global.get(p as any); if (v !== undefined) globalOverrides[p] = v; } catch { /* skip */ }
+        try { const v = global.get(p as SettingPath); if (v !== undefined) globalOverrides[p] = v; } catch { /* skip */ }
       }
     } catch { /* global not available */ }
     createOptions.settings = Settings.isolated({
@@ -256,11 +150,14 @@ export async function buildCreateSessionOptions(
   const configuredMcp = await createMcp(input.cwd, input.authStorage);
   if (configuredMcp) {
     createOptions.mcpManager = configuredMcp.manager;
-    const existingTools = Array.isArray(createOptions.customTools) ? createOptions.customTools as any[] : [];
+    // OMP 的 customTools 字段是 ToolDefinition/CustomTool[]，此处把 MCP 工具
+    // 并入同一列表，类型在协议边界集中断言。
+    type CustomTools = NonNullable<LocalCreateSessionOptions["customTools"]>;
+    const existingTools = Array.isArray(createOptions.customTools) ? createOptions.customTools as unknown as CustomTools : [];
     createOptions.customTools = [
       ...existingTools,
       ...filterMcpTools(configuredMcp.tools, configuredMcp.allowBlock, input.tools),
-    ];
+    ] as unknown as CustomTools;
   }
 
   return {
@@ -274,36 +171,7 @@ export async function buildCreateSessionOptions(
 }
 
 /** OMP skips this callback when the manager is supplied by the caller. */
-export function wireMcpToolsChanged(
-  session: AgentSession,
-  manager: MCPManager,
-  allowBlock: Record<string, { allow?: string[]; block?: string[] }>,
-  requestedToolNames?: string[],
-): void {
-  manager.setOnToolsChanged((tools) => {
-    void session.refreshMCPTools(filterMcpTools(tools, allowBlock, requestedToolNames)).catch((error) => {
-      console.error(`[mcp] failed to refresh session tools: ${error instanceof Error ? error.message : "unknown error"}`);
-    });
-  });
-}
-
-export function mcpReloadUnsupportedResponse(): {
-  status: "unsupported";
-  code: "mcp_reload_requires_session_rebuild";
-  message: string;
-} {
-  return {
-    status: "unsupported",
-    code: "mcp_reload_requires_session_rebuild",
-    message: "MCP configuration reload is not exposed through the Maxma API; rebuild the session",
-  };
-}
-
-// ---------------------------------------------------------------------------
-// State
-// ---------------------------------------------------------------------------
-
-const sessions = new Map<string, SessionRecord>();
+const sessions = bridgeState.sessions;
 const rl = createInterface({ input: process.stdin });
 let authStoragePromise: ReturnType<typeof discoverAuthStorage> | null = null;
 let settingsInitPromise: Promise<Settings> | null = null;
@@ -324,17 +192,9 @@ async function ensureSettings(): Promise<Settings> {
 // ── Tool approval state ───────────────────────────────────
 // Pending approval promises keyed by interaction_id. Resolved by the
 // user_response RPC handler when the frontend replies.
-interface PendingApproval {
-  resolve: (choice: string | undefined) => void;
-  reject: (err: Error) => void;
-  timer: ReturnType<typeof setTimeout>;
-}
-const pendingApprovals = new Map<string, PendingApproval>();
+const pendingApprovals = bridgeState.pendingApprovals;
 
-const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000; // 5 min → auto-deny
-
-/** Track tool elapsed: toolCallId → start timestamp (ms) */
-const _toolStartTimestamps = new Map<string, number>();
+const _toolStartTimestamps = bridgeState.toolStartTimestamps;
 
 async function getSharedAuthStorage() {
   if (!authStoragePromise) authStoragePromise = discoverAuthStorage();
@@ -345,518 +205,12 @@ async function getSharedAuthStorage() {
 // JSON-RPC helpers
 // ---------------------------------------------------------------------------
 
-function send(id: number | null, result: unknown) {
-  process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id, result }) + "\n");
-}
-
-function sendError(id: number | null, message: string) {
-  process.stdout.write(
-    JSON.stringify({ jsonrpc: "2.0", id, error: { message } }) + "\n",
-  );
-}
-
-function sendEvent(sessionId: string, event: Record<string, unknown>) {
-  process.stdout.write(
-    JSON.stringify({
-      jsonrpc: "2.0",
-      method: "event",
-      params: { session_id: sessionId, event },
-    }) + "\n",
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Model resolution
-// ---------------------------------------------------------------------------
-
-/**
- * Parse a model string like "openai/gpt-4o" into a proper Model object.
- *
- * Strategy:
- *   A — Try `getBundledModel(provider, modelId)` from the bundled catalog.
- *   B — Fall back to constructing a minimal Model object manually.
- */
-function parseModel(
-  modelStr: string,
-  options?: { provider?: string; baseUrl?: string; providerType?: string; contextWindow?: number },
-): Model {
-  const slashIdx = modelStr.indexOf("/");
-  const parsedProvider = slashIdx >= 0 ? modelStr.slice(0, slashIdx) : "";
-  const parsedModelId = slashIdx >= 0 ? modelStr.slice(slashIdx + 1) : modelStr;
-  const provider = options?.provider ?? parsedProvider;
-  const modelId = options?.provider ? modelStr : parsedModelId;
-
-  // Option A: bundled catalog lookup
-  if (provider) {
-    try {
-      const bundled = getBundledModel(provider as any, modelId);
-      if (bundled) return bundled;
-    } catch {
-      // Fall through to manual construction
-    }
-  }
-
-  // Option B: manual fallback (minimal Model object from env vars)
-  const baseUrl = options?.baseUrl || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
-  return {
-    id: modelId,
-    name: modelId,
-    api: "openai-completions" as const,
-    provider,
-    baseUrl,
-    reasoning: false,
-    input: ["text"] as ("text" | "image")[],
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: options?.contextWindow ?? 128000,
-    maxTokens: 4096,
-    compat: {
-      supportsDeveloperRole: true,
-      supportsStrictMode: false,
-      supportsReasoningEffort: false,
-      reasoningEffortMap: {},
-      supportsReasoningParams: false,
-      thinkingFormat: "openai" as const,
-      reasoningDisableMode: "omit" as const,
-      omitReasoningEffort: false,
-      includeEncryptedReasoning: false,
-      filterReasoningHistory: false,
-      disableReasoningOnForcedToolChoice: false,
-      disableReasoningOnToolChoice: false,
-      supportsToolChoice: true,
-      supportsForcedToolChoice: true,
-      supportsNamedToolChoice: true,
-      reasoningContentField: undefined,
-      requiresReasoningContentForToolCalls: false,
-      requiresReasoningContentForAllAssistantTurns: false,
-      allowsSyntheticReasoningContentForToolCalls: false,
-      replayReasoningContent: false,
-      qwenPreserveThinking: false,
-      requiresThinkingAsText: false,
-      requiresMistralToolIds: false,
-      requiresToolResultName: false,
-      requiresAssistantAfterToolResult: false,
-      requiresAssistantContentForToolCalls: false,
-      stripDeepseekSpecialTokens: false,
-      streamMarkupHealingPattern: undefined,
-      reasoningDeltasMayBeCumulative: false,
-      emptyLengthFinishIsContextError: false,
-      usesOpenAIToolCallIdLimit: false,
-      promptCacheSessionHeader: undefined,
-      isOpenRouterHost: false,
-      alwaysSendMaxTokens: true,
-      enableGeminiThinkingLoopGuard: undefined,
-      openRouterRouting: undefined,
-      wireModelIdMode: "raw" as const,
-      supportsStore: false,
-      supportsMultipleSystemMessages: true,
-      maxTokensField: "max_tokens" as const,
-      supportsUsageInStreaming: true,
-      cacheControlFormat: undefined,
-      supportsLongPromptCacheRetention: false,
-      supportsImageDetailOriginal: false,
-      strictResponsesPairing: false,
-      toolStrictMode: "none" as const,
-      streamIdleTimeoutMs: undefined,
-      vercelGatewayRouting: undefined,
-      extraBody: undefined,
-    },
-  } as Model;
-}
-
-// ---------------------------------------------------------------------------
-// Pi event → Maxma event mapping
-// ---------------------------------------------------------------------------
-
-/** Shape of OMP AgentEvent fields consumed by mapPiEventToMaxma. */
-interface OmpToolEvent {
-  type: string;
-  toolName?: string;
-  toolCallId?: string;
-  args?: Record<string, unknown>;
-  partialResult?: unknown;
-  result?: unknown;
-  isError?: boolean;
-  message?: { content?: string | Array<{ type: string; text?: string }> };
-  intent?: string;
-}
-
-interface OmpAssistantMessageEvent {
-  type: string;
-  delta?: string;
-  content?: string;
-  error?: unknown;
-}
-
-export function mapPiEventToMaxma(
-  piEvent: Record<string, unknown>,
-  guard?: { done: boolean } | null,
-): Record<string, unknown> | null {
-  const type = piEvent.type as string;
-
-  if (type === "message_update") {
-    const assistantEvent = piEvent.assistantMessageEvent as OmpAssistantMessageEvent | undefined;
-    if (!assistantEvent) return null;
-
-    const aeType = assistantEvent.type;
-
-    if (aeType === "text_delta") {
-      return {
-        type: "token",
-        payload: { token: assistantEvent.delta ?? "" },
-      };
-    }
-
-    // thinking_start / thinking_delta / thinking_end — map reasoning
-    // content so the frontend can render ThinkingBlocks.
-    // Follow the same text_delta → token pattern for the delta text.
-
-    if (aeType === "thinking_start") {
-      return {
-        type: "thinking_start",
-        payload: {},
-      };
-    }
-
-    if (aeType === "thinking_delta") {
-      return {
-        type: "thinking_delta",
-        payload: { delta: assistantEvent.delta ?? "" },
-      };
-    }
-
-    if (aeType === "thinking_end") {
-      return {
-        type: "thinking_end",
-        payload: { content: assistantEvent.content ?? "" },
-      };
-    }
-
-    // NOTE: toolcall_start/toolcall_end from message_update are pre-execution
-    // events (LLM deciding to call a tool). The actual execution data comes
-    // from tool_execution_start/tool_execution_end below, which carry full
-    // toolName and result data. Skip early message_update tool events to avoid
-    // duplicate/empty-named events.
-
-    if (aeType === "error") {
-      const errObj = assistantEvent.error as { content?: Array<{ text?: string }> } | undefined;
-      const errMsg =
-        errObj?.content?.[0]?.text ??
-        "Unknown agent error";
-      return {
-        type: "error",
-        payload: { code: "AGENT_ERROR", message: errMsg },
-      };
-    }
-
-    return null;
-  }
-
-  if (type === "tool_execution_start") {
-    const e = piEvent as unknown as OmpToolEvent;
-    if (e.toolCallId) _toolStartTimestamps.set(e.toolCallId, Date.now());
-    return {
-      type: "tool_start",
-      payload: {
-        tool_name: e.toolName ?? "",
-        input: JSON.stringify(e.args ?? {}),
-      },
-    };
-  }
-
-  if (type === "tool_execution_update") {
-    const e = piEvent as unknown as OmpToolEvent;
-    return {
-      type: "tool_update",
-      payload: {
-        tool_name: e.toolName ?? "",
-        partial_result: typeof e.partialResult === "string"
-          ? e.partialResult
-          : JSON.stringify(e.partialResult ?? ""),
-      },
-    };
-  }
-
-  if (type === "tool_execution_end") {
-    const e = piEvent as unknown as OmpToolEvent;
-    const startMs = e.toolCallId ? _toolStartTimestamps.get(e.toolCallId) : undefined;
-    if (e.toolCallId) _toolStartTimestamps.delete(e.toolCallId);
-    const elapsed = startMs !== undefined ? Math.round((Date.now() - startMs) / 1000) : 0;
-    const isError = e.isError === true;
-    if (isError) {
-      return {
-        type: "tool_error",
-        payload: {
-          tool_name: e.toolName ?? "",
-          error: JSON.stringify(e.result ?? {}),
-          elapsed,
-        },
-      };
-    }
-    return {
-      type: "tool_end",
-      payload: {
-        tool_name: e.toolName ?? "",
-        output: JSON.stringify(e.result ?? {}),
-        elapsed,
-      },
-    };
-  }
-
-  if (type === "message_end") {
-    const msg = (piEvent as unknown as OmpToolEvent).message;
-    let content = "";
-    if (msg?.content) {
-      if (typeof msg.content === "string") {
-        content = msg.content;
-      } else if (Array.isArray(msg.content)) {
-        content = msg.content
-          .filter((b): b is { type: string; text: string } => b?.type === "text")
-          .map(b => b.text)
-          .join("");
-      }
-    }
-    return {
-      type: "answer",
-      payload: { content },
-    };
-  }
-
-  if (type === "auto_compaction_end") {
-    const e = piEvent as unknown as OmpAutoCompactionEndEvent;
-    const result = e.result;
-    const summaryPreview =
-      result?.shortSummary ?? result?.summary ?? "";
-    return {
-      type: "context_compressed",
-      payload: {
-        summary_preview: summaryPreview.slice(0, 200),
-        before_tokens: result?.tokensBefore,
-        action: e.action ?? "context-full",
-        skipped: e.skipped ?? false,
-        aborted: e.aborted ?? false,
-        will_retry: e.willRetry ?? false,
-        error_message: e.errorMessage,
-      },
-    };
-  }
-
-  if (type === "auto_compaction_start") {
-    const e = piEvent as unknown as OmpAutoCompactionStartEvent;
-    const reason = e.reason ?? "threshold";
-    const action = e.action ?? "context-full";
-    return {
-      type: "context_compressing",
-      payload: {
-        reason: ["threshold", "overflow", "idle", "incomplete"].includes(reason)
-          ? (reason as "threshold" | "overflow" | "idle" | "incomplete")
-          : "threshold",
-        action: ["context-full", "handoff", "shake", "snapcompact"].includes(action)
-          ? (action as "context-full" | "handoff" | "shake" | "snapcompact")
-          : "context-full",
-      },
-    };
-  }
-
-  if (type === "agent_end") {
-    if (guard) guard.done = true;
-    return { type: "done", payload: {} };
-  }
-
-  // OMP auto-retry events
-  if (type === "auto_retry_start") {
-    const e = piEvent as unknown as OmpAutoRetryEvent;
-    return {
-      type: "retry_start",
-      payload: {
-        attempt: e.attempt ?? 0,
-        max_attempts: e.maxAttempts ?? 0,
-        delay_ms: e.delayMs ?? 0,
-        error_message: e.errorMessage ?? "",
-      },
-    };
-  }
-
-  if (type === "auto_retry_end") {
-    const e = piEvent as unknown as OmpAutoRetryEvent;
-    return {
-      type: "retry_end",
-      payload: {
-        success: e.success ?? false,
-        attempt: e.attempt ?? 0,
-        final_error: e.finalError,
-      },
-    };
-  }
-
-  // OMP todo reminder
-  if (type === "todo_reminder") {
-    const e = piEvent as unknown as OmpTodoReminderEvent;
-    return {
-      type: "todo_reminder",
-      payload: {
-        todos: (e.todos ?? []).map(t => ({
-          content: t?.content ?? "",
-          status: t?.status ?? "pending",
-        })),
-        attempt: e.attempt ?? 0,
-        max_attempts: e.maxAttempts ?? 0,
-      },
-    };
-  }
-
-  // OMP IRC multi-agent message
-  if (type === "irc_message") {
-    const e = piEvent as unknown as OmpIrcMessageEvent;
-    const msg = e.message;
-    if (!msg) return null;
-    return {
-      type: "irc_message",
-      payload: {
-        from: msg.from ?? "",
-        to: msg.to ?? "",
-        body: msg.body ?? "",
-        id: msg.id ?? "",
-      },
-    };
-  }
-
-  // OMP notice
-  if (type === "notice") {
-    const e = piEvent as unknown as OmpNoticeEvent;
-    return {
-      type: "notice",
-      payload: {
-        level: e.level ?? "info",
-        message: e.message ?? "",
-        source: e.source,
-      },
-    };
-  }
-
-  // Sub-session creation (call_sub_agent)
-  if (type === "sub_session_created") {
-    const e = piEvent as Record<string, unknown>;
-    return {
-      type: "sub_session_created",
-      payload: {
-        sub_session_id: String(e.sub_session_id ?? ""),
-        parent_session_id: String(e.parent_session_id ?? ""),
-        task: String(e.task ?? ""),
-        name: String(e.name ?? ""),
-      },
-    };
-  }
-
-  // Deferred sub-agent submitted
-  if (type === "deferred_subagent_submitted") {
-    const e = piEvent as Record<string, unknown>;
-    return {
-      type: "deferred_subagent_submitted",
-      payload: {
-        run_id: String(e.run_id ?? ""),
-      },
-    };
-  }
-
-  return null;
-}
-
-// ---------------------------------------------------------------------------
-// Per-prompt done guard + orchestration
-// ---------------------------------------------------------------------------
-
-export interface DoneGuard {
-  done: boolean;
-}
-
-export function createDoneGuard(): DoneGuard {
-  return { done: false };
-}
-
-/**
- * Run session.prompt(message) with a guaranteed done-event emission.
- *
- * Semantics:
- *   - If the subscriber fires `agent_end` during the call, it marks `guard.done`
- *     and emits `done` itself; the finally block then becomes a no-op.
- *   - If prompt() throws, emit a `PROMPT_ERROR` event (unless done was already
- *     emitted), then emit `done` via the finally block.
- *   - If the prompt exceeds `timeoutMs`, emit `PROMPT_TIMEOUT` error + `done`
- *     and abort the agent.
- *
- * The `sink` callback is invoked for every emitted event and is responsible
- * for the session_id envelope (callers bind it).
- */
-export async function orchestratePrompt(
-  session: AgentSession,
-  message: string,
-  guard: DoneGuard,
-  sink: (event: Record<string, unknown>) => void,
-  timeoutMs: number = 600_000,
-): Promise<void> {
-  const timeoutId = setTimeout(() => {
-    if (guard.done) return;
-    guard.done = true;
-    sink({
-      type: "error",
-      payload: { code: "PROMPT_TIMEOUT", message: `Prompt exceeded ${timeoutMs}ms limit` },
-    });
-    sink({ type: "done", payload: {} });
-    try {
-      session.agent.abort("Prompt timeout");
-    } catch {
-      // best-effort abort
-    }
-  }, timeoutMs);
-
-  try {
-    await session.prompt(message);
-  } catch (err) {
-    if (!guard.done) {
-      sink({
-        type: "error",
-        payload: { code: "PROMPT_ERROR", message: String(err) },
-      });
-    }
-  } finally {
-    clearTimeout(timeoutId);
-    if (!guard.done) {
-      guard.done = true;
-      sink({ type: "done", payload: {} });
-    }
-  }
-}
-
-/**
- * Resolve the cancel RPC against the currently-active prompt guard.
- *
- *   - guard active & not done   → mark done, emit `done` (prompt's finally becomes a no-op)
- *   - guard active & already done → no-op (agent_end / timeout already emitted done)
- *   - no guard (idle)           → emit `done` once for legacy compatibility
- *
- * The active prompt's try/finally would also emit `done` via the guard, but we
- * mark + emit here so cancel is resolved promptly even if the abort does not
- * propagate synchronously.
- */
-export function handleCancelGuard(
-  guard: DoneGuard | null,
-  sink: (event: Record<string, unknown>) => void,
-): void {
-  if (guard && guard.done) return;
-  if (guard) guard.done = true;
-  sink({ type: "done", payload: {} });
-}
-
-// ---------------------------------------------------------------------------
-// Main event subscriber
-// ---------------------------------------------------------------------------
-
 function subscribeSession(
   sessionId: string,
   session: AgentSession,
   record: SessionRecord,
 ): () => void {
-  return session.subscribe((event: any) => {
+  return session.subscribe((event: unknown) => {
     const mapped = mapPiEventToMaxma(event as Record<string, unknown>, record.currentGuard);
     if (mapped) {
       sendEvent(sessionId, mapped);
@@ -886,135 +240,6 @@ function subscribeSession(
  *
  * Returns extracted tool_input object and a risk_level estimate.
  */
-function parseApprovalTitle(title: string): {
-  toolName: string;
-  toolInput: Record<string, unknown> | undefined;
-  riskLevel: "low" | "medium" | "high";
-} {
-  const lines = title.split("\n");
-  const titleLine = lines[0] ?? "";
-  const toolName = titleLine.startsWith("Allow tool: ")
-    ? titleLine.slice("Allow tool: ".length)
-    : titleLine;
-
-  // Extract Args: block (everything after "Args:" until the next known section or end)
-  let toolInput: Record<string, unknown> | undefined;
-  const argsIndex = lines.findIndex((l) => l.trim() === "Args:");
-  if (argsIndex >= 0) {
-    const argsLines: string[] = [];
-    for (let i = argsIndex + 1; i < lines.length; i++) {
-      const trimmed = lines[i].trim();
-      if (trimmed === "" || trimmed.startsWith("Reason:") || trimmed.startsWith("Reasoning:")) break;
-      argsLines.push(lines[i]);
-    }
-    const argsText = argsLines.join("\n").trim();
-    if (argsText) {
-      try {
-        toolInput = JSON.parse(argsText) as Record<string, unknown>;
-      } catch {
-        toolInput = { raw: argsText };
-      }
-    }
-  }
-
-  // Extract Reason: block for risk level estimation
-  const reasonLine = lines.find((l) => l.trim().startsWith("Reason:") || l.trim().startsWith("Reasoning:"));
-  const reason = reasonLine?.replace(/^Reason(ing)?:\s*/i, "").toLowerCase() ?? "";
-
-  // Risk level estimation based on reason content
-  const highRiskKeywords = ["delete", "remove", "rm", "destroy", "dangerous", "overwrite", "force", "reset"];
-  const mediumRiskKeywords = ["write", "edit", "modify", "update", "create", "change", "add", "install", "execute", "run", "bash", "exec"];
-  const hasHigh = highRiskKeywords.some((k) => reason.includes(k));
-  const hasMedium = mediumRiskKeywords.some((k) => reason.includes(k));
-  // Also check tool name for risk signals
-  const toolNameLower = toolName.toLowerCase();
-  const toolHasHigh = ["delete", "remove", "rm", "destroy"].some((k) => toolNameLower.includes(k));
-  const toolHasMedium = ["write", "edit", "modify", "bash", "exec", "run", "create"].some((k) => toolNameLower.includes(k));
-
-  const riskLevel: "low" | "medium" | "high" =
-    hasHigh || toolHasHigh ? "high" : hasMedium || toolHasMedium ? "medium" : "low";
-
-  return { toolName, toolInput, riskLevel };
-}
-
-function createApprovalUiContext(sessionId: string): ExtensionUIContext {
-  const ctx: ExtensionUIContext = {
-    select(
-      title: string,
-      _options: ExtensionUISelectItem[],
-      _dialogOptions?: ExtensionUIDialogOptions,
-    ): Promise<string | undefined> {
-      return new Promise<string | undefined>((resolve, reject) => {
-        const interactionId = randomUUID();
-        const { toolName, toolInput, riskLevel } = parseApprovalTitle(title);
-
-        const timer = setTimeout(() => {
-          if (pendingApprovals.has(interactionId)) {
-            pendingApprovals.delete(interactionId);
-            // Timeout → deny (resolve undefined so the wrapper treats as "Deny").
-            resolve(undefined);
-          }
-        }, APPROVAL_TIMEOUT_MS);
-
-        pendingApprovals.set(interactionId, {
-          resolve: (choice) => {
-            clearTimeout(timer);
-            resolve(choice);
-          },
-          reject: (err) => {
-            clearTimeout(timer);
-            reject(err);
-          },
-          timer,
-        });
-
-        const event: MaxmaEvent = {
-          type: "ask_user",
-          payload: {
-            tool_name: toolName,
-            question: title,
-            mode: "approval",
-            options: ["Approve", "Deny"],
-            interaction_id: interactionId,
-            detail: title,
-            risk_level: riskLevel,
-            tool_input: toolInput,
-          },
-        };
-        sendEvent(sessionId, event);
-      });
-    },
-    confirm: (_title: string, _message: string) => Promise.resolve(false),
-    input: (_title: string, _placeholder?: string) => Promise.resolve(undefined),
-    notify: () => {},
-    onTerminalInput: () => () => {},
-    setStatus: () => {},
-    setWorkingMessage: () => {},
-    setWidget: () => {},
-    setFooter: () => {},
-    setHeader: () => {},
-    setTitle: () => {},
-    custom: <T,>() => Promise.resolve(undefined as unknown as T),
-    setEditorText: () => {},
-    pasteToEditor: () => {},
-    getEditorText: () => "",
-    editor: () => Promise.resolve(undefined),
-    addAutocompleteProvider: () => {},
-    setEditorComponent: () => {},
-    theme: {} as any,
-    getAllThemes: () => Promise.resolve([]),
-    getTheme: () => Promise.resolve(undefined),
-    setTheme: () => Promise.resolve({ success: false, error: "not supported" }),
-    getToolsExpanded: () => false,
-    setToolsExpanded: () => {},
-  };
-  return ctx;
-}
-
-// ---------------------------------------------------------------------------
-// RPC handler
-// ---------------------------------------------------------------------------
-
 async function shutdown() {
   for (const [_sid, record] of sessions) {
     try {
@@ -1031,26 +256,34 @@ async function shutdown() {
   process.exit(0);
 }
 
-// bun build --compile 下 import.meta.main 恒为 false(入口被 oh-my-pi 模块图间接引用)。
-// 开发模式(bun run)仍以 import.meta.main 判定;编译模式由 MAXMA_SIDECAR_COMPILED 注入。
-if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
-  rl.on("line", async (line: string) => {
-    let req: any;
-    try {
-      req = JSON.parse(line);
-    } catch {
-      sendError(null, "Parse error");
-      return;
-    }
+// ---------------------------------------------------------------------------
+// RPC handler (extracted for testability)
+// ---------------------------------------------------------------------------
 
-    const { method, params, id } = req;
+export const defaultIo: BridgeIo = {
+  send,
+  sendError,
+  sendEvent,
+  getSharedAuthStorage: () => getSharedAuthStorage(),
+  ensureSettings: () => ensureSettings(),
+};
+
+export async function handleRpcRequest(req: RpcRequest, io: BridgeIo = defaultIo): Promise<void> {
+  const { method, id } = req;
+  // JSON-RPC 协议边界的参数是运行时动态的（未知形状），在此放宽一次类型。
+  const params = (req.params ?? {}) as Record<string, any>;
+  // 局部别名：handler 体内原有 send/sendError/sendEvent 引用无需改动，
+  // 测试时传入自定义 io 即可接管输出。
+  const send = io.send;
+  const sendError = io.sendError;
+  const sendEvent = io.sendEvent;
 
     try {
       if (method === "create_session") {
         const modelStr: string = params?.model ?? "openai/gpt-4o";
         const provider: string | undefined = params?.provider || undefined;
         const apiKey: string | undefined = params?.api_key || undefined;
-        const authStorage = await getSharedAuthStorage();
+        const authStorage = await io.getSharedAuthStorage();
         if (provider && apiKey) authStorage.setRuntimeApiKey(provider, apiKey);
         const model = parseModel(modelStr, {
           provider,
@@ -1077,9 +310,9 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
         const sessionId = randomUUID();
         let session: AgentSession;
         let setToolUIContext: (uiContext: ExtensionUIContext, hasUI: boolean) => void;
-        let eventBus: import("@oh-my-pi/pi-coding-agent/src/utils/event-bus").EventBus | undefined;
+        let eventBus: EventBus | undefined;
         try {
-          ({ session, setToolUIContext, eventBus } = await createAgentSession(createOptions as any));
+          ({ session, setToolUIContext, eventBus } = await (io.createAgentSession ?? createAgentSession)(createOptions));
         } catch (error) {
           await mcpManager?.disconnectAll().catch(() => {});
           throw error;
@@ -1095,31 +328,8 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
           const runner = session.extensionRunner;
           if (runner) {
             runner.initialize(
-              {
-                sendMessage: () => {},
-                sendUserMessage: () => {},
-                appendEntry: () => {},
-                setLabel: () => {},
-                getActiveTools: () => [],
-                getAllTools: () => [],
-                setActiveTools: () => {},
-                getCommands: () => [],
-                setModel: () => {},
-                getThinkingLevel: () => undefined,
-                setThinkingLevel: () => {},
-                getSessionName: () => undefined,
-                setSessionName: async () => {},
-              } as any,
-              {
-                getModel: () => undefined,
-                isIdle: () => true,
-                abort: () => {},
-                hasPendingMessages: () => false,
-                shutdown: () => {},
-                getContextUsage: () => undefined,
-                compact: async () => {},
-                getSystemPrompt: () => [],
-              } as any,
+              noopExtensionActions(),
+              noopExtensionContextActions(),
               undefined,
               approvalCtx,
             );
@@ -1145,7 +355,8 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
         // Phase 3.4: 通过 EventBus 订阅子 Agent 生命周期事件
         if (eventBus) {
           record.eventBus = eventBus;
-          record.unsubLifecycle = eventBus.on(TASK_SUBAGENT_LIFECYCLE_CHANNEL, (data: any) => {
+          record.unsubLifecycle = eventBus.on(TASK_SUBAGENT_LIFECYCLE_CHANNEL, (raw: unknown) => {
+            const data = raw as { id?: string; description?: string; task?: string; agent?: string };
             sendEvent(sessionId, {
               type: "sub_session_created",
               payload: {
@@ -1285,32 +496,15 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
         // BC-002: mirror compact's hasLeadingSystem preservation. A leading
         // system message must always survive an undo; replaceMessages([])
         // must never be called (silent state wipe).
-        const hasLeadingSystem = originalLen > 0 &&
-          (messages[0] as any)?.role === "system";
-        let turnsRemoved = 0;
-        let cutIndex = originalLen;
-        // Scan from end to start; every time we step past a `user` message
-        // we count one completed turn (the assistant reply that preceded it
-        // from the caller's perspective is the one we are removing).
-        for (let i = originalLen - 1; i >= 0; i--) {
-          const role = (messages[i] as any)?.role;
-          if (role === "user") {
-            turnsRemoved += 1;
-            cutIndex = i;
-            if (turnsRemoved >= steps) break;
-          }
-        }
+        const { cutIndex, turnsRemoved, canUndo } = computeUndoTurnCut(messages, steps);
         // No-op when (a) we couldn't find `steps` user turns to remove, or
         // (b) the cut would land at/before index 0 with no leading system
         // message to keep — both cases previously produced
         // replaceMessages([]), silently wiping all conversation state.
-        if (turnsRemoved < steps || (!hasLeadingSystem && cutIndex <= 0)) {
+        if (!canUndo) {
           send(id, { removed: 0, turns_removed: 0, detail: "no turns to undo" });
           return;
         }
-        // Defensive: when a leading system message exists, ensure it is
-        // preserved even if cutIndex would land on index 0.
-        if (hasLeadingSystem && cutIndex < 1) cutIndex = 1;
         const remaining = messages.slice(0, cutIndex);
         const removed = originalLen - remaining.length;
         try {
@@ -1338,13 +532,7 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
         // present), so we keep it regardless of `keepLast`.
         const messages = record.session.state.messages;
         const originalLen = messages.length;
-        const hasLeadingSystem = originalLen > 0 &&
-          (messages[0] as any)?.role === "system";
-        const head = hasLeadingSystem ? [messages[0]] : [];
-        const tailSource = hasLeadingSystem ? messages.slice(1) : messages;
-        const tail = tailSource.slice(-Math.max(0, keepLast));
-        const remaining = head.concat(tail);
-        const removed = originalLen - remaining.length;
+        const { remaining, removed } = compactMessages(messages, keepLast);
         if (removed > 0) {
           try {
             record.session.agent.replaceMessages(remaining);
@@ -1375,14 +563,14 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
         // A4: limit<=0 应返回空（探活语义）。slice(-0)===slice(0) 会返回全量，
         // 后端用 limit=0 探活时每次搬运整段历史，与零成本探活意图相悖。
         const sliced = limit <= 0 ? [] : messages.slice(-Math.min(limit, total));
-        const result = sliced.map((m: any) => {
+        const result = sliced.map((m: { role?: string; content?: unknown }) => {
           let content = "";
           if (typeof m.content === "string") {
             content = m.content;
           } else if (Array.isArray(m.content)) {
             content = m.content
-              .filter((b: any) => b?.type === "text")
-              .map((b: any) => b.text ?? "")
+              .filter((b: unknown): b is { type: string; text?: string } => (b as { type?: string })?.type === "text")
+              .map((b) => b.text ?? "")
               .join("");
           }
           return { role: m.role ?? "unknown", content };
@@ -1419,7 +607,7 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
           return;
         }
         try {
-          record.settings!.set("tools.approvalMode" as any, autoApprove ? "yolo" : "always-ask");
+          setSetting(record.settings!, "tools.approvalMode", autoApprove ? "yolo" : "always-ask");
           console.error(`[auto_approve] Session ${sessionId.slice(0, 8)} approvalMode set to ${autoApprove ? "yolo" : "always-ask"}`);
           send(id, { ok: true });
         } catch (err) {
@@ -1441,7 +629,7 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
           const planId: string = (params?.plan_id as string) ?? "";
           const modifiedPlan: string | undefined = params?.modified_plan as string | undefined;
           if (action === "approve") {
-            record.settings!.set("plan.enabled" as any, true);
+            setSetting(record.settings!, "plan.enabled", true);
             console.error(`[plan] Session ${sessionId.slice(0, 8)} plan approved (plan_id=${planId})`);
             // Inject approved plan context into the agent's next turn
             if (modifiedPlan) {
@@ -1508,7 +696,7 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
           // Create new MCP manager and connect
           const cwd = process.env.MAXMA_PROJECT_ROOT ?? process.cwd();
           const newManager = new MCPManager(cwd);
-          const authStorage = await getSharedAuthStorage();
+          const authStorage = await io.getSharedAuthStorage();
           newManager.setAuthStorage(authStorage);
           const sourcePath = mcpConfigPath();
           const sources = Object.fromEntries(Object.keys(loaded.configs).map((name) => [name, {
@@ -1523,7 +711,7 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
           }
           const filteredTools = filterMcpTools(result.tools, loaded.allowBlock, record.mcpToolNames);
           // Update session with new MCP tools
-          await record.session.refreshMCPTools(filteredTools);
+          await record.session.refreshMCPTools(filteredTools as unknown as Parameters<AgentSession["refreshMCPTools"]>[0]);
           // Wire tools changed callback
           wireMcpToolsChanged(record.session, newManager, loaded.allowBlock, record.mcpToolNames);
           // Update record
@@ -1580,11 +768,11 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
       if (method === "get_settings") {
         const targetSessionId: string | undefined = params?.session_id;
         const record = targetSessionId ? sessions.get(targetSessionId) : undefined;
-        const settings = record?.settings ?? await ensureSettings();
+        const settings = record?.settings ?? await io.ensureSettings();
         const paths: string[] = params?.paths ?? [];
         const result: Record<string, unknown> = {};
         for (const p of paths) {
-          try { result[p] = settings.get(p as any); } catch { /* skip invalid path */ }
+          try { result[p] = settings.get(p as SettingPath); } catch { /* skip invalid path */ }
         }
         send(id, { settings: result });
         return;
@@ -1593,7 +781,7 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
       if (method === "set_settings") {
         const targetSessionId: string | undefined = params?.session_id;
         const record = targetSessionId ? sessions.get(targetSessionId) : undefined;
-        const settings = record?.settings ?? await ensureSettings();
+        const settings = record?.settings ?? await io.ensureSettings();
         const settingPath: string = params?.path;
         const value: unknown = params?.value;
         if (!settingPath) {
@@ -1601,7 +789,7 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
           return;
         }
         try {
-          settings.set(settingPath as any, value as any);
+          setSetting(settings, settingPath, value);
           send(id, { ok: true });
         } catch (err) {
           sendError(id, `Failed to set setting: ${String(err)}`);
@@ -1619,7 +807,7 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
             for (const [name, cfg] of Object.entries(record.mcpConfigs)) {
               discovered.push({
                 name,
-                transport: (cfg as any).type ?? "unknown",
+                transport: (cfg as { type?: string }).type ?? "unknown",
                 tool_count: record.mcpToolNames?.length ?? 0,
                 status: "connected",
               });
@@ -1632,11 +820,8 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
 
       if (method === "get_discovered_skills") {
         try {
-          const { discoverSkills } = await import("@oh-my-pi/pi-coding-agent");
-          const result = await discoverSkills();
-          const skills = result.skills ?? [];
-          // Return minimal serializable info
-          send(id, skills.map((s: any) => ({
+          const skills = await loadDiscoveredSkills();
+          send(id, skills.map((s: OmpSkillEntry) => ({
             name: s.name ?? "unknown",
             description: s.description ?? "",
             source: s.source ?? "auto",
@@ -1651,7 +836,7 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
         try {
           const { discoverExtensions } = await import("@oh-my-pi/pi-coding-agent");
           const result = await discoverExtensions();
-          send(id, { loaded: (result as any).loaded ?? 0, extensions: [] });
+          send(id, { loaded: (result as { loaded?: number }).loaded ?? 0, extensions: [] });
         } catch {
           send(id, { loaded: 0, extensions: [] });
         }
@@ -1662,10 +847,9 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
 
       if (method === "list_plugins") {
         try {
-          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent/extensibility/plugins") as any;
-          const pm = new (PluginManager as any)();
+          const pm = await loadPluginManager();
           const list = await pm.list();
-          send(id, list.map((p: any) => ({
+          send(id, list.map((p: OmpPluginInfo) => ({
             name: p.name ?? "",
             version: p.version ?? "",
             description: p.description ?? "",
@@ -1673,7 +857,7 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
             features: p.features ?? [],
             homepage: p.homepage ?? "",
           })));
-        } catch (e: any) {
+        } catch {
           send(id, []);
         }
         return;
@@ -1683,12 +867,11 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
         try {
           const spec: string = params?.spec ?? "";
           if (!spec) { sendError(id, "Missing required parameter: spec"); return; }
-          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent/extensibility/plugins") as any;
-          const pm = new (PluginManager as any)();
+          const pm = await loadPluginManager();
           const result = await pm.install(spec);
           send(id, { ok: true, plugin: result ?? null });
-        } catch (e: any) {
-          sendError(id, `Install failed: ${e.message ?? String(e)}`);
+        } catch (e: unknown) {
+          sendError(id, `Install failed: ${(e as Error)?.message ?? String(e)}`);
         }
         return;
       }
@@ -1697,12 +880,11 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
         try {
           const name: string = params?.name ?? "";
           if (!name) { sendError(id, "Missing required parameter: name"); return; }
-          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent/extensibility/plugins") as any;
-          const pm = new (PluginManager as any)();
+          const pm = await loadPluginManager();
           await pm.uninstall(name);
           send(id, { ok: true });
-        } catch (e: any) {
-          sendError(id, `Uninstall failed: ${e.message ?? String(e)}`);
+        } catch (e: unknown) {
+          sendError(id, `Uninstall failed: ${(e as Error)?.message ?? String(e)}`);
         }
         return;
       }
@@ -1712,12 +894,11 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
           const name: string = params?.name ?? "";
           const enabled: boolean = params?.enabled !== false;
           if (!name) { sendError(id, "Missing required parameter: name"); return; }
-          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent/extensibility/plugins") as any;
-          const pm = new (PluginManager as any)();
+          const pm = await loadPluginManager();
           await pm.setEnabled(name, enabled);
           send(id, { ok: true });
-        } catch (e: any) {
-          sendError(id, `Failed to toggle plugin: ${e.message ?? String(e)}`);
+        } catch (e: unknown) {
+          sendError(id, `Failed to toggle plugin: ${(e as Error)?.message ?? String(e)}`);
         }
         return;
       }
@@ -1726,10 +907,9 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
         try {
           const name: string = params?.name ?? "";
           if (!name) { sendError(id, "Missing required parameter: name"); return; }
-          const { PluginManager } = await import("@oh-my-pi/pi-coding-agent/extensibility/plugins") as any;
-          const pm = new (PluginManager as any)();
+          const pm = await loadPluginManager();
           const list = await pm.list();
-          const plugin = list.find((p: any) => p.name === name);
+          const plugin = list.find((p: OmpPluginInfo) => p.name === name);
           if (!plugin) { sendError(id, `Plugin not found: ${name}`); return; }
           send(id, {
             name: plugin.name ?? "",
@@ -1748,8 +928,8 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
             readme: plugin.readme ?? "",
             config_schema: plugin.config_schema ?? null,
           });
-        } catch (e: any) {
-          sendError(id, `Failed to get plugin detail: ${e.message ?? String(e)}`);
+        } catch (e: unknown) {
+          sendError(id, `Failed to get plugin detail: ${(e as Error)?.message ?? String(e)}`);
         }
         return;
       }
@@ -1772,8 +952,8 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
             config = all[name] ?? {};
           } catch {}
           send(id, { config });
-        } catch (e: any) {
-          sendError(id, `Failed to get plugin config: ${e.message ?? String(e)}`);
+        } catch (e: unknown) {
+          sendError(id, `Failed to get plugin config: ${(e as Error)?.message ?? String(e)}`);
         }
         return;
       }
@@ -1793,8 +973,8 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
           all[name] = config;
           fs.writeFileSync(pluginsConfigPath, JSON.stringify(all, null, 2), "utf-8");
           send(id, { ok: true });
-        } catch (e: any) {
-          sendError(id, `Failed to update plugin config: ${e.message ?? String(e)}`);
+        } catch (e: unknown) {
+          sendError(id, `Failed to update plugin config: ${(e as Error)?.message ?? String(e)}`);
         }
         return;
       }
@@ -1803,15 +983,17 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
         try {
           const message: string = params?.message ?? "";
           if (!message) { sendError(id, "Missing required parameter: message"); return; }
-          const { createAgentSession } = await import("@oh-my-pi/pi-coding-agent");
-          const { session } = await createAgentSession({
+          const createSessionFn = io.createAgentSession
+            ?? (await import("@oh-my-pi/pi-coding-agent")).createAgentSession;
+          const { session } = await createSessionFn({
             hasUI: false,
             autoApprove: true,
             model: params?.model ?? process.env.MAXMA_DEFAULT_MODEL,
-            authStorage: params?.authStorage ?? await getSharedAuthStorage(),
+            authStorage: params?.authStorage ?? await io.getSharedAuthStorage(),
           });
           let answer = "";
-          const unsub = session.subscribe((event: any) => {
+          const unsub = session.subscribe((raw: unknown) => {
+            const event = raw as { type?: string; payload?: { content?: string }; content?: string };
             if (event.type === "answer") {
               answer = event.payload?.content ?? event.content ?? answer;
             }
@@ -1821,8 +1003,8 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
           unsub();
           await session.dispose();
           send(id, { answer, status: "completed" });
-        } catch (e: any) {
-          sendError(id, `Headless prompt failed: ${e.message ?? String(e)}`);
+        } catch (e: unknown) {
+          sendError(id, `Headless prompt failed: ${(e as Error)?.message ?? String(e)}`);
         }
         return;
       }
@@ -1830,6 +1012,24 @@ if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
       sendError(id, `Unknown method: ${method}`);
     } catch (err) {
       sendError(id, String(err));
+    }
+}
+
+// bun build --compile 下 import.meta.main 恒为 false(入口被 oh-my-pi 模块图间接引用)。
+// 开发模式(bun run)仍以 import.meta.main 判定;编译模式由 MAXMA_SIDECAR_COMPILED 注入。
+if (import.meta.main || process.env.MAXMA_SIDECAR_COMPILED === "1") {
+  rl.on("line", async (line: string) => {
+    let req: RpcRequest;
+    try {
+      req = JSON.parse(line) as RpcRequest;
+    } catch {
+      sendError(null, "Parse error");
+      return;
+    }
+    try {
+      await handleRpcRequest(req);
+    } catch (err) {
+      sendError(req?.id ?? null, String(err));
     }
   });
 

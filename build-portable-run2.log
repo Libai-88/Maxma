@@ -1,0 +1,35 @@
+
+========================================
+  MaxmaHere Portable Build
+========================================
+
+[1/6] Building frontend and Python sidecar...
+============================================
+  MaxmaHere Server Build
+============================================
+
+[INFO] Cleaning stale directory dist\maxma-server
+[1/4] Building frontend...
+[INFO] Pre-cleaning web\dist
+
+> maxmahere-web@2.6.11 build
+> vue-tsc --noEmit && vite build
+
+[36mvite v5.4.21 [32mbuilding for production...[36m[39m
+transforming...
+[32m鉁?[39m 726 modules transformed.
+rendering chunks...
+[31mx[39m Build failed in 18.56s
+[31merror during build:
+[31m[vite:esbuild-transpile] remove D:\Maxma\tmp\esbuild-3fb401c198f7639125392e6a4aa9ba6d17b7578f9e815ea7e10881b77c9e3279: Access is denied.[31m
+    at D:\Maxma\MaxmaHere\web\node_modules\esbuild\lib\main.js:737:38
+    at responseCallbacks.<computed> (D:\Maxma\MaxmaHere\web\node_modules\esbuild\lib\main.js:622:9)
+    at handleIncomingPacket (D:\Maxma\MaxmaHere\web\node_modules\esbuild\lib\main.js:676:31)
+    at Socket.readFromStdout (D:\Maxma\MaxmaHere\web\node_modules\esbuild\lib\main.js:600:7)
+    at Socket.emit (node:events:519:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+    at Pipe.onStreamRead (node:internal/stream_base_commons:189:23)[39m
+[ERROR] Frontend build failed
+[ERROR] Formal server build failed.

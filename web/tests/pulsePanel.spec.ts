@@ -7,13 +7,23 @@ const health: HealthResponse = { status: 'degraded', version: 'test', llm: { sta
 
 describe('PulsePanel', () => {
   beforeEach(() => localStorage.clear())
+
   it('summarizes safe existing health state and persists collapse preference', async () => {
     const wrapper = mount(PulsePanel, { props: { health } })
     expect(wrapper.text()).toContain('2 项需要关注')
     expect(wrapper.text()).toContain('模型提供商')
     expect(wrapper.text()).toContain('验证失败，请检查 API Key。')
-    await wrapper.get('button').trigger('click')
-    expect(wrapper.find('#pulse-details').exists()).toBe(false)
+
+    // 展开/收起由 GSAP 控制 height/opacity（DOM 常驻），状态通过 aria-expanded 与 localStorage 反映
+    const toggle = wrapper.get('button.pulse-toggle')
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    await toggle.trigger('click')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
     expect(localStorage.getItem('maxma.pulse.collapsed')).toBe('true')
+
+    // 再次点击恢复展开
+    await toggle.trigger('click')
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    expect(localStorage.getItem('maxma.pulse.collapsed')).toBe('false')
   })
 })

@@ -105,7 +105,7 @@ useGsap(() => {
 .error-card--network { border-color: color-mix(in srgb, var(--status-info) 30%, transparent); background: color-mix(in srgb, var(--status-info) 10%, var(--bg-card)); }
 .error-card--timeout { border-color: color-mix(in srgb, var(--status-warn) 30%, transparent); background: color-mix(in srgb, var(--status-warn) 10%, var(--bg-card)); }
 .error-card--auth { border-color: color-mix(in srgb, var(--status-error) 30%, transparent); background: color-mix(in srgb, var(--status-error) 8%, var(--bg-card)); }
-.error-card--rate_limit { border-color: color-mix(in srgb, #a855f7 30%, transparent); background: color-mix(in srgb, #a855f7 10%, var(--bg-card)); }
+.error-card--rate_limit { border-color: color-mix(in srgb, var(--status-warn) 30%, transparent); background: color-mix(in srgb, var(--status-warn) 10%, var(--bg-card)); }
 .error-card--warning { border-color: color-mix(in srgb, var(--status-warn) 36%, transparent); background: color-mix(in srgb, var(--status-warn) 10%, var(--bg-card)); }
 
 .error-card__header {
@@ -136,7 +136,7 @@ useGsap(() => {
   font-size: 12px;
   color: var(--text-secondary);
   padding: 6px 10px;
-  background: rgba(0, 0, 0, 0.03);
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
   border-radius: 4px;
   margin-bottom: 8px;
 }

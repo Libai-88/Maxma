@@ -147,19 +147,38 @@ export const useActivityStore = defineStore('activity', () => {
         throw new Error('SSE response body is null — browser may not support ReadableStream')
       }
 
+      _resetSSEBuffer()
+      const reader = body.getReader()
+
+      // 硬超时兜底：tauriFetch 的 ReadableStream 可能在 getReader 后永久挂起
+      // （WebView2 / @tauri-apps/plugin-http 偶现 bug），导致 UI 永远停在「连接中」。
+      // 若 20s 内未收到任何 SSE 事件行，主动断开降级到轮询。
+      let _streamActive = false
+      const streamTimeoutId = setTimeout(() => {
+        if (!_streamActive) {
+          log.warn('[activity] stream idle timeout (20s) — falling back to polling')
+          reader.cancel().catch(() => {})
+          _onDisconnect()
+        }
+      }, 20000)
+
       connected.value = true
       connecting.value = false
       reconnectDelay = 1000  // 连接成功，重置退避间隔
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
 
-      _resetSSEBuffer()
-      const reader = body.getReader()
+      const origOnLine = (line: string) => _processSSELine(line)
+      const wrappedOnLine = (line: string) => {
+        if (!_streamActive) _streamActive = true  // 收到首行数据，取消 idle 超时
+        origOnLine(line)
+      }
 
       createSSELineReader(
         reader,
-        (line) => _processSSELine(line),
-        () => { /* stream ended */ _onDisconnect(); },
+        (line) => wrappedOnLine(line),
+        () => { clearTimeout(streamTimeoutId); /* stream ended */ _onDisconnect(); },
         (err) => {
+          clearTimeout(streamTimeoutId)
           if (err instanceof DOMException && err.name === 'AbortError') return
           _onDisconnect()
         },

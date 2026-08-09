@@ -144,7 +144,7 @@ onBeforeUnmount(() => {
   height: 100%;
   padding: 0;
   border: 0;
-  background: color-mix(in srgb, #000 26%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 26%, transparent);
   cursor: default;
   pointer-events: auto;
 }

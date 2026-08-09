@@ -119,6 +119,7 @@ api/data/sticker_recent.yaml
 
 # Tauri 本地构建产物
 desktop/src-tauri/target/
+desktop/src-tauri/target2/
 desktop/src-tauri/binaries/*.exe
 
 # Anthropic Skills（内置 skill 子目录需要版本控制，用户自定义 skill 在打包模式写入 %APPDATA%）
@@ -195,3 +196,7 @@ config/personas/*.sqlite3-wal
 # OMP 原生运行时目录——仅入库内置 skills，其余（配置/profiles/mcp 等运行时生成）忽略
 .omp/*
 !.omp/skills/
+
+# Windows 保留名残留（Git Bash 误创建的 NUL 设备目录项，Win32 API 无法删除）
+web/src/NUL
+web/vite.config.ts.timestamp-*.mjs

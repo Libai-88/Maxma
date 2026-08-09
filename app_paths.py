@@ -341,6 +341,8 @@ _PERSONAS_SEED: tuple[tuple[str, str], ...] = (
     # MAXMA.md 没有同名的 .example，模板即活跃文件，直接平移即可。
     ("MAXMA.md", "MAXMA.md"),
     ("AGENTS.md", "AGENTS.md"),
+    # 饱饱人格：便携版首次运行时播种到 data/config/personas/
+    ("SOUL.饱饱.md", "SOUL.饱饱.md"),
 )
 
 

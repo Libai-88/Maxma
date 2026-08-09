@@ -270,9 +270,9 @@ function copyCode() {
 
 .py-code-block :deep(.py-kw)      { color: var(--accent); font-style: italic; }
 .py-code-block :deep(.py-builtin) { color: var(--accent-dark); }
-.py-code-block :deep(.py-str)     { color: #40a02b; }
+.py-code-block :deep(.py-str)     { color: var(--py-str-color, #40a02b); }
 .py-code-block :deep(.py-comment) { color: var(--text-secondary); font-style: italic; }
-.py-code-block :deep(.py-num)     { color: #fe640b; }
+.py-code-block :deep(.py-num)     { color: var(--py-num-color, #fe640b); }
 
 .py-stdout {
   font-family: 'SF Mono', 'Consolas', monospace;
@@ -384,12 +384,12 @@ function copyCode() {
 
 .btn-approve {
   background: var(--accent);
-  color: #fff;
+  color: var(--text-inverse);
 }
 
 .btn-approve:hover {
-  background: #fff;
-  background: #fff;
-  background: color-mix(in srgb, var(--accent) 90%, #fff);
+  background: var(--bg-raised);
+  background: var(--bg-raised);
+  background: color-mix(in srgb, var(--accent) 90%, var(--text-inverse));
 }
 </style>

@@ -206,7 +206,7 @@ useGsap((_ctx, contextSafe) => {
   content: '';
   position: absolute;
   inset: 0;
-  background: rgba(255, 255, 255, 0.244);
+  background: color-mix(in srgb, var(--text-inverse) 24.4%, transparent);
   pointer-events: none;
   z-index: -1;
 }

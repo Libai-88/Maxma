@@ -28,7 +28,7 @@ defineProps<{
   pointer-events: none;
 
   background:
-    radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--text-inverse) 8%, transparent) 0%, transparent 50%),
     conic-gradient(
       from 0deg at 50% 50%,
       transparent 0deg,

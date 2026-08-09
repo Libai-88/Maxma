@@ -1,0 +1,390 @@
+
+[1m[7m[36m RUN [39m[27m[22m [36mv2.1.9 [39m[90mD:/Maxma/MaxmaHere/web[39m
+
+[90mstdout[2m | tests/workspaceShell.spec.ts
+[22m[39m[chat] localStorage 中共 0 个 maxma_turns_* 键, 恢复 0 个会话的缓存
+
+[90mstderr[2m | tests/workspaceShell.spec.ts[2m > [22m[2mworkspace shell[2m > [22m[2micon rail exposes real navigation and a session drawer trigger
+[22m[39m[Vue Router warn]: No match found for location with path "/capabilities"
+[Vue Router warn]: No match found for location with path "/plugins"
+[Vue Router warn]: No match found for location with path "/collab"
+[api] Failed to fetch token at runtime (attempt 1/3): TypeError: Failed to parse URL from /api/auth/token
+[90m    at node:internal/deps/undici/undici:14976:13[39m
+[90m    at processTicksAndRejections (node:internal/process/task_queues:103:5)[39m
+    at [90mD:\Maxma\MaxmaHere\web\[39msrc\api\index.ts:136:23
+    at ensureTokenLoaded [90m(D:\Maxma\MaxmaHere\web\[39msrc\api\index.ts:169:5[90m)[39m
+    at request [90m(D:\Maxma\MaxmaHere\web\[39msrc\api\index.ts:190:5[90m)[39m
+    at [90mD:\Maxma\MaxmaHere\web\[39msrc\stores\capabilities.ts:49:22 {
+  [cause]: TypeError: Invalid URL: /api/auth/token
+      at new URLImpl [90m(D:\Maxma\MaxmaHere\web\[39mnode_modules\[4mwhatwg-url[24m\lib\URL-impl.js:20:13[90m)[39m
+      at Object.exports.setup [90m(D:\Maxma\MaxmaHere\web\[39mnode_modules\[4mwhatwg-url[24m\lib\URL.js:54:12[90m)[39m
+      at new URL [90m(D:\Maxma\MaxmaHere\web\[39mnode_modules\[4mwhatwg-url[24m\lib\URL.js:115:22[90m)[39m
+  [90m    at new Request (node:internal/deps/undici/undici:9804:25)[39m
+  [90m    at fetch (node:internal/deps/undici/undici:10533:25)[39m
+  [90m    at fetch (node:internal/deps/undici/undici:14974:10)[39m
+  [90m    at fetch (node:internal/bootstrap/web/exposed-window-or-worker:75:12)[39m
+      at Module.tauriFetch [90m(D:\Maxma\MaxmaHere\web\[39msrc\utils\env.ts:164:10[90m)[39m
+      at [90mD:\Maxma\MaxmaHere\web\[39msrc\api\index.ts:136:29
+  [90m    at processTicksAndRejections (node:internal/process/task_queues:103:5)[39m
+}
+
+ [31m❯[39m tests/workspaceShell.spec.ts [2m([22m[2m10 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[33m 370[2mms[22m[39m
+[31m   [31m×[31m workspace shell[2m > [22mkeeps real WelcomeScreen starts wired to ChatView and removes actionless shells[90m 9[2mms[22m[31m[39m
+[31m     → expected 0 to be greater than or equal to 2[39m
+[31m   [31m×[31m workspace shell[2m > [22micon rail exposes real navigation and a session drawer trigger[90m 152[2mms[22m[31m[39m
+[31m     → Unable to get nav[aria-label="主导航"] within: <aside data-v-774065bc="" class="shell" aria-label="主导航">
+  <ul data-v-774065bc="" class="nav">
+    <!-- Brand logo -->
+    <li data-v-774065bc="" id="logo" style="opacity: 0; visibility: hidden;"><a data-v-774065bc="" href="/" class="" aria-label="Maxma" title="Maxma">
+        <div data-v-774065bc="" class="icon">
+          <div data-v-774065bc="" class="imageBox"><canvas data-v-371b20c6="" data-v-774065bc="" class="liquid-logo" aria-hidden="true"></canvas></div>
+        </div>
+        <div data-v-774065bc="" class="text">Maxma</div>
+      </a></li><!-- Nav items -->
+    <li data-v-774065bc="" class="" style="opacity: 0; visibility: hidden;"><a data-v-774065bc="" href="/" class="" aria-label="对话" title="对话">
+        <div data-v-774065bc="" class="icon"><span data-v-26446d8e="" data-v-774065bc="" class="icon icon--12" aria-hidden="true"><!-- Generator: Adobe Illustrator 19.1.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+<svg fill="currentColor" version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 72 72" style="enable-background:new 0 0 72 72;" xml:space="preserve">
+<g>
+	<g>
+		<path d="M9.55,52.506h21.998l23.287,16.643c0.347,0.249,0.756,0.346,1.166,0.346c0.312,0,0.625-0.089,0.914-0.236
+			C57.58,68.914,58,68.214,58,67.464V52.506h3.722C67.389,52.506,72,48.11,72,42.854V12.339c0-5.395-4.707-9.833-10.278-9.833H9.55
+			C4.195,2.506,0,6.758,0,12.339v30.516C0,48.289,4.105,52.506,9.55,52.506z M4,12.339c0-3.338,2.438-5.833,5.55-5.833h52.172
+			c3.344,0,6.278,2.662,6.278,5.833v30.516c0,3.05-2.816,5.651-6.278,5.651H56c-1.104,0-2,0.776-2,1.881v13.182L33.356,48.82
+			c-0.34-0.244-0.748-0.315-1.166-0.315H9.55c-3.268,0-5.55-2.395-5.55-5.651V12.339z"></path>
+		<path d="M13,18.506h45c1.104,0,2-0.896,2-2s-0.896-2-2-2H13c-1.104,0-2,0.896-2,2S11.896,18.506,13,18.506z"></path>
+		<path d="M13,27.506h27c1.104,0,2-0.896,2-2s-0.896-2-2-2H13c-1.104,0-2,0.896-2,2S11.896,27.506,13,27.506z"></path>
+	</g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+</svg></span></div>
+        <div data-v-774065bc="" class="text">对话</div>
+      </a></li>
+    <li data-v-774065bc="" class="" style="opacity: 0; visibility: hidden;"><a data-v-774065bc="" href="/capabilities" class="" aria-label="能力仪表盘" title="能力仪表盘">
+        <div data-v-774065bc="" class="icon"><span data-v-26446d8e="" data-v-774065bc="" class="icon icon--12" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="3" y="3" width="7" height="9" rx="1"></rect>
+  <rect x="14" y="3" width="7" height="5" rx="1"></rect>
+  <rect x="14" y="12" width="7" height="9" rx="1"></rect>
+  <rect x="3" y="16" width="7" height="5" rx="1"></rect>
+</svg></span></div>
+        <div data-v-774065bc="" class="text">能力仪表盘</div>
+      </a></li>
+    <li data-v-774065bc="" class="" style="opacity: 0; visibility: hidden;"><a data-v-774065bc="" href="/plugins" class="" aria-label="插件管理" title="插件管理">
+        <div data-v-774065bc="" class="icon"><span data-v-26446d8e="" data-v-774065bc="" class="icon icon--12" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M19.44 12.87c0-.46-.07-.83-.2-1.12l2.17-1.71-1.48-2.56-2.7.62c-.34-.3-.73-.52-1.2-.67-.46-.15-.96-.2-1.49-.15l-.86-2.56h-2.95l-.87 2.56c-.52-.05-1.02 0-1.48.15-.47.15-.86.38-1.2.67l-2.7-.62-1.48 2.56 2.17 1.71c-.13.29-.2.66-.2 1.12 0 .46.07.83.2 1.12l-2.17 1.71 1.48 2.56 2.7-.62c.34.3.73.52 1.2.67.46.15.96.2 1.49.15l.87 2.56h2.95l.86-2.56c.53.05 1.03 0 1.49-.15.47-.15.86-.38 1.2-.67l2.7.62 1.48-2.56-2.17-1.71c.13-.29.2-.66.2-1.12zM12 14.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"></path>
+</svg></span></div>
+        <div data-v-774065bc="" class="text">插件管理</div>
+      </a></li>
+    <li data-v-774065bc="" class="" style="opacity: 0; visibility: hidden;"><a data-v-774065bc="" href="/collab" class="" aria-label="协作" title="协作">
+        <div data-v-774065bc="" class="icon"><span data-v-26446d8e="" data-v-774065bc="" class="icon icon--12" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+  <circle cx="9" cy="7" r="4"></circle>
+  <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+</svg></span></div>
+        <div data-v-774065bc="" class="text">协作</div>
+      </a></li>
+    <li data-v-774065bc="" class="active" style="opacity: 0; visibility: hidden;"><a data-v-774065bc="" aria-current="page" href="/activity" class="router-link-active router-link-exact-active" aria-label="活动" title="活动">
+        <div data-v-774065bc="" class="icon"><span data-v-26446d8e="" data-v-774065bc="" class="icon icon--12" aria-hidden="true"><!-- Generator: Adobe Illustrator 19.1.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+<svg fill="currentColor" version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 82.118 82.118" style="enable-background:new 0 0 82.118 82.118;" xml:space="preserve">
+<g>
+	<g>
+		<path d="M75.346,15.559h-47.9c-3.499,0-4.873,1.509-6.328,2.905c-0.294,0.283-0.613,0.685-0.982,1.01
+			c-0.045,0.04-0.088,0.128-0.129,0.172L0.548,40.216c-0.721,0.761-0.731,1.962-0.024,2.737l19.459,21.298
+			c0.07,0.076,0.146-0.04,0.227,0.024c2.194,1.756,3.463,2.284,7.237,2.284h47.899c4.35,0,6.772-2.659,6.772-7.184V24.2
+			C82.118,19.491,79.491,15.559,75.346,15.559z M78.118,59.375c0,1.331,0.075,3.184-2.772,3.184h-47.9
+			c-2.675,0-3.106-0.101-4.616-1.307L4.731,41.544L22.85,22.461c0.387-0.344,0.725-0.833,1.037-1.134
+			c1.281-1.229,1.668-1.767,3.559-1.767h47.899c2.248,0,2.772,2.589,2.772,4.641v35.174H78.118z"></path>
+		<path d="M26.143,34.135c-4.297,0-7.793,3.496-7.793,7.794c0,4.297,3.496,7.793,7.793,7.793s7.793-3.496,7.793-7.793
+			C33.936,37.631,30.44,34.135,26.143,34.135z M26.143,45.722c-2.092,0-3.793-1.701-3.793-3.793s1.701-3.794,3.793-3.794
+			s3.793,1.702,3.793,3.794S28.235,45.722,26.143,45.722z"></path>
+	</g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+</svg></span></div>
+        <div data-v-774065bc="" class="text">活动</div>
+      </a></li>
+    <li data-v-774065bc="" class="" style="opacity: 0; visibility: hidden;"><a data-v-774065bc="" href="/help" class="" aria-label="帮助" title="帮助">
+        <div data-v-774065bc="" class="icon"><span data-v-26446d8e="" data-v-774065bc="" class="icon icon--12" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="12" cy="12" r="9"></circle>
+  <path d="M9.75 9a2.25 2.25 0 1 1 3.6 1.8c-.9.68-1.35 1.05-1.35 2.2M12 16.5h.01"></path>
+</svg></span></div>
+        <div data-v-774065bc="" class="text">帮助</div>
+      </a></li><!-- Spacer -->
+    <li data-v-774065bc="" class="spacer"></li><!-- Session toggle -->
+    <li data-v-774065bc="" class="" style="opacity: 0; visibility: hidden;"><button data-v-774065bc="" type="button" class="session-btn" aria-label="会话" title="会话" aria-controls="session-drawer" aria-expanded="false">
+        <div data-v-774065bc="" class="icon"><span data-v-26446d8e="" data-v-774065bc="" class="icon icon--12" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+  <path d="M8 8h8M8 12h5M8 16h3"></path>
+</svg></span></div>
+        <div data-v-774065bc="" class="text">会话</div>
+      </button></li><!-- Settings -->
+    <li data-v-774065bc="" class="settings-item" style="opacity: 0; visibility: hidden;">
+      <div data-v-503367b8="" class="settings-area"><button data-v-503367b8="" class="nav-item settings-btn compact" style="min-width: 44px; min-height: 44px;" aria-label="设置" title="设置"><span data-v-26446d8e="" data-v-503367b8="" class="icon icon--18" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="12" cy="12" r="3"></circle>
+  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+</svg></span>
+          <!--v-if-->
+        </button></div>
+      <!--teleport start-->
+      <!--teleport end-->
+    </li><!-- ME / User -->
+    <li data-v-774065bc="" class="" style="opacity: 0; visibility: hidden;"><a data-v-774065bc="" href="/user" class="" aria-label="用户" title="用户">
+        <div data-v-774065bc="" class="icon">
+          <div data-v-774065bc="" class="imageBox"><img data-v-774065bc="" src="/src/assets/images/brand/favicon.png" alt=""></div>
+        </div>
+        <div data-v-774065bc="" class="text">ME</div>
+      </a></li>
+  </ul>
+</aside>[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[1m[7m Failed Tests 2 [27m[22m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[31m[1m[7m FAIL [27m[22m[39m tests/workspaceShell.spec.ts[2m > [22mworkspace shell[2m > [22mkeeps real WelcomeScreen starts wired to ChatView and removes actionless shells
+[31m[1mAssertionError[22m: expected 0 to be greater than or equal to 2[39m
+[36m [2m❯[22m tests/workspaceShell.spec.ts:[2m157:68[22m[39m
+    [90m155| [39m    [34mexpect[39m(welcomeSource)[33m.[39mnot[33m.[39m[34mtoContain[39m([32m'const capabilities'[39m)
+    [90m156| [39m    [34mexpect[39m(welcomeSource)[33m.[39m[34mtoContain[39m([32m'@click="handleStart(ex.text)"'[39m)
+    [90m157| [39m    [34mexpect[39m((welcomeSource[33m.[39m[34mmatch[39m([36m/\$emit\('start'/g[39m) [33m??[39m [])[33m.[39mlength)[33m.[39m[34mtoB[39m…
+    [90m   | [39m                                                                   [31m^[39m
+    [90m158| [39m    [34mexpect[39m(chatViewSource)[33m.[39m[34mtoContain[39m([32m'<WelcomeScreen v-else @start="ha[39m…
+    [90m159| [39m    [34mexpect[39m(chatViewSource)[33m.[39m[34mtoContain[39m([32m'chatInputInstance.send(message)'[39m)
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[31m[1m[7m FAIL [27m[22m[39m tests/workspaceShell.spec.ts[2m > [22mworkspace shell[2m > [22micon rail exposes real navigation and a session drawer trigger
+[31m[1mError[22m[39m: Unable to get nav[aria-label="主导航"] within: <aside data-v-774065bc="" class="shell" aria-label="主导航">
+  <ul data-v-774065bc="" class="nav">
+    <!-- Brand logo -->
+    <li data-v-774065bc="" id="logo" style="opacity: 0; visibility: hidden;"><a data-v-774065bc="" href="/" class="" aria-label="Maxma" title="Maxma">
+        <div data-v-774065bc="" class="icon">
+          <div data-v-774065bc="" class="imageBox"><canvas data-v-371b20c6="" data-v-774065bc="" class="liquid-logo" aria-hidden="true"></canvas></div>
+        </div>
+        <div data-v-774065bc="" class="text">Maxma</div>
+      </a></li><!-- Nav items -->
+    <li data-v-774065bc="" class="" style="opacity: 0; visibility: hidden;"><a data-v-774065bc="" href="/" class="" aria-label="对话" title="对话">
+        <div data-v-774065bc="" class="icon"><span data-v-26446d8e="" data-v-774065bc="" class="icon icon--12" aria-hidden="true"><!-- Generator: Adobe Illustrator 19.1.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+<svg fill="currentColor" version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 72 72" style="enable-background:new 0 0 72 72;" xml:space="preserve">
+<g>
+	<g>
+		<path d="M9.55,52.506h21.998l23.287,16.643c0.347,0.249,0.756,0.346,1.166,0.346c0.312,0,0.625-0.089,0.914-0.236
+			C57.58,68.914,58,68.214,58,67.464V52.506h3.722C67.389,52.506,72,48.11,72,42.854V12.339c0-5.395-4.707-9.833-10.278-9.833H9.55
+			C4.195,2.506,0,6.758,0,12.339v30.516C0,48.289,4.105,52.506,9.55,52.506z M4,12.339c0-3.338,2.438-5.833,5.55-5.833h52.172
+			c3.344,0,6.278,2.662,6.278,5.833v30.516c0,3.05-2.816,5.651-6.278,5.651H56c-1.104,0-2,0.776-2,1.881v13.182L33.356,48.82
+			c-0.34-0.244-0.748-0.315-1.166-0.315H9.55c-3.268,0-5.55-2.395-5.55-5.651V12.339z"></path>
+		<path d="M13,18.506h45c1.104,0,2-0.896,2-2s-0.896-2-2-2H13c-1.104,0-2,0.896-2,2S11.896,18.506,13,18.506z"></path>
+		<path d="M13,27.506h27c1.104,0,2-0.896,2-2s-0.896-2-2-2H13c-1.104,0-2,0.896-2,2S11.896,27.506,13,27.506z"></path>
+	</g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+</svg></span></div>
+        <div data-v-774065bc="" class="text">对话</div>
+      </a></li>
+    <li data-v-774065bc="" class="" style="opacity: 0; visibility: hidden;"><a data-v-774065bc="" href="/capabilities" class="" aria-label="能力仪表盘" title="能力仪表盘">
+        <div data-v-774065bc="" class="icon"><span data-v-26446d8e="" data-v-774065bc="" class="icon icon--12" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="3" y="3" width="7" height="9" rx="1"></rect>
+  <rect x="14" y="3" width="7" height="5" rx="1"></rect>
+  <rect x="14" y="12" width="7" height="9" rx="1"></rect>
+  <rect x="3" y="16" width="7" height="5" rx="1"></rect>
+</svg></span></div>
+        <div data-v-774065bc="" class="text">能力仪表盘</div>
+      </a></li>
+    <li data-v-774065bc="" class="" style="opacity: 0; visibility: hidden;"><a data-v-774065bc="" href="/plugins" class="" aria-label="插件管理" title="插件管理">
+        <div data-v-774065bc="" class="icon"><span data-v-26446d8e="" data-v-774065bc="" class="icon icon--12" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M19.44 12.87c0-.46-.07-.83-.2-1.12l2.17-1.71-1.48-2.56-2.7.62c-.34-.3-.73-.52-1.2-.67-.46-.15-.96-.2-1.49-.15l-.86-2.56h-2.95l-.87 2.56c-.52-.05-1.02 0-1.48.15-.47.15-.86.38-1.2.67l-2.7-.62-1.48 2.56 2.17 1.71c-.13.29-.2.66-.2 1.12 0 .46.07.83.2 1.12l-2.17 1.71 1.48 2.56 2.7-.62c.34.3.73.52 1.2.67.46.15.96.2 1.49.15l.87 2.56h2.95l.86-2.56c.53.05 1.03 0 1.49-.15.47-.15.86-.38 1.2-.67l2.7.62 1.48-2.56-2.17-1.71c.13-.29.2-.66.2-1.12zM12 14.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"></path>
+</svg></span></div>
+        <div data-v-774065bc="" class="text">插件管理</div>
+      </a></li>
+    <li data-v-774065bc="" class="" style="opacity: 0; visibility: hidden;"><a data-v-774065bc="" href="/collab" class="" aria-label="协作" title="协作">
+        <div data-v-774065bc="" class="icon"><span data-v-26446d8e="" data-v-774065bc="" class="icon icon--12" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+  <circle cx="9" cy="7" r="4"></circle>
+  <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+</svg></span></div>
+        <div data-v-774065bc="" class="text">协作</div>
+      </a></li>
+    <li data-v-774065bc="" class="active" style="opacity: 0; visibility: hidden;"><a data-v-774065bc="" aria-current="page" href="/activity" class="router-link-active router-link-exact-active" aria-label="活动" title="活动">
+        <div data-v-774065bc="" class="icon"><span data-v-26446d8e="" data-v-774065bc="" class="icon icon--12" aria-hidden="true"><!-- Generator: Adobe Illustrator 19.1.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+<svg fill="currentColor" version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 82.118 82.118" style="enable-background:new 0 0 82.118 82.118;" xml:space="preserve">
+<g>
+	<g>
+		<path d="M75.346,15.559h-47.9c-3.499,0-4.873,1.509-6.328,2.905c-0.294,0.283-0.613,0.685-0.982,1.01
+			c-0.045,0.04-0.088,0.128-0.129,0.172L0.548,40.216c-0.721,0.761-0.731,1.962-0.024,2.737l19.459,21.298
+			c0.07,0.076,0.146-0.04,0.227,0.024c2.194,1.756,3.463,2.284,7.237,2.284h47.899c4.35,0,6.772-2.659,6.772-7.184V24.2
+			C82.118,19.491,79.491,15.559,75.346,15.559z M78.118,59.375c0,1.331,0.075,3.184-2.772,3.184h-47.9
+			c-2.675,0-3.106-0.101-4.616-1.307L4.731,41.544L22.85,22.461c0.387-0.344,0.725-0.833,1.037-1.134
+			c1.281-1.229,1.668-1.767,3.559-1.767h47.899c2.248,0,2.772,2.589,2.772,4.641v35.174H78.118z"></path>
+		<path d="M26.143,34.135c-4.297,0-7.793,3.496-7.793,7.794c0,4.297,3.496,7.793,7.793,7.793s7.793-3.496,7.793-7.793
+			C33.936,37.631,30.44,34.135,26.143,34.135z M26.143,45.722c-2.092,0-3.793-1.701-3.793-3.793s1.701-3.794,3.793-3.794
+			s3.793,1.702,3.793,3.794S28.235,45.722,26.143,45.722z"></path>
+	</g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+<g>
+</g>
+</svg></span></div>
+        <div data-v-774065bc="" class="text">活动</div>
+      </a></li>
+    <li data-v-774065bc="" class="" style="opacity: 0; visibility: hidden;"><a data-v-774065bc="" href="/help" class="" aria-label="帮助" title="帮助">
+        <div data-v-774065bc="" class="icon"><span data-v-26446d8e="" data-v-774065bc="" class="icon icon--12" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="12" cy="12" r="9"></circle>
+  <path d="M9.75 9a2.25 2.25 0 1 1 3.6 1.8c-.9.68-1.35 1.05-1.35 2.2M12 16.5h.01"></path>
+</svg></span></div>
+        <div data-v-774065bc="" class="text">帮助</div>
+      </a></li><!-- Spacer -->
+    <li data-v-774065bc="" class="spacer"></li><!-- Session toggle -->
+    <li data-v-774065bc="" class="" style="opacity: 0; visibility: hidden;"><button data-v-774065bc="" type="button" class="session-btn" aria-label="会话" title="会话" aria-controls="session-drawer" aria-expanded="false">
+        <div data-v-774065bc="" class="icon"><span data-v-26446d8e="" data-v-774065bc="" class="icon icon--12" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+  <path d="M8 8h8M8 12h5M8 16h3"></path>
+</svg></span></div>
+        <div data-v-774065bc="" class="text">会话</div>
+      </button></li><!-- Settings -->
+    <li data-v-774065bc="" class="settings-item" style="opacity: 0; visibility: hidden;">
+      <div data-v-503367b8="" class="settings-area"><button data-v-503367b8="" class="nav-item settings-btn compact" style="min-width: 44px; min-height: 44px;" aria-label="设置" title="设置"><span data-v-26446d8e="" data-v-503367b8="" class="icon icon--18" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="12" cy="12" r="3"></circle>
+  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+</svg></span>
+          <!--v-if-->
+        </button></div>
+      <!--teleport start-->
+      <!--teleport end-->
+    </li><!-- ME / User -->
+    <li data-v-774065bc="" class="" style="opacity: 0; visibility: hidden;"><a data-v-774065bc="" href="/user" class="" aria-label="用户" title="用户">
+        <div data-v-774065bc="" class="icon">
+          <div data-v-774065bc="" class="imageBox"><img data-v-774065bc="" src="/src/assets/images/brand/favicon.png" alt=""></div>
+        </div>
+        <div data-v-774065bc="" class="text">ME</div>
+      </a></li>
+  </ul>
+</aside>
+[36m [2m❯[22m VueWrapper.get node_modules/@vue/test-utils/dist/vue-test-utils.cjs.js:[2m7182:15[22m[39m
+    [90m7180| [39m            return result;
+    [90m7181| [39m        }
+    [90m7182| [39m        throw new Error(`Unable to get ${selector} within: ${this.html…
+    [90m   | [39m              [31m^[39m
+    [90m7183| [39m    }
+    [90m7184| [39m    getComponent(selector) {
+[90m [2m❯[22m tests/workspaceShell.spec.ts:[2m202:25[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m8 passed[39m[22m[90m (10)[39m
+[2m   Start at [22m 19:23:28
+[2m   Duration [22m 3.83s[2m (transform 1.18s, setup 22ms, collect 1.73s, tests 370ms, environment 790ms, prepare 174ms)[22m
+

@@ -1,0 +1,222 @@
+
+========================================
+  MaxmaHere Portable Build
+========================================
+
+[1/6] Building frontend and Python sidecar...
+============================================
+  MaxmaHere Server Build
+============================================
+
+[1/4] Building frontend...
+[INFO] Pre-cleaning web\dist
+
+> maxmahere-web@2.6.11 build
+> vue-tsc --noEmit && vite build
+
+[36mvite v5.4.21 [32mbuilding for production...[36m[39m
+transforming...
+[32m鉁?[39m 726 modules transformed.
+rendering chunks...
+computing gzip size...
+[2mdist/[22m[32mquick-chat.html                                                    [39m[1m[2m  2.16 kB[22m[1m[22m[2m 鈹?gzip:   0.96 kB[22m
+[2mdist/[22m[32msplash.html                                                        [39m[1m[2m  2.91 kB[22m[1m[22m[2m 鈹?gzip:   1.13 kB[22m
+[2mdist/[22m[32mindex.html                                                         [39m[1m[2m  4.01 kB[22m[1m[22m[2m 鈹?gzip:   1.67 kB[22m
+[2mdist/[22m[32massets/KaTeX_Size3-Regular-CTq5MqoE.woff                           [39m[1m[2m  4.42 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Size4-Regular-Dl5lxZxV.woff2                          [39m[1m[2m  4.93 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Size2-Regular-Dy4dx90m.woff2                          [39m[1m[2m  5.21 kB[22m[1m[22m
+[2mdist/[22m[32massets/favicon-CsH5j9sI.png                                        [39m[1m[2m  5.35 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Size1-Regular-mCD8mA8B.woff2                          [39m[1m[2m  5.47 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Size4-Regular-BF-4gkZK.woff                           [39m[1m[2m  5.98 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Size2-Regular-oD1tc_U0.woff                           [39m[1m[2m  6.19 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Size1-Regular-C195tn64.woff                           [39m[1m[2m  6.50 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Caligraphic-Regular-Di6jR-x-.woff2                    [39m[1m[2m  6.91 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Caligraphic-Bold-Dq_IR9rO.woff2                       [39m[1m[2m  6.91 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Size3-Regular-DgpXs0kz.ttf                            [39m[1m[2m  7.59 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Caligraphic-Regular-CTRA-rTL.woff                     [39m[1m[2m  7.66 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Caligraphic-Bold-BEiXGLvX.woff                        [39m[1m[2m  7.72 kB[22m[1m[22m
+[2mdist/[22m[32massets/logo-companion-opt-MJWxDk48.jpg                             [39m[1m[2m  8.42 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Script-Regular-D3wIWfF6.woff2                         [39m[1m[2m  9.64 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_SansSerif-Regular-DDBCnlJ7.woff2                      [39m[1m[2m 10.34 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Size4-Regular-DWFBv043.ttf                            [39m[1m[2m 10.36 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Script-Regular-D5yQViql.woff                          [39m[1m[2m 10.59 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Fraktur-Regular-CTYiF6lA.woff2                        [39m[1m[2m 11.32 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Fraktur-Bold-CL6g_b3V.woff2                           [39m[1m[2m 11.35 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Size2-Regular-B7gKUWhC.ttf                            [39m[1m[2m 11.51 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_SansSerif-Italic-C3H0VqGB.woff2                       [39m[1m[2m 12.03 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_SansSerif-Bold-D1sUS0GD.woff2                         [39m[1m[2m 12.22 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Size1-Regular-Dbsnue_I.ttf                            [39m[1m[2m 12.23 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_SansSerif-Regular-CS6fqUqJ.woff                       [39m[1m[2m 12.32 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Caligraphic-Regular-wX97UBjC.ttf                      [39m[1m[2m 12.34 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Caligraphic-Bold-ATXxdsX0.ttf                         [39m[1m[2m 12.37 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Fraktur-Regular-Dxdc4cR9.woff                         [39m[1m[2m 13.21 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Fraktur-Bold-BsDP51OF.woff                            [39m[1m[2m 13.30 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Typewriter-Regular-CO6r4hn1.woff2                     [39m[1m[2m 13.57 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_SansSerif-Italic-DN2j7dab.woff                        [39m[1m[2m 14.11 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_SansSerif-Bold-DbIhKOiC.woff                          [39m[1m[2m 14.41 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Typewriter-Regular-C0xS9mPB.woff                      [39m[1m[2m 16.03 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Math-BoldItalic-CZnvNsCZ.woff2                        [39m[1m[2m 16.40 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Math-Italic-t53AETM-.woff2                            [39m[1m[2m 16.44 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Script-Regular-C5JkGWo-.ttf                           [39m[1m[2m 16.65 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Main-BoldItalic-DxDJ3AOS.woff2                        [39m[1m[2m 16.78 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Main-Italic-NWA7e6Wa.woff2                            [39m[1m[2m 16.99 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Math-BoldItalic-iY-2wyZ7.woff                         [39m[1m[2m 18.67 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Math-Italic-DA0__PXp.woff                             [39m[1m[2m 18.75 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Main-BoldItalic-SpSLRI95.woff                         [39m[1m[2m 19.41 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_SansSerif-Regular-BNo7hRIc.ttf                        [39m[1m[2m 19.44 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Fraktur-Regular-CB_wures.ttf                          [39m[1m[2m 19.57 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Fraktur-Bold-BdnERNNW.ttf                             [39m[1m[2m 19.58 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Main-Italic-BMLOBm91.woff                             [39m[1m[2m 19.68 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_SansSerif-Italic-YYjJ1zSn.ttf                         [39m[1m[2m 22.36 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_SansSerif-Bold-CFMepnvq.ttf                           [39m[1m[2m 24.50 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Main-Bold-Cx986IdX.woff2                              [39m[1m[2m 25.32 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Main-Regular-B22Nviop.woff2                           [39m[1m[2m 26.27 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Typewriter-Regular-D3Ib7_Hf.ttf                       [39m[1m[2m 27.56 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_AMS-Regular-BQhdFMY1.woff2                            [39m[1m[2m 28.08 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Main-Bold-Jm3AIy58.woff                               [39m[1m[2m 29.91 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Main-Regular-Dr94JaBh.woff                            [39m[1m[2m 30.77 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Math-BoldItalic-B3XSjfu4.ttf                          [39m[1m[2m 31.20 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Math-Italic-flOr_0UB.ttf                              [39m[1m[2m 31.31 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Main-BoldItalic-DzxPMmG6.ttf                          [39m[1m[2m 32.97 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_AMS-Regular-DMm9YOAa.woff                             [39m[1m[2m 33.52 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Main-Italic-3WenGoN9.ttf                              [39m[1m[2m 33.58 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Main-Bold-waoOVXN0.ttf                                [39m[1m[2m 51.34 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Main-Regular-ypZvNtVU.ttf                             [39m[1m[2m 53.58 kB[22m[1m[22m
+[2mdist/[22m[32massets/empty-bg-night-DONlhIRI.jpg                                 [39m[1m[2m 58.41 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_AMS-Regular-DRggAlZN.ttf                              [39m[1m[2m 63.63 kB[22m[1m[22m
+[2mdist/[22m[32massets/empty-bg-day-_ZPwhTZ-.jpg                                   [39m[1m[2m 93.11 kB[22m[1m[22m
+[2mdist/[22m[35massets/NumberTicker-BmWo1F2O.css                                   [39m[1m[2m  0.16 kB[22m[1m[22m[2m 鈹?gzip:   0.13 kB[22m
+[2mdist/[22m[35massets/GlareCard-CRQASEtY.css                                      [39m[1m[2m  0.40 kB[22m[1m[22m[2m 鈹?gzip:   0.25 kB[22m
+[2mdist/[22m[35massets/TextGenerateEffect-CDxv6lJu.css                             [39m[1m[2m  0.45 kB[22m[1m[22m[2m 鈹?gzip:   0.24 kB[22m
+[2mdist/[22m[35massets/Sparkles-Div4BfTG.css                                       [39m[1m[2m  0.45 kB[22m[1m[22m[2m 鈹?gzip:   0.28 kB[22m
+[2mdist/[22m[35massets/ColourfulText-CUY5rjes.css                                  [39m[1m[2m  0.49 kB[22m[1m[22m[2m 鈹?gzip:   0.27 kB[22m
+[2mdist/[22m[35massets/favicon-3yqn6297.css                                        [39m[1m[2m  0.58 kB[22m[1m[22m[2m 鈹?gzip:   0.23 kB[22m
+[2mdist/[22m[35massets/FloatingCard-Ci8-Vb8Y.css                                   [39m[1m[2m  0.58 kB[22m[1m[22m[2m 鈹?gzip:   0.28 kB[22m
+[2mdist/[22m[35massets/DirectionAwareHover-Dg6-wJqD.css                            [39m[1m[2m  0.67 kB[22m[1m[22m[2m 鈹?gzip:   0.36 kB[22m
+[2mdist/[22m[35massets/DsTooltip-DO2nCF8J.css                                      [39m[1m[2m  0.76 kB[22m[1m[22m[2m 鈹?gzip:   0.35 kB[22m
+[2mdist/[22m[35massets/ImageBubble-Zb4ezsIv.css                                    [39m[1m[2m  0.84 kB[22m[1m[22m[2m 鈹?gzip:   0.37 kB[22m
+[2mdist/[22m[35massets/RenderMarkdown-Crx-N_9x.css                                 [39m[1m[2m  1.16 kB[22m[1m[22m[2m 鈹?gzip:   0.49 kB[22m
+[2mdist/[22m[35massets/CodeCard-4rFVunk3.css                                       [39m[1m[2m  1.21 kB[22m[1m[22m[2m 鈹?gzip:   0.48 kB[22m
+[2mdist/[22m[35massets/SearchBubble-Cs-FMihK.css                                   [39m[1m[2m  1.25 kB[22m[1m[22m[2m 鈹?gzip:   0.46 kB[22m
+[2mdist/[22m[35massets/BrowserBubble-CDE5TcW9.css                                  [39m[1m[2m  1.29 kB[22m[1m[22m[2m 鈹?gzip:   0.51 kB[22m
+[2mdist/[22m[35massets/GenericOutputBubble-BKQmK-bi.css                            [39m[1m[2m  1.35 kB[22m[1m[22m[2m 鈹?gzip:   0.50 kB[22m
+[2mdist/[22m[35massets/FeatureUnavailableView-DwOtbBCx.css                         [39m[1m[2m  1.68 kB[22m[1m[22m[2m 鈹?gzip:   0.59 kB[22m
+[2mdist/[22m[35massets/NotFoundView-B1tN_y6S.css                                   [39m[1m[2m  1.70 kB[22m[1m[22m[2m 鈹?gzip:   0.58 kB[22m
+[2mdist/[22m[35massets/MemoryBubble-D8Ths_4D.css                                   [39m[1m[2m  1.74 kB[22m[1m[22m[2m 鈹?gzip:   0.56 kB[22m
+[2mdist/[22m[35massets/TodoBubble-Fxs4zQj3.css                                     [39m[1m[2m  1.78 kB[22m[1m[22m[2m 鈹?gzip:   0.61 kB[22m
+[2mdist/[22m[35massets/MediaViewer--vDNEevk.css                                    [39m[1m[2m  1.79 kB[22m[1m[22m[2m 鈹?gzip:   0.66 kB[22m
+[2mdist/[22m[35massets/BubbleChrome-B-boiYvw.css                                   [39m[1m[2m  1.81 kB[22m[1m[22m[2m 鈹?gzip:   0.67 kB[22m
+[2mdist/[22m[35massets/ShareView-CK6OzCMR.css                                      [39m[1m[2m  1.94 kB[22m[1m[22m[2m 鈹?gzip:   0.65 kB[22m
+[2mdist/[22m[35massets/FileDiffView-BY8UAYnI.css                                   [39m[1m[2m  2.03 kB[22m[1m[22m[2m 鈹?gzip:   0.64 kB[22m
+[2mdist/[22m[35massets/MaxmaBlockerError-BKI1buMS.css                              [39m[1m[2m  2.05 kB[22m[1m[22m[2m 鈹?gzip:   0.64 kB[22m
+[2mdist/[22m[35massets/ExtensionView-CGE7fCMY.css                                  [39m[1m[2m  2.76 kB[22m[1m[22m[2m 鈹?gzip:   0.77 kB[22m
+[2mdist/[22m[35massets/AppearanceView-1223u3SA.css                                 [39m[1m[2m  3.55 kB[22m[1m[22m[2m 鈹?gzip:   1.03 kB[22m
+[2mdist/[22m[35massets/AutomationView-CleXdkXK.css                                 [39m[1m[2m  3.71 kB[22m[1m[22m[2m 鈹?gzip:   0.96 kB[22m
+[2mdist/[22m[35massets/PythonBubble-CvjaJY4I.css                                   [39m[1m[2m  4.02 kB[22m[1m[22m[2m 鈹?gzip:   1.01 kB[22m
+[2mdist/[22m[35massets/UserView-DOUEDBYg.css                                       [39m[1m[2m  4.36 kB[22m[1m[22m[2m 鈹?gzip:   1.20 kB[22m
+[2mdist/[22m[35massets/PluginDetailView-BZTxTxFd.css                               [39m[1m[2m  4.53 kB[22m[1m[22m[2m 鈹?gzip:   1.13 kB[22m
+[2mdist/[22m[35massets/AskUserBubble-BZ2UK_8M.css                                  [39m[1m[2m  4.70 kB[22m[1m[22m[2m 鈹?gzip:   1.15 kB[22m
+[2mdist/[22m[35massets/HelpView-WWSuda6B.css                                       [39m[1m[2m  5.03 kB[22m[1m[22m[2m 鈹?gzip:   1.25 kB[22m
+[2mdist/[22m[35massets/FilesBubble-CBhkppZG.css                                    [39m[1m[2m  5.13 kB[22m[1m[22m[2m 鈹?gzip:   1.17 kB[22m
+[2mdist/[22m[35massets/PluginListView-DFYyNixf.css                                 [39m[1m[2m  5.28 kB[22m[1m[22m[2m 鈹?gzip:   1.30 kB[22m
+[2mdist/[22m[35massets/MetricsView-D_Ofn7xT.css                                    [39m[1m[2m  5.29 kB[22m[1m[22m[2m 鈹?gzip:   1.40 kB[22m
+[2mdist/[22m[35massets/MaxmaBlockerView-CFpAU8mK.css                               [39m[1m[2m  5.58 kB[22m[1m[22m[2m 鈹?gzip:   1.32 kB[22m
+[2mdist/[22m[35massets/CollabView-ChBkjWiR.css                                     [39m[1m[2m  5.69 kB[22m[1m[22m[2m 鈹?gzip:   1.24 kB[22m
+[2mdist/[22m[35massets/RulesView-C059ExW-.css                                      [39m[1m[2m  5.87 kB[22m[1m[22m[2m 鈹?gzip:   1.43 kB[22m
+[2mdist/[22m[35massets/SettingsView-07U8x03e.css                                   [39m[1m[2m  6.01 kB[22m[1m[22m[2m 鈹?gzip:   1.58 kB[22m
+[2mdist/[22m[35massets/FileEditBubble-BXh1Eq4u.css                                 [39m[1m[2m  6.14 kB[22m[1m[22m[2m 鈹?gzip:   1.24 kB[22m
+[2mdist/[22m[35massets/CapabilitiesView-CTAkwJIc.css                               [39m[1m[2m  6.56 kB[22m[1m[22m[2m 鈹?gzip:   1.39 kB[22m
+[2mdist/[22m[35massets/NewsView-BCws1sCa.css                                       [39m[1m[2m  6.88 kB[22m[1m[22m[2m 鈹?gzip:   1.77 kB[22m
+[2mdist/[22m[35massets/PrivacyView-BnZvcNy3.css                                    [39m[1m[2m  7.00 kB[22m[1m[22m[2m 鈹?gzip:   1.61 kB[22m
+[2mdist/[22m[35massets/ActivityView-Df18WO43.css                                   [39m[1m[2m  7.44 kB[22m[1m[22m[2m 鈹?gzip:   1.63 kB[22m
+[2mdist/[22m[35massets/MemoryView-C9cP2K6L.css                                     [39m[1m[2m  8.19 kB[22m[1m[22m[2m 鈹?gzip:   1.88 kB[22m
+[2mdist/[22m[35massets/SoulView-VhZmtC47.css                                       [39m[1m[2m  8.52 kB[22m[1m[22m[2m 鈹?gzip:   2.01 kB[22m
+[2mdist/[22m[35massets/ProvidersView-CYOPrpMS.css                                  [39m[1m[2m 11.68 kB[22m[1m[22m[2m 鈹?gzip:   2.37 kB[22m
+[2mdist/[22m[35massets/McpView-9LWbGgie.css                                        [39m[1m[2m 17.57 kB[22m[1m[22m[2m 鈹?gzip:   3.12 kB[22m
+[2mdist/[22m[35massets/quick-chat-DE2Tqrux.css                                     [39m[1m[2m 20.55 kB[22m[1m[22m[2m 鈹?gzip:   5.18 kB[22m
+[2mdist/[22m[35massets/katex-DLVrwanO.css                                          [39m[1m[2m 28.93 kB[22m[1m[22m[2m 鈹?gzip:   8.04 kB[22m
+[2mdist/[22m[35massets/main-A38yX4iO.css                                           [39m[1m[2m 86.13 kB[22m[1m[22m[2m 鈹?gzip:  16.26 kB[22m
+[2mdist/[22m[35massets/ChatView-D3TBcUp2.css                                       [39m[1m[2m119.84 kB[22m[1m[22m[2m 鈹?gzip:  19.64 kB[22m
+[2mdist/[22m[36massets/error-B0qTCWyL.js                                           [39m[1m[2m  0.21 kB[22m[1m[22m[2m 鈹?gzip:   0.15 kB[22m
+[2mdist/[22m[36massets/useReveal-EpOdeN22.js                                       [39m[1m[2m  0.41 kB[22m[1m[22m[2m 鈹?gzip:   0.30 kB[22m
+[2mdist/[22m[36massets/useMediaViewer-pIngAAnf.js                                  [39m[1m[2m  0.44 kB[22m[1m[22m[2m 鈹?gzip:   0.28 kB[22m
+[2mdist/[22m[36massets/useTilt-BNlv-4-a.js                                         [39m[1m[2m  0.60 kB[22m[1m[22m[2m 鈹?gzip:   0.36 kB[22m
+[2mdist/[22m[36massets/persona-BvrcrQcW.js                                         [39m[1m[2m  0.61 kB[22m[1m[22m[2m 鈹?gzip:   0.52 kB[22m
+[2mdist/[22m[36massets/useViewEntrance-uxxfIEDJ.js                                 [39m[1m[2m  0.62 kB[22m[1m[22m[2m 鈹?gzip:   0.42 kB[22m
+[2mdist/[22m[36massets/ColourfulText-KGhubEFl.js                                   [39m[1m[2m  0.65 kB[22m[1m[22m[2m 鈹?gzip:   0.45 kB[22m
+[2mdist/[22m[36massets/TextGenerateEffect-DLujDv2C.js                              [39m[1m[2m  0.66 kB[22m[1m[22m[2m 鈹?gzip:   0.45 kB[22m
+[2mdist/[22m[36massets/GlareCard-oqx8S0DC.js                                       [39m[1m[2m  0.91 kB[22m[1m[22m[2m 鈹?gzip:   0.59 kB[22m
+[2mdist/[22m[36massets/provider-DT-Z29pP.js                                        [39m[1m[2m  0.92 kB[22m[1m[22m[2m 鈹?gzip:   0.60 kB[22m
+[2mdist/[22m[36massets/NumberTicker-D5NJo_Vt.js                                    [39m[1m[2m  1.04 kB[22m[1m[22m[2m 鈹?gzip:   0.62 kB[22m
+[2mdist/[22m[36massets/Sparkles-DmDQjxeM.js                                        [39m[1m[2m  1.05 kB[22m[1m[22m[2m 鈹?gzip:   0.65 kB[22m
+[2mdist/[22m[36massets/FloatingCard-CyRvWuOY.js                                    [39m[1m[2m  1.29 kB[22m[1m[22m[2m 鈹?gzip:   0.75 kB[22m
+[2mdist/[22m[36massets/DirectionAwareHover-O0WWz7OS.js                             [39m[1m[2m  1.43 kB[22m[1m[22m[2m 鈹?gzip:   0.77 kB[22m
+[2mdist/[22m[36massets/CodeCard-Cs6jG_sx.js                                        [39m[1m[2m  1.55 kB[22m[1m[22m[2m 鈹?gzip:   0.90 kB[22m
+[2mdist/[22m[36massets/MaxmaBlockerError-DREwvHjS.js                               [39m[1m[2m  1.64 kB[22m[1m[22m[2m 鈹?gzip:   1.03 kB[22m
+[2mdist/[22m[36massets/NotFoundView-6tvp6Id9.js                                    [39m[1m[2m  1.66 kB[22m[1m[22m[2m 鈹?gzip:   0.89 kB[22m
+[2mdist/[22m[36massets/ImageBubble--4PyTCmv.js                                     [39m[1m[2m  1.72 kB[22m[1m[22m[2m 鈹?gzip:   0.93 kB[22m
+[2mdist/[22m[36massets/FileDiffView-Cc3Bofrr.js                                    [39m[1m[2m  1.87 kB[22m[1m[22m[2m 鈹?gzip:   0.85 kB[22m
+[2mdist/[22m[36massets/BubbleChrome-De1uJhTq.js                                    [39m[1m[2m  1.92 kB[22m[1m[22m[2m 鈹?gzip:   0.94 kB[22m
+[2mdist/[22m[36massets/useMarkdownPersist-Bgn6KFCs.js                              [39m[1m[2m  1.97 kB[22m[1m[22m[2m 鈹?gzip:   1.07 kB[22m
+[2mdist/[22m[36massets/plugin-B_ZXBCPi.js                                          [39m[1m[2m  2.01 kB[22m[1m[22m[2m 鈹?gzip:   0.83 kB[22m
+[2mdist/[22m[36massets/index-Dc1Doox4.js                                           [39m[1m[2m  2.03 kB[22m[1m[22m[2m 鈹?gzip:   0.89 kB[22m
+[2mdist/[22m[36massets/ShareView-pkCseYDN.js                                       [39m[1m[2m  2.08 kB[22m[1m[22m[2m 鈹?gzip:   1.23 kB[22m
+[2mdist/[22m[36massets/DsTooltip-DScvBdI5.js                                       [39m[1m[2m  2.17 kB[22m[1m[22m[2m 鈹?gzip:   0.99 kB[22m
+[2mdist/[22m[36massets/FeatureUnavailableView-CuKXj_le.js                          [39m[1m[2m  2.18 kB[22m[1m[22m[2m 鈹?gzip:   1.17 kB[22m
+[2mdist/[22m[36massets/SearchBubble-BOfeByPy.js                                    [39m[1m[2m  2.41 kB[22m[1m[22m[2m 鈹?gzip:   1.13 kB[22m
+[2mdist/[22m[36massets/TodoBubble-DmbMcN7O.js                                      [39m[1m[2m  2.41 kB[22m[1m[22m[2m 鈹?gzip:   1.22 kB[22m
+[2mdist/[22m[36massets/core-DhEqZVGG.js                                            [39m[1m[2m  2.44 kB[22m[1m[22m[2m 鈹?gzip:   0.98 kB[22m
+[2mdist/[22m[36massets/GenericOutputBubble-DqB50-Bz.js                             [39m[1m[2m  2.57 kB[22m[1m[22m[2m 鈹?gzip:   1.49 kB[22m
+[2mdist/[22m[36massets/BrowserBubble-DRiyI97k.js                                   [39m[1m[2m  2.70 kB[22m[1m[22m[2m 鈹?gzip:   1.29 kB[22m
+[2mdist/[22m[36massets/MemoryBubble-CuGfn-8c.js                                    [39m[1m[2m  3.20 kB[22m[1m[22m[2m 鈹?gzip:   1.46 kB[22m
+[2mdist/[22m[36massets/ScrollToPlugin-BC1R1LGU.js                                  [39m[1m[2m  3.71 kB[22m[1m[22m[2m 鈹?gzip:   1.81 kB[22m
+[2mdist/[22m[36massets/ExtensionView-B7GKGuoc.js                                   [39m[1m[2m  4.10 kB[22m[1m[22m[2m 鈹?gzip:   1.90 kB[22m
+[2mdist/[22m[36massets/quick-chat-DhnOvsay.js                                      [39m[1m[2m  4.15 kB[22m[1m[22m[2m 鈹?gzip:   2.26 kB[22m
+[2mdist/[22m[36massets/AppearanceView-CmC6AcEq.js                                  [39m[1m[2m  4.67 kB[22m[1m[22m[2m 鈹?gzip:   1.90 kB[22m
+[2mdist/[22m[36massets/MediaViewer-CNfVBPLR.js                                     [39m[1m[2m  5.10 kB[22m[1m[22m[2m 鈹?gzip:   2.37 kB[22m
+[2mdist/[22m[36massets/AutomationView-BcTKzGi-.js                                  [39m[1m[2m  5.18 kB[22m[1m[22m[2m 鈹?gzip:   2.30 kB[22m
+[2mdist/[22m[36massets/MaxmaBlockerView-ajxAbZ0q.js                                [39m[1m[2m  5.29 kB[22m[1m[22m[2m 鈹?gzip:   3.02 kB[22m
+[2mdist/[22m[36massets/NewsView-Cdrx1_rK.js                                        [39m[1m[2m  5.72 kB[22m[1m[22m[2m 鈹?gzip:   2.61 kB[22m
+[2mdist/[22m[36massets/AskUserBubble-BxfWPKUK.js                                   [39m[1m[2m  5.95 kB[22m[1m[22m[2m 鈹?gzip:   2.46 kB[22m
+[2mdist/[22m[36massets/PythonBubble-CqNMO25T.js                                    [39m[1m[2m  6.34 kB[22m[1m[22m[2m 鈹?gzip:   2.79 kB[22m
+[2mdist/[22m[36massets/PluginListView-9xKcNDcb.js                                  [39m[1m[2m  6.36 kB[22m[1m[22m[2m 鈹?gzip:   2.92 kB[22m
+[2mdist/[22m[36massets/UserView-0pHO2Aoa.js                                        [39m[1m[2m  6.52 kB[22m[1m[22m[2m 鈹?gzip:   4.06 kB[22m
+[2mdist/[22m[36massets/RulesView-B1aYKq65.js                                       [39m[1m[2m  6.87 kB[22m[1m[22m[2m 鈹?gzip:   2.83 kB[22m
+[2mdist/[22m[36massets/PluginDetailView-BBnhkjOj.js                                [39m[1m[2m  6.95 kB[22m[1m[22m[2m 鈹?gzip:   2.87 kB[22m
+[2mdist/[22m[36massets/FileEditBubble-Bnedv8Pr.js                                  [39m[1m[2m  7.21 kB[22m[1m[22m[2m 鈹?gzip:   2.78 kB[22m
+[2mdist/[22m[36massets/SplitText-EJlRidAA.js                                       [39m[1m[2m  7.35 kB[22m[1m[22m[2m 鈹?gzip:   3.47 kB[22m
+[2mdist/[22m[36massets/FilesBubble-CXRBfN8s.js                                     [39m[1m[2m  7.44 kB[22m[1m[22m[2m 鈹?gzip:   2.63 kB[22m
+[2mdist/[22m[36massets/HelpView-6HGnHDd6.js                                        [39m[1m[2m  7.66 kB[22m[1m[22m[2m 鈹?gzip:   4.64 kB[22m
+[2mdist/[22m[36massets/PrivacyView-DD-7j267.js                                     [39m[1m[2m  8.17 kB[22m[1m[22m[2m 鈹?gzip:   4.07 kB[22m
+[2mdist/[22m[36massets/CollabView-CiXx712B.js                                      [39m[1m[2m  8.19 kB[22m[1m[22m[2m 鈹?gzip:   3.29 kB[22m
+[2mdist/[22m[36massets/CapabilitiesView-D3UwQLt2.js                                [39m[1m[2m  8.26 kB[22m[1m[22m[2m 鈹?gzip:   3.41 kB[22m
+[2mdist/[22m[36massets/SoulView-DAzu914q.js                                        [39m[1m[2m  8.54 kB[22m[1m[22m[2m 鈹?gzip:   4.96 kB[22m
+[2mdist/[22m[36massets/Observer-Axmp1CMU.js                                        [39m[1m[2m  9.27 kB[22m[1m[22m[2m 鈹?gzip:   4.20 kB[22m
+[2mdist/[22m[36massets/ActivityView-DPQBk7S6.js                                    [39m[1m[2m  9.31 kB[22m[1m[22m[2m 鈹?gzip:   4.69 kB[22m
+[2mdist/[22m[36massets/MemoryView-DoNbJpmq.js                                      [39m[1m[2m 10.18 kB[22m[1m[22m[2m 鈹?gzip:   4.55 kB[22m
+[2mdist/[22m[36massets/MetricsView-DCb_I1xX.js                                     [39m[1m[2m 14.19 kB[22m[1m[22m[2m 鈹?gzip:   6.03 kB[22m
+[2mdist/[22m[36massets/RenderMarkdown.vue_vue_type_style_index_0_lang-DARHUu0M.js  [39m[1m[2m 14.74 kB[22m[1m[22m[2m 鈹?gzip:   6.46 kB[22m
+[2mdist/[22m[36massets/ProvidersView-C0c-NwOa.js                                   [39m[1m[2m 19.90 kB[22m[1m[22m[2m 鈹?gzip:   7.57 kB[22m
+[2mdist/[22m[36massets/SettingsView-HoR24Vww.js                                    [39m[1m[2m 22.60 kB[22m[1m[22m[2m 鈹?gzip:   7.13 kB[22m
+[2mdist/[22m[36massets/Flip-Blvo3Ljq.js                                            [39m[1m[2m 24.87 kB[22m[1m[22m[2m 鈹?gzip:   9.59 kB[22m
+[2mdist/[22m[36massets/McpView-CjbIxThX.js                                         [39m[1m[2m 28.45 kB[22m[1m[22m[2m 鈹?gzip:  10.81 kB[22m
+[2mdist/[22m[36massets/ScrollTrigger-DN-1W0Uv.js                                   [39m[1m[2m 34.84 kB[22m[1m[22m[2m 鈹?gzip:  14.83 kB[22m
+[2mdist/[22m[36massets/favicon-BY5S5h1X.js                                         [39m[1m[2m 96.47 kB[22m[1m[22m[2m 鈹?gzip:  29.69 kB[22m
+[2mdist/[22m[36massets/vue-vendor-Di1ub1-d.js                                      [39m[1m[2m132.20 kB[22m[1m[22m[2m 鈹?gzip:  49.96 kB[22m
+[2mdist/[22m[36massets/ChatView-BlovHZvB.js                                        [39m[1m[2m161.74 kB[22m[1m[22m[2m 鈹?gzip:  58.01 kB[22m
+[2mdist/[22m[36massets/main-CqTVDvNO.js                                            [39m[1m[2m162.82 kB[22m[1m[22m[2m 鈹?gzip:  62.97 kB[22m
+[2mdist/[22m[36massets/markdown-vendor-BaWzuhFV.js                                 [39m[1m[2m359.24 kB[22m[1m[22m[2m 鈹?gzip: 126.42 kB[22m
+[2mdist/[22m[36massets/codemirror-B74nGrP-.js                                      [39m[1m[2m611.60 kB[22m[1m[22m[2m 鈹?gzip: 209.65 kB[22m
+[32m鉁?built in 14.98s[39m
+[INFO] Preparing bundled Bun runtime (bun.exe)...
+=== prepare-bun: Bun 1.3.14 (Windows x64) ===
+[cache] hit: C:\Users\Libai\AppData\Local\MaxmaBuildCache\bun-windows-x64-1.3.14.zip
+Copy-Item : Access to the path 'D:\Maxma\MaxmaHere\bun-sidecar\bun.exe' is denied.
+At D:\Maxma\MaxmaHere\build\prepare-bun.ps1:68 char:1
++ Copy-Item $bunExe.FullName $TargetBunExe -Force
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [Copy-Item], UnauthorizedAccessException
+    + FullyQualifiedErrorId : System.UnauthorizedAccessException,Microsoft.PowerShell.Commands.CopyItemCommand
+ 
+[ERROR] Bun runtime preparation failed
+[ERROR] Formal server build failed.

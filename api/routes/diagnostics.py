@@ -9,6 +9,7 @@
 """
 
 import logging
+import time
 
 from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
@@ -19,6 +20,25 @@ from app_paths import LOGS_DIR
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# 前端运行时诊断（console 错误/状态快照）写入独立文件，便于无 DevTools 排查
+_FRONTEND_DIAG_LOG = LOGS_DIR / "frontend-diag.log"
+
+
+@router.post("/diagnostics/frontend")
+async def frontend_diag(payload: dict):
+    """接收前端上报的运行时错误/状态快照，追加写入 frontend-diag.log。"""
+    try:
+        _FRONTEND_DIAG_LOG.parent.mkdir(parents=True, exist_ok=True)
+        kind = str(payload.get("kind") or "info")
+        msg = str(payload.get("msg") or "")[:2000]
+        url = str(payload.get("url") or "")[:300]
+        line = f"[{time.strftime('%H:%M:%S')}] {kind} | {url} | {msg}\n"
+        with open(_FRONTEND_DIAG_LOG, "a", encoding="utf-8") as f:
+            f.write(line)
+    except Exception as e:  # 诊断通道自身失败不影响主流程
+        logger.debug("[diagnostics] frontend diag write failed: %s", e)
+    return {"status": "ok"}
 
 
 @router.get("/diagnostics/error-log")

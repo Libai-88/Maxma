@@ -6,12 +6,10 @@ streams intermediate events back to frontend, and saves const sessions.
 
 import asyncio
 import base64
-import hashlib
 import inspect
 import json
 import logging
 import os
-import re
 import uuid
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -27,6 +25,14 @@ from api.session_manager import SessionState
 from api.ws_protocol import WsEventType, WsMessageType, CLIENT_MESSAGE_TYPES
 from api.yaml_store import yaml_file_lock
 from app_paths import PROJECT_ROOT, PROVIDERS_YAML_PATH
+# S2-4: 纯逻辑拆分——模型解析 / artifact 合成 / 回合上下文
+from api.routes.chat_model import _resolve_chat_model
+from api.routes.chat_artifacts import (
+    _FILE_WRITING_TOOLS,
+    _extract_file_path_from_output,
+    _build_artifact_payload,
+)
+from api.routes.chat_turns import _new_turn_id, _calculate_context_usage
 
 logger = logging.getLogger(__name__)
 
@@ -113,124 +119,6 @@ async def _destroy_sidecar_session(sidecar_mgr, session) -> None:
             sidecar_sid[:8],
             exc_info=True,
         )
-
-
-def _resolve_chat_model(provider_id: str, model_name: str) -> dict[str, str | int]:
-    """Resolve the browser's provider/model selection for the sidecar."""
-    requested_model = model_name.strip() or "gpt-4o"
-    requested_provider = provider_id.strip()
-    with yaml_file_lock(PROVIDERS_YAML_PATH):
-        provider = _find_provider(_load_providers(), requested_provider)
-
-    if provider is None:
-        return {
-            "provider": requested_provider or "openai",
-            "model": requested_model,
-            "base_url": "",
-            "api_key": "",
-            "provider_type": "openai",
-            "context_window": 128000,
-        }
-
-    models = provider.get("models")
-    selected_model = requested_model
-    if isinstance(models, list) and models and selected_model not in models:
-        selected_model = str(models[0])
-    return {
-        "provider": str(provider.get("id") or requested_provider or "openai"),
-        "model": selected_model,
-        "base_url": str(provider.get("base_url") or ""),
-        "api_key": _decrypt_api_key(provider.get("api_key")),
-        "provider_type": str(provider.get("provider_type") or "openai"),
-        "context_window": int(provider.get("context_window") or 128000),
-    }
-
-
-# ── Phase 2.2: Artifact 合成辅助 ──
-
-_FILE_WRITING_TOOLS = frozenset({"write", "edit", "create"})
-
-_MAX_ARTIFACT_BODY = 2000  # body 字符上限（前端 isInteractiveArtifact 限制 4000）
-
-
-def _extract_file_path_from_output(output: str) -> str | None:
-    """从工具输出字符串中提取文件路径。
-
-    侧边栏将工具结果序列化为 JSON，格式如：
-      {"content":[{"type":"text","text":"Successfully wrote 13 bytes to /path/to/file.txt"}],"details":{}}
-    此函数尝试解析 JSON 并提取文件路径。
-    """
-    text = output
-    # 尝试解析 JSON
-    try:
-        data = json.loads(output)
-        if isinstance(data, dict):
-            # 从 content 块提取文本
-            content = data.get("content", [])
-            if isinstance(content, list):
-                texts = [
-                    block.get("text", "")
-                    for block in content
-                    if isinstance(block, dict) and block.get("type") == "text"
-                ]
-                if texts:
-                    text = " ".join(texts)
-    except (json.JSONDecodeError, TypeError, ValueError):
-        pass
-
-    # 匹配 "to /path/to/file" 或 "Edited /path/to/file" 中的路径
-    for pattern in (
-        r'(?:to|at|:)\s*(/[^\s,.;!?\'"]+)',   # Unix 绝对路径
-        r'(?:to|at|:)\s*([A-Za-z]:\\[^\s,.;!?\'"]+)',  # Windows 绝对路径
-    ):
-        for match in re.finditer(pattern, text, re.IGNORECASE):
-            path = match.group(1).strip().rstrip(".,;:!?\"'")
-            if os.path.isfile(path):
-                return os.path.normpath(path)
-
-    # 兜底：扫描输出中所有存在的文件路径
-    for word in text.split():
-        word = word.strip().rstrip(".,;:!?\"'")
-        if os.path.isfile(word):
-            return os.path.normpath(word)
-
-    return None
-
-
-def _build_artifact_payload(file_path: str) -> dict | None:
-    """读取文件并构建 InteractiveArtifact 负载。
-
-    返回符合前端 InteractiveArtifact 类型的 dict，若文件不可读则返回 None。
-    """
-    if not os.path.isfile(file_path):
-        return None
-    try:
-        with open(file_path, "r", encoding="utf-8", errors="replace") as f:
-            content = f.read()
-    except (OSError, PermissionError):
-        return None
-
-    file_id = hashlib.md5(file_path.encode("utf-8")).hexdigest()  # 32 字符 hex
-    filename = os.path.basename(file_path)
-    token = base64.b64encode(file_path.encode("utf-8")).decode("ascii")
-
-    # 截断并 sanitize body（不包含 HTML 标签）
-    preview = content[:_MAX_ARTIFACT_BODY]
-    if len(content) > _MAX_ARTIFACT_BODY:
-        preview += "\n\n... (内容已截断)"
-    preview = preview.replace("<", "&lt;").replace(">", "&gt;")
-
-    return {
-        "version": 1,
-        "id": file_id,
-        "type": "choice",
-        "title": filename,
-        "body": preview,
-        "actions": [
-            {"id": "preview", "label": "预览", "token": token, "style": "primary"},
-            {"id": "open", "label": "打开", "token": token, "style": "secondary"},
-        ],
-    }
 
 
 async def _get_messages_from_sidecar(
@@ -658,38 +546,6 @@ async def _stream_turn_sidecar(
     return final_answer
 
 
-async def _calculate_context_usage(
-    session,
-    system_prompt,
-    *,
-    max_tokens: int = 256_000,
-    model_name: str = "",
-) -> dict:
-    """Estimate context usage from sidecar message history."""
-    messages = await _get_messages_from_sidecar(session, limit=200)
-    total_chars = sum(len(m.get("content", "")) for m in messages)
-    total_chars += len(system_prompt or "")
-    estimated_tokens = int(total_chars / 2)
-    return {
-        "estimated_tokens": estimated_tokens,
-        "max_tokens": max_tokens,
-        "percentage": min(
-            100, int(estimated_tokens / max(max_tokens, 1) * 100)
-        ),
-        "message_count": len(messages),
-        "model_name": model_name,
-    }
-
-
-def _new_turn_id(turn_id: object = None) -> str:
-    """Return a validated client id or create one before execution begins."""
-    if isinstance(turn_id, str):
-        candidate = turn_id.strip()
-        if candidate and len(candidate) <= 128:
-            return candidate
-    return uuid.uuid4().hex
-
-
 async def _save_const_session(
     session: SessionState, final_answer: str
 ) -> None:
@@ -832,8 +688,9 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             if session.is_const:
                 await _save_const_session(session, final_answer)
 
+        messages = await _get_messages_from_sidecar(session, limit=200)
         context_usage = await _calculate_context_usage(
-            session,
+            messages,
             sp,
             max_tokens=int(_turn_model_config.get("context_window") or 128000),
             model_name=str(_turn_model_config.get("model") or ""),

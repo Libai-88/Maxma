@@ -378,8 +378,8 @@ function formatDate(dateStr: string): string {
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
+  background: color-mix(in srgb, var(--status-error) 10%, transparent);
+  color: var(--status-error);
   border-radius: 6px;
   font-size: 0.85em;
   margin-bottom: 16px;
@@ -389,7 +389,7 @@ function formatDate(dateStr: string): string {
   padding: 2px 6px;
   border: none;
   background: transparent;
-  color: #ef4444;
+  color: var(--status-error);
   cursor: pointer;
   font-size: 1.1em;
 }
@@ -466,18 +466,18 @@ function formatDate(dateStr: string): string {
 }
 
 .mode-read {
-  background: rgba(59, 130, 246, 0.1);
-  color: #3b82f6;
+  background: color-mix(in srgb, var(--status-info) 10%, transparent);
+  color: var(--status-info);
 }
 
 .mode-comment {
-  background: rgba(245, 158, 11, 0.1);
-  color: #f59e0b;
+  background: color-mix(in srgb, var(--status-warn) 10%, transparent);
+  color: var(--status-warn);
 }
 
 .mode-edit {
-  background: rgba(16, 185, 129, 0.1);
-  color: #10b981;
+  background: color-mix(in srgb, var(--status-ok) 10%, transparent);
+  color: var(--status-ok);
 }
 
 .share-link {
@@ -528,7 +528,7 @@ function formatDate(dateStr: string): string {
 }
 
 .share-expires {
-  color: #f59e0b;
+  color: var(--status-warn);
 }
 
 .btn {
@@ -559,13 +559,13 @@ function formatDate(dateStr: string): string {
 }
 
 .btn-danger {
-  color: #ef4444;
-  border-color: rgba(239, 68, 68, 0.3);
+  color: var(--status-error);
+  border-color: color-mix(in srgb, var(--status-error) 30%, transparent);
 }
 
 .btn-danger:hover {
-  background: rgba(239, 68, 68, 0.1);
-  border-color: #ef4444;
+  background: color-mix(in srgb, var(--status-error) 10%, transparent);
+  border-color: var(--status-error);
 }
 
 /* Dialog */
@@ -576,7 +576,7 @@ function formatDate(dateStr: string): string {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.4);
+  background: color-mix(in srgb, var(--text-primary) 40%, transparent);
   backdrop-filter: blur(2px);
 }
 
@@ -587,7 +587,7 @@ function formatDate(dateStr: string): string {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 8px 32px color-mix(in srgb, var(--text-primary) 15%, transparent);
 }
 
 .dialog-content h3 {

@@ -1,5 +1,13 @@
 <template>
-  <div ref="rootRef" class="md-editor-view">
+  <!-- S4 兜底：便携版（Tauri WebView2）下 .cm-line color 可能被某条
+       路由 scoped CSS 覆盖或 CSS 变量未及时应用导致文字不可见。
+       在根容器直接 inline 颜色+字体：即便 codemirror 内部所有
+       color 规则失效，文字也能通过 inherit 可见。 -->
+  <div
+    ref="rootRef"
+    class="md-editor-view"
+    :style="{ color: '#1C1C1C', background: 'var(--bg-card, #FFFEFA)', fontFamily: 'inherit' }"
+  >
     <div class="header">
       <h2>{{ title }} <span class="subtitle">{{ subtitle }}</span></h2>
       <button class="save-button" :disabled="saving || content === savedContent" @click="saveContent">
@@ -36,14 +44,16 @@
       <button class="retry-button" @click="retryLoad">重试</button>
     </div>
     <div v-else class="editor-wrapper">
-      <Codemirror
+      <!-- S4-3 降级：原 codemirror 在 Tauri WebView2 下渲染异常（5 轮修复未根治）。
+           改用原生 textarea：保证人设/用户页编辑可用，放弃 markdown 语法高亮。
+           后续可在 codemirror 与 WebView2 兼容性稳定后再恢复。 -->
+      <textarea
+        ref="textareaRef"
+        class="md-textarea"
         v-model="content"
-        :extensions="extensions"
-        :disabled="saving"
         :placeholder="placeholder"
-        :autofocus="false"
-        :indent-with-tab="true"
-        :tab-size="2"
+        :disabled="saving"
+        spellcheck="false"
         @blur="onBlur"
       />
     </div>
@@ -53,7 +63,6 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
-import { Codemirror } from 'vue-codemirror'
 import { useMarkdownPersist } from '@/composables/useMarkdownPersist'
 import { confirmAction } from '@/composables/useConfirm'
 import Icon from '@/components/Icon.vue'
@@ -90,7 +99,6 @@ const {
   saveState,
   saveError,
   loadError,
-  extensions,
   saveStateText,
   loadContent,
   saveContent,
@@ -98,9 +106,11 @@ const {
   retryLoad,
 } = useMarkdownPersist({ type: props.type })
 
+const textareaRef = ref<HTMLTextAreaElement | null>(null)
+
 const rootRef = ref<HTMLElement | null>(null)
 
-// 入场：加载完成后 header + 编辑器 wrapper 浮入（仅 opacity/transform，不影响 Codemirror 初始化）
+// 入场：加载完成后 header + 编辑器 wrapper 浮入（仅 opacity/transform，不影响编辑器初始化）
 useGsap((_ctx, contextSafe) => {
   watch(loading, contextSafe((isLoading) => {
     if (isLoading) return
@@ -206,32 +216,62 @@ onMounted(loadContent)
 
 .editor-wrapper {
   flex: 1;
+  /* 保底最小高度：flex 布局异常时编辑器也不会塌陷为 0 */
+  min-height: 300px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
   background: var(--bg-primary);
+  /* 确保子元素 height:100% 有确定参考（WebView2 flex 子项不一定提供 definite height） */
+  position: relative;
+  display: flex;
+}
+
+/* S4-3 textarea 降级（codemirror 在 Tauri WebView2 渲染异常时使用）：
+   填满容器、稳定可编辑。放弃 markdown 语法高亮换取兼容性。 */
+.editor-wrapper .md-textarea {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  resize: none;
+  border: none;
+  outline: none;
+  padding: 16px;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: "Microsoft YaHei", "PingFang SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  tab-size: 2;
 }
 
 /* 修复：vue-codemirror 容器默认 display:contents（无盒子），在 WebView2 中
-   .cm-editor 的 height:100% 可能无法正确解析导致编辑器高度塌陷为 0，
-   内容与交互区全部不可见（人设/用户页"空白不可编辑"）。改为正常块级盒子，
-   让 .cm-editor 高度百分比有确定参考。 */
+   .cm-editor 的 height:100% 无法正确解析导致编辑器高度塌陷为 0，
+   内容与交互区全部不可见（人设/用户页"空白不可编辑"）。
+   1) display:block 覆盖 inline style="display:contents"
+   2) 绝对定位 + inset:0 让编辑器撑满容器，绕过 height% 百分比链断裂问题 */
 .editor-wrapper :deep(.v-codemirror) {
   display: block !important;
-  height: 100%;
+  position: absolute;
+  inset: 0;
 }
 
 .editor-wrapper :deep(.cm-editor) {
-  height: 100%;
-  /* 保底高度：即使 flex 布局异常也不会把编辑器压没 */
-  min-height: 240px;
+  height: 100% !important;
+  min-height: 100% !important;
 }
 
 .editor-wrapper :deep(.cm-scroller) {
+  /* specificity 必须 > codemirror base theme 的 `.ͼN .cm-scroller` (0,2,0)，
+     并加 !important 覆盖 codemirror 的 font-family: monospace —— 否则
+     Tauri WebView2 中 monospace 的中文 fallback 行为异常导致文字不可见。
+     overflow-y: auto 补全 codemirror 6 base theme 缺失的垂直滚动。 */
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
-    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    'Hiragino Sans GB', 'Microsoft YaHei', 'SimSun', sans-serif !important;
   font-size: 15px;
   line-height: 1.6;
+  color: var(--text-primary);
+  overflow-y: auto !important;
 }
 
 .editor-wrapper :deep(.cm-gutters) {
@@ -245,6 +285,13 @@ onMounted(loadContent)
 
 .editor-wrapper :deep(.cm-content) {
   padding: 16px;
+  color: var(--text-primary);
+}
+
+/* 关键：scoped 的 .cm-line 需要 color 兜底（之前缺失，靠 main.css 0,2,0 全局兜底，
+   在 Tauri WebView2 中 specificity 不够 → 显式加到 scoped 内） */
+.editor-wrapper :deep(.cm-line) {
+  color: var(--text-primary);
 }
 
 .editor-wrapper :deep(.cm-placeholder) {

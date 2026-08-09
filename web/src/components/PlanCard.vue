@@ -247,9 +247,9 @@ useGsap((ctx) => {
 
 .pending .plan-status { background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card)); color: var(--status-warn); }
 .approved .plan-status { background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card)); color: var(--status-ok); }
-.modified .plan-status { background: #dbeafe; color: #1e40af; }
+.modified .plan-status { background: var(--accent-light); color: var(--accent); }
 .rejected .plan-status { background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card)); color: var(--status-error); }
-.running .plan-status { background: #dbeafe; color: #1e40af; }
+.running .plan-status { background: var(--accent-light); color: var(--accent); }
 .failed .plan-status { background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card)); color: var(--status-error); }
 .replanning .plan-status { background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card)); color: var(--status-warn); }
 
@@ -275,7 +275,7 @@ useGsap((ctx) => {
 .plan-step.step-running {
   background: transparent;
   background: transparent;
-  background: color-mix(in srgb, #93c5fd 12%, transparent);
+  background: color-mix(in srgb, var(--accent-light) 12%, transparent);
 }
 
 .plan-step.step-done {
@@ -310,14 +310,14 @@ useGsap((ctx) => {
 
 .step-num.step-done { background: var(--status-ok); }
 .step-num.step-failed { background: var(--status-error); }
-.step-num.step-skipped { background: #9ca3af; }
+.step-num.step-skipped { background: var(--text-tertiary); }
 .step-num.step-running { background: var(--status-info); }
 
 .step-spinner {
   display: inline-block;
   width: 12px;
   height: 12px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid color-mix(in srgb, var(--text-inverse) 30%, transparent);
   border-top-color: var(--bg-primary);
   border-radius: 50%;
   animation: maxma-spin 0.8s linear infinite;
@@ -338,7 +338,7 @@ useGsap((ctx) => {
   margin-top: 2px;
 }
 
-.step-badge.running { background: #dbeafe; color: #1e40af; }
+.step-badge.running { background: var(--accent-light); color: var(--accent); }
 .step-badge.done { background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card)); color: var(--status-ok); }
 .step-badge.failed { background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card)); color: var(--status-error); }
 .step-badge.skipped { background: var(--bg-secondary); color: var(--text-secondary); }

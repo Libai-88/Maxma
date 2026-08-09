@@ -40,8 +40,8 @@ function toggle() { emit('update:modelValue', !props.modelValue) }
 .ds-switch__track:disabled { opacity: 0.5; cursor: not-allowed; }
 .ds-switch__thumb {
   position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
-  border-radius: 50%; background: #fff; transition: transform var(--duration-fast) var(--ease-out);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  border-radius: 50%; background: var(--bg-raised); transition: transform var(--duration-fast) var(--ease-out);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--text-primary) 15%, transparent);
 }
 .ds-switch__track.is-on .ds-switch__thumb { transform: translateX(18px); }
 </style>

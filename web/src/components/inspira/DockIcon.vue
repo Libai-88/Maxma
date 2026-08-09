@@ -184,6 +184,6 @@ onUnmounted(() => {
 /* ── Hover warm accent ── */
 .dock-icon:hover .icon-wrapper,
 .dock-icon:hover .dock-label {
-  color: #ffa117;
+  color: var(--status-warn);
 }
 </style>

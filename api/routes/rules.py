@@ -1,7 +1,8 @@
 """Rules API — OMP 质量规则管理（内置 + 自定义）。
 
 暴露 OMP 后端的语言特定质量规则供前端浏览和管理。
-内置规则为静态数据，自定义规则为内存存储（重启后丢失）。
+内置规则单一事实源为 config/rules/builtin_rules.json
+（sidecar 的 list_rules 工具同读该文件），自定义规则持久化到 user_rules.json。
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from app_paths import API_DATA_DIR
+from app_paths import API_DATA_DIR, BUNDLE_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +69,11 @@ class RuleResponse(BaseModel):
 
 # ─── Data Stores ───────────────────────────────────────────────────────────────
 
-# OMP 内置质量规则（按语言分组）— 不可删除，但可切换启用状态
-_BUILTIN_RULES: list[dict] = [
+# 内置规则单一事实源：config/rules/builtin_rules.json（sidecar list_rules 工具同读）。
+_BUILTIN_RULES_FILE = BUNDLE_DIR / "config" / "rules" / "builtin_rules.json"
+
+# 内嵌兜底——共享 JSON 缺失/损坏时使用，保证规则模块始终可用。
+_BUILTIN_RULES_FALLBACK: list[dict] = [
     # Python
     {"id": "py-type-hints", "language": "python", "name": "类型提示完整性", "description": "函数参数和返回值必须有类型注解", "severity": "warning", "pattern": "", "enabled": True},
     {"id": "py-async-safety", "language": "python", "name": "异步安全", "description": "async 函数中禁止阻塞调用（time.sleep, open 等）", "severity": "error", "pattern": "", "enabled": True},
@@ -93,6 +97,22 @@ _BUILTIN_RULES: list[dict] = [
     {"id": "sh-quote-vars", "language": "shell", "name": "变量引用", "description": "Shell 变量展开必须加双引号防止词分割", "severity": "warning", "pattern": "", "enabled": True},
     {"id": "sh-set-flags", "language": "shell", "name": "安全标志", "description": "脚本开头必须 set -euo pipefail", "severity": "error", "pattern": "", "enabled": True},
 ]
+
+
+def _load_builtin_rules() -> list[dict]:
+    """从共享 JSON 加载内置规则，缺失/损坏时回退内嵌列表。"""
+    try:
+        if _BUILTIN_RULES_FILE.exists():
+            with open(_BUILTIN_RULES_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list) and data:
+                return data
+    except Exception as e:
+        logger.warning("Failed to load builtin rules from %s: %s", _BUILTIN_RULES_FILE, e)
+    return list(_BUILTIN_RULES_FALLBACK)
+
+
+_BUILTIN_RULES: list[dict] = _load_builtin_rules()
 
 # 用户自定义规则（文件持久化）
 _USER_RULES: list[dict] = []

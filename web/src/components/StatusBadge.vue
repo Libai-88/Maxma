@@ -113,7 +113,7 @@ function makeItem(name: string, c: ComponentHealth | null | undefined) {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #ccc;
+  background: var(--text-tertiary);
 }
 .connected .dot {
   background: var(--status-ok);

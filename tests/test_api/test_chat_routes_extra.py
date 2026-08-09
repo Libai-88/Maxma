@@ -189,71 +189,40 @@ class TestGetMessagesFromSidecar:
 
 
 class TestCalculateContextUsage:
-    async def test_basic_math(self, monkeypatch):
-        session = _FakeChatSession()
-        # mock _get_messages_from_sidecar 返回已知内容
-        async def fake_get(session, limit=50, *, sidecar_mgr=None):
-            return [{"content": "ab"}, {"content": "cde"}]  # 5 chars
+    """_calculate_context_usage 已参数化（接收消息列表而非 session，S2-4）。"""
 
-        monkeypatch.setattr(chat_mod, "_get_messages_from_sidecar", fake_get)
-        # system_prompt = "sp" (2 chars) → total 7 → 7/2 = 3
-        usage = await _calculate_context_usage(session, "sp")
+    async def test_basic_math(self):
+        # 5 chars → 5/2 = 2 (int)；+ system_prompt "sp" 2 chars = 7 → 7/2 = 3
+        usage = await _calculate_context_usage(
+            [{"content": "ab"}, {"content": "cde"}], "sp"
+        )
         assert usage["estimated_tokens"] == 3
         assert usage["max_tokens"] == 256_000
         assert usage["message_count"] == 2
         assert usage["model_name"] == ""
         assert usage["percentage"] == 0  # 3 / 256000 * 100 = 0 (int)
 
-    async def test_zero_messages(self, monkeypatch):
-        session = _FakeChatSession()
-
-        async def fake_get(session, limit=50, *, sidecar_mgr=None):
-            return []
-
-        monkeypatch.setattr(chat_mod, "_get_messages_from_sidecar", fake_get)
-        usage = await _calculate_context_usage(session, "")
+    async def test_zero_messages(self):
+        usage = await _calculate_context_usage([], "")
         assert usage["estimated_tokens"] == 0
         assert usage["message_count"] == 0
         assert usage["percentage"] == 0
 
-    async def test_caps_percentage_at_100(self, monkeypatch):
-        session = _FakeChatSession()
-
-        async def fake_get(session, limit=50, *, sidecar_mgr=None):
-            return [{"content": "x" * 1_000_000}]
-
-        monkeypatch.setattr(chat_mod, "_get_messages_from_sidecar", fake_get)
-        usage = await _calculate_context_usage(session, "sp")
+    async def test_caps_percentage_at_100(self):
+        usage = await _calculate_context_usage([{"content": "x" * 1_000_000}], "sp")
         assert usage["percentage"] == 100
 
-    async def test_system_prompt_none_treated_as_empty(self, monkeypatch):
-        session = _FakeChatSession()
-
-        async def fake_get(session, limit=50, *, sidecar_mgr=None):
-            return []
-
-        monkeypatch.setattr(chat_mod, "_get_messages_from_sidecar", fake_get)
-        usage = await _calculate_context_usage(session, None)
+    async def test_system_prompt_none_treated_as_empty(self):
+        usage = await _calculate_context_usage([], None)
         assert usage["estimated_tokens"] == 0
 
-    async def test_custom_max_tokens_and_model_name(self, monkeypatch):
-        session = _FakeChatSession()
-
-        async def fake_get(session, limit=50, *, sidecar_mgr=None):
-            return [{"content": "x" * 200}]  # 200 chars → 100 tokens
-
-        monkeypatch.setattr(chat_mod, "_get_messages_from_sidecar", fake_get)
+    async def test_custom_max_tokens_and_model_name(self):
         usage = await _calculate_context_usage(
-            session, "", max_tokens=1000, model_name="gpt-4"
+            [{"content": "x" * 200}], "", max_tokens=1000, model_name="gpt-4"
         )
         assert usage["max_tokens"] == 1000
         assert usage["model_name"] == "gpt-4"
         assert usage["percentage"] == 10  # 100/1000 = 10%
-
-
-# ===========================================================================
-# _new_turn_id
-# ===========================================================================
 
 
 class TestNewTurnId:

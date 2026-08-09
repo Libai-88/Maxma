@@ -302,7 +302,7 @@ function isActive(path: string): boolean {
 .shell ul li:hover a .text,
 .shell ul li:hover button .icon,
 .shell ul li:hover button .text {
-  color: #ffa117;
+  color: var(--accent);
 }
 
 /* ── Settings button integration ── */
@@ -329,7 +329,7 @@ function isActive(path: string): boolean {
 
 .settings-item :deep(.settings-btn:hover) {
   background: transparent;
-  color: #ffa117;
+  color: var(--accent);
 }
 
 .settings-item :deep(.settings-btn .icon) {

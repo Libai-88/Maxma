@@ -614,7 +614,7 @@ function copyContent() {
 .match-text {
   color: var(--accent);
   word-break: break-all;
-  background: rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--text-inverse) 5%, transparent);
   padding: 1px 4px;
   border-radius: 3px;
 }

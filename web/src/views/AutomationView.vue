@@ -231,7 +231,7 @@ async function handleDelete(id: string) {
 .empty-icon { font-size: 2em; margin-bottom: 8px; }
 .empty-title { font-size: 1em; font-weight: 600; margin-bottom: 4px; }
 .empty-desc { font-size: 0.85em; }
-.error-banner { padding: 10px 12px; background: rgba(239,68,68,0.1); color: #ef4444; border-radius: 6px; font-size: 0.85em; margin-bottom: 12px; }
+.error-banner { padding: 10px 12px; background: color-mix(in srgb, var(--status-error) 10%, transparent); color: var(--status-error); border-radius: 6px; font-size: 0.85em; margin-bottom: 12px; }
 
 .section { margin-bottom: 20px; }
 .create-section { padding: 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
@@ -261,8 +261,8 @@ async function handleDelete(id: string) {
   background: var(--bg-secondary); cursor: pointer; font-size: 0.78em; transition: all 0.15s;
 }
 .btn-icon:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-danger { color: #ef4444; border-color: rgba(239,68,68,0.3); }
-.btn-danger:hover { background: rgba(239,68,68,0.1); }
+.btn-danger { color: var(--status-error); border-color: color-mix(in srgb, var(--status-error) 30%, transparent); }
+.btn-danger:hover { background: color-mix(in srgb, var(--status-error) 10%, transparent); }
 .automation-meta { display: flex; gap: 16px; flex-wrap: wrap; }
 .meta-item { font-size: 0.8em; color: var(--text-tertiary); }
 .history-panel { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
@@ -273,7 +273,7 @@ async function handleDelete(id: string) {
   padding: 1px 8px; border-radius: 4px; text-transform: uppercase; font-size: 0.85em;
   background: var(--bg-secondary); color: var(--text-secondary);
 }
-.history-status.completed { background: rgba(34,197,94,0.15); color: #22c55e; }
-.history-status.failed { background: rgba(239,68,68,0.15); color: #ef4444; }
+.history-status.completed { background: color-mix(in srgb, var(--status-ok) 15%, transparent); color: var(--status-ok); }
+.history-status.failed { background: color-mix(in srgb, var(--status-error) 15%, transparent); color: var(--status-error); }
 .history-time { color: var(--text-tertiary); }
 </style>

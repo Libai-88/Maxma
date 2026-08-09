@@ -1,0 +1,7 @@
+foo:
+  access_token: AT
+  authorized_at: 1786195607.2246873
+  expires_at: 1786199207.224686
+  refresh_token: RT
+  scope: read
+  token_type: Bearer

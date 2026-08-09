@@ -245,7 +245,7 @@ const { enabled: paperTexture, toggle: togglePaperTexture } = usePaperTexture()
               transform var(--duration-fast) var(--ease-out);
 }
 .theme-card:hover {
-  background: var(--overlay-subtle, rgba(0, 0, 0, 0.03));
+  background: var(--overlay-subtle, color-mix(in srgb, var(--text-primary) 3%, transparent));
 }
 .theme-card.active {
   border-color: var(--accent);

@@ -424,29 +424,42 @@ onMounted(async () => {
 
 .editor-wrapper {
   flex: 1;
+  /* 保底最小高度：flex 布局异常时编辑器也不会塌陷为 0 */
+  min-height: 300px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
   background: var(--bg-primary);
+  /* 确保子元素 height:100% 有确定参考（WebView2 flex 子项不一定提供 definite height） */
+  position: relative;
 }
 
 /* 与 MarkdownEditor.vue 一致：vue-codemirror 容器 display:contents 在 WebView2
-   可能使 .cm-editor 高度塌陷为 0（内容与交互不可见），改为块级盒子 + 保底高度 */
+   可能使 .cm-editor 高度塌陷为 0（内容与交互不可见）。
+   1) display:block 覆盖 inline style="display:contents"
+   2) 绝对定位 + inset:0 让编辑器撑满容器，绕过 height% 百分比链断裂问题 */
 .editor-wrapper :deep(.v-codemirror) {
   display: block !important;
-  height: 100%;
+  position: absolute;
+  inset: 0;
 }
 
 .editor-wrapper :deep(.cm-editor) {
-  height: 100%;
-  min-height: 240px;
+  height: 100% !important;
+  min-height: 100% !important;
 }
 
 .editor-wrapper :deep(.cm-scroller) {
+  /* specificity 必须 > codemirror base theme 的 `.ͼN .cm-scroller` (0,2,0)，
+     并加 !important 覆盖 codemirror 的 font-family: monospace —— 否则
+     Tauri WebView2 中 monospace 的中文 fallback 行为异常导致文字不可见。
+     overflow-y: auto 补全 codemirror 6 base theme 缺失的垂直滚动。 */
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
-    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    'Hiragino Sans GB', 'Microsoft YaHei', 'SimSun', sans-serif !important;
   font-size: 15px;
   line-height: 1.6;
+  color: var(--text-primary);
+  overflow-y: auto !important;
 }
 
 .editor-wrapper :deep(.cm-gutters) {
@@ -460,6 +473,13 @@ onMounted(async () => {
 
 .editor-wrapper :deep(.cm-content) {
   padding: 16px;
+  color: var(--text-primary);
+}
+
+/* 关键：scoped 的 .cm-line 需要 color 兜底（之前缺失，靠 main.css 0,2,0 全局兜底，
+   在 Tauri WebView2 中 specificity 不够 → 显式加到 scoped 内） */
+.editor-wrapper :deep(.cm-line) {
+  color: var(--text-primary);
 }
 
 .editor-wrapper :deep(.cm-placeholder) {
@@ -573,7 +593,7 @@ onMounted(async () => {
 .create-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: color-mix(in srgb, var(--text-primary) 40%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -645,7 +665,7 @@ onMounted(async () => {
 }
 .create-btn.save {
   background: var(--accent);
-  color: #fff;
+  color: var(--text-inverse);
   border-color: var(--accent);
 }
 .create-btn.save:hover:not(:disabled) {

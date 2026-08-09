@@ -165,7 +165,7 @@ useGsap((_ctx, contextSafe) => {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: rgba(0, 0, 0, 0.92);
+  background: color-mix(in srgb, var(--text-primary) 92%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -193,7 +193,7 @@ useGsap((_ctx, contextSafe) => {
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  background: rgba(30, 30, 30, 0.85);
+  background: color-mix(in srgb, var(--text-primary) 85%, transparent);
   border-radius: 100px;
   backdrop-filter: blur(12px);
   transition: opacity 0.3s ease, transform 0.3s ease;
@@ -213,14 +213,14 @@ useGsap((_ctx, contextSafe) => {
   border: none;
   border-radius: 50%;
   background: transparent;
-  color: rgba(255, 255, 255, 0.85);
+  color: color-mix(in srgb, var(--text-inverse) 85%, transparent);
   font-size: 1.2em;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
 .mv-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.15);
-  color: #fff;
+  background: color-mix(in srgb, var(--text-inverse) 15%, transparent);
+  color: var(--text-inverse);
 }
 .mv-btn:disabled {
   opacity: 0.3;
@@ -229,7 +229,7 @@ useGsap((_ctx, contextSafe) => {
 .mv-close { font-size: 1em; }
 
 .mv-counter {
-  color: rgba(255, 255, 255, 0.7);
+  color: color-mix(in srgb, var(--text-inverse) 70%, transparent);
   font-size: 0.85em;
   font-variant-numeric: tabular-nums;
   padding: 0 4px;
@@ -240,7 +240,7 @@ useGsap((_ctx, contextSafe) => {
 .mv-divider {
   width: 1px;
   height: 20px;
-  background: rgba(255, 255, 255, 0.2);
+  background: color-mix(in srgb, var(--text-inverse) 20%, transparent);
   margin: 0 4px;
 }
 

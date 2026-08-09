@@ -55,7 +55,7 @@
       <!-- 示例提示：分场景给出可点击的具体 prompt，降低上手门槛 -->
       <section class="example-prompts" aria-label="试试这些">
         <div class="example-title">
-          <ColourfulText text="试试这些" :duration="4" :colors="['var(--accent)', '#ffd93d', 'var(--accent)']" />
+          <ColourfulText text="试试这些" :duration="4" :colors="['var(--accent)', 'var(--status-warn)', 'var(--accent)']" />
           <Icon name="sparkles" :size="14" aria-hidden="true" />
         </div>
         <AnimatedList :delay="150" class="example-chips">

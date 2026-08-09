@@ -49,7 +49,7 @@ const ariaLabel = computed(() => `Maxma 朱砂印「玛」${props.size === 'lg' 
   line-height: 1;
   flex-shrink: 0;
   box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 25%, transparent),
-              inset 0 1px 0 rgba(255,255,255,0.12);
+              inset 0 1px 0 color-mix(in srgb, var(--text-inverse) 12%, transparent);
   user-select: none;
 }
 .brand-seal.clickable {

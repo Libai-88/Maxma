@@ -58,9 +58,9 @@ const props = withDefaults(defineProps<ShimmerButtonProps>(), {
   background: linear-gradient(
     105deg,
     transparent 40%,
-    rgba(255, 255, 255, 0.12) 45%,
+    color-mix(in srgb, var(--text-inverse) 12%, transparent) 45%,
     rgba(255, 255, 255, 0.28) 50%,
-    rgba(255, 255, 255, 0.12) 55%,
+    color-mix(in srgb, var(--text-inverse) 12%, transparent) 55%,
     transparent 60%
   );
   background-size: 200% 100%;

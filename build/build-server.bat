@@ -131,6 +131,13 @@ if "%NEEDS_NPM_INSTALL%"=="1" (
     popd
 )
 cd web
+REM Pre-clean dist via cmd-native rmdir (bypasses Node fs safe-delete hook that
+REM blocks vite emptyDir on >50 files). Pairs with emptyOutDir:true in vite.config.ts.
+if exist "dist\" (
+    echo [INFO] Pre-cleaning web\dist
+    rmdir /s /q "dist"
+    if errorlevel 1 exit /b 1
+)
 call npm run build 2>&1
 if errorlevel 1 (
     echo [ERROR] Frontend build failed

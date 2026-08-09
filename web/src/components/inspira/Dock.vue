@@ -304,7 +304,7 @@ function isActive(path: string): boolean {
 
 .settings-item :deep(.settings-btn:hover) {
   background: transparent;
-  color: #ffa117;
+  color: var(--status-warn);
 }
 
 .settings-item :deep(.settings-btn .icon) {

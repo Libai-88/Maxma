@@ -55,10 +55,10 @@ function onOutsideClick() {
   position: relative;
   background: linear-gradient(
     145deg,
-    rgba(255, 255, 255, 0.08),
+    color-mix(in srgb, var(--text-inverse) 8%, transparent),
     rgba(255, 255, 255, 0.02)
   );
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid color-mix(in srgb, var(--text-inverse) 12%, transparent);
   border-radius: 20px;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -104,7 +104,7 @@ function onOutsideClick() {
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.15);
   background: rgba(0, 0, 0, 0.25);
-  color: rgba(255, 255, 255, 0.7);
+  color: color-mix(in srgb, var(--text-inverse) 70%, transparent);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -112,9 +112,9 @@ function onOutsideClick() {
   transition: background 0.2s, border-color 0.2s, color 0.2s;
 }
 .modal-close-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: color-mix(in srgb, var(--text-inverse) 12%, transparent);
   border-color: rgba(255, 255, 255, 0.3);
-  color: #fff;
+  color: var(--text-inverse);
 }
 
 .modal-footer {

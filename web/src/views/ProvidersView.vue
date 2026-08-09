@@ -1168,12 +1168,12 @@ select.input { cursor: pointer; }
 .recommend--popular { border-top: 3px solid var(--accent); }
 .recommend--cheap { border-top: 3px solid var(--status-ok); }
 .recommend--local { border-top: 3px solid var(--status-warn); }
-.recommend--cn { border-top: 3px solid #6366f1; }
+.recommend--cn { border-top: 3px solid var(--status-info); }
 
 .badge--popular { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
 .badge--cheap { background: color-mix(in srgb, var(--status-ok) 18%, transparent); color: var(--status-ok); }
 .badge--local { background: color-mix(in srgb, var(--status-warn) 18%, transparent); color: var(--status-warn); }
-.badge--cn { background: color-mix(in srgb, #6366f1 18%, transparent); color: #6366f1; }
+.badge--cn { background: color-mix(in srgb, var(--status-info) 18%, transparent); color: var(--status-info); }
 
 /* ── 角色引导 ── */
 .role-guidance {

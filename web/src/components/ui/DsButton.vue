@@ -96,7 +96,7 @@ watchEffect(() => {
 
 .ds-btn--success {
   background: var(--status-success, #16a34a);
-  color: #fff;
+  color: var(--text-inverse);
   border-color: var(--status-success, #16a34a);
 }
 .ds-btn--success:hover:not(:disabled) {

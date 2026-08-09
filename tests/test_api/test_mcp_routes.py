@@ -615,11 +615,12 @@ class TestOAuthFlow:
         mock_ctx = MagicMock()
         mock_ctx.__aenter__ = AsyncMock(return_value=mock_client)
         mock_ctx.__aexit__ = AsyncMock(return_value=False)
-        monkeypatch.setattr(mcp_mod.httpx, "AsyncClient", lambda *a, **k: mock_ctx)
-
+        # S2-4: _exchange_oauth_code 已迁至 mcp_oauth 模块，patch 目标同步
+        from api.routes import mcp_oauth as mcp_oauth_mod
         stored = {}
-        monkeypatch.setattr(mcp_mod, "_load_oauth_tokens", lambda: stored)
-        monkeypatch.setattr(mcp_mod, "_save_oauth_tokens", lambda t: stored.update(t))
+        monkeypatch.setattr(mcp_oauth_mod.httpx, "AsyncClient", lambda *a, **k: mock_ctx)
+        monkeypatch.setattr(mcp_oauth_mod, "_load_oauth_tokens", lambda: stored)
+        monkeypatch.setattr(mcp_oauth_mod, "_save_oauth_tokens", lambda t: stored.update(t))
 
         resp = app_client.get(
             "/mcp/oauth/callback",
@@ -628,5 +629,5 @@ class TestOAuthFlow:
         assert resp.status_code == 200
         assert "text/html" in resp.headers.get("content-type", "")
         assert stored["foo"]["access_token"] == "AT"
-        # state 应被消费
-        assert state not in mcp_mod._oauth_pending_states
+        # state 应被消费（_exchange 消费 mcp_oauth 的 pending states）
+        assert state not in mcp_oauth_mod._oauth_pending_states

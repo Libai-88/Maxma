@@ -76,8 +76,8 @@ const blockedPaths = computed<string[]>(() => {
 
 <style scoped>
 .blocker-banner {
-  background: linear-gradient(135deg, #fff5f5 0%, #fff0e6 100%);
-  border: 1.5px solid #e74c3c;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--status-error) 6%, var(--bg-card)) 0%, color-mix(in srgb, var(--status-warn) 10%, var(--bg-card)) 100%);
+  border: 1.5px solid var(--status-error);
   border-radius: 10px;
   overflow: hidden;
 }
@@ -91,18 +91,18 @@ const blockedPaths = computed<string[]>(() => {
 
 .blocker-shield {
   flex-shrink: 0;
-  color: #c0392b;
+  color: var(--status-error);
 }
 
 .blocker-title {
   font-size: 15px;
   font-weight: 700;
-  color: #c0392b;
+  color: var(--status-error);
 }
 
 .blocker-divider {
   height: 1px;
-  background: linear-gradient(to right, #e74c3c44, transparent);
+  background: linear-gradient(to right, color-mix(in srgb, var(--status-error) 27%, transparent), transparent);
   margin: 2px 16px;
 }
 
@@ -116,12 +116,12 @@ const blockedPaths = computed<string[]>(() => {
 .blocker-intro {
   margin: 0;
   font-size: 13px;
-  color: #7f8c8d;
+  color: var(--text-tertiary);
   line-height: 1.5;
 }
 
 .blocker-intro strong {
-  color: #c0392b;
+  color: var(--status-error);
   font-weight: 700;
 }
 
@@ -184,7 +184,7 @@ const blockedPaths = computed<string[]>(() => {
 /* ── 普通错误（回退） ── */
 .bubble-error {
   font-size: 13px;
-  color: #b91c1c;
+  color: var(--status-error);
   padding: 4px 0;
 }
 </style>

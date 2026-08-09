@@ -1,0 +1,478 @@
+
+========================================
+  MaxmaHere Portable Build
+========================================
+
+[INFO] Removing previous portable output: D:\Maxma\MaxmaHere\..\MaxmaHere-Portable
+[1/6] Building frontend and Python sidecar...
+============================================
+  MaxmaHere Server Build
+============================================
+
+[INFO] Cleaning stale directory dist\maxma-server
+[1/4] Building frontend...
+[INFO] Pre-cleaning web\dist
+
+> maxmahere-web@2.6.11 build
+> vue-tsc --noEmit && vite build
+
+[36mvite v5.4.21 [32mbuilding for production...[36m[39m
+transforming...
+[32m鉁?[39m 726 modules transformed.
+rendering chunks...
+computing gzip size...
+[2mdist/[22m[32mquick-chat.html                                                    [39m[1m[2m  2.16 kB[22m[1m[22m[2m 鈹?gzip:   0.96 kB[22m
+[2mdist/[22m[32msplash.html                                                        [39m[1m[2m  2.91 kB[22m[1m[22m[2m 鈹?gzip:   1.13 kB[22m
+[2mdist/[22m[32mindex.html                                                         [39m[1m[2m  4.01 kB[22m[1m[22m[2m 鈹?gzip:   1.67 kB[22m
+[2mdist/[22m[32massets/KaTeX_Size3-Regular-CTq5MqoE.woff                           [39m[1m[2m  4.42 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Size4-Regular-Dl5lxZxV.woff2                          [39m[1m[2m  4.93 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Size2-Regular-Dy4dx90m.woff2                          [39m[1m[2m  5.21 kB[22m[1m[22m
+[2mdist/[22m[32massets/favicon-CsH5j9sI.png                                        [39m[1m[2m  5.35 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Size1-Regular-mCD8mA8B.woff2                          [39m[1m[2m  5.47 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Size4-Regular-BF-4gkZK.woff                           [39m[1m[2m  5.98 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Size2-Regular-oD1tc_U0.woff                           [39m[1m[2m  6.19 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Size1-Regular-C195tn64.woff                           [39m[1m[2m  6.50 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Caligraphic-Regular-Di6jR-x-.woff2                    [39m[1m[2m  6.91 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Caligraphic-Bold-Dq_IR9rO.woff2                       [39m[1m[2m  6.91 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Size3-Regular-DgpXs0kz.ttf                            [39m[1m[2m  7.59 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Caligraphic-Regular-CTRA-rTL.woff                     [39m[1m[2m  7.66 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Caligraphic-Bold-BEiXGLvX.woff                        [39m[1m[2m  7.72 kB[22m[1m[22m
+[2mdist/[22m[32massets/logo-companion-opt-MJWxDk48.jpg                             [39m[1m[2m  8.42 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Script-Regular-D3wIWfF6.woff2                         [39m[1m[2m  9.64 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_SansSerif-Regular-DDBCnlJ7.woff2                      [39m[1m[2m 10.34 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Size4-Regular-DWFBv043.ttf                            [39m[1m[2m 10.36 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Script-Regular-D5yQViql.woff                          [39m[1m[2m 10.59 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Fraktur-Regular-CTYiF6lA.woff2                        [39m[1m[2m 11.32 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Fraktur-Bold-CL6g_b3V.woff2                           [39m[1m[2m 11.35 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Size2-Regular-B7gKUWhC.ttf                            [39m[1m[2m 11.51 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_SansSerif-Italic-C3H0VqGB.woff2                       [39m[1m[2m 12.03 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_SansSerif-Bold-D1sUS0GD.woff2                         [39m[1m[2m 12.22 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Size1-Regular-Dbsnue_I.ttf                            [39m[1m[2m 12.23 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_SansSerif-Regular-CS6fqUqJ.woff                       [39m[1m[2m 12.32 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Caligraphic-Regular-wX97UBjC.ttf                      [39m[1m[2m 12.34 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Caligraphic-Bold-ATXxdsX0.ttf                         [39m[1m[2m 12.37 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Fraktur-Regular-Dxdc4cR9.woff                         [39m[1m[2m 13.21 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Fraktur-Bold-BsDP51OF.woff                            [39m[1m[2m 13.30 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Typewriter-Regular-CO6r4hn1.woff2                     [39m[1m[2m 13.57 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_SansSerif-Italic-DN2j7dab.woff                        [39m[1m[2m 14.11 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_SansSerif-Bold-DbIhKOiC.woff                          [39m[1m[2m 14.41 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Typewriter-Regular-C0xS9mPB.woff                      [39m[1m[2m 16.03 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Math-BoldItalic-CZnvNsCZ.woff2                        [39m[1m[2m 16.40 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Math-Italic-t53AETM-.woff2                            [39m[1m[2m 16.44 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Script-Regular-C5JkGWo-.ttf                           [39m[1m[2m 16.65 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Main-BoldItalic-DxDJ3AOS.woff2                        [39m[1m[2m 16.78 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Main-Italic-NWA7e6Wa.woff2                            [39m[1m[2m 16.99 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Math-BoldItalic-iY-2wyZ7.woff                         [39m[1m[2m 18.67 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Math-Italic-DA0__PXp.woff                             [39m[1m[2m 18.75 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Main-BoldItalic-SpSLRI95.woff                         [39m[1m[2m 19.41 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_SansSerif-Regular-BNo7hRIc.ttf                        [39m[1m[2m 19.44 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Fraktur-Regular-CB_wures.ttf                          [39m[1m[2m 19.57 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Fraktur-Bold-BdnERNNW.ttf                             [39m[1m[2m 19.58 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Main-Italic-BMLOBm91.woff                             [39m[1m[2m 19.68 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_SansSerif-Italic-YYjJ1zSn.ttf                         [39m[1m[2m 22.36 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_SansSerif-Bold-CFMepnvq.ttf                           [39m[1m[2m 24.50 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Main-Bold-Cx986IdX.woff2                              [39m[1m[2m 25.32 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Main-Regular-B22Nviop.woff2                           [39m[1m[2m 26.27 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Typewriter-Regular-D3Ib7_Hf.ttf                       [39m[1m[2m 27.56 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_AMS-Regular-BQhdFMY1.woff2                            [39m[1m[2m 28.08 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Main-Bold-Jm3AIy58.woff                               [39m[1m[2m 29.91 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Main-Regular-Dr94JaBh.woff                            [39m[1m[2m 30.77 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Math-BoldItalic-B3XSjfu4.ttf                          [39m[1m[2m 31.20 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Math-Italic-flOr_0UB.ttf                              [39m[1m[2m 31.31 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Main-BoldItalic-DzxPMmG6.ttf                          [39m[1m[2m 32.97 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_AMS-Regular-DMm9YOAa.woff                             [39m[1m[2m 33.52 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Main-Italic-3WenGoN9.ttf                              [39m[1m[2m 33.58 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Main-Bold-waoOVXN0.ttf                                [39m[1m[2m 51.34 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_Main-Regular-ypZvNtVU.ttf                             [39m[1m[2m 53.58 kB[22m[1m[22m
+[2mdist/[22m[32massets/empty-bg-night-DONlhIRI.jpg                                 [39m[1m[2m 58.41 kB[22m[1m[22m
+[2mdist/[22m[32massets/KaTeX_AMS-Regular-DRggAlZN.ttf                              [39m[1m[2m 63.63 kB[22m[1m[22m
+[2mdist/[22m[32massets/empty-bg-day-_ZPwhTZ-.jpg                                   [39m[1m[2m 93.11 kB[22m[1m[22m
+[2mdist/[22m[35massets/NumberTicker-BmWo1F2O.css                                   [39m[1m[2m  0.16 kB[22m[1m[22m[2m 鈹?gzip:   0.13 kB[22m
+[2mdist/[22m[35massets/GlareCard-CRQASEtY.css                                      [39m[1m[2m  0.40 kB[22m[1m[22m[2m 鈹?gzip:   0.25 kB[22m
+[2mdist/[22m[35massets/TextGenerateEffect-CDxv6lJu.css                             [39m[1m[2m  0.45 kB[22m[1m[22m[2m 鈹?gzip:   0.24 kB[22m
+[2mdist/[22m[35massets/Sparkles-Div4BfTG.css                                       [39m[1m[2m  0.45 kB[22m[1m[22m[2m 鈹?gzip:   0.28 kB[22m
+[2mdist/[22m[35massets/ColourfulText-CUY5rjes.css                                  [39m[1m[2m  0.49 kB[22m[1m[22m[2m 鈹?gzip:   0.27 kB[22m
+[2mdist/[22m[35massets/favicon-3yqn6297.css                                        [39m[1m[2m  0.58 kB[22m[1m[22m[2m 鈹?gzip:   0.23 kB[22m
+[2mdist/[22m[35massets/FloatingCard-Ci8-Vb8Y.css                                   [39m[1m[2m  0.58 kB[22m[1m[22m[2m 鈹?gzip:   0.28 kB[22m
+[2mdist/[22m[35massets/DirectionAwareHover-Dg6-wJqD.css                            [39m[1m[2m  0.67 kB[22m[1m[22m[2m 鈹?gzip:   0.36 kB[22m
+[2mdist/[22m[35massets/DsTooltip-DO2nCF8J.css                                      [39m[1m[2m  0.76 kB[22m[1m[22m[2m 鈹?gzip:   0.35 kB[22m
+[2mdist/[22m[35massets/ImageBubble-Zb4ezsIv.css                                    [39m[1m[2m  0.84 kB[22m[1m[22m[2m 鈹?gzip:   0.37 kB[22m
+[2mdist/[22m[35massets/RenderMarkdown-Crx-N_9x.css                                 [39m[1m[2m  1.16 kB[22m[1m[22m[2m 鈹?gzip:   0.49 kB[22m
+[2mdist/[22m[35massets/CodeCard-4rFVunk3.css                                       [39m[1m[2m  1.21 kB[22m[1m[22m[2m 鈹?gzip:   0.48 kB[22m
+[2mdist/[22m[35massets/SearchBubble-Cs-FMihK.css                                   [39m[1m[2m  1.25 kB[22m[1m[22m[2m 鈹?gzip:   0.46 kB[22m
+[2mdist/[22m[35massets/BrowserBubble-CDE5TcW9.css                                  [39m[1m[2m  1.29 kB[22m[1m[22m[2m 鈹?gzip:   0.51 kB[22m
+[2mdist/[22m[35massets/GenericOutputBubble-BKQmK-bi.css                            [39m[1m[2m  1.35 kB[22m[1m[22m[2m 鈹?gzip:   0.50 kB[22m
+[2mdist/[22m[35massets/FeatureUnavailableView-DwOtbBCx.css                         [39m[1m[2m  1.68 kB[22m[1m[22m[2m 鈹?gzip:   0.59 kB[22m
+[2mdist/[22m[35massets/NotFoundView-B1tN_y6S.css                                   [39m[1m[2m  1.70 kB[22m[1m[22m[2m 鈹?gzip:   0.58 kB[22m
+[2mdist/[22m[35massets/MemoryBubble-D8Ths_4D.css                                   [39m[1m[2m  1.74 kB[22m[1m[22m[2m 鈹?gzip:   0.56 kB[22m
+[2mdist/[22m[35massets/TodoBubble-Fxs4zQj3.css                                     [39m[1m[2m  1.78 kB[22m[1m[22m[2m 鈹?gzip:   0.61 kB[22m
+[2mdist/[22m[35massets/MediaViewer--vDNEevk.css                                    [39m[1m[2m  1.79 kB[22m[1m[22m[2m 鈹?gzip:   0.66 kB[22m
+[2mdist/[22m[35massets/BubbleChrome-B-boiYvw.css                                   [39m[1m[2m  1.81 kB[22m[1m[22m[2m 鈹?gzip:   0.67 kB[22m
+[2mdist/[22m[35massets/ShareView-CK6OzCMR.css                                      [39m[1m[2m  1.94 kB[22m[1m[22m[2m 鈹?gzip:   0.65 kB[22m
+[2mdist/[22m[35massets/FileDiffView-BY8UAYnI.css                                   [39m[1m[2m  2.03 kB[22m[1m[22m[2m 鈹?gzip:   0.64 kB[22m
+[2mdist/[22m[35massets/MaxmaBlockerError-BKI1buMS.css                              [39m[1m[2m  2.05 kB[22m[1m[22m[2m 鈹?gzip:   0.64 kB[22m
+[2mdist/[22m[35massets/ExtensionView-CGE7fCMY.css                                  [39m[1m[2m  2.76 kB[22m[1m[22m[2m 鈹?gzip:   0.77 kB[22m
+[2mdist/[22m[35massets/AppearanceView-1223u3SA.css                                 [39m[1m[2m  3.55 kB[22m[1m[22m[2m 鈹?gzip:   1.03 kB[22m
+[2mdist/[22m[35massets/AutomationView-CleXdkXK.css                                 [39m[1m[2m  3.71 kB[22m[1m[22m[2m 鈹?gzip:   0.96 kB[22m
+[2mdist/[22m[35massets/PythonBubble-CvjaJY4I.css                                   [39m[1m[2m  4.02 kB[22m[1m[22m[2m 鈹?gzip:   1.01 kB[22m
+[2mdist/[22m[35massets/UserView-DOUEDBYg.css                                       [39m[1m[2m  4.36 kB[22m[1m[22m[2m 鈹?gzip:   1.20 kB[22m
+[2mdist/[22m[35massets/PluginDetailView-BZTxTxFd.css                               [39m[1m[2m  4.53 kB[22m[1m[22m[2m 鈹?gzip:   1.13 kB[22m
+[2mdist/[22m[35massets/AskUserBubble-BZ2UK_8M.css                                  [39m[1m[2m  4.70 kB[22m[1m[22m[2m 鈹?gzip:   1.15 kB[22m
+[2mdist/[22m[35massets/HelpView-WWSuda6B.css                                       [39m[1m[2m  5.03 kB[22m[1m[22m[2m 鈹?gzip:   1.25 kB[22m
+[2mdist/[22m[35massets/FilesBubble-CBhkppZG.css                                    [39m[1m[2m  5.13 kB[22m[1m[22m[2m 鈹?gzip:   1.17 kB[22m
+[2mdist/[22m[35massets/PluginListView-DFYyNixf.css                                 [39m[1m[2m  5.28 kB[22m[1m[22m[2m 鈹?gzip:   1.30 kB[22m
+[2mdist/[22m[35massets/MetricsView-D_Ofn7xT.css                                    [39m[1m[2m  5.29 kB[22m[1m[22m[2m 鈹?gzip:   1.40 kB[22m
+[2mdist/[22m[35massets/MaxmaBlockerView-CFpAU8mK.css                               [39m[1m[2m  5.58 kB[22m[1m[22m[2m 鈹?gzip:   1.32 kB[22m
+[2mdist/[22m[35massets/CollabView-ChBkjWiR.css                                     [39m[1m[2m  5.69 kB[22m[1m[22m[2m 鈹?gzip:   1.24 kB[22m
+[2mdist/[22m[35massets/RulesView-C059ExW-.css                                      [39m[1m[2m  5.87 kB[22m[1m[22m[2m 鈹?gzip:   1.43 kB[22m
+[2mdist/[22m[35massets/SettingsView-07U8x03e.css                                   [39m[1m[2m  6.01 kB[22m[1m[22m[2m 鈹?gzip:   1.58 kB[22m
+[2mdist/[22m[35massets/FileEditBubble-BXh1Eq4u.css                                 [39m[1m[2m  6.14 kB[22m[1m[22m[2m 鈹?gzip:   1.24 kB[22m
+[2mdist/[22m[35massets/CapabilitiesView-CTAkwJIc.css                               [39m[1m[2m  6.56 kB[22m[1m[22m[2m 鈹?gzip:   1.39 kB[22m
+[2mdist/[22m[35massets/NewsView-BCws1sCa.css                                       [39m[1m[2m  6.88 kB[22m[1m[22m[2m 鈹?gzip:   1.77 kB[22m
+[2mdist/[22m[35massets/PrivacyView-BnZvcNy3.css                                    [39m[1m[2m  7.00 kB[22m[1m[22m[2m 鈹?gzip:   1.61 kB[22m
+[2mdist/[22m[35massets/ActivityView-Df18WO43.css                                   [39m[1m[2m  7.44 kB[22m[1m[22m[2m 鈹?gzip:   1.63 kB[22m
+[2mdist/[22m[35massets/MemoryView-C9cP2K6L.css                                     [39m[1m[2m  8.19 kB[22m[1m[22m[2m 鈹?gzip:   1.88 kB[22m
+[2mdist/[22m[35massets/SoulView-VhZmtC47.css                                       [39m[1m[2m  8.52 kB[22m[1m[22m[2m 鈹?gzip:   2.01 kB[22m
+[2mdist/[22m[35massets/ProvidersView-CYOPrpMS.css                                  [39m[1m[2m 11.68 kB[22m[1m[22m[2m 鈹?gzip:   2.37 kB[22m
+[2mdist/[22m[35massets/McpView-9LWbGgie.css                                        [39m[1m[2m 17.57 kB[22m[1m[22m[2m 鈹?gzip:   3.12 kB[22m
+[2mdist/[22m[35massets/quick-chat-DE2Tqrux.css                                     [39m[1m[2m 20.55 kB[22m[1m[22m[2m 鈹?gzip:   5.18 kB[22m
+[2mdist/[22m[35massets/katex-DLVrwanO.css                                          [39m[1m[2m 28.93 kB[22m[1m[22m[2m 鈹?gzip:   8.04 kB[22m
+[2mdist/[22m[35massets/main-A38yX4iO.css                                           [39m[1m[2m 86.13 kB[22m[1m[22m[2m 鈹?gzip:  16.26 kB[22m
+[2mdist/[22m[35massets/ChatView-D3TBcUp2.css                                       [39m[1m[2m119.84 kB[22m[1m[22m[2m 鈹?gzip:  19.64 kB[22m
+[2mdist/[22m[36massets/error-B0qTCWyL.js                                           [39m[1m[2m  0.21 kB[22m[1m[22m[2m 鈹?gzip:   0.15 kB[22m
+[2mdist/[22m[36massets/useReveal-EpOdeN22.js                                       [39m[1m[2m  0.41 kB[22m[1m[22m[2m 鈹?gzip:   0.30 kB[22m
+[2mdist/[22m[36massets/useMediaViewer-pIngAAnf.js                                  [39m[1m[2m  0.44 kB[22m[1m[22m[2m 鈹?gzip:   0.28 kB[22m
+[2mdist/[22m[36massets/useTilt-BNlv-4-a.js                                         [39m[1m[2m  0.60 kB[22m[1m[22m[2m 鈹?gzip:   0.36 kB[22m
+[2mdist/[22m[36massets/persona-BvrcrQcW.js                                         [39m[1m[2m  0.61 kB[22m[1m[22m[2m 鈹?gzip:   0.52 kB[22m
+[2mdist/[22m[36massets/useViewEntrance-uxxfIEDJ.js                                 [39m[1m[2m  0.62 kB[22m[1m[22m[2m 鈹?gzip:   0.42 kB[22m
+[2mdist/[22m[36massets/ColourfulText-KGhubEFl.js                                   [39m[1m[2m  0.65 kB[22m[1m[22m[2m 鈹?gzip:   0.45 kB[22m
+[2mdist/[22m[36massets/TextGenerateEffect-DLujDv2C.js                              [39m[1m[2m  0.66 kB[22m[1m[22m[2m 鈹?gzip:   0.45 kB[22m
+[2mdist/[22m[36massets/GlareCard-oqx8S0DC.js                                       [39m[1m[2m  0.91 kB[22m[1m[22m[2m 鈹?gzip:   0.59 kB[22m
+[2mdist/[22m[36massets/provider-DT-Z29pP.js                                        [39m[1m[2m  0.92 kB[22m[1m[22m[2m 鈹?gzip:   0.60 kB[22m
+[2mdist/[22m[36massets/NumberTicker-D5NJo_Vt.js                                    [39m[1m[2m  1.04 kB[22m[1m[22m[2m 鈹?gzip:   0.62 kB[22m
+[2mdist/[22m[36massets/Sparkles-DmDQjxeM.js                                        [39m[1m[2m  1.05 kB[22m[1m[22m[2m 鈹?gzip:   0.65 kB[22m
+[2mdist/[22m[36massets/FloatingCard-CyRvWuOY.js                                    [39m[1m[2m  1.29 kB[22m[1m[22m[2m 鈹?gzip:   0.75 kB[22m
+[2mdist/[22m[36massets/DirectionAwareHover-O0WWz7OS.js                             [39m[1m[2m  1.43 kB[22m[1m[22m[2m 鈹?gzip:   0.77 kB[22m
+[2mdist/[22m[36massets/CodeCard-Cs6jG_sx.js                                        [39m[1m[2m  1.55 kB[22m[1m[22m[2m 鈹?gzip:   0.90 kB[22m
+[2mdist/[22m[36massets/MaxmaBlockerError-DREwvHjS.js                               [39m[1m[2m  1.64 kB[22m[1m[22m[2m 鈹?gzip:   1.03 kB[22m
+[2mdist/[22m[36massets/NotFoundView-6tvp6Id9.js                                    [39m[1m[2m  1.66 kB[22m[1m[22m[2m 鈹?gzip:   0.89 kB[22m
+[2mdist/[22m[36massets/ImageBubble--4PyTCmv.js                                     [39m[1m[2m  1.72 kB[22m[1m[22m[2m 鈹?gzip:   0.93 kB[22m
+[2mdist/[22m[36massets/FileDiffView-Cc3Bofrr.js                                    [39m[1m[2m  1.87 kB[22m[1m[22m[2m 鈹?gzip:   0.85 kB[22m
+[2mdist/[22m[36massets/BubbleChrome-De1uJhTq.js                                    [39m[1m[2m  1.92 kB[22m[1m[22m[2m 鈹?gzip:   0.94 kB[22m
+[2mdist/[22m[36massets/useMarkdownPersist-Bgn6KFCs.js                              [39m[1m[2m  1.97 kB[22m[1m[22m[2m 鈹?gzip:   1.07 kB[22m
+[2mdist/[22m[36massets/plugin-B_ZXBCPi.js                                          [39m[1m[2m  2.01 kB[22m[1m[22m[2m 鈹?gzip:   0.83 kB[22m
+[2mdist/[22m[36massets/index-Dc1Doox4.js                                           [39m[1m[2m  2.03 kB[22m[1m[22m[2m 鈹?gzip:   0.89 kB[22m
+[2mdist/[22m[36massets/ShareView-pkCseYDN.js                                       [39m[1m[2m  2.08 kB[22m[1m[22m[2m 鈹?gzip:   1.23 kB[22m
+[2mdist/[22m[36massets/DsTooltip-DScvBdI5.js                                       [39m[1m[2m  2.17 kB[22m[1m[22m[2m 鈹?gzip:   0.99 kB[22m
+[2mdist/[22m[36massets/FeatureUnavailableView-CuKXj_le.js                          [39m[1m[2m  2.18 kB[22m[1m[22m[2m 鈹?gzip:   1.17 kB[22m
+[2mdist/[22m[36massets/SearchBubble-BOfeByPy.js                                    [39m[1m[2m  2.41 kB[22m[1m[22m[2m 鈹?gzip:   1.13 kB[22m
+[2mdist/[22m[36massets/TodoBubble-DmbMcN7O.js                                      [39m[1m[2m  2.41 kB[22m[1m[22m[2m 鈹?gzip:   1.22 kB[22m
+[2mdist/[22m[36massets/core-DhEqZVGG.js                                            [39m[1m[2m  2.44 kB[22m[1m[22m[2m 鈹?gzip:   0.98 kB[22m
+[2mdist/[22m[36massets/GenericOutputBubble-DqB50-Bz.js                             [39m[1m[2m  2.57 kB[22m[1m[22m[2m 鈹?gzip:   1.49 kB[22m
+[2mdist/[22m[36massets/BrowserBubble-DRiyI97k.js                                   [39m[1m[2m  2.70 kB[22m[1m[22m[2m 鈹?gzip:   1.29 kB[22m
+[2mdist/[22m[36massets/MemoryBubble-CuGfn-8c.js                                    [39m[1m[2m  3.20 kB[22m[1m[22m[2m 鈹?gzip:   1.46 kB[22m
+[2mdist/[22m[36massets/ScrollToPlugin-BC1R1LGU.js                                  [39m[1m[2m  3.71 kB[22m[1m[22m[2m 鈹?gzip:   1.81 kB[22m
+[2mdist/[22m[36massets/ExtensionView-B7GKGuoc.js                                   [39m[1m[2m  4.10 kB[22m[1m[22m[2m 鈹?gzip:   1.90 kB[22m
+[2mdist/[22m[36massets/quick-chat-DhnOvsay.js                                      [39m[1m[2m  4.15 kB[22m[1m[22m[2m 鈹?gzip:   2.26 kB[22m
+[2mdist/[22m[36massets/AppearanceView-CmC6AcEq.js                                  [39m[1m[2m  4.67 kB[22m[1m[22m[2m 鈹?gzip:   1.90 kB[22m
+[2mdist/[22m[36massets/MediaViewer-CNfVBPLR.js                                     [39m[1m[2m  5.10 kB[22m[1m[22m[2m 鈹?gzip:   2.37 kB[22m
+[2mdist/[22m[36massets/AutomationView-BcTKzGi-.js                                  [39m[1m[2m  5.18 kB[22m[1m[22m[2m 鈹?gzip:   2.30 kB[22m
+[2mdist/[22m[36massets/MaxmaBlockerView-ajxAbZ0q.js                                [39m[1m[2m  5.29 kB[22m[1m[22m[2m 鈹?gzip:   3.02 kB[22m
+[2mdist/[22m[36massets/NewsView-Cdrx1_rK.js                                        [39m[1m[2m  5.72 kB[22m[1m[22m[2m 鈹?gzip:   2.61 kB[22m
+[2mdist/[22m[36massets/AskUserBubble-BxfWPKUK.js                                   [39m[1m[2m  5.95 kB[22m[1m[22m[2m 鈹?gzip:   2.46 kB[22m
+[2mdist/[22m[36massets/PythonBubble-CqNMO25T.js                                    [39m[1m[2m  6.34 kB[22m[1m[22m[2m 鈹?gzip:   2.79 kB[22m
+[2mdist/[22m[36massets/PluginListView-9xKcNDcb.js                                  [39m[1m[2m  6.36 kB[22m[1m[22m[2m 鈹?gzip:   2.92 kB[22m
+[2mdist/[22m[36massets/UserView-0pHO2Aoa.js                                        [39m[1m[2m  6.52 kB[22m[1m[22m[2m 鈹?gzip:   4.06 kB[22m
+[2mdist/[22m[36massets/RulesView-B1aYKq65.js                                       [39m[1m[2m  6.87 kB[22m[1m[22m[2m 鈹?gzip:   2.83 kB[22m
+[2mdist/[22m[36massets/PluginDetailView-BBnhkjOj.js                                [39m[1m[2m  6.95 kB[22m[1m[22m[2m 鈹?gzip:   2.87 kB[22m
+[2mdist/[22m[36massets/FileEditBubble-Bnedv8Pr.js                                  [39m[1m[2m  7.21 kB[22m[1m[22m[2m 鈹?gzip:   2.78 kB[22m
+[2mdist/[22m[36massets/SplitText-EJlRidAA.js                                       [39m[1m[2m  7.35 kB[22m[1m[22m[2m 鈹?gzip:   3.47 kB[22m
+[2mdist/[22m[36massets/FilesBubble-CXRBfN8s.js                                     [39m[1m[2m  7.44 kB[22m[1m[22m[2m 鈹?gzip:   2.63 kB[22m
+[2mdist/[22m[36massets/HelpView-6HGnHDd6.js                                        [39m[1m[2m  7.66 kB[22m[1m[22m[2m 鈹?gzip:   4.64 kB[22m
+[2mdist/[22m[36massets/PrivacyView-DD-7j267.js                                     [39m[1m[2m  8.17 kB[22m[1m[22m[2m 鈹?gzip:   4.07 kB[22m
+[2mdist/[22m[36massets/CollabView-CiXx712B.js                                      [39m[1m[2m  8.19 kB[22m[1m[22m[2m 鈹?gzip:   3.29 kB[22m
+[2mdist/[22m[36massets/CapabilitiesView-D3UwQLt2.js                                [39m[1m[2m  8.26 kB[22m[1m[22m[2m 鈹?gzip:   3.41 kB[22m
+[2mdist/[22m[36massets/SoulView-DAzu914q.js                                        [39m[1m[2m  8.54 kB[22m[1m[22m[2m 鈹?gzip:   4.96 kB[22m
+[2mdist/[22m[36massets/Observer-Axmp1CMU.js                                        [39m[1m[2m  9.27 kB[22m[1m[22m[2m 鈹?gzip:   4.20 kB[22m
+[2mdist/[22m[36massets/ActivityView-DPQBk7S6.js                                    [39m[1m[2m  9.31 kB[22m[1m[22m[2m 鈹?gzip:   4.69 kB[22m
+[2mdist/[22m[36massets/MemoryView-DoNbJpmq.js                                      [39m[1m[2m 10.18 kB[22m[1m[22m[2m 鈹?gzip:   4.55 kB[22m
+[2mdist/[22m[36massets/MetricsView-DCb_I1xX.js                                     [39m[1m[2m 14.19 kB[22m[1m[22m[2m 鈹?gzip:   6.03 kB[22m
+[2mdist/[22m[36massets/RenderMarkdown.vue_vue_type_style_index_0_lang-DARHUu0M.js  [39m[1m[2m 14.74 kB[22m[1m[22m[2m 鈹?gzip:   6.46 kB[22m
+[2mdist/[22m[36massets/ProvidersView-C0c-NwOa.js                                   [39m[1m[2m 19.90 kB[22m[1m[22m[2m 鈹?gzip:   7.57 kB[22m
+[2mdist/[22m[36massets/SettingsView-HoR24Vww.js                                    [39m[1m[2m 22.60 kB[22m[1m[22m[2m 鈹?gzip:   7.13 kB[22m
+[2mdist/[22m[36massets/Flip-Blvo3Ljq.js                                            [39m[1m[2m 24.87 kB[22m[1m[22m[2m 鈹?gzip:   9.59 kB[22m
+[2mdist/[22m[36massets/McpView-CjbIxThX.js                                         [39m[1m[2m 28.45 kB[22m[1m[22m[2m 鈹?gzip:  10.81 kB[22m
+[2mdist/[22m[36massets/ScrollTrigger-DN-1W0Uv.js                                   [39m[1m[2m 34.84 kB[22m[1m[22m[2m 鈹?gzip:  14.83 kB[22m
+[2mdist/[22m[36massets/favicon-BY5S5h1X.js                                         [39m[1m[2m 96.47 kB[22m[1m[22m[2m 鈹?gzip:  29.69 kB[22m
+[2mdist/[22m[36massets/vue-vendor-Di1ub1-d.js                                      [39m[1m[2m132.20 kB[22m[1m[22m[2m 鈹?gzip:  49.96 kB[22m
+[2mdist/[22m[36massets/ChatView-BlovHZvB.js                                        [39m[1m[2m161.74 kB[22m[1m[22m[2m 鈹?gzip:  58.01 kB[22m
+[2mdist/[22m[36massets/main-CqTVDvNO.js                                            [39m[1m[2m162.82 kB[22m[1m[22m[2m 鈹?gzip:  62.97 kB[22m
+[2mdist/[22m[36massets/markdown-vendor-BaWzuhFV.js                                 [39m[1m[2m359.24 kB[22m[1m[22m[2m 鈹?gzip: 126.42 kB[22m
+[2mdist/[22m[36massets/codemirror-B74nGrP-.js                                      [39m[1m[2m611.60 kB[22m[1m[22m[2m 鈹?gzip: 209.65 kB[22m
+[32m鉁?built in 8.95s[39m
+[INFO] Preparing bundled Bun runtime (bun.exe)...
+=== prepare-bun: Bun 1.3.14 (Windows x64) ===
+[cache] hit: C:\Users\Libai\AppData\Local\MaxmaBuildCache\bun-windows-x64-1.3.14.zip
+[ok] bun.exe -> D:\Maxma\MaxmaHere\bun-sidecar\bun.exe
+[ok] bundled bun version: 1.3.14
+=== prepare-bun complete ===
+[INFO] Installing bun-sidecar dependencies with bundled Bun...
+bun install v1.3.14 (0d9b296a)
+
+Checked 256 installs across 296 packages (no changes) [578.00ms]
+[INFO] Compiling sidecar single-file executable...
+[compile] maxma-engine.exe 119.1MB -> D:\Maxma\MaxmaHere\desktop\src-tauri\resources\runtime\maxma-engine.exe
+[2/4] Packaging backend...
+Packaging safety checks passed.
+237 INFO: PyInstaller: 6.21.0, contrib hooks: 2026.6
+237 INFO: Python: 3.13.13
+282 INFO: Platform: Windows-11-10.0.28000-SP0
+282 INFO: Python environment: D:\Maxma\MaxmaHere\.venv
+297 INFO: Removing temporary files and cleaning cache in C:\Users\Libai\AppData\Local\pyinstaller
+2194 INFO: Module search paths (PYTHONPATH):
+['D:\\Maxma\\MaxmaHere',
+ 'D:\\PythonEnv\\cpython-3.13-windows-x86_64-none\\python313.zip',
+ 'D:\\PythonEnv\\cpython-3.13-windows-x86_64-none\\DLLs',
+ 'D:\\PythonEnv\\cpython-3.13-windows-x86_64-none\\Lib',
+ 'D:\\PythonEnv\\cpython-3.13-windows-x86_64-none',
+ 'D:\\Maxma\\MaxmaHere\\.venv',
+ 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages',
+ 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\win32',
+ 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\win32\\lib',
+ 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\pythonwin',
+ 'D:\\Maxma\\MaxmaHere']
+3076 INFO: Appending 'binaries' from .spec
+3079 INFO: Appending 'datas' from .spec
+3102 INFO: checking Analysis
+3102 INFO: Building Analysis because Analysis-00.toc is non existent
+3102 INFO: Looking for Python shared library...
+3102 INFO: Using Python shared library: D:\PythonEnv\cpython-3.13-windows-x86_64-none\python313.dll
+3102 INFO: Running Analysis Analysis-00.toc
+3102 INFO: Target bytecode optimization level: 0
+3102 INFO: Initializing module dependency graph...
+3105 INFO: Initializing module graph hook caches...
+3122 INFO: Analyzing modules for base_library.zip ...
+5149 INFO: Processing standard module hook 'hook-encodings.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+6459 INFO: Processing standard module hook 'hook-math.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+6836 INFO: Processing standard module hook 'hook-heapq.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+8384 INFO: Processing standard module hook 'hook-pickle.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+10233 INFO: Caching module dependency graph...
+10304 INFO: Analyzing D:\Maxma\MaxmaHere\main.py
+10313 INFO: Processing standard module hook 'hook-uvicorn.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+11376 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+11635 INFO: Processing standard module hook 'hook-xml.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+12048 INFO: Processing standard module hook 'hook-sysconfig.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+12056 INFO: Processing standard module hook 'hook-_ctypes.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+13529 INFO: Processing standard module hook 'hook-platform.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+13595 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+13597 INFO: SetuptoolsInfo: initializing cached setuptools info...
+14940 INFO: Processing standard module hook 'hook-difflib.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+15118 INFO: Processing standard module hook 'hook-webbrowser.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+15711 INFO: Processing standard module hook 'hook-websockets.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+17214 INFO: Processing standard module hook 'hook-anyio.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+19246 INFO: Processing standard module hook 'hook-pydantic.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+20392 INFO: Processing standard module hook 'hook-rich.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+21858 INFO: Processing standard module hook 'hook-pygments.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+26470 INFO: Processing standard module hook 'hook-zoneinfo.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+28394 INFO: Processing standard module hook 'hook-pywintypes.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+29086 INFO: Processing pre-safe-import-module hook 'hook-tomli.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+29087 INFO: Setuptools: 'tomli' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.tomli'!
+29180 INFO: Processing standard module hook 'hook-sqlite3.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+30224 INFO: Processing standard module hook 'hook-certifi.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+30892 INFO: Processing standard module hook 'hook-cryptography.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+33949 INFO: hook-cryptography: cryptography does not seem to be using dynamically linked OpenSSL.
+34223 INFO: Processing standard module hook 'hook-numpy.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+36948 INFO: Processing standard module hook 'hook-charset_normalizer.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+37368 INFO: Processing standard module hook 'hook-regex.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+38015 INFO: Processing standard module hook 'hook-PIL.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+38177 INFO: Processing standard module hook 'hook-PIL.Image.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+38961 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+39207 INFO: Processing standard module hook 'hook-PIL.ImageFilter.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+39560 INFO: Analyzing hidden import 'uvicorn.loops'
+39561 INFO: Analyzing hidden import 'uvicorn.loops.auto'
+39567 INFO: Analyzing hidden import 'uvicorn.protocols.http.auto'
+39568 INFO: Analyzing hidden import 'aiosqlite'
+39604 INFO: Analyzing hidden import 'aiohttp._http_parser'
+40259 INFO: Processing pre-safe-import-module hook 'hook-backports.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+40260 INFO: Setuptools: 'backports' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.backports'!
+41009 INFO: Analyzing hidden import 'bcrypt._bcrypt'
+41011 INFO: Processing standard module hook 'hook-bcrypt.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+41012 INFO: Analyzing hidden import 'coverage.tracer'
+41676 INFO: Processing standard module hook 'hook-xml.dom.domreg.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+42275 INFO: Analyzing hidden import 'jiter.jiter'
+42277 INFO: Analyzing hidden import 'lxml.builder'
+42279 INFO: Processing standard module hook 'hook-lxml.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+42960 INFO: Processing standard module hook 'hook-lxml.etree.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+42961 INFO: Analyzing hidden import 'lxml.objectify'
+42962 INFO: Analyzing hidden import 'lxml.sax'
+42975 INFO: Analyzing hidden import 'lxml._elementpath'
+42991 INFO: Analyzing hidden import 'orjson.orjson'
+42993 INFO: Processing standard module hook 'hook-orjson.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+42994 INFO: Analyzing hidden import 'ormsgpack.ormsgpack'
+42996 INFO: Processing standard module hook 'hook-ormsgpack.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\ormsgpack\\_pyinstaller'
+42997 INFO: Analyzing hidden import 'PIL._avif'
+42999 INFO: Analyzing hidden import 'PIL._imagingft'
+43044 INFO: Processing pre-safe-import-module hook 'hook-packaging.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+43094 INFO: Analyzing hidden import 'PIL._imagingmorph'
+43095 INFO: Analyzing hidden import 'PIL._imagingtk'
+43096 INFO: Analyzing hidden import 'PIL._webp'
+43098 INFO: Analyzing hidden import 'pybase64._pybase64'
+43113 INFO: Analyzing hidden import 'pythonwin.dde'
+43115 INFO: Analyzing hidden import 'pythonwin.win32ui'
+43115 INFO: Analyzing hidden import 'pythonwin.win32uiole'
+43115 INFO: Analyzing hidden import 'rpds.rpds'
+43117 INFO: Analyzing hidden import 'safetensors._safetensors_rust'
+43119 INFO: Analyzing hidden import 'tokenizers.tokenizers'
+43186 INFO: Analyzing hidden import 'uuid_utils._uuid_utils'
+43190 INFO: Analyzing hidden import 'win32.mmapfile'
+43191 INFO: Analyzing hidden import 'win32.odbc'
+43191 INFO: Analyzing hidden import 'win32.perfmon'
+43191 INFO: Analyzing hidden import 'win32.servicemanager'
+43191 INFO: Analyzing hidden import 'win32.timer'
+43192 INFO: Analyzing hidden import 'win32.win32api'
+43192 INFO: Analyzing hidden import 'win32.win32clipboard'
+43192 INFO: Analyzing hidden import 'win32.win32console'
+43192 INFO: Analyzing hidden import 'win32.win32cred'
+43192 INFO: Analyzing hidden import 'win32.win32crypt'
+43193 INFO: Analyzing hidden import 'win32.win32event'
+43193 INFO: Analyzing hidden import 'win32.win32evtlog'
+43193 INFO: Analyzing hidden import 'win32.win32file'
+43193 INFO: Analyzing hidden import 'win32.win32gui'
+43193 INFO: Analyzing hidden import 'win32.win32help'
+43194 INFO: Analyzing hidden import 'win32.win32inet'
+43194 INFO: Analyzing hidden import 'win32.win32job'
+43194 INFO: Analyzing hidden import 'win32.win32lz'
+43194 INFO: Analyzing hidden import 'win32.win32net'
+43194 INFO: Analyzing hidden import 'win32.win32pdh'
+43194 INFO: Analyzing hidden import 'win32.win32pipe'
+43195 INFO: Analyzing hidden import 'win32.win32print'
+43195 INFO: Analyzing hidden import 'win32.win32process'
+43195 INFO: Analyzing hidden import 'win32.win32profile'
+43195 INFO: Analyzing hidden import 'win32.win32ras'
+43195 INFO: Analyzing hidden import 'win32.win32security'
+43195 INFO: Analyzing hidden import 'win32.win32service'
+43196 INFO: Analyzing hidden import 'win32.win32trace'
+43196 INFO: Analyzing hidden import 'win32.win32transaction'
+43196 INFO: Analyzing hidden import 'win32.win32ts'
+43196 INFO: Analyzing hidden import 'win32.win32wnet'
+43196 INFO: Analyzing hidden import 'win32._win32sysloader'
+43196 INFO: Analyzing hidden import 'win32._winxptheme'
+43197 INFO: Analyzing hidden import 'xxhash._xxhash'
+43200 INFO: Analyzing hidden import '_cffi_backend'
+43201 INFO: Analyzing hidden import 'cffi'
+43342 INFO: Processing standard module hook 'hook-pycparser.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+43580 INFO: Processing pre-safe-import-module hook 'hook-distutils.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+43777 INFO: Analyzing hidden import 'cffi.backend_ctypes'
+43839 INFO: Analyzing hidden import 'cffi.setuptools_ext'
+43850 INFO: Processing module hooks (post-graph stage)...
+44226 INFO: Processing standard module hook 'hook-lxml.objectify.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+45106 INFO: Processing standard module hook 'hook-lxml.isoschematron.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+45121 WARNING: Hidden import "pycparser.lextab" not found!
+45121 WARNING: Hidden import "pycparser.yacctab" not found!
+45680 WARNING: Hidden import "tzdata" not found!
+46081 INFO: Processing standard module hook 'hook-PIL.SpiderImagePlugin.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+49155 INFO: Performing binary vs. data reclassification (640 entries)
+49373 INFO: Looking for ctypes DLLs
+49473 INFO: Analyzing run-time hooks ...
+49482 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+49486 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+49490 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+49494 INFO: Including run-time hook 'pyi_rth_pywintypes.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\rthooks'
+49495 INFO: Including run-time hook 'pyi_rth_cryptography_openssl.py' from 'D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\rthooks'
+49545 INFO: Creating base_library.zip...
+49573 INFO: Looking for dynamic libraries
+52032 INFO: Extra DLL search directories (AddDllDirectory): ['D:\\Maxma\\MaxmaHere\\.venv\\Lib\\site-packages\\numpy.libs']
+52032 INFO: Extra DLL search directories (PATH): []
+54538 INFO: Warnings written to D:\Maxma\MaxmaHere\build\maxma-server\warn-maxma-server.txt
+54710 INFO: Graph cross-reference written to D:\Maxma\MaxmaHere\build\maxma-server\xref-maxma-server.html
+54801 INFO: checking PYZ
+54801 INFO: Building PYZ because PYZ-00.toc is non existent
+54801 INFO: Building PYZ (ZlibArchive) D:\Maxma\MaxmaHere\build\maxma-server\PYZ-00.pyz
+56496 INFO: Building PYZ (ZlibArchive) D:\Maxma\MaxmaHere\build\maxma-server\PYZ-00.pyz completed successfully.
+56532 INFO: checking PKG
+56532 INFO: Building PKG because PKG-00.toc is non existent
+56532 INFO: Building PKG (CArchive) maxma-server.pkg
+56573 INFO: Building PKG (CArchive) maxma-server.pkg completed successfully.
+56575 INFO: Bootloader D:\Maxma\MaxmaHere\.venv\Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel\run.exe
+56575 INFO: checking EXE
+56575 INFO: Building EXE because EXE-00.toc is non existent
+56575 INFO: Building EXE from EXE-00.toc
+56575 INFO: Copying bootloader EXE to D:\Maxma\MaxmaHere\build\maxma-server\maxma-server.exe
+56583 INFO: Copying icon to EXE
+56589 INFO: Copying 0 resources to EXE
+56589 INFO: Embedding manifest in EXE
+56596 INFO: Appending PKG archive to EXE
+56608 INFO: Fixing EXE headers
+56713 INFO: Building EXE from EXE-00.toc completed successfully.
+56724 INFO: checking COLLECT
+56725 INFO: Building COLLECT because COLLECT-00.toc is non existent
+56726 INFO: Building COLLECT COLLECT-00.toc
+58297 INFO: Building COLLECT COLLECT-00.toc completed successfully.
+58314 INFO: Build complete! The results are available in: D:\Maxma\MaxmaHere\dist
+Packaging safety checks passed.
+[3/4] Running smoke test...
+[smoke] starting D:\Maxma\MaxmaHere\dist\maxma-server\maxma-server.exe
+[smoke] auth: ok
+[smoke] health: ok
+[smoke] providers: 3
+[smoke] mcp servers: 1
+[smoke] bundle startup verification passed
+[4/4] Deploying to Tauri binaries...
+
+============================================
+  Build complete
+  Artifact: dist\maxma-server\maxma-server.exe
+  Tauri sidecar: desktop\src-tauri\binaries\maxma-server-x86_64-pc-windows-msvc.exe
+============================================
+  File size: 13227598 bytes
+[2/6] Preparing embedded runtime...
+=== prepare-runtime: no-op ===
+[skip] node/python/uv downloads removed; maxma-engine.exe bundles Bun runtime
+[ok]  sidecar output: D:\Maxma\MaxmaHere\build\..\desktop\src-tauri\resources\runtime\maxma-engine.exe
+[3/6] Preparing bundled assets...
+=== prepare-assets: resource preparation ===
+
+[1/2] Playwright Chromium (SKIPPED - using Puppeteer on-demand)
+[ok] Skipped Playwright download (saves 690MB)
+[info] Puppeteer will auto-download browsers when first used
+
+[2/2] ONNX model (SKIPPED - knowledge base feature removed)
+[ok] Skipped ONNX model download (saves 463MB)
+
+=== prepare-assets complete ===
+Total saved: ~1.15GB (690MB Playwright + 463MB ONNX)
+Browsers will be downloaded on-demand by Puppeteer when first used
+[4/6] Building Tauri application without installer...
+[INFO] Portable target requires preinstalled Microsoft Edge WebView2 Runtime.
+        Info Looking up installed tauri packages to check mismatched versions...
+        Warn The bundle identifier "com.maxmahere.app" set in `"tauri.conf.json" identifier` ends with `.app`. This is not recommended because it conflicts with the application bundle extension on macOS.
+   Compiling maxma-here v2.6.11 (D:\Maxma\MaxmaHere\desktop\src-tauri)
+warning: variable does not need to be mutable
+   --> src\main.rs:701:13
+    |
+701 |         let mut store = child_store.lock().ok().and_then(|mut guard| { *guard = Some(child); Some(()) });
+    |             ----^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `WEBVIEW2_CLIENT_ID` is never used
+  --> src\main.rs:51:7
+   |
+51 | const WEBVIEW2_CLIENT_ID: &str = "{F3017226-FE2A-4295-8BDF-00DA56F6DDF5}";
+   |       ^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+error: linking with `D:\VSBuildTools\VC\Tools\MSVC\14.44.35207\bin\Hostx64\x64\link.exe` failed: exit code: 1109
+  |
+  = note: "D:\\VSBuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\link.exe" "/NOLOGO" "D:\\Maxma\\MaxmaHere\\desktop\\src-tauri\\target\\release\\deps\\rustcSWXt6R\\symbols.o" "<17 object files omitted>" "D:\\Maxma\\MaxmaHere\\desktop\\src-tauri\\target\\release\\deps/{libtauri_plugin_single_instance-9e6aa8828b13fae5,libtauri_plugin_log-ece2b672bb131761,libfern-14727c8836bb47fe,libtauri_plugin_http-0d680a235d4363be,libtauri_plugin_fs-49e20d50f40a26e9,libdata_url-78db6d2cf98e58e8,libreqwest-66b2a137c2e8dab4,libcookie_store-998c1be1aaca6c51,libpublicsuffix-d20645465603308f,libpsl_types-63c90f2aa155804d,libhyper_rustls-745746bf3e274051,libwebpki_roots-a8ba969c8b7ff4e9,libhyper_tls-3bf8445a1afe634a,libtokio_native_tls-dfb4c81bc19f6509,libtokio_rustls-2045a17300ec93ea,librustls-709fd7abfc9d7d65,libsubtle-99315a87cd0993c3,libwebpki-e75805b00e82bd43,libring-b78096531c9670b7,libgetrandom-8f17f7883a726835,libuntrusted-76675c54b7818bb9,librustls_pki_types-ba5fa92f79d87e58,libzeroize-2573b06ebf14f64e,libserde_urlencoded-e9340fbb7ca9a723,libryu-5d6eba54e419e9e5,libtower_http-90586d51396e19d0,libtower-e5d3809737a4f4f9,libtower_layer-5ce99d99a13a01ae,libnative_tls-3cec795f97efd8c8,libschannel-70a8883354f65108,libhyper_util-8d76536333e8cab4,libwindows_registry-4ce2f3a6bd349b7c,libwindows_strings-4e674c6e47e345cd,libwindows_result-5e4c9c512bf8c9e4,libipnet-f7574220dd2682a7,libtower_service-d8268a14e686492d,libhyper-7cdd350f5837430c,libwant-74923dc460bcd531,libtry_lock-1af1db28c25a641b,libhttparse-d8f508944e7dbfcc,libh2-1bda0d8bd48191e3,libtracing-363238d0ecee9165,libtracing_core-e9223431ef0fb46d,libtokio_util-7315cf5ffa2e64bf,libatomic_waker-49f3040ea4c3465d,libfutures_channel-4c5728b4c61e1bfc,libhttp_body_util-1772bb28889b28e2,libhttp_body-a79dd3469903fd4d,libfutures_util-5c88a676350cf590,libfutures_io-d836c0207151f70e,libslab-19da4aeec48d96d0,libfutures_sink-6a0707883c8a3291,libfutures_task-5cad09dcdbee8c8f,libsync_wrapper-6c0ec8012ef29f0d,libfutures_core-6284c3a0cb1e6860,libtauri_plugin_shell-6b304a46466ca3b9,libopen-0f072355fdec4f14,libshared_child-56675f0fcf45f83d,libwindows_sys-2ce89e704d0b8d04,libwindows_targets-af037d452f48ef99,libos_pipe-240a32aebe180dc0,libencoding_rs-500db72a3dfdaae9,libtauri_plugin_global_shortcut-1901ecdf2e76df3c,libglobal_hotkey-314a72632cd5956f,libtauri-4fc55f6d8a8a058a,libdirs-75d65564b2cf9d7e,libdirs_sys-13e190751139522c,liboption_ext-3344759ff4943925,libwindow_vibrancy-916e6c0f3eca0417,libwindows_sys-0675994191385bad,libwindows_targets-2b89bc63493d3f9a,libmime-9910246d709e34ed,libgetrandom-1dca36db421f4f15,libtauri_runtime_wry-ce9596135258110e,libsoftbuffer-9a8130b22f569cf0,libwry-cd604643d4e67713,libtao-49ba7953fb42465c,libwindows_version-101c59535c9392fb,libparking_lot-eedb7414285b53c8,libparking_lot_core-e92f7fd71ce53f74,libcfg_if-a6d390c06a308e4b,liblock_api-f561e6c0d61f2dab,libscopeguard-9e0b9aeafb41f66d,liblog-f3caa5bbc3707722,libvalue_bag-d0971a3393e649a5,libmuda-0e2893669f35463b,libkeyboard_types-062bbc56b3337158,libbitflags-8ec902acac822038,libunicode_segmentation-214be74ff4fd9c78,libonce_cell-2f0ff9dcaaeac03f,libcrossbeam_channel-3f0d70e6df1d602f,libcrossbeam_utils-0b0f6e1cb64a9aa4,libtokio-691d69a5a835eb0e,libsocket2-a7510781f34e02e0,libmio-3f66ce8eea6e35c5,libpin_project_lite-e6ad672f76ce18a3,libtauri_runtime-57ea0038f9eebe94,libwebview2_com-44f90a05a7593fe0,libwebview2_com_sys-c319a77248de1e22,libcookie-e6afd6e580271b0a,libwindows-de1d3c0403d7a98b,libwindows_core-b514b863a5a9d658,libwindows_strings-70cd467a36e5b722,libwindows_result-d354ee5a253f4597,libwindows_link-b7ca084d178002eb,libdpi-dc5bec51e152de68,libserialize_to_javascript-dbd0fe7571f64c3c,libraw_window_handle-5e301fe7f121c39a,libtauri_utils-4502f9e03c23ac67,libdunce-8cc27d62efec3df6,libinfer-4d2ad3a4003d55d2,libcfb-68947f43d2748fb1,libfnv-0c0278c6675d2a70,libbyteorder-0fda514d865f63fa,libuuid-d3fb05916f959c4e,libbrotli-b4c4e95d0a1a8cf4,libbrotli_decompressor-53b8e1a224bc0ac6,liballoc_stdlib-664cc79f0c911ce8,liballoc_no_stdlib-d68da20b06f0b2e7,liburlpattern-04523a794c6d8eaf,libunic_ucd_ident-acc37d4a6a3c8ca3,libunic_ucd_version-a91b2880a826e55e,libunic_common-fde71a9707b4c97c,libunic_char_property-11277f7d2981b3cd,libunic_char_range-77567c4dea288330,libregex-8ca8d29fdf02c584,libregex_automata-9b83661551437571,libaho_corasick-0d9f962b5949989b,libregex_syntax-55f449e888efca75,libglob-e377f2ef523cc1fa,libwalkdir-c9256717918eb86a,libsame_file-c52b2fa4aa390763,libwinapi_util-340c91421775ea23,libwindows_sys-880857d4b7fe0fcb,libwindows_link-00c055d229e54a21,libctor-4150e8d60b01fa4a,libplist-9964fcda1a6415cc,libtime-3137814caf7971be,libtime_core-64c07fe8939f0165,libnum_conv-36aa1906a7acbeb9,libderanged-5057dd46aa32b73a,libpowerfmt-fa20308ec31e354c,libquick_xml-7ff46e017bc2fece,libbase64-c61854154c9df35f,libindexmap-26fbe65eb23646bf,libequivalent-24730f67c843a19c,libhashbrown-c14e9b0c3771733f,libjson_patch-64b434cc26829bc3,libthiserror-c3cfd1f9311349cd,libjsonptr-de89d97dae9f3b4c,libserde_with-33ea538a6340fdcf,libserde_json-f3d713a80492d7e6,libmemchr-df6c1be260f27f0c,libzmij-3be264611582dbb8,libhttp-50fb36525fabc80a,libitoa-749974bbc94b8860,libbytes-c1fe49c2308579f8,libphf-ec5fb4d9f70a1227,libphf_shared-6f4867b36ee4ca0d,libsiphasher-6a37c5ab5d5ac95f,libtoml-1baa1f8bf091fb4b,libtoml_writer-582de9bbfafb90f4,libtoml_parser-6895607ebb5ee2b5,libwinnow-214c28a001de18f5,libserde_spanned-9008e38af6941a6b,libtoml_datetime-8a80e120d4986df2,libserde_untagged-e21de9e1b67df84e,liberased_serde-2d48e40204ea451b,libtypeid-fadb2d5b7fa781b6,liburl-414e1294c32018fe,libidna-aacfc7afdbb28f6c,libidna_adapter-865820149cb33e1f,libicu_properties-57fcf250babb07f0,libicu_properties_data-b4700210052f3187,libicu_normalizer-d9f6411e8798b950,libsmallvec-268d14c9657983b0,libicu_normalizer_data-630bd4bbbf07af0a,libicu_collections-1b6278501f6dd81c,libutf8_iter-2102a4014c94eb22,libpotential_utf-8877ae19cd63ac65,libicu_provider-bfd2b8128a518ed8,libicu_locale_core-8609348243232bd0,libtinystr-123e063d907a1de4,liblitemap-5a789dd80800daba,libwriteable-1024b1aba0ec2661,libzerovec-896d13b942a7871e,libzerotrie-6117880a4a2e261b,libyoke-042c886b77b4f9ff,libstable_deref_trait-41ee22e20104ad0b,libzerofrom-28ae516abca89c8d,libform_urlencoded-82208969c3fcb37b,libpercent_encoding-c3221a7b86debc36,libthiserror-1891ee85f34403e3,libanyhow-8f6f5e30936cbc68,libserde-9fd39295bed19e31,libserde_core-b49e67ff54e3e6f0,libsemver-336240b2873d8ba5}.rlib" "<sysroot>\\lib\\rustlib\\x86_64-pc-windows-msvc\\lib/{libstd-*,libpanic_unwind-*,libcfg_if-*,libwindows_link-*,librustc_demangle-*,libstd_detect-*,libhashbrown-*,librustc_std_workspace_alloc-*,libunwind-*,librustc_std_workspace_core-*,liballoc-*,libcore-*,libcompiler_builtins-*}.rlib" "bcrypt.lib" "advapi32.lib" "shell32.lib" "ole32.lib" "D:\\Rust\\cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\windows_x86_64_msvc-0.53.1\\lib\\windows.0.53.0.lib" "D:\\Rust\\cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\windows_x86_64_msvc-0.52.6\\lib\\windows.0.52.0.lib" "advapi32.lib" "kernel32.lib" "kernel32.lib" "kernel32.lib" "kernel32.lib" "ntdll.lib" "userenv.lib" "ws2_32.lib" "dbghelp.lib" "/defaultlib:msvcrt" "/NXCOMPAT" "/LIBPATH:D:\\Maxma\\MaxmaHere\\desktop\\src-tauri\\target\\release\\build\\maxma-here-e280dd27faf5ce9b\\out" "/LIBPATH:D:\\Maxma\\MaxmaHere\\desktop\\src-tauri\\target\\release\\build\\ring-5883a82f38ea3b72\\out" "/LIBPATH:D:\\Maxma\\MaxmaHere\\desktop\\src-tauri\\target\\release\\build\\webview2-com-sys-28ab1c6801218808\\out\\x64" "/LIBPATH:D:\\Rust\\cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\windows_x86_64_msvc-0.52.6\\lib" "/LIBPATH:D:\\Rust\\cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\windows_x86_64_msvc-0.53.1\\lib" "/OUT:D:\\Maxma\\MaxmaHere\\desktop\\src-tauri\\target\\release\\deps\\maxma_here.exe" "/SUBSYSTEM:windows" "/ENTRY:mainCRTStartup" "/OPT:REF,ICF" "/DEBUG" "/PDBALTPATH:%_PDB%" "/NATVIS:<sysroot>\\lib\\rustlib\\etc\\intrinsic.natvis" "/NATVIS:<sysroot>\\lib\\rustlib\\etc\\liballoc.natvis" "/NATVIS:<sysroot>\\lib\\rustlib\\etc\\libcore.natvis" "/NATVIS:<sysroot>\\lib\\rustlib\\etc\\libstd.natvis" "/NATVIS:D:\\Maxma\\MaxmaHere\\desktop\\src-tauri\\target\\release\\deps\\rustcSWXt6R\\maxma_here-0.natvis" "/NATVIS:D:\\Maxma\\MaxmaHere\\desktop\\src-tauri\\target\\release\\deps\\rustcSWXt6R\\maxma_here-1.natvis" "/NATVIS:D:\\Maxma\\MaxmaHere\\desktop\\src-tauri\\target\\release\\deps\\rustcSWXt6R\\maxma_here-2.natvis" "D:\\Maxma\\MaxmaHere\\desktop\\src-tauri\\target\\release\\build\\maxma-here-e280dd27faf5ce9b\\out\\resource.lib" "/NODEFAULTLIB:libvcruntimed.lib" "/NODEFAULTLIB:vcruntime.lib" "/NODEFAULTLIB:vcruntimed.lib" "/NODEFAULTLIB:libcmtd.lib" "/NODEFAULTLIB:msvcrt.lib" "/NODEFAULTLIB:msvcrtd.lib" "/NODEFAULTLIB:libucrt.lib" "/NODEFAULTLIB:libucrtd.lib" "/DEFAULTLIB:libcmt.lib" "/DEFAULTLIB:libvcruntime.lib" "/DEFAULTLIB:ucrt.lib"
+  = note: some arguments are omitted. use `--verbose` to show all linker arguments
+  = note: LINK : fatal error LNK1109: 鏃犳硶绉婚櫎鏂囦欢鈥淒:\GitTemp\lnk{024A51CC-2670-4582-9D47-8D3E62DCAB3F}.tmp鈥?
+          
+
+warning: `maxma-here` (bin "maxma-here") generated 2 warnings
+error: could not compile `maxma-here` (bin "maxma-here") due to 1 previous error; 2 warnings emitted
+       Error failed to build app: failed to build app
+[ERROR] Tauri no-bundle build failed.

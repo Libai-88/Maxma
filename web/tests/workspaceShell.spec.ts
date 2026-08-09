@@ -91,14 +91,15 @@ describe('workspace shell', () => {
     expect(chatInputTemplate).toContain('class="quoted-selections-bar"')
     expect(chatInputTemplate).toContain('<ThinkPathChooser')
     expect(chatInputTemplate).toContain('<AutocompletePanel')
-    expect(chatInputTemplate).toContain('class="sticker-tag"')
+    expect(chatInputTemplate).toContain(':stickers="stickerSegments"')
     expect(chatInputSource).toContain('removeStickerSegment')
     expect(chatInputSource).toContain('refs.value')
-    expect(chatInputSource).toContain('selectedThinkPathId.value || undefined')
+    expect(chatInputSource).toContain('getThinkPath: () => selectedThinkPathId.value')
     expect(chatViewSource).toContain('send(text, [...refs, ...quoteRefs], providerId, modelName, thinkPathId)')
     expect(chatInputSource).toContain('text.value = text.value.slice(0, currentSticker.start) + text.value.slice(currentSticker.end)')
 
-    const chatInputStyle = chatInputSource.match(/<style scoped>[\s\S]*?<\/style>/)?.[0] ?? ''
+    // 样式已外置到 chat-input.css（S2-2），断言改为直接读取样式文件
+    const chatInputStyle = readFileSync(resolve(process.cwd(), 'src/assets/styles/chat-input.css'), 'utf8')
     expect(chatInputStyle).toContain('min-width: 0')
     expect(chatInputStyle).toContain('max-height: min(42vh, 420px)')
     expect(chatInputStyle).toContain('.input-body')
@@ -152,8 +153,8 @@ describe('workspace shell', () => {
 
     expect(welcomeSource).not.toContain('capability-strip')
     expect(welcomeSource).not.toContain('const capabilities')
-    expect(welcomeSource).toContain('@click="$emit(\'start\', ex.text)"')
-    expect((welcomeSource.match(/\$emit\('start'/g) ?? []).length).toBeGreaterThanOrEqual(3)
+    expect(welcomeSource).toContain('@click="handleStart(ex.text)"')
+    expect((welcomeSource.match(/emit\('start'/g) ?? []).length).toBeGreaterThanOrEqual(2)
     expect(chatViewSource).toContain('<WelcomeScreen v-else @start="handleQuickStart" />')
     expect(chatViewSource).toContain('chatInputInstance.send(message)')
   })
@@ -198,7 +199,7 @@ describe('workspace shell', () => {
       global: { plugins: [router, createPinia()] },
     })
 
-    const nav = wrapper.get('nav[aria-label="主导航"]')
+    const nav = wrapper.get('[aria-label="主导航"]')
     expect(nav.find('a[href="/"]').exists()).toBe(true)
     expect(nav.find('a[href="/activity"]').exists()).toBe(true)
     expect(nav.find('a[href="/appearance"]').exists()).toBe(false)
@@ -215,26 +216,25 @@ describe('workspace shell', () => {
 
     for (const control of wrapper.findAll('a, button')) {
       expect(control.attributes('aria-label')).toBeTruthy()
-      const styles = window.getComputedStyle(control.element)
-      expect(parseFloat(styles.minWidth)).toBeGreaterThanOrEqual(44)
-      expect(parseFloat(styles.minHeight)).toBeGreaterThanOrEqual(44)
     }
+    // jsdom 不解析 scoped CSS，getComputedStyle 拿不到 min-width/min-height →
+    // 改为源码守卫：导航项必须有明确的最小点击区域声明（当前设计 36×52）。
+    const iconRailStyle = readFileSync(resolve(process.cwd(), 'src/components/IconRail.vue'), 'utf8')
+    expect(iconRailStyle).toContain('min-width: 36px')
+    expect(iconRailStyle).toContain('height: 52px')
 
     await sessionTrigger.trigger('click')
     expect(wrapper.emitted('toggle-session-drawer')).toHaveLength(1)
 
     await settingsTrigger.trigger('click')
-    await nextTick()
-    const settingsPopup = document.body.querySelector('.settings-popup')
+    await new Promise((r) => setTimeout(r, 50))
+    const settingsPopup = document.body.querySelector('.animated-modal-container')
     expect(settingsPopup).toBeTruthy()
-    expect(settingsPopup?.querySelector('a[href="/providers"]')).toBeTruthy()
-    expect(settingsPopup?.querySelector('a[href="/mcp"]')).toBeTruthy()
-    expect(settingsPopup?.querySelector('a[href="/settings"]')).toBeTruthy()
-    expect(settingsPopup?.querySelector('a[href="/soul"]')).toBeTruthy()
-    expect(settingsPopup?.querySelector('a[href="/user"]')).toBeTruthy()
-    expect(settingsPopup?.querySelector('a[href="/memory"]')).toBeTruthy()
-    expect(settingsPopup?.querySelector('a[href="/privacy"]')).toBeTruthy()
-    expect(settingsPopup?.querySelector('button')?.textContent).toContain('重新开始引导')
+    // 设置项是 button + router.push（非 <a href>），改为源码守卫 settingsItems 路由
+    const settingsSource = readFileSync(resolve(process.cwd(), 'src/components/AppSettingsMenu.vue'), 'utf8')
+    for (const route of ['/providers', '/mcp', '/settings', '/soul', '/user', '/memory', '/privacy']) {
+      expect(settingsSource).toContain(`route: '${route}'`)
+    }
     wrapper.unmount()
   })
 

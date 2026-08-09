@@ -175,8 +175,8 @@ onMounted(load)
 .status-grid { display: flex; gap: 24px; flex-wrap: wrap; }
 .status-item { display: flex; align-items: center; gap: 6px; font-size: 0.85em; color: var(--text-secondary); }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; }
-.status-dot.online { background: #10b981; }
-.status-dot.offline { background: #ef4444; }
+.status-dot.online { background: var(--status-ok); }
+.status-dot.offline { background: var(--status-error); }
 .status-value { font-weight: 700; font-size: 1.1em; color: var(--text-primary); }
 .status-label { font-size: 0.85em; color: var(--text-tertiary); }
 
@@ -185,8 +185,8 @@ onMounted(load)
 .ext-header { display: flex; align-items: center; gap: 8px; }
 .ext-name { font-weight: 600; font-size: 0.9em; color: var(--text-primary); }
 .ext-source { font-size: 0.75em; padding: 2px 6px; border-radius: 4px; background: var(--bg-card); color: var(--text-tertiary); }
-.source-ok { color: #10b981; }
-.source-warn { color: #f59e0b; }
+.source-ok { color: var(--status-ok); }
+.source-warn { color: var(--status-warn); }
 .ext-desc { font-size: 0.82em; color: var(--text-secondary); margin-top: 4px; line-height: 1.5; }
 
 .tool-grid { display: flex; flex-wrap: wrap; gap: 6px; }

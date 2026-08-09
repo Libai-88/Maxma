@@ -150,8 +150,8 @@ useTilt(() => rootEl.value)
 }
 
 .btn-danger:hover {
-  background: rgba(239, 68, 68, 0.1);
-  border-color: #ef4444;
+  background: color-mix(in srgb, var(--status-error) 10%, transparent);
+  border-color: var(--status-error);
 }
 
 .plugin-desc {

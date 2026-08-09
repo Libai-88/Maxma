@@ -462,14 +462,14 @@ function copyContent() {
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  background: #eaf6ea;
-  border: 1px solid #b8d8b8;
+  background: color-mix(in srgb, var(--status-ok) 8%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--status-ok) 30%, transparent);
   border-radius: 6px;
 }
 
 .success-icon {
   font-size: 18px;
-  color: #3d8b3d;
+  color: var(--status-ok);
   font-weight: 700;
   flex-shrink: 0;
 }
@@ -483,12 +483,12 @@ function copyContent() {
 .write-success-title {
   font-size: 14px;
   font-weight: 600;
-  color: #2d5a2d;
+  color: color-mix(in srgb, var(--status-ok) 70%, var(--text-primary));
 }
 
 .write-success-detail {
   font-size: 12px;
-  color: #3d7a3d;
+  color: color-mix(in srgb, var(--status-ok) 80%, var(--text-primary));
   word-break: break-all;
 }
 

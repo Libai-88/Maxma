@@ -185,8 +185,8 @@ onUnmounted(() => {
   justify-content: center;
   padding: 28px;
   background:
-    radial-gradient(circle at 50% 35%, rgba(255, 245, 230, 0.18), transparent 34%),
-    rgba(12, 13, 16, 0.72);
+    radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--status-warn) 18%, transparent), transparent 34%),
+    color-mix(in srgb, var(--text-primary) 72%, transparent);
   backdrop-filter: blur(10px);
   cursor: default;
 }
@@ -194,10 +194,10 @@ onUnmounted(() => {
 .preview-card {
   width: min(520px, 88vw);
   margin: 0;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid color-mix(in srgb, var(--text-inverse) 18%, transparent);
   border-radius: 24px;
-  background: rgba(24, 24, 28, 0.78);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.38);
+  background: color-mix(in srgb, var(--text-primary) 78%, transparent);
+  box-shadow: 0 30px 80px color-mix(in srgb, var(--text-primary) 38%, transparent);
   overflow: hidden;
 }
 
@@ -213,7 +213,7 @@ onUnmounted(() => {
   max-width: 100%;
   max-height: min(54vh, 390px);
   object-fit: contain;
-  filter: drop-shadow(0 18px 32px rgba(0, 0, 0, 0.28));
+  filter: drop-shadow(0 18px 32px color-mix(in srgb, var(--text-primary) 28%, transparent));
 }
 
 .preview-meta {
@@ -222,38 +222,38 @@ onUnmounted(() => {
   gap: 10px;
   align-items: center;
   padding: 14px 16px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: color-mix(in srgb, var(--text-inverse) 8%, transparent);
+  color: var(--text-inverse);
 }
 
 .preview-category {
   padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(255, 245, 230, 0.18);
-  color: #ffe8c2;
+  background: color-mix(in srgb, var(--status-warn) 18%, transparent);
+  color: color-mix(in srgb, var(--status-warn) 15%, var(--bg-raised));
   font-size: 0.82em;
   white-space: nowrap;
 }
 
 .preview-filename {
   overflow: hidden;
-  color: rgba(255, 255, 255, 0.78);
+  color: color-mix(in srgb, var(--text-inverse) 78%, transparent);
   font-size: 0.82em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .favorite-btn {
-  border: 1px solid rgba(255, 232, 194, 0.42);
+  border: 1px solid color-mix(in srgb, var(--status-warn) 42%, transparent);
   border-radius: 999px;
   padding: 5px 12px;
-  background: rgba(255, 232, 194, 0.12);
-  color: #ffe8c2;
+  background: color-mix(in srgb, var(--status-warn) 12%, transparent);
+  color: color-mix(in srgb, var(--status-warn) 15%, var(--bg-raised));
   cursor: pointer;
 }
 
 .favorite-btn:hover:not(:disabled) {
-  background: rgba(255, 232, 194, 0.22);
+  background: color-mix(in srgb, var(--status-warn) 22%, transparent);
 }
 
 .favorite-btn:disabled {
@@ -264,17 +264,17 @@ onUnmounted(() => {
 .preview-hint {
   margin: 0;
   padding: 0 16px 14px;
-  color: rgba(255, 255, 255, 0.48);
+  color: color-mix(in srgb, var(--text-inverse) 48%, transparent);
   font-size: 0.76em;
 }
 
 .preview-close,
 .preview-nav {
   position: fixed;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid color-mix(in srgb, var(--text-inverse) 20%, transparent);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: color-mix(in srgb, var(--text-inverse) 10%, transparent);
+  color: var(--text-inverse);
   cursor: pointer;
   backdrop-filter: blur(8px);
 }
@@ -306,7 +306,7 @@ onUnmounted(() => {
 
 .preview-close:hover,
 .preview-nav:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: color-mix(in srgb, var(--text-inverse) 18%, transparent);
 }
 
 /* 入场/退场/切图动画由 GSAP 控制；reduce-motion 由 useGsap 全局 timeScale 收口 */

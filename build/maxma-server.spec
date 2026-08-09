@@ -32,6 +32,8 @@ datas = [
     (str(project_root / "config" / "personas" / "MAXMA.md"), "config/personas"),
     (str(project_root / "config" / "personas" / "SOUL.example.md"), "config/personas"),
     (str(project_root / "config" / "personas" / "USER.example.md"), "config/personas"),
+    # 饱饱人格模板：便携版首次运行时播种到 data/config/personas/
+    (str(project_root / "config" / "personas" / "SOUL.饱饱.md"), "config/personas"),
     # 内置贴纸；config/stickers/custom 是用户上传目录，故不打包。
     # Anthropic Skills
     (str(project_root / ".omp" / "skills"), ".omp/skills"),

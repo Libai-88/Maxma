@@ -504,9 +504,9 @@ onMounted(() => {
 }
 .log-target { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
 .log-status { font-size: 11px; font-weight: 600; flex-shrink: 0; }
-.log-status.ok { color: #22c55e; }
-.log-status.error { color: #ef4444; }
-.log-status.blocked { color: #eab308; }
+.log-status.ok { color: var(--status-ok); }
+.log-status.error { color: var(--status-error); }
+.log-status.blocked { color: var(--status-warn); }
 
 .action-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .btn-action {
@@ -530,7 +530,7 @@ onMounted(() => {
   padding: 6px 12px;
   border-radius: 6px;
 }
-.action-message.ok { color: #22c55e; background: color-mix(in srgb, #22c55e 10%, var(--bg-card)); }
+.action-message.ok { color: var(--status-ok); background: color-mix(in srgb, var(--status-ok) 10%, var(--bg-card)); }
 .action-message.error { color: var(--status-error); background: color-mix(in srgb, var(--status-error) 10%, var(--bg-card)); }
 
 .loading-text, .empty-text {

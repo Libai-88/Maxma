@@ -136,7 +136,7 @@ async function handleSetTheme(id: ThemeId) {
               transform var(--duration-fast) var(--ease-out);
 }
 .theme-card:hover {
-  background: var(--overlay-subtle, rgba(0, 0, 0, 0.03));
+  background: var(--overlay-subtle, color-mix(in srgb, var(--text-primary) 3%, transparent));
 }
 @media (prefers-reduced-motion: no-preference) {
   .theme-card:hover {

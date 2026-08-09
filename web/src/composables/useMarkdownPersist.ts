@@ -11,6 +11,16 @@ import { createLogger } from '@/utils/logger'
 
 const log = createLogger('markdownPersist')
 
+/** 便携版无 DevTools 时的诊断打点：内容加载状态上报到后端日志。 */
+function reportDiag(msg: string) {
+  try {
+    void api.request('/diagnostics/frontend', {
+      method: 'POST',
+      body: JSON.stringify({ kind: 'markdown-persist', msg: msg.slice(0, 1000), url: `${location.pathname}${location.hash}` }),
+    }).catch(() => {})
+  } catch { /* silent */ }
+}
+
 export interface UseMarkdownPersistOptions {
   /** 人格类型，决定 API 路径 */
   type: 'soul' | 'user'
@@ -63,10 +73,31 @@ export function useMarkdownPersist(options: UseMarkdownPersistOptions): UseMarkd
   const saveError = ref('')
   const loadError = ref('')
 
-  // 统一的 Codemirror 配置：markdown 语法 + 自动换行
+  // 统一的 Codemirror 配置：markdown 语法 + 自动换行 + 主题样式（便携版关键修复）。
+  // EditorView.theme 通过 codemirror 自己的渲染管线注入 inline 样式，
+  // 这是 codemirror 推荐的设置方式，能可靠覆盖内置默认 + 任意外部 CSS/inline。
+  // 字体用 Microsoft YaHei（WebView2 Windows 一定有），确保中文可渲染。
   const extensions: Extension[] = [
     markdown(),
     EditorView.lineWrapping,
+    EditorView.theme({
+      '&': {
+        fontSize: '15px',
+        fontFamily: '"Microsoft YaHei", "PingFang SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        color: '#1C1C1C',
+        backgroundColor: 'transparent',
+        height: '100%',
+      },
+      '.cm-content': {
+        fontFamily: '"Microsoft YaHei", "PingFang SC", sans-serif',
+        color: '#1C1C1C',
+        caretColor: '#1C1C1C',
+        lineHeight: '1.6',
+      },
+      '.cm-line': {
+        color: '#1C1C1C',
+      },
+    }, { dark: false }),
   ]
 
   const saveStateText = computed(() => {
@@ -95,11 +126,13 @@ export function useMarkdownPersist(options: UseMarkdownPersistOptions): UseMarkd
       const res = await api.getPersona(type, variant)
       content.value = res.content
       savedContent.value = res.content
+      reportDiag(`loaded ${type}${variant ? `/${variant}` : ''} contentLen=${String(res.content || '').length}`)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       log.error(`加载 ${type} 失败`, e)
       loadError.value = msg
       content.value = ''
+      reportDiag(`load-fail ${type}: ${msg}`)
     } finally {
       loading.value = false
     }

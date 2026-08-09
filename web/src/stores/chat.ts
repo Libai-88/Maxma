@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { computed, reactive, ref, shallowRef } from 'vue'
 import type { ChatTurn, ContextUsage, CompactionReason, CompactionAction } from '@/types'
 import type { ModelInfo, ChatContextUsage } from '../types/chat'
+// S4-2: api 已被 30+ 文件静态引用进主 chunk，此处动态导入不会触发拆分（纯噪音），改静态
+import { api } from '@/api'
 
 export const TURNS_KEY_PREFIX = 'maxma_turns_'
 
@@ -178,7 +180,6 @@ export const useChatStore = defineStore('chat', () => {
 
   async function fetchAvailableModels() {
     try {
-      const { api } = await import('@/api')
       const data = await api.listProviders()
       const models: ModelInfo[] = []
       const providers = Array.isArray(data) ? data : (data as unknown as Record<string, unknown>).providers

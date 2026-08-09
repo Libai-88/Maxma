@@ -469,8 +469,8 @@ function submitConfirm() {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+  background: color-mix(in srgb, var(--status-error) 10%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--status-error) 30%, transparent);
   border-radius: 6px;
   margin-bottom: 8px;
 }

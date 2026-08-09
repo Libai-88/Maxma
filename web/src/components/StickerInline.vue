@@ -160,8 +160,8 @@ function capturePoster() {
   transform: translateX(-50%);
   padding: 2px 6px;
   border-radius: 999px;
-  background: rgba(17, 24, 39, 0.72);
-  color: #fff;
+  background: color-mix(in srgb, var(--text-primary) 72%, transparent);
+  color: var(--text-inverse);
   font-size: 10px;
   line-height: 1.2;
   white-space: nowrap;

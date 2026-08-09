@@ -226,8 +226,8 @@ function handleSearch(query: string, category: PluginCategory | undefined, enabl
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
+  background: color-mix(in srgb, var(--status-error) 10%, transparent);
+  color: var(--status-error);
   border-radius: 6px;
   font-size: 0.85em;
   margin-bottom: 12px;
@@ -237,7 +237,7 @@ function handleSearch(query: string, category: PluginCategory | undefined, enabl
   padding: 2px 6px;
   border: none;
   background: transparent;
-  color: #ef4444;
+  color: var(--status-error);
   cursor: pointer;
   font-size: 1.1em;
 }

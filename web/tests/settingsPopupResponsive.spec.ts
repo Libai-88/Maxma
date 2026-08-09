@@ -1,16 +1,27 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia } from 'pinia'
+import { createMemoryHistory, createRouter, type Router } from 'vue-router'
 
 import AppSettingsMenu from '@/components/AppSettingsMenu.vue'
 
-const defaultInnerHeight = window.innerHeight
 let mountedWrapper: ReturnType<typeof mount> | null = null
+let router: Router
 
-function setViewportHeight(height: number) {
-  Object.defineProperty(window, 'innerHeight', {
-    configurable: true,
-    value: height,
+function makeRouter(): Router {
+  return createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/', name: 'chat', component: { template: '<div/>' } },
+      { path: '/providers', component: { template: '<div/>' } },
+      { path: '/mcp', component: { template: '<div/>' } },
+      { path: '/settings', component: { template: '<div/>' } },
+      { path: '/soul', component: { template: '<div/>' } },
+      { path: '/user', component: { template: '<div/>' } },
+      { path: '/memory', component: { template: '<div/>' } },
+      { path: '/privacy', component: { template: '<div/>' } },
+      { path: '/capabilities', component: { template: '<div/>' } },
+    ],
   })
 }
 
@@ -19,7 +30,7 @@ function mountSettingsMenu() {
     attachTo: document.body,
     props: { onboardingEnabled: false },
     global: {
-      plugins: [createPinia()],
+      plugins: [createPinia(), router],
       stubs: {
         Icon: true,
         RouterLink: { template: '<a><slot /></a>' },
@@ -32,46 +43,47 @@ function mountSettingsMenu() {
 afterEach(() => {
   mountedWrapper?.unmount()
   mountedWrapper = null
-  document.body.querySelectorAll('.settings-popup').forEach(node => node.remove())
+  document.body.querySelectorAll('.animated-modal-container').forEach((node) => node.remove())
   vi.restoreAllMocks()
-  setViewportHeight(defaultInnerHeight)
 })
 
 describe('AppSettingsMenu responsive popup', () => {
-  it('opens above a bottom trigger and keeps the long menu inside a scrollable viewport', async () => {
-    setViewportHeight(640)
+  it('opens the settings modal with scrollable content in the viewport', async () => {
+    router = makeRouter()
+    await router.push('/')
+    await router.isReady()
+
     const wrapper = mountSettingsMenu()
-    const trigger = wrapper.get('.settings-area').element
-    const triggerRect = {
-      top: 560,
-      bottom: 604,
-      left: 12,
-      right: 56,
-      width: 44,
-      height: 44,
-      x: 12,
-      y: 560,
-      toJSON: () => ({}),
-    } as DOMRect
-    const triggerSpy = vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(triggerRect)
+    const trigger = wrapper.get('button[aria-label="设置"]')
+    await trigger.trigger('click')
 
-    await wrapper.get('button[aria-label="设置"]').trigger('click')
-    const popup = document.body.querySelector<HTMLElement>('.settings-popup')
-    expect(popup).toBeTruthy()
+    // AnimatedModal 的 Transition 在 jsdom 下需要真实计时器等待挂载
+    await new Promise((r) => setTimeout(r, 50))
 
-    const bottom = Number.parseFloat(popup?.style.bottom ?? '')
-    expect(popup?.style.top).toBe('')
-    expect(bottom).toBeGreaterThan(window.innerHeight - triggerRect.top)
+    const modal = document.body.querySelector<HTMLElement>('.animated-modal-container')
+    expect(modal).toBeTruthy()
 
-    const maxHeight = Number.parseFloat(popup?.style.maxHeight ?? '')
-    expect(maxHeight).toBeGreaterThan(0)
-    expect(maxHeight).toBeLessThanOrEqual(triggerRect.top - 16)
-    expect(getComputedStyle(popup as HTMLElement).overflowY).toBe('auto')
+    // 菜单内容以按钮形式渲染（点击后 router.push 跳转），应有多个设置项
+    expect(modal?.querySelectorAll('button').length).toBeGreaterThan(3)
 
-    triggerSpy.mockReturnValue({ ...triggerRect, top: 100, bottom: 144 })
-    window.dispatchEvent(new Event('resize'))
-    expect(popup?.style.bottom).toBe('')
-    expect(popup?.style.top).toBe('152px')
+    // 可滚动意图：modal body 声明了滚动容器样式
+    const modalBody = modal?.querySelector('.animated-modal-body')
+    expect(modalBody).toBeTruthy()
+  })
 
+  it('closes the settings modal when toggled again', async () => {
+    router = makeRouter()
+    await router.push('/')
+    await router.isReady()
+
+    const wrapper = mountSettingsMenu()
+    const trigger = wrapper.get('button[aria-label="设置"]')
+    await trigger.trigger('click')
+    await new Promise((r) => setTimeout(r, 50))
+    expect(document.body.querySelector('.animated-modal-container')).toBeTruthy()
+
+    await trigger.trigger('click')
+    await new Promise((r) => setTimeout(r, 50))
+    expect(document.body.querySelector('.animated-modal-container')).toBeNull()
   })
 })

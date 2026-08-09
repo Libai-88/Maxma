@@ -28,3 +28,6 @@ jobs:
 
       - name: Run Vitest
         run: npx vitest run
+
+      - name: Brand color guard (no hardcoded colors)
+        run: node scripts/check-hardcoded-colors.mjs

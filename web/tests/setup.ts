@@ -12,17 +12,20 @@ if (!globalThis.localStorage) {
   } as Storage
 }
 
-// 模拟 window.matchMedia —— GSAP 在 jsdom 中需要此 API
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: (query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: () => {},
-    removeListener: () => {},
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    dispatchEvent: () => false,
-  }),
-})
+// 模拟 window.matchMedia —— GSAP 在 jsdom 中需要此 API。
+// node 环境（@vitest-environment node）无 window，跳过。
+if (typeof window !== 'undefined' && !window.matchMedia) {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  })
+}

@@ -261,7 +261,7 @@ function onBackdropClick() {
   height: 20px;
   border-radius: 50%;
   background: var(--status-ok, #16a34a);
-  color: #fff;
+  color: var(--text-inverse);
   animation: loader-pop 0.3s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
 }
 

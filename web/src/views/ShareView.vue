@@ -85,10 +85,10 @@ onMounted(async () => {
 .header h2 { font-size: var(--fs-display-lg); font-weight: 600; margin: 0; }
 .share-info { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; font-size: 0.85em; color: var(--text-secondary); }
 .share-badge { font-size: 0.75em; padding: 3px 10px; border-radius: 4px; font-weight: 500; }
-.mode-read { background: rgba(59,130,246,0.1); color: #3b82f6; }
-.mode-comment { background: rgba(245,158,11,0.1); color: #f59e0b; }
-.mode-edit { background: rgba(16,185,129,0.1); color: #10b981; }
-.share-expires { color: #f59e0b; }
+.mode-read { background: color-mix(in srgb, var(--status-info) 10%, transparent); color: var(--status-info); }
+.mode-comment { background: color-mix(in srgb, var(--status-warn) 10%, transparent); color: var(--status-warn); }
+.mode-edit { background: color-mix(in srgb, var(--status-ok) 10%, transparent); color: var(--status-ok); }
+.share-expires { color: var(--status-warn); }
 .messages { display: flex; flex-direction: column; gap: 12px; }
 .message { padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border); }
 .message.user { background: var(--bg-secondary); }

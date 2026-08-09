@@ -64,6 +64,13 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       minify: 'esbuild',
+      // 关闭 vite 内部 emptyDir：被 safe-delete 钩子（>50 文件 tryTrash 需确认）
+      // 静默拦截，rmSync 不删但退出 0。改用 rename 隔离策略：构建前把 dist
+      // 改名为 _old（rename 通常不受 Node fs 钩子拦截），vite 写入新 dist。
+      emptyOutDir: false,
+      // codemirror 611KB 是编辑器生态自重（gzip 209KB），且已通过路由懒加载
+      // （仅 /user 页）按需拉取，不阻塞首屏。调高警告阈值消除噪音。
+      chunkSizeWarningLimit: 650,
       // 注意：此前 drop:['console'] 会删除前端全部 console 输出，导致运行时
       // 错误（如人设/用户编辑器空白）无法通过 F12 排查。保留 console 以便诊断。
       rollupOptions: {

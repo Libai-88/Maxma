@@ -1,16 +1,22 @@
 /**
  * tools/index.ts — Maxma 自定义工具注册入口
  *
- * 除 OMP 原生工具外,额外注册 remember_memory:
- * 用户明确要求"记住"时,直接把内容写入 Maxma 的长期记忆文件
- * (config/personas/memory.yaml),使记忆在记忆页面可见。
- * 这绕开了 OMP 独立运行的 memory 后端(写 ~/.omp/agent/memories,
- * 与 Maxma 记忆页不互通),保证记忆落盘在便携 data 内、随程序走。
+ * 除 OMP 原生工具外,注册 Maxma 特色工具：
+ *   - remember_memory（写）：用户明确要求"记住"时写入长期记忆文件
+ *   - search_memories（读）：检索记忆页内容
+ *   - get_sticker（读）：取内置贴纸
+ *   - list_rules（读）：查询质量规则（与后端共享数据源）
+ *
+ * 读类工具让 Agent 直接调用 Maxma 特色能力，形成 OMP 之上不可复制的能力层。
  */
 
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
 import type { ToolDefinition } from "@oh-my-pi/pi-coding-agent";
+import { memoryFilePath, searchMemoriesTool } from "./memory";
+import { getStickerTool } from "./stickers";
+import { listRulesTool } from "./rules";
+import { listAutomationsTool } from "./automations";
 
 /** Bun.YAML 通过 globalThis 访问,避免依赖 @types/bun。 */
 const bunYaml = (
@@ -54,16 +60,6 @@ function shortHash(input: string): string {
     h = Math.imul(h, 0x01000193);
   }
   return (h >>> 0).toString(16).padStart(8, "0");
-}
-
-/** 记忆文件路径:<MAXMA_PROJECT_ROOT>/config/personas/memory.yaml。 */
-function memoryFilePath(): string {
-  return path.join(
-    process.env.MAXMA_PROJECT_ROOT ?? process.cwd(),
-    "config",
-    "personas",
-    "memory.yaml",
-  );
 }
 
 /** 本地时间 YYYY-MM-DD HH:MM:SS(Maxma memory.yaml 的 latest_update_time 格式)。 */
@@ -133,5 +129,9 @@ export function registerCustomTools(): ToolDefinition[] {
         };
       },
     },
+    searchMemoriesTool(),
+    getStickerTool(),
+    listRulesTool(),
+    listAutomationsTool(),
   ] as unknown as ToolDefinition[];
 }

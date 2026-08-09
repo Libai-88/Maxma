@@ -70,7 +70,7 @@ function logSandboxError(err: SandboxError) {
   sandboxErrors.value.push(err)
 
   const tag = `[Sandbox ${err.type}]`
-  console.group(`%c${tag} ${err.message}`, 'color:#ef4444;font-weight:bold')
+  console.group(`%c${tag} ${err.message}`, 'color:var(--status-error);font-weight:bold')
   log.error('  消息:', err.message)
   if (err.stack) log.error('  堆栈:', err.stack)
   if (err.source) log.error('  来源:', err.source, `(${err.line}:${err.col})`)
@@ -461,11 +461,11 @@ onUnmounted(() => {
   gap: 6px;
   padding: 4px 10px;
   margin-bottom: 4px;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+  background: color-mix(in srgb, var(--status-error) 10%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--status-error) 30%, transparent);
   border-radius: 6px;
   font-size: 12px;
-  color: #b91c1c;
+  color: var(--status-error);
 }
 .sandbox-error-icon {
   font-size: 14px;

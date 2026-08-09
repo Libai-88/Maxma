@@ -249,8 +249,8 @@ function formatDate(dateStr: string): string {
 }
 
 .error-banner {
-  background: rgba(239, 68, 68, 0.08);
-  color: #ef4444;
+  background: color-mix(in srgb, var(--status-error) 8%, transparent);
+  color: var(--status-error);
   border-radius: 6px;
 }
 
@@ -389,19 +389,19 @@ function formatDate(dateStr: string): string {
 }
 
 .btn-warning {
-  background: #f59e0b;
+  background: var(--status-warn);
   color: white;
-  border-color: #f59e0b;
+  border-color: var(--status-warn);
 }
 
 .btn-danger {
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-  border-color: #ef4444;
+  background: color-mix(in srgb, var(--status-error) 10%, transparent);
+  color: var(--status-error);
+  border-color: var(--status-error);
 }
 
 .btn-danger:hover {
-  background: #ef4444;
+  background: var(--status-error);
   color: white;
 }
 </style>

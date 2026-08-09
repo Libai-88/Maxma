@@ -144,7 +144,7 @@ function getFileIndex(r: ParsedRef): number {
 .file-grid-card:hover {
   border-color: var(--accent);
   background: var(--bg-card);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 
 .file-grid-card.blocked {
@@ -216,8 +216,8 @@ function getFileIndex(r: ParsedRef): number {
 }
 
 .image-badge {
-  background: color-mix(in srgb, #22c55e 12%, transparent);
-  color: #22c55e;
+  background: color-mix(in srgb, var(--status-ok) 12%, transparent);
+  color: var(--status-ok);
 }
 
 .type-badge {

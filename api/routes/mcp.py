@@ -1,17 +1,30 @@
 """REST API — MCP 服务器配置 CRUD + 热加载 + Registry + OAuth。"""
 
 import logging
-import os
 import time
 import secrets
-from pathlib import Path
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-from app_paths import MCP_CONFIG_PATH, API_DATA_DIR
+from app_paths import MCP_CONFIG_PATH
 from api.yaml_store import dump_yaml_atomic, load_yaml, yaml_file_lock
+# S2-4: 纯逻辑拆分——配置校验/脱敏 与 OAuth 流程
+from api.routes.mcp_validation import (
+    _validate_env_vars,
+    _validate_stdio_command,
+    _redact_sensitive,
+    _merge_redacted_mapping,
+)
+from api.routes.mcp_oauth import (
+    OAuthAuthorizeBody,
+    OAuthCallbackBody,
+    _oauth_pending_states,
+    _load_oauth_tokens,
+    _save_oauth_tokens,
+    _exchange_oauth_code,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,145 +34,6 @@ MCP_YAML_PATH = MCP_CONFIG_PATH
 
 # 子进程环境变量黑名单 — 禁止通过 API 设置的敏感系统变量
 # 这些变量可被用于代码注入、库劫持、路径劫持等攻击
-_BLOCKED_ENV_KEYS: frozenset[str] = frozenset({
-    # Linux / macOS 动态库注入
-    "LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT", "LD_DEBUG",
-    "DYLD_INSERT_LIBRARIES", "DYLD_LIBRARY_PATH",
-    # Python 模块劫持
-    "PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "PYTHONPYCACHEPREFIX",
-    # 命令路径劫持
-    "PATH", "IFS", "BASH_ENV", "ENV",
-    # Shell 劫持 (Windows)
-    "COMSPEC", "SHELL", "PATHEXT",
-    # Node.js
-    "NODE_PATH", "NODE_OPTIONS",
-    # 通用危险变量
-    "HOME", "USERPROFILE", "TMPDIR", "TMP", "TEMP",
-})
-
-
-def _validate_env_vars(env: dict[str, object]) -> None:
-    """校验环境变量字典，拒绝黑名单中的敏感 key。
-
-    防止通过 MCP 服务器配置 API 设置可导致子进程代码注入的环境变量。
-    校验在 API 层执行，确保无论在 create 还是 update 路径都无法绕过。
-    """
-    blocked = [k for k in env if k.upper() in _BLOCKED_ENV_KEYS]
-    if blocked:
-        raise HTTPException(
-            status_code=400,
-            detail=f"环境变量包含禁止设置的敏感 key: {', '.join(blocked)}",
-        )
-
-
-# stdio transport 允许的可执行命令白名单（仅命令名，不含路径）。
-# MCP 服务器子进程只能通过这些常见的运行器启动，防止任意命令执行。
-# Windows 下自动兼容 .exe / .cmd / .bat 后缀。
-_ALLOWED_STDIO_COMMANDS: frozenset[str] = frozenset({
-    # Node.js 生态（MCP 官方示例几乎都是 npx 启动）
-    "npx", "node", "npm", "bun", "bunx", "deno",
-    # Python 生态
-    "python", "python3", "py", "uvx", "uv", "pipx",
-    # Go / Rust / 通用运行器
-    "go", "cargo", "ruby", "java",
-    # 容器隔离
-    "docker", "podman",
-})
-
-
-def _validate_stdio_command(command: str) -> str:
-    """校验 stdio 命令名在白名单内，防止任意可执行文件启动。
-
-    接受裸命令名（如 ``npx``）或绝对/相对路径——后者取 basename 校验。
-    Windows 下自动剥离 .exe / .cmd / .bat 后缀后再比对。
-    """
-    if not isinstance(command, str) or not command.strip():
-        raise HTTPException(status_code=400, detail="stdio 模式必须指定 command")
-    # 取命令本体（剥离路径和引号）
-    bare = command.strip().strip('"').strip("'")
-    # 处理 Windows 路径分隔符
-    basename = bare.rsplit("\\", 1)[-1].rsplit("/", 1)[-1]
-    # 剥离 Windows 可执行文件后缀
-    lower = basename.lower()
-    for ext in (".exe", ".cmd", ".bat"):
-        if lower.endswith(ext):
-            basename = basename[: -len(ext)]
-            break
-    if basename not in _ALLOWED_STDIO_COMMANDS:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"stdio 命令 '{basename}' 不在白名单中，"
-                f"允许的命令: {', '.join(sorted(_ALLOWED_STDIO_COMMANDS))}"
-            ),
-        )
-    return command
-
-
-_REDACTED = "[REDACTED]"
-_SENSITIVE_KEY_NAMES: frozenset[str] = frozenset({
-    "authorization",
-    "token",
-    "authtoken",
-    "accesstoken",
-    "refreshtoken",
-    "apitoken",
-    "apikey",
-    "xapikey",
-    "clientsecret",
-    "password",
-    "secret",
-    "cookie",
-    "setcookie",
-})
-_SENSITIVE_CONTAINER_NAMES: frozenset[str] = frozenset({"env", "headers"})
-
-
-def _normalise_sensitive_key(key: object) -> str:
-    """Normalize key spelling so secret detection is case/separator agnostic."""
-    return "".join(char for char in str(key).casefold() if char.isalnum())
-
-
-def _redact_sensitive(value: object, mask_all: bool = False) -> object:
-    """Return a recursively redacted copy without changing persisted config."""
-    if isinstance(value, dict):
-        redacted: dict[object, object] = {}
-        for key, item in value.items():
-            normalized_key = _normalise_sensitive_key(key)
-            if mask_all:
-                redacted[key] = _redact_sensitive(item, mask_all=True)
-            elif normalized_key in _SENSITIVE_CONTAINER_NAMES:
-                redacted[key] = _redact_sensitive(item, mask_all=True)
-            elif normalized_key in _SENSITIVE_KEY_NAMES:
-                redacted[key] = _REDACTED
-            else:
-                redacted[key] = _redact_sensitive(item)
-        return redacted
-    if isinstance(value, list):
-        return [_redact_sensitive(item, mask_all=mask_all) for item in value]
-    return _REDACTED if mask_all else value
-
-
-def _merge_redacted_mapping(target: object, update: object) -> dict[object, object]:
-    """Merge config mappings without allowing redacted placeholders to overwrite secrets."""
-    merged = dict(target) if isinstance(target, dict) else {}
-    if not isinstance(update, dict):
-        return merged
-    for key, value in update.items():
-        if value == _REDACTED:
-            continue
-        if isinstance(value, dict):
-            merged[key] = _merge_redacted_mapping(merged.get(key), value)
-        else:
-            merged[key] = value
-    return merged
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# Pydantic 请求体模型
-# ═══════════════════════════════════════════════════════════════════════
-
-
 class MCPServerCreateBody(BaseModel):
     """创建 MCP 服务器的请求体。"""
     server_id: str
@@ -756,39 +630,7 @@ async def install_from_registry(body: RegistryInstallBody, request: Request):
     return {**result, "status": "installed", "server": _redact_sensitive(server_dict), "registry_name": name}
 
 
-# ═══════════════════════════════════════════════════════════════════════
-# OAuth 授权流程
-# ═══════════════════════════════════════════════════════════════════════
-
-OAUTH_TOKENS_PATH = API_DATA_DIR / "mcp_oauth_tokens.yaml"
-
-# 内存中暂存 OAuth state（防 CSRF），生产环境应使用 Redis 等持久化
-_oauth_pending_states: dict[str, dict] = {}
-
-
-def _load_oauth_tokens() -> dict:
-    """读取已存储的 OAuth tokens。"""
-    if not OAUTH_TOKENS_PATH.exists():
-        return {}
-    raw = load_yaml(OAUTH_TOKENS_PATH, default={}) or {}
-    return raw if isinstance(raw, dict) else {}
-
-
-def _save_oauth_tokens(tokens: dict) -> None:
-    """持久化 OAuth tokens。"""
-    OAUTH_TOKENS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    dump_yaml_atomic(OAUTH_TOKENS_PATH, tokens)
-
-
-class OAuthAuthorizeBody(BaseModel):
-    """发起 OAuth 授权的请求体。"""
-    server_name: str
-    client_id: str | None = None
-    auth_endpoint: str | None = None  # 自定义授权端点
-    redirect_uri: str | None = None
-    scope: str | None = None
-
-
+# OAuth 授权流程（authorize 端点依赖 SMITHERY_REGISTRY_URL，保留在此）
 @router.post("/mcp/oauth/authorize")
 async def mcp_oauth_authorize(body: OAuthAuthorizeBody, request: Request):
     """发起 MCP 服务器的 OAuth 授权流程。
@@ -861,67 +703,9 @@ async def mcp_oauth_authorize(body: OAuthAuthorizeBody, request: Request):
     }
 
 
-class OAuthCallbackBody(BaseModel):
-    """OAuth 回调请求体。"""
-    code: str
-    state: str
-    server_name: str | None = None
-
-
-async def _exchange_oauth_code(code: str, state: str, server_name_override: str | None = None) -> dict:
-    """用 authorization code 换取 access token 并持久化。
-
-    验证 state（防 CSRF），调用 token 端点交换，存储 token，清除已用 state。
-    成功返回结构化结果字典；失败抛 HTTPException。
-    供 POST（前端手动提交）与 GET（浏览器重定向）两个回调入口共用。
-    """
-    pending = _oauth_pending_states.get(state)
-    if not pending:
-        raise HTTPException(status_code=400, detail="无效或已过期的 state 参数")
-
-    server_name = server_name_override or pending["server_name"]
-    client_id = pending["client_id"]
-    redirect_uri = pending["redirect_uri"]
-
-    token_endpoint = "https://auth.smithery.ai/token"
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(token_endpoint, json={
-                "grant_type": "authorization_code",
-                "code": code,
-                "client_id": client_id,
-                "redirect_uri": redirect_uri,
-            })
-            resp.raise_for_status()
-            token_data = resp.json()
-    except httpx.HTTPStatusError as e:
-        logger.warning("[mcp-oauth] Token exchange failed for %s: %s", server_name, e)
-        raise HTTPException(status_code=502, detail=f"Token 交换失败: {e.response.status_code}")
-    except Exception as e:
-        logger.warning("[mcp-oauth] Token exchange error for %s: %s", server_name, e)
-        raise HTTPException(status_code=502, detail=f"Token 交换失败: {e}")
-
-    tokens = _load_oauth_tokens()
-    tokens[server_name] = {
-        "access_token": token_data.get("access_token", ""),
-        "refresh_token": token_data.get("refresh_token", ""),
-        "token_type": token_data.get("token_type", "Bearer"),
-        "expires_at": time.time() + token_data.get("expires_in", 3600),
-        "scope": token_data.get("scope", ""),
-        "authorized_at": time.time(),
-    }
-    _save_oauth_tokens(tokens)
-
-    _oauth_pending_states.pop(state, None)
-
-    logger.info("[mcp-oauth] OAuth authorized for server: %s", server_name)
-    return {
-        "status": "authorized",
-        "server_name": server_name,
-        "token_type": token_data.get("token_type", "Bearer"),
-        "expires_in": token_data.get("expires_in", 3600),
-    }
-
+# ═══════════════════════════════════════════════════════════════════════
+# OAuth 授权流程
+# ═══════════════════════════════════════════════════════════════════════
 
 @router.post("/mcp/oauth/callback")
 async def mcp_oauth_callback(body: OAuthCallbackBody):

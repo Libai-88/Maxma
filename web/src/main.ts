@@ -4,6 +4,30 @@ import App from './App.vue'
 import router from './router'
 import '@/components/tools/_shared/shared.css'
 import { waitForBackend } from '@/utils/env'
+import { request } from '@/api'
+
+/**
+ * 前端运行时诊断上报（便携版无 DevTools 时的排查通道）。
+ * console 错误/未捕获 rejection 上报到后端 /api/diagnostics/frontend，
+ * 写入 data/logs/frontend-diag.log，由开发侧读取定位 WebView2 渲染问题。
+ * 必须走 request（自动带 X-Maxma-Token），裸 fetch 会被 401 拦截。
+ */
+function reportDiag(kind: string, msg: string) {
+  try {
+    const url = `${location.pathname}${location.hash}`
+    void request('/diagnostics/frontend', {
+      method: 'POST',
+      body: JSON.stringify({ kind, msg: String(msg).slice(0, 2000), url, ts: Date.now() }),
+    }).catch(() => { /* 诊断通道失败不阻塞 */ })
+  } catch { /* silent */ }
+}
+
+window.addEventListener('error', (e) => {
+  reportDiag('error', `${e.message} @ ${e.filename || ''}:${e.lineno || ''}:${e.colno || ''}`)
+})
+window.addEventListener('unhandledrejection', (e) => {
+  reportDiag('rejection', e.reason instanceof Error ? (e.reason.stack || e.reason.message) : String(e.reason))
+})
 
 async function boot() {
   const app = createApp(App)
@@ -11,6 +35,7 @@ async function boot() {
   app.use(router)
   app.config.errorHandler = (err, _instance, info) => {
     console.error('[GlobalError]', err, '\nInfo:', info)
+    reportDiag('vue-error', `${err instanceof Error ? err.stack || err.message : String(err)} | info: ${info}`)
     try {
       window.dispatchEvent(new CustomEvent('maxma:error', {
         detail: {

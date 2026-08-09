@@ -62,8 +62,23 @@ def test_get_active_persona_file_missing_returns_default(isolated_env: Path) -> 
 
 
 def test_get_active_persona_file_reads_yaml(isolated_env: Path) -> None:
+    # get_active_persona_file 会校验声明的文件真实存在（a291b2d2 防御逻辑：
+    # 防止指向不存在的 SOUL 导致编辑器空白）。因此必须先创建 SOUL.foo.md，
+    # 否则会按契约回退到 SOUL.md。
+    (isolated_env / "SOUL.foo.md").write_text("# foo\n", encoding="utf-8")
     (isolated_env / "active_persona.yaml").write_text("file: SOUL.foo.md\n", encoding="utf-8")
     assert prompts.get_active_persona_file() == "SOUL.foo.md"
+
+
+def test_get_active_persona_file_stale_yaml_falls_back(isolated_env: Path) -> None:
+    """active_persona.yaml 指向的文件不存在时应回退默认 SOUL.md。
+
+    覆盖 a291b2d2 的防御回退：便携版 seed 只播种 SOUL.md，而 yaml 可能从
+    开发环境迁移来指向已不存在的 SOUL.饱饱.md。此时若直接返回该文件名，
+    SoulView 会请求 404 导致编辑器空白。
+    """
+    (isolated_env / "active_persona.yaml").write_text("file: SOUL.ghost.md\n", encoding="utf-8")
+    assert prompts.get_active_persona_file() == "SOUL.md"
 
 
 def test_get_active_persona_file_corrupt_yaml_falls_back(isolated_env: Path) -> None:

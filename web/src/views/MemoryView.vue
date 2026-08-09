@@ -364,8 +364,8 @@ onMounted(async () => {
 .fact-meta { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
 .fact-cat { font-size: 0.72em; padding: 2px 8px; border-radius: 4px; background: var(--bg-secondary); color: var(--text-tertiary); }
 .fact-confidence { font-size: 0.72em; padding: 2px 6px; border-radius: 4px; }
-.fact-confidence.conf-high { color: #22c55e; background: rgba(34,197,94,0.08); }
-.fact-confidence.conf-mid { color: #f59e0b; background: rgba(245,158,11,0.08); }
+.fact-confidence.conf-high { color: var(--status-ok); background: color-mix(in srgb, var(--status-ok) 8%, transparent); }
+.fact-confidence.conf-mid { color: var(--status-warn); background: color-mix(in srgb, var(--status-warn) 8%, transparent); }
 .fact-confidence.conf-low { color: var(--text-tertiary); background: var(--bg-secondary); }
 .fact-time { font-size: 0.72em; color: var(--text-tertiary); margin-left: auto; }
 .fact-action, .fact-delete {
@@ -373,7 +373,7 @@ onMounted(async () => {
   padding: 2px 6px; border-radius: 4px; color: var(--text-tertiary); transition: color 0.1s;
 }
 .fact-action:hover { color: var(--accent); background: var(--bg-secondary); }
-.fact-delete:hover { color: #ef4444; background: rgba(239,68,68,0.08); }
+.fact-delete:hover { color: var(--status-error); background: color-mix(in srgb, var(--status-error) 8%, transparent); }
 
 /* Edit mode */
 .fact-edit { display: flex; flex-direction: column; gap: 8px; }

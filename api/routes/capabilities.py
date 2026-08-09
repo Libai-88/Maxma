@@ -50,10 +50,16 @@ async def get_capabilities(request: Request):
         "system": {},
     }
 
-    # 1. OMP Settings
+    # 1. OMP Settings — 非阻塞：sidecar 未就绪时跳过，避免触发 sidecar 启动
     try:
-        settings_result = await _rpc_call(request, "get_settings", {"paths": CORE_SETTING_PATHS})
-        result["settings"] = settings_result.get("settings", {})
+        sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
+        if sidecar_mgr is not None and getattr(sidecar_mgr, "client_running", False):
+            settings_result = await _rpc_call(request, "get_settings", {"paths": CORE_SETTING_PATHS})
+            result["settings"] = settings_result.get("settings", {})
+        else:
+            # sidecar 尚未就绪，Settings 降级为空（不阻塞请求）
+            result["settings"] = {}
+            logger.debug("[capabilities] sidecar not ready, skipping settings fetch")
     except Exception as e:
         logger.warning("[capabilities] Failed to fetch settings: %s", e)
         result["settings_error"] = str(e)
@@ -76,10 +82,16 @@ async def get_capabilities(request: Request):
     except Exception as e:
         logger.warning("[capabilities] Failed to fetch MCP servers: %s", e)
 
-    # 4. MCP 自动发现
+    # 4. MCP 自动发现 — 非阻塞：sidecar 未就绪时跳过（get_discovered_mcp_servers
+    #    内部会 await sidecar_mgr.start()，可能触发 sidecar 启动阻塞整个请求）
     try:
-        from api.routes.mcp import get_discovered_mcp_servers
-        result["discovered_mcp"] = await get_discovered_mcp_servers(request)
+        sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
+        if sidecar_mgr is not None and getattr(sidecar_mgr, "client_running", False):
+            from api.routes.mcp import get_discovered_mcp_servers
+            result["discovered_mcp"] = await get_discovered_mcp_servers(request)
+        else:
+            result["discovered_mcp"] = []
+            logger.debug("[capabilities] sidecar not ready, skipping MCP discovery")
     except Exception as e:
         logger.warning("[capabilities] Failed to fetch discovered MCP: %s", e)
 

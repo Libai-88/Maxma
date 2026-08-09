@@ -533,7 +533,7 @@ function handleQuickStart(message: string) {
   display: inline-block;
   padding: 10px 24px;
   background: var(--accent);
-  color: #fff;
+  color: var(--text-inverse);
   border-radius: 8px;
   text-decoration: none;
   font-size: 0.95em;

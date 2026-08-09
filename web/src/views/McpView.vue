@@ -1678,7 +1678,7 @@ select.input {
   border-radius: 8px;
   font-size: 14px;
   z-index: 100;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+  box-shadow: 0 2px 12px color-mix(in srgb, var(--text-primary) 15%, transparent);
 }
 .global-message.ok {
   background: var(--bg-card);
@@ -2042,7 +2042,7 @@ select.input {
   height: 16px;
   border-radius: 50%;
   background: var(--status-ok);
-  color: #fff;
+  color: var(--text-inverse);
   font-size: 10px;
   font-weight: 700;
   flex-shrink: 0;

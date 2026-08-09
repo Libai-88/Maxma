@@ -205,7 +205,7 @@ onMounted(async () => {
 .qc-error-bar {
   padding: 6px 12px;
   background: var(--status-error, #e74c3c);
-  color: #fff;
+  color: var(--text-inverse);
   font-size: 0.8em;
   cursor: pointer;
   white-space: nowrap;

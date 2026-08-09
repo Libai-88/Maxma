@@ -786,4 +786,63 @@ html, body {
     animation: none;
   }
 }
+
+/* ══ Codemirror 编辑器在 WebView2 / tauri:// 下可见性兜底 ══
+   BC-00X：人设页(/soul) 与 用户页(/user) 的 Codemirror 编辑器在便携版
+   (tauri://localhost 自定义协议 + WebView2) 下空白、不可编辑。
+   根因：.v-codemirror / .cm-editor 的关键布局规则位于组件懒加载 CSS
+   (SoulView-*.css / UserView-*.css) 中，经运行时 <link> 注入时在
+   tauri:// 协议下未被可靠应用；编辑器在 display:contents 下高度坍缩为 0。
+   修复：把关键布局规则提升到全局同步加载的 CSS（本文件 <style> 无 scoped，
+   随 index.html 静态 <link> 加载，先于任何路由组件挂载），确保编辑器
+   在任何时刻都有确定可见高度，与懒加载 CSS 时序解耦。
+   这些规则只作用于编辑器容器，不影响其它页面。 */
+/* 容器本身：明确高度参考（position:relative + 保底高度），确保绝对定位的子编辑器有确定高度。
+   specificity 必须 > codemirror base theme 的 `.cm-ThemeID .cm-scroller` (0,2,0)，
+   否则 codemirror 在 runtime 注入的 font-family:monospace 会覆盖我们的中文字体设置，
+   导致中文文本在 Tauri WebView2 中显示为 tofu（豆腐块）不可见 —— 历史上 BUG-00X 的核心。 */
+.editor-wrapper {
+  position: relative;
+  min-height: 300px;
+}
+body .editor-wrapper .v-codemirror {
+  display: block !important;
+  position: absolute;
+  inset: 0;
+}
+body .editor-wrapper .v-codemirror .cm-editor {
+  height: 100% !important;
+  min-height: 100% !important;
+}
+/* .cm-scroller 需要：
+   1) font-family 含中文字体（覆盖 codemirror 的 monospace —— 见上）
+   2) overflow-y: auto（codemirror 6 base theme 假设外部容器提供滚动，自己只设 overflow-x: auto） */
+body .editor-wrapper .cm-scroller {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', 'SimSun', sans-serif !important;
+  font-size: 15px !important;
+  line-height: 1.6 !important;
+  /* 关键：无显式主题时，CodeMirror 文本颜色可能继承失败导致与背景同色。
+     显式设置 color 确保文本在任何环境下可见。 */
+  /* 双保险：CSS 变量在 WebView2 作用域失效时回退固定色值（见下） */
+  color: var(--text-primary, #1C1C1C) !important;
+  overflow-y: auto !important;
+}
+body .editor-wrapper .cm-gutters {
+  background: var(--bg-primary);
+  border-right: 1px solid var(--border);
+}
+body .editor-wrapper .cm-content {
+  padding: 16px;
+  color: var(--text-primary, #1C1C1C);
+}
+body .editor-wrapper .cm-line {
+  color: var(--text-primary, #1C1C1C) !important;
+}
+body .editor-wrapper .cm-placeholder {
+  color: var(--text-tertiary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  font-size: 15px;
+}
 </style>

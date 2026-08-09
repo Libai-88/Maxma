@@ -566,19 +566,28 @@ _append_cache_prompt: str = ""
 def build_append_prompt() -> str:
     """构建原生提示词模式的追加段（append_system_prompt）。
 
-    与 build_system_prompt 的区别：本函数返回的是**最小功能注入**，
-    只包含 OMP 原生 prompt 无法自动发现、但 Maxma 集成必需的信息，
-    不含任何品牌/persona 内容。OMP 通过 appendSystemPrompt 机制将其
-    追加到原生 prompt 之后，原生 ROLE/工程原则/内部 URL/git 上下文
-    完整保留。
+    与 build_system_prompt 的区别：本函数追加到 OMP 原生 prompt 之后，
+    保留 OMP 原生 ROLE/工程原则/内部 URL/git 上下文（appendSystemPrompt
+    机制），同时把 Maxma 的用户可编辑人设（SOUL.md / USER.md / MAXMA.md /
+    AGENTS.md）与记忆说明注入进去。
+
+    注意：native_prompt_mode=True 时人设/用户/记忆都必须在此注入，否则
+    用户在前端编辑保存的 SOUL.md / USER.md 在运行时完全不生效——这是
+    便携版/原生模式下「人设没效果」「记忆异常」的历史根因。
 
     包含：
     - 中文回复指令（OMP 原生 prompt 为英文，保证中文对话体验）
+    - 性格设定（活跃 SOUL.md）
+    - 用户自述（USER.md）
+    - 行为规则（AGENTS.md）
+    - Maxma 自述（MAXMA.md）
+    - 记忆说明（引导模型调用 remember_memory）
     - macros 清单（OMP 无宏机制，仍由 Maxma 注入）
     skills 已迁移到 OMP 原生 `.omp/skills/`，由 OMP 自动发现并在原生
     prompt 中声明 + skill:// 加载，不再在此注入。
 
-    缓存依赖 macros 内容指纹，与品牌模式共用 _cache_lock。
+    缓存依赖 _current_fingerprint()（包含上述文件的 MD5），用户编辑
+    人设/macros 后缓存自动失效，与品牌模式共用 _cache_lock。
     """
     global _append_cache_fp, _append_cache_prompt
     fp = _current_fingerprint()
@@ -588,6 +597,35 @@ def build_append_prompt() -> str:
         fp = _current_fingerprint()
         if fp != _append_cache_fp:
             _parts = ["始终使用中文与用户对话，除非用户明确要求使用其他语言；技术术语可保留英文原文。"]
+
+            # 活跃 SOUL.md（性格人设）—— 与 _rebuild 保持一致
+            _active_soul = get_active_persona_file()
+            _soul = _read_persona(_active_soul)
+            if _soul.strip():
+                _parts.append("## 性格设定\n" + _soul.strip())
+
+            # USER.md（用户自述）
+            _user = _read_if_exists("USER.md")
+            if _user:
+                _parts.append("## 用户自述\n" + _user)
+
+            # AGENTS.md（行为规则）
+            _agents = _read_persona("AGENTS.md")
+            if _agents.strip():
+                _parts.append("## 行为规则\n" + _agents.strip())
+
+            # MAXMA.md（产品自述）
+            _maxma = _read_persona("MAXMA.md")
+            if _maxma.strip():
+                _parts.append(_maxma.strip())
+
+            # 记忆说明：引导模型在用户明确要求记住时调用 remember_memory 工具
+            _parts.append(
+                "## 记忆\n"
+                "当用户明确要求记住某个事实、偏好或信息时，调用 remember_memory 工具"
+                "把它写入长期记忆。记忆会显示在记忆页面。"
+            )
+
             _macros = _scan_macros()
             if _macros:
                 _parts.append(_macros)
