@@ -165,7 +165,6 @@ export function invalidateTurnsCache(sid: string) {
 // ── SessionChannel 定义 ────────────────────────────────────
 
 // SessionChannel 定义在 stores/chat.ts，由 @/stores/chat 导出
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type SessionChannel = import('@/stores/chat').SessionChannel
 
 // Lazy export — 运行时才访问 Store（Pinia 在模块加载时尚未安装）
@@ -1269,11 +1268,11 @@ export function useChat(sessionId: Ref<string>) {
   const isStreaming = computed(() => activeChannel.value.isStreaming)
   /** 追踪当前会话的已完成轮次列表。
    *  通过访问 .length 追踪数组变更（push/splice），并返回新数组引用
-   *  确保 ChatWindow 的 mergedTurns computed 和 DynamicScroller 能检测到变化。 */
+   *  确保 ChatWindow 的 mergedTurns computed 和 DynamicScroller 能检测到变化。
+   *  注：arr.slice() 内部经响应式代理读取 length 已触发追踪，
+   *  无需显式访问（此前冗余的 arr.length 表达式触发 lint error，已移除）。 */
   const turns = computed(() => {
     const arr = activeChannel.value.turns
-    // 访问 .length 以使 Vue 的响应式系统追踪数组内容变更
-    arr.length
     // 返回新数组引用，确保 DynamicScroller items prop 引用变化可检测
     return arr.slice()
   })

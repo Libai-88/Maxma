@@ -8,7 +8,6 @@ export const useMetricsStore = defineStore('metrics', () => {
   const history = ref<MetricsHistoryResponse | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
-  let _timer: ReturnType<typeof setInterval> | null = null
 
   async function refresh() {
     loading.value = true
@@ -32,18 +31,8 @@ export const useMetricsStore = defineStore('metrics', () => {
     }
   }
 
-  function startPolling(intervalMs: number = 15000) {
-    stopPolling()
-    refresh()
-    _timer = setInterval(refresh, intervalMs)
-  }
+  // 注：轮询由 MetricsView 自行管理（onMounted/onUnmounted 配对），
+  // 此 store 不内置定时器（此前 startPolling/stopPolling 无调用者，已移除）
 
-  function stopPolling() {
-    if (_timer !== null) {
-      clearInterval(_timer)
-      _timer = null
-    }
-  }
-
-  return { snapshot, history, loading, error, refresh, loadHistory, startPolling, stopPolling }
+  return { snapshot, history, loading, error, refresh, loadHistory }
 })

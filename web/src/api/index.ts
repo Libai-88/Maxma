@@ -1,8 +1,6 @@
 import type {
   CreateSessionResponse,
   ListSessionsResponse,
-  SessionInfo,
-  ContextUsage,
   HealthResponse,
   ListProvidersResponse,
   ListNewsResponse,
@@ -21,7 +19,6 @@ import type {
   MCPServerToolsResponse,
   DiscoveredServer,
   RegistryListResponse,
-  RegistryServerDetail,
   RegistryInstallResponse,
   OAuthAuthorizeResponse,
   OAuthStatusResponse,
@@ -33,7 +30,6 @@ import type {
   ActivityStatsResponse,
   ActivityClearResponse,
   DeferredRun,
-  ListDeferredRunsResponse,
   WorkflowDefinitionsResponse,
   ListWorkflowRunsResponse,
   WorkflowRun,
@@ -267,9 +263,6 @@ export const api = {
   listSessions: () =>
     request<ListSessionsResponse>('/sessions'),
 
-  getSession: (id: string) =>
-    request<SessionInfo>(`/sessions/${encodeURIComponent(id)}`),
-
   getMessages: (id: string) =>
     request<{ session_id: string; messages: { role: string; content: string }[] }>(`/sessions/${encodeURIComponent(id)}/messages`),
 
@@ -300,9 +293,6 @@ export const api = {
     ),
 
   // Server-side feature flag controls availability. No client-side opt-in is needed.
-  listDeferredRuns: (sessionId: string) =>
-    request<ListDeferredRunsResponse>(`/sessions/${encodeURIComponent(sessionId)}/deferred-runs`),
-
   getDeferredRun: (sessionId: string, runId: string) =>
     request<DeferredRun>(
       `/sessions/${encodeURIComponent(sessionId)}/deferred-runs/${encodeURIComponent(runId)}`,
@@ -327,11 +317,6 @@ export const api = {
       body: JSON.stringify({ workflow_id: workflowId, ...(parentTurnId ? { parent_turn_id: parentTurnId } : {}) }),
     }),
 
-  getWorkflowRun: (sessionId: string, runId: string) =>
-    request<WorkflowRun>(
-      `/sessions/${encodeURIComponent(sessionId)}/workflows/${encodeURIComponent(runId)}`,
-    ),
-
   cancelWorkflowRun: (sessionId: string, runId: string) =>
     request<WorkflowRun>(
       `/sessions/${encodeURIComponent(sessionId)}/workflows/${encodeURIComponent(runId)}/cancel`,
@@ -344,21 +329,8 @@ export const api = {
       { method: 'POST' },
     ),
 
-  getContextUsage: (sessionId: string) =>
-    request<ContextUsage & { session_id: string }>(`/sessions/${encodeURIComponent(sessionId)}/context-usage`),
-
   undoMessages: (sessionId: string, n: number = 1) =>
     request<{ deleted_count: number }>(`/sessions/${encodeURIComponent(sessionId)}/undo?n=${n}`, { method: 'POST' }),
-
-  /** 手动触发会话上下文压缩 */
-  compressSession: (sessionId: string) =>
-    request<{
-      compressed: boolean
-      removed_count?: number
-      summary_preview?: string
-      context_usage_before?: number
-      context_usage_after?: number
-    }>(`/sessions/${encodeURIComponent(sessionId)}/compress`, { method: 'POST' }),
 
   health: () =>
     request<HealthResponse>('/health'),
@@ -378,9 +350,6 @@ export const api = {
 
   listProviders: () =>
     request<ListProvidersResponse>('/providers'),
-
-  getProvider: (id: string) =>
-    request<ProviderConfig>(`/providers/${id}`),
 
   createProvider: (body: Partial<ProviderConfig>) =>
     request<ProviderConfig>('/providers', {
@@ -579,11 +548,6 @@ export const api = {
       method: 'DELETE',
     }),
 
-  reloadMcp: () =>
-    request<{ status: string; servers: MCPServerInfo[]; tool_count: number }>('/mcp/reload', {
-      method: 'POST',
-    }),
-
   // 阶段 4.1：列出某 MCP 服务器加载的所有工具名（供前端勾选 allowlist）
   listMcpServerTools: (serverId: string) =>
     request<MCPServerToolsResponse>(`/mcp/servers/${encodeURIComponent(serverId)}/tools`),
@@ -610,9 +574,6 @@ export const api = {
     return request<RegistryListResponse>(`/mcp/registry${query ? `?${query}` : ''}`)
   },
 
-  getMcpRegistryDetail: (name: string) =>
-    request<RegistryServerDetail>(`/mcp/registry/${encodeURIComponent(name)}`),
-
   installMcpFromRegistry: (name: string, body?: { server_id?: string; config?: Record<string, unknown> }) =>
     request<RegistryInstallResponse>('/mcp/registry/install', {
       method: 'POST',
@@ -625,12 +586,6 @@ export const api = {
     request<OAuthAuthorizeResponse>('/mcp/oauth/authorize', {
       method: 'POST',
       body: JSON.stringify({ server_name: serverName, ...options }),
-    }),
-
-  mcpOAuthCallback: (code: string, state: string, serverName?: string) =>
-    request<{ status: string; server_name: string; token_type: string; expires_in: number }>('/mcp/oauth/callback', {
-      method: 'POST',
-      body: JSON.stringify({ code, state, server_name: serverName }),
     }),
 
   mcpOAuthStatus: (serverName: string) =>

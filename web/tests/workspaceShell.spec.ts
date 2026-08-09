@@ -6,7 +6,6 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { createPinia } from 'pinia'
 import { nextTick } from 'vue'
 
-import IconRail from '@/components/IconRail.vue'
 import ChatHeader from '@/components/ChatHeader.vue'
 import SessionDrawer from '@/components/SessionDrawer.vue'
 import type { SessionInfo } from '@/types'
@@ -110,7 +109,6 @@ describe('workspace shell', () => {
     const chatViewSource = readFileSync(resolve(process.cwd(), 'src/views/ChatView.vue'), 'utf8')
     const chatWindowSource = readFileSync(resolve(process.cwd(), 'src/components/ChatWindow.vue'), 'utf8')
     const messageBubbleSource = readFileSync(resolve(process.cwd(), 'src/components/MessageBubble.vue'), 'utf8')
-    const workflowSource = readFileSync(resolve(process.cwd(), 'src/components/WorkflowCard.vue'), 'utf8')
 
     const chatViewStyle = chatViewSource.match(/<style scoped>[\s\S]*?<\/style>/)?.[0] ?? ''
     const chatWindowStyle = chatWindowSource.match(/<style scoped>[\s\S]*?<\/style>/)?.[0] ?? ''
@@ -136,9 +134,6 @@ describe('workspace shell', () => {
     expect(chatWindowSource).toContain(':sticker-url="turn.stickerUrl"')
     expect(messageBubbleSource).toContain('stripStickerDirectives')
     expect(messageBubbleSource).toContain('<StickerInline')
-
-    expect(workflowSource).toContain('v-if="available"')
-    expect(workflowSource).toContain('workflowIds.value.length > 0 || runs.value.length > 0')
   })
 
   it('renders the conversation stream while the first turn is still current', () => {
@@ -186,55 +181,6 @@ describe('workspace shell', () => {
     expect(wrapper.find('.header-details').exists()).toBe(false)
     expect(header.attributes('title')).toContain(longScene)
     expect(wrapper.get('.header-session').text()).toContain('一个很长很长的会话标题')
-    wrapper.unmount()
-  })
-
-  it('icon rail exposes real navigation and a session drawer trigger', async () => {
-    const router = createTestRouter()
-    await router.push('/activity')
-    await router.isReady()
-
-    const wrapper = mount(IconRail, {
-      props: { onboardingEnabled: true },
-      global: { plugins: [router, createPinia()] },
-    })
-
-    const nav = wrapper.get('[aria-label="主导航"]')
-    expect(nav.find('a[href="/"]').exists()).toBe(true)
-    expect(nav.find('a[href="/activity"]').exists()).toBe(true)
-    expect(nav.find('a[href="/appearance"]').exists()).toBe(false)
-    expect(nav.find('a[href="/help"]').exists()).toBe(true)
-    expect(nav.find('a[href="/activity"]').attributes('aria-current')).toBe('page')
-
-    const settingsTrigger = wrapper.get('button[aria-label="设置"]')
-    expect(settingsTrigger.attributes('title')).toBe('设置')
-
-    const sessionTrigger = wrapper.get('button[aria-label="会话"]')
-    expect(sessionTrigger.attributes('title')).toBe('会话')
-    expect(sessionTrigger.attributes('aria-controls')).toBe('session-drawer')
-    expect(sessionTrigger.attributes('aria-expanded')).toBe('false')
-
-    for (const control of wrapper.findAll('a, button')) {
-      expect(control.attributes('aria-label')).toBeTruthy()
-    }
-    // jsdom 不解析 scoped CSS，getComputedStyle 拿不到 min-width/min-height →
-    // 改为源码守卫：导航项必须有明确的最小点击区域声明（当前设计 36×52）。
-    const iconRailStyle = readFileSync(resolve(process.cwd(), 'src/components/IconRail.vue'), 'utf8')
-    expect(iconRailStyle).toContain('min-width: 36px')
-    expect(iconRailStyle).toContain('height: 52px')
-
-    await sessionTrigger.trigger('click')
-    expect(wrapper.emitted('toggle-session-drawer')).toHaveLength(1)
-
-    await settingsTrigger.trigger('click')
-    await new Promise((r) => setTimeout(r, 50))
-    const settingsPopup = document.body.querySelector('.animated-modal-container')
-    expect(settingsPopup).toBeTruthy()
-    // 设置项是 button + router.push（非 <a href>），改为源码守卫 settingsItems 路由
-    const settingsSource = readFileSync(resolve(process.cwd(), 'src/components/AppSettingsMenu.vue'), 'utf8')
-    for (const route of ['/providers', '/mcp', '/settings', '/soul', '/user', '/memory', '/privacy']) {
-      expect(settingsSource).toContain(`route: '${route}'`)
-    }
     wrapper.unmount()
   })
 

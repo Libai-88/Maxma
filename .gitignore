@@ -200,3 +200,13 @@ config/personas/*.sqlite3-wal
 # Windows 保留名残留（Git Bash 误创建的 NUL 设备目录项，Win32 API 无法删除）
 web/src/NUL
 web/vite.config.ts.timestamp-*.mjs
+
+# ── 前端调试残留（2026-08-09 清理后防复发） ──
+web/round*-test.cjs
+web/round1-providers-deep.cjs
+web/round8-regression.cjs
+web/tsc-full.txt
+web/tsc-output.txt
+web/vitest-*.log
+web/vitest_*.log
+web/dist_old/
