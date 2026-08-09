@@ -3,10 +3,14 @@ import { createPinia, setActivePinia } from 'pinia'
 import ContextUsageBadge from '@/components/ContextUsageBadge.vue'
 import { handleEventForChannel } from '@/composables/useChat'
 import { useChatStore } from '@/stores/chat'
+import { useSessionStore } from '@/stores/session'
 
 describe('context usage events', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    // 徽标只反映当前活跃会话的用量：将活动会话设为事件来源
+    // （与 syncContextUsage 的 sid 守卫对齐，见 POLLUTE-001 修复）
+    useSessionStore().sessionId = 'context-session'
   })
 
   it('normalizes 0-1 and 0-100 percentages and updates the badge', async () => {

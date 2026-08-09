@@ -184,6 +184,10 @@ export function resetToken(): void {
   tokenLoadPromise = null
 }
 
+/** 普通请求超时（ms）。修复 TIMEOUT-001：此前 request 无任何超时，
+ *  后端挂起（sidecar 死锁等）时 saving/loading 状态永久卡死无法恢复。 */
+const REQUEST_TIMEOUT_MS = 30000
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   // 桌面端始终以运行时 Token 为准，避免构建期 token 过期或串台。
   if (!tokenFetchedAtRuntime) {
@@ -196,10 +200,23 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   if (token) {
     headers['X-Maxma-Token'] = token
   }
-  const res = await tauriFetch(`${BASE}${url}`, {
+  const doFetch = () => tauriFetch(`${BASE}${url}`, {
     headers,
     ...options,
+    // 调用方自带 signal 时优先（如取消语义），否则使用统一超时
+    signal: options?.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
+
+  let res = await doFetch()
+  // 修复 AUTH-001：401（token 轮换/失效）→ 刷新 Token 后重试一次。
+  // 与 WS 关闭码 4001 的处理对齐；此前仅 WS 路径有刷新，无 WS 连接时
+  // 所有 HTTP 请求持续 401，用户只能整页重启。
+  if (res.status === 401) {
+    console.warn(`[api] ${url} 401，刷新 Token 后重试一次`)
+    resetToken()
+    await ensureTokenLoaded()
+    res = await doFetch()
+  }
   if (!res.ok) {
     const userMsg = `API 请求失败 (${res.status})`
     try {
@@ -229,9 +246,14 @@ async function uploadImage(file: File): Promise<{ file_id: string; filename: str
     body: form,
   })
   if (!res.ok) {
-    let detail = `图片上传失败: ${res.status}`
-    try { const body = await res.json(); if (body.detail) detail += `: ${body.detail}` } catch { /* ignore */ }
-    throw new Error(detail)
+    // 修复 LEAK-DETAIL-001：与 request() 的策略对齐——后端 detail 只进
+    // console 便于调试，不拼进用户可见错误（可能暴露内部路径/服务名）。
+    const detailMsg = `图片上传失败: ${res.status}`
+    try {
+      const body = await res.json()
+      if (body.detail) console.warn(`[api] /upload detail:`, body.detail)
+    } catch { /* ignore */ }
+    throw new Error(detailMsg)
   }
   return res.json()
 }

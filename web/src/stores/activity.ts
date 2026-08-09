@@ -50,6 +50,11 @@ export const useActivityStore = defineStore('activity', () => {
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let pollTimer: ReturnType<typeof setInterval> | null = null
   let _intentionalClose = false
+  // 修复 RACE-001：连接代数。每次 _connect 递增；旧连接被清理 abort 后，
+  // 其 catch 若发现代数已落后（startStream 已发起新连接），直接静默放弃，
+  // 不再依据全局 _intentionalClose 标志判断（该标志会被 startStream 重置，
+  // 导致旧连接的 AbortError 被误判为「非主动关闭」→ 调度多余重连 → 双连接）。
+  let _connectGeneration = 0
   // 重连退避间隔（ms）。必须是 store 级变量：若作为 _onDisconnect 局部变量，
   // 每次断开都会被重置为 1000，指数退避失效、重连永远间隔 1s。连接成功时重置。
   let reconnectDelay = 1000
@@ -112,6 +117,7 @@ export const useActivityStore = defineStore('activity', () => {
 
   async function _connect() {
     if (_intentionalClose) return
+    const gen = ++_connectGeneration
     connecting.value = true
     connected.value = false
 
@@ -166,6 +172,10 @@ export const useActivityStore = defineStore('activity', () => {
       connecting.value = false
       reconnectDelay = 1000  // 连接成功，重置退避间隔
       if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+      // 修复 RACE-001：成功路径必须清理挂起的重连定时器。此前仅清 pollTimer，
+      // 若旧连接 abort 的 catch 已在 startStream 之后调度了 reconnectTimer，
+      // 新连接成功后该定时器仍会触发 → 第二路 SSE 与第一路并存。
+      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
 
       const origOnLine = (line: string) => _processSSELine(line)
       const wrappedOnLine = (line: string) => {
@@ -184,14 +194,18 @@ export const useActivityStore = defineStore('activity', () => {
         },
       )
     } catch (err) {
-      // 超时 abort = 连接失败，走降级轮询；主动 stopStream 的 abort 静默忽略
+      // 超时 abort = 连接失败，走降级轮询；主动 stopStream/startStream 清理的
+      // abort 静默忽略。判断依据：代数落后（已有新连接接管）或主动关闭标志。
+      // 修复 RACE-001：不能用全局 _intentionalClose 单独判断——startStream
+      // 会先把它重置为 false 再发起新连接，旧连接 abort 的 catch 在此刻读到
+      // false，会把「主动清理」误判为「连接失败」而调度多余重连。
       if (err instanceof DOMException && err.name === 'AbortError') {
-        if (_intentionalClose) return
+        if (_intentionalClose || gen !== _connectGeneration) return
         // 超时触发：走降级
         _onDisconnect()
         return
       }
-      if (_intentionalClose) return
+      if (_intentionalClose || gen !== _connectGeneration) return
       _onDisconnect()
     }
   }

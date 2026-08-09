@@ -19,6 +19,9 @@ const log = createLogger('chat')
  *  若放实例级会在 sub_session_created 时抛 ReferenceError 崩溃。 */
 const _childSessionIds = new Set<string>()
 
+/** 正在从后端加载历史的会话 ID 集合（RACE-002 in-flight 去重）。 */
+const _historyLoadingSids = new Set<string>()
+
 /** 匹配旧格式尾缀（用于 localStorage 迁移） */
 const TIME_SUFFIX_RE = /（\d{4}-\d{2}-\d{2} \w{3} \d{2}:\d{2}）$/
 
@@ -184,7 +187,10 @@ function persistTurns(sid: string) {
   saveTurnsToStorage(sid, snapshot)
 }
 
-const STICKER_DIRECTIVE_RE = /\[表情(?:包)?[:：][^\]]+\]/g
+// 修复 REGEX-STATE-001：去掉 /g 标志。带 g 的正则在 .test() 之间共享
+// lastIndex，跨字符串交替返回 true/false，导致 [表情:xxx] 内联指令的
+// 原位替换间歇性失效（退化为消息末尾附加）。
+const STICKER_DIRECTIVE_RE = /\[表情(?:包)?[:：][^\]]+\]/
 
 async function hydrateTurnSticker(turn: ChatTurn): Promise<boolean> {
   if (!turn.finalAnswer || turn.stickerUrl) return false
@@ -536,7 +542,7 @@ function hasContextUsageFields(payload: unknown): boolean {
   return CONTEXT_USAGE_FIELDS.some((field) => field in data)
 }
 
-function syncContextUsage(ch: SessionChannel, payload: unknown) {
+function syncContextUsage(sid: string, ch: SessionChannel, payload: unknown) {
   const store = getChatStore()
   const normalized = normalizeContextUsage(payload, store.contextUsage)
   const rawPayload = payload && typeof payload === 'object' && !Array.isArray(payload)
@@ -552,7 +558,13 @@ function syncContextUsage(ch: SessionChannel, payload: unknown) {
     message_count: normalized.messageCount,
     model_name: normalized.modelName,
   } as ContextUsage
-  store.updateContextUsage(normalized)
+  // 修复 POLLUTE-001：仅当前活跃会话的用量写入全局 store（ContextUsageBadge）。
+  // 此前无条件更新：切到会话 B 后，会话 A 后台继续流式的 context_usage 事件
+  // 会持续污染全局徽标，用户看到的是 A 的用量（子 Agent 会话同理）。
+  // 与 artifact 事件的 sid 守卫（见 handleEventForChannel）保持一致。
+  if (sid === getSessionStore().sessionId) {
+    store.updateContextUsage(normalized)
+  }
 }
 
 export function handleEventForChannel(sid: string, event: ServerEvent) {
@@ -563,7 +575,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
 
   // context_usage 可以在无活跃轮次时接收（如连接初始化）
   if (event.type === 'context_usage') {
-    syncContextUsage(ch, event.payload)
+    syncContextUsage(sid, ch, event.payload)
     return
   }
 
@@ -577,7 +589,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       ...(payload.context_usage_after !== undefined ? { percentage: payload.context_usage_after } : {}),
     }
     if (hasContextUsageFields(usagePayload)) {
-      syncContextUsage(ch, {
+      syncContextUsage(sid, ch, {
         ...usagePayload,
       })
     }
@@ -623,9 +635,9 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     const donePayload = event.payload as Record<string, unknown>
     const usagePayload = donePayload.context_usage
     if (hasContextUsageFields(usagePayload)) {
-      syncContextUsage(ch, usagePayload)
+      syncContextUsage(sid, ch, usagePayload)
     } else if (hasContextUsageFields(donePayload)) {
-      syncContextUsage(ch, donePayload)
+      syncContextUsage(sid, ch, donePayload)
     }
   }
 
@@ -1374,7 +1386,19 @@ export function useChat(sessionId: Ref<string>) {
         // 修复：此前前端从未调用 /sessions/{id}/messages，导致 localStorage 无缓存时
         // 旧会话点击后无历史显示
         if (ch.turns.length === 0) {
-          await loadHistoryFromBackend(newId, ch)
+          // 修复 RACE-002：in-flight 去重。快速切换 A→B→A 且后端响应慢时，
+          // 两次 watch 回调都会看到 turns.length===0 且无缓存，若并发发起两次
+          // /messages 加载，两次 push 会导致历史整段重复并被持久化。
+          if (_historyLoadingSids.has(newId)) {
+            log.debug(`会话 ${newId} 的历史加载已在进行，跳过重复请求`)
+          } else {
+            _historyLoadingSids.add(newId)
+            try {
+              await loadHistoryFromBackend(newId, ch)
+            } finally {
+              _historyLoadingSids.delete(newId)
+            }
+          }
         }
       }
     },
