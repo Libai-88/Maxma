@@ -37,7 +37,7 @@
               <div class="setting-label">压缩策略</div>
               <div class="setting-desc">选择上下文压缩的方式。</div>
             </div>
-            <select class="select" :value="settings['compaction.strategy']" @change="set('compaction.strategy', ($event.target as HTMLSelectElement).value)">
+            <select class="select" aria-label="压缩策略" :value="settings['compaction.strategy']" @change="set('compaction.strategy', ($event.target as HTMLSelectElement).value)">
               <option value="context-full">上下文满时压缩</option>
               <option value="handoff">交接模式</option>
               <option value="shake">精简模式</option>
@@ -112,7 +112,7 @@
               <div class="setting-label">工具审批模式</div>
               <div class="setting-desc">AI 执行工具前是否需要你确认。</div>
             </div>
-            <select class="select" :value="settings['tools.approvalMode']" @change="set('tools.approvalMode', ($event.target as HTMLSelectElement).value)">
+            <select class="select" aria-label="工具审批模式" :value="settings['tools.approvalMode']" @change="set('tools.approvalMode', ($event.target as HTMLSelectElement).value)">
               <option value="yolo">自动批准（Yolo）</option>
               <option value="write">写操作需确认</option>
               <option value="always-ask">始终询问</option>
@@ -124,7 +124,7 @@
               <div class="setting-label">MCP 工具发现</div>
               <div class="setting-desc">自动发现并加载 MCP 服务器提供的工具。</div>
             </div>
-            <select class="select" :value="settings['tools.discoveryMode']" @change="set('tools.discoveryMode', ($event.target as HTMLSelectElement).value)">
+            <select class="select" aria-label="MCP 工具发现" :value="settings['tools.discoveryMode']" @change="set('tools.discoveryMode', ($event.target as HTMLSelectElement).value)">
               <option value="all">全部加载</option>
               <option value="auto">自动发现</option>
               <option value="off">关闭</option>
@@ -162,7 +162,7 @@
               <div class="setting-label">转向模式</div>
               <div class="setting-desc">连续发送多条消息时的处理方式。</div>
             </div>
-            <select class="select" :value="settings['steeringMode']" @change="set('steeringMode', ($event.target as HTMLSelectElement).value)">
+            <select class="select" aria-label="引导模式" :value="settings['steeringMode']" @change="set('steeringMode', ($event.target as HTMLSelectElement).value)">
               <option value="all">全部接受</option>
               <option value="one-at-a-time">逐条处理</option>
             </select>
@@ -173,7 +173,7 @@
               <div class="setting-label">中断模式</div>
               <div class="setting-desc">AI 正在回复时发送新消息的行为。</div>
             </div>
-            <select class="select" :value="settings['interruptMode']" @change="set('interruptMode', ($event.target as HTMLSelectElement).value)">
+            <select class="select" aria-label="打断模式" :value="settings['interruptMode']" @change="set('interruptMode', ($event.target as HTMLSelectElement).value)">
               <option value="immediate">立即中断</option>
               <option value="wait">等待完成</option>
             </select>
