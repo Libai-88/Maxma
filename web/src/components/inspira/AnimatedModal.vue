@@ -3,9 +3,13 @@
     <Transition name="modal">
       <div
         v-if="open"
+        ref="overlayRef"
         class="animated-modal-overlay"
+        role="dialog"
+        aria-modal="true"
         @click.self="onBackdropClick"
         @keydown.esc="onEsc"
+        @keydown.tab="onTabTrap"
       >
         <div class="animated-modal-container">
           <slot :open-modal="openModal" :close-modal="closeModal" />
@@ -16,7 +20,7 @@
 </template>
 
 <script setup lang="ts">
-import { watch, onUnmounted } from 'vue'
+import { nextTick, ref, watch, onUnmounted } from 'vue'
 
 const props = withDefaults(defineProps<{
   open?: boolean
@@ -29,6 +33,10 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   'update:open': [value: boolean]
 }>()
+
+const overlayRef = ref<HTMLElement | null>(null)
+/** 打开前的焦点元素，关闭时还原（FOCUS-003） */
+let restoreFocusEl: HTMLElement | null = null
 
 function openModal() {
   emit('update:open', true)
@@ -48,11 +56,57 @@ function onEsc(e: KeyboardEvent) {
   }
 }
 
+// 修复 FOCUS-003：模态内 Tab 焦点陷阱。此前打开后 Tab 可逃逸到背景
+// 应用（侧边栏/主内容区），且关闭后焦点不还原。与 DsOverlay 的
+// 焦点管理对齐（DsOverlay.vue:145-168 已有完整实现）。
+function onTabTrap(e: KeyboardEvent) {
+  const overlay = overlayRef.value
+  if (!overlay) return
+  const focusables = Array.from(
+    overlay.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+    ),
+  ).filter(el => el.offsetParent !== null)
+  if (focusables.length === 0) {
+    e.preventDefault()
+    return
+  }
+  const first = focusables[0]
+  const last = focusables[focusables.length - 1]
+  const active = document.activeElement as HTMLElement | null
+  if (e.shiftKey) {
+    if (active === first || !overlay.contains(active)) {
+      e.preventDefault()
+      last.focus()
+    }
+  } else if (active === last || !overlay.contains(active)) {
+    e.preventDefault()
+    first.focus()
+  }
+}
+
 watch(() => props.open, (val) => {
   if (val) {
+    restoreFocusEl = document.activeElement as HTMLElement | null
     document.addEventListener('keydown', onEsc)
+    // 打开后把焦点移入模态（首个可聚焦元素）
+    void nextTick(() => {
+      const overlay = overlayRef.value
+      if (!overlay) return
+      const focusables = overlay.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+      )
+      const target = focusables[0]
+      if (target) target.focus()
+      else overlay.focus?.()
+    })
   } else {
     document.removeEventListener('keydown', onEsc)
+    // 关闭后还原焦点到触发元素
+    if (restoreFocusEl && document.contains(restoreFocusEl)) {
+      restoreFocusEl.focus()
+    }
+    restoreFocusEl = null
   }
 }, { immediate: true })
 

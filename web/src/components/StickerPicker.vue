@@ -97,8 +97,14 @@
         class="sticker-item"
         :class="{ highlighted: highlightedStickerIndex === index }"
         :data-sticker-index="index"
+        role="button"
+        tabindex="-1"
+        :aria-label="sticker.filename"
+        :aria-selected="highlightedStickerIndex === index"
         @click="selectSticker(sticker)"
         @mouseenter="highlightedStickerIndex = index"
+        @keydown.enter.prevent="selectSticker(sticker)"
+        @keydown.space.prevent="selectSticker(sticker)"
         @contextmenu.prevent="onContextMenu($event, sticker)"
       >
         <img

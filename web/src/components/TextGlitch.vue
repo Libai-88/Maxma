@@ -30,6 +30,14 @@ const props = withDefaults(defineProps<{
 
 const GLITCH_CHARS = '!@#$%^&*<>?/{}|~+=_0123456789ABCDEF'
 
+// 修复 PERF-004：常驻展示（enableOnHover=false，如欢迎页主标题）改为
+// 周期性短促故障——每 2.5s 周期内仅前 300ms 产生乱码，其余时间显示原文。
+// 此前每 120ms 生成一次乱码并触发重渲染（约 8 次/秒），低端机持续耗电。
+// 实现技巧：tick 仍按原频率跑，但非爆发期赋回 props.text——Vue ref 对
+// 相同值不触发响应式更新，重渲染只发生在状态切换的少数帧。
+const BURST_MS = 300
+const BURST_PERIOD_MS = 2500
+
 const displayText = ref(props.text)
 let intervalId: ReturnType<typeof setInterval> | null = null
 let isHovering = false
@@ -53,7 +61,14 @@ function startGlitch() {
       displayText.value = props.text
       return
     }
-    displayText.value = getGlitched(props.text)
+    if (props.enableOnHover) {
+      // hover 模式：悬停期间持续高频故障
+      displayText.value = getGlitched(props.text)
+      return
+    }
+    // 常驻模式：周期性短促爆发（PERF-004）
+    const t = Date.now() % BURST_PERIOD_MS
+    displayText.value = t < BURST_MS ? getGlitched(props.text) : props.text
   }, Math.max(50, 120 / props.speed))
 }
 

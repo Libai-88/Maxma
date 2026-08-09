@@ -11,6 +11,9 @@
       key-field="id"
       @scroll="onScrollerScroll"
       :key="'scroller-' + sessionId + '-' + refreshKey"
+      role="log"
+      aria-label="对话消息列表"
+      aria-live="polite"
     >
       <template #default="{ item: turn, index: mergedIdx, active }">
         <DynamicScrollerItem
@@ -29,7 +32,9 @@
             <div
               class="cite-source"
               :data-user-msg-idx="turnsIndex(mergedIdx)"
+              tabindex="0"
               @contextmenu.prevent="onBubbleContextMenu($event, 'user_message', turn.userMessage, '用户', turnsIndex(mergedIdx))"
+              @keydown="onBubbleContextMenuKeydown($event, 'user_message', turn.userMessage, '用户', turnsIndex(mergedIdx))"
             >
               <MessageBubble
                 role="user"
@@ -55,13 +60,16 @@
                 <div
                   v-if="ev.kind === 'thinking' && !ev.consumed"
                   class="cite-source"
+                  tabindex="0"
                   @contextmenu.prevent="onBubbleContextMenu($event, 'thinking', ev.tokens, '思考过程')"
+                  @keydown="onBubbleContextMenuKeydown($event, 'thinking', ev.tokens, '思考过程')"
                 >
                   <ThinkingBlock :block="ev" />
                 </div>
                 <div
                   v-else-if="ev.kind === 'tool'"
                   class="cite-source"
+                  tabindex="0"
                   @contextmenu.prevent="
                     onBubbleContextMenu(
                       $event,
@@ -70,6 +78,7 @@
                       ev.name,
                     )
                   "
+                  @keydown="onBubbleContextMenuKeydown($event, 'tool_result', ev.output || ev.input || '', ev.name)"
                 >
                   <!-- 审批请求（mode === 'approval'）且工具未完成：渲染 ApprovalBubble
                        - 审批等待中：显示允许/拒绝按钮
@@ -101,7 +110,9 @@
               <div
                 v-if="turn.finalAnswer && !hasAnswerBlock(turn) && !isStreamingTurn(turn)"
                 class="cite-source"
+                tabindex="0"
                 @contextmenu.prevent="onBubbleContextMenu($event, 'assistant_message', turn.finalAnswer, 'AI')"
+                @keydown="onBubbleContextMenuKeydown($event, 'assistant_message', turn.finalAnswer, 'AI')"
               >
                 <MessageBubble
                   role="assistant"
@@ -155,8 +166,8 @@
       </template>
 
       <template #after>
-        <!-- 错误提示 -->
-        <div v-if="error" class="error-banner" :class="'error-' + (errorCategory || 'system')">
+        <!-- 错误提示（role=alert：错误出现时主动播报） -->
+        <div v-if="error" class="error-banner" :class="'error-' + (errorCategory || 'system')" role="alert">
           <Icon class="error-icon" :name="errorIconName" :size="16" />
           <span class="error-message">{{ error }}</span>
           <span v-if="errorTraceId" class="error-trace-id">Trace: {{ errorTraceId }}</span>
@@ -177,7 +188,7 @@
         </div>
 
         <!-- 流式输出打字指示器 -->
-        <div v-if="showTypingIndicator" class="typing-indicator">
+        <div v-if="showTypingIndicator" class="typing-indicator" role="status" aria-live="polite">
           <span class="typing-label">饱饱正在输入</span>
           <span class="typing-dots">
             <span class="typing-dot"></span>
@@ -317,6 +328,7 @@ const {
   ctxMenuPos,
   ctxMenuItems,
   onBubbleContextMenu,
+  onBubbleContextMenuKeydown,
   handleContextMenuSelect,
   closeContextMenu,
 } = useContextMenu({

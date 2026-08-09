@@ -80,6 +80,10 @@
   border-collapse: collapse;
   margin: 8px 0;
   width: 100%;
+  /* 修复 OVERFLOW-001：宽表格在窄窗口可横向滚动，不再被裁剪 */
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
 }
 
 .markdown-body th,

@@ -14,7 +14,7 @@
   /* ── 文字层级（4 阶 — v2.0 新增 text-inverse） ── */
   --text-primary:   #E1EAF0;
   --text-secondary: #B7C5CE;
-  --text-tertiary:  #A3B5C0;
+  --text-tertiary:  #B7C5CE; /* 占位/禁用（WCAG AA ≥4.5:1，对 --bg-primary 实测 5.18:1） */
   --text-inverse:   #3B4A54;
 
   /* ── 强调色 — 暖玫瑰（4 阶 — v2.0 新增 accent-active） ── */

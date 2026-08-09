@@ -38,6 +38,8 @@ function themeParams(dark: boolean) {
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 let animId = 0
 let observer: MutationObserver | null = null
+/** visibilitychange 监听引用（PERF-003 后台暂停后恢复用，onUnmounted 移除） */
+let onVisibilityChangeRef: (() => void) | null = null
 const BLOB_COUNT = 4
 const blobs: Blob[] = []
 
@@ -150,6 +152,14 @@ function drawOrganicBlob(
 }
 
 function animate(ts: number, canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, dpr: number) {
+  // 修复 PERF-003：页面切到后台时暂停 rAF 循环（浏览器对后台标签页的 rAF
+  // 本会限频到 ~1fps，但显式暂停可彻底省掉 canvas 绘制开销与闭包唤醒）。
+  // 恢复前台时由 visibilitychange 监听重启循环。
+  if (document.hidden) {
+    animId = 0
+    return
+  }
+
   const time = ts * 0.001 // seconds
   const w = canvas.width / dpr
   const h = canvas.height / dpr
@@ -240,12 +250,24 @@ onMounted(() => {
   })
   ro.observe(canvas.parentElement!)
 
+  // 修复 PERF-003：后台暂停后，恢复前台时重启 rAF 循环
+  const onVisibilityChange = () => {
+    if (!document.hidden && animId === 0) {
+      animId = requestAnimationFrame((t) => animate(t, canvas, ctx, Math.min(window.devicePixelRatio || 1, 2)))
+    }
+  }
+  document.addEventListener('visibilitychange', onVisibilityChange)
+
   animId = requestAnimationFrame((t) => animate(t, canvas, ctx, Math.min(window.devicePixelRatio || 1, 2)))
+
+  // 清理放在 onUnmounted 引用（组件级）
+  onVisibilityChangeRef = onVisibilityChange
 })
 
 onUnmounted(() => {
   cancelAnimationFrame(animId)
   observer?.disconnect()
+  if (onVisibilityChangeRef) document.removeEventListener('visibilitychange', onVisibilityChangeRef)
   blobs.length = 0
 })
 </script>

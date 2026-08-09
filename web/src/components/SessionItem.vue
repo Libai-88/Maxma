@@ -233,7 +233,8 @@ function formatRelativeTime(ts: number): string {
   overflow: hidden;
   max-width: 22px;
 }
-.session-item:hover .btn-delete {
+.session-item:hover .btn-delete,
+.session-item:focus-within .btn-delete {
   opacity: 1;
 }
 .btn-delete:hover {

@@ -210,6 +210,13 @@ onMounted(async () => {
     globalErrorToast.visible = true
     console.debug('[App] maxma:error event received, showing toast:', detail.message)
   }) as EventListener)
+
+  // 修复 PERF-003：页面切后台时暂停全部装饰 CSS 动画（LeavesOverlay 等
+  // infinite CSS 动画在后台标签页不会自动暂停）。App 为根组件不卸载，
+  // 与应用级监听相同，无需清理。
+  document.addEventListener('visibilitychange', () => {
+    document.documentElement.classList.toggle('animations-paused', document.hidden)
+  })
 })
 </script>
 
@@ -267,6 +274,15 @@ onMounted(async () => {
   .main {
     transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
   }
+}
+
+/* ── 后台暂停装饰动画（PERF-003） ──
+   App.vue visibilitychange 切换该 class；LeavesOverlay 等 infinite CSS
+   动画在后台标签页不会自动暂停，统一暂停可省 GPU/CPU 开销。 */
+html.animations-paused *,
+html.animations-paused *::before,
+html.animations-paused *::after {
+  animation-play-state: paused !important;
 }
 
 /* ── 路由级过渡（router-view Transition） ── */

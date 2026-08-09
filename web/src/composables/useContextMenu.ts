@@ -66,8 +66,27 @@ export function useContextMenu({ turns, emit }: UseContextMenuOptions) {
     }
 
     pendingCitation.value = { text: citeText }
-    ctxMenuPos.value = { x: event.clientX, y: event.clientY }
+    // 修复 KEYBOARD-001：键盘触发（Shift+F10 / 菜单键）时无鼠标坐标，
+    // 菜单定位到触发元素附近而非 (0,0) 角落。
+    if (event instanceof KeyboardEvent) {
+      const el = event.currentTarget as HTMLElement | null
+      if (el) {
+        const rect = el.getBoundingClientRect()
+        ctxMenuPos.value = { x: Math.round(rect.left), y: Math.round(rect.bottom) }
+      } else {
+        ctxMenuPos.value = { x: 0, y: 0 }
+      }
+    } else {
+      ctxMenuPos.value = { x: event.clientX, y: event.clientY }
+    }
     ctxMenuVisible.value = true
+  }
+
+  /** 键盘打开上下文菜单（Shift+F10 / ContextMenu 键）。 */
+  function onBubbleContextMenuKeydown(event: KeyboardEvent, sourceType: string, fullText: string, sourceLabel: string, userMsgIdx?: number) {
+    if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return
+    event.preventDefault()
+    onBubbleContextMenu(event as unknown as MouseEvent, sourceType, fullText, sourceLabel, userMsgIdx)
   }
 
   function handleContextMenuSelect(action: string) {
@@ -96,6 +115,7 @@ export function useContextMenu({ turns, emit }: UseContextMenuOptions) {
     ctxMenuPos,
     ctxMenuItems,
     onBubbleContextMenu,
+    onBubbleContextMenuKeydown,
     handleContextMenuSelect,
     closeContextMenu,
   }

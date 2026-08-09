@@ -14,7 +14,7 @@
   /* ── 文字层级（4 阶） ── */
   --text-primary:   #2D3F30;
   --text-secondary: #5A6B5E;
-  --text-tertiary:  #6E7E72;  /* 占位/禁用（WCAG AA ≥4.5:1） */
+  --text-tertiary:  #5D6E61;  /* 占位/禁用（WCAG AA ≥4.5:1） */
   --text-inverse:   #FFFFFF;
 
   /* ── 强调色 — 青苔绿（4 阶） ── */

@@ -1,6 +1,14 @@
 <template>
   <div v-if="toolCall" ref="rootEl" class="tool-card" :class="[toolCall.status, { open: isOpen }]">
-    <div class="tool-header" @click="toggle" role="button" :aria-expanded="isOpen">
+    <div
+      class="tool-header"
+      @click="toggle"
+      role="button"
+      tabindex="0"
+      :aria-expanded="isOpen"
+      @keydown.enter.prevent="toggle"
+      @keydown.space.prevent="toggle"
+    >
       <span class="tool-icon">
         <span v-if="toolCall.status === 'running'" class="spinner-sm"></span>
         <Icon v-else-if="toolCall.status === 'done'" name="checkmark" :size="14" />
@@ -62,7 +70,15 @@
           </div>
           <!-- Collapsible JSON (arrays / nested objects) -->
           <div v-else-if="outputDisplay.type === 'json'" class="json-block">
-            <div class="json-header" @click="jsonExpanded = !jsonExpanded" role="button">
+            <div
+              class="json-header"
+              @click="jsonExpanded = !jsonExpanded"
+              role="button"
+              tabindex="0"
+              :aria-expanded="jsonExpanded"
+              @keydown.enter.prevent="jsonExpanded = !jsonExpanded"
+              @keydown.space.prevent="jsonExpanded = !jsonExpanded"
+            >
               <span class="json-toggle">{{ jsonExpanded ? '▼' : '▶' }}</span>
               <span class="json-summary">{{ outputDisplay.summary }}</span>
             </div>

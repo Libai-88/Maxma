@@ -163,8 +163,8 @@
       <div class="form-group">
         <div class="form-group-title">基础设置</div>
         <div class="form-section">
-          <label class="form-label">提供商 <span class="required-mark">*</span></label>
-          <select v-model="form.provider_type" class="input" :disabled="isEditing">
+          <label class="form-label" for="provider-type">提供商 <span class="required-mark">*</span></label>
+          <select v-model="form.provider_type" id="provider-type" class="input" :disabled="isEditing">
             <option v-for="preset in presets" :key="preset.id" :value="preset.id">
               {{ preset.label }}{{ preset.recommended ? ' ★ 推荐' : '' }}
             </option>
@@ -173,52 +173,52 @@
         </div>
 
         <div class="form-section">
-          <label class="form-label">显示名称 <span class="required-mark">*</span></label>
-          <input v-model="form.label" class="input" :class="{ 'input-error': fieldErrors.label }" placeholder="例如: DeepSeek" />
+          <label class="form-label" for="provider-label">显示名称 <span class="required-mark">*</span></label>
+          <input v-model="form.label" id="provider-label" class="input" :class="{ 'input-error': fieldErrors.label }" placeholder="例如: DeepSeek" />
         </div>
 
         <div class="form-section">
-          <label class="form-label">API Key <span class="required-mark">*</span></label>
-          <input v-model="form.api_key" class="input mono" :class="{ 'input-error': fieldErrors.api_key }" type="password" autocomplete="current-password" :placeholder="isEditing ? '留空则不修改' : 'sk-...'" />
+          <label class="form-label" for="provider-api-key">API Key <span class="required-mark">*</span></label>
+          <input v-model="form.api_key" id="provider-api-key" class="input mono" :class="{ 'input-error': fieldErrors.api_key }" type="password" autocomplete="current-password" :placeholder="isEditing ? '留空则不修改' : 'sk-...'" />
         </div>
 
         <div class="form-section">
-          <label class="form-label">Base URL <span class="required-mark">*</span></label>
-          <input v-model="form.base_url" class="input mono" :class="{ 'input-error': fieldErrors.base_url }" placeholder="https://api.deepseek.com" />
+          <label class="form-label" for="provider-base-url">Base URL <span class="required-mark">*</span></label>
+          <input v-model="form.base_url" id="provider-base-url" class="input mono" :class="{ 'input-error': fieldErrors.base_url }" placeholder="https://api.deepseek.com" />
         </div>
       </div>
 
       <div class="form-group">
         <div class="form-group-title">模型参数</div>
 	      <div class="form-section">
-	        <label class="form-label">上下文窗口 (tokens)<span class="form-label-hint"> · 模型一次对话能处理的最大文本长度</span></label>
-	        <input v-model.number="form.context_window" class="input mono" type="number" placeholder="256000" />
+	        <label class="form-label" for="provider-context-window">上下文窗口 (tokens)<span class="form-label-hint"> · 模型一次对话能处理的最大文本长度</span></label>
+	        <input v-model.number="form.context_window" id="provider-context-window" class="input mono" type="number" placeholder="256000" />
 	      </div>
 	      <div class="form-row form-row--3cols">
 	        <div class="form-section">
-	          <label class="form-label">Max Tokens</label>
-	          <input v-model.number="form.max_tokens" class="input mono" type="number" placeholder="4096" />
+	          <label class="form-label" for="provider-max-tokens">Max Tokens</label>
+	          <input v-model.number="form.max_tokens" id="provider-max-tokens" class="input mono" type="number" placeholder="4096" />
 	        </div>
 	        <div class="form-section">
-	          <label class="form-label">Temperature</label>
-	          <input v-model.number="form.temperature" class="input mono" type="number" step="0.1" min="0" max="2" placeholder="0.7" />
+	          <label class="form-label" for="provider-temperature">Temperature</label>
+	          <input v-model.number="form.temperature" id="provider-temperature" class="input mono" type="number" step="0.1" min="0" max="2" placeholder="0.7" />
 	        </div>
 	        <div class="form-section">
-	          <label class="form-label">Top P</label>
-	          <input v-model.number="form.top_p" class="input mono" type="number" step="0.05" min="0" max="1" placeholder="1.0" />
+	          <label class="form-label" for="provider-top-p">Top P</label>
+	          <input v-model.number="form.top_p" id="provider-top-p" class="input mono" type="number" step="0.05" min="0" max="1" placeholder="1.0" />
 	        </div>
 			      </div>
             </div>
 	          <div class="form-group">
 	            <div class="form-group-title">高级设置</div>
-		        <div class="form-section">
-		          <label class="form-label">超时 (秒)</label>
-		          <input v-model.number="form.timeout" class="input mono" type="number" min="1" placeholder="60" />
-		        </div>
-		        <div class="form-section">
-		          <label class="form-label">自定义 Headers (JSON)</label>
-		          <input v-model="form.extra_headers_raw" class="input mono" placeholder='{"X-Custom-Header": "value"}' />
-		        </div>
+	        <div class="form-section">
+	          <label class="form-label" for="provider-timeout">超时 (秒)</label>
+	          <input v-model.number="form.timeout" id="provider-timeout" class="input mono" type="number" min="1" placeholder="60" />
+	        </div>
+	        <div class="form-section">
+	          <label class="form-label" for="provider-headers">自定义 Headers (JSON)</label>
+	          <input v-model="form.extra_headers_raw" id="provider-headers" class="input mono" placeholder='{"X-Custom-Header": "value"}' />
+	        </div>
           </div>
 
 		      <!-- 测试 & 拉取模型 -->

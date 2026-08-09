@@ -14,7 +14,7 @@
   /* ── 文字层级（4 阶） ── */
   --text-primary:   #E6EDF3;  /* 星光 — 正文 */
   --text-secondary: #8B949E;  /* 微光 — 辅助 */
-  --text-tertiary:  #484F58;  /* 暗影 — 占位/禁用 */
+  --text-tertiary:  #7D8590;  /* 暗影 — 占位/禁用（WCAG AA ≥4.5:1） */
   --text-inverse:   #0D1117;  /* 深空 — 亮底暗文 */
 
   /* ── 强调色 — 导航星金（4 阶） ── */

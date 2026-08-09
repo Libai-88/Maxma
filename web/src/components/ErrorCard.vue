@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootEl" class="error-card" :class="[`error-card--${category}`]">
+  <div ref="rootEl" class="error-card" :class="[`error-card--${category}`]" role="alert">
     <div class="error-card__header">
       <Icon class="error-card__icon" name="warning" :size="16" />
       <span class="error-card__title">{{ title }}</span>

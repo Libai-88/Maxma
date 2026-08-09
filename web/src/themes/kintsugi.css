@@ -13,8 +13,8 @@
 
   /* ── 文字层级（4 阶） ── */
   --text-primary:   #2C2416;  /* 墨黑 — 正文 */
-  --text-secondary: #8C806E;  /* 灰釉 — 辅助 */
-  --text-tertiary:  #8C8070;  /* 淡陶 — 占位/禁用（WCAG AA ≥4.5:1） */
+  --text-secondary: #6B6152;  /* 灰釉 — 辅助（WCAG AA ≥4.5:1） */
+  --text-tertiary:  #6E6455;  /* 淡陶 — 占位/禁用（WCAG AA ≥4.5:1） */
   --text-inverse:   #FFFFFF;
 
   /* ── 强调色 — 金箔（4 阶） ── */

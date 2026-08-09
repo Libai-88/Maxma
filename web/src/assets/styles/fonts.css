@@ -1,0 +1,37 @@
+/* ── 自托管字体（FONT-SELFHOST-001） ─────────────────────────────
+ * EB Garamond（拉丁，品牌衬线）与 JetBrains Mono（代码）为体积小、
+ * 视觉关键的字族，从 Google Fonts 下载 latin 子集后本地打包，
+ * 断网/国内网络环境下不再依赖 fonts.googleapis.com。
+ *
+ * 中文大字体（Noto Serif SC / LXGW WenKai Screen 全量字形 20MB+）
+ * 保留 CDN 加载 + 系统回退链（Source Han Serif SC / Songti SC /
+ * SimSun），避免显著增大便携版体积。若未来需要完全离线，
+ * 用子集化工具（如 fonttools）生成常用字 woff2 后替换。
+ *
+ * 注：EB Garamond 的 400/600/700 由同一可变字体文件承载
+ * （font-weight: 400 700 声明可变轴），italic 单独文件。
+ */
+
+@font-face {
+  font-family: 'EB Garamond';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url(/fonts/eb-garamond.woff2) format('woff2');
+}
+
+@font-face {
+  font-family: 'EB Garamond';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/fonts/eb-garamond-italic.woff2) format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 500;
+  font-display: swap;
+  src: url(/fonts/jetbrains-mono.woff2) format('woff2');
+}

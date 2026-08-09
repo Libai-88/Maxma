@@ -91,7 +91,7 @@ useGsap((_ctx, contextSafe) => {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xl);
-  width: 480px;
+  width: min(480px, calc(100vw - 48px));
   max-height: 80vh;
   display: flex;
   flex-direction: column;

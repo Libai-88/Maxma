@@ -1,6 +1,14 @@
 <template>
   <div class="tool-bubble" :class="[toolCall.status, { open: isOpen }]">
-    <div class="bubble-header" @click="toggle" role="button" :aria-expanded="isOpen">
+    <div
+      class="bubble-header"
+      @click="toggle"
+      role="button"
+      tabindex="0"
+      :aria-expanded="isOpen"
+      @keydown.enter.prevent="toggle"
+      @keydown.space.prevent="toggle"
+    >
       <span class="bubble-status">
         <span v-if="toolCall.status === 'running'" class="tool-pulse-dot"></span>
         <Icon v-else-if="toolCall.status === 'done'" name="checkmark" :size="14" />

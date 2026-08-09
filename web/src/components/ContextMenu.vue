@@ -39,7 +39,7 @@
 
 <script setup lang="ts">
 import Icon from '@/components/Icon.vue'
-import { onMounted, onUnmounted, ref, watchEffect } from 'vue'
+import { nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import { gsap, useGsap } from '@/composables/useGsap'
 
 export interface ContextMenuItem {
@@ -84,6 +84,14 @@ function focusItem(index: number) {
   const target = items[index]
   if (target) target.focus()
 }
+
+// 修复 FOCUS-002：菜单打开（含键盘 Shift+F10 触发）后把焦点移入首个菜单项，
+// 否则 Teleport 到 body 末尾的菜单不在 Tab 顺序内，键盘用户无法操作。
+watch(() => props.visible, (v) => {
+  if (v) {
+    void nextTick(() => focusItem(0))
+  }
+})
 
 function select(action: string) {
   emit('select', action)

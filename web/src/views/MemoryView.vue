@@ -113,7 +113,7 @@
         </div>
       </div>
       <div v-else ref="factListEl" class="fact-list">
-        <GlareCard v-for="fact in facts" :key="fact.id" class="fact-card">
+        <GlareCard v-for="fact in displayFacts" :key="fact.id" class="fact-card">
           <div v-if="editingId === fact.id" class="fact-edit">
             <textarea v-model="editContent" class="edit-textarea" rows="3" />
             <div class="edit-actions">
@@ -141,6 +141,12 @@
             </div>
           </template>
         </GlareCard>
+      </div>
+      <!-- 修复 PERF-001：记忆列表前端分页，避免数百张卡片全量渲染 -->
+      <div v-if="displayFacts.length < facts.length" class="load-more-row">
+        <button class="btn" @click="visibleCount += PAGE_SIZE">
+          加载更多（{{ facts.length - displayFacts.length }} 条）
+        </button>
       </div>
     </template>
   </div>
@@ -233,10 +239,24 @@ function formatTime(t: string): string {
 
 const facts = computed(() => store.facts)
 
+// ── 前端分页（PERF-001）：一次性加载全量数据（后端无分页参数），
+//    但只渲染前 N 条，避免数百张 GlareCard 全量挂 DOM。
+//    筛选/搜索变化时重置到首页。
+const PAGE_SIZE = 50
+const visibleCount = ref(PAGE_SIZE)
+const displayFacts = computed(() => facts.value.slice(0, visibleCount.value))
+
+function resetPagination() {
+  visibleCount.value = PAGE_SIZE
+}
+
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 function debouncedSearch() {
   if (debounceTimer) clearTimeout(debounceTimer)
-  debounceTimer = setTimeout(loadFacts, 300)
+  debounceTimer = setTimeout(() => {
+    resetPagination()
+    loadFacts()
+  }, 300)
 }
 
 async function loadFacts() {
@@ -251,6 +271,7 @@ async function loadFacts() {
     const qs = params.toString()
     const data = await api.request<MemoryFact[]>(`/memory${qs ? '?' + qs : ''}`)
     store.facts = Array.isArray(data) ? data : []
+    resetPagination()
   } catch { store.facts = [] }
 
   // Load stats
@@ -353,6 +374,7 @@ onMounted(async () => {
 .empty-link { color: var(--accent); text-decoration: none; display: inline-block; margin-top: 8px; }
 
 .fact-list { display: flex; flex-direction: column; gap: 8px; max-height: 600px; overflow-y: auto; }
+.load-more-row { display: flex; justify-content: center; margin-top: 12px; }
 .fact-card {
   padding: 12px 14px; background: var(--bg-card); border: 1px solid var(--border);
   border-radius: var(--radius); transition: border-color 0.15s;

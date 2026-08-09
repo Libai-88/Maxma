@@ -175,6 +175,13 @@ function getOrCreateChannel(sid: string): SessionChannel {
   return getChatStore().getOrCreateChannel(sid) as SessionChannel
 }
 
+/** 持久化防抖（PERF-002）：流式期间 done/memory/工具事件高频触发 persistTurns，
+ *  每次全量 JSON.stringify 到 localStorage 是 O(n) 主线程序列化，长会话下
+ *  累计 O(n²) 卡顿。改为 800ms 尾随防抖；关键边界（切会话/断开）用
+ *  flushPersistTurns 同步落盘，防止退出/切换时丢失最新数据。 */
+const PERSIST_DEBOUNCE_MS = 800
+const _persistTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
 function persistTurns(sid: string) {
   const ch = getChatStore().channels.get(sid)
   if (!ch) {
@@ -182,7 +189,26 @@ function persistTurns(sid: string) {
     return
   }
   const snapshot = [...ch.turns]
-  log.debug(`持久化会话 ${sid}: ${snapshot.length} 条 turn`)
+  log.debug(`持久化会话 ${sid}: ${snapshot.length} 条 turn (防抖 ${PERSIST_DEBOUNCE_MS}ms)`)
+  turnsCache.set(sid, snapshot)
+  const existing = _persistTimers.get(sid)
+  if (existing) clearTimeout(existing)
+  _persistTimers.set(sid, setTimeout(() => {
+    _persistTimers.delete(sid)
+    saveTurnsToStorage(sid, snapshot)
+  }, PERSIST_DEBOUNCE_MS))
+}
+
+/** 同步落盘：取消挂起的防抖定时器并立即写入（切会话/WS 断开/组件卸载前调用）。 */
+function flushPersistTurns(sid: string) {
+  const timer = _persistTimers.get(sid)
+  if (timer) {
+    clearTimeout(timer)
+    _persistTimers.delete(sid)
+  }
+  const ch = getChatStore().channels.get(sid)
+  if (!ch) return
+  const snapshot = [...ch.turns]
   turnsCache.set(sid, snapshot)
   saveTurnsToStorage(sid, snapshot)
 }
@@ -445,7 +471,8 @@ async function connectSession(sid: string) {
       chFinal.isAwaitingUser = false
       chFinal._awaitingToolName = null
       if (!chFinal.privateMode) {
-        persistTurns(sid)
+        // WS 断开是数据可能丢失的边界，同步落盘（PERF-002）
+        flushPersistTurns(sid)
       }
     }
     // 正常关闭（code 1000）— 不重连，视为有意断开
@@ -1351,7 +1378,8 @@ export function useChat(sessionId: Ref<string>) {
       log.debug(`sessionId 变化: "${oldId}" → "${newId}"`)
       if (oldId) {
         log.debug(`在切换前持久化旧会话 "${oldId}"`)
-        persistTurns(oldId)
+        // 会话切换是数据边界，同步落盘（PERF-002）
+        flushPersistTurns(oldId)
       }
       const evictedSessionId = newId
         ? chatSessionAliveCache.touch(newId, { scrollTop: 0 }, (candidateId) => {
@@ -1360,7 +1388,8 @@ export function useChat(sessionId: Ref<string>) {
         })
         : null
       if (evictedSessionId) {
-        persistTurns(evictedSessionId)
+        // 会话被逐出即断开连接，先同步落盘再断开（PERF-002）
+        flushPersistTurns(evictedSessionId)
         disconnectSession(evictedSessionId)
       }
       activeChannelRef.value = getOrCreateChannel(newId)
@@ -1543,7 +1572,8 @@ export function useChat(sessionId: Ref<string>) {
     const actual = Math.min(count, ch.turns.length)
     ch.turns.splice(ch.turns.length - actual, actual)
     if (!ch.privateMode) {
-      persistTurns(sessionId.value)
+      // 撤回是即时可见操作，同步落盘避免刷新后撤回被回滚（PERF-002）
+      flushPersistTurns(sessionId.value)
     }
     void refreshSessions()
   }

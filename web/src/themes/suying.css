@@ -15,7 +15,7 @@
   /* ── 文字层级（4 阶） ── */
   --text-primary:   #1C1C1C;  /* 浓墨 — 正文 */
   --text-secondary: #3D3D3D;  /* 重墨 — 辅助 */
-  --text-tertiary:  #6E6E6E;  /* 淡墨 — 占位/禁用（WCAG AA ≥4.5:1） */
+  --text-tertiary:  #646464;  /* 淡墨 — 占位/禁用（WCAG AA ≥4.5:1） */
   --text-inverse:   #FFFFFF;  /* 留白 — 暗底亮文 */
 
   /* ── 强调色 — 朱砂印（4 阶） ── */

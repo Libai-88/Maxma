@@ -56,6 +56,8 @@ useGsap((_ctx, contextSafe) => {
 .setting-control { display: flex; align-items: center; gap: 8px; }
 .setting-slider { width: 120px; height: 4px; appearance: none; background: var(--border); border-radius: 2px; outline: none; cursor: pointer; }
 .setting-slider::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; background: var(--accent); border-radius: 50%; cursor: pointer; }
+/* 修复 FOCUS-001：滑块键盘焦点可见（此前 outline:none 且无任何焦点样式） */
+.setting-slider:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .setting-value { min-width: 40px; text-align: right; font-size: 12px; font-family: 'SF Mono', monospace; color: var(--text-primary); }
 .toggle-btn { padding: 4px 12px; border: 1px solid var(--border); border-radius: 6px; background: transparent; font-size: 12px; color: var(--text-secondary); cursor: pointer; }
 .toggle-btn.active { background: var(--accent); color: var(--bg-primary); border-color: var(--accent); }

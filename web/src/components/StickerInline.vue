@@ -4,7 +4,11 @@
     class="sticker-inline"
     :class="{ paused: shouldUsePoster, loading: !displaySrc }"
     :title="shouldUsePoster ? '动图已暂停' : displayFilename"
+    role="button"
+    tabindex="0"
     @click="$emit('preview', displaySticker)"
+    @keydown.enter.prevent="$emit('preview', displaySticker)"
+    @keydown.space.prevent="$emit('preview', displaySticker)"
   >
     <img
       v-if="shouldUsePoster && posterSrc"
