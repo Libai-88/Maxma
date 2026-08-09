@@ -1408,6 +1408,13 @@ export function useChat(sessionId: Ref<string>) {
       log.warn(`WebSocket 未就绪, readyState=${ch.ws?.readyState}, session=${sessionId.value}`)
       return false
     }
+    // 修复 F-001：流式输出期间禁止发送新消息。此前无守卫时 Enter 会覆盖
+    // currentTurn，导致正在生成的回复丢失（events 留在被覆盖的 turn 上，
+    // 从未 push 进 turns）且新消息的 token 事件被静默丢弃。
+    if (ch.isStreaming) {
+      log.warn(`流式输出进行中，拒绝发送 (session=${sessionId.value})`)
+      return false
+    }
     ch.isStreaming = true
     ch.error = null
 

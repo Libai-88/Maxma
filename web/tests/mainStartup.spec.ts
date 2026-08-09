@@ -10,7 +10,14 @@ vi.mock('vue', () => ({ createApp: mocks.createApp }))
 vi.mock('pinia', () => ({ createPinia: mocks.createPinia }))
 vi.mock('@/App.vue', () => ({ default: {} }))
 vi.mock('@/router', () => ({ default: {} }))
-vi.mock('@/utils/env', () => ({ waitForBackend: mocks.waitForBackend }))
+// 修复 CI-001：api/index.ts 模块顶层调用 getApiBase()（`let BASE = getApiBase()`），
+// 若 mock 不提供该导出，模块加载即抛 "No getApiBase export" 错误。
+vi.mock('@/utils/env', () => ({
+  waitForBackend: mocks.waitForBackend,
+  getApiBase: () => '/api',
+  ensurePortLoaded: vi.fn().mockResolvedValue(undefined),
+  tauriFetch: vi.fn(),
+}))
 
 describe('main startup failure', () => {
   beforeEach(() => {

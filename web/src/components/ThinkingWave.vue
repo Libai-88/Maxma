@@ -218,6 +218,14 @@ function resize(canvas: HTMLCanvasElement) {
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 
+// 修复 LEAK-001：具名 resize 处理器，onUnmounted 时可移除。
+// 此前匿名箭头函数无法 removeEventListener，组件随 isStreaming
+// 每次挂载/卸载泄漏一个 window 监听器（闭包持有 canvas 引用）。
+function onWindowResize() {
+  const canvas = canvasRef.value
+  if (canvas) resize(canvas)
+}
+
 onMounted(() => {
   const canvas = canvasRef.value
   if (!canvas) return
@@ -237,7 +245,7 @@ onMounted(() => {
     attributeFilter: ['data-theme'],
   })
 
-  window.addEventListener('resize', () => resize(canvas))
+  window.addEventListener('resize', onWindowResize)
 
   animId = requestAnimationFrame((t) => draw(canvas, ctx, t))
 })
@@ -245,6 +253,7 @@ onMounted(() => {
 onUnmounted(() => {
   cancelAnimationFrame(animId)
   observer?.disconnect()
+  window.removeEventListener('resize', onWindowResize)
   waves = []
 })
 </script>

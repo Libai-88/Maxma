@@ -251,6 +251,7 @@ const {
   getThinkPath: () => selectedThinkPathId.value,
   isDisabled: () => disabled.value,
   canSend: () => canSend.value,
+  isStreaming: () => isStreaming.value,
   send: (msg, refs, thinkPath) => chatInput.send(msg, refs, thinkPath),  onSendSuccess: () => {
     text.value = ''
     selectedThinkPathId.value = null

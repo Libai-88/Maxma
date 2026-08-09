@@ -6,7 +6,7 @@
   <div
     ref="rootRef"
     class="md-editor-view"
-    :style="{ color: '#1C1C1C', background: 'var(--bg-card, #FFFEFA)', fontFamily: 'inherit' }"
+    :style="{ color: 'var(--text-primary, #1C1C1C)', background: 'var(--bg-card, #FFFEFA)', fontFamily: 'inherit' }"
   >
     <div class="header">
       <h2>{{ title }} <span class="subtitle">{{ subtitle }}</span></h2>

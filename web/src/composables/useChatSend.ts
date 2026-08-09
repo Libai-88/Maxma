@@ -24,6 +24,8 @@ export interface UseChatSendOptions<TRefs> {
   isDisabled: () => boolean
   /** 是否可发送（连接就绪） */
   canSend: () => boolean
+  /** 流式输出进行中（AI 正在生成回复，应拒绝新消息） */
+  isStreaming: () => boolean
   /** 实际发送（返回是否成功） */
   send: (msg: string, refs: TRefs[], thinkPath: ThinkPathId | undefined) => boolean
   /** 发送成功后的清理（清空输入/附件/自动缩放） */
@@ -58,6 +60,10 @@ export function useChatSend<TRefs>(opts: UseChatSendOptions<TRefs>) {
     const msg = opts.text().trim()
     if (!msg && !opts.hasImage()) return
     if (opts.isDisabled()) return
+
+    // 修复 F-001：流式输出期间忽略发送（键盘 Enter 路径），按钮已禁用。
+    // 输入文本保留在输入框中，用户可先点「停止」再发送。
+    if (opts.isStreaming()) return
 
     if (!opts.canSend()) {
       showConnectionError('无法连接到 AI 引擎（sidecar 未启动），请检查后端配置')
