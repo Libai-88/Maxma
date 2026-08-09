@@ -70,6 +70,7 @@ import OnboardingView from '@/views/OnboardingView.vue';
 import Dock from '@/components/inspira/Dock.vue';
 import SessionDrawer from '@/components/SessionDrawer.vue';
 import { useChatStore } from '@/stores/chat';
+import { flushAllTurnsOnPageLeave } from '@/composables/useChat';
 import { onboardingEnabled, useOnboardingStore } from '@/stores/onboarding';
 import { storeToRefs } from 'pinia';
 import { useSessionStore } from '@/stores/session';
@@ -217,6 +218,10 @@ onMounted(async () => {
   document.addEventListener('visibilitychange', () => {
     document.documentElement.classList.toggle('animations-paused', document.hidden)
   })
+
+  // 修复 PAGE-LEAVE-001：刷新/关闭窗口前把进行中的轮次落盘。
+  // 刷新时 WS onclose 不保证触发，当前轮消息会从 UI 永久丢失。
+  window.addEventListener('pagehide', flushAllTurnsOnPageLeave)
 })
 </script>
 

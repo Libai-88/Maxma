@@ -409,7 +409,9 @@ function onSend(text: string, refs: ParsedRef[], providerId?: string, modelName?
       preview: q.text,
     }))
   const sent = send(text, [...refs, ...quoteRefs], providerId, modelName, thinkPathId)
-  clearQuotes()
+  // 修复 SEND-FAIL-QUOTES-001：发送失败（WS 断开）时保留选区引用，
+  // 用户重连后可直接重发，无需重新选择
+  if (sent) clearQuotes()
   return sent
 }
 

@@ -288,12 +288,18 @@ export function contentNeedsIsolation(markdown: string): boolean {
     if (/<style[\s>/]/i.test(line) || /<\/style>/i.test(line)) return true
     // 检查 <link rel="stylesheet">（全局 CSS 泄漏）
     if (/<link[\s>]/i.test(line) && /rel\s*=\s*["']stylesheet["']/i.test(line)) return true
-    // 检查内联事件处理器 onXxx="..."
-    if (/\son\w+\s*=\s*["']/i.test(line)) return true
-    // 检查 javascript: URL
-    if (/href\s*=\s*["']\s*javascript:/i.test(line)) return true
+    // 检查内联事件处理器 onXxx="..." 及无引号形式（修复 ISOLATION-002：
+    // 此前仅匹配带引号属性值，`onerror=alert(1)` 这类无引号写法会漏检）
+    if (/\son\w+\s*=\s*["'][^"']*["']/i.test(line) || /\son\w+\s*=\s*[^"'\s>][^\s>]*/i.test(line)) return true
+    // 检查内联 style 属性（修复 ISOLATION-001：全屏遮盖/视觉劫持风险，
+    // 此前仅检测 <style> 标签，属性形式漏检）
+    if (/\sstyle\s*=\s*["'][^"']*["']/i.test(line)) return true
+    // 检查 javascript: URL（含无引号与单双引号形式）
+    if (/href\s*=\s*["']?\s*javascript:/i.test(line)) return true
     // 检查 <iframe> 嵌入
     if (/<iframe[\s>/]/i.test(line)) return true
+    // 检查 data:text/html 类嵌入（修复 ISOLATION-003：HTML 载荷的 data URI）
+    if (/src\s*=\s*["']?\s*data:\s*text\/html/i.test(line)) return true
     // 检查 <meta http-equiv="refresh"> 自动跳转（防止注入主文档后浏览器自动导航）
     if (/<meta[^>]*http-equiv\s*=\s*["']?\s*refresh/i.test(line)) return true
     // 检查自动跳转脚本（location.href / window.location / window.open 赋值到外部）

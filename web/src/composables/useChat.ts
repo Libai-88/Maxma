@@ -212,6 +212,37 @@ function flushPersistTurns(sid: string) {
   saveTurnsToStorage(sid, snapshot)
 }
 
+/**
+ * 页面离开（刷新/关闭窗口）兜底落盘（PAGE-LEAVE-001）。
+ * 刷新时 Chromium 不保证触发 WS onclose，进行中的 currentTurn（流式/等待审批）
+ * 只存在于内存 → 该轮消息与部分回复从 UI 永久丢失且无法从后端回显。
+ * pagehide 在刷新/关闭前同步触发，localStorage 为同步 API 可安全写入。
+ * 与 onclose/onopen 的中断轮次清理互斥：此处已复位 currentTurn/isStreaming，
+ * 后续 onclose 的 `isStreaming && currentTurn` 守卫不会双推。
+ */
+export function flushAllTurnsOnPageLeave(): void {
+  const store = getChatStore()
+  for (const [sid, ch] of store.channels) {
+    if (!ch.initialized) continue
+    if (ch.isStreaming && ch.currentTurn) {
+      const interrupted = ch.currentTurn
+      if (!interrupted.finalAnswer) {
+        interrupted.finalAnswer = '（连接中断，回复未完成）'
+      }
+      ch.turns.push(interrupted)
+      ch.currentTurn = null
+      ch.isStreaming = false
+      ch.isAwaitingUser = false
+      ch._awaitingToolName = null
+      if (!ch.privateMode) {
+        flushPersistTurns(sid)
+      }
+    } else if (ch.turns.length > 0) {
+      flushPersistTurns(sid)
+    }
+  }
+}
+
 // 修复 REGEX-STATE-001：去掉 /g 标志。带 g 的正则在 .test() 之间共享
 // lastIndex，跨字符串交替返回 true/false，导致 [表情:xxx] 内联指令的
 // 原位替换间歇性失效（退化为消息末尾附加）。
@@ -742,7 +773,10 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
         lastThink = findLastThinking(turn.events)
       }
       if (lastThink) {
-        lastThink.tokens += event.payload.token
+        // 修复 TOKEN-DEFENSE-001：token 字段缺失/非字符串时跳过，
+        // 此前会把字面 "undefined" 拼进可见回复流
+        const tok = event.payload?.token
+        if (typeof tok === 'string' && tok) lastThink.tokens += tok
       }
       break
     }
@@ -752,7 +786,8 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       // 流。thinking_delta 一定是推理过程，不应 auto-create becameAnswer block）。
       const lastThink = findLastThinking(turn.events)
       if (lastThink && !lastThink.becameAnswer) {
-        lastThink.tokens += event.payload.delta
+        const delta = event.payload?.delta
+        if (typeof delta === 'string' && delta) lastThink.tokens += delta
       }
       break
     }
@@ -1066,10 +1101,18 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       // 找到这个已存在的 event 并填充 output/elapsed。
       if (!runningTool && mode === 'approval') {
         log.debug('approval mode: runningTool 不存在，创建占位 tool event 承载 interaction')
+        // 修复 DEEP-JSON-001：深嵌套 tool_input 的 stringify 可能 RangeError 爆栈，
+        // 失败时降级为类型提示而不是丢失整个 ask_user 事件（Agent 静默卡审批）
+        let inputText = ''
+        try {
+          inputText = ae.payload.tool_input ? JSON.stringify(ae.payload.tool_input, null, 2) : ''
+        } catch {
+          inputText = String(ae.payload.tool_input ?? '')
+        }
         turn.events.push({
           kind: 'tool',
           name: ae.payload.tool_name,
-          input: ae.payload.tool_input ? JSON.stringify(ae.payload.tool_input, null, 2) : '',
+          input: inputText,
           output: null,
           elapsed: null,
           status: 'running',
@@ -1324,10 +1367,16 @@ export function useChat(sessionId: Ref<string>) {
         const msg = res.messages[i]
         if (msg.role === 'human') {
           // 开始一轮新对话
+          // 修复 HISTORY-REFS-001：剥离发送时附加的时间尾缀与 __refs__ JSON 标记
+          // （与 migrateLegacyTurn 的 localStorage 迁移逻辑一致）。此前原样透传，
+          // 用户气泡直接显示 "（时间）__refs__[{...}]__/refs__" 原始序列化内容，
+          // 且引用的 chip 渲染丢失。
+          const { cleanText, refs } = parseReferences(msg.content || '')
+          const userMessage = refs.length > 0 ? cleanText : (msg.content || '').replace(TIME_SUFFIX_RE, '')
           const turn: ChatTurn = {
             id: `history-${sid}-${i}`,
-            userMessage: msg.content,
-            refs: [],
+            userMessage,
+            refs,
             events: [],
             memoryEvents: [],
             finalAnswer: null,
