@@ -67,8 +67,12 @@ function loadAllTurnsFromStorage(): Map<string, ChatTurn[]> {
 
 function saveTurnsToStorage(sid: string, data: ChatTurn[]) {
   const key = TURNS_KEY_PREFIX + sid
+  // PERF-PERSIST-CAP-001：localStorage 只保留最近 500 轮——长会话无限增长
+  // 会让每次全量 JSON.stringify 越来越大（每轮 800ms 防抖全量序列化，
+  // 累计 O(n²)）。后端 get_messages 上限同样是 500 条，刷新后校准一致。
+  const toPersist = data.length > MAX_PERSISTED_TURNS ? data.slice(-MAX_PERSISTED_TURNS) : data
   const tryWrite = () => {
-    const serialized = JSON.stringify(data)
+    const serialized = JSON.stringify(toPersist)
     const size = new Blob([serialized]).size
     localStorage.setItem(key, serialized)
     return size
@@ -139,6 +143,49 @@ const switchSession = (id: string) => getSessionStore().switchSession(id)
 // （修复：此前为 new Map()，导致 loadAllTurnsFromStorage 成为死代码，
 //   页面刷新后 turnsCache 为空，旧会话点击后无历史显示）
 const turnsCache = loadAllTurnsFromStorage()
+
+// MULTI-WINDOW-002：跨窗口 turns 缓存同步。storage 事件由"其他窗口"的
+// 持久化触发（本窗口写入不触发自身事件）——窗口 A 产生新轮次后，窗口 B
+// 的缓存与当前聊天视图即时更新，不再各自持有全量覆盖写、互相抹掉对方
+// 的数据（刷新后另一窗口的新消息丢失）。
+// 空闲守卫：流式/审批等待/进行中轮次不重建（避免打断当前窗口的工作），
+// 仅更新缓存，下次切换/刷新生效。
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (!event.key || !event.key.startsWith(TURNS_KEY_PREFIX)) return
+    const sid = event.key.slice(TURNS_KEY_PREFIX.length)
+    if (!event.newValue) {
+      // PERF-CACHE-LEAK-001：另一窗口删除了该会话的缓存 → 本窗口同步
+      // 释放内存缓存（此前残留导致删除的会话 turns 永不回收）
+      turnsCache.delete(sid)
+      const ch = getChatStore().channels.get(sid)
+      if (ch && ch.initialized && !ch.isStreaming && !ch.isAwaitingUser && !ch.currentTurn) {
+        ch.turns.length = 0
+      }
+      return
+    }
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(event.newValue)
+    } catch {
+      return
+    }
+    if (!Array.isArray(parsed)) return
+    turnsCache.set(sid, parsed as ChatTurn[])
+    const ch = getChatStore().channels.get(sid)
+    if (ch && ch.initialized && !ch.isStreaming && !ch.isAwaitingUser && !ch.currentTurn) {
+      ch.turns.splice(0, ch.turns.length, ...(parsed as ChatTurn[]))
+    }
+  })
+
+  // PERF-CACHE-LEAK-001：本窗口删除会话后，session store 派发此事件
+  // 释放 turnsCache 内存（直接 import 会与 stores/session 循环依赖）
+  window.addEventListener('maxma:turnscache-invalidate', ((e: CustomEvent<{ sid: string }>) => {
+    if (e.detail?.sid) {
+      turnsCache.delete(e.detail.sid)
+    }
+  }) as EventListener)
+}
 
 /** 清空会话时失效内存 turnsCache，防止切回会话后已清空的消息复活 */
 export function invalidateTurnsCache(sid: string) {
@@ -259,9 +306,133 @@ async function hydrateTurnSticker(turn: ChatTurn): Promise<boolean> {
   }
 }
 
+/** 并发执行 map 回调，最多 limit 个同时在途（PERF-HYDRATE-001） */
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length)
+  let next = 0
+  async function worker() {
+    while (next < items.length) {
+      const idx = next++
+      results[idx] = await fn(items[idx])
+    }
+  }
+  const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker())
+  await Promise.all(workers)
+  return results
+}
+
 async function hydrateTurnStickers(sid: string, turns: ChatTurn[]): Promise<void> {
-  const changed = (await Promise.all(turns.map(hydrateTurnSticker))).some(Boolean)
+  // PERF-HYDRATE-001：长会话恢复时此前 Promise.all 一次性并发 N 个
+  // tauriFetch（100+ 轮 = 100+ 并发请求），限制为 4 并发。
+  const changed = (await mapLimit(turns, 4, hydrateTurnSticker)).some(Boolean)
   if (changed) persistTurns(sid)
+}
+
+/** 后端返回 [{role, content}] → ChatTurn[]（一轮 = 1 human + 后续所有非 human 消息） */
+function backendMessagesToTurns(sid: string, messages: { role: string; content: string }[]): ChatTurn[] {
+  const turns: ChatTurn[] = []
+  let i = 0
+  while (i < messages.length) {
+    const msg = messages[i]
+    if (msg.role === 'human') {
+      // 修复 HISTORY-REFS-001：剥离发送时附加的时间尾缀与 __refs__ JSON 标记
+      // （与 migrateLegacyTurn 的 localStorage 迁移逻辑一致）。此前原样透传，
+      // 用户气泡直接显示 "（时间）__refs__[{...}]__/refs__" 原始序列化内容，
+      // 且引用的 chip 渲染丢失。
+      const { cleanText, refs } = parseReferences(msg.content || '')
+      const userMessage = refs.length > 0 ? cleanText : (msg.content || '').replace(TIME_SUFFIX_RE, '')
+      const turn: ChatTurn = {
+        id: `history-${sid}-${i}`,
+        userMessage,
+        refs,
+        events: [],
+        memoryEvents: [],
+        finalAnswer: null,
+      }
+      i++
+      // 收集后续所有非 human 消息（ai/tool），直到下一个 human
+      const aiContents: string[] = []
+      while (i < messages.length && messages[i].role !== 'human') {
+        const m = messages[i]
+        if (m.role === 'ai' && m.content) {
+          // 收集非空 ai 消息内容，最后一个非空 ai 消息作为 finalAnswer
+          aiContents.push(m.content)
+        }
+        // tool 消息跳过（历史回看不需要显示工具调用细节）
+        i++
+      }
+      // 最后一个非空 ai 消息作为 finalAnswer
+      turn.finalAnswer = aiContents.length > 0 ? aiContents[aiContents.length - 1] : null
+      // 兜底：如果 finalAnswer 为空（如 agent 被取消、工具失败后图直接结束），
+      // 设置占位提示，避免用户感知为"整轮对话被吞掉"
+      if (!turn.finalAnswer) {
+        turn.finalAnswer = '（这一轮处理未生成文字回复，请查看工具执行结果或重新提问。）'
+      }
+      turns.push(turn)
+    } else {
+      // 非 human 消息但没有前置 human（异常情况），跳过
+      i++
+    }
+  }
+  return turns
+}
+
+/**
+ * CACHE-RECONCILE-001：本地 turns 缓存与后端真相校准。
+ *
+ * 此前缓存命中后从不与后端比对（缓存即真相）：多窗口/另一设备发生
+ * undo、消息清理时，刷新后仍显示旧缓存；"回复未完成"占位符也永久
+ * 保留（后端其实已成功）。本函数在以下时机做一次校准：
+ *   - WS 重连成功（onopen）
+ *   - 缓存恢复后（watch sessionId 路径）
+ * 规则：
+ *   - 仅在后端返回 source="sidecar"（完整消息）时校准；SessionMap
+ *     fallback 是截断/限轮历史，不能作为校准依据（会误删本地缓存）。
+ *   - 仅在本会话空闲（无流式、无审批等待、无 currentTurn）时执行，
+ *     绝不打断进行中的轮次。
+ *   - 轮次数不同，或最后一轮内容不一致（如占位符 vs 真实回复）→
+ *     以后端重建本地 turns 并落盘。
+ */
+const _reconcileInFlight = new Set<string>()
+async function reconcileTurnsWithBackend(sid: string, ch: SessionChannel) {
+  if (!sid || sid === '__pending__') return
+  if (_reconcileInFlight.has(sid)) return
+  // 空闲守卫：流式/审批/进行中轮次不做校准
+  if (ch.isStreaming || ch.isAwaitingUser || ch.currentTurn) return
+  if (ch.turns.length === 0) return
+  _reconcileInFlight.add(sid)
+  try {
+    const res = await api.getMessages(sid, 500)
+    if (!res.messages || res.messages.length === 0 || res.source !== 'sidecar') {
+      return
+    }
+    const backendTurns = backendMessagesToTurns(sid, res.messages)
+    if (backendTurns.length === 0) return
+
+    // 空闲守卫复查（await 期间状态可能变化）
+    if (ch.isStreaming || ch.isAwaitingUser || ch.currentTurn) return
+
+    const local = ch.turns
+    const countDiffers = backendTurns.length !== local.length
+    // 内容比对：最后一轮的 userMessage/finalAnswer 是否一致
+    let contentDiffers = false
+    if (!countDiffers && local.length > 0) {
+      const b = backendTurns[backendTurns.length - 1]
+      const l = local[local.length - 1]
+      contentDiffers = b.userMessage !== l.userMessage || b.finalAnswer !== l.finalAnswer
+    }
+    if (!countDiffers && !contentDiffers) return
+
+    log.warn(`会话 ${sid} 缓存与后端不一致（本地 ${local.length} 轮 vs 后端 ${backendTurns.length} 轮，内容差异=${contentDiffers}），以后端为准重建`)
+    ch.turns.splice(0, ch.turns.length, ...backendTurns)
+    turnsCache.set(sid, backendTurns)
+    saveTurnsToStorage(sid, backendTurns)
+    void hydrateTurnStickers(sid, backendTurns)
+  } catch (e) {
+    log.debug(`会话 ${sid} 校准失败（保留本地缓存）:`, e)
+  } finally {
+    _reconcileInFlight.delete(sid)
+  }
 }
 
 // ── WebSocket 生命周期（每 Session 独立管理） ──────────────
@@ -286,6 +457,10 @@ function getReconnectDelay(attempts: number): number {
 /** 最大重连次数，超过后停止重连 */
 const MAX_RECONNECT_ATTEMPTS = 20
 
+/** PERF-PERSIST-CAP-001：localStorage 持久化轮次上限（与后端 get_messages
+ *  limit=500 一致，刷新后校准不会截出不一致的历史） */
+const MAX_PERSISTED_TURNS = 500
+
 /** 轮次看门狗超时（TURN-WATCHDOG-001）：与后端 600s turn 超时对齐 */
 const TURN_WATCHDOG_MS = 10 * 60 * 1000
 
@@ -296,6 +471,11 @@ const TURN_WATCHDOG_MS = 10 * 60 * 1000
 const _toolUpdateBuffers = new Map<string, string>()
 const _toolUpdatePending = new Set<string>()
 let _toolUpdateRafId: number | null = null
+
+// PERF-PARTIAL-001：单工具 partialResult 累积上限——长输出工具（bash 流式
+// 日志等）的 partial_result 无限增长会撑爆 turn 内存与 localStorage 持久化
+// 体积（每次全量 JSON.stringify）。超出部分丢弃，UI 展示截断内容。
+const MAX_PARTIAL_RESULT_LEN = 64 * 1024
 
 function flushToolUpdates() {
   _toolUpdateRafId = null
@@ -310,7 +490,12 @@ function flushToolUpdates() {
     )
     if (tc) {
       const buf = _toolUpdateBuffers.get(key)
-      if (buf) tc.partialResult = (tc.partialResult ?? '') + buf
+      if (buf) {
+        const next = (tc.partialResult ?? '') + buf
+        tc.partialResult = next.length > MAX_PARTIAL_RESULT_LEN
+          ? next.slice(-MAX_PARTIAL_RESULT_LEN)
+          : next
+      }
     }
     _toolUpdateBuffers.delete(key)
   }
@@ -459,6 +644,9 @@ async function connectSession(sid: string) {
         persistTurns(sid)
       }
     }
+    // CACHE-RECONCILE-001：重连成功后与后端校准本地缓存——
+    // 断线期间其他窗口/其他路径可能已撤回或完成轮次
+    void reconcileTurnsWithBackend(sid, chFinal)
   }
 
   ws.onclose = (event) => {
@@ -758,6 +946,18 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     return
   }
 
+  // artifact_result：后端对 artifact_action 的确认/失败回执（ARTIFACT-ACK-001）。
+  // 必须在 turn 守卫之前处理——用户操作 artifact 按钮时通常没有进行中的轮次。
+  if (event.type === 'artifact_result') {
+    const payload = event.payload as { artifact_id?: string; action_id?: string; status?: string } | undefined
+    // 此前前端乐观标记"已提交"后无 ack 处理——后端执行失败（token 失效/
+    // 动作非法）时 UI 永久显示"已提交"且无回滚入口。失败时恢复按钮样式。
+    if (payload?.artifact_id && payload?.action_id && payload.status === 'error') {
+      useWorkbenchStore().revertArtifactAction(payload.artifact_id, payload.action_id)
+    }
+    return
+  }
+
   const turn = ch.currentTurn
   if (!turn) return
 
@@ -1005,6 +1205,19 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
         if (currentSid === sid) {
           setTimeout(() => switchSession(ch.parentSessionId!), 500)
         }
+        // PERF-SUBCHANNEL-LEAK-001：子会话完成后延迟清理其 channel——
+        // 此前子会话 channel 永久留在 channels map（有 WS、有 turns），
+        // 长时间运行 Agent 频繁调用子 agent 时内存持续增长。
+        // 10 分钟后若仍空闲（无流式/审批），断开 WS 并从 map 移除；
+        // localStorage 缓存保留，用户再次进入时自动恢复。
+        const subSid = sid
+        setTimeout(() => {
+          const subCh = getChatStore().channels.get(subSid)
+          if (subCh && !subCh.isStreaming && !subCh.isAwaitingUser && !subCh.currentTurn) {
+            disconnectSession(subSid)
+            _childSessionIds.delete(subSid)
+          }
+        }, 10 * 60 * 1000)
       }
       break
     }
@@ -1375,59 +1588,12 @@ export function useChat(sessionId: Ref<string>) {
       return
     }
     try {
-      const res = await api.getMessages(sid)
+      const res = await api.getMessages(sid, 500)
       if (!res.messages || res.messages.length === 0) {
         log.debug(`会话 ${sid} 后端无历史消息`)
         return
       }
-      // 后端返回 [{role, content}]，按 human 分组配对成 ChatTurn
-      // 一轮对话 = 1 个 human + 后续所有非 human 消息（ai/tool），直到下一个 human
-      // 修复：此前只看 human/ai 相邻配对，含工具调用的回复（human → ai(tool_calls) → tool → ai(final)）会丢失
-      const turns: ChatTurn[] = []
-      let i = 0
-      while (i < res.messages.length) {
-        const msg = res.messages[i]
-        if (msg.role === 'human') {
-          // 开始一轮新对话
-          // 修复 HISTORY-REFS-001：剥离发送时附加的时间尾缀与 __refs__ JSON 标记
-          // （与 migrateLegacyTurn 的 localStorage 迁移逻辑一致）。此前原样透传，
-          // 用户气泡直接显示 "（时间）__refs__[{...}]__/refs__" 原始序列化内容，
-          // 且引用的 chip 渲染丢失。
-          const { cleanText, refs } = parseReferences(msg.content || '')
-          const userMessage = refs.length > 0 ? cleanText : (msg.content || '').replace(TIME_SUFFIX_RE, '')
-          const turn: ChatTurn = {
-            id: `history-${sid}-${i}`,
-            userMessage,
-            refs,
-            events: [],
-            memoryEvents: [],
-            finalAnswer: null,
-          }
-          i++
-          // 收集后续所有非 human 消息（ai/tool），直到下一个 human
-          const aiContents: string[] = []
-          while (i < res.messages.length && res.messages[i].role !== 'human') {
-            const m = res.messages[i]
-            if (m.role === 'ai' && m.content) {
-              // 收集非空 ai 消息内容，最后一个非空 ai 消息作为 finalAnswer
-              aiContents.push(m.content)
-            }
-            // tool 消息跳过（历史回看不需要显示工具调用细节）
-            i++
-          }
-          // 最后一个非空 ai 消息作为 finalAnswer
-          turn.finalAnswer = aiContents.length > 0 ? aiContents[aiContents.length - 1] : null
-          // 兜底：如果 finalAnswer 为空（如 agent 被取消、工具失败后图直接结束），
-          // 设置占位提示，避免用户感知为"整轮对话被吞掉"
-          if (!turn.finalAnswer) {
-            turn.finalAnswer = '（这一轮处理未生成文字回复，请查看工具执行结果或重新提问。）'
-          }
-          turns.push(turn)
-        } else {
-          // 非 human 消息但没有前置 human（异常情况），跳过
-          i++
-        }
-      }
+      const turns = backendMessagesToTurns(sid, res.messages)
       if (turns.length > 0) {
         log.debug(`从后端加载会话 ${sid}: ${turns.length} 条 turn`)
         ch.turns.push(...turns)
@@ -1439,6 +1605,11 @@ export function useChat(sessionId: Ref<string>) {
       log.warn(`加载会话 ${sid} 历史失败:`, e)
     }
   }
+
+  /**
+   * CACHE-RECONCILE-001：本地 turns 缓存与后端真相校准（实现见模块级
+   * reconcileTurnsWithBackend——模块级 connectSession 的 onopen 也要调用）。
+   */
 
   // Keep at most five inactive sessions alive. Streaming and approval-waiting
   // sessions are protected so a cache eviction never cancels user-visible work.
@@ -1488,6 +1659,9 @@ export function useChat(sessionId: Ref<string>) {
         } else {
           log.debug(`跳过恢复: 通道已有数据`)
         }
+        // CACHE-RECONCILE-001：缓存恢复后后台与后端校准（不阻塞 UI），
+        // 修正另一窗口撤回/后端清理导致的陈旧缓存与占位符轮次
+        void reconcileTurnsWithBackend(newId, ch)
       } else {
         log.debug(`未找到会话 ${newId} 的缓存, sessionId="${sessionId.value}"`)
         const available = Array.from(turnsCache.keys())
@@ -1532,8 +1706,10 @@ export function useChat(sessionId: Ref<string>) {
     }
     _childSessionIds.clear()
     chatSessionAliveCache.clear()
-    // 组件卸载时释放内存中的 turns 缓存（localStorage 中的持久化数据保留）
-    turnsCache.clear()
+    // R3 修复：不再清空 turnsCache——模块级缓存与 localStorage 一致，
+    // 清空后重挂载会回退后端加载；若后端该临时会话已被清理则历史
+    // 不可见（localStorage 明明还有完整缓存却不读）。缓存键随会话
+    // 数量增长，由会话删除/配额驱逐路径负责回收。
   })
 
   function send(text: string, refs: ParsedRef[] = [], providerId?: string, modelName?: string, thinkPathId?: ThinkPathId, clientMsgId?: string): boolean {

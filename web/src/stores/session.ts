@@ -9,6 +9,21 @@ const log = createLogger('session')
 
 const STORAGE_KEY = 'maxma_session_id'
 
+// MULTI-WINDOW-001：跨窗口会话同步。storage 事件只由"其他窗口"的写入触发
+// （本窗口写入不会收到自身事件），窗口 B 切换会话后，窗口 A 的 sessionId
+// 随之切换——此前无任何监听，两窗口的 maxma_session_id 互相覆盖且各自
+// 不知道，刷新后跳回另一窗口选的会话。
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (event.key !== STORAGE_KEY || !event.newValue) return
+    const current = useSessionStore()
+    if (event.newValue !== current.sessionId) {
+      log.debug(`另一窗口切换会话: "${current.sessionId}" → "${event.newValue}"`)
+      current.sessionId = event.newValue
+    }
+  })
+}
+
 export const useSessionStore = defineStore('session', () => {
   const sessionId = ref('')
   const sessions = ref<SessionInfo[]>([])
@@ -59,13 +74,26 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  let _refreshInFlight: Promise<void> | null = null
   async function refreshSessions() {
-    // 失败时保留现有数据（不置空），并抛错让调用方决定是否重试
-    // 修复：此前失败时 sessions.value = [] 且不抛错，
-    // 导致 initIfNeeded 误认为 init 成功不再重试，
-    // 页面刷新时如果后端还在启动会话列表永久为空
-    const res = await api.listSessions()
-    sessions.value = res.sessions
+    // SESSION-REFRESH-RACE-001：in-flight 去重——调用方众多且互不协调
+    // （健康恢复 watch / done 事件 / sub_session_created / 删除流程），
+    // 并发请求时慢响应后到会覆盖新列表（刚删的会话复活、新建会话消失）。
+    // 复用同一个在途 promise，同一时刻只允许一个列表请求。
+    if (_refreshInFlight) return _refreshInFlight
+    _refreshInFlight = (async () => {
+      try {
+        // 失败时保留现有数据（不置空），并抛错让调用方决定是否重试
+        // 修复：此前失败时 sessions.value = [] 且不抛错，
+        // 导致 initIfNeeded 误认为 init 成功不再重试，
+        // 页面刷新时如果后端还在启动会话列表永久为空
+        const res = await api.listSessions()
+        sessions.value = res.sessions
+      } finally {
+        _refreshInFlight = null
+      }
+    })()
+    return _refreshInFlight
   }
 
   async function _createSession() {
@@ -95,6 +123,9 @@ export const useSessionStore = defineStore('session', () => {
     // 防止事件继续到达把已删缓存重新写回），再删缓存。
     useChatStore().disconnectChannel(id)
     useChatStore().removeTurnsFromStorage(id)
+    // PERF-CACHE-LEAK-001：释放内存 turnsCache（useChat 模块级缓存，
+    // 直接 import 会循环依赖，通过事件通知）
+    window.dispatchEvent(new CustomEvent('maxma:turnscache-invalidate', { detail: { sid: id } }))
     if (sessionId.value === id) {
       await refreshSessions().catch((err) => log.warn('refreshSessions after delete failed:', err))
       if (sessions.value.length > 0) {
@@ -119,6 +150,8 @@ export const useSessionStore = defineStore('session', () => {
       // 修复 DELETE-SESSION-001：批量删除同样先断开再删缓存
       useChatStore().disconnectChannel(id)
       useChatStore().removeTurnsFromStorage(id)
+      // PERF-CACHE-LEAK-001：释放内存 turnsCache
+      window.dispatchEvent(new CustomEvent('maxma:turnscache-invalidate', { detail: { sid: id } }))
     })
     // 若当前会话被删，切到剩余第一个会话
     if (sessionId.value && ids.includes(sessionId.value)) {

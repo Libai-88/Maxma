@@ -69,7 +69,23 @@ export const useActivityStore = defineStore('activity', () => {
   async function fetchRecent(limit = 100) {
     try {
       const data = await api.getActivityRecent(limit)
-      records.value = data.records || []
+      const snapshot = data.records || []
+      // ACTIVITY-MERGE-001：快照全量替换会覆盖 SSE push 的新记录——
+      // 若 SSE 事件在 fetch 间隙到达，随后到达的旧快照会把它们抹掉。
+      // 合并策略：保留本地时间戳晚于快照最新时间的记录（SSE 实时推送
+      // 尚未进入后端快照），与快照按时间升序合并去重。
+      const snapshotLatest = snapshot.length > 0
+        ? Math.max(...snapshot.map(r => r.timestamp ?? 0))
+        : 0
+      const localNewer = records.value.filter(r => (r.timestamp ?? 0) > snapshotLatest)
+      const seen = new Set<string>()
+      const merged = [...localNewer, ...snapshot].filter((r) => {
+        const key = `${r.timestamp}-${r.category}-${r.event_type}-${r.session_id}-${r.tool_name}-${r.message}`
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+      records.value = merged.sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0)).slice(-500)
     } catch (e) {
       log.error('Failed to fetch activity:', e)
     }

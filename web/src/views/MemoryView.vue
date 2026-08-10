@@ -266,7 +266,13 @@ function debouncedSearch() {
   }, 300)
 }
 
+/** MEMORY-POLL-RACE-001：请求序号守卫——15s 轮询与删除/保存的并发竞态。
+ *  删除完成并 reload 后，在途轮询响应（仍含已删记忆）若后到会把它重新渲染
+ *  （已删记忆复活最长 30s）。只有最新一次请求的响应允许写入 store。 */
+let _factsSeq = 0
+
 async function loadFacts() {
+  const seq = ++_factsSeq
   try {
     const q = searchQuery.value.trim()
     const cat = categoryFilter.value !== 'all' ? categoryFilter.value : undefined
@@ -277,17 +283,21 @@ async function loadFacts() {
     if (mc) params.set('min_confidence', String(mc))
     const qs = params.toString()
     const data = await api.request<MemoryFact[]>(`/memory${qs ? '?' + qs : ''}`)
+    if (seq !== _factsSeq) return  // 过期响应丢弃
     store.facts = Array.isArray(data) ? data : []
     resetPagination()
     loadError.value = ''
   } catch (e) {
-    store.facts = []
+    if (seq !== _factsSeq) return
+    // 失败保留旧数据（last-known-good）——此前 store.facts = [] 会把
+    // 瞬时网络错误渲染成"记忆全部清空"，直到 15s 后下次轮询成功
     loadError.value = e instanceof Error ? e.message : String(e)
   }
 
   // Load stats
   try {
-    stats.value = await api.request<{ total: number; categories: Record<string, number>; avg_confidence: number }>('/memory/stats')
+    const statsData = await api.request<{ total: number; categories: Record<string, number>; avg_confidence: number }>('/memory/stats')
+    if (seq === _factsSeq) stats.value = statsData
   } catch { /* ignore */ }
 }
 

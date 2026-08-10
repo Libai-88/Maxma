@@ -276,6 +276,20 @@ export interface ArtifactEvent {
   payload: InteractiveArtifact
 }
 
+/** ARTIFACT-ACK-001：后端对 artifact_action 的确认回执。
+ * status=completed 表示动作成功；status=error 表示执行失败（token 失效/
+ * 动作非法等），前端据此回滚乐观的"已提交"标记。 */
+export interface ArtifactResultEvent {
+  type: 'artifact_result'
+  payload: {
+    artifact_id: string
+    action_id: string
+    status: 'completed' | 'error'
+    content?: string | null
+    error?: string | null
+  }
+}
+
 /** UNIMPLEMENTED (B4): 无发射端/无订阅。OMP memory 跑在 mnemopi 独立 state，
  * 不经 AgentSessionEvent subscribe 流。UI 已就绪待深接。 */
 export interface MemoryToolStartEvent {
@@ -415,6 +429,7 @@ export type ServerEvent =
   | ContextCompressedEvent
   | ContextCompressingEvent
   | ArtifactEvent
+  | ArtifactResultEvent
   | AskUserEvent
   | PlanProposedEvent
   | PlanStepStartEvent

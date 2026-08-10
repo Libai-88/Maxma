@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, reactive, ref, shallowRef } from 'vue'
+import { computed, reactive, ref, shallowRef, watch } from 'vue'
 import type { ChatTurn, ContextUsage, CompactionReason, CompactionAction } from '@/types'
 import type { ModelInfo, ChatContextUsage } from '../types/chat'
 // S4-2: api 已被 30+ 文件静态引用进主 chunk，此处动态导入不会触发拆分（纯噪音），改静态
@@ -124,13 +124,43 @@ export const useChatStore = defineStore('chat', () => {
   const channels = reactive(new Map<string, SessionChannel>())
 
   // --- New state ---
-  const currentModel = ref('gpt-4o')
+  // R1-SETTINGS-PERSIST-001：模型/温度/输出上限/思考开关此前全部为内存态，
+  // 页面刷新（Tauri 崩溃恢复/重启）后全部回默认。现在持久化到 localStorage，
+  // 初始化时恢复、变更时保存。
+  const SETTINGS_STORAGE_KEY = 'maxma_chat_settings'
+  function loadPersistedChatSettings(): { model?: string; temperature?: number; maxTokens?: number; thinking?: boolean } {
+    try {
+      const raw = localStorage.getItem(SETTINGS_STORAGE_KEY)
+      if (!raw) return {}
+      const parsed = JSON.parse(raw)
+      return parsed && typeof parsed === 'object' ? parsed : {}
+    } catch {
+      return {}
+    }
+  }
+  const _persisted = loadPersistedChatSettings()
+
+  const currentModel = ref<string>(typeof _persisted.model === 'string' && _persisted.model ? _persisted.model : 'gpt-4o')
   const availableModels = shallowRef<ModelInfo[]>([])
-  const temperature = ref(0.7)
-  const maxTokens = ref(4096)
-  const thinkingEnabled = ref(false)
+  const temperature = ref<number>(typeof _persisted.temperature === 'number' && Number.isFinite(_persisted.temperature) ? _persisted.temperature : 0.7)
+  const maxTokens = ref<number>(typeof _persisted.maxTokens === 'number' && Number.isFinite(_persisted.maxTokens) ? _persisted.maxTokens : 4096)
+  const thinkingEnabled = ref<boolean>(typeof _persisted.thinking === 'boolean' ? _persisted.thinking : false)
   const contextUsage = ref<ChatContextUsage>({ ...DEFAULT_CONTEXT_USAGE })
   // --- End new state ---
+
+  function persistChatSettings() {
+    try {
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({
+        model: currentModel.value,
+        temperature: temperature.value,
+        maxTokens: maxTokens.value,
+        thinking: thinkingEnabled.value,
+      }))
+    } catch {
+      // 配额超限时静默失败——设置丢失可接受，不阻塞主流程
+    }
+  }
+  watch([currentModel, temperature, maxTokens, thinkingEnabled], persistChatSettings)
 
   const allSessionStatuses = computed(() => {
     const map: Record<string, { connected: boolean; isStreaming: boolean; isAwaitingUser: boolean }> = {}
@@ -215,31 +245,39 @@ export const useChatStore = defineStore('chat', () => {
     contextUsage.value = normalizeContextUsage(usage, contextUsage.value)
   }
 
+  let _modelsFetching: Promise<void> | null = null
   async function fetchAvailableModels() {
-    try {
-      const data = await api.listProviders()
-      const models: ModelInfo[] = []
-      const providers = Array.isArray(data) ? data : (data as unknown as Record<string, unknown>).providers
-      if (Array.isArray(providers)) {
-        for (const p of providers) {
-          // 只包含已启用且有 api_key 的 provider（过滤掉默认模板和未配置的 provider）
-          if (!p.enabled || !p.api_key || p.api_key.trim() === '') {
-            continue
-          }
-          if (Array.isArray(p.models)) {
-            for (const m of p.models) {
-              models.push({
-                id: `${p.id}/${m}`,
-                provider: p.id,
-                name: m,
-                contextWindow: p.context_window || 128000,
-              })
+    // PERF-MODELS-DEDUP-001：多组件（ChatView/ModelSelector/ProvidersView）
+    // 并发调用时复用同一在途请求，避免重复拉取 provider 列表
+    if (_modelsFetching) return _modelsFetching
+    _modelsFetching = (async () => {
+      try {
+        const data = await api.listProviders()
+        const models: ModelInfo[] = []
+        const providers = Array.isArray(data) ? data : (data as unknown as Record<string, unknown>).providers
+        if (Array.isArray(providers)) {
+          for (const p of providers) {
+            // 只包含已启用且有 api_key 的 provider（过滤掉默认模板和未配置的 provider）
+            if (!p.enabled || !p.api_key || p.api_key.trim() === '') {
+              continue
+            }
+            if (Array.isArray(p.models)) {
+              for (const m of p.models) {
+                models.push({
+                  id: `${p.id}/${m}`,
+                  provider: p.id,
+                  name: m,
+                  contextWindow: p.context_window || 128000,
+                })
+              }
             }
           }
         }
-      }
-      availableModels.value = models
-    } catch { /* Use defaults */ }
+        availableModels.value = models
+      } catch { /* Use defaults */ }
+      finally { _modelsFetching = null }
+    })()
+    return _modelsFetching
   }
   // --- End new actions ---
 

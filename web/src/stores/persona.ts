@@ -26,8 +26,11 @@ export const usePersonaStore = defineStore('persona', () => {
   const error = ref<string | null>(null)
   let _loaded = false
 
-  async function fetchProfile() {
-    if (_loaded) return
+  async function fetchProfile(force = false) {
+    // PERSONA-STALE-001：默认只在首次加载（_loaded 守卫避免重复请求）；
+    // 但保存人设后必须刷新——force=true 绕过守卫强制拉取最新配置，
+    // 否则 SoulView 保存走另一条 API，store 里的 profile 永远陈旧。
+    if (_loaded && !force) return
     loading.value = true
     error.value = null
     try {
@@ -42,8 +45,7 @@ export const usePersonaStore = defineStore('persona', () => {
   }
 
   async function loadProfile() {
-    _loaded = false
-    await fetchProfile()
+    await fetchProfile(true)
   }
 
   return { profile, loading, error, fetchProfile, loadProfile }

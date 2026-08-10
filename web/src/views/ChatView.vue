@@ -79,6 +79,9 @@
               <span>私密模式</span>
               <span class="session-action-state">{{ privateMode ? '已开启' : '已关闭' }}</span>
             </button>
+            <!-- R5-PRIVATE-NOTICE-001：私密消息设计上不落盘（不进 localStorage、
+                 刷新/关闭后不保留）——开启时明确提示，避免用户误以为消息丢失是故障 -->
+            <p v-if="privateMode" class="session-action-hint">私密消息仅保存在当前页面，刷新或关闭窗口后不保留</p>
             <button class="session-action" type="button" role="menuitem" :aria-pressed="autoApprove" @click="toggleAutoApprove">
               <span>自动执行</span>
               <span class="session-action-state">{{ autoApprove ? '已开启' : '需确认' }}</span>
@@ -522,6 +525,15 @@ let _undoInFlight = false
 async function handleUndo() {
   // 修复 UNDO-DEDUP-001：撤回连点防重（键盘连按 Enter 会连续触发）
   if (_undoInFlight) return
+  // UNDO-BUSY-001：流式输出中禁止撤回——后端 undo 从消息列表末尾切轮，
+  // 会把 in-flight 轮次的未完成消息一并切掉，运行中回复与上下文不一致；
+  // 后端 undo 端点同样有 409 守卫，这里提前拦截并提示。
+  if (isStreaming.value) {
+    window.dispatchEvent(new CustomEvent('maxma:error', {
+      detail: { message: '正在生成回复，请等待本轮完成后撤回' },
+    }))
+    return
+  }
   _undoInFlight = true
   try {
     const result = await api.undoMessages(sessionId.value, 1)
@@ -835,6 +847,14 @@ function handleQuickStart(message: string) {
 .session-action-state {
   color: var(--text-secondary);
   font-size: 12px;
+}
+
+.session-action-hint {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 2px 10px 6px;
+  border-bottom: 1px solid var(--border);
 }
 
 .session-task-status {

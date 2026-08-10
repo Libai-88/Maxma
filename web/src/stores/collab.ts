@@ -53,6 +53,9 @@ export const useCollabStore = defineStore('collab', () => {
   async function createShare(request: CreateShareRequest): Promise<SessionShare> {
     try {
       const share = await api.createSessionShare(request)
+      // COLLAB-MUTATE-RACE-001：mutation 后递增 seq，作废在途 loadShares
+      // 响应——否则旧响应（不含新 share）后到会覆盖掉刚创建的 share
+      _sharesSeq++
       shares.value.push(share)
       return share
     } catch (e) {
@@ -64,6 +67,9 @@ export const useCollabStore = defineStore('collab', () => {
   async function revokeShare(shareId: string) {
     try {
       await api.revokeSessionShare(shareId)
+      // COLLAB-MUTATE-RACE-001：mutation 后递增 seq，作废在途 loadShares
+      // 响应——否则旧响应（仍含该 share）后到会让被撤销的 share 复活
+      _sharesSeq++
       shares.value = shares.value.filter(s => s.share_id !== shareId)
     } catch (e) {
       error.value = toErrorMessage(e)
@@ -91,6 +97,8 @@ export const useCollabStore = defineStore('collab', () => {
   async function createSnapshot(sessionId: string, title: string): Promise<SessionSnapshot> {
     try {
       const snapshot = await api.createSessionSnapshot(sessionId, title)
+      // COLLAB-MUTATE-RACE-001：同 shares，作废在途 loadSnapshots 响应
+      _snapshotsSeq++
       snapshots.value.push(snapshot)
       return snapshot
     } catch (e) {
@@ -102,6 +110,8 @@ export const useCollabStore = defineStore('collab', () => {
   async function deleteSnapshot(snapshotId: string) {
     try {
       await api.deleteSessionSnapshot(snapshotId)
+      // COLLAB-MUTATE-RACE-001：同 shares，作废在途 loadSnapshots 响应
+      _snapshotsSeq++
       snapshots.value = snapshots.value.filter(s => s.snapshot_id !== snapshotId)
     } catch (e) {
       error.value = toErrorMessage(e)

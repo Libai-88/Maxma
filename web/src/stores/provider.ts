@@ -34,6 +34,10 @@ export const useProviderStore = defineStore('provider', () => {
   const errorMessage = ref('')
   /** 进行中的加载 promise（并发调用时复用，避免竞态） */
   let _loadingPromise: Promise<void> | null = null
+  /** PROVIDER-REFRESH-RACE-001：加载代数——refresh 发起强制刷新时递增，
+   *  旧的 loadProviders 响应（mutation 前启动、后到）按代数丢弃，
+   *  不再覆盖刷新后的新列表。 */
+  let _refreshGen = 0
 
   /**
    * 从后端加载 provider 列表
@@ -43,11 +47,13 @@ export const useProviderStore = defineStore('provider', () => {
   function loadProviders(retries = 3): Promise<void> {
     if (_loadingPromise) return _loadingPromise
     loading.value = true
+    const gen = _refreshGen
     _loadingPromise = (async () => {
       try {
         for (let attempt = 0; attempt <= retries; attempt++) {
           try {
             const res = await api.listProviders()
+            if (gen !== _refreshGen) return  // 过期响应丢弃
             allProviders.value = res.providers
             loaded.value = true
             return
@@ -74,6 +80,8 @@ export const useProviderStore = defineStore('provider', () => {
   async function refresh(): Promise<void> {
     // 等待进行中的加载完成（如果有），再强制重新加载
     if (_loadingPromise) await _loadingPromise
+    // 递增代数：丢弃任何在 mutation 前启动、可能后到的旧响应
+    _refreshGen++
     _loadingPromise = null
     loading.value = false
     errorMessage.value = ''

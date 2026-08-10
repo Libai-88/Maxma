@@ -267,8 +267,8 @@ export const api = {
   listSessions: () =>
     request<ListSessionsResponse>('/sessions'),
 
-  getMessages: (id: string) =>
-    request<{ session_id: string; messages: { role: string; content: string }[] }>(`/sessions/${encodeURIComponent(id)}/messages`),
+  getMessages: (id: string, limit: number = 50) =>
+    request<{ session_id: string; messages: { role: string; content: string }[]; total?: number; source?: string }>(`/sessions/${encodeURIComponent(id)}/messages?limit=${limit}`),
 
   deleteSession: (id: string) =>
     request<{ status: string }>(`/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
