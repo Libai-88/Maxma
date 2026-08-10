@@ -42,6 +42,7 @@ class _FakeChatSession:
         self._sidecar_mgr = None
         self._sidecar_session_id = None
         self.active_turn_ws = None
+        self._last_model_key = None
         self.recent_message_ids = deque(maxlen=200)
 
     def persistent_metadata(self):
