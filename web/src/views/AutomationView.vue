@@ -10,6 +10,7 @@
       <div class="create-row">
         <input v-model="form.name" type="text" placeholder="任务名称" class="form-input" />
         <input v-model="form.schedule" type="text" placeholder="Cron 表达式 (如 0 9 * * *)" class="form-input" />
+        <p class="form-hint">当前版本按分钟轮询调度（约每分钟检查一次），精确到秒的表达式会被近似执行。</p>
         <input v-model="form.action" type="text" placeholder="执行动作" class="form-input flex-2" />
         <button class="btn btn-primary" @click="handleCreate" :disabled="!canCreate">创建</button>
       </div>

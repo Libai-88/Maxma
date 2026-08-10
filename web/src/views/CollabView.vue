@@ -113,9 +113,10 @@
             <label>访问模式</label>
             <select v-model="shareForm.access_mode" class="form-select">
               <option value="read">只读</option>
-              <option value="comment">可评论</option>
-              <option value="edit">可编辑</option>
+              <option value="comment" disabled>可评论（即将推出）</option>
+              <option value="edit" disabled>可编辑（即将推出）</option>
             </select>
+            <p class="form-hint">当前分享链接为只读展示；评论/编辑模式尚未接入。</p>
           </div>
           <div class="form-field">
             <label>有效期（小时，留空为永久）</label>

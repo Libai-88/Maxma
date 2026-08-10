@@ -950,11 +950,17 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
   // artifact_result：后端对 artifact_action 的确认/失败回执（ARTIFACT-ACK-001）。
   // 必须在 turn 守卫之前处理——用户操作 artifact 按钮时通常没有进行中的轮次。
   if (event.type === 'artifact_result') {
-    const payload = event.payload as { artifact_id?: string; action_id?: string; status?: string } | undefined
+    const payload = event.payload as { artifact_id?: string; action_id?: string; status?: string; content?: string | null; error?: string | null } | undefined
     // 此前前端乐观标记"已提交"后无 ack 处理——后端执行失败（token 失效/
     // 动作非法）时 UI 永久显示"已提交"且无回滚入口。失败时恢复按钮样式。
-    if (payload?.artifact_id && payload?.action_id && payload.status === 'error') {
-      useWorkbenchStore().revertArtifactAction(payload.artifact_id, payload.action_id)
+    // ARTIFACT-RESULT-001：成功回执的 content（"预览"的文件内容）存入
+    // workbench，卡片据此真实展示——此前成功也永远只显示"已提交"。
+    if (payload?.artifact_id && payload?.action_id) {
+      if (payload.status === 'error') {
+        useWorkbenchStore().revertArtifactAction(payload.artifact_id, payload.action_id)
+      } else {
+        useWorkbenchStore().setArtifactResult(payload.artifact_id, payload.action_id, payload.content ?? '', payload.error ?? undefined)
+      }
     }
     return
   }
@@ -1805,6 +1811,8 @@ export function useChat(sessionId: Ref<string>) {
         model_name: modelName,
         temperature: cs.temperature,
         max_tokens: cs.maxTokens,
+        // THINKING-WIRE-001：思考开关端到端接线（后端 → create_session → OMP thinkingLevel）
+        thinking: cs.thinkingEnabled,
         ...(thinkPathId ? { think_path_id: thinkPathId } : {}),
       },
     }

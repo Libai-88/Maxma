@@ -466,6 +466,9 @@ export interface ChatMessage {
     temperature?: number
     /** 同 temperature，孤儿 UI，始终默认值（B2）。 */
     max_tokens?: number
+    /** THINKING-WIRE-001：思考开关——后端读取并传给 sidecar create_session
+     *  thinking_level（OMP thinkingLevel），已真实生效。 */
+    thinking?: boolean
     /** 前端 ThinkPathChooser 选择；sidecar 暂未接入，不发到 OMP（B2 纠正：
      *  此前注释"the server validates it again"不实，服务端不读取此字段）。 */
     think_path_id?: 'light' | 'standard' | 'deep'

@@ -18,6 +18,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from agent.prompts import build_system_prompt
 from api.routes.tools import _BUILTIN_TOOLS as _CHAT_BUILTIN_TOOLS
 from api.activity_hub import record as record_activity
+from api.metrics import get_metrics
 from api.routes.providers import _decrypt_api_key, _find_provider, _load_providers
 from api.const_session_store import save_const_session
 from api.middleware.rate_limit import get_ws_rate_limiter
@@ -203,6 +204,7 @@ async def _stream_turn_sidecar(
     *,
     use_append: bool = False,
     turn_id: str = "",
+    thinking_level: str | None = None,
 ) -> str:
     """Execute a turn via oh-my-pi sidecar (Bun subprocess).
 
@@ -306,7 +308,10 @@ async def _stream_turn_sidecar(
 
         # MAXTOKENS-END2END-001：用户设置的输出上限（首条消息 payload 存入
         # session._max_tokens）传给 sidecar 覆写 Model.maxTokens。
+        # PROVIDER-FORM-001：未设置会话级上限时回退 provider 级默认值。
         _session_max_tokens = getattr(session, "_max_tokens", None) or 0
+        if not _session_max_tokens:
+            _session_max_tokens = model_config.get("max_tokens") or 0
 
         # 原生提示词模式：走 OMP append_system_prompt（追加到 OMP 原生 prompt 之后），
         # 不传 system_prompt，避免整体替换 OMP 原生的 harness prompt。
@@ -326,6 +331,8 @@ async def _stream_turn_sidecar(
                     "permission_mode": _effective_permission_mode,
                     "tools": _session_tools,
                     **({"max_tokens": _session_max_tokens} if _session_max_tokens else {}),
+                    # THINKING-WIRE-001：思考开关端到端接线（前端 Thinking 开关）
+                    **({"thinking_level": thinking_level} if thinking_level else {}),
                 },
             )
         except Exception as e:
@@ -381,6 +388,11 @@ async def _stream_turn_sidecar(
                         tool_name=payload.get("tool_name", ""),
                         message="调用工具",
                     )
+                    # METRICS-WIRE-001：工具调用指标（此前 record_tool_call 无生产调用方，仪表盘恒为 0）
+                    try:
+                        get_metrics().record_tool_call(payload.get("tool_name", ""))
+                    except Exception:
+                        pass
                     # MEMORY-EVENTS-001：收集写类记忆工具活动，done 后合成
                     tool_name = payload.get("tool_name", "")
                     if tool_name in _MEMORY_WRITE_TOOLS:
@@ -407,6 +419,14 @@ async def _stream_turn_sidecar(
                             "output": payload.get("output", ""),
                             "elapsed": payload.get("elapsed", 0),
                         })
+                    try:
+                        get_metrics().record_tool_call(
+                            tool_name,
+                            latency_ms=float(payload.get("elapsed") or 0) * 1000,
+                            is_error=False,
+                        )
+                    except Exception:
+                        pass
                     # PERF-TOOL-OUTPUT-001：截断超大工具输出
                     raw_output = payload.get("output", "")
                     truncated = False
@@ -443,6 +463,10 @@ async def _stream_turn_sidecar(
                             "tool_name": tool_name,
                             "error": payload.get("error", ""),
                         })
+                    try:
+                        get_metrics().record_tool_call(tool_name, is_error=True)
+                    except Exception:
+                        pass
                     # PERF-TOOL-OUTPUT-001：错误详情同样截断
                     raw_error = payload.get("error", "")
                     if isinstance(raw_error, str) and len(raw_error) > _MAX_TOOL_ERROR_LEN:
@@ -825,6 +849,16 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             max_tokens=int(_turn_model_config.get("context_window") or 128000),
             model_name=str(_turn_model_config.get("model") or ""),
         )
+        # METRICS-WIRE-001：LLM 调用指标（此前无生产调用方，仪表盘恒为 0）
+        try:
+            get_metrics().record_llm_call(
+                model=str(_turn_model_config.get("model") or ""),
+                tokens_in=int(context_usage.get("estimated_tokens") or 0),
+                tokens_out=max(0, len(final_answer or "") // 2),
+                latency_ms=0.0,
+            )
+        except Exception:
+            pass
 
         await ws.send_json(
             {
@@ -1238,6 +1272,12 @@ async def websocket_chat(ws: WebSocket, session_id: str):
 
             # Start streaming as a background task so the message loop
             # remains responsive for cancel and auxiliary messages
+            # THINKING-WIRE-001：payload.thinking（bool）→ thinking_level
+            # （"off"/"high"）；未提供时不传，沿用 OMP 默认
+            _thinking_flag = payload.get("thinking")
+            _thinking_kwargs = {}
+            if isinstance(_thinking_flag, bool):
+                _thinking_kwargs["thinking_level"] = "high" if _thinking_flag else "off"
             turn_task = asyncio.create_task(
                 _stream_turn_sidecar(
                     ws, session, user_message, system_prompt,
@@ -1245,6 +1285,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                     cancel_event=cancel_event,
                     use_append=_use_append,
                     turn_id=turn_id,
+                    **_thinking_kwargs,
                 )
             )
             session._active_task = turn_task

@@ -12,7 +12,16 @@
         @click="submit(action.id, action.token)"
       >{{ action.label }}</button>
     </div>
-    <small v-if="submitted">已提交，正在等待处理。</small>
+    <small v-if="submitted && !result">已提交，正在等待处理。</small>
+    <div v-if="result" class="artifact-result">
+      <template v-if="result.error">
+        <small class="artifact-result-error">操作失败：{{ result.error }}</small>
+      </template>
+      <template v-else>
+        <div class="artifact-result-header">文件内容</div>
+        <pre class="artifact-result-body">{{ result.content || '（空文件）' }}</pre>
+      </template>
+    </div>
   </section>
 </template>
 
@@ -21,11 +30,15 @@ import { computed, ref } from 'vue'
 import type { CanvasCard } from '@/types/workbench'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 import { useButtonFx } from '@/composables/useButtonFx'
+import { useWorkbenchStore } from '@/stores/workbench'
 
 const props = defineProps<{ card: CanvasCard }>()
 const emit = defineEmits<{ remove: []; 'artifact-action': [payload: { artifactId: string; actionId: string; token: string }] }>()
 const submitted = ref(false)
 const artifact = computed(() => props.card.artifact!)
+// ARTIFACT-RESULT-001：读取后端回执（"预览"展示文件内容）
+const result = computed(() => useWorkbenchStore().getArtifactResult(artifact.value.id, lastActionId.value))
+const lastActionId = ref('')
 
 const rootEl = ref<HTMLElement | null>(null)
 
@@ -46,6 +59,7 @@ useButtonFx(() => rootEl.value, '.artifact-action.danger', { hoverScale: 1.03, b
 function submit(actionId: string, token: string) {
   if (submitted.value) return
   submitted.value = true
+  lastActionId.value = actionId
   emit('artifact-action', { artifactId: artifact.value.id, actionId, token })
 }
 </script>
@@ -58,6 +72,10 @@ p { margin: 8px 0 12px; white-space: pre-wrap; font-size: 13px; line-height: 1.5
 .artifact-action { border: 1px solid var(--border-color, #d9d9d9); border-radius: 5px; padding: 6px 12px; cursor: pointer; }
 .primary { background: var(--accent-color, #1a73e8); color: var(--text-inverse); border-color: var(--accent-color, #1a73e8); }
 .danger { background: var(--status-error); color: var(--text-inverse); border-color: var(--status-error); }
+.artifact-result { margin-top: 10px; border-top: 1px solid var(--border-color, #eee); padding-top: 8px; }
+.artifact-result-header { font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+.artifact-result-body { max-height: 280px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 12px; line-height: 1.5; background: var(--bg-secondary, #f7f7f7); border-radius: 6px; padding: 8px; }
+.artifact-result-error { color: var(--status-error); }
 .secondary { background: var(--bg-secondary, #f5f5f5); color: var(--text-primary, #222); }
 .artifact-action:focus-visible { outline: 2px solid var(--accent-color, #1a73e8); outline-offset: 2px; }
 .artifact-action:disabled { cursor: not-allowed; opacity: .65; }

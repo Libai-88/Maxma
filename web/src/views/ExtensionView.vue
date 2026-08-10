@@ -73,6 +73,20 @@
         </div>
       </div>
 
+      <!-- Skills（SKILLS-UI-001：sidecar get_discovered_skills 此前无 UI） -->
+      <div class="section" v-if="skills.length">
+        <h3>Skills ({{ skills.length }})</h3>
+        <div class="ext-list">
+          <div v-for="sk in skills" :key="sk.name" class="ext-card">
+            <div class="ext-header">
+              <span class="ext-name">{{ sk.name }}</span>
+              <span class="ext-source" :class="sk.source === 'auto' ? 'source-warn' : 'source-ok'">{{ sk.source }}</span>
+            </div>
+            <div v-if="sk.description" class="ext-desc">{{ sk.description }}</div>
+          </div>
+        </div>
+      </div>
+
       <!-- 空状态 -->
       <div v-if="!customTools.length && !mcpServers.length" class="empty">
         <div class="empty-icon">🧩</div>
@@ -124,6 +138,7 @@ const loading = ref(true)
 const error = ref('')
 const tools = ref<ToolInfo[]>([])
 const mcpServers = ref<McpServerInfo[]>([])
+const skills = ref<{ name: string; description: string; source: string }[]>([])
 const systemStatus = ref<{ sidecar_available: boolean }>({ sidecar_available: false })
 
 const rootEl = ref<HTMLElement | null>(null)
@@ -145,6 +160,12 @@ async function load() {
     tools.value = caps.tools || []
     mcpServers.value = caps.mcp_servers || []
     systemStatus.value = { sidecar_available: caps.system?.sidecar_available ?? false }
+    // SKILLS-UI-001：自动发现 Skills（sidecar 未就绪时为空，不阻塞页面）
+    try {
+      skills.value = await api.request<{ name: string; description: string; source: string }[]>('/skills/discovered')
+    } catch {
+      skills.value = []
+    }
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
   } finally {

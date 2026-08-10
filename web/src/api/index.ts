@@ -567,6 +567,11 @@ export const api = {
   listMcpServerTools: (serverId: string) =>
     request<MCPServerToolsResponse>(`/mcp/servers/${encodeURIComponent(serverId)}/tools`),
 
+  // MCP-WIRE-001：热加载 MCP 配置到所有活跃会话（保存/删除/启停后调用，
+  // 否则新配置仅在新会话生效）
+  reloadMcp: () =>
+    request<{ status: string; reloaded: number }>('/mcp/reload', { method: 'POST' }),
+
   // 获取 OMP 自动发现的 MCP 服务器
   listMcpDiscovered: () =>
     request<DiscoveredServer[]>('/mcp/discovered'),

@@ -4,10 +4,11 @@
     <div class="setting-row">
       <label class="setting-label">Temperature</label>
       <div class="setting-control">
-        <input type="range" min="0" max="2" step="0.1" :value="store.temperature" @input="store.setTemperature(Number(($event.target as HTMLInputElement).value))" class="setting-slider" />
+        <input type="range" min="0" max="2" step="0.1" :value="store.temperature" disabled class="setting-slider setting-slider-disabled" />
         <span class="setting-value">{{ store.temperature.toFixed(1) }}</span>
       </div>
     </div>
+    <p class="setting-note">温度暂未接入运行时（OMP 未暴露该参数）；输出上限与思考开关即时生效。</p>
     <div class="setting-row">
       <label class="setting-label">Max Tokens</label>
       <div class="setting-control">
@@ -58,6 +59,8 @@ useGsap((_ctx, contextSafe) => {
 .setting-slider::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; background: var(--accent); border-radius: 50%; cursor: pointer; }
 /* 修复 FOCUS-001：滑块键盘焦点可见（此前 outline:none 且无任何焦点样式） */
 .setting-slider:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.setting-slider-disabled { opacity: 0.45; cursor: not-allowed; }
+.setting-note { font-size: 11px; color: var(--text-tertiary); line-height: 1.5; padding-top: 4px; }
 .setting-value { min-width: 40px; text-align: right; font-size: 12px; font-family: 'SF Mono', monospace; color: var(--text-primary); }
 .toggle-btn { padding: 4px 12px; border: 1px solid var(--border); border-radius: 6px; background: transparent; font-size: 12px; color: var(--text-secondary); cursor: pointer; }
 .toggle-btn.active { background: var(--accent); color: var(--bg-primary); border-color: var(--accent); }

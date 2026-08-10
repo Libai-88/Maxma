@@ -11,8 +11,26 @@ from agent.prompts import get_system_prompt_parts
 
 logger = logging.getLogger(__name__)
 
+def _audit_record(type_: str, target: str, target_id: str, detail: str) -> None:
+    """AUDIT-WIRE-001：追加审计记录（内部调用，复用 audit_log 的持久化）。"""
+    try:
+        from api.routes.audit_log import _append_record
+        _append_record({
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "epoch": int(time.time()),
+            "type": type_,
+            "target": target,
+            "detail": f"{detail}: {target_id}"[:500],
+            "data_size": 0,
+            "status": "ok",
+        })
+    except Exception:
+        pass  # 审计失败不影响主操作
+
+
 # PATH-TRAVERSAL-001：session_id 安全字符校验（uuid hex + 短划线等）
 import re
+import time
 _SAFE_SID_RE = re.compile(r"^[0-9a-zA-Z_-]{1,64}$")
 
 router = APIRouter()
@@ -453,6 +471,8 @@ async def delete_session(session_id: str, request: Request):
     sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
     if not await _delete_session_inner(sm, sidecar_mgr, session_id):
         raise HTTPException(status_code=404, detail="会话不存在")
+    # AUDIT-WIRE-001：敏感操作写入审计日志（此前审计模块无任何生产写入方）
+    _audit_record("session", "delete", session_id, "会话删除")
     return {"status": "deleted"}
 
 

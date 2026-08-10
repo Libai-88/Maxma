@@ -226,6 +226,7 @@
         <div class="section" v-show="activeSection === 'tts'">
           <h3>语音</h3>
           <p class="section-desc">配置文本转语音（TTS）的引擎与朗读行为。</p>
+          <p class="section-devnote">⚠️ 语音朗读引擎尚未接入运行时，此处的设置仅作保存，暂不影响 AI 回复的朗读行为。</p>
 
           <div class="setting-row">
             <div class="setting-info">

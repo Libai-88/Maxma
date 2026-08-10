@@ -31,6 +31,24 @@ from api.yaml_store import YamlCorruptedError, dump_yaml_atomic, load_yaml, load
 
 logger = logging.getLogger(__name__)
 
+def _audit_log_write(type_: str, target: str, detail: str) -> None:
+    """AUDIT-WIRE-001：敏感操作审计（内部调用，失败不影响主操作）。"""
+    try:
+        from api.routes.audit_log import _append_record
+        import time as _t
+        _append_record({
+            "timestamp": _t.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "epoch": int(_t.time()),
+            "type": type_,
+            "target": target,
+            "detail": detail[:500],
+            "data_size": 0,
+            "status": "ok",
+        })
+    except Exception:
+        pass
+
+
 router = APIRouter()
 
 # 模块级常量：便于测试通过 monkeypatch 替换。
@@ -279,6 +297,13 @@ class ProviderCreateBody(BaseModel):
     models: list[str] = Field(default_factory=list, description="支持的模型 id 列表")
     enabled: bool = Field(True, description="是否启用")
     context_window: int | None = Field(None, description="上下文窗口大小")
+    # PROVIDER-FORM-001：前端表单展示的字段此前未声明，Pydantic 忽略 extra
+    # 静默丢弃——保存返回成功但刷新后消失。补全字段真实持久化。
+    max_tokens: int | None = Field(None, description="默认最大输出 token 数")
+    temperature: float | None = Field(None, description="默认采样温度")
+    top_p: float | None = Field(None, description="核采样概率")
+    timeout: int | None = Field(None, description="请求超时秒数")
+    extra_headers: dict | None = Field(None, description="自定义请求头（与前端表单字段名一致）")
 
     @field_validator("base_url")
     @classmethod
@@ -296,6 +321,12 @@ class ProviderUpdateBody(BaseModel):
     models: list[str] | None = None
     enabled: bool | None = None
     context_window: int | None = None
+    # PROVIDER-FORM-001：同上，补全表单字段
+    max_tokens: int | None = None
+    temperature: float | None = None
+    top_p: float | None = None
+    timeout: int | None = None
+    extra_headers: dict | None = None
 
     @field_validator("base_url")
     @classmethod

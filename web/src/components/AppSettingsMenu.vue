@@ -84,6 +84,10 @@ const settingsItems: SettingsItem[] = [
   { icon: 'metrics', title: '运行指标', subtitle: '监控系统性能与资源使用', route: '/metrics' },
   { icon: 'appearance', title: '外观', subtitle: '自定义主题颜色与界面布局', route: '/appearance' },
   { icon: 'help', title: '帮助', subtitle: '了解 Maxma 能力、快速上手与常见问题', route: '/help' },
+  // NAV-ENTRY-001：自动化/规则/资讯此前无任何导航入口（仅 URL 直访可达）
+  { icon: 'clock', title: '自动化', subtitle: '定时任务与自动执行', route: '/automation' },
+  { icon: 'ruler', title: '质量规则', subtitle: 'AI 编码规范与质量约束', route: '/rules' },
+  { icon: 'activity', title: '资讯', subtitle: '查看最新动态与公告', route: '/news' },
 ]
 
 // ── 操作函数 ──

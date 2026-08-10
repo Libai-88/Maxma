@@ -37,6 +37,7 @@ import { createConfiguredMcp, filterMcpTools, wireMcpToolsChanged, mcpReloadUnsu
 import { parseModel } from "./model";
 import { mapPiEventToMaxma, createDoneGuard, orchestratePrompt, handleCancelGuard, computeUndoTurnCut, compactMessages, resolveUserResponse, MAX_TOOL_CALLS_PER_TURN } from "./events";
 import { createApprovalUiContext, parseApprovalTitle } from "./approval";
+import { checkToolBlocked } from "./blocker";
 
 // Re-export public API so existing imports (tests, rpc_client) keep working.
 export {
@@ -75,6 +76,7 @@ export async function buildCreateSessionOptions(
     appendSystemPrompt?: string;
     tools?: string[];
     permissionMode?: string;
+    thinkingLevel?: string;
   },
   createMcp: typeof createConfiguredMcp = createConfiguredMcp,
 ): Promise<{
@@ -92,6 +94,12 @@ export async function buildCreateSessionOptions(
     cwd: input.cwd,
     authStorage: input.authStorage,
   } as unknown as LocalCreateSessionOptions;
+  // THINKING-WIRE-001：思考开关端到端接线——前端 Thinking 开关 →
+  // chat.py → create_session thinking_level → OMP thinkingLevel。
+  // 此前 ModelSettingsPanel 从未挂载、payload 字段无消费方，开关零效果。
+  if (input.thinkingLevel !== undefined) {
+    createOptions.thinkingLevel = input.thinkingLevel as never;
+  }
   // systemPrompt 与 appendSystemPrompt 互斥：前者整体替换 OMP 原生 prompt，
   // 后者追加到原生 prompt 之后。两者同时传入时 OMP 会以 systemPrompt 整体替换。
   if (input.systemPrompt !== undefined) createOptions.systemPrompt = input.systemPrompt;
@@ -211,6 +219,33 @@ export function subscribeSession(
   record: SessionRecord,
 ): () => void {
   return session.subscribe((event: unknown) => {
+    // BLOCKER-ENFORCE-001：MaxmaBlocker 拒止锚执行拦截——文件类工具
+    // 执行开始时检查参数路径是否命中 .maxma_blocker 标记，命中即
+    // error + done + abort（此前拒止锚只有 REST 检查无执行拦截）。
+    if ((event as { type?: string })?.type === "tool_execution_start") {
+      const toolEvent = event as { toolName?: string; args?: unknown };
+      const blocked = checkToolBlocked(toolEvent.toolName ?? "", toolEvent.args);
+      if (blocked) {
+        const guard = record.currentGuard;
+        if (guard && !guard.done) {
+          guard.done = true;
+        }
+        sendEvent(sessionId, {
+          type: "error",
+          payload: {
+            code: "PATH_BLOCKED",
+            message: `路径被 MaxmaBlocker 拒止锚保护（${blocked.blockerPath}），已中断工具调用（${blocked.toolPath}）`,
+          },
+        });
+        sendEvent(sessionId, { type: "done", payload: {} });
+        try {
+          session.agent.abort("MaxmaBlocker path blocked");
+        } catch {
+          // best-effort abort
+        }
+        return; // 丢弃被阻断工具的事件
+      }
+    }
     // 修复 TOOL-LOOP-GUARD-001：按 tool_start 计数，超限终止本轮。
     // OMP 循环无计数上限（仅 600s 墙钟兜底），模型在 tool_error 后反复
     // 调用工具时会产生无界副作用与费用。计数在订阅层（事件实际流经此处）。
@@ -329,6 +364,8 @@ export async function handleRpcRequest(req: RpcRequest, io: BridgeIo = defaultIo
         const appendSystemPrompt: string | undefined = params?.append_system_prompt;
         const tools: string[] | undefined = params?.tools as string[] | undefined;
         const permissionMode: string = (params?.permission_mode as string) ?? "ask";
+        // THINKING-WIRE-001：思考级别（"off"/"high" 等，来自前端 Thinking 开关）
+        const thinkingLevel: string | undefined = params?.thinking_level as string | undefined;
 
         const { options: createOptions, needsApproval, mcpManager, mcpConfigs, mcpAllowBlock, mcpToolNames } = await buildCreateSessionOptions({
           model,
@@ -338,6 +375,7 @@ export async function handleRpcRequest(req: RpcRequest, io: BridgeIo = defaultIo
           appendSystemPrompt,
           tools: Array.isArray(tools) ? tools : undefined,
           permissionMode,
+          thinkingLevel,
         });
 
         const sessionId = randomUUID();

@@ -388,7 +388,12 @@ async def delete_mcp_server(server_id: str, request: Request):
 
 @router.get("/mcp/discovered")
 async def get_discovered_mcp_servers(request: Request):
-    """返回 OMP 自动发现的 MCP 服务器列表。"""
+    """返回 OMP 自动发现的 MCP 服务器列表。
+
+    DISCOVERED-SHAPE-001：sidecar 返回 {name, transport, tool_count, status}，
+    前端类型按 {id, name, transport, tools} 读取——补 server_id 映射并
+    归一化字段，使列表 key 与工具标签真实渲染。
+    """
     try:
         sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
         if sidecar_mgr is None:
@@ -398,7 +403,23 @@ async def get_discovered_mcp_servers(request: Request):
         if client is None:
             return []
         result = await client.call("get_discovered_mcp", {})
-        return result if isinstance(result, list) else []
+        if not isinstance(result, list):
+            return []
+        normalized = []
+        for entry in result:
+            if not isinstance(entry, dict):
+                continue
+            server_id = entry.get("server_id") or entry.get("name") or entry.get("id") or ""
+            normalized.append({
+                "server_id": server_id,
+                "id": server_id,
+                "name": entry.get("name") or server_id,
+                "transport": entry.get("transport") or "unknown",
+                "tool_count": int(entry.get("tool_count") or 0),
+                "tools": [],
+                "status": entry.get("status") or "connected",
+            })
+        return normalized
     except Exception as e:
         logger.warning("[mcp] Failed to fetch discovered MCP: %s", e)
         return []

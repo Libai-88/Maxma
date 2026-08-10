@@ -10,7 +10,7 @@
       <details class="intro-card" open>
         <summary>什么是拒止锚？什么时候需要用到？</summary>
         <div class="intro-body">
-          <p>拒止锚（MaxmaBlocker）是 Maxma 的<strong>强制阻断标记</strong>——在某个目录中放置一个名为 <code>MaxmaBlocker</code> 的标记文件后，AI 的所有文件类工具就再也无法读写该目录及其所有子目录，<strong>无论白名单是否放行</strong>。</p>
+          <p>拒止锚（MaxmaBlocker）是 Maxma 的<strong>执行阻断标记</strong>——在某个目录中放置一个名为 <code>.maxma_blocker</code> 的标记文件后，AI 的文件类工具调用一旦指向该目录及其子目录，<strong>会被立即中断并报错</strong>，无论白名单是否放行。</p>
           <p>可以把它理解为 AI 的"禁区铁门"：白名单是"邀请函"，拒止锚是"上锁"——上了锁的房间，邀请函也进不去。</p>
           <p><strong>典型使用场景</strong>：</p>
           <ul>
@@ -28,9 +28,10 @@
         <div class="rule-body">
           <p>拒止锚是一种强制安全机制，优先级高于白名单：</p>
           <ul>
-            <li>在指定目录中创建 <code>MaxmaBlocker</code> 标记文件（无扩展名），AI 的所有文件工具将无法访问该目录及其所有子目录。</li>
-            <li>检查时会从目标目录逐级向上查找，一旦发现任何父目录包含 <code>MaxmaBlocker</code> 文件即强制阻断。</li>
+            <li>在指定目录中创建 <code>.maxma_blocker</code> 标记文件（无扩展名），AI 的文件类工具调用指向该目录或其子目录时会被立即中断。</li>
+            <li>检查时会从目标路径逐级向上查找，一旦发现任何父目录包含 <code>.maxma_blocker</code> 文件即强制阻断。</li>
             <li>访问被拒止锚阻断时，白名单中即使有对应的放行条目也不会生效。</li>
+            <li>附件上传与路径检查（<code>check-path-blocked</code>）同样会标记被阻断的路径。</li>
           </ul>
           <p class="rule-note">路径白名单及完整权限规则参见设置页的「路径白名单」配置。</p>
         </div>

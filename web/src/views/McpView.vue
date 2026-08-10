@@ -1118,6 +1118,8 @@ async function handleSave() {
       saveMessage.value = '保存成功'
     }
     saveMessageClass.value = 'ok'
+    // MCP-WIRE-001：保存后热加载到所有活跃会话（sidecar 不可用时静默）
+    api.reloadMcp().catch(() => { /* sidecar 未就绪时新配置下个会话生效 */ })
 
     // saving 锁延迟释放：避免 800ms 窗口期内用户重复点击
     schedule(() => {
@@ -1140,6 +1142,8 @@ async function toggleServer(serverId: string, enabled: boolean) {
   toggling.add(serverId)
   try {
     await api.updateMcpServer(serverId, { enabled })
+    // MCP-WIRE-001：启停同样热加载
+    api.reloadMcp().catch(() => { /* 静默 */ })
     const s = servers.value.find((x) => x.server_id === serverId)
     if (s) s.enabled = enabled
     showGlobal(enabled ? `已启用 ${serverId}` : `已停用 ${serverId}`, 'ok')

@@ -23,6 +23,7 @@
         <span class="hindsight-caret">{{ hindsightOpen ? '▾' : '▸' }}</span>
       </div>
       <div v-if="hindsightOpen" class="hindsight-body">
+        <p class="hs-devnote">⚠️ Hindsight 自动回顾引擎尚未接入运行时，此处的配置仅作保存，暂不影响记忆处理行为。</p>
         <div class="hs-row">
           <div class="hs-info">
             <div class="hs-label">启用 Hindsight 记忆处理</div>

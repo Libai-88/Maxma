@@ -43,6 +43,8 @@ def _resolve_chat_model(provider_id: str, model_name: str) -> dict[str, str | in
             selected_model, requested_provider, models[0],
         )
         selected_model = str(models[0])
+    # PROVIDER-FORM-001：provider 级默认输出上限（表单字段真实持久化后生效）
+    provider_max_tokens = provider.get("max_tokens")
     return {
         "provider": str(provider.get("id") or requested_provider or "openai"),
         "model": selected_model,
@@ -50,4 +52,5 @@ def _resolve_chat_model(provider_id: str, model_name: str) -> dict[str, str | in
         "api_key": _decrypt_api_key(provider.get("api_key")),
         "provider_type": str(provider.get("provider_type") or "openai"),
         "context_window": int(provider.get("context_window") or 128000),
+        "max_tokens": int(provider_max_tokens) if isinstance(provider_max_tokens, (int, float)) and provider_max_tokens > 0 else None,
     }

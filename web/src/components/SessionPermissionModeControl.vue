@@ -12,6 +12,7 @@
 
 <script setup lang="ts">
 import { api } from '@/api'
+import { useChatStore } from '@/stores/chat'
 import type { PermissionMode } from '@/types'
 import { ref, watch } from 'vue'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
@@ -81,6 +82,18 @@ async function updateMode(nextMode: PermissionMode) {
     if (!isCurrentSession(sessionId, generation)) return
     enabled.value = response.permission_modes_enabled
     mode.value = response.permission_mode
+    // PERM-LIVE-001：运行中会话即时生效——PUT 只更新后端 SessionState，
+    // 已运行 sidecar 会话的审批策略不会改变（permission_mode 只在新建
+    // 会话时传入）。通过 WS update_auto_approve 走 set_auto_approve RPC
+    // 立即切换 approvalMode（与"自动执行"开关同一链路）。
+    const autoApprove = response.permission_mode === 'auto' || response.permission_mode === 'operate'
+    const ch = useChatStore().channels.get(sessionId)
+    if (ch?.ws && ch.ws.readyState === WebSocket.OPEN) {
+      ch.ws.send(JSON.stringify({
+        type: 'update_auto_approve',
+        payload: { auto_approve: autoApprove },
+      }))
+    }
   } catch (error) {
     if (!isCurrentSession(sessionId, generation)) return
     if (isFeatureUnavailable(error)) {

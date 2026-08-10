@@ -391,3 +391,36 @@ def _count_sessions(request: Request) -> int:
         return 0
     except Exception:
         return 0
+
+
+@router.get("/skills/discovered")
+async def get_discovered_skills(request: Request):
+    """返回 OMP 自动发现的 Skills 列表（SKILLS-UI-001）。
+
+    sidecar RPC get_discovered_skills 此前无 REST 端点、无前端消费
+    （死代码）；ExtensionView 现在据此展示 Skills 区块。
+    """
+    try:
+        sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
+        if sidecar_mgr is None:
+            return []
+        await sidecar_mgr.start()
+        client = sidecar_mgr.client
+        if client is None:
+            return []
+        result = await client.call("get_discovered_skills", {})
+        if not isinstance(result, list):
+            return []
+        normalized = []
+        for entry in result:
+            if not isinstance(entry, dict):
+                continue
+            normalized.append({
+                "name": entry.get("name") or "",
+                "description": entry.get("description") or "",
+                "source": entry.get("source") or "auto",
+            })
+        return normalized
+    except Exception as e:
+        logger.warning("[skills] Failed to fetch discovered skills: %s", e)
+        return []

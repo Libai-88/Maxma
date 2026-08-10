@@ -22,7 +22,7 @@ import threading
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app_paths import API_DATA_DIR
@@ -91,6 +91,28 @@ router = APIRouter()
 
 CONFIG_PATH = API_DATA_DIR / "panel_configs.json"
 LOCK_PATH = API_DATA_DIR / "panel_configs.json.lock"
+
+
+async def _apply_omp_setting(request: Request, path: str, value: Any) -> None:
+    """PANEL-WIRE-001：把面板配置同步写入 OMP 运行时设置（sidecar RPC）。
+
+    面板持久化（panel_configs.json）与 OMP 生效设置之间此前无任何桥接——
+    TTS/浏览器工具/子代理/Hindsight 面板都是"保存成功但功能不生效"的死配置。
+    可接线的路径（browser.*、advisor.*）在此同步；sidecar 不可用时静默
+    降级（面板数据已持久化，sidecar 恢复后仍可手动应用）。
+    """
+    sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
+    if sidecar_mgr is None:
+        return
+    try:
+        await sidecar_mgr.start()
+        client = sidecar_mgr.client
+        if client is None:
+            return
+        await client.call("set_settings", {"path": path, "value": value})
+        logger.info("[panel] OMP setting %s = %s 已同步", path, value)
+    except Exception as e:
+        logger.warning("[panel] 同步 OMP 设置 %s 失败（面板已保存）: %s", path, e)
 
 # ── 默认配置 ──
 # GET 时若文件不存在或对应面板缺失，返回这些默认值；
@@ -302,7 +324,7 @@ async def get_browser_tools_config():
 
 
 @router.put("/settings/browser-tools")
-async def update_browser_tools_config(body: BrowserToolsConfigBody):
+async def update_browser_tools_config(body: BrowserToolsConfigBody, request: Request):
     updates = body.model_dump(exclude_none=False)
     domains = updates.get("allowed_domains")
     if domains is not None:
@@ -317,7 +339,15 @@ async def update_browser_tools_config(body: BrowserToolsConfigBody):
                 seen.add(d)
                 cleaned.append(d)
         updates["allowed_domains"] = cleaned
-    return _put_panel("browser_tools", updates)
+    result = _put_panel("browser_tools", updates)
+    # PANEL-WIRE-001：同步 OMP 运行时设置——此前面板只持久化到
+    # panel_configs.json，无任何消费方（死配置）。browser.enabled 是
+    # OMP 真实生效的工具开关，保存面板时一并写入。
+    if "enabled" in updates:
+        await _apply_omp_setting(request, "browser.enabled", bool(updates["enabled"]))
+    if "headless" in updates:
+        await _apply_omp_setting(request, "browser.headless", bool(updates["headless"]))
+    return result
 
 
 # ── 子代理配置 ──
@@ -329,6 +359,12 @@ async def get_sub_agents_config():
 
 
 @router.put("/settings/sub-agents")
-async def update_sub_agents_config(body: SubAgentsConfigBody):
+async def update_sub_agents_config(body: SubAgentsConfigBody, request: Request):
     updates = body.model_dump(exclude_none=False)
-    return _put_panel("sub_agents", updates)
+    result = _put_panel("sub_agents", updates)
+    # PANEL-WIRE-001：同步 OMP advisor 设置——面板开关真实生效
+    if "enabled" in updates:
+        await _apply_omp_setting(request, "advisor.enabled", bool(updates["enabled"]))
+    if "max_concurrent" in updates:
+        await _apply_omp_setting(request, "advisor.maxConcurrent", int(updates["max_concurrent"]))
+    return result

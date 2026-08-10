@@ -221,6 +221,20 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     persistWorkspace()
   }
 
+  /** ARTIFACT-RESULT-001：artifact 动作执行结果（"预览"的文件内容等）。
+   *  此前后端回执的 content 无人消费——"预览/打开"按钮永远只显示"已提交"。 */
+  const artifactResults = ref<Map<string, { content: string; error?: string }>>(new Map())
+
+  function setArtifactResult(artifactId: string, actionId: string, content: string, error?: string) {
+    artifactResults.value.set(`${artifactId}:${actionId}`, { content, error })
+    // 触发响应式（Map 原地 set 不触发）
+    artifactResults.value = new Map(artifactResults.value)
+  }
+
+  function getArtifactResult(artifactId: string, actionId: string) {
+    return artifactResults.value.get(`${artifactId}:${actionId}`)
+  }
+
   function buildReasoningTimeline(turns: ChatTurn[]): ReasoningEntry[] {
     const recentTurns = turns.slice(-MAX_TURNS)
     const entries: ReasoningEntry[] = []
@@ -275,6 +289,9 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     addArtifact,
     markArtifactActionSubmitted,
     revertArtifactAction,
+    artifactResults,
+    setArtifactResult,
+    getArtifactResult,
     removeCard,
     selectCard,
     toggleCardPin,

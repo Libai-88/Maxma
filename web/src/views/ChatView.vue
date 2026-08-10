@@ -86,6 +86,13 @@
               <span>自动执行</span>
               <span class="session-action-state">{{ autoApprove ? '已开启' : '需确认' }}</span>
             </button>
+            <!-- MODEL-PARAMS-001：模型参数（输出上限/思考开关）挂载入口——
+                 此前 ModelSettingsPanel 从未挂载，max_tokens 后端支持但 UI 孤儿 -->
+            <button class="session-action" type="button" role="menuitem" @click="modelSettingsOpen = !modelSettingsOpen">
+              <span>模型参数</span>
+              <span class="session-action-state">{{ modelSettingsOpen ? '收起' : '展开' }}</span>
+            </button>
+            <ModelSettingsPanel v-if="modelSettingsOpen" class="session-model-settings" />
             <div v-if="taskTrackerData" class="session-task-status" role="status" aria-label="任务状态">
               <div class="session-task-heading">任务状态</div>
               <TaskTrackerBar :data="taskTrackerData as unknown as TaskTrackerData" />
@@ -155,6 +162,7 @@
 defineOptions({ name: 'ChatView' })
 import { api } from '@/api'
 import ChatInput from '@/components/ChatInput.vue'
+import ModelSettingsPanel from '@/components/ModelSettingsPanel.vue'
 import ChatWindow from '@/components/ChatWindow.vue'
 import SessionPermissionModeControl from '@/components/SessionPermissionModeControl.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
@@ -243,6 +251,8 @@ const selectedModelName = ref(safeGetItem(SELECTED_MODEL_KEY) || '')
 const providerStore = useProviderStore()
 const { hasProviders } = storeToRefs(providerStore)
 const chatStore = useChatStore()
+// MODEL-PARAMS-001：会话菜单内模型参数面板展开状态
+const modelSettingsOpen = ref(false)
 
 // 后端不可用时的加载失败状态（区分"后端不可用"和"真的无 provider"）
 const providerLoadFailed = ref(false)
@@ -849,6 +859,11 @@ function handleQuickStart(message: string) {
 .session-action-state {
   color: var(--text-secondary);
   font-size: 12px;
+}
+
+.session-model-settings {
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
 }
 
 .session-action-hint {

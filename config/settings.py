@@ -47,6 +47,14 @@ class Settings(BaseSettings):
     # 品牌只做锦上添花，不替换 OMP 原生能力；关闭即回到纯功能注入。
     brand_enhancement: bool = True
 
+    # 思考路径选择器门控（FEATURE-GATE-001：health.py 引用但此前从未定义，
+    # extra="forbid" 下访问即 AttributeError。默认关闭——关闭时前端不展示
+    # 思考路径选择器，避免"展示但不可用"）。
+    think_path_enabled: bool = False
+
+    # Provider 诊断开关（health 端点引用字段，默认关闭）。
+    provider_diagnostics_enabled: bool = False
+
     model_config = {
         "env_file": str(ENV_FILE_PATH),
         "env_file_encoding": "utf-8",
