@@ -89,6 +89,12 @@
           <!-- Plain code block (fallback) -->
           <pre v-else-if="outputDisplay.type === 'code'" class="code-block">{{ outputDisplay.raw }}</pre>
         </div>
+        <!-- 修复 ERROR-EMPTY-001：tool_error 且错误信息为空/null 时，
+             卡片不再只剩图标——显示兜底提示，用户能明确知道工具失败了 -->
+        <div v-else-if="toolCall.status === 'error'" class="tool-section tool-error-empty">
+          <span class="tool-error-empty-icon" aria-hidden="true">⚠</span>
+          工具执行失败
+        </div>
       </div>
     </div>
   </div>
@@ -535,6 +541,18 @@ useGsap((_ctx, contextSafe) => {
 }
 .tool-section:last-child {
   margin-bottom: 0;
+}
+/* 错误空态提示（ERROR-EMPTY-001） */
+.tool-error-empty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--status-error);
+}
+.tool-error-empty-icon {
+  font-size: 13px;
+  line-height: 1;
 }
 .tool-section-title {
   font-size: 12px;

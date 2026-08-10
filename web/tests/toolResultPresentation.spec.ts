@@ -45,4 +45,39 @@ describe('tool result presentation', () => {
     expect(wrapper.text()).not.toContain('top-secret-token')
     expect(wrapper.text()).not.toContain('关闭')
   })
+
+  it('ERROR-EMPTY-001: error 且 output 为空时显示错误卡片而非空气泡', () => {
+    const wrapper = mount(ToolBubbleRouter, {
+      props: {
+        toolCall: toolCall({
+          name: 'python',
+          status: 'error',
+          output: null,
+          input: 'print(1)',
+        }),
+      },
+    })
+
+    // 已注册专用气泡（python）的 error 状态也必须走 ErrorCard（ERROR-BYPASS-001）
+    expect(wrapper.find('.error-card--warning').exists()).toBe(true)
+    expect(wrapper.find('.tool-bubble').exists()).toBe(false)
+    expect(wrapper.text()).toContain('该工具没有完成操作')
+    // 不是空卡片：有可见文案
+    expect(wrapper.text().trim().length).toBeGreaterThan(10)
+  })
+
+  it('ERROR-EMPTY-001: error 且 output 为空字符串时同样有错误提示', () => {
+    const wrapper = mount(ToolBubbleRouter, {
+      props: {
+        toolCall: toolCall({
+          status: 'error',
+          output: '',
+        }),
+      },
+    })
+
+    expect(wrapper.find('.error-card--warning').exists()).toBe(true)
+    expect(wrapper.text()).toContain('工具')
+    expect(wrapper.text().trim().length).toBeGreaterThan(10)
+  })
 })

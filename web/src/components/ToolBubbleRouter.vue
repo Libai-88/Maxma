@@ -16,9 +16,15 @@
     />
     <ToolCallCard v-else :tool-call="toolCall" @pin="$emit('pin', $event)" />
   </ProcessFoldBlock>
+  <!-- 修复 ERROR-BYPASS-001：专用工具气泡分支此前无 error 检查——
+       status='error' 且工具已注册气泡（python/file_edit 等）时绕过
+       ErrorCard 直接渲染气泡组件，错误信息为空时卡片只剩图标。
+       错误状态统一走 ErrorCard（含兜底文案与诊断路径）。
+       注：TS 模板收窄认为 status 已非 error（前序分支排除），但运行时
+       JS 无收窄，此断言仍必要，故用 as string 绕过静态误报。 -->
   <component
     :is="bubbleComponent"
-    v-else-if="bubbleComponent"
+    v-else-if="bubbleComponent && (toolCall.status as string) !== 'error'"
     :tool-call="toolCall"
     @action="handleAction"
     @pin="$emit('pin', $event)"
