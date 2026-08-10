@@ -51,7 +51,8 @@ async def list_plugins(request: Request):
         raise
     except Exception as e:
         logger.error("Failed to list plugins: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.warning("[plugins] RPC failed", exc_info=True)
+        raise HTTPException(status_code=500, detail="服务暂时不可用，请稍后重试")
 
 
 @router.post("/plugins/install")
@@ -64,7 +65,8 @@ async def install_plugin(body: InstallPluginRequest, request: Request):
         raise
     except Exception as e:
         logger.error("Failed to install plugin %s: %s", body.spec, e)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.warning("[plugins] RPC failed", exc_info=True)
+        raise HTTPException(status_code=500, detail="服务暂时不可用，请稍后重试")
 
 
 @router.delete("/plugins/{name}")
@@ -77,7 +79,8 @@ async def uninstall_plugin(name: str, request: Request):
         raise
     except Exception as e:
         logger.error("Failed to uninstall plugin %s: %s", name, e)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.warning("[plugins] RPC failed", exc_info=True)
+        raise HTTPException(status_code=500, detail="服务暂时不可用，请稍后重试")
 
 
 @router.put("/plugins/{name}/toggle")
@@ -93,7 +96,8 @@ async def toggle_plugin(name: str, body: TogglePluginRequest, request: Request):
         raise
     except Exception as e:
         logger.error("Failed to toggle plugin %s: %s", name, e)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.warning("[plugins] RPC failed", exc_info=True)
+        raise HTTPException(status_code=500, detail="服务暂时不可用，请稍后重试")
 
 
 @router.get("/plugins/{name}")
@@ -106,7 +110,8 @@ async def get_plugin_detail(name: str, request: Request):
         raise
     except Exception as e:
         logger.error("Failed to get plugin detail %s: %s", name, e)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.warning("[plugins] RPC failed", exc_info=True)
+        raise HTTPException(status_code=500, detail="服务暂时不可用，请稍后重试")
 
 
 @router.get("/plugins/{name}/config")
@@ -119,7 +124,8 @@ async def get_plugin_config(name: str, request: Request):
         raise
     except Exception as e:
         logger.error("Failed to get plugin config %s: %s", name, e)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.warning("[plugins] RPC failed", exc_info=True)
+        raise HTTPException(status_code=500, detail="服务暂时不可用，请稍后重试")
 
 
 @router.put("/plugins/{name}/config")
@@ -135,4 +141,5 @@ async def update_plugin_config(name: str, body: UpdatePluginConfigRequest, reque
         raise
     except Exception as e:
         logger.error("Failed to update plugin config %s: %s", name, e)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.warning("[plugins] RPC failed", exc_info=True)
+        raise HTTPException(status_code=500, detail="服务暂时不可用，请稍后重试")

@@ -132,13 +132,14 @@ def _load_user_rules() -> None:
 
 
 def _save_user_rules() -> None:
-    """将自定义规则持久化到文件。"""
-    _USER_RULES_PATH.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        with open(_USER_RULES_PATH, "w", encoding="utf-8") as f:
-            json.dump(_USER_RULES, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        logger.warning("Failed to save user rules to %s: %s", _USER_RULES_PATH, e)
+    """将自定义规则持久化到文件（RULES-RACE-001：读写加锁）。"""
+    with _rules_lock:
+        _USER_RULES_PATH.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with open(_USER_RULES_PATH, "w", encoding="utf-8") as f:
+                json.dump(_USER_RULES, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.warning("Failed to save user rules to %s: %s", _USER_RULES_PATH, e)
 
 
 # 模块加载时自动恢复持久化规则

@@ -9,6 +9,7 @@ from __future__ import annotations
 import ipaddress
 import logging
 import os
+import threading
 import time
 from typing import Any
 from urllib.parse import urlsplit
@@ -601,6 +602,12 @@ _ENVELOPE_ALGORITHM = "fernet"
 _ENVELOPE_KEY_ID = "default"
 
 
+# FERNET-RACE-001：key 生成 check-then-act 加锁——并发请求同时看到文件
+# 不存在时各自生成并 os.replace，后写者覆盖先写者，先写者加密的 api_key
+# 永久不可解密（_decrypt_api_key 静默返回空）
+_fernet_key_lock = threading.Lock()
+
+
 def _get_or_create_fernet_key() -> bytes:
     """读取或生成持久化 Fernet key。
 
@@ -609,17 +616,21 @@ def _get_or_create_fernet_key() -> bytes:
     """
     if _CREDENTIAL_KEY_PATH.exists():
         return _CREDENTIAL_KEY_PATH.read_bytes()
-    _CREDENTIAL_KEY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    key = Fernet.generate_key()
-    # 原子写入：先写临时文件再 rename，避免其他进程读到半截 key
-    tmp_path = _CREDENTIAL_KEY_PATH.with_suffix(".key.tmp")
-    tmp_path.write_bytes(key)
-    try:
-        os.chmod(tmp_path, 0o600)
-    except OSError:
-        pass
-    os.replace(tmp_path, _CREDENTIAL_KEY_PATH)
-    return key
+    with _fernet_key_lock:
+        # 双检：持锁后再次确认（避免重复生成）
+        if _CREDENTIAL_KEY_PATH.exists():
+            return _CREDENTIAL_KEY_PATH.read_bytes()
+        _CREDENTIAL_KEY_PATH.parent.mkdir(parents=True, exist_ok=True)
+        key = Fernet.generate_key()
+        # 原子写入：先写临时文件再 rename，避免其他进程读到半截 key
+        tmp_path = _CREDENTIAL_KEY_PATH.with_suffix(".key.tmp")
+        tmp_path.write_bytes(key)
+        try:
+            os.chmod(tmp_path, 0o600)
+        except OSError:
+            pass
+        os.replace(tmp_path, _CREDENTIAL_KEY_PATH)
+        return key
 
 
 def _encrypt_api_key(plaintext: str) -> str:

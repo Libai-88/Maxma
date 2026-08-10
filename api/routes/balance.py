@@ -1,7 +1,10 @@
 """DeepSeek 余额查询 — 从环境变量获取凭据"""
 
 import asyncio
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
@@ -117,9 +120,10 @@ async def get_deepseek_balance(request: Request):
         data = response.json()
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="DeepSeek API 请求超时")
-    except httpx.HTTPStatusError as e:
-        status = e.response.status_code if e.response is not None else 0
-        raise HTTPException(status_code=500, detail=f"DeepSeek API 错误：HTTP {status}")
+    except httpx.HTTPStatusError:
+        logger.warning("[balance] DeepSeek API HTTP error", exc_info=True)
+        raise HTTPException(status_code=500, detail="查询余额失败，请稍后重试")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"DeepSeek API 错误：{e}")
+        logger.warning("[balance] DeepSeek API error", exc_info=True)
+        raise HTTPException(status_code=500, detail="查询余额失败，请稍后重试")
     return data

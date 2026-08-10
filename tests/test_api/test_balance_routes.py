@@ -161,7 +161,9 @@ class TestGetDeepseekBalanceRoute:
 
         resp = app_client.get("/deepseek-balance")
         assert resp.status_code == 500
-        assert "DeepSeek API 错误" in resp.json()["detail"]
+        # M6-LEAK-001：内部异常文本不再外泄（只进日志）
+        assert "DeepSeek API 错误" not in resp.json()["detail"]
+        assert "boom" not in resp.json()["detail"]
 
     def test_generic_exception_returns_500(self, app_client, monkeypatch):
         monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-boom")
@@ -174,4 +176,6 @@ class TestGetDeepseekBalanceRoute:
 
         resp = app_client.get("/deepseek-balance")
         assert resp.status_code == 500
-        assert "DeepSeek API 错误" in resp.json()["detail"]
+        # M6-LEAK-001：内部异常文本不再外泄（只进日志）
+        assert "DeepSeek API 错误" not in resp.json()["detail"]
+        assert "boom" not in resp.json()["detail"]

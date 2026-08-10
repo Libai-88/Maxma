@@ -90,7 +90,8 @@ async def get_settings(request: Request, paths: str | None = None):
         raise
     except Exception as e:
         logger.error("Failed to get settings: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.warning("[settings] RPC failed", exc_info=True)
+        raise HTTPException(status_code=500, detail="服务暂时不可用，请稍后重试")
 
 
 @router.put("/settings")
@@ -106,4 +107,5 @@ async def set_settings(request: Request, body: SetSettingsRequest):
         raise
     except Exception as e:
         logger.error("Failed to set setting %s: %s", body.path, e)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.warning("[settings] RPC failed", exc_info=True)
+        raise HTTPException(status_code=500, detail="服务暂时不可用，请稍后重试")

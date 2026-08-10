@@ -292,6 +292,14 @@ class SidecarManager:
                 if consecutive_failures >= 3:
                     logger.warning("[sidecar] heartbeat: 3 consecutive failures, marking dead")
                     self._dead = True
+                    # 修复 HEARTBEAT-KILL-001：立即终止 sidecar 进程（terminate→
+                    # 5s→kill）——此前只置 None 等下次 get_client 才清理，读循环
+                    # 死的进程若仍存活（事件循环卡死），AgentSession/run/MCP 连接
+                    # 无监督继续执行最长 90s+ 空窗
+                    try:
+                        await self.stop()
+                    except Exception:
+                        logger.warning("[sidecar] heartbeat: failed to stop process", exc_info=True)
                     break
                 continue
 

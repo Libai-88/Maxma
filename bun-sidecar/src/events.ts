@@ -400,11 +400,29 @@ export async function orchestratePrompt(
       payload: { code: "PROMPT_TIMEOUT", message: `Prompt exceeded ${timeoutMs}ms limit` },
     });
     sink({ type: "done", payload: {} });
-    try {
-      session.agent.abort("Prompt timeout");
-    } catch {
-      // best-effort abort
-    }
+    // 修复 TIMEOUT-ABORT-001：超时用 AgentSession.abort（与 cancel 语义一致）。
+    // 底层 agent.abort 无法打断 retry 退避睡眠/排队 prompt/审批等待——超时后
+    // run 继续跑，下一轮 prompt 级联 AgentBusyError（连续失败 1-2 次）。
+    // session.abort 会 abortRetry + abortCompaction + abortBash 并清 post-prompt 任务。
+    const doAbort = async () => {
+      try {
+        if (typeof (session as unknown as { abort?: unknown }).abort === "function") {
+          await (session as unknown as { abort: (o: { goalReason: string; reason: string }) => Promise<void> }).abort({
+            goalReason: "internal",
+            reason: "Prompt timeout",
+          });
+          return;
+        }
+      } catch {
+        // fall through to low-level abort
+      }
+      try {
+        session.agent.abort("Prompt timeout");
+      } catch {
+        // best-effort abort
+      }
+    };
+    void doAbort();
   }, timeoutMs);
 
   try {
