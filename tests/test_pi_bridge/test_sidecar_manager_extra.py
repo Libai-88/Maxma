@@ -25,13 +25,15 @@ from api.pi_bridge.sidecar_manager import (
 
 
 class TestResolveBunPath:
-    def test_meipass_returns_bundled_bun_when_exists(self, monkeypatch, tmp_path):
-        # 模拟 PyInstaller 打包环境
-        monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
-        bundled = tmp_path / "bun-sidecar" / "bun.exe"
-        bundled.parent.mkdir(parents=True)
-        bundled.write_text("fake")
-        assert _resolve_bun_path() == str(bundled)
+    def test_settings_returns_configured_bun_path(self, monkeypatch, tmp_path):
+        # _resolve_bun_path 从 settings.sidecar_bun_path 读取（旧版 _MEIPASS
+        # 分支已移除，此测试同步到当前实现语义：配置路径优先返回）
+        class FakeSettings:
+            sidecar_bun_path = str(tmp_path / "bun-sidecar" / "bun.exe")
+        monkeypatch.setattr(
+            "config.settings.get_settings", lambda: FakeSettings()
+        )
+        assert _resolve_bun_path() == str(tmp_path / "bun-sidecar" / "bun.exe")
 
     def test_meipass_falls_back_when_bundled_missing(self, monkeypatch, tmp_path):
         # _MEIPASS 存在但 bun.exe 不存在，应走 settings 分支

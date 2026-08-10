@@ -127,6 +127,7 @@ class TestGetMessagesFromSidecar:
     async def test_no_sidecar_id_returns_empty(self, monkeypatch):
         session = _FakeChatSession()
         client = AsyncMock()
+        client.disconnected = asyncio.Event()
         mgr = _FakeSidecarMgr(client=client)
         _patch_session_map(monkeypatch, sidecar_id=None)
         # session._sidecar_session_id 也是 None
@@ -151,6 +152,7 @@ class TestGetMessagesFromSidecar:
     async def test_success_returns_messages(self, monkeypatch):
         session = _FakeChatSession()
         client = AsyncMock()
+        client.disconnected = asyncio.Event()
         client.call = AsyncMock(return_value={
             "messages": [{"role": "user", "content": "hi"}]
         })
@@ -163,6 +165,7 @@ class TestGetMessagesFromSidecar:
     async def test_exception_returns_empty(self, monkeypatch):
         session = _FakeChatSession()
         client = AsyncMock()
+        client.disconnected = asyncio.Event()
         client.call = AsyncMock(side_effect=RuntimeError("boom"))
         mgr = _FakeSidecarMgr(client=client)
         _patch_session_map(monkeypatch, sidecar_id="sc-1")
@@ -173,6 +176,7 @@ class TestGetMessagesFromSidecar:
     async def test_respects_limit_param(self, monkeypatch):
         session = _FakeChatSession()
         client = AsyncMock()
+        client.disconnected = asyncio.Event()
         client.call = AsyncMock(return_value={"messages": []})
         mgr = _FakeSidecarMgr(client=client)
         _patch_session_map(monkeypatch, sidecar_id="sc-1")
@@ -392,6 +396,7 @@ class TestSidecarTurnFailures:
         ws = MagicMock()
         ws.send_json = AsyncMock()
         client = MagicMock()
+        client.disconnected = asyncio.Event()  # SIDECAR-DISCONNECT-001：三方等待需要 Event
         client.on = MagicMock(side_effect=lambda _event, _handler: lambda: None)
 
         async def call(method, params):
@@ -506,7 +511,7 @@ class TestWebSocketChat:
         self, ws_app, monkeypatch
     ):
         # patch _stream_turn_sidecar 返回固定 answer
-        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False):
+        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id=""):
             return f"echo:{user_message}"
 
         monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", fake_stream)
@@ -597,7 +602,7 @@ class TestWebSocketChat:
     def test_happy_path_increments_message_count(
         self, ws_app, monkeypatch
     ):
-        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False):
+        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id=""):
             return "answer"
 
         monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", fake_stream)
@@ -616,7 +621,7 @@ class TestWebSocketChat:
     def test_empty_final_answer_skips_message_count(
         self, ws_app, monkeypatch
     ):
-        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False):
+        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id=""):
             return ""  # 空 answer
 
         monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", fake_stream)
@@ -635,7 +640,7 @@ class TestWebSocketChat:
     def test_const_session_triggers_save(
         self, ws_app, monkeypatch
     ):
-        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False):
+        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id=""):
             return "final-answer"
 
         monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", fake_stream)
@@ -664,7 +669,7 @@ class TestWebSocketChat:
     def test_non_const_session_does_not_trigger_save(
         self, ws_app, monkeypatch
     ):
-        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False):
+        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id=""):
             return "answer"
 
         monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", fake_stream)
@@ -688,7 +693,7 @@ class TestWebSocketChat:
         assert save_called["v"] is False
 
     def test_ws_registers_and_unregisters(self, ws_app, monkeypatch):
-        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False):
+        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id=""):
             return "x"
 
         monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", fake_stream)
@@ -705,7 +710,7 @@ class TestWebSocketChat:
         assert "s6" in registry.unregistered
 
     def test_done_message_has_turn_id_from_payload(self, ws_app, monkeypatch):
-        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False):
+        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id=""):
             return "x"
 
         monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", fake_stream)
@@ -720,7 +725,7 @@ class TestWebSocketChat:
             assert done["payload"]["turn_id"] == "client-turn-1"
 
     def test_done_message_generates_turn_id_when_missing(self, ws_app, monkeypatch):
-        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False):
+        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id=""):
             return "x"
 
         monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", fake_stream)

@@ -425,7 +425,17 @@ export async function handleRpcRequest(req: RpcRequest, io: BridgeIo = defaultIo
           return;
         }
 
-        record.session.agent.abort("Cancelled by user");
+        // 修复 CANCEL-SCOPE-001：改用 AgentSession.abort 而非底层 agent.abort。
+        // 底层 abort 只打断当前 run，无法打断 retry 退避睡眠、排队中的 prompt
+        // 与审批等待——cancel 后工具仍可能被继续执行（重复副作用）。
+        // AgentSession.abort 会 abortRetry + abortCompaction + abortBash 并清
+        // post-prompt 任务；goalReason=interrupted 使其带用户中断语义。
+        try {
+          await record.session.abort({ goalReason: "interrupted", reason: "Interrupted by user" });
+        } catch {
+          // 兜底：session.abort 不可用时退回底层 abort
+          record.session.agent.abort("Cancelled by user");
+        }
         // The active prompt's finally block would also emit done via the guard,
         // but we mark + emit here so cancel is resolved promptly even if the
         // abort does not propagate synchronously.
@@ -985,6 +995,10 @@ export async function handleRpcRequest(req: RpcRequest, io: BridgeIo = defaultIo
           if (!message) { sendError(id, "Missing required parameter: message"); return; }
           const createSessionFn = io.createAgentSession
             ?? (await import("@oh-my-pi/pi-coding-agent")).createAgentSession;
+          // 修复 HEADLESS-LEAK-001：错误路径必须清理订阅与 session。
+          // 此前 session.prompt/waitForIdle 抛错时 unsub/dispose 被跳过，
+          // AgentSession（EventBus/磁盘 session 文件）泄漏；且 headless 不走
+          // orchestratePrompt 无 600s 超时——automation 调度下泄漏会累积。
           const { session } = await createSessionFn({
             hasUI: false,
             autoApprove: true,
@@ -998,10 +1012,13 @@ export async function handleRpcRequest(req: RpcRequest, io: BridgeIo = defaultIo
               answer = event.payload?.content ?? event.content ?? answer;
             }
           });
-          await session.prompt(message);
-          await session.waitForIdle();
-          unsub();
-          await session.dispose();
+          try {
+            await session.prompt(message);
+            await session.waitForIdle();
+          } finally {
+            unsub();
+            await session.dispose().catch(() => {});
+          }
           send(id, { answer, status: "completed" });
         } catch (e: unknown) {
           sendError(id, `Headless prompt failed: ${(e as Error)?.message ?? String(e)}`);

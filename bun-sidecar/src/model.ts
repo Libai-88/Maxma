@@ -26,7 +26,16 @@ export function parseModel(
   if (provider) {
     try {
       const bundled = getBundledModel(provider as GeneratedProvider, modelId);
-      if (bundled) return bundled;
+      if (bundled) {
+        // 修复 BASE_URL-OVERRIDE-001：目录命中时保留用户配置的 base_url。
+        // 此前 bundled 原样返回，用户在 Web UI 配置的自定义端点（自建网关/
+        // 代理）被目录内置端点静默覆盖，请求发往错误地址必然失败。
+        // 能力元数据（reasoning/api/compat）仍用目录值，仅端点以用户配置优先。
+        if (options?.baseUrl && options.baseUrl.trim()) {
+          return { ...bundled, baseUrl: options.baseUrl };
+        }
+        return bundled;
+      }
     } catch {
       // Fall through to manual construction
     }
@@ -34,10 +43,14 @@ export function parseModel(
 
   // Option B: manual fallback (minimal Model object from env vars)
   const baseUrl = options?.baseUrl || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
+  // 修复 API-FORMAT-001：按端点识别协议格式。此前回退硬编码 openai-completions，
+  // anthropic 端点（默认供应商 claude-haiku-3-5 等非目录模型）收到 OpenAI 格式
+  // 请求必然失败。anthropic 端点用 anthropic-messages 协议。
+  const isAnthropic = /anthropic/i.test(baseUrl) || provider === "anthropic";
   return {
     id: modelId,
     name: modelId,
-    api: "openai-completions" as const,
+    api: (isAnthropic ? "anthropic-messages" : "openai-completions") as "anthropic-messages" | "openai-completions",
     provider,
     baseUrl,
     reasoning: false,

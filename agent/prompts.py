@@ -602,6 +602,14 @@ def build_append_prompt() -> str:
             _active_soul = get_active_persona_file()
             _soul = _read_persona(_active_soul)
             if _soul.strip():
+                # 修复 USER_NAME-TOKEN-001：替换 {{USER_NAME}} 占位符
+                # （此前 native 模式原样保留占位符，与 _rebuild 的行为不一致）
+                _user_raw_for_name = _read_if_exists("USER.md") or ""
+                _user_name = _parse_user_name(_user_raw_for_name)
+                if _user_name:
+                    _soul = _soul.replace("{{USER_NAME}}", _user_name)
+                else:
+                    _soul = _soul.replace("{{USER_NAME}}", "你")
                 _parts.append("## 性格设定\n" + _soul.strip())
 
             # USER.md（用户自述）

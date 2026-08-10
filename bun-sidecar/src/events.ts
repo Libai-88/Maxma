@@ -237,6 +237,10 @@ export function mapPiEventToMaxma(
   }
 
   if (type === "agent_end") {
+    // 修复 DONE-DUP-001：cancel/超时路径已通过 handleCancelGuard 发过 done
+    // （guard.done 已置位），迟到的 aborted agent_end 不再重复发送——
+    // 此前无条件重发导致前端/Python 收到重复 done，状态机有二义性
+    if (guard?.done) return null;
     if (guard) guard.done = true;
     return { type: "done", payload: {} };
   }

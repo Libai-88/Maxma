@@ -158,6 +158,16 @@ async def _get_messages_from_sidecar(
         return []
 
 
+def _turn_timeout_seconds() -> int:
+    """单轮整体超时（SETTINGS-TIMEOUT-001）：读取配置的 turn_timeout，
+    此前硬编码 600s 导致 .env 调优无效。"""
+    try:
+        from config.settings import get_settings
+        return int(get_settings().turn_timeout) or 600
+    except Exception:
+        return 600
+
+
 async def _stream_turn_sidecar(
     ws: WebSocket,
     session: SessionState,
@@ -500,10 +510,13 @@ async def _stream_turn_sidecar(
             wait_tasks = [
                 asyncio.create_task(turn_done.wait()),
                 asyncio.create_task(cancel_event.wait()),
+                # 修复 SIDECAR-DISCONNECT-001：sidecar 读循环死亡（崩溃/EOF）时
+                # 立即醒转报错，而非静默挂起直到 600s 超时
+                asyncio.create_task(client.disconnected.wait()),
             ]
             done, pending = await asyncio.wait(
                 wait_tasks,
-                timeout=600,
+                timeout=_turn_timeout_seconds(),
                 return_when=asyncio.FIRST_COMPLETED,
             )
             for pending_task in pending:
@@ -520,8 +533,24 @@ async def _stream_turn_sidecar(
                 if not final_answer:
                     final_answer = ""
                 return final_answer
+            if client.disconnected.is_set():
+                raise RuntimeError("Sidecar disconnected during turn")
         else:
-            await asyncio.wait_for(turn_done.wait(), timeout=600)
+            # 非 cancel 路径同样联动断开事件
+            disconnect_task = asyncio.create_task(client.disconnected.wait())
+            turn_wait = asyncio.create_task(turn_done.wait())
+            done, pending = await asyncio.wait(
+                [turn_wait, disconnect_task],
+                timeout=_turn_timeout_seconds(),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for pending_task in pending:
+                pending_task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+            if not done:
+                raise asyncio.TimeoutError
+            if client.disconnected.is_set():
+                raise RuntimeError("Sidecar disconnected during turn")
     except asyncio.TimeoutError:
         logger.warning(
             "[sidecar] Turn timed out for session %s", sidecar_sid[:8]

@@ -44,6 +44,9 @@ class JsonRpcClient:
         # 避免慢事件 handler（如 WS send_json）阻塞读循环导致 RPC 响应迟到。
         self._event_queue: asyncio.Queue[tuple[str, dict]] = asyncio.Queue()
         self._event_task: asyncio.Task[None] | None = None
+        # 读循环存活事件（SIDECAR-DISCONNECT-001）：读循环异常/EOF 退出时置位，
+        # 等待 in-flight turn 的调用方据此立即醒转，而不是静默挂起直到 600s 超时。
+        self.disconnected = asyncio.Event()
 
     # -- Public API ---------------------------------------------------------
 
@@ -205,6 +208,9 @@ class JsonRpcClient:
                 logger.exception("[rpc] read loop crashed")
         finally:
             self._running = False
+            # 修复 SIDECAR-DISCONNECT-001：读循环退出（崩溃/EOF）置位断开事件，
+            # 让等待 in-flight turn 的调用方立即醒转，不再静默挂起直到超时
+            self.disconnected.set()
             # Cancel all pending futures
             for fut in self._pending.values():
                 if not fut.done():

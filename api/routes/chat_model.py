@@ -7,6 +7,9 @@ chat.py 通过 `from api.routes.chat_model import _resolve_chat_model` 使用。
 from api.routes.providers import _decrypt_api_key, _find_provider, _load_providers
 from api.yaml_store import yaml_file_lock
 from app_paths import PROVIDERS_YAML_PATH
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _resolve_chat_model(provider_id: str, model_name: str) -> dict[str, str | int]:
@@ -17,6 +20,10 @@ def _resolve_chat_model(provider_id: str, model_name: str) -> dict[str, str | in
         provider = _find_provider(_load_providers(), requested_provider)
 
     if provider is None:
+        logger.warning(
+            "[model] Provider %r not found; falling back to openai/gpt-4o (empty credentials)",
+            requested_provider,
+        )
         return {
             "provider": requested_provider or "openai",
             "model": requested_model,
@@ -29,6 +36,12 @@ def _resolve_chat_model(provider_id: str, model_name: str) -> dict[str, str | in
     models = provider.get("models")
     selected_model = requested_model
     if isinstance(models, list) and models and selected_model not in models:
+        # 修复 MODEL-SILENT-SWAP-001：静默替换为列表首个模型时记录日志，
+        # 避免"实际调用模型与 UI 显示不一致"无任何告警
+        logger.warning(
+            "[model] Requested model %r not in provider %r models; using %r",
+            selected_model, requested_provider, models[0],
+        )
         selected_model = str(models[0])
     return {
         "provider": str(provider.get("id") or requested_provider or "openai"),
