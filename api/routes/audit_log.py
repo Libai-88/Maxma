@@ -59,14 +59,22 @@ class _ChainedLock:
         self.file_lock = None
 
     def __enter__(self):
+        # 修复 LOCK-LEAK-001：文件锁获取失败（超时抛异常）时也必须释放
+        # 进程内锁——此前 __exit__ 不会被调用，inproc 锁永不释放，
+        # 后续所有 audit-log 请求卡死在 acquire()（永久死锁）
         self.inproc.acquire()
-        self.file_lock = yaml_file_lock(self.path_str, timeout=5)
-        self.file_lock.__enter__()
+        try:
+            self.file_lock = yaml_file_lock(self.path_str, timeout=5)
+            self.file_lock.__enter__()
+        except Exception:
+            self.inproc.release()
+            raise
         return self
 
     def __exit__(self, *args):
         try:
-            self.file_lock.__exit__(*args)
+            if self.file_lock is not None:
+                self.file_lock.__exit__(*args)
         finally:
             self.inproc.release()
 

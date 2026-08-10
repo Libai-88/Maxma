@@ -184,8 +184,9 @@ class TestStaleSessionValidation:
                 ws, session, "hello", "system prompt",
             )
 
-        # 验证：stale session 被清理
-        sm_inst.remove.assert_called_once_with("maxma-session-1")
+        # 验证：stale session 映射被清理（CONTEXT-RESTORE-001：只清 sidecar_id
+        # 保留 turns，供 get_recent_turns 恢复上下文）
+        sm_inst.clear_sidecar_id.assert_called_once_with("maxma-session-1")
         # 验证：新 session 被创建
         methods = [c[0] for c in call_log]
         assert "create_session" in methods
@@ -461,6 +462,7 @@ class _FakeChatSession:
         self._sidecar_session_id = None
         self.active_turn_ws = None
         self._last_model_key = None
+        self._active_task = None
         self.recent_message_ids = deque(maxlen=200)
 
     def persistent_metadata(self):

@@ -910,14 +910,11 @@ class TestGenerateTitle:
 
 
 class TestUnconstifySessionIdempotent:
-    def test_unconstify_when_session_missing_still_ok(self, app_client, monkeypatch):
-        # session 不存在，仍应返回 ok（因为先 delete_const_session 再 get session）
-        monkeypatch.setattr(
-            "api.const_session_store.delete_const_session", lambda sid: False
-        )
+    def test_unconstify_when_session_missing_returns_404(self, app_client, monkeypatch):
+        # PATH-TRAVERSAL-001：会话不存在返回 404（此前无校验直接返回 ok，
+        # 且 session_id 未校验存在路径穿越删任意 YAML 的风险）
         resp = app_client["client"].delete("/sessions/ghost/const")
-        assert resp.status_code == 200
-        assert resp.json() == {"status": "ok"}
+        assert resp.status_code == 404
 
     def test_unconstify_clears_session_flags(self, app_client, monkeypatch):
         sm = app_client["app"].state.session_manager

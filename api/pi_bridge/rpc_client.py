@@ -148,6 +148,9 @@ class JsonRpcClient:
             if not fut.done():
                 fut.set_exception(RuntimeError("Client stopped"))
         self._pending.clear()
+        # 修复 HEARTBEAT-CLEANUP-001：stop 也置位 disconnected——
+        # 等待 in-flight turn 的调用方（chat.py 三方等待）据此立即醒转
+        self.disconnected.set()
 
     @property
     def is_running(self) -> bool:

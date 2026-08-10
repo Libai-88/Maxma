@@ -43,6 +43,7 @@ class _FakeChatSession:
         self._sidecar_session_id = None
         self.active_turn_ws = None
         self._last_model_key = None
+        self._active_task = None
         self.recent_message_ids = deque(maxlen=200)
 
     def persistent_metadata(self):
@@ -403,7 +404,7 @@ class TestSidecarTurnFailures:
         client.disconnected = asyncio.Event()  # SIDECAR-DISCONNECT-001：三方等待需要 Event
         client.on = MagicMock(side_effect=lambda _event, _handler: lambda: None)
 
-        async def call(method, params):
+        async def call(method, params, **kwargs):
             if method == "create_session":
                 return {"session_id": "sc-timeout"}
             return {}
@@ -435,7 +436,7 @@ class TestSidecarTurnFailures:
             )
 
         client.call.assert_any_await(
-            "cancel", {"session_id": "sc-timeout"}
+            "cancel", {"session_id": "sc-timeout"}, timeout=5
         )
 
 

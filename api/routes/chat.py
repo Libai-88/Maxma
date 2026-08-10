@@ -108,11 +108,20 @@ async def _destroy_sidecar_session(sidecar_mgr, session) -> None:
     if client is None or not getattr(client, "is_running", True):
         return  # sidecar unavailable — skip (avoid restarting it just to destroy)
     try:
-        await client.call("destroy_session", {"session_id": sidecar_sid})
+        await client.call("destroy_session", {"session_id": sidecar_sid}, timeout=5)
         logger.info(
             "[sidecar] destroyed sidecar session %s on disconnect",
             sidecar_sid[:8],
         )
+        # 修复 DESTROY-STATE-001：destroy 成功后清空映射与本地引用，
+        # 避免下轮 stale 校验失败再走重建（重复 RPC 往返）
+        try:
+            from api.pi_bridge.session_adapter import get_session_map
+            sm = get_session_map()
+            sm.clear_sidecar_id(session.session_id)
+        except Exception:
+            pass
+        session._sidecar_session_id = None
     except Exception:
         logger.debug(
             "[sidecar] Failed to destroy session %s on disconnect",
@@ -231,7 +240,10 @@ async def _stream_turn_sidecar(
             )
             sidecar_sid = None
             sm = get_session_map()
-            sm.remove(session.session_id)
+            # 修复 CONTEXT-RESTORE-001：stale 校验失败只清 sidecar 映射，
+            # 保留 turns 列供 get_recent_turns 恢复上下文（此前 remove 整行
+            # 删除，最近 20 轮对话被不可逆删除且恢复功能从未生效）
+            sm.clear_sidecar_id(session.session_id)
 
     if not sidecar_sid:
         # Build system prompt with recent past turns for continuity
@@ -532,7 +544,7 @@ async def _stream_turn_sidecar(
             if cancel_event.is_set():
                 logger.info("[sidecar] Turn cancelled for session %s", sidecar_sid[:8])
                 try:
-                    await client.call("cancel", {"session_id": sidecar_sid})
+                    await client.call("cancel", {"session_id": sidecar_sid}, timeout=5)
                 except Exception as e:
                     logger.warning("[sidecar] Failed to cancel after cancel_event for session %s: %s", sidecar_sid[:8], e)
                 if not final_answer:
@@ -561,7 +573,7 @@ async def _stream_turn_sidecar(
             "[sidecar] Turn timed out for session %s", sidecar_sid[:8]
         )
         try:
-            await client.call("cancel", {"session_id": sidecar_sid})
+            await client.call("cancel", {"session_id": sidecar_sid}, timeout=5)
         except Exception as e:
             logger.warning("[sidecar] Failed to cancel after timeout for session %s: %s", sidecar_sid[:8], e)
         raise
@@ -570,7 +582,7 @@ async def _stream_turn_sidecar(
             "[sidecar] Turn failed for session %s", sidecar_sid[:8]
         )
         try:
-            await client.call("cancel", {"session_id": sidecar_sid})
+            await client.call("cancel", {"session_id": sidecar_sid}, timeout=5)
         except Exception as cancel_err:
             logger.warning("[sidecar] Failed to cancel after error for session %s: %s", sidecar_sid[:8], cancel_err)
         if not final_answer:
@@ -633,6 +645,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
     _turn_system_prompt: str = ""
     _turn_id: str = ""
     _turn_model_config: dict[str, str | int] = {}
+    _turn_client_msg_id: str = ""
 
     async def _handle_turn_result(
         task: asyncio.Task,
@@ -704,6 +717,8 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             except Exception:
                 logger.debug("[ws] Failed to report turn failure", exc_info=True)
             turn_task = None
+            if session._active_task is task:
+                session._active_task = None
             return
 
         um = _turn_user_message
@@ -715,6 +730,9 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                 {"type": WsEventType.ANSWER, "payload": {"turn_id": _new_turn_id(tid), "content": final_answer}}
             )
             session.message_count += 2
+            # IDEMPOTENCY-001：turn 成功后才记录幂等 id（失败轮次可重试）
+            if _turn_client_msg_id and _turn_client_msg_id not in session.recent_message_ids:
+                session.recent_message_ids.append(_turn_client_msg_id)
 
             try:
                 sm = get_session_map()
@@ -753,6 +771,8 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             payload={"context_usage": context_usage},
         )
         turn_task = None
+        if session._active_task is not None and session._active_task.done():
+            session._active_task = None
 
     try:
         while True:
@@ -956,6 +976,9 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             # 修复 IDEMPOTENCY-001：client_msg_id 幂等去重。
             # 前端在发送失败（WS 断开）后重试时复用同一 id——同一逻辑消息
             # 只执行一次，避免写文件/bash 等副作用工具重复执行。
+            # 注意：id 不在收到时立即记录——若轮次失败（PROMPT_ERROR/超时/
+            # 断开）且前端认为未发送而重试，立即记录会把重试误判为重复丢弃
+            # （消息静默丢失）。改为 turn 成功后记录（见 _handle_turn_result）。
             client_msg_id = payload.get("client_msg_id")
             if isinstance(client_msg_id, str) and client_msg_id:
                 if client_msg_id in session.recent_message_ids:
@@ -963,7 +986,6 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                         "[ws] 重复 client_msg_id=%s 已忽略（幂等去重）", client_msg_id[:12]
                     )
                     continue
-                session.recent_message_ids.append(client_msg_id)
 
             # MAXTOKENS-END2END-001：记录用户设置的输出上限（会话创建时使用）
             _mt = payload.get("max_tokens")
@@ -972,7 +994,8 @@ async def websocket_chat(ws: WebSocket, session_id: str):
 
             # 修复 CONN-MUTEX-001：同一 session 多 WS 连接互斥。
             # 跨连接并发 turn 会让双方订阅同一 sidecar session 的事件流，
-            # 消息归属错乱。仅允许持有 active_turn_ws 的连接发起新 turn。            if session.active_turn_ws is not None and session.active_turn_ws is not ws:
+            # 消息归属错乱。仅允许持有 active_turn_ws 的连接发起新 turn。
+            if session.active_turn_ws is not None and session.active_turn_ws is not ws:
                 await ws.send_json({
                     "type": WsEventType.ERROR,
                     "payload": {
@@ -1095,12 +1118,17 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             _turn_system_prompt = system_prompt
             _turn_id = turn_id
             _turn_model_config = model_config
+            _turn_client_msg_id = client_msg_id if isinstance(client_msg_id, str) else ""
 
             # Reset cancel event for new turn
             cancel_event.clear()
 
             # CONN-MUTEX-001：记录 turn 归属连接，turn 结束后清除
             session.active_turn_ws = ws
+            # F14-DELETE-CANCEL-001：turn 任务挂到 SessionState._active_task，
+            # 供 DELETE /sessions 等路径取消进行中的 turn（此前只存局部变量）
+            if session._active_task is not None and not session._active_task.done():
+                session._active_task.cancel()
 
             # Start streaming as a background task so the message loop
             # remains responsive for cancel and auxiliary messages
@@ -1113,6 +1141,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                     turn_id=turn_id,
                 )
             )
+            session._active_task = turn_task
             # Go back to loop top — _handle_turn_result processes completion
             # via the asyncio.wait interleaving or the turn_task.done() check
 

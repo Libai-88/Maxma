@@ -158,6 +158,22 @@ class SessionMap:
             )
             self._conn.commit()
         return cur.rowcount > 0
+
+    def clear_sidecar_id(self, maxma_id: str) -> None:
+        """仅清空 sidecar 映射，保留 turns 列（CONTEXT-RESTORE-001）。
+
+        会话重建（sidecar 重启/断线重连/模型切换）时 sidecar session 必然
+        失效，但最近 N 轮对话（turns 列）是恢复上下文的唯一持久来源。
+        此前用 remove() 整行删除，紧接着的 get_recent_turns() 永远读空——
+        "恢复最近轮次"功能从未真正生效，且历史被不可逆删除。
+        """
+        with self._lock:
+            self._conn.execute(
+                "UPDATE session_map SET sidecar_id='', updated_at=datetime('now') "
+                "WHERE maxma_id = ?",
+                (maxma_id,),
+            )
+            self._conn.commit()
     
     def set_const(self, maxma_id: str, is_const: bool = True) -> None:
         """标记一个 Maxma session 是否为 const session。"""

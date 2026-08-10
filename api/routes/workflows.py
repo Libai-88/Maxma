@@ -190,8 +190,13 @@ async def list_workflow_runs(session_id: str, request: Request):
         session_runs = [
             run.to_dict()
             for run in _runs.values()
-            if run.parent_turn_id == session_id
-            or run.parent_turn_id.startswith(session_id[:8])
+            if (
+                run.parent_turn_id is not None
+                and (
+                    run.parent_turn_id == session_id
+                    or run.parent_turn_id.startswith(session_id[:8])
+                )
+            )
         ]
     return {"runs": session_runs}
 

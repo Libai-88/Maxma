@@ -296,7 +296,16 @@ class SidecarManager:
                 continue
 
         # If we get here, the sidecar is gone — mark it for transparent restart
+        # 修复 HEARTBEAT-CLEANUP-001：先 stop 旧 client——置位 disconnected
+        # 事件让 in-flight turn 立即醒转（此前只置 None，读循环存活的旧 client
+        # 不会置位事件，turn 挂满 600s；且 _read_task/_event_task 泄漏）
+        old_client = self._client
         self._client = None
+        if old_client is not None:
+            try:
+                await old_client.stop()
+            except Exception:
+                logger.warning("[sidecar] heartbeat: failed to stop stale client", exc_info=True)
         logger.info("[sidecar] heartbeat: marked for restart on next get_client()")
 
     async def stop(self) -> None:

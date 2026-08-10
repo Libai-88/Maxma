@@ -222,9 +222,9 @@ class TestDeleteSession:
 
 class TestUndoSession:
     def test_undo_n_less_than_1(self, app_client):
+        # PARAM-RANGE-001：n<1 现在返回 400（此前 200 + deleted_count:0 掩盖错误）
         resp = app_client["client"].post("/sessions/s1/undo?n=0")
-        assert resp.status_code == 200
-        assert resp.json() == {"deleted_count": 0}
+        assert resp.status_code == 400
 
     def test_undo_no_sidecar_503(self, app_client):
         app_client["client"].post("/sessions")
@@ -247,6 +247,9 @@ class TestUnconstifySession:
         monkeypatch.setattr(
             "api.const_session_store.delete_const_session", fake_delete
         )
+        # PATH-TRAVERSAL-001：需要会话存在（404 校验前移）
+        sm = app_client["app"].state.session_manager
+        sm._sessions["s1"] = _FakeSession(session_id="s1", is_const=True, const_name="c1")
         resp = app_client["client"].delete("/sessions/s1/const")
         assert resp.status_code == 200
         assert resp.json() == {"status": "ok"}

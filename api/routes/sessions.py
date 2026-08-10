@@ -11,6 +11,10 @@ from agent.prompts import get_system_prompt_parts
 
 logger = logging.getLogger(__name__)
 
+# PATH-TRAVERSAL-001：session_id 安全字符校验（uuid hex + 短划线等）
+import re
+_SAFE_SID_RE = re.compile(r"^[0-9a-zA-Z_-]{1,64}$")
+
 router = APIRouter()
 
 
@@ -130,6 +134,10 @@ async def set_session_permission_mode(
 
 @router.get("/sessions/{session_id}/messages")
 async def get_messages(session_id: str, request: Request, limit: int = 50):
+    # 修复 PARAM-RANGE-001：limit 无界/负值语义错乱（负 limit 会让
+    # get_recent_turns 的 turns[-count:] 切出错误片段）
+    if limit < 1 or limit > 500:
+        raise HTTPException(status_code=400, detail="limit 必须在 1-500 之间")
     sm = request.app.state.session_manager
     session = await sm.get(session_id)
     logger.info("[messages] get_messages(%s): session=%s", session_id[:8], session)
@@ -267,8 +275,8 @@ async def _sync_const_session_after_undo(session, deleted: int, *, sidecar_mgr=N
 @router.post("/sessions/{session_id}/undo")
 async def undo_session_messages(session_id: str, request: Request, n: int = 1):
     """撤回最近 n 轮对话（默认撤回最后一轮）。"""
-    if n < 1:
-        return {"deleted_count": 0}
+    if n < 1 or n > 100:
+        raise HTTPException(status_code=400, detail="n 必须在 1-100 之间")
     sm = request.app.state.session_manager
     session = await sm.get(session_id)
     if session is None:
@@ -640,14 +648,21 @@ async def generate_session_title(session_id: str, request: Request):
 @router.delete("/sessions/{session_id}/const")
 async def unconstify_session(session_id: str, request: Request):
     """取消固定，删除磁盘文件。"""
-    from api.const_session_store import delete_const_session
+    # 修复 PATH-TRAVERSAL-001：session_id 只允许安全字符（uuid hex 等），
+    # 拒绝路径分隔符/`..`——此前未校验直接拼 `_CONST_DIR / f"{session_id}.yaml"`，
+    # Starlette 解码 %2F 后可穿越目录删除任意 .yaml
+    if not session_id or "/" in session_id or "\\" in session_id or ".." in session_id or not _SAFE_SID_RE.match(session_id):
+        raise HTTPException(status_code=400, detail="非法的 session_id")
 
-    delete_const_session(session_id)
+    from api.const_session_store import delete_const_session
 
     sm = request.app.state.session_manager
     session = await sm.get(session_id)
-    if session is not None:
-        session.is_const = False
-        session.const_name = ""
+    if session is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+
+    delete_const_session(session_id)
+    session.is_const = False
+    session.const_name = ""
 
     return {"status": "ok"}

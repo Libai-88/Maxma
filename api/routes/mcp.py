@@ -612,6 +612,20 @@ async def install_from_registry(body: RegistryInstallBody, request: Request):
         if env:
             server_dict["env"] = env
 
+    # 修复 REGISTRY-VALIDATE-001：Registry 安装路径与 create/update 端点
+    # 一致地执行命令白名单与 env 黑名单校验——此前第三方数据直接写入配置，
+    # 成为唯一绕过 _validate_stdio_command/_validate_env_vars 的路径
+    if transport == "stdio":
+        try:
+            server_dict["command"] = _validate_stdio_command(str(server_dict.get("command", "")))
+        except HTTPException as e:
+            raise HTTPException(status_code=400, detail=f"Registry 命令校验失败: {e.detail}") from e
+    if server_dict.get("env"):
+        try:
+            _validate_env_vars(server_dict["env"])
+        except HTTPException as e:
+            raise HTTPException(status_code=400, detail=f"Registry env 校验失败: {e.detail}") from e
+
     # 写入本地配置
     with yaml_file_lock(MCP_YAML_PATH):
         entries = _load_raw()
