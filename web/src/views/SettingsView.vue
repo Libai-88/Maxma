@@ -4,6 +4,12 @@
       <h2>设置 SETTINGS</h2>
     </div>
 
+    <!-- 面板配置加载失败提示（PANEL-ERROR-VISIBLE-001）：不阻塞整体设置页 -->
+    <div v-if="panelLoadError" class="panel-error-banner" role="alert">
+      <span>{{ panelLoadError }}</span>
+      <button class="btn" @click="loadPanelConfigs">重试面板</button>
+    </div>
+
     <div v-if="loading" class="loading">加载中...</div>
     <div v-else-if="loadError" class="empty">
       <p>加载失败: {{ loadError }}</p>
@@ -557,14 +563,23 @@ async function loadSettings() {
   }
 }
 
+const panelLoadError = ref('')
+
 async function loadPanelConfigs() {
-  // 各面板独立加载，单个失败不影响其他面板
+  // 修复 PANEL-ERROR-VISIBLE-001：加载失败时记录错误并显示重试入口——
+  // 此前静默显示默认值（如"已停用"实际已启用），用户按错误默认值操作
+  // 可能覆盖真实配置
+  panelLoadError.value = ''
+  let failed = 0
   try { tts.value = { ...tts.value, ...(await api.getTtsConfig()) } }
-  catch (e) { log.warn('Failed to load TTS config:', e) }
+  catch (e) { failed++; log.warn('Failed to load TTS config:', e) }
   try { browser.value = { ...browser.value, ...(await api.getBrowserToolsConfig()) } }
-  catch (e) { log.warn('Failed to load browser tools config:', e) }
+  catch (e) { failed++; log.warn('Failed to load browser tools config:', e) }
   try { subagent.value = { ...subagent.value, ...(await api.getSubAgentConfig()) } }
-  catch (e) { log.warn('Failed to load sub-agent config:', e) }
+  catch (e) { failed++; log.warn('Failed to load sub-agent config:', e) }
+  if (failed > 0) {
+    panelLoadError.value = `有 ${failed} 个面板配置加载失败，当前显示的可能不是实际配置`
+  }
 }
 
 // ── 去重：避免同一个 setting path 短时间内重复请求后端 ──
@@ -666,6 +681,22 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+
+
+/* 面板配置加载失败提示（PANEL-ERROR-VISIBLE-001） */
+.panel-error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--status-warn) 35%, var(--border));
+  border-radius: var(--radius);
+  font-size: 13px;
+  color: var(--text-primary);
+}
 .settings-view {
   flex: 1;
   min-height: 0;

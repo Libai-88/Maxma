@@ -164,7 +164,8 @@
           </select>
           <button class="btn-small" @click="loadHistory">刷新</button>
         </div>
-        <div v-if="!history || history.snapshots.length < 2" class="empty-text">暂无足够的历史快照</div>
+        <div v-if="historyLoading" class="empty-text">历史数据加载中...</div>
+        <div v-else-if="!history || history.snapshots.length < 2" class="empty-text">暂无足够的历史快照</div>
         <template v-else>
           <div class="sub-section">
             <div class="sub-title">HTTP 请求数 ({{ history.snapshots.length }} 个采样点)</div>
@@ -231,8 +232,16 @@ async function refresh() {
   await metricsStore.refresh()
 }
 
+const historyLoading = ref(false)
 async function loadHistory() {
-  await metricsStore.loadHistory(historyWindow.value)
+  // 修复 HISTORY-LOADING-001：历史窗口加载有 loading 反馈，
+  // 失败与"暂无数据"不再混同
+  historyLoading.value = true
+  try {
+    await metricsStore.loadHistory(historyWindow.value)
+  } finally {
+    historyLoading.value = false
+  }
 }
 
 function startTimer() {

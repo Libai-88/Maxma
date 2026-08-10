@@ -37,6 +37,9 @@ export interface UseChatInputOptions {
 
       // ── 事件回调（接入时由 ChatView 提供） ──
       onSend?: (text: string, refs: ParsedRef[], providerId?: string, modelName?: string, thinkPathId?: ThinkPathId, clientMsgId?: string) => boolean
+      /** 重连状态（RECONNECT-STATE-001）：重连耗尽标记与手动重连回调 */
+      reconnectExhausted?: Ref<boolean>
+      onReconnect?: () => void
   onStop?: () => void
   onModelChange?: (providerId: string, modelName: string) => void
   onCommitQuote?: () => void
@@ -54,6 +57,10 @@ export interface UseChatInputReturn {
   thinkPathEnabled: Ref<boolean>
   quotedSelections: Ref<QuotedSelection[]>
   quoteCandidate: Ref<QuoteCandidate | null>
+  /** 重连耗尽标记（RECONNECT-STATE-001） */
+  reconnectExhausted?: Ref<boolean>
+  /** 手动重连回调（RECONNECT-STATE-001） */
+  onReconnect?: () => void
   // ── 派生 ──
   /** 是否可提交：有文本且未在流式输出且可发送 */
   canSubmit: ComputedRef<boolean>
@@ -81,6 +88,9 @@ export interface UseChatInputReturn {
  *   - clearText/appendText/setText 操作内部 text ref，可独立使用
  */
 export function useChatInput(options: UseChatInputOptions = {}): UseChatInputReturn {
+  // RECONNECT-STATE-001：重连状态透传（由 ChatView 注入）
+  const reconnectExhausted = options.reconnectExhausted
+  const onReconnect = options.onReconnect
   const {
     isStreaming: extIsStreaming,
     canSend: extCanSend,
@@ -190,6 +200,8 @@ export function useChatInput(options: UseChatInputOptions = {}): UseChatInputRet
   }
 
   return {
+    reconnectExhausted,
+    onReconnect,
     text: localText,
     isStreaming,
     disabled,

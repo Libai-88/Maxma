@@ -293,6 +293,9 @@ async function loadPersonas() {
 }
 
 async function onPersonaChange() {
+  // 修复 PERSONA-SWITCH-ROLLBACK-001：切换失败时回滚 select 到原值——
+  // 此前 v-model 已乐观切换到新文件，失败后选择器与内容不一致
+  const previous = activeFile.value
   // 切换人格：先保存当前（如果有改动），再调用后端切换，最后加载新人格
   if (content.value !== savedContent.value) {
     await saveContent()
@@ -303,6 +306,7 @@ async function onPersonaChange() {
     personas.value.forEach(p => { p.active = p.file === activeFile.value })
   } catch (e: unknown) {
     log.error('[SoulView] switchPersona FAIL', e)
+    activeFile.value = previous  // 回滚选择
     loadError.value = '切换人格失败: ' + (e instanceof Error ? e.message : String(e))
     return
   }

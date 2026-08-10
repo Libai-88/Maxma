@@ -189,7 +189,8 @@ const { health } = storeToRefs(useHealthStore())
 const {
   connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId,
   taskTrackerData, send, cancel, sendUserResponse, sendArtifactAction, sendPlanResponse, removeTurns,
-  privateMode, setPrivateMode, autoApprove, setAutoApprove
+  privateMode, setPrivateMode, autoApprove, setAutoApprove,
+  reconnectExhausted, reconnect,
 } = useChat(sessionId)
 
 const workbench = useWorkbenchStore()
@@ -406,6 +407,8 @@ const chatInputInstance = provideChatInput({
   onModelChange,
   onCommitQuote: commitCandidate,
   onRemoveQuote: removeQuote,
+  reconnectExhausted,
+  onReconnect: reconnect,
 })
 
 const isSubagent = computed(() => {

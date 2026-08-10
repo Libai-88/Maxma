@@ -105,3 +105,27 @@ describe('useCollabStore', () => {
     })
   })
 })
+
+describe('COLLAB-RACE-001 会话切换竞态守卫', () => {
+  it('快速 A→B 切换时慢响应（A）不覆盖新会话（B）数据', async () => {
+    const store = useCollabStore()
+
+    // A 会话响应慢：先挂起，稍后 resolve
+    let resolveA!: (v: unknown) => void
+    ;(api.listSessionShares as any).mockImplementationOnce(
+      () => new Promise((r) => { resolveA = r })
+    )
+    const promiseA = store.loadShares('sessA')
+    // B 会话响应快
+    ;(api.listSessionShares as any).mockResolvedValueOnce([{ session_id: 'sessB', share_id: 'b1' }])
+    await store.loadShares('sessB')
+    expect(store.shares).toHaveLength(1)
+    expect(store.shares[0].share_id).toBe('b1')
+
+    // A 的慢响应此时才到：seq 已过期，必须丢弃
+    resolveA([{ session_id: 'sessA', share_id: 'a1' }])
+    await promiseA
+    expect(store.shares[0].share_id).toBe('b1')
+    expect(store.shares[0].share_id).not.toBe('a1')
+  })
+})

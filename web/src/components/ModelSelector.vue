@@ -129,6 +129,11 @@ function syncInitialSelection() {
     return
   }
 
+  // 修复 MODEL-SILENT-SWAP-002：当前选择不在可用列表时静默改选首个——
+  // 记录日志便于排查（模型被移除/API key 失效导致列表变化时）
+  console.warn(
+    `[ModelSelector] 当前选择不在可用模型列表，自动切换为 ${models[0].id}（此前选择: ${chatInput.providerId.value}/${chatInput.modelName.value}）`,
+  )
   onSelectModel(models[0].id)
 }
 

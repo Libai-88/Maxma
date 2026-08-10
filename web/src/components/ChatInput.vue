@@ -1,8 +1,14 @@
 <template>
   <div class="chat-input-wrapper" role="form" aria-label="消息输入">
-    <div v-if="connectionError" class="chat-connection-error" role="alert" aria-live="assertive">
+    <div v-if="connectionError || reconnectExhausted" class="chat-connection-error" role="alert" aria-live="assertive">
       <Icon class="chat-connection-error-icon" name="warning" :size="16" />
-      <span class="chat-connection-error-text">{{ connectionError }}</span>
+      <span class="chat-connection-error-text">{{ connectionError || (reconnectExhausted ? '连接已断开，自动重连失败' : '') }}</span>
+      <button
+        v-if="reconnectExhausted && onReconnect"
+        type="button"
+        class="chat-connection-error-retry"
+        @click="onReconnect"
+      >重新连接</button>
       <button type="button" class="chat-connection-error-close" aria-label="关闭连接错误" title="关闭连接错误" @click="connectionError = null"><Icon name="close" :size="14" /></button>
     </div>
     <div v-if="imageError" class="chat-image-error" role="alert" aria-live="assertive">
@@ -232,6 +238,8 @@ const {
   thinkPathEnabled,
   quotedSelections,
   quoteCandidate,
+  reconnectExhausted,
+  onReconnect,
 } = chatInput
 
 const text = ref('')
@@ -295,11 +303,16 @@ useGsap((_ctx, contextSafe) => {
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const inputContainerRef = ref<HTMLDivElement | null>(null)
 const loading = ref(false)
-const inputPlaceholder = computed(() =>
-  canSend.value
-    ? '输入消息…… 输入 @ 选择技能 · 输入 # 选择工具 · 输入 ! 选择宏'
-    : '后端连接中，可先输入内容，连接完成后发送……'
-)
+const inputPlaceholder = computed(() => {
+  if (canSend.value) {
+    return '输入消息…… 输入 @ 选择技能 · 输入 # 选择工具 · 输入 ! 选择宏'
+  }
+  // 修复 RECONNECT-STATE-001：区分"连接中"与"已放弃重连"
+  if (reconnectExhausted) {
+    return '连接已断开，请点击下方"重新连接"'
+  }
+  return '后端连接中，可先输入内容，连接完成后发送……'
+})
 const sendButtonTitle = computed(() => {
   if (noProvider.value) return '请先在模型设置中添加 LLM 提供商'
   if (!canSend.value) return '后端连接中，暂时还不能发送'

@@ -1711,9 +1711,30 @@ export function useChat(sessionId: Ref<string>) {
     void refreshSessions()
   }
 
+  // 修复 RECONNECT-STATE-001：重连状态暴露。
+  // reconnectExhausted：20 次退避重连全部失败（连接已放弃）；
+  // reconnect()：手动重连（重置退避计数并重新连接）。
+  const reconnectExhausted = computed(() => {
+    const ch = activeChannel.value
+    return !!ch && !ch.connected && ch.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS
+  })
+
+  function reconnect() {
+    const ch = activeChannel.value
+    if (!ch) return
+    ch.reconnectAttempts = 0
+    if (ch.reconnectTimer) {
+      clearTimeout(ch.reconnectTimer)
+      ch.reconnectTimer = null
+    }
+    log.info(`手动重连 (session=${sessionId.value})`)
+    ensureConnected(sessionId.value)
+  }
+
   return {
     connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId,
     contextUsage, taskTrackerData,
+    reconnectExhausted, reconnect,
     send, cancel, sendUserResponse, sendArtifactAction, sendPlanResponse, removeTurns,
     privateMode, setPrivateMode,
     autoApprove, setAutoApprove,
