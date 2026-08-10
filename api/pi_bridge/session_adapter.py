@@ -108,6 +108,7 @@ class SessionMap:
         for col_sql in [
             "ALTER TABLE session_map ADD COLUMN is_const INTEGER DEFAULT 0",
             "ALTER TABLE session_map ADD COLUMN turns TEXT DEFAULT '[]'",
+            "ALTER TABLE session_map ADD COLUMN message_ids TEXT DEFAULT '[]'",
         ]:
             try:
                 self._conn.execute(col_sql)
@@ -233,6 +234,35 @@ class SessionMap:
                 return turns[-count:]
             return []
 
+    def remove_recent_turns(self, maxma_id: str, count: int) -> int:
+        """从持久化 turns 中移除最近 count 轮（UNDO-SYNC-001）。
+
+        撤回（undo）时调用：sidecar 消息已被撤销，但 SessionMap 的 turns
+        列若不同步，sidecar 会话销毁/重启后已撤回的轮次会被恢复进上下文，
+        重启后 message_count 也把撤回轮次算回去。返回实际移除的轮数。
+        """
+        if count <= 0:
+            return 0
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT turns FROM session_map WHERE maxma_id = ?",
+                (maxma_id,),
+            ).fetchone()
+            if not row or not row[0]:
+                return 0
+            turns = _decode_turns(row[0])
+            removed = min(count, len(turns))
+            if removed <= 0:
+                return 0
+            remaining = turns[:-removed]
+            self._conn.execute(
+                "UPDATE session_map SET turns = ?, updated_at = datetime('now') "
+                "WHERE maxma_id = ?",
+                (json.dumps(remaining, ensure_ascii=False), maxma_id),
+            )
+            self._conn.commit()
+            return removed
+
     def list_all(self) -> list[dict[str, str]]:
         """列出所有映射（用于调试/管理）。"""
         with self._lock:
@@ -273,6 +303,42 @@ class SessionMap:
                 "updated_at": r[4],
             })
         return result
+
+    # ── 消息幂等 id 持久化（IDEMPOTENCY-PERSIST-001）────────────────
+    # recent_message_ids 只存在内存（SessionState.deque，maxlen=200）：
+    # 后端重启后清空，断线重试的同一 client_msg_id 会被当作新消息再次
+    # 执行（写文件等副作用重复）。持久化到本表，重启后仍可去重。
+
+    def get_message_ids(self, maxma_id: str) -> list[str]:
+        """读取该会话已成功执行的消息幂等 id 列表。"""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT message_ids FROM session_map WHERE maxma_id = ?",
+                (maxma_id,),
+            ).fetchone()
+        if not row or not row[0]:
+            return []
+        try:
+            decoded = json.loads(row[0])
+        except (TypeError, json.JSONDecodeError):
+            return []
+        return [str(i) for i in decoded] if isinstance(decoded, list) else []
+
+    def append_message_id(self, maxma_id: str, msg_id: str) -> None:
+        """追加一个已成功执行的幂等 id（保留最近 200 个，与内存 deque 一致）。"""
+        ids = self.get_message_ids(maxma_id)
+        if msg_id in ids:
+            return
+        ids.append(msg_id)
+        if len(ids) > 200:
+            ids = ids[-200:]
+        with self._lock:
+            self._conn.execute(
+                "UPDATE session_map SET message_ids = ?, updated_at = datetime('now') "
+                "WHERE maxma_id = ?",
+                (json.dumps(ids, ensure_ascii=False), maxma_id),
+            )
+            self._conn.commit()
     
     @property
     def count(self) -> int:

@@ -10,6 +10,7 @@ import inspect
 import json
 import logging
 import os
+import time
 import uuid
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -39,6 +40,21 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _PUBLIC_TURN_ERROR = "后端处理失败，请稍后重试"
+
+# PERF-TOOL-OUTPUT-001：工具输出过大——bash/launch 等工具可返回数 MB 输出，
+# 全量经 WS 转发后：1) 前端存进 turn.events 并随 turns 全量 JSON.stringify
+# 写入 localStorage（长会话每轮 800ms 防抖全量序列化，体积爆炸后主线程卡死）；
+# 2) WS 消息本身巨大拖慢流式。转发前截断，UI 展示不受影响（截断提示明确）。
+_MAX_TOOL_OUTPUT_LEN = 100_000  # 100KB
+_MAX_TOOL_ERROR_LEN = 20_000   # 20KB
+
+# MEMORY-EVENTS-001：OMP 不通过 AgentSession subscribe 流暴露 memory 事件，
+# 前端 memory_* 卡片链路此前是端到端死代码。本后端在 turn 内识别"写类"
+# 记忆工具的调用，在 done 之后合成 memory_start/memory_tool_*/memory_done
+# 事件流（前端契约：memory 事件必须带与 done 一致的 turn_id、且在 done
+# 之后到达——done handler 先设置 turn.turnId，memory 事件才能定位目标轮次）。
+# 读类工具（search_memories）不合成事件，避免每次搜索都刷记忆卡片。
+_MEMORY_WRITE_TOOLS = frozenset({"remember_memory"})
 
 
 class TurnStartError(Exception):
@@ -342,6 +358,8 @@ async def _stream_turn_sidecar(
     # 3. Register event handlers to forward intermediate events to WS
     final_answer = ""
     turn_done = asyncio.Event()
+    # MEMORY-EVENTS-001：本轮写类记忆工具活动（done 后统一合成 memory 事件流）
+    memory_activity: list[dict] = []
 
     def _make_handler(evt_type: str):
         async def handler(sid: str, event: dict):
@@ -350,8 +368,11 @@ async def _stream_turn_sidecar(
             try:
                 payload = event.get("payload", {})
                 if evt_type == WsEventType.TOKEN:
+                    # TURN-OWNERSHIP-001：TOKEN 事件必须携带 turn_id——
+                    # 此前不带 turn_id 时，cancel 后事件队列里滞留的旧轮 token
+                    # 无法被前端按"已终结轮次"过滤，会污染新轮的流式回复
                     await ws.send_json(
-                        {"type": WsEventType.TOKEN, "payload": {"token": payload.get("token", "")}}
+                        {"type": WsEventType.TOKEN, "payload": {"token": payload.get("token", ""), "turn_id": turn_id}}
                     )
                 elif evt_type == WsEventType.TOOL_START:
                     record_activity(
@@ -360,6 +381,14 @@ async def _stream_turn_sidecar(
                         tool_name=payload.get("tool_name", ""),
                         message="调用工具",
                     )
+                    # MEMORY-EVENTS-001：收集写类记忆工具活动，done 后合成
+                    tool_name = payload.get("tool_name", "")
+                    if tool_name in _MEMORY_WRITE_TOOLS:
+                        memory_activity.append({
+                            "kind": "start",
+                            "tool_name": tool_name,
+                            "input": payload.get("input", ""),
+                        })
                     await ws.send_json(
                         {"type": WsEventType.TOOL_START, "payload": {"turn_id": turn_id, "tool_name": payload.get("tool_name", ""), "input": payload.get("input", "")}}
                     )
@@ -370,11 +399,24 @@ async def _stream_turn_sidecar(
                         tool_name=payload.get("tool_name", ""),
                         message="工具执行完成",
                     )
+                    tool_name = payload.get("tool_name", "")
+                    if tool_name in _MEMORY_WRITE_TOOLS:
+                        memory_activity.append({
+                            "kind": "end",
+                            "tool_name": tool_name,
+                            "output": payload.get("output", ""),
+                            "elapsed": payload.get("elapsed", 0),
+                        })
+                    # PERF-TOOL-OUTPUT-001：截断超大工具输出
+                    raw_output = payload.get("output", "")
+                    truncated = False
+                    if isinstance(raw_output, str) and len(raw_output) > _MAX_TOOL_OUTPUT_LEN:
+                        raw_output = raw_output[:_MAX_TOOL_OUTPUT_LEN] + "\n…（输出过长，已截断）"
+                        truncated = True
                     await ws.send_json(
-                        {"type": WsEventType.TOOL_END, "payload": {"turn_id": turn_id, "tool_name": payload.get("tool_name", ""), "output": payload.get("output", ""), "elapsed": payload.get("elapsed", 0)}}
+                        {"type": WsEventType.TOOL_END, "payload": {"turn_id": turn_id, "tool_name": tool_name, "output": raw_output, "elapsed": payload.get("elapsed", 0), "truncated": truncated}}
                     )
                     # Phase 2.2: 检测文件写入型工具，合成 artifact 事件
-                    tool_name = payload.get("tool_name", "")
                     if tool_name in _FILE_WRITING_TOOLS:
                         output = payload.get("output", "")
                         file_path = _extract_file_path_from_output(output)
@@ -394,8 +436,19 @@ async def _stream_turn_sidecar(
                         level="error",
                         message=str(payload.get("error", "")) or "工具执行出错",
                     )
+                    tool_name = payload.get("tool_name", "")
+                    if tool_name in _MEMORY_WRITE_TOOLS:
+                        memory_activity.append({
+                            "kind": "error",
+                            "tool_name": tool_name,
+                            "error": payload.get("error", ""),
+                        })
+                    # PERF-TOOL-OUTPUT-001：错误详情同样截断
+                    raw_error = payload.get("error", "")
+                    if isinstance(raw_error, str) and len(raw_error) > _MAX_TOOL_ERROR_LEN:
+                        raw_error = raw_error[:_MAX_TOOL_ERROR_LEN] + "\n…（错误详情过长，已截断）"
                     await ws.send_json(
-                        {"type": WsEventType.TOOL_ERROR, "payload": {"turn_id": turn_id, "tool_name": payload.get("tool_name", ""), "error": payload.get("error", "")}}
+                        {"type": WsEventType.TOOL_ERROR, "payload": {"turn_id": turn_id, "tool_name": tool_name, "error": raw_error}}
                     )
                 elif evt_type == WsEventType.ERROR:
                     # 前端 ChatWindow 渲染 errorTraceId（Trace 显示）和 errorCategory
@@ -549,7 +602,9 @@ async def _stream_turn_sidecar(
                     logger.warning("[sidecar] Failed to cancel after cancel_event for session %s: %s", sidecar_sid[:8], e)
                 if not final_answer:
                     final_answer = ""
-                return final_answer
+                # MEMORY-EVENTS-001：返回本轮的写类记忆工具活动，由
+                # _handle_turn_result 在 done 后合成 memory 事件流
+                return (final_answer, memory_activity)
             if client.disconnected.is_set():
                 raise RuntimeError("Sidecar disconnected during turn")
         else:
@@ -594,7 +649,9 @@ async def _stream_turn_sidecar(
             except Exception as e:
                 logger.warning("[sidecar] Failed to unsubscribe handler: %s", e)
 
-    return final_answer
+    # MEMORY-EVENTS-001：返回本轮的写类记忆工具活动（失败轮次同样返回，
+    # 若工具已执行完毕，前端仍能显示记忆卡片；无活动时为空列表）
+    return (final_answer, memory_activity)
 
 
 async def _save_const_session(
@@ -678,7 +735,12 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             turn_task = None
             return
         try:
-            final_answer = task.result()
+            task_result = task.result()
+            # MEMORY-EVENTS-001：兼容旧签名——成功路径返回 (final_answer, memory_activity)
+            final_answer = task_result
+            memory_activity: list[dict] = []
+            if isinstance(task_result, tuple) and len(task_result) == 2:
+                final_answer, memory_activity = task_result
         except Exception as exc:
             logger.exception("[ws] Turn task failed for session %s", session_id[:8])
             error_code = "SIDECAR_UNAVAILABLE"
@@ -733,6 +795,16 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             # IDEMPOTENCY-001：turn 成功后才记录幂等 id（失败轮次可重试）
             if _turn_client_msg_id and _turn_client_msg_id not in session.recent_message_ids:
                 session.recent_message_ids.append(_turn_client_msg_id)
+                # IDEMPOTENCY-PERSIST-001：同时持久化到 SessionMap——
+                # 后端重启后内存 deque 清空，持久化 id 保证断线重试不重复执行
+                try:
+                    sm = get_session_map()
+                    sm.append_message_id(session.session_id, _turn_client_msg_id)
+                except Exception:
+                    logger.debug(
+                        "[sidecar] Failed to persist message id",
+                        exc_info=True,
+                    )
 
             try:
                 sm = get_session_map()
@@ -763,11 +835,42 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                 },
             }
         )
+
+        # MEMORY-EVENTS-001：done 之后批量合成 memory 事件流。
+        # 顺序要求：done handler 先设置 currentTurn.turnId 并把轮次推入
+        # turns，memory 事件随后到达才能通过 turn_id 定位目标轮次；
+        # 若先于 done 发送，前端找不到 turnId 会静默丢弃。
+        if memory_activity:
+            done_turn_id = _new_turn_id(tid)
+            try:
+                await ws.send_json({"type": WsEventType.MEMORY_START, "payload": {"turn_id": done_turn_id}})
+                for act in memory_activity:
+                    if act.get("kind") == "start":
+                        await ws.send_json({
+                            "type": WsEventType.MEMORY_TOOL_START,
+                            "payload": {"turn_id": done_turn_id, "tool_name": act.get("tool_name", ""), "input": act.get("input", "")},
+                        })
+                    elif act.get("kind") == "end":
+                        await ws.send_json({
+                            "type": WsEventType.MEMORY_TOOL_END,
+                            "payload": {"turn_id": done_turn_id, "tool_name": act.get("tool_name", ""), "output": act.get("output", ""), "elapsed": act.get("elapsed", 0)},
+                        })
+                    elif act.get("kind") == "error":
+                        await ws.send_json({
+                            "type": WsEventType.MEMORY_TOOL_ERROR,
+                            "payload": {"turn_id": done_turn_id, "tool_name": act.get("tool_name", ""), "error": act.get("error", "")},
+                        })
+                await ws.send_json({"type": WsEventType.MEMORY_DONE, "payload": {"turn_id": done_turn_id}})
+            except Exception:
+                logger.debug("[memory] Failed to forward synthesized memory events", exc_info=True)
+
         record_activity(
             "turn", "turn_end",
             session_id=session.session_id,
             turn_id=tid or "",
-            message=final_answer or "(本轮无最终回复)",
+            # PERF-ACTIVITY-001：完整回复不写入活动中心——长回复 × 1000 条
+            # 环形缓冲会显著占用内存，message 只保留摘要
+            message=(final_answer or "(本轮无最终回复)")[:500],
             payload={"context_usage": context_usage},
         )
         turn_task = None
@@ -829,6 +932,9 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             msg_type = msg.get("type")
 
             if msg_type == WsMessageType.PING:
+                # SESSION-ACTIVE-001：心跳刷新 last_active——否则长连接闲置期间
+                # last_active 停留在连接建立时刻，TTL 清理会把活跃连接误判为过期
+                session.last_active = time.time()
                 await ws.send_json({"type": "pong"})
                 continue
 
@@ -1164,4 +1270,5 @@ async def websocket_chat(ws: WebSocket, session_id: str):
         await _destroy_sidecar_session(
             app_state.sidecar_manager, session
         )
-        app_state.ws_registry.unregister(session_id)
+        # MULTI-WS-001：只注销本连接（其他窗口的同会话连接保持注册）
+        app_state.ws_registry.unregister(session_id, ws)

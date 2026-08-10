@@ -133,6 +133,36 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("[metrics] Failed to start history flush (non-fatal)")
 
+    # 7.2 会话 TTL 清理任务（SESSION-CLEANUP-001）。
+    # cleanup_expired 此前从未被调用——会话永不清理、_sessions 无限增长；
+    # 现在每 5 分钟清理一次。活跃 WS 连接的会话由心跳刷新 last_active
+    # （chat.py PING 分支），不会被误杀。
+    app.state.session_cleanup_task = None
+    try:
+
+        async def _session_cleanup_loop():
+            while True:
+                await asyncio.sleep(300)
+                try:
+                    # 活跃 WS 连接的会话刷新 last_active，防止误杀
+                    for sid in app.state.ws_registry.ids():
+                        try:
+                            await app.state.session_manager.get(sid)
+                        except Exception:
+                            pass
+                    removed = await app.state.session_manager.cleanup_expired()
+                    if removed:
+                        logger.info("[session] cleanup expired sessions: %d", removed)
+                except asyncio.CancelledError:
+                    break
+                except Exception:
+                    logger.debug("[session] cleanup loop error", exc_info=True)
+
+        app.state.session_cleanup_task = asyncio.create_task(_session_cleanup_loop())
+        logger.info("[session] TTL cleanup task started")
+    except Exception:
+        logger.exception("[session] Failed to start TTL cleanup task (non-fatal)")
+
     yield
 
     # Cancel the OpenCode Zen background sync task (if started)
@@ -148,6 +178,15 @@ async def lifespan(app: FastAPI):
     if getattr(app.state, "sidecar_manager", None):
         await app.state.sidecar_manager.stop()
         logger.info("[sidecar] SidecarManager stopped")
+
+    # 取消会话 TTL 清理任务
+    cleanup_task = getattr(app.state, "session_cleanup_task", None)
+    if cleanup_task is not None:
+        cleanup_task.cancel()
+        try:
+            await cleanup_task
+        except (asyncio.CancelledError, Exception):
+            pass
 
     # Stop automation scheduler background task
     await stop_scheduler()

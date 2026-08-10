@@ -442,7 +442,8 @@ class TestEventHandlerBranches:
             mock_client2.call = mock_call2
             result = await _stream_turn_sidecar(ws2, session2, "hi", "sp")
 
-        assert result == "the-answer"
+        # MEMORY-EVENTS-001：返回 (final_answer, memory_activity) 元组
+        assert isinstance(result, tuple) and result[0] == "the-answer" and result[1] == []
 
 
 # ---------------------------------------------------------------------------
@@ -490,7 +491,7 @@ class _FakeWSRegistry:
     def register(self, session_id, ws):
         self.registered.append(session_id)
 
-    def unregister(self, session_id):
+    def unregister(self, session_id, ws=None):
         self.unregistered.append(session_id)
 
 

@@ -201,57 +201,74 @@ async def create_new_persona(body: CreatePersonaRequest):
     filename = f"SOUL.{safe_name}.md"
     filepath = PERSONAS_DIR / filename
 
-    if filepath.exists():
-        raise HTTPException(status_code=409, detail=f"人格文件已存在: {filename}")
+    # PERSONA-CREATE-001：check-then-act 与写入必须包在同一把锁内，
+    # 且写入用临时文件 + os.replace 原子替换——此前 exists() 检查与
+    # write_text 之间无锁（并发创建同名人格互相覆盖、均返回 201），
+    # 直接截断写还会在崩溃时留下半截 SOUL.md。
+    with yaml_file_lock(filepath):
+        if filepath.exists():
+            raise HTTPException(status_code=409, detail=f"人格文件已存在: {filename}")
 
-    # B-011: normalize "isolated" → "persona" so that get_persona_memory_path's
-    # `== "persona"` check matches regardless of which alias the client used.
-    # This keeps the frontmatter value, memory file creation, and read-time
-    # check all consistent — no silent fallthrough to shared memory.yaml.
-    effective_memory = "persona" if body.memory == "isolated" else body.memory
+        # B-011: normalize "isolated" → "persona" so that get_persona_memory_path's
+        # `== "persona"` check matches regardless of which alias the client used.
+        # This keeps the frontmatter value, memory file creation, and read-time
+        # check all consistent — no silent fallthrough to shared memory.yaml.
+        effective_memory = "persona" if body.memory == "isolated" else body.memory
 
-    # B-012: build frontmatter as a dict and dump with yaml.safe_dump so that
-    # special characters in description/tools/memory (quotes, newlines, colons,
-    # etc.) are properly escaped. F-string interpolation allowed injection of
-    # arbitrary keys (e.g. description='x"\nmemory: persona').
-    fm_dict: dict[str, str] = {}
-    if body.description:
-        fm_dict["description"] = body.description
-    if body.tools:
-        fm_dict["tools"] = body.tools
-    if effective_memory != "shared":
-        fm_dict["memory"] = effective_memory
+        # B-012: build frontmatter as a dict and dump with yaml.safe_dump so that
+        # special characters in description/tools/memory (quotes, newlines, colons,
+        # etc.) are properly escaped. F-string interpolation allowed injection of
+        # arbitrary keys (e.g. description='x"\nmemory: persona').
+        fm_dict: dict[str, str] = {}
+        if body.description:
+            fm_dict["description"] = body.description
+        if body.tools:
+            fm_dict["tools"] = body.tools
+        if effective_memory != "shared":
+            fm_dict["memory"] = effective_memory
 
-    fm_yaml = yaml.safe_dump(
-        fm_dict, sort_keys=False, default_flow_style=False, allow_unicode=True
-    ).strip()
-    fm_block = f"---\n{fm_yaml}\n---\n\n" if fm_yaml else "---\n---\n\n"
+        fm_yaml = yaml.safe_dump(
+            fm_dict, sort_keys=False, default_flow_style=False, allow_unicode=True
+        ).strip()
+        fm_block = f"---\n{fm_yaml}\n---\n\n" if fm_yaml else "---\n---\n\n"
 
-    # 构建模板
-    content_lines = [
-        f"# {body.name}",
-        "",
-        "## 角色定义",
-        f"你是 **{body.name}**。{body.description or '一个独特的 Agent 人格。'}",
-        "",
-        "## 性格特征",
-        "（请在此处描述人格的性格特征、说话风格、行为模式等）",
-        "",
-        "## 说话风格",
-        "（请在此处描述人格的语言风格、常用词汇、语气特点等）",
-        "",
-    ]
+        # 构建模板
+        content_lines = [
+            f"# {body.name}",
+            "",
+            "## 角色定义",
+            f"你是 **{body.name}**。{body.description or '一个独特的 Agent 人格。'}",
+            "",
+            "## 性格特征",
+            "（请在此处描述人格的性格特征、说话风格、行为模式等）",
+            "",
+            "## 说话风格",
+            "（请在此处描述人格的语言风格、常用词汇、语气特点等）",
+            "",
+        ]
 
-    full_content = fm_block + "\n".join(content_lines)
-    filepath.write_text(full_content, encoding="utf-8")
+        full_content = fm_block + "\n".join(content_lines)
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+        fd, temp_name = tempfile.mkstemp(
+            dir=str(filepath.parent), prefix=f".{filepath.name}.", suffix=".tmp", text=True
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
+                handle.write(full_content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp_name, filepath)
+        finally:
+            if os.path.exists(temp_name):
+                os.unlink(temp_name)
 
-    # 如果配置了独立记忆，创建空的记忆文件
-    # 兼容前端 PersonaMemoryMode: 'shared' | 'isolated'（已归一化为 'persona'）
-    if effective_memory == "persona":
-        persona_id = filepath.stem
-        memory_path = PERSONAS_DIR / f"memory_{persona_id}.yaml"
-        if not memory_path.exists():
-            memory_path.write_text("{}\n", encoding="utf-8")
+        # 如果配置了独立记忆，创建空的记忆文件
+        # 兼容前端 PersonaMemoryMode: 'shared' | 'isolated'（已归一化为 'persona'）
+        if effective_memory == "persona":
+            persona_id = filepath.stem
+            memory_path = PERSONAS_DIR / f"memory_{persona_id}.yaml"
+            if not memory_path.exists():
+                _write_text_atomically(memory_path, "{}\n")
 
     invalidate_prompt_cache()
     logger.info(f"创建新人格: {filename}")

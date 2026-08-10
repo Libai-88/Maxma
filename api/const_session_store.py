@@ -99,9 +99,15 @@ def load_all_const_sessions() -> list[dict]:
 
 
 def delete_const_session(session_id: str) -> bool:
-    """删除 const 会话文件。"""
+    """删除 const 会话文件。
+
+    CONST-DELETE-001：与 save_const_session 共用同一把文件锁——
+    此前 unlink 不持锁，并发 save+delete 可能把刚保存的会话删掉，
+    或删除请求先返回、文件随后被保存重新创建（删除"复活"）。
+    """
     filepath = _CONST_DIR / f"{session_id}.yaml"
-    if filepath.exists():
-        filepath.unlink()
-        return True
+    with yaml_file_lock(filepath):
+        if filepath.exists():
+            filepath.unlink()
+            return True
     return False

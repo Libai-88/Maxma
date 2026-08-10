@@ -27,7 +27,7 @@ from api.security.credential_envelope import (
     is_credential_envelope,
     is_legacy_encrypted,
 )
-from api.yaml_store import dump_yaml_atomic, load_yaml, yaml_file_lock
+from api.yaml_store import YamlCorruptedError, dump_yaml_atomic, load_yaml, load_yaml_strict, yaml_file_lock
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,11 @@ router = APIRouter()
 
 # 模块级常量：便于测试通过 monkeypatch 替换。
 PROVIDERS_YAML_PATH = PROVIDERS_YAML_PATH
+
+# PERF-PROVIDERS-CACHE-001：providers 列表 TTL 缓存（秒）。
+# 元组为 (缓存路径, 时间戳, 数据)——按路径区分，兼容测试 monkeypatch。
+PROVIDERS_CACHE_TTL = 3
+_providers_cache: tuple[str, float, list[dict[str, Any]]] | None = None
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -114,17 +119,50 @@ def _load_providers() -> list[dict[str, Any]]:
     """读取 yaml 中的 providers 列表。
 
     文件不存在/为空/解析失败 → 返回空列表（由调用方决定是否 fallback）。
+
+    PERF-PROVIDERS-CACHE-001：每轮 chat 消息都会调用本函数（运行时配置
+    注入），此前每次都同步读 providers.yaml。加 3 秒 TTL 缓存——
+    写入路径（_save_providers）负责失效，避免返回陈旧数据。
+    缓存按路径区分：测试/嵌入场景 monkeypatch PROVIDERS_YAML_PATH 时
+    不会读到其他路径的旧值。
     """
+    global _providers_cache
+    now = time.time()
+    cache_key = str(PROVIDERS_YAML_PATH)
+    if _providers_cache is not None:
+        cached_path, cached_at, cached = _providers_cache
+        if cached_path == cache_key and now - cached_at < PROVIDERS_CACHE_TTL:
+            return cached
     raw = load_yaml(PROVIDERS_YAML_PATH, default=None)
     if not isinstance(raw, dict):
+        _providers_cache = (cache_key, now, [])
         return []
     items = raw.get("providers", [])
-    return items if isinstance(items, list) else []
+    result = items if isinstance(items, list) else []
+    _providers_cache = (cache_key, now, result)
+    return result
 
 
 def _save_providers(items: list[dict[str, Any]]) -> None:
-    """原子写入 providers 列表到 yaml。"""
+    """原子写入 providers 列表到 yaml。
+
+    PROVIDERS-CORRUPT-001：文件已损坏时拒绝覆盖——此前 _load_providers
+    把解析失败静默降级为 []，下一次保存会把全部旧 Provider 配置（含
+    加密 api_key）永久覆盖丢失。
+    """
+    global _providers_cache
+    if PROVIDERS_YAML_PATH.exists():
+        try:
+            load_yaml_strict(PROVIDERS_YAML_PATH, default=None)
+        except YamlCorruptedError as exc:
+            logger.error("[providers] %s，拒绝覆盖写入（原文件已保留）", exc)
+            raise HTTPException(
+                status_code=503,
+                detail="Provider 配置文件已损坏，为保护现有配置已拒绝写入，请检查 providers.yaml",
+            ) from exc
     dump_yaml_atomic(PROVIDERS_YAML_PATH, {"providers": items})
+    # PERF-PROVIDERS-CACHE-001：写入后失效缓存，保证下次读取即新值
+    _providers_cache = None
 
 
 def _find_provider(items: list[dict[str, Any]], provider_id: str) -> dict[str, Any] | None:

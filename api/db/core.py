@@ -30,7 +30,20 @@ DB_PATH = DB_DIR / "maxma.db"
 
 # ── Schema 迁移 ──────────────────────────────────────────
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 7
+
+
+def _migrate_v6_add_claim_token(conn: sqlite3.Connection) -> None:
+    """v6 迁移：automations 表新增 claim_token 列（原子认领标记）。
+
+    幂等实现：检查列已存在则跳过，避免崩溃重启后重复 ALTER TABLE 报错。
+    """
+    cols = [row[1] for row in conn.execute("PRAGMA table_info(automations)").fetchall()]
+    if "claim_token" not in cols:
+        conn.execute("ALTER TABLE automations ADD COLUMN claim_token TEXT DEFAULT NULL")
+    conn.execute(
+        "INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (6, julianday('now'))"
+    )
 
 
 def _migrate_v3_add_priority(conn: sqlite3.Connection) -> None:
@@ -211,6 +224,24 @@ SCHEMA_MIGRATIONS: list[str | Any] = [
 
     INSERT OR IGNORE INTO schema_version (version, applied_at)
     VALUES (5, julianday('now'));
+    """,
+    # v6: 自动化原子认领（claim_token 列，见 _migrate_v6_add_claim_token）
+    _migrate_v6_add_claim_token,
+    # v7: 后台子任务（deferred runs）持久化——后端重启后运行状态不丢失
+    """
+    CREATE TABLE IF NOT EXISTS deferred_runs (
+        session_id TEXT NOT NULL,
+        run_id TEXT NOT NULL,
+        data TEXT NOT NULL DEFAULT '{}',
+        updated_at REAL NOT NULL DEFAULT (julianday('now')),
+        PRIMARY KEY (session_id, run_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_deferred_runs_session
+        ON deferred_runs(session_id);
+
+    INSERT OR IGNORE INTO schema_version (version, applied_at)
+    VALUES (7, julianday('now'));
     """,
 ]
 

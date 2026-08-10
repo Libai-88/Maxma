@@ -197,6 +197,11 @@ async def get_messages(session_id: str, request: Request, limit: int = 50):
                         "session_id": session_id,
                         "messages": normalized,
                         "total": result.get("total", 0),
+                        # CACHE-RECONCILE-001：标记来源——前端只在
+                        # source="sidecar"（完整消息）时做缓存校准；
+                        # SessionMap fallback 是截断/限轮的历史，不能
+                        # 作为校准依据（会误删本地完整缓存）。
+                        "source": "sidecar",
                     }
                 except Exception:
                     logger.debug("[messages] sidecar fetch failed for %s", session_id, exc_info=True)
@@ -209,7 +214,7 @@ async def get_messages(session_id: str, request: Request, limit: int = 50):
     for t in turns:
         messages.append({"role": "human", "content": t.get("user", "")})
         messages.append({"role": "ai", "content": t.get("assistant", "")})
-    return {"session_id": session_id, "messages": messages, "total": len(messages)}
+    return {"session_id": session_id, "messages": messages, "total": len(messages), "source": "session_map"}
 
 
 async def _sync_const_session_after_undo(session, deleted: int, *, sidecar_mgr=None):
@@ -282,6 +287,12 @@ async def undo_session_messages(session_id: str, request: Request, n: int = 1):
     if session is None:
         raise HTTPException(status_code=404, detail="会话不存在")
 
+    # UNDO-BUSY-001：Agent 运行中禁止撤回——sidecar 的 undo 从消息列表
+    # 末尾切轮，会把 in-flight 轮次的未完成消息一并切掉，运行中 turn 的
+    # 上下文被从底部修改，最终回复与上下文不一致。
+    if session._active_task is not None and not session._active_task.done():
+        raise HTTPException(status_code=409, detail="Agent 正在处理中，请等待本轮完成后撤回")
+
     # ── Sidecar path ──────────────────────────────────────────────
     mgr = getattr(request.app.state, "sidecar_manager", None)
     if mgr is not None:
@@ -307,18 +318,32 @@ async def undo_session_messages(session_id: str, request: Request, n: int = 1):
                         "steps": n,
                     })
                     deleted = result.get("removed", 0)
+                    turns_removed = int(result.get("turns_removed") or 0)
 
-                    # 先更新内存状态，再同步 const YAML。
+                    # 先更新内存状态，再同步持久化。
                     # 顺序保证：_sync_const_session_after_undo 通过
                     # persistent_metadata() 读取 session.message_count，
                     # 必须先更新 message_count 才能将新值持久化到 YAML，
                     # 否则 YAML 会保存旧值造成内存与磁盘状态不一致。
                     session.message_count = max(0, session.message_count - deleted)
 
+                    # UNDO-SYNC-001：同步 SessionMap 持久化 turns——
+                    # 此前只改 sidecar 消息与内存计数，sidecar 会话销毁/
+                    # 重启后已撤回的轮次会被 get_recent_turns 恢复进上下文，
+                    # 重启后 message_count = len(turns)*2 也把撤回轮次算回。
+                    # turns_removed 是 sidecar 按完整轮数切除的准确值；
+                    # 旧 sidecar 未返回该字段时按消息数折半兜底。
+                    if turns_removed > 0:
+                        smap.remove_recent_turns(session_id, turns_removed)
+                    elif deleted > 0:
+                        smap.remove_recent_turns(session_id, max(1, deleted // 2))
+
                     if session.is_const and deleted > 0:
                         await _sync_const_session_after_undo(session, deleted, sidecar_mgr=mgr)
 
                     return {"deleted_count": deleted}
+                except HTTPException:
+                    raise
                 except Exception:
                     logger.debug("[undo] sidecar undo failed for %s", session_id, exc_info=True)
 

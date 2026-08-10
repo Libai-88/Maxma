@@ -199,8 +199,9 @@ async def test_turn_error_returns_safe_message_but_logs_detail(caplog):
                 ws, session, "hello", "system prompt"
             )
 
-    assert result == "后端处理失败，请稍后重试"
-    assert "provider secret details" not in result
+    # MEMORY-EVENTS-001：返回 (final_answer, memory_activity) 元组
+    assert isinstance(result, tuple) and result[0] == "后端处理失败，请稍后重试"
+    assert "provider secret details" not in result[0]
     assert "provider secret details" in caplog.text
 
 

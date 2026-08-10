@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from app_paths import MCP_CONFIG_PATH
-from api.yaml_store import dump_yaml_atomic, load_yaml, yaml_file_lock
+from api.yaml_store import YamlCorruptedError, dump_yaml_atomic, load_yaml, load_yaml_strict, yaml_file_lock
 # S2-4: 纯逻辑拆分——配置校验/脱敏 与 OAuth 流程
 from api.routes.mcp_validation import (
     _validate_env_vars,
@@ -93,8 +93,21 @@ def _load_raw() -> list[dict]:
 
 
 def _save_raw(servers: list[dict]) -> None:
-    """写入 YAML。"""
+    """写入 YAML。
+
+    MCP-CORRUPT-001：文件已损坏时拒绝覆盖——此前 _load_raw 把解析失败
+    静默降级为 []，下一次保存会把全部旧 MCP 配置永久覆盖丢失。
+    """
     MCP_YAML_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if MCP_YAML_PATH.exists():
+        try:
+            load_yaml_strict(MCP_YAML_PATH, default=None)
+        except YamlCorruptedError as exc:
+            logger.error("[mcp] %s，拒绝覆盖写入（原文件已保留）", exc)
+            raise HTTPException(
+                status_code=503,
+                detail="MCP 配置文件已损坏，为保护现有配置已拒绝写入，请检查 mcp_servers.yaml",
+            ) from exc
     dump_yaml_atomic(MCP_YAML_PATH, {"mcp_servers": servers})
 
 

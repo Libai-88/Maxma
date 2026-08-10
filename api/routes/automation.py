@@ -180,6 +180,97 @@ def db_record_run(automation_id: str, started_at: str, finished_at: str, status:
     return run_id
 
 
+# ── 原子认领（AUTOMATION-CLAIM-001）─────────────────────
+# 此前调度器先 SELECT 到期任务、执行完才推进 next_run：
+#   1) 单次 headless 执行超过 60s 时，下个 tick 会把同一任务再选中 →
+#      并发重复执行（重复 LLM 调用/动作）；
+#   2) "记历史"与"推进 next_run"是两个独立事务，中途崩溃重启后立即重复触发；
+#   3) 手动触发与调度 tick 无互斥，可同时执行。
+# 现在执行前先在单个事务内以 claim_token 抢占，执行完在同一事务内
+# 记历史 + 清认领 + 推进 next_run；崩溃残留的认领超过阈值后自动回收。
+
+# 崩溃残留认领的回收阈值：超过该时长（秒）的 claim_token 视为僵尸，
+# 允许重新认领。取 30 分钟——远大于最长 headless 调用（10 分钟），
+# 正常执行中的任务不会被回收，崩溃/杀进程残留的任务能自愈恢复调度。
+CLAIM_STALE_SECONDS = 1800
+
+
+def _iso_delta_seconds(now_iso: str, seconds: int) -> str:
+    return (datetime.fromisoformat(now_iso) - timedelta(seconds=seconds)).isoformat()
+
+
+def db_claim_due_automations(now_iso: str) -> list[dict[str, Any]]:
+    """原子认领所有到期且未被认领的自动化任务。
+
+    单事务内：UPDATE 抢占 claim_token → 读回被本 token 认领的行。
+    并发 tick / 手动触发之间的 UPDATE 由 SQLite 行锁串行化，
+    WHERE 条件保证同一任务只会被一个执行者认领。
+    """
+    stale_before = _iso_delta_seconds(now_iso, CLAIM_STALE_SECONDS)
+    with transaction() as db:
+        db.execute(
+            """UPDATE automations SET claim_token = ?
+               WHERE enabled = 1 AND next_run IS NOT NULL AND next_run <= ?
+                 AND (claim_token IS NULL OR claim_token < ?)""",
+            (now_iso, now_iso, stale_before),
+        )
+        rows = db.execute(
+            "SELECT * FROM automations WHERE claim_token = ?", (now_iso,)
+        ).fetchall()
+    return [_row_to_automation(r) for r in rows]
+
+
+def db_claim_automation(automation_id: str, now_iso: str) -> bool:
+    """认领指定自动化（手动触发）。已被认领且未过回收阈值时返回 False。"""
+    stale_before = _iso_delta_seconds(now_iso, CLAIM_STALE_SECONDS)
+    with transaction() as db:
+        cur = db.execute(
+            """UPDATE automations SET claim_token = ?
+               WHERE id = ? AND (claim_token IS NULL OR claim_token < ?)""",
+            (now_iso, automation_id, stale_before),
+        )
+        return cur.rowcount > 0
+
+
+def db_release_claim(automation_id: str) -> None:
+    """释放认领（执行失败/异常时），保留 next_run 原值供下个 tick 重试。"""
+    with transaction() as db:
+        db.execute(
+            "UPDATE automations SET claim_token = NULL WHERE id = ?",
+            (automation_id,),
+        )
+
+
+def db_finish_automation(
+    automation_id: str,
+    *,
+    started_at: str,
+    finished_at: str,
+    status: str,
+    result: str | None,
+    next_run: str | None,
+) -> int:
+    """单事务完成一次运行：记历史 + 更新计数 + 推进 next_run + 释放认领。
+
+    替代此前 db_record_run + db_update_automation 的两事务组合——
+    中途崩溃不会再出现"历史已记但 next_run 未推进"的重复触发窗口。
+    """
+    with transaction() as db:
+        cur = db.execute(
+            """INSERT INTO automation_run_history (automation_id, started_at, finished_at, status, result)
+               VALUES (?, ?, ?, ?, ?)""",
+            (automation_id, started_at, finished_at, status, result),
+        )
+        run_id = cur.lastrowid
+        db.execute(
+            """UPDATE automations
+               SET last_run = ?, run_count = run_count + 1, next_run = ?, claim_token = NULL
+               WHERE id = ?""",
+            (finished_at, next_run, automation_id),
+        )
+    return run_id
+
+
 def db_get_run_history(automation_id: str, limit: int = 20) -> list[dict[str, Any]]:
     with transaction() as db:
         rows = db.execute(
@@ -238,7 +329,8 @@ async def _scheduler_loop():
         try:
             await asyncio.sleep(SCHEDULER_INTERVAL_SECONDS)
             now_iso = _now_iso()
-            due_tasks = db_get_due_automations(now_iso)
+            # AUTOMATION-CLAIM-001：原子认领到期任务，防并发重复执行
+            due_tasks = db_claim_due_automations(now_iso)
 
             for task in due_tasks:
                 started_at = _now_iso()
@@ -249,30 +341,40 @@ async def _scheduler_loop():
                 else:
                     message = str(action)
 
-                if message:
-                    result_data = await _call_headless(_scheduler_sidecar_mgr, message)
-                    status = result_data.get("status", "completed")
-                    answer = result_data.get("answer", "")
-                else:
-                    result_data = {"message": "无执行内容"}
-                    status = "completed"
-                    answer = ""
+                try:
+                    if message:
+                        result_data = await _call_headless(_scheduler_sidecar_mgr, message)
+                        status = result_data.get("status", "completed")
+                        answer = result_data.get("answer", "")
+                    else:
+                        result_data = {"message": "无执行内容"}
+                        status = "completed"
+                        answer = ""
 
-                finished_at = _now_iso()
-                result = json.dumps(
-                    {"message": answer or "定时执行完成", "action": task["action"]},
-                    ensure_ascii=False,
-                )
+                    finished_at = _now_iso()
+                    result = json.dumps(
+                        {"message": answer or "定时执行完成", "action": task["action"]},
+                        ensure_ascii=False,
+                    )
 
-                db_record_run(task["id"], started_at, finished_at, status, result)
+                    next_run = _compute_next_run(task["interval_seconds"], task["cron_expr"])
+                    db_finish_automation(
+                        task["id"],
+                        started_at=started_at,
+                        finished_at=finished_at,
+                        status=status,
+                        result=result,
+                        next_run=next_run,
+                    )
 
-                next_run = _compute_next_run(task["interval_seconds"], task["cron_expr"])
-                db_update_automation(task["id"], {"next_run": next_run})
-
-                logger.info(
-                    "[automation] Executed task '%s' (%s) -> %s, next_run=%s",
-                    task["name"], task["id"], status, next_run,
-                )
+                    logger.info(
+                        "[automation] Executed task '%s' (%s) -> %s, next_run=%s",
+                        task["name"], task["id"], status, next_run,
+                    )
+                except Exception as exc:
+                    # 执行异常：释放认领并保留原 next_run，下个 tick 自动重试
+                    logger.exception("[automation] Failed to execute task '%s' (%s): %s", task["name"], task["id"], exc)
+                    db_release_claim(task["id"])
 
         except asyncio.CancelledError:
             logger.info("[automation] Scheduler cancelled, shutting down")
@@ -414,48 +516,66 @@ async def toggle_automation(automation_id: str, request: Request):
 
 @router.post("/automations/{automation_id}/run")
 async def trigger_run(automation_id: str, request: Request):
-    """立即触发一次执行（手动运行 — 通过 sidecar 无头执行）。"""
+    """立即触发一次执行（手动运行 — 通过 sidecar 无头执行）。
+
+    AUTOMATION-CLAIM-001：执行前原子认领，与调度 tick 互斥——
+    任务已在运行（调度器或另一次手动触发）时返回 409。
+    """
     existing = db_get_automation(automation_id)
     if existing is None:
         raise HTTPException(status_code=404, detail="Automation not found")
 
-    started_at = _now_iso()
-    sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
-    action = existing.get("action", {})
-    message = ""
-    if isinstance(action, dict):
-        message = action.get("payload", {}).get("text", "") if isinstance(action.get("payload"), dict) else str(action)
-    else:
-        message = str(action)
+    now_iso = _now_iso()
+    if not db_claim_automation(automation_id, now_iso):
+        raise HTTPException(status_code=409, detail="该自动化任务正在运行中，请稍后再试")
 
-    if message and sidecar_mgr:
-        result_data = await _call_headless(sidecar_mgr, message)
-        status = result_data.get("status", "completed")
-        answer = result_data.get("answer", "")
-    else:
-        result_data = {}
-        status = "completed"
-        answer = "（无执行内容）"
+    started_at = now_iso
+    try:
+        sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
+        action = existing.get("action", {})
+        message = ""
+        if isinstance(action, dict):
+            message = action.get("payload", {}).get("text", "") if isinstance(action.get("payload"), dict) else str(action)
+        else:
+            message = str(action)
 
-    finished_at = _now_iso()
-    result = json.dumps(
-        {"message": answer, "action": existing["action"]},
-        ensure_ascii=False,
-    )
+        if message and sidecar_mgr:
+            result_data = await _call_headless(sidecar_mgr, message)
+            status = result_data.get("status", "completed")
+            answer = result_data.get("answer", "")
+        else:
+            result_data = {}
+            status = "completed"
+            answer = "（无执行内容）"
 
-    run_id = db_record_run(automation_id, started_at, finished_at, status, result)
+        finished_at = _now_iso()
+        result = json.dumps(
+            {"message": answer, "action": existing["action"]},
+            ensure_ascii=False,
+        )
 
-    next_run = _compute_next_run(existing["interval_seconds"], existing["cron_expr"])
-    db_update_automation(automation_id, {"next_run": next_run})
+        next_run = _compute_next_run(existing["interval_seconds"], existing["cron_expr"])
+        run_id = db_finish_automation(
+            automation_id,
+            started_at=started_at,
+            finished_at=finished_at,
+            status=status,
+            result=result,
+            next_run=next_run,
+        )
 
-    logger.info("[automation] Manual run triggered for '%s' (%s) -> %s", existing["name"], automation_id, status)
-    return {
-        "ok": True,
-        "run_id": run_id,
-        "status": status,
-        "started_at": started_at,
-        "finished_at": finished_at,
-    }
+        logger.info("[automation] Manual run triggered for '%s' (%s) -> %s", existing["name"], automation_id, status)
+        return {
+            "ok": True,
+            "run_id": run_id,
+            "status": status,
+            "started_at": started_at,
+            "finished_at": finished_at,
+        }
+    except Exception as exc:
+        # 执行异常：释放认领，让后续调度/手动触发可以重试
+        db_release_claim(automation_id)
+        raise exc
 
 
 @router.get("/automations/{automation_id}/history")

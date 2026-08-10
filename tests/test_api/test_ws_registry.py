@@ -27,6 +27,23 @@ def test_register_and_get(registry):
     assert registry.get("session-2") is None
 
 
+def test_register_multiple_connections_and_get_all(registry):
+    """MULTI-WS-001：同一 session 多连接（多窗口）并存，get_all 返回全部。"""
+    ws1 = FakeWebSocket("session-1")
+    ws2 = FakeWebSocket("session-1")
+    registry.register("session-1", ws1)
+    registry.register("session-1", ws2)
+
+    assert registry.get("session-1") is ws2  # 最近连接（兼容旧语义）
+    assert registry.get_all("session-1") == [ws1, ws2]
+
+    # 注销单个连接：另一连接保持注册
+    registry.unregister("session-1", ws1)
+    assert registry.get("session-1") is ws2
+    registry.unregister("session-1", ws2)
+    assert registry.get("session-1") is None
+
+
 def test_unregister_removes_mapping(registry):
     ws = FakeWebSocket("session-1")
     registry.register("session-1", ws)
@@ -66,7 +83,10 @@ def test_concurrent_register_unregister_and_get(registry):
         t.join()
 
     assert not errors
-    # 最终状态必须满足：每个存在的 session 映射到一个 FakeWebSocket
-    for sid, ws in registry._sessions.items():
-        assert isinstance(ws, FakeWebSocket)
-        assert ws.session_id == sid
+    # 最终状态必须满足：每个存在的 session 映射到连接列表（MULTI-WS-001
+    # 后注册表按连接列表存储），列表非空且元素均为 FakeWebSocket
+    for sid, conns in registry._sessions.items():
+        assert isinstance(conns, list) and conns
+        for ws in conns:
+            assert isinstance(ws, FakeWebSocket)
+            assert ws.session_id == sid

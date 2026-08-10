@@ -293,17 +293,18 @@ async def resume_workflow_run(session_id: str, run_id: str, request: Request):
 # ── 执行引擎 ──
 
 async def _send_ws_event(request: Request, session_id: str, event_type: str, payload: dict) -> None:
-    """通过 WebSocket 注册表向会话推送事件。"""
+    """通过 WebSocket 注册表向会话推送事件（广播到全部连接，MULTI-WS-001）。"""
     ws_registry = getattr(request.app.state, "ws_registry", None)
     if not ws_registry:
         return
-    ws = ws_registry.get(session_id)
-    if not ws:
+    conns = ws_registry.get_all(session_id)
+    if not conns:
         return
-    try:
-        await ws.send_json({"type": event_type, "payload": payload})
-    except Exception as e:
-        logger.warning("[workflow] Failed to send WS event %s: %s", event_type, e)
+    for ws in conns:
+        try:
+            await ws.send_json({"type": event_type, "payload": payload})
+        except Exception as e:
+            logger.warning("[workflow] Failed to send WS event %s: %s", event_type, e)
 
 
 async def _execute_workflow(

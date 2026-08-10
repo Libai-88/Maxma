@@ -71,7 +71,7 @@ class _FakeWSRegistry:
     def register(self, session_id, ws):
         self.registered.append(session_id)
 
-    def unregister(self, session_id):
+    def unregister(self, session_id, ws=None):
         self.unregistered.append(session_id)
 
 

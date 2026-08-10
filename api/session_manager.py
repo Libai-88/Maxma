@@ -176,6 +176,16 @@ class SessionManager:
                     pass
             turns = smap.get_recent_turns(session_id, count=100)
             session.message_count = len(turns) * 2
+            # IDEMPOTENCY-PERSIST-001：恢复持久化的消息幂等 id，
+            # 后端重启后断线重试的同一 client_msg_id 仍能去重
+            try:
+                for persisted_id in smap.get_message_ids(session_id):
+                    session.recent_message_ids.append(persisted_id)
+            except Exception:
+                logger.debug(
+                    "[session] Failed to restore message ids for %s",
+                    session_id[:8], exc_info=True,
+                )
             logger.info(
                 "[session] Restored session %s from SessionMap: turns=%d",
                 session_id[:8], len(turns),
@@ -191,9 +201,10 @@ class SessionManager:
     async def get(self, session_id: str) -> SessionState | None:
         async with self._lock:
             session = self._sessions.get(session_id)
-        if session is not None:
-            session.last_active = time.time()
-            return session
+            if session is not None:
+                # 锁内更新 last_active，避免并发访问的写竞争
+                session.last_active = time.time()
+                return session
         # 不在内存中时，尝试从持久化 SessionMap 恢复
         restored = await self._restore_from_session_map(session_id)
         if restored is not None:

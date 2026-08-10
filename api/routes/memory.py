@@ -48,7 +48,12 @@ def _get_memory_lock(path_str: str) -> threading.Lock:
 
 @contextmanager
 def _file_lock(path: str, timeout: int = 5) -> Iterator[None]:
-    """文件锁兜底实现：优先使用 portalocker，不可用时退化为 threading.Lock。"""
+    """文件锁：进程内 threading.Lock + portalocker 双重保障（与 yaml_store 一致）。
+
+    MEMORY-LOCK-001：此前 portalocker 可用时直接绕过进程内锁——portalocker 是
+    OS 进程级锁，同进程内可重入，无法阻止 FastAPI 单进程多协程的并发
+    读-改-写（并发 PUT/DELETE /memory/{id} 会互相覆盖）。进程内锁必须无条件持有。
+    """
     global _portalocker_available
     if _portalocker_available is None:
         try:
@@ -69,17 +74,17 @@ def _file_lock(path: str, timeout: int = 5) -> Iterator[None]:
         except ImportError:
             _portalocker_available = False
 
-    if _portalocker_available:
-        import portalocker
-        with portalocker.Lock(path, timeout=timeout):
+    lock = _get_memory_lock(path)
+    lock.acquire()
+    try:
+        if _portalocker_available:
+            import portalocker
+            with portalocker.Lock(path, timeout=timeout):
+                yield
+        else:
             yield
-    else:
-        lock = _get_memory_lock(path)
-        lock.acquire()
-        try:
-            yield
-        finally:
-            lock.release()
+    finally:
+        lock.release()
 
 router = APIRouter()
 

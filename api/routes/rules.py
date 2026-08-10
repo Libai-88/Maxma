@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import tempfile
+import threading
 import uuid
 from typing import Literal
 
@@ -24,6 +26,16 @@ router = APIRouter()
 
 # 用户自定义规则持久化路径
 _USER_RULES_PATH = API_DATA_DIR / "user_rules.json"
+# 内置规则启停覆盖持久化路径（RULES-TOGGLE-001）。
+# 内置规则单一事实源 builtin_rules.json 在打包模式下位于只读 bundle，
+# 且 sidecar list_rules 工具同读该文件 —— 直接在原文件上改写无法跨
+# 进程生效、打包模式还会写入失败。改用独立覆盖文件（id → enabled），
+# 后端与 sidecar 读取内置规则时叠加应用，任何模式下两端一致。
+_TOGGLES_PATH = API_DATA_DIR / "rule_toggles.json"
+
+# RULES-RACE-001：读写锁（此前引用了从未定义的 _rules_lock，
+# 导致所有自定义规则写操作 NameError → 500 且磁盘永不落盘）。
+_rules_lock = threading.RLock()
 
 # ─── Pydantic Models ───────────────────────────────────────────────────────────
 
@@ -131,19 +143,75 @@ def _load_user_rules() -> None:
             logger.warning("Failed to load user rules from %s: %s", _USER_RULES_PATH, e)
 
 
+def _write_json_atomic(path, data: list | dict) -> None:
+    """临时文件 + fsync + os.replace 原子写，避免崩溃留下截断文件。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(
+        dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp", text=True
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp_name, path)
+    finally:
+        if os.path.exists(temp_name):
+            try:
+                os.unlink(temp_name)
+            except OSError:
+                pass
+
+
 def _save_user_rules() -> None:
-    """将自定义规则持久化到文件（RULES-RACE-001：读写加锁）。"""
+    """将自定义规则持久化到文件（RULES-RACE-001：读写加锁 + 原子写）。"""
     with _rules_lock:
-        _USER_RULES_PATH.parent.mkdir(parents=True, exist_ok=True)
         try:
-            with open(_USER_RULES_PATH, "w", encoding="utf-8") as f:
-                json.dump(_USER_RULES, f, ensure_ascii=False, indent=2)
+            _write_json_atomic(_USER_RULES_PATH, _USER_RULES)
         except Exception as e:
             logger.warning("Failed to save user rules to %s: %s", _USER_RULES_PATH, e)
 
 
+# ── 内置规则启停覆盖（RULES-TOGGLE-001）──────────────────────
+# 覆盖文件 {id: enabled}，启动时叠加到 _BUILTIN_RULES 的 enabled 字段。
+_TOGGLES: dict[str, bool] = {}
+
+
+def _load_toggles() -> None:
+    """从覆盖文件恢复内置规则的启停状态。"""
+    global _TOGGLES
+    if not _TOGGLES_PATH.exists():
+        return
+    try:
+        with open(_TOGGLES_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            _TOGGLES = {str(k): bool(v) for k, v in data.items() if isinstance(v, bool)}
+    except Exception as e:
+        logger.warning("Failed to load rule toggles from %s: %s", _TOGGLES_PATH, e)
+
+
+def _apply_toggles() -> None:
+    """把覆盖应用到内置规则列表（启动时与 toggle 时调用）。"""
+    for rule in _BUILTIN_RULES:
+        override = _TOGGLES.get(rule.get("id"))
+        if override is not None:
+            rule["enabled"] = override
+
+
+def _save_toggles() -> None:
+    """持久化内置规则启停覆盖（加锁 + 原子写）。"""
+    with _rules_lock:
+        try:
+            _write_json_atomic(_TOGGLES_PATH, _TOGGLES)
+        except Exception as e:
+            logger.warning("Failed to save rule toggles to %s: %s", _TOGGLES_PATH, e)
+
+
 # 模块加载时自动恢复持久化规则
 _load_user_rules()
+_load_toggles()
+_apply_toggles()
 
 
 # ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -261,12 +329,24 @@ async def delete_rule(rule_id: str, request: Request):
 
 @router.patch("/rules/{rule_id}/toggle")
 async def toggle_rule(rule_id: str, body: RuleToggle, request: Request):
-    """启用或禁用一条规则（内置和自定义均可）。"""
-    rule = _find_builtin(rule_id) or _find_custom(rule_id)
+    """启用或禁用一条规则（内置和自定义均可）。
+
+    内置规则：写入覆盖文件（RULES-TOGGLE-001）——此前只改模块内存，
+    与 sidecar list_rules 工具读到的磁盘状态永久不一致，重启后还原。
+    自定义规则：写入 user_rules.json（RULES-RACE-001 修复后落盘生效）。
+    """
+    builtin_rule = _find_builtin(rule_id)
+    custom_rule = _find_custom(rule_id)
+    rule = builtin_rule or custom_rule
     if rule is None:
         raise HTTPException(status_code=404, detail=f"规则 '{rule_id}' 不存在")
 
     rule["enabled"] = body.enabled
-    source = "builtin" if _find_builtin(rule_id) else "custom"
+    if builtin_rule is not None:
+        _TOGGLES[rule_id] = body.enabled
+        _save_toggles()
+    else:
+        _save_user_rules()
+    source = "builtin" if builtin_rule is not None else "custom"
     logger.info("Toggled rule %s -> enabled=%s", rule_id, body.enabled)
     return {**rule, "source": source, "editable": source == "custom"}

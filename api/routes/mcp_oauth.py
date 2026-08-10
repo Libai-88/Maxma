@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 
 from app_paths import API_DATA_DIR
-from api.yaml_store import dump_yaml_atomic, load_yaml
+from api.yaml_store import dump_yaml_atomic, load_yaml, yaml_file_lock
 
 logger = logging.getLogger(__name__)
 
@@ -81,16 +81,19 @@ async def _exchange_oauth_code(code: str, state: str, server_name_override: str 
         logger.warning("[mcp-oauth] Token exchange error for %s: %s", server_name, e)
         raise HTTPException(status_code=502, detail=f"Token 交换失败: {e}")
 
-    tokens = _load_oauth_tokens()
-    tokens[server_name] = {
-        "access_token": token_data.get("access_token", ""),
-        "refresh_token": token_data.get("refresh_token", ""),
-        "token_type": token_data.get("token_type", "Bearer"),
-        "expires_at": time.time() + token_data.get("expires_in", 3600),
-        "scope": token_data.get("scope", ""),
-        "authorized_at": time.time(),
-    }
-    _save_oauth_tokens(tokens)
+    # OAUTH-RMW-001：读-改-写必须持锁——此前多个服务器授权回调并发完成时
+    # 各自基于旧快照写回，先写者的 token 被后写者整体覆盖（授权状态丢失）。
+    with yaml_file_lock(OAUTH_TOKENS_PATH):
+        tokens = _load_oauth_tokens()
+        tokens[server_name] = {
+            "access_token": token_data.get("access_token", ""),
+            "refresh_token": token_data.get("refresh_token", ""),
+            "token_type": token_data.get("token_type", "Bearer"),
+            "expires_at": time.time() + token_data.get("expires_in", 3600),
+            "scope": token_data.get("scope", ""),
+            "authorized_at": time.time(),
+        }
+        _save_oauth_tokens(tokens)
 
     _oauth_pending_states.pop(state, None)
 

@@ -106,6 +106,32 @@ def load_yaml(path: str | Path, default: Any = None) -> Any:
     return default if data is None else data
 
 
+class YamlCorruptedError(Exception):
+    """配置文件存在但无法解析（YAML 语法错误/IO 失败）。
+
+    YAML-CORRUPT-001：写入路径必须区分"文件缺失"（可用默认值初始化）
+    与"文件已损坏"（继续写会把全部旧配置永久覆盖丢失）。前者用
+    ``load_yaml``，后者用 ``load_yaml_strict`` 在覆盖前显式拒绝。
+    """
+
+
+def load_yaml_strict(path: str | Path, default: Any = None) -> Any:
+    """读取 YAML；文件缺失或为空返回 default，解析失败抛 YamlCorruptedError。
+
+    供读-改-写路径在覆盖前验证现有文件可解析，防止损坏文件被静默
+    当作空文档写回（旧配置全量丢失）。
+    """
+    p = Path(path)
+    if not p.exists():
+        return default
+    try:
+        with open(p, encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+    except (yaml.YAMLError, OSError) as exc:
+        raise YamlCorruptedError(f"YAML 解析失败: {p}: {exc}") from exc
+    return default if data is None else data
+
+
 def dump_yaml_atomic(path: str | Path, data: Any) -> None:
     """将 YAML 原子写入目标路径。"""
     p = Path(path)

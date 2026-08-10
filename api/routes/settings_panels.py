@@ -48,7 +48,12 @@ def _get_panel_lock(path_str: str) -> threading.Lock:
 
 @contextmanager
 def _fallback_lock(path: str, timeout: int = 5) -> Iterator[None]:
-    """文件锁兜底实现：优先使用 portalocker，不可用时退化为 threading.Lock。"""
+    """文件锁：进程内 threading.Lock + portalocker 双重保障（与 yaml_store 一致）。
+
+    PANEL-LOCK-001：此前 portalocker 可用时直接绕过进程内锁——portalocker 是
+    OS 进程级锁，同进程内可重入，无法阻止 FastAPI 单进程多协程的并发
+    读-改-写（并发 PUT 面板配置会互相覆盖）。进程内锁必须无条件持有。
+    """
     global _portalocker_available
     if _portalocker_available is None:
         try:
@@ -70,18 +75,17 @@ def _fallback_lock(path: str, timeout: int = 5) -> Iterator[None]:
         except ImportError:
             _portalocker_available = False
 
-    if _portalocker_available:
-        import portalocker
-        with portalocker.Lock(path, timeout=timeout):
+    lock = _get_panel_lock(path)
+    lock.acquire()
+    try:
+        if _portalocker_available:
+            import portalocker
+            with portalocker.Lock(path, timeout=timeout):
+                yield
+        else:
             yield
-    else:
-        # portalocker 不可用时退化为进程内锁
-        lock = _get_panel_lock(path)
-        lock.acquire()
-        try:
-            yield
-        finally:
-            lock.release()
+    finally:
+        lock.release()
 
 router = APIRouter()
 
@@ -228,6 +232,19 @@ def _put_panel(panel: str, updates: dict[str, Any]) -> dict[str, Any]:
     # 过滤掉 None（未提供的字段保持原值）
     patch = {k: v for k, v in updates.items() if v is not None}
     with _fallback_lock(str(LOCK_PATH)):
+        # PANEL-CORRUPT-001：文件已损坏时拒绝覆盖——此前 _load_all 把
+        # JSONDecodeError 静默降级为 {}，下一次保存会把四个面板的全部
+        # 旧配置用默认值覆盖丢失。
+        if CONFIG_PATH.exists():
+            try:
+                with open(CONFIG_PATH, encoding="utf-8") as f:
+                    json.load(f)
+            except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                logger.error("[panel_configs] %s 已损坏，拒绝覆盖写入（原文件已保留）: %s", CONFIG_PATH, exc)
+                raise HTTPException(
+                    status_code=503,
+                    detail="面板配置文件已损坏，为保护现有配置已拒绝写入，请检查 panel_configs.json",
+                ) from exc
         all_data = _load_all()
         current = all_data.get(panel, {})
         if not isinstance(current, dict):

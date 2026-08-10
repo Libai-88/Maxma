@@ -1,9 +1,13 @@
 """API 路由 — 表情收藏管理。"""
 
+import os
 import re
+import tempfile
 import threading
 from datetime import datetime
 from pathlib import Path
+
+import yaml
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
@@ -37,14 +41,12 @@ def _validate_sticker_ref(category: str, filename: str) -> None:
 
 def _load_yaml_safe(path: Path) -> dict:
     """安全加载 YAML 文件，文件不存在时创建默认文件。"""
-    import yaml
     with _yaml_lock:
         if not path.exists():
             # H1: 文件不存在时创建默认文件
             path.parent.mkdir(parents=True, exist_ok=True)
             default_data = {'favorites': []} if 'favorite' in str(path) else {'recent': []}
-            with open(path, 'w', encoding='utf-8') as f:
-                yaml.dump(default_data, f, allow_unicode=True, default_flow_style=False)
+            _save_yaml_safe(path, default_data)
             return default_data
         try:
             with open(path, 'r', encoding='utf-8') as f:
@@ -54,12 +56,29 @@ def _load_yaml_safe(path: Path) -> dict:
 
 
 def _save_yaml_safe(path: Path, data: dict) -> None:
-    """安全保存 YAML 文件。"""
-    import yaml
+    """安全保存 YAML 文件（临时文件 + fsync + os.replace 原子替换）。
+
+    STICKER-ATOMIC-001：此前直接 open(path,'w') 覆盖写原文件——崩溃/断电
+    在写中途会留下截断的 YAML，而 _load_yaml_safe 对损坏文件返回 {}，
+    下一次任意收藏操作会把空数据原子写回，全部收藏永久丢失。
+    """
     with _yaml_lock:
         path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, 'w', encoding='utf-8') as f:
-            yaml.dump(data, f, allow_unicode=True, default_flow_style=False)
+        fd, temp_name = tempfile.mkstemp(
+            dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp", text=True
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+                yaml.dump(data, f, allow_unicode=True, default_flow_style=False)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_name, path)
+        finally:
+            if os.path.exists(temp_name):
+                try:
+                    os.unlink(temp_name)
+                except OSError:
+                    pass
 
 
 class FavoriteRequest(BaseModel):
