@@ -366,6 +366,16 @@ export function createDoneGuard(): DoneGuard {
  * The `sink` callback is invoked for every emitted event and is responsible
  * for the session_id envelope (callers bind it).
  */
+/**
+ * 工具调用次数护栏（TOOL-LOOP-GUARD-001）。
+ * OMP agent 循环无轮次/工具调用计数上限，唯一兜底是墙钟超时。模型在
+ * tool_error 后反复换参调用同一工具（或交替调用 A→B→A→B 绕过 OMP 的
+ * toolCallLoopGuard）时，10 分钟内可产生无界工具副作用与 LLM 费用。
+ * 计数与终止逻辑在 session-bridge.ts 的 subscribeSession 内实现（事件流
+ * 经订阅层转发，不经本函数的 sink），此处仅导出阈值常量。
+ */
+export const MAX_TOOL_CALLS_PER_TURN = 50;
+
 export async function orchestratePrompt(
   session: AgentSession,
   message: string,
@@ -373,8 +383,17 @@ export async function orchestratePrompt(
   sink: (event: Record<string, unknown>) => void,
   timeoutMs: number = 600_000,
 ): Promise<void> {
+  // 修复 PROMPT-WEDGE-001：超时后必须解除 promptQueue 阻塞。
+  // 此前超时只 emit done + abort，若 agent 卡在不可中断的工具/审批上，
+  // `await session.prompt()` 永不 settle → 队列链的 then 块永不完成 →
+  // 该 session 之后所有 prompt 永久排队（功能性死锁）。
+  // 方案：超时 abort 后给 3s 宽限让 abort 生效，随后 resolve 本调用
+  // （队列继续），旧 prompt 若仍在后台运行，后续 prompt 由 OMP 内部
+  // idle-retry 处理（30s 后报 AgentBusyError，可恢复而非永久卡死）。
+  let timedOut = false;
   const timeoutId = setTimeout(() => {
     if (guard.done) return;
+    timedOut = true;
     guard.done = true;
     sink({
       type: "error",
@@ -389,7 +408,14 @@ export async function orchestratePrompt(
   }, timeoutMs);
 
   try {
-    await session.prompt(message);
+    await Promise.race([
+      session.prompt(message),
+      new Promise<void>((resolve) => {
+        // 仅超时后生效：等待 abort 传播的宽限期，随后解除队列阻塞
+        if (!timedOut) return; // 正常路径由 prompt settle 胜出
+        setTimeout(resolve, 3000);
+      }),
+    ]);
   } catch (err) {
     if (!guard.done) {
       sink({

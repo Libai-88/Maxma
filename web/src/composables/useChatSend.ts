@@ -5,6 +5,7 @@
  * 自动消失计时、消息发送入口。减少 ChatInput.vue 的单文件体积。
  */
 import { ref } from 'vue'
+import { generateUUID } from '@/utils/env'
 import type { ThinkPathId } from '@/utils/thinkPath'
 
 const CONNECTION_TIMEOUT_MS = 5000
@@ -27,7 +28,7 @@ export interface UseChatSendOptions<TRefs> {
   /** 流式输出进行中（AI 正在生成回复，应拒绝新消息） */
   isStreaming: () => boolean
   /** 实际发送（返回是否成功） */
-  send: (msg: string, refs: TRefs[], thinkPath: ThinkPathId | undefined) => boolean
+  send: (msg: string, refs: TRefs[], thinkPath: ThinkPathId | undefined, clientMsgId?: string) => boolean
   /** 发送成功后的清理（清空输入/附件/自动缩放） */
   onSendSuccess: () => void
 }
@@ -39,6 +40,8 @@ export function useChatSend<TRefs>(opts: UseChatSendOptions<TRefs>) {
 
   let _connectionErrorTimer: ReturnType<typeof setTimeout> | null = null
   let _sendStateTimer: ReturnType<typeof setTimeout> | null = null
+  /** IDEMPOTENCY-001：待重试消息的幂等 id（发送成功即清除） */
+  let _pendingClientMsgId: string | null = null
 
   function clearSendStateTimer() {
     if (_sendStateTimer) { clearTimeout(_sendStateTimer); _sendStateTimer = null }
@@ -72,8 +75,12 @@ export function useChatSend<TRefs>(opts: UseChatSendOptions<TRefs>) {
       return
     }
 
-    const sent = opts.send(msg, opts.getRefs(), opts.getThinkPath() || undefined)
+    // 修复 IDEMPOTENCY-001：发送失败（WS 断开）后重试复用同一 client_msg_id，
+    // 后端据此去重，避免同一消息重发导致副作用工具重复执行
+    const sent = opts.send(msg, opts.getRefs(), opts.getThinkPath() || undefined, _pendingClientMsgId ?? undefined)
     if (!sent) {
+      // 发送失败：保留 pending id 供下次重试复用；文本保留在输入框
+      if (!_pendingClientMsgId) _pendingClientMsgId = generateUUID()
       sendState.value = 'error'
       clearSendStateTimer()
       _sendStateTimer = setTimeout(() => { sendState.value = 'idle'; _sendStateTimer = null }, SEND_ERROR_MS)
@@ -81,6 +88,7 @@ export function useChatSend<TRefs>(opts: UseChatSendOptions<TRefs>) {
       return
     }
 
+    _pendingClientMsgId = null  // 发送成功，幂等 id 使命完成
     sendState.value = 'success'
     clearSendStateTimer()
     _sendStateTimer = setTimeout(() => { sendState.value = 'idle'; _sendStateTimer = null }, SEND_FEEDBACK_MS)

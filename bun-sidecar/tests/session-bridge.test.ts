@@ -1,11 +1,13 @@
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect, spyOn } from "bun:test";
 import {
   mapPiEventToMaxma,
   createDoneGuard,
   orchestratePrompt,
   handleCancelGuard,
   buildCreateSessionOptions,
+  subscribeSession,
 } from "../src/session-bridge";
+import { MAX_TOOL_CALLS_PER_TURN } from "../src/events";
 
 describe("module import smoke test", () => {
   test("mapPiEventToMaxma is exported and callable", () => {
@@ -399,5 +401,37 @@ describe("handleCancelGuard", () => {
   });
 });
 
+// ── TOOL-LOOP-GUARD-001：工具调用计数护栏 ─────────────────────────
+describe("subscribeSession — tool loop guard", () => {
+  function makeRecord() {
+    const subscribers: Array<(e: any) => void> = [];
+    const session: any = {
+      subscribe: (cb: (e: any) => void) => { subscribers.push(cb); return () => {}; },
+      agent: { abort: () => {} },
+    };
+    return {
+      session,
+      emit: (e: any) => subscribers.forEach((cb) => cb(e)),
+      record: {
+        session,
+        unsubscribe: () => {},
+        promptQueue: Promise.resolve(),
+        currentGuard: createDoneGuard(),
+        toolCallCount: 0,
+      } as any,
+    };
+  }
 
-
+  test("tool_start 递增计数，超限后终止本轮（guard.done）", () => {
+    const { emit, record } = makeRecord();
+    // 拦截 stdout 写入（subscribeSession 内部 sendEvent 会写 stdout）
+    const writeSpy = spyOn(process.stdout, "write").mockImplementation(() => true);
+    subscribeSession("sid-test", record.session as any, record);
+    for (let i = 0; i < MAX_TOOL_CALLS_PER_TURN + 1; i++) {
+      emit({ type: "tool_start", payload: { tool_name: "bash", input: "x" } });
+    }
+    expect(record.toolCallCount).toBe(MAX_TOOL_CALLS_PER_TURN + 1);
+    expect(record.currentGuard!.done).toBe(true);
+    writeSpy.mockRestore();
+  });
+});

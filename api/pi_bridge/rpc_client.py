@@ -178,6 +178,16 @@ class JsonRpcClient:
                         "[rpc] invalid JSON from sidecar: %s", line_str[:200]
                     )
                     continue
+                # 修复 MALFORMED-RPC-001：单条畸形消息（数组/字符串等非 dict）
+                # 此前 `msg.get("id")` 抛 AttributeError 直接击穿读循环，
+                # 健康进程被误判死亡 → 全渠道重建、in-flight turn 全部失败。
+                # 非 dict 消息记录并跳过，读循环保持存活。
+                if not isinstance(msg, dict):
+                    logger.warning(
+                        "[rpc] non-dict message from sidecar: %r (skipped)",
+                        str(msg)[:200],
+                    )
+                    continue
                 # RPC response (has id) — resolve pending future inline
                 msg_id = msg.get("id")
                 if msg_id is not None and msg_id in self._pending:

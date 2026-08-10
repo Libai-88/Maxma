@@ -408,14 +408,15 @@ function addCitation(ref: ParsedRef) {
   chatInputRef.value?.addRef(ref)
 }
 
-function onSend(text: string, refs: ParsedRef[], providerId?: string, modelName?: string, thinkPathId?: ThinkPathId): boolean {
+function onSend(text: string, refs: ParsedRef[], providerId?: string, modelName?: string, thinkPathId?: ThinkPathId, clientMsgId?: string): boolean {
   // 将选区引用作为 refs 的一部分传给后端
     const quoteRefs: SelectionRef[] = quotedSelections.value.map(q => ({
       type: 'selection',
       label: q.source,
       preview: q.text,
     }))
-  const sent = send(text, [...refs, ...quoteRefs], providerId, modelName, thinkPathId)
+  // IDEMPOTENCY-001：clientMsgId 透传（重试复用同一幂等 id）
+  const sent = send(text, [...refs, ...quoteRefs], providerId, modelName, thinkPathId, clientMsgId)
   // 修复 SEND-FAIL-QUOTES-001：发送失败（WS 断开）时保留选区引用，
   // 用户重连后可直接重发，无需重新选择
   if (sent) clearQuotes()

@@ -276,6 +276,10 @@ async def _stream_turn_sidecar(
         # 传入可用工具名列表，让 OMP session 正确注册 function calling
         _session_tools = [t["name"] for t in _CHAT_BUILTIN_TOOLS if isinstance(t, dict) and t.get("name")]
 
+        # MAXTOKENS-END2END-001：用户设置的输出上限（首条消息 payload 存入
+        # session._max_tokens）传给 sidecar 覆写 Model.maxTokens。
+        _session_max_tokens = getattr(session, "_max_tokens", None) or 0
+
         # 原生提示词模式：走 OMP append_system_prompt（追加到 OMP 原生 prompt 之后），
         # 不传 system_prompt，避免整体替换 OMP 原生的 harness prompt。
         # 品牌模式：传 system_prompt（整体替换，旧行为）。
@@ -293,6 +297,7 @@ async def _stream_turn_sidecar(
                     "cwd": str(PROJECT_ROOT),
                     "permission_mode": _effective_permission_mode,
                     "tools": _session_tools,
+                    **({"max_tokens": _session_max_tokens} if _session_max_tokens else {}),
                 },
             )
         except Exception as e:
@@ -758,6 +763,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             # Process a completed turn before waiting for new messages
             elif turn_task and turn_task.done():
                 await _handle_turn_result(turn_task)
+                session.active_turn_ws = None  # CONN-MUTEX-001：turn 结束释放归属
                 continue
 
             # Wait for a new message or the current turn to complete
@@ -787,6 +793,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                         except asyncio.CancelledError:
                             pass
                     await _handle_turn_result(turn_task)
+                    session.active_turn_ws = None  # CONN-MUTEX-001：turn 结束释放归属
                     continue
                 raw = recv_task.result()
             else:
@@ -946,6 +953,37 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             if not user_message:
                 continue
 
+            # 修复 IDEMPOTENCY-001：client_msg_id 幂等去重。
+            # 前端在发送失败（WS 断开）后重试时复用同一 id——同一逻辑消息
+            # 只执行一次，避免写文件/bash 等副作用工具重复执行。
+            client_msg_id = payload.get("client_msg_id")
+            if isinstance(client_msg_id, str) and client_msg_id:
+                if client_msg_id in session.recent_message_ids:
+                    logger.info(
+                        "[ws] 重复 client_msg_id=%s 已忽略（幂等去重）", client_msg_id[:12]
+                    )
+                    continue
+                session.recent_message_ids.append(client_msg_id)
+
+            # MAXTOKENS-END2END-001：记录用户设置的输出上限（会话创建时使用）
+            _mt = payload.get("max_tokens")
+            if isinstance(_mt, (int, float)) and _mt > 0:
+                session._max_tokens = int(_mt)
+
+            # 修复 CONN-MUTEX-001：同一 session 多 WS 连接互斥。
+            # 跨连接并发 turn 会让双方订阅同一 sidecar session 的事件流，
+            # 消息归属错乱。仅允许持有 active_turn_ws 的连接发起新 turn。            if session.active_turn_ws is not None and session.active_turn_ws is not ws:
+                await ws.send_json({
+                    "type": WsEventType.ERROR,
+                    "payload": {
+                        "code": "BUSY",
+                        "message": "另一窗口正在处理该会话，请稍后再试",
+                        "category": "system_error",
+                        "trace_id": uuid.uuid4().hex,
+                    },
+                })
+                continue
+
             # ═══ 运行时配置注入 ═══
             # AGENTS.md 声明了每轮对话注入 [运行时配置]。若缺失，
             # 模型会反复"索取"此信息，以为前端忘记发送了。
@@ -1018,6 +1056,17 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                 system_prompt = build_system_prompt()
                 _use_append = False
 
+            # 修复 PROMPT-LEN-001：提示词长度预检（仅日志警告，不截断——
+            # OMP 的 compaction 预算会计入 prompt，超限由压缩策略处理）。
+            # 提示词过大（用户自述/宏/AGENTS.md 很长）时，小上下文模型会
+            # 直接 context length exceeded，此处提前暴露可诊断信号。
+            _prompt_len = len(system_prompt) if system_prompt else 0
+            if _prompt_len > 30000:
+                logger.warning(
+                    "[prompt] system_prompt 过大（%d 字符），小上下文模型可能超限",
+                    _prompt_len,
+                )
+
             turn_id = payload.get("turn_id")
             model_config = _resolve_chat_model(
                 str(payload.get("provider_id") or ""),
@@ -1032,6 +1081,9 @@ async def websocket_chat(ws: WebSocket, session_id: str):
 
             # Reset cancel event for new turn
             cancel_event.clear()
+
+            # CONN-MUTEX-001：记录 turn 归属连接，turn 结束后清除
+            session.active_turn_ws = ws
 
             # Start streaming as a background task so the message loop
             # remains responsive for cancel and auxiliary messages
@@ -1050,6 +1102,9 @@ async def websocket_chat(ws: WebSocket, session_id: str):
     except WebSocketDisconnect:
         pass
     finally:
+        # CONN-MUTEX-001：断开连接若持有 turn 归属则释放
+        if session.active_turn_ws is ws:
+            session.active_turn_ws = None
         if turn_task and not turn_task.done():
             cancel_event.set()
             await _cancel_sidecar_turn(

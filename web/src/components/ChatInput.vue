@@ -253,7 +253,7 @@ const {
   isDisabled: () => disabled.value,
   canSend: () => canSend.value,
   isStreaming: () => isStreaming.value,
-  send: (msg, refs, thinkPath) => chatInput.send(msg, refs, thinkPath),  onSendSuccess: () => {
+  send: (msg, refs, thinkPath, clientMsgId) => chatInput.send(msg, refs, thinkPath, clientMsgId),  onSendSuccess: () => {
     text.value = ''
     selectedThinkPathId.value = null
     clearRefs()

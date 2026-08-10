@@ -1523,7 +1523,7 @@ export function useChat(sessionId: Ref<string>) {
     turnsCache.clear()
   })
 
-  function send(text: string, refs: ParsedRef[] = [], providerId?: string, modelName?: string, thinkPathId?: ThinkPathId): boolean {
+  function send(text: string, refs: ParsedRef[] = [], providerId?: string, modelName?: string, thinkPathId?: ThinkPathId, clientMsgId?: string): boolean {
     const ch = activeChannel.value
     if (!ch.ws || ch.ws.readyState !== WebSocket.OPEN) {
       log.warn(`WebSocket 未就绪, readyState=${ch.ws?.readyState}, session=${sessionId.value}`)
@@ -1541,6 +1541,11 @@ export function useChat(sessionId: Ref<string>) {
 
     const timestamp = buildTimestamp()
     const flatMsg = buildFlatMessage(text, timestamp, refs)
+
+    // 修复 IDEMPOTENCY-001：客户端消息幂等 id。
+    // 网络抖动/重连后用户重发同一消息（文本保留）时复用同一 id，
+    // 后端据此去重，避免写文件/bash 等副作用工具重复执行。
+    const msgId = clientMsgId ?? generateUUID()
 
     const turn: ChatTurn = {
       id: generateUUID(),
@@ -1574,6 +1579,7 @@ export function useChat(sessionId: Ref<string>) {
       type: 'chat',
       payload: {
         message: flatMsg,
+        client_msg_id: msgId,
         private: ch.privateMode,
         auto_approve: ch.autoApprove,
         provider_id: providerId,

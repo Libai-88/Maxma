@@ -35,7 +35,7 @@ import { bridgeState, type DoneGuard, type PendingApproval, type SessionRecord }
 import { send, sendError, sendEvent, type BridgeIo } from "./rpc";
 import { createConfiguredMcp, filterMcpTools, wireMcpToolsChanged, mcpReloadUnsupportedResponse, loadConfiguredMcp, mcpConfigPath } from "./mcp";
 import { parseModel } from "./model";
-import { mapPiEventToMaxma, createDoneGuard, orchestratePrompt, handleCancelGuard, computeUndoTurnCut, compactMessages, resolveUserResponse } from "./events";
+import { mapPiEventToMaxma, createDoneGuard, orchestratePrompt, handleCancelGuard, computeUndoTurnCut, compactMessages, resolveUserResponse, MAX_TOOL_CALLS_PER_TURN } from "./events";
 import { createApprovalUiContext, parseApprovalTitle } from "./approval";
 
 // Re-export public API so existing imports (tests, rpc_client) keep working.
@@ -205,12 +205,38 @@ async function getSharedAuthStorage() {
 // JSON-RPC helpers
 // ---------------------------------------------------------------------------
 
-function subscribeSession(
+export function subscribeSession(
   sessionId: string,
   session: AgentSession,
   record: SessionRecord,
 ): () => void {
   return session.subscribe((event: unknown) => {
+    // 修复 TOOL-LOOP-GUARD-001：按 tool_start 计数，超限终止本轮。
+    // OMP 循环无计数上限（仅 600s 墙钟兜底），模型在 tool_error 后反复
+    // 调用工具时会产生无界副作用与费用。计数在订阅层（事件实际流经此处）。
+    if ((event as { type?: string })?.type === "tool_start") {
+      record.toolCallCount += 1;
+      if (record.toolCallCount > MAX_TOOL_CALLS_PER_TURN) {
+        const guard = record.currentGuard;
+        if (guard && !guard.done) {
+          guard.done = true;
+          sendEvent(sessionId, {
+            type: "error",
+            payload: {
+              code: "TOOL_LOOP_LIMIT",
+              message: `工具调用次数超过上限（${MAX_TOOL_CALLS_PER_TURN}），已终止本轮`,
+            },
+          });
+          sendEvent(sessionId, { type: "done", payload: {} });
+          try {
+            session.agent.abort("Tool loop limit reached");
+          } catch {
+            // best-effort abort
+          }
+        }
+        return; // 丢弃超限后的多余工具事件
+      }
+    }
     const mapped = mapPiEventToMaxma(event as Record<string, unknown>, record.currentGuard);
     if (mapped) {
       sendEvent(sessionId, mapped);
@@ -291,6 +317,13 @@ export async function handleRpcRequest(req: RpcRequest, io: BridgeIo = defaultIo
           providerType: params?.provider_type,
           contextWindow: params?.context_window as number | undefined,
         });
+        // MAXTOKENS-END2END-001：用户设置的输出上限端到端生效。
+        // 前端 max_tokens → chat.py → create_session；覆写 Model.maxTokens
+        // （OMP 按模型 maxTokens 发 max_tokens 参数）。此前该设置被忽略。
+        const requestedMaxTokens = Number(params?.max_tokens);
+        if (Number.isFinite(requestedMaxTokens) && requestedMaxTokens > 0) {
+          model.maxTokens = Math.min(requestedMaxTokens, 262144);
+        }
         const cwd: string = params?.cwd ?? process.cwd();
         const systemPrompt: string | undefined = params?.system_prompt;
         const appendSystemPrompt: string | undefined = params?.append_system_prompt;
@@ -344,6 +377,7 @@ export async function handleRpcRequest(req: RpcRequest, io: BridgeIo = defaultIo
           unsubscribe: () => {},
           promptQueue: Promise.resolve(),
           currentGuard: null,
+          toolCallCount: 0,
           mcpManager,
           mcpConfigs,
           mcpAllowBlock,
@@ -393,6 +427,7 @@ export async function handleRpcRequest(req: RpcRequest, io: BridgeIo = defaultIo
           .then(async () => {
             const guard = createDoneGuard();
             record.currentGuard = guard;
+            record.toolCallCount = 0;  // TOOL-LOOP-GUARD-001：每轮重置计数
             try {
               await orchestratePrompt(
                 record.session,

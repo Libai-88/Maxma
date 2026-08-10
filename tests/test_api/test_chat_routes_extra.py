@@ -10,6 +10,7 @@ import json
 import logging
 import threading
 import uuid
+from collections import deque
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -40,6 +41,8 @@ class _FakeChatSession:
         self.created_at = "2026-01-01T00:00:00Z"
         self._sidecar_mgr = None
         self._sidecar_session_id = None
+        self.active_turn_ws = None
+        self.recent_message_ids = deque(maxlen=200)
 
     def persistent_metadata(self):
         return {"created_at": self.created_at}

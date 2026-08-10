@@ -16,6 +16,8 @@ export interface SessionRecord {
   eventBus?: EventBus;  // Phase 3.4: Shared EventBus
   promptQueue: Promise<void>;  // serializes concurrent prompt calls
   currentGuard: DoneGuard | null;  // active per-prompt done sentinel
+  /** 当前 prompt 的工具调用计数（TOOL-LOOP-GUARD-001），prompt 开始时重置 */
+  toolCallCount: number;
   mcpManager?: MCPManager;
   mcpConfigs?: Record<string, MCPServerConfig>;
   mcpAllowBlock?: Record<string, { allow?: string[]; block?: string[] }>;

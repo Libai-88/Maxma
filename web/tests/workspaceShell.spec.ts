@@ -94,7 +94,7 @@ describe('workspace shell', () => {
     expect(chatInputSource).toContain('removeStickerSegment')
     expect(chatInputSource).toContain('refs.value')
     expect(chatInputSource).toContain('getThinkPath: () => selectedThinkPathId.value')
-    expect(chatViewSource).toContain('send(text, [...refs, ...quoteRefs], providerId, modelName, thinkPathId)')
+    expect(chatViewSource).toContain('send(text, [...refs, ...quoteRefs], providerId, modelName, thinkPathId, clientMsgId)')
     expect(chatInputSource).toContain('text.value = text.value.slice(0, currentSticker.start) + text.value.slice(currentSticker.end)')
 
     // 样式已外置到 chat-input.css（S2-2），断言改为直接读取样式文件

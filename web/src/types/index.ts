@@ -439,6 +439,8 @@ export interface ChatMessage {
   type: 'chat'
   payload: {
     message: string
+    /** IDEMPOTENCY-001：客户端消息幂等 id（发送失败重试复用，后端据此去重） */
+    client_msg_id?: string
     /** 前端 privateMode 用：控制 localStorage 持久化，后端不需要（B2）。 */
     private?: boolean
     /** 会话级语义；per-turn 发但实际由建会时 permission_mode 决定（B2/B1）。 */

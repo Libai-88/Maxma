@@ -47,13 +47,17 @@ export function parseModel(
   // anthropic 端点（默认供应商 claude-haiku-3-5 等非目录模型）收到 OpenAI 格式
   // 请求必然失败。anthropic 端点用 anthropic-messages 协议。
   const isAnthropic = /anthropic/i.test(baseUrl) || provider === "anthropic";
+  // 修复 REASONING-FALLBACK-001：手工回退模型按模型 id 启发式识别推理模型
+  // （此前硬编码 reasoning=false，deepseek-r1 等非目录推理模型被当作非推理
+  // 模型，OMP 不走 reasoning 路径、无思考预算控制）。目录命中仍以目录为准。
+  const reasoningModelId = /reasoner|r1|thinking|deepseek-reason/i.test(modelId);
   return {
     id: modelId,
     name: modelId,
     api: (isAnthropic ? "anthropic-messages" : "openai-completions") as "anthropic-messages" | "openai-completions",
     provider,
     baseUrl,
-    reasoning: false,
+    reasoning: reasoningModelId,
     input: ["text"] as ("text" | "image")[],
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: options?.contextWindow ?? 128000,

@@ -7,6 +7,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
+from collections import deque
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,18 @@ class SessionState:
     # ── oh-my-pi sidecar 字段 ─────────────────────────────────
     _sidecar_mgr: Any = field(default=None, repr=False)
     _sidecar_session_id: str | None = field(default=None, repr=False)
+
+    # ── 消息幂等（IDEMPOTENCY-001）──────────────────────────
+    # 最近收到的 client_msg_id（环形上限 200），重发/重连后同 id 消息去重，
+    # 避免副作用工具重复执行。deque 的 append/contains 在 GIL 下原子。
+    recent_message_ids: deque[str] = field(
+        default_factory=lambda: deque(maxlen=200), repr=False
+    )
+
+    # ── 多连接互斥（CONN-MUTEX-001）────────────────────────
+    # 当前正在执行 turn 的 WS 连接归属。第二个连接发 chat 消息时据此拒绝，
+    # 避免跨连接并发 turn 的消息归属错乱。
+    active_turn_ws: Any = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         """初始化后处理。
