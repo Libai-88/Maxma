@@ -131,4 +131,35 @@ describe('robustness — 异常/畸形事件防御', () => {
     expect(think?.tokens).toBe('正常')
     expect(think?.tokens).not.toContain('undefined')
   })
+
+  it('TURN-OWNERSHIP：已终结轮次的迟到事件被丢弃，不污染新轮', () => {
+    const ch = setup()
+    // 旧轮：turn_start 由 send 创建 → done 设置 _lastDoneTurnId
+    startTurn(ch, 'old-turn')
+    handleEventForChannel('test-session', {
+      type: 'tool_start',
+      payload: { turn_id: 'old-turn', tool_name: 'bash', input: 'ls' },
+    })
+    handleEventForChannel('test-session', { type: 'done', payload: { turn_id: 'old-turn', cancelled: true } })
+    expect(ch._lastDoneTurnId).toBe('old-turn')
+    expect(ch.isStreaming).toBe(false)
+
+    // 新轮开始（send 后状态）
+    startTurn(ch, 'new-turn')
+    // 旧轮的迟到事件（cancel RPC 生效前已序列化）：必须被丢弃
+    handleEventForChannel('test-session', {
+      type: 'tool_end',
+      payload: { turn_id: 'old-turn', tool_name: 'bash', output: 'ghost output', elapsed: 1 },
+    })
+    handleEventForChannel('test-session', {
+      type: 'error',
+      payload: { turn_id: 'old-turn', code: 'AGENT_ERROR', message: '迟到的错误' },
+    })
+    // 新轮不被污染：无幽灵工具卡片、流式状态未被误杀
+    expect(ch.currentTurn?.events.filter(e => e.kind === 'tool').length).toBe(0)
+    expect(ch.isStreaming).toBe(true)
+    // 新轮正常事件仍被处理
+    handleEventForChannel('test-session', { type: 'token', payload: { token: '新轮内容', turn_id: 'new-turn' } })
+    expect(ch.currentTurn?.events.find(e => e.kind === 'thinking')?.tokens).toBe('新轮内容')
+  })
 })

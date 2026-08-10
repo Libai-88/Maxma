@@ -167,6 +167,7 @@ async def _stream_turn_sidecar(
     cancel_event: asyncio.Event | None = None,
     *,
     use_append: bool = False,
+    turn_id: str = "",
 ) -> str:
     """Execute a turn via oh-my-pi sidecar (Bun subprocess).
 
@@ -174,6 +175,9 @@ async def _stream_turn_sidecar(
     retry_*, notice, sub_session_created, memory_*, plan_* 等)
     to the frontend in real-time via transparent forwarding.
     Returns the final answer string.
+
+    turn_id：当前轮次 ID（TURN-OWNERSHIP-001）。转发事件携带 turn_id，
+    前端据此丢弃已终结轮次的迟到事件（cancel 后快速重发时的旧轮污染）。
     """
     model_config = model_config or {}
     app_state = ws.app.state
@@ -330,7 +334,7 @@ async def _stream_turn_sidecar(
                         message="调用工具",
                     )
                     await ws.send_json(
-                        {"type": WsEventType.TOOL_START, "payload": {"tool_name": payload.get("tool_name", ""), "input": payload.get("input", "")}}
+                        {"type": WsEventType.TOOL_START, "payload": {"turn_id": turn_id, "tool_name": payload.get("tool_name", ""), "input": payload.get("input", "")}}
                     )
                 elif evt_type == WsEventType.TOOL_END:
                     record_activity(
@@ -340,7 +344,7 @@ async def _stream_turn_sidecar(
                         message="工具执行完成",
                     )
                     await ws.send_json(
-                        {"type": WsEventType.TOOL_END, "payload": {"tool_name": payload.get("tool_name", ""), "output": payload.get("output", ""), "elapsed": payload.get("elapsed", 0)}}
+                        {"type": WsEventType.TOOL_END, "payload": {"turn_id": turn_id, "tool_name": payload.get("tool_name", ""), "output": payload.get("output", ""), "elapsed": payload.get("elapsed", 0)}}
                     )
                     # Phase 2.2: 检测文件写入型工具，合成 artifact 事件
                     tool_name = payload.get("tool_name", "")
@@ -364,7 +368,7 @@ async def _stream_turn_sidecar(
                         message=str(payload.get("error", "")) or "工具执行出错",
                     )
                     await ws.send_json(
-                        {"type": WsEventType.TOOL_ERROR, "payload": {"tool_name": payload.get("tool_name", ""), "error": payload.get("error", "")}}
+                        {"type": WsEventType.TOOL_ERROR, "payload": {"turn_id": turn_id, "tool_name": payload.get("tool_name", ""), "error": payload.get("error", "")}}
                     )
                 elif evt_type == WsEventType.ERROR:
                     # 前端 ChatWindow 渲染 errorTraceId（Trace 显示）和 errorCategory
@@ -393,6 +397,7 @@ async def _stream_turn_sidecar(
                         {
                             "type": WsEventType.ERROR,
                             "payload": {
+                                "turn_id": turn_id,
                                 "code": error_code,
                                 "message": error_message,
                                 "trace_id": error_trace_id,
@@ -648,6 +653,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                     {
                         "type": WsEventType.ERROR,
                         "payload": {
+                            "turn_id": _new_turn_id(_turn_id),
                             "code": error_code,
                             "message": error_message,
                             "category": "system_error",
@@ -672,7 +678,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
 
         if final_answer:
             await ws.send_json(
-                {"type": WsEventType.ANSWER, "payload": {"content": final_answer}}
+                {"type": WsEventType.ANSWER, "payload": {"turn_id": _new_turn_id(tid), "content": final_answer}}
             )
             session.message_count += 2
 
@@ -1006,6 +1012,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                     model_config=model_config,
                     cancel_event=cancel_event,
                     use_append=_use_append,
+                    turn_id=turn_id,
                 )
             )
             # Go back to loop top — _handle_turn_result processes completion

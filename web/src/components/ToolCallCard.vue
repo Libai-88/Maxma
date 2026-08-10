@@ -306,13 +306,17 @@ function detectCodeDisplay(raw: string): CodeDisplay | MarkdownDisplay {
 }
 
 const inputDisplay = computed<SectionDisplay>(() => {
-  const kv = parseJsonKv(props.toolCall.input)
+  // 修复 TYPE-DEFENSE-001：input/output 可能为非字符串（桥接侧异常），
+  // String() 兜底避免下游 .trim()/.split() 抛 TypeError 导致渲染崩溃
+  const raw = typeof props.toolCall.input === 'string' ? props.toolCall.input : String(props.toolCall.input ?? '')
+  const kv = parseJsonKv(raw)
   if (kv) return kv
   return { type: 'markdown' }
 })
 
 const outputDisplay = computed<SectionDisplay>(() => {
-  const raw = props.toolCall.output
+  // 修复 TYPE-DEFENSE-001：同 input，非字符串输出兜底
+  const raw = typeof props.toolCall.output === 'string' ? props.toolCall.output : String(props.toolCall.output ?? '')
   if (!raw) return { type: 'markdown' }
   // 1) 图片预览
   const img = detectImageDisplay(raw)
@@ -466,6 +470,10 @@ useGsap((_ctx, contextSafe) => {
 }
 .tool-card.error {
   border-color: color-mix(in srgb, var(--status-error) 30%, var(--border));
+}
+/* 错误态：头部文字与图标着色（ERROR-VISUAL-001） */
+.tool-card.error .tool-header {
+  color: var(--status-error);
 }
 .tool-header {
   padding: 8px 14px;

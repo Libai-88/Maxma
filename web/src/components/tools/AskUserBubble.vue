@@ -1,12 +1,12 @@
 <template>
   <BubbleChrome :tool-call="toolCall">
     <!-- 等待交互数据到达 -->
-    <div v-if="toolCall.status === 'running' && !submitted && !interactionData.interactionId" class="ask-waiting">
+    <div v-if="toolCall.status === 'running' && !isSubmitted && !interactionData.interactionId" class="ask-waiting">
       <span>等待询问...</span>
     </div>
 
     <!-- 运行中：展示交互表单 -->
-    <div v-else-if="toolCall.status === 'running' && !submitted && interactionData.interactionId" class="ask-body">
+    <div v-else-if="toolCall.status === 'running' && !isSubmitted && interactionData.interactionId" class="ask-body">
       <p class="ask-question">{{ interactionData.question }}</p>
 
       <!-- QA 模式：自由文本输入 -->
@@ -116,7 +116,7 @@
     </div>
 
     <!-- 已提交，等待回复 -->
-    <div v-else-if="toolCall.status === 'running' && submitted" class="ask-waiting">
+    <div v-else-if="toolCall.status === 'running' && isSubmitted" class="ask-waiting">
       <span>已提交，等待回复...</span>
     </div>
 
@@ -157,6 +157,17 @@ const emit = defineEmits<{
 }>()
 
 const submitted = ref(false)
+
+function markSubmitted() {
+  // 持久化到 interaction（ASK-REPEAT-001）：滚动重建后组件本地态丢失，
+  // 靠 interaction.submitted 恢复"已提交"状态
+  if (interactionData.value.interactionId) {
+    emit('action', {
+      action: 'set_ask_submitted',
+      data: { interactionId: interactionData.value.interactionId },
+    })
+  }
+}
 const qaText = ref('')
 const singleSelected = ref('')
 const multiSelected = ref<string[]>([])
@@ -168,7 +179,7 @@ const countdownRemaining = ref(TIMEOUT_SECONDS)
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 
 const showCountdown = computed(() => {
-  return props.toolCall.status === 'running' && !submitted.value && !!interactionData.value.interactionId
+  return props.toolCall.status === 'running' && !isSubmitted.value && !!interactionData.value.interactionId
 })
 
 const countdownPercent = computed(() => {
@@ -222,6 +233,11 @@ const interactionData = computed(() => {
   return result
 })
 
+// 修复 ASK-REPEAT-001：提交状态优先读持久化的 interaction.submitted
+// （ChatView 在 user_response 成功后写入），组件被 DynamicScroller
+// 销毁重建后仍显示"已提交"，不会对同一 interaction 二次提交。
+const isSubmitted = computed(() => submitted.value || interactionData.value.submitted === true)
+
 // 交互数据到达时启动倒计时（必须在 interactionData 声明之后，否则触发 TDZ ReferenceError）
 // immediate: 组件挂载时若 interactionId 已存在（如从历史会话恢复），需立即启动倒计时，
 // 否则只有 interactionId 变化时才会启动，导致历史会话恢复场景下倒计时永远不开始。
@@ -257,6 +273,7 @@ function submitQA() {
   const text = qaText.value.trim()
   if (!text) return
   submitted.value = true
+  markSubmitted()
   emit('action', {
     action: 'user_response',
     data: {
@@ -269,6 +286,7 @@ function submitQA() {
 function submitSingle() {
   if (!singleSelected.value) return
   submitted.value = true
+  markSubmitted()
   emit('action', {
     action: 'user_response',
     data: {
@@ -281,6 +299,7 @@ function submitSingle() {
 function submitMulti() {
   if (multiSelected.value.length === 0) return
   submitted.value = true
+  markSubmitted()
   emit('action', {
     action: 'user_response',
     data: {
@@ -293,6 +312,7 @@ function submitMulti() {
 function submitConfirm() {
   if (confirmText.value.trim() !== '确认') return
   submitted.value = true
+  markSubmitted()
   emit('action', {
     action: 'user_response',
     data: {

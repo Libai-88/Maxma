@@ -58,7 +58,9 @@ export function useChatSend<TRefs>(opts: UseChatSendOptions<TRefs>) {
 
   function handleSend() {
     const msg = opts.text().trim()
-    if (!msg && !opts.hasImage()) return
+    // 修复 SEND-REFS-001：仅有引用/文件附件（无文本无图片）也可发送——
+    // 引用会由 buildFlatMessage 拼入消息（时间尾缀保证后端判空不误杀）
+    if (!msg && !opts.hasImage() && opts.getRefs().length === 0) return
     if (opts.isDisabled()) return
 
     // 修复 F-001：流式输出期间忽略发送（键盘 Enter 路径），按钮已禁用。

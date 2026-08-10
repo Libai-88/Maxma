@@ -98,6 +98,8 @@ export interface SessionChannel {
   _lastPongAt: number  // 上次收到 pong 的时间戳（ms），用于检测静默断开
   /** context_compressing 在 currentTurn 为 null 时缓存，待下一轮创建后回放 */
   pendingCompaction?: { reason: CompactionReason; action: CompactionAction }
+  /** 最近一次 done 事件的 turn_id（TURN-OWNERSHIP-001：用于丢弃已终结轮次的迟到事件） */
+  _lastDoneTurnId: string | null
 }
 
 function createChannel(): SessionChannel {
@@ -108,6 +110,7 @@ function createChannel(): SessionChannel {
     reconnectTimer: null, reconnectAttempts: 0, initialized: false,
     _awaitingToolName: null, parentSessionId: null,
     privateMode: false, autoApprove: false, _pingTimer: null, _lastPongAt: 0,
+    _lastDoneTurnId: null,
   }
 }
 
@@ -139,6 +142,34 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function removeChannel(sid: string) {
+    channels.delete(sid)
+  }
+
+  /**
+   * 完整断开一个会话通道（DELETE-SESSION-001）。
+   * 删除会话时必须先断开 WS 并终止进行中的 agent 任务——此前只删 localStorage
+   * 缓存，被删会话的 channel 仍存活：流式中删除时任务在后台继续跑、事件继续
+   * 到达、persistTurns 把已删缓存重新写回（缓存复活）。
+   * 放这里而非 useChat.ts：session store 删除流程需要调用，避免循环依赖。
+   */
+  function disconnectChannel(sid: string) {
+    const ch = channels.get(sid)
+    if (!ch) return
+    if (ch.reconnectTimer) {
+      clearTimeout(ch.reconnectTimer)
+      ch.reconnectTimer = null
+    }
+    if (ch._pingTimer) {
+      clearInterval(ch._pingTimer)
+      ch._pingTimer = null
+    }
+    if (ch.ws) {
+      ch.ws.onclose = null
+      ch.ws.close()
+      ch.ws = null
+    }
+    ch.connected = false
+    ch.initialized = false
     channels.delete(sid)
   }
 
@@ -208,7 +239,7 @@ export const useChatStore = defineStore('chat', () => {
 
   return {
     channels, allSessionStatuses, TURNS_KEY_PREFIX,
-    getOrCreateChannel, removeChannel,
+    getOrCreateChannel, removeChannel, disconnectChannel,
     removeTurnsFromStorage, loadTurnsFromStorage,
     cleanupOrphanedCaches,
     // --- New exports ---

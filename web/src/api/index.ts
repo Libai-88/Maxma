@@ -214,7 +214,11 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     res = await doFetch()
   }
   if (!res.ok) {
-    const userMsg = `API 请求失败 (${res.status})`
+    // 修复 RATE-LIMIT-HINT-001：429（限流）给出可理解的提示，
+    // 其余状态保持通用文案（detail 只进 console 不暴露内部细节）
+    const userMsg = res.status === 429
+      ? '操作过于频繁，请稍后再试'
+      : `API 请求失败 (${res.status})`
     try {
       const body = await res.json()
       // 将后端详情输出到 console 便于调试，不向用户暴露内部细节

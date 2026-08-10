@@ -238,7 +238,7 @@
         @click="scrollToTurn(idx)"
         @keydown.enter.prevent="scrollToTurn(idx)"
         @keydown.space.prevent="scrollToTurn(idx)"
-        :title="turn.userMessage.slice(0, 60)"
+        :title="truncateWithEllipsis(turn.userMessage, 60)"
         aria-label="跳转到该轮次"
       />
     </div>
@@ -264,6 +264,7 @@ import { useChatScroll } from '@/composables/useChatScroll'
 import { gsap, useGsap } from '@/composables/useGsap'
 import { useTypewriter } from '@/composables/useTypewriter'
 import { useContextMenu } from '@/composables/useContextMenu'
+import { truncateWithEllipsis } from '@/utils/text'
 import ContextMenu from './ContextMenu.vue'
 import MessageBubble from './MessageBubble.vue'
 import ThinkingBlock from './ThinkingBlock.vue'

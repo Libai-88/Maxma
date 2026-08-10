@@ -383,7 +383,14 @@ const chatInputInstance = provideChatInput({
   quotedSelections,
   quoteCandidate,
   onSend,
-  onStop: cancel,
+  // 修复 CANCEL-FEEDBACK-001：停止失败（WS 断开）时提示用户
+  onStop: () => {
+    if (!cancel()) {
+      window.dispatchEvent(new CustomEvent('maxma:error', {
+        detail: { message: '连接已断开，无法停止当前任务' },
+      }))
+    }
+  },
   onModelChange,
   onCommitQuote: commitCandidate,
   onRemoveQuote: removeQuote,
@@ -415,10 +422,36 @@ function onSend(text: string, refs: ParsedRef[], providerId?: string, modelName?
   return sent
 }
 
+/** 持久化 interaction.submitted（ASK-REPEAT-001），跨组件生命周期有效 */
+function markInteractionSubmitted(interactionId: string) {
+  if (!interactionId) return
+  for (const ch of chatStore.channels.values()) {
+    for (const turn of [ch.currentTurn, ...ch.turns].filter(Boolean)) {
+      if (!turn) continue
+      for (const ev of turn.events) {
+        if (ev.kind === 'tool' && ev.interaction?.interactionId === interactionId) {
+          ev.interaction.submitted = true
+        }
+      }
+    }
+  }
+}
+
 function handleToolAction(payload: { action: string; data?: unknown }) {
-  if (payload.action === 'user_response') {
-    const d = payload.data as { interactionId: string; response: string | string[] }
-    sendUserResponse(d.interactionId, d.response)
+  if (payload.action === 'user_response') {    const d = payload.data as { interactionId: string; response: string | string[] }
+    // 修复 APPROVAL-LOSS-001：WS 断开时发送失败 → 不置 responded 乐观状态，
+    // 审批气泡保持可操作，用户重连后可重试
+    const ok = sendUserResponse(d.interactionId, d.response)
+    if (!ok) {
+      log.warn(`审批响应发送失败（WS 未就绪），保持待审批状态 interaction=${d.interactionId}`)
+    } else {
+      // 持久化 submitted（ASK-REPEAT-001）：AskUserBubble 滚动重建后
+      // 本地 submitted 丢失，靠 interaction.submitted 恢复"已提交"态
+      markInteractionSubmitted(d.interactionId)
+    }
+  } else if (payload.action === 'set_ask_submitted') {
+    const d = payload.data as { interactionId: string }
+    markInteractionSubmitted(d.interactionId)
   } else if (payload.action === 'set_responded') {
     const d = payload.data as { interactionId: string; responded: 'yes' | 'no' }
     // 持久化审批响应到 interaction 数据中（跨 DynamicScroller 生命周期）

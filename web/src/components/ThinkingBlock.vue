@@ -18,7 +18,8 @@
         ></div>
         <template v-else-if="block.becameAnswer">
           <template v-for="(seg, i) in segments" :key="i">
-            <RenderMarkdown v-if="seg.type === 'text'" :content="seg.text" />
+            <!-- :streaming 使 RenderMarkdown 在流式阶段跳过沙箱 iframe 逐 token 重建（RENDER-O2 修复） -->
+            <RenderMarkdown v-if="seg.type === 'text'" :content="seg.text" :streaming="!block.done" />
             <StickerInline v-else :sticker="seg" @preview="previewSticker" />
           </template>
         </template>
@@ -203,8 +204,13 @@ useGsap((ctx, contextSafe) => {
   )
 })
 
-/** 解析内容中的 <sticker:category/filename.webp> 标记，分段返回 */
-const cleanedTokens = computed(() => stripThinkingLabels(props.block.tokens ?? ''))
+/** 解析内容中的 <sticker:category/filename.webp> 标记，分段返回。
+ *  RENDER-O2 修复：流式阶段用 80ms 节流的 displayText（与思考阶段同一节流器）
+ *  切分，避免每个 token 触发全量 md.render + sanitizeHtml 的 O(n²) 渲染；
+ *  done 时 displayText 已被 watch 立即设为全量，内容不丢。 */
+const cleanedTokens = computed(() =>
+  props.block.done ? stripThinkingLabels(props.block.tokens ?? '') : displayText.value,
+)
 const segments = useStickerSegments(cleanedTokens)
 const stickerSegments = computed(() => segments.value.filter((seg): seg is StickerSegment => seg.type === 'sticker'))
 

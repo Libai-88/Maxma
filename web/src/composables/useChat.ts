@@ -123,26 +123,9 @@ function saveTurnsToStorage(sid: string, data: ChatTurn[]) {
 }
 
 export function disconnectSession(sid: string) {
-  const chatStore = useChatStore()
-  const ch = chatStore.channels.get(sid)
-  if (!ch) return
-  if (ch.reconnectTimer) {
-    clearTimeout(ch.reconnectTimer)
-    ch.reconnectTimer = null
-  }
-  // 清理心跳 ping 定时器（修复 R-005）
-  if (ch._pingTimer) {
-    clearInterval(ch._pingTimer)
-    ch._pingTimer = null
-  }
-  if (ch.ws) {
-    ch.ws.onclose = null
-    ch.ws.close()
-    ch.ws = null
-  }
-  ch.connected = false
-  ch.initialized = false
-  chatStore.removeChannel(sid)
+  // 统一走 store 的 disconnectChannel（DELETE-SESSION-001：删除流程与
+  // 会话逐出共用同一清理逻辑，避免双实现漂移）
+  useChatStore().disconnectChannel(sid)
   chatSessionAliveCache.remove(sid)
 }
 
@@ -630,6 +613,26 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
   const ch = getChatStore().channels.get(sid)
   if (!ch) return
 
+  // 修复 TURN-OWNERSHIP-001：丢弃已终结轮次的迟到事件。
+  // 场景：cancel 后旧轮 done(cancelled) 已到达并设置 _lastDoneTurnId，
+  // 用户立刻发新消息；旧轮在 cancel RPC 生效前已序列化的
+  // tool_end/ask_user/error 事件此时才经 WS 到达——若不过滤会污染新轮
+  // （幽灵工具卡片、error 误杀新轮流式）。规则：事件携带 turn_id 且与
+  // 最近一次 done 的 turn_id 相同 → 属于已终结轮次，丢弃。
+  // memory_* 事件例外：done 之后才到达（记忆 consumer 后台处理），
+  // 且走 turn_id 查找目标轮次的独立路径，不能丢。
+  const eventPayload = event.payload as Record<string, unknown> | undefined
+  const eventTurnId = typeof eventPayload?.turn_id === 'string' ? eventPayload.turn_id : null
+  if (
+    eventTurnId !== null
+    && ch._lastDoneTurnId !== null
+    && eventTurnId === ch._lastDoneTurnId
+    && !event.type.startsWith('memory_')
+  ) {
+    log.debug(`丢弃已终结轮次 ${eventTurnId} 的迟到事件: ${event.type}`)
+    return
+  }
+
   // context_usage 可以在无活跃轮次时接收（如连接初始化）
   if (event.type === 'context_usage') {
     syncContextUsage(sid, ch, event.payload)
@@ -959,9 +962,14 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       break
     }
 
-    case 'done':
+    case 'done': {
       ch.isAwaitingUser = false
       ch._awaitingToolName = null
+      // TURN-OWNERSHIP-001：记录已终结轮次 id，用于过滤迟到事件
+      const doneTurnId = (event.payload as Record<string, unknown>).turn_id
+      if (typeof doneTurnId === 'string' && doneTurnId) {
+        ch._lastDoneTurnId = doneTurnId
+      }
       // 存储后端 turn_id，用于关联后台记忆 consumer 的事件
       if (ch.currentTurn && (event.payload as Record<string, unknown>).turn_id) {
         ch.currentTurn.turnId = (event.payload as Record<string, unknown>).turn_id as string
@@ -994,6 +1002,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
         }
       }
       break
+    }
 
     case 'error':
       ch.isAwaitingUser = false
@@ -1424,6 +1433,17 @@ export function useChat(sessionId: Ref<string>) {
     sessionId,
     async (newId, oldId) => {
       log.debug(`sessionId 变化: "${oldId}" → "${newId}"`)
+      // 修复 BADGE-STALE-001：切换会话时立即用目标会话的用量刷新全局徽标，
+      // 避免显示旧会话的陈旧数据（刷新页面后徽标回到 0 的同类问题，在
+      // 缓存恢复路径同样被本逻辑覆盖）
+      if (newId) {
+        const targetCh = getChatStore().channels.get(newId)
+        if (targetCh?.contextUsage) {
+          getChatStore().updateContextUsage(
+            normalizeContextUsage(targetCh.contextUsage, getChatStore().contextUsage),
+          )
+        }
+      }
       if (oldId) {
         log.debug(`在切换前持久化旧会话 "${oldId}"`)
         // 会话切换是数据边界，同步落盘（PERF-002）
@@ -1567,21 +1587,33 @@ export function useChat(sessionId: Ref<string>) {
     return true
   }
 
-  function cancel() {
+  function cancel(): boolean {
     const ch = activeChannel.value
-    if (!ch.ws || ch.ws.readyState !== WebSocket.OPEN) return
+    if (!ch.ws || ch.ws.readyState !== WebSocket.OPEN) {
+      // 修复 CANCEL-FEEDBACK-001：断线时停止操作静默失败，返回 false
+      // 供调用方提示（此前按钮无任何反应，agent 继续运行）
+      return false
+    }
     const payload: ClientMessage = { type: 'cancel', payload: {} }
     ch.ws.send(JSON.stringify(payload))
+    return true
   }
 
-  function sendUserResponse(interactionId: string, response: string | string[]) {
+  function sendUserResponse(interactionId: string, response: string | string[]): boolean {
     const ch = activeChannel.value
-    if (!ch.ws || ch.ws.readyState !== WebSocket.OPEN) return
+    if (!ch.ws || ch.ws.readyState !== WebSocket.OPEN) {
+      // 修复 APPROVAL-LOSS-001：WS 断开时不再静默丢弃——调用方据此
+      // 不置 responded 状态并提示用户（此前 UI 乐观显示"已批准"，
+      // 后端从未收到，Agent 一直等到超时）
+      log.warn(`sendUserResponse 失败：WS 未就绪 (interaction=${interactionId})`)
+      return false
+    }
     const payload: ClientMessage = {
       type: 'user_response',
       payload: { interaction_id: interactionId, response },
     }
     ch.ws.send(JSON.stringify(payload))
+    return true
   }
 
   function sendArtifactAction(artifactId: string, actionId: string, token: string): boolean {
@@ -1595,9 +1627,13 @@ export function useChat(sessionId: Ref<string>) {
     return true
   }
 
-  function sendPlanResponse(planId: string, action: 'approve' | 'modify' | 'reject', modifiedPlan?: string) {
+  function sendPlanResponse(planId: string, action: 'approve' | 'modify' | 'reject', modifiedPlan?: string): boolean {
     const ch = activeChannel.value
-    if (!ch.ws || ch.ws.readyState !== WebSocket.OPEN) return
+    if (!ch.ws || ch.ws.readyState !== WebSocket.OPEN) {
+      // 修复 APPROVAL-LOSS-001：与 sendUserResponse 一致，失败返回 false
+      log.warn(`sendPlanResponse 失败：WS 未就绪 (plan=${planId})`)
+      return false
+    }
     // 更新 planCard 状态 — 必须用 currentTurn（plan_proposed 也写在这里）
     const currentTurn = ch.currentTurn
     if (currentTurn?.planCard && currentTurn.planCard.planId === planId) {
@@ -1611,6 +1647,7 @@ export function useChat(sessionId: Ref<string>) {
       (msg.payload as Record<string, unknown>).modified_plan = modifiedPlan
     }
     ch.ws.send(JSON.stringify(msg))
+    return true
   }
 
   /** 从当前会话的 turns 列表中移除最后 count 条轮次（撤回后的前端同步）。 */

@@ -130,6 +130,12 @@ useGsap((_ctx, contextSafe) => {
     if (!el) return
     if (props.content.includes('```') || props.content.includes('|') || props.content.length < 24) return
     if (revealedReplies.has(props.content)) return
+    // 修复 MEM-GROWTH-001：Set 无界增长（长会话每个独特内容一条记录）。
+    // 超过 500 条时按插入序淘汰最旧（Set 迭代序 = 插入序）
+    if (revealedReplies.size >= 500) {
+      const oldest = revealedReplies.values().next().value
+      if (oldest !== undefined) revealedReplies.delete(oldest)
+    }
     revealedReplies.add(props.content)
     try {
       const { SplitText } = await lazyLoadPlugin('SplitText')

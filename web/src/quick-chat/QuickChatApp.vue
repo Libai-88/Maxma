@@ -39,6 +39,7 @@
         placeholder="输入消息… (Enter 发送, Shift+Enter 换行)"
         @keydown.enter.exact.prevent="onSend"
         :disabled="isStreaming"
+        maxlength="100000"
       ></textarea>
       <button
         v-if="isStreaming"

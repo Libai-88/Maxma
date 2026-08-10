@@ -197,6 +197,20 @@ onMounted(async () => {
   if (!initialized) {
     globalErrorToast.message = '会话初始化失败，请检查后端服务后重试'
     globalErrorToast.visible = true
+    // 修复 SESSION-INIT-001：重试耗尽后自动恢复——10s 后再次尝试，
+    // 避免应用卡死在"空会话+不可发送"状态需手动整页刷新
+    window.setTimeout(() => {
+      void sessionStore.initIfNeeded().then((ok) => {
+        if (ok) {
+          globalErrorToast.visible = false
+          globalErrorToast.message = ''
+          console.debug('[App] 会话初始化自动恢复成功')
+        } else {
+          globalErrorToast.visible = true
+          globalErrorToast.message = '会话初始化失败，正在自动重试…'
+        }
+      })
+    }, 10000)
   }
   onboarding.initialize()
 

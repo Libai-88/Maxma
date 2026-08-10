@@ -91,6 +91,9 @@ export const useSessionStore = defineStore('session', () => {
       log.warn('deleteSession failed:', e)
       return
     }
+    // 修复 DELETE-SESSION-001：先断开被删会话的 WS（终止后台 agent 任务、
+    // 防止事件继续到达把已删缓存重新写回），再删缓存。
+    useChatStore().disconnectChannel(id)
     useChatStore().removeTurnsFromStorage(id)
     if (sessionId.value === id) {
       await refreshSessions().catch((err) => log.warn('refreshSessions after delete failed:', err))
@@ -112,7 +115,11 @@ export const useSessionStore = defineStore('session', () => {
       log.warn('batchDelete failed:', e)
       return
     }
-    ids.forEach((id) => useChatStore().removeTurnsFromStorage(id))
+    ids.forEach((id) => {
+      // 修复 DELETE-SESSION-001：批量删除同样先断开再删缓存
+      useChatStore().disconnectChannel(id)
+      useChatStore().removeTurnsFromStorage(id)
+    })
     // 若当前会话被删，切到剩余第一个会话
     if (sessionId.value && ids.includes(sessionId.value)) {
       await refreshSessions().catch((err) => log.warn('refreshSessions after batchDelete failed:', err))

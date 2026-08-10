@@ -1,6 +1,7 @@
 import { computed, ref, type Ref } from 'vue'
 import type { ParsedRef } from '@/utils/references'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
+import { truncateWithEllipsis } from '@/utils/text'
 import type { ChatTurn } from '@/types'
 
 const MAX_CITE_LENGTH = 1000
@@ -62,7 +63,8 @@ export function useContextMenu({ turns, emit }: UseContextMenuOptions) {
     if (!citeText) return
 
     if (citeText.length > MAX_CITE_LENGTH) {
-      citeText = citeText.slice(0, MAX_CITE_LENGTH) + '…'
+      // 修复 TRUNCATE-001：码点安全截断，不切断 emoji 代理对
+      citeText = truncateWithEllipsis(citeText, MAX_CITE_LENGTH)
     }
 
     pendingCitation.value = { text: citeText }
