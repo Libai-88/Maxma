@@ -217,7 +217,13 @@ const {
   commitCandidate,
   removeQuote,
   clearQuotes,
+  resetQuotesForSessionSwitch,
 } = useSelectionQuote()
+
+// QUOTE-STALE-001：会话切换时清空选区引用，避免 A 会话的引用附带进 B 会话
+watch(() => sessionId, () => {
+  resetQuotesForSessionSwitch()
+})
 
 // 服务端 think_path 能力开关（包成 ref 以便传入 useChatInput）
 const thinkPathEnabled = computed(() => health.value?.think_path_enabled === true)
@@ -248,6 +254,10 @@ async function retryLoadProviders() {
   providerRetrying.value = true
   try {
     await loadProvidersWithStatus()
+    // 修复 STATE-RECOVERY-001：重试成功后刷新模型列表——此前只重载 provider，
+    // availableModels 仍为空 → 模型选择器为空、发送按钮永久禁用（noProvider），
+    // 错误卡片消失但聊天仍不可用，只能整页刷新恢复
+    await chatStore.fetchAvailableModels()
   } finally {
     providerRetrying.value = false
   }
@@ -376,7 +386,9 @@ function onModelChange(providerId: string, modelName: string) {
 // 保留实例引用，便于 handleQuickStart 复用 ChatInput 的 providerId/modelName 状态
 const chatInputInstance = provideChatInput({
   isStreaming,
-  canSend: connected,
+  // 修复 NO-PROVIDER-GUARD-001：无可用模型时键盘 Enter 也不可发送
+  // （此前 canSend 只看 WS 连接，按钮禁用但 Enter 仍能发出无效轮次）
+  canSend: computed(() => connected.value && chatStore.availableModels.length > 0),
   initialProviderId: selectedProviderId,
   initialModelName: selectedModelName,
   thinkPathEnabled,
@@ -438,6 +450,21 @@ function markInteractionSubmitted(interactionId: string) {
   }
 }
 
+/** 持久化 interaction.responded（APPROVAL-OPTIMISM-001），审批气泡恢复态 */
+function markInteractionResponded(interactionId: string, responded: 'yes' | 'no') {
+  if (!interactionId) return
+  for (const ch of chatStore.channels.values()) {
+    for (const turn of [ch.currentTurn, ...ch.turns].filter(Boolean)) {
+      if (!turn) continue
+      for (const ev of turn.events) {
+        if (ev.kind === 'tool' && ev.interaction?.interactionId === interactionId) {
+          ev.interaction.responded = responded
+        }
+      }
+    }
+  }
+}
+
 function handleToolAction(payload: { action: string; data?: unknown }) {
   if (payload.action === 'user_response') {    const d = payload.data as { interactionId: string; response: string | string[] }
     // 修复 APPROVAL-LOSS-001：WS 断开时发送失败 → 不置 responded 乐观状态，
@@ -449,6 +476,13 @@ function handleToolAction(payload: { action: string; data?: unknown }) {
       // 持久化 submitted（ASK-REPEAT-001）：AskUserBubble 滚动重建后
       // 本地 submitted 丢失，靠 interaction.submitted 恢复"已提交"态
       markInteractionSubmitted(d.interactionId)
+      // 修复 APPROVAL-OPTIMISM-001：审批（yes/no）响应成功时同时持久化
+      // responded——ApprovalBubble 不再独立发 set_responded，滚动重建后
+      // 靠 interaction.responded 恢复"已批准/已拒绝"态（不重复提交）
+      const resp = Array.isArray(d.response) ? d.response[0] : d.response
+      if (resp === 'yes' || resp === 'no') {
+        markInteractionResponded(d.interactionId, resp)
+      }
     }
   } else if (payload.action === 'set_ask_submitted') {
     const d = payload.data as { interactionId: string }
@@ -481,7 +515,11 @@ function handleArtifactAction(payload: { artifactId: string; actionId: string; t
   }
 }
 
+let _undoInFlight = false
 async function handleUndo() {
+  // 修复 UNDO-DEDUP-001：撤回连点防重（键盘连按 Enter 会连续触发）
+  if (_undoInFlight) return
+  _undoInFlight = true
   try {
     const result = await api.undoMessages(sessionId.value, 1)
     if (result.deleted_count > 0) {
@@ -489,13 +527,22 @@ async function handleUndo() {
     }
   } catch (e) {
     log.error('撤回失败:', e)
+  } finally {
+    _undoInFlight = false
   }
 }
 
 function handleQuickStart(message: string) {
   // 通过 ChatInput 实例的 send 方法发送，确保使用 ChatInput 当前选中的 provider/model，
   // 而非直接调用 onSend（会丢失用户在 ModelSelector 中的选择）
-  chatInputInstance.send(message)
+  // 修复 QUICKSTART-FEEDBACK-001：发送失败（WS 未就绪/流式中）给出可见提示，
+  // 此前静默丢弃且错误横幅无处显示（空态时 ChatWindow 不渲染）
+  const ok = chatInputInstance.send(message)
+  if (!ok) {
+    window.dispatchEvent(new CustomEvent('maxma:error', {
+      detail: { message: '暂时无法发送，请等待连接完成后再试' },
+    }))
+  }
 }
 </script>
 

@@ -37,7 +37,7 @@
         v-model="inputText"
         class="qc-textarea"
         placeholder="输入消息… (Enter 发送, Shift+Enter 换行)"
-        @keydown.enter.exact.prevent="onSend"
+        @keydown.enter.exact.prevent="onKeydownEnter"
         :disabled="isStreaming"
         maxlength="100000"
       ></textarea>
@@ -108,6 +108,13 @@ const mergedTurns = computed(() => {
   return list
 })
 
+// 修复 IME-COMPOSE-001：中文输入法确认候选词按 Enter 不触发发送
+// （主输入框有 isComposing 守卫，QuickChat 此前缺失——半截拼音被当消息发出）
+function onKeydownEnter(e: KeyboardEvent) {
+  if (e.isComposing || e.keyCode === 229) return
+  onSend()
+}
+
 function onSend() {
   const text = inputText.value.trim()
   if (!text || isStreaming.value) return
@@ -131,9 +138,17 @@ function onSessionChange() {
   // useChat 内部 watch 会自动响应 selectedSessionId 变化并切换通道
 }
 
+let _creatingSession = false
 async function createNewSession() {
-  await sessionStore.createSession()
-  selectedSessionId.value = sessionStore.sessionId
+  // 修复 NEW-SESSION-DEDUP-001：连点防重（此前重复触发多次 POST /sessions 创建空会话）
+  if (_creatingSession) return
+  _creatingSession = true
+  try {
+    await sessionStore.createSession()
+    selectedSessionId.value = sessionStore.sessionId
+  } finally {
+    _creatingSession = false
+  }
 }
 
 async function hideWindow() {

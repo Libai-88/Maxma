@@ -1073,6 +1073,23 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                 str(payload.get("model_name") or ""),
             )
 
+            # 修复 MODEL-SWITCH-001：模型/提供商变更时销毁旧 sidecar session，
+            # 下轮 _ensure_sidecar_session 用新模型重建（上下文恢复最近轮次）。
+            # 此前 sidecar session 固定创建时模型，切换模型静默无效（UI 显示
+            # 新模型、实际仍用旧模型）。
+            _new_model_key = f"{model_config.get('provider')}/{model_config.get('model')}"
+            if (
+                getattr(session, "_sidecar_session_id", None)
+                and session._last_model_key
+                and session._last_model_key != _new_model_key
+            ):
+                logger.info(
+                    "[model] 模型切换 %s → %s，重建 sidecar session",
+                    session._last_model_key, _new_model_key,
+                )
+                await _destroy_sidecar_session(app_state.sidecar_manager, session)
+            session._last_model_key = _new_model_key
+
             # Store context for completion handler
             _turn_user_message = user_message
             _turn_system_prompt = system_prompt

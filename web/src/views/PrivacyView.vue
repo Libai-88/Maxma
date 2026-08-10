@@ -129,6 +129,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { api } from '@/api'
+import { useSessionStore } from '@/stores/session'
+import { useChatStore } from '@/stores/chat'
 import { createLogger } from '@/utils/logger'
 import { confirmAction } from '@/composables/useConfirm'
 import type { AuditLogRecord } from '@/types'
@@ -231,11 +233,18 @@ async function clearHistory() {
   actionLoading.value = true
   actionMessage.value = ''
   try {
+    const sessionStore = useSessionStore()
+    const chatStore = useChatStore()
     const sessions = await api.listSessions()
     let succeeded = 0
     let failed = 0
     for (const s of sessions.sessions || []) {
       try {
+        // 修复 GHOST-SESSION-001：走标准删除流程（断开 WS + 删缓存 + 刷新列表），
+        // 此前只调 API 不刷新 sessionStore —— 侧边栏仍列出已删会话（幽灵数据），
+        // 点击后连接失败但内存 turns/缓存仍在，已删会话可继续"对话"
+        chatStore.disconnectChannel(s.session_id)
+        chatStore.removeTurnsFromStorage(s.session_id)
         await api.deleteSession(s.session_id)
         succeeded++
       } catch (e: unknown) {
@@ -243,6 +252,7 @@ async function clearHistory() {
         log.warn('[PrivacyView] 删除会话失败:', e instanceof Error ? e.message : String(e))
       }
     }
+    await sessionStore.refreshSessions().catch(() => {})
     if (failed === 0) {
       actionMessage.value = `已清除 ${succeeded} 个会话`
       actionMessageType.value = 'ok'

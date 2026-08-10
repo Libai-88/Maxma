@@ -100,6 +100,10 @@ export interface SessionChannel {
   pendingCompaction?: { reason: CompactionReason; action: CompactionAction }
   /** 最近一次 done 事件的 turn_id（TURN-OWNERSHIP-001：用于丢弃已终结轮次的迟到事件） */
   _lastDoneTurnId: string | null
+  /** 轮次看门狗定时器（TURN-WATCHDOG-001）：后端任务挂起时强制复位流式状态 */
+  _turnWatchdog: ReturnType<typeof setTimeout> | null
+  /** 发送时私密模式（PRIVATE-SWITCH-001）：done 落盘判定用发送时值 */
+  _privateAtSend: boolean | null
 }
 
 function createChannel(): SessionChannel {
@@ -111,6 +115,8 @@ function createChannel(): SessionChannel {
     _awaitingToolName: null, parentSessionId: null,
     privateMode: false, autoApprove: false, _pingTimer: null, _lastPongAt: 0,
     _lastDoneTurnId: null,
+    _turnWatchdog: null,
+    _privateAtSend: null,
   }
 }
 

@@ -143,7 +143,7 @@
               class="btn-send"
               :class="{ 'is-success': sendState === 'success', 'is-error': sendState === 'error' }"
               aria-label="发送消息"
-              :disabled="(!text.trim() && imageRefs.length === 0 && refs.length === 0) || disabled || noProvider || !canSend"
+              :disabled="(!text.trim() && imageRefs.length === 0 && refs.length === 0 && quotedSelections.length === 0) || disabled || noProvider || !canSend"
               :title="sendButtonTitle"
               @click="handleSend"
             >
@@ -248,6 +248,8 @@ const {
 } = useChatSend({
   text: () => text.value,
   getRefs: () => refs.value,
+  hasQuotes: () => quotedSelections.value.length > 0,
+  hasPendingUploads: () => imageRefs.value.some(r => (r as { path?: string }).path === ''),
   hasImage: () => imageRefs.value.length > 0,
   getThinkPath: () => selectedThinkPathId.value,
   isDisabled: () => disabled.value,

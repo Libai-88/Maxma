@@ -101,6 +101,11 @@
     </div>
 
     <div v-if="store.loading" class="loading">加载中...</div>
+    <div v-else-if="loadError" class="empty error-state">
+      <div class="empty-title">加载失败</div>
+      <div class="empty-desc">{{ loadError }}</div>
+      <button class="btn btn-primary" @click="loadFacts" style="margin-top: 8px;">重试</button>
+    </div>
     <template v-else>
       <div v-if="facts.length === 0" class="empty">
         <Sparkles :density="10" />
@@ -238,6 +243,8 @@ function formatTime(t: string): string {
 }
 
 const facts = computed(() => store.facts)
+// 修复 LOAD-ERROR-VISIBLE-002：加载失败时显示错误+重试，而非"暂无记忆"空态
+const loadError = ref('')
 
 // ── 前端分页（PERF-001）：一次性加载全量数据（后端无分页参数），
 //    但只渲染前 N 条，避免数百张 GlareCard 全量挂 DOM。
@@ -272,7 +279,11 @@ async function loadFacts() {
     const data = await api.request<MemoryFact[]>(`/memory${qs ? '?' + qs : ''}`)
     store.facts = Array.isArray(data) ? data : []
     resetPagination()
-  } catch { store.facts = [] }
+    loadError.value = ''
+  } catch (e) {
+    store.facts = []
+    loadError.value = e instanceof Error ? e.message : String(e)
+  }
 
   // Load stats
   try {

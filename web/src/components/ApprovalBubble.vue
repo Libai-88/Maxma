@@ -73,17 +73,16 @@ const riskIcon = riskIcons[props.riskLevel] || 'info'
 
 function onApprove() {
   if (props.responded) return
+  // 修复 APPROVAL-OPTIMISM-001：不再独立 emit set_responded——
+  // 由 ChatView 在 user_response 发送成功后统一持久化 responded。
+  // 此前无条件连发两个 action，WS 断开时 user_response 静默失败但
+  // responded 已被标记，UI 显示"已批准"、后端从未收到，无法重试。
   emit('action', {
     action: 'user_response',
     data: {
       interactionId: props.interactionId,
       response: 'yes',
     },
-  })
-  // 父级收到 action 后更新 interaction.responded，见 ChatWindow.forwardAction
-  emit('action', {
-    action: 'set_responded',
-    data: { interactionId: props.interactionId, responded: 'yes' as const },
   })
 }
 
@@ -95,10 +94,6 @@ function onReject() {
       interactionId: props.interactionId,
       response: 'no',
     },
-  })
-  emit('action', {
-    action: 'set_responded',
-    data: { interactionId: props.interactionId, responded: 'no' as const },
   })
 }
 

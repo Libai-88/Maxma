@@ -488,6 +488,17 @@ watch(
   },
 )
 
+// 修复 SCROLL-RECOVERY-001：会话切换时重置"已连接过"标记——
+// 此前 wasConnectedBefore 是 setup 局部变量，跨会话切换不重置：
+// 会话 B 的首次连接被误判为"重连"→ 强制重建 Scroller → 刚恢复的
+// 滚动位置被清零并滚到底（长会话每次切换都跳底）
+watch(
+  () => props.sessionId,
+  () => {
+    wasConnectedBefore = false
+  },
+)
+
 // 打字指示器延迟：新 turn 到达后 1.5-3.5s 才显示 "正在输入"
 watch(
   () => props.currentTurn?.id,

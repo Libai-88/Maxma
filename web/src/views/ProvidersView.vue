@@ -480,6 +480,12 @@ const testResult = ref<Record<string, TestConnectionResponse>>({})
 // 后续 CRUD 操作通过 refreshStore 强制刷新 store，无需再调用 loadProviders
 async function loadProviders() {
   await providerStore.loadProviders()
+  // 修复 LOAD-ERROR-VISIBLE-001：首载失败时把 store 的错误透出——
+  // 此前 store 内部 catch 吞错，UI 显示"添加你的第一个 AI 模型"引导空态
+  // （用户以为没配置 provider），无重试入口
+  if (!providerStore.loaded && providerStore.errorMessage) {
+    loadError.value = providerStore.errorMessage
+  }
 }
 
 function startAdd() {

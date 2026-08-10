@@ -652,6 +652,22 @@ export async function handleRpcRequest(req: RpcRequest, io: BridgeIo = defaultIo
           return;
         }
         try {
+          // 修复 APPROVAL-UI-MISSING-001：yolo 会话切到 always-ask 前必须安装
+          // approval UI。此前 yolo 会话从未调用 runner.initialize/setToolUIContext，
+          // 切回询问模式后 OMP 审批 wrapper 检查 runner.hasUI()=false 直接 throw
+          // → 写类工具一律 tool_error，用户永远看不到审批弹窗。
+          if (!autoApprove) {
+            const runner = record.session.extensionRunner;
+            if (runner && !runner.hasUI()) {
+              runner.initialize(
+                noopExtensionActions(),
+                noopExtensionContextActions(),
+                undefined,
+                createApprovalUiContext(sessionId),
+              );
+              console.info(`[auto_approve] Session ${sessionId.slice(0, 8)}: approval UI installed on switch to ask mode`);
+            }
+          }
           setSetting(record.settings!, "tools.approvalMode", autoApprove ? "yolo" : "always-ask");
           console.error(`[auto_approve] Session ${sessionId.slice(0, 8)} approvalMode set to ${autoApprove ? "yolo" : "always-ask"}`);
           send(id, { ok: true });

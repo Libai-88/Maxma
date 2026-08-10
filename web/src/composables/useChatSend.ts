@@ -19,6 +19,10 @@ export interface UseChatSendOptions<TRefs> {
   getRefs: () => TRefs[]
   /** 是否有图片附件（图片也算可发送内容） */
   hasImage: () => boolean
+  /** 是否有选区引用（仅引用也可发送） */
+  hasQuotes: () => boolean
+  /** 是否有图片仍在上传中（path 未就绪） */
+  hasPendingUploads: () => boolean
   /** 选择的思考路径 */
   getThinkPath: () => ThinkPathId | null | undefined
   /** 后端连接中不可发送 */
@@ -59,12 +63,29 @@ export function useChatSend<TRefs>(opts: UseChatSendOptions<TRefs>) {
     }, CONNECTION_TIMEOUT_MS)
   }
 
+  // 修复 IDEMPOTENCY-EDIT-001：文本内容变化后重置幂等 id——
+  // 发送失败后用户修改措辞再重试，新内容必须用新 id（否则被后端
+  // 按旧 id 幂等去重静默丢弃）
+  let _lastText = ''
+  function trackTextChange(text: string) {
+    if (text !== _lastText) {
+      _lastText = text
+      _pendingClientMsgId = null
+    }
+  }
+
   function handleSend() {
     const msg = opts.text().trim()
+    trackTextChange(msg)
     // 修复 SEND-REFS-001：仅有引用/文件附件（无文本无图片）也可发送——
     // 引用会由 buildFlatMessage 拼入消息（时间尾缀保证后端判空不误杀）
-    if (!msg && !opts.hasImage() && opts.getRefs().length === 0) return
+    if (!msg && !opts.hasImage() && opts.getRefs().length === 0 && !opts.hasQuotes()) return
     if (opts.isDisabled()) return
+    // 修复 IMG-UPLOADING-001：图片上传完成前禁止发送（path 为空会发无效引用）
+    if (opts.hasPendingUploads()) {
+      showConnectionError('图片仍在上传中，请稍候')
+      return
+    }
 
     // 修复 F-001：流式输出期间忽略发送（键盘 Enter 路径），按钮已禁用。
     // 输入文本保留在输入框中，用户可先点「停止」再发送。

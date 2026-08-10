@@ -116,6 +116,12 @@ function clearQuotes() {
   quotedSelections.value = []
 }
 
+/** 会话切换时清空引用（QUOTE-STALE-001）：引用是模块级状态，
+ *  此前切换会话不重置，A 会话的引用会附带进 B 会话的新消息 */
+function resetQuotesForSessionSwitch() {
+  quotedSelections.value = []
+}
+
 export function useSelectionQuote() {
   // 单次注册监听器：使用引用计数避免 HMR 或重复调用导致重复监听
   onMounted(() => {
@@ -142,5 +148,6 @@ export function useSelectionQuote() {
     commitCandidate,
     removeQuote,
     clearQuotes,
+    resetQuotesForSessionSwitch,
   }
 }

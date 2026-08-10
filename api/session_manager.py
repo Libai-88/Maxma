@@ -68,6 +68,12 @@ class SessionState:
     # 避免跨连接并发 turn 的消息归属错乱。
     active_turn_ws: Any = field(default=None, repr=False)
 
+    # ── 模型切换（MODEL-SWITCH-001）─────────────────────────
+    # 上次创建 sidecar session 时的模型键（provider/model）。变更时销毁并
+    # 重建 sidecar session（恢复最近轮次上下文），使切换真正生效——
+    # 此前 sidecar session 固定创建时模型，切换静默无效。
+    _last_model_key: str | None = field(default=None, repr=False)
+
     def __post_init__(self) -> None:
         """初始化后处理。
 

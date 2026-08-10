@@ -286,6 +286,9 @@ function getReconnectDelay(attempts: number): number {
 /** 最大重连次数，超过后停止重连 */
 const MAX_RECONNECT_ATTEMPTS = 20
 
+/** 轮次看门狗超时（TURN-WATCHDOG-001）：与后端 600s turn 超时对齐 */
+const TURN_WATCHDOG_MS = 10 * 60 * 1000
+
 // ── tool_update throttling ──
 // Accumulate partial_result deltas in a non-reactive buffer and flush via
 // requestAnimationFrame.  Prevents rapid tool_execution_update events from
@@ -459,6 +462,7 @@ async function connectSession(sid: string) {
   }
 
   ws.onclose = (event) => {
+    if (chFinal._turnWatchdog) { clearTimeout(chFinal._turnWatchdog); chFinal._turnWatchdog = null }
     chFinal.connected = false
     // 清理心跳 ping 定时器（修复 R-005）
     if (chFinal._pingTimer) {
@@ -963,6 +967,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     }
 
     case 'done': {
+      if (ch._turnWatchdog) { clearTimeout(ch._turnWatchdog); ch._turnWatchdog = null }
       ch.isAwaitingUser = false
       ch._awaitingToolName = null
       // TURN-OWNERSHIP-001：记录已终结轮次 id，用于过滤迟到事件
@@ -985,7 +990,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
           ch.currentTurn = null
         }
         ch.isStreaming = false
-        if (!ch.privateMode) {
+        if (!(ch._privateAtSend ?? ch.privateMode)) {
           persistTurns(sid)
         }
         void refreshSessions()  // 轮次结束，刷新会话列表以更新 message_count
@@ -1004,9 +1009,16 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       break
     }
 
-    case 'error':
+    case 'error': {
+      if (ch._turnWatchdog) { clearTimeout(ch._turnWatchdog); ch._turnWatchdog = null }
       ch.isAwaitingUser = false
       ch._awaitingToolName = null
+      // 修复 ERROR-TURN-OWNERSHIP-001：error 终结轮次同样记录 turn_id，
+      // 此后旧轮迟到的 tool_end/tool_update 事件不再污染新轮
+      const errTurnId = (event.payload as Record<string, unknown>).turn_id
+      if (typeof errTurnId === 'string' && errTurnId) {
+        ch._lastDoneTurnId = errTurnId
+      }
       ch.error = event.payload.message
       ch.errorCategory = event.payload.category ?? null
       ch.errorTraceId = event.payload.trace_id ?? null
@@ -1023,6 +1035,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       }
       log.warn(`error: ${event.payload.code} (${event.payload.category ?? 'unknown'})`, event.payload.message)
       break
+    }
 
     case 'retry_start':
       if (turn) {
@@ -1538,6 +1551,35 @@ export function useChat(sessionId: Ref<string>) {
     }
     ch.isStreaming = true
     ch.error = null
+    // 修复 PRIVATE-SWITCH-001：记录发送时的私密模式，done 时按此判定
+    // 持久化——流式中切换私密开关不改变本轮的落盘归属
+    ch._privateAtSend = ch.privateMode
+
+    // 修复 TURN-WATCHDOG-001：轮次看门狗。后端 agent 挂起（LLM/工具调用
+    // 无响应但 WS 连接健康）时，done/error 永不到达，isStreaming 永久为
+    // true → 发送守卫拒绝新消息、骨架屏/打字指示器永久显示、UI 卡死。
+    // 发送后启动 10 分钟定时器（与后端 600s turn 超时对齐），超时强制
+    // 复位流式状态并提示，用户可重新发送。
+    if (ch._turnWatchdog) clearTimeout(ch._turnWatchdog)
+    ch._turnWatchdog = setTimeout(() => {
+      const c = getChatStore().channels.get(sessionId.value)
+      if (!c || !c.isStreaming) return
+      log.warn(`轮次看门狗超时：强制复位 isStreaming (session=${sessionId.value})`)
+      c.isStreaming = false
+      if (c.currentTurn) {
+        const stalled = c.currentTurn
+        if (!stalled.finalAnswer) {
+          stalled.finalAnswer = '（任务超时，回复未完成）'
+        }
+        c.turns.push(stalled)
+        c.currentTurn = null
+        c.isAwaitingUser = false
+        c._awaitingToolName = null
+        if (!c.privateMode) flushPersistTurns(sessionId.value)
+      }
+      c.error = '任务执行超时，请重试'
+      c.errorCategory = 'system_error'
+    }, TURN_WATCHDOG_MS)
 
     const timestamp = buildTimestamp()
     const flatMsg = buildFlatMessage(text, timestamp, refs)
