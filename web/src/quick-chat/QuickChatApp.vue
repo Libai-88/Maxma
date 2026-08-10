@@ -88,6 +88,17 @@ const {
   turns, currentTurn, isStreaming, send, cancel,
 } = useChat(selectedSessionId)
 
+// 修复 QUICKCHAT-SUB-001：sub_session_created 时 useChat 内部 switchSession
+// 只更新 session store（模块级 switchSession → getSessionStore().switchSession），
+// 本组件的 selectedSessionId 不会跟着变，视图停留在父会话、子会话消息不可见。
+// 此处监听 store 同步本地 ref——useChat 的 watch(sessionId) 随即触发通道切换；
+// 子会话 done 后 store 自动切回父会话时同理跟随。
+watch(() => sessionStore.sessionId, (id) => {
+  if (id && id !== selectedSessionId.value) {
+    selectedSessionId.value = id
+  }
+})
+
 // useChat 未暴露 showTyping，本地计算：流式进行中且尚无最终回复时显示打字指示
 const showTyping = computed(() => isStreaming.value && !currentTurn.value?.finalAnswer)
 
