@@ -158,7 +158,9 @@ export function useButtonFx(
 
     const bind = contextSafe(() => {
       const el = target()
-      if (!el) return
+      // ANIM-GUARD-001：非 DOM 元素直接跳过——按钮动效是增强，
+      // 不能因 $el 解包返回非元素（部分 WebView/沙箱环境）而抛错。
+      if (!el || !(el instanceof HTMLElement)) return
       const btns = gsap.utils.toArray<HTMLElement>(selector, el)
       if (!btns.length) return
 

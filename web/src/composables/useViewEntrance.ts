@@ -27,7 +27,10 @@ export function useViewEntrance(
     let done = false
     const play = contextSafe(() => {
       const el = root()
-      if (!el || done) return
+      // ANIM-GUARD-001：非 DOM 元素（组件实例 $el 在部分 WebView/沙箱环境下
+      // 可能是 Text/Comment 节点或代理对象）直接跳过动画——入场动画是增强，
+      // 绝不能因类型问题抛错打断页面渲染（此前 el.querySelector 曾因此崩溃）。
+      if (!el || done || !(el instanceof HTMLElement)) return
       done = true
       const tl = gsap.timeline({ defaults: { ease: easeMap.out, duration, overwrite: 'auto' } })
       const h = header ? el.querySelector<HTMLElement>(header) : null
