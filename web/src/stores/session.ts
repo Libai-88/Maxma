@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { api } from '@/api'
 import { useChatStore, TURNS_KEY_PREFIX } from '@/stores/chat'
+import { safeGetItem, safeKeys, safeRemoveItem, safeSetItem } from '@/lib/storage'
 import { createLogger } from '@/utils/logger'
 import type { SessionInfo } from '@/types'
 
@@ -42,7 +43,7 @@ export const useSessionStore = defineStore('session', () => {
           // 在控制台留下红色报错噪音（属正常情况，不应显示为错误）。
           // refreshSessions 失败会抛错，由外层 catch 重试，语义不变。
           await refreshSessions()
-          const stored = localStorage.getItem(STORAGE_KEY)
+          const stored = safeGetItem(STORAGE_KEY)
           if (stored && sessions.value.some(s => s.session_id === stored)) {
             sessionId.value = stored
           } else {
@@ -99,7 +100,8 @@ export const useSessionStore = defineStore('session', () => {
   async function _createSession() {
     const res = await api.createSession()
     sessionId.value = res.session_id
-    localStorage.setItem(STORAGE_KEY, res.session_id)
+    // COMPAT-STORAGE-001：存储不可用时静默降级（会话仍可用，仅刷新后不恢复选择）
+    safeSetItem(STORAGE_KEY, res.session_id)
   }
 
   async function createSession() {
@@ -109,7 +111,7 @@ export const useSessionStore = defineStore('session', () => {
 
   async function switchSession(id: string) {
     sessionId.value = id
-    localStorage.setItem(STORAGE_KEY, id)
+    safeSetItem(STORAGE_KEY, id)
   }
 
   async function deleteSession(id: string) {
@@ -224,15 +226,14 @@ export const useSessionStore = defineStore('session', () => {
     // 先收集要删除的 key，再统一删除。直接在遍历中 removeItem 会导致
     // localStorage 索引位移，连续的孤儿缓存会被跳过（每隔一个漏删一个）。
     const keysToRemove: string[] = []
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i)
-      if (key && key.startsWith(TURNS_KEY_PREFIX)) {
+    for (const key of safeKeys()) {
+      if (key.startsWith(TURNS_KEY_PREFIX)) {
         const sid = key.slice(TURNS_KEY_PREFIX.length)
         if (sid && !validIds.has(sid)) keysToRemove.push(key)
       }
     }
     for (const key of keysToRemove) {
-      localStorage.removeItem(key)
+      safeRemoveItem(key)
     }
   }
 

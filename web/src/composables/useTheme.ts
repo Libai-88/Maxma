@@ -4,6 +4,7 @@
 
 import { ref, computed, watch } from 'vue'
 import { createLogger } from '@/utils/logger'
+import { safeGetItem, safeSetItem } from '@/lib/storage'
 
 const log = createLogger('theme')
 
@@ -140,7 +141,8 @@ const isDark = computed(() => {
 })
 
 function loadStoredTheme(): ThemeId {
-  const raw = localStorage.getItem(STORAGE_KEY)
+  // COMPAT-STORAGE-001：模块级/启动期读取用安全包装（隐私模式不崩溃）
+  const raw = safeGetItem(STORAGE_KEY)
   if (!raw) return DEFAULT_THEME
   const valid = THEMES.find(t => t.id === raw)
   return valid ? (raw as ThemeId) : DEFAULT_THEME
@@ -148,7 +150,7 @@ function loadStoredTheme(): ThemeId {
 
 function setTheme(theme: ThemeId) {
   storedTheme.value = theme
-  localStorage.setItem(STORAGE_KEY, theme)
+  safeSetItem(STORAGE_KEY, theme)
 }
 
 function applyTheme(theme: ThemeId) {
@@ -160,7 +162,7 @@ watch(activeTheme, (t) => applyTheme(t), { immediate: true })
 
 // 初始化字体开关
 if (typeof document !== 'undefined') {
-  const serifOff = localStorage.getItem('maxma.fontSerif') === 'off'
+  const serifOff = safeGetItem('maxma.fontSerif') === 'off'
   document.body.classList.toggle('font-sans', serifOff)
 }
 

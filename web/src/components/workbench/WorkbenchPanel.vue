@@ -319,6 +319,7 @@ onBeforeUnmount(() => {
     width: 100%;
     max-width: 100%;
     height: min(82dvh, 720px);
+    max-height: calc(100vh - 12px); /* COMPAT-DVH-001：旧引擎回退 */
     max-height: calc(100dvh - 12px);
     border-top: 1px solid var(--border);
     border-right: 0;

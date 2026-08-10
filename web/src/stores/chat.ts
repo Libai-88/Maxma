@@ -4,6 +4,7 @@ import type { ChatTurn, ContextUsage, CompactionReason, CompactionAction } from 
 import type { ModelInfo, ChatContextUsage } from '../types/chat'
 // S4-2: api 已被 30+ 文件静态引用进主 chunk，此处动态导入不会触发拆分（纯噪音），改静态
 import { api } from '@/api'
+import { safeGetItem, safeKeys, safeRemoveItem } from '@/lib/storage'
 
 export const TURNS_KEY_PREFIX = 'maxma_turns_'
 
@@ -210,12 +211,13 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   function removeTurnsFromStorage(sid: string) {
-    localStorage.removeItem(TURNS_KEY_PREFIX + sid)
+    // COMPAT-STORAGE-001：安全删除（存储不可用时静默）
+    safeRemoveItem(TURNS_KEY_PREFIX + sid)
   }
 
   function loadTurnsFromStorage(sid: string): ChatTurn[] | null {
     try {
-      const raw = localStorage.getItem(TURNS_KEY_PREFIX + sid)
+      const raw = safeGetItem(TURNS_KEY_PREFIX + sid)
       return raw ? JSON.parse(raw) : null
     } catch { return null }
   }
@@ -224,15 +226,14 @@ export const useChatStore = defineStore('chat', () => {
     // 先收集要删除的 key，再统一删除。直接在遍历中 removeItem 会导致
     // localStorage 索引位移，连续的孤儿缓存会被跳过（每隔一个漏删一个）。
     const keysToRemove: string[] = []
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i)
+    for (const key of safeKeys()) {
       if (key && key.startsWith(TURNS_KEY_PREFIX)) {
         const sid = key.slice(TURNS_KEY_PREFIX.length)
         if (sid && !validIds.has(sid)) keysToRemove.push(key)
       }
     }
     for (const key of keysToRemove) {
-      localStorage.removeItem(key)
+      safeRemoveItem(key)
     }
   }
 

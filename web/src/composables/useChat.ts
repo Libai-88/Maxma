@@ -7,6 +7,7 @@ import { buildFlatMessage, buildTimestamp, parseReferences } from '@/utils/refer
 import type { ParsedRef } from '@/utils/references'
 import { getToken, ensureTokenLoaded, resetToken, api } from '@/api'
 import { ensurePortLoaded, waitForBackend, getWsBase, getApiBase, generateUUID, tauriFetch } from '@/utils/env'
+import { safeGetItem, safeRemoveItem, safeSetItem, safeKeys } from '@/lib/storage'
 import { chatSessionAliveCache } from '@/composables/sessionAliveCache'
 import { useWorkbenchStore } from '@/stores/workbench'
 import { detectEmotion, getStickerUrl, replaceEmotionTags } from './stickerUtils'
@@ -40,14 +41,15 @@ function migrateLegacyTurn(turn: Record<string, unknown>): ChatTurn {
 // 从 localStorage 恢复所有会话的消息缓存（页面刷新后仍保留）
 function loadAllTurnsFromStorage(): Map<string, ChatTurn[]> {
   const map = new Map<string, ChatTurn[]>()
-  const keysFound: string[] = []
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i)
-    if (key && key.startsWith(TURNS_KEY_PREFIX)) {
-      keysFound.push(key)
+  // COMPAT-STORAGE-001：存储不可用（隐私模式/禁用）时安全降级为空缓存——
+  // 此前直接访问 localStorage.length 在模块加载期抛 SecurityError，应用白屏
+  try {
+    const keysFound = safeKeys()
+    for (const key of keysFound) {
+      if (!key.startsWith(TURNS_KEY_PREFIX)) continue
       const sid = key.slice(TURNS_KEY_PREFIX.length)
       try {
-        const raw = localStorage.getItem(key) || '[]'
+        const raw = safeGetItem(key) || '[]'
         const data = JSON.parse(raw)
         if (Array.isArray(data)) {
           const migrated = data.map(migrateLegacyTurn)
@@ -60,8 +62,10 @@ function loadAllTurnsFromStorage(): Map<string, ChatTurn[]> {
         log.error(`解析 localStorage 键 ${key} 失败:`, e)
       }
     }
+    log.debug(`localStorage 中共 ${keysFound.length} 个 ${TURNS_KEY_PREFIX}* 键, 恢复 ${map.size} 个会话的缓存`)
+  } catch (e) {
+    log.warn('读取 localStorage 失败（存储不可用？），按空缓存启动:', e)
   }
-  log.debug(`localStorage 中共 ${keysFound.length} 个 ${TURNS_KEY_PREFIX}* 键, 恢复 ${map.size} 个会话的缓存`)
   return map
 }
 
@@ -74,7 +78,11 @@ function saveTurnsToStorage(sid: string, data: ChatTurn[]) {
   const tryWrite = () => {
     const serialized = JSON.stringify(toPersist)
     const size = new Blob([serialized]).size
-    localStorage.setItem(key, serialized)
+    if (!safeSetItem(key, serialized)) {
+      // COMPAT-STORAGE-001：存储不可用（SecurityError）与配额超限统一走
+      // 下面的清理/降级路径
+      throw new DOMException('storage unavailable', 'QuotaExceededError')
+    }
     return size
   }
   try {
@@ -90,17 +98,11 @@ function saveTurnsToStorage(sid: string, data: ChatTurn[]) {
       // localStorage.key(i) reflects insertion order in modern browsers), NOT
       // LRU — we do not track access timestamps. The first half of the
       // oldest-inserted keys is dropped to make room for the current write.
-      const otherKeys: string[] = []
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i)
-        if (k && k.startsWith(TURNS_KEY_PREFIX) && k !== key) {
-          otherKeys.push(k)
-        }
-      }
+      const otherKeys = safeKeys().filter(k => k.startsWith(TURNS_KEY_PREFIX) && k !== key)
       // 删除一半最旧的缓存（最多保留一半），按键在 localStorage 中的顺序（近似 FIFO）
       const toEvict = otherKeys.slice(0, Math.max(1, Math.ceil(otherKeys.length / 2)))
       for (const k of toEvict) {
-        localStorage.removeItem(k)
+        safeRemoveItem(k)
         const evictedSid = k.slice(TURNS_KEY_PREFIX.length)
         turnsCache.delete(evictedSid)
         log.warn(`配额压力下清理会话 ${evictedSid} 的缓存`)
@@ -112,14 +114,13 @@ function saveTurnsToStorage(sid: string, data: ChatTurn[]) {
       } catch (e2) {
         log.error(`清理后仍无法保存会话 ${sid} (key=${key}):`, e2)
         // 最后手段：移除当前会话自己的缓存键，避免留下部分写入的脏数据
-        try { localStorage.removeItem(key) } catch { /* ignore */ }
+        safeRemoveItem(key)
       }
     } else {
       log.error(`保存会话 ${sid} 到 localStorage 失败 (key=${key}):`, e)
       let total = 0
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i)
-        if (k) total += k.length + (localStorage.getItem(k) || '').length
+      for (const k of safeKeys()) {
+        total += k.length + (safeGetItem(k) || '').length
       }
       log.warn(`localStorage 当前总估算用量: ${(total * 2 / 1024).toFixed(1)} KB`)
     }

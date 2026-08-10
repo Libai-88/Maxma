@@ -195,7 +195,9 @@ useGsap((_ctx, contextSafe) => {
   padding: 8px 16px;
   background: color-mix(in srgb, var(--text-primary) 85%, transparent);
   border-radius: 100px;
-  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);; /* COMPAT-BACKDROP-001：Safari<18 需要前缀 */
+
+  backdrop-filter: blur(12px);;
   transition: opacity 0.3s ease, transform 0.3s ease;
 }
 .mv-controls-hidden .mv-controls {

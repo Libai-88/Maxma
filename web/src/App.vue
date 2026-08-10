@@ -457,6 +457,7 @@ html, body {
   display: flex;
   width: 100%;
   max-width: 100%;
+  height: 100vh; /* COMPAT-DVH-001：旧引擎（Chrome<108/Safari<15.4/Firefox<101）不支持 dvh 时回退 */
   height: 100dvh;
   min-width: 0;
   min-height: 0;
@@ -879,5 +880,12 @@ body .editor-wrapper .cm-placeholder {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
     'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   font-size: 15px;
+}
+
+/* COMPAT-NARROW-001：窄窗口（<820px）压缩 dock 宽度，避免聊天列被
+   dock 84px + 侧栏挤压到不可用（浏览器 dev 模式拖窄 / 125% 缩放下
+   800px 等效 640px CSS px） */
+@media (max-width: 820px) {
+  :root { --icon-rail-width: 56px; }
 }
 </style>

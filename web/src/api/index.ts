@@ -196,11 +196,22 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   if (token) {
     headers['X-Maxma-Token'] = token
   }
+  // COMPAT-ABORT-001：AbortSignal.timeout 需 Chrome/Edge≥103、Safari≥16、
+  // Firefox≥100——旧环境直接调用会 ReferenceError 导致所有请求崩溃。
+  // 不支持时用 AbortController + setTimeout 手动实现相同语义。
+  function timeoutSignal(ms: number): AbortSignal {
+    if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+      return AbortSignal.timeout(ms)
+    }
+    const controller = new AbortController()
+    setTimeout(() => controller.abort(), ms)
+    return controller.signal
+  }
   const doFetch = () => tauriFetch(`${BASE}${url}`, {
     headers,
     ...options,
     // 调用方自带 signal 时优先（如取消语义），否则使用统一超时
-    signal: options?.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    signal: options?.signal ?? timeoutSignal(REQUEST_TIMEOUT_MS),
   })
 
   let res = await doFetch()

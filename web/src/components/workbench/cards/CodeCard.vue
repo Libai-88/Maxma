@@ -19,6 +19,7 @@ import type { CanvasCard } from '@/types/workbench'
 import Icon from '@/components/Icon.vue'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 import { useButtonFx } from '@/composables/useButtonFx'
+import { safeCopyText } from '@/lib/clipboard'
 
 const props = defineProps<{ card: CanvasCard }>()
 defineEmits<{ remove: [] }>()
@@ -42,7 +43,7 @@ useButtonFx(() => rootEl.value, '.card-remove', { hoverScale: 1.05, bounceIcon: 
 
 async function copyCode() {
   try {
-    await navigator.clipboard.writeText(props.card.content)
+    await safeCopyText(props.card.content)
     copied.value = true
     setTimeout(() => { copied.value = false }, 2000)
   } catch { /* ignore */ }

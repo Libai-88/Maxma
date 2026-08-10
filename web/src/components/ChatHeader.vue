@@ -106,6 +106,11 @@ useGsap((_ctx, contextSafe) => {
 .header-right > * { min-width: 0; max-width: 100%; flex: 0 1 auto; }
 .header-right :deep(button) { min-width: var(--touch-target-min, 44px); min-height: var(--touch-target-min, 44px); }
 
+/* COMPAT-NARROW-001：900px 以下头部右侧允许换行，避免触控按钮溢出 */
+@media (max-width: 900px) {
+  .header-right { flex-wrap: wrap; max-width: 75%; row-gap: 4px; }
+}
+
 @media (max-width: 767px) {
   .chat-header {
     flex-wrap: wrap;

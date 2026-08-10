@@ -187,7 +187,9 @@ onUnmounted(() => {
   background:
     radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--status-warn) 18%, transparent), transparent 34%),
     color-mix(in srgb, var(--text-primary) 72%, transparent);
-  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);; /* COMPAT-BACKDROP-001：Safari<18 需要前缀 */
+
+  backdrop-filter: blur(10px);;
   cursor: default;
 }
 
@@ -276,7 +278,9 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--text-inverse) 10%, transparent);
   color: var(--text-inverse);
   cursor: pointer;
-  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);; /* COMPAT-BACKDROP-001：Safari<18 需要前缀 */
+
+  backdrop-filter: blur(8px);;
 }
 
 .preview-close {

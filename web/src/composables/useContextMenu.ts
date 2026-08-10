@@ -3,6 +3,7 @@ import type { ParsedRef } from '@/utils/references'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
 import { truncateWithEllipsis } from '@/utils/text'
 import type { ChatTurn } from '@/types'
+import { safeCopyText } from '@/lib/clipboard'
 
 const MAX_CITE_LENGTH = 1000
 
@@ -99,7 +100,7 @@ export function useContextMenu({ turns, emit }: UseContextMenuOptions) {
       const citeRef: ParsedRef = { type: 'cite', text: pendingCitation.value.text, label }
       emit('cite', citeRef)
     } else if (action === 'copy' && pendingCitation.value) {
-      navigator.clipboard.writeText(pendingCitation.value.text)
+      void safeCopyText(pendingCitation.value.text)
     } else if (action === 'undo') {
       emit('action', { action: 'undo', data: { n: 1 } })
     }

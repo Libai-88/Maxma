@@ -38,6 +38,7 @@ function themeParams(dark: boolean) {
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 let animId = 0
 let observer: MutationObserver | null = null
+let roRef: ResizeObserver | null = null
 /** visibilitychange 监听引用（PERF-003 后台暂停后恢复用，onUnmounted 移除） */
 let onVisibilityChangeRef: (() => void) | null = null
 const BLOB_COUNT = 4
@@ -249,6 +250,8 @@ onMounted(() => {
     resize(canvas)
   })
   ro.observe(canvas.parentElement!)
+  // COMPAT-RO-LEAK-001：提升到组件作用域，onUnmounted 中 disconnect
+  roRef = ro
 
   // 修复 PERF-003：后台暂停后，恢复前台时重启 rAF 循环
   const onVisibilityChange = () => {
@@ -267,6 +270,10 @@ onMounted(() => {
 onUnmounted(() => {
   cancelAnimationFrame(animId)
   observer?.disconnect()
+  // COMPAT-RO-LEAK-001：ResizeObserver 此前未 disconnect——组件反复
+  // 挂载/卸载（HMR/错误边界重置）时持续观察已移除的父节点造成泄漏
+  roRef?.disconnect()
+  roRef = null
   if (onVisibilityChangeRef) document.removeEventListener('visibilitychange', onVisibilityChangeRef)
   blobs.length = 0
 })

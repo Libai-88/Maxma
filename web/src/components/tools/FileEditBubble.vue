@@ -151,6 +151,7 @@ import BubbleChrome from './_shared/BubbleChrome.vue'
 import MaxmaBlockerError from './_shared/MaxmaBlockerError.vue'
 import Icon from '@/components/Icon.vue'
 import { useButtonFx } from '@/composables/useButtonFx'
+import { safeCopyText } from '@/lib/clipboard'
 
 const FileDiffView = defineAsyncComponent(() => import('./FileDiffView.vue'))
 
@@ -270,14 +271,14 @@ const diffFileName = computed(() => {
 function copyPath() {
   const path = td.value.file_path as string || ''
   if (!path) return
-  navigator.clipboard.writeText(path)
+  void safeCopyText(path)
   emit('action', { action: 'copy-path', data: { path } })
 }
 
 function copyContent() {
   const content = td.value.content as string | undefined
   if (!content) return
-  navigator.clipboard.writeText(content)
+  void safeCopyText(content)
   emit('action', { action: 'copy-content', data: { length: content.length } })
 }
 </script>

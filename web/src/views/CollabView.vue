@@ -160,6 +160,7 @@ import { confirmAction } from '@/composables/useConfirm'
 import type { SessionInfo } from '@/types'
 import { useViewEntrance } from '@/composables/useViewEntrance'
 import { useButtonFx } from '@/composables/useButtonFx'
+import { safeCopyText } from '@/lib/clipboard'
 
 const rootEl = ref<HTMLElement | null>(null)
 useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.section' })
@@ -275,7 +276,7 @@ function getShareUrl(shareId: string): string {
 }
 
 function copyToClipboard(text: string) {
-  navigator.clipboard.writeText(text).then(() => {
+  void safeCopyText(text).then(() => {
     copyFeedback.value = '已复制'
     setTimeout(() => { copyFeedback.value = '' }, 2000)
   })
@@ -577,7 +578,9 @@ function formatDate(dateStr: string): string {
   align-items: center;
   justify-content: center;
   background: color-mix(in srgb, var(--text-primary) 40%, transparent);
-  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);; /* COMPAT-BACKDROP-001：Safari<18 需要前缀 */
+
+  backdrop-filter: blur(2px);;
 }
 
 .dialog-content {

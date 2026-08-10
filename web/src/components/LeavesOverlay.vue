@@ -140,7 +140,9 @@ function onToggle() {
   padding: 0;
   opacity: 0.45;
   transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease;
-  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);; /* COMPAT-BACKDROP-001：Safari<18 需要前缀 */
+
+  backdrop-filter: blur(4px);;
 }
 
 .leaves-toggle:hover {

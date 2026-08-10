@@ -102,6 +102,7 @@
 <script setup lang="ts">
 import { computed, ref, nextTick, type ComponentPublicInstance } from 'vue'
 import { useTheme } from '@/composables/useTheme'
+import { safeGetItem, safeSetItem } from '@/lib/storage'
 import { usePaperTexture } from '@/composables/usePaperTexture'
 import { useViewEntrance } from '@/composables/useViewEntrance'
 import { gsap, useGsap } from '@/composables/useGsap'
@@ -155,11 +156,12 @@ function setCssProp(el: Element | ComponentPublicInstance | null, prop: string, 
   if (el instanceof HTMLElement) el.style.setProperty(prop, value)
 }
 
-const serifFont = ref(localStorage.getItem('maxma.fontSerif') !== 'off')
+// COMPAT-STORAGE-001：安全读写（隐私模式/禁用存储不崩溃）
+const serifFont = ref(safeGetItem('maxma.fontSerif') !== 'off')
 
 function toggleSerif() {
   serifFont.value = !serifFont.value
-  localStorage.setItem('maxma.fontSerif', serifFont.value ? 'on' : 'off')
+  safeSetItem('maxma.fontSerif', serifFont.value ? 'on' : 'off')
   document.body.classList.toggle('font-sans', !serifFont.value)
 }
 

@@ -26,6 +26,7 @@ import { getApiBase, tauriFetch } from '@/utils/env'
 import Icon from '@/components/Icon.vue'
 import { createLogger } from '@/utils/logger'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
+import { safeCopyText } from '@/lib/clipboard'
 
 const log = createLogger('StickerContextMenu')
 
@@ -135,10 +136,8 @@ function onCopyPath() {
   if (!props.sticker) return
   
   const path = `${getApiBase()}/stickers/${props.sticker.path}`
-  navigator.clipboard.writeText(path).then(() => {
+  void safeCopyText(path).then(() => {
     emit('close')
-  }).catch(err => {
-    log.error('复制失败:', err)
   })
 }
 

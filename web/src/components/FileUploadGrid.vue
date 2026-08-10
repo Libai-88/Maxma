@@ -245,7 +245,9 @@ function getFileIndex(r: ParsedRef): number {
   border: none;
   border-radius: 50%;
   background: color-mix(in srgb, var(--bg-primary) 80%, transparent);
-  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);; /* COMPAT-BACKDROP-001：Safari<18 需要前缀 */
+
+  backdrop-filter: blur(4px);;
   color: var(--text-secondary);
   cursor: pointer;
   opacity: 0;

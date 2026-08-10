@@ -181,6 +181,7 @@ import { storeToRefs } from 'pinia'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useGlobalShortcut } from '@/composables/useGlobalShortcut'
 import { createLogger } from '@/utils/logger'
+import { safeGetItem, safeSetItem } from '@/lib/storage'
 import CardSpotlight from '@/components/inspira/CardSpotlight.vue'
 import GlowBorder from '@/components/inspira/GlowBorder.vue'
 
@@ -235,8 +236,9 @@ const thinkPathEnabled = computed(() => health.value?.think_path_enabled === tru
 // 持久化 provider/model 选择到 localStorage，刷新后恢复
 const SELECTED_PROVIDER_KEY = 'maxma_selected_provider'
 const SELECTED_MODEL_KEY = 'maxma_selected_model'
-const selectedProviderId = ref(localStorage.getItem(SELECTED_PROVIDER_KEY) || '')
-const selectedModelName = ref(localStorage.getItem(SELECTED_MODEL_KEY) || '')
+// COMPAT-STORAGE-001：setup 期读取也用安全包装（隐私模式/禁用存储不崩溃）
+const selectedProviderId = ref(safeGetItem(SELECTED_PROVIDER_KEY) || '')
+const selectedModelName = ref(safeGetItem(SELECTED_MODEL_KEY) || '')
 
 const providerStore = useProviderStore()
 const { hasProviders } = storeToRefs(providerStore)
@@ -381,9 +383,9 @@ useGlobalShortcut({ key: 'k', mod: true }, () => { setPrivateMode(!privateMode.v
 function onModelChange(providerId: string, modelName: string) {
   selectedProviderId.value = providerId
   selectedModelName.value = modelName
-  // 持久化到 localStorage，刷新后可恢复
-  localStorage.setItem(SELECTED_PROVIDER_KEY, providerId)
-  localStorage.setItem(SELECTED_MODEL_KEY, modelName)
+  // 持久化到 localStorage，刷新后可恢复（存储不可用时静默降级）
+  safeSetItem(SELECTED_PROVIDER_KEY, providerId)
+  safeSetItem(SELECTED_MODEL_KEY, modelName)
 }
 
 // ── ChatInput 状态收敛：创建 useChatInput 实例并 provide 给 ChatInput ──

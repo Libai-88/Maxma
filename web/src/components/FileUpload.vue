@@ -87,7 +87,9 @@ function onDrop(_e: DragEvent) {
   gap: 8px;
   z-index: 10;
   background: color-mix(in srgb, var(--bg-primary) 80%, transparent);
-  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);; /* COMPAT-BACKDROP-001：Safari<18 需要前缀 */
+
+  backdrop-filter: blur(4px);;
   border-radius: 10px;
   color: var(--accent);
 }
