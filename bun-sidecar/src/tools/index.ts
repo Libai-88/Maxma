@@ -88,40 +88,72 @@ export function registerCustomTools(): ToolDefinition[] {
         const file = memoryFilePath();
 
         // 读取现有记忆文档(文件缺失按空文档处理)
-        let doc: Record<string, unknown> = {};
-        try {
-          const raw = await fs.readFile(file, "utf8");
-          const parsed = bunYaml.parse(raw);
-          if (parsed && typeof parsed === "object") {
-            doc = parsed as Record<string, unknown>;
+        const readDoc = async (): Promise<Record<string, unknown>> => {
+          try {
+            const raw = await fs.readFile(file, "utf8");
+            const parsed = bunYaml.parse(raw);
+            if (parsed && typeof parsed === "object") {
+              return parsed as Record<string, unknown>;
+            }
+          } catch {
+            // 首次写入,文件尚不存在
           }
-        } catch {
-          // 首次写入,文件尚不存在
-        }
+          return {};
+        };
 
         // 去重:已有相同 description 则跳过
-        for (const value of Object.values(doc)) {
-          if (
-            value &&
-            typeof value === "object" &&
-            (value as { description?: unknown }).description === content
-          ) {
-            return {
-              content: [{ type: "text", text: "该记忆已存在,跳过重复写入。" }],
-              details: { stored: false, reason: "duplicate" },
-            };
+        const hasDuplicate = (d: Record<string, unknown>): boolean => {
+          for (const value of Object.values(d)) {
+            if (
+              value &&
+              typeof value === "object" &&
+              (value as { description?: unknown }).description === content
+            ) {
+              return true;
+            }
           }
+          return false;
+        };
+
+        const doc = await readDoc();
+        if (hasDuplicate(doc)) {
+          return {
+            content: [{ type: "text", text: "该记忆已存在,跳过重复写入。" }],
+            details: { stored: false, reason: "duplicate" },
+          };
         }
 
         const id = shortHash(content);
-        doc[id] = {
+        const entry = {
           description: content,
           history: [],
           latest_update_time: localTimestamp(),
           theme: category,
         };
+
+        // MEMORY-WRITE-RACE-001：写入前重读一次并与最新磁盘状态合并，
+        // 缩小与 Python 后端（memory.py UI 增删改）并发读改写之间的丢更新窗口：
+        // 后端在本次读取之后、重读之前完成的删除/编辑不会被旧快照回滚。
+        // 写入改用临时文件 + rename 原子替换——此前直接 fs.writeFile 截断写，
+        // 崩溃/交错会留下损坏的 YAML，导致记忆页面 503、Agent 读空。
+        const fresh = await readDoc();
+        if (hasDuplicate(fresh)) {
+          return {
+            content: [{ type: "text", text: "该记忆已存在,跳过重复写入。" }],
+            details: { stored: false, reason: "duplicate" },
+          };
+        }
+        fresh[id] = entry;
+
         await fs.mkdir(path.dirname(file), { recursive: true });
-        await fs.writeFile(file, bunYaml.stringify(doc), "utf8");
+        const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
+        await fs.writeFile(tmp, bunYaml.stringify(fresh), "utf8");
+        try {
+          await fs.rename(tmp, file);
+        } catch (err) {
+          await fs.rm(tmp, { force: true }).catch(() => {});
+          throw err;
+        }
 
         return {
           content: [{ type: "text", text: `已记住: ${content}` }],

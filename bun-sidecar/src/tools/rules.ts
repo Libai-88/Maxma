@@ -30,6 +30,13 @@ function userRulesFile(): string {
   return path.join(process.env.MAXMA_PROJECT_ROOT ?? process.cwd(), "api", "data", "user_rules.json");
 }
 
+/** 内置规则启停覆盖：<MAXMA_PROJECT_ROOT>/api/data/rule_toggles.json
+ *  （RULES-TOGGLE-001：Python 后端 toggle 内置规则写入此文件，本工具叠加应用，
+ *    保证 Agent 侧与 UI 侧看到一致的启停状态。） */
+function ruleTogglesFile(): string {
+  return path.join(process.env.MAXMA_PROJECT_ROOT ?? process.cwd(), "api", "data", "rule_toggles.json");
+}
+
 async function readJsonList(file: string): Promise<Record<string, unknown>[]> {
   try {
     const raw = await fs.readFile(file, "utf8");
@@ -40,14 +47,36 @@ async function readJsonList(file: string): Promise<Record<string, unknown>[]> {
   }
 }
 
+async function readRuleToggles(): Promise<Record<string, boolean>> {
+  try {
+    const raw = await fs.readFile(ruleTogglesFile(), "utf8");
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const result: Record<string, boolean> = {};
+      for (const [id, enabled] of Object.entries(parsed as Record<string, unknown>)) {
+        if (typeof enabled === "boolean") result[id] = enabled;
+      }
+      return result;
+    }
+  } catch {
+    // 覆盖文件缺失/损坏时按原状返回
+  }
+  return {};
+}
+
 /** 读取全部质量规则（内置 + 自定义）。 */
 export async function readAllRules(): Promise<QualityRule[]> {
-  const [builtin, custom] = await Promise.all([
+  const [builtin, custom, toggles] = await Promise.all([
     readJsonList(builtinRulesFile()),
     readJsonList(userRulesFile()),
+    readRuleToggles(),
   ]);
   return [
-    ...builtin.map((r) => ({ ...r, source: "builtin" }) as unknown as QualityRule),
+    ...builtin.map((r) => ({
+      ...r,
+      source: "builtin",
+      enabled: toggles[String(r.id)] ?? r.enabled,
+    }) as unknown as QualityRule),
     ...custom.map((r) => ({ ...r, source: "custom" }) as unknown as QualityRule),
   ].filter((r) => typeof r.id === "string");
 }
