@@ -77,6 +77,7 @@ export async function buildCreateSessionOptions(
     tools?: string[];
     permissionMode?: string;
     thinkingLevel?: string;
+    temperature?: number;
   },
   createMcp: typeof createConfiguredMcp = createConfiguredMcp,
 ): Promise<{
@@ -112,44 +113,76 @@ export async function buildCreateSessionOptions(
   // subsystem, so disabling it loses nothing.
   createOptions.settings = Settings.isolated({"advisor.enabled": false, "memory.backend": "off"});
 
-  const needsApproval = input.permissionMode === "ask" || input.permissionMode === "read_only";
+  // ── 权限模式 4 档 → OMP approvalMode 3 档真实映射（AG-PERM-001） ──
+  // 此前 read_only/ask/operate/auto 只映射成 needsApproval 布尔：operate/auto
+  // 与 yolo 完全等效、read_only 只是"每次确认"而非承诺的"拒写"。OMP 原生支持
+  // always-ask（读自动、写/执行需确认）/ write（读+写自动、执行需确认）/
+  // yolo（全部自动）三档，直接映射即可获得真实语义差异：
+  //   read_only → always-ask（写入必须逐次确认，符合"只读优先"承诺）
+  //   ask       → always-ask
+  //   operate   → write（读+写自动批准，bash/launch 等执行类需确认）
+  //   auto      → yolo
+  // permission_modes_enabled 关闭时由调用方传 "yolo"（旧行为）。
+  const permissionMode = input.permissionMode ?? "ask";
+  const approvalMode =
+    permissionMode === "operate" ? "write"
+    : permissionMode === "auto" ? "yolo"
+    : "always-ask"; // read_only / ask / 未知值
+  const needsApproval = approvalMode !== "yolo";
+
+  // ── 继承全局运行时配置（AG-COMPACTION-001） ──
+  // 此前 yolo 路径 Settings.isolated({advisor,memory}) 是空壳，用户调好的
+  // 压缩阈值/重试策略在默认模式（yolo）下完全不生效。统一读取全局配置，
+  // always-ask 路径只额外覆盖 approvalMode（旧行为本就如此）。
+  const globalPaths = [
+    "compaction.enabled", "compaction.strategy", "compaction.thresholdPercent",
+    "retry.enabled", "retry.maxRetries", "retry.modelFallback",
+    "tools.discoveryMode",
+    "steeringMode", "interruptMode", "followUpMode",
+    "thinkingBudgets.minimal", "thinkingBudgets.low", "thinkingBudgets.medium",
+    "thinkingBudgets.high", "thinkingBudgets.xhigh", "thinkingBudgets.max",
+    "skills.enabled", "bash.enabled", "lsp.enabled", "git.enabled",
+    "edit.mode", "read.summarize.enabled",
+    "todo.enabled", "glob.enabled", "grep.enabled", "browser.enabled",
+    "github.enabled", "checkpoint.enabled", "inspect_image.enabled",
+    "launch.enabled", "debug.enabled",
+    "astGrep.enabled", "astEdit.enabled",
+    "web_search.enabled", "ask.enabled",
+    // "memory.backend" intentionally excluded: mnemopi requires the
+    // un-bundled embedding deps (fastembed/onnxruntime). Maxma's own
+    // memory lives in its persona memory.yaml, not OMP's memory subsystem.
+    "autolearn.enabled",
+  ];
+  const globalOverrides: Record<string, unknown> = {};
+  try {
+    const global = await ensureSettings();
+    for (const p of globalPaths) {
+      try { const v = global.get(p as SettingPath); if (v !== undefined) globalOverrides[p] = v; } catch { /* skip */ }
+    }
+  } catch { /* global not available */ }
+
   createOptions.autoApprove = !needsApproval;
   if (needsApproval) {
     createOptions.hasUI = true;
-    // Inherit global settings and only override approval mode, instead of
-    // creating an empty isolated copy that loses all user preferences.
-    const globalPaths = [
-      "compaction.enabled", "compaction.strategy", "compaction.thresholdPercent",
-      "retry.enabled", "retry.maxRetries", "retry.modelFallback",
-      "tools.discoveryMode",
-      "steeringMode", "interruptMode", "followUpMode",
-      "thinkingBudgets.minimal", "thinkingBudgets.low", "thinkingBudgets.medium",
-      "thinkingBudgets.high", "thinkingBudgets.xhigh", "thinkingBudgets.max",
-      "skills.enabled", "bash.enabled", "lsp.enabled", "git.enabled",
-      "edit.mode", "read.summarize.enabled",
-      "todo.enabled", "glob.enabled", "grep.enabled", "browser.enabled",
-      "github.enabled", "checkpoint.enabled", "inspect_image.enabled",
-      "launch.enabled", "debug.enabled",
-      "astGrep.enabled", "astEdit.enabled",
-      "web_search.enabled", "ask.enabled",
-      // "memory.backend" intentionally excluded: mnemopi requires the
-      // un-bundled embedding deps (fastembed/onnxruntime). Maxma's own
-      // memory lives in its persona memory.yaml, not OMP's memory subsystem.
-      "autolearn.enabled",
-    ];
-    const globalOverrides: Record<string, unknown> = {};
-    try {
-      const global = await ensureSettings();
-      for (const p of globalPaths) {
-        try { const v = global.get(p as SettingPath); if (v !== undefined) globalOverrides[p] = v; } catch { /* skip */ }
-      }
-    } catch { /* global not available */ }
     createOptions.settings = Settings.isolated({
       ...globalOverrides,
-      "tools.approvalMode": "always-ask",
+      "tools.approvalMode": approvalMode,
       "advisor.enabled": false,
       "memory.backend": "off",
     });
+  } else {
+    createOptions.settings = Settings.isolated({
+      ...globalOverrides,
+      "tools.approvalMode": "yolo",
+      "advisor.enabled": false,
+      "memory.backend": "off",
+    });
+  }
+
+  // TEMP-END2END-001：用户设置的采样温度端到端生效（OMP settings.temperature，
+  // -1 为 provider 默认）。此前前端发送、后端丢弃、sidecar 不传，控件纯假。
+  if (input.temperature !== undefined && Number.isFinite(input.temperature) && input.temperature >= 0) {
+    setSetting(createOptions.settings, "temperature", input.temperature);
   }
 
   const customTools = registerCustomTools();
@@ -366,6 +399,8 @@ export async function handleRpcRequest(req: RpcRequest, io: BridgeIo = defaultIo
         const permissionMode: string = (params?.permission_mode as string) ?? "ask";
         // THINKING-WIRE-001：思考级别（"off"/"high" 等，来自前端 Thinking 开关）
         const thinkingLevel: string | undefined = params?.thinking_level as string | undefined;
+        // TEMP-END2END-001：采样温度（-1 表示 provider 默认，不覆盖）
+        const temperature = Number(params?.temperature);
 
         const { options: createOptions, needsApproval, mcpManager, mcpConfigs, mcpAllowBlock, mcpToolNames } = await buildCreateSessionOptions({
           model,
@@ -376,6 +411,7 @@ export async function handleRpcRequest(req: RpcRequest, io: BridgeIo = defaultIo
           tools: Array.isArray(tools) ? tools : undefined,
           permissionMode,
           thinkingLevel,
+          temperature: Number.isFinite(temperature) ? temperature : undefined,
         });
 
         const sessionId = randomUUID();
@@ -425,19 +461,41 @@ export async function handleRpcRequest(req: RpcRequest, io: BridgeIo = defaultIo
         record.unsubscribe = subscribeSession(sessionId, session, record);
 
         // Phase 3.4: 通过 EventBus 订阅子 Agent 生命周期事件
+        // AG-SUBAGENT-001：此前所有 lifecycle 事件一律映射为 sub_session_created，
+        // 前端据此 ensureConnected+switchSession 创建"全新空会话"——但真实子
+        // Agent 在父会话内部运行，事件不会发到那个空会话（用户看到空白聊天，
+        // 无进度、无完成回调，deferred 状态机也永远收不到数据）。现在按状态分流：
+        //   started  → sub_session_created（父会话内提示子任务启动）
+        //   completed/failed/aborted → deferred_subagent_submitted（带真实状态，
+        //     Python deferred_runs 状态机 + 前端 SubAgentCard 轮询展示）
         if (eventBus) {
           record.eventBus = eventBus;
           record.unsubLifecycle = eventBus.on(TASK_SUBAGENT_LIFECYCLE_CHANNEL, (raw: unknown) => {
-            const data = raw as { id?: string; description?: string; task?: string; agent?: string };
-            sendEvent(sessionId, {
-              type: "sub_session_created",
-              payload: {
-                sub_session_id: data.id ?? "",
-                parent_session_id: sessionId,
-                task: data.description ?? data.task ?? "",
-                name: data.agent ?? "subagent",
-              },
-            });
+            const data = raw as { id?: string; description?: string; task?: string; agent?: string; status?: string };
+            const subId = data.id ?? "";
+            const status = data.status ?? "started";
+            if (status === "started") {
+              sendEvent(sessionId, {
+                type: "sub_session_created",
+                payload: {
+                  sub_session_id: subId,
+                  parent_session_id: sessionId,
+                  task: data.description ?? data.task ?? "",
+                  name: data.agent ?? "subagent",
+                },
+              });
+            } else {
+              sendEvent(sessionId, {
+                type: "deferred_subagent_submitted",
+                payload: {
+                  run_id: subId,
+                  parent_session_id: sessionId,
+                  status, // completed / failed / aborted
+                  task: data.description ?? data.task ?? "",
+                  name: data.agent ?? "subagent",
+                },
+              });
+            }
           });
         }
 
@@ -542,7 +600,35 @@ export async function handleRpcRequest(req: RpcRequest, io: BridgeIo = defaultIo
       }
 
       if (method === "get_health") {
-        send(id, { status: "ok", message: "sidecar running" });
+        // UX-HEALTH-001：probe=true 时做真实可用性探测（此前忽略 probe 直接
+        // 返回 ok，模型/provider 挂了前端永远显示"就绪"）。探测内容：
+        // 默认模型对应的 provider 是否已配置 API key（零配额消耗）。
+        const probe = params?.probe === true;
+        if (!probe) {
+          send(id, { status: "ok", message: "sidecar running" });
+          return;
+        }
+        try {
+          const authStorage = await io.getSharedAuthStorage();
+          const defaultModel = process.env.MAXMA_DEFAULT_MODEL ?? "";
+          const slashIdx = defaultModel.indexOf("/");
+          const provider = slashIdx >= 0 ? defaultModel.slice(0, slashIdx) : "";
+          let status = "ok";
+          let message = `sidecar running (${sessions.size} sessions)`;
+          if (provider) {
+            const key = await Promise.race([
+              authStorage.getApiKey(provider).catch(() => undefined),
+              new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 5000)),
+            ]);
+            if (!key) {
+              status = "degraded";
+              message = `Provider ${provider} 未配置 API key`;
+            }
+          }
+          send(id, { status, message, sessions: sessions.size });
+        } catch (err) {
+          send(id, { status: "error", message: `Health probe failed: ${String(err)}` });
+        }
         return;
       }
 
@@ -1082,17 +1168,21 @@ export async function handleRpcRequest(req: RpcRequest, io: BridgeIo = defaultIo
         try {
           const message: string = params?.message ?? "";
           if (!message) { sendError(id, "Missing required parameter: message"); return; }
+          const maxTokens = Number(params?.max_tokens);
           const createSessionFn = io.createAgentSession
             ?? (await import("@oh-my-pi/pi-coding-agent")).createAgentSession;
           // 修复 HEADLESS-LEAK-001：错误路径必须清理订阅与 session。
           // 此前 session.prompt/waitForIdle 抛错时 unsub/dispose 被跳过，
           // AgentSession（EventBus/磁盘 session 文件）泄漏；且 headless 不走
           // orchestratePrompt 无 600s 超时——automation 调度下泄漏会累积。
+          // HEADLESS-TIMEOUT-001：显式 300s 超时 + abort，模型挂起时 RPC
+          // 不再无限挂起（调用方 120s 兜底期间自动化任务一直显示"运行中"）。
           const { session } = await createSessionFn({
             hasUI: false,
             autoApprove: true,
             model: params?.model ?? process.env.MAXMA_DEFAULT_MODEL,
             authStorage: params?.authStorage ?? await io.getSharedAuthStorage(),
+            ...(Number.isFinite(maxTokens) && maxTokens > 0 ? { maxTokens } : {}),
           });
           let answer = "";
           const unsub = session.subscribe((raw: unknown) => {
@@ -1101,9 +1191,21 @@ export async function handleRpcRequest(req: RpcRequest, io: BridgeIo = defaultIo
               answer = event.payload?.content ?? event.content ?? answer;
             }
           });
+          const TIMEOUT_MS = 300_000;
+          const timeout = new Promise<never>((_, reject) => {
+            const t = setTimeout(() => {
+              reject(new Error(`Headless prompt timed out after ${TIMEOUT_MS / 1000}s`));
+            }, TIMEOUT_MS);
+            (t as unknown as { unref?: () => void }).unref?.();
+          });
           try {
-            await session.prompt(message);
-            await session.waitForIdle();
+            await Promise.race([
+              (async () => {
+                await session.prompt(message);
+                await session.waitForIdle();
+              })(),
+              timeout,
+            ]);
           } finally {
             unsub();
             await session.dispose().catch(() => {});
