@@ -108,9 +108,13 @@ def _validate_args(args: list[str]) -> list[str]:
 
 class TestConnectionRequest(BaseModel):
     """测试连接请求。"""
-    command: str
+    command: str = ""
     args: list[str] = []
     env: dict[str, str] = {}
+    # UX-MCP-TEST-001：URL 类传输（streamable_http/websocket/sse）测试——
+    # 此前 test-connection 只支持 stdio 命令启动探测，URL 类服务器无法测试。
+    transport: str = "stdio"
+    url: str = ""
 
 
 class TestConnectionResponse(BaseModel):
@@ -124,11 +128,41 @@ class TestConnectionResponse(BaseModel):
 async def test_connection(req: TestConnectionRequest) -> TestConnectionResponse:
     """测试 MCP 服务器连接。
 
-    1. 校验命令白名单 + 拒绝 shell 元字符
-    2. 解析命令（取 basename，由 subprocess 在 PATH 中查找）
-    3. 校验并构造子进程环境变量
-    4. 启动子进程，5 秒内未崩溃视为成功
+    stdio：校验命令白名单 + 拒绝 shell 元字符 → 启动子进程，5 秒内未崩溃视为成功。
+    URL 类（streamable_http/websocket/sse）：HTTP(S) 可达性探测（GET，5s 超时，
+    任何 HTTP 响应都视为可达——MCP 端点对 GET 的响应码因实现而异）。
     """
+    if req.transport != "stdio":
+        url = (req.url or "").strip()
+        if not url:
+            return TestConnectionResponse(
+                success=False,
+                error="缺少服务器 URL",
+                resolved_command="",
+            )
+        if not url.startswith(("http://", "https://")):
+            return TestConnectionResponse(
+                success=False,
+                error="URL 必须以 http:// 或 https:// 开头",
+                resolved_command="",
+            )
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
+                resp = await client.get(url)
+            # 任何 HTTP 响应（含 4xx）都说明服务可达；连接失败才报错
+            return TestConnectionResponse(
+                success=True,
+                error=None,
+                resolved_command=url,
+            )
+        except Exception as e:
+            return TestConnectionResponse(
+                success=False,
+                error=f"连接失败: {str(e)[:200]}",
+                resolved_command=url,
+            )
+
     # 1. 命令白名单校验
     resolved = _resolve_command(req.command)
     # 2. args 元字符校验

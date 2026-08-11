@@ -280,9 +280,16 @@ def create_app() -> FastAPI:
         return {"token": app.state.auth_token}
 
     # Health check
+    # UX-HEALTH-001：此前返回固定 {"status":"ok"}，模型/sidecar 挂了用户
+    # 永远不知道（前端 StatusBadge 恒显示"就绪"）。改为真实四部件报告，
+    # probe_remote=True 走 sidecar 探测（结果在 health.py 内缓存 60s，
+    # 前端 30s 轮询不会每次都触发真实探测）。
     @app.get("/api/health")
     async def health():
-        return {"status": "ok", "version": __version__}
+        from api.health import get_health_report
+
+        report = await get_health_report(app, probe_remote=True)
+        return report.model_dump(exclude_none=True)
 
     # Production static file serving
     if os.environ.get("MAXMA_ENV") == "production":

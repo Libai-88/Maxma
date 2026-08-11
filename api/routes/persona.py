@@ -281,6 +281,116 @@ async def create_new_persona(body: CreatePersonaRequest):
     }
 
 
+# ── 人设删除 / 重命名（UX-SOUL-MANAGE-001：此前人设只能创建和切换，
+# 误建的人设永久留在列表中） ──────────────────────────────
+
+class RenamePersonaRequest(BaseModel):
+    new_name: str
+
+
+@router.delete("/personas/{file}")
+async def delete_persona(file: str):
+    """删除一个人格文件（含其独立记忆文件）。
+
+    保护规则：内置 SOUL.md 不可删。若删除的是当前活跃人格，自动回退到
+    默认 SOUL.md——UI 是"选择即切换"，任何人格被选中即成为当前，若禁止
+    删除活跃人格将导致除 SOUL 外的人格永远无法删除（死锁）。
+    """
+    if not file or file == "SOUL.md":
+        raise HTTPException(status_code=400, detail="内置默认人格不可删除")
+    # 路径穿越防护
+    import re as _re
+    if not _re.match(r'^SOUL\.[\w\u4e00-\u9fff\-]+\.md$', file):
+        raise HTTPException(status_code=400, detail="非法的人格文件名")
+
+    path = _get_persona_variant_path(file) if file != "SOUL.md" else PERSONAS_DIR / file
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"人格文件不存在: {file}")
+
+    was_active = get_active_persona_file() == file
+
+    try:
+        with yaml_file_lock(path):
+            path.unlink()
+        # 清理独立记忆文件（memory_{persona_id}.yaml）
+        memory_path = PERSONAS_DIR / f"memory_{path.stem}.yaml"
+        if memory_path.exists():
+            with yaml_file_lock(memory_path):
+                memory_path.unlink()
+    except OSError as exc:
+        logger.exception("删除人格 %s 失败", file)
+        raise HTTPException(status_code=500, detail="删除失败，请检查文件权限") from exc
+
+    # 删除的是活跃人格 → 回退默认（UI"选择即切换"，被删人格已不可再选）
+    if was_active:
+        set_active_persona("SOUL.md")
+
+    invalidate_prompt_cache()
+    logger.info("删除人格: %s", file)
+    return {"status": "deleted", "file": file}
+
+
+@router.put("/personas/{file}/rename")
+async def rename_persona(file: str, body: RenamePersonaRequest):
+    """重命名人格文件（保留内容与独立记忆归属）。"""
+    if not file or file == "SOUL.md":
+        raise HTTPException(status_code=400, detail="内置默认人格不可重命名")
+    import re as _re
+    if not _re.match(r'^SOUL\.[\w\u4e00-\u9fff\-]+\.md$', file):
+        raise HTTPException(status_code=400, detail="非法的人格文件名")
+
+    new_name = (body.new_name or "").strip()
+    if not new_name:
+        raise HTTPException(status_code=400, detail="名称不能为空")
+    if not _re.match(r'^[\w\u4e00-\u9fff\-]+$', new_name):
+        raise HTTPException(status_code=400, detail="名称只能包含字母、数字、中文、下划线和连字符")
+    new_name = new_name.replace(" ", "_")
+
+    src = _get_persona_variant_path(file)
+    if not src.exists():
+        raise HTTPException(status_code=404, detail=f"人格文件不存在: {file}")
+
+    new_filename = f"SOUL.{new_name}.md"
+    dst = PERSONAS_DIR / new_filename
+    if dst.exists():
+        raise HTTPException(status_code=409, detail=f"人格文件已存在: {new_filename}")
+
+    # ACTIVE-FOLLOW-RENAME-001：rename 前记录活跃状态——rename 后旧文件已
+    # 不存在，get_active_persona_file() 会按防御逻辑回退到 SOUL.md，无法
+    # 再据此判断"被重命名的人格是否活跃"。
+    was_active = get_active_persona_file() == file
+
+    try:
+        with yaml_file_lock(src):
+            # 文件内标题同步更新（# Name）
+            text = src.read_text(encoding="utf-8")
+            import re as _re2
+            text = _re2.sub(r'^#\s+.+$', f'# {new_name}', text, count=1, flags=_re2.MULTILINE)
+            src.write_text(text, encoding="utf-8")
+            src.rename(dst)
+    except OSError as exc:
+        logger.exception("重命名人格 %s 失败", file)
+        raise HTTPException(status_code=500, detail="重命名失败，请检查文件权限") from exc
+
+    # 独立记忆文件跟随重命名（memory_SOUL.旧名.yaml → memory_SOUL.新名.yaml）
+    old_memory = PERSONAS_DIR / f"memory_{src.stem}.yaml"
+    new_memory = PERSONAS_DIR / f"memory_{dst.stem}.yaml"
+    if old_memory.exists() and not new_memory.exists():
+        try:
+            with yaml_file_lock(old_memory):
+                old_memory.rename(new_memory)
+        except OSError:
+            logger.warning("重命名人格记忆文件失败（忽略）: %s", old_memory)
+
+    # 活跃人格指向更新（基于 rename 前记录的状态）
+    if was_active:
+        set_active_persona(new_filename)
+
+    invalidate_prompt_cache()
+    logger.info("重命名人格: %s → %s", file, new_filename)
+    return {"status": "renamed", "file": new_filename}
+
+
 @router.get("/persona/profile")
 async def get_persona_profile():
     """返回当前活跃人格的展示信息（从 SOUL.md + USER.md 解析）。"""

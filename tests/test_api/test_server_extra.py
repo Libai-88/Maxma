@@ -111,7 +111,13 @@ class TestCreateAppBasic:
         resp = client.get("/api/health")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["status"] == "ok"
+        # UX-HEALTH-001：不再固定返回 ok——四部件真实报告。测试环境无
+        # sidecar/模型配置，overall 应为 degraded 且带 llm 组件明细；
+        # 若 lifespan 初始化了 sidecar 则为 ok。两者都属合法契约。
+        assert data["status"] in ("ok", "degraded")
+        assert "llm" in data
+        assert "native_tools" in data
+        assert "mcp_tools" in data
         from version import __version__
 
         assert data["version"] == __version__
@@ -306,7 +312,8 @@ class TestCreateAppProductionStatic:
         client = TestClient(app)
         resp = client.get("/api/health")
         assert resp.status_code == 200
-        assert resp.json()["status"] == "ok"
+        # UX-HEALTH-001：真实四部件报告（测试环境无 sidecar → degraded 合法）
+        assert resp.json()["status"] in ("ok", "degraded")
 
 
 # ===========================================================================

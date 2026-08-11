@@ -176,7 +176,11 @@ async def test_cancel_logs_warning_when_client_call_cancel_fails_on_error(caplog
 
 @pytest.mark.asyncio
 async def test_turn_error_returns_safe_message_but_logs_detail(caplog):
-    """Prompt exceptions stay detailed in logs but not in the user answer."""
+    """Prompt exceptions stay detailed in logs but not in the user answer.
+
+    UX-ERROR-001：失败不再被吞成普通回复——上抛 TurnError（携带安全文案），
+    _handle_turn_result 据此走 ERROR+DONE 路径；敏感详情只进日志。
+    """
     handlers = {}
     ws, session, mock_client = _setup_mocks(handlers)
 
@@ -195,13 +199,14 @@ async def test_turn_error_returns_safe_message_but_logs_detail(caplog):
 
     with _patch_session_map():
         with caplog.at_level(logging.ERROR):
-            result = await chat._stream_turn_sidecar(
-                ws, session, "hello", "system prompt"
-            )
+            with pytest.raises(chat.TurnError) as excinfo:
+                await chat._stream_turn_sidecar(
+                    ws, session, "hello", "system prompt"
+                )
 
-    # MEMORY-EVENTS-001：返回 (final_answer, memory_activity) 元组
-    assert isinstance(result, tuple) and result[0] == "后端处理失败，请稍后重试"
-    assert "provider secret details" not in result[0]
+    assert excinfo.value.code == "SIDECAR_TURN_FAILED"
+    assert excinfo.value.message == "后端处理失败，请稍后重试"
+    assert "provider secret details" not in excinfo.value.message
     assert "provider secret details" in caplog.text
 
 

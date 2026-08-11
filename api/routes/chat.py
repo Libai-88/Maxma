@@ -71,6 +71,21 @@ class TurnStartError(Exception):
         self.message = message
 
 
+class TurnError(Exception):
+    """Turn-level failure after the session exists (timeout / disconnect / crash).
+
+    Unlike TurnStartError, a TurnError may carry a partial answer streamed
+    before the failure, so the frontend can show what was produced and offer
+    a retry (UX-ERROR-001：此前失败被吞成普通回复，用户无法区分成功与失败).
+    """
+
+    def __init__(self, code: str, message: str, *, partial_answer: str = "") -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.partial_answer = partial_answer
+
+
 async def _get_sidecar_client(sidecar_mgr):
     """Return a sidecar client via the manager's ``get_client()`` lifecycle API.
 
@@ -205,6 +220,7 @@ async def _stream_turn_sidecar(
     use_append: bool = False,
     turn_id: str = "",
     thinking_level: str | None = None,
+    temperature: float | None = None,
 ) -> str:
     """Execute a turn via oh-my-pi sidecar (Bun subprocess).
 
@@ -268,7 +284,10 @@ async def _stream_turn_sidecar(
         _sidecar_system_prompt = system_prompt
         try:
             sm = get_session_map()
-            _past_turns = sm.get_recent_turns(session.session_id, count=5)
+            # AG-CONTEXT-001：恢复轮数 5 → 20（与 session_adapter.MAX_TURNS 对齐）。
+            # 此前只注入最近 5 轮，断线/重启重建后长对话中早于 5 轮的约定、
+            # 事实、任务要求全部丢失（UI 历史还在，模型不知道）。
+            _past_turns = sm.get_recent_turns(session.session_id, count=20)
             if _past_turns:
                 _history_lines = []
                 for t in _past_turns:
@@ -306,6 +325,32 @@ async def _stream_turn_sidecar(
         # 传入可用工具名列表，让 OMP session 正确注册 function calling
         _session_tools = [t["name"] for t in _CHAT_BUILTIN_TOOLS if isinstance(t, dict) and t.get("name")]
 
+        # PERSONA-TOOLS-001：人设级工具白名单接线（此前 get_persona_allowed_tools
+        # 无任何调用方，SOUL.md 写 tools: 不产生效果）。白名单命中时只保留
+        # 允许的工具（按 name 或 label 匹配，兼容新旧命名）；自定义工具
+        # （remember_memory 等）由 sidecar 全量注册，不受白名单过滤。
+        try:
+            from agent.prompts import get_persona_allowed_tools
+            _allowed_tools = get_persona_allowed_tools()
+            if _allowed_tools:
+                _filtered = []
+                for _t in _CHAT_BUILTIN_TOOLS:
+                    if not isinstance(_t, dict) or not _t.get("name"):
+                        continue
+                    if (
+                        _t.get("name") in _allowed_tools
+                        or str(_t.get("label", "")).lower() in {a.lower() for a in _allowed_tools}
+                    ):
+                        _filtered.append(_t["name"])
+                if _filtered:
+                    _session_tools = _filtered
+                    logger.info(
+                        "[persona] 人设工具白名单生效：%d/%d 个内置工具",
+                        len(_filtered), len(_CHAT_BUILTIN_TOOLS),
+                    )
+        except Exception:
+            logger.debug("[persona] 工具白名单过滤失败，使用全量工具", exc_info=True)
+
         # MAXTOKENS-END2END-001：用户设置的输出上限（首条消息 payload 存入
         # session._max_tokens）传给 sidecar 覆写 Model.maxTokens。
         # PROVIDER-FORM-001：未设置会话级上限时回退 provider 级默认值。
@@ -317,6 +362,21 @@ async def _stream_turn_sidecar(
         # 不传 system_prompt，避免整体替换 OMP 原生的 harness prompt。
         # 品牌模式：传 system_prompt（整体替换，旧行为）。
         _prompt_field = "append_system_prompt" if use_append else "system_prompt"
+        # UX-INIT-NOTICE-001：create_session 可能因 MCP 连接挂起/模型配置错误
+        # 阻塞——此前走默认 120s 超时，期间前端无任何反馈（假死）。提前发
+        # notice 告知用户正在初始化，并把 RPC 超时压到 30s。
+        try:
+            await ws.send_json({
+                "type": WsEventType.NOTICE,
+                "payload": {
+                    "message": "正在初始化模型会话…",
+                    "level": "info",
+                    "source": "maxma",
+                    "turn_id": turn_id,
+                },
+            })
+        except Exception:
+            pass
         try:
             result = await client.call(
                 "create_session",
@@ -333,7 +393,10 @@ async def _stream_turn_sidecar(
                     **({"max_tokens": _session_max_tokens} if _session_max_tokens else {}),
                     # THINKING-WIRE-001：思考开关端到端接线（前端 Thinking 开关）
                     **({"thinking_level": thinking_level} if thinking_level else {}),
+                    # TEMP-END2END-001：用户设置的采样温度端到端生效
+                    **({"temperature": temperature} if temperature is not None else {}),
                 },
+                timeout=30,
             )
         except Exception as e:
             logger.exception(
@@ -352,6 +415,11 @@ async def _stream_turn_sidecar(
         session._sidecar_session_id = sidecar_sid
         sm = get_session_map()
         sm.set_mapping(session.session_id, sidecar_sid)
+        # AG-CONTEXT-001：记录会话活跃时间（空闲 TTL 清理用）
+        try:
+            app_state.sidecar_manager.touch_idle_session(sidecar_sid)
+        except Exception:
+            pass
         logger.info(
             "[sidecar] Created session %s for Maxma session %s",
             sidecar_sid[:8],
@@ -526,15 +594,29 @@ async def _stream_turn_sidecar(
             turn_done.set()
 
     async def _on_deferred(sid: str, event: dict):
-        """Store deferred run data from sidecar and forward to WS."""
+        """Store deferred run data from sidecar and forward to WS.
+
+        AG-SUBAGENT-001：sidecar 现在把真实子 Agent 生命周期事件
+        （completed/failed/aborted）作为 deferred_subagent_submitted 转发，
+        此前该事件源在 OMP 中不存在、deferred 状态机是死代码。此处把
+        OMP 生命周期状态映射到前端契约（succeeded/failed/cancelled）。
+        """
         if sid != sidecar_sid:
             return
         try:
             payload = event.get("payload", {})
+            _raw_status = payload.get("status", "queued")
+            _mapped_status = {
+                "completed": "succeeded",
+                "failed": "failed",
+                "aborted": "cancelled",
+            }.get(_raw_status, _raw_status)
             run_data = {
                 "run_id": payload.get("run_id", ""),
                 "parent_turn_id": payload.get("parent_turn_id"),
-                "status": payload.get("status", "queued"),
+                "status": _mapped_status,
+                "task": payload.get("task", ""),
+                "name": payload.get("name", ""),
                 "result_ref": payload.get("result_ref"),
                 "result": payload.get("result"),
                 "cancel_reason": payload.get("cancel_reason"),
@@ -630,7 +712,11 @@ async def _stream_turn_sidecar(
                 # _handle_turn_result 在 done 后合成 memory 事件流
                 return (final_answer, memory_activity)
             if client.disconnected.is_set():
-                raise RuntimeError("Sidecar disconnected during turn")
+                raise TurnError(
+                    "SIDECAR_DISCONNECTED",
+                    "连接中断，回复未完成",
+                    partial_answer=final_answer,
+                )
         else:
             # 非 cancel 路径同样联动断开事件
             disconnect_task = asyncio.create_task(client.disconnected.wait())
@@ -646,7 +732,11 @@ async def _stream_turn_sidecar(
             if not done:
                 raise asyncio.TimeoutError
             if client.disconnected.is_set():
-                raise RuntimeError("Sidecar disconnected during turn")
+                raise TurnError(
+                    "SIDECAR_DISCONNECTED",
+                    "连接中断，回复未完成",
+                    partial_answer=final_answer,
+                )
     except asyncio.TimeoutError:
         logger.warning(
             "[sidecar] Turn timed out for session %s", sidecar_sid[:8]
@@ -655,7 +745,13 @@ async def _stream_turn_sidecar(
             await client.call("cancel", {"session_id": sidecar_sid}, timeout=5)
         except Exception as e:
             logger.warning("[sidecar] Failed to cancel after timeout for session %s: %s", sidecar_sid[:8], e)
-        raise
+        # UX-ERROR-001：超时不再被吞成普通回复——带 code 与部分输出上抛，
+        # _handle_turn_result 走 ERROR+DONE（前端显示错误并支持重试）
+        raise TurnError(
+            "PROMPT_TIMEOUT",
+            f"回复超过 {_turn_timeout_seconds() // 60} 分钟未完成，已自动停止",
+            partial_answer=final_answer,
+        )
     except Exception as e:
         logger.exception(
             "[sidecar] Turn failed for session %s", sidecar_sid[:8]
@@ -664,8 +760,15 @@ async def _stream_turn_sidecar(
             await client.call("cancel", {"session_id": sidecar_sid}, timeout=5)
         except Exception as cancel_err:
             logger.warning("[sidecar] Failed to cancel after error for session %s: %s", sidecar_sid[:8], cancel_err)
-        if not final_answer:
-            final_answer = _PUBLIC_TURN_ERROR
+        # UX-ERROR-001：失败必须上抛（此前置 _PUBLIC_TURN_ERROR 后正常返回，
+        # 用户看到"后端处理失败"以普通回复形式进入对话流，无错误标记）。
+        if isinstance(e, TurnError):
+            raise
+        raise TurnError(
+            "SIDECAR_TURN_FAILED",
+            _PUBLIC_TURN_ERROR,
+            partial_answer=final_answer,
+        ) from e
     finally:
         for unsub in unsubs:
             try:
@@ -769,9 +872,17 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             logger.exception("[ws] Turn task failed for session %s", session_id[:8])
             error_code = "SIDECAR_UNAVAILABLE"
             error_message = _PUBLIC_TURN_ERROR
+            partial_answer = ""
             if isinstance(exc, TurnStartError):
                 error_code = exc.code
                 error_message = exc.message
+            elif isinstance(exc, TurnError):
+                error_code = exc.code
+                error_message = exc.message
+                partial_answer = exc.partial_answer
+            elif isinstance(exc, asyncio.TimeoutError):
+                error_code = "PROMPT_TIMEOUT"
+                error_message = "回复超过时限未完成"
             error_trace_id = uuid.uuid4().hex
             record_activity(
                 "turn", "turn_error",
@@ -782,6 +893,20 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                 message=error_message,
             )
             try:
+                # UX-ERROR-001：失败前已流式输出的部分内容先送达（失败轮次
+                # 不丢产物），随后 ERROR + 带 error 标记的 DONE 闭合状态机，
+                # 前端据此显示失败样式与"重试"入口。
+                if partial_answer:
+                    await ws.send_json(
+                        {
+                            "type": WsEventType.ANSWER,
+                            "payload": {
+                                "turn_id": _new_turn_id(_turn_id),
+                                "content": partial_answer,
+                                "partial": True,
+                            },
+                        }
+                    )
                 await ws.send_json(
                     {
                         "type": WsEventType.ERROR,
@@ -797,7 +922,10 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                 await ws.send_json(
                     {
                         "type": WsEventType.DONE,
-                        "payload": {"turn_id": _new_turn_id(_turn_id)},
+                        "payload": {
+                            "turn_id": _new_turn_id(_turn_id),
+                            "error": error_code,
+                        },
                     }
                 )
             except Exception:
@@ -866,6 +994,9 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                 "payload": {
                     "turn_id": _new_turn_id(tid),
                     "context_usage": context_usage,
+                    # UX-EMPTY-001：模型返回空内容（内容过滤/拒绝）时标记本轮，
+                    # 前端渲染占位提示，避免"发出去没回音"的假死感。
+                    "empty": not bool(final_answer),
                 },
             }
         )
@@ -990,10 +1121,47 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                             # 但进程仍活着时，mgr.client 可能为 None 或 is_running=False，
                             # 此处会 RuntimeError；get_client() 会透明重启 sidecar。
                             client = await _get_sidecar_client(mgr)
+                            # UX-CANCEL-TIMEOUT-001：cancel 显式 5s 超时——此前走
+                            # rpc_client 默认 120s，sidecar abort 不返回时停止按钮
+                            # 无反应、消息循环被阻塞、新消息也发不出去（假死）。
                             await client.call(
                                 "cancel",
                                 {"session_id": session._sidecar_session_id},
+                                timeout=5,
                             )
+                            # AG-IDEMPOTENCY-001：取消时若模型已产出最终回复
+                            # （副作用已执行完毕、恰在 ANSWER 送达前被取消），
+                            # 补发该回复并记录幂等 id——否则前端重试同一
+                            # client_msg_id 会当作新消息再次执行（副作用重复）。
+                            if _turn_client_msg_id and _turn_id:
+                                try:
+                                    _msgs = await client.call(
+                                        "get_messages",
+                                        {"session_id": session._sidecar_session_id, "limit": 4},
+                                        timeout=5,
+                                    )
+                                    _last_answer = ""
+                                    for _m in (_msgs.get("messages") or []):
+                                        if _m.get("role") == "assistant" and str(_m.get("content") or "").strip():
+                                            _last_answer = str(_m.get("content"))
+                                    if _last_answer:
+                                        await ws.send_json({
+                                            "type": WsEventType.ANSWER,
+                                            "payload": {
+                                                "turn_id": _new_turn_id(_turn_id),
+                                                "content": _last_answer,
+                                                "partial": True,
+                                            },
+                                        })
+                                        if _turn_client_msg_id not in session.recent_message_ids:
+                                            session.recent_message_ids.append(_turn_client_msg_id)
+                                            try:
+                                                _sm = get_session_map()
+                                                _sm.append_message_id(session.session_id, _turn_client_msg_id)
+                                            except Exception:
+                                                pass
+                                except Exception:
+                                    logger.debug("[ws] Cancel 后检查已产出回复失败", exc_info=True)
                         except Exception:
                             logger.debug(
                                 "[ws] Failed to send cancel to sidecar",
@@ -1127,10 +1295,20 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                     )
                     continue
 
-            # MAXTOKENS-END2END-001：记录用户设置的输出上限（会话创建时使用）
+            # MAXTOKENS-END2END-001：记录用户设置的输出上限（会话创建时使用）。
+            # MAXTOKENS-CLAMP-001：前端默认值 128000 是"上下文窗口"语义（注释
+            # 即"窗口上限"），若原样当作输出上限传给小窗口免费模型会产生无效/
+            # 被拒的 max_tokens。超过 65536 视为未设置（走 provider 级默认）。
             _mt = payload.get("max_tokens")
-            if isinstance(_mt, (int, float)) and _mt > 0:
+            if isinstance(_mt, (int, float)) and 0 < _mt <= 65536:
                 session._max_tokens = int(_mt)
+
+            # TEMP-END2END-001：用户设置的采样温度端到端接线（此前前端发送、
+            # 后端丢弃、sidecar 不传，控件纯假）。范围 [-1, 2]：-1 表示
+            # provider 默认（不覆盖），0-2 为实际采样值。
+            _temperature = payload.get("temperature")
+            if isinstance(_temperature, (int, float)) and -1 <= float(_temperature) <= 2:
+                session._temperature = float(_temperature)
 
             # 修复 CONN-MUTEX-001：同一 session 多 WS 连接互斥。
             # 跨连接并发 turn 会让双方订阅同一 sidecar session 的事件流，
@@ -1272,12 +1450,19 @@ async def websocket_chat(ws: WebSocket, session_id: str):
 
             # Start streaming as a background task so the message loop
             # remains responsive for cancel and auxiliary messages
-            # THINKING-WIRE-001：payload.thinking（bool）→ thinking_level
-            # （"off"/"high"）；未提供时不传，沿用 OMP 默认
+            # THINKING-WIRE-001：payload.thinking 支持两态——
+            #   bool → "high"/"off"（旧契约）
+            #   str  → 直接透传（"off"/"minimal"/"low"/"medium"/"high"/"xhigh"/"max"，
+            #           OMP 多级思考能力，THINKING-LEVELS-001）
+            # 未提供时不传，沿用 OMP 默认
             _thinking_flag = payload.get("thinking")
             _thinking_kwargs = {}
-            if isinstance(_thinking_flag, bool):
+            if isinstance(_thinking_flag, str) and _thinking_flag:
+                _thinking_kwargs["thinking_level"] = _thinking_flag
+            elif isinstance(_thinking_flag, bool):
                 _thinking_kwargs["thinking_level"] = "high" if _thinking_flag else "off"
+            # TEMP-END2END-001：每轮把会话级温度传给 sidecar
+            _temperature_value = getattr(session, "_temperature", None)
             turn_task = asyncio.create_task(
                 _stream_turn_sidecar(
                     ws, session, user_message, system_prompt,
@@ -1285,6 +1470,7 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                     cancel_event=cancel_event,
                     use_append=_use_append,
                     turn_id=turn_id,
+                    temperature=_temperature_value,
                     **_thinking_kwargs,
                 )
             )
@@ -1307,9 +1493,17 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             )
             turn_task.cancel()
             await asyncio.gather(turn_task, return_exceptions=True)
-        # 断开即销毁 sidecar session，防止会话在 sidecar 内存累积导致反复内存重启
-        await _destroy_sidecar_session(
-            app_state.sidecar_manager, session
-        )
+        # AG-CONTEXT-001：断开不再销毁 sidecar 会话——此前任何 WS 断线/后端
+        # 重启/1GB 心跳重启都会销毁会话，重连重建时 Agent 只剩最近 5 轮纯文本
+        # 注入，长对话中早于 5 轮的约定/事实全部丢失（UI 历史还在、模型不知道）。
+        # 现在保留会话供重连复用；空闲会话由 sidecar_manager 的 TTL 清理兜底
+        # （touch_idle_session + sweep_idle_sessions），内存不会无限累积。
+        try:
+            mgr = app_state.sidecar_manager
+            sid = getattr(session, "_sidecar_session_id", None)
+            if mgr is not None and sid:
+                mgr.touch_idle_session(sid)
+        except Exception:
+            logger.debug("[ws] Failed to touch idle session", exc_info=True)
         # MULTI-WS-001：只注销本连接（其他窗口的同会话连接保持注册）
         app_state.ws_registry.unregister(session_id, ws)

@@ -263,6 +263,29 @@ class SessionMap:
             self._conn.commit()
             return removed
 
+    def clear_turns(self, maxma_id: str) -> int:
+        """清空该会话的 turns 与 message_ids（UX-CLEAR-001：清空会话端点用）。
+
+        保留行本身与 sidecar 映射（sidecar session 由调用方销毁），只把
+        持久化对话历史与幂等 id 清零——否则前端清空后刷新，后端恢复路径
+        又把旧历史带回（"清空后消息复活"）。
+        """
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT turns FROM session_map WHERE maxma_id = ?",
+                (maxma_id,),
+            ).fetchone()
+            if not row:
+                return 0
+            turn_count = len(_decode_turns(row[0]))
+            self._conn.execute(
+                "UPDATE session_map SET turns = '[]', message_ids = '[]', "
+                "updated_at = datetime('now') WHERE maxma_id = ?",
+                (maxma_id,),
+            )
+            self._conn.commit()
+            return turn_count
+
     def list_all(self) -> list[dict[str, str]]:
         """列出所有映射（用于调试/管理）。"""
         with self._lock:

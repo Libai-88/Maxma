@@ -422,6 +422,58 @@ async def get_context_usage(session_id: str, request: Request):
     return usage
 
 
+@router.delete("/sessions/{session_id}/messages")
+async def clear_session_messages(session_id: str, request: Request):
+    """清空会话全部消息（UX-CLEAR-001）。
+
+    前端"清空会话"此前只清本地 turns，刷新/重启后 loadHistoryFromBackend
+    会把历史全部恢复——用户确认"不可撤销"后消息"复活"，属信任级问题。
+    本端点：销毁 sidecar session（模型侧上下文）→ 清空 SessionMap 持久化
+    turns 与幂等 id → 重置 message_count。const 会话同时删除磁盘文件。
+    """
+    sm = request.app.state.session_manager
+    session = await sm.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+
+    # Agent 运行中禁止清空（避免 in-flight turn 的上下文被从底部抽走）
+    if session._active_task is not None and not session._active_task.done():
+        raise HTTPException(status_code=409, detail="Agent 正在处理中，请等待本轮完成后清空")
+
+    # 1. 销毁 sidecar session（模型侧上下文）
+    from api.routes.chat import _destroy_sidecar_session
+    sidecar_mgr = getattr(request.app.state, "sidecar_manager", None)
+    if sidecar_mgr is not None:
+        try:
+            await _destroy_sidecar_session(sidecar_mgr, session)
+        except Exception:
+            logger.debug("[sessions] clear: destroy sidecar session failed", exc_info=True)
+
+    # 2. 清空 SessionMap 持久化 turns + message_ids
+    from api.pi_bridge.session_adapter import get_session_map
+    try:
+        smap = get_session_map()
+        cleared = smap.clear_turns(session_id)
+    except Exception:
+        logger.warning("[sessions] clear: SessionMap clear failed", exc_info=True)
+        cleared = 0
+
+    # 3. 重置内存状态
+    session.message_count = 0
+    session.recent_message_ids.clear()
+
+    # 4. const 会话：同步删除磁盘文件（避免重启后旧内容复活）
+    if session.is_const:
+        try:
+            from api.const_session_store import delete_const_session
+            delete_const_session(session_id)
+        except Exception:
+            logger.debug("[sessions] clear: const file delete failed", exc_info=True)
+
+    _audit_record("session", "clear", session_id, "清空会话消息")
+    return {"status": "cleared", "cleared_turns": cleared}
+
+
 async def _delete_session_inner(
     sm, sidecar_mgr, session_id: str,
 ) -> bool:
@@ -654,14 +706,16 @@ async def generate_session_title(session_id: str, request: Request):
             client = None
         if client is not None:
             try:
-                result = await client.call("chat", {
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"对话内容：\n{conversation_text}\n\n标题："},
-                    ],
+                # TITLE-FIX-001：此前调用不存在的 "chat" RPC 方法（sidecar 方法
+                # 清单无此方法 → 必返 Unknown method），fallback 的 app.state.llm
+                # 又从未被赋值 → 标题生成按钮 100% 失败。改用 headless_prompt
+                # （真实存在的 RPC，走 OMP ModelRegistry 路由），并显式 30s 超时
+                # 防止模型挂起时标题按钮无限转圈。
+                result = await client.call("headless_prompt", {
+                    "message": prompt,
                     "max_tokens": 50,
-                })
-                raw = result.get("content", "") or ""
+                }, timeout=30)
+                raw = result.get("answer", "") or ""
                 title = raw.strip().strip('"').strip("'")
             except Exception as e:
                 logger.warning("[generate-title] sidecar RPC 失败，尝试直连: %s", e)

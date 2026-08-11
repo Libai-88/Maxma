@@ -12,6 +12,7 @@
 不修改源代码，全部通过 mock + 直接调用 / WebSocket TestClient 覆盖。
 """
 
+import asyncio
 import json
 import logging
 from collections import deque
@@ -41,6 +42,11 @@ def _build_ws_session_mgr(handlers, *, sidecar_session_id=None):
 
     mock_client = MagicMock()
     mock_client.is_running = True
+    # SIDECAR-DISCONNECT-001：disconnected 必须是真 asyncio.Event——
+    # MagicMock 的 .wait() 返回 MagicMock 而非 coroutine，asyncio.create_task
+    # 直接 TypeError。UX-ERROR-001 上抛 TurnError 后该错误不再被吞掉，
+    # mock 必须真实。
+    mock_client.disconnected = asyncio.Event()
 
     def on(evt_type, handler):
         handlers[evt_type] = handler
@@ -501,7 +507,8 @@ class TestAppendTurnException:
     def test_append_turn_exception_swallowed(self, monkeypatch):
         """lines 348-349: append_turn 抛异常应被 debug 日志吞掉，不影响 done。"""
         # patch _stream_turn_sidecar 返回固定 answer
-        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id=""):
+        # TEMP-END2END-001：新签名带 temperature 关键字参数
+        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id="", thinking_level=None, temperature=None):
             return "final-answer"
 
         monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", fake_stream)

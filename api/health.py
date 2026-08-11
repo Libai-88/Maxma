@@ -17,6 +17,11 @@ from api.runtime_status import RuntimeStatus, sanitize_user_detail
 
 logger = logging.getLogger(__name__)
 
+# UX-HEALTH-001：远端探测结果缓存（60s）。前端每 30s 轮询 /api/health，
+# 每次都真实探测会拖慢轮询；缓存让探测频次降为每 60s 一次，其余走缓存。
+_LLM_PROBE_CACHE: dict[str, object] = {"ts": 0.0, "health": None}
+_LLM_PROBE_TTL = 60.0
+
 
 class ComponentHealth(BaseModel):
     status: Literal["ok", "degraded", "error"]
@@ -105,22 +110,30 @@ async def check_llm(app: FastAPI, probe_remote: bool = False) -> ComponentHealth
             detail="LLM 由 OMP ModelRegistry 管理，未执行远端探测",
         )
 
-    # 远端探测：尝试通过 sidecar 验证连接
+    # 远端探测：尝试通过 sidecar 验证连接（结果缓存 _LLM_PROBE_TTL 秒，
+    # 避免前端 30s 轮询每次都触发真实探测）
+    now = time.monotonic()
+    if _LLM_PROBE_CACHE["health"] is not None and now - float(_LLM_PROBE_CACHE["ts"]) < _LLM_PROBE_TTL:
+        return _LLM_PROBE_CACHE["health"]  # type: ignore[return-value]
+
+    # Sidecar 不可用/未初始化时，从 app.state 的健康信号给出 degraded 而非盲 ok
     sidecar_mgr = getattr(app.state, "sidecar_manager", None)
     if sidecar_mgr is None:
-        return ComponentHealth(
-            status="error",
-            detail="Sidecar 管理器未初始化",
+        _LLM_PROBE_CACHE["ts"] = now
+        _LLM_PROBE_CACHE["health"] = ComponentHealth(
+            status="error", detail="Sidecar 管理器未初始化",
         )
+        return _LLM_PROBE_CACHE["health"]  # type: ignore[return-value]
 
     try:
         await sidecar_mgr.start()
         client = sidecar_mgr.client
         if client is None:
-            return ComponentHealth(
-                status="error",
-                detail="Sidecar 客户端不可用",
+            _LLM_PROBE_CACHE["ts"] = now
+            _LLM_PROBE_CACHE["health"] = ComponentHealth(
+                status="error", detail="Sidecar 客户端不可用",
             )
+            return _LLM_PROBE_CACHE["health"]  # type: ignore[return-value]
         start = time.monotonic()
         result = await asyncio.wait_for(
             client.call("get_health", {"probe": True}),
@@ -128,26 +141,32 @@ async def check_llm(app: FastAPI, probe_remote: bool = False) -> ComponentHealth
         )
         elapsed = (time.monotonic() - start) * 1000
         if result.get("status") == "ok":
-            return ComponentHealth(
+            _LLM_PROBE_CACHE["ts"] = now
+            _LLM_PROBE_CACHE["health"] = ComponentHealth(
                 status="ok",
                 latency_ms=round(elapsed, 1),
-                detail="OMP sidecar 健康",
+                detail=result.get("message", "OMP sidecar 健康"),
             )
-        return ComponentHealth(
+            return _LLM_PROBE_CACHE["health"]  # type: ignore[return-value]
+        _LLM_PROBE_CACHE["ts"] = now
+        _LLM_PROBE_CACHE["health"] = ComponentHealth(
             status="error",
             latency_ms=round(elapsed, 1),
             detail=result.get("message", "Sidecar 报告异常"),
         )
+        return _LLM_PROBE_CACHE["health"]  # type: ignore[return-value]
     except asyncio.TimeoutError:
-        return ComponentHealth(
-            status="error",
-            detail="Sidecar 健康检查超时",
+        _LLM_PROBE_CACHE["ts"] = now
+        _LLM_PROBE_CACHE["health"] = ComponentHealth(
+            status="error", detail="Sidecar 健康检查超时",
         )
+        return _LLM_PROBE_CACHE["health"]  # type: ignore[return-value]
     except Exception as e:
-        return ComponentHealth(
-            status="error",
-            detail=f"Sidecar 健康检查失败: {e}",
+        _LLM_PROBE_CACHE["ts"] = now
+        _LLM_PROBE_CACHE["health"] = ComponentHealth(
+            status="error", detail=f"Sidecar 健康检查失败: {e}",
         )
+        return _LLM_PROBE_CACHE["health"]  # type: ignore[return-value]
 
 
 def get_ltm_diagnostic(app: FastAPI) -> LtmDiagnostic | None:

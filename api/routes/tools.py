@@ -3,6 +3,13 @@ from fastapi import APIRouter
 
 router = APIRouter()
 
+# TOOL-LIST-ACCURACY-001：清单必须与运行时事实一致——
+# 1) 移除 OMP 原生记忆工具 recall/reflect/retain/memory_edit：编译包不含
+#    fastembed/onnxruntime，sidecar 将 memory.backend 钉死为 "off"，这 4 个
+#    工具在运行时不会被注册（模型 schema 中不存在、调用必失败）。此前清单
+#    宣称 31 个工具、其中 4 个不可用，CapabilitiesView 展示与事实不符。
+# 2) 补充 Maxma 自定义工具（remember_memory/search_memories/get_sticker/
+#    list_rules/list_automations）：真实可用却不在清单里。
 _BUILTIN_TOOLS = [
     # File
     {"name": "read", "label": "Read", "description": "读取文件内容", "category": "file", "builtin": True},
@@ -33,14 +40,15 @@ _BUILTIN_TOOLS = [
     {"name": "ask", "label": "Ask User", "description": "向用户提问", "category": "interactive", "builtin": True},
     {"name": "todo", "label": "Todo", "description": "待办管理", "category": "interactive", "builtin": True},
     {"name": "inspect_image", "label": "Inspect Image", "description": "图片分析", "category": "interactive", "builtin": True},
-    # Memory
-    {"name": "recall", "label": "Recall", "description": "检索记忆", "category": "memory", "builtin": True},
-    {"name": "reflect", "label": "Reflect", "description": "反思更新记忆", "category": "memory", "builtin": True},
-    {"name": "retain", "label": "Retain", "description": "保留事实", "category": "memory", "builtin": True},
-    {"name": "memory_edit", "label": "Memory Edit", "description": "编辑记忆", "category": "memory", "builtin": True},
     # Skills
     {"name": "manage_skill", "label": "Manage Skill", "description": "管理技能包", "category": "skills", "builtin": True},
     {"name": "learn", "label": "Learn", "description": "学习", "category": "skills", "builtin": True},
+    # ── Maxma 自定义工具（真实可用，sidecar customTools 全量注册）──
+    {"name": "remember_memory", "label": "Remember Memory", "description": "记住一条长期记忆（用户明确要求时）", "category": "memory", "builtin": True, "source": "custom"},
+    {"name": "search_memories", "label": "Search Memories", "description": "检索长期记忆", "category": "memory", "builtin": True, "source": "custom"},
+    {"name": "get_sticker", "label": "Get Sticker", "description": "获取内置贴纸", "category": "fun", "builtin": True, "source": "custom"},
+    {"name": "list_rules", "label": "List Rules", "description": "查询质量规则", "category": "system", "builtin": True, "source": "custom"},
+    {"name": "list_automations", "label": "List Automations", "description": "查询自动化任务", "category": "system", "builtin": True, "source": "custom"},
 ]
 
 @router.get("/tools")

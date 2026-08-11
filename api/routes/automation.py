@@ -58,19 +58,119 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+# CRON-PARSE-001：标准 5 字段 cron 表达式解析（零依赖实现，便携版不增依赖）。
+# 此前 cron_expr 被完全忽略、一律按"下一分钟边界"触发——cron 任务实际
+# 每分钟误触发一次。支持：* / 数字 / 逗号列表 / a-b 范围 / */n 与 a-b/n 步长；
+# day-of-month 与 day-of-week 按 Vixie cron 的 OR 语义（任一匹配即触发）。
+_CRON_FIELD_RANGES = (0, 59), (0, 23), (1, 31), (1, 12), (0, 6)  # min hour dom month dow
+_CRON_FIELD_NAMES = ("minute", "hour", "day-of-month", "month", "day-of-week")
+_CRON_MONTH_ALIASES = {"jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+                       "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12}
+_CRON_DOW_ALIASES = {"sun": 0, "mon": 1, "tue": 2, "wed": 3, "thu": 4, "fri": 5, "sat": 6}
+
+
+def _parse_cron_field(field: str, lo: int, hi: int, *, names: dict[str, int] | None = None) -> set[int]:
+    """解析单个 cron 字段为允许值集合；非法字段抛 ValueError。"""
+    if names is None:
+        names = {}
+    values: set[int] = set()
+    for part in field.split(","):
+        part = part.strip()
+        if not part:
+            raise ValueError(f"empty cron field part: {field!r}")
+        # 步长 /n
+        step = 1
+        if "/" in part:
+            base, step_str = part.rsplit("/", 1)
+            if not step_str.isdigit() or int(step_str) <= 0:
+                raise ValueError(f"invalid step in cron field: {part!r}")
+            step = int(step_str)
+        else:
+            base = part
+        # 名称别名（jan/mon…）
+        base_lower = base.lower()
+        if base_lower in names:
+            base = str(names[base_lower])
+        if base == "*":
+            start, end = lo, hi
+        elif "-" in base:
+            start_str, end_str = base.split("-", 1)
+            if not start_str.isdigit() or not end_str.isdigit():
+                raise ValueError(f"invalid range in cron field: {part!r}")
+            start, end = int(start_str), int(end_str)
+        else:
+            if not base.isdigit():
+                raise ValueError(f"invalid cron field value: {part!r}")
+            start = end = int(base)
+        if start < lo or end > hi or start > end:
+            raise ValueError(f"cron value out of range {lo}-{hi}: {part!r}")
+        values.update(range(start, end + 1, step))
+    return values
+
+
+def parse_cron_expr(expr: str) -> list[set[int]]:
+    """解析完整 5 字段 cron 表达式，返回 5 个允许值集合。"""
+    fields = expr.strip().split()
+    if len(fields) != 5:
+        raise ValueError(
+            f"cron 表达式必须为 5 字段（分 时 日 月 周），收到 {len(fields)} 个: {expr!r}"
+        )
+    parsed = []
+    for i, (field, (lo, hi)) in enumerate(zip(fields, _CRON_FIELD_RANGES)):
+        names = _CRON_MONTH_ALIASES if i == 3 else (_CRON_DOW_ALIASES if i == 4 else None)
+        parsed.append(_parse_cron_field(field, lo, hi, names=names))
+    return parsed
+
+
+def _cron_matches(parsed: list[set[int]], dt: datetime) -> bool:
+    """判断 dt 是否匹配 cron 表达式（DOM 与 DOW 为 OR 语义）。"""
+    minute, hour, dom, month, dow = parsed
+    if dt.minute not in minute or dt.hour not in hour or dt.month not in month:
+        return False
+    # Vixie cron 语义：day-of-month 与 day-of-week 任一匹配即触发
+    return dt.day in dom or dt.weekday() in dow
+
+
+def _next_cron_run(expr: str, after: datetime) -> datetime | None:
+    """计算 after 之后最近一次 cron 触发时间；非法表达式返回 None。"""
+    try:
+        parsed = parse_cron_expr(expr)
+    except ValueError as e:
+        logger.warning("[automation] 无效 cron 表达式 %r: %s", expr, e)
+        return None
+    # 从 after 的下一分钟开始逐分钟扫描，上限 366 天（任意合法表达式
+    # 至多一年内必触发；防御无限循环）
+    cursor = after.replace(second=0, microsecond=0) + timedelta(minutes=1)
+    deadline = cursor + timedelta(days=366)
+    while cursor <= deadline:
+        if _cron_matches(parsed, cursor):
+            return cursor
+        cursor += timedelta(minutes=1)
+    logger.warning("[automation] cron 表达式 %r 在 366 天内无匹配", expr)
+    return None
+
+
+def validate_cron_expr(expr: str) -> bool:
+    """前端创建/编辑时校验 cron 表达式（返回是否合法）。"""
+    try:
+        parse_cron_expr(expr)
+        return True
+    except ValueError:
+        return False
+
+
 def _compute_next_run(interval_seconds: int | None, cron_expr: str | None) -> str | None:
     """Compute the next run time based on interval or cron expression.
 
-    For cron_expr, we do a simple approximation: next minute boundary.
-    Full cron parsing can be added later with croniter if needed.
+    CRON-PARSE-001：cron_expr 此前被忽略（一律下一分钟边界 → 每分钟误触发），
+    现按标准 5 字段解析；非法表达式返回 None（任务不会被调度，日志有警告）。
     """
     now = datetime.now(timezone.utc)
     if interval_seconds and interval_seconds > 0:
         return (now + timedelta(seconds=interval_seconds)).isoformat()
     if cron_expr:
-        # Simple approximation: next minute boundary for cron-based tasks
-        next_minute = now.replace(second=0, microsecond=0) + timedelta(minutes=1)
-        return next_minute.isoformat()
+        nxt = _next_cron_run(cron_expr, now)
+        return nxt.isoformat() if nxt else None
     return None
 
 
@@ -315,8 +415,16 @@ async def _call_headless(sidecar_mgr: Any, message: str) -> dict:
     if client is None:
         return {"answer": "", "status": "sidecar_unavailable"}
     try:
-        result = await client.call("headless_prompt", {"message": message})
+        # HEADLESS-CALL-TIMEOUT-001：显式 120s RPC 超时（sidecar 侧 headless
+        # 另有 300s 硬超时兜底）——此前无超时参数走 rpc_client 默认值，且
+        # 调度循环串行执行，一个挂死的任务会阻塞整个调度器。
+        result = await asyncio.wait_for(
+            client.call("headless_prompt", {"message": message}),
+            timeout=120,
+        )
         return result if isinstance(result, dict) else {"answer": str(result), "status": "completed"}
+    except asyncio.TimeoutError:
+        return {"answer": "", "status": "timeout", "error": "headless_prompt 超时"}
     except Exception as e:
         return {"answer": "", "status": "error", "error": str(e)}
 
@@ -423,6 +531,13 @@ async def create_automation(body: CreateAutomationRequest, request: Request):
             status_code=422,
             detail="Must provide either cron_expr or interval_seconds",
         )
+    # CRON-PARSE-001：创建时校验 cron 表达式，非法立即 422（此前非法表达式
+    # 会被静默接受并按"每分钟触发"执行）
+    if body.cron_expr and not validate_cron_expr(body.cron_expr):
+        raise HTTPException(
+            status_code=422,
+            detail="cron 表达式无效（需要 5 字段：分 时 日 月 周，如 '0 9 * * 1-5'）",
+        )
 
     automation_id = secrets.token_urlsafe(12)
     now = _now_iso()
@@ -460,6 +575,12 @@ async def update_automation(automation_id: str, body: UpdateAutomationRequest, r
     if body.description is not None:
         fields["description"] = body.description
     if body.cron_expr is not None:
+        # CRON-PARSE-001：更新时同样校验 cron 表达式
+        if body.cron_expr and not validate_cron_expr(body.cron_expr):
+            raise HTTPException(
+                status_code=422,
+                detail="cron 表达式无效（需要 5 字段：分 时 日 月 周，如 '0 9 * * 1-5'）",
+            )
         fields["cron_expr"] = body.cron_expr
     if body.interval_seconds is not None:
         fields["interval_seconds"] = body.interval_seconds

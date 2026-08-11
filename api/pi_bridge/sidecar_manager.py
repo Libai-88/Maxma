@@ -96,6 +96,10 @@ class SidecarManager:
         # "初始化瞬态"（进程装好但 client 未 attach）与"heartbeat 死亡标记"，
         # 后者需要硬重启而非短路返回（避免永久 wedge）。
         self._dead = False
+        # AG-CONTEXT-001：sidecar 会话活跃时间表（sidecar_sid → last_active
+        # epoch）。WS 断开不再销毁会话（保留上下文供重连复用），空闲超时
+        # 的会话由 heartbeat 循环 sweep 兜底销毁，防止 sidecar 内存累积。
+        self._idle_sessions: dict[str, float] = {}
 
     # -- Properties ---------------------------------------------------------
 
@@ -256,6 +260,47 @@ class SidecarManager:
             # Start periodic heartbeat (every 30s)
             self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
+    def touch_idle_session(self, sidecar_sid: str) -> None:
+        """记录/刷新 sidecar 会话的活跃时间（AG-CONTEXT-001）。"""
+        if sidecar_sid:
+            self._idle_sessions[sidecar_sid] = asyncio.get_event_loop().time()
+
+    async def sweep_idle_sessions(self, ttl: float = 1800.0) -> int:
+        """销毁超过 ttl 秒未活跃的 sidecar 会话，返回销毁数。
+
+        WS 断开保留会话（重连复用上下文）后，必须有一层空闲清理兜底，
+        否则长期不用的会话会在 sidecar 内存中累积。销毁只释放 sidecar
+        侧 session（SessionMap 的 turns 保留，供将来重建时恢复上下文）。
+        """
+        if not self._idle_sessions or self._client is None or not self._client.is_running:
+            return 0
+        now = asyncio.get_event_loop().time()
+        stale = [
+            sid for sid, ts in self._idle_sessions.items()
+            if now - ts > ttl
+        ]
+        swept = 0
+        for sid in stale:
+            try:
+                await self._client.call(
+                    "destroy_session", {"session_id": sid}, timeout=5
+                )
+                # 同步清理 SessionMap 的 sidecar 映射（turns 保留）
+                try:
+                    from api.pi_bridge.session_adapter import get_session_map
+                    sm = get_session_map()
+                    sm.clear_sidecar_id(sid)
+                except Exception:
+                    pass
+                self._idle_sessions.pop(sid, None)
+                swept += 1
+                logger.info("[sidecar] Swept idle session %s (TTL %.0fs)", sid[:8], ttl)
+            except Exception:
+                # destroy 失败（如会话已被侧删除）——直接从表移除，避免反复重试
+                self._idle_sessions.pop(sid, None)
+                logger.debug("[sidecar] Failed to sweep idle session %s", sid[:8], exc_info=True)
+        return swept
+
     async def _heartbeat_loop(self) -> None:
         """Periodic health check — detects silent sidecar death between user turns.
         Also monitors process memory and restarts if over limit."""
@@ -303,6 +348,13 @@ class SidecarManager:
                     break
                 continue
 
+            # AG-CONTEXT-001：空闲会话 TTL 清理（30 分钟无活跃则销毁，
+            # 保留 SessionMap turns 供上下文恢复）。仅在心跳正常时执行。
+            try:
+                await self.sweep_idle_sessions(ttl=1800.0)
+            except Exception:
+                logger.debug("[sidecar] idle sweep failed", exc_info=True)
+
         # If we get here, the sidecar is gone — mark it for transparent restart
         # 修复 HEARTBEAT-CLEANUP-001：先 stop 旧 client——置位 disconnected
         # 事件让 in-flight turn 立即醒转（此前只置 None，读循环存活的旧 client
@@ -344,6 +396,11 @@ class SidecarManager:
         if self._client is not None:
             await self._client.stop()
             self._client = None
+        # AG-CONTEXT-001：进程重启后 sidecar 内会话全部失效，清空活跃表
+        # （getattr 防御：测试用 __new__ 构造的实例可能没有该属性）
+        idle = getattr(self, "_idle_sessions", None)
+        if idle:
+            idle.clear()
 
         if not self.is_running:
             return

@@ -426,7 +426,10 @@ class TestSidecarTurnFailures:
         monkeypatch.setattr(chat_mod.asyncio, "wait", timeout_wait)
         cancel_event = asyncio.Event()
 
-        with pytest.raises(asyncio.TimeoutError):
+        # UX-ERROR-001：超时不再以裸 asyncio.TimeoutError 上抛，而是携带稳定
+        # code（PROMPT_TIMEOUT）与用户可读文案的 TurnError，供 _handle_turn_result
+        # 走 ERROR+DONE 路径（此前失败被吞成普通回复）
+        with pytest.raises(chat_mod.TurnError) as exc_info:
             await chat_mod._stream_turn_sidecar(
                 ws,
                 session,
@@ -435,6 +438,8 @@ class TestSidecarTurnFailures:
                 cancel_event=cancel_event,
             )
 
+        assert exc_info.value.code == "PROMPT_TIMEOUT"
+        assert exc_info.value.message
         client.call.assert_any_await(
             "cancel", {"session_id": "sc-timeout"}, timeout=5
         )
@@ -516,7 +521,7 @@ class TestWebSocketChat:
         self, ws_app, monkeypatch
     ):
         # patch _stream_turn_sidecar 返回固定 answer
-        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id=""):
+        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id="", thinking_level=None, temperature=None):
             return f"echo:{user_message}"
 
         monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", fake_stream)
@@ -607,7 +612,7 @@ class TestWebSocketChat:
     def test_happy_path_increments_message_count(
         self, ws_app, monkeypatch
     ):
-        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id=""):
+        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id="", thinking_level=None, temperature=None):
             return "answer"
 
         monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", fake_stream)
@@ -626,7 +631,7 @@ class TestWebSocketChat:
     def test_empty_final_answer_skips_message_count(
         self, ws_app, monkeypatch
     ):
-        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id=""):
+        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id="", thinking_level=None, temperature=None):
             return ""  # 空 answer
 
         monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", fake_stream)
@@ -645,7 +650,7 @@ class TestWebSocketChat:
     def test_const_session_triggers_save(
         self, ws_app, monkeypatch
     ):
-        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id=""):
+        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id="", thinking_level=None, temperature=None):
             return "final-answer"
 
         monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", fake_stream)
@@ -674,7 +679,7 @@ class TestWebSocketChat:
     def test_non_const_session_does_not_trigger_save(
         self, ws_app, monkeypatch
     ):
-        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id=""):
+        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id="", thinking_level=None, temperature=None):
             return "answer"
 
         monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", fake_stream)
@@ -698,7 +703,7 @@ class TestWebSocketChat:
         assert save_called["v"] is False
 
     def test_ws_registers_and_unregisters(self, ws_app, monkeypatch):
-        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id=""):
+        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id="", thinking_level=None, temperature=None):
             return "x"
 
         monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", fake_stream)
@@ -715,7 +720,7 @@ class TestWebSocketChat:
         assert "s6" in registry.unregistered
 
     def test_done_message_has_turn_id_from_payload(self, ws_app, monkeypatch):
-        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id=""):
+        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id="", thinking_level=None, temperature=None):
             return "x"
 
         monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", fake_stream)
@@ -730,7 +735,7 @@ class TestWebSocketChat:
             assert done["payload"]["turn_id"] == "client-turn-1"
 
     def test_done_message_generates_turn_id_when_missing(self, ws_app, monkeypatch):
-        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id=""):
+        async def fake_stream(ws, session, user_message, system_prompt, model_config=None, cancel_event=None, use_append=False, turn_id="", thinking_level=None, temperature=None):
             return "x"
 
         monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", fake_stream)

@@ -36,7 +36,7 @@ def test_recent_message_ids_duplicate_is_ignored(monkeypatch):
 
     async def fake_stream(ws_, session_, user_message, system_prompt,
                           model_config=None, cancel_event=None,
-                          use_append=False, turn_id=""):
+                          use_append=False, turn_id="", thinking_level=None, temperature=None):
         return f"echo:{user_message}"
 
     monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", fake_stream)

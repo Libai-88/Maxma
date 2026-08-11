@@ -152,6 +152,22 @@ _cached_prompt: str = ""
 _cached_parts: list[dict] = []
 _cache_lock = threading.Lock()
 
+# MEMORY-GUIDANCE-001：记忆说明（AG-9 记忆主动化）。
+# 写入侧：从"仅用户明确要求时"扩展为"主动保存有价值信息"——用户偏好/
+# 身份/事实/长期任务要求是模型最容易感知的长期记忆素材，等待用户逐条
+# 要求会漏掉绝大多数可记忆信息；检索侧：明确提示回答前可主动检索，
+# 替代"完全依赖用户要求才查"的被动行为。
+_MEMORY_INSTRUCTION = (
+    "## 记忆\n"
+    "你可以维护用户的长期记忆，记忆会持久化显示在记忆页面：\n"
+    "- 当用户明确要求记住某信息时，必须调用 remember_memory 写入。\n"
+    "- 当对话中出现值得长期保留的信息（用户偏好、身份/职业、家庭/作息、"
+    "长期目标与任务要求、关键事实）时，主动调用 remember_memory 保存，"
+    "不要等用户逐条要求。避免保存一次性任务细节、临时状态或重复内容。\n"
+    "- 回答涉及用户历史信息前，可调用 search_memories 检索相关记忆，"
+    "而不是让用户重复说明。"
+)
+
 
 def _file_hash(path: Path) -> str:
     """计算文件内容的 MD5 摘要（仅 hex 前 16 位）。"""
@@ -282,7 +298,7 @@ def _rebuild(fingerprint: str) -> None:
         {"key": "behavior_rules", "label": "系统行为规则",
          "content": "## 行为规则\n" + agents_md_content},
         {"key": "memory_instruction", "label": "记忆说明",
-         "content": "## 记忆\n当用户明确要求记住某个事实、偏好或信息时，调用 remember_memory 工具把它写入长期记忆。记忆会显示在记忆页面。"},
+         "content": _MEMORY_INSTRUCTION},
         {"key": "personality", "label": "性格人设",
          "content": "## 性格设定\n" + soul_content},
         {"key": "user_self_report", "label": "用户自述",
@@ -307,8 +323,7 @@ def _rebuild(fingerprint: str) -> None:
         "## 用户自述",
         user_md_raw,
         "",
-        "## 记忆",
-        "当用户明确要求记住某个事实、偏好或信息时，调用 remember_memory 工具把它写入长期记忆。记忆会显示在记忆页面。",
+        _MEMORY_INSTRUCTION,
         "",
         macros_content,
     ]

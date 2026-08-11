@@ -36,6 +36,20 @@ def app():
     return a
 
 
+@pytest.fixture(autouse=True)
+def _reset_llm_probe_cache():
+    """UX-HEALTH-001：LLM 探测结果缓存（60s）——测试间重置，避免缓存泄漏。
+
+    check_llm(probe_remote=True) 首次真实探测后写入模块级缓存，后续调用
+    直接返回缓存；不重置会导致测试间状态串扰（前一个测试的错误状态
+    被后一个测试读到）。
+    """
+    before = health_mod._LLM_PROBE_CACHE
+    health_mod._LLM_PROBE_CACHE = {"ts": 0.0, "health": None}
+    yield
+    health_mod._LLM_PROBE_CACHE = before
+
+
 # ── ComponentHealth 模型 ────────────────────────────
 
 
