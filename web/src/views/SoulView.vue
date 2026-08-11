@@ -61,14 +61,18 @@
         </div>
       </details>
       <div class="editor-wrapper">
-        <Codemirror
+        <!-- WEBVIEW2-EDITOR-001：vue-codemirror 在 Tauri WebView2 下渲染异常
+             （5 轮 CSS 修复未根治，编辑器高度塌陷/内容不可见）。与
+             MarkdownEditor.vue 同一降级方案：原生 textarea，放弃语法高亮，
+             保证人设页在桌面端真实可用。 -->
+        <textarea
+          ref="editorTextarea"
+          class="md-textarea"
           v-model="content"
-          :extensions="extensions"
-          :disabled="saving"
           :placeholder="pagePlaceholder"
-          :autofocus="false"
-          :indent-with-tab="true"
-          :tab-size="2"
+          :disabled="saving"
+          spellcheck="false"
+          tab-size="2"
           @blur="onBlur"
         />
       </div>
@@ -106,7 +110,6 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { Codemirror } from 'vue-codemirror'
 import { api } from '@/api'
 import PersonaCard from '../components/PersonaCard.vue'
 import { useMarkdownPersist } from '@/composables/useMarkdownPersist'
@@ -149,7 +152,6 @@ const {
   saveState,
   saveError,
   loadError,
-  extensions,
   saveStateText,
   loadContent,
   saveContent,
@@ -438,14 +440,23 @@ onMounted(async () => {
   position: relative;
 }
 
-/* 与 MarkdownEditor.vue 一致：vue-codemirror 容器 display:contents 在 WebView2
-   可能使 .cm-editor 高度塌陷为 0（内容与交互不可见）。
-   1) display:block 覆盖 inline style="display:contents"
-   2) 绝对定位 + inset:0 让编辑器撑满容器，绕过 height% 百分比链断裂问题 */
-.editor-wrapper :deep(.v-codemirror) {
-  display: block !important;
+/* WEBVIEW2-EDITOR-001：原生 textarea 样式（与 MarkdownEditor.vue 一致），
+   不再依赖 vue-codemirror 的 display:contents/height 链 */
+.editor-wrapper .md-textarea {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
+  resize: none;
+  border: none;
+  outline: none;
+  padding: 16px;
+  background: transparent;
+  color: var(--text-primary, #1C1C1C);
+  font-family: "Microsoft YaHei", "PingFang SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  tab-size: 2;
 }
 
 .editor-wrapper :deep(.cm-editor) {
