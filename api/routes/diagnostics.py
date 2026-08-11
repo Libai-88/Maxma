@@ -90,11 +90,12 @@ async def list_log_files():
 
 @router.delete("/diagnostics/logs")
 async def cleanup_old_log_files():
-    """清理旧日志轮转文件，保留当前的 maxma.log 和 tauri.log。
+    """清理日志文件，保留当前活跃日志。
 
-    删除规则：
-    - 保留：maxma.log、tauri.log（当前活跃日志）
-    - 删除：maxma.log.1~5、tauri.log.1~5、*.log.old 等轮转文件
+    DIAG-CLEAN-001：此前只删轮转文件（maxma.log.*/tauri.log.*/*.log.old），
+    测试/调试遗留的任意 .log 文件（approval-test.log 等）会永久留在
+    日志目录且被列表展示、却无法清理。现在保护三个活跃文件
+    （maxma.log / tauri.log / frontend-diag.log），其余 .log/.log.* 全删。
     """
     deleted_files: list[dict] = []
     freed_bytes = 0
@@ -111,7 +112,7 @@ async def cleanup_old_log_files():
             }
 
         # 受保护的当前活跃日志文件（不删除）
-        protected_names = {"maxma.log", "tauri.log"}
+        protected_names = {"maxma.log", "tauri.log", "frontend-diag.log"}
 
         for entry in sorted(LOGS_DIR.iterdir(), key=lambda p: p.name):
             if not entry.is_file():
@@ -123,13 +124,13 @@ async def cleanup_old_log_files():
             if name_lower in protected_names:
                 continue
 
-            # 仅处理 maxma.log.* / tauri.log.* / *.log.old 轮转文件
-            is_rotation = (
-                name_lower.startswith("maxma.log.")
-                or name_lower.startswith("tauri.log.")
+            # 仅处理 .log 文件及其轮转/衍生文件（.log.1、.log.old、*.log 等）
+            is_log_like = (
+                name_lower.endswith(".log")
+                or ".log." in name_lower
                 or name_lower.endswith(".log.old")
             )
-            if not is_rotation:
+            if not is_log_like:
                 continue
 
             try:

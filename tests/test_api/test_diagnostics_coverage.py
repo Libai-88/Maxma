@@ -601,15 +601,18 @@ def test_scan_log_files_non_json_non_error_line_skipped(isolated_logs_dir):
     assert errors == []
 
 
-def test_scan_log_files_warning_level_skipped(isolated_logs_dir):
-    """WARNING level entries are not captured (only ERROR/CRITICAL)."""
-    log_entry = {"ts": "2026-07-17 10:00:00", "level": "WARNING", "msg": "warn"}
+def test_scan_log_files_warning_level_captured(isolated_logs_dir):
+    """DIAG-COMPLETE-001：WARNING 级别现纳入扫描（4xx 请求失败/超时警告等
+    用户可感知错误信号此前全部漏报）。"""
+    log_entry = {"ts": "2026-07-17 10:00:00", "level": "WARNING", "msg": "warn-msg"}
     (isolated_logs_dir / "maxma.log").write_text(
         json.dumps(log_entry) + "\n", encoding="utf-8"
     )
 
     errors = error_collector._scan_log_files()
-    assert errors == []
+    assert len(errors) == 1
+    assert errors[0]["level"] == "WARNING"
+    assert errors[0]["message"] == "warn-msg"
 
 
 def test_scan_log_files_rotation_files(isolated_logs_dir):

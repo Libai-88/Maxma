@@ -159,11 +159,14 @@ class ErrorCollector:
         file_errors = self._scan_log_files()
         system_info = self._collect_system_info()
 
-        # 合并去重（按 timestamp+message 粗略去重，优先保留内存版本）
+        # 合并去重（按 message+level 粗略去重，优先保留内存版本）。
+        # 注意：不能用时间戳参与 key——内存记录时间戳为 "YYYY-MM-DD HH:MM:SS"、
+        # 文件记录为 ISO 带毫秒（"2026-08-05T01:39:31.201"），格式不一致
+        # 导致同一错误（实时收集 + 文件扫描各一份）去重失败、重复出现。
         seen_keys: set[str] = set()
         merged: list[dict] = []
         for err in memory_errors + file_errors:
-            key = f"{err.get('timestamp', '')}|{err.get('message', '')[:200]}"
+            key = f"{err.get('level', '')}|{err.get('message', '')[:200]}"
             if key in seen_keys:
                 continue
             seen_keys.add(key)
@@ -304,7 +307,14 @@ class ErrorCollector:
         return "\n".join(lines)
 
     def _scan_log_files(self) -> list[dict]:
-        """扫描日志文件中的 ERROR/CRITICAL 条目（兜底机制）。"""
+        """扫描日志文件中的 ERROR/CRITICAL/WARNING 条目（兜底机制）。
+
+        DIAG-COMPLETE-001：级别范围从 ERROR/CRITICAL 扩展为含 WARNING——
+        4xx 请求失败、超时警告等用户可感知的错误信号此前全部漏报。
+        DIAG-FRONTEND-001：纳入 frontend-diag.log（前端上报的运行时错误），
+        此前前端捕获的错误只落盘、导出报告中完全看不到（便携版无 DevTools
+        时前端错误恰恰最难排查）。
+        """
         errors: list[dict] = []
         log_patterns = [
             "maxma.log",
@@ -327,13 +337,19 @@ class ErrorCollector:
                         try:
                             entry = json.loads(line)
                             level = entry.get("level", "")
-                            if level in ("ERROR", "CRITICAL"):
+                            if level in ("ERROR", "CRITICAL", "WARNING"):
+                                # DIAG-NOISE-001：401/403/404 是常规噪音
+                                # （token 校验失败/探测请求），跳过——否则
+                                # WARNING 占报告绝大多数、淹没真实错误
+                                msg = entry.get("msg", "")
+                                if any(f"→ {code}" in msg for code in ("401", "403", "404")):
+                                    continue
                                 errors.append(
                                     {
                                         "timestamp": entry.get("ts", ""),
                                         "level": level,
                                         "category": "log_file",
-                                        "message": entry.get("msg", ""),
+                                        "message": msg,
                                         "logger_name": entry.get("logger", ""),
                                         "session_id": entry.get("session_id"),
                                         "request_id": entry.get("request_id"),
@@ -345,7 +361,7 @@ class ErrorCollector:
                                 )
                         except json.JSONDecodeError:
                             # 非 JSON 行（旧格式或损坏），简单匹配关键词
-                            if "ERROR" in line or "CRITICAL" in line:
+                            if any(k in line for k in ("ERROR", "CRITICAL", "WARNING")):
                                 errors.append(
                                     {
                                         "timestamp": "",
@@ -358,6 +374,42 @@ class ErrorCollector:
                                 )
             except (OSError, PermissionError):
                 continue
+
+        # 前端运行时诊断（frontend-diag.log）：逐行收集（非 JSON 格式）。
+        # 行格式：[HH:MM:SS] kind | url | msg —— kind 位于时间后的第一段
+        # （error/vue-error/rejection/warn 为错误类；markdown-persist 等为
+        # info 快照，不混入报告）
+        frontend_log = LOGS_DIR / "frontend-diag.log"
+        if frontend_log.exists():
+            import re as _re
+            _fe_kind_re = _re.compile(r"^\[\d{2}:\d{2}:\d{2}\]\s+([^|]+?)\s*\|")
+            try:
+                with open(frontend_log, "r", encoding="utf-8", errors="replace") as f:
+                    for line_num, line in enumerate(f, 1):
+                        line = line.strip()
+                        if not line:
+                            continue
+                        m = _fe_kind_re.match(line)
+                        kind = m.group(1).strip() if m else ""
+                        if kind in ("error", "vue-error", "rejection"):
+                            level = "ERROR"
+                        elif kind in ("warn", "warning"):
+                            level = "WARNING"
+                        else:
+                            continue  # 只收错误类行（info 快照不混入）
+                        errors.append(
+                            {
+                                "timestamp": "",
+                                "level": level,
+                                "category": "frontend",
+                                "message": line[:500],
+                                "source_file": "frontend-diag.log",
+                                "source_line": line_num,
+                            }
+                        )
+            except (OSError, PermissionError):
+                pass
+
         return errors
 
     def _collect_autonomy_status(self) -> dict:

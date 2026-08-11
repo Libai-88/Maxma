@@ -85,12 +85,45 @@ class RequestLogMiddleware:
                     method, path, status_code, duration_ms,
                     extra=extra,
                 )
+                # DIAG-WIRE-001：5xx 同步写入错误收集器（内存缓冲）——
+                # 此前收集器零生产调用，导出报告只靠日志扫描兜底。
+                try:
+                    from api.diagnostics import error_collector
+                    error_collector.add_error(
+                        level="ERROR",
+                        category="http",
+                        message=f"{method} {path} → {status_code}",
+                        request_id=request_id,
+                        logger_name="api.middleware.request_log",
+                        duration_ms=round(duration_ms, 1),
+                        status_code=status_code,
+                    )
+                except Exception:
+                    pass  # 收集器故障不影响主流程
             elif status_code >= 400:
                 logger.warning(
                     "%s %s → %d (%.1fms)",
                     method, path, status_code, duration_ms,
                     extra=extra,
                 )
+                # DIAG-WIRE-001：4xx 同步写入收集器（WARNING 级）。
+                # 401/403/404 是常规噪音（token 校验失败/探测请求）——
+                # 混入报告会让 WARNING 占绝大多数、淹没真实错误信号，
+                # 只收集业务性 4xx（409 冲突/422 参数/429 限流等）。
+                if status_code not in (401, 403, 404):
+                    try:
+                        from api.diagnostics import error_collector
+                        error_collector.add_error(
+                            level="WARNING",
+                            category="http",
+                            message=f"{method} {path} → {status_code}",
+                            request_id=request_id,
+                            logger_name="api.middleware.request_log",
+                            duration_ms=round(duration_ms, 1),
+                            status_code=status_code,
+                        )
+                    except Exception:
+                        pass
             else:
                 logger.info(
                     "%s %s → %d (%.1fms)",

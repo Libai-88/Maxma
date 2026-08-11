@@ -525,6 +525,19 @@ async def _stream_turn_sidecar(
                         message=str(payload.get("error", "")) or "工具执行出错",
                     )
                     tool_name = payload.get("tool_name", "")
+                    # DIAG-WIRE-001：工具执行错误写入收集器（诊断报告可定位到工具）
+                    try:
+                        from api.diagnostics import error_collector
+                        error_collector.add_error(
+                            level="ERROR",
+                            category="tool",
+                            message=f"[{tool_name}] {str(payload.get('error', ''))[:500]}",
+                            session_id=session.session_id,
+                            logger_name="sidecar.tool",
+                            tool_name=tool_name,
+                        )
+                    except Exception:
+                        pass
                     if tool_name in _MEMORY_WRITE_TOOLS:
                         memory_activity.append({
                             "kind": "error",
@@ -558,6 +571,20 @@ async def _stream_turn_sidecar(
                         "[sidecar] Error for session %s: %s (trace=%s)",
                         sidecar_sid[:8], error_message, error_trace_id,
                     )
+                    # DIAG-WIRE-001：sidecar 错误同步写入收集器（带 trace_id/session_id）
+                    try:
+                        from api.diagnostics import error_collector
+                        error_collector.add_error(
+                            level="ERROR",
+                            category="agent",
+                            message=f"[{error_code}] {error_message}",
+                            trace_id=error_trace_id,
+                            session_id=session.session_id,
+                            logger_name="sidecar",
+                            error_code=error_code,
+                        )
+                    except Exception:
+                        pass
                     record_activity(
                         "turn", "error",
                         session_id=session.session_id,
@@ -884,6 +911,19 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                 error_code = "PROMPT_TIMEOUT"
                 error_message = "回复超过时限未完成"
             error_trace_id = uuid.uuid4().hex
+            # DIAG-WIRE-001：turn 级失败写入收集器（带 trace_id/session_id）
+            try:
+                from api.diagnostics import error_collector
+                error_collector.add_error(
+                    level="ERROR",
+                    category="agent",
+                    message=f"[{error_code}] {error_message}",
+                    trace_id=error_trace_id,
+                    session_id=session.session_id,
+                    logger_name="chat.turn",
+                )
+            except Exception:
+                pass
             record_activity(
                 "turn", "turn_error",
                 session_id=session.session_id,

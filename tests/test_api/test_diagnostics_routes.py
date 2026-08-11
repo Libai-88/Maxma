@@ -98,28 +98,28 @@ class TestLogsRoutes:
         d = isolated_env["logs_dir"]
         active_maxma = d / "maxma.log"
         active_tauri = d / "tauri.log"
+        frontend_diag = d / "frontend-diag.log"
         rot1 = d / "maxma.log.1"
         rot2 = d / "maxma.log.2"
         rot3 = d / "tauri.log.1"
         old = d / "app.log.old"
-        other = d / "random.log"  # 不匹配轮转规则，应保留
-        for p in (active_maxma, active_tauri, rot1, rot2, rot3, old, other):
+        other = d / "random.log"  # DIAG-CLEAN-001：非活跃 .log 现可清理（此前保留）
+        for p in (active_maxma, active_tauri, frontend_diag, rot1, rot2, rot3, old, other):
             p.write_bytes(b"x" * 10)
 
         resp = isolated_env["client"].delete("/diagnostics/logs")
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "ok"
-        # 删除了 rot1, rot2, rot3, old（4 个）
-        assert body["deleted_count"] == 4
-        assert body["freed_bytes"] == 40
+        # 删除了 rot1, rot2, rot3, old, random.log（5 个）
+        assert body["deleted_count"] == 5
+        assert body["freed_bytes"] == 50
         deleted_names = {f["name"] for f in body["deleted_files"]}
-        assert deleted_names == {"maxma.log.1", "maxma.log.2", "tauri.log.1", "app.log.old"}
-        # 活跃日志保留
+        assert deleted_names == {"maxma.log.1", "maxma.log.2", "tauri.log.1", "app.log.old", "random.log"}
+        # 活跃日志与前端诊断日志保留
         assert active_maxma.exists()
         assert active_tauri.exists()
-        # 不匹配的 random.log 保留
-        assert other.exists()
+        assert frontend_diag.exists()
 
     def test_cleanup_missing_logs_dir(self, tmp_path, monkeypatch):
         # 指向不存在的目录
