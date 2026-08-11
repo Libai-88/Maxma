@@ -559,6 +559,137 @@ describe("handleRpcRequest — plan_action", () => {
   });
 });
 
+describe("handleRpcRequest — set_plan_mode", () => {
+  function planModeSession() {
+    const calls: { op: string; arg?: unknown }[] = [];
+    const settings = { get: () => undefined, set: () => {} };
+    const fakeSession = makeFakeSession({
+      settings,
+      agent: { ...makeFakeSession().agent },
+      getActiveToolNames: () => ["read", "bash"],
+      setActiveToolsByName: async (names: string[]) => {
+        calls.push({ op: "setActiveToolsByName", arg: names });
+      },
+      setPlanModeState: (state: unknown) => {
+        calls.push({ op: "setPlanModeState", arg: state });
+      },
+      sendPlanModeContext: async () => {
+        calls.push({ op: "sendPlanModeContext" });
+      },
+      isStreaming: false,
+    } as never);
+    registerSession("s1", fakeSession as never);
+    return { calls, settings };
+  }
+
+  test("enable installs resolve tool + plan state + context steer", async () => {
+    const { calls } = planModeSession();
+    const { io, results } = makeIo();
+    await handleRpcRequest(
+      { method: "set_plan_mode", id: 1, params: { session_id: "s1", enabled: true } },
+      io,
+    );
+    expect(results[0]?.result).toEqual({ ok: true, enabled: true });
+    const toolCall = calls.find((c) => c.op === "setActiveToolsByName");
+    expect(toolCall?.arg).toContain("resolve");
+    const stateCall = calls.find((c) => c.op === "setPlanModeState");
+    expect(stateCall?.arg).toMatchObject({ enabled: true, planFilePath: "local://PLAN.md" });
+    expect(calls.some((c) => c.op === "sendPlanModeContext")).toBe(true);
+  });
+
+  test("enable does not duplicate an already-active resolve tool", async () => {
+    const calls: { op: string; arg?: unknown }[] = [];
+    const fakeSession = makeFakeSession({
+      settings: { get: () => undefined, set: () => {} },
+      getActiveToolNames: () => ["read", "resolve"],
+      setActiveToolsByName: async (names: string[]) => {
+        calls.push({ op: "setActiveToolsByName", arg: names });
+      },
+      setPlanModeState: () => {},
+      isStreaming: true,
+    } as never);
+    registerSession("s1", fakeSession as never);
+    const { io } = makeIo();
+    await handleRpcRequest(
+      { method: "set_plan_mode", id: 1, params: { session_id: "s1", enabled: true } },
+      io,
+    );
+    // resolve 已在活跃列表 → 不重复调用 setActiveToolsByName
+    expect(calls.filter((c) => c.op === "setActiveToolsByName").length).toBe(0);
+    // 流式中不注入 steer 上下文
+    expect(calls.some((c) => c.op === "sendPlanModeContext")).toBe(false);
+  });
+
+  test("disable clears plan state and does not re-add tools", async () => {
+    const { calls } = planModeSession();
+    const { io, results } = makeIo();
+    await handleRpcRequest(
+      { method: "set_plan_mode", id: 1, params: { session_id: "s1", enabled: false } },
+      io,
+    );
+    expect(results[0]?.result).toEqual({ ok: true, enabled: false });
+    const stateCall = calls.find((c) => c.op === "setPlanModeState");
+    expect(stateCall?.arg).toBeUndefined();
+    expect(calls.some((c) => c.op === "setActiveToolsByName")).toBe(false);
+  });
+
+  test("missing session → error", async () => {
+    const { io, results } = makeIo();
+    await handleRpcRequest(
+      { method: "set_plan_mode", id: 1, params: { session_id: "nope", enabled: true } },
+      io,
+    );
+    expect(results[0]?.error).toContain("Session not found");
+  });
+});
+
+describe("handleRpcRequest — checkpoint_action", () => {
+  function checkpointSession() {
+    const appended: unknown[] = [];
+    const fakeSession = makeFakeSession({
+      agent: { ...makeFakeSession().agent, appendMessage: (m) => appended.push(m) },
+    });
+    registerSession("s1", fakeSession);
+    return { appended };
+  }
+
+  test("save appends a checkpoint request message", async () => {
+    const { appended } = checkpointSession();
+    const { io, results } = makeIo();
+    await handleRpcRequest(
+      { method: "checkpoint_action", id: 1, params: { session_id: "s1", action: "save", goal: "before refactor" } },
+      io,
+    );
+    expect(results[0]?.result).toEqual({ ok: true, action: "save" });
+    expect(appended.length).toBe(1);
+    const msg = appended[0] as { content?: string; role?: string };
+    expect(msg.role).toBe("user");
+    expect(msg.content).toContain("[Checkpoint Request]");
+    expect(msg.content).toContain("before refactor");
+  });
+
+  test("restore appends a rewind request message", async () => {
+    const { appended } = checkpointSession();
+    const { io } = makeIo();
+    await handleRpcRequest(
+      { method: "checkpoint_action", id: 1, params: { session_id: "s1", action: "restore" } },
+      io,
+    );
+    const msg = appended[0] as { content?: string };
+    expect(msg.content).toContain("[Rewind Request]");
+    expect(msg.content).toContain("rewind tool");
+  });
+
+  test("missing session → error", async () => {
+    const { io, results } = makeIo();
+    await handleRpcRequest(
+      { method: "checkpoint_action", id: 1, params: { session_id: "nope", action: "save" } },
+      io,
+    );
+    expect(results[0]?.error).toContain("Session not found");
+  });
+});
+
 describe("handleRpcRequest — execute_workflow_step", () => {
   test("prompts the agent and emits start/end events", async () => {
     const prompted: string[] = [];

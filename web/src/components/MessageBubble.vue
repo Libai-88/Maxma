@@ -26,6 +26,20 @@
       >
         {{ isCollapsed ? '展开' : '收起' }}
       </button>
+      <!-- GAP-A2-001：TTS 朗读按钮——WebView2 speechSynthesis 系统语音，
+           零 API 成本；未启用 TTS 时点击给出引导提示 -->
+      <div v-if="role === 'assistant' && content" class="bubble-actions">
+        <button
+          class="bubble-action"
+          type="button"
+          :aria-pressed="speakingState"
+          :aria-label="speakingState ? '停止朗读' : '朗读本条回复'"
+          @click.stop="toggleRead"
+        >
+          <span aria-hidden="true">{{ speakingState ? '◼' : '▶' }}</span>
+          {{ speakingState ? '停止' : '朗读' }}
+        </button>
+      </div>
       <div v-if="refs?.length" class="ref-chips">
         <ReferenceChip
           v-for="(r, idx) in refs"
@@ -57,6 +71,8 @@ import StickerInline from './StickerInline.vue'
 import StickerPreviewOverlay from './StickerPreviewOverlay.vue'
 import { useStickerSegments, type StickerSegment } from '@/composables/useStickerSegments'
 import { stripStickerDirectives } from '@/composables/stickerUtils'
+import { speakText, stopSpeaking, speakingState } from '@/composables/useTts'
+import { showError } from '@/lib/toast'
 import { gsap, useGsap, easeMap, lazyLoadPlugin } from '@/composables/useGsap'
 
 const props = defineProps<{
@@ -101,6 +117,26 @@ function previewSticker(sticker: StickerSegment) {
   previewIndex.value = stickerSegments.value.findIndex(
     seg => seg.occurrenceKey === sticker.occurrenceKey
   )
+}
+
+// GAP-A2-001：朗读/停止切换。speakText 内部加载配置——
+// 未启用时静默无操作，这里给出可见反馈引导用户去设置页开启。
+function toggleRead() {
+  if (speakingState.value) {
+    stopSpeaking()
+    return
+  }
+  const ok = speakText(props.content)
+  if (!ok) {
+    showError('当前环境不支持语音合成')
+    return
+  }
+  // 配置异步加载后可能发现 TTS 未启用——短暂延迟后仍无朗读状态则提示
+  window.setTimeout(() => {
+    if (!speakingState.value) {
+      showError('TTS 未启用：请在「设置 → 语音」中开启后使用朗读')
+    }
+  }, 1500)
 }
 
 function measureHeight() {
@@ -275,6 +311,36 @@ useGsap((_ctx, contextSafe) => {
 .collapse-toggle:hover {
   color: var(--text-primary);
   border-color: var(--text-secondary);
+}
+
+/* ── 朗读按钮（GAP-A2-001） ── */
+.bubble-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.bubble-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  font-size: 0.75em;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: color 0.2s var(--ease-out),
+              border-color 0.2s var(--ease-out),
+              background 0.2s var(--ease-out);
+}
+
+.bubble-action:hover,
+.bubble-action[aria-pressed="true"] {
+  color: var(--text-primary);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .ref-chips {

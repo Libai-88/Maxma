@@ -27,6 +27,20 @@
         <span v-if="!block.done && !block.becameAnswer" class="stream-caret" aria-hidden="true"></span>
         <span v-if="isStreamingAnswer" class="stream-caret" aria-hidden="true"></span>
       </div>
+      <!-- GAP-A2-001：TTS 朗读按钮——流式答案（becameAnswer）由本组件承载，
+           完成态显示朗读/停止（与 MessageBubble 的按钮同一语义） -->
+      <div v-if="block.becameAnswer && block.done && block.tokens" class="thinking-actions">
+        <button
+          class="bubble-action"
+          type="button"
+          :aria-pressed="speakingState"
+          :aria-label="speakingState ? '停止朗读' : '朗读本条回复'"
+          @click.stop="toggleRead"
+        >
+          <span aria-hidden="true">{{ speakingState ? '◼' : '▶' }}</span>
+          {{ speakingState ? '停止' : '朗读' }}
+        </button>
+      </div>
     </div>
   </div>
   <!-- 表情预览 overlay -->
@@ -46,9 +60,30 @@ import StickerInline from './StickerInline.vue'
 import StickerPreviewOverlay from './StickerPreviewOverlay.vue'
 import { useStickerSegments, type StickerSegment } from '@/composables/useStickerSegments'
 import { hasEmotionTag } from '@/composables/stickerUtils'
+import { speakText, stopSpeaking, speakingState } from '@/composables/useTts'
+import { showError } from '@/lib/toast'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const props = defineProps<{ block: ThinkingBlockType }>()
+
+// GAP-A2-001：朗读/停止（与 MessageBubble 同语义；文案 = 已完成的答案内容）
+function toggleRead() {
+  const text = props.block.tokens ?? ''
+  if (speakingState.value) {
+    stopSpeaking()
+    return
+  }
+  const ok = speakText(text)
+  if (!ok) {
+    showError('当前环境不支持语音合成')
+    return
+  }
+  window.setTimeout(() => {
+    if (!speakingState.value) {
+      showError('TTS 未启用：请在「设置 → 语音」中开启后使用朗读')
+    }
+  }, 1500)
+}
 
 const previewIndex = ref(-1)
 const answerStreamEl = ref<HTMLElement | null>(null)
@@ -300,6 +335,36 @@ useGsap(() => {
 }
 .thinking-content {
   color: var(--text-primary);
+}
+
+/* ── 朗读按钮（GAP-A2-001） ── */
+.thinking-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.bubble-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  font-size: 0.75em;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: color 0.2s var(--ease-out),
+              border-color 0.2s var(--ease-out),
+              background 0.2s var(--ease-out);
+}
+
+.bubble-action:hover,
+.bubble-action[aria-pressed="true"] {
+  color: var(--text-primary);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 .answer-stream {
   display: inline;

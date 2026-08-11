@@ -104,6 +104,30 @@
               {{ settings['retry.modelFallback'] ? '开启' : '关闭' }}
             </button>
           </div>
+
+          <!-- GAP-B6-001：备用模型链（retry.fallbackChains）——
+               JSON 编辑 + 本地校验，保存到 OMP 全局设置（sidecar set_settings 持久化）。 -->
+          <div class="setting-row" v-if="settings['retry.modelFallback']">
+            <div class="setting-info">
+              <div class="setting-label">备用模型链</div>
+              <div class="setting-desc">
+                主模型失败时按序尝试的备用模型（JSON 对象）。键可为模型角色、
+                "provider/model-id" 或通配 "provider/*"；值为有序模型列表。
+                示例：<code>{"default": ["openai/gpt-4o-mini"]}</code>
+              </div>
+            </div>
+            <div class="setting-control setting-control--wide">
+              <textarea
+                class="input-textarea"
+                rows="5"
+                :value="fallbackChainsText"
+                aria-label="备用模型链 JSON"
+                placeholder='{"default": ["provider/model"]}'
+                @change="saveFallbackChains(($event.target as HTMLTextAreaElement).value)"
+              ></textarea>
+              <p v-if="fallbackChainsError" class="setting-error" role="alert">{{ fallbackChainsError }}</p>
+            </div>
+          </div>
         </div>
       </GlowingEffect>
 
@@ -184,6 +208,18 @@
               <option value="wait">等待完成</option>
             </select>
           </div>
+
+          <!-- GAP-A8-001：自动学习开关——OMP autolearn（实验性）。
+               对话结束后提炼经验并沉淀到技能/记忆，复用现有模型，无新增付费 API。 -->
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">自动学习</div>
+              <div class="setting-desc">对话结束后自动提炼经验与要点（实验性，会消耗少量额外 token）。</div>
+            </div>
+            <button class="toggle-btn" :class="{ on: settings['autolearn.enabled'] }" @click="toggle('autolearn.enabled')">
+              {{ settings['autolearn.enabled'] ? '开启' : '关闭' }}
+            </button>
+          </div>
         </div>
       </GlowingEffect>
 
@@ -222,19 +258,19 @@
       </GlowingEffect>
 
       <!-- TTS / 语音 -->
-      <!-- UX-FAKE-SETTING-001：语音引擎尚未接入运行时——整段置灰并标注
-           "即将上线"，与可用配置明确区分（此前仅一行小字提示，用户配置了
-           功能却完全不生效，损害配置可信度） -->
+      <!-- GAP-A2-001：语音引擎真实接线——WebView2 speechSynthesis 系统语音，
+           零 API 成本。此前整段置灰"即将上线"（UX-FAKE-SETTING-001），
+           edge-tts/openai-tts 提供商从未有消费方；现统一为 system 并接通
+           消息气泡"朗读"按钮与 auto_read 自动朗读。 -->
       <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
-        <div class="section section-upcoming" v-show="activeSection === 'tts'">
-          <h3>语音 <span class="upcoming-badge">即将上线</span></h3>
-          <p class="section-desc">配置文本转语音（TTS）的引擎与朗读行为。</p>
-          <p class="section-devnote">此功能尚未接入运行时，以下设置暂不生效。</p>
+        <div class="section" v-show="activeSection === 'tts'">
+          <h3>语音</h3>
+          <p class="section-desc">配置文本转语音（TTS）的引擎与朗读行为。使用 Windows 系统语音，无需任何付费服务。</p>
 
           <div class="setting-row">
             <div class="setting-info">
               <div class="setting-label">启用 TTS</div>
-              <div class="setting-desc">开启后可将 AI 回复朗读出来。</div>
+              <div class="setting-desc">开启后可将 AI 回复朗读出来（消息气泡上的"朗读"按钮）。</div>
             </div>
             <button class="toggle-btn" :class="{ on: tts.enabled }" @click="setTts('enabled', !tts.enabled)">
               {{ tts.enabled ? '开启' : '关闭' }}
@@ -244,12 +280,11 @@
           <template v-if="tts.enabled">
             <div class="setting-row">
               <div class="setting-info">
-                <div class="setting-label">TTS 引擎</div>
-                <div class="setting-desc">选择语音合成提供商。</div>
+                <div class="setting-label">语音引擎</div>
+                <div class="setting-desc">系统语音（Windows 自带，离线可用）。</div>
               </div>
-              <select class="select" :value="tts.provider" @change="onTtsProviderChange(($event.target as HTMLSelectElement).value as TtsConfig['provider'])">
-                <option value="edge-tts">Edge TTS</option>
-                <option value="openai-tts">OpenAI TTS</option>
+              <select class="select" aria-label="语音引擎" :value="tts.provider" @change="onTtsProviderChange(($event.target as HTMLSelectElement).value as TtsConfig['provider'])">
+                <option value="system">系统语音</option>
                 <option value="custom">自定义</option>
               </select>
             </div>
@@ -257,12 +292,23 @@
             <div class="setting-row">
               <div class="setting-info">
                 <div class="setting-label">语音</div>
-                <div class="setting-desc">根据所选引擎动态加载可用音色。</div>
+                <div class="setting-desc">当前系统已安装的语音列表（含中文/英文）。</div>
               </div>
-              <select class="select" :value="tts.voice" @change="setTts('voice', ($event.target as HTMLSelectElement).value)">
-                <option value="">（默认）</option>
-                <option v-for="v in voiceOptions" :key="v" :value="v">{{ v }}</option>
+              <select class="select" aria-label="语音" :value="tts.voice" @change="setTts('voice', ($event.target as HTMLSelectElement).value)">
+                <option value="">（自动选择中文语音）</option>
+                <option v-for="v in systemVoiceOptions" :key="v.value" :value="v.value">{{ v.label }}</option>
               </select>
+            </div>
+
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-label">试听</div>
+                <div class="setting-desc">使用当前语音朗读一句示例文本。</div>
+              </div>
+              <div class="setting-control">
+                <button class="btn" type="button" @click="previewTts">播放试听</button>
+                <button class="btn" type="button" @click="stopTts">停止</button>
+              </div>
             </div>
 
             <div class="setting-row">
@@ -305,6 +351,35 @@
               </button>
             </div>
           </template>
+        </div>
+      </GlowingEffect>
+
+      <!-- 系统通知（GAP-A3-001） -->
+      <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
+        <div class="section" v-show="activeSection === 'notify'">
+          <h3>系统通知</h3>
+          <p class="section-desc">任务完成、等待审批时在系统层弹出通知（窗口在后台时）。</p>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">启用系统通知</div>
+              <div class="setting-desc">长任务完成或 Agent 等待你确认时，即使窗口不在前台也能收到提醒。</div>
+            </div>
+            <button class="toggle-btn" :class="{ on: notifyEnabled }" @click="toggleNotify">
+              {{ notifyEnabled ? '开启' : '关闭' }}
+            </button>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">通知权限</div>
+              <div class="setting-desc">Windows 系统级权限，由下方按钮在点击时申请。</div>
+            </div>
+            <div class="setting-control">
+              <span class="permission-badge" :class="notifyPermissionClass">{{ notifyPermissionLabel }}</span>
+              <button class="btn" type="button" @click="testNotify">测试通知</button>
+            </div>
+          </div>
         </div>
       </GlowingEffect>
 
@@ -477,11 +552,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { api } from '@/api'
 import type { TtsConfig, BrowserToolsConfig, SubAgentConfig } from '@/api'
+import { isNotifyEnabled, setNotifyEnabled, isNotificationSupported, getNotificationPermission, requestNotifyPermission, showSystemNotification } from '@/lib/notify'
+import { invalidateTtsConfigCache, listSystemVoices, speakText, stopSpeaking, isSpeechSupported } from '@/composables/useTts'
 import { createLogger } from '@/utils/logger'
-import { showError } from '@/lib/toast'
+import { showError, showSuccess } from '@/lib/toast'
 import { useViewEntrance } from '@/composables/useViewEntrance'
 import { useButtonFx } from '@/composables/useButtonFx'
 import GlowingEffect from '@/components/inspira/GlowingEffect.vue'
@@ -504,7 +581,7 @@ useButtonFx(() => rootEl.value, '.btn', { hoverScale: 1.08, bounceIcon: true, ma
 // ── Panel configs（独立于 OMP Settings，存储在后端 panel_configs.json） ──
 
 const tts = ref<TtsConfig>({
-  enabled: false, provider: 'edge-tts', voice: '', speed: 1.0, pitch: 1.0, auto_read: false,
+  enabled: false, provider: 'system', voice: '', speed: 1.0, pitch: 1.0, auto_read: false,
 })
 const browser = ref<BrowserToolsConfig>({
   enabled: false, chrome_path: '', headless: true,
@@ -524,30 +601,76 @@ const sectionTabs = [
   { label: '推理预算', value: 'thinking' },
   { label: '技能包', value: 'skills' },
   { label: '语音', value: 'tts' },
+  { label: '通知', value: 'notify' },
   { label: '浏览器', value: 'browser' },
   { label: '子代理', value: 'subagent' },
 ]
 const activeSection = ref('compaction')
 
-// 各引擎的常用音色（动态加载占位 — 真实部署可替换为后端枚举）
-const VOICES_BY_PROVIDER: Record<TtsConfig['provider'], string[]> = {
-  'edge-tts': ['zh-CN-XiaoxiaoNeural', 'zh-CN-YunxiNeural', 'en-US-AriaNeural', 'en-US-GuyNeural'],
-  'openai-tts': ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'],
-  'custom': [],
-}
-const voiceOptions = computed(() => VOICES_BY_PROVIDER[tts.value.provider] ?? [])
+// GAP-A2-001：语音列表来自系统（speechSynthesis.getVoices()），
+// 中文优先展示；voice 存语音名称（与朗读时匹配逻辑一致）。
+const systemVoiceOptions = computed(() => {
+  const voices = listSystemVoices()
+  const sorted = [...voices].sort((a, b) => {
+    const aZh = a.lang?.toLowerCase().startsWith('zh') ? 0 : 1
+    const bZh = b.lang?.toLowerCase().startsWith('zh') ? 0 : 1
+    return aZh - bZh || a.name.localeCompare(b.name)
+  })
+  return sorted.map((v) => ({ value: v.name, label: `${v.name}（${v.lang}）` }))
+})
 
 const CORE_PATHS = [
   'compaction.enabled', 'compaction.strategy', 'compaction.thresholdPercent',
   'compaction.midTurnEnabled', 'compaction.idleEnabled',
-  'retry.enabled', 'retry.maxRetries', 'retry.modelFallback',
+  'retry.enabled', 'retry.maxRetries', 'retry.modelFallback', 'retry.fallbackChains',
   'tools.approvalMode', 'tools.discoveryMode',
   'advisor.enabled',
   'steeringMode', 'followUpMode', 'interruptMode',
   'thinkingBudgets.minimal', 'thinkingBudgets.low', 'thinkingBudgets.medium',
   'thinkingBudgets.high', 'thinkingBudgets.xhigh', 'thinkingBudgets.max',
   'skills.enabled',
+  'autolearn.enabled',
 ]
+
+// GAP-B6-001：备用模型链 JSON 编辑器状态
+const fallbackChainsText = ref('')
+const fallbackChainsError = ref('')
+
+watch(() => settings.value['retry.fallbackChains'], (v) => {
+  if (v === undefined || v === null) {
+    fallbackChainsText.value = ''
+  } else {
+    fallbackChainsText.value = typeof v === 'string' ? v : JSON.stringify(v, null, 2)
+  }
+}, { immediate: true })
+
+async function saveFallbackChains(raw: string) {
+  fallbackChainsError.value = ''
+  const text = raw.trim()
+  if (!text) {
+    await set('retry.fallbackChains', {})
+    return
+  }
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    fallbackChainsError.value = 'JSON 格式错误，请检查括号与引号'
+    return
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    fallbackChainsError.value = '必须是 JSON 对象（键 → 字符串数组）'
+    return
+  }
+  for (const [key, value] of Object.entries(parsed)) {
+    if (!Array.isArray(value) || !value.every((s) => typeof s === 'string' && s.trim())) {
+      fallbackChainsError.value = `键 "${key}" 的值必须是非空字符串数组`
+      return
+    }
+  }
+  await set('retry.fallbackChains', parsed)
+  fallbackChainsText.value = JSON.stringify(parsed, null, 2)
+}
 
 function thinkingLevelLabel(level: string): string {
   const labels: Record<string, string> = {
@@ -631,6 +754,7 @@ async function setTts<K extends keyof TtsConfig>(key: K, value: TtsConfig[K]) {
   tts.value[key] = value
   try {
     tts.value = { ...tts.value, ...(await api.updateTtsConfig({ [key]: value })) }
+    invalidateTtsConfigCache()  // GAP-A2-001：朗读端 60s TTL 缓存立即失效
   } catch (e) {
     log.error(`Failed to set tts.${String(key)}:`, e)
     tts.value[key] = prev
@@ -646,12 +770,75 @@ async function onTtsProviderChange(provider: TtsConfig['provider']) {
   tts.value.voice = ''
   try {
     tts.value = { ...tts.value, ...(await api.updateTtsConfig({ provider, voice: '' })) }
+    invalidateTtsConfigCache()
   } catch (e) {
     log.error('Failed to change TTS provider:', e)
     tts.value.provider = prevProvider
     tts.value.voice = prevVoice
     showError(`语音引擎切换失败: ${e instanceof Error ? e.message : String(e)}`)
   }
+}
+
+// GAP-A2-001：试听/停止（用户手势内直接调用，读当前面板配置生效）
+function previewTts() {
+  if (!isSpeechSupported()) {
+    showError('当前环境不支持语音合成')
+    return
+  }
+  const ok = speakText('你好，这是 Maxma 的语音试听。Hello, this is a Maxma voice preview.')
+  if (!ok) {
+    showError('语音合成不可用，请检查系统语音设置')
+    return
+  }
+  showSuccess('正在播放试听…')
+}
+
+function stopTts() {
+  stopSpeaking()
+}
+
+// ── 系统通知（GAP-A3-001）：纯客户端能力（Notification API），
+//    开关存 localStorage，不新增任何后端/API 依赖 ──
+const notifyEnabled = ref(isNotifyEnabled())
+
+function toggleNotify() {
+  notifyEnabled.value = !notifyEnabled.value
+  setNotifyEnabled(notifyEnabled.value)
+  showSuccess(notifyEnabled.value ? '已开启系统通知' : '已关闭系统通知')
+}
+
+const notifyPermissionLabel = computed(() => {
+  const p = getNotificationPermission()
+  if (p === 'unsupported') return '不支持'
+  if (p === 'granted') return '已授权'
+  if (p === 'denied') return '已拒绝（请在系统设置中允许）'
+  return '未请求'
+})
+const notifyPermissionClass = computed(() => {
+  const p = getNotificationPermission()
+  if (p === 'granted') return 'permission-granted'
+  if (p === 'denied') return 'permission-denied'
+  return 'permission-default'
+})
+
+async function testNotify() {
+  if (!isNotificationSupported()) {
+    showError('当前环境不支持系统通知')
+    return
+  }
+  if (getNotificationPermission() !== 'granted') {
+    const granted = await requestNotifyPermission()
+    if (!granted) {
+      showError('通知权限未授予，请在 Windows 系统设置中允许通知')
+      return
+    }
+  }
+  const shown = showSystemNotification('Maxma — 测试通知', '系统通知已就绪 ✅', true)
+  if (!shown) {
+    showError('通知未弹出：请检查开关或系统通知设置')
+    return
+  }
+  showSuccess('已发送测试通知')
 }
 
 async function setBrowser<K extends keyof BrowserToolsConfig>(key: K, value: BrowserToolsConfig[K]) {
@@ -896,5 +1083,53 @@ input[type="range"] {
   cursor: pointer;
   font-size: 0.85em;
   margin-top: 8px;
+}
+
+.permission-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 0.8em;
+  margin-right: 8px;
+  border: 1px solid var(--border);
+}
+
+.permission-granted {
+  color: var(--status-ok, #4caf50);
+  border-color: var(--status-ok, #4caf50);
+}
+
+.permission-denied {
+  color: var(--status-error, #e05252);
+  border-color: var(--status-error, #e05252);
+}
+
+.permission-default {
+  color: var(--text-secondary);
+}
+
+.setting-control--wide {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.input-textarea {
+  width: 100%;
+  min-height: 110px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.8em;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.setting-error {
+  margin-top: 6px;
+  font-size: 0.8em;
+  color: var(--status-error, #e05252);
 }
 </style>

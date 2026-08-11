@@ -11,9 +11,24 @@ import { safeGetItem, safeRemoveItem, safeSetItem, safeKeys } from '@/lib/storag
 import { chatSessionAliveCache } from '@/composables/sessionAliveCache'
 import { useWorkbenchStore } from '@/stores/workbench'
 import { detectEmotion, getStickerUrl, replaceEmotionTags } from './stickerUtils'
+import { showSystemNotification } from '@/lib/notify'
+import { autoReadIfEnabled } from '@/composables/useTts'
 import { createLogger } from '@/utils/logger'
 
 const log = createLogger('chat')
+
+/** GAP-A3-001：轮次完成系统通知——仅窗口后台时弹出（前台应用内 UI 已足够）。
+ *  预览剥离 markdown 符号后截断，避免系统通知里出现 `#`/`*` 噪音。 */
+function notifyTurnDone(finalAnswer: string | null): void {
+  if (!finalAnswer) return
+  const plain = finalAnswer
+    .replace(/```[\s\S]*?```/g, '（代码块）')
+    .replace(/[#>*`_~[\]|]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!plain) return
+  showSystemNotification('Maxma — 任务完成', plain.length > 80 ? plain.slice(0, 80) + '…' : plain)
+}
 
 /** 追踪所有 useChat 实例创建的子会话 ID，用于组件卸载时清理孤儿 WS。
  *  必须为模块级：handleEventForChannel 是模块级函数（line 628 引用），
@@ -1200,6 +1215,12 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
         }
         log.debug(`会话 ${sid}: becameAnswer=${trackBecame}, events=${turnToFinalize.events.length}, finalAnswer=${turnToFinalize.finalAnswer?.slice(0, 50) ?? 'null'}`)
         ch.turns.push(turnToFinalize)
+        // GAP-A3-001：任务完成系统通知（仅后台窗口时弹出）
+        notifyTurnDone(turnToFinalize.finalAnswer)
+        // GAP-A2-001：自动朗读回复（配置启用 auto_read 时）
+        if (turnToFinalize.finalAnswer) {
+          autoReadIfEnabled(turnToFinalize.finalAnswer)
+        }
         if (ch.currentTurn?.id === turnToFinalize.id) {
           ch.currentTurn = null
         }
@@ -1331,6 +1352,16 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       const mode = ae.payload.mode
       ch.isAwaitingUser = true
       ch._awaitingToolName = ae.payload.tool_name
+      // GAP-A3-001：审批等待系统通知——用户切走窗口时（如长任务触发了写操作
+      // 审批），不通知则 Agent 会一直卡在等待上。仅后台窗口时弹出。
+      if (mode === 'approval') {
+        const toolName = ae.payload.tool_name || '工具'
+        const q = ae.payload.question?.replace(/\s+/g, ' ').trim() ?? ''
+        showSystemNotification(
+          'Maxma — 需要你的确认',
+          `Agent 请求执行 ${toolName}${q ? `：${q.slice(0, 60)}` : ''}`,
+        )
+      }
       log.debug('received ask_user event:', {
         tool_name: ae.payload.tool_name,
         question: ae.payload.question?.slice(0, 50),
@@ -1892,6 +1923,35 @@ export function useChat(sessionId: Ref<string>) {
     return true
   }
 
+  // GAP-A6-001：计划模式开关——会话菜单切换 → WS set_plan_mode →
+  // 后端转发 sidecar set_plan_mode RPC（session.setPlanModeState）。
+  function sendPlanMode(enabled: boolean): boolean {
+    const ch = activeChannel.value
+    if (!ch.ws || ch.ws.readyState !== WebSocket.OPEN) {
+      log.warn(`sendPlanMode 失败：WS 未就绪 (enabled=${enabled})`)
+      return false
+    }
+    ch.ws.send(JSON.stringify({
+      type: 'set_plan_mode',
+      payload: { enabled },
+    }))
+    return true
+  }
+
+  // GAP-A7-001：检查点/回退——会话菜单 → WS checkpoint_action →
+  // 后端转发 sidecar checkpoint_action RPC（追加指令消息，下一轮执行）。
+  function sendCheckpointAction(action: 'save' | 'restore', goal?: string): boolean {
+    const ch = activeChannel.value
+    if (!ch.ws || ch.ws.readyState !== WebSocket.OPEN) {
+      log.warn(`sendCheckpointAction 失败：WS 未就绪 (action=${action})`)
+      return false
+    }
+    const payload: Record<string, unknown> = { action }
+    if (goal) payload.goal = goal
+    ch.ws.send(JSON.stringify({ type: 'checkpoint_action', payload }))
+    return true
+  }
+
   /** 从当前会话的 turns 列表中移除最后 count 条轮次（撤回后的前端同步）。 */
   function removeTurns(count: number) {
     const ch = getOrCreateChannel(sessionId.value)
@@ -1939,7 +1999,7 @@ export function useChat(sessionId: Ref<string>) {
     connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId,
     contextUsage, taskTrackerData,
     reconnectExhausted, reconnect,
-    send, cancel, sendUserResponse, sendArtifactAction, sendPlanResponse, removeTurns,
+    send, cancel, sendUserResponse, sendArtifactAction, sendPlanResponse, sendPlanMode, sendCheckpointAction, removeTurns,
     dismissError,
     privateMode, setPrivateMode,
     autoApprove, setAutoApprove,

@@ -41,7 +41,7 @@
 | A1 | **语音输入（STT）** | 几乎所有 AI 助手标配 | OMP `stt.enabled`/`stt.submitTrigger` 原生支持麦克风听写。做法：ChatInput 加麦克风按钮 → 调 OMP stt（或浏览器 getUserMedia + 自研转写，前端工作量中等）；设置页暴露 stt 选项 |
 | A2 | **TTS 语音朗读（真实接通）** | Claude 桌面端朗读、ChatGPT 语音 | OMP `providers.tts`（本地 Kokoro-82M / xAI Grok Voice）+ `speechgen.enabled`（语音生成工具）。做法：把设置页的"仅保存"假配置改为真实接线（替换置灰区）；消息气泡加"朗读"按钮；AI 回复可自动朗读 |
 | A3 | **系统通知** | Claude Code / Cursor 的任务完成通知 | OMP `completion.notify`（任务完成）、`ask.notify`（等待审批/提问时）。做法：前端 Notification API（WebView2 支持）+ 后端事件驱动；审批等待时通知用户是强需求（用户切走窗口时） |
-| A4 | **图片生成（generate_image）** | ChatGPT 文生图 | OMP 16.5.2 已内置 `generate_image` 工具（文生图+编辑）。做法：工具清单加 generate_image + 前端渲染图片气泡 + providers.image 配置 |
+| A4 | ~~图片生成（generate_image）~~ **已砍** | ChatGPT 文生图 | OMP 16.5.2 已内置 `generate_image` 工具，但文生图依赖 provider 图像能力（OpenAI/Gemini/xAI 等均为付费 API）。产品原则：不要求用户额外配置付费 API → **不做**。若未来主流 provider 免费开放图像能力再评估 |
 | A5 | **网页抓取（fetch）** | 通用 Agent 工具 | OMP `fetch.enabled` 工具（抓取 URL 内容，比 web_search 更直接）。做法：工具清单注册 + 结果气泡（可复用现有气泡样式） |
 | A6 | **计划模式开关** | Claude Code 的 plan mode | OMP `plan.enabled`/`plan.defaultOnStartup`。做法：权限模式控制区加"计划模式"开关（当前 sidecar 只在 plan approve 时硬编码 true）；会话菜单/输入框上方切换 |
 | A7 | **检查点/回退 UI** | Claude Code 的 checkpoint 恢复 | OMP `checkpoint.enabled` + Maxma 已注册的 checkpoint/rewind 工具。做法：会话菜单加"创建检查点""回到检查点"；工具栏显示最近检查点状态——对长任务的"后悔药"体验价值高 |
@@ -87,7 +87,7 @@
 
 ```
 第一批（高价值快见效，约 1 周）：
-  A3 系统通知 → A2 TTS 朗读 → A6 计划模式 → A7 检查点 UI → A4 图片生成
+  A3 系统通知 → A2 TTS 朗读 → A6 计划模式 → A7 检查点 UI
 
 第二批（能力扩展，约 1 周）：
   A1 语音输入 → A5 fetch → A8 自动学习 → B6 fallback 链 → B2 上下文提升
@@ -95,8 +95,13 @@
 第三批（进阶模式）：
   B1 Goal → B3 recap → B4 后台化 → B5 异步面板 → B7 vault
 
+已砍：
+  A4 图片生成（依赖付费 provider 图像 API，违反"不要求用户配置付费 API"原则）
+
 按需评估：
   C1-C4（外部依赖/成本高）
 ```
 
-> 全部功能均为 OMP 16.5.2 原生能力，升级 OMP（见 docs/omp-upgrade-runbook.md）不影响这些开发；部分功能（如 generate_image）在 17.x 还有增强，升级时可获得。
+> **付费 API 门槛原则（2026-08-12 新增）**：所有新增功能不得要求用户额外配置付费 API；
+> 功能本质上依赖付费能力（如图片生成）时直接砍掉，除非未来 provider 免费开放。
+> 全部功能均为 OMP 16.5.2 原生能力，升级 OMP（见 docs/omp-upgrade-runbook.md）不影响这些开发。

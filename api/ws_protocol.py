@@ -88,6 +88,10 @@ class WsMessageType(str, Enum):
     ARTIFACT_ACTION = "artifact_action"
     UPDATE_AUTO_APPROVE = "update_auto_approve"
 
+    # GAP 新增：计划模式开关 → set_plan_mode RPC；检查点/回退 → checkpoint_action RPC
+    SET_PLAN_MODE = "set_plan_mode"
+    CHECKPOINT_ACTION = "checkpoint_action"
+
 
 # 便捷集合（向后兼容现有 frozenset 用法）
 SIDECAR_EVENT_TYPES = frozenset(t.value for t in WsEventType)

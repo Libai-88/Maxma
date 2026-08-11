@@ -86,6 +86,21 @@
               <span>自动执行</span>
               <span class="session-action-state">{{ autoApprove ? '已开启' : '需确认' }}</span>
             </button>
+            <!-- GAP-A6-001：计划模式开关——先规划后执行（OMP plan mode）。
+                 切换经 WS set_plan_mode 下发，sidecar 即时启停计划模式。 -->
+            <button class="session-action" type="button" role="menuitem" :aria-pressed="planModeOn" @click="togglePlanMode">
+              <span>计划模式</span>
+              <span class="session-action-state">{{ planModeOn ? '已开启' : '已关闭' }}</span>
+            </button>
+            <p v-if="planModeOn" class="session-action-hint">开启后 Agent 先产出执行计划，再逐步执行</p>
+            <!-- GAP-A7-001：检查点/回退——长任务的"后悔药"。经 WS
+                 checkpoint_action 下发，下一轮由 Agent 调用 checkpoint/rewind 工具。 -->
+            <button class="session-action" type="button" role="menuitem" @click="handleCheckpoint('save')">
+              <span>创建检查点</span>
+            </button>
+            <button class="session-action" type="button" role="menuitem" @click="handleCheckpoint('restore')">
+              <span>回到检查点</span>
+            </button>
             <!-- MODEL-PARAMS-001：模型参数（输出上限/思考开关）挂载入口——
                  此前 ModelSettingsPanel 从未挂载，max_tokens 后端支持但 UI 孤儿 -->
             <button class="session-action" type="button" role="menuitem" @click="modelSettingsOpen = !modelSettingsOpen">
@@ -194,7 +209,7 @@ import { createLogger } from '@/utils/logger'
 import { safeGetItem, safeSetItem } from '@/lib/storage'
 import CardSpotlight from '@/components/inspira/CardSpotlight.vue'
 import GlowBorder from '@/components/inspira/GlowBorder.vue'
-import { showError } from '@/lib/toast'
+import { showError, showSuccess } from '@/lib/toast'
 
 const log = createLogger('ChatView')
 
@@ -203,7 +218,7 @@ const { sessionId, sessions } = storeToRefs(sessionStore)
 const { health } = storeToRefs(useHealthStore())
 const {
   connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId,
-  taskTrackerData, send, cancel, sendUserResponse, sendArtifactAction, sendPlanResponse, removeTurns,
+  taskTrackerData, send, cancel, sendUserResponse, sendArtifactAction, sendPlanResponse, sendPlanMode, sendCheckpointAction, removeTurns,
   dismissError,
   privateMode, setPrivateMode, autoApprove, setAutoApprove,
   reconnectExhausted, reconnect,
@@ -404,6 +419,30 @@ function togglePrivateMode() {
 function toggleAutoApprove() {
   setAutoApprove(!autoApprove.value)
   closeMoreMenu()
+}
+
+// GAP-A6-001：计划模式开关（会话级）。仅前端状态 + WS 下发，刷新后回到默认
+// 关闭态（sidecar 会话的 plan 状态与 UI 一致重建，不持久化避免歧义）。
+const planModeOn = ref(false)
+
+function togglePlanMode() {
+  const next = !planModeOn.value
+  if (!sendPlanMode(next)) {
+    showError('计划模式切换失败：连接未就绪')
+    return
+  }
+  planModeOn.value = next
+  showSuccess(next ? '已开启计划模式：Agent 将先规划后执行' : '已关闭计划模式')
+}
+
+// GAP-A7-001：检查点/回退入口。经 WS 下发，下一轮由 Agent 执行 checkpoint/
+// rewind 工具（git 仓库上下文内有效；非 git 项目 Agent 会如实反馈不可用）。
+function handleCheckpoint(action: 'save' | 'restore') {
+  if (!sendCheckpointAction(action)) {
+    showError('请求失败：连接未就绪')
+    return
+  }
+  showSuccess(action === 'save' ? '已请求创建检查点，将在下一轮执行' : '已请求回到最近检查点，将在下一轮执行')
 }
 
 // Ctrl+K 切换私密模式

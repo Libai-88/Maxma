@@ -128,12 +128,16 @@ DEFAULT_HINDSIGHT_CONFIG: dict[str, Any] = {
 
 DEFAULT_TTS_CONFIG: dict[str, Any] = {
     "enabled": False,
-    "provider": "edge-tts",  # edge-tts | openai-tts | custom
+    "provider": "system",  # GAP-A2-001：system = WebView2 speechSynthesis 系统语音（零 API）
     "voice": "",
     "speed": 1.0,
     "pitch": 1.0,
     "auto_read": False,
 }
+
+# GAP-A2-001：历史假配置（edge-tts/openai-tts 从未接线）规范化映射——
+# 读取时收敛为 system，避免前端显示已废弃的选项。
+_LEGACY_TTS_PROVIDERS = {"edge-tts", "openai-tts"}
 
 DEFAULT_BROWSER_TOOLS_CONFIG: dict[str, Any] = {
     "enabled": False,
@@ -304,14 +308,22 @@ async def update_hindsight_config(body: HindsightConfigBody):
 
 @router.get("/settings/tts")
 async def get_tts_config():
-    return _get_panel("tts")
+    cfg = _get_panel("tts")
+    # GAP-A2-001：历史 provider 值（edge-tts/openai-tts）规范化
+    if str(cfg.get("provider")) in _LEGACY_TTS_PROVIDERS:
+        cfg = {**cfg, "provider": "system"}
+    return cfg
 
 
 @router.put("/settings/tts")
 async def update_tts_config(body: TtsConfigBody):
     updates = body.model_dump(exclude_none=False)
-    if updates.get("provider") not in (None, "edge-tts", "openai-tts", "custom"):
-        raise HTTPException(status_code=422, detail="provider must be edge-tts/openai-tts/custom")
+    provider = updates.get("provider")
+    if provider is not None and provider not in ("system", "custom") and provider not in _LEGACY_TTS_PROVIDERS:
+        raise HTTPException(status_code=422, detail="provider must be system/custom")
+    # 历史值写入时同样规范化
+    if provider in _LEGACY_TTS_PROVIDERS:
+        updates["provider"] = "system"
     return _put_panel("tts", updates)
 
 

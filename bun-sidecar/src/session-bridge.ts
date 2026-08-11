@@ -111,7 +111,11 @@ export async function buildCreateSessionOptions(
   // fastembed/onnxruntime, so memory.backend="mnemopi" would fail at runtime.
   // Maxma's own memory (persona memory.yaml) is independent of OMP's memory
   // subsystem, so disabling it loses nothing.
-  createOptions.settings = Settings.isolated({"advisor.enabled": false, "memory.backend": "off"});
+  // CHECKPOINT-DEFAULT-001：checkpoint.enabled 钉为 true——tools.py 清单向用户
+  // 宣告 checkpoint/rewind 两个工具，OMP 默认 false 会让工具实际未注册
+  // （模型 schema 中不存在、调用必失败），清单与运行时事实不符。git 仓库
+  // 上下文里该工具才真正生效（OMP 工具自身按 repo 探测），非 git 项目零副作用。
+  createOptions.settings = Settings.isolated({"advisor.enabled": false, "memory.backend": "off", "checkpoint.enabled": true});
 
   // ── 权限模式 4 档 → OMP approvalMode 3 档真实映射（AG-PERM-001） ──
   // 此前 read_only/ask/operate/auto 只映射成 needsApproval 布尔：operate/auto
@@ -148,6 +152,14 @@ export async function buildCreateSessionOptions(
     "launch.enabled", "debug.enabled",
     "astGrep.enabled", "astEdit.enabled",
     "web_search.enabled", "ask.enabled",
+    // GAP-FEATURE-001：差距分析新增能力透传——计划模式（默认关闭，用户可在
+    // 会话菜单手动开启）、网页抓取（read 工具 URL 能力）、模型 fallback 链。
+    // 均在 OMP schema 内，未设置时回退 schema 默认值。
+    // 注：generate_image 不入列——文生图依赖 provider 图像能力（OpenAI/Gemini/
+    // xAI 等均为付费 API），按产品原则（不要求用户额外配置付费 API）砍掉。
+    "plan.enabled", "plan.defaultOnStartup",
+    "fetch.enabled",
+    "retry.fallbackChains",
     // "memory.backend" intentionally excluded: mnemopi requires the
     // un-bundled embedding deps (fastembed/onnxruntime). Maxma's own
     // memory lives in its persona memory.yaml, not OMP's memory subsystem.
@@ -157,9 +169,25 @@ export async function buildCreateSessionOptions(
   try {
     const global = await ensureSettings();
     for (const p of globalPaths) {
-      try { const v = global.get(p as SettingPath); if (v !== undefined) globalOverrides[p] = v; } catch { /* skip */ }
+      // CONFIG-INHERIT-001：只继承"显式配置过"的值。此前直接拷贝
+      // global.get(p)——未配置时 get() 返回 schema 默认值（如
+      // checkpoint.enabled 默认 false），会把我们想要的非默认值
+      // （checkpoint.enabled=true，见 CHECKPOINT-DEFAULT-001）覆盖掉，
+      // 导致清单宣告的 checkpoint/rewind 工具实际未注册。isConfigured()
+      // 区分"用户显式配置"与"schema 默认值"，未配置时交由下方
+      // Settings.isolated 的 schema 默认回退处理（语义不变）。
+      try {
+        if (global.isConfigured(p as SettingPath)) {
+          const v = global.get(p as SettingPath);
+          if (v !== undefined) globalOverrides[p] = v;
+        }
+      } catch { /* skip */ }
     }
   } catch { /* global not available */ }
+
+  // CHECKPOINT-DEFAULT-001：globalOverrides 未显式配置时默认注册
+  // checkpoint/rewind 工具（与 tools.py 宣告一致）；用户显式关闭则尊重。
+  const checkpointEnabled = globalOverrides["checkpoint.enabled"] ?? true;
 
   createOptions.autoApprove = !needsApproval;
   if (needsApproval) {
@@ -169,6 +197,7 @@ export async function buildCreateSessionOptions(
       "tools.approvalMode": approvalMode,
       "advisor.enabled": false,
       "memory.backend": "off",
+      "checkpoint.enabled": checkpointEnabled,
     });
   } else {
     createOptions.settings = Settings.isolated({
@@ -176,6 +205,7 @@ export async function buildCreateSessionOptions(
       "tools.approvalMode": "yolo",
       "advisor.enabled": false,
       "memory.backend": "off",
+      "checkpoint.enabled": checkpointEnabled,
     });
   }
 
@@ -856,6 +886,79 @@ export async function handleRpcRequest(req: RpcRequest, io: BridgeIo = defaultIo
           send(id, { ok: true });
         } catch (err) {
           sendError(id, `Failed to handle plan_action: ${String(err)}`);
+        }
+        return;
+      }
+
+      // ── Plan Mode Toggle (GAP-A6：计划模式开关) ──────────────────────
+      // 与 plan_action（审批已产出的计划）不同，本 RPC 是用户显式切换会话
+      // 的"计划模式"状态。启用 = OMP CLI /plan 命令等价物：
+      //   setPlanModeState({enabled, planFilePath, workflow}) 让会话进入
+      //   只读规划态（后续轮次先产出计划再执行，计划事件照常流入 plan_* 通道）；
+      //   ensureActiveTool("resolve") 是 plan mode 提交计划所需工具，缺失时
+      //   计划永远无法进入审批（OMP CLI 进入 plan mode 时同样补 resolve/write）。
+      // 停用 = setPlanModeState(undefined)（与 CLI /plan 再次切换一致）。
+      if (method === "set_plan_mode") {
+        const sessionId: string = params?.session_id as string;
+        const enabled: boolean = params?.enabled === true;
+        const record = sessions.get(sessionId);
+        if (!record) {
+          sendError(id, `Session not found: ${sessionId}`);
+          return;
+        }
+        try {
+          const session = record.session;
+          if (enabled) {
+            setSetting(record.settings!, "plan.enabled", true);
+            const active = session.getActiveToolNames();
+            if (!active.includes("resolve")) {
+              await session.setActiveToolsByName([...new Set([...active, "resolve"])]);
+            }
+            session.setPlanModeState({
+              enabled: true,
+              planFilePath: "local://PLAN.md",
+              workflow: "parallel",
+            });
+            // 会话空闲时立即下发 plan-mode 上下文（流式中由 OMP 自行处理）
+            if (typeof session.sendPlanModeContext === "function" && !session.isStreaming) {
+              session.sendPlanModeContext({ deliverAs: "steer" }).catch(() => {});
+            }
+          } else {
+            session.setPlanModeState(undefined);
+          }
+          send(id, { ok: true, enabled });
+        } catch (err) {
+          sendError(id, `Failed to set plan mode: ${String(err)}`);
+        }
+        return;
+      }
+
+      // ── Checkpoint Action (GAP-A7：检查点/回退用户入口) ──────────────
+      // checkpoint/rewind 是 agent 工具，无直接 session API；以显式指令消息
+      // 追加到会话（与 plan_action 注入 [Plan Approved] 同机制），下一轮
+      // prompt 时 agent 会调用 checkpoint({goal}) / rewind({report})。
+      // git 仓库上下文外工具自身探测后不生效（OMP 工具级行为，零副作用）。
+      if (method === "checkpoint_action") {
+        const sessionId: string = params?.session_id as string;
+        const action: string = params?.action as string; // "save" | "restore"
+        const record = sessions.get(sessionId);
+        if (!record) {
+          sendError(id, `Session not found: ${sessionId}`);
+          return;
+        }
+        try {
+          const goal: string = (params?.goal as string) ?? "user-requested checkpoint";
+          const content = action === "restore"
+            ? "[Rewind Request]\nThe user asked to restore the most recent checkpoint. Use the rewind tool (report: user-requested restore) and confirm what was rewound."
+            : `[Checkpoint Request]\nThe user asked to save a checkpoint of the current conversation state. Use the checkpoint tool (goal: ${goal}) and confirm the checkpoint was created.`;
+          record.session.agent.appendMessage({
+            role: "user",
+            content,
+            timestamp: Date.now(),
+          });
+          send(id, { ok: true, action });
+        } catch (err) {
+          sendError(id, `Failed to enqueue checkpoint action: ${String(err)}`);
         }
         return;
       }

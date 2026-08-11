@@ -1210,11 +1210,14 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                 continue
 
             # ── Auxiliary messages ──
-            # B1: 仅 user_response 在 sidecar 有 RPC handler（session-bridge.ts:1064）。
-            # plan_response / artifact_action / update_auto_approve 此前被当 RPC 方法名
-            # 透传，但 sidecar dispatcher 只认 10 个方法 → 必返 "Unknown method" 错误，
-            # 后端 logger.debug 吞掉，功能从未生效（黑洞）。接通需 SDK 深改（plan-mode
-            # 事件暴露到 subscribe 流 / ArtifactManager 事件化 / OMP 运行时 approvalMode
+            # B1: user_response / update_auto_approve / plan_response /
+            # set_plan_mode / checkpoint_action 在 sidecar 均有 RPC handler
+            # （session-bridge.ts），在此按方法名转发。artifact_action 走
+            # 文件解码 + 工具执行管线（见下方分支），不是 RPC 透传。
+            # 此前 plan_response 等被当 RPC 方法名透传但 sidecar dispatcher
+            # 不认 → 必返 "Unknown method" 错误，后端 logger.debug 吞掉，
+            # 功能从未生效（黑洞）。接通需 SDK 深改（plan-mode 事件暴露到
+            # subscribe 流 / ArtifactManager 事件化 / OMP 运行时 approvalMode
             # 切换），超 bridge 范围。此处不再黑洞转发，避免无谓 RPC + 错误往返。
             # 前端 send 函数保留（UI 不破坏），后续接通只需在此加分支。
             if msg_type == WsMessageType.USER_RESPONSE:
@@ -1280,6 +1283,50 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                         logger.info("[ws] Forwarded plan_response (action=%s) to sidecar session %s", action, sidecar_sid[:8])
                     except Exception:
                         logger.debug("[ws] Failed to forward plan_response to sidecar", exc_info=True)
+                continue
+
+            # GAP-A6-001：计划模式开关——前端会话菜单切换 → set_plan_mode RPC
+            # （sidecar 调 session.setPlanModeState 启用/停用计划模式）。
+            if msg_type == "set_plan_mode":
+                _payload = msg.get("payload", {})
+                _enabled = bool(_payload.get("enabled", False))
+                sidecar_sid = getattr(session, "_sidecar_session_id", None)
+                if sidecar_sid:
+                    try:
+                        mgr = app_state.sidecar_manager
+                        await mgr.start()
+                        client = await _get_sidecar_client(mgr)
+                        await client.call(
+                            "set_plan_mode",
+                            {"session_id": sidecar_sid, "enabled": _enabled},
+                        )
+                        logger.info("[ws] Forwarded set_plan_mode=%s to sidecar session %s", _enabled, sidecar_sid[:8])
+                    except Exception:
+                        logger.debug("[ws] Failed to forward set_plan_mode to sidecar", exc_info=True)
+                continue
+
+            # GAP-A7-001：检查点/回退——前端会话菜单 → checkpoint_action RPC
+            # （sidecar 向会话追加显式指令，下一轮由 agent 调用 checkpoint/rewind 工具）。
+            if msg_type == "checkpoint_action":
+                _payload = msg.get("payload", {})
+                _action = str(_payload.get("action", ""))
+                sidecar_sid = getattr(session, "_sidecar_session_id", None)
+                if sidecar_sid:
+                    try:
+                        mgr = app_state.sidecar_manager
+                        await mgr.start()
+                        client = await _get_sidecar_client(mgr)
+                        await client.call(
+                            "checkpoint_action",
+                            {
+                                "session_id": sidecar_sid,
+                                "action": _action,
+                                **({"goal": _payload["goal"]} if _payload.get("goal") else {}),
+                            },
+                        )
+                        logger.info("[ws] Forwarded checkpoint_action=%s to sidecar session %s", _action, sidecar_sid[:8])
+                    except Exception:
+                        logger.debug("[ws] Failed to forward checkpoint_action to sidecar", exc_info=True)
                 continue
 
             if msg_type == "artifact_action":

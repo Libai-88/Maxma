@@ -66,9 +66,12 @@ export interface HindsightConfig {
   prompt_template: string
 }
 
+// GAP-A2-001：TTS 提供商收敛为 system（WebView2 speechSynthesis 系统语音，
+// 零 API 成本）。edge-tts/openai-tts 为历史假配置（从未接线），后端读取时
+// 会规范化为 system（见 settings_panels.py）。
 export interface TtsConfig {
   enabled: boolean
-  provider: 'edge-tts' | 'openai-tts' | 'custom'
+  provider: 'system' | 'custom'
   voice: string
   speed: number
   pitch: number
