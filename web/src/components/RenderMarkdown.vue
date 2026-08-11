@@ -68,12 +68,17 @@ const renderResult = computed(() => {
     error = msg
   }
 
-  try {
-    sandbox = renderMarkdownRaw(props.content)
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    log.error('[RenderMarkdown] raw render 错误:', msg)
-    if (!error) error = msg
+  // ANIM-MD-001：流式期间 useSandbox 恒为 false（iframe 会因内容频繁变化
+  // 不断重载）——raw 渲染此时必然不会被消费，跳过可省去每 80ms 一次的
+  // 全量 md.parse + sanitizeHtml（长流式下 O(n²) 的纯浪费）。
+  if (!props.streaming) {
+    try {
+      sandbox = renderMarkdownRaw(props.content)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      log.error('[RenderMarkdown] raw render 错误:', msg)
+      if (!error) error = msg
+    }
   }
 
   return { html, sandbox, error }

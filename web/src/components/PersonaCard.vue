@@ -30,7 +30,7 @@ useTilt(() => rootEl.value)
 </script>
 
 <style scoped>
-.persona-card { padding: 20px; border: 1px solid var(--border, #e5e7eb); border-radius: 10px; background: var(--bg-card, #fff); will-change: transform; transition: box-shadow 0.25s ease, border-color 0.25s ease; box-shadow: var(--shadow-sm); }
+.persona-card { padding: 20px; border: 1px solid var(--border, #e5e7eb); border-radius: 10px; background: var(--bg-card, #fff); /* ANIM-WC-002：移除常驻 will-change（非动画期间白占合成层） */; transition: box-shadow 0.25s ease, border-color 0.25s ease; box-shadow: var(--shadow-sm); }
 .persona-card:hover { box-shadow: var(--shadow-lg); border-color: color-mix(in srgb, var(--accent) 24%, var(--border)); }
 .card-header { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-secondary, #6b7280); margin-bottom: 16px; }
 .persona-avatar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }

@@ -22,7 +22,9 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   direction: 'bottom',
-  blurLayers: 8,
+  // ANIM-BLUR-001：默认层数 8 → 4——每层都是全宽 backdrop-filter 采样，
+  // 层数减半且视觉过渡仍平滑（层间距随 blurIntensity 自动补偿）
+  blurLayers: 4,
   blurIntensity: 0.25,
   class: '',
 })

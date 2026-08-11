@@ -52,6 +52,12 @@ export function useChatScroll({ sessionId, turns, currentTurn }: UseChatScrollOp
 
   // ── 流式 token 签名 ──
 
+  // ANIM-SIG-001：签名节流状态。签名同时驱动 size-dependencies（每变化
+  // 一次触发 scroller 同步布局读取 + 下方条目重排）与自动滚动 watch——
+  // 每个 token 都变会让长流式期间每帧强制布局。按 500ms 或 50 词粒度更新。
+  let _sigLastLen = 0
+  let _sigLastUpdate = 0
+
   /** 返回所有 thinking block 的 tokens 长度总和，用于触发自动滚动和 size-dependencies */
   function streamingTokensSignature(turn: ChatTurn): number {
     let total = 0
@@ -60,6 +66,12 @@ export function useChatScroll({ sessionId, turns, currentTurn }: UseChatScrollOp
         total += ev.tokens.length
       }
     }
+    const now = Date.now()
+    if (now - _sigLastUpdate < 500 && Math.abs(total - _sigLastLen) < 50) {
+      return _sigLastLen
+    }
+    _sigLastUpdate = now
+    _sigLastLen = total
     return total
   }
 

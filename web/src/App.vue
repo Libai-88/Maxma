@@ -652,7 +652,8 @@ html, body {
 /* ── Collapsible sidebar ── */
 .sidebar {
   position: relative;
-  will-change: width;
+  /* ANIM-WC-001：移除常驻 will-change:width——width 是 layout 属性，
+     will-change 对其无效且让侧栏永久占用一个合成层 */
 }
 @media (prefers-reduced-motion: no-preference) {
   .sidebar {

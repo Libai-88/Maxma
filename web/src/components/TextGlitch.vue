@@ -14,7 +14,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onUnmounted } from 'vue'
+import { ref, watch, onActivated, onDeactivated, onUnmounted } from 'vue'
 
 const props = withDefaults(defineProps<{
   text?: string
@@ -95,6 +95,12 @@ watch(() => props.speed, () => {
 })
 
 startGlitch()
+
+// ANIM-PAUSE-001：keep-alive 缓存（离开聊天页）时停止故障 interval
+onActivated(() => {
+  if (intervalId === null) startGlitch()
+})
+onDeactivated(() => stopGlitch())
 
 onUnmounted(() => {
   stopGlitch()

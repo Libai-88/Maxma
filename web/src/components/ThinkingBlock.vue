@@ -8,7 +8,7 @@
     </div>
     <div class="thinking-body" v-if="block.tokens">
       <div class="thinking-content">
-        <!-- 流式答案（becameAnswer）：纯文本用 SplitText 增量逐词 reveal，实现打字机生长感；
+        <!-- 流式答案（becameAnswer）：纯文本增量逐词 reveal（ANIM-SPLIT-001），实现打字机生长感；
              复杂 markdown（代码/表格）降级走 RenderMarkdown 保证格式正确 -->
         <div
           v-if="isStreamingAnswer"
@@ -46,7 +46,7 @@ import StickerInline from './StickerInline.vue'
 import StickerPreviewOverlay from './StickerPreviewOverlay.vue'
 import { useStickerSegments, type StickerSegment } from '@/composables/useStickerSegments'
 import { hasEmotionTag } from '@/composables/stickerUtils'
-import { gsap, useGsap, easeMap, lazyLoadPlugin } from '@/composables/useGsap'
+import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const props = defineProps<{ block: ThinkingBlockType }>()
 
@@ -121,46 +121,56 @@ const isStreamingAnswer = computed(() =>
   props.block.becameAnswer && !props.block.done && isPlainAnswer(props.block.tokens ?? '')
 )
 
-// 增量逐词 reveal：token 追加时只对新词做 from，实现打字机生长感
-// SplitText 实例复用，split() 重拆后仅动画 lastWordCount 之后的新词
-// rAF 节流：同帧内多次 token 更新合并为一次重拆，避免高频抖动
-let answerSplit: SplitText | null = null
-let lastWordCount = 0
+// 增量逐词 reveal（ANIM-SPLIT-001）：token 追加时只对新增文本创建 word spans。
+// 此前用 SplitText 每帧全量重拆（split() 内部先 revert 全部 span 再全量重建，
+// 长回答 O(n²) DOM 增删 + 每帧整块 reflow）。改为手动增量：按空白切分新增
+// 片段，逐词包 <span class="answer-word"> 追加到容器，仅动画新词。
+let lastProcessedLen = 0
 let streamRaf = 0
 
-useGsap((ctx, contextSafe) => {
-  const doSplit = contextSafe(async () => {
+// 每次增量处理的字符上限（防单帧 token 爆发一次创建过多节点）
+const MAX_CHARS_PER_FRAME = 2000
+
+useGsap((_ctx, contextSafe) => {
+  const doSplit = contextSafe(() => {
     const el = answerStreamEl.value
     const text = props.block.tokens ?? ''
     if (!el || !props.block.becameAnswer || props.block.done) return
     if (!isPlainAnswer(text)) {
-      answerSplit?.revert()
-      answerSplit = null
-      lastWordCount = 0
+      // 复杂 markdown（代码/表格）：清空增量容器，交给 RenderMarkdown 渲染
+      el.textContent = ''
+      lastProcessedLen = 0
       return
     }
-    el.textContent = stripThinkingLabels(text.replace(STICKER_PLACEHOLDER_RE, ''))
-    let SplitText: any
-    try {
-      SplitText = await lazyLoadPlugin('SplitText')
-      if (!SplitText || !SplitText.create) throw new Error('SplitText 插件不可用')
-    } catch {
-      // 插件按需加载失败时跳过字符级动画，不阻塞答案渲染
-      answerSplit = null
-      lastWordCount = 0
+    const clean = stripThinkingLabels(text.replace(STICKER_PLACEHOLDER_RE, ''))
+    if (clean.length < lastProcessedLen) {
+      // 内容回退（如替换指令）：整体重建
+      el.textContent = clean
+      lastProcessedLen = clean.length
       return
     }
-    if (answerSplit) {
-      answerSplit.split({ type: 'words', wordsClass: 'answer-word' })
-    } else {
-      answerSplit = SplitText.create(el, { type: 'words', wordsClass: 'answer-word', aria: 'auto' })
-      lastWordCount = 0
+    if (clean.length === lastProcessedLen) return
+
+    // 增量追加：只处理新增片段（含标点/空白的词边界切分）
+    const delta = clean.slice(lastProcessedLen, lastProcessedLen + MAX_CHARS_PER_FRAME)
+    lastProcessedLen += delta.length
+
+    const frag = document.createDocumentFragment()
+    const freshWords: HTMLElement[] = []
+    // 按词切分（保留空白为独立 span，保证词间距与换行）
+    const parts = delta.split(/(\s+)/)
+    for (const part of parts) {
+      if (!part) continue
+      const span = document.createElement('span')
+      span.className = 'answer-word'
+      span.textContent = part
+      frag.appendChild(span)
+      if (part.trim()) freshWords.push(span)
     }
-    const words = answerSplit?.words ?? []
-    const fresh = words.slice(lastWordCount)
-    lastWordCount = words.length
-    if (fresh.length) {
-      gsap.from(fresh, {
+    el.appendChild(frag)
+
+    if (freshWords.length) {
+      gsap.from(freshWords, {
         yPercent: 26,
         autoAlpha: 0,
         duration: 0.3,
@@ -177,28 +187,29 @@ useGsap((ctx, contextSafe) => {
       if (streamRaf) return
       streamRaf = requestAnimationFrame(() => {
         streamRaf = 0
-        void doSplit()
+        doSplit()
       })
     },
     { immediate: true },
   )
 
   // 卸载时取消 pending rAF，避免组件销毁后仍执行 doSplit
-  ctx.add(() => {
+  _ctx.add(() => {
     if (streamRaf) {
       cancelAnimationFrame(streamRaf)
       streamRaf = 0
     }
   })
 
-  // 答案完成：revert SplitText，切回 RenderMarkdown 完整渲染（含 markdown/sticker）
+  // 答案完成：清空增量容器状态（容器本身随 isStreamingAnswer=false 隐藏，
+  // 完整 markdown 由 segments/RenderMarkdown 渲染）
   watch(
     () => props.block.done,
     contextSafe((done) => {
-      if (done && answerSplit) {
-        answerSplit.revert()
-        answerSplit = null
-        lastWordCount = 0
+      if (done) {
+        const el = answerStreamEl.value
+        if (el) el.textContent = ''
+        lastProcessedLen = 0
       }
     }),
   )

@@ -263,20 +263,16 @@
   overflow: visible;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .chat-input {
-    animation: border-breathe 4s ease-in-out infinite;
-  }
+/* ANIM-PAINT-001：border-breathe（box-shadow 4s infinite）是 paint 属性动画，
+   每帧重新光栅化输入框阴影并与下方 canvas 叠加——改为静态阴影 + 聚焦时
+   一次性亮起（focus-visible 过渡走合成属性），呼吸感由 border-color 保留 */
+.chat-input {
+  box-shadow: var(--shadow-md);
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
-
-@keyframes border-breathe {
-  0%, 100% {
-    box-shadow: var(--shadow-md);
-  }
-  50% {
-    box-shadow: var(--shadow-md),
-                0 0 18px color-mix(in srgb, var(--accent) 6%, transparent);
-  }
+.chat-input:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md), 0 0 18px color-mix(in srgb, var(--accent) 10%, transparent);
 }
 .chat-input.is-resizing {
   border-color: var(--accent);

@@ -69,7 +69,7 @@ function onMouseLeave() {
   z-index: 2;
   border-radius: inherit;
   transition: opacity 0.3s ease;
-  will-change: opacity, background;
+  will-change: opacity;
 }
 
 /* Respect user's motion preferences */

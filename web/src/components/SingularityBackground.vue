@@ -12,7 +12,7 @@ const __dialKitDefaults = useDialKit()
 </script>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onActivated, onDeactivated, onMounted, onUnmounted } from 'vue'
 
 interface Props extends Partial<DialKitConfig> {
   noise?: {
@@ -245,13 +245,42 @@ onMounted(() => {
   animId = requestAnimationFrame((t) => draw(canvas, ctx, t))
 })
 
-onUnmounted(() => {
+// ANIM-PAUSE-001：keep-alive 缓存（导航离开聊天页）时停止 rAF——
+// 此前 ChatView 仅 deactivated 不卸载，160 粒子在不可见页面以 60fps 持续运行
+let _started = false
+
+function startLoop() {
+  const canvas = canvasRef.value
+  if (!canvas || _started || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  _started = true
+  resize(canvas)
+  canvas.addEventListener('pointermove', onPointerMove)
+  canvas.addEventListener('pointerleave', onPointerLeave)
+  animId = requestAnimationFrame((t) => draw(canvas, ctx, t))
+}
+
+function stopLoop() {
   cancelAnimationFrame(animId)
+  _started = false
   const canvas = canvasRef.value
   if (canvas) {
     canvas.removeEventListener('pointermove', onPointerMove)
     canvas.removeEventListener('pointerleave', onPointerLeave)
   }
+}
+
+onMounted(() => startLoop())
+
+onActivated(() => {
+  // 从 keep-alive 恢复
+  if (!_started) startLoop()
+})
+onDeactivated(() => stopLoop())
+
+onUnmounted(() => {
+  stopLoop()
   particles = []
 })
 </script>

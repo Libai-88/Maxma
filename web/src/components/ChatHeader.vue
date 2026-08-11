@@ -3,8 +3,8 @@
     <ProgressiveBlur
       class="header-blur-bg"
       direction="bottom"
-      :blur-layers="6"
-      :blur-intensity="0.3"
+      :blur-layers="3"
+      :blur-intensity="0.5"
     />
     <div class="header-left" :title="contextDetails" :aria-label="contextDetails">
       <span class="header-avatar" aria-hidden="true">{{ store.profile.avatar }}</span>

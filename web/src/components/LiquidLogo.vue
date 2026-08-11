@@ -251,10 +251,25 @@ function initWebGL(canvas: HTMLCanvasElement, img: HTMLImageElement) {
   return true
 }
 
+// ANIM-PAUSE-002：后台/最小化时暂停 WebGL 循环 + 30fps 限帧（logo 是
+// 36px 小元素，30fps 视觉无感；此前常驻满帧跑 shader 纯属浪费）
+const LOGO_TARGET_FRAME_MS = 1000 / 30
+let logoLastFrameTs = 0
+
 function render(ts: number) {
   if (!gl || !program) return
   const canvas = canvasRef.value
   if (!canvas) return
+  // ANIM-PAUSE-002：后台暂停（隐藏时 rAF 会降到 ~1fps，显式短路彻底省掉 shader）
+  if (document.hidden) {
+    animId = 0
+    return
+  }
+  if (ts - logoLastFrameTs < LOGO_TARGET_FRAME_MS) {
+    animId = requestAnimationFrame(render)
+    return
+  }
+  logoLastFrameTs = ts
 
   if (!startTime) startTime = ts
   const elapsed = (ts - startTime) / 1000

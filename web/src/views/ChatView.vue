@@ -1,5 +1,5 @@
 <template>
-  <div class="chat-view">
+  <div ref="rootRef" class="chat-view">
     <!-- 后端不可用：provider 加载失败 -->
     <div v-if="providerLoadFailed" class="no-provider-overlay">
       <div class="no-provider-card">
@@ -186,7 +186,7 @@ import { useChatStore } from '@/stores/chat'
 import type { ParsedRef, SelectionRef } from '@/utils/references'
 import type { ThinkPathId } from '@/utils/thinkPath'
 import { storeToRefs } from 'pinia'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import { useGlobalShortcut } from '@/composables/useGlobalShortcut'
 import { createLogger } from '@/utils/logger'
 import { safeGetItem, safeSetItem } from '@/lib/storage'
@@ -251,6 +251,8 @@ const selectedModelName = ref(safeGetItem(SELECTED_MODEL_KEY) || '')
 const providerStore = useProviderStore()
 const { hasProviders } = storeToRefs(providerStore)
 const chatStore = useChatStore()
+// ANIM-PAUSE-001：keep-alive 暂停用根元素 ref
+const rootRef = ref<HTMLElement | null>(null)
 // MODEL-PARAMS-001：会话菜单内模型参数面板展开状态
 const modelSettingsOpen = ref(false)
 
@@ -370,6 +372,19 @@ function handleMoreMenuKeydown(event: KeyboardEvent) {
 onMounted(() => {
   document.addEventListener('pointerdown', handleMoreMenuPointerdown)
   document.addEventListener('keydown', handleMoreMenuKeydown)
+})
+
+// ANIM-PAUSE-001：keep-alive 缓存时暂停 ChatView 子树全部 CSS 动画——
+// 导航离开后缓存的欢迎屏动画（Sparkles/Ripple/TextGlitch 等）此前以
+// 60fps 继续在不可见页面运行。deactivated 加暂停类，activated 恢复。
+onActivated(() => {
+  rootRef.value?.classList.remove('view-paused')
+  // 恢复 JS 动画（SingularityBackground 等挂载在子树内，由各自组件处理）
+  window.dispatchEvent(new CustomEvent('maxma:chat-view-active', { detail: { active: true } }))
+})
+onDeactivated(() => {
+  rootRef.value?.classList.add('view-paused')
+  window.dispatchEvent(new CustomEvent('maxma:chat-view-active', { detail: { active: false } }))
 })
 
 onBeforeUnmount(() => {
@@ -931,4 +946,11 @@ function handleQuickStart(message: string) {
   }
 }
 
+/* ANIM-PAUSE-001：ChatView 被 keep-alive 缓存（导航离开）时暂停子树全部
+   CSS 动画（含欢迎屏 Sparkles/Ripple/TextGlitch 的 infinite 动画） */
+.view-paused,
+.view-paused * {
+  animation-play-state: paused !important;
+  transition: none !important;
+}
 </style>

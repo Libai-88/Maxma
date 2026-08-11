@@ -42,9 +42,11 @@ const enabled = ref(true)
 
 const { isDark } = useTheme()
 
+// ANIM-BLEND-001：移除 mix-blend-mode——blend 会强制每帧把该层与下方
+// 每帧重绘的 LiquidBackground canvas 做全屏混合（视觉接近但 GPU 成本极高）。
+// 保留 opacity 柔化效果，视觉差异极小。
 const overlayStyle = computed(() => ({
-  mixBlendMode: isDark.value ? 'screen' as const : 'multiply' as const,
-  opacity: isDark.value ? 0.12 : 0.28,
+  opacity: isDark.value ? 0.12 : 0.22,
 }))
 
 const compensationStyle = computed(() => ({

@@ -61,7 +61,8 @@ function newTarget(b: Blob, w: number, h: number) {
 function setup(canvas: HTMLCanvasElement) {
   const parent = canvas.parentElement
   if (!parent) return
-  const dpr = Math.min(window.devicePixelRatio || 1, 2)
+  // ANIM-DPR-001：绘制分辨率降至 dpr1（模糊液态视觉无感；dpr2 时物理像素 4 倍）
+  const dpr = Math.min(window.devicePixelRatio || 1, 1)
   const w = parent.clientWidth
   const h = parent.clientHeight
   canvas.width = w * dpr
@@ -152,6 +153,11 @@ function drawOrganicBlob(
   ctx.closePath()
 }
 
+// ANIM-FPS-001：30fps 限帧——液态流动 30fps 视觉等价（高刷屏上省一半
+// 全屏渐变填充负载）；顺带替代原先的 rAF 时间参数（用单调时钟节流）
+const TARGET_FRAME_MS = 1000 / 30
+let lastFrameTs = 0
+
 function animate(ts: number, canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, dpr: number) {
   // 修复 PERF-003：页面切到后台时暂停 rAF 循环（浏览器对后台标签页的 rAF
   // 本会限频到 ~1fps，但显式暂停可彻底省掉 canvas 绘制开销与闭包唤醒）。
@@ -160,6 +166,12 @@ function animate(ts: number, canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
     animId = 0
     return
   }
+  // ANIM-FPS-001：帧间隔不足时跳过本帧（仍排下一帧，节流不清零）
+  if (ts - lastFrameTs < TARGET_FRAME_MS) {
+    animId = requestAnimationFrame((t) => animate(t, canvas, ctx, dpr))
+    return
+  }
+  lastFrameTs = ts
 
   const time = ts * 0.001 // seconds
   const w = canvas.width / dpr
@@ -219,7 +231,8 @@ function animate(ts: number, canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
 function resize(canvas: HTMLCanvasElement) {
   const parent = canvas.parentElement
   if (!parent) return
-  const dpr = Math.min(window.devicePixelRatio || 1, 2)
+  // ANIM-DPR-001：绘制分辨率降至 dpr1（模糊液态视觉无感；dpr2 时物理像素 4 倍）
+  const dpr = Math.min(window.devicePixelRatio || 1, 1)
   const w = parent.clientWidth
   const h = parent.clientHeight
   canvas.width = w * dpr

@@ -89,11 +89,7 @@
 }
 
 /* ── Gradient Shift（品牌渐变动画） ── */
-@keyframes maxma-gradient-shift {
-  0%   { background-position: 0% 50%; }
-  50%  { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
+
 
 /* ── Pulse / Expand / Hint ── */
 @keyframes maxma-pulse {
@@ -120,17 +116,8 @@
 }
 
 /* ── 打字机省略号 ── */
-@keyframes maxma-typewriter-dots {
-  0%, 100% { content: '\00a0'; }
-  25%      { content: '.'; }
-  50%      { content: '..'; }
-  75%      { content: '...'; }
-}
-@keyframes maxma-cycling-dots {
-  0%, 100% { content: '.'; }
-  33%      { content: '..'; }
-  66%      { content: '...'; }
-}
+
+
 
 /* ── 流式输入指示器：弹跳小点 ── */
 @keyframes maxma-bounce-dot {
@@ -158,10 +145,7 @@
 }
 
 /* ── 欢迎屏 aura 呼吸（慢速缩放） ── */
-@keyframes maxma-aura-breathe {
-  0%, 100% { transform: scale(1); }
-  50%      { transform: scale(1.07); }
-}
+
 
 /* ── Toast 倒计时进度条 ── */
 @keyframes maxma-toast-progress {
@@ -170,10 +154,7 @@
 }
 
 /* ── 品牌 logo 呼吸光晕 ── */
-@keyframes maxma-brand-breathe {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 22%, transparent); }
-  50%      { box-shadow: 0 0 14px 3px color-mix(in srgb, var(--accent) 34%, transparent); }
-}
+
 
 /* ── 工具气泡：执行中呼吸光晕 ── */
 @keyframes maxma-tool-glow {

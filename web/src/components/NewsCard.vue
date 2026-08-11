@@ -98,7 +98,7 @@ const paragraphs = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  will-change: transform;
+  /* ANIM-WC-002：移除常驻 will-change */;
 }
 .news-card:hover {
   box-shadow: var(--shadow-lg);
