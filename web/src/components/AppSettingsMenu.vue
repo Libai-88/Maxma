@@ -44,6 +44,7 @@ import { useSessionStore } from '@/stores/session';
 import { useChatStore } from '@/stores/chat';
 import { invalidateTurnsCache } from '@/composables/useChat';
 import { confirmAction } from '@/composables/useConfirm';
+import { showError, showSuccess } from '@/lib/toast';
 
 const props = withDefaults(defineProps<{
   compact?: boolean
@@ -101,13 +102,26 @@ async function handleClearSession() {
     confirmText: '清空',
     danger: true,
   })) return
+  try {
+    // UX-CLEAR-001：清空必须同步后端——此前只清本地 turns，刷新/重启后
+    // loadHistoryFromBackend 会把历史全部恢复（"清空后消息复活"）。
+    // DELETE /sessions/{sid}/messages 销毁 sidecar 会话、清空 SessionMap
+    // 持久化 turns 与幂等 id。
+    await api.clearSessionMessages(sid)
+  } catch (e) {
+    showError('清空会话失败: ' + (e instanceof Error ? e.message : String(e)))
+    return
+  }
   const ch = chatStore.channels.get(sid)
   if (ch) {
     ch.turns.splice(0, ch.turns.length)
     ch.currentTurn = null
+    ch.error = null
+    ch.errorCategory = null
   }
   chatStore.removeTurnsFromStorage(sid)
   invalidateTurnsCache(sid)
+  showSuccess('会话已清空')
   closeSettingsMenu()
 }
 
@@ -124,10 +138,10 @@ async function handleExportErrorLog() {
       defaultFilename: filename,
     })
     if (result) {
-      window.dispatchEvent(new CustomEvent('maxma:error', { detail: { message: `错误日志已保存到:\n${result}` } }))
+      showSuccess(`错误日志已保存到:\n${result}`)
     }
   } catch (e) {
-    window.dispatchEvent(new CustomEvent('maxma:error', { detail: { message: '导出错误日志失败: ' + (e instanceof Error ? e.message : String(e)) } }))
+    showError('导出错误日志失败: ' + (e instanceof Error ? e.message : String(e)))
   } finally {
     exportingErrorLog.value = false
   }
@@ -149,10 +163,10 @@ async function handleManageLogs() {
     })
     if (confirmClean) {
       const result = await api.clearOldLogs()
-      window.dispatchEvent(new CustomEvent('maxma:error', { detail: { message: `已清理 ${result.deleted_count ?? 0} 个旧日志文件，释放 ${(result.freed_mb ?? 0).toFixed(2)} MB 空间` } }))
+      showSuccess(`已清理 ${result.deleted_count ?? 0} 个旧日志文件，释放 ${(result.freed_mb ?? 0).toFixed(2)} MB 空间`)
     }
   } catch (e) {
-    window.dispatchEvent(new CustomEvent('maxma:error', { detail: { message: '日志管理失败: ' + (e instanceof Error ? e.message : String(e)) } }))
+    showError('日志管理失败: ' + (e instanceof Error ? e.message : String(e)))
   } finally {
     managingLogs.value = false
   }

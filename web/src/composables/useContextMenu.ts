@@ -4,6 +4,7 @@ import type { ContextMenuItem } from '@/components/ContextMenu.vue'
 import { truncateWithEllipsis } from '@/utils/text'
 import type { ChatTurn } from '@/types'
 import { safeCopyText } from '@/lib/clipboard'
+import { showError, showSuccess } from '@/lib/toast'
 
 const MAX_CITE_LENGTH = 1000
 
@@ -16,19 +17,29 @@ interface UseContextMenuOptions {
 }
 
 /**
- * 聊天消息右键菜单：引用、复制、撤回
+ * 聊天消息右键菜单：引用、复制、重新生成、撤回
  */
 export function useContextMenu({ turns, emit }: UseContextMenuOptions) {
   const ctxMenuVisible = ref(false)
   const ctxMenuPos = ref({ x: 0, y: 0 })
   const pendingCitation = ref<{ text: string } | null>(null)
   const pendingUserMsgIdx = ref<number | null>(null)
+  // UX-REGEN-001：右键来源类型（assistant_message 时提供"重新生成"）
+  const pendingSourceType = ref<string>('')
 
   const ctxMenuItems = computed((): ContextMenuItem[] => {
     const items: ContextMenuItem[] = [
       { label: '引用', action: 'cite', icon: 'cite-speech' },
       { label: '复制', action: 'copy', icon: 'copy' },
     ]
+    // UX-REGEN-001：assistant 回复（finalAnswer 或 becameAnswer 的 thinking 块）
+    // 上提供"重新生成"——撤回该轮及之后并重发
+    if (
+      (pendingSourceType.value === 'assistant_message' || pendingSourceType.value === 'thinking')
+      && pendingUserMsgIdx.value !== null
+    ) {
+      items.push({ label: '重新生成', action: 'regenerate', icon: 'undo-arrow' })
+    }
     if (
       pendingUserMsgIdx.value !== null
       && pendingUserMsgIdx.value === turns.value.length - 1
@@ -41,12 +52,13 @@ export function useContextMenu({ turns, emit }: UseContextMenuOptions) {
 
   function onBubbleContextMenu(
     event: MouseEvent,
-    _sourceType: string,
+    sourceType: string,
     fullText: string,
     _sourceLabel: string,
     userMsgIdx?: number,
   ) {
     pendingUserMsgIdx.value = userMsgIdx ?? null
+    pendingSourceType.value = sourceType
 
     let citeText = fullText
 
@@ -100,7 +112,14 @@ export function useContextMenu({ turns, emit }: UseContextMenuOptions) {
       const citeRef: ParsedRef = { type: 'cite', text: pendingCitation.value.text, label }
       emit('cite', citeRef)
     } else if (action === 'copy' && pendingCitation.value) {
-      void safeCopyText(pendingCitation.value.text)
+      // UX-COPY-FEEDBACK-001：复制成功/失败给出明确反馈（此前返回值被忽略，
+      // 复制失败时用户粘贴才发现）
+      void safeCopyText(pendingCitation.value.text).then((ok) => {
+        if (ok) showSuccess('已复制到剪贴板')
+        else showError('复制失败，请手动选择文本复制')
+      })
+    } else if (action === 'regenerate') {
+      emit('action', { action: 'regenerate', data: { index: pendingUserMsgIdx.value } })
     } else if (action === 'undo') {
       emit('action', { action: 'undo', data: { n: 1 } })
     }
@@ -111,6 +130,7 @@ export function useContextMenu({ turns, emit }: UseContextMenuOptions) {
     ctxMenuVisible.value = false
     pendingCitation.value = null
     pendingUserMsgIdx.value = null
+    pendingSourceType.value = ''
   }
 
   return {

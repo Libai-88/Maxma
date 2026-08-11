@@ -149,8 +149,17 @@
             <span v-if="!s.enabled" class="disabled-tag">已停用</span>
           </div>
 
+          <!-- UX-MCP-TEST-001：测试连接结果（所有传输类型） -->
+          <div v-if="testResultMap[s.server_id]" class="mcp-test-result" :class="testResultMap[s.server_id].success ? 'ok' : 'err'">
+            <span v-if="testResultMap[s.server_id].success">✓ 连接正常</span>
+            <span v-else>✗ {{ testResultMap[s.server_id].error }}</span>
+          </div>
+
           <!-- 操作按钮 -->
           <div class="card-actions">
+            <button class="action-btn" :disabled="testingId !== null" @click="testServer(s)">
+              {{ testingId === s.server_id ? '测试中...' : '测试连接' }}
+            </button>
             <button class="action-btn" :disabled="loadingDetailId === s.server_id" @click="startEdit(s)">
               {{ loadingDetailId === s.server_id ? '加载...' : '编辑' }}
             </button>
@@ -581,6 +590,34 @@ const saveMessageClass = ref('')
 const editingId = ref('')
 const loadingDetailId = ref('')  // 编辑按钮加载状态
 const deletingId = ref('')       // 删除按钮防抖
+
+// ── UX-MCP-TEST-001：卡片级测试连接（所有传输类型）──
+const testingId = ref<string | null>(null)
+const testResultMap = ref<Record<string, { success: boolean; error: string | null }>>({})
+
+/** 测试指定 MCP 服务器连接：stdio 走命令启动探测，URL 类走 HTTP 可达性探测。 */
+async function testServer(s: MCPServerConfig) {
+  if (testingId.value) return
+  testingId.value = s.server_id
+  testResultMap.value = { ...testResultMap.value, [s.server_id]: { success: false, error: '测试中…' } }
+  try {
+    const body = s.transport === 'stdio'
+      ? { command: s.command ?? '', args: s.args ?? [], env: s.env ?? {}, transport: 'stdio' }
+      : { command: '', args: [], env: {}, transport: s.transport, url: s.url ?? '' }
+    const res = await api.testMcpConnection(body)
+    testResultMap.value = {
+      ...testResultMap.value,
+      [s.server_id]: { success: res.success, error: res.error ?? null },
+    }
+  } catch (e) {
+    testResultMap.value = {
+      ...testResultMap.value,
+      [s.server_id]: { success: false, error: e instanceof Error ? e.message : String(e) },
+    }
+  } finally {
+    testingId.value = null
+  }
+}
 
 // ── 全局提示 ──
 const globalMessage = ref('')
@@ -1525,6 +1562,24 @@ onMounted(() => { loadServers(); loadDiscovered() })
   display: flex;
   gap: 8px;
   margin-top: auto;
+}
+/* UX-MCP-TEST-001：测试结果行 */
+.mcp-test-result {
+  margin-top: 8px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 0.78em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mcp-test-result.ok {
+  background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card));
+  color: var(--status-ok);
+}
+.mcp-test-result.err {
+  background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
+  color: var(--status-error);
 }
 .action-btn {
   padding: 5px 12px;

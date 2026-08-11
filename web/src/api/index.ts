@@ -227,13 +227,20 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   if (!res.ok) {
     // 修复 RATE-LIMIT-HINT-001：429（限流）给出可理解的提示，
     // 其余状态保持通用文案（detail 只进 console 不暴露内部细节）
-    const userMsg = res.status === 429
+    // UX-API-DETAIL-001：4xx 业务错误（如 409 冲突）的 detail 是后端编写
+    // 的用户可读中文文案（如"当前正在使用的人格不可删除"），应直接展示；
+    // 5xx 内部错误 detail 可能含路径/堆栈，只进 console。
+    let userMsg = res.status === 429
       ? '操作过于频繁，请稍后再试'
       : `API 请求失败 (${res.status})`
     try {
       const body = await res.json()
-      // 将后端详情输出到 console 便于调试，不向用户暴露内部细节
-      if (body.detail) console.warn(`[api] ${url} detail:`, body.detail)
+      if (body.detail) {
+        console.warn(`[api] ${url} detail:`, body.detail)
+        if (res.status >= 400 && res.status < 500) {
+          userMsg = typeof body.detail === 'string' ? body.detail : userMsg
+        }
+      }
     } catch { /* ignore parse errors */ }
     throw new Error(userMsg)
   }
@@ -251,11 +258,26 @@ async function uploadImage(file: File): Promise<{ file_id: string; filename: str
   if (token) {
     headers['X-Maxma-Token'] = token
   }
-  const res = await tauriFetch(`${BASE}/upload`, {
-    method: 'POST',
-    headers,
-    body: form,
-  })
+  // UX-UPLOAD-TIMEOUT-001：上传显式 60s 超时——此前无 AbortSignal/超时，
+  // 后端处理挂起（如磁盘满）时前端无限等待，预览图一直显示"上传中"
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 60_000)
+  let res: Response
+  try {
+    res = await tauriFetch(`${BASE}/upload`, {
+      method: 'POST',
+      headers,
+      body: form,
+      signal: controller.signal,
+    })
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      throw new Error('图片上传超时（60s），请检查网络或文件大小后重试')
+    }
+    throw e
+  } finally {
+    clearTimeout(timer)
+  }
   if (!res.ok) {
     // 修复 LEAK-DETAIL-001：与 request() 的策略对齐——后端 detail 只进
     // console 便于调试，不拼进用户可见错误（可能暴露内部路径/服务名）。
@@ -292,6 +314,10 @@ export const api = {
 
   clearTempSessions: () =>
     request<{ deleted: string[], count: number }>(`/sessions/clear-temp`, { method: 'POST' }),
+
+  // UX-CLEAR-001：清空会话消息（后端销毁 sidecar 会话 + 清空持久化历史）
+  clearSessionMessages: (id: string) =>
+    request<{ status: string, cleared_turns: number }>(`/sessions/${encodeURIComponent(id)}/messages`, { method: 'DELETE' }),
 
   getSessionPermissionMode: (sessionId: string) =>
     request<SessionPermissionModeResponse>(
@@ -509,6 +535,16 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  // UX-SOUL-MANAGE-001：人设删除 / 重命名
+  deletePersona: (file: string) =>
+    request<{ status: string; file: string }>(`/personas/${encodeURIComponent(file)}`, { method: 'DELETE' }),
+
+  renamePersona: (file: string, newName: string) =>
+    request<{ status: string; file: string }>(`/personas/${encodeURIComponent(file)}/rename`, {
+      method: 'PUT',
+      body: JSON.stringify({ new_name: newName }),
+    }),
+
   // ── 文件选择器 ──
 
   selectFile: (type: 'file' | 'folder') =>
@@ -576,8 +612,8 @@ export const api = {
   listMcpDiscovered: () =>
     request<DiscoveredServer[]>('/mcp/discovered'),
 
-  // 测试 MCP 服务器连接（stdio 命令解析 + 子进程启动探测）
-  testMcpConnection: (body: { command: string; args: string[]; env: Record<string, string> }) =>
+  // 测试 MCP 服务器连接（stdio 命令解析 + 子进程启动探测 / URL 类 HTTP 可达性探测）
+  testMcpConnection: (body: { command: string; args: string[]; env: Record<string, string>; transport?: string; url?: string }) =>
     request<{ success: boolean; error: string | null; resolved_command: string }>('/mcp/test-connection', {
       method: 'POST',
       body: JSON.stringify(body),

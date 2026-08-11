@@ -4,6 +4,7 @@ import { api } from '@/api'
 import { useChatStore, TURNS_KEY_PREFIX } from '@/stores/chat'
 import { safeGetItem, safeKeys, safeRemoveItem, safeSetItem } from '@/lib/storage'
 import { createLogger } from '@/utils/logger'
+import { showError } from '@/lib/toast'
 import type { SessionInfo } from '@/types'
 
 const log = createLogger('session')
@@ -104,9 +105,19 @@ export const useSessionStore = defineStore('session', () => {
     safeSetItem(STORAGE_KEY, res.session_id)
   }
 
+  // UX-CREATE-DEDUP-001：创建请求在途标记（防连点）
+  let _createInFlight = false
+
   async function createSession() {
-    await _createSession()
-    await refreshSessions().catch((err) => log.warn('refreshSessions after create failed:', err))
+    // UX-CREATE-DEDUP-001：新建会话防连点（快速双击会创建一串空会话）
+    if (_createInFlight) return
+    _createInFlight = true
+    try {
+      await _createSession()
+      await refreshSessions().catch((err) => log.warn('refreshSessions after create failed:', err))
+    } finally {
+      _createInFlight = false
+    }
   }
 
   async function switchSession(id: string) {
@@ -119,6 +130,9 @@ export const useSessionStore = defineStore('session', () => {
       await api.deleteSession(id)
     } catch (e) {
       log.warn('deleteSession failed:', e)
+      // UX-FEEDBACK-001：删除失败必须可见（此前静默 return，用户走完
+      // 确认对话框后列表毫无变化、不知道发生了什么）
+      showError('删除会话失败: ' + (e instanceof Error ? e.message : String(e)))
       return
     }
     // 修复 DELETE-SESSION-001：先断开被删会话的 WS（终止后台 agent 任务、
@@ -146,6 +160,8 @@ export const useSessionStore = defineStore('session', () => {
       await api.batchDeleteSessions(ids)
     } catch (e) {
       log.warn('batchDelete failed:', e)
+      // UX-FEEDBACK-001：批量删除失败给出可见反馈
+      showError('批量删除失败: ' + (e instanceof Error ? e.message : String(e)))
       return
     }
     ids.forEach((id) => {

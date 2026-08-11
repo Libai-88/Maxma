@@ -211,9 +211,16 @@ let _timer: ReturnType<typeof setInterval> | null = null
 useReveal(() => statGridRef.value, '.stat', { stagger: 0.04 })
 
 // 数字 count-up：纯数值 stat 从 0 滚动到目标（带单位/格式化值跳过）
+// UX-METRICS-ANIM-001：自动刷新（15s）时静默更新、不重放 count-up——
+// 此前每次自动刷新都触发 loading 翻转 → 所有数字从 0 重滚一遍，页面
+// 每 15 秒整体"跳动"；仅首次加载/手动刷新播放入场动画。
+let _firstLoadDone = false
 useGsap((_ctx, contextSafe) => {
   watch(() => loading.value, contextSafe((l) => {
     if (l || !statGridRef.value) return
+    const isAutoRefreshTick = _firstLoadDone
+    _firstLoadDone = true
+    if (isAutoRefreshTick) return
     const vals = Array.from(statGridRef.value.querySelectorAll<HTMLElement>('.stat-value'))
     vals.forEach((el) => {
       if (el.querySelector('.unit')) return

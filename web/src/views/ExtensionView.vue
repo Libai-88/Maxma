@@ -88,12 +88,21 @@
       </div>
 
       <!-- 空状态 -->
-      <div v-if="!customTools.length && !mcpServers.length" class="empty">
+      <!-- UX-EXTENSION-EMPTY-001：空态纳入全部数据源——此前只检查 customTools/
+           mcpServers，只有内置工具/Skills 时误报"暂未发现扩展" -->
+      <div v-if="!builtinTools.length && !mcpServers.length && !skills.length" class="empty">
         <div class="empty-icon">🧩</div>
         <div class="empty-title">暂未发现扩展</div>
         <div class="empty-desc">
           安装插件或配置 MCP 服务器后，扩展会自动出现在这里。
         </div>
+      </div>
+
+      <!-- UX-EXTENSION-REFRESH-001：手动刷新按钮（MCP/插件页改动后不必离开重进） -->
+      <div class="section refresh-row">
+        <button class="btn" :disabled="loading" @click="loadAll">
+          {{ loading ? '刷新中…' : '⟳ 刷新' }}
+        </button>
       </div>
 
       <!-- 入口 -->
@@ -171,6 +180,11 @@ async function load() {
   } finally {
     loading.value = false
   }
+}
+
+// UX-EXTENSION-REFRESH-001：手动刷新入口
+function loadAll() {
+  void load()
 }
 
 onMounted(load)

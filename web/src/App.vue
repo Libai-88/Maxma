@@ -43,12 +43,12 @@
       :health="health"
       @open-providers="openProviderSetup"
     />
-    <!-- 全局错误通知 toast（监听 maxma:error 事件） -->
+    <!-- 全局通知 toast（监听 maxma:toast 事件，按 level 路由样式） -->
     <DsToast
-      v-model:visible="globalErrorToast.visible"
-      :message="globalErrorToast.message"
-      type="error"
-      :duration="6000"
+      v-model:visible="globalToast.visible"
+      :message="globalToast.message"
+      :type="globalToast.level"
+      :duration="globalToast.duration"
       dismissible
     />
     <!-- 全局确认对话框（替代 window.confirm） -->
@@ -139,7 +139,9 @@ async function handleSwitchSession(id: string) {
 }
 
 function openProviderSetup() {
-  onboarding.complete()
+  // UX-ONBOARDING-001：导航到模型设置时不再标记引导"完结"——此前点主 CTA
+  // 即永久跳过第 2-3 步（主题/工作区），用户没配好 provider 返回时引导
+  // 已经消失。现在只路由过去，未完成步骤由 onboarding.shouldShow 继续兜底。
   router.push('/providers')
 }
 
@@ -177,15 +179,23 @@ useGlobalShortcut({ key: 'n', mod: true, allowInEditable: true }, () => {
   void createSession().then(() => router.push('/'))
 })
 
+// UX-SHORTCUT-001：Ctrl/Cmd + L 聚焦对话输入框（桌面应用常规快捷键；
+// 输入框聚焦由 ChatView 监听事件完成，跨页面安全）。
+useGlobalShortcut({ key: 'l', mod: true, allowInEditable: true }, () => {
+  document.dispatchEvent(new CustomEvent('maxma:focus-input'))
+})
+
 const chatStore = useChatStore()
 const { allSessionStatuses } = storeToRefs(chatStore)
 
 const { health } = useHealthPolling()
 
-/** 全局错误 toast 状态（由 maxma:error 事件驱动） */
-const globalErrorToast = reactive({
+/** 全局 toast 状态（由 maxma:toast / maxma:error 事件驱动） */
+const globalToast = reactive({
   visible: false,
   message: '',
+  level: 'error' as 'info' | 'success' | 'error' | 'warning',
+  duration: 6000,
 })
 
 const sidebarBgUrl = `${import.meta.env.BASE_URL}images/sidebar-bg.jpg`
@@ -195,19 +205,20 @@ onMounted(async () => {
   // 初始化 Session 状态（从 localStorage 恢复或创建新会话）
   const initialized = await sessionStore.initIfNeeded()
   if (!initialized) {
-    globalErrorToast.message = '会话初始化失败，请检查后端服务后重试'
-    globalErrorToast.visible = true
+    globalToast.message = '会话初始化失败，请检查后端服务后重试'
+    globalToast.level = 'error'
+    globalToast.visible = true
     // 修复 SESSION-INIT-001：重试耗尽后自动恢复——10s 后再次尝试，
     // 避免应用卡死在"空会话+不可发送"状态需手动整页刷新
     window.setTimeout(() => {
       void sessionStore.initIfNeeded().then((ok) => {
         if (ok) {
-          globalErrorToast.visible = false
-          globalErrorToast.message = ''
+          globalToast.visible = false
+          globalToast.message = ''
           console.debug('[App] 会话初始化自动恢复成功')
         } else {
-          globalErrorToast.visible = true
-          globalErrorToast.message = '会话初始化失败，正在自动重试…'
+          globalToast.visible = true
+          globalToast.message = '会话初始化失败，正在自动重试…'
         }
       })
     }, 10000)
@@ -219,10 +230,23 @@ onMounted(async () => {
 
   // 修复 BC-003：监听 maxma:error 事件，显示用户可见的 toast 通知。
   // 该事件由 main.ts 中的全局 Vue errorHandler 派发。
+  // UX-TOAST-001：统一反馈通道——maxma:toast 携带 level（info/success/error/
+  // warning）按语义渲染；maxma:error 保留兼容（映射为 error 级别）。
+  const showToastEvent = ((e: CustomEvent) => {
+    const detail = e.detail ?? {}
+    globalToast.message = detail.message || '发生了意外错误'
+    globalToast.level = (detail.level as typeof globalToast.level) || 'info'
+    globalToast.duration = typeof detail.duration === 'number' ? detail.duration : 6000
+    globalToast.visible = true
+    console.debug('[App] toast event received:', globalToast.level, globalToast.message)
+  }) as EventListener
+  window.addEventListener('maxma:toast', showToastEvent)
   window.addEventListener('maxma:error', ((e: CustomEvent) => {
     const detail = e.detail
-    globalErrorToast.message = detail.message || '发生了意外错误'
-    globalErrorToast.visible = true
+    globalToast.message = detail.message || '发生了意外错误'
+    globalToast.level = 'error'
+    globalToast.duration = 6000
+    globalToast.visible = true
     console.debug('[App] maxma:error event received, showing toast:', detail.message)
   }) as EventListener)
 

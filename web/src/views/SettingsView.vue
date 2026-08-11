@@ -222,11 +222,14 @@
       </GlowingEffect>
 
       <!-- TTS / 语音 -->
+      <!-- UX-FAKE-SETTING-001：语音引擎尚未接入运行时——整段置灰并标注
+           "即将上线"，与可用配置明确区分（此前仅一行小字提示，用户配置了
+           功能却完全不生效，损害配置可信度） -->
       <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
-        <div class="section" v-show="activeSection === 'tts'">
-          <h3>语音</h3>
+        <div class="section section-upcoming" v-show="activeSection === 'tts'">
+          <h3>语音 <span class="upcoming-badge">即将上线</span></h3>
           <p class="section-desc">配置文本转语音（TTS）的引擎与朗读行为。</p>
-          <p class="section-devnote">⚠️ 语音朗读引擎尚未接入运行时，此处的设置仅作保存，暂不影响 AI 回复的朗读行为。</p>
+          <p class="section-devnote">此功能尚未接入运行时，以下设置暂不生效。</p>
 
           <div class="setting-row">
             <div class="setting-info">
@@ -331,7 +334,9 @@
                 <input type="text" class="input-text" :value="browser.chrome_path"
                   placeholder="自动检测"
                   @change="setBrowser('chrome_path', ($event.target as HTMLInputElement).value)" />
-                <button class="btn" @click="detectChrome">检测</button>
+                <!-- UX-BUTTON-LABEL-001：按钮叫"检测"实际弹文件选择框，文案与行为
+                     不符——改为"选择文件" -->
+                <button class="btn" @click="detectChrome">选择文件</button>
               </div>
             </div>
 
@@ -476,6 +481,7 @@ import { ref, computed, onMounted } from 'vue'
 import { api } from '@/api'
 import type { TtsConfig, BrowserToolsConfig, SubAgentConfig } from '@/api'
 import { createLogger } from '@/utils/logger'
+import { showError } from '@/lib/toast'
 import { useViewEntrance } from '@/composables/useViewEntrance'
 import { useButtonFx } from '@/composables/useButtonFx'
 import GlowingEffect from '@/components/inspira/GlowingEffect.vue'
@@ -604,6 +610,9 @@ async function set(path: string, value: unknown) {
   } catch (e) {
     log.error(`Failed to set ${path}:`, e)
     settings.value[path] = prev
+    // UX-SETTINGS-FEEDBACK-001：保存失败必须可见——此前静默回滚控件值，
+    // 用户拨动开关后看到它悄悄弹回，完全不知道发生了什么
+    showError(`设置保存失败 (${path}): ${e instanceof Error ? e.message : String(e)}`)
   } finally {
     // 清除本 path 的在途标记，确保下一次同类请求能正常发起
     if (promise && _inflightSettings.get(path) === promise) {
@@ -625,6 +634,7 @@ async function setTts<K extends keyof TtsConfig>(key: K, value: TtsConfig[K]) {
   } catch (e) {
     log.error(`Failed to set tts.${String(key)}:`, e)
     tts.value[key] = prev
+    showError(`语音设置保存失败: ${e instanceof Error ? e.message : String(e)}`)
   }
 }
 
@@ -640,6 +650,7 @@ async function onTtsProviderChange(provider: TtsConfig['provider']) {
     log.error('Failed to change TTS provider:', e)
     tts.value.provider = prevProvider
     tts.value.voice = prevVoice
+    showError(`语音引擎切换失败: ${e instanceof Error ? e.message : String(e)}`)
   }
 }
 
@@ -651,6 +662,7 @@ async function setBrowser<K extends keyof BrowserToolsConfig>(key: K, value: Bro
   } catch (e) {
     log.error(`Failed to set browser.${String(key)}:`, e)
     browser.value[key] = prev
+    showError(`浏览器工具设置保存失败: ${e instanceof Error ? e.message : String(e)}`)
   }
 }
 
@@ -662,6 +674,7 @@ async function setSubAgent<K extends keyof SubAgentConfig>(key: K, value: SubAge
   } catch (e) {
     log.error(`Failed to set subagent.${String(key)}:`, e)
     subagent.value[key] = prev
+    showError(`子代理设置保存失败: ${e instanceof Error ? e.message : String(e)}`)
   }
 }
 
@@ -696,8 +709,7 @@ onMounted(async () => {
   border: 1px solid color-mix(in srgb, var(--status-warn) 35%, var(--border));
   border-radius: var(--radius);
   font-size: 13px;
-  color: var(--text-primary);
-}
+  color: var(--text-primary);}
 .settings-view {
   flex: 1;
   min-height: 0;
@@ -721,6 +733,26 @@ onMounted(async () => {
 
 .section {
   margin-bottom: 28px;
+}
+
+/* UX-FAKE-SETTING-001：未接入运行时的配置段整体置灰 + "即将上线"徽标 */
+.section-upcoming {
+  opacity: 0.55;
+  filter: saturate(0.6);
+  pointer-events: none;
+  user-select: none;
+}
+.upcoming-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.68em;
+  font-weight: 500;
+  vertical-align: middle;
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
 }
 
 .section h3 {

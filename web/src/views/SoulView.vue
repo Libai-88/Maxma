@@ -14,6 +14,11 @@
           </option>
         </select>
         <button class="btn-create-persona" @click="showCreateDialog = true" title="创建新人格">+</button>
+        <!-- UX-SOUL-MANAGE-001：重命名 / 删除当前选中人格（内置 SOUL.md 除外） -->
+        <template v-if="activeFile && activeFile !== 'SOUL.md'">
+          <button class="btn-persona-manage" @click="startRename" title="重命名人格">✎</button>
+          <button class="btn-persona-manage danger" @click="handleDeletePersona" title="删除人格">✕</button>
+        </template>
       </div>
       <span class="save-indicator" :class="saveState">
         {{ saveStateText }}
@@ -115,6 +120,7 @@ import PersonaCard from '../components/PersonaCard.vue'
 import { useMarkdownPersist } from '@/composables/useMarkdownPersist'
 import { confirmAction } from '@/composables/useConfirm'
 import { createLogger } from '@/utils/logger'
+import { showError, showSuccess } from '@/lib/toast'
 import { useViewEntrance } from '@/composables/useViewEntrance'
 import { useButtonFx } from '@/composables/useButtonFx'
 
@@ -294,13 +300,77 @@ async function loadPersonas() {
   }
 }
 
+// ── UX-SOUL-MANAGE-001：重命名 / 删除人格 ──
+
+const renaming = ref(false)
+const deleting = ref(false)
+
+function startRename() {
+  const current = personas.value.find(p => p.file === activeFile.value)
+  const name = current?.name || ''
+  void confirmRename(name)
+}
+
+async function confirmRename(currentName: string) {
+  const newName = window.prompt('输入新名称（字母/数字/中文/下划线/连字符）：', currentName)
+  if (newName === null) return
+  const trimmed = newName.trim()
+  if (!trimmed) return
+  if (trimmed === currentName) return
+  if (renaming.value) return
+  renaming.value = true
+  try {
+    const res = await api.renamePersona(activeFile.value, trimmed)
+    await loadPersonas()
+    // 重命名后文件路径变化，重新加载内容
+    activeFile.value = res.file
+    await loadContent()
+    showSuccess('人格已重命名')
+  } catch (e: unknown) {
+    log.error('[SoulView] renamePersona FAIL', e)
+    showError('重命名失败: ' + (e instanceof Error ? e.message : String(e)))
+  } finally {
+    renaming.value = false
+  }
+}
+
+async function handleDeletePersona() {
+  const file = activeFile.value
+  if (!file || file === 'SOUL.md') return
+  if (!await confirmAction({
+    title: '删除人格',
+    message: `确定删除人格「${file}」吗？此操作不可撤销。`,
+    confirmText: '删除',
+    danger: true,
+  })) return
+  if (deleting.value) return
+  deleting.value = true
+  try {
+    await api.deletePersona(file)
+    await loadPersonas()
+    showSuccess('人格已删除')
+  } catch (e: unknown) {
+    log.error('[SoulView] deletePersona FAIL', e)
+    showError('删除失败: ' + (e instanceof Error ? e.message : String(e)))
+  } finally {
+    deleting.value = false
+  }
+}
+
 async function onPersonaChange() {
   // 修复 PERSONA-SWITCH-ROLLBACK-001：切换失败时回滚 select 到原值——
   // 此前 v-model 已乐观切换到新文件，失败后选择器与内容不一致
   const previous = activeFile.value
   // 切换人格：先保存当前（如果有改动），再调用后端切换，最后加载新人格
+  // UX-SOUL-SAVE-001：保存失败必须中断切换——此前失败仅显示"保存失败"
+  // 小字后继续 loadContent() 覆盖编辑器，未保存编辑静默丢失
   if (content.value !== savedContent.value) {
-    await saveContent()
+    const saved = await saveContent()
+    if (!saved) {
+      activeFile.value = previous  // 回滚选择
+      showError('保存失败，已取消切换人设，请检查后重试')
+      return
+    }
   }
   try {
     await api.switchPersona(activeFile.value)
@@ -602,6 +672,34 @@ onMounted(async () => {
   border-color: var(--accent);
   color: var(--accent);
   background: var(--bg-primary);
+}
+
+/* UX-SOUL-MANAGE-001：重命名 / 删除人格按钮（与创建按钮同尺寸） */
+.btn-persona-manage {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s var(--ease-out),
+              color 0.15s var(--ease-out);
+  margin-left: 4px;
+}
+.btn-persona-manage:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--bg-primary);
+}
+.btn-persona-manage.danger:hover {
+  border-color: var(--status-error);
+  color: var(--status-error);
 }
 
 /* ── 创建弹窗 ── */

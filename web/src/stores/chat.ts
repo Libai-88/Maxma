@@ -129,7 +129,8 @@ export const useChatStore = defineStore('chat', () => {
   // 页面刷新（Tauri 崩溃恢复/重启）后全部回默认。现在持久化到 localStorage，
   // 初始化时恢复、变更时保存。
   const SETTINGS_STORAGE_KEY = 'maxma_chat_settings'
-  function loadPersistedChatSettings(): { model?: string; temperature?: number; maxTokens?: number; thinking?: boolean } {
+  interface PersistedChatSettings { model?: string; temperature?: number; maxTokens?: number; thinking?: boolean; thinkingLevel?: string }
+  function loadPersistedChatSettings(): PersistedChatSettings {
     try {
       const raw = localStorage.getItem(SETTINGS_STORAGE_KEY)
       if (!raw) return {}
@@ -145,7 +146,17 @@ export const useChatStore = defineStore('chat', () => {
   const availableModels = shallowRef<ModelInfo[]>([])
   const temperature = ref<number>(typeof _persisted.temperature === 'number' && Number.isFinite(_persisted.temperature) ? _persisted.temperature : 0.7)
   const maxTokens = ref<number>(typeof _persisted.maxTokens === 'number' && Number.isFinite(_persisted.maxTokens) ? _persisted.maxTokens : 4096)
-  const thinkingEnabled = ref<boolean>(typeof _persisted.thinking === 'boolean' ? _persisted.thinking : false)
+  // THINKING-LEVELS-001：思考强度从 bool 升级为多级字符串（OMP 支持
+  // off/minimal/low/medium/high/xhigh/max）。兼容旧持久化格式（bool → high/off）。
+  const thinkingLevel = ref<string>(
+    typeof _persisted.thinkingLevel === 'string' && _persisted.thinkingLevel
+      ? _persisted.thinkingLevel
+      : typeof _persisted.thinking === 'boolean'
+        ? (_persisted.thinking ? 'high' : 'off')
+        : 'off',
+  )
+  /** 兼容旧 UI 契约：thinkingEnabled = thinkingLevel !== 'off' */
+  const thinkingEnabled = computed(() => thinkingLevel.value !== 'off')
   const contextUsage = ref<ChatContextUsage>({ ...DEFAULT_CONTEXT_USAGE })
   // --- End new state ---
 
@@ -155,13 +166,14 @@ export const useChatStore = defineStore('chat', () => {
         model: currentModel.value,
         temperature: temperature.value,
         maxTokens: maxTokens.value,
+        thinkingLevel: thinkingLevel.value,
         thinking: thinkingEnabled.value,
       }))
     } catch {
       // 配额超限时静默失败——设置丢失可接受，不阻塞主流程
     }
   }
-  watch([currentModel, temperature, maxTokens, thinkingEnabled], persistChatSettings)
+  watch([currentModel, temperature, maxTokens, thinkingLevel], persistChatSettings)
 
   const allSessionStatuses = computed(() => {
     const map: Record<string, { connected: boolean; isStreaming: boolean; isAwaitingUser: boolean }> = {}
@@ -240,8 +252,13 @@ export const useChatStore = defineStore('chat', () => {
   // --- New actions ---
   function setModel(modelId: string) { currentModel.value = modelId }
   function setTemperature(val: number) { temperature.value = Math.max(0, Math.min(2, val)) }
-  function setMaxTokens(val: number) { maxTokens.value = Math.max(256, Math.min(256000, val)) }
-  function toggleThinking(enabled: boolean) { thinkingEnabled.value = enabled }
+  // MAXTOKENS-CLAMP-001：输出上限上限 65536——超过该值的"窗口上限"语义值
+  // （如旧默认 128000）会被后端视为未设置（走 provider 默认）
+  function setMaxTokens(val: number) { maxTokens.value = Math.max(256, Math.min(65536, val)) }
+  /** THINKING-LEVELS-001：设置思考强度（off/minimal/low/medium/high/xhigh/max） */
+  function setThinkingLevel(level: string) { thinkingLevel.value = level }
+  /** 兼容旧调用：开关 → high/off */
+  function toggleThinking(enabled: boolean) { thinkingLevel.value = enabled ? 'high' : 'off' }
   function updateContextUsage(usage: Partial<ChatContextUsage>) {
     contextUsage.value = normalizeContextUsage(usage, contextUsage.value)
   }
@@ -288,8 +305,8 @@ export const useChatStore = defineStore('chat', () => {
     removeTurnsFromStorage, loadTurnsFromStorage,
     cleanupOrphanedCaches,
     // --- New exports ---
-    currentModel, availableModels, temperature, maxTokens, thinkingEnabled, contextUsage,
-    setModel, setTemperature, setMaxTokens, toggleThinking, updateContextUsage, fetchAvailableModels,
+    currentModel, availableModels, temperature, maxTokens, thinkingEnabled, thinkingLevel, contextUsage,
+    setModel, setTemperature, setMaxTokens, toggleThinking, setThinkingLevel, updateContextUsage, fetchAvailableModels,
   }
 })
 

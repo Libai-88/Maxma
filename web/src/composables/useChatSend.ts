@@ -88,8 +88,12 @@ export function useChatSend<TRefs>(opts: UseChatSendOptions<TRefs>) {
     }
 
     // 修复 F-001：流式输出期间忽略发送（键盘 Enter 路径），按钮已禁用。
-    // 输入文本保留在输入框中，用户可先点「停止」再发送。
-    if (opts.isStreaming()) return
+    // UX-STREAM-FEEDBACK-001：此前直接 return 静默吞掉——用户按 Enter
+    // 无任何反馈，以为消息已排队/已发送。改为横幅提示，输入文本保留。
+    if (opts.isStreaming()) {
+      showConnectionError('AI 正在生成回复，请等待完成后发送新消息')
+      return
+    }
 
     if (!opts.canSend()) {
       showConnectionError('无法连接到 AI 引擎（sidecar 未启动），请检查后端配置')

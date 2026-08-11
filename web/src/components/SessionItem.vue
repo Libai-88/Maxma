@@ -30,7 +30,9 @@
           <span class="const-name-text">{{ session.const_name || '未命名' }}</span>
         </template>
         <template v-else>
-          Session #{{ displayIndex }}
+          <!-- UX-SESSION-PREVIEW-001：临时会话显示首条消息摘要（此前只有
+               "Session #N"序号，无可检索标识，会话多时只能靠记忆定位） -->
+          {{ preview || `Session #${displayIndex}` }}
         </template>
         <span v-if="session.is_subagent" class="sub-badge" title="子 Agent 会话（只读）">sub</span>
       </span>
@@ -80,6 +82,8 @@ defineProps<{
   isConst: boolean
   /** 临时会话显示序号；const 会话不使用 */
   displayIndex?: number
+  /** UX-SESSION-PREVIEW-001：临时会话的首条消息摘要（无可检索标识时的定位依据） */
+  preview?: string
   /** 父级 sidebar 折叠状态，用于内部应用 collapsed 样式 */
   collapsed?: boolean
   /** 管理模式：显示多选 checkbox */

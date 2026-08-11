@@ -24,9 +24,9 @@
         </button>
       </div>
       <div v-if="store.installProgress" class="install-progress">
-        {{ store.installProgress.status === 'success' ? '✓' : '⏳' }}
+        {{ store.installProgress.status === 'success' ? '✓' : store.installProgress.status === 'error' ? '✗' : '⏳' }}
         {{ store.installProgress.spec }} -
-        {{ store.installProgress.status === 'success' ? '安装成功' : '正在安装...' }}
+        {{ store.installProgress.status === 'success' ? '安装成功' : store.installProgress.status === 'error' ? '安装失败' : '正在安装...' }}
       </div>
     </div>
 

@@ -895,29 +895,23 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
   }
 
   // sub_session_created 可能在任何时候到达（主 Agent 调用 call_sub_agent）
+  // AG-SUBAGENT-001：真实子 Agent 在父会话内部运行，事件经父会话 WS 转发。
+  // 此前这里 ensureConnected(subId)+switchSession(subId) 会打开一个"全新空
+  // 会话"并把用户切过去——子 Agent 的事件根本不会发到那个会话，用户看到的
+  // 是空白聊天且被强制跳转。现在只在父 turn 中记录一条系统事件，让用户
+  // 感知子任务启动；完成/失败状态由 deferred_subagent_submitted + SubAgentCard
+  // 展示。
   if (event.type === 'sub_session_created') {
-    const subId = event.payload.sub_session_id
-    const parentId = event.payload.parent_session_id
     void refreshSessions()
-    ensureConnected(subId)
-
-    // 追踪子会话，用于组件卸载时清理孤儿 WS
-    _childSessionIds.add(subId)
-
-    // 初始化子会话的 currentTurn，否则子 Agent 推送的所有事件都被丢弃
-    const subCh = getOrCreateChannel(subId)
-    subCh.parentSessionId = parentId
-    subCh.isStreaming = true
-    subCh.currentTurn = {
-      id: generateUUID(),
-      userMessage: event.payload.task || '(子 Agent 任务)',
-      refs: [],
-      events: [],
-      memoryEvents: [],
-      finalAnswer: null,
+    const taskLabel = event.payload.task || event.payload.name || '子 Agent'
+    if (ch.currentTurn) {
+      ch.currentTurn.events.push({
+        kind: 'system',
+        detail: 'subagent_started',
+        content: `子任务启动：${taskLabel}`,
+        timestamp: Date.now(),
+      })
     }
-
-    void switchSession(subId)
     return
   }
 
@@ -1191,6 +1185,19 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
         const turnToFinalize = ch.currentTurn
         const lastThink = findLastThinking(turnToFinalize.events)
         const trackBecame = lastThink?.becameAnswer
+        // UX-EMPTY-001：模型返回空内容（内容过滤/拒绝）且无任何工具/思考
+        // 活动时，done 到达后该轮 UI 空白（"发出去没回音"的假死感）。
+        // 补占位文案让用户明确知道"本轮没有内容"并可重试。
+        const donePayload = event.payload as Record<string, unknown>
+        if (
+          donePayload.empty === true
+          && !turnToFinalize.finalAnswer
+          && turnToFinalize.events.length === 0
+        ) {
+          turnToFinalize.finalAnswer = '（本轮没有生成回复内容，请重试或换一种问法）'
+          ch.error = '模型未返回内容'
+          ch.errorCategory = 'system_error'
+        }
         log.debug(`会话 ${sid}: becameAnswer=${trackBecame}, events=${turnToFinalize.events.length}, finalAnswer=${turnToFinalize.finalAnswer?.slice(0, 50) ?? 'null'}`)
         ch.turns.push(turnToFinalize)
         if (ch.currentTurn?.id === turnToFinalize.id) {
@@ -1812,7 +1819,9 @@ export function useChat(sessionId: Ref<string>) {
         temperature: cs.temperature,
         max_tokens: cs.maxTokens,
         // THINKING-WIRE-001：思考开关端到端接线（后端 → create_session → OMP thinkingLevel）
-        thinking: cs.thinkingEnabled,
+        // THINKING-LEVELS-001：多级字符串（off/minimal/low/medium/high/xhigh/max），
+        // 后端已支持字符串直传
+        thinking: cs.thinkingLevel,
         ...(thinkPathId ? { think_path_id: thinkPathId } : {}),
       },
     }
@@ -1916,11 +1925,22 @@ export function useChat(sessionId: Ref<string>) {
     ensureConnected(sessionId.value)
   }
 
+  // UX-ERROR-ACTION-001：关闭错误横幅（本地消隐，状态保留——
+  // 下次错误出现时横幅重新展示）
+  function dismissError() {
+    const ch = activeChannel.value
+    if (!ch) return
+    ch.error = null
+    ch.errorCategory = null
+    ch.errorTraceId = null
+  }
+
   return {
     connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId,
     contextUsage, taskTrackerData,
     reconnectExhausted, reconnect,
     send, cancel, sendUserResponse, sendArtifactAction, sendPlanResponse, removeTurns,
+    dismissError,
     privateMode, setPrivateMode,
     autoApprove, setAutoApprove,
   }

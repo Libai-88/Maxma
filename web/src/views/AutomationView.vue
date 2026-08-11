@@ -5,14 +5,20 @@
       <p class="header-sub">定时任务与自动化调度</p>
     </div>
 
-    <!-- 创建表单 -->
+    <!-- 创建/编辑表单 -->
+    <!-- UX-AUTOMATION-EDIT-001：支持编辑已有任务（此前只能删除重建）；
+         cron 前端校验 + 创建成功反馈 -->
     <div class="section create-section">
       <div class="create-row">
         <input v-model="form.name" type="text" placeholder="任务名称" class="form-input" />
-        <input v-model="form.schedule" type="text" placeholder="Cron 表达式 (如 0 9 * * *)" class="form-input" />
-        <p class="form-hint">当前版本按分钟轮询调度（约每分钟检查一次），精确到秒的表达式会被近似执行。</p>
+        <input v-model="form.schedule" type="text" placeholder="Cron 表达式 (如 0 9 * * *)" class="form-input" :class="{ 'form-input-error': scheduleError }" @input="validateSchedule" />
+        <p v-if="scheduleError" class="form-error">{{ scheduleError }}</p>
+        <p v-else class="form-hint">5 字段 Cron：分 时 日 月 周（如 <code>0 9 * * 1-5</code> = 工作日 9:00）。调度器约每分钟检查一次。</p>
         <input v-model="form.action" type="text" placeholder="执行动作" class="form-input flex-2" />
-        <button class="btn btn-primary" @click="handleCreate" :disabled="!canCreate">创建</button>
+        <button class="btn btn-primary" @click="handleCreate" :disabled="!canCreate">
+          {{ editingId ? '保存修改' : '创建' }}
+        </button>
+        <button v-if="editingId" class="btn" @click="resetForm">取消编辑</button>
       </div>
     </div>
 
@@ -34,6 +40,8 @@
               </button>
               <button class="btn-icon" @click="toggleHistory(a)">历史</button>
               <button class="btn-icon" @click="handleToggle(a)">{{ a.enabled ? '暂停' : '启用' }}</button>
+              <!-- UX-AUTOMATION-EDIT-001：编辑入口 -->
+              <button class="btn-icon" @click="startEdit(a)">编辑</button>
               <button class="btn-icon btn-danger" @click="handleDelete(a.id)">删除</button>
             </div>
           </div>
@@ -63,6 +71,7 @@ import { ref, computed, onMounted } from 'vue'
 import { api } from '@/api'
 import { toErrorMessage } from '@/utils/error'
 import { confirmAction } from '@/composables/useConfirm'
+import { showError, showSuccess } from '@/lib/toast'
 import { useViewEntrance } from '@/composables/useViewEntrance'
 import { useButtonFx } from '@/composables/useButtonFx'
 
@@ -101,6 +110,10 @@ const form = ref({ name: '', schedule: '', action: '' })
 const running = ref<Set<string>>(new Set())
 const expandedHistory = ref<string | null>(null)
 const historyMap = ref<Record<string, RunHistoryEntry[]>>({})
+// UX-AUTOMATION-EDIT-001：编辑中的任务 id（非空时表单进入编辑模式）
+const editingId = ref<string | null>(null)
+// UX-AUTOMATION-CRON-001：cron 前端校验错误文案
+const scheduleError = ref('')
 
 const rootEl = ref<HTMLElement | null>(null)
 useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.automation-card', ready: () => !loading.value })
@@ -110,8 +123,61 @@ useButtonFx(() => rootEl.value, '.btn-primary', { magnetic: 10 })
 useButtonFx(() => rootEl.value, '.btn-icon:not(.btn-danger)', { watchSources: [automations, running] })
 useButtonFx(() => rootEl.value, '.btn-danger', { danger: true, watchSources: [automations] })
 
+/** 简单 5 字段 cron 校验（分 时 日 月 周；* 数字 , - /）——与后端解析规则一致。 */
+function validateSchedule() {
+  const expr = form.value.schedule.trim()
+  if (!expr) { scheduleError.value = ''; return }
+  const fields = expr.split(/\s+/)
+  if (fields.length !== 5) {
+    scheduleError.value = 'Cron 需要 5 个字段（分 时 日 月 周），如 0 9 * * 1-5'
+    return
+  }
+  const ranges = [[0, 59], [0, 23], [1, 31], [1, 12], [0, 6]]
+  for (let i = 0; i < 5; i++) {
+    const part = fields[i]
+    if (!/^(\*|[0-9,-/]+|[a-zA-Z]+)(\/\d+)?$/.test(part)) {
+      scheduleError.value = `第 ${i + 1} 个字段无效：${part}`
+      return
+    }
+    // 数字范围粗校验（字母别名 jan/mon 等放行）
+    const [lo, hi] = ranges[i]
+    for (const seg of part.split(',')) {
+      const base = seg.split('/')[0]
+      if (base === '*' || /^[a-zA-Z]+$/.test(base)) continue
+      const nums = base.split('-').map(Number)
+      if (nums.some(n => !Number.isFinite(n) || n < lo || n > hi)) {
+        scheduleError.value = `第 ${i + 1} 个字段超出范围 ${lo}-${hi}：${part}`
+        return
+      }
+      if (nums.length === 2 && nums[0] > nums[1]) {
+        scheduleError.value = `第 ${i + 1} 个字段范围颠倒：${part}`
+        return
+      }
+    }
+  }
+  scheduleError.value = ''
+}
+
+function resetForm() {
+  form.value = { name: '', schedule: '', action: '' }
+  editingId.value = null
+  scheduleError.value = ''
+}
+
+function startEdit(a: Automation) {
+  form.value = {
+    name: a.name,
+    schedule: a.cron_expr ?? (a.interval_seconds ? `*/${Math.max(1, Math.round((a.interval_seconds) / 60))} * * * *` : ''),
+    action: actionLabel(a),
+  }
+  editingId.value = a.id
+  validateSchedule()
+  // 滚动到表单区
+  rootEl.value?.querySelector('.create-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
+
 const canCreate = computed(() =>
-  Boolean(form.value.name.trim() && form.value.schedule.trim() && form.value.action.trim())
+  Boolean(form.value.name.trim() && form.value.schedule.trim() && form.value.action.trim() && !scheduleError.value)
 )
 
 /** 后端 action 为结构化对象，展示其自由文本或类型。 */
@@ -148,18 +214,32 @@ async function handleCreate() {
   try {
     // 后端契约：需 cron_expr（或 interval_seconds）+ 结构化 action 对象。
     // 表单的 schedule 映射为 cron_expr，自由文本 action 包装为 custom payload。
-    const created = await api.request<Automation>('/automations', {
-      method: 'POST',
-      body: JSON.stringify({
-        name: form.value.name.trim(),
-        cron_expr: form.value.schedule.trim(),
-        action: { type: 'custom', payload: { text: form.value.action.trim() } },
-      }),
-    })
-    automations.value.push(created)
-    form.value = { name: '', schedule: '', action: '' }
+    // UX-AUTOMATION-EDIT-001：编辑模式走 PUT 更新，创建走 POST。
+    const payload = {
+      name: form.value.name.trim(),
+      cron_expr: form.value.schedule.trim(),
+      action: { type: 'custom', payload: { text: form.value.action.trim() } },
+    }
+    if (editingId.value) {
+      const updated = await api.request<Automation>(`/automations/${editingId.value}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      })
+      const idx = automations.value.findIndex(x => x.id === editingId.value)
+      if (idx !== -1) automations.value[idx] = updated
+      showSuccess('自动化任务已更新')
+    } else {
+      const created = await api.request<Automation>('/automations', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+      automations.value.push(created)
+      showSuccess('自动化任务已创建')
+    }
+    resetForm()
   } catch (e) {
     error.value = toErrorMessage(e)
+    showError(`保存失败: ${toErrorMessage(e)}`)
   }
 }
 
@@ -242,6 +322,8 @@ async function handleDelete(id: string) {
   border-radius: 6px; background: var(--bg-secondary); color: var(--text-primary); font-size: 0.85em;
 }
 .form-input:focus { outline: none; border-color: var(--accent); }
+.form-input-error { border-color: var(--status-error) !important; }
+.form-error { width: 100%; color: var(--status-error); font-size: 0.78em; margin: 2px 0 0; }
 .flex-2 { flex: 2; }
 
 .btn { padding: 8px 16px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-secondary); cursor: pointer; font-size: 0.85em; color: var(--text-secondary); white-space: nowrap; }

@@ -49,7 +49,7 @@ export interface UseMarkdownPersistReturn {
   isDirty: ComputedRef<boolean>
   // ── 方法 ──
   loadContent: () => Promise<void>
-  saveContent: () => Promise<void>
+  saveContent: () => Promise<boolean>,
   /** 编辑器失焦时调用；dirty 则触发保存 */
   onBlur: () => void
   /** 重新加载（用于加载失败后的重试按钮） */
@@ -138,8 +138,10 @@ export function useMarkdownPersist(options: UseMarkdownPersistOptions): UseMarkd
     }
   }
 
-  async function saveContent() {
-    if (saving.value || content.value === savedContent.value) return
+  async function saveContent(): Promise<boolean> {
+    // UX-SOUL-SAVE-001：返回保存结果（失败时调用方决定是否中断后续操作，
+    // 如人设切换——此前失败仅设置 saveError 后继续执行，未保存编辑被覆盖丢失）
+    if (saving.value || content.value === savedContent.value) return true
     saving.value = true
     saveState.value = 'saving'
     saveError.value = ''
@@ -150,9 +152,11 @@ export function useMarkdownPersist(options: UseMarkdownPersistOptions): UseMarkd
       saveState.value = 'saved'
       if (_saveStateTimer) clearTimeout(_saveStateTimer)
       _saveStateTimer = setTimeout(() => { saveState.value = ''; _saveStateTimer = null }, 2000)
+      return true
     } catch (e: unknown) {
       log.error(`保存 ${type} 失败`, e)
       saveError.value = e instanceof Error ? e.message : String(e)
+      return false
     } finally {
       saving.value = false
     }

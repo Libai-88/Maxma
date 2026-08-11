@@ -16,14 +16,17 @@
     </div>
 
     <!-- Hindsight 配置 -->
-    <div class="hindsight-section" v-if="!store.loading">
+    <!-- UX-FAKE-SETTING-001：Hindsight 回顾引擎尚未接入运行时——整段置灰
+         标注"即将上线"，与可用配置明确区分（此前仅一行小字，用户配置了
+         功能却完全不生效） -->
+    <div class="hindsight-section section-upcoming" v-if="!store.loading">
       <div class="hindsight-header" @click="hindsightOpen = !hindsightOpen">
-        <span class="hindsight-title">Hindsight 配置</span>
+        <span class="hindsight-title">Hindsight 配置 <span class="upcoming-badge">即将上线</span></span>
         <span class="hindsight-hint">{{ hindsight.enabled ? '已启用' : '已停用' }}</span>
         <span class="hindsight-caret">{{ hindsightOpen ? '▾' : '▸' }}</span>
       </div>
       <div v-if="hindsightOpen" class="hindsight-body">
-        <p class="hs-devnote">⚠️ Hindsight 自动回顾引擎尚未接入运行时，此处的配置仅作保存，暂不影响记忆处理行为。</p>
+        <p class="hs-devnote">此功能尚未接入运行时，以下设置暂不生效。</p>
         <div class="hs-row">
           <div class="hs-info">
             <div class="hs-label">启用 Hindsight 记忆处理</div>
@@ -90,11 +93,11 @@
       <div class="search-box">
         <HaloSearch v-model="searchQuery" placeholder="搜索记忆内容..." @input="debouncedSearch" />
       </div>
-      <select v-model="categoryFilter" class="filter-select" @change="loadFacts">
+      <select v-model="categoryFilter" class="filter-select" @change="loadFacts(true)">
         <option value="all">全部分类</option>
         <option v-for="cat in categoryOptions" :key="cat" :value="cat">{{ categoryLabel(cat) }}</option>
       </select>
-      <select v-model="confidenceFilter" class="filter-select" @change="loadFacts">
+      <select v-model="confidenceFilter" class="filter-select" @change="loadFacts(true)">
         <option value="0">全部置信度</option>
         <option value="0.5">50% 以上</option>
         <option value="0.8">80% 以上</option>
@@ -105,7 +108,7 @@
     <div v-else-if="loadError" class="empty error-state">
       <div class="empty-title">加载失败</div>
       <div class="empty-desc">{{ loadError }}</div>
-      <button class="btn btn-primary" @click="loadFacts" style="margin-top: 8px;">重试</button>
+      <button class="btn btn-primary" @click="loadFacts(true)" style="margin-top: 8px;">重试</button>
     </div>
     <template v-else>
       <div v-if="facts.length === 0" class="empty">
@@ -165,6 +168,7 @@ import { api } from '@/api'
 import type { HindsightConfig } from '@/api'
 import { confirmAction } from '@/composables/useConfirm'
 import { createLogger } from '@/utils/logger'
+import { showError, showSuccess } from '@/lib/toast'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 import HaloSearch from '@/components/inspira/HaloSearch.vue'
 import GlareCard from '@/components/inspira/GlareCard.vue'
@@ -272,7 +276,7 @@ function debouncedSearch() {
  *  （已删记忆复活最长 30s）。只有最新一次请求的响应允许写入 store。 */
 let _factsSeq = 0
 
-async function loadFacts() {
+async function loadFacts(reset: boolean = true) {
   const seq = ++_factsSeq
   try {
     const q = searchQuery.value.trim()
@@ -286,7 +290,9 @@ async function loadFacts() {
     const data = await api.request<MemoryFact[]>(`/memory${qs ? '?' + qs : ''}`)
     if (seq !== _factsSeq) return  // 过期响应丢弃
     store.facts = Array.isArray(data) ? data : []
-    resetPagination()
+    // UX-MEMORY-PAGINATION-001：仅搜索/筛选变化时重置分页——编辑/删除后
+    // reload 保留当前"加载更多"页码（此前删除第 2 页条目会跳回第 1 页）
+    if (reset) resetPagination()
     loadError.value = ''
   } catch (e) {
     if (seq !== _factsSeq) return
@@ -321,9 +327,13 @@ async function saveEdit(id: string) {
       body: JSON.stringify({ content: editContent.value, category: editCategory.value }),
     })
     editingId.value = null
-    await loadFacts()
+    // UX-MEMORY-PAGINATION-001：编辑后保留当前页码
+    await loadFacts(false)
+    showSuccess('记忆已更新')
   } catch (e) {
     log.warn('[memory] saveEdit failed:', e)
+    // UX-MEMORY-FEEDBACK-001：记忆保存/删除失败必须可见（此前仅 log.warn）
+    showError('记忆保存失败: ' + (e instanceof Error ? e.message : String(e)))
   }
 }
 
@@ -336,9 +346,12 @@ async function handleDelete(id: string) {
   })) return
   try {
     await api.request(`/memory/${encodeURIComponent(id)}`, { method: 'DELETE' })
-    await loadFacts()
+    // UX-MEMORY-PAGINATION-001：删除后保留当前页码
+    await loadFacts(false)
+    showSuccess('记忆已删除')
   } catch (e) {
     log.warn('[memory] delete failed:', e)
+    showError('记忆删除失败: ' + (e instanceof Error ? e.message : String(e)))
   }
 }
 
@@ -437,6 +450,25 @@ onMounted(async () => {
 .hindsight-section {
   margin-bottom: 16px; border: 1px solid var(--border);
   border-radius: var(--radius); background: var(--bg-card); overflow: hidden;
+}
+/* UX-FAKE-SETTING-001：未接入运行时的配置段置灰 */
+.section-upcoming {
+  opacity: 0.55;
+  filter: saturate(0.6);
+  pointer-events: none;
+  user-select: none;
+}
+.upcoming-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.68em;
+  font-weight: 500;
+  vertical-align: middle;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
 }
 .hindsight-header {
   display: flex; align-items: center; gap: 8px; padding: 10px 14px;

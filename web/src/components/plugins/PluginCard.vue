@@ -13,7 +13,7 @@
           @click.stop="emit('toggle', plugin.name)"
           :title="plugin.enabled ? '禁用' : '启用'"
         >
-          {{ plugin.enabled ? '启用' : '禁用' }}
+          {{ plugin.enabled ? '禁用' : '启用' }}
         </button>
         <button
           class="btn-icon"

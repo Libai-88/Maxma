@@ -140,11 +140,16 @@
           </div>
 
           <!-- 测试结果 -->
+          <!-- UX-PROVIDER-TEST-001：失败时展示具体原因（此前 detail 存储但
+               从不渲染，401/超时用户无法从卡片得知，只能进编辑表单再测） -->
           <Transition name="fade">
             <div v-if="testResult?.[p.id]" class="test-result" :class="testResult[p.id].status">
               <span v-if="testResult[p.id].status === 'ok'">✓</span>
               <span v-else>✗</span>
               {{ testResult[p.id].latency_ms ?? '-' }}ms
+              <span v-if="testResult[p.id].status !== 'ok' && testResult[p.id].detail" class="test-result-detail" :title="testResult[p.id].detail ?? ''">
+                {{ testResult[p.id].detail }}
+              </span>
             </div>
           </Transition>
 
@@ -611,7 +616,14 @@ async function handleSave() {
 }
 
 async function deleteProvider(id: string) {
-  if (!await confirmAction({ title: '删除提供商', message: `确定删除提供商「${id}」？`, confirmText: '删除', danger: true })) return
+  // UX-LAST-PROVIDER-001：删除最后一个可用 provider 前明确警告——
+  // 此前仅普通确认框，删除后聊天模型选择器变空并静默降级
+  const enabledCount = providerStore.allProviders.filter((p: { enabled: boolean; id: string }) => p.enabled && p.id !== id).length
+  const isLast = enabledCount === 0
+  const message = isLast
+    ? `确定删除提供商「${id}」？这是最后一个启用的提供商，删除后对话将没有可用模型！`
+    : `确定删除提供商「${id}」？`
+  if (!await confirmAction({ title: '删除提供商', message, confirmText: '删除', danger: true })) return
   try {
     await api.deleteProvider(id)
     // 用 refresh() 强制刷新 store，让 ChatInput 等消费方感知删除
@@ -902,6 +914,16 @@ onMounted(loadProviders)
 }
 .test-result.ok { background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card)); color: var(--status-ok); }
 .test-result.error { background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card)); color: var(--status-error); }
+/* UX-PROVIDER-TEST-001：失败原因（截断单行 + hover 全文） */
+.test-result-detail {
+  margin-left: 6px;
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 340px;
+  vertical-align: middle;
+}
 
 /* ── 操作按钮 ── */
 .card-actions {

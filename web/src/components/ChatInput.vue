@@ -245,6 +245,19 @@ const {
 const text = ref('')
 const selectedThinkPathId = ref<ThinkPathId | null>(null)
 
+// ── 发送历史（UX-INPUT-HISTORY-001） ──
+// ↑/↓ 回忆已发送消息（发送失败/想重发/改写时不必手动重打）。栈 [0] 为最近。
+const sentHistory = ref<string[]>([])
+const SENT_HISTORY_LIMIT = 50
+let historyCursor = -1
+function pushToHistory(msg: string) {
+  sentHistory.value.unshift(msg)
+  if (sentHistory.value.length > SENT_HISTORY_LIMIT) {
+    sentHistory.value.length = SENT_HISTORY_LIMIT
+  }
+  historyCursor = -1
+}
+
 // ── 发送状态机（按钮反馈 + 连接错误横幅 + 发送入口） ──
 
 const {
@@ -263,7 +276,13 @@ const {
   isDisabled: () => disabled.value,
   canSend: () => canSend.value,
   isStreaming: () => isStreaming.value,
-  send: (msg, refs, thinkPath, clientMsgId) => chatInput.send(msg, refs, thinkPath, clientMsgId),  onSendSuccess: () => {
+  send: (msg, refs, thinkPath, clientMsgId) => {
+    const ok = chatInput.send(msg, refs, thinkPath, clientMsgId)
+    // UX-INPUT-HISTORY-001：发送成功才进历史（失败保留待重试）
+    if (ok && msg.trim()) pushToHistory(msg.trim())
+    return ok
+  },
+  onSendSuccess: () => {
     text.value = ''
     selectedThinkPathId.value = null
     clearRefs()
@@ -304,6 +323,11 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const inputContainerRef = ref<HTMLDivElement | null>(null)
 const loading = ref(false)
 const inputPlaceholder = computed(() => {
+  // UX-STREAM-FEEDBACK-001：流式输出中明确占位（此前占位符仍显示
+  // "输入消息……"，用户 Enter 无反应误以为已发送）
+  if (isStreaming.value) {
+    return 'AI 正在生成回复，可随时停止后发送新消息……'
+  }
   if (canSend.value) {
     return '输入消息…… 输入 @ 选择技能 · 输入 # 选择工具 · 输入 ! 选择宏'
   }
@@ -364,7 +388,14 @@ const {
   handlePasteLink,
 } = useLinkInput({ refs, showMenu, textareaRef })
 
-defineExpose({ addRef })
+defineExpose({
+  addRef,
+  // UX-SHORTCUT-001：全局 Ctrl/Cmd+L 聚焦输入框
+  focusInput: () => {
+    textareaRef.value?.focus()
+    textareaRef.value?.scrollIntoView({ block: 'nearest' })
+  },
+})
 
 // ── 文件网格状态 ──
 
@@ -420,14 +451,16 @@ function onContextMenuRefresh() {
 function onPaste(e: ClipboardEvent) {
   const items = e.clipboardData?.items
   if (items) {
+    let handled = false
     for (const item of Array.from(items)) {
       if (item.type.startsWith('image/')) {
         e.preventDefault()
         const file = item.getAsFile()
         if (file) handleImageFile(file)
-        return
+        handled = true
       }
     }
+    if (handled) return
   }
   handlePasteLink(e)
 }
@@ -454,10 +487,37 @@ const {
 function onKeydown(e: KeyboardEvent) {
   if (e.isComposing || e.keyCode === 229) return
   if (acHandleKeydown(e)) return
+  // UX-INPUT-HISTORY-001：非补全态下 ↑/↓ 回忆发送历史
+  if (e.key === 'ArrowUp' && !e.shiftKey) {
+    if (sentHistory.value.length === 0) return
+    e.preventDefault()
+    historyCursor = Math.min(historyCursor + 1, sentHistory.value.length - 1)
+    text.value = sentHistory.value[historyCursor]
+    moveCursorToEnd()
+    return
+  }
+  if (e.key === 'ArrowDown' && !e.shiftKey) {
+    if (historyCursor < 0) return
+    e.preventDefault()
+    historyCursor--
+    text.value = historyCursor >= 0 ? sentHistory.value[historyCursor] : ''
+    moveCursorToEnd()
+    return
+  }
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
     handleSend()
   }
+}
+
+function moveCursorToEnd() {
+  nextTick(() => {
+    const el = textareaRef.value
+    if (el) {
+      el.setSelectionRange(el.value.length, el.value.length)
+      autoResize()
+    }
+  })
 }
 
 // ── Composer 模型状态 ──

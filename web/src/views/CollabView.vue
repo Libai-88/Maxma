@@ -57,10 +57,12 @@
                 :value="getShareUrl(share.share_id)"
                 readonly
                 class="share-link-input"
-                @click="copyToClipboard(getShareUrl(share.share_id))"
+                @click="copyToClipboard(getShareUrl(share.share_id), share.share_id)"
               />
-              <button class="btn-copy" @click="copyToClipboard(getShareUrl(share.share_id))">
-                复制
+              <button class="btn-copy" @click="copyToClipboard(getShareUrl(share.share_id), share.share_id)">
+                <!-- UX-COLLAB-COPY-001：复制反馈（此前 copyFeedback 赋值但模板
+                     从未渲染，复制成功与否用户无从感知） -->
+                {{ copyFeedback === share.share_id ? '✓ 已复制' : '复制' }}
               </button>
             </div>
             <div class="share-meta">
@@ -276,10 +278,14 @@ function getShareUrl(shareId: string): string {
   return `${window.location.origin}/share/${shareId}`
 }
 
-function copyToClipboard(text: string) {
-  void safeCopyText(text).then(() => {
-    copyFeedback.value = '已复制'
-    setTimeout(() => { copyFeedback.value = '' }, 2000)
+function copyToClipboard(text: string, shareId?: string) {
+  // UX-COLLAB-COPY-001：按 share_id 标识反馈状态（多行分享链接互不干扰）
+  const feedbackKey = shareId ?? text
+  void safeCopyText(text).then((ok) => {
+    if (ok) {
+      copyFeedback.value = feedbackKey
+      setTimeout(() => { if (copyFeedback.value === feedbackKey) copyFeedback.value = '' }, 2000)
+    }
   })
 }
 

@@ -13,6 +13,20 @@
       </div>
     </div>
 
+    <!-- UX-SESSION-SEARCH-001：会话搜索框（折叠时隐藏）——此前会话一多只能
+         滚动定位，临时会话又无可检索标识 -->
+    <div v-if="!collapsed && !managing" class="session-search">
+      <Icon name="search" :size="14" class="session-search-icon" />
+      <input
+        v-model="searchQuery"
+        type="text"
+        class="session-search-input"
+        placeholder="搜索会话…"
+        aria-label="搜索会话"
+      />
+      <button v-if="searchQuery" class="session-search-clear" type="button" aria-label="清除搜索" @click="searchQuery = ''">&times;</button>
+    </div>
+
     <div ref="sessionListRef" class="session-list">
 
       <!-- ── 已保存（固定会话）── -->
@@ -53,6 +67,7 @@
           :status="(sessionStatuses ?? {})[s.session_id]"
           :is-const="false"
           :display-index="getSessionDisplayIndex(s)"
+          :preview="getSessionPreview(s)"
           :collapsed="collapsed"
           :selectable="managing"
           :selected="selectedIds.has(s.session_id)"
@@ -197,9 +212,11 @@ import ContextMenu from '@/components/ContextMenu.vue';
 import Icon from '@/components/Icon.vue';
 import SessionItem from './SessionItem.vue';
 import { useSessionStore } from '@/stores/session';
+import { useChatStore } from '@/stores/chat';
 import type { SessionInfo } from '@/types';
 import { computed, nextTick, ref, watch, watchEffect } from 'vue';
 import { createLogger } from '@/utils/logger'
+import { showError } from '@/lib/toast'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 import { confirmAction } from '@/composables/useConfirm'
 
@@ -297,16 +314,42 @@ const emit = defineEmits<{
 
 // ── 分区计算 ──────────────────────────────────────────────────
 
+// UX-SESSION-SEARCH-001：搜索关键词 + 临时会话首条消息摘要
+const searchQuery = ref('')
+
 function getSessionDisplayIndex(s: SessionInfo): number {
   return tempSessions.value.length - tempSessions.value.findIndex(x => x.session_id === s.session_id)
 }
 
+/** 临时会话首条用户消息摘要（无可检索标识时作为定位依据）。 */
+function getSessionPreview(s: SessionInfo): string {
+  try {
+    const chatStore = useChatStore()
+    const cached = chatStore.loadTurnsFromStorage(s.session_id)
+    const first = cached?.find(t => t.userMessage?.trim())
+    if (first?.userMessage) {
+      const text = first.userMessage.trim()
+      return text.length > 18 ? text.slice(0, 18) + '…' : text
+    }
+  } catch { /* storage 不可用时忽略 */ }
+  return ''
+}
+
+/** 搜索过滤：匹配首条消息摘要 / 固定会话名 / session_id。 */
+function matchesQuery(s: SessionInfo, query: string): boolean {
+  if (!query) return true
+  const q = query.toLowerCase()
+  if (s.const_name?.toLowerCase().includes(q)) return true
+  if (s.session_id.toLowerCase().includes(q)) return true
+  return getSessionPreview(s).toLowerCase().includes(q)
+}
+
 const constSessions = computed(() =>
-  props.sessions.filter(s => s.is_const)
+  props.sessions.filter(s => s.is_const && matchesQuery(s, searchQuery.value))
 )
 
 const tempSessions = computed(() =>
-  props.sessions.filter(s => !s.is_const)
+  props.sessions.filter(s => !s.is_const && matchesQuery(s, searchQuery.value))
 )
 
 // ── Hover card ────────────────────────────────────────────────
@@ -486,6 +529,8 @@ async function generateTitle() {
     })
   } catch (e) {
     log.error('[constify] 标题生成失败:', e)
+    // UX-TITLE-FEEDBACK-001：生成失败给出可见反馈（此前仅 log，点 ✨ 无反应）
+    showError('标题生成失败: ' + (e instanceof Error ? e.message : String(e)))
   } finally {
     generating.value = false
   }
@@ -727,14 +772,54 @@ function handleDeleteKeydown(event: KeyboardEvent) {
 .session-sidebar.collapsed .nav-label {
   display: none;
 }
+/* UX-SESSION-SEARCH-001：会话搜索框 */
+.session-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 0 6px 6px;
+}
+.session-search-icon {
+  position: absolute;
+  left: 8px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+}
+.session-search-input {
+  width: 100%;
+  padding: 5px 26px 5px 26px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 0.82em;
+  font-family: inherit;
+  outline: none;
+}
+.session-search-input:focus {
+  border-color: var(--accent);
+}
+.session-search-clear {
+  position: absolute;
+  right: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px;
+}
+.session-search-clear:hover {
+  color: var(--text-primary);
+}
 .session-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
   max-height: 400px;
   overflow-y: auto;
-  padding: 0 6px 8px;
-}
+  padding: 0 6px 8px;}
 
 /* ── Section label ── */
 .section-label {

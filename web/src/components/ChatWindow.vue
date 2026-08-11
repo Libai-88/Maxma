@@ -61,8 +61,8 @@
                   v-if="ev.kind === 'thinking' && !ev.consumed"
                   class="cite-source"
                   tabindex="0"
-                  @contextmenu.prevent="onBubbleContextMenu($event, 'thinking', ev.tokens, '思考过程')"
-                  @keydown="onBubbleContextMenuKeydown($event, 'thinking', ev.tokens, '思考过程')"
+                  @contextmenu.prevent="onBubbleContextMenu($event, 'thinking', ev.tokens, '思考过程', turnsIndex(mergedIdx))"
+                  @keydown="onBubbleContextMenuKeydown($event, 'thinking', ev.tokens, '思考过程', turnsIndex(mergedIdx))"
                 >
                   <ThinkingBlock :block="ev" />
                 </div>
@@ -111,8 +111,8 @@
                 v-if="turn.finalAnswer && !hasAnswerBlock(turn) && !isStreamingTurn(turn)"
                 class="cite-source"
                 tabindex="0"
-                @contextmenu.prevent="onBubbleContextMenu($event, 'assistant_message', turn.finalAnswer, 'AI')"
-                @keydown="onBubbleContextMenuKeydown($event, 'assistant_message', turn.finalAnswer, 'AI')"
+                @contextmenu.prevent="onBubbleContextMenu($event, 'assistant_message', turn.finalAnswer, 'AI', turnsIndex(mergedIdx))"
+                @keydown="onBubbleContextMenuKeydown($event, 'assistant_message', turn.finalAnswer, 'AI', turnsIndex(mergedIdx))"
               >
                 <MessageBubble
                   role="assistant"
@@ -174,6 +174,15 @@
           <button class="error-copy-btn" @click="copyErrorLog" :title="'复制错误日志'" aria-label="复制错误日志">
             <Icon v-if="copySuccess" class="copy-success" name="checkmark" :size="14" />
             <span v-else class="copy-icon"></span>
+          </button>
+          <!-- UX-ERROR-ACTION-001：失败轮次可一键重试（复用幂等机制）；
+               轻量错误（限流/取消）可手动关闭横幅（此前常驻无法收起） -->
+          <button class="error-action-btn" type="button" title="重新发送最后一条消息" aria-label="重试" @click="emit('retry')">
+            <Icon name="undo-arrow" :size="14" />
+            <span>重试</span>
+          </button>
+          <button class="error-action-btn" type="button" title="关闭提示" aria-label="关闭错误提示" @click="emit('dismissError')">
+            <Icon name="close" :size="14" />
           </button>
         </div>
 
@@ -305,6 +314,9 @@ const emit = defineEmits<{
   (e: 'togglePrivate'): void
   (e: 'planRespond', planId: string, action: 'approve' | 'modify' | 'reject', modifiedPlan?: string): void
   (e: 'pin', payload: { type: 'code' | 'table' | 'summary'; title: string; content: string; sourceTool?: string }): void
+  // UX-ERROR-ACTION-001：错误横幅重试 / 关闭
+  (e: 'retry'): void
+  (e: 'dismissError'): void
 }>()
 
 // ── Composables ──
@@ -792,6 +804,26 @@ onUnmounted(() => {
 .error-copy-btn:hover {
   opacity: 1;
   background: transparent;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+.error-action-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s, background 0.15s;
+  font-size: 0.8em;
+  font-family: inherit;
+}
+.error-action-btn:hover {
+  opacity: 1;
   background: color-mix(in srgb, currentColor 10%, transparent);
 }
 .error-copy-btn .copy-icon {

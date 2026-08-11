@@ -59,6 +59,15 @@
     </div>
 
     <!-- 事件列表 -->
+    <!-- UX-ACTIVITY-FILTER-001：类别筛选下拉 -->
+    <div class="activity-filter">
+      <select v-model="categoryFilter" class="activity-filter-select" aria-label="按类别筛选活动">
+        <option value="all">全部类别</option>
+        <option v-for="(count, cat) in statsByCategory" :key="cat" :value="cat">
+          {{ categoryLabel(cat as string) }} ({{ count }})
+        </option>
+      </select>
+    </div>
     <div ref="activityListEl" class="activity-list">
       <div
         v-for="record in displayRecords"
@@ -109,6 +118,8 @@ import FloatingCard from '@/components/inspira/FloatingCard.vue'
 
 const store = useActivityStore()
 const activityListEl = ref<HTMLElement | null>(null)
+// UX-ACTIVITY-FILTER-001：类别筛选状态
+const categoryFilter = ref('all')
 
 // 实时事件流：新事件追加时淡入上浮（初始加载同样生效）
 useGsap((_ctx, contextSafe) => {
@@ -166,7 +177,12 @@ function isActivityStats(data: unknown): data is ActivityStatsResponse {
   )
 }
 
-const displayRecords = computed(() => [...store.records].reverse())
+const displayRecords = computed(() => {
+  // UX-ACTIVITY-FILTER-001：类别筛选（事件多了之后可聚焦某类活动）
+  const cat = categoryFilter.value
+  const records = cat === 'all' ? store.records : store.records.filter(r => r.category === cat)
+  return [...records].reverse()
+})
 
 const safeStats = computed<ActivityStatsResponse>(() => {
   if (isActivityStats(store.stats)) return store.stats
@@ -437,6 +453,25 @@ onUnmounted(() => {
   font-size: 0.75em;
   color: var(--text-tertiary);
   text-transform: uppercase;
+}
+
+.activity-filter {
+  margin-bottom: 10px;
+}
+.activity-filter-select {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 0.82em;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+}
+.activity-filter-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .activity-list {

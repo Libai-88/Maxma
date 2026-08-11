@@ -121,6 +121,8 @@
             @toggle-private="setPrivateMode(!privateMode)"
             @plan-respond="sendPlanResponse"
             @pin="handlePin"
+            @retry="handleRetryLast"
+            @dismiss-error="dismissError"
           />
         </CardSpotlight>
         </template>
@@ -192,6 +194,7 @@ import { createLogger } from '@/utils/logger'
 import { safeGetItem, safeSetItem } from '@/lib/storage'
 import CardSpotlight from '@/components/inspira/CardSpotlight.vue'
 import GlowBorder from '@/components/inspira/GlowBorder.vue'
+import { showError } from '@/lib/toast'
 
 const log = createLogger('ChatView')
 
@@ -201,6 +204,7 @@ const { health } = storeToRefs(useHealthStore())
 const {
   connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId,
   taskTrackerData, send, cancel, sendUserResponse, sendArtifactAction, sendPlanResponse, removeTurns,
+  dismissError,
   privateMode, setPrivateMode, autoApprove, setAutoApprove,
   reconnectExhausted, reconnect,
 } = useChat(sessionId)
@@ -405,6 +409,19 @@ function toggleAutoApprove() {
 // Ctrl+K 切换私密模式
 useGlobalShortcut({ key: 'k', mod: true }, () => { setPrivateMode(!privateMode.value) })
 
+// UX-SHORTCUT-001：Esc 停止生成（桌面应用最常用快捷键之一）。
+// 仅在流式输出中生效，避免误触导致输入框等组件行为异常。
+useGlobalShortcut({ key: 'Escape' }, () => {
+  if (isStreaming.value) {
+    cancel()
+  }
+})
+
+// UX-SHORTCUT-001：Ctrl/Cmd+L 聚焦输入框（App.vue 派发 maxma:focus-input）
+useGlobalShortcut({ key: 'l', mod: true, allowInEditable: true }, () => {
+  chatInputRef.value?.focusInput?.()
+})
+
 function onModelChange(providerId: string, modelName: string) {
   selectedProviderId.value = providerId
   selectedModelName.value = modelName
@@ -535,6 +552,75 @@ function handleToolAction(payload: { action: string; data?: unknown }) {
     }
   } else if (payload.action === 'undo') {
     handleUndo()
+  } else if (payload.action === 'regenerate') {
+    handleRegenerate(payload.data as { index: number })
+  }
+}
+
+// ── 重新生成（UX-REGEN-001） ──
+// assistant 回复右键"重新生成"：撤回该轮及之后所有轮（后端 undo N 轮），
+// 再以同一用户消息重发（新 client_msg_id，幂等不冲突）。与 ChatGPT 的
+// 重新生成行为一致：后续对话一并丢弃。
+let _regenInFlight = false
+async function handleRegenerate(data: { index: number }) {
+  if (_regenInFlight || _undoInFlight) return
+  if (isStreaming.value) {
+    showError('正在生成回复，请等待本轮完成后重试')
+    return
+  }
+  const ch = chatStore.channels.get(sessionId.value)
+  if (!ch) return
+  const index = typeof data?.index === 'number' ? data.index : -1
+  if (index < 0 || index >= ch.turns.length) return
+  const message = ch.turns[index].userMessage
+  if (!message) return
+
+  const roundsToRemove = ch.turns.length - index
+  if (roundsToRemove > 100) {
+    showError('对话过长，无法重新生成该轮（最多撤回 100 轮）')
+    return
+  }
+  _regenInFlight = true
+  try {
+    const result = await api.undoMessages(sessionId.value, roundsToRemove)
+    if (result.deleted_count > 0) {
+      removeTurns(roundsToRemove)
+    } else {
+      showError('重新生成失败：无法撤回该轮对话')
+      return
+    }
+  } catch (e) {
+    log.error('重新生成-撤回失败:', e)
+    showError('重新生成失败: ' + (e instanceof Error ? e.message : String(e)))
+    return
+  } finally {
+    _regenInFlight = false
+  }
+  // 撤回成功后重发同一用户消息（走 ChatInput 实例，保持当前选中的模型）
+  const ok = chatInputInstance.send(message)
+  if (!ok) {
+    showError('暂时无法发送，请等待连接完成后再试')
+  }
+}
+
+// ── 错误横幅重试（AG-RETRY-001 / UX-ERROR-ACTION-001） ──
+// 失败轮次（后端错误/超时/连接中断）后重发最后一条用户消息。走 ChatInput
+// 实例发送会生成新 client_msg_id，不与失败轮次冲突。
+function handleRetryLast() {
+  if (isStreaming.value) {
+    showError('正在生成回复，请等待完成后重试')
+    return
+  }
+  const ch = chatStore.channels.get(sessionId.value)
+  const last = ch?.turns[ch.turns.length - 1]
+  const message = last?.userMessage
+  if (!message) {
+    showError('没有可重试的消息')
+    return
+  }
+  const ok = chatInputInstance.send(message)
+  if (!ok) {
+    showError('暂时无法发送，请等待连接完成后再试')
   }
 }
 
@@ -566,9 +652,14 @@ async function handleUndo() {
     const result = await api.undoMessages(sessionId.value, 1)
     if (result.deleted_count > 0) {
       removeTurns(1)
+    } else {
+      // UX-FEEDBACK-001：撤回 0 条（无更多可撤）给出提示，而非静默无反应
+      showError('没有可撤回的消息')
     }
   } catch (e) {
     log.error('撤回失败:', e)
+    // UX-FEEDBACK-001：失败必须可见（此前仅 log，用户点撤回毫无反应）
+    showError('撤回失败: ' + (e instanceof Error ? e.message : String(e)))
   } finally {
     _undoInFlight = false
   }
