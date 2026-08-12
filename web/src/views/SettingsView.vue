@@ -67,6 +67,18 @@
               />
             </div>
           </div>
+
+          <!-- GAP-B2-001：上下文提升——溢出时升级到大上下文模型而非压缩。
+               需要配置了更大上下文窗口的模型才实际生效（OMP 自动挑选）。 -->
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">上下文提升</div>
+              <div class="setting-desc">上下文溢出时优先切换到更大窗口的模型，而不是压缩历史（需存在更大窗口的模型才生效）。</div>
+            </div>
+            <button class="toggle-btn" :class="{ on: settings['contextPromotion.enabled'] }" @click="toggle('contextPromotion.enabled')">
+              {{ settings['contextPromotion.enabled'] ? '开启' : '关闭' }}
+            </button>
+          </div>
         </div>
       </GlowingEffect>
 
@@ -622,6 +634,7 @@ const systemVoiceOptions = computed(() => {
 const CORE_PATHS = [
   'compaction.enabled', 'compaction.strategy', 'compaction.thresholdPercent',
   'compaction.midTurnEnabled', 'compaction.idleEnabled',
+  'contextPromotion.enabled',
   'retry.enabled', 'retry.maxRetries', 'retry.modelFallback', 'retry.fallbackChains',
   'tools.approvalMode', 'tools.discoveryMode',
   'advisor.enabled',

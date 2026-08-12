@@ -35,6 +35,8 @@ export interface UseChatSendOptions<TRefs> {
   send: (msg: string, refs: TRefs[], thinkPath: ThinkPathId | undefined, clientMsgId?: string) => boolean
   /** 发送成功后的清理（清空输入/附件/自动缩放） */
   onSendSuccess: () => void
+  /** 发送前钩子（GAP-A1-001：发送时放弃未完成的语音听写） */
+  onBeforeSend?: () => void
 }
 
 export function useChatSend<TRefs>(opts: UseChatSendOptions<TRefs>) {
@@ -102,6 +104,7 @@ export function useChatSend<TRefs>(opts: UseChatSendOptions<TRefs>) {
 
     // 修复 IDEMPOTENCY-001：发送失败（WS 断开）后重试复用同一 client_msg_id，
     // 后端据此去重，避免同一消息重发导致副作用工具重复执行
+    opts.onBeforeSend?.()
     const sent = opts.send(msg, opts.getRefs(), opts.getThinkPath() || undefined, _pendingClientMsgId ?? undefined)
     if (!sent) {
       // 发送失败：保留 pending id 供下次重试复用；文本保留在输入框

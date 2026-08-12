@@ -38,21 +38,21 @@
 
 | # | 功能 | 主流产品对照 | 说明与做法 |
 |---|---|---|---|
-| A1 | **语音输入（STT）** | 几乎所有 AI 助手标配 | OMP `stt.enabled`/`stt.submitTrigger` 原生支持麦克风听写。做法：ChatInput 加麦克风按钮 → 调 OMP stt（或浏览器 getUserMedia + 自研转写，前端工作量中等）；设置页暴露 stt 选项 |
-| A2 | **TTS 语音朗读（真实接通）** | Claude 桌面端朗读、ChatGPT 语音 | OMP `providers.tts`（本地 Kokoro-82M / xAI Grok Voice）+ `speechgen.enabled`（语音生成工具）。做法：把设置页的"仅保存"假配置改为真实接线（替换置灰区）；消息气泡加"朗读"按钮；AI 回复可自动朗读 |
+| A1 | **语音输入（STT）** ✅ 2026-08-12 | 几乎所有 AI 助手标配 | 做法调整：OMP `stt.enabled` 挂在 TUI 输入层（input-controller），sidecar 无输入管线不可复用 → 改走前端 **Web Speech API 听写**（浏览器/OS 内置识别，零 API 成本）：ChatInput 麦克风按钮 + 中间结果实时回显 + 权限/网络错误优雅降级（`web/src/composables/useSpeechInput.ts`） |
+| A2 | **TTS 语音朗读（真实接通）** ✅ 2026-08-12 | Claude 桌面端朗读、ChatGPT 语音 | 做法调整：OMP providers.tts（Kokoro/xAI）需额外运行时模型/付费 API → 改走 **WebView2 speechSynthesis 系统语音**（零 API）：消息气泡/ThinkingBlock「朗读」按钮 + 设置页语音面板真实接线（edge-tts/openai-tts 假配置移除并规范化）+ auto_read 自动朗读 |
 | A3 | **系统通知** | Claude Code / Cursor 的任务完成通知 | OMP `completion.notify`（任务完成）、`ask.notify`（等待审批/提问时）。做法：前端 Notification API（WebView2 支持）+ 后端事件驱动；审批等待时通知用户是强需求（用户切走窗口时） |
 | A4 | ~~图片生成（generate_image）~~ **已砍** | ChatGPT 文生图 | OMP 16.5.2 已内置 `generate_image` 工具，但文生图依赖 provider 图像能力（OpenAI/Gemini/xAI 等均为付费 API）。产品原则：不要求用户额外配置付费 API → **不做**。若未来主流 provider 免费开放图像能力再评估 |
-| A5 | **网页抓取（fetch）** | 通用 Agent 工具 | OMP `fetch.enabled` 工具（抓取 URL 内容，比 web_search 更直接）。做法：工具清单注册 + 结果气泡（可复用现有气泡样式） |
-| A6 | **计划模式开关** | Claude Code 的 plan mode | OMP `plan.enabled`/`plan.defaultOnStartup`。做法：权限模式控制区加"计划模式"开关（当前 sidecar 只在 plan approve 时硬编码 true）；会话菜单/输入框上方切换 |
-| A7 | **检查点/回退 UI** | Claude Code 的 checkpoint 恢复 | OMP `checkpoint.enabled` + Maxma 已注册的 checkpoint/rewind 工具。做法：会话菜单加"创建检查点""回到检查点"；工具栏显示最近检查点状态——对长任务的"后悔药"体验价值高 |
-| A8 | **自动学习开关** | — | OMP `autolearn.enabled`（从对话自动学习）。做法：设置页加开关（当前 globalPaths 已透传但 UI 不可控） |
+| A5 | **网页抓取（fetch）** ✅ 2026-08-12 | 通用 Agent 工具 | OMP `fetch.enabled` 是 read 工具的 URL 能力（tools/read.ts 门控），非独立工具。已接入 globalPaths 透传（默认 true），read 工具可直接抓取 URL 内容 |
+| A6 | **计划模式开关** ✅ 2026-08-12 | Claude Code 的 plan mode | 会话菜单「计划模式」开关 → WS set_plan_mode → sidecar `session.setPlanModeState` + resolve 工具激活（与 CLI /plan 等价）；plan.defaultOnStartup 透传 |
+| A7 | **检查点/回退 UI** ✅ 2026-08-12 | Claude Code 的 checkpoint 恢复 | 会话菜单「创建检查点/回到检查点」→ WS checkpoint_action → sidecar 追加指令消息，下一轮由 agent 调用 checkpoint/rewind 工具；checkpoint.enabled 默认注册（CONFIG-INHERIT-001 修复后与工具清单一致） |
+| A8 | **自动学习开关** ✅ 2026-08-12 | — | 设置页「交互」区开关（autolearn.enabled），全局设置持久化 |
 
 ### B 梯队：中期值得做（接线稍多，2-4 天/项）
 
 | # | 功能 | 说明 |
 |---|---|---|
 | B1 | **Goal 模式** | OMP `goal.enabled`（目标导向模式，Claude 的 /goal 类似）。做法：会话级模式切换 + goal 状态展示（statusInFooter） |
-| B2 | **上下文提升（contextPromotion）** | 重要上下文自动提升防压缩（如用户明确标记"记住这条"）。做法：设置开关 + 在压缩事件中展示被提升内容 |
+| B2 | **上下文提升（contextPromotion）** ✅ 2026-08-12 | 重要上下文自动提升防压缩。做法：globalPaths 透传 + 设置页「上下文管理」开关（溢出时自动切更大窗口模型，需配置了更大窗口模型才生效） |
 | B3 | **会话闲置回顾（recap）** | OMP `recap.enabled/idleSeconds`（闲置后自动回顾对话）。做法：开关 + 回顾结果作为 notice 展示 |
 | B4 | **Bash 长任务后台化** | OMP `bash.autoBackground.enabled`（长命令自动转后台，不阻塞对话）。做法：开关 + 后台任务状态气泡（复用 task 状态 UI） |
 | B5 | **异步任务 UI** | OMP `async.enabled/maxJobs`。做法：job 工具状态可视化（当前只有事件流无集中面板） |
@@ -86,11 +86,12 @@
 ## 四、建议实施顺序
 
 ```
-第一批（高价值快见效，约 1 周）：
+第一批（✅ 已完成 2026-08-12）：
   A3 系统通知 → A2 TTS 朗读 → A6 计划模式 → A7 检查点 UI
 
-第二批（能力扩展，约 1 周）：
-  A1 语音输入 → A5 fetch → A8 自动学习 → B6 fallback 链 → B2 上下文提升
+第二批（✅ 已完成 2026-08-12）：
+  A1 语音输入（Web Speech API 听写）→ A5 fetch（read URL 能力，已验证接线）
+  → A8 自动学习 → B6 fallback 链 → B2 上下文提升
 
 第三批（进阶模式）：
   B1 Goal → B3 recap → B4 后台化 → B5 异步面板 → B7 vault

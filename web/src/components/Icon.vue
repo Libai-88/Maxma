@@ -27,6 +27,7 @@ import sparklesRaw from '@/assets/icons/chat-input/sparkles.svg?raw'
 import toolRaw from '@/assets/icons/chat-input/tool.svg?raw'
 import sendRaw from '@/assets/icons/chat-input/send.svg?raw'
 import stopRaw from '@/assets/icons/chat-input/stop.svg?raw'
+import micRaw from '@/assets/icons/chat-input/mic.svg?raw'
 // sidebar/
 import playgroundRaw from '@/assets/icons/sidebar/playground.svg?raw'
 // chat-input/
@@ -111,6 +112,7 @@ const svgContents: Record<string, string> = {
   tool: toolRaw,
   send: sendRaw,
   stop: stopRaw,
+  mic: micRaw,
   playground: playgroundRaw,
   cite: citeRaw,
   close: closeRaw,

@@ -142,6 +142,21 @@
         <div class="input-right-group">
           <div class="input-actions">
             <ContextUsageBadge />
+            <!-- GAP-A1-001：语音输入（Web Speech API 听写，零付费 API）。
+                 听写中按钮高亮，再次点击停止并提交；环境不支持时点击给出引导。 -->
+            <button
+              v-if="!isStreaming"
+              ref="micBtnRef"
+              type="button"
+              class="btn-mic"
+              :class="{ listening: micListening }"
+              :aria-label="micListening ? '停止语音输入' : '语音输入'"
+              :aria-pressed="micListening"
+              :title="micListening ? '停止并提交语音' : '语音输入（听写）'"
+              @click="toggleMic"
+            >
+              <Icon name="mic" :size="16" />
+            </button>
             <BorderBeam v-if="!isStreaming">
             <button
               ref="sendBtnRef"
@@ -217,6 +232,8 @@ import { useFileRefs } from '@/composables/useFileRefs'
 import { useImageAttachment } from '@/composables/useImageAttachment'
 import { useLinkInput } from '@/composables/useLinkInput'
 import { useChatSend } from '@/composables/useChatSend'
+import { useSpeechInput } from '@/composables/useSpeechInput'
+import { showError, showSuccess } from '@/lib/toast'
 import type { ThinkPathId } from '@/utils/thinkPath'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
@@ -244,6 +261,42 @@ const {
 
 const text = ref('')
 const selectedThinkPathId = ref<ThinkPathId | null>(null)
+
+// ── 语音输入（GAP-A1-001） ──
+// Web Speech API 听写：听写期间中间结果实时写入输入框（追加在原文之后），
+// 停止/自然结束提交最终文本；环境不支持/权限拒绝时经 toast 引导。
+const micBtnRef = ref<HTMLButtonElement | null>(null)
+const speechInput = useSpeechInput({
+  onResult: (fullText) => {
+    text.value = fullText
+    nextTick(() => autoResize())
+  },
+  onError: (message) => {
+    if (message) showError(message)
+  },
+})
+const micListening = speechInput.listening
+
+function toggleMic() {
+  if (micListening.value) {
+    // 停止并提交
+    speechInput.stop()
+    showSuccess('语音已写入输入框')
+    return
+  }
+  // 开始听写：以当前输入框内容为基准，听写结果追加其后
+  const ok = speechInput.start(text.value)
+  if (ok) {
+    showSuccess('正在聆听…再次点击麦克风停止')
+  }
+}
+
+// 发送/离开页面时放弃未完成的听写
+function abortDictationIfListening() {
+  if (micListening.value) {
+    speechInput.abort()
+  }
+}
 
 // ── 发送历史（UX-INPUT-HISTORY-001） ──
 // ↑/↓ 回忆已发送消息（发送失败/想重发/改写时不必手动重打）。栈 [0] 为最近。
@@ -288,6 +341,8 @@ const {
     clearRefs()
     nextTick(() => autoResize())
   },
+  // GAP-A1-001：发送时放弃未完成的听写（避免听写结果污染下一条消息）
+  onBeforeSend: () => abortDictationIfListening(),
 })
 
 // 发送按钮反馈：成功 spring 弹跳 / 失败抖动（替代 CSS keyframes）
@@ -544,6 +599,8 @@ const { customHeight, isResizing, startResize } = useResizeHandle(inputContainer
 onUnmounted(() => {
   cleanupSendTimers()
   cleanupImage()
+  // GAP-A1-001：卸载时放弃未完成的听写（识别对象单次使用，需显式清理）
+  abortDictationIfListening()
 })
 </script>
 

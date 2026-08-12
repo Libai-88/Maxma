@@ -485,6 +485,49 @@
   justify-content: center;
   flex-shrink: 0;
 }
+/* GAP-A1-001：语音输入按钮（听写中高亮脉冲） */
+.btn-mic {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  font-size: 1em;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+              background-color 0.2s,
+              color 0.2s,
+              border-color 0.2s,
+              box-shadow 0.2s;
+}
+@media (hover: hover) and (pointer: fine) {
+  .btn-mic:hover {
+    color: var(--text-primary);
+    border-color: var(--accent);
+    transform: scale(1.05);
+  }
+}
+.btn-mic:active {
+  transform: scale(0.95);
+}
+.btn-mic.listening {
+  color: var(--text-inverse);
+  border-color: var(--status-error);
+  background: var(--status-error);
+  animation: maxma-mic-pulse 1.4s ease-in-out infinite;
+}
+@keyframes maxma-mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--status-error) 45%, transparent); }
+  50% { box-shadow: 0 0 0 6px transparent; }
+}
 .btn-send {
   background: var(--accent);
   color: var(--text-inverse);

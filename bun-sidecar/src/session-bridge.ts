@@ -153,13 +153,15 @@ export async function buildCreateSessionOptions(
     "astGrep.enabled", "astEdit.enabled",
     "web_search.enabled", "ask.enabled",
     // GAP-FEATURE-001：差距分析新增能力透传——计划模式（默认关闭，用户可在
-    // 会话菜单手动开启）、网页抓取（read 工具 URL 能力）、模型 fallback 链。
+    // 会话菜单手动开启）、网页抓取（read 工具 URL 能力）、模型 fallback 链、
+    // 上下文提升（溢出时升级到大上下文模型而非压缩）。
     // 均在 OMP schema 内，未设置时回退 schema 默认值。
     // 注：generate_image 不入列——文生图依赖 provider 图像能力（OpenAI/Gemini/
     // xAI 等均为付费 API），按产品原则（不要求用户额外配置付费 API）砍掉。
     "plan.enabled", "plan.defaultOnStartup",
     "fetch.enabled",
     "retry.fallbackChains",
+    "contextPromotion.enabled",
     // "memory.backend" intentionally excluded: mnemopi requires the
     // un-bundled embedding deps (fastembed/onnxruntime). Maxma's own
     // memory lives in its persona memory.yaml, not OMP's memory subsystem.
