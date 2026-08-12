@@ -1,15 +1,15 @@
 /**
- * SPLASH-CANVAS-001：启动等待屏全屏 Canvas 动画（星空 + 流星 + 萤火虫 + 光晕）。
+ * SPLASH-CANVAS-002：启动等待屏全屏 Canvas 动画（星空 + 流星 + 星屑光尘）。
  *
- * 设计理念「灯下待你」：深蓝夜空背景里，只有一扇窗亮着暖光——Maxma
- * 在等你回来。星星缓慢闪烁漂移、偶尔有流星划过、窗下浮着暖色萤火虫，
- * 中央窗户的暖光随"呼吸"向外扩散。
+ * 配合「墨色山水 · 月下灯火」整屏 SVG 夜景：Canvas 负责动态层——
+ * 夜空的星星缓慢闪烁漂移、偶尔有流星划过、细小的星屑光尘在画面中
+ * 缓缓飘落明灭。SVG 的山水/灯火/倒影由 CSS 动画驱动，两层互不干扰。
  *
  * 说明：
  * - 独立模块脚本（同源，符合 CSP script-src 'self'），在 Vue 挂载前运行；
- * - 通过 MutationObserver 监听 #app-loading 被移除后自动停止动画；
+ * - MutationObserver 监听 #app-loading 被移除后自动停止动画并销毁 canvas；
  * - prefers-reduced-motion 时只渲染一帧静态星空，不运行动画循环；
- * - 使用设备像素比适配高分屏，粒子规模按视口面积缩放控制性能。
+ * - devicePixelRatio 适配（上限 2x），粒子规模按视口面积缩放。
  */
 (function () {
   const splash = document.getElementById('app-loading')
@@ -29,14 +29,10 @@
   let height = 0
   let dpr = 1
 
-  /** 星星：位置、半径、基础亮度、闪烁相位/速度、漂移速度 */
   let stars = []
-  /** 流星：角度、速度、寿命计时 */
   let meteors = []
-  /** 萤火虫：暖色光点，缓慢漂浮 */
-  let fireflies = []
-  /** 中央窗户光晕（由插画位置决定，像素坐标在 resize 时计算） */
-  let glow = { x: 0, y: 0, r: 0 }
+  /** 星屑光尘：缓慢飘落、明灭（氛围微光） */
+  let dusts = []
 
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2)
@@ -48,47 +44,41 @@
     canvas.style.height = height + 'px'
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     seedParticles()
-    // 窗户光晕锚点：中央偏上（插画所在区域）
-    glow.x = width / 2
-    glow.y = height * 0.44
-    glow.r = Math.min(width, height) * 0.42
   }
 
   function seedParticles() {
     const area = width * height
-    // 星数按面积缩放（约每 2600px² 一颗，上限 320 颗）
-    const starCount = Math.min(320, Math.round(area / 2600))
+    // 星星：集中在天空区域（上部 60%），避免与山脚灯火混淆
+    const starCount = Math.min(280, Math.round(area / 3000))
     stars = Array.from({ length: starCount }, () => ({
       x: Math.random() * width,
-      y: Math.random() * height * 0.92,
-      r: 0.4 + Math.random() * 1.4,
-      base: 0.25 + Math.random() * 0.6,
+      y: Math.random() * height * 0.6,
+      r: 0.4 + Math.random() * 1.3,
+      base: 0.2 + Math.random() * 0.55,
       phase: Math.random() * Math.PI * 2,
       speed: 0.4 + Math.random() * 1.2,
-      driftX: (Math.random() - 0.5) * 0.06,
-      driftY: (Math.random() - 0.5) * 0.03,
-      warm: Math.random() < 0.7, // 70% 暖白星
+      driftX: (Math.random() - 0.5) * 0.05,
+      driftY: (Math.random() - 0.5) * 0.025,
+      warm: Math.random() < 0.65,
     }))
-    // 萤火虫：底部区域漂浮
-    const fireflyCount = Math.min(18, Math.round(area / 52000))
-    fireflies = Array.from({ length: fireflyCount }, () => ({
+    // 星屑光尘：全画面缓慢飘落
+    const dustCount = Math.min(22, Math.round(area / 42000))
+    dusts = Array.from({ length: dustCount }, () => ({
       x: Math.random() * width,
-      y: height * 0.55 + Math.random() * height * 0.45,
-      r: 1 + Math.random() * 1.8,
+      y: Math.random() * height,
+      r: 0.6 + Math.random() * 1.5,
+      vy: 0.08 + Math.random() * 0.22,
+      vx: (Math.random() - 0.5) * 0.12,
       phase: Math.random() * Math.PI * 2,
-      speed: 0.5 + Math.random() * 0.8,
-      vx: (Math.random() - 0.5) * 0.25,
-      vy: -(0.05 + Math.random() * 0.15),
-      hue: 32 + Math.random() * 12, // 暖橙到金黄
+      speed: 0.5 + Math.random() * 1,
     }))
   }
 
-  /** 生成一颗流星（从窗口上方任意位置斜落） */
   function spawnMeteor() {
     const fromLeft = Math.random() < 0.5
     meteors.push({
       x: fromLeft ? Math.random() * width * 0.3 : width * (0.7 + Math.random() * 0.3),
-      y: Math.random() * height * 0.3,
+      y: Math.random() * height * 0.35,
       vx: (Math.random() * 1.6 + 2.2) * (fromLeft ? 1 : -1),
       vy: (Math.random() * 0.6 + 1.1),
       life: 1,
@@ -97,72 +87,22 @@
   }
 
   function drawSky() {
-    // 夜空渐变：深蓝紫 → 底部略暖（地平线微光）
-    const g = ctx.createLinearGradient(0, 0, 0, height)
-    g.addColorStop(0, '#181D30')
-    g.addColorStop(0.55, '#211E3A')
-    g.addColorStop(0.85, '#33264A')
-    g.addColorStop(1, '#3A2B45')
-    ctx.fillStyle = g
-    ctx.fillRect(0, 0, width, height)
-
-    // 星云光晕（径向模糊感：多层半透明圆）
-    const nebula = [
-      { x: width * 0.22, y: height * 0.2, r: Math.min(width, height) * 0.34, c: 'rgba(120, 90, 190, 0.10)' },
-      { x: width * 0.8, y: height * 0.32, r: Math.min(width, height) * 0.3, c: 'rgba(190, 120, 90, 0.07)' },
-      { x: width * 0.5, y: height * 0.85, r: Math.min(width, height) * 0.42, c: 'rgba(194, 59, 34, 0.05)' },
-    ]
-    for (const n of nebula) {
-      const g2 = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r)
-      g2.addColorStop(0, n.c)
-      g2.addColorStop(1, 'rgba(0,0,0,0)')
-      ctx.fillStyle = g2
-      ctx.fillRect(0, 0, width, height)
-    }
-
-    // 极淡噪点（颗粒质感）
-    if (!reduced) {
-      const grain = ctx.createImageData(1, 1)
-      for (let i = 0; i < 220; i++) {
-        const x = Math.random() * width
-        const y = Math.random() * height
-        const a = 0.03 + Math.random() * 0.05
-        ctx.fillStyle = `rgba(255, 240, 210, ${a})`
-        ctx.fillRect(x, y, 1, 1)
-      }
-    }
+    // 天空底色：与 SVG 夜空无缝衔接（最上层 canvas 的底色就是夜空，
+    // 但我们让 canvas 透明，由 SVG 提供底色——这里只画星星等动态元素）
+    // 注意：canvas 是透明的，天空由 SVG .scene 承担，无需画底色。
+    ctx.clearRect(0, 0, width, height)
   }
 
   function drawStars(t) {
     for (const s of stars) {
-      const twinkle = s.base + Math.sin(t * 0.001 * s.speed + s.phase) * 0.25
-      ctx.globalAlpha = Math.max(0.08, twinkle)
+      const twinkle = s.base + Math.sin(t * 0.001 * s.speed + s.phase) * 0.22
+      ctx.globalAlpha = Math.max(0.06, twinkle)
       ctx.fillStyle = s.warm ? '#FFEFC9' : '#DDE3F5'
       ctx.beginPath()
       ctx.arc(s.x + s.driftX * t * 0.01, s.y + s.driftY * t * 0.01, s.r, 0, Math.PI * 2)
       ctx.fill()
     }
     ctx.globalAlpha = 1
-  }
-
-  function drawFireflies(t) {
-    for (const f of fireflies) {
-      // 上下漂浮（正弦）+ 呼吸亮度
-      const bob = Math.sin(t * 0.001 * f.speed + f.phase) * 14
-      const alpha = 0.35 + Math.sin(t * 0.002 + f.phase * 2) * 0.3
-      const x = f.x + f.vx * t * 0.01
-      const y = f.y + f.vy * t * 0.01 + bob
-      // 撞边反弹
-      if (y < height * 0.4 || y > height * 0.98) f.vy = -f.vy
-      if (x < 0 || x > width) f.vx = -f.vx
-      const g = ctx.createRadialGradient(x, y, 0, x, y, f.r * 5)
-      g.addColorStop(0, `hsla(${f.hue}, 90%, 70%, ${alpha})`)
-      g.addColorStop(1, `hsla(${f.hue}, 90%, 70%, 0)`)
-      ctx.fillStyle = g
-      ctx.beginPath()
-      ctx.arc(x, y, f.r * 5, 0, Math.PI * 2)
-      ctx.fill()
-    }
   }
 
   function drawMeteors(t) {
@@ -187,15 +127,24 @@
     }
   }
 
-  /** 中央窗户的暖光：以插画位置为中心向外扩散，随呼吸脉动 */
-  function drawGlow(t) {
-    const breathe = 0.86 + Math.sin(t * 0.0012) * 0.12
-    const g = ctx.createRadialGradient(glow.x, glow.y, 0, glow.x, glow.y, glow.r)
-    g.addColorStop(0, `rgba(255, 190, 110, ${0.16 * breathe})`)
-    g.addColorStop(0.5, `rgba(255, 165, 90, ${0.06 * breathe})`)
-    g.addColorStop(1, 'rgba(255, 160, 80, 0)')
-    ctx.fillStyle = g
-    ctx.fillRect(glow.x - glow.r, glow.y - glow.r, glow.r * 2, glow.r * 2)
+  /** 星屑光尘：缓慢飘落 + 明灭（撞边回卷） */
+  function drawDusts(t) {
+    for (const d of dusts) {
+      d.y += d.vy
+      d.x += d.vx
+      // 回卷：落到画面底部后从顶部重新出现
+      if (d.y > height + 10) { d.y = -10; d.x = Math.random() * width }
+      if (d.x < -10) d.x = width + 10
+      if (d.x > width + 10) d.x = -10
+      const alpha = 0.25 + Math.sin(t * 0.0012 * d.speed + d.phase) * 0.22
+      const g = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, d.r * 4)
+      g.addColorStop(0, `rgba(255, 236, 200, ${Math.max(0.05, alpha)})`)
+      g.addColorStop(1, 'rgba(255, 236, 200, 0)')
+      ctx.fillStyle = g
+      ctx.beginPath()
+      ctx.arc(d.x, d.y, d.r * 4, 0, Math.PI * 2)
+      ctx.fill()
+    }
   }
 
   let rafId = null
@@ -207,10 +156,9 @@
   function frame(now) {
     const t = now - t0
     drawSky()
-    drawGlow(t)
     drawStars(t)
     drawMeteors(t)
-    drawFireflies(t)
+    drawDusts(t)
     frameCount++
     canvas.setAttribute('data-frame', String(frameCount))
     rafId = requestAnimationFrame(frame)
@@ -220,13 +168,11 @@
     resize()
     window.addEventListener('resize', resize)
     if (reduced) {
-      // 降级：绘制一帧静态星空（无动画循环）
       frame(0)
       cancelAnimationFrame(rafId)
       rafId = null
       return
     }
-    // 流星定时器：每 5-9 秒随机一颗
     meteorTimer = window.setInterval(spawnMeteor, 5000 + Math.random() * 4000)
     rafId = requestAnimationFrame(frame)
   }
@@ -235,11 +181,9 @@
     if (rafId) cancelAnimationFrame(rafId)
     if (meteorTimer) clearInterval(meteorTimer)
     window.removeEventListener('resize', resize)
-    // 移除 canvas（保留首屏其它内容）
     canvas.remove()
   }
 
-  // 首屏被移除（后端就绪）时停止动画
   const observer = new MutationObserver(() => {
     if (!document.body.contains(splash)) {
       observer.disconnect()
