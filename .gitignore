@@ -136,6 +136,7 @@ logs/
 # 安全威胁模型（本地文档，不提交）
 dev_docs/security/
 api/data/maxma.db
+api/data/session_map.db
 
 # 会话状态持久化（SQLite WAL 模式，运行时生成）
 checkpoints.sqlite
