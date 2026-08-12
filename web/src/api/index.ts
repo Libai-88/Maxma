@@ -193,8 +193,12 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     await ensureTokenLoaded()
   }
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+  // STICKER-AUTH-001：FormData 上传（贴纸上传）不能强制 JSON Content-Type，
+  // 否则浏览器不会自动生成 multipart boundary，后端解析失败。
+  const isFormBody = typeof FormData !== 'undefined' && options?.body instanceof FormData
+  const headers: Record<string, string> = {}
+  if (!isFormBody) {
+    headers['Content-Type'] = 'application/json'
   }
   if (token) {
     headers['X-Maxma-Token'] = token

@@ -10,7 +10,7 @@ import { ensurePortLoaded, waitForBackend, getWsBase, getApiBase, generateUUID, 
 import { safeGetItem, safeRemoveItem, safeSetItem, safeKeys } from '@/lib/storage'
 import { chatSessionAliveCache } from '@/composables/sessionAliveCache'
 import { useWorkbenchStore } from '@/stores/workbench'
-import { detectEmotion, getStickerUrl, replaceEmotionTags } from './stickerUtils'
+import { detectEmotion, getStickerUrl, replaceEmotionTags, replaceStickerDirectives } from './stickerUtils'
 import { showSystemNotification } from '@/lib/notify'
 import { autoReadIfEnabled } from '@/composables/useTts'
 import type { GoalChannelState } from '@/stores/chat'
@@ -375,10 +375,10 @@ export function flushAllTurnsOnPageLeave(): void {
   }
 }
 
-// 修复 REGEX-STATE-001：去掉 /g 标志。带 g 的正则在 .test() 之间共享
-// lastIndex，跨字符串交替返回 true/false，导致 [表情:xxx] 内联指令的
-// 原位替换间歇性失效（退化为消息末尾附加）。
-const STICKER_DIRECTIVE_RE = /\[表情(?:包)?[:：][^\]]+\]/
+// STICKER-MULTI-001：多指令替换改由 stickerUtils.replaceStickerDirectives
+// 统一处理（每个类别各自取贴纸、全部原位替换）。此前的 STICKER_DIRECTIVE_RE
+// 无 /g 标志，只替换第一条指令，其余被剥除；带 g 的正则又会在 .test() 间
+// 共享 lastIndex（REGEX-STATE-001）。局部新建正则避免两难。
 
 async function hydrateTurnSticker(turn: ChatTurn): Promise<boolean> {
   if (!turn.finalAnswer || turn.stickerUrl) return false
@@ -386,16 +386,19 @@ async function hydrateTurnSticker(turn: ChatTurn): Promise<boolean> {
   if (!emotion) return false
 
   try {
+    // 先尝试替换全部显式指令（[表情包:xxx]）；有指令且替换成功则结束
+    const withDirectives = await replaceStickerDirectives(turn.finalAnswer)
+    if (withDirectives !== turn.finalAnswer) {
+      turn.finalAnswer = withDirectives
+      return true
+    }
+    // 无显式指令：取一张该情绪的贴纸——裸情感词标记原位替换，否则末尾附加
     const response = await tauriFetch(getStickerUrl(emotion))
     if (!response.ok) return false
     const data = await response.json()
     if (!data?.path) return false
-    const stickerTag = `<sticker:${data.path}>`
     const next = turn.finalAnswer
-    if (STICKER_DIRECTIVE_RE.test(next)) {
-      // 将内联指令（[表情:xxx]）替换为可渲染的 sticker 标签，保持原位显示
-      turn.finalAnswer = next.replace(STICKER_DIRECTIVE_RE, stickerTag)
-    } else if (next.includes(`[${emotion}]`)) {
+    if (next.includes(`[${emotion}]`)) {
       // 裸情感词标记（[爱心] 等）：替换为内联贴纸
       turn.finalAnswer = replaceEmotionTags(next, emotion, data.path)
     } else {
@@ -1238,42 +1241,50 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       if (event.payload?.content) {
         const emotion = detectEmotion(event.payload.content)
         if (emotion) {
-          // Fire-and-forget: fetch a sticker for this emotion, don't block message display.
-          // 必须使用 tauriFetch：Tauri WebView2 不允许从 tauri://localhost 向 http:// 发起
-          // 原生 fetch，会静默失败导致 stickerUrl 永远为空。与红队 R3 #1 修复的 store bug 同模式。
-          tauriFetch(getStickerUrl(emotion))
-            .then((r) => {
-              if (!r.ok) {
-                log.warn('sticker fetch non-ok response:', r.status)
-                return null
-              }
-              return r.json()
-            })
-            .then((data) => {
-              if (data?.path && turn.finalAnswer) {
-                const stickerTag = `<sticker:${data.path}>`
-                let next = turn.finalAnswer
-                if (STICKER_DIRECTIVE_RE.test(next)) {
-                  // 将内联指令（[表情:xxx]）替换为可渲染的 sticker 标签，保持原位显示
-                  next = next.replace(STICKER_DIRECTIVE_RE, stickerTag)
-                } else if (next.includes(`[${emotion}]`)) {
-                  // 裸情感词标记（[爱心] 等）：AI 直接在正文写的情绪标签，替换为内联贴纸
-                  next = replaceEmotionTags(next, emotion, data.path)
-                } else {
-                  // 无显式标记：整条消息末尾附带一个贴纸
-                  turn.stickerUrl = `${getApiBase()}/stickers/${data.path}`
+          // Fire-and-forget: 不阻塞消息显示。先替换全部显式指令
+          // （STICKER-MULTI-001：此前只替换第一条，其余被剥除），
+          // 无指令时取一张该情绪贴纸——裸标记原位替换，否则末尾附加。
+          // 必须使用 tauriFetch：Tauri WebView2 不允许从 tauri://localhost
+          // 向 http:// 发起原生 fetch，会静默失败导致 stickerUrl 永远为空。
+          void replaceStickerDirectives(turn.finalAnswer).then((withDirectives) => {
+            if (!turn.finalAnswer) return
+            if (withDirectives !== turn.finalAnswer) {
+              turn.finalAnswer = withDirectives
+              // 同步更新正在显示的 thinking block，避免流式阶段露出明文标记
+              const lastThink = findLastThinking(turn.events)
+              if (lastThink) lastThink.tokens = withDirectives
+              return
+            }
+            return tauriFetch(getStickerUrl(emotion))
+              .then((r) => {
+                if (!r.ok) {
+                  log.warn('sticker fetch non-ok response:', r.status)
+                  return null
                 }
-                if (next !== turn.finalAnswer) {
-                  turn.finalAnswer = next
-                  // 同步更新正在显示的 thinking block，避免流式阶段露出明文标记
-                  const lastThink = findLastThinking(turn.events)
-                  if (lastThink) {
-                    lastThink.tokens = next
+                return r.json()
+              })
+              .then((data) => {
+                if (data?.path && turn.finalAnswer) {
+                  let next = turn.finalAnswer
+                  if (next.includes(`[${emotion}]`)) {
+                    // 裸情感词标记（[爱心] 等）：AI 直接在正文写的情绪标签，替换为内联贴纸
+                    next = replaceEmotionTags(next, emotion, data.path)
+                  } else {
+                    // 无显式标记：整条消息末尾附带一个贴纸
+                    turn.stickerUrl = `${getApiBase()}/stickers/${data.path}`
+                  }
+                  if (next !== turn.finalAnswer) {
+                    turn.finalAnswer = next
+                    // 同步更新正在显示的 thinking block，避免流式阶段露出明文标记
+                    const lastThink = findLastThinking(turn.events)
+                    if (lastThink) {
+                      lastThink.tokens = next
+                    }
                   }
                 }
-              }
-            })
-            .catch((err) => log.warn('sticker fetch failed:', err))
+              })
+              .catch((err) => log.warn('sticker fetch failed:', err))
+          })
         }
       }
       break

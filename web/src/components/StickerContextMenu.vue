@@ -22,7 +22,8 @@
 
 <script setup lang="ts">
 import { ref, watch, watchEffect } from 'vue'
-import { getApiBase, tauriFetch } from '@/utils/env'
+import { getApiBase } from '@/utils/env'
+import { request } from '@/api'
 import Icon from '@/components/Icon.vue'
 import { createLogger } from '@/utils/logger'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
@@ -83,15 +84,16 @@ function bounceIcon(e: MouseEvent) {
 }
 
 // 检查是否已收藏
+// STICKER-AUTH-001：此前裸 tauriFetch 无 token，favorites GET 401 导致
+// 收藏状态永远 false；改走 request（自动带 token）。
 async function checkFavoriteStatus() {
   if (!props.sticker) return
   
   try {
-    const res = await tauriFetch(`${getApiBase()}/stickers/favorites`)
-    const data = await res.json()
+    const data = await request<{ favorites: Array<{ filename: string; category: string }> }>('/stickers/favorites')
     const favorites = data.favorites || []
     isFavorited.value = favorites.some(
-      (f: { filename: string; category: string }) => f.filename === props.sticker?.filename && f.category === props.sticker?.category
+      (f) => f.filename === props.sticker?.filename && f.category === props.sticker?.category
     )
   } catch (err) {
     log.error('检查收藏状态失败:', err)
@@ -106,15 +108,14 @@ async function onToggleFavorite() {
   try {
     if (isFavorited.value) {
       // 取消收藏
-      await tauriFetch(`${getApiBase()}/stickers/favorites?filename=${encodeURIComponent(props.sticker.filename)}&category=${encodeURIComponent(props.sticker.category)}`, {
+      await request(`/stickers/favorites?filename=${encodeURIComponent(props.sticker.filename)}&category=${encodeURIComponent(props.sticker.category)}`, {
         method: 'DELETE'
       })
       isFavorited.value = false
     } else {
       // 添加收藏
-      await tauriFetch(`${getApiBase()}/stickers/favorites`, {
+      await request('/stickers/favorites', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           category: props.sticker.category,
           filename: props.sticker.filename
@@ -146,9 +147,8 @@ async function onReduceRecommendation() {
 
   loading.value = true
   try {
-    await tauriFetch(`${getApiBase()}/stickers/skip`, {
+    await request('/stickers/skip', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         category: props.sticker.category,
         filename: props.sticker.filename

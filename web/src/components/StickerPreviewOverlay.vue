@@ -39,7 +39,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { StickerSegment } from '@/composables/useStickerSegments'
-import { getApiBase, tauriFetch } from '@/utils/env'
+import { request } from '@/api'
 import { createLogger } from '@/utils/logger'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
@@ -118,11 +118,11 @@ function handleClose() {
 async function refreshFavoriteStatus() {
   if (!current.value) return
   try {
-    const res = await tauriFetch(`${getApiBase()}/stickers/favorites`)
-    const data = await res.json()
+    // STICKER-AUTH-001：裸 tauriFetch 无 token 会 401，改走 request
+    const data = await request<{ favorites: Array<{ category: string; filename: string }> }>('/stickers/favorites')
     const favorites = data.favorites || []
     isFavorited.value = favorites.some(
-      (item: { category: string; filename: string }) => item.category === current.value.category && item.filename === current.value.filename
+      (item) => item.category === current.value.category && item.filename === current.value.filename
     )
   } catch (err) {
     log.warn('[StickerPreviewOverlay] 收藏状态读取失败:', err)
@@ -134,15 +134,14 @@ async function toggleFavorite() {
   favoriteLoading.value = true
   try {
     if (isFavorited.value) {
-      await tauriFetch(
-        `${getApiBase()}/stickers/favorites?filename=${encodeURIComponent(current.value.filename)}&category=${encodeURIComponent(current.value.category)}`,
+      await request(
+        `/stickers/favorites?filename=${encodeURIComponent(current.value.filename)}&category=${encodeURIComponent(current.value.category)}`,
         { method: 'DELETE' }
       )
       isFavorited.value = false
     } else {
-      await tauriFetch(`${getApiBase()}/stickers/favorites`, {
+      await request('/stickers/favorites', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           category: current.value.category,
           filename: current.value.filename,

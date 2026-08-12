@@ -1,6 +1,6 @@
 /** 情绪关键词 → 表情包分类映射 */
 
-import { getApiBase } from '@/utils/env'
+import { getApiBase, tauriFetch } from '@/utils/env'
 
 const EMOTION_MAP: Record<string, string> = {
   '开心': '开心', '高兴': '开心', '哈哈': '开心', '嘻嘻': '开心', '真好': '开心',
@@ -70,4 +70,43 @@ export function replaceEmotionTags(text: string, emotion: string, stickerPath: s
 /** 根据分类名获取随机贴纸 URL */
 export function getStickerUrl(category: string): string {
   return `${getApiBase()}/stickers/random/${encodeURIComponent(category)}`
+}
+
+/**
+ * STICKER-MULTI-001：把所有 [表情包:情绪] 指令替换为对应类别的贴纸标签。
+ * 此前只替换第一条指令，其余被 MessageBubble 的 stripStickerDirectives 剥除，
+ * 模型写多个表情时只显示 1 个贴纸。现在每个类别并发拉取一张随机贴纸，
+ * 逐条指令原位替换；拉取失败时保留原指令文本（语义仍可见）。
+ * 注意：不使用模块级共享正则的 .test()（REGEX-STATE-001 教训），
+ * 每次调用内部新建正则，避免 lastIndex 跨调用串扰。
+ */
+export async function replaceStickerDirectives(text: string): Promise<string> {
+  if (!text) return text
+  const directiveRe = /\[表情(?:包)?[:：]([^\]]+)\]/g
+  const matches = Array.from(text.matchAll(directiveRe))
+  if (!matches.length) return text
+
+  // 去重后的类别集合（EMOTION_MAP 未收录的情绪词跳过）
+  const categories = [...new Set(
+    matches.map(m => EMOTION_MAP[m[1]]).filter((c): c is string => Boolean(c)),
+  )]
+  if (!categories.length) return text
+
+  const tagByCategory = new Map<string, string>()
+  await Promise.all(categories.map(async (category) => {
+    try {
+      const res = await tauriFetch(getStickerUrl(category))
+      if (!res.ok) return
+      const data = await res.json()
+      if (data?.path) tagByCategory.set(category, `<sticker:${data.path}>`)
+    } catch {
+      // 拉取失败保留原指令文本
+    }
+  }))
+  if (!tagByCategory.size) return text
+
+  return text.replace(/\[表情(?:包)?[:：]([^\]]+)\]/g, (matched, emotion: string) => {
+    const category = EMOTION_MAP[emotion]
+    return category && tagByCategory.has(category) ? tagByCategory.get(category)! : matched
+  })
 }

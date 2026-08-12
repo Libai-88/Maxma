@@ -123,7 +123,8 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
-import { getApiBase, tauriFetch } from '@/utils/env'
+import { getApiBase } from '@/utils/env'
+import { request } from '@/api'
 import { createLogger } from '@/utils/logger'
 import { gsap, useGsap, easeMap, durationMap } from '@/composables/useGsap'
 
@@ -263,11 +264,12 @@ async function uploadFile(file: File) {
   try {
     const formData = new FormData()
     formData.append('file', file)
-    const res = await tauriFetch(`${getApiBase()}/stickers/upload`, {
+    // STICKER-AUTH-001：POST 上传必须带 token（此前 401 静默失败）；
+    // request 对 FormData 自动不设 JSON Content-Type（保留 multipart）。
+    const data = await request<{ success: boolean; path?: string; error?: string }>('/stickers/upload', {
       method: 'POST',
       body: formData,
     })
-    const data = await res.json()
     if (data.success) {
       // 刷新列表
       await loadData()
@@ -420,8 +422,10 @@ async function loadRecommendations() {
       text: props.contextText || searchQuery.value || '',
       limit: '4',
     })
-    const res = await tauriFetch(`${getApiBase()}/stickers/recommendations?${params.toString()}`)
-    const data = await res.json()
+    // STICKER-AUTH-001：recommendations 需鉴权，改走 request（带 token）
+    const data = await request<{ recommendations?: Sticker[] }>(
+      `/stickers/recommendations?${params.toString()}`,
+    )
     recommendedStickers.value = data.recommendations || []
   } catch (err) {
     log.warn('[StickerPicker] 加载推荐表情失败:', err)
@@ -446,26 +450,29 @@ function updatePickerPosition() {
 }
 
 // 加载数据
+// STICKER-AUTH-001：此前用裸 tauriFetch 调用——/api/stickers/index、/recent、
+// /favorites 需要鉴权（auth 中间件对单段路径不豁免），401 导致表情库恒为空。
+// 统一改走 request（自动携带 X-Maxma-Token，401 时自动刷新重试）。
 async function loadData() {
   log.debug('[StickerPicker] loadData called')
   try {
     const [allResult, recentResult, favResult] = await Promise.allSettled([
-      tauriFetch(`${getApiBase()}/stickers/index`),
-      tauriFetch(`${getApiBase()}/stickers/recent`),
-      tauriFetch(`${getApiBase()}/stickers/favorites`),
+      request<{ index: Record<string, Sticker> }>('/stickers/index'),
+      request<{ recent: Sticker[] }>('/stickers/recent'),
+      request<{ favorites: Sticker[] }>('/stickers/favorites'),
     ])
 
     const allData =
       allResult.status === 'fulfilled'
-        ? await allResult.value.json()
+        ? allResult.value
         : { index: {} }
     const recentData =
       recentResult.status === 'fulfilled'
-        ? await recentResult.value.json()
+        ? recentResult.value
         : { recent: [] }
     const favData =
       favResult.status === 'fulfilled'
-        ? await favResult.value.json()
+        ? favResult.value
         : { favorites: [] }
 
     if (allResult.status === 'rejected') {

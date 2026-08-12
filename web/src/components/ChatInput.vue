@@ -133,8 +133,23 @@
             <button type="button" class="add-file-menu-item" role="menuitem" @click="startLinkInput">
               <Icon name="link" :size="14" /> 加入链接
             </button>
+            <!-- STICKER-ENTRY-001：表情入口——此前 StickerPicker 完整实现但从未
+                 被任何组件挂载，用户主动发表情的 GUI 不存在。附件菜单加表情项。 -->
+            <button type="button" class="add-file-menu-item" role="menuitem" @click="openStickerPicker">
+              <Icon name="sticker" :size="14" /> 表情
+            </button>
           </div>
           <div v-if="showMenu" class="menu-backdrop" @click="closeAddFileMenu(true)"></div>
+          <!-- STICKER-ENTRY-001：表情选择器挂载点（此前 StickerPicker 有完整
+               实现但从未被挂载，ref 与 refresh() 均为死代码）。挂在附件按钮的
+               relative 容器内，bottom:100% 从按钮上方弹出。 -->
+          <StickerPicker
+            ref="stickerPickerRef"
+            :visible="stickerPickerVisible"
+            :context-text="text"
+            @select="onStickerSelect"
+            @close="onStickerPickerClose"
+          />
           </div>
           <span class="input-separator"></span>
           <ModelSelector />
@@ -232,6 +247,7 @@ import ThinkingWave from '@/components/ThinkingWave.vue'
 import AutocompletePanel from '@/components/AutocompletePanel.vue'
 import Icon from '@/components/Icon.vue'
 import StickerContextMenu from '@/components/StickerContextMenu.vue'
+import StickerPicker from '@/components/StickerPicker.vue'
 import QuotedSelectionCard from '@/components/QuotedSelectionCard.vue'
 import ThinkPathChooser from '@/components/ThinkPathChooser.vue'
 import { computeFloatingInputPosition } from '@/utils/floatingPosition'
@@ -251,7 +267,6 @@ import { showError, showSuccess } from '@/lib/toast'
 import type { ThinkPathId } from '@/utils/thinkPath'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
-import type StickerPickerComponent from '@/components/StickerPicker.vue'
 import type { Sticker } from '@/components/StickerPicker.vue'
 import ModelSelector from './ModelSelector.vue'
 import ContextUsageBadge from './ContextUsageBadge.vue'
@@ -495,11 +510,34 @@ watchEffect(() => {
 const contextMenuVisible = ref(false)
 const contextMenuPosition = ref({ x: 0, y: 0 })
 const contextMenuSticker = ref<Sticker | null>(null)
-const stickerPickerRef = ref<InstanceType<typeof StickerPickerComponent> | null>(null)
+// STICKER-ENTRY-001：表情选择器由附件菜单"表情"项打开，选择后以
+// <sticker:path> 标记插入输入框（useStickerSegments 解析为贴纸段）。
+const stickerPickerVisible = ref(false)
+const stickerPickerRef = ref<InstanceType<typeof StickerPicker> | null>(null)
 const parsedInputSegments = useStickerSegments(text)
 const stickerSegments = computed(() =>
   parsedInputSegments.value.filter((seg): seg is StickerSegment => seg.type === 'sticker')
 )
+
+function openStickerPicker() {
+  closeAddFileMenu(true)
+  stickerPickerVisible.value = true
+}
+
+function onStickerSelect(sticker: Sticker) {
+  const tag = `<sticker:${sticker.path}>`
+  text.value = text.value ? `${text.value} ${tag}` : tag
+  stickerPickerVisible.value = false
+  nextTick(() => {
+    textareaRef.value?.focus()
+    autoResize()
+  })
+}
+
+function onStickerPickerClose() {
+  stickerPickerVisible.value = false
+  nextTick(() => textareaRef.value?.focus())
+}
 
 function removeStickerSegment(sticker: StickerSegment) {
   const currentSticker = stickerSegments.value.find(seg => seg.occurrenceKey === sticker.occurrenceKey) || sticker
