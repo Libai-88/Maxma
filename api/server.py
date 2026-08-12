@@ -38,6 +38,7 @@ from api.routes import maxma_blocker as maxma_blocker_router
 from api.routes import mcp_test as mcp_test_router
 from api.routes import metrics as metrics_router
 from api.routes import news as news_router
+from api.routes import onboarding as onboarding_router
 from api.routes import restart as restart_router
 from api.routes import session_compress as session_compress_router
 from api.routes import settings_panels as settings_panels_router
@@ -262,6 +263,7 @@ def create_app() -> FastAPI:
     app.include_router(mcp_test_router.router)
     app.include_router(metrics_router.router, prefix="/api")
     app.include_router(news_router.router, prefix="/api")
+    app.include_router(onboarding_router.router, prefix="/api")
     app.include_router(session_compress_router.router, prefix="/api")
     app.include_router(transcripts_router.router, prefix="/api")
     app.include_router(upload_router.router, prefix="/api")

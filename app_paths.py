@@ -181,6 +181,9 @@ USER_MD_PATH = PERSONAS_DATA_DIR / "USER.md"
 ACTIVE_PERSONA_PATH = PERSONAS_DATA_DIR / "active_persona.yaml"
 ENV_FILE_PATH = DATA_DIR / ".env"
 MCP_CONFIG_PATH = API_DATA_DIR / "mcp_servers.yaml"
+# 首次引导状态（ONBOARDING-PORTABLE-001）：随数据目录走，便携版/标准版
+# 各自独立。此前存前端 localStorage，WebView2 profile 共享时互相污染。
+ONBOARDING_STATE_PATH = DATA_DIR / "config" / "onboarding.json"
 WORKFLOW_JOURNAL_PATH = API_DATA_DIR / "workflow_journal.sqlite"
 PROVIDERS_YAML_PATH = API_DATA_DIR / "providers.yaml"
 # Migration backups are intentionally separate from the live configuration.

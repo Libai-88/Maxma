@@ -82,6 +82,8 @@ skills/bilibili/cookie.txt
 tools/bilibili/cookie.txt
 output/bilibili/
 config/personas/memory.yaml
+# 首次引导状态（开发模式下写入项目 config/，随数据目录走；打包模式在便携 data/）
+config/onboarding.json
 *.lock
 !desktop/src-tauri/Cargo.lock
 !bun-sidecar/bun.lock

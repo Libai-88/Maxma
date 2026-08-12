@@ -223,7 +223,9 @@ onMounted(async () => {
       })
     }, 10000)
   }
-  onboarding.initialize()
+  // ONBOARDING-PORTABLE-001：引导状态现从后端读取（随数据目录走），
+  // 需要等待一次网络往返后再决定是否显示引导。
+  await onboarding.initialize()
 
   // Phase 4：启动能力发现 —— 拉取能力清单并开启 5 分钟后台轮询。
   initCapabilities()

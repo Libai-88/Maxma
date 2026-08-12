@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
+import { request } from '@/api'
 import { createLogger } from '@/utils/logger'
 
 const log = createLogger('onboarding')
@@ -25,6 +26,22 @@ const defaultPreferences: OnboardingPreferences = {
 
 function copyDefaults(): OnboardingSnapshot {
   return { completed: false, preferences: { ...defaultPreferences } }
+}
+
+/** 从后端响应规范化 snapshot（字段白名单与 loadOnboardingSnapshot 保持一致） */
+function normalizeSnapshot(data: unknown): OnboardingSnapshot | null {
+  if (!data || typeof data !== 'object') return null
+  const parsed = data as Partial<OnboardingSnapshot>
+  if (typeof parsed.completed !== 'boolean') return null
+  const preferences = (parsed.preferences ?? {}) as Partial<OnboardingPreferences>
+  return {
+    completed: parsed.completed,
+    preferences: {
+      displayName: typeof preferences.displayName === 'string' ? preferences.displayName.slice(0, 80) : '',
+      language: preferences.language === 'en' ? 'en' : 'zh-CN',
+      workspace: preferences.workspace === 'project' ? 'project' : 'personal',
+    },
+  }
 }
 
 export function loadOnboardingSnapshot(storage: Storage = localStorage): OnboardingSnapshot {
@@ -66,17 +83,36 @@ export const useOnboardingStore = defineStore('onboarding', () => {
   const initialized = ref(false)
   const shouldShow = computed(() => onboardingEnabled && initialized.value && !snapshot.value.completed)
 
-  function initialize() {
+  // ONBOARDING-PORTABLE-001：引导状态以后端为准（随数据目录走，便携版与
+  // 标准版各自独立）。此前仅存 localStorage，WebView2 profile 共享时互相
+  // 污染——任一版本点过"跳过/完成"，另一版本首启便直接跳过引导。
+  // 后端不可用（旧版本后端/网络异常）时回退 localStorage，保证兼容。
+  async function initialize() {
     if (initialized.value) return
-    snapshot.value = loadOnboardingSnapshot()
+    try {
+      const data = await request<unknown>('/onboarding/state')
+      const normalized = normalizeSnapshot(data)
+      // 关键：后端无记录（新用户）时**不信任** localStorage 的 completed——
+      // 它可能来自共享 profile 的旧状态。一律按新用户显示引导。
+      snapshot.value = normalized ?? copyDefaults()
+    } catch (err) {
+      log.warn('onboarding state fetch failed, fallback to localStorage:', err)
+      snapshot.value = loadOnboardingSnapshot()
+    }
     initialized.value = true
   }
 
   function persist() {
+    // localStorage 仅作缓存/兜底（后端不可用时 initialize 仍能恢复最近状态）
     const ok = saveOnboardingSnapshot(snapshot.value)
     if (!ok) {
       log.warn('Failed to persist onboarding snapshot to localStorage')
     }
+    // 同步到后端：状态随数据目录持久化
+    void request('/onboarding/state', {
+      method: 'PUT',
+      body: JSON.stringify(snapshot.value),
+    }).catch((err) => log.warn('onboarding state persist failed:', err))
   }
 
   function updatePreferences(preferences: Partial<OnboardingPreferences>) {
