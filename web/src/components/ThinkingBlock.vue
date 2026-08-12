@@ -60,29 +60,43 @@ import StickerInline from './StickerInline.vue'
 import StickerPreviewOverlay from './StickerPreviewOverlay.vue'
 import { useStickerSegments, type StickerSegment } from '@/composables/useStickerSegments'
 import { hasEmotionTag } from '@/composables/stickerUtils'
-import { speakText, stopSpeaking, speakingState } from '@/composables/useTts'
+import { speakText, stopSpeaking, speakingState, lastSpeakError } from '@/composables/useTts'
 import { showError } from '@/lib/toast'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const props = defineProps<{ block: ThinkingBlockType }>()
 
-// GAP-A2-001：朗读/停止（与 MessageBubble 同语义；文案 = 已完成的答案内容）
+// GAP-A2-001：朗读/停止（与 MessageBubble 同语义；文案 = 已完成的答案内容）。
+// TTS-BUGFIX-001：按 speakText 真实结果给精确反馈，'ok' 后 4s 复查引擎。
 function toggleRead() {
   const text = props.block.tokens ?? ''
   if (speakingState.value) {
     stopSpeaking()
     return
   }
-  const ok = speakText(text)
-  if (!ok) {
-    showError('当前环境不支持语音合成')
-    return
-  }
-  window.setTimeout(() => {
-    if (!speakingState.value) {
+  void speakText(text).then((result) => {
+    if (result === 'disabled') {
       showError('TTS 未启用：请在「设置 → 语音」中开启后使用朗读')
+      return
     }
-  }, 1500)
+    if (result === 'unsupported') {
+      showError('当前环境不支持语音合成')
+      return
+    }
+    if (result === 'load-config-failed') {
+      showError('语音配置加载失败，请稍后重试')
+      return
+    }
+    if (result === 'error') {
+      showError(`语音合成失败（${lastSpeakError.value || '未知原因'}）`)
+      return
+    }
+    window.setTimeout(() => {
+      if (!speakingState.value) {
+        showError('语音引擎未响应，请检查系统语音与音频设备设置')
+      }
+    }, 4000)
+  })
 }
 
 const previewIndex = ref(-1)

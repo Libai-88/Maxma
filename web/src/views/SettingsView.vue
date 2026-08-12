@@ -644,7 +644,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { api } from '@/api'
 import type { TtsConfig, BrowserToolsConfig, SubAgentConfig } from '@/api'
 import { isNotifyEnabled, setNotifyEnabled, isNotificationSupported, getNotificationPermission, requestNotifyPermission, showSystemNotification } from '@/lib/notify'
-import { invalidateTtsConfigCache, listSystemVoices, speakText, stopSpeaking, isSpeechSupported } from '@/composables/useTts'
+import { invalidateTtsConfigCache, listSystemVoices, speakText, stopSpeaking, isSpeechSupported, lastSpeakError } from '@/composables/useTts'
 import { createLogger } from '@/utils/logger'
 import { showError, showSuccess } from '@/lib/toast'
 import { useViewEntrance } from '@/composables/useViewEntrance'
@@ -872,18 +872,32 @@ async function onTtsProviderChange(provider: TtsConfig['provider']) {
   }
 }
 
-// GAP-A2-001：试听/停止（用户手势内直接调用，读当前面板配置生效）
+// GAP-A2-001：试听/停止（用户手势内直接调用，读当前面板配置生效）。
+// TTS-BUGFIX-001：按 speakText 真实结果反馈（此前异步加载配置后静默失败）。
 function previewTts() {
   if (!isSpeechSupported()) {
     showError('当前环境不支持语音合成')
     return
   }
-  const ok = speakText('你好，这是 Maxma 的语音试听。Hello, this is a Maxma voice preview.')
-  if (!ok) {
-    showError('语音合成不可用，请检查系统语音设置')
-    return
-  }
-  showSuccess('正在播放试听…')
+  void speakText('你好，这是 Maxma 的语音试听。Hello, this is a Maxma voice preview.').then((result) => {
+    if (result === 'disabled') {
+      showError('请先开启 TTS 再试听')
+      return
+    }
+    if (result === 'unsupported') {
+      showError('当前环境不支持语音合成')
+      return
+    }
+    if (result === 'load-config-failed') {
+      showError('语音配置加载失败，请稍后重试')
+      return
+    }
+    if (result === 'error') {
+      showError(`语音合成失败（${lastSpeakError.value || '未知原因'}）`)
+      return
+    }
+    showSuccess('正在播放试听…')
+  })
 }
 
 function stopTts() {

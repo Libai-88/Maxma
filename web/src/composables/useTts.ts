@@ -6,7 +6,9 @@
  * API，按产品原则（不要求用户配置付费 API）不接入。
  *
  * 配置来源：/settings/tts（panel_configs.json），provider 固定为 "system"。
- * 所有路径安全降级：无 speechSynthesis / 未启用 / 无语音时静默。
+ * 所有路径安全降级，且失败原因可诊断（TTS-BUGFIX-001：此前的静默失败 +
+ * 误报"未启用"让用户以为功能坏了——现在 speakText 返回明确结果枚举，
+ * 调用方据此给出精确反馈）。
  */
 import { ref } from 'vue'
 import { api, type TtsConfig } from '@/api'
@@ -57,52 +59,106 @@ export function isSpeechSupported(): boolean {
   return typeof window !== 'undefined' && 'speechSynthesis' in window
 }
 
-/** 列出系统可用语音（含 voiceschanged 补载；zh 优先排序） */
+/** 列出系统可用语音（含 voiceschanged 补载） */
 export function listSystemVoices(): SpeechSynthesisVoice[] {
   if (!isSpeechSupported()) return []
-  const voices = window.speechSynthesis.getVoices()
-  if (voices.length === 0) {
-    // 某些引擎异步加载语音列表——注册一次性补载回调（模块级去重）
-    window.speechSynthesis.onvoiceschanged ??= () => {
-      // 仅触发一次后释放，避免长驻
-      window.speechSynthesis.onvoiceschanged = null
+  return window.speechSynthesis.getVoices()
+}
+
+/** 等待系统语音列表就绪（WebView2/Chrome 首次异步加载）。
+ *  TTS-BUGFIX-001：voices 未就绪时 speak 可能静默失败，等待 voiceschanged
+ *  事件（500ms 超时）后返回当前列表。 */
+export function waitVoicesReady(timeoutMs = 500): Promise<SpeechSynthesisVoice[]> {
+  return new Promise((resolve) => {
+    const synth = window.speechSynthesis
+    const voices = synth.getVoices()
+    if (voices.length > 0) {
+      resolve(voices)
+      return
     }
-  }
-  return voices
+    const timer = setTimeout(() => {
+      cleanup()
+      resolve(synth.getVoices())
+    }, timeoutMs)
+    const onChanged = () => {
+      cleanup()
+      resolve(synth.getVoices())
+    }
+    const cleanup = () => {
+      clearTimeout(timer)
+      synth.onvoiceschanged = null
+    }
+    synth.onvoiceschanged = onChanged
+  })
 }
 
 /** 全局朗读状态（消息气泡"朗读/停止"按钮的响应式标签来源） */
 export const speakingState = ref(false)
 
-/** 朗读文本。未启用 / 无语音 / 无 API 时返回 false。 */
-export function speakText(text: string): boolean {
-  if (!isSpeechSupported() || !text) return false
+/** 朗读结果枚举——调用方据此给用户精确反馈（不再盲猜"未启用"） */
+export type SpeakResult =
+  | 'ok'                 // 已提交朗读（可能仍在启动）
+  | 'unsupported'        // 环境不支持 speechSynthesis
+  | 'disabled'           // 配置未启用 TTS
+  | 'load-config-failed' // 配置加载失败
+  | 'error'              // speak 抛错
+
+/** 最近一次朗读的引擎错误（onerror 原因透出，供诊断） */
+export const lastSpeakError = ref('')
+
+/**
+ * 朗读文本。返回结果枚举：
+ * - 'ok'：已提交（onstart 前 speak 可能仍在初始化，引擎启动由
+ *   speakingState 反映；调用方可在 3-4s 后复查）
+ * - 'disabled' / 'unsupported' / 'error'：未启动，调用方直接提示
+ */
+export async function speakText(text: string): Promise<SpeakResult> {
+  if (!isSpeechSupported() || !text) return 'unsupported'
   const synth = window.speechSynthesis
   // 朗读中再次调用 → 打断重读（与"停止"按钮语义一致）
   if (synth.speaking) synth.cancel()
 
+  let cfg: TtsConfig
+  try {
+    cfg = await loadTtsConfig()
+  } catch {
+    return 'load-config-failed'
+  }
+  if (!cfg.enabled) return 'disabled'
+
+  // TTS-BUGFIX-001：voices 未就绪时等待（避免 WebView2 首次静默失败）
+  const voices = await waitVoicesReady()
+
   const utterance = new SpeechSynthesisUtterance(text.replace(/```[\s\S]*?```/g, '（代码块）'))
   utterance.onstart = () => { speakingState.value = true }
-  utterance.onend = () => { speakingState.value = false }
-  utterance.onerror = () => { speakingState.value = false }
-  void loadTtsConfig().then((cfg) => {
-    if (!cfg.enabled) return
-    const voices = listSystemVoices()
-    if (cfg.voice) {
-      const match = voices.find((v) => v.name === cfg.voice || v.voiceURI === cfg.voice)
-      if (match) utterance.voice = match
-    } else {
-      // 默认优先中文女声，其次任意中文，最后系统默认
-      const zhFemale = voices.find((v) => v.lang?.toLowerCase().startsWith('zh') && /female|xiaoxiao|yaoyao|晓|女/i.test(v.name))
-      const zh = voices.find((v) => v.lang?.toLowerCase().startsWith('zh'))
-      utterance.voice = zhFemale ?? zh ?? null
-    }
-    utterance.lang = utterance.voice?.lang ?? 'zh-CN'
-    utterance.rate = cfg.speed ?? 1.0
-    utterance.pitch = cfg.pitch ?? 1.0
+  utterance.onend = () => {
+    speakingState.value = false
+    lastSpeakError.value = ''
+  }
+  utterance.onerror = (e) => {
+    speakingState.value = false
+    lastSpeakError.value = String((e as SpeechSynthesisErrorEvent)?.error ?? 'unknown')
+  }
+  if (cfg.voice) {
+    const match = voices.find((v) => v.name === cfg.voice || v.voiceURI === cfg.voice)
+    if (match) utterance.voice = match
+  } else {
+    // 默认优先中文女声，其次任意中文，最后系统默认
+    const zhFemale = voices.find((v) => v.lang?.toLowerCase().startsWith('zh') && /female|xiaoxiao|yaoyao|晓|女/i.test(v.name))
+    const zh = voices.find((v) => v.lang?.toLowerCase().startsWith('zh'))
+    utterance.voice = zhFemale ?? zh ?? null
+  }
+  utterance.lang = utterance.voice?.lang ?? 'zh-CN'
+  utterance.rate = cfg.speed ?? 1.0
+  utterance.pitch = cfg.pitch ?? 1.0
+  try {
     synth.speak(utterance)
-  })
-  return true
+    return 'ok'
+  } catch (err) {
+    log.warn('speak 失败:', err)
+    lastSpeakError.value = String(err)
+    return 'error'
+  }
 }
 
 /** 停止当前朗读 */
@@ -110,6 +166,7 @@ export function stopSpeaking(): void {
   if (!isSpeechSupported()) return
   window.speechSynthesis.cancel()
   speakingState.value = false
+  lastSpeakError.value = ''
 }
 
 /**
@@ -122,11 +179,11 @@ export function autoReadIfEnabled(text: string): void {
     if (!cfg.enabled || !cfg.auto_read) return
     // 用户正手动朗读时打断（最新动作优先）
     if (window.speechSynthesis.speaking) window.speechSynthesis.cancel()
-    speakText(text)
+    void speakText(text)
   })
 }
 
-// 组件用响应式入口（MessageBubble 朗读按钮 / 设置页试听）
+/** 组件用响应式入口（MessageBubble 朗读按钮 / 设置页试听） */
 export function useTts() {
   const config = ref<TtsConfig>({ ...DEFAULT_TTS_CONFIG })
   const loading = ref(false)

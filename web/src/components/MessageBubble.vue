@@ -71,7 +71,7 @@ import StickerInline from './StickerInline.vue'
 import StickerPreviewOverlay from './StickerPreviewOverlay.vue'
 import { useStickerSegments, type StickerSegment } from '@/composables/useStickerSegments'
 import { stripStickerDirectives } from '@/composables/stickerUtils'
-import { speakText, stopSpeaking, speakingState } from '@/composables/useTts'
+import { speakText, stopSpeaking, speakingState, lastSpeakError } from '@/composables/useTts'
 import { showError } from '@/lib/toast'
 import { gsap, useGsap, easeMap, lazyLoadPlugin } from '@/composables/useGsap'
 
@@ -119,24 +119,39 @@ function previewSticker(sticker: StickerSegment) {
   )
 }
 
-// GAP-A2-001：朗读/停止切换。speakText 内部加载配置——
-// 未启用时静默无操作，这里给出可见反馈引导用户去设置页开启。
+// GAP-A2-001：朗读/停止切换。speakText 返回结果枚举——TTS-BUGFIX-001：
+// 此前静默失败 + 1.5s 盲猜 toast（"TTS 未启用"），WebView2 引擎启动慢时
+// 误报导致用户以为功能坏了。现在按真实结果给精确反馈；'ok' 后复查
+// 4s（引擎初始化），仍未开始才提示检查系统语音。
 function toggleRead() {
   if (speakingState.value) {
     stopSpeaking()
     return
   }
-  const ok = speakText(props.content)
-  if (!ok) {
-    showError('当前环境不支持语音合成')
-    return
-  }
-  // 配置异步加载后可能发现 TTS 未启用——短暂延迟后仍无朗读状态则提示
-  window.setTimeout(() => {
-    if (!speakingState.value) {
+  void speakText(props.content).then((result) => {
+    if (result === 'disabled') {
       showError('TTS 未启用：请在「设置 → 语音」中开启后使用朗读')
+      return
     }
-  }, 1500)
+    if (result === 'unsupported') {
+      showError('当前环境不支持语音合成')
+      return
+    }
+    if (result === 'load-config-failed') {
+      showError('语音配置加载失败，请稍后重试')
+      return
+    }
+    if (result === 'error') {
+      showError(`语音合成失败（${lastSpeakError.value || '未知原因'}）`)
+      return
+    }
+    // ok：引擎初始化可能需数秒，4s 后仍未开始朗读才提示
+    window.setTimeout(() => {
+      if (!speakingState.value) {
+        showError('语音引擎未响应，请检查系统语音与音频设备设置')
+      }
+    }, 4000)
+  })
 }
 
 function measureHeight() {
