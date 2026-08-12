@@ -75,36 +75,12 @@
           </button>
           <div v-if="moreMenuOpen" ref="actionsMenuRef" id="session-actions-menu" class="session-actions-menu" role="menu" aria-label="更多会话操作">
             <div class="session-actions-heading">会话设置</div>
-            <button class="session-action" type="button" role="menuitem" :aria-pressed="privateMode" @click="togglePrivateMode">
-              <span>私密模式</span>
-              <span class="session-action-state">{{ privateMode ? '已开启' : '已关闭' }}</span>
-            </button>
-            <!-- R5-PRIVATE-NOTICE-001：私密消息设计上不落盘（不进 localStorage、
-                 刷新/关闭后不保留）——开启时明确提示，避免用户误以为消息丢失是故障 -->
-            <p v-if="privateMode" class="session-action-hint">私密消息仅保存在当前页面，刷新或关闭窗口后不保留</p>
-            <button class="session-action" type="button" role="menuitem" :aria-pressed="autoApprove" @click="toggleAutoApprove">
-              <span>自动执行</span>
-              <span class="session-action-state">{{ autoApprove ? '已开启' : '需确认' }}</span>
-            </button>
-            <!-- GAP-A6-001：计划模式开关——先规划后执行（OMP plan mode）。
-                 切换经 WS set_plan_mode 下发，sidecar 即时启停计划模式。 -->
-            <button class="session-action" type="button" role="menuitem" :aria-pressed="planModeOn" @click="togglePlanMode">
-              <span>计划模式</span>
-              <span class="session-action-state">{{ planModeOn ? '已开启' : '已关闭' }}</span>
-            </button>
-            <p v-if="planModeOn" class="session-action-hint">开启后 Agent 先产出执行计划，再逐步执行</p>
-            <!-- GAP-A7-001：检查点/回退——长任务的"后悔药"。经 WS
-                 checkpoint_action 下发，下一轮由 Agent 调用 checkpoint/rewind 工具。 -->
-            <button class="session-action" type="button" role="menuitem" @click="handleCheckpoint('save')">
-              <span>创建检查点</span>
-            </button>
-            <button class="session-action" type="button" role="menuitem" @click="handleCheckpoint('restore')">
-              <span>回到检查点</span>
-            </button>
-            <!-- GAP-B1-001：目标模式（OMP goal）——设定持续目标，Agent 自主推进 -->
-            <div class="session-action-block" role="group" aria-label="目标模式">
-              <GoalModePanel :goal-state="goalState" :send-action="sendGoalAction" />
-            </div>
+            <!-- GAP-CMD-001：进阶操作统一收敛到斜杠命令（输入 / 查看面板）。
+                 私密/自动执行/计划模式/检查点/目标模式入口已由 /private /auto
+                 /plan /checkpoint /goal 接管——单一入口降低学习成本。 -->
+            <p class="session-action-hint session-action-hint--cmd">💡 输入 <code>/</code> 查看全部命令（如 /goal 完成周报、/plan、/undo）</p>
+            <!-- GAP-B1-001：目标状态只读展示（操作统一走 /goal 命令） -->
+            <GoalStatusLine v-if="goalState?.goal" :goal="goalState.goal" />
             <!-- MODEL-PARAMS-001：模型参数（输出上限/思考开关）挂载入口——
                  此前 ModelSettingsPanel 从未挂载，max_tokens 后端支持但 UI 孤儿 -->
             <button class="session-action" type="button" role="menuitem" @click="modelSettingsOpen = !modelSettingsOpen">
@@ -186,7 +162,7 @@ import ChatInput from '@/components/ChatInput.vue'
 import ModelSettingsPanel from '@/components/ModelSettingsPanel.vue'
 import ChatWindow from '@/components/ChatWindow.vue'
 import SessionPermissionModeControl from '@/components/SessionPermissionModeControl.vue'
-import GoalModePanel from '@/components/GoalModePanel.vue'
+import GoalStatusLine from '@/components/GoalStatusLine.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import TaskTrackerBar, { type TaskTrackerData } from '@/components/TaskTrackerBar.vue'
 import WorkbenchPanel from '@/components/workbench/WorkbenchPanel.vue'
@@ -217,7 +193,7 @@ import { createLogger } from '@/utils/logger'
 import { safeGetItem, safeSetItem } from '@/lib/storage'
 import CardSpotlight from '@/components/inspira/CardSpotlight.vue'
 import GlowBorder from '@/components/inspira/GlowBorder.vue'
-import { showError, showSuccess } from '@/lib/toast'
+import { showError } from '@/lib/toast'
 
 const log = createLogger('ChatView')
 
@@ -420,39 +396,9 @@ onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleMoreMenuKeydown)
 })
 
-function togglePrivateMode() {
-  setPrivateMode(!privateMode.value)
-  closeMoreMenu()
-}
-
-function toggleAutoApprove() {
-  setAutoApprove(!autoApprove.value)
-  closeMoreMenu()
-}
-
-// GAP-A6-001：计划模式开关（会话级）。仅前端状态 + WS 下发，刷新后回到默认
-// 关闭态（sidecar 会话的 plan 状态与 UI 一致重建，不持久化避免歧义）。
+// GAP-CMD-001：计划模式状态（会话级，/plan 命令切换）。仅前端状态 + WS
+// 下发，刷新后回到默认关闭态（sidecar 会话的 plan 状态与 UI 一致重建）。
 const planModeOn = ref(false)
-
-function togglePlanMode() {
-  const next = !planModeOn.value
-  if (!sendPlanMode(next)) {
-    showError('计划模式切换失败：连接未就绪')
-    return
-  }
-  planModeOn.value = next
-  showSuccess(next ? '已开启计划模式：Agent 将先规划后执行' : '已关闭计划模式')
-}
-
-// GAP-A7-001：检查点/回退入口。经 WS 下发，下一轮由 Agent 执行 checkpoint/
-// rewind 工具（git 仓库上下文内有效；非 git 项目 Agent 会如实反馈不可用）。
-function handleCheckpoint(action: 'save' | 'restore') {
-  if (!sendCheckpointAction(action)) {
-    showError('请求失败：连接未就绪')
-    return
-  }
-  showSuccess(action === 'save' ? '已请求创建检查点，将在下一轮执行' : '已请求回到最近检查点，将在下一轮执行')
-}
 
 // Ctrl+K 切换私密模式
 useGlobalShortcut({ key: 'k', mod: true }, () => { setPrivateMode(!privateMode.value) })
@@ -1133,6 +1079,23 @@ function handleQuickStart(message: string) {
   line-height: 1.5;
   padding: 2px 10px 6px;
   border-bottom: 1px solid var(--border);
+}
+
+/* GAP-CMD-001：斜杠命令引导行（发现性入口） */
+.session-action-hint--cmd {
+  border-bottom: none;
+  padding: 6px 10px;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border-radius: 8px;
+  margin: 0 2px 6px;
+}
+
+.session-action-hint--cmd code {
+  font-family: ui-monospace, Consolas, monospace;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  padding: 0 4px;
+  border-radius: 4px;
 }
 
 .session-task-status {
