@@ -260,6 +260,13 @@ class RateLimitMiddleware:
         # 只读请求才可跳过限流。路径前缀本身不足以表达安全性：同一路由
         # 可能同时提供 GET 查询和 POST/PUT/DELETE 写操作，后者必须消耗配额。
         method = scope.get("method", "GET").upper()
+        # DIAG-429-001：诊断上报通道（POST /api/diagnostics/frontend）豁免限流。
+        # 该端点只把前端运行时错误追加写入本地日志文件，无任何状态变更；前端
+        # unhandledrejection 风暴（WebView2 history API 异常等）不应被本地 429
+        # 误伤——否则日志被 429 噪音淹没，掩盖真实的供应商限流信号。
+        # 其余 diagnostics 路由（error-log 的 DELETE 等写操作）仍正常限流。
+        if path == "/api/diagnostics/frontend":
+            return await self.app(scope, receive, send)
         if method in {"GET", "HEAD"} and (
             path in _RATE_LIMIT_SKIP_PATHS
             or any(path.startswith(p) for p in _RATE_LIMIT_SKIP_PREFIXES)

@@ -195,6 +195,16 @@ export async function buildCreateSessionOptions(
     }
   } catch { /* global not available */ }
 
+  // RETRY-DEFAULT-001：应用侧默认重试上限 3 次（与设置页 UI 默认值一致）。
+  // OMP schema 默认 maxRetries=10，免费档模型（匿名共享配额）在限流时会让
+  // 单条消息反复退避重试最长 10 分钟，进一步放大对共享配额的压力。
+  // 用户显式配置过时尊重用户值（isConfigured 优先）。
+  try {
+    if (!global.isConfigured("retry.maxRetries" as SettingPath)) {
+      globalOverrides["retry.maxRetries"] = 3;
+    }
+  } catch { /* global not available */ }
+
   // CHECKPOINT-DEFAULT-001：globalOverrides 未显式配置时默认注册
   // checkpoint/rewind 工具（与 tools.py 宣告一致）；用户显式关闭则尊重。
   const checkpointEnabled = globalOverrides["checkpoint.enabled"] ?? true;
@@ -261,7 +271,18 @@ let settingsInitPromise: Promise<Settings> | null = null;
 async function ensureSettings(): Promise<Settings> {
   if (!settingsInitPromise) {
     settingsInitPromise = Settings.init()
-      .then(() => Settings.instance)
+      .then((settings) => {
+        // RETRY-DEFAULT-001：Maxma 应用默认重试上限 3（OMP schema 默认 10，
+        // 免费档模型限流时会把单条消息拖到最长 10 分钟）。用户从未显式配置
+        // 时写入应用默认值（OMP set 会持久化），保证设置页显示与运行时
+        // 生效值一致；用户之后显式配置的值优先（isConfigured 不再为 false）。
+        try {
+          if (!settings.isConfigured("retry.maxRetries" as SettingPath)) {
+            settings.set("retry.maxRetries" as SettingPath, 3);
+          }
+        } catch { /* 初始化写入失败不阻塞 */ }
+        return settings;
+      })
       .catch((err) => {
         settingsInitPromise = null; // 重置缓存，允许下次重试
         throw err;

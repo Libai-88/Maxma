@@ -12,8 +12,24 @@ import { request } from '@/api'
  * console 错误/未捕获 rejection 上报到后端 /api/diagnostics/frontend，
  * 写入 data/logs/frontend-diag.log，由开发侧读取定位 WebView2 渲染问题。
  * 必须走 request（自动带 X-Maxma-Token），裸 fetch 会被 401 拦截。
+ *
+ * DIAG-429-001：上报节流 + 去重。此前每个 rejection/error 都立即上报，
+ * WebView2 history API 异常风暴（数百条 "resource id is invalid"）会以
+ * >30 次/15s 的洪峰撞上后端限流中间件，产生大量本地 429 噪音日志。
+ * 现在 1s 窗口最多 1 条、同消息 10s 内只报一次。
  */
+const DIAG_MIN_INTERVAL_MS = 1000
+const DIAG_DEDUPE_WINDOW_MS = 10000
+let lastDiagTs = 0
+let lastDiagMsg = ''
+let lastDiagMsgTs = 0
 function reportDiag(kind: string, msg: string) {
+  const now = Date.now()
+  if (msg === lastDiagMsg && now - lastDiagMsgTs < DIAG_DEDUPE_WINDOW_MS) return
+  if (now - lastDiagTs < DIAG_MIN_INTERVAL_MS) return
+  lastDiagTs = now
+  lastDiagMsg = msg
+  lastDiagMsgTs = now
   try {
     const url = `${location.pathname}${location.hash}`
     void request('/diagnostics/frontend', {
