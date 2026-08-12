@@ -65,7 +65,13 @@ async function boot() {
   }
 
   // 生产环境：等待后端就绪（Tauri sidecar 启动需 10-30s）
-  // 等待期间 index.html 的 loading 覆盖层保持可见
+  // 等待期间 index.html 的 loading 覆盖层保持可见；就绪后更新状态文案，
+  // 让启动过程有明确的阶段反馈（SPLASH-STAGE-001）。
+  const splash = document.getElementById('app-loading')
+  function setBootStatus(text: string) {
+    const el = document.getElementById('boot-status-text')
+    if (el) el.textContent = text
+  }
   let backendReady = false
   let backendError = ''
   try {
@@ -74,7 +80,6 @@ async function boot() {
     backendError = err instanceof Error ? err.message : String(err)
   }
   if (!backendReady) {
-    const splash = document.getElementById('app-loading')
     if (splash) splash.remove()
     const el = document.getElementById('app')
     if (el) {
@@ -84,8 +89,9 @@ async function boot() {
     return
   }
 
-  // 隐藏 loading 覆盖层并挂载 Vue
-  const splash = document.getElementById('app-loading')
+  // 后端就绪：更新状态文案后再移除覆盖层（短暂展示"已就绪"，避免
+  // 首屏在长时间等待后直接闪没，用户无感知）
+  setBootStatus('后端服务已就绪')
   if (splash) splash.remove()
   app.mount('#app')
 }

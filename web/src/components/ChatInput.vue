@@ -413,7 +413,9 @@ const inputPlaceholder = computed(() => {
     return 'AI 正在生成回复，可随时停止后发送新消息……'
   }
   if (canSend.value) {
-    return '输入消息…… 输入 @ 选择技能 · 输入 # 选择工具 · 输入 ! 选择宏'
+    // PLACEHOLDER-SLASH-001：进阶操作已由 / 斜杠命令统一管理（GAP-CMD-001），
+    // 占位提示同步更新——旧版 "@ 技能 / # 工具 / ! 宏" 的分散入口提示已过时
+    return '输入消息…… 输入 / 打开命令菜单'
   }
   // 修复 RECONNECT-STATE-001：区分"连接中"与"已放弃重连"
   if (reconnectExhausted) {

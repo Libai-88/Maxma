@@ -14,30 +14,75 @@
   <body>
     <noscript>请启用 JavaScript 以使用 Maxma。</noscript>
     <div id="app-loading" role="status" aria-label="正在启动">
-      <div class="boot-seal" aria-hidden="true">玛</div>
+      <div class="boot-seal-wrap" aria-hidden="true">
+        <div class="boot-seal">玛</div>
+      </div>
       <p class="boot-title">Maxma</p>
-      <p class="boot-status">正在启动后端服务<span class="boot-dots"><i>·</i><i>·</i><i>·</i></span></p>
+      <p class="boot-slogan">本地 AI 桌面工作站</p>
+      <div class="boot-bar" aria-hidden="true"><span></span></div>
+      <p class="boot-status"><span id="boot-status-text">正在启动后端服务</span><span class="boot-dots"><i>·</i><i>·</i><i>·</i></span></p>
       <p class="boot-hint">首次启动需要 10–30 秒</p>
     </div>
     <style>
       #app-loading {
         position: fixed; inset: 0; z-index: 9999;
         display: flex; flex-direction: column; align-items: center; justify-content: center;
-        background: radial-gradient(ellipse 80% 60% at 50% 42%, #F8F5EF 0%, #F4F0E8 70%, #EEE9E0 100%);
+        background: radial-gradient(ellipse 90% 70% at 50% 38%, #FAF7F1 0%, #F5F1E9 55%, #EFEAE1 100%);
         font-family: 'Songti SC', 'STSong', 'SimSun', 'Noto Serif SC', serif;
+        overflow: hidden;
+      }
+      /* 宣纸颗粒质感：极淡的细点阵，模拟纸张纤维 */
+      #app-loading::before {
+        content: ''; position: absolute; inset: 0; pointer-events: none;
+        background-image:
+          radial-gradient(rgba(28, 28, 28, 0.028) 1px, transparent 1px),
+          radial-gradient(rgba(28, 28, 28, 0.018) 1px, transparent 1px);
+        background-size: 5px 5px, 9px 9px;
+        background-position: 0 0, 3px 3px;
+      }
+      /* 顶部朱砂细线：品牌「墨色 + 朱砂印」的点睛 */
+      #app-loading::after {
+        content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+        width: 64px; height: 3px; border-radius: 0 0 2px 2px;
+        background: linear-gradient(90deg, transparent, #C23B22 30%, #C23B22 70%, transparent);
+        opacity: 0.85;
+      }
+      #app-loading .boot-seal-wrap {
+        margin-bottom: 24px;
+        animation: boot-seal-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
       }
       #app-loading .boot-seal {
-        width: 52px; height: 52px; margin-bottom: 20px;
+        width: 60px; height: 60px;
         display: flex; align-items: center; justify-content: center;
-        background: #C23B22; color: #F8F5EF;
-        font-size: 26px; font-weight: 700; line-height: 1;
-        border-radius: 10px;
-        box-shadow: 0 2px 12px rgba(194, 59, 34, 0.25), inset 0 1px 0 rgba(255,255,255,0.15);
-        animation: boot-breathe 2.4s cubic-bezier(0.37, 0, 0.63, 1) infinite;
+        background: linear-gradient(145deg, #D24830 0%, #C23B22 55%, #A9321C 100%);
+        color: #FBF7F0;
+        font-size: 30px; font-weight: 700; line-height: 1;
+        border-radius: 12px;
+        box-shadow:
+          0 3px 14px rgba(194, 59, 34, 0.3),
+          inset 0 1px 0 rgba(255, 255, 255, 0.2),
+          inset 0 -2px 4px rgba(120, 25, 10, 0.25);
+        animation: boot-breathe 2.6s cubic-bezier(0.37, 0, 0.63, 1) 0.7s infinite;
       }
       #app-loading .boot-title {
-        margin: 0 0 10px; font-size: 20px; font-weight: 600;
-        letter-spacing: 0.5px; color: #1C1C1C;
+        margin: 0 0 6px; font-size: 24px; font-weight: 900;
+        letter-spacing: 3px; color: #1C1C1C;
+      }
+      #app-loading .boot-slogan {
+        margin: 0 0 26px; font-size: 12px; letter-spacing: 4px;
+        color: #A49A8C;
+      }
+      /* 不确定进度条：朱砂色流动块 */
+      #app-loading .boot-bar {
+        width: 140px; height: 2px; margin-bottom: 18px;
+        border-radius: 999px; background: rgba(28, 28, 28, 0.09);
+        overflow: hidden;
+      }
+      #app-loading .boot-bar span {
+        display: block; width: 38%; height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, rgba(194,59,34,0.55), #C23B22, rgba(194,59,34,0.55));
+        animation: boot-slide 1.5s cubic-bezier(0.45, 0, 0.55, 1) infinite;
       }
       #app-loading .boot-status {
         margin: 0; font-size: 13px; color: #6E6E6E; letter-spacing: 1px;
@@ -51,15 +96,27 @@
       #app-loading .boot-hint {
         margin: 14px 0 0; font-size: 11px; color: #B0A898; letter-spacing: 0.5px;
       }
+      @keyframes boot-seal-in {
+        from { opacity: 0; transform: scale(0.55) rotate(-8deg); }
+        to { opacity: 1; transform: scale(1) rotate(0deg); }
+      }
       @keyframes boot-breathe {
-        0%, 100% { transform: scale(1); box-shadow: 0 2px 12px rgba(194,59,34,0.25), inset 0 1px 0 rgba(255,255,255,0.15); }
-        50% { transform: scale(1.06); box-shadow: 0 4px 20px rgba(194,59,34,0.35), inset 0 1px 0 rgba(255,255,255,0.15); }
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+      }
+      @keyframes boot-slide {
+        0% { transform: translateX(-120%); }
+        100% { transform: translateX(360%); }
       }
       @keyframes boot-dot {
         0%, 100% { opacity: 0.25; } 50% { opacity: 1; }
       }
       @media (prefers-reduced-motion: reduce) {
-        #app-loading .boot-seal, #app-loading .boot-dots i { animation: none; }
+        #app-loading .boot-seal-wrap,
+        #app-loading .boot-seal,
+        #app-loading .boot-bar span,
+        #app-loading .boot-dots i { animation: none; }
+        #app-loading .boot-seal-wrap { opacity: 1; transform: none; }
       }
     </style>
     <div id="app"></div>
