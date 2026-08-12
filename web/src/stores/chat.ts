@@ -105,6 +105,20 @@ export interface SessionChannel {
   _turnWatchdog: ReturnType<typeof setTimeout> | null
   /** 发送时私密模式（PRIVATE-SWITCH-001）：done 落盘判定用发送时值 */
   _privateAtSend: boolean | null
+  /** GAP-B1-001：目标模式状态（goal_updated 事件 / goal_action 回执更新） */
+  goalState: GoalChannelState | null
+}
+
+/** GAP-B1-001：目标模式状态（与 OMP GoalModeState/Goal 字段对齐的子集） */
+export interface GoalChannelState {
+  goal: {
+    id: string
+    objective: string
+    status: 'active' | 'paused' | 'budget-limited' | 'complete' | 'dropped'
+    tokensUsed?: number
+    tokenBudget?: number
+  } | null
+  state?: { enabled?: boolean; mode?: string } | null
 }
 
 function createChannel(): SessionChannel {
@@ -118,6 +132,7 @@ function createChannel(): SessionChannel {
     _lastDoneTurnId: null,
     _turnWatchdog: null,
     _privateAtSend: null,
+    goalState: null,
   }
 }
 

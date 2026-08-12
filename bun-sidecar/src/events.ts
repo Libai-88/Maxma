@@ -66,6 +66,12 @@ interface OmpNoticeEvent {
   source?: unknown;
 }
 
+interface OmpGoalUpdatedEvent {
+  type?: string;
+  goal?: { id?: string; objective?: string; status?: string; tokensUsed?: number; tokenBudget?: number } | null;
+  state?: { enabled?: boolean; mode?: string };
+}
+
 export function mapPiEventToMaxma(
   piEvent: Record<string, unknown>,
   guard?: DoneGuard | null,
@@ -197,6 +203,21 @@ export function mapPiEventToMaxma(
     return {
       type: "answer",
       payload: { content },
+    };
+  }
+
+  // GAP-B1-001：Goal 模式状态事件（AgentSession 经 #emitSessionEvent 发出，
+  // 与 tool/answer 同级流入 subscribe 流）。前端据此更新目标状态展示
+  // （创建/暂停/恢复/放弃/预算耗尽都会触发）。
+  if (type === "goal_updated") {
+    const e = piEvent as unknown as OmpGoalUpdatedEvent;
+    const goal = e.goal;
+    return {
+      type: "goal_updated",
+      payload: {
+        goal: goal ?? null,
+        state: e.state ?? null,
+      },
     };
   }
 

@@ -172,6 +172,57 @@
               <option value="off">关闭</option>
             </select>
           </div>
+
+          <!-- GAP-B4-001：Bash 长任务自动后台化（OMP 工具级行为） -->
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Bash 长任务后台化</div>
+              <div class="setting-desc">超过阈值的 bash 命令自动转入后台执行，不阻塞对话（完成后交付结果）。</div>
+            </div>
+            <button class="toggle-btn" :class="{ on: settings['bash.autoBackground.enabled'] }" @click="toggle('bash.autoBackground.enabled')">
+              {{ settings['bash.autoBackground.enabled'] ? '开启' : '关闭' }}
+            </button>
+          </div>
+          <div class="setting-row" v-if="settings['bash.autoBackground.enabled']">
+            <div class="setting-info">
+              <div class="setting-label">后台化阈值（秒）</div>
+              <div class="setting-desc">预计执行超过该时长的命令自动转后台。</div>
+            </div>
+            <input type="number" class="input-number" min="5" max="300" step="5"
+              :value="settings['bash.autoBackground.thresholdMs'] ? Math.round(Number(settings['bash.autoBackground.thresholdMs']) / 1000) : 30"
+              @change="set('bash.autoBackground.thresholdMs', Number(($event.target as HTMLInputElement).value) * 1000)" />
+          </div>
+
+          <!-- GAP-B5-001：异步任务（job 工具可用性） -->
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">异步任务</div>
+              <div class="setting-desc">启用后台作业（job 工具）：Agent 可将长任务作为独立后台作业运行。</div>
+            </div>
+            <button class="toggle-btn" :class="{ on: settings['async.enabled'] }" @click="toggle('async.enabled')">
+              {{ settings['async.enabled'] ? '开启' : '关闭' }}
+            </button>
+          </div>
+          <div class="setting-row" v-if="settings['async.enabled']">
+            <div class="setting-info">
+              <div class="setting-label">最大并行作业数</div>
+            </div>
+            <input type="number" class="input-number" min="1" max="10"
+              :value="settings['async.maxJobs'] ?? 3"
+              @change="set('async.maxJobs', Number(($event.target as HTMLInputElement).value))" />
+          </div>
+
+          <!-- GAP-B7-001：Obsidian 保管库（vault:// URL 支持，非密钥库——
+               Maxma 的密钥由凭据信封机制管理） -->
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">Obsidian 保管库</div>
+              <div class="setting-desc">允许 read 工具通过 vault:// URL 读取/编辑 Obsidian 保管库内容（需本机 Obsidian CLI）。</div>
+            </div>
+            <button class="toggle-btn" :class="{ on: settings['vault.enabled'] }" @click="toggle('vault.enabled')">
+              {{ settings['vault.enabled'] ? '开启' : '关闭' }}
+            </button>
+          </div>
         </div>
       </GlowingEffect>
 
@@ -231,6 +282,31 @@
             <button class="toggle-btn" :class="{ on: settings['autolearn.enabled'] }" @click="toggle('autolearn.enabled')">
               {{ settings['autolearn.enabled'] ? '开启' : '关闭' }}
             </button>
+          </div>
+
+          <!-- GAP-B3-001：会话闲置回顾——轮次完成后闲置一段时间，自动生成
+               简短进展总结（OMP recap 配置；触发器由 Maxma 应用层实现）。 -->
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-label">闲置回顾</div>
+              <div class="setting-desc">对话闲置一段时间后自动生成简短进展总结（会消耗少量额外 token）。</div>
+            </div>
+            <button class="toggle-btn" :class="{ on: settings['recap.enabled'] !== false }" @click="toggle('recap.enabled')">
+              {{ settings['recap.enabled'] !== false ? '开启' : '关闭' }}
+            </button>
+          </div>
+          <div class="setting-row" v-if="settings['recap.enabled'] !== false">
+            <div class="setting-info">
+              <div class="setting-label">闲置时长</div>
+              <div class="setting-desc">闲置多久后触发回顾。</div>
+            </div>
+            <select class="select" aria-label="回顾闲置时长" :value="String(settings['recap.idleSeconds'] ?? 240)" @change="set('recap.idleSeconds', Number(($event.target as HTMLSelectElement).value))">
+              <option value="60">1 分钟</option>
+              <option value="120">2 分钟</option>
+              <option value="240">4 分钟</option>
+              <option value="300">5 分钟</option>
+              <option value="600">10 分钟</option>
+            </select>
           </div>
         </div>
       </GlowingEffect>
@@ -643,6 +719,10 @@ const CORE_PATHS = [
   'thinkingBudgets.high', 'thinkingBudgets.xhigh', 'thinkingBudgets.max',
   'skills.enabled',
   'autolearn.enabled',
+  'recap.enabled', 'recap.idleSeconds',
+  'bash.autoBackground.enabled', 'bash.autoBackground.thresholdMs',
+  'async.enabled', 'async.maxJobs',
+  'vault.enabled',
 ]
 
 // GAP-B6-001：备用模型链 JSON 编辑器状态

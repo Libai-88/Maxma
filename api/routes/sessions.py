@@ -369,6 +369,56 @@ async def undo_session_messages(session_id: str, request: Request, n: int = 1):
     raise HTTPException(status_code=503, detail="Undo 需要 sidecar 连接")
 
 
+@router.post("/sessions/{session_id}/recap")
+async def recap_session(session_id: str, request: Request):
+    """GAP-B3-001：会话闲置回顾——基于当前会话上下文生成简短进展总结。
+
+    前端 idle 计时触发（配置 recap.enabled/recap.idleSeconds，见设置页）；
+    sidecar 把回顾 prompt 串行追加到会话 promptQueue，不新建会话。
+    进行中的轮次拒绝执行（避免打断流式回复）。
+    """
+    sm = request.app.state.session_manager
+    session = await sm.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+
+    if session._active_task is not None and not session._active_task.done():
+        raise HTTPException(status_code=409, detail="Agent 正在处理中，请等待本轮完成后再回顾")
+
+    mgr = getattr(request.app.state, "sidecar_manager", None)
+    if mgr is None:
+        raise HTTPException(status_code=503, detail="Sidecar 不可用")
+    try:
+        await mgr.start()
+        client = await mgr.get_client()
+    except Exception:
+        logger.debug("[sessions] sidecar start failed for recap", exc_info=True)
+        raise HTTPException(status_code=503, detail="Sidecar 不可用")
+    if client is None:
+        raise HTTPException(status_code=503, detail="Sidecar 不可用")
+
+    from api.pi_bridge.session_adapter import get_session_map
+    smap = get_session_map()
+    sidecar_sid = smap.get_sidecar_id(session_id)
+    if not sidecar_sid:
+        sidecar_sid = getattr(session, "_sidecar_session_id", None)
+    if not sidecar_sid:
+        raise HTTPException(status_code=409, detail="会话尚未初始化模型连接")
+
+    try:
+        result = await client.call("session_recap", {"session_id": sidecar_sid})
+        answer = str(result.get("answer") or "").strip()
+        return {
+            "answer": answer,
+            "status": "completed" if answer else "empty",
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("[recap] session_recap failed for %s", session_id)
+        raise HTTPException(status_code=502, detail="回顾生成失败，请稍后重试")
+
+
 @router.get("/sessions/{session_id}/context-usage")
 async def get_context_usage(session_id: str, request: Request):
     sm = request.app.state.session_manager

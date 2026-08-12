@@ -162,6 +162,14 @@ export async function buildCreateSessionOptions(
     "fetch.enabled",
     "retry.fallbackChains",
     "contextPromotion.enabled",
+    // GAP-B3/B4/B5/B7-001：第三批能力透传——闲置回顾（Maxma 侧自建 idle
+    // 触发器，配置复用 OMP）、Bash 长任务后台化（工具级行为）、异步任务
+    // （job 工具可用性）、Obsidian vault:// URL 支持（read 工具解析）。
+    "recap.enabled", "recap.idleSeconds",
+    "bash.autoBackground.enabled", "bash.autoBackground.thresholdMs",
+    "async.enabled", "async.maxJobs",
+    "vault.enabled",
+    "goal.enabled",
     // "memory.backend" intentionally excluded: mnemopi requires the
     // un-bundled embedding deps (fastembed/onnxruntime). Maxma's own
     // memory lives in its persona memory.yaml, not OMP's memory subsystem.
@@ -961,6 +969,129 @@ export async function handleRpcRequest(req: RpcRequest, io: BridgeIo = defaultIo
           send(id, { ok: true, action });
         } catch (err) {
           sendError(id, `Failed to enqueue checkpoint action: ${String(err)}`);
+        }
+        return;
+      }
+
+      // ── Goal Mode (GAP-B1-001：目标导向模式) ──────────────────────────
+      // 与 CLI `/goal set|pause|resume|drop` 等价，经 session.goalRuntime
+      // 真实启停目标模式；状态变化由 session 发出 goal_updated 事件
+      // （events.ts 已映射）推送前端。
+      if (method === "goal_action") {
+        const sessionId: string = params?.session_id as string;
+        const action: string = params?.action as string;
+        const record = sessions.get(sessionId);
+        if (!record) {
+          sendError(id, `Session not found: ${sessionId}`);
+          return;
+        }
+        try {
+          const runtime = record.session.goalRuntime as {
+            createGoal?: (input: { objective: string; tokenBudget?: number }) => Promise<unknown>;
+            replaceGoal?: (input: { objective: string; tokenBudget?: number }) => Promise<unknown>;
+            pauseGoal?: () => Promise<unknown>;
+            resumeGoal?: () => Promise<unknown>;
+            dropGoal?: () => Promise<unknown>;
+          };
+          let state: unknown;
+          const objective = params?.objective as string | undefined;
+          const tokenBudget = Number(params?.token_budget);
+          if (action === "set" || action === "replace") {
+            if (!objective || !objective.trim()) {
+              sendError(id, "Goal objective is required");
+              return;
+            }
+            setSetting(record.settings!, "goal.enabled", true);
+            // 必须以方法形式调用（保留 this 绑定）——提取为局部变量再调用会
+            // 丢失 this，私有字段品牌检查失败（TypeError: this.#withAccounting
+            // is undefined）。pause/resume/drop 走方法调用无此问题。
+            const input = { objective: objective.trim(), ...(Number.isFinite(tokenBudget) && tokenBudget > 0 ? { tokenBudget } : {}) };
+            state = action === "replace"
+              ? await runtime.replaceGoal?.(input)
+              : await runtime.createGoal?.(input);
+          } else if (action === "pause") {
+            state = await runtime.pauseGoal?.();
+          } else if (action === "resume") {
+            state = await runtime.resumeGoal?.();
+          } else if (action === "drop") {
+            state = await runtime.dropGoal?.();
+          } else {
+            sendError(id, `Unknown goal action: ${action}`);
+            return;
+          }
+          send(id, { ok: true, action, state: state ?? null });
+        } catch (err) {
+          sendError(id, `Failed to handle goal_action: ${String(err)}`);
+        }
+        return;
+      }
+
+      // ── Goal State Query (GAP-B1-001) ─────────────────────────────────
+      if (method === "get_goal_state") {
+        const sessionId: string = params?.session_id as string;
+        const record = sessions.get(sessionId);
+        if (!record) {
+          sendError(id, `Session not found: ${sessionId}`);
+          return;
+        }
+        try {
+          const state = record.session.getGoalModeState();
+          send(id, { state: state ?? null });
+        } catch (err) {
+          sendError(id, `Failed to get goal state: ${String(err)}`);
+        }
+        return;
+      }
+
+      // ── Session Recap (GAP-B3-001：会话闲置回顾) ──────────────────────
+      // OMP 的 recap 触发器在 TUI event-controller（sidecar 无此层），
+      // Maxma 在应用层实现触发器（前端 idle 计时 → 本 RPC）。回顾基于
+      // 当前会话自身上下文生成（串行进 promptQueue，不新建会话）。
+      // 捕获 answer 用独立订阅（与主订阅并存，互不干扰）。
+      if (method === "session_recap") {
+        const sessionId: string = params?.session_id as string;
+        const record = sessions.get(sessionId);
+        if (!record) {
+          sendError(id, `Session not found: ${sessionId}`);
+          return;
+        }
+        try {
+          const promptText = "请简要回顾当前对话：进展、已确认的事实与待办事项，80 字以内。";
+          const answer = await new Promise<string>((resolve) => {
+            let lastAnswer = "";
+            let settled = false;
+            const finish = (text: string) => {
+              if (settled) return;
+              settled = true;
+              unsubscribe();
+              resolve(text);
+            };
+            const unsubscribe = record.session.subscribe((raw: unknown) => {
+              const ev = raw as { type?: string; payload?: { content?: string }; content?: string };
+              if (ev.type === "answer") {
+                const content = ev.payload?.content ?? ev.content ?? "";
+                if (content) lastAnswer = content;
+              }
+            });
+            record.promptQueue = record.promptQueue
+              .catch(() => {})
+              .then(async () => {
+                try {
+                  await record.session.prompt(promptText, { synthetic: true });
+                  await record.session.waitForIdle();
+                  finish(lastAnswer);
+                } catch (err) {
+                  finish("");
+                }
+              });
+            // 30s 兜底超时——回顾不应阻塞太久；超时返回空内容
+            // （前端对空回顾静默跳过，不展示噪音）
+            const timer = setTimeout(() => finish(""), 30_000);
+            (timer as unknown as { unref?: () => void }).unref?.();
+          });
+          send(id, { answer, status: answer ? "completed" : "empty" });
+        } catch (err) {
+          sendError(id, `Failed to run session recap: ${String(err)}`);
         }
         return;
       }

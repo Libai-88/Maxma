@@ -690,6 +690,136 @@ describe("handleRpcRequest — checkpoint_action", () => {
   });
 });
 
+describe("handleRpcRequest — goal_action / get_goal_state", () => {
+  function goalSession() {
+    const calls: { op: string; arg?: unknown }[] = [];
+    const goalRuntime = {
+      createGoal: async (input: unknown) => {
+        calls.push({ op: "createGoal", arg: input });
+        return { enabled: true, mode: "active", goal: { id: "g1", objective: (input as { objective: string }).objective, status: "active" } };
+      },
+      replaceGoal: async (input: unknown) => {
+        calls.push({ op: "replaceGoal", arg: input });
+        return { enabled: true, mode: "active", goal: { id: "g1", objective: (input as { objective: string }).objective, status: "active" } };
+      },
+      pauseGoal: async () => {
+        calls.push({ op: "pauseGoal" });
+        return { enabled: true, mode: "active", goal: { id: "g1", status: "paused" } };
+      },
+      resumeGoal: async () => {
+        calls.push({ op: "resumeGoal" });
+        return { enabled: true, mode: "active", goal: { id: "g1", status: "active" } };
+      },
+      dropGoal: async () => {
+        calls.push({ op: "dropGoal" });
+        return { id: "g1", status: "dropped" };
+      },
+    };
+    const fakeSession = makeFakeSession({
+      settings: { get: () => undefined, set: () => {} },
+      goalRuntime,
+      getGoalModeState: () => ({ enabled: true, mode: "active", goal: { id: "g1", objective: "x", status: "active", tokensUsed: 0, timeUsedSeconds: 0, createdAt: 0, updatedAt: 0 } }),
+    } as never);
+    registerSession("s1", fakeSession as never);
+    return { calls };
+  }
+
+  test("set creates a goal with objective and enables goal mode", async () => {
+    const { calls } = goalSession();
+    const { io, results } = makeIo();
+    await handleRpcRequest(
+      { method: "goal_action", id: 1, params: { session_id: "s1", action: "set", objective: "完成文档" } },
+      io,
+    );
+    expect(results[0]?.result?.ok).toBe(true);
+    expect(calls.find((c) => c.op === "createGoal")?.arg).toMatchObject({ objective: "完成文档" });
+    expect(results[0]?.result?.state?.goal?.status).toBe("active");
+  });
+
+  test("replace uses replaceGoal", async () => {
+    const { calls } = goalSession();
+    const { io } = makeIo();
+    await handleRpcRequest(
+      { method: "goal_action", id: 1, params: { session_id: "s1", action: "replace", objective: "新目标", token_budget: 50000 } },
+      io,
+    );
+    expect(calls.find((c) => c.op === "replaceGoal")?.arg).toMatchObject({ objective: "新目标", tokenBudget: 50000 });
+  });
+
+  test("set without objective → error", async () => {
+    goalSession();
+    const { io, results } = makeIo();
+    await handleRpcRequest(
+      { method: "goal_action", id: 1, params: { session_id: "s1", action: "set" } },
+      io,
+    );
+    expect(results[0]?.error).toContain("objective is required");
+  });
+
+  test("pause / resume / drop dispatch correctly", async () => {
+    const { calls } = goalSession();
+    const { io } = makeIo();
+    await handleRpcRequest({ method: "goal_action", id: 1, params: { session_id: "s1", action: "pause" } }, io);
+    await handleRpcRequest({ method: "goal_action", id: 1, params: { session_id: "s1", action: "resume" } }, io);
+    await handleRpcRequest({ method: "goal_action", id: 1, params: { session_id: "s1", action: "drop" } }, io);
+    expect(calls.map((c) => c.op)).toEqual(["pauseGoal", "resumeGoal", "dropGoal"]);
+  });
+
+  test("unknown action → error", async () => {
+    goalSession();
+    const { io, results } = makeIo();
+    await handleRpcRequest(
+      { method: "goal_action", id: 1, params: { session_id: "s1", action: "explode" } },
+      io,
+    );
+    expect(results[0]?.error).toContain("Unknown goal action");
+  });
+
+  test("get_goal_state returns current state", async () => {
+    goalSession();
+    const { io, results } = makeIo();
+    await handleRpcRequest({ method: "get_goal_state", id: 1, params: { session_id: "s1" } }, io);
+    expect(results[0]?.result?.state?.goal?.status).toBe("active");
+  });
+
+  test("goal action on missing session → error", async () => {
+    const { io, results } = makeIo();
+    await handleRpcRequest(
+      { method: "goal_action", id: 1, params: { session_id: "nope", action: "set", objective: "x" } },
+      io,
+    );
+    expect(results[0]?.error).toContain("Session not found");
+  });
+});
+
+describe("handleRpcRequest — session_recap", () => {
+  test("chains a recap prompt and returns the captured answer", async () => {
+    const listeners: Array<(e: { type?: string; payload?: { content?: string }; content?: string }) => void> = [];
+    const fakeSession = makeFakeSession({
+      subscribe: (fn: (e: unknown) => void) => {
+        listeners.push(fn as never);
+        return () => {};
+      },
+      prompt: async (msg: string) => {
+        // 模拟 OMP 在 prompt 期间发出 answer 事件
+        for (const l of listeners) l({ type: "answer", payload: { content: "回顾：已完成 A，待办 B。" } });
+        return true;
+      },
+      waitForIdle: async () => {},
+    } as never);
+    registerSession("s1", fakeSession as never);
+    const { io, results } = makeIo();
+    await handleRpcRequest({ method: "session_recap", id: 1, params: { session_id: "s1" } }, io);
+    expect(results[0]?.result?.answer).toContain("回顾");
+  });
+
+  test("recap on missing session → error", async () => {
+    const { io, results } = makeIo();
+    await handleRpcRequest({ method: "session_recap", id: 1, params: { session_id: "nope" } }, io);
+    expect(results[0]?.error).toContain("Session not found");
+  });
+});
+
 describe("handleRpcRequest — execute_workflow_step", () => {
   test("prompts the agent and emits start/end events", async () => {
     const prompted: string[] = [];

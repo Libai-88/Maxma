@@ -92,6 +92,9 @@ class WsMessageType(str, Enum):
     SET_PLAN_MODE = "set_plan_mode"
     CHECKPOINT_ACTION = "checkpoint_action"
 
+    # GAP-B1-001：目标模式（set/replace/pause/resume/drop）→ goal_action RPC
+    GOAL_ACTION = "goal_action"
+
 
 # 便捷集合（向后兼容现有 frozenset 用法）
 SIDECAR_EVENT_TYPES = frozenset(t.value for t in WsEventType)

@@ -51,13 +51,13 @@
 
 | # | 功能 | 说明 |
 |---|---|---|
-| B1 | **Goal 模式** | OMP `goal.enabled`（目标导向模式，Claude 的 /goal 类似）。做法：会话级模式切换 + goal 状态展示（statusInFooter） |
+| B1 | **Goal 模式** ✅ 2026-08-12 | 会话菜单「目标模式」面板（目标输入/开始/替换 + 暂停/恢复/放弃 + 状态徽标）→ WS goal_action → sidecar `goalRuntime.createGoal/pause/resume/drop`；`goal_updated` 事件映射透传。修复方法提取丢失 this 绑定（私有字段品牌检查失败）的接线 bug |
 | B2 | **上下文提升（contextPromotion）** ✅ 2026-08-12 | 重要上下文自动提升防压缩。做法：globalPaths 透传 + 设置页「上下文管理」开关（溢出时自动切更大窗口模型，需配置了更大窗口模型才生效） |
-| B3 | **会话闲置回顾（recap）** | OMP `recap.enabled/idleSeconds`（闲置后自动回顾对话）。做法：开关 + 回顾结果作为 notice 展示 |
-| B4 | **Bash 长任务后台化** | OMP `bash.autoBackground.enabled`（长命令自动转后台，不阻塞对话）。做法：开关 + 后台任务状态气泡（复用 task 状态 UI） |
-| B5 | **异步任务 UI** | OMP `async.enabled/maxJobs`。做法：job 工具状态可视化（当前只有事件流无集中面板） |
+| B3 | **会话闲置回顾（recap）** ✅ 2026-08-12 | OMP recap 触发器在 TUI 层（sidecar 无此层）→ Maxma 应用层实现：轮次完成后按 idleSeconds 计时（用户活动重置）→ POST /sessions/{id}/recap → sidecar session_recap（基于会话自身上下文串行生成）→ 系统消息展示；超时/失败静默跳过 |
+| B4 | **Bash 长任务后台化** ✅ 2026-08-12 | `bash.autoBackground.enabled/thresholdMs`（工具级行为）透传 + 设置页「工具」开关与阈值 |
+| B5 | **异步任务 UI** ✅ 2026-08-12 | `async.enabled/maxJobs` 透传 + 设置页开关——启用后 job 工具可用（此前 Async execution is disabled），工具卡片流式展示 |
 | B6 | **模型 fallback 链 UI** | OMP `retry.fallbackChains`（主模型失败自动切换备用）。做法：Provider 设置页加"备用模型"配置——**多 provider 用户的核心可靠性体验** |
-| B7 | **秘密保管库（vault）** | OMP `vault.enabled`（密钥安全存储）。做法：设置页密钥管理（当前 api_key 明文在 providers.yaml） |
+| B7 | **Obsidian 保管库（vault）** ✅ 2026-08-12 | 修正语义：OMP vault 是 Obsidian vault:// URL 支持（read 工具经 Obsidian CLI 读写保管库），非密钥库（Maxma 密钥由凭据信封机制管理）。vault.enabled 透传 + 设置页开关 |
 
 ### C 梯队：依赖外部/高成本（评估后决定）
 
@@ -93,8 +93,8 @@
   A1 语音输入（Web Speech API 听写）→ A5 fetch（read URL 能力，已验证接线）
   → A8 自动学习 → B6 fallback 链 → B2 上下文提升
 
-第三批（进阶模式）：
-  B1 Goal → B3 recap → B4 后台化 → B5 异步面板 → B7 vault
+第三批（✅ 已完成 2026-08-12）：
+  B1 Goal 模式 → B3 recap → B4 后台化 → B5 异步 → B7 Obsidian vault
 
 已砍：
   A4 图片生成（依赖付费 provider 图像 API，违反"不要求用户配置付费 API"原则）

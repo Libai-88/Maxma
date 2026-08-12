@@ -13,6 +13,7 @@ import { useWorkbenchStore } from '@/stores/workbench'
 import { detectEmotion, getStickerUrl, replaceEmotionTags } from './stickerUtils'
 import { showSystemNotification } from '@/lib/notify'
 import { autoReadIfEnabled } from '@/composables/useTts'
+import type { GoalChannelState } from '@/stores/chat'
 import { createLogger } from '@/utils/logger'
 
 const log = createLogger('chat')
@@ -28,6 +29,91 @@ function notifyTurnDone(finalAnswer: string | null): void {
     .trim()
   if (!plain) return
   showSystemNotification('Maxma — 任务完成', plain.length > 80 ? plain.slice(0, 80) + '…' : plain)
+}
+
+// ── 会话闲置回顾（GAP-B3-001） ──
+// OMP 的 recap 触发器在 TUI 层，Maxma 在应用层实现：
+// 轮次完成后开始计时（recap.idleSeconds），期间无任何用户活动（发送/
+// 审批/取消）则触发一次回顾（后端 session_recap RPC，基于会话自身上下文），
+// 结果以系统消息展示在会话内。任何活动都会重置计时；流式/审批中不触发。
+const RECAP_CONFIG_TTL_MS = 60_000
+let recapConfigCache: { enabled: boolean; idleSeconds: number } | null = null
+let recapConfigAt = 0
+let recapConfigPromise: Promise<{ enabled: boolean; idleSeconds: number }> | null = null
+
+async function getRecapConfig(): Promise<{ enabled: boolean; idleSeconds: number }> {
+  const now = Date.now()
+  if (recapConfigCache && now - recapConfigAt < RECAP_CONFIG_TTL_MS) return recapConfigCache
+  if (recapConfigPromise) return recapConfigPromise
+  recapConfigPromise = api.getSettings(['recap.enabled', 'recap.idleSeconds'])
+    .then((data) => {
+      const idleRaw = Number(data?.['recap.idleSeconds'])
+      recapConfigCache = {
+        enabled: data?.['recap.enabled'] !== false,
+        idleSeconds: Number.isFinite(idleRaw) && idleRaw >= 60 ? Math.min(idleRaw, 600) : 240,
+      }
+      recapConfigAt = Date.now()
+      return recapConfigCache
+    })
+    .catch(() => ({ enabled: false, idleSeconds: 240 }))
+    .finally(() => { recapConfigPromise = null })
+  return recapConfigPromise
+}
+
+const recapTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+/** 用户活动 → 重置该会话的回顾计时（发送/审批/取消时调用）。 */
+export function recapTouch(sid: string): void {
+  const timer = recapTimers.get(sid)
+  if (timer) {
+    clearTimeout(timer)
+    recapTimers.delete(sid)
+  }
+}
+
+/** 轮次完成 → 按配置调度一次闲置回顾。 */
+function recapSchedule(sid: string): void {
+  void getRecapConfig().then((cfg) => {
+    if (!cfg.enabled) return
+    recapTouch(sid)
+    const timer = setTimeout(() => {
+      recapTimers.delete(sid)
+      void runRecap(sid)
+    }, cfg.idleSeconds * 1000)
+    recapTimers.set(sid, timer)
+  })
+}
+
+async function runRecap(sid: string): Promise<void> {
+  const ch = getChatStore().channels.get(sid)
+  if (!ch || !ch.initialized || !ch.connected) return
+  // 流式/审批等待/进行中轮次不打扰
+  if (ch.isStreaming || ch.isAwaitingUser || ch.currentTurn) return
+  // 无任何对话内容时不回顾
+  if (ch.turns.length === 0) return
+  try {
+    const res = await api.recapSession(sid)
+    const answer = (res?.answer ?? '').trim()
+    if (!answer) return
+    const content = `📋 对话回顾：${answer}`
+    const target = getChatStore().channels.get(sid)
+    if (!target) return
+    if (target.currentTurn) {
+      target.currentTurn.events.push({ kind: 'system', detail: 'recap', content, timestamp: Date.now() })
+    } else {
+      target.turns.push({
+        id: `recap-${sid}-${Date.now()}`,
+        userMessage: '',
+        refs: [],
+        events: [{ kind: 'system', detail: 'recap', content, timestamp: Date.now() }],
+        memoryEvents: [],
+        finalAnswer: null,
+      })
+      if (!target._privateAtSend) persistTurns(sid)
+    }
+  } catch {
+    /* 回顾失败静默（网络/模型临时不可用不打扰用户） */
+  }
 }
 
 /** 追踪所有 useChat 实例创建的子会话 ID，用于组件卸载时清理孤儿 WS。
@@ -974,6 +1060,17 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     return
   }
 
+  // GAP-B1-001：目标模式状态事件（sidecar 透传 goal_updated / goal_action
+  // 回执）。可能在无活跃轮次时到达，必须在 turn 守卫之前处理。
+  if (event.type === 'goal_updated') {
+    const payload = event.payload as { goal?: GoalChannelState['goal']; state?: GoalChannelState['state'] } | undefined
+    ch.goalState = {
+      goal: payload?.goal ?? null,
+      state: payload?.state ?? null,
+    }
+    return
+  }
+
   const turn = ch.currentTurn
   if (!turn) return
 
@@ -1221,6 +1318,8 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
         if (turnToFinalize.finalAnswer) {
           autoReadIfEnabled(turnToFinalize.finalAnswer)
         }
+        // GAP-B3-001：轮次完成 → 调度闲置回顾（用户活动会重置计时）
+        recapSchedule(sid)
         if (ch.currentTurn?.id === turnToFinalize.id) {
           ch.currentTurn = null
         }
@@ -1763,6 +1862,8 @@ export function useChat(sessionId: Ref<string>) {
       log.warn(`WebSocket 未就绪, readyState=${ch.ws?.readyState}, session=${sessionId.value}`)
       return false
     }
+    // GAP-B3-001：用户发送消息 = 活跃，重置闲置回顾计时
+    recapTouch(sessionId.value)
     // 修复 F-001：流式输出期间禁止发送新消息。此前无守卫时 Enter 会覆盖
     // currentTurn，导致正在生成的回复丢失（events 留在被覆盖的 turn 上，
     // 从未 push 进 turns）且新消息的 token 事件被静默丢弃。
@@ -1952,6 +2053,24 @@ export function useChat(sessionId: Ref<string>) {
     return true
   }
 
+  // GAP-B1-001：目标模式（set/replace/pause/resume/drop）→ WS goal_action →
+  // 后端转发 sidecar goal_action RPC。回执的 goal_updated 事件会更新 goalState。
+  function sendGoalAction(action: 'set' | 'replace' | 'pause' | 'resume' | 'drop', objective?: string, tokenBudget?: number): boolean {
+    const ch = activeChannel.value
+    if (!ch.ws || ch.ws.readyState !== WebSocket.OPEN) {
+      log.warn(`sendGoalAction 失败：WS 未就绪 (action=${action})`)
+      return false
+    }
+    const payload: Record<string, unknown> = { action }
+    if (objective) payload.objective = objective
+    if (tokenBudget !== undefined && Number.isFinite(tokenBudget)) payload.token_budget = tokenBudget
+    ch.ws.send(JSON.stringify({ type: 'goal_action', payload }))
+    return true
+  }
+
+  /** GAP-B1-001：当前会话目标模式状态（goal_updated 事件驱动） */
+  const goalState = computed(() => activeChannel.value.goalState ?? null)
+
   /** 从当前会话的 turns 列表中移除最后 count 条轮次（撤回后的前端同步）。 */
   function removeTurns(count: number) {
     const ch = getOrCreateChannel(sessionId.value)
@@ -2003,6 +2122,7 @@ export function useChat(sessionId: Ref<string>) {
     dismissError,
     privateMode, setPrivateMode,
     autoApprove, setAutoApprove,
+    goalState, sendGoalAction,
   }
 }
 

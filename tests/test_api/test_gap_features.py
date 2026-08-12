@@ -155,6 +155,39 @@ class TestWebSocketGapForwarding:
             ws.send_text(json.dumps({"type": "ping"}))
             assert ws.receive_json() == {"type": "pong"}
 
+    def test_goal_action_set_forwarded(self, ws_app):
+        client = self._attach_client(ws_app)
+        client.call.return_value = {
+            "ok": True,
+            "action": "set",
+            "state": {"enabled": True, "mode": "active", "goal": {"id": "g1", "objective": "完成周报", "status": "active"}},
+        }
+        with TestClient(ws_app).websocket_connect("/ws/chat/s1") as ws:
+            ws.send_text(json.dumps({
+                "type": "goal_action",
+                "payload": {"action": "set", "objective": "完成周报"},
+            }))
+            # 回执以 goal_updated 事件推送前端
+            evt = ws.receive_json()
+            assert evt["type"] == "goal_updated"
+            assert evt["payload"]["goal"]["objective"] == "完成周报"
+            assert evt["payload"]["goal"]["status"] == "active"
+        client.call.assert_any_await(
+            "goal_action", {"session_id": "sc-1", "action": "set", "objective": "完成周报"}
+        )
+
+    def test_goal_action_pause_forwarded_without_state_event(self, ws_app):
+        client = self._attach_client(ws_app)
+        client.call.return_value = {"ok": True, "action": "pause", "state": None}
+        with TestClient(ws_app).websocket_connect("/ws/chat/s1") as ws:
+            ws.send_text(json.dumps({
+                "type": "goal_action",
+                "payload": {"action": "pause"},
+            }))
+        client.call.assert_any_await(
+            "goal_action", {"session_id": "sc-1", "action": "pause"}
+        )
+
 
 # ── TTS 面板规范化（GAP-A2-001） ───────────────────────────────────────────
 
@@ -217,3 +250,83 @@ class TestToolListNoPaidApiTools:
             assert t["label"]
             assert t["category"]
             assert t.get("builtin") is True
+
+
+# ── 会话闲置回顾端点（GAP-B3-001） ──────────────────────────────────────────
+
+
+@pytest.fixture
+def recap_app(monkeypatch):
+    from api.routes import sessions as sessions_mod
+    from api.pi_bridge import session_adapter
+
+    class _Sess:
+        def __init__(self):
+            self._active_task = None
+            self._sidecar_session_id = None
+
+    manager = MagicMock()
+    manager.get = AsyncMock(return_value=None)
+
+    smap = MagicMock()
+    smap.get_sidecar_id.return_value = None
+    smap.remove_recent_turns = MagicMock()
+
+    monkeypatch.setattr(session_adapter, "get_session_map", lambda: smap)
+
+    app = FastAPI()
+    app.state.session_manager = manager
+    app.state.sidecar_manager = None
+    app.include_router(sessions_mod.router)
+    return app, manager, smap
+
+
+class TestRecapEndpoint:
+    def test_recap_404_when_session_missing(self, recap_app):
+        app, manager, _ = recap_app
+        manager.get.return_value = None
+        with TestClient(app) as client:
+            resp = client.post("/sessions/nope/recap")
+            assert resp.status_code == 404
+
+    def test_recap_409_when_agent_busy(self, recap_app):
+        app, manager, _ = recap_app
+        sess = MagicMock()
+        sess._active_task = MagicMock()
+        sess._active_task.done.return_value = False
+        manager.get.return_value = sess
+        with TestClient(app) as client:
+            resp = client.post("/sessions/s1/recap")
+            assert resp.status_code == 409
+
+    def test_recap_503_without_sidecar(self, recap_app):
+        app, manager, _ = recap_app
+        sess = MagicMock()
+        sess._active_task = None
+        manager.get.return_value = sess
+        with TestClient(app) as client:
+            resp = client.post("/sessions/s1/recap")
+            assert resp.status_code == 503
+
+    def test_recap_calls_rpc_and_returns_answer(self, recap_app, monkeypatch):
+        app, manager, smap = recap_app
+        sess = MagicMock()
+        sess._active_task = None
+        sess._sidecar_session_id = "sc-1"
+        manager.get.return_value = sess
+        smap.get_sidecar_id.return_value = "sc-1"
+
+        client_mock = MagicMock()
+        client_mock.call = AsyncMock(return_value={"answer": "回顾：已完成 A，待办 B。", "status": "completed"})
+        mgr = MagicMock()
+        mgr.start = AsyncMock()
+        mgr.get_client = AsyncMock(return_value=client_mock)
+        app.state.sidecar_manager = mgr
+
+        with TestClient(app) as client:
+            resp = client.post("/sessions/s1/recap")
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["answer"] == "回顾：已完成 A，待办 B。"
+            assert body["status"] == "completed"
+        client_mock.call.assert_any_await("session_recap", {"session_id": "sc-1"})

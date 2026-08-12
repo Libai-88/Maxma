@@ -101,6 +101,10 @@
             <button class="session-action" type="button" role="menuitem" @click="handleCheckpoint('restore')">
               <span>回到检查点</span>
             </button>
+            <!-- GAP-B1-001：目标模式（OMP goal）——设定持续目标，Agent 自主推进 -->
+            <div class="session-action-block" role="group" aria-label="目标模式">
+              <GoalModePanel :goal-state="goalState" :send-action="sendGoalAction" />
+            </div>
             <!-- MODEL-PARAMS-001：模型参数（输出上限/思考开关）挂载入口——
                  此前 ModelSettingsPanel 从未挂载，max_tokens 后端支持但 UI 孤儿 -->
             <button class="session-action" type="button" role="menuitem" @click="modelSettingsOpen = !modelSettingsOpen">
@@ -182,6 +186,7 @@ import ChatInput from '@/components/ChatInput.vue'
 import ModelSettingsPanel from '@/components/ModelSettingsPanel.vue'
 import ChatWindow from '@/components/ChatWindow.vue'
 import SessionPermissionModeControl from '@/components/SessionPermissionModeControl.vue'
+import GoalModePanel from '@/components/GoalModePanel.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import TaskTrackerBar, { type TaskTrackerData } from '@/components/TaskTrackerBar.vue'
 import WorkbenchPanel from '@/components/workbench/WorkbenchPanel.vue'
@@ -222,6 +227,7 @@ const {
   dismissError,
   privateMode, setPrivateMode, autoApprove, setAutoApprove,
   reconnectExhausted, reconnect,
+  goalState, sendGoalAction,
 } = useChat(sessionId)
 
 const workbench = useWorkbenchStore()

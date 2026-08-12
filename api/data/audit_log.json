@@ -7,5 +7,50 @@
     "detail": "Verification test",
     "data_size": 0,
     "status": "ok"
+  },
+  {
+    "timestamp": "2026-08-12T12:42:00+0800",
+    "epoch": 1786509720,
+    "type": "session",
+    "target": "delete",
+    "detail": "会话删除: s1",
+    "data_size": 0,
+    "status": "ok"
+  },
+  {
+    "timestamp": "2026-08-12T12:42:00+0800",
+    "epoch": 1786509720,
+    "type": "session",
+    "target": "delete",
+    "detail": "会话删除: s1",
+    "data_size": 0,
+    "status": "ok"
+  },
+  {
+    "timestamp": "2026-08-12T12:42:00+0800",
+    "epoch": 1786509720,
+    "type": "session",
+    "target": "delete",
+    "detail": "会话删除: s1",
+    "data_size": 0,
+    "status": "ok"
+  },
+  {
+    "timestamp": "2026-08-12T12:42:00+0800",
+    "epoch": 1786509720,
+    "type": "session",
+    "target": "delete",
+    "detail": "会话删除: s1",
+    "data_size": 0,
+    "status": "ok"
+  },
+  {
+    "timestamp": "2026-08-12T12:42:00+0800",
+    "epoch": 1786509720,
+    "type": "session",
+    "target": "delete",
+    "detail": "会话删除: s1",
+    "data_size": 0,
+    "status": "ok"
   }
 ]

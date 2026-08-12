@@ -447,6 +447,23 @@ export type ServerEvent =
   | WorkflowStepEndEvent
   | WorkflowStepErrorEvent
   | WorkflowCompletedEvent
+  | GoalUpdatedEvent
+
+// === GAP-B1-001：目标模式状态事件 ===
+
+export interface GoalUpdatedEvent {
+  type: 'goal_updated'
+  payload: {
+    goal: {
+      id: string
+      objective: string
+      status: 'active' | 'paused' | 'budget-limited' | 'complete' | 'dropped'
+      tokensUsed?: number
+      tokenBudget?: number
+    } | null
+    state?: { enabled?: boolean; mode?: string } | null
+  }
+}
 
 // === WebSocket 客户端 → 服务端消息 ===
 

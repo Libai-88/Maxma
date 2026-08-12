@@ -322,6 +322,10 @@ export const api = {
   clearSessionMessages: (id: string) =>
     request<{ status: string, cleared_turns: number }>(`/sessions/${encodeURIComponent(id)}/messages`, { method: 'DELETE' }),
 
+  // GAP-B3-001：会话闲置回顾（基于当前会话上下文生成简短进展总结）
+  recapSession: (id: string) =>
+    request<{ answer: string, status: string }>(`/sessions/${encodeURIComponent(id)}/recap`, { method: 'POST' }),
+
   getSessionPermissionMode: (sessionId: string) =>
     request<SessionPermissionModeResponse>(
       `/sessions/${encodeURIComponent(sessionId)}/permission-mode`,

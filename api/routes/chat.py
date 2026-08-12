@@ -101,6 +101,31 @@ async def _get_sidecar_client(sidecar_mgr):
     return client
 
 
+async def _resolve_live_sidecar_sid(client, session, session_id: str) -> str | None:
+    """AUX-STALE-001：解析仍存活（未失效）的 sidecar 会话 id。
+
+    聊天路径对持久化映射做 stale 校验（get_messages limit=0 探活，失效则
+    清映射重建）；aux 消息（goal_action/checkpoint_action 等）此前直接用
+    映射值转发——sidecar 重启后旧映射必失败且静默无感。统一复用探活逻辑：
+    失效时清映射并返回 None（调用方静默跳过，下次聊天轮自动重建）。
+    """
+    sm = get_session_map()
+    sidecar_sid = sm.get_sidecar_id(session_id) or getattr(session, "_sidecar_session_id", None)
+    if not sidecar_sid:
+        return None
+    try:
+        await client.call("get_messages", {"session_id": sidecar_sid, "limit": 0})
+        return sidecar_sid
+    except Exception:
+        logger.info("[ws] Stale sidecar session %s — clearing mapping", str(sidecar_sid)[:8])
+        sm.clear_sidecar_id(session_id)
+        try:
+            session._sidecar_session_id = None
+        except Exception:
+            pass
+        return None
+
+
 async def _cancel_sidecar_turn(
     sidecar_mgr,
     sidecar_session_id: str | None,
@@ -1310,12 +1335,17 @@ async def websocket_chat(ws: WebSocket, session_id: str):
             if msg_type == "checkpoint_action":
                 _payload = msg.get("payload", {})
                 _action = str(_payload.get("action", ""))
-                sidecar_sid = getattr(session, "_sidecar_session_id", None)
+                sidecar_sid = None
+                try:
+                    mgr = app_state.sidecar_manager
+                    await mgr.start()
+                    client = await _get_sidecar_client(mgr)
+                    # AUX-STALE-001：探活后转发（sidecar 重启后旧映射静默失败）
+                    sidecar_sid = await _resolve_live_sidecar_sid(client, session, session_id)
+                except Exception:
+                    logger.debug("[ws] sidecar unavailable for checkpoint_action", exc_info=True)
                 if sidecar_sid:
                     try:
-                        mgr = app_state.sidecar_manager
-                        await mgr.start()
-                        client = await _get_sidecar_client(mgr)
                         await client.call(
                             "checkpoint_action",
                             {
@@ -1327,6 +1357,46 @@ async def websocket_chat(ws: WebSocket, session_id: str):
                         logger.info("[ws] Forwarded checkpoint_action=%s to sidecar session %s", _action, sidecar_sid[:8])
                     except Exception:
                         logger.debug("[ws] Failed to forward checkpoint_action to sidecar", exc_info=True)
+                continue
+
+            # GAP-B1-001：目标模式（set/replace/pause/resume/drop）→ goal_action RPC。
+            # 前端会话菜单「目标模式」区操作；goal_updated 事件由 sidecar 订阅
+            # 流透传（events.ts 映射），前端据此更新状态展示。
+            if msg_type == "goal_action":
+                _payload = msg.get("payload", {})
+                _action = str(_payload.get("action", ""))
+                sidecar_sid = None
+                try:
+                    mgr = app_state.sidecar_manager
+                    await mgr.start()
+                    client = await _get_sidecar_client(mgr)
+                    # AUX-STALE-001：探活后转发（sidecar 重启后旧映射静默失败）
+                    sidecar_sid = await _resolve_live_sidecar_sid(client, session, session_id)
+                except Exception:
+                    logger.debug("[ws] sidecar unavailable for goal_action", exc_info=True)
+                if sidecar_sid:
+                    try:
+                        _goal_payload: dict = {
+                            "session_id": sidecar_sid,
+                            "action": _action,
+                        }
+                        if _payload.get("objective"):
+                            _goal_payload["objective"] = _payload["objective"]
+                        if _payload.get("token_budget") is not None:
+                            _goal_payload["token_budget"] = _payload["token_budget"]
+                        result = await client.call("goal_action", _goal_payload)
+                        # 回执带最新 goal 状态，直接推送前端（不依赖 goal_updated 事件到达时序）
+                        if result and result.get("state"):
+                            await ws.send_json({
+                                "type": "goal_updated",
+                                "payload": {
+                                    "goal": result["state"].get("goal"),
+                                    "state": result["state"],
+                                },
+                            })
+                        logger.info("[ws] Forwarded goal_action=%s to sidecar session %s", _action, sidecar_sid[:8])
+                    except Exception:
+                        logger.debug("[ws] Failed to forward goal_action to sidecar", exc_info=True)
                 continue
 
             if msg_type == "artifact_action":
