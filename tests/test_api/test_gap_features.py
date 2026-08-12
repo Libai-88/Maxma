@@ -330,3 +330,82 @@ class TestRecapEndpoint:
             assert body["answer"] == "回顾：已完成 A，待办 B。"
             assert body["status"] == "completed"
         client_mock.call.assert_any_await("session_recap", {"session_id": "sc-1"})
+
+
+# ── 斜杠命令 /compact 端点（GAP-CMD-001） ───────────────────────────────────
+
+
+class TestCompactEndpoint:
+    def test_compact_404_when_session_missing(self, recap_app):
+        app, manager, _ = recap_app
+        manager.get.return_value = None
+        with TestClient(app) as client:
+            resp = client.post("/sessions/nope/compact")
+            assert resp.status_code == 404
+
+    def test_compact_409_when_agent_busy(self, recap_app):
+        app, manager, _ = recap_app
+        sess = MagicMock()
+        sess._active_task = MagicMock()
+        sess._active_task.done.return_value = False
+        manager.get.return_value = sess
+        with TestClient(app) as client:
+            resp = client.post("/sessions/s1/compact")
+            assert resp.status_code == 409
+
+    def test_compact_invalid_keep_last_rejected(self, recap_app):
+        app, manager, _ = recap_app
+        sess = MagicMock()
+        sess._active_task = None
+        manager.get.return_value = sess
+        with TestClient(app) as client:
+            resp = client.post("/sessions/s1/compact?keep_last=0")
+            assert resp.status_code == 400
+            resp2 = client.post("/sessions/s1/compact?keep_last=9999")
+            assert resp2.status_code == 400
+
+    def test_compact_probes_stale_then_calls_rpc(self, recap_app):
+        app, manager, smap = recap_app
+        sess = MagicMock()
+        sess._active_task = None
+        sess._sidecar_session_id = "sc-1"
+        manager.get.return_value = sess
+        smap.get_sidecar_id.return_value = "sc-1"
+
+        client_mock = MagicMock()
+        client_mock.call = AsyncMock(side_effect=[
+            {"ok": True},  # 探活 get_messages
+            {"compressed": True, "removed_count": 42, "detail": "压缩完成"},
+        ])
+        mgr = MagicMock()
+        mgr.start = AsyncMock()
+        mgr.get_client = AsyncMock(return_value=client_mock)
+        app.state.sidecar_manager = mgr
+
+        with TestClient(app) as client:
+            resp = client.post("/sessions/s1/compact?keep_last=20")
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["compressed"] is True
+            assert body["removed_count"] == 42
+        client_mock.call.assert_any_await("compact", {"session_id": "sc-1", "keep_last": 20})
+
+    def test_compact_stale_session_cleared(self, recap_app):
+        app, manager, smap = recap_app
+        sess = MagicMock()
+        sess._active_task = None
+        sess._sidecar_session_id = "sc-1"
+        manager.get.return_value = sess
+        smap.get_sidecar_id.return_value = "sc-1"
+
+        client_mock = MagicMock()
+        client_mock.call = AsyncMock(side_effect=Exception("Session not found"))
+        mgr = MagicMock()
+        mgr.start = AsyncMock()
+        mgr.get_client = AsyncMock(return_value=client_mock)
+        app.state.sidecar_manager = mgr
+
+        with TestClient(app) as client:
+            resp = client.post("/sessions/s1/compact")
+            assert resp.status_code == 409
+        smap.clear_sidecar_id.assert_called_once_with("s1")

@@ -326,6 +326,10 @@ export const api = {
   recapSession: (id: string) =>
     request<{ answer: string, status: string }>(`/sessions/${encodeURIComponent(id)}/recap`, { method: 'POST' }),
 
+  // GAP-CMD-001：压缩上下文历史（斜杠命令 /compact）
+  compactSession: (id: string, keepLast: number = 20) =>
+    request<{ compressed: boolean, removed_count: number, detail: string }>(`/sessions/${encodeURIComponent(id)}/compact?keep_last=${keepLast}`, { method: 'POST' }),
+
   getSessionPermissionMode: (sessionId: string) =>
     request<SessionPermissionModeResponse>(
       `/sessions/${encodeURIComponent(sessionId)}/permission-mode`,

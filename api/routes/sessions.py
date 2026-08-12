@@ -419,6 +419,68 @@ async def recap_session(session_id: str, request: Request):
         raise HTTPException(status_code=502, detail="回顾生成失败，请稍后重试")
 
 
+@router.post("/sessions/{session_id}/compact")
+async def compact_session(session_id: str, request: Request, keep_last: int = 20):
+    """GAP-CMD-001：压缩上下文历史（斜杠命令 /compact）。
+
+    截断会话消息历史至最近 keep_last 条（保留首位 system 消息），
+    复用 sidecar compact RPC；进行中的轮次拒绝执行。
+    """
+    if keep_last < 1 or keep_last > 500:
+        raise HTTPException(status_code=400, detail="keep_last 必须在 1-500 之间")
+    sm = request.app.state.session_manager
+    session = await sm.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="会话不存在")
+
+    if session._active_task is not None and not session._active_task.done():
+        raise HTTPException(status_code=409, detail="Agent 正在处理中，请等待本轮完成后压缩")
+
+    mgr = getattr(request.app.state, "sidecar_manager", None)
+    if mgr is None:
+        raise HTTPException(status_code=503, detail="Sidecar 不可用")
+    try:
+        await mgr.start()
+        client = await mgr.get_client()
+    except Exception:
+        logger.debug("[sessions] sidecar start failed for compact", exc_info=True)
+        raise HTTPException(status_code=503, detail="Sidecar 不可用")
+    if client is None:
+        raise HTTPException(status_code=503, detail="Sidecar 不可用")
+
+    from api.pi_bridge.session_adapter import get_session_map
+    smap = get_session_map()
+    sidecar_sid = smap.get_sidecar_id(session_id)
+    if not sidecar_sid:
+        sidecar_sid = getattr(session, "_sidecar_session_id", None)
+    if not sidecar_sid:
+        raise HTTPException(status_code=409, detail="会话尚未初始化模型连接")
+
+    try:
+        # AUX-STALE-001：探活后调用（sidecar 重启后旧映射静默失败）
+        await client.call("get_messages", {"session_id": sidecar_sid, "limit": 0})
+    except Exception:
+        smap.clear_sidecar_id(session_id)
+        try:
+            session._sidecar_session_id = None
+        except Exception:
+            pass
+        raise HTTPException(status_code=409, detail="会话连接已失效，请发送一条消息后重试")
+
+    try:
+        result = await client.call("compact", {"session_id": sidecar_sid, "keep_last": keep_last})
+        return {
+            "compressed": bool(result.get("compressed")),
+            "removed_count": int(result.get("removed_count") or 0),
+            "detail": result.get("detail", ""),
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("[compact] compact failed for %s", session_id)
+        raise HTTPException(status_code=502, detail="上下文压缩失败，请稍后重试")
+
+
 @router.get("/sessions/{session_id}/context-usage")
 async def get_context_usage(session_id: str, request: Request):
     sm = request.app.state.session_manager

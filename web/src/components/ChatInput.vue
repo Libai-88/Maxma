@@ -198,6 +198,18 @@
       @close="acMode = null"
       @update:active-index="acActiveIndex = $event"
     />
+    <!-- GAP-CMD-001：斜杠命令面板（/ 触发，复用 AutocompletePanel 渲染） -->
+    <AutocompletePanel
+      :items="slashFiltered"
+      :visible="slashVisible"
+      :position="slashPosition"
+      :active-index="slashActiveIndex"
+      :filter-text="slashFilterText"
+      icon-name="sparkles"
+      @select="onSlashSelect"
+      @close="slashCmd.close()"
+      @update:active-index="slashActiveIndex = $event"
+    />
     <!-- 选区引用浮层 -->
     <Transition name="quote-pop">
       <button
@@ -233,6 +245,8 @@ import { useImageAttachment } from '@/composables/useImageAttachment'
 import { useLinkInput } from '@/composables/useLinkInput'
 import { useChatSend } from '@/composables/useChatSend'
 import { useSpeechInput } from '@/composables/useSpeechInput'
+import { useSlashCommands } from '@/composables/useSlashCommands'
+import { useSlashCommandsInjected } from '@/composables/useSlashCommandsProvide'
 import { showError, showSuccess } from '@/lib/toast'
 import type { ThinkPathId } from '@/utils/thinkPath'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue'
@@ -539,8 +553,55 @@ const {
   onConfirm: () => autoResize(),
 })
 
+// ── / 斜杠命令（GAP-CMD-001） ──
+// 统一命令体系：输入 / 弹出命令面板（与 # 工具补全互斥），执行分发到
+// ChatView 提供的 runner（既有 WS/REST/handler 全部复用，不重复实现）。
+const slashRunner = useSlashCommandsInjected()
+const slashCmd = useSlashCommands({
+  text,
+  textareaRef,
+  run: async (name, args) => {
+    if (!slashRunner) {
+      showError('命令执行器未就绪')
+      return ''
+    }
+    const feedback = await slashRunner.run(name, args).catch(() => '')
+    if (feedback) showSuccess(String(feedback))
+    return feedback ?? ''
+  },
+})
+// 面板展示名带 / 前缀 + 用法提示
+const slashFiltered = computed(() =>
+  slashCmd.filtered.value.map(c => ({
+    name: '/' + c.name,
+    description: c.usage ? `${c.description}（${c.usage}）` : c.description,
+  })),
+)
+// 模板绑定用的解构 ref（Vue 模板不自动解包 composable 返回对象内的 ref）
+const slashVisible = slashCmd.visible
+const slashPosition = slashCmd.position
+const slashActiveIndex = slashCmd.activeIndex
+const slashFilterText = slashCmd.filterText
+
+// / 与 # 互斥：/ 激活时关闭工具补全
+watch(text, () => {
+  const el = textareaRef.value
+  if (!el || el !== document.activeElement) return
+  if (acMode.value) {
+    slashCmd.close()
+    return
+  }
+  slashCmd.detect(el, text.value)
+})
+
+function onSlashSelect() {
+  void slashCmd.execute()
+}
+
 function onKeydown(e: KeyboardEvent) {
   if (e.isComposing || e.keyCode === 229) return
+  // / 命令面板优先消费键盘（可见时）
+  if (slashCmd.handleKeydown(e)) return
   if (acHandleKeydown(e)) return
   // UX-INPUT-HISTORY-001：非补全态下 ↑/↓ 回忆发送历史
   if (e.key === 'ArrowUp' && !e.shiftKey) {

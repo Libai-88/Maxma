@@ -199,6 +199,9 @@ import gearIconRaw from '@/assets/icons/status/gear.svg?raw'
 import { useChat } from '@/composables/useChat'
 import { useSelectionQuote } from '@/composables/useSelectionQuote'
 import { provideChatInput } from '@/composables/useChatInput'
+import { invalidateTurnsCache } from '@/composables/useChat'
+import { provideSlashCommands } from '@/composables/useSlashCommandsProvide'
+import { SLASH_COMMANDS } from '@/composables/useSlashCommands'
 import { useWorkbenchStore } from '@/stores/workbench'
 import { useHealthStore } from '@/stores/health'
 import { useProviderStore } from '@/stores/provider'
@@ -508,6 +511,113 @@ const isSubagent = computed(() => {
     s => s.session_id === sessionId.value && s.is_subagent
   )
 })
+
+// ── 斜杠命令执行器（GAP-CMD-001） ──
+// 统一命令体系 → 既有 handler 分发。ChatInput 的 / 命令面板通过
+// provide/inject 调用本执行器，返回用户可见反馈文案。
+const slashCommandRunner = {
+  run: async (name: string, args: string): Promise<string | void> => {
+    const sid = sessionId.value
+    const ch = chatStore.channels.get(sid)
+    switch (name) {
+      case 'help': {
+        const lines = ['可用斜杠命令：']
+        for (const c of SLASH_COMMANDS) {
+          lines.push(`· ${c.usage ?? '/' + c.name} — ${c.description}`)
+        }
+        if (ch) {
+          ch.turns.push({
+            id: `slash-help-${Date.now()}`,
+            userMessage: '',
+            refs: [],
+            events: [{ kind: 'system', detail: 'slash_help', content: lines.join('\n'), timestamp: Date.now() }],
+            memoryEvents: [],
+            finalAnswer: null,
+          })
+        }
+        return
+      }
+      case 'plan': {
+        const next = !planModeOn.value
+        if (!sendPlanMode(next)) return '计划模式切换失败：连接未就绪'
+        planModeOn.value = next
+        return next ? '已开启计划模式：Agent 将先规划后执行' : '已关闭计划模式'
+      }
+      case 'goal': {
+        const sub = args.split(/\s+/)[0]?.toLowerCase()
+        if (sub === 'pause' || sub === 'resume' || sub === 'drop') {
+          if (!sendGoalAction(sub)) return '目标操作失败：连接未就绪'
+          return sub === 'pause' ? '目标已暂停' : sub === 'resume' ? '目标已恢复' : '目标已放弃'
+        }
+        if (!args) return '用法：/goal <目标>（或 /goal pause|resume|drop）'
+        if (!sendGoalAction('set', args)) return '目标设置失败：连接未就绪'
+        return '目标已设定，Agent 将朝目标推进'
+      }
+      case 'checkpoint': {
+        const action = args.trim().toLowerCase() === 'restore' ? 'restore' : 'save'
+        if (!sendCheckpointAction(action)) return '请求失败：连接未就绪'
+        return action === 'save' ? '已请求创建检查点，将在下一轮执行' : '已请求回到最近检查点，将在下一轮执行'
+      }
+      case 'undo': {
+        if (isStreaming.value) return '正在生成回复，请等待完成后撤回'
+        try {
+          const result = await api.undoMessages(sid, 1)
+          if ((result.deleted_count ?? 0) > 0) {
+            removeTurns(1)
+            return '已撤回上一轮'
+          }
+          return '没有可撤回的对话'
+        } catch (e) {
+          return '撤回失败：' + (e instanceof Error ? e.message : String(e))
+        }
+      }
+      case 'retry': {
+        handleRetryLast()
+        return
+      }
+      case 'compact': {
+        try {
+          const result = await api.compactSession(sid, 20)
+          return result.removed_count > 0
+            ? `上下文已压缩：移除 ${result.removed_count} 条消息`
+            : '上下文无需压缩'
+        } catch (e) {
+          return '压缩失败：' + (e instanceof Error ? e.message : String(e))
+        }
+      }
+      case 'clear': {
+        try {
+          await api.clearSessionMessages(sid)
+        } catch (e) {
+          return '清空失败：' + (e instanceof Error ? e.message : String(e))
+        }
+        const target = chatStore.channels.get(sid)
+        if (target) {
+          target.turns.splice(0, target.turns.length)
+          target.currentTurn = null
+          target.error = null
+          target.errorCategory = null
+        }
+        chatStore.removeTurnsFromStorage(sid)
+        invalidateTurnsCache(sid)
+        return '会话已清空'
+      }
+      case 'private': {
+        const next = !privateMode.value
+        setPrivateMode(next)
+        return next ? '已开启私密模式' : '已关闭私密模式'
+      }
+      case 'auto': {
+        const next = !autoApprove.value
+        setAutoApprove(next)
+        return next ? '已开启自动执行' : '已切换为逐次确认'
+      }
+      default:
+        return `未知命令：/${name}（输入 /help 查看全部命令）`
+    }
+  },
+}
+provideSlashCommands(slashCommandRunner)
 
 const chatInputRef = ref<InstanceType<typeof ChatInput> | null>(null)
 

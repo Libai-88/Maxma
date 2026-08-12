@@ -70,6 +70,28 @@
 
 ---
 
+## 三、斜杠命令统一管理（GAP-CMD-001，2026-08-12）
+
+主流 Agent（Claude Code / Cursor）以 / 命令统一管理进阶操作；Maxma 的进阶
+功能此前分散在会话菜单/设置页各处。现已收敛为统一命令体系，输入 / 即弹出
+命令面板（名称/用法/描述），Tab/方向键/Enter 操作：
+
+| 命令 | 功能 | 底层实现 |
+|---|---|---|
+| /help | 命令帮助 | 会话内系统消息 |
+| /plan | 计划模式开关 | WS set_plan_mode |
+| /goal <目标> / pause / resume / drop | 目标模式管理 | WS goal_action |
+| /checkpoint [restore] | 检查点/回退 | WS checkpoint_action |
+| /undo | 撤回上一轮 | REST undo + 前端同步 |
+| /retry | 重试最后一轮 | 复用错误横幅重试 |
+| /compact | 压缩上下文 | POST /sessions/{id}/compact（新端点） |
+| /clear | 清空会话 | REST clearSessionMessages |
+| /private / /auto | 私密/自动执行开关 | 前端状态 + WS |
+
+实现：`web/src/composables/useSlashCommands.ts`（状态机+注册表）、
+`ChatView` 执行器（provide 分发到既有 handler，零重复实现）、
+复用 AutocompletePanel 渲染；与 # 工具补全互斥。
+
 ## 三、与主流 Agent 工具的体验差距（用户感知层面）
 
 用户"感觉差距不小"的根源，按感受强度排序：
