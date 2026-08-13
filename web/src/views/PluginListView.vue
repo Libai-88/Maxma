@@ -143,6 +143,7 @@ function handleSearch(query: string, category: PluginCategory | undefined, enabl
   min-height: 0;
   overflow-y: auto;
   max-width: 960px;
+  width: 100%;
   margin: 0 auto;
   padding: 24px 16px 80px;
 }

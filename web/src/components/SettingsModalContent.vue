@@ -93,12 +93,19 @@ defineEmits<{
   display: flex;
   flex-direction: column;
   gap: 0;
+  /* MODAL-ACTIONS-VISIBLE-001：内容超高时让卡片网格自己滚动，
+     底部操作按钮（重启/清空/日志）始终可见，不再被挤出视口。
+     父容器 .modal-body-inner 为 flex column，本组件用 flex:1 撑满，
+     不依赖百分比高度（flex 链路上 height:100% 解析不稳定）。 */
+  flex: 1;
+  min-height: 0;
 }
 
 /* ── Header ── */
 .settings-header {
   text-align: center;
   padding: 4px 0 16px;
+  flex-shrink: 0;
 }
 .settings-title {
   font-size: 20px;
@@ -119,6 +126,18 @@ defineEmits<{
   grid-template-columns: 1fr 1fr;
   gap: 10px;
   padding: 0 0 4px;
+  /* 卡片过多时网格自身滚动（17 张场景），滚动条贴近网格而非整窗 */
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* MODAL-ODD-CARD-001：卡片数为奇数时最后一张不再孤悬左列——
+   grid 单列跨行 + 居中 + 半宽，视觉均衡（17 张卡片场景） */
+.settings-card:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+  justify-self: center;
+  width: calc(50% - 5px);
 }
 
 .settings-card {
@@ -208,6 +227,7 @@ defineEmits<{
   gap: 8px;
   padding-top: 16px;
   flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .action-btn {

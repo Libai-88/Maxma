@@ -75,7 +75,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.share-view { max-width: 800px; margin: 0 auto; padding: 24px 16px 80px; }
+.share-view { flex: 1; min-height: 0; overflow-y: auto; max-width: 800px; width: 100%; margin: 0 auto; padding: 24px 16px 80px; }
 .loading, .error { text-align: center; padding: 60px 20px; color: var(--text-tertiary); }
 .error h2 { font-size: 1.2em; color: var(--status-error); margin-bottom: 8px; }
 .error p { font-size: 0.9em; margin-bottom: 16px; }

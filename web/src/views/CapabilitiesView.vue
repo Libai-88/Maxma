@@ -274,11 +274,13 @@ onMounted(load)
 
 <style scoped>
 .capabilities-view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   max-width: 720px;
   margin: 0 auto;
   padding: 24px 16px 80px;
-  overflow-y: auto;
-  max-height: 100%;
+  width: 100%;
 }
 
 .header { margin-bottom: 24px; }

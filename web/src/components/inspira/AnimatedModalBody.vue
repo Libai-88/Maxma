@@ -76,6 +76,12 @@ function onOutsideClick() {
 }
 
 .modal-body-inner {
+  /* MODAL-LAYOUT-001：作为 flex column 容器，让子组件（如设置中心）
+     能通过 flex:1 + min-height:0 撑满可视高度、内部自行滚动，
+     底部操作区保持可见。原为纯 block + overflow-y:auto，
+     内容超高时整个弹窗滚动、底部按钮被挤出视口。 */
+  display: flex;
+  flex-direction: column;
   flex: 1;
   overflow-y: auto;
   padding: 24px;

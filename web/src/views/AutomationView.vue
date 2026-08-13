@@ -304,7 +304,7 @@ async function handleDelete(id: string) {
 </script>
 
 <style scoped>
-.automation-view { max-width: 800px; margin: 0 auto; padding: 24px 16px 80px; }
+.automation-view { flex: 1; min-height: 0; overflow-y: auto; max-width: 800px; width: 100%; margin: 0 auto; padding: 24px 16px 80px; }
 .header { margin-bottom: 16px; }
 .header h2 { font-size: var(--fs-display-lg); font-weight: 600; font-family: var(--font-display); letter-spacing: -0.01em; margin: 0; }
 .header-sub { font-size: 0.82em; color: var(--text-tertiary); margin: 4px 0 0; }

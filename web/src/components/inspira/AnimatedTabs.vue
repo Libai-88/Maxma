@@ -3,7 +3,7 @@
     <button
       v-for="tab in props.tabs"
       :key="tab.value"
-      ref="setTabRef"
+      :ref="setTabRef"
       :class="['tab-btn', { active: modelValue === tab.value }]"
       role="tab"
       :aria-selected="modelValue === tab.value"
@@ -13,13 +13,13 @@
     </button>
     <div
       class="tab-indicator"
-      :style="indicatorStyle"
+      :style="indicator"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { cn } from '@/lib/utils'
 
 interface Tab {
@@ -46,6 +46,20 @@ const containerRef = ref<HTMLElement | null>(null)
 // 容器横向滚动量，用 ref 包起来以便响应式系统在 scroll 时重新计算 indicator
 const scrollLeft = ref(0)
 
+// TABS-INDICATOR-001：指示器样式不再用 computed 派生——
+// offsetLeft/offsetTop 是布局值而非响应式，v-show 切换 section 引起的
+// flex-wrap 重排（滚动条出现/消失改变可用宽度）后 computed 无法感知，
+// 指示器会停留在重排前的错误位置（点击第一行末尾 tab 时尤为明显）。
+// 改为手动刷新：所有可能改变布局的时机（挂载 / modelValue 变化 /
+// 容器滚动 / 窗口 resize）都强制重读布局值。
+const indicator = reactive({
+  width: '0px',
+  height: '0px',
+  top: '0px',
+  transform: 'translateX(0px)',
+  opacity: 0,
+})
+
 function setTabRef(el: any) {
   if (el) {
     const tab = props.tabs.find((t) => {
@@ -57,20 +71,22 @@ function setTabRef(el: any) {
   }
 }
 
-const indicatorStyle = computed(() => {
+/** 重读激活 tab 的布局值并应用到指示器（非响应式依赖，调用方负责时机） */
+function refreshIndicator() {
   const activeTab = tabRefs.value.get(props.modelValue)
-  // offsetLeft 是相对 offsetParent 的，但我们的容器没有 positioned 祖先，
-  // 所以 offsetLeft 实际相对的是 body / 文档；横向滚动后必须减去 scrollLeft
-  // 才能得到"相对容器原点的偏移"，避免 indicator 偏出可见区域。
-  if (!activeTab) return { opacity: 0 }
-  return {
-    width: `${activeTab.offsetWidth}px`,
-    transform: `translateX(${activeTab.offsetLeft - scrollLeft.value}px)`,
-    opacity: 1,
+  if (!activeTab) {
+    indicator.opacity = 0
+    return
   }
-})
+  indicator.width = `${activeTab.offsetWidth}px`
+  indicator.height = `${activeTab.offsetHeight}px`
+  indicator.top = `${activeTab.offsetTop}px`
+  indicator.transform = `translateX(${activeTab.offsetLeft - scrollLeft.value}px)`
+  indicator.opacity = 1
+}
 
 function updateIndicator() {
+  refreshIndicator()
   const activeTab = tabRefs.value.get(props.modelValue)
   if (activeTab) {
     // 容器可滚动时把激活项 "滚到视野里"，避免横向滚动到末尾后指示器错位
@@ -82,7 +98,11 @@ function onContainerScroll() {
   if (containerRef.value) {
     scrollLeft.value = containerRef.value.scrollLeft
   }
+  refreshIndicator()
 }
+
+// 窗口 resize 会改变可用宽度 → flex-wrap 重排 → 指示器必须跟随
+let resizeObserver: ResizeObserver | null = null
 
 onMounted(() => {
   // 通过任意一个 tab 按钮回溯找到容器，避开页面多实例时的 querySelector 取错问题
@@ -96,22 +116,38 @@ onMounted(() => {
     }
   }
   nextTick(() => {
-    updateIndicator()
+    refreshIndicator()
   })
+  // 布局观察：容器尺寸变化（含父级滚动条出现导致的宽度收缩）时刷新指示器
+  if (typeof ResizeObserver !== 'undefined' && containerRef.value) {
+    resizeObserver = new ResizeObserver(() => {
+      refreshIndicator()
+    })
+    resizeObserver.observe(containerRef.value)
+  }
 })
 
 onUnmounted(() => {
   if (containerRef.value) {
     containerRef.value.removeEventListener('scroll', onContainerScroll)
   }
+  resizeObserver?.disconnect()
 })
 
 watch(
   () => props.modelValue,
   () => {
+    // 等两帧：v-show 切换 section 会先改变布局（滚动条出现/消失 →
+    // flex-wrap 重排），此时重读 offsetLeft/offsetTop 才是稳定终值
     nextTick(() => {
       updateIndicator()
     })
+    requestAnimationFrame(() => {
+      updateIndicator()
+    })
+    setTimeout(() => {
+      updateIndicator()
+    }, 0)
   },
 )
 </script>
@@ -119,6 +155,7 @@ watch(
 <style scoped>
 .animated-tabs {
   display: flex;
+  flex-wrap: wrap;
   position: relative;
   gap: 4px;
   padding: 4px;
@@ -127,18 +164,9 @@ watch(
   border: 1px solid var(--border);
   width: fit-content;
   max-width: 100%;
-  /* 标签过多时支持横向滚动，避免被父容器裁掉（设置页 10 个 tab 时尤为明显） */
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
-  scrollbar-gutter: stable;
-}
-.animated-tabs::-webkit-scrollbar {
-  height: 4px;
-}
-.animated-tabs::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 2px;
+  /* TABS-WRAP-001：标签过多时换行展示（设置页 11 个 tab），
+     所有标签完整可见，不再横向滚动裁剪 */
+  overflow: visible;
 }
 
 .tab-btn {
@@ -173,14 +201,13 @@ watch(
 
 .tab-indicator {
   position: absolute;
-  top: 4px;
   left: 0;
-  height: calc(100% - 8px);
   border-radius: 8px;
   background: var(--accent);
   opacity: 0;
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
               width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
               opacity 0.2s ease;
   pointer-events: none;
 }

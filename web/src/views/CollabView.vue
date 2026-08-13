@@ -309,7 +309,11 @@ function formatDate(dateStr: string): string {
 
 <style scoped>
 .collab-view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   max-width: 800px;
+  width: 100%;
   margin: 0 auto;
   padding: 24px 16px 80px;
 }
