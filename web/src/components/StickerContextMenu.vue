@@ -67,11 +67,18 @@ useGsap((_ctx, contextSafe) => {
 })
 
 // CSP-safe CSSOM: position menu via style.setProperty (was :style binding)
+// CTX-CLAMP-001：菜单为 fixed 定位，触发点靠近视口边缘时菜单会超出
+// 窗口被截断（表情网格边缘右键场景）。定位后按视口钳制，
+// 保留 8px 边距确保菜单完整可见。
 watchEffect(() => {
   const el = menuRef.value
   if (!el || !props.visible) return
-  el.style.setProperty('left', `${props.position.x}px`)
-  el.style.setProperty('top', `${props.position.y}px`)
+  const menuW = el.offsetWidth || 140
+  const menuH = el.offsetHeight || 32
+  const left = Math.max(8, Math.min(props.position.x, window.innerWidth - menuW - 8))
+  const top = Math.max(8, Math.min(props.position.y, window.innerHeight - menuH - 8))
+  el.style.setProperty('left', `${left}px`)
+  el.style.setProperty('top', `${top}px`)
 }, { flush: 'post' })
 
 // 菜单项 hover：图标弹性蹦跳，反馈「可操作」

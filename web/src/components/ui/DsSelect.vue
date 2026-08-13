@@ -260,13 +260,18 @@ function updatePopupPosition() {
   if (!inputRef.value) return
   const r = inputRef.value.getBoundingClientRect()
   const listH = listboxRef.value?.offsetHeight ?? 200
+  const listW = listboxRef.value?.offsetWidth ?? r.width
   const spaceBelow = window.innerHeight - r.bottom
   const above = spaceBelow < listH + 8 && r.top > spaceBelow
   const top = above ? r.top - listH - 4 : r.bottom + 4
+  // DS-SELECT-CLAMP-001：下拉为 fixed 定位，select 靠近窗口右缘时
+  // 列表会超出窗口被截断。left 按视口钳制（保留 4px 边距），
+  // max-width 同时兜底防溢出。
+  const left = Math.max(4, Math.min(r.left, window.innerWidth - listW - 4))
   popupStyle.value = {
     position: 'fixed',
     top: `${Math.max(4, top)}px`,
-    left: `${r.left}px`,
+    left: `${left}px`,
     'min-width': `${r.width}px`,
     'max-width': `${Math.min(window.innerWidth - 8, r.width * 1.5)}px`,
   }

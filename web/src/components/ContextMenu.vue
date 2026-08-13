@@ -67,11 +67,18 @@ const emit = defineEmits<{
 const menuRef = ref<HTMLElement | null>(null)
 
 // CSP-safe CSSOM: position menu via style.setProperty (was :style binding)
+// CTX-CLAMP-001：菜单为 fixed 定位，触发点靠近视口边缘时（如右键
+// 消息气泡右缘/底部）菜单会超出窗口被截断。定位后按视口钳制：
+// 横向不超右缘（保留 8px 边距），纵向优先保持触发点、超出时回缩。
 watchEffect(() => {
   const el = menuRef.value
   if (!el || !props.visible) return
-  el.style.setProperty('left', `${props.position.x}px`)
-  el.style.setProperty('top', `${props.position.y}px`)
+  const menuW = el.offsetWidth || 120
+  const menuH = el.offsetHeight || 32
+  const left = Math.max(8, Math.min(props.position.x, window.innerWidth - menuW - 8))
+  const top = Math.max(8, Math.min(props.position.y, window.innerHeight - menuH - 8))
+  el.style.setProperty('left', `${left}px`)
+  el.style.setProperty('top', `${top}px`)
 }, { flush: 'post' })
 
 function getMenuItems(): HTMLElement[] {

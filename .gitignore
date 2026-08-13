@@ -216,4 +216,4 @@ web/dist_old/
 
 # 本地功能测试临时脚本（2026-08-10 API 测试矩阵）
 tmp/
-build-portable-run4.log
+build-portable-run*.log

@@ -437,15 +437,23 @@ function updatePickerPosition() {
     const root = pickerRootRef.value
     if (!root || !props.visible) return
     const rect = root.getBoundingClientRect()
+    // PICKER-DOCK-001：表情选择器挂在输入栏左侧的附件按钮上（right:0 向左展开），
+    // 展开后左边缘会越过左侧 dock 图标栏（84px 固定占位）与其重叠，左边表情不可见。
+    // 修正逻辑：左边界按「dock 宽度 + 8px 间距」钳制（窄窗口下 dock 收窄为 56px，
+    // 与 App.vue COMPAT-NARROW-001 的 --icon-rail-width 断点保持一致），
+    // 右边界仍按窗口边缘 12px 钳制。
+    const dockWidth = window.innerWidth <= 820 ? 56 : 84
+    const leftBoundary = dockWidth + 8
+    const rightBoundary = window.innerWidth - 12
     let shift = 0
-    if (rect.left < 12) {
-      shift = 12 - rect.left
-    } else if (rect.right > window.innerWidth - 12) {
-      shift = window.innerWidth - 12 - rect.right
+    if (rect.left < leftBoundary) {
+      shift = leftBoundary - rect.left
+    } else if (rect.right > rightBoundary) {
+      shift = rightBoundary - rect.right
     }
     // CSP-safe CSSOM: was reactive :style pickerStyle
     root.style.setProperty('transform', shift ? `translateX(${shift}px)` : '')
-    root.style.setProperty('max-width', 'calc(100vw - 24px)')
+    root.style.setProperty('max-width', `calc(100vw - ${dockWidth + 24}px)`)
   })
 }
 

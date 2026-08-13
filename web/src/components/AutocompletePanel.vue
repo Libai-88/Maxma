@@ -83,10 +83,15 @@ function highlightName(name: string): string {
 }
 
 // CSP-safe CSSOM: position panel via style.setProperty (was :style binding)
+// AC-CLAMP-001：面板为 fixed 定位（max-width 360px），输入框靠近窗口
+// 右缘时面板会超出窗口被截断。定位后按视口钳制：
+// 横向优先跟随输入框，超出右缘时回缩（保留 8px 边距）。
 watchEffect(() => {
   const el = panelRef.value
   if (!el || !props.visible) return
-  el.style.setProperty('left', `${props.position.x}px`)
+  const panelW = el.offsetWidth || 240
+  const left = Math.max(8, Math.min(props.position.x, window.innerWidth - panelW - 8))
+  el.style.setProperty('left', `${left}px`)
   el.style.setProperty('bottom', `${window.innerHeight - props.position.y + 28}px`)
 }, { flush: 'post' })
 

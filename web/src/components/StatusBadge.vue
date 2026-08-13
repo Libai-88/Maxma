@@ -137,11 +137,17 @@ function makeItem(name: string, c: ComponentHealth | null | undefined) {
   transform: translateY(-4px);
   transition: visibility 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
   pointer-events: none;
+  /* TOOLTIP-CLIP-001：健康卡片挂在顶栏右侧（badge 靠近窗口右缘），
+     原 left:0 从 badge 左缘向右展开 240px，右边缘超出窗口且被
+     .chat-view overflow:hidden 裁剪，右侧信息不可见。
+     改为 right:0 从 badge 右缘向左展开，配合 max-width 视口钳制：
+     任何窗口宽度下卡片都完整落在可视区域内。 */
   position: absolute;
   top: calc(100% + 8px);
-  left: 0;
+  right: 0;
   z-index: 100;
   min-width: 240px;
+  max-width: min(320px, calc(100vw - 24px));
   padding: 8px 12px;
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -149,7 +155,8 @@ function makeItem(name: string, c: ComponentHealth | null | undefined) {
   box-shadow: var(--shadow-lg);
   font-size: 12px;
   line-height: 1.6;
-  white-space: nowrap;
+  /* 去掉外层 nowrap：与 max-width 冲突会把卡片撑破视口。
+     长文本由 .detail-text 内部 ellipsis 控制截断。 */
 }
 
 /* ── card rows ── */
