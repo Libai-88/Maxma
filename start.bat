@@ -2,9 +2,9 @@
 
 cd /d "%~dp0"
 
-REM Port configuration: API remains on 8000; Vite/Tauri use 1420.
+REM Port configuration: API on 8000; web 端 (Vite) on 5173.
 if "%MAXMA_API_PORT%"=="" set "MAXMA_API_PORT=8000"
-if "%MAXMA_WEB_PORT%"=="" set "MAXMA_WEB_PORT=1420"
+if "%MAXMA_WEB_PORT%"=="" set "MAXMA_WEB_PORT=5173"
 
 echo ========================================
 echo   MaxmaHere Startup
@@ -28,16 +28,19 @@ if not exist "main.py" (
 )
 
 if not exist ".venv\Scripts\python.exe" (
-    echo [ERR] Virtual env not found. Run:
-    echo        python -m venv .venv
-    echo        .venv\Scripts\pip install -r requirements.txt
+    echo [ERR] 依赖尚未安装。请先运行 install.bat 一键安装。
     pause
     exit /b 1
 )
 
 if not exist "web\node_modules" (
-    echo [ERR] Frontend dependencies not found. Run:
-    echo        cd web ^&^& npm install
+    echo [ERR] 前端依赖未安装，请先运行 install.bat 一键安装。
+    pause
+    exit /b 1
+)
+
+if not exist "bun-sidecar\node_modules" (
+    echo [ERR] Agent 引擎依赖未安装，请先运行 install.bat 一键安装。
     pause
     exit /b 1
 )
