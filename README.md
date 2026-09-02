@@ -36,7 +36,18 @@ MaxmaHere 提供多 LLM Provider、流式对话、Agent 工具、MCP、Skill、�
 Vue/Tauri -> HTTP/WebSocket -> FastAPI -> JSON-RPC stdio -> Bun sidecar -> oh-my-pi -> LLM/MCP
 ```
 
-## 开发环境
+## 快速开始（Windows 一键）
+
+只需两个脚本：
+
+```bat
+install.bat   一键安装（依赖 + 环境配置）
+start.bat     一键启动（后端 + 前端，并打开浏览器 http://localhost:5173）
+```
+
+首次使用在网页"提供商"页面填写 LLM 的 Base URL 与 API Key。多端使用：浏览器访问 `http://localhost:5173` 即为 web 端；Tauri 桌面版走 `build\build-desktop.bat`。
+
+## 手动搭建（进阶 / 跨平台）
 
 需要 Python 3.11+、Bun 1.3+、Node.js 18+。构建 Windows 桌面安装包还需要 Rust、Tauri CLI 和 Visual Studio C++ Build Tools。
 
@@ -46,6 +57,7 @@ python -m venv .venv
 cd bun-sidecar
 bun install
 cd ..
+cd web && npm install
 ```
 
 ## 启动与测试

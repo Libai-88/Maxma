@@ -2,6 +2,8 @@
 #    uv pip compile pyproject.toml --extra dev -o requirements-lock.txt
 aiosqlite==0.22.1
     # via maxmahere (pyproject.toml)
+python-multipart==0.0.20
+    # via maxmahere (pyproject.toml)
 annotated-doc==0.0.4
     # via fastapi
 annotated-types==0.7.0

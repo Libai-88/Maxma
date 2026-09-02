@@ -91,7 +91,14 @@ def _get_persona_variant_path(variant: str) -> Path:
     Keep this check shared by read, write, and activation endpoints.  Besides
     preventing traversal, it prevents a malformed active_persona.yaml from
     turning a normal SOUL page into an empty or unrelated file.
+
+    网络层（如统一网关/代理）可能在查询串中的文件名校尾追加反斜杠等分隔符
+    （例如 文件名后多一个反斜杠）；仅当剥离末尾分隔符/空白后能得到合法文件名
+    时才采用，否则仍按原值校验并返回 400。
     """
+    cleaned = variant.rstrip("\\/ \t\r\n")
+    if cleaned and _PERSONA_FILENAME_RE.fullmatch(cleaned):
+        variant = cleaned
     if not _PERSONA_FILENAME_RE.fullmatch(variant):
         raise HTTPException(status_code=400, detail="无效的人格文件名")
     path = PERSONAS_DIR / variant
