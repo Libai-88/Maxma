@@ -21,6 +21,11 @@ if errorlevel 1 (
     set RUNTIME_OK=0
 ) else (
     for /f "delims=" %%v in ('python --version 2^>^&1') do echo   [OK] %%v
+    python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" >nul 2>&1
+    if errorlevel 1 (
+        echo   [ERR] Python 版本过低，需要 3.11 及以上
+        set RUNTIME_OK=0
+    )
 )
 
 where node >nul 2>&1
@@ -30,6 +35,11 @@ if errorlevel 1 (
     set RUNTIME_OK=0
 ) else (
     for /f "delims=" %%v in ('node --version') do echo   [OK] Node.js %%v
+    node -e "if(+process.versions.node.split('.')[0]<18)process.exit(1)" >nul 2>&1
+    if errorlevel 1 (
+        echo   [ERR] Node.js 版本过低，需要 18 及以上
+        set RUNTIME_OK=0
+    )
 )
 
 where bun >nul 2>&1
