@@ -355,15 +355,20 @@ async function handleDelete(id: string) {
   }
 }
 
+let refreshTimer: ReturnType<typeof setInterval> | null = null
+
 onMounted(async () => {
   store.loading = true
   await Promise.all([loadFacts(), loadHindsightConfig()])
   store.loading = false
   // 定期刷新:agent 通过 remember_memory 写入的新记忆能自动出现在记忆页
-  const timer = window.setInterval(() => {
+  refreshTimer = window.setInterval(() => {
     if (!document.hidden) loadFacts()
   }, 15000)
-  onUnmounted(() => window.clearInterval(timer))
+})
+
+onUnmounted(() => {
+  if (refreshTimer) window.clearInterval(refreshTimer)
 })
 </script>
 
