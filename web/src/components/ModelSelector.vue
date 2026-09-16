@@ -130,17 +130,17 @@ function syncInitialSelection() {
     return
   }
 
-  // 修复 MODEL-SILENT-SWAP-002：当前选择不在可用列表时静默改选首个——
-  // 记录日志便于排查（模型被移除/API key 失效导致列表变化时）
-  // UX-MODEL-SWAP-001：静默替换必须对用户可见——此前仅 console.warn，
-  // 用户正对话却不知道模型已被悄悄换掉
-  const prevLabel = chatInput.providerId.value && chatInput.modelName.value
-    ? `${chatInput.providerId.value}/${chatInput.modelName.value}`
-    : '原模型'
-  console.warn(
-    `[ModelSelector] 当前选择不在可用模型列表，自动切换为 ${models[0].id}（此前选择: ${prevLabel}）`,
-  )
-  showToast(`模型 ${prevLabel} 不可用，已切换到 ${models[0].name ?? models[0].id}`, 'warning', 6000)
+  // UX-MODEL-SWAP-001：仅当用户确有历史选择、而该选择从可用列表消失时，
+  // 才提示"已切换"（静默替换必须可见）。首次运行/无历史选择时（providerId
+  // 与 modelName 均为空）静默采用首个模型，不误报"原模型不可用"。
+  const hadPriorSelection = Boolean(chatInput.providerId.value && chatInput.modelName.value)
+  if (hadPriorSelection) {
+    const prevLabel = `${chatInput.providerId.value}/${chatInput.modelName.value}`
+    console.warn(
+      `[ModelSelector] 当前选择不在可用模型列表，自动切换为 ${models[0].id}（此前选择: ${prevLabel}）`,
+    )
+    showToast(`模型 ${prevLabel} 不可用，已切换到 ${models[0].name ?? models[0].id}`, 'warning', 6000)
+  }
   onSelectModel(models[0].id)
 }
 
