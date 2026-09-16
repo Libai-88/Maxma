@@ -282,7 +282,8 @@ describe('useChatStore', () => {
       expect(store.temperature).toBe(2)
     })
 
-    it('setMaxTokens clamps between 256 and 256000', () => {
+    // MAXTOKENS-CLAMP-001：上限 65536——超过该值的语义值会被后端视为未设置
+    it('setMaxTokens clamps between 256 and 65536', () => {
       const store = useChatStore()
 
       store.setMaxTokens(8192)
@@ -292,7 +293,7 @@ describe('useChatStore', () => {
       expect(store.maxTokens).toBe(256)
 
       store.setMaxTokens(999999)
-      expect(store.maxTokens).toBe(256000)
+      expect(store.maxTokens).toBe(65536)
     })
 
     it('toggleThinking sets thinkingEnabled', () => {

@@ -206,7 +206,11 @@ describe('workspace shell', () => {
     expect(drawer.attributes('aria-labelledby')).toBe('session-drawer-title')
     expect(document.activeElement).toBe(wrapper.get('.session-drawer__close').element)
 
-    const focusable = wrapper.findAll('aside button')
+    // 与 SessionDrawer 焦点陷阱的 selector 保持一致（含搜索框 input），
+    // 否则"最后一个可聚焦元素"与陷阱实际列表不一致
+    const focusable = wrapper.findAll(
+      'aside a[href], aside button:not([disabled]), aside input:not([disabled]), aside select:not([disabled]), aside textarea:not([disabled]), aside [tabindex]:not([tabindex="-1"])',
+    )
     expect(focusable.length).toBeGreaterThanOrEqual(2)
     const first = focusable[0].element
     const last = focusable[focusable.length - 1].element

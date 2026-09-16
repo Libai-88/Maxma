@@ -1,10 +1,14 @@
 """REST API — 系统更新动态。"""
 
+import logging
+
 import yaml
 from fastapi import APIRouter
 from pydantic import BaseModel, field_validator
 
 from app_paths import NEWS_YAML_PATH
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -44,9 +48,22 @@ class ListNewsResponse(BaseModel):
 def _load_news() -> list[NewsEntry]:
     if not NEWS_PATH.exists():
         return []
-    with open(NEWS_PATH, encoding="utf-8") as f:
-        raw = yaml.safe_load(f) or {}
-    entries = [NewsEntry(**item) for item in raw.get("news", [])]
+    try:
+        with open(NEWS_PATH, encoding="utf-8") as f:
+            raw = yaml.safe_load(f) or {}
+    except Exception:
+        logger.exception("Failed to read news file: %s", NEWS_PATH)
+        return []
+    if not isinstance(raw, dict):
+        logger.error("News file has unexpected top-level type: %s", type(raw).__name__)
+        return []
+    entries: list[NewsEntry] = []
+    # 脏数据容错：单条字段缺失/类型错误只跳过该条，不让整个列表接口 500
+    for item in raw.get("news", []):
+        try:
+            entries.append(NewsEntry(**item))
+        except Exception:
+            logger.warning("Skipping invalid news entry: %r", item)
     # 按日期降序排列（最新的在前）
     entries.sort(key=lambda e: e.date, reverse=True)
     return entries

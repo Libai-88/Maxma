@@ -71,6 +71,27 @@ class TestNewsRoute:
         entries = news_mod._load_news()
         assert entries == []
 
+    def test_list_news_skips_invalid_entries(self, client):
+        # 脏数据容错：缺必填字段的条目跳过，其余正常返回，接口不 500
+        _write_news(
+            client["path"],
+            [
+                {"id": "bad", "title": "缺字段"},
+                {
+                    "id": "ok",
+                    "title": "正常",
+                    "description": "d",
+                    "type": "fix",
+                    "date": "2026-06-01",
+                    "version": "1.0.0",
+                },
+            ],
+        )
+        resp = client["client"].get("/news")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert [e["id"] for e in body["news"]] == ["ok"]
+
     def test_load_news_missing_returns_empty(self, tmp_path):
         # 直接调用 _load_news，未 monkeypatch 时 NEWS_PATH 指向模块原始路径
         # 这里用一个不存在的临时路径验证逻辑

@@ -57,10 +57,11 @@ describe('Vite runtime configuration', () => {
     expect(resolveDevConfig().server?.port).toBe(5173)
   })
 
-  it('allows Tauri loopback images in both production HTML entrypoints', () => {
+  // 兼容性审计（8d002ee）后 img-src 放宽为允许 https 远程图片
+  it('allows remote and loopback images in both production HTML entrypoints', () => {
     for (const entry of ['index.html', 'quick-chat.html']) {
       const html = readFileSync(resolve(process.cwd(), entry), 'utf8')
-      expect(html).toContain("img-src 'self' http://localhost:* http://127.0.0.1:* data: blob:")
+      expect(html).toContain("img-src 'self' https: http://localhost:* http://127.0.0.1:* data: blob:")
     }
   })
 })
