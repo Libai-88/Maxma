@@ -42,7 +42,9 @@ _BUILTIN_TOOLS = [
     {"name": "inspect_image", "label": "Inspect Image", "description": "图片分析", "category": "interactive", "builtin": True},
     # Skills
     {"name": "manage_skill", "label": "Manage Skill", "description": "管理技能包", "category": "skills", "builtin": True},
-    {"name": "learn", "label": "Learn", "description": "学习", "category": "skills", "builtin": True},
+    # LEARN-GHOST-001：learn 已移除宣告——OMP 注册门控要求 memory.backend ∈
+    # {hindsight, mnemopi, local}，而 sidecar 钉死 "off"（compiled 不含
+    # fastembed/onnxruntime），该工具运行时永不注册，宣告与事实不符。
     # ── Maxma 自定义工具（真实可用，sidecar customTools 全量注册）──
     {"name": "remember_memory", "label": "Remember Memory", "description": "记住一条长期记忆（用户明确要求时）", "category": "memory", "builtin": True, "source": "custom"},
     {"name": "search_memories", "label": "Search Memories", "description": "检索长期记忆", "category": "memory", "builtin": True, "source": "custom"},

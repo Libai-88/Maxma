@@ -30,9 +30,6 @@ import type {
   ActivityStatsResponse,
   ActivityClearResponse,
   DeferredRun,
-  WorkflowDefinitionsResponse,
-  ListWorkflowRunsResponse,
-  WorkflowRun,
   PermissionMode,
   SessionPermissionModeResponse,
   CapabilitiesResponse,
@@ -357,31 +354,6 @@ export const api = {
   cancelDeferredRun: (sessionId: string, runId: string) =>
     request<DeferredRun>(
       `/sessions/${encodeURIComponent(sessionId)}/deferred-runs/${encodeURIComponent(runId)}/cancel`,
-      { method: 'POST' },
-    ),
-
-  // Workflows are server-flagged and registry-backed; callers can only select a listed ID.
-  listWorkflowDefinitions: () =>
-    request<WorkflowDefinitionsResponse>('/workflows/definitions'),
-
-  listWorkflowRuns: (sessionId: string) =>
-    request<ListWorkflowRunsResponse>(`/sessions/${encodeURIComponent(sessionId)}/workflows`),
-
-  startWorkflow: (sessionId: string, workflowId: string, parentTurnId?: string) =>
-    request<WorkflowRun>(`/sessions/${encodeURIComponent(sessionId)}/workflows`, {
-      method: 'POST',
-      body: JSON.stringify({ workflow_id: workflowId, ...(parentTurnId ? { parent_turn_id: parentTurnId } : {}) }),
-    }),
-
-  cancelWorkflowRun: (sessionId: string, runId: string) =>
-    request<WorkflowRun>(
-      `/sessions/${encodeURIComponent(sessionId)}/workflows/${encodeURIComponent(runId)}/cancel`,
-      { method: 'POST' },
-    ),
-
-  resumeWorkflowRun: (sessionId: string, runId: string) =>
-    request<WorkflowRun>(
-      `/sessions/${encodeURIComponent(sessionId)}/workflows/${encodeURIComponent(runId)}/resume`,
       { method: 'POST' },
     ),
 

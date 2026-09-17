@@ -706,6 +706,7 @@ async def _stream_turn_sidecar(
         WsEventType.NOTICE,
         WsEventType.IRC_MESSAGE,
         WsEventType.SUB_SESSION_CREATED,
+        WsEventType.GOAL_UPDATED,
         WsEventType.MEMORY_START,
         WsEventType.MEMORY_TOOL_START,
         WsEventType.MEMORY_TOOL_END,

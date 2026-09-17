@@ -37,6 +37,7 @@ import { createConfiguredMcp, filterMcpTools, wireMcpToolsChanged, mcpReloadUnsu
 import { parseModel } from "./model";
 import { mapPiEventToMaxma, createDoneGuard, orchestratePrompt, handleCancelGuard, computeUndoTurnCut, compactMessages, resolveUserResponse, MAX_TOOL_CALLS_PER_TURN } from "./events";
 import { createApprovalUiContext, parseApprovalTitle } from "./approval";
+import { installPlanApprovalHandler, rejectPendingPlansForSession } from "./plan-bridge";
 import { checkToolBlocked } from "./blocker";
 
 // Re-export public API so existing imports (tests, rpc_client) keep working.
@@ -647,6 +648,10 @@ export async function handleRpcRequest(req: RpcRequest, io: BridgeIo = defaultIo
 
         record.unsubscribe();
         record.unsubLifecycle?.();  // Phase 3.4: clean up EventBus lifecycle subscription
+        // PLAN-BRIDGE-001：兑现该会话全部在途计划审批（reject），防止
+        // handler promise 悬挂；pendingApprovals 按 interaction_id 键控，
+        // 由 5min 超时兜底。
+        rejectPendingPlansForSession(bridgeState.pendingPlans, sessionId, clearTimeout);
         try {
           await record.session.dispose();
         } finally {
@@ -874,6 +879,20 @@ export async function handleRpcRequest(req: RpcRequest, io: BridgeIo = defaultIo
         try {
           const planId: string = (params?.plan_id as string) ?? "";
           const modifiedPlan: string | undefined = params?.modified_plan as string | undefined;
+          // PLAN-BRIDGE-001：优先兑现 plan-bridge 在途审批（handler 恢复，
+          // 由它统一注入执行指令并发 plan_completed）。无在途条目时回退旧
+          // 的直接注入路径（兼容旧前端时序：plan_proposed 前用户已点确认）。
+          const pendingPlan = bridgeState.pendingPlans.get(planId);
+          if (pendingPlan) {
+            bridgeState.pendingPlans.delete(planId);
+            clearTimeout(pendingPlan.timer);
+            pendingPlan.resolve({
+              action: action === "approve" || action === "modify" ? action : "reject",
+              modifiedPlan,
+            });
+            send(id, { ok: true });
+            return;
+          }
           if (action === "approve") {
             setSetting(record.settings!, "plan.enabled", true);
             console.error(`[plan] Session ${sessionId.slice(0, 8)} plan approved (plan_id=${planId})`);
@@ -945,6 +964,17 @@ export async function handleRpcRequest(req: RpcRequest, io: BridgeIo = defaultIo
             if (!active.includes("resolve")) {
               await session.setActiveToolsByName([...new Set([...active, "resolve"])]);
             }
+            // PLAN-BRIDGE-001：安装 standing resolve handler——OMP 的 resolve
+            // 工具在 agent 提交计划（action=apply）时回退到该 handler；此前
+            // 只注册计划态不装 handler，模型提交计划必抛
+            // "No pending action to resolve"，plan_proposed 永不发射。
+            installPlanApprovalHandler(sessionId, session as unknown as import("./plan-bridge").PlanCapableSession, {
+              sendEvent,
+              pendingPlans: bridgeState.pendingPlans,
+              setTimeoutFn: setTimeout,
+              clearTimeoutFn: clearTimeout,
+              uuidFn: randomUUID,
+            });
             session.setPlanModeState({
               enabled: true,
               planFilePath: "local://PLAN.md",
@@ -956,6 +986,11 @@ export async function handleRpcRequest(req: RpcRequest, io: BridgeIo = defaultIo
             }
           } else {
             session.setPlanModeState(undefined);
+            // 停用计划模式：卸载 handler 并拒绝全部在途计划审批，
+            // 防止泄漏的 promise 挂住 resolve 工具调用。
+            (session as unknown as { setStandingResolveHandler?: (h: null) => void })
+              .setStandingResolveHandler?.(null);
+            rejectPendingPlansForSession(bridgeState.pendingPlans, sessionId, clearTimeout);
           }
           send(id, { ok: true, enabled });
         } catch (err) {

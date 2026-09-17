@@ -226,24 +226,6 @@
         </div>
       </GlowingEffect>
 
-      <!-- Advisor -->
-      <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
-        <div class="section" v-show="activeSection === 'advisor'">
-          <h3>顾问</h3>
-          <p class="section-desc">启用第二个 AI 模型作为顾问，被动审查每次对话。</p>
-
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">启用顾问</div>
-              <div class="setting-desc">配对一个顾问模型来审查 AI 的回复。</div>
-            </div>
-            <button class="toggle-btn" :class="{ on: settings['advisor.enabled'] }" @click="toggle('advisor.enabled')">
-              {{ settings['advisor.enabled'] ? '开启' : '关闭' }}
-            </button>
-          </div>
-        </div>
-      </GlowingEffect>
-
       <!-- Interaction -->
       <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
         <div class="section" v-show="activeSection === 'interaction'">
@@ -684,7 +666,6 @@ const sectionTabs = [
   { label: '上下文管理', value: 'compaction' },
   { label: '容错', value: 'retry' },
   { label: '工具', value: 'tools' },
-  { label: '顾问', value: 'advisor' },
   { label: '交互', value: 'interaction' },
   { label: '推理预算', value: 'thinking' },
   { label: '技能包', value: 'skills' },
@@ -713,7 +694,6 @@ const CORE_PATHS = [
   'contextPromotion.enabled',
   'retry.enabled', 'retry.maxRetries', 'retry.modelFallback', 'retry.fallbackChains',
   'tools.approvalMode', 'tools.discoveryMode',
-  'advisor.enabled',
   'steeringMode', 'followUpMode', 'interruptMode',
   'thinkingBudgets.minimal', 'thinkingBudgets.low', 'thinkingBudgets.medium',
   'thinkingBudgets.high', 'thinkingBudgets.xhigh', 'thinkingBudgets.max',

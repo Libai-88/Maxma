@@ -212,7 +212,9 @@ async def create_session_snapshot(session_id: str, body: CreateSnapshotRequest, 
         try:
             session = await session_mgr.get(session_id)
             if session:
-                turn_count = len(getattr(session, "messages", []))
+                # SessionState 无 messages 属性（此前 getattr 恒返 []，
+                # 快照 turn_count 永远是 0），真实计数在 message_count。
+                turn_count = int(getattr(session, "message_count", 0) or 0)
         except Exception:
             pass
 

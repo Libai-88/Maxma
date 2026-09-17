@@ -35,8 +35,25 @@ export interface PendingApproval {
   timer: ReturnType<typeof setTimeout>;
 }
 
+/** PLAN-BRIDGE-001：计划审批的在途条目（plan-bridge.ts 写入，plan_action RPC 兑现）。 */
+export interface PendingPlan {
+  resolve: (decision: PlanDecision) => void;
+  timer: ReturnType<typeof setTimeout>;
+  /** 归属的 sidecar session id，destroy_session 时按此清理 */
+  sessionId: string;
+}
+
+export interface PlanDecision {
+  action: "approve" | "reject" | "modify";
+  modifiedPlan?: string;
+  reason?: string;
+}
+
 /** 审批超时——超时自动拒绝（deny by default）。 */
 export const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000; // 5 min
+
+/** 计划审批超时——计划修订成本高，给 10 分钟。 */
+export const PLAN_APPROVAL_TIMEOUT_MS = 10 * 60 * 1000; // 10 min
 
 /**
  * Mutable bridge state, exported for testability. Production code keeps the
@@ -45,5 +62,6 @@ export const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000; // 5 min
 export const bridgeState = {
   sessions: new Map<string, SessionRecord>(),
   pendingApprovals: new Map<string, PendingApproval>(),
+  pendingPlans: new Map<string, PendingPlan>(),
   toolStartTimestamps: new Map<string, number>(),
 };

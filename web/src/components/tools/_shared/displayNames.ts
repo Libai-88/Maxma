@@ -37,6 +37,12 @@ const DISPLAY_NAMES: Record<string, string> = {
   report_tool_issue: '报告工具问题',
   goal: '目标管理',
   search: '搜索',
+  /* Maxma 自定义工具（sidecar customTools 注册，tools.py 宣告） */
+  remember_memory: '记住记忆',
+  search_memories: '检索记忆',
+  get_sticker: '获取贴纸',
+  list_rules: '查询规则',
+  list_automations: '查询自动化',
 }
 
 export function toolDisplayName(name: string): string {

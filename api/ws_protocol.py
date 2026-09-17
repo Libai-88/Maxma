@@ -42,6 +42,10 @@ class WsEventType(str, Enum):
     SUB_SESSION_CREATED = "sub_session_created"
     DEFERRED_SUBAGENT_SUBMITTED = "deferred_subagent_submitted"
 
+    # GAP-B1-001：目标模式状态事件——sidecar events.ts 映射发射，chat.py
+    # 订阅透传（agent 自主变更目标/预算耗尽时前端据此更新状态展示）。
+    GOAL_UPDATED = "goal_updated"
+
     # Plan mode events — 由后端 chat.py 透传 sidecar 事件
     PLAN_PROPOSED = "plan_proposed"
     PLAN_STEP_START = "plan_step_start"

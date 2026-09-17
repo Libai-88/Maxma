@@ -15,7 +15,7 @@
         <Icon v-else name="close" :size="14" />
         <span v-if="toolCall.status === 'done'" class="tool-done-ring" aria-hidden="true"></span>
       </span>
-      <span class="tool-name">{{ toolCall.name }}</span>
+      <span class="tool-name">{{ displayName }}</span>
       <span class="tool-elapsed" v-if="toolCall.elapsed !== null">
         {{ toolCall.elapsed }}s
       </span>
@@ -108,8 +108,13 @@ import PinButton from '@/components/workbench/PinButton.vue'
 import { useMediaViewer } from '@/composables/useMediaViewer'
 import Icon from '@/components/Icon.vue'
 import { gsap, useGsap, easeMap, durationMap } from '@/composables/useGsap'
+import { toolDisplayName } from './tools/_shared/displayNames'
 
 const props = defineProps<{ toolCall: ToolCall }>()
+
+// 未注册专属气泡的工具（自定义工具/MCP/新内建工具）兜底卡片显示中文名，
+// 无映射时回退原始 toolCall.name。
+const displayName = computed(() => toolDisplayName(props.toolCall.name))
 
 defineEmits<{
   pin: [payload: { type: 'code' | 'table' | 'summary'; title: string; content: string; sourceTool?: string }]

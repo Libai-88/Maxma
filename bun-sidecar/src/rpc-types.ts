@@ -214,6 +214,30 @@ export type MaxmaEvent =
       };
     }
   | { type: "context_usage"; payload: Record<string, unknown> }
+  // PLAN-BRIDGE-001：计划模式审批事件（plan-bridge.ts 发射）。plan_proposed
+  // 携带 agent 提交的全部计划文本与步骤摘要，前端 PlanCard 渲染审批；
+  // plan_completed 在用户批准后发射，卡片切换到执行态。
+  | {
+      type: "plan_proposed";
+      payload: {
+        plan_id: string;
+        steps: string[];
+        plan_text: string;
+      };
+    }
+  | {
+      type: "plan_completed";
+      payload: { summary: { total_steps: number } };
+    }
+  // GAP-B1-001：目标模式状态事件（events.ts 映射发射；chat.py 需订阅转发，
+  // 否则 agent 自主变更目标时前端收不到）。
+  | {
+      type: "goal_updated";
+      payload: {
+        goal: Record<string, unknown> | null;
+        state: Record<string, unknown> | null;
+      };
+    }
   // A3: auto_compaction_end → context_compressed。前端已有处理逻辑（用量更新 +
   // 系统通知），此前无发射端。CompactionResult 无 after_tokens/removed_count，
   // 前端已防御 undefined。willRetry/error_message 来自 OMP AutoCompactionEndEvent，
