@@ -177,11 +177,18 @@ class SessionMap:
             self._conn.commit()
     
     def set_const(self, maxma_id: str, is_const: bool = True) -> None:
-        """标记一个 Maxma session 是否为 const session。"""
+        """标记一个 Maxma session 是否为 const session。
+
+        CONST-PERSIST-001：upsert 语义——固定操作可能发生在会话首条消息
+        发送之前，此时 session_map 尚无该行，纯 UPDATE 影响 0 行、固定
+        状态丢失（重启后 const 会话退化为临时会话甚至从列表消失）。
+        """
         with self._lock:
             self._conn.execute(
-                "UPDATE session_map SET is_const = ?, updated_at = datetime('now') WHERE maxma_id = ?",
-                (1 if is_const else 0, maxma_id),
+                "INSERT INTO session_map (maxma_id, sidecar_id, is_const) VALUES (?, '', ?) "
+                "ON CONFLICT(maxma_id) DO UPDATE SET "
+                "is_const=excluded.is_const, updated_at=datetime('now')",
+                (maxma_id, 1 if is_const else 0),
             )
             self._conn.commit()
 

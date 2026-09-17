@@ -650,9 +650,10 @@ async function recheckProvider(id: string) {
     await api.checkProviderHealth(id)
     await Promise.all([providerStore.refresh(), healthStore.refresh()])
   } catch (e: unknown) {
-    const msg = toErrorMessage(e)
-    loadError.value = msg
-    setTimeout(() => { if (loadError.value === msg) loadError.value = '' }, 5000)
+    // 失败只影响当前卡片（单卡级错误提示）——此前写全局 loadError，
+    // 模板 v-else-if 优先于列表渲染，一次重检失败会把全部卡片替换成
+    // 整页「加载失败」5 秒
+    testResult.value[id] = { status: 'error', latency_ms: null, detail: toErrorMessage(e) }
   } finally {
     rechecking.value[id] = false
   }
@@ -664,6 +665,9 @@ async function toggleProvider(id: string, enabled: boolean) {
     // 同步刷新全局 store，让 ChatInput 等消费方感知到 enabled 变化
     // providers 是 computed，会自动更新，无需手动修改
     await providerStore.refresh()
+    // 与 handleSave/deleteProvider 对齐：同步刷新 chatStore 模型列表，
+    // 否则 ChatView 保持挂载时 ModelSelector 仍列出已停用 provider 的模型
+    await chatStore.fetchAvailableModels()
   } catch (e: unknown) {
     window.dispatchEvent(new CustomEvent('maxma:error', { detail: { message: '切换失败: ' + toErrorMessage(e) } }))
   }

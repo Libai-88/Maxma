@@ -127,11 +127,7 @@
             <textarea v-model="editContent" class="edit-textarea" rows="3" />
             <div class="edit-actions">
               <select v-model="editCategory" class="filter-select">
-                <option value="preference">偏好</option>
-                <option value="event">事件</option>
-                <option value="knowledge">知识</option>
-                <option value="rule">规则</option>
-                <option value="other">其他</option>
+                <option v-for="cat in categoryOptions" :key="cat" :value="cat">{{ categoryLabel(cat) }}</option>
               </select>
               <button class="btn btn-primary" @click="saveEdit(fact.id)">保存</button>
               <button class="btn" @click="cancelEdit">取消</button>
@@ -195,7 +191,7 @@ const categoryFilter = ref('all')
 const confidenceFilter = ref('0')
 const editingId = ref<string | null>(null)
 const editContent = ref('')
-const editCategory = ref('preference')
+const editCategory = ref('')
 const stats = ref<{ total: number; categories: Record<string, number>; avg_confidence: number }>({
   total: 0, categories: {}, avg_confidence: 0,
 })
@@ -229,11 +225,19 @@ async function setHindsight<K extends keyof HindsightConfig>(key: K, value: Hind
   }
 }
 
-const categoryOptions = ['preference', 'event', 'knowledge', 'rule', 'other']
+// 类别词表来自数据本身（后端 theme 字段，如 瞬间/身份/事实/偏好…）——
+// 此前写死 preference/event/… 英文词表，与真实数据零交集，任何类别筛选
+// 都返回空列表，编辑下拉也永远对不上当前值。
+const categoryOptions = computed(() => {
+  const cats = new Set<string>(Object.keys(stats.value.categories ?? {}))
+  for (const f of facts.value) {
+    if (f.category) cats.add(f.category)
+  }
+  return [...cats].sort()
+})
 
 function categoryLabel(cat: string): string {
-  const labels: Record<string, string> = { preference: '偏好', event: '事件', knowledge: '知识', rule: '规则', other: '其他' }
-  return labels[cat] ?? cat
+  return cat || '未分类'
 }
 
 function confidenceLevel(c: number): string {
@@ -356,18 +360,23 @@ async function handleDelete(id: string) {
 }
 
 let refreshTimer: ReturnType<typeof setInterval> | null = null
+let viewDestroyed = false
 
 onMounted(async () => {
   store.loading = true
   await Promise.all([loadFacts(), loadHindsightConfig()])
+  // await 期间用户可能已离开本路由；此时再建 interval 将永不销毁（泄漏）
+  if (viewDestroyed) return
   store.loading = false
   // 定期刷新:agent 通过 remember_memory 写入的新记忆能自动出现在记忆页
+  // 轮询保留当前页码（reset=false），避免用户"加载更多"后每 15s 被弹回第一页
   refreshTimer = window.setInterval(() => {
-    if (!document.hidden) loadFacts()
+    if (!document.hidden) loadFacts(false)
   }, 15000)
 })
 
 onUnmounted(() => {
+  viewDestroyed = true
   if (refreshTimer) window.clearInterval(refreshTimer)
 })
 </script>

@@ -225,13 +225,13 @@ describe('useSessionStore', () => {
       expect(mockApi.generateSessionTitle).toHaveBeenCalledWith('sess-1')
     })
 
-    it('returns empty string on failure', async () => {
+    // 失败向上抛出（调用方 SessionSidebar 依赖 catch 保留用户输入并 toast
+    // 报错；此前吞错返回 '' 会把已输入的会话名覆盖为空）
+    it('rethrows on failure', async () => {
       mockApi.generateSessionTitle.mockRejectedValue(new Error('timeout'))
 
       const store = useSessionStore()
-      const title = await store.generateSessionTitle('sess-1')
-
-      expect(title).toBe('')
+      await expect(store.generateSessionTitle('sess-1')).rejects.toThrow('timeout')
     })
   })
 

@@ -146,10 +146,15 @@ class TestSessionMapConst:
         sm.set_const("m1", False)
         assert sm.get_const("m1") is False
 
-    def test_set_const_on_missing_row_is_noop(self, sm):
-        # UPDATE 不存在的行不影响任何记录，但不抛异常
+    def test_set_const_creates_row_when_missing(self, sm):
+        # CONST-PERSIST-001：固定操作可发生在首条消息之前（session_map 尚无
+        # 该行），set_const 必须 upsert 建行持久化，而非静默 no-op
         sm.set_const("ghost", True)
-        assert sm.get_const("ghost") is False
+        assert sm.get_const("ghost") is True
+
+    def test_set_const_false_creates_row_when_missing(self, sm):
+        sm.set_const("ghost2", False)
+        assert sm.get_const("ghost2") is False
 
 
 class TestSessionMapAppendTurn:

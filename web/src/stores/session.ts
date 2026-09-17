@@ -144,8 +144,10 @@ export const useSessionStore = defineStore('session', () => {
     window.dispatchEvent(new CustomEvent('maxma:turnscache-invalidate', { detail: { sid: id } }))
     if (sessionId.value === id) {
       await refreshSessions().catch((err) => log.warn('refreshSessions after delete failed:', err))
-      if (sessions.value.length > 0) {
-        await switchSession(sessions.value[0].session_id)
+      // 兜底优先选主会话——subagent 会话是只读的，不应被自动切入
+      const fallback = sessions.value.find((s) => !s.is_subagent) ?? sessions.value[0]
+      if (fallback) {
+        await switchSession(fallback.session_id)
       } else {
         await createSession()
       }
@@ -171,11 +173,12 @@ export const useSessionStore = defineStore('session', () => {
       // PERF-CACHE-LEAK-001：释放内存 turnsCache
       window.dispatchEvent(new CustomEvent('maxma:turnscache-invalidate', { detail: { sid: id } }))
     })
-    // 若当前会话被删，切到剩余第一个会话
+    // 若当前会话被删，切到剩余第一个主会话（subagent 只读，不自动切入）
     if (sessionId.value && ids.includes(sessionId.value)) {
       await refreshSessions().catch((err) => log.warn('refreshSessions after batchDelete failed:', err))
-      if (sessions.value.length > 0) {
-        await switchSession(sessions.value[0].session_id)
+      const fallback = sessions.value.find((s) => !s.is_subagent) ?? sessions.value[0]
+      if (fallback) {
+        await switchSession(fallback.session_id)
       } else {
         await createSession()
       }
@@ -193,8 +196,9 @@ export const useSessionStore = defineStore('session', () => {
     }
     await refreshSessions().catch((err) => log.warn('refreshSessions after clearTemp failed:', err))
     if (sessionId.value && !sessions.value.some((s) => s.session_id === sessionId.value)) {
-      if (sessions.value.length > 0) {
-        await switchSession(sessions.value[0].session_id)
+      const fallback = sessions.value.find((s) => !s.is_subagent) ?? sessions.value[0]
+      if (fallback) {
+        await switchSession(fallback.session_id)
       } else {
         await createSession()
       }
@@ -206,6 +210,9 @@ export const useSessionStore = defineStore('session', () => {
       await api.constifySession(id, name)
     } catch (e) {
       log.warn('constifySession failed:', e)
+      // UX-FEEDBACK-001：固定失败必须可见（后端 409「Agent 仍在运行中」等
+      // 原因文案需透传；此前静默 return，用户点确定后卡片关闭毫无变化）
+      showError('固定会话失败: ' + (e instanceof Error ? e.message : String(e)))
       return
     }
     await refreshSessions().catch((err) => log.warn('refreshSessions after constify failed:', err))
@@ -216,19 +223,17 @@ export const useSessionStore = defineStore('session', () => {
       await api.unconstifySession(id)
     } catch (e) {
       log.warn('unconstifySession failed:', e)
+      showError('取消固定失败: ' + (e instanceof Error ? e.message : String(e)))
       return
     }
     await refreshSessions().catch((err) => log.warn('refreshSessions after unconstify failed:', err))
   }
 
   async function generateSessionTitle(id: string): Promise<string> {
-    try {
-      const res = await api.generateSessionTitle(id)
-      return res.title
-    } catch (e) {
-      log.warn('generateSessionTitle failed:', e)
-      return ''
-    }
+    // 失败时向上抛出——此前吞错返回 ''，调用方（SessionSidebar）会把
+    // 用户已输入的会话名覆盖为空且自己的 catch/toast 永不触发
+    const res = await api.generateSessionTitle(id)
+    return res.title
   }
 
   function cleanupOrphanedCaches() {

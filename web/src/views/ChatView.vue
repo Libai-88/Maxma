@@ -238,7 +238,8 @@ const {
 } = useSelectionQuote()
 
 // QUOTE-STALE-001：会话切换时清空选区引用，避免 A 会话的引用附带进 B 会话
-watch(() => sessionId, () => {
+// （此前 getter 返回 ref 对象本身而非 .value，依赖不被追踪，回调永不执行）
+watch(sessionId, () => {
   resetQuotesForSessionSwitch()
 })
 

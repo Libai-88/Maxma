@@ -737,6 +737,12 @@ async def constify_session(session_id: str, body: ConstifyRequest, request: Requ
     session.is_const = True
     session.const_name = body.name
 
+    # CONST-PERSIST-001：持久化 is_const 到 SessionMap——此前只改内存，
+    # 后端重启后固定会话退化为临时会话（可被 clear-temp 误删），
+    # 且从未发过消息的会话重启后从列表消失、YAML 成孤儿文件。
+    from api.pi_bridge.session_adapter import get_session_map
+    get_session_map().set_const(session_id, True)
+
     return {
         "session_id": session.session_id,
         "is_const": True,
@@ -875,5 +881,9 @@ async def unconstify_session(session_id: str, request: Request):
     delete_const_session(session_id)
     session.is_const = False
     session.const_name = ""
+
+    # CONST-PERSIST-001：取消固定同样持久化，避免重启后复活为 const
+    from api.pi_bridge.session_adapter import get_session_map
+    get_session_map().set_const(session_id, False)
 
     return {"status": "ok"}
