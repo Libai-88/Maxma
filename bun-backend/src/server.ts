@@ -47,6 +47,13 @@ import { initializeDatabase } from "./db/core";
 import { getMetrics } from "./metrics";
 import { getApiDataDir } from "./app-paths";
 import { send as rpcSend, sendError as rpcSendError, sendEvent as rpcSendEvent } from "./rpc";
+import {
+  handleChatMessage,
+  registerChatConnection,
+  unregisterChatConnection,
+  type ChatWsHub,
+  type WsData,
+} from "./routes/chat-ws";
 
 const VERSION = "2.0.0-stage2";
 const PORT = Number(process.env.MAXMA_BUN_PORT ?? 8001);
@@ -55,6 +62,65 @@ const startedAt = Date.now();
 /** 会话注册表与在途计划（供 sessions REST 门面与 WS 层共用）。 */
 const hubSessions = new Map<string, PiSessionRecord>();
 const hubPlans = new Map<string, PiPendingPlan>();
+/** WS 连接注册表与幂等 id（chat WS 层）。 */
+const wsConnections = new Map<string, Set<ServerWebSocket<WsData>>>();
+const seenClientMsgIds = new Map<string, string[]>();
+
+/** kernel 事件 → WS 广播出口（无连接时保留 stdout 便于诊断）。 */
+function broadcastEvent(sessionId: string, event: { type: string; payload: Record<string, unknown> }): void {
+  const conns = wsConnections.get(sessionId);
+  if (conns && conns.size > 0) {
+    const data = JSON.stringify(event);
+    for (const ws of conns) {
+      try {
+        ws.send(data);
+      } catch (err) {
+        console.warn(`[ws] broadcast failed for ${sessionId.slice(0, 8)}: ${String(err)}`);
+      }
+    }
+  } else {
+    rpcSendEvent(sessionId, event);
+  }
+}
+
+/** 单请求作用域 RPC 调用（kernel in-process）。 */
+function callKernelRpc(
+  method: string,
+  params: Record<string, unknown>,
+): Promise<{ ok: true; result: unknown } | { ok: false; error: string }> {
+  return new Promise((resolve) => {
+    const io = {
+      send: (id: number | null, result: unknown) => resolve({ ok: true, result }),
+      sendError: (_id: number | null, message: string) => resolve({ ok: false, error: message }),
+      sendEvent: (sid: string, event: { type: string; payload: Record<string, unknown> }) =>
+        broadcastEvent(sid, event),
+    };
+    const sid = params.session_id as string | undefined;
+    if (method === "create_session") {
+      void handlePiCreateSession(
+        { io, sessions: hubSessions, pendingPlans: hubPlans },
+        params,
+        0,
+      );
+      return;
+    }
+    if (sid && hubSessions.has(sid)) {
+      void handlePiSessionRpc({ io, sessions: hubSessions, pendingPlans: hubPlans }, method, sid, params, 0);
+      return;
+    }
+    resolve({ ok: false, error: `Session not found: ${sid ?? "(missing)"}` });
+  });
+}
+
+/** chat WS hub（message 分发 + 广播）。 */
+const chatHub: ChatWsHub = {
+  sessions: hubSessions,
+  pendingPlans: hubPlans,
+  connections: wsConnections,
+  seenClientMsgIds,
+  callRpc: callKernelRpc,
+  broadcast: broadcastEvent,
+};
 
 export function createApp(): Hono {
   const token = loadOrCreateToken();
@@ -100,7 +166,8 @@ export function createApp(): Hono {
     "/",
     createSessionsRoutes({
       hub: {
-        io: { send: rpcSend, sendError: rpcSendError, sendEvent: rpcSendEvent },
+        // 2.3：事件出口改为 WS 广播（REST 调用经 callKernelRpc 的 Promise 拿结果）
+        io: { send: rpcSend, sendError: rpcSendError, sendEvent: broadcastEvent },
         sessions: hubSessions,
         pendingPlans: hubPlans,
       },
@@ -194,7 +261,7 @@ export function startServer() {
     async fetch(req, server) {
       const url = new URL(req.url);
 
-      // ── WebSocket 升级（阶段 2.3 接入 chat WS；2.0 先完成鉴权契约）──
+      // ── WebSocket 升级：/ws/chat/{sid}（chat WS）+ 鉴权（X-Maxma-Token 或 subprotocol）──
       if (req.headers.get("upgrade")?.toLowerCase() === "websocket") {
         const protocols = (req.headers.get("sec-websocket-protocol") ?? "")
           .split(",")
@@ -205,7 +272,16 @@ export function startServer() {
           // 与 Python 版一致：鉴权失败关闭码 4001
           return new Response("Unauthorized", { status: 401 });
         }
-        const upgraded = server.upgrade(req, { data: { token } });
+        // 从路径提取 sessionId（Python 版路由 /ws/chat/{session_id}）
+        const match = url.pathname.match(/^\/ws\/chat\/([^/]+)$/);
+        if (!match) {
+          return new Response("Unknown WS endpoint", { status: 404 });
+        }
+        const sessionId = decodeURIComponent(match[1]!);
+        const upgraded = server.upgrade(req, {
+          data: { sessionId } satisfies WsData,
+          headers: {},
+        });
         if (!upgraded) return new Response("WebSocket upgrade failed", { status: 400 });
         return undefined as unknown as Response;
       }
@@ -219,9 +295,23 @@ export function startServer() {
       return app.fetch(req);
     },
     websocket: {
-      // 阶段 2.3 实现；2.0 仅保证握手后不崩
-      message() {},
-      close() {},
+      // ── chat WS 生命周期（2.3：kernel in-process 事件直连）──
+      open(ws) {
+        const data = ws.data as WsData;
+        registerChatConnection(chatHub, data.sessionId, ws);
+        console.info(`[ws] connected session=${data.sessionId.slice(0, 8)}`);
+      },
+      message(ws, raw) {
+        const data = ws.data as WsData;
+        // 消息分发（白名单 + 事件广播经 chatHub）
+        handleChatMessage(chatHub, ws as unknown as ServerWebSocket<WsData>, raw);
+        void data;
+      },
+      close(ws) {
+        const data = ws.data as WsData;
+        unregisterChatConnection(chatHub, data.sessionId, ws as unknown as ServerWebSocket<WsData>);
+        console.info(`[ws] disconnected session=${data.sessionId.slice(0, 8)}`);
+      },
     },
   });
 }

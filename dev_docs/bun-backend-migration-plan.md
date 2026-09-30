@@ -161,7 +161,7 @@ Bun 后端（单进程 = API 服务器 + Agent 引擎）
 - 测试：routes-2.1 5/5 + server-smoke 4/4 = bun-backend 9/9。
 - 验收：✅ 快照 diff 为空（news/onboarding/history）；✅ bun:test 全绿。
 
-### 阶段 2.2 数据存储批（2 天）——🔄 进行中（2026-09-30 起）
+### 阶段 2.2 数据存储批（2 天）——✅ 已完成（2026-10-01）
 - 已交付：`src/db/core.ts`（**bun:sqlite 迁移引擎**：v1-v7 SQL 原样保留 + v3/v6 幂等列检查直译 + WAL/busy_timeout/foreign_keys + withTransaction）；`src/routes/rules.ts`（6 端点直译：内置规则共享 JSON + 内嵌兜底 17 条原样、user_rules.json 原子写、rule_toggles.json 覆盖（RULES-TOGGLE-001）、内置保护 403、source/editable 附加）；`src/routes/maxma-blocker.ts`（标记文件/旧版清理/check-path-blocked fail-closed 含 NUL 防注入）；`src/routes/settings.ts`（**官方 SettingsManager 全局单例**——修正阶段一遗留的语义缺口：前端设置面板是全局语义而非 per-session）；`src/routes/transcripts.ts`（类别白名单/穿越防护/JSONL 读取容错）；`src/yaml-store.ts`（原子写辅助）。
 - 依赖：bun-backend 补装 pi 三包@0.99.0（settings 的 SettingsManager + 2.3 kernel in-process 前置）。
 - 测试：bun-backend 全量 **21/21**（smoke 4 + routes-2.1 5 + rules 4 + routes-2.2b 8）。
@@ -172,6 +172,9 @@ Bun 后端（单进程 = API 服务器 + Agent 引擎）
 - 2.2g 已交付：`src/routes/settings-panels.ts`（四面板 GET/PUT：默认值合并、None 不覆盖、Pydantic 约束直译 422、GAP-A2-001 legacy TTS 规范化、allowed_domains 清洗、PANEL-CORRUPT-001 损坏拒绝写入、PANEL-WIRE-001 同步 kernel 全局 SettingsManager）+ `src/settings-global.ts` 共享单例。
 - **PANEL-ORDER-001**：挂载顺序 bug——memory.ts 的 `:memoryId` 参数路由抢先匹配 `/api/memory/hindsight-config`（404），修复：settings-panels 先于 memory 挂载。
 - 测试：panels-2.2g 4/4——bun-backend 全量 **44/44**。
+- 2.2h 已交付（批收尾）：`src/const-session-store.ts`（save/load/loadAll/delete YAML 往返）；`src/routes/workflows.ts`（定义扫描/WorkflowRunState/TTL 清理 MAX_RUNS 1000/simple+sidecar 双模式/cancel 标志/WS 事件经 eventSink 注入——2.3 接线）；`src/routes/deferred-runs.ts`（DEFERRED-PERSIST-001 SQLite 持久化 manager + 3 端点）；`src/routes/collab.ts`（shares/snapshots 双表 CRUD，分享消息经 hubSessions in-process 直查）。
+- **createApp 启动时执行 v1-v7 迁移**（此前只有 auth_tokens 自建表，deferred_runs/collab_shares 等缺失）——对齐 Python db/core.py import 时自动初始化；db/core 迁移标志按 dbPath 绑定（测试目录切换安全，同 app-paths 惰性化教训）。
+- 测试：routes-2.2h 5/5——bun-backend 全量 **49/49** + bun-sidecar 契约 43/43（25 快照全绿）。**2.2 存储批完成**，下一步 2.3 对话链路（chat WS）。
 - 2.2f 已交付：stickers 三模块——`src/routes/stickers.ts`（随机/文件服务+immutable 缓存头/分类列表，安全校验原样）、`src/routes/sticker-favorites.ts`（收藏/取消/recent 去重/recommendations 时间段推荐（情感检测 stub 同语义）/index 双目录，STICKER-ATOMIC-001 原子写）、`src/routes/sticker-upload.ts`（**PIL→sharp**：PNG/JPG 缩放 256 转 WebP、GIF 动画帧转动画 WebP、md5 内容哈希幂等）；sharp 新依赖（二进制 ~30MB，2.6 产物体积核算项）。
 - 测试：stickers-2.2f 6/6（服务/收藏全链路/推荐+index/上传真实转换+幂等/格式校验/穿越 %2e%2e）——bun-backend 全量 **40/40**。
 - 测试教训：URL 客户端会规范化 `..`——穿越测试用 `%2e%2e` 编码（服务端 decode 后校验才有效）。
@@ -183,10 +186,12 @@ Bun 后端（单进程 = API 服务器 + Agent 引擎）
 - 2.2c 已交付：`src/routes/memory.ts`（投影契约 description/theme/latest_update_time→content/category/updatedAt、过期剔除、`_` 前缀键跳过、q/category/min_confidence 过滤、stats、PUT/DELETE 404 语义、原子写）；`src/routes/audit-log.ts`（JSON 数组原子写、limit/event_type/since 过滤、倒序、stats top_targets、append 本地时区 %z 时间戳、clear）；session_manager.py 判定**归 2.3**（OMP 会话桥接的一部分：in-memory TTL + session_map.db 恢复——kernel in-process 后由会话表替代，非直译项）。
 - 测试：routes-2.2c 4/4（投影契约/过滤/stats、PUT/DELETE 落盘验证、audit 全链路）——bun-backend 全量 **25/25**。
 
-### 阶段 2.3 核心对话链路（2~3 天，最重）
-- 范围：chat WS（hello/事件流/ask_user/user_response/取消/静默回顾）、chat_turns/chat_artifacts/session_compress/deferred_runs/activity_hub(SSE)/collab
-- 顺序：WS 层先行（Bun WS + kernel 订阅直连，事件快照对照）→ REST 辅助 → SSE
-- 验收：**25 个 WS 事件契约快照全绿**（kernel 层已有）+ WS 会话全流程手测（对话/审批/计划/目标/checkpoint/取消）；SSE 活动流手测
+### 阶段 2.3 核心对话链路（2~3 天，最重）——🔄 进行中（2026-10-01 起）
+- 已交付（2.3a）：`src/routes/chat-ws.ts`——**chat WS 全层**：/ws/chat/{sid} upgrade 鉴权（token/subprotocol 双通道）+ hello 协议握手首帧 + 10 种 client 消息分发（ping/chat/cancel/user_response/update_auto_approve/plan_response/set_plan_mode/checkpoint_action/goal_action/artifact_action，白名单外静默丢弃）+ **kernel 事件流 WS 广播**（hub sendEvent 改 wsRegistry 出口，stdout 兜底）+ MULTI-WS-001 多窗口同播 + IDEMPOTENCY-001 幂等去重（成功后登记）+ CONN-MUTEX-001 BUSY（currentGuard 判定）+ AG-CONTEXT-001 断开不销毁会话 + artifact_action 文件读取回执。
+- 架构要点：kernel io.sendEvent 从 stdout 改为 WS 广播是 2.3 的接线核心——kernel 事件流（token/tool_start/answer/done…）不经任何中转直达前端 WS。
+- 测试：chat-ws-2.3 6/6（mock ServerWebSocket 直测）——bun-backend 全量 **55/55**。
+- 测试教训：**bun test 下"共享 makeHub helper + 跨目录动态 import kernel + 多测试"组合会进程级挂起**（无输出无超时）——全部内联构造（每个测试自带 kernel import）后解决；zz-*.test.ts 二分定位法有效。
+- 剩余（2.3b）：chat_turns/chat_artifacts/session_compress REST、activity_hub SSE、deferred_runs WS 事件写入接线、真机端到端手测。
 
 ### 阶段 2.4 Provider/MCP/凭据（1~2 天）
 - 范围：providers（**Fernet 兼容**）/mcp×4/opencode_zen
