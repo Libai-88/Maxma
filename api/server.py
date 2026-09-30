@@ -294,8 +294,27 @@ def create_app() -> FastAPI:
         return report.model_dump(exclude_none=True)
 
     # Production static file serving
-    if os.environ.get("MAXMA_ENV") == "production":
-        from app_paths import WEB_DIST_DIR as dist_dir
+    # WEB-HOST-001：Web 形态（Tauri 桌面壳构建链移除后的保底分发形态）。
+    # 触发条件（满足其一）：
+    #   - MAXMA_ENV=production（原桌面打包语义，dist 走 app_paths.WEB_DIST_DIR）
+    #   - MAXMA_SERVE_WEB=1（Web 形态显式开关，dist 优先仓库 web/dist，
+    #     便于开发机直接 serve 最新构建）
+    # 鉴权说明：AuthMiddleware 仅保护 /api/ 与 /ws/，静态资源天然放行；
+    # 浏览器端 token 经白名单端点 /api/auth/token 运行时获取（前端
+    # ensureTokenLoaded 已是形态无关实现）。
+    serve_web_explicit = os.environ.get("MAXMA_SERVE_WEB") == "1"
+    if os.environ.get("MAXMA_ENV") == "production" or serve_web_explicit:
+        from pathlib import Path
+
+        from app_paths import WEB_DIST_DIR as bundled_dist_dir
+
+        dist_dir: Path | None = None
+        if serve_web_explicit:
+            # Web 形态：优先仓库 web/dist（最新构建），回退打包资源路径
+            repo_dist = Path(__file__).resolve().parent.parent / "web" / "dist"
+            dist_dir = repo_dist if (repo_dist / "index.html").exists() else bundled_dist_dir
+        else:
+            dist_dir = bundled_dist_dir
 
         if dist_dir.exists():
             from fastapi.responses import FileResponse
