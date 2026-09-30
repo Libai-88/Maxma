@@ -196,7 +196,7 @@ export const SCHEMA_MIGRATIONS: Migration[] = [
     INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (7, julianday('now'));`,
 ];
 
-let initialized = false;
+let initializedForPath: string | null = null;
 
 /** 获取一个新连接（WAL + busy_timeout + foreign_keys，与 Python 版一致）。 */
 export function getConnection(): Database {
@@ -207,9 +207,10 @@ export function getConnection(): Database {
   return db;
 }
 
-/** 初始化数据库：确保目录存在、按版本运行迁移（幂等）。 */
+/** 初始化数据库：确保目录存在、按版本运行迁移（幂等；按 dbPath 失效重跑）。 */
 export function initializeDatabase(): void {
-  if (initialized) return;
+  const currentPath = dbPath();
+  if (initializedForPath === currentPath) return;
   fs.mkdirSync(dbDir(), { recursive: true });
   const conn = getConnection();
   try {
@@ -234,7 +235,7 @@ export function initializeDatabase(): void {
         console.info(`[db] Migrated from v${current} to v${SCHEMA_VERSION}`);
       }
     }
-    initialized = true;
+    initializedForPath = currentPath;
     console.info(`[db] Database ready at ${dbPath()} (v${SCHEMA_VERSION})`);
   } finally {
     conn.close();

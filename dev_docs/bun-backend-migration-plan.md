@@ -168,7 +168,10 @@ Bun 后端（单进程 = API 服务器 + Agent 引擎）
 - **双跑对照**：`/api/rules` 三端点 **SAME**（真实项目 17 条内置规则全量一致）。
 - 已知行为对齐记录：pi Settings 可选键默认 undefined → GET 未设键静默跳过（测试用 set→get 往返断言）；pi settings 树与旧内核键名不同（无 compaction.thresholdPercent 等），设置面板键对齐为独立后续任务。
 - files.py `/select-file`（tkinter 桌面对话框）**不迁移**——随 Tauri 壳消失。
-- 剩余：settings_panels/const_session_store/workflows/deferred_runs/collab；sessions ✅ persona ✅ stickers×3 ✅（2.2e/2.2d/2.2f）
+- 剩余：const_session_store/workflows/deferred_runs/collab；sessions ✅ persona ✅ stickers×3 ✅ settings_panels ✅（2.2e/2.2d/2.2f/2.2g）
+- 2.2g 已交付：`src/routes/settings-panels.ts`（四面板 GET/PUT：默认值合并、None 不覆盖、Pydantic 约束直译 422、GAP-A2-001 legacy TTS 规范化、allowed_domains 清洗、PANEL-CORRUPT-001 损坏拒绝写入、PANEL-WIRE-001 同步 kernel 全局 SettingsManager）+ `src/settings-global.ts` 共享单例。
+- **PANEL-ORDER-001**：挂载顺序 bug——memory.ts 的 `:memoryId` 参数路由抢先匹配 `/api/memory/hindsight-config`（404），修复：settings-panels 先于 memory 挂载。
+- 测试：panels-2.2g 4/4——bun-backend 全量 **44/44**。
 - 2.2f 已交付：stickers 三模块——`src/routes/stickers.ts`（随机/文件服务+immutable 缓存头/分类列表，安全校验原样）、`src/routes/sticker-favorites.ts`（收藏/取消/recent 去重/recommendations 时间段推荐（情感检测 stub 同语义）/index 双目录，STICKER-ATOMIC-001 原子写）、`src/routes/sticker-upload.ts`（**PIL→sharp**：PNG/JPG 缩放 256 转 WebP、GIF 动画帧转动画 WebP、md5 内容哈希幂等）；sharp 新依赖（二进制 ~30MB，2.6 产物体积核算项）。
 - 测试：stickers-2.2f 6/6（服务/收藏全链路/推荐+index/上传真实转换+幂等/格式校验/穿越 %2e%2e）——bun-backend 全量 **40/40**。
 - 测试教训：URL 客户端会规范化 `..`——穿越测试用 `%2e%2e` 编码（服务端 decode 后校验才有效）。

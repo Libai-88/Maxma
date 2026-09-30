@@ -39,6 +39,11 @@ import { createSessionsRoutes } from "./routes/sessions";
 import { createStickerFileRoutes } from "./routes/stickers";
 import { createStickerFavoritesRoutes } from "./routes/sticker-favorites";
 import { createStickerUploadRoutes } from "./routes/sticker-upload";
+import { createSettingsPanelRoutes } from "./routes/settings-panels";
+import { createWorkflowRoutes } from "./routes/workflows";
+import { createCollabRoutes } from "./routes/collab";
+import { createDeferredRunRoutes } from "./routes/deferred-runs";
+import { initializeDatabase } from "./db/core";
 import { getMetrics } from "./metrics";
 import { getApiDataDir } from "./app-paths";
 import { send as rpcSend, sendError as rpcSendError, sendEvent as rpcSendEvent } from "./rpc";
@@ -53,6 +58,8 @@ const hubPlans = new Map<string, PiPendingPlan>();
 
 export function createApp(): Hono {
   const token = loadOrCreateToken();
+  // 数据库迁移（对齐 Python db/core.py import 时自动初始化：v1-v7 schema）
+  initializeDatabase();
   const app = new Hono();
 
   // 中间件顺序与 Python 版一致：RequestLog -> RateLimit -> Auth -> 路由
@@ -69,6 +76,9 @@ export function createApp(): Hono {
   app.route("/", createMetricsRoutes());
 
   // 2.2 存储批：rules / maxma-blocker / settings / transcripts / memory / audit-log
+  // 2.2 存储批：settings-panels 先于 memory 挂载——避免 memory 的
+  // :memoryId 参数路由抢先匹配 /api/memory/hindsight-config（PANEL-ORDER-001）
+  app.route("/", createSettingsPanelRoutes());
   app.route("/", createRulesRoutes());
   app.route("/", createMaxmaBlockerRoutes());
   app.route("/", createSettingsRoutes());
@@ -79,6 +89,11 @@ export function createApp(): Hono {
   app.route("/", createStickerFileRoutes());
   app.route("/", createStickerFavoritesRoutes());
   app.route("/", createStickerUploadRoutes());
+
+  // 2.2h：workflows / deferred-runs / collab
+  app.route("/", createWorkflowRoutes());
+  app.route("/", createDeferredRunRoutes());
+  app.route("/", createCollabRoutes({ sessions: hubSessions }));
 
   // 2.2e 会话门面：REST /api/sessions → kernel（in-process）
   app.route(

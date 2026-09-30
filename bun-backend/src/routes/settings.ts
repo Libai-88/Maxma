@@ -15,7 +15,7 @@
 
 import { Hono } from "hono";
 
-import { SettingsManager } from "@earendil-works/pi-coding-agent";
+import { getGlobalSettingsSingleton } from "../settings-global";
 
 // 核心配置项列表（与 Python 版逐条一致——作为"请求键全集"）
 export const CORE_SETTING_PATHS = [
@@ -47,15 +47,9 @@ export const CORE_SETTING_PATHS = [
   "skills.enabled",
 ];
 
-/** 全局 SettingsManager 单例（阶段二：进程级配置，替代 sidecar 全局 RPC）。 */
-let globalSettings: SettingsManager | null = null;
-
-function getGlobalSettings(): SettingsManager {
-  if (!globalSettings) {
-    // inMemory：内存态（阶段二后续可按需挂磁盘持久化——对齐 Python 100ms debounce 语义）
-    globalSettings = SettingsManager.inMemory();
-  }
-  return globalSettings;
+/** 全局 SettingsManager 单例（与 settings-panels 共享同一实例）。 */
+function getGlobalSettings() {
+  return getGlobalSettingsSingleton();
 }
 
 /** 从 Settings 对象解析点路径。 */
