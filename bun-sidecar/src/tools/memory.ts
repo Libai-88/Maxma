@@ -7,7 +7,7 @@
 
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
-import type { ToolDefinition } from "@oh-my-pi/pi-coding-agent";
+import type { MaxmaToolDescriptor } from "./descriptor";
 
 /** Bun.YAML 通过 globalThis 访问，避免依赖 @types/bun。 */
 const bunYaml = (
@@ -84,13 +84,13 @@ const searchMemoriesSchema = {
   additionalProperties: false,
 } as const;
 
-export function searchMemoriesTool(): ToolDefinition {
+export function searchMemoriesTool(): MaxmaToolDescriptor {
   return {
     name: "search_memories",
     label: "检索记忆",
     description:
       "检索用户长期记忆中明确记住的事实、偏好、身份、习惯等信息。当对话需要回忆用户之前要求记住的内容时调用（例如用户说\"我之前让你记住的...\"）。返回匹配的记忆条目；无匹配时返回空。",
-    parameters: searchMemoriesSchema as unknown as ToolDefinition["parameters"],
+    parameters: searchMemoriesSchema as unknown as MaxmaToolDescriptor["parameters"],
     approval: "read",
     async execute(_id: string, params: { query?: string; category?: string; limit?: number }) {
       const memories = await readMemories();

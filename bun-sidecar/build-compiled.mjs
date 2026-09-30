@@ -1,8 +1,8 @@
 // Compile session-bridge into a single-file executable.
 //
-// The compiled binary embeds the Bun runtime plus the bundled oh-my-pi agent
-// code, replacing the 1.1GB node_modules tree + 98MB bun.exe that were
-// previously shipped alongside the Python backend.
+// The compiled binary embeds the Bun runtime plus the bundled pi agent code
+// (@earendil-works/pi-coding-agent), replacing the node_modules tree +
+// bun.exe that were previously shipped alongside the Python backend.
 //
 //   bun run build-compiled.mjs
 //
@@ -12,14 +12,12 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-// External at compile time. These are lazy / optional native deps of oh-my-pi
-// (local embedding & ONNX inference) that Maxma never triggers via
-// createAgentSession; leaving them out of the binary keeps it ~120MB instead
-// of pulling in transformers.js + onnxruntime (hundreds of MB).
+// External at compile time. Optional native deps never triggered by Maxma
+// sessions (local embedding & ONNX inference); keeping them external keeps
+// the binary small instead of pulling transformers.js + onnxruntime.
 const EXTERNAL = [
   "fastembed",
   "onnxruntime-node",
-  "omp-legacy-pi-modules",
 ];
 
 const outfile = path.resolve(

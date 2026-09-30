@@ -869,6 +869,13 @@ async def _save_const_session(
 async def websocket_chat(ws: WebSocket, session_id: str):
     """WebSocket chat endpoint — proxy to OMP sidecar."""
     await ws.accept()
+    # 阶段〇-3 协议握手（docs/contracts/ws-events.md）：accept 后首帧声明协议
+    # 版本，为阶段二新旧后端并行运行留协商空间。旧前端对未知类型走默认路径
+    # 静默忽略，增量无副作用。
+    try:
+        await ws.send_json({"type": "hello", "payload": {"protocol_version": 1}})
+    except Exception:
+        logger.debug("[ws] hello handshake send failed", exc_info=True)
     app_state = ws.app.state
     session = await app_state.session_manager.get_or_create(session_id)
     app_state.ws_registry.register(session_id, ws)

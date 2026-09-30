@@ -7,7 +7,7 @@
 
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
-import type { ToolDefinition } from "@oh-my-pi/pi-coding-agent";
+import type { MaxmaToolDescriptor } from "./descriptor";
 
 /** 内置贴纸目录：<MAXMA_PROJECT_ROOT>/config/stickers/<category>/*.webp */
 export function stickersDir(): string {
@@ -67,13 +67,13 @@ const getStickerSchema = {
   additionalProperties: false,
 } as const;
 
-export function getStickerTool(): ToolDefinition {
+export function getStickerTool(): MaxmaToolDescriptor {
   return {
     name: "get_sticker",
     label: "取贴纸",
     description:
       "获取 Maxma 内置表情贴纸。不传 category 时返回可用分类列表；传入分类名时随机返回该分类下的一张贴纸路径。适合在回复中点缀情绪时调用。",
-    parameters: getStickerSchema as unknown as ToolDefinition["parameters"],
+    parameters: getStickerSchema as unknown as MaxmaToolDescriptor["parameters"],
     approval: "read",
     async execute(_id: string, params: { category?: string }) {
       const category = (params.category ?? "").trim();

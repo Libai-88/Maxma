@@ -8,7 +8,7 @@
 
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
-import type { ToolDefinition } from "@oh-my-pi/pi-coding-agent";
+import type { MaxmaToolDescriptor } from "./descriptor";
 
 export interface QualityRule {
   id: string;
@@ -96,13 +96,13 @@ const listRulesSchema = {
   additionalProperties: false,
 } as const;
 
-export function listRulesTool(): ToolDefinition {
+export function listRulesTool(): MaxmaToolDescriptor {
   return {
     name: "list_rules",
     label: "质量规则",
     description:
       "查询 Maxma 配置的质量规则（编码规范）。编写代码前调用可了解项目要求遵守的规则：类型提示、命名规范、错误处理等。支持按语言和严重度过滤。",
-    parameters: listRulesSchema as unknown as ToolDefinition["parameters"],
+    parameters: listRulesSchema as unknown as MaxmaToolDescriptor["parameters"],
     approval: "read",
     async execute(_id: string, params: { language?: string; severity?: string }) {
       let rules = await readAllRules();

@@ -8,11 +8,10 @@
     "start": "bun run src/session-bridge.ts"
   },
   "dependencies": {
-    "@oh-my-pi/pi-agent-core": "16.5.2",
-    "@oh-my-pi/pi-ai": "16.5.2",
-    "@oh-my-pi/pi-catalog": "16.5.2",
-    "@oh-my-pi/pi-coding-agent": "16.5.2",
-    "typescript": "^5.7.0",
-    "zod": "^3.23.0"
+    "@earendil-works/pi-agent-core": "0.99.0",
+    "@earendil-works/pi-ai": "0.99.0",
+    "@earendil-works/pi-coding-agent": "0.99.0",
+    "typebox": "1.3.27",
+    "typescript": "^5.7.0"
   }
 }

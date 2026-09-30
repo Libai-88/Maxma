@@ -151,7 +151,8 @@ class TestWebSocketGapForwarding:
                 "type": "set_plan_mode",
                 "payload": {"enabled": True},
             }))
-            # 连接仍可用（ping 有响应）
+            # 连接仍可用（先消费 hello 握手帧，ping 有响应）
+            assert ws.receive_json() == {"type": "hello", "payload": {"protocol_version": 1}}
             ws.send_text(json.dumps({"type": "ping"}))
             assert ws.receive_json() == {"type": "pong"}
 
@@ -167,7 +168,8 @@ class TestWebSocketGapForwarding:
                 "type": "goal_action",
                 "payload": {"action": "set", "objective": "完成周报"},
             }))
-            # 回执以 goal_updated 事件推送前端
+            # 回执以 goal_updated 事件推送前端（先消费 hello 握手帧）
+            assert ws.receive_json() == {"type": "hello", "payload": {"protocol_version": 1}}
             evt = ws.receive_json()
             assert evt["type"] == "goal_updated"
             assert evt["payload"]["goal"]["objective"] == "完成周报"

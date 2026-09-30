@@ -1,0 +1,245 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`contract snapshot: pi event mapping (ws-events.md §3.1) 流式输出族: token 1`] = `
+{
+  "payload": {
+    "token": "A",
+  },
+  "type": "token",
+}
+`;
+
+exports[`contract snapshot: pi event mapping (ws-events.md §3.1) 流式输出族: thinking_start 1`] = `
+{
+  "payload": {},
+  "type": "thinking_start",
+}
+`;
+
+exports[`contract snapshot: pi event mapping (ws-events.md §3.1) 流式输出族: thinking_delta 1`] = `
+{
+  "payload": {
+    "delta": "x",
+  },
+  "type": "thinking_delta",
+}
+`;
+
+exports[`contract snapshot: pi event mapping (ws-events.md §3.1) 流式输出族: thinking_end 1`] = `
+{
+  "payload": {
+    "content": "x",
+  },
+  "type": "thinking_end",
+}
+`;
+
+exports[`contract snapshot: pi event mapping (ws-events.md §3.1) 流式输出族: error 1`] = `
+{
+  "payload": {
+    "code": "AGENT_ERROR",
+    "message": "boom",
+  },
+  "type": "error",
+}
+`;
+
+exports[`contract snapshot: pi event mapping (ws-events.md §3.1) 工具执行族: tool_start 1`] = `
+{
+  "payload": {
+    "input": "{"file_path":"a"}",
+    "tool_name": "read",
+  },
+  "type": "tool_start",
+}
+`;
+
+exports[`contract snapshot: pi event mapping (ws-events.md §3.1) 工具执行族: tool_update 1`] = `
+{
+  "payload": {
+    "partial_result": "50%",
+    "tool_name": "bash",
+  },
+  "type": "tool_update",
+}
+`;
+
+exports[`contract snapshot: pi event mapping (ws-events.md §3.1) 工具执行族: tool_end 1`] = `
+{
+  "payload": {
+    "elapsed": 0,
+    "output": ""ok"",
+    "tool_name": "bash",
+  },
+  "type": "tool_end",
+}
+`;
+
+exports[`contract snapshot: pi event mapping (ws-events.md §3.1) 工具执行族: tool_error 1`] = `
+{
+  "payload": {
+    "elapsed": 0,
+    "error": "{"e":"x"}",
+    "tool_name": "bash",
+  },
+  "type": "tool_error",
+}
+`;
+
+exports[`contract snapshot: pi event mapping (ws-events.md §3.1) 回答与终态族: answer 1`] = `
+{
+  "payload": {
+    "content": "答案正文",
+  },
+  "type": "answer",
+}
+`;
+
+exports[`contract snapshot: pi event mapping (ws-events.md §3.1) 回答与终态族: done 1`] = `
+{
+  "payload": {},
+  "type": "done",
+}
+`;
+
+exports[`contract snapshot: pi event mapping (ws-events.md §3.1) 回答与终态族: agent_end_null 1`] = `null`;
+
+exports[`contract snapshot: pi event mapping (ws-events.md §3.1) 压缩与重试族: context_compressing 1`] = `
+{
+  "payload": {
+    "action": "context-full",
+    "reason": "threshold",
+  },
+  "type": "context_compressing",
+}
+`;
+
+exports[`contract snapshot: pi event mapping (ws-events.md §3.1) 压缩与重试族: context_compressed 1`] = `
+{
+  "payload": {
+    "aborted": false,
+    "action": "context-full",
+    "before_tokens": 123,
+    "error_message": undefined,
+    "skipped": false,
+    "summary_preview": "s",
+    "will_retry": false,
+  },
+  "type": "context_compressed",
+}
+`;
+
+exports[`contract snapshot: pi event mapping (ws-events.md §3.1) 压缩与重试族: retry_start 1`] = `
+{
+  "payload": {
+    "attempt": 1,
+    "delay_ms": 800,
+    "error_message": "429",
+    "max_attempts": 3,
+  },
+  "type": "retry_start",
+}
+`;
+
+exports[`contract snapshot: pi event mapping (ws-events.md §3.1) 压缩与重试族: retry_end 1`] = `
+{
+  "payload": {
+    "attempt": 1,
+    "final_error": undefined,
+    "success": true,
+  },
+  "type": "retry_end",
+}
+`;
+
+exports[`contract snapshot: pi RPC shapes (agent-rpc.md §8) create_session / get_health / undo / get_messages / get_goal_state: create_session_reply 1`] = `
+{
+  "id": 1,
+  "result": {
+    "session_id": "<uuid>",
+  },
+}
+`;
+
+exports[`contract snapshot: pi RPC shapes (agent-rpc.md §8) create_session / get_health / undo / get_messages / get_goal_state: get_health_reply 1`] = `
+{
+  "id": 2,
+  "result": {
+    "engine": "pi",
+    "ok": true,
+    "pending_approvals": 0,
+    "streaming": false,
+  },
+}
+`;
+
+exports[`contract snapshot: pi RPC shapes (agent-rpc.md §8) create_session / get_health / undo / get_messages / get_goal_state: undo_reply 1`] = `
+{
+  "id": 3,
+  "result": {
+    "detail": "no turns to undo",
+    "removed": 0,
+    "turns_removed": 0,
+  },
+}
+`;
+
+exports[`contract snapshot: pi RPC shapes (agent-rpc.md §8) create_session / get_health / undo / get_messages / get_goal_state: get_messages_reply 1`] = `
+{
+  "id": 4,
+  "result": {
+    "messages": [],
+    "total": 0,
+  },
+}
+`;
+
+exports[`contract snapshot: pi RPC shapes (agent-rpc.md §8) create_session / get_health / undo / get_messages / get_goal_state: get_goal_state_reply 1`] = `
+{
+  "id": 5,
+  "result": {
+    "state": null,
+  },
+}
+`;
+
+exports[`contract snapshot: pi RPC shapes (agent-rpc.md §8) create_session / get_health / undo / get_messages / get_goal_state: set_plan_mode_reply 1`] = `
+{
+  "id": 6,
+  "result": {
+    "enabled": true,
+    "ok": true,
+  },
+}
+`;
+
+exports[`contract snapshot: pi RPC shapes (agent-rpc.md §8) create_session / get_health / undo / get_messages / get_goal_state: unsupported_error 1`] = `
+{
+  "id": 7,
+  "message": "pi engine: method "list_plugins" not yet migrated (see docs/contracts/agent-rpc.md §8)",
+}
+`;
+
+exports[`contract snapshot: ask_user payload (ws-events.md §3.2) destructive 工具审批请求: ask_user_payload 1`] = `
+{
+  "interaction_id": "<uuid>",
+  "mode": "approval",
+  "options": [
+    "Approve",
+    "Deny",
+  ],
+  "question": "允许调用 bash？",
+  "risk_level": "medium",
+  "tool_input": {
+    "command": "npm test",
+  },
+  "tool_name": "bash",
+}
+`;
+
+exports[`contract snapshot: ask_user payload (ws-events.md §3.2) destructive 工具审批请求: approval_decision_approved 1`] = `
+{
+  "approved": true,
+  "reason": undefined,
+}
+`;

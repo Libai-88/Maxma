@@ -827,6 +827,14 @@ async function connectSession(sid: string) {
   ws.onmessage = (event: MessageEvent) => {
     try {
       const msg: ServerEvent = JSON.parse(event.data)
+      // 阶段〇-3 协议握手帧（docs/contracts/ws-events.md）：记录版本后不进事件
+      // 路由。hello 不在 ServerEvent 联合中，经宽化类型识别，后续版本协商在此扩展。
+      const rawType = (msg as { type?: string }).type
+      if (rawType === 'hello') {
+        const pv = (msg as { payload?: { protocol_version?: number } }).payload?.protocol_version
+        log.info('WS hello: protocol_version =', pv ?? 'unknown', 'session:', sid)
+        return
+      }
       log.debug('WS event received:', msg.type, 'session:', sid, msg.type === 'ask_user' ? {
         tool_name: (msg as AskUserEvent).payload?.tool_name,
         interaction_id: (msg as AskUserEvent).payload?.interaction_id,

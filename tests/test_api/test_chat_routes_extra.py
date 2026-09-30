@@ -11,6 +11,7 @@ import logging
 import threading
 import uuid
 from collections import deque
+from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -478,33 +479,41 @@ def ws_app(monkeypatch):
 
 
 class TestWebSocketChat:
+    @contextmanager
+    def _ws_connect(self, ws_app, path: str):
+        """建连并消费 hello 握手帧（阶段〇-3，docs/contracts/ws-events.md §2.1），
+        使各用例继续以业务首帧为基准。"""
+        with TestClient(ws_app).websocket_connect(path) as ws:
+            assert ws.receive_json() == {"type": "hello", "payload": {"protocol_version": 1}}
+            yield ws
+
     def test_ping_pong(self, ws_app):
-        with TestClient(ws_app).websocket_connect("/ws/chat/s1") as ws:
+        with self._ws_connect(ws_app, "/ws/chat/s1") as ws:
             ws.send_text(json.dumps({"type": "ping"}))
             msg = ws.receive_json()
             assert msg == {"type": "pong"}
 
     def test_invalid_json_skipped(self, ws_app):
-        with TestClient(ws_app).websocket_connect("/ws/chat/s1") as ws:
+        with self._ws_connect(ws_app, "/ws/chat/s1") as ws:
             ws.send_text("not-json")
             # 发一个 ping 验证连接仍活
             ws.send_text(json.dumps({"type": "ping"}))
             assert ws.receive_json() == {"type": "pong"}
 
     def test_non_dict_json_skipped(self, ws_app):
-        with TestClient(ws_app).websocket_connect("/ws/chat/s1") as ws:
+        with self._ws_connect(ws_app, "/ws/chat/s1") as ws:
             ws.send_text(json.dumps([1, 2, 3]))  # 合法 JSON 但是 list
             ws.send_text(json.dumps({"type": "ping"}))
             assert ws.receive_json() == {"type": "pong"}
 
     def test_non_chat_type_skipped(self, ws_app):
-        with TestClient(ws_app).websocket_connect("/ws/chat/s1") as ws:
+        with self._ws_connect(ws_app, "/ws/chat/s1") as ws:
             ws.send_text(json.dumps({"type": "other", "payload": {}}))
             ws.send_text(json.dumps({"type": "ping"}))
             assert ws.receive_json() == {"type": "pong"}
 
     def test_empty_message_skipped(self, ws_app):
-        with TestClient(ws_app).websocket_connect("/ws/chat/s1") as ws:
+        with self._ws_connect(ws_app, "/ws/chat/s1") as ws:
             ws.send_text(json.dumps({
                 "type": "chat", "payload": {"message": "   "}
             }))
@@ -512,7 +521,7 @@ class TestWebSocketChat:
             assert ws.receive_json() == {"type": "pong"}
 
     def test_non_dict_payload_skipped(self, ws_app):
-        with TestClient(ws_app).websocket_connect("/ws/chat/s1") as ws:
+        with self._ws_connect(ws_app, "/ws/chat/s1") as ws:
             ws.send_text(json.dumps({"type": "chat", "payload": "not-dict"}))
             ws.send_text(json.dumps({"type": "ping"}))
             assert ws.receive_json() == {"type": "pong"}
@@ -526,7 +535,7 @@ class TestWebSocketChat:
 
         monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", fake_stream)
 
-        with TestClient(ws_app).websocket_connect("/ws/chat/s1") as ws:
+        with self._ws_connect(ws_app, "/ws/chat/s1") as ws:
             ws.send_text(json.dumps({
                 "type": "chat",
                 "payload": {"message": "hello", "turn_id": "my-turn-id"},
@@ -555,7 +564,7 @@ class TestWebSocketChat:
         monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", failing_stream)
 
         with caplog.at_level(logging.ERROR):
-            with TestClient(ws_app).websocket_connect("/ws/chat/s1") as ws:
+            with self._ws_connect(ws_app, "/ws/chat/s1") as ws:
                 ws.send_text(json.dumps({
                     "type": "chat",
                     "payload": {"message": "hello", "turn_id": "turn-1"},
@@ -600,7 +609,7 @@ class TestWebSocketChat:
         session._sidecar_session_id = "sc-disconnect"
         ws_app.state.session_manager._default = session
 
-        with TestClient(ws_app).websocket_connect("/ws/chat/s-disconnect") as ws:
+        with self._ws_connect(ws_app, "/ws/chat/s-disconnect") as ws:
             ws.send_text(json.dumps({
                 "type": "chat",
                 "payload": {"message": "keep working"},
@@ -619,7 +628,7 @@ class TestWebSocketChat:
         session = _FakeChatSession(session_id="s2", message_count=10)
         ws_app.state.session_manager._default = session
 
-        with TestClient(ws_app).websocket_connect("/ws/chat/s2") as ws:
+        with self._ws_connect(ws_app, "/ws/chat/s2") as ws:
             ws.send_text(json.dumps({
                 "type": "chat", "payload": {"message": "hi"}
             }))
@@ -638,7 +647,7 @@ class TestWebSocketChat:
         session = _FakeChatSession(session_id="s3", message_count=5)
         ws_app.state.session_manager._default = session
 
-        with TestClient(ws_app).websocket_connect("/ws/chat/s3") as ws:
+        with self._ws_connect(ws_app, "/ws/chat/s3") as ws:
             ws.send_text(json.dumps({
                 "type": "chat", "payload": {"message": "hi"}
             }))
@@ -666,7 +675,7 @@ class TestWebSocketChat:
         session = _FakeChatSession(session_id="s4", is_const=True, const_name="c1")
         ws_app.state.session_manager._default = session
 
-        with TestClient(ws_app).websocket_connect("/ws/chat/s4") as ws:
+        with self._ws_connect(ws_app, "/ws/chat/s4") as ws:
             ws.send_text(json.dumps({
                 "type": "chat", "payload": {"message": "hi"}
             }))
@@ -693,7 +702,7 @@ class TestWebSocketChat:
         session = _FakeChatSession(session_id="s5", is_const=False)
         ws_app.state.session_manager._default = session
 
-        with TestClient(ws_app).websocket_connect("/ws/chat/s5") as ws:
+        with self._ws_connect(ws_app, "/ws/chat/s5") as ws:
             ws.send_text(json.dumps({
                 "type": "chat", "payload": {"message": "hi"}
             }))
@@ -708,7 +717,7 @@ class TestWebSocketChat:
 
         monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", fake_stream)
 
-        with TestClient(ws_app).websocket_connect("/ws/chat/s6") as ws:
+        with self._ws_connect(ws_app, "/ws/chat/s6") as ws:
             ws.send_text(json.dumps({
                 "type": "chat", "payload": {"message": "hi"}
             }))
@@ -725,7 +734,7 @@ class TestWebSocketChat:
 
         monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", fake_stream)
 
-        with TestClient(ws_app).websocket_connect("/ws/chat/s7") as ws:
+        with self._ws_connect(ws_app, "/ws/chat/s7") as ws:
             ws.send_text(json.dumps({
                 "type": "chat",
                 "payload": {"message": "hi", "turn_id": "client-turn-1"},
@@ -740,7 +749,7 @@ class TestWebSocketChat:
 
         monkeypatch.setattr(chat_mod, "_stream_turn_sidecar", fake_stream)
 
-        with TestClient(ws_app).websocket_connect("/ws/chat/s8") as ws:
+        with self._ws_connect(ws_app, "/ws/chat/s8") as ws:
             ws.send_text(json.dumps({
                 "type": "chat",
                 "payload": {"message": "hi"},  # 无 turn_id

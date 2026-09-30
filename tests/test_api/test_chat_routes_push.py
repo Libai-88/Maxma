@@ -545,6 +545,8 @@ class TestAppendTurnException:
         app.include_router(chat_mod.router)
 
         with TestClient(app).websocket_connect("/ws/chat/s1") as ws:
+            # 阶段〇-3：先消费 hello 握手帧（docs/contracts/ws-events.md §2.1）
+            assert ws.receive_json() == {"type": "hello", "payload": {"protocol_version": 1}}
             ws.send_text(json.dumps({
                 "type": "chat",
                 "payload": {"message": "hi"},

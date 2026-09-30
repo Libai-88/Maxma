@@ -7,7 +7,16 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { registerCustomTools } from "../src/tools/index";
+import { searchMemoriesTool } from "../src/tools/memory";
+import { getStickerTool } from "../src/tools/stickers";
+import { listRulesTool } from "../src/tools/rules";
+import { registerRememberMemoryTool } from "../src/tools/remember-memory";
+import type { MaxmaToolDescriptor } from "../src/tools/descriptor";
+
+/** cutover 后的 4 工具矩阵（list_automations 随 automation 下线移除）。 */
+function registerCustomTools(): MaxmaToolDescriptor[] {
+  return [registerRememberMemoryTool(), searchMemoriesTool(), getStickerTool(), listRulesTool()];
+}
 import { readMemories } from "../src/tools/memory";
 import { listStickerCategories, pickSticker } from "../src/tools/stickers";
 import { readAllRules } from "../src/tools/rules";
@@ -37,15 +46,14 @@ function writeMemoryYaml(entries: Record<string, unknown>): void {
 // ── 注册矩阵 ────────────────────────────────────────────────────────────────
 
 describe("registerCustomTools", () => {
-  test("registers 5 custom tools (write + 4 read)", () => {
+  test("registers 4 custom tools (write + 3 read)", () => {
     const tools = registerCustomTools();
     const names = tools.map((t) => t.name);
     expect(names).toContain("remember_memory");
     expect(names).toContain("search_memories");
     expect(names).toContain("get_sticker");
     expect(names).toContain("list_rules");
-    expect(names).toContain("list_automations");
-    expect(tools.length).toBe(5);
+    expect(tools.length).toBe(4);
   });
 
   test("every tool uses a plain JSON Schema (no zod leakage)", () => {
