@@ -6,17 +6,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  pyinstaller-build:
+  bun-bundle-build:
     runs-on: windows-latest
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
 
       - name: Set up Node.js 20
         uses: actions/setup-node@v4
@@ -25,27 +20,23 @@ jobs:
           cache: "npm"
           cache-dependency-path: web/package-lock.json
 
-      - name: Run packaging safety preflight
-        shell: powershell
-        run: .\build\test-packaging-safety.ps1 -SkipArtifact
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v1
 
-      - name: Build server through the clean-checkout entry point
+      - name: Build the Bun backend bundle (server.js + runtime)
         shell: cmd
         env:
           MAXMA_CI: "1"
         run: call build\build-server.bat
 
-      - name: Verify build contracts and sanitized PyInstaller contents
+      - name: Verify bundle artifacts
         shell: powershell
         run: |
-          .\build\test-build-contract.ps1
-          .\build\test-packaging-safety.ps1 -TocPath "build\maxma-server\PKG-00.toc"
-
-      - name: Verify build artifact
-        shell: powershell
-        run: |
-          if (-not (Test-Path "dist\maxma-server.exe")) {
-            Write-Error "Build artifact dist\maxma-server.exe not found"
-            exit 1
+          foreach ($f in @("dist\bun-server\server.js", "dist\bun-server\bun.exe", "dist\bun-server\node_modules\sharp")) {
+            if (-not (Test-Path $f)) { Write-Error "Missing build artifact: $f"; exit 1 }
           }
-          Write-Host "Build artifact verified: dist\maxma-server.exe"
+          Write-Host "Bun bundle artifacts verified."
+
+      - name: Smoke test the bundle (start + core endpoints)
+        shell: powershell
+        run: .\build\smoke-test-server.ps1 -Port 8000

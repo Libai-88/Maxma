@@ -1,0 +1,29 @@
+name: Bun Backend
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v1
+
+      # bun-backend tests import bun-sidecar/src/kernel/* by relative path;
+      # those files resolve @earendil-works/* from bun-sidecar/node_modules,
+      # so both dependency trees must be installed.
+      - name: Install bun-sidecar dependencies
+        working-directory: bun-sidecar
+        run: bun install --frozen-lockfile
+
+      - name: Install bun-backend dependencies
+        working-directory: bun-backend
+        run: bun install --frozen-lockfile
+
+      - name: Run Bun backend tests
+        working-directory: bun-backend
+        run: bun test
