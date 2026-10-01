@@ -112,7 +112,8 @@ function fakeIo() {
 }
 
 /** 快照只对形状负责：掩码每次运行变化的随机标识。 */
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// session_id 契约为 uuid4().hex（32 位无连字符）；同时保留带连字符 UUID 形态的掩码。
+const UUID_RE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32})$/i;
 function maskRandomIds<T>(value: T): T {
   if (typeof value === "string" && UUID_RE.test(value)) return "<uuid>" as unknown as T;
   if (Array.isArray(value)) return value.map(maskRandomIds) as unknown as T;

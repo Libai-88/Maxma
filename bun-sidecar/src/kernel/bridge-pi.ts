@@ -145,7 +145,9 @@ export async function handlePiCreateSession(
       ? (rawMode as MaxmaPermissionMode)
       : "ask";
 
-  const sessionId = randomUUID();
+  // session_id 契约：对齐 Python `uuid.uuid4().hex`（32 位小写 hex，无连字符）——
+  // 前端 useChat.ts 以 /^[0-9a-f]{32}$/i 校验并据此建立 WS，带连字符会被拒绝。
+  const sessionId = randomUUID().replace(/-/g, "");
   // record 先行占位（gate 经闭包读 record.permissionMode，set_auto_approve 运行时切换）
   const record = {
     engine: "pi",

@@ -171,12 +171,20 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to, _from) => {
+router.beforeEach(async (to, _from) => {
   // 能力守卫：若目标路由声明了 meta.feature 且该能力被禁用，
-  // 重定向到「功能不可用」页面。清单尚未加载时 isFeatureEnabled
-  // 返回乐观默认 true，因此不会阻塞首次导航。
+  // 重定向到「功能不可用」页面。直接 URL 访问/硬刷新时守卫先于
+  // App mount 的清单拉取执行——清单未加载时先等待一次 fetch
+  // （store 内部并发去重，不会与 init 重复请求），并设超时兜底：
+  // 后端不可达时保持乐观放行，不阻塞页面。
   if (to.meta?.feature && to.name !== 'feature-unavailable') {
     const capabilities = useCapabilitiesStore()
+    if (!capabilities.capabilities) {
+      await Promise.race([
+        capabilities.fetchCapabilities(),
+        new Promise((resolve) => setTimeout(resolve, 3000)),
+      ])
+    }
     if (!capabilities.isFeatureEnabled(to.meta.feature)) {
       return {
         name: 'feature-unavailable',
