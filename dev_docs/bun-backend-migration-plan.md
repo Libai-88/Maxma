@@ -201,10 +201,19 @@ Bun 后端（单进程 = API 服务器 + Agent 引擎）
 - 测试：chat-ws-2.3b 9/9 + routes-2.3b 7/7——bun-backend 全量 **71/71**；bun-sidecar 契约 61/61（25 快照全绿）。真机端到端冒烟：hello 握手 + subprotocol 鉴权 + 无 provider 时 error{turn_id,trace_id,category}→done{turn_id,empty,context_usage} 富化闭合全通过。
 - 2.3 剩余：带真实 provider 的 UI 手测（流式/取消/审批/计划/目标/checkpoint/artifact/memory 端到端）——归入 2.5 全量切换验收（§5 E2E 手测清单），非代码缺口。
 
-### 阶段 2.4 Provider/MCP/凭据（1~2 天）
+### 阶段 2.4 Provider/MCP/凭据（1~2 天）——🔄 2.4a 完成（2026-10-01），MCP 系列待 2.4b
 - 范围：providers（**Fernet 兼容**）/mcp×4/opencode_zen
 - 顺序：Fernet 兼容实现 → **向量测试**（Python 生成固定 envelope 固化到测试）→ providers CRUD → MCP 系列
 - 验收：旧凭据可解密可用（真实凭据验证）；provider CRUD 手测；MCP 连通性测试手测
+- 2.4a 已交付（凭据/providers 批，MCP 系列除外）：
+  - `src/security/credential-envelope.ts`——**Fernet 规范实现**（Node crypto：AES-128-CBC+PKCS7 / HMAC-SHA256 timing-safe / 0x80 版本字节 / urlsafe b64 带 padding）+ 信封层（encv1: canonical JSON sort_keys）直译 credential_envelope.py + getOrCreateFernetKey（原子写 credential.key，FERNET-RACE-001 双检）+ encryptApiKey/decryptApiKey（明文透传、InvalidToken→空串同 Python）。
+  - **向量测试**（credential-2.4.test.ts 6/6）：Python cryptography 生成固定 key/token/envelope 固化 → Bun 解密互认（正向）；**反向** Bun 加密 token → spawnSync venv python 解密（交叉验证）；篡改/错 key/非法信封/空值静默语义一致。providers-2.4.test.ts 另含真实凭据落盘 → Python 解密互认。§4.1 最高风险项锁定。
+  - `src/routes/providers.ts`——11 端点直译（CRUD/test/discover-models/{id}/test/{id}/discover-models/encrypt-keys/opencode-zen/sync-models/health）；URL 安全校验逐分支直译（scheme/凭据/query/fragment/端口/IDNA/**元数据地址黑名单含十进制 IPv4 归一**/unspecified/multicast）；**Pydantic v2 lax 模式标量强转复刻**（enabled:"yes"→true、str→int、float→int 拒绝）；**422 错误形状逐字节对齐 FastAPI RequestValidationError**（key 顺序 type/loc/msg/input/ctx，missing 带整 body、string_too_short 带 ctx.min_length、value_error 带 ctx.error:{}、model_attributes_type/json_invalid/list_type/string_type/int_type/float_type/bool_parsing/dict_type）；TTL 缓存 + PROVIDERS-CORRUPT-001 损坏拒绝 503；FastAPI 先校验后 404 顺序对齐。
+  - `src/services/opencode-zen.ts`（内置免费供应商注入 + 官方免费模型周期同步，httpx→fetch）+ `src/routes/balance.ts`（DeepSeek 余额，超时 504/错误 500）。
+  - server.ts 接线：providers/balance 挂载 + 启动迁移（B-009 明文加密）+ 后台同步。
+- **双跑对照（Python bare FastAPI providers 路由 vs Bun createProvidersRoutes，同序 24 操作，api_key 密文掩码 + opencode-zen models 网络同步归一）：0/24 差异**——含全部 422 错误形状逐字节 SAME。真实 providers.yaml 未被污染（对照经临时目录隔离）。
+- 测试：credential-2.4 6/6 + providers-2.4 8/8——bun-backend 全量 **85/85**。
+- 剩余（2.4b）：MCP 系列（mcp.py/mcp_test/mcp_validation/mcp_oauth）+ capabilities 依赖的 MCP 面。
 
 ### 阶段 2.5 长尾与默认切换（1 天）
 - 范围：剩余路由收尾；默认后端改 bun；旧 Python 进程保留一个版本周期

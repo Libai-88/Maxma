@@ -45,6 +45,9 @@ import { createCollabRoutes } from "./routes/collab";
 import { createDeferredRunRoutes } from "./routes/deferred-runs";
 import { createActivityRoutes } from "./routes/activity";
 import { createSessionCompressRoutes } from "./routes/session-compress";
+import { createProvidersRoutes, migratePlaintextKeysToEncrypted } from "./routes/providers";
+import { createBalanceRoutes } from "./routes/balance";
+import { startBackgroundSync } from "./services/opencode-zen";
 import { initializeDatabase } from "./db/core";
 import { getMetrics } from "./metrics";
 import { getApiDataDir } from "./app-paths";
@@ -174,6 +177,10 @@ export function createApp(): Hono {
   app.route("/", createActivityRoutes());
   app.route("/", createSessionCompressRoutes({ sessions: hubSessions, callRpc: callKernelRpc }));
 
+  // 2.4：providers / balance
+  app.route("/", createProvidersRoutes());
+  app.route("/", createBalanceRoutes());
+
   // 2.3b：workflow WS 事件接线（kernel 直调路径不经回合富化层，原始广播）
   setWorkflowEventSink((sessionId, eventType, payload) => {
     broadcastEvent(sessionId, { type: eventType, payload });
@@ -217,6 +224,21 @@ export function createApp(): Hono {
 
   // 指标后台 flush（对齐 Python start_flush_task，60s）
   getMetrics().startFlushTask(60);
+
+  // 2.4 启动迁移（对齐 Python lifespan B-009：明文 api_key 就地加密，幂等）
+  try {
+    const n = migratePlaintextKeysToEncrypted();
+    if (n > 0) console.info(`[providers] startup migration: encrypted ${n} plaintext api_key(s)`);
+  } catch (err) {
+    console.warn(`[providers] startup migration failed (non-fatal): ${String(err)}`);
+  }
+
+  // 2.4 内置免费供应商 + 后台周期同步（对齐 Python lifespan opencode-zen）
+  try {
+    startBackgroundSync();
+  } catch (err) {
+    console.warn(`[opencode-zen] startup injection failed (non-fatal): ${String(err)}`);
+  }
 
   // 启动事件（对齐 Python server.py record_activity("system","startup")）
   recordActivity("system", "startup", { message: `MaxmaHere 后端启动完成 (${VERSION})` });

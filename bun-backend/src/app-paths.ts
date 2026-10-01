@@ -64,5 +64,9 @@ export const getVectorDbDir = (): string => path.join(dataDir(), "vector_db");
 
 /** news.yaml（与 Python NEWS_YAML_PATH 一致）。 */
 export const getNewsYamlPath = (): string => path.join(getApiDataDir(), "news.yaml");
+/** providers.yaml（与 Python PROVIDERS_YAML_PATH 一致）。 */
+export const getProvidersYamlPath = (): string => path.join(getApiDataDir(), "providers.yaml");
+/** Fernet 凭据密钥文件（与 Python API_DATA_DIR/credential.key 一致）。 */
+export const getCredentialKeyPath = (): string => path.join(getApiDataDir(), "credential.key");
 /** 引导状态文件（与 Python ONBOARDING_STATE_PATH 一致）。 */
 export const getOnboardingStatePath = (): string => path.join(dataDir(), "config", "onboarding.json");
