@@ -40,15 +40,19 @@ import { createStickerFileRoutes } from "./routes/stickers";
 import { createStickerFavoritesRoutes } from "./routes/sticker-favorites";
 import { createStickerUploadRoutes } from "./routes/sticker-upload";
 import { createSettingsPanelRoutes } from "./routes/settings-panels";
-import { createWorkflowRoutes } from "./routes/workflows";
+import { createWorkflowRoutes, setWorkflowEventSink } from "./routes/workflows";
 import { createCollabRoutes } from "./routes/collab";
 import { createDeferredRunRoutes } from "./routes/deferred-runs";
+import { createActivityRoutes } from "./routes/activity";
+import { createSessionCompressRoutes } from "./routes/session-compress";
 import { initializeDatabase } from "./db/core";
 import { getMetrics } from "./metrics";
 import { getApiDataDir } from "./app-paths";
+import { record as recordActivity } from "./activity-hub";
 import { send as rpcSend, sendError as rpcSendError, sendEvent as rpcSendEvent } from "./rpc";
 import {
   handleChatMessage,
+  onKernelEvent,
   registerChatConnection,
   unregisterChatConnection,
   type ChatWsHub,
@@ -66,7 +70,7 @@ const hubPlans = new Map<string, PiPendingPlan>();
 const wsConnections = new Map<string, Set<ServerWebSocket<WsData>>>();
 const seenClientMsgIds = new Map<string, string[]>();
 
-/** kernel 事件 → WS 广播出口（无连接时保留 stdout 便于诊断）。 */
+/** kernel 事件 → WS 广播原始出口（无连接时保留 stdout 便于诊断）。 */
 function broadcastEvent(sessionId: string, event: { type: string; payload: Record<string, unknown> }): void {
   const conns = wsConnections.get(sessionId);
   if (conns && conns.size > 0) {
@@ -83,6 +87,11 @@ function broadcastEvent(sessionId: string, event: { type: string; payload: Recor
   }
 }
 
+/** kernel 事件 → 回合富化层（2.3b：turn_id/截断/artifact/memory/deferred/埋点）。 */
+function kernelEventSink(sessionId: string, event: { type: string; payload: Record<string, unknown> }): void {
+  onKernelEvent(chatHub, sessionId, event);
+}
+
 /** 单请求作用域 RPC 调用（kernel in-process）。 */
 function callKernelRpc(
   method: string,
@@ -93,7 +102,7 @@ function callKernelRpc(
       send: (id: number | null, result: unknown) => resolve({ ok: true, result }),
       sendError: (_id: number | null, message: string) => resolve({ ok: false, error: message }),
       sendEvent: (sid: string, event: { type: string; payload: Record<string, unknown> }) =>
-        broadcastEvent(sid, event),
+        kernelEventSink(sid, event),
     };
     const sid = params.session_id as string | undefined;
     if (method === "create_session") {
@@ -161,13 +170,22 @@ export function createApp(): Hono {
   app.route("/", createDeferredRunRoutes());
   app.route("/", createCollabRoutes({ sessions: hubSessions }));
 
+  // 2.3b：activity hub REST+SSE / session-compress
+  app.route("/", createActivityRoutes());
+  app.route("/", createSessionCompressRoutes({ sessions: hubSessions, callRpc: callKernelRpc }));
+
+  // 2.3b：workflow WS 事件接线（kernel 直调路径不经回合富化层，原始广播）
+  setWorkflowEventSink((sessionId, eventType, payload) => {
+    broadcastEvent(sessionId, { type: eventType, payload });
+  });
+
   // 2.2e 会话门面：REST /api/sessions → kernel（in-process）
   app.route(
     "/",
     createSessionsRoutes({
       hub: {
-        // 2.3：事件出口改为 WS 广播（REST 调用经 callKernelRpc 的 Promise 拿结果）
-        io: { send: rpcSend, sendError: rpcSendError, sendEvent: broadcastEvent },
+        // 2.3：事件出口经回合富化层广播（REST 调用经 callKernelRpc 的 Promise 拿结果）
+        io: { send: rpcSend, sendError: rpcSendError, sendEvent: kernelEventSink },
         sessions: hubSessions,
         pendingPlans: hubPlans,
       },
@@ -199,6 +217,9 @@ export function createApp(): Hono {
 
   // 指标后台 flush（对齐 Python start_flush_task，60s）
   getMetrics().startFlushTask(60);
+
+  // 启动事件（对齐 Python server.py record_activity("system","startup")）
+  recordActivity("system", "startup", { message: `MaxmaHere 后端启动完成 (${VERSION})` });
 
   return app;
 }
@@ -278,9 +299,11 @@ export function startServer() {
           return new Response("Unknown WS endpoint", { status: 404 });
         }
         const sessionId = decodeURIComponent(match[1]!);
+        // 不传 headers：Bun 自动协商回显客户端请求的 subprotocol（token），
+        // 与 Python 版 auth 中间件在 accept 时注入 subprotocol 同语义；
+        // 传空对象 {} 会触发 Bun 的 upgrade headers 校验异常。
         const upgraded = server.upgrade(req, {
           data: { sessionId } satisfies WsData,
-          headers: {},
         });
         if (!upgraded) return new Response("WebSocket upgrade failed", { status: 400 });
         return undefined as unknown as Response;

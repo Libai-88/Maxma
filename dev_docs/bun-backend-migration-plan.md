@@ -191,7 +191,15 @@ Bun 后端（单进程 = API 服务器 + Agent 引擎）
 - 架构要点：kernel io.sendEvent 从 stdout 改为 WS 广播是 2.3 的接线核心——kernel 事件流（token/tool_start/answer/done…）不经任何中转直达前端 WS。
 - 测试：chat-ws-2.3 6/6（mock ServerWebSocket 直测）——bun-backend 全量 **55/55**。
 - 测试教训：**bun test 下"共享 makeHub helper + 跨目录动态 import kernel + 多测试"组合会进程级挂起**（无输出无超时）——全部内联构造（每个测试自带 kernel import）后解决；zz-*.test.ts 二分定位法有效。
-- 剩余（2.3b）：chat_turns/chat_artifacts/session_compress REST、activity_hub SSE、deferred_runs WS 事件写入接线、真机端到端手测。
+- 已交付（2.3b）：对话链路收尾。
+  - `src/activity-hub.ts`（环形缓冲 1000 + record 遥测安全包装/message 截断 120，**新增 subscribe() 订阅器**——Python SSE 1s 轮询 deque，Bun 单线程改记录时同步回调）+ `src/routes/activity.ts`（recent/stats/clear/stream 四端点，SSE 经 ReadableStream 即时推送 + 15s keepalive 注释行，事件名 `activity`）。
+  - `src/routes/chat-turns.ts`（newTurnId 校验回退 uuid4 hex / calculateContextUsage chars÷2 粗估 + percentage 封顶 100）+ `src/routes/chat-artifacts.ts`（extractFilePathFromOutput JSON content 块解析 + unix/windows 路径正则 + 兜底扫描 / buildArtifactPayload md5 id + base64 token + 2000 截断 + HTML 转义，PIL→fs、os.path→node:path 直译）。
+  - `src/routes/chat-ws.ts` **回合富化层**（chat.py _stream_turn_sidecar handler + _handle_turn_result 直译，kernel 事件统一出口 onKernelEvent → per-session Promise 链保序）：TURN-OWNERSHIP-001 turn_id（**每轮生成一次**——Python 版逐事件重生成属缺陷，按契约意图收敛）、answer 吞流捕获 + done 时重合成 answer(turn_id)+done(context_usage,empty)、PERF-TOOL-OUTPUT-001 截断（output 100KB/error 20KB）、Phase 2.2 artifact 合成、MEMORY-EVENTS-001 memory_* 事件流（done 之后批量）、AG-SUBAGENT-001 deferred 写入 DeferredRunManager（completed→succeeded 映射）、METRICS-WIRE-001 工具/LLM 指标、WS per-session 限流（capacity 60/60s，RATE_LIMITED 错误形状对齐 make_error）、AG-IDEMPOTENCY-001 cancel 已产出回复补发 answer(partial)+登记幂等 id、CONN-MUTEX-001 用 turnStates 同步登记消除竞态窗口。
+  - `src/routes/session-compress.ts`（/compress + /fresh-compact：kernel in-process compact，失败保持 Python degraded 形状）。
+  - `server.ts` 接线：kernel 事件出口改 kernelEventSink（sessions REST 门面同改）；activity/session-compress 路由挂载；workflow eventSink → broadcastEvent；createApp 记录 system/startup 活动；sessions 删除三路径补 cancelParent（对齐 Python session_manager.remove）。
+- **真机端到端发现并修正的关键 bug**：2.3a 的 mock WS 从未经过真实握手——`server.upgrade(req,{headers:{}})` 空对象触发 Bun 校验异常（`upgrade options.headers must be a Headers or an object`），握手失败。**去掉 headers 参数**：Bun 自动协商回显客户端请求的 subprotocol（token），与 Python auth 中间件 accept 时注入 subprotocol 同语义。教训：WS 契约必须真机握手验证，mock 直测覆盖不到 upgrade 协商层。
+- 测试：chat-ws-2.3b 9/9 + routes-2.3b 7/7——bun-backend 全量 **71/71**；bun-sidecar 契约 61/61（25 快照全绿）。真机端到端冒烟：hello 握手 + subprotocol 鉴权 + 无 provider 时 error{turn_id,trace_id,category}→done{turn_id,empty,context_usage} 富化闭合全通过。
+- 2.3 剩余：带真实 provider 的 UI 手测（流式/取消/审批/计划/目标/checkpoint/artifact/memory 端到端）——归入 2.5 全量切换验收（§5 E2E 手测清单），非代码缺口。
 
 ### 阶段 2.4 Provider/MCP/凭据（1~2 天）
 - 范围：providers（**Fernet 兼容**）/mcp×4/opencode_zen

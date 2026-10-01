@@ -21,6 +21,8 @@ import {
   type PiPendingPlan,
 } from "../../../bun-sidecar/src/kernel/bridge-pi";
 
+import { getDeferredRunManager } from "./deferred-runs";
+
 /** Bun 后端的会话注册表（kernel 桥经 deps 注入）。 */
 export interface SessionHub {
   io: PiBridgeIo;
@@ -254,6 +256,12 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     const record = deps.hub.sessions.get(sid);
     if (!record) return c.json({ detail: "会话不存在" }, 404);
     await callRpc(deps, "destroy_session", { session_id: sid });
+    // 对齐 Python session_manager.remove：取消该会话的活跃 deferred run
+    try {
+      getDeferredRunManager().cancelParent(sid);
+    } catch {
+      /* best-effort */
+    }
     deps.audit?.("session", "delete", sid, "会话删除");
     return c.json({ status: "deleted" });
   });
@@ -264,6 +272,11 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     for (const sid of body.session_ids ?? []) {
       if (deps.hub.sessions.has(sid)) {
         await callRpc(deps, "destroy_session", { session_id: sid });
+        try {
+          getDeferredRunManager().cancelParent(sid);
+        } catch {
+          /* best-effort */
+        }
         deleted.push(sid);
       }
     }
@@ -274,6 +287,11 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     const deleted: string[] = [];
     for (const sid of [...deps.hub.sessions.keys()]) {
       await callRpc(deps, "destroy_session", { session_id: sid });
+      try {
+        getDeferredRunManager().cancelParent(sid);
+      } catch {
+        /* best-effort */
+      }
       deleted.push(sid);
     }
     return c.json({ deleted, count: deleted.length });
