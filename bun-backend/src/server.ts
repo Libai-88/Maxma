@@ -12,8 +12,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 
 import { getWebDistDir } from "./app-paths";
+import { buildCorsOrigins } from "./cors-config";
 import { loadOrCreateToken } from "./auth";
 import { createAuthMiddleware, extractWsToken } from "./middleware/auth";
 import {
@@ -49,6 +51,13 @@ import { createProvidersRoutes, migratePlaintextKeysToEncrypted } from "./routes
 import { createBalanceRoutes } from "./routes/balance";
 import { createMcpRoutes } from "./routes/mcp";
 import { createMcpTestRoutes } from "./routes/mcp-test";
+import { createToolsRoutes } from "./routes/tools";
+import { createRestartRoutes } from "./routes/restart";
+import { createUploadRoutes } from "./routes/upload";
+import { createPluginsRoutes } from "./routes/plugins";
+import { createFileRoutes } from "./routes/files";
+import { createDiagnosticsRoutes } from "./routes/diagnostics";
+import { createCapabilitiesRoutes } from "./routes/capabilities";
 import { startBackgroundSync } from "./services/opencode-zen";
 import { initializeDatabase } from "./db/core";
 import { getMetrics } from "./metrics";
@@ -65,8 +74,9 @@ import {
 } from "./routes/chat-ws";
 
 const VERSION = "2.0.0-stage2";
-const PORT = Number(process.env.MAXMA_BUN_PORT ?? 8001);
-const startedAt = Date.now();
+// 2.5d 默认切换：bun-backend 接管 8000（Python 默认端口）。灰度回退：
+// MAXMA_BUN_PORT=8001 + 前端 MAXMA_API_BASE 指回 Python。
+const PORT = Number(process.env.MAXMA_BUN_PORT ?? 8000);
 
 /** 会话注册表与在途计划（供 sessions REST 门面与 WS 层共用）。 */
 const hubSessions = new Map<string, PiSessionRecord>();
@@ -142,13 +152,34 @@ export function createApp(): Hono {
   initializeDatabase();
   const app = new Hono();
 
-  // 中间件顺序与 Python 版一致：RequestLog -> RateLimit -> Auth -> 路由
+  // 中间件顺序与 Python 版一致：RequestLog -> RateLimit -> Auth -> CORS -> 路由
+  // （Python add_middleware LIFO：后 add 先执行；CORS 最先 add → 最内层。
+  // Auth 放行 OPTIONS，预检由 CORS 层返回 204。）
   app.use("*", requestLogMiddleware);
   app.use("*", createRateLimitMiddleware());
   app.use("*", createAuthMiddleware(() => token));
+  const corsOrigins = new Set(buildCorsOrigins());
+  app.use(
+    "*",
+    cors({
+      origin: (o) => (o && corsOrigins.has(o) ? o : null),
+      credentials: true,
+      allowMethods: ["GET", "HEAD", "PUT", "POST", "DELETE", "PATCH", "OPTIONS"],
+      // allowHeaders 空 → hono 回显 Access-Control-Request-Headers（对齐
+      // Starlette allow_headers=["*"] + credentials 的反射行为）
+      allowHeaders: [],
+    }),
+  );
 
-  // 核心路由（2.0：health / auth token）
-  app.route("/", createCoreRoutes({ version: VERSION, startedAt, engine: "bun-backend" }));
+  // 核心路由（2.0：health / auth token；2.5b：health 四部件完整版）
+  app.route(
+    "/",
+    createCoreRoutes({
+      version: VERSION,
+      sessionIds: () => [...hubSessions.keys()],
+      callRpc: callKernelRpc,
+    }),
+  );
 
   // 2.1 只读批：news / onboarding / metrics
   app.route("/", createNewsRoutes());
@@ -186,6 +217,26 @@ export function createApp(): Hono {
   // 2.4b：MCP 系列（servers CRUD / registry / oauth / test-connection）
   app.route("/", createMcpRoutes({ sessions: hubSessions, callRpc: callKernelRpc }));
   app.route("/", createMcpTestRoutes());
+
+  // 2.5a：tools / restart / upload / plugins 桩 / files 桩
+  app.route("/", createToolsRoutes());
+  app.route("/", createRestartRoutes());
+  app.route("/", createUploadRoutes());
+  app.route("/", createPluginsRoutes());
+  app.route("/", createFileRoutes());
+
+  // 2.5b：diagnostics（错误报告 + 前端诊断上报）
+  app.route("/", createDiagnosticsRoutes());
+
+  // 2.5c：capabilities 聚合 + skills/discovered 桩（endpoints 由 app.routes 派生）
+  app.route(
+    "/",
+    createCapabilitiesRoutes({
+      sessionCount: () => hubSessions.size,
+      endpoints: () =>
+        [...new Set(app.routes.filter((r) => r.path.startsWith("/api")).map((r) => r.path))].sort(),
+    }),
+  );
 
   // 2.3b：workflow WS 事件接线（kernel 直调路径不经回合富化层，原始广播）
   setWorkflowEventSink((sessionId, eventType, payload) => {

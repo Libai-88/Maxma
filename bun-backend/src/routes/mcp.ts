@@ -46,7 +46,7 @@ export function mcpYamlPath(): string {
   return getMcpConfigPath();
 }
 
-function loadRaw(): Entry[] {
+export function loadRaw(): Entry[] {
   const file = mcpYamlPath();
   if (!fs.existsSync(file)) return [];
   const raw = BunYamlSafeParse(fs.readFileSync(file, "utf8"));

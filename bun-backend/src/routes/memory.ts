@@ -118,6 +118,25 @@ function writeDocument(filePath: string, document: Record<string, unknown>): voi
   }
 }
 
+/** 记忆统计（total/categories/avg_confidence）——capabilities 聚合复用。 */
+export function memoryStats(): { total: number; categories: Record<string, number>; avg_confidence: number } {
+  const document = loadDocument(memoryFilePath());
+  if (document === null) return { total: 0, categories: {}, avg_confidence: 0 };
+  const facts = projectFacts(document);
+  const total = facts.length;
+  const categories: Record<string, number> = {};
+  let confSum = 0;
+  for (const f of facts) {
+    categories[f.category] = (categories[f.category] ?? 0) + 1;
+    confSum += f.confidence;
+  }
+  return {
+    total,
+    categories,
+    avg_confidence: total > 0 ? Math.round((confSum / total) * 100) / 100 : 0,
+  };
+}
+
 export function createMemoryRoutes(): Hono {
   const app = new Hono();
   const filePath = () => memoryFilePath();
@@ -145,21 +164,7 @@ export function createMemoryRoutes(): Hono {
   });
 
   app.get("/api/memory/stats", (c) => {
-    const document = loadDocument(filePath());
-    if (document === null) return c.json({ total: 0, categories: {}, avg_confidence: 0 });
-    const facts = projectFacts(document);
-    const total = facts.length;
-    const categories: Record<string, number> = {};
-    let confSum = 0;
-    for (const f of facts) {
-      categories[f.category] = (categories[f.category] ?? 0) + 1;
-      confSum += f.confidence;
-    }
-    return c.json({
-      total,
-      categories,
-      avg_confidence: total > 0 ? Math.round((confSum / total) * 100) / 100 : 0,
-    });
+    return c.json(memoryStats());
   });
 
   app.delete("/api/memory/:memoryId", (c) => {

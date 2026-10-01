@@ -38,6 +38,7 @@ import type { PiPendingPlan, PiSessionRecord } from "../../../bun-sidecar/src/ke
 
 import { record as recordActivity } from "../activity-hub";
 import { getMetrics } from "../metrics";
+import { getErrorCollector } from "../error-collector";
 import { getDeferredRunManager } from "./deferred-runs";
 import { newTurnId, calculateContextUsage } from "./chat-turns";
 import { FILE_WRITING_TOOLS, extractFilePathFromOutput, buildArtifactPayload } from "./chat-artifacts";
@@ -200,6 +201,16 @@ async function processKernelEvent(
         level: "error",
         message: String(payload.error ?? "") || "工具执行出错",
       });
+      // DIAG-WIRE-001：工具执行错误写入收集器（诊断报告可定位到工具）
+      try {
+        getErrorCollector().addError("ERROR", "tool", `[${toolName}] ${String(payload.error ?? "").slice(0, 500)}`, {
+          session_id: sessionId,
+          logger_name: "sidecar.tool",
+          tool_name: toolName,
+        });
+      } catch {
+        /* 收集器故障不影响主流程 */
+      }
       if (state && MEMORY_WRITE_TOOLS.has(toolName)) {
         state.memoryActivity.push({ kind: "error", tool_name: toolName, error: payload.error ?? "" });
       }
@@ -233,6 +244,17 @@ async function processKernelEvent(
         "SIDECAR_UNAVAILABLE",
       ]);
       const category = systemErrorCodes.has(errorCode) ? "system_error" : "tool_error";
+      // DIAG-WIRE-001：sidecar 错误同步写入收集器（带 trace_id/session_id）
+      try {
+        getErrorCollector().addError("ERROR", "agent", `[${errorCode}] ${errorMessage}`, {
+          trace_id: traceId,
+          session_id: sessionId,
+          logger_name: "sidecar",
+          error_code: errorCode,
+        });
+      } catch {
+        /* 收集器故障不影响主流程 */
+      }
       recordActivity("turn", "error", {
         session_id: sessionId,
         level: "error",
@@ -710,6 +732,17 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
       .then((result) => {
         if (!result.ok) {
           turnStates.delete(sessionId);
+          // DIAG-WIRE-001：turn 级失败写入收集器（带 trace_id/session_id，
+          // 对齐 Python chat.py turn-task except 分支）
+          try {
+            getErrorCollector().addError("ERROR", "agent", `[SIDECAR_UNAVAILABLE] ${result.error}`, {
+              trace_id: crypto.randomUUID().replace(/-/g, ""),
+              session_id: sessionId,
+              logger_name: "chat.turn",
+            });
+          } catch {
+            /* 收集器故障不影响主流程 */
+          }
           hub.broadcast(sessionId, {
             type: "error",
             payload: { message: result.error, category: "system_error" },
@@ -718,6 +751,15 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
       })
       .catch((err) => {
         turnStates.delete(sessionId);
+        try {
+          getErrorCollector().addError("ERROR", "agent", `[SIDECAR_UNAVAILABLE] ${String(err)}`, {
+            trace_id: crypto.randomUUID().replace(/-/g, ""),
+            session_id: sessionId,
+            logger_name: "chat.turn",
+          });
+        } catch {
+          /* 收集器故障不影响主流程 */
+        }
         hub.broadcast(sessionId, {
           type: "error",
           payload: { message: String(err), category: "system_error" },

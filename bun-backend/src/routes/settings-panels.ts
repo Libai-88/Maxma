@@ -92,7 +92,7 @@ function saveAll(data: Record<string, unknown>): void {
 }
 
 /** 读取单个面板（与默认值合并）。损坏文件在 GET 侧降级为默认值。 */
-function getPanel(panel: string): Record<string, unknown> {
+export function getPanel(panel: string): Record<string, unknown> {
   const stored = loadAll()[panel] ?? {};
   const merged = { ...DEFAULTS[panel]! };
   if (stored && typeof stored === "object") Object.assign(merged, stored);

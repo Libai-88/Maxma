@@ -41,8 +41,16 @@ describe("bun-backend 冒烟", () => {
     const health = await app.request("/api/health");
     expect(health.status).toBe(200);
     const body = (await health.json()) as Record<string, unknown>;
+    // 2.5b：health 完整版（四部件报告，对齐 Python api/health.py）
     expect(body.status).toBe("ok");
-    expect(body.engine).toBe("bun-backend");
+    expect(typeof body.version).toBe("string");
+    for (const key of ["llm", "memory", "native_tools", "mcp_tools"]) {
+      const comp = body[key] as Record<string, unknown>;
+      expect(comp).toBeDefined();
+      expect(comp.status).toBe("ok");
+    }
+    expect(typeof body.anthropic_skills_count).toBe("number");
+    expect(typeof body.timestamp).toBe("number");
 
     const tokenRes = await app.request("/api/auth/token");
     expect(tokenRes.status).toBe(200);

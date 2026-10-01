@@ -53,7 +53,7 @@ function getGlobalSettings() {
 }
 
 /** 从 Settings 对象解析点路径。 */
-function readDottedPath(root: unknown, dotted: string): unknown {
+export function readDottedPath(root: unknown, dotted: string): unknown {
   return dotted.split(".").reduce<unknown>((acc, key) => {
     if (acc === null || acc === undefined || typeof acc !== "object") return undefined;
     return (acc as Record<string, unknown>)[key];
