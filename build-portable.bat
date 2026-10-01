@@ -117,6 +117,7 @@ REM flattened server.js resolves bundleDir()/dataDir() correctly.
     echo set "MAXMA_SERVE_WEB=1"
     echo set "MAXMA_ENV=production"
     echo if "%%MAXMA_API_PORT%%"=="" set "MAXMA_API_PORT=8000"
+    echo set "MAXMA_BUN_PORT=%%MAXMA_API_PORT%%"
     echo echo Starting MaxmaHere on http://127.0.0.1:%%MAXMA_API_PORT%% ...
     echo start "MaxmaHere" "%%SCRIPT_DIR%%bun.exe" run "%%SCRIPT_DIR%%server.js"
     echo echo Backend launched. Open the URL above in your browser.

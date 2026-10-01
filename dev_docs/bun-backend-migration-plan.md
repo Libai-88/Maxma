@@ -1,6 +1,6 @@
 # 阶段二方案：后端统一迁移到 Bun 并彻底移除 Python
 
-> 状态：**已确认实施中**（用户 2026-09-30 确认）。阶段 2.0 ✅ 已完成。
+> 状态：**阶段二完成**（2.0-2.6 全部交付，Bun 后端全量接管，Python 已移除；用户 2026-09-30 确认方案、2026-10-01 完成）。
 > 前置：阶段一已完成——pi 引擎全部能力位于 `bun-sidecar/src/kernel/*`（官方 API），Python 层现为纯"HTTP 壳"。
 > 本文基于 2026-09-30 对代码库的实际盘点（api/ 共 86 个 .py 文件、17,889 行）。
 > ⚠️ 本文件曾被意外覆盖（2026-09-30 15:01，仅剩"# 继续执行"17 字节），当前为重建版。
@@ -235,8 +235,20 @@ Bun 后端（单进程 = API 服务器 + Agent 引擎）
 - 测试：routes-2.5 21/21（tools/plugins桩/files桩/upload/runtime-status/error-collector/diagnostics/health四部件/capabilities/CORS预检+实际请求/config-settings env·.env）——bun-backend 全量 **115/115**。Python 回归 **1645 passed**（api/ 未改动，确认无 Python 侧依赖破坏）。**2.5 批完成**，下一步 2.6 删 Python。
 
 ### 阶段 2.6 Python 移除（0.5 天）
-- 范围：删除 api/、main.py、PyInstaller 打包链；desktop/src-tauri 残留清理；`bun build --compile` 产物合并（单可执行）
-- 验收：全仓零 api/ 引用；bun test 全绿；**便携包重建**（体积对比：预期 -300MB 级 Python 运行时）；判据 4 复核
+- 范围：删除 api/、main.py、PyInstaller 打包链；desktop/src-tauri 残留清理；产物合并
+- 验收：全仓零 api/ 引用；bun test 全绿；**便携包重建**（体积对比）；判据 4 复核
+- 2.6 已交付（Python 移除 + 构建链改 Bun bundle 路线）：
+  - **关键实测决策（用户 2026-10-01 确认，两次）**：
+    1. **打包形态 = bundle 路线**（非计划原写的 `bun build --compile` 单可执行）。实测三种 compile 变体全部失败：sharp（贴纸上传的图片转换，server.ts 顶层 eager import）依赖 libvips 原生 DLL + 平台包动态 require，编译产物虚拟 FS 无法解析 → 启动即崩。bundle 路线：`bun build --target bun` 产出 server.js（sharp JS 内联、原生件保留运行时 require）+ 随包携带最小 node_modules（sharp/@img/detect-libc/semver，20MB）+ 固定版 bun.exe（94MB）；端到端验证贴纸上传真实转换成功（webp 产出）。
+    2. **移除 Tauri 桌面壳**（desktop/src-tauri 整目录），只交付 Web 形态——符合 §7 决策 3「Web 为当前分发形态」+ §2.6「src-tauri 残留清理」。kernel 已 in-process，独立 sidecar 进程（maxma-engine.exe，105MB）确认死重（main.rs/bun-backend 均不引用），一并移除。
+  - **2.6a 删除 Python 源码**（commit 8d1d864）：api/（85 文件，**保留 api/data/ 6 个运行时数据文件**——Bun `getApiDataDir()` 正读写此目录）、agent/（仅被 Python 引用）、tests/（106 pytest）、main.py、app_paths.py、config/{__init__,settings}.py（数据文件保留）、setup.py、pyproject.toml、requirements*.txt、constraints.txt、mypy.ini、.python-version、start_dev.py、.pre-commit-config.yaml、build/maxma-server.spec、scripts/*.py、**version.py 保留**（Bun `app-version.ts` 运行时读取，版本单一源）。删后 bun test 115/115（credential/providers 的 venv 交叉验证有 existsSync 守卫自动跳过，正向固化向量已锁定 Fernet 格式）。
+  - **2.6b 构建链重写**（commit 6b005d0）：`bun-backend/build-server.mjs`（Bun.build API 不自动写盘，遍历 outputs 逐个 `Bun.write`）；`build/build-server.bat`（前端 build → bun install → bundle server.js → 暂存 bun.exe + sharp 原生件到 dist/bun-server）；`build-portable.bat`（组装 Web 便携包：bundle + web/dist + config 模板/personas/rules/stickers[排除 custom] + .omp/skills + workflows + version.py + bun-sidecar/package.json + portable.flag + data/ + 生成 launcher MaxmaHere.bat）；launcher 显式设 `MAXMA_BUNDLE_DIR/MAXMA_EXE_DIR/MAXMA_DATA_DIR/MAXMA_SERVE_WEB/MAXMA_ENV/MAXMA_BUN_PORT`（扁平 server.js 的 `import.meta.dir` 不再指向项目根，须靠 env 解析路径）；start.bat/start-web.bat/install.bat 去 Python；smoke-test-server.ps1 + portable-smoke-test.ps1 改测 Bun bundle（版本断言从 version.py 动态读，不再硬编码 v2.6.9）。删作废脚本：build-desktop/run-desktop-dev/setup-desktop-env/assemble-portable/prepare-runtime/prepare-assets/test-packaging-safety/test-build-contract/dev-tools/setup-dev-env/pytest/update-lock/build-with-msvc/run_portable_build/setup/setup-dev。
+  - **2.6c CI**（commit 8bac185）：删 pytest.yml；build-verify.yml 改 Bun bundle 构建 + 冒烟；security.yml 去 ruff（保留 gitleaks）；新增 bun-backend.yml（**bun-backend 测试 import bun-sidecar/src/kernel/* 按相对路径解析 @earendil-works → 须同时装 sidecar+backend 两套 node_modules**，实测隐藏耦合已锁定）。
+  - **2.6d 清理与验证**（commit 68e9e27 + 收尾）：删孤儿 `bun-sidecar/build-compiled.mjs`（输出指向已删 src-tauri）；清磁盘未跟踪 Python 残留（__pycache__/.pyc、被 gitignore 的 target/ 等，保留 api/data）。
+  - ⚠️ 教训：Write/Edit 工具产 LF-only，**cmd.exe 无法解析 LF 批处理**（if-block 崩溃、诡异的 dir 回显）——所有 .bat 必须转 CRLF（原 test-build-contract.ps1 的 CRLF 断言正是此因）。PowerShell 可处理 LF，仅嵌套引号需注意。
+- **验收实测**：bun-backend **115/115** + bun-sidecar **61/61**；从零重建便携包 → portable-smoke **全绿**（auth/health v2.6.11/news 45/plugins 200/providers/mcp）；全仓功能性引用扫描：除注释/文档/运行时数据路径外**零 Python/api/ 断链**。
+- **体积对比**：旧干净便携包 ≈ maxma-server(160.4MB：bootloader 12.7 + _internal 147.7) + maxma-engine(105MB) + web/config(47MB) ≈ **312MB** → 新 **181.2MB**（bun.exe 93.9 + server.js 20.3 + node_modules 20 + web/dist 24 + config 22.9 + .omp 0.1），**净减约 131MB**。计划预估「-300MB」未计入必须随附的 ~94MB Bun 运行时（替换 Python ~148MB _internal，运行时净省 ~54MB）+ 独立引擎 105MB 内联进 server.js。
+- **判据 4（灰度回滚）复核**：2.6 是迁移终点——Python 源码已删，「前端指回 8000 Python」的回滚路径按设计关闭；回滚改为 git revert 到 tag `stage-2.5`（数据格式 SQLite/YAML/凭据信封全程未变，零迁移）。**阶段二（2.0-2.6）完成，Bun 后端全量接管。**
 
 ---
 
