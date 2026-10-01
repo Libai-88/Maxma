@@ -201,7 +201,7 @@ Bun 后端（单进程 = API 服务器 + Agent 引擎）
 - 测试：chat-ws-2.3b 9/9 + routes-2.3b 7/7——bun-backend 全量 **71/71**；bun-sidecar 契约 61/61（25 快照全绿）。真机端到端冒烟：hello 握手 + subprotocol 鉴权 + 无 provider 时 error{turn_id,trace_id,category}→done{turn_id,empty,context_usage} 富化闭合全通过。
 - 2.3 剩余：带真实 provider 的 UI 手测（流式/取消/审批/计划/目标/checkpoint/artifact/memory 端到端）——归入 2.5 全量切换验收（§5 E2E 手测清单），非代码缺口。
 
-### 阶段 2.4 Provider/MCP/凭据（1~2 天）——🔄 2.4a 完成（2026-10-01），MCP 系列待 2.4b
+### 阶段 2.4 Provider/MCP/凭据（1~2 天）——✅ 已完成（2026-10-01）
 - 范围：providers（**Fernet 兼容**）/mcp×4/opencode_zen
 - 顺序：Fernet 兼容实现 → **向量测试**（Python 生成固定 envelope 固化到测试）→ providers CRUD → MCP 系列
 - 验收：旧凭据可解密可用（真实凭据验证）；provider CRUD 手测；MCP 连通性测试手测
@@ -213,7 +213,13 @@ Bun 后端（单进程 = API 服务器 + Agent 引擎）
   - server.ts 接线：providers/balance 挂载 + 启动迁移（B-009 明文加密）+ 后台同步。
 - **双跑对照（Python bare FastAPI providers 路由 vs Bun createProvidersRoutes，同序 24 操作，api_key 密文掩码 + opencode-zen models 网络同步归一）：0/24 差异**——含全部 422 错误形状逐字节 SAME。真实 providers.yaml 未被污染（对照经临时目录隔离）。
 - 测试：credential-2.4 6/6 + providers-2.4 8/8——bun-backend 全量 **85/85**。
-- 剩余（2.4b）：MCP 系列（mcp.py/mcp_test/mcp_validation/mcp_oauth）+ capabilities 依赖的 MCP 面。
+- 2.4b 已交付（MCP 系列）：
+  - `src/routes/mcp-validation.ts`（env 黑名单/stdio 命令白名单/redactSensitive 递归脱敏（env·headers 容器整体 mask、敏感 key 名归一化匹配）/mergeRedactedMapping [REDACTED] 占位不覆盖真实密钥——mcp_validation.py 直译）。
+  - `src/routes/mcp-oauth.ts`（OAuth state 暂存/token 交换/读写 mcp_oauth_tokens.yaml；OAUTH-RMW-001 读改写原子）+ `src/routes/mcp.ts`（servers CRUD + discovered + reload + Smithery registry 代理/install + oauth authorize/callback(POST+GET HTML)/status 全端点；MCP-CORRUPT-001 损坏拒绝 503；transport 级 400 先于业务、Pydantic 422 先于 400 顺序对齐；**JS truthiness 陷阱修正**——Python `if body.args:` 空列表假值 vs JS `[]` 真值，显式判空）。
+  - `src/routes/mcp-test.ts`（test-connection：stdio 子进程 5s 超时判活（Bun.spawn）/URL 类可达性探测；命令白名单 + shell 元字符拒绝；**错误消息 Python repr 风格对齐**（`'rm'` 单引号 + `['a', 'b']` list repr）。
+  - 架构差异：discovered（kernel 无 get_discovered_mcp RPC → []，同 Python sidecar 不可用分支）；reload（遍历活跃 kernel 会话调 reload_mcp_for_session，pi 返回 noop）；mcp_tools 状态源 Python 自阶段一后恒 []→Bun 对齐 tool_count:0。
+- **MCP 双跑对照（同序 36 操作，OAuth 随机 state/origin 归一，registry 网络端点跳过）：0/36 差异**。真实 mcp_servers.yaml 未被污染。
+- 测试：mcp-2.4b 9/9——bun-backend 全量 **94/94**。**2.4 批完成**，下一步 2.5 长尾与默认切换。
 
 ### 阶段 2.5 长尾与默认切换（1 天）
 - 范围：剩余路由收尾；默认后端改 bun；旧 Python 进程保留一个版本周期

@@ -47,6 +47,8 @@ import { createActivityRoutes } from "./routes/activity";
 import { createSessionCompressRoutes } from "./routes/session-compress";
 import { createProvidersRoutes, migratePlaintextKeysToEncrypted } from "./routes/providers";
 import { createBalanceRoutes } from "./routes/balance";
+import { createMcpRoutes } from "./routes/mcp";
+import { createMcpTestRoutes } from "./routes/mcp-test";
 import { startBackgroundSync } from "./services/opencode-zen";
 import { initializeDatabase } from "./db/core";
 import { getMetrics } from "./metrics";
@@ -180,6 +182,10 @@ export function createApp(): Hono {
   // 2.4：providers / balance
   app.route("/", createProvidersRoutes());
   app.route("/", createBalanceRoutes());
+
+  // 2.4b：MCP 系列（servers CRUD / registry / oauth / test-connection）
+  app.route("/", createMcpRoutes({ sessions: hubSessions, callRpc: callKernelRpc }));
+  app.route("/", createMcpTestRoutes());
 
   // 2.3b：workflow WS 事件接线（kernel 直调路径不经回合富化层，原始广播）
   setWorkflowEventSink((sessionId, eventType, payload) => {

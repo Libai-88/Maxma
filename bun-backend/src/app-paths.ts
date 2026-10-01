@@ -66,6 +66,10 @@ export const getVectorDbDir = (): string => path.join(dataDir(), "vector_db");
 export const getNewsYamlPath = (): string => path.join(getApiDataDir(), "news.yaml");
 /** providers.yaml（与 Python PROVIDERS_YAML_PATH 一致）。 */
 export const getProvidersYamlPath = (): string => path.join(getApiDataDir(), "providers.yaml");
+/** mcp_servers.yaml（与 Python MCP_CONFIG_PATH 一致）。 */
+export const getMcpConfigPath = (): string => path.join(getApiDataDir(), "mcp_servers.yaml");
+/** mcp_oauth_tokens.yaml（与 Python mcp_oauth.OAUTH_TOKENS_PATH 一致）。 */
+export const getMcpOAuthTokensPath = (): string => path.join(getApiDataDir(), "mcp_oauth_tokens.yaml");
 /** Fernet 凭据密钥文件（与 Python API_DATA_DIR/credential.key 一致）。 */
 export const getCredentialKeyPath = (): string => path.join(getApiDataDir(), "credential.key");
 /** 引导状态文件（与 Python ONBOARDING_STATE_PATH 一致）。 */
