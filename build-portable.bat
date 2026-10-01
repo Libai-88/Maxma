@@ -2,19 +2,18 @@
 chcp 65001 >nul
 setlocal EnableExtensions EnableDelayedExpansion
 
-REM MaxmaHere portable build. Keep this flow aligned with build-desktop.bat.
+REM MaxmaHere portable build (Web distribution, Bun backend).
+REM Stage 2.6: the PyInstaller/Tauri chain is removed; the deliverable is a
+REM self-contained Web folder that runs `bun.exe run server.js` and serves the
+REM frontend from the same process (WEB-HOST-001).
+
 set "PROJECT_ROOT=%~dp0"
 set "PORTABLE_DIR=%PROJECT_ROOT%..\MaxmaHere-Portable"
-set "TAURI_ROOT=%PROJECT_ROOT%desktop\src-tauri"
-set "TAURI_RELEASE_DIR=%TAURI_ROOT%\target\release"
-set "TAURI_RELEASE_RESOURCES=%PROJECT_ROOT%desktop\src-tauri\target\release\resources"
-set "DIST_DIR=%PROJECT_ROOT%web\dist"
-set "SIDECAR_NAME=maxma-server-x86_64-pc-windows-msvc.exe"
-set "SIDECAR_SOURCE=%PROJECT_ROOT%desktop\src-tauri\binaries\maxma-server-x86_64-pc-windows-msvc.exe"
+set "SERVER_DIR=%PROJECT_ROOT%dist\bun-server"
 
 echo.
 echo ========================================
-echo   MaxmaHere Portable Build
+echo   MaxmaHere Portable Build (Web / Bun)
 echo ========================================
 echo.
 
@@ -24,9 +23,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM Remove the previous portable output before the server-build preflight scans it.
-REM Runtime artifacts inside data/ (e.g. api\data\maxma.db) are not user data but
-REM would trip the packaging-safety forbidden-path check and block a repeat build.
+REM Remove the previous portable output before the build scans for artifacts.
 if exist "%PORTABLE_DIR%\" (
     echo [INFO] Removing previous portable output: %PORTABLE_DIR%
     rmdir /s /q "%PORTABLE_DIR%"
@@ -36,305 +33,137 @@ if exist "%PORTABLE_DIR%\" (
     )
 )
 
-REM Resolve the normal build environment for the final cargo invocation.
-call build\setup-dev-env.bat
-if errorlevel 1 (
-    echo [ERROR] Development environment setup failed.
-    exit /b 1
-)
-
-REM setup-dev-env.bat executes dev-tools.ps1 output that re-sets PROJECT_ROOT
-REM without a trailing slash, breaking later %PROJECT_ROOT%dist\... joins.
-REM Restore the trailing-slash value after the environment setup call.
-set "PROJECT_ROOT=%~dp0"
-
-echo [1/6] Building frontend and Python sidecar...
+echo [1/3] Building Bun backend bundle (server.js + runtime)...
 call build\build-server.bat
 if errorlevel 1 (
-    echo [ERROR] Formal server build failed.
+    echo [ERROR] Bun backend build failed.
+    exit /b 1
+)
+if not exist "%SERVER_DIR%\server.js" (
+    echo [ERROR] server.js not produced: %SERVER_DIR%\server.js
+    exit /b 1
+)
+if not exist "%SERVER_DIR%\bun.exe" (
+    echo [ERROR] bun.exe not staged: %SERVER_DIR%\bun.exe
     exit /b 1
 )
 
-if not exist "web\dist\" (
-    echo [ERROR] Frontend dist was not produced: %DIST_DIR%
-    exit /b 1
-)
-if not exist "%SIDECAR_SOURCE%" (
-    echo [ERROR] Target-suffix sidecar was not produced: %SIDECAR_SOURCE%
-    exit /b 1
-)
-
-echo [2/6] Preparing embedded runtime...
-powershell -NoProfile -ExecutionPolicy Bypass -File build\prepare-runtime.ps1
-if errorlevel 1 (
-    echo [ERROR] Embedded runtime preparation failed.
-    exit /b 1
-)
-if not exist "%TAURI_ROOT%\resources\runtime\" (
-    echo [ERROR] Runtime resources were not prepared.
-    exit /b 1
-)
-
-echo [3/6] Preparing bundled assets...
-powershell -NoProfile -ExecutionPolicy Bypass -File build\prepare-assets.ps1
-if errorlevel 1 (
-    echo [ERROR] Asset preparation failed.
-    exit /b 1
-)
-if not exist "%TAURI_ROOT%\resources\assets\" (
-    echo [ERROR] Asset resources were not prepared.
-    exit /b 1
-)
-
-echo [4/6] Building Tauri application without installer...
-REM Portable builds do not run NSIS, so they cannot install WebView2. The
-REM packaged executable checks the target machine and fails with a clear log
-REM message when the Evergreen WebView2 Runtime is absent.
-echo [INFO] Portable target requires preinstalled Microsoft Edge WebView2 Runtime.
-pushd "%TAURI_ROOT%"
-if errorlevel 1 (
-    echo [ERROR] Cannot enter Tauri project directory.
-    exit /b 1
-)
-cargo tauri build --no-bundle
-if errorlevel 1 (
-    popd
-    echo [ERROR] Tauri no-bundle build failed.
-    exit /b 1
-)
-popd
-
-if not exist "%TAURI_RELEASE_DIR%\maxma-here.exe" (
-    echo [ERROR] Tauri application was not produced.
-    exit /b 1
-)
-if not exist "%TAURI_ROOT%\resources\" (
-    echo [ERROR] Tauri resources directory is missing.
-    exit /b 1
-)
-
-REM No-bundle builds do not create an installer directory. Stage the same
-REM resource layout explicitly so resource_dir() resolves to resources\.
-if exist "%TAURI_RELEASE_RESOURCES%\" rmdir /s /q "%TAURI_RELEASE_RESOURCES%"
-if exist "%TAURI_RELEASE_RESOURCES%\" (
-    echo [ERROR] Cannot remove stale Tauri release resources directory.
-    exit /b 1
-)
-if not exist "%TAURI_RELEASE_RESOURCES%\" mkdir "%TAURI_RELEASE_RESOURCES%"
-if errorlevel 1 (
-    echo [ERROR] Cannot create Tauri release resources directory.
-    exit /b 1
-)
-xcopy /e /i /q "%TAURI_ROOT%\resources" "%TAURI_RELEASE_RESOURCES%" >nul
-if errorlevel 1 (
-    echo [ERROR] Failed to stage Tauri release resources.
-    exit /b 1
-)
-if not exist "%TAURI_RELEASE_RESOURCES%\runtime\" (
-    echo [ERROR] Tauri release runtime resources are missing.
-    exit /b 1
-)
-if not exist "%TAURI_RELEASE_RESOURCES%\assets\" (
-    echo [ERROR] Tauri release asset resources are missing.
-    exit /b 1
-)
-
-echo [5/6] Assembling portable layout...
-if exist "%PORTABLE_DIR%\" rmdir /s /q "%PORTABLE_DIR%"
-if exist "%PORTABLE_DIR%\" (
-    echo [ERROR] Cannot remove previous portable output.
-    exit /b 1
-)
+echo [2/3] Assembling portable layout...
 mkdir "%PORTABLE_DIR%"
 if errorlevel 1 (
     echo [ERROR] Cannot create portable output directory.
     exit /b 1
 )
-copy /y "%TAURI_RELEASE_DIR%\maxma-here.exe" "%PORTABLE_DIR%\maxma-here.exe" >nul
+
+REM Backend runtime bundle (server.js + bun.exe + sharp native node_modules)
+xcopy /e /i /q "%SERVER_DIR%" "%PORTABLE_DIR%" >nul
 if errorlevel 1 (
-    echo [ERROR] Failed to copy the Tauri application.
-    exit /b 1
-)
-if not exist "%PORTABLE_DIR%\maxma-here.exe" (
-    echo [ERROR] Portable Tauri application is missing.
+    echo [ERROR] Failed to copy backend bundle.
     exit /b 1
 )
 
-REM PyInstaller onedir 模式产生 dist/maxma-server/ 目录结构：
-REM   maxma-server/
-REM     ├── maxma-server.exe  (bootloader)
-REM     └── _internal/        (Python 运行时 + 依赖)
-REM 便携版需要整个目录，但为保持根目录简洁，将 maxma-server.exe 提到根，
-REM _internal/ 保留在子目录
-
-set "SIDECAR_BUILD_DIR=%PROJECT_ROOT%dist\maxma-server"
-if not exist "%SIDECAR_BUILD_DIR%\maxma-server.exe" (
-    echo [ERROR] PyInstaller onedir output missing: %SIDECAR_BUILD_DIR%\maxma-server.exe
-    exit /b 1
-)
-if not exist "%SIDECAR_BUILD_DIR%\_internal\" (
-    echo [ERROR] PyInstaller _internal directory missing: %SIDECAR_BUILD_DIR%\_internal\
-    exit /b 1
-)
-
-REM 复制 maxma-server.exe 到便携版根目录
-copy /y "%SIDECAR_BUILD_DIR%\maxma-server.exe" "%PORTABLE_DIR%\maxma-server.exe" >nul
+REM Frontend dist (served by the backend; bundleDir()/web/dist)
+mkdir "%PORTABLE_DIR%\web" 2>nul
+xcopy /e /i /q "%PROJECT_ROOT%web\dist" "%PORTABLE_DIR%\web\dist" >nul
 if errorlevel 1 (
-    echo [ERROR] Failed to copy maxma-server.exe
-    exit /b 1
-)
-if not exist "%PORTABLE_DIR%\maxma-server.exe" (
-    echo [ERROR] Portable maxma-server.exe is missing.
+    echo [ERROR] Failed to copy frontend dist.
     exit /b 1
 )
 
-REM 复制 _internal/ 目录（Python 运行时和依赖）
-xcopy /e /i /q "%SIDECAR_BUILD_DIR%\_internal" "%PORTABLE_DIR%\_internal" >nul
-if errorlevel 1 (
-    echo [ERROR] Failed to copy _internal directory.
-    exit /b 1
-)
-if not exist "%PORTABLE_DIR%\_internal\" (
-    echo [ERROR] Portable _internal directory is missing.
-    exit /b 1
-)
+REM Bundle resources the backend reads at runtime (templates only, never user
+REM data): config/personas templates, config/rules, built-in stickers,
+REM .omp/skills, workflows, macros, version.py, bun-sidecar/package.json.
+mkdir "%PORTABLE_DIR%\config\personas" 2>nul
+xcopy /e /i /q "%PROJECT_ROOT%config\personas\AGENTS.md" "%PORTABLE_DIR%\config\personas" >nul
+xcopy /e /i /q "%PROJECT_ROOT%config\personas\MAXMA.md" "%PORTABLE_DIR%\config\personas" >nul
+xcopy /e /i /q "%PROJECT_ROOT%config\personas\SOUL.example.md" "%PORTABLE_DIR%\config\personas" >nul
+xcopy /e /i /q "%PROJECT_ROOT%config\personas\USER.example.md" "%PORTABLE_DIR%\config\personas" >nul
+xcopy /e /i /q "%PROJECT_ROOT%config\personas\SOUL.饱饱.md" "%PORTABLE_DIR%\config\personas" >nul 2>&1
+xcopy /e /i /q "%PROJECT_ROOT%config\rules" "%PORTABLE_DIR%\config\rules" >nul
+xcopy /e /i /q "%PROJECT_ROOT%config\stickers" "%PORTABLE_DIR%\config\stickers" >nul
+REM custom stickers are user uploads — never ship them
+if exist "%PORTABLE_DIR%\config\stickers\custom" rmdir /s /q "%PORTABLE_DIR%\config\stickers\custom"
+xcopy /e /i /q "%PROJECT_ROOT%.omp\skills" "%PORTABLE_DIR%\.omp\skills" >nul
+if exist "%PROJECT_ROOT%workflows\" xcopy /e /i /q "%PROJECT_ROOT%workflows" "%PORTABLE_DIR%\workflows" >nul
+if exist "%PROJECT_ROOT%macros\" xcopy /e /i /q "%PROJECT_ROOT%macros" "%PORTABLE_DIR%\macros" >nul
+copy /y "%PROJECT_ROOT%version.py" "%PORTABLE_DIR%\version.py" >nul
+mkdir "%PORTABLE_DIR%\bun-sidecar" 2>nul
+copy /y "%PROJECT_ROOT%bun-sidecar\package.json" "%PORTABLE_DIR%\bun-sidecar\package.json" >nul
 
-xcopy /e /i /q "%TAURI_RELEASE_RESOURCES%" "%PORTABLE_DIR%\resources" >nul
-if errorlevel 1 (
-    echo [ERROR] Failed to copy Tauri resources.
-    exit /b 1
-)
-if not exist "%PORTABLE_DIR%\resources\runtime\maxma-engine.exe" (
-    echo [ERROR] Portable sidecar executable maxma-engine.exe is missing.
-    exit /b 1
-)
-if not exist "%PORTABLE_DIR%\resources\assets\" (
-    echo [ERROR] Portable asset resources are missing.
-    exit /b 1
-)
-
-if exist "%PORTABLE_DIR%\resources\binaries\" (
-    echo [ERROR] Portable sidecar must be beside maxma-here.exe, not under resources\binaries.
-    exit /b 1
-)
-
-echo [6/6] Creating portable mode marker and data directory...
-REM portable.flag 是便携模式的关键标记：app_paths.py 和 main.rs 通过检测此文件
-REM 判断是否将用户数据写入可执行文件旁边的 data/ 目录（而非 %APPDATA%）
-REM Write meaningful version info for diagnostics and future compatibility checks.
-REM Version is read dynamically from version.py (single source) to avoid stale hardcoding.
+echo [3/3] Portable marker, launcher and data directory...
+REM portable.flag: app-paths.ts + the launcher detect this to write data beside
+REM the executable (data/) instead of %APPDATA%.
 for /f "tokens=2 delims==" %%V in ('findstr /c:"__version__" "%PROJECT_ROOT%version.py"') do set "APP_VERSION=%%V"
 set "APP_VERSION=%APP_VERSION: =%"
 set "APP_VERSION=%APP_VERSION:"=%"
 (echo MaxmaHere Portable Mode Marker
-echo version=%APP_VERSION%
+echo version=!APP_VERSION!
 echo built=%DATE% %TIME%) > "%PORTABLE_DIR%\portable.flag"
 if not exist "%PORTABLE_DIR%\portable.flag" (
     echo [ERROR] Failed to create portable.flag marker.
     exit /b 1
 )
 
-REM Create empty data dir. ensure_data_dirs() auto-creates all subdirs on first run
-REM (api/data, config/personas, logs, uploads, vector_db, etc.)
-REM Pre-create the data root so users can identify the storage location at a glance
-if not exist "%PORTABLE_DIR%\data\" (
-    mkdir "%PORTABLE_DIR%\data"
-    if errorlevel 1 (
-        echo [ERROR] Cannot create portable data directory.
-        exit /b 1
-    )
-)
-
-REM Pre-create data/api/data and seed default MCP config for a better first-run UX.
-REM ensure_data_dirs() creates all subdirs; the seeded config improves first run.
-REM (Split path construction to pass safety check regex)
-set "API_DATA_DIR=%PORTABLE_DIR%\data\api"
-set "API_DATA_SUBDIR=%API_DATA_DIR%\data"
-if not exist "%API_DATA_SUBDIR%" (
-    mkdir "%API_DATA_SUBDIR%"
-)
-if exist "%TAURI_ROOT%\resources\default-config\mcp_servers.yaml" (
-    if not exist "%API_DATA_SUBDIR%\mcp_servers.yaml" (
-        copy /y "%TAURI_ROOT%\resources\default-config\mcp_servers.yaml" "%API_DATA_SUBDIR%\mcp_servers.yaml" >nul 2>&1
-    )
-)
-REM Seed built-in update log (news.yaml) so /api/news works offline on first run.
-if exist "%TAURI_ROOT%\resources\default-config\news.yaml" (
-    if not exist "%API_DATA_SUBDIR%\news.yaml" (
-        copy /y "%TAURI_ROOT%\resources\default-config\news.yaml" "%API_DATA_SUBDIR%\news.yaml" >nul 2>&1
-    )
-)
-
-REM 写入 README 说明文件，帮助用户理解便携版结构
+REM Launcher: runs the bundled backend with explicit path env vars so the
+REM flattened server.js resolves bundleDir()/dataDir() correctly.
 (
-    echo MaxmaHere Portable
-    echo ================================
-    echo.
-    echo 这是一个便携版（免安装）分发。
-    echo.
-    echo 所有用户数据（配置、数据库、日志、上传等）均存储在 data/ 目录中，
-    echo 与可执行文件位于同一目录下。你可以将整个文件夹移动到任意位置
-    echo （包括 U 盘），数据会跟随应用程序。
-    echo.
-    echo 目录结构：
-    echo   maxma-here.exe      - 主程序
-    echo   maxma-server.exe    - 后端服务（PyInstaller bootloader）
-    echo   _internal/          - Python 运行时和依赖
-    echo   portable.flag       - 便携模式标记（请勿删除）
-    echo   data/               - 用户数据目录
-    echo   resources/          - 嵌入式运行时和资源
-    echo.
-    echo 注意：需要系统已安装 Microsoft Edge WebView2 Runtime。
-    echo.
-    echo 如需切换回标准安装模式（数据写入 %%APPDATA%%），删除 portable.flag 后
-    echo 重新打包即可（推荐使用 NSIS 安装版）。
-) > "%PORTABLE_DIR%\PORTABLE_README.txt" 2>nul
+    echo @echo off
+    echo chcp 65001 ^>nul
+    echo setlocal EnableExtensions
+    echo set "SCRIPT_DIR=%%~dp0"
+    echo set "MAXMA_BUNDLE_DIR=%%SCRIPT_DIR%%"
+    echo set "MAXMA_EXE_DIR=%%SCRIPT_DIR%%"
+    echo set "MAXMA_DATA_DIR=%%SCRIPT_DIR%%data"
+    echo set "MAXMA_SERVE_WEB=1"
+    echo set "MAXMA_ENV=production"
+    echo if "%%MAXMA_API_PORT%%"=="" set "MAXMA_API_PORT=8000"
+    echo echo Starting MaxmaHere on http://127.0.0.1:%%MAXMA_API_PORT%% ...
+    echo start "MaxmaHere" "%%SCRIPT_DIR%%bun.exe" run "%%SCRIPT_DIR%%server.js"
+    echo echo Backend launched. Open the URL above in your browser.
+    echo pause
+) > "%PORTABLE_DIR%\MaxmaHere.bat"
 
-REM Remove git placeholder files (.gitkeep) that were packaged from the repo.
-REM They are dev-time artifacts only and must not ship in the portable build.
+REM Pre-create the data root + seed default configs for first-run UX.
+if not exist "%PORTABLE_DIR%\data\" mkdir "%PORTABLE_DIR%\data"
+set "API_DATA_DIR=%PORTABLE_DIR%\data\api\data"
+if not exist "%API_DATA_DIR%" mkdir "%API_DATA_DIR%"
+if exist "%PROJECT_ROOT%resources\default-config\mcp_servers.yaml" (
+    if not exist "%API_DATA_DIR%\mcp_servers.yaml" copy /y "%PROJECT_ROOT%resources\default-config\mcp_servers.yaml" "%API_DATA_DIR%\mcp_servers.yaml" >nul 2>&1
+)
+if exist "%PROJECT_ROOT%api\data\news.yaml" (
+    if not exist "%API_DATA_DIR%\news.yaml" copy /y "%PROJECT_ROOT%api\data\news.yaml" "%API_DATA_DIR%\news.yaml" >nul 2>&1
+)
+
+REM Strip git placeholders from the shipped tree.
 for /r "%PORTABLE_DIR%" %%F in (.gitkeep) do del "%%F" 2>nul
 
 echo.
 echo ========================================
 echo   Portable build complete
 echo   Output: %PORTABLE_DIR%
-echo   Layout:
-echo     maxma-here.exe
-echo     maxma-server.exe
-echo     _internal/       ^(Python runtime, extracted once^)
-echo     portable.flag
-echo     data/            ^(user data, auto-populated on first run^)
-echo     resources/       ^(embedded runtime ^& assets^)
+echo     server.js / bun.exe / node_modules\
+echo     web\dist\  config\  .omp\skills\  version.py
+echo     portable.flag  data\  MaxmaHere.bat
 echo ========================================
 
-REM Post-build verification: ensure all critical files exist
+REM Post-build verification
 set "VERIFY_OK=1"
-if not exist "%PORTABLE_DIR%\maxma-here.exe" (
-    echo [VERIFY FAIL] maxma-here.exe is missing
+for %%F in (server.js bun.exe portable.flag MaxmaHere.bat) do (
+    if not exist "%PORTABLE_DIR%\%%F" (
+        echo [VERIFY FAIL] %%F is missing
+        set "VERIFY_OK=0"
+    )
+)
+if not exist "%PORTABLE_DIR%\node_modules\sharp" (
+    echo [VERIFY FAIL] node_modules\sharp is missing
     set "VERIFY_OK=0"
 )
-if not exist "%PORTABLE_DIR%\maxma-server.exe" (
-    echo [VERIFY FAIL] maxma-server.exe is missing
+if not exist "%PORTABLE_DIR%\web\dist\index.html" (
+    echo [VERIFY FAIL] web\dist\index.html is missing
     set "VERIFY_OK=0"
 )
-if not exist "%PORTABLE_DIR%\_internal" (
-    echo [VERIFY FAIL] _internal/ directory is missing
-    set "VERIFY_OK=0"
-)
-if not exist "%PORTABLE_DIR%\portable.flag" (
-    echo [VERIFY FAIL] portable.flag is missing
-    set "VERIFY_OK=0"
-)
-if not exist "%PORTABLE_DIR%\data" (
-    echo [VERIFY FAIL] data/ directory is missing
-    set "VERIFY_OK=0"
-)
-if not exist "%PORTABLE_DIR%\resources\runtime\maxma-engine.exe" (
-    echo [VERIFY FAIL] resources/runtime/maxma-engine.exe is missing
-    set "VERIFY_OK=0"
-)
-if not exist "%PORTABLE_DIR%\resources\assets" (
-    echo [VERIFY FAIL] resources/assets/ is missing
+if not exist "%PORTABLE_DIR%\version.py" (
+    echo [VERIFY FAIL] version.py is missing
     set "VERIFY_OK=0"
 )
 if not "%VERIFY_OK%"=="1" (

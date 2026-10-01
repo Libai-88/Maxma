@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
@@ -6,27 +7,13 @@ echo ========================================
 echo   MaxmaHere - 一键安装
 echo ========================================
 echo.
-echo 本脚本会自动完成后端、前端、Agent 引擎的依赖
+echo 本脚本完成后端（Bun）、前端、Agent 引擎的依赖
 echo 安装与 .env 初始化，全程无需手动敲命令。
 echo.
 
 REM ---------- 0. 运行环境检测 ----------
-echo [0/4] 检查运行环境（Python / Node / Bun）...
+echo [0/4] 检查运行环境（Node.js / Bun）...
 set RUNTIME_OK=1
-
-where python >nul 2>&1
-if errorlevel 1 (
-    echo   [ERR] 未找到 Python，请先安装 Python 3.11+：
-    echo         https://www.python.org/downloads/
-    set RUNTIME_OK=0
-) else (
-    for /f "delims=" %%v in ('python --version 2^>^&1') do echo   [OK] %%v
-    python -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" >nul 2>&1
-    if errorlevel 1 (
-        echo   [ERR] Python 版本过低，需要 3.11 及以上
-        set RUNTIME_OK=0
-    )
-)
 
 where node >nul 2>&1
 if errorlevel 1 (
@@ -42,15 +29,6 @@ if errorlevel 1 (
     )
 )
 
-where bun >nul 2>&1
-if errorlevel 1 (
-    echo   [ERR] 未找到 Bun，请先安装：
-    echo         powershell -c "irm bun.sh/install.ps1 | iex"
-    set RUNTIME_OK=0
-) else (
-    for /f "delims=" %%v in ('bun --version') do echo   [OK] Bun %%v
-)
-
 if not "%RUNTIME_OK%"=="1" (
     echo.
     echo 缺少的运行环境请先安装，然后重新运行本脚本。
@@ -59,56 +37,52 @@ if not "%RUNTIME_OK%"=="1" (
 )
 echo.
 
-REM ---------- 1. Python 虚拟环境 + 后端依赖 ----------
-echo [1/4] 安装后端依赖（Python 虚拟环境）...
-if not exist ".venv\Scripts\python.exe" (
-    echo   正在创建 .venv ...
-    python -m venv .venv
-    if errorlevel 1 (
-        echo   [ERR] 创建虚拟环境失败
-        pause
-        exit /b 1
-    )
-) else (
-    echo   [OK] .venv 已存在，跳过创建
-)
-
-echo   正在安装 Python 依赖（约 200-400MB，请稍候）...
-".venv\Scripts\python" -m pip install --upgrade pip >nul
-".venv\Scripts\python" -m pip install -r requirements.txt
+REM ---------- 1. Bun 运行时（固定版本，不依赖全局安装）----------
+echo [1/4] 准备 Bun 运行时（固定版本，下载 bun.exe）...
+powershell -NoProfile -ExecutionPolicy Bypass -File build\prepare-bun.ps1
 if errorlevel 1 (
-    echo   [ERR] Python 依赖安装失败，请检查网络后重试
+    echo   [ERR] 下载 Bun 失败，请检查网络后重试
     pause
     exit /b 1
 )
-echo   [OK] 后端依赖已安装
-echo.
-
-REM ---------- 2. Agent 引擎（Bun sidecar）依赖 ----------
-echo [2/4] 安装 Agent 引擎依赖（bun-sidecar）...
-if exist "bun-sidecar\node_modules" (
-    echo   [OK] sidecar 依赖已存在，跳过安装
-) else (
-    pushd bun-sidecar
-    bun install
-    if errorlevel 1 (
-        popd
-        echo   [ERR] sidecar 依赖安装失败
-        pause
-        exit /b 1
-    )
-    popd
-    echo   [OK] sidecar 依赖已安装
+set "BUN=%CD%\bun-sidecar\bun.exe"
+if not exist "%BUN%" (
+    echo   [ERR] bun.exe 未就位
+    pause
+    exit /b 1
 )
+echo   [OK] Bun 运行时已准备
+
+REM ---------- 2. 后端 + Agent 引擎依赖（Bun）----------
+echo [2/4] 安装后端与 Agent 引擎依赖（bun-backend / bun-sidecar）...
+pushd bun-backend
+"%BUN%" install
+if errorlevel 1 (
+    popd
+    echo   [ERR] bun-backend 依赖安装失败
+    pause
+    exit /b 1
+)
+popd
+pushd bun-sidecar
+"%BUN%" install
+if errorlevel 1 (
+    popd
+    echo   [ERR] bun-sidecar 依赖安装失败
+    pause
+    exit /b 1
+)
+popd
+echo   [OK] 后端与引擎依赖已安装
 echo.
 
-REM ---------- 3. 前端（web 端）依赖 ----------
+REM ---------- 3. 前端依赖 ----------
 echo [3/4] 安装前端依赖（web）...
 if exist "web\node_modules" (
     echo   [OK] 前端依赖已存在，跳过安装
 ) else (
     pushd web
-    call npm install
+    call npm ci
     if errorlevel 1 (
         popd
         echo   [ERR] 前端依赖安装失败
@@ -116,8 +90,8 @@ if exist "web\node_modules" (
         exit /b 1
     )
     popd
-    echo   [OK] 前端依赖已安装
 )
+echo   [OK] 前端依赖已安装
 echo.
 
 REM ---------- 4. 环境配置文件 ----------
@@ -139,7 +113,7 @@ echo   安装完成！
 echo.
 echo   下一步：
 echo     1. 双击运行 start.bat 启动
-echo        （自动拉起后端 + 前端，并打开浏览器）
+echo        （自动拉起 Bun 后端 + Vite 前端，并打开浏览器）
 echo     2. 首次使用请在网页"提供商 /providers"页面
 echo        填入 LLM 的 Base URL 与 API Key
 echo ========================================

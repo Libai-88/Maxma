@@ -1,16 +1,16 @@
 <#
 .SYNOPSIS
     Download the official Bun Windows binary (pinned version) and place it at
-    bun-sidecar/bun.exe so PyInstaller bundles it into the packaged backend.
+    bun-sidecar/bun.exe so the build and dev scripts run on a fixed runtime.
 .DESCRIPTION
-    In production the backend launches the oh-my-pi sidecar via the bundled
-    bun.exe: _resolve_bun_path() in api/pi_bridge/sidecar_manager.py looks for
-    bun-sidecar/bun.exe under the PyInstaller _MEIPASS directory. This script
-    prepares that binary at build time so the packaged artifact can start the
-    agent engine on a clean machine.
+    Stage 2.6: the backend is a Bun bundle (server.js) run by bun.exe, and the
+    agent engine runs in-process. A pinned bun.exe keeps a missing or mismatched
+    global Bun from producing a partial build. build-server.bat and install.bat
+    both resolve the runtime here; the portable package ships this bun.exe
+    beside server.js.
 
-    Shares the download cache with prepare-runtime.ps1
-    (%LOCALAPPDATA%/MaxmaBuildCache) to avoid repeated downloads.
+    Uses a local download cache (%LOCALAPPDATA%/MaxmaBuildCache) to avoid
+    repeated downloads.
 .PARAMETER BunVersion
     Pinned Bun version (kept in sync with the dev environment).
 .PARAMETER CacheDir
