@@ -30,6 +30,7 @@ export interface MaxmaEventLike {
 const toolStartTimestamps = new Map<string, number>();
 
 interface PiMessageLike {
+  role?: string;
   content?: string | Array<{ type?: string; text?: string }>;
   provider?: string;
   model?: string;
@@ -54,7 +55,11 @@ export function mapPiAgentEventToMaxma(
   event: unknown,
   guard?: PiDoneGuard | null,
   requestDurationMs?: number | null,
-  accounting?: { priceStatus: "catalog_estimate" | "unknown"; cacheStatus: "catalog" | "unknown" },
+  accounting?: {
+    priceStatus: "catalog_estimate" | "unknown";
+    cacheStatus: "catalog" | "unknown";
+    requestTelemetry?: { requestShapeHash: string | null; prefixFingerprint: string | null; fingerprintEpoch: string } | null;
+  },
 ): MaxmaEventLike | null {
   const e = event as { type?: string } & Record<string, any>;
   const type = e?.type;
@@ -134,6 +139,7 @@ export function mapPiAgentEventToMaxma(
   // ── 回答（message_end 携带权威完成消息）──
   if (type === "message_end") {
     const message = e.message as PiMessageLike & { usage?: Record<string, unknown> };
+    if (message?.role && message.role !== "assistant") return null;
     const usage = message?.usage;
     return {
       type: "answer",
@@ -143,6 +149,9 @@ export function mapPiAgentEventToMaxma(
         provider: message?.provider ?? null,
         model: message?.model ?? null,
         request_duration_ms: requestDurationMs ?? null,
+        request_shape_hash: accounting?.requestTelemetry?.requestShapeHash ?? null,
+        prefix_fingerprint: accounting?.requestTelemetry?.prefixFingerprint ?? null,
+        fingerprint_epoch: accounting?.requestTelemetry?.fingerprintEpoch ?? null,
       },
     };
   }

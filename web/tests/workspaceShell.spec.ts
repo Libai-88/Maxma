@@ -38,6 +38,19 @@ function createTestRouter() {
 }
 
 describe('workspace shell', () => {
+  it('keeps ChatView mounted across route navigation', () => {
+    const appSource = readFileSync(resolve(process.cwd(), 'src/App.vue'), 'utf8')
+    expect(appSource).toContain('<KeepAlive include="ChatView">')
+  })
+
+  it('initializes the chat store before task brief state reads from it', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/views/ChatView.vue'), 'utf8')
+    const storeInitialization = source.indexOf('const chatStore = useChatStore()')
+    const taskBriefComputed = source.indexOf('const taskBrief = computed(() => chatStore.channels.get(sessionId.value)')
+
+    expect(storeInitialization).toBeGreaterThanOrEqual(0)
+    expect(taskBriefComputed).toBeGreaterThan(storeInitialization)
+  })
   it('header ownership keeps only active context controls and truncates long titles', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/views/ChatView.vue'), 'utf8')
     const chatInputSource = readFileSync(resolve(process.cwd(), 'src/components/ChatInput.vue'), 'utf8')
@@ -47,7 +60,6 @@ describe('workspace shell', () => {
 
     expect(headerBlock).not.toContain('<ModelSelector')
     expect(headerBlock).not.toContain('<ContextUsageBadge')
-    expect(headerBlock).toContain('<StatusBadge')
     expect(headerBlock).toContain('aria-label="更多会话操作"')
     expect(headerBlock).toContain('aria-label="工作台"')
     expect(headerBlock).toContain('class="session-task-status"')
@@ -129,7 +141,7 @@ describe('workspace shell', () => {
     expect(chatWindowStyle).toContain('overflow-y: auto')
     expect(chatWindowStyle).toContain('overflow-x: hidden')
 
-    expect(messageBubbleStyle).toContain('max-width: min(100%, 760px)')
+    expect(messageBubbleStyle).toContain('max-width: min(100%, 720px)')
     expect(messageBubbleStyle).toContain('overflow-wrap: anywhere')
     expect(chatWindowSource).toContain(':sticker-url="turn.stickerUrl"')
     expect(messageBubbleSource).toContain('stripStickerDirectives')

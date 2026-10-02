@@ -370,6 +370,9 @@ async function processKernelEvent(
           usage,
           priceStatus: state?.priceStatus ?? "unknown",
           cacheStatus,
+          requestShapeHash: typeof payload.request_shape_hash === "string" ? payload.request_shape_hash : null,
+          prefixFingerprint: typeof payload.prefix_fingerprint === "string" ? payload.prefix_fingerprint : null,
+          fingerprintEpoch: typeof payload.fingerprint_epoch === "string" ? payload.fingerprint_epoch : null,
           durationMs,
         });
         if (recorded.inserted) getMetrics().recordLlmUsageRequest(requestModel ?? "unknown", usage, durationMs, {
@@ -383,10 +386,43 @@ async function processKernelEvent(
     }
 
     case "llm_usage": {
-      if (payload.kind !== "cache_warm") return;
       const usage = payload.usage !== null && typeof payload.usage === "object"
         ? payload.usage as Record<string, unknown>
         : null;
+      if (payload.kind === "model_request") {
+        const reportedCache = usage && typeof usage.cacheRead === "number" && Number.isFinite(usage.cacheRead) && usage.cacheRead >= 0 && typeof usage.cacheWrite === "number" && Number.isFinite(usage.cacheWrite) && usage.cacheWrite >= 0;
+        const cacheStatus: LlmCacheStatus = reportedCache ? "observed" : payload.cache_status === "catalog" ? "catalog" : "unknown";
+        const durationMs = typeof payload.request_duration_ms === "number" && Number.isFinite(payload.request_duration_ms)
+          ? Math.max(0, payload.request_duration_ms)
+          : null;
+        const provider = typeof payload.provider === "string" ? payload.provider : null;
+        const model = typeof payload.model === "string" ? payload.model : null;
+        try {
+          const recorded = recordLlmUsageCall({
+            sessionId,
+            turnId: null,
+            kind: "model_request",
+            usageSource: "pi_message_end",
+            provider,
+            model,
+            usage,
+            priceStatus: payload.price_status === "catalog_estimate" ? "catalog_estimate" : "unknown",
+            cacheStatus,
+            requestShapeHash: typeof payload.request_shape_hash === "string" ? payload.request_shape_hash : null,
+            prefixFingerprint: typeof payload.prefix_fingerprint === "string" ? payload.prefix_fingerprint : null,
+            fingerprintEpoch: typeof payload.fingerprint_epoch === "string" ? payload.fingerprint_epoch : null,
+            durationMs,
+          });
+          if (recorded.inserted) getMetrics().recordLlmUsageRequest(model ?? "unknown", usage, durationMs, {
+            kind: "model_request",
+            cacheStatus,
+          });
+        } catch (error) {
+          console.warn(`[llm-usage] failed to record hidden model request: ${String(error)}`);
+        }
+        return;
+      }
+      if (payload.kind !== "cache_warm") return;
       const reportedCache = usage && typeof usage.cacheRead === "number" && Number.isFinite(usage.cacheRead) && usage.cacheRead >= 0 && typeof usage.cacheWrite === "number" && Number.isFinite(usage.cacheWrite) && usage.cacheWrite >= 0;
       const cacheStatus: LlmCacheStatus = reportedCache ? "observed" : payload.cache_status === "catalog" ? "catalog" : "unknown";
       const occurredAt = typeof payload.occurred_at === "string" && Number.isFinite(Date.parse(payload.occurred_at))

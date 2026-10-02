@@ -360,6 +360,7 @@ export function startServer() {
   startLlmUsageRetentionTask();
   return Bun.serve({
     port: PORT,
+    ...(process.env.MAXMA_BUN_HOST ? { hostname: process.env.MAXMA_BUN_HOST } : {}),
     async fetch(req, server) {
       const url = new URL(req.url);
 

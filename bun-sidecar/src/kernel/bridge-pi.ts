@@ -15,6 +15,7 @@ import type { AgentSession as PiAgentSession } from "@earendil-works/pi-coding-a
 import { createMaxmaSession } from "./pi-session";
 import { createMaxmaApprovalGate, type MaxmaApprovalGate } from "./approval-gate";
 import { mapPiAgentEventToMaxma, type PiDoneGuard } from "./events";
+import { createRequestFingerprintEpoch, createRequestFingerprintSecret, type RequestTelemetry } from "./request-telemetry";
 import { orchestratePiPrompt, handlePiCancelGuard } from "./prompt";
 import { loadMaxmaMcpEntries } from "./mcp";
 import { resolvePiModel } from "./model";
@@ -53,6 +54,9 @@ export interface PiSessionRecord {
   modelRequestStartedAt: number | null;
   modelPriceStatus: "catalog_estimate" | "unknown";
   modelCacheStatus: "catalog" | "unknown";
+  latestRequestTelemetry: RequestTelemetry | null;
+  requestFingerprintSecret: Uint8Array;
+  requestFingerprintEpoch: string;
 }
 
 export interface PiBridgeIo {
@@ -100,18 +104,63 @@ export function subscribePiSession(
   io: PiBridgeIo,
 ): () => void {
   return record.session.subscribe((event: unknown) => {
-    // RECAP-SILENT-001：旁路 prompt（闲置回顾）期间丢弃事件——
-    // 回顾结果经 RPC 返回，不应以流式事件/done 泄漏给前端。
-    const incoming = event as { type?: string; entry?: { type?: string; kind?: string } };
-    const usageMustBeTracked = incoming.type === "message_end"
-      || (incoming.type === "entry_appended" && incoming.entry?.type === "usage" && incoming.entry.kind === "cache_warm");
-    if (record.suppressEvents && !usageMustBeTracked) return;
-    const eventType = (event as { type?: string })?.type;
-    if (eventType === "message_start") record.modelRequestStartedAt = performance.now();
-    const requestDurationMs = eventType === "message_end" && record.modelRequestStartedAt !== null
-      ? Math.max(0, performance.now() - record.modelRequestStartedAt)
-      : null;
+    const incoming = event as {
+      type?: string;
+      entry?: { type?: string; kind?: string };
+      message?: { role?: string };
+    };
+    const eventType = incoming.type;
+    const isAssistantMessage = incoming.message?.role === "assistant";
+    const isAssistantEnd = eventType === "message_end" && isAssistantMessage;
+    const isCacheWarm = eventType === "entry_appended" && incoming.entry?.type === "usage" && incoming.entry.kind === "cache_warm";
 
+    if (eventType === "message_start" && isAssistantMessage) {
+      record.modelRequestStartedAt = performance.now();
+      record.latestRequestTelemetry = null;
+    }
+
+    // Idle recap calls contribute to usage but must never leak generated content or tool events.
+    if (record.suppressEvents) {
+      if (!isAssistantEnd && !isCacheWarm) return;
+      const durationMs = isAssistantEnd && record.modelRequestStartedAt !== null
+        ? Math.max(0, performance.now() - record.modelRequestStartedAt)
+        : null;
+      const currentModel = record.session.model;
+      const entry = incoming.entry as { provider?: string; model?: string } | undefined;
+      const usageMetadataMatches = isCacheWarm && entry?.provider === currentModel?.provider && entry?.model === currentModel?.id;
+      const mapped = mapPiAgentEventToMaxma(event, record.currentGuard, durationMs, {
+        priceStatus: usageMetadataMatches ? record.modelPriceStatus : "unknown",
+        cacheStatus: usageMetadataMatches ? record.modelCacheStatus : "unknown",
+        requestTelemetry: isAssistantEnd ? record.latestRequestTelemetry : null,
+      });
+      if (mapped?.type === "answer") {
+        io.sendEvent(sessionId, {
+          type: "llm_usage",
+          payload: {
+            kind: "model_request",
+            usage_source: "pi_message_end",
+            usage: mapped.payload.usage ?? null,
+            provider: mapped.payload.provider ?? null,
+            model: mapped.payload.model ?? null,
+            request_duration_ms: mapped.payload.request_duration_ms ?? null,
+            price_status: record.modelPriceStatus,
+            cache_status: record.modelCacheStatus,
+            request_shape_hash: mapped.payload.request_shape_hash ?? null,
+            prefix_fingerprint: mapped.payload.prefix_fingerprint ?? null,
+            fingerprint_epoch: mapped.payload.fingerprint_epoch ?? null,
+          },
+        });
+      } else if (mapped?.type === "llm_usage") {
+        io.sendEvent(sessionId, mapped);
+      }
+      if (isAssistantEnd) {
+        record.modelRequestStartedAt = null;
+        record.latestRequestTelemetry = null;
+      }
+      return;
+    }
+
+    if (eventType === "message_end" && !isAssistantMessage) return;
     if (eventType === "tool_execution_start") {
       record.toolCallCount += 1;
       if (record.toolCallCount > MAX_TOOL_CALLS_PER_TURN) {
@@ -128,19 +177,24 @@ export function subscribePiSession(
           io.sendEvent(sessionId, { type: "done", payload: {} });
           void record.session.abort().catch(() => {});
         }
-        return; // 丢弃超限后的多余工具事件
+        return;
       }
     }
+    const durationMs = isAssistantEnd && record.modelRequestStartedAt !== null
+      ? Math.max(0, performance.now() - record.modelRequestStartedAt)
+      : null;
     const currentModel = record.session.model;
     const entry = incoming.entry as { provider?: string; model?: string } | undefined;
-    const usageMetadataMatches = eventType === "entry_appended" && entry?.provider === currentModel?.provider && entry?.model === currentModel?.id;
-    const mapped = mapPiAgentEventToMaxma(event, record.currentGuard, requestDurationMs, {
+    const usageMetadataMatches = isCacheWarm && entry?.provider === currentModel?.provider && entry?.model === currentModel?.id;
+    const mapped = mapPiAgentEventToMaxma(event, record.currentGuard, durationMs, {
       priceStatus: usageMetadataMatches ? record.modelPriceStatus : "unknown",
       cacheStatus: usageMetadataMatches ? record.modelCacheStatus : "unknown",
+      requestTelemetry: isAssistantEnd ? record.latestRequestTelemetry : null,
     });
-    if (mapped) {
-      io.sendEvent(sessionId, mapped);
-      if (eventType === "message_end") record.modelRequestStartedAt = null;
+    if (mapped) io.sendEvent(sessionId, mapped);
+    if (isAssistantEnd) {
+      record.modelRequestStartedAt = null;
+      record.latestRequestTelemetry = null;
     }
   });
 }
@@ -185,6 +239,9 @@ export async function handlePiCreateSession(
     modelRequestStartedAt: null,
     modelPriceStatus: "unknown",
     modelCacheStatus: "unknown",
+    latestRequestTelemetry: null,
+    requestFingerprintSecret: createRequestFingerprintSecret(),
+    requestFingerprintEpoch: createRequestFingerprintEpoch(),
   } as PiSessionRecord;
 
   const approvalGate = createMaxmaApprovalGate({
@@ -233,6 +290,11 @@ export async function handlePiCreateSession(
     approvalGate,
     modelRuntime: resolved.modelRuntime,
     model: resolved.model,
+    requestFingerprintSecret: record.requestFingerprintSecret,
+    requestFingerprintEpoch: record.requestFingerprintEpoch,
+    onRequestTelemetry: (telemetry) => {
+      if (record.modelRequestStartedAt !== null) record.latestRequestTelemetry = telemetry;
+    },
     ...(thinkingLevel ? { thinkingLevel } : {}),
     ...(mcp && mcp.entries.length > 0 ? { mcpServers: mcp.entries } : {}),
     // Maxma 特色能力层（§6.2 任务 5：4 个工具 + 计划模式 submit_plan）

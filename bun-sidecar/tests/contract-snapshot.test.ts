@@ -70,7 +70,7 @@ describe("contract snapshot: pi event mapping (ws-events.md §3.1)", () => {
     expect(
       snapMapping({
         type: "message_end",
-        message: { content: [{ type: "text", text: "答案正文" }] },
+        message: { role: "assistant", content: [{ type: "text", text: "答案正文" }] },
       }),
     ).toMatchSnapshot("answer");
     // done 由 agent_settled 触发（官方终态语义）

@@ -31,6 +31,9 @@ describe("LLM usage ledger", () => {
       usage: { input: 100, output: 20, cacheRead: 40, cacheWrite: 0, cost: { input: 0.001, output: 0.002, cacheRead: 0.0001, cacheWrite: 0, total: 0.0031 } },
       priceStatus: "catalog_estimate",
       cacheStatus: "catalog",
+      requestShapeHash: "a".repeat(64),
+      prefixFingerprint: "b".repeat(64),
+      fingerprintEpoch: "12345678-1234-1234-1234-123456789abc",
       durationMs: 840,
     });
     const missing = ledger.recordLlmUsageCall({
@@ -63,6 +66,9 @@ describe("LLM usage ledger", () => {
       cache_observation_status: "catalog",
       cost_status: "catalog_estimate",
       cost_total: 0.0031,
+      request_shape_hash: "a".repeat(64),
+      prefix_fingerprint: "b".repeat(64),
+      fingerprint_epoch: "12345678-1234-1234-1234-123456789abc",
     });
     expect(rows.find((row) => row.id === missing.id)).toMatchObject({
       input_tokens: null,
@@ -111,6 +117,9 @@ describe("LLM usage ledger", () => {
       usage: { input: 0, output: 0, cacheRead: 80, cacheWrite: 0 },
       priceStatus: "catalog_estimate",
       cacheStatus: "catalog",
+      requestShapeHash: "a".repeat(64),
+      prefixFingerprint: "b".repeat(64),
+      fingerprintEpoch: "12345678-1234-1234-1234-123456789abc",
     });
 
     const summary = ledger.getLlmUsageSummary({ windowSeconds: 86_400 });

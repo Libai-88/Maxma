@@ -85,9 +85,9 @@ describe("kernel: mapPiAgentEventToMaxma", () => {
     expect(
       mapPiAgentEventToMaxma({
         type: "message_end",
-        message: { content: [{ type: "thinking", thinking: "x" }, { type: "text", text: "答案" }] },
+        message: { role: "assistant", content: [{ type: "thinking", thinking: "x" }, { type: "text", text: "答案" }] },
       }),
-    ).toEqual({ type: "answer", payload: { content: "答案", usage: null, provider: null, model: null, request_duration_ms: null } });
+    ).toEqual({ type: "answer", payload: { content: "答案", usage: null, provider: null, model: null, request_duration_ms: null, request_shape_hash: null, prefix_fingerprint: null, fingerprint_epoch: null } });
   });
 
   test("done 由 agent_settled 触发且幂等；agent_end 不触发", () => {

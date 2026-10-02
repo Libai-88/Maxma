@@ -17,6 +17,7 @@
 # Node / frontend
 /node_modules/
 web/node_modules/
+desktop/node_modules/
 web/dist/
 
 # Bun backend build output

@@ -242,6 +242,7 @@ const moreMenuTrigger = ref<HTMLButtonElement | null>(null)
 const actionsMenuRef = ref<HTMLElement | null>(null)
 
 const hasMessages = computed(() => turns.value.length > 0 || currentTurn.value)
+const chatStore = useChatStore()
 const taskBrief = computed(() => chatStore.channels.get(sessionId.value)?.taskBrief ?? null)
 const taskBriefAnswer = ref('')
 const taskBriefPrompt = ref('')
@@ -298,7 +299,6 @@ const selectedModelName = ref(safeGetItem(SELECTED_MODEL_KEY) || '')
 
 const providerStore = useProviderStore()
 const { hasProviders } = storeToRefs(providerStore)
-const chatStore = useChatStore()
 // ANIM-PAUSE-001：keep-alive 暂停用根元素 ref
 const rootRef = ref<HTMLElement | null>(null)
 // MODEL-PARAMS-001：会话菜单内模型参数面板展开状态

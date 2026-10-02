@@ -6,6 +6,7 @@ describe("Pi usage event mapping", () => {
     expect(mapPiAgentEventToMaxma({
       type: "message_end",
       message: {
+        role: "assistant",
         provider: "openai",
         model: "gpt-test",
         content: [{ type: "text", text: "done" }],
@@ -19,6 +20,9 @@ describe("Pi usage event mapping", () => {
         provider: "openai",
         model: "gpt-test",
         request_duration_ms: 321,
+        request_shape_hash: null,
+        prefix_fingerprint: null,
+        fingerprint_epoch: null,
       },
     });
   });

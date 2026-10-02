@@ -22,7 +22,9 @@
       <RegionalErrorBoundary :reset-keys="[$route.path]">
         <router-view v-slot="{ Component, route }">
           <Transition :name="pageTransition" mode="out-in">
-            <component :is="Component" :key="route.name" />
+            <KeepAlive include="ChatView">
+              <component :is="Component" :key="route.name" />
+            </KeepAlive>
           </Transition>
         </router-view>
       </RegionalErrorBoundary>

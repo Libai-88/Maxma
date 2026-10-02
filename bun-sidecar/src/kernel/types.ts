@@ -9,6 +9,7 @@
 
 import type { ToolDefinition, Model, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { Api } from "@earendil-works/pi-ai";
+import type { RequestTelemetry } from "./request-telemetry";
 
 /**
  * Maxma 权限模式 4 档（与现 sidecar session-bridge.ts AG-PERM-001 同名同义）。
@@ -84,4 +85,8 @@ export interface MaxmaSessionOptions {
   model?: Model<Api>;
   /** 思考级别（官方 ThinkingLevel，pi-ai types）。 */
   thinkingLevel?: "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+  /** Provider 请求前的无正文结构摘要与短期前缀指纹。 */
+  requestFingerprintSecret?: Uint8Array;
+  requestFingerprintEpoch?: string;
+  onRequestTelemetry?: (telemetry: RequestTelemetry) => void;
 }

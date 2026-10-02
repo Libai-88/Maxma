@@ -27,6 +27,7 @@ import {
 import { createMaxmaApprovalExtension } from "./extensions/maxma-approval";
 import { createMaxmaBlockerExtension } from "./extensions/maxma-blocker";
 import { maxmaSkillPaths } from "./skills";
+import { createRequestTelemetryExtension } from "./request-telemetry";
 import type { ApprovalGate, MaxmaPermissionMode, MaxmaSessionOptions } from "./types";
 
 export type { MaxmaPermissionMode } from "./types";
@@ -58,6 +59,13 @@ export async function createMaxmaSession(opts: MaxmaSessionOptions): Promise<Age
   //   3) MCP 扩展（官方 createMcpExtension，loadConfig 注入 Maxma 的 mcp_servers.yaml 清单；
   //      未提供清单时不装配——SDK 会话默认不加载任何内置扩展，官方文档明示）
   const extensionFactories: InlineExtension[] = [createMaxmaBlockerExtension()];
+  if (opts.requestFingerprintSecret && opts.requestFingerprintEpoch && opts.onRequestTelemetry) {
+    extensionFactories.push(createRequestTelemetryExtension(
+      opts.requestFingerprintSecret,
+      opts.requestFingerprintEpoch,
+      opts.onRequestTelemetry,
+    ));
+  }
   const approval = approvalExtensionFor(opts.permissionMode ?? "ask", opts.approvalGate);
   if (approval) extensionFactories.push(approval);
   if (opts.mcpServers && opts.mcpServers.length > 0) {

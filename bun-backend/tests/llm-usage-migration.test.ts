@@ -34,9 +34,12 @@ describe("LLM usage schema migration", () => {
     try {
       const version = migrated.query("SELECT MAX(version) AS version FROM schema_version").get() as { version: number };
       const columns = migrated.query("PRAGMA table_info(llm_usage_calls)").all() as Array<{ name: string }>;
-      expect(version.version).toBe(8);
+      expect(version.version).toBe(9);
       expect(columns.map((column) => column.name)).toContain("source_entry_id");
       expect(columns.map((column) => column.name)).toContain("cache_observation_status");
+      expect(columns.map((column) => column.name)).toContain("request_shape_hash");
+      expect(columns.map((column) => column.name)).toContain("prefix_fingerprint");
+      expect(columns.map((column) => column.name)).toContain("fingerprint_epoch");
     } finally {
       migrated.close();
     }

@@ -36,7 +36,7 @@ describe('context usage events', () => {
     })
 
     const wrapper = mount(ContextUsageBadge)
-    expect(wrapper.find('.acpb-text').text()).toBe('13')
+    expect(wrapper.find('.hud-context').text()).toBe('13% ctx')
 
     handleEventForChannel('context-session', {
       type: 'context_usage',
@@ -55,7 +55,7 @@ describe('context usage events', () => {
       },
     })
     await wrapper.vm.$nextTick()
-    expect(wrapper.find('.acpb-text').text()).toBe('25')
+    expect(wrapper.find('.hud-context').text()).toBe('25% ctx')
     wrapper.unmount()
   })
 

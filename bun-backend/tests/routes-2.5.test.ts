@@ -442,11 +442,18 @@ describe("capabilities 聚合（阶段 2.5c）", () => {
     expect([...endpoints].sort()).toEqual(endpoints);
   });
 
-  test("GET /api/skills/discovered → []（kernel 无对应 RPC 桩）", async () => {
+  test("GET /api/skills/discovered → discovered skills array", async () => {
     const app = await makeApp();
     const res = await app.request("/api/skills/discovered", { headers: authHeader() });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual([]);
+    const skills = await res.json() as Array<Record<string, unknown>>;
+    expect(Array.isArray(skills)).toBe(true);
+    for (const skill of skills) {
+      expect(typeof skill.name).toBe("string");
+      expect(typeof skill.description).toBe("string");
+      expect(typeof skill.source).toBe("string");
+      expect(typeof skill.file_path).toBe("string");
+    }
   });
 });
 

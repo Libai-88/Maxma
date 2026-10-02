@@ -21,7 +21,7 @@ export function dbPath(): string {
   return path.join(getApiDataDir(), "maxma.db");
 }
 
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 type Migration = string | ((conn: Database) => void);
 
@@ -227,6 +227,13 @@ export const SCHEMA_MIGRATIONS: Migration[] = [
     CREATE INDEX IF NOT EXISTS idx_llm_usage_calls_turn
       ON llm_usage_calls(session_id, turn_id, request_index);
     INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (8, julianday('now'));`,
+  // v9: 不含 prompt 正文的请求结构摘要与会话短期前缀指纹
+  `ALTER TABLE llm_usage_calls ADD COLUMN request_shape_hash TEXT;
+    ALTER TABLE llm_usage_calls ADD COLUMN prefix_fingerprint TEXT;
+    ALTER TABLE llm_usage_calls ADD COLUMN fingerprint_epoch TEXT;
+    CREATE INDEX IF NOT EXISTS idx_llm_usage_calls_fingerprint
+      ON llm_usage_calls(session_id, fingerprint_epoch, prefix_fingerprint);
+    INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (9, julianday('now'));`,
 ];
 
 let initializedForPath: string | null = null;

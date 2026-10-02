@@ -23,6 +23,9 @@ export interface LlmUsageCallInput {
   usage: unknown;
   priceStatus: LlmCostStatus;
   cacheStatus?: LlmCacheStatus;
+  requestShapeHash?: string | null;
+  prefixFingerprint?: string | null;
+  fingerprintEpoch?: string | null;
   durationMs?: number | null;
   occurredAt?: Date;
 }
@@ -55,6 +58,9 @@ export interface LlmUsageCallRow {
   cache_read_tokens: number | null;
   cache_write_tokens: number | null;
   cache_observation_status: LlmCacheStatus;
+  request_shape_hash: string | null;
+  prefix_fingerprint: string | null;
+  fingerprint_epoch: string | null;
   usage_status: LlmUsageStatus;
   cost_input: number | null;
   cost_output: number | null;
@@ -99,6 +105,14 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
+}
+
+function digestOrNull(value: unknown): string | null {
+  return typeof value === "string" && /^[a-f0-9]{64}$/i.test(value) ? value.toLowerCase() : null;
+}
+
+function epochOrNull(value: unknown): string | null {
+  return typeof value === "string" && /^[0-9a-f-]{36}$/i.test(value) ? value.toLowerCase() : null;
 }
 
 function readCost(usage: Record<string, unknown> | null): Record<string, number | null> {
@@ -152,12 +166,15 @@ function normalizeInput(input: LlmUsageCallInput): Omit<LlmUsageCallRow, "id"> {
     cache_read_tokens: tokenValues.cacheRead,
     cache_write_tokens: tokenValues.cacheWrite,
     cache_observation_status: input.cacheStatus ?? (tokenValues.cacheRead !== null && tokenValues.cacheWrite !== null ? "observed" : "unknown"),
+    request_shape_hash: digestOrNull(input.requestShapeHash),
+    prefix_fingerprint: digestOrNull(input.prefixFingerprint),
+    fingerprint_epoch: epochOrNull(input.fingerprintEpoch),
     usage_status: usageStatus,
     cost_input: costIsKnown ? cost.input ?? null : null,
     cost_output: costIsKnown ? cost.output ?? null : null,
     cost_cache_read: costIsKnown ? cost.cacheRead ?? null : null,
     cost_cache_write: costIsKnown ? cost.cacheWrite ?? null : null,
-    cost_total: costIsKnown ? cost.total : null,
+    cost_total: costIsKnown ? cost.total ?? null : null,
     cost_status: costStatus,
   };
 }
@@ -172,9 +189,9 @@ export function recordLlmUsageCall(input: LlmUsageCallInput): LlmUsageRecorded {
       `INSERT OR IGNORE INTO llm_usage_calls (
         id, source_entry_id, session_id, turn_id, request_index, kind, usage_source, provider, model,
         occurred_at, duration_ms, input_tokens, output_tokens, cache_read_tokens,
-        cache_write_tokens, cache_observation_status, usage_status, cost_input, cost_output, cost_cache_read,
-        cost_cache_write, cost_total, cost_status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        cache_write_tokens, cache_observation_status, request_shape_hash, prefix_fingerprint, fingerprint_epoch,
+        usage_status, cost_input, cost_output, cost_cache_read, cost_cache_write, cost_total, cost_status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       id,
       row.source_entry_id,
@@ -192,6 +209,9 @@ export function recordLlmUsageCall(input: LlmUsageCallInput): LlmUsageRecorded {
       row.cache_read_tokens,
       row.cache_write_tokens,
       row.cache_observation_status,
+      row.request_shape_hash,
+      row.prefix_fingerprint,
+      row.fingerprint_epoch,
       row.usage_status,
       row.cost_input,
       row.cost_output,
