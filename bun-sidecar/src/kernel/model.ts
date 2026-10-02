@@ -14,6 +14,7 @@
 
 import { ModelRuntime, type ModelRuntime as ModelRuntimeType } from "@earendil-works/pi-coding-agent";
 import type { Api, Model } from "@earendil-works/pi-ai";
+import { registerOpencodeZenTransport } from "./opencode-zen";
 
 export interface MaxmaModelParams {
   /** "provider/model-id" 或裸 model id（provider 覆写存在时整体视为 id）。 */
@@ -37,9 +38,42 @@ export interface ResolvedPiModel {
 
 /** 零成本兜底定价（Usage.cost 同形状；自定义端点无目录价可用）。 */
 const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+const PI_APIS = new Set([
+  "openai-completions",
+  "openai-responses",
+  "openai-codex-responses",
+  "azure-openai-responses",
+  "anthropic-messages",
+  "bedrock-converse-stream",
+  "google-generative-ai",
+  "google-vertex",
+  "mistral-conversations",
+  "pi-messages",
+]);
+const PROVIDER_API_ALIASES: Record<string, Api> = {
+  openai: "openai-completions",
+  custom: "openai-completions",
+  deepseek: "openai-completions",
+  qwen: "openai-completions",
+  ollama: "openai-completions",
+  anthropic: "anthropic-messages",
+  google: "google-generative-ai",
+  gemini: "google-generative-ai",
+  vertex: "google-vertex",
+  bedrock: "bedrock-converse-stream",
+};
 
-export async function resolvePiModel(p: MaxmaModelParams): Promise<ResolvedPiModel> {
-  const modelRuntime = await ModelRuntime.create();
+function resolvePiApi(providerType?: string): Api {
+  if (!providerType) return "openai-completions";
+  if (PI_APIS.has(providerType)) return providerType as Api;
+  return PROVIDER_API_ALIASES[providerType.toLowerCase()] ?? "openai-completions";
+}
+
+export async function resolvePiModel(
+  p: MaxmaModelParams,
+  existingRuntime?: ModelRuntimeType,
+): Promise<ResolvedPiModel> {
+  const modelRuntime = existingRuntime ?? await ModelRuntime.create();
 
   // 与 OMP parseModel 相同的 provider/id 拆分语义
   const slashIdx = p.model.indexOf("/");
@@ -57,6 +91,10 @@ export async function resolvePiModel(p: MaxmaModelParams): Promise<ResolvedPiMod
     await modelRuntime.setRuntimeApiKey(provider, p.apiKey);
   }
 
+  if (provider === "opencode-zen") {
+    registerOpencodeZenTransport(modelRuntime, modelId, p.baseUrl);
+  }
+
   // 2) registry 查找（内建目录 + models.json 自定义模型）
   let model = modelRuntime.getModel(provider, modelId);
 
@@ -66,7 +104,7 @@ export async function resolvePiModel(p: MaxmaModelParams): Promise<ResolvedPiMod
       name: provider,
       ...(p.baseUrl ? { baseUrl: p.baseUrl } : {}),
       ...(p.apiKey ? { apiKey: p.apiKey } : {}),
-      ...(p.providerType ? { api: p.providerType as Api } : {}),
+      api: resolvePiApi(p.providerType),
       models: [
         {
           id: modelId,

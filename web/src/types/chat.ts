@@ -13,4 +13,11 @@ export interface ChatContextUsage {
   percentage: number
   messageCount: number
   modelName: string
+  inputTokens?: number
+  outputTokens?: number
+  cacheReadTokens?: number
+  cacheWriteTokens?: number
+  cacheHitRate?: number | null
+  outputSpeed?: number
+  latencyMs?: number
 }

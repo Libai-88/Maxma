@@ -70,13 +70,6 @@
           />
         </div>
 
-        <!-- ME / User -->
-        <DockIcon
-          icon="user"
-          label="ME"
-          to="/user"
-          :active="isActive('/user')"
-        />
       </div>
     </div>
   </aside>
@@ -163,11 +156,11 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { to: '/', label: '对话', icon: 'chat' },
-  { to: '/capabilities', label: '能力仪表盘', icon: 'dashboard' },
-  { to: '/plugins', label: '插件管理', icon: 'puzzle', feature: 'plugins' },
-  { to: '/collab', label: '协作', icon: 'collab', feature: 'collab' },
+  { to: '/providers', label: '模型', icon: 'model' },
+  { to: '/memory', label: '记忆', icon: 'memory', feature: 'memory' },
+  { to: '/metrics', label: '运行指标', icon: 'metrics' },
+  { to: '/extensions', label: '插件', icon: 'extensions' },
   { to: '/activity', label: '活动', icon: 'activity' },
-  { to: '/help', label: '帮助', icon: 'help' },
 ]
 
 // 根据能力清单动态隐藏被禁用的导航项
@@ -176,7 +169,7 @@ const visibleNavItems = computed(() =>
 )
 
 function isActive(path: string): boolean {
-  return route.path === path
+  return path === '/' ? route.path === path : route.path === path || route.path.startsWith(`${path}/`)
 }
 </script>
 
@@ -185,12 +178,16 @@ function isActive(path: string): boolean {
   position: fixed;
   top: 0;
   left: 0;
-  width: 84px;
+  width: var(--icon-rail-width, 84px);
   height: 100%;
   background: var(--bg-card, #fff);
   z-index: 120;
-  padding-left: 10px;
+  padding-left: 6px;
   overflow: hidden;
+}
+
+@media (max-width: 820px) {
+  .dock { padding-left: 2px; }
 }
 
 .dock-inner {

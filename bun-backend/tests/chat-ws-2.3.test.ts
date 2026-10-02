@@ -115,6 +115,33 @@ describe("chat WS（阶段 2.3）", () => {
     expect((errors[0]!.payload as { code: string }).code).toBe("BUSY");
   }, 15000);
 
+  test("chat 使用所选 provider 的模型和后端凭据", async () => {
+    const { handleChatMessage } = await import("../src/routes/chat-ws");
+    const { sid, hub, ws } = await makeSession();
+    const providersFile = path.join(dataDir, "api", "data", "providers.yaml");
+    fs.writeFileSync(providersFile, Bun.YAML.stringify({
+      providers: [{
+        id: "test-provider",
+        provider_type: "openai-completions",
+        label: "Test provider",
+        api_key: "test-secret",
+        base_url: "http://127.0.0.1:1234/v1",
+        models: ["test-model"],
+        enabled: true,
+      }],
+    }));
+    hub.callRpc = async (method: string) => ({ ok: true as const, result: method === "prompt" ? { ok: true } : null });
+
+    handleChatMessage(hub, ws, JSON.stringify({
+      type: "chat",
+      payload: { message: "hello", provider_id: "test-provider", model_name: "test-model" },
+    }));
+    await Bun.sleep(50);
+
+    const record = hub.sessions.get(sid) as { session: { model?: { provider: string; id: string } } };
+    expect(record.session.model).toMatchObject({ provider: "test-provider", id: "test-model" });
+  }, 15000);
+
   test("artifact_action：token=base64(路径) → artifact_result completed/404", async () => {
     const { handleChatMessage } = await import("../src/routes/chat-ws");
     const { hub, ws, sent } = await makeSession();

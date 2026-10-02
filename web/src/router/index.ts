@@ -64,9 +64,7 @@ const router = createRouter({
     },
     {
       path: '/mcp',
-      name: 'mcp',
-      component: () => import('@/views/McpView.vue'),
-      meta: { transition: 'rise', title: 'MCP 工具', feature: 'mcp' },
+      redirect: { path: '/extensions', query: { tab: 'mcp' } },
     },
     {
       path: '/user',
@@ -100,15 +98,11 @@ const router = createRouter({
     },
     {
       path: '/plugins',
-      name: 'plugins',
-      component: () => import('@/views/PluginListView.vue'),
-      meta: { transition: 'rise', title: '插件管理', feature: 'plugins' },
+      redirect: '/extensions',
     },
     {
       path: '/plugins/:name',
-      name: 'plugin-detail',
-      component: () => import('@/views/PluginDetailView.vue'),
-      meta: { transition: 'zoom', title: '插件详情', feature: 'plugins' },
+      redirect: '/extensions',
     },
     {
       path: '/extensions',

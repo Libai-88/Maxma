@@ -68,8 +68,12 @@ export interface MetricsSnapshot {
   };
   llm: {
     total_calls: number;
+    estimated_usage_calls: number;
     total_tokens_in: number;
     total_tokens_out: number;
+    cache_read_tokens: number;
+    cache_write_tokens: number;
+    cache_hit_rate: number | null;
     latency_ms: Record<string, number>;
     by_model: Record<string, number>;
   };
@@ -86,8 +90,11 @@ export class Metrics {
   private toolErrors = new Map<string, number>();
   private toolLatency = new Map<string, Histogram>();
   private llmCount = 0;
+  private llmEstimatedUsageCount = 0;
   private llmTokensIn = 0;
   private llmTokensOut = 0;
+  private llmCacheRead = 0;
+  private llmCacheWrite = 0;
   private llmLatency = new Histogram();
   private llmByModel = new Map<string, number>();
   private errorCount = new Map<string, number>();
@@ -134,10 +141,21 @@ export class Metrics {
     }
   }
 
-  recordLlmCall(model: string, tokensIn: number, tokensOut: number, latencyMs: number): void {
+  recordLlmCall(
+    model: string,
+    tokensIn: number,
+    tokensOut: number,
+    latencyMs: number,
+    cacheRead = 0,
+    cacheWrite = 0,
+    estimatedUsage = false,
+  ): void {
     this.llmCount += 1;
+    if (estimatedUsage) this.llmEstimatedUsageCount += 1;
     this.llmTokensIn += tokensIn;
     this.llmTokensOut += tokensOut;
+    this.llmCacheRead += Math.max(0, cacheRead);
+    this.llmCacheWrite += Math.max(0, cacheWrite);
     this.llmLatency.observe(latencyMs);
     this.llmByModel.set(model, (this.llmByModel.get(model) ?? 0) + 1);
   }
@@ -183,8 +201,14 @@ export class Metrics {
       },
       llm: {
         total_calls: this.llmCount,
+        estimated_usage_calls: this.llmEstimatedUsageCount,
         total_tokens_in: this.llmTokensIn,
         total_tokens_out: this.llmTokensOut,
+        cache_read_tokens: this.llmCacheRead,
+        cache_write_tokens: this.llmCacheWrite,
+        cache_hit_rate: this.llmCacheRead + this.llmTokensIn > 0
+          ? this.llmCacheRead / (this.llmCacheRead + this.llmTokensIn)
+          : null,
         latency_ms: this.llmLatency.toDict(),
         by_model: Object.fromEntries(this.llmByModel),
       },
@@ -289,8 +313,11 @@ export class Metrics {
     this.toolErrors.clear();
     this.toolLatency.clear();
     this.llmCount = 0;
+    this.llmEstimatedUsageCount = 0;
     this.llmTokensIn = 0;
     this.llmTokensOut = 0;
+    this.llmCacheRead = 0;
+    this.llmCacheWrite = 0;
     this.llmLatency = new Histogram();
     this.llmByModel.clear();
     this.errorCount.clear();

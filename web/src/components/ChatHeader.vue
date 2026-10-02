@@ -62,7 +62,7 @@ useGsap((_ctx, contextSafe) => {
 </script>
 
 <style scoped>
-.chat-header { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; max-width: 100%; min-width: 0; overflow: visible; padding: 10px clamp(12px, 2.4vw, 24px); border-bottom: 1px solid color-mix(in srgb, var(--border) 78%, transparent); background: color-mix(in srgb, var(--bg-card) 50%, transparent); box-shadow: var(--shadow-xs); }
+.chat-header { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; max-width: 100%; min-width: 0; overflow: visible; padding: 12px clamp(14px, 2.4vw, 28px); border-bottom: 1px solid var(--border); background: var(--bg-card); box-shadow: 0 1px 0 color-mix(in srgb, var(--text-primary) 3%, transparent); }
 .header-blur-bg { position: absolute; inset: 0; z-index: -1; border-radius: inherit; }
 .header-left { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 auto; overflow: hidden; font-size: 14px; }
 .header-avatar { font-size: 18px; }
@@ -70,39 +70,13 @@ useGsap((_ctx, contextSafe) => {
 .header-name, .header-session { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .header-name {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1rem;
   line-height: 1.3;
   font-weight: 800;
-  letter-spacing: -0.02em;
-  background: linear-gradient(
-    110deg,
-    var(--header-gradient-from) 0%,
-    var(--header-gradient-mid1) 25%,
-    var(--header-gradient-mid2) 50%,
-    var(--header-gradient-to) 75%,
-    var(--header-gradient-from) 100%
-  );
-  background-size: 300% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-  filter: drop-shadow(0 0 8px var(--header-glow));
-  animation: header-name-flow 5s linear infinite;
-}
-
-@keyframes header-name-flow {
-  0% { background-position: 0% 50%; }
-  100% { background-position: 300% 50%; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .header-name {
-    animation: none;
-  }
+  color: var(--text-primary);
 }
 .header-session { color: var(--text-secondary); font-size: 12px; }
-.header-right { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 0; max-width: 55%; flex: 0 1 auto; flex-wrap: nowrap; overflow: visible; }
+.header-right { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; max-width: 55%; flex: 0 1 auto; flex-wrap: nowrap; overflow: visible; }
 .header-right > * { min-width: 0; max-width: 100%; flex: 0 1 auto; }
 .header-right :deep(button) { min-width: var(--touch-target-min, 44px); min-height: var(--touch-target-min, 44px); }
 

@@ -14,10 +14,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { McpServerEntry } from "@earendil-works/pi-coding-agent";
+import { maxmaProjectRoot } from "./project-paths";
 
 /** 与 src/mcp.ts mcpConfigPath 同语义（kernel 不回引 OMP 模块，切换期镜像）。 */
 function mcpConfigPath(): string {
-  return path.resolve(process.env.MAXMA_PROJECT_ROOT ?? process.cwd(), "api/data/mcp_servers.yaml");
+  return path.resolve(maxmaProjectRoot(), "api/data/mcp_servers.yaml");
 }
 
 export interface MaxmaMcpLoadResult {

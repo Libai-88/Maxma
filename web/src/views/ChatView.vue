@@ -48,7 +48,6 @@
     <template v-else>
     <ChatHeader>
       <template #extra>
-        <StatusBadge :connected="connected" :health="health" />
         <button
           class="workbench-toggle-btn"
           :class="{ active: workbench.isOpen }"
@@ -111,6 +110,7 @@
             :error="error"
             :error-category="errorCategory"
             :error-trace-id="errorTraceId"
+            :error-diagnostic="errorDiagnostic"
             @action="handleToolAction"
             @cite="addCitation"
             @toggle-private="setPrivateMode(!privateMode)"
@@ -123,6 +123,33 @@
         </template>
         <WelcomeScreen v-else @start="handleQuickStart" />
 
+        <section v-if="taskBrief" class="task-brief-panel" aria-live="polite">
+          <header class="task-brief-header">
+            <div>
+              <strong>需求对齐</strong>
+              <p v-if="taskBrief.summary">{{ taskBrief.summary }}</p>
+              <p v-else>正在理解请求并整理执行条件…</p>
+            </div>
+            <button type="button" class="task-brief-close" aria-label="取消需求对齐" @click="cancelTaskBrief">取消</button>
+          </header>
+          <div v-if="taskBrief.status === 'thinking'" class="task-brief-thinking">
+            <span class="task-brief-spinner"></span><span>正在整理需求</span>
+          </div>
+          <form v-else-if="taskBrief.status === 'clarify'" class="task-brief-form" @submit.prevent="submitTaskBriefAnswer">
+            <ol><li v-for="(question, index) in taskBrief.questions" :key="index">{{ question }}</li></ol>
+            <textarea v-model="taskBriefAnswer" rows="3" maxlength="4000" placeholder="按序回答；不确定的部分可以写“你来决定”"></textarea>
+            <button type="submit" class="task-brief-primary" :disabled="!taskBriefAnswer.trim()">继续对齐</button>
+          </form>
+          <div v-else-if="taskBrief.status === 'ready'" class="task-brief-form">
+            <label for="task-brief-prompt">执行指令（可编辑）</label>
+            <textarea id="task-brief-prompt" v-model="taskBriefPrompt" rows="7" maxlength="20000"></textarea>
+            <button type="button" class="task-brief-primary" :disabled="!taskBriefPrompt.trim()" @click="runTaskBrief">确认并开始执行</button>
+          </div>
+          <div v-else class="task-brief-form">
+            <p class="task-brief-error">需求对齐暂不可用：{{ taskBrief.error || '模型没有生成有效指令' }}</p>
+            <button type="button" class="task-brief-primary" @click="runOriginalTaskBrief">使用原始请求执行</button>
+          </div>
+        </section>
         <ChatInput
           v-if="!isSubagent"
           ref="chatInputRef"
@@ -163,7 +190,6 @@ import ModelSettingsPanel from '@/components/ModelSettingsPanel.vue'
 import ChatWindow from '@/components/ChatWindow.vue'
 import SessionPermissionModeControl from '@/components/SessionPermissionModeControl.vue'
 import GoalStatusLine from '@/components/GoalStatusLine.vue'
-import StatusBadge from '@/components/StatusBadge.vue'
 import TaskTrackerBar, { type TaskTrackerData } from '@/components/TaskTrackerBar.vue'
 import WorkbenchPanel from '@/components/workbench/WorkbenchPanel.vue'
 import ReasoningTimeline from '@/components/workbench/ReasoningTimeline.vue'
@@ -201,8 +227,9 @@ const sessionStore = useSessionStore()
 const { sessionId, sessions } = storeToRefs(sessionStore)
 const { health } = storeToRefs(useHealthStore())
 const {
-  connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId,
-  taskTrackerData, send, cancel, sendUserResponse, sendArtifactAction, sendPlanResponse, sendPlanMode, sendCheckpointAction, removeTurns,
+  connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId, errorDiagnostic,
+  taskTrackerData, send, cancel, answerTaskBrief, executeTaskBrief, cancelTaskBrief,
+  sendUserResponse, sendArtifactAction, sendPlanResponse, sendPlanMode, sendCheckpointAction, removeTurns,
   dismissError,
   privateMode, setPrivateMode, autoApprove, setAutoApprove,
   reconnectExhausted, reconnect,
@@ -215,6 +242,22 @@ const moreMenuTrigger = ref<HTMLButtonElement | null>(null)
 const actionsMenuRef = ref<HTMLElement | null>(null)
 
 const hasMessages = computed(() => turns.value.length > 0 || currentTurn.value)
+const taskBrief = computed(() => chatStore.channels.get(sessionId.value)?.taskBrief ?? null)
+const taskBriefAnswer = ref('')
+const taskBriefPrompt = ref('')
+watch(taskBrief, (state) => {
+  taskBriefAnswer.value = ''
+  if (state?.status === 'ready') taskBriefPrompt.value = state.executionPrompt ?? ''
+}, { deep: true })
+function submitTaskBriefAnswer() {
+  const answer = taskBriefAnswer.value.trim()
+  if (answer && answerTaskBrief(answer)) taskBriefAnswer.value = ''
+}
+function runTaskBrief() {
+  if (taskBriefPrompt.value.trim()) executeTaskBrief(taskBriefPrompt.value.trim())
+}
+function runOriginalTaskBrief() { executeTaskBrief(undefined, true) }
+
 
 // 状态图标 SVG（剥掉 <?xml?> 声明，与 Icon.vue 处理方式一致）
 const warningIconSvg = computed(() => warningIconRaw.replace(/<\?xml[^>]*\?>/, '').trim())
@@ -544,6 +587,8 @@ const slashCommandRunner = {
           target.currentTurn = null
           target.error = null
           target.errorCategory = null
+          target.errorTraceId = null
+          target.errorDiagnostic = null
         }
         chatStore.removeTurnsFromStorage(sid)
         invalidateTurnsCache(sid)
@@ -949,9 +994,15 @@ function handleQuickStart(message: string) {
    CardSpotlight 默认是 block 容器，会使其高度退化为内容高度，
    消息超出后被 overflow:hidden 裁剪、无法滚动。此处改为 flex column。 */
 .chat-window-host {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: stretch;
+}
+
+.chat-window-host :deep(.card-spotlight-glow) {
+  display: none;
 }
 
 .chat-main-column {
@@ -1142,7 +1193,9 @@ function handleQuickStart(message: string) {
 
 @media (max-width: 767px) {
   .chat-header :deep(.header-right) {
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
+    max-width: 100%;
+    justify-content: flex-start;
   }
 }
 
@@ -1163,4 +1216,19 @@ function handleQuickStart(message: string) {
   animation-play-state: paused !important;
   transition: none !important;
 }
+
+.task-brief-panel { margin: 0 12px 10px; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--accent, #8b7cff) 34%, var(--border-subtle, #333)); border-radius: 14px; background: color-mix(in srgb, var(--accent, #8b7cff) 5%, var(--bg-panel, #16161b)); color: var(--text-primary, #eee); }
+.task-brief-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.task-brief-header strong { font-size: 13px; }
+.task-brief-header p, .task-brief-error { margin: 5px 0 0; color: var(--text-secondary, #aaa); font-size: 12px; line-height: 1.55; }
+.task-brief-close { border: 0; background: transparent; color: var(--text-muted, #999); cursor: pointer; }
+.task-brief-form { display: grid; gap: 10px; margin-top: 10px; }
+.task-brief-form ol { margin: 0; padding-left: 22px; color: var(--text-primary, #eee); font-size: 13px; line-height: 1.7; }
+.task-brief-form textarea { width: 100%; min-height: 72px; resize: vertical; padding: 10px 12px; border: 1px solid var(--border-subtle, #444); border-radius: 10px; background: var(--bg-input, #101014); color: var(--text-primary, #eee); font: inherit; font-size: 12px; line-height: 1.55; }
+.task-brief-form label { color: var(--text-secondary, #aaa); font-size: 12px; }
+.task-brief-primary { justify-self: end; padding: 8px 13px; border: 0; border-radius: 9px; background: var(--accent, #8b7cff); color: white; font-size: 12px; cursor: pointer; }
+.task-brief-primary:disabled { opacity: .45; cursor: not-allowed; }
+.task-brief-thinking { display: flex; align-items: center; gap: 8px; margin-top: 12px; color: var(--text-secondary, #aaa); font-size: 12px; }
+.task-brief-spinner { width: 13px; height: 13px; border: 2px solid color-mix(in srgb, var(--accent, #8b7cff) 24%, transparent); border-top-color: var(--accent, #8b7cff); border-radius: 50%; animation: task-brief-spin .8s linear infinite; }
+@keyframes task-brief-spin { to { transform: rotate(360deg); } }
 </style>

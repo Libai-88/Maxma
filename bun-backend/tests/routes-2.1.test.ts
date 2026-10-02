@@ -146,6 +146,7 @@ describe("阶段 2.1：metrics", () => {
     m.recordToolCall("read", 5, false);
     m.recordToolCall("bash", 20, true);
     m.recordLlmCall("gpt-4o", 100, 50, 300);
+    m.recordLlmCall("deepseek", 50, 20, 500, 0, 0, true);
     m.recordError("tool");
     m.recordRateLimit("http");
 
@@ -154,7 +155,12 @@ describe("阶段 2.1：metrics", () => {
     expect(snap.http.status_codes).toEqual({ 200: 2, 500: 1 });
     expect(Object.keys(snap.http.top_paths)).toContain("GET /api/news");
     expect(snap.tools.by_tool["bash"]).toMatchObject({ count: 1, errors: 1 });
-    expect(snap.llm).toMatchObject({ total_calls: 1, total_tokens_in: 100, total_tokens_out: 50 });
+    expect(snap.llm).toMatchObject({
+      total_calls: 2,
+      estimated_usage_calls: 1,
+      total_tokens_in: 150,
+      total_tokens_out: 70,
+    });
     expect(snap.errors).toEqual({ tool: 1, rate_limit_http: 1 });
   });
 

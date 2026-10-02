@@ -93,6 +93,7 @@ export interface ErrorEvent {
     category?: 'user_error' | 'tool_error' | 'system_error' | 'rate_limit' | 'cancelled'
     details?: RateLimitDetails & Record<string, unknown>
     trace_id?: string
+    diagnostic?: Record<string, unknown>
   }
 }
 
@@ -448,8 +449,21 @@ export type ServerEvent =
   | WorkflowStepErrorEvent
   | WorkflowCompletedEvent
   | GoalUpdatedEvent
+  | TaskBriefUpdateEvent
 
 // === GAP-B1-001：目标模式状态事件 ===
+
+export interface TaskBriefUpdateEvent {
+  type: 'task_brief_update'
+  payload: {
+    turn_id?: string
+    status: 'thinking' | 'clarify' | 'ready' | 'fallback'
+    summary?: string
+    questions?: string[]
+    executionPrompt?: string
+    error?: string
+  }
+}
 
 export interface GoalUpdatedEvent {
   type: 'goal_updated'
@@ -471,6 +485,8 @@ export interface ChatMessage {
   type: 'chat'
   payload: {
     message: string
+    turn_id?: string
+    task_brief?: boolean
     /** IDEMPOTENCY-001：客户端消息幂等 id（发送失败重试复用，后端据此去重） */
     client_msg_id?: string
     /** 前端 privateMode 用：控制 localStorage 持久化，后端不需要（B2）。 */

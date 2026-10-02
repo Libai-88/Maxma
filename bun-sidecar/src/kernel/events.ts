@@ -129,7 +129,15 @@ export function mapPiAgentEventToMaxma(
 
   // ── 回答（message_end 携带权威完成消息）──
   if (type === "message_end") {
-    return { type: "answer", payload: { content: extractText(e.message as PiMessageLike) } };
+    const message = e.message as PiMessageLike & { usage?: Record<string, unknown> };
+    const usage = message?.usage;
+    return {
+      type: "answer",
+      payload: {
+        content: extractText(message),
+        ...(usage && typeof usage === "object" ? { usage } : {}),
+      },
+    };
   }
 
   // ── 回合终态：agent_settled（官方：不会再自动继续）→ done ──

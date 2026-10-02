@@ -175,20 +175,36 @@ describe("error-collector + diagnostics（阶段 2.5b）", () => {
     collector.addError("WARNING", "http", "GET /api/x → 422", { request_id: "r1" });
     // 重复（同 level+message）应被去重
     collector.addError("ERROR", "tool", "[bash] boom", { session_id: "s2" });
+    collector.addError("ERROR", "agent", "same failure", { trace_id: "trace-one", session_id: "s1", stage: "model_request" });
+    collector.addError("ERROR", "agent", "same failure", { trace_id: "trace-two", session_id: "s1", stage: "model_request" });
+    collector.addError("ERROR", "agent", "stack-bearing failure", { trace_id: "trace-stack", exception: "Error: boom\\n at request()", stage: "model_request", model_name: "test-model" });
+
+    const archive = path.join(dataDir, "logs", "diagnostics.jsonl");
+    expect(fs.existsSync(archive)).toBe(true);
 
     const report = collector.exportReport() as Record<string, unknown>;
     expect(typeof report.generated_at).toBe("string");
+    expect(typeof (report.system_info as Record<string, unknown>).bun_version).toBe("string");
     const stats = report.stats as Record<string, unknown>;
-    expect(stats.memory_error_count).toBe(3);
+    expect(stats.memory_error_count).toBe(6);
     expect(stats.buffer_capacity).toBe(ErrorCollector.MAX_IN_MEMORY);
     const errors = report.errors as Array<Record<string, unknown>>;
-    // 去重后：bash boom 一条 + http 422 一条
-    expect(errors.filter((e) => e.category === "tool").length).toBe(1);
-    expect(stats.merged_total).toBe(2);
+    // 不同会话中的同类工具错误保留独立上下文。
+    expect(errors.filter((e) => e.category === "tool").length).toBe(2);
+    expect(errors.filter((e) => e.message === "same failure").length).toBe(2);
+    expect(errors.find((e) => e.message === "stack-bearing failure")?.extra).toMatchObject({ stage: "model_request", model_name: "test-model" });
+    expect(errors.find((e) => e.message === "stack-bearing failure")?.exception).toContain("request()");
+    expect(errors.filter((e) => e.message === "[bash] boom").every((e) => e.occurrence_count === 1)).toBe(true);
+    expect(stats.merged_total).toBe(6);
+
+    const afterRestart = new ErrorCollector().exportReport() as Record<string, unknown>;
+    const restored = afterRestart.errors as Array<Record<string, unknown>>;
+    expect(restored.some((e) => e.trace_id === "trace-stack" && e.exception)).toBe(true);
 
     const cleared = collector.clear();
-    expect(cleared).toBe(3);
+    expect(cleared).toBe(6);
     expect(collector.getAll().length).toBe(0);
+    expect(fs.existsSync(archive)).toBe(false);
   });
 
   test("diagnostics 全端点：frontend 上报 → 报告可见 → 文本导出 → 清理", async () => {
@@ -198,7 +214,13 @@ describe("error-collector + diagnostics（阶段 2.5b）", () => {
     const post = await app.request("/api/diagnostics/frontend", {
       method: "POST",
       headers: { ...h, "content-type": "application/json" },
-      body: JSON.stringify({ kind: "error", msg: "vue crash", url: "http://localhost:5173/chat" }),
+      body: JSON.stringify({
+        kind: "error",
+        msg: "vue crash",
+        url: "http://localhost:5173/chat",
+        trace_id: "frontend-trace-1234",
+        diagnostic: { name: "TypeError", stack: "TypeError: vue crash\\n at render()", filename: "ChatView.vue", line: 42 },
+      }),
     });
     expect(post.status).toBe(200);
     expect(await post.json()).toEqual({ status: "ok" });
@@ -206,7 +228,7 @@ describe("error-collector + diagnostics（阶段 2.5b）", () => {
     const diagLog = path.join(dataDir, "logs", "frontend-diag.log");
     expect(fs.existsSync(diagLog)).toBe(true);
     const line = fs.readFileSync(diagLog, "utf8");
-    expect(line).toMatch(/^\[\d{2}:\d{2}:\d{2}\] error \| http:\/\/localhost:5173\/chat \| vue crash\n$/);
+    expect(line).toMatch(/^\[\d{2}:\d{2}:\d{2}\] error \| http:\/\/localhost:5173\/chat \| frontend-trace-1234 \| vue crash\n$/);
 
     // 错误报告（JSON）应含前端行（category frontend，level ERROR）
     const report = (await (await app.request("/api/diagnostics/error-log", { headers: h })).json()) as {
@@ -218,6 +240,9 @@ describe("error-collector + diagnostics（阶段 2.5b）", () => {
     const fe = report.errors.find((e) => e.category === "frontend");
     expect(fe).toBeDefined();
     expect(fe!.level).toBe("ERROR");
+    expect(fe!.trace_id).toBe("frontend-trace-1234");
+    expect(fe!.exception).toContain("render()");
+    expect(fe!.extra).toMatchObject({ name: "TypeError", filename: "ChatView.vue", line: 42 });
     expect(report.system_info.app_version).toBe("v2.6.11");
     expect(report.autonomy_status.available).toBe(false);
     expect(report.tauri_startup_log.available).toBe(false);

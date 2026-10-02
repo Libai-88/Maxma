@@ -20,6 +20,7 @@ import type {
   DiscoveredServer,
   RegistryListResponse,
   RegistryInstallResponse,
+  ModelScopeMcpListResponse,
   OAuthAuthorizeResponse,
   OAuthStatusResponse,
   MetricsSnapshot,
@@ -621,6 +622,21 @@ export const api = {
     request<RegistryInstallResponse>('/mcp/registry/install', {
       method: 'POST',
       body: JSON.stringify({ name, ...body }),
+    }),
+
+  searchModelScopeMcp: (params?: { q?: string; page?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.q) qs.set('q', params.q)
+    if (params?.page) qs.set('page', String(params.page))
+    return request<ModelScopeMcpListResponse>(`/mcp/modelscope${qs.size ? `?${qs}` : ''}`)
+  },
+
+  getModelScopeMcpDetail: (serverId: string) =>
+    request<{ id: string; name: string; description: string; server_config: unknown[] }>('/mcp/modelscope/' + encodeURIComponent(serverId)),
+
+  installModelScopeMcp: (serverId: string, env?: Record<string, string>) =>
+    request<RegistryInstallResponse>('/mcp/modelscope/install', {
+      method: 'POST', body: JSON.stringify({ server_id: serverId, env }),
     }),
 
   // ── MCP OAuth 授权 ──

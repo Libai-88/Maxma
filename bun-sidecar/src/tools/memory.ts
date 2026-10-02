@@ -8,6 +8,7 @@
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
 import type { MaxmaToolDescriptor } from "./descriptor";
+import { maxmaProjectRoot } from "../kernel/project-paths";
 
 /** Bun.YAML 通过 globalThis 访问，避免依赖 @types/bun。 */
 const bunYaml = (
@@ -19,7 +20,7 @@ const bunYaml = (
 /** 记忆文件路径：<MAXMA_PROJECT_ROOT>/config/personas/memory.yaml。 */
 export function memoryFilePath(): string {
   return path.join(
-    process.env.MAXMA_PROJECT_ROOT ?? process.cwd(),
+    maxmaProjectRoot(),
     "config",
     "personas",
     "memory.yaml",

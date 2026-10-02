@@ -30,7 +30,7 @@ const SYNC_FIRST_DELAY_MS = 3_000;
 
 /** 网络不可用时的兜底免费模型列表（保证新用户首启可用）。 */
 const FALLBACK_FREE_MODELS = [
-  "deepseek-v4-flash-free",
+  "space-bunny-free",
   "mimo-v2.5-free",
   "nemotron-3-ultra-free",
   "north-mini-code-free",
@@ -49,7 +49,7 @@ export function isFreeModel(modelId: unknown): boolean {
 
 /** 稳定排序：deepseek-v4-flash-free 默认首位，其余按字母序（big-pickle 靠后）。 */
 export function orderModels(models: string[]): string[] {
-  const prefer = ["deepseek-v4-flash-free", "mimo-v2.5-free"];
+  const prefer = ["space-bunny-free", "mimo-v2.6-flash-free", "mimo-v2.5-free"];
   const head = prefer.filter((m) => models.includes(m));
   const rest = models.filter((m) => !head.includes(m)).sort();
   return [...head, ...rest];

@@ -6,9 +6,13 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 
 import { createMaxmaApprovalExtension, MAXMA_APPROVAL_EXTENSION_NAME } from "../src/kernel/extensions/maxma-approval";
 import { approvalExtensionFor, createMaxmaSession } from "../src/kernel/pi-session";
+import { discoverMaxmaSkills } from "../src/kernel/skills";
 import type { ApprovalGate, ApprovalRequest, ApprovalDecision } from "../src/kernel/types";
 
 /** 恒拒门（测试用，模拟超时默认拒绝的终态）。 */
@@ -89,6 +93,33 @@ describe("kernel: maxma-approval extension", () => {
 });
 
 describe("kernel: createMaxmaSession", () => {
+  test("discovers project Agent Skills and exposes them to Pi sessions", async () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "maxma-skills-"));
+    const skillDir = path.join(cwd, ".agents", "skills", "verification-skill");
+    fs.mkdirSync(skillDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(skillDir, "SKILL.md"),
+      "---\nname: verification-skill\ndescription: A skill used to verify discovery.\n---\nUse this skill for verification.\n",
+    );
+
+    try {
+      const discovered = discoverMaxmaSkills(cwd);
+      expect(discovered.skills.map((skill) => skill.name)).toContain("verification-skill");
+
+      const session = await createMaxmaSession({ inMemory: true, cwd });
+      try {
+        expect(session.resourceLoader.getSkills().skills.map((skill) => skill.name)).toContain("verification-skill");
+        const expanded = (session as unknown as { _expandSkillCommand(text: string): string })
+          ._expandSkillCommand("/skill:verification-skill");
+        expect(expanded).toContain("Use this skill for verification.");
+      } finally {
+        session.dispose();
+      }
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
   test("inMemory 会话创建 → 官方 API 面 → dispose", async () => {
     const session = await createMaxmaSession({ inMemory: true, cwd: import.meta.dir });
 

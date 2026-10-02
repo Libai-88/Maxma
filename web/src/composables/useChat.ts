@@ -13,7 +13,7 @@ import { useWorkbenchStore } from '@/stores/workbench'
 import { detectEmotion, getStickerUrl, replaceEmotionTags, replaceStickerDirectives } from './stickerUtils'
 import { showSystemNotification } from '@/lib/notify'
 import { autoReadIfEnabled } from '@/composables/useTts'
-import type { GoalChannelState } from '@/stores/chat'
+import type { GoalChannelState, TaskBriefState } from '@/stores/chat'
 import { createLogger } from '@/utils/logger'
 
 const log = createLogger('chat')
@@ -692,6 +692,9 @@ async function connectSession(sid: string) {
       chFinal.connected = true
       chFinal.reconnectAttempts = 0  // 连接成功，重置退避计数
       chFinal.error = null  // 清除连接错误状态
+      chFinal.errorCategory = null
+      chFinal.errorTraceId = null
+      chFinal.errorDiagnostic = null
       if (chFinal.reconnectTimer) {
         clearTimeout(chFinal.reconnectTimer)
         chFinal.reconnectTimer = null
@@ -902,6 +905,13 @@ function syncContextUsage(sid: string, ch: SessionChannel, payload: unknown) {
     percentage: normalized.percentage,
     message_count: normalized.messageCount,
     model_name: normalized.modelName,
+    input_tokens: normalized.inputTokens,
+    output_tokens: normalized.outputTokens,
+    cache_read_tokens: normalized.cacheReadTokens,
+    cache_write_tokens: normalized.cacheWriteTokens,
+    cache_hit_rate: normalized.cacheHitRate,
+    output_speed: normalized.outputSpeed,
+    latency_ms: normalized.latencyMs,
   } as ContextUsage
   // 修复 POLLUTE-001：仅当前活跃会话的用量写入全局 store（ContextUsageBadge）。
   // 此前无条件更新：切到会话 B 后，会话 A 后台继续流式的 context_usage 事件
@@ -1053,6 +1063,21 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     return
   }
 
+  if (event.type === 'task_brief_update') {
+    const payload = event.payload as Partial<TaskBriefState> & { turn_id?: string }
+    const expectedTurnId = ch.currentTurn?.turnId ?? ch.currentTurn?.id
+    if (payload.turn_id && expectedTurnId && payload.turn_id !== expectedTurnId) return
+    ch.taskBrief = {
+      turnId: String(payload.turn_id ?? expectedTurnId ?? ''),
+      status: payload.status === 'clarify' || payload.status === 'ready' || payload.status === 'fallback' ? payload.status : 'thinking',
+      ...(typeof payload.summary === 'string' ? { summary: payload.summary } : {}),
+      ...(Array.isArray(payload.questions) ? { questions: payload.questions.filter((item): item is string => typeof item === 'string') } : {}),
+      ...(typeof payload.executionPrompt === 'string' ? { executionPrompt: payload.executionPrompt } : {}),
+      ...(typeof payload.error === 'string' ? { error: payload.error } : {}),
+    }
+    return
+  }
+
   // artifact_result：后端对 artifact_action 的确认/失败回执（ARTIFACT-ACK-001）。
   // 必须在 turn 守卫之前处理——用户操作 artifact 按钮时通常没有进行中的轮次。
   if (event.type === 'artifact_result') {
@@ -1108,6 +1133,17 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
         // 此前会把字面 "undefined" 拼进可见回复流
         const tok = event.payload?.token
         if (typeof tok === 'string' && tok) lastThink.tokens += tok
+        if (sid === getSessionStore().sessionId) {
+          const live = getChatStore().contextUsage
+          const started = (turn as ChatTurn & { _streamStartedAt?: number })._streamStartedAt ?? Date.now()
+          ;(turn as ChatTurn & { _streamStartedAt?: number })._streamStartedAt = started
+          const outputTokens = Math.max(0, Math.floor(lastThink.tokens.length / 2))
+          getChatStore().updateContextUsage({
+            outputTokens,
+            outputSpeed: outputTokens / Math.max(0.1, (Date.now() - started) / 1000),
+            modelName: live.modelName,
+          })
+        }
       }
       break
     }
@@ -1299,6 +1335,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     }
 
     case 'done': {
+      ch.taskBrief = null
       if (ch._turnWatchdog) { clearTimeout(ch._turnWatchdog); ch._turnWatchdog = null }
       ch.isAwaitingUser = false
       ch._awaitingToolName = null
@@ -1388,6 +1425,9 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       ch.error = event.payload.message
       ch.errorCategory = event.payload.category ?? null
       ch.errorTraceId = event.payload.trace_id ?? null
+      ch.errorDiagnostic = event.payload.diagnostic && typeof event.payload.diagnostic === 'object'
+        ? event.payload.diagnostic as Record<string, unknown>
+        : null
       ch.isStreaming = false
       // 清理当前轮次：error 到达时该 turn 不会再有后续事件，
       // 若不清空会被下一条 send() 覆盖丢失
@@ -1721,6 +1761,7 @@ export function useChat(sessionId: Ref<string>) {
   const error = computed(() => activeChannel.value.error)
   const errorCategory = computed(() => activeChannel.value.errorCategory)
   const errorTraceId = computed(() => activeChannel.value.errorTraceId)
+  const errorDiagnostic = computed(() => activeChannel.value.errorDiagnostic)
   const contextUsage = computed(() => activeChannel.value.contextUsage)
   const taskTrackerData = computed(() => activeChannel.value.taskTrackerData)
 
@@ -1892,6 +1933,9 @@ export function useChat(sessionId: Ref<string>) {
     }
     ch.isStreaming = true
     ch.error = null
+    ch.errorCategory = null
+    ch.errorTraceId = null
+    ch.errorDiagnostic = null
     // 修复 PRIVATE-SWITCH-001：记录发送时的私密模式，done 时按此判定
     // 持久化——流式中切换私密开关不改变本轮的落盘归属
     ch._privateAtSend = ch.privateMode
@@ -1962,6 +2006,7 @@ export function useChat(sessionId: Ref<string>) {
       type: 'chat',
       payload: {
         message: flatMsg,
+        turn_id: turn.id,
         client_msg_id: msgId,
         private: ch.privateMode,
         auto_approve: ch.autoApprove,
@@ -1973,11 +2018,44 @@ export function useChat(sessionId: Ref<string>) {
         // THINKING-LEVELS-001：多级字符串（off/minimal/low/medium/high/xhigh/max），
         // 后端已支持字符串直传
         thinking: cs.thinkingLevel,
+        ...(cs.taskBriefEnabled ? { task_brief: true } : {}),
         ...(thinkPathId ? { think_path_id: thinkPathId } : {}),
       },
     }
     ch.ws.send(JSON.stringify(payload))
     return true
+  }
+
+  function sendTaskBriefMessage(type: 'task_brief_answer' | 'task_brief_execute' | 'task_brief_cancel', payload: Record<string, unknown> = {}): boolean {
+    const ch = activeChannel.value
+    if (!ch.ws || ch.ws.readyState !== WebSocket.OPEN) return false
+    ch.ws.send(JSON.stringify({ type, payload }))
+    if (type === 'task_brief_answer' && ch.taskBrief) ch.taskBrief = { ...ch.taskBrief, status: 'thinking' }
+    if (type === 'task_brief_execute' && ch.taskBrief) {
+      ch.taskBrief = { ...ch.taskBrief, status: 'thinking' }
+      ch.isStreaming = true
+      if (ch._turnWatchdog) clearTimeout(ch._turnWatchdog)
+      ch._turnWatchdog = setTimeout(() => {
+        const active = getChatStore().channels.get(sessionId.value)
+        if (!active || !active.isStreaming) return
+        active.isStreaming = false
+        active.taskBrief = null
+        active.error = '任务执行超时，请重试'
+        active.errorCategory = 'system_error'
+      }, TURN_WATCHDOG_MS)
+    }
+    if (type === 'task_brief_cancel') ch.taskBrief = null
+    return true
+  }
+
+  function answerTaskBrief(answer: string): boolean {
+    return sendTaskBriefMessage('task_brief_answer', { answer })
+  }
+  function executeTaskBrief(executionPrompt?: string, useOriginal = false): boolean {
+    return sendTaskBriefMessage('task_brief_execute', { execution_prompt: executionPrompt, use_original: useOriginal })
+  }
+  function cancelTaskBrief(): boolean {
+    return sendTaskBriefMessage('task_brief_cancel')
   }
 
   function cancel(): boolean {
@@ -2115,10 +2193,20 @@ export function useChat(sessionId: Ref<string>) {
     const ch = activeChannel.value
     if (!ch) return
     ch.reconnectAttempts = 0
+    // 手动重连必须绕过 initialized 短路。该标记表示“已开始初始化”，
+    // 连接失败后仍会保持为 true，若不复位，ensureConnected 会直接返回。
+    ch.initialized = false
     if (ch.reconnectTimer) {
       clearTimeout(ch.reconnectTimer)
       ch.reconnectTimer = null
     }
+    // onclose 已负责清理已断开的 socket；保留 CLOSED 引用不会阻止
+    // connectSession，它只会跳过 OPEN/CONNECTING 的连接。
+    ch.connected = false
+    ch.error = null
+    ch.errorCategory = null
+    ch.errorTraceId = null
+    ch.errorDiagnostic = null
     log.info(`手动重连 (session=${sessionId.value})`)
     ensureConnected(sessionId.value)
   }
@@ -2131,13 +2219,14 @@ export function useChat(sessionId: Ref<string>) {
     ch.error = null
     ch.errorCategory = null
     ch.errorTraceId = null
+    ch.errorDiagnostic = null
   }
 
   return {
-    connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId,
+    connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId, errorDiagnostic,
     contextUsage, taskTrackerData,
     reconnectExhausted, reconnect,
-    send, cancel, sendUserResponse, sendArtifactAction, sendPlanResponse, sendPlanMode, sendCheckpointAction, removeTurns,
+    send, cancel, answerTaskBrief, executeTaskBrief, cancelTaskBrief, sendUserResponse, sendArtifactAction, sendPlanResponse, sendPlanMode, sendCheckpointAction, removeTurns,
     dismissError,
     privateMode, setPrivateMode,
     autoApprove, setAutoApprove,

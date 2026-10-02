@@ -73,6 +73,13 @@ export function normalizeContextUsage(payload: unknown, previous: ChatContextUsa
     percentage: Math.min(100, Math.max(0, percentage)),
     messageCount,
     modelName,
+    inputTokens: firstFinite(data.input_tokens, data.inputTokens) ?? previous.inputTokens,
+    outputTokens: firstFinite(data.output_tokens, data.outputTokens) ?? previous.outputTokens,
+    cacheReadTokens: firstFinite(data.cache_read_tokens, data.cacheReadTokens) ?? previous.cacheReadTokens,
+    cacheWriteTokens: firstFinite(data.cache_write_tokens, data.cacheWriteTokens) ?? previous.cacheWriteTokens,
+    cacheHitRate: firstFinite(data.cache_hit_rate, data.cacheHitRate) ?? previous.cacheHitRate ?? null,
+    outputSpeed: firstFinite(data.output_speed, data.outputSpeed) ?? previous.outputSpeed,
+    latencyMs: firstFinite(data.latency_ms, data.latencyMs) ?? previous.latencyMs,
   }
 }
 
@@ -86,6 +93,7 @@ export interface SessionChannel {
   error: string | null
   errorCategory: 'user_error' | 'tool_error' | 'system_error' | 'rate_limit' | 'cancelled' | null
   errorTraceId: string | null
+  errorDiagnostic: Record<string, unknown> | null
   contextUsage: ContextUsage | null
   taskTrackerData: Record<string, unknown> | null
   reconnectTimer: ReturnType<typeof setTimeout> | null
@@ -107,6 +115,16 @@ export interface SessionChannel {
   _privateAtSend: boolean | null
   /** GAP-B1-001：目标模式状态（goal_updated 事件 / goal_action 回执更新） */
   goalState: GoalChannelState | null
+  taskBrief: TaskBriefState | null
+}
+
+export interface TaskBriefState {
+  turnId: string
+  status: 'thinking' | 'clarify' | 'ready' | 'fallback'
+  summary?: string
+  questions?: string[]
+  executionPrompt?: string
+  error?: string
 }
 
 /** GAP-B1-001：目标模式状态（与 OMP GoalModeState/Goal 字段对齐的子集） */
@@ -125,7 +143,7 @@ function createChannel(): SessionChannel {
   return {
     ws: null, connected: false, isStreaming: false, isAwaitingUser: false,
     turns: [], currentTurn: null, error: null, errorCategory: null,
-    errorTraceId: null, contextUsage: null, taskTrackerData: null,
+    errorTraceId: null, errorDiagnostic: null, contextUsage: null, taskTrackerData: null,
     reconnectTimer: null, reconnectAttempts: 0, initialized: false,
     _awaitingToolName: null, parentSessionId: null,
     privateMode: false, autoApprove: false, _pingTimer: null, _lastPongAt: 0,
@@ -133,6 +151,7 @@ function createChannel(): SessionChannel {
     _turnWatchdog: null,
     _privateAtSend: null,
     goalState: null,
+    taskBrief: null,
   }
 }
 
@@ -144,7 +163,7 @@ export const useChatStore = defineStore('chat', () => {
   // 页面刷新（Tauri 崩溃恢复/重启）后全部回默认。现在持久化到 localStorage，
   // 初始化时恢复、变更时保存。
   const SETTINGS_STORAGE_KEY = 'maxma_chat_settings'
-  interface PersistedChatSettings { model?: string; temperature?: number; maxTokens?: number; thinking?: boolean; thinkingLevel?: string }
+  interface PersistedChatSettings { model?: string; temperature?: number; maxTokens?: number; thinking?: boolean; thinkingLevel?: string; taskBriefEnabled?: boolean }
   function loadPersistedChatSettings(): PersistedChatSettings {
     try {
       const raw = localStorage.getItem(SETTINGS_STORAGE_KEY)
@@ -172,6 +191,7 @@ export const useChatStore = defineStore('chat', () => {
   )
   /** 兼容旧 UI 契约：thinkingEnabled = thinkingLevel !== 'off' */
   const thinkingEnabled = computed(() => thinkingLevel.value !== 'off')
+  const taskBriefEnabled = ref(_persisted.taskBriefEnabled === true)
   const contextUsage = ref<ChatContextUsage>({ ...DEFAULT_CONTEXT_USAGE })
   // --- End new state ---
 
@@ -183,12 +203,13 @@ export const useChatStore = defineStore('chat', () => {
         maxTokens: maxTokens.value,
         thinkingLevel: thinkingLevel.value,
         thinking: thinkingEnabled.value,
+        taskBriefEnabled: taskBriefEnabled.value,
       }))
     } catch {
       // 配额超限时静默失败——设置丢失可接受，不阻塞主流程
     }
   }
-  watch([currentModel, temperature, maxTokens, thinkingLevel], persistChatSettings)
+  watch([currentModel, temperature, maxTokens, thinkingLevel, taskBriefEnabled], persistChatSettings)
 
   const allSessionStatuses = computed(() => {
     const map: Record<string, { connected: boolean; isStreaming: boolean; isAwaitingUser: boolean }> = {}
@@ -272,6 +293,7 @@ export const useChatStore = defineStore('chat', () => {
   function setMaxTokens(val: number) { maxTokens.value = Math.max(256, Math.min(65536, val)) }
   /** THINKING-LEVELS-001：设置思考强度（off/minimal/low/medium/high/xhigh/max） */
   function setThinkingLevel(level: string) { thinkingLevel.value = level }
+  function setTaskBriefEnabled(enabled: boolean) { taskBriefEnabled.value = enabled }
   /** 兼容旧调用：开关 → high/off */
   function toggleThinking(enabled: boolean) { thinkingLevel.value = enabled ? 'high' : 'off' }
   function updateContextUsage(usage: Partial<ChatContextUsage>) {
@@ -320,8 +342,7 @@ export const useChatStore = defineStore('chat', () => {
     removeTurnsFromStorage, loadTurnsFromStorage,
     cleanupOrphanedCaches,
     // --- New exports ---
-    currentModel, availableModels, temperature, maxTokens, thinkingEnabled, thinkingLevel, contextUsage,
-    setModel, setTemperature, setMaxTokens, toggleThinking, setThinkingLevel, updateContextUsage, fetchAvailableModels,
+    currentModel, availableModels, temperature, maxTokens, thinkingEnabled, thinkingLevel, taskBriefEnabled, contextUsage,
+    setModel, setTemperature, setMaxTokens, toggleThinking, setThinkingLevel, setTaskBriefEnabled, updateContextUsage, fetchAvailableModels,
   }
 })
-

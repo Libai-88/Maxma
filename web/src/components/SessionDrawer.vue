@@ -313,7 +313,8 @@ onUnmounted(() => document.removeEventListener('keydown', onDocumentKeydown))
 
 @media (max-width: 640px) {
   .session-drawer {
-    width: min(var(--session-drawer-width, 320px), calc(100vw - var(--icon-rail-width, 84px)));
+    width: 100vw;
+    max-width: 100vw;
   }
 }
 

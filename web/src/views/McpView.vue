@@ -188,7 +188,40 @@
 
       <!-- ═══ 市场 Tab ═══ -->
       <template v-else-if="activeTab === 'marketplace'">
-        <!-- 搜索栏 -->
+        <div class="market-source-picker" role="group" aria-label="市场来源">
+          <button class="tab-btn" :class="{ active: marketSource === 'smithery' }" @click="setMarketSource('smithery')">Smithery</button>
+          <button class="tab-btn" :class="{ active: marketSource === 'modelscope' }" @click="setMarketSource('modelscope')">魔搭社区</button>
+        </div>
+        <template v-if="marketSource === 'modelscope'">
+          <div class="marketplace-search">
+            <input v-model="modelScopeQuery" class="input marketplace-search-input" placeholder="搜索中文 MCP 服务，例如地图、搜索" @keydown.enter="searchModelScope" />
+            <button class="ds-btn ds-btn--primary" :disabled="modelScopeLoading" @click="searchModelScope">{{ modelScopeLoading ? '搜索中…' : '搜索' }}</button>
+          </div>
+          <div v-if="modelScopeError" class="empty">{{ modelScopeError }}<div class="retry-row"><button class="ds-btn ds-btn--primary" @click="loadModelScope">重试</button></div></div>
+          <div v-else-if="modelScopeLoading" class="loading">正在加载魔搭 MCP 市场…</div>
+          <div v-else-if="modelScopeServers.length" class="marketplace-grid">
+            <div v-for="item in modelScopeServers" :key="item.id" class="registry-card">
+              <div class="registry-card-header">
+                <img v-if="item.logo_url" :src="item.logo_url" class="registry-icon" alt="" @error="($event.target as HTMLImageElement).style.display = 'none'" />
+                <div v-else class="registry-icon-placeholder">{{ item.name.slice(0, 1) }}</div>
+                <div class="registry-card-title"><span class="registry-name">{{ item.name }}</span></div>
+              </div>
+              <div class="registry-desc">{{ item.description || '暂无描述' }}</div>
+              <div class="registry-meta"><span class="registry-author">{{ item.author }}</span><span>{{ Number(item.view_count || 0).toLocaleString() }} 次浏览</span></div>
+              <div class="registry-card-actions">
+                <button class="ds-btn ds-btn--primary registry-install-btn" :disabled="installingName === item.id" @click="installFromModelScope(item)">{{ installingName === item.id ? '安装中…' : '导入配置' }}</button>
+                <a v-if="item.source_url" class="ds-btn" :href="item.source_url" target="_blank" rel="noreferrer">项目详情 ↗</a>
+              </div>
+            </div>
+          </div>
+          <div v-else class="empty"><p>暂无搜索结果</p><p class="empty-hint">尝试中文关键词搜索魔搭 MCP 服务</p></div>
+          <div v-if="modelScopeTotal > 20" class="marketplace-pagination">
+            <button class="ds-btn" :disabled="modelScopePage <= 1 || modelScopeLoading" @click="modelScopePage--; loadModelScope()">上一页</button>
+            <span class="page-info">第 {{ modelScopePage }} 页</span>
+            <button class="ds-btn" :disabled="modelScopePage * 20 >= modelScopeTotal || modelScopeLoading" @click="modelScopePage++; loadModelScope()">下一页</button>
+          </div>
+        </template>
+        <template v-else>
         <div class="marketplace-search">
           <input
             v-model="registryQuery"
@@ -278,6 +311,7 @@
             @click="registryPage++; loadRegistry()"
           >下一页</button>
         </div>
+        </template>
       </template>
     </template>
 
@@ -654,6 +688,14 @@ async function loadDiscovered() {
 const activeTab = ref<'servers' | 'marketplace'>('servers')
 
 // ── 市场（Registry）状态 ──
+const marketSource = ref<'smithery' | 'modelscope'>('smithery')
+const modelScopeQuery = ref('')
+const modelScopeServers = ref<import('@/types').ModelScopeMcpServer[]>([])
+const modelScopeLoading = ref(false)
+const modelScopeError = ref('')
+const modelScopePage = ref(1)
+const modelScopeTotal = ref(0)
+
 const registryServers = ref<import('@/types').RegistryServer[]>([])
 const registryLoading = ref(false)
 const registryError = ref('')
@@ -675,6 +717,61 @@ useButtonFx(() => rootEl.value, '.form-template-btn', { hoverScale: 1.06, bounce
 
 // 危险操作按钮：hover 轻微左倾抖动提示（attachButtonFx danger 模式）
 useButtonFx(() => rootEl.value, '.action-btn.danger', { danger: true, watchSources: [loading] })
+
+function setMarketSource(source: 'smithery' | 'modelscope') {
+  marketSource.value = source
+  if (source === 'modelscope' && modelScopeServers.value.length === 0 && !modelScopeLoading.value) loadModelScope()
+}
+
+async function loadModelScope() {
+  modelScopeLoading.value = true
+  modelScopeError.value = ''
+  try {
+    const result = await api.searchModelScopeMcp({ q: modelScopeQuery.value.trim() || undefined, page: modelScopePage.value })
+    modelScopeServers.value = result.servers || []
+    modelScopeTotal.value = result.total || 0
+  } catch (error) {
+    modelScopeError.value = toErrorMessage(error)
+  } finally {
+    modelScopeLoading.value = false
+  }
+}
+
+function searchModelScope() {
+  modelScopePage.value = 1
+  loadModelScope()
+}
+
+async function installFromModelScope(item: import('@/types').ModelScopeMcpServer) {
+  if (installingName.value) return
+  installingName.value = item.id
+  try {
+    const detail = await api.getModelScopeMcpDetail(item.id)
+    const root = (detail.server_config as Array<Record<string, unknown>> | undefined)?.find((entry) => entry.mcpServers && typeof entry.mcpServers === 'object')?.mcpServers as Record<string, unknown> | undefined
+    const config = root && Object.values(root)[0] as Record<string, unknown> | undefined
+    const sourceEnv = config?.env && typeof config.env === 'object' && !Array.isArray(config.env) ? config.env as Record<string, unknown> : {}
+    const env: Record<string, string> = {}
+    for (const [key, raw] of Object.entries(sourceEnv)) {
+      const template = String(raw ?? '')
+      const placeholder = /^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/.test(template)
+      if (!placeholder) continue
+      const value = window.prompt(`请输入必需的 MCP 环境变量：${key}`, '')
+      if (value === null) return
+      if (!value.trim()) {
+        showGlobal(`必需环境变量 ${key} 不能为空，已取消导入`, 'error')
+        return
+      }
+      env[key] = value
+    }
+    await api.installModelScopeMcp(item.id, env)
+    showGlobal(`已导入 ${item.name}`, 'ok')
+    await Promise.all([loadServers(), loadDiscovered()])
+  } catch (error) {
+    showGlobal('导入失败: ' + toErrorMessage(error), 'error')
+  } finally {
+    installingName.value = ''
+  }
+}
 
 function switchToMarketplace() {
   activeTab.value = 'marketplace'

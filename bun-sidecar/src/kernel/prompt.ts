@@ -19,6 +19,18 @@ export interface PiPromptCapableSession {
   abort(): Promise<void>;
 }
 
+function errorDiagnostics(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      stack: error.stack ?? null,
+      cause: error.cause instanceof Error ? `${error.cause.name}: ${error.cause.message}` : error.cause == null ? null : String(error.cause),
+      stage: "model_request",
+    };
+  }
+  return { name: typeof error, stack: null, cause: String(error), stage: "model_request" };
+}
+
 export async function orchestratePiPrompt(
   session: PiPromptCapableSession,
   message: string,
@@ -33,7 +45,11 @@ export async function orchestratePiPrompt(
     guard.done = true;
     sink({
       type: "error",
-      payload: { code: "PROMPT_TIMEOUT", message: `Prompt exceeded ${timeoutMs}ms limit` },
+      payload: {
+        code: "PROMPT_TIMEOUT",
+        message: `Prompt exceeded ${timeoutMs}ms limit`,
+        diagnostic: { stage: "model_request", timeout_ms: timeoutMs },
+      },
     });
     sink({ type: "done", payload: {} });
     // 官方 abort()：停止活动操作并等待 idle
@@ -53,7 +69,7 @@ export async function orchestratePiPrompt(
     if (!guard.done) {
       sink({
         type: "error",
-        payload: { code: "PROMPT_ERROR", message: String(err) },
+        payload: { code: "PROMPT_ERROR", message: String(err), diagnostic: errorDiagnostics(err) },
       });
     }
   } finally {

@@ -344,4 +344,11 @@ onBeforeUnmount(() => {
     transition: none;
   }
 }
+
+@media (max-width: 640px) {
+  .workbench-panel {
+    width: 100%;
+    border-left: 0;
+  }
+}
 </style>

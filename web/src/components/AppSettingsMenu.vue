@@ -71,22 +71,15 @@ const chatStore = useChatStore()
 // ── 设置页面列表 ──
 
 const settingsItems: SettingsItem[] = [
-  { icon: 'dashboard', title: '能力仪表盘', subtitle: 'OMP 全部能力模块概览与运行状态', route: '/capabilities' },
-  { icon: 'puzzle', title: '插件管理', subtitle: '安装、卸载与管理 OMP 插件', route: '/plugins' },
-  { icon: 'model', title: '模型', subtitle: '配置 AI 语言模型与接入密钥', route: '/providers' },
-  { icon: 'settings', title: '设置', subtitle: '压缩、重试、工具审批等核心配置', route: '/settings' },
-  { icon: 'mcp', title: 'MCP 服务', subtitle: '连接和管理 AI 工具与外部服务', route: '/mcp' },
-  { icon: 'extensions', title: '扩展管理', subtitle: '查看已发现的 OMP 扩展与 Skills', route: '/extensions' },
+  { icon: 'dashboard', title: '能力清单', subtitle: '查看 Agent 的能力、工具与运行配置', route: '/capabilities' },
+  { icon: 'extensions', title: '插件', subtitle: '管理 MCP 服务并查看已发现的 Skills', route: '/extensions' },
+  { icon: 'settings', title: '运行设置', subtitle: '配置上下文压缩、重试与工具审批', route: '/settings' },
   { icon: 'soul', title: '人设', subtitle: '设定 AI 助手的角色与对话风格', route: '/soul' },
   { icon: 'user', title: '用户', subtitle: '管理用户账户与偏好设置', route: '/user' },
-  { icon: 'memory', title: '记忆', subtitle: '查看与管理 AI 自动记录的长期事实', route: '/memory' },
   { icon: 'blocker', title: '拒止锚', subtitle: '在敏感目录强制阻断 AI 文件访问', route: '/maxma-blocker' },
   { icon: 'privacy', title: '隐私仪表盘', subtitle: '查看与控制数据收集与隐私设置', route: '/privacy' },
-  { icon: 'metrics', title: '运行指标', subtitle: '监控系统性能与资源使用', route: '/metrics' },
   { icon: 'appearance', title: '外观', subtitle: '自定义主题颜色与界面布局', route: '/appearance' },
   { icon: 'help', title: '帮助', subtitle: '了解 Maxma 能力、快速上手与常见问题', route: '/help' },
-  // NAV-ENTRY-001：自动化/规则/资讯此前无任何导航入口（仅 URL 直访可达）
-  { icon: 'clock', title: '自动化', subtitle: '定时任务与自动执行', route: '/automation' },
   { icon: 'ruler', title: '质量规则', subtitle: 'AI 编码规范与质量约束', route: '/rules' },
   { icon: 'activity', title: '资讯', subtitle: '查看最新动态与公告', route: '/news' },
 ]

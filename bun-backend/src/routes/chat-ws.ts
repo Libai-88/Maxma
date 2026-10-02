@@ -35,8 +35,11 @@ import type { ServerWebSocket } from "bun";
 import * as crypto from "node:crypto";
 
 import type { PiPendingPlan, PiSessionRecord } from "../../../bun-sidecar/src/kernel/bridge-pi";
+import { resolvePiModel } from "../../../bun-sidecar/src/kernel/model";
+import { createTaskBrief, type TaskBriefResult } from "../plugins/task-brief";
 
 import { record as recordActivity } from "../activity-hub";
+import { decryptProviderKey, findProvider, loadProviders } from "./providers";
 import { getMetrics } from "../metrics";
 import { getErrorCollector } from "../error-collector";
 import { getDeferredRunManager } from "./deferred-runs";
@@ -55,6 +58,9 @@ export const CLIENT_MESSAGE_TYPES = new Set([
   "checkpoint_action",
   "goal_action",
   "artifact_action",
+  "task_brief_answer",
+  "task_brief_execute",
+  "task_brief_cancel",
 ]);
 
 /** PERF-TOOL-OUTPUT-001：工具输出/错误截断（与 Python 版同阈值）。 */
@@ -91,7 +97,11 @@ interface TurnState {
   userMessage: string;
   clientMsgId: string;
   modelName: string;
+  providerId: string;
   maxTokens: number;
+  startedAt: number;
+  /** Provider-reported token usage from the final assistant message. */
+  usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number };
   /** kernel answer 事件捕获的最终回复。 */
   finalAnswer: string;
   /** MEMORY-EVENTS-001：本轮写类记忆工具活动。 */
@@ -101,6 +111,47 @@ interface TurnState {
 }
 
 const turnStates = new Map<string, TurnState>();
+
+interface PendingTaskBrief {
+  turnId: string;
+  originalRequest: string;
+  answers: string[];
+  model: NonNullable<PiSessionRecord["session"]["model"]>;
+  runtime: PiSessionRecord["session"]["modelRuntime"];
+  result: TaskBriefResult | null;
+  busy: boolean;
+  rounds: number;
+  promptOptions: Record<string, unknown>;
+}
+const taskBriefStates = new Map<string, PendingTaskBrief>();
+
+async function updateTaskBrief(hub: ChatWsHub, sessionId: string, pending: PendingTaskBrief): Promise<void> {
+  if (pending.busy) return;
+  pending.busy = true;
+  hub.broadcast(sessionId, { type: "task_brief_update", payload: { turn_id: pending.turnId, status: "thinking" } });
+  try {
+    pending.result = await createTaskBrief(
+      { originalRequest: pending.originalRequest, answers: pending.answers },
+      pending.model,
+      pending.runtime,
+    );
+    if (taskBriefStates.get(sessionId) !== pending) return;
+    hub.broadcast(sessionId, { type: "task_brief_update", payload: { turn_id: pending.turnId, ...pending.result } });
+  } catch (error) {
+    pending.result = null;
+    if (taskBriefStates.get(sessionId) !== pending) return;
+    hub.broadcast(sessionId, {
+      type: "task_brief_update",
+      payload: {
+        turn_id: pending.turnId,
+        status: "fallback",
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+  } finally {
+    pending.busy = false;
+  }
+}
 /** 每会话事件串行链（保证 done 的异步补发不破坏事件顺序）。 */
 const eventChains = new Map<string, Promise<void>>();
 
@@ -242,15 +293,31 @@ async function processKernelEvent(
         "PROMPT_ERROR",
         "PROMPT_TIMEOUT",
         "SIDECAR_UNAVAILABLE",
+        "MODEL_CONFIG_ERROR",
       ]);
       const category = systemErrorCodes.has(errorCode) ? "system_error" : "tool_error";
+      const diagnostic = payload.diagnostic && typeof payload.diagnostic === "object"
+        ? payload.diagnostic as Record<string, unknown>
+        : {};
+      const diagnosticContext = {
+        ...diagnostic,
+        stage: diagnostic.stage ?? "agent_runtime",
+        error_code: errorCode,
+        turn_id: state?.turnId ?? null,
+        provider_id: state?.providerId ?? null,
+        model_name: state?.modelName ?? null,
+        max_tokens: state?.maxTokens ?? null,
+        input_chars: state?.userMessage.length ?? null,
+        elapsed_ms: state ? Math.round(performance.now() - state.startedAt) : null,
+      };
       // DIAG-WIRE-001：sidecar 错误同步写入收集器（带 trace_id/session_id）
       try {
         getErrorCollector().addError("ERROR", "agent", `[${errorCode}] ${errorMessage}`, {
           trace_id: traceId,
           session_id: sessionId,
+          request_id: state?.turnId ?? null,
           logger_name: "sidecar",
-          error_code: errorCode,
+          ...diagnosticContext,
         });
       } catch {
         /* 收集器故障不影响主流程 */
@@ -266,6 +333,7 @@ async function processKernelEvent(
         message: errorMessage,
         trace_id: traceId,
         category,
+        diagnostic: diagnosticContext,
       });
       return;
     }
@@ -273,6 +341,15 @@ async function processKernelEvent(
     case "answer": {
       // 吞流捕获（Python _on_answer 同语义——done 时统一重发带 turn_id 的 answer）
       if (state) state.finalAnswer = String(payload.content ?? "");
+      if (state && payload.usage && typeof payload.usage === "object") {
+        const usage = payload.usage as Record<string, unknown>;
+        state.usage = {
+          input: Number(usage.input) || 0,
+          output: Number(usage.output) || 0,
+          cacheRead: Number(usage.cacheRead) || 0,
+          cacheWrite: Number(usage.cacheWrite) || 0,
+        };
+      }
       return;
     }
 
@@ -317,6 +394,7 @@ async function processKernelEvent(
 /** done 到达 → 闭合回合（Python _handle_turn_result 成功/取消路径直译）。 */
 async function finishTurn(hub: ChatWsHub, sessionId: string, state: TurnState): Promise<void> {
   turnStates.delete(sessionId);
+  taskBriefStates.delete(sessionId);
 
   if (state.cancelled) {
     hub.broadcast(sessionId, { type: "done", payload: { turn_id: state.turnId, cancelled: true } });
@@ -355,14 +433,31 @@ async function finishTurn(hub: ChatWsHub, sessionId: string, state: TurnState): 
     maxTokens: state.maxTokens,
     modelName: state.modelName,
   });
+  const usagePayload = state.usage;
+  if (usagePayload) {
+    Object.assign(contextUsage as Record<string, unknown>, {
+      input_tokens: usagePayload.input ?? 0,
+      output_tokens: usagePayload.output ?? 0,
+      cache_read_tokens: usagePayload.cacheRead ?? 0,
+      cache_write_tokens: usagePayload.cacheWrite ?? 0,
+      cache_hit_rate: (usagePayload.cacheRead ?? 0) + (usagePayload.input ?? 0) > 0
+        ? (usagePayload.cacheRead ?? 0) / ((usagePayload.cacheRead ?? 0) + (usagePayload.input ?? 0))
+        : null,
+      latency_ms: Math.max(0, performance.now() - state.startedAt),
+      output_speed: (usagePayload.output ?? 0) / Math.max(0.1, (performance.now() - state.startedAt) / 1000),
+    });
+  }
 
   // METRICS-WIRE-001：LLM 调用指标
   try {
     getMetrics().recordLlmCall(
       state.modelName,
-      contextUsage.estimated_tokens,
-      Math.max(0, Math.floor(state.finalAnswer.length / 2)),
-      0,
+      state.usage?.input ?? contextUsage.estimated_tokens,
+      state.usage?.output ?? Math.max(0, Math.floor(state.finalAnswer.length / 2)),
+      Math.max(0, performance.now() - state.startedAt),
+      state.usage?.cacheRead ?? 0,
+      state.usage?.cacheWrite ?? 0,
+      state.usage?.input == null || state.usage?.output == null,
     );
   } catch {
     /* noop */
@@ -474,6 +569,10 @@ export function unregisterChatConnection(hub: ChatWsHub, sessionId: string, ws: 
   set.delete(ws);
   if (set.size === 0) {
     hub.connections.delete(sessionId);
+    if (taskBriefStates.has(sessionId)) {
+      taskBriefStates.delete(sessionId);
+      turnStates.delete(sessionId);
+    }
     // Python finally 语义：WS 断开取消在途 turn（kernel cancel → done{cancelled}）
     const state = turnStates.get(sessionId);
     if (state) {
@@ -512,6 +611,12 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
 
   // ── cancel ──
   if (msgType === "cancel") {
+    const pendingBrief = taskBriefStates.get(sessionId);
+    if (pendingBrief) {
+      taskBriefStates.delete(sessionId);
+      void onKernelEvent(hub, sessionId, { type: "done", payload: { turn_id: pendingBrief.turnId, cancelled: true } });
+      return;
+    }
     const state = turnStates.get(sessionId);
     if (record?.currentGuard && state) {
       state.cancelled = true;
@@ -548,6 +653,51 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
     }
     if (record) {
       void hub.callRpc("cancel", { session_id: sessionId }).catch(() => {});
+    }
+    return;
+  }
+
+  if (msgType === "task_brief_answer") {
+    const pending = taskBriefStates.get(sessionId);
+    const answer = String(payload.answer ?? "").trim().slice(0, 4000);
+    if (!pending || pending.busy || pending.result?.status !== "clarify" || !answer) return;
+    pending.answers.push(answer);
+    pending.rounds += 1;
+    if (pending.rounds > 4) {
+      pending.result = null;
+      hub.broadcast(sessionId, { type: "task_brief_update", payload: { turn_id: pending.turnId, status: "fallback", error: "澄清轮次已达上限，可使用原始请求执行。" } });
+      return;
+    }
+    void updateTaskBrief(hub, sessionId, pending);
+    return;
+  }
+
+  if (msgType === "task_brief_execute") {
+    const pending = taskBriefStates.get(sessionId);
+    if (!pending || pending.busy) return;
+    if (payload.use_original !== true && pending.result?.status !== "ready") return;
+    const message = payload.use_original === true
+      ? pending.originalRequest
+      : typeof payload.execution_prompt === "string" ? payload.execution_prompt.trim().slice(0, 20_000) : "";
+    if (!message) return;
+    taskBriefStates.delete(sessionId);
+    void hub.callRpc("prompt", { session_id: sessionId, message, ...pending.promptOptions }).then((result) => {
+      if (!result.ok) {
+        void onKernelEvent(hub, sessionId, { type: "error", payload: { code: "TASK_BRIEF_EXECUTE_ERROR", message: result.error } });
+        void onKernelEvent(hub, sessionId, { type: "done", payload: { turn_id: pending.turnId } });
+      }
+    }).catch((error) => {
+      void onKernelEvent(hub, sessionId, { type: "error", payload: { code: "TASK_BRIEF_EXECUTE_ERROR", message: String(error) } });
+      void onKernelEvent(hub, sessionId, { type: "done", payload: { turn_id: pending.turnId } });
+    });
+    return;
+  }
+
+  if (msgType === "task_brief_cancel") {
+    const pending = taskBriefStates.get(sessionId);
+    if (pending) {
+      taskBriefStates.delete(sessionId);
+      void onKernelEvent(hub, sessionId, { type: "done", payload: { turn_id: pending.turnId, cancelled: true } });
     }
     return;
   }
@@ -702,7 +852,9 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
       userMessage,
       clientMsgId: typeof clientMsgId === "string" ? clientMsgId : "",
       modelName: String(payload.model_name ?? ""),
+      providerId: String(payload.provider_id ?? ""),
       maxTokens: 256_000,
+      startedAt: performance.now(),
       finalAnswer: "",
       memoryActivity: [],
       cancelled: false,
@@ -710,25 +862,86 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
 
     recordActivity("turn", "turn_start", { session_id: sessionId, turn_id: turnId, message: userMessage });
 
-    void hub
-      .callRpc("prompt", {
-        session_id: sessionId,
-        message: userMessage,
-        // THINKING-WIRE-001：thinking 两态（bool→high/off；str 直接透传）
-        ...(typeof payload.thinking === "string" && payload.thinking
-          ? { thinking_level: payload.thinking }
-          : typeof payload.thinking === "boolean"
-            ? { thinking_level: payload.thinking ? "high" : "off" }
+    void (async () => {
+      try {
+        const providerId = typeof payload.provider_id === "string" ? payload.provider_id : "";
+        const modelName = typeof payload.model_name === "string" ? payload.model_name : "";
+        let selectedModel = record?.session.model;
+        if (providerId && modelName) {
+          const provider = findProvider(loadProviders(), providerId);
+          if (!provider || provider.enabled === false) {
+            throw new Error(`所选提供商不可用：${providerId}`);
+          }
+          const resolved = await resolvePiModel(
+            {
+              model: modelName,
+              provider: providerId,
+              baseUrl: typeof provider.base_url === "string" ? provider.base_url : undefined,
+              apiKey: decryptProviderKey(provider.api_key),
+              providerType: typeof provider.provider_type === "string" ? provider.provider_type : undefined,
+              contextWindow: Number(provider.context_window) || undefined,
+              maxTokens: Number(payload.max_tokens) || undefined,
+            },
+            record?.session.modelRuntime,
+          );
+          if (!record) throw new Error(`会话不存在：${sessionId}`);
+          selectedModel = resolved.model;
+          await record.session.setModel(resolved.model);
+        }
+        const promptOptions = {
+          ...(typeof payload.thinking === "string" && payload.thinking
+            ? { thinking_level: payload.thinking }
+            : typeof payload.thinking === "boolean"
+              ? { thinking_level: payload.thinking ? "high" : "off" }
+              : {}),
+          ...(payload.model_name ? { model_name: payload.model_name } : {}),
+          ...(payload.provider_id ? { provider_id: payload.provider_id } : {}),
+          ...(typeof payload.temperature === "number" && payload.temperature >= -1 && payload.temperature <= 2
+            ? { temperature: payload.temperature }
             : {}),
-        ...(payload.model_name ? { model_name: payload.model_name } : {}),
-        ...(payload.provider_id ? { provider_id: payload.provider_id } : {}),
-        ...(typeof payload.temperature === "number" && payload.temperature >= -1 && payload.temperature <= 2
-          ? { temperature: payload.temperature }
-          : {}),
-        ...(typeof payload.max_tokens === "number" && payload.max_tokens > 0 && payload.max_tokens <= 65536
-          ? { max_tokens: Math.floor(payload.max_tokens) }
-          : {}),
-      })
+          ...(typeof payload.max_tokens === "number" && payload.max_tokens > 0 && payload.max_tokens <= 65536
+            ? { max_tokens: Math.floor(payload.max_tokens) }
+            : {}),
+        };
+        if (payload.task_brief === true) {
+          if (!record || !selectedModel) throw new Error("当前会话没有可用模型，无法进行需求对齐");
+          const pending: PendingTaskBrief = {
+            turnId,
+            originalRequest: userMessage,
+            answers: [],
+            model: selectedModel,
+            runtime: record.session.modelRuntime,
+            result: null,
+            busy: false,
+            rounds: 0,
+            promptOptions,
+          };
+          taskBriefStates.set(sessionId, pending);
+          await updateTaskBrief(hub, sessionId, pending);
+          return { ok: true as const, result: null };
+        }
+        return hub.callRpc("prompt", {
+          session_id: sessionId,
+          message: userMessage,
+          ...promptOptions,
+        });
+      } catch (error) {
+        await onKernelEvent(hub, sessionId, {
+          type: "error",
+          payload: {
+            code: "MODEL_CONFIG_ERROR",
+            message: error instanceof Error ? error.message : String(error),
+            diagnostic: {
+              name: error instanceof Error ? error.name : typeof error,
+              stack: error instanceof Error ? error.stack ?? null : null,
+              stage: "model_resolution",
+            },
+          },
+        });
+        await onKernelEvent(hub, sessionId, { type: "done", payload: {} });
+        return { ok: true as const, result: null };
+      }
+    })()
       .then((result) => {
         if (!result.ok) {
           turnStates.delete(sessionId);

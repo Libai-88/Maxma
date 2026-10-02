@@ -1,8 +1,8 @@
 <template>
   <div class="capabilities-view">
     <div class="header">
-      <h2>能力仪表盘 CAPABILITIES</h2>
-      <p class="header-sub">OMP 自动发现与配置的全部能力模块概览</p>
+      <h2>能力清单 CAPABILITIES</h2>
+      <p class="header-sub">Pi Agent 可用工具、接入能力与运行配置</p>
     </div>
 
     <div v-if="loading" class="loading"><TextGenerateEffect words="加载中..." /></div>
@@ -45,12 +45,6 @@
             <div class="stat-card">
               <div class="stat-value"><NumberTicker :value="memory?.total ?? 0" /></div>
               <div class="stat-label">记忆条数</div>
-            </div>
-          </GlareCard>
-          <GlareCard>
-            <div class="stat-card">
-              <div class="stat-value"><NumberTicker :value="plugins?.length ?? 0" /></div>
-              <div class="stat-label">已装插件</div>
             </div>
           </GlareCard>
         </div>
@@ -192,7 +186,6 @@ const discovered_mcp = ref<McpServerItem[] | null>(null)
 const env = ref<Record<string, string>>({})
 const system = ref<Record<string, number | boolean>>({})
 const memory = ref<{ total: number; categories: Record<string, number>; avg_confidence: number } | null>(null)
-const plugins = ref<Record<string, unknown>[]>([])
 const configSources = ref<{
   sources: Array<{ name: string; path: string; priority: number; exists: boolean; scope: string; description: string }>
   active_count: number; total_count: number
@@ -257,11 +250,6 @@ async function load() {
     system.value = data.system ?? {}
     memory.value = data.memory ?? null
     configSources.value = data.config_sources ?? null
-    // Also load plugin count
-    try {
-      const pdata = await api.request<Record<string, unknown>[]>('/plugins')
-      plugins.value = Array.isArray(pdata) ? pdata : []
-    } catch { plugins.value = [] }
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e)
   } finally {

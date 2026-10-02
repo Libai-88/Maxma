@@ -11,6 +11,8 @@
 
 import type { MaxmaEventLike } from "./events";
 
+type GoalEntry = { type?: string; customType?: string; data?: unknown };
+
 export interface PiGoal {
   id: string;
   objective: string;
@@ -40,6 +42,39 @@ export function goalReminder(state: PiGoalState): string | null {
 
 export function emptyGoalState(): PiGoalState {
   return { enabled: false, mode: null, goal: null };
+}
+
+/** Recover the latest persisted goal entry from a pi session tree. */
+export function restoreGoalState(entries: readonly GoalEntry[]): PiGoalState {
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const entry = entries[i];
+    if (entry?.type !== "custom" || entry.customType !== "maxma:goal") continue;
+    const data = entry.data;
+    if (!data || typeof data !== "object") return emptyGoalState();
+    const value = data as Partial<PiGoalState>;
+    if (typeof value.enabled !== "boolean" || !(value.mode === "active" || value.mode === "paused" || value.mode === null)) {
+      return emptyGoalState();
+    }
+    const goal = value.goal;
+    if (goal === null || goal === undefined) return { enabled: value.enabled, mode: value.mode, goal: null };
+    if (typeof goal !== "object") return emptyGoalState();
+    const candidate = goal as Partial<PiGoal>;
+    if (typeof candidate.id !== "string" || typeof candidate.objective !== "string" || !(candidate.status === "active" || candidate.status === "paused")) {
+      return emptyGoalState();
+    }
+    return {
+      enabled: value.enabled,
+      mode: value.mode,
+      goal: {
+        id: candidate.id,
+        objective: candidate.objective,
+        status: candidate.status,
+        ...(typeof candidate.tokenBudget === "number" ? { tokenBudget: candidate.tokenBudget } : {}),
+        ...(typeof candidate.tokensUsed === "number" ? { tokensUsed: candidate.tokensUsed } : {}),
+      },
+    };
+  }
+  return emptyGoalState();
 }
 
 export function applyGoalAction(

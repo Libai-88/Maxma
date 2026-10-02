@@ -57,6 +57,8 @@ export interface MaxmaSessionOptions {
   systemPrompt?: string;
   /** 追加系统提示词（官方 DefaultResourceLoader.appendSystemPrompt）。 */
   appendSystemPrompt?: string[];
+  /** 是否加载 Agent Skills；默认启用。 */
+  skillsEnabled?: boolean;
   /** 工具白名单（官方 CreateAgentSessionOptions.tools）。 */
   tools?: string[];
   /** 权限模式，默认 "ask"。 */

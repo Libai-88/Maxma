@@ -299,6 +299,7 @@ const props = withDefaults(defineProps<{
   error?: string | null
   errorCategory?: 'user_error' | 'tool_error' | 'system_error' | 'rate_limit' | 'cancelled' | null
   errorTraceId?: string | null
+  errorDiagnostic?: Record<string, unknown> | null
 }>(), {
   turns: () => [],
   currentTurn: null,
@@ -306,6 +307,7 @@ const props = withDefaults(defineProps<{
   error: null,
   errorCategory: null,
   errorTraceId: null,
+  errorDiagnostic: null,
 })
 
 const emit = defineEmits<{
@@ -381,6 +383,7 @@ async function copyErrorLog() {
       if (props.errorCategory) text += `错误类别: ${props.errorCategory}\n`
       if (props.errorTraceId) text += `Trace ID: ${props.errorTraceId}\n`
       if (props.error) text += `错误信息: ${props.error}\n`
+      if (props.errorDiagnostic) text += `诊断上下文: ${JSON.stringify(props.errorDiagnostic, null, 2)}\n`
     }
   } catch {
     const now = new Date()
@@ -392,6 +395,7 @@ async function copyErrorLog() {
       `Trace ID: ${props.errorTraceId || 'N/A'}`,
       `错误类别: ${props.errorCategory || 'system_error'}`,
       `错误信息: ${props.error || 'N/A'}`,
+      ...(props.errorDiagnostic ? [`诊断上下文: ${JSON.stringify(props.errorDiagnostic, null, 2)}`] : []),
       '========================================',
     ]
     text = lines.join('\n')
@@ -567,18 +571,15 @@ const { contextSafe } = useGsap(() => {
     if (!root) return
     const rows = Array.from(root.querySelectorAll('.turn-wrapper')).slice(-Math.min(delta, 10))
     if (!rows.length) return
-    // 3D 立起入场：消息从平面 rotateX 立起 + 弹簧（back.out），方向按角色左右滑入
-    // 幅度加大：更深的翻起 + 更明显的横向滑入 + 更长错落，张力但保持可读
+    // 轻量淡入上移，避免大列表中 3D 变换和逐帧重绘造成滚动卡顿。
     gsap.from(rows, {
       autoAlpha: 0,
       x: (_i, el) => (el.classList.contains('user') ? 26 : -26),
-      rotationX: -28,
-      transformPerspective: 700,
-      y: 18,
-      scale: 0.98,
-      duration: 0.5,
-      ease: 'back.out(1.8)',
-      stagger: 0.06,
+      y: 8,
+      scale: 0.995,
+      duration: 0.24,
+      ease: 'power2.out',
+      stagger: 0.03,
       overwrite: 'auto',
     })
   }))
@@ -594,7 +595,7 @@ onUnmounted(() => {
     flex: 1 1 auto;
     min-width: 0;
     min-height: 0;
-    padding: 20px 24px;
+    padding: 16px clamp(12px, 3vw, 28px) 20px;
     background: var(--bg-primary);
     display: flex;
     flex-direction: column;
@@ -605,7 +606,7 @@ onUnmounted(() => {
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
-  max-width: 768px;
+  max-width: 820px;
   width: 100%;
   margin: 0 auto;
   overflow-y: auto;

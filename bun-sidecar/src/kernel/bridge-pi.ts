@@ -18,6 +18,7 @@ import { mapPiAgentEventToMaxma, type PiDoneGuard } from "./events";
 import { orchestratePiPrompt, handlePiCancelGuard } from "./prompt";
 import { loadMaxmaMcpEntries } from "./mcp";
 import { resolvePiModel } from "./model";
+import { loadPersonaSystemPrompt } from "./persona-prompt";
 import { buildPiCustomTools } from "./tools";
 import {
   createSubmitPlanTool,
@@ -26,8 +27,9 @@ import {
   resolvePiPlanAction,
   type PiPendingPlan,
 } from "./plan";
-import { applyGoalAction, emptyGoalState, goalReminder, goalUpdatedEvent, type PiGoalState } from "./goal";
+import { applyGoalAction, emptyGoalState, goalReminder, goalUpdatedEvent, restoreGoalState, type PiGoalState } from "./goal";
 import type { MaxmaPermissionMode, MaxmaSessionOptions } from "./types";
+import { maxmaProjectRoot } from "./project-paths";
 
 /** 与 src/events.ts MAX_TOOL_CALLS_PER_TURN 同值——引擎隔离各自持镜像，切换期单源收敛。 */
 export const MAX_TOOL_CALLS_PER_TURN = 50;
@@ -135,7 +137,7 @@ export async function handlePiCreateSession(
   id: number | null,
 ): Promise<void> {
   const io = deps.io;
-  const cwd: string = params?.cwd ?? process.env.MAXMA_PROJECT_ROOT ?? process.cwd();
+  const cwd: string = params?.cwd ?? maxmaProjectRoot();
   const systemPrompt: string | undefined = params?.system_prompt;
   const appendSystemPrompt: string | undefined = params?.append_system_prompt;
   const tools: string[] | undefined = Array.isArray(params?.tools) ? params.tools : undefined;
@@ -212,7 +214,11 @@ export async function handlePiCreateSession(
     // Maxma 特色能力层（§6.2 任务 5：4 个工具 + 计划模式 submit_plan）
     customTools: [...buildPiCustomTools(), submitPlanTool],
     ...(systemPrompt !== undefined ? { systemPrompt } : {}),
-    ...(appendSystemPrompt !== undefined ? { appendSystemPrompt } : {}),
+    skillsEnabled: params?.skills_enabled !== false,
+    appendSystemPrompt: [
+      ...(appendSystemPrompt !== undefined ? [appendSystemPrompt] : []),
+      loadPersonaSystemPrompt(),
+    ],
     ...(tools !== undefined ? { tools } : {}),
     inMemory: params?.in_memory === true,
   };
@@ -225,6 +231,9 @@ export async function handlePiCreateSession(
     return;
   }
   record.session = session;
+  record.goalState = restoreGoalState(
+    session.sessionManager.getEntries() as Array<{ type?: string; customType?: string; data?: unknown }>,
+  );
   record.unsubscribe = subscribePiSession(sessionId, record, io);
   deps.sessions.set(sessionId, record);
 

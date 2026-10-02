@@ -16,6 +16,7 @@ import {
   DefaultResourceLoader,
   SessionManager,
   createAgentSession,
+  createCodemodeExtension,
   createMcpExtension,
   getAgentDir,
   type AgentSession,
@@ -25,6 +26,7 @@ import {
 
 import { createMaxmaApprovalExtension } from "./extensions/maxma-approval";
 import { createMaxmaBlockerExtension } from "./extensions/maxma-blocker";
+import { maxmaSkillPaths } from "./skills";
 import type { ApprovalGate, MaxmaPermissionMode, MaxmaSessionOptions } from "./types";
 
 export type { MaxmaPermissionMode } from "./types";
@@ -65,6 +67,7 @@ export async function createMaxmaSession(opts: MaxmaSessionOptions): Promise<Age
       source: s.source ?? "maxma:mcp_servers.yaml",
       scope: "extension" as const,
     }));
+    extensionFactories.push(createCodemodeExtension());
     extensionFactories.push(
       createMcpExtension({
         // 官方 McpExtensionOptions.loadConfig：覆盖默认 mcp.json 发现，
@@ -78,13 +81,16 @@ export async function createMaxmaSession(opts: MaxmaSessionOptions): Promise<Age
     cwd,
     agentDir,
     extensionFactories,
+    additionalSkillPaths: opts.skillsEnabled === false ? [] : maxmaSkillPaths(cwd),
+    ...(opts.skillsEnabled === false ? { noSkills: true } : {}),
     // 官方选项：整体替换 / 追加系统提示词（直映 create_session RPC 的
     // system_prompt / append_system_prompt 参数）。
     ...(opts.systemPrompt !== undefined ? { systemPrompt: opts.systemPrompt } : {}),
     ...(opts.appendSystemPrompt !== undefined && opts.appendSystemPrompt.length > 0
-      ? { appendSystemPrompt: opts.appendSystemPrompt }
+      ? { appendSystemPromptOverride: (base: string[]) => [...base, ...opts.appendSystemPrompt!] }
       : {}),
   });
+  await resourceLoader.reload();
 
   const { session } = await createAgentSession({
     cwd,

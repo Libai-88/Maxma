@@ -8,11 +8,12 @@
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
 import type { MaxmaToolDescriptor } from "./descriptor";
+import { maxmaBundleRoot } from "../kernel/project-paths";
 
 /** 内置贴纸目录：<MAXMA_PROJECT_ROOT>/config/stickers/<category>/*.webp */
 export function stickersDir(): string {
   return path.join(
-    process.env.MAXMA_PROJECT_ROOT ?? process.cwd(),
+    maxmaBundleRoot(),
     "config",
     "stickers",
   );

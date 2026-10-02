@@ -565,5 +565,104 @@
     "detail": "会话删除: s1",
     "data_size": 0,
     "status": "ok"
+  },
+  {
+    "timestamp": "2026-10-01T10:19:54+0800",
+    "epoch": 1790821194,
+    "type": "session",
+    "target": "delete",
+    "detail": "会话删除: s1",
+    "data_size": 0,
+    "status": "ok"
+  },
+  {
+    "timestamp": "2026-10-01T10:19:54+0800",
+    "epoch": 1790821194,
+    "type": "session",
+    "target": "delete",
+    "detail": "会话删除: s1",
+    "data_size": 0,
+    "status": "ok"
+  },
+  {
+    "timestamp": "2026-10-01T10:19:54+0800",
+    "epoch": 1790821194,
+    "type": "session",
+    "target": "delete",
+    "detail": "会话删除: s1",
+    "data_size": 0,
+    "status": "ok"
+  },
+  {
+    "timestamp": "2026-10-01T10:19:54+0800",
+    "epoch": 1790821194,
+    "type": "session",
+    "target": "delete",
+    "detail": "会话删除: s1",
+    "data_size": 0,
+    "status": "ok"
+  },
+  {
+    "timestamp": "2026-10-01T10:19:54+0800",
+    "epoch": 1790821194,
+    "type": "session",
+    "target": "delete",
+    "detail": "会话删除: s1",
+    "data_size": 0,
+    "status": "ok"
+  },
+  {
+    "timestamp": "2026-10-02T06:34:35+0800",
+    "epoch": 1790894075,
+    "type": "session",
+    "target": "delete",
+    "target_id": "ea141716bac54f2e96e92d7729ae8432",
+    "detail": "会话删除",
+    "status": "ok"
+  },
+  {
+    "timestamp": "2026-10-02T06:35:25+0800",
+    "epoch": 1790894125,
+    "type": "session",
+    "target": "delete",
+    "target_id": "cca73b3a11a8414195240ab4d612a5ae",
+    "detail": "会话删除",
+    "status": "ok"
+  },
+  {
+    "timestamp": "2026-10-02T06:37:09+0800",
+    "epoch": 1790894229,
+    "type": "session",
+    "target": "delete",
+    "target_id": "8265a466734a46d38ab760a042865f98",
+    "detail": "会话删除",
+    "status": "ok"
+  },
+  {
+    "timestamp": "2026-10-02T06:56:22+0800",
+    "epoch": 1790895382,
+    "type": "session",
+    "target": "delete",
+    "target_id": "0730d095d5134ee3a0df4d498b22980e",
+    "detail": "会话删除",
+    "status": "ok"
+  },
+  {
+    "timestamp": "2026-10-02T06:57:05+0800",
+    "epoch": 1790895425,
+    "type": "session",
+    "target": "delete",
+    "target_id": "14d86ee8931245968ada90cd7aadd0fa",
+    "detail": "会话删除",
+    "status": "ok"
+  },
+  {
+    "timestamp": "2026-10-02T07:12:12+0800",
+    "epoch": 1790896332,
+    "type": "session",
+    "target": "delete",
+    "target_id": "0a312550ff3d4f5c9748a6c83fec62b8",
+    "detail": "会话删除",
+    "status": "ok"
   }
 ]

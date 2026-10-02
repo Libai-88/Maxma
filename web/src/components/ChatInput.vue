@@ -157,6 +157,17 @@
         <div class="input-right-group">
           <div class="input-actions">
             <ContextUsageBadge />
+            <button
+              type="button"
+              class="task-brief-toggle"
+              :class="{ active: chatStore.taskBriefEnabled }"
+              :aria-pressed="chatStore.taskBriefEnabled"
+              :title="chatStore.taskBriefEnabled ? '关闭需求对齐：发送时先澄清并生成执行指令' : '开启需求对齐：发送时先澄清并生成执行指令'"
+              @click="chatStore.setTaskBriefEnabled(!chatStore.taskBriefEnabled)"
+            >
+              <Icon name="sparkles" :size="14" />
+              <span>需求对齐</span>
+            </button>
             <!-- GAP-A1-001：语音输入（Web Speech API 听写，零付费 API）。
                  听写中按钮高亮，再次点击停止并提交；环境不支持时点击给出引导。 -->
             <button
@@ -706,3 +717,9 @@ onUnmounted(() => {
 </script>
 
 <style scoped src="@/assets/styles/chat-input.css"></style>
+
+<style scoped>
+.task-brief-toggle { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 0 9px; border: 1px solid var(--border-subtle, rgba(128,128,128,.24)); border-radius: 999px; background: transparent; color: var(--text-muted, #888); font-size: 11px; white-space: nowrap; cursor: pointer; transition: color .16s ease, border-color .16s ease, background .16s ease; }
+.task-brief-toggle:hover, .task-brief-toggle.active { color: var(--accent, #8b7cff); border-color: color-mix(in srgb, var(--accent, #8b7cff) 48%, transparent); background: color-mix(in srgb, var(--accent, #8b7cff) 10%, transparent); }
+@media (max-width: 560px) { .task-brief-toggle span { display: none; } .task-brief-toggle { width: 30px; justify-content: center; padding: 0; } }
+</style>

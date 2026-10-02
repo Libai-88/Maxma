@@ -18,6 +18,7 @@
 
 import { Hono } from "hono";
 import * as fs from "node:fs";
+import * as crypto from "node:crypto";
 import * as os from "node:os";
 import * as path from "node:path";
 
@@ -31,12 +32,74 @@ import { redactSensitive } from "./mcp-validation";
 import { loadProviders } from "./providers";
 import { getPanel } from "./settings-panels";
 import { memoryStats } from "./memory";
+import { discoverMaxmaSkills } from "../../../bun-sidecar/src/kernel/skills";
 
 export interface CapabilitiesDeps {
   /** 活跃 kernel 会话数（system.session_count）。 */
   sessionCount: () => number;
   /** 已挂载的 /api 路由路径清单（endpoints 字段，server.ts 注入）。 */
   endpoints: () => string[];
+}
+
+async function unzipSkillArchive(archive: Uint8Array, expectedEntries: number): Promise<Array<[string, Uint8Array]>> {
+  const { Unzip, UnzipInflate, UnzipPassThrough } = await import("fflate");
+  return new Promise((resolve, reject) => {
+    const files: Array<[string, Uint8Array]> = [];
+    let entryCount = 0;
+    let completedCount = 0;
+    let totalOutputBytes = 0;
+    let settled = false;
+    const fail = (message: string) => {
+      if (settled) return;
+      settled = true;
+      reject(new Error(message));
+    };
+    const unzip = new Unzip((file) => {
+      if (settled) { void file.terminate(); return; }
+      entryCount++;
+      if (entryCount > 250 || entryCount > expectedEntries) { fail("Skill 文件数量无效或超过 250 个"); void file.terminate(); return; }
+      const normalized = file.name.replace(/\\/g, "/");
+      const isDirectory = normalized.endsWith("/");
+      const parts = normalized.split("/").filter((part) => !(isDirectory && part === ""));
+      if (!normalized || normalized.startsWith("/") || /^[a-z]:/i.test(normalized) || parts.some((part) => !part || part === "." || part === "..")) {
+        fail("压缩包包含不安全的文件路径"); void file.terminate(); return;
+      }
+      const pieces: Uint8Array[] = [];
+      let fileBytes = 0;
+      file.ondata = (error, data, final) => {
+        if (settled) { void file.terminate(); return; }
+        if (error) { fail("Skill ZIP 解压失败: " + String(error)); void file.terminate(); return; }
+        if (data?.length) {
+          fileBytes += data.length;
+          totalOutputBytes += data.length;
+          if (totalOutputBytes > 20 * 1024 * 1024) { fail("解压后的 Skill 超过 20 MB"); void file.terminate(); return; }
+          pieces.push(data);
+        }
+        if (final) {
+          completedCount++;
+          if (!isDirectory) {
+            const contents = new Uint8Array(fileBytes);
+            let offset = 0;
+            for (const piece of pieces) { contents.set(piece, offset); offset += piece.length; }
+            files.push([normalized, contents]);
+          }
+          if (entryCount === expectedEntries && completedCount === expectedEntries && !settled) {
+            settled = true;
+            resolve(files);
+          }
+        }
+      };
+      try { file.start(); } catch (error) { fail("Skill ZIP 解压失败: " + String(error)); }
+    });
+    unzip.register(UnzipInflate);
+    unzip.register(UnzipPassThrough);
+    try {
+      unzip.push(archive, true);
+      if (!settled && (entryCount !== expectedEntries || completedCount !== expectedEntries)) fail("Skill ZIP 文件条目不完整");
+    } catch (error) {
+      fail("Skill ZIP 解压失败: " + (error instanceof Error ? error.message : String(error)));
+    }
+  });
 }
 
 /** 工具按类别分组。 */
@@ -288,8 +351,142 @@ export function createCapabilitiesRoutes(deps: CapabilitiesDeps): Hono {
     return c.json(result);
   });
 
-  // Skills 自动发现——kernel 无 get_discovered_skills RPC → []（桩）
-  app.get("/api/skills/discovered", (c) => c.json([]));
+  // Skills 自动发现：使用 pi 官方 loader，和实际会话使用同一套默认目录。
+  app.get("/api/skills/discovered", (c) => {
+    try {
+      const result = discoverMaxmaSkills();
+      const skills = result.skills;
+      if (c.req.query("details") === "1") {
+        return c.json({ skills, diagnostics: result.diagnostics });
+      }
+      return c.json(skills);
+    } catch (err) {
+      console.warn(`[skills] discovery failed: ${String(err)}`);
+      return c.json(c.req.query("details") === "1" ? { skills: [], diagnostics: [{ message: String(err) }] } : []);
+    }
+  });
+
+
+  app.get("/api/skills/market", async (c) => {
+    const keyword = (c.req.query("q") ?? "").trim().slice(0, 160);
+    const page = Math.max(1, Math.min(5000, Number(c.req.query("page") ?? 1) || 1));
+    const pageSize = Math.max(1, Math.min(50, Number(c.req.query("page_size") ?? 20) || 20));
+    const query = new URLSearchParams({ page: String(page), pageSize: String(pageSize), sortBy: "downloads", order: "desc" });
+    if (keyword) query.set("keyword", keyword);
+    try {
+      const response = await fetch("https://api.skillhub.cn/api/skills?" + query.toString(), { signal: AbortSignal.timeout(15_000) });
+      if (!response.ok) return c.json({ detail: "SkillHub 暂不可用（HTTP " + response.status + "）" }, 502);
+      const payload = await response.json() as { code?: number; message?: string; data?: { total?: number; skills?: unknown[] } };
+      if (payload.code !== 0 || !payload.data) return c.json({ detail: payload.message ?? "SkillHub 响应异常" }, 502);
+      return c.json({ total: payload.data.total ?? 0, skills: payload.data.skills ?? [], page, page_size: pageSize });
+    } catch (error) {
+      return c.json({ detail: "SkillHub 连接失败: " + (error instanceof Error ? error.message : String(error)) }, 502);
+    }
+  });
+
+  app.post("/api/skills/market/install", async (c) => {
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const slug = typeof body.slug === "string" ? body.slug.trim() : "";
+    if (!/^[a-z0-9][a-z0-9._-]{0,119}$/i.test(slug)) return c.json({ detail: "无效的 Skill 标识" }, 400);
+    const installRoot = path.join(os.homedir(), ".agents", "skills");
+    const target = path.join(installRoot, slug);
+    if (fs.existsSync(target)) return c.json({ detail: "Skill 已安装: " + slug }, 409);
+    const temporary = target + ".install-" + crypto.randomUUID();
+    try {
+      const response = await fetch("https://api.skillhub.cn/api/v1/download?slug=" + encodeURIComponent(slug), { signal: AbortSignal.timeout(30_000) });
+      if (!response.ok) return c.json({ detail: "SkillHub 下载失败（HTTP " + response.status + "）" }, 502);
+      if (!response.body) return c.json({ detail: "SkillHub 下载内容为空" }, 502);
+      const reader = response.body.getReader();
+      const archiveChunks: Uint8Array[] = [];
+      let archiveBytes = 0;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          archiveBytes += value.length;
+          if (archiveBytes > 25 * 1024 * 1024) {
+            await reader.cancel();
+            return c.json({ detail: "Skill 压缩包超过 25 MB" }, 413);
+          }
+          archiveChunks.push(value);
+        }
+      } finally { reader.releaseLock(); }
+      if (archiveBytes < 22) return c.json({ detail: "Skill 压缩包大小无效" }, 413);
+      const archive = new Uint8Array(archiveBytes);
+      let archiveOffset = 0;
+      for (const chunk of archiveChunks) { archive.set(chunk, archiveOffset); archiveOffset += chunk.length; }
+      const view = new DataView(archive.buffer, archive.byteOffset, archive.byteLength);
+      const eocdStart = Math.max(0, archive.length - 65_557);
+      let eocd = -1;
+      for (let offset = archive.length - 22; offset >= eocdStart; offset--) {
+        if (view.getUint32(offset, true) === 0x06054b50) { eocd = offset; break; }
+      }
+      if (eocd < 0 || view.getUint16(eocd + 4, true) !== 0 || view.getUint16(eocd + 6, true) !== 0 || view.getUint16(eocd + 8, true) !== view.getUint16(eocd + 10, true) || eocd + 22 + view.getUint16(eocd + 20, true) !== archive.length) throw new Error("Skill ZIP 目录无效或不支持分卷压缩包");
+      const entryCount = view.getUint16(eocd + 10, true);
+      const centralSize = view.getUint32(eocd + 12, true);
+      const centralOffset = view.getUint32(eocd + 16, true);
+      if (entryCount < 1 || entryCount > 250 || entryCount === 0xffff || centralSize === 0xffffffff || centralOffset === 0xffffffff || centralOffset + centralSize > eocd) throw new Error("Skill ZIP 文件数量或目录无效");
+      const decoder = new TextDecoder("utf-8", { fatal: true });
+      const declaredSizes = new Map<string, number>();
+      let totalDeclaredBytes = 0;
+      let cursor = centralOffset;
+      for (let index = 0; index < entryCount; index++) {
+        if (cursor + 46 > centralOffset + centralSize || view.getUint32(cursor, true) !== 0x02014b50) throw new Error("Skill ZIP 中央目录损坏");
+        const flags = view.getUint16(cursor + 8, true);
+        const compression = view.getUint16(cursor + 10, true);
+        const compressedSize = view.getUint32(cursor + 20, true);
+        const uncompressedSize = view.getUint32(cursor + 24, true);
+        const nameLength = view.getUint16(cursor + 28, true);
+        const extraLength = view.getUint16(cursor + 30, true);
+        const commentLength = view.getUint16(cursor + 32, true);
+        const externalAttributes = view.getUint32(cursor + 38, true);
+        const recordEnd = cursor + 46 + nameLength + extraLength + commentLength;
+        if (recordEnd > centralOffset + centralSize || compressedSize === 0xffffffff || uncompressedSize === 0xffffffff || (flags & 1) !== 0 || (compression !== 0 && compression !== 8)) throw new Error("Skill ZIP 包含不支持或无效的文件条目");
+        const archivePath = decoder.decode(archive.subarray(cursor + 46, cursor + 46 + nameLength)).replace(/\\/g, "/");
+        const isDirectory = archivePath.endsWith("/");
+        const normalizedParts = archivePath.split("/").filter((part) => isDirectory && part === "" ? false : true);
+        if (!archivePath || archivePath.startsWith("/") || /^[a-z]:/i.test(archivePath) || normalizedParts.some((part) => !part || part === "." || part === "..") || ((externalAttributes >>> 16) & 0xf000) === 0xa000) throw new Error("压缩包包含不安全的文件路径");
+        if (isDirectory && (compressedSize !== 0 || uncompressedSize !== 0)) throw new Error("Skill ZIP 目录条目包含意外数据");
+        if (!isDirectory) {
+          totalDeclaredBytes += uncompressedSize;
+          if (totalDeclaredBytes > 20 * 1024 * 1024) throw new Error("解压后的 Skill 超过 20 MB");
+          declaredSizes.set(archivePath, uncompressedSize);
+        }
+        cursor = recordEnd;
+      }
+      if (cursor !== centralOffset + centralSize) throw new Error("Skill ZIP 中央目录长度不匹配");
+      const entries = await unzipSkillArchive(archive, entryCount);
+      if (entries.length !== declaredSizes.size || entries.some(([name, contents]) => declaredSizes.get(name) !== contents.length)) throw new Error("Skill ZIP 实际内容与目录声明不一致");
+      if (entries.length === 0 || entries.length > 250) return c.json({ detail: "Skill 文件数量无效或超过 250 个" }, 413);
+      const safeEntries: Array<[string, Uint8Array]> = [];
+      let totalBytes = 0;
+      for (const [archivePath, contents] of entries) {
+        const normalized = archivePath.replace(/\\/g, "/");
+        if (normalized.startsWith("/") || /^[a-z]:/i.test(normalized) || normalized.split("/").some((part) => !part || part === "." || part === "..")) throw new Error("压缩包包含不安全的文件路径");
+        totalBytes += contents.length;
+        if (totalBytes > 20 * 1024 * 1024) throw new Error("解压后的 Skill 超过 20 MB");
+        safeEntries.push([normalized, contents]);
+      }
+      const skillFile = safeEntries.find(([name]) => name === "SKILL.md" || name.endsWith("/SKILL.md"));
+      if (!skillFile) throw new Error("压缩包中没有 SKILL.md");
+      const rootPrefix = skillFile[0].endsWith("/SKILL.md") ? skillFile[0].slice(0, -"SKILL.md".length) : "";
+      fs.mkdirSync(temporary, { recursive: true });
+      for (const [archivePath, contents] of safeEntries) {
+        const relative = rootPrefix && archivePath.startsWith(rootPrefix) ? archivePath.slice(rootPrefix.length) : archivePath;
+        if (!relative) continue;
+        const destination = path.resolve(temporary, relative);
+        if (!destination.startsWith(path.resolve(temporary) + path.sep)) throw new Error("Skill 文件路径越界");
+        fs.mkdirSync(path.dirname(destination), { recursive: true });
+        fs.writeFileSync(destination, contents, { flag: "wx" });
+      }
+      fs.mkdirSync(installRoot, { recursive: true });
+      fs.renameSync(temporary, target);
+      return c.json({ status: "installed", slug, path: target });
+    } catch (error) {
+      fs.rmSync(temporary, { recursive: true, force: true });
+      return c.json({ detail: "Skill 安装失败: " + (error instanceof Error ? error.message : String(error)) }, 502);
+    }
+  });
 
   return app;
 }

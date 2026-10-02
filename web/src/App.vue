@@ -22,19 +22,12 @@
       <RegionalErrorBoundary :reset-keys="[$route.path]">
         <router-view v-slot="{ Component, route }">
           <Transition :name="pageTransition" mode="out-in">
-            <!-- :key=route.name 保证 keep-alive 缓存稳定（ChatView 切换回来不重建） -->
-            <keep-alive include="ChatView" :max="5">
-              <component :is="Component" :key="route.name" />
-            </keep-alive>
+            <component :is="Component" :key="route.name" />
           </Transition>
         </router-view>
       </RegionalErrorBoundary>
     </main>
     <!-- 保留全局媒体与引导层，布局本身不依赖装饰层。 -->
-    <AuroraBackground :opacity="0.12" :aurora-count="3" />
-    <LiquidBackground />
-    <CursorGlow />
-    <SmoothCursor />
     <LeavesOverlay />
     <!-- 全屏媒体查看器 -->
     <MediaViewer />
@@ -78,10 +71,6 @@ import { defineAsyncComponent, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 
 import LeavesOverlay from '@/components/LeavesOverlay.vue'
-import CursorGlow from '@/components/CursorGlow.vue'
-import SmoothCursor from '@/components/inspira/SmoothCursor.vue'
-import AuroraBackground from '@/components/inspira/AuroraBackground.vue'
-import LiquidBackground from '@/components/LiquidBackground.vue'
 import { usePaperTexture } from '@/composables/usePaperTexture'
 import { useGlobalShortcut } from '@/composables/useGlobalShortcut'
 import { useHealthPolling } from '@/composables/useHealthPolling'
@@ -344,8 +333,8 @@ html.animations-paused *::after {
 .page-rise-back-enter-active,   .page-rise-back-leave-active,
 .page-zoom-forward-enter-active, .page-zoom-forward-leave-active,
 .page-zoom-back-enter-active,   .page-zoom-back-leave-active {
-  transition: opacity 0.32s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
-              transform 0.32s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+  transition: opacity 0.18s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
+              transform 0.18s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));
 }
 .page-fade-enter-from {
   opacity: 0;
@@ -359,65 +348,61 @@ html.animations-paused *::after {
 /* ── flip：3D 翻转（主内容页，如对话/记忆/动态） ── */
 .page-flip-forward-enter-from {
   opacity: 0;
-  transform: perspective(1400px) rotateY(-24deg) translateX(60px) scale(0.96);
-  transform-origin: left center;
+  transform: translateX(12px);
 }
 .page-flip-forward-leave-to {
   opacity: 0;
-  transform: perspective(1400px) rotateY(16deg) translateX(-40px) scale(0.97);
-  transform-origin: right center;
+  transform: translateX(-8px);
 }
 .page-flip-back-enter-from {
   opacity: 0;
-  transform: perspective(1400px) rotateY(24deg) translateX(-60px) scale(0.96);
-  transform-origin: right center;
+  transform: translateX(-12px);
 }
 .page-flip-back-leave-to {
   opacity: 0;
-  transform: perspective(1400px) rotateY(-16deg) translateX(40px) scale(0.97);
-  transform-origin: left center;
+  transform: translateX(8px);
 }
 
 /* ── slide：水平滑入（设置类，如外观/角色/用户/隐私） ── */
 .page-slide-forward-enter-from {
   opacity: 0;
-  transform: translateX(48px);
+  transform: translateX(12px);
 }
 .page-slide-forward-leave-to {
   opacity: 0;
-  transform: translateX(-32px);
+  transform: translateX(-8px);
 }
 .page-slide-back-enter-from {
   opacity: 0;
-  transform: translateX(-48px);
+  transform: translateX(-12px);
 }
 .page-slide-back-leave-to {
   opacity: 0;
-  transform: translateX(32px);
+  transform: translateX(8px);
 }
 
 /* ── rise：上升浮入（工具类，如模型/插件/规则/自动化） ── */
 .page-rise-forward-enter-from,
 .page-rise-back-enter-from {
   opacity: 0;
-  transform: translateY(36px);
+  transform: translateY(12px);
 }
 .page-rise-forward-leave-to,
 .page-rise-back-leave-to {
   opacity: 0;
-  transform: translateY(-24px);
+  transform: translateY(-8px);
 }
 
 /* ── zoom：缩放淡入（详情/特殊页，如插件详情/分享/404） ── */
 .page-zoom-forward-enter-from,
 .page-zoom-back-enter-from {
   opacity: 0;
-  transform: scale(0.9);
+  transform: scale(0.98);
 }
 .page-zoom-forward-leave-to,
 .page-zoom-back-leave-to {
   opacity: 0;
-  transform: scale(0.96);
+  transform: scale(0.99);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -462,8 +447,7 @@ html, body {
   min-width: 0;
   overflow: hidden;
   font-family: var(--font-body);
-  /* 响应式字体：15px 基准，随视口宽度自适应缩放（1920px≈16px, 2560px≈18px） */
-	  font-size: clamp(16px, 15px + 0.2vw, 18px);
+  font-size: 16px;
   line-height: 1.6;
   color: var(--text-primary);
   background: var(--bg-primary);
@@ -488,7 +472,7 @@ html, body {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: color-mix(in srgb, var(--bg-primary) 86%, transparent);
+  background: var(--bg-primary);
 }
 
 .app-layout {
@@ -664,9 +648,8 @@ html, body {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: color-mix(in srgb, var(--bg-primary) 72%, transparent);
+  background: var(--bg-primary);
   /* 页面转场 3D 透视：router-view 翻转出入场提供深度 */
-  perspective: 1400px;
 }
 
 .sidebar .health-panel {

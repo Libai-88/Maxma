@@ -23,7 +23,7 @@ const DIAG_DEDUPE_WINDOW_MS = 10000
 let lastDiagTs = 0
 let lastDiagMsg = ''
 let lastDiagMsgTs = 0
-function reportDiag(kind: string, msg: string) {
+function reportDiag(kind: string, msg: string, diagnostic: Record<string, unknown> = {}) {
   const now = Date.now()
   if (msg === lastDiagMsg && now - lastDiagMsgTs < DIAG_DEDUPE_WINDOW_MS) return
   if (now - lastDiagTs < DIAG_MIN_INTERVAL_MS) return
@@ -32,18 +32,38 @@ function reportDiag(kind: string, msg: string) {
   lastDiagMsgTs = now
   try {
     const url = `${location.pathname}${location.hash}`
+    const traceId = crypto.randomUUID().replace(/-/g, '')
     void request('/diagnostics/frontend', {
       method: 'POST',
-      body: JSON.stringify({ kind, msg: String(msg).slice(0, 2000), url, ts: Date.now() }),
+      body: JSON.stringify({
+        kind,
+        msg: String(msg).slice(0, 12000),
+        url,
+        ts: Date.now(),
+        trace_id: traceId,
+        diagnostic: {
+          ...diagnostic,
+          route: url,
+          user_agent: navigator.userAgent,
+          viewport: `${window.innerWidth}x${window.innerHeight}`,
+        },
+      }),
     }).catch(() => { /* 诊断通道失败不阻塞 */ })
   } catch { /* silent */ }
 }
 
 window.addEventListener('error', (e) => {
-  reportDiag('error', `${e.message} @ ${e.filename || ''}:${e.lineno || ''}:${e.colno || ''}`)
+  reportDiag('error', e.error instanceof Error ? e.error.stack || e.message : e.message, {
+    filename: e.filename,
+    line: e.lineno,
+    column: e.colno,
+    name: e.error instanceof Error ? e.error.name : null,
+  })
 })
 window.addEventListener('unhandledrejection', (e) => {
-  reportDiag('rejection', e.reason instanceof Error ? (e.reason.stack || e.reason.message) : String(e.reason))
+  reportDiag('rejection', e.reason instanceof Error ? (e.reason.stack || e.reason.message) : String(e.reason), {
+    name: e.reason instanceof Error ? e.reason.name : typeof e.reason,
+  })
 })
 
 async function boot() {
@@ -52,7 +72,10 @@ async function boot() {
   app.use(router)
   app.config.errorHandler = (err, _instance, info) => {
     console.error('[GlobalError]', err, '\nInfo:', info)
-    reportDiag('vue-error', `${err instanceof Error ? err.stack || err.message : String(err)} | info: ${info}`)
+    reportDiag('vue-error', err instanceof Error ? err.stack || err.message : String(err), {
+      name: err instanceof Error ? err.name : typeof err,
+      component_info: info,
+    })
     try {
       window.dispatchEvent(new CustomEvent('maxma:error', {
         detail: {

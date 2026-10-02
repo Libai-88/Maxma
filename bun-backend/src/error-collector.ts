@@ -32,6 +32,8 @@ export interface ErrorRecord {
   extra: Record<string, unknown>;
   source_file?: string;
   source_line?: number;
+  occurrence_count?: number;
+  related_trace_ids?: string[];
 }
 
 /** 本地时间 "YYYY-MM-DD HH:MM:SS"（对齐 Python time.strftime + localtime）。 */
@@ -42,12 +44,33 @@ function localTimestamp(d: Date): string {
 
 export class ErrorCollector {
   static readonly MAX_IN_MEMORY = 500;
+  static readonly MAX_ARCHIVE_BYTES = 5 * 1024 * 1024;
   private buffer: ErrorRecord[] = [];
   private startedAt = Date.now() / 1000;
+
+  private archivePath(): string {
+    return path.join(getLogsDir(), "diagnostics.jsonl");
+  }
+
+  private appendArchive(record: ErrorRecord): void {
+    try {
+      const file = this.archivePath();
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      if (fs.existsSync(file) && fs.statSync(file).size >= ErrorCollector.MAX_ARCHIVE_BYTES) {
+        const previous = `${file}.1`;
+        try { fs.rmSync(previous, { force: true }); } catch { /* best-effort rotation */ }
+        fs.renameSync(file, previous);
+      }
+      fs.appendFileSync(file, `${JSON.stringify(record)}\n`, "utf8");
+    } catch {
+      // Persistent diagnostics are best-effort and must not interrupt application work.
+    }
+  }
 
   add(record: ErrorRecord): void {
     this.buffer.push(record);
     if (this.buffer.length > ErrorCollector.MAX_IN_MEMORY) this.buffer.shift();
+    this.appendArchive(record);
   }
 
   addError(
@@ -84,6 +107,9 @@ export class ErrorCollector {
   clear(): number {
     const count = this.buffer.length;
     this.buffer = [];
+    for (const file of [this.archivePath(), `${this.archivePath()}.1`]) {
+      try { fs.rmSync(file, { force: true }); } catch { /* best-effort cleanup */ }
+    }
     return count;
   }
 
@@ -91,7 +117,7 @@ export class ErrorCollector {
   private scanLogFiles(): Array<Partial<ErrorRecord> & Record<string, unknown>> {
     const errors: Array<Partial<ErrorRecord> & Record<string, unknown>> = [];
     const logsDir = getLogsDir();
-    const patterns = ["maxma.log", "maxma.log.1", "maxma.log.2", "maxma.log.3", "maxma.log.4", "maxma.log.5"];
+    const patterns = ["diagnostics.jsonl", "diagnostics.jsonl.1", "maxma.log", "maxma.log.1", "maxma.log.2", "maxma.log.3", "maxma.log.4", "maxma.log.5"];
 
     for (const pattern of patterns) {
       const logFile = path.join(logsDir, pattern);
@@ -111,19 +137,25 @@ export class ErrorCollector {
           const entry = JSON.parse(line) as Record<string, unknown>;
           const level = String(entry.level ?? "");
           if (level === "ERROR" || level === "CRITICAL" || level === "WARNING") {
-            const msg = String(entry.msg ?? "");
+            const msg = String(entry.msg ?? entry.message ?? "");
             // DIAG-NOISE-001：401/403/404 常规噪音跳过
             if (["401", "403", "404"].some((code) => msg.includes(`→ ${code}`))) continue;
+            const known = new Set(["timestamp", "ts", "level", "category", "message", "msg", "trace_id", "session_id", "request_id", "logger_name", "logger", "exception", "source_file", "source_line", "extra"]);
+            const parsedExtra = entry.extra && typeof entry.extra === "object" && !Array.isArray(entry.extra)
+              ? entry.extra as Record<string, unknown>
+              : {};
+            const extra = Object.fromEntries(Object.entries(entry).filter(([key]) => !known.has(key)));
             errors.push({
               timestamp: String(entry.ts ?? ""),
               level,
-              category: "log_file",
+              category: String(entry.category ?? "log_file"),
               message: msg,
-              logger_name: String(entry.logger ?? ""),
+              logger_name: String(entry.logger_name ?? entry.logger ?? ""),
               session_id: (entry.session_id as string | undefined) ?? null,
               request_id: (entry.request_id as string | undefined) ?? null,
               trace_id: (entry.trace_id as string | undefined) ?? null,
               exception: (entry.exception as string | undefined) ?? null,
+              extra: { ...parsedExtra, ...extra },
               source_file: pattern,
               source_line: lineNum,
             });
@@ -165,11 +197,16 @@ export class ErrorCollector {
         if (["error", "vue-error", "rejection"].includes(kind)) level = "ERROR";
         else if (["warn", "warning"].includes(kind)) level = "WARNING";
         else continue;
+        const fields = line.split(" | ");
+        const hasTrace = fields.length >= 4 && /^[a-z0-9-]{12,64}$/i.test(fields[2] ?? "");
         errors.push({
           timestamp: "",
           level,
           category: "frontend",
-          message: line.slice(0, 500),
+          message: (hasTrace ? fields.slice(3).join(" | ") : fields.slice(2).join(" | ")).slice(0, 12_000),
+          logger_name: "frontend",
+          ...(hasTrace ? { trace_id: fields[2] } : {}),
+          ...(fields[1] ? { extra: { url: fields[1] } } : {}),
           source_file: "frontend-diag.log",
           source_line: lineNum,
         });
@@ -220,7 +257,7 @@ export class ErrorCollector {
         }
         if (!stat.isFile()) continue;
         const lower = name.toLowerCase();
-        if (!lower.endsWith(".log") && !lower.startsWith("maxma.log") && !lower.startsWith("tauri.log")) continue;
+        if (!lower.endsWith(".log") && !lower.endsWith(".jsonl") && lower !== "diagnostics.jsonl.1" && !lower.startsWith("maxma.log") && !lower.startsWith("tauri.log")) continue;
         let sizeBytes = 0;
         try {
           sizeBytes = stat.size;
@@ -244,10 +281,14 @@ export class ErrorCollector {
     const info: Record<string, unknown> = {
       app_version: appVersion(),
       python_version: "N/A",
+      bun_version: process.versions.bun ?? "N/A",
+      node_compat_version: process.versions.node ?? "N/A",
       platform: `${os.type()} ${os.release()} ${os.arch()}`,
       os_name: process.platform,
       machine: os.machine(),
       processor: os.cpus()[0]?.model ?? "",
+      process_id: process.pid,
+      executable: process.execPath,
       uptime_seconds: Math.floor(Date.now() / 1000 - this.startedAt),
       logs_dir: getLogsDir(),
       data_dir: dataDir(),
@@ -273,14 +314,28 @@ export class ErrorCollector {
     const fileErrors = this.scanLogFiles();
     const systemInfo = this.collectSystemInfo();
 
-    // 合并去重（按 level|message[:200] 粗略去重，优先保留内存版本）
-    const seen = new Set<string>();
+    // Trace ID 区分独立失败；相同错误的重复采集只聚合计数，不丢关联信息。
+    const seen = new Map<string, Record<string, unknown>>();
     const merged: Array<Record<string, unknown>> = [];
     for (const err of [...memoryErrors, ...fileErrors] as Array<Record<string, unknown>>) {
-      const key = `${String(err.level ?? "")}|${String(err.message ?? "").slice(0, 200)}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      merged.push(err);
+      const traceId = String(err.trace_id ?? "");
+      const key = traceId
+        ? `trace:${traceId}`
+        : [err.level, err.category, err.message, err.session_id, err.logger_name].map((v) => String(v ?? "")).join("|");
+      const existing = seen.get(key);
+      if (existing) {
+        const sameTrace = traceId && traceId === String(existing.trace_id ?? "");
+        const archiveCopyOfMemory = Boolean(err.source_file) && !Boolean(existing.source_file);
+        if (!sameTrace && !archiveCopyOfMemory) {
+          existing.occurrence_count = Number(existing.occurrence_count ?? 1) + 1;
+        }
+        const ids = new Set([...(existing.related_trace_ids as string[] | undefined ?? []), sameTrace ? "" : traceId].filter(Boolean));
+        if (ids.size) existing.related_trace_ids = [...ids];
+        continue;
+      }
+      const first = { ...err, occurrence_count: 1 };
+      seen.set(key, first);
+      merged.push(first);
     }
     // 按时间排序：Python `e.get("timestamp") or ""` 使空时间戳归一为 ""，
     // 升序排到最前（直译对齐代码实际行为，非注释所述"排到最后"）。
@@ -404,7 +459,14 @@ export class ErrorCollector {
         const extra = err.extra as Record<string, unknown> | undefined;
         if (extra && Object.keys(extra).length) {
           lines.push("  附加信息:");
-          for (const [k, v] of Object.entries(extra)) lines.push(`    ${k}: ${String(v)}`);
+          for (const [k, v] of Object.entries(extra)) {
+            const rendered = typeof v === "string" ? v : JSON.stringify(v);
+            lines.push(`    ${k}: ${rendered ?? String(v)}`);
+          }
+        }
+        if (Number(err.occurrence_count) > 1) lines.push(`  重复次数: ${String(err.occurrence_count)}`);
+        if (Array.isArray(err.related_trace_ids) && err.related_trace_ids.length) {
+          lines.push(`  关联 Trace: ${(err.related_trace_ids as string[]).join(", ")}`);
         }
         lines.push("");
       });

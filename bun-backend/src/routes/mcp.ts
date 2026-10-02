@@ -3,11 +3,9 @@
  * （api/routes/mcp.py 的 Bun 直译，阶段二 2.4b）。
  *
  * 存储：api/data/mcp_servers.yaml（与 Python MCP_CONFIG_PATH 同文件）。
- * mcp_tools 状态源：Python 侧 app.state.mcp_tools 自阶段一后恒为 []
- * （无 MCP manager 填充）——Bun 对齐为常量 0。
- * discovered/reload：Python 经 sidecar RPC；Bun kernel in-process——
- * get_discovered_mcp 无对应 RPC（返回 []，同 Python sidecar 不可用分支）；
- * reload 对每个活跃会话调 kernel reload_mcp_for_session（pi 返回 noop）。
+ * mcp_tools 状态源：从活跃 pi 会话的工具注册表读取真实工具。
+ * discovered/reload：配置由 YAML 提供，工具状态从当前会话聚合；
+ * pi 会话的 MCP 配置在创建时绑定，配置变更后需重建会话。
  *
  * 校验分工：Pydantic 422（字段类型）先行，transport 级 400（业务）在后——
  * 与 FastAPI 先校验 body 再进 handler 的顺序对齐。
@@ -339,6 +337,29 @@ function findEntry(entries: Entry[], serverId: string): Entry | null {
   return entries.find((e) => e.server_id === serverId) ?? null;
 }
 
+/** 从已绑定的 pi 会话读取真实 MCP 工具注册表。 */
+function collectMcpTools(deps: McpDeps, serverId?: string) {
+  const prefix = serverId ? `mcp__${serverId}__` : "mcp__";
+  const tools = new Map<string, Record<string, unknown>>();
+  for (const record of deps.sessions.values()) {
+    try {
+      for (const tool of record.session.getAllTools()) {
+        if (!tool.name.startsWith(prefix)) continue;
+        tools.set(tool.name, {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
+          exposure: tool.exposure,
+          source: tool.sourceInfo,
+        });
+      }
+    } catch {
+      // 会话正在销毁时读取工具表可能失败，忽略该会话即可。
+    }
+  }
+  return [...tools.values()];
+}
+
 // ── Registry 代理 ──
 
 interface RegistryFetchError {
@@ -423,7 +444,8 @@ export function createMcpRoutes(deps: McpDeps): Hono {
   // GET /mcp/servers
   app.get("/api/mcp/servers", (c) => {
     const entries = loadRaw();
-    return c.json({ servers: entries.map((e) => redactSensitive(e)), tool_count: 0 });
+    const tools = collectMcpTools(deps);
+    return c.json({ servers: entries.map((e) => redactSensitive(e)), tool_count: tools.length });
   });
 
   // GET /mcp/servers/{id}
@@ -436,8 +458,10 @@ export function createMcpRoutes(deps: McpDeps): Hono {
   // GET /mcp/servers/{id}/tools
   app.get("/api/mcp/servers/:serverId/tools", (c) => {
     const serverId = c.req.param("serverId");
-    if (!findEntry(loadRaw(), serverId)) return c.json({ detail: `MCP 服务器 '${serverId}' 不存在` }, 404);
-    return c.json({ server_id: serverId, tools: [], note: "工具由 OMP sidecar 动态管理，请在对话中让 AI 列出或调用它们" });
+    const entry = findEntry(loadRaw(), serverId);
+    if (!entry) return c.json({ detail: `MCP 服务器 '${serverId}' 不存在` }, 404);
+    const serverName = String(entry.name ?? entry.server_id ?? serverId);
+    return c.json({ server_id: serverId, tools: collectMcpTools(deps, serverName) });
   });
 
   // POST /mcp/servers
@@ -510,8 +534,18 @@ export function createMcpRoutes(deps: McpDeps): Hono {
     }
   });
 
-  // GET /mcp/discovered（kernel 无 get_discovered_mcp RPC → []，同 Python sidecar 不可用分支）
-  app.get("/api/mcp/discovered", (c) => c.json([]));
+  // GET /mcp/discovered：返回配置服务器与当前会话已发现的真实工具。
+  app.get("/api/mcp/discovered", (c) => {
+    const tools = collectMcpTools(deps);
+    const entries = loadRaw();
+    return c.json(entries.map((entry) => ({
+      server_id: String(entry.server_id ?? ""),
+      name: String(entry.name ?? entry.server_id ?? ""),
+      transport: String(entry.transport ?? "unknown"),
+      enabled: entry.enabled !== false,
+      tool_count: tools.filter((tool) => String(tool.name).startsWith(`mcp__${String(entry.name ?? entry.server_id ?? "")}__`)).length,
+    })));
+  });
 
   // POST /mcp/reload
   app.post("/api/mcp/reload", async (c) => {
@@ -529,14 +563,105 @@ export function createMcpRoutes(deps: McpDeps): Hono {
         errors.push(`${sid.slice(0, 8)}: ${String(err)}`);
       }
     }
+    const status = reloadedCount > 0 ? "reloaded" : "noop";
     return c.json({
-      status: "reloaded",
+      status,
       reloaded_sessions: reloadedCount,
       total_sessions: activeSessions.length,
       errors,
-      servers: [],
-      tool_count: 0,
+      servers: loadRaw().map((entry) => redactSensitive(entry)),
+      tool_count: collectMcpTools(deps).length,
+      ...(reloadedCount === 0 && errors.length === 0
+        ? { detail: "pi 会话需要重建后才能应用 MCP 配置" }
+        : {}),
     });
+  });
+
+  // ModelScope MCP marketplace (search/detail/import of published local server configs).
+  app.get("/api/mcp/modelscope", async (c) => {
+    const q = (c.req.query("q") ?? "").trim().slice(0, 160);
+    const page = Math.max(1, Number(c.req.query("page") ?? 1) || 1);
+    try {
+      const response = await fetch("https://www.modelscope.cn/openapi/v1/mcp/servers", {
+        method: "PUT", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ search: q, page_number: page, page_size: 20 }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!response.ok) return c.json({ detail: "魔搭 MCP 市场暂不可用（HTTP " + response.status + "）" }, 502);
+      const payload = await response.json() as { success?: boolean; data?: { mcp_server_list?: Array<Record<string, unknown>>; total_count?: number } };
+      if (!payload.success || !payload.data) return c.json({ detail: "魔搭 MCP 市场响应异常" }, 502);
+      const servers = (payload.data.mcp_server_list ?? []).map((item) => {
+        const locales = item.locales as Record<string, Record<string, unknown>> | undefined;
+        const zh = locales?.zh ?? {};
+        return {
+          id: String(item.id ?? ""), name: String(item.chinese_name || zh.name || item.name || item.id || ""),
+          description: String(zh.description || item.description || ""), author: String(item.publisher ?? item.author ?? ""),
+          logo_url: String(item.logo_url ?? ""), view_count: Number(item.view_count ?? 0), categories: item.categories ?? [],
+        };
+      });
+      return c.json({ servers, total: payload.data.total_count ?? servers.length, page, page_size: 20 });
+    } catch (error) {
+      return c.json({ detail: "魔搭 MCP 市场连接失败: " + (error instanceof Error ? error.message : String(error)) }, 502);
+    }
+  });
+
+  app.get("/api/mcp/modelscope/*", async (c) => {
+    let serverId = "";
+    try { serverId = decodeURIComponent(c.req.path.split("/api/mcp/modelscope/")[1] ?? ""); } catch { return c.json({ detail: "无效的服务标识" }, 400); }
+    if (!/^[A-Za-z0-9@][A-Za-z0-9._/@-]{0,239}$/.test(serverId) || serverId.includes("..")) return c.json({ detail: "无效的服务标识" }, 400);
+    try {
+      const response = await fetch("https://www.modelscope.cn/openapi/v1/mcp/servers/" + encodeURIComponent(serverId), { signal: AbortSignal.timeout(15_000) });
+      if (!response.ok) return c.json({ detail: "魔搭 MCP 服务详情不可用（HTTP " + response.status + "）" }, response.status === 404 ? 404 : 502);
+      const payload = await response.json() as { success?: boolean; data?: Record<string, unknown> };
+      if (!payload.success || !payload.data) return c.json({ detail: "魔搭 MCP 服务详情响应异常" }, 502);
+      const item = payload.data;
+      const locales = item.locales as Record<string, Record<string, unknown>> | undefined;
+      const zh = locales?.zh ?? {};
+      return c.json({ id: String(item.id ?? serverId), name: String(item.chinese_name || zh.name || item.name || serverId), description: String(zh.description || item.description || ""), author: String(item.author ?? ""), source_url: String(item.source_url ?? ""), server_config: item.server_config ?? [], operational_urls: item.operational_urls ?? [], readme: String(item.readme ?? "") });
+    } catch (error) {
+      return c.json({ detail: "魔搭 MCP 服务详情获取失败: " + (error instanceof Error ? error.message : String(error)) }, 502);
+    }
+  });
+
+  app.post("/api/mcp/modelscope/install", async (c) => {
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const serverId = String(body.server_id ?? "").trim();
+    if (!/^[A-Za-z0-9@][A-Za-z0-9._/@-]{0,239}$/.test(serverId) || serverId.includes("..")) return c.json({ detail: "无效的 server_id" }, 400);
+    try {
+      const response = await fetch("https://www.modelscope.cn/openapi/v1/mcp/servers/" + encodeURIComponent(serverId), { signal: AbortSignal.timeout(15_000) });
+      if (!response.ok) throw new McpHttpError(response.status === 404 ? 404 : 502, "无法获取魔搭 MCP 服务配置");
+      const payload = await response.json() as { success?: boolean; data?: Record<string, unknown> };
+      const data = payload.data;
+      if (!payload.success || !data) throw new McpHttpError(502, "魔搭 MCP 服务配置响应异常");
+      const configs = Array.isArray(data.server_config) ? data.server_config as Array<Record<string, unknown>> : [];
+      const configRoot = configs.find((config) => config.mcpServers && typeof config.mcpServers === "object")?.mcpServers as Record<string, Record<string, unknown>> | undefined;
+      const first = configRoot ? Object.entries(configRoot)[0] : undefined;
+      if (!first) throw new McpHttpError(422, "该服务没有可导入的本地 MCP 启动配置");
+      const [publishedName, rawConfig] = first;
+      const config = rawConfig as Record<string, unknown>;
+      if (typeof config.command !== "string") throw new McpHttpError(422, "该服务提供的是托管连接，暂不支持直接导入本地启动配置");
+      const serverName = serverId.replace(/^@/, "").replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 100);
+      if (!serverName) throw new McpHttpError(400, "无法从 server_id 生成本地服务名称");
+      const command = validateStdioCommand(config.command);
+      if (config.args !== undefined && (!Array.isArray(config.args) || !config.args.every((arg) => typeof arg === "string"))) throw new McpHttpError(422, "该服务的 args 配置格式无效");
+      const args = config.args === undefined ? [] : config.args as string[];
+      const sourceEnv = config.env && typeof config.env === "object" && !Array.isArray(config.env) ? config.env as Record<string, unknown> : {};
+      const suppliedEnv = body.env && typeof body.env === "object" && !Array.isArray(body.env) ? body.env as Record<string, unknown> : {};
+      if (Object.keys(suppliedEnv).some((key) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || typeof suppliedEnv[key] !== "string")) throw new McpHttpError(400, "环境变量格式无效");
+      const unresolved = Object.entries(sourceEnv).filter(([key, value]) => typeof value === "string" && /^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/.test(value) && typeof suppliedEnv[key] !== "string");
+      if (unresolved.length) throw new McpHttpError(422, "请先填写必需的环境变量: " + unresolved.map(([key]) => key).join(", "));
+      const env = { ...Object.fromEntries(Object.entries(sourceEnv).map(([key, value]) => [key, typeof value === "string" ? value : String(value)])), ...suppliedEnv };
+      if (Object.keys(env).length > 0) validateEnvVars(env);
+      const entries = loadRaw();
+      if (findEntry(entries, serverName)) throw new McpHttpError(409, "server_id 已存在：" + serverName);
+      const server: Entry = { server_id: serverName, transport: "stdio", enabled: true, description: String(data.description ?? data.chinese_name ?? data.name ?? publishedName), command, args, ...(Object.keys(env).length ? { env } : {}) };
+      entries.push(server);
+      saveRaw(entries);
+      const result = reloadView(entries);
+      return c.json({ ...result, status: "installed", server: redactSensitive(server), marketplace_id: serverId });
+    } catch (error) {
+      return fail(c, error);
+    }
   });
 
   // GET /mcp/registry

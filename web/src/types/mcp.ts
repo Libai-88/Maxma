@@ -118,6 +118,23 @@ export interface RegistryInstallResponse {
   tool_count: number
 }
 
+export interface ModelScopeMcpServer {
+  id: string
+  name: string
+  description: string
+  author: string
+  logo_url?: string
+  source_url?: string
+  view_count?: number
+}
+
+export interface ModelScopeMcpListResponse {
+  servers: ModelScopeMcpServer[]
+  total: number
+  page: number
+  page_size: number
+}
+
 // ── OAuth 授权 ──
 
 export interface OAuthAuthorizeResponse {

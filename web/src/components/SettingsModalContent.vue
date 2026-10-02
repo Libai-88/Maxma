@@ -2,8 +2,8 @@
   <div class="settings-modal">
     <!-- Header -->
     <div class="settings-header">
-      <h2 class="settings-title">设置中心</h2>
-      <p class="settings-subtitle">选择要配置的功能模块</p>
+      <h2 class="settings-title">功能导航</h2>
+      <p class="settings-subtitle">配置与管理</p>
     </div>
 
     <!-- Grid of setting items -->

@@ -20,7 +20,7 @@
         <ul>
           <li><strong>HTTP 请求</strong>：前端与本地后端通信的请求数与延迟。延迟突然飙高说明后端响应变慢。</li>
           <li><strong>工具调用</strong>：AI 实际使用的工具次数（搜索、文件读写、MCP 等）。错误数 > 0 提示有工具失败。</li>
-          <li><strong>LLM 调用</strong>：调用 AI 模型的次数与 Token 消耗——可据此估算 API 费用。</li>
+          <li><strong>模型轮次</strong>：统计已完成的对话轮次，不等于底层 API 请求数。Token 优先使用模型返回的用量；未返回时会估算。</li>
           <li><strong>错误统计</strong>：按类别聚合的应用错误。健康状态下应为空或极少。</li>
           <li><strong>历史趋势</strong>：可切换 30 分钟 ~ 24 小时窗口，观察指标随时间的变化。</li>
         </ul>
@@ -107,12 +107,13 @@
 
       <!-- LLM 区 -->
       <section class="card">
-        <h3>LLM 调用</h3>
-        <p class="section-desc">调用 AI 语言模型（如 DeepSeek、Ollama）的次数与 Token 消耗。输出 Token 越多，对话越长、API 费用越高。</p>
+        <h3>模型用量</h3>
+        <p class="section-desc">按已完成的对话轮次汇总。底层模型可能在一轮中发起多次请求；缺少模型用量回报时输入、输出 Token 会使用估算值，缓存命中率也会受输入估算影响。</p>
+        <p v-if="snapshot.llm.estimated_usage_calls" class="section-desc">当前进程有 {{ snapshot.llm.estimated_usage_calls }} 轮使用了估算 Token。</p>
         <div class="stat-grid">
           <FloatingCard><GlareCard class="stat">
             <div class="stat-value"><NumberTicker :value="snapshot.llm.total_calls" /></div>
-            <div class="stat-label">调用次数</div>
+            <div class="stat-label">完成轮次</div>
           </GlareCard></FloatingCard>
           <FloatingCard><GlareCard class="stat">
             <div class="stat-value">{{ formatTokens(snapshot.llm.total_tokens_in) }}</div>
@@ -123,12 +124,20 @@
             <div class="stat-label">输出 Tokens</div>
           </GlareCard></FloatingCard>
           <FloatingCard><GlareCard class="stat">
+            <div class="stat-value">{{ formatTokens(snapshot.llm.cache_read_tokens) }}</div>
+            <div class="stat-label">缓存读取 Tokens</div>
+          </GlareCard></FloatingCard>
+          <FloatingCard><GlareCard class="stat">
+            <div class="stat-value">{{ snapshot.llm.cache_hit_rate === null ? '—' : `${(snapshot.llm.cache_hit_rate * 100).toFixed(1)}%` }}</div>
+            <div class="stat-label">缓存命中率</div>
+          </GlareCard></FloatingCard>
+          <FloatingCard><GlareCard class="stat">
             <div class="stat-value">{{ snapshot.llm.latency_ms.avg_ms.toFixed(1) }}<span class="unit">ms</span></div>
-            <div class="stat-label">平均延迟</div>
+            <div class="stat-label">平均轮次时长</div>
           </GlareCard></FloatingCard>
         </div>
         <div v-if="Object.keys(snapshot.llm.by_model).length > 0" class="sub-section">
-          <div class="sub-title">按模型分布</div>
+          <div class="sub-title">按模型统计轮次</div>
           <BarChartMini
             :items="modelItems"
             :height="100"

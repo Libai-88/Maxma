@@ -26,8 +26,12 @@ export interface MetricsSnapshot {
   }
   llm: {
     total_calls: number
+    estimated_usage_calls?: number
     total_tokens_in: number
     total_tokens_out: number
+    cache_read_tokens: number
+    cache_write_tokens: number
+    cache_hit_rate: number | null
     latency_ms: MetricsHistogram
     by_model: Record<string, number>
   }

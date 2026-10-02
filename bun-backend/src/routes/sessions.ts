@@ -22,6 +22,7 @@ import {
 } from "../../../bun-sidecar/src/kernel/bridge-pi";
 
 import { getDeferredRunManager } from "./deferred-runs";
+import { getGlobalSettingsSingleton } from "../settings-global";
 
 /** Bun 后端的会话注册表（kernel 桥经 deps 注入）。 */
 export interface SessionHub {
@@ -69,7 +70,10 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
 
   // ── 创建 ──
   app.post("/api/sessions", async (c) => {
-    await callRpc(deps, "create_session", { cwd: process.cwd() });
+    // 让 kernel 使用 Maxma 项目根目录；bun-backend 的 cwd 通常是子目录。
+    const settings = getGlobalSettingsSingleton().getSettings() as Record<string, unknown>;
+    const skills = settings.skills as Record<string, unknown> | undefined;
+    await callRpc(deps, "create_session", { skills_enabled: skills?.enabled !== false });
     const created = [...deps.hub.sessions.keys()].at(-1)!;
     const record = deps.hub.sessions.get(created)!;
     return c.json({ session_id: created, created_at: new Date().toISOString(), engine: record.engine });

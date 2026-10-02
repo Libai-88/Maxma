@@ -18,6 +18,8 @@ import { loadMaxmaMcpEntries } from "../src/kernel/mcp";
 import { resolvePiModel } from "../src/kernel/model";
 import { buildPiCustomTools } from "../src/kernel/tools";
 import { createMaxmaSession } from "../src/kernel/pi-session";
+import { loadPersonaSystemPrompt } from "../src/kernel/persona-prompt";
+import { restoreGoalState } from "../src/kernel/goal";
 import { orchestratePiPrompt, handlePiCancelGuard } from "../src/kernel/prompt";
 import {
   handlePiCreateSession,
@@ -214,6 +216,10 @@ describe("kernel: orchestratePiPrompt", () => {
     const session = { prompt: async () => { throw new Error("boom"); }, abort: async () => {} };
     await orchestratePiPrompt(session, "hi", guard, (e) => events.push(e), 1000);
     expect(events.some((e) => e.type === "error" && (e.payload as any).code === "PROMPT_ERROR")).toBe(true);
+    const error = events.find((e) => e.type === "error")!;
+    expect((error.payload.diagnostic as Record<string, unknown>).name).toBe("Error");
+    expect(String((error.payload.diagnostic as Record<string, unknown>).stack)).toContain("boom");
+    expect((error.payload.diagnostic as Record<string, unknown>).stage).toBe("model_request");
     expect(events.at(-1)?.type).toBe("done");
   });
 
@@ -374,9 +380,28 @@ describe("kernel: resolvePiModel", () => {
     });
     expect(model.provider).toBe("maxma-custom");
     expect(model.id).toBe("my-model");
+    expect(model.api).toBe("openai-completions");
     expect(model.baseUrl).toBe("https://api.example.com/v1");
     expect(model.contextWindow).toBe(64_000);
     expect(model.maxTokens).toBe(4_096);
+  });
+
+  test("Maxma provider 类型映射到 pi 支持的 API", async () => {
+    const { model } = await resolvePiModel({
+      model: "opencode-zen/deepseek-v4-flash-free",
+      baseUrl: "https://opencode.ai/zen/v1",
+      apiKey: "sk-test",
+      providerType: "openai",
+    });
+    expect(model.api).toBe("openai-completions");
+
+    const custom = await resolvePiModel({
+      model: "tao/qwen3.6-max-preview:free",
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "sk-test",
+      providerType: "custom",
+    });
+    expect(custom.model.api).toBe("openai-completions");
   });
 
   test("registry 未命中且无 baseUrl → 明确报错（不臆造模型元数据）", async () => {
@@ -415,6 +440,40 @@ describe("kernel: pi RPC bridge", () => {
     const sid = (replies[0]!.result as { session_id: string }).session_id;
     expect(sessions.has(sid)).toBe(true);
     expect(sessions.get(sid)!.permissionMode).toBe("read_only");
+  });
+
+  test("新会话加载活动人设、用户档案和表情贴纸指引", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "maxma-persona-prompt-"));
+    const personaDir = path.join(dir, "config", "personas");
+    fs.mkdirSync(personaDir, { recursive: true });
+    fs.writeFileSync(path.join(personaDir, "active_persona.yaml"), "file: SOUL.测试.md\n");
+    fs.writeFileSync(path.join(personaDir, "SOUL.md"), "默认人设，不应覆盖活动人设");
+    fs.writeFileSync(path.join(personaDir, "SOUL.测试.md"), "你是测试人设，称呼 {{USER_NAME}}。");
+    fs.writeFileSync(path.join(personaDir, "USER.md"), "用户喜欢简短回复。");
+    fs.mkdirSync(path.join(dir, "config"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "config", "onboarding.json"), JSON.stringify({ preferences: { displayName: "小李" } }));
+    const previousDataDir = process.env.MAXMA_DATA_DIR;
+    const previousBundleDir = process.env.MAXMA_BUNDLE_DIR;
+    process.env.MAXMA_DATA_DIR = dir;
+    process.env.MAXMA_BUNDLE_DIR = dir;
+    try {
+      const session = await createMaxmaSession({
+        inMemory: true,
+        cwd: import.meta.dir,
+        appendSystemPrompt: [loadPersonaSystemPrompt()],
+      });
+      expect(session.systemPrompt).toContain("你是测试人设，称呼 小李。");
+      expect(session.systemPrompt).toContain("用户喜欢简短回复。");
+      expect(session.systemPrompt).toContain("[表情包:分类]");
+      expect(session.systemPrompt).not.toContain("默认人设，不应覆盖活动人设");
+      session.dispose();
+    } finally {
+      if (previousDataDir === undefined) delete process.env.MAXMA_DATA_DIR;
+      else process.env.MAXMA_DATA_DIR = previousDataDir;
+      if (previousBundleDir === undefined) delete process.env.MAXMA_BUNDLE_DIR;
+      else process.env.MAXMA_BUNDLE_DIR = previousBundleDir;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   test("pi 会话支持核心 RPC，未迁移方法显式报错", async () => {
@@ -555,6 +614,21 @@ describe("kernel: pi RPC bridge", () => {
     resolvePiPlanAction(pendingPlans, planId2, { action: "reject", reason: "需要修改" });
     const result2 = await execution2;
     expect((result2.content[0]!.text ?? "").startsWith("Plan rejected")).toBe(true);
+  });
+
+  test("Goal 状态从持久化 custom entry 恢复", () => {
+    const state = restoreGoalState([
+      { type: "custom", customType: "maxma:goal", data: {
+        enabled: true,
+        mode: "paused",
+        goal: { id: "goal-1", objective: "完成周报", status: "paused", tokenBudget: 1000 },
+      } },
+    ]);
+    expect(state).toEqual({
+      enabled: true,
+      mode: "paused",
+      goal: { id: "goal-1", objective: "完成周报", status: "paused", tokenBudget: 1000 },
+    });
   });
 
   test("Goal 模式：状态机 + goal_updated 事件 + get_goal_state", async () => {

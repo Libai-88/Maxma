@@ -214,7 +214,7 @@ useGsap((_ctx, contextSafe) => {
 <style scoped>
 .message-row {
   display: flex;
-  padding: 4px 0;
+  padding: 6px 0;
   min-width: 0;
 }
 .message-row + .message-row {
@@ -235,14 +235,14 @@ useGsap((_ctx, contextSafe) => {
 }
 
 .bubble {
-  max-width: min(100%, 760px);
-  padding: 10px 16px;
-  border-radius: 14px;
+  max-width: min(100%, 720px);
+  padding: 12px 16px;
+  border-radius: 12px;
   font-size: 1em;
   line-height: 1.6;
   word-break: break-word;
   overflow-wrap: anywhere;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text-primary) 5%, transparent);
   min-width: 0;
   transition: transform 0.15s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1)),
               box-shadow 0.15s var(--ease-out, cubic-bezier(0.23, 1, 0.32, 1));

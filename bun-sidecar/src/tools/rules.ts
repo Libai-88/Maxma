@@ -9,6 +9,7 @@
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
 import type { MaxmaToolDescriptor } from "./descriptor";
+import { maxmaBundleRoot, maxmaDataRoot } from "../kernel/project-paths";
 
 export interface QualityRule {
   id: string;
@@ -22,19 +23,19 @@ export interface QualityRule {
 
 /** 内置规则共享 JSON：<MAXMA_PROJECT_ROOT>/config/rules/builtin_rules.json */
 function builtinRulesFile(): string {
-  return path.join(process.env.MAXMA_PROJECT_ROOT ?? process.cwd(), "config", "rules", "builtin_rules.json");
+  return path.join(maxmaBundleRoot(), "config", "rules", "builtin_rules.json");
 }
 
 /** 用户自定义规则：<MAXMA_PROJECT_ROOT>/api/data/user_rules.json */
 function userRulesFile(): string {
-  return path.join(process.env.MAXMA_PROJECT_ROOT ?? process.cwd(), "api", "data", "user_rules.json");
+  return path.join(maxmaDataRoot(), "api", "data", "user_rules.json");
 }
 
 /** 内置规则启停覆盖：<MAXMA_PROJECT_ROOT>/api/data/rule_toggles.json
  *  （RULES-TOGGLE-001：Python 后端 toggle 内置规则写入此文件，本工具叠加应用，
  *    保证 Agent 侧与 UI 侧看到一致的启停状态。） */
 function ruleTogglesFile(): string {
-  return path.join(process.env.MAXMA_PROJECT_ROOT ?? process.cwd(), "api", "data", "rule_toggles.json");
+  return path.join(maxmaDataRoot(), "api", "data", "rule_toggles.json");
 }
 
 async function readJsonList(file: string): Promise<Record<string, unknown>[]> {

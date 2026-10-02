@@ -82,7 +82,9 @@ export function createSettingsRoutes(): Hono {
     const result: Record<string, unknown> = {};
     for (const p of pathList) {
       const value = readDottedPath(settings, p);
+      // Skills 默认开启；旧配置文件可能没有该节点，前端仍需得到稳定布尔值。
       if (value !== undefined) result[p] = value;
+      else if (p === "skills.enabled") result[p] = true;
     }
     return c.json(result);
   });

@@ -6,7 +6,7 @@
  *   POST   /api/diagnostics/frontend        前端上报 → 追加 frontend-diag.log
  *   GET    /api/diagnostics/error-log       完整错误报告（JSON）
  *   GET    /api/diagnostics/error-log/text  纯文本报告（下载/复制）
- *   DELETE /api/diagnostics/error-log       清空内存缓冲区
+ *   DELETE /api/diagnostics/error-log       清空内存缓冲区与诊断归档
  *   GET    /api/diagnostics/logs            日志文件列表及大小
  *   DELETE /api/diagnostics/logs            清理旧日志（保留三个活跃文件）
  */
@@ -36,9 +36,32 @@ export function createDiagnosticsRoutes(): Hono {
       const payload = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
       fs.mkdirSync(getLogsDir(), { recursive: true });
       const kind = String(payload.kind ?? "") || "info";
-      const msg = String(payload.msg ?? "").slice(0, 2000);
+      const msg = String(payload.msg ?? "").slice(0, 12_000);
       const url = String(payload.url ?? "").slice(0, 300);
-      const line = `[${clockStamp(new Date())}] ${kind} | ${url} | ${msg}\n`;
+      const traceId = String(payload.trace_id ?? "").slice(0, 64) || null;
+      const inputDiagnostic = payload.diagnostic && typeof payload.diagnostic === "object" && !Array.isArray(payload.diagnostic)
+        ? payload.diagnostic as Record<string, unknown>
+        : {};
+      const diagnostic: Record<string, unknown> = {};
+      for (const key of ["name", "stack", "filename", "line", "column", "route", "user_agent", "viewport", "component_info"]) {
+        const value = inputDiagnostic[key];
+        if (typeof value === "string") diagnostic[key] = value.slice(0, key === "stack" ? 20_000 : 1000);
+        else if (typeof value === "number" || typeof value === "boolean") diagnostic[key] = value;
+      }
+      const exception = typeof diagnostic.stack === "string" ? diagnostic.stack : null;
+      delete diagnostic.stack;
+      const level = ["error", "vue-error", "rejection"].includes(kind) ? "ERROR" : "WARNING";
+      getErrorCollector().addError(level, "frontend", msg, {
+        ...(traceId ? { trace_id: traceId } : {}),
+        logger_name: "frontend",
+        exception,
+        url,
+        kind,
+        ...diagnostic,
+      });
+      const line = traceId
+        ? `[${clockStamp(new Date())}] ${kind} | ${url} | ${traceId} | ${msg}\n`
+        : `[${clockStamp(new Date())}] ${kind} | ${url} | ${msg}\n`;
       fs.appendFileSync(frontendDiagLogPath(), line, "utf8");
     } catch {
       // 诊断通道自身失败不影响主流程
@@ -96,7 +119,7 @@ export function createDiagnosticsRoutes(): Hono {
         });
       }
 
-      const protectedNames = new Set(["maxma.log", "tauri.log", "frontend-diag.log"]);
+      const protectedNames = new Set(["maxma.log", "tauri.log", "frontend-diag.log", "diagnostics.jsonl", "diagnostics.jsonl.1"]);
       const entries = fs.readdirSync(logsDir).sort((a, b) => a.localeCompare(b));
 
       for (const name of entries) {
