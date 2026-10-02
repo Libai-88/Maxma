@@ -21,7 +21,7 @@ export function dbPath(): string {
   return path.join(getApiDataDir(), "maxma.db");
 }
 
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 type Migration = string | ((conn: Database) => void);
 
@@ -194,6 +194,39 @@ export const SCHEMA_MIGRATIONS: Migration[] = [
     );
     CREATE INDEX IF NOT EXISTS idx_deferred_runs_session ON deferred_runs(session_id);
     INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (7, julianday('now'));`,
+  // v8: 逐模型请求用量账本（不保存提示词或消息内容）
+  `CREATE TABLE IF NOT EXISTS llm_usage_calls (
+      id TEXT PRIMARY KEY,
+      source_entry_id TEXT UNIQUE,
+      session_id TEXT NOT NULL,
+      turn_id TEXT,
+      request_index INTEGER,
+      kind TEXT NOT NULL,
+      usage_source TEXT NOT NULL,
+      provider TEXT,
+      model TEXT,
+      occurred_at TEXT NOT NULL,
+      duration_ms INTEGER,
+      input_tokens INTEGER,
+      output_tokens INTEGER,
+      cache_read_tokens INTEGER,
+      cache_write_tokens INTEGER,
+      cache_observation_status TEXT NOT NULL DEFAULT 'unknown',
+      usage_status TEXT NOT NULL,
+      cost_input REAL,
+      cost_output REAL,
+      cost_cache_read REAL,
+      cost_cache_write REAL,
+      cost_total REAL,
+      cost_status TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_llm_usage_calls_occurred_at
+      ON llm_usage_calls(occurred_at);
+    CREATE INDEX IF NOT EXISTS idx_llm_usage_calls_provider_model_time
+      ON llm_usage_calls(provider, model, occurred_at);
+    CREATE INDEX IF NOT EXISTS idx_llm_usage_calls_turn
+      ON llm_usage_calls(session_id, turn_id, request_index);
+    INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (8, julianday('now'));`,
 ];
 
 let initializedForPath: string | null = null;
@@ -275,5 +308,5 @@ export function withTransaction<T>(fn: (db: Database) => T): T {
 
 /** 测试辅助：重置初始化标志（切临时数据目录后需重新迁移）。 */
 export function resetDbInitForTest(): void {
-  initialized = false;
+  initializedForPath = null;
 }

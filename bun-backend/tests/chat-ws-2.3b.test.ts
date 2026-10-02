@@ -211,6 +211,84 @@ describe("回合富化层（阶段 2.3b）", () => {
     expect(done.payload.cancelled).toBe(true);
   }, 15000);
 
+  test("多次模型响应、缺失用量和 cache_warm 分别写入用量账本", async () => {
+    const { onKernelEvent, handleChatMessage } = await import("../src/routes/chat-ws");
+    const { getRecentLlmUsageCalls } = await import("../src/llm-usage-ledger");
+    const { getMetrics } = await import("../src/metrics");
+    const before = getMetrics().getSnapshot().llm;
+    const sid = "sess-llm-usage-ledger";
+    const { hub, ws, sent, promptCalls } = makeHub(sid);
+    handleChatMessage(hub as never, ws as never, JSON.stringify({ type: "chat", payload: { message: "测试用量" } }));
+    await Bun.sleep(10);
+    expect(promptCalls.length).toBe(1);
+
+    await onKernelEvent(hub as never, sid, {
+      type: "answer",
+      payload: {
+        content: "",
+        provider: "openai",
+        model: "gpt-test",
+        request_duration_ms: 120,
+        usage: { input: 100, output: 10, cacheRead: 30, cacheWrite: 0, cost: { input: 0.001, output: 0.002, cacheRead: 0.0001, cacheWrite: 0, total: 0.0031 } },
+      },
+    });
+    await onKernelEvent(hub as never, sid, {
+      type: "answer",
+      payload: {
+        content: "",
+        provider: "openai",
+        model: "gpt-test",
+        request_duration_ms: 220,
+        usage: { input: 50, output: 8, cacheRead: 20, cacheWrite: 0, cost: { input: 0.001, output: 0.001, cacheRead: 0.0001, cacheWrite: 0, total: 0.0021 } },
+      },
+    });
+    await onKernelEvent(hub as never, sid, {
+      type: "answer",
+      payload: { content: "done", provider: "custom-free", model: "free-test", usage: null },
+    });
+    await onKernelEvent(hub as never, sid, { type: "done", payload: {} });
+    await onKernelEvent(hub as never, sid, {
+      type: "llm_usage",
+      payload: {
+        kind: "cache_warm",
+        usage_source: "pi_usage_entry",
+        usage_entry_id: "warm-entry-test",
+        occurred_at: new Date().toISOString(),
+        provider: "openai",
+        model: "gpt-test",
+        usage: { input: 0, output: 0, cacheRead: 70, cacheWrite: 0, cost: { input: 0, output: 0, cacheRead: 0.0002, cacheWrite: 0, total: 0.0002 } },
+      },
+    });
+
+    const rows = getRecentLlmUsageCalls({ windowSeconds: 86_400 });
+    const sessionRows = rows.filter((row) => row.session_id === sid);
+    expect(sessionRows).toHaveLength(4);
+    expect(sessionRows.filter((row) => row.kind === "model_request").map((row) => row.request_index)).toEqual([3, 2, 1]);
+    expect(sessionRows.find((row) => row.usage_status === "missing")).toMatchObject({
+      input_tokens: null,
+      output_tokens: null,
+      cost_total: null,
+      cost_status: "unknown",
+    });
+    expect(sessionRows.find((row) => row.kind === "cache_warm")).toMatchObject({
+      turn_id: null,
+      source_entry_id: `${sid}:warm-entry-test`,
+      cache_read_tokens: 70,
+      cost_total: null,
+      cost_status: "unknown",
+    });
+    const completed = sent.find((event) => event.type === "done") as { payload: { context_usage: Record<string, unknown> } };
+    expect(completed.payload.context_usage).toMatchObject({
+      model_request_count: 3,
+      usage_status: "partial",
+      input_tokens: null,
+      cache_hit_rate: null,
+    });
+    const after = getMetrics().getSnapshot().llm;
+    expect(after.total_calls - before.total_calls).toBe(3);
+    expect(after.missing_usage_calls - before.missing_usage_calls).toBe(1);
+    expect(after.cache_warm_calls - before.cache_warm_calls).toBe(1);
+  }, 15000);
   test("WS 限流：超过 capacity 后 chat → error{RATE_LIMITED}", async () => {
     const { onKernelEvent, handleChatMessage } = await import("../src/routes/chat-ws");
     const sid = "sess-ratelimit";

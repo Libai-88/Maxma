@@ -69,6 +69,11 @@ export interface MetricsSnapshot {
   llm: {
     total_calls: number;
     estimated_usage_calls: number;
+    reported_usage_calls: number;
+    partial_usage_calls: number;
+    missing_usage_calls: number;
+    cache_warm_calls: number;
+    cache_unobserved_calls: number;
     total_tokens_in: number;
     total_tokens_out: number;
     cache_read_tokens: number;
@@ -91,6 +96,13 @@ export class Metrics {
   private toolLatency = new Map<string, Histogram>();
   private llmCount = 0;
   private llmEstimatedUsageCount = 0;
+  private llmReportedUsageCount = 0;
+  private llmPartialUsageCount = 0;
+  private llmMissingUsageCount = 0;
+  private llmCacheWarmCount = 0;
+  private llmCacheUnobservedCount = 0;
+  private llmModelInput = 0;
+  private llmModelCacheRead = 0;
   private llmTokensIn = 0;
   private llmTokensOut = 0;
   private llmCacheRead = 0;
@@ -160,6 +172,47 @@ export class Metrics {
     this.llmByModel.set(model, (this.llmByModel.get(model) ?? 0) + 1);
   }
 
+  recordLlmUsageRequest(
+    model: string,
+    usage: unknown,
+    latencyMs: number | null,
+    options: { kind?: "model_request" | "cache_warm"; cacheStatus?: "catalog" | "observed" | "unknown" } = {},
+  ): void {
+    const kind = options.kind ?? "model_request";
+    const record = usage !== null && typeof usage === "object" && !Array.isArray(usage)
+      ? usage as Record<string, unknown>
+      : null;
+    const number = (value: unknown): number | null =>
+      typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+    const input = number(record?.input);
+    const output = number(record?.output);
+    const cacheRead = number(record?.cacheRead);
+    const cacheWrite = number(record?.cacheWrite);
+
+    if (kind === "cache_warm") this.llmCacheWarmCount += 1;
+    else {
+      this.llmCount += 1;
+      this.llmByModel.set(model, (this.llmByModel.get(model) ?? 0) + 1);
+    }
+    if (!record) this.llmMissingUsageCount += 1;
+    else if (input === null || output === null) this.llmPartialUsageCount += 1;
+    else this.llmReportedUsageCount += 1;
+    if (input !== null) this.llmTokensIn += input;
+    if (output !== null) this.llmTokensOut += output;
+    if (cacheRead !== null) this.llmCacheRead += cacheRead;
+    if (cacheWrite !== null) this.llmCacheWrite += cacheWrite;
+
+    if (kind === "model_request") {
+      if (input !== null) this.llmModelInput += input;
+      if (cacheRead !== null) this.llmModelCacheRead += cacheRead;
+      if (input === null || cacheRead === null || cacheWrite === null || (options.cacheStatus ?? "unknown") === "unknown") {
+        this.llmCacheUnobservedCount += 1;
+      }
+      if (latencyMs !== null && Number.isFinite(latencyMs) && latencyMs >= 0) {
+        this.llmLatency.observe(latencyMs);
+      }
+    }
+  }
   recordError(category: string): void {
     this.errorCount.set(category, (this.errorCount.get(category) ?? 0) + 1);
   }
@@ -206,9 +259,12 @@ export class Metrics {
         total_tokens_out: this.llmTokensOut,
         cache_read_tokens: this.llmCacheRead,
         cache_write_tokens: this.llmCacheWrite,
-        cache_hit_rate: this.llmCacheRead + this.llmTokensIn > 0
-          ? this.llmCacheRead / (this.llmCacheRead + this.llmTokensIn)
-          : null,
+        cache_hit_rate: this.llmCacheUnobservedCount === 0 && this.llmModelInput + this.llmModelCacheRead > 0 ? this.llmModelCacheRead / (this.llmModelInput + this.llmModelCacheRead) : null,
+        reported_usage_calls: this.llmReportedUsageCount,
+        partial_usage_calls: this.llmPartialUsageCount,
+        missing_usage_calls: this.llmMissingUsageCount,
+        cache_warm_calls: this.llmCacheWarmCount,
+        cache_unobserved_calls: this.llmCacheUnobservedCount,
         latency_ms: this.llmLatency.toDict(),
         by_model: Object.fromEntries(this.llmByModel),
       },
@@ -314,6 +370,13 @@ export class Metrics {
     this.toolLatency.clear();
     this.llmCount = 0;
     this.llmEstimatedUsageCount = 0;
+    this.llmReportedUsageCount = 0;
+    this.llmPartialUsageCount = 0;
+    this.llmMissingUsageCount = 0;
+    this.llmCacheWarmCount = 0;
+    this.llmCacheUnobservedCount = 0;
+    this.llmModelInput = 0;
+    this.llmModelCacheRead = 0;
     this.llmTokensIn = 0;
     this.llmTokensOut = 0;
     this.llmCacheRead = 0;

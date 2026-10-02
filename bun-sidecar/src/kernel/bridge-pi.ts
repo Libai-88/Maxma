@@ -50,6 +50,9 @@ export interface PiSessionRecord {
   goalState: PiGoalState;
   /** 闲置回顾等旁路 prompt 进行中：订阅层丢弃事件（RECAP-SILENT-001） */
   suppressEvents: boolean;
+  modelRequestStartedAt: number | null;
+  modelPriceStatus: "catalog_estimate" | "unknown";
+  modelCacheStatus: "catalog" | "unknown";
 }
 
 export interface PiBridgeIo {
@@ -99,8 +102,17 @@ export function subscribePiSession(
   return record.session.subscribe((event: unknown) => {
     // RECAP-SILENT-001：旁路 prompt（闲置回顾）期间丢弃事件——
     // 回顾结果经 RPC 返回，不应以流式事件/done 泄漏给前端。
-    if (record.suppressEvents) return;
-    if ((event as { type?: string })?.type === "tool_execution_start") {
+    const incoming = event as { type?: string; entry?: { type?: string; kind?: string } };
+    const usageMustBeTracked = incoming.type === "message_end"
+      || (incoming.type === "entry_appended" && incoming.entry?.type === "usage" && incoming.entry.kind === "cache_warm");
+    if (record.suppressEvents && !usageMustBeTracked) return;
+    const eventType = (event as { type?: string })?.type;
+    if (eventType === "message_start") record.modelRequestStartedAt = performance.now();
+    const requestDurationMs = eventType === "message_end" && record.modelRequestStartedAt !== null
+      ? Math.max(0, performance.now() - record.modelRequestStartedAt)
+      : null;
+
+    if (eventType === "tool_execution_start") {
       record.toolCallCount += 1;
       if (record.toolCallCount > MAX_TOOL_CALLS_PER_TURN) {
         const guard = record.currentGuard;
@@ -119,9 +131,16 @@ export function subscribePiSession(
         return; // 丢弃超限后的多余工具事件
       }
     }
-    const mapped = mapPiAgentEventToMaxma(event, record.currentGuard);
+    const currentModel = record.session.model;
+    const entry = incoming.entry as { provider?: string; model?: string } | undefined;
+    const usageMetadataMatches = eventType === "entry_appended" && entry?.provider === currentModel?.provider && entry?.model === currentModel?.id;
+    const mapped = mapPiAgentEventToMaxma(event, record.currentGuard, requestDurationMs, {
+      priceStatus: usageMetadataMatches ? record.modelPriceStatus : "unknown",
+      cacheStatus: usageMetadataMatches ? record.modelCacheStatus : "unknown",
+    });
     if (mapped) {
       io.sendEvent(sessionId, mapped);
+      if (eventType === "message_end") record.modelRequestStartedAt = null;
     }
   });
 }
@@ -163,6 +182,9 @@ export async function handlePiCreateSession(
     planMode: false,
     goalState: emptyGoalState(),
     suppressEvents: false,
+    modelRequestStartedAt: null,
+    modelPriceStatus: "unknown",
+    modelCacheStatus: "unknown",
   } as PiSessionRecord;
 
   const approvalGate = createMaxmaApprovalGate({
@@ -200,6 +222,8 @@ export async function handlePiCreateSession(
       ? Math.min(Number(params.max_tokens), 262_144)
       : undefined,
   });
+  record.modelPriceStatus = resolved.priceStatus;
+  record.modelCacheStatus = resolved.cacheStatus;
 
   const thinkingLevel = params?.thinking_level as MaxmaSessionOptions["thinkingLevel"] | undefined;
 

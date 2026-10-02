@@ -31,6 +31,8 @@ const toolStartTimestamps = new Map<string, number>();
 
 interface PiMessageLike {
   content?: string | Array<{ type?: string; text?: string }>;
+  provider?: string;
+  model?: string;
 }
 
 /** 从消息 content 提取纯文本（与 OMP 版 message_end 处理一致）。 */
@@ -51,6 +53,8 @@ const COMPACTION_REASONS = ["threshold", "overflow", "idle", "incomplete"];
 export function mapPiAgentEventToMaxma(
   event: unknown,
   guard?: PiDoneGuard | null,
+  requestDurationMs?: number | null,
+  accounting?: { priceStatus: "catalog_estimate" | "unknown"; cacheStatus: "catalog" | "unknown" },
 ): MaxmaEventLike | null {
   const e = event as { type?: string } & Record<string, any>;
   const type = e?.type;
@@ -135,9 +139,33 @@ export function mapPiAgentEventToMaxma(
       type: "answer",
       payload: {
         content: extractText(message),
-        ...(usage && typeof usage === "object" ? { usage } : {}),
+        usage: usage && typeof usage === "object" ? usage : null,
+        provider: message?.provider ?? null,
+        model: message?.model ?? null,
+        request_duration_ms: requestDurationMs ?? null,
       },
     };
+  }
+
+  // Pi 将缓存预热记为不进入对话上下文的 UsageEntry；作为独立用量写入账本。
+  if (type === "entry_appended") {
+    const entry = e.entry as Record<string, any> | undefined;
+    if (entry?.type === "usage" && entry.kind === "cache_warm") {
+      return {
+        type: "llm_usage",
+        payload: {
+          kind: "cache_warm",
+          usage_source: "pi_usage_entry",
+          usage_entry_id: entry.id ?? null,
+          occurred_at: entry.timestamp ?? null,
+          provider: entry.provider ?? null,
+          model: entry.model ?? null,
+          usage: entry.usage ?? null,
+          price_status: accounting?.priceStatus ?? "unknown",
+          cache_status: accounting?.cacheStatus ?? "unknown",
+        },
+      };
+    }
   }
 
   // ── 回合终态：agent_settled（官方：不会再自动继续）→ done ──

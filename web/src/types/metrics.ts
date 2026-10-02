@@ -27,6 +27,11 @@ export interface MetricsSnapshot {
   llm: {
     total_calls: number
     estimated_usage_calls?: number
+    reported_usage_calls?: number
+    partial_usage_calls?: number
+    missing_usage_calls?: number
+    cache_warm_calls?: number
+    cache_unobserved_calls?: number
     total_tokens_in: number
     total_tokens_out: number
     cache_read_tokens: number

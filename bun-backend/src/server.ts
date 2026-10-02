@@ -61,6 +61,7 @@ import { createCapabilitiesRoutes } from "./routes/capabilities";
 import { startBackgroundSync } from "./services/opencode-zen";
 import { initializeDatabase } from "./db/core";
 import { getMetrics } from "./metrics";
+import { startLlmUsageRetentionTask } from "./llm-usage-ledger";
 import { getApiDataDir } from "./app-paths";
 import { record as recordActivity } from "./activity-hub";
 import { send as rpcSend, sendError as rpcSendError, sendEvent as rpcSendEvent } from "./rpc";
@@ -356,6 +357,7 @@ const app = createApp();
 
 /** 启动 HTTP/WS 监听（仅直接运行时调用；测试只 import createApp/serveFrontend）。 */
 export function startServer() {
+  startLlmUsageRetentionTask();
   return Bun.serve({
     port: PORT,
     async fetch(req, server) {

@@ -34,6 +34,8 @@ export interface MaxmaModelParams {
 export interface ResolvedPiModel {
   model: Model<Api>;
   modelRuntime: ModelRuntimeType;
+  priceStatus: "catalog_estimate" | "unknown";
+  cacheStatus: "catalog" | "unknown";
 }
 
 /** 零成本兜底定价（Usage.cost 同形状；自定义端点无目录价可用）。 */
@@ -97,6 +99,7 @@ export async function resolvePiModel(
 
   // 2) registry 查找（内建目录 + models.json 自定义模型）
   let model = modelRuntime.getModel(provider, modelId);
+  let usesCatalogPricing = Boolean(model) && !p.baseUrl;
 
   // 3) 未命中且带自定义端点/api 类型 → 注册单模型自定义 provider 后重查
   if (!model && (p.baseUrl || p.providerType)) {
@@ -118,6 +121,7 @@ export async function resolvePiModel(
       ],
     });
     model = modelRuntime.getModel(provider, modelId);
+    usesCatalogPricing = false;
   }
 
   if (!model) {
@@ -127,5 +131,11 @@ export async function resolvePiModel(
     );
   }
 
-  return { model, modelRuntime };
+  const hasCatalogCachePricing = usesCatalogPricing && (model.cost.cacheRead > 0 || model.cost.cacheWrite > 0);
+  return {
+    model,
+    modelRuntime,
+    priceStatus: usesCatalogPricing ? "catalog_estimate" : "unknown",
+    cacheStatus: hasCatalogCachePricing ? "catalog" : "unknown",
+  };
 }

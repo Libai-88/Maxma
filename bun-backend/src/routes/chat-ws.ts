@@ -41,6 +41,7 @@ import { createTaskBrief, type TaskBriefResult } from "../plugins/task-brief";
 import { record as recordActivity } from "../activity-hub";
 import { decryptProviderKey, findProvider, loadProviders } from "./providers";
 import { getMetrics } from "../metrics";
+import { recordLlmUsageCall, type LlmCacheStatus } from "../llm-usage-ledger";
 import { getErrorCollector } from "../error-collector";
 import { getDeferredRunManager } from "./deferred-runs";
 import { newTurnId, calculateContextUsage } from "./chat-turns";
@@ -100,8 +101,11 @@ interface TurnState {
   providerId: string;
   maxTokens: number;
   startedAt: number;
+  priceStatus: "catalog_estimate" | "unknown";
+  cacheStatus: "catalog" | "unknown";
+  modelUsageRequests: Array<{ usage: Record<string, unknown> | null; durationMs: number | null; cacheStatus: "catalog" | "observed" | "unknown" }>;
+  requestCount: number;
   /** Provider-reported token usage from the final assistant message. */
-  usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number };
   /** kernel answer 事件捕获的最终回复。 */
   finalAnswer: string;
   /** MEMORY-EVENTS-001：本轮写类记忆工具活动。 */
@@ -339,16 +343,75 @@ async function processKernelEvent(
     }
 
     case "answer": {
-      // 吞流捕获（Python _on_answer 同语义——done 时统一重发带 turn_id 的 answer）
       if (state) state.finalAnswer = String(payload.content ?? "");
-      if (state && payload.usage && typeof payload.usage === "object") {
-        const usage = payload.usage as Record<string, unknown>;
-        state.usage = {
-          input: Number(usage.input) || 0,
-          output: Number(usage.output) || 0,
-          cacheRead: Number(usage.cacheRead) || 0,
-          cacheWrite: Number(usage.cacheWrite) || 0,
-        };
+      const usage = payload.usage !== null && typeof payload.usage === "object"
+        ? payload.usage as Record<string, unknown>
+        : null;
+      const requestIndex = state ? ++state.requestCount : null;
+      const requestModel = String(payload.model ?? state?.modelName ?? "") || null;
+      const requestProvider = String(payload.provider ?? state?.providerId ?? "") || null;
+      const durationMs = typeof payload.request_duration_ms === "number" && Number.isFinite(payload.request_duration_ms)
+        ? Math.max(0, payload.request_duration_ms)
+        : null;
+      const reportedCache = usage && typeof usage.cacheRead === "number" && Number.isFinite(usage.cacheRead) && usage.cacheRead >= 0 && typeof usage.cacheWrite === "number" && Number.isFinite(usage.cacheWrite) && usage.cacheWrite >= 0;
+      const cacheStatus: LlmCacheStatus = reportedCache
+        ? "observed"
+        : state?.cacheStatus ?? "unknown";
+      if (state) state.modelUsageRequests.push({ usage, durationMs, cacheStatus });
+      try {
+        const recorded = recordLlmUsageCall({
+          sessionId,
+          turnId: state?.turnId ?? null,
+          requestIndex,
+          kind: "model_request",
+          usageSource: "pi_message_end",
+          provider: requestProvider,
+          model: requestModel,
+          usage,
+          priceStatus: state?.priceStatus ?? "unknown",
+          cacheStatus,
+          durationMs,
+        });
+        if (recorded.inserted) getMetrics().recordLlmUsageRequest(requestModel ?? "unknown", usage, durationMs, {
+          kind: "model_request",
+          cacheStatus,
+        });
+      } catch (error) {
+        console.warn(`[llm-usage] failed to record model request: ${String(error)}`);
+      }
+      return;
+    }
+
+    case "llm_usage": {
+      if (payload.kind !== "cache_warm") return;
+      const usage = payload.usage !== null && typeof payload.usage === "object"
+        ? payload.usage as Record<string, unknown>
+        : null;
+      const reportedCache = usage && typeof usage.cacheRead === "number" && Number.isFinite(usage.cacheRead) && usage.cacheRead >= 0 && typeof usage.cacheWrite === "number" && Number.isFinite(usage.cacheWrite) && usage.cacheWrite >= 0;
+      const cacheStatus: LlmCacheStatus = reportedCache ? "observed" : payload.cache_status === "catalog" ? "catalog" : "unknown";
+      const occurredAt = typeof payload.occurred_at === "string" && Number.isFinite(Date.parse(payload.occurred_at))
+        ? new Date(payload.occurred_at)
+        : undefined;
+      try {
+        const recorded = recordLlmUsageCall({
+          sessionId,
+          sourceEntryId: typeof payload.usage_entry_id === "string" ? `${sessionId}:${payload.usage_entry_id}` : null,
+          turnId: state?.turnId ?? null,
+          kind: "cache_warm",
+          usageSource: "pi_usage_entry",
+          provider: typeof payload.provider === "string" ? payload.provider : null,
+          model: typeof payload.model === "string" ? payload.model : null,
+          usage,
+          priceStatus: payload.price_status === "catalog_estimate" ? "catalog_estimate" : "unknown",
+          cacheStatus,
+          occurredAt,
+        });
+        if (recorded.inserted) getMetrics().recordLlmUsageRequest(String(payload.model ?? "unknown"), usage, null, {
+          kind: "cache_warm",
+          cacheStatus,
+        });
+      } catch (error) {
+        console.warn(`[llm-usage] failed to record cache warm usage: ${String(error)}`);
       }
       return;
     }
@@ -433,34 +496,37 @@ async function finishTurn(hub: ChatWsHub, sessionId: string, state: TurnState): 
     maxTokens: state.maxTokens,
     modelName: state.modelName,
   });
-  const usagePayload = state.usage;
-  if (usagePayload) {
-    Object.assign(contextUsage as Record<string, unknown>, {
-      input_tokens: usagePayload.input ?? 0,
-      output_tokens: usagePayload.output ?? 0,
-      cache_read_tokens: usagePayload.cacheRead ?? 0,
-      cache_write_tokens: usagePayload.cacheWrite ?? 0,
-      cache_hit_rate: (usagePayload.cacheRead ?? 0) + (usagePayload.input ?? 0) > 0
-        ? (usagePayload.cacheRead ?? 0) / ((usagePayload.cacheRead ?? 0) + (usagePayload.input ?? 0))
-        : null,
-      latency_ms: Math.max(0, performance.now() - state.startedAt),
-      output_speed: (usagePayload.output ?? 0) / Math.max(0.1, (performance.now() - state.startedAt) / 1000),
-    });
-  }
-
-  // METRICS-WIRE-001：LLM 调用指标
-  try {
-    getMetrics().recordLlmCall(
-      state.modelName,
-      state.usage?.input ?? contextUsage.estimated_tokens,
-      state.usage?.output ?? Math.max(0, Math.floor(state.finalAnswer.length / 2)),
-      Math.max(0, performance.now() - state.startedAt),
-      state.usage?.cacheRead ?? 0,
-      state.usage?.cacheWrite ?? 0,
-      state.usage?.input == null || state.usage?.output == null,
+  const modelRequests = state.modelUsageRequests;
+  if (modelRequests.length > 0) {
+    const number = (usage: Record<string, unknown> | null, key: string): number | null => {
+      const value = usage?.[key];
+      return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+    };
+    const allTokensReported = modelRequests.every((request) =>
+      number(request.usage, "input") !== null && number(request.usage, "output") !== null,
     );
-  } catch {
-    /* noop */
+    const allCacheObserved = modelRequests.every((request) =>
+      request.cacheStatus !== "unknown" && number(request.usage, "input") !== null && number(request.usage, "cacheRead") !== null && number(request.usage, "cacheWrite") !== null,
+    );
+    const inputTokens = modelRequests.reduce((sum, request) => sum + (number(request.usage, "input") ?? 0), 0);
+    const outputTokens = modelRequests.reduce((sum, request) => sum + (number(request.usage, "output") ?? 0), 0);
+    const cacheReadTokens = modelRequests.reduce((sum, request) => sum + (number(request.usage, "cacheRead") ?? 0), 0);
+    const cacheWriteTokens = modelRequests.reduce((sum, request) => sum + (number(request.usage, "cacheWrite") ?? 0), 0);
+    const hasAnyTokenUsage = modelRequests.some((request) => request.usage !== null);
+    const turnDurationMs = Math.max(0, performance.now() - state.startedAt);
+    Object.assign(contextUsage as unknown as Record<string, unknown>, {
+      model_request_count: modelRequests.length,
+      usage_status: allTokensReported ? "reported" : hasAnyTokenUsage ? "partial" : "missing",
+      input_tokens: allTokensReported ? inputTokens : null,
+      output_tokens: allTokensReported ? outputTokens : null,
+      cache_read_tokens: allCacheObserved ? cacheReadTokens : null,
+      cache_write_tokens: allCacheObserved ? cacheWriteTokens : null,
+      cache_hit_rate: allCacheObserved && inputTokens + cacheReadTokens > 0
+        ? cacheReadTokens / (inputTokens + cacheReadTokens)
+        : null,
+      latency_ms: turnDurationMs,
+      output_speed: allTokensReported ? outputTokens / Math.max(0.1, turnDurationMs / 1000) : null,
+    });
   }
 
   hub.broadcast(sessionId, {
@@ -855,6 +921,10 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
       providerId: String(payload.provider_id ?? ""),
       maxTokens: 256_000,
       startedAt: performance.now(),
+      priceStatus: "unknown",
+      cacheStatus: "unknown",
+      modelUsageRequests: [],
+      requestCount: 0,
       finalAnswer: "",
       memoryActivity: [],
       cancelled: false,
@@ -886,6 +956,13 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
           );
           if (!record) throw new Error(`会话不存在：${sessionId}`);
           selectedModel = resolved.model;
+          record.modelPriceStatus = resolved.priceStatus;
+          record.modelCacheStatus = resolved.cacheStatus;
+          const activeTurn = turnStates.get(sessionId);
+          if (activeTurn?.turnId === turnId) {
+            activeTurn.priceStatus = resolved.priceStatus;
+            activeTurn.cacheStatus = resolved.cacheStatus;
+          }
           await record.session.setModel(resolved.model);
         }
         const promptOptions = {

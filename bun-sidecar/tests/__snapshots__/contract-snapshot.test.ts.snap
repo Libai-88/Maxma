@@ -90,11 +90,14 @@ exports[`contract snapshot: pi event mapping (ws-events.md §3.1) 回答与终�
 {
   "payload": {
     "content": "答案正文",
+    "model": null,
+    "provider": null,
+    "request_duration_ms": null,
+    "usage": null,
   },
   "type": "answer",
 }
 `;
-
 exports[`contract snapshot: pi event mapping (ws-events.md §3.1) 回答与终态族: done 1`] = `
 {
   "payload": {},

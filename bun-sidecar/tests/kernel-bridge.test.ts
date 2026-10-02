@@ -87,7 +87,7 @@ describe("kernel: mapPiAgentEventToMaxma", () => {
         type: "message_end",
         message: { content: [{ type: "thinking", thinking: "x" }, { type: "text", text: "答案" }] },
       }),
-    ).toEqual({ type: "answer", payload: { content: "答案" } });
+    ).toEqual({ type: "answer", payload: { content: "答案", usage: null, provider: null, model: null, request_duration_ms: null } });
   });
 
   test("done 由 agent_settled 触发且幂等；agent_end 不触发", () => {
@@ -402,6 +402,8 @@ describe("kernel: resolvePiModel", () => {
       providerType: "custom",
     });
     expect(custom.model.api).toBe("openai-completions");
+    expect(custom.priceStatus).toBe("unknown");
+    expect(custom.cacheStatus).toBe("unknown");
   });
 
   test("registry 未命中且无 baseUrl → 明确报错（不臆造模型元数据）", async () => {
