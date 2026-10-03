@@ -76,7 +76,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import DockIcon from '@/components/inspira/DockIcon.vue'
 import AppSettingsMenu from '@/components/AppSettingsMenu.vue'
@@ -90,45 +90,15 @@ import logoUrl from '@/assets/images/brand/favicon.png'
 const rootEl = ref<HTMLElement | null>(null)
 const route = useRoute()
 
-let cleanupHover: (() => void) | null = null
-
 onMounted(() => {
   const el = rootEl.value
   if (!el) return
   const q = gsap.utils.selector(el)
 
-  // 导航图标入场：品牌 + 导航项依次淡入
+  // 只做一次轻量入场；导航宽度保持固定，避免 hover 时覆盖主内容。
   gsap.timeline({ defaults: { ease: easeMap.out } })
-    .from(q('.dock-section.dock-top'), { autoAlpha: 0, duration: 0.3 })
-    .from(q('.dock-section.dock-nav .dock-icon'), { autoAlpha: 0, duration: 0.3, stagger: 0.04 }, '-=0.15')
-
-  // 侧边栏 hover 错落展开
-  const hoverTl = gsap.timeline({ paused: true })
-  hoverTl
-    .to(el, { width: 300, duration: 0.35, ease: easeMap.out })
-    .to(q('.dock-label'), {
-      opacity: 1,
-      maxWidth: 200,
-      paddingLeft: 12,
-      duration: 0.2,
-      ease: easeMap.smooth,
-      stagger: 0.03,
-    }, '-=0.1')
-
-  const onEnter = () => hoverTl.play()
-  const onLeave = () => hoverTl.reverse()
-  el.addEventListener('mouseenter', onEnter)
-  el.addEventListener('mouseleave', onLeave)
-
-  cleanupHover = () => {
-    el.removeEventListener('mouseenter', onEnter)
-    el.removeEventListener('mouseleave', onLeave)
-    hoverTl.kill()
-  }
-})
-
-onUnmounted(() => {
-  cleanupHover?.()
+    .from(q('.dock-section.dock-top'), { autoAlpha: 0, y: -4, duration: 0.24 })
+    .from(q('.dock-section.dock-nav .dock-icon'), { autoAlpha: 0, y: 4, duration: 0.22, stagger: 0.035 }, '-=0.12')
 })
 
 withDefaults(defineProps<{
@@ -184,7 +154,10 @@ function isActive(path: string): boolean {
   background: var(--bg-card, #fff);
   z-index: 120;
   padding-left: 6px;
-  overflow: hidden;
+  overflow: visible;
+  border-right: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  box-shadow: 2px 0 14px color-mix(in srgb, var(--text-primary) 4%, transparent);
+  isolation: isolate;
 }
 
 @media (max-width: 820px) {
@@ -206,7 +179,7 @@ function isActive(path: string): boolean {
 }
 
 .dock-top {
-  margin: 20px 0 24px 0;
+  margin: 16px 0 20px 0;
 }
 
 .dock-nav {
@@ -297,7 +270,7 @@ function isActive(path: string): boolean {
   gap: 0;
   background: transparent;
   color: var(--accent, rgb(110, 90, 240));
-  transition: color 0.5s;
+  transition: color var(--duration-fast, .15s), background var(--duration-fast, .15s);
 }
 
 .settings-item :deep(.settings-btn:hover) {

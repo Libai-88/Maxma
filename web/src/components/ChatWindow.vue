@@ -655,7 +655,7 @@ onUnmounted(() => {
   flex-direction: column;
   justify-content: flex-end;
   height: 100%;
-  padding: 0 48px 40px 48px;
+  padding: clamp(24px, 6vh, 72px) clamp(18px, 5vw, 56px) 40px;
   gap: 16px;
   background-image: var(--empty-bg-image);
   background-size: cover;
@@ -676,7 +676,7 @@ onUnmounted(() => {
   z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
 }
 .empty-state-text {
   display: flex;
@@ -687,7 +687,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 2.8em;
+  font-size: clamp(1.7rem, 3.6vw, 2.45rem);
   font-weight: 700;
   font-family: var(--font-display);
   letter-spacing: -0.5px;
@@ -695,8 +695,9 @@ onUnmounted(() => {
     text-shadow: 0 2px 16px color-mix(in srgb, var(--accent) 15%, transparent);
   }
   .empty-desc {
-      font-size: 1.3em;
-      color: var(--accent);
+      max-width: var(--text-measure, 68ch);
+      font-size: clamp(1rem, 1.5vw, 1.18rem);
+      color: var(--text-primary);
       font-weight: 500;
       text-shadow: 0 1px 12px color-mix(in srgb, var(--accent) 15%, transparent);
     }
@@ -720,7 +721,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  opacity: .65;
+  opacity: .86;
   transition: opacity .2s;
     text-shadow: 0 1px 8px color-mix(in srgb, var(--accent) 12%, transparent);
 }
@@ -733,7 +734,7 @@ onUnmounted(() => {
   gap: 8px;
   font-size: 0.9em;
   color: var(--text-secondary);
-  line-height: 1.5;
+  line-height: 1.6;
   cursor: default;
   transition: color .15s;
 }

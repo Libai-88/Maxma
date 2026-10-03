@@ -105,7 +105,7 @@ onUnmounted(() => {
 }
 
 .dock-icon.active {
-  background: var(--bg-primary, #e4e9f5);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-card));
   border-top-left-radius: 50px;
   border-bottom-left-radius: 50px;
 }
@@ -158,7 +158,7 @@ onUnmounted(() => {
   min-width: 36px;
   height: 52px;
   color: var(--accent, rgb(110, 90, 240));
-  transition: color 0.5s;
+  transition: color var(--duration-fast, .15s), background var(--duration-fast, .15s);
   will-change: transform;
 }
 
@@ -172,7 +172,7 @@ onUnmounted(() => {
   padding-left: 0;
   text-transform: uppercase;
   letter-spacing: 1px;
-  transition: color 0.5s;
+  transition: color var(--duration-fast, .15s), background var(--duration-fast, .15s);
   font-weight: 800;
   font-family: var(--font-display);
   overflow: hidden;
@@ -182,6 +182,12 @@ onUnmounted(() => {
 }
 
 /* ── Hover warm accent ── */
+.dock-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 12px;
+}
+
 .dock-icon:hover .icon-wrapper,
 .dock-icon:hover .dock-label {
   color: var(--status-warn);
