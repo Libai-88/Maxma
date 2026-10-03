@@ -158,6 +158,7 @@ const navItems: NavItem[] = [
   { to: '/', label: '对话', icon: 'chat' },
   { to: '/providers', label: '模型', icon: 'model' },
   { to: '/memory', label: '记忆', icon: 'memory', feature: 'memory' },
+  { to: '/evolution', label: '成长', icon: 'sparkles', feature: 'memory' },
   { to: '/metrics', label: '运行指标', icon: 'metrics' },
   { to: '/extensions', label: '插件', icon: 'extensions' },
   { to: '/activity', label: '活动', icon: 'activity' },

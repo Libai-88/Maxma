@@ -29,6 +29,12 @@ const router = createRouter({
       meta: { transition: 'flip', title: '记忆', feature: 'memory' },
     },
     {
+      path: '/evolution',
+      name: 'evolution',
+      component: () => import('@/views/EvolutionView.vue'),
+      meta: { transition: 'rise', title: '行为成长', feature: 'memory' },
+    },
+    {
       path: '/kb',
       redirect: '/memory',
     },

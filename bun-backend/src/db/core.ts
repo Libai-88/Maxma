@@ -21,7 +21,7 @@ export function dbPath(): string {
   return path.join(getApiDataDir(), "maxma.db");
 }
 
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 type Migration = string | ((conn: Database) => void);
 
@@ -234,6 +234,36 @@ export const SCHEMA_MIGRATIONS: Migration[] = [
     CREATE INDEX IF NOT EXISTS idx_llm_usage_calls_fingerprint
       ON llm_usage_calls(session_id, fingerprint_epoch, prefix_fingerprint);
     INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (9, julianday('now'));`,
+  // v10: EvoCore 行为策略账本（不保存原始提示词，只保存短规则与统计）
+  `CREATE TABLE IF NOT EXISTS evolution_rules (
+      id TEXT PRIMARY KEY,
+      rule_text TEXT NOT NULL,
+      scope TEXT NOT NULL DEFAULT 'global',
+      keywords_json TEXT NOT NULL DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'candidate',
+      confidence REAL NOT NULL DEFAULT 0.5,
+      evidence_count INTEGER NOT NULL DEFAULT 1,
+      positive_count INTEGER NOT NULL DEFAULT 0,
+      negative_count INTEGER NOT NULL DEFAULT 0,
+      source TEXT NOT NULL DEFAULT 'explicit_user',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      last_used_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_evolution_rules_status_updated
+      ON evolution_rules(status, updated_at DESC);
+    CREATE TABLE IF NOT EXISTS evolution_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      rule_id TEXT,
+      event_type TEXT NOT NULL,
+      session_id TEXT,
+      turn_id TEXT,
+      detail_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_evolution_events_rule_time
+      ON evolution_events(rule_id, created_at DESC);
+    INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (10, julianday('now'));`,
 ];
 
 let initializedForPath: string | null = null;

@@ -884,6 +884,27 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ enabled }),
     }),
+
+  // ── EvoCore 行为策略 ──
+  listEvolutionRules: (status?: string) =>
+    request<{ rules: Array<Record<string, unknown>> }>(`/evolution/rules${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  getEvolutionStats: () =>
+    request<{ total: number; active: number; candidates: number; paused: number; avg_confidence: number }>('/evolution/stats'),
+  learnEvolutionRule: (text: string, scope = 'global') =>
+    request<{ learned: boolean; rule: Record<string, unknown> | null }>('/evolution/learn', {
+      method: 'POST',
+      body: JSON.stringify({ text, scope }),
+    }),
+  setEvolutionRuleStatus: (id: string, status: string) =>
+    request<{ rule: Record<string, unknown> }>(`/evolution/rules/${encodeURIComponent(id)}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status }),
+    }),
+  feedbackEvolutionRule: (id: string, feedback: string, correction?: string) =>
+    request<{ rule: Record<string, unknown> }>(`/evolution/rules/${encodeURIComponent(id)}/feedback`, {
+      method: 'POST',
+      body: JSON.stringify({ feedback, correction }),
+    }),
 }
 
 export { request }

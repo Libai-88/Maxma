@@ -35,6 +35,7 @@ import { createMaxmaBlockerRoutes } from "./routes/maxma-blocker";
 import { createSettingsRoutes } from "./routes/settings";
 import { createTranscriptsRoutes } from "./routes/transcripts";
 import { createMemoryRoutes } from "./routes/memory";
+import { createEvolutionRoutes } from "./routes/evolution";
 import { createAuditLogRoutes } from "./routes/audit-log";
 import { createPersonaRoutes } from "./routes/persona";
 import { createSessionsRoutes } from "./routes/sessions";
@@ -196,6 +197,7 @@ export function createApp(): Hono {
   app.route("/", createSettingsRoutes());
   app.route("/", createTranscriptsRoutes());
   app.route("/", createMemoryRoutes());
+  app.route("/", createEvolutionRoutes());
   app.route("/", createAuditLogRoutes());
   app.route("/", createPersonaRoutes());
   app.route("/", createStickerFileRoutes());

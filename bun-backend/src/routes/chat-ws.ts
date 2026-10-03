@@ -37,6 +37,7 @@ import * as crypto from "node:crypto";
 import type { PiPendingPlan, PiSessionRecord } from "../../../bun-sidecar/src/kernel/bridge-pi";
 import { resolvePiModel } from "../../../bun-sidecar/src/kernel/model";
 import { createTaskBrief, type TaskBriefResult } from "../plugins/task-brief";
+import { getEvolutionContext, learnFromUserMessage } from "../evolution-ledger";
 
 import { record as recordActivity } from "../activity-hub";
 import { decryptProviderKey, findProvider, loadProviders } from "./providers";
@@ -67,6 +68,17 @@ export const CLIENT_MESSAGE_TYPES = new Set([
 /** PERF-TOOL-OUTPUT-001：工具输出/错误截断（与 Python 版同阈值）。 */
 const MAX_TOOL_OUTPUT_LEN = 100_000;
 const MAX_TOOL_ERROR_LEN = 20_000;
+
+/** EvoCore：只在已有请求路径上做确定性规则提炼与按需检索，不额外调用模型。 */
+function enrichWithEvolutionContext(message: string, sessionId: string, turnId: string): string {
+  try {
+    learnFromUserMessage(message, sessionId, turnId);
+    return `${message}${getEvolutionContext(message)}`;
+  } catch (error) {
+    console.warn(`[evolution] context unavailable: ${String(error)}`);
+    return message;
+  }
+}
 
 /** MEMORY-EVENTS-001：写类记忆工具（done 后合成 memory_* 事件流）。 */
 const MEMORY_WRITE_TOOLS = new Set(["remember_memory"]);
@@ -783,7 +795,8 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
       : typeof payload.execution_prompt === "string" ? payload.execution_prompt.trim().slice(0, 20_000) : "";
     if (!message) return;
     taskBriefStates.delete(sessionId);
-    void hub.callRpc("prompt", { session_id: sessionId, message, ...pending.promptOptions }).then((result) => {
+    const enrichedMessage = enrichWithEvolutionContext(message, sessionId, pending.turnId);
+    void hub.callRpc("prompt", { session_id: sessionId, message: enrichedMessage, ...pending.promptOptions }).then((result) => {
       if (!result.ok) {
         void onKernelEvent(hub, sessionId, { type: "error", payload: { code: "TASK_BRIEF_EXECUTE_ERROR", message: result.error } });
         void onKernelEvent(hub, sessionId, { type: "done", payload: { turn_id: pending.turnId } });
@@ -1033,9 +1046,10 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
           await updateTaskBrief(hub, sessionId, pending);
           return { ok: true as const, result: null };
         }
+        const enrichedMessage = enrichWithEvolutionContext(userMessage, sessionId, turnId);
         return hub.callRpc("prompt", {
           session_id: sessionId,
-          message: userMessage,
+          message: enrichedMessage,
           ...promptOptions,
         });
       } catch (error) {
