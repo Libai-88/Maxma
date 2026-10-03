@@ -1,6 +1,6 @@
 <template>
-  <div class="hud-wrap" :class="{ expanded }">
-    <button class="hud-trigger" type="button" :aria-expanded="expanded" aria-label="查看模型调用统计" @click="expanded = !expanded">
+  <div ref="rootEl" class="hud-wrap" :class="{ expanded }">
+    <button class="hud-trigger" type="button" :aria-expanded="expanded" aria-haspopup="dialog" aria-label="查看模型调用统计" @click="expanded = !expanded">
       <span class="hud-signal" :class="{ live: isLive }"><i></i><i></i><i></i></span>
       <span class="hud-primary">{{ speedLabel }}</span><span class="hud-divider"></span>
       <span class="hud-context">{{ Math.round(percentage) }}% ctx</span><span class="hud-chevron" aria-hidden="true">{{ expanded ? '⌃' : '⌄' }}</span>
@@ -20,9 +20,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { normalizeContextUsage, useChatStore } from '../stores/chat'
-const store = useChatStore(); const expanded = ref(false)
+const store = useChatStore(); const expanded = ref(false); const rootEl = ref<HTMLElement | null>(null)
 const usage = computed(() => normalizeContextUsage(store.contextUsage)); const percentage = computed(() => usage.value.percentage)
 const isLive = computed(() => (usage.value.outputSpeed ?? 0) > 0 && !usage.value.latencyMs)
 const speedLabel = computed(() => { const speed = usage.value.outputSpeed ?? 0; return speed > 0 ? `${speed.toFixed(speed >= 10 ? 0 : 1)} t/s` : '就绪' })
@@ -30,7 +30,17 @@ const cacheLabel = computed(() => usage.value.cacheHitRate == null ? '—' : `${
 const latencyLabel = computed(() => usage.value.latencyMs ? `${Math.round(usage.value.latencyMs)} ms` : '流式中')
 function formatNum(value: number): string { if (!Number.isFinite(value) || value <= 0) return '0'; if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`; if (value >= 1000) return `${(value / 1000).toFixed(1)}k`; return String(Math.round(value)) }
 function closeOnEscape(event: KeyboardEvent) { if (event.key === 'Escape') expanded.value = false }
-window.addEventListener('keydown', closeOnEscape); onBeforeUnmount(() => window.removeEventListener('keydown', closeOnEscape))
+function closeOnOutside(event: PointerEvent) {
+  if (expanded.value && rootEl.value && !rootEl.value.contains(event.target as Node)) expanded.value = false
+}
+onMounted(() => {
+  window.addEventListener('keydown', closeOnEscape)
+  window.addEventListener('pointerdown', closeOnOutside)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', closeOnEscape)
+  window.removeEventListener('pointerdown', closeOnOutside)
+})
 </script>
 
 <style scoped>
