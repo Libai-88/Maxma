@@ -123,6 +123,10 @@ export interface TaskBriefState {
   status: 'thinking' | 'clarify' | 'ready' | 'fallback'
   summary?: string
   questions?: string[]
+  missing?: string[]
+  assumptions?: string[]
+  confidence?: number
+  riskLevel?: 'low' | 'medium' | 'high'
   executionPrompt?: string
   error?: string
 }

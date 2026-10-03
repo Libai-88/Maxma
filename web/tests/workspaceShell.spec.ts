@@ -51,6 +51,20 @@ describe('workspace shell', () => {
     expect(storeInitialization).toBeGreaterThanOrEqual(0)
     expect(taskBriefComputed).toBeGreaterThan(storeInitialization)
   })
+  it('exposes uncertainty-aware task alignment states in the chat UI', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/views/ChatView.vue'), 'utf8')
+    const storeSource = readFileSync(resolve(process.cwd(), 'src/stores/chat.ts'), 'utf8')
+    const wsSource = readFileSync(resolve(process.cwd(), 'src/composables/useChat.ts'), 'utf8')
+
+    expect(source).toContain('当前执行准备度')
+    expect(source).toContain('为什么要问')
+    expect(source).toContain('已采用的默认假设')
+    expect(storeSource).toContain('confidence?: number')
+    expect(storeSource).toContain("riskLevel?: 'low' | 'medium' | 'high'")
+    expect(wsSource).toContain('payload.missing')
+    expect(wsSource).toContain('payload.assumptions')
+    expect(wsSource).toContain('payload.riskLevel')
+  })
   it('header ownership keeps only active context controls and truncates long titles', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/views/ChatView.vue'), 'utf8')
     const chatInputSource = readFileSync(resolve(process.cwd(), 'src/components/ChatInput.vue'), 'utf8')
@@ -163,6 +177,11 @@ describe('workspace shell', () => {
     expect(welcomeSource).toContain('@click="handleStart(ex.text)"')
     expect((welcomeSource.match(/emit\('start'/g) ?? []).length).toBeGreaterThanOrEqual(2)
     expect(chatViewSource).toContain('<WelcomeScreen v-else @start="handleQuickStart" />')
+    expect(chatViewSource).toContain('执行前确认')
+    expect(chatViewSource).toContain('把任务说清楚，Agent 才能一次做对')
+    expect(chatViewSource).toContain('你的补充信息')
+    expect(chatViewSource).toContain('目标：做一个适合手机查看的早餐推荐')
+    expect(chatViewSource).toContain('交给 Agent 的执行指令')
     expect(chatViewSource).toContain('chatInputInstance.send(message)')
   })
 

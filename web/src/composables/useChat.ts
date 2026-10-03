@@ -1072,6 +1072,10 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       status: payload.status === 'clarify' || payload.status === 'ready' || payload.status === 'fallback' ? payload.status : 'thinking',
       ...(typeof payload.summary === 'string' ? { summary: payload.summary } : {}),
       ...(Array.isArray(payload.questions) ? { questions: payload.questions.filter((item): item is string => typeof item === 'string') } : {}),
+      ...(Array.isArray(payload.missing) ? { missing: payload.missing.filter((item): item is string => typeof item === 'string') } : {}),
+      ...(Array.isArray(payload.assumptions) ? { assumptions: payload.assumptions.filter((item): item is string => typeof item === 'string') } : {}),
+      ...(typeof payload.confidence === 'number' ? { confidence: Math.min(1, Math.max(0, payload.confidence)) } : {}),
+      ...(payload.riskLevel === 'low' || payload.riskLevel === 'medium' || payload.riskLevel === 'high' ? { riskLevel: payload.riskLevel } : {}),
       ...(typeof payload.executionPrompt === 'string' ? { executionPrompt: payload.executionPrompt } : {}),
       ...(typeof payload.error === 'string' ? { error: payload.error } : {}),
     }

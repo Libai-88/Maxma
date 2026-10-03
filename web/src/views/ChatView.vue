@@ -125,25 +125,51 @@
 
         <section v-if="taskBrief" class="task-brief-panel" aria-live="polite">
           <header class="task-brief-header">
-            <div>
-              <strong>需求对齐</strong>
+            <div class="task-brief-title-wrap">
+              <span class="task-brief-eyebrow">执行前确认</span>
+              <strong>把任务说清楚，Agent 才能一次做对</strong>
               <p v-if="taskBrief.summary">{{ taskBrief.summary }}</p>
-              <p v-else>正在理解请求并整理执行条件…</p>
+              <p v-else>我会先确认目标、范围和交付标准，再生成真正执行的指令。</p>
             </div>
             <button type="button" class="task-brief-close" aria-label="取消需求对齐" @click="cancelTaskBrief">取消</button>
           </header>
           <div v-if="taskBrief.status === 'thinking'" class="task-brief-thinking">
-            <span class="task-brief-spinner"></span><span>正在整理需求</span>
+            <span class="task-brief-spinner"></span><span>正在提取目标、约束和验收标准…</span>
           </div>
           <form v-else-if="taskBrief.status === 'clarify'" class="task-brief-form" @submit.prevent="submitTaskBriefAnswer">
-            <ol><li v-for="(question, index) in taskBrief.questions" :key="index">{{ question }}</li></ol>
-            <textarea v-model="taskBriefAnswer" rows="3" maxlength="4000" placeholder="按序回答；不确定的部分可以写“你来决定”"></textarea>
-            <button type="submit" class="task-brief-primary" :disabled="!taskBriefAnswer.trim()">继续对齐</button>
+            <div class="task-brief-readiness" :class="`risk-${taskBrief.riskLevel || 'medium'}`">
+              <div><span class="task-brief-readiness-label">当前执行准备度</span><strong>{{ Math.round((taskBrief.confidence ?? 0.5) * 100) }}%</strong></div>
+              <div class="task-brief-readiness-track"><span :style="{ width: `${Math.round((taskBrief.confidence ?? 0.5) * 100)}%` }"></span></div>
+              <span class="task-brief-risk">{{ taskBrief.riskLevel === 'high' ? '高风险：仍有关键条件缺失' : taskBrief.riskLevel === 'low' ? '低风险：信息已较完整' : '中风险：补充后结果会更稳定' }}</span>
+            </div>
+            <div class="task-brief-step"><span class="task-brief-step-dot">1</span><div><strong>补充关键信息</strong><span>只回答会影响结果的问题；不确定的地方可以让 Agent 决定。</span></div></div>
+            <ol class="task-brief-questions">
+              <li v-for="(question, index) in taskBrief.questions" :key="index"><span class="task-brief-question-number">{{ index + 1 }}</span><span>{{ question }}</span></li>
+            </ol>
+            <div v-if="taskBrief.missing?.length" class="task-brief-missing"><strong>为什么要问</strong><span v-for="item in taskBrief.missing" :key="item">{{ item }}</span></div>
+            <label class="task-brief-field-label" for="task-brief-answer">你的补充信息</label>
+            <textarea id="task-brief-answer" v-model="taskBriefAnswer" rows="5" maxlength="4000" placeholder="例如：
+目标：做一个适合手机查看的早餐推荐
+范围：公司附近 3 公里
+预算：每人 30 元以内
+偏好：清淡、无需排队
+不确定的部分：你来决定"></textarea>
+            <div class="task-brief-field-footer"><span>按问题编号回答即可，也可以写成一段话。</span><span>{{ taskBriefAnswer.length }}/4000</span></div>
+            <button type="submit" class="task-brief-primary" :disabled="!taskBriefAnswer.trim()">继续对齐 <span aria-hidden="true">→</span></button>
           </form>
           <div v-else-if="taskBrief.status === 'ready'" class="task-brief-form">
-            <label for="task-brief-prompt">执行指令（可编辑）</label>
-            <textarea id="task-brief-prompt" v-model="taskBriefPrompt" rows="7" maxlength="20000"></textarea>
-            <button type="button" class="task-brief-primary" :disabled="!taskBriefPrompt.trim()" @click="runTaskBrief">确认并开始执行</button>
+            <div class="task-brief-readiness risk-low">
+              <div><span class="task-brief-readiness-label">执行准备度</span><strong>{{ Math.round((taskBrief.confidence ?? 0.9) * 100) }}%</strong></div>
+              <div class="task-brief-readiness-track"><span :style="{ width: `${Math.round((taskBrief.confidence ?? 0.9) * 100)}%` }"></span></div>
+              <span class="task-brief-risk">{{ taskBrief.riskLevel === 'high' ? '请检查风险较高的假设' : '可以开始执行' }}</span>
+            </div>
+            <div class="task-brief-step"><span class="task-brief-step-dot">2</span><div><strong>确认执行指令</strong><span>这是 Agent 将实际执行的内容，你可以直接修改。</span></div></div>
+            <div class="task-brief-summary"><span>已对齐</span><p>{{ taskBrief.summary || '目标、范围和交付方式已整理完成。' }}</p></div>
+            <div v-if="taskBrief.assumptions?.length" class="task-brief-assumptions"><strong>已采用的默认假设</strong><span v-for="item in taskBrief.assumptions" :key="item">{{ item }}</span></div>
+            <label class="task-brief-field-label" for="task-brief-prompt">交给 Agent 的执行指令</label>
+            <textarea id="task-brief-prompt" v-model="taskBriefPrompt" rows="9" maxlength="20000"></textarea>
+            <div class="task-brief-field-footer"><span>确认后将开始调用模型和工具。</span><span>{{ taskBriefPrompt.length }}/20000</span></div>
+            <button type="button" class="task-brief-primary" :disabled="!taskBriefPrompt.trim()" @click="runTaskBrief">确认并开始执行 <span aria-hidden="true">→</span></button>
           </div>
           <div v-else class="task-brief-form">
             <p class="task-brief-error">需求对齐暂不可用：{{ taskBrief.error || '模型没有生成有效指令' }}</p>
@@ -1217,18 +1243,57 @@ function handleQuickStart(message: string) {
   transition: none !important;
 }
 
-.task-brief-panel { margin: 0 12px 10px; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--accent, #8b7cff) 34%, var(--border-subtle, #333)); border-radius: 14px; background: color-mix(in srgb, var(--accent, #8b7cff) 5%, var(--bg-panel, #16161b)); color: var(--text-primary, #eee); }
-.task-brief-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.task-brief-header strong { font-size: 13px; }
-.task-brief-header p, .task-brief-error { margin: 5px 0 0; color: var(--text-secondary, #aaa); font-size: 12px; line-height: 1.55; }
-.task-brief-close { border: 0; background: transparent; color: var(--text-muted, #999); cursor: pointer; }
-.task-brief-form { display: grid; gap: 10px; margin-top: 10px; }
-.task-brief-form ol { margin: 0; padding-left: 22px; color: var(--text-primary, #eee); font-size: 13px; line-height: 1.7; }
-.task-brief-form textarea { width: 100%; min-height: 72px; resize: vertical; padding: 10px 12px; border: 1px solid var(--border-subtle, #444); border-radius: 10px; background: var(--bg-input, #101014); color: var(--text-primary, #eee); font: inherit; font-size: 12px; line-height: 1.55; }
-.task-brief-form label { color: var(--text-secondary, #aaa); font-size: 12px; }
-.task-brief-primary { justify-self: end; padding: 8px 13px; border: 0; border-radius: 9px; background: var(--accent, #8b7cff); color: white; font-size: 12px; cursor: pointer; }
-.task-brief-primary:disabled { opacity: .45; cursor: not-allowed; }
-.task-brief-thinking { display: flex; align-items: center; gap: 8px; margin-top: 12px; color: var(--text-secondary, #aaa); font-size: 12px; }
-.task-brief-spinner { width: 13px; height: 13px; border: 2px solid color-mix(in srgb, var(--accent, #8b7cff) 24%, transparent); border-top-color: var(--accent, #8b7cff); border-radius: 50%; animation: task-brief-spin .8s linear infinite; }
+.task-brief-panel {
+  --brief-ink: #172033; --brief-muted: #536176; --brief-surface: #ffffff;
+  --brief-soft: #f4f7fb; --brief-line: #d7dfeb;
+  margin: 0 12px 14px; padding: 22px 24px 20px;
+  border: 1px solid color-mix(in srgb, var(--accent, #635bff) 48%, var(--brief-line));
+  border-radius: 16px; background: var(--brief-surface); color: var(--brief-ink);
+  box-shadow: 0 12px 36px color-mix(in srgb, #172033 14%, transparent);
+}
+.task-brief-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.task-brief-title-wrap { min-width: 0; }
+.task-brief-eyebrow { display: block; margin-bottom: 7px; color: var(--accent, #635bff); font-size: 12px; font-weight: 800; letter-spacing: .08em; }
+.task-brief-header strong { display: block; color: var(--brief-ink); font-size: 20px; line-height: 1.3; letter-spacing: -.015em; }
+.task-brief-header p, .task-brief-error { margin: 8px 0 0; color: var(--brief-muted); font-size: 14px; line-height: 1.6; }
+.task-brief-close { min-width: 44px; min-height: 44px; padding: 8px 10px; border: 1px solid var(--brief-line); border-radius: 9px; background: var(--brief-surface); color: var(--brief-muted); font: inherit; font-size: 13px; cursor: pointer; }
+.task-brief-close:hover { color: var(--brief-ink); border-color: var(--accent, #635bff); background: var(--brief-soft); }
+.task-brief-form { display: grid; gap: 10px; margin-top: 20px; }
+.task-brief-step { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--accent, #635bff) 22%, var(--brief-line)); border-radius: 11px; background: var(--brief-soft); }
+.task-brief-step-dot { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; border-radius: 50%; background: var(--accent, #635bff); color: #fff; font-size: 12px; font-weight: 800; }
+.task-brief-step strong, .task-brief-step span { display: block; }
+.task-brief-step strong { color: var(--brief-ink); font-size: 14px; }
+.task-brief-step div > span { margin-top: 2px; color: var(--brief-muted); font-size: 13px; line-height: 1.5; }
+.task-brief-questions { display: grid; gap: 8px; margin: 2px 0 4px; padding: 0; list-style: none; }
+.task-brief-questions li { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid var(--brief-line); border-radius: 10px; background: var(--brief-surface); color: var(--brief-ink); font-size: 14px; line-height: 1.55; }
+.task-brief-question-number { display: grid; place-items: center; flex: 0 0 22px; width: 22px; height: 22px; border-radius: 6px; background: color-mix(in srgb, var(--accent, #635bff) 12%, var(--brief-surface)); color: var(--accent, #635bff); font-size: 12px; font-weight: 800; }
+.task-brief-field-label { margin-top: 4px; color: var(--brief-ink); font-size: 14px; font-weight: 800; }
+.task-brief-form textarea { width: 100%; min-height: 116px; resize: vertical; padding: 13px 14px; border: 1px solid #b8c4d5; border-radius: 10px; outline: none; background: #fbfcfe; color: var(--brief-ink); font: inherit; font-size: 14px; line-height: 1.65; box-sizing: border-box; }
+.task-brief-form textarea::placeholder { color: #6a7890; opacity: 1; }
+.task-brief-form textarea:focus { border-color: var(--accent, #635bff); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #635bff) 18%, transparent); }
+.task-brief-field-footer { display: flex; justify-content: space-between; gap: 12px; color: var(--brief-muted); font-size: 12px; line-height: 1.4; }
+.task-brief-summary { padding: 12px 14px; border-left: 3px solid var(--accent, #635bff); background: var(--brief-soft); }
+.task-brief-summary span { color: var(--accent, #635bff); font-size: 12px; font-weight: 800; }
+.task-brief-summary p { margin: 4px 0 0; color: var(--brief-ink); font-size: 14px; line-height: 1.55; }
+.task-brief-primary { justify-self: end; min-height: 44px; padding: 10px 16px; border: 0; border-radius: 9px; background: var(--accent, #635bff); color: #fff; font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 12px color-mix(in srgb, var(--accent, #635bff) 28%, transparent); }
+.task-brief-primary:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
+.task-brief-primary:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+.task-brief-thinking { display: flex; align-items: center; gap: 10px; margin-top: 18px; color: var(--brief-muted); font-size: 14px; }
+.task-brief-spinner { width: 16px; height: 16px; border: 2px solid color-mix(in srgb, var(--accent, #635bff) 24%, transparent); border-top-color: var(--accent, #635bff); border-radius: 50%; animation: task-brief-spin .8s linear infinite; }
+@media (max-width: 640px) { .task-brief-panel { margin: 0 8px 10px; padding: 18px 16px; } .task-brief-header strong { font-size: 18px; } .task-brief-field-footer { flex-direction: column; gap: 3px; } .task-brief-primary { width: 100%; } }
+.task-brief-readiness { display: grid; grid-template-columns: auto minmax(100px, 1fr) auto; align-items: center; gap: 10px; padding: 11px 13px; border: 1px solid var(--brief-line); border-radius: 10px; background: var(--brief-soft); }
+.task-brief-readiness > div:first-child { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+.task-brief-readiness-label { color: var(--brief-muted); font-size: 12px; }
+.task-brief-readiness strong { color: var(--brief-ink); font-size: 17px; font-variant-numeric: tabular-nums; }
+.task-brief-readiness-track { height: 7px; overflow: hidden; border-radius: 99px; background: #dbe3ee; }
+.task-brief-readiness-track span { display: block; height: 100%; border-radius: inherit; background: var(--accent, #635bff); transition: width .25s var(--ease-out); }
+.task-brief-risk { color: var(--brief-muted); font-size: 12px; white-space: nowrap; }
+.task-brief-readiness.risk-high { border-color: #e2b8b8; background: #fff7f7; }
+.task-brief-readiness.risk-high .task-brief-readiness-track span { background: #c84b4b; }
+.task-brief-readiness.risk-high .task-brief-risk { color: #9a3434; }
+.task-brief-missing, .task-brief-assumptions { display: grid; gap: 5px; padding: 10px 13px; border-radius: 9px; background: #fffaf0; color: #644b1d; font-size: 12px; line-height: 1.5; }
+.task-brief-missing strong, .task-brief-assumptions strong { font-size: 13px; }
+.task-brief-missing span, .task-brief-assumptions span { display: block; }
+.task-brief-assumptions { background: #f4f7fb; color: var(--brief-muted); }
 @keyframes task-brief-spin { to { transform: rotate(360deg); } }
 </style>
