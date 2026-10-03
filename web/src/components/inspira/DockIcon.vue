@@ -2,6 +2,7 @@
   <div
     class="dock-icon"
     :class="{ active, expanded }"
+    :data-label="label"
     ref="rootEl"
     @mouseenter="onEnter"
     @mouseleave="onLeave"
@@ -121,6 +122,32 @@ onUnmounted(() => {
   box-shadow: 5px 5px 0 5px var(--bg-primary, #e4e9f5);
   background: transparent;
   pointer-events: none;
+}
+
+.dock-link::after {
+  content: attr(data-label);
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  z-index: 20;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-md);
+  font: 600 12px/1.2 var(--font-body, sans-serif);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-4px, -50%);
+  transition: opacity var(--duration-fast, .15s) var(--ease-out), transform var(--duration-fast, .15s) var(--ease-out);
+}
+
+.dock-icon:hover .dock-link::after,
+.dock-icon:focus-within .dock-link::after {
+  opacity: 1;
+  transform: translate(0, -50%);
 }
 
 .dock-icon.active::after {
