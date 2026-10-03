@@ -11,6 +11,7 @@ import SessionDrawer from '@/components/SessionDrawer.vue'
 import type { SessionInfo } from '@/types'
 import { usePersonaStore } from '@/stores/persona'
 import { useSessionStore } from '@/stores/session'
+import { useChatStore } from '@/stores/chat'
 
 function createTestRouter() {
   return createRouter({
@@ -65,6 +66,29 @@ describe('workspace shell', () => {
     expect(wsSource).toContain('payload.assumptions')
     expect(wsSource).toContain('payload.riskLevel')
   })
+  it('keeps background stream state visible and clears unread events on return', () => {
+    const pinia = createPinia()
+    const store = useChatStore(pinia)
+    const channel = store.getOrCreateChannel('continuity-test')
+    channel.isChatViewActive = false
+    channel.streamPhase = 'streaming'
+    channel.unreadEvents = 4
+
+    store.markSessionView('continuity-test', true)
+
+    expect(channel.streamPhase).toBe('streaming')
+    expect(channel.unreadEvents).toBe(0)
+    expect(store.allSessionStatuses['continuity-test']).toMatchObject({
+      isStreaming: false,
+      streamPhase: 'streaming',
+      unreadEvents: 0,
+    })
+
+    const itemSource = readFileSync(resolve(process.cwd(), 'src/components/SessionItem.vue'), 'utf8')
+    expect(itemSource).toContain('后台有')
+    expect(itemSource).toContain('status?.unreadEvents')
+  })
+
   it('header ownership keeps only active context controls and truncates long titles', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/views/ChatView.vue'), 'utf8')
     const chatInputSource = readFileSync(resolve(process.cwd(), 'src/components/ChatInput.vue'), 'utf8')

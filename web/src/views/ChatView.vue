@@ -270,6 +270,13 @@ const actionsMenuRef = ref<HTMLElement | null>(null)
 const hasMessages = computed(() => turns.value.length > 0 || currentTurn.value)
 const chatStore = useChatStore()
 const taskBrief = computed(() => chatStore.channels.get(sessionId.value)?.taskBrief ?? null)
+// FLOW-CONTINUITY-001：keep-alive 只缓存组件，不代表用户仍在看对话页。
+// 用会话级 presence 标记区分前台与后台流式任务，避免切页后任务状态无反馈。
+const chatViewActive = ref(true)
+watch(sessionId, (next, previous) => {
+  if (previous) chatStore.markSessionView(previous, false)
+  if (next) chatStore.markSessionView(next, chatViewActive.value)
+}, { immediate: true })
 const taskBriefAnswer = ref('')
 const taskBriefPrompt = ref('')
 watch(taskBrief, (state) => {
@@ -452,11 +459,15 @@ onMounted(() => {
 // 导航离开后缓存的欢迎屏动画（Sparkles/Ripple/TextGlitch 等）此前以
 // 60fps 继续在不可见页面运行。deactivated 加暂停类，activated 恢复。
 onActivated(() => {
+  chatViewActive.value = true
+  chatStore.markSessionView(sessionId.value, true)
   rootRef.value?.classList.remove('view-paused')
   // 恢复 JS 动画（SingularityBackground 等挂载在子树内，由各自组件处理）
   window.dispatchEvent(new CustomEvent('maxma:chat-view-active', { detail: { active: true } }))
 })
 onDeactivated(() => {
+  chatViewActive.value = false
+  chatStore.markSessionView(sessionId.value, false)
   rootRef.value?.classList.add('view-paused')
   window.dispatchEvent(new CustomEvent('maxma:chat-view-active', { detail: { active: false } }))
 })

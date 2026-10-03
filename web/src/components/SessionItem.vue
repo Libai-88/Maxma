@@ -47,13 +47,24 @@
       <span
         v-else-if="status?.isStreaming"
         class="status-dot streaming"
-        title="Agent 运行中"
+        :title="status?.unreadEvents ? 'Agent 在后台运行中' : 'Agent 运行中'"
+      />
+      <span
+        v-else-if="status?.streamPhase === 'error'"
+        class="status-dot error"
+        title="任务发生错误"
       />
       <span
         v-else-if="status?.connected"
         class="status-dot connected"
         title="已连接"
       />
+      <span
+        v-if="status?.unreadEvents"
+        class="session-unread-badge"
+        :aria-label="`后台有 ${status.unreadEvents} 条新状态`"
+        :title="`后台有 ${status.unreadEvents} 条新状态，打开会话查看`"
+      >{{ status.unreadEvents > 99 ? '99+' : status.unreadEvents }}</span>
       <button
         class="btn-delete"
         @click.stop="$emit('delete', session)"
@@ -73,6 +84,10 @@ interface SessionStatus {
   connected: boolean
   isStreaming: boolean
   isAwaitingUser: boolean
+  streamPhase?: 'idle' | 'streaming' | 'awaiting_user' | 'completed' | 'error'
+  unreadEvents?: number
+  streamStartedAt?: number | null
+  lastActivityAt?: number | null
 }
 
 defineProps<{
@@ -251,6 +266,21 @@ function formatRelativeTime(ts: number): string {
   gap: 4px;
 }
 
+.session-unread-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 0 0 2px var(--bg-card);
+}
+
 .status-dot {
   width: 8px;
   height: 8px;
@@ -270,6 +300,10 @@ function formatRelativeTime(ts: number): string {
 .status-dot.awaiting-user {
   background: var(--status-warn);
   animation: maxma-pulse 1.2s ease-in-out infinite;
+}
+
+.status-dot.error {
+  background: var(--status-error);
 }
 
 

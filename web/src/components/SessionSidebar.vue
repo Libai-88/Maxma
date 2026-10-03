@@ -300,7 +300,7 @@ useGsap((_ctx, contextSafe) => {
 const props = defineProps<{
   sessions: SessionInfo[]
   activeId: string
-  sessionStatuses?: Record<string, { connected: boolean; isStreaming: boolean; isAwaitingUser: boolean }>
+  sessionStatuses?: Record<string, { connected: boolean; isStreaming: boolean; isAwaitingUser: boolean; streamPhase?: 'idle' | 'streaming' | 'awaiting_user' | 'completed' | 'error'; unreadEvents?: number; streamStartedAt?: number | null; lastActivityAt?: number | null }>
   collapsed?: boolean
 }>()
 
@@ -375,9 +375,11 @@ function formatRelativeTime(ts: number): string {
 
 function getAgentStatus(sessionId: string): string {
   const status = props.sessionStatuses?.[sessionId]
+  if (status?.streamPhase === 'error') return '执行出错'
+  if (status?.streamPhase === 'completed' && status.unreadEvents) return '后台已完成'
   if (!status?.connected) return '就绪'
   if (status.isAwaitingUser) return '需处理'
-  if (status.isStreaming) return '工作中'
+  if (status.isStreaming) return status.unreadEvents ? '后台工作中' : '工作中'
   return '就绪'
 }
 

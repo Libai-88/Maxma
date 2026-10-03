@@ -364,6 +364,8 @@ export function flushAllTurnsOnPageLeave(): void {
       ch.turns.push(interrupted)
       ch.currentTurn = null
       ch.isStreaming = false
+      ch.streamPhase = ch.error ? 'error' : 'idle'
+      ch.streamStartedAt = null
       ch.isAwaitingUser = false
       ch._awaitingToolName = null
       if (!ch.privateMode) {
@@ -746,6 +748,8 @@ async function connectSession(sid: string) {
       chFinal.turns.push(interrupted)
       chFinal.currentTurn = null
       chFinal.isStreaming = false
+      chFinal.streamPhase = 'error'
+      chFinal.streamStartedAt = null
       chFinal.isAwaitingUser = false
       chFinal._awaitingToolName = null
       if (!chFinal.privateMode) {
@@ -781,6 +785,8 @@ async function connectSession(sid: string) {
       chFinal.turns.push(interrupted)
       chFinal.currentTurn = null
       chFinal.isStreaming = false
+      chFinal.streamPhase = 'error'
+      chFinal.streamStartedAt = null
       chFinal.isAwaitingUser = false
       chFinal._awaitingToolName = null
       if (!chFinal.privateMode) {
@@ -948,6 +954,17 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     return
   }
 
+  // FLOW-CONTINUITY-001：所有可见任务事件都更新会话级活动时间；
+  // 对话页被 keep-alive 暂停时累计少量未读事件，回来后由 markSessionView 清零。
+  // 心跳和用量同步属于传输噪声，不计入未读提示。
+  const observableEvent = event.type !== 'pong' && event.type !== 'context_usage'
+  if (observableEvent) {
+    ch.lastActivityAt = Date.now()
+    if (!ch.isChatViewActive) {
+      ch.unreadEvents = Math.min(99, ch.unreadEvents + 1)
+    }
+  }
+
   // context_usage 可以在无活跃轮次时接收（如连接初始化）
   if (event.type === 'context_usage') {
     syncContextUsage(sid, ch, event.payload)
@@ -1007,6 +1024,9 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
 
   // done 也可能在 currentTurn 已被清理后到达；上下文用量仍需同步到 Badge。
   if (event.type === 'done') {
+    ch.streamPhase = 'completed'
+    ch.lastCompletedAt = Date.now()
+    ch.streamStartedAt = null
     const donePayload = event.payload as Record<string, unknown>
     const usagePayload = donePayload.context_usage
     if (hasContextUsageFields(usagePayload)) {
@@ -1391,6 +1411,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       } else {
         log.warn(`会话 ${sid} 的 done 事件到达时 currentTurn 为 null`)
         ch.isStreaming = false
+        ch.streamPhase = 'completed'
       }
       // 子 Agent 完成 → 仅当用户仍停留在此子会话时才切回父会话，
       // 避免覆盖用户已切换到其它会话的选择
@@ -1417,6 +1438,8 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     }
 
     case 'error': {
+      ch.streamPhase = 'error'
+      ch.streamStartedAt = null
       if (ch._turnWatchdog) { clearTimeout(ch._turnWatchdog); ch._turnWatchdog = null }
       ch.isAwaitingUser = false
       ch._awaitingToolName = null
@@ -1512,6 +1535,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     case 'ask_user': {
       const ae = event as AskUserEvent
       const mode = ae.payload.mode
+      ch.streamPhase = 'awaiting_user'
       ch.isAwaitingUser = true
       ch._awaitingToolName = ae.payload.tool_name
       // GAP-A3-001：审批等待系统通知——用户切走窗口时（如长任务触发了写操作
@@ -1936,6 +1960,10 @@ export function useChat(sessionId: Ref<string>) {
       return false
     }
     ch.isStreaming = true
+    ch.streamPhase = 'streaming'
+    ch.streamStartedAt = Date.now()
+    ch.lastActivityAt = ch.streamStartedAt
+    ch.unreadEvents = 0
     ch.error = null
     ch.errorCategory = null
     ch.errorTraceId = null
@@ -1955,6 +1983,8 @@ export function useChat(sessionId: Ref<string>) {
       if (!c || !c.isStreaming) return
       log.warn(`轮次看门狗超时：强制复位 isStreaming (session=${sessionId.value})`)
       c.isStreaming = false
+      c.streamPhase = 'error'
+      c.streamStartedAt = null
       if (c.currentTurn) {
         const stalled = c.currentTurn
         if (!stalled.finalAnswer) {
@@ -2038,11 +2068,16 @@ export function useChat(sessionId: Ref<string>) {
     if (type === 'task_brief_execute' && ch.taskBrief) {
       ch.taskBrief = { ...ch.taskBrief, status: 'thinking' }
       ch.isStreaming = true
+      ch.streamPhase = 'streaming'
+      ch.streamStartedAt = Date.now()
+      ch.lastActivityAt = ch.streamStartedAt
       if (ch._turnWatchdog) clearTimeout(ch._turnWatchdog)
       ch._turnWatchdog = setTimeout(() => {
         const active = getChatStore().channels.get(sessionId.value)
         if (!active || !active.isStreaming) return
         active.isStreaming = false
+        active.streamPhase = 'error'
+        active.streamStartedAt = null
         active.taskBrief = null
         active.error = '任务执行超时，请重试'
         active.errorCategory = 'system_error'

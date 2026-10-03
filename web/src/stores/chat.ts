@@ -96,6 +96,13 @@ export interface SessionChannel {
   errorDiagnostic: Record<string, unknown> | null
   contextUsage: ContextUsage | null
   taskTrackerData: Record<string, unknown> | null
+  /** 流式任务连续性：用于导航离开后的状态反馈与未读提示。 */
+  isChatViewActive: boolean
+  streamPhase: 'idle' | 'streaming' | 'awaiting_user' | 'completed' | 'error'
+  unreadEvents: number
+  streamStartedAt: number | null
+  lastActivityAt: number | null
+  lastCompletedAt: number | null
   reconnectTimer: ReturnType<typeof setTimeout> | null
   reconnectAttempts: number
   initialized: boolean
@@ -148,6 +155,8 @@ function createChannel(): SessionChannel {
     ws: null, connected: false, isStreaming: false, isAwaitingUser: false,
     turns: [], currentTurn: null, error: null, errorCategory: null,
     errorTraceId: null, errorDiagnostic: null, contextUsage: null, taskTrackerData: null,
+    isChatViewActive: false, streamPhase: 'idle', unreadEvents: 0,
+    streamStartedAt: null, lastActivityAt: null, lastCompletedAt: null,
     reconnectTimer: null, reconnectAttempts: 0, initialized: false,
     _awaitingToolName: null, parentSessionId: null,
     privateMode: false, autoApprove: false, _pingTimer: null, _lastPongAt: 0,
@@ -216,12 +225,36 @@ export const useChatStore = defineStore('chat', () => {
   watch([currentModel, temperature, maxTokens, thinkingLevel, taskBriefEnabled], persistChatSettings)
 
   const allSessionStatuses = computed(() => {
-    const map: Record<string, { connected: boolean; isStreaming: boolean; isAwaitingUser: boolean }> = {}
+    const map: Record<string, {
+      connected: boolean
+      isStreaming: boolean
+      isAwaitingUser: boolean
+      streamPhase: SessionChannel['streamPhase']
+      unreadEvents: number
+      streamStartedAt: number | null
+      lastActivityAt: number | null
+    }> = {}
     for (const [sid, ch] of channels) {
-      map[sid] = { connected: ch.connected, isStreaming: ch.isStreaming, isAwaitingUser: ch.isAwaitingUser }
+      map[sid] = {
+        connected: ch.connected,
+        isStreaming: ch.isStreaming,
+        isAwaitingUser: ch.isAwaitingUser,
+        streamPhase: ch.streamPhase,
+        unreadEvents: ch.unreadEvents,
+        streamStartedAt: ch.streamStartedAt,
+        lastActivityAt: ch.lastActivityAt,
+      }
     }
     return map
   })
+
+  /** 标记当前会话是否正在对话页可见；离开时保留任务，回来时清除未读提示。 */
+  function markSessionView(sid: string, active: boolean): void {
+    const ch = channels.get(sid)
+    if (!ch) return
+    ch.isChatViewActive = active
+    if (active) ch.unreadEvents = 0
+  }
 
   function getOrCreateChannel(sid: string): SessionChannel {
     if (!channels.has(sid)) {
@@ -341,7 +374,7 @@ export const useChatStore = defineStore('chat', () => {
   // --- End new actions ---
 
   return {
-    channels, allSessionStatuses, TURNS_KEY_PREFIX,
+    channels, allSessionStatuses, markSessionView, TURNS_KEY_PREFIX,
     getOrCreateChannel, removeChannel, disconnectChannel,
     removeTurnsFromStorage, loadTurnsFromStorage,
     cleanupOrphanedCaches,
