@@ -104,7 +104,14 @@
       </select>
     </div>
 
-    <div v-if="store.loading" class="loading">加载中...</div>
+    <div v-if="store.loading" class="memory-loading" role="status" aria-live="polite" aria-label="正在加载记忆">
+      <span class="sr-only">正在加载记忆…</span>
+      <div v-for="n in 4" :key="n" class="memory-skeleton-card" aria-hidden="true">
+        <div class="skeleton-line skeleton-line--long"></div>
+        <div class="skeleton-line skeleton-line--medium"></div>
+        <div class="skeleton-line skeleton-line--short"></div>
+      </div>
+    </div>
     <div v-else-if="loadError" class="empty error-state">
       <div class="empty-title">加载失败</div>
       <div class="empty-desc">{{ loadError }}</div>
@@ -421,6 +428,13 @@ onUnmounted(() => {
 }
 
 .loading, .empty { text-align: center; padding: 40px; color: var(--text-tertiary); }
+.memory-loading { display: grid; gap: 8px; }
+.memory-skeleton-card { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); }
+.skeleton-line { height: 10px; border-radius: 999px; background: linear-gradient(90deg, var(--bg-secondary) 25%, color-mix(in srgb, var(--accent) 10%, var(--bg-secondary)) 50%, var(--bg-secondary) 75%); background-size: 240% 100%; animation: memory-skeleton-shimmer 1.35s ease-in-out infinite; }
+.skeleton-line--long { width: 88%; }
+.skeleton-line--medium { width: 62%; }
+.skeleton-line--short { width: 28%; height: 8px; }
+@keyframes memory-skeleton-shimmer { 0% { background-position: 160% 0; } 100% { background-position: -80% 0; } }
 .empty-icon { font-size: 2em; margin-bottom: 8px; }
 .empty-title { font-size: 1em; font-weight: 600; margin-bottom: 4px; }
 .empty-desc { font-size: 0.85em; line-height: 1.6; }
