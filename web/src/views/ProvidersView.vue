@@ -107,8 +107,17 @@
           <div class="card-models-section">
             <div class="card-models-title">模型（{{ p.models.length }}）</div>
             <div class="card-models-tags">
-              <span v-for="m in p.models" :key="m" class="model-tag">{{ m }}</span>
+              <span v-for="m in visibleModels(p)" :key="m" class="model-tag">{{ m }}</span>
               <span v-if="p.models.length === 0" class="model-tag empty">未配置</span>
+              <button
+                v-if="p.models.length > MODEL_PREVIEW_LIMIT"
+                type="button"
+                class="model-more"
+                :aria-expanded="isModelsExpanded(p.id)"
+                @click="toggleModels(p.id)"
+              >
+                {{ isModelsExpanded(p.id) ? '收起' : `+${p.models.length - MODEL_PREVIEW_LIMIT} 个模型` }}
+              </button>
             </div>
           </div>
 
@@ -343,6 +352,23 @@ const chatStore = useChatStore()
 const providers = computed(() => providerStore.allProviders)
 const loading = computed(() => providerStore.loading)
 const providerGridRef = ref<HTMLElement | null>(null)
+const MODEL_PREVIEW_LIMIT = 6
+const expandedProviders = ref(new Set<string>())
+
+function isModelsExpanded(providerId: string) {
+  return expandedProviders.value.has(providerId)
+}
+
+function toggleModels(providerId: string) {
+  const next = new Set(expandedProviders.value)
+  if (next.has(providerId)) next.delete(providerId)
+  else next.add(providerId)
+  expandedProviders.value = next
+}
+
+function visibleModels(provider: ProviderConfig) {
+  return isModelsExpanded(provider.id) ? provider.models : provider.models.slice(0, MODEL_PREVIEW_LIMIT)
+}
 
 // 提供商卡片错落入场（加载完成后）
 useReveal(() => providerGridRef.value, '.provider-card', { stagger: 0.05 })
@@ -844,6 +870,25 @@ onMounted(loadProviders)
 .model-tag.empty {
   color: var(--text-tertiary);
   font-family: inherit;
+}
+.model-more {
+  flex: 0 0 auto;
+  align-self: center;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background-color .18s ease, border-color .18s ease, color .18s ease;
+}
+.model-more:hover,
+.model-more:focus-visible {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  outline: none;
 }
 
 .card-context-window {
