@@ -1,6 +1,6 @@
 <template>
   <div class="onboarding-backdrop" role="presentation">
-    <section ref="rootEl" class="onboarding" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+    <section ref="rootEl" class="onboarding" role="dialog" aria-modal="true" aria-labelledby="onboarding-title" tabindex="-1" @keydown.esc="skip">
       <header class="onboarding-header"><div><p class="eyebrow">MAXMAHERE</p><h2 id="onboarding-title">{{ titles[step] }}</h2></div><button class="skip" type="button" @click="skip">跳过</button></header>
       <div class="stepper" aria-label="引导进度"><span v-for="(_, index) in titles" :key="index" :class="{ active: index === step, complete: index < step }"></span></div>
       <div v-if="step === 0" class="step-content">
@@ -68,7 +68,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import type { HealthResponse } from '@/types'
 import { THEMES, useTheme } from '@/composables/useTheme'
 import { useOnboardingStore } from '@/stores/onboarding'
@@ -90,6 +90,10 @@ watch([displayName, language, workspace], () => onboarding.updatePreferences({ d
 function skip() { onboarding.complete() }
 function next() { if (step.value === titles.length - 1) onboarding.complete(); else step.value += 1 }
 function openProviders() { emit('openProviders') }
+onMounted(async () => {
+  await nextTick()
+  rootEl.value?.querySelector<HTMLElement>('.primary')?.focus()
+})
 
 // 卡片弹性入场 + 步骤切换内容过渡 + 完成页 stagger
 const rootEl = ref<HTMLElement | null>(null)
