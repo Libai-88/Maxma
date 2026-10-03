@@ -134,9 +134,9 @@ describe("kernel: createMaxmaSession", () => {
     expect(typeof session.setActiveToolsByName).toBe("function");
     expect(session.isStreaming).toBe(false);
 
-    // 默认内置工具（官方：read/bash/edit/write）
+    // 默认内置工具：文件读写、检索与目录发现
     const tools = session.getActiveToolNames();
-    for (const t of ["read", "bash", "edit", "write"]) {
+    for (const t of ["read", "bash", "edit", "write", "grep", "find", "ls"]) {
       expect(tools).toContain(t);
     }
 

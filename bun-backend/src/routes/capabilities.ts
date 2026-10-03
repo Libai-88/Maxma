@@ -198,6 +198,7 @@ function buildManifest(deps: CapabilitiesDeps, gathered: Record<string, unknown>
     enabled: true,
     oauth: true,
     registry: true,
+    transports: ["stdio", "streamable_http"],
     servers: ((gathered.mcp_servers as unknown[]) ?? []).length,
   };
 
@@ -225,13 +226,18 @@ function buildManifest(deps: CapabilitiesDeps, gathered: Record<string, unknown>
 
   features.collab = { enabled: true, persistence: "sqlite" };
 
-  features.plugins = { enabled: true, marketplace: false };
+  features.plugins = { enabled: false, marketplace: false };
+
+  features.extensions = {
+    enabled: true,
+    bundled: ["maxma-approval", "maxma-blocker", "request-telemetry"],
+  };
 
   features.rules = { enabled: true, custom_rules: true };
 
   const tools = (gathered.tools as Array<Record<string, unknown>>) ?? [];
-  const builtinCount = tools.filter((t) => t.builtin !== false).length;
-  const customCount = tools.length - builtinCount;
+  const builtinCount = tools.filter((t) => t.source !== "custom").length;
+  const customCount = tools.filter((t) => t.source === "custom").length;
   const categories = [...new Set(tools.map((t) => String(t.category ?? "other")))].sort();
   features.tools = {
     builtin_count: builtinCount,

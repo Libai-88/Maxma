@@ -12,6 +12,7 @@ interface NumberTickerProps {
   duration?: number
   delay?: number
   decimalPlaces?: number
+  animateOnUpdate?: boolean
   class?: string
 }
 
@@ -19,6 +20,7 @@ const props = withDefaults(defineProps<NumberTickerProps>(), {
   duration: 0.8,
   delay: 0,
   decimalPlaces: 0,
+  animateOnUpdate: true,
   class: '',
 })
 
@@ -82,6 +84,12 @@ onUnmounted(() => {
 watch(
   () => props.value,
   (newVal) => {
+    if (!props.animateOnUpdate) {
+      animation?.kill()
+      animation = null
+      currentValue.value = newVal
+      return
+    }
     animateTo(newVal)
   },
 )

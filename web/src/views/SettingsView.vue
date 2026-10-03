@@ -1,7 +1,7 @@
 <template>
   <div class="settings-view" ref="rootEl">
     <div class="header">
-      <h2>设置 SETTINGS</h2>
+      <h2>设置</h2>
     </div>
 
     <!-- 面板配置加载失败提示（PANEL-ERROR-VISIBLE-001）：不阻塞整体设置页 -->
@@ -314,11 +314,11 @@
       <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
         <div class="section" v-show="activeSection === 'skills'">
           <h3>技能包</h3>
-          <p class="section-desc">控制 OMP 技能包的启用状态。</p>
+          <p class="section-desc">控制 Pi Skills 的启用状态。</p>
           <div class="setting-row">
             <div class="setting-info">
               <div class="setting-label">启用技能包</div>
-              <div class="setting-desc">加载 .agents/skills/ 和 .claude/skills/ 中的技能。</div>
+              <div class="setting-desc">加载 Maxma 随包技能，以及项目和用户 .agents/skills/ 中的技能。</div>
             </div>
             <button class="toggle-btn" :class="{ on: settings['skills.enabled'] }" @click="toggle('skills.enabled')">
               {{ settings['skills.enabled'] ? '开启' : '关闭' }}

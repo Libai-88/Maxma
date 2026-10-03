@@ -3,7 +3,7 @@
     <!-- 标题栏 -->
     <BlurReveal>
       <div class="header">
-        <h2>更新动态 News</h2>
+        <h2>更新动态</h2>
         <span class="news-count" v-if="!loading && !loadError">共 {{ news.length }} 条更新</span>
       </div>
     </BlurReveal>

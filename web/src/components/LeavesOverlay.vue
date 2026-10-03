@@ -10,22 +10,14 @@
     <div class="leaves-layer leaves-layer--2"></div>
     <div class="leaves-layer leaves-layer--3"></div>
     <div class="leaves-compensation" :style="compensationStyle"></div>
-    <button
-      type="button"
-      class="leaves-toggle"
-      :title="enabled ? '点击关闭树阴光影' : '点击开启树阴光影'"
-      aria-label="切换树阴光影"
-      @click.stop="onToggle"
-    >
-      <Icon class="leaves-toggle-icon" name="leaf" :size="14" />
-    </button>
   </div>
   <button
-    v-else
     type="button"
-    class="leaves-toggle leaves-toggle--off"
-    title="点击开启树阴光影"
-    aria-label="开启树阴光影"
+    class="leaves-toggle"
+    :class="{ 'leaves-toggle--off': !enabled }"
+    :title="enabled ? '点击关闭树阴光影' : '点击开启树阴光影'"
+    :aria-label="enabled ? '关闭树阴光影' : '开启树阴光影'"
+    :aria-pressed="enabled"
     @click.stop="onToggle"
   >
     <Icon class="leaves-toggle-icon" name="leaf" :size="14" />

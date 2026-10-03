@@ -1,7 +1,7 @@
 <template>
   <div class="capabilities-view">
     <div class="header">
-      <h2>能力清单 CAPABILITIES</h2>
+      <h2>能力清单</h2>
       <p class="header-sub">Pi Agent 可用工具、接入能力与运行配置</p>
     </div>
 
@@ -81,6 +81,15 @@
         </div>
       </div>
 
+      <!-- Maxma 内置扩展 -->
+      <div class="section" v-if="features?.extensions?.enabled">
+        <h3>内置扩展</h3>
+        <p class="section-desc">随 Maxma 启用的 Pi 扩展，用于安全控制与运行观测。</p>
+        <div class="extension-list">
+          <span v-for="name in bundledExtensions" :key="name" class="extension-chip">{{ extensionLabel(name) }}</span>
+        </div>
+      </div>
+
       <!-- Provider 列表 -->
       <div class="section" v-if="providers.length > 0">
         <h3>模型提供商 ({{ providers.length }})</h3>
@@ -157,7 +166,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import { api } from '@/api'
-import type { ToolItem, ProviderItem } from '@/types'
+import type { ToolItem, ProviderItem, CapabilityFeatures } from '@/types'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 import GlareCard from '@/components/inspira/GlareCard.vue'
 import DirectionAwareHover from '@/components/inspira/DirectionAwareHover.vue'
@@ -171,6 +180,8 @@ const settings = ref<Record<string, unknown>>({})
 const tools = ref<ToolItem[]>([])
 const tool_categories = ref<Record<string, ToolItem[]>>({})
 const providers = ref<ProviderItem[]>([])
+const features = ref<CapabilityFeatures | null>(null)
+const bundledExtensions = ref<string[]>([])
 
 interface McpServerItem {
   server_id?: string
@@ -235,6 +246,16 @@ function categoryLabel(cat: string): string {
   return categoryLabels[cat] ?? cat
 }
 
+const extensionLabels: Record<string, string> = {
+  'maxma-approval': '工具审批',
+  'maxma-blocker': '路径拒止锚',
+  'request-telemetry': '请求观测',
+}
+
+function extensionLabel(name: string): string {
+  return extensionLabels[name] ?? name
+}
+
 async function load() {
   loading.value = true
   error.value = ''
@@ -244,6 +265,10 @@ async function load() {
     tools.value = data.tools ?? []
     tool_categories.value = data.tool_categories ?? {}
     providers.value = data.providers ?? []
+    features.value = data.features ?? null
+    bundledExtensions.value = Array.isArray(data.features?.extensions?.bundled)
+      ? data.features.extensions.bundled.filter((name): name is string => typeof name === 'string')
+      : []
     mcp_servers.value = data.mcp_servers ?? []
     discovered_mcp.value = data.discovered_mcp ?? null
     env.value = data.env ?? {}
@@ -350,6 +375,10 @@ onMounted(load)
   cursor: default;
 }
 .tool-chip:hover { border-color: var(--accent); color: var(--text-primary); }
+
+/* Built-in extensions */
+.extension-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.extension-chip { padding: 5px 10px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 10%, var(--bg-secondary)); border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border)); color: var(--text-secondary); font-size: 0.78em; }
 
 /* Provider */
 .provider-list { display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow-y: auto; }

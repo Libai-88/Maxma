@@ -1,7 +1,7 @@
 <template>
   <div class="plugin-view" ref="rootEl">
     <div class="header">
-      <h2>插件市场 PLUGIN MARKETPLACE</h2>
+      <h2>插件市场</h2>
       <p class="header-sub">管理 OMP 插件——浏览、安装、配置与卸载</p>
     </div>
 

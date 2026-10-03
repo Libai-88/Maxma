@@ -1,7 +1,7 @@
 <template>
   <div class="privacy-view" ref="rootEl">
     <div class="header">
-      <h2>隐私仪表盘 Privacy Dashboard</h2>
+      <h2>隐私仪表盘</h2>
       <p class="header-sub">查看 Maxma 把数据存在哪里、监控了哪些网络活动，并执行清除 / 加密等数据管理操作。</p>
     </div>
 

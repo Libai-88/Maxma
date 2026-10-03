@@ -23,14 +23,7 @@
         :number-of-circles="6"
       />
       <div class="welcome-avatar"><SingularityBackground /></div>
-      <h1 class="welcome-name">
-        <TextGlitch
-          :text="store.profile.name || 'Maxma'"
-          :speed="1"
-          :enable-shadows="true"
-          :enable-on-hover="false"
-        />
-      </h1>
+      <h1 class="welcome-name">{{ store.profile.name || 'Maxma' }}</h1>
       <p class="welcome-scene"><TextScrollReveal :text="sceneText" /></p>
       <p class="welcome-greeting">
         <ColourfulText :text="store.profile.greeting || '你好呀，今天想聊些什么？'" :duration="4" />
@@ -84,7 +77,6 @@ import MultiStepLoader from './inspira/MultiStepLoader.vue'
 import type { Step } from './inspira/MultiStepLoader.vue'
 import SingularityBackground from './SingularityBackground.vue'
 import Ripple from './Ripple.vue'
-import TextGlitch from '@/components/TextGlitch.vue'
 import AnimatedList from '@/components/AnimatedList.vue'
 import InteractiveHoverButton from '@/components/InteractiveHoverButton.vue'
 import ShimmerButton from '@/components/inspira/ShimmerButton.vue'
@@ -232,9 +224,9 @@ const examples = computed(() => [
   min-height: 0;
   box-sizing: border-box;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 48px 24px;
+  padding: 32px 24px;
   overflow-x: hidden;
   overflow-y: auto;
 }
@@ -245,6 +237,7 @@ const examples = computed(() => [
   min-width: 0;
   box-sizing: border-box;
   text-align: center;
+  margin-block: auto;
 }
 
 .ripple-bg {
@@ -399,7 +392,39 @@ const examples = computed(() => [
   font-family: var(--font-ui);
 }
 
-/* 响应式：窄屏垂直堆叠主操作按钮 */
+/* 矮窗口优先呈现欢迎内容与示例，避免第二排入口被输入区挤出首屏。 */
+@media (max-height: 780px) and (min-width: 481px) {
+  .welcome-screen { padding-block: 12px; }
+  .welcome-avatar { width: 76px; height: 76px; margin-bottom: 10px; }
+  .welcome-name { margin-bottom: 4px; }
+  .welcome-scene { margin-bottom: 4px; }
+  .welcome-taglines { margin-top: 0; }
+  .welcome-rule { margin: 14px auto; }
+  .welcome-actions { gap: 8px; margin-bottom: 14px; }
+  .action-btn { padding: 10px 20px; }
+  .example-title { margin-bottom: 6px; }
+  .example-chips { gap: 6px; }
+  .example-hint { margin-top: 8px; }
+}
+
+/* 窄屏为主操作保留易点按尺寸。 */
+/* 窄矮窗口压缩装饰留白，让入门示例与输入区同时进入首屏。 */
+@media (max-width: 480px) and (max-height: 780px) {
+  .welcome-screen { padding-block: 8px; }
+  .welcome-avatar { width: 56px; height: 56px; margin-bottom: 6px; }
+  .welcome-name { font-size: clamp(22px, 6vw, 26px); margin-bottom: 4px; }
+  .welcome-scene { font-size: 13px; line-height: 1.45; margin-bottom: 4px; }
+  .welcome-greeting { font-size: 18px; }
+  .welcome-taglines { font-size: 12px; line-height: 1.4; }
+  .welcome-rule { margin: 8px auto; }
+  .welcome-screen .welcome-actions { flex-direction: row; gap: 6px; margin-bottom: 8px; }
+  .welcome-screen .action-btn { flex: 1 1 0; width: auto; min-width: 0; min-height: 40px; padding: 8px 6px; font-size: 13px; white-space: nowrap; }
+  .welcome-screen .action-btn--primary { flex: 1 1 0; width: auto; min-width: 0; min-height: 40px; padding: 8px 6px; justify-content: center; font-size: 13px; white-space: nowrap; }
+  .example-prompts { margin-top: 0; }
+  .example-title { margin-bottom: 6px; }
+  .example-chips { gap: 6px; }
+  .example-hint { margin-top: 8px; }
+}
 @media (max-width: 480px) {
   .welcome-screen {
     align-items: flex-start;

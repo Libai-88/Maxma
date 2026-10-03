@@ -1,7 +1,7 @@
 <template>
   <div class="automation-view" ref="rootEl">
     <div class="header">
-      <h2>自动化 AUTOMATION</h2>
+      <h2>自动化</h2>
       <p class="header-sub">定时任务与自动化调度</p>
     </div>
 

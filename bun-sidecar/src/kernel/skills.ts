@@ -2,6 +2,8 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { getAgentDir, loadSkills } from "@earendil-works/pi-coding-agent";
 
+import { maxmaBundleRoot } from "./project-paths";
+
 export interface DiscoveredSkill {
   name: string;
   description: string;
@@ -16,11 +18,13 @@ export interface SkillDiscoveryResult {
   diagnostics: unknown[];
 }
 
-export function maxmaSkillPaths(cwd: string): string[] {
-  return [
+export function maxmaSkillPaths(cwd: string, enabled = true): string[] {
+  if (!enabled) return [];
+  return [...new Set([
     path.join(cwd, ".agents", "skills"),
     path.join(os.homedir(), ".agents", "skills"),
-  ];
+    path.join(maxmaBundleRoot(), ".maxma", "skills"),
+  ])];
 }
 
 /** Discover Pi defaults and Agent Skills directories used by Maxma projects. */

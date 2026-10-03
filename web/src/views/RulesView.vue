@@ -3,7 +3,7 @@
     <div class="header">
       <div class="header-top">
         <div>
-          <h2>质量规则 RULES</h2>
+          <h2>质量规则</h2>
           <p class="header-sub">Agent 可查询的编码参考规范；当前不执行静态扫描</p>
         </div>
         <button class="btn-create" @click="openCreateDialog">+ 新建规则</button>

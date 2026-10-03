@@ -48,14 +48,17 @@ async function makeApp() {
 // ── 2.5a：tools / plugins 桩 / files 桩 / upload ──
 
 describe("tools / plugins / files（阶段 2.5a）", () => {
-  test("GET /api/tools → 裸数组（30 项，含 custom 记忆工具）", async () => {
+  test("GET /api/tools → 裸数组（14 项，含 Pi 与 Maxma 工具）", async () => {
     const app = await makeApp();
     const res = await app.request("/api/tools", { headers: authHeader() });
     expect(res.status).toBe(200);
     const tools = (await res.json()) as Array<Record<string, unknown>>;
     expect(Array.isArray(tools)).toBe(true);
-    expect(tools.length).toBe(30);
+    expect(tools.length).toBe(14);
     expect(tools.some((t) => t.name === "remember_memory" && t.source === "custom")).toBe(true);
+    expect(tools.some((t) => t.name === "submit_plan" && t.source === "custom")).toBe(true);
+    expect(tools.some((t) => t.name === "web_search")).toBe(false);
+    expect(tools.some((t) => t.name === "list_automations")).toBe(false);
     expect(tools.every((t) => t.builtin === true)).toBe(true);
   });
 
@@ -341,7 +344,7 @@ describe("health 四部件（阶段 2.5b）", () => {
       expect(comp.reason_code).toBeUndefined();
       expect(comp.summary).toBeUndefined();
     }
-    expect((body.native_tools as { detail: string }).detail).toBe("30 个工具");
+    expect((body.native_tools as { detail: string }).detail).toBe("14 个工具");
     expect((body.mcp_tools as { detail: string }).detail).toBe("0 个工具（未配置 MCP 服务器）");
     expect(typeof body.anthropic_skills_count).toBe("number");
     expect(body.provider_diagnostics_enabled).toBe(false);
@@ -399,7 +402,7 @@ describe("capabilities 聚合（阶段 2.5c）", () => {
     const body = (await res.json()) as Record<string, unknown>;
 
     expect(typeof body.settings).toBe("object");
-    expect((body.tools as unknown[]).length).toBe(30);
+    expect((body.tools as unknown[]).length).toBe(14);
     expect(body.tool_categories).toBeDefined();
     expect(Array.isArray(body.mcp_servers)).toBe(true);
     expect(Array.isArray(body.providers)).toBe(true);
@@ -420,11 +423,15 @@ describe("capabilities 聚合（阶段 2.5c）", () => {
     const features = body.features as Record<string, Record<string, unknown>>;
     expect(features.automation.enabled).toBe(false); // automation 随 Python 下线
     expect(features.mcp.enabled).toBe(true);
+    expect(features.mcp.transports).toEqual(["stdio", "streamable_http"]);
     expect(features.memory.enabled).toBe(true);
     expect(features.collab.enabled).toBe(true);
-    expect(features.plugins.enabled).toBe(true);
+    expect(features.plugins.enabled).toBe(false);
+    expect(features.extensions.enabled).toBe(true);
+    expect(features.extensions.bundled).toEqual(["maxma-approval", "maxma-blocker", "request-telemetry"]);
     expect(features.rules.enabled).toBe(true);
-    expect(features.tools.builtin_count).toBe(30);
+    expect(features.tools.builtin_count).toBe(7);
+    expect(features.tools.custom_count).toBe(7);
     // providers 可能含 opencode-zen 内置供应商（后台同步注入，与运行顺序无关）——
     // 只验证形状：providers 数组、total_models 与 providers 长度一致
     expect(Array.isArray(features.models.providers)).toBe(true);
@@ -448,6 +455,8 @@ describe("capabilities 聚合（阶段 2.5c）", () => {
     expect(res.status).toBe(200);
     const skills = await res.json() as Array<Record<string, unknown>>;
     expect(Array.isArray(skills)).toBe(true);
+    expect(skills.some((skill) => skill.name === "coding-starter")).toBe(true);
+    expect(skills.some((skill) => skill.name === "spreadsheet-starter")).toBe(true);
     for (const skill of skills) {
       expect(typeof skill.name).toBe("string");
       expect(typeof skill.description).toBe("string");

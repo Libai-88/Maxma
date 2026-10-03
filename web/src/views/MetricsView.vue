@@ -1,7 +1,7 @@
 <template>
   <div class="metrics-view">
     <div class="header">
-      <h2>运行时指标 Metrics</h2>
+      <h2>运行指标</h2>
       <div class="header-actions">
         <span v-if="loading" class="badge-muted">刷新中…</span>
         <span v-else-if="error" class="badge-error" :title="error">获取失败</span>
@@ -13,7 +13,7 @@
       </div>
     </div>
 
-    <details class="metrics-guide" open>
+    <details class="metrics-guide">
       <summary>这些指标是什么？我该关注什么？</summary>
       <div class="guide-body">
         <p>本页展示 Maxma 后端进程的实时运行数据，帮助判断应用是否健康、AI 是否按预期工作。</p>
@@ -43,11 +43,11 @@
         <p class="section-desc">前端发往本地后端的 HTTP 请求总量、延迟分布与状态码构成。延迟飙升或 5xx 占比高，通常意味着后端卡顿或异常。</p>
         <div ref="statGridRef" class="stat-grid">
           <FloatingCard><GlareCard class="stat">
-            <div class="stat-value"><NumberTicker :value="snapshot.http.total_requests" /></div>
+            <div class="stat-value"><NumberTicker :value="snapshot.http.total_requests" :animate-on-update="false" /></div>
             <div class="stat-label">总请求数</div>
           </GlareCard></FloatingCard>
           <FloatingCard><GlareCard class="stat">
-            <div class="stat-value"><NumberTicker :value="snapshot.http.latency_ms.count" /></div>
+            <div class="stat-value"><NumberTicker :value="snapshot.http.latency_ms.count" :animate-on-update="false" /></div>
             <div class="stat-label">采样数</div>
           </GlareCard></FloatingCard>
           <FloatingCard><GlareCard class="stat">
@@ -82,17 +82,17 @@
         <p class="section-desc">AI 在对话中实际调用的工具（搜索 / 文件读写 / MCP / 内置能力等）的总次数、错误数与按工具的分布。</p>
         <div class="stat-grid">
           <FloatingCard><GlareCard class="stat">
-            <div class="stat-value"><NumberTicker :value="snapshot.tools.total_calls" /></div>
+            <div class="stat-value"><NumberTicker :value="snapshot.tools.total_calls" :animate-on-update="false" /></div>
             <div class="stat-label">总调用数</div>
           </GlareCard></FloatingCard>
           <FloatingCard><GlareCard class="stat">
             <div class="stat-value" :class="{ 'text-error': snapshot.tools.total_errors > 0 }">
-              <NumberTicker :value="snapshot.tools.total_errors" />
+              <NumberTicker :value="snapshot.tools.total_errors" :animate-on-update="false" />
             </div>
             <div class="stat-label">错误总数</div>
           </GlareCard></FloatingCard>
           <FloatingCard><GlareCard class="stat">
-            <div class="stat-value"><NumberTicker :value="Object.keys(snapshot.tools.by_tool).length" /></div>
+            <div class="stat-value"><NumberTicker :value="Object.keys(snapshot.tools.by_tool).length" :animate-on-update="false" /></div>
             <div class="stat-label">工具种类</div>
           </GlareCard></FloatingCard>
         </div>
@@ -113,7 +113,7 @@
         <p v-if="snapshot.llm.cache_warm_calls" class="section-desc">缓存预热调用：{{ snapshot.llm.cache_warm_calls }} 次，读取 Token 计入总用量，但不计入对话缓存命中率。</p>
         <div class="stat-grid">
           <FloatingCard><GlareCard class="stat">
-            <div class="stat-value"><NumberTicker :value="snapshot.llm.total_calls" /></div>
+            <div class="stat-value"><NumberTicker :value="snapshot.llm.total_calls" :animate-on-update="false" /></div>
             <div class="stat-label">模型请求</div>
           </GlareCard></FloatingCard>
           <FloatingCard><GlareCard class="stat">
@@ -202,7 +202,7 @@ import { useMetricsStore } from '@/stores/metrics'
 import Sparkline from '@/components/Sparkline.vue'
 import BarChartMini from '@/components/BarChartMini.vue'
 import { useReveal } from '@/composables/useReveal'
-import { gsap, useGsap, easeMap } from '@/composables/useGsap'
+
 import GlareCard from '@/components/inspira/GlareCard.vue'
 import NumberTicker from '@/components/inspira/NumberTicker.vue'
 import Sparkles from '@/components/inspira/Sparkles.vue'
@@ -219,31 +219,6 @@ let _timer: ReturnType<typeof setInterval> | null = null
 
 // 统计卡错落入场（数据加载完成后）
 useReveal(() => statGridRef.value, '.stat', { stagger: 0.04 })
-
-// 数字 count-up：纯数值 stat 从 0 滚动到目标（带单位/格式化值跳过）
-// UX-METRICS-ANIM-001：自动刷新（15s）时静默更新、不重放 count-up——
-// 此前每次自动刷新都触发 loading 翻转 → 所有数字从 0 重滚一遍，页面
-// 每 15 秒整体"跳动"；仅首次加载/手动刷新播放入场动画。
-let _firstLoadDone = false
-useGsap((_ctx, contextSafe) => {
-  watch(() => loading.value, contextSafe((l) => {
-    if (l || !statGridRef.value) return
-    const isAutoRefreshTick = _firstLoadDone
-    _firstLoadDone = true
-    if (isAutoRefreshTick) return
-    const vals = Array.from(statGridRef.value.querySelectorAll<HTMLElement>('.stat-value'))
-    vals.forEach((el) => {
-      if (el.querySelector('.unit')) return
-      const target = Number(el.textContent)
-      if (!Number.isFinite(target) || target === 0) return
-      const proxy = { v: 0 }
-      gsap.to(proxy, {
-        v: target, duration: 0.8, ease: easeMap.out,
-        onUpdate: () => { el.textContent = Math.round(proxy.v).toString() },
-      })
-    })
-  }))
-})
 
 async function refresh() {
   await metricsStore.refresh()
@@ -445,6 +420,10 @@ function formatTokens(n: number): string {
   gap: 12px;
   font-size: 13px;
   color: var(--text-secondary);
+}
+.header-actions > * {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 .badge-muted {
   padding: 2px 8px;

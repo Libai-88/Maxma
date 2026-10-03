@@ -34,7 +34,7 @@ import {
 import type { PiSessionRecord } from "../../../bun-sidecar/src/kernel/bridge-pi";
 
 const SMITHERY_REGISTRY_URL = "https://registry.smithery.ai/servers";
-const TRANSPORTS = new Set(["stdio", "sse", "streamable_http", "websocket"]);
+const TRANSPORTS = new Set(["stdio", "streamable_http"]);
 
 type Entry = Record<string, unknown>;
 
@@ -220,10 +220,6 @@ function validateCreateBody(body: Record<string, unknown>):
     const n = checkFloat("timeout", body.timeout, errors);
     if (n !== null) out.timeout = n;
   }
-  if ("sse_read_timeout" in body && body.sse_read_timeout !== null && body.sse_read_timeout !== undefined) {
-    const n = checkFloat("sse_read_timeout", body.sse_read_timeout, errors);
-    if (n !== null) out.sse_read_timeout = n;
-  }
   out.tls_verify = "tls_verify" in body ? checkBool("tls_verify", body.tls_verify, errors, true) : true;
 
   if (errors.length > 0) return { ok: false, error: { detail: errors } };
@@ -237,7 +233,7 @@ function validateUpdateBody(body: Record<string, unknown>):
   const errors: DetailEntry[] = [];
   const fields: Entry = {};
 
-  for (const key of ["enabled", "description", "allowed_tools", "blocked_tools", "command", "args", "env", "cwd", "url", "headers", "timeout", "sse_read_timeout", "tls_verify"] as const) {
+  for (const key of ["enabled", "description", "allowed_tools", "blocked_tools", "command", "args", "env", "cwd", "url", "headers", "timeout", "tls_verify"] as const) {
     if (!(key in body)) continue;
     const v = body[key];
     if (v === null) {
@@ -256,7 +252,7 @@ function validateUpdateBody(body: Record<string, unknown>):
     } else if (key === "env" || key === "headers") {
       const d = checkDict(key, v, errors);
       if (d) fields[key] = d;
-    } else if (key === "timeout" || key === "sse_read_timeout") {
+    } else if (key === "timeout") {
       const n = checkFloat(key, v, errors);
       if (n !== null) fields[key] = n;
     }
@@ -287,7 +283,7 @@ function buildServerDict(b: Entry): Entry {
       d.env = b.env;
     }
     if (b.cwd) d.cwd = b.cwd;
-  } else if (t === "sse" || t === "streamable_http" || t === "websocket") {
+  } else if (t === "streamable_http") {
     if (!b.url) throw new McpHttpError(400, `${t} 模式必须指定 url`);
     d.url = b.url;
     d.tls_verify = b.tls_verify;
@@ -295,16 +291,15 @@ function buildServerDict(b: Entry): Entry {
       d.headers = b.headers;
     }
     if (b.timeout !== undefined) d.timeout = b.timeout;
-    if (t === "sse" && b.sse_read_timeout !== undefined) d.sse_read_timeout = b.sse_read_timeout;
   } else {
-    throw new McpHttpError(400, `不支持的 transport: ${t}，仅支持 stdio/sse/streamable_http/websocket`);
+    throw new McpHttpError(400, `不支持的 transport: ${t}，仅支持 stdio/streamable_http`);
   }
   return d;
 }
 
 function validateUpdateAgainstTransport(target: Entry, updateFields: Entry): void {
   const transport = String(updateFields.transport ?? target.transport ?? "");
-  if (transport === "sse" || transport === "streamable_http" || transport === "websocket") {
+  if (transport === "streamable_http") {
     const url = updateFields.url ?? target.url ?? "";
     if (!url) throw new McpHttpError(400, `${transport} 模式必须指定 url`);
   } else if (transport === "stdio") {

@@ -45,6 +45,7 @@
           :label="item.label"
           :to="item.to"
           :active="isActive(item.to)"
+          :busy="item.to === '/' && hasStreaming"
         />
       </div>
 
@@ -84,6 +85,7 @@ import LiquidLogo from '@/components/LiquidLogo.vue'
 import GlowingEffect from '@/components/inspira/GlowingEffect.vue'
 import AnimatedBeam from '@/components/inspira/AnimatedBeam.vue'
 import { useCapabilities } from '@/composables/useCapabilities'
+import { useChatStore } from '@/stores/chat'
 import { gsap, easeMap } from '@/composables/useGsap'
 import logoUrl from '@/assets/images/brand/favicon.png'
 
@@ -92,7 +94,7 @@ const route = useRoute()
 
 onMounted(() => {
   const el = rootEl.value
-  if (!el) return
+  if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
   const q = gsap.utils.selector(el)
 
   // 只做一次轻量入场；导航宽度保持固定，避免 hover 时覆盖主内容。
@@ -115,6 +117,8 @@ const emit = defineEmits<{
 }>()
 
 const { hasFeature } = useCapabilities()
+const chatStore = useChatStore()
+const hasStreaming = computed(() => Array.from(chatStore.channels.values()).some(channel => channel.isStreaming))
 
 interface NavItem {
   to: string

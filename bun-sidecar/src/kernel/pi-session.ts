@@ -32,6 +32,8 @@ import type { ApprovalGate, MaxmaPermissionMode, MaxmaSessionOptions } from "./t
 
 export type { MaxmaPermissionMode } from "./types";
 
+export const MAXMA_DEFAULT_PI_TOOLS = ["read", "bash", "edit", "write", "grep", "find", "ls"] as const;
+
 /** 判定是否需要装配审批扩展：模式非 auto 且提供了门。 */
 export function approvalExtensionFor(
   mode: MaxmaPermissionMode,
@@ -89,7 +91,7 @@ export async function createMaxmaSession(opts: MaxmaSessionOptions): Promise<Age
     cwd,
     agentDir,
     extensionFactories,
-    additionalSkillPaths: opts.skillsEnabled === false ? [] : maxmaSkillPaths(cwd),
+    additionalSkillPaths: maxmaSkillPaths(cwd, opts.skillsEnabled !== false),
     ...(opts.skillsEnabled === false ? { noSkills: true } : {}),
     // 官方选项：整体替换 / 追加系统提示词（直映 create_session RPC 的
     // system_prompt / append_system_prompt 参数）。
@@ -100,6 +102,11 @@ export async function createMaxmaSession(opts: MaxmaSessionOptions): Promise<Age
   });
   await resourceLoader.reload();
 
+  const defaultTools = [
+    ...MAXMA_DEFAULT_PI_TOOLS,
+    ...(opts.customTools ?? []).map((tool) => tool.name),
+  ];
+
   const { session } = await createAgentSession({
     cwd,
     sessionManager,
@@ -109,8 +116,8 @@ export async function createMaxmaSession(opts: MaxmaSessionOptions): Promise<Age
     ...(opts.modelRuntime !== undefined ? { modelRuntime: opts.modelRuntime } : {}),
     ...(opts.model !== undefined ? { model: opts.model } : {}),
     ...(opts.thinkingLevel !== undefined ? { thinkingLevel: opts.thinkingLevel } : {}),
-    // 官方选项：工具白名单（未提供时启用默认内置工具 read/bash/edit/write）
-    ...(opts.tools !== undefined && opts.tools.length > 0 ? { tools: opts.tools } : {}),
+    // 官方选项：工具白名单（未提供时启用 Maxma 的默认文件与代码工具集）
+    tools: opts.tools ?? defaultTools,
     ...(opts.customTools !== undefined && opts.customTools.length > 0
       ? { customTools: opts.customTools }
       : {}),
@@ -119,6 +126,9 @@ export async function createMaxmaSession(opts: MaxmaSessionOptions): Promise<Age
   // 官方文档要求：MCP 扩展在 session_start 时连接服务器，需 bindExtensions 触发。
   // ExtensionBindings 字段全可选，v1 传空对象（UI 上下文在审批桥接期接入）。
   await session.bindExtensions({});
+  if (opts.tools === undefined) {
+    session.setActiveToolsByName(session.getAllTools().map((tool) => tool.name));
+  }
 
   return session;
 }

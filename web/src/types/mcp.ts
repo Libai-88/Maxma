@@ -1,6 +1,6 @@
 /** MCP 服务器配置类型定义 */
 
-export type MCPTransport = 'stdio' | 'sse' | 'streamable_http' | 'websocket'
+export type MCPTransport = 'stdio' | 'streamable_http'
 
 export interface MCPServerInfo {
   server_id: string
@@ -11,7 +11,7 @@ export interface MCPServerInfo {
   // 阶段 4.1：工具级 allowlist / blocklist
   allowed_tools?: string[] | null
   blocked_tools?: string[] | null
-  // 阶段 4.3：TLS 校验开关（仅 sse / streamable_http / websocket）
+  // TLS 校验开关（仅 streamable_http）
   tls_verify?: boolean
 }
 
@@ -21,11 +21,10 @@ export interface MCPServerConfig extends MCPServerInfo {
   args?: string[]
   env?: Record<string, string>
   cwd?: string
-  // sse / streamable_http / websocket 专用
+  // streamable_http 专用
   url?: string
   headers?: Record<string, string>
   timeout?: number
-  sse_read_timeout?: number
 }
 
 export interface ListMCPServersResponse {
@@ -49,7 +48,6 @@ export interface MCPServerCreateBody {
   url?: string
   headers?: Record<string, string>
   timeout?: number
-  sse_read_timeout?: number
   tls_verify?: boolean
 }
 
@@ -67,7 +65,6 @@ export interface MCPServerUpdateBody {
   url?: string
   headers?: Record<string, string>
   timeout?: number
-  sse_read_timeout?: number
   tls_verify?: boolean
 }
 

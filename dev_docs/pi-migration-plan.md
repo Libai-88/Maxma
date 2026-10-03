@@ -142,7 +142,7 @@ Maxma 后端 (Bun + TypeScript，单一进程)
 | 子 Agent 事件 | ❌ 无任何 subagent 导出——`sub_session_created` 确认无 pi 等价物，按 §6.2 任务 10 flag 关闭 |
 | 权限模式映射素材 | ✅ `createReadOnlyTools`/`createCodingTools`/`createBashTool`/`createPowerShellTool` 等工具工厂 + `defineTool`/`wrapRegisteredTools`——4 档权限的工具集切换可全部用官方工厂组装 |
 | Settings | ✅ `SettingsManager` + `DEFAULT_COMPACTION_SETTINGS`（压缩键官方存在） |
-| 默认工具集 | `read/bash/edit/write`（无 OMP 的 plan/todo 等专有工具） |
+| 默认工具集 | `read/bash/edit/write/grep/find/ls`（无 OMP 的 plan/todo 等专有工具） |
 | 版本锁定 | **锁 `0.99.0`**。注意：npm 版本跳跃大（0.87.1→0.99.0 隔 12 天），锁精确版本 + 升级跑快照是硬约束 |
 
 **结论**：阶段一技术路径全部可行，无阻断项；所有自建能力均有官方 API 承接，无需自创机制。

@@ -3,7 +3,7 @@
  * （api/routes/mcp_test.py 的 Bun 直译，阶段二 2.4b）。
  *
  * stdio：命令白名单 + 拒绝 shell 元字符 → 启动子进程，5 秒内未崩溃视为成功。
- * URL 类（streamable_http/websocket/sse）：HTTP(S) 可达性探测（GET，5s 超时，
+ * streamable_http：HTTP(S) 可达性探测（GET，5s 超时，
  * 任何 HTTP 响应都视为可达）。
  */
 
@@ -101,8 +101,13 @@ export function createMcpTestRoutes(): Hono {
       : {};
     const url = typeof body.url === "string" ? body.url : "";
 
+    // Pi 当前仅支持 stdio 与 streamable_http。
+    if (transport !== "stdio" && transport !== "streamable_http") {
+      return c.json({ success: false, error: "不支持的 transport：仅支持 stdio 或 streamable_http", resolved_command: "" } satisfies TestResponse, 400);
+    }
+
     // URL 类传输
-    if (transport !== "stdio") {
+    if (transport === "streamable_http") {
       const trimmed = url.trim();
       if (!trimmed) {
         return c.json({ success: false, error: "缺少服务器 URL", resolved_command: "" } satisfies TestResponse);

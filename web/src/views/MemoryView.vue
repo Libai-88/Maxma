@@ -1,7 +1,7 @@
 <template>
   <div class="memory-view">
     <div class="header">
-      <h2>记忆 Memory</h2>
+      <h2>记忆</h2>
       <p class="header-sub">AI 自动记录的长期事实——偏好、背景、历史决策。</p>
     </div>
 

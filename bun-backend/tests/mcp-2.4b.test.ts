@@ -142,13 +142,13 @@ describe("MCP servers CRUD（阶段 2.4b）", () => {
     expect(blockedEnv.status).toBe(400);
     expect(((await blockedEnv.json()) as { detail: string }).detail).toContain("环境变量包含禁止设置的敏感 key: PATH");
 
-    const sseNoUrl = await app.request("/api/mcp/servers", {
+    const unsupportedSse = await app.request("/api/mcp/servers", {
       method: "POST",
       headers: H,
       body: JSON.stringify({ server_id: "x", transport: "sse" }),
     });
-    expect(sseNoUrl.status).toBe(400);
-    expect(((await sseNoUrl.json()) as { detail: string }).detail).toBe("sse 模式必须指定 url");
+    expect(unsupportedSse.status).toBe(400);
+    expect(((await unsupportedSse.json()) as { detail: string }).detail).toContain("仅支持 stdio/streamable_http");
   }, 20000);
 
   test("Pydantic 类型形状：args 元素 string_type 带下标、timeout float_parsing、args 空列表不落盘", async () => {
@@ -256,7 +256,7 @@ describe("MCP test-connection（阶段 2.4b）", () => {
     const urlMissing = await app.request("/api/mcp/test-connection", {
       method: "POST",
       headers: H,
-      body: JSON.stringify({ transport: "sse", url: "" }),
+      body: JSON.stringify({ transport: "streamable_http", url: "" }),
     });
     const u = (await urlMissing.json()) as { success: boolean; error: string; resolved_command: string };
     expect(u.success).toBe(false);
@@ -265,7 +265,7 @@ describe("MCP test-connection（阶段 2.4b）", () => {
     const urlScheme = await app.request("/api/mcp/test-connection", {
       method: "POST",
       headers: H,
-      body: JSON.stringify({ transport: "sse", url: "ftp://x" }),
+      body: JSON.stringify({ transport: "streamable_http", url: "ftp://x" }),
     });
     expect(((await urlScheme.json()) as { error: string }).error).toBe("URL 必须以 http:// 或 https:// 开头");
   }, 20000);

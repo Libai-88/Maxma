@@ -47,7 +47,7 @@
         </div>
       </div>
 
-      <!-- 自定义工具 / 扩展 -->
+      <!-- Maxma 自定义工具 -->
       <div class="section" v-if="activeTab === 'tools' && customTools.length">
         <h3>自定义工具 ({{ customTools.length }})</h3>
         <div class="ext-list">
@@ -61,9 +61,9 @@
         </div>
       </div>
 
-      <!-- 内置工具 -->
+      <!-- Pi 默认工具 -->
       <div class="section" v-if="activeTab === 'tools' && builtinTools.length">
-        <h3>内置工具 ({{ builtinTools.length }})</h3>
+        <h3>Pi 默认工具 ({{ builtinTools.length }})</h3>
         <div class="tool-grid">
           <div v-for="t in builtinTools" :key="t.name" class="tool-chip" :title="t.description">
             {{ t.label || t.name }}
@@ -75,7 +75,8 @@
       <!-- Skills（SKILLS-UI-001：sidecar get_discovered_skills 此前无 UI） -->
       <div class="section" v-if="activeTab === 'skills'">
         <div class="skill-market">
-          <div class="skill-market-heading"><div><h3>SkillHub 技能市场</h3><p>搜索并安装社区共享的 Agent Skills</p></div><a href="https://skillhub.cn" target="_blank" rel="noreferrer">打开市场 ↗</a></div>
+          <div class="bundled-skill-note"><strong>Maxma 随包 Skills</strong><span>编码、调试、文档和表格能力已内置，无需下载或额外服务。</span></div>
+          <div class="skill-market-heading"><div><h3>可选社区技能市场</h3><p>按需搜索并安装社区共享的 Agent Skills</p></div><a href="https://skillhub.cn" target="_blank" rel="noreferrer">打开市场 ↗</a></div>
           <div class="skill-market-search"><input v-model="skillQuery" placeholder="搜索中文或英文技能" @keydown.enter="searchSkillMarket"><button class="btn" :disabled="skillMarketLoading" @click="searchSkillMarket">{{ skillMarketLoading ? '搜索中…' : '搜索' }}</button></div>
           <p v-if="skillMarketError" class="skill-market-error">{{ skillMarketError }}</p>
           <div v-else-if="skillMarketLoading" class="loading">正在搜索 SkillHub…</div>
@@ -141,6 +142,7 @@ interface ToolInfo {
   description?: string
   category?: string
   builtin?: boolean
+  source?: string
 }
 
 interface McpServerInfo {
@@ -184,10 +186,8 @@ useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.section', rea
 // 重试按钮 hover 弹性放大（error 态挂载后由 watchSources 补绑定）
 useButtonFx(() => rootEl.value, '.btn', { watchSources: [error] })
 
-// builtin !== false: includes builtin:true AND absent/undefined (which defaults to builtin)
-const builtinTools = computed(() => tools.value.filter(t => t.builtin !== false))
-// only tools with explicit builtin:false are custom
-const customTools = computed(() => tools.value.filter(t => t.builtin === false))
+const builtinTools = computed(() => tools.value.filter(t => t.source !== 'custom'))
+const customTools = computed(() => tools.value.filter(t => t.source === 'custom'))
 
 watch(() => route.query.tab, (value) => {
   if (typeof value === 'string' && validTabs.includes(value as ExtensionTab)) activeTab.value = value as ExtensionTab
@@ -225,6 +225,7 @@ function changeSkillMarketPage(delta: number) {
 }
 
 async function installSkill(skill: MarketSkill) {
+  if (!window.confirm(`确认安装社区技能“${skill.name || skill.slug}”？技能内容来自外部来源，请先确认其可信度。`)) return
   installingSkill.value = skill.slug
   try {
     await api.request('/skills/market/install', { method: 'POST', body: JSON.stringify({ slug: skill.slug }) })
@@ -260,11 +261,14 @@ function loadAll() {
   void load()
 }
 
-onMounted(() => { void load(); void searchSkillMarket() })
+onMounted(() => { void load() })
 </script>
 
 <style scoped>
 .skill-market { margin: 0 0 24px; padding: 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--bg-secondary); }
+.bundled-skill-note { display: flex; flex-direction: column; gap: 4px; margin-bottom: 16px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border)); border-radius: 10px; background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.bundled-skill-note strong { color: var(--text-primary); font-size: .86rem; }
+.bundled-skill-note span { color: var(--text-secondary); font-size: .78rem; line-height: 1.45; }
 .skill-market-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .skill-market-heading h3 { margin: 0; font-size: 1rem; }
 .skill-market-heading p { margin: 4px 0 0; color: var(--text-tertiary); font-size: .82rem; }

@@ -93,7 +93,7 @@ $BackendBundle = Join-Path $DistRoot "bun-server"
 $BackendNodeModules = Join-Path $BackendDir "node_modules"
 $RuntimeNodeModules = Join-Path $BackendBundle "node_modules"
 New-Item -ItemType Directory -Force -Path $RuntimeNodeModules | Out-Null
-foreach ($module in @("sharp", "@img\sharp-win32-x64", "detect-libc", "semver")) {
+foreach ($module in @("sharp", "@img\sharp-win32-x64", "@img\colour", "detect-libc", "semver")) {
     $source = Join-Path $BackendNodeModules $module
     $destination = Join-Path $RuntimeNodeModules $module
     if (-not (Test-Path $destination) -and (Test-Path $source)) {
@@ -126,6 +126,7 @@ foreach ($name in $BuiltInPersonaNames) {
     }
     Copy-Item -LiteralPath $source -Destination $PersonaDir -Force
 }
+$BundledSkillNames = @("coding-starter", "office-starter", "debugging-starter", "document-starter", "spreadsheet-starter", "mcp-starter")
 $StickersDir = Join-Path $RuntimeDir "config\stickers"
 Copy-Item -Path (Join-Path $ProjectRoot "config\rules") -Destination (Join-Path $RuntimeDir "config") -Recurse -Force
 Copy-Item -Path (Join-Path $ProjectRoot "config\stickers") -Destination (Join-Path $RuntimeDir "config") -Recurse -Force
@@ -141,8 +142,19 @@ Copy-Item -LiteralPath (Join-Path $ProjectRoot "version.py") -Destination $Runti
 New-Item -ItemType Directory -Force -Path (Join-Path $RuntimeDir "bun-sidecar") | Out-Null
 Copy-Item -LiteralPath (Join-Path $ProjectRoot "bun-sidecar\package.json") -Destination (Join-Path $RuntimeDir "bun-sidecar\package.json") -Force
 New-Item -ItemType Directory -Force -Path (Join-Path $RuntimeDir "macros") | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $RuntimeDir ".omp\skills"), (Join-Path $RuntimeDir "web\dist") | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $RuntimeDir ".omp\skills"), (Join-Path $RuntimeDir ".maxma\skills"), (Join-Path $RuntimeDir "web\dist") | Out-Null
 Copy-Item -Path (Join-Path $ProjectRoot ".omp\skills\*") -Destination (Join-Path $RuntimeDir ".omp\skills") -Recurse -Force
+Copy-Item -Path (Join-Path $ProjectRoot ".maxma\skills\*") -Destination (Join-Path $RuntimeDir ".maxma\skills") -Recurse -Force
+$BundledSkillNames | ForEach-Object {
+    $sourceSkill = Join-Path $ProjectRoot (Join-Path ".maxma\skills" (Join-Path $_ "SKILL.md"))
+    $runtimeSkill = Join-Path $RuntimeDir (Join-Path ".maxma\skills" (Join-Path $_ "SKILL.md"))
+    if (-not (Test-Path -LiteralPath $sourceSkill -PathType Leaf)) {
+        throw "随包技能资源缺失：$sourceSkill"
+    }
+    if (-not (Test-Path -LiteralPath $runtimeSkill -PathType Leaf)) {
+        throw "桌面运行目录缺少随包技能：$runtimeSkill"
+    }
+}
 Copy-Item -Path (Join-Path $ProjectRoot "web\dist\*") -Destination (Join-Path $RuntimeDir "web\dist") -Recurse -Force
 if (Test-Path (Join-Path $ProjectRoot "workflows")) {
     New-Item -ItemType Directory -Force -Path (Join-Path $RuntimeDir "workflows") | Out-Null
@@ -162,6 +174,18 @@ $unpackedDir = Join-Path $OutputDir "win-unpacked"
 if (-not (Test-Path (Join-Path $unpackedDir "MaxmaHere.exe")) -or -not (Test-Path (Join-Path $unpackedDir "resources\maxma\server.js"))) {
     throw "桌面运行目录缺少程序或后端资源。"
 }
+$BuiltInPersonaNames | ForEach-Object {
+    $bundledPersona = Join-Path $unpackedDir "resources\maxma\config\personas\$_"
+    if (-not (Test-Path -LiteralPath $bundledPersona -PathType Leaf)) {
+        throw "桌面运行目录缺少内置人格：$_"
+    }
+}
+$BundledSkillNames | ForEach-Object {
+    $bundledSkill = Join-Path $unpackedDir (Join-Path "resources\maxma\.maxma\skills" (Join-Path $_ "SKILL.md"))
+    if (-not (Test-Path -LiteralPath $bundledSkill -PathType Leaf)) {
+        throw "桌面运行目录缺少随包技能：$_"
+    }
+}
 $desktopPackage = Get-Content -LiteralPath (Join-Path $ElectronPackage "package.json") -Raw | ConvertFrom-Json
 $artifactPath = Join-Path $OutputDir ("MaxmaHere-{0}-portable-x64.zip" -f $desktopPackage.version)
 if (Test-Path -LiteralPath $artifactPath) {
@@ -178,7 +202,21 @@ $zip = [System.IO.Compression.ZipFile]::OpenRead($artifact.FullName)
 try {
     $exeEntry = $zip.Entries | Where-Object { $_.FullName -match "MaxmaHere\.exe$" } | Select-Object -First 1
     $runtimeEntry = $zip.Entries | Where-Object { $_.FullName -match "resources/maxma/server\.js$" } | Select-Object -First 1
+    $personaEntries = @($BuiltInPersonaNames | ForEach-Object {
+        $entryName = "resources/maxma/config/personas/$_"
+        $zip.Entries | Where-Object { $_.FullName -eq $entryName } | Select-Object -First 1
+    })
+    $skillEntries = @($BundledSkillNames | ForEach-Object {
+        $entryName = "resources/maxma/.maxma/skills/$_/SKILL.md"
+        $zip.Entries | Where-Object { $_.FullName -eq $entryName } | Select-Object -First 1
+    })
     if (-not $exeEntry -or -not $runtimeEntry) { throw "便携 ZIP 缺少桌面程序或 Maxma 后端资源。" }
+    if ($personaEntries.Count -ne $BuiltInPersonaNames.Count -or $personaEntries -contains $null) {
+        throw "便携 ZIP 缺少内置人格文件。"
+    }
+    if ($skillEntries.Count -ne $BundledSkillNames.Count -or $skillEntries -contains $null) {
+        throw "便携 ZIP 缺少随包技能文件。"
+    }
 } finally {
     $zip.Dispose()
 }

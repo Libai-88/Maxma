@@ -297,8 +297,8 @@ export async function handlePiCreateSession(
     },
     ...(thinkingLevel ? { thinkingLevel } : {}),
     ...(mcp && mcp.entries.length > 0 ? { mcpServers: mcp.entries } : {}),
-    // Maxma 特色能力层（§6.2 任务 5：4 个工具 + 计划模式 submit_plan）
-    customTools: [...buildPiCustomTools(), submitPlanTool],
+    // Maxma 特色能力层（记忆、规则、办公读取 + 计划模式）
+    customTools: [...buildPiCustomTools(cwd), submitPlanTool],
     ...(systemPrompt !== undefined ? { systemPrompt } : {}),
     skillsEnabled: params?.skills_enabled !== false,
     appendSystemPrompt: [

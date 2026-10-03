@@ -1255,56 +1255,62 @@ function handleQuickStart(message: string) {
 }
 
 .task-brief-panel {
-  --brief-ink: #172033; --brief-muted: #536176; --brief-surface: #ffffff;
-  --brief-soft: #f4f7fb; --brief-line: #d7dfeb;
-  margin: 0 12px 14px; padding: 22px 24px 20px;
-  border: 1px solid color-mix(in srgb, var(--accent, #635bff) 48%, var(--brief-line));
-  border-radius: 16px; background: var(--brief-surface); color: var(--brief-ink);
-  box-shadow: 0 12px 36px color-mix(in srgb, #172033 14%, transparent);
+  --brief-ink: var(--text-primary);
+  --brief-muted: var(--text-secondary);
+  --brief-surface: var(--bg-card);
+  --brief-soft: var(--bg-secondary);
+  --brief-line: var(--border);
+  margin: 0 12px 14px;
+  padding: 22px 24px 20px;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--brief-line));
+  border-radius: 16px;
+  background: var(--bg-card);
+  color: var(--brief-ink);
+  box-shadow: 0 12px 36px color-mix(in srgb, var(--text-primary) 12%, transparent);
 }
 .task-brief-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .task-brief-title-wrap { min-width: 0; }
-.task-brief-eyebrow { display: block; margin-bottom: 7px; color: var(--accent, #635bff); font-size: 12px; font-weight: 800; letter-spacing: .08em; }
+.task-brief-eyebrow { display: block; margin-bottom: 7px; color: var(--accent); font-size: 12px; font-weight: 800; letter-spacing: .08em; }
 .task-brief-header strong { display: block; color: var(--brief-ink); font-size: 20px; line-height: 1.3; letter-spacing: -.015em; }
 .task-brief-header p, .task-brief-error { margin: 8px 0 0; color: var(--brief-muted); font-size: 14px; line-height: 1.6; }
 .task-brief-close { min-width: 44px; min-height: 44px; padding: 8px 10px; border: 1px solid var(--brief-line); border-radius: 9px; background: var(--brief-surface); color: var(--brief-muted); font: inherit; font-size: 13px; cursor: pointer; }
-.task-brief-close:hover { color: var(--brief-ink); border-color: var(--accent, #635bff); background: var(--brief-soft); }
+.task-brief-close:hover { color: var(--brief-ink); border-color: var(--accent); background: var(--brief-soft); }
 .task-brief-form { display: grid; gap: 10px; margin-top: 20px; }
-.task-brief-step { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--accent, #635bff) 22%, var(--brief-line)); border-radius: 11px; background: var(--brief-soft); }
-.task-brief-step-dot { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; border-radius: 50%; background: var(--accent, #635bff); color: #fff; font-size: 12px; font-weight: 800; }
+.task-brief-step { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--brief-line)); border-radius: 11px; background: var(--brief-soft); }
+.task-brief-step-dot { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: var(--text-inverse); font-size: 12px; font-weight: 800; }
 .task-brief-step strong, .task-brief-step span { display: block; }
 .task-brief-step strong { color: var(--brief-ink); font-size: 14px; }
 .task-brief-step div > span { margin-top: 2px; color: var(--brief-muted); font-size: 13px; line-height: 1.5; }
 .task-brief-questions { display: grid; gap: 8px; margin: 2px 0 4px; padding: 0; list-style: none; }
 .task-brief-questions li { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid var(--brief-line); border-radius: 10px; background: var(--brief-surface); color: var(--brief-ink); font-size: 14px; line-height: 1.55; }
-.task-brief-question-number { display: grid; place-items: center; flex: 0 0 22px; width: 22px; height: 22px; border-radius: 6px; background: color-mix(in srgb, var(--accent, #635bff) 12%, var(--brief-surface)); color: var(--accent, #635bff); font-size: 12px; font-weight: 800; }
+.task-brief-question-number { display: grid; place-items: center; flex: 0 0 22px; width: 22px; height: 22px; border-radius: 6px; background: color-mix(in srgb, var(--accent) 14%, var(--brief-surface)); color: var(--accent); font-size: 12px; font-weight: 800; }
 .task-brief-field-label { margin-top: 4px; color: var(--brief-ink); font-size: 14px; font-weight: 800; }
-.task-brief-form textarea { width: 100%; min-height: 116px; resize: vertical; padding: 13px 14px; border: 1px solid #b8c4d5; border-radius: 10px; outline: none; background: #fbfcfe; color: var(--brief-ink); font: inherit; font-size: 14px; line-height: 1.65; box-sizing: border-box; }
-.task-brief-form textarea::placeholder { color: #6a7890; opacity: 1; }
-.task-brief-form textarea:focus { border-color: var(--accent, #635bff); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #635bff) 18%, transparent); }
+.task-brief-form textarea { width: 100%; min-height: 116px; resize: vertical; padding: 13px 14px; border: 1px solid var(--border-strong); border-radius: 10px; outline: none; background: var(--bg-primary); color: var(--text-primary); font: inherit; font-size: 14px; line-height: 1.65; box-sizing: border-box; }
+.task-brief-form textarea::placeholder { color: var(--text-tertiary); opacity: 1; }
+.task-brief-form textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
 .task-brief-field-footer { display: flex; justify-content: space-between; gap: 12px; color: var(--brief-muted); font-size: 12px; line-height: 1.4; }
-.task-brief-summary { padding: 12px 14px; border-left: 3px solid var(--accent, #635bff); background: var(--brief-soft); }
-.task-brief-summary span { color: var(--accent, #635bff); font-size: 12px; font-weight: 800; }
+.task-brief-summary { padding: 12px 14px; border-left: 3px solid var(--accent); background: var(--brief-soft); }
+.task-brief-summary span { color: var(--accent); font-size: 12px; font-weight: 800; }
 .task-brief-summary p { margin: 4px 0 0; color: var(--brief-ink); font-size: 14px; line-height: 1.55; }
-.task-brief-primary { justify-self: end; min-height: 44px; padding: 10px 16px; border: 0; border-radius: 9px; background: var(--accent, #635bff); color: #fff; font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 12px color-mix(in srgb, var(--accent, #635bff) 28%, transparent); }
+.task-brief-primary { justify-self: end; min-height: 44px; padding: 10px 16px; border: 0; border-radius: 9px; background: var(--accent); color: var(--text-inverse); font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; box-shadow: 0 4px 12px color-mix(in srgb, var(--accent) 28%, transparent); }
 .task-brief-primary:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
 .task-brief-primary:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
 .task-brief-thinking { display: flex; align-items: center; gap: 10px; margin-top: 18px; color: var(--brief-muted); font-size: 14px; }
-.task-brief-spinner { width: 16px; height: 16px; border: 2px solid color-mix(in srgb, var(--accent, #635bff) 24%, transparent); border-top-color: var(--accent, #635bff); border-radius: 50%; animation: task-brief-spin .8s linear infinite; }
+.task-brief-spinner { width: 16px; height: 16px; border: 2px solid color-mix(in srgb, var(--accent) 24%, transparent); border-top-color: var(--accent); border-radius: 50%; animation: task-brief-spin .8s linear infinite; }
 @media (max-width: 640px) { .task-brief-panel { margin: 0 8px 10px; padding: 18px 16px; } .task-brief-header strong { font-size: 18px; } .task-brief-field-footer { flex-direction: column; gap: 3px; } .task-brief-primary { width: 100%; } }
 .task-brief-readiness { display: grid; grid-template-columns: auto minmax(100px, 1fr) auto; align-items: center; gap: 10px; padding: 11px 13px; border: 1px solid var(--brief-line); border-radius: 10px; background: var(--brief-soft); }
 .task-brief-readiness > div:first-child { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
 .task-brief-readiness-label { color: var(--brief-muted); font-size: 12px; }
 .task-brief-readiness strong { color: var(--brief-ink); font-size: 17px; font-variant-numeric: tabular-nums; }
-.task-brief-readiness-track { height: 7px; overflow: hidden; border-radius: 99px; background: #dbe3ee; }
-.task-brief-readiness-track span { display: block; height: 100%; border-radius: inherit; background: var(--accent, #635bff); transition: width .25s var(--ease-out); }
+.task-brief-readiness-track { height: 7px; overflow: hidden; border-radius: 99px; background: color-mix(in srgb, var(--brief-muted) 16%, var(--brief-surface)); }
+.task-brief-readiness-track span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width .25s var(--ease-out); }
 .task-brief-risk { color: var(--brief-muted); font-size: 12px; white-space: nowrap; }
-.task-brief-readiness.risk-high { border-color: #e2b8b8; background: #fff7f7; }
-.task-brief-readiness.risk-high .task-brief-readiness-track span { background: #c84b4b; }
-.task-brief-readiness.risk-high .task-brief-risk { color: #9a3434; }
-.task-brief-missing, .task-brief-assumptions { display: grid; gap: 5px; padding: 10px 13px; border-radius: 9px; background: #fffaf0; color: #644b1d; font-size: 12px; line-height: 1.5; }
+.task-brief-readiness.risk-high { border-color: color-mix(in srgb, var(--status-error) 42%, var(--brief-line)); background: color-mix(in srgb, var(--status-error) 8%, var(--brief-surface)); }
+.task-brief-readiness.risk-high .task-brief-readiness-track span { background: var(--status-error); }
+.task-brief-readiness.risk-high .task-brief-risk { color: var(--status-error); }
+.task-brief-missing, .task-brief-assumptions { display: grid; gap: 5px; padding: 10px 13px; border: 1px solid color-mix(in srgb, var(--status-warn) 32%, var(--brief-line)); border-radius: 9px; background: color-mix(in srgb, var(--status-warn) 10%, var(--brief-surface)); color: var(--brief-ink); font-size: 12px; line-height: 1.5; }
 .task-brief-missing strong, .task-brief-assumptions strong { font-size: 13px; }
 .task-brief-missing span, .task-brief-assumptions span { display: block; }
-.task-brief-assumptions { background: #f4f7fb; color: var(--brief-muted); }
+.task-brief-assumptions { border-color: var(--brief-line); background: var(--brief-soft); color: var(--brief-muted); }
 @keyframes task-brief-spin { to { transform: rotate(360deg); } }
 </style>

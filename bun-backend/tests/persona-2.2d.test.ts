@@ -176,6 +176,25 @@ describe("persona 路由（阶段 2.2d）", () => {
     expect(list.active_file).toBe("SOUL.大饱.md");
   });
 
+  test("干净安装时两个内置人格可从只读模板目录发现", async () => {
+    const bundleDir = fs.mkdtempSync(path.join(os.tmpdir(), "maxma-persona-builtins-"));
+    const templateDir = path.join(bundleDir, "config", "personas");
+    const sourceDir = path.resolve(import.meta.dir, "..", "..", "config", "personas");
+    fs.mkdirSync(templateDir, { recursive: true });
+    for (const filename of ["SOUL.md", "SOUL.饱饱.md"]) {
+      fs.copyFileSync(path.join(sourceDir, filename), path.join(templateDir, filename));
+    }
+    fs.rmSync(path.join(dataDir, "config", "personas", "SOUL.md"), { force: true });
+    process.env.MAXMA_BUNDLE_DIR = bundleDir;
+    const app = await makeApp();
+    const response = await app.request("/api/personas", { headers: authHeader() });
+    expect(response.status).toBe(200);
+    const result = (await response.json()) as { personas: Array<{ file: string }> };
+    expect(result.personas.map((persona) => persona.file)).toEqual(
+      expect.arrayContaining(["SOUL.md", "SOUL.饱饱.md"]),
+    );
+    fs.rmSync(bundleDir, { recursive: true, force: true });
+  });
   test("模板人格可读取，保存时写入用户目录", async () => {
     const bundleDir = fs.mkdtempSync(path.join(os.tmpdir(), "maxma-persona-bundle-"));
     const templateDir = path.join(bundleDir, "config", "personas");

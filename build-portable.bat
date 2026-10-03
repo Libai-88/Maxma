@@ -88,11 +88,28 @@ if not exist "%PROJECT_ROOT%config\personas\SOUL.饱饱.md" (
 )
 xcopy /e /i /q "%PROJECT_ROOT%config\personas\SOUL.md" "%PORTABLE_DIR%\config\personas" >nul
 xcopy /e /i /q "%PROJECT_ROOT%config\personas\SOUL.饱饱.md" "%PORTABLE_DIR%\config\personas" >nul
+for %%P in (SOUL.md SOUL.饱饱.md) do (
+    if not exist "%PORTABLE_DIR%\config\personas\%%P" (
+        echo [ERROR] Built-in persona missing from portable output: %%P
+        exit /b 1
+    )
+)
 xcopy /e /i /q "%PROJECT_ROOT%config\rules" "%PORTABLE_DIR%\config\rules" >nul
 xcopy /e /i /q "%PROJECT_ROOT%config\stickers" "%PORTABLE_DIR%\config\stickers" >nul
 REM custom stickers are user uploads — never ship them
 if exist "%PORTABLE_DIR%\config\stickers\custom" rmdir /s /q "%PORTABLE_DIR%\config\stickers\custom"
 xcopy /e /i /q "%PROJECT_ROOT%.omp\skills" "%PORTABLE_DIR%\.omp\skills" >nul
+xcopy /e /i /q "%PROJECT_ROOT%.maxma\skills" "%PORTABLE_DIR%\.maxma\skills" >nul
+for %%S in (coding-starter office-starter debugging-starter document-starter spreadsheet-starter mcp-starter) do (
+    if not exist "%PROJECT_ROOT%.maxma\skills\%%S\SKILL.md" (
+        echo [ERROR] Bundled skill missing from source: %%S
+        exit /b 1
+    )
+    if not exist "%PORTABLE_DIR%\.maxma\skills\%%S\SKILL.md" (
+        echo [ERROR] Bundled skill missing from portable output: %%S
+        exit /b 1
+    )
+)
 if exist "%PROJECT_ROOT%workflows\" xcopy /e /i /q "%PROJECT_ROOT%workflows" "%PORTABLE_DIR%\workflows" >nul
 if exist "%PROJECT_ROOT%macros\" xcopy /e /i /q "%PROJECT_ROOT%macros" "%PORTABLE_DIR%\macros" >nul
 copy /y "%PROJECT_ROOT%version.py" "%PORTABLE_DIR%\version.py" >nul
@@ -152,7 +169,7 @@ echo ========================================
 echo   Portable build complete
 echo   Output: %PORTABLE_DIR%
 echo     server.js / bun.exe / node_modules\
-echo     web\dist\  config\  .omp\skills\  version.py
+echo     web\dist\  config\  .omp\skills\  .maxma\skills\  version.py
 echo     portable.flag  data\  MaxmaHere.bat
 echo ========================================
 

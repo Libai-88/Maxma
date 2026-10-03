@@ -2,7 +2,7 @@
   <div class="providers-view">
     <!-- ── 标题栏 ── -->
     <div class="header">
-      <h2>提供商管理 PROVIDERS</h2>
+      <h2>模型提供商</h2>
       <button v-if="mode === 'list'" class="btn primary" @click="startAdd">+ 添加提供商</button>
       <button v-else class="btn" @click="cancelForm">← 返回列表</button>
     </div>
@@ -705,8 +705,9 @@ onMounted(loadProviders)
 <style scoped>
 .providers-view {
   flex: 1;
+  min-width: 0;
   overflow-y: auto;
-  padding: 24px;
+  padding: clamp(16px, 3vw, 24px);
 }
 
 .header {
@@ -714,6 +715,10 @@ onMounted(loadProviders)
   align-items: center;
   justify-content: space-between;
   margin-bottom: 20px;
+}
+.header > .btn {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .header h2 {
 	  font-size: var(--fs-display-lg);

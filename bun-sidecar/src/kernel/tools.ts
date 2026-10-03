@@ -22,6 +22,7 @@ import { listRulesTool } from "../tools/rules";
 import { getStickerTool } from "../tools/stickers";
 import { searchMemoriesTool } from "../tools/memory";
 import { registerRememberMemoryTool } from "../tools/remember-memory";
+import { readOfficeFileTool, writeOfficeFileTool } from "../tools/office";
 
 /** OMP approval 字段 → 官方 ToolAnnotations（审批门 needsApprovalForMode 消费）。 */
 function annotationsFor(approval: MaxmaToolDescriptor["approval"]): ToolDefinition["annotations"] {
@@ -44,15 +45,17 @@ export function adaptDescriptorToPi(descriptor: MaxmaToolDescriptor): ToolDefini
 }
 
 /**
- * pi 引擎的 Maxma 自定义工具集（§7.5：不含 list_automations）。
+ * pi 引擎的 Maxma 自定义工具集（不含已下线的 list_automations）。
  * remember_memory 的实现在 tools-remember-memory.ts（原 tools/index.ts 内联逻辑平移）。
  */
-export function buildPiCustomTools(): ToolDefinition[] {
+export function buildPiCustomTools(cwd?: string): ToolDefinition[] {
   const descriptors: MaxmaToolDescriptor[] = [
     registerRememberMemoryTool(),
     searchMemoriesTool(),
     getStickerTool(),
     listRulesTool(),
+    ...(cwd ? [readOfficeFileTool(cwd)] : []),
+    ...(cwd ? [writeOfficeFileTool(cwd)] : []),
   ];
   return descriptors.map(adaptDescriptorToPi);
 }

@@ -1,7 +1,7 @@
 <template>
   <div class="collab-view" ref="rootEl">
     <div class="header">
-      <h2>协作 COLLABORATION</h2>
+      <h2>协作</h2>
       <p class="header-sub">管理会话分享、快照与协作访问</p>
     </div>
 

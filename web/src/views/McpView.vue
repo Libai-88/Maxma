@@ -357,9 +357,7 @@
         </label>
         <select v-model="form.transport" class="input" :disabled="isEditing" required>
           <option value="stdio">stdio（本地程序）</option>
-          <option value="sse">SSE（服务端推送消息）</option>
           <option value="streamable_http">Streamable HTTP</option>
-          <option value="websocket">WebSocket</option>
         </select>
       </div>
 
@@ -442,7 +440,7 @@
           <input v-model="form.url" class="input mono" placeholder="例如: http://localhost:3000/mcp" required />
           <div class="form-hint">
             仅允许连接到本机地址（localhost / 127.0.0.1 / 0.0.0.0 / ::1）。
-            SSE/HTTP 用 http:// 开头，WebSocket 用 ws:// 或 wss:// 开头。
+            Streamable HTTP 使用 http:// 或 https:// 地址。
           </div>
         </div>
 
@@ -473,10 +471,6 @@
           <input v-model.number="form.timeout" type="number" class="input" placeholder="可选" min="0" step="0.1" />
         </div>
 
-        <div v-if="form.transport === 'sse'" class="form-section">
-          <label class="form-label">SSE 读取超时（秒）</label>
-          <input v-model.number="form.sse_read_timeout" type="number" class="input" placeholder="可选" min="0" step="0.1" />
-        </div>
       </template>
 
       <!-- 阶段 4.1：工具级 allowlist / blocklist -->
@@ -662,7 +656,7 @@ const helpTip = ref<InstanceType<typeof DsTooltip>>()
 const helpContent = ref('')
 
 // 帮助文本常量（避免模板内嵌重复字面量）
-	const HELP_TRANSPORT = '选择 MCP 服务器与 Maxma 的连接方式：\n\nstdio — 在本机启动一个程序（最常用），适合安装在本地的工具\nSSE — 通过长连接接收服务端推送的消息\nStreamable HTTP — 基于 HTTP 协议，支持数据流式传输\nWebSocket — 双向实时通信，适合需要持续交互的服务'
+	const HELP_TRANSPORT = '选择 MCP 服务器与 Maxma 的连接方式：\n\nstdio — 在本机启动一个程序（最常用），适合安装在本地的工具\nStreamable HTTP — 通过 HTTP 协议连接远程 MCP 服务。'
 
 	const HELP_COMMAND = '需要运行的命令行程序（仅 stdio 模式需要填写）。\n\n常用选项：npx（运行 Node.js 工具）、python（运行 Python 脚本）、node（运行 JavaScript）、docker（运行容器）等。\n\n系统会检查命令是否在安全白名单中，不在名单中的命令会被禁止执行。'
 
@@ -906,7 +900,6 @@ const emptyForm = () => ({
   url: '',
   headersEntries: [] as KVEntry[],
   timeout: undefined as number | undefined,
-  sse_read_timeout: undefined as number | undefined,
   tls_verify: true,
   // 工具 allowlist / blocklist
   allowed_tools: [] as string[],
@@ -928,9 +921,7 @@ function addChip(arr: string[], value: string) {
 function transportLabel(t: string): string {
   const map: Record<string, string> = {
     stdio: 'stdio',
-    sse: 'SSE',
     streamable_http: 'HTTP',
-    websocket: 'WS',
   }
   return map[t] || t
 }
@@ -1120,7 +1111,6 @@ async function startEdit(server: MCPServerConfig) {
       url: full.url || '',
       headersEntries: objToEntries(full.headers),
       timeout: full.timeout,
-      sse_read_timeout: full.sse_read_timeout,
       tls_verify: full.tls_verify !== false,
       allowed_tools: full.allowed_tools || [],
       blocked_tools: full.blocked_tools || [],
@@ -1236,9 +1226,6 @@ async function handleSave() {
       const headersMap = entriesToObj(form.headersEntries)
       if (Object.keys(headersMap).length) body.headers = headersMap
       if (form.timeout != null) body.timeout = form.timeout
-      if (form.transport === 'sse' && form.sse_read_timeout != null) {
-        body.sse_read_timeout = form.sse_read_timeout
-      }
     }
     if (form.allowed_tools.length) body.allowed_tools = form.allowed_tools
     if (form.blocked_tools.length) body.blocked_tools = form.blocked_tools
@@ -1579,9 +1566,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
   text-transform: uppercase;
 }
 .transport-badge.stdio { background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card)); color: var(--status-ok); }
-.transport-badge.sse { background: color-mix(in srgb, var(--accent) 12%, var(--bg-card)); color: var(--accent); }
 .transport-badge.streamable_http { background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card)); color: var(--status-warn); }
-.transport-badge.websocket { background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card)); color: var(--status-error); }
 
 .toggle-btn {
   width: 40px;

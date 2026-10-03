@@ -2,7 +2,6 @@
   <div
     class="dock-icon"
     :class="{ active, expanded }"
-    :data-label="label"
     ref="rootEl"
     @mouseenter="onEnter"
     @mouseleave="onLeave"
@@ -19,11 +18,13 @@
       v-if="to"
       :to="to"
       class="dock-link"
-      :aria-label="label"
+      :aria-label="busy ? `${label}，正在生成回复` : label"
       :title="label"
+      :data-label="label"
     >
       <div class="icon-wrapper" ref="iconEl">
         <Icon :name="icon" :size="20" />
+        <span v-if="busy" class="busy-dot" aria-hidden="true"></span>
       </div>
       <div class="dock-label" ref="labelEl">{{ label }}</div>
     </router-link>
@@ -33,10 +34,12 @@
       class="dock-link"
       :aria-label="label"
       :title="label"
-      @click="$emit('click')"
+      :data-label="label"
+        @click="$emit('click')"
     >
       <div class="icon-wrapper" ref="iconEl">
         <Icon :name="icon" :size="20" />
+        <span v-if="busy" class="busy-dot" aria-hidden="true"></span>
       </div>
       <div class="dock-label" ref="labelEl">{{ label }}</div>
     </button>
@@ -55,9 +58,11 @@ withDefaults(defineProps<{
   to?: string
   active?: boolean
   expanded?: boolean
+  busy?: boolean
 }>(), {
   active: false,
   expanded: false,
+  busy: false,
 })
 
 defineEmits<{
@@ -71,8 +76,14 @@ const labelEl = ref<HTMLElement | null>(null)
 // ── macOS 风格的图标放大效果 ──
 let hoverTween: gsap.core.Tween | null = null
 
+function canAnimateHover(): boolean {
+  return typeof window !== 'undefined'
+    && window.matchMedia('(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)').matches
+}
+
 function onEnter() {
   if (!iconEl.value) return
+  if (!canAnimateHover()) return
   hoverTween?.kill()
   hoverTween = gsap.to(iconEl.value, {
     scale: 1.35,
@@ -84,6 +95,12 @@ function onEnter() {
 
 function onLeave() {
   if (!iconEl.value) return
+  if (!canAnimateHover()) {
+    hoverTween?.kill()
+    hoverTween = null
+    gsap.set(iconEl.value, { clearProps: 'transform' })
+    return
+  }
   hoverTween?.kill()
   hoverTween = gsap.to(iconEl.value, {
     scale: 1,
@@ -186,7 +203,28 @@ onUnmounted(() => {
   height: 52px;
   color: var(--accent, rgb(110, 90, 240));
   transition: color var(--duration-fast, .15s), background var(--duration-fast, .15s);
-  will-change: transform;
+}
+
+.busy-dot {
+  position: absolute;
+  top: -1px;
+  right: -2px;
+  width: 7px;
+  height: 7px;
+  border: 2px solid var(--bg-card);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+  animation: dock-busy-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes dock-busy-pulse {
+  0%, 100% { transform: scale(.82); opacity: .7; }
+  50% { transform: scale(1); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .busy-dot { animation: none; }
 }
 
 .dock-label {

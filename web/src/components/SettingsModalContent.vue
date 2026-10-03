@@ -115,8 +115,8 @@ defineEmits<{
   margin: 0;
 }
 .settings-subtitle {
-  font-size: 13px;
-  color: color-mix(in srgb, var(--text-inverse) 50%, transparent);
+  font-size: 14px;
+  color: color-mix(in srgb, var(--text-inverse) 78%, transparent);
   margin: 4px 0 0;
 }
 
@@ -210,9 +210,9 @@ defineEmits<{
 }
 
 .card-subtitle {
-  font-size: 11px;
-  line-height: 1.35;
-  color: color-mix(in srgb, var(--text-inverse) 45%, transparent);
+  font-size: 12px;
+  line-height: 1.4;
+  color: color-mix(in srgb, var(--text-inverse) 80%, transparent);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
