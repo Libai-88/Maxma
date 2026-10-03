@@ -116,10 +116,16 @@ New-Item -ItemType Directory -Force -Path $PersonaDir | Out-Null
 foreach ($name in @("AGENTS.md", "MAXMA.md", "SOUL.example.md", "USER.example.md")) {
     Copy-Item -LiteralPath (Join-Path $ProjectRoot "config\personas\$name") -Destination $PersonaDir -Force
 }
-# 内置人格是产品资源：自动打包所有正式 SOUL*.md，排除示例和锁文件。
-Get-ChildItem -LiteralPath (Join-Path $ProjectRoot "config\personas") -Filter "SOUL*.md" -File |
-    Where-Object { $_.Name -ne "SOUL.example.md" } |
-    Copy-Item -Destination $PersonaDir -Force
+# 内置人格是产品资源：两个正式人格必须始终随包提供。
+$BuiltInPersonaNames = @("SOUL.md", "SOUL.饱饱.md")
+$BuiltInPersonaSourceDir = Join-Path $ProjectRoot "config\personas"
+foreach ($name in $BuiltInPersonaNames) {
+    $source = Join-Path $BuiltInPersonaSourceDir $name
+    if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+        throw "内置人格资源缺失，无法构建便携版：$source"
+    }
+    Copy-Item -LiteralPath $source -Destination $PersonaDir -Force
+}
 $StickersDir = Join-Path $RuntimeDir "config\stickers"
 Copy-Item -Path (Join-Path $ProjectRoot "config\rules") -Destination (Join-Path $RuntimeDir "config") -Recurse -Force
 Copy-Item -Path (Join-Path $ProjectRoot "config\stickers") -Destination (Join-Path $RuntimeDir "config") -Recurse -Force

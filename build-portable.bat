@@ -78,7 +78,16 @@ xcopy /e /i /q "%PROJECT_ROOT%config\personas\AGENTS.md" "%PORTABLE_DIR%\config\
 xcopy /e /i /q "%PROJECT_ROOT%config\personas\MAXMA.md" "%PORTABLE_DIR%\config\personas" >nul
 xcopy /e /i /q "%PROJECT_ROOT%config\personas\SOUL.example.md" "%PORTABLE_DIR%\config\personas" >nul
 xcopy /e /i /q "%PROJECT_ROOT%config\personas\USER.example.md" "%PORTABLE_DIR%\config\personas" >nul
-xcopy /e /i /q "%PROJECT_ROOT%config\personas\SOUL.饱饱.md" "%PORTABLE_DIR%\config\personas" >nul 2>&1
+if not exist "%PROJECT_ROOT%config\personas\SOUL.md" (
+    echo [ERROR] Missing built-in persona: SOUL.md
+    exit /b 1
+)
+if not exist "%PROJECT_ROOT%config\personas\SOUL.饱饱.md" (
+    echo [ERROR] Missing built-in persona: SOUL.饱饱.md
+    exit /b 1
+)
+xcopy /e /i /q "%PROJECT_ROOT%config\personas\SOUL.md" "%PORTABLE_DIR%\config\personas" >nul
+xcopy /e /i /q "%PROJECT_ROOT%config\personas\SOUL.饱饱.md" "%PORTABLE_DIR%\config\personas" >nul
 xcopy /e /i /q "%PROJECT_ROOT%config\rules" "%PORTABLE_DIR%\config\rules" >nul
 xcopy /e /i /q "%PROJECT_ROOT%config\stickers" "%PORTABLE_DIR%\config\stickers" >nul
 REM custom stickers are user uploads — never ship them
