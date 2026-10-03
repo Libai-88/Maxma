@@ -297,6 +297,7 @@ onMounted(() => { void load(); void searchSkillMarket() })
 .extension-skeleton-card span:nth-child(3) { width: 46%; }
 .extension-error { border: 1px solid color-mix(in srgb, var(--status-warn) 35%, var(--border)); border-radius: var(--radius); background: color-mix(in srgb, var(--status-warn) 5%, transparent); }
 @keyframes extension-skeleton-shimmer { 0% { background-position: 160% 0; } 100% { background-position: -80% 0; } }
+@media (prefers-reduced-motion: reduce) { .extension-skeleton-card span { animation: none; } }
 @media (max-width: 520px) { .extension-skeleton-grid { grid-template-columns: 1fr; } }
 .empty-icon { font-size: 2em; margin-bottom: 8px; }
 .empty-title { font-size: 1em; font-weight: 600; margin-bottom: 4px; }

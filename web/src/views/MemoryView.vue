@@ -435,6 +435,7 @@ onUnmounted(() => {
 .skeleton-line--medium { width: 62%; }
 .skeleton-line--short { width: 28%; height: 8px; }
 @keyframes memory-skeleton-shimmer { 0% { background-position: 160% 0; } 100% { background-position: -80% 0; } }
+@media (prefers-reduced-motion: reduce) { .skeleton-line { animation: none; } }
 .empty-icon { font-size: 2em; margin-bottom: 8px; }
 .empty-title { font-size: 1em; font-weight: 600; margin-bottom: 4px; }
 .empty-desc { font-size: 0.85em; line-height: 1.6; }
