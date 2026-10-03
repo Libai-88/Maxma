@@ -12,9 +12,16 @@
     </div>
 
     <McpView v-if="activeTab === 'mcp'" />
-    <div v-else-if="loading" class="loading">扫描中...</div>
-    <div v-else-if="error" class="empty">
-      <p>加载失败: {{ error }}</p>
+    <div v-else-if="loading" class="extension-loading" role="status" aria-live="polite" aria-label="正在扫描插件">
+      <span class="sr-only">正在扫描插件与 Skills…</span>
+      <div class="extension-skeleton-grid" aria-hidden="true">
+        <div v-for="n in 6" :key="n" class="extension-skeleton-card"><span></span><span></span><span></span></div>
+      </div>
+    </div>
+    <div v-else-if="error" class="empty extension-error">
+      <div class="empty-icon" aria-hidden="true">⚠</div>
+      <div class="empty-title">插件列表暂时不可用</div>
+      <p class="empty-desc">{{ error.includes("操作过于频繁") ? "请求过于频繁，稍后重试即可；页面上的其它功能不受影响。" : error }}</p>
       <button class="btn" @click="load">重试</button>
     </div>
     <template v-else>
@@ -282,6 +289,15 @@ onMounted(() => { void load(); void searchSkillMarket() })
 .extension-tabs button.active { background: var(--bg-card); color: var(--text-primary); box-shadow: 0 1px 3px color-mix(in srgb, var(--text-primary) 12%, transparent); }
 .compact-empty { padding: 22px; }
 .loading, .empty { text-align: center; padding: 40px; color: var(--text-tertiary); }
+.extension-loading { padding: 12px 0 28px; }
+.extension-skeleton-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.extension-skeleton-card { display: grid; gap: 9px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); }
+.extension-skeleton-card span { display: block; height: 10px; border-radius: 999px; background: linear-gradient(90deg, var(--bg-secondary) 25%, color-mix(in srgb, var(--accent) 10%, var(--bg-secondary)) 50%, var(--bg-secondary) 75%); background-size: 240% 100%; animation: extension-skeleton-shimmer 1.35s ease-in-out infinite; }
+.extension-skeleton-card span:nth-child(2) { width: 78%; }
+.extension-skeleton-card span:nth-child(3) { width: 46%; }
+.extension-error { border: 1px solid color-mix(in srgb, var(--status-warn) 35%, var(--border)); border-radius: var(--radius); background: color-mix(in srgb, var(--status-warn) 5%, transparent); }
+@keyframes extension-skeleton-shimmer { 0% { background-position: 160% 0; } 100% { background-position: -80% 0; } }
+@media (max-width: 520px) { .extension-skeleton-grid { grid-template-columns: 1fr; } }
 .empty-icon { font-size: 2em; margin-bottom: 8px; }
 .empty-title { font-size: 1em; font-weight: 600; margin-bottom: 4px; }
 .empty-desc { font-size: 0.85em; line-height: 1.6; }
