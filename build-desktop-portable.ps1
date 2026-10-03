@@ -116,6 +116,10 @@ New-Item -ItemType Directory -Force -Path $PersonaDir | Out-Null
 foreach ($name in @("AGENTS.md", "MAXMA.md", "SOUL.example.md", "USER.example.md")) {
     Copy-Item -LiteralPath (Join-Path $ProjectRoot "config\personas\$name") -Destination $PersonaDir -Force
 }
+# 内置人格是产品资源：自动打包所有正式 SOUL*.md，排除示例和锁文件。
+Get-ChildItem -LiteralPath (Join-Path $ProjectRoot "config\personas") -Filter "SOUL*.md" -File |
+    Where-Object { $_.Name -ne "SOUL.example.md" } |
+    Copy-Item -Destination $PersonaDir -Force
 $StickersDir = Join-Path $RuntimeDir "config\stickers"
 Copy-Item -Path (Join-Path $ProjectRoot "config\rules") -Destination (Join-Path $RuntimeDir "config") -Recurse -Force
 Copy-Item -Path (Join-Path $ProjectRoot "config\stickers") -Destination (Join-Path $RuntimeDir "config") -Recurse -Force
