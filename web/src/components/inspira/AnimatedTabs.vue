@@ -192,11 +192,13 @@ watch(
 }
 
 .tab-btn.active {
-  color: var(--accent);
+  color: var(--text-inverse, #fff);
+  font-weight: 700;
 }
 
 .tab-btn:focus-visible {
-  box-shadow: 0 0 0 2px var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 72%, transparent);
+  border-radius: 8px;
 }
 
 .tab-indicator {
