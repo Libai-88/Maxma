@@ -3,8 +3,8 @@
     <header class="evolution-hero">
       <div>
         <span class="eyebrow">EVOCORE</span>
-        <h1>行为成长</h1>
-        <p>把明确的用户反馈沉淀为可验证、可撤销、按需生效的行为策略。</p>
+        <h1>行为偏好</h1>
+        <p>把明确的用户反馈沉淀为可验证、可撤销、按需生效的行为偏好。</p>
       </div>
       <div class="evolution-stats" aria-label="成长统计">
         <div><strong>{{ stats.active }}</strong><span>生效策略</span></div>
@@ -15,7 +15,7 @@
 
     <section class="evolution-learn card">
       <div class="section-heading">
-        <div><h2>添加一条长期行为</h2><p>只处理明确的偏好或规则，不从普通对话猜测你的性格。</p></div>
+        <div><h2>添加一条长期行为偏好</h2><p>只处理明确的偏好或规则，不从普通对话猜测你的性格。</p></div>
         <span class="cost-chip">无需额外模型调用</span>
       </div>
       <div class="learn-row">
@@ -27,9 +27,9 @@
     </section>
 
     <section class="card">
-      <div class="section-heading"><div><h2>当前行为策略</h2><p>只有 active 策略会在匹配当前请求时进入上下文；每条策略都可以暂停或纠正。</p></div><button class="ghost" @click="load">刷新</button></div>
+      <div class="section-heading"><div><h2>当前行为偏好</h2><p>只有 active 策略会在匹配当前请求时进入上下文；每条策略都可以暂停或纠正。</p></div><button class="ghost" @click="load">刷新</button></div>
       <div v-if="loading" class="empty">正在读取策略…</div>
-      <div v-else-if="rules.length === 0" class="empty">还没有成长策略。明确告诉 Maxma“以后……”或“请记住……”即可开始。</div>
+      <div v-else-if="rules.length === 0" class="empty">还没有行为偏好。明确告诉 Maxma“以后……”或“请记住……”即可开始。</div>
       <div v-else class="rule-list">
         <article v-for="rule in rules" :key="String(rule.id)" class="rule-item">
           <div class="rule-main"><span class="rule-status" :class="String(rule.status)"></span><p>{{ rule.rule_text }}</p></div>

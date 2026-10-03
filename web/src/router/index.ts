@@ -32,7 +32,7 @@ const router = createRouter({
       path: '/evolution',
       name: 'evolution',
       component: () => import('@/views/EvolutionView.vue'),
-      meta: { transition: 'rise', title: '行为成长', feature: 'memory' },
+      meta: { transition: 'rise', title: '行为偏好', feature: 'memory' },
     },
     {
       path: '/kb',

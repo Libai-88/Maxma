@@ -128,6 +128,18 @@ function isTemplatePlaceholder(text: string): boolean {
   return false;
 }
 
+function personaReadPath(filename: string): string | null {
+  const userPath = path.join(personasDir(), filename);
+  if (fs.existsSync(userPath)) return userPath;
+  const templatePath = path.join(personasTemplatesDir(), filename);
+  if (fs.existsSync(templatePath)) return templatePath;
+  return null;
+}
+
+function personaWritePath(filename: string): string {
+  return path.join(personasDir(), filename);
+}
+
 function getPersonaVariantPath(variant: string): string {
   const cleaned = variant.replace(/[\\/ \t\r\n]+$/, "");
   if (cleaned && PERSONA_FILENAME_RE.test(cleaned)) variant = cleaned;
@@ -165,12 +177,13 @@ export function createPersonaRoutes(): Hono {
     }
     try {
       if (type === "soul" && variant) {
-        const file = getPersonaVariantPath(variant);
-        if (!fs.existsSync(file)) return c.json({ detail: `人格文件不存在: ${variant}` }, 404);
+        getPersonaVariantPath(variant);
+        const file = personaReadPath(variant);
+        if (!file) return c.json({ detail: `人格文件不存在: ${variant}` }, 404);
         return c.json({ content: fs.readFileSync(file, "utf8"), type });
       }
-      const file = path.join(personasDir(), VALID_TYPES[type]!);
-      const content = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
+      const file = personaReadPath(VALID_TYPES[type]!);
+      const content = file ? fs.readFileSync(file, "utf8") : "";
       return c.json({ content, type });
     } catch (err) {
       const e = errorResponse(err);
@@ -188,7 +201,7 @@ export function createPersonaRoutes(): Hono {
     }
     try {
       const file =
-        type === "soul" && variant ? getPersonaVariantPath(variant) : path.join(personasDir(), VALID_TYPES[type]!);
+        type === "soul" && variant ? personaWritePath(variant) : personaWritePath(VALID_TYPES[type]!);
       try {
         writeTextAtomically(file, body.content ?? "");
       } catch (err) {
@@ -373,8 +386,8 @@ export function createPersonaRoutes(): Hono {
   });
 
   app.get("/api/persona/profile", (c) => {
-    const soulPath = path.join(personasDir(), "SOUL.md");
-    const userPath = path.join(personasDir(), "USER.md");
+    const soulPath = personaReadPath("SOUL.md");
+    const userPath = personaReadPath("USER.md");
 
     let name = "Maxma";
     let description = "温暖体贴又有点调皮的大姐姐";

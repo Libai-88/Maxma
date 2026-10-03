@@ -90,6 +90,18 @@ try {
 
 Write-Host "[4/5] 暂存桌面运行资源..."
 $BackendBundle = Join-Path $DistRoot "bun-server"
+$BackendNodeModules = Join-Path $BackendDir "node_modules"
+$RuntimeNodeModules = Join-Path $BackendBundle "node_modules"
+New-Item -ItemType Directory -Force -Path $RuntimeNodeModules | Out-Null
+foreach ($module in @("sharp", "@img\sharp-win32-x64", "detect-libc", "semver")) {
+    $source = Join-Path $BackendNodeModules $module
+    $destination = Join-Path $RuntimeNodeModules $module
+    if (-not (Test-Path $destination) -and (Test-Path $source)) {
+        New-Item -ItemType Directory -Force -Path (Split-Path $destination) | Out-Null
+        Copy-Item -LiteralPath $source -Destination $destination -Recurse -Force
+    }
+}
+
 foreach ($required in @(
     (Join-Path $BackendBundle "server.js"),
     (Join-Path $BackendBundle "node_modules\sharp"),

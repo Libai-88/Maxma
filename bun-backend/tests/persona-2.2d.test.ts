@@ -176,6 +176,24 @@ describe("persona 路由（阶段 2.2d）", () => {
     expect(list.active_file).toBe("SOUL.大饱.md");
   });
 
+  test("模板人格可读取，保存时写入用户目录", async () => {
+    const bundleDir = fs.mkdtempSync(path.join(os.tmpdir(), "maxma-persona-bundle-"));
+    const templateDir = path.join(bundleDir, "config", "personas");
+    fs.mkdirSync(templateDir, { recursive: true });
+    fs.writeFileSync(path.join(templateDir, "SOUL.模板.md"), "# 模板人格\n\n来自只读模板\n");
+    const userDir = path.join(dataDir, "config", "personas");
+    fs.rmSync(path.join(userDir, "SOUL.模板.md"), { force: true });
+    process.env.MAXMA_BUNDLE_DIR = bundleDir;
+    const app = await makeApp();
+    const read = await app.request("/api/persona?type=soul&variant=SOUL.%E6%A8%A1%E6%9D%BF.md", { headers: authHeader() });
+    expect(read.status).toBe(200);
+    expect(((await read.json()) as { content: string }).content).toContain("来自只读模板");
+    const saved = await app.request("/api/persona?type=soul&variant=SOUL.%E6%A8%A1%E6%9D%BF.md", { method: "PUT", headers: { "content-type": "application/json", ...authHeader() }, body: JSON.stringify({ content: "# 我的模板人格\n" }) });
+    expect(saved.status).toBe(200);
+    expect(fs.readFileSync(path.join(userDir, "SOUL.模板.md"), "utf8")).toContain("我的模板人格");
+    fs.rmSync(bundleDir, { recursive: true, force: true });
+  });
+
   test("profile：解析 SOUL/USER + 占位符回退'你'", async () => {
     const app = await makeApp();
     const profile = (await (await app.request("/api/persona/profile", { headers: authHeader() })).json()) as {
