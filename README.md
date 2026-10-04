@@ -78,6 +78,14 @@ build\build-server.bat    REM 产出 dist\bun-server（server.js + bun.exe + sha
 build-portable.bat        REM 组装 Web 便携包到 ..\MaxmaHere-Portable
 ```
 
+Windows 桌面便携版：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File build-desktop-portable.ps1 -SkipDependencyInstall
+```
+
+输出 `dist\electron-portable\MaxmaHere-2.6.11-portable-x64.zip` 及同名 `.sha256` 校验文件。
+
 便携包冒烟检查：
 
 ```powershell
