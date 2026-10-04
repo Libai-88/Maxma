@@ -147,7 +147,18 @@ REM flattened server.js resolves bundleDir()/dataDir() correctly.
     echo set "MAXMA_BUN_PORT=%%MAXMA_API_PORT%%"
     echo echo Starting MaxmaHere on http://127.0.0.1:%%MAXMA_API_PORT%% ...
     echo start "MaxmaHere" "%%SCRIPT_DIR%%bun.exe" run "%%SCRIPT_DIR%%server.js"
-    echo ping -n 4 127.0.0.1 ^>nul
+    echo set "READY=0"
+    echo for /L %%%%i in ^(1,1,60^) do ^(
+    echo     curl -s --fail http://127.0.0.1:%%MAXMA_API_PORT%%/api/health ^>nul 2^>^&1
+    echo     if not errorlevel 1 ^(set "READY=1" ^& goto :backend_ready^)
+    echo     ping -n 2 127.0.0.1 ^>nul
+    echo ^)
+    echo :backend_ready
+    echo if "%%READY%%"=="0" ^(
+    echo     echo Backend did not become ready within 60 seconds.
+    echo     pause
+    echo     exit /b 1
+    echo ^)
     echo start "" "http://127.0.0.1:%%MAXMA_API_PORT%%/"
     echo echo Backend launched. Browser opened automatically.
     echo pause
