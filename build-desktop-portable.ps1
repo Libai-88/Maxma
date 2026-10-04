@@ -1,4 +1,4 @@
-param(
+﻿param(
     [switch]$SkipDependencyInstall
 )
 
@@ -248,17 +248,28 @@ if (Test-Path -LiteralPath $artifactPath) {
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [System.IO.Compression.ZipFile]::CreateFromDirectory($unpackedDir, $artifactPath, [System.IO.Compression.CompressionLevel]::Optimal, $false)
 $artifact = Get-Item -LiteralPath $artifactPath
+$checksumPath = "$artifactPath.sha256"
+if (Test-Path -LiteralPath $checksumPath) {
+    $resolvedChecksum = [System.IO.Path]::GetFullPath($checksumPath)
+    if (-not $resolvedChecksum.StartsWith([System.IO.Path]::GetFullPath($OutputDir), [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "拒绝覆盖输出目录之外的校验文件：$resolvedChecksum"
+    }
+    Remove-Item -LiteralPath $resolvedChecksum -Force
+}
+$hash = (Get-FileHash -LiteralPath $artifact.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+Set-Content -LiteralPath $checksumPath -Value "$hash  $($artifact.Name)" -Encoding ascii
 $zip = [System.IO.Compression.ZipFile]::OpenRead($artifact.FullName)
 try {
-    $exeEntry = $zip.Entries | Where-Object { $_.FullName -match "MaxmaHere\.exe$" } | Select-Object -First 1
-    $runtimeEntry = $zip.Entries | Where-Object { $_.FullName -match "resources/maxma/server\.js$" } | Select-Object -First 1
+    $zipEntryNames = @($zip.Entries | ForEach-Object { $_.FullName.Replace('\', '/') })
+    $exeEntry = $zipEntryNames | Where-Object { $_ -match "MaxmaHere\.exe$" } | Select-Object -First 1
+    $runtimeEntry = $zipEntryNames | Where-Object { $_ -match "resources/maxma/server\.js$" } | Select-Object -First 1
     $personaEntries = @($BuiltInPersonaNames | ForEach-Object {
         $entryName = "resources/maxma/config/personas/$_"
-        $zip.Entries | Where-Object { $_.FullName -eq $entryName } | Select-Object -First 1
+        $zipEntryNames | Where-Object { $_ -eq $entryName } | Select-Object -First 1
     })
     $skillEntries = @($BundledSkillNames | ForEach-Object {
         $entryName = "resources/maxma/.maxma/skills/$_/SKILL.md"
-        $zip.Entries | Where-Object { $_.FullName -eq $entryName } | Select-Object -First 1
+        $zipEntryNames | Where-Object { $_ -eq $entryName } | Select-Object -First 1
     })
     if (-not $exeEntry -or -not $runtimeEntry) { throw "便携 ZIP 缺少桌面程序或 Maxma 后端资源。" }
     if ($personaEntries.Count -ne $BuiltInPersonaNames.Count -or $personaEntries -contains $null) {
@@ -271,4 +282,5 @@ try {
     $zip.Dispose()
 }
 Write-Host "[完成] $($artifact.FullName) ($([math]::Round($artifact.Length / 1MB, 1)) MB)"
+Write-Host "[校验] $checksumPath (SHA-256: $hash)"
 Write-Host "[数据] 启动后用户数据和 Chromium 缓存保存在程序旁的 data\ 目录。"
