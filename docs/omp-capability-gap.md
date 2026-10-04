@@ -11,23 +11,24 @@
 | OMP 能力模块 | Maxma 状态 |
 |---|---|
 | 对话/流式/思考/工具调用/审批流/压缩/重试 | ✅ 已接入 |
-| MCP / 插件 / Skills / 子 Agent / 自动化 | ✅ 已接入 |
+| MCP / 插件 / Skills / 子 Agent | ✅ 已接入（插件 REST 当前为兼容桩） |
+| 自动化 | ⚠️ 旧自动化路由已下线，应用内能力开关保持关闭 |
 | 权限模式 / 记忆（自定义）/ 规则 / 协作 | ✅ 已接入 |
-| **语音输入（STT）** | ❌ 未接入 |
-| **语音输出（TTS + speechgen）** | ❌ 设置页是"仅保存"假配置（已置灰） |
+| **语音输入（STT）** | ✅ Web Speech API 听写 |
+| **语音输出（TTS + speechgen）** | ✅ 浏览器 `speechSynthesis` 朗读 |
 | **图片生成（generate_image）** | ❌ 工具未注册、无 UI |
-| **网页抓取（fetch）** | ❌ 工具未注册（只有 web_search） |
-| **系统通知（completion.notify / ask.notify）** | ❌ 无任何桌面通知 |
-| **计划模式开关（plan.enabled / defaultOnStartup）** | ⚠️ 事件/卡片已透传，但无开关 UI |
-| **检查点/回退（checkpoint/rewind）** | ⚠️ 工具已注册，但无用户入口 |
-| **Goal 模式（goal.enabled）** | ❌ 未接入 |
-| **自动学习（autolearn）** | ❌ 未接入 |
-| **上下文提升（contextPromotion）** | ❌ 未接入 |
-| **会话闲置回顾（recap）** | ❌ 未接入 |
-| **Bash 长任务自动后台化（autoBackground）** | ❌ 未接入 |
-| **异步任务 UI（async/job）** | ⚠️ job 工具已注册，无 UI |
-| **模型 fallback 链（retry.fallbackChains）** | ⚠️ 设置透传了，UI 不可配 |
-| **秘密保管库（vault）** | ❌ 未接入（影响凭据安全体验） |
+| **网页抓取（fetch）** | ✅ `read` 工具支持 URL |
+| **系统通知（completion.notify / ask.notify）** | ✅ Notification API + 设置页 |
+| **计划模式开关（plan.enabled / defaultOnStartup）** | ✅ 会话菜单 / 斜杠命令 |
+| **检查点/回退（checkpoint/rewind）** | ✅ 会话菜单 / 斜杠命令 |
+| **Goal 模式（goal.enabled）** | ✅ 会话目标面板 |
+| **自动学习（autolearn）** | ✅ 设置页开关 |
+| **上下文提升（contextPromotion）** | ✅ 设置页开关 |
+| **会话闲置回顾（recap）** | ✅ 应用层闲置触发 |
+| **Bash 长任务自动后台化（autoBackground）** | ✅ 设置页开关与阈值 |
+| **异步任务 UI（async/job）** | ✅ 设置页开关与任务卡片 |
+| **模型 fallback 链（retry.fallbackChains）** | ✅ 设置页 JSON 编辑与校验 |
+| **秘密保管库（vault）** | ✅ Obsidian `vault://` 工具支持 |
 | **Hindsight 回顾 / MnemoPi 记忆** | ❌ 依赖外部服务 / 依赖 fastembed（编译包未打包） |
 
 ---
@@ -94,14 +95,13 @@
 
 ## 三、与主流 Agent 工具的体验差距（用户感知层面）
 
-用户"感觉差距不小"的根源，按感受强度排序：
+当前仍存在的体验差距，主要集中在外部依赖或明确裁剪的能力：
 
-1. **没有语音交互**（输入/朗读都没有）——主流 AI 助手的标配，最显眼的缺失
-2. **没有系统通知**——长任务/审批等待时用户完全无感知，体验断层
-3. **没有计划模式开关**——只能在对话中被动触发，无法"先计划后执行"
-4. **没有检查点恢复**——长任务出错只能重来，无"后悔药"
-5. **不能生成图片/抓取网页**——能力面板比主流工具少两块
-6. **无 Goal/自动学习等模式**——高级用户的可玩性不足
+1. **图片生成**——需要额外的付费模型能力，暂不作为默认能力
+2. **插件生态**——当前 REST 接口保留兼容桩，插件运行时尚未接入
+3. **自动化调度**——旧自动化路由已下线，尚未完成 Bun 运行时重写
+4. **Hindsight / MnemoPi 语义记忆**——分别依赖外部服务和较重的原生运行时
+5. **协作深化**——当前分享以只读展示为主，评论/编辑模式尚未接入
 
 ---
 
