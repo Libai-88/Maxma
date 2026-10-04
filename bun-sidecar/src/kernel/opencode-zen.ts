@@ -5,11 +5,16 @@ import { createHash, randomUUID } from "node:crypto";
 
 const DEFAULT_BASE_URL = "https://opencode.ai/zen/v1";
 const QUARTET = ["bash", "glob", "grep", "read"] as const;
+const BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const upstream = openAICompletionsApi();
 
-function id(prefix: "ses" | "msg", value: string): string {
-  const digest = createHash("sha256").update(`maxma-opencode-zen\0${value}`).digest("hex").slice(0, 20);
-  return `${prefix}_${digest}`;
+function base62From(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => BASE62[byte % BASE62.length]).join("");
+}
+
+export function opencodeZenGatewayId(prefix: "ses" | "msg", value: string): string {
+  const digest = createHash("sha256").update(`maxma-opencode-zen\0${value}`).digest();
+  return `${prefix}_${digest.subarray(0, 6).toString("hex")}${base62From(digest.subarray(6, 20))}`;
 }
 
 function toolNames(messages: TranscriptContext["messages"]): Set<string> {
@@ -49,8 +54,8 @@ export function opencodeZenStreamSimple(
     authorization: "Bearer public",
     "user-agent": "opencode/1.18.31",
     "x-opencode-client": "desktop",
-    "x-opencode-session": id("ses", sessionSeed),
-    "x-opencode-request": id("msg", requestSeed),
+    "x-opencode-session": opencodeZenGatewayId("ses", sessionSeed),
+    "x-opencode-request": opencodeZenGatewayId("msg", requestSeed),
     "x-opencode-project": "global",
   };
   return upstream.streamSimple(model, withFingerprint(context), { ...options, headers });
