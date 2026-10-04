@@ -170,6 +170,19 @@
         </div>
       </div>
 
+      <div v-if="servers.length > 0" class="preset-templates preset-templates--existing">
+        <div class="preset-templates-title">📦 添加常用 MCP 模板</div>
+        <div class="preset-template-list">
+          <button
+            v-for="t in mcpTemplates"
+            :key="t.id"
+            type="button"
+            class="ds-btn preset-template-btn"
+            @click="startAddWithTemplate(t)"
+          >{{ t.label }}</button>
+        </div>
+      </div>
+
       <!-- OMP 自动发现 -->
       <div v-if="discoveredServers.length > 0" class="section omp-section">
         <div class="section-title">OMP 自动发现</div>

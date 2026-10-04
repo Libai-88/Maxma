@@ -75,7 +75,7 @@
       <!-- Skills（SKILLS-UI-001：sidecar get_discovered_skills 此前无 UI） -->
       <div class="section" v-if="activeTab === 'skills'">
         <div class="skill-market">
-          <div class="bundled-skill-note"><strong>Maxma 随包 Skills</strong><span>编码、调试、文档和表格能力已内置，无需下载或额外服务。</span></div>
+          <div class="bundled-skill-note"><strong>Maxma 随包 Skills</strong><span>编码、调试、执行流程、研究、文档、表格和安全审计能力已内置，无需下载或额外服务。</span></div>
           <div class="skill-market-heading"><div><h3>可选社区技能市场</h3><p>按需搜索并安装社区共享的 Agent Skills</p></div><a href="https://skillhub.cn" target="_blank" rel="noreferrer">打开市场 ↗</a></div>
           <div class="skill-market-search"><input v-model="skillQuery" placeholder="搜索中文或英文技能" @keydown.enter="searchSkillMarket"><button class="btn" :disabled="skillMarketLoading" @click="searchSkillMarket">{{ skillMarketLoading ? '搜索中…' : '搜索' }}</button></div>
           <p v-if="skillMarketError" class="skill-market-error">{{ skillMarketError }}</p>
