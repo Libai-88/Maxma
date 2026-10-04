@@ -58,7 +58,7 @@ export function opencodeZenStreamSimple(
 
 export function registerOpencodeZenTransport(runtime: { registerProvider: (id: string, config: Record<string, unknown>) => void }, modelId: string, baseUrl = DEFAULT_BASE_URL): void {
   runtime.registerProvider("opencode-zen", {
-    name: "OpenCode Zen (免费)",
+    name: "Maxma 免费模型",
     baseUrl,
     api: "openai-completions",
     streamSimple: opencodeZenStreamSimple,

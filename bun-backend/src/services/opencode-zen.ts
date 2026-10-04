@@ -19,7 +19,7 @@ import { getCredentialKeyPath } from "../app-paths";
 export const OPENCODE_ZEN_BASE_URL = "https://opencode.ai/zen/v1";
 export const OPENCODE_ZEN_ANON_API_KEY = "public";
 export const OPENCODE_ZEN_PROVIDER_ID = "opencode-zen";
-export const OPENCODE_ZEN_LABEL = "OpenCode Zen (免费)";
+export const OPENCODE_ZEN_LABEL = "Maxma 免费模型";
 
 const FREE_SUFFIX = "-free";
 const FREE_HIDDEN_MODELS = new Set(["big-pickle", "hy3-free"]);

@@ -84,7 +84,7 @@ const selectedModelId = computed(() => {
 
 const modelOptions = computed(() => store.availableModels.map(model => ({
   value: model.id,
-  label: `${model.provider} · ${model.name}`,
+  label: `${model.providerLabel || model.provider} · ${model.name}`,
   providerId: model.provider,
   modelName: model.name,
   contextWindow: model.contextWindow,

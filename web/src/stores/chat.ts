@@ -362,6 +362,7 @@ export const useChatStore = defineStore('chat', () => {
                 models.push({
                   id: `${p.id}/${m}`,
                   provider: p.id,
+                  providerLabel: p.builtin ? 'Maxma 免费模型' : (p.label || p.id),
                   name: m,
                   contextWindow: p.context_window || 128000,
                 })
