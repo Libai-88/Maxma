@@ -7,14 +7,33 @@ const DEFAULT_BASE_URL = "https://opencode.ai/zen/v1";
 const QUARTET = ["bash", "glob", "grep", "read"] as const;
 const BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const upstream = openAICompletionsApi();
+const sessionIds = new Map<string, string>();
 
 function base62From(bytes: Uint8Array): string {
   return Array.from(bytes, (byte) => BASE62[byte % BASE62.length]).join("");
 }
 
+function timestampPrefix(kind: "ses" | "msg"): string {
+  const timestamp = BigInt(Date.now());
+  const value = kind === "ses" ? ~(timestamp * 0x1000n + 1n) : timestamp * 0x1000n + 1n;
+  let hex = "";
+  for (let index = 0; index < 6; index += 1) {
+    hex += Number((value >> BigInt(40 - 8 * index)) & 0xffn).toString(16).padStart(2, "0");
+  }
+  return hex;
+}
+
+function stableSessionId(seed: string): string {
+  const existing = sessionIds.get(seed);
+  if (existing) return existing;
+  const id = opencodeZenGatewayId("ses", seed);
+  sessionIds.set(seed, id);
+  return id;
+}
+
 export function opencodeZenGatewayId(prefix: "ses" | "msg", value: string): string {
   const digest = createHash("sha256").update(`maxma-opencode-zen\0${value}`).digest();
-  return `${prefix}_${digest.subarray(0, 6).toString("hex")}${base62From(digest.subarray(6, 20))}`;
+  return `${prefix}_${timestampPrefix(prefix)}${base62From(digest.subarray(6, 20))}`;
 }
 
 function toolNames(messages: TranscriptContext["messages"]): Set<string> {
@@ -51,10 +70,12 @@ export function opencodeZenStreamSimple(
   const requestSeed = randomUUID();
   const headers = {
     ...(options?.headers ?? {}),
+    "content-type": "application/json",
+    accept: "text/event-stream",
     authorization: "Bearer public",
     "user-agent": "opencode/1.18.31",
     "x-opencode-client": "desktop",
-    "x-opencode-session": opencodeZenGatewayId("ses", sessionSeed),
+    "x-opencode-session": stableSessionId(sessionSeed),
     "x-opencode-request": opencodeZenGatewayId("msg", requestSeed),
     "x-opencode-project": "global",
   };
@@ -66,6 +87,12 @@ export function registerOpencodeZenTransport(runtime: { registerProvider: (id: s
     name: "Maxma 免费模型",
     baseUrl,
     api: "openai-completions",
+    compat: {
+      maxTokensField: "max_tokens",
+      supportsReasoningEffort: false,
+      supportsStore: false,
+      supportsDeveloperRole: false,
+    },
     streamSimple: opencodeZenStreamSimple,
     models: [{
       id: modelId,
