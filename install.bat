@@ -114,8 +114,8 @@ echo.
 echo   下一步：
 echo     1. 双击运行 start.bat 启动
 echo        （自动拉起 Bun 后端 + Vite 前端，并打开浏览器）
-echo     2. 首次使用请在网页"提供商 /providers"页面
-echo        填入 LLM 的 Base URL 与 API Key
+echo     2. 首次启动即可使用内置免费模型
+echo        也可在网页"提供商 /providers"页面添加其他模型
 echo ========================================
 echo.
 pause

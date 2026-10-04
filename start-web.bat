@@ -9,6 +9,7 @@ REM (backend bundles the frontend from web/dist; build it first: cd web && npm r
 
 set "SCRIPT_DIR=%~dp0"
 set "MAXMA_SERVE_WEB=1"
+set "PI_CODING_AGENT_DIR=%SCRIPT_DIR%data\pi"
 if "%MAXMA_BUN_PORT%"=="" set "MAXMA_BUN_PORT=8000"
 
 REM Resolve a Bun binary: global bun, then the pinned bundled runtime, then a

@@ -7,6 +7,8 @@ REM Backend: bun-backend (Hono, default :8000). Frontend: web (Vite, :5173).
 
 cd /d "%~dp0"
 
+set "PI_CODING_AGENT_DIR=%~dp0data\pi"
+
 if "%MAXMA_BUN_PORT%"=="" set "MAXMA_BUN_PORT=8000"
 if "%MAXMA_WEB_PORT%"=="" set "MAXMA_WEB_PORT=5173"
 
