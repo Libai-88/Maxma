@@ -4,7 +4,7 @@ import type { AssistantMessageEventStream } from "@earendil-works/pi-ai";
 import { createHash, randomUUID } from "node:crypto";
 
 const DEFAULT_BASE_URL = "https://opencode.ai/zen/v1";
-const QUARTET = ["bash", "find", "grep", "read"] as const;
+const QUARTET = ["bash", "glob", "grep", "read"] as const;
 const upstream = openAICompletionsApi();
 
 function id(prefix: "ses" | "msg", value: string): string {

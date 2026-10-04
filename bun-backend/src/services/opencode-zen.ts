@@ -23,7 +23,10 @@ export const OPENCODE_ZEN_LABEL = "OpenCode Zen (免费)";
 
 const FREE_SUFFIX = "-free";
 const FREE_HIDDEN_MODELS = new Set(["big-pickle", "hy3-free"]);
-const EXTERNAL_BLOCKED_FREE_MODELS = new Set(["mimo-v2.5-free", "mimo-v2.6-flash-free"]);
+const EXTERNAL_COMPATIBLE_FREE_MODELS = new Set([
+  "mimo-v2.6-flash-free",
+  "space-bunny-free",
+]);
 
 const SYNC_TIMEOUT = 15_000;
 const SYNC_INTERVAL_MS = 6 * 3600 * 1000;
@@ -31,12 +34,8 @@ const SYNC_FIRST_DELAY_MS = 3_000;
 
 /** 网络不可用时的兜底免费模型列表（保证新用户首启可用）。 */
 const FALLBACK_FREE_MODELS = [
+  "mimo-v2.6-flash-free",
   "space-bunny-free",
-  "nemotron-3-ultra-free",
-  "north-mini-code-free",
-  "laguna-s-2.1-free",
-  "ling-3.0-flash-free",
-  "big-pickle",
 ];
 
 const DEFAULT_CONTEXT_WINDOW = 262144;
@@ -49,12 +48,12 @@ export function isFreeModel(modelId: unknown): boolean {
 
 export function isOpenCodeZenModelAvailable(modelId: unknown): boolean {
   const mid = String(modelId ?? "").trim();
-  return isFreeModel(mid) && !EXTERNAL_BLOCKED_FREE_MODELS.has(mid);
+  return isFreeModel(mid) && EXTERNAL_COMPATIBLE_FREE_MODELS.has(mid);
 }
 
 /** 稳定排序：deepseek-v4-flash-free 默认首位，其余按字母序（big-pickle 靠后）。 */
 export function orderModels(models: string[]): string[] {
-  const prefer = ["space-bunny-free"];
+  const prefer = ["mimo-v2.6-flash-free", "space-bunny-free"];
   const head = prefer.filter((m) => models.includes(m));
   const rest = models.filter((m) => !head.includes(m)).sort();
   return [...head, ...rest];
