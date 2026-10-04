@@ -18,12 +18,14 @@ const bundleDir = app.isPackaged
 const backendExe = path.join(bundleDir, "bun.exe");
 const backendScript = path.join(bundleDir, "server.js");
 const backendLogDir = path.join(dataDir, "logs");
+const piAgentDir = path.join(dataDir, "pi");
 const runtimeDirs = [
   dataDir,
   path.join(dataDir, "electron"),
   path.join(dataDir, "session"),
   path.join(dataDir, "cache"),
   path.join(dataDir, "temp"),
+  piAgentDir,
   backendLogDir,
 ];
 for (const directory of runtimeDirs) fs.mkdirSync(directory, { recursive: true });
@@ -116,6 +118,7 @@ async function startBackend() {
       MAXMA_BUN_HOST: "127.0.0.1",
       MAXMA_ENV: "production",
       MAXMA_SERVE_WEB: "1",
+      PI_CODING_AGENT_DIR: piAgentDir,
     },
   });
   backend.stdout.on("data", (chunk) => writeBackendLog(chunk, "stdout"));
