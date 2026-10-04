@@ -12,6 +12,7 @@ product
 
 MaxmaHere 是一个多 LLM 提供商支持的 ReAct AI Agent 桌面客户端。它让用户能够：
 - 与 AI 进行自由对话，调用多种工具（天气、待办、文件操作、网页搜索等）
+- 开箱即用地使用内置免费模型，无需注册或 API Key
 - 在多个 LLM 提供商之间灵活切换（DeepSeek、OpenAI、Qwen 等）
 - 管理 AI 的长期记忆和个性设定
 - 通过插槽技能（Skill）体系扩展 AI 能力

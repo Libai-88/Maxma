@@ -44,7 +44,7 @@ install.bat   一键安装（Bun 运行时 + 依赖 + 环境配置）
 start.bat     一键启动（后端 + 前端，并打开浏览器 http://localhost:5173）
 ```
 
-首次使用在网页“提供商”页面配置模型：云端服务填写 Base URL 与 API Key，Ollama、vLLM、LM Studio 等本地服务无需 API Key。浏览器访问 `http://localhost:5173`（开发）或 `http://127.0.0.1:8000`（后端直接托管 `web/dist`）即为 web 端。
+首次启动即可使用 Maxma 内置的免费模型通道（MiMo V2.6、Space Bunny），无需登录、注册或填写 API Key；也可以在网页“提供商”页面添加云端服务（填写 Base URL 与 API Key）或 Ollama、vLLM、LM Studio 等本地服务。浏览器访问 `http://localhost:5173`（开发）或 `http://127.0.0.1:8000`（后端直接托管 `web/dist`）即为 web 端。
 
 ## 手动搭建（进阶 / 跨平台）
 
