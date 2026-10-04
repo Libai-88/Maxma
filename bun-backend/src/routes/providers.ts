@@ -91,6 +91,16 @@ export function findProvider(items: ProviderEntry[], providerId: string): Provid
   return null;
 }
 
+/** 返回给浏览器的安全视图：凭据只在后端运行时解密，绝不下发加密信封。 */
+export function publicProvider(entry: ProviderEntry): ProviderEntry {
+  const { api_key: apiKey, ...publicFields } = entry;
+  return {
+    ...publicFields,
+    api_key: "",
+    api_key_configured: typeof apiKey === "string" && apiKey.length > 0,
+  };
+}
+
 /** 加密明文 key（已加密/空值跳过；create/update 路径共用）。 */
 export function encryptApiKeyIfNeeded(value: string): string {
   if (value && !isCredentialEnvelope(value) && !isLegacyEncrypted(value)) {
@@ -674,7 +684,7 @@ export function createProvidersRoutes(): Hono {
     } catch (err) {
       console.warn(`[providers] builtin opencode-zen injection failed (non-fatal): ${String(err)}`);
     }
-    return c.json({ providers: loadProviders() });
+    return c.json({ providers: loadProviders().map(publicProvider) });
   });
 
   // 端点 2: POST /providers
@@ -705,7 +715,7 @@ export function createProvidersRoutes(): Hono {
       if (err instanceof YamlCorruptedError) return corruptResponse(c);
       throw err;
     }
-    return c.json(provider);
+    return c.json(publicProvider(provider));
   });
 
   // 端点 6: POST /providers/test（先于 /:id 注册，避免参数路由抢匹配）
@@ -756,7 +766,7 @@ export function createProvidersRoutes(): Hono {
   app.get("/api/providers/:providerId", (c) => {
     const target = findProvider(loadProviders(), c.req.param("providerId"));
     if (!target) return c.json({ detail: `provider '${c.req.param("providerId")}' 不存在` }, 404);
-    return c.json(target);
+    return c.json(publicProvider(target));
   });
 
   // 端点 4: PUT /providers/{id}
@@ -782,7 +792,7 @@ export function createProvidersRoutes(): Hono {
       if (err instanceof YamlCorruptedError) return corruptResponse(c);
       throw err;
     }
-    return c.json(target);
+    return c.json(publicProvider(target));
   });
 
   // 端点 5: DELETE /providers/{id}

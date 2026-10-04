@@ -12,6 +12,8 @@ export interface ProviderConfig {
   provider_type: string
   label: string
   api_key: string
+  /** 后端仅返回凭据是否存在，不返回明文或加密信封。 */
+  api_key_configured?: boolean
   base_url: string
   models: string[]
   enabled: boolean

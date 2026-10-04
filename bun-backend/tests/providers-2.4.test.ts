@@ -77,7 +77,8 @@ describe("providers CRUD（阶段 2.4）", () => {
     expect(created.status).toBe(200);
     const p = (await created.json()) as Record<string, unknown>;
     expect(p.id).toBe("myprov");
-    expect(String(p.api_key)).toMatch(/^encv1:/); // 明文已加密
+    expect(p.api_key).toBe("");
+    expect(p.api_key_configured).toBe(true);
     expect(p.context_window).toBe(64000);
 
     // 重复 id → 409
@@ -103,7 +104,8 @@ describe("providers CRUD（阶段 2.4）", () => {
     const u = (await upd.json()) as Record<string, unknown>;
     expect(u.label).toBe("Renamed");
     expect(u.enabled).toBe(false);
-    expect(String(u.api_key)).toMatch(/^encv1:/);
+    expect(u.api_key).toBe("");
+    expect(u.api_key_configured).toBe(true);
 
     // delete
     const del = await app.request("/api/providers/myprov", { method: "DELETE", headers: h });
@@ -182,7 +184,8 @@ describe("providers CRUD（阶段 2.4）", () => {
     if (!python) return; // 无 venv 时跳过（credential-2.4.test.ts 已锁定格式互认）
 
     const { parseCredentialEnvelope } = await import("../src/security/credential-envelope");
-    const env = parseCredentialEnvelope(String(((await res.json()) as Record<string, unknown>).api_key));
+    const stored = (await import("../src/routes/providers")).loadProviders().find((entry) => entry.id === "px");
+    const env = parseCredentialEnvelope(String(stored?.api_key));
     const script = `from cryptography.fernet import Fernet\nprint(Fernet(open(r"${path.join(dataDir, "api", "data", "credential.key")}", 'rb').read()).decrypt("${env.ciphertext}".encode()).decode())\n`;
     const tmp = path.join(dataDir, "verify.py");
     fs.writeFileSync(tmp, script, "utf8");
@@ -221,13 +224,14 @@ describe("providers CRUD（阶段 2.4）", () => {
     expect(res.status).toBe(503);
   }, 20000);
 
-  test("GET /providers 惰性注入 opencode-zen 内置供应商（列表首位、key 加密）", async () => {
+  test("GET /providers 惰性注入 opencode-zen 内置供应商（列表首位、凭据不下发）", async () => {
     const app = await makeApp();
     const res = await app.request("/api/providers", { headers: jsonH() });
     expect(res.status).toBe(200);
     const { providers } = (await res.json()) as { providers: Array<Record<string, unknown>> };
     expect(providers[0]!.id).toBe("opencode-zen");
-    expect(String(providers[0]!.api_key)).toMatch(/^encv1:/);
+    expect(providers[0]!.api_key).toBe("");
+    expect(providers[0]!.api_key_configured).toBe(true);
     expect(providers[0]!.builtin).toBe(true);
     expect(Array.isArray(providers[0]!.models)).toBe(true);
     // 幂等：再次 GET 不重复注入

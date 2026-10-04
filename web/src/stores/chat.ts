@@ -353,7 +353,8 @@ export const useChatStore = defineStore('chat', () => {
         if (Array.isArray(providers)) {
           for (const p of providers) {
             // 只包含已启用且有 api_key 的 provider（过滤掉默认模板和未配置的 provider）
-            if (!p.enabled || (!isLocalProvider(p.provider_type, p.base_url) && (!p.api_key || p.api_key.trim() === ''))) {
+            const hasApiKey = p.api_key_configured === true || Boolean(p.api_key && p.api_key.trim())
+            if (!p.enabled || (!isLocalProvider(p.provider_type, p.base_url) && !hasApiKey)) {
               continue
             }
             if (Array.isArray(p.models)) {
