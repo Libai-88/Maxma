@@ -5,6 +5,7 @@ import type { ModelInfo, ChatContextUsage } from '../types/chat'
 // S4-2: api 已被 30+ 文件静态引用进主 chunk，此处动态导入不会触发拆分（纯噪音），改静态
 import { api } from '@/api'
 import { safeGetItem, safeKeys, safeRemoveItem } from '@/lib/storage'
+import { isLocalProvider } from '@/utils/provider'
 
 export const TURNS_KEY_PREFIX = 'maxma_turns_'
 
@@ -352,7 +353,7 @@ export const useChatStore = defineStore('chat', () => {
         if (Array.isArray(providers)) {
           for (const p of providers) {
             // 只包含已启用且有 api_key 的 provider（过滤掉默认模板和未配置的 provider）
-            if (!p.enabled || !p.api_key || p.api_key.trim() === '') {
+            if (!p.enabled || (!isLocalProvider(p.provider_type, p.base_url) && (!p.api_key || p.api_key.trim() === ''))) {
               continue
             }
             if (Array.isArray(p.models)) {

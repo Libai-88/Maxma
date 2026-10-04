@@ -316,7 +316,7 @@ interface Step {
 const steps: Step[] = [
   {
     title: '配置一个 AI 模型',
-    desc: '前往<a href="/providers" class="inline-link">模型设置</a>页面，选择一个提供商（推荐 <strong>DeepSeek</strong> 注册即送免费额度，或 <strong>Ollama</strong> 完全本地运行），填入 API Key 后保存。',
+    desc: '前往<a href="/providers" class="inline-link">模型设置</a>页面，选择一个提供商（推荐 <strong>DeepSeek</strong> 注册即送免费额度，或 <strong>Ollama</strong> 完全本地运行）。云端服务填入 API Key，本地服务无需填写。',
   },
   {
     title: '回到对话页开始聊天',

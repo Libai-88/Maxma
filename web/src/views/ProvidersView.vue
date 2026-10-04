@@ -192,8 +192,8 @@
         </div>
 
         <div class="form-section">
-          <label class="form-label" for="provider-api-key">API Key <span class="required-mark">*</span></label>
-          <input v-model="form.api_key" id="provider-api-key" class="input mono" :class="{ 'input-error': fieldErrors.api_key }" type="password" autocomplete="current-password" :placeholder="isEditing ? '留空则不修改' : 'sk-...'" />
+            <label class="form-label" for="provider-api-key">API Key <span v-if="!localProvider" class="required-mark">*</span><span v-else class="form-label-hint"> · 本地服务可留空</span></label>
+            <input v-model="form.api_key" id="provider-api-key" class="input mono" :class="{ 'input-error': fieldErrors.api_key }" type="password" autocomplete="current-password" :placeholder="localProvider ? '本地服务无需填写' : (isEditing ? '留空则不修改' : 'sk-...')" />
         </div>
 
         <div class="form-section">
@@ -237,10 +237,10 @@
 
 		      <!-- 测试 & 拉取模型 -->
       <div class="form-row">
-        <button type="button" class="btn" :disabled="!isEditing && (!form.api_key || !form.base_url)" @click="handleTest">
+        <button type="button" class="btn" :disabled="!isEditing && ((!localProvider && !form.api_key) || !form.base_url)" @click="handleTest">
           {{ testing ? '测试中...' : '测试连接' }}
         </button>
-        <button type="button" class="btn" :disabled="!isEditing && (!form.api_key || !form.base_url)" @click="handleDiscover">
+        <button type="button" class="btn" :disabled="!isEditing && ((!localProvider && !form.api_key) || !form.base_url)" @click="handleDiscover">
           {{ discovering ? '拉取中...' : '拉取模型列表' }}
         </button>
       </div>
@@ -278,6 +278,7 @@ import { useProviderStore } from '@/stores/provider'
 import { useChatStore } from '@/stores/chat'
 import { useHealthStore } from '@/stores/health'
 import { diagnosticMessage, retryMessage } from '@/utils/providerDiagnostics'
+import { isLocalProvider } from '@/utils/provider'
 import { toErrorMessage } from '@/utils/error'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useReveal } from '@/composables/useReveal'
@@ -404,6 +405,7 @@ function diagnosticFor(provider: ProviderConfig): ComponentHealth | null {
 // ── 表单 ──
 const form = ref({ id: '', provider_type: 'deepseek', label: '', api_key: '', base_url: '', context_window: 256000, max_tokens: undefined as number | undefined, temperature: undefined as number | undefined, top_p: undefined as number | undefined, timeout: undefined as number | undefined, extra_headers_raw: '' })
 const isEditing = computed(() => mode.value === 'edit')
+const localProvider = computed(() => isLocalProvider(form.value.provider_type, form.value.base_url))
 const editingId = ref('')
 
 function presetBaseUrl(id: string) {
@@ -443,6 +445,7 @@ async function handleTest() {
     const res = await api.testConnection({
       api_key: form.value.api_key,
       base_url: form.value.base_url,
+      provider_type: form.value.provider_type,
     })
     if (res.status === 'ok') {
       testOk.value = true
@@ -474,6 +477,7 @@ async function handleDiscover() {
       const res = await api.discoverModels({
         api_key: form.value.api_key,
         base_url: form.value.base_url,
+        provider_type: form.value.provider_type,
       })
       models = res.models
     }
@@ -566,7 +570,7 @@ async function handleSave() {
       saving.value = false
       return
     }
-    if (!isEditing.value && !form.value.api_key.trim()) {
+    if (!isEditing.value && !localProvider.value && !form.value.api_key.trim()) {
       fieldErrors.api_key = true
       formError.value = 'API Key 不能为空'
       saving.value = false

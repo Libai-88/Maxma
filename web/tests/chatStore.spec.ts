@@ -70,16 +70,17 @@ describe('useChatStore', () => {
       expect(store.availableModels[0].provider).toBe('anthropic')
     })
 
-    it('skips providers without api_key', async () => {
+    it('skips cloud providers without api_key but keeps local providers', async () => {
       mockApi.listProviders.mockResolvedValue([
         { id: 'openai', enabled: true, api_key: '', models: ['gpt-4o'] },
-        { id: 'local', enabled: true, api_key: '  ', models: ['llama'] },
+        { id: 'ollama', provider_type: 'ollama', base_url: 'http://127.0.0.1:11434/v1', enabled: true, api_key: '  ', models: ['llama'] },
       ] as any)
 
       const store = useChatStore()
       await store.fetchAvailableModels()
 
-      expect(store.availableModels).toHaveLength(0)
+      expect(store.availableModels).toHaveLength(1)
+      expect(store.availableModels[0].id).toBe('ollama/llama')
     })
 
     it('handles api failure gracefully', async () => {
