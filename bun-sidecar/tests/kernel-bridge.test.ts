@@ -90,6 +90,26 @@ describe("kernel: mapPiAgentEventToMaxma", () => {
     ).toEqual({ type: "answer", payload: { content: "答案", usage: null, provider: null, model: null, request_duration_ms: null, request_shape_hash: null, prefix_fingerprint: null, fingerprint_epoch: null } });
   });
 
+  test("message_end stopReason=error → 保留上游错误，不生成空 answer", () => {
+    expect(
+      mapPiAgentEventToMaxma({
+        type: "message_end",
+        message: {
+          role: "assistant",
+          content: [],
+          stopReason: "error",
+          errorMessage: '403: {"type":"FreeTierError","message":"只能在 OpenCode 内使用"}',
+        },
+      }),
+    ).toEqual({
+      type: "error",
+      payload: {
+        code: "AGENT_ERROR",
+        message: '403: {"type":"FreeTierError","message":"只能在 OpenCode 内使用"}',
+      },
+    });
+  });
+
   test("done 由 agent_settled 触发且幂等；agent_end 不触发", () => {
     const guard = { done: false };
     expect(mapPiAgentEventToMaxma({ type: "agent_end", messages: [] }, guard)).toBeNull();

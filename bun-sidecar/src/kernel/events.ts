@@ -34,6 +34,8 @@ interface PiMessageLike {
   content?: string | Array<{ type?: string; text?: string }>;
   provider?: string;
   model?: string;
+  stopReason?: string;
+  errorMessage?: string;
 }
 
 /** 从消息 content 提取纯文本（与 OMP 版 message_end 处理一致）。 */
@@ -88,7 +90,10 @@ export function mapPiAgentEventToMaxma(
     if (ae.type === "error") {
       return {
         type: "error",
-        payload: { code: "AGENT_ERROR", message: extractText(ae.error) || "Unknown agent error" },
+        payload: {
+          code: "AGENT_ERROR",
+          message: ae.error?.errorMessage || extractText(ae.error) || "Unknown agent error",
+        },
       };
     }
     // start/text_start/text_end/toolcall_* /done：执行数据由 tool_execution_* 事件
@@ -140,6 +145,15 @@ export function mapPiAgentEventToMaxma(
   if (type === "message_end") {
     const message = e.message as PiMessageLike & { usage?: Record<string, unknown> };
     if (message?.role && message.role !== "assistant") return null;
+    if (message?.stopReason === "error") {
+      return {
+        type: "error",
+        payload: {
+          code: "AGENT_ERROR",
+          message: message.errorMessage || extractText(message) || "Unknown agent error",
+        },
+      };
+    }
     const usage = message?.usage;
     return {
       type: "answer",
