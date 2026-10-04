@@ -63,6 +63,18 @@ describe("kernel: mapPiAgentEventToMaxma", () => {
     expect(mapped).toEqual({ type: "error", payload: { code: "AGENT_ERROR", message: "模型 429" } });
   });
 
+  test("兼容上游 error.message，避免错误被显示为空回复", () => {
+    expect(
+      mapPiAgentEventToMaxma({
+        type: "message_update",
+        assistantMessageEvent: {
+          type: "error",
+          error: { message: "403: free tier unavailable" },
+        },
+      }),
+    ).toEqual({ type: "error", payload: { code: "AGENT_ERROR", message: "403: free tier unavailable" } });
+  });
+
   test("tool_execution_start/update/end → tool_start/tool_update/tool_end", () => {
     expect(
       mapPiAgentEventToMaxma({ type: "tool_execution_start", toolCallId: "c1", toolName: "read", args: { path: "a.ts" } }),
@@ -108,6 +120,15 @@ describe("kernel: mapPiAgentEventToMaxma", () => {
         message: '403: {"type":"FreeTierError","message":"只能在 OpenCode 内使用"}',
       },
     });
+  });
+
+  test("message_end error.message → 保留网关错误", () => {
+    expect(
+      mapPiAgentEventToMaxma({
+        type: "message_end",
+        message: { role: "assistant", content: [], stopReason: "error", message: "模型暂时不可用" },
+      }),
+    ).toEqual({ type: "error", payload: { code: "AGENT_ERROR", message: "模型暂时不可用" } });
   });
 
   test("done 由 agent_settled 触发且幂等；agent_end 不触发", () => {

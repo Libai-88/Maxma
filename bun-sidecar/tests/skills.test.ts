@@ -22,7 +22,7 @@ describe("kernel: Maxma skills", () => {
   test("bundled Skills only reference tools available in Maxma Pi sessions", () => {
     const skillFiles = [
       "coding-starter", "debugging-starter", "office-starter", "document-starter", "spreadsheet-starter", "mcp-starter",
-      "execution-playbook", "cost-aware", "research-evidence", "document-quality",
+      "execution-playbook", "cost-aware", "research-evidence", "document-quality", "security-review",
     ]
       .map((name) => path.join(maxmaSkillPaths(path.join(os.tmpdir(), "maxma-skill-test-project"))[2], name, "SKILL.md"));
     const forbiddenToolNames = ["glob", "web_search", "ast_grep", "ast_edit", "lsp", "manage_skill"];
@@ -45,5 +45,6 @@ describe("kernel: Maxma skills", () => {
     expect(names).toContain("cost-aware");
     expect(names).toContain("research-evidence");
     expect(names).toContain("document-quality");
+    expect(names).toContain("security-review");
   });
 });

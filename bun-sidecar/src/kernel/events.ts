@@ -36,6 +36,7 @@ interface PiMessageLike {
   model?: string;
   stopReason?: string;
   errorMessage?: string;
+  message?: string;
 }
 
 /** 从消息 content 提取纯文本（与 OMP 版 message_end 处理一致）。 */
@@ -92,7 +93,7 @@ export function mapPiAgentEventToMaxma(
         type: "error",
         payload: {
           code: "AGENT_ERROR",
-          message: ae.error?.errorMessage || extractText(ae.error) || "Unknown agent error",
+          message: ae.error?.errorMessage || ae.error?.message || extractText(ae.error) || "Unknown agent error",
         },
       };
     }
@@ -150,7 +151,7 @@ export function mapPiAgentEventToMaxma(
         type: "error",
         payload: {
           code: "AGENT_ERROR",
-          message: message.errorMessage || extractText(message) || "Unknown agent error",
+          message: message.errorMessage || message.message || extractText(message) || "Unknown agent error",
         },
       };
     }
