@@ -780,6 +780,9 @@ export function createProvidersRoutes(): Hono {
     const items = loadProviders();
     const target = findProvider(items, providerId);
     if (!target) return c.json({ detail: `provider '${providerId}' 不存在` }, 404);
+    if (target.builtin === true) {
+      return c.json({ detail: "内置免费模型由 Maxma 管理，不可修改" }, 403);
+    }
     const updateFields = validated.fields;
     if ("api_key" in updateFields) {
       const val = updateFields.api_key;
@@ -799,8 +802,12 @@ export function createProvidersRoutes(): Hono {
   app.delete("/api/providers/:providerId", (c) => {
     const providerId = c.req.param("providerId");
     const items = loadProviders();
-    if (findProvider(items, providerId) === null) {
+    const target = findProvider(items, providerId);
+    if (target === null) {
       return c.json({ detail: `provider '${providerId}' 不存在` }, 404);
+    }
+    if (target.builtin === true) {
+      return c.json({ detail: "内置免费模型由 Maxma 管理，不可删除" }, 403);
     }
     const newItems = items.filter((e) => e.id !== providerId);
     try {

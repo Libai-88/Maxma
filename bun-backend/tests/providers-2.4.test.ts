@@ -240,6 +240,29 @@ describe("providers CRUD（阶段 2.4）", () => {
     expect(p2.filter((e) => e.id === "opencode-zen").length).toBe(1);
   }, 20000);
 
+  test("内置免费供应商不可修改或删除", async () => {
+    const app = await makeApp();
+    const h = jsonH();
+    await app.request("/api/providers", { headers: h });
+
+    const update = await app.request("/api/providers/opencode-zen", {
+      method: "PUT",
+      headers: h,
+      body: JSON.stringify({ enabled: false }),
+    });
+    expect(update.status).toBe(403);
+
+    const remove = await app.request("/api/providers/opencode-zen", {
+      method: "DELETE",
+      headers: h,
+    });
+    expect(remove.status).toBe(403);
+
+    const list = await app.request("/api/providers", { headers: h });
+    const { providers } = (await list.json()) as { providers: Array<Record<string, unknown>> };
+    expect(providers.some((entry) => entry.id === "opencode-zen" && entry.enabled === true)).toBe(true);
+  }, 20000);
+
   test("balance：无 DEEPSEEK_API_KEY → 400", async () => {
     const app = await makeApp();
     const res = await app.request("/api/deepseek-balance", { headers: jsonH() });

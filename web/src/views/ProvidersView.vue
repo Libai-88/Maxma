@@ -94,11 +94,13 @@
               <span v-else class="card-type-badge">{{ p.provider_type.toUpperCase() }}</span>
             </div>
             <button
+              v-if="!p.builtin"
               class="toggle-btn"
               :class="{ active: p.enabled }"
               :title="p.enabled ? '已启用' : '已停用'"
               @click="toggleProvider(p.id, !p.enabled)"
             ></button>
+            <span v-else class="builtin-managed" title="内置免费模型由 Maxma 自动维护">自动维护</span>
           </div>
 
           <!-- API 信息 -->
@@ -167,8 +169,9 @@
           <!-- 操作按钮 -->
           <div class="card-actions">
             <button class="action-btn" :data-provider-id="p.id" :aria-label="`测试连接 ${p.label}`" @click="testProvider(p.id)">测试连接</button>
-            <button class="action-btn" :data-provider-id="p.id" :aria-label="`编辑 ${p.label}`" @click="startEdit(p)">编辑</button>
-            <button class="action-btn" :data-provider-id="p.id" :aria-label="`删除 ${p.label}`" @click="deleteProvider(p.id)">删除</button>
+            <button v-if="!p.builtin" class="action-btn" :data-provider-id="p.id" :aria-label="`编辑 ${p.label}`" @click="startEdit(p)">编辑</button>
+            <button v-if="!p.builtin" class="action-btn" :data-provider-id="p.id" :aria-label="`删除 ${p.label}`" @click="deleteProvider(p.id)">删除</button>
+            <span v-else class="builtin-action-note">由 Maxma 管理</span>
           </div>
         </div>
       </div>
@@ -1051,6 +1054,22 @@ onMounted(loadProviders)
 	.action-btn:hover {
 	  opacity: 0.7;
 	}
+.builtin-managed,
+.builtin-action-note {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.builtin-managed {
+  align-self: center;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.builtin-action-note {
+  align-self: center;
+  margin-left: auto;
+}
 
 /* ── Form ── */
 .wizard-form {
