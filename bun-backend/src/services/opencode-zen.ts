@@ -23,6 +23,7 @@ export const OPENCODE_ZEN_LABEL = "OpenCode Zen (免费)";
 
 const FREE_SUFFIX = "-free";
 const FREE_HIDDEN_MODELS = new Set(["big-pickle", "hy3-free"]);
+const EXTERNAL_BLOCKED_FREE_MODELS = new Set(["mimo-v2.5-free", "mimo-v2.6-flash-free"]);
 
 const SYNC_TIMEOUT = 15_000;
 const SYNC_INTERVAL_MS = 6 * 3600 * 1000;
@@ -31,7 +32,6 @@ const SYNC_FIRST_DELAY_MS = 3_000;
 /** 网络不可用时的兜底免费模型列表（保证新用户首启可用）。 */
 const FALLBACK_FREE_MODELS = [
   "space-bunny-free",
-  "mimo-v2.5-free",
   "nemotron-3-ultra-free",
   "north-mini-code-free",
   "laguna-s-2.1-free",
@@ -47,9 +47,14 @@ export function isFreeModel(modelId: unknown): boolean {
   return mid.endsWith(FREE_SUFFIX) || FREE_HIDDEN_MODELS.has(mid);
 }
 
+export function isOpenCodeZenModelAvailable(modelId: unknown): boolean {
+  const mid = String(modelId ?? "").trim();
+  return isFreeModel(mid) && !EXTERNAL_BLOCKED_FREE_MODELS.has(mid);
+}
+
 /** 稳定排序：deepseek-v4-flash-free 默认首位，其余按字母序（big-pickle 靠后）。 */
 export function orderModels(models: string[]): string[] {
-  const prefer = ["space-bunny-free", "mimo-v2.6-flash-free", "mimo-v2.5-free"];
+  const prefer = ["space-bunny-free"];
   const head = prefer.filter((m) => models.includes(m));
   const rest = models.filter((m) => !head.includes(m)).sort();
   return [...head, ...rest];
@@ -79,7 +84,7 @@ export async function fetchFreeModels(): Promise<string[]> {
       for (const m of items) {
         if (!m || typeof m !== "object" || Array.isArray(m)) continue;
         const mid = (m as Record<string, unknown>).id;
-        if (typeof mid === "string" && isFreeModel(mid) && !models.includes(mid)) models.push(mid);
+        if (typeof mid === "string" && isOpenCodeZenModelAvailable(mid) && !models.includes(mid)) models.push(mid);
       }
     }
   }
@@ -101,11 +106,22 @@ export function buildProviderEntry(): ProviderEntry {
   };
 }
 
-/** 幂等注入默认供应商（已存在 → 原样返回保留用户修改）。 */
+/** 幂等注入默认供应商（保留用户修改，同时清理已知不可用模型）。 */
 export function ensureOpencodeZenProvider(): ProviderEntry | null {
   const items = loadProviders();
   const existing = findProvider(items, OPENCODE_ZEN_PROVIDER_ID);
-  if (existing !== null) return existing;
+  if (existing !== null) {
+    const models = Array.isArray(existing.models) ? existing.models.filter(isOpenCodeZenModelAvailable) : [];
+    if (models.length !== existing.models.length) {
+      existing.models = models;
+      try {
+        saveProviders(items);
+      } catch (err) {
+        console.error(`[opencode-zen] failed to sanitize provider models: ${String(err)}`);
+      }
+    }
+    return existing;
+  }
   const provider = buildProviderEntry();
   // 插入列表头：前端无历史选择时选中第一个 enabled provider
   items.unshift(provider);
@@ -122,7 +138,7 @@ export function ensureOpencodeZenProvider(): ProviderEntry | null {
 function loadProviderModels(): string[] {
   const target = findProvider(loadProviders(), OPENCODE_ZEN_PROVIDER_ID);
   const models = target?.models;
-  return Array.isArray(models) ? [...models] : [];
+  return Array.isArray(models) ? models.filter(isOpenCodeZenModelAvailable) : [];
 }
 
 export interface SyncResult {
