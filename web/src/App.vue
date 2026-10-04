@@ -34,7 +34,7 @@
     <!-- 全屏媒体查看器 -->
     <MediaViewer />
     <OnboardingView
-      v-if="onboarding.shouldShow"
+      v-if="onboarding.shouldShow && !onboardingPaused"
       :health="health"
       @open-providers="openProviderSetup"
     />
@@ -70,7 +70,7 @@ import { onboardingEnabled, useOnboardingStore } from '@/stores/onboarding';
 import { storeToRefs } from 'pinia';
 import { useSessionStore } from '@/stores/session';
 import { defineAsyncComponent, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 
 import LeavesOverlay from '@/components/LeavesOverlay.vue'
 import { usePaperTexture } from '@/composables/usePaperTexture'
@@ -83,11 +83,12 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import BrandSeal from '@/components/brand/BrandSeal.vue'
 import { confirmAction } from '@/composables/useConfirm'
 import { useKonami } from '@/composables/useKonami'
-import { reactive, ref } from 'vue'
+import { reactive, ref, watch } from 'vue'
 
 const MediaViewer = defineAsyncComponent(() => import('@/components/MediaViewer.vue'))
 const onboarding = useOnboardingStore()
 const sessionDrawerOpen = ref(false)
+const onboardingPaused = ref(false)
 
 // 初始化纸质纹理 — 在顶层调用 composable，确保 reactive context 正确
 const { enabled: paperTextureEnabled } = usePaperTexture()
@@ -102,6 +103,10 @@ function closeSessionDrawer() {
 }
 
 const router = useRouter()
+const route = useRoute()
+watch(() => route.path, (path) => {
+  if (path !== '/providers') onboardingPaused.value = false
+}, { immediate: true })
 
 // 差异化页面转场：direction（前进/后退）由 history.position 判断，
 // transition 类型（flip/slide/rise/zoom）由目标路由 meta.transition 决定。
@@ -130,9 +135,7 @@ async function handleSwitchSession(id: string) {
 }
 
 function openProviderSetup() {
-  // UX-ONBOARDING-001：导航到模型设置时不再标记引导"完结"——此前点主 CTA
-  // 即永久跳过第 2-3 步（主题/工作区），用户没配好 provider 返回时引导
-  // 已经消失。现在只路由过去，未完成步骤由 onboarding.shouldShow 继续兜底。
+  onboardingPaused.value = true
   router.push('/providers')
 }
 
