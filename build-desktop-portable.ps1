@@ -190,6 +190,14 @@ $webPackage = Get-Content -LiteralPath (Join-Path $ProjectRoot "web\package.json
 if ([string]$webPackage.version -ne $canonicalVersion) {
     throw "版本不一致：web/package.json=$($webPackage.version)，version.py=$canonicalVersion。"
 }
+$staleDataDir = Join-Path $OutputDir "win-unpacked\data"
+if (Test-Path -LiteralPath $staleDataDir) {
+    $resolvedStaleData = [System.IO.Path]::GetFullPath($staleDataDir)
+    if (-not $resolvedStaleData.StartsWith([System.IO.Path]::GetFullPath($OutputDir), [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "拒绝清理输出目录之外的运行数据：$resolvedStaleData"
+    }
+    Remove-Item -LiteralPath $resolvedStaleData -Recurse -Force
+}
 Push-Location $ElectronPackage
 try {
     npm run pack:portable
@@ -199,6 +207,23 @@ try {
 $unpackedDir = Join-Path $OutputDir "win-unpacked"
 if (-not (Test-Path (Join-Path $unpackedDir "MaxmaHere.exe")) -or -not (Test-Path (Join-Path $unpackedDir "resources\maxma\server.js"))) {
     throw "桌面运行目录缺少程序或后端资源。"
+}
+$dataSeedDir = Join-Path $unpackedDir "data\api\data"
+New-Item -ItemType Directory -Force -Path $dataSeedDir | Out-Null
+foreach ($seed in @(
+    @{ Source = (Join-Path $ProjectRoot "api\data\news.yaml"); Name = "news.yaml" },
+    @{ Source = (Join-Path $ProjectRoot "resources\default-config\mcp_servers.yaml"); Name = "mcp_servers.yaml" }
+)) {
+    if (-not (Test-Path -LiteralPath $seed.Source -PathType Leaf)) {
+        throw "桌面默认配置资源缺失：$($seed.Source)"
+    }
+    Copy-Item -LiteralPath $seed.Source -Destination (Join-Path $dataSeedDir $seed.Name) -Force
+}
+foreach ($forbidden in @("maxma.db", "credential.key", "providers.yaml", "onboarding.json")) {
+    $forbiddenPath = Join-Path $unpackedDir ("data\api\data\{0}" -f $forbidden)
+    if (Test-Path -LiteralPath $forbiddenPath) {
+        throw "桌面便携包运行数据中禁止出现用户文件：$forbiddenPath"
+    }
 }
 $BuiltInPersonaNames | ForEach-Object {
     $bundledPersona = Join-Path $unpackedDir "resources\maxma\config\personas\$_"
