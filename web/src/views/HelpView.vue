@@ -156,7 +156,7 @@ const faqs: Faq[] = [
   {
     q: '需要付费吗？',
     segments: [
-      { text: 'Maxma 本身完全免费开源。你需要为使用的 AI 模型付费（如 OpenAI / DeepSeek 按 API 调用计费），但也可以使用 ' },
+      { text: 'Maxma 本身完全免费开源，并内置无需 API Key 的免费模型通道。你也可以为使用的 AI 模型付费（如 OpenAI / DeepSeek 按 API 调用计费），或使用 ' },
       { text: 'Ollama', strong: true },
       { text: ' 运行本地模型，完全免费。' },
     ],
@@ -172,7 +172,7 @@ const faqs: Faq[] = [
   {
     q: '不知道选哪个模型？',
     segments: [
-      { text: '国内用户推荐 ' },
+      { text: '想立即开始可先使用 Maxma 内置的免费模型。国内用户也推荐 ' },
       { text: 'DeepSeek', strong: true },
       { text: '（性价比高、注册即送免费额度、中文表现优秀）或 ' },
       { text: '通义千问 Qwen', strong: true },

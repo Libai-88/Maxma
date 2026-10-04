@@ -90,7 +90,8 @@
           <div class="card-header">
             <div class="card-title-row">
               <span class="card-label">{{ p.label }}</span>
-              <span class="card-type-badge">{{ p.provider_type.toUpperCase() }}</span>
+              <span v-if="p.builtin" class="card-type-badge card-type-badge--free">内置免费</span>
+              <span v-else class="card-type-badge">{{ p.provider_type.toUpperCase() }}</span>
             </div>
             <button
               class="toggle-btn"
@@ -101,7 +102,8 @@
           </div>
 
           <!-- API 信息 -->
-          <div class="card-url">{{ p.base_url }}</div>
+          <div v-if="p.builtin" class="card-url card-url--builtin">无需 API Key · 模型清单自动同步</div>
+          <div v-else class="card-url">{{ p.base_url }}</div>
 
           <!-- 模型列表 -->
           <div class="card-models-section">
@@ -853,6 +855,9 @@ onMounted(loadProviders)
   color: var(--text-tertiary);
   letter-spacing: 0.5px;
 }
+.card-type-badge--free {
+  color: var(--status-ok);
+}
 
 /* ── 开关按钮 ── */
 .toggle-btn {
@@ -892,6 +897,9 @@ onMounted(loadProviders)
 	  word-break: break-all;
 	  line-height: 1.5;
 	}
+.card-url--builtin {
+  color: var(--status-ok);
+}
 
 /* ── 模型列表区 ── */
 .card-models-section {

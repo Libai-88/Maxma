@@ -18,7 +18,7 @@
         <h3>{{ noUsableModels ? '还差一步即可开始' : '开始使用 Maxma' }}</h3>
         <p class="no-provider-lead">{{ noUsableModels
           ? '已找到模型提供商，但还没有可选择的模型。请在模型设置中拉取或填写模型 ID。'
-          : 'Maxma 通过「模型提供商」连接到 AI 大模型。云端服务填写 API Key，本地服务无需填写。' }}</p>
+          : 'Maxma 已内置免费模型通道，无需 API Key；也支持云端服务和本地模型。' }}</p>
 
         <!-- 快速上手 3 步引导（面向 Novice 画像） -->
         <ol class="no-provider-steps">
@@ -28,7 +28,7 @@
           </li>
           <li>
             <span class="step-no">2</span>
-            <span class="step-text">选择一个提供商（推荐 DeepSeek 性价比高、Qwen 国内免费额度、OpenAI 体验最佳）</span>
+            <span class="step-text">优先选择内置免费模型；也可以选择 DeepSeek、Qwen 或 OpenAI 等外部服务</span>
           </li>
           <li>
             <span class="step-no">3</span>
@@ -42,7 +42,7 @@
         </div>
 
         <p class="no-provider-note">
-          <span aria-hidden="true">💡</span> 不知道选哪个？DeepSeek 注册即送免费额度，Ollama 本地运行无需 API Key。
+          <span aria-hidden="true">💡</span> 内置免费模型无需 API Key；Ollama 适合完全离线运行。
         </p>
       </div>
     </div>

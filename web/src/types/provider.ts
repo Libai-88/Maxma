@@ -17,6 +17,8 @@ export interface ProviderConfig {
   base_url: string
   models: string[]
   enabled: boolean
+  /** Maxma-managed provider that is ready without user credentials. */
+  builtin?: boolean
   context_window?: number
   max_tokens?: number
   temperature?: number

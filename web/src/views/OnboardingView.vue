@@ -21,11 +21,11 @@
         <label>语言<select v-model="language"><option value="zh-CN">简体中文</option><option value="en">English</option></select></label>
       </div>
       <div v-else-if="step === 1" class="step-content">
-        <p>连接一个模型提供商后，即可开始对话。不会在此页面收集或显示 API Key。</p>
+        <p>Maxma 已内置免费模型通道，选择 MiMo V2.6 或 Space Bunny 即可开始对话，无需登录、注册或填写 API Key。也可以连接你自己的云端或本地模型。</p>
         <p class="health-note" :class="providerReady ? 'ok' : 'attention'">{{ providerReady ? '检测到可用的模型服务。' : '尚未检测到可用的模型服务——可点击下方按钮前往配置。' }}</p>
         <div class="step-tip">
           <Icon class="tip-icon" name="info" :size="14" />
-          <div class="tip-text">不知道选哪个？<strong>DeepSeek</strong> 注册即送免费额度、中文表现优秀；<strong>Ollama</strong> 完全本地运行、无需 API Key。</div>
+          <div class="tip-text">想立即开始就选内置免费模型；需要更高配额或完全离线时，再添加 <strong>DeepSeek</strong> 或 <strong>Ollama</strong>。</div>
         </div>
         <button class="secondary" type="button" @click="openProviders">前往模型设置</button>
       </div>
