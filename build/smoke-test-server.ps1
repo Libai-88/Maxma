@@ -18,6 +18,7 @@ $resolvedRoot = (Resolve-Path $ProjectRoot).Path
 $serverDir = Join-Path $resolvedRoot "dist\bun-server"
 $bunExe = Join-Path $serverDir "bun.exe"
 $serverJs = Join-Path $serverDir "server.js"
+$smokeDataDir = Join-Path $serverDir "smoke-data"
 
 if (-not (Test-Path $bunExe)) { throw "Smoke test failed: bun.exe not found: $bunExe" }
 if (-not (Test-Path $serverJs)) { throw "Smoke test failed: server.js not found: $serverJs" }
@@ -43,6 +44,10 @@ function Wait-HttpJson {
 
 $proc = $null
 try {
+    $env:MAXMA_BUNDLE_DIR = $serverDir
+    $env:MAXMA_EXE_DIR = $serverDir
+    $env:MAXMA_DATA_DIR = $smokeDataDir
+    $env:PI_CODING_AGENT_DIR = Join-Path $smokeDataDir "pi"
     Write-Host "[smoke] starting $bunExe run server.js"
     $proc = Start-Process -FilePath $bunExe -ArgumentList "run", $serverJs -WorkingDirectory $serverDir -PassThru -WindowStyle Hidden
 
@@ -66,4 +71,9 @@ try {
         Start-Sleep -Seconds 1
     }
     Remove-Item Env:\MAXMA_BUN_PORT -ErrorAction SilentlyContinue
+    Remove-Item Env:\MAXMA_BUNDLE_DIR -ErrorAction SilentlyContinue
+    Remove-Item Env:\MAXMA_EXE_DIR -ErrorAction SilentlyContinue
+    Remove-Item Env:\MAXMA_DATA_DIR -ErrorAction SilentlyContinue
+    Remove-Item Env:\PI_CODING_AGENT_DIR -ErrorAction SilentlyContinue
+    if (Test-Path $smokeDataDir) { Remove-Item $smokeDataDir -Recurse -Force -ErrorAction SilentlyContinue }
 }
