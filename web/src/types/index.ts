@@ -449,6 +449,8 @@ export type ServerEvent =
   | WorkflowStepErrorEvent
   | WorkflowCompletedEvent
   | GoalUpdatedEvent
+  | CollaborationUpdateEvent
+  | TaskReviewUpdateEvent
   | TaskBriefUpdateEvent
 
 // === GAP-B1-001：目标模式状态事件 ===
@@ -467,6 +469,31 @@ export interface TaskBriefUpdateEvent {
     executionPrompt?: string
     error?: string
   }
+}
+
+export interface CollaborationUpdateEvent {
+  type: 'collaboration_update'
+  payload: {
+    status: 'queued' | 'error'
+    mode: 'steer' | 'follow_up'
+    message: string
+  }
+}
+
+export interface TaskReviewUpdateEvent {
+  type: 'task_review_update'
+  payload: {
+    status: 'available' | 'accepted' | 'revising'
+    turn_id: string
+    answer?: string
+    message?: string
+  }
+}
+
+export interface TaskReviewState {
+  turnId: string
+  status: 'available' | 'revising'
+  answer: string
 }
 
 export interface GoalUpdatedEvent {

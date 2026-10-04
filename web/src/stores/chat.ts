@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, reactive, ref, shallowRef, watch } from 'vue'
-import type { ChatTurn, ContextUsage, CompactionReason, CompactionAction } from '@/types'
+import type { ChatTurn, ContextUsage, CompactionReason, CompactionAction, TaskReviewState } from '@/types'
 import type { ModelInfo, ChatContextUsage } from '../types/chat'
 // S4-2: api 已被 30+ 文件静态引用进主 chunk，此处动态导入不会触发拆分（纯噪音），改静态
 import { api } from '@/api'
@@ -123,6 +123,7 @@ export interface SessionChannel {
   /** GAP-B1-001：目标模式状态（goal_updated 事件 / goal_action 回执更新） */
   goalState: GoalChannelState | null
   taskBrief: TaskBriefState | null
+  taskReview: TaskReviewState | null
 }
 
 export interface TaskBriefState {
@@ -165,6 +166,7 @@ function createChannel(): SessionChannel {
     _privateAtSend: null,
     goalState: null,
     taskBrief: null,
+    taskReview: null,
   }
 }
 

@@ -63,6 +63,9 @@ export const CLIENT_MESSAGE_TYPES = new Set([
   "task_brief_answer",
   "task_brief_execute",
   "task_brief_cancel",
+  "steer",
+  "follow_up",
+  "task_review",
 ]);
 
 /** PERF-TOOL-OUTPUT-001：工具输出/错误截断（与 Python 版同阈值）。 */
@@ -140,6 +143,12 @@ interface PendingTaskBrief {
   promptOptions: Record<string, unknown>;
 }
 const taskBriefStates = new Map<string, PendingTaskBrief>();
+
+interface PendingTaskReview {
+  turnId: string;
+  answer: string;
+}
+const taskReviewStates = new Map<string, PendingTaskReview>();
 
 async function updateTaskBrief(hub: ChatWsHub, sessionId: string, pending: PendingTaskBrief): Promise<void> {
   if (pending.busy) return;
@@ -587,6 +596,14 @@ async function finishTurn(hub: ChatWsHub, sessionId: string, state: TurnState): 
     },
   });
 
+  if (state.finalAnswer) {
+    taskReviewStates.set(sessionId, { turnId: state.turnId, answer: state.finalAnswer });
+    hub.broadcast(sessionId, {
+      type: "task_review_update",
+      payload: { status: "available", turn_id: state.turnId, answer: state.finalAnswer.slice(0, 1200) },
+    });
+  }
+
   // MEMORY-EVENTS-001：done 之后批量合成 memory 事件流（顺序契约）
   if (state.memoryActivity.length > 0) {
     const doneTurnId = state.turnId;
@@ -687,6 +704,7 @@ export function unregisterChatConnection(hub: ChatWsHub, sessionId: string, ws: 
       taskBriefStates.delete(sessionId);
       turnStates.delete(sessionId);
     }
+    taskReviewStates.delete(sessionId);
     // Python finally 语义：WS 断开取消在途 turn（kernel cancel → done{cancelled}）
     const state = turnStates.get(sessionId);
     if (state) {
@@ -817,6 +835,46 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
     return;
   }
 
+  if (msgType === "task_review") {
+    const review = taskReviewStates.get(sessionId);
+    if (!review || turnStates.has(sessionId) || record?.currentGuard) return;
+    const action = payload.action === "accept" ? "accept" : payload.action === "revise" ? "revise" : "";
+    if (!action) return;
+    if (action === "accept") {
+      taskReviewStates.delete(sessionId);
+      hub.broadcast(sessionId, { type: "task_review_update", payload: { status: "accepted", turn_id: review.turnId } });
+      return;
+    }
+    const feedback = String(payload.feedback ?? "").trim().slice(0, 4000);
+    if (!feedback) return;
+    taskReviewStates.delete(sessionId);
+    const turnId = newTurnId();
+    const revisionMessage = `请根据用户对上一轮结果的反馈进行修订，并直接完成修订后的任务。\n用户反馈：${feedback}`;
+    hub.broadcast(sessionId, { type: "task_review_update", payload: { status: "revising", turn_id: turnId, message: revisionMessage } });
+    handleChatMessage(hub, ws, JSON.stringify({
+      type: "chat",
+      payload: { message: revisionMessage, turn_id: turnId, client_msg_id: `review-${turnId}` },
+    }));
+    return;
+  }
+
+  if (msgType === "steer" || msgType === "follow_up") {
+    const state = turnStates.get(sessionId);
+    const message = String(payload.message ?? "").trim().slice(0, 4000);
+    if (!state || !record?.currentGuard || !message) return;
+    const mode = msgType === "steer" ? "steer" : "follow_up";
+    void hub.callRpc(mode, { session_id: sessionId, message }).then((result) => {
+      if (!result.ok) {
+        hub.broadcast(sessionId, { type: "collaboration_update", payload: { status: "error", mode, message: result.error } });
+        return;
+      }
+      hub.broadcast(sessionId, { type: "collaboration_update", payload: { status: "queued", mode, message } });
+    }).catch((error) => {
+      hub.broadcast(sessionId, { type: "collaboration_update", payload: { status: "error", mode, message: String(error) } });
+    });
+    return;
+  }
+
   // ── user_response（ask_user 应答）──
   if (msgType === "user_response") {
     void hub.callRpc("user_response", { session_id: sessionId, ...payload }).catch(() => {});
@@ -927,6 +985,7 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
   if (msgType === "chat") {
     const userMessage = String(payload.message ?? "").trim();
     if (!userMessage) return;
+    taskReviewStates.delete(sessionId);
 
     // IDEMPOTENCY-001：client_msg_id 幂等去重
     const clientMsgId = payload.client_msg_id;

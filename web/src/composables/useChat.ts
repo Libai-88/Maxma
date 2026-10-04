@@ -949,6 +949,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     && ch._lastDoneTurnId !== null
     && eventTurnId === ch._lastDoneTurnId
     && !event.type.startsWith('memory_')
+    && event.type !== 'task_review_update'
   ) {
     log.debug(`丢弃已终结轮次 ${eventTurnId} 的迟到事件: ${event.type}`)
     return
@@ -1098,6 +1099,44 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       ...(payload.riskLevel === 'low' || payload.riskLevel === 'medium' || payload.riskLevel === 'high' ? { riskLevel: payload.riskLevel } : {}),
       ...(typeof payload.executionPrompt === 'string' ? { executionPrompt: payload.executionPrompt } : {}),
       ...(typeof payload.error === 'string' ? { error: payload.error } : {}),
+    }
+    return
+  }
+
+  if (event.type === 'collaboration_update') {
+    if (ch.currentTurn) {
+      const payload = event.payload
+      ch.currentTurn.events.push({
+        kind: 'system',
+        detail: 'collaboration_update',
+        content: payload.status === 'queued'
+          ? payload.mode === 'steer' ? '已将你的调整要求交给 Agent。' : '已将你的补充要求排入下一步。'
+          : `协作消息未送达：${payload.message}`,
+        timestamp: Date.now(),
+      })
+    }
+    return
+  }
+
+  if (event.type === 'task_review_update') {
+    const payload = event.payload
+    if (payload.status === 'available') {
+      ch.taskReview = { turnId: payload.turn_id, status: 'available', answer: payload.answer ?? '' }
+    } else if (payload.status === 'accepted') {
+      ch.taskReview = null
+    } else if (payload.status === 'revising') {
+      ch.taskReview = null
+      ch.isStreaming = true
+      ch.streamPhase = 'streaming'
+      ch.streamStartedAt = Date.now()
+      ch.currentTurn = {
+        id: payload.turn_id,
+        userMessage: payload.message ?? '根据反馈修订上一轮结果',
+        refs: [],
+        events: [],
+        memoryEvents: [],
+        finalAnswer: null,
+      }
     }
     return
   }
@@ -1960,6 +1999,7 @@ export function useChat(sessionId: Ref<string>) {
       return false
     }
     ch.isStreaming = true
+    ch.taskReview = null
     ch.streamPhase = 'streaming'
     ch.streamStartedAt = Date.now()
     ch.lastActivityAt = ch.streamStartedAt
@@ -2095,6 +2135,24 @@ export function useChat(sessionId: Ref<string>) {
   }
   function cancelTaskBrief(): boolean {
     return sendTaskBriefMessage('task_brief_cancel')
+  }
+
+  function sendCollaborationMessage(mode: 'steer' | 'follow_up', message: string): boolean {
+    const ch = activeChannel.value
+    const text = message.trim().slice(0, 4000)
+    if (!text || !ch.ws || ch.ws.readyState !== WebSocket.OPEN || !ch.isStreaming) return false
+    ch.ws.send(JSON.stringify({ type: mode, payload: { message: text } }))
+    return true
+  }
+
+  function sendTaskReview(action: 'accept' | 'revise', feedback = ''): boolean {
+    const ch = activeChannel.value
+    const review = ch.taskReview
+    if (!review || !ch.ws || ch.ws.readyState !== WebSocket.OPEN) return false
+    if (action === 'revise' && !feedback.trim()) return false
+    ch.ws.send(JSON.stringify({ type: 'task_review', payload: { action, feedback: feedback.trim().slice(0, 4000) } }))
+    if (action === 'accept') ch.taskReview = null
+    return true
   }
 
   function cancel(): boolean {
@@ -2265,7 +2323,7 @@ export function useChat(sessionId: Ref<string>) {
     connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId, errorDiagnostic,
     contextUsage, taskTrackerData,
     reconnectExhausted, reconnect,
-    send, cancel, answerTaskBrief, executeTaskBrief, cancelTaskBrief, sendUserResponse, sendArtifactAction, sendPlanResponse, sendPlanMode, sendCheckpointAction, removeTurns,
+    send, cancel, answerTaskBrief, executeTaskBrief, cancelTaskBrief, sendCollaborationMessage, sendTaskReview, sendUserResponse, sendArtifactAction, sendPlanResponse, sendPlanMode, sendCheckpointAction, removeTurns,
     dismissError,
     privateMode, setPrivateMode,
     autoApprove, setAutoApprove,

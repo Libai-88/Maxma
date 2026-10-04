@@ -65,7 +65,9 @@ export async function handleRpcRequest(req: RpcRequest): Promise<void> {
     method === "goal_action" ||
     method === "get_goal_state" ||
     method === "reload_mcp_for_session" ||
-    method === "execute_workflow_step"
+    method === "execute_workflow_step" ||
+    method === "steer" ||
+    method === "follow_up"
   ) {
     sendError(id, `Session not found: ${sessionId ?? "(missing)"}`);
     return;

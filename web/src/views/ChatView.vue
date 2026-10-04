@@ -176,6 +176,42 @@
             <button type="button" class="task-brief-primary" @click="runOriginalTaskBrief">使用原始请求执行</button>
           </div>
         </section>
+        <section v-if="isStreaming" class="collaboration-panel" aria-live="polite">
+          <div class="collaboration-panel-copy">
+            <span class="collaboration-eyebrow">实时协作</span>
+            <strong>任务进行中，随时调整方向</strong>
+            <span>告诉 Agent 哪一步需要改变，不必等本轮结束。</span>
+          </div>
+          <textarea
+            v-model="collaborationMessage"
+            rows="2"
+            maxlength="4000"
+            placeholder="例如：范围缩小到 src 目录；先不要修改文件，先给我看方案"
+            @keydown.enter.exact.prevent="sendCollaboration('steer')"
+          ></textarea>
+          <div class="collaboration-actions">
+            <span>{{ collaborationMessage.length }}/4000</span>
+            <div>
+              <button type="button" class="collaboration-secondary" :disabled="!collaborationMessage.trim()" @click="sendCollaboration('follow_up')">完成当前步骤后处理</button>
+              <button type="button" class="collaboration-primary" :disabled="!collaborationMessage.trim()" @click="sendCollaboration('steer')">立即调整</button>
+            </div>
+          </div>
+        </section>
+        <section v-if="chatStore.channels.get(sessionId)?.taskReview" class="task-review-panel" aria-live="polite">
+          <div class="task-review-copy">
+            <span class="collaboration-eyebrow">完成后验收</span>
+            <strong>结果符合你的预期吗？</strong>
+            <span>确认结果，或告诉 Agent 需要怎样修改。</span>
+          </div>
+          <textarea v-model="taskReviewFeedback" rows="2" maxlength="4000" placeholder="需要修改时，写出具体差异，例如：保留第二部分，删掉第三部分"></textarea>
+          <div class="collaboration-actions">
+            <span>{{ taskReviewFeedback.length }}/4000</span>
+            <div>
+              <button type="button" class="collaboration-secondary" :disabled="!taskReviewFeedback.trim()" @click="reviseTask">按反馈修订</button>
+              <button type="button" class="collaboration-primary" @click="acceptTask">结果符合预期</button>
+            </div>
+          </div>
+        </section>
         <ChatInput
           v-if="!isSubagent"
           ref="chatInputRef"
@@ -254,7 +290,7 @@ const { sessionId, sessions } = storeToRefs(sessionStore)
 const { health } = storeToRefs(useHealthStore())
 const {
   connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId, errorDiagnostic,
-  taskTrackerData, send, cancel, answerTaskBrief, executeTaskBrief, cancelTaskBrief,
+  taskTrackerData, send, cancel, answerTaskBrief, executeTaskBrief, cancelTaskBrief, sendCollaborationMessage, sendTaskReview,
   sendUserResponse, sendArtifactAction, sendPlanResponse, sendPlanMode, sendCheckpointAction, removeTurns,
   dismissError,
   privateMode, setPrivateMode, autoApprove, setAutoApprove,
@@ -279,6 +315,8 @@ watch(sessionId, (next, previous) => {
 }, { immediate: true })
 const taskBriefAnswer = ref('')
 const taskBriefPrompt = ref('')
+const collaborationMessage = ref('')
+const taskReviewFeedback = ref('')
 watch(taskBrief, (state) => {
   taskBriefAnswer.value = ''
   if (state?.status === 'ready') taskBriefPrompt.value = state.executionPrompt ?? ''
@@ -291,6 +329,18 @@ function runTaskBrief() {
   if (taskBriefPrompt.value.trim()) executeTaskBrief(taskBriefPrompt.value.trim())
 }
 function runOriginalTaskBrief() { executeTaskBrief(undefined, true) }
+function sendCollaboration(mode: 'steer' | 'follow_up') {
+  const message = collaborationMessage.value.trim()
+  if (!message || !sendCollaborationMessage(mode, message)) return
+  collaborationMessage.value = ''
+}
+function acceptTask() {
+  if (sendTaskReview('accept')) taskReviewFeedback.value = ''
+}
+function reviseTask() {
+  const feedback = taskReviewFeedback.value.trim()
+  if (feedback && sendTaskReview('revise', feedback)) taskReviewFeedback.value = ''
+}
 
 
 // 状态图标 SVG（剥掉 <?xml?> 声明，与 Icon.vue 处理方式一致）
@@ -1313,4 +1363,24 @@ function handleQuickStart(message: string) {
 .task-brief-missing span, .task-brief-assumptions span { display: block; }
 .task-brief-assumptions { border-color: var(--brief-line); background: var(--brief-soft); color: var(--brief-muted); }
 @keyframes task-brief-spin { to { transform: rotate(360deg); } }
+.collaboration-panel { display: grid; gap: 10px; margin: 10px 0; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border)); border-radius: 10px; background: color-mix(in srgb, var(--accent) 6%, var(--bg-card)); }
+.collaboration-panel-copy { display: grid; gap: 3px; }
+.collaboration-eyebrow { color: var(--accent); font-size: 11px; font-weight: 800; letter-spacing: .08em; }
+.collaboration-panel-copy strong { color: var(--text-primary); font-size: 14px; }
+.collaboration-panel-copy span:last-child { color: var(--text-secondary); font-size: 12px; }
+.collaboration-panel textarea { width: 100%; min-height: 58px; resize: vertical; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--bg-primary); color: var(--text-primary); font: inherit; font-size: 13px; line-height: 1.5; }
+.collaboration-panel textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
+.collaboration-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: var(--text-tertiary); font-size: 11px; }
+.collaboration-actions > div { display: flex; gap: 8px; }
+.collaboration-secondary, .collaboration-primary { min-height: 34px; padding: 7px 11px; border: 1px solid var(--border-strong); border-radius: 7px; font: inherit; font-size: 12px; cursor: pointer; }
+.collaboration-secondary { background: var(--bg-primary); color: var(--text-secondary); }
+.collaboration-primary { border-color: var(--accent); background: var(--accent); color: var(--text-inverse); }
+.collaboration-secondary:disabled, .collaboration-primary:disabled { opacity: .45; cursor: not-allowed; }
+.task-review-panel { display: grid; gap: 10px; margin: 10px 0; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--status-ok) 28%, var(--border)); border-radius: 10px; background: color-mix(in srgb, var(--status-ok) 5%, var(--bg-card)); }
+.task-review-copy { display: grid; gap: 3px; }
+.task-review-copy strong { color: var(--text-primary); font-size: 14px; }
+.task-review-copy span:last-child { color: var(--text-secondary); font-size: 12px; }
+.task-review-panel textarea { width: 100%; min-height: 58px; resize: vertical; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--bg-primary); color: var(--text-primary); font: inherit; font-size: 13px; line-height: 1.5; }
+.task-review-panel textarea:focus { outline: none; border-color: var(--status-ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-ok) 16%, transparent); }
+@media (max-width: 640px) { .collaboration-actions { align-items: stretch; flex-direction: column; } .collaboration-actions > div { width: 100%; } .collaboration-secondary, .collaboration-primary { flex: 1; } }
 </style>

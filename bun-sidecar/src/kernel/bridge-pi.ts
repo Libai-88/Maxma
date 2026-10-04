@@ -369,6 +369,19 @@ export async function handlePiSessionRpc(
     return;
   }
 
+  if (method === "steer" || method === "follow_up") {
+    const message = typeof params?.message === "string" ? params.message.trim().slice(0, 4000) : "";
+    if (!message) {
+      io.sendError(id, "Missing required parameter: message");
+      return;
+    }
+    const disposition = method === "steer"
+      ? await record.session.steer(message)
+      : await record.session.followUp(message);
+    io.send(id, { ok: true, disposition });
+    return;
+  }
+
   if (method === "cancel") {
     handlePiCancelGuard(record.currentGuard, (event) => io.sendEvent(sessionId, event));
     // 官方 abort()：停止活动操作并等待 idle；同时拒绝全部在途审批防挂起
