@@ -277,7 +277,7 @@ async function uploadImage(file: File): Promise<{ file_id: string; filename: str
     })
   } catch (e) {
     if (e instanceof DOMException && e.name === 'AbortError') {
-      throw new Error('图片上传超时（60s），请检查网络或文件大小后重试')
+      throw new Error('图片上传超时（60s），请检查网络或文件大小后重试', { cause: e })
     }
     throw e
   } finally {

@@ -274,7 +274,7 @@ function formatRelativeTime(ts: number): string {
   padding: 0 5px;
   border-radius: 999px;
   background: var(--accent);
-  color: #fff;
+  color: var(--user-bubble-text);
   font-size: 10px;
   font-weight: 800;
   line-height: 1;
