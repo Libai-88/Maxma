@@ -176,6 +176,20 @@ $marker = Join-Path $RuntimeDir "portable.flag"
 Set-Content -LiteralPath $marker -Value "MaxmaHere Portable Desktop Mode" -Encoding utf8
 
 Write-Host "[5/5] 生成 Windows x64 桌面便携 ZIP..."
+$desktopPackage = Get-Content -LiteralPath (Join-Path $ElectronPackage "package.json") -Raw | ConvertFrom-Json
+$versionText = Get-Content -LiteralPath (Join-Path $ProjectRoot "version.py") -Raw
+$versionMatch = [regex]::Match($versionText, '__version__\s*=\s*["'']([^"'']+)["'']')
+if (-not $versionMatch.Success) {
+    throw "无法从 version.py 读取应用版本。"
+}
+$canonicalVersion = $versionMatch.Groups[1].Value.TrimStart('v')
+if ([string]$desktopPackage.version -ne $canonicalVersion) {
+    throw "版本不一致：desktop/package.json=$($desktopPackage.version)，version.py=$canonicalVersion。"
+}
+$webPackage = Get-Content -LiteralPath (Join-Path $ProjectRoot "web\package.json") -Raw | ConvertFrom-Json
+if ([string]$webPackage.version -ne $canonicalVersion) {
+    throw "版本不一致：web/package.json=$($webPackage.version)，version.py=$canonicalVersion。"
+}
 Push-Location $ElectronPackage
 try {
     npm run pack:portable
@@ -198,7 +212,6 @@ $BundledSkillNames | ForEach-Object {
         throw "桌面运行目录缺少随包技能：$_"
     }
 }
-$desktopPackage = Get-Content -LiteralPath (Join-Path $ElectronPackage "package.json") -Raw | ConvertFrom-Json
 $artifactPath = Join-Path $OutputDir ("MaxmaHere-{0}-portable-x64.zip" -f $desktopPackage.version)
 if (Test-Path -LiteralPath $artifactPath) {
     $resolvedArtifact = [System.IO.Path]::GetFullPath($artifactPath)
