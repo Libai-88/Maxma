@@ -120,6 +120,13 @@ try {
     $providers = Wait-HttpJson -Url "$apiBase/providers" -Headers $headers -TimeoutSeconds 15
     $mcps = Wait-HttpJson -Url "$apiBase/mcp/servers" -Headers $headers -TimeoutSeconds 15
     Write-Host "[portable-smoke] providers: $($providers.providers.Count) mcp servers: $($mcps.servers.Count)"
+    $freeProvider = @($providers.providers) | Where-Object { $_.id -eq "opencode-zen" } | Select-Object -First 1
+    if (-not $freeProvider) { throw "built-in free model provider is missing" }
+    $freeModels = @($freeProvider.models | ForEach-Object { [string]$_ })
+    foreach ($requiredModel in @("mimo-v2.6-flash-free", "space-bunny-free")) {
+        if ($freeModels -notcontains $requiredModel) { throw "built-in free model is missing: $requiredModel" }
+    }
+    Write-Host "[portable-smoke] built-in free models: $($freeModels -join ', ')"
 
     Write-Host "[portable-smoke] PASS: portable bundle startup + all verification points OK"
 } catch {
