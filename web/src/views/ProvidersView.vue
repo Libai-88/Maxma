@@ -260,6 +260,21 @@
         <button type="button" class="btn sm" @click="selectedModels = []">取消全选</button>
       </div>
 
+      <div class="form-section model-manual-entry">
+        <label class="form-label" for="provider-manual-model">手动添加模型 ID</label>
+        <div class="form-row">
+          <input
+            v-model.trim="manualModel"
+            id="provider-manual-model"
+            class="input mono"
+            placeholder="例如：llama3.2、gpt-4o-mini"
+            @keydown.enter.prevent="addManualModel"
+          />
+          <button type="button" class="btn" @click="addManualModel">添加模型</button>
+        </div>
+        <p class="form-hint">模型列表拉取失败或服务没有 /models 接口时，可直接填写模型 ID。</p>
+      </div>
+
       <div class="form-actions">
         <button type="submit" class="btn primary" :disabled="saving">
           {{ saving ? '保存中...' : (isEditing ? '更新' : '保存') }}
@@ -464,6 +479,16 @@ async function handleTest() {
 const discovering = ref(false)
 const discoveredModels = ref<string[]>([])
 const selectedModels = ref<string[]>([])
+const manualModel = ref('')
+
+function addManualModel() {
+  const model = manualModel.value.trim()
+  if (!model) return
+  if (!discoveredModels.value.includes(model)) discoveredModels.value.push(model)
+  if (!selectedModels.value.includes(model)) selectedModels.value.push(model)
+  manualModel.value = ''
+  formError.value = ''
+}
 
 async function handleDiscover() {
   discovering.value = true
@@ -528,6 +553,7 @@ function startAdd() {
 	  form.value = { id: '', provider_type: 'deepseek', label: '', api_key: '', base_url: presetBaseUrl('deepseek'), context_window: 256000, max_tokens: undefined, temperature: undefined, top_p: undefined, timeout: undefined, extra_headers_raw: '' }
   discoveredModels.value = []
   selectedModels.value = []
+  manualModel.value = ''
   formError.value = ''
   testOk.value = false
 }
@@ -550,6 +576,7 @@ function startEdit(p: ProviderConfig) {
   }
   discoveredModels.value = [...p.models]
   selectedModels.value = [...p.models]
+  manualModel.value = ''
   formError.value = ''
   testOk.value = false
 }
@@ -581,6 +608,20 @@ async function handleSave() {
       formError.value = 'Base URL 不能为空'
       saving.value = false
       return
+    }
+    // 首次保存时自动拉取模型；失败不阻止保存，用户可稍后重试或手动填写模型 ID。
+    if (!isEditing.value && discoveredModels.value.length === 0 && (localProvider.value || form.value.api_key.trim())) {
+      try {
+        const discovered = await api.discoverModels({
+          api_key: form.value.api_key,
+          base_url: form.value.base_url,
+          provider_type: form.value.provider_type,
+        })
+        discoveredModels.value = discovered.models
+        selectedModels.value = [...discovered.models]
+      } catch {
+        // 保存配置本身不依赖模型发现，失败后由聊天页提供下一步指引。
+      }
     }
     let extraHeaders: Record<string, string> | undefined
     if (form.value.extra_headers_raw?.trim()) {
