@@ -341,6 +341,11 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   let _modelsFetching: Promise<void> | null = null
+  const builtinModelNames: Record<string, string> = {
+    'mimo-v2.6-flash-free': 'MiMo V2.6 Flash',
+    'space-bunny-free': 'Space Bunny',
+  }
+
   async function fetchAvailableModels() {
     // PERF-MODELS-DEDUP-001：多组件（ChatView/ModelSelector/ProvidersView）
     // 并发调用时复用同一在途请求，避免重复拉取 provider 列表
@@ -359,13 +364,15 @@ export const useChatStore = defineStore('chat', () => {
             }
             if (Array.isArray(p.models)) {
               for (const m of p.models) {
-                models.push({
+                const modelInfo: ModelInfo = {
                   id: `${p.id}/${m}`,
                   provider: p.id,
                   providerLabel: p.builtin ? 'Maxma 免费模型' : (p.label || p.id),
                   name: m,
                   contextWindow: p.context_window || 128000,
-                })
+                }
+                if (p.builtin && builtinModelNames[m]) modelInfo.displayName = builtinModelNames[m]
+                models.push(modelInfo)
               }
             }
           }

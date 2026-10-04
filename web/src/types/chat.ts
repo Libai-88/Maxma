@@ -4,6 +4,7 @@ export interface ModelInfo {
   provider: string
   providerLabel?: string
   name: string
+  displayName?: string
   contextWindow: number
 }
 

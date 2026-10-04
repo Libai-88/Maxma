@@ -46,15 +46,39 @@ describe('useChatStore', () => {
       expect(store.availableModels[0]).toEqual({
         id: 'openai/gpt-4o',
         provider: 'openai',
+        providerLabel: 'openai',
         name: 'gpt-4o',
         contextWindow: 128000,
       })
       expect(store.availableModels[2]).toEqual({
         id: 'anthropic/claude-sonnet-4-20250514',
         provider: 'anthropic',
+        providerLabel: 'anthropic',
         name: 'claude-sonnet-4-20250514',
         contextWindow: 200000,
       })
+    })
+
+    it('uses readable display names for built-in free models', async () => {
+      mockApi.listProviders.mockResolvedValue([
+        {
+          id: 'maxma-free',
+          label: 'Maxma 免费模型',
+          builtin: true,
+          enabled: true,
+          api_key_configured: true,
+          models: ['mimo-v2.6-flash-free', 'space-bunny-free'],
+          context_window: 128000,
+        },
+      ] as any)
+
+      const store = useChatStore()
+      await store.fetchAvailableModels()
+
+      expect(store.availableModels.map(model => model.displayName)).toEqual([
+        'MiMo V2.6 Flash',
+        'Space Bunny',
+      ])
     })
 
     it('skips disabled providers', async () => {
