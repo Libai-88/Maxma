@@ -15,6 +15,7 @@ import { showSystemNotification } from '@/lib/notify'
 import { autoReadIfEnabled } from '@/composables/useTts'
 import type { GoalChannelState, TaskBriefState } from '@/stores/chat'
 import { createLogger } from '@/utils/logger'
+import { userFacingModelError } from '@/utils/modelErrors'
 
 const log = createLogger('chat')
 
@@ -1488,7 +1489,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       if (typeof errTurnId === 'string' && errTurnId) {
         ch._lastDoneTurnId = errTurnId
       }
-      ch.error = event.payload.message
+      ch.error = userFacingModelError(event.payload.message, event.payload.diagnostic)
       ch.errorCategory = event.payload.category ?? null
       ch.errorTraceId = event.payload.trace_id ?? null
       ch.errorDiagnostic = event.payload.diagnostic && typeof event.payload.diagnostic === 'object'
