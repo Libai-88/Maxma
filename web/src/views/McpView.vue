@@ -1074,7 +1074,6 @@ const mcpTemplates: McpTemplate[] = [
     transport: 'streamable_http',
     description: '读取和搜索网页、文档与 PDF。默认只读；可选填 Jina API Key 以提高额度。',
     url: 'https://mcp.jina.ai/v1',
-    headersEntries: [{ key: 'Authorization', value: '' }],
   },
 ]
 
