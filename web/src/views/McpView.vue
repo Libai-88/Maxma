@@ -1009,8 +1009,11 @@ interface McpTemplate {
   label: string
   server_id: string
   description: string
-  command: string
-  args: string[]
+  transport?: MCPTransport
+  command?: string
+  args?: string[]
+  url?: string
+  headersEntries?: KVEntry[]
   envEntries?: KVEntry[]
 }
 
@@ -1064,16 +1067,27 @@ const mcpTemplates: McpTemplate[] = [
     args: ['-y', '@modelcontextprotocol/server-github'],
     envEntries: [{ key: 'GITHUB_PERSONAL_ACCESS_TOKEN', value: '' }],
   },
+  {
+    id: 'jina-reader',
+    label: '📖 Jina 网页阅读',
+    server_id: 'jina-reader',
+    transport: 'streamable_http',
+    description: '读取和搜索网页、文档与 PDF。默认只读；可选填 Jina API Key 以提高额度。',
+    url: 'https://mcp.jina.ai/v1',
+    headersEntries: [{ key: 'Authorization', value: '' }],
+  },
 ]
 
 function startAddWithTemplate(t: McpTemplate) {
   Object.assign(form, {
     ...emptyForm(),
     server_id: t.server_id,
-    transport: 'stdio' as MCPTransport,
+    transport: t.transport ?? 'stdio' as MCPTransport,
     description: t.description,
-    command: t.command,
-    args: [...t.args],
+    command: t.command ?? '',
+    args: [...(t.args ?? [])],
+    url: t.url ?? '',
+    headersEntries: t.headersEntries ? t.headersEntries.map(e => ({ ...e })) : [],
     envEntries: t.envEntries ? t.envEntries.map(e => ({ ...e })) : [],
   })
   availableTools.value = []

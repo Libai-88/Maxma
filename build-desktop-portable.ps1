@@ -126,7 +126,18 @@ foreach ($name in $BuiltInPersonaNames) {
     }
     Copy-Item -LiteralPath $source -Destination $PersonaDir -Force
 }
-$BundledSkillNames = @("coding-starter", "office-starter", "debugging-starter", "document-starter", "spreadsheet-starter", "mcp-starter")
+$BundledSkillNames = @(
+    "coding-starter",
+    "office-starter",
+    "debugging-starter",
+    "document-starter",
+    "spreadsheet-starter",
+    "mcp-starter",
+    "execution-playbook",
+    "cost-aware",
+    "research-evidence",
+    "document-quality"
+)
 $StickersDir = Join-Path $RuntimeDir "config\stickers"
 Copy-Item -Path (Join-Path $ProjectRoot "config\rules") -Destination (Join-Path $RuntimeDir "config") -Recurse -Force
 Copy-Item -Path (Join-Path $ProjectRoot "config\stickers") -Destination (Join-Path $RuntimeDir "config") -Recurse -Force

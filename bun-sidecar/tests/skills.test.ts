@@ -20,7 +20,10 @@ describe("kernel: Maxma skills", () => {
   });
 
   test("bundled Skills only reference tools available in Maxma Pi sessions", () => {
-    const skillFiles = ["coding-starter", "debugging-starter", "office-starter", "document-starter", "spreadsheet-starter", "mcp-starter"]
+    const skillFiles = [
+      "coding-starter", "debugging-starter", "office-starter", "document-starter", "spreadsheet-starter", "mcp-starter",
+      "execution-playbook", "cost-aware", "research-evidence", "document-quality",
+    ]
       .map((name) => path.join(maxmaSkillPaths(path.join(os.tmpdir(), "maxma-skill-test-project"))[2], name, "SKILL.md"));
     const forbiddenToolNames = ["glob", "web_search", "ast_grep", "ast_edit", "lsp", "manage_skill"];
     for (const file of skillFiles) {
@@ -38,5 +41,9 @@ describe("kernel: Maxma skills", () => {
     expect(names).toContain("document-starter");
     expect(names).toContain("spreadsheet-starter");
     expect(names).toContain("mcp-starter");
+    expect(names).toContain("execution-playbook");
+    expect(names).toContain("cost-aware");
+    expect(names).toContain("research-evidence");
+    expect(names).toContain("document-quality");
   });
 });
