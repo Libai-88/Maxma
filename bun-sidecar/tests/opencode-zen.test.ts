@@ -60,4 +60,46 @@ describe("OpenCode Zen request compatibility", () => {
     expect(request?.headers.get("x-opencode-session")).toMatch(/^ses_[0-9a-f]{12}[0-9A-Za-z]{14}$/);
     expect(request?.headers.get("x-opencode-request")).toMatch(/^msg_[0-9a-f]{12}[0-9A-Za-z]{14}$/);
   });
+
+  test("falls back from a failed MiMo request to Space Bunny", async () => {
+    let calls = 0;
+    const stream = opencodeZenStreamSimple(
+      {
+        id: "mimo-v2.6-flash-free",
+        name: "MiMo V2.6 Flash",
+        provider: "opencode-zen",
+        api: "openai-completions",
+        baseUrl: "https://opencode.ai/zen/v1",
+        apiKey: "public",
+        input: ["text"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        reasoning: true,
+        contextWindow: 262144,
+        maxTokens: 32768,
+        compat: { maxTokensField: "max_tokens", supportsReasoningEffort: false },
+      },
+      { messages: [{ role: "user", content: [{ type: "text", text: "Reply exactly OK" }] }] },
+      {
+        sessionId: "fallback-test",
+        fetch: async () => {
+          calls += 1;
+          if (calls === 1) return new Response(JSON.stringify({ error: { message: "temporary failure" } }), { status: 503 });
+          return new Response(
+            'data: {"choices":[{"delta":{"content":"OK"},"finish_reason":"stop"}]}\n\n' +
+              "data: [DONE]\n\n",
+            { status: 200, headers: { "content-type": "text/event-stream" } },
+          );
+        },
+      },
+    );
+
+    let answer = "";
+    for await (const event of stream) {
+      if (event.type === "text_delta") answer += event.delta;
+      expect(event.type).not.toBe("error");
+    }
+
+    expect(answer).toBe("OK");
+    expect(calls).toBe(2);
+  });
 });
