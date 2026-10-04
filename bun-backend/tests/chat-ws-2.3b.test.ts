@@ -39,12 +39,14 @@ function makeHub(sid: string, opts: { messages?: Array<Record<string, unknown>> 
   const ws: FakeWs = { data: { sessionId: sid }, send: (d: string) => sent.push(JSON.parse(d)) };
   conns.set(sid, new Set([ws]));
   const promptCalls: Array<Record<string, unknown>> = [];
+  const rpcCalls: Array<{ method: string; params: Record<string, unknown> }> = [];
   const hub = {
     sessions: new Map<string, { currentGuard: unknown }>(),
     pendingPlans: new Map(),
     connections: conns,
     seenClientMsgIds: new Map<string, string[]>(),
     callRpc: async (method: string, params: Record<string, unknown>) => {
+      rpcCalls.push({ method, params });
       if (method === "prompt") {
         promptCalls.push(params);
         return { ok: true as const, result: { ok: true } };
@@ -60,7 +62,7 @@ function makeHub(sid: string, opts: { messages?: Array<Record<string, unknown>> 
       if (set) for (const w of set) w.send(JSON.stringify(e));
     },
   };
-  return { hub, ws, sent, promptCalls };
+  return { hub, ws, sent, promptCalls, rpcCalls };
 }
 
 describe("回合富化层（阶段 2.3b）", () => {
@@ -303,5 +305,59 @@ describe("回合富化层（阶段 2.3b）", () => {
     const err = sent.find((f) => f.type === "error") as { payload: { code: string; category: string } };
     expect(err.payload.code).toBe("RATE_LIMITED");
     expect(err.payload.category).toBe("rate_limit");
+  }, 15000);
+
+  test("steer/follow_up → 调用对应 RPC 并广播 queued", async () => {
+    const { handleChatMessage } = await import("../src/routes/chat-ws");
+    const sid = "sess-collaboration-rpc";
+    const { hub, ws, sent, rpcCalls } = makeHub(sid);
+
+    handleChatMessage(hub as never, ws as never, JSON.stringify({ type: "chat", payload: { message: "执行任务" } }));
+    await Bun.sleep(10);
+    hub.sessions.set(sid, { currentGuard: {} } as never);
+    handleChatMessage(hub as never, ws as never, JSON.stringify({ type: "steer", payload: { message: "改用中文输出" } }));
+    handleChatMessage(hub as never, ws as never, JSON.stringify({ type: "follow_up", payload: { message: "完成后补充摘要" } }));
+    await Bun.sleep(10);
+
+    expect(rpcCalls.filter((call) => call.method === "steer")).toHaveLength(1);
+    expect(rpcCalls.filter((call) => call.method === "follow_up")).toHaveLength(1);
+    expect(sent.filter((event) => event.type === "collaboration_update").map((event) => (event.payload as { status: string }).status))
+      .toEqual(["queued", "queued"]);
+  }, 15000);
+
+  test("完成回合后可接受验收，并按反馈开启修订回合", async () => {
+    const { handleChatMessage, onKernelEvent } = await import("../src/routes/chat-ws");
+    const sid = "sess-task-review";
+    const { hub, ws, sent, promptCalls } = makeHub(sid);
+
+    handleChatMessage(hub as never, ws as never, JSON.stringify({ type: "chat", payload: { message: "生成结果" } }));
+    await Bun.sleep(10);
+    await onKernelEvent(hub as never, sid, { type: "answer", payload: { content: "初始结果" } });
+    await onKernelEvent(hub as never, sid, { type: "done", payload: {} });
+    expect(sent.find((event) => event.type === "task_review_update")?.payload).toMatchObject({ status: "available" });
+
+    handleChatMessage(hub as never, ws as never, JSON.stringify({ type: "task_review", payload: { action: "revise", feedback: "补充边界条件" } }));
+    await Bun.sleep(10);
+    expect(sent.filter((event) => event.type === "task_review_update").at(-1)?.payload).toMatchObject({ status: "revising" });
+    expect(promptCalls).toHaveLength(2);
+
+    await onKernelEvent(hub as never, sid, { type: "answer", payload: { content: "修订结果" } });
+    await onKernelEvent(hub as never, sid, { type: "done", payload: {} });
+    handleChatMessage(hub as never, ws as never, JSON.stringify({ type: "task_review", payload: { action: "accept" } }));
+    await Bun.sleep(5);
+    expect(sent.filter((event) => event.type === "task_review_update").at(-1)?.payload).toMatchObject({ status: "accepted" });
+  }, 15000);
+
+  test("最后一个连接断开会取消在途回合", async () => {
+    const { handleChatMessage, registerChatConnection, unregisterChatConnection } = await import("../src/routes/chat-ws");
+    const sid = "sess-disconnect-cancel";
+    const { hub, ws, rpcCalls } = makeHub(sid);
+    registerChatConnection(hub as never, sid, ws as never);
+    handleChatMessage(hub as never, ws as never, JSON.stringify({ type: "chat", payload: { message: "长任务" } }));
+    await Bun.sleep(10);
+    hub.sessions.set(sid, { currentGuard: {} } as never);
+    unregisterChatConnection(hub as never, sid, ws as never);
+    await Bun.sleep(5);
+    expect(rpcCalls.some((call) => call.method === "cancel")).toBe(true);
   }, 15000);
 });

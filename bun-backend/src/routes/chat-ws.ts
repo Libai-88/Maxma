@@ -707,6 +707,7 @@ export function unregisterChatConnection(hub: ChatWsHub, sessionId: string, ws: 
     taskReviewStates.delete(sessionId);
     // Python finally 语义：WS 断开取消在途 turn（kernel cancel → done{cancelled}）
     const state = turnStates.get(sessionId);
+    turnStates.delete(sessionId);
     if (state) {
       state.cancelled = true;
       void hub.callRpc("cancel", { session_id: sessionId }).catch(() => {});

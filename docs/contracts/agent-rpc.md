@@ -11,6 +11,8 @@
 | --- | --- | --- | --- |
 | `create_session` | `{ engine?, model, system_prompt?, append_system_prompt?, cwd?, tools? }` | `{ session_id }` | 建会话；权限模式映射为审批语义。**默认引擎已切 `pi`**（2026-09-30）；`MAXMA_AGENT_ENGINE=omp` 环境变量整体回退旧内核；显式 `engine` 参数优先级最高。pi 引擎支持参数与 RPC 矩阵见 §8 |
 | `prompt` | `{ session_id, message }` | `{ ok: true }` | 提交用户消息；事件经 `event` 通知推送 |
+| `steer` | `{ session_id, message }` | `{ ok: true, disposition? }` | 活跃回合中立即注入用户调整；由 Pi 在当前工具调用完成后处理 |
+| `follow_up` | `{ session_id, message }` | `{ ok: true, disposition? }` | 活跃回合中排队，当前回合结束后处理 |
 | `cancel` | `{ session_id }` | `{ ok: true }` | 中止当前运行（必须走此 RPC，不可只取消 Python 侧任务） |
 | `destroy_session` | `{ session_id }` | `{ ok: true }` | 销毁会话并释放资源 |
 | `undo` | `{ session_id, steps? }` | `{ removed }` | 回退 N 个回合；前导 system 消息始终保留 |

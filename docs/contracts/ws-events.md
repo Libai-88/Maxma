@@ -33,6 +33,9 @@
 | `checkpoint_action` | `{ action: "save"\|"restore", goal? }` | 探活后透传 `checkpoint_action` RPC |
 | `goal_action` | `{ action: "set"\|"replace"\|"pause"\|"resume"\|"drop", objective?, token_budget? }` | 探活后透传 `goal_action` RPC |
 | `artifact_action` | 产物操作载荷 | 后端本地处理（读文件/操作），回 `artifact_result`；不经 sidecar |
+| `steer` | `{ message: string }` | 活跃回合中立即注入调整；当前工具调用完成后由 Pi 处理 |
+| `follow_up` | `{ message: string }` | 活跃回合中排入后续处理；当前回合结束后由 Pi 处理 |
+| `task_review` | `{ action: "accept"\|"revise", feedback?: string }` | 回合完成后的验收；`revise` 会开启新的普通 `chat` 回合 |
 
 处理位置：`api/routes/chat.py` 1163–1440 区间分支。
 
@@ -77,6 +80,8 @@
 | `deferred_subagent_submitted` | 透传 payload | chat.py:686 |
 | `plan_step_start` / `plan_step_end` / `plan_step_error` | 步骤载荷 | sidecar 发射 → chat.py 白名单透传 |
 | `workflow_step_start` / `workflow_step_end` / `workflow_step_error` / `workflow_completed` | `{ step_id, tool_name, status?, error? }` | `api/routes/workflows.py` 执行引擎推送 |
+| `collaboration_update` | `{ status: "queued"\|"error", mode: "steer"\|"follow_up", message }` | 实时协作消息入队或失败回执 |
+| `task_review_update` | `{ status: "available"\|"accepted"\|"revising", turn_id, answer?, message? }` | 回合完成后的验收状态；有最终回答且未取消时发出 `available` |
 
 ## 4. 已知不一致（替换期需对齐）
 
