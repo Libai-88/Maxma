@@ -11,12 +11,14 @@
         </button>
       </div>
     </div>
-    <!-- 无提供商引导卡片 -->
-    <div v-else-if="!hasProviders" class="no-provider-overlay">
+    <!-- 无提供商 / 无模型引导卡片 -->
+    <div v-else-if="!hasProviders || noUsableModels" class="no-provider-overlay">
       <div class="no-provider-card no-provider-card--enhanced">
         <div class="no-provider-icon no-provider-icon--gear" v-html="gearIconSvg"></div>
-        <h3>开始使用 Maxma</h3>
-        <p class="no-provider-lead">Maxma 通过「模型提供商」连接到 AI 大模型。只需填一次 API Key，就能开始对话。</p>
+        <h3>{{ noUsableModels ? '还差一步即可开始' : '开始使用 Maxma' }}</h3>
+        <p class="no-provider-lead">{{ noUsableModels
+          ? '已找到模型提供商，但还没有可选择的模型。请在模型设置中拉取或填写模型 ID。'
+          : 'Maxma 通过「模型提供商」连接到 AI 大模型。云端服务填写 API Key，本地服务无需填写。' }}</p>
 
         <!-- 快速上手 3 步引导（面向 Novice 画像） -->
         <ol class="no-provider-steps">
@@ -30,7 +32,7 @@
           </li>
           <li>
             <span class="step-no">3</span>
-            <span class="step-text">填入 API Key 并保存，回到此页即可开始对话</span>
+            <span class="step-text">云端服务填入 API Key；Ollama 等本地服务无需 Key，保存后拉取模型</span>
           </li>
         </ol>
 
@@ -40,7 +42,7 @@
         </div>
 
         <p class="no-provider-note">
-          <span aria-hidden="true">💡</span> 不知道选哪个？DeepSeek 注册即送免费额度，OpenAI 兼容 API 都能直接接入。
+          <span aria-hidden="true">💡</span> 不知道选哪个？DeepSeek 注册即送免费额度，Ollama 本地运行无需 API Key。
         </p>
       </div>
     </div>
@@ -382,6 +384,7 @@ const selectedModelName = ref(safeGetItem(SELECTED_MODEL_KEY) || '')
 
 const providerStore = useProviderStore()
 const { hasProviders } = storeToRefs(providerStore)
+const noUsableModels = computed(() => providerStore.loaded && chatStore.availableModels.length === 0)
 // ANIM-PAUSE-001：keep-alive 暂停用根元素 ref
 const rootRef = ref<HTMLElement | null>(null)
 // MODEL-PARAMS-001：会话菜单内模型参数面板展开状态
