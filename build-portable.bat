@@ -140,6 +140,7 @@ REM flattened server.js resolves bundleDir()/dataDir() correctly.
     echo set "MAXMA_BUNDLE_DIR=%%SCRIPT_DIR%%"
     echo set "MAXMA_EXE_DIR=%%SCRIPT_DIR%%"
     echo set "MAXMA_DATA_DIR=%%SCRIPT_DIR%%data"
+    echo set "PI_CODING_AGENT_DIR=%%SCRIPT_DIR%%data\pi"
     echo set "MAXMA_SERVE_WEB=1"
     echo set "MAXMA_ENV=production"
     echo if "%%MAXMA_API_PORT%%"=="" set "MAXMA_API_PORT=8000"
