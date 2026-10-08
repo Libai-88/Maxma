@@ -109,10 +109,14 @@ describe('渠道专属面板', () => {
   })
 
   it('onboarding.status 带 provider 与 accountId，只在 loomy/raccoon 下发', async () => {
+    // ⚠️ 真实结构是**三个平行 Record**，不是任务对象数组（原先按数组写，列表永远为空）
     transport({
       'onboarding.status': {
-        tasks: [{ id: 't1', title: '首次对话', claimable: true, claimed: false, earned: 300 }],
-        earned: 300,
+        tasks: { desktop_login_reward: false },
+        titles: { desktop_login_reward: '桌面端登录奖励（每号一次）' },
+        points: { desktop_login_reward: 3000 },
+        earned: 0,
+        total: 3000,
       },
     })
     const store = await loadStore()
@@ -120,8 +124,15 @@ describe('渠道专属面板', () => {
     await store.loadOnboarding('raccoon', 'raccoon-1')
 
     expect(callsTo('onboarding.status')).toEqual([{ provider: 'raccoon', accountId: 'raccoon-1' }])
+    // 三个 Record 被合成为任务行（标题来自 titles、状态来自 tasks、分值来自 points）
     expect(store.onboarding?.tasks).toHaveLength(1)
-    expect(store.onboarding?.earned).toBe(300)
+    expect(store.onboarding?.tasks[0]).toEqual({
+      key: 'desktop_login_reward',
+      title: '桌面端登录奖励（每号一次）',
+      claimed: false,
+      points: 3000,
+    })
+    expect(store.onboarding?.total).toBe(3000)
   })
 
   it('onboarding.claim 领取后重读状态并刷新账号列表', async () => {
@@ -136,7 +147,13 @@ describe('渠道专属面板', () => {
         return { granted: !claimed, earned: 300, claimed: [], skipped: [] }
       }
       if (method === 'onboarding.status') {
-        return { tasks: [{ id: 't1', title: '首次对话', claimed: true, earned: 300 }], earned: 300 }
+        return {
+          tasks: { first_chat: true },
+          titles: { first_chat: '首次对话' },
+          points: { first_chat: 300 },
+          earned: 300,
+          total: 300,
+        }
       }
       return {}
     })
@@ -153,7 +170,7 @@ describe('渠道专属面板', () => {
   it('clearAccountDetail 同时清掉两类明细', async () => {
     transport({
       'cline.requestLog': { rows: [{ ts: 1 }] },
-      'onboarding.status': { tasks: [{ id: 't' }] },
+      'onboarding.status': { tasks: { k: true }, titles: { k: '任务' }, points: { k: 1 } },
     })
     const store = await loadStore()
 

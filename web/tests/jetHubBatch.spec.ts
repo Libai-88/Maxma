@@ -4,7 +4,8 @@
  * 这批方法都是「现有面板上的增强」，但入参形状错一样会静默失败（插件只回中文校验文案），
  * 所以逐字锁 payload。另外锁两条顺序语义：
  *   - `provider.setOrder` 的 `order` 是**渠道 id 的完整数组**（不是"把 A 移到 B 前"这类指令）；
- *   - `account.reorder` 的 `order` 同理，且必须带 `provider`。
+ *   - `account.reorder` 的参数名是 **`orderedIds`**（不是 `order`），且必须带 `provider`。
+ *     `provider.setOrder` 用的才是 `order` —— 两者不同名，别互抄。
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -85,12 +86,12 @@ describe('批量操作与排序', () => {
     ])
   })
 
-  it('账号排序带 provider 与完整 id 数组', async () => {
+  it('账号排序带 provider 与完整 id 数组，键名是 orderedIds', async () => {
     transport()
     const store = await loadStore()
 
     await store.reorderAccounts('trae', ['b', 'a'])
-    expect(callsTo('account.reorder')).toEqual([{ provider: 'trae', order: ['b', 'a'] }])
+    expect(callsTo('account.reorder')).toEqual([{ provider: 'trae', orderedIds: ['b', 'a'] }])
   })
 
   it('模型批量：单模型 / 全部 / 清理失效各自的入参', async () => {

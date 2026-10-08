@@ -114,6 +114,52 @@ function fmtNumber(value: unknown): string {
 }
 
 /**
+ * Cline 订阅额度行。
+ *
+ * ⚠️ 真实结构是 `{ accountId, nickname, ok, windows[], error? }` ——
+ * **没有 `summary` 字段**（我原先读 `row.summary` 永远得空）。
+ * 额度是 `windows[]`（窗口型百分比），失败时带 `error` 说明原因而不是画成 0%。
+ */
+function clineQuotaLine(row: Record<string, unknown>): string {
+  if (row.error) return String(row.error)
+  const windows = Array.isArray(row.windows) ? (row.windows as Array<Record<string, unknown>>) : []
+  if (windows.length === 0) return row.ok === false ? '读取失败' : '—'
+  return windows
+    .map((w) => {
+      const label = String(w.label ?? w.type ?? '窗口')
+      const percent = typeof w.percentUsed === 'number' ? `${Math.round(w.percentUsed)}%` : '—'
+      return `${label} ${percent}`
+    })
+    .join(' · ')
+}
+
+/**
+ * Cline 请求日志行尾（token 用量 + 延迟）。
+ *
+ * ⚠️ 真实字段是 `inputTokens` / `outputTokens` / `ttftMs` / `ttfcMs` / `usageReported`，
+ * **没有 `status` 也没有 `durationMs`**（我原先读那两个，永远渲染成空）。
+ * `usageReported === false` 时必须显示「用量未上报」而不是 0 —— 0 会被读成「没花 token」。
+ */
+function clineLogTail(row: Record<string, unknown>): string {
+  if (row.error) return String(row.error)
+  const parts: string[] = []
+  if (row.usageReported === false) {
+    parts.push('用量未上报')
+  } else {
+    const inTok = Number(row.inputTokens)
+    const outTok = Number(row.outputTokens)
+    if (Number.isFinite(inTok) || Number.isFinite(outTok)) {
+      parts.push(`↑${fmtNumber(inTok)} ↓${fmtNumber(outTok)}`)
+    }
+  }
+  const ttft = Number(row.ttftMs)
+  if (Number.isFinite(ttft) && ttft > 0) parts.push(`首块 ${Math.round(ttft)}ms`)
+  const ttfc = Number(row.ttfcMs)
+  if (Number.isFinite(ttfc) && ttfc > 0) parts.push(`首字 ${Math.round(ttfc)}ms`)
+  return parts.length > 0 ? parts.join(' · ') : '—'
+}
+
+/**
  * 一个账号的余额文案。
  *
  * ⚠️ `credits.balances` 的返回形状是
@@ -878,7 +924,7 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
             <ul v-if="store.clineQuota?.accounts?.length" class="kv">
               <li v-for="(row, idx) in store.clineQuota.accounts" :key="idx">
                 <span>{{ (row.nickname as string) || (row.accountId as string) || `账号 ${idx + 1}` }}</span>
-                <span>{{ row.error ? String(row.error) : (row.summary as string) || '—' }}</span>
+                <span>{{ clineQuotaLine(row) }}</span>
               </li>
             </ul>
             <p v-else class="card-sub">暂无额度读数（需要该渠道已登录账号，且插件已拉到订阅信息）。</p>
@@ -897,8 +943,8 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
             <ul v-if="store.clineRequestLog.length" class="pop-list-wide">
               <li v-for="(row, idx) in store.clineRequestLog" :key="idx" :class="{ 'row-error': Boolean(row.error) }">
                 <span>{{ fmtTs(row.ts) }}</span>
-                <span>{{ (row.model as string) || '—' }}</span>
-                <span>{{ row.error ? String(row.error) : `${row.status ?? ''} ${row.durationMs ? `${row.durationMs}ms` : ''}` }}</span>
+                <span>{{ (row.upstream as string) || (row.model as string) || '—' }}</span>
+                <span>{{ clineLogTail(row) }}</span>
               </li>
             </ul>
             <p v-else class="card-sub">该账号还没有请求记录。</p>
@@ -913,17 +959,17 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
               <button class="btn btn-sm" type="button" @click="store.clearAccountDetail()">关闭</button>
             </div>
             <ul v-if="store.onboarding.tasks.length" class="kv">
-              <li v-for="(task, idx) in store.onboarding.tasks" :key="idx">
-                <span>{{ (task.title as string) || (task.name as string) || (task.id as string) || `任务 ${idx + 1}` }}</span>
+              <li v-for="task in store.onboarding.tasks" :key="task.key">
+                <span>{{ task.title }}</span>
                 <span>
-                  {{ task.claimed ? '已领取' : task.claimable === false ? '未达成' : '可领取' }}
-                  <template v-if="typeof task.earned === 'number'"> · 累计 {{ task.earned }}</template>
+                  {{ task.claimed ? '已领取' : '可领取' }}
+                  <template v-if="typeof task.points === 'number'"> · {{ task.points }} 分</template>
                 </span>
               </li>
             </ul>
             <p v-else class="card-sub">该账号暂无可展示的任务。</p>
             <p v-if="typeof store.onboarding.earned === 'number'" class="card-sub">
-              累计已领：{{ store.onboarding.earned }}
+              累计已领：{{ store.onboarding.earned }}<template v-if="typeof store.onboarding.total === 'number'"> / {{ store.onboarding.total }}</template>
             </p>
           </div>
 

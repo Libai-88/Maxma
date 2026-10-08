@@ -39,16 +39,18 @@ const STATUSES = {
 
 function mockHappyPath() {
   requestMock.mockImplementation(async () => ({ providers: ROUTES }))
-  callJetHubMock.mockImplementation(async (method: string) => {
+  callJetHubMock.mockImplementation(async (method: string, payload?: Record<string, unknown>) => {
     if (method === 'provider.status') return { statuses: STATUSES }
     if (method === 'account.list') {
-      return {
-        accounts: [
-          { id: 'TRAE_ACCOUNT_1', provider: 'trae', nickname: '主号', enabled: true, expiresAt: Date.now() + 86_400_000 },
-          { id: 'TRAE_ACCOUNT_2', provider: 'trae', enabled: false },
-          { id: 'BUDDY_ACCOUNT_1', provider: 'buddy', refreshable: true },
-        ],
-      }
+      // ⚠️ 插件按 provider **严格过滤**（`a.provider === provider`），不传就永远空数组。
+      // 所以 mock 必须也按 provider 过滤 —— 否则会掩盖「逐渠道取」这条真实契约。
+      const wanted = String(payload?.provider ?? '')
+      const all = [
+        { id: 'TRAE_ACCOUNT_1', provider: 'trae', nickname: '主号', enabled: true, expiresAt: Date.now() + 86_400_000 },
+        { id: 'TRAE_ACCOUNT_2', provider: 'trae', enabled: false },
+        { id: 'BUDDY_ACCOUNT_1', provider: 'buddy', refreshable: true },
+      ]
+      return { accounts: all.filter((a) => a.provider === wanted) }
     }
     throw new Error(`unexpected method ${method}`)
   })
@@ -70,7 +72,10 @@ describe('jetHub store', () => {
     expect(requestMock).toHaveBeenCalledWith('/plugins/codearts-auth/providers')
     // 状态查询必须带上后端给的渠道 id（插件要求 providers 是字符串数组）
     expect(callJetHubMock).toHaveBeenCalledWith('provider.status', { providers: ['trae', 'buddy', 'zcode'] })
-    expect(callJetHubMock).toHaveBeenCalledWith('account.list', {})
+    // ⚠️ 账号必须**逐渠道**取：插件按 provider 严格过滤，不传 provider 永远返回空数组
+    expect(callJetHubMock).toHaveBeenCalledWith('account.list', { provider: 'trae' })
+    expect(callJetHubMock).toHaveBeenCalledWith('account.list', { provider: 'buddy' })
+    expect(callJetHubMock).not.toHaveBeenCalledWith('account.list', {})
     expect(store.routes).toHaveLength(3)
     expect(store.notReady).toBe('')
     expect(store.error).toBe('')

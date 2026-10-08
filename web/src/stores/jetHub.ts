@@ -158,6 +158,28 @@ export interface JetHubBadgeReading {
   autoCheckin?: Record<string, unknown>
 }
 
+/**
+ * 新人任务 / 登录奖励（`onboarding.status`）。
+ *
+ * ⚠️ 插件返回的是**三个平行 Record**（`tasks` 完成状态 / `titles` 展示名 / `points` 分值），
+ * 不是任务对象数组 —— store 把它们合成这里的行数组供界面遍历。
+ */
+export interface JetHubOnboardingTask {
+  key: string
+  title: string
+  claimed: boolean
+  points?: number
+}
+
+export interface JetHubOnboarding {
+  provider: string
+  accountId: string
+  tasks: JetHubOnboardingTask[]
+  /** 累计已领（Raccoon 幂等：已领过也报累计值，不是 0）。 */
+  earned?: number
+  total?: number
+}
+
 /** `backup.import` 的回执（插件逐项给出的落库统计）。 */export interface JetHubImportResult {
   credentialsImported: number
   accountsImported: number
@@ -240,7 +262,17 @@ export const useJetHubStore = defineStore('jetHub', () => {
     notReady.value = routes.value.length === 0 ? (res?.detail || '插件尚未启用或正在启动，请稍后重试。') : ''
   }
 
-  /** 拉取全部渠道状态 + 账号明细。 */
+  /**
+   * 拉取全部渠道状态 + 账号明细。
+   *
+   * ⚠️ `account.list` **必须逐渠道调用**：插件的实现是
+   * `pool.listAccounts(provider)` → `readAccounts().filter(a => a.provider === provider)`，
+   * 严格等值过滤。不传 provider 时 `undefined === 'opencode'` 恒为假 ⇒ **永远返回空数组**。
+   *
+   * 这里曾经传 `{}` 想「一次拿全部账号」，结果**账号列表永远为空**（即使已登录），
+   * 而且不报错、类型也「对」（我把返回类型写成了自己以为的形状）。
+   * 插件客户端一直是逐渠道调的（`rpcCall('account.list', { provider })`）。
+   */
   async function refresh() {
     loading.value = true
     error.value = ''
@@ -252,12 +284,17 @@ export const useJetHubStore = defineStore('jetHub', () => {
         return
       }
       const ids = routes.value.map((route) => route.id)
-      const [statusRes, accountRes] = await Promise.all([
+      const [statusRes, ...accountResults] = await Promise.all([
         callJetHub<ProviderStatusResponse>('provider.status', { providers: ids }),
-        callJetHub<AccountListResponse>('account.list', {}),
+        // 逐渠道并发；单个渠道失败不影响其余（未登录的渠道返回空数组是正常的）
+        ...ids.map((id) =>
+          callJetHub<AccountListResponse>('account.list', { provider: id }).catch(() => ({ accounts: [] })),
+        ),
       ])
       statuses.value = statusRes?.statuses ?? {}
-      accounts.value = Array.isArray(accountRes?.accounts) ? accountRes.accounts : []
+      accounts.value = accountResults.flatMap((res) =>
+        Array.isArray(res?.accounts) ? res.accounts : [],
+      )
     } catch (e) {
       error.value = toErrorMessage(e)
       throw e
@@ -829,7 +866,7 @@ export const useJetHubStore = defineStore('jetHub', () => {
   //
   // 入参照插件的校验文案逐字对齐（真机探测）：
   //   account.retest {accountId?}          account.retestAll {}        account.resetAll {}
-  //   account.update {accountId, patch}    account.reorder {provider, order}
+  //   account.update {accountId, patch}    account.reorder {provider, orderedIds} ← 注意不是 order
   //   model.setAllDisabled {provider, disabled}                        model.clearDead {provider}
   //   model.setDisabledMany {provider, modelIds, disabled}
   //   provider.getOrder {}                 provider.setOrder {order: string[]}
@@ -871,10 +908,17 @@ export const useJetHubStore = defineStore('jetHub', () => {
     })
   }
 
-  /** 保存账号顺序（顺序即插件自动选号的优先级）。 */
-  async function reorderAccounts(provider: string, order: string[]) {
+  /**
+   * 保存账号顺序（顺序即插件自动选号的优先级）。
+   *
+   * ⚠️ 参数名是 **`orderedIds`**，不是 `order` —— 插件校验的是
+   * `Array.isArray(req.orderedIds)`，传错键名只回一句「orderedIds 必须是字符串数组」，
+   * 不报错、不崩，界面上表现为「拖了没反应」。
+   * （`provider.setOrder` 用的才是 `order`，两者不同名，别互抄。）
+   */
+  async function reorderAccounts(provider: string, orderedIds: string[]) {
     return await run(`reorder:${provider}`, async () => {
-      const result = await callJetHub('account.reorder', { provider, order })
+      const result = await callJetHub('account.reorder', { provider, orderedIds })
       await refresh()
       return result
     })
@@ -1019,18 +1063,32 @@ export const useJetHubStore = defineStore('jetHub', () => {
   // ⚠️ 这两个端点**只支持 loomy 与 raccoon**（其余渠道回 `unsupported provider`），
   // 且**必须带 accountId**。Raccoon 只有一项一次性奖励（桌面端登录奖励），
   // 插件把它映射成 Loomy 那套「任务」形状，复用同一个 RPC 与 UI。
+  //
+  // ⚠️⚠️ 真实结构是**对象不是数组**（我原先按数组读，任务列表永远为空）：
+  //   tasks:  Record<任务键, boolean>   ← 完成状态，不是任务对象数组
+  //   titles: Record<任务键, string>    ← 展示名
+  //   points: Record<任务键, number>    ← 该项分值
+  //   earned / total: number
+  // 所以界面要遍历 `titles`（它带展示名），用键去 `tasks` / `points` 取值。
+  //
   // ⚠️ 领取在 Raccoon 侧是**幂等**的：已领过返回 `granted:false`，
   // 此时 `earned` 必须报**累计值**而不是 0（插件记录过这个真实缺陷）。
 
-  const onboarding = ref<{
-    provider: string
-    accountId: string
-    tasks: Array<Record<string, unknown>>
-    earned?: number
-    claimed?: unknown[]
-    skipped?: unknown[]
-  } | null>(null)
+  const onboarding = ref<JetHubOnboarding | null>(null)
   const onboardingLoading = ref(false)
+
+  /** 把插件的三个平行 Record 合成界面好用的任务行。 */
+  function toOnboardingTasks(res: Record<string, unknown>): JetHubOnboardingTask[] {
+    const titles = (res?.titles ?? {}) as Record<string, unknown>
+    const done = (res?.tasks ?? {}) as Record<string, unknown>
+    const points = (res?.points ?? {}) as Record<string, unknown>
+    return Object.keys(titles).map((key) => ({
+      key,
+      title: String(titles[key] ?? key),
+      claimed: done[key] === true,
+      points: typeof points[key] === 'number' ? (points[key] as number) : undefined,
+    }))
+  }
 
   async function loadOnboarding(provider: string, accountId: string) {
     onboardingLoading.value = true
@@ -1040,8 +1098,9 @@ export const useJetHubStore = defineStore('jetHub', () => {
       onboarding.value = {
         provider,
         accountId,
-        tasks: Array.isArray(res?.tasks) ? (res.tasks as Array<Record<string, unknown>>) : [],
+        tasks: toOnboardingTasks(res),
         earned: typeof res?.earned === 'number' ? res.earned : undefined,
+        total: typeof res?.total === 'number' ? res.total : undefined,
       }
     } catch (e) {
       error.value = toErrorMessage(e)
@@ -1054,14 +1113,6 @@ export const useJetHubStore = defineStore('jetHub', () => {
   async function claimOnboarding(provider: string, accountId: string) {
     return await run(`onboarding:${accountId}`, async () => {
       const res = await callJetHub<Record<string, unknown>>('onboarding.claim', { provider, accountId })
-      onboarding.value = {
-        provider,
-        accountId,
-        tasks: onboarding.value?.tasks ?? [],
-        earned: typeof res?.earned === 'number' ? res.earned : undefined,
-        claimed: Array.isArray(res?.claimed) ? res.claimed : [],
-        skipped: Array.isArray(res?.skipped) ? res.skipped : [],
-      }
       await loadOnboarding(provider, accountId)
       await refresh()
       return res
