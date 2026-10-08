@@ -73,8 +73,11 @@ start.bat
 
 ## 构建
 
+> 构建流程、**产物固定位置**、验证方式与踩坑记录统一见
+> [dev_docs/build-and-artifacts.md](dev_docs/build-and-artifacts.md)。
+
 ```bat
-build\build-server.bat    REM 产出 dist\bun-server（server.js + bun.exe + sharp 原生件）
+build\build-server.bat    REM 产出 dist\bun-server（server.js + bun.exe + sharp 原生件 + 插件栈）
 build-portable.bat        REM 组装 Web 便携包到 ..\MaxmaHere-Portable
 ```
 

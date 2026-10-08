@@ -1,7 +1,10 @@
-param(
+﻿param(
     [string]$PortableDir = (Resolve-Path (Join-Path $PSScriptRoot "..\..\MaxmaHere-Portable")).Path,
     [int]$Port = 8010,
-    [int]$TimeoutSec = 120
+    [int]$TimeoutSec = 120,
+    # 预设数据目录：桌面便携版首次启动前 news.yaml 还没播种，
+    # 传这个参数可先把随包默认配置复制进去（见下方 Seed 逻辑）。
+    [switch]$SeedDefaults
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,10 +17,16 @@ $ErrorActionPreference = "Stop"
 #      - /api/health       version matches version.py (read dynamically)
 #      - /api/news         >= 45 update-log entries
 #      - /api/settings     core settings read (kernel in-process)
-#      - /api/plugins      plugin stub returns [] (no 500)
+#      - /api/plugins      built-in plugin registered AND its runtime loaded
 #      - /api/providers    provider management
 #      - /api/mcp/servers  MCP server management
 #   3. Stop the process and clean the runtime data the test produced.
+#
+# ⚠️ 这个脚本对**两种便携布局都适用**，因为它们同构：
+#      Web 便携包      ..\MaxmaHere-Portable
+#      桌面运行目录    dist\electron-portable\win-unpacked\resources\maxma
+#    两者的区别只有「数据目录里是否已经播种默认配置」——首次启动前桌面版还没有
+#    data\api\data\news.yaml，加 -SeedDefaults 可从随包 config 里补上。
 
 $bunExe = Join-Path $PortableDir "bun.exe"
 $serverJs = Join-Path $PortableDir "server.js"
@@ -36,6 +45,32 @@ $expectedVersion = ($versionLine -split '=', 2)[1].Trim().Trim([char]34, [char]3
 
 $listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($listener) { throw "Portable smoke test failed: port $Port is already in use by PID $($listener.OwningProcess)" }
+
+# 桌面便携版首次启动前，data\api\data 里还没有随包默认配置（首次运行才播种）。
+# -SeedDefaults 时从随包 config / resources 复制一份，让本脚本能直接验未启动过的产物。
+if ($SeedDefaults) {
+    $seedTarget = Join-Path $PortableDir "data\api\data"
+    New-Item -ItemType Directory -Force -Path $seedTarget | Out-Null
+    # ⚠️ 默认配置在两个布局里的位置不同，两个都试：
+    #   - 桌面版：播种在 `win-unpacked\data\api\data\`（PortableDir 的上两级），
+    #     因为桌面壳把用户数据放在程序旁，而不是 resources\maxma 里面；
+    #   - Web 便携包：直接放在 PortableDir\data\api\data\。
+    $seedCandidates = @(
+        (Join-Path $PortableDir "..\..\data\api\data"),
+        $seedTarget
+    )
+    foreach ($name in @("news.yaml", "mcp_servers.yaml")) {
+        if (Test-Path (Join-Path $seedTarget $name)) { continue }
+        foreach ($candidate in $seedCandidates) {
+            $source = Join-Path $candidate $name
+            if (Test-Path -LiteralPath $source) {
+                Copy-Item -LiteralPath $source -Destination (Join-Path $seedTarget $name) -Force
+                Write-Host "[portable-smoke] seeded $name"
+                break
+            }
+        }
+    }
+}
 
 function Wait-HttpJson {
     param(

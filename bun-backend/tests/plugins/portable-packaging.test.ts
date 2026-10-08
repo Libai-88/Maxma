@@ -124,6 +124,49 @@ describe("后端打包契约", () => {
     expect(lfOnly, "批处理文件里出现了纯 LF 行").toBe(0);
   });
 
+  test("含中文字符串的 .ps1 必须带 UTF-8 BOM", () => {
+    // ⚠️ 实测机制：Windows PowerShell 5.1 对**无 BOM** 的 .ps1 按系统 ANSI（中文机器上是
+    // GBK）解码。中文出现在**注释**里无害，但出现在**字符串**里时，UTF-8 字节被误解码后
+    // 会把引号吃掉 → 解析崩溃：
+    //     Write-Host "中文输出：测试"   →   The string is missing the terminator: ".
+    // 症状是整份脚本报一堆看不懂的语法错（Try statement is missing its Catch…），
+    // 而不是「编码错误」。所以：**字符串里有中文的 .ps1 必须带 BOM**。
+    //
+    // 这条规则来自一次真实返工：编辑 build-desktop-portable.ps1 时把 BOM 弄丢了，
+    // 桌面构建直接崩在解析阶段。
+    const scripts = [
+      "build-desktop-portable.ps1",
+      "build/portable-smoke-test.ps1",
+      "build/port-guard.ps1",
+      "build/prepare-bun.ps1",
+      "build/smoke-test-server.ps1",
+      "bun-sidecar/build.ps1",
+    ];
+    const BOM = [0xef, 0xbb, 0xbf];
+
+    for (const rel of scripts) {
+      const abs = path.join(repoRoot, rel);
+      if (!fs.existsSync(abs)) continue;
+      const bytes = fs.readFileSync(abs);
+      const hasBom = bytes[0] === BOM[0] && bytes[1] === BOM[1] && bytes[2] === BOM[2];
+      const text = bytes.toString("utf8");
+
+      // 判断「非 ASCII 是否出现在字符串字面量里」：够用的近似是看含非 ASCII 的行
+      // 是否同时含引号。宁可要求严一点（多带一个 BOM 无害），也不要漏判导致崩解析。
+      const riskyLines = text
+        .split("\n")
+        .filter((line) => /[^\x00-\x7F]/.test(line) && /["']/.test(line) && !line.trimStart().startsWith("#"));
+
+      if (riskyLines.length > 0) {
+        expect(
+          hasBom,
+          `${rel} 的字符串里含中文（${riskyLines.length} 行）却没有 UTF-8 BOM；` +
+            "PowerShell 5.1 会按 ANSI 解码并报语法错。请以 UTF-8 with BOM 保存。",
+        ).toBe(true);
+      }
+    }
+  });
+
   test("便携冒烟脚本校验插件真的加载了（不只看 HTTP 200）", () => {
     // 只断言 /api/plugins 返回 200 是无效的：那个端点读的是注册表 JSON 文件，
     // 根本不碰插件运行时 —— 插件栈缺失时它照样 200。
@@ -145,6 +188,39 @@ describe("后端打包契约", () => {
     expect(desktopPs1).toContain("externals.json");
     expect(desktopPs1).toContain("dsh-codearts-auth");
     expect(desktopPs1).toContain("@deepseek-ai\\dsh-llm");
+    // 桌面链必须**照清单拷贝**插件栈，而不是只校验清单存在。
+    // 曾经的缺陷：只检查 externals.json 存在（那个文件由 .mjs 生成，永远存在），
+    // 而 node_modules 里的包从没被拷进去 —— 守卫通过、插件静默不工作。
+    expect(desktopPs1).toContain("foreach ($package in $ExternalPackages)");
+    expect(desktopPs1).toContain("Copy-Item -LiteralPath $source");
+  });
+
+  test("electron-builder 配置从清单派生 extraResources（否则会被 filter 过滤掉）", () => {
+    // ⚠️ electron-builder.config.cjs 的 extraResources 第一条 filter 显式排除
+    // node_modules（`!node_modules/{**/*}`），所以**只有显式列出的包才会进包**。
+    // 这里曾经漏掉整个插件栈：产物照常生成，用户装上后插件静默不工作。
+    const config = fs.readFileSync(
+      path.join(repoRoot, "desktop/electron-builder.config.cjs"),
+      "utf8",
+    );
+    expect(config).toContain("externals.json");
+    expect(config).toContain("externalPackages.map");
+    expect(config).toContain('to: path.join("maxma", "node_modules", name)');
+    // 清单缺失或条目过少时必须直接失败，而不是产出一个没有插件的包
+    expect(config).toContain("Missing plugin dependency manifest");
+    expect(config).toContain("looks truncated");
+    // 排除 node_modules 的那条 filter 仍然在（说明我们确实需要显式列举）
+    expect(config).toContain("!node_modules/{**/*}");
+  });
+
+  test("便携冒烟脚本能验两种布局（Web 便携包 / 桌面运行目录）", () => {
+    // 两种布局同构（server.js + bun.exe + portable.flag + version.py + externals.json），
+    // 所以一个脚本就该能验两者；默认配置位置不同，用 -SeedDefaults 兜住。
+    expect(smoke).toContain("SeedDefaults");
+    expect(smoke).toContain("..\\..\\data\\api\\data");
+    // 校验的是「插件运行时真的加载」与「外置包一个不缺」
+    expect(smoke).toContain("plugins/codearts-auth/providers");
+    expect(smoke).toContain("externals.json");
   });
 
   test("插件的 package.json 声明与实际依赖一致（外置清单的前提）", () => {

@@ -123,11 +123,19 @@ web/src/main.ts
 便携冒烟：powershell -NoProfile -ExecutionPolicy Bypass -File build\portable-smoke-test.ps1
 ```
 
-## 便携版打包（Web 形态）
+## 便携版打包（两种形态）
 
-- 构建链：`build\build-server.bat` → `dist\bun-server\`（`server.js` 经 `bun build --target bun` 打包；`bun.exe` 固定版运行时；`node_modules\` 携带 sharp 原生件）→ `build-portable.bat` 组装便携目录。
-- 产物结构：`server.js` + `bun.exe` + `node_modules\`（sharp/libvips）+ `web\dist\`（前端静态文件）+ `config\`（模板/规则/内置贴纸）+ `.omp\skills\` + `version.py` + `bun-sidecar\package.json` + `portable.flag`（便携模式契约标记）+ `data\`（用户数据）+ `MaxmaHere.bat`（启动器）。
+> **产物固定位置、验证方式与踩坑记录见 [dev_docs/build-and-artifacts.md](dev_docs/build-and-artifacts.md)（唯一事实源）。**
+
+| 形态 | 命令 | 产物 |
+| --- | --- | --- |
+| Web 便携包 | `build-portable.bat` | `..\MaxmaHere-Portable\` |
+| Electron 桌面便携包 | `powershell -File build-desktop-portable.ps1` | `dist\electron-portable\MaxmaHere-<版本>-portable-x64.zip` + `.sha256` |
+
+- 共同输入：`build\build-server.bat` → `dist\bun-server\`（`server.js` 经 `bun build --target bun` 打包；`bun.exe` 固定版运行时；`node_modules\` 携带 sharp 原生件 **与插件栈**；`externals.json` 为运行时依赖清单）。
+- 产物结构：`server.js` + `bun.exe` + `externals.json` + `node_modules\`（sharp/libvips + 插件栈）+ `web\dist\`（前端静态文件）+ `config\`（模板/规则/内置贴纸）+ `.omp\skills\` + `.maxma\skills\` + `version.py` + `bun-sidecar\package.json` + `portable.flag`（便携模式契约标记）+ `data\`（用户数据）+ `MaxmaHere.bat`（启动器）。
 - 打包形态说明：不用 `bun build --compile` 单文件——sharp 的 libvips 原生 DLL 无法被编译产物内嵌（启动即崩）；bundle 路线（bun.exe + server.js + 原生件目录）是验证过的可行形态，贴纸上传端到端可用。
+- **插件栈刻意不进 bundle**：`@deepseek-ai/dsh-llm` 在模块作用域读自己的 `../package.json`，内联后路径会断（详见构建文档 §4.1）。清单由 `build-server.mjs` 递归推导，`build-server.bat` / `electron-builder.config.cjs` / 冒烟脚本三处都读它。
 - 启动器通过 `MAXMA_BUNDLE_DIR` / `MAXMA_DATA_DIR` / `MAXMA_EXE_DIR` / `MAXMA_SERVE_WEB` 环境变量显式指定路径（扁平化 server.js 的模块内路径不再指向项目根）。
 - 浏览器等大资源按需下载，不预打包。
 
