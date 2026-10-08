@@ -41,6 +41,7 @@ import { getEvolutionContext, learnFromUserMessage } from "../evolution-ledger";
 
 import { record as recordActivity } from "../activity-hub";
 import { decryptProviderKey, findProvider, loadProviders } from "./providers";
+import { isPluginProvider } from "../plugins/dsh";
 import { getMetrics } from "../metrics";
 import { recordLlmUsageCall, type LlmCacheStatus } from "../llm-usage-ledger";
 import { getErrorCollector } from "../error-collector";
@@ -1048,17 +1049,30 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
         let selectedModel = record?.session.model;
         if (providerId && modelName) {
           const provider = findProvider(loadProviders(), providerId);
-          if (!provider || provider.enabled === false) {
+          // 插件提供的渠道**不在 providers.yaml 里**（凭据与端点在插件自己的适配器里），
+          // 所以「查不到就报错」会把插件模型整条链路挡在门外
+          //（pi 侧其实已经能解析 —— 见 kernel/model.ts 的 registerPluginProviderOn）。
+          const pluginProvided = !provider && isPluginProvider(providerId);
+          if (!provider && !pluginProvided) {
+            throw new Error(`所选提供商不可用：${providerId}`);
+          }
+          if (provider && provider.enabled === false) {
             throw new Error(`所选提供商不可用：${providerId}`);
           }
           const resolved = await resolvePiModel(
             {
               model: modelName,
               provider: providerId,
-              baseUrl: typeof provider.base_url === "string" ? provider.base_url : undefined,
-              apiKey: decryptProviderKey(provider.api_key),
-              providerType: typeof provider.provider_type === "string" ? provider.provider_type : undefined,
-              contextWindow: Number(provider.context_window) || undefined,
+              // 插件渠道没有 base_url / api_key / provider_type 可传：
+              // 这些都由插件适配器自己决定，传空值反而会覆盖它的配置。
+              ...(provider
+                ? {
+                    baseUrl: typeof provider.base_url === "string" ? provider.base_url : undefined,
+                    apiKey: decryptProviderKey(provider.api_key),
+                    providerType: typeof provider.provider_type === "string" ? provider.provider_type : undefined,
+                    contextWindow: Number(provider.context_window) || undefined,
+                  }
+                : {}),
               maxTokens: Number(payload.max_tokens) || undefined,
             },
             record?.session.modelRuntime,

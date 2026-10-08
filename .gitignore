@@ -51,6 +51,10 @@ api/data/event_hooks.yaml
 api/data/sticker_favorites.yaml
 api/data/sticker_preferences.yaml
 api/data/sticker_recent.yaml
+# 插件子系统运行时数据（PLUGIN-001）：含 .credentials.yaml（**明文账号凭据**）、
+# state.json（账号池）、registry.json（启停状态）。开发模式下就落在项目目录里，
+# 必须整目录忽略 —— 一旦入库等于把用户的第三方账号凭据提交出去。
+api/data/plugins/
 config/mcp_servers.yaml
 config/personas/USER.md
 config/personas/SOUL.md

@@ -72,7 +72,8 @@ const chatStore = useChatStore()
 
 const settingsItems: SettingsItem[] = [
   { icon: 'dashboard', title: '能力清单', subtitle: '查看 Agent 的能力、工具与运行配置', route: '/capabilities' },
-  { icon: 'extensions', title: '插件', subtitle: '管理 MCP 服务并查看已发现的 Skills', route: '/extensions' },
+  { icon: 'extensions', title: '扩展', subtitle: '管理 MCP 服务并查看已发现的 Skills', route: '/extensions' },
+  { icon: 'puzzle', title: '插件', subtitle: '安装、启用与配置 Maxma 插件', route: '/plugins' },
   { icon: 'settings', title: '运行设置', subtitle: '配置上下文压缩、重试与工具审批', route: '/settings' },
   { icon: 'soul', title: '人设', subtitle: '设定 AI 助手的角色与对话风格', route: '/soul' },
   { icon: 'user', title: '用户', subtitle: '管理用户账户与偏好设置', route: '/user' },

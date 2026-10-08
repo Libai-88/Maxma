@@ -46,9 +46,22 @@ export function readJsonSafe<T>(filePath: string): T | null {
 
 /** 原子写 JSON（ensure_ascii=False 等价：直接 UTF-8 输出）。 */
 export function writeJsonAtomic(filePath: string, data: unknown): void {
+  writeTextAtomic(filePath, JSON.stringify(data, null, 2));
+}
+
+/**
+ * 原子写纯文本（临时文件 + rename）。
+ *
+ * ⚠️ 需要**块状 YAML 文本**时用它，不要用 `writeYamlAtomic`：
+ * `Bun.YAML.stringify` 输出的是**流式（flow）风格**
+ * （实测 `{version: 1,refs: {NAME: value}}` 一行），任何按行扫描 YAML 的
+ * 消费者（例如 Jet Hub 插件从 `.credentials.yaml` 的 `refs:` 段重建账号索引）
+ * 都读不到。
+ */
+export function writeTextAtomic(filePath: string, text: string): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const tmp = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), "utf8");
+  fs.writeFileSync(tmp, text, "utf8");
   try {
     fs.renameSync(tmp, filePath);
   } catch (err) {

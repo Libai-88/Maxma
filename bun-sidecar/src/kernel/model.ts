@@ -15,6 +15,7 @@
 import { ModelRuntime, type ModelRuntime as ModelRuntimeType } from "@earendil-works/pi-coding-agent";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { registerOpencodeZenTransport } from "./opencode-zen";
+import { registerPluginProviderOn } from "./plugin-models";
 
 export interface MaxmaModelParams {
   /** "provider/model-id" 或裸 model id（provider 覆写存在时整体视为 id）。 */
@@ -95,6 +96,10 @@ export async function resolvePiModel(
 
   if (provider === "opencode-zen") {
     registerOpencodeZenTransport(modelRuntime, modelId, p.baseUrl);
+  } else {
+    // 插件提供的路由（Jet Hub 等）：把该路由的模型与自定义传输注册到本 runtime。
+    // 未装注册器时是 no-op，不影响内建 provider。
+    await registerPluginProviderOn(modelRuntime, provider, modelId);
   }
 
   // 2) registry 查找（内建目录 + models.json 自定义模型）

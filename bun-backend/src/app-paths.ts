@@ -74,3 +74,25 @@ export const getMcpOAuthTokensPath = (): string => path.join(getApiDataDir(), "m
 export const getCredentialKeyPath = (): string => path.join(getApiDataDir(), "credential.key");
 /** 引导状态文件（与 Python ONBOARDING_STATE_PATH 一致）。 */
 export const getOnboardingStatePath = (): string => path.join(dataDir(), "config", "onboarding.json");
+
+// ── 插件子系统（PLUGIN-001） ──
+
+/** 已安装插件的根目录。 */
+export const getPluginsDir = (): string => path.join(dataDir(), "plugins");
+
+/** 单个插件的数据目录（凭据、状态、缓存都落这里，随包走）。 */
+export const getPluginDataDir = (pluginId: string): string => {
+  const safe = String(pluginId).replace(/[^A-Za-z0-9._-]/g, "_");
+  return path.join(getPluginsDir(), safe);
+};
+
+/** 插件注册表（启用状态、安装来源等）。 */
+export const getPluginsRegistryPath = (): string => path.join(getPluginsDir(), "registry.json");
+
+/**
+ * DSH 插件子系统的状态根目录。
+ *
+ * 会作为 `DSH_HOME` / `DSH_JET_HUB_STATE_DIR` 注入插件（见 plugins/dsh/host.ts），
+ * 使插件的账号池与令牌留在 Maxma 自己的数据目录内，而不是写用户主目录的 `~/.dsh`。
+ */
+export const getDshPluginStateDir = (): string => path.join(getPluginsDir(), "dsh");

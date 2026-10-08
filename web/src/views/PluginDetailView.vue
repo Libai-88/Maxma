@@ -87,6 +87,13 @@
       <!-- 操作 -->
       <div class="section actions-section">
         <button
+          v-if="detail.enabled && hasManagementUi"
+          class="btn btn-primary"
+          @click="openManagementUi"
+        >
+          打开管理界面
+        </button>
+        <button
           class="btn"
           :class="detail.enabled ? 'btn-warning' : 'btn-primary'"
           @click="handleToggle"
@@ -121,6 +128,21 @@ const error = ref('')
 
 const rootEl = ref<HTMLElement | null>(null)
 useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.section', ready: () => !loading.value })
+
+/**
+ * 哪些插件有自带的管理界面。
+ *
+ * 目前只有 Jet Hub（`codearts-auth`）—— 它的管理面是插件自己注册的 HTTP 端点，
+ * Maxma 只负责把入口放在这里，并把 `/plugins/:name/jet-hub` 挂到同一个能力守卫下。
+ * 用白名单而不是「有 providers 就显示」：宿主还没起好时 providers 为空，
+ * 按钮会闪一下又消失。
+ */
+const MANAGEMENT_UI = new Set(['codearts-auth'])
+const hasManagementUi = computed(() => MANAGEMENT_UI.has(pluginName.value))
+
+function openManagementUi() {
+  router.push({ name: 'plugin-jet-hub', params: { name: pluginName.value } })
+}
 
 const renderedReadme = computed(() => {
   if (!detail.value?.readme) return ''

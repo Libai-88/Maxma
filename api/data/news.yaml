@@ -1,4 +1,12 @@
 news:
+  - id: "jet-hub-plugin"
+    title: "Jet Hub 插件：多账号与多渠道"
+    description: "新增插件系统，并把 Jet Hub 接入为内置插件：统一登录与管理多个 AI 编程服务账号（CodeArts、CodeBuddy、TRAE、Qoder、Cline、ZCode 等 15 个渠道），支持多账号池、凭据静默续期、积分查询与一键领取、Token 用量账本、账号备份迁移，模型直接进入 Maxma 模型选择器。可在「插件」页启用/停用与配置。"
+    type: "feat"
+    date: "2026-10-08"
+    tags: ["插件", "模型", "多账号"]
+    version: "v2.6.11"
+    pr_number: null
   - id: "opencode-zen-free-models"
     title: "内置 OpenCode Zen 免费模型"
     description: "开箱即用：内置 Maxma 免费模型通道，无需登录、注册或填写 API Key 即可使用 MiMo V2.6 Flash 与 Space Bunny。模型列表自动同步，支持手动刷新；也可在模型设置中添加自己的云端或本地模型。"

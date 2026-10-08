@@ -226,7 +226,9 @@ function buildManifest(deps: CapabilitiesDeps, gathered: Record<string, unknown>
 
   features.collab = { enabled: true, persistence: "sqlite" };
 
-  features.plugins = { enabled: false, marketplace: false };
+  // PLUGIN-001：插件子系统已落地（真实注册表 + 管理页）。marketplace 仍为 false ——
+  // 尚不支持从网络安装第三方插件（需先过安全评审）。
+  features.plugins = { enabled: true, marketplace: false };
 
   features.extensions = {
     enabled: true,

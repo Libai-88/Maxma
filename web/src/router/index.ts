@@ -103,12 +103,26 @@ const router = createRouter({
       meta: { transition: 'slide', title: '设置' },
     },
     {
+      // PLUGIN-001：插件管理（真实路由，取代此前的 redirect 死代码）。
+      // meta.feature 走能力清单的 features.plugins 开关；禁用时守卫会重定向到
+      // FeatureUnavailableView，而不是让用户看到一个空壳页面。
       path: '/plugins',
-      redirect: '/extensions',
+      name: 'plugins',
+      component: () => import('@/views/PluginListView.vue'),
+      meta: { transition: 'rise', title: '插件', feature: 'plugins' },
     },
     {
       path: '/plugins/:name',
-      redirect: '/extensions',
+      name: 'plugin-detail',
+      component: () => import('@/views/PluginDetailView.vue'),
+      meta: { transition: 'slide', title: '插件详情', feature: 'plugins' },
+    },
+    {
+      // 插件自带的独立管理界面（Jet Hub）：挂在插件详情之下，同受 plugins 能力守卫。
+      path: '/plugins/:name/jet-hub',
+      name: 'plugin-jet-hub',
+      component: () => import('@/views/JetHubView.vue'),
+      meta: { transition: 'slide', title: 'Jet Hub', feature: 'plugins' },
     },
     {
       path: '/extensions',

@@ -56,6 +56,8 @@ import { createToolsRoutes } from "./routes/tools";
 import { createRestartRoutes } from "./routes/restart";
 import { createUploadRoutes } from "./routes/upload";
 import { createPluginsRoutes } from "./routes/plugins";
+import { currentPluginHttpHandlers, ensurePluginBridgeInstalled } from "./plugins/dsh";
+import { createPluginHttpBridge } from "./plugins/dsh/http-bridge";
 import { createFileRoutes } from "./routes/files";
 import { createDiagnosticsRoutes } from "./routes/diagnostics";
 import { createCapabilitiesRoutes } from "./routes/capabilities";
@@ -172,6 +174,11 @@ export function createApp(): Hono {
       allowHeaders: [],
     }),
   );
+
+  // 插件端点转发（PLUGIN-001 / P2）：插件（如 Jet Hub）通过 `connection.fetch.register`
+  // 把自己的 HTTP 端点交给宿主。这里按「路径 + 方法」查表转发，查不到就 next()。
+  // ⚠️ 必须放在鉴权与 CORS 之后：插件端点多管账号凭据，不能无鉴权暴露。
+  app.use("*", createPluginHttpBridge({ handlers: currentPluginHttpHandlers }));
 
   // 核心路由（2.0：health / auth token；2.5b：health 四部件完整版）
   app.route(
@@ -426,4 +433,8 @@ export function startServer() {
 if (import.meta.main || process.env.MAXMA_BACKEND_COMPILED === "1") {
   const server = startServer();
   console.log(`[bun-backend] listening on http://127.0.0.1:${server.port} (engine=bun-backend)`);
+  // PLUGIN-001：装配插件宿主并把插件模型接进 pi。
+  // fire-and-forget —— 插件起不来（未登录/缺依赖）不该拦住 Maxma 启动，
+  // 只是插件提供的模型暂不可用。
+  void ensurePluginBridgeInstalled();
 }

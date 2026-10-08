@@ -377,6 +377,29 @@ export const useChatStore = defineStore('chat', () => {
             }
           }
         }
+
+        // 插件渠道（Jet Hub 等）：它们**不在 providers.yaml 里**，凭据与端点在插件自己的
+        // 适配器内，所以要从插件端点单独取。不做这一步的话，插件模型在 pi 侧能解析、
+        // 在模型选择器里却根本选不到 —— 融合链路等于断在最后一步。
+        // 取不到（插件停用/未启动）时静默跳过，不影响 Maxma 自身的模型。
+        try {
+          const pluginModels = await api.listPluginModels('codearts-auth')
+          for (const p of Array.isArray(pluginModels?.providers) ? pluginModels.providers : []) {
+            for (const m of Array.isArray(p.models) ? p.models : []) {
+              models.push({
+                id: `${p.id}/${m.id}`,
+                provider: p.id,
+                providerLabel: p.name || p.id,
+                name: m.name || m.id,
+                contextWindow: 128000,
+                source: 'plugin',
+              })
+            }
+          }
+        } catch {
+          /* 插件不可用时不影响 Maxma 自身模型列表 */
+        }
+
         availableModels.value = models
       } catch { /* Use defaults */ }
       finally { _modelsFetching = null }

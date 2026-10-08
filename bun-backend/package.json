@@ -8,9 +8,15 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@deepseek-ai/cordis": "4.0.4",
+    "@deepseek-ai/dsh-commands": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-credentials": "0.1.7-rc.2",
+    "@deepseek-ai/dsh-llm": "0.1.7-rc.2",
+    "@deepseek-ai/schemastery": "3.18.4",
     "@earendil-works/pi-agent-core": "0.99.0",
     "@earendil-works/pi-ai": "0.99.0",
     "@earendil-works/pi-coding-agent": "0.99.0",
+    "dsh-codearts-auth": "1.0.261007",
     "fflate": "^0.8.3",
     "hono": "^4.13.12",
     "sharp": "^0.35.5"

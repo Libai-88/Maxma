@@ -785,6 +785,17 @@ export const api = {
   getPluginConfig: (name: string) =>
     request<{ config: Record<string, unknown> }>(`/plugins/${encodeURIComponent(name)}/config`),
 
+  /**
+   * 插件提供的渠道及其模型清单（模型选择器的数据源）。
+   *
+   * ⚠️ 插件渠道不在 `providers.yaml` 里 —— 凭据与端点在插件自己的适配器内。
+   * 不单独取这一步，插件模型在 pi 侧能解析、在模型选择器里却选不到。
+   */
+  listPluginModels: (name: string) =>
+    request<{ providers: Array<{ id: string; name: string; models: Array<{ id: string; name?: string }> }> }>(
+      `/plugins/${encodeURIComponent(name)}/models`,
+    ),
+
   // ── Collaboration 协作 ──
 
   listSessionShares: (sessionId: string) =>
@@ -908,3 +919,73 @@ export const api = {
 }
 
 export { request }
+
+// ── Jet Hub（插件管理面，PLUGIN-001 / P2）──
+
+/**
+ * 插件管理 RPC 的错误。`code` 逐字来自插件（如 `bad-request`、`jet-hub/handler-failed`、
+ * `gateway/bad-request`），界面据此分流提示。
+ */
+export class JetHubError extends Error {
+  readonly code: string
+  readonly details: unknown
+
+  constructor(code: string, message: string, details?: unknown) {
+    super(message)
+    this.name = 'JetHubError'
+    this.code = code
+    this.details = details
+  }
+}
+
+/** 插件端点的响应信封（与 DSH 客户端 `connection.rpc.call` 完全同形）。 */
+interface JetHubEnvelope<T> {
+  type: string
+  rpcId: string
+  result: { ok: true; value: T } | { ok: false; error: { code?: string; message?: string; details?: unknown } }
+}
+
+function newRpcId(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  } catch {
+    /* 旧环境回退 */
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
+
+/**
+ * 调一次插件管理 RPC。
+ *
+ * ⚠️ 契约要点：插件把失败包在 `result.ok === false` 里（HTTP 仍是 200），
+ * 所以**必须判 `ok`**；直接 `return result` 会把失败显示成成功 —— 这正是插件
+ * 客户端 `unwrapRpcResult` 的语义，逐字保留。
+ *
+ * 端点是插件通过 `connection.fetch.register` 注册进来的（`POST /api/jet-hub`），
+ * 由后端请求插件分派器；前端只认这一层信封，与插件的 React bundle 无关。
+ */
+export async function callJetHub<T = unknown>(
+  method: string,
+  payload: Record<string, unknown> = {},
+  signal?: AbortSignal,
+): Promise<T> {
+  const envelope = await request<JetHubEnvelope<T>>('/jet-hub', {
+    method: 'POST',
+    body: JSON.stringify({
+      type: 'client-request',
+      rpcId: newRpcId(),
+      method: 'jet-hub',
+      payload: { method, payload },
+    }),
+    ...(signal ? { signal } : {}),
+  })
+
+  const result = envelope?.result
+  if (!result || typeof result !== 'object') {
+    throw new JetHubError('gateway/bad-response', '插件返回了无法识别的响应')
+  }
+  if (result.ok === true) return result.value
+
+  const error = (result as { error?: { code?: string; message?: string; details?: unknown } }).error
+  throw new JetHubError(error?.code ?? 'jet-hub/unknown', error?.message ?? '插件调用失败', error?.details)
+}

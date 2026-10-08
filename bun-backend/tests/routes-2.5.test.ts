@@ -62,31 +62,34 @@ describe("tools / plugins / files（阶段 2.5a）", () => {
     expect(tools.every((t) => t.builtin === true)).toBe(true);
   });
 
-  test("plugins 桩：GET → []；详情 404；写操作 501", async () => {
+  test("plugins：GET 返回注册表清单；未知插件 404；写操作校验参数", async () => {
     const app = await makeApp();
     const h = authHeader();
 
+    // PLUGIN-001：不再是空数组桩 —— 内置插件（Jet Hub）来自真实注册表。
     const list = await app.request("/api/plugins", { headers: h });
     expect(list.status).toBe(200);
-    expect(await list.json()).toEqual([]);
+    const plugins = (await list.json()) as Array<{ name: string; enabled: boolean }>;
+    expect(plugins.map((p) => p.name)).toContain("codearts-auth");
 
     const detail = await app.request("/api/plugins/foo", { headers: h });
     expect(detail.status).toBe(404);
     expect(((await detail.json()) as { detail: string }).detail).toContain("'foo'");
 
+    // 未支持的网络安装如实拒绝；未知插件的 toggle 是 404（而非此前的 501 桩）。
     const install = await app.request("/api/plugins/install", {
       method: "POST",
       headers: { ...h, "content-type": "application/json" },
-      body: "{}",
+      body: JSON.stringify({ spec: "third-party-unknown" }),
     });
     expect(install.status).toBe(501);
 
     const toggle = await app.request("/api/plugins/foo/toggle", {
       method: "PUT",
       headers: { ...h, "content-type": "application/json" },
-      body: "{}",
+      body: JSON.stringify({ enabled: true }),
     });
-    expect(toggle.status).toBe(501);
+    expect(toggle.status).toBe(404);
   });
 
   test("select-file 桩：GET /api/select-file → {path:null}", async () => {
@@ -426,7 +429,8 @@ describe("capabilities 聚合（阶段 2.5c）", () => {
     expect(features.mcp.transports).toEqual(["stdio", "streamable_http"]);
     expect(features.memory.enabled).toBe(true);
     expect(features.collab.enabled).toBe(true);
-    expect(features.plugins.enabled).toBe(false);
+    expect(features.plugins.enabled).toBe(true); // PLUGIN-001：插件子系统已落地
+    expect(features.plugins.marketplace).toBe(false); // 尚不支持从网络安装第三方插件
     expect(features.extensions.enabled).toBe(true);
     expect(features.extensions.bundled).toEqual(["maxma-approval", "maxma-blocker", "request-telemetry"]);
     expect(features.rules.enabled).toBe(true);

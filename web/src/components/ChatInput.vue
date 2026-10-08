@@ -157,6 +157,8 @@
         <div class="input-right-group">
           <div class="input-actions">
             <ContextUsageBadge />
+            <!-- 插件用量徽标（Jet Hub）：只在选中插件渠道的模型时出现 -->
+            <JetHubUsageBadge :model="chatStore.currentModel" />
             <button
               type="button"
               class="task-brief-toggle"
@@ -280,6 +282,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch, watchEffect } f
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 import type { Sticker } from '@/components/StickerPicker.vue'
 import ModelSelector from './ModelSelector.vue'
+import JetHubUsageBadge from './chat/JetHubUsageBadge.vue'
 import ContextUsageBadge from './ContextUsageBadge.vue'
 import FileUpload from './FileUpload.vue'
 import FileUploadGrid from './FileUploadGrid.vue'
