@@ -175,6 +175,47 @@
           </div>
         </div>
       </div>
+
+      <!-- ── 插件渠道（Jet Hub）── -->
+      <!-- 插件渠道不在 providers.yaml 里（凭据与端点在插件适配器内），providers.yaml
+           的卡片网格永远看不到它们 —— 用户在 Jet Hub 登录后到这页找不到渠道（真机踩过）。
+           这里只读展示模型清单；账号管理（登录/删除/积分）仍归 Jet Hub 页，避免两处
+           管理同一凭据。 -->
+      <div v-if="!pluginLoading && pluginProviders.length > 0" class="plugin-section">
+        <div class="plugin-section-header">
+          <h3 class="plugin-section-title">插件渠道</h3>
+          <span class="plugin-section-hint">由 Jet Hub 插件提供 · 账号与积分在插件页管理</span>
+          <router-link to="/plugins/codearts-auth/jet-hub" class="plugin-manage-link">去 Jet Hub 管理 →</router-link>
+        </div>
+        <div class="card-grid">
+          <div v-for="p in pluginProviders" :key="p.id" class="provider-card plugin-card">
+            <div class="card-header">
+              <div class="card-title-row">
+                <span class="card-label">{{ p.name }}</span>
+                <span class="card-type-badge plugin-badge">插件渠道</span>
+              </div>
+              <span class="builtin-managed" title="插件渠道由 Jet Hub 插件自动维护">插件维护</span>
+            </div>
+            <div class="card-url card-url--builtin">{{ p.id }} · 模型清单由插件同步</div>
+            <div class="card-models-section">
+              <div class="card-models-title">模型（{{ p.models.length }}）</div>
+              <div class="card-models-tags">
+                <span v-for="m in pluginVisibleModels(p)" :key="m" class="model-tag">{{ m }}</span>
+                <span v-if="p.models.length === 0" class="model-tag empty">未读取到 · 该渠道尚未登录</span>
+                <button
+                  v-if="p.models.length > MODEL_PREVIEW_LIMIT"
+                  type="button"
+                  class="model-more"
+                  :aria-expanded="isModelsExpanded(`plugin:${p.id}`)"
+                  @click="toggleModels(`plugin:${p.id}`)"
+                >
+                  {{ isModelsExpanded(`plugin:${p.id}`) ? '收起' : `+${p.models.length - MODEL_PREVIEW_LIMIT} 个模型` }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </template>
 
     <!-- ── 表单模式（添加/编辑） ── -->
@@ -389,6 +430,38 @@ function toggleModels(providerId: string) {
 
 function visibleModels(provider: ProviderConfig) {
   return isModelsExpanded(provider.id) ? provider.models : provider.models.slice(0, MODEL_PREVIEW_LIMIT)
+}
+
+// ── 插件渠道（Jet Hub）只读展示 ──
+// 数据源与模型选择器同源：/api/plugins/:name/models。渠道未登录时插件返回空模型
+// 清单 —— 如实展示「未读取到 · 该渠道尚未登录」，不造默认模型名。
+interface PluginChannelInfo {
+  id: string
+  name: string
+  models: string[]
+}
+const pluginProviders = ref<PluginChannelInfo[]>([])
+const pluginLoading = ref(false)
+
+function pluginVisibleModels(p: PluginChannelInfo) {
+  return isModelsExpanded(`plugin:${p.id}`) ? p.models : p.models.slice(0, MODEL_PREVIEW_LIMIT)
+}
+
+async function loadPluginChannels() {
+  pluginLoading.value = true
+  try {
+    const result = await api.listPluginModels('codearts-auth')
+    pluginProviders.value = (Array.isArray(result?.providers) ? result.providers : []).map((p) => ({
+      id: p.id,
+      name: p.name || p.id,
+      models: (Array.isArray(p.models) ? p.models : []).map((m) => m.name || m.id),
+    }))
+  } catch {
+    // 插件停用/宿主未起：本区整体不显示（pluginProviders 为空），不打扰 providers.yaml 主体
+    pluginProviders.value = []
+  } finally {
+    pluginLoading.value = false
+  }
 }
 
 // 提供商卡片错落入场（加载完成后）
@@ -749,7 +822,10 @@ async function toggleProvider(id: string, enabled: boolean) {
   }
 }
 
-onMounted(loadProviders)
+onMounted(() => {
+  void loadProviders()
+  void loadPluginChannels()
+})
 </script>
 
 <style scoped>
@@ -776,6 +852,44 @@ onMounted(loadProviders)
 	  font-family: var(--font-display);
 	  letter-spacing: -0.01em;
 	}
+
+/* ── 插件渠道区（Jet Hub 只读展示）── */
+.plugin-section {
+  margin-top: 28px;
+}
+.plugin-section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.plugin-section-title {
+  margin: 0;
+  font-size: var(--fs-title);
+  font-weight: 600;
+  font-family: var(--font-display);
+}
+.plugin-section-hint {
+  font-size: var(--fs-caption);
+  color: var(--text-secondary);
+}
+.plugin-manage-link {
+  margin-left: auto;
+  font-size: var(--fs-caption);
+  color: var(--accent);
+  text-decoration: none;
+}
+.plugin-manage-link:hover {
+  text-decoration: underline;
+}
+.plugin-badge {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.plugin-card .card-url--builtin {
+  /* 与内置免费卡片同一淡化样式，强调「清单自动同步、不可在此编辑」 */
+}
 
 /* ── Buttons ── */
 .btn {

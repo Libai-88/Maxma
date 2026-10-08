@@ -791,5 +791,20 @@ account.list     {}                              → { accounts: [...] }
 - `credits.claimAll` 在支持渠道上的真实领取（需要已登录账号）。
 - 网关 `gateway.setEnabled` 的监听态（宿主策略刻意关闭，面板正确显示 blockedByEnv）。
 
+## 11. 追加复查（用户实测触发：「插件正常了，但模型配置页看不见供应商、对话框选不了模型」）
+
+用户实测插件管理面正常后，暴露**模型集成面**的两处断点。机制对照（插件侧
+`llm-adapter.listModels` 的约定）：渠道账号池为空 → 返回 `[]`（不抛错）；登录后
+→ 远端目录 + 静态兜底。所以数据链路本身是通的，断在两个 UI 消费端：
+
+| # | 位置 | 缺陷 | 修复 |
+|---|---|---|---|
+| 8 | 模型选择器（ChatView） | 模型清单只在页面挂载/供应商变更时拉取；**Jet Hub 登录成功后不刷新** → 新渠道模型在对话框里始终缺席，必须整页刷新 | jetHub store 账号变化（登录成功 / opencode 加账号 / 删账号）→ `refreshChatModels()` → `fetchAvailableModels({force:true})`（force 先等在途请求落地再重拉，防止拿到登录前旧清单） |
+| 9 | ProvidersView（模型配置页） | 只读 providers.yaml；**插件渠道不在那份清单里**（凭据在插件适配器内）→ 用户登录后到这页找不到渠道，以为登录没生效 | 新增「插件渠道」只读区：数据源与模型选择器同源（`/api/plugins/:name/models`），渠道未登录如实标「未读取到 · 该渠道尚未登录」，管理入口指回 Jet Hub 页（避免两处管理同一凭据） |
+
+防复发：`web/tests/jetHubModelIntegration.spec.ts`（5 条）锁整条链 —— chat store
+合并插件模型 + force 语义、jetHub store 四个账号变化点必须联动刷新、ProvidersView
+只读区契约（同源数据、空清单如实标注、插件停用整区隐藏）。
+
 **基线**：后端 218 / 引擎 sidecar 83 / 前端 404 全绿，`vue-tsc` 零错误。
 提交：`d210ade`（#1）、`d4878df`（#2–#5）、本文对应提交（#6–#7）。

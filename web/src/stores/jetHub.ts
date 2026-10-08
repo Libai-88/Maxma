@@ -19,6 +19,24 @@ import { request } from '@/api'
 import { toErrorMessage } from '@/utils/error'
 import { supportsPermanentLock } from '@/utils/jetHub/credits-capabilities.js'
 
+/**
+ * 账号增删后同步刷新聊天页的模型清单。
+ *
+ * chat store 的 `availableModels` 只在页面挂载/供应商变更时拉取，其中插件渠道模型
+ * 来自 `listPluginModels` —— 未登录渠道插件返回空清单。用户在 Jet Hub 完成授权后
+ * 若不主动刷新，回到聊天页模型选择器里仍然没有新渠道（真机踩过：登录成功 →
+ * 切到对话框 → 模型列表里没有 CodeBuddy）。放在 store 动作里而不是组件里：
+ * 登录会话在 JetHubView 内完成，但账号变化必须无条件传播。
+ */
+async function refreshChatModels(): Promise<void> {
+  try {
+    const { useChatStore } = await import('@/stores/chat')
+    await useChatStore().fetchAvailableModels({ force: true })
+  } catch {
+    /* 模型清单刷新失败不影响本页动作（下次进入聊天页挂载时会再拉） */
+  }
+}
+
 export interface JetHubProviderRoute {
   id: string
   name: string
@@ -379,6 +397,8 @@ export const useJetHubStore = defineStore('jetHub', () => {
     await run(`delete:${accountId}`, async () => {
       await callJetHub('account.delete', { accountId })
       await refresh()
+      // 删账号后插件可能不再提供该渠道模型 → 聊天页清单同步收缩
+      void refreshChatModels()
     })
   }
 
@@ -509,6 +529,8 @@ export const useJetHubStore = defineStore('jetHub', () => {
           if (res?.done === true) {
             login.value = login.value ? { ...login.value, status: 'done', message: '授权成功，账号已添加' } : null
             await refresh()
+            // 授权成功 → 新渠道模型可选（不 await：不阻塞登录会话收尾）
+            void refreshChatModels()
             return
           }
         } catch (e) {
@@ -733,6 +755,7 @@ export const useJetHubStore = defineStore('jetHub', () => {
         ...(nickname?.trim() ? { nickname: nickname.trim() } : {}),
       })
       await refresh()
+      void refreshChatModels()
       return result
     })
   }
@@ -744,6 +767,7 @@ export const useJetHubStore = defineStore('jetHub', () => {
         ...(nickname?.trim() ? { nickname: nickname.trim() } : {}),
       })
       await refresh()
+      void refreshChatModels()
       return result
     })
   }

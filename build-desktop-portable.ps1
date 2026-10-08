@@ -238,6 +238,19 @@ if ([string]$webPackage.version -ne $canonicalVersion) {
     throw "版本不一致：web/package.json=$($webPackage.version)，version.py=$canonicalVersion。"
 }
 $staleDataDir = Join-Path $OutputDir "win-unpacked\data"
+# ⚠️ 清理前先检测运行中的桌面实例：win-unpacked\data 被 MaxmaHere.exe（或它拉起的
+# bun 后端）占用时，Remove-Item 会抛 IOException（lockfile 不可删），原始报错完全
+# 看不出原因 —— 真机踩过两次（冒烟测试残留实例 / 用户正在测试旧构建时重建）。
+# 给出可操作的报错，而不是一个裸堆栈。
+$unpackedExe = Join-Path $OutputDir "win-unpacked\MaxmaHere.exe"
+$runningApp = Get-Process -ErrorAction SilentlyContinue | Where-Object {
+    ($_.ProcessName -eq 'MaxmaHere' -or $_.ProcessName -eq 'bun') -and
+    $_.Path -and $_.Path.StartsWith((Join-Path $OutputDir "win-unpacked"), [System.StringComparison]::OrdinalIgnoreCase)
+}
+if ($runningApp) {
+    $pids = ($runningApp | Select-Object -ExpandProperty Id) -join ', '
+    throw ("桌面便携版正在运行（PID $pids），占用 win-unpacked\data，无法清理。请先关闭应用再重新构建。")
+}
 if (Test-Path -LiteralPath $staleDataDir) {
     $resolvedStaleData = [System.IO.Path]::GetFullPath($staleDataDir)
     if (-not $resolvedStaleData.StartsWith([System.IO.Path]::GetFullPath($OutputDir), [System.StringComparison]::OrdinalIgnoreCase)) {

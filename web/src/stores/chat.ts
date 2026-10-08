@@ -346,10 +346,13 @@ export const useChatStore = defineStore('chat', () => {
     'space-bunny-free': 'Space Bunny',
   }
 
-  async function fetchAvailableModels() {
+  async function fetchAvailableModels(options?: { force?: boolean }) {
     // PERF-MODELS-DEDUP-001：多组件（ChatView/ModelSelector/ProvidersView）
-    // 并发调用时复用同一在途请求，避免重复拉取 provider 列表
-    if (_modelsFetching) return _modelsFetching
+    // 并发调用时复用同一在途请求，避免重复拉取 provider 列表。
+    // force（Jet Hub 登录/删账号后联动刷新）不等复用：先等在途请求落地再重拉，
+    // 否则登录完成时会拿到「登录前」的旧清单，等于没刷。
+    if (_modelsFetching && !options?.force) return _modelsFetching
+    if (_modelsFetching && options?.force) await _modelsFetching.catch(() => {})
     _modelsFetching = (async () => {
       try {
         const data = await api.listProviders()
