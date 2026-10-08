@@ -176,6 +176,36 @@ describe("后端打包契约", () => {
     expect(smoke).toContain("missing runtime packages");
   });
 
+  test("冒烟脚本必须把 -PortableDir 解析成绝对路径（相对路径下 bun 瞬间退出）", () => {
+    // 真机踩过：传 `dist\...` 相对路径时，bun.exe / server.js / env 里的数据目录
+    // 全是相对解析，进程瞬间退出（exit 1），脚本却只会傻等 120s 超时 —— 症状与
+    // 「服务起不来」难以区分。必须在脚本入口 Resolve-Path。
+    expect(smoke).toContain("Resolve-Path -LiteralPath $PortableDir");
+  });
+
+  test("桌面链暂存 web\\dist 必须先清后拷（镜像语义）", () => {
+    // vite 关闭了 emptyOutDir（safe-delete 钩子会静默拦截 rmSync），仓库 dist 由
+    // web/scripts/clean-dist.mjs 保证干净；但桌面链是往**上次构建残留**的
+    // win-unpacked 里叠加拷贝 —— 不先清的话旧 hash chunk 永远留在 ZIP 里
+    //（实测 JetHubView 新旧两个 bundle 并存）。
+    const desktopPs1 = fs.readFileSync(path.join(repoRoot, "build-desktop-portable.ps1"), "utf8");
+    const idx = desktopPs1.indexOf("web\\dist\\*");
+    expect(idx, "桌面链应当拷贝 web\\dist").toBeGreaterThan(0);
+    // 在拷贝语句**之前**必须先删除运行目录里的旧 web\dist
+    const before = desktopPs1.slice(0, idx);
+    expect(before).toContain('Remove-Item -LiteralPath $resolvedWebDist -Recurse -Force');
+  });
+
+  test("前端构建必须先清空 dist（clean-dist 接入 build 脚本）", () => {
+    // vite.config.ts emptyOutDir:false（safe-delete 钩子拦截 rmSync），若没有
+    // clean-dist 前置步骤，web\dist 会永远累积旧 hash chunk。
+    const webPkg = JSON.parse(fs.readFileSync(path.join(repoRoot, "web/package.json"), "utf8"));
+    expect(webPkg.scripts.build).toContain("clean-dist.mjs");
+    const cleaner = fs.readFileSync(path.join(repoRoot, "web/scripts/clean-dist.mjs"), "utf8");
+    // 用 rename 隔离而不是 rmSync（rmSync 会被 safe-delete 钩子静默拦截）
+    expect(cleaner).toContain("renameSync");
+  });
+
   test("两条便携构建链都在构建期拦住缺失的插件栈", () => {
     // Web 便携包（build-portable.bat）
     const portableBat = fs.readFileSync(path.join(repoRoot, "build-portable.bat"), "utf8");

@@ -28,6 +28,11 @@ $ErrorActionPreference = "Stop"
 #    两者的区别只有「数据目录里是否已经播种默认配置」——首次启动前桌面版还没有
 #    data\api\data\news.yaml，加 -SeedDefaults 可从随包 config 里补上。
 
+# ⚠️ 必须先解析成绝对路径：后面 Start-Process 的 -WorkingDirectory、bun.exe /
+# server.js / 各 env 都是相对它拼的。传相对路径时 bun 进程会**瞬间退出**（exit 1，
+# 数据目录等相对解析失败），冒烟脚本却只会傻等 120s 超时 —— 症状与「服务起不来」
+# 难以区分（真机踩过：-PortableDir dist\... 相对写法必现）。resolve 顺带验证目录存在。
+$PortableDir = (Resolve-Path -LiteralPath $PortableDir).Path
 $bunExe = Join-Path $PortableDir "bun.exe"
 $serverJs = Join-Path $PortableDir "server.js"
 if (-not (Test-Path $bunExe)) { throw "Portable smoke test failed: bun.exe not found: $bunExe" }

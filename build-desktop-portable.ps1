@@ -200,7 +200,21 @@ $BundledSkillNames | ForEach-Object {
         throw "桌面运行目录缺少随包技能：$runtimeSkill"
     }
 }
-Copy-Item -Path (Join-Path $ProjectRoot "web\dist\*") -Destination (Join-Path $RuntimeDir "web\dist") -Recurse -Force
+# ⚠️ web\dist 必须**先清后拷**（镜像语义）。vite 关闭了 emptyOutDir（见
+# web/vite.config.ts 的 safe-delete 注释），仓库 dist 由 clean-dist.mjs 保证干净；
+# 但这里是往**上一次构建残留**的 win-unpacked 里叠加拷贝 —— 不清的话旧 hash 的
+# chunk 会一直留在 ZIP 里（实测 JetHubView 新旧两个 bundle 并存），产物体积虚涨、
+# 排障时被旧文件误导。护栏与下方 stale-data 相同：只在 win-unpacked 边界内删。
+$runtimeWebDist = Join-Path $RuntimeDir "web\dist"
+$resolvedWebDist = [System.IO.Path]::GetFullPath($runtimeWebDist)
+if (-not $resolvedWebDist.StartsWith([System.IO.Path]::GetFullPath($RuntimeDir), [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "拒绝清理运行目录之外的 web\dist：$resolvedWebDist"
+}
+if (Test-Path -LiteralPath $resolvedWebDist) {
+    Remove-Item -LiteralPath $resolvedWebDist -Recurse -Force
+}
+New-Item -ItemType Directory -Force -Path $resolvedWebDist | Out-Null
+Copy-Item -Path (Join-Path $ProjectRoot "web\dist\*") -Destination $resolvedWebDist -Recurse -Force
 if (Test-Path (Join-Path $ProjectRoot "workflows")) {
     New-Item -ItemType Directory -Force -Path (Join-Path $RuntimeDir "workflows") | Out-Null
     Copy-Item -Path (Join-Path $ProjectRoot "workflows\*") -Destination (Join-Path $RuntimeDir "workflows") -Recurse -Force -ErrorAction SilentlyContinue

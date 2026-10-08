@@ -117,6 +117,29 @@ Write-Host "中文输出：测试"
 等脚本时，务必确认 BOM 与 CRLF 保留。`bun-backend/tests/plugins/portable-packaging.test.ts`
 里有自动化守卫（BOM 规则 + CRLF 规则），改完跑一次后端测试即可。
 
+### 4.7 冒烟脚本传相对 `-PortableDir` 会让 bun 瞬间退出（不是超时）
+
+`build\portable-smoke-test.ps1` 用 `-PortableDir` 拼 bun.exe / server.js / 各 env。
+传**相对路径**（如 `dist\...`）时这些全是相对解析，bun 进程**瞬间退出（exit 1）**，
+脚本却只会傻等 120s 超时——症状与「服务起不来」难以区分（真机踩过，排障半多小时）。
+现在脚本入口 `Resolve-Path -LiteralPath $PortableDir` 强制绝对路径，守卫见打包测试
+「冒烟脚本必须把 -PortableDir 解析成绝对路径」。
+
+### 4.8 产物里的旧 hash chunk（dist 累积与叠加拷贝）
+
+vite 关闭了 `emptyOutDir`（safe-delete 钩子对 >50 文件的 rmSync 会**静默失败但退出 0**，
+见 `web/vite.config.ts` 注释）。由此有两处会累积旧 hash 的 chunk：
+
+1. **仓库 `web\dist`**：由 `web/scripts/clean-dist.mjs`（接入 `npm run build` 前置）
+   用 rename 隔离解决 —— rmSync 不可靠，rename 不受钩子拦截。
+2. **桌面链 win-unpacked**：`build-desktop-portable.ps1` 往**上次构建残留**里叠加拷贝。
+   已改为暂存 `web\dist` 前先删再拷（镜像语义，路径护栏与 stale-data 相同）。
+   实测修复后 ZIP 从 266.5MB 瘦到 245.6MB。
+
+诊断特征：`web\dist\assets` 里同一入口出现两个 hash（如 `JetHubView-CHP0TWVG.js` +
+`JetHubView-CZBEl02D.js`）。守卫见打包测试「前端构建必须先清空 dist」「桌面链暂存
+web\dist 必须先清后拷」。
+
 ## 5. 回归测试
 
 ```text
@@ -145,7 +168,7 @@ git tag
 | `dist\bun-server\server.js` | 20.6 MB |
 | `dist\bun-server\bun.exe` | 94 MB |
 | `dist\bun-server\node_modules\`（sharp + 插件栈） | 约 40 MB |
-| `..\MaxmaHere-Portable\` | 201.2 MB |
-| `dist\electron-portable\...zip` | 266.2 MB |
+| `..\MaxmaHere-Portable\` | 约 201 MB |
+| `dist\electron-portable\...zip` | 245.6 MB（清掉累积的旧 hash chunk 后） |
 
 插件带来的增量约 **+20MB**（Web 包）—— 插件本体 9.8MB + 23 个依赖。
