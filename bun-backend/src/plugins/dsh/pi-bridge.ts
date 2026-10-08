@@ -103,6 +103,8 @@ interface PiMessageLike {
   toolsAdded?: PiToolSchema[];
   toolCallId?: string;
   isError?: boolean;
+  provider?: string;
+  model?: string;
   timestamp?: number;
 }
 
@@ -203,8 +205,18 @@ function textOf(content: unknown): string {
  * pi 的 transcript → DSH 的 `GenerateOptions.messages`。
  *
  * 工具结果刻意发**旧形状**（见模块头的铁律 2）。
+ *
+ * ⚠️ assistant 消息必须带 `source`（dsh-llm 契约：`ModelMessageSource`
+ * = `{kind:'model', provider, model}`）。真机踩过：缺 source 时
+ * `LlmRuntime.forAdapter()` 读 `message.source.replayState` 直接炸
+ * （「undefined is not an object (evaluating 'source.replayState')」）——
+ * 第一轮模型回复（含工具调用）落地后，第二轮请求必炸。
+ * provider/model 尽量取 pi 消息自带的，取不到用发起调用的路由兜底。
  */
-export function piMessagesToDshMessages(messages: readonly PiMessageLike[]): unknown[] {
+export function piMessagesToDshMessages(
+  messages: readonly PiMessageLike[],
+  fallback?: { provider?: string; model?: string },
+): unknown[] {
   const out: unknown[] = [];
   for (const message of messages) {
     if (!message || typeof message !== "object") continue;
@@ -248,7 +260,18 @@ export function piMessagesToDshMessages(messages: readonly PiMessageLike[]): unk
           });
         }
       }
-      out.push({ role: "assistant", content });
+      out.push({
+        role: "assistant",
+        content,
+        // dsh-llm 契约：assistant 消息必填 source（LlmRuntime.forAdapter 会读
+        // message.source.replayState，缺 source 直接 TypeError）。replayState
+        // 是适配器私有的重放数据，我们本就不携带（pi 的会话重放不走它）。
+        source: {
+          kind: "model",
+          provider: typeof message.provider === "string" && message.provider ? message.provider : fallback?.provider || "unknown",
+          model: typeof message.model === "string" && message.model ? message.model : fallback?.model || "unknown",
+        },
+      });
       continue;
     }
 
@@ -348,7 +371,9 @@ async function pump(
     const dshConfig: DshGenerateOptions = {
       provider,
       model: model.id,
-      messages: piMessagesToDshMessages(messages),
+      // 把发起调用的路由传给消息转换：assistant 消息缺 provider/model 元数据时兜底，
+      // 保证 source 契约永远完整（见 piMessagesToDshMessages 的说明）。
+      messages: piMessagesToDshMessages(messages, { provider, model: model.id }),
       ...(tools.length > 0 ? { tools } : {}),
       ...(typeof options?.maxTokens === "number" ? { maxTokens: options.maxTokens } : {}),
       ...(typeof options?.temperature === "number" ? { temperature: options.temperature } : {}),

@@ -81,6 +81,9 @@ describe("pi → DSH 报文翻译", () => {
     expect(assistant.content[0]).toEqual({ type: "text", text: "好的" });
     expect(assistant.content[1]).toEqual({ type: "reasoning", text: "先看目录" });
     expect(assistant.content[2]).toEqual({ type: "tool-call", id: "call_1", name: "read", arguments: '{"path":"a.txt"}' });
+    // source 契约：dsh-llm 的 forAdapter 读 message.source.replayState，
+    // 缺 source 直接 TypeError（真机：「undefined is not an object」）
+    expect(assistant.source).toEqual({ kind: "model", provider: "unknown", model: "unknown" });
 
     // 工具结果：旧形状（0.1.7 的一等 role:'tool' 会被插件自己降级成这个形状）
     const toolResult = out[3] as { role: string; content: Array<Record<string, unknown>> };
@@ -105,6 +108,21 @@ describe("pi → DSH 报文翻译", () => {
     const tools = piToolsFromMessages(messages);
     expect(tools).toHaveLength(1);
     expect(tools[0]?.name).toBe("bash");
+  });
+
+  test("assistant 消息的 source 优先取 pi 自带 provider/model，缺省用调用路由兜底", () => {
+    // pi 的 AssistantMessage 自带 provider/model（哪条路由产出的就是哪条）
+    const out = piMessagesToDshMessages(
+      [
+        { role: "user", content: "hi" },
+        { role: "assistant", content: [{ type: "text", text: "a" }], provider: "buddy", model: "hy4-preview" },
+        { role: "assistant", content: [{ type: "text", text: "b" }] },
+      ],
+      { provider: "trae", model: "m2" },
+    ) as Array<{ source?: { kind: string; provider: string; model: string } }>;
+    expect(out[1]?.source).toEqual({ kind: "model", provider: "buddy", model: "hy4-preview" });
+    // 没带元数据的 assistant（如恢复的历史）→ 用发起调用的路由兜底，source 永远存在
+    expect(out[2]?.source).toEqual({ kind: "model", provider: "trae", model: "m2" });
   });
 });
 
