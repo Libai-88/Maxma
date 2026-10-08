@@ -62,4 +62,21 @@ describe('robustness — markdown 消毒链路（模型异常内容不崩溃且�
     expect(out).not.toMatch(/href\s*=\s*["']?\s*javascript:/i)
     expect(out).not.toMatch(/<a[^>]*href="javascript:/i)
   })
+
+  it('贴纸相对路径重写为 /api/stickers/（STICKER-RENDER-001）', () => {
+    // 真机踩过：get_sticker 返回相对 config/stickers 的路径，模型原样写进
+    // markdown → <img src="日常/xxx.webp"> 按页面 URL 解析 404 → 破图，
+    // 而贴纸是最后一轮唯一内容时看起来就像「模型不回复」。
+    // markdown 形式
+    const md = renderMarkdown('![sticker](日常/3ad9eda6793bf94371feaa1994489b83_png.webp)')
+    expect(md).toContain('src="/api/stickers/日常/3ad9eda6793bf94371feaa1994489b83_png.webp"')
+    // 原始 HTML 形式（html:true 时模型可能直接输出 <img>）
+    const html = renderMarkdown('<img src="开心/abc-123.webp" alt="sticker">')
+    expect(html).toContain('src="/api/stickers/开心/abc-123.webp"')
+    // 非贴纸形状不动：外链、绝对路径、非 webp、多段路径
+    expect(renderMarkdown('![x](https://cdn.example.com/a.webp)')).toContain('src="https://cdn.example.com/a.webp"')
+    expect(renderMarkdown('![x](/uploads/a.webp)')).toContain('src="/uploads/a.webp"')
+    expect(renderMarkdown('![x](日常/a.png)')).not.toContain('/api/stickers/')
+    expect(renderMarkdown('![x](a/b/c.webp)')).not.toContain('/api/stickers/')
+  })
 })

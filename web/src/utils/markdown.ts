@@ -9,6 +9,38 @@ const md = new MarkdownIt({
   linkify: true, // 自动识别 URL 为可点击链接
 })
 
+// ── 贴纸路径重写（STICKER-RENDER-001）────────────────────────
+// get_sticker 工具返回相对 config/stickers 的路径（如「日常/xxx.webp」），
+// 模型会把它原样写进 markdown 图片。前端必须重写为
+// /api/stickers/:category/:filename —— 后端对该路由放行鉴权
+// （middleware/auth.ts），专为 <img> 这类无自定义头的请求设计。
+// 真机踩过：不重写则浏览器按页面 URL 解析 → 404 破图；
+// 贴纸是最后一轮唯一内容时，看起来就像「模型不回复」。
+// 匹配规则与后端 stickers.ts 的 CATEGORY_RE / FILENAME_RE 对齐。
+const STICKER_SRC_RE = /^([\w\u4e00-\u9fff-]+)\/([\w-]+\.webp)$/
+
+/** 贴纸相对路径 → 后端 API URL；非贴纸形状的 src 原样返回。 */
+export function resolveStickerSrc(src: string): string {
+  // markdown-it 的 normalizeLink 会把中文目录编码成 %XX——先解码再匹配
+  let decoded = src
+  try {
+    decoded = decodeURI(src)
+  } catch {
+    /* 畸形 % 序列：按原文匹配 */
+  }
+  return STICKER_SRC_RE.test(decoded) ? `/api/stickers/${decoded.replace(/^\/+/, '')}` : src
+}
+
+// markdown-it 的 image token 渲染：![sticker](日常/xxx.webp) 走这里
+const defaultImageRule = md.renderer.rules.image
+md.renderer.rules.image = function (tokens, idx, options, env, self) {
+  const token = tokens[idx]
+  const src = token.attrGet('src')
+  if (src) token.attrSet('src', resolveStickerSrc(src))
+  if (defaultImageRule) return defaultImageRule(tokens, idx, options, env, self)
+  return self.renderToken(tokens, idx, options)
+}
+
 // ── XSS 防御：无外部依赖的轻量级 HTML 消毒 ─────────────────
 // 因运行环境限制无法新增 npm 包，使用浏览器原生 DOMParser 实现。
 
@@ -128,8 +160,13 @@ function sanitizeNode(node: Node): Node | null {
   for (let i = 0; i < el.attributes.length; i++) {
     const attr = el.attributes[i]
     if (!attr) continue
-    const cleanValue = sanitizeAttribute(attr.name, attr.value)
+    let cleanValue = sanitizeAttribute(attr.name, attr.value)
     if (cleanValue !== null) {
+      // STICKER-RENDER-001：原始 HTML 的 <img src="日常/xxx.webp"> 同样重写
+      // （模型可能输出 HTML 形式而非 markdown 形式的贴纸图片）
+      if (tag === 'img' && attr.name.toLowerCase() === 'src') {
+        cleanValue = resolveStickerSrc(cleanValue)
+      }
       safe.setAttribute(attr.name, cleanValue)
     }
   }
