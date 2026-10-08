@@ -744,3 +744,52 @@ account.list     {}                              → { accounts: [...] }
 - 凭据只落 Maxma 数据目录；`describe` 系列接口不返回值本体。
 - 插件要 spawn 浏览器、绑回环端口、跑 headful Chromium（ZCode captcha）、读同目录 `.wasm`（Qoder）：
   这些在受限环境可能不可用，但**都不会让插件加载失败**（插件自身已降级），只影响对应渠道的登录/领取。
+
+
+## 10. 全功能健康复查（PLUGIN-001 · 用户报障「积分刷新后还是 0」触发的系统性复查）
+
+复查方法：**不靠眼查**。真机调用插件 RPC → 递归拍平真实返回结构 → 与界面实际读取的
+字段做差集；参数名用空参调用的校验文案反向核对；按钮显隐与插件能力矩阵
+（`credits-capabilities.js`）× 15 渠道逐项对照。
+
+### 10.1 修掉的缺陷（7 处）
+
+| # | 类别 | 位置 | 缺陷 | 影响 |
+|---|---|---|---|---|
+| 1 | 数据契约 | `credits.balances` | 把 `balance` 对象当数字读（真实余额在 `balance.total`，单位在 `packages[].unit`） | 积分恒显示 0（用户报障的那处） |
+| 2 | 数据契约 | `account.list` | 不传 `provider`（插件严格等值过滤，`{}` 恒回 `[]`） | 账号列表永远为空，即使已登录 —— 与 #1 叠加成同一个人可见症状 |
+| 3 | 数据契约 | `account.reorder` | 键名写成 `order`（应为 `orderedIds`；`provider.setOrder` 才用 `order`，两者不同名） | 拖排序没反应 |
+| 4 | 数据契约 | `cline.quota` / `cline.requestLog` | 读不存在的 `summary` / `status` / `durationMs` | 两栏永远空白 |
+| 5 | 数据契约 | `onboarding.status` | 把 `tasks` 当数组（实为三个平行 Record：tasks/titles/points） | 任务列表永远为空 |
+| 6 | 能力门控 | 五个面板 | 只用了 permanentLock 一个门控：「一键领取」6 渠道空按钮、「账号测试」仅 gemini 支持、**Loomy 显示重测会白烧积分**、Cline/onboarding 用硬编码 | 无效按钮 / 用户资产损失 |
+| 7 | 能力门控 | 聊天徽标 | `jet-hub-auto` 在渠道清单里但 `usage.badge` 不支持 → 每 60s 一个必然失败的请求 | 选自动选号时永久刷报错 |
+
+### 10.2 复查中确认为健康（不需要修）的项
+
+- 网关面板：`running/address/apiKey/models/blockedByEnv` 全部与真实形状一致。
+- 备份：`export/import/status` 回执字段一致；`skipped` 是数组（明细）不是计数。
+- 自动签到：`usage.autoCheckin` 返回 `{autoCheckin:{enabled,...}}`，store/模板读取一致。
+- 重测/重置本身是池内本地操作（无标记时零请求、恒 ok）——门控它们的理由是
+  Loomy 白烧积分（#6），不是「点了报错」。
+- 聊天链路端到端（真机）：`chat-ws → resolvePiModel → pi-bridge → opencode 匿名通道`
+  出 token 全通（事件序列 `hello → thinking → answer → done`）；`jet-hub-auto/auto`
+  在无候选渠道时回干净可读的 AGENT_ERROR（自动适配器 v1 只接入
+  codearts/loomy/zcode/buddy/workbuddy，是设计意图，非缺陷）。
+
+### 10.3 防复发基建
+
+- `bun-backend/tests/plugins/plugin-data-contract.test.ts`（12 条）：真机调离线端点、
+  拍平真实结构、断言界面消费字段存在，每个修掉的缺陷留一条**反证**
+  （如 `accounts[].unit` 不存在、`tasks` 不是数组、`rows[].status` 不存在）。
+- `web/tests/jetHubCapabilityGating.spec.ts`（11 条）：能力表语义不得漂移 +
+  源码契约（按钮必须带 v-if 门控、门控值必须来自能力矩阵、徽标必须挡 jet-hub-auto）。
+- `web/tests/jetHubCreditRendering.spec.ts`（7 条，#1 时加）：余额渲染与源码契约。
+
+### 10.4 诚实边界（未实机验证的部分）
+
+- 13 个需真实登录的渠道的登录流（无凭据，无法 e2e）；参数名已过空参校验文案审计。
+- `credits.claimAll` 在支持渠道上的真实领取（需要已登录账号）。
+- 网关 `gateway.setEnabled` 的监听态（宿主策略刻意关闭，面板正确显示 blockedByEnv）。
+
+**基线**：后端 218 / 引擎 sidecar 83 / 前端 404 全绿，`vue-tsc` 零错误。
+提交：`d210ade`（#1）、`d4878df`（#2–#5）、本文对应提交（#6–#7）。
