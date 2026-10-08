@@ -25,6 +25,7 @@ import {
 } from '@/utils/jetHub/badge-model.js'
 import { formatUnits } from '@/utils/jetHub/credits-format.js'
 import { formatQuotaPercent } from '@/utils/jetHub/quota-format.js'
+import { supportsCreditBalance } from '@/utils/jetHub/credits-capabilities.js'
 
 const props = defineProps<{
   /** 当前会话选中的模型（形如 `provider/modelId`，与 Maxma 其它地方一致）。 */
@@ -50,8 +51,16 @@ const providerId = computed(() => {
 })
 
 const route = computed(() => store.routes.find((item) => item.id === providerId.value))
-/** 非插件渠道（如内置免费通道、用户自配 provider）不显示徽标。 */
-const active = computed(() => Boolean(route.value))
+/**
+ * 非插件渠道（如内置免费通道、用户自配 provider）不显示徽标。
+ *
+ * ⚠️ 还要按能力矩阵再挡一道：`jet-hub-auto`（自动选号）**在渠道清单里**，
+ * 但 `usage.badge` 对它回 `unsupported provider` —— 不挡的话，聊天页每选一次
+ * 自动选号，徽标就每 60 秒发一个必然失败的请求、永久刷报错。
+ * 插件客户端自己的面板挂载也是这么门控的（`canLoadCredits = supportsCreditBalance(provider)`，
+ * 文件头记录的历史缺陷正是「对不支持的 provider 无条件发请求」）。
+ */
+const active = computed(() => Boolean(route.value) && supportsCreditBalance(providerId.value))
 
 const view = computed(() =>
   badgeView({

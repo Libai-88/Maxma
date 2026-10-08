@@ -19,7 +19,16 @@ import { useButtonFx } from '@/composables/useButtonFx'
 import { confirmAction } from '@/composables/useConfirm'
 import { toErrorMessage } from '@/utils/error'
 import { disablingLeavesNoEnabledAccount } from '@/utils/jetHub/account-model-link.js'
-import { permanentLockCopy, supportsPermanentLock } from '@/utils/jetHub/credits-capabilities.js'
+import {
+  permanentLockCopy,
+  supportsAccountTest,
+  supportsCreditBalance,
+  supportsDailyCheckin,
+  supportsOnboardingTasks,
+  supportsPermanentLock,
+  supportsRateLimit,
+  supportsSubscriptionQuota,
+} from '@/utils/jetHub/credits-capabilities.js'
 import { creditGroupsOf } from '@/utils/jetHub/badge-model.js'
 import { formatUnits } from '@/utils/jetHub/credits-format.js'
 import Icon from '@/components/Icon.vue'
@@ -49,11 +58,28 @@ const currentAccounts = computed(() => (current.value ? store.accountsOf(current
 const currentCredits = computed(() => (current.value ? store.credits[current.value.id] : undefined))
 /** OpenCode 是唯一「不跳浏览器 + 匿名通道」的渠道，界面按此分支。 */
 const isOpencode = computed(() => current.value?.id === 'opencode')
-/** Cline 有订阅额度与请求日志（插件只为它实现了这两项）。 */
-const isCline = computed(() => current.value?.id === 'cline')
-/** 只有这两个渠道有「新人任务 / 登录奖励」（插件端点的硬限制）。 */
-const ONBOARDING_PROVIDERS = new Set(['loomy', 'raccoon'])
-const hasOnboarding = computed(() => ONBOARDING_PROVIDERS.has(current.value?.id ?? ''))
+
+/**
+ * 能力门控 —— 一律走搬运过来的能力矩阵，不自己写 `provider === 'xxx'`。
+ *
+ * ⚠️ 插件把 `credits-capabilities.js` 定义为「**发请求前门控**的唯一真相源」，
+ * 并在文件头记录了历史缺陷：早期客户端对不支持的 provider 无条件发请求，
+ * 导致每打开一次面板就留下必然失败的报错、把账号卡片渲染成「查询失败」。
+ * **修法不是吞掉错误，而是不发起这个请求。**
+ *
+ * 我之前只用了 permanentLock 一个门控，其余全是硬编码或无条件显示 ——
+ * 实测影响：`一键领取积分` 在 6 个渠道上是空按钮（点了必报 unsupported provider）、
+ * `账号测试` 在 15 个渠道里只有 1 个支持。
+ */
+const canCreditBalance = computed(() => supportsCreditBalance(current.value?.id ?? ''))
+const canDailyCheckin = computed(() => supportsDailyCheckin(current.value?.id ?? ''))
+const canOnboarding = computed(() => supportsOnboardingTasks(current.value?.id ?? ''))
+const canSubscriptionQuota = computed(() => supportsSubscriptionQuota(current.value?.id ?? ''))
+const canRateLimit = computed(() => supportsRateLimit(current.value?.id ?? ''))
+const canAccountTest = computed(() => supportsAccountTest(current.value?.id ?? ''))
+
+/** Cline 有订阅额度与请求日志 —— 用能力矩阵而不是 `id === 'cline'`。 */
+const isCline = computed(() => canSubscriptionQuota.value)
 
 async function openClineQuota() {
   await guard('读取订阅额度', () => store.loadClineQuota())
@@ -509,8 +535,12 @@ function selectProvider(id: string) {
   claimSummary.value = null
   store.clearAccountDetail()
   if (id) {
-    void guard('读取积分', () => store.loadCredits(id))
-    void store.loadPermanentLock(id)
+    // ⚠️ 按能力矩阵门控**自动请求**：插件明确记录过这个历史缺陷 ——
+    // 「对不支持的 provider 无条件发请求」会让每次打开面板都留下一条必然失败的
+    // 报错，并把账号卡片的「积分」渲染成「查询失败」。**修法不是吞掉错误，
+    // 而是不发起这个请求。**（supportsCreditBalance / supportsPermanentLock）
+    if (supportsCreditBalance(id)) void guard('读取积分', () => store.loadCredits(id))
+    if (supportsPermanentLock(id)) void store.loadPermanentLock(id)
   }
 }
 
@@ -814,7 +844,11 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
               >
                 {{ currentStatus.closed ? '打开渠道' : '关闭渠道' }}
               </button>
+              <!-- ⚠️ 限流按钮按 supportsRateLimit 门控（与插件客户端一致）：
+                   Loomy 不限流（积分耗尽时静默降级为扣永久积分），对它显示这些按钮
+                   不仅永远测不出限流，重测还会**白烧积分**（插件记录的用户报障）。 -->
               <button
+                v-if="canRateLimit"
                 class="btn"
                 type="button"
                 :disabled="store.pending === 'reset-all'"
@@ -824,6 +858,7 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
                 重置限流
               </button>
               <button
+                v-if="canRateLimit"
                 class="btn"
                 type="button"
                 :disabled="store.pending === 'reset-all-accounts'"
@@ -833,6 +868,7 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
                 全部重置限流
               </button>
               <button
+                v-if="canRateLimit"
                 class="btn"
                 type="button"
                 :disabled="store.pending === 'retest-all'"
@@ -951,7 +987,7 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
           </div>
 
           <!-- Loomy / Raccoon 新人任务 · 登录奖励 -->
-          <div v-if="hasOnboarding && store.onboarding" class="detail-card">
+          <div v-if="canOnboarding && store.onboarding" class="detail-card">
             <div class="credits-head">
               <h3 class="block-title">
                 {{ current?.id === 'raccoon' ? '登录奖励' : '新人任务' }} · {{ store.onboarding.accountId }}
@@ -994,11 +1030,12 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
           </div>
 
           <!-- 积分：余额来自 credits.balances；一键领取是 credits.claimAll（按单位分列，不跨单位求和） -->
-          <div class="credits">
+          <div v-if="canCreditBalance || canDailyCheckin" class="credits">
             <div class="credits-head">
               <h3 class="block-title">积分</h3>
               <div class="card-actions">
                 <button
+                  v-if="canCreditBalance"
                   class="btn btn-sm"
                   type="button"
                   :disabled="store.creditsLoading"
@@ -1007,6 +1044,7 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
                   {{ store.creditsLoading ? '读取中…' : '刷新积分' }}
                 </button>
                 <button
+                  v-if="canDailyCheckin"
                   class="btn btn-sm btn-primary"
                   type="button"
                   :disabled="store.pending === `claim:${current.id}`"
@@ -1076,7 +1114,10 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
                 <span v-if="account.refreshable === false" class="tag tag-warn">不可续期</span>
               </div>
               <div class="account-actions">
+                <!-- ⚠️ canRateLimit 门控：对不限流的渠道（如 Loomy）重测永远测不出
+                     限流、没有标记可清，还会白烧积分（插件记录的真实报障）。 -->
                 <button
+                  v-if="canRateLimit"
                   class="btn btn-sm"
                   type="button"
                   :disabled="store.pending === `retest:${account.id}`"
@@ -1116,7 +1157,7 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
                   请求日志
                 </button>
                 <button
-                  v-if="hasOnboarding"
+                  v-if="canOnboarding"
                   class="btn btn-sm"
                   type="button"
                   :title="current?.id === 'raccoon' ? '查看一次性登录奖励的领取状态' : '查看新人任务与领取状态'"
@@ -1126,7 +1167,7 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
                   {{ current?.id === 'raccoon' ? '登录奖励' : '新人任务' }}
                 </button>
                 <button
-                  v-if="hasOnboarding"
+                  v-if="canOnboarding"
                   class="btn btn-sm btn-primary"
                   type="button"
                   :disabled="store.pending === `onboarding:${account.id}`"
@@ -1155,6 +1196,7 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
                   </button>
                 </template>
                 <button
+                  v-if="canAccountTest"
                   class="btn btn-sm"
                   type="button"
                   :disabled="store.pending === `test:${account.id}`"
