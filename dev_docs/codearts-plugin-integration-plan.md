@@ -803,6 +803,7 @@ account.list     {}                              → { accounts: [...] }
 | 9 | ProvidersView（模型配置页） | 只读 providers.yaml；**插件渠道不在那份清单里**（凭据在插件适配器内）→ 用户登录后到这页找不到渠道，以为登录没生效 | 新增「插件渠道」只读区：数据源与模型选择器同源（`/api/plugins/:name/models`），渠道未登录如实标「未读取到 · 该渠道尚未登录」，管理入口指回 Jet Hub 页（避免两处管理同一凭据） |
 | 10 | 模型选择器 → chat-ws → 插件适配器 | **模型 id 与展示名混淆**：chat store 合并插件模型时 `name: m.name \|\| m.id` 把展示标签（如「Hy4 preview · x0.29→免费」）当 model_name 发给后端 → 插件按 id 解析不到 → 一条对话都发不出去（AGENT_ERROR）。opencode 侥幸可用只因它 id===name，掩盖了缺陷 | `name: m.id`（wire 上只放 id，pi-providers 注册同样按 m.id 对齐），展示名移入 `displayName`。**配套可观测性缺陷**：finish kind=error 的 `failure` 明细在 pi-bridge pump 里被整条丢弃 → sidecar 事件映射四层兜底全空 → 界面只剩零诊断价值的「Unknown agent error」；现在逐层提取（Error/string/对象）为 `partial.errorMessage` |
 | 11 | pi-bridge 消息转换 → dsh-llm | **assistant 消息缺 `source` 契约**：dsh-llm 要求 assistant 消息必填 `ModelMessageSource`（`{kind:'model', provider, model}`），pi-bridge 转换不带 → 第一轮模型回复（含工具调用）落地后，第二轮请求 `LlmRuntime.forAdapter()` 读 `message.source.replayState` 直接 TypeError（真机：「undefined is not an object」，buddy 6.4s 处炸）。#10 的修复让真实错误文本透传出来才得以定位 | 转换时补 `source`：provider/model 优先取 pi 消息自带元数据，取不到用发起调用的路由兜底；`replayState` 本就不携带（pi 会话重放不走它，`forAdapter` 对 undefined 原样放行） |
+| 12 | web markdown 渲染（贴纸） | **贴纸相对路径不重写**：`get_sticker` 返回相对 config/stickers 的路径（「日常/xxx.webp」），模型原样写进 `![sticker](…)`，前端按页面 URL 解析 → 404 破图；贴纸是最后一轮唯一内容时看起来像「模型不回复」。OMP 渲染层有该重写，移植时丢失（引擎侧转写里 331 字回复 + 贴纸都在，纯前端渲染缺陷） | markdown-it image token + 原始 HTML `<img>` 两路重写为 `/api/stickers/:category/:filename`（后端鉴权已对该路由白名单，专为 `<img>` 无头请求设计）；markdown-it 会先编码 src，先 `decodeURI` 再匹配；规则与后端 CATEGORY_RE/FILENAME_RE 对齐 |
 
 防复发：`web/tests/jetHubModelIntegration.spec.ts`（6 条）锁整条链 —— chat store
 合并插件模型 + force 语义 + **name=m.id 契约（禁止回退 `m.name \|\| m.id`）**、jetHub
@@ -810,5 +811,5 @@ store 四个账号变化点必须联动刷新、ProvidersView 只读区契约（
 标注、插件停用整区隐藏）。后端 `pi-bridge.test.ts` 锁 finish.failure 三种形状
 （字符串/Error/对象）都必须落进 errorMessage。
 
-**基线**：后端 223 / 引擎 sidecar 83 / 前端 410 全绿，`vue-tsc` 零错误。
-提交：`d210ade`（#1）、`d4878df`（#2–#5）、本文对应提交（#6–#7）、`cee1d46`（#8–#10）、`d2a72a8`（#11）。
+**基线**：后端 223 / 引擎 sidecar 83 / 前端 411 全绿，`vue-tsc` 零错误。
+提交：`d210ade`（#1）、`d4878df`（#2–#5）、本文对应提交（#6–#7）、`cee1d46`（#8–#10）、`d2a72a8`（#11）、`30c6888`（#12）。
