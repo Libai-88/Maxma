@@ -1,4 +1,12 @@
 news:
+  - id: "plugin-model-fix"
+    title: "插件模型选择与报错修复"
+    description: "修复插件渠道模型在对话框发消息必报错的问题（模型 id 与展示名混淆所致），同时把插件的真实失败原因透传到错误提示，不再只显示「Unknown agent error」。"
+    type: "fix"
+    date: "2026-10-09"
+    tags: ["插件", "模型", "修复"]
+    version: "v2.6.11"
+    pr_number: null
   - id: "jet-hub-plugin"
     title: "Jet Hub 插件：多账号与多渠道"
     description: "新增插件系统，并把 Jet Hub 接入为内置插件：统一登录与管理多个 AI 编程服务账号（CodeArts、CodeBuddy、TRAE、Qoder、Cline、ZCode 等 15 个渠道），支持多账号池、凭据静默续期、积分查询与一键领取、Token 用量账本、账号备份迁移，模型直接进入 Maxma 模型选择器。可在「插件」页启用/停用与配置。"
