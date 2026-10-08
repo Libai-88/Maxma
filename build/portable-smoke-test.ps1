@@ -99,23 +99,43 @@ try {
     $settingsCount = @($settings.PSObject.Properties).Count
     Write-Host "[portable-smoke] settings: $settingsCount keys returned"
 
-    # 5. plugins stub (must be 200, not 500)
-    $pluginsStatus = 0
-    for ($i = 0; $i -lt 60; $i++) {
-        try {
-            $null = Invoke-RestMethod -Uri "$apiBase/plugins" -Headers $headers -TimeoutSec 10 -ErrorAction Stop
-            $pluginsStatus = 200
-            break
-        } catch {
-            if ($_.Exception.Response) {
-                $pluginsStatus = [int]$_.Exception.Response.StatusCode
-                break
-            }
-            Start-Sleep -Seconds 1
-        }
+    # 5. plugins: the registry must list the built-in plugin, AND the plugin must
+    #    actually LOAD. Checking only "HTTP 200" is not enough — that passes even
+    #    when the plugin stack is missing from node_modules, because /api/plugins
+    #    reads the registry (a JSON file) and never touches the plugin runtime.
+    #    The real signal is the provider routes, which require the plugin to load.
+    $plugins = Wait-HttpJson -Url "$apiBase/plugins" -Headers $headers -TimeoutSeconds 30
+    Write-Host "[portable-smoke] plugins: $(@($plugins).Count) registered"
+    $codearts = @($plugins) | Where-Object { $_.name -eq "codearts-auth" } | Select-Object -First 1
+    if (-not $codearts) { throw "built-in plugin 'codearts-auth' is not registered" }
+    if (-not $codearts.enabled) { throw "built-in plugin 'codearts-auth' is registered but disabled" }
+
+    # 5b. Plugin runtime actually loaded -> its provider routes are visible.
+    #     This is what catches "externals missing from the portable bundle".
+    $pluginProviders = Wait-HttpJson -Url "$apiBase/plugins/codearts-auth/providers" -Headers $headers -TimeoutSeconds 60
+    $routeCount = @($pluginProviders.providers).Count
+    Write-Host "[portable-smoke] plugin provider routes: $routeCount"
+    if ($routeCount -lt 15) {
+        throw ("plugin runtime did not load: expected >= 15 provider routes, got $routeCount" +
+            $(if ($pluginProviders.detail) { " (detail: $($pluginProviders.detail))" } else { "" }))
     }
-    Write-Host "[portable-smoke] plugins: HTTP $pluginsStatus"
-    if ($pluginsStatus -ne 200) { throw "plugins endpoint returned HTTP $pluginsStatus" }
+
+    # 5c. The plugin stack must be resolvable next to server.js. This is the
+    #     packaging contract: these packages are deliberately kept OUT of the
+    #     bundle (see bun-backend/build-server.mjs), so a missing copy only
+    #     shows up at runtime.
+    $externalsPath = Join-Path $PortableDir "externals.json"
+    if (Test-Path $externalsPath) {
+        $externals = (Get-Content -Raw $externalsPath | ConvertFrom-Json).packages
+        $missing = @()
+        foreach ($pkg in $externals) {
+            if (-not (Test-Path (Join-Path $PortableDir "node_modules/$pkg/package.json"))) { $missing += $pkg }
+        }
+        Write-Host "[portable-smoke] externals: $(@($externals).Count) declared, $($missing.Count) missing"
+        if ($missing.Count -gt 0) { throw "portable bundle is missing runtime packages: $($missing -join ', ')" }
+    } else {
+        Write-Host "[portable-smoke] WARN: externals.json not found; skipping package manifest check"
+    }
 
     # 6. providers / mcp/servers
     $providers = Wait-HttpJson -Url "$apiBase/providers" -Headers $headers -TimeoutSeconds 15

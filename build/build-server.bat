@@ -119,12 +119,20 @@ if not exist "%OUT_JS%" (
     exit /b 1
 )
 
-REM [4/4] Stage the runtime: bun.exe + minimal native node_modules for sharp.
-REM sharp's JS is inlined into server.js; only its native addon + libvips DLLs
-REM must ship alongside (resolved at runtime from node_modules next to server.js).
-echo [4/4] Staging runtime (bun.exe + sharp native modules)...
+REM [4/4] Stage the runtime: bun.exe + node_modules (native addons + plugin stack).
+REM
+REM Two groups of runtime dependencies ship alongside server.js:
+REM   a) sharp's native addon + libvips DLLs — its JS is inlined, only the
+REM      native parts must be resolvable from node_modules next to server.js;
+REM   b) the plugin stack (dsh-codearts-auth + @deepseek-ai/* + jose/undici) —
+REM      deliberately kept OUT of the bundle (see build-server.mjs
+REM      EXTERNAL_PACKAGES). dsh-llm reads its own ../package.json at module
+REM      scope, so inlining it breaks the path; and the plugin loads by
+REM      specifier at runtime. Both MUST be present or startup fails.
+echo [4/4] Staging runtime (bun.exe + sharp native modules + plugin stack)...
 mkdir "%OUT_DIR%\node_modules" 2>nul
 mkdir "%OUT_DIR%\node_modules\@img" 2>nul
+mkdir "%OUT_DIR%\node_modules\@deepseek-ai" 2>nul
 copy /y "%BUN_EXE%" "%OUT_BUN%" >nul
 if errorlevel 1 (
     echo [ERROR] Failed to copy bun.exe to output
@@ -156,13 +164,54 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM Plugin stack. The package list is NOT hand-written here: build-server.mjs
+REM derives the full dependency closure and writes dist\bun-server\externals.json.
+REM Keeping one source of truth matters — a hand-written list already drifted once
+REM (missed @deepseek-ai/dsh-attachment, which only surfaced at portable startup).
+REM
+REM xcopy per package (not the whole @deepseek-ai tree) so the portable bundle
+REM does not grow by unused packages.
+set "EXTERNALS_JSON=%OUT_DIR%\externals.json"
+if not exist "%EXTERNALS_JSON%" (
+    echo [ERROR] Missing externals manifest: %EXTERNALS_JSON%
+    echo         build-server.mjs should have produced it.
+    exit /b 1
+)
+set "STAGED=0"
+for /f "usebackq delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "(Get-Content -Raw '%EXTERNALS_JSON%' | ConvertFrom-Json).packages"`) do (
+    if not exist "%BACKEND_DIR%\node_modules\%%P\package.json" (
+        echo [ERROR] Plugin dependency missing from bun-backend: %%P
+        echo         Run: cd bun-backend ^&^& bun install
+        exit /b 1
+    )
+    xcopy /e /i /q "%BACKEND_DIR%\node_modules\%%P" "%OUT_DIR%\node_modules\%%P" >nul
+    if errorlevel 1 (
+        echo [ERROR] Failed to stage %%P
+        exit /b 1
+    )
+    REM Post-stage verification: every external must be resolvable next to
+    REM server.js. This is the cheap guard against "built fine, dies on startup".
+    if not exist "%OUT_DIR%\node_modules\%%P\package.json" (
+        echo [ERROR] Plugin stack incomplete after staging: %%P
+        exit /b 1
+    )
+    set /a STAGED+=1
+)
+if %STAGED% LSS 20 (
+    echo [ERROR] Staged only %STAGED% external packages; expected the full closure.
+    echo         The manifest may be truncated or unreadable.
+    exit /b 1
+)
+echo       plugin stack staged (%STAGED% packages)
+
 echo.
 echo ============================================
 echo   Build complete
 echo   Output: %OUT_DIR%
-echo     server.js  (bundled backend)
-echo     bun.exe    (runtime)
-echo     node_modules\ (sharp native)
+echo     server.js        (bundled backend)
+echo     bun.exe          (runtime)
+echo     externals.json   (runtime dependency manifest)
+echo     node_modules\    (sharp native + plugin stack)
 echo ============================================
 for %%F in ("%OUT_JS%") do echo   server.js size: %%~zF bytes
 

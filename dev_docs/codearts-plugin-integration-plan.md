@@ -306,6 +306,87 @@ captcha 载体页）。**55 个 RPC 方法由此全部可达**，界面层不再
 | ~~P4b~~ ✅ | ~~其余面板：积分与额度、网关、Token 账本、备份、会话内用量徽标~~ | 已交付：Rounds 8 / 9 / 12；纯逻辑模块以**插件自带单测**验收（74 条） |
 | P5 | 全功能对齐盘点：对照 §1.1 能力清单逐项打勾，缺口登记 | 一张「能力 → Maxma 落点 → 测试」对照表，无未登记缺口 |
 
+### Round 18（方案 A）：**插件随包 —— 便携版可用**
+
+前一轮发现的问题：**便携包里插件不工作**（开发模式完全正常，所以此前所有验收都漏掉了它）。
+本轮按方案 A 修掉并验证。
+
+#### 根因（与最初猜测不同）
+
+第一直觉是「bundle 里的动态 import 被改写」。孤立复现（`bun build` 一个小文件 + 变量
+specifier）显示 import 其实是好的 —— 所以插桩到真实现场，拿到了真正的错误：
+
+```
+[plugins] 插件子系统启动失败：ResolveMessage: Cannot find module
+          '../package.json' from 'D:\...\portable\server.js'
+```
+
+这句来自 **`@deepseek-ai/dsh-llm`**：它在模块作用域执行
+`createRequire(import.meta.url)("../package.json")` 填 `APP_IDENTITY.version`。
+被内联进 server.js 后 `import.meta.url` 变成 server.js 的位置，`../package.json`
+就跑到便携包**上一级目录**去了。外层只表现为
+「invalid plugin, expect function or object with an apply method, received undefined」——
+完全看不出是版本号读取引起的。
+
+> 教训：这个错误在 `import` 阶段抛出，而我的 `loadModule` 把它包成了「插件未就绪」，
+> 把真实原因吞掉了。**插桩打一行 `console.error` 比继续推理快得多。**
+
+#### 改法
+
+1. **`build-server.mjs`**：把插件栈标为 `external`，不内联。
+   清单**不手写**，而是从 `package.json` **递归求依赖闭包**（`dependencies` +
+   `peerDependencies`）——手写清单实测漏过 `dsh-commands` 依赖的
+   `@deepseek-ai/dsh-attachment`，只在便携包启动时才报模块找不到。
+   闭包结果（23 个包）落地成 `dist/bun-server/externals.json`。
+2. **`build-server.bat`**：读 `externals.json` 逐包 `xcopy`（不整树拷贝，避免便携包
+   塞进未使用的包），拷完逐个校验 `package.json` 可解析，并对清单条目数设下限
+   （防「清单被截断却报成功」）。
+3. **`build-portable.bat` / `build-desktop-portable.ps1`**：在构建期就校验
+   `externals.json` + 插件本体 + `dsh-llm` 存在 —— 缺了只会在运行时表现为
+   「插件静默不工作」，极难归因。
+4. **`portable-smoke-test.ps1`**：原来的检查只是「`/api/plugins` 返回 200」，
+   而那个端点读的是**注册表 JSON 文件**、根本不碰插件运行时 —— 插件栈缺失时它照样 200。
+   改为校验：插件已注册且启用 → **`/plugins/codearts-auth/providers` 有 ≥15 条路由**
+   （这才证明插件真的加载了）→ `externals.json` 声明的包一个不缺。
+
+#### 验证
+
+真实构建脚本端到端跑通：
+```
+[3/4] Bundling backend (server.js)...
+[bundle] server.js 20.6MB
+[bundle] externals OK (23 个包保留为运行时依赖)
+[bundle] externals manifest -> dist\bun-server\externals.json
+[4/4] Staging runtime (bun.exe + sharp native modules + plugin stack)...
+      plugin stack staged (23 packages)
+```
+
+便携布局实跑（`server.js` + `bun.exe` + `node_modules` + `portable.flag` + `data/`）：
+```
+health                                    → ok
+GET /api/plugins/codearts-auth/providers  → 15 条（codearts→CodeArts Agent, buddy→CodeBuddy (腾讯) …）
+GET /api/plugins/codearts-auth/models     → 15 渠道 / 7 模型（与开发模式一致）
+POST /api/jet-hub  account.list           → ok=true
+POST /api/jet-hub  usage.badgePreference  → ok=true preference=auto
+POST /api/jet-hub  provider.status        → codearts.models=9 trae.models=28
+```
+
+冒烟脚本（含本轮新增的三项插件校验）：
+```
+[portable-smoke] plugins: 1 registered
+[portable-smoke] plugin provider routes: 15
+[portable-smoke] externals: 23 declared, 0 missing
+[portable-smoke] PASS: portable bundle startup + all verification points OK
+```
+
+体积代价：`node_modules` 由约 12MB 增至约 26MB（基线便携包 181MB）。
+
+#### 回归测试
+
+`bun-backend/tests/plugins/portable-packaging.test.ts`（9 条）锁住这套契约：
+external 传参、闭包推导**用真实 node_modules 实跑一遍**、manifest 落地、
+`.bat` 按清单拷贝并校验、`.bat` 保持 CRLF、冒烟脚本校验插件真的加载、
+两条便携链的构建期守卫、以及「插件依赖必须在插件自己的 package.json 里声明」。
 ### Round 17（P11 续）：**真实对话跑通 —— 又抓三个契约缺陷，现已打通**
 
 不再满足于「接口都在」，而是**通过插件渠道真实跑了一轮对话**（全部走生产链路：

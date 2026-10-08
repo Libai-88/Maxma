@@ -1,4 +1,4 @@
-﻿param(
+param(
     [switch]$SkipDependencyInstall
 )
 
@@ -105,7 +105,13 @@ foreach ($module in @("sharp", "@img\sharp-win32-x64", "@img\colour", "detect-li
 foreach ($required in @(
     (Join-Path $BackendBundle "server.js"),
     (Join-Path $BackendBundle "node_modules\sharp"),
-    (Join-Path $BackendBundle "node_modules\@img\sharp-win32-x64")
+    (Join-Path $BackendBundle "node_modules\@img\sharp-win32-x64"),
+    # 插件栈：这些包**刻意不打进 server.js**（见 bun-backend/build-server.mjs），
+    # 缺了只会在桌面版启动、插件加载时暴露 —— 且症状是「插件静默不工作」，
+    # 极难归因。这里在构建期就拦住。
+    (Join-Path $BackendBundle "externals.json"),
+    (Join-Path $BackendBundle "node_modules\dsh-codearts-auth"),
+    (Join-Path $BackendBundle "node_modules\@deepseek-ai\dsh-llm")
 )) {
     if (-not (Test-Path $required)) { throw "后端运行资源缺失：$required" }
 }

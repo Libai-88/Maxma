@@ -199,6 +199,22 @@ if not exist "%PORTABLE_DIR%\node_modules\sharp" (
     echo [VERIFY FAIL] node_modules\sharp is missing
     set "VERIFY_OK=0"
 )
+REM Plugin stack: these packages are deliberately kept OUT of server.js
+REM (see bun-backend/build-server.mjs), so a missing copy only shows up when the
+REM portable app starts and the plugin fails to load. Verify the manifest and the
+REM two packages whose absence is hardest to diagnose.
+if not exist "%PORTABLE_DIR%\externals.json" (
+    echo [VERIFY FAIL] externals.json is missing ^(plugin runtime manifest^)
+    set "VERIFY_OK=0"
+)
+if not exist "%PORTABLE_DIR%\node_modules\dsh-codearts-auth\package.json" (
+    echo [VERIFY FAIL] node_modules\dsh-codearts-auth is missing ^(plugin body^)
+    set "VERIFY_OK=0"
+)
+if not exist "%PORTABLE_DIR%\node_modules\@deepseek-ai\dsh-llm\package.json" (
+    echo [VERIFY FAIL] node_modules\@deepseek-ai\dsh-llm is missing ^(reads its own ../package.json^)
+    set "VERIFY_OK=0"
+)
 if not exist "%PORTABLE_DIR%\web\dist\index.html" (
     echo [VERIFY FAIL] web\dist\index.html is missing
     set "VERIFY_OK=0"
