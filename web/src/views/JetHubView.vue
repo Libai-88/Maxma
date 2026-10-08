@@ -20,6 +20,8 @@ import { confirmAction } from '@/composables/useConfirm'
 import { toErrorMessage } from '@/utils/error'
 import { disablingLeavesNoEnabledAccount } from '@/utils/jetHub/account-model-link.js'
 import { permanentLockCopy, supportsPermanentLock } from '@/utils/jetHub/credits-capabilities.js'
+import { creditGroupsOf } from '@/utils/jetHub/badge-model.js'
+import { formatUnits } from '@/utils/jetHub/credits-format.js'
 import Icon from '@/components/Icon.vue'
 
 const route = useRoute()
@@ -109,6 +111,39 @@ function fmtNumber(value: unknown): string {
   const n = typeof value === 'number' ? value : Number(value)
   if (!Number.isFinite(n)) return '0'
   return n.toLocaleString('zh-CN')
+}
+
+/**
+ * 一个账号的余额文案。
+ *
+ * ⚠️ `credits.balances` 的返回形状是
+ * `{ accountId, nickname, balance: { total, packages[], expiredTotal } }` ——
+ * **余额在 `balance.total`，单位在 `packages[].unit`**，两者都不在账号对象上。
+ *
+ * 这里曾经写成 `fmtNumber(entry.balance) + entry.unit`：`entry.balance` 是对象，
+ * `Number(对象)` 得 NaN → 显示 **0**，单位也永远为空。症状就是「登录后刷新积分仍是 0」，
+ * 且与账号是否登录无关。
+ *
+ * 单位归一口径直接复用搬运过来的 `creditGroupsOf()`（它已经处理了同义异拼
+ * `credit`/`credits`/`''` 与 token 特例，以及配额单位的特殊分支），不自己再写一套。
+ */
+function creditLine(entry: Record<string, unknown>): string {
+  const balance = entry?.balance as { total?: unknown; packages?: unknown } | undefined
+  if (!balance || typeof balance.total !== 'number' || !Number.isFinite(balance.total)) {
+    // 读不到数的账号**不要画成 0**：0 会被读成「额度用光了」，而实际是「没读到」
+    return '未读取到'
+  }
+  const { groups } = creditGroupsOf([entry])
+  const group = groups[0]
+  if (group) {
+    // 配额单位（窗口型）是并行百分比，累加无意义 —— 用插件自己的逐窗口行
+    if (Array.isArray(group.quotaLines) && group.quotaLines.length > 0) {
+      return group.quotaLines.join(' · ')
+    }
+    // 与插件客户端同款拼法：数值紧贴单位标签，中间不加空格（badge-model.js:566）
+    return `${formatUnits(group.total, group.unit)}${group.label}`
+  }
+  return formatUnits(balance.total, '')
 }
 
 async function toggleUsage() {
@@ -939,7 +974,7 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
             <ul v-if="currentCredits?.accounts?.length" class="kv">
               <li v-for="(entry, idx) in currentCredits.accounts" :key="idx">
                 <span>{{ entry.nickname || entry.accountId || `账号 ${idx + 1}` }}</span>
-                <span>{{ fmtNumber(entry.balance) }} {{ entry.unit || '' }}</span>
+                <span>{{ creditLine(entry) }}</span>
               </li>
             </ul>
             <p v-else class="card-sub">
