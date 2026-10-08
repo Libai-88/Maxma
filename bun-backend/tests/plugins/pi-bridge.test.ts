@@ -180,6 +180,34 @@ describe("DSH chunk → pi 事件翻译", () => {
     const last = events.at(-1) as { type: string; reason: string };
     expect(last.type).toBe("error");
     expect(last.reason).toBe("error");
+    // 没有任何 failure 明细时也要有一句可读文案（不能是空串——空串会让 sidecar
+    // 只剩「Unknown agent error」这种零诊断价值的兜底）
+    const errMessage = (last as unknown as { error: { errorMessage?: string } }).error.errorMessage;
+    expect(typeof errMessage).toBe("string");
+    expect(errMessage!.length).toBeGreaterThan(0);
+  });
+
+  test("finish kind=error 的 failure 明细必须落到 errorMessage（真机踩过整条被丢）", async () => {
+    // 用户报障：模型选择器发展示名 → 插件按 id 找不到模型 → finish kind=error，
+    // failure 里的「模型不存在」没进 errorMessage，界面只剩 Unknown agent error。
+    // 字符串形状
+    const str = sourceYielding([
+      { type: "finish", reason: { kind: "error", failure: "unknown model: Hy4 preview" } },
+    ]);
+    const ev1 = await collect(createPluginStreamSimple(str, "buddy")(model, context) as never);
+    expect((ev1.at(-1) as { error: { errorMessage?: string } }).error.errorMessage).toContain("unknown model: Hy4 preview");
+    // Error 实例形状
+    const err = sourceYielding([
+      { type: "finish", reason: { kind: "error", failure: new Error("模型不存在") } },
+    ]);
+    const ev2 = await collect(createPluginStreamSimple(err, "buddy")(model, context) as never);
+    expect((ev2.at(-1) as { error: { errorMessage?: string } }).error.errorMessage).toContain("模型不存在");
+    // 对象形状（取 message 键）
+    const obj = sourceYielding([
+      { type: "finish", reason: { kind: "error", failure: { code: "MODEL_NOT_FOUND", message: "未知模型" } } },
+    ]);
+    const ev3 = await collect(createPluginStreamSimple(obj, "buddy")(model, context) as never);
+    expect((ev3.at(-1) as { error: { errorMessage?: string } }).error.errorMessage).toContain("未知模型");
   });
 
   test("流没给终态时补一个 done，避免上层永远等待", async () => {

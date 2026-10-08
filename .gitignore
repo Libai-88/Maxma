@@ -102,7 +102,7 @@ web/tests/comprehensive_test.py
 web/tests/playwright/
 web/tests/screenshots/
 web/test-results/
-web/dist_old/
+web/dist_old*/
 web/tsc-*.txt
 web/tsc-full.txt
 web/tsc-output.txt

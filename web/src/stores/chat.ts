@@ -389,11 +389,18 @@ export const useChatStore = defineStore('chat', () => {
           const pluginModels = await api.listPluginModels('codearts-auth')
           for (const p of Array.isArray(pluginModels?.providers) ? pluginModels.providers : []) {
             for (const m of Array.isArray(p.models) ? p.models : []) {
+              // ⚠️ name 必须放模型 **id**（发往 chat-ws 的 model_name，插件按 id 解析）；
+              // 展示名放 displayName。真机踩过：把展示名（如「Hy4 preview · x0.29→免费」）
+              // 当 name 发出去 → 插件按 id 找不到模型 → 一条对话都发不出去
+              //（且 finish.failure 明细被丢弃时界面只剩 Unknown agent error）。
+              // pi-providers 注册模型时 id 也按 m.id 对齐，两处不能各写各的。
+              const displayName = m.name && m.name !== m.id ? m.name : undefined
               models.push({
                 id: `${p.id}/${m.id}`,
                 provider: p.id,
                 providerLabel: p.name || p.id,
-                name: m.name || m.id,
+                name: m.id,
+                ...(displayName ? { displayName } : {}),
                 contextWindow: 128000,
                 source: 'plugin',
               })

@@ -28,6 +28,16 @@ describe('Jet Hub 模型集成', () => {
     expect(chatStore).toMatch(/id: `\$\{p\.id\}\/\$\{m\.id\}`/)
   })
 
+  test('发给 chat-ws 的 model_name 必须是模型 id，展示名只进 displayName', () => {
+    // 真机踩过：`name: m.name || m.id` 把展示名（「Hy4 preview · x0.29→免费」）
+    // 发给后端 → 插件按 id 解析不到 → 一条对话都发不出去（AGENT_ERROR）。
+    // 插件模型的 id/name 是两个字段：id 上线（wire）、name 只做展示。
+    expect(chatStore).toMatch(/name: m\.id,/)
+    expect(chatStore).toMatch(/displayName = m\.name && m\.name !== m\.id \? m\.name : undefined/)
+    // 禁止回到 `name: m.name || m.id` 的旧写法
+    expect(chatStore).not.toMatch(/name: m\.name \|\| m\.id/)
+  })
+
   test('fetchAvailableModels 支持 force 绕过在途去重（登录后联动刷新的前提）', () => {
     // force 时必须先等在途请求落地再重拉，否则拿到的是「登录前」的旧清单
     expect(chatStore).toMatch(/options\?: \{ force\?: boolean \}/)

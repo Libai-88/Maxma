@@ -146,6 +146,36 @@ function stopReasonFromFinish(kind: string): "stop" | "length" | "toolUse" | "ab
   }
 }
 
+/**
+ * 从 DSH `finish.reason.failure` 里提取人可读的失败原因。
+ * failure 形状不定：Error 实例 / 纯字符串 / `{message}` 之类的对象 / 任意 JSON。
+ * 逐层提取，取不到文本时退化为 JSON 序列化（好过空串——空串会让上层只剩
+ * 「Unknown agent error」这种零诊断价值的兜底文案）。
+ */
+export function extractFailureMessage(failure: unknown): string {
+  if (!failure) return "";
+  if (typeof failure === "string") {
+    return failure.trim();
+  }
+  if (failure instanceof Error) {
+    return failure.message || failure.name;
+  }
+  if (typeof failure === "object") {
+    const f = failure as Record<string, unknown>;
+    for (const key of ["message", "error", "detail", "reason"]) {
+      const v = f[key];
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+    try {
+      const s = JSON.stringify(failure);
+      if (s && s !== "{}" && s !== "[]") return s;
+    } catch {
+      /* 循环引用等序列化失败：继续走 String() */
+    }
+  }
+  return String(failure);
+}
+
 function textOf(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
@@ -419,6 +449,15 @@ async function pump(
           finished = true;
           if (reason === "aborted" || reason === "error") {
             partial.stopReason = reason;
+            if (reason === "error") {
+              // ⚠️ 真机踩过（用户报障「Unknown agent error」）：finish kind=error 的
+              // failure 明细不落到 errorMessage 的话，sidecar 的事件映射
+              // （bun-sidecar/src/kernel/events.ts）四层兜底全空，用户只能看到
+              // 「Unknown agent error」—— 插件真实报错（如「模型不存在」）完全不可见。
+              // failure 形状不定（Error / string / 对象），逐层提取文本。
+              const failure = (chunk.reason as { failure?: unknown } | undefined)?.failure;
+              partial.errorMessage = extractFailureMessage(failure) || "插件调用失败（插件未返回失败原因）";
+            }
             output.push({ type: "error", reason, error: partial } as never);
           } else {
             partial.stopReason = reason;
