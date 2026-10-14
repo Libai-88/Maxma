@@ -2,7 +2,7 @@
 
 > 这是当前代码导航，不是历史迁移记录。代码、测试和构建脚本与本文档冲突时，以代码和测试为准。
 >
-> 更新时间：2026-10-01（基线：main，version.py = `v2.6.11`）
+> 更新时间：2026-10-09（基线：`feat/jet-hub-plugin`，version.py = `v2.6.11`）
 
 ## 唯一现行架构入口
 
@@ -23,17 +23,29 @@ web/src/main.ts
 
 辅入口：`web/src/quick-chat/main.ts` — 独立挂载的轻量聊天页（QuickChatApp，默认素影主题），与主应用共享 Pinia store、主题与后端 API。
 
+插件链路（Jet Hub，经插件 HTTP 桥转发到 `dsh-codearts-auth`）：
+
+```text
+web/src/views/JetHubView.vue
+  -> web/src/api/index.ts POST /api/jet-hub
+  -> bun-backend/src/plugins/dsh/http-bridge.ts（通用转发，路径由插件给出）
+  -> dsh-codearts-auth 的 jet-hub-rpc 分派器
+  -> pi 桥 registerPluginProviderOn -> pi ModelRuntime.registerProvider
+```
+
 ## 目录导航
 
 | 目录 | 入口 | 责任 |
 | --- | --- | --- |
 | `web/` | `web/src/main.ts`、`web/src/quick-chat/main.ts` | Vue 应用、路由、Pinia、REST/WS、主题和工具结果渲染 |
 | `bun-backend/` | `src/server.ts` | Hono 后端：鉴权/限流/CORS、全部 REST 路由、chat WS、kernel in-process 装配、静态托管 |
+| `bun-backend/src/plugins/` | `plugins/registry.ts`、`plugins/dsh/index.ts` | 插件注册表与 DSH 插件宿主（连接、凭据、HTTP 桥、pi 桥、provider 注册） |
 | `bun-sidecar/` | `src/kernel/bridge-pi.ts` | pi 引擎桥：AgentSession、模型、工具、MCP、审批、计划、目标、检查点、事件映射 |
+| `desktop/` | `electron/main.cjs`、`electron-builder.config.cjs` | Electron 桌面壳（仅打包形态，本身不含业务逻辑） |
 | `config/` | — | 内置模板与人设/规则/贴纸数据（运行时可写副本在数据目录） |
 | `build/` | `build-server.bat` | Bun 后端 bundle（server.js + bun.exe + sharp 原生件）与冒烟测试 |
 | `build-portable.bat`（根目录） | — | Web 便携包完整构建流程 |
-| `api/data/` | — | 运行时数据目录（providers.yaml / maxma.db / credential.key 等，历史路径名保留） |
+| `api/data/` | — | 运行时数据目录（providers.yaml / maxma.db / credential.key / plugins/ 等，历史路径名保留） |
 | `version.py` | — | 项目统一版本号单一数据源（后端经 app-version.ts 读取） |
 
 ## 前端关键位置
@@ -43,7 +55,7 @@ web/src/main.ts
 - API：`web/src/api/index.ts`
 - 聊天连接：`web/src/composables/useChat.ts`（WebSocket 生命周期）
 - 斜杠命令：`web/src/composables/useSlashCommands.ts` + `useSlashCommandsProvide.ts`
-- 状态（Pinia）：`web/src/stores/` — session / chat / memory / provider / persona / capabilities / plugin / activity / metrics / health / onboarding / workbench / sidebar / collab / tools
+- 状态（Pinia）：`web/src/stores/` — session / chat / memory / provider / persona / capabilities / plugin / jetHub / activity / metrics / health / onboarding / workbench / sidebar / collab / tools
 - 类型定义：`web/src/types/`（chat / session / provider / mcp / persona / workflow / workbench / news / metrics / activity / audit-log 等模块）
 - 工具组件注册：`web/src/components/tools/registry.ts`（覆盖全部内置工具）
 - 组件分组：
@@ -51,17 +63,34 @@ web/src/main.ts
   - `web/src/components/workbench/` — 工作台面板与卡片（canvas-registry + cards/）
   - `web/src/components/inspira/` — 30+ 动效/视觉组件（AuroraBackground、AnimatedModal、GlareCard 等）
   - `web/src/components/ui/` — Ds 系列基础组件（DsModal / DsToast / DsTooltip / ConfirmDialog 等）
-  - `web/src/components/plugins/` — 插件卡片/搜索/配置面板（当前引擎下为空态/不可用）
+  - `web/src/components/plugins/` — 插件卡片/搜索/配置面板
   - `web/src/components/brand/` — 品牌印章（BrandSeal）
 - 页面：`web/src/views/`
   - 对话域：`ChatView`（主界面）、`ShareView`（分享会话）
   - 记忆/角色：`MemoryView`、`SoulView`、`UserView`
   - 配置域：`ProvidersView`、`McpView`、`SettingsView`、`AppearanceView`、`PrivacyView`、`MaxmaBlockerView`、`CapabilitiesView`（能力仪表盘）
-  - 扩展域：`PluginListView`、`PluginDetailView`、`ExtensionView`、`RulesView`、`CollabView`（AutomationView 由 feature 开关隐藏）
-  - 信息域：`NewsView`、`ActivityView`、`MetricsView`、`HelpView`
+  - 扩展域：`PluginListView`、`PluginDetailView`、`JetHubView`（插件自带管理界面）、`ExtensionView`、`RulesView`、`CollabView`（AutomationView 由 feature 开关隐藏）
+  - 信息域：`NewsView`、`ActivityView`、`MetricsView`、`HelpView`、`EvolutionView`
   - 流程域：`OnboardingView`（首次引导）、`FeatureUnavailableView`、`NotFoundView`
 - 工具函数：`web/src/utils/`（env / wsProtocol / markdown / logger / error / thinkPath 等）
-- 设计令牌和主题：`web/src/assets/styles/`（tokens.css 为活规范）+ `web/src/themes/`（素影 suying / 夜间 night）
+- 设计令牌和主题：`web/src/assets/styles/`（tokens.css 为活规范）+ `web/src/themes/`（素影 suying / 極線 ultraline / 夜航 night / 金継 kintsugi / 青原 grass / 子夜 midnight，共 6 个）
+- Jet Hub 客户端工具：`web/src/utils/jetHub/`（quota / credits / badge / account-model 格式与能力表，由插件搬运而来）
+
+## 插件子系统关键位置
+
+> 插件面已于 `feat/jet-hub-plugin` 分支落地，取代了原先的 100% 桩实现。移植过程与决策见 `dev_docs/codearts-plugin-integration-plan.md`。
+
+- 注册表：`bun-backend/src/plugins/registry.ts`（`BUILTIN_PLUGINS` 声明式描述符 + `registry.json` 状态合并；`listPlugins` / `setPluginEnabled` / `setPluginConfig` / `uninstallPlugin` / `enabledDshSpecifiers`）
+- 内置插件：`codearts-auth`（展示名 **Jet Hub**），默认启用，`kind: "dsh"`
+- REST 面：`routes/plugins.ts` — `GET /api/plugins`、`GET /api/plugins/:name`、`GET /api/plugins/:name/config`、`GET /api/plugins/:name/providers`、`GET /api/plugins/:name/models`、`PUT /api/plugins/:name/config`、`PUT /api/plugins/:name/toggle`、`POST /api/plugins/install`、`DELETE /api/plugins/:name`（内置插件拒绝卸载）
+- DSH 宿主：`bun-backend/src/plugins/dsh/` — `host.ts`（装配 + 环境注入）、`connection.ts`（插件 HTTP 端点注册）、`http-bridge.ts`（通用转发）、`credential-provider.ts`（实现 DSH 的 `credentials` 抽象类）、`pi-bridge.ts` / `pi-providers.ts`（把渠道注册进 pi ModelRuntime）、`index.ts`（`getDshPluginHost` / `isPluginProvider` / `currentPluginHttpHandlers`）
+- 插件数据落盘：数据目录 `plugins/`（`registry.json` + `plugins/<id>/` + `plugins/dsh/`），经 `app-paths.ts` 的 `getPluginsDir` / `getPluginDataDir` / `getDshPluginStateDir` 解析；宿主注入 `DSH_HOME` / `DSH_JET_HUB_STATE_DIR`，使插件账号池留在 Maxma 数据目录内而非 `~/.dsh`
+- pi 侧接入：`bun-sidecar/src/kernel/model.ts` 的 `resolvePiModel()` + `bun-sidecar/src/kernel/plugin-models.ts`
+- 前端：`views/JetHubView.vue`、`stores/jetHub.ts`、`utils/jetHub/**`；路由 `/plugins/:name/jet-hub`（受 `meta.feature: 'plugins'` 守卫）
+- 关键约束（真机踩过，有回归测试守着）：
+  1. `chat-ws` 对 providers.yaml 里查不到的 provider 必须回落到 `isPluginProvider()`，且**不传** baseUrl / apiKey / providerType；
+  2. 注册自定义 provider 时**必须带 baseUrl**（pi 会拒绝无 baseUrl 的自定义模型），刻意用保留域 `https://plugin.invalid/<route>` 让误用立即响亮失败；
+  3. 插件方法面覆盖由 `bun-backend/tests/plugins/jet-hub-coverage.test.ts` 从插件分派器现读方法名做差集守卫，插件升级新增方法会让测试变红。
 
 ## 后端关键位置（bun-backend/src/）
 
@@ -73,7 +102,7 @@ web/src/main.ts
 - Settings：`routes/settings.ts`、`settings-panels.ts`、`settings-global.ts`（pi 全局 SettingsManager）
 - 记忆：`routes/memory.ts`（CRUD + 搜索/筛选/统计）
 - 能力仪表盘：`routes/capabilities.ts`（聚合 settings/工具/MCP/Provider/配置源 + Phase4 manifest）
-- 插件：`routes/plugins.ts`（桩）；规则：`routes/rules.ts`；工具清单：`routes/tools.ts`
+- 插件：`routes/plugins.ts`（真实注册表 + REST 面）；规则：`routes/rules.ts`；工具清单：`routes/tools.ts`
 - 贴纸系统：`routes/stickers.ts`、`sticker-upload.ts`（sharp 转换）、`sticker-favorites.ts`
 - 人设：`routes/persona.ts`；引导：`routes/onboarding.ts`；动态：`routes/news.ts`
 - 运行可观测：`routes/activity.ts`（活动流 SSE）、`routes/metrics-route.ts`、`metrics.ts`、`routes/diagnostics.ts`、`error-collector.ts`、`health.ts`、`runtime-status.ts`、`routes/audit-log.ts`、`routes/transcripts.ts`
@@ -132,10 +161,11 @@ web/src/main.ts
 | Web 便携包 | `build-portable.bat` | `..\MaxmaHere-Portable\` |
 | Electron 桌面便携包 | `powershell -File build-desktop-portable.ps1` | `dist\electron-portable\MaxmaHere-<版本>-portable-x64.zip` + `.sha256` |
 
+- 两种形态是**同一套后端产物的两种壳**：Web 形态由后端直接托管 `web/dist`；Electron 形态（`desktop/`，electron 44.5.1）只是包一层桌面窗口，业务逻辑全在后端。
 - 共同输入：`build\build-server.bat` → `dist\bun-server\`（`server.js` 经 `bun build --target bun` 打包；`bun.exe` 固定版运行时；`node_modules\` 携带 sharp 原生件 **与插件栈**；`externals.json` 为运行时依赖清单）。
 - 产物结构：`server.js` + `bun.exe` + `externals.json` + `node_modules\`（sharp/libvips + 插件栈）+ `web\dist\`（前端静态文件）+ `config\`（模板/规则/内置贴纸）+ `.omp\skills\` + `.maxma\skills\` + `version.py` + `bun-sidecar\package.json` + `portable.flag`（便携模式契约标记）+ `data\`（用户数据）+ `MaxmaHere.bat`（启动器）。
 - 打包形态说明：不用 `bun build --compile` 单文件——sharp 的 libvips 原生 DLL 无法被编译产物内嵌（启动即崩）；bundle 路线（bun.exe + server.js + 原生件目录）是验证过的可行形态，贴纸上传端到端可用。
-- **插件栈刻意不进 bundle**：`@deepseek-ai/dsh-llm` 在模块作用域读自己的 `../package.json`，内联后路径会断（详见构建文档 §4.1）。清单由 `build-server.mjs` 递归推导，`build-server.bat` / `electron-builder.config.cjs` / 冒烟脚本三处都读它。
+- **插件栈刻意不进 bundle**：`@deepseek-ai/dsh-llm` 在模块作用域读自己的 `../package.json`，内联后路径会断（详见构建文档 §4.1）。清单由 `build-server.mjs` 递归推导，`build-server.bat` / `electron-builder.config.cjs` / 冒烟脚本三处都读它。插件栈当前 24 个包（`@deepseek-ai/*` + `dsh-codearts-auth` + `zod`/`jose`/`undici` 等），随包分发是 Jet Hub 在便携版可用的前提。
 - 启动器通过 `MAXMA_BUNDLE_DIR` / `MAXMA_DATA_DIR` / `MAXMA_EXE_DIR` / `MAXMA_SERVE_WEB` 环境变量显式指定路径（扁平化 server.js 的模块内路径不再指向项目根）。
 - 浏览器等大资源按需下载，不预打包。
 
@@ -143,9 +173,12 @@ web/src/main.ts
 
 运行时版本来源为 `version.py`；发布前需同步核对 `web/package.json`、`portable.flag` 和 Git tag。
 
+当前 `v2.6.11`：`version.py` / `web/package.json` / 便携包 `portable.flag` **三处一致**（2026-10-09 核对）。
+
 **当前实现边界**：
 
 - Agent 推理和工具循环只在 pi 引擎（kernel）中执行；Bun 后端是 API、会话和安全策略层。
-- 自动化功能随旧后端下线（capabilities `automation.enabled=false`，前端路由守卫隐藏）；插件系统在当前引擎不可用（REST 桩化）。
-- `/kb` 知识库已废弃返回 503；部分旧兼容接口可能返回 stub/未启用状态。
+- 自动化功能随旧后端下线（capabilities `automation.enabled=false`，前端路由守卫隐藏）。
+- 插件子系统**已落地**（真实注册表 + REST 面 + Jet Hub 管理页，capabilities `features.plugins = { enabled: true, marketplace: false }`）；未接的网络安装面保持拒绝（`POST /api/plugins/install` 只启用已随包分发的插件）。移植范围与未接方法的归属见 `dev_docs/codearts-plugin-integration-plan.md`。
+- `/kb` 知识库路由已从后端移除（不是 503 桩）。
 - Memory 事件未实现（pi memory 独立运行，不发射事件）；MCP 配置变更需 `reload_mcp_for_session` 或新建 session。

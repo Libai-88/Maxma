@@ -69,8 +69,10 @@
 
   /* ── 工具/专用 ── */
   --tool-bg:        transparent;
-  --user-bubble:    transparent;
-  --user-bubble-bg: transparent;
+  /* 讯号蓝实底 + 白字（4.83:1）。原值 transparent —— 该主题 bg-card 也是纯白，
+     透明气泡等于完全没有气泡；极简不等于无法分辨角色。 */
+  --user-bubble-solid: #0066FF;
+  --user-bubble-text:  #FFFFFF;
   --sidebar-bg:     #FFFFFF;
   --overlay-subtle:  rgba(0, 0, 0, 0.02);
   --overlay-light:   rgba(0, 0, 0, 0.04);

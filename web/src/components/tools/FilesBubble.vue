@@ -470,7 +470,7 @@ function copyContent() {
 
 .success-icon {
   font-size: 18px;
-  color: var(--status-ok);
+  color: var(--status-ok-text);
   font-weight: 700;
   flex-shrink: 0;
 }

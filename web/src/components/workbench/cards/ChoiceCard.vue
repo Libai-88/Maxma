@@ -75,7 +75,7 @@ p { margin: 8px 0 12px; white-space: pre-wrap; font-size: 13px; line-height: 1.5
 .artifact-result { margin-top: 10px; border-top: 1px solid var(--border-color, #eee); padding-top: 8px; }
 .artifact-result-header { font-size: 12px; font-weight: 600; margin-bottom: 6px; }
 .artifact-result-body { max-height: 280px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 12px; line-height: 1.5; background: var(--bg-secondary, #f7f7f7); border-radius: 6px; padding: 8px; }
-.artifact-result-error { color: var(--status-error); }
+.artifact-result-error { color: var(--status-error-text); }
 .secondary { background: var(--bg-secondary, #f5f5f5); color: var(--text-primary, #222); }
 .artifact-action:focus-visible { outline: 2px solid var(--accent-color, #1a73e8); outline-offset: 2px; }
 .artifact-action:disabled { cursor: not-allowed; opacity: .65; }

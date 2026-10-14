@@ -106,6 +106,6 @@ const useSandbox = computed(() => {
 <style>
 /* CSP-safe: class-based styling for v-html error fallback (was inline style) */
 .md-render-error {
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 </style>

@@ -249,14 +249,14 @@ const examples = computed(() => [
   -webkit-mask-image: linear-gradient(to bottom, white 40%, transparent 100%);
 }
 
-.welcome-error { text-align: center; color: var(--status-error); }
+.welcome-error { text-align: center; color: var(--status-error-text); }
 .welcome-error-text { font-size: var(--fs-ui); margin: 0 0 12px; }
 .welcome-error-retry {
   padding: 6px 16px;
   border: 1px solid var(--status-error);
   border-radius: var(--radius-input);
   background: transparent;
-  color: var(--status-error);
+  color: var(--status-error-text);
   cursor: pointer;
   font-size: var(--fs-caption);
   transition: background var(--duration-fast) var(--ease-out);

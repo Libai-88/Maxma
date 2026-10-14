@@ -11,6 +11,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 
+import { deriveAltHue, hexToHsl, hslToHex, parseHex } from '@/utils/themeColor'
+
 let animId = 0
 let observer: MutationObserver | null = null
 
@@ -25,55 +27,18 @@ interface WaveLayer {
   glow: boolean
 }
 
-function parseHex(hex: string): [number, number, number] {
-  const h = hex.replace('#', '')
-  return [
-    parseInt(h.substring(0, 2), 16),
-    parseInt(h.substring(2, 4), 16),
-    parseInt(h.substring(4, 6), 16),
-  ]
-}
-
-function hexToHsl(hex: string): [number, number, number] {
-  const [r, g, b] = parseHex(hex)
-  const rn = r / 255, gn = g / 255, bn = b / 255
-  const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn)
-  let h = 0, s = 0, l = (max + min) / 2
-  if (max !== min) {
-    const d = max - min
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
-    switch (max) {
-      case rn: h = ((gn - bn) / d + (gn < bn ? 6 : 0)) / 6; break
-      case gn: h = ((bn - rn) / d + 2) / 6; break
-      case bn: h = ((rn - gn) / d + 4) / 6; break
-    }
-  }
-  return [h * 360, s * 100, l * 100]
-}
-
-function hslToHex(h: number, s: number, l: number): string {
-  s /= 100; l /= 100
-  const a = s * Math.min(l, 1 - l)
-  const f = (n: number) => {
-    const k = (n + h / 30) % 12
-    const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1)
-    return Math.round(255 * color).toString(16).padStart(2, '0')
-  }
-  return `#${f(0)}${f(8)}${f(4)}`
-}
-
 function setupWaves(): WaveLayer[] {
   const style = getComputedStyle(document.documentElement)
   const accent = style.getPropertyValue('--accent').trim() || '#6e5af0'
-  const accentPink = style.getPropertyValue('--accent-pink').trim() || '#e05af0'
+  const accentAlt = deriveAltHue(accent)
   const accentLight = style.getPropertyValue('--accent-light').trim() || accent
 
   return [
     { color: accent,      alpha: 0.55, freq: 0.015, amp: 10, phase: 0,     speed: 0.5, yBase: 0.45, glow: true },
-    { color: accentPink,  alpha: 0.40, freq: 0.022, amp: 7,  phase: 1.8,  speed: 0.7, yBase: 0.55, glow: true },
+    { color: accentAlt,   alpha: 0.40, freq: 0.022, amp: 7,  phase: 1.8,  speed: 0.7, yBase: 0.55, glow: true },
     { color: accentLight, alpha: 0.30, freq: 0.010, amp: 12, phase: 3.2,  speed: 0.35, yBase: 0.38, glow: false },
     { color: accent,      alpha: 0.20, freq: 0.028, amp: 5,  phase: 4.7,  speed: 0.9, yBase: 0.62, glow: false },
-    { color: accentPink,  alpha: 0.15, freq: 0.035, amp: 4,  phase: 0.9,  speed: 1.1, yBase: 0.70, glow: false },
+    { color: accentAlt,   alpha: 0.15, freq: 0.035, amp: 4,  phase: 0.9,  speed: 1.1, yBase: 0.70, glow: false },
   ]
 }
 

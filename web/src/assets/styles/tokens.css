@@ -102,11 +102,27 @@
   --titlebar-h: 44px;
   --chat-column-width: 720px;
 
-  /* ── 状态色（默认值，由各主题覆盖） ── */
-  --status-ok:    #16a34a;
-  --status-warn:  #d97706;
-  --status-error: #dc2626;
-  --status-info:  #2563eb;
+  /* ── 状态色（默认值，取自品牌矿物色系，与 suying 一致） ──
+   * 兜底值必须属于品牌，否则「主题漏定义」会渲染成 Tailwind 默认色。
+   * 另附 *-text 变体：给**当文字色**用的加深/提亮版（见下）。
+   */
+  --status-ok:    #6B8E6B;
+  --status-warn:  #C99A5A;
+  --status-error: #C5554A;
+  --status-info:  #5A8A9A;
+
+  /* ── 状态色·文字版 ──
+   * 藤黄 #C99A5A 在宣纸底只有 2.34:1，作背景/描边可以，作**文字**偏淡。
+   * 用 color-mix 向 --text-primary 靠拢 30%：明色主题自动变深、暗色主题自动变亮
+   * （它们的 --text-primary 本就是浅色）。比例 30% 是「全部 6 主题 × 4 状态
+   * 都 ≥4.5:1」与「还看得出色相」的折中（实测最差 4.71，多为 8~15）。
+   * 之所以不逐主题调：那是 24 个魔法数；这一个公式由测试守着。
+   * 见 web/tests/themeTokens.spec.ts。
+   */
+  --status-ok-text:    color-mix(in srgb, var(--status-ok) 30%, var(--text-primary));
+  --status-warn-text:  color-mix(in srgb, var(--status-warn) 30%, var(--text-primary));
+  --status-error-text: color-mix(in srgb, var(--status-error) 30%, var(--text-primary));
+  --status-info-text:  color-mix(in srgb, var(--status-info) 30%, var(--text-primary));
 
   /* ── 遮罩层（主题可覆盖） ── */
   --overlay-subtle: rgba(0, 0, 0, 0.03);
@@ -114,16 +130,23 @@
   --overlay-medium: rgba(0, 0, 0, 0.08);
   --overlay-strong: rgba(0, 0, 0, 0.15);
 
-  /* ── 头部品牌渐变（主题可覆盖） ── */
-  --header-gradient-from: #D4A5A5;
-  --header-gradient-mid1: #C9A876;
-  --header-gradient-mid2: #E8B4BC;
-  --header-gradient-to:   #D4A5A5;
-  --header-glow: rgba(212, 165, 165, 0.35);
+  /* ── 头部品牌渐变（由当前主题的 --accent 派生，不硬编码上一代色值） ── */
+  --header-gradient-from: color-mix(in srgb, var(--accent) 22%, var(--bg-primary));
+  --header-gradient-mid1: color-mix(in srgb, var(--accent) 12%, var(--bg-primary));
+  --header-gradient-mid2: color-mix(in srgb, var(--accent) 18%, var(--bg-primary));
+  --header-gradient-to:   color-mix(in srgb, var(--accent) 22%, var(--bg-primary));
+  --header-glow: color-mix(in srgb, var(--accent) 35%, transparent);
 
-  /* ── 用户气泡实色（主题可覆盖） ── */
-  --user-bubble-solid: var(--accent-pink, #D4A5A5);
-  --user-bubble-text:  var(--bg-card, #FFFEFA);
+  /* ── 用户气泡（主题可覆盖） ──
+   * 底色必须与 --bg-card 拉开，否则用户与 AI 气泡同色、无法分辨谁说的。
+   * 历史事故：这里曾回落到上一代品牌的 --accent-pink（只有 1/6 主题定义），
+   * 旗舰 suying 的用户气泡一度与 AI 气泡同为 #F8F5EF（对比度 1.00）。
+   * 现在回落到当前主题的 --accent：6 个主题全部 ≥1.2，且天然跟随品牌换色。
+   */
+  --user-bubble-solid: var(--accent);
+  --user-bubble-text:  var(--text-inverse);
+  /* 曾有 --user-bubble / --user-bubble-bg 两个别名，现已无消费点并从主题中删除。
+     新代码只用上面这一对。 */
 
   /* ── 纸质纹理系统（默认开启，可通过主题设置切换） ── */
   --paper-texture-url: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.9 0 0 0 0 0.88 0 0 0 0 0.82 0 0 0 0.08 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
@@ -136,7 +159,7 @@
 
   /* ── 背景氛围渐变（由各主题覆盖，用于 body 动态背景） ── */
   --bg-aura-start: color-mix(in srgb, var(--accent) 6%, var(--bg-primary));
-  --bg-aura-end:   color-mix(in srgb, var(--accent-pink) 4%, var(--bg-primary));
+  --bg-aura-end:   color-mix(in srgb, var(--accent) 4%, var(--bg-primary));
   --bg-aura-duration: 90s;
 
   /* ── 精致细节（v2.1 — 主题可覆盖） ── */

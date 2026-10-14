@@ -13,8 +13,8 @@
 
   /* ── 文字层级（4 阶 — v2.0 新增 text-inverse） ── */
   --text-primary:   #E1EAF0;
-  --text-secondary: #B7C5CE;
-  --text-tertiary:  #B7C5CE; /* 占位/禁用（WCAG AA ≥4.5:1，对 --bg-primary 实测 5.18:1） */
+  --text-secondary: #DFE8EE; /* 提亮：原 #B7C5CE 在弹窗卡片面（bg-raised 92%+accent 8% 再叠 3% 底）上仅 3.18:1 */
+  --text-tertiary:  #B7C5CE; /* 占位/禁用（WCAG AA ≥4.5:1，对 --bg-primary 实测 5.18:1；仅用于不承载正文的场合） */
   --text-inverse:   #3B4A54;
 
   /* ── 强调色 — 暖玫瑰（4 阶 — v2.0 新增 accent-active） ── */
@@ -68,10 +68,8 @@
   --bubble-asym-assistant: 6px;
 
   /* ── 工具/专用（保留 v1 兼容变量） ── */
-  --user-bubble:     rgba(170, 121, 141, 0.18);
-  --user-bubble-bg:  rgba(170, 121, 141, 0.18);
   --user-bubble-solid: #EAB2A0;
-  --user-bubble-text:  #445560;
+  --user-bubble-text:  #3B4A54;
   --user-bg:         rgba(201, 154, 175, 0.10);
   --tool-bg:         rgba(201, 154, 175, 0.06);
   --tool-text:       #a97a8f;

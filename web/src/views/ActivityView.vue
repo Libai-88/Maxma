@@ -289,11 +289,11 @@ onUnmounted(() => {
   transition: background 0.2s, color 0.2s;
 }
 .activity-status.status-online {
-  color: var(--status-ok);
+  color: var(--status-ok-text);
   background: color-mix(in srgb, var(--status-ok) 10%, transparent);
 }
 .activity-status.status-connecting {
-  color: var(--status-warn);
+  color: var(--status-warn-text);
   background: color-mix(in srgb, var(--status-warn) 12%, transparent);
 }
 .activity-status.status-offline {
@@ -413,9 +413,9 @@ onUnmounted(() => {
   text-align: center;
 }
 .cat-chip.cat-tool { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
-.cat-chip.cat-turn { background: color-mix(in srgb, var(--status-ok) 15%, transparent); color: var(--status-ok); }
-.cat-chip.cat-compression { background: color-mix(in srgb, var(--status-warn) 15%, transparent); color: var(--status-warn); }
-.cat-chip.cat-approval { background: color-mix(in srgb, var(--status-error) 15%, transparent); color: var(--status-error); }
+.cat-chip.cat-turn { background: color-mix(in srgb, var(--status-ok) 15%, transparent); color: var(--status-ok-text); }
+.cat-chip.cat-compression { background: color-mix(in srgb, var(--status-warn) 15%, transparent); color: var(--status-warn-text); }
+.cat-chip.cat-approval { background: color-mix(in srgb, var(--status-error) 15%, transparent); color: var(--status-error-text); }
 .cat-meaning {
   color: var(--text-secondary);
 }
@@ -521,9 +521,9 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 .activity-item-category.cat-tool { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
-.activity-item-category.cat-turn { background: color-mix(in srgb, var(--status-ok) 15%, transparent); color: var(--status-ok); }
-.activity-item-category.cat-compression { background: color-mix(in srgb, var(--status-warn) 15%, transparent); color: var(--status-warn); }
-.activity-item-category.cat-approval { background: color-mix(in srgb, var(--status-error) 15%, transparent); color: var(--status-error); }
+.activity-item-category.cat-turn { background: color-mix(in srgb, var(--status-ok) 15%, transparent); color: var(--status-ok-text); }
+.activity-item-category.cat-compression { background: color-mix(in srgb, var(--status-warn) 15%, transparent); color: var(--status-warn-text); }
+.activity-item-category.cat-approval { background: color-mix(in srgb, var(--status-error) 15%, transparent); color: var(--status-error-text); }
 
 .activity-item-content {
   flex: 1;

@@ -91,13 +91,13 @@ const blockedPaths = computed<string[]>(() => {
 
 .blocker-shield {
   flex-shrink: 0;
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 
 .blocker-title {
   font-size: 15px;
   font-weight: 700;
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 
 .blocker-divider {
@@ -121,7 +121,7 @@ const blockedPaths = computed<string[]>(() => {
 }
 
 .blocker-intro strong {
-  color: var(--status-error);
+  color: var(--status-error-text);
   font-weight: 700;
 }
 
@@ -134,7 +134,7 @@ const blockedPaths = computed<string[]>(() => {
 .blocker-label {
 	  font-size: 10px;
 	  font-weight: 600;
-	  color: var(--status-warn);
+	  color: var(--status-warn-text);
 	  text-transform: uppercase;
 	  letter-spacing: 0.5px;
 	}
@@ -157,7 +157,7 @@ const blockedPaths = computed<string[]>(() => {
 	.blocker-path-text {
 	  font-family: 'SF Mono', 'Consolas', monospace;
 	  font-size: 12px;
-	  color: var(--status-error);
+	  color: var(--status-error-text);
 	  word-break: break-all;
 	  background: none;
 	  padding: 0;
@@ -168,7 +168,7 @@ const blockedPaths = computed<string[]>(() => {
 	  align-items: flex-start;
 	  gap: 6px;
 	  font-size: 12px;
-	  color: var(--status-warn);
+	  color: var(--status-warn-text);
 	  line-height: 1.5;
 	  padding: 8px 10px;
 	  background: color-mix(in srgb, var(--status-warn) 8%, var(--bg-card));
@@ -184,7 +184,7 @@ const blockedPaths = computed<string[]>(() => {
 /* ── 普通错误（回退） ── */
 .bubble-error {
   font-size: 13px;
-  color: var(--status-error);
+  color: var(--status-error-text);
   padding: 4px 0;
 }
 </style>

@@ -245,13 +245,13 @@ useGsap((ctx) => {
   font-weight: 500;
 }
 
-.pending .plan-status { background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card)); color: var(--status-warn); }
-.approved .plan-status { background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card)); color: var(--status-ok); }
+.pending .plan-status { background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card)); color: var(--status-warn-text); }
+.approved .plan-status { background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card)); color: var(--status-ok-text); }
 .modified .plan-status { background: var(--accent-light); color: var(--accent); }
-.rejected .plan-status { background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card)); color: var(--status-error); }
+.rejected .plan-status { background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card)); color: var(--status-error-text); }
 .running .plan-status { background: var(--accent-light); color: var(--accent); }
-.failed .plan-status { background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card)); color: var(--status-error); }
-.replanning .plan-status { background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card)); color: var(--status-warn); }
+.failed .plan-status { background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card)); color: var(--status-error-text); }
+.replanning .plan-status { background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card)); color: var(--status-warn-text); }
 
 /* ── 步骤列表 ── */
 .plan-steps {
@@ -339,8 +339,8 @@ useGsap((ctx) => {
 }
 
 .step-badge.running { background: var(--accent-light); color: var(--accent); }
-.step-badge.done { background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card)); color: var(--status-ok); }
-.step-badge.failed { background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card)); color: var(--status-error); }
+.step-badge.done { background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card)); color: var(--status-ok-text); }
+.step-badge.failed { background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card)); color: var(--status-error-text); }
 .step-badge.skipped { background: var(--bg-secondary); color: var(--text-secondary); }
 
 /* ── 重规划/失败提示 ── */
@@ -358,13 +358,13 @@ useGsap((ctx) => {
 .plan-replan-hint {
   background: var(--bg-card);
   background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card));
-  color: var(--status-warn);
+  color: var(--status-warn-text);
 }
 
 .plan-failed-hint {
   background: var(--bg-card);
   background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 
 .replan-icon {
@@ -437,7 +437,7 @@ useGsap((ctx) => {
 
 .plan-btn.reject {
   background: var(--bg-card);
-  color: var(--status-error);
+  color: var(--status-error-text);
   border-color: color-mix(in srgb, var(--status-error) 40%, var(--border));
 }
 

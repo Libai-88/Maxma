@@ -68,12 +68,12 @@ const fallbackText = computed(() => {
 .todo-item { display: flex; align-items: flex-start; gap: 8px; padding: 6px 8px; background: var(--bg-secondary); border-radius: 6px; font-size: 13px; }
 .todo-item.done { opacity: 0.6; }
 .todo-checkbox { flex-shrink: 0; width: 16px; text-align: center; color: var(--accent); }
-.todo-item.done .todo-checkbox { color: var(--status-ok); }
+.todo-item.done .todo-checkbox { color: var(--status-ok-text); }
 .todo-text { flex: 1; color: var(--text-primary); word-break: break-word; }
 .todo-item.done .todo-text { text-decoration: line-through; color: var(--text-tertiary); }
 .todo-priority { font-size: 10px; padding: 1px 6px; border-radius: 4px; text-transform: uppercase; }
-.pri-high { background: color-mix(in srgb, var(--status-error) 10%, transparent); color: var(--status-error); }
-.pri-medium { background: color-mix(in srgb, var(--status-warn) 10%, transparent); color: var(--status-warn); }
-.pri-low { background: color-mix(in srgb, var(--status-ok) 10%, transparent); color: var(--status-ok); }
+.pri-high { background: color-mix(in srgb, var(--status-error) 10%, transparent); color: var(--status-error-text); }
+.pri-medium { background: color-mix(in srgb, var(--status-warn) 10%, transparent); color: var(--status-warn-text); }
+.pri-low { background: color-mix(in srgb, var(--status-ok) 10%, transparent); color: var(--status-ok-text); }
 .todo-result { font-size: 13px; color: var(--text-primary); padding: 4px 0; }
 </style>

@@ -110,13 +110,13 @@ defineEmits<{
 .settings-title {
   font-size: 20px;
   font-weight: 700;
-  color: var(--text-inverse);
+  color: var(--text-primary);
   letter-spacing: 0.02em;
   margin: 0;
 }
 .settings-subtitle {
   font-size: 14px;
-  color: color-mix(in srgb, var(--text-inverse) 78%, transparent);
+  color: var(--text-secondary);
   margin: 4px 0 0;
 }
 
@@ -145,13 +145,13 @@ defineEmits<{
   align-items: center;
   gap: 12px;
   padding: 14px 14px;
-  border: 1px solid color-mix(in srgb, var(--text-inverse) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
   border-radius: 14px;
-  background: color-mix(in srgb, var(--text-inverse) 3%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
   cursor: pointer;
   text-align: left;
   font-family: inherit;
-  color: var(--text-inverse);
+  color: var(--text-primary);
   transition: all 0.2s ease;
   animation: card-enter 0.4s ease both;
   animation-delay: calc(var(--i, 0) * 30ms);
@@ -169,8 +169,8 @@ defineEmits<{
 }
 
 .settings-card:hover {
-  background: color-mix(in srgb, var(--text-inverse) 8%, transparent);
-  border-color: color-mix(in srgb, var(--text-inverse) 20%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-color: color-mix(in srgb, var(--text-primary) 20%, transparent);
   transform: translateY(-1px);
   box-shadow: 0 4px 20px color-mix(in srgb, var(--text-primary) 20%, transparent);
 }
@@ -183,17 +183,17 @@ defineEmits<{
   width: 46px;
   height: 46px;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--text-inverse) 8%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: var(--text-inverse);
+  color: var(--text-primary);
   transition: background 0.2s;
 }
 
 .settings-card:hover .card-icon {
-  background: color-mix(in srgb, var(--text-inverse) 14%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 14%, transparent);
 }
 
 .card-info {
@@ -205,14 +205,14 @@ defineEmits<{
   font-size: 14px;
   font-weight: 600;
   line-height: 1.3;
-  color: var(--text-inverse);
+  color: var(--text-primary);
   margin-bottom: 2px;
 }
 
 .card-subtitle {
   font-size: 12px;
   line-height: 1.4;
-  color: color-mix(in srgb, var(--text-inverse) 80%, transparent);
+  color: var(--text-secondary);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -235,10 +235,10 @@ defineEmits<{
   align-items: center;
   gap: 5px;
   padding: 6px 14px;
-  border: 1px solid color-mix(in srgb, var(--text-inverse) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
   border-radius: 20px;
-  background: color-mix(in srgb, var(--text-inverse) 5%, transparent);
-  color: color-mix(in srgb, var(--text-inverse) 70%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  color: var(--text-secondary);
   font-size: 12px;
   font-family: inherit;
   cursor: pointer;
@@ -246,9 +246,9 @@ defineEmits<{
   white-space: nowrap;
 }
 .action-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--text-inverse) 12%, transparent);
-  border-color: color-mix(in srgb, var(--text-inverse) 25%, transparent);
-  color: var(--text-inverse);
+  background: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  border-color: color-mix(in srgb, var(--text-primary) 25%, transparent);
+  color: var(--text-primary);
 }
 .action-btn:active:not(:disabled) {
   transform: scale(0.96);
@@ -258,11 +258,11 @@ defineEmits<{
   cursor: not-allowed;
 }
 .action-btn.restarting {
-  color: var(--status-warn);
+  color: var(--status-warn-text);
   border-color: color-mix(in srgb, var(--status-warn) 25%, transparent);
 }
 .action-btn.exporting {
-  color: var(--status-info);
+  color: var(--status-info-text);
   border-color: color-mix(in srgb, var(--status-info) 25%, transparent);
 }
 .action-btn svg {

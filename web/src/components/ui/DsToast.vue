@@ -233,17 +233,17 @@ useGsap((_ctx, contextSafe) => {
 }
 .ds-toast--info .ds-toast__icon { color: var(--accent); }
 .ds-toast--success {
-  border-left-color: var(--status-ok);
+  border-left-color: var(--status-ok-text);
 }
-.ds-toast--success .ds-toast__icon { color: var(--status-ok); }
+.ds-toast--success .ds-toast__icon { color: var(--status-ok-text); }
 .ds-toast--error {
-  border-left-color: var(--status-error);
+  border-left-color: var(--status-error-text);
 }
-.ds-toast--error .ds-toast__icon { color: var(--status-error); }
+.ds-toast--error .ds-toast__icon { color: var(--status-error-text); }
 .ds-toast--warning {
-	  border-left-color: var(--status-warn);
+	  border-left-color: var(--status-warn-text);
 	}
-	.ds-toast--warning .ds-toast__icon { color: var(--status-warn); }
+	.ds-toast--warning .ds-toast__icon { color: var(--status-warn-text); }
 
 .ds-toast__icon {
   flex-shrink: 0;

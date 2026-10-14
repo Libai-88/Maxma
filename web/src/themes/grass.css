@@ -69,8 +69,10 @@
 
   /* ── 工具/专用 ── */
   --tool-bg:        rgba(91, 140, 95, 0.06);
-  --user-bubble:    rgba(122, 174, 127, 0.14);
-  --user-bubble-bg: rgba(122, 174, 127, 0.14);
+  /* 松烟绿：取主题自有的 --accent-hover 值（白字 5.02:1）—— --accent #5B8C5F
+     配白字仅 3.92:1，达不到 4.5。复用既有色阶，不另造颜色。 */
+  --user-bubble-solid: #4A7A4E;
+  --user-bubble-text:  #FFFFFF;
   --sidebar-bg:     #EDF2E9;
   --overlay-subtle:  rgba(45, 63, 48, 0.03);
   --overlay-light:   rgba(45, 63, 48, 0.05);

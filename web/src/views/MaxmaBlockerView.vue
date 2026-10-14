@@ -437,7 +437,7 @@ onMounted(loadEntries)
 }
 .msg.error {
 	  background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
-	  color: var(--status-error);
+	  color: var(--status-error-text);
 	}
 
 /* ── 按钮 ── */
@@ -460,7 +460,7 @@ onMounted(loadEntries)
   border-color: var(--accent);
 }
 .btn-danger {
-  color: var(--status-error);
+  color: var(--status-error-text);
   border-color: var(--status-error);
 }
 </style>

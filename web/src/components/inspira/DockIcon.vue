@@ -255,6 +255,6 @@ onUnmounted(() => {
 
 .dock-icon:hover .icon-wrapper,
 .dock-icon:hover .dock-label {
-  color: var(--status-warn);
+  color: var(--status-warn-text);
 }
 </style>

@@ -1,7 +1,7 @@
 # Maxma 品牌指南 v1.0
 
 > **唯一事实源（Source of Truth）**：本文档定义 Maxma 的品牌身份、视觉规范与声音准则。
-> 代码侧的活规范是 `web/src/assets/styles/tokens.css`（结构 token）与 `web/src/themes/*.css`（36-Token 主题契约）。
+> 代码侧的活规范是 `web/src/assets/styles/tokens.css`（结构 token）与 `web/src/themes/*.css`（34-Token 主题必填契约 + 主题扩展）。
 > 本文档与代码不一致时，以代码为准并回头修订本文档。
 
 ## 快速参考
@@ -102,6 +102,61 @@ Maxma 是用户的**首席思维伙伴**——不是搜索引擎、不是执行�
 - **阴影带色温**：阴影用暖棕调 `rgba(120,100,80,*)` 或墨调 `rgba(28,28,28,*)`，禁止纯黑高透明度
 - ** tint 用 color-mix**：所有半透明着色通过 `color-mix(in srgb, ...)` 派生，不手写 rgba 魔法值
 - **暗色主题不反色**：暗色主题（夜航/子夜）使用降饱和的暖暗色，而非简单反转
+- **兜底值必须属于品牌**：`tokens.css` 的默认 token 取品牌矿物色，不留上一代品牌或第三方调色板（如 Tailwind）的值。历史事故：用户气泡兜底曾写 `--accent-pink`（只有 1/6 主题定义），其余主题静默渲染成旧品牌粉。见 §2.1。
+- **状态色作文字用 `-text` 变体**：`--status-warn` 这类彩色直接作文字偏淡（藤黄在宣纸底仅 2.34:1），必须改用 `--status-warn-text` 等文字版。
+
+### 2.1 对话可辨性（可访问性硬约束）
+
+**用户气泡与 AI 气泡必须肉眼可分。** 这不是审美偏好，是产品原则——「对话即界面」意味着用户必须能瞬间分辨谁说的。
+
+判据是实测对比度，不是肉眼估计：
+
+| 检查 | 阈值 | 由测试锁定 |
+| --- | --- | --- |
+| `--user-bubble-solid` vs `--bg-card`（AI 气泡） | ≥ 1.2 | `themeTokens.spec.ts` |
+| `--user-bubble-text` vs `--user-bubble-solid` | ≥ 4.5 | `themeTokens.spec.ts` |
+| `--status-*-text` vs `--bg-card`（6 主题 × 4 状态 = 24 组） | ≥ 4.5 | `themeTokens.spec.ts` |
+
+**只用 `--user-bubble-solid` + `--user-bubble-text` 这一对。** 历史上存在四种写法（主题写死 `--user-bubble`、轻量聊天读 `--user-bubble` + `--bg-primary`、iframe 沙箱转发 `--user-bubble`），导致轻量页与主应用对「用户气泡」的理解分叉；现已收敛并有测试守住。
+
+全局兜底是 `--user-bubble-solid: var(--accent)`——跟着主题走，天然满足阈值。
+
+| 主题 | 用户气泡 | 文字 | vs AI 气泡 |
+| --- | --- | --- | --- |
+| 素影 suying | `#C23B22` 朱砂 | 白 | 4.89 |
+| 青原 grass | `#4A7A4E`（主题自有 `--accent-hover`） | 白 | 4.86 |
+| 金継 kintsugi | `#C8A84E` 缮金 | 浓墨 | 2.20 |
+| 夜航 night | `#D4A853` 夜航金 | 墨 | 7.85 |
+| 極線 ultraline | `#0066FF` 讯号蓝 | 白 | 4.83 |
+| 子夜 midnight | `#EAB2A0` 霞粉 | `#3B4A54` | 4.19 |
+
+> 说明：`grass` 用主题既有的 `--accent-hover` 而非 `--accent`——后者配白字仅 3.92:1，达不到 4.5。复用既有色阶，不另造颜色。
+
+**状态色·文字版**用 `color-mix(in srgb, var(--status-*) 30%, var(--text-primary))`：明色主题自动变深、暗色主题自动变亮（它们的 `--text-primary` 本就是浅色），一个公式覆盖 24 组，实测最差 4.71:1。相比逐主题调比例，这是 1 个常数而不是 24 个魔法数。
+
+### 2.2 `--text-inverse` 只用于实底色块（MODAL-THEME-001）
+
+`--text-inverse` 的语义是「**给实底色块用的亮/暗字**」——比如朱砂按钮上的白字。它**不是**「压在页面上的正文色」。
+
+真实事故：设置弹窗的玻璃底是 `color-mix(--text-inverse 8%, transparent)`（半透明，叠在页面之上），而弹窗里的标题、卡片标题也一律用 `--text-inverse`。两者同源 → **同色压同色，对比度 1.00**。
+
+| 主题 | 事故时 | 修法 |
+| --- | --- | --- |
+| 夜航 night / 子夜 midnight | 1.00 | 4.53 ~ 4.60 |
+| 素影 suying / 青原 grass 等 | 1.06 ~ 1.13 | 4.96 ~ 13.90 |
+
+> 明色主题当时也是坏的（1.06~1.13）——只是白底白字比黑底黑字更难被察觉。这个 bug 一直存在，只是在深色主题下才被报障。
+
+**约定**：
+
+- 浮层/弹窗的底从 `--bg-card` / `--bg-raised` 派生，**不用** `--text-inverse`；需要色相就掺少量 `--accent`（`color-mix` 保证深浅主题自动反向，无需分支）。
+- 压在页面或玻璃上的正文用 `--text-primary` / `--text-secondary`。
+- 半透明面上的 tint（`color-mix(..., N%, transparent)`）也要跟着换成 `--text-primary` 系，否则同样是同色压同色。
+- 深色浮层（媒体预览等整体为 72%~92% `--text-primary` 的组件）用 `--text-inverse` 是对的，已列入测试白名单。
+
+硬编码的 `rgba(255,255,255,…)` 同属这一类错误——它在深色主题下方向相反，须改走 `--border` / `--scrollbar-thumb` 等 token。
+
+判据由 `web/tests/themeTokens.spec.ts` 锁定：弹窗标题与次要文字在卡片面上均需 ≥4.5:1，且 `--text-inverse` 不得脱离实底使用。
 
 ### 主题家族
 
@@ -114,7 +169,12 @@ Maxma 是用户的**首席思维伙伴**——不是搜索引擎、不是执行�
 | 青原 Grass | `grass.css` | 变体：松烟绿调 |
 | 子夜 Midnight | `midnight.css` | 暗色：更深的夜 |
 
-每个主题遵守 **36-Token 契约**：表面 4 + 文字 4 + 强调 4 + 边框 3 + 状态 4 + 圆角 4 + 阴影 5 + 动效 2 + 布局 2 + 专用 4。新增主题必须填满契约。
+每个主题遵守 **34-Token 必填契约**，分两级：
+
+- **必填 34 项**（缺任一项即不合格）：表面 4 + 文字 4 + 强调 4 + 边框 3 + 状态 4 + 圆角 4 + 阴影 4 + 动效 2 + 布局 2 + 专用 3（`--tool-bg` + 对话气泡 2）
+- **主题扩展**：允许额外定义（如 `midnight` 的 `--accent-pink` 系暗色专属变量），但必须在文件头注释登记用途，且**不得被跨主题消费**——只有部分主题定义的 token 被组件读取时，其余主题会静默落到硬编码兜底。
+
+「必填项齐全」由 `web/tests/themeTokens.spec.ts` 断言，新增主题漏填会立刻红。
 
 ---
 

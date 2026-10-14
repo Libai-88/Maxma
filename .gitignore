@@ -55,6 +55,10 @@ api/data/sticker_recent.yaml
 # state.json（账号池）、registry.json（启停状态）。开发模式下就落在项目目录里，
 # 必须整目录忽略 —— 一旦入库等于把用户的第三方账号凭据提交出去。
 api/data/plugins/
+# 同上，但落在仓库根：MAXMA_DATA_DIR 未设置时 dataDir() 解析到项目根，
+# 于是运行时数据出现在 <repo>/data/** 与 <repo>/plugins/**（曾实测生成）。
+data/
+plugins/
 config/mcp_servers.yaml
 config/personas/USER.md
 config/personas/SOUL.md

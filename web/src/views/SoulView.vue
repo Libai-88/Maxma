@@ -450,7 +450,7 @@ onMounted(async () => {
   color: var(--text-tertiary);
 }
 .save-indicator.saved {
-  color: var(--status-ok);
+  color: var(--status-ok-text);
 }
 
 .save-button {
@@ -699,7 +699,7 @@ onMounted(async () => {
 }
 .btn-persona-manage.danger:hover {
   border-color: var(--status-error);
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 
 /* ── 创建弹窗 ── */

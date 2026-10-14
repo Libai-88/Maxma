@@ -100,7 +100,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File build\portable-smoke-test.ps
 - Agent 推理和工具循环只在 pi 引擎（kernel）中执行。
 - Bun 后端是 API、会话和安全策略层，不是 Agent 图执行器。
 - MCP 配置变更后，新建 session 或调用 `reload_mcp_for_session` 才能保证使用最新配置。
-- 自动化功能随旧后端下线（capabilities 清单 `automation.enabled=false`）；插件系统在当前引擎不可用（REST 桩化）；`/kb` 知识库已废弃。
+- 自动化功能随旧后端下线（capabilities 清单 `automation.enabled=false`）；`/kb` 知识库路由已移除。
+- 插件子系统已落地（真实注册表 + Jet Hub 管理页 + 渠道模型接入 pi 模型选择器），但网络安装面保持拒绝；
+  未接的插件方法均为形态/策略/重复问题，详见 `dev_docs/codearts-plugin-integration-plan.md`。
+- 分发形态有两种：Web 便携包，以及 Electron 桌面便携包（同一套后端产物的桌面壳）。
 
 ## License
 

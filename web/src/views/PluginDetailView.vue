@@ -276,7 +276,7 @@ function formatDate(dateStr: string): string {
 
 .error-banner {
   background: color-mix(in srgb, var(--status-error) 8%, transparent);
-  color: var(--status-error);
+  color: var(--status-error-text);
   border-radius: 6px;
 }
 
@@ -422,7 +422,7 @@ function formatDate(dateStr: string): string {
 
 .btn-danger {
   background: color-mix(in srgb, var(--status-error) 10%, transparent);
-  color: var(--status-error);
+  color: var(--status-error-text);
   border-color: var(--status-error);
 }
 

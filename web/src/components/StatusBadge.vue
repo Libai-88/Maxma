@@ -177,10 +177,10 @@ function makeItem(name: string, c: ComponentHealth | null | undefined) {
   color: var(--text-primary);
 }
 .status-ok {
-  color: var(--status-ok);
+  color: var(--status-ok-text);
 }
 .status-err {
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 .card-divider {
   height: 1px;

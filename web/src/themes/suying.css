@@ -70,8 +70,10 @@
 
   /* ── 工具/专用 ── */
   --tool-bg:        rgba(28, 28, 28, 0.03);
-  --user-bubble:    #F8F5EF;
-  --user-bubble-bg: #F8F5EF;
+  /* 用户气泡：朱砂实底 + 白字（5.33:1）。不可用 --bg-card 同色的浅底，
+     那会让用户与 AI 气泡同为 #F8F5EF（对比度 1.00，肉眼分不出谁说的）。 */
+  --user-bubble-solid: #C23B22;
+  --user-bubble-text:  #FFFFFF;
   --sidebar-bg:     #EEE9E0;
   --overlay-subtle:  rgba(28, 28, 28, 0.03);
   --overlay-light:   rgba(28, 28, 28, 0.05);

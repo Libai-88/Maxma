@@ -150,17 +150,17 @@ const paragraphs = computed(() => {
 /* 各类型的 hover 颜色使用 overlay 方案，确保与主题兼容 */
 .news-card:hover .card-type-badge.type-feat {
 	  background: color-mix(in srgb, var(--status-ok) 20%, var(--bg-card));
-	  color: var(--status-ok);
+	  color: var(--status-ok-text);
 	}
 	
 	.news-card:hover .card-type-badge.type-enhance {
 	  background: color-mix(in srgb, var(--status-info) 20%, var(--bg-card));
-	  color: var(--status-info);
+	  color: var(--status-info-text);
 	}
 	
 	.news-card:hover .card-type-badge.type-fix {
 	  background: color-mix(in srgb, var(--status-warn) 20%, var(--bg-card));
-	  color: var(--status-warn);
+	  color: var(--status-warn-text);
 	}
 	
 	.news-card:hover .card-type-badge.type-refactor {

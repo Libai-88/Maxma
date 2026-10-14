@@ -179,17 +179,17 @@ useGsap((_ctx, contextSafe) => {
   margin-left: auto;
 }
 .risk-tag-high {
-  color: var(--status-error);
+  color: var(--status-error-text);
   background: transparent;
   background: color-mix(in srgb, var(--status-error) 12%, transparent);
 }
 .risk-tag-medium {
-  color: var(--status-warn);
+  color: var(--status-warn-text);
   background: transparent;
   background: color-mix(in srgb, var(--status-warn) 12%, transparent);
 }
 .risk-tag-low {
-  color: var(--status-ok);
+  color: var(--status-ok-text);
   background: transparent;
   background: color-mix(in srgb, var(--status-ok) 12%, transparent);
 }
@@ -260,13 +260,13 @@ useGsap((_ctx, contextSafe) => {
 }
 
 .approval-approved {
-  color: var(--status-ok);
+  color: var(--status-ok-text);
   font-weight: 500;
   font-size: 0.88em;
 }
 
 .approval-rejected {
-  color: var(--status-error);
+  color: var(--status-error-text);
   font-weight: 500;
   font-size: 0.88em;
 }

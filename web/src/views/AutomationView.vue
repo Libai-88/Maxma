@@ -312,7 +312,7 @@ async function handleDelete(id: string) {
 .empty-icon { font-size: 2em; margin-bottom: 8px; }
 .empty-title { font-size: 1em; font-weight: 600; margin-bottom: 4px; }
 .empty-desc { font-size: 0.85em; }
-.error-banner { padding: 10px 12px; background: color-mix(in srgb, var(--status-error) 10%, transparent); color: var(--status-error); border-radius: 6px; font-size: 0.85em; margin-bottom: 12px; }
+.error-banner { padding: 10px 12px; background: color-mix(in srgb, var(--status-error) 10%, transparent); color: var(--status-error-text); border-radius: 6px; font-size: 0.85em; margin-bottom: 12px; }
 
 .section { margin-bottom: 20px; }
 .create-section { padding: 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
@@ -323,7 +323,7 @@ async function handleDelete(id: string) {
 }
 .form-input:focus { outline: none; border-color: var(--accent); }
 .form-input-error { border-color: var(--status-error) !important; }
-.form-error { width: 100%; color: var(--status-error); font-size: 0.78em; margin: 2px 0 0; }
+.form-error { width: 100%; color: var(--status-error-text); font-size: 0.78em; margin: 2px 0 0; }
 .flex-2 { flex: 2; }
 
 .btn { padding: 8px 16px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-secondary); cursor: pointer; font-size: 0.85em; color: var(--text-secondary); white-space: nowrap; }
@@ -344,7 +344,7 @@ async function handleDelete(id: string) {
   background: var(--bg-secondary); cursor: pointer; font-size: 0.78em; transition: all 0.15s;
 }
 .btn-icon:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-danger { color: var(--status-error); border-color: color-mix(in srgb, var(--status-error) 30%, transparent); }
+.btn-danger { color: var(--status-error-text); border-color: color-mix(in srgb, var(--status-error) 30%, transparent); }
 .btn-danger:hover { background: color-mix(in srgb, var(--status-error) 10%, transparent); }
 .automation-meta { display: flex; gap: 16px; flex-wrap: wrap; }
 .meta-item { font-size: 0.8em; color: var(--text-tertiary); }
@@ -356,7 +356,7 @@ async function handleDelete(id: string) {
   padding: 1px 8px; border-radius: 4px; text-transform: uppercase; font-size: 0.85em;
   background: var(--bg-secondary); color: var(--text-secondary);
 }
-.history-status.completed { background: color-mix(in srgb, var(--status-ok) 15%, transparent); color: var(--status-ok); }
-.history-status.failed { background: color-mix(in srgb, var(--status-error) 15%, transparent); color: var(--status-error); }
+.history-status.completed { background: color-mix(in srgb, var(--status-ok) 15%, transparent); color: var(--status-ok-text); }
+.history-status.failed { background: color-mix(in srgb, var(--status-error) 15%, transparent); color: var(--status-error-text); }
 .history-time { color: var(--text-tertiary); }
 </style>

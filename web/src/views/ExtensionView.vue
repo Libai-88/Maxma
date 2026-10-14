@@ -327,8 +327,8 @@ onMounted(() => { void load() })
 .ext-header { display: flex; align-items: center; gap: 8px; }
 .ext-name { font-weight: 600; font-size: 0.9em; color: var(--text-primary); }
 .ext-source { font-size: 0.75em; padding: 2px 6px; border-radius: 4px; background: var(--bg-card); color: var(--text-tertiary); }
-.source-ok { color: var(--status-ok); }
-.source-warn { color: var(--status-warn); }
+.source-ok { color: var(--status-ok-text); }
+.source-warn { color: var(--status-warn-text); }
 .ext-desc { font-size: 0.82em; color: var(--text-secondary); margin-top: 4px; line-height: 1.5; }
 
 .tool-grid { display: flex; flex-wrap: wrap; gap: 6px; }

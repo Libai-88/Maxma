@@ -922,10 +922,10 @@ function handleDeleteKeydown(event: KeyboardEvent) {
   cursor: not-allowed;
 }
 .manage-btn.delete-selected {
-  color: var(--status-error, #dc2626);
+  color: var(--status-error, #C5554A);
 }
 .manage-btn.delete-selected:hover:not(:disabled) {
-  border-color: var(--status-error, #dc2626);
+  border-color: var(--status-error, #C5554A);
   background: color-mix(in srgb, var(--status-error) 10%, transparent);
 }
 .manage-btn.done {
@@ -1231,7 +1231,7 @@ function handleDeleteKeydown(event: KeyboardEvent) {
 }
 
 .delete-confirm-btn.confirm {
-  background: var(--status-error, #dc2626);
+  background: var(--status-error, #C5554A);
   color: var(--bg-primary);
 }
 

@@ -910,7 +910,7 @@ onMounted(() => {
   border-color: var(--accent);
 }
 .btn.sm { padding: 4px 10px; font-size: 12px; }
-.btn.danger { color: var(--status-error); border-color: var(--status-error); }
+.btn.danger { color: var(--status-error-text); border-color: var(--status-error); }
 
 /* ── List ── */
 .loading, .empty {
@@ -973,7 +973,7 @@ onMounted(() => {
   letter-spacing: 0.5px;
 }
 .card-type-badge--free {
-  color: var(--status-ok);
+  color: var(--status-ok-text);
 }
 
 /* ── 开关按钮 ── */
@@ -1015,7 +1015,7 @@ onMounted(() => {
 	  line-height: 1.5;
 	}
 .card-url--builtin {
-  color: var(--status-ok);
+  color: var(--status-ok-text);
 }
 
 /* ── 模型列表区 ── */
@@ -1093,15 +1093,15 @@ onMounted(() => {
   border-left: 3px solid var(--status-warn);
   background: var(--bg-card);
   background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card));
-  color: var(--status-warn);
+  color: var(--status-warn-text);
   font-size: 12px;
   line-height: 1.4;
 }
 .provider-diagnostic.error {
-  border-left-color: var(--status-error);
+  border-left-color: var(--status-error-text);
   background: var(--bg-card);
   background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 .diagnostic-copy {
   min-width: 0;
@@ -1136,8 +1136,8 @@ onMounted(() => {
   padding: 6px 10px;
   border-radius: 6px;
 }
-.test-result.ok { background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card)); color: var(--status-ok); }
-.test-result.error { background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card)); color: var(--status-error); }
+.test-result.ok { background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card)); color: var(--status-ok-text); }
+.test-result.error { background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card)); color: var(--status-error-text); }
 /* UX-PROVIDER-TEST-001：失败原因（截断单行 + hover 全文） */
 .test-result-detail {
   margin-left: 6px;
@@ -1234,8 +1234,8 @@ select.input { cursor: pointer; }
   padding: 8px 12px;
   border-radius: 6px;
 }
-.msg.ok { background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card)); color: var(--status-ok); }
-.msg.error { background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card)); color: var(--status-error); }
+.msg.ok { background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card)); color: var(--status-ok-text); }
+.msg.error { background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card)); color: var(--status-error-text); }
 
 .model-list {
   display: flex;
@@ -1280,7 +1280,7 @@ select.input { cursor: pointer; }
 	  border-bottom: 1px solid var(--border);
 	}
 .required-mark {
-  color: var(--status-error);
+  color: var(--status-error-text);
   margin-left: 2px;
 }
 .input-error {
@@ -1439,9 +1439,9 @@ select.input { cursor: pointer; }
 .recommend--cn { border-top: 3px solid var(--status-info); }
 
 .badge--popular { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
-.badge--cheap { background: color-mix(in srgb, var(--status-ok) 18%, transparent); color: var(--status-ok); }
-.badge--local { background: color-mix(in srgb, var(--status-warn) 18%, transparent); color: var(--status-warn); }
-.badge--cn { background: color-mix(in srgb, var(--status-info) 18%, transparent); color: var(--status-info); }
+.badge--cheap { background: color-mix(in srgb, var(--status-ok) 18%, transparent); color: var(--status-ok-text); }
+.badge--local { background: color-mix(in srgb, var(--status-warn) 18%, transparent); color: var(--status-warn-text); }
+.badge--cn { background: color-mix(in srgb, var(--status-info) 18%, transparent); color: var(--status-info-text); }
 
 /* ── 角色引导 ── */
 .role-guidance {

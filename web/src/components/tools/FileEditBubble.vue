@@ -303,7 +303,7 @@ function copyContent() {
 
 .bubble-error {
   font-size: 13px;
-  color: var(--status-error);
+  color: var(--status-error-text);
   padding: 4px 0;
 }
 
@@ -513,11 +513,11 @@ function copyContent() {
 }
 
 .edit-result-item.ok {
-  color: var(--status-ok);
+  color: var(--status-ok-text);
 }
 
 .edit-result-item.error {
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 
 .eri-icon {

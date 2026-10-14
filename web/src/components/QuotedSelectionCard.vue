@@ -63,7 +63,7 @@ useGsap(() => {
   border-radius: 3px;
 }
 .quoted-remove:hover {
-  color: var(--status-error);
+  color: var(--status-error-text);
   background: transparent;
   background: transparent;
   background: color-mix(in srgb, var(--status-error) 10%, transparent);

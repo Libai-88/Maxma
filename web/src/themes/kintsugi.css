@@ -69,8 +69,9 @@
 
   /* ── 工具/专用 ── */
   --tool-bg:        rgba(200, 168, 78, 0.04);
-  --user-bubble:    #FCFAF5;
-  --user-bubble-bg: #FCFAF5;
+  /* 金缮金实底 + 浓墨字（7.44:1）；原值 #FCFAF5 与 --bg-card 同色，用户/AI 气泡无法分辨。 */
+  --user-bubble-solid: #C8A84E;
+  --user-bubble-text:  #1C1C1C;
   --sidebar-bg:     #EDE6DB;
   --overlay-subtle:  rgba(44, 36, 22, 0.03);
   --overlay-light:   rgba(44, 36, 22, 0.05);

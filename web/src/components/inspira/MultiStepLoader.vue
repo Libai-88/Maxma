@@ -221,7 +221,7 @@ function onBackdropClick() {
   display: none;
 }
 .loader-step.step--complete::before {
-  background: var(--status-ok, #16a34a);
+  background: var(--status-ok, #6B8E6B);
 }
 
 /* ── Indicator ── */
@@ -248,7 +248,7 @@ function onBackdropClick() {
   width: 20px;
   height: 20px;
   border: 2.5px solid var(--border, #e5e5e5);
-  border-top-color: var(--accent, #D4A5A5);
+  border-top-color: var(--accent, #C23B22);
   border-radius: 50%;
   animation: loader-spin 0.7s linear infinite;
 }
@@ -260,7 +260,7 @@ function onBackdropClick() {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: var(--status-ok, #16a34a);
+  background: var(--status-ok, #6B8E6B);
   color: var(--text-inverse);
   animation: loader-pop 0.3s var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1));
 }
@@ -284,7 +284,7 @@ function onBackdropClick() {
 
 .step--complete .step-label,
 .step-label--done {
-  color: var(--status-ok, #16a34a);
+  color: var(--status-ok, #6B8E6B);
 }
 
 /* ── Animations ── */
@@ -315,7 +315,7 @@ function onBackdropClick() {
 @media (prefers-reduced-motion: reduce) {
   .step-spinner {
     animation: none;
-    border-top-color: var(--accent, #D4A5A5);
+    border-top-color: var(--accent, #C23B22);
     opacity: 0.7;
   }
 

@@ -227,7 +227,7 @@ onMounted(async () => {
   border-radius: 4px;
   -webkit-app-region: no-drag;
 }
-.qc-close:hover { background: var(--bg-card); color: var(--status-error); }
+.qc-close:hover { background: var(--bg-card); color: var(--status-error-text); }
 
 .qc-error-bar {
   padding: 6px 12px;
@@ -271,8 +271,10 @@ onMounted(async () => {
 }
 .qc-msg--user {
   align-self: flex-end;
-  background: var(--user-bubble, var(--accent));
-  color: var(--bg-primary);
+  /* 与主聊天用同一对 token，否则轻量页与主应用对「用户气泡」的理解会分叉
+     （此前这里读 --user-bubble + --bg-primary，与主应用的 solid/text 不一致）。 */
+  background: var(--user-bubble-solid);
+  color: var(--user-bubble-text);
 }
 .qc-msg--assistant {
   align-self: flex-start;
@@ -330,7 +332,7 @@ onMounted(async () => {
   border: 1px solid var(--status-error);
   border-radius: var(--radius);
   background: transparent;
-  color: var(--status-error);
+  color: var(--status-error-text);
   font-size: 0.8em;
   cursor: pointer;
   white-space: nowrap;

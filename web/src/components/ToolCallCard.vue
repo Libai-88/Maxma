@@ -484,7 +484,7 @@ useGsap((_ctx, contextSafe) => {
 }
 /* 错误态：头部文字与图标着色（ERROR-VISUAL-001） */
 .tool-card.error .tool-header {
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 .tool-header {
   padding: 8px 14px;
@@ -553,7 +553,7 @@ useGsap((_ctx, contextSafe) => {
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 .tool-error-empty-icon {
   font-size: 13px;
@@ -669,16 +669,16 @@ useGsap((_ctx, contextSafe) => {
   background: var(--bg-secondary);
 }
 .diff-hunk {
-	  color: var(--status-info);
+	  color: var(--status-info-text);
 	  background: color-mix(in srgb, var(--status-info) 8%, transparent);
 	  font-weight: 500;
 	}
 	.diff-add {
-	  color: var(--status-ok);
+	  color: var(--status-ok-text);
 	  background: color-mix(in srgb, var(--status-ok) 8%, transparent);
 	}
 	.diff-del {
-	  color: var(--status-error);
+	  color: var(--status-error-text);
 	  background: color-mix(in srgb, var(--status-error) 8%, transparent);
 	}
 .diff-context {
