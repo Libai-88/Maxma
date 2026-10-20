@@ -1425,8 +1425,8 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
 }
 
 .btn-danger {
-  border-color: #b23b2e;
-  color: #b23b2e;
+  border-color: var(--status-error);
+  color: var(--status-error-text);
 }
 
 .login-card {
@@ -1626,7 +1626,7 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
 }
 
 .pop-list-wide li.row-error {
-  color: #b23b2e;
+  color: var(--status-error-text);
 }
 
 .model-row.muted {
@@ -1723,8 +1723,8 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
 }
 
 .tag-warn {
-  border-color: #d9a441;
-  color: #a5731a;
+  border-color: var(--status-warn);
+  color: var(--status-warn-text);
 }
 
 .tag-closed {
@@ -1749,9 +1749,9 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
 }
 
 .btn-primary {
-  border-color: var(--accent, #b4552d);
-  background: var(--accent, #b4552d);
-  color: #fff;
+  border-color: var(--accent-solid);
+  background: var(--accent-solid);
+  color: var(--accent-solid-text);
 }
 
 .btn-sm {
@@ -1767,8 +1767,8 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
 }
 
 .banner-error {
-  border: 1px solid #d9a441;
-  color: #a5731a;
+  border: 1px solid var(--status-warn);
+  color: var(--status-warn-text);
 }
 
 .banner-muted {
@@ -1777,8 +1777,8 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
 }
 
 .banner-warn {
-  border: 1px solid #d9a441;
-  color: #a5731a;
+  border: 1px solid var(--status-warn);
+  color: var(--status-warn-text);
 }
 
 .btn-file {

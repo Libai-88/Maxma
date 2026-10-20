@@ -255,6 +255,60 @@ describe('主题 token 契约', () => {
     expect(failures).toEqual([])
   })
 
+test('实底色与其配对前景色达到 WCAG AA（≥4.5:1）', () => {
+    // 背景不透明、其上直接压文字时，底色与字色必须**配套**定义。
+    //
+    // 起因：`--accent` 是品牌强调色，同时被当描边/图标/渐变端点用，不能为了
+    // 压字而改深——但它配 `--text-inverse` 在 6 主题里只有 3 个达 AA
+    // （kintsugi 2.29、midnight 3.80、grass 3.92）。于是另立
+    // `--accent-solid` / `--accent-solid-text`（及 error 版）这对专用 token，
+    // 形态沿用仓库既有的 `--user-bubble-solid` / `--user-bubble-text` 约定。
+    //
+    // 本测试守住「每个主题都必须给出达标的配套值」——新增主题时漏配即红。
+    const PAIRS: Array<[string, string]> = [
+      ['--accent-solid', '--accent-solid-text'],
+      ['--status-error-solid', '--status-error-solid-text'],
+    ]
+
+    const failures: string[] = []
+    for (const theme of themes) {
+      for (const [bgToken, fgToken] of PAIRS) {
+        const bg = hex(theme.resolve(bgToken))
+        const fg = hex(theme.resolve(fgToken))
+        if (!bg || !fg) {
+          failures.push(`${theme.name}: ${bgToken}/${fgToken} 缺字面值（无法静态判定）`)
+          continue
+        }
+        const cr = contrast(fg, bg)
+        if (cr < 4.5) failures.push(`${theme.name} ${fgToken}(${fg}) on ${bgToken}(${bg}) = ${cr.toFixed(2)}`)
+      }
+    }
+
+    expect(failures).toEqual([])
+  })
+
+test('强调色·文字版在卡片底上可读（对比度 ≥ 4.5）', () => {
+    // `--accent` 直接当文字色在浅色底上偏淡（金缮 2.20:1、青草 3.79:1），
+    // 作描边/图标/实底可以，作**文字**偏淡。`--accent-text` 是它的文字版
+    // （与 --status-*-text 同公式：向 --text-primary 靠拢 30%）。
+    const failures: string[] = []
+
+    for (const theme of themes) {
+      const card = hex(theme.resolve('--bg-card'))
+      const accent = hex(theme.resolve('--accent'))
+      const ink = hex(theme.resolve('--text-primary'))
+      expect(card, `${theme.name} 的 --bg-card 应为字面色`).not.toBeNull()
+      expect(accent, `${theme.name} 的 --accent 应为字面色`).not.toBeNull()
+      expect(ink, `${theme.name} 的 --text-primary 应为字面色`).not.toBeNull()
+
+      const accentText = mixRgb(accent!, 0.3, ink!)
+      const cr = contrast(accentText, card!)
+      if (cr < 4.5) failures.push(`${theme.name} --accent-text = ${accentText} → ${cr.toFixed(2)}`)
+    }
+
+    expect(failures).toEqual([])
+  })
+
 test('--text-inverse 只用在「实底色块」上，不用于透明面', () => {
     // `--text-inverse` 的语义是「给实底色块用的亮/暗字」（accent 按钮上的白字）。
     // 把它当「压在页面/玻璃上的正文色」用，就会与半透明面同色压同色 → 对比度 1.00。

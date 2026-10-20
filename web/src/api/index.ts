@@ -31,6 +31,7 @@ import type {
   ActivityStatsResponse,
   ActivityClearResponse,
   DeferredRun,
+  ListDeferredRunsResponse,
   PermissionMode,
   SessionPermissionModeResponse,
   CapabilitiesResponse,
@@ -350,6 +351,12 @@ export const api = {
   getDeferredRun: (sessionId: string, runId: string) =>
     request<DeferredRun>(
       `/sessions/${encodeURIComponent(sessionId)}/deferred-runs/${encodeURIComponent(runId)}`,
+    ),
+
+  // 列出当前会话的全部后台子任务。Agent 任务中心用它取代 mock 数据。
+  listDeferredRuns: (sessionId: string) =>
+    request<ListDeferredRunsResponse>(
+      `/sessions/${encodeURIComponent(sessionId)}/deferred-runs`,
     ),
 
   cancelDeferredRun: (sessionId: string, runId: string) =>

@@ -72,6 +72,16 @@
   /* 夜航金实底 + 墨字（7.73:1）；原值 #1C2333 与 --bg-card(#161B22) 仅 1.10，几乎看不出。 */
   --user-bubble-solid: #D4A853;
   --user-bubble-text:  #1C1C1C;
+
+  /* 实底色（背景不透明、其上直接压字时用）——
+   * --accent 是品牌强调色，还要当描边/图标/渐变端点用，不能为了压字而改深。
+   * 需要「实底 + 压字」的地方（accent 按钮）用这对专用 token。
+   * 夜航金实底 + 深空字（8.58:1）；--accent 配 --text-inverse 在本主题只有 5.33:1（除本主题外均达标）。 */
+  --accent-solid: #D4A853;
+  --accent-solid-text: #0D1117;
+  /* 警报红实底 + 深空字（5.65:1）。--status-error 配 --text-inverse 在本主题 5.65:1。 */
+  --status-error-solid: #F85149;
+  --status-error-solid-text: #0D1117;
   --sidebar-bg:     #161B22;
   --overlay-subtle:  rgba(255, 255, 255, 0.02);
   --overlay-light:   rgba(255, 255, 255, 0.04);

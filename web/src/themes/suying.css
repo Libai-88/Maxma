@@ -74,6 +74,16 @@
      那会让用户与 AI 气泡同为 #F8F5EF（对比度 1.00，肉眼分不出谁说的）。 */
   --user-bubble-solid: #C23B22;
   --user-bubble-text:  #FFFFFF;
+
+  /* 实底色（背景不透明、其上直接压字时用）——
+   * --accent 是品牌强调色，还要当描边/图标/渐变端点用，不能为了压字而改深。
+   * 需要「实底 + 压字」的地方（accent 按钮）用这对专用 token。
+   * 朱砂实底 + 白字（5.33:1）；--accent 配 --text-inverse 在本主题只有 5.33:1（除本主题外均达标）。 */
+  --accent-solid: #C23B22;
+  --accent-solid-text: #FFFFFF;
+  /* 胭脂实底 + 白字（5.27:1）。--status-error 配 --text-inverse 在本主题 4.40:1。 */
+  --status-error-solid: #b14c43;
+  --status-error-solid-text: #FFFFFF;
   --sidebar-bg:     #EEE9E0;
   --overlay-subtle:  rgba(28, 28, 28, 0.03);
   --overlay-light:   rgba(28, 28, 28, 0.05);

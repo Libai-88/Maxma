@@ -86,6 +86,15 @@
   --surface-raised: #FFFFFF;
   --surface-dark: #2C3033;
 
+  /* ── 悬停态表面 ──
+   * `--bg-hover` 此前只在消费点出现（StickerPicker / StickerContextMenu 等），
+   * 任何地方都没有定义——悬停时背景直接落回继承色，看起来像「没反应」。
+   * 这里从主题的 `--bg-raised` 派生：主题文件都定义了 `--bg-raised`，
+   * 而 `--bg-raised` 本身就是各主题标注的「弹窗/悬停」层。
+   * 放在 base 层而非主题层，保证 6 个主题零改动即可获得一致悬停反馈。
+   */
+  --bg-hover: color-mix(in srgb, var(--bg-raised) 82%, var(--text-primary));
+
   /* ── 布局常量 ── */
   /* ── 标准断点（供所有组件 @media 统一引用）
        Mobile:  max-width 767px
@@ -123,6 +132,37 @@
   --status-warn-text:  color-mix(in srgb, var(--status-warn) 30%, var(--text-primary));
   --status-error-text: color-mix(in srgb, var(--status-error) 30%, var(--text-primary));
   --status-info-text:  color-mix(in srgb, var(--status-info) 30%, var(--text-primary));
+
+  /* ── 强调色·文字版 ──
+   * 与上面的 --status-*-text 同理：--accent 是品牌强调色，直接当文字色在
+   * 浅色底上偏淡（金缮 2.20:1、青草 3.79:1），作描边/图标/实底可以，
+   * 作**文字**偏淡。用 color-mix 向 --text-primary 靠拢 30%：明色主题
+   * 自动变深、暗色主题自动变亮。实测 6 主题在 --bg-card / 徽章底色上
+   * 均 ≥5.2:1（见 web/tests/themeTokens.spec.ts）。
+   */
+  --accent-text: color-mix(in srgb, var(--accent) 30%, var(--text-primary));
+
+  /* ── 实底色（背景为不透明色块、其上直接压文字时用） ──
+   *
+   * `--accent` 是「品牌强调色」：它同时被用作描边、图标、渐变端点，因此
+   * **不能**为了压文字而改深——改了整站强调色都会变。真正需要「实底 + 上
+   * 面压字」的地方（accent 按钮、error 按钮）改用下面这对专用 token。
+   *
+   * 为什么要单独设：`--accent` 配 `--text-inverse` 在 6 主题里只有 3 个达
+   * WCAG AA 4.5:1（kintsugi 2.29、midnight 3.80、grass 3.92）。仓库里
+   * grass.css 的 `--user-bubble-solid` 已经踩过这个坑并留下注释（取更深的
+   * 同色相值，白字 5.02:1）。这里把同一结论固化成 token，避免每个组件各写
+   * 各的，也避免有人为了「统一」而把 `--accent` 改深。
+   *
+   * 形态沿用仓库既有的 `--user-bubble-solid` / `--user-bubble-text` 约定：
+   * 每个主题给出一对**配套**值，前景色与背景色成对定义，主题之间可自由
+   * 组合（暗色主题用深字、亮色主题用白字）。实测 6 主题均 ≥4.5:1，
+   * 由 web/tests/themeTokens.spec.ts 守着。
+   */
+  --accent-solid: var(--accent);
+  --accent-solid-text: var(--text-inverse);
+  --status-error-solid: var(--status-error);
+  --status-error-solid-text: var(--text-inverse);
 
   /* ── 遮罩层（主题可覆盖） ── */
   --overlay-subtle: rgba(0, 0, 0, 0.03);

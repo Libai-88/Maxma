@@ -70,6 +70,16 @@
   /* ── 工具/专用（保留 v1 兼容变量） ── */
   --user-bubble-solid: #EAB2A0;
   --user-bubble-text:  #3B4A54;
+
+  /* 实底色（背景不透明、其上直接压字时用）——
+   * --accent 是品牌强调色，还要当描边/图标/渐变端点用，不能为了压字而改深。
+   * 需要「实底 + 压字」的地方（accent 按钮）用这对专用 token。
+   * 藕荷实底 + 雪青字（4.86:1）；--accent 配 --text-inverse 在本主题只有 3.80:1（除本主题外均达标）。 */
+  --accent-solid: #795c69;
+  --accent-solid-text: #E1EAF0;
+  /* 绛红实底 + 雪青字（5.22:1）。--status-error 配 --text-inverse 在本主题 2.61:1。 */
+  --status-error-solid: #8b4e4e;
+  --status-error-solid-text: #E1EAF0;
   --user-bg:         rgba(201, 154, 175, 0.10);
   --tool-bg:         rgba(201, 154, 175, 0.06);
   --tool-text:       #a97a8f;

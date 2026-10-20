@@ -34,16 +34,38 @@ web -> Bun 后端 /ws/chat/{session_id} -> kernel in-process -> pi AgentSession
 
 ## 测试基线
 
-> 数字为 2026-10-09 在 `feat/jet-hub-plugin` 上实测结果，不是估计值。
+> 数字为 2026-10-20 在 `feat/jet-hub-plugin` 上实测结果，不是估计值。
+> （后端 223 / 引擎 83 为 2026-10-09 实测，本次未改后端与引擎，未重跑。）
 
 ```text
 后端：cd bun-backend && bun test        （223 pass / 0 fail，33 个测试文件）
 引擎：cd bun-sidecar && bun test        （83 pass / 0 fail，10 个测试文件）
-前端：cd web && npx vitest run         （411 pass / 0 fail，52 个测试文件）
+前端：cd web && npx vitest run         （451 pass / 0 fail，55 个测试文件）
 便携冒烟：powershell -File build\portable-smoke-test.ps1
 ```
 
 > 注：本文档早期版本记录的后端 115 / 引擎 61 已被插件面带来的新增测试取代。
+> 前端基线由 411 升到 451：新增 Agent 任务中心相关 29 条（`web/tests/agentTasks.spec.ts` 11 +
+> `web/tests/agentComponents.spec.ts` 18），主题对比度契约 2 条，另修复 `subAgentCard.spec.ts`
+> 2 条被重写打破的回归。
+
+## Agent 任务中心（后台子任务）
+
+对话中派发的子 Agent 会在 `/agent-tasks`（Dock 左侧栏「Agent」）以任务卡片呈现。
+
+- 数据源：`bun-backend/src/routes/deferred-runs.ts` 的三个端点
+  （list / get / cancel），前端封装在 `web/src/composables/useAgentTasks.ts`
+- 前端：`web/src/views/AgentTasksView.vue` + `web/src/components/agent/*`
+- 关键契约：
+  - **后端时间戳是秒**（`Math.floor(Date.now() / 1000)`），前端统一换算成毫秒
+  - 只有存在 `queued` / `running` 任务时才轮询（4s），全终态后停
+  - deferred-runs 端点**恒定挂载**，不受 `features.sub_agents.enabled`
+    （默认 `false`）影响——所以路由不能用 `meta.feature: 'sub_agents'` 门控
+  - 端点 404 → 判定「能力不可用」并隐藏面板，不当错误抛给用户
+- 隐私边界（ADR 0003）：只消费 `DeferredRun`，**不读**后端记录里的
+  `task` / `name`；标题一律用不透明 `run_id` 短串
+- 依赖边是**推导**出来的（后端不记录子任务间依赖）：同回合 = 并行，
+  相邻回合 = 顺序
 
 ## 插件子系统（当前分支的重点）
 

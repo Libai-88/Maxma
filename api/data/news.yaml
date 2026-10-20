@@ -1,4 +1,12 @@
 news:
+  - id: "agent-task-center"
+    title: "Agent 任务中心"
+    description: "新增「Agent」任务中心页面，集中查看对话中派发的后台子 Agent：实时状态、进度与结果一览，可随时取消单个或全部运行中的任务。数据直接来自后端任务接口，状态随对话实时更新。"
+    type: "feat"
+    date: "2026-10-20"
+    tags: ["Agent", "子任务", "界面"]
+    version: "v2.6.11"
+    pr_number: null
   - id: "theme-contrast-fix"
     title: "深色主题弹窗文字修复"
     description: "修复深色主题下设置等弹窗文字几乎看不见的问题：弹窗玻璃底与正文用了同一个色值，文字与背景几乎同色。同时统一了用户气泡与状态色的对比度，6 套主题全部通过可读性校验。"

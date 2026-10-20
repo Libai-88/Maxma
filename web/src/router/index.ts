@@ -171,6 +171,17 @@ const router = createRouter({
       meta: { transition: 'rise', title: '自动化', feature: 'automation' },
     },
     {
+      path: '/agent-tasks',
+      name: 'agent-tasks',
+      component: () => import('@/views/AgentTasksView.vue'),
+      meta: { transition: 'flip', title: 'Agent 任务' },
+    },
+    {
+      // 旧路径保留重定向，避免上一个版本的书签/外链落到 404。
+      path: '/agent-demo',
+      redirect: { name: 'agent-tasks' },
+    },
+    {
       path: '/feature-unavailable',
       name: 'feature-unavailable',
       component: () => import('@/views/FeatureUnavailableView.vue'),

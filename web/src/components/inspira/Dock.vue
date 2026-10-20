@@ -133,6 +133,7 @@ const navItems: NavItem[] = [
   { to: '/providers', label: '模型', icon: 'model' },
   { to: '/memory', label: '记忆', icon: 'memory', feature: 'memory' },
   { to: '/evolution', label: '成长', icon: 'sparkles', feature: 'memory' },
+  { to: '/agent-tasks', label: 'Agent', icon: 'cpu' },
   { to: '/metrics', label: '运行指标', icon: 'metrics' },
   { to: '/extensions', label: '扩展', icon: 'extensions' },
   { to: '/plugins', label: '插件', icon: 'puzzle', feature: 'plugins' },

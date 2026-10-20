@@ -262,17 +262,17 @@ onBeforeUnmount(() => {
 }
 
 .tone-ok .dot {
-  background: #3f9c5a;
+  background: var(--status-ok);
   opacity: 1;
 }
 
 .tone-warn .dot {
-  background: #d9a441;
+  background: var(--status-warn);
   opacity: 1;
 }
 
 .tone-error .dot {
-  background: #b23b2e;
+  background: var(--status-error);
   opacity: 1;
 }
 
@@ -288,7 +288,7 @@ onBeforeUnmount(() => {
 }
 
 .warn-mark {
-  color: #d9a441;
+  color: var(--status-warn);
 }
 
 .popover {
@@ -305,7 +305,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border, #e6e2da);
   border-radius: 10px;
   background: var(--bg-card, #fff);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+  box-shadow: var(--shadow-lg);
 }
 
 .pop-head {
@@ -328,7 +328,7 @@ onBeforeUnmount(() => {
 .pop-warn {
   margin: 0;
   font-size: 11px;
-  color: #a5731a;
+  color: var(--status-warn-text);
 }
 
 .pop-list {
