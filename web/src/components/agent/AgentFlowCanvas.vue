@@ -1,10 +1,22 @@
 <template>
-  <div class="agent-flow-canvas" ref="canvasEl" @mousedown="handleCanvasMouseDown">
-    <div class="flow-viewport" :style="{ transform: `scale(${zoom})` }">
+  <div
+    class="agent-flow-canvas"
+    ref="canvasEl"
+    :class="{ 'is-panning': dragging }"
+    @mousedown="handleCanvasMouseDown"
+  >
+    <div
+      class="flow-viewport"
+      :style="{
+        transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+        width: `${stageWidth}px`,
+        height: `${stageHeight}px`,
+      }"
+    >
       <svg
         class="flow-svg"
-        :width="canvasWidth"
-        :height="canvasHeight"
+        :width="stageWidth"
+        :height="stageHeight"
       >
         <!-- 背景网格 -->
         <defs>
@@ -36,7 +48,7 @@
       <!-- 箭头标记 -->
       <defs>
         <marker
-          v-for="type in ['sequential', 'parallel', 'conditional']"
+          v-for="type in ['sequential', 'parallel']"
           :key="`arrow-${type}`"
           :id="`arrow-${type}`"
           markerWidth="10"
@@ -73,8 +85,7 @@
         tabindex="0"
         :aria-pressed="selectedId === agent.id"
         @click="handleNodeClick(agent.id)"
-        @keydown.enter.prevent="handleNodeClick(agent.id)"
-        @keydown.space.prevent="handleNodeClick(agent.id)"
+        @keydown="handleNodeKeydown($event, agent.id)"
       >
         <!-- 节点状态指示器 -->
         <div class="node-status-indicator">
@@ -144,10 +155,6 @@
         <span class="legend-line parallel"></span>
         <span class="legend-text">并行执行</span>
       </div>
-      <div class="legend-item">
-        <span class="legend-line conditional"></span>
-        <span class="legend-text">条件执行</span>
-      </div>
     </div>
   </div>
 </template>
@@ -174,6 +181,9 @@ const canvasEl = ref<HTMLElement | null>(null)
 const canvasWidth = ref(1000)
 const canvasHeight = ref(600)
 const zoom = ref(1)
+/** 平移量（px）。画布固定 600px 高且 overflow:hidden，层数多时必须能拖。 */
+const pan = ref({ x: 0, y: 0 })
+const dragging = ref(false)
 /** 本地选中态；外部给了 selectedId 就以外部为准（受控）。 */
 const localSelectedId = ref<string | null>(null)
 const selectedId = computed(() =>
@@ -221,7 +231,8 @@ const positionedAgents = computed<PositionedAgent[]>(() => {
   // 计算位置
   layers.forEach((layerAgents, layerIdx) => {
     const layerHeight = layerAgents.length * NODE_SPACING
-    const startY = (canvasHeight.value - layerHeight) / 2
+    // 节点多于 5 个时 startY 会变成负数，把第一个节点顶出画布。
+    const startY = Math.max(40, (canvasHeight.value - layerHeight) / 2)
 
     layerAgents.forEach((agentId, nodeIdx) => {
       const agent = agentMap.get(agentId)
@@ -237,6 +248,20 @@ const positionedAgents = computed<PositionedAgent[]>(() => {
   })
 
   return Array.from(positioned.values())
+})
+
+/**
+ * 舞台尺寸：至少与容器一致；节点超出时随之变大。
+ * 之前固定用容器宽高，右侧/底部节点被 `overflow:hidden` 直接切掉。
+ */
+const stageWidth = computed(() => {
+  const right = positionedAgents.value.reduce((max, a) => Math.max(max, a.x + NODE_WIDTH), 0)
+  return Math.max(canvasWidth.value, right + 100)
+})
+
+const stageHeight = computed(() => {
+  const bottom = positionedAgents.value.reduce((max, a) => Math.max(max, a.y + NODE_HEIGHT), 0)
+  return Math.max(canvasHeight.value, bottom + 60)
 })
 
 // 计算连接线路径
@@ -273,7 +298,6 @@ function getConnectionColor(conn: { type: string }) {
   const colors = {
     sequential: 'var(--accent)',
     parallel: 'var(--status-info-text)',
-    conditional: 'var(--status-warn-text)',
   }
   return colors[conn.type as keyof typeof colors] || colors.sequential
 }
@@ -282,7 +306,6 @@ function getArrowColor(type: string) {
   const colors = {
     sequential: 'var(--accent)',
     parallel: 'var(--status-info-text)',
-    conditional: 'var(--status-warn-text)',
   }
   return colors[type as keyof typeof colors] || colors.sequential
 }
@@ -308,18 +331,55 @@ function handleCancelNode(agentId: string) {
 }
 
 /**
- * 点击画布空白处取消选中。
+ * 点击画布空白处取消选中；按住拖动则平移画布。
  *
  * 监听挂在 `.agent-flow-canvas` 而不是内层 `<svg>`——后者是
- * `pointer-events: none`（连线层不能挡住节点），事件根本到不了它，
- * 于是这个处理函数永远不会触发（jsdom 里因为没有真实命中测试而「看起来」
- * 是好的，浏览器里却是死代码）。
+ * `pointer-events: none`（连线层不能挡住节点），事件根本到不了它。
  */
+let dragStart = { x: 0, y: 0, panX: 0, panY: 0 }
+let dragMoved = false
+
 function handleCanvasMouseDown(event: MouseEvent) {
-  // 点在节点上时不算「点空白」——节点自己会 stopPropagation。
-  if ((event.target as HTMLElement | null)?.closest('.agent-node')) return
+  if (event.button !== 0) return
+  const target = event.target as HTMLElement | null
+  // 点在节点/缩放按钮上时不进入平移，也不清空选中。
+  if (target?.closest('.agent-node, .zoom-controls')) return
   localSelectedId.value = null
   emit('select', '')
+
+  dragMoved = false
+  dragStart = { x: event.clientX, y: event.clientY, panX: pan.value.x, panY: pan.value.y }
+  dragging.value = true
+  // 防止上一次 mouseup 丢失时累积监听器。
+  window.removeEventListener('mousemove', handleDragMove)
+  window.removeEventListener('mouseup', handleDragEnd)
+  window.addEventListener('mousemove', handleDragMove)
+  window.addEventListener('mouseup', handleDragEnd)
+}
+
+function handleDragMove(event: MouseEvent) {
+  const dx = event.clientX - dragStart.x
+  const dy = event.clientY - dragStart.y
+  if (!dragMoved && Math.abs(dx) + Math.abs(dy) < 4) return
+  dragMoved = true
+  pan.value = { x: dragStart.panX + dx, y: dragStart.panY + dy }
+}
+
+function handleDragEnd() {
+  dragging.value = false
+  window.removeEventListener('mousemove', handleDragMove)
+  window.removeEventListener('mouseup', handleDragEnd)
+}
+
+/**
+ * 节点本身是 `role="button"`，内部还有取消按钮。
+ * 只响应节点自身获得焦点时的 Enter/Space，避免冒泡误触。
+ */
+function handleNodeKeydown(event: KeyboardEvent, agentId: string) {
+  if (event.target !== event.currentTarget) return
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  handleNodeClick(agentId)
 }
 
 function zoomIn() {
@@ -332,6 +392,7 @@ function zoomOut() {
 
 function resetZoom() {
   zoom.value = 1
+  pan.value = { x: 0, y: 0 }
 }
 
 // 响应式画布大小
@@ -425,6 +486,8 @@ onMounted(() => {
 // 且回调闭包持有已销毁的 DOM 引用。
 onUnmounted(() => {
   window.removeEventListener('resize', updateCanvasSize)
+  window.removeEventListener('mousemove', handleDragMove)
+  window.removeEventListener('mouseup', handleDragEnd)
 })
 </script>
 
@@ -437,6 +500,15 @@ onUnmounted(() => {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   overflow: hidden;
+}
+
+.agent-flow-canvas.is-panning {
+  cursor: grabbing;
+}
+
+/* 拖动时不走过渡，否则画布会「追」着鼠标慢半拍。 */
+.agent-flow-canvas.is-panning .flow-viewport {
+  transition: none;
 }
 
 /* 缩放视口：网格、连线、节点一起缩放。
@@ -470,10 +542,6 @@ onUnmounted(() => {
 
 .connection-path.type-parallel {
   stroke-dasharray: 8 4;
-}
-
-.connection-path.type-conditional {
-  stroke-dasharray: 4 4;
 }
 
 /* 节点层 */
@@ -772,16 +840,6 @@ onUnmounted(() => {
     var(--status-info) 8px,
     transparent 8px,
     transparent 12px
-  );
-}
-
-.legend-line.conditional {
-  background-image: repeating-linear-gradient(
-    90deg,
-    var(--status-warn),
-    var(--status-warn) 4px,
-    transparent 4px,
-    transparent 8px
   );
 }
 

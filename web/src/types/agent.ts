@@ -26,7 +26,7 @@ export interface Agent {
 export interface AgentDependency {
   from: string
   to: string
-  type?: 'sequential' | 'parallel' | 'conditional'
+  type?: 'sequential' | 'parallel'
 }
 
 export type TimelineEventType = 'start' | 'progress' | 'complete' | 'error' | 'info'

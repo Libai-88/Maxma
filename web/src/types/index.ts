@@ -265,8 +265,18 @@ export interface DeferredSubagentSubmittedEvent {
   type: 'deferred_subagent_submitted'
   payload: {
     run_id: string
-    parent_session_id: string | null
+    parent_turn_id: string | null
     status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+    result_ref: string | null
+    /** 列表/WS 投影恒为 null；全文走 GET /deferred-runs/:runId。 */
+    result: string | null
+    cancel_reason: string | null
+    deadline_at: number | null
+    attempts: number
+    created_at: number
+    updated_at: number
+    error_code?: string | null
+    error_message?: string | null
   }
 }
 

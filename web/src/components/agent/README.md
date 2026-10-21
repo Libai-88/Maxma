@@ -108,7 +108,7 @@ interface Agent {
 interface AgentDependency {
   from: string
   to: string
-  type?: 'sequential' | 'parallel' | 'conditional'
+  type?: 'sequential' | 'parallel'
 }
 
 // Props
@@ -121,14 +121,11 @@ interface AgentDependency {
 **Events**:
 - `cancelAgent` - 取消单个任务
 - `cancelAll` - 取消所有运行中任务
-- `selectAgent` - 选中某个任务
-- `expandAgent` / `collapseAgent` - 展开 / 收起任务详情
+- `expandAgent` - 展开任务详情；页面据此懒加载 `result` 全文
 
+> 选中（`selectAgent`）与收起（`collapseAgent`）是编排器内部状态，不再对外 emit。
 > 原先还有 `pauseAll` / `resumeAll` 两个事件与「暂停全部」按钮。
 > 后端**没有**暂停端点，属于假功能，已一并移除。
-- `selectAgent` - 选中某个任务
-- `expandAgent` - 展开任务详情
-- `collapseAgent` - 收起任务详情
 
 **使用示例**:
 ```vue
@@ -227,9 +224,10 @@ interface TimelineEvent {
 > **澄清**：`SubAgentCard` 是仓库**原有**的已跟踪文件
 > （`web/src/components/SubAgentCard.vue`），不是本次新增的组件。
 > 本次对它做了视觉重做，并恢复了它原有的对外契约
-> （标题文案 `后台子任务`、取消按钮类名 `.cancel-run`）——
-> 上一版重写时改掉了这两处，导致 `tests/subAgentCard.spec.ts` 2 条测试变红，
-> 且 GSAP hover 钩子依赖的 `.cancel-run` 一并失效。
+> （标题文案 `后台子任务`、取消按钮类名 `.cancel-run`）。
+> 取消按钮的 hover 反馈由 CSS（`.cancel-run-btn:hover`）提供；
+> 早前在 setup 阶段查找 `.cancel-run` 的 GSAP hover 钩子已删除——
+> 按钮在 `v-if="expanded"` 内，那时集合为空，永远不会绑定。
 
 **它与本套编排组件的区别**：
 
@@ -255,16 +253,22 @@ interface TimelineEvent {
    ```
    GET /api/sessions/:sessionId/deferred-runs
    ```
+   活跃任务全量返回，终态任务默认最多 100 条（`?limit=` 可调，上限 200），
+   响应带 `has_more`。**列表不返回 `result` 全文**（恒为 `null`），避免每 4 秒
+   轮询反复搬运历史输出。
 
 2. **获取单个 deferred run**
    ```
    GET /api/sessions/:sessionId/deferred-runs/:runId
    ```
+   返回完整投影（含 `result`）。卡片展开时按需调用。
 
 3. **取消 deferred run**
    ```
    POST /api/sessions/:sessionId/deferred-runs/:runId/cancel
    ```
+   本地记录立即置为 `cancelled`（终态，迟到的完成事件不会把它改回去），
+   同时通过可选的 `cancel_deferred_run` RPC 钩子把意图下发给执行侧。
 
 ### 数据流
 
@@ -280,11 +284,12 @@ api.listDeferredRuns() -> useAgentTasks(映射 + 轮询) -> AgentTasksView -> �
 2. 有 `queued` / `running` 任务时每 4 秒轮询一次；全终态后自动停止
 3. 取消后就地更新该条任务状态
 4. 会话切换时重新拉取，并丢弃切换前的在途响应（防竞态）
+5. 展开卡片时再调 `getDeferredRun` 补 `result` 全文（列表不带 result）
 
-> **注意**：这里**没有** WebSocket 推送。后端 `deferred_subagent_submitted`
-> 事件只带一个不透明的 `run_id`，状态始终由上面的 REST 接口拉取。
-> `SubAgentCard`（对话气泡里的卡片）走的是 `getDeferredRun` 单点查询，
-> 与本套编排组件不是同一条数据路径。
+> **注意**：状态事实仍以 REST 为准。后端 `deferred_subagent_submitted`
+> WebSocket 事件现在只转发**白名单投影**（不含 `task` / `name` / `result`），
+> 前端只从中取不透明的 `run_id` 来建立 turn 与子任务的关联。
+> `SubAgentCard`（对话气泡里的卡片）同样走 `getDeferredRun` 单点查询。
 
 ## 使用指南
 
@@ -322,15 +327,14 @@ api.listDeferredRuns() -> useAgentTasks(映射 + 轮询) -> AgentTasksView -> �
    <AgentOrchestrator
      :agents="agents"
      :dependencies="dependencies"
-     :selected-id="selectedId"
      @cancel-agent="handleCancel"
      @cancel-all="handleCancelAll"
-     @select-agent="handleSelect"
+     @expand-agent="loadRunResult"
    />
    ```
 
-   > 事件名是 `cancel-agent` / `cancel-all` / `select-agent`（kebab-case，
-   > 对应 script 里的 `cancelAgent` / `cancelAll` / `selectAgent`）。
+   > 事件名是 `cancel-agent` / `cancel-all` / `expand-agent`（kebab-case，
+   > 对应 script 里的 `cancelAgent` / `cancelAll` / `expandAgent`）。
 
 ### 查看实际效果
 
@@ -539,7 +543,7 @@ A: 确保引入了主题 CSS 文件（`App.vue` 里 `@import '@/themes/*.css'`�
 
 - [ ] `aria-live`：任务状态变化不播报给读屏（见「可访问性」）
 - [ ] 焦点管理：展开/收起、切换视图后焦点会丢
-- [ ] 节点拖拽与画布平移：`AgentFlowCanvas` 只做了缩放
+- [ ] 节点拖拽：`AgentFlowCanvas` 已支持画布平移与缩放，单个节点还不能拖动
 - [ ] `max-height` 展开动画的裁切问题（超过 600px 会截断）
 
 ### 可能的增强
@@ -551,6 +555,8 @@ A: 确保引入了主题 CSS 文件（`App.vue` 里 `@import '@/themes/*.css'`�
 ### 需要后端先支持
 
 - [ ] 子任务间的真实依赖关系（当前依赖边是从 `parent_turn_id` **推导**的）
+- [ ] 执行侧消费 `cancel_deferred_run`：本地已置 `cancelled` 并下发 RPC，
+      执行器尚未实现该方法时必须自己收尾，否则只是 UI 状态
 - [ ] 任务进度百分比（后端 `DeferredRun` 未提供 `progress` 字段，
       当前进度条是模拟动画）
 - [ ] 暂停 / 恢复（后端无对应端点，故前端不做）

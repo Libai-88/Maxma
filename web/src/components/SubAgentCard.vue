@@ -46,7 +46,7 @@
               </div>
               <div class="run-meta">
                 <span v-if="run.attempts > 1" class="run-attempts">
-                  重试 {{ run.attempts }} 次
+                  尝试 {{ run.attempts }} 次
                 </span>
                 <button
                   v-if="isActive(run.status)"
@@ -67,7 +67,7 @@
             </div>
             <div v-else-if="run.status === 'failed'" class="run-error">
               <Icon name="warning" :size="16" />
-              <span>任务执行失败</span>
+              <span>{{ failureText(run) }}</span>
             </div>
             <div v-else-if="run.status === 'cancelled'" class="run-cancelled">
               {{ cancelText(run.cancel_reason) }}
@@ -141,6 +141,12 @@ function cancelText(reason: DeferredRun['cancel_reason']): string {
   return '任务已取消'
 }
 
+function failureText(run: DeferredRun): string {
+  if (run.error_message) return run.error_message
+  if (run.error_code) return `任务执行失败（${run.error_code}）`
+  return '任务执行失败'
+}
+
 function stopPolling() {
   if (pollTimer) {
     clearTimeout(pollTimer)
@@ -161,9 +167,15 @@ function isUnavailableError(error: unknown): boolean {
   return error instanceof Error && /\b404\b/.test(error.message)
 }
 
+let refreshing = false
+
 async function refresh() {
-  if (!expanded.value || loading.value || !available.value) return
-  loading.value = true
+  if (!expanded.value || refreshing || !available.value) return
+  refreshing = true
+  // `loading` 只表示「首次加载、还没有任何内容」。轮询刷新不碰它，
+  // 否则展开面板每 4 秒会被“正在读取状态…”整块替换一次。
+  const firstLoad = Object.keys(runsById.value).length === 0
+  if (firstLoad) loading.value = true
   try {
     const results = await Promise.allSettled(
       props.runIds.map(runId => api.getDeferredRun(props.sessionId, runId)),
@@ -181,6 +193,7 @@ async function refresh() {
     }
     runsById.value = next
   } finally {
+    refreshing = false
     loading.value = false
     schedulePolling()
   }
@@ -205,19 +218,9 @@ useGsap((_ctx, contextSafe) => {
   }), { flush: 'post' })
 })
 
-// 取消运行按钮：中断操作 hover 抖动提示
-useGsap((ctx) => {
-  const el = cardEl.value
-  if (!el) return
-  const btns = gsap.utils.toArray<HTMLElement>('.cancel-run', el)
-  btns.forEach((btn) => {
-    const onEnter = () => {
-      gsap.to(btn, { x: -2, duration: 0.08, yoyo: true, repeat: 1, ease: 'power1.out', overwrite: 'auto' })
-    }
-    btn.addEventListener('mouseenter', onEnter)
-    ctx.add(() => btn.removeEventListener('mouseenter', onEnter))
-  })
-})
+// 取消按钮的 hover 提醒用 CSS 实现（见 .cancel-run:hover）。
+// 之前在这里用 useGsap 查 `.cancel-run` 绑定 mouseenter，但按钮位于
+// `v-if="expanded"` 内，setup 阶段集合为空，展开后也不会重新绑定——死代码。
 
 async function cancelRun(runId: string) {
   if (cancelling.value.has(runId)) return
@@ -470,12 +473,12 @@ onUnmounted(stopPolling)
 }
 
 .run-status-badge.status-succeeded {
-  background: color-mix(in srgb, var(--status-ok) 15%, var(--bg-secondary));
+  background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-secondary));
   color: var(--status-ok-text);
 }
 
 .run-status-badge.status-failed {
-  background: color-mix(in srgb, var(--status-error) 15%, var(--bg-secondary));
+  background: color-mix(in srgb, var(--status-error) 12%, var(--bg-secondary));
   color: var(--status-error-text);
 }
 

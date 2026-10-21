@@ -45,7 +45,7 @@ import { createStickerUploadRoutes } from "./routes/sticker-upload";
 import { createSettingsPanelRoutes } from "./routes/settings-panels";
 import { createWorkflowRoutes, setWorkflowEventSink } from "./routes/workflows";
 import { createCollabRoutes } from "./routes/collab";
-import { createDeferredRunRoutes } from "./routes/deferred-runs";
+import { createDeferredRunRoutes, setDeferredRunCancelHandler } from "./routes/deferred-runs";
 import { createActivityRoutes } from "./routes/activity";
 import { createSessionCompressRoutes } from "./routes/session-compress";
 import { createProvidersRoutes, migratePlaintextKeysToEncrypted } from "./routes/providers";
@@ -149,6 +149,12 @@ const chatHub: ChatWsHub = {
   callRpc: callKernelRpc,
   broadcast: broadcastEvent,
 };
+
+// 取消子任务时把意图下发给执行侧。执行侧未实现该方法时 callKernelRpc 返回
+// { ok: false }，本地记录仍然是 cancelled（浏览器看到的事实不变）。
+setDeferredRunCancelHandler((sessionId, runId) =>
+  callKernelRpc("cancel_deferred_run", { session_id: sessionId, run_id: runId }),
+);
 
 export function createApp(): Hono {
   const token = loadOrCreateToken();

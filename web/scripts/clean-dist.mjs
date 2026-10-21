@@ -18,6 +18,7 @@
  * 产物只拷 dist）。
  */
 import { existsSync, readdirSync, renameSync, rmSync, statSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 
 const distDir = join(process.cwd(), "dist");
@@ -27,8 +28,9 @@ if (!existsSync(distDir)) {
 }
 
 // 1. 旧 dist 整体改名隔离（rename 不被 safe-delete 钩子拦截）
-const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-const quarantined = `${distDir}_old_${stamp}`;
+// 时间戳到毫秒 + 随机后缀：同一秒内连跑两次构建也不会撞名。
+const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 23);
+const quarantined = `${distDir}_old_${stamp}_${randomUUID().slice(0, 8)}`;
 renameSync(distDir, quarantined);
 console.log(`[clean-dist] dist -> ${quarantined.split(/[\\/]/).pop()}`);
 

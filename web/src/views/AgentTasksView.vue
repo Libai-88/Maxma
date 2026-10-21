@@ -11,12 +11,12 @@
         <button
           type="button"
           class="refresh-btn"
-          :disabled="loading"
+          :disabled="loading && !tasks.length"
           @click="refresh"
           aria-label="刷新任务列表"
         >
           <Icon name="refresh" :size="16" />
-          <span>{{ loading ? '刷新中' : '刷新' }}</span>
+          <span>{{ loading && !tasks.length ? '加载中' : '刷新' }}</span>
         </button>
       </div>
     </header>
@@ -62,11 +62,14 @@
         :dependencies="agentDependencies"
         @cancel-agent="handleCancelAgent"
         @cancel-all="handleCancelAll"
-        @select-agent="handleSelectAgent"
+        @expand-agent="handleExpandAgent"
       />
 
+      <p v-if="hasMore" class="list-truncated">
+        仅显示最近一批已结束任务；更早的记录仍保留在后台。
+      </p>
+
       <section class="timeline-section">
-        <h2 class="section-title">执行时间线</h2>
         <AgentStatusTimeline
           :events="timelineEvents"
           :is-live="hasActive"
@@ -83,8 +86,9 @@ import Icon from '@/components/Icon.vue'
 import AgentOrchestrator from '@/components/agent/AgentOrchestrator.vue'
 import AgentStatusTimeline from '@/components/agent/AgentStatusTimeline.vue'
 import { useAgentTasks } from '@/composables/useAgentTasks'
+import { buildAgentDependencies } from '@/utils/agentDependencies'
 import { useSessionStore } from '@/stores/session'
-import type { Agent, AgentDependency, TimelineEvent } from '@/types/agent'
+import type { Agent, TimelineEvent } from '@/types/agent'
 
 const sessionStore = useSessionStore()
 
@@ -94,7 +98,9 @@ const {
   error,
   unavailable,
   hasActive,
+  hasMore,
   refresh,
+  loadRunResult,
   cancel,
   cancelAll,
 } = useAgentTasks({
@@ -113,9 +119,21 @@ const STATUS_TEXT: Record<string, string> = {
  * 把真实任务映射成 Agent 卡片模型。
  *
  * 隐私边界：标题只使用不透明的 run_id 短串。ADR 0003 规定完整 prompt、
- * 子会话记录与原始工具结果不得进入父级摘要与 UI 缓存——后端记录里虽有
- * `task` / `name` 字段，前端 `DeferredRun` 类型刻意不暴露，这里同样不读。
+ * 子会话记录与原始工具结果不得进入父级摘要与 UI 缓存——后端投影
+ * （`toDeferredRunView`）已不再返回 `task` / `name`，这里也没有可读的字段。
  */
+const ERROR_TEXT: Record<string, string> = {
+  timeout: '执行超时',
+  deferred_run_failed: '子任务执行失败',
+}
+
+/** 失败原因：优先用后端透传的 message，其次把错误码翻成人话。 */
+function failureText(task: { error_code?: string; error_message?: string }): string | undefined {
+  if (task.error_message) return task.error_message
+  if (!task.error_code) return undefined
+  return ERROR_TEXT[task.error_code] ?? `执行失败（${task.error_code}）`
+}
+
 const agentTasks = computed<Agent[]>(() =>
   tasks.value.map(task => ({
     id: task.run_id,
@@ -125,48 +143,13 @@ const agentTasks = computed<Agent[]>(() =>
     attempts: task.attempts,
     duration: task.duration,
     result: task.result ?? undefined,
-    error: task.error_code,
+    error: failureText(task),
     cancelReason: task.cancel_reason ?? undefined,
     cancellable: task.cancellable,
   })),
 )
 
-/**
- * 从真实数据推导依赖边。
- *
- * 后端不记录子任务之间的依赖关系，只记录每个任务所属的 `parent_turn_id`。
- * 可据实推导的结构是：
- *   - 同一回合内的任务是**并行**兄弟（同一轮一起派发）；
- *   - 相邻回合之间是**顺序**关系（对话回合依次发生）。
- * 于是把「上一回合的最后一个任务」作为「本回合各任务」的前驱：
- * 顺序边连到首个任务，并行边连到其余任务。没有任何虚构的节点。
- */
-const agentDependencies = computed<AgentDependency[]>(() => {
-  const deps: AgentDependency[] = []
-  // 按回合分组，组内保持后端返回的顺序（后端按 created_at 倒序）。
-  const turns = new Map<string, string[]>()
-  for (const task of tasks.value) {
-    const turn = task.parent_turn_id ?? '__no_turn__'
-    const bucket = turns.get(turn)
-    if (bucket) bucket.push(task.run_id)
-    else turns.set(turn, [task.run_id])
-  }
-
-  const groups = [...turns.values()].filter(group => group.length > 0)
-  for (let i = 1; i < groups.length; i += 1) {
-    const prev = groups[i - 1]
-    const current = groups[i]
-    const predecessor = prev[prev.length - 1]
-    current.forEach((runId, idx) => {
-      deps.push({
-        from: predecessor,
-        to: runId,
-        type: idx === 0 ? 'sequential' : 'parallel',
-      })
-    })
-  }
-  return deps
-})
+const agentDependencies = computed(() => buildAgentDependencies(tasks.value))
 
 const timelineEvents = computed<TimelineEvent[]>(() =>
   tasks.value.map(task => {
@@ -210,9 +193,12 @@ function handleCancelAll() {
   void cancelAll()
 }
 
-function handleSelectAgent(agentId: string) {
-  // 选中态由编排器内部维护；此处保留出口便于将来接「查看详情」跳转。
-  void agentId
+function handleExpandAgent(agentId: string) {
+  // 列表接口不返回 result 全文，展开时补一次单条详情。
+  // 已经懒加载过就不再重复请求。
+  const task = tasks.value.find(t => t.run_id === agentId)
+  if (task?.result != null) return
+  void loadRunResult(agentId)
 }
 
 function handleTimelineAction(eventId: string, actionType: string) {
@@ -288,12 +274,12 @@ function handleTimelineAction(eventId: string, actionType: string) {
   margin: 32px auto 0;
 }
 
-.section-title {
-  margin: 0 0 12px;
-  font-size: 18px;
-  font-weight: 600;
-  font-family: var(--font-display);
-  color: var(--text-primary);
+.list-truncated {
+  max-width: 1200px;
+  margin: 12px auto 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-align: right;
 }
 
 /* 状态面板 */

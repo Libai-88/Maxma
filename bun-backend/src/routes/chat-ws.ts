@@ -45,7 +45,7 @@ import { isPluginProvider } from "../plugins/dsh";
 import { getMetrics } from "../metrics";
 import { recordLlmUsageCall, type LlmCacheStatus } from "../llm-usage-ledger";
 import { getErrorCollector } from "../error-collector";
-import { getDeferredRunManager } from "./deferred-runs";
+import { getDeferredRunManager, toDeferredRunView } from "./deferred-runs";
 import { newTurnId, calculateContextUsage } from "./chat-turns";
 import { FILE_WRITING_TOOLS, extractFilePathFromOutput, buildArtifactPayload } from "./chat-artifacts";
 
@@ -481,27 +481,40 @@ async function processKernelEvent(
     }
 
     case "deferred_subagent_submitted": {
-      // AG-SUBAGENT-001：生命周期状态映射后写入 DeferredRunManager，原样转发
+      // AG-SUBAGENT-001：生命周期状态映射后写入 DeferredRunManager。
+      //
+      // 只落库运行状态，不落 `task` / `name`：那是子任务的完整 prompt/标题，
+      // ADR 0003 不允许进入父会话的数据面（库、HTTP、WS 都不行）。
+      const rawStatus = String(payload.status ?? "queued");
+      const mapped: Record<string, string> = { completed: "succeeded", failed: "failed", aborted: "cancelled" };
+      let forwarded: Record<string, unknown> = {
+        run_id: payload.run_id ?? "",
+        status: mapped[rawStatus] ?? rawStatus,
+      };
       try {
-        const rawStatus = String(payload.status ?? "queued");
-        const mapped: Record<string, string> = { completed: "succeeded", failed: "failed", aborted: "cancelled" };
-        getDeferredRunManager().addOrUpdate(sessionId, {
+        const stored = getDeferredRunManager().addOrUpdate(sessionId, {
           run_id: payload.run_id ?? "",
           parent_turn_id: payload.parent_turn_id ?? null,
           status: mapped[rawStatus] ?? rawStatus,
-          task: payload.task ?? "",
-          name: payload.name ?? "",
           result_ref: payload.result_ref ?? null,
           result: payload.result ?? null,
           cancel_reason: payload.cancel_reason ?? null,
           deadline_at: payload.deadline_at ?? null,
           attempts: payload.attempts ?? 0,
           error_code: payload.error_code ?? null,
+          error_message:
+            typeof payload.error_message === "string"
+              ? payload.error_message
+              : typeof payload.error === "string"
+                ? payload.error
+                : null,
         });
+        // 浏览器只看白名单投影；列表态不重复携带 result 全文。
+        forwarded = toDeferredRunView(stored, { includeResult: false });
       } catch (err) {
         console.warn(`[deferred] Failed to store deferred run: ${String(err)}`);
       }
-      send("deferred_subagent_submitted", payload);
+      send("deferred_subagent_submitted", forwarded);
       return;
     }
 

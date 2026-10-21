@@ -94,10 +94,19 @@ describe('AgentCard', () => {
     expect(header.attributes('role')).toBe('button')
     expect(header.attributes('tabindex')).toBe('0')
 
-    await header.trigger('keydown.enter')
+    await header.trigger('keydown', { key: 'Enter' })
     expect(wrapper.find('.agent-card-body').exists()).toBe(true)
 
-    await header.trigger('keydown.space')
+    await header.trigger('keydown', { key: ' ' })
+    expect(wrapper.find('.agent-card-body').exists()).toBe(false)
+  })
+
+  it('内部取消按钮按 Enter 不会被头部 role=button 当成展开', async () => {
+    const wrapper = mount(AgentCard, {
+      props: { agentId: 'agent-1', status: 'running' },
+    })
+
+    await wrapper.get('.cancel-btn').trigger('keydown', { key: 'Enter' })
     expect(wrapper.find('.agent-card-body').exists()).toBe(false)
   })
 
@@ -280,6 +289,28 @@ describe('AgentFlowCanvas', () => {
     expect(viewport()).toContain('scale(1)')
   })
 
+  it('可拖动平移画布，重置后归零', async () => {
+    const wrapper = mount(AgentFlowCanvas, {
+      props: { agents, dependencies },
+    })
+    const canvas = wrapper.get('.agent-flow-canvas')
+    const viewport = () => wrapper.get('.flow-viewport').attributes('style') ?? ''
+
+    await canvas.trigger('mousedown', { button: 0, clientX: 10, clientY: 10 })
+    expect(canvas.classes()).toContain('is-panning')
+
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 60, clientY: 30 }))
+    await nextTick()
+    expect(viewport()).toContain('translate(50px, 20px)')
+
+    window.dispatchEvent(new MouseEvent('mouseup'))
+    await nextTick()
+    expect(canvas.classes()).not.toContain('is-panning')
+
+    await wrapper.get('.zoom-btn[aria-label="重置"]').trigger('click')
+    expect(viewport()).toContain('translate(0px, 0px)')
+  })
+
   it('节点可键盘选中', async () => {
     const wrapper = mount(AgentFlowCanvas, {
       props: { agents, dependencies },
@@ -289,7 +320,7 @@ describe('AgentFlowCanvas', () => {
     expect(node.attributes('role')).toBe('button')
     expect(node.attributes('tabindex')).toBe('0')
 
-    await node.trigger('keydown.enter')
+    await node.trigger('keydown', { key: 'Enter' })
     expect(wrapper.emitted('select')?.[0]).toEqual(['a1'])
   })
 

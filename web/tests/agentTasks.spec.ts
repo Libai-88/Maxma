@@ -18,13 +18,14 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { defineComponent, h, nextTick, ref } from 'vue'
 import { mount } from '@vue/test-utils'
 
-const { listDeferredRuns, cancelDeferredRun } = vi.hoisted(() => ({
+const { listDeferredRuns, cancelDeferredRun, getDeferredRun } = vi.hoisted(() => ({
   listDeferredRuns: vi.fn(),
   cancelDeferredRun: vi.fn(),
+  getDeferredRun: vi.fn(),
 }))
 
 vi.mock('@/api', () => ({
-  api: { listDeferredRuns, cancelDeferredRun },
+  api: { listDeferredRuns, cancelDeferredRun, getDeferredRun },
 }))
 
 import { useAgentTasks } from '@/composables/useAgentTasks'
@@ -66,6 +67,7 @@ describe('useAgentTasks', () => {
   beforeEach(() => {
     listDeferredRuns.mockReset()
     cancelDeferredRun.mockReset()
+    getDeferredRun.mockReset()
     vi.useFakeTimers()
   })
 
@@ -211,6 +213,69 @@ describe('useAgentTasks', () => {
     await vi.waitFor(() => expect(api.error.value).toBe('network down'))
 
     expect(api.unavailable.value).toBe(false)
+  })
+
+  it('一次 404 不会永久隐藏面板：后端恢复后刷新可复位', async () => {
+    listDeferredRuns.mockRejectedValueOnce(new Error('API 请求失败 (404)'))
+    listDeferredRuns.mockResolvedValue({ runs: [makeRun()] })
+
+    const { api } = mountComposable(() => 'session-1')
+    await nextTick()
+    await vi.waitFor(() => expect(api.unavailable.value).toBe(true))
+
+    await api.refresh()
+    await vi.waitFor(() => expect(api.unavailable.value).toBe(false))
+    expect(api.tasks.value).toHaveLength(1)
+  })
+
+  it('列表的 has_more 透传，供界面提示历史被裁剪', async () => {
+    listDeferredRuns.mockResolvedValue({ runs: [makeRun()], has_more: true })
+
+    const { api } = mountComposable(() => 'session-1')
+    await nextTick()
+    await vi.waitFor(() => expect(api.tasks.value).toHaveLength(1))
+
+    expect(api.hasMore.value).toBe(true)
+  })
+
+  it('loadRunResult 只补详情，不改动其它任务', async () => {
+    listDeferredRuns.mockResolvedValue({
+      runs: [
+        makeRun({ run_id: 'run-1', status: 'succeeded' }),
+        makeRun({ run_id: 'run-2', status: 'succeeded' }),
+      ],
+    })
+    getDeferredRun.mockResolvedValue(
+      makeRun({ run_id: 'run-1', status: 'succeeded', result: '完整结果' })
+    )
+
+    const { api } = mountComposable(() => 'session-1')
+    await nextTick()
+    await vi.waitFor(() => expect(api.tasks.value).toHaveLength(2))
+
+    await api.loadRunResult('run-1')
+
+    expect(getDeferredRun).toHaveBeenCalledWith('session-1', 'run-1')
+    expect(api.tasks.value.find(t => t.run_id === 'run-1')?.result).toBe('完整结果')
+    expect(api.tasks.value.find(t => t.run_id === 'run-2')?.result).toBeNull()
+  })
+
+  it('轮询刷新不会把已懒加载的 result 冲回 null', async () => {
+    listDeferredRuns.mockResolvedValue({
+      runs: [makeRun({ run_id: 'run-1', status: 'succeeded', result: null })],
+    })
+    getDeferredRun.mockResolvedValue(
+      makeRun({ run_id: 'run-1', status: 'succeeded', result: '完整结果' })
+    )
+
+    const { api } = mountComposable(() => 'session-1')
+    await nextTick()
+    await vi.waitFor(() => expect(api.tasks.value).toHaveLength(1))
+
+    await api.loadRunResult('run-1')
+    await api.refresh()
+
+    expect(api.tasks.value[0].result).toBe('完整结果')
   })
 
   it('切换会话后重新拉取该会话的任务', async () => {

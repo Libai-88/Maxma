@@ -412,10 +412,10 @@ onUnmounted(() => {
   min-width: 56px;
   text-align: center;
 }
-.cat-chip.cat-tool { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
-.cat-chip.cat-turn { background: color-mix(in srgb, var(--status-ok) 15%, transparent); color: var(--status-ok-text); }
-.cat-chip.cat-compression { background: color-mix(in srgb, var(--status-warn) 15%, transparent); color: var(--status-warn-text); }
-.cat-chip.cat-approval { background: color-mix(in srgb, var(--status-error) 15%, transparent); color: var(--status-error-text); }
+.cat-chip.cat-tool { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent-text); }
+.cat-chip.cat-turn { background: color-mix(in srgb, var(--status-ok) 12%, transparent); color: var(--status-ok-text); }
+.cat-chip.cat-compression { background: color-mix(in srgb, var(--status-warn) 12%, transparent); color: var(--status-warn-text); }
+.cat-chip.cat-approval { background: color-mix(in srgb, var(--status-error) 12%, transparent); color: var(--status-error-text); }
 .cat-meaning {
   color: var(--text-secondary);
 }
@@ -520,10 +520,10 @@ onUnmounted(() => {
   color: var(--text-secondary);
   white-space: nowrap;
 }
-.activity-item-category.cat-tool { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
-.activity-item-category.cat-turn { background: color-mix(in srgb, var(--status-ok) 15%, transparent); color: var(--status-ok-text); }
-.activity-item-category.cat-compression { background: color-mix(in srgb, var(--status-warn) 15%, transparent); color: var(--status-warn-text); }
-.activity-item-category.cat-approval { background: color-mix(in srgb, var(--status-error) 15%, transparent); color: var(--status-error-text); }
+.activity-item-category.cat-tool { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent-text); }
+.activity-item-category.cat-turn { background: color-mix(in srgb, var(--status-ok) 12%, transparent); color: var(--status-ok-text); }
+.activity-item-category.cat-compression { background: color-mix(in srgb, var(--status-warn) 12%, transparent); color: var(--status-warn-text); }
+.activity-item-category.cat-approval { background: color-mix(in srgb, var(--status-error) 12%, transparent); color: var(--status-error-text); }
 
 .activity-item-content {
   flex: 1;

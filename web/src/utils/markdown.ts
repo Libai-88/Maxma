@@ -16,8 +16,11 @@ const md = new MarkdownIt({
 // （middleware/auth.ts），专为 <img> 这类无自定义头的请求设计。
 // 真机踩过：不重写则浏览器按页面 URL 解析 → 404 破图；
 // 贴纸是最后一轮唯一内容时，看起来就像「模型不回复」。
-// 匹配规则与后端 stickers.ts 的 CATEGORY_RE / FILENAME_RE 对齐。
-const STICKER_SRC_RE = /^([\w\u4e00-\u9fff-]+)\/([\w-]+\.webp)$/
+// 模型可能写出的前缀形式：`日常/x.webp`、`./日常/x.webp`、
+// `stickers/日常/x.webp`、`config/stickers/日常/x.webp`。统一剥掉前缀再匹配。
+// 不处理以 `/` 开头的绝对路径：那是站内资源（如 `/uploads/a.webp`），
+// 不能当成贴纸改写。匹配规则与后端 stickers.ts 的 CATEGORY_RE / FILENAME_RE 对齐。
+const STICKER_SRC_RE = /^(?:\.\/)?(?:config\/)?(?:stickers\/)?([\w\u4e00-\u9fff-]+\/[\w-]+\.webp)$/
 
 /** 贴纸相对路径 → 后端 API URL；非贴纸形状的 src 原样返回。 */
 export function resolveStickerSrc(src: string): string {
@@ -28,7 +31,8 @@ export function resolveStickerSrc(src: string): string {
   } catch {
     /* 畸形 % 序列：按原文匹配 */
   }
-  return STICKER_SRC_RE.test(decoded) ? `/api/stickers/${decoded.replace(/^\/+/, '')}` : src
+  const match = STICKER_SRC_RE.exec(decoded)
+  return match ? `/api/stickers/${match[1]}` : src
 }
 
 // markdown-it 的 image token 渲染：![sticker](日常/xxx.webp) 走这里

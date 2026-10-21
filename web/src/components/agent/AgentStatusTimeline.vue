@@ -110,7 +110,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 import Icon from '@/components/Icon.vue'
 import type { TimelineEvent } from '@/types/agent'
@@ -130,6 +130,23 @@ const emit = defineEmits<{
 }>()
 
 const timelineEl = ref<HTMLElement | null>(null)
+/**
+ * 相对时间的基准。没有这个 tick 的话，轮询停止后（全终态）
+ * 「刚刚 / 3 分钟前」会永久冻结在最后一次数据变化时的值。
+ */
+const now = ref(Date.now())
+let clock: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  clock = setInterval(() => {
+    now.value = Date.now()
+  }, 60_000)
+})
+onUnmounted(() => {
+  if (clock) {
+    clearInterval(clock)
+    clock = null
+  }
+})
 const filter = ref<'all' | 'running' | 'completed'>('all')
 
 const filteredEvents = computed(() => {
@@ -158,8 +175,7 @@ const emptyMessage = computed(() => {
 })
 
 function formatTime(timestamp: number): string {
-  const now = Date.now()
-  const diff = now - timestamp
+  const diff = now.value - timestamp
 
   if (diff < 60000) {
     return '刚刚'

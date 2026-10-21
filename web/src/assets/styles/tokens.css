@@ -122,16 +122,16 @@
 
   /* ── 状态色·文字版 ──
    * 藤黄 #C99A5A 在宣纸底只有 2.34:1，作背景/描边可以，作**文字**偏淡。
-   * 用 color-mix 向 --text-primary 靠拢 30%：明色主题自动变深、暗色主题自动变亮
-   * （它们的 --text-primary 本就是浅色）。比例 30% 是「全部 6 主题 × 4 状态
-   * 都 ≥4.5:1」与「还看得出色相」的折中（实测最差 4.71，多为 8~15）。
+   * 用 color-mix 向 --text-primary 靠拢 25%：明色主题自动变深、暗色主题自动变亮
+   * （它们的 --text-primary 本就是浅色）。比例 25% 是「全部 6 主题 × 4 状态 ×
+   * 12% 同色底都 ≥4.5:1」与「还看得出色相」的折中（实测最差 4.60，多为 8~15）。
    * 之所以不逐主题调：那是 24 个魔法数；这一个公式由测试守着。
    * 见 web/tests/themeTokens.spec.ts。
    */
-  --status-ok-text:    color-mix(in srgb, var(--status-ok) 30%, var(--text-primary));
-  --status-warn-text:  color-mix(in srgb, var(--status-warn) 30%, var(--text-primary));
-  --status-error-text: color-mix(in srgb, var(--status-error) 30%, var(--text-primary));
-  --status-info-text:  color-mix(in srgb, var(--status-info) 30%, var(--text-primary));
+  --status-ok-text:    color-mix(in srgb, var(--status-ok) 25%, var(--text-primary));
+  --status-warn-text:  color-mix(in srgb, var(--status-warn) 25%, var(--text-primary));
+  --status-error-text: color-mix(in srgb, var(--status-error) 25%, var(--text-primary));
+  --status-info-text:  color-mix(in srgb, var(--status-info) 25%, var(--text-primary));
 
   /* ── 强调色·文字版 ──
    * 与上面的 --status-*-text 同理：--accent 是品牌强调色，直接当文字色在

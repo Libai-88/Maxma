@@ -153,9 +153,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   cancelAgent: [agentId: string]
   cancelAll: []
-  selectAgent: [agentId: string]
   expandAgent: [agentId: string]
-  collapseAgent: [agentId: string]
 }>()
 
 const orchestratorEl = ref<HTMLElement | null>(null)
@@ -246,16 +244,17 @@ async function handleCancelAll() {
 }
 
 function handleSelectAgent(agentId: string) {
+  // 选中态是编排器内部状态：流程图与列表共享，不必再往上传。
   selectedAgentId.value = agentId
-  emit('selectAgent', agentId)
 }
 
 function handleExpandAgent(agentId: string) {
+  selectedAgentId.value = agentId
   emit('expandAgent', agentId)
 }
 
-function handleCollapseAgent(agentId: string) {
-  emit('collapseAgent', agentId)
+function handleCollapseAgent(_agentId: string) {
+  // 收起详情不改变选中态：从列表切到流程图时仍能定位到同一条任务。
 }
 
 // 自动刷新：真正的数据拉取由父组件负责（useAgentTasks 会按活跃状态轮询）。
@@ -377,7 +376,7 @@ onUnmounted(() => {
   padding: 4px 10px;
   border-radius: 12px;
   background: color-mix(in srgb, var(--accent) 15%, var(--bg-secondary));
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: 12px;
   font-weight: 600;
 }

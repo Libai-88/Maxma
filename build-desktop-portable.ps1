@@ -202,9 +202,9 @@ $BundledSkillNames | ForEach-Object {
 }
 # ⚠️ web\dist 必须**先清后拷**（镜像语义）。vite 关闭了 emptyOutDir（见
 # web/vite.config.ts 的 safe-delete 注释），仓库 dist 由 clean-dist.mjs 保证干净；
-# 但这里是往**上一次构建残留**的 win-unpacked 里叠加拷贝 —— 不清的话旧 hash 的
-# chunk 会一直留在 ZIP 里（实测 JetHubView 新旧两个 bundle 并存），产物体积虚涨、
-# 排障时被旧文件误导。护栏与下方 stale-data 相同：只在 win-unpacked 边界内删。
+# 但这里是清掉 electron-runtime **暂存目录**（$RuntimeDir\web\dist）里的旧内容——
+# 上次构建残留的旧 hash chunk 会一直留在 ZIP 里（实测 JetHubView 新旧两个
+# bundle 并存），产物体积虚涨、排障时被旧文件误导。护栏：只在 RuntimeDir 边界内删。
 $runtimeWebDist = Join-Path $RuntimeDir "web\dist"
 $resolvedWebDist = [System.IO.Path]::GetFullPath($runtimeWebDist)
 if (-not $resolvedWebDist.StartsWith([System.IO.Path]::GetFullPath($RuntimeDir), [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -242,10 +242,17 @@ $staleDataDir = Join-Path $OutputDir "win-unpacked\data"
 # bun 后端）占用时，Remove-Item 会抛 IOException（lockfile 不可删），原始报错完全
 # 看不出原因 —— 真机踩过两次（冒烟测试残留实例 / 用户正在测试旧构建时重建）。
 # 给出可操作的报错，而不是一个裸堆栈。
-$unpackedExe = Join-Path $OutputDir "win-unpacked\MaxmaHere.exe"
+$unpackedRoot = Join-Path $OutputDir "win-unpacked"
 $runningApp = Get-Process -ErrorAction SilentlyContinue | Where-Object {
-    ($_.ProcessName -eq 'MaxmaHere' -or $_.ProcessName -eq 'bun') -and
-    $_.Path -and $_.Path.StartsWith((Join-Path $OutputDir "win-unpacked"), [System.StringComparison]::OrdinalIgnoreCase)
+    if ($_.ProcessName -ne 'MaxmaHere' -and $_.ProcessName -ne 'bun') { return $false }
+    # 读取其他用户的进程 Path 会抛 Access denied；脚本全局 Stop，必须兜住，
+    # 否则一次无关进程就能让构建失败。
+    try {
+        $procPath = $_.Path
+        return $procPath -and $procPath.StartsWith($unpackedRoot, [System.StringComparison]::OrdinalIgnoreCase)
+    } catch {
+        return $false
+    }
 }
 if ($runningApp) {
     $pids = ($runningApp | Select-Object -ExpandProperty Id) -join ', '

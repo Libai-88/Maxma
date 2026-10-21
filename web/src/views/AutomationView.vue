@@ -356,7 +356,7 @@ async function handleDelete(id: string) {
   padding: 1px 8px; border-radius: 4px; text-transform: uppercase; font-size: 0.85em;
   background: var(--bg-secondary); color: var(--text-secondary);
 }
-.history-status.completed { background: color-mix(in srgb, var(--status-ok) 15%, transparent); color: var(--status-ok-text); }
-.history-status.failed { background: color-mix(in srgb, var(--status-error) 15%, transparent); color: var(--status-error-text); }
+.history-status.completed { background: color-mix(in srgb, var(--status-ok) 12%, transparent); color: var(--status-ok-text); }
+.history-status.failed { background: color-mix(in srgb, var(--status-error) 12%, transparent); color: var(--status-error-text); }
 .history-time { color: var(--text-tertiary); }
 </style>

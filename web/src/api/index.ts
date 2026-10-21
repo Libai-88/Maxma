@@ -353,7 +353,8 @@ export const api = {
       `/sessions/${encodeURIComponent(sessionId)}/deferred-runs/${encodeURIComponent(runId)}`,
     ),
 
-  // 列出当前会话的全部后台子任务。Agent 任务中心用它取代 mock 数据。
+  // 列出当前会话的后台子任务（活跃全量 + 最近一批终态）。
+  // 列表投影不含 result 全文；展开时用 getDeferredRun 补。
   listDeferredRuns: (sessionId: string) =>
     request<ListDeferredRunsResponse>(
       `/sessions/${encodeURIComponent(sessionId)}/deferred-runs`,

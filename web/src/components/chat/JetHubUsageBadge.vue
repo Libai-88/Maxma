@@ -288,7 +288,7 @@ onBeforeUnmount(() => {
 }
 
 .warn-mark {
-  color: var(--status-warn);
+  color: var(--status-warn-text);
 }
 
 .popover {

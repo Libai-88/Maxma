@@ -47,15 +47,19 @@ export interface DeferredRun {
   parent_turn_id: string | null
   status: DeferredRunStatus
   result_ref: string | null
+  /** 列表接口恒为 null；展开详情时用 GET /deferred-runs/:runId 取全文。 */
   result: string | null
   cancel_reason: 'cancelled_by_user' | 'parent_session_closed' | 'cancelled' | null
   deadline_at: number | null
   attempts: number
   created_at: number
   updated_at: number
-  error_code?: 'deferred_run_failed'
+  error_code?: string | null
+  error_message?: string | null
 }
 
 export interface ListDeferredRunsResponse {
   runs: DeferredRun[]
+  /** 是否还有更早的终态任务没有返回（列表按活跃 + 最近 N 条裁剪）。 */
+  has_more?: boolean
 }

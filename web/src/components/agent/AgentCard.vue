@@ -12,8 +12,7 @@
       :tabindex="interactive ? 0 : undefined"
       :aria-expanded="interactive ? expanded : undefined"
       @click="interactive && toggle()"
-      @keydown.enter.prevent="interactive && toggle()"
-      @keydown.space.prevent="interactive && toggle()"
+      @keydown="handleHeaderKeydown"
     >
       <div class="status-indicator">
         <div class="status-pulse" v-if="isActive"></div>
@@ -30,7 +29,7 @@
         <h3 class="agent-title">{{ title || `Agent #${agentId.slice(0, 8)}` }}</h3>
         <div class="agent-stats">
           <span class="stat-badge">{{ statusLabel }}</span>
-          <span v-if="attempts > 1" class="stat-badge attempts">重试 {{ attempts }}次</span>
+          <span v-if="attempts > 1" class="stat-badge attempts">尝试 {{ attempts }}次</span>
           <span v-if="duration" class="stat-badge duration">{{ formatDuration(duration) }}</span>
         </div>
       </div>
@@ -170,6 +169,19 @@ function toggle() {
   } else {
     emit('collapse', props.agentId)
   }
+}
+
+/**
+ * 卡片头部是 `role="button"`，内部还有真正的取消/展开按钮。
+ * 只处理来自头部自身的事件，避免焦点在内部按钮上按 Enter/Space 时
+ * 冒泡到容器、连带把卡片展开。
+ */
+function handleHeaderKeydown(event: KeyboardEvent) {
+  if (!props.interactive) return
+  if (event.target !== event.currentTarget) return
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  toggle()
 }
 
 async function handleCancel() {

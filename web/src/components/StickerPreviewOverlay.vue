@@ -230,8 +230,9 @@ onUnmounted(() => {
 .preview-category {
   padding: 4px 10px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--status-warn) 18%, transparent);
-  color: color-mix(in srgb, var(--status-warn) 15%, var(--bg-raised));
+  background: color-mix(in srgb, var(--status-warn) 12%, transparent);
+  /* 卡片底是 --text-primary（与主题明暗相反），文字必须以 --text-inverse 为基色。 */
+  color: color-mix(in srgb, var(--status-warn) 35%, var(--text-inverse));
   font-size: 0.82em;
   white-space: nowrap;
 }
@@ -249,12 +250,12 @@ onUnmounted(() => {
   border-radius: 999px;
   padding: 5px 12px;
   background: color-mix(in srgb, var(--status-warn) 12%, transparent);
-  color: color-mix(in srgb, var(--status-warn) 15%, var(--bg-raised));
+  color: color-mix(in srgb, var(--status-warn) 35%, var(--text-inverse));
   cursor: pointer;
 }
 
 .favorite-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--status-warn) 22%, transparent);
+  background: color-mix(in srgb, var(--status-warn) 16%, transparent);
 }
 
 .favorite-btn:disabled {

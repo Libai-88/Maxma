@@ -195,10 +195,10 @@ describe('主题 token 契约', () => {
 
   test('状态色·文字版在卡片底上可读（对比度 ≥ 4.5）', () => {
     // 藤黄 #C99A5A 在宣纸底只有 2.34:1，作背景可以，作文字偏淡。
-    // 变体是「向 --text-primary 靠拢 30%」——明色主题自动变深、暗色主题自动变亮
+    // 变体是「向 --text-primary 靠拢 25%」——明色主题自动变深、暗色主题自动变亮
     // （它们的 --text-primary 本就是浅色），所以一个公式覆盖 6 个主题。
     // MIX 与 tokens.css 里的 color-mix 比例必须一致，改一处要改两处。
-    const MIX = 0.3
+    const MIX = 0.25
     const STATUSES = ['ok', 'warn', 'error', 'info'] as const
     const failures: string[] = []
 
@@ -214,6 +214,36 @@ describe('主题 token 契约', () => {
         const mixed = mixRgb(base!, MIX, ink!)
         const cr = contrast(mixed, card!)
         if (cr < 4.5) failures.push(`${theme.name} --status-${status}-text = ${mixed} → ${cr.toFixed(2)}`)
+      }
+    }
+
+    expect(failures).toEqual([])
+  })
+
+  test('状态文字在同色 12% 底上仍可读（≥ 4.5）', () => {
+    // 真实用法是「12% 状态色底 + --status-*-text 文字」（FileDiffView、
+    // ActivityView、AutomationView、ProvidersView 等）。只验卡片底会漏掉
+    // midnight 上的失败：底越接近状态色，状态文字越难高于 4.5。
+    // 12% 是仓库里带 --status-*-text 的底色上限；更高的 15%/18%/20% 只用于
+    // 图标或普通 --text-primary 文字（无文字对比度风险）。
+    const MIX = 0.25
+    const TINT = 0.12
+    const STATUSES = ['ok', 'warn', 'error', 'info'] as const
+    const failures: string[] = []
+
+    for (const theme of themes) {
+      const card = hex(theme.resolve('--bg-card'))
+      const ink = hex(theme.resolve('--text-primary'))
+      expect(card, `${theme.name} 的 --bg-card 应为字面色`).not.toBeNull()
+      expect(ink, `${theme.name} 的 --text-primary 应为字面色`).not.toBeNull()
+
+      for (const status of STATUSES) {
+        const base = hex(theme.resolve(`--status-${status}`))
+        expect(base, `${theme.name} 的 --status-${status} 应为字面色`).not.toBeNull()
+        const tinted = mixRgb(base!, TINT, card!)
+        const text = mixRgb(base!, MIX, ink!)
+        const cr = contrast(text, tinted)
+        if (cr < 4.5) failures.push(`${theme.name} --status-${status}-text on 12% tint = ${cr.toFixed(2)}`)
       }
     }
 

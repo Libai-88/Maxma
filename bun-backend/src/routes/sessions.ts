@@ -260,9 +260,12 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     const record = deps.hub.sessions.get(sid);
     if (!record) return c.json({ detail: "会话不存在" }, 404);
     await callRpc(deps, "destroy_session", { session_id: sid });
-    // 对齐 Python session_manager.remove：取消该会话的活跃 deferred run
+    // 对齐 Python session_manager.remove：取消活跃 deferred run，并删掉记录
+    // （会话已经不存在，留着只是孤儿行）。
     try {
-      getDeferredRunManager().cancelParent(sid);
+      const mgr = getDeferredRunManager();
+      mgr.cancelParent(sid);
+      mgr.deleteSession(sid);
     } catch {
       /* best-effort */
     }
@@ -277,7 +280,9 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
       if (deps.hub.sessions.has(sid)) {
         await callRpc(deps, "destroy_session", { session_id: sid });
         try {
-          getDeferredRunManager().cancelParent(sid);
+          const mgr = getDeferredRunManager();
+          mgr.cancelParent(sid);
+          mgr.deleteSession(sid);
         } catch {
           /* best-effort */
         }
@@ -292,7 +297,9 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     for (const sid of [...deps.hub.sessions.keys()]) {
       await callRpc(deps, "destroy_session", { session_id: sid });
       try {
-        getDeferredRunManager().cancelParent(sid);
+        const mgr = getDeferredRunManager();
+        mgr.cancelParent(sid);
+        mgr.deleteSession(sid);
       } catch {
         /* best-effort */
       }

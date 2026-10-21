@@ -44,6 +44,7 @@ export interface AgentTask {
   result: string | null
   cancel_reason: DeferredRun['cancel_reason']
   error_code?: string
+  error_message?: string
   /** 是否可取消（排队中 / 执行中）。 */
   cancellable: boolean
   /** 终态任务。 */
@@ -82,7 +83,8 @@ function toTask(run: DeferredRun): AgentTask {
     attempts: Number(run.attempts ?? 0),
     result: run.result ?? null,
     cancel_reason: run.cancel_reason ?? null,
-    error_code: run.error_code,
+    error_code: run.error_code ?? undefined,
+    error_message: run.error_message ?? undefined,
     cancellable: isActive(run.status),
     settled: !isActive(run.status),
   }
@@ -95,6 +97,8 @@ export function useAgentTasks(options: UseAgentTasksOptions) {
   /** 后端能力不可用（功能关闭 / 端点 404）。此时整个面板应当隐藏。 */
   const unavailable = ref(false)
   const cancelling = ref<Set<string>>(new Set())
+  /** 列表是否还有更早的终态任务被裁剪。 */
+  const hasMore = ref(false)
 
   let pollTimer: ReturnType<typeof setTimeout> | null = null
   let disposed = false
@@ -144,8 +148,21 @@ export function useAgentTasks(options: UseAgentTasksOptions) {
       const data = await api.listDeferredRuns(requestedSession)
       // 会话已切换 → 丢弃这次响应，不要污染新会话的状态。
       if (options.sessionId() !== requestedSession) return
-      tasks.value = (data?.runs ?? []).map(toTask)
+      // 列表不返回 result 全文。用户展开卡片时已经懒加载过的 result
+      // 不能被下一轮轮询覆盖回 null（详情请求与轮询可能并发）。
+      const loadedResults = new Map(
+        tasks.value.filter(t => t.result != null).map(t => [t.run_id, t.result!] as const),
+      )
+      tasks.value = (data?.runs ?? []).map((run) => {
+        const task = toTask(run)
+        const cached = loadedResults.get(task.run_id)
+        if (task.result == null && cached != null) task.result = cached
+        return task
+      })
+      hasMore.value = Boolean(data?.has_more)
       error.value = null
+      // 后端恢复后允许重新显示：不能因为一次 404 就永久隐藏面板。
+      unavailable.value = false
     } catch (e) {
       if (options.sessionId() !== requestedSession) return
       if (isUnavailableError(e)) {
@@ -164,6 +181,42 @@ export function useAgentTasks(options: UseAgentTasksOptions) {
         inFlightSession = null
         loading.value = false
         schedulePolling()
+      }
+    }
+  }
+
+  /**
+   * 懒加载单条任务详情（主要是 `result` 全文）。
+   *
+   * 列表接口为了控制轮询体积不返回 result；卡片展开时再补一次单条请求，
+   * 失败就保持列表里的字段，不影响主流程。
+   */
+  async function loadRunResult(runId: string): Promise<void> {
+    const sessionId = options.sessionId()
+    if (!sessionId) return
+    try {
+      const run = await api.getDeferredRun(sessionId, runId)
+      if (options.sessionId() !== sessionId) return
+      const detail = toTask(run)
+      // 只补详情字段：轮询可能在详情请求之后带回更新的状态，
+      // 不能用较旧的详情把状态/时间戳整体覆盖回去。
+      tasks.value = tasks.value.map((t) =>
+        t.run_id === runId
+          ? {
+              ...t,
+              result: detail.result ?? t.result,
+              error_code: detail.error_code ?? t.error_code,
+              error_message: detail.error_message ?? t.error_message,
+              updated_at: Math.max(t.updated_at, detail.updated_at),
+            }
+          : t,
+      )
+      unavailable.value = false
+    } catch (e) {
+      if (isUnavailableError(e)) {
+        unavailable.value = true
+      } else {
+        log.warn('加载子任务详情失败:', e)
       }
     }
   }
@@ -226,7 +279,9 @@ export function useAgentTasks(options: UseAgentTasksOptions) {
     cancelling,
     activeCount,
     hasActive,
+    hasMore,
     refresh,
+    loadRunResult,
     cancel,
     cancelAll,
   }
