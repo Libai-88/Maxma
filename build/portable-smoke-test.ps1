@@ -109,7 +109,14 @@ $dataDir = Join-Path $PortableDir "data"
 
 try {
     Write-Host "[portable-smoke] starting $bunExe run server.js (port $Port, wd=$PortableDir)"
-    $proc = Start-Process -FilePath $bunExe -ArgumentList "run", $serverJs -WorkingDirectory $PortableDir -PassThru -WindowStyle Hidden
+    # 捕获 stdout 是必须的：启动自检只在日志里输出（不走任何 HTTP 面），
+    # 不捕获就永远测不到"自检静默失效"——本仓已因字段名写错连续踩过两次
+    # （改了返回键只改一个消费方，`=== false` 与 truthy 分支全不进，日志那行干脆不打印）。
+    $stdoutLog = Join-Path $env:TEMP "portable-smoke-stdout.log"
+    $stderrLog = Join-Path $env:TEMP "portable-smoke-stderr.log"
+    Remove-Item $stdoutLog, $stderrLog -ErrorAction SilentlyContinue
+    $proc = Start-Process -FilePath $bunExe -ArgumentList "run", $serverJs -WorkingDirectory $PortableDir `
+        -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
 
     $apiBase = "http://127.0.0.1:$Port/api"
 
@@ -197,6 +204,43 @@ try {
     }
     Write-Host "[portable-smoke] built-in free models: $($freeModels -join ', ')"
 
+    # 7. 引擎配置目录落点自检必须真的在启动日志里留痕。
+    #    便携包一定注入了 PI_CODING_AGENT_DIR，所以期望是"在数据目录内"；
+    #    若这行缺失或报"没落在"，说明注入失效或自检本身又哑了——
+    #    前者会让用户数据写进主目录，后者会让这个问题没人发现。
+    $logText = ""
+    if (Test-Path $stdoutLog) {
+        # 两个坑叠在这里，都实测踩过：
+        #   ① 必须显式按 UTF-8 读：Windows PowerShell 5.1 的 Get-Content 默认按
+        #      ANSI/GBK 解码，中文变乱码 → 后面"在 Maxma 数据目录内"永远匹配不上，
+        #      明明日志是对的、断言却判它不对。
+        #   ② 后端进程仍在运行、stdout 重定向文件**被它占着**，ReadAllText 会抛
+        #      "文件正由另一进程使用"。所以用 FileShare.ReadWrite 打开读，
+        #      否则断言会以"无法访问文件"的样子失败，而不是给出真实结论。
+        $stream = [System.IO.File]::Open($stdoutLog, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        try {
+            $reader = New-Object System.IO.StreamReader($stream, [System.Text.Encoding]::UTF8)
+            $logText = $reader.ReadToEnd()
+            $reader.Close()
+        } finally {
+            $stream.Dispose()
+        }
+    }
+    # 用 -like（字面通配）+ 转义方括号：日志行开头是 [engine]，而 [ ] 在 -like 与
+    # 正则里都是特殊字符，写 "*[engine]*" 会匹配意外的内容。
+    $agentDirLine = ($logText -split "`n" | Where-Object { $_ -like "*[[]engine[]]*" } | Select-Object -First 1)
+    if (-not $agentDirLine) {
+        throw "startup self-check printed nothing to the log ([engine] line missing) — portable data dir check is silently dead"
+    }
+    Write-Host "[portable-smoke] agent dir self-check: $($agentDirLine.Trim())"
+    if ($agentDirLine -notlike "*在 Maxma 数据目录内*") {
+        throw "engine agent dir is NOT inside the portable data dir: $($agentDirLine.Trim())"
+    }
+    $engineInfo = $health.engine
+    if ($engineInfo -and $engineInfo.agent_dir_inside_expected -ne $true) {
+        throw "health.engine.agent_dir_inside_expected is not true"
+    }
+
     Write-Host "[portable-smoke] PASS: portable bundle startup + all verification points OK"
 } catch {
     $failed = $_
@@ -213,6 +257,7 @@ try {
     Remove-Item Env:\PI_CODING_AGENT_DIR -ErrorAction SilentlyContinue
     Remove-Item Env:\MAXMA_SERVE_WEB -ErrorAction SilentlyContinue
     Remove-Item Env:\MAXMA_ENV -ErrorAction SilentlyContinue
+    Remove-Item $stdoutLog, $stderrLog -ErrorAction SilentlyContinue
 }
 
 if ($failed) { throw "Portable smoke test failed: $($failed.Exception.Message)" }
