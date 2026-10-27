@@ -230,6 +230,16 @@ describe("RPC 方法清单与实现必须一致", () => {
     // stdio 入口不得再手抄清单
     const entry = read("bun-sidecar/src/session-bridge.ts");
     expect(entry, "session-bridge.ts 应改用 PI_RPC_METHODS，不要手抄方法表").toContain("PI_RPC_METHODS");
+
+    // provider api 白名单同理：model.ts 必须从契约取，不得自带一份字面量清单。
+    // （本仓的教训：契约后来补的前瞻名 `azure`，本地那份清单并不知道，
+    //   "升级后仍兼容 Azure"就只写在文档里、运行时不成立。）
+    const model = read("bun-sidecar/src/kernel/model.ts");
+    expect(model, "model.ts 的 PI_APIS 必须来自 pi-contract 的 PI_PROVIDER_APIS").toContain("PI_PROVIDER_APIS");
+    expect(
+      /const PI_APIS = new Set\(\s*\[?\s*"/.test(model),
+      "model.ts 又出现了手抄的 api 字面量清单，请改回引用 PI_PROVIDER_APIS",
+    ).toBe(false);
   });
 });
 

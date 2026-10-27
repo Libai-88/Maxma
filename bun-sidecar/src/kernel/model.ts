@@ -14,6 +14,7 @@
 
 import { ModelRuntime, type ModelRuntime as ModelRuntimeType } from "@earendil-works/pi-coding-agent";
 import type { Api, Model } from "@earendil-works/pi-ai";
+import { PI_PROVIDER_APIS, PI_PROVIDER_APIS_FORWARD_COMPAT } from "./pi-contract";
 import { registerOpencodeZenTransport } from "./opencode-zen";
 import { registerPluginProviderOn } from "./plugin-models";
 
@@ -41,18 +42,16 @@ export interface ResolvedPiModel {
 
 /** 零成本兜底定价（Usage.cost 同形状；自定义端点无目录价可用）。 */
 const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-const PI_APIS = new Set([
-  "openai-completions",
-  "openai-responses",
-  "openai-codex-responses",
-  "azure-openai-responses",
-  "anthropic-messages",
-  "bedrock-converse-stream",
-  "google-generative-ai",
-  "google-vertex",
-  "mistral-conversations",
-  "pi-messages",
-]);
+/**
+ * provider 的 api 标识白名单。**唯一来源是 `pi-contract.ts`**：那里与已安装引擎的
+ * `KnownApi` 做双向差集，并单独登记了上游 1.0.3 改名后的前瞻名 `azure`
+ * （`PI_PROVIDER_APIS_FORWARD_COMPAT`）。
+ *
+ * 这里原本自己抄了一份 10 项清单——契约后来补的前瞻名运行时并不知道，
+ * 等于"升级后仍兼容 Azure"这件事只写在文档里、代码里不成立。
+ * 清单两处各写一遍的结局必然是其中一遍是错的，所以接回单源。
+ */
+const PI_APIS = new Set<string>([...PI_PROVIDER_APIS, ...PI_PROVIDER_APIS_FORWARD_COMPAT]);
 const PROVIDER_API_ALIASES: Record<string, Api> = {
   openai: "openai-completions",
   custom: "openai-completions",
