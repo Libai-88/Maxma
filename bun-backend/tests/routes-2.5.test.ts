@@ -443,7 +443,19 @@ describe("capabilities 聚合（阶段 2.5c）", () => {
 
     const sidecar = body.sidecar as Record<string, unknown>;
     expect(sidecar.status).toBe("running");
-    expect(sidecar.version).toBe("0.1.0");
+    // 这里原本断言 "0.1.0"——那是 bun-sidecar/package.json 里 maxma-sidecar 的
+    // **产品版本**，被当"引擎版本"展示（capabilities.ts:sidecarVersion()）。
+    // 现已改为经 kernel 取 pi 根面导出的 VERSION，所以断言跟着改成引擎事实：
+    // sidecar.version 必须等于 engine.version，且两者都是 pi 的版本号（0.x/1.x），
+    // 不是 sidecar 的 0.1.0。
+    const engine = body.engine as Record<string, unknown>;
+    expect(typeof engine.version).toBe("string");
+    expect(engine.version).toMatch(/^\d+\.\d+\.\d+/);
+    expect(engine.version).not.toBe("0.1.0");
+    expect(sidecar.version).toBe(engine.version);
+    expect(engine.name).toBe("@earendil-works/pi-coding-agent");
+    // 配置目录落点诊断（便携包数据是否随包携带的判据，见 kernel/engine-info.ts）
+    expect(typeof engine.agent_dir).toBe("string");
 
     const endpoints = body.endpoints as string[];
     expect(endpoints).toContain("/api/health");
