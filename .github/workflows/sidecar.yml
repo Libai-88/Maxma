@@ -17,7 +17,16 @@ jobs:
         uses: oven-sh/setup-bun@v1
 
       - name: Install dependencies
-        run: bun install
+        # bun-sidecar/bun.lock 一直在库里，但这条此前没加 --frozen-lockfile，
+        # 于是 CI 每次按 package.json 的范围重新解析（家族包 ^0.99.0 会漂）。
+        run: bun install --frozen-lockfile
+
+      # 引擎边界的编译期断层面。此前**没有任何 workflow 跑 tsc**，所以
+      # kernel/types.ts 从 pi-coding-agent import 了它并不导出的 `Model`
+      # 红了数周没人看见（纯类型 import 会被擦除，运行时与测试都察觉不到）。
+      # 这里是 0 错误硬门槛，与根目录 scripts/check-type-budget.mjs 的棘轮并行。
+      - name: Typecheck (engine boundary)
+        run: bun x tsc --noEmit
 
       - name: Run Bun tests with coverage
         run: bun test --coverage
@@ -25,9 +34,17 @@ jobs:
       - name: Enforce core module coverage threshold (>= 65% lines)
         shell: bash
         run: |
-          # 核心逻辑模块（事件映射/审批/MCP解析/模型/状态）必须 ≥65% 行覆盖。
-          # session-bridge.ts 是 RPC 分发薄壳，不设硬门槛。
-          CORE="events\.ts|approval\.ts|mcp\.ts|model\.ts|state\.ts"
+          # 核心逻辑模块必须 ≥65% 行覆盖。
+          #
+          # 这条此前是坏的，三处都要修：
+          #   1. 名单是 OMP 时代的文件名：`approval.ts` 实名是 approval-gate.ts，
+          #      `state.ts` 这个文件已经不存在——grep 落空的项不会报错，于是门槛
+          #      静默地只覆盖到 events/mcp/model 三个，真正的引擎接缝（bridge-pi、
+          #      plan、goal、pi-session…）完全没被守住。
+          #   2. `grep -v "tests\\"` 是 Windows 分隔符，在 ubuntu runner 上什么都
+          #      没排除（测试文件自己也会进覆盖率表）。
+          #   3. 模式要同时匹配 \ 与 /，否则换平台就整体失效。
+          CORE="src.kernel.(events|approval-gate|mcp|model|bridge-pi|plan|goal|pi-session|pi-contract|skills|tools|prompt|request-telemetry|project-paths)\.ts"
           FAIL=0
           while read -r FILE COV; do
             echo "$FILE line coverage: ${COV}%"
@@ -35,5 +52,12 @@ jobs:
               echo "::error::$FILE coverage ${COV}% is below the 65% threshold"
               FAIL=1
             fi
-          done < <(bun test --coverage 2>&1 | grep -E "$CORE" | grep -v "tests\\" | awk -F'|' '{gsub(/ /,"",$1); gsub(/ /,"",$3); print $1, $3}')
+          done < <(bun test --coverage 2>&1 | grep -E "$CORE" | grep -vE "tests[\\\\/]" | awk -F'|' '{gsub(/ /,"",$1); gsub(/ /,"",$3); print $1, $3}')
+
+          # 名单本身也要校验：模式匹配不到任何一行 = 门槛空转（就是上面那个 bug 的形状）。
+          MATCHED=$(bun test --coverage 2>&1 | grep -cE "$CORE" || true)
+          if [ "${MATCHED:-0}" -lt 10 ]; then
+            echo "::error::覆盖率名单只匹配到 ${MATCHED} 行，疑似文件名漂移，门槛空转"
+            exit 1
+          fi
           exit $FAIL
