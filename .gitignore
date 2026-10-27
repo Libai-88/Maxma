@@ -68,8 +68,13 @@ config/personas/memory.yaml
 config/onboarding.json
 config/personas/*.sqlite3-shm
 config/personas/*.sqlite3-wal
+# 这里的 *.lock 指的是运行时的文件锁（api/data/*.yaml.lock 等），不是依赖锁。
+# 依赖锁必须逐目录显式收编：漏一个，那个目录的依赖树在生产线上就不可复现——
+# bun-backend/bun.lock 曾被这条通配误吞，导致 CI 的 `bun install --frozen-lockfile`
+# 无锁可冻、每次现解析（家族包 @earendil-works/* 因此漂出与本地不同的版本）。
 *.lock
 !bun-sidecar/bun.lock
+!bun-backend/bun.lock
 *.clean
 providers.yaml
 providers.yaml.legacy-*.bak
