@@ -7,6 +7,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { authHeaderFor } from "./_helpers/auth";
 
 let dataDir = "";
 let prevDataDir: string | undefined;
@@ -40,18 +41,9 @@ async function makeApp() {
   const { createApp } = await import("../src/server");
   return createApp();
 }
-
+/** 读 auth token 生成鉴权头（实现见 tests/_helpers/auth.ts，勿再手搓 sqlite 类型桩）。 */
 function authHeader(): Record<string, string> {
-  const { Database } = require("bun:sqlite") as {
-    Database: new (p: string, o?: object) => { query: (s: string) => { get: () => { token: string } | null } };
-  };
-  const db = new Database(path.join(dataDir, "api", "data", "maxma.db"), { readonly: true });
-  try {
-    const row = db.query("SELECT token FROM auth_tokens ORDER BY id DESC LIMIT 1").get();
-    return { "x-maxma-token": row?.token ?? "" };
-  } finally {
-    db.close();
-  }
+  return authHeaderFor(dataDir);
 }
 
 async function makeSession(app: Awaited<ReturnType<typeof makeApp>>): Promise<string> {

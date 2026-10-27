@@ -9,6 +9,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { authHeaderFor } from "./_helpers/auth";
 
 let dataDir = "";
 let prevDataDir: string | undefined;
@@ -192,22 +193,9 @@ describe("阶段 2.1：metrics", () => {
     expect(Array.isArray(hb.snapshots)).toBe(true);
   });
 });
-
-// ── 助手 ──
-
-/** 从 maxma.db 读出真实 token（与 Python/前端同源），用于通过鉴权中间件。 */
+/** 读 auth token 生成鉴权头（实现见 tests/_helpers/auth.ts，勿再手搓 sqlite 类型桩）。 */
 function authHeader(): Record<string, string> {
-  // 延迟 import：token 在 createApp() 首次调用时生成落库
-  // 这里直接读 db（与 src/auth.ts 同一文件同表）
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { Database } = require("bun:sqlite") as { Database: new (p: string, o?: object) => { query: (s: string) => { get: () => { token: string } | null } } };
-  const db = new Database(path.join(dataDir, "api", "data", "maxma.db"), { readonly: true });
-  try {
-    const row = db.query("SELECT token FROM auth_tokens ORDER BY id DESC LIMIT 1").get();
-    return { "x-maxma-token": row?.token ?? "" };
-  } finally {
-    db.close();
-  }
+  return authHeaderFor(dataDir);
 }
 
 // AUTH 占位消除（避免未用告警）
