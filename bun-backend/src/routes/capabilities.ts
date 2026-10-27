@@ -22,10 +22,12 @@ import * as crypto from "node:crypto";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import { bundleDir } from "../app-paths";
+import { bundleDir, dataDir } from "../app-paths";
 import { appVersion } from "../app-version";
-import { getGlobalSettingsSingleton } from "../settings-global";
-import { CORE_SETTING_PATHS, readDottedPath } from "./settings";
+import { getSettingValue } from "../settings-global";
+import { agentDirDiagnostics, engineIdentity } from "../../../bun-sidecar/src/kernel/engine-info";
+import { ENGINE_EVENT_EXPECTED_BUT_UNPRODUCED } from "../../../bun-sidecar/src/kernel/pi-contract";
+import { CORE_SETTING_PATHS } from "./settings";
 import { BUILTIN_TOOLS } from "./tools";
 import { loadRaw as loadMcpRaw } from "./mcp";
 import { redactSensitive } from "./mcp-validation";
@@ -112,18 +114,17 @@ function categorizeTools(tools: Array<Record<string, unknown>>): Record<string, 
   return categories;
 }
 
-/** bun-sidecar/package.json 版本号。 */
-function sidecarVersion(): string | null {
+/**
+ * 「引擎版本」——以前这里读 `bun-sidecar/package.json` 的 `maxma-sidecar`
+ * 产品版本（0.1.0）并当作引擎版本展示，跟 pi 实际是哪个版本毫无关系。
+ * 现在经 kernel 取 pi 根面导出的 VERSION（内联进 server.js 后依然可读）。
+ */
+function engineVersion(): string | null {
   try {
-    const pkg = path.join(bundleDir(), "bun-sidecar", "package.json");
-    if (fs.existsSync(pkg)) {
-      const data = JSON.parse(fs.readFileSync(pkg, "utf8")) as Record<string, unknown>;
-      return typeof data.version === "string" ? data.version : null;
-    }
+    return engineIdentity().version || null;
   } catch {
-    // fallthrough
+    return null;
   }
-  return null;
 }
 
 /** OMP 配置来源分析（_analyze_config_sources 直译）。 */
@@ -216,8 +217,21 @@ function buildManifest(deps: CapabilitiesDeps, gathered: Record<string, unknown>
 
   features.browser_tools = { enabled: Boolean(browserCfg.enabled ?? false) };
 
+  // 后台子任务（Agent 任务中心）：面板开关是**用户意图**，引擎支持度是**事实**。
+  // 二者必须分开——上一个版本只看了面板值，于是 Dock 无条件渲染 /agent-tasks，
+  // 用户点进去是一个永远为空的列表：当前 pi 引擎没有任何子 Agent 运行时，
+  // kernel 不会发 deferred_subagent_submitted（登记见 pi-contract.ts 的
+  // ENGINE_EVENT_EXPECTED_BUT_UNPRODUCED）。
+  const engineSupportsSubAgents = !ENGINE_EVENT_EXPECTED_BUT_UNPRODUCED.some(
+    (e) => e.event === "deferred_subagent_submitted",
+  );
   features.sub_agents = {
-    enabled: Boolean(subagentCfg.enabled ?? false),
+    enabled: Boolean(subagentCfg.enabled ?? false) && engineSupportsSubAgents,
+    // 面板开着但引擎不支持时，前端可据此给出真实原因而非"你关掉了"。
+    engine_supported: engineSupportsSubAgents,
+    reason: engineSupportsSubAgents
+      ? null
+      : "当前 Agent 引擎（pi）没有子任务运行时，后台子任务暂不可用",
     max_concurrent: Number(subagentCfg.max_concurrent ?? 3) || 3,
   };
 
@@ -257,7 +271,12 @@ function buildManifest(deps: CapabilitiesDeps, gathered: Record<string, unknown>
   return {
     version: appVersion(),
     features,
-    sidecar: { status: "running", version: sidecarVersion() },
+    // sidecar 已是 in-process，不再是独立进程；version 字段现在如实报引擎版本。
+    // 新前端请优先读 engine（name + version）。
+    sidecar: { status: "running", version: engineVersion() },
+    // 引擎身份 + 配置目录落点。agent_dir_inside_expected=false 意味着便携/桌面壳
+    // 注入的 env 没生效，pi 正在往用户主目录写数据（见 kernel/engine-info.ts）。
+    engine: { ...engineIdentity(), ...agentDirDiagnostics(dataDir()) },
     endpoints: deps.endpoints(),
   };
 }
@@ -275,12 +294,12 @@ export function createCapabilitiesRoutes(deps: CapabilitiesDeps): Hono {
       system: {},
     };
 
-    // 1. Settings——kernel in-process 直读（Python：sidecar client_running 才取）
+    // 1. Settings——经 settings-global 读取（显式覆盖优先，其次引擎默认值）。
+    //    旧实现直接读那个 in-memory 单例，重启后面板改动就消失了，这里跟着丢。
     try {
-      const settings = getGlobalSettingsSingleton().getSettings();
       const gathered: Record<string, unknown> = {};
       for (const p of CORE_SETTING_PATHS) {
-        const value = readDottedPath(settings, p);
+        const value = getSettingValue(p);
         if (value !== undefined) gathered[p] = value;
       }
       result.settings = gathered;

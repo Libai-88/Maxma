@@ -14,7 +14,8 @@ import * as path from "node:path";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 
-import { getWebDistDir } from "./app-paths";
+import { getWebDistDir, dataDir } from "./app-paths";
+import { agentDirDiagnostics } from "../../bun-sidecar/src/kernel/engine-info";
 import { buildCorsOrigins } from "./cors-config";
 import { loadOrCreateToken } from "./auth";
 import { createAuthMiddleware, extractWsToken } from "./middleware/auth";
@@ -439,6 +440,23 @@ export function startServer() {
 if (import.meta.main || process.env.MAXMA_BACKEND_COMPILED === "1") {
   const server = startServer();
   console.log(`[bun-backend] listening on http://127.0.0.1:${server.port} (engine=bun-backend)`);
+
+  // 引擎配置目录落点自检（见 bun-sidecar/src/kernel/engine-info.ts）。
+  // 便携包/桌面壳靠注入 PI_CODING_AGENT_DIR 把 pi 的数据搬进包内；那个变量名是
+  // 引擎自己拼出来的，改名后注入会**静默失效**，pi 会直接把会话/设置/凭据写进
+  // 用户主目录。与其等用户发现数据"没迁移"，启动时就把它喊出来。
+  const agentDirCheck = agentDirDiagnostics(dataDir());
+  if (agentDirCheck.inside_expected === false) {
+    console.error(
+      `[engine] 引擎配置目录没落在 Maxma 数据目录内：agentDir=${agentDirCheck.agent_dir} ` +
+        `expected=${agentDirCheck.expected_root}\n` +
+        "  便携/桌面形态下这意味着 PI_CODING_AGENT_DIR 注入未生效，引擎正在写用户主目录，" +
+        "会话与凭据不会随包携带。请检查启动器的环境变量注入，或设置 MAXMA_DATA_DIR。",
+    );
+  } else if (agentDirCheck.inside_expected) {
+    console.log(`[engine] 配置目录=${agentDirCheck.agent_dir}（在 Maxma 数据目录内）`);
+  }
+
   // PLUGIN-001：装配插件宿主并把插件模型接进 pi。
   // fire-and-forget —— 插件起不来（未登录/缺依赖）不该拦住 Maxma 启动，
   // 只是插件提供的模型暂不可用。

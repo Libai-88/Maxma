@@ -174,7 +174,9 @@ const router = createRouter({
       path: '/agent-tasks',
       name: 'agent-tasks',
       component: () => import('@/views/AgentTasksView.vue'),
-      meta: { transition: 'flip', title: 'Agent 任务' },
+      // 能力守卫：当前 pi 引擎无子任务运行时，后端 features.sub_agents.enabled=false，
+      // 直接输入 URL / 硬刷新也会落到「功能不可用」页，而不是一个永远为空的列表。
+      meta: { transition: 'flip', title: 'Agent 任务', feature: 'sub_agents' },
     },
     {
       // 旧路径保留重定向，避免上一个版本的书签/外链落到 404。

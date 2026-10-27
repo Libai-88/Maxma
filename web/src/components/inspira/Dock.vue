@@ -133,7 +133,11 @@ const navItems: NavItem[] = [
   { to: '/providers', label: '模型', icon: 'model' },
   { to: '/memory', label: '记忆', icon: 'memory', feature: 'memory' },
   { to: '/evolution', label: '成长', icon: 'sparkles', feature: 'memory' },
-  { to: '/agent-tasks', label: 'Agent', icon: 'cpu' },
+  // 后台子任务：当前 pi 引擎无子 Agent 运行时，enabled 由后端能力清单给出
+  // （见 bun-sidecar/src/kernel/pi-contract.ts 的 ENGINE_EVENT_EXPECTED_BUT_UNPRODUCED）。
+  // 引擎不发 deferred_subagent_submitted 时这里必须消失——上一个版本它无条件渲染，
+  // 用户点进去是一个永远为空的列表。
+  { to: '/agent-tasks', label: 'Agent', icon: 'cpu', feature: 'sub_agents' },
   { to: '/metrics', label: '运行指标', icon: 'metrics' },
   { to: '/extensions', label: '扩展', icon: 'extensions' },
   { to: '/plugins', label: '插件', icon: 'puzzle', feature: 'plugins' },
