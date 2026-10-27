@@ -22,7 +22,7 @@ import {
 } from "../../../bun-sidecar/src/kernel/bridge-pi";
 
 import { getDeferredRunManager } from "./deferred-runs";
-import { getGlobalSettingsSingleton } from "../settings-global";
+import { engineSettingsForNewSession, getSettingValue } from "../settings-global";
 
 /** Bun 后端的会话注册表（kernel 桥经 deps 注入）。 */
 export interface SessionHub {
@@ -71,9 +71,15 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
   // ── 创建 ──
   app.post("/api/sessions", async (c) => {
     // 让 kernel 使用 Maxma 项目根目录；bun-backend 的 cwd 通常是子目录。
-    const settings = getGlobalSettingsSingleton().getSettings() as Record<string, unknown>;
-    const skills = settings.skills as Record<string, unknown> | undefined;
-    await callRpc(deps, "create_session", { skills_enabled: skills?.enabled !== false });
+    // skills.enabled 走应用层参数（显式覆盖优先，缺省视为开启）；其余"归引擎消费"
+    // 的显式改动经 settings 下发，由 kernel 在新会话上 applyOverrides。
+    // 见 bun-backend/src/settings-global.ts 头注释——旧实现在这里直接读那个
+    // in-memory 单例，所以面板改了也不生效。
+    const skillsEnabled = getSettingValue("skills.enabled") !== false;
+    await callRpc(deps, "create_session", {
+      skills_enabled: skillsEnabled,
+      settings: engineSettingsForNewSession(),
+    });
     const created = [...deps.hub.sessions.keys()].at(-1)!;
     const record = deps.hub.sessions.get(created)!;
     return c.json({ session_id: created, created_at: new Date().toISOString(), engine: record.engine });

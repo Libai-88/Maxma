@@ -37,48 +37,6 @@
               {{ settings['compaction.enabled'] ? '开启' : '关闭' }}
             </button>
           </div>
-
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">压缩策略</div>
-              <div class="setting-desc">选择上下文压缩的方式。</div>
-            </div>
-            <select class="select" aria-label="压缩策略" :value="settings['compaction.strategy']" @change="set('compaction.strategy', ($event.target as HTMLSelectElement).value)">
-              <option value="context-full">上下文满时压缩</option>
-              <option value="handoff">交接模式</option>
-              <option value="shake">精简模式</option>
-              <option value="snapcompact">快速压缩</option>
-              <option value="off">关闭</option>
-            </select>
-          </div>
-
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">压缩阈值</div>
-              <div class="setting-desc">上下文使用率达到此百分比时触发压缩。</div>
-            </div>
-            <div class="setting-control">
-              <BalanceSlider
-                :min="50" :max="95" :step="5"
-                :model-value="(settings['compaction.thresholdPercent'] ?? 80) as number"
-                @update:model-value="set('compaction.thresholdPercent', $event)"
-                show-value
-                class="setting-balance-slider"
-              />
-            </div>
-          </div>
-
-          <!-- GAP-B2-001：上下文提升——溢出时升级到大上下文模型而非压缩。
-               需要配置了更大上下文窗口的模型才实际生效（OMP 自动挑选）。 -->
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">上下文提升</div>
-              <div class="setting-desc">上下文溢出时优先切换到更大窗口的模型，而不是压缩历史（需存在更大窗口的模型才生效）。</div>
-            </div>
-            <button class="toggle-btn" :class="{ on: settings['contextPromotion.enabled'] }" @click="toggle('contextPromotion.enabled')">
-              {{ settings['contextPromotion.enabled'] ? '开启' : '关闭' }}
-            </button>
-          </div>
         </div>
       </GlowingEffect>
 
@@ -106,123 +64,6 @@
               :value="settings['retry.maxRetries'] ?? 3"
               @change="set('retry.maxRetries', Number(($event.target as HTMLInputElement).value))" />
           </div>
-
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">模型降级</div>
-              <div class="setting-desc">主模型失败时切换到备用模型。</div>
-            </div>
-            <button class="toggle-btn" :class="{ on: settings['retry.modelFallback'] }" @click="toggle('retry.modelFallback')">
-              {{ settings['retry.modelFallback'] ? '开启' : '关闭' }}
-            </button>
-          </div>
-
-          <!-- GAP-B6-001：备用模型链（retry.fallbackChains）——
-               JSON 编辑 + 本地校验，保存到 OMP 全局设置（sidecar set_settings 持久化）。 -->
-          <div class="setting-row" v-if="settings['retry.modelFallback']">
-            <div class="setting-info">
-              <div class="setting-label">备用模型链</div>
-              <div class="setting-desc">
-                主模型失败时按序尝试的备用模型（JSON 对象）。键可为模型角色、
-                "provider/model-id" 或通配 "provider/*"；值为有序模型列表。
-                示例：<code>{"default": ["openai/gpt-4o-mini"]}</code>
-              </div>
-            </div>
-            <div class="setting-control setting-control--wide">
-              <textarea
-                class="input-textarea"
-                rows="5"
-                :value="fallbackChainsText"
-                aria-label="备用模型链 JSON"
-                placeholder='{"default": ["provider/model"]}'
-                @change="saveFallbackChains(($event.target as HTMLTextAreaElement).value)"
-              ></textarea>
-              <p v-if="fallbackChainsError" class="setting-error" role="alert">{{ fallbackChainsError }}</p>
-            </div>
-          </div>
-        </div>
-      </GlowingEffect>
-
-      <!-- Tools -->
-      <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
-        <div class="section" v-show="activeSection === 'tools'">
-          <h3>工具</h3>
-          <p class="section-desc">控制 AI 使用工具时的行为。</p>
-
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">工具审批模式</div>
-              <div class="setting-desc">AI 执行工具前是否需要你确认。</div>
-            </div>
-            <select class="select" aria-label="工具审批模式" :value="settings['tools.approvalMode']" @change="set('tools.approvalMode', ($event.target as HTMLSelectElement).value)">
-              <option value="yolo">自动批准（Yolo）</option>
-              <option value="write">写操作需确认</option>
-              <option value="always-ask">始终询问</option>
-            </select>
-          </div>
-
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">MCP 工具发现</div>
-              <div class="setting-desc">自动发现并加载 MCP 服务器提供的工具。</div>
-            </div>
-            <select class="select" aria-label="MCP 工具发现" :value="settings['tools.discoveryMode']" @change="set('tools.discoveryMode', ($event.target as HTMLSelectElement).value)">
-              <option value="all">全部加载</option>
-              <option value="auto">自动发现</option>
-              <option value="off">关闭</option>
-            </select>
-          </div>
-
-          <!-- GAP-B4-001：Bash 长任务自动后台化（OMP 工具级行为） -->
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">Bash 长任务后台化</div>
-              <div class="setting-desc">超过阈值的 bash 命令自动转入后台执行，不阻塞对话（完成后交付结果）。</div>
-            </div>
-            <button class="toggle-btn" :class="{ on: settings['bash.autoBackground.enabled'] }" @click="toggle('bash.autoBackground.enabled')">
-              {{ settings['bash.autoBackground.enabled'] ? '开启' : '关闭' }}
-            </button>
-          </div>
-          <div class="setting-row" v-if="settings['bash.autoBackground.enabled']">
-            <div class="setting-info">
-              <div class="setting-label">后台化阈值（秒）</div>
-              <div class="setting-desc">预计执行超过该时长的命令自动转后台。</div>
-            </div>
-            <input type="number" class="input-number" min="5" max="300" step="5"
-              :value="settings['bash.autoBackground.thresholdMs'] ? Math.round(Number(settings['bash.autoBackground.thresholdMs']) / 1000) : 30"
-              @change="set('bash.autoBackground.thresholdMs', Number(($event.target as HTMLInputElement).value) * 1000)" />
-          </div>
-
-          <!-- GAP-B5-001：异步任务（job 工具可用性） -->
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">异步任务</div>
-              <div class="setting-desc">启用后台作业（job 工具）：Agent 可将长任务作为独立后台作业运行。</div>
-            </div>
-            <button class="toggle-btn" :class="{ on: settings['async.enabled'] }" @click="toggle('async.enabled')">
-              {{ settings['async.enabled'] ? '开启' : '关闭' }}
-            </button>
-          </div>
-          <div class="setting-row" v-if="settings['async.enabled']">
-            <div class="setting-info">
-              <div class="setting-label">最大并行作业数</div>
-            </div>
-            <input type="number" class="input-number" min="1" max="10"
-              :value="settings['async.maxJobs'] ?? 3"
-              @change="set('async.maxJobs', Number(($event.target as HTMLInputElement).value))" />
-          </div>
-
-          <!-- GAP-B7-001：Obsidian 保管库（vault:// URL 支持，非密钥库——
-               Maxma 的密钥由凭据信封机制管理） -->
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">Obsidian 保管库</div>
-              <div class="setting-desc">允许 read 工具通过 vault:// URL 读取/编辑 Obsidian 保管库内容（需本机 Obsidian CLI）。</div>
-            </div>
-            <button class="toggle-btn" :class="{ on: settings['vault.enabled'] }" @click="toggle('vault.enabled')">
-              {{ settings['vault.enabled'] ? '开启' : '关闭' }}
-            </button>
-          </div>
         </div>
       </GlowingEffect>
 
@@ -241,29 +82,6 @@
               <option value="all">全部接受</option>
               <option value="one-at-a-time">逐条处理</option>
             </select>
-          </div>
-
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">中断模式</div>
-              <div class="setting-desc">AI 正在回复时发送新消息的行为。</div>
-            </div>
-            <select class="select" aria-label="打断模式" :value="settings['interruptMode']" @change="set('interruptMode', ($event.target as HTMLSelectElement).value)">
-              <option value="immediate">立即中断</option>
-              <option value="wait">等待完成</option>
-            </select>
-          </div>
-
-          <!-- GAP-A8-001：自动学习开关——OMP autolearn（实验性）。
-               对话结束后提炼经验并沉淀到技能/记忆，复用现有模型，无新增付费 API。 -->
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-label">自动学习</div>
-              <div class="setting-desc">对话结束后自动提炼经验与要点（实验性，会消耗少量额外 token）。</div>
-            </div>
-            <button class="toggle-btn" :class="{ on: settings['autolearn.enabled'] }" @click="toggle('autolearn.enabled')">
-              {{ settings['autolearn.enabled'] ? '开启' : '关闭' }}
-            </button>
           </div>
 
           <!-- GAP-B3-001：会话闲置回顾——轮次完成后闲置一段时间，自动生成
@@ -299,7 +117,12 @@
           <h3>推理预算</h3>
           <p class="section-desc">控制 AI 在不同推理级别下的 token 预算。</p>
 
-          <div class="setting-row" v-for="level in ['minimal', 'low', 'medium', 'high', 'xhigh', 'max']" :key="level">
+          <!-- 预算键只有引擎真实存在的 4 档：pi 的 ThinkingBudgetsSettings 是
+               {minimal, low, medium, high}。xhigh / max 是**档位**
+               （PI_THINKING_LEVELS 全序 7 档，见 bun-sidecar/src/kernel/pi-contract.ts:224，
+               会话级选择器在 ModelSettingsPanel.vue 仍是 7 档），
+               但引擎没有这两个档的预算键，故此处不再渲染它们的输入框。 -->
+          <div class="setting-row" v-for="level in ['minimal', 'low', 'medium', 'high']" :key="level">
             <div class="setting-info">
               <div class="setting-label">{{ thinkingLevelLabel(level) }}</div>
             </div>
@@ -622,7 +445,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { api } from '@/api'
 import type { TtsConfig, BrowserToolsConfig, SubAgentConfig } from '@/api'
 import { isNotifyEnabled, setNotifyEnabled, isNotificationSupported, getNotificationPermission, requestNotifyPermission, showSystemNotification } from '@/lib/notify'
@@ -665,7 +488,6 @@ const subagent = ref<SubAgentConfig>({
 const sectionTabs = [
   { label: '上下文管理', value: 'compaction' },
   { label: '容错', value: 'retry' },
-  { label: '工具', value: 'tools' },
   { label: '交互', value: 'interaction' },
   { label: '推理预算', value: 'thinking' },
   { label: '技能包', value: 'skills' },
@@ -688,67 +510,33 @@ const systemVoiceOptions = computed(() => {
   return sorted.map((v) => ({ value: v.name, label: `${v.name}（${v.lang}）` }))
 })
 
+// 面板要读写的设置点路径。每一项都必须在
+// bun-sidecar/src/kernel/pi-contract.ts 的 MAXMA_SETTINGS_KEYS 里登记（consumer: pi | maxma）：
+// 未登记 → PUT /api/settings 回 422；登记为 consumer:"none" → 409 并带原因。
+// 上一代引擎（OMP）遗留的无人消费键已随面板删除一并移出（历史值留在设置文件里不动）。
+// 'vault.enabled'（Obsidian 保管库）同批删除：全仓除本面板外没有任何读者，
+// 且 pi 0.99.0 的 read 工具不提供 vault:// —— 它登记为 consumer:"none"。
 const CORE_PATHS = [
-  'compaction.enabled', 'compaction.strategy', 'compaction.thresholdPercent',
-  'compaction.midTurnEnabled', 'compaction.idleEnabled',
-  'contextPromotion.enabled',
-  'retry.enabled', 'retry.maxRetries', 'retry.modelFallback', 'retry.fallbackChains',
-  'tools.approvalMode', 'tools.discoveryMode',
-  'steeringMode', 'followUpMode', 'interruptMode',
+  // consumer: "pi"
+  'compaction.enabled',
+  'retry.enabled', 'retry.maxRetries',
+  'steeringMode', 'followUpMode',
   'thinkingBudgets.minimal', 'thinkingBudgets.low', 'thinkingBudgets.medium',
-  'thinkingBudgets.high', 'thinkingBudgets.xhigh', 'thinkingBudgets.max',
+  'thinkingBudgets.high',
+  // consumer: "maxma"
   'skills.enabled',
-  'autolearn.enabled',
   'recap.enabled', 'recap.idleSeconds',
-  'bash.autoBackground.enabled', 'bash.autoBackground.thresholdMs',
-  'async.enabled', 'async.maxJobs',
-  'vault.enabled',
 ]
 
-// GAP-B6-001：备用模型链 JSON 编辑器状态
-const fallbackChainsText = ref('')
-const fallbackChainsError = ref('')
-
-watch(() => settings.value['retry.fallbackChains'], (v) => {
-  if (v === undefined || v === null) {
-    fallbackChainsText.value = ''
-  } else {
-    fallbackChainsText.value = typeof v === 'string' ? v : JSON.stringify(v, null, 2)
-  }
-}, { immediate: true })
-
-async function saveFallbackChains(raw: string) {
-  fallbackChainsError.value = ''
-  const text = raw.trim()
-  if (!text) {
-    await set('retry.fallbackChains', {})
-    return
-  }
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(text)
-  } catch {
-    fallbackChainsError.value = 'JSON 格式错误，请检查括号与引号'
-    return
-  }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    fallbackChainsError.value = '必须是 JSON 对象（键 → 字符串数组）'
-    return
-  }
-  for (const [key, value] of Object.entries(parsed)) {
-    if (!Array.isArray(value) || !value.every((s) => typeof s === 'string' && s.trim())) {
-      fallbackChainsError.value = `键 "${key}" 的值必须是非空字符串数组`
-      return
-    }
-  }
-  await set('retry.fallbackChains', parsed)
-  fallbackChainsText.value = JSON.stringify(parsed, null, 2)
-}
+// retry.fallbackChains / retry.modelFallback 的 JSON 编辑器随其 consumer:"none" 一起撤下
+// （原 GAP-B6-001：编辑器状态 + saveFallbackChains 校验函数），后端现在对这两个键回 409。
 
 function thinkingLevelLabel(level: string): string {
+  // 只覆盖预算表真实存在的 4 档；xhigh / max 是**档位**（会话级选择器在
+  // ModelSettingsPanel.vue，仍是 PI_THINKING_LEVELS 的 7 档），不是预算键。
   const labels: Record<string, string> = {
     minimal: '最小', low: '低', medium: '中',
-    high: '高', xhigh: '极高', max: '最大',
+    high: '高',
   }
   return `${labels[level] ?? level}（${level}）`
 }
@@ -1194,30 +982,5 @@ input[type="range"] {
 
 .permission-default {
   color: var(--text-secondary);
-}
-
-.setting-control--wide {
-  flex: 1 1 100%;
-  min-width: 0;
-}
-
-.input-textarea {
-  width: 100%;
-  min-height: 110px;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-family: ui-monospace, Consolas, monospace;
-  font-size: 0.8em;
-  line-height: 1.5;
-  resize: vertical;
-}
-
-.setting-error {
-  margin-top: 6px;
-  font-size: 0.8em;
-  color: var(--status-error, #e05252);
 }
 </style>
