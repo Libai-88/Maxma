@@ -241,7 +241,12 @@ describe("persona 路由（阶段 2.2d）", () => {
       const after = (await (await app.request("/api/personas", { headers: authHeader() })).json()) as {
         active_file: string;
       };
-      expect(after.active_file).toBe(files[files.length - 1]);
+      // noUncheckedIndexedAccess：末项是可能 undefined。用显式判空把它收窄成 string
+      //（`expect().toBeDefined()` 只做运行时断言、不做类型收窄；若改用 String(last)，
+      //  真出现空列表时会把 undefined 变成字符串 "undefined" 而看不出来）。
+      const last = files.at(-1);
+      if (!last) throw new Error("人格列表不应为空");
+      expect(after.active_file).toBe(last);
     } finally {
       fs.rmSync(bundleDir, { recursive: true, force: true });
     }

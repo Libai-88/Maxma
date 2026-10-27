@@ -28,6 +28,25 @@ export const FREE_LANE_PRIMARY_MODEL_ID = "mimo-v2.6-flash-free";
  */
 export const FREE_LANE_FALLBACK_MODEL_IDS: readonly string[] = [];
 
+/**
+ * **实测不可用**的免费模型——与上面两个正向常量同属"免费渠道可用模型"这一个事实，
+ * 所以放在同一处（`bun-backend/src/services/opencode-zen.ts` 从这里取用）。
+ *
+ * 判据来自 `scripts/verify-free-models.mjs` 的可重复实测（不是猜测）：
+ *   - `beam-free`：实测 `403 RegionError — This model is not available in your
+ *     country`。这是**地区**限制、与额度无关，不会"过阵子就好"，
+ *     也不该因为"上游列表里有它"就放行。
+ *   - `space-bunny-free`：实测已从 `GET /zen/v1/models` 消失（下架），
+ *     而它曾被当作兜底目标与便携包内置可选项。
+ *
+ * 之所以要显式记下来：上游目录随时变，而"不能用"这个结论只能靠实测得出、
+ * 读代码读不出来；不记下来就会有人看到列表里有它、顺手放回白名单。
+ */
+export const FREE_LANE_KNOWN_UNUSABLE_MODEL_IDS: readonly string[] = [
+  "beam-free",
+  "space-bunny-free",
+];
+
 function base62From(bytes: Uint8Array): string {
   return Array.from(bytes, (byte) => BASE62[byte % BASE62.length]).join("");
 }

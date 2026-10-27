@@ -18,6 +18,7 @@ import { getCredentialKeyPath } from "../app-paths";
 
 import {
   FREE_LANE_FALLBACK_MODEL_IDS,
+  FREE_LANE_KNOWN_UNUSABLE_MODEL_IDS,
   FREE_LANE_PRIMARY_MODEL_ID,
 } from "../../../bun-sidecar/src/kernel/opencode-zen";
 
@@ -28,6 +29,16 @@ export const OPENCODE_ZEN_LABEL = "Maxma 免费模型";
 
 const FREE_SUFFIX = "-free";
 const FREE_HIDDEN_MODELS = new Set(["big-pickle", "hy3-free"]);
+
+/**
+ * **实测不可用**的免费模型：即使将来有人把它加进白名单、或上游临时列出来，
+ * 也必须拒绝——否则用户选中就必然报错。
+ *
+ * 清单本体在 kernel（`FREE_LANE_KNOWN_UNUSABLE_MODEL_IDS`），与"可用"的正向常量
+ * 放在一处：它们属于同一个事实（免费渠道可用模型集），不该在两个文件里各留一份。
+ * 那正是上一轮 `space-bunny-free` 失效时改不完的根因。
+ */
+const KNOWN_UNUSABLE_FREE_MODELS = new Set<string>(FREE_LANE_KNOWN_UNUSABLE_MODEL_IDS);
 /**
  * 免费渠道的模型标识**唯一来源在 `bun-sidecar/src/kernel/opencode-zen.ts`**。
  * 这里以前自己也抄了一份（`EXTERNAL_COMPATIBLE` + `FALLBACK` + `prefer` 三处），
@@ -59,6 +70,7 @@ export function isFreeModel(modelId: unknown): boolean {
 
 export function isOpenCodeZenModelAvailable(modelId: unknown): boolean {
   const mid = String(modelId ?? "").trim();
+  if (KNOWN_UNUSABLE_FREE_MODELS.has(mid)) return false;
   return isFreeModel(mid) && EXTERNAL_COMPATIBLE_FREE_MODELS.has(mid);
 }
 
