@@ -21,6 +21,8 @@
 import { VERSION as PI_CODING_AGENT_VERSION, getAgentDir } from "@earendil-works/pi-coding-agent";
 import * as path from "node:path";
 
+import { PI_PROVIDER_API_RENAMES, PI_PROVIDER_APIS } from "./pi-contract";
+
 /** pi 引擎（pi-coding-agent）的版本号，形如 "0.99.0"。 */
 export function engineVersion(): string {
   return PI_CODING_AGENT_VERSION;
@@ -29,6 +31,58 @@ export function engineVersion(): string {
 /** 引擎标识，供 /api/capabilities 与诊断导出如实标注"当前跑的是哪个引擎的哪个版本"。 */
 export function engineIdentity(): { name: string; version: string } {
   return { name: "@earendil-works/pi-coding-agent", version: PI_CODING_AGENT_VERSION };
+}
+
+/**
+ * 语义化版本比较：`versionAtLeast("1.0.3", "1.0.3") === true`。
+ * 只取 major.minor.patch 的数值，忽略预发布后缀（上游不发 prerelease）。
+ */
+export function versionAtLeast(current: string, target: string): boolean {
+  const a = current.split(".").map((n) => parseInt(n, 10) || 0);
+  const b = target.split(".").map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) {
+    const left = a[i] ?? 0;
+    const right = b[i] ?? 0;
+    if (left !== right) return left > right;
+  }
+  return true;
+}
+
+/**
+ * **当前安装的引擎**认识的 api 标识集合。
+ *
+ * 改名不能靠"两个名字都收进白名单"糊过去：那样在 0.99.0 上会把一个引擎并不认识
+ * 的名字当成合法 api，用户配置 Azure 时从"静默回落 openai-completions"变成
+ * "发送时报错"——修 bug 顺手造出一条新的用户可见报错路径。
+ *
+ * 正确做法是按版本选实名：`since` 之前用旧名，之后用新名；**两个方向都能解析**，
+ * 所以升级当天不需要改任何用户配置，也不会报错。
+ */
+export function engineApiNames(): string[] {
+  const version = PI_CODING_AGENT_VERSION;
+  const out = new Set<string>(PI_PROVIDER_APIS);
+  for (const rename of PI_PROVIDER_API_RENAMES) {
+    if (versionAtLeast(version, rename.since)) {
+      out.delete(rename.from);
+      out.add(rename.to);
+    } else {
+      out.delete(rename.to);
+      out.add(rename.from);
+    }
+  }
+  return [...out];
+}
+
+/** 把一个 api/provider 名归一到当前引擎认识的写法。 */
+export function resolveEngineApiName(name: string): string {
+  const known = new Set(engineApiNames());
+  if (known.has(name)) return name;
+  for (const rename of PI_PROVIDER_API_RENAMES) {
+    const useNew = versionAtLeast(PI_CODING_AGENT_VERSION, rename.since);
+    if (name === rename.from) return useNew ? rename.to : rename.from;
+    if (name === rename.to) return useNew ? rename.to : rename.from;
+  }
+  return name;
 }
 
 /**

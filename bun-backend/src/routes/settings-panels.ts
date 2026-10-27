@@ -14,7 +14,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { getApiDataDir } from "../app-paths";
-import { getGlobalSettingsSingleton } from "../settings-global";
+// getGlobalSettingsSingleton 的引用已移除：那两处 applyOverrides 是 no-op（见下方注释），
+// 面板配置的唯一存储是 panel_configs.json。
 
 function configPath(): string {
   return path.join(getApiDataDir(), "panel_configs.json");
@@ -214,14 +215,11 @@ export function createSettingsPanelRoutes(): Hono {
       updates.allowed_domains = cleaned;
     }
     const result = putPanel("browser_tools", updates);
-    // PANEL-WIRE-001：同步 OMP 运行时设置（kernel 全局单例直调）
-    const settings = getGlobalSettingsSingleton();
-    if ("enabled" in updates) {
-      settings.applyOverrides({ browser: { enabled: Boolean(updates.enabled) } } as never);
-    }
-    if ("headless" in updates) {
-      settings.applyOverrides({ browser: { headless: Boolean(updates.headless) } } as never);
-    }
+    // 面板值只有一个存储：panel_configs.json（capabilities 与前端都从这里读）。
+    // 这里原本还把 enabled/headless 镜像写进 kernel 的全局 SettingsManager
+    // （注释写着"同步 OMP 运行时设置"）。实测那是**纯 no-op**：pi 的 Settings 里
+    // 没有 browser 键（`settings-manager.d.ts` 无此字段），而那个单例是 in-memory、
+    // 也不参与会话。保留注释会误导后来的人以为浏览器开关接到了引擎上。
     return c.json(result);
   });
 
@@ -232,13 +230,8 @@ export function createSettingsPanelRoutes(): Hono {
     const invalid = validatePanel("sub_agents", body);
     if (invalid) return c.json({ detail: invalid }, 422);
     const result = putPanel("sub_agents", body);
-    const settings = getGlobalSettingsSingleton();
-    if ("enabled" in body) {
-      settings.applyOverrides({ advisor: { enabled: Boolean(body.enabled) } } as never);
-    }
-    if ("max_concurrent" in body) {
-      settings.applyOverrides({ advisor: { maxConcurrent: Number(body.max_concurrent) } } as never);
-    }
+    // 同上：`advisor.*` 是上一代引擎的键，pi 的 Settings 里没有，镜像写是 no-op。
+    // 子代理配置的实际生效面是 capabilities.features.sub_agents（含引擎支持度）。
     return c.json(result);
   });
 

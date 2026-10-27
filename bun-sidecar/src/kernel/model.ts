@@ -14,7 +14,7 @@
 
 import { ModelRuntime, type ModelRuntime as ModelRuntimeType } from "@earendil-works/pi-coding-agent";
 import type { Api, Model } from "@earendil-works/pi-ai";
-import { PI_PROVIDER_APIS, PI_PROVIDER_APIS_FORWARD_COMPAT } from "./pi-contract";
+import { engineApiNames, resolveEngineApiName } from "./engine-info";
 import { registerOpencodeZenTransport } from "./opencode-zen";
 import { registerPluginProviderOn } from "./plugin-models";
 
@@ -43,15 +43,16 @@ export interface ResolvedPiModel {
 /** 零成本兜底定价（Usage.cost 同形状；自定义端点无目录价可用）。 */
 const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 /**
- * provider 的 api 标识白名单。**唯一来源是 `pi-contract.ts`**：那里与已安装引擎的
- * `KnownApi` 做双向差集，并单独登记了上游 1.0.3 改名后的前瞻名 `azure`
- * （`PI_PROVIDER_APIS_FORWARD_COMPAT`）。
+ * provider 的 api 标识白名单。**唯一来源是 `pi-contract.ts` + `engine-info.ts`
+ * 的 `engineApiNames()`**：契约登记引擎认识的 api 与改过名的成对记录，
+ * 实际接受哪一边由**已安装引擎的版本**决定。
  *
- * 这里原本自己抄了一份 10 项清单——契约后来补的前瞻名运行时并不知道，
- * 等于"升级后仍兼容 Azure"这件事只写在文档里、代码里不成立。
- * 清单两处各写一遍的结局必然是其中一遍是错的，所以接回单源。
+ * 这里原本自己抄了 10 项清单；后来我一度改成"新旧名字都收"，那是错的——
+ * 在 0.99.0 上接受 `azure` 会让用户配置从"回落 openai-completions"变成
+ * "发送时报错"，修 bug 反而造出一条新的用户可见报错路径。版本选实名，
+ * 两个方向都能解析，升级当天不用改任何用户配置。
  */
-const PI_APIS = new Set<string>([...PI_PROVIDER_APIS, ...PI_PROVIDER_APIS_FORWARD_COMPAT]);
+const PI_APIS = new Set<string>(engineApiNames());
 const PROVIDER_API_ALIASES: Record<string, Api> = {
   openai: "openai-completions",
   custom: "openai-completions",
@@ -67,7 +68,9 @@ const PROVIDER_API_ALIASES: Record<string, Api> = {
 
 function resolvePiApi(providerType?: string): Api {
   if (!providerType) return "openai-completions";
-  if (PI_APIS.has(providerType)) return providerType as Api;
+  // 先按引擎版本把改过名的写法归一到当前实名，再查白名单。
+  const known = resolveEngineApiName(providerType);
+  if (PI_APIS.has(known)) return known as Api;
   return PROVIDER_API_ALIASES[providerType.toLowerCase()] ?? "openai-completions";
 }
 

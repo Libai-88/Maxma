@@ -36,12 +36,14 @@ import {
   MAXMA_COMPACTION_REASONS_WS,
   PI_PACKAGES,
   PI_PROVIDER_APIS,
-  PI_PROVIDER_APIS_FORWARD_COMPAT,
+  PI_PROVIDER_API_RENAMES,
   PI_SESSION_EVENTS_CONSUMED,
   PI_THINKING_LEVELS,
   PI_TURN_TERMINAL_EVENT,
   MAXMA_SETTINGS_KEYS,
 } from "../src/kernel/pi-contract";
+
+import { engineApiNames, engineVersion, resolveEngineApiName, versionAtLeast } from "../src/kernel/engine-info";
 
 const PI_ROOT = path.resolve(import.meta.dir, "../node_modules/@earendil-works");
 
@@ -211,26 +213,61 @@ describe("pi 契约对账：安装包必须真实提供 Maxma 声明的消费面
     expect(declared.filter((x) => !engine.includes(x)), "pi 删除档位，Maxma 清单未收").toEqual([]);
   });
 
-  test("provider api 白名单必须覆盖 pi 的全部 KnownApi（pi 新增即红）", () => {
+  test("运行时接受的每个 api 名都必须是**已安装引擎**认识的（否则用户一选就报错）", () => {
     const text = readOrNull(path.join(pkgDir("@earendil-works/pi-ai"), "dist/types.d.ts")) ?? "";
     const m = text.match(/export\s+type\s+KnownApi\s*=\s*([^;]+);/);
     expect(m, "pi-ai 里找不到 KnownApi 联合类型").not.toBeNull();
     const literals = [...new Set((m![1]!.match(/"[^"]+"/g) ?? []).map((s) => s.replace(/"/g, "")))];
-    const allowed = new Set<string>([...PI_PROVIDER_APIS, ...PI_PROVIDER_APIS_FORWARD_COMPAT]);
+    const engine = new Set(literals);
+
+    // 方向一：我们准备接受的每一个名字，引擎必须真的认识。
+    // 这条断言存在的原因是修 bug 时曾一度"新旧两个名字都收"——在 0.99.0 上接受
+    // `azure` 会让 Azure 渠道从"静默回落"变成"发送时报错"，等于新造一条用户可见
+    // 的报错路径。接受集必须由引擎版本决定，不由我们的好意决定。
+    const accepted = engineApiNames();
+    const unknown = accepted.filter((x) => !engine.has(x));
     expect(
-      literals.filter((x) => !allowed.has(x)),
-      `pi 新增了 api，Maxma 白名单未登记（会被判非法 providerType）：${literals
-        .filter((x) => !allowed.has(x))
-        .join(", ")}`,
+      unknown,
+      `这些 api 会被接受，但已安装引擎并不认识（用户选了会在发送时报错）：\n  ${unknown.join("\n  ")}`,
     ).toEqual([]);
 
-    // Maxma 侧多出来的名字必须全部登记为前瞻兼容项，不许有"来历不明的白名单条目"。
-    const engineSet = new Set(literals);
-    const extras = PI_PROVIDER_APIS.filter((x) => !engineSet.has(x));
+    // 方向二：引擎新增的 api 必须登记，否则会被判成非法 providerType。
+    const unregistered = literals.filter((x) => !new Set(PI_PROVIDER_APIS).has(x) && !new Set(accepted).has(x));
     expect(
-      extras,
-      `PI_PROVIDER_APIS 里有引擎不认识的 api，要么移入 PI_PROVIDER_APIS_FORWARD_COMPAT：${extras.join(", ")}`,
+      unregistered,
+      `pi 新增了 api，Maxma 未登记：${unregistered.join(", ")}`,
     ).toEqual([]);
+  });
+
+  test("改名表必须与已安装引擎的现实一致（每次只准一边成立）", () => {
+    const text = readOrNull(path.join(pkgDir("@earendil-works/pi-ai"), "dist/types.d.ts")) ?? "";
+    const m = text.match(/export\s+type\s+KnownApi\s*=\s*([^;]+);/);
+    const literals = new Set((m?.[1] ?? "").match(/"[^"]+"/g)?.map((s) => s.replace(/"/g, "")) ?? []);
+    const version = engineVersion();
+
+    for (const rename of PI_PROVIDER_API_RENAMES) {
+      expect(rename.from !== rename.to, `${rename.from} 的改名表自相矛盾`).toBe(true);
+      const hasFrom = literals.has(rename.from);
+      const hasTo = literals.has(rename.to);
+      // 引擎要么认识旧名、要么认识新名，不可能两个都认识或都不认识。
+      expect(
+        hasFrom !== hasTo,
+        `改名 ${rename.from} → ${rename.to} (since ${rename.since}) 与已安装引擎不符：` +
+          `当前 ${version}，旧名${hasFrom ? "在" : "不在"}、新名${hasTo ? "在" : "不在"} KnownApi`,
+      ).toBe(true);
+
+      // 版本判断必须与引擎现实一致——这条会在"版本号写错"或"改名提前/推迟发生"时红。
+      const atLeast = versionAtLeast(version, rename.since);
+      expect(
+        atLeast,
+        `versionAtLeast(${version}, ${rename.since})=${atLeast} 与引擎实际认识的名字矛盾（会接受错误的名字）`,
+      ).toBe(hasTo);
+
+      // 归一化函数必须把两个写法都导向引擎认识的那一个。
+      const target = hasTo ? rename.to : rename.from;
+      expect(resolveEngineApiName(rename.from), `${rename.from} 未归一到引擎实名`).toBe(target);
+      expect(resolveEngineApiName(rename.to), `${rename.to} 未归一到引擎实名`).toBe(target);
+    }
   });
 
   test("compaction reason：引擎会发的每一个值都必须在 WS 契约里（否则被钳成 threshold）", () => {

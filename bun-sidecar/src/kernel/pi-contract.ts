@@ -250,14 +250,30 @@ export const PI_PROVIDER_APIS = [
 ] as const;
 
 /**
- * 前瞻兼容项：**当前锁定的 0.99.0 里还不存在**，升级后才是真名。
+ * 引擎改过名的 api 标识（成对登记，附生效版本）。
  *
  * 上游 1.0.3 的 Breaking Changes 把 Azure provider 从 `azure-openai-responses`
- * 改名为 `azure`，并要求迁移 auth.json / models.json / settings.json 里的 provider key。
- * 两个名字都保留，是为了让同一份代码在升级前后都能解析 Azure 渠道；
- * 只留一个 = 升级当天 Azure 渠道静默解析失败。
+ * 改名为 `azure`，并要求迁移 auth.json / models.json / settings.json 里的
+ * provider key。
+ *
+ * ⚠️ 这里**不是**"两个名字都当合法值"的白名单——那样做会让当前 0.99.0 运行时
+ * 接受一个引擎并不认识的 api 名，把"回落 openai-completions"换成"发送时报错"，
+ * 等于新造一条用户可见的报错路径。正确做法是按**已安装引擎的版本**选定实名，
+ * 两个方向都能解析（见 `engine-info.ts` 的 `engineApiNames()`）。
  */
-export const PI_PROVIDER_APIS_FORWARD_COMPAT = ["azure"] as const;
+export const PI_PROVIDER_API_RENAMES: ReadonlyArray<{
+  from: string;
+  to: string;
+  since: string;
+  note: string;
+}> = [
+  {
+    from: "azure-openai-responses",
+    to: "azure",
+    since: "1.0.3",
+    note: "上游 1.0.3 Breaking：Azure provider 更名；用户配置里两个名字都要能用",
+  },
+];
 
 // ─────────────────────────────────────────────────────────────
 // 4. compaction 词表（引擎值 vs Maxma 契约值，两者不等价）
