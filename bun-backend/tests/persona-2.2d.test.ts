@@ -132,8 +132,7 @@ describe("persona 路由（阶段 2.2d）", () => {
     expect(after.active_file).toBe("SOUL.md");
   });
 
-  test("重命名：内容标题同步 + 独立记忆跟随 + 活跃指向更新", async () => {
-    const app = await makeApp();
+  test("重命名：内容标题同步 + 独立记忆跟随 + 活跃指向更新", async () => {    const app = await makeApp();
     const h = { "content-type": "application/json", ...authHeader() };
 
     // 建 SOUL.小饱.md + 独立记忆 + 切活跃
@@ -203,6 +202,49 @@ describe("persona 路由（阶段 2.2d）", () => {
     expect(saved.status).toBe(200);
     expect(fs.readFileSync(path.join(userDir, "SOUL.模板.md"), "utf8")).toContain("我的模板人格");
     fs.rmSync(bundleDir, { recursive: true, force: true });
+  });
+
+  test("首启（用户目录为空）：列表里的**模板人格**必须能切换为活跃", async () => {
+    // 回归 PERSONA-ACTIVE-TEMPLATE-404。
+    // 真实部署形态是"模板在只读 bundle、用户数据在别处"（本文件其余用例把两者指向
+    // 同一目录，所以一直测不出这个 bug）。此时 GET /api/personas 会把模板目录里的
+    // 人格也列出来，而 PUT /api/personas/active 曾经固定只在用户目录找文件 ——
+    // 用户看到列表里有 SOUL.md / SOUL.饱饱.md，点任何一个都 404，连列表刚标注为
+    // active 的那个也切不动。
+    const bundleDir = fs.mkdtempSync(path.join(os.tmpdir(), "maxma-persona-bundle2-"));
+    const templateDir = path.join(bundleDir, "config", "personas");
+    fs.mkdirSync(templateDir, { recursive: true });
+    fs.writeFileSync(path.join(templateDir, "SOUL.md"), "# 模板 SOUL\n\n来自只读模板\n");
+    fs.writeFileSync(path.join(templateDir, "SOUL.模板.md"), "# 模板人格\n\n来自只读模板\n");
+    // 用户目录故意留空（首启的真实状态）
+    const userDir = path.join(dataDir, "config", "personas");
+    fs.rmSync(path.join(userDir, "SOUL.md"), { force: true });
+    process.env.MAXMA_BUNDLE_DIR = bundleDir;
+    try {
+      const app = await makeApp();
+      const h = { "content-type": "application/json", ...authHeader() };
+      const list = (await (await app.request("/api/personas", { headers: authHeader() })).json()) as {
+        personas: Array<{ file: string }>;
+      };
+      const files = list.personas.map((p) => p.file);
+      expect(files, "列表应包含模板目录里的人格").toContain("SOUL.模板.md");
+
+      // 列表里每一个都必须是可切换的
+      for (const file of files) {
+        const res = await app.request("/api/personas/active", {
+          method: "PUT",
+          headers: h,
+          body: JSON.stringify({ file }),
+        });
+        expect(res.status, `切换模板人格应成功: ${file}`).toBe(200);
+      }
+      const after = (await (await app.request("/api/personas", { headers: authHeader() })).json()) as {
+        active_file: string;
+      };
+      expect(after.active_file).toBe(files[files.length - 1]);
+    } finally {
+      fs.rmSync(bundleDir, { recursive: true, force: true });
+    }
   });
 
   test("profile：解析 SOUL/USER + 占位符回退'你'", async () => {

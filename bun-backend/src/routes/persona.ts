@@ -245,10 +245,19 @@ export function createPersonaRoutes(): Hono {
     const body = (await c.req.json().catch(() => ({}))) as { file?: string };
     const file = body.file ?? "";
     try {
-      const target = file === "SOUL.md" ? path.join(personasDir(), file) : getPersonaVariantPath(file);
-      if (!fs.existsSync(target)) return c.json({ detail: `人格文件不存在: ${file}` }, 404);
-      setActivePersona(file);
-      return c.json({ status: "ok", active_file: file });
+      // 校验文件名（与写入路径同一套白名单 + 前缀校验，防穿越），
+      // 但**存在性判定必须走 personaReadPath**：它按"用户目录 → 模板目录"顺序查找，
+      // 与 listPersonas() 对外展示的范围一致。
+      //
+      // 修复 PERSONA-ACTIVE-TEMPLATE-404：此前这里固定拼 personasDir()（只认用户目录），
+      // 而 GET /api/personas 把模板目录里的人格也列出来 —— 首次运行（用户目录为空）
+      // 时列表能显示 SOUL.md / SOUL.饱饱.md，点任何一个都 404「人格文件不存在」，
+      // 包括列表里刚标注为 active 的那一个。
+      const variant = file === "SOUL.md" ? file : path.basename(getPersonaVariantPath(file));
+      const target = personaReadPath(variant);
+      if (!target) return c.json({ detail: `人格文件不存在: ${file}` }, 404);
+      setActivePersona(variant);
+      return c.json({ status: "ok", active_file: variant });
     } catch (err) {
       const e = errorResponse(err);
       return c.json({ detail: e.message }, e.status);
