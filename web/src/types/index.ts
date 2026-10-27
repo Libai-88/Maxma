@@ -127,7 +127,14 @@ export interface ContextCompressedEvent {
   }
 }
 
-export type CompactionReason = 'threshold' | 'overflow' | 'idle' | 'incomplete'
+/** 压缩触发原因。
+ * 'manual' 来自 pi 的 compaction_start 事件（见
+ * bun-backend/node_modules/@earendil-works/pi-coding-agent/dist/core/agent-session.d.ts:61
+ * `reason: "manual" | "threshold" | "overflow"`）。
+ * 注：sidecar 的 kernel/events.ts 目前把未知取值钳成 'threshold'，所以 'manual'
+ * 暂时不会真的到达前端；类型先补齐，避免钳位放开后前端按 undefined 渲染文案。
+ * 'idle' / 'incomplete' 为上一代引擎（OMP）取值，保留以兼容历史转录。 */
+export type CompactionReason = 'manual' | 'threshold' | 'overflow' | 'idle' | 'incomplete'
 export type CompactionAction = 'context-full' | 'handoff' | 'shake' | 'snapcompact'
 
 export interface ContextCompressingEvent {

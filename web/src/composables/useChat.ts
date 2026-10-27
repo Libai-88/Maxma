@@ -1007,6 +1007,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     if (ch.currentTurn) {
       ch.pendingCompaction = undefined
       const reasonLabels: Record<CompactionReason, string> = {
+        manual: '手动压缩',
         threshold: '上下文触达阈值',
         overflow: '上下文溢出',
         idle: '空闲超时',
@@ -2062,6 +2063,7 @@ export function useChat(sessionId: Ref<string>) {
     // 回放 currentTurn 为 null 时缓存的 pendingCompaction
     if (ch.pendingCompaction) {
       const reasonLabels: Record<CompactionReason, string> = {
+        manual: '手动压缩',
         threshold: '上下文触达阈值',
         overflow: '上下文溢出',
         idle: '空闲超时',

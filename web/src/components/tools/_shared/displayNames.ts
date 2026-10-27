@@ -1,5 +1,21 @@
+/**
+ * 工具气泡标题的中文字典：工具名 → 展示名。
+ * 未登记的名字会原样显示英文（toolDisplayName 的兜底），所以「引擎实际会调用的工具」
+ * 必须全部出现在这里；实际可用工具清单来源：
+ *   bun-sidecar/src/kernel/pi-session.ts:35（引擎内置）、bun-sidecar/src/tools/*（自定义）、
+ *   bun-sidecar/src/kernel/plan.ts:84（submit_plan）。
+ *
+ * 表内三段共存：当前 pi 引擎内置 7 个 + Maxma 自定义 7 个 + 上一代引擎（OMP）专有若干。
+ * OMP 专有名在 pi 下不产生，但可能被用户配置的 MCP 服务器同名暴露，也用于历史转录回放，
+ * 故保留（删除 = 那些气泡标题退回英文）。
+ */
 const DISPLAY_NAMES: Record<string, string> = {
-  /* OMP 内建工具 */
+  /* 引擎内建 + 上一代引擎（OMP）内建，同名者共用一条中文。
+   * 其中仅 OMP 存在、pi 下不产生的：eval, task, todo, ask, inspect_image, ast_grep,
+   * ast_edit, browser, lsp, ssh, github, checkpoint, rewind, job, irc, launch, debug,
+   * learn, manage_skill, memory_edit, retain, recall, reflect, resolve,
+   * search_tool_bm25, yield（glob 同理——pi 用 find 而非 glob）。
+   * 保留原因见文件头：兼容 MCP 同名工具 + 历史转录回放。 */
   bash: 'Shell 执行',
   read: '读取文件',
   write: '写入文件',
@@ -43,6 +59,18 @@ const DISPLAY_NAMES: Record<string, string> = {
   get_sticker: '获取贴纸',
   list_rules: '查询规则',
   list_automations: '查询自动化',
+  read_office_file: '读取 Office 文件',
+  write_office_file: '写入 Office 文件',
+  /* 计划模式提交工具（bun-sidecar/src/kernel/plan.ts:84） */
+  submit_plan: '提交计划',
+  /* pi 引擎（@earendil-works/pi-coding-agent）内置工具里与上方 OMP 同名的
+   * read/write/edit/grep/bash 复用既有中文；以下两个是 pi 专有、此前缺失的：
+   *   find — 按 glob 模式查找文件；ls — 列目录
+   * powershell 为 pi 支持但未进入 MAXMA_DEFAULT_PI_TOOLS 的第 8 个内置工具，
+   * 一并登记以防默认工具集调整时标题退化为英文原名。 */
+  find: '查找文件',
+  ls: '目录列表',
+  powershell: 'PowerShell 执行',
 }
 
 export function toolDisplayName(name: string): string {

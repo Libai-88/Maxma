@@ -24,6 +24,7 @@ import {
   MAXMA_GOAL_STATUSES_WS_SUPERSET,
   MAXMA_SETTINGS_KEYS,
   PI_BUILTIN_TOOLS,
+  MAXMA_ENABLED_DEFAULT_TOOLS,
   PI_PACKAGES,
   PI_THINKING_LEVELS,
   MAXMA_ENGINE_WS_EVENTS,
@@ -316,5 +317,18 @@ describe("跨侧清单一致性（同一件事不许三处各写各的）", () =
       unmapped,
       `这些当前会被调用的工具在展示字典里没有映射（气泡标题会退回英文）：\n  ${unmapped.join("\n  ")}`,
     ).toEqual([]);
+
+    // 5) 前端测试自己抄了一份"引擎内置工具"清单（web/tests/toolRegistry.spec.ts）。
+    //    那份清单**只能等于我方的默认启用集**，不许从记忆里的"7 个"手抄——
+    //    本仓的引擎工具数已经从 7 变成 8（powershell 存在但未默认启用），
+    //    这类数字一旦漂移，前端断言就会悄悄守着一张过期的名单。
+    const webTest = read("web/tests/toolRegistry.spec.ts");
+    const webBuiltin = webTest.match(/const PI_BUILTIN_TOOLS\s*=\s*\[([^\]]*)\]/);
+    expect(webBuiltin, "web/tests/toolRegistry.spec.ts 里的内置工具清单结构变了，请同步本校验").not.toBeNull();
+    const listed = [...webBuiltin![1]!.matchAll(/'([^']+)'/g)].map((m) => m[1]!);
+    expect(
+      listed,
+      `前端测试的内置工具清单与契约的默认启用集不一致（引擎工具数变化时这里必须同步）`,
+    ).toEqual([...MAXMA_ENABLED_DEFAULT_TOOLS]);
   });
 });
