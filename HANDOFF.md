@@ -183,8 +183,19 @@ bash scripts/verify-all-gates.sh
   # 类型债棘轮（scripts/check-type-budget.mjs）/ 后端 bundle
 ```
 
-引擎升级入口（替代已删除的 upgrade-omp.mjs / verify-omp-settings.mjs）：
+端到端回合冒烟（验证 `web → WS → kernel → pi → provider → SSE 回流` 整条链路）：
 
+```text
+cd bun-backend && bun run src/server.ts                      # 另开一个终端
+BASE=http://127.0.0.1:8000 TOKEN=<auth_tokens 里的 token> \
+  bun scripts/smoke-e2e-roundtrip.mjs                        # 退出码 0 = 链路通
+```
+
+它**在本地起一个假的 OpenAI 兼容服务**并注册成临时渠道，因此不花额度、不依赖外网，
+也不受内置免费渠道配额影响（2026-10-27 就是免费渠道被 429 卡住、单测又全都测不到
+这条链路，才需要它）。跑完自动删临时会话与临时渠道。
+
+引擎升级入口（替代已删除的 upgrade-omp.mjs / verify-omp-settings.mjs）：
 ```text
 node scripts/upgrade-pi.mjs --check     # 只读：版本差距 + current→target 的 Breaking Changes
 node scripts/upgrade-pi.mjs 1.4.0       # 两个 workspace 一起 bump + 家族 overrides + 自动验证 + 失败回滚
