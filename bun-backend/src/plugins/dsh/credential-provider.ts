@@ -109,7 +109,11 @@ export class MaxmaCredentialProvider extends CredentialProvider {
    * —— 传实例给 `ctx.plugin()` 会被判为「invalid plugin」。
    */
   constructor(ctx: Context, options?: MaxmaCredentialProviderOptions) {
-    super(ctx, "credentials");
+    // 父类 CredentialProvider 的构造签名现在是 `(ctx)`：它内部已经自己做了
+    // `super(ctx, "credentials")` 向 Cordis 注册服务名。此前这里多传一个
+    // "credentials"，运行时被 JS 忽略（所以行为一直正确）、tsc 却报 TS2554
+    // "Expected 1 arguments, but got 2" —— 又一处"靠巧合正确"。
+    super(ctx);
     this.storePath = options?.storePath ?? defaultStorePath();
   }
 

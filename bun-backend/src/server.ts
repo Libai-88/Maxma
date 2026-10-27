@@ -69,6 +69,7 @@ import { startLlmUsageRetentionTask } from "./llm-usage-ledger";
 import { getApiDataDir } from "./app-paths";
 import { record as recordActivity } from "./activity-hub";
 import { send as rpcSend, sendError as rpcSendError, sendEvent as rpcSendEvent } from "./rpc";
+import type { ServerWebSocket } from "bun";
 import {
   handleChatMessage,
   onKernelEvent,
@@ -90,8 +91,15 @@ const hubPlans = new Map<string, PiPendingPlan>();
 const wsConnections = new Map<string, Set<ServerWebSocket<WsData>>>();
 const seenClientMsgIds = new Map<string, string[]>();
 
-/** kernel 事件 → WS 广播原始出口（无连接时保留 stdout 便于诊断）。 */
-function broadcastEvent(sessionId: string, event: { type: string; payload: Record<string, unknown> }): void {
+/**
+ * kernel 事件 → WS 广播原始出口（无连接时保留 stdout 便于诊断）。
+ *
+ * 事件类型与 `ChatWsHub.broadcast` 的声明保持一致（`payload?: unknown`）：
+ * 这里只做 JSON 序列化，不解释 payload 形状，所以不该比接口更窄——
+ * 之前写成 `payload: Record<string, unknown>` 反而是实现方擅自收窄契约，
+ * 导致赋值处 tsc 报不兼容（TS2322），而那本应是接口说了算。
+ */
+function broadcastEvent(sessionId: string, event: { type: string; payload?: unknown }): void {
   const conns = wsConnections.get(sessionId);
   if (conns && conns.size > 0) {
     const data = JSON.stringify(event);
@@ -374,7 +382,11 @@ const app = createApp();
 /** 启动 HTTP/WS 监听（仅直接运行时调用；测试只 import createApp/serveFrontend）。 */
 export function startServer() {
   startLlmUsageRetentionTask();
-  return Bun.serve({
+  // 显式带上 WsData 泛型：不写的话 Bun.serve 推导出 `ServerWebSocket<undefined>`，
+  // 于是下面 websocket 回调里 `ws.data` 是 undefined、`server.upgrade({data})`
+  // 也判为不兼容（实测 5 处 tsc 错误）。泛型是这里唯一的正解——用断言去压会
+  // 把"data 形状写错"这类真问题一起盖住。
+  return Bun.serve<WsData>({
     port: PORT,
     ...(process.env.MAXMA_BUN_HOST ? { hostname: process.env.MAXMA_BUN_HOST } : {}),
     async fetch(req, server) {

@@ -168,7 +168,15 @@ export function createMcpTestRoutes(): Hono {
 
     let stderrText = "";
     try {
-      stderrText = await new Response(proc.stderr).text();
+      // `proc` 的类型是 `ReturnType<typeof Bun.spawn>`，它的 stderr 是联合类型
+      // （`number | ReadableStream | undefined`），而 new Response() 只接受
+      // BodyInit —— 直接传会 TS2345。这里先判"是不是可读流"再消费，
+      // 是流就用 Response 读文本、否则退化为空串：不把联合硬塞进去，
+      // 也不假设它一定是流（spawn 的 stdio 配置将来变了也不会崩）。
+      const stderr = proc.stderr;
+      if (stderr && typeof stderr !== "number") {
+        stderrText = await new Response(stderr as ReadableStream<Uint8Array>).text();
+      }
     } catch {
       /* noop */
     }

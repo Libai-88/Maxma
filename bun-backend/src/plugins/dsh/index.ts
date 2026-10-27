@@ -12,6 +12,11 @@ import { registerPluginProviderRegistrar } from "../../../../bun-sidecar/src/ker
 import { enabledDshSpecifiers, getPlugin } from "../registry";
 import { createDshPluginHost, type DshPluginHost, type DshPluginHostOptions } from "./host";
 import { createPluginProviderRegistrar } from "./pi-providers";
+// 本文件内部要用到 PluginHttpHandler（currentPluginHttpHandlers 的返回类型），
+// 而下面的 `export type { … } from "…"` 只是**再导出**、不会在本文件里绑定名字——
+// 所以必须单独 import 一次，否则第 107 行的注解报 TS2304。
+// （同理 DshPluginHost 等是经 `import { type X }` 一并绑定的，才没有问题。）
+import type { PluginHttpHandler } from "./connection";
 
 export type { DshPluginHost, DshPluginHostOptions, DshProviderInfo } from "./host";
 export { MaxmaCredentialProvider } from "./credential-provider";

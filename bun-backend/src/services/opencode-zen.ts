@@ -121,8 +121,13 @@ export function ensureOpencodeZenProvider(): ProviderEntry | null {
   const items = loadProviders();
   const existing = findProvider(items, OPENCODE_ZEN_PROVIDER_ID);
   if (existing !== null) {
-    const models = Array.isArray(existing.models) ? existing.models.filter(isOpenCodeZenModelAvailable) : [];
-    if (models.length !== existing.models.length) {
+    // existing.models 的类型是 unknown（providers.yaml 是外部输入，可能被手改坏）。
+    // 旧写法 `models.length !== existing.models.length` 在"models 不是数组"时会
+    // 直接抛 TypeError——因为三元只保护了左边那次的取值，右边仍对 unknown 取属性。
+    // 现在把当前值先归一成数组再比，非数组一律当成空列表（下面会写回正确形状）。
+    const currentModels = Array.isArray(existing.models) ? existing.models : [];
+    const models = currentModels.filter(isOpenCodeZenModelAvailable);
+    if (models.length !== currentModels.length) {
       existing.models = models;
       try {
         saveProviders(items);

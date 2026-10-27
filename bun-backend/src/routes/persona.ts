@@ -14,6 +14,7 @@
  */
 
 import { Hono } from "hono";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -161,9 +162,29 @@ function writeTextAtomically(filePath: string, content: string): void {
 }
 
 /** 统一处理直译自 HTTPException 的错误（带 status 的 Error）。 */
-function errorResponse(err: unknown): { status: number; message: string } {
+function errorResponse(err: unknown): { status: ContentfulStatusCode; message: string } {
   const e = err as { status?: number; message?: string };
-  return { status: e.status ?? 500, message: e.message ?? String(err) };
+  // 返回类型必须是 ContentfulStatusCode：hono 的 `c.json(body, status)` 只接受
+  // 那个窄联合，宽 `number` 会重载失败（TS2769）。错误对象里的 status 本就来自
+  // 各处的字面量或外部输入，这里按 Hono 的语义收窄——未知值一律 500，
+  // 而不是把 `number` 强塞给 c.json 再靠断言蒙过去。
+  return { status: toContentfulStatus(e.status), message: e.message ?? String(err) };
+}
+
+/**
+ * 任意外部给的 status → Hono 认可的 ContentfulStatusCode。
+ * 与 `routes/settings.ts` / `routes/deferred-runs.ts` 的处理同一思路：
+ * 明确列出可透传的码，其余一律 500（不把非法值当合法状态码发给客户端）。
+ */
+function toContentfulStatus(raw: unknown): ContentfulStatusCode {
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isInteger(n) || n < 400 || n > 599) return 500;
+  // 只有 Hono 认识的那批码可以透传；其余（如 499、598）归一到 500。
+  const allowed: ContentfulStatusCode[] = [
+    400, 401, 403, 404, 405, 409, 410, 412, 413, 415, 422, 429,
+    500, 501, 502, 503, 504,
+  ];
+  return allowed.includes(n as ContentfulStatusCode) ? (n as ContentfulStatusCode) : 500;
 }
 
 export function createPersonaRoutes(): Hono {
@@ -395,7 +416,11 @@ export function createPersonaRoutes(): Hono {
     let style = "playful · 直接 · 温暖";
     let nickname = "你";
 
-    if (fs.existsSync(soulPath)) {
+    // personaReadPath 可能返回 null（持久文件与模板都不存在）。此前只查了
+    // existsSync(soulPath) 就直接 readFileSync(soulPath)——**类型上就不成立**：
+    // `string | null` 传给 PathLike。运行时之所以没炸，是因为 existsSync(null)
+    // 恰好返回 false 走了 else 分支；但这是靠巧合，不是靠逻辑。这里改为显式判空。
+    if (soulPath && fs.existsSync(soulPath)) {
       const text = fs.readFileSync(soulPath, "utf8");
       const nameMatch = text.match(/^#\s+(.+)$/m);
       if (nameMatch) name = nameMatch[1]!.trim();
@@ -416,7 +441,7 @@ export function createPersonaRoutes(): Hono {
       if (styleHints.length > 0) style = styleHints.slice(0, 3).join(" · ");
     }
 
-    if (fs.existsSync(userPath)) {
+    if (userPath && fs.existsSync(userPath)) {
       const userText = fs.readFileSync(userPath, "utf8");
       const nn = userText.match(/\*\*称呼\*\*\s*[：:]\s*(.+)/);
       if (nn) {
