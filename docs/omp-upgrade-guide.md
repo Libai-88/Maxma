@@ -1,7 +1,32 @@
+> ## ⛔ 本文件已废弃（2026-08 基线，勿据以操作）
+>
+> **本文所有事实基线属于上一代引擎。** 引擎已于 2026-09-30 从 `@oh-my-pi/*`（代号 OMP）整体换成 `@earendil-works/*`（代号 pi）：包名、版本体系、上游仓库、耦合面全变。正文保留仅作**历史演练记录**（§0「类型全绿而运行时炸」这条教训今天仍然有效）。下列条目按 2026-10-27 复验：
+>
+> | 文中说法 | 今天的事实 |
+> |---|---|
+> | 适用对象 `@oh-my-pi/pi-coding-agent`（:4） | 现为 `@earendil-works/{pi-coding-agent,pi-agent-core,pi-ai}`，**两处 workspace 各锁一份**：`bun-backend/package.json:16-18`、`bun-sidecar/package.json:11-13` |
+> | 基线 16.5.2 / 对照 17.2.12（§0） | 现锁 **0.99.0**（2026-09-29）；上游 latest **1.4.0**（2026-10-21），0.99.0 之后已发 **11 个版本**并跨过 1.0 大版本 |
+> | 「minor 带 Breaking，semver 不可信」（§0/:15） | **结论仍成立且已再次应验**：0.99.0 之后的 11 个版本中 **1.0.3 与 1.2.0 自带 `### Breaking Changes`**（源：上游包内 CHANGELOG）。1.0.3 把 Azure provider 由 `azure-openai-responses` 改名 `azure`，直接命中 `bun-sidecar/src/kernel/model.ts:48` 的硬编码白名单；1.2.0 改 `before_agent_start` 与 busy/isIdle 语义，与 Maxma 押 `agent_settled` 作终态判据相邻 |
+> | 「已有防御：`omp-compat.ts` 窄接口隔离层」（§0/:26、§5/:140） | **该文件不存在**（全仓 find 零命中）。新架构直 import pi 公开 API；隔离职责改由 `bun-sidecar/src/kernel/` + `kernel/pi-contract.ts`（消费面单源清单）承担 |
+> | 「32 处 import」（§0/:21） | 数字作废（2026-10-27 实测）：`bun-sidecar/src` 有 **16** 个文件 import `@earendil-works/*`（集中在 `kernel/` 接缝内），`bun-backend/src` 另有 **4** 个文件绕开 kernel 直接 import（`settings-global.ts`、`plugins/dsh/pi-bridge.ts`、`plugins/dsh/pi-providers.ts`、`plugins/task-brief/index.ts`；行号随改动漂移，此处只记文件名） |
+> | 「138 用例」（§0/:33、§3） | 实测 2026-10-27（守卫落地后）：`bun-sidecar` **104 pass / tsc 0 error**、`bun-backend` **236 pass**、`web` **509 pass**，均 0 fail |
+> | 「pi-natives 运行时阻断」（§0/:35、§1/:59） | 上下文已消失：两把 `bun.lock` 闭包里**没有 `pi-natives`**（grep 命中 0）。该阻断属 oh-my-pi 17.x，不迁移到当前引擎 |
+> | 报 issue 地址 `github.com/can1357/oh-my-pi`（§1/:59） | 现上游为 **`github.com/earendil-works/pi`**（据安装包 `package.json` 的 `repository` 字段，`directory: packages/coding-agent`） |
+> | §4 工具 `scripts/upgrade-omp.mjs` | **已删除**（原实测崩溃：`--check` 报「当前锁定: undefined / npm latest: 18.13.1」后抛 `TypeError`；三处致命错误——读旧 scope 依赖键、查的是**仍在发版的旧引擎**、只 bump `bun-sidecar` 一个 workspace）。替代者：**`scripts/upgrade-pi.mjs`**——两个 workspace 一起 bump（含家族包 overrides）、打印 current→target 之间的 `### Breaking Changes`、跑 tsc + 两份守卫测试 + 两侧 `bun test`、复查两把锁是否一致，**任一步失败即非零退出并回滚 package.json** |
+> | §4 工具 `scripts/verify-omp-settings.mjs` | **已删除**（原为双重失效**且假通过**：报「找不到 settings-schema.d.ts」却以退出码 0 结束；其检测对象 `const globalPaths = [...]` 已从源码消失）。替代者不是同名脚本：settings 键归属登记在 `pi-contract.ts` 的 `MAXMA_SETTINGS_KEYS`，由 `bun-sidecar/tests/pi-contract.test.ts` 与**已安装引擎**的 `settings-manager.d.ts` 做 `engineReal` 双向差集，面板侧键由 `engine-boundary.test.ts` 校验「面板每个键都已登记、登记为 none 的不许出现在面板上」 |
+> | §2「bun.lock 已锁，可复现」（:73） | 原判断**只对 3 个直接包成立**：pi-coding-agent 0.99.0 对家族包声明 `^0.99.0`，实测曾漂出两套版本（backend 的 chord/pi-codemode/pi-mcp/pi-telemetry/pi-tui = 0.99.1，sidecar 同一批 = 0.99.0），且 `bun-backend/bun.lock` 被 `.gitignore` 的 `*.lock` 吞掉未入库（CI 的 `--frozen-lockfile` 无锁可冻）。**现已修**：两处 `package.json` 的 `overrides` 把 8 个 `@earendil-works/*` 钉成同版本、backend 锁收编入库、`engine-boundary.test.ts` 断言「两 workspace 直接依赖同版本 + 两把锁解析版本逐包相等 + 两把锁都被跟踪」 |
+>
+> **当前有效入口**：策略与风险读 `docs/00-当前架构.md` §2.3 与 `HANDOFF.md`；引擎消费面单一数据源读 `bun-sidecar/src/kernel/pi-contract.ts`；RPC/事件契约读 `docs/contracts/agent-rpc.md`、`docs/contracts/ws-events.md`；升级执行入口 `node scripts/upgrade-pi.mjs --check`。
+> ✅ §3「受控升级流程」的三个自动化缺口**已补齐**（2026-10-27）：`.github/workflows/sidecar.yml` 加了 `bun x tsc --noEmit`（引擎边界硬门槛，0 error）并把 `bun install` 改为 `--frozen-lockfile`、同时修正了覆盖率名单（旧 `CORE` 里的 `approval.ts`/`state.ts` 已不存在，真正的接缝 `bridge-pi/plan/goal/pi-session` 从没被守过）；`bun-backend.yml` 加了类型债棘轮 `scripts/check-type-budget.mjs`（sidecar 基线 0、backend 基线 86，只准减）；两 workspace 版本一致性与事件生产者对账由上述两个守卫测试承载。**仍未自动化的是运行时冒烟**——本文件 §0 那条"类型全绿而运行时炸"的教训不因有了 tsc 而失效。
+
+---
+
 # OMP 版本更新方案（对齐颗粒度指南）
 
 > 更新日期：2026-08-10
 > 适用对象：MaxmaHere 的 Agent 引擎（@oh-my-pi/pi-coding-agent）
+> ⚠️ **以上为历史基线，已不适用于当前引擎**——见文件顶部废弃告示块。
+
 
 ---
 

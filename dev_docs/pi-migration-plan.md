@@ -6,6 +6,24 @@
 > 决策：两阶段走 —— 先换内核（保留 Python），再统一后端（移除 Python）。每阶段独立可交付、独立可回滚。
 > 决策补充（2026-09-29）：① 凭据信封采用 encv2 + 一次性迁移（设计见 §8.1）；② 插件功能保留并重建，collab / deferred_runs 等半成品功能下线（处置清单见 §7.5）。
 
+> **当前状态（2026-10-27 核对，正文保持原样不改）**
+>
+> - **§6.0 spike 的结论仍然成立**：pi 上游不提供 plan / goal / 权限系统 / subagent。这三项已按本方案在
+>   `bun-sidecar/src/kernel/` 用官方机制自建完成，代码注释即判据——`kernel/plan.ts:4`「pi 无计划模式运行时
+>   （官方扩展事件里无 plan 概念，spike 已确认）」、`kernel/goal.ts:4`「pi 无 goal 运行时（官方无等价导出）」、
+>   `kernel/types.ts:16`「pi 无内置权限系统（官方 README/Security 明示）」，落点为官方 `tool_call` 钩子。
+>   §3.2 所称"本方案核心工作量"已兑现，**并已成为 Maxma 的自维护项**：跟进上游版本不会自动带回这些能力。
+> - **§7.5 对 `deferred_runs` 的「移除」处置没有落实**：那行写的判据是「默认关闭、UI 未暴露」（针对
+>   `routes/deferred_runs.py`）。今天 Python 版已随阶段二删除，但 Bun 侧追踪层 `bun-backend/src/routes/deferred-runs.ts`
+>   （约 300 行：SQLite 表、终态不可逆、白名单投影）**仍在**，前端入口也仍在——`web/src/components/inspira/Dock.vue:136`
+>   无条件渲染「Agent」项、路由 `/agent-tasks` 无守卫、`api/data/panel_configs.json` 的 `sub_agents.enabled` 实为
+>   **`true`**（并非「默认关闭」）。而引擎侧从不发 `deferred_subagent_submitted`（`bun-sidecar/src` 全目录 grep 零命中），
+>   `cancel_deferred_run` 无 handler。净结果：入口开着、页面可进、列表恒空。
+>   处置（能力门控）进行中；判据与登记见 `bun-sidecar/src/kernel/pi-contract.ts` 的
+>   `ENGINE_EVENT_EXPECTED_UNPRODUCED`，文档面见 `docs/contracts/ws-events.md` §3.2/§4.4 与 `HANDOFF.md`「Agent 任务中心」节警告。
+> - §6.1/§9 的版本对拍约定需要更新：引擎现已锁 `@earendil-works/* 0.99.0`，上游 latest 1.4.0，
+>   其中 1.0.3 / 1.2.0 自带 Breaking Changes。升级相关事实统一见 `docs/omp-upgrade-guide.md` 顶部废弃块。
+
 ---
 
 ## 1. 背景与目标
