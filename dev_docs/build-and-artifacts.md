@@ -161,6 +161,43 @@ desktop/package.json
 git tag
 ```
 
+`portable.flag` 由 `build-portable.bat` 从 `version.py` 读出后写入（第 4 个数字），
+所以便携包自身的版本号也跟随单一数据源，不需要手改。
+
+## 6.1 产物不进版本控制，交付靠"重建 + 拷走"（2026-10-28 明确）
+
+**这是有意设计，不是遗漏**：
+
+| 产物 | 在 git 里？ | 原因 |
+| --- | --- | --- |
+| `dist/**` | ❌ 否（`.gitignore`） | 245MB 级二进制 + 每次构建都变的 hash 文件名；进仓库会让 clone 与 diff 都不可用 |
+| `..\MaxmaHere-Portable\` | ❌ 否（父仓 `.gitignore`） | 同上，且它在子模块**之外**（父仓跟踪数 0） |
+| 源码 + 构建脚本 + 守卫测试 | ✅ 是 | 交付物是"可复现地重建产物"的能力，而不是产物本身 |
+
+因此 **`git clone` 拿不到便携包**。要交付给别人，按下面顺序做（前两步决定产物是否
+与代码一致，第三步才是拷贝）：
+
+```text
+1) 确认工作区干净、闸门通过        bash scripts/verify-all-gates.sh
+2) 重建（顺序不能颠倒，产物链有依赖）
+   build\build-server.bat           → dist\bun-server\（后端 bundle，两条链的共同输入）
+   cd web && npm run build          → web\dist\（前端；build-portable.bat 会用）
+   build-portable.bat               → ..\MaxmaHere-Portable\          （Web 便携包）
+   powershell -File build-desktop-portable.ps1
+                                    → dist\electron-portable\MaxmaHere-<版本>-portable-x64.zip + .sha256
+3) 验证（不要只确认"文件在"）
+   powershell -File build\portable-smoke-test.ps1      # 包内 Bun 后端
+   powershell -File scripts\verify-desktop-render.ps1  # 桌面包：壳 + 渲染层真的在跑
+4) 交付
+   - Web 便携包：整个 `..\MaxmaHere-Portable\` 目录拷走即用
+   - 桌面包：分发 `MaxmaHere-<版本>-portable-x64.zip` **连同 `.sha256`**
+```
+
+⚠️ 两条最容易踩的：① **产物比代码旧**是常态（改完代码忘了重建），
+交付前用 `stat`/时间戳比一次"产物 mtime ≥ 最后一次代码提交"；
+② 只确认"zip 存在、体积正常"说明不了能用——本仓有过"zip 照常生成、大小正常，
+装上后插件静默不工作"的先例（§4.1/§4.4）。第 3 步两个脚本就是为此存在。
+
 ## 7. 体积基线（2026-10-08，含插件）
 
 | 产物 | 体积 |

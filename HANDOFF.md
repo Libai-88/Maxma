@@ -16,7 +16,10 @@
   引擎消费面（用到的导出符号、事件名、工具名、settings 键、provider api）的**单一数据源是 `bun-sidecar/src/kernel/pi-contract.ts`**，由 `tests/pi-contract.test.ts`（对账已安装的 pi 包）与 `tests/engine-boundary.test.ts`（对账边界纪律与三侧清单）双向校验，升级前对着它核对，不要靠 grep 全文。
 - 后端：Bun + Hono（`bun-backend/`，默认端口 8000）
 - 前端：Vue 3 + Vite + Pinia + TypeScript
-- 分发形态：**Web 便携包**（后端托管 `web/dist`）与 **Electron 桌面便携包**（`desktop/`，electron 44.5.1）
+- 分发形态：**Web 便携包**（后端托管 `web/dist`）与 **Electron 桌面便携包**（`desktop/`，electron 44.5.1）。
+  ⚠️ **构建产物不进版本控制**（`dist/**` 与父仓的 `MaxmaHere-Portable/` 都在 `.gitignore`）——
+  `git clone` 拿不到便携包，交付必须"重建 + 拷走"。完整步骤、易踩点与验证脚本见
+  [dev_docs/build-and-artifacts.md](dev_docs/build-and-artifacts.md) §6.1。
 - 阶段二（Python → Bun 全量迁移）已完成：Python 后端、PyInstaller 打包链、Tauri 桌面壳均已移除（tag `stage-2.6`）
 
 ## 唯一 Agent 路径
@@ -54,6 +57,7 @@ web -> Bun 后端 /ws/chat/{session_id} -> kernel in-process -> pi AgentSession
               · npm run lint:colors（160 个 Vue 文件 0 违规）
 打包：cd bun-backend && bun run build-server.mjs（server.js 21.6MB，externals 23 包自检通过）
 便携冒烟：powershell -File build\portable-smoke-test.ps1（退出码 0 = 通过）
+桌面包渲染层：powershell -File scripts\verify-desktop-render.ps1（验外壳拉起后端 + 渲染层连上 WS）
 端到端回合：bash scripts/smoke-e2e-roundtrip.mjs（需后端在跑，见「常用命令」）
 一次性复跑全部上述项：bash scripts/verify-all-gates.sh（判定按退出码，不按输出字符串）
 ```
@@ -311,3 +315,5 @@ node scripts/check-type-budget.mjs --write  # 类型债下降后，下调基线�
 - 结构变化先更新 [docs/00-当前架构.md](docs/00-当前架构.md)。
 - 代码与文档冲突时，以代码和测试为准，并修正文档。
 - 便携包构建脚本（`*.bat`）必须保持 CRLF 换行——cmd.exe 无法解析 LF-only 批处理。
+- 含中文的 `*.ps1` 必须保留 UTF-8 BOM（否则 Windows PowerShell 按 GBK 解码，
+  报出指向 `param()` 的误导性解析错误）；由 `bun-backend/tests/script-encoding.test.ts` 守住。
