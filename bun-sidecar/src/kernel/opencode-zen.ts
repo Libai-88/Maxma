@@ -89,6 +89,14 @@ async function pumpOpencodeZenStream(
     const canFallback = model.id === MIMO_MODEL_ID && !sawAnswer && options?.signal?.aborted !== true;
     if (canFallback && (event.type === "error" || event.type === "done")) {
       const fallbackModel = { ...model, id: SPACE_BUNNY_MODEL_ID, name: SPACE_BUNNY_MODEL_ID, reasoning: true };
+      // 兜底必须留痕：此前主模型失败后静默换名重发，用户只看到最后一句
+      // "Model is unavailable"，无从判断兜底有没有发生、目标是谁。
+      // （2026-10-27 实测：上游 /zen/v1/models 已不再提供 space-bunny-free，
+      //  这条兜底当前必然失败——见 HANDOFF「当前限制」。）
+      console.warn(
+        `[opencode-zen] ${model.id} 未产出内容，兜底到 ${SPACE_BUNNY_MODEL_ID}` +
+          `（事件类型 ${event.type}）`,
+      );
       const fallback = upstream.streamSimple(fallbackModel, withFingerprint(context), buildStreamOptions(context, fallbackModel, options));
       for await (const fallbackEvent of fallback) output.push(fallbackEvent);
       output.end();
