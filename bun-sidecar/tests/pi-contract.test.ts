@@ -33,6 +33,7 @@ import {
   PI_CODING_AGENT_TYPE_EXPORTS,
   PI_CODING_AGENT_VALUE_EXPORTS,
   PI_COMPACTION_REASONS_ENGINE,
+  PI_ENGINE_VERSION,
   MAXMA_COMPACTION_REASONS_WS,
   PI_PACKAGES,
   PI_PROVIDER_APIS,
@@ -125,6 +126,19 @@ function interfaceFields(text: string, name: string): Map<string, string> | null
 // ─────────────────────────────────────────────────────────────
 
 describe("pi 契约对账：安装包必须真实提供 Maxma 声明的消费面", () => {
+  test("pi 自报版本必须与声明版本一致（便携包里它自报 0.0.0）", async () => {
+    const mod = (await import("@earendil-works/pi-coding-agent")) as { VERSION?: string };
+    const reported = mod.VERSION ?? "";
+    // 产物形态下 pi 读不到自己包旁的 package.json → "0.0.0"，此时由
+    // engineVersion() 回落到 PI_ENGINE_VERSION；dev 下两者必须相等，
+    // 否则说明 bump 了依赖却忘了改声明值（或反之）。
+    if (reported && reported !== "0.0.0") {
+      expect(reported, "pi 自报版本与 PI_ENGINE_VERSION 不一致").toBe(PI_ENGINE_VERSION);
+    }
+    expect(PI_ENGINE_VERSION).toMatch(/^\d+\.\d+\.\d+/);
+    expect(engineVersion(), "engineVersion() 必须给出可信版本，不能是 0.0.0").toBe(PI_ENGINE_VERSION);
+  });
+
   test("三个 pi 包都已安装且版本可读（两 workspace 一致性由 engine-boundary 守）", () => {
     for (const spec of PI_PACKAGES) {
       const pkgJson = readOrNull(path.join(pkgDir(spec), "package.json"));

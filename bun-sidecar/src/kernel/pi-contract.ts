@@ -28,6 +28,20 @@
 // 1. 引擎包与版本
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * 引擎版本号——**Maxma 侧的声明值**。
+ *
+ * 为什么不直接信 pi 自己的 `VERSION`：pi 用
+ * `VERSION = pkg.version || "0.0.0"`（`dist/config.js:430`）从**模块旁边的
+ * package.json** 读版本。而发布形态里 pi 被 `bun build` 内联进 `server.js`
+ * （external 清单不含 `@earendil-works`），产物目录里没有那份 package.json，
+ * 于是 `VERSION === "0.0.0"`——dev 环境正确、便携包里谎报。
+ * 这里显式声明一份，由测试断言它与两个 workspace 实际锁定的版本一致；
+ * `engine-info.ts` 在 pi 报 "0.0.0" 时回落到本值。
+ * `scripts/upgrade-pi.mjs` bump 时会一并改写它，避免又多一处手抄。
+ */
+export const PI_ENGINE_VERSION = "0.99.0";
+
 /** Maxma 直接依赖的 pi 包。两处 workspace 必须同版本（engine-boundary 校验）。 */
 export const PI_PACKAGES = [
   "@earendil-works/pi-coding-agent",

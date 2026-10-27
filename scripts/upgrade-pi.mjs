@@ -240,6 +240,8 @@ if (cur0.pinned === target && !FORCE) {
 
 // ── 3. bump（含备份与失败回滚）─────────────────────────────
 const backups = new Map();
+const CONTRACT_FILE = path.join(ROOT, "bun-sidecar", "src", "kernel", "pi-contract.ts");
+backups.set(CONTRACT_FILE, readFileSync(CONTRACT_FILE, "utf8"));
 for (const ws of WORKSPACES) {
   const file = path.join(ROOT, ws, "package.json");
   backups.set(file, readFileSync(file, "utf8"));
@@ -249,7 +251,22 @@ for (const ws of WORKSPACES) {
   for (const f of FAMILY) if (pkg.overrides?.[f]) pkg.overrides[f] = target;
   writeFileSync(file, JSON.stringify(pkg, null, 2) + "\n", "utf8");
 }
-console.log(`\n已写入两个 workspace 的 package.json（direct ${DIRECT.length} 个 + overrides 家族 ${FAMILY.length} 个 → ${target}）${DRY ? "（--dry-run 实际未写）" : ""}`);
+// 契约里的声明版本必须跟着走：便携包里 pi 读不到自己的 package.json，
+// /api/capabilities 展示的引擎版本就是 PI_ENGINE_VERSION（见其注释）。
+if (!DRY) {
+  const contract = backups.get(CONTRACT_FILE);
+  const next = contract.replace(
+    /export const PI_ENGINE_VERSION = "[^"]*";/,
+    `export const PI_ENGINE_VERSION = "${target}";`,
+  );
+  if (next === contract) {
+    console.error("✗ 没能在 pi-contract.ts 里找到 PI_ENGINE_VERSION 声明，请手动同步后再升级。");
+    restore();
+    process.exit(1);
+  }
+  writeFileSync(CONTRACT_FILE, next, "utf8");
+}
+console.log(`\n已写入两个 workspace 的 package.json（direct ${DIRECT.length} 个 + overrides 家族 ${FAMILY.length} 个 → ${target}）与 pi-contract.ts 的 PI_ENGINE_VERSION${DRY ? "（--dry-run 实际未写）" : ""}`);
 
 function restore() {
   for (const [file, text] of backups) writeFileSync(file, text, "utf8");

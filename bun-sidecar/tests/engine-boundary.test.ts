@@ -26,6 +26,7 @@ import {
   PI_BUILTIN_TOOLS,
   MAXMA_ENABLED_DEFAULT_TOOLS,
   PI_PACKAGES,
+  PI_ENGINE_VERSION,
   PI_RPC_METHODS,
   PI_THINKING_LEVELS,
   MAXMA_ENGINE_WS_EVENTS,
@@ -74,6 +75,12 @@ describe("依赖树可复现性", () => {
         drift.push(`${pkg}: backend=${back[pkg]} / sidecar=${side[pkg]}`);
       }
       if (back[pkg] && /[\^~]/.test(back[pkg])) drift.push(`${pkg} 不是精确锁定：${back[pkg]}`);
+      // 声明版本必须等于契约里的 PI_ENGINE_VERSION —— 便携包读不到 pi 的
+      // package.json（pi 被内联进 server.js），capabilities 展示的引擎版本
+      // 就靠这个常量兜底；它和真实锁定值漂移 = 界面上报假版本。
+      if (back[pkg] && back[pkg] !== PI_ENGINE_VERSION) {
+        drift.push(`${pkg}: package.json=${back[pkg]} 但 PI_ENGINE_VERSION=${PI_ENGINE_VERSION}`);
+      }
     }
     expect(drift, `pi 依赖版本不一致：\n  ${drift.join("\n  ")}`).toEqual([]);
   });
@@ -258,6 +265,21 @@ describe("RPC 方法清单与实现必须一致", () => {
       "桌面壳注入了 PI_CODING_AGENT_DIR 却没有校验注入是否生效——静默失效时数据会写进用户主目录",
     ).toBe(true);
     expect(main, "校验必须真的在启动路径上被调用").toMatch(/await checkEngineAgentDir\(/);
+
+    // 跨进程读字段最容易出的错：写的人拼错键名，读的人永远拿到 undefined，
+    // 于是"校验存在"但永不生效——本次就是这样：desktop 读 agent_dir_inside_expected，
+    // 而 kernel 返回的键叫 inside_expected。字段名必须两端对得上，且由测试来对。
+    const info = read("bun-sidecar/src/kernel/engine-info.ts");
+    const producedKeys = new Set<string>();
+    const fnBody = info.slice(info.indexOf("export function agentDirDiagnostics"));
+    for (const m of fnBody.matchAll(/^\s*([a-z_][a-z0-9_]*)\s*:/gm)) producedKeys.add(m[1]!);
+    expect(producedKeys.size, "解析不到 agentDirDiagnostics 的返回字段").toBeGreaterThan(2);
+    const consumed = [...main.matchAll(/engine\.([a-z_]+)/g)].map((m) => m[1]!);
+    const ghost = consumed.filter((k) => !producedKeys.has(k));
+    expect(
+      [...new Set(ghost)],
+      `桌面壳读了 kernel 不存在的字段（校验会静默失效）：${[...new Set(ghost)].join(", ")}`,
+    ).toEqual([]);
   });
 });
 

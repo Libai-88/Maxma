@@ -21,16 +21,23 @@
 import { VERSION as PI_CODING_AGENT_VERSION, getAgentDir } from "@earendil-works/pi-coding-agent";
 import * as path from "node:path";
 
-import { PI_PROVIDER_API_RENAMES, PI_PROVIDER_APIS } from "./pi-contract";
+import { PI_PROVIDER_API_RENAMES, PI_PROVIDER_APIS, PI_ENGINE_VERSION } from "./pi-contract";
 
-/** pi 引擎（pi-coding-agent）的版本号，形如 "0.99.0"。 */
+/**
+ * pi 报的引擎版本（便携包里是 "0.0.0"，见 `PI_ENGINE_VERSION` 的说明）。
+ */
+const PI_REPORTED_VERSION = PI_CODING_AGENT_VERSION;
+
+/** 引擎版本：pi 自己报的优先；产物里它读不到 package.json 会报 0.0.0，此时回落 Maxma 声明值。 */
 export function engineVersion(): string {
-  return PI_CODING_AGENT_VERSION;
+  return PI_REPORTED_VERSION && PI_REPORTED_VERSION !== "0.0.0"
+    ? PI_REPORTED_VERSION
+    : PI_ENGINE_VERSION;
 }
 
 /** 引擎标识，供 /api/capabilities 与诊断导出如实标注"当前跑的是哪个引擎的哪个版本"。 */
 export function engineIdentity(): { name: string; version: string } {
-  return { name: "@earendil-works/pi-coding-agent", version: PI_CODING_AGENT_VERSION };
+  return { name: "@earendil-works/pi-coding-agent", version: engineVersion() };
 }
 
 /**
@@ -59,7 +66,7 @@ export function versionAtLeast(current: string, target: string): boolean {
  * 所以升级当天不需要改任何用户配置，也不会报错。
  */
 export function engineApiNames(): string[] {
-  const version = PI_CODING_AGENT_VERSION;
+  const version = engineVersion();
   const out = new Set<string>(PI_PROVIDER_APIS);
   for (const rename of PI_PROVIDER_API_RENAMES) {
     if (versionAtLeast(version, rename.since)) {
@@ -78,7 +85,7 @@ export function resolveEngineApiName(name: string): string {
   const known = new Set(engineApiNames());
   if (known.has(name)) return name;
   for (const rename of PI_PROVIDER_API_RENAMES) {
-    const useNew = versionAtLeast(PI_CODING_AGENT_VERSION, rename.since);
+    const useNew = versionAtLeast(engineVersion(), rename.since);
     if (name === rename.from) return useNew ? rename.to : rename.from;
     if (name === rename.to) return useNew ? rename.to : rename.from;
   }
@@ -106,7 +113,7 @@ export function resolveEngineApiName(name: string): string {
 export function agentDirDiagnostics(expectedRoot?: string): {
   agent_dir: string;
   expected_root: string | null;
-  inside_expected: boolean | null;
+  agent_dir_inside_expected: boolean | null;
 } {
   let agentDir = "";
   try {
@@ -114,12 +121,18 @@ export function agentDirDiagnostics(expectedRoot?: string): {
   } catch (err) {
     agentDir = `(getAgentDir 失败: ${String(err)})`;
   }
-  if (!expectedRoot) return { agent_dir: agentDir, expected_root: null, inside_expected: null };
+  if (!expectedRoot) {
+    return { agent_dir: agentDir, expected_root: null, agent_dir_inside_expected: null };
+  }
 
   const resolvedAgent = path.resolve(agentDir);
   const resolvedExpected = path.resolve(expectedRoot);
   const inside =
     resolvedAgent === resolvedExpected ||
     resolvedAgent.startsWith(resolvedExpected + path.sep);
-  return { agent_dir: resolvedAgent, expected_root: resolvedExpected, inside_expected: inside };
+  return {
+    agent_dir: resolvedAgent,
+    expected_root: resolvedExpected,
+    agent_dir_inside_expected: inside,
+  };
 }
