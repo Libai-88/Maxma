@@ -10,10 +10,10 @@ describe("ModelScope MCP marketplace", () => {
   test("search proxies Chinese query and maps server metadata", async () => {
     const originalFetch = globalThis.fetch;
     let requestBody: Record<string, unknown> | undefined;
-    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    globalThis.fetch = (async (_input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
       requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
       return Response.json({ success: true, data: { total_count: 1, mcp_server_list: [{ id: "demo/search", chinese_name: "搜索工具", publisher: "社区作者", view_count: 42, locales: { zh: { description: "中文搜索" } } }] } });
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
     try {
       const app = createMcpRoutes({ sessions: new Map(), callRpc: async () => ({ ok: true, result: {} }) });
       const response = await app.request("/api/mcp/modelscope?q=%E6%90%9C%E7%B4%A2&page=2");
@@ -25,7 +25,7 @@ describe("ModelScope MCP marketplace", () => {
 
   test("rejects invalid marketplace server identifiers before network access", async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = (() => { throw new Error("unexpected network call"); }) as typeof fetch;
+    globalThis.fetch = (() => { throw new Error("unexpected network call"); }) as unknown as typeof fetch;
     try {
       const app = createMcpRoutes({ sessions: new Map(), callRpc: async () => ({ ok: true, result: {} }) });
       const response = await app.request("/api/mcp/modelscope/install", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ server_id: "../../outside" }) });
@@ -41,7 +41,7 @@ describe("ModelScope MCP marketplace", () => {
     globalThis.fetch = (async () => Response.json({ success: true, data: {
       id: "@demo/search", name: "Search", description: "Search server",
       server_config: [{ mcpServers: { search: { command: "npx", args: ["-y", "search-mcp"], env: { API_KEY: "${API_KEY}" } } } }],
-    } })) as typeof fetch;
+    } })) as unknown as typeof fetch;
     try {
       const app = createMcpRoutes({ sessions: new Map(), callRpc: async () => ({ ok: true, result: {} }) });
       const missingEnv = await app.request("/api/mcp/modelscope/install", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ server_id: "@demo/search" }) });
@@ -64,7 +64,7 @@ describe("ModelScope MCP marketplace", () => {
     const originalFetch = globalThis.fetch;
     const archive = zipSync({ "SKILL.md": [new Uint8Array(20 * 1024 * 1024 + 1), { level: 9 }] });
     expect(archive.length).toBeLessThan(25 * 1024 * 1024);
-    globalThis.fetch = (() => new Response(archive)) as typeof fetch;
+    globalThis.fetch = (() => new Response(archive)) as unknown as typeof fetch;
     try {
       const app = createCapabilitiesRoutes({ sessionCount: () => 0, endpoints: () => [] });
       const response = await app.request("/api/skills/market/install", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slug: "oversized-test-skill" }) });
@@ -85,7 +85,7 @@ describe("ModelScope MCP marketplace", () => {
     }
     expect(central).toBeGreaterThanOrEqual(0);
     view.setUint32(central + 24, 1, true);
-    globalThis.fetch = (() => new Response(bytes)) as typeof fetch;
+    globalThis.fetch = (() => new Response(bytes)) as unknown as typeof fetch;
     try {
       const app = createCapabilitiesRoutes({ sessionCount: () => 0, endpoints: () => [] });
       const response = await app.request("/api/skills/market/install", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slug: "forged-size-test-skill" }) });
@@ -103,7 +103,7 @@ describe("ModelScope MCP marketplace", () => {
     process.env.USERPROFILE = homeDir;
     process.env.HOME = homeDir;
     const archive = zipSync({ "market-skill/SKILL.md": new TextEncoder().encode("---\nname: market-skill\ndescription: Test skill\n---\n") });
-    globalThis.fetch = (() => new Response(archive)) as typeof fetch;
+    globalThis.fetch = (() => new Response(archive)) as unknown as typeof fetch;
     try {
       const app = createCapabilitiesRoutes({ sessionCount: () => 0, endpoints: () => [] });
       const response = await app.request("/api/skills/market/install", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slug: "market-skill" }) });

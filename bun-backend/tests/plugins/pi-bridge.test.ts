@@ -82,8 +82,14 @@ describe("pi → DSH 报文翻译", () => {
     expect(assistant.content[1]).toEqual({ type: "reasoning", text: "先看目录" });
     expect(assistant.content[2]).toEqual({ type: "tool-call", id: "call_1", name: "read", arguments: '{"path":"a.txt"}' });
     // source 契约：dsh-llm 的 forAdapter 读 message.source.replayState，
-    // 缺 source 直接 TypeError（真机：「undefined is not an object」）
-    expect(assistant.source).toEqual({ kind: "model", provider: "unknown", model: "unknown" });
+    // 缺 source 直接 TypeError（真机：「undefined is not an object」）。
+    // assistant 的静态类型只声明了 role/content，source 是适配器额外挂上的字段，
+    // 所以取用前先收窄形状——断言的对象本身就是被测契约。
+    expect((assistant as { source?: unknown }).source).toEqual({
+      kind: "model",
+      provider: "unknown",
+      model: "unknown",
+    });
 
     // 工具结果：旧形状（0.1.7 的一等 role:'tool' 会被插件自己降级成这个形状）
     const toolResult = out[3] as { role: string; content: Array<Record<string, unknown>> };

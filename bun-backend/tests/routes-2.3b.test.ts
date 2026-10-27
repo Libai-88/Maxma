@@ -139,7 +139,14 @@ describe("chat-turns / chat-artifacts 纯逻辑（阶段 2.3b）", () => {
     expect(body).not.toContain("<div>");
     expect(body).toContain("&lt;div&gt;");
     expect(body).toContain("内容已截断");
-    const token = String((p.actions as Array<Record<string, unknown>>)[0].token);
+    // `[...] [0]` 在 noUncheckedIndexedAccess 下是可能 undefined。expect(...) 只做
+    // 运行时断言、**不做类型收窄**，所以这里显式声明可空并在比较时用可选链：
+    // 目的是让"缺 actions[0]"失败得可读，而不是让 undefined 在深处爆 TypeError。
+    const action = (p.actions as Array<Record<string, unknown>>)[0] as
+      | { token?: unknown }
+      | undefined;
+    expect(action, "artifact 缺少 actions[0]").toBeDefined();
+    const token = String(action?.token);
     expect(Buffer.from(token, "base64").toString("utf8")).toBe(file);
     expect(buildArtifactPayload(path.join(dataDir, "ghost.txt"))).toBeNull();
   });

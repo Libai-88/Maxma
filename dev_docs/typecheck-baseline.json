@@ -1,7 +1,7 @@
 {
-  "_comment": "类型债棘轮基线，由 scripts/check-type-budget.mjs 校验：CI 只在错误数**上升**时红。bun-sidecar 已清零（0）——它是引擎边界的编译期断层面，必须保持 0，任何新增都不该被容忍。bun-backend 的 86 是阶段二 Python→Bun 直译遗留，从未进过 CI 所以悄悄攒下的；下降后请用 --write 下调。",
+  "_comment": "类型债棘轮基线，由 scripts/check-type-budget.mjs 校验：CI 只在错误数上升时红。两侧均已清零（2026-10-27）——不再留任何额度。bun-sidecar 是引擎边界的编译期断层面；bun-backend 原有 86 个历史欠债（阶段二 Python→Bun 直译遗留、13 个测试文件手搓 sqlite 类型桩、office.ts 在两 workspace 按不同严格度编译等）已全部修完。任何新增都会立即红。",
   "baseline": {
     "bun-sidecar": 0,
-    "bun-backend": 86
+    "bun-backend": 0
   }
 }

@@ -31,7 +31,8 @@ jobs:
       # 类型债棘轮。此前**没有任何 workflow 跑 tsc**，于是引擎边界的编译期
       # 断言长期缺失：kernel/types.ts 从 pi-coding-agent import 了它并不导出的
       # `Model`（纯类型 import 被擦除，运行时与测试都察觉不到），红了数周无人知。
-      # bun-sidecar 基线 0 = 硬门槛；bun-backend 基线 86 = 阶段二直译遗留的历史欠债，
-      # 只准减不准增（详见 scripts/check-type-budget.mjs 头注释）。
-      - name: Type-debt ratchet (tsc)
+      # 两侧基线现已**清零**（2026-10-27）：原有 86 个历史错误全部修完，
+      # 所以这条不再是"容忍存量"，而是与 sidecar 同等的硬门槛——
+      # 任何新增类型错误当场红。详见 scripts/check-type-budget.mjs 头注释。
+      - name: Type-debt ratchet (tsc, baseline 0/0)
         run: node scripts/check-type-budget.mjs

@@ -63,7 +63,13 @@ describe("workflows（阶段 2.2h）", () => {
       definitions: Record<string, { name: string; step_count: number }>;
     };
     expect(defs.workflow_ids).toContain("demo");
-    expect(defs.definitions.demo.step_count).toBe(2);
+    // noUncheckedIndexedAccess 下 `defs.definitions.demo` 是可能 undefined。
+    // expect().toBeDefined() **不做类型收窄**（它只是运行时断言），所以下面仍要用
+    // 一次断言把它交给编译器；这里写的是一条窄的、就地取值的断言，
+    // 目的是让"缺 demo"的失败信息可读，而不是让 undefined 在深处爆 TypeError。
+    const demo = defs.definitions.demo as { name: string; step_count: number } | undefined;
+    expect(demo, "workflow 定义里缺少 demo").toBeDefined();
+    expect(demo?.step_count).toBe(2);
 
     const sid = await makeSession(app);
     const started = (await (

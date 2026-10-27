@@ -382,7 +382,10 @@ describe("health 四部件（阶段 2.5b）", () => {
     const res = await app.request("/api/health");
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
-    expect(["ok", "degraded"]).toContain(body.status);
+    // body.status 是 unknown（Record 的索引取值），expect(...).toContain 要求
+    // 参数与接收数组元素类型相容 —— 先显式断言成 string，让失败信息可读，
+    // 而不是把 unknown 塞给 matcher。
+    expect(["ok", "degraded"]).toContain(String(body.status));
     expect(body.version).toBe("v2.6.11");
   });
 });
@@ -416,22 +419,31 @@ describe("capabilities 聚合（阶段 2.5c）", () => {
     // Phase4 manifest
     expect(body.version).toBe("v2.6.11");
     const features = body.features as Record<string, Record<string, unknown>>;
-    expect(features.automation.enabled).toBe(false); // automation 随 Python 下线
-    expect(features.mcp.enabled).toBe(true);
-    expect(features.mcp.transports).toEqual(["stdio", "streamable_http"]);
-    expect(features.memory.enabled).toBe(true);
-    expect(features.collab.enabled).toBe(true);
-    expect(features.plugins.enabled).toBe(true); // PLUGIN-001：插件子系统已落地
-    expect(features.plugins.marketplace).toBe(false); // 尚不支持从网络安装第三方插件
-    expect(features.extensions.enabled).toBe(true);
-    expect(features.extensions.bundled).toEqual(["maxma-approval", "maxma-blocker", "request-telemetry"]);
-    expect(features.rules.enabled).toBe(true);
-    expect(features.tools.builtin_count).toBe(7);
-    expect(features.tools.custom_count).toBe(7);
+    // `noUncheckedIndexedAccess` 下 `features.X` 是 `Record | undefined`，直接取
+    // `.enabled` 会报 TS18048（14 处）。用一个小助手取子对象：断言把"缺少某个
+    // feature"变成一条**可读的失败信息**（而不是 undefined 属性访问的 TypeError），
+    // 返回类型仍靠 as 收窄——expect 本身不做类型收窄，这点在注释里说清楚。
+    const feature = (name: string): Record<string, unknown> => {
+      const value = features[name];
+      expect(value, `manifest 缺少 feature: ${name}`).toBeDefined();
+      return value as Record<string, unknown>;
+    };
+    expect(feature("automation").enabled).toBe(false); // automation 随 Python 下线
+    expect(feature("mcp").enabled).toBe(true);
+    expect(feature("mcp").transports).toEqual(["stdio", "streamable_http"]);
+    expect(feature("memory").enabled).toBe(true);
+    expect(feature("collab").enabled).toBe(true);
+    expect(feature("plugins").enabled).toBe(true); // PLUGIN-001：插件子系统已落地
+    expect(feature("plugins").marketplace).toBe(false); // 尚不支持从网络安装第三方插件
+    expect(feature("extensions").enabled).toBe(true);
+    expect(feature("extensions").bundled).toEqual(["maxma-approval", "maxma-blocker", "request-telemetry"]);
+    expect(feature("rules").enabled).toBe(true);
+    expect(feature("tools").builtin_count).toBe(7);
+    expect(feature("tools").custom_count).toBe(7);
     // providers 可能含 opencode-zen 内置供应商（后台同步注入，与运行顺序无关）——
     // 只验证形状：providers 数组、total_models 与 providers 长度一致
-    expect(Array.isArray(features.models.providers)).toBe(true);
-    expect(features.models.total_models).toBe((body.providers as unknown[]).length);
+    expect(Array.isArray(feature("models").providers)).toBe(true);
+    expect(feature("models").total_models).toBe((body.providers as unknown[]).length);
 
     const sidecar = body.sidecar as Record<string, unknown>;
     expect(sidecar.status).toBe("running");
