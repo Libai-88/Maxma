@@ -504,9 +504,42 @@ export const ENGINE_EVENT_EXPECTED_BUT_UNPRODUCED: ReadonlyArray<{
 ];
 
 /**
- * 由 bun-backend 自行合成、不经引擎的事件（不参与"引擎生产者"对账）。
- * 列出来是为了让对账测试的判据可核对，而不是靠猜。
+ * kernel 实现的 RPC 方法名（`create_session` 由 dispatcher 单独分流，不在其列）。
+ *
+ * 这份清单以前手抄在 `session-bridge.ts` 的"需要会话上下文"分支里，抄漏的方法
+ * （`session_recap` / `clear_messages` / `set_permission_mode`）在无会话时会被报成
+ * `Unknown method` 而不是 `Session not found`。现在由
+ * `tests/engine-boundary.test.ts` 与 `bridge-pi.ts` 里实际的
+ * `if (method === "...")` 分支做双向差集校验——清单与实现不许各写各的。
  */
+export const PI_RPC_METHODS = [
+  "prompt",
+  "cancel",
+  "destroy_session",
+  "get_health",
+  "user_response",
+  "undo",
+  "compact",
+  "get_messages",
+  "clear_messages",
+  "get_settings",
+  "set_settings",
+  "set_auto_approve",
+  "set_permission_mode",
+  "set_plan_mode",
+  "plan_action",
+  "checkpoint_action",
+  "goal_action",
+  "get_goal_state",
+  "reload_mcp_for_session",
+  "session_recap",
+  "execute_workflow_step",
+  "steer",
+  "follow_up",
+] as const;
+
+/** 由 bun-backend 自行合成、不经引擎的事件（不参与"引擎生产者"对账）。
+ * 列出来是为了让对账测试的判据可核对，而不是靠猜。 */
 export const BACKEND_SYNTHESIZED_EVENTS = [
   "hello",
   "artifact",

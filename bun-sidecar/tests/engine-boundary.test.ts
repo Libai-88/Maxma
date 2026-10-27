@@ -26,6 +26,7 @@ import {
   PI_BUILTIN_TOOLS,
   MAXMA_ENABLED_DEFAULT_TOOLS,
   PI_PACKAGES,
+  PI_RPC_METHODS,
   PI_THINKING_LEVELS,
   MAXMA_ENGINE_WS_EVENTS,
 } from "../src/kernel/pi-contract";
@@ -203,6 +204,32 @@ describe("引擎边界纪律", () => {
       expect(entry.reason, `${entry.event} 的登记缺原因`).toBeTruthy();
       expect(entry.handling, `${entry.event} 的登记缺处置说明`).toBeTruthy();
     }
+  });
+});
+
+describe("RPC 方法清单与实现必须一致", () => {
+  test("pi-contract 登记的方法 = bridge-pi 实际分支（双向）", () => {
+    const bridge = read("bun-sidecar/src/kernel/bridge-pi.ts");
+    const implemented = new Set<string>();
+    for (const m of bridge.matchAll(/method === "([a-z_]+)"/g)) implemented.add(m[1]!);
+
+    const declaredOnly = PI_RPC_METHODS.filter((m) => !implemented.has(m));
+    expect(
+      declaredOnly,
+      `清单里有 bridge-pi 未实现的方法（dispatcher 会把它说成 Unknown method）：\n  ${declaredOnly.join("\n  ")}`,
+    ).toEqual([]);
+
+    const implementedOnly = [...implemented].filter(
+      (m) => m !== "create_session" && !(PI_RPC_METHODS as readonly string[]).includes(m),
+    );
+    expect(
+      implementedOnly,
+      `bridge-pi 新增了方法却没登记进 PI_RPC_METHODS（session-bridge 的 Session not found 判定会漏）：\n  ${implementedOnly.join("\n  ")}`,
+    ).toEqual([]);
+
+    // stdio 入口不得再手抄清单
+    const entry = read("bun-sidecar/src/session-bridge.ts");
+    expect(entry, "session-bridge.ts 应改用 PI_RPC_METHODS，不要手抄方法表").toContain("PI_RPC_METHODS");
   });
 });
 

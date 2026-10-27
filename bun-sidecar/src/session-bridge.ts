@@ -15,6 +15,7 @@ import { createInterface } from "node:readline";
 
 import { send, sendError, sendEvent } from "./rpc";
 import { handlePiCreateSession, handlePiSessionRpc, type PiSessionRecord } from "./kernel/bridge-pi";
+import { PI_RPC_METHODS } from "./kernel/pi-contract";
 import { rejectPendingPiPlansForSession, type PiPendingPlan } from "./kernel/plan";
 import type { RpcRequest } from "./rpc-types";
 
@@ -47,28 +48,12 @@ export async function handleRpcRequest(req: RpcRequest): Promise<void> {
     return;
   }
 
-  if (
-    method === "prompt" ||
-    method === "cancel" ||
-    method === "destroy_session" ||
-    method === "get_health" ||
-    method === "user_response" ||
-    method === "undo" ||
-    method === "compact" ||
-    method === "get_messages" ||
-    method === "get_settings" ||
-    method === "set_settings" ||
-    method === "set_auto_approve" ||
-    method === "set_plan_mode" ||
-    method === "plan_action" ||
-    method === "checkpoint_action" ||
-    method === "goal_action" ||
-    method === "get_goal_state" ||
-    method === "reload_mcp_for_session" ||
-    method === "execute_workflow_step" ||
-    method === "steer" ||
-    method === "follow_up"
-  ) {
+  // 已知但需要"会话存在"的方法：统一回 Session not found。
+  // 清单来自 kernel/pi-contract.ts（与 bridge-pi.ts 的实际分支由
+  // tests/engine-boundary.test.ts 双向校验），此前这里手抄，抄漏的
+  // session_recap / clear_messages / set_permission_mode 会被报成
+  // Unknown method，把一个"会话不存在"的问题说成"方法不存在"。
+  if ((PI_RPC_METHODS as readonly string[]).includes(method)) {
     sendError(id, `Session not found: ${sessionId ?? "(missing)"}`);
     return;
   }
