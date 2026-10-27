@@ -16,6 +16,11 @@ import {
 import { encryptApiKey } from "../security/credential-envelope";
 import { getCredentialKeyPath } from "../app-paths";
 
+import {
+  FREE_LANE_FALLBACK_MODEL_IDS,
+  FREE_LANE_PRIMARY_MODEL_ID,
+} from "../../../bun-sidecar/src/kernel/opencode-zen";
+
 export const OPENCODE_ZEN_BASE_URL = "https://opencode.ai/zen/v1";
 export const OPENCODE_ZEN_ANON_API_KEY = "public";
 export const OPENCODE_ZEN_PROVIDER_ID = "opencode-zen";
@@ -23,9 +28,15 @@ export const OPENCODE_ZEN_LABEL = "Maxma 免费模型";
 
 const FREE_SUFFIX = "-free";
 const FREE_HIDDEN_MODELS = new Set(["big-pickle", "hy3-free"]);
-const EXTERNAL_COMPATIBLE_FREE_MODELS = new Set([
-  "mimo-v2.6-flash-free",
-  "space-bunny-free",
+/**
+ * 免费渠道的模型标识**唯一来源在 `bun-sidecar/src/kernel/opencode-zen.ts`**。
+ * 这里以前自己也抄了一份（`EXTERNAL_COMPATIBLE` + `FALLBACK` + `prefer` 三处），
+ * 结果上游下架 `space-bunny-free` 之后，五处副本各留一份、失效改不完，
+ * 便携包还把它当内置模型展示给用户选（选了必然报错）。
+ */
+const EXTERNAL_COMPATIBLE_FREE_MODELS = new Set<string>([
+  FREE_LANE_PRIMARY_MODEL_ID,
+  ...FREE_LANE_FALLBACK_MODEL_IDS,
 ]);
 
 const SYNC_TIMEOUT = 15_000;
@@ -34,8 +45,8 @@ const SYNC_FIRST_DELAY_MS = 3_000;
 
 /** 网络不可用时的兜底免费模型列表（保证新用户首启可用）。 */
 const FALLBACK_FREE_MODELS = [
-  "mimo-v2.6-flash-free",
-  "space-bunny-free",
+  FREE_LANE_PRIMARY_MODEL_ID,
+  ...FREE_LANE_FALLBACK_MODEL_IDS,
 ];
 
 const DEFAULT_CONTEXT_WINDOW = 262144;
@@ -51,9 +62,9 @@ export function isOpenCodeZenModelAvailable(modelId: unknown): boolean {
   return isFreeModel(mid) && EXTERNAL_COMPATIBLE_FREE_MODELS.has(mid);
 }
 
-/** 稳定排序：deepseek-v4-flash-free 默认首位，其余按字母序（big-pickle 靠后）。 */
+/** 稳定排序：主免费模型首位，其余按字母序（big-pickle 靠后）。 */
 export function orderModels(models: string[]): string[] {
-  const prefer = ["mimo-v2.6-flash-free", "space-bunny-free"];
+  const prefer = [FREE_LANE_PRIMARY_MODEL_ID, ...FREE_LANE_FALLBACK_MODEL_IDS];
   const head = prefer.filter((m) => models.includes(m));
   const rest = models.filter((m) => !head.includes(m)).sort();
   return [...head, ...rest];

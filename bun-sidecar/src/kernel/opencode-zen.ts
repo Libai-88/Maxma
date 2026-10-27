@@ -9,8 +9,24 @@ const QUARTET = ["bash", "glob", "grep", "read"] as const;
 const BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const upstream = openAICompletionsApi();
 const sessionIds = new Map<string, string>();
-const MIMO_MODEL_ID = "mimo-v2.6-flash-free";
-const SPACE_BUNNY_MODEL_ID = "space-bunny-free";
+/**
+ * 内置免费渠道（Maxma 免费模型）的模型标识——**唯一来源**，
+ * `bun-backend/src/services/opencode-zen.ts` 从这里取，不再各自抄一份
+ * （此前同一个 id 在 5 处出现：kernel 2 处、services 3 处，失效时改不完）。
+ */
+export const FREE_LANE_PRIMARY_MODEL_ID = "mimo-v2.6-flash-free";
+
+/**
+ * 兜底候选：**必须是上游目录里仍在提供的免费模型**。
+ *
+ * 2026-10-27 实测 `GET https://opencode.ai/zen/v1/models` 返回 84 个模型、
+ * 8 个 `-free`，其中**没有** `space-bunny-free`。保留它作为兜底目标只会发出一版
+ * 必然失败的请求，用户看到的是 `Model is unavailable`——一条注定失败、又没有
+ * 任何信号的分支。因此这里置空，并保留注释说明怎么加回来：
+ * 上游恢复该模型（或新增其它可用免费模型）时，把 id 加进本数组即可，
+ * 兜底与离线默认可见性会一起生效，不必再改第二个地方。
+ */
+export const FREE_LANE_FALLBACK_MODEL_IDS: readonly string[] = [];
 
 function base62From(bytes: Uint8Array): string {
   return Array.from(bytes, (byte) => BASE62[byte % BASE62.length]).join("");
@@ -66,9 +82,15 @@ export function opencodeZenStreamSimple(
   model: Model<"openai-completions">,
   context: TranscriptContext,
   options?: SimpleStreamOptions,
+  /**
+   * 兜底候选，默认取 `FREE_LANE_FALLBACK_MODEL_IDS`（当前为空——上游不再提供
+   * space-bunny-free）。参数化是为了让**机制本身**继续被测试覆盖：注入一个假目标
+   * 就能验证"主模型无输出时换名重发"，不必为了测试而保留一条线上必然失败的请求。
+   */
+  fallbacks: readonly string[] = FREE_LANE_FALLBACK_MODEL_IDS,
 ): AssistantMessageEventStream {
   const stream = createAssistantMessageEventStream();
-  void pumpOpencodeZenStream(stream, model, context, options);
+  void pumpOpencodeZenStream(stream, model, context, options, fallbacks);
   return stream;
 }
 
@@ -77,6 +99,7 @@ async function pumpOpencodeZenStream(
   model: Model<"openai-completions">,
   context: TranscriptContext,
   options?: SimpleStreamOptions,
+  fallbacks: readonly string[] = FREE_LANE_FALLBACK_MODEL_IDS,
 ): Promise<void> {
   const streamOptions = buildStreamOptions(context, model, options);
   const primary = upstream.streamSimple(model, withFingerprint(context), streamOptions);
@@ -86,18 +109,26 @@ async function pumpOpencodeZenStream(
     if (event.type === "text_delta" || event.type === "toolcall_start" || event.type === "toolcall_delta") {
       sawAnswer = true;
     }
-    const canFallback = model.id === MIMO_MODEL_ID && !sawAnswer && options?.signal?.aborted !== true;
-    if (canFallback && (event.type === "error" || event.type === "done")) {
-      const fallbackModel = { ...model, id: SPACE_BUNNY_MODEL_ID, name: SPACE_BUNNY_MODEL_ID, reasoning: true };
-      // 兜底必须留痕：此前主模型失败后静默换名重发，用户只看到最后一句
-      // "Model is unavailable"，无从判断兜底有没有发生、目标是谁。
-      // （2026-10-27 实测：上游 /zen/v1/models 已不再提供 space-bunny-free，
-      //  这条兜底当前必然失败——见 HANDOFF「当前限制」。）
-      console.warn(
-        `[opencode-zen] ${model.id} 未产出内容，兜底到 ${SPACE_BUNNY_MODEL_ID}` +
-          `（事件类型 ${event.type}）`,
+    const wantsFallback =
+      model.id === FREE_LANE_PRIMARY_MODEL_ID && !sawAnswer && options?.signal?.aborted !== true;
+    if (wantsFallback && (event.type === "error" || event.type === "done")) {
+      const [fallbackId] = fallbacks;
+      if (!fallbackId) {
+        // 没有可用的兜底目标（当前就是这种情况：上游目录已不提供 space-bunny-free）。
+        // 明确说出来，别让"兜底没发生"和"兜底失败"在日志里长得一样。
+        console.warn(`[opencode-zen] ${model.id} 未产出内容（事件 ${event.type}），且无可用兜底模型`);
+        output.push(event);
+        continue;
+      }
+      // 兜底必须留痕：此前是静默换名重发，用户只看到最后一句 "Model is unavailable"，
+      // 既不知道发生过兜底、也不知道目标是谁。
+      console.warn(`[opencode-zen] ${model.id} 未产出内容，兜底到 ${fallbackId}（事件类型 ${event.type}）`);
+      const fallbackModel = { ...model, id: fallbackId, name: fallbackId, reasoning: true };
+      const fallback = upstream.streamSimple(
+        fallbackModel,
+        withFingerprint(context),
+        buildStreamOptions(context, fallbackModel, options),
       );
-      const fallback = upstream.streamSimple(fallbackModel, withFingerprint(context), buildStreamOptions(context, fallbackModel, options));
       for await (const fallbackEvent of fallback) output.push(fallbackEvent);
       output.end();
       return;
