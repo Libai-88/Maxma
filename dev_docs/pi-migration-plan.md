@@ -22,7 +22,7 @@
 >   处置（能力门控）进行中；判据与登记见 `bun-sidecar/src/kernel/pi-contract.ts` 的
 >   `ENGINE_EVENT_EXPECTED_UNPRODUCED`，文档面见 `docs/contracts/ws-events.md` §3.2/§4.4 与 `HANDOFF.md`「Agent 任务中心」节警告。
 > - §6.1/§9 的版本对拍约定需要更新：引擎现已锁 `@earendil-works/* 0.99.0`，上游 latest 1.4.0，
->   其中 1.0.3 / 1.2.0 自带 Breaking Changes。升级相关事实统一见 `docs/omp-upgrade-guide.md` 顶部废弃块。
+>   其中 1.0.3 / 1.2.0 自带 Breaking Changes。升级相关事实统一见 `docs/archive/omp-upgrade-guide.md` 顶部废弃块。
 
 ---
 
@@ -285,7 +285,7 @@ Maxma 后端 (Bun + TypeScript，单一进程)
 
 | 风险 | 等级 | 对策 |
 | --- | --- | --- |
-| pi 0.x API churn（一年 0.5→0.87） | 高 | 精确锁版本；kernel 接口隔离（升级只动 `kernel/pi-session.ts` + extensions）；升级 runbook 固化（参照 docs/omp-upgrade-runbook.md 模式） |
+| pi 0.x API churn（一年 0.5→0.87） | 高 | 精确锁版本；kernel 接口隔离（升级只动 `kernel/pi-session.ts` + extensions）；升级 runbook 固化（参照 docs/archive/omp-upgrade-runbook.md 模式） |
 | 事件语义差异导致前端行为回归 | 高 | 阶段〇快照测试为硬门禁；`agent_end` vs `agent_settled`、队列/重试/压缩事件逐一对拍 |
 | 审批时序（钩子内异步等前端） | 中 | block 钩子内 await + 超时默认拒绝 + 取消传播（abort 时 reject 所有 pending 审批） |
 | 子 Agent 事件 / SessionManager 导入等「待验证」项 | 中 | 阶段一第 0 个 spike：用 SDK 示例 11/13/14 验证三个未知点，再进入正式开发 |

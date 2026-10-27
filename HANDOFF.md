@@ -210,18 +210,23 @@ node scripts/check-type-budget.mjs --write  # 类型债下降后，下调基线�
 
 - MCP 配置热重载需调用 `reload_mcp_for_session` RPC 而非自动检测。
 - **内置免费渠道（Maxma 免费模型）当前不可用**（2026-10-27 实测，非代码回归）：
-  直连上游 `GET https://opencode.ai/zen/v1/models` 返回 84 个模型、其中 8 个 `-free`；
-  但 Maxma 侧 `EXTERNAL_COMPATIBLE_FREE_MODELS`（`services/opencode-zen.ts:26-29`）只放行
-  `mimo-v2.6-flash-free` 与 `space-bunny-free` 两个，故同步后只剩 1 个可显示（日志
-  `models synced: 1 free models`）。其中 **`space-bunny-free` 上游已不再提供**——
-  `kernel/opencode-zen.ts` 的兜底目标是它，所以**这条 failover 当前必然失败**
-  （已加 `console.warn` 留痕，此前是静默换名重发）。实测主模型请求返回
-  `429 FreeUsageLimitError`（直连）/ `400 Model is unavailable`（经 Maxma 身份），
-  `beam-free` 另有 `403 RegionError`。
-  待决策项（**不是 bug 修复能覆盖的，需要产品判断**）：① 是否把其余 6 个 `-free`
-  纳入兼容白名单（需逐个验证能否经"外部兼容"身份调用，且受地区与配额影响）；
-  ② 兜底目标应改为"从同步到的可用免费列表里选下一个"而非硬编码第二个 id。
-  在配额恢复前无法验证 ①，因此本次未擅自改动白名单。
+  上游 `GET https://opencode.ai/zen/v1/models` 提供 84 个模型、8 个 `-free`，
+  但逐个实测（`bun scripts/verify-free-models.mjs`）的结果是：
+  **7 个返回 429 `FreeUsageLimitError`**（模型存在、身份被接受，但额度耗尽——
+  **无法判定能否出内容，因此不能凭猜测放行**：deepseek-v4.1-flash-free、
+  flint-40b-free、glm-5.3-flash-free、jev-1.13-free、
+  nemotron-3.5-lightning-free、nemotron-3.5-super-vl-free、mimo-v2.6-flash-free），
+  **1 个返回 403 `RegionError`**（`beam-free` — "not available in your country"，
+  与额度无关、不会自行恢复）。
+  Maxma 侧因此只放行 `mimo-v2.6-flash-free`（日志 `models synced: 1 free models`）。
+  - **白名单不扩充是有据的决定**，不是遗漏：7 个待额度恢复后用上述脚本复测；
+    `beam-free` 已记入 `FREE_LANE_KNOWN_UNUSABLE_MODEL_IDS`（kernel），
+    `isOpenCodeZenModelAvailable()` 显式拒绝——避免将来"上游列表里有它"被顺手放行。
+  - 已修掉的两处：`space-bunny-free` 上游已下架却仍作兜底目标（现兜底列表为空，
+    触发时 `console.warn` 留痕，不再静默换名重发）；同一模型 id 曾抄在 5 处，
+    现已收成 kernel 单源。
+  - 仍开放的产品判断：兜底策略应从"硬编码第二个 id"改为"从同步到的可用免费列表
+    里选下一个"——需要产品确认语义，本次未擅自改。
 - 自动化功能已下线（capabilities `automation.enabled=false`，前端路由守卫隐藏）；如需恢复基于 Bun 重写为独立工作项。
 - 插件的**网络安装面**刻意未开：`POST /api/plugins/install` 只启用已随包分发的插件，未知插件返回拒绝；真正的网络安装需先过安全评审。
 - **后台子任务（Agent 任务中心）在 pi 引擎下无数据来源**，入口已按能力门控隐藏（见「Agent 任务中心」一节）；`deferred-runs` 三个 REST 端点仍挂载，供未来接上执行侧后复用。
@@ -240,7 +245,7 @@ node scripts/check-type-budget.mjs --write  # 类型债下降后，下调基线�
   2026-10-27 已校正为 Bun 侧真实实现（`kernel/bridge-pi.ts`、`kernel/events.ts`、`routes/chat-ws.ts`），
   并补「传输现状：in-process，无 stdio 层」。历史教训：这两份文档把 `session_recap` / `execute_workflow_step`
   标为「未迁移」近一个月，而代码早已实现，导致一次解耦调查误判功能不可用——**引用 §8 状态列前先对 `bridge-pi.ts`**。
-- **`docs/omp-upgrade-guide.md`、`docs/omp-upgrade-runbook.md`、`docs/omp-capability-gap.md` 已废弃**
+- **`docs/archive/omp-upgrade-guide.md`、`docs/archive/omp-upgrade-runbook.md`、`docs/archive/omp-capability-gap.md` 已废弃**
   （2026-08 基线，对象是上一代引擎 @oh-my-pi）。三份文件顶部已加告示块并逐条列出失效点；正文保留作历史演练记录。
 - **升级工具已重写**：旧的 `scripts/upgrade-omp.mjs` 与 `scripts/verify-omp-settings.mjs` **已删除**
   （前者读旧 scope 依赖键得到 `undefined` 后抛 `TypeError`，且查到的是仍在发版的 `@oh-my-pi` 18.13.1，

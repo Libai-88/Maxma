@@ -127,8 +127,8 @@
 
 > **付费 API 门槛原则（2026-08-12 新增）**：所有新增功能不得要求用户额外配置付费 API；
 > 功能本质上依赖付费能力（如图片生成）时直接砍掉，除非未来 provider 免费开放。
-> 全部功能均为 OMP 16.5.2 原生能力，升级 OMP（见 docs/omp-upgrade-runbook.md）不影响这些开发。
+> 全部功能均为 OMP 16.5.2 原生能力，升级 OMP（见 docs/archive/omp-upgrade-runbook.md）不影响这些开发。
 
 > **现状补充（2026-10-27 核对）**：上句的基线已过期，且方向反了。引擎已换成 `@earendil-works/pi` 0.99.0，**这些能力在 pi 上游并不存在**——它们已由 Maxma 在 `bun-sidecar/src/kernel/` 自建：计划模式（`kernel/plan.ts:4` 注释「pi 无计划模式运行时」）、目标模式（`kernel/goal.ts:4`「pi 无 goal 运行时」）、四档权限与审批门（`kernel/types.ts:16`「pi 无内置权限系统」，另见 `dev_docs/permission-modes.md`）、拒止锚（`kernel/extensions/maxma-blocker.ts`）、检查点（`bridge-pi.ts` 的 `checkpoint_action` 分支，借官方 label/branch 载体）、闲置回顾（同文件的 `session_recap` 分支）等。判据与工作量归属见 `dev_docs/pi-migration-plan.md` §3.2（「pi 没有、Maxma 必须自建——本方案核心工作量」）与 §6.0 spike 实测。
-> 因此：**跟进 pi 上游新版本不会自动带回这些能力**，它们从 OMP 原生退化为 Maxma 自维护项；本文件作为"能力差距清单"的历史价值在于说明**为什么 kernel/ 有这 2600 行自建代码**，而不再用于"升级即获得"。`docs/omp-upgrade-runbook.md` 亦已废弃（见其顶部告示）。
+> 因此：**跟进 pi 上游新版本不会自动带回这些能力**，它们从 OMP 原生退化为 Maxma 自维护项；本文件作为"能力差距清单"的历史价值在于说明**为什么 kernel/ 有这 2600 行自建代码**，而不再用于"升级即获得"。`docs/archive/omp-upgrade-runbook.md` 亦已废弃（见其顶部告示）。
 

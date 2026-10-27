@@ -1,6 +1,6 @@
 > ## ⛔ 本手册已废弃——照它执行会造成**半升级**（2026-08 基线）
 >
-> 第 3 行那句「阅读本文即可独立辅助完成 OMP 升级」今天**不成立且有害**：引擎已在 2026-09-30 从 `@oh-my-pi/*`（OMP）整体换成 `@earendil-works/*`（pi），本手册的包名、脚本、步骤、基线数字全部指向不存在的对象。正文保留仅作历史记录；完整的事实对照表见 `docs/omp-upgrade-guide.md` 顶部废弃块。以下 9 处是**按本手册操作会直接踩到的空洞**（均于 2026-10-27 复验）：
+> 第 3 行那句「阅读本文即可独立辅助完成 OMP 升级」今天**不成立且有害**：引擎已在 2026-09-30 从 `@oh-my-pi/*`（OMP）整体换成 `@earendil-works/*`（pi），本手册的包名、脚本、步骤、基线数字全部指向不存在的对象。正文保留仅作历史记录；完整的事实对照表见 `docs/archive/omp-upgrade-guide.md` 顶部废弃块。以下 9 处是**按本手册操作会直接踩到的空洞**（均于 2026-10-27 复验）：
 >
 > 1. **适用对象错**：全文基线 `@oh-my-pi/*` 16.5.2 → 对照 17.2.12。现引擎为 `@earendil-works/{pi-coding-agent,pi-agent-core,pi-ai}`，锁 **0.99.0**，两处 workspace 各一份：`bun-backend/package.json:16-18`、`bun-sidecar/package.json:11-13`。
 > 2. **步骤 8 的 `git add`（:168）只列 `bun-sidecar/package.json bun-sidecar/bun.lock`**——**漏了 `bun-backend`**。两处都锁 pi 三件套，按此走必然半升级。今天两把锁的家族包曾漂成 0.99.1 / 0.99.0 两套，即此问题的现场后果；**现已修**：两处 `package.json` 的 `overrides` 把 8 个 `@earendil-works/*` 钉成同版本、`bun-backend/bun.lock` 收编入库、`bun-sidecar/tests/engine-boundary.test.ts` 断言两 workspace 逐包同版本 + 两把锁解析一致 + 都被跟踪。
@@ -20,7 +20,7 @@
 
 > **给无上下文 Agent 的自包含操作手册**：阅读本文即可独立辅助完成 OMP 升级。
 > ⚠️ **此句已作废**——见文件顶部废弃块。
-> 配套方案文档：`docs/omp-upgrade-guide.md`（策略与风险评估，本手册直接可执行）。
+> 配套方案文档：`docs/archive/omp-upgrade-guide.md`（策略与风险评估，本手册直接可执行）。
 >
 > 更新日期：2026-08-11
 
