@@ -184,8 +184,16 @@ try {
     $freeProvider = @($providers.providers) | Where-Object { $_.id -eq "opencode-zen" } | Select-Object -First 1
     if (-not $freeProvider) { throw "built-in free model provider is missing" }
     $freeModels = @($freeProvider.models | ForEach-Object { [string]$_ })
-    foreach ($requiredModel in @("mimo-v2.6-flash-free", "space-bunny-free")) {
-        if ($freeModels -notcontains $requiredModel) { throw "built-in free model is missing: $requiredModel" }
+    # 免费模型名单的唯一来源是 bun-sidecar/src/kernel/opencode-zen.ts
+    # （FREE_LANE_PRIMARY_MODEL_ID / FREE_LANE_FALLBACK_MODEL_IDS）。
+    # 这里上一版把 "mimo-v2.6-flash-free","space-bunny-free" 逐个写死在此，而
+    # 2026-10-27 实测上游 /zen/v1/models 已不提供 space-bunny-free —— 代码修好后，
+    # 这条断言本身就成了"把失效配置锁成契约"的那一处。改为三条不抄名单的规则：
+    # 列表非空、主模型在、且不得再出现已知下架的模型。
+    if ($freeModels.Count -lt 1) { throw "built-in free model list is empty" }
+    if ($freeModels -notcontains "mimo-v2.6-flash-free") { throw "built-in primary free model is missing: mimo-v2.6-flash-free" }
+    foreach ($dropped in @("space-bunny-free")) {
+        if ($freeModels -contains $dropped) { throw "built-in free list still offers upstream-dropped model: $dropped" }
     }
     Write-Host "[portable-smoke] built-in free models: $($freeModels -join ', ')"
 
