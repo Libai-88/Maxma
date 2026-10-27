@@ -41,16 +41,20 @@ web -> Bun 后端 /ws/chat/{session_id} -> kernel in-process -> pi AgentSession
 > 数字为 **2026-10-27**（引擎契约守卫落地后）在 `feat/jet-hub-plugin` 上实测结果，不是估计值。
 > 演进轨迹：115/61（插件面前）→ 227/83（`c79a8b5` 任务中心）→ 本次 +9 条设置语义测试 / +21 条守卫测试；前端 451 → 472 → 509（工具映射 33 条 + 门控 4 条 + Agent 守卫若干）。
 
+> 下列数字为 2026-10-27 实测；**它们会随每次加测试而变化**，所以每条都给了现测命令，
+> 别把这些数字当权威——权威是跑一遍的结果（或直接 `bash scripts/verify-all-gates.sh`）。
+
 ```text
-后端：cd bun-backend && bun test        （236 pass / 0 fail，34 个测试文件，26.0s）
-引擎：cd bun-sidecar && bun test        （106 pass / 0 fail，12 个测试文件， 6.4s）
+后端：cd bun-backend && bun test        （240 pass / 0 fail，35 个测试文件，26.5s）
+引擎：cd bun-sidecar && bun test        （108 pass / 0 fail，12 个测试文件， 5.7s）
 前端：cd web && npx vitest run         （509 pass / 0 fail，59 个测试文件，14.4s）
 类型：cd bun-sidecar && bun x tsc --noEmit   （0 error —— CI 硬门槛）
       node scripts/check-type-budget.mjs     （sidecar 基线 0 / backend 基线 86，只准减）
 前端类型/规范：cd web && npx vue-tsc --noEmit（0 error）· npm run lint（0 error / 20 warning）
               · npm run lint:colors（160 个 Vue 文件 0 违规）
-打包：cd bun-backend && bun run build-server.mjs（server.js 20.6MB，externals 23 包自检通过）
-便携冒烟：powershell -File build\portable-smoke-test.ps1
+打包：cd bun-backend && bun run build-server.mjs（server.js 21.6MB，externals 23 包自检通过）
+便携冒烟：powershell -File build\portable-smoke-test.ps1（退出码 0 = 通过）
+端到端回合：bash scripts/smoke-e2e-roundtrip.mjs（需后端在跑，见「常用命令」）
 一次性复跑全部上述项：bash scripts/verify-all-gates.sh（判定按退出码，不按输出字符串）
 ```
 
