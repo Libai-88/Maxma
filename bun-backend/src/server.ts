@@ -446,14 +446,14 @@ if (import.meta.main || process.env.MAXMA_BACKEND_COMPILED === "1") {
   // 引擎自己拼出来的，改名后注入会**静默失效**，pi 会直接把会话/设置/凭据写进
   // 用户主目录。与其等用户发现数据"没迁移"，启动时就把它喊出来。
   const agentDirCheck = agentDirDiagnostics(dataDir());
-  if (agentDirCheck.inside_expected === false) {
+  if (agentDirCheck.agent_dir_inside_expected === false) {
     console.error(
       `[engine] 引擎配置目录没落在 Maxma 数据目录内：agentDir=${agentDirCheck.agent_dir} ` +
         `expected=${agentDirCheck.expected_root}\n` +
         "  便携/桌面形态下这意味着 PI_CODING_AGENT_DIR 注入未生效，引擎正在写用户主目录，" +
         "会话与凭据不会随包携带。请检查启动器的环境变量注入，或设置 MAXMA_DATA_DIR。",
     );
-  } else if (agentDirCheck.inside_expected) {
+  } else if (agentDirCheck.agent_dir_inside_expected) {
     console.log(`[engine] 配置目录=${agentDirCheck.agent_dir}（在 Maxma 数据目录内）`);
   }
 

@@ -266,20 +266,55 @@ describe("RPC 方法清单与实现必须一致", () => {
     ).toBe(true);
     expect(main, "校验必须真的在启动路径上被调用").toMatch(/await checkEngineAgentDir\(/);
 
-    // 跨进程读字段最容易出的错：写的人拼错键名，读的人永远拿到 undefined，
-    // 于是"校验存在"但永不生效——本次就是这样：desktop 读 agent_dir_inside_expected，
-    // 而 kernel 返回的键叫 inside_expected。字段名必须两端对得上，且由测试来对。
+    // 跨边界读字段最容易出的错：写的人改了键名，读的人还按旧名读，于是永远拿到
+    // undefined —— **"校验存在"但永不生效**。本次就发生了两次：
+    //   ① desktop 读 agent_dir_inside_expected，而 kernel 当时返回 inside_expected；
+    //   ② 把字段改名后，bun-backend/src/server.ts 的两处读取没跟着改，启动自检
+    //      再次静默失效（日志里那行 [engine] 干脆不打印）。
+    // 只扫桌面壳是不够的（第一次的测试就只扫了它，才漏掉②）。这里改为扫**所有**
+    // 消费方：只要文件里出现 "<对象>.<字段>" 且字段名属于本诊断的形状族，
+    // 就必须是 kernel 真正产出的键。
     const info = read("bun-sidecar/src/kernel/engine-info.ts");
-    const producedKeys = new Set<string>();
     const fnBody = info.slice(info.indexOf("export function agentDirDiagnostics"));
+    const producedKeys = new Set<string>();
     for (const m of fnBody.matchAll(/^\s*([a-z_][a-z0-9_]*)\s*:/gm)) producedKeys.add(m[1]!);
     expect(producedKeys.size, "解析不到 agentDirDiagnostics 的返回字段").toBeGreaterThan(2);
-    const consumed = [...main.matchAll(/engine\.([a-z_]+)/g)].map((m) => m[1]!);
-    const ghost = consumed.filter((k) => !producedKeys.has(k));
+
+    /** 诊断形状族的候选字段名（含历史名）：读到它们就必须是产出键。 */
+    const FAMILY = [
+      "inside_expected",
+      "agent_dir_inside_expected",
+      "agent_dir",
+      "expected_root",
+    ];
+    const consumers = [
+      "desktop/electron/main.cjs",
+      "bun-backend/src/server.ts",
+      "bun-backend/src/routes/capabilities.ts",
+      "bun-backend/src/health.ts",
+    ];
+    const ghosts: string[] = [];
+    for (const rel of consumers) {
+      if (!exists(rel)) continue;
+      const text = read(rel);
+      for (const m of text.matchAll(/\b([A-Za-z_$][\w$]*)\.([a-z_]+)\b/g)) {
+        const field = m[2]!;
+        if (!FAMILY.includes(field)) continue;
+        if (!producedKeys.has(field)) ghosts.push(`${rel}: ${m[1]}.${field}`);
+      }
+    }
     expect(
-      [...new Set(ghost)],
-      `桌面壳读了 kernel 不存在的字段（校验会静默失效）：${[...new Set(ghost)].join(", ")}`,
+      [...new Set(ghosts)],
+      `这些地方读了 kernel 不产出的字段，校验会静默失效（拿到 undefined）：\n  ${[...new Set(ghosts)].join("\n  ")}`,
     ).toEqual([]);
+
+    // 产物形态下必然为 true 的键，必须至少被一个**在启动路径上**的消费方检查，
+    // 否则"注入失效"只写进了响应体、没人报警。
+    const serverSrc = read("bun-backend/src/server.ts");
+    expect(
+      serverSrc.includes("agent_dir_inside_expected"),
+      "后端启动自检没读新字段名 —— 注入失效时不会打印任何告警",
+    ).toBe(true);
   });
 });
 
