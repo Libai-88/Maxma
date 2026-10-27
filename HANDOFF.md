@@ -42,8 +42,8 @@ web -> Bun 后端 /ws/chat/{session_id} -> kernel in-process -> pi AgentSession
 > 演进轨迹：115/61（插件面前）→ 227/83（`c79a8b5` 任务中心）→ 本次 +9 条设置语义测试 / +21 条守卫测试；前端 451 → 472 → 509（工具映射 33 条 + 门控 4 条 + Agent 守卫若干）。
 
 ```text
-后端：cd bun-backend && bun test        （236 pass / 0 fail，34 个测试文件，24.1s）
-引擎：cd bun-sidecar && bun test        （104 pass / 0 fail，12 个测试文件， 5.4s）
+后端：cd bun-backend && bun test        （236 pass / 0 fail，34 个测试文件，26.0s）
+引擎：cd bun-sidecar && bun test        （105 pass / 0 fail，12 个测试文件， 6.2s）
 前端：cd web && npx vitest run         （509 pass / 0 fail，59 个测试文件，14.4s）
 类型：cd bun-sidecar && bun x tsc --noEmit   （0 error —— CI 硬门槛）
       node scripts/check-type-budget.mjs     （sidecar 基线 0 / backend 基线 86，只准减）
@@ -51,6 +51,7 @@ web -> Bun 后端 /ws/chat/{session_id} -> kernel in-process -> pi AgentSession
               · npm run lint:colors（160 个 Vue 文件 0 违规）
 打包：cd bun-backend && bun run build-server.mjs（server.js 20.6MB，externals 23 包自检通过）
 便携冒烟：powershell -File build\portable-smoke-test.ps1
+一次性复跑全部上述项：bash scripts/verify-all-gates.sh（判定按退出码，不按输出字符串）
 ```
 
 > ⚠️ `bun-backend` 的 86 个 tsc 错误是阶段二 Python→Bun 直译遗留的**历史欠债**（含测试文件），
