@@ -18,11 +18,12 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { bundleDir } from "./app-paths";
+import { bundleDir, dataDir } from "./app-paths";
 import { appVersion } from "./app-version";
 import { getAppSettings } from "./config-settings";
 import { runtimeHealth, sanitizeUserDetail, type HealthState } from "./runtime-status";
 import { BUILTIN_TOOLS } from "./routes/tools";
+import { agentDirDiagnostics, engineIdentity } from "../../bun-sidecar/src/kernel/engine-info";
 
 export interface HealthDeps {
   /** 活跃 kernel 会话 id（llm 探测目标）。 */
@@ -150,6 +151,12 @@ export async function getHealthReport(deps: HealthDeps): Promise<Record<string, 
   return {
     status: overall,
     version: appVersion(),
+    // 引擎身份与配置目录落点（**信息字段，不参与 overall 判定**）。
+    // 不参与判定是刻意的：开发形态下 pi 用 ~/.pi/agent 是正常的，把它算成
+    // degraded 会让健康检查天天红；真正需要它的是便携/桌面形态——桌面壳自己
+    // 注入了 PI_CODING_AGENT_DIR，读到 false 就说明注入失效（见
+    // desktop/electron/main.cjs 的 checkEngineAgentDir）。
+    engine: { ...engineIdentity(), ...agentDirDiagnostics(dataDir()) },
     llm,
     memory,
     native_tools: nativeTools,

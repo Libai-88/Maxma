@@ -43,7 +43,7 @@ web -> Bun 后端 /ws/chat/{session_id} -> kernel in-process -> pi AgentSession
 
 ```text
 后端：cd bun-backend && bun test        （236 pass / 0 fail，34 个测试文件，26.0s）
-引擎：cd bun-sidecar && bun test        （105 pass / 0 fail，12 个测试文件， 6.2s）
+引擎：cd bun-sidecar && bun test        （106 pass / 0 fail，12 个测试文件， 6.4s）
 前端：cd web && npx vitest run         （509 pass / 0 fail，59 个测试文件，14.4s）
 类型：cd bun-sidecar && bun x tsc --noEmit   （0 error —— CI 硬门槛）
       node scripts/check-type-budget.mjs     （sidecar 基线 0 / backend 基线 86，只准减）
@@ -154,8 +154,12 @@ web -> Bun 后端 /ws/chat/{session_id} -> kernel in-process -> pi AgentSession
 注入的正是字面量 `PI_CODING_AGENT_DIR`。**上游改这个命名会静默失效**——便携包会把会话/设置/凭据
 写进用户主目录，且不报错。因此新增启动自检：`bun-sidecar/src/kernel/engine-info.ts` 的
 `agentDirDiagnostics()` 直接问引擎 `getAgentDir()` 解析到哪儿、判断它是否落在 Maxma 数据目录内
-（**验结果而不是比字符串**），后端启动时不满足就 `console.error` 喊出来，
-`/api/capabilities` 的 `engine.agent_dir / agent_dir_inside_expected` 把它暴露给诊断面。
+（**验结果而不是比字符串**），后端启动时不满足就 `console.error` 喊出来。该状态还出现在
+免鉴权的 `/api/health` 的 `engine` 字段（**只作信息字段，不参与 overall 判定**——开发形态下
+pi 用 `~/.pi/agent` 是正常的，算成 degraded 会让健康检查天天红）与
+`/api/capabilities` 的 `engine.agent_dir_inside_expected`。桌面壳在探活成功后读该字段，
+读到 `false` 才 `showErrorBox`（桌面形态一定注入了该变量，false 即真失效；请求失败属于
+"未知"，不打扰启动）。注入与校验成对存在，由 `bun-sidecar/tests/engine-boundary.test.ts` 断言。
 
 用户数据包括 Provider（`api/data/providers.yaml`，API Key 凭据信封加密）、认证 Token（`api/data/maxma.db` auth_tokens 表）、SQLite、固定会话、人设、Skill、Macro、上传文件、日志。
 

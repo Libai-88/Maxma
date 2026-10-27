@@ -241,6 +241,24 @@ describe("RPC 方法清单与实现必须一致", () => {
       "model.ts 又出现了手抄的 api 字面量清单，请改回引用 PI_PROVIDER_APIS",
     ).toBe(false);
   });
+
+  test("桌面壳注入引擎 env 的地方，必须同时校验注入是否生效", () => {
+    /**
+     * `PI_CODING_AGENT_DIR` 是 pi 自己按 `${APP_NAME.toUpperCase()}_CODING_AGENT_DIR`
+     * 拼出来的内部变量名（config.js:432）。壳里写的是**字面量**，上游改命名后
+     * 注入会静默失效：便携/桌面包把会话、设置、凭据写进用户主目录，不迁移也不报错。
+     * 判据不比字符串——验结果：`/api/health` 的 `engine.agent_dir_inside_expected`
+     * 由 `getAgentDir()` 现算（见 kernel/engine-info.ts）。
+     * 这条断言防止"以后有人把校验当多余代码删掉"，让注入与校验成对存在。
+     */
+    const main = read("desktop/electron/main.cjs");
+    expect(main, "桌面壳应注入 PI_CODING_AGENT_DIR 以把引擎数据搬进包内").toContain("PI_CODING_AGENT_DIR");
+    expect(
+      main.includes("agent_dir_inside_expected"),
+      "桌面壳注入了 PI_CODING_AGENT_DIR 却没有校验注入是否生效——静默失效时数据会写进用户主目录",
+    ).toBe(true);
+    expect(main, "校验必须真的在启动路径上被调用").toMatch(/await checkEngineAgentDir\(/);
+  });
 });
 
 describe("跨侧清单一致性（同一件事不许三处各写各的）", () => {

@@ -9,7 +9,7 @@
 > | 「minor 带 Breaking，semver 不可信」（§0/:15） | **结论仍成立且已再次应验**：0.99.0 之后的 11 个版本中 **1.0.3 与 1.2.0 自带 `### Breaking Changes`**（源：上游包内 CHANGELOG）。1.0.3 把 Azure provider 由 `azure-openai-responses` 改名 `azure`，直接命中 `bun-sidecar/src/kernel/model.ts:48` 的硬编码白名单；1.2.0 改 `before_agent_start` 与 busy/isIdle 语义，与 Maxma 押 `agent_settled` 作终态判据相邻 |
 > | 「已有防御：`omp-compat.ts` 窄接口隔离层」（§0/:26、§5/:140） | **该文件不存在**（全仓 find 零命中）。新架构直 import pi 公开 API；隔离职责改由 `bun-sidecar/src/kernel/` + `kernel/pi-contract.ts`（消费面单源清单）承担 |
 > | 「32 处 import」（§0/:21） | 数字作废（2026-10-27 实测）：`bun-sidecar/src` 有 **16** 个文件 import `@earendil-works/*`（集中在 `kernel/` 接缝内），`bun-backend/src` 另有 **4** 个文件绕开 kernel 直接 import（`settings-global.ts`、`plugins/dsh/pi-bridge.ts`、`plugins/dsh/pi-providers.ts`、`plugins/task-brief/index.ts`；行号随改动漂移，此处只记文件名） |
-> | 「138 用例」（§0/:33、§3） | 实测 2026-10-27（守卫落地后）：`bun-sidecar` **105 pass / tsc 0 error**、`bun-backend` **236 pass**、`web` **509 pass**，均 0 fail |
+> | 「138 用例」（§0/:33、§3） | 实测 2026-10-27（守卫落地后）：`bun-sidecar` **106 pass / tsc 0 error**、`bun-backend` **236 pass**、`web` **509 pass**，均 0 fail |
 > | 「pi-natives 运行时阻断」（§0/:35、§1/:59） | 上下文已消失：两把 `bun.lock` 闭包里**没有 `pi-natives`**（grep 命中 0）。该阻断属 oh-my-pi 17.x，不迁移到当前引擎 |
 > | 报 issue 地址 `github.com/can1357/oh-my-pi`（§1/:59） | 现上游为 **`github.com/earendil-works/pi`**（据安装包 `package.json` 的 `repository` 字段，`directory: packages/coding-agent`） |
 > | §4 工具 `scripts/upgrade-omp.mjs` | **已删除**（原实测崩溃：`--check` 报「当前锁定: undefined / npm latest: 18.13.1」后抛 `TypeError`；三处致命错误——读旧 scope 依赖键、查的是**仍在发版的旧引擎**、只 bump `bun-sidecar` 一个 workspace）。替代者：**`scripts/upgrade-pi.mjs`**——两个 workspace 一起 bump（含家族包 overrides）、打印 current→target 之间的 `### Breaking Changes`、跑 tsc + 两份守卫测试 + 两侧 `bun test`、复查两把锁是否一致，**任一步失败即非零退出并回滚 package.json** |

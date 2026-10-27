@@ -85,6 +85,49 @@ function checkHealth(port) {
   });
 }
 
+/**
+ * 引擎配置目录落点校验（只认"明确 false"）。
+ *
+ * 上面 startBackend() 注入的 `PI_CODING_AGENT_DIR` 是 pi **自己拼出来的**变量名
+ * （config.js: `${APP_NAME.toUpperCase()}_CODING_AGENT_DIR`）。上游改命名后这里会
+ * 静默失效，便携包把会话/设置/凭据写进用户主目录，且不报错——正是本次审计发现的
+ * S1 项。后端在 /api/health 里如实报 `engine.agent_dir_inside_expected`（经
+ * `getAgentDir()` 验结果，不比字符串），这里在**桌面形态**把它喊出来：
+ * 桌面壳必定设置了该变量，读到 false 就是真出问题；读不到（网络异常）则不打扰，
+ * 因为那属于"未知"，不是"失败"。
+ */
+function checkEngineAgentDir(port) {
+  return new Promise((resolve) => {
+    const request = http.get(
+      { hostname: "127.0.0.1", port, path: "/api/health", timeout: 2000 },
+      (response) => {
+        let text = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => { text += chunk; });
+        response.on("end", () => {
+          try {
+            const health = JSON.parse(text);
+            const engine = health?.engine;
+            if (engine && engine.agent_dir_inside_expected === false) {
+              const detail =
+                `引擎配置目录未落在 Maxma 数据目录内：\n  ${engine.agent_dir}\n` +
+                `期望位于：\n  ${engine.expected_root}\n\n` +
+                "这通常意味着 PI_CODING_AGENT_DIR 注入失效（引擎侧改了变量命名）。" +
+                "会话、设置与凭据将被写入用户主目录，不会随便携包携带。";
+              dialog.showErrorBox("MaxmaHere 数据目录异常", detail);
+            }
+          } catch {
+            /* 解析失败按"未知"处理，不阻塞启动 */
+          }
+          resolve();
+        });
+      },
+    );
+    request.once("timeout", () => { request.destroy(); resolve(); });
+    request.once("error", () => resolve());
+  });
+}
+
 async function waitForBackend(port, timeoutMs = 90_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -133,6 +176,9 @@ async function startBackend() {
   });
 
   await waitForBackend(backendPort);
+  // 探活成功后立刻核对引擎数据目录落点（桌面形态一定注入了该变量，
+  // 读到 false 就是注入失效——见 checkEngineAgentDir 的注释）。
+  await checkEngineAgentDir(backendPort);
 }
 
 function openExternalUrl(url) {

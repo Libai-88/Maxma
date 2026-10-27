@@ -8,7 +8,7 @@
 > 4. **`scripts/upgrade-omp.mjs` 已删除**（实测 `--check` 抛 `TypeError`、查的是仍在发版的旧 scope、只动一个 workspace）。**入口换成 `scripts/upgrade-pi.mjs`**：`node scripts/upgrade-pi.mjs --check` 只读查看版本差距与 current→target 之间的 `### Breaking Changes`；带版本号执行时两个 workspace 一起 bump（含家族 overrides）→ `bun install` ×2 → tsc → 两份守卫测试 → sidecar/backend `bun test` → 复查两把锁一致，**任一步失败非零退出并回滚 package.json**。运行时冒烟仍需人工（见第 9 条与本手册 §0 教训）。
 > 5. **步骤 6 的 `bun run build-compiled.mjs`（:152）文件不存在**：全仓 find 零命中；`--compile` 路线已被 in-process + `bun-backend/build-server.mjs` bundle 取代，产物 `dist/bun-server/server.js` 里 pi 是被**内联**的（external 清单不含 `@earendil-works`）。
 > 6. **§1.1 提到的 `omp-compat.ts` 窄接口层不存在**（全仓 find 零命中）；今天承担该职责的是 `bun-sidecar/src/kernel/` + `bun-sidecar/src/kernel/pi-contract.ts`。
-> 7. **「138 用例」过期**：实测 2026-10-27（守卫落地后）sidecar **105 pass / tsc 0 error**、backend **236 pass**、web **509 pass**（均 0 fail）。
+> 7. **「138 用例」过期**：实测 2026-10-27（守卫落地后）sidecar **106 pass / tsc 0 error**、backend **236 pass**、web **509 pass**（均 0 fail）。
 > 8. **报 issue 地址 `github.com/can1357/oh-my-pi` 已非上游**：现为 `github.com/earendil-works/pi`（安装包 `package.json` 的 `repository` 字段，`directory: packages/coding-agent`）。
 > 9. **"上游不做 breaking 就能随时升"这个前提不成立**：0.99.0（09-29）之后上游已发 **11 个版本**，其中 **1.0.3、1.2.0 自带 `### Breaking Changes`**；1.0.3 的 Azure provider 改名直接命中 `kernel/model.ts:48` 硬编码白名单。跨 1.0 属受控迁移，不是 bump-lock 量级。
 >
