@@ -7,8 +7,13 @@
  *   - session-bridge.ts 的 RPC handlers 逐步迁移到只依赖本目录接口。
  */
 
-import type { ToolDefinition, Model, ModelRuntime } from "@earendil-works/pi-coding-agent";
-import type { Api } from "@earendil-works/pi-ai";
+/**
+ * `Model` 属 **pi-ai**，不由 pi-coding-agent 根面再导出——此前从后者 import 它，
+ * 因为它是纯类型（编译期被擦除）所以运行时不报错，`tsc` 却一直红着（TS2305）。
+ * 引擎侧"从哪个包拿哪个类型"由 pi-contract.ts 登记，tests/pi-contract.test.ts 对账。
+ */
+import type { McpServerEntry, ToolDefinition, ModelRuntime } from "@earendil-works/pi-coding-agent";
+import type { Api, Model } from "@earendil-works/pi-ai";
 import type { RequestTelemetry } from "./request-telemetry";
 
 /**
@@ -69,14 +74,13 @@ export interface MaxmaSessionOptions {
   /** 自定义工具（官方 CreateAgentSessionOptions.customTools，ToolDefinition）。 */
   customTools?: ToolDefinition[];
   /**
-   * MCP 服务器清单（官方 McpServerEntry 形状，name/config/source）。
+   * MCP 服务器清单：直接用官方 `McpServerEntry`，不在我方再造一个
+   * `{ config: Record<string, unknown> }` 的松散镜像——官方 config 是**可判别联合**
+   * （stdio 必须有 command、http 必须有 url），压成 Record 会丢掉这层约束，
+   * 也让 `createMcpExtension({ loadConfig })` 的返回类型对不上（实测 tsc 红）。
    * 由 bridge 从 api/data/mcp_servers.yaml 转换；缺省时不装配 MCP 扩展。
    */
-  mcpServers?: Array<{
-    name: string;
-    config: Record<string, unknown>;
-    source?: string;
-  }>;
+  mcpServers?: McpServerEntry[];
   /** 不落盘会话（官方 SessionManager.inMemory()），测试与临时会话用。 */
   inMemory?: boolean;
   /** 官方 auth/model 运行时（kernel/model.ts resolvePiModel 产物）。 */

@@ -29,6 +29,13 @@ import {
   type PiPendingPlan,
 } from "./plan";
 import { applyGoalAction, emptyGoalState, goalReminder, goalUpdatedEvent, restoreGoalState, type PiGoalState } from "./goal";
+
+/**
+ * 再导出：bun-backend 的 server.ts / routes/sessions.ts 需要这个类型来构造
+ * hubPlans。此前它们直接 `import { type PiPendingPlan } from ".../bridge-pi"`，
+ * 而 bridge-pi 只是**内部 import** 了它 —— 后端 tsc 因此报 TS2459（声明了但未导出）。
+ */
+export type { PiPendingPlan } from "./plan";
 import type { MaxmaPermissionMode, MaxmaSessionOptions } from "./types";
 import { maxmaProjectRoot } from "./project-paths";
 
@@ -317,6 +324,22 @@ export async function handlePiCreateSession(
     return;
   }
   record.session = session;
+
+  // 全局设置的引擎侧生效：create_session 带入"用户显式改过、且归引擎消费"的键。
+  // 会话的 SettingsManager 由 pi 自行装配，与后端那个全局单例不是同一个对象，
+  // 所以必须在这里显式下发——否则设置面板改完对实际运行毫无影响（见
+  // bun-backend/src/settings-global.ts 的头注释）。失败不阻断建会话：会话退回
+  // 引擎默认值，并由后端把原因记进日志。
+  const sessionSettings = params?.settings as Record<string, unknown> | undefined;
+  if (sessionSettings && typeof sessionSettings === "object" && Object.keys(sessionSettings).length > 0) {
+    try {
+      session.settingsManager.applyOverrides(sessionSettings as never);
+      await session.settingsManager.flush();
+    } catch (error) {
+      console.warn(`[kernel] create_session 应用全局设置失败（本会话按引擎默认值运行）: ${String(error)}`);
+    }
+  }
+
   record.goalState = restoreGoalState(
     session.sessionManager.getEntries() as Array<{ type?: string; customType?: string; data?: unknown }>,
   );

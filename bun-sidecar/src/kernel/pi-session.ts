@@ -21,10 +21,12 @@ import {
   getAgentDir,
   type AgentSession,
   type InlineExtension,
+  type McpServerEntry,
   type ModelRuntime,
 } from "@earendil-works/pi-coding-agent";
 
 import { createMaxmaApprovalExtension } from "./extensions/maxma-approval";
+import { MAXMA_ENABLED_DEFAULT_TOOLS } from "./pi-contract";
 import { createMaxmaBlockerExtension } from "./extensions/maxma-blocker";
 import { maxmaSkillPaths } from "./skills";
 import { createRequestTelemetryExtension } from "./request-telemetry";
@@ -32,7 +34,12 @@ import type { ApprovalGate, MaxmaPermissionMode, MaxmaSessionOptions } from "./t
 
 export type { MaxmaPermissionMode } from "./types";
 
-export const MAXMA_DEFAULT_PI_TOOLS = ["read", "bash", "edit", "write", "grep", "find", "ls"] as const;
+/**
+ * 默认给会话启用的工具集。清单的**唯一来源是 `pi-contract.ts`**（那里还登记了
+ * 引擎实际提供的全部内置工具，含本表未启用的 powershell）——此前两处各写各的，
+ * 引擎改工具名时会静默没有工具。
+ */
+export const MAXMA_DEFAULT_PI_TOOLS = MAXMA_ENABLED_DEFAULT_TOOLS;
 
 /** 判定是否需要装配审批扩展：模式非 auto 且提供了门。 */
 export function approvalExtensionFor(
@@ -71,10 +78,10 @@ export async function createMaxmaSession(opts: MaxmaSessionOptions): Promise<Age
   const approval = approvalExtensionFor(opts.permissionMode ?? "ask", opts.approvalGate);
   if (approval) extensionFactories.push(approval);
   if (opts.mcpServers && opts.mcpServers.length > 0) {
-    const servers = opts.mcpServers.map((s) => ({
+    const servers: McpServerEntry[] = opts.mcpServers.map((s) => ({
       name: s.name,
       config: s.config,
-      source: s.source ?? "maxma:mcp_servers.yaml",
+      source: s.source,
       scope: "extension" as const,
     }));
     extensionFactories.push(createCodemodeExtension());

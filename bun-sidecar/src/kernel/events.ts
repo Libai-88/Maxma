@@ -15,6 +15,8 @@
  *   auto_retry_start/end 与 OMP 同名同字段，直接映射。
  */
 
+import { MAXMA_COMPACTION_REASONS_WS } from "./pi-contract";
+
 /** 与 src/state.ts DoneGuard 结构等价（kernel 不依赖 OMP state）。 */
 export interface PiDoneGuard {
   done: boolean;
@@ -52,7 +54,14 @@ function extractText(msg?: PiMessageLike): string {
   return "";
 }
 
-const COMPACTION_REASONS = ["threshold", "overflow", "idle", "incomplete"];
+/**
+ * WS 契约的 compaction reason 取值域——唯一来源是 `pi-contract.ts`。
+ *
+ * 此前这里手抄了一份 `["threshold","overflow","idle","incomplete"]`，**漏了 pi 会发的
+ * `manual`**：未知值一律被下面的 `?? "threshold"` 兜住，于是「用户手动压缩」在 UI 上
+ * 被静默误报成「阈值触发」。引擎加一个 reason 就复现一次，所以清单不许在此处重抄。
+ */
+const COMPACTION_REASONS: readonly string[] = MAXMA_COMPACTION_REASONS_WS;
 
 export function mapPiAgentEventToMaxma(
   event: unknown,

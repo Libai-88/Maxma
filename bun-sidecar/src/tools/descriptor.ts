@@ -12,9 +12,22 @@
  *     （read → readOnlyHint: true；write → readOnlyHint: false）
  */
 
+/**
+ * 工具输出内容块：**可判别联合**，不是"一个 type 字段取两个值 + 一堆可选字段"。
+ *
+ * 旧的摊平写法 `{ type: "text" | "image"; text?; data?; mimeType? }` 结构上比引擎
+ * 要求的 `TextContent | ImageContent` 宽——它能构造出 `{type:"text", data:...}`
+ * 这种引擎不认的对象，所以 `tsc` 报 `'"text" | "image"' is not assignable to '"image"'`。
+ * 该报错是真实的形状缺陷，不是噪音；收紧后所有工具体（只产出 text 块）依旧成立。
+ * 本文件保持零引擎依赖：这里声明的是 Maxma 自己的形状，与引擎结构等价即可。
+ */
+export type MaxmaToolContent =
+  | { type: "text"; text: string }
+  | { type: "image"; data: string; mimeType: string };
+
 /** 工具执行结果（OMP/pi 共同形状：模型可见 content + UI/日志用 details）。 */
 export interface MaxmaToolResult {
-  content: Array<{ type: "text" | "image"; text?: string; data?: string; mimeType?: string }>;
+  content: MaxmaToolContent[];
   details?: unknown;
 }
 
