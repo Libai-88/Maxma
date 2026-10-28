@@ -430,7 +430,7 @@ describe("kernel: resolvePiModel", () => {
   test("Maxma provider 类型映射到 pi 支持的 API", async () => {
     const { model } = await resolvePiModel({
       model: "opencode-zen/deepseek-v4-flash-free",
-      baseUrl: "https://opencode.ai/zen/v1",
+      baseUrl: "https://opencode.ai/inference/v1",
       apiKey: "sk-test",
       providerType: "openai",
     });

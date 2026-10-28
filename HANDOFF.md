@@ -214,24 +214,32 @@ node scripts/check-type-budget.mjs --write  # 类型债下降后，下调基线�
 ## 当前限制
 
 - MCP 配置热重载需调用 `reload_mcp_for_session` RPC 而非自动检测。
-- **内置免费渠道（Maxma 免费模型）当前不可用**（2026-10-27 实测，非代码回归）：
-  上游 `GET https://opencode.ai/zen/v1/models` 提供 84 个模型、8 个 `-free`，
-  但逐个实测（`bun scripts/verify-free-models.mjs`）的结果是：
-  **7 个返回 429 `FreeUsageLimitError`**（模型存在、身份被接受，但额度耗尽——
-  **无法判定能否出内容，因此不能凭猜测放行**：deepseek-v4.1-flash-free、
-  flint-40b-free、glm-5.3-flash-free、jev-1.13-free、
-  nemotron-3.5-lightning-free、nemotron-3.5-super-vl-free、mimo-v2.6-flash-free），
-  **1 个返回 403 `RegionError`**（`beam-free` — "not available in your country"，
-  与额度无关、不会自行恢复）。
-  Maxma 侧因此只放行 `mimo-v2.6-flash-free`（日志 `models synced: 1 free models`）。
-  - **白名单不扩充是有据的决定**，不是遗漏：7 个待额度恢复后用上述脚本复测；
-    `beam-free` 已记入 `FREE_LANE_KNOWN_UNUSABLE_MODEL_IDS`（kernel），
-    `isOpenCodeZenModelAvailable()` 显式拒绝——避免将来"上游列表里有它"被顺手放行。
-  - 已修掉的两处：`space-bunny-free` 上游已下架却仍作兜底目标（现兜底列表为空，
-    触发时 `console.warn` 留痕，不再静默换名重发）；同一模型 id 曾抄在 5 处，
-    现已收成 kernel 单源。
-  - 仍开放的产品判断：兜底策略应从"硬编码第二个 id"改为"从同步到的可用免费列表
-    里选下一个"——需要产品确认语义，本次未擅自改。
+- **内置免费渠道（Maxma 免费模型）**：协议已按上游 V2 修正（2026-10-28），
+  但**本机免费额度当前耗尽**（上游 429，非代码问题）。
+  - **协议修了什么**（依据上游原始仓库 gitee.com/iJetLi/deepseek-harness-codearts）：
+    ① 端点 `/zen/v1` → **`/inference/v1`**（上游 `opencode-product.ts` 的 `baseUrl`；
+    其 docs 逐变量实测记着「旧端点 → 403」）；
+    ② **不再发送 `x-opencode-request`**（上游实测「在场即 403」，旧客户端标记即毒药）——
+    Maxma 此前每个请求都发它，这是 403 的直接来源；
+    ③ 门禁工具从四个（bash/glob/grep/read，且 properties 为空）收成**只保留 `read`
+    且带完整 schema**（上游实测：只带 read 必定放行，多带其它一律 403，空
+    properties 也会 403）；
+    ④ UA 改为 V2 外形 `opencode/latest/2.0.29/cli`、`x-opencode-client: cli`，
+    并补齐四个 affinity 头（其中 `x-opencode-session-id` 是唯一必需的那一个）。
+  - **兜底链修了什么**：兜底清单从「空」扩到 **4 个**（交集 = 上游标为"已实测可用且匿名"
+    ∩ 当前目录仍在提供）：`nemotron-3.5-lightning-free` → `deepseek-v4.1-flash-free`
+    → `glm-5.3-flash-free` → `nemotron-3.5-super-vl-free`。逻辑从「只试第一个候选
+    就放弃」改为**走完整条链**，每个候选独立判断是否真的产出内容。
+    实测同步结果：`models synced: 1 free models` → **5 free models**。
+  - **同时修掉一个由本次改动引入的静默失败**：第一版在"全部候选失败"分支里丢弃所有帧
+    然后 `output.end()`，导致前端只收到握手 `hello`、随后卡到超时（零报错、无从判断）。
+    现在回放主模型的**终态帧**，真机实测已能收到可行动原因
+    （`429 FreeUsageLimitError` + 上游原文）。回归用例已锁住"全败必须发终态帧"。
+  - **仍开放的产品判断**：兜底是否要按"额度/地区"动态挑选（现为固定顺序）。
+  - `beam-free` / `space-bunny-free` 等已记入 `FREE_LANE_KNOWN_UNUSABLE_MODEL_IDS`
+    （kernel），`isOpenCodeZenModelAvailable()` 显式拒绝——避免"上游列表里有它"
+    被顺手放行。模型 id 与端点都已收成 kernel 单源，且由
+    `bun-sidecar/tests/opencode-fallback-chain.test.ts` 断言不得回退到旧端点。
 - 自动化功能已下线（capabilities `automation.enabled=false`，前端路由守卫隐藏）；如需恢复基于 Bun 重写为独立工作项。
 - 插件的**网络安装面**刻意未开：`POST /api/plugins/install` 只启用已随包分发的插件，未知插件返回拒绝；真正的网络安装需先过安全评审。
 - **后台子任务（Agent 任务中心）在 pi 引擎下无数据来源**，入口已按能力门控隐藏（见「Agent 任务中心」一节）；`deferred-runs` 三个 REST 端点仍挂载，供未来接上执行侧后复用。

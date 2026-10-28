@@ -17,12 +17,20 @@ import { encryptApiKey } from "../security/credential-envelope";
 import { getCredentialKeyPath } from "../app-paths";
 
 import {
+  DEFAULT_BASE_URL,
   FREE_LANE_FALLBACK_MODEL_IDS,
   FREE_LANE_KNOWN_UNUSABLE_MODEL_IDS,
   FREE_LANE_PRIMARY_MODEL_ID,
 } from "../../../bun-sidecar/src/kernel/opencode-zen";
 
-export const OPENCODE_ZEN_BASE_URL = "https://opencode.ai/zen/v1";
+/**
+ * ⚠️ 端点必须与内核**同源**：上游 2026-10 把推理/目录端点从 `/zen/v1` 迁到
+ * `/inference/v1`（依据上游仓库 `src/opencode-product.ts` 的 `baseUrl`），
+ * 而这里以前自己写了一份旧字面量 —— 同步目录时会打到已废弃的端点，
+ * 与内核的聊天路径走进两个不同的上游入口（症状很难归因：
+ * 聊天能用、但模型同步"看起来正常却拿不到新模型"）。
+ */
+export const OPENCODE_ZEN_BASE_URL = DEFAULT_BASE_URL;
 export const OPENCODE_ZEN_ANON_API_KEY = "public";
 export const OPENCODE_ZEN_PROVIDER_ID = "opencode-zen";
 export const OPENCODE_ZEN_LABEL = "Maxma 免费模型";

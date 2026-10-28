@@ -27,8 +27,18 @@
  * 输出末尾给出"可进白名单 / 待额度恢复后再测 / 不该放行"三档结论。
  */
 
-const BASE = "https://opencode.ai/zen/v1";
 const TIMEOUT_MS = 30_000;
+
+/**
+ * 端点从**内核单源**取，不在这里再写一份字面量。
+ *
+ * 上游 2026-10 已把推理/目录端点从 `/zen/v1` 迁到 `/inference/v1`
+ * （依据上游仓库 `src/opencode-product.ts` 的 `baseUrl`）。本脚本此前自己写着
+ * 旧端点 —— 那会让"验证脚本"去测一个已被废弃的入口，结论自然与实际不符。
+ */
+const { DEFAULT_BASE_URL: BASE } = await import(
+  "../bun-sidecar/src/kernel/opencode-zen.ts"
+);
 
 async function upstreamFreeModels() {
   const res = await fetch(`${BASE}/models`, {
