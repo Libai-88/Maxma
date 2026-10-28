@@ -130,7 +130,12 @@ function toolNames(messages: TranscriptContext["messages"]): Set<string> {
  *   这正是"形状门禁"要拒的形态之一。
  * - 描述**不参与校验**（空描述也放行），但上游用了明确的"不要调用"文案；
  *   照抄它，比自创文案更不容易与客户端工具描述混淆。
- * - `strict: false` 也要带上（上游 `gateTool` 的原样形态）。
+ * - ⚠️ 上游 `gateTool()` 里还有一个 `strict: false`，而 **Maxma 这一侧发不出去**：
+ *   pi 的 `Tool` 类型把 strict 当 provider 能力（`supportsStrictTools`，默认 false），
+ *   适配器不会把该字段透传到 wire（实测 wire 上 `strict` 为 `undefined`）。
+ *   **不宣称它必需**：上游那张逐变量矩阵只验证了「properties 为空」与「改名」两格，
+ *   没有单独验证 strict —— 属未验证项。若将来出现无法归因的 403，
+ *   `strict: false` 缺席是**该怀疑的点之一**（已在此登记，避免下次重新推一遍）。
  */
 const GATE_TOOL_NAME = "read" as const;
 
@@ -335,9 +340,13 @@ function buildStreamOptions(
     // ⚠️ **绝不发送 `x-opencode-request`**：上游逐头实测记着
     //    「带上 `x-opencode-request`（即使三个 affinity 头都在）→ **403**（旧客户端标记即毒药）」。
     //    Maxma 此前每个请求都发 `x-opencode-request: msg_…`，这是 403 的直接来源之一。
-    // ⚠️ 唯一的**必需**头是 `x-opencode-session-id`；其余三个 affinity 头（project /
-    //    session / x-session-affinity / X-Session-Id）保留只为贴合真实 CLI 外形，
-    //    上游实测「只带 project+session+client 三头 → 403」。
+    // ⚠️ 唯一**必需**的头是 `x-opencode-session-id`；其余三个 affinity 头保留只为贴合真实 CLI 外形
+    //    （上游实测：只带 project+session+client 三头、不带 session-id → 403）。
+    // ⚠️ `x-opencode-project` 的**取值形状未经实测**：上游用 40 位十六进制派生值，
+    //    而 Maxma 用字面量 `"global"`。上游那组对照只验证了该头的**在场**，
+    //    没有验证取值 —— 所以这里不做断言，也不能宣称"已验证"。它不参与门禁
+    //    （真正决定放行的是上面的 session-id），但若将来出现无法归因的 403，
+    //    这是**第一个该怀疑的点**。
     "user-agent": "opencode/latest/2.0.29/cli",
     "x-opencode-client": "cli",
     "x-opencode-project": "global",

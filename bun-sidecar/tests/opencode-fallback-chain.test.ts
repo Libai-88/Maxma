@@ -70,6 +70,63 @@ describe("免费渠道端点：单一来源 + 禁止回退到已废弃路径", (
   });
 });
 
+describe("门禁工具体 wire 形状（依据上游 opencode-messages.spec.ts 的断言）", () => {
+  test("只广告一个 read，且 schema 逐字段与上游 gateTool 一致", async () => {
+    let captured: { body: Record<string, unknown> } | null = null;
+    const stream = opencodeZenStreamSimple(
+      model(FREE_LANE_PRIMARY_MODEL_ID),
+      ctx,
+      {
+        sessionId: "wire-shape",
+        // 经 OpenAI SDK 发出 ⇒ body 在第二个参数
+        fetch: async (_url, init) => {
+          captured = {
+            body: JSON.parse(String((init as RequestInit | undefined)?.body ?? "{}")) as Record<string, unknown>,
+          };
+          return okResponse("OK");
+        },
+      },
+    );
+    for await (const _ of stream) { /* 消费完 */ }
+
+    const tools = (captured!.body.tools ?? []) as Array<{ type?: string; function?: Record<string, unknown> }>;
+    expect(tools.length, "门禁只保留 read 一个工具").toBe(1);
+    const fn = tools[0]!.function as Record<string, unknown>;
+    expect(tools[0]!.type).toBe("function");
+    expect(fn.name).toBe("read");
+    // 参数 schema：三个属性、required 只有 path、additionalProperties:false
+    //（上游逐格实测：properties 为空会被形状门禁拒成 403）
+    const params = fn.parameters as { properties?: Record<string, unknown>; required?: string[]; additionalProperties?: boolean };
+    expect(Object.keys(params.properties ?? {}).sort()).toEqual(["limit", "offset", "path"]);
+    expect(params.required).toEqual(["path"]);
+    expect(params.additionalProperties).toBe(false);
+  });
+
+  test("请求头不含 x-opencode-request（上游实测：在场即 403）", async () => {
+    let headers: Headers | null = null;
+    const stream = opencodeZenStreamSimple(
+      model(FREE_LANE_PRIMARY_MODEL_ID),
+      ctx,
+      {
+        sessionId: "header-shape",
+        fetch: async (_url, init) => {
+          headers = new Headers((init as RequestInit | undefined)?.headers);
+          return okResponse("OK");
+        },
+      },
+    );
+    for await (const _ of stream) { /* 消费完 */ }
+    const h = headers as unknown as Headers;
+    expect(h.get("x-opencode-request"), "旧客户端标记绝不能发送").toBeNull();
+    // 唯一必需的头必须在，且四个 affinity 头复用同一 session
+    const sid = h.get("x-opencode-session-id");
+    expect(sid).toMatch(/^ses_[0-9a-f]{12}[0-9A-Za-z]{14}$/);
+    expect(h.get("x-opencode-session")).toBe(sid);
+    expect(h.get("x-session-affinity")).toBe(sid);
+    expect(h.get("X-Session-Id")).toBe(sid);
+  });
+});
+
 describe("免费渠道兜底链", () => {
   test("兜底清单非空，且不含实测不可用的模型", () => {
     expect(FREE_LANE_FALLBACK_MODEL_IDS.length, "兜底清单为空 ⇒ 兜底机制等于没有").toBeGreaterThan(0);

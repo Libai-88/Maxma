@@ -1019,7 +1019,11 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
               </button>
             </div>
             <p class="card-sub">
-              key 在 <a href="https://opencode.ai/auth" target="_blank" rel="noopener noreferrer">opencode.ai/auth</a> 生成。
+              <!-- 生成地址：/auth 已 302 到登录页，权威入口是 /console/account。
+                   依据上游仓库 src/opencode-rpc.ts 的报错文案与其
+                   docs/agent-notes/providers-opencode.md 的实测记录（2026-10-28 复核：
+                   `curl -I opencode.ai/auth` → 302 /console/login；/console/account → 200）。 -->
+              key 在 <a href="https://opencode.ai/console/account" target="_blank" rel="noopener noreferrer">opencode.ai/console/account</a> 生成。
               <strong>同一个 key 重复添加会复用同一账号</strong>（不会变成两个额度桶）。
               手动粘贴的 key 没有续期概念，插件如实标为不可续期。
             </p>
