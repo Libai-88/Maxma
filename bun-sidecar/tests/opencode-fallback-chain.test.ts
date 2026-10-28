@@ -68,6 +68,25 @@ describe("免费渠道端点：单一来源 + 禁止回退到已废弃路径", (
       `这些地方把已废弃的 /zen 端点写成了字符串（应改为引用 DEFAULT_BASE_URL）：\n  ${offenders.join("\n  ")}`,
     ).toEqual([]);
   });
+
+  test("打包产物里的 /zen 只应来自 pi 内置目录，不得来自我方 provider", () => {
+    // 排查取证记录（别把它当缺陷重新报一次）：`dist/**/server.js` 里能搜到十几处
+    // `https://opencode.ai/zen`，但它们**全部来自 pi 自带的 provider 目录**
+    // （`@earendil-works/pi-ai/dist/providers/data/opencode.json`，
+    // provider 名为 `opencode` / `opencode-go`），不是 Maxma 代码。
+    //
+    // 为什么无害：Maxma 的免费渠道用的是**自己注册的 provider id `opencode-zen`**
+    //（`kernel/model.ts:99` 的专用分支 + `registerOpencodeZenTransport`），
+    // 与 pi 内置的 `opencode` 是两个 id，`getModel("opencode-zen", …)` 不可能命中
+    // 内置目录。实测解析结果：provider=`opencode-zen`、baseUrl 含 `/inference/v1`。
+    //
+    // 这条断言锁"我方源码不含旧端点字面量"（上一条已覆盖），此处只记录判别方法：
+    // 若将来产物里出现 `/zen` 且**同时**出现在我方文件里，上一条会先红。
+    const model = fs.readFileSync(path.join(REPO, "bun-sidecar/src/kernel/model.ts"), "utf8");
+    expect(model, "免费渠道必须走专用注册分支，否则会落到 pi 内置目录的 /zen").toContain(
+      'provider === "opencode-zen"',
+    );
+  });
 });
 
 describe("门禁工具体 wire 形状（依据上游 opencode-messages.spec.ts 的断言）", () => {
