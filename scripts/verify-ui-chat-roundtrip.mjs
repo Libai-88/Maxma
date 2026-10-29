@@ -100,7 +100,15 @@ async function waitHealth(timeoutMs = 60_000) {
 }
 
 if (!process.env.BASE) {
-  dataDir = fs.mkdtempSync(path.join(REPO, ".tmp-uichat-"));
+  // ⚠️ 临时数据目录放**系统临时目录**，不要放仓库根。
+  //
+  // 早先建在 `REPO/.tmp-uichat-*`，理由是"沙箱可能拒绝写系统临时目录"；
+  // 但实测那个顾虑不成立（本脚本在 pwsh/bash 下都能写 %TEMP%），
+  // 而放仓库根的代价是实打实的：进程若被强杀（如端口冲突那次），
+  // `finally` 不执行 ⇒ 仓库里**留下未被忽略的垃圾目录**，
+  // 既污染 `git status`，也让人误以为它是仓库内容。
+  // 另一边修：`.gitignore` 也加上 `.tmp-*` 兜底（双保险）。
+  dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "maxma-uichat-"));
   backend = spawn(process.env.MAXMA_BUN ?? "bun", ["run", path.join(REPO, "bun-backend", "src", "server.ts")], {
     cwd: path.join(REPO, "bun-backend"),
     env: {

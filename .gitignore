@@ -97,6 +97,11 @@ vector_db/
 .superma/
 .trae-html-share-packages/
 tmp/
+# 验证脚本的临时数据目录（`scripts/verify-*.mjs`）。
+# 它们现在建在系统临时目录里，但**进程被强杀时 `finally` 不执行**，
+# 万一有哪次又落在仓库根，这条兜底能避免它污染 `git status`
+#（实测踩过：一次端口冲突后仓库根留下 `.tmp-uichat-*`）。
+.tmp-*/
 
 # Local docs (security threat model) and build-time downloaded runtimes/assets
 dev_docs/security/
