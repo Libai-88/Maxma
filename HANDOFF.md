@@ -59,6 +59,7 @@ web -> Bun 后端 /ws/chat/{session_id} -> kernel in-process -> pi AgentSession
 便携冒烟：powershell -File build\portable-smoke-test.ps1（退出码 0 = 通过）
 桌面包渲染层：powershell -File scripts\verify-desktop-render.ps1（验外壳拉起后端 + 渲染层连上 WS）
 便携包用户路径：bun scripts\verify-portable-user-path.mjs（首启人格列表/切换、免费渠道模型）
+界面聊天链路：bun scripts\verify-ui-chat-roundtrip.mjs（真实前端：打字→发送→收到回复；零额度）
 端到端回合：bash scripts/smoke-e2e-roundtrip.mjs（需后端在跑，见「常用命令」）
 一次性复跑全部上述项：bash scripts/verify-all-gates.sh（判定按退出码，不按输出字符串）
 ```

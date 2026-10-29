@@ -5,7 +5,18 @@
     <link rel="icon" type="image/png" href="/src/assets/images/brand/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Maxma - AI 助手桌面应用" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' ws://localhost:* http://localhost:* ws://127.0.0.1:* http://127.0.0.1:*; img-src 'self' https: http://localhost:* http://127.0.0.1:* data: blob:; frame-src 'self';" />
+    <!--
+      CSP。⚠️ `font-src` 必须含 `data:`：KaTeX（数学公式渲染）把其中一个字体
+      —— `KaTeX_Size3`，用于大号符号（大型积分号/求和号等）—— 以
+      `url(data:font/woff2;base64,…)` **内联**在它的 CSS 里，其余 19 个字体的
+      `@font-face` 才走相对路径（`'self'`）。
+      缺 `data:` 时该字体会被拦，控制台报
+      `Loading the font 'data:font/woff2;base64,…' violates … font-src 'self' https://fonts.gstatic.com`，
+      症状是复杂公式的符号回退到替代字体（尺寸/基线略有偏差）——
+      不报错、也不影响正文，所以很容易被忽略。
+      实测来源：`web/dist/assets/katex-*.css`（2026-10-28 核对）。
+    -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' ws://localhost:* http://localhost:* ws://127.0.0.1:* http://127.0.0.1:*; img-src 'self' https: http://localhost:* http://127.0.0.1:* data: blob:; frame-src 'self';" />
     <title>Maxma</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

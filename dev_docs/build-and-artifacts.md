@@ -189,6 +189,7 @@ git tag
    powershell -File build\portable-smoke-test.ps1      # 包内 Bun 后端：启动 + 端点 + 资源清单
    bun scripts\verify-portable-user-path.mjs          # 便携包真实用户路径：人格列表/切换、免费渠道模型
    powershell -File scripts\verify-desktop-render.ps1  # 桌面包：壳 + 渲染层真的在跑
+   bun scripts\verify-ui-chat-roundtrip.mjs           # 真实前端界面：打字 → 发送 → 收到回复（零额度）
 4) 交付
    - Web 便携包：整个 `..\MaxmaHere-Portable\` 目录拷走即用
    - 桌面包：分发 `MaxmaHere-<版本>-portable-x64.zip` **连同 `.sha256`**
