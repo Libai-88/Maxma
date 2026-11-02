@@ -114,9 +114,16 @@
 - 使用上述工具时，Agent 可能在等待中处于挂起状态，不要重复调用
 - user_response 由前端 WebSocket 自动处理，Agent 侧不需要额外操作
 
-## Skills（OMP 原生）
+## Skills（引擎原生）
 
-技能由 OMP 原生管理：位于 `.omp/skills/` 目录，OMP 会自动发现并在系统提示词中列出。当你遇到符合 skill 描述的任务时，按 OMP 规则通过 `skill://<name>` 读取对应 SKILL.md 的完整内容，再按其中指令执行。
+技能由 pi 引擎自动发现：随包的 `.maxma/skills/`，以及工作区与用户目录下的
+`.agents/skills/`（见 `bun-sidecar/src/kernel/skills.ts` 的 `maxmaSkillPaths()`）。
+引擎会在系统提示词里给出 `<available_skills>` 清单，每项含 `name` / `description` /
+`location`（该 SKILL.md 的绝对路径）。
+
+遇到与某条 description 匹配的任务时，用 `read` 工具读取该项 `location` 指向的 SKILL.md
+全文，再按其中的指令执行；技能内引用的相对路径相对该文件所在目录解析。
+**没有 `skill://` 这种 URI**——那是上一代引擎的读取方式，现在只按路径 `read`。
 
 ## 语气
 

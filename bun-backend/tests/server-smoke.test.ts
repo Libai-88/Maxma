@@ -49,7 +49,6 @@ describe("bun-backend 冒烟", () => {
       expect(comp).toBeDefined();
       expect(comp.status).toBe("ok");
     }
-    expect(typeof body.anthropic_skills_count).toBe("number");
     expect(typeof body.timestamp).toBe("number");
 
     const tokenRes = await app.request("/api/auth/token");

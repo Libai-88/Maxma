@@ -850,7 +850,6 @@ export interface HealthResponse {
   memory: ComponentHealth
   native_tools: ComponentHealth
   mcp_tools: ComponentHealth
-  anthropic_skills_count: number
   providers?: Record<string, ComponentHealth>
   ltm?: ComponentHealth & { provider_id?: string | null }
   provider_diagnostics_enabled?: boolean

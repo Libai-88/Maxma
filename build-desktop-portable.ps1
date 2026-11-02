@@ -187,8 +187,7 @@ Copy-Item -LiteralPath (Join-Path $ProjectRoot "version.py") -Destination $Runti
 New-Item -ItemType Directory -Force -Path (Join-Path $RuntimeDir "bun-sidecar") | Out-Null
 Copy-Item -LiteralPath (Join-Path $ProjectRoot "bun-sidecar\package.json") -Destination (Join-Path $RuntimeDir "bun-sidecar\package.json") -Force
 New-Item -ItemType Directory -Force -Path (Join-Path $RuntimeDir "macros") | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $RuntimeDir ".omp\skills"), (Join-Path $RuntimeDir ".maxma\skills"), (Join-Path $RuntimeDir "web\dist") | Out-Null
-Copy-Item -Path (Join-Path $ProjectRoot ".omp\skills\*") -Destination (Join-Path $RuntimeDir ".omp\skills") -Recurse -Force
+New-Item -ItemType Directory -Force -Path (Join-Path $RuntimeDir ".maxma\skills"), (Join-Path $RuntimeDir "web\dist") | Out-Null
 Copy-Item -Path (Join-Path $ProjectRoot ".maxma\skills\*") -Destination (Join-Path $RuntimeDir ".maxma\skills") -Recurse -Force
 $BundledSkillNames | ForEach-Object {
     $sourceSkill = Join-Path $ProjectRoot (Join-Path ".maxma\skills" (Join-Path $_ "SKILL.md"))

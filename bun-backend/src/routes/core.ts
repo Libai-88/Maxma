@@ -33,7 +33,6 @@ export function createCoreRoutes(deps: CoreDeps): Hono {
         memory: { status: "ok" },
         native_tools: { status: "ok" },
         mcp_tools: { status: "ok" },
-        anthropic_skills_count: 0,
         timestamp: Date.now() / 1000,
       });
     }

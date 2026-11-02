@@ -79,10 +79,6 @@ config/personas/*.sqlite3-wal
 providers.yaml
 providers.yaml.legacy-*.bak
 
-# OMP native runtime dir — only built-in skills are versioned
-.omp/*
-!.omp/skills/
-
 # Macros user data
 macros/*/
 

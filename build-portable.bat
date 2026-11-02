@@ -72,7 +72,7 @@ if errorlevel 1 (
 
 REM Bundle resources the backend reads at runtime (templates only, never user
 REM data): config/personas templates, config/rules, built-in stickers,
-REM .omp/skills, workflows, macros, version.py, bun-sidecar/package.json.
+REM workflows, macros, version.py, bun-sidecar/package.json.
 mkdir "%PORTABLE_DIR%\config\personas" 2>nul
 xcopy /e /i /q "%PROJECT_ROOT%config\personas\AGENTS.md" "%PORTABLE_DIR%\config\personas" >nul
 xcopy /e /i /q "%PROJECT_ROOT%config\personas\MAXMA.md" "%PORTABLE_DIR%\config\personas" >nul
@@ -98,7 +98,6 @@ xcopy /e /i /q "%PROJECT_ROOT%config\rules" "%PORTABLE_DIR%\config\rules" >nul
 xcopy /e /i /q "%PROJECT_ROOT%config\stickers" "%PORTABLE_DIR%\config\stickers" >nul
 REM custom stickers are user uploads — never ship them
 if exist "%PORTABLE_DIR%\config\stickers\custom" rmdir /s /q "%PORTABLE_DIR%\config\stickers\custom"
-xcopy /e /i /q "%PROJECT_ROOT%.omp\skills" "%PORTABLE_DIR%\.omp\skills" >nul
 xcopy /e /i /q "%PROJECT_ROOT%.maxma\skills" "%PORTABLE_DIR%\.maxma\skills" >nul
 for %%S in (coding-starter office-starter debugging-starter document-starter spreadsheet-starter mcp-starter) do (
     if not exist "%PROJECT_ROOT%.maxma\skills\%%S\SKILL.md" (
@@ -182,7 +181,7 @@ echo ========================================
 echo   Portable build complete
 echo   Output: %PORTABLE_DIR%
 echo     server.js / bun.exe / node_modules\
-echo     web\dist\  config\  .omp\skills\  .maxma\skills\  version.py
+echo     web\dist\  config\  .maxma\skills\  version.py
 echo     portable.flag  data\  MaxmaHere.bat
 echo ========================================
 
