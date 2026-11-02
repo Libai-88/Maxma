@@ -5,10 +5,11 @@
 
 ## 状态
 
-- 仓库 `https://github.com/Libai-88/Maxma.git`；现行开发分支 `feat/jet-hub-plugin`
-  （含插件面），经 PR squash 合入 `main`。别在文档里写"领先 N 个提交"这类会当场过期的数，
+- 仓库 `https://github.com/Libai-88/Maxma.git`，主分支 `main`；插件面已于 PR #3 squash 合入
+  （`feat/jet-hub-plugin` 随之删除）。别在文档里写"领先 N 个提交"这类当场过期的数，
   要核对就现跑 `git rev-list --left-right --count origin/main...HEAD`。
-- 版本 v2.6.12：`version.py` / `web/package.json` / `desktop/package.json` / 便携包 `portable.flag` 一致。
+- 版本 **v2.6.12**：`version.py` / `web/package.json` / `desktop/package.json` / 便携包
+  `portable.flag` 四处一致，两种便携包已由该提交重建并验证（见 build 文档 §6.1 的四步验证）。
 - 引擎 `@earendil-works/pi-coding-agent` **0.99.0**（in-process）。**落后上游 11 个版本**（latest 1.4.0），
   其中 1.0.3 与 1.2.0 自带 Breaking Changes（1.0.3 把 Azure provider 由 `azure-openai-responses` 改名 `azure`，
   命中 `bun-sidecar/src/kernel/model.ts` 的硬编码白名单）。
@@ -33,11 +34,11 @@ web -> Bun 后端 /ws/chat/{session_id} -> kernel in-process -> pi AgentSession
 > 下列为 2026-11-02 实测。
 
 ```text
-引擎  cd bun-sidecar && bun test            119 pass / 0 fail（13 文件）
+引擎  cd bun-sidecar && bun test            122 pass / 0 fail（13 文件）
 引擎  cd bun-sidecar && bun x tsc --noEmit  0 error（CI 硬门槛）
-后端  cd bun-backend && bun test            243 pass / 0 fail（35 文件）
+后端  cd bun-backend && bun test            253 pass / 0 fail（37 文件）
 类型  node scripts/check-type-budget.mjs    sidecar 0 / backend 0（只准减）
-前端  cd web && npx vitest run              509 pass / 0 fail（59 文件）
+前端  cd web && npx vitest run              572 pass / 0 fail（64 文件）
 前端  cd web && npx vue-tsc --noEmit        0 error
 前端  cd web && npm run lint                0 error / 20 warning
 前端  cd web && npm run lint:colors         160 个 Vue 文件 0 违规
@@ -100,6 +101,8 @@ node scripts/check-type-budget.mjs --write    # 类型债下降后下调基线�
 | `rpc-types.ts` 的 compaction `reason` 手抄清单缺 `manual` | 改为从 `MAXMA_COMPACTION_REASONS_WS` 派生，不再手抄 | `pi-contract.test.ts` 派生形状断言 + `engine-boundary.test.ts` 与前端联合逐字对账 |
 | 界面撒谎：`FeatureUnavailableView` 把「引擎做不到」说成「你关掉了」；`browser_tools`/`sub_agents` 面板写了没人读；安装框宣称 npm/GitHub 而 `marketplace=false` | 判定集中在 `describeFeatureAvailability`；无人消费的面板置灰并**拒绝写入**；安装框按 `marketplace` 分支 | `web/tests/capabilityHonesty.spec.ts`、`web/tests/settingsMenuCapability.spec.ts` |
 | Electron 包里两处必然 reject 的 Tauri `invoke` | 导出错误日志改浏览器下载；QuickChat 关闭改 `window.close()` + 「已收起」态（`sandbox:true` 下 Electron 不覆写 `window.close`，已核实） | `settingsMenuCapability.spec.ts`、`web/tests/quickChatClose.spec.ts` |
+| `Bun Backend` CI 自 10-21 起每次 push 全红（14 项），本地却全绿 | 全是测试对自身环境的隐含假设：写死 `D:\MaxmaTemp`（ubuntu runner 无 D 盘）、`.bat` 的 CRLF 靠本机 `core.autocrlf` 而非仓库保证（补 `.gitattributes`）、persona 用例拷未被跟踪的 `config/personas/SOUL.md`、Skill 安装用例改 `$HOME` 骗 `os.homedir()`（Bun 在 Linux 上不跟随，改走 `getUserSkillsDir()` + `MAXMA_USER_SKILLS_DIR`）。另把 4 处写死的 `"v2.6.11"` 改成与 `appVersion()` 比对 | `bun-backend/tests/_helpers/tmp.ts` + `portable-packaging.test.ts`；CI 已实测转绿 |
+| 桌面包 `.sha256` 用两空格（文本模式）+ CRLF，下载方 `sha256sum -c` 对二进制产物必报 FAILED（值其实是对的） | 改 `<hash> *<name>` + `-NoNewline` 显式 LF | `portable-packaging.test.ts`「桌面包的 .sha256 用二进制模式 + LF」，对真实产物断言无 CR、第 65 字节为 ` *`、LF 结尾 |
 
 ## 遗留问题（未修，接手时别当成可用功能）
 

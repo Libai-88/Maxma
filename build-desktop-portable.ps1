@@ -324,7 +324,12 @@ if (Test-Path -LiteralPath $checksumPath) {
     Remove-Item -LiteralPath $resolvedChecksum -Force
 }
 $hash = (Get-FileHash -LiteralPath $artifact.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-Set-Content -LiteralPath $checksumPath -Value "$hash  $($artifact.Name)" -Encoding ascii
+# 校验文件的格式有讲究，两处都会让下载方验不过：
+#   1) 两空格分隔在 coreutils 语义里是**文本模式**，对 zip 是错的，要用 `*` 标二进制模式；
+#   2) Set-Content 默认在 Windows 写 CRLF，行尾 \r 会污染内容/文件名。
+# 所以显式拼一行 LF 结尾的字符串并用 -NoNewline 落盘（ASCII，无 BOM）。
+$checksumLine = "$hash *$($artifact.Name)`n"
+Set-Content -LiteralPath $checksumPath -Value $checksumLine -Encoding ascii -NoNewline
 $zip = [System.IO.Compression.ZipFile]::OpenRead($artifact.FullName)
 try {
     $zipEntryNames = @($zip.Entries | ForEach-Object { $_.FullName.Replace('\', '/') })
