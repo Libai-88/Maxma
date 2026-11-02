@@ -1,15 +1,15 @@
 # MaxmaHere 交接说明
 
 > 当前可执行状态，供下一位接手者。架构请先读 [docs/00-当前架构.md](docs/00-当前架构.md)。
-> 更新时间：2026-11-02（分支 `feat/jet-hub-plugin`，`version.py` = v2.6.12）
+> 更新时间：2026-11-02（`version.py` = v2.6.13）
 
 ## 状态
 
-- 仓库 `https://github.com/Libai-88/Maxma.git`，主分支 `main`；插件面已于 PR #3 squash 合入
-  （`feat/jet-hub-plugin` 随之删除）。别在文档里写"领先 N 个提交"这类当场过期的数，
+- 仓库 `https://github.com/Libai-88/Maxma.git`，主分支 `main`；变更一律走分支 + PR squash 合入，
+  合并即删分支。别在文档里写"领先 N 个提交"或点名某个短期分支（它会消失）——
   要核对就现跑 `git rev-list --left-right --count origin/main...HEAD`。
-- 版本 **v2.6.12**：`version.py` / `web/package.json` / `desktop/package.json` / 便携包
-  `portable.flag` 四处一致，两种便携包已由该提交重建并验证（见 build 文档 §6.1 的四步验证）。
+- 版本 **v2.6.13**：`version.py` / `web/package.json` / `desktop/package.json` / 便携包
+  `portable.flag` 四处一致，两种便携包由该提交重建并验证（见 build 文档 §6.1 的四步验证）。
 - 引擎 `@earendil-works/pi-coding-agent` **0.99.0**（in-process）。**落后上游 11 个版本**（latest 1.4.0），
   其中 1.0.3 与 1.2.0 自带 Breaking Changes（1.0.3 把 Azure provider 由 `azure-openai-responses` 改名 `azure`，
   命中 `bun-sidecar/src/kernel/model.ts` 的硬编码白名单）。
