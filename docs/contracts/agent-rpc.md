@@ -27,14 +27,17 @@
 | --- | --- | --- |
 | `user_response` | `{ session_id, interaction_id, response }` | 应答 `ask_user` |
 | `set_auto_approve` | `{ session_id, auto_approve }` | `true`→`auto`，`false`→`ask`，运行时即时生效。**两态开关**：会把已选的 `read_only`/`operate` 改写掉，权限模式控件不许用它兜底 |
-| `set_permission_mode` | `{ session_id, permission_mode }` | 四档任选，改运行中会话的 `record.permissionMode`（审批门按闭包读，即时生效）；非法档位 `io.sendError`。四档见 `dev_docs/permission-modes.md` |
+| `set_permission_mode` | `{ session_id, permission_mode }` | 档位任选，改运行中会话的 `record.permissionMode`（审批门按闭包读，即时生效）；非法档位 `io.sendError`。校验表与 REST 返回值同源：`pi-contract.ts` 的 `MAXMA_PERMISSION_MODES`。四档语义见 `dev_docs/permission-modes.md` |
 
 REST 面（`bun-backend/src/routes/sessions.ts`）：`GET` / `PUT`
 `/api/sessions/:sessionId/permission-mode` 回同一个形状
 `{ session_id, permission_mode, available_permission_modes }`。
 `available_permission_modes` 非空即代表可用（没有 feature flag，四档恒生效），前端据此渲染选项；
+它的值是 `pi-contract.ts` 的 `MAXMA_PERMISSION_MODES`——kernel 入参校验、REST 返回值、
+`MaxmaPermissionMode` 类型三者同源（`routes/sessions.ts` 运行时 import，先例同
+`routes/capabilities.ts:29`），前端那份因边界纪律只能是副本，由测试逐字对账。
 字段名与 `web/src/types/session.ts` 的 `SessionPermissionModeResponse` 由
-`bun-backend/tests/permission-mode-contract.test.ts` 逐字对账。`PUT` 非法档位 422，会话不存在 404。
+`bun-backend/tests/permission-mode-contract.test.ts` 对账。`PUT` 非法档位 422，会话不存在 404。
 
 ## 3. 计划 / 目标 / 检查点 / 回顾
 

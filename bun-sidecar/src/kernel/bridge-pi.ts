@@ -37,6 +37,7 @@ import { applyGoalAction, emptyGoalState, goalReminder, goalUpdatedEvent, restor
  */
 export type { PiPendingPlan } from "./plan";
 import type { MaxmaPermissionMode, MaxmaSessionOptions } from "./types";
+import { MAXMA_PERMISSION_MODES } from "./pi-contract";
 import { maxmaProjectRoot } from "./project-paths";
 
 /** 与 src/events.ts MAX_TOOL_CALLS_PER_TURN 同值——引擎隔离各自持镜像，切换期单源收敛。 */
@@ -78,8 +79,6 @@ export interface PiBridgeDeps {
   /** 在途计划审批（与 OMP 路径共用 bridgeState.pendingPlans；形状结构等价）。 */
   pendingPlans: Map<string, PiPendingPlan>;
 }
-
-const PI_PERMISSION_MODES: readonly MaxmaPermissionMode[] = ["read_only", "ask", "operate", "auto"];
 
 /** 从官方 Settings 对象解析点路径（如 "compaction.thresholdPercent"）。 */
 function readDottedPath(root: unknown, dotted: string): unknown {
@@ -223,7 +222,7 @@ export async function handlePiCreateSession(
   const tools: string[] | undefined = Array.isArray(params?.tools) ? params.tools : undefined;
   const rawMode = params?.permission_mode as string | undefined;
   const permissionMode: MaxmaPermissionMode =
-    rawMode && PI_PERMISSION_MODES.includes(rawMode as MaxmaPermissionMode)
+    MAXMA_PERMISSION_MODES.includes(rawMode as MaxmaPermissionMode)
       ? (rawMode as MaxmaPermissionMode)
       : "ask";
 
@@ -662,7 +661,7 @@ export async function handlePiSessionRpc(
   if (method === "set_permission_mode") {
     // 4 档权限模式运行时切换（AG-PERM-001：read_only/ask/operate/auto）
     const mode = params?.permission_mode as MaxmaPermissionMode;
-    if (!PI_PERMISSION_MODES.includes(mode)) {
+    if (!MAXMA_PERMISSION_MODES.includes(mode)) {
       io.sendError(id, `不支持的权限模式: ${String(mode)}`);
       return;
     }

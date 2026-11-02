@@ -631,3 +631,40 @@ export const BACKEND_SYNTHESIZED_EVENTS = [
   "task_review_update",
   "workflow_completed",
 ] as const;
+
+// ─────────────────────────────────────────────────────────────
+// 8. 会话权限模式档位（Maxma 自建词表，跨 kernel / REST / 前端三侧）
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Maxma 权限模式 4 档（AG-PERM-001），限制由强到弱；**数组顺序即 REST
+ * `available_permission_modes` 与前端选项的展示顺序**。
+ *
+ * ## 为什么在"引擎契约"里登记一个引擎没有的名字
+ *
+ * pi 无内置权限系统（官方 README/Security 明示），四档是 Maxma 自建语义，
+ * 落点是官方 tool_call 钩子（`kernel/approval-gate.ts` 的 `needsApprovalForMode`）。
+ * 但它和引擎名字属于同一类缺陷：这四个字符串以前**在四处各写一份**——
+ * `kernel/types.ts` 的联合类型、`bridge-pi.ts` 的 RPC 入参校验（模块私有、未导出）、
+ * `routes/sessions.ts` 的 REST 返回值、`web/src/types/session.ts` 的前端联合。
+ * 跨 workspace 的字符串副本 tsc 看不见，只动一处时会出现"REST 说这档可用、
+ * kernel 判它非法"（用户选到必 422 的档位）或反过来。现在清单只有这一处，
+ * 档位类型由它**派生**（见下），kernel 与 REST 两侧运行时 import 同一份常量
+ * （跨 workspace 运行时消费的先例：`routes/capabilities.ts:29`，不属
+ * `@earendil-works/*`，故 `engine-boundary.test.ts` 的 allowlist 无需登记）。
+ *
+ * 前端仍是**副本**，而且是被纪律要求成副本：`engine-boundary.test.ts` 的判据是
+ * 「前端只认 Maxma REST/WS 契约」，`web/src` 不许 import kernel 源码，所以前端联合
+ * 由 `bun-backend/tests/permission-mode-contract.test.ts` 逐字对账（含
+ * `PermissionModeControl.vue` 里那份 prop 默认值清单）。
+ *
+ * 新增/改名一档必须同时动 `needsApprovalForMode` 的分支与前端联合——
+ * 该测试对"审批门实际分支的档位集合"与本清单做**双向**差集校验，漏一侧当场红。
+ */
+export const MAXMA_PERMISSION_MODES = ["read_only", "ask", "operate", "auto"] as const;
+
+/**
+ * 档位类型 = 上面清单的派生值（以前是第二个字面量联合，两处可以各漂各的）。
+ * `kernel/types.ts` 只做再导出，全仓的 `MaxmaPermissionMode` 都指向这一份。
+ */
+export type MaxmaPermissionMode = (typeof MAXMA_PERMISSION_MODES)[number];
