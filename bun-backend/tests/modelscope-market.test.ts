@@ -97,25 +97,24 @@ describe("ModelScope MCP marketplace", () => {
 
   test("installs a valid Skill ZIP into the user skills directory", async () => {
     const originalFetch = globalThis.fetch;
-    const originalUserProfile = process.env.USERPROFILE;
-    const originalHome = process.env.HOME;
-    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "maxma-skill-install-"));
-    process.env.USERPROFILE = homeDir;
-    process.env.HOME = homeDir;
+    // 用受支持的 MAXMA_USER_SKILLS_DIR 覆盖口，而不是改 USERPROFILE/HOME 去
+    // 骗 os.homedir()：Bun 在 Linux 上不跟随 $HOME，CI 上文件会落到真实家目录、
+    // 断言处再 ENOENT（Windows 读 USERPROFILE 所以本地永远绿）。
+    const originalSkillsDir = process.env.MAXMA_USER_SKILLS_DIR;
+    const skillsRoot = fs.mkdtempSync(path.join(os.tmpdir(), "maxma-skill-install-"));
+    process.env.MAXMA_USER_SKILLS_DIR = skillsRoot;
     const archive = zipSync({ "market-skill/SKILL.md": new TextEncoder().encode("---\nname: market-skill\ndescription: Test skill\n---\n") });
     globalThis.fetch = (() => new Response(archive)) as unknown as typeof fetch;
     try {
       const app = createCapabilitiesRoutes({ sessionCount: () => 0, endpoints: () => [] });
       const response = await app.request("/api/skills/market/install", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slug: "market-skill" }) });
       expect(response.status).toBe(200);
-      expect(fs.readFileSync(path.join(homeDir, ".agents", "skills", "market-skill", "SKILL.md"), "utf8")).toContain("name: market-skill");
+      expect(fs.readFileSync(path.join(skillsRoot, "market-skill", "SKILL.md"), "utf8")).toContain("name: market-skill");
     } finally {
       globalThis.fetch = originalFetch;
-      if (originalUserProfile === undefined) delete process.env.USERPROFILE;
-      else process.env.USERPROFILE = originalUserProfile;
-      if (originalHome === undefined) delete process.env.HOME;
-      else process.env.HOME = originalHome;
-      fs.rmSync(homeDir, { recursive: true, force: true });
+      if (originalSkillsDir === undefined) delete process.env.MAXMA_USER_SKILLS_DIR;
+      else process.env.MAXMA_USER_SKILLS_DIR = originalSkillsDir;
+      fs.rmSync(skillsRoot, { recursive: true, force: true });
     }
   });
 

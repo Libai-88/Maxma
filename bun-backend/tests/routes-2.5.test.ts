@@ -11,6 +11,12 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { authHeaderFor } from "./_helpers/auth";
+import { appVersion } from "../src/app-version";
+
+// 版本断言一律与单一数据源比对，不写死字面量：写死会让每次升版本都红一次，
+// 而这条断言真正要守的是"报告里的版本 == version.py"，不是某个具体号。
+// 形状守卫放在用到它的用例里（顶层 expect 会在模块加载期抛错，不算用例失败）。
+const EXPECTED_VERSION = appVersion();
 
 let dataDir = "";
 let prevDataDir: string | undefined;
@@ -241,7 +247,7 @@ describe("error-collector + diagnostics（阶段 2.5b）", () => {
     expect(fe!.trace_id).toBe("frontend-trace-1234");
     expect(fe!.exception).toContain("render()");
     expect(fe!.extra).toMatchObject({ name: "TypeError", filename: "ChatView.vue", line: 42 });
-    expect(report.system_info.app_version).toBe("v2.6.11");
+    expect(report.system_info.app_version).toBe(EXPECTED_VERSION);
     expect(report.autonomy_status.available).toBe(false);
     expect(report.tauri_startup_log.available).toBe(false);
 
@@ -329,7 +335,7 @@ describe("health 四部件（阶段 2.5b）", () => {
     });
 
     expect(body.status).toBe("ok");
-    expect(body.version).toBe("v2.6.11");
+    expect(body.version).toBe(EXPECTED_VERSION);
     for (const key of ["llm", "memory", "native_tools", "mcp_tools"]) {
       const comp = body[key] as Record<string, unknown>;
       expect(comp.status).toBe("ok");
@@ -386,7 +392,7 @@ describe("health 四部件（阶段 2.5b）", () => {
     // 参数与接收数组元素类型相容 —— 先显式断言成 string，让失败信息可读，
     // 而不是把 unknown 塞给 matcher。
     expect(["ok", "degraded"]).toContain(String(body.status));
-    expect(body.version).toBe("v2.6.11");
+    expect(body.version).toBe(EXPECTED_VERSION);
   });
 });
 
@@ -417,7 +423,7 @@ describe("capabilities 聚合（阶段 2.5c）", () => {
     expect((cfg.resolution_order as string[]).length).toBe(13);
 
     // Phase4 manifest
-    expect(body.version).toBe("v2.6.11");
+    expect(body.version).toBe(EXPECTED_VERSION);
     const features = body.features as Record<string, Record<string, unknown>>;
     // `noUncheckedIndexedAccess` 下 `features.X` 是 `Record | undefined`，直接取
     // `.enabled` 会报 TS18048（14 处）。用一个小助手取子对象：断言把"缺少某个
@@ -570,5 +576,15 @@ describe("config-settings（阶段 2.5a）", () => {
     } finally {
       if (prev !== undefined) process.env.MAXMA_API_PORT = prev;
     }
+  });
+});
+
+describe("版本断言的自身有效性", () => {
+  // 上面四处改成与 appVersion() 比对后，若 appVersion() 因故返回空串，
+  // 那四条断言会同时变成空话。这里把它钉回 version.py 这个单一数据源。
+  test("EXPECTED_VERSION 来自 version.py 且形状合法", () => {
+    expect(EXPECTED_VERSION).toMatch(/^v\d+\.\d+\.\d+/);
+    const raw = fs.readFileSync(path.resolve(import.meta.dir, "..", "..", "version.py"), "utf8");
+    expect(EXPECTED_VERSION).toBe(raw.match(/__version__\s*=\s*"([^"]+)"/)?.[1] ?? "");
   });
 });

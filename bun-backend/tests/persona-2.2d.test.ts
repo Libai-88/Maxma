@@ -170,10 +170,13 @@ describe("persona 路由（阶段 2.2d）", () => {
   test("干净安装时两个内置人格可从只读模板目录发现", async () => {
     const bundleDir = fs.mkdtempSync(path.join(os.tmpdir(), "maxma-persona-builtins-"));
     const templateDir = path.join(bundleDir, "config", "personas");
-    const sourceDir = path.resolve(import.meta.dir, "..", "..", "config", "personas");
+    // 自己造模板内容，不从仓库 config/personas 拷：那里只有 SOUL.饱饱.md 与
+    // SOUL.example.md 被跟踪，`SOUL.md` 是各人本机首次运行才生成的未跟踪文件，
+    // 干净 clone（CI）上 copyFileSync 直接 ENOENT。本用例要验的是"只读模板目录
+    // 里有两个内置人格时能否被发现"，模板内容自己给即可（同下一个用例的写法）。
     fs.mkdirSync(templateDir, { recursive: true });
     for (const filename of ["SOUL.md", "SOUL.饱饱.md"]) {
-      fs.copyFileSync(path.join(sourceDir, filename), path.join(templateDir, filename));
+      fs.writeFileSync(path.join(templateDir, filename), `# ${filename.replace("SOUL.", "").replace(".md", "") || "Maxma"}\n\n测试用内置人格模板\n`);
     }
     fs.rmSync(path.join(dataDir, "config", "personas", "SOUL.md"), { force: true });
     process.env.MAXMA_BUNDLE_DIR = bundleDir;

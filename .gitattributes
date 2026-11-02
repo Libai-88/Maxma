@@ -1,0 +1,15 @@
+# 行尾契约（与 docs/00-当前架构.md、HANDOFF.md「变更规则」一致）
+#
+# 为什么必须有这个文件：`*.bat` 里的 CRLF 是**功能要求**，不是风格 ——
+# cmd.exe 无法解析纯 LF 批处理。而仓库里存的是 LF（blob 无 \r），全靠各人
+# 本机 `core.autocrlf=true` 在签出时补上 CRLF。CI 的 runner 是 ubuntu，
+# 签出得到纯 LF，于是 `portable-packaging.test.ts` 的「.bat 保持 CRLF」
+# 守卫在 CI 上必然红 —— 报的是"环境问题"，把真正的契约信号淹掉了。
+# 显式声明后，任何平台签出都得到 CRLF，守卫测的才是仓库内容本身。
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# PowerShell：统一 LF。含中文的 .ps1 必须保留 UTF-8 BOM（那是字节内容，
+# 与 eol 无关，由 bun-backend/tests/script-encoding.test.ts 单独守住）。
+# 不定这条的话，Windows 上 autocrlf=true 会把它们变成 CRLF 并产生伪 diff。
+*.ps1 text eol=lf

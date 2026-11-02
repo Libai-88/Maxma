@@ -22,7 +22,7 @@ import * as crypto from "node:crypto";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import { bundleDir, dataDir } from "../app-paths";
+import { bundleDir, dataDir, getUserSkillsDir } from "../app-paths";
 import { appVersion } from "../app-version";
 import { getSettingValue } from "../settings-global";
 import { agentDirDiagnostics, engineIdentity } from "../../../bun-sidecar/src/kernel/engine-info";
@@ -415,7 +415,7 @@ export function createCapabilitiesRoutes(deps: CapabilitiesDeps): Hono {
     const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
     const slug = typeof body.slug === "string" ? body.slug.trim() : "";
     if (!/^[a-z0-9][a-z0-9._-]{0,119}$/i.test(slug)) return c.json({ detail: "无效的 Skill 标识" }, 400);
-    const installRoot = path.join(os.homedir(), ".agents", "skills");
+    const installRoot = getUserSkillsDir();
     const target = path.join(installRoot, slug);
     if (fs.existsSync(target)) return c.json({ detail: "Skill 已安装: " + slug }, 409);
     const temporary = target + ".install-" + crypto.randomUUID();

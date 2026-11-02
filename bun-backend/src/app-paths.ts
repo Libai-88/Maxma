@@ -13,6 +13,7 @@
 
 import * as path from "node:path";
 import * as fs from "node:fs";
+import * as os from "node:os";
 
 export const PORTABLE_FLAG_FILENAME = "portable.flag";
 
@@ -61,6 +62,20 @@ export const getApiDataDir = (): string => path.join(dataDir(), "api", "data");
 export const getLogsDir = (): string => path.join(dataDir(), "logs");
 export const getUploadsDir = (): string => path.join(dataDir(), "uploads");
 export const getVectorDbDir = (): string => path.join(dataDir(), "vector_db");
+
+/**
+ * 用户级 skills 安装根。默认 `os.homedir()/.agents/skills`，可用
+ * `MAXMA_USER_SKILLS_DIR` 覆盖（与 `MAXMA_DATA_DIR` 同一信任级：都由启动器/
+ * 测试注入，不接受请求体传值——这个路径决定 Skill 安装写到哪，不能让 HTTP 侧控制）。
+ *
+ * 为什么要显式覆盖口而不是让测试改 `HOME`：Bun 的 `os.homedir()` 在 Linux 上
+ * 不跟随 `$HOME`（Windows 上读 `USERPROFILE`，所以本地一直是绿的），
+ * 靠改环境变量的测试在 CI 上会把文件写到真实家目录然后读不到。
+ */
+export const getUserSkillsDir = (): string =>
+  process.env.MAXMA_USER_SKILLS_DIR
+    ? path.resolve(process.env.MAXMA_USER_SKILLS_DIR)
+    : path.join(os.homedir(), ".agents", "skills");
 
 /** news.yaml（与 Python NEWS_YAML_PATH 一致）。 */
 export const getNewsYamlPath = (): string => path.join(getApiDataDir(), "news.yaml");

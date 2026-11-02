@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { makeTempDataDir } from "./_helpers/tmp";
 
 let dataDir = "";
 let previousDataDir: string | undefined;
 
 beforeEach(() => {
-  dataDir = fs.mkdtempSync(path.join("D:\\MaxmaTemp", "maxma-evolution-"));
+  dataDir = makeTempDataDir("maxma-evolution");
   previousDataDir = process.env.MAXMA_DATA_DIR;
   process.env.MAXMA_DATA_DIR = dataDir;
   fs.mkdirSync(path.join(dataDir, "api", "data"), { recursive: true });

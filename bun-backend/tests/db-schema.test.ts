@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { Database } from "bun:sqlite";
+import { makeTempDataDir } from "./_helpers/tmp";
 
 /**
  * db/core.ts schema 回归锁：无人读取的 path_whitelist 死表不再被创建。
@@ -72,7 +73,7 @@ function sourceFilesMentioning(root: string, needle: string): string[] {
 }
 
 beforeEach(() => {
-  dataDir = fs.mkdtempSync(path.join("D:\\MaxmaTemp", "maxma-db-schema-"));
+  dataDir = makeTempDataDir("maxma-db-schema");
   previousDataDir = process.env.MAXMA_DATA_DIR;
   process.env.MAXMA_DATA_DIR = dataDir;
   fs.mkdirSync(path.join(dataDir, "api", "data"), { recursive: true });
