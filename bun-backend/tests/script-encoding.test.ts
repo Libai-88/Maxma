@@ -30,22 +30,30 @@ function filesWithExt(dir: string, ext: string): string[] {
   return out;
 }
 
-describe("文档归档契约", () => {
+describe("文档现行性契约", () => {
   /**
-   * `docs/` 是**活跃规范目录**（当前架构、品牌、安全契约、contracts/*）。
-   * 已废弃的文档必须移进 `docs/archive/`：留在原地会被当成现行规范引用——
-   * 本仓已经栽过：`docs/omp-upgrade-guide.md` 等三份是 2026-08 的 @oh-my-pi 基线，
-   * 里面引用的脚本、文件、报 issue 地址全都指向不存在的对象，
-   * 却和现行文档并排躺在 `docs/` 下。
+   * `docs/` 只放**现行规范**（当前架构、品牌、安全契约、contracts/*）。
+   * 历史决策记录放 `dev_docs/adr/`，构建事实放 `dev_docs/build-and-artifacts.md`。
    *
-   * 判据：`docs/`（不含 archive）下的 markdown **全文**不得出现"已废弃/已过期/
-   * 勿据以操作/不再适用/DEPRECATED"这类字样——一旦废弃就该归档，而不是原地贴告示。
+   * 本仓栽过两次：
+   *   1. 三份 2026-08 的 @oh-my-pi 升级文档与现行文档并排躺在 `docs/` 下，
+   *      引用的脚本/文件/报 issue 地址全指向不存在的对象，被当成现行规范引用。
+   *   2. Python 后端下线后，`security-contract.md` 仍写着 `Status: Active` 并把
+   *      路径白名单的执行方指到已删除的 `security_adapter.py` —— 一份自称现行、
+   *      实则描述已删子系统的安全文档，比没有文档更危险。
+   *
+   * 判据一（原地贴告示 = 该删）：`docs/` 下的 markdown 全文不得出现
+   * "已废弃/已过期/勿据以操作/不再适用/DEPRECATED"。废弃内容直接删除，
+   * 历史用 `git log --diff-filter=D -- <路径>` 取回，不留存档副本。
    * 扫全文而不是只看开头：告示块可能贴在文件任何位置。
+   *
+   * 判据二（悬空引用）：`docs/` 与 `dev_docs/` 下 markdown 里的相对链接
+   * 必须指向真实存在的文件。删文档不改引用是同一类事故的第二次发生。
    */
   const DOCS = path.join(REPO, "docs");
   const STALE_MARKERS = [/已废弃/, /已过期/, /勿据以操作/, /不再适用/, /DEPRECATED/];
 
-  test("docs/ 下的活跃文档不得自称废弃（废弃请移入 docs/archive/）", () => {
+  test("docs/ 下的文档不得自称废弃（废弃请直接删除，历史交给 git）", () => {
     const offenders: string[] = [];
     if (fs.existsSync(DOCS)) {
       for (const e of fs.readdirSync(DOCS, { withFileTypes: true })) {
@@ -56,31 +64,42 @@ describe("文档归档契约", () => {
     }
     expect(
       offenders,
-      `这些文档自称已废弃却仍在 docs/（活跃规范目录）下——请 git mv 到 docs/archive/ ` +
-        `并更新引用，否则会被当成现行规范：\n  ${offenders.join("\n  ")}`,
+      `这些文档自称已废弃却仍留在 docs/（现行规范目录）——请删除并更新引用，` +
+        `否则会被当成现行规范：\n  ${offenders.join("\n  ")}`,
     ).toEqual([]);
   });
 
-  test("归档文档的引用不得指向已移走的旧路径（防空链）", () => {
-    const archived = ["omp-upgrade-guide", "omp-upgrade-runbook", "omp-capability-gap"];
-    const staleRefs: string[] = [];
-    const scan = (file: string) => {
+  test("文档内的相对链接不得悬空", () => {
+    const offenders: string[] = [];
+    const roots = ["docs", "dev_docs"];
+    // 根目录文档（README / PROJECT_INDEX / HANDOFF）同样必须无悬空链接
+    const files = [
+      ...roots.flatMap((r) => filesWithExt(path.join(REPO, r), ".md")),
+      ...["README.md", "PROJECT_INDEX.md", "HANDOFF.md", "PRODUCT.md", "CLAUDE.md"]
+        .map((f) => path.join(REPO, f))
+        .filter((f) => fs.existsSync(f)),
+    ];
+    for (const file of files) {
       const text = fs.readFileSync(file, "utf8");
-      for (const name of archived) {
-        // 允许 docs/archive/<name>，不允许裸 docs/<name>
-        const re = new RegExp(`docs/(?!archive/)${name}\\.md`, "g");
-        for (const m of text.matchAll(re)) staleRefs.push(`${path.relative(REPO, file)}: ${m[0]}`);
+      const rel = path.relative(REPO, file);
+      // markdown 链接 [x](target)：相对于所在文件解析
+      for (const m of text.matchAll(/\]\(([^)\s#]+)(?:#[^)\s]*)?\)/g)) {
+        const target = m[1];
+        if (!target || /^(https?:|mailto:|data:|#)/.test(target)) continue;
+        if (!fs.existsSync(path.resolve(path.dirname(file), target))) {
+          offenders.push(`${rel} -> ${target}`);
+        }
       }
-    };
-    for (const rel of ["HANDOFF.md", "dev_docs/pi-migration-plan.md"]) {
-      const abs = path.join(REPO, rel);
-      if (fs.existsSync(abs)) scan(abs);
+      // 行内代码里的仓库路径 `docs/…md`：从仓库根解析
+      for (const m of text.matchAll(/`((?:docs|dev_docs)\/[\w\-./\u4e00-\u9fff]+\.md)`/g)) {
+        const target = m[1];
+        if (!target) continue;
+        if (!fs.existsSync(path.join(REPO, target))) {
+          offenders.push(`${rel} -> ${target}`);
+        }
+      }
     }
-    for (const name of archived) {
-      const abs = path.join(DOCS, "archive", `${name}.md`);
-      if (fs.existsSync(abs)) scan(abs);
-    }
-    expect(staleRefs, `这些引用指向已归档文档的旧路径：\n  ${staleRefs.join("\n  ")}`).toEqual([]);
+    expect(offenders, `这些文档引用指向不存在的文件：\n  ${offenders.join("\n  ")}`).toEqual([]);
   });
 });
 

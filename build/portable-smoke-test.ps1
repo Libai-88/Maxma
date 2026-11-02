@@ -99,7 +99,6 @@ $env:MAXMA_BUNDLE_DIR = $PortableDir
 $env:MAXMA_EXE_DIR = $PortableDir
 $env:MAXMA_DATA_DIR = Join-Path $PortableDir "data"
 $env:PI_CODING_AGENT_DIR = Join-Path $PortableDir "data\pi"
-$env:MAXMA_SERVE_WEB = "1"
 $env:MAXMA_ENV = "production"
 $env:MAXMA_BUN_PORT = [string]$Port
 
@@ -255,7 +254,6 @@ try {
     Remove-Item Env:\MAXMA_EXE_DIR -ErrorAction SilentlyContinue
     Remove-Item Env:\MAXMA_DATA_DIR -ErrorAction SilentlyContinue
     Remove-Item Env:\PI_CODING_AGENT_DIR -ErrorAction SilentlyContinue
-    Remove-Item Env:\MAXMA_SERVE_WEB -ErrorAction SilentlyContinue
     Remove-Item Env:\MAXMA_ENV -ErrorAction SilentlyContinue
     Remove-Item $stdoutLog, $stderrLog -ErrorAction SilentlyContinue
 }

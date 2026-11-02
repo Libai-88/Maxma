@@ -120,7 +120,6 @@ if (!process.env.BASE) {
       MAXMA_BUN_PORT: String(BACKEND_PORT),
       MAXMA_API_PORT: String(BACKEND_PORT),
       MAXMA_BUN_HOST: "127.0.0.1",
-      MAXMA_SERVE_WEB: "1",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });

@@ -280,41 +280,38 @@ Maxma 是用户的**首席思维伙伴**——不是搜索引擎、不是执行�
 
 ---
 
-## 7. 提示词增强层（Prompt Enhancement）
+## 7. 提示词层（人设与品牌）
 
-品牌软包装在提示词层的落点。**铁律：永不替换 OMP 原生 prompt**，
-只通过 `appendSystemPrompt` 机制追加增强内容（`agent/prompts.py`
-`build_append_prompt` → `build_brand_prompt`）。
+**铁律：永不替换引擎原生 prompt**，只通过官方 `appendSystemPrompt` 追加。
+实现在 `bun-sidecar/src/kernel/persona-prompt.ts` 的 `loadPersonaSystemPrompt()`，
+由 `kernel/bridge-pi.ts` 在 `create_session` 时追加到引擎原生 system prompt 之后。
 
-### 分层
+### 组成
 
-| 层 | 内容 | 开关 |
+| 块 | 来源 | 说明 |
 |----|------|------|
-| 功能层 | 中文回复指令 + macros 清单 | 永久保留 |
-| 品牌增强层 | 产品名 + 语气引导 + 表情指令 | `brand_enhancement` |
+| 人设 SOUL | 活动人设的 `config/personas/SOUL.md`（数据目录优先，回落随包模板） | 人格与语气主体，支持 `{{USER_NAME}}` 占位 |
+| 用户档案 | `config/personas/USER.md` | 渲染为「## 用户档案」小节 |
+| 显示名 | `config/onboarding.json` 的 `preferences.displayName` | 替换 `{{USER_NAME}}`；缺失或非法时回落「用户」 |
+| 表情贴纸指令 | `persona-prompt.ts` 的 `STICKER_INSTRUCTIONS`（硬编码） | `[表情包:分类]` 格式与 12 个可用分类 |
 
-> skills 已迁移到 OMP 原生 `.omp/skills/`（`app_paths.OMP_SKILLS_DIR`），
-> 由 OMP 自动发现并通过 `skill://<name>` 加载，**不在提示词层注入**。
-> 这符合本指南「只增强、不替换 OMP 原生」的铁律。标注处理见
-> `maxma-server.spec` 与 `app_paths.ensure_omp_skills_seed`。
+> skills **不在提示词层注入**：由引擎从 `.maxma/skills/`（随包）与工作区/用户目录
+> `.agents/skills/` 自动发现，见 `kernel/skills.ts` `maxmaSkillPaths()`。
 
-### 品牌增强块规范（`build_brand_prompt`）
+### 品牌规范
 
-1. **只做风格引导，不定义 AI 身份** — 禁止「你是 Maxma 不是 ChatGPT」这类
-   身份替换。OMP 原生 ROLE（"helpful assistant in Oh My Pi harness"）必须
-   完整保留，品牌块只追加风格约束，不覆盖原生人格。
+1. **只做风格引导，不定义 AI 身份** — 禁止「你是 Maxma 不是 ChatGPT」这类身份替换；
+   引擎原生 ROLE 必须完整保留，追加块只加风格约束。
 2. **语气**：克制但有温度，先结论后细节，不寒暄、不推销、不堆感叹号。
-3. **表情指令**：`[表情包:情绪]`。情绪词表与前端
-   `web/src/composables/stickerUtils.ts` 的 `EMOTION_MAP` **严格对齐**
-   （12 类，与 `config/stickers/` 目录一一对应），保证模型写出的情绪词
-   一定能命中贴纸系统。
+3. **表情指令**：`[表情包:分类]`。分类词表与前端 `web/src/composables/stickerUtils.ts`
+   的 `EMOTION_MAP` **严格对齐**（12 类，与 `config/stickers/` 下 12 个情绪目录一一对应；
+   `custom` 为用户上传目录，不在词表内），保证模型写出的情绪词一定命中贴纸系统。
 4. **墨色**：作为品牌理念（判断有分量但不喧哗），不是 AI 名字。
 
 ### 修改纪律
 
-- 品牌增强块内容变化 → 同步更新 `EMOTION_MAP` / `config/stickers/` 目录 / 本文档
-- 任何提示词改动必须验证不破坏 OMP 原生 tool inventory 与内部 URL 体系
-- 开关：`config/settings.py` 的 `brand_enhancement`（与 `native_prompt_mode` 正交）
+- 贴纸分类变化 → 同步 `STICKER_INSTRUCTIONS` / `EMOTION_MAP` / `config/stickers/` 目录 / 本文档
+- 任何提示词改动必须验证不破坏引擎原生 tool inventory 与内部 URL 体系
 
 ---
 

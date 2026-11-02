@@ -2,6 +2,14 @@
 
 ## 概述
 
+> ⚠️ **当前状态：入口已按能力门控关闭，功能不可用。**
+> 唯一的落库点消费 `deferred_subagent_submitted` 事件，而 pi 引擎从不发射它
+> （登记在 `bun-sidecar/src/kernel/pi-contract.ts` 的 `ENGINE_EVENT_EXPECTED_BUT_UNPRODUCED`），
+> 因此 `deferred_runs` 表恒空。`/agent-tasks` 路由与 Dock 的「Agent」条目均带
+> `feature: 'sub_agents'` 守卫，`capabilities.features.sub_agents.enabled` 恒为 false。
+> 本文描述的是**代码结构与契约**，改动这些组件时仍然有效；勿据此认为功能可用。
+> 恢复该功能需要在 Maxma 侧自建子任务派发并让 kernel 发出该事件，然后撤掉那条登记。
+
 后台子 Agent（deferred runs）的可视化管理界面：**读真实后端数据**，
 不造演示假数据。设计跟随 MaxmaHere 品牌规范（6 主题，旗舰素影：宣纸白 + 朱砂红）。
 
@@ -23,9 +31,11 @@
 
 ### 入口
 
-- 页面：`/agent-tasks`（Dock 左侧栏「Agent」）
+- 页面：`/agent-tasks`（受 `meta.feature: 'sub_agents'` 守卫，当前恒落「功能不可用」页）
+- Dock：左侧栏「Agent」条目（同名 feature 声明，禁用即隐藏）
 - 视图：`web/src/views/AgentTasksView.vue`
 - 数据：`web/src/composables/useAgentTasks.ts`
+- 门控回归测试：`web/tests/agentTasksGating.spec.ts`
 
 ## 核心组件
 

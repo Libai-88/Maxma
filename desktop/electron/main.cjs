@@ -160,7 +160,6 @@ async function startBackend() {
       MAXMA_API_PORT: String(backendPort),
       MAXMA_BUN_HOST: "127.0.0.1",
       MAXMA_ENV: "production",
-      MAXMA_SERVE_WEB: "1",
       PI_CODING_AGENT_DIR: piAgentDir,
     },
   });

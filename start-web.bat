@@ -8,7 +8,6 @@ REM This entry point is for running the Web form directly from a repo checkout
 REM (backend bundles the frontend from web/dist; build it first: cd web && npm run build).
 
 set "SCRIPT_DIR=%~dp0"
-set "MAXMA_SERVE_WEB=1"
 set "PI_CODING_AGENT_DIR=%SCRIPT_DIR%data\pi"
 if "%MAXMA_BUN_PORT%"=="" set "MAXMA_BUN_PORT=8000"
 
