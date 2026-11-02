@@ -6,7 +6,7 @@ import { useSessionStore } from '@/stores/session'
 import { buildFlatMessage, buildTimestamp, parseReferences } from '@/utils/references'
 import type { ParsedRef } from '@/utils/references'
 import { getToken, ensureTokenLoaded, resetToken, api } from '@/api'
-import { ensurePortLoaded, waitForBackend, getWsBase, getApiBase, generateUUID, tauriFetch } from '@/utils/env'
+import { waitForBackend, getWsBase, getApiBase, generateUUID } from '@/utils/env'
 import { safeGetItem, safeRemoveItem, safeSetItem, safeKeys } from '@/lib/storage'
 import { chatSessionAliveCache } from '@/composables/sessionAliveCache'
 import { useWorkbenchStore } from '@/stores/workbench'
@@ -110,6 +110,7 @@ export const SERVER_EVENT_HANDLER_TYPES: Record<ServerEvent['type'], true> = {
   memory_done: true,
   // 目标模式与协作
   goal_updated: true,
+  permission_mode_updated: true,
   collaboration_update: true,
   task_review_update: true,
   task_brief_update: true,
@@ -498,7 +499,7 @@ async function hydrateTurnSticker(turn: ChatTurn): Promise<boolean> {
       return true
     }
     // 无显式指令：取一张该情绪的贴纸——裸情感词标记原位替换，否则末尾附加
-    const response = await tauriFetch(getStickerUrl(emotion))
+    const response = await fetch(getStickerUrl(emotion))
     if (!response.ok) return false
     const data = await response.json()
     if (!data?.path) return false
@@ -533,7 +534,7 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 
 async function hydrateTurnStickers(sid: string, turns: ChatTurn[]): Promise<void> {
   // PERF-HYDRATE-001：长会话恢复时此前 Promise.all 一次性并发 N 个
-  // tauriFetch（100+ 轮 = 100+ 并发请求），限制为 4 并发。
+  // 贴纸请求（100+ 轮 = 100+ 并发请求），限制为 4 并发。
   const changed = (await mapLimit(turns, 4, hydrateTurnSticker)).some(Boolean)
   if (changed) persistTurns(sid)
 }
@@ -728,10 +729,6 @@ async function connectSession(sid: string) {
   if (ch.ws && (ch.ws.readyState === WebSocket.OPEN || ch.ws.readyState === WebSocket.CONNECTING)) {
     return
   }
-
-  // 确保端口已加载（Tauri 环境下 sidecar 端口可能不是默认 8000）
-  await ensurePortLoaded()
-  if (!isChannelStillValid(sid)) return
 
   // 等待后端就绪（PyInstaller onefile 启动可能需要数秒，孤儿 sidecar 被清理后
   // 新 sidecar 需要时间启动）。waitForBackend 在后端已就绪时立即返回，仅在后端
@@ -1034,7 +1031,7 @@ function syncContextUsage(sid: string, ch: SessionChannel, payload: unknown) {
 export function handleEventForChannel(sid: string, event: ServerEvent) {
   // WS-EVENT-SINK-001：未知入站类型必须在**任何**状态判断之前宣告。
   // 放在通道查找/迟到轮次过滤/currentTurn 守卫之前，是因为后端广播的
-  // workflow_* 一类事件本来就与当前回合无关（parent_turn_id 可为 null），
+  // 会话级事件（goal_updated / permission_mode_updated）本来就与当前回合无关，
   // 若只在 switch 的 default 里告警，无活跃轮次时事件会在更早的 return
   // 处被吞掉，仍然静默。已登记类型零成本通过（Set.has）。
   // default 分支里 event 已被收窄成 never（联合成员全部有分支），所以原始
@@ -1288,6 +1285,19 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     return
   }
 
+  // PERM-ANNOUNCE-001：内核每次写 record.permissionMode 都广播真值
+  // （set_permission_mode 四档 / 「自动执行」开关走的 set_auto_approve 两态）。
+  // 会话级状态，与回合无关，可能在无活跃轮次时到达 → 必须在 turn 守卫之前处理。
+  // 通道状态是唯一真相源：权限选择器从这里收敛，不再各存一份本地档位。
+  if (event.type === 'permission_mode_updated') {
+    const mode = event.payload?.permission_mode
+    if (!mode) return
+    ch.permissionMode = mode
+    // 「自动执行」= auto 档；两态开关与四档选择器从此读同一份通道状态。
+    ch.autoApprove = mode === 'auto'
+    return
+  }
+
   const turn = ch.currentTurn
   if (!turn) return
 
@@ -1469,8 +1479,8 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
           // Fire-and-forget: 不阻塞消息显示。先替换全部显式指令
           // （STICKER-MULTI-001：此前只替换第一条，其余被剥除），
           // 无指令时取一张该情绪贴纸——裸标记原位替换，否则末尾附加。
-          // 必须使用 tauriFetch：Tauri WebView2 不允许从 tauri://localhost
-          // 向 http:// 发起原生 fetch，会静默失败导致 stickerUrl 永远为空。
+          // 原生 fetch 即可：两种已发布形态都是同源 HTTP 页面，上一代桌面壳
+          // 需要代理层绕开的跨协议限制已不存在。
           void replaceStickerDirectives(turn.finalAnswer).then((withDirectives) => {
             if (!turn.finalAnswer) return
             if (withDirectives !== turn.finalAnswer) {
@@ -1480,7 +1490,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
               if (lastThink) lastThink.tokens = withDirectives
               return
             }
-            return tauriFetch(getStickerUrl(emotion))
+            return fetch(getStickerUrl(emotion))
               .then((r) => {
                 if (!r.ok) {
                   log.warn('sticker fetch non-ok response:', r.status)

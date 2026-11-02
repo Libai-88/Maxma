@@ -1,15 +1,15 @@
 # MaxmaHere 交接说明
 
 > 当前可执行状态，供下一位接手者。架构请先读 [docs/00-当前架构.md](docs/00-当前架构.md)。
-> 更新时间：2026-11-02（分支 `feat/jet-hub-plugin`，`version.py` = v2.6.12）
+> 更新时间：2026-11-02（`version.py` = v2.6.13）
 
 ## 状态
 
-- 仓库 `https://github.com/Libai-88/Maxma.git`，主分支 `main`；插件面已于 PR #3 squash 合入
-  （`feat/jet-hub-plugin` 随之删除）。别在文档里写"领先 N 个提交"这类当场过期的数，
+- 仓库 `https://github.com/Libai-88/Maxma.git`，主分支 `main`；变更一律走分支 + PR squash 合入，
+  合并即删分支。别在文档里写"领先 N 个提交"或点名某个短期分支（它会消失）——
   要核对就现跑 `git rev-list --left-right --count origin/main...HEAD`。
-- 版本 **v2.6.12**：`version.py` / `web/package.json` / `desktop/package.json` / 便携包
-  `portable.flag` 四处一致，两种便携包已由该提交重建并验证（见 build 文档 §6.1 的四步验证）。
+- 版本 **v2.6.13**：`version.py` / `web/package.json` / `desktop/package.json` / 便携包
+  `portable.flag` 四处一致，两种便携包由该提交重建并验证（见 build 文档 §6.1 的四步验证）。
 - 引擎 `@earendil-works/pi-coding-agent` **0.99.0**（in-process）。**落后上游 11 个版本**（latest 1.4.0），
   其中 1.0.3 与 1.2.0 自带 Breaking Changes（1.0.3 把 Azure provider 由 `azure-openai-responses` 改名 `azure`，
   命中 `bun-sidecar/src/kernel/model.ts` 的硬编码白名单）。
@@ -83,7 +83,11 @@ node scripts/check-type-budget.mjs --write    # 类型债下降后下调基线�
   全败时回放主模型终态帧（不再静默卡超时）。**本机额度当前耗尽**（上游 429，非代码问题）。
   `beam-free` / `space-bunny-free` 已记入 `FREE_LANE_KNOWN_UNUSABLE_MODEL_IDS` 显式拒绝。
   仍开放的产品判断：兜底是否按额度/地区动态挑选（现为固定顺序）。
-- 自动化功能已随旧后端下线（`automation.enabled=false`）；恢复需基于 Bun 重写，属独立工作项。
+- **自动化 / 工作流：整条表面已删除（2026-11-02），不存在"待接通"的实现。** 旧的 Bun REST 工作流面
+  （`routes/workflows.ts` + kernel `execute_workflow_step` + `workflow_*` 四个事件与登记 +
+  前端 `types/workflow.ts` + 打包里的 `workflows/` 目录）只能报失败，已连同其依赖一起移除。
+  旧后端那条 `automation.enabled=false` 也随之下线。恢复自动化是**独立工作项**：定义来源、
+  执行侧、前端消费者三样都要重新设计，别试图接回这条链（详见 docs/contracts/ws-events.md §4）。
 - **Agent 任务中心（后台子任务）在 pi 引擎下无数据来源**：唯一落库点消费 `deferred_subagent_submitted`，
   而引擎侧从不发该事件（pi 无子 Agent 运行时）。入口已按能力门控隐藏（Dock + 路由 `meta.feature`），
   登记在 `pi-contract.ts` 的 `ENGINE_EVENT_EXPECTED_BUT_UNPRODUCED`，由 `engine-boundary.test.ts` 双向校验。
@@ -94,7 +98,10 @@ node scripts/check-type-budget.mjs --write    # 类型债下降后下调基线�
 
 | 缺陷 | 修法 | 锁 |
 | --- | --- | --- |
-| 权限模式 UI 断链：REST 回 `enabled`，前端读 `permission_modes_enabled`（后端从不产出）→ 控件恒禁用，用户切换被静默吞掉 | REST 与前端类型同源，改回 `{session_id, permission_mode, available_permission_modes}`，控件按服务端列表渲染选项 | `bun-backend/tests/permission-mode-contract.test.ts`（含四处档位清单双向对账） |
+| 权限模式 UI 断链：REST 回 `enabled`，前端读 `permission_modes_enabled`（后端从不产出）→ 控件恒禁用，用户切换被静默吞掉。旧测试 fixture 自己补了这个字段，所以它一直是绿的 | REST 与前端类型同源，改回 `{session_id, permission_mode, available_permission_modes}`，控件按服务端列表渲染选项 | `bun-backend/tests/permission-mode-contract.test.ts`（含 PERM-LIVE-001 审批行为翻转） |
+| 档位清单在四处各写一份字面量（kernel 类型、`bridge-pi.ts` 未导出的 `PI_PERMISSION_MODES`、`sessions.ts`、前端 `PermissionMode`），另有三份前端副本从未被对账（`PermissionModeControl.vue` 的 `availableModes` 默认值、`options` 文案表、`modeRank`）→ 内核改档位名，前端渲染空白选项且 `rank` 为 `undefined` | `MAXMA_PERMISSION_MODES` 进 `pi-contract.ts`，类型由它派生，kernel 两处校验与 REST 响应都运行时消费它；`kernel/types.ts` 改 import+re-export，引用方零改动 | 同 `permission-mode-contract.test.ts`：单源结构锁 + 前端 4 份副本保序对账 + `needsApprovalForMode` 分支集合双向对账（漏分支会静默落进门尾 `return true`） |
+| 上一代引擎的 `.omp/skills`（13 个）仍在两种便携包里分发却无人加载（引擎只读 `.maxma/skills` + `.agents/skills`，零名称重叠；12/13 正文指挥模型去调不存在的工具）；并撑着 `countOmpSkills()` → `anthropic_skills_count` → 零 import 的死组件 `StatusBadge.vue` 这条谎，以及能力页里"用户 `~/.omp`"这行没人读的配置源 | 整体删除，两处打包脚本停止暂存，字段/死组件/类型/`.gitignore` 专为其保留的规则/配置源行一并清除（配置源 13→12）；`config/personas/AGENTS.md` 的 Skills 节改写为 pi 真实机制（注入 `<available_skills>`，按 `location` 用 `read` 读；`skill://` 在 pi dist 里不存在） | `bun-sidecar/tests/shipped-skills-packaging.test.ts`：打包暂存的技能根必须等于引擎加载的随包技能根（差集为空），且两侧 src 剥注释后不得把 `.omp` 当运行期路径 |
+| Tauri 传输层整条死路径（`detectTauri()`、`ensurePortLoaded()` 的 60×1s `get_api_port` 轮询、`tauriFetch()`、只为它存在的 `vite-env.d.ts` ambient 声明）在两种现行形态下恒为 false 分支 | 全部删除，9 个调用文件改用原生 `fetch`，`getApiBase/getBackendOrigin/getWsBase/openExternal` 恒为同源浏览器形态；`web/package.json` 去掉 `@tauri-apps/plugin-http`（lock 已重生成），`cors-config.ts` 去掉两条 `tauri://` origin 及其被测试钉住的断言；`vite.config.ts` 的 `base:"./"`、`App.vue` 的懒注入时序仍必要，只把理由从 tauri 改成真实原因 | `web/tests/envRuntime.spec.ts`：剥注释递归扫 `web/src/**` 无 `__TAURI`/`@tauri-apps`/`tauriFetch` 等（并断言扫描真覆盖到 `utils/env.ts`，防"零命中"来自空目录）+ 同源 URL 与 `waitForBackend` 行为锁 |
 | **同一条链上的提权**：PUT 后补发 `update_auto_approve`，而 `set_auto_approve` 是 `auto`/`ask` 两态 → 选 `operate` 被升成 `auto`（绕过审批），选 `read_only` 被退回 `ask` | 删掉补发。PUT 本就经 in-process `set_permission_mode` 改运行中会话的 `record.permissionMode`，补发是 Python/sidecar 跨进程时代的遗留 | 同上 PERM-LIVE-001：断言 `approvalGate.needsApproval(write)` 随档位真实翻转 |
 | 路径白名单层随 Python 整体删除，但 UI 仍向用户宣称它存在（5 处文案 + 1 张无读取方的表 + 2 个死类型） | 文案改为真实机制（拒止锚 + 逐次确认）；`db/core.ts` v1 不再建 `path_whitelist` 表；删 `WhitelistEntry`/`ListWhitelistResponse` | `web/tests/pathWhitelistClaims.spec.ts`（挂载扫可见文本 + 历史谎话负控）、`bun-backend/tests/db-schema.test.ts`（老库升级路径） |
 | 事件静默丢弃：`useChat.ts` 的 switch 无 `default` | 入口守卫 + `default` 告警 + `SERVER_EVENT_HANDLER_TYPES` 编译期登记表；4 个零消费者的 `workflow_*` 类型从联合删除 | `web/tests/wsEventSink.spec.ts`（含变异测试：往联合加类型而不加 case 会红） |
@@ -103,15 +110,15 @@ node scripts/check-type-budget.mjs --write    # 类型债下降后下调基线�
 | Electron 包里两处必然 reject 的 Tauri `invoke` | 导出错误日志改浏览器下载；QuickChat 关闭改 `window.close()` + 「已收起」态（`sandbox:true` 下 Electron 不覆写 `window.close`，已核实） | `settingsMenuCapability.spec.ts`、`web/tests/quickChatClose.spec.ts` |
 | `Bun Backend` CI 自 10-21 起每次 push 全红（14 项），本地却全绿 | 全是测试对自身环境的隐含假设：写死 `D:\MaxmaTemp`（ubuntu runner 无 D 盘）、`.bat` 的 CRLF 靠本机 `core.autocrlf` 而非仓库保证（补 `.gitattributes`）、persona 用例拷未被跟踪的 `config/personas/SOUL.md`、Skill 安装用例改 `$HOME` 骗 `os.homedir()`（Bun 在 Linux 上不跟随，改走 `getUserSkillsDir()` + `MAXMA_USER_SKILLS_DIR`）。另把 4 处写死的 `"v2.6.11"` 改成与 `appVersion()` 比对 | `bun-backend/tests/_helpers/tmp.ts` + `portable-packaging.test.ts`；CI 已实测转绿 |
 | 桌面包 `.sha256` 用两空格（文本模式）+ CRLF，下载方 `sha256sum -c` 对二进制产物必报 FAILED（值其实是对的） | 改 `<hash> *<name>` + `-NoNewline` 显式 LF | `portable-packaging.test.ts`「桌面包的 .sha256 用二进制模式 + LF」，对真实产物断言无 CR、第 65 字节为 ` *`、LF 结尾 |
+| **一个字段两个写入方，谁都不通知谁**：`record.permissionMode` 被 `set_permission_mode`（四档）与 `set_auto_approve`（两态，直接覆盖）写，而权限选择器只信自己那次 GET、也不 watch 变化 → 拨完「自动执行」开关，选择器显示的是内核并不在的档位；同一会话的另一个标签页更看不见 | 内核收成唯一写入口 `bridge-pi.ts` 的 `writePermissionMode`，**每次真正写入广播 `permission_mode_updated { permission_mode }`**（被拒的写入不发）；前端把它登记进 `ServerEvent` 联合 + `SERVER_EVENT_HANDLER_TYPES` + `useChat.ts` 分支，落到 per-channel 状态，「自动执行」开关与权限选择器都从这一份收敛 | `bun-backend/tests/permission-mode-contract.test.ts` 新增 PERM-ANNOUNCE-001 组（真跑 in-process kernel，两种顺序 + 非法档位不发 + REST PUT 也广播 + 事件名/载荷字段名 kernel↔前端类型↔useChat 分支逐字对账 + 反第二份状态真值）；`web/tests/wsEventSink.spec.ts` 锁事件→通道状态（含"无活跃轮次也要处理"）；`web/tests/sessionPermissionModeControl.spec.ts` 锁状态→渲染（迟到 GET 不许回退旧档） |
+| **死的 REST 工作流面**：`server.ts` 用空 deps 挂 `createWorkflowRoutes()`，`executeViaKernel` 恒 `undefined` → `mode: "sidecar"` 的定义落进 `executeSimpleStep()` 并因 `Unsupported workflow tool` 失败；REST 面只能报失败，kernel 那条分支只剩直接调 RPC 才够得着，前端零消费者 | 整体删除：路由 + server 挂载与 sink 接线 + kernel `execute_workflow_step` 分支 + 四处登记（`PI_RPC_METHODS` / `MAXMA_ENGINE_WS_EVENTS` 三条 / `BACKEND_SYNTHESIZED_EVENTS` 的 `workflow_completed` / `rpc-types.ts`）+ 前端 `types/workflow.ts` 与其再导出 + 两种便携包停止暂存 `workflows\` + 仓库里那个只有这条死路由会读的空目录 | `bun-sidecar/tests/engine-boundary.test.ts`：新增「干净切换锁」（三侧源码剥注释后无 `workflow` 标识符、三张清单无残留、文件不存在）与 kernel-bridge 的"调它必落 `not yet migrated` 兜底、不再发 `workflow_*`"；原来靠 `workflow_completed` 做的跨文件形状锁改成**机制锁**（临时 fixture 复刻注入型 sink + `const EV_*` 回查 + 埋点干扰项，要求扫得出、且恰好扫出那两个） |
 
 ## 遗留问题（未修，接手时别当成可用功能）
 
-1. **`record.permissionMode` 有两个写入方。** `set_permission_mode`（四档）与 `set_auto_approve`（两态，直接覆盖档位）写同一个字段，而权限模式控件从不 refetch → 拨完「自动执行」开关后，选择器可能显示内核并不在的档位。修法：控件 watch 变化后 refetch，或后端在任一写入路径推 `permission_mode` 事件。
-2. **档位清单仍是四份源码副本**（`kernel/types.ts` 类型、`bridge-pi.ts:82` 未导出的 `PI_PERMISSION_MODES`、`routes/sessions.ts`、`web/src/types/session.ts`）。改名会被对账测试当场拦下，但源码层没单源。终态：`MAXMA_PERMISSION_MODES` 进 `pi-contract.ts`，两侧运行时消费（`capabilities.ts:29` 已有同类跨 workspace 先例，不需登记 allowlist）。
-3. **工作流执行侧是断的。** `server.ts:230` 用**空 deps** 挂 `createWorkflowRoutes()`，`executeViaKernel` 恒 `undefined`，于是 `mode: "sidecar"` 的定义落进 `executeSimpleStep()` 并因 `Unsupported workflow tool` 失败；kernel 的 `workflow_step_*` 分支只剩直接调 RPC 才够得着。前端也已无任何工作流消费者。详见 [docs/contracts/ws-events.md](docs/contracts/ws-events.md) §4。
-4. **Tauri 残骸未清完**：`web/src/utils/env.ts` 的 `detectTauri()`/`tauriFetch`/`get_api_port` 整条死路径（8 个文件经 `tauriFetch` 走它，`envRuntime.spec.ts` 还在测它）、`web/package.json` 仍声明 `@tauri-apps/plugin-http`（`@tauri-apps/api` 只是传递依赖）、`cors-config.ts` 的 `tauri://` origin。两侧形态下 `detectTauri()` 恒 false，所以是**死而不危害**，删除是独立的解耦工作项。
-5. **`.omp/skills` 仍在两种便携包里分发，但没人读它。** 13 个 skill 全是上一代引擎内容（`file_read`/`kb_search`/`manage_whitelist`/`run_python`/`git_*` 等 12/13 个引用的是不存在的工具），引擎只加载 `.maxma/skills`（12 个，与之零重叠）。`countOmpSkills()` 把它计成 `anthropic_skills_count`，而该字段唯一的消费方 `web/src/components/StatusBadge.vue` **没有任何地方 import** —— 即一个显示错误数字的死组件。清理要同时动 `build-portable.bat:101`、`build-desktop-portable.ps1:190-191`、`health.ts` 与那个死组件。
-6. `PluginListView.vue` 的 `plugins.marketplace` 语义：当前 `false` = 「只启用随包插件」，输入框也只接受随包标识。真要开网络安装，前置是安全评审（下载校验、体积/条目上限、路径穿越、原子落盘），见 `routes/plugins.ts` 的 501 分支。
+1. `PluginListView.vue` 的 `plugins.marketplace` 语义：当前 `false` = 「只启用随包插件」，输入框也只接受随包标识。真要开网络安装，前置是安全评审（下载校验、体积/条目上限、路径穿越、原子落盘），见 `routes/plugins.ts` 的 501 分支。
+2. **`config/personas/` 里的 `AGENTS.md` 与 `MAXMA.md` 随两种便携包分发，但没有任何代码读取它们。** `listPersonas()` 只扫 `SOUL*.md`（`persona.ts:78`），`persona-prompt.ts` 只读 SOUL/USER，pi 的项目上下文读的是 `<cwd>/AGENTS.md` 而非包内这个路径。于是 `AGENTS.md` 的「特殊工具说明」整节是上一代引擎的工具词汇且从不被校验：`ask_user_qa`/`ask_user_single_choice`/`ask_user_multi_choice`、`task_tracker`、`call_sub_agent`、`file_read`、`run_python`、`git_status`、`browser_browse`、`tavily_search` 全都不存在（真实面是 `read/bash/edit/write/grep/find/ls` + 6 个自定义 + `submit_plan`）。本轮只修了它确实错误的 Skills 节；要么按真实工具面重写这两份，要么停止分发（与 `.omp/skills` 同一处置）。
+3. `capabilities.ts` 的配置源清单除已删的 `~/.omp` 外，其余行（`~/.claude`、`~/.cursor`、`.omprc`、`.omprc.json`、`.mcp.json`、`.github`、项目 `AGENTS.md`…）**未逐条核实是否真被 Maxma/pi 读取**，而能力页把它们连同"活跃 N/M"计数展示给用户。要么核实并只留真实读取方，要么把这整张表降级为"可能存在的目录"措辞。另：删掉 `~/.omp` 行后 `priority` 号从 9 跳到 11（仅展示用，未影响判定）。
+4. **`update_auto_approve` 的失败被吞掉。** kernel 侧没有该会话记录时，`callKernelRpc` 解析成 `{ok:false}`，而 `chat-ws.ts:902-905` 以 `void ….catch(() => {})` 丢弃 → 不会有任何回执，「自动执行」开关停在它的乐观值上（权限选择器此时正确地保持内核最后一次宣告的档位）。属既有行为，本轮让分歧从"静默"变成"可见"，真正的修法是给该分支一个回执或错误事件。
 
 ## 本次文档清理（2026-11-02）
 

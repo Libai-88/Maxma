@@ -53,7 +53,7 @@ import type {
   CreateShareRequest,
   SessionSnapshot,
 } from '@/types/collab'
-import { ensurePortLoaded, getApiBase, tauriFetch } from '@/utils/env'
+import { getApiBase } from '@/utils/env'
 
 // ── Panel Config 类型 ──
 
@@ -96,9 +96,8 @@ export interface SubAgentConfig {
   show_progress: boolean
 }
 
-// 注意：BASE 在 ensurePortLoaded() 完成后可能因端口冲突回退而变化，
-// 因此在 ensureTokenLoaded() 中会重新计算。
-let BASE = getApiBase()
+// getApiBase() 返回同源相对路径（/api），运行期恒定，模块加载时算一次即可。
+const BASE = getApiBase()
 
 /** 运行时从后端获取的 Token。桌面端与浏览器端都以这份为准。 */
 let token = ''
@@ -125,13 +124,10 @@ export async function ensureTokenLoaded(): Promise<void> {
   if (!tokenLoadPromise) {
     const capturedVersion = tokenLoadVersion
     tokenLoadPromise = (async () => {
-      // 先加载运行时端口（Tauri 端口冲突回退），再构造请求 URL
-      await ensurePortLoaded()
-      BASE = getApiBase()
       let lastError: unknown
       for (let attempt = 1; attempt <= 3; attempt++) {
         try {
-          const res = await tauriFetch(`${BASE}/auth/token`)
+          const res = await fetch(`${BASE}/auth/token`)
           // 版本已变化 — resetToken() 在此期间被调用，此次 fetch 结果已过时，静默丢弃
           if (tokenLoadVersion !== capturedVersion) {
             console.log('[api] Token fetch result discarded due to resetToken()')
@@ -213,7 +209,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     setTimeout(() => controller.abort(), ms)
     return controller.signal
   }
-  const doFetch = () => tauriFetch(`${BASE}${url}`, {
+  const doFetch = () => fetch(`${BASE}${url}`, {
     headers,
     ...options,
     // 调用方自带 signal 时优先（如取消语义），否则使用统一超时
@@ -270,7 +266,7 @@ async function uploadImage(file: File): Promise<{ file_id: string; filename: str
   const timer = setTimeout(() => controller.abort(), 60_000)
   let res: Response
   try {
-    res = await tauriFetch(`${BASE}/upload`, {
+    res = await fetch(`${BASE}/upload`, {
       method: 'POST',
       headers,
       body: form,
@@ -379,7 +375,7 @@ export const api = {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (token) headers['X-Maxma-Token'] = token
     try {
-      await tauriFetch(`${BASE}/restart`, { method: 'POST', headers })
+      await fetch(`${BASE}/restart`, { method: 'POST', headers })
     } catch { /* server will close connection, expected */ }
   },
 
@@ -722,7 +718,7 @@ export const api = {
     if (token) {
       headers['X-Maxma-Token'] = token
     }
-    const res = await tauriFetch(`${BASE}/diagnostics/error-log/text`, { headers })
+    const res = await fetch(`${BASE}/diagnostics/error-log/text`, { headers })
     if (!res.ok) {
       throw new Error(`导出错误日志失败: ${res.status}`)
     }

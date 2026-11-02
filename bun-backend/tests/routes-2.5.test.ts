@@ -347,7 +347,6 @@ describe("health 四部件（阶段 2.5b）", () => {
     }
     expect((body.native_tools as { detail: string }).detail).toBe("14 个工具");
     expect((body.mcp_tools as { detail: string }).detail).toBe("0 个工具（未配置 MCP 服务器）");
-    expect(typeof body.anthropic_skills_count).toBe("number");
     expect(body.provider_diagnostics_enabled).toBe(false);
     expect(body.think_path_enabled).toBe(false);
     expect(typeof body.timestamp).toBe("number");
@@ -419,8 +418,8 @@ describe("capabilities 聚合（阶段 2.5c）", () => {
     expect(body.memory).toEqual({ total: 0, categories: {}, avg_confidence: 0 });
 
     const cfg = body.config_sources as Record<string, unknown>;
-    expect((cfg.sources as unknown[]).length).toBe(13);
-    expect((cfg.resolution_order as string[]).length).toBe(13);
+    expect((cfg.sources as unknown[]).length).toBe(12);
+    expect((cfg.resolution_order as string[]).length).toBe(12);
 
     // Phase4 manifest
     expect(body.version).toBe(EXPECTED_VERSION);
@@ -534,8 +533,6 @@ describe("CORS（阶段 2.5d）", () => {
       const origins = buildCorsOrigins();
       expect(origins).toContain("http://localhost:5173");
       expect(origins).toContain("http://localhost:8000");
-      expect(origins).toContain("tauri://localhost");
-      expect(origins).toContain("https://tauri.localhost");
     } finally {
       if (prev === undefined) delete process.env.MAXMA_ENV;
       else process.env.MAXMA_ENV = prev;

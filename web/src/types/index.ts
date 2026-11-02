@@ -1,6 +1,7 @@
 import type { ParsedRef } from '@/utils/references'
 
 import type { InteractiveArtifact } from './workbench'
+import type { PermissionMode } from './session'
 
 // === WebSocket 服务端 → 客户端事件 ===
 
@@ -375,10 +376,10 @@ export interface MemoryDoneEvent {
  *   - sub_session_created — 已实现（Phase 3.4）：EventBus 订阅 TASK_SUBAGENT_LIFECYCLE_CHANNEL
  *   - deferred_subagent_submitted — 部分实现：后端 deferred_run_manager 已就绪，需产品决策
  *   - memory_* — 未实现：OMP memory 跑在独立状态，不通过事件流推送
- *   - workflow_step_start/end/error / workflow_completed — 已从本联合删除：后端
- *     `routes/workflows.ts` 确实经 `server.ts` 的 broadcastEvent 广播，但 web/src
- *     没有任何 store/view/component 读取工作流运行态（grep 'workflow' 只命中类型定义本身），
- *     留着它们只是让类型面谎报"前端接得住"。恢复条件：先做出真实消费者，再登记类型与分支。
+ *   - workflow_step_start/end/error / workflow_completed — 2026-11-02 起**不存在**：
+ *     后端那条死的 REST 工作流面（`bun-backend/src/routes/workflows.ts` 空 deps 挂载，
+ *     sidecar 分支永远走不到）连同 kernel 的 `execute_workflow_step` 已整体删除，
+ *     前端也从没有过消费者。恢复自动化是独立工作项，届时事件类型/分支/UI 一起新建。
  *   - llm_usage — 不属于前端：`chat-ws.ts` 的 `case "llm_usage"` 每条路径都 return，
  *     只落台账与 metrics，永不透传浏览器。用量到前端的常规路径是 done.payload.context_usage。
  *
@@ -428,6 +429,7 @@ export type ServerEvent =
   | CollaborationUpdateEvent
   | TaskReviewUpdateEvent
   | TaskBriefUpdateEvent
+  | PermissionModeUpdatedEvent
 
 // === GAP-B1-001：目标模式状态事件 ===
 
@@ -483,6 +485,21 @@ export interface GoalUpdatedEvent {
       tokenBudget?: number
     } | null
     state?: { enabled?: boolean; mode?: string } | null
+  }
+}
+
+/**
+ * PERM-ANNOUNCE-001：内核每次改 `record.permissionMode` 都广播这一条。
+ *
+ * 这个字段有两个写入方（`set_permission_mode` 四档、WS「自动执行」开关走的
+ * `set_auto_approve` 两态），以前谁都不通知谁：拨完开关，权限选择器还按自己 GET
+ * 到的旧值渲染，显示的是内核并不在的档位。现在两个消费者都从这一条事件收敛，
+ * 同一会话的另一个标签页也跟着走。
+ */
+export interface PermissionModeUpdatedEvent {
+  type: 'permission_mode_updated'
+  payload: {
+    permission_mode: PermissionMode
   }
 }
 
@@ -850,7 +867,6 @@ export interface HealthResponse {
   memory: ComponentHealth
   native_tools: ComponentHealth
   mcp_tools: ComponentHealth
-  anthropic_skills_count: number
   providers?: Record<string, ComponentHealth>
   ltm?: ComponentHealth & { provider_id?: string | null }
   provider_diagnostics_enabled?: boolean
@@ -986,7 +1002,6 @@ export interface ProviderItem {
 // 现有 `import { X } from '@/types'` 用法不破坏。
 export * from './provider'
 export * from './session'
-export * from './workflow'
 export * from './mcp'
 export * from './news'
 export * from './metrics'

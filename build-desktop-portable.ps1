@@ -27,6 +27,14 @@ if (-not (Test-Path $BunExe)) {
     throw "D 盘缺少已准备好的 Bun 运行时，已停止构建以避免触发其他缓存路径：$BunExe"
 }
 
+# 暂存目录必须先清空再拷。它是"上一次构建的产物树"而不是源码树，而
+# Copy-Item -Force 只做同名覆盖、**不删上次有这次没有的条目** —— 被移除的资源会
+# 复活进包里。实测踩过：删掉 .omp/skills 后重跑，桌面 zip 里仍有 13 个
+# .omp/skills/*.md，来源就是上一轮构建残留的 dist\electron-runtime。
+# 上方路径护栏已保证 $RuntimeDir 落在 $DistRoot 之内。
+if (Test-Path -LiteralPath $RuntimeDir) {
+    Remove-Item -LiteralPath $RuntimeDir -Recurse -Force
+}
 New-Item -ItemType Directory -Force -Path $CacheRoot, $BuildTemp, $RuntimeDir, $OutputDir | Out-Null
 $env:TEMP = $BuildTemp
 $env:TMP = $BuildTemp
@@ -187,8 +195,7 @@ Copy-Item -LiteralPath (Join-Path $ProjectRoot "version.py") -Destination $Runti
 New-Item -ItemType Directory -Force -Path (Join-Path $RuntimeDir "bun-sidecar") | Out-Null
 Copy-Item -LiteralPath (Join-Path $ProjectRoot "bun-sidecar\package.json") -Destination (Join-Path $RuntimeDir "bun-sidecar\package.json") -Force
 New-Item -ItemType Directory -Force -Path (Join-Path $RuntimeDir "macros") | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $RuntimeDir ".omp\skills"), (Join-Path $RuntimeDir ".maxma\skills"), (Join-Path $RuntimeDir "web\dist") | Out-Null
-Copy-Item -Path (Join-Path $ProjectRoot ".omp\skills\*") -Destination (Join-Path $RuntimeDir ".omp\skills") -Recurse -Force
+New-Item -ItemType Directory -Force -Path (Join-Path $RuntimeDir ".maxma\skills"), (Join-Path $RuntimeDir "web\dist") | Out-Null
 Copy-Item -Path (Join-Path $ProjectRoot ".maxma\skills\*") -Destination (Join-Path $RuntimeDir ".maxma\skills") -Recurse -Force
 $BundledSkillNames | ForEach-Object {
     $sourceSkill = Join-Path $ProjectRoot (Join-Path ".maxma\skills" (Join-Path $_ "SKILL.md"))
@@ -215,10 +222,6 @@ if (Test-Path -LiteralPath $resolvedWebDist) {
 }
 New-Item -ItemType Directory -Force -Path $resolvedWebDist | Out-Null
 Copy-Item -Path (Join-Path $ProjectRoot "web\dist\*") -Destination $resolvedWebDist -Recurse -Force
-if (Test-Path (Join-Path $ProjectRoot "workflows")) {
-    New-Item -ItemType Directory -Force -Path (Join-Path $RuntimeDir "workflows") | Out-Null
-    Copy-Item -Path (Join-Path $ProjectRoot "workflows\*") -Destination (Join-Path $RuntimeDir "workflows") -Recurse -Force -ErrorAction SilentlyContinue
-}
 $marker = Join-Path $RuntimeDir "portable.flag"
 Set-Content -LiteralPath $marker -Value "MaxmaHere Portable Desktop Mode" -Encoding utf8
 

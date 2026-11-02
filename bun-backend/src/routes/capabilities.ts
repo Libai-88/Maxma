@@ -146,7 +146,6 @@ function analyzeConfigSources(): Record<string, unknown> {
     { name: "项目 .github", path: path.join(cwd, ".github"), priority: 7, exists: existsDir(path.join(cwd, ".github")), scope: "project", description: "GitHub 项目配置" },
     { name: "项目 .mcp.json", path: path.join(cwd, ".mcp.json"), priority: 8, exists: existsFile(path.join(cwd, ".mcp.json")), scope: "project", description: "MCP 服务器配置文件" },
     { name: "项目 agents.md", path: path.join(cwd, "AGENTS.md"), priority: 9, exists: existsFile(path.join(cwd, "AGENTS.md")), scope: "project", description: "项目上下文说明" },
-    { name: "用户 ~/.omp", path: path.join(home, ".omp"), priority: 10, exists: existsDir(path.join(home, ".omp")), scope: "user", description: "OMP 全局用户配置" },
     { name: "用户 ~/.claude", path: path.join(home, ".claude"), priority: 11, exists: existsDir(path.join(home, ".claude")), scope: "user", description: "Claude Code 全局配置" },
     { name: "用户 ~/.cursor", path: path.join(home, ".cursor"), priority: 12, exists: existsDir(path.join(home, ".cursor")), scope: "user", description: "Cursor 编辑器全局配置" },
     { name: "Maxma 数据目录", path: path.join(maxmaRoot, "api", "data"), priority: 13, exists: existsDir(path.join(maxmaRoot, "api", "data")), scope: "app", description: "Maxma 应用数据目录" },

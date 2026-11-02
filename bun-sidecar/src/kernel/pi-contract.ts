@@ -448,12 +448,7 @@ export const MAXMA_SETTINGS_ENGINE_REAL_PATHS: ReadonlySet<string> = new Set(
 
 /**
  * Maxma WS 契约中**由引擎负责产出**的事件（词表来源 docs/contracts/ws-events.md §3.1，
- * 另加引擎派生的 llm_usage 与工作流逐步事件 workflow_step_*——后三个由 kernel 的
- * `execute_workflow_step` 分支产出（`bridge-pi.ts`），`routes/workflows.ts` 只是另一个
- * 并行生产者，所以它们归这张表，不归下面的后端合成表。
- * （注意：`server.ts:230` 用 `createWorkflowRoutes()` 空 deps 挂载，`executeViaKernel`
- * 恒为 undefined，所以**当前**这条 kernel 分支只能由直接调用该 RPC 的一方触发，
- * 工作流路由自己走的是 simple 分支。已作为开放项记在 ws-events.md §4。）
+ * 另加引擎派生的 llm_usage 与 `permission_mode_updated`）。
  *
  * 由 tests/engine-boundary.test.ts 逐条核对"kernel 里真的有生产者"。
  * 没有生产者又不在下面的显式登记里的，测试红——这正是
@@ -467,8 +462,16 @@ export const MAXMA_SETTINGS_ENGINE_REAL_PATHS: ReadonlySet<string> = new Set(
  *     两张里才是矛盾。
  *   - `BACKEND_SYNTHESIZED_EVENTS`：由 bun-backend 路由自行合成，不经引擎，
  *     与前两张互斥（`engine-boundary.test.ts` 查这条互斥）。
- * `workflow_completed` 属于第三张：它只有后端生产者（`routes/workflows.ts`），
- * kernel 里没有对应分支，所以**不能**列在这里，否则等于伪造引擎生产者。
+ *
+ * `permission_mode_updated` 必须落在本清单而不是后端合成表：`record.permissionMode`
+ * 的两个写入方（`set_permission_mode` 四档 / `set_auto_approve` 两态）都在 kernel 里，
+ * 广播只能由写入方发。REST 层转发不了"别人写的那一次"——那正是这个字段以前会漂移的原因
+ * （`dev_docs/permission-modes.md`）。
+ *
+ * 曾有而今无：`workflow_step_start` / `workflow_step_end` / `workflow_step_error`。
+ * 它们由 kernel 的 `execute_workflow_step` 分支产出，而那条分支唯一的调用方
+ * （`bun-backend/src/routes/workflows.ts`）用空 deps 挂载，永远走不到 sidecar 路径；
+ * 2026-11-02 整条死面连同这三个事件一起删除，恢复自动化是独立工作项。
  */
 export const MAXMA_ENGINE_WS_EVENTS = [
   "thinking_start",
@@ -500,9 +503,7 @@ export const MAXMA_ENGINE_WS_EVENTS = [
   "context_usage",
   "sub_session_created",
   "deferred_subagent_submitted",
-  "workflow_step_start",
-  "workflow_step_end",
-  "workflow_step_error",
+  "permission_mode_updated",
 ] as const;
 
 /**
@@ -591,7 +592,6 @@ export const PI_RPC_METHODS = [
   "get_goal_state",
   "reload_mcp_for_session",
   "session_recap",
-  "execute_workflow_step",
   "steer",
   "follow_up",
 ] as const;
@@ -608,7 +608,9 @@ export const PI_RPC_METHODS = [
  * 两条历史谎言就是靠这个形状藏住的，本次一并清掉：
  *   - `workflow_completed` 只有后端生产者（`routes/workflows.ts`），此前**三张清单
  *     一张都不在**，所以对账测试看不见它——旧判据只正则扫 `chat-ws.ts`，
- *     从别的后端路由发出去的事件天然免疫。
+ *     从别的后端路由发出去的事件天然免疫。该路由连同这个事件已于 2026-11-02 删除
+ *     （死的 REST 工作流面），但扫描器**仍须**覆盖整个目录：形状锁改吃临时 fixture，
+ *     见 engine-boundary.test.ts。
  *   - `turn_start` / `task_review` 曾被登记成"后端合成的事件"，其实
  *     `turn_start` 只是 `recordActivity("turn", "turn_start", …)` 的**活动埋点
  *     event_type**（`activity-hub.ts`，不进 WS 帧），`task_review` 是**入站**
@@ -629,5 +631,41 @@ export const BACKEND_SYNTHESIZED_EVENTS = [
   "memory_done",
   "task_brief_update",
   "task_review_update",
-  "workflow_completed",
 ] as const;
+
+// ─────────────────────────────────────────────────────────────
+// 8. 会话权限模式档位（Maxma 自建词表，跨 kernel / REST / 前端三侧）
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Maxma 权限模式 4 档（AG-PERM-001），限制由强到弱；**数组顺序即 REST
+ * `available_permission_modes` 与前端选项的展示顺序**。
+ *
+ * ## 为什么在"引擎契约"里登记一个引擎没有的名字
+ *
+ * pi 无内置权限系统（官方 README/Security 明示），四档是 Maxma 自建语义，
+ * 落点是官方 tool_call 钩子（`kernel/approval-gate.ts` 的 `needsApprovalForMode`）。
+ * 但它和引擎名字属于同一类缺陷：这四个字符串以前**在四处各写一份**——
+ * `kernel/types.ts` 的联合类型、`bridge-pi.ts` 的 RPC 入参校验（模块私有、未导出）、
+ * `routes/sessions.ts` 的 REST 返回值、`web/src/types/session.ts` 的前端联合。
+ * 跨 workspace 的字符串副本 tsc 看不见，只动一处时会出现"REST 说这档可用、
+ * kernel 判它非法"（用户选到必 422 的档位）或反过来。现在清单只有这一处，
+ * 档位类型由它**派生**（见下），kernel 与 REST 两侧运行时 import 同一份常量
+ * （跨 workspace 运行时消费的先例：`routes/capabilities.ts:29`，不属
+ * `@earendil-works/*`，故 `engine-boundary.test.ts` 的 allowlist 无需登记）。
+ *
+ * 前端仍是**副本**，而且是被纪律要求成副本：`engine-boundary.test.ts` 的判据是
+ * 「前端只认 Maxma REST/WS 契约」，`web/src` 不许 import kernel 源码，所以前端联合
+ * 由 `bun-backend/tests/permission-mode-contract.test.ts` 逐字对账（含
+ * `PermissionModeControl.vue` 里那份 prop 默认值清单）。
+ *
+ * 新增/改名一档必须同时动 `needsApprovalForMode` 的分支与前端联合——
+ * 该测试对"审批门实际分支的档位集合"与本清单做**双向**差集校验，漏一侧当场红。
+ */
+export const MAXMA_PERMISSION_MODES = ["read_only", "ask", "operate", "auto"] as const;
+
+/**
+ * 档位类型 = 上面清单的派生值（以前是第二个字面量联合，两处可以各漂各的）。
+ * `kernel/types.ts` 只做再导出，全仓的 `MaxmaPermissionMode` 都指向这一份。
+ */
+export type MaxmaPermissionMode = (typeof MAXMA_PERMISSION_MODES)[number];

@@ -13,7 +13,8 @@
 <script setup lang="ts">
 import { api } from '@/api'
 import type { PermissionMode } from '@/types'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useChatStore } from '@/stores/chat'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 import PermissionModeControl from './PermissionModeControl.vue'
 
@@ -35,6 +36,8 @@ useGsap((_ctx, contextSafe) => {
   }), { flush: 'post' })
 })
 
+const chatStore = useChatStore()
+
 /**
  * 可用档位来自服务端 `available_permission_modes`——非空即可交互。
  *
@@ -48,6 +51,22 @@ const mode = ref<PermissionMode>('ask')
 const busy = ref(false)
 const errorMessage = ref('')
 let requestGeneration = 0
+
+/**
+ * PERM-ANNOUNCE-001：内核是 `record.permissionMode` 的唯一写入方，两条写入路径
+ * （REST PUT → `set_permission_mode` 四档、WS「自动执行」开关 → `set_auto_approve`
+ * 两态）每次写入都广播 `permission_mode_updated`，`useChat` 把真值落进通道状态。
+ * 这里以那份状态为准收敛：GET 只负责首屏与可用档位清单，之后开关一拨、
+ * 或同一会话的另一个标签页改档，选择器都跟着走到内核真正所在的档位——
+ * 以前它只信自己那次 GET，于是拨完开关显示的是内核并不在的档位。
+ */
+const announcedMode = computed(
+  () => chatStore.channels.get(props.sessionId)?.permissionMode ?? null,
+)
+
+watch(announcedMode, announced => {
+  if (announced) mode.value = announced
+}, { immediate: true })
 
 function isCurrentSession(sessionId: string, generation: number): boolean {
   return props.sessionId === sessionId && requestGeneration === generation
@@ -66,7 +85,9 @@ async function load(sessionId: string) {
     const response = await api.getSessionPermissionMode(sessionId)
     if (!isCurrentSession(sessionId, generation)) return
     availableModes.value = response.available_permission_modes
-    mode.value = response.permission_mode
+    // GET 是首屏快照；若内核已经广播过更新的档位（例如「自动执行」开关刚拨过），
+    // 以广播值为准，别让一次迟到的 GET 把选择器带回旧档。
+    mode.value = announcedMode.value ?? response.permission_mode
   } catch {
     // 能力探测失败不新增 UI：保持隐藏（空清单），下一次载入会话时重试。
   }
@@ -83,7 +104,7 @@ async function updateMode(nextMode: PermissionMode) {
     const response = await api.setSessionPermissionMode(sessionId, nextMode)
     if (!isCurrentSession(sessionId, generation)) return
     availableModes.value = response.available_permission_modes
-    mode.value = response.permission_mode
+    mode.value = announcedMode.value ?? response.permission_mode
     // 不再补发 WS update_auto_approve（PERM-LIVE-001 的旧注释）。Bun 后端是
     // in-process 直调 kernel：PUT 经 set_permission_mode RPC 改的就是运行中
     // 会话的 record.permissionMode，审批门按闭包读它，切换即时生效

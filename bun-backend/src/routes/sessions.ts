@@ -21,6 +21,7 @@ import {
   type PiPendingPlan,
 } from "../../../bun-sidecar/src/kernel/bridge-pi";
 import type { MaxmaPermissionMode } from "../../../bun-sidecar/src/kernel/types";
+import { MAXMA_PERMISSION_MODES } from "../../../bun-sidecar/src/kernel/pi-contract";
 
 import { getDeferredRunManager } from "./deferred-runs";
 import { engineSettingsForNewSession, getSettingValue } from "../settings-global";
@@ -42,21 +43,15 @@ export interface SessionsDeps {
 const ROLE_MAP: Record<string, string> = { user: "human", assistant: "ai" };
 
 /**
- * 权限模式四档的后端权威清单，顺序即 UI 展示顺序（限制由强到弱）。
+ * 档位清单**不在这里声明**：单源是 `bun-sidecar/src/kernel/pi-contract.ts` 的
+ * `MAXMA_PERMISSION_MODES`，本路由运行时 import 它（先例：
+ * `routes/capabilities.ts:29` 同样跨 workspace 取 kernel 常量，不属
+ * `@earendil-works/*`，无需 `engine-boundary.test.ts` 的 allowlist 登记）。
+ * 以前这里另抄一份、`bridge-pi.ts` 再抄一份（模块私有未导出，REST 面拿不到），
+ * 四处副本靠对账测试兜着；现在 kernel 校验、REST 返回、类型三者同源，
+ * "REST 说可用而 kernel 判非法"这类漂移在源码层就不可能出现。
+ * 顺序即 UI 展示顺序（限制由强到弱），前端 `PermissionModeControl.vue` 按它渲染。
  *
- * 为什么这里还留一份"值"清单：kernel 侧的 `MaxmaPermissionMode`（kernel/types.ts）
- * 是纯类型、运行时擦除，`bridge-pi.ts` 的 `PI_PERMISSION_MODES` 又是模块私有常量
- * （未导出），REST 面拿不到。档位类型仍锚在 kernel 联合上——写错档名 tsc 直接红。
- *
- * 它不是第四个可以各写各的副本：`bun-backend/tests/permission-mode-contract.test.ts`
- * 逐字对账 kernel 联合类型、`bridge-pi.ts` 的 `PI_PERMISSION_MODES`、前端
- * `web/src/types/session.ts` 的 `PermissionMode` 联合与本清单，任一侧改名或增删
- * 档位当场红。以前正是"两侧各写各的、没人对账"让 `permission_modes_enabled`
- * 这个后端从不产出的字段活到今天（前端恒读 undefined → 控件恒禁用）。
- */
-const AVAILABLE_PERMISSION_MODES: readonly MaxmaPermissionMode[] = ["read_only", "ask", "operate", "auto"];
-
-/**
  * GET/PUT 共用的响应形状。字段名即前后端契约：`available_permission_modes`
  * 非空 = 该会话可用权限模式，前端据此决定控件是否可交互、并逐项渲染选项。
  * 没有 feature flag——四档在 kernel 里恒生效（见 dev_docs/permission-modes.md），
@@ -67,7 +62,7 @@ function permissionModeView(sessionId: string, mode: MaxmaPermissionMode) {
     session_id: sessionId,
     permission_mode: mode,
     // 展开一份：清单本身是模块级 readonly 常量，不许把它的可变副本交给调用方。
-    available_permission_modes: [...AVAILABLE_PERMISSION_MODES],
+    available_permission_modes: [...MAXMA_PERMISSION_MODES],
   };
 }
 

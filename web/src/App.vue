@@ -838,20 +838,21 @@ html, body {
   }
 }
 
-/* ══ Codemirror 编辑器在 WebView2 / tauri:// 下可见性兜底 ══
-   BC-00X：人设页(/soul) 与 用户页(/user) 的 Codemirror 编辑器在便携版
-   (tauri://localhost 自定义协议 + WebView2) 下空白、不可编辑。
-   根因：.v-codemirror / .cm-editor 的关键布局规则位于组件懒加载 CSS
-   (SoulView-*.css / UserView-*.css) 中，经运行时 <link> 注入时在
-   tauri:// 协议下未被可靠应用；编辑器在 display:contents 下高度坍缩为 0。
-   修复：把关键布局规则提升到全局同步加载的 CSS（本文件 <style> 无 scoped，
+/* ══ Codemirror 编辑器可见性兜底 ══
+   BC-00X（历史成因：已随阶段 2 删除的 Tauri 壳 + WebView2）：人设页(/soul)
+   与用户页(/user) 的 Codemirror 编辑器在便携版下空白、不可编辑。
+   根因与壳无关：.v-codemirror / .cm-editor 的关键布局规则位于组件懒加载 CSS
+   (SoulView-*.css / UserView-*.css) 中，经运行时 <link> 注入时排在组件挂载之后，
+   编辑器在 display:contents 下高度坍缩为 0。
+   兜底保留：把关键布局规则提升到全局同步加载的 CSS（本文件 <style> 无 scoped，
    随 index.html 静态 <link> 加载，先于任何路由组件挂载），确保编辑器
    在任何时刻都有确定可见高度，与懒加载 CSS 时序解耦。
    这些规则只作用于编辑器容器，不影响其它页面。 */
 /* 容器本身：明确高度参考（position:relative + 保底高度），确保绝对定位的子编辑器有确定高度。
    specificity 必须 > codemirror base theme 的 `.cm-ThemeID .cm-scroller` (0,2,0)，
    否则 codemirror 在 runtime 注入的 font-family:monospace 会覆盖我们的中文字体设置，
-   导致中文文本在 Tauri WebView2 中显示为 tofu（豆腐块）不可见 —— 历史上 BUG-00X 的核心。 */
+   导致中文只能落到等宽字体回退（历史上便携版的 WebView2 直接显示为 tofu 豆腐块）
+   —— BUG-00X 的核心；这条 specificity 要求与桌面壳无关，仍然必要。 */
 .editor-wrapper {
   position: relative;
   min-height: 300px;

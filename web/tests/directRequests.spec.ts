@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
   request: vi.fn(),
   getToken: vi.fn(() => 'stale-token'),
   getApiBase: vi.fn(() => '/api'),
-  tauriFetch: vi.fn(),
 }))
 
 vi.mock('@/api', () => ({
@@ -18,7 +17,6 @@ vi.mock('@/api', () => ({
 
 vi.mock('@/utils/env', () => ({
   getApiBase: mocks.getApiBase,
-  tauriFetch: mocks.tauriFetch,
 }))
 
 import { api } from '@/api'
@@ -32,7 +30,6 @@ describe('runtime-safe direct API consumers', () => {
     mocks.request.mockReset()
     mocks.getToken.mockClear()
     mocks.getApiBase.mockClear()
-    mocks.tauriFetch.mockReset()
     mocks.request.mockImplementation(async (path: string) => {
       if (path === '/persona/profile') return { name: 'Runtime Maxma' }
       if (path === '/memory') return [{ id: 'fact-1' }]
@@ -53,7 +50,6 @@ describe('runtime-safe direct API consumers', () => {
     expect(mocks.request).toHaveBeenCalledWith('/persona/profile')
     expect(mocks.request).toHaveBeenCalledWith('/memory')
     expect(mocks.request).toHaveBeenCalledWith('/tools')
-    expect(mocks.tauriFetch).not.toHaveBeenCalled()
     expect(mocks.getApiBase).not.toHaveBeenCalled()
     expect(mocks.getToken).not.toHaveBeenCalled()
   })
@@ -65,6 +61,6 @@ describe('runtime-safe direct API consumers', () => {
     expect(source).toContain('api.getSettings(')
     expect(source).not.toContain('getToken')
     expect(source).not.toContain('getApiBase')
-    expect(source).not.toContain('tauriFetch')
+    expect(source).not.toMatch(/from '@\/utils\/env'/)
   })
 })

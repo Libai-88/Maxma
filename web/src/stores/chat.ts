@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, reactive, ref, shallowRef, watch } from 'vue'
-import type { ChatTurn, ContextUsage, CompactionReason, CompactionAction, TaskReviewState } from '@/types'
+import type { ChatTurn, ContextUsage, CompactionReason, CompactionAction, TaskReviewState, PermissionMode } from '@/types'
 import type { ModelInfo, ChatContextUsage } from '../types/chat'
 // S4-2: api 已被 30+ 文件静态引用进主 chunk，此处动态导入不会触发拆分（纯噪音），改静态
 import { api } from '@/api'
@@ -111,6 +111,12 @@ export interface SessionChannel {
   parentSessionId: string | null
   privateMode: boolean
   autoApprove: boolean
+  /**
+   * PERM-ANNOUNCE-001：内核广播 `record.permissionMode` 的**当前真值**
+   * （`permission_mode_updated` 事件），null = 这个通道还没收到过事件、只能信 GET。
+   * 「自动执行」开关与权限选择器都从这里收敛，两边不再各存一份档位。
+   */
+  permissionMode: PermissionMode | null
   _pingTimer: ReturnType<typeof setInterval> | null  // 心跳 ping 定时器
   _lastPongAt: number  // 上次收到 pong 的时间戳（ms），用于检测静默断开
   /** context_compressing 在 currentTurn 为 null 时缓存，待下一轮创建后回放 */
@@ -161,7 +167,7 @@ function createChannel(): SessionChannel {
     streamStartedAt: null, lastActivityAt: null, lastCompletedAt: null,
     reconnectTimer: null, reconnectAttempts: 0, initialized: false,
     _awaitingToolName: null, parentSessionId: null,
-    privateMode: false, autoApprove: false, _pingTimer: null, _lastPongAt: 0,
+    privateMode: false, autoApprove: false, permissionMode: null, _pingTimer: null, _lastPongAt: 0,
     _lastDoneTurnId: null,
     _turnWatchdog: null,
     _privateAtSend: null,

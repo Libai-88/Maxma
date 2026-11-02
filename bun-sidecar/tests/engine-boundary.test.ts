@@ -65,27 +65,32 @@ function filesImportingPi(dirRel: string): string[] {
 }
 
 /**
- * 扫出 bun-backend 里**真实会发出去的 WS 事件名**（相对仓库根 → 发射点列表）。
+ * 扫出指定目录里**真实会发出去的 WS 事件名**（相对仓库根 → 发射点列表）。
+ * 默认整个 `bun-backend/src`；参数是给"机制锁"用的（见下面"发射点扫描必须跨文件"
+ * 那条用例），不是可选装饰。
  *
- * 为什么不能只正则扫 `chat-ws.ts`（旧判据就是这么写的）：后端不只有一个事件出口。
- * `routes/workflows.ts` 经 `server.ts` 注入的 sink 直接广播 `workflow_completed`，
- * 那份文件对旧判据完全隐形——于是"事件谁在发"与"清单登记了什么"之间的差集
- * 永远查不到它，`MAXMA_ENGINE_WS_EVENTS` 少登记一条也没人红。
+ * 为什么必须**按目录**扫、不能只正则扫 `chat-ws.ts`（旧判据就是这么写的）：后端不只有
+ * 一个事件出口。`routes/workflows.ts` 当年经 `server.ts` 注入的 sink 直接广播
+ * `workflow_completed`，那份文件对旧判据完全隐形——"事件谁在发"与"清单登记了什么"
+ * 之间的差集永远查不到它，`MAXMA_ENGINE_WS_EVENTS` 少登记一条也没人红。
+ * 那条死的 REST 工作流面已于 2026-11-02 整体删除（空 deps 挂载 → sidecar 分支永不可达），
+ * 现在真实树里只剩 `chat-ws.ts` 一个发射文件。判据不能因此退化成"扫一个文件也算扫"：
+ * 跨文件发现能力由**临时 fixture** 现场自证，扫描范围一缩回单文件就红。
  *
  * 认得的发射形状（覆盖后端现存的每一类出口）：
  *   - `send("token", …)` / `sendEvent(sessionId, …)`（chat-ws 的 WS 写封装）
  *   - `hub.broadcast(sessionId, { type: "memory_start", … })`
  *   - `broadcastEvent(sessionId, { type: … })`（server.ts）
  *   - `ws.send(JSON.stringify({ type: "hello", … }))`
- *   - `eventSink(sessionId, EV_COMPLETED, …)`：常量名回查同文件的
- *     `const EV_COMPLETED = "workflow_completed"`，不猜命名规则。
+ *   - `eventSink(sessionId, EV_XXX, …)`：常量名回查同文件的
+ *     `const EV_XXX = "xxx_completed"`（就是当年 `EV_COMPLETED` 那个形状），不猜命名规则。
  *
  * 刻意**不**认的形状：`recordActivity("turn", "turn_start", …)` 的第二个参数是
  * 活动埋点的 `event_type`（`activity-hub.ts`），不进 WS 帧；入站客户端消息类型
  * （`task_review`）也不是服务端事件。旧清单把这两个当成"后端合成事件"登记过，
- * 那是给对账测试开了个永远命不中的口子。
+ * 那是给对账测试开的永不命中的口子。
  */
-function backendWsEmittedEvents(): Map<string, string[]> {
+function backendWsEmittedEvents(dirRel = "bun-backend/src"): Map<string, string[]> {
   const EMITTERS = "send|sendEvent|emit|eventSink|broadcast|broadcastEvent";
   const PATTERNS = [
     // send("token", …) —— 第一个参数就是事件名
@@ -98,7 +103,7 @@ function backendWsEmittedEvents(): Map<string, string[]> {
     new RegExp(`\\bws\\s*\\.\\s*send\\s*\\(\\s*(?:JSON\\s*\\.\\s*stringify\\s*\\(\\s*)?\\{\\s*type\\s*:\\s*"([a-z_]+)"`, "g"),
   ];
   const emitted = new Map<string, string[]>();
-  for (const abs of tsFiles("bun-backend/src")) {
+  for (const abs of tsFiles(dirRel)) {
     const rel = path.relative(REPO, abs).replace(/\\/g, "/");
     const src = fs.readFileSync(abs, "utf8");
     // 事件名常量表：`const EV_COMPLETED = "workflow_completed";`
@@ -269,9 +274,10 @@ describe("引擎边界纪律", () => {
   });
 
   test("后端路由发出的每个事件都必须登记归属；登记的合成事件必须真有发射点（双向）", () => {
-    // 这条补的是旧判据的结构性盲区：`backendSynthesized` 只正则扫 `chat-ws.ts`，
-    // 从别的后端路由（`workflows.ts` 经 server.ts 注入的 sink）发出去的
-    // `workflow_completed` 对判据完全隐形——三张清单一张都不在，照样全绿。
+    // 这条补的是旧判据的**结构性盲区**：`backendSynthesized` 只正则扫 `chat-ws.ts`，
+    // 从别的后端路由（当年的 `workflows.ts` 经 server.ts 注入的 sink）发出去的事件
+    // 对判据完全隐形——三张清单一张都不在，照样全绿。跨文件发现能力由下一条用例
+    // （临时 fixture）自证；这里查的是真实树的三向归属对账。
     const emitted = backendWsEmittedEvents();
     expect(
       [...emitted.keys()].length,
@@ -314,23 +320,141 @@ describe("引擎边界纪律", () => {
         doubleClaimed.join("\n  "),
     ).toEqual([]);
 
-    // 4) 本条缺陷的形状锁：`workflow_completed` 的发射点在 `routes/workflows.ts`，
-    //    不在 `chat-ws.ts`。旧判据只扫后者，所以它既没被登记、也没被查出。
-    //    这里显式要求扫描器**跨文件**看见它，并归在"后端合成"那张表里。
-    const completedSites = emitted.get("workflow_completed") ?? [];
+  });
+
+  test("发射点扫描必须跨文件：喂给它一个 chat-ws 之外的路由，照样得看见（机制锁）", () => {
+    // 本条替代的是原先"workflow_completed 必须来自 routes/workflows.ts"那条形状锁。
+    // 那条死的 REST 工作流面 2026-11-02 整体删除后，真实树里只剩 `chat-ws.ts` 一个
+    // 发射文件——继续断言"扫描器看得见某个非 chat-ws 的文件"会退化成空断言
+    // （没有主体，怎么改判据都绿）。所以这里自己造主体：把当年那个缺陷的形状
+    // （路由文件 + `const EV_*` 常量 + 经注入的 sink 广播）写成临时 fixture，
+    // 要求扫描器**跨目录**发现它——扫描面一旦缩回 `chat-ws.ts` 那个单文件，
+    // fixture 就扫不出任何东西，本条当场红。再加一个干扰项，锁住"不许把
+    // 活动埋点/入站消息也算成 WS 事件"。
+    const fixtureRel = `.tmp-boundary-fixture-${process.pid}`;
+    const fixtureAbs = path.join(REPO, fixtureRel);
+    // 复刻 `routes/workflows.ts` 当年的两类出口形状：
+    //   1) 常量名 → 经注入的 sink 发出（`eventSink(sessionId, EV_COMPLETED, …)`）
+    //   2) 字面量 → 经 server.ts 的 broadcastEvent 发出
+    // 两者都不在 chat-ws.ts 里，正是旧判据漏掉的那一类。
+    const files: Record<string, string> = {
+      "routes/synthetic-autoruns.ts": [
+        'const EV_SYNTH_RUN = "synthetic_run_done";',
+        "type Sink = (sid: string, type: string, payload: Record<string, unknown>) => void;",
+        "let eventSink: Sink = () => {};",
+        'export function setSyntheticSink(sink: Sink): void { eventSink = sink; }',
+        "export function finish(sid: string): void {",
+        "  eventSink(sid, EV_SYNTH_RUN, {});",
+        "}",
+      ].join("\n"),
+      "routes/synthetic-deferred.ts": [
+        'export function emit(sid: string, broadcastEvent: (s: string, e: { type: string }) => void): void {',
+        '  broadcastEvent(sid, { type: "synthetic_step_start" });',
+        "}",
+      ].join("\n"),
+      // 干扰项：活动埋点的 event_type 与入站消息类型都不算下行 WS 事件，
+      // 扫描器把它们认成事件的话，等于又开一个永不命中的登记口子。
+      "routes/synthetic-noise.ts": [
+        'import { record as recordActivity } from "../activity-hub";',
+        'export function noise(sid: string): void {',
+        '  recordActivity("turn", "synthetic_turn_start", { session_id: sid });',
+        '}',
+      ].join("\n"),
+    };
+    fs.mkdirSync(path.join(fixtureAbs, "routes"), { recursive: true });
+    for (const [rel, src] of Object.entries(files)) {
+      fs.writeFileSync(path.join(fixtureAbs, rel), src, "utf8");
+    }
+    try {
+      const found = backendWsEmittedEvents(fixtureRel);
+      // 1) 常量回查：`EV_SYNTH_RUN` → "synthetic_run_done"，发射点必须落在那个 fixture 文件
+      const runSites = found.get("synthetic_run_done") ?? [];
+      expect(
+        runSites.some((s) => s.startsWith(`${fixtureRel}/routes/synthetic-autoruns.ts:`)),
+        `扫描器看不见注入型 sink 发出的事件（常量名没回查成字符串字面量）——` +
+          `这正是当年 workflow_completed 隐形的机制，现扫到：${runSites.join(", ") || "无"}`,
+      ).toBe(true);
+      // 2) 第二种出口形状（broadcastEvent + 字面量）同样要跨文件看见
+      const stepSites = found.get("synthetic_step_start") ?? [];
+      expect(
+        stepSites.some((s) => s.startsWith(`${fixtureRel}/routes/synthetic-deferred.ts:`)),
+        `扫描器看不见 broadcastEvent 字面量发射点，现扫到：${stepSites.join(", ") || "无"}`,
+      ).toBe(true);
+      // 3) 干扰项不许被当成 WS 事件（否则清单能登记一个永远命不中的事件）
+      expect(
+        found.has("synthetic_turn_start"),
+        "活动埋点的 event_type 被扫成 WS 事件了——那是给对账测试开的空口子",
+      ).toBe(false);
+
+      // 4) fixture 的扫描结果必须**恰好**是那两个事件（多一个说明判据开始把
+      //    埋点/入站消息也算成 WS 事件，少一个说明发射形状没被认出来）。
+      expect(
+        [...found.keys()].sort(),
+        `fixture 扫出的事件集合不该是：${[...found.keys()].sort().join(", ")}`,
+      ).toEqual(["synthetic_run_done", "synthetic_step_start"]);
+
+      // 5) 真实树的发射点必须来自**目录遍历**：每一个所在文件都要在
+      //    `tsFiles("bun-backend/src")` 数出来的清单里，而那份清单本身必须是非平凡的。
+      //    （把遍历换成写死的 `chat-ws.ts` 时，上面 fixture 那几条先红；
+      //    这条兜的是"扫描面被偷偷挪到别的目录"。）
+      const scanned = tsFiles("bun-backend/src").map((abs) =>
+        path.relative(REPO, abs).replace(/\\/g, "/"),
+      );
+      expect(scanned.length, `bun-backend/src 只数出 ${scanned.length} 个 .ts——遍历被改窄了`).toBeGreaterThan(20);
+      const realFiles = new Set(
+        [...backendWsEmittedEvents().values()]
+          .flat()
+          .map((site) => site.slice(0, site.lastIndexOf(":"))),
+      );
+      const offList = [...realFiles].filter((f) => !scanned.includes(f));
+      expect(
+        offList,
+        `这些发射点不在目录遍历的清单里，扫描面被动过手脚：\n  ${offList.join("\n  ")}`,
+      ).toEqual([]);
+    } finally {
+      fs.rmSync(fixtureAbs, { recursive: true, force: true });
+    }
+  });
+
+  test("死的 REST 工作流面已整体移除：不许留下半个表面（干净切换锁）", () => {
+    // 2026-11-02 的处置：`routes/workflows.ts`（空 deps 挂载，sidecar 分支永不可达，
+    // 只能回报失败）连同 kernel 的 `execute_workflow_step`、四处事件/方法登记、
+    // 前端 `types/workflow.ts` 一起删除。这里锁"删干净"——半个删除比不删更坏：
+    // 清单里留一条没人产出的事件，就是下一次 Agent 任务中心那种"全绿但永远收不到"。
+    expect(exists("bun-backend/src/routes/workflows.ts")).toBe(false);
+    expect(exists("web/src/types/workflow.ts")).toBe(false);
+
+    const workflowish = [
+      ...MAXMA_ENGINE_WS_EVENTS,
+      ...BACKEND_SYNTHESIZED_EVENTS,
+      ...PI_RPC_METHODS,
+    ].filter((name) => name.includes("workflow"));
     expect(
-      completedSites.some((s) => s.startsWith("bun-backend/src/routes/workflows.ts:")),
-      `扫描器看不见 routes/workflows.ts 发出的 workflow_completed——判据又退回只扫 chat-ws.ts 了` +
-        `（现扫到：${completedSites.join(", ") || "无"}）`,
-    ).toBe(true);
+      workflowish,
+      `这些工作流残留还挂在清单上，可生产它的代码已删除：\n  ${workflowish.join("\n  ")}`,
+    ).toEqual([]);
+    for (const entry of ENGINE_EVENT_EXPECTED_BUT_UNPRODUCED) {
+      expect(entry.event, "工作流事件不许改头换面登记成\u201c引擎不产出\u201d").not.toMatch(/workflow/);
+    }
+
+    // 两侧源码剥注释后不得再出现工作流标识符（发射点、RPC 分支、前端类型都算）
+    const leftovers: string[] = [];
+    for (const rel of [
+      ...tsFiles("bun-backend/src"),
+      ...tsFiles("bun-sidecar/src"),
+      ...tsFiles("web/src"),
+    ]) {
+      const relPath = path.relative(REPO, rel).replace(/\\/g, "/");
+      const src = fs
+        .readFileSync(rel, "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+      if (/workflow/i.test(src)) leftovers.push(relPath);
+    }
     expect(
-      BACKEND_SYNTHESIZED_EVENTS as readonly string[],
-      "workflow_completed 必须登记为后端合成事件（kernel 里没有它的生产者）",
-    ).toContain("workflow_completed");
-    expect(
-      MAXMA_ENGINE_WS_EVENTS as readonly string[],
-      "workflow_completed 不在 kernel 里产出，不许冒充引擎生产者",
-    ).not.toContain("workflow_completed");
+      leftovers,
+      `这些地方还留着 workflow 标识符（.github/workflows 属 CI，不在扫描面内）：\n  ${leftovers.join("\n  ")}`,
+    ).toEqual([]);
   });
 });
 

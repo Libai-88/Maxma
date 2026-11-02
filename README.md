@@ -84,7 +84,7 @@ Windows 桌面便携版：
 powershell -NoProfile -ExecutionPolicy Bypass -File build-desktop-portable.ps1 -SkipDependencyInstall
 ```
 
-输出 `dist\electron-portable\MaxmaHere-2.6.12-portable-x64.zip` 及同名 `.sha256` 校验文件。
+输出 `dist\electron-portable\MaxmaHere-2.6.13-portable-x64.zip` 及同名 `.sha256` 校验文件。
 
 便携包冒烟检查：
 

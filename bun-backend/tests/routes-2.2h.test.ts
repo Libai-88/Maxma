@@ -1,6 +1,7 @@
 /**
- * tests/routes-2.2h.test.ts — workflows / deferred-runs / collab / const-store
- * 单测（阶段 2.2h，2.2 批收尾）。
+ * tests/routes-2.2h.test.ts — deferred-runs / collab / const-store
+ * 单测（阶段 2.2h，2.2 批收尾）。工作流 REST 面已于 2026-11-02 作为死代码整体删除
+ * （空 deps 挂载 → sidecar 分支永不可达），本文件只剩它剩下的三条路由链。
  */
 
 import { describe, expect, test, beforeEach, afterEach } from "bun:test";
@@ -20,13 +21,6 @@ beforeEach(() => {
   process.env.MAXMA_DATA_DIR = dataDir;
   process.env.MAXMA_BUNDLE_DIR = dataDir;
   fs.mkdirSync(path.join(dataDir, "api", "data"), { recursive: true });
-  // 造一个工作流定义（sleep + log + set_var，全 simple 模式）
-  const wfDir = path.join(dataDir, "workflows");
-  fs.mkdirSync(wfDir, { recursive: true });
-  fs.writeFileSync(
-    path.join(wfDir, "demo.yaml"),
-    ["name: 演示工作流", "description: 测试用", "version: 1", "steps:", "  - step_id: s1", "    tool: log", "    args:", '      message: "hello"', "  - step_id: s2", "    tool: set_var", "    args:", "      key: k1", "      value: v1"].join("\n"),
-  );
 });
 
 afterEach(() => {
@@ -52,75 +46,6 @@ async function makeSession(app: Awaited<ReturnType<typeof makeApp>>): Promise<st
   ).json()) as { session_id: string };
   return created.session_id;
 }
-
-describe("workflows（阶段 2.2h）", () => {
-  test("定义列表 → 启动 → 轮询至 succeeded → cancel/resume 状态机", async () => {
-    const app = await makeApp();
-    const h = { "content-type": "application/json", ...authHeader() };
-
-    const defs = (await (await app.request("/api/workflows/definitions", { headers: h })).json()) as {
-      workflow_ids: string[];
-      definitions: Record<string, { name: string; step_count: number }>;
-    };
-    expect(defs.workflow_ids).toContain("demo");
-    // noUncheckedIndexedAccess 下 `defs.definitions.demo` 是可能 undefined。
-    // expect().toBeDefined() **不做类型收窄**（它只是运行时断言），所以下面仍要用
-    // 一次断言把它交给编译器；这里写的是一条窄的、就地取值的断言，
-    // 目的是让"缺 demo"的失败信息可读，而不是让 undefined 在深处爆 TypeError。
-    const demo = defs.definitions.demo as { name: string; step_count: number } | undefined;
-    expect(demo, "workflow 定义里缺少 demo").toBeDefined();
-    expect(demo?.step_count).toBe(2);
-
-    const sid = await makeSession(app);
-    const started = (await (
-      await app.request(`/api/sessions/${sid}/workflows`, {
-        method: "POST",
-        headers: h,
-        body: JSON.stringify({ workflow_id: "demo" }),
-      })
-    ).json()) as { run_id: string; status: string };
-    expect(started.status).toBe("running");
-
-    // 轮询至终态（simple 步骤瞬时完成）
-    let final: Record<string, unknown> = {};
-    for (let i = 0; i < 20; i++) {
-      final = (await (
-        await app.request(`/api/sessions/${sid}/workflows/${started.run_id}`, { headers: h })
-      ).json()) as Record<string, unknown>;
-      if (final.status === "succeeded") break;
-      await Bun.sleep(100);
-    }
-    expect(final.status).toBe("succeeded");
-    const steps = final.steps as Array<{ status: string }>;
-    expect(steps.every((s) => s.status === "succeeded")).toBe(true);
-
-    // 对已终态 run cancel → 400
-    const cancel = await app.request(`/api/sessions/${sid}/workflows/${started.run_id}/cancel`, {
-      method: "POST",
-      headers: h,
-    });
-    expect(cancel.status).toBe(400);
-
-    // resume 非 failed → 400
-    const resume = await app.request(`/api/sessions/${sid}/workflows/${started.run_id}/resume`, {
-      method: "POST",
-      headers: h,
-    });
-    expect(resume.status).toBe(400);
-  });
-
-  test("未知 workflow 404", async () => {
-    const app = await makeApp();
-    const h = { "content-type": "application/json", ...authHeader() };
-    const sid = await makeSession(app);
-    const res = await app.request(`/api/sessions/${sid}/workflows`, {
-      method: "POST",
-      headers: h,
-      body: JSON.stringify({ workflow_id: "no-such" }),
-    });
-    expect(res.status).toBe(404);
-  });
-});
 
 describe("deferred-runs（阶段 2.2h）", () => {
   test("manager upsert/list/cancel 终态 409/404", async () => {

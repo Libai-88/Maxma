@@ -34,7 +34,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import type { StickerSegment } from '@/composables/useStickerSegments'
-import { getApiBase, tauriFetch } from '@/utils/env'
+import { getApiBase } from '@/utils/env'
 import { useStickerPerformance } from '@/composables/useStickerPerformance'
 import Icon from '@/components/Icon.vue'
 import { createLogger } from '@/utils/logger'
@@ -66,7 +66,7 @@ const displaySticker = computed<StickerSegment>(() => ({
 async function loadRandomSticker() {
   if (props.sticker.src || !props.sticker.category) return
   try {
-    const res = await tauriFetch(`${getApiBase()}/stickers/random/${encodeURIComponent(props.sticker.category)}`)
+    const res = await fetch(`${getApiBase()}/stickers/random/${encodeURIComponent(props.sticker.category)}`)
     if (!res.ok) return
     const data = await res.json()
     if (data?.path) {

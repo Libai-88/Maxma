@@ -15,10 +15,7 @@
  *   - ltm：Python 恒 None → exclude_none 省略该字段。
  */
 
-import * as fs from "node:fs";
-import * as path from "node:path";
-
-import { bundleDir, dataDir } from "./app-paths";
+import { dataDir } from "./app-paths";
 import { appVersion } from "./app-version";
 import { getAppSettings } from "./config-settings";
 import { runtimeHealth, sanitizeUserDetail, type HealthState } from "./runtime-status";
@@ -125,17 +122,6 @@ function checkMcpTools(): Record<string, unknown> {
   });
 }
 
-/** .omp/skills 子目录计数（对齐 Python OMP_SKILLS_DIR.is_dir() + iterdir）。 */
-export function countOmpSkills(): number {
-  const dir = path.join(bundleDir(), ".omp", "skills");
-  try {
-    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return 0;
-    return fs.readdirSync(dir).filter((name) => fs.statSync(path.join(dir, name)).isDirectory()).length;
-  } catch {
-    return 0;
-  }
-}
-
 /** 四部件健康报告（对齐 get_health_report，probe_remote 恒为 Python 服务端硬编码 True）。 */
 export async function getHealthReport(deps: HealthDeps): Promise<Record<string, unknown>> {
   const settings = getAppSettings();
@@ -143,7 +129,6 @@ export async function getHealthReport(deps: HealthDeps): Promise<Record<string, 
   const memory = checkMemory();
   const nativeTools = checkNativeTools();
   const mcpTools = checkMcpTools();
-  const skillsCount = countOmpSkills();
 
   const all = [llm, memory, nativeTools, mcpTools];
   const overall = all.every((c) => c.status === "ok") ? "ok" : "degraded";
@@ -161,7 +146,6 @@ export async function getHealthReport(deps: HealthDeps): Promise<Record<string, 
     memory,
     native_tools: nativeTools,
     mcp_tools: mcpTools,
-    anthropic_skills_count: skillsCount,
     // ltm: Python 恒 None → exclude_none 省略
     provider_diagnostics_enabled: settings.provider_diagnostics_enabled,
     think_path_enabled: settings.think_path_enabled,

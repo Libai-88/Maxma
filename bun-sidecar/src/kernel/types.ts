@@ -17,13 +17,15 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 import type { RequestTelemetry } from "./request-telemetry";
 
 /**
- * Maxma 权限模式 4 档（与现 sidecar session-bridge.ts AG-PERM-001 同名同义）。
- * pi 无内置权限系统（官方 README/Security 明示），落点为官方 tool_call 钩子：
- *   - read_only / ask → 非只读工具逐次审批（write/edit/bash 等需确认）
- *   - operate         → 读写自动批准，执行类（bash/PowerShell）逐次审批
- *   - auto            → 全部自动批准（yolo）
+ * Maxma 权限模式 4 档：档位清单与类型都单源在 `pi-contract.ts`
+ * （`MAXMA_PERMISSION_MODES`，类型由它派生），这里只做 kernel 面的再导出——
+ * 全仓的 `MaxmaPermissionMode` 都指向那一份，改名不可能两处各漂各的。
+ * 语义（哪一档审批什么工具）见 `approval-gate.ts` 的 `needsApprovalForMode`
+ * 与 dev_docs/permission-modes.md。
  */
-export type MaxmaPermissionMode = "read_only" | "ask" | "operate" | "auto";
+import type { MaxmaPermissionMode } from "./pi-contract";
+
+export type { MaxmaPermissionMode };
 
 /** 工具注解（官方 Tool.annotations：readOnlyHint/destructiveHint/openWorldHint）。 */
 export type ToolAnnotations = {

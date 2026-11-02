@@ -57,8 +57,12 @@ api/data/sticker_recent.yaml
 api/data/plugins/
 # 同上，但落在仓库根：MAXMA_DATA_DIR 未设置时 dataDir() 解析到项目根，
 # 于是运行时数据出现在 <repo>/data/** 与 <repo>/plugins/**（曾实测生成）。
-data/
-plugins/
+# 必须锚定到根目录：写成 `data/`、`plugins/` 会匹配**任意深度**同名目录，
+# 于是 bun-backend/src/plugins、bun-backend/tests/plugins、web/src/components/plugins
+# 里的新文件被静默忽略（实测 git add 明确拒绝，只有已跟踪文件靠 force 才进得去）——
+# 和 dev_docs/security/ 那条一样属于"被 ignore 屏蔽、不出现在 git status"的陷阱。
+/data/
+/plugins/
 config/mcp_servers.yaml
 config/personas/USER.md
 config/personas/SOUL.md
@@ -78,10 +82,6 @@ config/personas/*.sqlite3-wal
 *.clean
 providers.yaml
 providers.yaml.legacy-*.bak
-
-# OMP native runtime dir — only built-in skills are versioned
-.omp/*
-!.omp/skills/
 
 # Macros user data
 macros/*/

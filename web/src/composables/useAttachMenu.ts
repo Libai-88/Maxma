@@ -1,6 +1,5 @@
 import { nextTick, onMounted, onUnmounted, ref, watch, type Ref } from 'vue'
 import { api } from '@/api'
-import { isTauri } from '@/utils/env'
 import { createLogger } from '@/utils/logger'
 import type { FileRef, FolderRef, ParsedRef } from '@/utils/references'
 
@@ -160,11 +159,8 @@ export function useAttachMenu({ disabled, refs, loading }: UseAttachMenuOptions)
   }
 
   async function selectLocalPath(type: 'file' | 'folder'): Promise<string | null> {
-    if (isTauri()) {
-      const w = window as unknown as { __TAURI_INTERNALS__?: { invoke?: (cmd: string, args: Record<string, unknown>) => Promise<string> }; __TAURI__?: { core?: { invoke?: (cmd: string, args: Record<string, unknown>) => Promise<string> } } }
-      const invoke = w.__TAURI_INTERNALS__?.invoke ?? w.__TAURI__?.core?.invoke
-      if (invoke) return await invoke('select_path', { kind: type })
-    }
+    // 后端 /api/select-file：Python 版是服务器端 tkinter 对话框，当前为桩实现
+    // （返回 path:null，等价于用户取消），调用方容忍 null 并静默无操作。
     const data = await api.selectFile(type)
     return data.path
   }

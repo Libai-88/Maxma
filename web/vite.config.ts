@@ -29,7 +29,6 @@ export default defineConfig(({ mode }) => {
   const apiPort =
     Number(process.env.MAXMA_API_PORT) ||
     Number(env.MAXMA_API_PORT) ||
-    Number(env.VITE_MAXMA_API_PORT) ||
     8000
   const webPort =
     Number(process.env.MAXMA_WEB_PORT) ||
@@ -38,8 +37,9 @@ export default defineConfig(({ mode }) => {
     5173
 
   return {
-    // Tauri serves the built files through a custom protocol; root-relative
-    // asset URLs would resolve to tauri://localhost/assets/... and 404.
+    // 相对 base 让产物与挂载点无关：后端把 web/dist 挂在自身 origin 根下，
+    // 但同一份 dist 也可能被放到子路径（反代前缀）或直接以 file:// 打开检查，
+    // 那时根相对 /assets/... 会解析到宿主根目录而 404。
     base: mode === 'production' ? './' : '/',
     plugins: [vue(), relaxDevCsp()],
     test: {

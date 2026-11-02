@@ -44,7 +44,6 @@ import { createStickerFileRoutes } from "./routes/stickers";
 import { createStickerFavoritesRoutes } from "./routes/sticker-favorites";
 import { createStickerUploadRoutes } from "./routes/sticker-upload";
 import { createSettingsPanelRoutes } from "./routes/settings-panels";
-import { createWorkflowRoutes, setWorkflowEventSink } from "./routes/workflows";
 import { createCollabRoutes } from "./routes/collab";
 import { createDeferredRunRoutes, setDeferredRunCancelHandler } from "./routes/deferred-runs";
 import { createActivityRoutes } from "./routes/activity";
@@ -226,8 +225,7 @@ export function createApp(): Hono {
   app.route("/", createStickerFavoritesRoutes());
   app.route("/", createStickerUploadRoutes());
 
-  // 2.2h：workflows / deferred-runs / collab
-  app.route("/", createWorkflowRoutes());
+  // 2.2h：deferred-runs / collab
   app.route("/", createDeferredRunRoutes());
   app.route("/", createCollabRoutes({ sessions: hubSessions }));
 
@@ -262,11 +260,6 @@ export function createApp(): Hono {
         [...new Set(app.routes.filter((r) => r.path.startsWith("/api")).map((r) => r.path))].sort(),
     }),
   );
-
-  // 2.3b：workflow WS 事件接线（kernel 直调路径不经回合富化层，原始广播）
-  setWorkflowEventSink((sessionId, eventType, payload) => {
-    broadcastEvent(sessionId, { type: eventType, payload });
-  });
 
   // 2.2e 会话门面：REST /api/sessions → kernel（in-process）
   app.route(

@@ -87,7 +87,7 @@ async function boot() {
     } catch { /* silent */ }
   }
 
-  // 生产环境：等待后端就绪（Tauri sidecar 启动需 10-30s）
+  // 生产环境：等待后端就绪（Bun 后端冷启动 + 首次建库可能需要十几秒）
   // 等待期间 index.html 的 loading 覆盖层保持可见；就绪后更新状态文案，
   // 让启动过程有明确的阶段反馈（SPLASH-STAGE-001）。
   const splash = document.getElementById('app-loading')

@@ -49,8 +49,11 @@
   回归锁：`web/tests/pathWhitelistClaims.spec.ts`（挂载两个视图、扫渲染后的可见文案）、
   `bun-backend/tests/db-schema.test.ts`（新库不建该表 + 老库升级路径不破 + 源码零引用）。
 - **权限模式 UI 链已接通（2026-11-02 修）**：REST 回 `{session_id, permission_mode,
-  available_permission_modes}`，前端按该清单渲染并据其非空判定可交互；字段名与档位
-  清单由 `bun-backend/tests/permission-mode-contract.test.ts` 四处对账。
+  available_permission_modes}`，前端按该清单渲染并据其非空判定可交互。
+  字段名由 `bun-backend/tests/permission-mode-contract.test.ts` 对账；档位清单**单源**在
+  `bun-sidecar/src/kernel/pi-contract.ts` 的 `MAXMA_PERMISSION_MODES`——kernel 入参校验、
+  REST 返回值、类型派生共用它，前端副本与 `needsApprovalForMode` 的分支集合由同一条测试
+  双向核对。
   注意：`set_auto_approve`（WS `update_auto_approve`）只有 auto/ask 两态，会把已选的
   `read_only`/`operate` 改写掉——它不是四档切换的兜底通道。
 - **`dev_docs/security/` 已被 `.gitignore` 屏蔽**，不会出现在 `git status`；

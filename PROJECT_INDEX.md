@@ -1,7 +1,7 @@
 # MaxmaHere 项目索引
 
 > 代码导航，不是历史记录。与代码/测试冲突时以代码为准并回来改本文。
-> 更新时间：2026-11-02（基线 `feat/jet-hub-plugin`，v2.6.12）
+> 更新时间：2026-11-02（`version.py` = v2.6.13）
 
 ## 入口
 
@@ -66,7 +66,8 @@ web/src/main.ts
 - 记忆 `routes/memory.ts`；能力 `routes/capabilities.ts`；插件 `routes/plugins.ts` + `plugins/`
 - 贴纸 `routes/stickers.ts`、`sticker-upload.ts`、`sticker-favorites.ts`；人设 `persona.ts`；引导 `onboarding.ts`；动态 `news.ts`；规则 `rules.ts`；工具清单 `tools.ts`
 - 可观测 `routes/activity.ts`（SSE）、`metrics-route.ts`、`metrics.ts`、`diagnostics.ts`、`error-collector.ts`、`health.ts`、`runtime-status.ts`、`audit-log.ts`、`transcripts.ts`
-- 其他 `files.ts`、`upload.ts`、`collab.ts`、`deferred-runs.ts`、`restart.ts`、`maxma-blocker.ts`、`workflows.ts`、`core.ts`
+- 其他 `files.ts`、`upload.ts`、`collab.ts`、`deferred-runs.ts`、`restart.ts`、`maxma-blocker.ts`、`core.ts`
+  （`workflows.ts` 已于 2026-11-02 作为死代码删除：空 deps 挂载 → sidecar 分支永不可达）
 - 安全 `auth.ts`、`middleware/{auth,rate-limit,request-log}.ts`、`security/credential-envelope.ts`
 - 路径与存储 `app-paths.ts`、`config-settings.ts`、`cors-config.ts`、`app-version.ts`、`db/core.ts`（bun:sqlite，v1–v10 迁移）、`yaml-store.ts`
 

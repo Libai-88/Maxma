@@ -63,7 +63,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File build\portable-smoke-test.ps
 
 ```text
 [portable-smoke] auth: ok
-[portable-smoke] health: status=ok version=v2.6.12      ← 版本与随包 version.py 比对
+[portable-smoke] health: status=ok version=v2.6.13      ← 版本与随包 version.py 比对
 [portable-smoke] news: 49 entries
 [portable-smoke] plugins: 1 registered                   ← 注册表里有内置插件
 [portable-smoke] plugin provider routes: 15              ← **插件运行时真的加载了**
