@@ -30,6 +30,13 @@
  *    ——档位名收下了、语义却是"什么都审批"，只有把两边的名字放在一起才看得见。
  * 5. **PUT/create_session 真的按清单生效**（PERM-LIVE-001）：不是"mock 回了个
  *    字符串"，而是 hub 记录的 permissionMode 变了、审批门对同一个工具的判定跟着翻转。
+ * 6. **写入方必须自己广播**（PERM-ANNOUNCE-001）：`record.permissionMode` 有两个写入方
+ *    （`set_permission_mode` 四档 / WS「自动执行」开关的 `set_auto_approve` 两态），
+ *    单写者是 kernel，所以收敛机制只能是"每次写入广播 `permission_mode_updated`"。
+ *    判据是行为：真跑 in-process kernel，比对 record 与广播序列（两种顺序都测、
+ *    被拒的写入不许出声），再逐字对账事件名/载荷字段名在 kernel、前端类型、
+ *    `useChat.ts` 分支三侧一致。以前两侧各存一份本地档位、谁都不通知谁，
+ *    「拨完开关选择器显示内核并不在的档位」就是全绿通过的。
  *
  * 装配方式与 tests/chat-ws-2.3.test.ts 一致：kernel in-process 直调 + 本地 hub Map，
  * 不 import server.ts（那个模块的 hubSessions 是私有的，且 createApp() 会 initializeDatabase()）。
@@ -43,6 +50,7 @@ import type { Hono } from "hono";
 
 import {
   handlePiCreateSession,
+  handlePiSessionRpc,
   type PiBridgeIo,
   type PiPendingPlan,
   type PiSessionRecord,
@@ -108,13 +116,33 @@ function frontendResponseFields(): string[] {
   return [...block![1]!.matchAll(/^\s*([a-z_]+)\??\s*:/gm)].map((m) => m[1]!);
 }
 
+/** 内核广播出去的事件（sendEvent 出口），用于对账"写了就必须 announce"。 */
+interface EmittedEvent {
+  sessionId: string;
+  type: string;
+  payload: Record<string, unknown>;
+}
+
 /** 后端 hub + 路由 + 一个真实 pi 会话（in-memory，不落盘）。 */
 async function makeHub(
   permissionMode?: string,
-): Promise<{ app: Hono; sessions: Map<string, PiSessionRecord>; sid: string }> {
+): Promise<{
+  app: Hono;
+  sessions: Map<string, PiSessionRecord>;
+  sid: string;
+  events: EmittedEvent[];
+  callRpc: (method: string, params: Record<string, unknown>) => Promise<void>;
+}> {
   const sessions = new Map<string, PiSessionRecord>();
   const pendingPlans = new Map<string, PiPendingPlan>();
-  const io: PiBridgeIo = { send: () => {}, sendError: () => {}, sendEvent: () => {} };
+  const events: EmittedEvent[] = [];
+  const io: PiBridgeIo = {
+    send: () => {},
+    sendError: () => {},
+    sendEvent: (sessionId, event) => {
+      events.push({ sessionId, type: event.type, payload: event.payload });
+    },
+  };
   await handlePiCreateSession(
     { io, sessions, pendingPlans },
     { cwd: import.meta.dir, in_memory: true, permission_mode: permissionMode },
@@ -125,7 +153,21 @@ async function makeHub(
     hub: { io, sessions, pendingPlans },
     version: "test",
   });
-  return { app, sessions, sid };
+  return {
+    app,
+    sessions,
+    sid,
+    events,
+    callRpc: (method, params) =>
+      handlePiSessionRpc({ io, sessions, pendingPlans }, method, sid, { session_id: sid, ...params }, 1),
+  };
+}
+
+/** 只取档位广播，按顺序给出广播值。 */
+function announcedModes(events: EmittedEvent[]): unknown[] {
+  return events
+    .filter((e) => e.type === "permission_mode_updated")
+    .map((e) => e.payload.permission_mode);
 }
 
 /** GET /api/sessions/:id/permission-mode 的响应体。 */
@@ -378,5 +420,151 @@ describe("权限模式 REST 契约（AG-PERM-001 / PERM-LIVE-001）", () => {
 
     const missingGet = await app.request("/api/sessions/deadbeef/permission-mode");
     expect(missingGet.status).toBe(404);
+  });
+});
+
+// ── PERM-ANNOUNCE-001：一个字段两个写入方，写入方必须自己广播 ──────────────
+//
+// 原缺陷的形状：`record.permissionMode` 被两条 RPC 写（`set_permission_mode` 四档、
+// WS「自动执行」开关走的 `set_auto_approve` 两态，后者直接把档位覆盖成 auto/ask），
+// 谁写完都不出声。前端「自动执行」开关与权限选择器各自维护本地状态，于是
+// 「选 operate → 拨开关 → 内核在 auto，选择器仍显示 operate」这种漂移全绿通过：
+// 内核、REST、WS 三条链各自都没错，错的只是没有 feedback 边。
+//
+// 下面的判据都是**行为**判据：真跑 in-process kernel，看 record 与事件序列是否
+// 一致（不是"事件名字符串存在于文件里"）。顺序双向都测，因为两条写入路径的
+// 覆盖语义不对称。
+describe("档位写入必须广播（PERM-ANNOUNCE-001）", () => {
+  test("set_auto_approve → set_permission_mode：record 与广播序列逐个相等", async () => {
+    const { sessions, sid, events, callRpc } = await makeHub();
+    const record = sessions.get(sid)!;
+    const base = events.length; // create_session 期间的其它事件不参与对账
+
+    await callRpc("set_auto_approve", { auto_approve: true });
+    expect(record.permissionMode).toBe("auto");
+    expect(announcedModes(events.slice(base))).toEqual(["auto"]);
+
+    await callRpc("set_permission_mode", { permission_mode: "operate" });
+    expect(record.permissionMode).toBe("operate");
+    expect(announcedModes(events.slice(base))).toEqual(["auto", "operate"]);
+
+    // 广播值必须就是 record 当前值——UI 据此渲染，差一个就是"显示内核不在的档位"
+    expect(announcedModes(events.slice(base)).at(-1)).toBe(record.permissionMode);
+    // 审批门按同一份档位分支：证明广播的是真正生效的那个字段，不是另一份影子状态
+    expect(record.approvalGate.needsApproval({ toolName: "write", annotations: { readOnlyHint: false } })).toBe(false);
+
+    await callRpc("set_auto_approve", { auto_approve: false });
+    expect(record.permissionMode).toBe("ask");
+    expect(announcedModes(events.slice(base))).toEqual(["auto", "operate", "ask"]);
+    expect(record.approvalGate.needsApproval({ toolName: "write", annotations: { readOnlyHint: false } })).toBe(true);
+  });
+
+  test("反序（先四档后开关）同样相等；两态覆盖四档是 record 的真值而非 UI 猜测", async () => {
+    const { sessions, sid, events, callRpc } = await makeHub();
+    const record = sessions.get(sid)!;
+    const base = events.length;
+
+    await callRpc("set_permission_mode", { permission_mode: "operate" });
+    await callRpc("set_auto_approve", { auto_approve: true });
+    expect(record.permissionMode, "开关把 operate 覆盖成 auto 是既有语义，但必须让 UI 看得见").toBe("auto");
+    expect(announcedModes(events.slice(base))).toEqual(["operate", "auto"]);
+
+    // read_only → 关开关：内核落到 ask，不是留在 read_only 的"看起来没变"
+    const other = await makeHub();
+    const otherBase = other.events.length;
+    await other.callRpc("set_permission_mode", { permission_mode: "read_only" });
+    await other.callRpc("set_auto_approve", { auto_approve: false });
+    expect(other.sessions.get(other.sid)!.permissionMode).toBe("ask");
+    expect(announcedModes(other.events.slice(otherBase))).toEqual(["read_only", "ask"]);
+  });
+
+  test("非法档位被拒时一条都不广播；REST PUT 走的也是同一个写入口", async () => {
+    const { app, sessions, sid, events, callRpc } = await makeHub();
+    const record = sessions.get(sid)!;
+    const base = events.length;
+
+    await callRpc("set_permission_mode", { permission_mode: "god_mode_not_in_list" });
+    expect(announcedModes(events.slice(base)), "写入失败却广播了，等于教 UI 相信一个没发生的档位")
+      .toEqual([]);
+    expect(record.permissionMode).toBe("ask");
+
+    // REST PUT：同样必须广播（否则在另一个标签页里改档，本端选择器依旧陈旧）
+    const put = await app.request(`/api/sessions/${sid}/permission-mode`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ permission_mode: "read_only" }),
+    });
+    expect(put.status).toBe(200);
+    expect(announcedModes(events.slice(base))).toEqual(["read_only"]);
+
+    await app.request(`/api/sessions/${sid}/permission-mode`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ permission_mode: "god_mode_not_in_list" }),
+    });
+    expect(announcedModes(events.slice(base)), "422 之后不该再有第二条广播").toEqual(["read_only"]);
+
+    const res = await app.request(`/api/sessions/${sid}/permission-mode`);
+    expect(((await res.json()) as Record<string, unknown>).permission_mode).toBe(record.permissionMode);
+  });
+
+  test("事件的载荷字段名三侧逐字一致：kernel 广播、前端类型、前端分支", () => {
+    // 这条锁的是"跨边界字符串契约"——字段名 tsc 看不见，两侧各写一份就会各漂各的
+    // （`permission_modes_enabled` 那次事故就是这个形状：读的人换了个没人产出的键）。
+    const kernelSrc = stripComments(read("bun-sidecar/src/kernel/bridge-pi.ts"));
+    const emitter = kernelSrc.match(
+      /function writePermissionMode\([\s\S]*?io\.sendEvent\(sessionId,\s*\{\s*type:\s*"([a-z_]+)",\s*payload:\s*\{\s*([a-z_]+):\s*mode\s*\}/u,
+    );
+    expect(emitter, "bridge-pi.ts 的 writePermissionMode 形状变了（事件名/载荷字段名）").not.toBeNull();
+    const [eventName, payloadKey] = [emitter![1]!, emitter![2]!];
+    expect(eventName).toBe("permission_mode_updated");
+    expect(payloadKey, "载荷字段名必须是 permission_mode（与 REST 视图同名）").toBe("permission_mode");
+
+    // 前端类型：接的是同一个事件名、读的是同一个字段名
+    const typesSrc = stripComments(read("web/src/types/index.ts"));
+    const feEvent = typesSrc.match(
+      /export interface PermissionModeUpdatedEvent \{\s*type: '([a-z_]+)'\s*payload: \{\s*([a-z_]+):/u,
+    );
+    expect(feEvent, "web/src/types/index.ts 里找不到 PermissionModeUpdatedEvent").not.toBeNull();
+    expect(feEvent![1]!, "前端事件名与 kernel 广播的不是同一条").toBe(eventName);
+    expect(feEvent![2]!, "前端读的字段名与 kernel 广播的不是同一个").toBe(payloadKey);
+
+    // 清单登记：kernel 是生产者，必须归"引擎产出"，不许混进后端合成表
+    const contract = stripComments(read("bun-sidecar/src/kernel/pi-contract.ts"));
+    expect(
+      (contract.match(/export const MAXMA_ENGINE_WS_EVENTS = \[([\s\S]*?)\] as const/)?.[1] ?? "").includes(
+        `"${eventName}"`,
+      ),
+      `${eventName} 必须登记在 MAXMA_ENGINE_WS_EVENTS（kernel 里真有生产者）`,
+    ).toBe(true);
+    expect(
+      (contract.match(/export const BACKEND_SYNTHESIZED_EVENTS = \[([\s\S]*?)\] as const/)?.[1] ?? "").includes(
+        `"${eventName}"`,
+      ),
+      `${eventName} 由 kernel 产出，不许同时被说成后端合成事件`,
+    ).toBe(false);
+
+    // 前端必须有真实分支：登记了却没分支正是 WS-EVENT-SINK-001 的原缺陷
+    const useChatSrc = stripComments(read("web/src/composables/useChat.ts"));
+    expect(
+      useChatSrc.includes(`'${eventName}'`) &&
+        new RegExp(`^\\s{2}${eventName}: true,$`, "m").test(useChatSrc),
+      `${eventName} 需在 useChat.ts 有处理分支并登记进 SERVER_EVENT_HANDLER_TYPES`,
+    ).toBe(true);
+  });
+
+  test("反副本：档位广播不许在后端/前端另建第二份状态真值", () => {
+    // 只有 kernel 的 writePermissionMode 能写 record.permissionMode；后端路由/前端
+    // 若各自缓存一份"当前档位"并据此判断，就是回到本次漂移的老路。
+    const backendSrc = stripComments(read("bun-backend/src/routes/sessions.ts"));
+    expect(
+      backendSrc,
+      "sessions.ts 不许自己写 record.permissionMode——单写者在 kernel，否则广播会漏",
+    ).not.toMatch(/record\.permissionMode\s*=/);
+
+    const kernelSrc = stripComments(read("bun-sidecar/src/kernel/bridge-pi.ts"));
+    const directWrites = [...kernelSrc.matchAll(/record\.permissionMode\s*=/g)].length;
+    expect(directWrites, "record.permissionMode 的赋值只许出现在 writePermissionMode 里").toBe(1);
+    expect(kernelSrc).toMatch(/function writePermissionMode\(/);
   });
 });

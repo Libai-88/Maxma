@@ -110,6 +110,7 @@ export const SERVER_EVENT_HANDLER_TYPES: Record<ServerEvent['type'], true> = {
   memory_done: true,
   // 目标模式与协作
   goal_updated: true,
+  permission_mode_updated: true,
   collaboration_update: true,
   task_review_update: true,
   task_brief_update: true,
@@ -1030,7 +1031,7 @@ function syncContextUsage(sid: string, ch: SessionChannel, payload: unknown) {
 export function handleEventForChannel(sid: string, event: ServerEvent) {
   // WS-EVENT-SINK-001：未知入站类型必须在**任何**状态判断之前宣告。
   // 放在通道查找/迟到轮次过滤/currentTurn 守卫之前，是因为后端广播的
-  // workflow_* 一类事件本来就与当前回合无关（parent_turn_id 可为 null），
+  // 会话级事件（goal_updated / permission_mode_updated）本来就与当前回合无关，
   // 若只在 switch 的 default 里告警，无活跃轮次时事件会在更早的 return
   // 处被吞掉，仍然静默。已登记类型零成本通过（Set.has）。
   // default 分支里 event 已被收窄成 never（联合成员全部有分支），所以原始
@@ -1281,6 +1282,19 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       goal: payload?.goal ?? null,
       state: payload?.state ?? null,
     }
+    return
+  }
+
+  // PERM-ANNOUNCE-001：内核每次写 record.permissionMode 都广播真值
+  // （set_permission_mode 四档 / 「自动执行」开关走的 set_auto_approve 两态）。
+  // 会话级状态，与回合无关，可能在无活跃轮次时到达 → 必须在 turn 守卫之前处理。
+  // 通道状态是唯一真相源：权限选择器从这里收敛，不再各存一份本地档位。
+  if (event.type === 'permission_mode_updated') {
+    const mode = event.payload?.permission_mode
+    if (!mode) return
+    ch.permissionMode = mode
+    // 「自动执行」= auto 档；两态开关与四档选择器从此读同一份通道状态。
+    ch.autoApprove = mode === 'auto'
     return
   }
 

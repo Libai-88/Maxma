@@ -29,6 +29,10 @@
 | `set_auto_approve` | `{ session_id, auto_approve }` | `true`→`auto`，`false`→`ask`，运行时即时生效。**两态开关**：会把已选的 `read_only`/`operate` 改写掉，权限模式控件不许用它兜底 |
 | `set_permission_mode` | `{ session_id, permission_mode }` | 档位任选，改运行中会话的 `record.permissionMode`（审批门按闭包读，即时生效）；非法档位 `io.sendError`。校验表与 REST 返回值同源：`pi-contract.ts` 的 `MAXMA_PERMISSION_MODES`。四档语义见 `dev_docs/permission-modes.md` |
 
+两条写入路径的**唯一写入口**是 `bridge-pi.ts` 的 `writePermissionMode`（PERM-ANNOUNCE-001）：
+每次真正写入都广播 `permission_mode_updated { permission_mode }`，被拒的写入（非法档位）
+一条都不发。前端的「自动执行」开关与权限选择器都从这条事件收敛，谁都不再自存一份档位。
+
 REST 面（`bun-backend/src/routes/sessions.ts`）：`GET` / `PUT`
 `/api/sessions/:sessionId/permission-mode` 回同一个形状
 `{ session_id, permission_mode, available_permission_modes }`。
@@ -48,17 +52,23 @@ REST 面（`bun-backend/src/routes/sessions.ts`）：`GET` / `PUT`
 | `checkpoint_action` | 官方 label/branch：save = `appendLabelChange`，restore = 找最近 label → `branch(targetId)`，无需 LLM 回合 |
 | `session_recap` | `getLastAssistantText()` 捕获答案，30s 兜底返回空内容（前端对空回顾静默跳过） |
 
-## 4. MCP / Settings / 工作流
+## 4. MCP / Settings
 
 | 方法 | 说明 |
 | --- | --- |
 | `reload_mcp_for_session` | 重连 MCP 并 `refreshMCPTools`；配置变更后必须调用或新建会话 |
 | `get_settings` / `set_settings` | 点路径读写，键全集来自 `pi-contract.ts` 的 `MAXMA_SETTINGS_KEYS`；`consumer: "none"` 的键 PUT 返回 409 |
-| `execute_workflow_step` | step 转 prompt 直调，事件经订阅层流给前端（产品面已下线，方法保留） |
 
 ## 5. 未实现（落 §8 兜底）
 
 `headless_prompt`、插件与发现类（`list_plugins` / `install_plugin` / `uninstall_plugin` / `set_plugin_enabled` / `get_plugin_detail` / `get_plugin_config` / `update_plugin_config` / `get_discovered_skills` / `get_discovered_extensions`）、已被 per-session 版取代的 `reload_mcp`、`cancel_deferred_run`。
+
+> 曾有而今无：`execute_workflow_step`（**2026-11-02 删除**，不是"未迁移"）。它唯一的调用方
+> `bun-backend/src/routes/workflows.ts` 被空 deps 挂载，sidecar 分支永不可达，只能报
+> `Unsupported workflow tool`；路由 + kernel 分支 + 事件/方法登记 + 前端类型 + `workflows/`
+> 打包一并移除。现在调它会落到 §8 兜底（`not yet migrated`），由
+> `bun-sidecar/tests/kernel-bridge.test.ts` 锁住"不许静默黑洞"。恢复自动化属独立工作项，
+> 别接回这条链（背景见 docs/contracts/ws-events.md §4）。
 
 ## 8. 语义要点
 
@@ -70,10 +80,10 @@ REST 面（`bun-backend/src/routes/sessions.ts`）：`GET` / `PUT`
 - MaxmaBlocker 挂官方 `tool_call` 钩子，`create_session` 恒装配；命中 block 单次调用并把原因回给 agent，整轮不中断。
 - MCP：stdio + streamable_http 经 `createMcpExtension(loadConfig)` 注入；allow/block 映射官方 `exposure`/`toolExposure`；sse/websocket 不支持。
 
-> **§8 的状态列请以现读 `bridge-pi.ts` 的 `if (method === "...")` 分支为准。** 本表曾把已实现的 `session_recap` / `execute_workflow_step` 标为"未迁移"近一个月，误导过一次解耦调查。
+> **§8 的状态列请以现读 `bridge-pi.ts` 的 `if (method === "...")` 分支为准。** 本表曾把已实现的 `session_recap` / `execute_workflow_step` 标为"未迁移"近一个月，误导过一次解耦调查（后者 2026-11-02 起真的没了，见 §4）。
 
 ## 9. 已知不一致
 
-1. `rpc-types.ts` 的 `RpcMethodName` 联合与 `bridge-pi.ts` 实现漂移：kernel 实际实现 23 个方法名（+ `create_session` 独立入口），部分已实现的方法未列入联合，部分列入联合的方法无分支（走 §5 兜底）。**权威是 `PI_RPC_METHODS` 与 `bridge-pi.ts`**，不是 `rpc-types.ts`。
+1. `rpc-types.ts` 的 `RpcMethodName` 联合与 `bridge-pi.ts` 实现漂移：kernel 实际实现 22 个方法名（+ `create_session` 独立入口），部分已实现的方法未列入联合，部分列入联合的方法无分支（走 §5 兜底）。**权威是 `PI_RPC_METHODS` 与 `bridge-pi.ts`**，不是 `rpc-types.ts`。
 2. 插件/发现类方法的参数与返回类型未在 `rpc-types.ts` 定义。
 3. 阶段约束：§1–§3 的方法面保持稳定，新增对引擎名字的依赖必须先在 `pi-contract.ts` 登记。

@@ -214,10 +214,6 @@ if (Test-Path -LiteralPath $resolvedWebDist) {
 }
 New-Item -ItemType Directory -Force -Path $resolvedWebDist | Out-Null
 Copy-Item -Path (Join-Path $ProjectRoot "web\dist\*") -Destination $resolvedWebDist -Recurse -Force
-if (Test-Path (Join-Path $ProjectRoot "workflows")) {
-    New-Item -ItemType Directory -Force -Path (Join-Path $RuntimeDir "workflows") | Out-Null
-    Copy-Item -Path (Join-Path $ProjectRoot "workflows\*") -Destination (Join-Path $RuntimeDir "workflows") -Recurse -Force -ErrorAction SilentlyContinue
-}
 $marker = Join-Path $RuntimeDir "portable.flag"
 Set-Content -LiteralPath $marker -Value "MaxmaHere Portable Desktop Mode" -Encoding utf8
 

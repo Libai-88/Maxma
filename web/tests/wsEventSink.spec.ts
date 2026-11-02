@@ -8,7 +8,9 @@
  * `workflow_step_start` / `workflow_step_end` / `workflow_step_error` /
  * `workflow_completed` 四个类型。后端 `routes/workflows.ts` 经 `server.ts` 的
  * `broadcastEvent` 真的在广播它们，前端一条都不接：类型面宣称接得住、快照全绿、
- * 页面照开，UI 只是永远少一块。上游改名同样会以这种"静默空白"的方式落地。
+ * 页面照开，UI 只是永远少一块。（那条死的 REST 工作流面已于 2026-11-02 整体删除，
+ * 见下方"联合不再谎报未接通的表面"里的清除对账；本条锁的是**教训的形状**：
+ * 声明了就必须有分支，否则就别再声明。）
  *
  * 出站侧同一类问题：`ClientMessage` 联合只覆盖后端 `CLIENT_MESSAGE_TYPES`
  * 白名单 16 项中的 6 项，其余 10 项以无类型对象字面量发出，字段拼错零提示，
@@ -29,13 +31,13 @@
  *    （c）经 logger 发出一次 dev 可见告警、（d）同一类型不刷屏、
  *    （e）不影响后续已登记事件的处理。
  * 5. **诚实性**：`llm_usage` 不在前端联合里（后端每条路径都 return，永不转发），
- *    `workflow_*` 也不在（前端零消费者）。恢复条件见 types/index.ts 的注释。
+ *    `workflow_*` 也不在（那整条表面已被删除，前端从未有消费者）。
  *
  * 风格：结构性断言读源文本并先剥注释（对齐 tests/agentTasksGating.spec.ts、
  * tests/jetHubCapabilityGating.spec.ts——只在注释里提一句不算数）；
  * 行为性断言真的调用 `handleEventForChannel` / `sendClientMessage`。
  */
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -226,15 +228,26 @@ describe('ServerEvent 联合 ↔ 前端处理分支（WS-EVENT-SINK-001 核心�
 describe('联合不再谎报未接通的表面', () => {
   const declared = unionTypeLiterals(TYPES_SRC, 'ServerEvent')
 
-  it('workflow_* 不在前端联合里（后端确实广播，但 web/src 零消费者）', () => {
+  it('workflow_* 不在前端联合里，且整条工作流面已从三侧源码清除', () => {
     for (const t of ['workflow_step_start', 'workflow_step_end', 'workflow_step_error', 'workflow_completed']) {
       expect(declared, `${t} 又回到 ServerEvent 联合了，但前端仍没有它`).not.toContain(t)
     }
-    // 后端仍在广播：删除是"承认没接"，不是"后端不发了"。若后端停发，本断言
-    // 会红并提醒重新核对两侧，而不是留下无人察觉的漂移。
-    const WORKFLOWS_SRC = readSource('../../bun-backend/src/routes/workflows.ts')
-    expect(WORKFLOWS_SRC).toMatch(/const EV_STEP_START = "workflow_step_start"/)
-    expect(WORKFLOWS_SRC).toMatch(/eventSink\(sessionId, EV_COMPLETED/)
+    // 2026-11-02：后端那条 REST 工作流面（空 deps 挂载 → sidecar 分支永不可达，
+    // 只能回报失败）连同 kernel 的 `execute_workflow_step` 一起删除。这里对账的是
+    // **删干净**：三侧源码剥注释后不许再留下 workflow 标识符，也不许再打包那个
+    // 只有这条死路由会读的 `workflows/` 目录。半个删除比不删更坏——类型还在、
+    // 清单还登记着，前端却又回到"宣称接得住"的原点。
+    for (const rel of [
+      '../../bun-backend/src/server.ts',
+      '../../bun-sidecar/src/kernel/bridge-pi.ts',
+      '../../bun-sidecar/src/kernel/pi-contract.ts',
+      '../../bun-sidecar/src/rpc-types.ts',
+      '../src/types/index.ts',
+    ]) {
+      expect(readSource(rel), `${rel} 仍残留 workflow 标识符`).not.toMatch(/workflow/i)
+    }
+    expect(existsSync(join(__dirname, '../../bun-backend/src/routes/workflows.ts'))).toBe(false)
+    expect(existsSync(join(__dirname, '../src/types/workflow.ts'))).toBe(false)
   })
 
   it('llm_usage 不在前端联合里，且后端每条路径都 return（只落台账，永不转发）', () => {
@@ -349,12 +362,46 @@ describe('未知入站事件的真实行为', () => {
     expect(ch.currentTurn.finalAnswer).toBe('正常回复')
   })
 
-  it('未知类型在无活跃轮次时同样会宣告（这正是 workflow_* 被静默丢弃的场景）', () => {
+  it('会话级事件在无活跃轮次时同样会宣告（原 workflow_* 被静默丢弃的场景）', () => {
     const warnSpy = spyOnWarn()
     const ch = setup()
     expect(ch.currentTurn).toBeNull()
     handleEventForChannel(SID, { type: 'workflow_step_start', payload: { run_id: 'r-1', step_id: 's-1' } } as never)
     expect(warnSpy.mock.calls.map(c => c.join(' ')).some(m => m.includes('workflow_step_start'))).toBe(true)
+  })
+
+  it('permission_mode_updated 无活跃轮次也落到通道状态，两态开关随之收敛（PERM-ANNOUNCE-001）', () => {
+    const warnSpy = spyOnWarn()
+    const ch = setup()
+    expect(ch.currentTurn).toBeNull()
+
+    // 内核写完 record.permissionMode 就广播，不管有没有在跑回合。
+    // 原缺陷：「自动执行」开关走 set_auto_approve（两态覆盖四档），权限选择器
+    // 只信自己那次 GET → 开关拨完选择器显示的是内核并不在的档位。
+    handleEventForChannel(SID, { type: 'permission_mode_updated', payload: { permission_mode: 'operate' } })
+    expect(ch.permissionMode).toBe('operate')
+    expect(ch.autoApprove).toBe(false)
+
+    handleEventForChannel(SID, { type: 'permission_mode_updated', payload: { permission_mode: 'auto' } })
+    expect(ch.permissionMode).toBe('auto')
+    expect(ch.autoApprove).toBe(true)
+
+    // 已登记且已接通：入口守卫与 default 兜底都不该出声
+    expect(warnSpy.mock.calls.map(c => c.join(' ')).some(m => m.includes('未处理的入站事件类型'))).toBe(false)
+  })
+
+  it('档位事件只改它自己的通道，不污染同浏览器的另一个会话', () => {
+    const otherSid = 'b'.repeat(32)
+    setup()
+    useChatStore().getOrCreateChannel(otherSid)
+
+    handleEventForChannel(SID, { type: 'permission_mode_updated', payload: { permission_mode: 'read_only' } })
+
+    const ch = useChatStore().channels.get(SID)!
+    const other = useChatStore().channels.get(otherSid)!
+    expect(ch.permissionMode).toBe('read_only')
+    expect(other.permissionMode).toBeNull()
+    expect(other.autoApprove).toBe(false)
   })
 
   it('已登记类型绝不会被入口守卫拦下（pong 仍更新心跳时间戳）', () => {

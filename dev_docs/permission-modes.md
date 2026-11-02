@@ -40,6 +40,19 @@
      `false` → `ask`。它是"自动执行"开关的链路，会把已选的 `read_only` / `operate`
      改写掉，所以权限模式控件**不得**在 PUT 之后再补发它（曾经补发过：Python/sidecar
      跨进程时代 PUT 碰不到运行中会话，只能靠这条兜底；现在 in-process 直调，补发只剩副作用）。
+5. 两条链写的是**同一个字段**，收敛机制是**写入方自己广播**（PERM-ANNOUNCE-001）：
+   `bridge-pi.ts` 的 `writePermissionMode` 是唯一写入口，每次真正写入都发一条
+   `permission_mode_updated { permission_mode }`（被拒的写入——非法档位——一条都不发）。
+   事件经 `chat-ws.ts` 的透传分支广播给该会话的**所有**连接，所以：
+   - `useChat.ts` 把它落到 per-channel 状态（`permissionMode` + 派生的 `autoApprove`）；
+   - `SessionPermissionModeControl.vue` 的显示从那份状态收敛，GET 只负责首屏与
+     `available_permission_modes` 清单，迟到的 GET 不许把选择器带回旧档。
+   以前这里是**两个写入方 + 零反馈**：开关拨完（`set_auto_approve` 把档位覆盖成 auto/ask），
+   选择器仍显示它自己那次 GET 拿到的档位——内核、REST、WS 三条链各自都没错，
+   缺的是那条 announce 边。同一会话的另一个标签页也只能靠重新 GET 撞运气。
+   判据：`bun-backend/tests/permission-mode-contract.test.ts` 的 PERM-ANNOUNCE-001 组
+   （真跑 in-process kernel，比对 record 与广播序列；两种顺序都测）+
+   `web/tests/wsEventSink.spec.ts`（事件→通道状态）+ `web/tests/sessionPermissionModeControl.spec.ts`（状态→渲染）。
 
 权限模式是**附加限制层**：只收紧，任何一档都不能绕过 MaxmaBlocker 拒止锚、MCP stdio 命令白名单、
 Provider URL 校验或凭据加密。没有兼容性开关，四档始终生效。

@@ -708,7 +708,7 @@ describe("kernel: pi RPC bridge", () => {
     expect(errors.some((e) => e.id === 55 && e.message.includes("objective is required"))).toBe(true);
   });
 
-  test("session_recap 静默旁路 + execute_workflow_step 契约", async () => {
+  test("session_recap 静默旁路 + 已删除的工作流 RPC 必须响亮落到 unsupported 兜底", async () => {
     const { io, replies, errors, events } = fakeIo();
     const sessions = new Map<string, PiSessionRecord>();
     const pendingPlans = new Map();
@@ -722,8 +722,11 @@ describe("kernel: pi RPC bridge", () => {
     // RECAP-SILENT-001：回顾期间的 prompt 事件不应泄漏（无 done 事件）
     expect(events.some((e) => e.event.type === "done")).toBe(false);
 
-    // execute_workflow_step：契约事件 workflow_step_start/end（prompt 会失败于
-    // 无模型，但 start 事件先发、error 路径发 workflow_step_error）
+    // `execute_workflow_step` 随死的 REST 工作流面一起删除（2026-11-02：唯一的调用方
+    // `routes/workflows.ts` 用空 deps 挂载，sidecar 分支永不可达）。这里锁的是删除后的
+    // 形状：调它必须落到 `not yet migrated` 兜底报错，而不是静默黑洞，也不再产生
+    // 任何 workflow_step_* 事件——事件消失而清单没跟上，就是下一次 Agent 任务中心式
+    // "全绿但永远收不到"的起点。
     await handlePiSessionRpc(
       { io, sessions, pendingPlans },
       "execute_workflow_step",
@@ -731,9 +734,8 @@ describe("kernel: pi RPC bridge", () => {
       { step_definition: { step_id: "s1", tool: "read", args: { file_path: "x" } } },
       62,
     );
-    expect(events.some((e) => e.event.type === "workflow_step_start")).toBe(true);
-    // 无模型环境：prompt 失败 → error 路径（或正常路径），但必有起或错事件且 RPC 不挂起
-    expect(replies.some((r) => r.id === 62) || errors.some((e) => e.id === 62)).toBe(true);
+    expect(errors.some((e) => e.id === 62 && e.message.includes("not yet migrated"))).toBe(true);
+    expect(events.some((e) => e.event.type.startsWith("workflow_"))).toBe(false);
     expect(sessions.has(sid)).toBe(true);
   });
 

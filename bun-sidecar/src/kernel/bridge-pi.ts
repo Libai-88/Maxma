@@ -349,6 +349,28 @@ export async function handlePiCreateSession(
 }
 
 /**
+ * 权限模式的**唯一写入点**（PERM-ANNOUNCE-001）。
+ *
+ * `record.permissionMode` 有两个写入方，语义还不一样：`set_permission_mode` 四档任选，
+ * `set_auto_approve` 只有两态（开 → auto，关 → ask）。以前两条链各自只回自己的 RPC
+ * 结果，谁都不广播——于是拨完「自动执行」开关，权限选择器仍按自己 GET 到的旧值渲染，
+ * 显示的是内核并不在的档位（同一会话的另一个标签页同样看不见）。现在两条写入路径都
+ * 经这里，**每次写入广播一次 `permission_mode_updated`**，前端以事件为唯一收敛点。
+ */
+function writePermissionMode(
+  record: PiSessionRecord,
+  io: PiBridgeIo,
+  sessionId: string,
+  mode: MaxmaPermissionMode,
+): void {
+  record.permissionMode = mode;
+  io.sendEvent(sessionId, {
+    type: "permission_mode_updated",
+    payload: { permission_mode: mode },
+  });
+}
+
+/**
  * pi 会话的 RPC 分发（dispatcher 检测到 piSessions 命中后进入）。
  * 支持：prompt / cancel / destroy_session / get_health / user_response /
  * set_auto_approve / reload_mcp_for_session（重建会话语义）。
@@ -450,9 +472,12 @@ export async function handlePiSessionRpc(
   }
 
   if (method === "set_auto_approve") {
-    // 与 OMP 版同语义：true → 全自动（yolo / pi "auto"），false → 逐次审批（"ask"）
+    // 与 OMP 版同语义：true → 全自动（yolo / pi "auto"），false → 逐次审批（"ask"）。
+    // 两态覆盖四档是**有意**的：它是"自动执行"开关的链路，改写已选的
+    // read_only / operate 就是它的语义（见 dev_docs/permission-modes.md）。
+    // 区别只在于现在改完会广播，UI 不再停留在旧档位上自说自话。
     const autoApprove = params?.auto_approve === true;
-    record.permissionMode = autoApprove ? "auto" : "ask";
+    writePermissionMode(record, io, sessionId, autoApprove ? "auto" : "ask");
     io.send(id, { ok: true, permission_mode: record.permissionMode });
     return;
   }
@@ -665,7 +690,7 @@ export async function handlePiSessionRpc(
       io.sendError(id, `不支持的权限模式: ${String(mode)}`);
       return;
     }
-    record.permissionMode = mode;
+    writePermissionMode(record, io, sessionId, mode);
     io.send(id, { ok: true, permission_mode: mode });
     return;
   }
@@ -747,36 +772,6 @@ export async function handlePiSessionRpc(
       io.send(id, { recap: answer });
     } finally {
       record0.suppressEvents = false;
-    }
-    return;
-  }
-
-  if (method === "execute_workflow_step") {
-    // Workflow 步骤执行（Phase 3.5 保留功能）：与 OMP 版同构——
-    // step 转 prompt 直调（事件经订阅层流给前端展示进度），step 起止事件契约不变。
-    const stepDefinition = (params?.step_definition ?? {}) as Record<string, unknown>;
-    const toolName: string = (stepDefinition.tool as string) ?? "";
-    const toolArgs: Record<string, unknown> = (stepDefinition.args as Record<string, unknown>) ?? {};
-    const stepId: string = (stepDefinition.step_id as string) ?? "unknown";
-    io.sendEvent(sessionId, {
-      type: "workflow_step_start",
-      payload: { step_id: stepId, tool_name: toolName },
-    });
-    try {
-      const promptMsg = `Execute the following step:\nTool: ${toolName}\nArgs: ${JSON.stringify(toolArgs)}\n\nReturn the result.`;
-      await record.session.prompt(promptMsg);
-      await record.session.waitForIdle();
-      io.sendEvent(sessionId, {
-        type: "workflow_step_end",
-        payload: { step_id: stepId, tool_name: toolName, status: "done" },
-      });
-      io.send(id, { ok: true, step_id: stepId });
-    } catch (err) {
-      io.sendEvent(sessionId, {
-        type: "workflow_step_error",
-        payload: { step_id: stepId, error: String(err) },
-      });
-      io.sendError(id, `Workflow step failed: ${String(err)}`);
     }
     return;
   }

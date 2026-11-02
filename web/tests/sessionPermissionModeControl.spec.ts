@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 
 const { getSessionPermissionMode, setSessionPermissionMode } = vi.hoisted(() => ({
   getSessionPermissionMode: vi.fn(),
@@ -11,6 +12,8 @@ vi.mock('@/api', () => ({
 }))
 
 import SessionPermissionModeControl from '@/components/SessionPermissionModeControl.vue'
+import { useChatStore } from '@/stores/chat'
+import type { PermissionMode } from '@/types'
 
 /**
  * 后端 `permissionModeView()` 的真实形状（bun-backend/src/routes/sessions.ts）。
@@ -34,8 +37,21 @@ function response(mode: (typeof ALL_MODES)[number] = 'ask', availableModes: read
 // 全文匹配会命中多个选项，用例就点错了档。
 const radio = (mode: string) => `[role="radio"][data-mode="${mode}"]`
 
+/**
+ * 模拟"内核广播已落地"的通道状态。`useChat.ts` 的 permission_mode_updated 分支写的
+ * 就是这两个字段（事件→状态那段由 wsEventSink.spec.ts 锁），本组用例锁的是
+ * 状态→渲染这一段：选择器必须跟着通道真值走，而不是留在自己那次 GET 的快照上。
+ */
+function announce(sessionId: string, mode: PermissionMode) {
+  const ch = useChatStore().getOrCreateChannel(sessionId)
+  ch.permissionMode = mode
+  ch.autoApprove = mode === 'auto'
+  return ch
+}
+
 describe('SessionPermissionModeControl', () => {
   beforeEach(() => {
+    setActivePinia(createPinia())
     getSessionPermissionMode.mockReset()
     setSessionPermissionMode.mockReset()
   })
@@ -138,5 +154,61 @@ describe('SessionPermissionModeControl', () => {
 
     expect(wrapper.find('[aria-label="会话权限模式"]').exists()).toBe(false)
     expect(wrapper.find('.permission-mode-error').exists()).toBe(false)
+  })
+
+  // ── PERM-ANNOUNCE-001：档位真值由内核广播，选择器跟着收敛 ──────────────
+  // 原缺陷：`record.permissionMode` 有两个写入方——REST PUT 走 set_permission_mode
+  // （四档），WS「自动执行」开关走 set_auto_approve（两态，直接把档位覆盖成
+  // auto / ask）。控件只信自己那次 GET，也不 watch 任何变化，于是拨完开关后
+  // 它显示的是内核并不在的档位（选 operate → 拨开关 → 内核在 auto，UI 仍写 operate）。
+  // 现在内核每次写入都广播 permission_mode_updated，useChat 把真值写进通道状态
+  // （事件→状态那一段由 web/tests/wsEventSink.spec.ts 锁），控件从这里收敛。
+
+  it('通道状态收到新档位后，选择器跟着改显示（不重发 GET）', async () => {
+    getSessionPermissionMode.mockResolvedValue(response('ask'))
+    const wrapper = mount(SessionPermissionModeControl, { props: { sessionId: 'session-a' } })
+    await vi.waitFor(() => expect(wrapper.text()).toContain('权限：每次确认'))
+    expect(getSessionPermissionMode).toHaveBeenCalledTimes(1)
+
+    // 「自动执行」开关那次 set_auto_approve 落进内核后的广播值
+    announce('session-a', 'operate')
+
+    await vi.waitFor(() => expect(wrapper.text()).toContain('权限：工作区操作'))
+    expect(wrapper.text()).not.toContain('权限：每次确认')
+    // 收敛靠事件，不靠本地补一次 GET：GET 只发过一次
+    expect(getSessionPermissionMode).toHaveBeenCalledTimes(1)
+  })
+
+  it('首屏之后的迟到 GET 不许把选择器带回旧档', async () => {
+    getSessionPermissionMode.mockResolvedValue(response('ask'))
+    const wrapper = mount(SessionPermissionModeControl, { props: { sessionId: 'session-a' } })
+    await vi.waitFor(() => expect(wrapper.text()).toContain('权限：每次确认'))
+
+    announce('session-a', 'auto')
+    await vi.waitFor(() => expect(wrapper.text()).toContain('权限：受控自动'))
+
+    // 切走再切回同一会话会重发 GET；服务端那份快照比广播旧时也不许覆盖真值
+    await wrapper.setProps({ sessionId: 'session-b' })
+    await wrapper.setProps({ sessionId: 'session-a' })
+    await vi.waitFor(() => expect(getSessionPermissionMode).toHaveBeenCalledWith('session-a'))
+    expect(wrapper.text()).toContain('权限：受控自动')
+    expect(wrapper.text()).not.toContain('权限：每次确认')
+  })
+
+  it('PUT 成功后仍以内核广播的档位为准（另一标签页可能同时改档）', async () => {
+    getSessionPermissionMode.mockResolvedValue(response('ask'))
+    setSessionPermissionMode.mockResolvedValue(response('operate'))
+
+    const wrapper = mount(SessionPermissionModeControl, { props: { sessionId: 'session-a' } })
+    await vi.waitFor(() => expect(wrapper.find('.permission-trigger').exists()).toBe(true))
+
+    await wrapper.get('.permission-trigger').trigger('click')
+    await wrapper.get(radio('operate')).trigger('click')
+    await wrapper.get('.confirm-change').trigger('click')
+    await vi.waitFor(() => expect(setSessionPermissionMode).toHaveBeenCalledWith('session-a', 'operate'))
+
+    // 另一个标签页把档位改成了 read_only，本端的 PUT 响应是过期的
+    announce('session-a', 'read_only')
+    await vi.waitFor(() => expect(wrapper.text()).toContain('权限：只读'))
   })
 })

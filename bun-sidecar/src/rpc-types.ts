@@ -8,6 +8,7 @@
 // 事件 payload 的取值域**不在本文件维护**：唯一来源是 `kernel/pi-contract.ts`
 // （Maxma 引擎消费面单源清单）。本文件只允许"派生"，重抄一份字面量就会与引擎现实漂移。
 import { MAXMA_COMPACTION_ACTION_WS, MAXMA_COMPACTION_REASONS_WS } from "./kernel/pi-contract";
+import type { MaxmaPermissionMode } from "./kernel/pi-contract";
 
 // ---------------------------------------------------------------------------
 // JSON-RPC 2.0 Envelope
@@ -69,8 +70,7 @@ export type RpcMethodName =
   | "headless_prompt"
   | "set_auto_approve"
   | "reload_mcp_for_session"
-  | "plan_action"
-  | "execute_workflow_step";
+  | "plan_action";
 
 export interface CreateSessionParams {
   model: string;
@@ -352,4 +352,11 @@ export type MaxmaEvent =
         message: string;
         source?: string;
       };
+    }
+  // PERM-ANNOUNCE-001：`record.permissionMode` 的两个写入方（set_permission_mode 四档 /
+  // set_auto_approve 两态）每次写入都广播这一条，前端权限选择器与「自动执行」开关据此
+  // 收敛。取值域派生自 `pi-contract.ts` 的 MAXMA_PERMISSION_MODES，不在这里重抄字面量。
+  | {
+      type: "permission_mode_updated";
+      payload: { permission_mode: MaxmaPermissionMode };
     };

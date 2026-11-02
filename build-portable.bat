@@ -72,7 +72,7 @@ if errorlevel 1 (
 
 REM Bundle resources the backend reads at runtime (templates only, never user
 REM data): config/personas templates, config/rules, built-in stickers,
-REM workflows, macros, version.py, bun-sidecar/package.json.
+REM macros, version.py, bun-sidecar/package.json.
 mkdir "%PORTABLE_DIR%\config\personas" 2>nul
 xcopy /e /i /q "%PROJECT_ROOT%config\personas\AGENTS.md" "%PORTABLE_DIR%\config\personas" >nul
 xcopy /e /i /q "%PROJECT_ROOT%config\personas\MAXMA.md" "%PORTABLE_DIR%\config\personas" >nul
@@ -109,7 +109,6 @@ for %%S in (coding-starter office-starter debugging-starter document-starter spr
         exit /b 1
     )
 )
-if exist "%PROJECT_ROOT%workflows\" xcopy /e /i /q "%PROJECT_ROOT%workflows" "%PORTABLE_DIR%\workflows" >nul
 if exist "%PROJECT_ROOT%macros\" xcopy /e /i /q "%PROJECT_ROOT%macros" "%PORTABLE_DIR%\macros" >nul
 copy /y "%PROJECT_ROOT%version.py" "%PORTABLE_DIR%\version.py" >nul
 mkdir "%PORTABLE_DIR%\bun-sidecar" 2>nul
@@ -181,7 +180,7 @@ echo ========================================
 echo   Portable build complete
 echo   Output: %PORTABLE_DIR%
 echo     server.js / bun.exe / node_modules\
-echo     web\dist\  config\  .maxma\skills\  version.py
+echo     web\dist\  config\  .maxma\skills\  macros\  version.py
 echo     portable.flag  data\  MaxmaHere.bat
 echo ========================================
 
