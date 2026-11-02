@@ -63,8 +63,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File build\portable-smoke-test.ps
 
 ```text
 [portable-smoke] auth: ok
-[portable-smoke] health: status=ok version=v2.6.11      ← 版本与随包 version.py 比对
-[portable-smoke] news: 46 entries
+[portable-smoke] health: status=ok version=v2.6.12      ← 版本与随包 version.py 比对
+[portable-smoke] news: 49 entries
 [portable-smoke] plugins: 1 registered                   ← 注册表里有内置插件
 [portable-smoke] plugin provider routes: 15              ← **插件运行时真的加载了**
 [portable-smoke] externals: 23 declared, 0 missing       ← 外置包一个不缺
@@ -140,15 +140,33 @@ vite 关闭了 `emptyOutDir`（safe-delete 钩子对 >50 文件的 rmSync 会**�
 `JetHubView-CZBEl02D.js`）。守卫见打包测试「前端构建必须先清空 dist」「桌面链暂存
 web\dist 必须先清后拷」。
 
+### 4.9 `.sha256` 的格式：两空格 + CRLF 会让下载方验不过
+
+桌面包的校验文件原先写 `"$hash  $name"`（两空格）并用 `Set-Content` 落盘，两个坑叠在一起：
+
+1. **两空格在 coreutils 语义里是「文本模式」**。对 zip 这种内容里全是 `0D 0A` 字节的
+   二进制产物，文本模式算出来的摘要与二进制不同 → 值明明对，`sha256sum -c` 报 FAILED。
+   必须写 `<hash> *<name>`（星号 = 二进制模式）。
+2. **`Set-Content` 不带 `-NoNewline` 时在 Windows 上补 CRLF**，行尾 `\r` 跟着进文件，
+   非 Windows 侧的校验工具会把它当文件名的一部分。
+
+守卫：打包测试「桌面包的 .sha256 用二进制模式 + LF」既查脚本写法，也对**真实产物**
+断言无 CR、第 65 字节是 ` *`、以 LF 结尾。
+
+另需知道：`dist\electron-portable\...zip` **不可复现** —— zip 里存了各条目的 mtime，
+代码一字不动重跑一次，SHA-256 也会变（实测 `29e3…` → `ca4f…`）。所以 sha256 只能用于
+"确认对方拿到的是我这次给的同一个包"，不能用来判断"代码有没有变"。
+
 ## 5. 回归测试
 
 ```text
-cd bun-backend && bun test tests/plugins/portable-packaging.test.ts   （12 条）
+cd bun-backend && bun test tests/plugins/portable-packaging.test.ts   （16 条）
 ```
 
 覆盖：external 传参、闭包推导（**用真实 node_modules 实跑**）、manifest 落地、
 `.bat` 按清单拷贝并校验、`.bat` CRLF、`.ps1` BOM、冒烟脚本强度、
-两条便携链的构建期守卫、electron-builder 的 `extraResources` 派生、插件依赖声明。
+两条便携链的构建期守卫、electron-builder 的 `extraResources` 派生、插件依赖声明、
+`.sha256` 的二进制模式与 LF 字节形状。
 
 ## 6. 版本一致性
 

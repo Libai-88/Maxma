@@ -286,4 +286,38 @@ describe("后端打包契约", () => {
       expect(pluginPkg.dependencies?.[dep], `${dep} 必须在插件的 dependencies 里`).toBeDefined();
     }
   });
+
+  test("桌面包的 .sha256 用二进制模式 + LF（否则下载方验不过）", () => {
+    // 这两个坑实测踩过：
+    //   1) `<hash>  <name>`（两空格）在 coreutils 语义里是**文本模式**，对 zip 这种
+    //      含 0D0A 字节的二进制产物会算出不同摘要；必须用 `*` 标二进制模式。
+    //   2) Set-Content 不带 -NoNewline 时在 Windows 上补 CRLF，行尾 \r 跟着进文件。
+    const ps1 = fs
+      .readFileSync(path.join(repoRoot, "build-desktop-portable.ps1"), "utf8")
+      .replace(/#[^\r\n]*/g, "");
+
+    // 写法：显式拼 `*` 标记 + LF，并用 -NoNewline 阻止 Set-Content 自己补换行
+    expect(ps1, "校验行必须用 `*` 二进制模式标记").toMatch(/\$hash\s+\*\$?\{?\$?\(/);
+    expect(ps1, "校验行必须以反引号 n 显式加 LF").toMatch(/\$checksumLine\s*=\s*"[^"]*`n"/);
+    expect(ps1, "落盘必须 -NoNewline，否则 Windows 上会补出 CRLF").toMatch(
+      /Set-Content[^\r\n]*\$checksumPath[^\r\n]*-NoNewline/,
+    );
+
+    // 反向：不许退回两空格文本模式
+    expect(ps1, "两空格是文本模式，会误解决策包").not.toMatch(/\$hash\s{2}\$\(/);
+
+    // 产物的字节形状（校验文件已生成时顺带实测；未生成则跳过，不造假断言）
+    const checksumPath = path.join(repoRoot, "dist/electron-portable");
+    if (fs.existsSync(checksumPath)) {
+      const file = fs
+        .readdirSync(checksumPath)
+        .find((name) => name.endsWith(".zip.sha256"));
+      if (file) {
+        const bytes = fs.readFileSync(path.join(checksumPath, file));
+        expect(bytes.includes(0x0d), "校验文件不得含 CR").toBe(false);
+        expect(String.fromCharCode(...bytes.slice(64, 66)), "第 65 字节必须是空格 + '*'").toBe(" *");
+        expect(bytes.at(-1)).toBe(0x0a);
+      }
+    }
+  });
 });
