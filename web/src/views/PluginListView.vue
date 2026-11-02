@@ -1,32 +1,45 @@
 <template>
   <div class="plugin-view" ref="rootEl">
     <div class="header">
-      <h2>插件市场</h2>
-      <p class="header-sub">管理 OMP 插件——浏览、安装、配置与卸载</p>
+      <h2>插件</h2>
+      <!-- 品牌更正：OMP 是上一代引擎（已退役），本产品是 Maxma + pi 引擎。 -->
+      <p class="header-sub">管理随 Maxma 分发的插件——启用、配置与卸载</p>
     </div>
 
-    <!-- 安装框 -->
+    <!-- 安装框（CAP-HONESTY-001）：
+         capabilities.features.plugins.marketplace 是 false（当前发布状态），
+         而 POST /api/plugins/install 对任何未随包分发的 spec 一律回 501
+         （bun-backend/src/routes/plugins.ts）。此前这里无条件渲染
+         「npm 包名 / GitHub URL / git URL...」的输入框，等于承诺了一个
+         后端明确拒绝的能力。现在按 marketplace 标志分支：
+           - 开：网络安装（未来安全评审落地后）
+           - 关：只说「启用随包分发的插件」，并解释为什么不能联网安装 -->
     <div class="toolbar">
       <div class="install-box">
-        <input
-          v-model="installSpec"
-          type="text"
-          placeholder="npm 包名 / GitHub URL / git URL..."
-          @keyup.enter="handleInstall"
-          :disabled="store.installing"
-        />
-        <button
-          class="btn btn-primary"
-          @click="handleInstall"
-          :disabled="store.installing || !installSpec.trim()"
-        >
-          {{ store.installing ? '安装中...' : '安装' }}
-        </button>
+        <label class="install-label" for="plugin-install-spec">{{ installBoxTitle }}</label>
+        <div class="install-row">
+          <input
+            id="plugin-install-spec"
+            v-model="installSpec"
+            type="text"
+            :placeholder="installPlaceholder"
+            @keyup.enter="handleInstall"
+            :disabled="store.installing"
+          />
+          <button
+            class="btn btn-primary"
+            @click="handleInstall"
+            :disabled="store.installing || !installSpec.trim()"
+          >
+            {{ store.installing ? '处理中...' : installActionLabel }}
+          </button>
+        </div>
+        <p class="install-note">{{ installNote }}</p>
       </div>
       <div v-if="store.installProgress" class="install-progress">
         {{ store.installProgress.status === 'success' ? '✓' : store.installProgress.status === 'error' ? '✗' : '⏳' }}
         {{ store.installProgress.spec }} -
-        {{ store.installProgress.status === 'success' ? '安装成功' : store.installProgress.status === 'error' ? '安装失败' : '正在安装...' }}
+        {{ store.installProgress.status === 'success' ? '已启用' : store.installProgress.status === 'error' ? '启用失败' : '正在处理...' }}
       </div>
     </div>
 
@@ -46,9 +59,9 @@
     <template v-else>
       <div v-if="store.filteredPlugins.length === 0" class="empty">
         <div class="empty-icon">🧩</div>
-        <div class="empty-title">{{ store.plugins.length === 0 ? '暂无已安装的插件' : '没有匹配的插件' }}</div>
+        <div class="empty-title">{{ store.plugins.length === 0 ? '没有可启用的插件' : '没有匹配的插件' }}</div>
         <div class="empty-desc">
-          {{ store.plugins.length === 0 ? '在上方输入 npm 包名或 GitHub URL 安装插件。' : '尝试调整搜索条件或过滤器。' }}
+          {{ store.plugins.length === 0 ? emptyListDesc : '尝试调整搜索条件或过滤器。' }}
         </div>
       </div>
       <div v-else ref="listRef" class="plugin-list">
@@ -67,7 +80,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePluginStore } from '@/stores/plugin'
 import { confirmAction } from '@/composables/useConfirm'
@@ -76,12 +89,46 @@ import PluginSearchBar from '@/components/plugins/PluginSearchBar.vue'
 import type { PluginCategory } from '@/types/plugin'
 import { useReveal } from '@/composables/useReveal'
 import { useButtonFx } from '@/composables/useButtonFx'
+import { useCapabilitiesStore } from '@/stores/capabilities'
 
 const router = useRouter()
 const store = usePluginStore()
 const installSpec = ref('')
 const listRef = ref<HTMLElement | null>(null)
 const rootEl = ref<HTMLElement | null>(null)
+
+const capabilitiesStore = useCapabilitiesStore()
+
+// 后端 plugins.marketplace 决定这个框到底能做什么（缺失时按 false 处理：
+// 宁可少承诺，也不重复「装了但 501」的旧行为）。
+const marketplaceEnabled = computed(
+  () => capabilitiesStore.getFeatureConfig('plugins').marketplace === true,
+)
+
+const installBoxTitle = computed(() =>
+  marketplaceEnabled.value ? '安装插件' : '启用随包分发的插件',
+)
+
+const installPlaceholder = computed(() =>
+  marketplaceEnabled.value
+    ? 'npm 包名 / GitHub URL / git URL...'
+    : '插件标识，例如 codearts-auth',
+)
+
+const installActionLabel = computed(() => (marketplaceEnabled.value ? '安装' : '启用'))
+
+const installNote = computed(() =>
+  marketplaceEnabled.value
+    ? '安装来源需先通过安全评审（下载校验、体积与条目上限、路径穿越防护）。'
+    : '当前仅支持启用随 Maxma 分发的插件；从网络安装第三方插件需要先通过安全评审，'
+      + '该能力位（plugins.marketplace）开启后此输入框才会接受 npm / GitHub 来源。',
+)
+
+const emptyListDesc = computed(() =>
+  marketplaceEnabled.value
+    ? '在上方输入 npm 包名或 GitHub URL 安装插件。'
+    : '在上方输入插件标识（如 codearts-auth）即可启用随包分发的插件。',
+)
 
 // 安装主 CTA：磁吸 + 弹性
 useButtonFx(() => rootEl.value, '.btn', { hoverScale: 1.08, bounceIcon: true, magnetic: 10 })
@@ -172,7 +219,26 @@ function handleSearch(query: string, category: PluginCategory | undefined, enabl
 
 .install-box {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.install-label {
+  font-size: 0.82em;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.install-row {
+  display: flex;
   gap: 8px;
+}
+
+.install-note {
+  margin: 0;
+  font-size: 0.75em;
+  line-height: 1.5;
+  color: var(--text-tertiary);
 }
 
 .install-box input {

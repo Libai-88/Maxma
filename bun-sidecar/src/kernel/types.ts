@@ -1,10 +1,10 @@
 /**
- * kernel/types.ts — Maxma Agent 内核接口（阶段一 §6.2）。
+ * kernel/types.ts — Maxma Agent 内核接口。
  *
- * 设计纪律（dev_docs/pi-migration-plan.md §6）：
- *   - 本目录是唯一允许 import `@earendil-works/*` 的地方（迁移完成后约束生效）。
- *   - 全部能力只用 pi 官方 API（官方 SDK 文档 + 0.99.0 类型声明），不自创机制。
- *   - session-bridge.ts 的 RPC handlers 逐步迁移到只依赖本目录接口。
+ * 设计纪律：
+ *   - 本目录是唯一允许 import `@earendil-works/*` 的地方，
+ *     越界 import 必须在 engine-boundary.test.ts 登记理由。
+ *   - 全部能力只用 pi 官方 API（官方 SDK 文档 + 已安装版本的类型声明），不自创机制。
  */
 
 /**

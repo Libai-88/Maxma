@@ -75,8 +75,15 @@ describe("sessions 门面（阶段 2.2e）", () => {
     ).json()) as { session_id: string };
 
     const get = await app.request(`/api/sessions/${created.session_id}/permission-mode`, { headers: h });
-    const g = (await get.json()) as { permission_mode: string; enabled: boolean };
-    expect(g.enabled).toBe(true);
+    const g = (await get.json()) as {
+      session_id: string;
+      permission_mode: string;
+      available_permission_modes: string[];
+    };
+    // 可用性由清单表达，不再有恒为 true 的 `enabled`（那个字段以前和前端读的
+    // `permission_modes_enabled` 对不上，控件因此恒禁用——见
+    // tests/permission-mode-contract.test.ts）。
+    expect(g.available_permission_modes.length).toBeGreaterThan(0);
     expect(["read_only", "ask", "operate", "auto"]).toContain(g.permission_mode);
 
     const put = await app.request(`/api/sessions/${created.session_id}/permission-mode`, {
@@ -85,7 +92,6 @@ describe("sessions 门面（阶段 2.2e）", () => {
       body: JSON.stringify({ permission_mode: "operate" }),
     });
     expect(((await put.json()) as { permission_mode: string }).permission_mode).toBe("operate");
-
     const bad = await app.request(`/api/sessions/${created.session_id}/permission-mode`, {
       method: "PUT",
       headers: h,

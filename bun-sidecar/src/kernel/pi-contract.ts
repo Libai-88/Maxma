@@ -311,6 +311,18 @@ export const MAXMA_COMPACTION_REASONS_WS = [
   "incomplete",
 ] as const;
 
+// 编译期断言（零运行时开销）：**引擎真发的 reason 必须全部落在 WS 契约域内**。
+//
+// 为什么不只靠测试：`bun-sidecar/tsconfig.json` 只编译 `src`，测试文件不进 tsc；
+// 而这条不变量正是"缺一个编译期断层面"的那一类——上一代事故里，白名单漏 `manual`
+// 时 tsc 一声不响。把断言写成类型约束后，谁从 `MAXMA_COMPACTION_REASONS_WS`
+// 删掉引擎真实值，`tsc --noEmit`（scripts/check-type-budget.mjs 的硬门槛）当场红。
+// 反方向（契约里有引擎不发的遗留值）是有意为之，不在此断言范围内。
+type _ValuesMustBeCoveredBy<T extends (typeof MAXMA_COMPACTION_REASONS_WS)[number]> = T;
+type _EngineCompactionReasonsAreInWsContract = _ValuesMustBeCoveredBy<
+  (typeof PI_COMPACTION_REASONS_ENGINE)[number]
+>;
+
 /** Maxma 契约里 compaction 的 action 取值：pi 路径恒发 context-full。 */
 export const MAXMA_COMPACTION_ACTION_WS = ["context-full"] as const;
 
@@ -436,11 +448,27 @@ export const MAXMA_SETTINGS_ENGINE_REAL_PATHS: ReadonlySet<string> = new Set(
 
 /**
  * Maxma WS 契约中**由引擎负责产出**的事件（词表来源 docs/contracts/ws-events.md §3.1，
- * 另加引擎派生的 llm_usage 与计划模式的 workflow_step_*）。
+ * 另加引擎派生的 llm_usage 与工作流逐步事件 workflow_step_*——后三个由 kernel 的
+ * `execute_workflow_step` 分支产出（`bridge-pi.ts`），`routes/workflows.ts` 只是另一个
+ * 并行生产者，所以它们归这张表，不归下面的后端合成表。
+ * （注意：`server.ts:230` 用 `createWorkflowRoutes()` 空 deps 挂载，`executeViaKernel`
+ * 恒为 undefined，所以**当前**这条 kernel 分支只能由直接调用该 RPC 的一方触发，
+ * 工作流路由自己走的是 simple 分支。已作为开放项记在 ws-events.md §4。）
  *
  * 由 tests/engine-boundary.test.ts 逐条核对"kernel 里真的有生产者"。
  * 没有生产者又不在下面的显式登记里的，测试红——这正是
  * `deferred_subagent_submitted` 当年静默死亡却全绿的缺口。
+ *
+ * 判据分工（三张清单各自回答"谁对这个事件负责"）：
+ *   - 本清单：引擎（kernel）负责产出，逐条要求 kernel 里有生产者；
+ *   - `ENGINE_EVENT_EXPECTED_BUT_UNPRODUCED`：**本清单的例外区**——契约还声明着"引擎产出"、
+ *     但引擎换代后没人产出了。所以一张事件同时出现在这两张表里是有意的（如
+ *     `sub_session_created` / `deferred_subagent_submitted`），出现在"本清单 + 后端合成"
+ *     两张里才是矛盾。
+ *   - `BACKEND_SYNTHESIZED_EVENTS`：由 bun-backend 路由自行合成，不经引擎，
+ *     与前两张互斥（`engine-boundary.test.ts` 查这条互斥）。
+ * `workflow_completed` 属于第三张：它只有后端生产者（`routes/workflows.ts`），
+ * kernel 里没有对应分支，所以**不能**列在这里，否则等于伪造引擎生产者。
  */
 export const MAXMA_ENGINE_WS_EVENTS = [
   "thinking_start",
@@ -493,12 +521,12 @@ export const ENGINE_EVENT_EXPECTED_BUT_UNPRODUCED: ReadonlyArray<{
 }> = [
   {
     event: "deferred_subagent_submitted",
-    reason: "pi 无子 Agent 运行时（dev_docs/pi-migration-plan.md §6.0 spike：无任何 subagent 导出）；事件与 DeferredRunManager 均为 OMP 时代遗留",
+    reason: "pi 无子 Agent 运行时（已安装引擎包无任何 subagent 导出，由 tests/pi-contract.test.ts 现读对账）；事件与 DeferredRunManager 均为上一代引擎（OMP）时代遗留",
     handling: "Agent 任务中心入口按能力门控隐藏（capabilities.sub_agents.engine_supported=false），后端追踪面保留待接",
   },
   {
     event: "sub_session_created",
-    reason: "同上：pi 无子会话概念，ws-events.md §3.2 所写的「sidecar 发射」指旧 OMP 内核",
+    reason: "同上：pi 无子会话概念，旧契约文档写的「sidecar 发射」指上一代引擎内核（现登记于本文 §3.3）",
     handling: "协议保留，前端 SubAgentCard 待与任务中心一并处置",
   },
   {
@@ -568,12 +596,38 @@ export const PI_RPC_METHODS = [
   "follow_up",
 ] as const;
 
-/** 由 bun-backend 自行合成、不经引擎的事件（不参与"引擎生产者"对账）。
- * 列出来是为了让对账测试的判据可核对，而不是靠猜。 */
+/**
+ * 由 bun-backend 路由自行合成、**不经引擎**的 WS 事件（不参与"引擎生产者"对账）。
+ *
+ * 判据不是靠猜：`tests/engine-boundary.test.ts` 会扫 `bun-backend/src` 全部
+ * WS 发射点（`send("x")` / `hub.broadcast(id, { type: "x" })` /
+ * `eventSink(id, EV_CONST, …)` / `ws.send(JSON.stringify({ type: "x" }))`，
+ * 常量名回查同文件的 `const EV_X = "x"`），要求
+ * **发射得出 → 必须登记**、**登记了 → 必须查得到发射点**，双向都红。
+ *
+ * 两条历史谎言就是靠这个形状藏住的，本次一并清掉：
+ *   - `workflow_completed` 只有后端生产者（`routes/workflows.ts`），此前**三张清单
+ *     一张都不在**，所以对账测试看不见它——旧判据只正则扫 `chat-ws.ts`，
+ *     从别的后端路由发出去的事件天然免疫。
+ *   - `turn_start` / `task_review` 曾被登记成"后端合成的事件"，其实
+ *     `turn_start` 只是 `recordActivity("turn", "turn_start", …)` 的**活动埋点
+ *     event_type**（`activity-hub.ts`，不进 WS 帧），`task_review` 是**入站**
+ *     客户端消息类型（`chat-ws.ts` 的 `CLIENT_MESSAGE_TYPES`），出站的那个叫
+ *     `task_review_update`。登记一个不存在的事件，等于给对账测试开了个永远
+ *     不会命中的口子。
+ */
 export const BACKEND_SYNTHESIZED_EVENTS = [
   "hello",
-  "artifact",
   "pong",
-  "turn_start",
-  "task_review",
+  "artifact",
+  "artifact_result",
+  "collaboration_update",
+  "memory_start",
+  "memory_tool_start",
+  "memory_tool_end",
+  "memory_tool_error",
+  "memory_done",
+  "task_brief_update",
+  "task_review_update",
+  "workflow_completed",
 ] as const;

@@ -45,6 +45,7 @@ import {
 } from "../src/kernel/pi-contract";
 
 import { engineApiNames, engineVersion, resolveEngineApiName, versionAtLeast } from "../src/kernel/engine-info";
+import { mapPiAgentEventToMaxma } from "../src/kernel/events";
 
 const PI_ROOT = path.resolve(import.meta.dir, "../node_modules/@earendil-works");
 
@@ -122,6 +123,84 @@ function interfaceFields(text: string, name: string): Map<string, string> | null
   }
   return fields;
 }
+
+/**
+ * 剥掉块注释与整行 `//` 注释——**只在注释里提到的名字不算声明**。
+ * 本仓的门禁测试都是这个写法（web/tests/agentTasksGating.spec.ts、
+ * jet-hub-capability-gating.spec.ts）：上一版 `ws-events.md` 把 `manual` 写进
+ * 说明文字里，文档看着对、类型照样漏，判据必须只看真实代码。
+ */
+function stripComments(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+}
+
+describe("pi 契约对账：WS payload 类型必须从清单派生，不许重抄字面量", () => {
+  /**
+   * 守的是这一类缺陷的**第二次**发生：`events.ts` 已经修成从
+   * `MAXMA_COMPACTION_REASONS_WS` 取值域（第一次事故：手抄的白名单漏了 pi 会发的
+   * `manual`，未知值一律被钳成 `threshold`，"用户手动压缩"在 UI 上被误报成
+   * "阈值触发"）。`rpc-types.ts` 的 `MaxmaEvent` 当时还留着同一份手抄字面量，
+   * 是同一个洞的另一半——清单改了、类型没改，前端按类型收窄分支照样看不见 manual。
+   */
+  test("rpc-types 的 reason 取值域必须派生自 MAXMA_COMPACTION_REASONS_WS", () => {
+    const rpcTypesPath = path.resolve(import.meta.dir, "../src/rpc-types.ts");
+    const src = stripComments(fs.readFileSync(rpcTypesPath, "utf8"));
+
+    // 1) 必须真的 import 那份清单（"派生"的前提）
+    expect(
+      /import\s*\{[^}]*\bMAXMA_COMPACTION_REASONS_WS\b[^}]*\}\s*from\s*"\.\/kernel\/pi-contract"/.test(src),
+      "rpc-types.ts 没有从 kernel/pi-contract 引入 MAXMA_COMPACTION_REASONS_WS，取值域又是各写各的",
+    ).toBe(true);
+
+    // 2) 别名必须是 typeof …[number] 派生，不是字面量联合
+    const alias = src.match(/export type MaxmaCompactionReason\s*=\s*([^;]+);/);
+    expect(alias, "rpc-types.ts 里找不到 MaxmaCompactionReason 别名（结构变了请同步本校验）").not.toBeNull();
+    expect(
+      alias![1]!.replace(/\s+/g, ""),
+      "MaxmaCompactionReason 不是从 MAXMA_COMPACTION_REASONS_WS 派生的——重抄字面量就会与清单漂移",
+    ).toBe("(typeofMAXMA_COMPACTION_REASONS_WS)[number]");
+
+    // 3) payload 必须用这个别名
+    const block = src.match(/type:\s*"context_compressing"[\s\S]*?payload:\s*\{([\s\S]*?)\};/);
+    expect(block, "找不到 context_compressing 的 payload 形状").not.toBeNull();
+    const reasonField = block![1]!.match(/reason:\s*([^;]+);/);
+    expect(reasonField, "context_compressing.payload 里没有 reason 字段").not.toBeNull();
+    expect(
+      reasonField![1]!.trim(),
+      "context_compressing.payload.reason 不是 MaxmaCompactionReason（八成又手抄了一份联合）",
+    ).toBe("MaxmaCompactionReason");
+
+    // 4) 全文件不许再出现"字面量 reason 联合"——派生别名旁边补一份抄本同样会漏值
+    expect(
+      /reason:\s*"[a-z_]+"(\s*\|\s*"[a-z_]+")+/.test(src),
+      "rpc-types.ts 里又出现了 reason 的字面量联合，请改回从 pi-contract 派生",
+    ).toBe(false);
+
+    // 5) 清单自己必须含 `manual`（引擎真发；本条红 = 有人从单源里删了它，
+    //    那么派生出来的类型也会一起漏——这正是第一次事故的值）
+    expect(
+      MAXMA_COMPACTION_REASONS_WS as readonly string[],
+      `MAXMA_COMPACTION_REASONS_WS 丢了 manual：类型与钳位白名单会同时把「手动压缩」报成阈值触发`,
+    ).toContain("manual");
+  });
+
+  test("引擎真发的每个 compaction reason 都必须原样到达 WS payload（不许被钳成 threshold）", () => {
+    for (const reason of PI_COMPACTION_REASONS_ENGINE) {
+      const mapped = mapPiAgentEventToMaxma({ type: "compaction_start", reason }, { done: false });
+      expect(mapped, `${reason} 的 compaction_start 没被映射`).not.toBeNull();
+      expect(mapped!.type).toBe("context_compressing");
+      expect(
+        mapped!.payload.reason,
+        `引擎会发 reason=${reason}，却被映射层改写成 ${String(mapped!.payload.reason)}——UI 会误报触发原因`,
+      ).toBe(reason);
+    }
+    // 未知值仍然回落 threshold（白名单不许放开成"原样透传任意字符串"）
+    const clampedUnknown = mapPiAgentEventToMaxma({ type: "compaction_start", reason: "brand_new" }, { done: false });
+    expect(clampedUnknown!.payload.reason).toBe("threshold");
+    const clampedAbsent = mapPiAgentEventToMaxma({ type: "compaction_start" }, { done: false });
+    expect(clampedAbsent!.payload.reason).toBe("threshold");
+  });
+});
 
 // ─────────────────────────────────────────────────────────────
 

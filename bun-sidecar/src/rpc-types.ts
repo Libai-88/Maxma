@@ -5,6 +5,10 @@
  * session-bridge.ts 实现，事件映射遵循 Maxma 前端 WS 协议格式。
  */
 
+// 事件 payload 的取值域**不在本文件维护**：唯一来源是 `kernel/pi-contract.ts`
+// （Maxma 引擎消费面单源清单）。本文件只允许"派生"，重抄一份字面量就会与引擎现实漂移。
+import { MAXMA_COMPACTION_ACTION_WS, MAXMA_COMPACTION_REASONS_WS } from "./kernel/pi-contract";
+
 // ---------------------------------------------------------------------------
 // JSON-RPC 2.0 Envelope
 // ---------------------------------------------------------------------------
@@ -161,6 +165,28 @@ export interface SetSettingsResult {
 // Events — Maxma 前端 WS 协议格式
 // ---------------------------------------------------------------------------
 
+/**
+ * `context_compressing.payload.reason` 的取值域——**从 `pi-contract.ts` 派生**，
+ * 不是第二份字面量清单。引擎新增一个 reason 时，只需要改 `MAXMA_COMPACTION_REASONS_WS`
+ * 一处，本类型与 `web` 的 `CompactionReason` 会由测试逼着一起跟上。
+ */
+export type MaxmaCompactionReason = (typeof MAXMA_COMPACTION_REASONS_WS)[number];
+
+/**
+ * `context_compressing.payload.action` 的取值域。
+ *
+ * 引擎真实值**派生自** `MAXMA_COMPACTION_ACTION_WS`（pi 路径恒发 `context-full`），
+ * 后面三个是上一代引擎（OMP）遗留值：当前引擎不产出，保留给历史转录回放与前端既有
+ * 分支（与 `web/src/types/index.ts` 的 `CompactionAction` 逐字一致，由
+ * `bun-sidecar/tests/engine-boundary.test.ts` 对账）。遗留值只能显式写在这里——
+ * 契约清单里没有它们，整体派生会把契约域悄悄收窄。
+ */
+export type MaxmaCompactionAction =
+  | (typeof MAXMA_COMPACTION_ACTION_WS)[number]
+  | "handoff"
+  | "shake"
+  | "snapcompact";
+
 /** Sidecar 可推送的全部事件类型（由 mapPiEventToMaxma 映射产生）
 
 注：独立 `context_usage` 事件不在联合中 —— sidecar 从未发射独立 context_usage，
@@ -254,11 +280,16 @@ export type MaxmaEvent =
         error_message?: string;
       };
     }
+  // `reason` 的取值域整个**派生自 `pi-contract.ts`**，`action` 的引擎真实值派生、上一代遗留值显式（见上面的别名注释）。
+  // 重抄过一次真事故：`MaxmaEvent` 的 reason 联合漏了 pi 会发的 `manual`，于是
+  // "用户手动压缩"在 UI 上被静默误报成"阈值触发"（详见 docs/contracts/ws-events.md
+  // §3.1）。类型 ↔ 清单 ↔ 前端联合三者的双向锁由
+  // `bun-sidecar/tests/engine-boundary.test.ts` 承担。
   | {
       type: "context_compressing";
       payload: {
-        reason: "threshold" | "overflow" | "idle" | "incomplete";
-        action: "context-full" | "handoff" | "shake" | "snapcompact";
+        reason: MaxmaCompactionReason;
+        action: MaxmaCompactionAction;
       };
     }
   | {

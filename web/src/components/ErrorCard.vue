@@ -55,7 +55,7 @@ const suggestion = computed(() => {
     case 'network': return '请检查网络连接后重试'
     case 'auth': return '请检查 API 密钥是否正确配置'
     case 'timeout': return '请稍后重试，或尝试简化请求'
-    case 'permission': return '请确认路径是否在白名单中'
+    case 'permission': return '该目录可能被拒止锚阻断，或工具调用未获审批放行'
     case 'not_found': return '请确认目标路径或资源是否存在'
     case 'rate_limit': return '请稍候片刻再重试'
     case 'warning': return '可稍后重试，或复制诊断信息继续排查'

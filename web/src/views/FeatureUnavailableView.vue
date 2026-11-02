@@ -2,16 +2,27 @@
 <template>
   <div class="fu-view" ref="rootEl">
     <div class="fu-card">
-      <div class="fu-icon">🚧</div>
+      <div class="fu-icon">{{ availabilityIcon }}</div>
       <h1 class="fu-title">功能不可用</h1>
       <p class="fu-text">
         <template v-if="featureTitle">「{{ featureTitle }}」</template>
         <template v-else>该功能</template>
         当前未启用。
       </p>
+      <!-- CAP-HONESTY-001：照实说原因。后端能力清单特意发布了
+           engine_supported / reason（bun-backend/src/routes/capabilities.ts
+           features.sub_agents），此前这里只读 route.query.title，于是
+           「引擎做不到」被渲染成「你可能在设置里关了」——把引擎的缺陷
+           谎报成用户的操作。 -->
       <p class="fu-desc">
-        此功能可能需要在设置中开启，或当前部署未包含相应能力。
-        你可以返回对话继续，或前往能力仪表盘查看当前可用的特性。
+        {{ availability.reason }}
+      </p>
+      <p v-if="availability.kind === 'engine_unsupported'" class="fu-note">
+        这一条由 Agent 引擎的能力清单报告，调整本地设置不会改变结果；
+        引擎支持后重新检测即可恢复入口。
+      </p>
+      <p v-else-if="availability.kind === 'user_disabled'" class="fu-note">
+        前往「运行设置」或能力仪表盘可以重新开启。
       </p>
       <div class="fu-actions">
         <router-link to="/" class="fu-action fu-action-primary">
@@ -42,12 +53,19 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter, type LocationQueryValue } from 'vue-router'
 import { useCapabilitiesStore } from '@/stores/capabilities'
 import { useViewEntrance } from '@/composables/useViewEntrance'
 import { useButtonFx } from '@/composables/useButtonFx'
 
 defineOptions({ name: 'FeatureUnavailableView' })
+
+/** query 值 → 字符串：数组取首个，`null`（?x= / ?x）与缺项一律收敛成空串。 */
+function firstQueryValue(
+  value: LocationQueryValue | LocationQueryValue[],
+): string {
+  return (Array.isArray(value) ? value[0] : value) ?? ''
+}
 
 const rootEl = ref<HTMLElement | null>(null)
 useViewEntrance(() => rootEl.value, { blocks: '.fu-card' })
@@ -59,14 +77,20 @@ const route = useRoute()
 const router = useRouter()
 const capabilitiesStore = useCapabilitiesStore()
 
-const featureTitle = computed(() => {
-  const t = route.query.title
-  return Array.isArray(t) ? t[0] : t || ''
-})
+const featureTitle = computed<string>(() => firstQueryValue(route.query.title))
 
-const featureKey = computed(() => {
-  const f = route.query.feature
-  return Array.isArray(f) ? f[0] : f || ''
+// ?feature= / ?feature 这类残缺 query 会让数组分支取到 null，而旧写法只在
+// 非数组分支上兜了 `|| ''`；describeFeature 的形参是 string，必须收敛。
+const featureKey = computed<string>(() => firstQueryValue(route.query.feature))
+
+// CAP-HONESTY-001：真实原因取自能力清单（engine_supported / reason），
+// 不再靠 route.query 猜「用户可能关掉了」。清单未加载时也只说「无法判断」。
+const availability = computed(() => capabilitiesStore.describeFeature(featureKey.value))
+
+const availabilityIcon = computed(() => {
+  if (availability.value.kind === 'engine_unsupported') return '🚫'
+  if (availability.value.kind === 'user_disabled') return '🔌'
+  return '🚧'
 })
 
 // 重新拉取能力清单；若该特性其实已启用，则返回原页面。
@@ -124,6 +148,19 @@ async function retry() {
   font-size: 0.85em;
   line-height: 1.5;
   margin: 0 0 20px;
+}
+
+/* 补充说明：负上边距只在它真的渲染时生效（不用 :has，兼容旧 WebView2） */
+.fu-note {
+  color: var(--text-tertiary);
+  font-size: 0.78em;
+  line-height: 1.5;
+  margin: -12px 0 20px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  text-align: left;
 }
 .fu-actions {
   display: flex;

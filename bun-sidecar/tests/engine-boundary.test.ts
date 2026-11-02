@@ -18,6 +18,8 @@ import * as path from "node:path";
 
 import {
   ENGINE_EVENT_EXPECTED_BUT_UNPRODUCED,
+  BACKEND_SYNTHESIZED_EVENTS,
+  MAXMA_COMPACTION_ACTION_WS,
   MAXMA_COMPACTION_REASONS_WS,
   MAXMA_CUSTOM_TOOLS,
   MAXMA_GOAL_STATUSES_ENGINE,
@@ -60,6 +62,62 @@ function filesImportingPi(dirRel: string): string[] {
   return tsFiles(dirRel)
     .filter((f) => re.test(fs.readFileSync(f, "utf8")))
     .map((f) => path.relative(REPO, f).replace(/\\/g, "/"));
+}
+
+/**
+ * 扫出 bun-backend 里**真实会发出去的 WS 事件名**（相对仓库根 → 发射点列表）。
+ *
+ * 为什么不能只正则扫 `chat-ws.ts`（旧判据就是这么写的）：后端不只有一个事件出口。
+ * `routes/workflows.ts` 经 `server.ts` 注入的 sink 直接广播 `workflow_completed`，
+ * 那份文件对旧判据完全隐形——于是"事件谁在发"与"清单登记了什么"之间的差集
+ * 永远查不到它，`MAXMA_ENGINE_WS_EVENTS` 少登记一条也没人红。
+ *
+ * 认得的发射形状（覆盖后端现存的每一类出口）：
+ *   - `send("token", …)` / `sendEvent(sessionId, …)`（chat-ws 的 WS 写封装）
+ *   - `hub.broadcast(sessionId, { type: "memory_start", … })`
+ *   - `broadcastEvent(sessionId, { type: … })`（server.ts）
+ *   - `ws.send(JSON.stringify({ type: "hello", … }))`
+ *   - `eventSink(sessionId, EV_COMPLETED, …)`：常量名回查同文件的
+ *     `const EV_COMPLETED = "workflow_completed"`，不猜命名规则。
+ *
+ * 刻意**不**认的形状：`recordActivity("turn", "turn_start", …)` 的第二个参数是
+ * 活动埋点的 `event_type`（`activity-hub.ts`），不进 WS 帧；入站客户端消息类型
+ * （`task_review`）也不是服务端事件。旧清单把这两个当成"后端合成事件"登记过，
+ * 那是给对账测试开了个永远命不中的口子。
+ */
+function backendWsEmittedEvents(): Map<string, string[]> {
+  const EMITTERS = "send|sendEvent|emit|eventSink|broadcast|broadcastEvent";
+  const PATTERNS = [
+    // send("token", …) —— 第一个参数就是事件名
+    new RegExp(`\\b(?:${EMITTERS})\\s*\\(\\s*"([a-z_]+)"`, "g"),
+    // sendEvent(sessionId, "x") / eventSink(sessionId, EV_X, …)
+    new RegExp(`\\b(?:${EMITTERS})\\s*\\(\\s*[\\w.]+\\s*,\\s*(?:"([a-z_]+)"|([A-Z][A-Z0-9_$]*)\\s*[,)])`, "g"),
+    // broadcast(id, { type: "x" … }) / broadcastEvent(id, { type: "x" … })
+    new RegExp(`\\b(?:${EMITTERS})\\s*\\(\\s*[\\w.]+\\s*,\\s*\\{\\s*type\\s*:\\s*"([a-z_]+)"`, "g"),
+    // ws.send(JSON.stringify({ type: "hello" … }))
+    new RegExp(`\\bws\\s*\\.\\s*send\\s*\\(\\s*(?:JSON\\s*\\.\\s*stringify\\s*\\(\\s*)?\\{\\s*type\\s*:\\s*"([a-z_]+)"`, "g"),
+  ];
+  const emitted = new Map<string, string[]>();
+  for (const abs of tsFiles("bun-backend/src")) {
+    const rel = path.relative(REPO, abs).replace(/\\/g, "/");
+    const src = fs.readFileSync(abs, "utf8");
+    // 事件名常量表：`const EV_COMPLETED = "workflow_completed";`
+    const consts = new Map<string, string>();
+    for (const m of src.matchAll(/^\s*(?:export\s+)?const\s+([A-Z][A-Z0-9_$]*)\s*(?::\s*[^=]+)?=\s*"([a-z_]+)"\s*;/gm)) {
+      consts.set(m[1]!, m[2]!);
+    }
+    for (const re of PATTERNS) {
+      for (const m of src.matchAll(re)) {
+        const event = m[1] ?? consts.get(m[2] ?? "");
+        if (!event) continue; // 大写常量指向的不是字符串字面量事件名
+        const at = `${rel}:${src.slice(0, m.index).split("\n").length}`;
+        const list = emitted.get(event) ?? [];
+        if (!list.includes(at)) list.push(at);
+        emitted.set(event, list);
+      }
+    }
+  }
+  return emitted;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -176,18 +234,15 @@ describe("引擎边界纪律", () => {
     const kernelSrc = tsFiles("bun-sidecar/src/kernel")
       .map((f) => read(path.relative(REPO, f).replace(/\\/g, "/")))
       .join("\n");
-    // 后端自己合成的事件不参与"引擎生产者"对账
-    const backendSynthesized = new Set<string>();
-    const chatWs = read("bun-backend/src/routes/chat-ws.ts");
-    for (const m of chatWs.matchAll(/sendEvent\(\s*[\w.]+\s*,\s*\{?\s*type:\s*"([a-z_]+)"/g)) {
-      backendSynthesized.add(m[1]!);
-    }
-    for (const m of chatWs.matchAll(/send\(\s*"([a-z_]+)"/g)) backendSynthesized.add(m[1]!);
 
     const registeredUnproduced = new Set(ENGINE_EVENT_EXPECTED_BUT_UNPRODUCED.map((e) => e.event));
     const missing: string[] = [];
     for (const event of MAXMA_ENGINE_WS_EVENTS) {
-      if (registeredUnproduced.has(event) || backendSynthesized.has(event)) continue;
+      // 注意：这里**不再**用"后端也发过这个事件"来豁免引擎生产者检查。
+      // 旧写法把 `chat-ws.ts` 正则扫出来的名字当作豁免集，而 chat-ws 会原样转发
+      // token/answer/done/error/tool_* 等引擎事件——于是 kernel 里删掉某个生产者
+      // 也不会红（转发层还在发，只是永远等不到）。清单说"引擎产出"，就只认 kernel。
+      if (registeredUnproduced.has(event)) continue;
       if (!kernelSrc.includes(`type: "${event}"`)) missing.push(event);
     }
     expect(
@@ -211,6 +266,71 @@ describe("引擎边界纪律", () => {
       expect(entry.reason, `${entry.event} 的登记缺原因`).toBeTruthy();
       expect(entry.handling, `${entry.event} 的登记缺处置说明`).toBeTruthy();
     }
+  });
+
+  test("后端路由发出的每个事件都必须登记归属；登记的合成事件必须真有发射点（双向）", () => {
+    // 这条补的是旧判据的结构性盲区：`backendSynthesized` 只正则扫 `chat-ws.ts`，
+    // 从别的后端路由（`workflows.ts` 经 server.ts 注入的 sink）发出去的
+    // `workflow_completed` 对判据完全隐形——三张清单一张都不在，照样全绿。
+    const emitted = backendWsEmittedEvents();
+    expect(
+      [...emitted.keys()].length,
+      `只扫到 ${emitted.size} 个后端 WS 发射点——发射形状变了或目录扫空了，` +
+        `判据会退化成"什么都不查"，请先修本文件的正则，别删这条检查`,
+    ).toBeGreaterThan(10);
+
+    const engine = new Set<string>(MAXMA_ENGINE_WS_EVENTS);
+    const synthesized = new Set<string>(BACKEND_SYNTHESIZED_EVENTS);
+    const unproduced = new Set(ENGINE_EVENT_EXPECTED_BUT_UNPRODUCED.map((e) => e.event));
+
+    // 1) 发得出 → 必须有归属（三张清单之一）。未登记 = 没人对这个事件负责，
+    //    前端接不接、引擎要不要产出、文档说不说，全都没有对账点。
+    const homeless = [...emitted.keys()].filter(
+      (e) => !engine.has(e) && !synthesized.has(e) && !unproduced.has(e),
+    );
+    expect(
+      homeless,
+      `后端在发这些事件，但没有一张清单认领它们（引擎产出 / 后端合成 / 已登记不产出）：\n  ` +
+        homeless.map((e) => `${e} ← ${emitted.get(e)!.join(", ")}`).join("\n  "),
+    ).toEqual([]);
+
+    // 2) 登记为"后端合成" → 必须查得到发射点。清单不许骗人：
+    //    `turn_start` 只是活动埋点的 event_type、`task_review` 是入站消息类型，
+    //    两个都不进 WS 下行帧，此前却被登记成后端合成事件（对账测试永远命不中）。
+    const phantom = BACKEND_SYNTHESIZED_EVENTS.filter((e) => !emitted.has(e));
+    expect(
+      phantom,
+      `BACKEND_SYNTHESIZED_EVENTS 里这些事件在 bun-backend 查不到任何 WS 发射点，` +
+        `请撤掉登记或补上发射方：\n  ${phantom.join("\n  ")}`,
+    ).toEqual([]);
+
+    // 3) 归属互斥：说"引擎产出"又说"后端合成"，等于两条对账各查各的、谁都查不住。
+    const doubleClaimed = BACKEND_SYNTHESIZED_EVENTS.filter(
+      (e) => engine.has(e) || unproduced.has(e),
+    );
+    expect(
+      doubleClaimed,
+      `这些事件同时被登记成"后端合成"和"引擎产出/引擎不产出"，归属必须唯一：\n  ` +
+        doubleClaimed.join("\n  "),
+    ).toEqual([]);
+
+    // 4) 本条缺陷的形状锁：`workflow_completed` 的发射点在 `routes/workflows.ts`，
+    //    不在 `chat-ws.ts`。旧判据只扫后者，所以它既没被登记、也没被查出。
+    //    这里显式要求扫描器**跨文件**看见它，并归在"后端合成"那张表里。
+    const completedSites = emitted.get("workflow_completed") ?? [];
+    expect(
+      completedSites.some((s) => s.startsWith("bun-backend/src/routes/workflows.ts:")),
+      `扫描器看不见 routes/workflows.ts 发出的 workflow_completed——判据又退回只扫 chat-ws.ts 了` +
+        `（现扫到：${completedSites.join(", ") || "无"}）`,
+    ).toBe(true);
+    expect(
+      BACKEND_SYNTHESIZED_EVENTS as readonly string[],
+      "workflow_completed 必须登记为后端合成事件（kernel 里没有它的生产者）",
+    ).toContain("workflow_completed");
+    expect(
+      MAXMA_ENGINE_WS_EVENTS as readonly string[],
+      "workflow_completed 不在 kernel 里产出，不许冒充引擎生产者",
+    ).not.toContain("workflow_completed");
   });
 });
 
@@ -401,6 +521,29 @@ describe("跨侧清单一致性（同一件事不许三处各写各的）", () =
       webReasons,
       `前端 CompactionReason 与契约域不一致（引擎新增 reason 时会在这里露出来）`,
     ).toEqual([...MAXMA_COMPACTION_REASONS_WS].sort());
+
+    // 2b) sidecar 的 payload 类型必须与前端联合逐字相等。
+    //     reason 是**派生**的（由 pi-contract.test.ts 锁死派生形状），这里只查结果；
+    //     action 是"引擎真实值 + 显式登记的上一代遗留值"的超集，两处各写一份就
+    //     会各漂各的（前端按 union 分支渲染文案，sidecar 按 union 收窄实发值）。
+    const rpcTypes = read("bun-sidecar/src/rpc-types.ts");
+    const sideReason = rpcTypes.match(/type:\s*"context_compressing"[\s\S]*?reason:\s*([^;]+);/);
+    expect(sideReason, "sidecar 的 context_compressing.payload.reason 形状变了，请同步本校验").not.toBeNull();
+    expect(sideReason![1]!.trim(), "sidecar 的 reason 又不再是派生别名了").toBe("MaxmaCompactionReason");
+
+    const sideAction = rpcTypes.match(/export type MaxmaCompactionAction =([\s\S]*?);/);
+    expect(sideAction, "找不到 MaxmaCompactionAction 别名").not.toBeNull();
+    const sideActionValues = [
+      ...MAXMA_COMPACTION_ACTION_WS,
+      ...(sideAction![1]!.match(/"([a-z_-]+)"/g) ?? []).map((s) => s.replace(/"/g, "")),
+    ].sort();
+    const webAction = types.match(/export type CompactionAction = ([^;\n]+)/);
+    expect(webAction, "web 里找不到 CompactionAction 联合类型").not.toBeNull();
+    const webActionValues = (webAction![1]!.match(/'[a-z_-]+'/g) ?? []).map((s) => s.replace(/'/g, "")).sort();
+    expect(
+      webActionValues,
+      `前端 CompactionAction 与 sidecar 的 action 取值域不一致（上一代遗留值增减时必须同步两侧）`,
+    ).toEqual(sideActionValues);
 
     // 3) goal 状态：引擎产出的必须是前端域的超集之内。
     //    按 budget-limited 这个前端独有值锚定——文件里还有别的 `status:` 联合，

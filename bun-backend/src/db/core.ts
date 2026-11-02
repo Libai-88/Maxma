@@ -53,6 +53,11 @@ function migrateV6AddClaimToken(conn: Database): void {
 
 export const SCHEMA_MIGRATIONS: Migration[] = [
   // v1: 初始 schema
+  // 路径白名单表（path_whitelist）已从此处删除：阶段二 cutover 连同 Python 执行层一起去掉了它，
+  // 全仓没有任何读写方（见 docs/security-contract.md §3）。选择「就地改 v1」而非新增 drop 迁移：
+  // initializeDatabase() 对已存在的库只跑 SCHEMA_MIGRATIONS.slice(current)，v1 永不重放，
+  // 因此新库不再创建该表、老库保留一张零行空表（无读取方，零影响）；SCHEMA_VERSION 不动——
+  // 不抬版本号就不会与并发工作项抢 v11，也不会打断既有用户的升级路径。
   `CREATE TABLE IF NOT EXISTS schema_version (
       version INTEGER PRIMARY KEY,
       applied_at REAL NOT NULL DEFAULT (julianday('now'))
@@ -92,12 +97,6 @@ export const SCHEMA_MIGRATIONS: Migration[] = [
       metadata TEXT NOT NULL DEFAULT '{}',
       messages BLOB,
       created_at REAL NOT NULL DEFAULT (julianday('now'))
-    );
-    CREATE TABLE IF NOT EXISTS path_whitelist (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      path TEXT NOT NULL,
-      description TEXT NOT NULL DEFAULT '',
-      recursive INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS maxma_blocker (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

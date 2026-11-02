@@ -85,7 +85,7 @@
           </div>
 
           <!-- GAP-B3-001：会话闲置回顾——轮次完成后闲置一段时间，自动生成
-               简短进展总结（OMP recap 配置；触发器由 Maxma 应用层实现）。 -->
+               简短进展总结（recap.* 设置键；触发器由 Maxma 应用层实现）。 -->
           <div class="setting-row">
             <div class="setting-info">
               <div class="setting-label">闲置回顾</div>
@@ -278,9 +278,9 @@
 
       <!-- 浏览器工具 -->
       <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
-        <div class="section" v-show="activeSection === 'browser'">
-          <h3>浏览器工具</h3>
-          <p class="section-desc">配置 AI 内置浏览器自动化的运行方式。</p>
+        <div class="section" :class="{ 'section-upcoming': browserInert }" v-show="activeSection === 'browser'">
+          <h3>浏览器工具<span v-if="browserInert" class="upcoming-badge">暂不生效</span></h3>
+          <p class="section-desc">{{ browserInert ? browserInertReason : '配置 AI 内置浏览器自动化的运行方式。' }}</p>
 
           <div class="setting-row">
             <div class="setting-info">
@@ -359,9 +359,9 @@
 
       <!-- 子代理 -->
       <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
-        <div class="section" v-show="activeSection === 'subagent'">
-          <h3>子代理</h3>
-          <p class="section-desc">控制 AI 派生子代理并行处理任务的行为。</p>
+        <div class="section" :class="{ 'section-upcoming': subagentInert }" v-show="activeSection === 'subagent'">
+          <h3>子代理<span v-if="subagentInert" class="upcoming-badge">暂不生效</span></h3>
+          <p class="section-desc">{{ subagentInert ? subagentInertReason : '控制 AI 派生子代理并行处理任务的行为。' }}</p>
 
           <div class="setting-row">
             <div class="setting-info">
@@ -457,8 +457,11 @@ import { useButtonFx } from '@/composables/useButtonFx'
 import GlowingEffect from '@/components/inspira/GlowingEffect.vue'
 import AnimatedTabs from '@/components/inspira/AnimatedTabs.vue'
 import BalanceSlider from '@/components/inspira/BalanceSlider.vue'
+import { useCapabilitiesStore } from '@/stores/capabilities'
 
 const log = createLogger('SettingsView')
+
+const capabilitiesStore = useCapabilitiesStore()
 
 const loading = ref(true)
 const loadError = ref('')
@@ -471,7 +474,7 @@ useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.section', rea
 useButtonFx(() => rootEl.value, '.toggle-btn', { hoverScale: 1.08, bounceIcon: true, watchSources: [loading] })
 useButtonFx(() => rootEl.value, '.btn', { hoverScale: 1.08, bounceIcon: true, magnetic: 8, watchSources: [loading] })
 
-// ── Panel configs（独立于 OMP Settings，存储在后端 panel_configs.json） ──
+// ── Panel configs（独立于引擎设置，存储在后端 panel_configs.json） ──
 
 const tts = ref<TtsConfig>({
   enabled: false, provider: 'system', voice: '', speed: 1.0, pitch: 1.0, auto_read: false,
@@ -485,7 +488,52 @@ const subagent = ref<SubAgentConfig>({
   model: 'inherit', timeout_seconds: 120, show_progress: true,
 })
 
-const sectionTabs = [
+// ── 假设置门控（CAP-HONESTY-001）──────────────────────────────────────
+// 一个运行时永远不读的控件，对用户就是谎言。两种「写了没人读」：
+//   1. 引擎侧不支持：后端能力清单直说 engine_supported=false + reason
+//      （features.sub_agents，见 bun-backend/src/routes/capabilities.ts），
+//      面板值与它做 AND，所以 enabled 恒 false——这里改什么都不生效。
+//   2. 全仓零消费方：browser_tools 的字段只落 panel_configs.json；
+//      routes/settings-panels.ts 里那段「镜像写 kernel SettingsManager」
+//      的注释自己承认实测是纯 no-op，pi 引擎也没有 browser 工具
+//      （内置工具面见 pi-contract.ts 的 PI_BUILTIN_TOOLS）。
+// 处理方式沿用本仓既有约定（MemoryView 的 Hindsight：UX-FAKE-SETTING-001）——
+// 整段置灰 + 「暂不生效」徽标 + 写明原因，pointer-events:none 让写入根本点不到。
+
+/** 面板配置键 → 能力清单里的特性名。 */
+const PANEL_FEATURE: Record<'browser' | 'subagent', string> = {
+  browser: 'browser_tools',
+  subagent: 'sub_agents',
+}
+
+/** 没有任何运行时读取方的特性（新增消费方后必须从这里删掉）。 */
+const FEATURES_WITHOUT_RUNTIME_CONSUMER: ReadonlySet<string> = new Set(['browser_tools'])
+
+const ENGINE_UNSUPPORTED_FALLBACK = '当前 Agent 引擎不支持该能力，这里的修改不会生效'
+const NO_CONSUMER_REASON = '运行时没有任何一方读取这些配置（只写入本地面板文件），修改不会产生效果'
+
+/** 该面板当前是否「写了也没用」；返回置灰原因，可用时返回 null。 */
+function panelInertReason(panel: 'browser' | 'subagent'): string | null {
+  const feature = PANEL_FEATURE[panel]
+  const cfg = capabilitiesStore.getFeatureConfig(feature)
+  if (cfg.engine_supported === false) {
+    const backendReason = typeof cfg.reason === 'string' ? cfg.reason.trim() : ''
+    return backendReason || ENGINE_UNSUPPORTED_FALLBACK
+  }
+  if (FEATURES_WITHOUT_RUNTIME_CONSUMER.has(feature)) return NO_CONSUMER_REASON
+  return null
+}
+
+const browserInertReason = computed(() => panelInertReason('browser'))
+const subagentInertReason = computed(() => panelInertReason('subagent'))
+const browserInert = computed(() => browserInertReason.value !== null)
+const subagentInert = computed(() => subagentInertReason.value !== null)
+
+// 清单未加载时 getFeatureConfig 回 {}，两个判据都不成立 → 面板照常可编辑。
+// 这是刻意的乐观默认，与 isFeatureEnabled / Dock 一致：后端瞬时不可达时
+// 不把设置页变成一片灰。「引擎不支持」只在后端明确发 false 时才成立。
+
+const BASE_SECTION_TABS = [
   { label: '上下文管理', value: 'compaction' },
   { label: '容错', value: 'retry' },
   { label: '交互', value: 'interaction' },
@@ -496,6 +544,18 @@ const sectionTabs = [
   { label: '浏览器', value: 'browser' },
   { label: '子代理', value: 'subagent' },
 ]
+
+// tab 标签也带上「暂不生效」——用户不必点进去才发现这一节写了也没用。
+const sectionTabs = computed(() => {
+  const inertLabel: Record<string, string | null> = {
+    browser: browserInertReason.value,
+    subagent: subagentInertReason.value,
+  }
+  return BASE_SECTION_TABS.map((tab) => ({
+    ...tab,
+    label: inertLabel[tab.value] ? `${tab.label}（暂不生效）` : tab.label,
+  }))
+})
 const activeSection = ref('compaction')
 
 // GAP-A2-001：语音列表来自系统（speechSynthesis.getVoices()），
@@ -717,6 +777,9 @@ async function testNotify() {
 }
 
 async function setBrowser<K extends keyof BrowserToolsConfig>(key: K, value: BrowserToolsConfig[K]) {
+  // CAP-HONESTY-001：置灰不只是视觉——写入面一并关掉，任何路径（键盘/
+  // 程序化调用）都不会把一个运行时不读的值当成用户偏好存下去。
+  if (browserInert.value) return
   const prev = browser.value[key]
   browser.value[key] = value
   try {
@@ -729,6 +792,8 @@ async function setBrowser<K extends keyof BrowserToolsConfig>(key: K, value: Bro
 }
 
 async function setSubAgent<K extends keyof SubAgentConfig>(key: K, value: SubAgentConfig[K]) {
+  // CAP-HONESTY-001：同上，engine_supported=false 时这个面板不写任何东西。
+  if (subagentInert.value) return
   const prev = subagent.value[key]
   subagent.value[key] = value
   try {

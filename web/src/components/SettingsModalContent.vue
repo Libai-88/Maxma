@@ -70,6 +70,13 @@ export interface SettingsItem {
   title: string
   subtitle: string
   route: string
+  /**
+   * 该入口对应的后端能力名（与 router 的 `meta.feature` 同名）。
+   * 声明后由 AppSettingsMenu 按能力清单过滤——与 `Dock.vue` 的
+   * `NavItem.feature` 同一约定：能力关闭时不渲染入口，
+   * 而不是让用户点进一个必然落到「功能不可用」页的卡片。
+   */
+  feature?: string
 }
 
 defineProps<{

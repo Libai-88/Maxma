@@ -356,54 +356,6 @@ export interface MemoryDoneEvent {
   }
 }
 
-/** 已实现（Phase 3.5）：由 workflows.py 执行引擎推送。 */
-export interface WorkflowStepStartEvent {
-  type: 'workflow_step_start'
-  payload: {
-    run_id: string
-    step_id: string
-    position: number
-    tool: string
-    args: Record<string, unknown>
-    total_steps: number
-  }
-}
-
-/** 已实现（Phase 3.5）：由 workflows.py 执行引擎推送。 */
-export interface WorkflowStepEndEvent {
-  type: 'workflow_step_end'
-  payload: {
-    run_id: string
-    step_id: string
-    position: number
-    status: string
-    output: string
-  }
-}
-
-/** 已实现（Phase 3.5）：由 workflows.py 执行引擎推送。 */
-export interface WorkflowStepErrorEvent {
-  type: 'workflow_step_error'
-  payload: {
-    run_id: string
-    step_id: string
-    position: number
-    error: string
-  }
-}
-
-/** 已实现（Phase 3.5）：由 workflows.py 执行引擎推送。 */
-export interface WorkflowCompletedEvent {
-  type: 'workflow_completed'
-  payload: {
-    run_id: string
-    status: string
-    current_step?: number
-    total_steps?: number
-    error?: string
-  }
-}
-
 /**
  * ServerEvent 联合 —— 服务端→浏览器 WS 事件。
  *
@@ -417,13 +369,24 @@ export interface WorkflowCompletedEvent {
  *   - 运行时通知: notice, todo_reminder, irc_message
  *   - 用量: context_usage (独立事件), done.payload.context_usage (内嵌)
  *
- * 实现状态（2026-08-02）：
- *   - plan_* — 已实现：后端 chat.py 透传 sidecar 的 plan_proposed/step_start/step_end/step_error/completed 事件
- *   - artifact — 已实现（Phase 2.2）：后端 TOOL_END 检测写文件工具后合成
+ * 实现状态（2026-11-02 复核）：
+ *   - plan_* — 已实现：后端透传 sidecar 的 plan_proposed/step_start/step_end/step_error/completed
+ *   - artifact / artifact_result — 已实现：后端 TOOL_END 检测写文件工具后合成 / 回执
  *   - sub_session_created — 已实现（Phase 3.4）：EventBus 订阅 TASK_SUBAGENT_LIFECYCLE_CHANNEL
  *   - deferred_subagent_submitted — 部分实现：后端 deferred_run_manager 已就绪，需产品决策
  *   - memory_* — 未实现：OMP memory 跑在独立状态，不通过事件流推送
- *   - workflow_* — 已实现（Phase 3.5）：workflows.py 执行引擎实时推送进度
+ *   - workflow_step_start/end/error / workflow_completed — 已从本联合删除：后端
+ *     `routes/workflows.ts` 确实经 `server.ts` 的 broadcastEvent 广播，但 web/src
+ *     没有任何 store/view/component 读取工作流运行态（grep 'workflow' 只命中类型定义本身），
+ *     留着它们只是让类型面谎报"前端接得住"。恢复条件：先做出真实消费者，再登记类型与分支。
+ *   - llm_usage — 不属于前端：`chat-ws.ts` 的 `case "llm_usage"` 每条路径都 return，
+ *     只落台账与 metrics，永不透传浏览器。用量到前端的常规路径是 done.payload.context_usage。
+ *
+ * 不变式（联合成员必须有分支）：新增 type 而不登记处理路径，
+ *   1. `useChat.ts` 的 `SERVER_EVENT_HANDLER_TYPES`（Record<ServerEvent['type'], true>）
+ *      缺键 → vue-tsc 报错；
+ *   2. `web/tests/wsEventSink.spec.ts` 把联合成员与 useChat.ts 的真实 `case`/`event.type ===`
+ *      逐一对账，并断言事件 switch 保留 `default` 兜底 → 测试红。
  */
 export type ServerEvent =
   | ThinkingStartEvent
@@ -461,10 +424,6 @@ export type ServerEvent =
   | MemoryToolEndEvent
   | MemoryToolErrorEvent
   | MemoryDoneEvent
-  | WorkflowStepStartEvent
-  | WorkflowStepEndEvent
-  | WorkflowStepErrorEvent
-  | WorkflowCompletedEvent
   | GoalUpdatedEvent
   | CollaborationUpdateEvent
   | TaskReviewUpdateEvent
@@ -563,9 +522,11 @@ export interface CancelMessage {
   payload: Record<string, never>
 }
 
+/** 心跳（`useChat.ts` 的 ping 定时器）。后端 `ping` 分支不读 payload，
+ *  实际发出的帧没有 payload 字段，故声明为可选。 */
 export interface PingMessage {
   type: 'ping'
-  payload: Record<string, never>
+  payload?: Record<string, never>
 }
 
 /** 用户对 ask_user 交互工具的响应 */
@@ -594,7 +555,115 @@ export interface ArtifactActionMessage {
   }
 }
 
-export type ClientMessage = ChatMessage | CancelMessage | PingMessage | UserResponseMessage | UpdateAutoApproveMessage | ArtifactActionMessage
+/** 计划卡片的用户回执（approve/modify/reject）→ 后端 plan_action RPC。 */
+export interface PlanResponseMessage {
+  type: 'plan_response'
+  payload: {
+    plan_id: string
+    action: 'approve' | 'modify' | 'reject'
+    modified_plan?: string
+  }
+}
+
+/** 会话计划模式开关 → 后端 set_plan_mode RPC。 */
+export interface SetPlanModeMessage {
+  type: 'set_plan_mode'
+  payload: { enabled: boolean }
+}
+
+/** 检查点保存/回退 → 后端 checkpoint_action RPC。 */
+export interface CheckpointActionMessage {
+  type: 'checkpoint_action'
+  payload: {
+    action: 'save' | 'restore'
+    goal?: string
+  }
+}
+
+/** 目标模式操作 → 后端 goal_action RPC（回执为 goal_updated 事件）。 */
+export interface GoalActionMessage {
+  type: 'goal_action'
+  payload: {
+    action: 'set' | 'replace' | 'pause' | 'resume' | 'drop'
+    objective?: string
+    token_budget?: number
+  }
+}
+
+/** 流式进行中立即调整（后端 steer RPC）。 */
+export interface SteerMessage {
+  type: 'steer'
+  payload: { message: string }
+}
+
+/** 流式进行中排入下一步的补充要求（后端 follow_up RPC）。 */
+export interface FollowUpMessage {
+  type: 'follow_up'
+  payload: { message: string }
+}
+
+/** 回合验收：接受或带反馈重做（后端复用 chat 路径发起修订轮）。 */
+export interface TaskReviewMessage {
+  type: 'task_review'
+  payload: {
+    action: 'accept' | 'revise'
+    feedback?: string
+  }
+}
+
+/** 需求澄清：回答澄清问题。 */
+export interface TaskBriefAnswerMessage {
+  type: 'task_brief_answer'
+  payload: { answer: string }
+}
+
+/** 需求澄清：按澄清后的执行提示或原始请求开跑。 */
+export interface TaskBriefExecuteMessage {
+  type: 'task_brief_execute'
+  payload: {
+    execution_prompt?: string
+    use_original?: boolean
+  }
+}
+
+/** 需求澄清：放弃澄清（后端补发 done{cancelled}）。 */
+export interface TaskBriefCancelMessage {
+  type: 'task_brief_cancel'
+  payload?: Record<string, never>
+}
+
+/** 需求澄清面板的三个动作（`useChat.ts` 内部 helper 的参数类型）。 */
+export type TaskBriefMessage =
+  | TaskBriefAnswerMessage
+  | TaskBriefExecuteMessage
+  | TaskBriefCancelMessage
+
+/**
+ * ClientMessage 联合 —— 浏览器→服务端 WS 消息。
+ *
+ * 权威白名单是 `bun-backend/src/routes/chat-ws.ts` 的 `CLIENT_MESSAGE_TYPES`
+ * （16 项）：白名单外的 type 被后端**静默丢弃**。本联合与白名单的双向对账由
+ * `web/tests/wsEventSink.spec.ts` 锁定（前端多发 → 后端吞掉；前端漏声明 →
+ * 发送点失去类型检查）。此前联合只覆盖 6 项，另外 10 项以无类型对象字面量发出，
+ * 字段拼错不会有任何提示。
+ */
+export type ClientMessage =
+  | ChatMessage
+  | CancelMessage
+  | PingMessage
+  | UserResponseMessage
+  | UpdateAutoApproveMessage
+  | ArtifactActionMessage
+  | PlanResponseMessage
+  | SetPlanModeMessage
+  | CheckpointActionMessage
+  | GoalActionMessage
+  | SteerMessage
+  | FollowUpMessage
+  | TaskReviewMessage
+  | TaskBriefAnswerMessage
+  | TaskBriefExecuteMessage
+  | TaskBriefCancelMessage
 
 // === 前端 UI 状态类型 ===
 
@@ -802,18 +871,6 @@ export interface ToolInfo {
 
 export interface ListToolsResponse {
   tools: ToolInfo[]
-}
-
-// === 路径白名单 ===
-
-export interface WhitelistEntry {
-  path: string
-  description: string
-  recursive: boolean
-}
-
-export interface ListWhitelistResponse {
-  entries: WhitelistEntry[]
 }
 
 // === MaxmaBlocker 拒止锚 ===

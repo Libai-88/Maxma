@@ -158,7 +158,7 @@ const storageItems: StorageItem[] = [
   { icon: '🔑', label: '提供商配置', path: 'api/data/providers.yaml' },
   { icon: '🔧', label: 'MCP 配置', path: 'api/data/mcp_servers.yaml' },
   { icon: '📋', label: '环境变量', path: '.env' },
-  { icon: '📁', label: '路径白名单', path: 'api/data/path_whitelist.yaml' },
+  { icon: '🛡️', label: '拒止锚配置', path: 'api/data/maxma_blocker.yaml' },
   { icon: '📝', label: '审计日志', path: 'logs/audit.jsonl' },
   { icon: '📊', label: '上传文件', path: 'uploads/' },
 ]

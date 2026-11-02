@@ -44,7 +44,7 @@
     </section>
 
     <section class="principles">
-      <span>机制边界</span><p>人格成长只改变可回滚的行为策略，不会覆盖工具权限、安全规则或文件白名单。</p>
+      <span>机制边界</span><p>人格成长只改变可回滚的行为策略，不会覆盖工具权限、审批门或拒止锚拦截。</p>
     </section>
   </div>
 </template>
