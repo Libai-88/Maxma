@@ -118,7 +118,7 @@ function handleClose() {
 async function refreshFavoriteStatus() {
   if (!current.value) return
   try {
-    // STICKER-AUTH-001：裸 tauriFetch 无 token 会 401，改走 request
+    // STICKER-AUTH-001：裸 fetch 无 token 会 401，改走 request
     const data = await request<{ favorites: Array<{ category: string; filename: string }> }>('/stickers/favorites')
     const favorites = data.favorites || []
     isFavorited.value = favorites.some(

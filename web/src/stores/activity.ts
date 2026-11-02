@@ -2,7 +2,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { api, getToken, ensureTokenLoaded } from '@/api'
-import { getBackendOrigin, tauriFetch } from '@/utils/env'
+import { getBackendOrigin } from '@/utils/env'
 import { createLogger } from '@/utils/logger'
 import type { ActivityRecord, ActivityStatsResponse } from '@/types'
 
@@ -151,10 +151,9 @@ export const useActivityStore = defineStore('activity', () => {
       // 再次读取 token（ensureTokenLoaded 可能更新了它）
       const tokenToUse = getToken()
 
-      // 必须用 tauriFetch 而非原生 fetch：Tauri 桌面端页面 origin 为 tauri://localhost，
-      // WebView2 禁止其向 http:// 发起原生 fetch，会导致 SSE 连接永远失败、
-      // 状态在「连接中/离线」间反复横跳。tauriFetch 在浏览器模式下自动回退为原生 fetch。
-      const response = await tauriFetch(`${base}/api/activity/stream`, {
+      // 同源页面（后端托管 web/dist / Electron 加载后端 origin），原生 fetch 即可；
+      // getBackendOrigin() 恒为空串，拼接结果是页面 origin 下的相对路径。
+      const response = await fetch(`${base}/api/activity/stream`, {
         headers: tokenToUse ? { 'X-Maxma-Token': tokenToUse } : undefined,
         signal: abortController.signal,
       })
@@ -172,8 +171,8 @@ export const useActivityStore = defineStore('activity', () => {
       _resetSSEBuffer()
       const reader = body.getReader()
 
-      // 硬超时兜底：tauriFetch 的 ReadableStream 可能在 getReader 后永久挂起
-      // （WebView2 / @tauri-apps/plugin-http 偶现 bug），导致 UI 永远停在「连接中」。
+      // 硬超时兜底：SSE 的 ReadableStream 可能在 getReader 后一直不产出任何数据
+      // （后端挂起 / 代理缓冲），导致 UI 永远停在「连接中」。
       // 若 20s 内未收到任何 SSE 事件行，主动断开降级到轮询。
       let _streamActive = false
       const streamTimeoutId = setTimeout(() => {

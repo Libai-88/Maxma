@@ -15,8 +15,6 @@ vi.mock('@/router', () => ({ default: {} }))
 vi.mock('@/utils/env', () => ({
   waitForBackend: mocks.waitForBackend,
   getApiBase: () => '/api',
-  ensurePortLoaded: vi.fn().mockResolvedValue(undefined),
-  tauriFetch: vi.fn(),
 }))
 
 describe('main startup failure', () => {

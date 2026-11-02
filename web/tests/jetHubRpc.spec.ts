@@ -12,12 +12,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const fetchMock = vi.fn()
-vi.mock('@/utils/env', () => ({
-  ensurePortLoaded: vi.fn(async () => {}),
-  // 真实实现返回的是**含 /api 前缀**的基址（真机验证：POST /api/jet-hub）。
-  getApiBase: () => 'http://127.0.0.1:8000/api',
-  tauriFetch: (...args: unknown[]) => fetchMock(...args),
-}))
+// 传输层就是原生 fetch，基址同源（/api）：替身只需替换全局 fetch，
+// 不再 vi.mock('@/utils/env') —— ensurePortLoaded / tauriFetch 那条
+// 跨环境通道已随 Tauri 壳一并删除。
+vi.stubGlobal('fetch', fetchMock)
 
 async function loadApi() {
   vi.resetModules()

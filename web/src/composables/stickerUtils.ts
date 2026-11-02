@@ -1,6 +1,6 @@
 /** 情绪关键词 → 表情包分类映射 */
 
-import { getApiBase, tauriFetch } from '@/utils/env'
+import { getApiBase } from '@/utils/env'
 
 const EMOTION_MAP: Record<string, string> = {
   '开心': '开心', '高兴': '开心', '哈哈': '开心', '嘻嘻': '开心', '真好': '开心',
@@ -95,7 +95,7 @@ export async function replaceStickerDirectives(text: string): Promise<string> {
   const tagByCategory = new Map<string, string>()
   await Promise.all(categories.map(async (category) => {
     try {
-      const res = await tauriFetch(getStickerUrl(category))
+      const res = await fetch(getStickerUrl(category))
       if (!res.ok) return
       const data = await res.json()
       if (data?.path) tagByCategory.set(category, `<sticker:${data.path}>`)

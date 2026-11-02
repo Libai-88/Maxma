@@ -458,7 +458,7 @@ function updatePickerPosition() {
 }
 
 // 加载数据
-// STICKER-AUTH-001：此前用裸 tauriFetch 调用——/api/stickers/index、/recent、
+// STICKER-AUTH-001：此前用裸 fetch 调用——/api/stickers/index、/recent、
 // /favorites 需要鉴权（auth 中间件对单段路径不豁免），401 导致表情库恒为空。
 // 统一改走 request（自动携带 X-Maxma-Token，401 时自动刷新重试）。
 async function loadData() {

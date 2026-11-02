@@ -1,101 +1,18 @@
 /**
- * 运行时环境检测 + Tauri-aware fetch 包装器。
+ * 运行时环境工具：后端基址、健康轮询、外链打开、UUID 生成。
  *
- * WebView2 不允许从 tauri://localhost 向 http:// 发起原生 fetch()，
- * 因此 Tauri 环境下使用 @tauri-apps/plugin-http（经 Rust reqwest 发出请求）。
- * 浏览器环境下使用原生 fetch，行为不变。
- *
- * 注意：@tauri-apps/plugin-http 使用动态 import（惰性加载），
- * 避免在浏览器模式下的模块初始化阶段强制加载 Tauri 专有包。
+ * 两种已发布形态都是同源 HTTP 页面 —— Web 便携包由后端直接托管
+ * web/dist，Electron 壳（desktop/electron/main.cjs，sandbox:true、无 preload）
+ * 加载的也是后端自身 origin。因此 API/WS 一律用相对路径 + location.host，
+ * 原生 fetch 即可；上一代桌面壳的 IPC 探测与 Rust HTTP 代理层已随壳一并移除。
  */
-
-/** @tauri-apps/plugin-http 的 fetch 引用（惰性初始化） */
-let _tauriFetchImpl: ((input: string | URL | Request, init?: RequestInit) => Promise<Response>) | null = null
-
-/** 获取 Tauri HTTP fetch 实现（动态导入，仅在 Tauri 模式下调用） */
-async function getTauriFetch(): Promise<(input: string | URL | Request, init?: RequestInit) => Promise<Response>> {
-  if (!_tauriFetchImpl) {
-    const mod = await import('@tauri-apps/plugin-http')
-    _tauriFetchImpl = mod.fetch
-  }
-  return _tauriFetchImpl
-}
-
-/** 默认后端端口（与 main.py uvicorn.run 保持一致） */
-const DEFAULT_API_PORT = 8000
-
-/** 运行时端口（Tauri 端口冲突回退时由 ensurePortLoaded() 动态更新） */
-let runtimeApiPort: number = Number(import.meta.env.VITE_MAXMA_API_PORT) || DEFAULT_API_PORT
-let portLoaded = false
-let portLoadPromise: Promise<void> | null = null
-
-/** get_api_port 可能要等 Tauri setup 完成，给 sidecar 启动留下充足时间。 */
-const PORT_DISCOVERY_ATTEMPTS = 60
-const PORT_DISCOVERY_INTERVAL_MS = 1000
-
-/** 实时检测是否在 Tauri WebView 中运行 */
-function detectTauri(): boolean {
-  if (typeof window === 'undefined') return false
-  const w = window as unknown as Record<string, unknown>
-  return !!w.__TAURI_INTERNALS__ || !!w.__TAURI__
-}
-
-/** True when running inside a Tauri v2 WebView.
- * 注意：必须调用 isTauri() 而非直接引用，Proxy 对象永远 truthy。
- */
-export function isTauri(): boolean {
-  return detectTauri()
-}
-
-/**
- * 在 Tauri 环境下从后端 Rust 命令获取实际监听端口。
- *
- * Tauri 启动时若默认端口 8000 被占用，会自动回退到 8001-8010。
- * 前端必须调用此函数获取真实端口，否则会连到错误端口。
- * 浏览器环境下此函数为空操作。
- *
- * 失败时自动重试，因为 Tauri 主进程可能在 setup 阶段还未完成端口注册。
- * 端口命令只负责报告监听端口，不在这里做健康检查：sidecar 可能已经选定
- * 回退端口，但仍需要几十秒完成解压和启动。健康状态由 waitForBackend() 轮询。
- */
-export async function ensurePortLoaded(): Promise<void> {
-  if (!detectTauri() || portLoaded) return
-  if (!portLoadPromise) {
-    portLoadPromise = (async () => {
-      try {
-        const { invoke } = await import('@tauri-apps/api/core')
-        for (let attempt = 1; attempt <= PORT_DISCOVERY_ATTEMPTS; attempt++) {
-          try {
-            const port = await invoke<number>('get_api_port')
-            if (typeof port === 'number' && port > 0) {
-              // Keep the selected port even while the sidecar is still booting.
-              runtimeApiPort = port
-              return
-            }
-          } catch {
-            // Tauri setup not ready yet; retry on next iteration.
-          }
-          if (attempt < PORT_DISCOVERY_ATTEMPTS) {
-            await new Promise(resolve => setTimeout(resolve, PORT_DISCOVERY_INTERVAL_MS))
-          }
-        }
-      } catch {
-        // Port discovery unavailable; keep configured port.
-      } finally {
-        portLoaded = true
-        portLoadPromise = null
-      }
-    })()
-  }
-  await portLoadPromise
-}
 
 /**
  * 检查后端健康状态（带重试）。
- * 在 Tauri 环境下，sidecar 启动可能需要 30-90 秒（PyInstaller onefile 解压 +
- * 数据库加载），此函数会反复重试直到后端就绪或超时。
+ * 便携包冷启动时后端需要完成数据目录准备与引擎加载，可能耗时数十秒，
+ * 此函数会反复重试直到后端就绪或超时。
  *
- * @param maxAttempts 最大重试次数（默认 45 次，每次间隔 2 秒，共 90 秒 — 覆盖 sidecar 最大启动时间）
+ * @param maxAttempts 最大重试次数（默认 45 次，每次间隔 2 秒，共 90 秒 — 覆盖后端最大启动时间）
  * @param intervalMs 重试间隔（毫秒，默认 2000）
  * @returns true 如果后端就绪，false 如果超时
  */
@@ -103,11 +20,10 @@ export async function waitForBackend(
   maxAttempts: number = 45,
   intervalMs: number = 2000,
 ): Promise<boolean> {
-  await ensurePortLoaded()
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const url = `${getApiBase()}/health`
-      const resp = await tauriFetch(url, { method: 'GET' })
+      const resp = await fetch(url, { method: 'GET' })
       if (resp.ok) {
         return true
       }
@@ -121,47 +37,20 @@ export async function waitForBackend(
   return false
 }
 
-/** 当前生效的 API 端口 */
-function currentApiPort(): number {
-  return runtimeApiPort
-}
-
-/** 所有 HTTP API 请求的基础路径 */
+/** 所有 HTTP API 请求的基础路径（同源相对路径：开发期走 Vite 代理，生产由后端直供） */
 export function getApiBase(): string {
-  // 浏览器走 Vite 代理；Tauri 必须使用 HTTP 插件可访问的绝对地址。
-  if (detectTauri()) {
-    return `http://127.0.0.1:${currentApiPort()}/api`
-  }
   return '/api'
 }
 
-/** 后端原始地址（不含 /api 前缀，用于非 API 路径如 /api/upload → 上传使用 getApiBase） */
+/** 后端 origin（同源形态下恒为空串，拼接结果即相对路径，用于 /api 前缀之外的路径） */
 export function getBackendOrigin(): string {
-  return detectTauri() ? `http://127.0.0.1:${currentApiPort()}` : ''
+  return ''
 }
 
-/** WebSocket 基础路径（不含 /ws/chat/... 后缀） */
+/** WebSocket 基础路径（不含 /ws/chat/... 后缀），与页面同源 */
 export function getWsBase(): string {
-  if (detectTauri()) {
-    return `ws://127.0.0.1:${currentApiPort()}`
-  }
   const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
   return `${protocol}://${window.location.host}`
-}
-
-/**
- * 跨环境 fetch — Tauri 走 plugin-http（Rust reqwest），浏览器走原生 fetch。
- * 接口与原生 fetch 完全一致，可直接替换。
- */
-export function tauriFetch(
-  input: string | URL | Request,
-  init?: RequestInit,
-): Promise<Response> {
-  if (detectTauri()) {
-    // 惰性加载 Tauri HTTP 插件，避免浏览器模式下强制解析 Tauri 专有包
-    return getTauriFetch().then(fn => fn(input, init))
-  }
-  return fetch(input, init)
 }
 
 /**
@@ -181,8 +70,7 @@ function isSafeUrl(url: string): boolean {
 }
 
 /**
- * 在系统浏览器中打开外部链接。
- * Tauri 环境下通过 shell 插件打开，浏览器环境下用 window.open。
+ * 在新标签页打开外部链接（两种形态都是普通 HTTP 页面，直接用 window.open）。
  * 对 javascript: data: 等危险协议直接拒绝。
  */
 export function openExternal(url: string): void {
@@ -190,13 +78,7 @@ export function openExternal(url: string): void {
     console.warn('[env] 拒绝打开不安全的 URL:', url)
     return
   }
-  if (detectTauri() && (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__) {
-    ;(window as unknown as { __TAURI_INTERNALS__: { invoke: (cmd: string, args: Record<string, unknown>) => Promise<void> } }).__TAURI_INTERNALS__.invoke('plugin:shell|open', { path: url }).catch((err: unknown) => {
-      console.warn('[env] openExternal failed:', err)
-    })
-  } else {
-    window.open(url, '_blank', 'noopener,noreferrer')
-  }
+  window.open(url, '_blank', 'noopener,noreferrer')
 }
 
 /**

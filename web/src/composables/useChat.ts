@@ -6,7 +6,7 @@ import { useSessionStore } from '@/stores/session'
 import { buildFlatMessage, buildTimestamp, parseReferences } from '@/utils/references'
 import type { ParsedRef } from '@/utils/references'
 import { getToken, ensureTokenLoaded, resetToken, api } from '@/api'
-import { ensurePortLoaded, waitForBackend, getWsBase, getApiBase, generateUUID, tauriFetch } from '@/utils/env'
+import { waitForBackend, getWsBase, getApiBase, generateUUID } from '@/utils/env'
 import { safeGetItem, safeRemoveItem, safeSetItem, safeKeys } from '@/lib/storage'
 import { chatSessionAliveCache } from '@/composables/sessionAliveCache'
 import { useWorkbenchStore } from '@/stores/workbench'
@@ -498,7 +498,7 @@ async function hydrateTurnSticker(turn: ChatTurn): Promise<boolean> {
       return true
     }
     // 无显式指令：取一张该情绪的贴纸——裸情感词标记原位替换，否则末尾附加
-    const response = await tauriFetch(getStickerUrl(emotion))
+    const response = await fetch(getStickerUrl(emotion))
     if (!response.ok) return false
     const data = await response.json()
     if (!data?.path) return false
@@ -533,7 +533,7 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
 
 async function hydrateTurnStickers(sid: string, turns: ChatTurn[]): Promise<void> {
   // PERF-HYDRATE-001：长会话恢复时此前 Promise.all 一次性并发 N 个
-  // tauriFetch（100+ 轮 = 100+ 并发请求），限制为 4 并发。
+  // 贴纸请求（100+ 轮 = 100+ 并发请求），限制为 4 并发。
   const changed = (await mapLimit(turns, 4, hydrateTurnSticker)).some(Boolean)
   if (changed) persistTurns(sid)
 }
@@ -728,10 +728,6 @@ async function connectSession(sid: string) {
   if (ch.ws && (ch.ws.readyState === WebSocket.OPEN || ch.ws.readyState === WebSocket.CONNECTING)) {
     return
   }
-
-  // 确保端口已加载（Tauri 环境下 sidecar 端口可能不是默认 8000）
-  await ensurePortLoaded()
-  if (!isChannelStillValid(sid)) return
 
   // 等待后端就绪（PyInstaller onefile 启动可能需要数秒，孤儿 sidecar 被清理后
   // 新 sidecar 需要时间启动）。waitForBackend 在后端已就绪时立即返回，仅在后端
@@ -1469,8 +1465,8 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
           // Fire-and-forget: 不阻塞消息显示。先替换全部显式指令
           // （STICKER-MULTI-001：此前只替换第一条，其余被剥除），
           // 无指令时取一张该情绪贴纸——裸标记原位替换，否则末尾附加。
-          // 必须使用 tauriFetch：Tauri WebView2 不允许从 tauri://localhost
-          // 向 http:// 发起原生 fetch，会静默失败导致 stickerUrl 永远为空。
+          // 原生 fetch 即可：两种已发布形态都是同源 HTTP 页面，上一代桌面壳
+          // 需要代理层绕开的跨协议限制已不存在。
           void replaceStickerDirectives(turn.finalAnswer).then((withDirectives) => {
             if (!turn.finalAnswer) return
             if (withDirectives !== turn.finalAnswer) {
@@ -1480,7 +1476,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
               if (lastThink) lastThink.tokens = withDirectives
               return
             }
-            return tauriFetch(getStickerUrl(emotion))
+            return fetch(getStickerUrl(emotion))
               .then((r) => {
                 if (!r.ok) {
                   log.warn('sticker fetch non-ok response:', r.status)

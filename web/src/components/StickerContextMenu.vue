@@ -91,7 +91,7 @@ function bounceIcon(e: MouseEvent) {
 }
 
 // 检查是否已收藏
-// STICKER-AUTH-001：此前裸 tauriFetch 无 token，favorites GET 401 导致
+// STICKER-AUTH-001：此前用裸 fetch 无 token，favorites GET 401 导致
 // 收藏状态永远 false；改走 request（自动带 token）。
 async function checkFavoriteStatus() {
   if (!props.sticker) return
