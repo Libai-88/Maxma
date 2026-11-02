@@ -225,6 +225,30 @@ describe("后端打包契约", () => {
     expect(desktopPs1).toContain("Copy-Item -LiteralPath $source");
   });
 
+  test("桌面链暂存前必须清空 runtime 目录（否则删掉的资源会复活进包里）", () => {
+    // Copy-Item -Force 只做同名覆盖，不删"上次有、这次没有"的条目。
+    // 实测踩过：把 .omp/skills 从仓库与暂存清单里删干净后重跑，
+    // 桌面 zip 里仍有 13 个 resources/maxma/.omp/skills/*.md —— 来源是上一轮
+    // 构建残留的 dist\electron-runtime。产物看起来完全正常（大小、结构都对），
+    // 只是多装了已经不属于这个版本的东西。
+    const ps1 = fs.readFileSync(path.join(repoRoot, "build-desktop-portable.ps1"), "utf8");
+    const purge = ps1.search(/Remove-Item\s+-LiteralPath\s+\$RuntimeDir\s+-Recurse\s+-Force/);
+    const stage = ps1.search(/Copy-Item\s+-Path\s+\(Join-Path\s+\$BackendBundle\s+"\*"\)\s+-Destination\s+\$RuntimeDir/);
+
+    expect(purge, "桌面链没有清空 runtime 暂存目录就拷贝").not.toBe(-1);
+    expect(stage, "找不到暂存 backend 产物的那一步").not.toBe(-1);
+    // 顺序才是关键：清空必须发生在任何往 $RuntimeDir 拷贝之前。
+    expect(
+      purge < stage,
+      `清空 runtime 目录（${purge}）必须早于首次暂存拷贝（${stage}），否则残留文件仍会进包`,
+    ).toBe(true);
+
+    // 清空动作必须受路径护栏保护：护栏检查在删除之前。
+    const guard = ps1.search(/拒绝写入 dist 目录以外的构建路径/);
+    expect(guard, "缺少 dist 路径护栏").not.toBe(-1);
+    expect(guard < purge, "路径护栏必须先于删除生效").toBe(true);
+  });
+
   test("electron-builder 配置从清单派生 extraResources（否则会被 filter 过滤掉）", () => {
     // ⚠️ electron-builder.config.cjs 的 extraResources 第一条 filter 显式排除
     // node_modules（`!node_modules/{**/*}`），所以**只有显式列出的包才会进包**。
