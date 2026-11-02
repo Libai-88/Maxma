@@ -252,6 +252,41 @@ const svgContents: Record<string, string> = {
   <path d="M3 21l7-7"/>
   <path d="M13.5 11c-2.5 0-4.5 2-4.5 4.5V21h9v-5.5c0-2.5-2-4.5-4.5-4.5z"/>
 </svg>`,
+  // ── Agent / 任务编排面（components/agent/*） ──
+  cpu: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="6" y="6" width="12" height="12" rx="2"/>
+  <path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>
+</svg>`,
+  layers: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M12 2.5 2.5 7.5 12 12.5l9.5-5-9.5-5z"/>
+  <path d="M2.5 12.5 12 17.5l9.5-5"/>
+</svg>`,
+  grid: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="3" y="3" width="7" height="7" rx="1"/>
+  <rect x="14" y="3" width="7" height="7" rx="1"/>
+  <rect x="14" y="14" width="7" height="7" rx="1"/>
+  <rect x="3" y="14" width="7" height="7" rx="1"/>
+</svg>`,
+  list: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <line x1="8" y1="6" x2="20" y2="6"/>
+  <line x1="8" y1="12" x2="20" y2="12"/>
+  <line x1="8" y1="18" x2="20" y2="18"/>
+  <circle cx="4" cy="6" r="1"/>
+  <circle cx="4" cy="12" r="1"/>
+  <circle cx="4" cy="18" r="1"/>
+</svg>`,
+  refresh: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M20.5 12a8.5 8.5 0 1 1-2.6-6.1"/>
+  <path d="M20.5 4v5h-5"/>
+</svg>`,
+  ban: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="12" cy="12" r="9"/>
+  <line x1="5.6" y1="5.6" x2="18.4" y2="18.4"/>
+</svg>`,
+  plus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <line x1="12" y1="5" x2="12" y2="19"/>
+  <line x1="5" y1="12" x2="19" y2="12"/>
+</svg>`,
 }
 
 const svgContent = computed(() => {

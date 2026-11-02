@@ -16,7 +16,17 @@
 
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import type { MaxmaToolContent } from "../tools/descriptor";
 import type { MaxmaEventLike } from "./events";
+
+/**
+ * `submit_plan` 工具结果的 details 形状（审批结论）。
+ * 显式声明是为了给 execute 标注返回类型——见该函数处的注释。
+ */
+interface SubmitPlanDetails {
+  approved?: boolean;
+  reason?: string;
+}
 
 /** 计划审批的在途条目（与 state.ts PendingPlan 同形状，plan_action RPC 兑现）。 */
 export interface PiPendingPlan {
@@ -95,7 +105,15 @@ export function createSubmitPlanTool(deps: CreateSubmitPlanToolDeps): ToolDefini
       additionalProperties: false,
     }) as ToolDefinition["parameters"],
     annotations: { readOnlyHint: true },
-    async execute(toolCallId, params) {
+    /**
+     * 返回类型必须显式标注：`defineTool` 会从**第一个** return 分支反推 details 的泛型
+     * （本函数里是 `{}` → `approved?: undefined`），于是后面 `{approved: true}` 的分支
+     * 全部判为不兼容（tsc TS2322）。标注在入口处，分支之间就不再互相污染。
+     */
+    async execute(
+      toolCallId,
+      params,
+    ): Promise<{ content: MaxmaToolContent[]; details: SubmitPlanDetails }> {
       const planMarkdown = String((params as { plan_markdown?: unknown }).plan_markdown ?? "").trim();
       if (!planMarkdown) {
         return {
@@ -117,7 +135,10 @@ export function createSubmitPlanTool(deps: CreateSubmitPlanToolDeps): ToolDefini
         payload: { plan_id: planId, steps, plan_text: planMarkdown },
       });
 
-      let timer: ReturnType<typeof setTimeout>;
+      // `!`：Promise 的执行函数是同步运行的，timer 在 await 返回之前必然已赋值，
+      // 所以下面 clearTimeout(timer) 不存在"未赋值就用"的路径。写成 `| undefined`
+      // 反而会把 pendingPlans 里的 timer 类型污染成可选。
+      let timer!: ReturnType<typeof setTimeout>;
       const decision = await new Promise<PiPlanDecision>((resolve) => {
         timer = setTimeout(() => {
           if (deps.pendingPlans.has(planId)) {

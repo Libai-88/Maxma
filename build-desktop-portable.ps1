@@ -102,10 +102,42 @@ foreach ($module in @("sharp", "@img\sharp-win32-x64", "@img\colour", "detect-li
     }
 }
 
+# 插件栈：这些包**刻意不打进 server.js**（见 bun-backend/build-server.mjs 的
+# EXTERNAL_PACKAGES）。清单由 build-server.mjs 从 package.json 递归推导并写成
+# externals.json —— 这里照单拷贝，不手写清单（手写必然漂移）。
+#
+# ⚠️ 本步骤曾经缺失：桌面链 [3/5] 直接调 build-server.mjs（绕过 build-server.bat
+#    的暂存步骤），而 [4/5] 只拷 sharp —— 于是桌面版永远没有插件栈，
+#    且症状是「插件静默不工作」。守卫只检查 externals.json 存在是不够的，
+#    因为那个文件由 .mjs 生成，缺的是 node_modules 里的包。
+$ExternalsManifest = Join-Path $BackendBundle "externals.json"
+if (-not (Test-Path $ExternalsManifest)) {
+    throw "缺少外置依赖清单：$ExternalsManifest（build-server.mjs 应当生成它）"
+}
+$ExternalPackages = (Get-Content -Raw $ExternalsManifest | ConvertFrom-Json).packages
+if (@($ExternalPackages).Count -lt 20) {
+    throw "外置依赖清单条目过少（$(@($ExternalPackages).Count)），疑似被截断：$ExternalsManifest"
+}
+foreach ($package in $ExternalPackages) {
+    $source = Join-Path $BackendNodeModules $package
+    $destination = Join-Path $RuntimeNodeModules $package
+    if (-not (Test-Path (Join-Path $source "package.json"))) {
+        throw "插件依赖未安装：$package（请在 bun-backend 运行 bun install）"
+    }
+    New-Item -ItemType Directory -Force -Path (Split-Path $destination) | Out-Null
+    Copy-Item -LiteralPath $source -Destination $destination -Recurse -Force
+}
+Write-Host "      插件栈已暂存（$(@($ExternalPackages).Count) 个包）"
+
 foreach ($required in @(
     (Join-Path $BackendBundle "server.js"),
     (Join-Path $BackendBundle "node_modules\sharp"),
-    (Join-Path $BackendBundle "node_modules\@img\sharp-win32-x64")
+    (Join-Path $BackendBundle "node_modules\@img\sharp-win32-x64"),
+    # 插件栈：缺了只会在桌面版启动、插件加载时暴露 —— 且症状是「插件静默不工作」，
+    # 极难归因。这里在构建期就拦住（校验真实包目录，不只是清单文件）。
+    (Join-Path $BackendBundle "externals.json"),
+    (Join-Path $BackendBundle "node_modules\dsh-codearts-auth\package.json"),
+    (Join-Path $BackendBundle "node_modules\@deepseek-ai\dsh-llm\package.json")
 )) {
     if (-not (Test-Path $required)) { throw "后端运行资源缺失：$required" }
 }
@@ -168,7 +200,21 @@ $BundledSkillNames | ForEach-Object {
         throw "桌面运行目录缺少随包技能：$runtimeSkill"
     }
 }
-Copy-Item -Path (Join-Path $ProjectRoot "web\dist\*") -Destination (Join-Path $RuntimeDir "web\dist") -Recurse -Force
+# ⚠️ web\dist 必须**先清后拷**（镜像语义）。vite 关闭了 emptyOutDir（见
+# web/vite.config.ts 的 safe-delete 注释），仓库 dist 由 clean-dist.mjs 保证干净；
+# 但这里是清掉 electron-runtime **暂存目录**（$RuntimeDir\web\dist）里的旧内容——
+# 上次构建残留的旧 hash chunk 会一直留在 ZIP 里（实测 JetHubView 新旧两个
+# bundle 并存），产物体积虚涨、排障时被旧文件误导。护栏：只在 RuntimeDir 边界内删。
+$runtimeWebDist = Join-Path $RuntimeDir "web\dist"
+$resolvedWebDist = [System.IO.Path]::GetFullPath($runtimeWebDist)
+if (-not $resolvedWebDist.StartsWith([System.IO.Path]::GetFullPath($RuntimeDir), [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "拒绝清理运行目录之外的 web\dist：$resolvedWebDist"
+}
+if (Test-Path -LiteralPath $resolvedWebDist) {
+    Remove-Item -LiteralPath $resolvedWebDist -Recurse -Force
+}
+New-Item -ItemType Directory -Force -Path $resolvedWebDist | Out-Null
+Copy-Item -Path (Join-Path $ProjectRoot "web\dist\*") -Destination $resolvedWebDist -Recurse -Force
 if (Test-Path (Join-Path $ProjectRoot "workflows")) {
     New-Item -ItemType Directory -Force -Path (Join-Path $RuntimeDir "workflows") | Out-Null
     Copy-Item -Path (Join-Path $ProjectRoot "workflows\*") -Destination (Join-Path $RuntimeDir "workflows") -Recurse -Force -ErrorAction SilentlyContinue
@@ -192,6 +238,26 @@ if ([string]$webPackage.version -ne $canonicalVersion) {
     throw "版本不一致：web/package.json=$($webPackage.version)，version.py=$canonicalVersion。"
 }
 $staleDataDir = Join-Path $OutputDir "win-unpacked\data"
+# ⚠️ 清理前先检测运行中的桌面实例：win-unpacked\data 被 MaxmaHere.exe（或它拉起的
+# bun 后端）占用时，Remove-Item 会抛 IOException（lockfile 不可删），原始报错完全
+# 看不出原因 —— 真机踩过两次（冒烟测试残留实例 / 用户正在测试旧构建时重建）。
+# 给出可操作的报错，而不是一个裸堆栈。
+$unpackedRoot = Join-Path $OutputDir "win-unpacked"
+$runningApp = Get-Process -ErrorAction SilentlyContinue | Where-Object {
+    if ($_.ProcessName -ne 'MaxmaHere' -and $_.ProcessName -ne 'bun') { return $false }
+    # 读取其他用户的进程 Path 会抛 Access denied；脚本全局 Stop，必须兜住，
+    # 否则一次无关进程就能让构建失败。
+    try {
+        $procPath = $_.Path
+        return $procPath -and $procPath.StartsWith($unpackedRoot, [System.StringComparison]::OrdinalIgnoreCase)
+    } catch {
+        return $false
+    }
+}
+if ($runningApp) {
+    $pids = ($runningApp | Select-Object -ExpandProperty Id) -join ', '
+    throw ("桌面便携版正在运行（PID $pids），占用 win-unpacked\data，无法清理。请先关闭应用再重新构建。")
+}
 if (Test-Path -LiteralPath $staleDataDir) {
     $resolvedStaleData = [System.IO.Path]::GetFullPath($staleDataDir)
     if (-not $resolvedStaleData.StartsWith([System.IO.Path]::GetFullPath($OutputDir), [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -278,6 +344,18 @@ try {
     }
     if ($skillEntries.Count -ne $BundledSkillNames.Count -or $skillEntries -contains $null) {
         throw "便携 ZIP 缺少随包技能文件。"
+    }
+    # 插件栈也要在 ZIP 里复核一遍：外置依赖不进 server.js，缺了 ZIP 照样能生成，
+    # 但用户装上后插件静默不工作。这是最后一道防线。
+    $externalEntryNames = @($ExternalPackages | ForEach-Object {
+        "resources/maxma/node_modules/$_/package.json"
+    })
+    $missingExternalEntries = @($externalEntryNames | Where-Object { $zipEntryNames -notcontains $_ })
+    if ($missingExternalEntries.Count -gt 0) {
+        throw "便携 ZIP 缺少插件运行依赖（$($missingExternalEntries.Count) 个）：$($missingExternalEntries[0]) …"
+    }
+    if ($zipEntryNames -notcontains "resources/maxma/externals.json") {
+        throw "便携 ZIP 缺少 externals.json（插件依赖清单）。"
     }
 } finally {
     $zip.Dispose()

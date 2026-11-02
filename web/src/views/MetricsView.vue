@@ -438,7 +438,7 @@ function formatTokens(n: number): string {
   background: transparent;
   background: transparent;
   background: color-mix(in srgb, var(--status-error) 12%, transparent);
-  color: var(--status-error);
+  color: var(--status-error-text);
   font-size: 12px;
 }
 .btn-small {
@@ -498,7 +498,7 @@ function formatTokens(n: number): string {
   color: var(--text-secondary);
   margin-left: 2px;
 }
-.stat-value.text-error { color: var(--status-error); }
+.stat-value.text-error { color: var(--status-error-text); }
 .stat-label {
   font-size: 11px;
   color: var(--text-secondary);

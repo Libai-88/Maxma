@@ -163,7 +163,7 @@ onMounted(loadContent)
   color: var(--text-tertiary);
 }
 .save-indicator.saved {
-  color: var(--status-ok);
+  color: var(--status-ok-text);
 }
 
 .save-button {

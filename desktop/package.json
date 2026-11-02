@@ -1,6 +1,6 @@
 {
   "name": "maxmahere-desktop",
-  "version": "2.6.11",
+  "version": "2.6.12",
   "private": true,
   "description": "MaxmaHere Electron desktop shell",
   "main": "electron/main.cjs",

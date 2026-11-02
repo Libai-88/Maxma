@@ -45,7 +45,12 @@ export function loadConstSession(filePath: string): Record<string, unknown> | nu
   try {
     if (!fs.existsSync(filePath)) return null;
     const data = BunYamlSafeParse(fs.readFileSync(filePath, "utf8"));
-    return data && typeof data === "object" && !Array.isArray(data) ? data : null;
+    // `typeof data === "object"` 只把类型收窄到 `object`（不带索引签名），
+    // 而本函数签名承诺 `Record<string, unknown>`。这里确实只需判断"是不是一个
+    // 非数组对象"，字段形状由调用方各自校验，所以显式断言成记录形状。
+    return data && typeof data === "object" && !Array.isArray(data)
+      ? (data as Record<string, unknown>)
+      : null;
   } catch (err) {
     console.warn(`[const] failed to load session file ${filePath}: ${String(err)}`);
     return null;

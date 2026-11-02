@@ -434,7 +434,7 @@ function submitConfirm() {
 /* 错误 */
 .ask-error {
   font-size: 13px;
-  color: var(--status-error);
+  color: var(--status-error-text);
   padding: 4px 0;
 }
 
@@ -496,12 +496,12 @@ function submitConfirm() {
 }
 .confirm-warning-icon {
   font-size: 16px;
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 .confirm-warning-text {
   font-size: 13px;
   font-weight: 600;
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 .confirm-detail {
   font-size: 13px;
@@ -578,7 +578,7 @@ function submitConfirm() {
   font-variant-numeric: tabular-nums;
 }
 .countdown-text.urgent {
-  color: var(--status-error);
+  color: var(--status-error-text);
   font-weight: 600;
 }
 

@@ -13,6 +13,7 @@
 
 import * as path from "node:path";
 import * as fs from "node:fs";
+import * as os from "node:os";
 
 export const PORTABLE_FLAG_FILENAME = "portable.flag";
 
@@ -62,6 +63,20 @@ export const getLogsDir = (): string => path.join(dataDir(), "logs");
 export const getUploadsDir = (): string => path.join(dataDir(), "uploads");
 export const getVectorDbDir = (): string => path.join(dataDir(), "vector_db");
 
+/**
+ * 用户级 skills 安装根。默认 `os.homedir()/.agents/skills`，可用
+ * `MAXMA_USER_SKILLS_DIR` 覆盖（与 `MAXMA_DATA_DIR` 同一信任级：都由启动器/
+ * 测试注入，不接受请求体传值——这个路径决定 Skill 安装写到哪，不能让 HTTP 侧控制）。
+ *
+ * 为什么要显式覆盖口而不是让测试改 `HOME`：Bun 的 `os.homedir()` 在 Linux 上
+ * 不跟随 `$HOME`（Windows 上读 `USERPROFILE`，所以本地一直是绿的），
+ * 靠改环境变量的测试在 CI 上会把文件写到真实家目录然后读不到。
+ */
+export const getUserSkillsDir = (): string =>
+  process.env.MAXMA_USER_SKILLS_DIR
+    ? path.resolve(process.env.MAXMA_USER_SKILLS_DIR)
+    : path.join(os.homedir(), ".agents", "skills");
+
 /** news.yaml（与 Python NEWS_YAML_PATH 一致）。 */
 export const getNewsYamlPath = (): string => path.join(getApiDataDir(), "news.yaml");
 /** providers.yaml（与 Python PROVIDERS_YAML_PATH 一致）。 */
@@ -74,3 +89,25 @@ export const getMcpOAuthTokensPath = (): string => path.join(getApiDataDir(), "m
 export const getCredentialKeyPath = (): string => path.join(getApiDataDir(), "credential.key");
 /** 引导状态文件（与 Python ONBOARDING_STATE_PATH 一致）。 */
 export const getOnboardingStatePath = (): string => path.join(dataDir(), "config", "onboarding.json");
+
+// ── 插件子系统（PLUGIN-001） ──
+
+/** 已安装插件的根目录。 */
+export const getPluginsDir = (): string => path.join(dataDir(), "plugins");
+
+/** 单个插件的数据目录（凭据、状态、缓存都落这里，随包走）。 */
+export const getPluginDataDir = (pluginId: string): string => {
+  const safe = String(pluginId).replace(/[^A-Za-z0-9._-]/g, "_");
+  return path.join(getPluginsDir(), safe);
+};
+
+/** 插件注册表（启用状态、安装来源等）。 */
+export const getPluginsRegistryPath = (): string => path.join(getPluginsDir(), "registry.json");
+
+/**
+ * DSH 插件子系统的状态根目录。
+ *
+ * 会作为 `DSH_HOME` / `DSH_JET_HUB_STATE_DIR` 注入插件（见 plugins/dsh/host.ts），
+ * 使插件的账号池与令牌留在 Maxma 自己的数据目录内，而不是写用户主目录的 `~/.dsh`。
+ */
+export const getDshPluginStateDir = (): string => path.join(getPluginsDir(), "dsh");

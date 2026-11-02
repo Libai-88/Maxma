@@ -391,7 +391,7 @@ function formatDate(dateStr: string): string {
   justify-content: space-between;
   padding: 10px 12px;
   background: color-mix(in srgb, var(--status-error) 10%, transparent);
-  color: var(--status-error);
+  color: var(--status-error-text);
   border-radius: 6px;
   font-size: 0.85em;
   margin-bottom: 16px;
@@ -401,7 +401,7 @@ function formatDate(dateStr: string): string {
   padding: 2px 6px;
   border: none;
   background: transparent;
-  color: var(--status-error);
+  color: var(--status-error-text);
   cursor: pointer;
   font-size: 1.1em;
 }
@@ -479,17 +479,17 @@ function formatDate(dateStr: string): string {
 
 .mode-read {
   background: color-mix(in srgb, var(--status-info) 10%, transparent);
-  color: var(--status-info);
+  color: var(--status-info-text);
 }
 
 .mode-comment {
   background: color-mix(in srgb, var(--status-warn) 10%, transparent);
-  color: var(--status-warn);
+  color: var(--status-warn-text);
 }
 
 .mode-edit {
   background: color-mix(in srgb, var(--status-ok) 10%, transparent);
-  color: var(--status-ok);
+  color: var(--status-ok-text);
 }
 
 .share-link {
@@ -540,7 +540,7 @@ function formatDate(dateStr: string): string {
 }
 
 .share-expires {
-  color: var(--status-warn);
+  color: var(--status-warn-text);
 }
 
 .btn {
@@ -571,7 +571,7 @@ function formatDate(dateStr: string): string {
 }
 
 .btn-danger {
-  color: var(--status-error);
+  color: var(--status-error-text);
   border-color: color-mix(in srgb, var(--status-error) 30%, transparent);
 }
 

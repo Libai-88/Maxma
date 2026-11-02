@@ -1,4 +1,36 @@
 news:
+  - id: "agent-task-center"
+    title: "Agent 任务中心"
+    description: "新增「Agent」任务中心页面，集中查看对话中派发的后台子 Agent：实时状态、进度与结果一览，可随时取消单个或全部运行中的任务。数据直接来自后端任务接口，状态随对话实时更新。"
+    type: "feat"
+    date: "2026-10-20"
+    tags: ["Agent", "子任务", "界面"]
+    version: "v2.6.11"
+    pr_number: null
+  - id: "theme-contrast-fix"
+    title: "深色主题弹窗文字修复"
+    description: "修复深色主题下设置等弹窗文字几乎看不见的问题：弹窗玻璃底与正文用了同一个色值，文字与背景几乎同色。同时统一了用户气泡与状态色的对比度，6 套主题全部通过可读性校验。"
+    type: "fix"
+    date: "2026-10-09"
+    tags: ["界面", "主题", "修复"]
+    version: "v2.6.11"
+    pr_number: null
+  - id: "plugin-model-fix"
+    title: "插件模型选择与报错修复"
+    description: "修复插件渠道模型在对话框发消息必报错的问题（模型 id 与展示名混淆所致），同时把插件的真实失败原因透传到错误提示，不再只显示「Unknown agent error」。"
+    type: "fix"
+    date: "2026-10-09"
+    tags: ["插件", "模型", "修复"]
+    version: "v2.6.11"
+    pr_number: null
+  - id: "jet-hub-plugin"
+    title: "Jet Hub 插件：多账号与多渠道"
+    description: "新增插件系统，并把 Jet Hub 接入为内置插件：统一登录与管理多个 AI 编程服务账号（CodeArts、CodeBuddy、TRAE、Qoder、Cline、ZCode 等 15 个渠道），支持多账号池、凭据静默续期、积分查询与一键领取、Token 用量账本、账号备份迁移，模型直接进入 Maxma 模型选择器。可在「插件」页启用/停用与配置。"
+    type: "feat"
+    date: "2026-10-08"
+    tags: ["插件", "模型", "多账号"]
+    version: "v2.6.11"
+    pr_number: null
   - id: "opencode-zen-free-models"
     title: "内置 OpenCode Zen 免费模型"
     description: "开箱即用：内置 Maxma 免费模型通道，无需登录、注册或填写 API Key 即可使用 MiMo V2.6 Flash 与 Space Bunny。模型列表自动同步，支持手动刷新；也可在模型设置中添加自己的云端或本地模型。"

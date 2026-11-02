@@ -1,52 +1,73 @@
 # 权限模式
 
-> 本文档描述当前 session 权限模式与 sidecar 审批行为。实际生效逻辑以 `config/settings.py`、`api/session_manager.py`、`api/routes/sessions.py` 和 `bun-sidecar/src/session-bridge.ts` 为准。
+> 权威实现：`bun-sidecar/src/kernel/types.ts`（模式定义）、`kernel/approval-gate.ts`（判据）、
+> `kernel/extensions/maxma-approval.ts`（官方 `tool_call` 钩子）、`bun-backend/src/routes/sessions.ts`（REST 面）。
+> 决策背景见 [adr/0004-permission-modes.md](adr/0004-permission-modes.md)。
 
-## 模式
+## 四档
 
-| 模式 | 读操作 | 本地写入 | 外部、可执行、破坏性或未知操作 |
+| 模式 | 读操作 | 本地写入 | 执行/破坏性操作 |
 | --- | --- | --- | --- |
-| `read_only` | 允许 | 拒绝 | 拒绝 |
-| `ask` | 允许 | 询问 | 询问 |
-| `operate` | 允许 | 允许 | 询问 |
-| `auto` | 允许 | 允许 | 询问；仍受工具和路径白名单约束 |
+| `read_only` | 允许 | 审批 | 审批 |
+| `ask` | 允许 | 审批 | 审批 |
+| `operate` | 允许 | 允许 | 审批 |
+| `auto` | 允许 | 允许 | 放行（仍受 MaxmaBlocker、MCP 命令白名单、Provider URL 校验约束） |
 
-权限模式是附加限制层，不替代以下独立检查点：
+判据只看官方 `Tool.annotations`，不猜语义：`readOnlyHint === true` 视为只读；
+`operate` 下的"执行类"= `destructiveHint === true` 或工具名属于 bash / powershell 族。
+无效模式值回落 `ask`。
 
-- oh-my-pi 工具审批
-- Maxma 路径白名单和 MaxmaBlocker
-- MCP stdio 命令白名单
-- Provider URL 校验
-- 凭据加密和脱敏
-- 子 Agent 或后台任务的父级权限继承
+两点必须写明白，否则文档会承诺代码没有的行为：
 
-## 生效流程
+- **`read_only` 与 `ask` 当前判定完全相同**（`needsApprovalForMode`：
+  `if (mode === "read_only" || mode === "ask") return !readOnly`）——都是"非只读工具逐次审批"，
+  `read_only` 并不额外拒绝写入。它作为独立档位保留是给未来的收紧留位置；
+  UI 文案（`PermissionModeControl.vue`）不许写成"只读会拒绝写入"。
+- **`auto` 不装配审批门**（`pi-session.ts` `approvalExtensionFor`：`mode === "auto"` → 不装），
+  所以 auto 下**没有任何逐次确认**，只剩 MaxmaBlocker 拒止锚、MCP stdio 命令白名单与
+  Provider URL 校验。UI 文案不许承诺"高风险操作仍会要求确认"。
 
-1. 前端通过 `PUT /api/sessions/{id}/permission-mode` 修改 session 模式。
-2. Python 将模式保存在 `SessionState.permission_mode`，并在创建 sidecar session 时传入 `permission_mode`。
-3. `bun-sidecar/src/session-bridge.ts` 将 `ask` 和 `read_only` 转为需要 UI 审批的 session；`auto` 和 `operate` 使用自动批准语义，但仍不能绕过 Maxma 安全检查。
-4. sidecar 通过 `ask_user` 事件向前端发出工具审批请求。
-5. 前端通过 `user_response` 把批准或拒绝结果发回 sidecar。
+## 生效链路
 
-## 功能开关
+1. 会话创建时传入 `permission_mode`，kernel 据此决定是否装配审批门。
+2. `auto` → 门不装配；其余 → 命中判据的工具调用产生 `ask_user` 事件（带 `interaction_id`）。
+3. 前端应答 `user_response`；**超时默认拒绝**（5 分钟），会话销毁时 `rejectAll` 清理在途审批。
+4. 运行时切换有两条链，**语义不同，别混用**：
+   - `set_permission_mode` RPC（REST `PUT /api/sessions/:id/permission-mode` 走这条）：
+     四档任选，改的就是运行中会话的 `record.permissionMode`，审批门按闭包读它，即时生效。
+   - WS `update_auto_approve` → `set_auto_approve`：只有两态，`true` → `auto`、
+     `false` → `ask`。它是"自动执行"开关的链路，会把已选的 `read_only` / `operate`
+     改写掉，所以权限模式控件**不得**在 PUT 之后再补发它（曾经补发过：Python/sidecar
+     跨进程时代 PUT 碰不到运行中会话，只能靠这条兜底；现在 in-process 直调，补发只剩副作用）。
 
-`MAXMA_PERMISSION_MODES_ENABLED` / `permission_modes_enabled` 默认关闭，以兼容旧配置。关闭时，后端把有效模式收敛为 `ask`，因此工具采用确认优先行为；开启后才使用 session 中选择的四种模式。
+权限模式是**附加限制层**：只收紧，任何一档都不能绕过 MaxmaBlocker 拒止锚、MCP stdio 命令白名单、
+Provider URL 校验或凭据加密。没有兼容性开关，四档始终生效。
 
-这是兼容开关，不代表权限代码不存在。变更该开关时必须同时验证：
+## REST 契约
 
-- session 创建参数
-- sidecar `autoApprove` 和 `hasUI`
-- `ask_user` / `user_response` 往返
-- cancel、超时和断线时的待处理审批
-- 路径与 MCP 安全检查仍然生效
+`GET` / `PUT` `/api/sessions/:sessionId/permission-mode` 都回同一个形状
+（`routes/sessions.ts` 的 `permissionModeView()`）：
 
-## 修改要求
-
-修改权限模式时至少运行：
-
-```text
-pytest tests/test_api tests/test_pi_bridge -q
-cd bun-sidecar && bun test
+```json
+{"session_id":"…","permission_mode":"ask","available_permission_modes":["read_only","ask","operate","auto"]}
 ```
 
-涉及安全边界时还要同步更新 [docs/security-contract.md](../docs/security-contract.md) 和相关 ADR。
+- `available_permission_modes` 是**可用性信号本身**：非空即可交互，前端
+  `SessionPermissionModeControl.vue` 据此决定渲染，`PermissionModeControl.vue`
+  按这份清单的顺序渲染选项。没有 feature flag，所以也就没有 `enabled` 之类的布尔量——
+  四档恒生效，一个恒为 true 的开关只是让 UI 有机会骗人。
+- 档位清单当前有四处声明：`kernel/types.ts` 的 `MaxmaPermissionMode`（类型，运行时擦除）、
+  `bridge-pi.ts` 的 `PI_PERMISSION_MODES`（RPC 入参校验，模块私有未导出）、
+  `routes/sessions.ts` 的 `AVAILABLE_PERMISSION_MODES`（REST 返回值）、
+  `web/src/types/session.ts` 的 `PermissionMode`（前端联合）。
+  改名或增删档位必须四处一起动，`bun-backend/tests/permission-mode-contract.test.ts`
+  逐字对账这四处（外加 REST 实际响应的字段名 ↔ 前端接口声明），漏一处当场红。
+  下一步收敛成单源（把清单挪进 `pi-contract.ts` 供两侧运行时消费）见 HANDOFF。
+- `PUT` 非法档位 422，会话不存在 404；`GET` 会话不存在 404。
+
+## 改动要求
+
+改权限模式至少跑：`cd bun-sidecar && bun test` 与 `cd bun-backend && bun test`，
+并验证：会话创建参数、`autoApprove`/审批门装配、`ask_user`/`user_response` 往返、
+cancel/超时/断线时的待处理审批、MaxmaBlocker 与 MCP 检查仍生效。
+涉及安全边界时同步 [docs/security-contract.md](../docs/security-contract.md)。

@@ -391,7 +391,7 @@ onMounted(load)
 .provider-model { font-family: var(--font-mono); font-size: 0.9em; color: var(--text-secondary); }
 .provider-type { font-size: 0.85em; color: var(--text-tertiary); padding: 2px 6px; background: var(--bg-card); border-radius: 4px; }
 .provider-status { font-size: 0.85em; padding: 2px 8px; border-radius: 4px; color: var(--text-tertiary); }
-.provider-status.active { color: var(--status-ok); background: color-mix(in srgb, var(--status-ok) 10%, transparent); }
+.provider-status.active { color: var(--status-ok-text); background: color-mix(in srgb, var(--status-ok) 10%, transparent); }
 
 /* MCP */
 .mcp-list { display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow-y: auto; }
@@ -403,8 +403,8 @@ onMounted(load)
 .mcp-name { font-weight: 500; color: var(--text-primary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mcp-transport { font-family: var(--font-mono); font-size: 0.9em; color: var(--text-tertiary); }
 .mcp-status { font-size: 0.85em; padding: 2px 8px; border-radius: 4px; color: var(--text-tertiary); }
-.mcp-status.enabled { color: var(--status-ok); }
-.mcp-status.connected { color: var(--status-info); }
+.mcp-status.enabled { color: var(--status-ok-text); }
+.mcp-status.connected { color: var(--status-info-text); }
 
 /* Config sources */
 .section-desc { font-size: 0.78em; color: var(--text-tertiary); margin: -8px 0 12px; }
@@ -421,14 +421,14 @@ onMounted(load)
 .source-desc { font-size: 0.9em; color: var(--text-tertiary); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .source-scope { font-size: 0.85em; padding: 2px 6px; border-radius: 4px; background: var(--bg-card); color: var(--text-tertiary); flex-shrink: 0; }
 .source-status { font-size: 0.85em; padding: 2px 8px; border-radius: 4px; color: var(--text-tertiary); }
-.source-status.found { color: var(--status-ok); background: color-mix(in srgb, var(--status-ok) 8%, transparent); }
+.source-status.found { color: var(--status-ok-text); background: color-mix(in srgb, var(--status-ok) 8%, transparent); }
 .conflict-section { margin-top: 12px; }
-.conflict-title { color: var(--status-warn); }
+.conflict-title { color: var(--status-warn-text); }
 .conflict-card { padding: 8px 10px; background: color-mix(in srgb, var(--status-warn) 6%, transparent); border: 1px solid color-mix(in srgb, var(--status-warn) 20%, transparent); border-radius: 6px; margin-bottom: 6px; }
-.conflict-scope { font-size: 0.8em; font-weight: 600; color: var(--status-warn); }
+.conflict-scope { font-size: 0.8em; font-weight: 600; color: var(--status-warn-text); }
 .conflict-sources { font-size: 0.85em; color: var(--text-secondary); margin-top: 2px; }
 .conflict-note { font-size: 0.75em; color: var(--text-tertiary); margin-top: 4px; }
-.conflict-clear { font-size: 0.82em; color: var(--status-ok); padding: 6px 0; }
+.conflict-clear { font-size: 0.82em; color: var(--status-ok-text); padding: 6px 0; }
 
 .loading, .empty {
   text-align: center; padding: 40px; color: var(--text-tertiary);

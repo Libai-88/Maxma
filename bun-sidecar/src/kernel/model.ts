@@ -14,7 +14,9 @@
 
 import { ModelRuntime, type ModelRuntime as ModelRuntimeType } from "@earendil-works/pi-coding-agent";
 import type { Api, Model } from "@earendil-works/pi-ai";
+import { engineApiNames, resolveEngineApiName } from "./engine-info";
 import { registerOpencodeZenTransport } from "./opencode-zen";
+import { registerPluginProviderOn } from "./plugin-models";
 
 export interface MaxmaModelParams {
   /** "provider/model-id" 或裸 model id（provider 覆写存在时整体视为 id）。 */
@@ -40,18 +42,17 @@ export interface ResolvedPiModel {
 
 /** 零成本兜底定价（Usage.cost 同形状；自定义端点无目录价可用）。 */
 const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-const PI_APIS = new Set([
-  "openai-completions",
-  "openai-responses",
-  "openai-codex-responses",
-  "azure-openai-responses",
-  "anthropic-messages",
-  "bedrock-converse-stream",
-  "google-generative-ai",
-  "google-vertex",
-  "mistral-conversations",
-  "pi-messages",
-]);
+/**
+ * provider 的 api 标识白名单。**唯一来源是 `pi-contract.ts` + `engine-info.ts`
+ * 的 `engineApiNames()`**：契约登记引擎认识的 api 与改过名的成对记录，
+ * 实际接受哪一边由**已安装引擎的版本**决定。
+ *
+ * 这里原本自己抄了 10 项清单；后来我一度改成"新旧名字都收"，那是错的——
+ * 在 0.99.0 上接受 `azure` 会让用户配置从"回落 openai-completions"变成
+ * "发送时报错"，修 bug 反而造出一条新的用户可见报错路径。版本选实名，
+ * 两个方向都能解析，升级当天不用改任何用户配置。
+ */
+const PI_APIS = new Set<string>(engineApiNames());
 const PROVIDER_API_ALIASES: Record<string, Api> = {
   openai: "openai-completions",
   custom: "openai-completions",
@@ -67,7 +68,9 @@ const PROVIDER_API_ALIASES: Record<string, Api> = {
 
 function resolvePiApi(providerType?: string): Api {
   if (!providerType) return "openai-completions";
-  if (PI_APIS.has(providerType)) return providerType as Api;
+  // 先按引擎版本把改过名的写法归一到当前实名，再查白名单。
+  const known = resolveEngineApiName(providerType);
+  if (PI_APIS.has(known)) return known as Api;
   return PROVIDER_API_ALIASES[providerType.toLowerCase()] ?? "openai-completions";
 }
 
@@ -95,6 +98,10 @@ export async function resolvePiModel(
 
   if (provider === "opencode-zen") {
     registerOpencodeZenTransport(modelRuntime, modelId, p.baseUrl);
+  } else {
+    // 插件提供的路由（Jet Hub 等）：把该路由的模型与自定义传输注册到本 runtime。
+    // 未装注册器时是 no-op，不影响内建 provider。
+    await registerPluginProviderOn(modelRuntime, provider, modelId);
   }
 
   // 2) registry 查找（内建目录 + models.json 自定义模型）

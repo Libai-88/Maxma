@@ -454,8 +454,8 @@ onUnmounted(() => {
 .fact-meta { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
 .fact-cat { font-size: 0.72em; padding: 2px 8px; border-radius: 4px; background: var(--bg-secondary); color: var(--text-tertiary); }
 .fact-confidence { font-size: 0.72em; padding: 2px 6px; border-radius: 4px; }
-.fact-confidence.conf-high { color: var(--status-ok); background: color-mix(in srgb, var(--status-ok) 8%, transparent); }
-.fact-confidence.conf-mid { color: var(--status-warn); background: color-mix(in srgb, var(--status-warn) 8%, transparent); }
+.fact-confidence.conf-high { color: var(--status-ok-text); background: color-mix(in srgb, var(--status-ok) 8%, transparent); }
+.fact-confidence.conf-mid { color: var(--status-warn-text); background: color-mix(in srgb, var(--status-warn) 8%, transparent); }
 .fact-confidence.conf-low { color: var(--text-tertiary); background: var(--bg-secondary); }
 .fact-time { font-size: 0.72em; color: var(--text-tertiary); margin-left: auto; }
 .fact-action, .fact-delete {
@@ -463,7 +463,7 @@ onUnmounted(() => {
   padding: 2px 6px; border-radius: 4px; color: var(--text-tertiary); transition: color 0.1s;
 }
 .fact-action:hover { color: var(--accent); background: var(--bg-secondary); }
-.fact-delete:hover { color: var(--status-error); background: color-mix(in srgb, var(--status-error) 8%, transparent); }
+.fact-delete:hover { color: var(--status-error-text); background: color-mix(in srgb, var(--status-error) 8%, transparent); }
 
 /* Edit mode */
 .fact-edit { display: flex; flex-direction: column; gap: 8px; }

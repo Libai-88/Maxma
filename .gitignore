@@ -51,6 +51,14 @@ api/data/event_hooks.yaml
 api/data/sticker_favorites.yaml
 api/data/sticker_preferences.yaml
 api/data/sticker_recent.yaml
+# 插件子系统运行时数据（PLUGIN-001）：含 .credentials.yaml（**明文账号凭据**）、
+# state.json（账号池）、registry.json（启停状态）。开发模式下就落在项目目录里，
+# 必须整目录忽略 —— 一旦入库等于把用户的第三方账号凭据提交出去。
+api/data/plugins/
+# 同上，但落在仓库根：MAXMA_DATA_DIR 未设置时 dataDir() 解析到项目根，
+# 于是运行时数据出现在 <repo>/data/** 与 <repo>/plugins/**（曾实测生成）。
+data/
+plugins/
 config/mcp_servers.yaml
 config/personas/USER.md
 config/personas/SOUL.md
@@ -60,8 +68,13 @@ config/personas/memory.yaml
 config/onboarding.json
 config/personas/*.sqlite3-shm
 config/personas/*.sqlite3-wal
+# 这里的 *.lock 指的是运行时的文件锁（api/data/*.yaml.lock 等），不是依赖锁。
+# 依赖锁必须逐目录显式收编：漏一个，那个目录的依赖树在生产线上就不可复现——
+# bun-backend/bun.lock 曾被这条通配误吞，导致 CI 的 `bun install --frozen-lockfile`
+# 无锁可冻、每次现解析（家族包 @earendil-works/* 因此漂出与本地不同的版本）。
 *.lock
 !bun-sidecar/bun.lock
+!bun-backend/bun.lock
 *.clean
 providers.yaml
 providers.yaml.legacy-*.bak
@@ -84,6 +97,11 @@ vector_db/
 .superma/
 .trae-html-share-packages/
 tmp/
+# 验证脚本的临时数据目录（`scripts/verify-*.mjs`）。
+# 它们现在建在系统临时目录里，但**进程被强杀时 `finally` 不执行**，
+# 万一有哪次又落在仓库根，这条兜底能避免它污染 `git status`
+#（实测踩过：一次端口冲突后仓库根留下 `.tmp-uichat-*`）。
+.tmp-*/
 
 # Local docs (security threat model) and build-time downloaded runtimes/assets
 dev_docs/security/
@@ -98,7 +116,7 @@ web/tests/comprehensive_test.py
 web/tests/playwright/
 web/tests/screenshots/
 web/test-results/
-web/dist_old/
+web/dist_old*/
 web/tsc-*.txt
 web/tsc-full.txt
 web/tsc-output.txt

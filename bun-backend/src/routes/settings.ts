@@ -2,89 +2,53 @@
  * routes/settings.ts — 全局 Settings 读写（api/routes/settings.py 的 Bun 直译，
  * 阶段二 2.2）。
  *
- * 语义说明：Python 版把该端点桥接到 sidecar 的全局 settings RPC；Bun 后端
- * kernel in-process 后直接使用官方 SettingsManager 全局单例（inMemory +
- * overrides），端点契约不变：
- *   - GET /api/settings?paths=a,b → {path: value}（未知路径静默跳过）
- *   - PUT /api/settings {path, value} → {ok: true}
+ * 端点契约：
+ *   - GET  /api/settings?paths=a,b → {path: value}（未登记/无值的路径跳过）
+ *   - GET  /api/settings/schema    → 每个登记键的归属与支持状态（前端据此标注）
+ *   - PUT  /api/settings {path, value} → {ok: true, consumer, engine_real}
  *
- * ⚠️ pi 的 settings 树与旧内核键名不同（无 compaction.thresholdPercent/strategy
- * 等）——CORE_SETTING_PATHS 列表保留原样作为"请求键全集"，实际返回以 pi 树
- * 为准；前端设置面板键对齐为独立后续任务。
+ * ⚠️ 与旧实现的差别（这是修 bug，不是改行为）：
+ *   旧 PUT 对**任何**字符串路径都 `applyOverrides()` 并回 `{ok:true}`。pi 的
+ *   `applyOverrides` 对未知键宽容，于是上一代引擎遗留的键、以及从未接线的开关，
+ *   拨完都"保存成功"但毫无作用。现在按 `pi-contract.ts` 的登记表判定：
+ *     · 未登记 → 422（新增配置项必须先登记由谁消费）
+ *     · 登记为无人消费 → 409 并写明原因
+ *   读写都走 settings-global.ts，显式改动落盘，引擎侧的改动经 create_session 生效。
  */
 
 import { Hono } from "hono";
 
-import { getGlobalSettingsSingleton } from "../settings-global";
+import {
+  getSettingValue,
+  SettingRejectedError,
+  settingsSupportView,
+  setSettingValue,
+} from "../settings-global";
+import { MAXMA_SETTINGS_KEYS } from "../../../bun-sidecar/src/kernel/pi-contract";
 
-// 核心配置项列表（与 Python 版逐条一致——作为"请求键全集"）
-export const CORE_SETTING_PATHS = [
-  "compaction.enabled",
-  "compaction.strategy",
-  "compaction.thresholdPercent",
-  "compaction.midTurnEnabled",
-  "compaction.idleEnabled",
-  "compaction.idleThresholdTokens",
-  "compaction.idleTimeoutSeconds",
-  "retry.enabled",
-  "retry.maxRetries",
-  "retry.baseDelayMs",
-  "retry.maxDelayMs",
-  "retry.modelFallback",
-  "tools.approvalMode",
-  "tools.discoveryMode",
-  "advisor.enabled",
-  "advisor.subagents",
-  "steeringMode",
-  "followUpMode",
-  "interruptMode",
-  "thinkingBudgets.minimal",
-  "thinkingBudgets.low",
-  "thinkingBudgets.medium",
-  "thinkingBudgets.high",
-  "thinkingBudgets.xhigh",
-  "thinkingBudgets.max",
-  "skills.enabled",
-];
-
-/** 全局 SettingsManager 单例（与 settings-panels 共享同一实例）。 */
-function getGlobalSettings() {
-  return getGlobalSettingsSingleton();
-}
-
-/** 从 Settings 对象解析点路径。 */
-export function readDottedPath(root: unknown, dotted: string): unknown {
-  return dotted.split(".").reduce<unknown>((acc, key) => {
-    if (acc === null || acc === undefined || typeof acc !== "object") return undefined;
-    return (acc as Record<string, unknown>)[key];
-  }, root);
-}
-
-/** 点路径 → 嵌套覆盖对象（applyOverrides 需要 Partial<Settings> 形状）。 */
-function buildNestedOverride(dotted: string, value: unknown): Record<string, unknown> {
-  const keys = dotted.split(".").filter((k) => k.length > 0);
-  let node: Record<string, unknown> = { [keys[keys.length - 1]!]: value };
-  for (let i = keys.length - 2; i >= 0; i--) {
-    node = { [keys[i]!]: node };
-  }
-  return node;
-}
+/**
+ * 默认返回的键全集（不传 paths 时）。
+ * 唯一来源是 `pi-contract.ts` 的登记表——以前这里手抄一份 26 项的列表，
+ * 与前端面板的清单各写各的，漂移了也没人知道。
+ */
+export const CORE_SETTING_PATHS: readonly string[] = MAXMA_SETTINGS_KEYS.map((k) => k.path);
 
 export function createSettingsRoutes(): Hono {
   const app = new Hono();
+
+  // 必须在 /api/settings 之前声明吗？Hono 按完整路径匹配，二者不冲突；
+  // 放前面是为了读的人一眼看到"schema 是只读元信息"。
+  app.get("/api/settings/schema", (c) => c.json({ settings: settingsSupportView() }));
 
   app.get("/api/settings", (c) => {
     const pathsParam = c.req.query("paths");
     const pathList = pathsParam
       ? pathsParam.split(",").map((p) => p.trim()).filter(Boolean)
-      : CORE_SETTING_PATHS;
-    const settings = getGlobalSettings().getSettings();
+      : [...CORE_SETTING_PATHS];
     const result: Record<string, unknown> = {};
     for (const p of pathList) {
-      const value = readDottedPath(settings, p);
-      // Skills 默认开启；旧配置文件可能没有该节点，前端仍需得到稳定布尔值。
+      const value = getSettingValue(p);
       if (value !== undefined) result[p] = value;
-      else if (p === "skills.enabled") result[p] = true;
     }
     return c.json(result);
   });
@@ -95,11 +59,23 @@ export function createSettingsRoutes(): Hono {
       return c.json({ detail: "path 为必填字段" }, 422);
     }
     try {
-      const overrides = buildNestedOverride(body.path, body.value);
-      getGlobalSettings().applyOverrides(overrides as never);
-      await getGlobalSettings().flush();
-      return c.json({ ok: true });
+      const entry = setSettingValue(body.path, body.value);
+      return c.json({
+        ok: true,
+        consumer: entry.consumer,
+        engine_real: entry.engineReal,
+      });
     } catch (err) {
+      if (err instanceof SettingRejectedError) {
+        // 这类拒绝必须是可读的：前端 UX-SETTINGS-FEEDBACK-001 会把 detail 弹出来。
+        // 状态码用字面量三元收敛，而不是直接传 err.status（number）——Hono 的
+        // c.json(data, status) 要求 ContentfulStatusCode，宽 number 会走重载失败。
+        const status = err.status === 422 ? 422 : err.status === 503 ? 503 : 409;
+        return c.json(
+          { detail: err.message, code: err.code, path: err.settingPath },
+          status,
+        );
+      }
       console.error(`[settings] Failed to set setting ${body.path}: ${String(err)}`);
       return c.json({ detail: "服务暂时不可用，请稍后重试" }, 500);
     }

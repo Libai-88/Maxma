@@ -179,7 +179,7 @@ describe("回合富化层（阶段 2.3b）", () => {
     expect(ms.payload.turn_id).toBe(done.payload.turn_id);
   }, 15000);
 
-  test("deferred_subagent_submitted → 写入 DeferredRunManager + 原样转发", async () => {
+  test("deferred_subagent_submitted → 写入 DeferredRunManager + 白名单转发", async () => {
     const { onKernelEvent, handleChatMessage } = await import("../src/routes/chat-ws");
     const { initializeDatabase } = await import("../src/db/core");
     const { getDeferredRunManager } = await import("../src/routes/deferred-runs");
@@ -192,11 +192,19 @@ describe("回合富化层（阶段 2.3b）", () => {
       type: "deferred_subagent_submitted",
       payload: { run_id: "run-1", status: "completed", task: "t", name: "n" },
     });
-    const fwd = sent.find((f) => f.type === "deferred_subagent_submitted") as { payload: { run_id: string } };
+    const fwd = sent.find((f) => f.type === "deferred_subagent_submitted") as {
+      payload: { run_id: string; status: string; task?: string; name?: string };
+    };
     expect(fwd.payload.run_id).toBe("run-1");
+    // 完整 prompt/标题不能过 WS 边界
+    expect(fwd.payload.task).toBeUndefined();
+    expect(fwd.payload.name).toBeUndefined();
+    expect(fwd.payload.status).toBe("succeeded");
     const stored = getDeferredRunManager().getRun(sid, "run-1");
     expect(stored).not.toBeNull();
     expect(stored!.status).toBe("succeeded"); // completed → succeeded 生命周期映射
+    expect(stored!.task).toBeUndefined();
+    expect(stored!.name).toBeUndefined();
   }, 15000);
 
   test("cancel 在途回合 → done{cancelled:true}", async () => {

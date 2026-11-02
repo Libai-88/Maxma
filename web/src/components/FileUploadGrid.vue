@@ -217,7 +217,7 @@ function getFileIndex(r: ParsedRef): number {
 
 .image-badge {
   background: color-mix(in srgb, var(--status-ok) 12%, transparent);
-  color: var(--status-ok);
+  color: var(--status-ok-text);
 }
 
 .type-badge {
@@ -229,7 +229,7 @@ function getFileIndex(r: ParsedRef): number {
 
 .blocked-badge {
   background: color-mix(in srgb, var(--status-error) 12%, transparent);
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 
 /* ── 删除按钮 ── */
@@ -259,7 +259,7 @@ function getFileIndex(r: ParsedRef): number {
 }
 
 .card-remove:hover {
-  color: var(--status-error);
+  color: var(--status-error-text);
   background: color-mix(in srgb, var(--status-error) 12%, var(--bg-primary));
 }
 

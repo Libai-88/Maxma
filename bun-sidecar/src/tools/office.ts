@@ -48,14 +48,27 @@ function decodeXmlText(value: string): string {
     .replace(/&#x([\da-f]+);/gi, (_, code: string) => String.fromCodePoint(Number.parseInt(code, 16)));
 }
 
+/**
+ * 正则捕获组的取值助手。
+ *
+ * `match[1]` 在类型上是 `string | undefined`（`noUncheckedIndexedAccess` 下更明确），
+ * 直接传给 `decodeXmlText(text: string)` 会报 TS2345。这里统一收口：
+ * 捕获组缺失（理论上不应发生，正则里有该组）时退化为空串，而不是让 undefined
+ * 流进 XML 解码。**不做非空断言**——真出现形状变化时，空串比崩溃更安全，
+ * 而且这段代码解析的是用户上传的 Office 文件（半可控输入）。
+ */
+function capture(match: RegExpMatchArray | RegExpExecArray, index = 1): string {
+  return match[index] ?? "";
+}
+
 function docxText(bytes: Uint8Array): string {
   const files = unzipSync(bytes);
   const documentXml = files["word/document.xml"];
   if (!documentXml) throw new Error("DOCX 缺少 word/document.xml。");
   const xml = strFromU8(documentXml);
   const paragraphs = [...xml.matchAll(/<w:p(?:\s[^>]*)?>(.*?)<\/w:p>/gs)].map((match) =>
-    [...match[1].matchAll(/<w:t(?:\s[^>]*)?>(.*?)<\/w:t>/gs)]
-      .map((textMatch) => decodeXmlText(textMatch[1]))
+    [...capture(match).matchAll(/<w:t(?:\s[^>]*)?>(.*?)<\/w:t>/gs)]
+      .map((textMatch) => decodeXmlText(capture(textMatch)))
       .join(""),
   );
   return paragraphs.filter(Boolean).join("\n");
@@ -65,8 +78,8 @@ function workbookSharedStrings(files: Record<string, Uint8Array>): string[] {
   const shared = files["xl/sharedStrings.xml"];
   if (!shared) return [];
   return [...strFromU8(shared).matchAll(/<si(?:\s[^>]*)?>(.*?)<\/si>/gs)].map((match) =>
-    [...match[1].matchAll(/<t(?:\s[^>]*)?>(.*?)<\/t>/gs)]
-      .map((textMatch) => decodeXmlText(textMatch[1]))
+    [...capture(match).matchAll(/<t(?:\s[^>]*)?>(.*?)<\/t>/gs)]
+      .map((textMatch) => decodeXmlText(capture(textMatch)))
       .join(""),
   );
 }
@@ -75,15 +88,17 @@ function xlsxText(bytes: Uint8Array): string {
   const files = unzipSync(bytes);
   const worksheetName = Object.keys(files).find((name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name));
   if (!worksheetName) throw new Error("XLSX 缺少工作表。");
+  const worksheet = files[worksheetName];
+  if (!worksheet) throw new Error(`XLSX 缺少工作表内容: ${worksheetName}`);
   const sharedStrings = workbookSharedStrings(files);
-  const xml = strFromU8(files[worksheetName]);
+  const xml = strFromU8(worksheet);
   const rows = [...xml.matchAll(/<row(?:\s[^>]*)?>(.*?)<\/row>/gs)].map((rowMatch) => {
-    const cells = [...rowMatch[1].matchAll(/<c(?:\s[^>]*)?>(.*?)<\/c>/gs)];
+    const cells = [...capture(rowMatch).matchAll(/<c(?:\s[^>]*)?>(.*?)<\/c>/gs)];
     const values = cells.map((cellMatch) => {
       const cellXml = cellMatch[0];
       const type = /\bt="([^"']+)"/.exec(cellXml)?.[1];
       const inline = [...cellXml.matchAll(/<t(?:\s[^>]*)?>(.*?)<\/t>/gs)]
-        .map((textMatch) => decodeXmlText(textMatch[1]))
+        .map((textMatch) => decodeXmlText(capture(textMatch)))
         .join("");
       const raw = /<v(?:\s[^>]*)?>(.*?)<\/v>/s.exec(cellXml)?.[1] ?? inline;
       const value = decodeXmlText(raw);

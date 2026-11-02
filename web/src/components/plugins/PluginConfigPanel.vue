@@ -111,7 +111,7 @@ function handleReset() {
 }
 
 .required {
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 
 .form-hint {

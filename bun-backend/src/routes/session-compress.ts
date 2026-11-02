@@ -47,7 +47,12 @@ export function createSessionCompressRoutes(deps: SessionCompressDeps): Hono {
   const app = new Hono();
 
   const handler = async (c: Context) => {
+    // `c.req.param()` 的类型是 `string | undefined`（Hono 无法从路径模式推出必填）。
+    // 路由已声明 `:sessionId`，所以空值只可能来自畸形请求——显式判空并回 400，
+    // 比用 `!` 断言更诚实：真出现空值时给出可读原因，而不是把 undefined 传进
+    // 后续的会话查找里变成别的问题。
     const sid = c.req.param("sessionId");
+    if (!sid) return c.json({ detail: "缺少 sessionId" }, 400);
     if (!deps.sessions.has(sid)) return c.json({ detail: "会话不存在" }, 404);
     return c.json(await tryCompact(sid, deps));
   };

@@ -1,12 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import * as fs from "node:fs";
-import * as path from "node:path";
+import { makeTempDataDir, removeTempDataDir } from "./_helpers/tmp";
 
 let dataDir = "";
 let previousDataDir: string | undefined;
 
 beforeEach(() => {
-  dataDir = fs.mkdtempSync(path.join("D:\\MaxmaTemp", "maxma-evolution-route-"));
+  dataDir = makeTempDataDir("maxma-evolution-route");
   previousDataDir = process.env.MAXMA_DATA_DIR;
   process.env.MAXMA_DATA_DIR = dataDir;
 });
@@ -16,7 +15,7 @@ afterEach(async () => {
   resetDbInitForTest();
   if (previousDataDir === undefined) delete process.env.MAXMA_DATA_DIR;
   else process.env.MAXMA_DATA_DIR = previousDataDir;
-  fs.rmSync(dataDir, { recursive: true, force: true });
+  removeTempDataDir(dataDir);
 });
 
 describe("EvoCore routes", () => {

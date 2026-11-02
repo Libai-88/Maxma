@@ -257,7 +257,7 @@ function formatRelativeTime(ts: number): string {
   opacity: 1;
 }
 .btn-delete:hover {
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 
 .session-item-right {

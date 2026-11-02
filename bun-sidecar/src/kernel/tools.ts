@@ -39,7 +39,11 @@ export function adaptDescriptorToPi(descriptor: MaxmaToolDescriptor): ToolDefini
     annotations: annotationsFor(descriptor.approval),
     async execute(toolCallId, params) {
       // Maxma 执行体不消费 signal/onUpdate/ctx（纯读写本地文件）
-      return await descriptor.execute(toolCallId, params as Record<string, unknown>);
+      const result = await descriptor.execute(toolCallId, params as Record<string, unknown>);
+      // 引擎的 AgentToolResult 要求 `details` **必填**，而 descriptor 的 MaxmaToolResult
+      // 里它是可选。这个差异在适配层补齐——不改 descriptor（它对引擎无知是刻意的）。
+      // 顺序有意：先给默认值再展开，descriptor 真给了 details 时以它为准。
+      return { details: undefined, ...result };
     },
   }) as ToolDefinition;
 }

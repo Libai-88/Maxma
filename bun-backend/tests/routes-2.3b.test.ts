@@ -7,6 +7,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { authHeaderFor } from "./_helpers/auth";
 
 let dataDir = "";
 let prevDataDir: string | undefined;
@@ -23,18 +24,9 @@ afterEach(() => {
   else process.env.MAXMA_DATA_DIR = prevDataDir;
   fs.rmSync(dataDir, { recursive: true, force: true });
 });
-
+/** 读 auth token 生成鉴权头（实现见 tests/_helpers/auth.ts，勿再手搓 sqlite 类型桩）。 */
 function authHeader(): Record<string, string> {
-  const { Database } = require("bun:sqlite") as {
-    Database: new (p: string, o?: object) => { query: (s: string) => { get: () => { token: string } | null } };
-  };
-  const db = new Database(path.join(dataDir, "api", "data", "maxma.db"), { readonly: true });
-  try {
-    const row = db.query("SELECT token FROM auth_tokens ORDER BY id DESC LIMIT 1").get();
-    return { "x-maxma-token": row?.token ?? "" };
-  } finally {
-    db.close();
-  }
+  return authHeaderFor(dataDir);
 }
 
 async function makeApp() {
@@ -147,7 +139,14 @@ describe("chat-turns / chat-artifacts 纯逻辑（阶段 2.3b）", () => {
     expect(body).not.toContain("<div>");
     expect(body).toContain("&lt;div&gt;");
     expect(body).toContain("内容已截断");
-    const token = String((p.actions as Array<Record<string, unknown>>)[0].token);
+    // `[...] [0]` 在 noUncheckedIndexedAccess 下是可能 undefined。expect(...) 只做
+    // 运行时断言、**不做类型收窄**，所以这里显式声明可空并在比较时用可选链：
+    // 目的是让"缺 actions[0]"失败得可读，而不是让 undefined 在深处爆 TypeError。
+    const action = (p.actions as Array<Record<string, unknown>>)[0] as
+      | { token?: unknown }
+      | undefined;
+    expect(action, "artifact 缺少 actions[0]").toBeDefined();
+    const token = String(action?.token);
     expect(Buffer.from(token, "base64").toString("utf8")).toBe(file);
     expect(buildArtifactPayload(path.join(dataDir, "ghost.txt"))).toBeNull();
   });

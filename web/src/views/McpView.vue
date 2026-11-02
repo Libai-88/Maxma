@@ -1490,7 +1490,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
 	}
 	.role-card:last-child .role-badge {
 	  background: color-mix(in srgb, var(--status-ok) 10%, var(--bg-card));
-	  color: var(--status-ok);
+	  color: var(--status-ok-text);
 	}
 
 /* ── 帮助图标 ── */
@@ -1591,8 +1591,8 @@ onMounted(() => { loadServers(); loadDiscovered() })
   font-weight: 600;
   text-transform: uppercase;
 }
-.transport-badge.stdio { background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card)); color: var(--status-ok); }
-.transport-badge.streamable_http { background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card)); color: var(--status-warn); }
+.transport-badge.stdio { background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card)); color: var(--status-ok-text); }
+.transport-badge.streamable_http { background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card)); color: var(--status-warn-text); }
 
 .toggle-btn {
   width: 40px;
@@ -1683,11 +1683,11 @@ onMounted(() => { loadServers(); loadDiscovered() })
 }
 .mcp-test-result.ok {
   background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card));
-  color: var(--status-ok);
+  color: var(--status-ok-text);
 }
 .mcp-test-result.err {
   background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 .action-btn {
   padding: 5px 12px;
@@ -1706,7 +1706,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
   cursor: not-allowed;
 }
 .action-btn.danger {
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 .action-btn.danger:hover {
   border-color: var(--status-error);
@@ -1805,7 +1805,7 @@ select.input {
 }
 .kv-remove:hover {
   border-color: var(--status-error);
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 .kv-add {
   padding: 6px 12px;
@@ -1832,8 +1832,8 @@ select.input {
 .save-msg {
   font-size: 13px;
 }
-.save-msg.ok { color: var(--status-ok); }
-.save-msg.error { color: var(--status-error); }
+.save-msg.ok { color: var(--status-ok-text); }
+.save-msg.error { color: var(--status-error-text); }
 
 /* ── 全局提示 ── */
 .global-message {
@@ -1850,12 +1850,12 @@ select.input {
 .global-message.ok {
   background: var(--bg-card);
   background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card));
-  color: var(--status-ok);
+  color: var(--status-ok-text);
 }
 .global-message.error {
   background: var(--bg-card);
   background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 
 /* ── 阶段 4.1：chips 输入（allowlist / blocklist） ── */
@@ -1885,7 +1885,7 @@ select.input {
 .chip.chip-danger {
   background: var(--bg-card);
   background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 .chip-remove {
   border: none;
@@ -1925,7 +1925,7 @@ select.input {
 }
 .tool-pick-danger:hover {
   border-color: var(--status-error);
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 
 /* ── OMP 自动发现区 ── */
@@ -2254,7 +2254,7 @@ select.input {
 }
 .oauth-badge.authorized {
   background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card));
-  color: var(--status-ok);
+  color: var(--status-ok-text);
 }
 .oauth-badge.unauthorized {
   background: color-mix(in srgb, var(--text-tertiary) 12%, var(--bg-card));

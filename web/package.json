@@ -1,11 +1,11 @@
 {
   "name": "maxmahere-web",
   "private": true,
-  "version": "2.6.11",
+  "version": "2.6.12",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build",
+    "build": "node scripts/clean-dist.mjs && vue-tsc --noEmit && vite build",
     "test": "vitest run",
     "preview": "vite preview",
     "lint": "eslint src/ --max-warnings=60",

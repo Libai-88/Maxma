@@ -201,9 +201,14 @@ export function validateProviderBaseUrl(baseUrl: unknown): string {
   if (isMetadataHost(hostname)) throw new InvalidProviderUrl();
   const ip = parseIp(hostname);
   if (ip?.kind === "v4" && ip.octets) {
+    // parseIp 只在正则匹配出 4 段且每段 ≤255 时才返回 octets，
+    // 但 noUncheckedIndexedAccess 下解构元素类型是 `number | undefined`。
+    // 显式兜底而不是断言：万一将来 parseIp 放宽，这里会退化为"不判"，
+    // 而不是把 undefined 当数字比较（那会静默放过组播地址）。
     const [a, b, c, d] = ip.octets;
     const unspecified = a === 0 && b === 0 && c === 0 && d === 0;
-    const multicast = a >= 224 && a <= 239;
+    const multicast =
+      typeof a === "number" && a >= 224 && a <= 239;
     if (unspecified || multicast) throw new InvalidProviderUrl();
   } else if (ip?.kind === "v6") {
     const h = hostname.toLowerCase();

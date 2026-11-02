@@ -14,7 +14,8 @@ import * as path from "node:path";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 
-import { getWebDistDir } from "./app-paths";
+import { getWebDistDir, dataDir } from "./app-paths";
+import { agentDirDiagnostics } from "../../bun-sidecar/src/kernel/engine-info";
 import { buildCorsOrigins } from "./cors-config";
 import { loadOrCreateToken } from "./auth";
 import { createAuthMiddleware, extractWsToken } from "./middleware/auth";
@@ -45,7 +46,7 @@ import { createStickerUploadRoutes } from "./routes/sticker-upload";
 import { createSettingsPanelRoutes } from "./routes/settings-panels";
 import { createWorkflowRoutes, setWorkflowEventSink } from "./routes/workflows";
 import { createCollabRoutes } from "./routes/collab";
-import { createDeferredRunRoutes } from "./routes/deferred-runs";
+import { createDeferredRunRoutes, setDeferredRunCancelHandler } from "./routes/deferred-runs";
 import { createActivityRoutes } from "./routes/activity";
 import { createSessionCompressRoutes } from "./routes/session-compress";
 import { createProvidersRoutes, migratePlaintextKeysToEncrypted } from "./routes/providers";
@@ -56,6 +57,8 @@ import { createToolsRoutes } from "./routes/tools";
 import { createRestartRoutes } from "./routes/restart";
 import { createUploadRoutes } from "./routes/upload";
 import { createPluginsRoutes } from "./routes/plugins";
+import { currentPluginHttpHandlers, ensurePluginBridgeInstalled } from "./plugins/dsh";
+import { createPluginHttpBridge } from "./plugins/dsh/http-bridge";
 import { createFileRoutes } from "./routes/files";
 import { createDiagnosticsRoutes } from "./routes/diagnostics";
 import { createCapabilitiesRoutes } from "./routes/capabilities";
@@ -66,6 +69,7 @@ import { startLlmUsageRetentionTask } from "./llm-usage-ledger";
 import { getApiDataDir } from "./app-paths";
 import { record as recordActivity } from "./activity-hub";
 import { send as rpcSend, sendError as rpcSendError, sendEvent as rpcSendEvent } from "./rpc";
+import type { ServerWebSocket } from "bun";
 import {
   handleChatMessage,
   onKernelEvent,
@@ -87,8 +91,15 @@ const hubPlans = new Map<string, PiPendingPlan>();
 const wsConnections = new Map<string, Set<ServerWebSocket<WsData>>>();
 const seenClientMsgIds = new Map<string, string[]>();
 
-/** kernel 事件 → WS 广播原始出口（无连接时保留 stdout 便于诊断）。 */
-function broadcastEvent(sessionId: string, event: { type: string; payload: Record<string, unknown> }): void {
+/**
+ * kernel 事件 → WS 广播原始出口（无连接时保留 stdout 便于诊断）。
+ *
+ * 事件类型与 `ChatWsHub.broadcast` 的声明保持一致（`payload?: unknown`）：
+ * 这里只做 JSON 序列化，不解释 payload 形状，所以不该比接口更窄——
+ * 之前写成 `payload: Record<string, unknown>` 反而是实现方擅自收窄契约，
+ * 导致赋值处 tsc 报不兼容（TS2322），而那本应是接口说了算。
+ */
+function broadcastEvent(sessionId: string, event: { type: string; payload?: unknown }): void {
   const conns = wsConnections.get(sessionId);
   if (conns && conns.size > 0) {
     const data = JSON.stringify(event);
@@ -148,6 +159,12 @@ const chatHub: ChatWsHub = {
   broadcast: broadcastEvent,
 };
 
+// 取消子任务时把意图下发给执行侧。执行侧未实现该方法时 callKernelRpc 返回
+// { ok: false }，本地记录仍然是 cancelled（浏览器看到的事实不变）。
+setDeferredRunCancelHandler((sessionId, runId) =>
+  callKernelRpc("cancel_deferred_run", { session_id: sessionId, run_id: runId }),
+);
+
 export function createApp(): Hono {
   const token = loadOrCreateToken();
   // 数据库迁移（对齐 Python db/core.py import 时自动初始化：v1-v7 schema）
@@ -172,6 +189,11 @@ export function createApp(): Hono {
       allowHeaders: [],
     }),
   );
+
+  // 插件端点转发（PLUGIN-001 / P2）：插件（如 Jet Hub）通过 `connection.fetch.register`
+  // 把自己的 HTTP 端点交给宿主。这里按「路径 + 方法」查表转发，查不到就 next()。
+  // ⚠️ 必须放在鉴权与 CORS 之后：插件端点多管账号凭据，不能无鉴权暴露。
+  app.use("*", createPluginHttpBridge({ handlers: currentPluginHttpHandlers }));
 
   // 核心路由（2.0：health / auth token；2.5b：health 四部件完整版）
   app.route(
@@ -360,7 +382,11 @@ const app = createApp();
 /** 启动 HTTP/WS 监听（仅直接运行时调用；测试只 import createApp/serveFrontend）。 */
 export function startServer() {
   startLlmUsageRetentionTask();
-  return Bun.serve({
+  // 显式带上 WsData 泛型：不写的话 Bun.serve 推导出 `ServerWebSocket<undefined>`，
+  // 于是下面 websocket 回调里 `ws.data` 是 undefined、`server.upgrade({data})`
+  // 也判为不兼容（实测 5 处 tsc 错误）。泛型是这里唯一的正解——用断言去压会
+  // 把"data 形状写错"这类真问题一起盖住。
+  return Bun.serve<WsData>({
     port: PORT,
     ...(process.env.MAXMA_BUN_HOST ? { hostname: process.env.MAXMA_BUN_HOST } : {}),
     async fetch(req, server) {
@@ -426,4 +452,25 @@ export function startServer() {
 if (import.meta.main || process.env.MAXMA_BACKEND_COMPILED === "1") {
   const server = startServer();
   console.log(`[bun-backend] listening on http://127.0.0.1:${server.port} (engine=bun-backend)`);
+
+  // 引擎配置目录落点自检（见 bun-sidecar/src/kernel/engine-info.ts）。
+  // 便携包/桌面壳靠注入 PI_CODING_AGENT_DIR 把 pi 的数据搬进包内；那个变量名是
+  // 引擎自己拼出来的，改名后注入会**静默失效**，pi 会直接把会话/设置/凭据写进
+  // 用户主目录。与其等用户发现数据"没迁移"，启动时就把它喊出来。
+  const agentDirCheck = agentDirDiagnostics(dataDir());
+  if (agentDirCheck.agent_dir_inside_expected === false) {
+    console.error(
+      `[engine] 引擎配置目录没落在 Maxma 数据目录内：agentDir=${agentDirCheck.agent_dir} ` +
+        `expected=${agentDirCheck.expected_root}\n` +
+        "  便携/桌面形态下这意味着 PI_CODING_AGENT_DIR 注入未生效，引擎正在写用户主目录，" +
+        "会话与凭据不会随包携带。请检查启动器的环境变量注入，或设置 MAXMA_DATA_DIR。",
+    );
+  } else if (agentDirCheck.agent_dir_inside_expected) {
+    console.log(`[engine] 配置目录=${agentDirCheck.agent_dir}（在 Maxma 数据目录内）`);
+  }
+
+  // PLUGIN-001：装配插件宿主并把插件模型接进 pi。
+  // fire-and-forget —— 插件起不来（未登录/缺依赖）不该拦住 Maxma 启动，
+  // 只是插件提供的模型暂不可用。
+  void ensurePluginBridgeInstalled();
 }

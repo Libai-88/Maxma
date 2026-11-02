@@ -1,8 +1,6 @@
-![首页](images/%E9%A6%96%E9%A1%B5.png)
-
 # MaxmaHere
 
-> 基于 pi 引擎的本地优先 AI Agent 客户端（Web 形态分发）。
+> 基于 pi 引擎的本地优先 AI Agent 客户端（Web 便携包与 Electron 桌面便携包两种形态）。
 
 MaxmaHere 提供多 LLM Provider、流式对话、Agent 工具、MCP、Skill、人设、记忆、权限审批和一键便携打包能力。
 
@@ -17,7 +15,6 @@ MaxmaHere 提供多 LLM Provider、流式对话、Agent 工具、MCP、Skill、�
 
 - [docs/security-contract.md](docs/security-contract.md)
 - [dev_docs/permission-modes.md](dev_docs/permission-modes.md)
-- [dev_docs/path-whitelist.md](dev_docs/path-whitelist.md)
 
 ## 技术栈
 
@@ -73,8 +70,11 @@ start.bat
 
 ## 构建
 
+> 构建流程、**产物固定位置**、验证方式与踩坑记录统一见
+> [dev_docs/build-and-artifacts.md](dev_docs/build-and-artifacts.md)。
+
 ```bat
-build\build-server.bat    REM 产出 dist\bun-server（server.js + bun.exe + sharp 原生件）
+build\build-server.bat    REM 产出 dist\bun-server（server.js + bun.exe + sharp 原生件 + 插件栈）
 build-portable.bat        REM 组装 Web 便携包到 ..\MaxmaHere-Portable
 ```
 
@@ -84,7 +84,7 @@ Windows 桌面便携版：
 powershell -NoProfile -ExecutionPolicy Bypass -File build-desktop-portable.ps1 -SkipDependencyInstall
 ```
 
-输出 `dist\electron-portable\MaxmaHere-2.6.11-portable-x64.zip` 及同名 `.sha256` 校验文件。
+输出 `dist\electron-portable\MaxmaHere-2.6.12-portable-x64.zip` 及同名 `.sha256` 校验文件。
 
 便携包冒烟检查：
 
@@ -97,7 +97,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File build\portable-smoke-test.ps
 - Agent 推理和工具循环只在 pi 引擎（kernel）中执行。
 - Bun 后端是 API、会话和安全策略层，不是 Agent 图执行器。
 - MCP 配置变更后，新建 session 或调用 `reload_mcp_for_session` 才能保证使用最新配置。
-- 自动化功能随旧后端下线（capabilities 清单 `automation.enabled=false`）；插件系统在当前引擎不可用（REST 桩化）；`/kb` 知识库已废弃。
+- 自动化功能随旧后端下线（capabilities 清单 `automation.enabled=false`）；`/kb` 知识库路由已移除。
+- 插件子系统已落地（真实注册表 + Jet Hub 管理页 + 渠道模型接入 pi 模型选择器），但网络安装面保持拒绝。
+- 分发形态有两种：Web 便携包，以及 Electron 桌面便携包（同一套后端产物的桌面壳）。
 
 ## License
 

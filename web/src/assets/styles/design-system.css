@@ -66,7 +66,7 @@
 	  opacity: 1;
 	}
 .ds-btn--danger {
-  color: var(--status-error);
+  color: var(--status-error-text);
   border-color: var(--status-error);
 }
 .ds-btn--danger:hover:not(:disabled) {
@@ -156,22 +156,22 @@
 .ds-badge--ok {
   background: var(--bg-card);
   background: color-mix(in srgb, var(--status-ok) 10%, var(--bg-card));
-  color: var(--status-ok);
+  color: var(--status-ok-text);
 }
 .ds-badge--warn {
   background: var(--bg-card);
   background: color-mix(in srgb, var(--status-warn) 10%, var(--bg-card));
-  color: var(--status-warn);
+  color: var(--status-warn-text);
 }
 .ds-badge--error {
   background: var(--bg-card);
   background: color-mix(in srgb, var(--status-error) 10%, var(--bg-card));
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 .ds-badge--info {
   background: var(--bg-card);
   background: color-mix(in srgb, var(--status-info) 10%, var(--bg-card));
-  color: var(--status-info);
+  color: var(--status-info-text);
 }
 .ds-badge--neutral {
   background: var(--bg-secondary);

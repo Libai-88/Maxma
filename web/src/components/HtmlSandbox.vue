@@ -59,7 +59,7 @@ function getThemeCssVars(): string[] {
     '--bg-primary', '--bg-secondary', '--bg-card',
     '--text-primary', '--text-secondary', '--text-tertiary',
     '--accent', '--accent-dark', '--border',
-    '--user-bubble',
+    '--user-bubble-solid', '--user-bubble-text',
     '--status-ok', '--status-error', '--status-warn',
     '--shadow', '--shadow-xs', '--shadow-sm', '--shadow-md', '--shadow-lg', '--shadow-xl', '--radius',
   ]
@@ -70,7 +70,7 @@ function logSandboxError(err: SandboxError) {
   sandboxErrors.value.push(err)
 
   const tag = `[Sandbox ${err.type}]`
-  console.group(`%c${tag} ${err.message}`, 'color:var(--status-error);font-weight:bold')
+  console.group(`%c${tag} ${err.message}`, 'color: var(--status-error-text);font-weight:bold')
   log.error('  消息:', err.message)
   if (err.stack) log.error('  堆栈:', err.stack)
   if (err.source) log.error('  来源:', err.source, `(${err.line}:${err.col})`)
@@ -465,7 +465,7 @@ onUnmounted(() => {
   border: 1px solid color-mix(in srgb, var(--status-error) 30%, transparent);
   border-radius: 6px;
   font-size: 12px;
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 .sandbox-error-icon {
   font-size: 14px;

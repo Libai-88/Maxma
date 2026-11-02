@@ -838,7 +838,7 @@ onUnmounted(() => {
   background-position: center;
 }
 .error-copy-btn .copy-success {
-  color: var(--status-ok);
+  color: var(--status-ok-text);
 }
 /* 用户错误：暖琥珀警告 */
 .error-banner.error-user_error {
@@ -846,7 +846,7 @@ onUnmounted(() => {
     background: color-mix(in srgb, var(--status-warn) 10%, var(--bg-card));
     border: 1px solid transparent;
     border: 1px solid color-mix(in srgb, var(--status-warn) 30%, transparent);
-    color: var(--status-warn);
+    color: var(--status-warn-text);
   }
   /* 工具错误：暖琥珀 */
   .error-banner.error-tool_error {
@@ -854,7 +854,7 @@ onUnmounted(() => {
     background: color-mix(in srgb, var(--status-warn) 10%, var(--bg-card));
     border: 1px solid transparent;
     border: 1px solid color-mix(in srgb, var(--status-warn) 30%, transparent);
-    color: var(--status-warn);
+    color: var(--status-warn-text);
   }
   /* 系统错误：暖红 */
   .error-banner.error-system_error {
@@ -862,7 +862,7 @@ onUnmounted(() => {
     background: color-mix(in srgb, var(--status-error) 10%, var(--bg-card));
     border: 1px solid transparent;
     border: 1px solid color-mix(in srgb, var(--status-error) 25%, transparent);
-    color: var(--status-error);
+    color: var(--status-error-text);
   }
   /* 限流错误：暖蓝 */
   .error-banner.error-rate_limit {
@@ -870,7 +870,7 @@ onUnmounted(() => {
     background: color-mix(in srgb, var(--status-info) 10%, var(--bg-card));
     border: 1px solid transparent;
     border: 1px solid color-mix(in srgb, var(--status-info) 25%, transparent);
-    color: var(--status-info);
+    color: var(--status-info-text);
   }
 /* 取消：灰色 */
 .error-banner.error-cancelled {
@@ -885,7 +885,7 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--status-error) 10%, var(--bg-card));
   border: 1px solid transparent;
   border: 1px solid color-mix(in srgb, var(--status-error) 25%, transparent);
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 
 /* ── 右侧滚动标记 ── */
@@ -997,11 +997,11 @@ onUnmounted(() => {
 }
 
 .memory-check {
-  color: var(--status-ok);
+  color: var(--status-ok-text);
 }
 
 .memory-cross {
-  color: var(--status-error);
+  color: var(--status-error-text);
 }
 
 .memory-tool-name {
@@ -1015,7 +1015,7 @@ onUnmounted(() => {
 }
 
 .memory-tool-status.is-error {
-    color: var(--status-error);
+    color: var(--status-error-text);
   }
 
 .memory-tool-output {

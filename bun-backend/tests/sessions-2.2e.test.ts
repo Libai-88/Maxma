@@ -9,6 +9,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { authHeaderFor } from "./_helpers/auth";
 
 let dataDir = "";
 let prevDataDir: string | undefined;
@@ -30,18 +31,9 @@ async function makeApp() {
   const { createApp } = await import("../src/server");
   return createApp();
 }
-
+/** 读 auth token 生成鉴权头（实现见 tests/_helpers/auth.ts，勿再手搓 sqlite 类型桩）。 */
 function authHeader(): Record<string, string> {
-  const { Database } = require("bun:sqlite") as {
-    Database: new (p: string, o?: object) => { query: (s: string) => { get: () => { token: string } | null } };
-  };
-  const db = new Database(path.join(dataDir, "api", "data", "maxma.db"), { readonly: true });
-  try {
-    const row = db.query("SELECT token FROM auth_tokens ORDER BY id DESC LIMIT 1").get();
-    return { "x-maxma-token": row?.token ?? "" };
-  } finally {
-    db.close();
-  }
+  return authHeaderFor(dataDir);
 }
 
 describe("sessions 门面（阶段 2.2e）", () => {
@@ -83,8 +75,15 @@ describe("sessions 门面（阶段 2.2e）", () => {
     ).json()) as { session_id: string };
 
     const get = await app.request(`/api/sessions/${created.session_id}/permission-mode`, { headers: h });
-    const g = (await get.json()) as { permission_mode: string; enabled: boolean };
-    expect(g.enabled).toBe(true);
+    const g = (await get.json()) as {
+      session_id: string;
+      permission_mode: string;
+      available_permission_modes: string[];
+    };
+    // 可用性由清单表达，不再有恒为 true 的 `enabled`（那个字段以前和前端读的
+    // `permission_modes_enabled` 对不上，控件因此恒禁用——见
+    // tests/permission-mode-contract.test.ts）。
+    expect(g.available_permission_modes.length).toBeGreaterThan(0);
     expect(["read_only", "ask", "operate", "auto"]).toContain(g.permission_mode);
 
     const put = await app.request(`/api/sessions/${created.session_id}/permission-mode`, {
@@ -93,7 +92,6 @@ describe("sessions 门面（阶段 2.2e）", () => {
       body: JSON.stringify({ permission_mode: "operate" }),
     });
     expect(((await put.json()) as { permission_mode: string }).permission_mode).toBe("operate");
-
     const bad = await app.request(`/api/sessions/${created.session_id}/permission-mode`, {
       method: "PUT",
       headers: h,

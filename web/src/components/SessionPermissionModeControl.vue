@@ -1,6 +1,6 @@
 <template>
   <PermissionModeControl
-    :enabled="enabled"
+    :available-modes="availableModes"
     :mode="mode"
     :busy="busy"
     @change="updateMode"
@@ -12,7 +12,6 @@
 
 <script setup lang="ts">
 import { api } from '@/api'
-import { useChatStore } from '@/stores/chat'
 import type { PermissionMode } from '@/types'
 import { ref, watch } from 'vue'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
@@ -36,7 +35,15 @@ useGsap((_ctx, contextSafe) => {
   }), { flush: 'post' })
 })
 
-const enabled = ref(false)
+/**
+ * 可用档位来自服务端 `available_permission_modes`——非空即可交互。
+ *
+ * 这里以前读的是 `response.permission_modes_enabled`，而后端从不产出该字段
+ * （它回的是 `enabled`），于是恒为 undefined → 控件恒禁用 → 用户每次切换都被
+ * `updateMode()` 的 `if (!enabled)` 静默吞掉。四档在 kernel 里一直是真实生效的，
+ * 断的只是这条 UI 链。没有 feature flag，所以也不再回一个恒 true 的布尔量。
+ */
+const availableModes = ref<PermissionMode[]>([])
 const mode = ref<PermissionMode>('ask')
 const busy = ref(false)
 const errorMessage = ref('')
@@ -46,13 +53,9 @@ function isCurrentSession(sessionId: string, generation: number): boolean {
   return props.sessionId === sessionId && requestGeneration === generation
 }
 
-function isFeatureUnavailable(error: unknown): boolean {
-  return error instanceof Error && /\b409\b/.test(error.message)
-}
-
 async function load(sessionId: string) {
   const generation = ++requestGeneration
-  enabled.value = false
+  availableModes.value = []
   mode.value = 'ask'
   busy.value = false
   errorMessage.value = ''
@@ -62,47 +65,37 @@ async function load(sessionId: string) {
   try {
     const response = await api.getSessionPermissionMode(sessionId)
     if (!isCurrentSession(sessionId, generation)) return
-    enabled.value = response.permission_modes_enabled
+    availableModes.value = response.available_permission_modes
     mode.value = response.permission_mode
   } catch {
-    // A failed initial capability probe must not create a new UI surface.
-    // The normal session controls remain available and the next session load retries.
+    // 能力探测失败不新增 UI：保持隐藏（空清单），下一次载入会话时重试。
   }
 }
 
 async function updateMode(nextMode: PermissionMode) {
   const sessionId = props.sessionId
   const generation = requestGeneration
-  if (!enabled.value || busy.value || !sessionId) return
+  if (availableModes.value.length === 0 || busy.value || !sessionId) return
 
   busy.value = true
   errorMessage.value = ''
   try {
     const response = await api.setSessionPermissionMode(sessionId, nextMode)
     if (!isCurrentSession(sessionId, generation)) return
-    enabled.value = response.permission_modes_enabled
+    availableModes.value = response.available_permission_modes
     mode.value = response.permission_mode
-    // PERM-LIVE-001：运行中会话即时生效——PUT 只更新后端 SessionState，
-    // 已运行 sidecar 会话的审批策略不会改变（permission_mode 只在新建
-    // 会话时传入）。通过 WS update_auto_approve 走 set_auto_approve RPC
-    // 立即切换 approvalMode（与"自动执行"开关同一链路）。
-    const autoApprove = response.permission_mode === 'auto' || response.permission_mode === 'operate'
-    const ch = useChatStore().channels.get(sessionId)
-    if (ch?.ws && ch.ws.readyState === WebSocket.OPEN) {
-      ch.ws.send(JSON.stringify({
-        type: 'update_auto_approve',
-        payload: { auto_approve: autoApprove },
-      }))
-    }
-  } catch (error) {
+    // 不再补发 WS update_auto_approve（PERM-LIVE-001 的旧注释）。Bun 后端是
+    // in-process 直调 kernel：PUT 经 set_permission_mode RPC 改的就是运行中
+    // 会话的 record.permissionMode，审批门按闭包读它，切换即时生效
+    // （bun-backend/tests/permission-mode-contract.test.ts 锁住这条链）。
+    // 而 update_auto_approve 走的是 set_auto_approve，它只会把模式写成
+    // auto / ask——补发会把刚选定的档位改掉：read_only 静默退回 ask，
+    // operate 被升级成 auto。那是 Python/sidecar 跨进程时代的遗留。
+  } catch {
     if (!isCurrentSession(sessionId, generation)) return
-    if (isFeatureUnavailable(error)) {
-      enabled.value = false
-      mode.value = 'ask'
-      errorMessage.value = '权限模式当前不可用，已继续使用逐次确认。'
-    } else {
-      errorMessage.value = '无法更新会话权限，请稍后重试。'
-    }
+    // 这条链后端只会回 404（会话不存在）/ 422（档位非法），没有"功能未开"
+    // 的 409；旧代码为 409 写的降级分支永远命中不了，删掉。
+    errorMessage.value = '无法更新会话权限，请稍后重试。'
   } finally {
     if (isCurrentSession(sessionId, generation)) busy.value = false
   }
@@ -114,7 +107,7 @@ watch(() => props.sessionId, sessionId => { void load(sessionId) }, { immediate:
 <style scoped>
 .permission-mode-error {
   max-width: 240px;
-  color: var(--status-warn);
+  color: var(--status-warn-text);
   font-size: 12px;
   line-height: 1.35;
 }

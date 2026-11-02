@@ -10,6 +10,13 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { authHeaderFor } from "./_helpers/auth";
+import { appVersion } from "../src/app-version";
+
+// 版本断言一律与单一数据源比对，不写死字面量：写死会让每次升版本都红一次，
+// 而这条断言真正要守的是"报告里的版本 == version.py"，不是某个具体号。
+// 形状守卫放在用到它的用例里（顶层 expect 会在模块加载期抛错，不算用例失败）。
+const EXPECTED_VERSION = appVersion();
 
 let dataDir = "";
 let prevDataDir: string | undefined;
@@ -26,18 +33,9 @@ afterEach(() => {
   else process.env.MAXMA_DATA_DIR = prevDataDir;
   fs.rmSync(dataDir, { recursive: true, force: true });
 });
-
+/** 读 auth token 生成鉴权头（实现见 tests/_helpers/auth.ts，勿再手搓 sqlite 类型桩）。 */
 function authHeader(): Record<string, string> {
-  const { Database } = require("bun:sqlite") as {
-    Database: new (p: string, o?: object) => { query: (s: string) => { get: () => { token: string } | null } };
-  };
-  const db = new Database(path.join(dataDir, "api", "data", "maxma.db"), { readonly: true });
-  try {
-    const row = db.query("SELECT token FROM auth_tokens ORDER BY id DESC LIMIT 1").get();
-    return { "x-maxma-token": row?.token ?? "" };
-  } finally {
-    db.close();
-  }
+  return authHeaderFor(dataDir);
 }
 
 async function makeApp() {
@@ -62,31 +60,34 @@ describe("tools / plugins / files（阶段 2.5a）", () => {
     expect(tools.every((t) => t.builtin === true)).toBe(true);
   });
 
-  test("plugins 桩：GET → []；详情 404；写操作 501", async () => {
+  test("plugins：GET 返回注册表清单；未知插件 404；写操作校验参数", async () => {
     const app = await makeApp();
     const h = authHeader();
 
+    // PLUGIN-001：不再是空数组桩 —— 内置插件（Jet Hub）来自真实注册表。
     const list = await app.request("/api/plugins", { headers: h });
     expect(list.status).toBe(200);
-    expect(await list.json()).toEqual([]);
+    const plugins = (await list.json()) as Array<{ name: string; enabled: boolean }>;
+    expect(plugins.map((p) => p.name)).toContain("codearts-auth");
 
     const detail = await app.request("/api/plugins/foo", { headers: h });
     expect(detail.status).toBe(404);
     expect(((await detail.json()) as { detail: string }).detail).toContain("'foo'");
 
+    // 未支持的网络安装如实拒绝；未知插件的 toggle 是 404（而非此前的 501 桩）。
     const install = await app.request("/api/plugins/install", {
       method: "POST",
       headers: { ...h, "content-type": "application/json" },
-      body: "{}",
+      body: JSON.stringify({ spec: "third-party-unknown" }),
     });
     expect(install.status).toBe(501);
 
     const toggle = await app.request("/api/plugins/foo/toggle", {
       method: "PUT",
       headers: { ...h, "content-type": "application/json" },
-      body: "{}",
+      body: JSON.stringify({ enabled: true }),
     });
-    expect(toggle.status).toBe(501);
+    expect(toggle.status).toBe(404);
   });
 
   test("select-file 桩：GET /api/select-file → {path:null}", async () => {
@@ -246,7 +247,7 @@ describe("error-collector + diagnostics（阶段 2.5b）", () => {
     expect(fe!.trace_id).toBe("frontend-trace-1234");
     expect(fe!.exception).toContain("render()");
     expect(fe!.extra).toMatchObject({ name: "TypeError", filename: "ChatView.vue", line: 42 });
-    expect(report.system_info.app_version).toBe("v2.6.11");
+    expect(report.system_info.app_version).toBe(EXPECTED_VERSION);
     expect(report.autonomy_status.available).toBe(false);
     expect(report.tauri_startup_log.available).toBe(false);
 
@@ -334,7 +335,7 @@ describe("health 四部件（阶段 2.5b）", () => {
     });
 
     expect(body.status).toBe("ok");
-    expect(body.version).toBe("v2.6.11");
+    expect(body.version).toBe(EXPECTED_VERSION);
     for (const key of ["llm", "memory", "native_tools", "mcp_tools"]) {
       const comp = body[key] as Record<string, unknown>;
       expect(comp.status).toBe("ok");
@@ -387,8 +388,11 @@ describe("health 四部件（阶段 2.5b）", () => {
     const res = await app.request("/api/health");
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
-    expect(["ok", "degraded"]).toContain(body.status);
-    expect(body.version).toBe("v2.6.11");
+    // body.status 是 unknown（Record 的索引取值），expect(...).toContain 要求
+    // 参数与接收数组元素类型相容 —— 先显式断言成 string，让失败信息可读，
+    // 而不是把 unknown 塞给 matcher。
+    expect(["ok", "degraded"]).toContain(String(body.status));
+    expect(body.version).toBe(EXPECTED_VERSION);
   });
 });
 
@@ -419,27 +423,49 @@ describe("capabilities 聚合（阶段 2.5c）", () => {
     expect((cfg.resolution_order as string[]).length).toBe(13);
 
     // Phase4 manifest
-    expect(body.version).toBe("v2.6.11");
+    expect(body.version).toBe(EXPECTED_VERSION);
     const features = body.features as Record<string, Record<string, unknown>>;
-    expect(features.automation.enabled).toBe(false); // automation 随 Python 下线
-    expect(features.mcp.enabled).toBe(true);
-    expect(features.mcp.transports).toEqual(["stdio", "streamable_http"]);
-    expect(features.memory.enabled).toBe(true);
-    expect(features.collab.enabled).toBe(true);
-    expect(features.plugins.enabled).toBe(false);
-    expect(features.extensions.enabled).toBe(true);
-    expect(features.extensions.bundled).toEqual(["maxma-approval", "maxma-blocker", "request-telemetry"]);
-    expect(features.rules.enabled).toBe(true);
-    expect(features.tools.builtin_count).toBe(7);
-    expect(features.tools.custom_count).toBe(7);
+    // `noUncheckedIndexedAccess` 下 `features.X` 是 `Record | undefined`，直接取
+    // `.enabled` 会报 TS18048（14 处）。用一个小助手取子对象：断言把"缺少某个
+    // feature"变成一条**可读的失败信息**（而不是 undefined 属性访问的 TypeError），
+    // 返回类型仍靠 as 收窄——expect 本身不做类型收窄，这点在注释里说清楚。
+    const feature = (name: string): Record<string, unknown> => {
+      const value = features[name];
+      expect(value, `manifest 缺少 feature: ${name}`).toBeDefined();
+      return value as Record<string, unknown>;
+    };
+    expect(feature("automation").enabled).toBe(false); // automation 随 Python 下线
+    expect(feature("mcp").enabled).toBe(true);
+    expect(feature("mcp").transports).toEqual(["stdio", "streamable_http"]);
+    expect(feature("memory").enabled).toBe(true);
+    expect(feature("collab").enabled).toBe(true);
+    expect(feature("plugins").enabled).toBe(true); // PLUGIN-001：插件子系统已落地
+    expect(feature("plugins").marketplace).toBe(false); // 尚不支持从网络安装第三方插件
+    expect(feature("extensions").enabled).toBe(true);
+    expect(feature("extensions").bundled).toEqual(["maxma-approval", "maxma-blocker", "request-telemetry"]);
+    expect(feature("rules").enabled).toBe(true);
+    expect(feature("tools").builtin_count).toBe(7);
+    expect(feature("tools").custom_count).toBe(7);
     // providers 可能含 opencode-zen 内置供应商（后台同步注入，与运行顺序无关）——
     // 只验证形状：providers 数组、total_models 与 providers 长度一致
-    expect(Array.isArray(features.models.providers)).toBe(true);
-    expect(features.models.total_models).toBe((body.providers as unknown[]).length);
+    expect(Array.isArray(feature("models").providers)).toBe(true);
+    expect(feature("models").total_models).toBe((body.providers as unknown[]).length);
 
     const sidecar = body.sidecar as Record<string, unknown>;
     expect(sidecar.status).toBe("running");
-    expect(sidecar.version).toBe("0.1.0");
+    // 这里原本断言 "0.1.0"——那是 bun-sidecar/package.json 里 maxma-sidecar 的
+    // **产品版本**，被当"引擎版本"展示（capabilities.ts:sidecarVersion()）。
+    // 现已改为经 kernel 取 pi 根面导出的 VERSION，所以断言跟着改成引擎事实：
+    // sidecar.version 必须等于 engine.version，且两者都是 pi 的版本号（0.x/1.x），
+    // 不是 sidecar 的 0.1.0。
+    const engine = body.engine as Record<string, unknown>;
+    expect(typeof engine.version).toBe("string");
+    expect(engine.version).toMatch(/^\d+\.\d+\.\d+/);
+    expect(engine.version).not.toBe("0.1.0");
+    expect(sidecar.version).toBe(engine.version);
+    expect(engine.name).toBe("@earendil-works/pi-coding-agent");
+    // 配置目录落点诊断（便携包数据是否随包携带的判据，见 kernel/engine-info.ts）
+    expect(typeof engine.agent_dir).toBe("string");
 
     const endpoints = body.endpoints as string[];
     expect(endpoints).toContain("/api/health");
@@ -550,5 +576,15 @@ describe("config-settings（阶段 2.5a）", () => {
     } finally {
       if (prev !== undefined) process.env.MAXMA_API_PORT = prev;
     }
+  });
+});
+
+describe("版本断言的自身有效性", () => {
+  // 上面四处改成与 appVersion() 比对后，若 appVersion() 因故返回空串，
+  // 那四条断言会同时变成空话。这里把它钉回 version.py 这个单一数据源。
+  test("EXPECTED_VERSION 来自 version.py 且形状合法", () => {
+    expect(EXPECTED_VERSION).toMatch(/^v\d+\.\d+\.\d+/);
+    const raw = fs.readFileSync(path.resolve(import.meta.dir, "..", "..", "version.py"), "utf8");
+    expect(EXPECTED_VERSION).toBe(raw.match(/__version__\s*=\s*"([^"]+)"/)?.[1] ?? "");
   });
 });

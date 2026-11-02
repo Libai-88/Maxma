@@ -35,7 +35,12 @@ export function discoverMaxmaSkills(cwd?: string): SkillDiscoveryResult {
     skills: result.skills.map((skill) => ({
       name: skill.name,
       description: skill.description,
-      source: skill.sourceInfo?.source ?? skill.sourceInfo?.kind ?? "unknown",
+      // SourceInfo 只导出 source；kind 是 pi 文档里出现、未进公开类型的字段，
+      // 这里按"可选补充"读，取不到就落 "unknown"（登记见 pi-contract.ts 的
+      // PI_DUCK_TYPED_ENTRY_SHAPES）。
+      source: skill.sourceInfo?.source
+        ?? (skill.sourceInfo as { kind?: string } | undefined)?.kind
+        ?? "unknown",
       file_path: skill.filePath,
       base_dir: skill.baseDir,
       disable_model_invocation: skill.disableModelInvocation,

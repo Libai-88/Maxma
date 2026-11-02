@@ -9,6 +9,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 
+import { deriveAltHue, parseHex } from '@/utils/themeColor'
+
 // ── 类型 ──
 interface Blob {
   x: number; y: number
@@ -44,15 +46,6 @@ let onVisibilityChangeRef: (() => void) | null = null
 const BLOB_COUNT = 4
 const blobs: Blob[] = []
 
-function parseHex(hex: string): [number, number, number] {
-  const h = hex.replace('#', '')
-  return [
-    parseInt(h.substring(0, 2), 16),
-    parseInt(h.substring(2, 4), 16),
-    parseInt(h.substring(4, 6), 16),
-  ]
-}
-
 function newTarget(b: Blob, w: number, h: number) {
   b.tx = 100 + Math.random() * (w - 200)
   b.ty = 100 + Math.random() * (h - 200)
@@ -70,12 +63,13 @@ function setup(canvas: HTMLCanvasElement) {
   canvas.style.width = w + 'px'
   canvas.style.height = h + 'px'
 
-  // 读取主题色
+  // 读取主题色。第二个色相由 --accent 派生（旧代码读 --accent-pink，
+  // 而它只有 midnight 一个主题定义，其余主题会静默落到硬编码的紫色）。
   const style = getComputedStyle(document.documentElement)
   const accent = style.getPropertyValue('--accent').trim() || '#6e5af0'
-  const accentPink = style.getPropertyValue('--accent-pink').trim() || '#e05af0'
+  const accentAlt = deriveAltHue(accent)
   const c1 = parseHex(accent)
-  const c2 = parseHex(accentPink)
+  const c2 = parseHex(accentAlt)
 
   const dark = isDarkTheme()
   const { alphas } = themeParams(dark)

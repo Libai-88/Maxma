@@ -141,7 +141,6 @@ REM flattened server.js resolves bundleDir()/dataDir() correctly.
     echo set "MAXMA_EXE_DIR=%%SCRIPT_DIR%%"
     echo set "MAXMA_DATA_DIR=%%SCRIPT_DIR%%data"
     echo set "PI_CODING_AGENT_DIR=%%SCRIPT_DIR%%data\pi"
-    echo set "MAXMA_SERVE_WEB=1"
     echo set "MAXMA_ENV=production"
     echo if "%%MAXMA_API_PORT%%"=="" set "MAXMA_API_PORT=8000"
     echo set "MAXMA_BUN_PORT=%%MAXMA_API_PORT%%"
@@ -197,6 +196,22 @@ for %%F in (server.js bun.exe portable.flag MaxmaHere.bat) do (
 )
 if not exist "%PORTABLE_DIR%\node_modules\sharp" (
     echo [VERIFY FAIL] node_modules\sharp is missing
+    set "VERIFY_OK=0"
+)
+REM Plugin stack: these packages are deliberately kept OUT of server.js
+REM (see bun-backend/build-server.mjs), so a missing copy only shows up when the
+REM portable app starts and the plugin fails to load. Verify the manifest and the
+REM two packages whose absence is hardest to diagnose.
+if not exist "%PORTABLE_DIR%\externals.json" (
+    echo [VERIFY FAIL] externals.json is missing ^(plugin runtime manifest^)
+    set "VERIFY_OK=0"
+)
+if not exist "%PORTABLE_DIR%\node_modules\dsh-codearts-auth\package.json" (
+    echo [VERIFY FAIL] node_modules\dsh-codearts-auth is missing ^(plugin body^)
+    set "VERIFY_OK=0"
+)
+if not exist "%PORTABLE_DIR%\node_modules\@deepseek-ai\dsh-llm\package.json" (
+    echo [VERIFY FAIL] node_modules\@deepseek-ai\dsh-llm is missing ^(reads its own ../package.json^)
     set "VERIFY_OK=0"
 )
 if not exist "%PORTABLE_DIR%\web\dist\index.html" (

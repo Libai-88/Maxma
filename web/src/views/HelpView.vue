@@ -138,7 +138,7 @@ const capabilities: Capability[] = [
   { icon: '⚡', title: 'Skills 技能', desc: '用 Markdown 沉淀工作流与规范，AI 会根据上下文自动加载相关 Skill' },
   { icon: '🧠', title: '长期记忆', desc: '记住你的偏好、项目背景、历史决策；可私密模式临时关闭' },
   { icon: '🎨', title: '人设系统', desc: '为 AI 设定角色、语气、专业领域，适配不同场景' },
-  { icon: '🔒', title: '本地优先', desc: '所有数据保存在本地，无需注册账号；支持路径白名单与拒止锚安全策略' },
+  { icon: '🔒', title: '本地优先', desc: '所有数据保存在本地，无需注册账号；拒止锚强制阻断 + 工具调用逐次确认' },
 ]
 
 interface FaqSegment {

@@ -20,9 +20,10 @@ import {
   type PiSessionRecord,
   type PiPendingPlan,
 } from "../../../bun-sidecar/src/kernel/bridge-pi";
+import type { MaxmaPermissionMode } from "../../../bun-sidecar/src/kernel/types";
 
 import { getDeferredRunManager } from "./deferred-runs";
-import { getGlobalSettingsSingleton } from "../settings-global";
+import { engineSettingsForNewSession, getSettingValue } from "../settings-global";
 
 /** Bun 后端的会话注册表（kernel 桥经 deps 注入）。 */
 export interface SessionHub {
@@ -39,6 +40,36 @@ export interface SessionsDeps {
 }
 
 const ROLE_MAP: Record<string, string> = { user: "human", assistant: "ai" };
+
+/**
+ * 权限模式四档的后端权威清单，顺序即 UI 展示顺序（限制由强到弱）。
+ *
+ * 为什么这里还留一份"值"清单：kernel 侧的 `MaxmaPermissionMode`（kernel/types.ts）
+ * 是纯类型、运行时擦除，`bridge-pi.ts` 的 `PI_PERMISSION_MODES` 又是模块私有常量
+ * （未导出），REST 面拿不到。档位类型仍锚在 kernel 联合上——写错档名 tsc 直接红。
+ *
+ * 它不是第四个可以各写各的副本：`bun-backend/tests/permission-mode-contract.test.ts`
+ * 逐字对账 kernel 联合类型、`bridge-pi.ts` 的 `PI_PERMISSION_MODES`、前端
+ * `web/src/types/session.ts` 的 `PermissionMode` 联合与本清单，任一侧改名或增删
+ * 档位当场红。以前正是"两侧各写各的、没人对账"让 `permission_modes_enabled`
+ * 这个后端从不产出的字段活到今天（前端恒读 undefined → 控件恒禁用）。
+ */
+const AVAILABLE_PERMISSION_MODES: readonly MaxmaPermissionMode[] = ["read_only", "ask", "operate", "auto"];
+
+/**
+ * GET/PUT 共用的响应形状。字段名即前后端契约：`available_permission_modes`
+ * 非空 = 该会话可用权限模式，前端据此决定控件是否可交互、并逐项渲染选项。
+ * 没有 feature flag——四档在 kernel 里恒生效（见 dev_docs/permission-modes.md），
+ * 所以不再返回那个恒为 true 的 `enabled`，也不 reintroduce 布尔开关。
+ */
+function permissionModeView(sessionId: string, mode: MaxmaPermissionMode) {
+  return {
+    session_id: sessionId,
+    permission_mode: mode,
+    // 展开一份：清单本身是模块级 readonly 常量，不许把它的可变副本交给调用方。
+    available_permission_modes: [...AVAILABLE_PERMISSION_MODES],
+  };
+}
 
 /** RPC 调用 helper：kernel 的 io 回调 → Promise 结果（单请求作用域）。 */
 function callRpc<T>(
@@ -71,9 +102,15 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
   // ── 创建 ──
   app.post("/api/sessions", async (c) => {
     // 让 kernel 使用 Maxma 项目根目录；bun-backend 的 cwd 通常是子目录。
-    const settings = getGlobalSettingsSingleton().getSettings() as Record<string, unknown>;
-    const skills = settings.skills as Record<string, unknown> | undefined;
-    await callRpc(deps, "create_session", { skills_enabled: skills?.enabled !== false });
+    // skills.enabled 走应用层参数（显式覆盖优先，缺省视为开启）；其余"归引擎消费"
+    // 的显式改动经 settings 下发，由 kernel 在新会话上 applyOverrides。
+    // 见 bun-backend/src/settings-global.ts 头注释——旧实现在这里直接读那个
+    // in-memory 单例，所以面板改了也不生效。
+    const skillsEnabled = getSettingValue("skills.enabled") !== false;
+    await callRpc(deps, "create_session", {
+      skills_enabled: skillsEnabled,
+      settings: engineSettingsForNewSession(),
+    });
     const created = [...deps.hub.sessions.keys()].at(-1)!;
     const record = deps.hub.sessions.get(created)!;
     return c.json({ session_id: created, created_at: new Date().toISOString(), engine: record.engine });
@@ -110,15 +147,13 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
   });
 
   // ── 权限模式（4 档，AG-PERM-001）──
+  // 响应形状的唯一出口是 permissionModeView()：字段名与 web/src/types/session.ts
+  // 的 SessionPermissionModeResponse 由 tests/permission-mode-contract.test.ts 对账。
   app.get("/api/sessions/:sessionId/permission-mode", (c) => {
     const sid = c.req.param("sessionId");
     const record = deps.hub.sessions.get(sid);
     if (!record) return c.json({ detail: "会话不存在" }, 404);
-    return c.json({
-      session_id: sid,
-      permission_mode: record.permissionMode,
-      enabled: true,
-    });
+    return c.json(permissionModeView(sid, record.permissionMode));
   });
 
   app.put("/api/sessions/:sessionId/permission-mode", async (c) => {
@@ -130,7 +165,12 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
       { session_id: sid, permission_mode: body.permission_mode },
     );
     if (!result.ok) return c.json({ detail: result.error }, result.error.includes("Session not found") ? 404 : 422);
-    return c.json({ session_id: sid, permission_mode: result.result.permission_mode, enabled: true });
+    // 回读 hub 记录而不是 RPC 里那个 string：kernel 在应答前已把
+    // record.permissionMode 改成新模式（bridge-pi.ts 的 set_permission_mode 分支），
+    // 记录本身是类型化的 MaxmaPermissionMode，省掉一次"字符串再当枚举用"的裸转。
+    const record = deps.hub.sessions.get(sid);
+    if (!record) return c.json({ detail: "会话已不存在" }, 404);
+    return c.json(permissionModeView(sid, record.permissionMode));
   });
 
   // ── 消息（role 映射 user→human / assistant→ai，契约对齐 Python）──
@@ -260,9 +300,12 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     const record = deps.hub.sessions.get(sid);
     if (!record) return c.json({ detail: "会话不存在" }, 404);
     await callRpc(deps, "destroy_session", { session_id: sid });
-    // 对齐 Python session_manager.remove：取消该会话的活跃 deferred run
+    // 对齐 Python session_manager.remove：取消活跃 deferred run，并删掉记录
+    // （会话已经不存在，留着只是孤儿行）。
     try {
-      getDeferredRunManager().cancelParent(sid);
+      const mgr = getDeferredRunManager();
+      mgr.cancelParent(sid);
+      mgr.deleteSession(sid);
     } catch {
       /* best-effort */
     }
@@ -277,7 +320,9 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
       if (deps.hub.sessions.has(sid)) {
         await callRpc(deps, "destroy_session", { session_id: sid });
         try {
-          getDeferredRunManager().cancelParent(sid);
+          const mgr = getDeferredRunManager();
+          mgr.cancelParent(sid);
+          mgr.deleteSession(sid);
         } catch {
           /* best-effort */
         }
@@ -292,7 +337,9 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     for (const sid of [...deps.hub.sessions.keys()]) {
       await callRpc(deps, "destroy_session", { session_id: sid });
       try {
-        getDeferredRunManager().cancelParent(sid);
+        const mgr = getDeferredRunManager();
+        mgr.cancelParent(sid);
+        mgr.deleteSession(sid);
       } catch {
         /* best-effort */
       }

@@ -1,7 +1,7 @@
 <template>
   <section
     ref="rootRef"
-    v-if="enabled"
+    v-if="visibleOptions.length > 0"
     class="permission-mode-control"
     aria-label="会话权限模式"
   >
@@ -19,18 +19,20 @@
 
     <div v-if="open" id="permission-mode-options" class="permission-panel">
       <p class="permission-summary">
-        这是当前会话的额外限制，不会绕过工具白名单、路径保护、MCP 限制、审批或沙盒。
+        这是当前会话的附加限制，只能收紧：它不会绕过拒止锚（MaxmaBlocker）、
+        MCP stdio 命令白名单或 Provider URL 校验。
       </p>
 
       <div class="permission-options" role="radiogroup" aria-label="选择会话权限模式">
         <button
-          v-for="option in options"
+          v-for="option in visibleOptions"
           :key="option.value"
           class="permission-option"
           :class="{ selected: currentMode === option.value }"
           type="button"
           role="radio"
           :aria-checked="currentMode === option.value"
+          :data-mode="option.value"
           :disabled="busy"
           @click="requestMode(option.value)"
         >
@@ -61,16 +63,18 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { gsap, useGsap, easeMap, durationMap } from '@/composables/useGsap'
-
-export type PermissionMode = 'read_only' | 'ask' | 'operate' | 'auto'
+import type { PermissionMode } from '@/types'
 
 const props = withDefaults(defineProps<{
-  /** Server-owned feature flag. False keeps the legacy approval UI unchanged. */
-  enabled?: boolean
+  /**
+   * 服务端 `available_permission_modes` 的投影：可用档位 + 展示顺序。
+   * 空数组 = 该会话没有可用的权限模式，控件整体不渲染（不摆一个拨不动的开关）。
+   */
+  availableModes?: PermissionMode[]
   mode?: PermissionMode
   busy?: boolean
 }>(), {
-  enabled: false,
+  availableModes: () => ['read_only', 'ask', 'operate', 'auto'],
   mode: 'ask',
   busy: false,
 })
@@ -87,30 +91,44 @@ type PermissionOption = {
   confirmation: string
 }
 
+/**
+ * 档位文案表（唯一一份 UI 文案）；可见性与顺序由服务端 availableModes 决定。
+ *
+ * 文案必须与 `bun-sidecar/src/kernel/approval-gate.ts` 的 `needsApprovalForMode`
+ * 逐句对得上，判据只有官方 `Tool.annotations`（readOnlyHint / destructiveHint）与
+ * 工具名族：
+ *   - read_only 与 ask 走**同一个分支**（非只读即审批），今天没有行为差别，
+ *     所以文案不许编造"只读会拒绝写入"这种差别；
+ *   - operate 只拦执行族（bash / powershell）与 destructiveHint，未标注的写入放行；
+ *   - auto 全部放行、**不再弹任何确认**（旧文案"仅明确允许的本地工具可自动运行，
+ *     其余仍需确认"是反的，等于向用户承诺了一层不存在的保护）；
+ *   - 不存在"路径白名单"或"沙盒"这一层（docs/security-contract.md §1/§3），
+ *     所以也不许把它们列为"不会被绕过"的保证。
+ */
 const options: PermissionOption[] = [
   {
     value: 'read_only',
     label: '只读',
-    description: '允许读取；写入、本地执行、联网和未知工具都会被拒绝。',
-    confirmation: '此模式会阻止写入和执行操作。',
+    description: '只有标注为只读的工具自动放行；写入、执行、联网一律逐次确认。',
+    confirmation: '此模式会让所有非只读工具先征求确认。',
   },
   {
     value: 'ask',
     label: '每次确认',
-    description: '允许读取；写入、执行、联网和未知工具都需逐次确认。',
+    description: '与「只读」判定相同：只读工具放行，其余逐次确认。会话默认档。',
     confirmation: '此模式会在可能改变环境的操作前征求确认。',
   },
   {
     value: 'operate',
     label: '工作区操作',
-    description: '允许受保护范围内的本地写入；执行、联网、破坏性和未知操作仍需确认。',
-    confirmation: '本地写入将不再逐次确认；执行、联网和破坏性操作仍会要求确认。',
+    description: '本地写入自动放行；执行类（bash / PowerShell）与破坏性操作仍需确认。',
+    confirmation: '本地写入将不再逐次确认；执行与破坏性操作仍会要求确认。',
   },
   {
     value: 'auto',
     label: '受控自动',
-    description: '仅明确允许的本地工具可自动运行；执行、联网、破坏性和未知操作仍需确认。',
-    confirmation: '只有服务器白名单中的低风险本地工具可自动运行，其余高风险操作仍会要求确认。',
+    description: '所有工具直接放行，不再弹确认；只剩拒止锚与 MCP / Provider 校验拦截。',
+    confirmation: '此模式不再有任何逐次确认，除下层拦截（拒止锚、MCP 命令白名单、Provider URL 校验）外无额外保护。',
   },
 ]
 
@@ -141,10 +159,20 @@ useGsap((_ctx, contextSafe) => {
       { opacity: 1, scale: 1, y: 0, duration: durationMap.slow, ease: easeMap.smooth, clearProps: 'transform' })
   }), { flush: 'post' })
 })
+/**
+ * 实际渲染的选项：按服务端给的档位顺序取文案，服务端认得但 UI 没有文案的档位
+ * 会被丢弃（宁可少摆一个开关，也不摆一个标签是英文原始值的选项）。
+ */
+const visibleOptions = computed<PermissionOption[]>(() =>
+  props.availableModes
+    .map(mode => options.find(option => option.value === mode))
+    .filter((option): option is PermissionOption => option !== undefined),
+)
+
 const currentOption = computed(() => optionFor(currentMode.value))
 
-watch(() => props.enabled, enabled => {
-  if (!enabled) {
+watch(visibleOptions, modes => {
+  if (modes.length === 0) {
     open.value = false
     pendingMode.value = null
   }

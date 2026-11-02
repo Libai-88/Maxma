@@ -20,6 +20,31 @@ for (const filename of builtInPersonas) {
   }
 }
 
+// 插件栈（PLUGIN-001）：这些包**刻意不打进 server.js**（见 bun-backend/build-server.mjs），
+// 必须逐个随包。清单由 build-server.mjs 从 package.json 递归推导并写成 externals.json ——
+// 这里读同一份清单，不手写（手写必然漂移）。
+//
+// ⚠️ 下面 extraResources 的第一条 filter 显式排除了 node_modules（`!node_modules/{**/*}`），
+// 所以**只有在这里显式列出的包才会进包**。这里曾经漏掉整个插件栈：
+// 产物照常生成，但用户装上后插件静默不工作。
+const externalsManifest = path.join(runtimeDir, "externals.json");
+if (!fs.existsSync(externalsManifest)) {
+  throw new Error(
+    `Missing plugin dependency manifest: ${externalsManifest}（bun-backend/build-server.mjs 应当生成它）`,
+  );
+}
+const externalPackages = JSON.parse(fs.readFileSync(externalsManifest, "utf8")).packages;
+if (!Array.isArray(externalPackages) || externalPackages.length < 20) {
+  throw new Error(
+    `Plugin dependency manifest looks truncated (${externalPackages && externalPackages.length} entries): ${externalsManifest}`,
+  );
+}
+for (const name of externalPackages) {
+  if (!fs.existsSync(path.join(runtimeModulesDir, name, "package.json"))) {
+    throw new Error(`Plugin dependency not staged into the desktop runtime: ${name}`);
+  }
+}
+
 module.exports = {
   appId: "com.maxmahere.desktop",
   electronDist: path.join(__dirname, "node_modules", "electron", "dist"),
@@ -42,6 +67,12 @@ module.exports = {
         to: path.join("maxma", "node_modules", name),
         filter: ["**/*"],
       })),
+    // 插件栈：照 externals.json 逐包复制（与 build-server.bat 同一份真源）。
+    ...externalPackages.map((name) => ({
+      from: path.join(runtimeModulesDir, name),
+      to: path.join("maxma", "node_modules", name),
+      filter: ["**/*"],
+    })),
   ],
   asar: true,
   artifactName: "MaxmaHere-${version}-portable-${arch}.${ext}",

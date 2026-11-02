@@ -53,18 +53,23 @@ function onOutsideClick() {
 <style scoped>
 .animated-modal-body {
   position: relative;
+  /* MODAL-THEME-001：玻璃底原先是 `color-mix(--text-inverse 8%, transparent)`
+     叠在页面之上。深色主题下这层与页面同色、内容近乎隐形。
+     改为从 --bg-raised 派生——弹窗是「浮在页面上的一层卡片」，
+     底色应当与卡片体系一致；掺 8% --accent 让玻璃层仍带主题色相，
+     深色主题自动变深、浅色主题自动变浅，不需要任何主题分支。
+     同规则内的 `rgba(255,255,255,…)` 硬编码（描边、滚动条、关闭按钮）一并去掉，
+     它们在深色主题下方向同样是反的。 */
   background: linear-gradient(
     145deg,
-    color-mix(in srgb, var(--text-inverse) 8%, transparent),
-    rgba(255, 255, 255, 0.02)
+    color-mix(in srgb, var(--bg-raised) 92%, var(--accent) 8%),
+    var(--bg-card)
   );
-  border: 1px solid color-mix(in srgb, var(--text-inverse) 12%, transparent);
+  border: 1px solid var(--border);
   border-radius: 20px;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  box-shadow:
-    0 24px 80px rgba(0, 0, 0, 0.35),
-    0 0 0 1px rgba(255, 255, 255, 0.06);
+  box-shadow: var(--shadow-xl);
   overflow: hidden;
   max-height: 80vh;
   display: flex;
@@ -86,7 +91,7 @@ function onOutsideClick() {
   overflow-y: auto;
   padding: 24px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 .modal-body-inner::-webkit-scrollbar {
@@ -96,7 +101,7 @@ function onOutsideClick() {
   background: transparent;
 }
 .modal-body-inner::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--scrollbar-thumb);
   border-radius: 3px;
 }
 
@@ -108,9 +113,11 @@ function onOutsideClick() {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(0, 0, 0, 0.25);
-  color: color-mix(in srgb, var(--text-inverse) 70%, transparent);
+  /* MODAL-THEME-001：原为 rgba(255,255,255,…)/rgba(0,0,0,.25) 硬编码，
+     深色主题下按钮变白框白叉、几乎不可见。改走 --bg-raised / --border / --text-secondary。 */
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text-secondary);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -118,9 +125,9 @@ function onOutsideClick() {
   transition: background 0.2s, border-color 0.2s, color 0.2s;
 }
 .modal-close-btn:hover {
-  background: color-mix(in srgb, var(--text-inverse) 12%, transparent);
-  border-color: rgba(255, 255, 255, 0.3);
-  color: var(--text-inverse);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-raised));
+  border-color: var(--border-strong);
+  color: var(--text-primary);
 }
 
 .modal-footer {

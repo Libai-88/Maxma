@@ -7,6 +7,7 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { authHeaderFor } from "./_helpers/auth";
 
 let dataDir = "";
 let prevDataDir: string | undefined;
@@ -40,18 +41,9 @@ async function makeApp() {
   const { createApp } = await import("../src/server");
   return createApp();
 }
-
+/** 读 auth token 生成鉴权头（实现见 tests/_helpers/auth.ts，勿再手搓 sqlite 类型桩）。 */
 function authHeader(): Record<string, string> {
-  const { Database } = require("bun:sqlite") as {
-    Database: new (p: string, o?: object) => { query: (s: string) => { get: () => { token: string } | null } };
-  };
-  const db = new Database(path.join(dataDir, "api", "data", "maxma.db"), { readonly: true });
-  try {
-    const row = db.query("SELECT token FROM auth_tokens ORDER BY id DESC LIMIT 1").get();
-    return { "x-maxma-token": row?.token ?? "" };
-  } finally {
-    db.close();
-  }
+  return authHeaderFor(dataDir);
 }
 
 async function makeSession(app: Awaited<ReturnType<typeof makeApp>>): Promise<string> {
@@ -71,7 +63,13 @@ describe("workflows（阶段 2.2h）", () => {
       definitions: Record<string, { name: string; step_count: number }>;
     };
     expect(defs.workflow_ids).toContain("demo");
-    expect(defs.definitions.demo.step_count).toBe(2);
+    // noUncheckedIndexedAccess 下 `defs.definitions.demo` 是可能 undefined。
+    // expect().toBeDefined() **不做类型收窄**（它只是运行时断言），所以下面仍要用
+    // 一次断言把它交给编译器；这里写的是一条窄的、就地取值的断言，
+    // 目的是让"缺 demo"的失败信息可读，而不是让 undefined 在深处爆 TypeError。
+    const demo = defs.definitions.demo as { name: string; step_count: number } | undefined;
+    expect(demo, "workflow 定义里缺少 demo").toBeDefined();
+    expect(demo?.step_count).toBe(2);
 
     const sid = await makeSession(app);
     const started = (await (
@@ -157,6 +155,86 @@ describe("deferred-runs（阶段 2.2h）", () => {
     // 未知 run → 404
     const missing = await app.request(`/api/sessions/${sid}/deferred-runs/nope`, { headers: h });
     expect(missing.status).toBe(404);
+  });
+
+  test("浏览器投影：列表不含 task/name/result，单条才返回 result", async () => {
+    const app = await makeApp();
+    const h = authHeader();
+    const sid = await makeSession(app);
+    const { getDeferredRunManager } = await import("../src/routes/deferred-runs");
+    const mgr = getDeferredRunManager();
+
+    mgr.addOrUpdate(sid, {
+      run_id: "secret-1",
+      status: "succeeded",
+      task: "完整子任务提示词",
+      name: "子任务标题",
+      result: "最终结果",
+      error_message: "失败原因",
+    });
+
+    const list = (await (
+      await app.request(`/api/sessions/${sid}/deferred-runs`, { headers: h })
+    ).json()) as { runs: Array<Record<string, unknown>> };
+    const row = list.runs.find((r) => r.run_id === "secret-1")!;
+    expect(row.task).toBeUndefined();
+    expect(row.name).toBeUndefined();
+    expect(row.result).toBeNull();
+
+    const one = (await (
+      await app.request(`/api/sessions/${sid}/deferred-runs/secret-1`, { headers: h })
+    ).json()) as Record<string, unknown>;
+    expect(one.result).toBe("最终结果");
+    expect(one.error_message).toBe("失败原因");
+    expect(one.task).toBeUndefined();
+  });
+
+  test("取消是终态：迟到的 succeeded 事件不会把 cancelled 冲掉", async () => {
+    const app = await makeApp();
+    await makeSession(app);
+    const { getDeferredRunManager } = await import("../src/routes/deferred-runs");
+    const mgr = getDeferredRunManager();
+    const sid = "sess-sticky-cancel";
+
+    mgr.addOrUpdate(sid, { run_id: "r-sticky", status: "running" });
+    mgr.cancelRun(sid, "r-sticky");
+    const after = mgr.addOrUpdate(sid, { run_id: "r-sticky", status: "succeeded", result: "late" });
+    expect(after.status).toBe("cancelled");
+    expect(after.cancel_reason).toBe("cancelled_by_user");
+    mgr.deleteSession(sid);
+  });
+
+  test("分页：活跃任务永不裁剪，终态按 limit 返回并带 has_more", async () => {
+    const app = await makeApp();
+    await makeSession(app);
+    const { getDeferredRunManager } = await import("../src/routes/deferred-runs");
+    const mgr = getDeferredRunManager();
+    const sid = "sess-page";
+
+    mgr.addOrUpdate(sid, { run_id: "active", status: "running", created_at: 1 });
+    for (let i = 0; i < 3; i += 1) {
+      mgr.addOrUpdate(sid, { run_id: `done-${i}`, status: "succeeded", created_at: 100 + i });
+    }
+
+    const page = mgr.listPage(sid, 1);
+    expect(page.runs.map((r) => r.run_id)).toContain("active");
+    expect(page.runs.filter((r) => r.status === "succeeded").length).toBe(1);
+    expect(page.hasMore).toBe(true);
+    mgr.deleteSession(sid);
+  });
+
+  test("超时兜底：过期 running 记录变为 failed/timeout", async () => {
+    const app = await makeApp();
+    await makeSession(app);
+    const { getDeferredRunManager } = await import("../src/routes/deferred-runs");
+    const mgr = getDeferredRunManager();
+    const sid = "sess-timeout";
+
+    mgr.addOrUpdate(sid, { run_id: "r-timeout", status: "running", deadline_at: 1 });
+    const got = mgr.getRun(sid, "r-timeout")!;
+    expect(got.status).toBe("failed");
+    expect(got.error_code).toBe("timeout");
+    mgr.deleteSession(sid);
   });
 });
 

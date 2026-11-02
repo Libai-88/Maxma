@@ -1,5 +1,5 @@
 import { computed, watch, onUnmounted, ref, type Ref } from 'vue'
-import type { ClientMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, CompactionReason,  AskUserEvent, ArtifactEvent, PlanProposedEvent, PlanStepStartEvent, PlanStepEndEvent, PlanStepErrorEvent, PlanCompletedEvent, DeferredSubagentSubmittedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent } from '@/types'
+import type { ClientMessage, TaskBriefMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, CompactionReason,  AskUserEvent, ArtifactEvent, PlanProposedEvent, PlanStepStartEvent, PlanStepEndEvent, PlanStepErrorEvent, PlanCompletedEvent, DeferredSubagentSubmittedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent } from '@/types'
 import type { ThinkPathId } from '@/utils/thinkPath'
 import { normalizeContextUsage, useChatStore, TURNS_KEY_PREFIX } from '@/stores/chat'
 import { useSessionStore } from '@/stores/session'
@@ -18,6 +18,108 @@ import { createLogger } from '@/utils/logger'
 import { userFacingModelError } from '@/utils/modelErrors'
 
 const log = createLogger('chat')
+
+/**
+ * WS-EVENT-SINK-001：浏览器→服务端 WS 帧的**唯一**出口。
+ *
+ * 参数类型是 `ClientMessage`（与后端 `chat-ws.ts` 的 `CLIENT_MESSAGE_TYPES`
+ * 白名单逐一对账，见 `web/tests/wsEventSink.spec.ts`）。此前 10 种消息以无类型
+ * 对象字面量散落在各 send 函数里，字段拼错、type 拼错都不会有任何提示——
+ * 而白名单外的 type 会被后端静默丢弃。走这一个函数后，出站面重新受类型约束。
+ */
+export function sendClientMessage(ws: WebSocket, message: ClientMessage): void {
+  ws.send(JSON.stringify(message))
+}
+
+/** WS-EVENT-SINK-001：未知入站事件类型的告警去重集合（每种类型只警告一次）。 */
+const _warnedUnknownEventTypes = new Set<string>()
+
+/**
+ * WS-EVENT-SINK-001：让未知入站事件**自我宣告**。
+ *
+ * 只写日志：不弹 toast、不改任何通道状态，per-channel 状态机不受影响。
+ * 同一类型只警告一次——流式场景下同一未知类型可能每秒到达数十条，
+ * 逐条打印会淹没 devtools。
+ */
+function warnUnknownInboundEvent(sid: string, inboundType: string, inboundPayload: unknown): void {
+  if (_warnedUnknownEventTypes.has(inboundType)) return
+  _warnedUnknownEventTypes.add(inboundType)
+  log.warn(
+    `未处理的入站事件类型 "${inboundType}"（session=${sid}）：已丢弃。` +
+    `若这是后端真实事件，需在 web/src/types/index.ts 的 ServerEvent 联合、` +
+    `useChat.ts 的 SERVER_EVENT_HANDLER_TYPES 与事件 switch 补登记；` +
+    `若这是上游改名，见 docs/contracts/ws-events.md。`,
+    inboundPayload,
+  )
+}
+
+/**
+ * WS-EVENT-SINK-001：**入站事件必须被处理**的编译期锁。
+ *
+ * 类型是 `Record<ServerEvent['type'], true>`——只要有人往 `ServerEvent` 联合里
+ * 加一个成员而不在这里登记，vue-tsc 就报 "missing property"。登记了却没有真实
+ * 分支的话，`web/tests/wsEventSink.spec.ts` 会拿这份清单和 `useChat.ts` 源码里
+ * 的 `case '…'` / `event.type === '…'` 逐一对账并判红。
+ *
+ * 背景：此前联合里有四个 workflow_* 成员、事件 switch 没有 `default` 分支，
+ * 后端广播它们时前端静默丢弃——类型面宣称接得住，页面照开，UI 永远少一块。
+ */
+export const SERVER_EVENT_HANDLER_TYPES: Record<ServerEvent['type'], true> = {
+  // 基础对话（引擎产出，events.ts 映射）
+  thinking_start: true,
+  thinking_delta: true,
+  thinking_end: true,
+  token: true,
+  tool_start: true,
+  tool_update: true,
+  tool_end: true,
+  tool_error: true,
+  answer: true,
+  done: true,
+  error: true,
+  // 重试 / 运行时通知
+  retry_start: true,
+  retry_end: true,
+  todo_reminder: true,
+  notice: true,
+  irc_message: true,
+  // 审批与心跳
+  ask_user: true,
+  pong: true,
+  // 上下文管理与用量
+  context_usage: true,
+  context_compressing: true,
+  context_compressed: true,
+  // 计划模式
+  plan_proposed: true,
+  plan_step_start: true,
+  plan_step_end: true,
+  plan_step_error: true,
+  plan_completed: true,
+  // 子任务
+  sub_session_created: true,
+  deferred_subagent_submitted: true,
+  // 卡片（后端合成 / 回执）
+  artifact: true,
+  artifact_result: true,
+  // 后台记忆 consumer
+  memory_start: true,
+  memory_tool_start: true,
+  memory_tool_end: true,
+  memory_tool_error: true,
+  memory_done: true,
+  // 目标模式与协作
+  goal_updated: true,
+  collaboration_update: true,
+  task_review_update: true,
+  task_brief_update: true,
+}
+
+/**
+ * 已登记入站类型的查询集合。由 `SERVER_EVENT_HANDLER_TYPES` 的键**派生**，
+ * 不是第二份手写清单——登记了处理器就自动 known，两边不可能漂移。
+ */
+const _knownInboundEventTypes = new Set<string>(Object.keys(SERVER_EVENT_HANDLER_TYPES))
 
 /** GAP-A3-001：轮次完成系统通知——仅窗口后台时弹出（前台应用内 UI 已足够）。
  *  预览剥离 markdown 符号后截断，避免系统通知里出现 `#`/`*` 噪音。 */
@@ -731,7 +833,7 @@ async function connectSession(sid: string) {
           ch.ws.close(4000, 'pong timeout')
           return
         }
-        ch.ws.send(JSON.stringify({ type: 'ping' }))
+        sendClientMessage(ch.ws, { type: 'ping' })
       }
       // 连接后立即发送首次 ping，确保健康检测立即生效
       sendPing()
@@ -930,6 +1032,20 @@ function syncContextUsage(sid: string, ch: SessionChannel, payload: unknown) {
 }
 
 export function handleEventForChannel(sid: string, event: ServerEvent) {
+  // WS-EVENT-SINK-001：未知入站类型必须在**任何**状态判断之前宣告。
+  // 放在通道查找/迟到轮次过滤/currentTurn 守卫之前，是因为后端广播的
+  // workflow_* 一类事件本来就与当前回合无关（parent_turn_id 可为 null），
+  // 若只在 switch 的 default 里告警，无活跃轮次时事件会在更早的 return
+  // 处被吞掉，仍然静默。已登记类型零成本通过（Set.has）。
+  // default 分支里 event 已被收窄成 never（联合成员全部有分支），所以原始
+  // type/payload 必须在 switch 之前取好，兜底日志才有内容可说。
+  const inboundType = String(event.type)
+  const inboundPayload = event.payload
+  if (!_knownInboundEventTypes.has(inboundType)) {
+    warnUnknownInboundEvent(sid, inboundType, inboundPayload)
+    return
+  }
+
   // B4: plan_* / memory_* 事件已由后端 chat.py 直接 emit，sidecar 透传。
   // 前端 handler 已就绪，事件自动激活。context_compressed 经 A3 接通。
   const ch = getChatStore().channels.get(sid)
@@ -1007,6 +1123,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     if (ch.currentTurn) {
       ch.pendingCompaction = undefined
       const reasonLabels: Record<CompactionReason, string> = {
+        manual: '手动压缩',
         threshold: '上下文触达阈值',
         overflow: '上下文溢出',
         idle: '空闲超时',
@@ -1736,7 +1853,15 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       }
       break
     }
-
+    default: {
+      // WS-EVENT-SINK-001：兜底分支。函数入口已按 SERVER_EVENT_HANDLER_TYPES
+      // 拦下未登记类型，这里是第二道防线——入口守卫被改动/未来重构掉时，
+      // 未知事件仍然会自我宣告，而不是静默变成空白 UI。
+      // 类型上 event 在此已是 never（联合成员全部有分支），故用 switch 之前
+      // 捕获的 inboundType/inboundPayload 记录原始内容。
+      warnUnknownInboundEvent(sid, inboundType, inboundPayload)
+      break
+    }
   }
 }
 
@@ -1844,10 +1969,7 @@ export function useChat(sessionId: Ref<string>) {
     activeChannel.value.autoApprove = val
     const ch = activeChannel.value
     if (ch.ws && ch.ws.readyState === WebSocket.OPEN) {
-      ch.ws.send(JSON.stringify({
-        type: 'update_auto_approve',
-        payload: { auto_approve: val }
-      }))
+      sendClientMessage(ch.ws, { type: 'update_auto_approve', payload: { auto_approve: val } })
     }
   }
 
@@ -2062,6 +2184,7 @@ export function useChat(sessionId: Ref<string>) {
     // 回放 currentTurn 为 null 时缓存的 pendingCompaction
     if (ch.pendingCompaction) {
       const reasonLabels: Record<CompactionReason, string> = {
+        manual: '手动压缩',
         threshold: '上下文触达阈值',
         overflow: '上下文溢出',
         idle: '空闲超时',
@@ -2077,7 +2200,7 @@ export function useChat(sessionId: Ref<string>) {
     }
 
     const cs = getChatStore()
-    const payload: ClientMessage = {
+    const msg: ClientMessage = {
       type: 'chat',
       payload: {
         message: flatMsg,
@@ -2097,14 +2220,15 @@ export function useChat(sessionId: Ref<string>) {
         ...(thinkPathId ? { think_path_id: thinkPathId } : {}),
       },
     }
-    ch.ws.send(JSON.stringify(payload))
+    sendClientMessage(ch.ws, msg)
     return true
   }
 
-  function sendTaskBriefMessage(type: 'task_brief_answer' | 'task_brief_execute' | 'task_brief_cancel', payload: Record<string, unknown> = {}): boolean {
+  function sendTaskBriefMessage(msg: TaskBriefMessage): boolean {
     const ch = activeChannel.value
     if (!ch.ws || ch.ws.readyState !== WebSocket.OPEN) return false
-    ch.ws.send(JSON.stringify({ type, payload }))
+    sendClientMessage(ch.ws, msg)
+    const type = msg.type
     if (type === 'task_brief_answer' && ch.taskBrief) ch.taskBrief = { ...ch.taskBrief, status: 'thinking' }
     if (type === 'task_brief_execute' && ch.taskBrief) {
       ch.taskBrief = { ...ch.taskBrief, status: 'thinking' }
@@ -2129,20 +2253,27 @@ export function useChat(sessionId: Ref<string>) {
   }
 
   function answerTaskBrief(answer: string): boolean {
-    return sendTaskBriefMessage('task_brief_answer', { answer })
+    return sendTaskBriefMessage({ type: 'task_brief_answer', payload: { answer } })
   }
   function executeTaskBrief(executionPrompt?: string, useOriginal = false): boolean {
-    return sendTaskBriefMessage('task_brief_execute', { execution_prompt: executionPrompt, use_original: useOriginal })
+    return sendTaskBriefMessage({
+      type: 'task_brief_execute',
+      payload: { execution_prompt: executionPrompt, use_original: useOriginal },
+    })
   }
   function cancelTaskBrief(): boolean {
-    return sendTaskBriefMessage('task_brief_cancel')
+    return sendTaskBriefMessage({ type: 'task_brief_cancel' })
   }
 
   function sendCollaborationMessage(mode: 'steer' | 'follow_up', message: string): boolean {
     const ch = activeChannel.value
     const text = message.trim().slice(0, 4000)
     if (!text || !ch.ws || ch.ws.readyState !== WebSocket.OPEN || !ch.isStreaming) return false
-    ch.ws.send(JSON.stringify({ type: mode, payload: { message: text } }))
+    // mode 是判别式联合，必须分支后才能让 TS 认定具体成员
+    const msg: ClientMessage = mode === 'steer'
+      ? { type: 'steer', payload: { message: text } }
+      : { type: 'follow_up', payload: { message: text } }
+    sendClientMessage(ch.ws, msg)
     return true
   }
 
@@ -2151,7 +2282,7 @@ export function useChat(sessionId: Ref<string>) {
     const review = ch.taskReview
     if (!review || !ch.ws || ch.ws.readyState !== WebSocket.OPEN) return false
     if (action === 'revise' && !feedback.trim()) return false
-    ch.ws.send(JSON.stringify({ type: 'task_review', payload: { action, feedback: feedback.trim().slice(0, 4000) } }))
+    sendClientMessage(ch.ws, { type: 'task_review', payload: { action, feedback: feedback.trim().slice(0, 4000) } })
     if (action === 'accept') ch.taskReview = null
     return true
   }
@@ -2163,8 +2294,7 @@ export function useChat(sessionId: Ref<string>) {
       // 供调用方提示（此前按钮无任何反应，agent 继续运行）
       return false
     }
-    const payload: ClientMessage = { type: 'cancel', payload: {} }
-    ch.ws.send(JSON.stringify(payload))
+    sendClientMessage(ch.ws, { type: 'cancel', payload: {} })
     return true
   }
 
@@ -2177,22 +2307,22 @@ export function useChat(sessionId: Ref<string>) {
       log.warn(`sendUserResponse 失败：WS 未就绪 (interaction=${interactionId})`)
       return false
     }
-    const payload: ClientMessage = {
+    const msg: ClientMessage = {
       type: 'user_response',
       payload: { interaction_id: interactionId, response },
     }
-    ch.ws.send(JSON.stringify(payload))
+    sendClientMessage(ch.ws, msg)
     return true
   }
 
   function sendArtifactAction(artifactId: string, actionId: string, token: string): boolean {
     const ch = activeChannel.value
     if (!ch.ws || ch.ws.readyState !== WebSocket.OPEN) return false
-    const payload: ClientMessage = {
+    const msg: ClientMessage = {
       type: 'artifact_action',
       payload: { artifact_id: artifactId, action_id: actionId, token },
     }
-    ch.ws.send(JSON.stringify(payload))
+    sendClientMessage(ch.ws, msg)
     return true
   }
 
@@ -2208,14 +2338,15 @@ export function useChat(sessionId: Ref<string>) {
     if (currentTurn?.planCard && currentTurn.planCard.planId === planId) {
       currentTurn.planCard.status = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'modified'
     }
-    const msg: Record<string, unknown> = {
+    const msg: ClientMessage = {
       type: 'plan_response',
-      payload: { plan_id: planId, action },
+      payload: {
+        plan_id: planId,
+        action,
+        ...(modifiedPlan ? { modified_plan: modifiedPlan } : {}),
+      },
     }
-    if (modifiedPlan) {
-      (msg.payload as Record<string, unknown>).modified_plan = modifiedPlan
-    }
-    ch.ws.send(JSON.stringify(msg))
+    sendClientMessage(ch.ws, msg)
     return true
   }
 
@@ -2227,10 +2358,7 @@ export function useChat(sessionId: Ref<string>) {
       log.warn(`sendPlanMode 失败：WS 未就绪 (enabled=${enabled})`)
       return false
     }
-    ch.ws.send(JSON.stringify({
-      type: 'set_plan_mode',
-      payload: { enabled },
-    }))
+    sendClientMessage(ch.ws, { type: 'set_plan_mode', payload: { enabled } })
     return true
   }
 
@@ -2242,9 +2370,11 @@ export function useChat(sessionId: Ref<string>) {
       log.warn(`sendCheckpointAction 失败：WS 未就绪 (action=${action})`)
       return false
     }
-    const payload: Record<string, unknown> = { action }
-    if (goal) payload.goal = goal
-    ch.ws.send(JSON.stringify({ type: 'checkpoint_action', payload }))
+    const msg: ClientMessage = {
+      type: 'checkpoint_action',
+      payload: { action, ...(goal ? { goal } : {}) },
+    }
+    sendClientMessage(ch.ws, msg)
     return true
   }
 
@@ -2256,10 +2386,15 @@ export function useChat(sessionId: Ref<string>) {
       log.warn(`sendGoalAction 失败：WS 未就绪 (action=${action})`)
       return false
     }
-    const payload: Record<string, unknown> = { action }
-    if (objective) payload.objective = objective
-    if (tokenBudget !== undefined && Number.isFinite(tokenBudget)) payload.token_budget = tokenBudget
-    ch.ws.send(JSON.stringify({ type: 'goal_action', payload }))
+    const msg: ClientMessage = {
+      type: 'goal_action',
+      payload: {
+        action,
+        ...(objective ? { objective } : {}),
+        ...(tokenBudget !== undefined && Number.isFinite(tokenBudget) ? { token_budget: tokenBudget } : {}),
+      },
+    }
+    sendClientMessage(ch.ws, msg)
     return true
   }
 

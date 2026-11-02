@@ -29,7 +29,8 @@
 
 ### 1.2 Scope（选填）
 
-用英文小写表示影响范围，如：`agent`、`callbacks`、`clients`、`config`、`api` 等。
+英文小写，取实际模块名：`backend`、`sidecar`、`engine`、`zen`、`persona`、`desktop`、
+`build`、`ui`、`web`、`tests`、`docs`。
 
 ### 1.3 Subject（必填）
 
@@ -51,29 +52,33 @@
 ### 1.6 示例
 
 ```
-feat(agent): 添加多轮对话支持
+feat(engine): 接入会话级目标模式
 
 Closes #42
 ```
 
 ```
-fix(callbacks): 修复重连时回调未触发的 bug
+fix(zen): 免费渠道全部候选失败时回放终态帧
 
-ZMQ socket 重连时的竞态条件导致回调被丢弃。添加了回调队列和刷新逻辑。
+此前丢弃所有帧后直接结束流，前端只收到握手帧然后卡到超时，
+零报错、无从判断原因。
 
 Refs #58
 ```
 
 ```
-chore: 从 setup.py 迁移到 pyproject.toml
+chore(build): 把 bun-backend/bun.lock 收编入库
 ```
 
 ```
-refactor(config)!: 使用 pydantic 重新设计配置加载
+refactor(settings)!: 设置键改为从登记表取全集
 
-BREAKING CHANGE: Config 现在通过 ConfigurationManager 加载，
-而非直接字典访问。
+BREAKING CHANGE: consumer="none" 的键 PUT 返回 409，
+不再静默接受。
 ```
+
+> 本仓**没有** commit-msg 钩子或 conventional-commit lint，规范靠人遵守；
+> 闸门脚本只查 lint、类型债、硬编码色与测试。
 
 ---
 
@@ -81,18 +86,18 @@ BREAKING CHANGE: Config 现在通过 ConfigurationManager 加载，
 
 ### 2.1 分支类型前缀
 
-| 前缀            | 用途                       | 示例                              |
-| --------------- | -------------------------- | --------------------------------- |
-| `feat/`         | 新功能开发                 | `feat/multi-agent`                |
-| `fix/`          | Bug 修复                   | `fix/zmq-reconnect-crash`         |
-| `hotfix/`       | 生产环境紧急修复           | `hotfix/api-auth-bypass`          |
-| `refactor/`     | 重构                       | `refactor/session-manager`        |
-| `perf/`         | 性能优化                   | `perf/reduce-memory-usage`        |
-| `docs/`         | 文档                       | `docs/api-reference`              |
-| `chore/`        | 杂项（依赖、工具等）       | `chore/update-zmq-binding`        |
-| `test/`         | 测试                       | `test/integration-coverage`       |
-| `exp/`          | 实验性分支（可能不合并）   | `exp/new-protocol`                |
-| `release/`      | 发布分支                   | `release/v1.2.0`                  |
+| 前缀        | 用途                     | 示例                        |
+| ----------- | ------------------------ | --------------------------- |
+| `feat/`     | 新功能开发               | `feat/jet-hub-plugin`       |
+| `fix/`      | Bug 修复                 | `fix/bridge-contract`       |
+| `hotfix/`   | 生产环境紧急修复         | `hotfix/auth-token-leak`    |
+| `refactor/` | 重构                     | `refactor/session-manager`  |
+| `perf/`     | 性能优化                 | `perf/ws-backpressure`      |
+| `docs/`     | 文档                     | `docs/security-contract`    |
+| `chore/`    | 杂项（依赖、工具等）     | `chore/pin-engine-deps`     |
+| `test/`     | 测试                     | `test/engine-boundary`      |
+| `exp/`      | 实验性分支（可能不合并） | `exp/kep`                   |
+| `release/`  | 发布分支                 | `release/v2.7.0`            |
 
 ### 2.2 命名规则
 
@@ -103,11 +108,11 @@ BREAKING CHANGE: Config 现在通过 ConfigurationManager 加载，
 ### 2.3 示例
 
 ```
-feat/audio-streaming
-fix/callback-memory-leak
-hotfix/login-crash
-refactor/config-manager
-release/v1.0.0
+feat/jet-hub-plugin
+fix/persona-first-run-404
+test/engine-boundary
+chore/pin-engine-deps
+release/v2.6.11
 ```
 
 ---
@@ -126,10 +131,11 @@ main
 
 ### 3.1 基本规则
 
-1. `main` 分支始终保持可发布状态
-2. 所有变更通过分支开发，合并进 `main`
-3. 合并前先 rebase 到最新的 `main`（保持历史线性）
-4. 合并时使用 `--no-ff`（保留分支痕迹）或 squash merge（按需）
+1. `main` 始终保持可发布状态
+2. 所有变更走分支 + PR 合并进 `main`
+3. 合并前先 rebase 到最新 `main`（保持历史线性）
+4. 合并用 `gh pr merge --squash --delete-branch`（本仓实际流程，见
+   `scripts/git-pr-flow.sh`）；长期试验分支不加 `--delete-branch`
 5. 发布时在 `main` 上打 tag：`v<major>.<minor>.<patch>`
 
 ### 3.2 Tag 规范

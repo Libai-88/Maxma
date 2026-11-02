@@ -11,6 +11,8 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import type { ServerWebSocket } from "bun";
+import type { ChatWsHub, WsData } from "../src/routes/chat-ws";
 
 let dataDir = "";
 let prevDataDir: string | undefined;
@@ -32,9 +34,16 @@ async function makeSession(): Promise<{
   sid: string;
   sessions: Map<string, Record<string, unknown>>;
   sent: Array<Record<string, unknown>>;
-  ws: never;
-  conns: Map<string, Set<never>>;
+  /** mock 的 ServerWebSocket（测试内只用到 send/data，不必实现全部方法）。 */
+  ws: ServerWebSocket<WsData>;
+  conns: Map<string, Set<ServerWebSocket<WsData>>>;
   seenIds: Map<string, string[]>;
+  /**
+   * 真实构造的 hub，供 handleChatMessage 直调。
+   * 此前这个返回类型**漏了 hub**，于是 9 处 `const { hub } = await makeSession()`
+   * 全报 TS2339/T2353——测试一直能跑，只是类型声明与实现不符（又一次"运行时靠巧合"）。
+   */
+  hub: ChatWsHub;
 }> {
   const kernel = await import("../../bun-sidecar/src/kernel/bridge-pi");
   const chatws = await import("../src/routes/chat-ws");
@@ -57,15 +66,37 @@ async function makeSession(): Promise<{
   };
   await kernel.handlePiCreateSession({ io, sessions, pendingPlans }, { cwd: process.cwd() }, 0);
   const sid = [...sessions.keys()][0]!;
-  const ws = { data: { sessionId: sid }, send: (d: string) => sent.push(JSON.parse(d)) } as never;
-  chatws.registerChatConnection(
-    { sessions, pendingPlans, connections: conns, seenClientMsgIds: seenIds, callRpc, broadcast: io.sendEvent } as never,
-    sid,
-    ws,
-  );
+  // mock 的 ServerWebSocket：只用 data 与 send 两个成员，其余按需给最小实现。
+  // 此前写成 `as never`，结果 ws 的类型是 `never`，第 198 行 `w.send(...)` 报
+  // TS2339（Property 'send' does not exist on type 'never'）——
+  // "用 never 绕类型检查"的代价就是之后连合法成员都访问不了。
+  const ws = {
+    data: { sessionId: sid },
+    send: (d: string) => sent.push(JSON.parse(d)),
+    close: () => {},
+  } as unknown as ServerWebSocket<WsData>;
+  const hub: ChatWsHub = {
+    sessions: sessions as ChatWsHub["sessions"],
+    pendingPlans: pendingPlans as ChatWsHub["pendingPlans"],
+    connections: conns as ChatWsHub["connections"],
+    seenClientMsgIds: seenIds,
+    callRpc: async (method, params) => {
+      callRpc(method, params);
+      return { ok: true, result: null };
+    },
+    broadcast: (targetSid, event) => io.sendEvent(targetSid, event as Record<string, unknown>),
+  };
+  chatws.registerChatConnection(hub, sid, ws);
   conns.set(sid, new Set([ws]));
-  const hub = { sessions, pendingPlans, connections: conns, seenClientMsgIds: seenIds, callRpc, broadcast: io.sendEvent };
-  return { sid, hub, sent, ws };
+  return {
+    sid,
+    sessions: sessions as Map<string, Record<string, unknown>>,
+    sent,
+    ws,
+    conns: conns as Map<string, Set<ServerWebSocket<WsData>>>,
+    seenIds,
+    hub,
+  };
 }
 
 describe("chat WS（阶段 2.3）", () => {
@@ -107,7 +138,13 @@ describe("chat WS（阶段 2.3）", () => {
     const kernel = await import("../../bun-sidecar/src/kernel/bridge-pi");
     const { sid, hub, ws, sent } = await makeSession();
     const record = hub.sessions.get(sid) as { currentGuard: unknown };
-    record.currentGuard = kernel.createDoneGuardStub ? kernel.createDoneGuardStub() : {};
+    // BUSY 判据是 `record.currentGuard` 真值（chat-ws.ts 的 `if (record?.currentGuard …)`），
+    // 不需要一个"真正的" DoneGuard——只要非空即代表"本回合进行中"。
+    // 旧写法是 `kernel.createDoneGuardStub ? kernel.createDoneGuardStub() : {}`，
+    // 而 **createDoneGuardStub 从来没有被导出过**（kernel 里搜不到），
+    // 也就是这个三元恒走 `{}` 分支：测试一直是对的，但形状上在调用一个不存在的 API。
+    // 直接给最小真值对象，并保留 PiDoneGuard 的形状（done: false）以免误导。
+    record.currentGuard = { done: false };
 
     handleChatMessage(hub, ws, JSON.stringify({ type: "chat", payload: { message: "再来一条" } }));
     const errors = sent.filter((f) => f.type === "error");
@@ -178,17 +215,33 @@ describe("chat WS（阶段 2.3）", () => {
     await kernel.handlePiCreateSession({ io, sessions, pendingPlans: new Map() }, { cwd: process.cwd() }, 0);
     const sid = [...sessions.keys()][0]!;
 
-    const conns = new Map<string, Set<never>>();
+    // 与 makeSession 同一处理：connections 用真实元素类型（ServerWebSocket<WsData>），
+    // 不写 `Set<never>`——否则下面 `w.send(...)` 整段是 never 上的属性访问。
+    const conns = new Map<string, Set<ServerWebSocket<WsData>>>();
     const mk = () => {
       const sent: Array<Record<string, unknown>> = [];
-      const ws = { data: { sessionId: sid }, send: (d: string) => sent.push(JSON.parse(d)) } as never;
+      const ws = {
+        data: { sessionId: sid },
+        send: (d: string) => sent.push(JSON.parse(d)),
+        close: () => {},
+      } as unknown as ServerWebSocket<WsData>;
       return { ws, sent };
     };
     const w1 = mk();
     const w2 = mk();
-    const hub = { sessions, pendingPlans: new Map(), connections: conns, seenClientMsgIds: new Map(), callRpc: async () => ({ ok: true as const, result: null }), broadcast: (s: string, e: Record<string, unknown>) => { const set = conns.get(s); if (set) for (const w of set) w.send(JSON.stringify(e)); } };
-    chatws.registerChatConnection(hub as never, sid, w1.ws);
-    chatws.registerChatConnection(hub as never, sid, w2.ws);
+    const hub: ChatWsHub = {
+      sessions: sessions as ChatWsHub["sessions"],
+      pendingPlans: new Map() as ChatWsHub["pendingPlans"],
+      connections: conns,
+      seenClientMsgIds: new Map(),
+      callRpc: async () => ({ ok: true, result: null }),
+      broadcast: (s, e) => {
+        const set = conns.get(s);
+        if (set) for (const w of set) w.send(JSON.stringify(e));
+      },
+    };
+    chatws.registerChatConnection(hub, sid, w1.ws);
+    chatws.registerChatConnection(hub, sid, w2.ws);
     expect(conns.get(sid)!.size).toBe(2);
 
     hub.broadcast(sid, { type: "notice", payload: { message: "广播测试" } });

@@ -346,10 +346,13 @@ export const useChatStore = defineStore('chat', () => {
     'space-bunny-free': 'Space Bunny',
   }
 
-  async function fetchAvailableModels() {
+  async function fetchAvailableModels(options?: { force?: boolean }) {
     // PERF-MODELS-DEDUP-001：多组件（ChatView/ModelSelector/ProvidersView）
-    // 并发调用时复用同一在途请求，避免重复拉取 provider 列表
-    if (_modelsFetching) return _modelsFetching
+    // 并发调用时复用同一在途请求，避免重复拉取 provider 列表。
+    // force（Jet Hub 登录/删账号后联动刷新）不等复用：先等在途请求落地再重拉，
+    // 否则登录完成时会拿到「登录前」的旧清单，等于没刷。
+    if (_modelsFetching && !options?.force) return _modelsFetching
+    if (_modelsFetching && options?.force) await _modelsFetching.catch(() => {})
     _modelsFetching = (async () => {
       try {
         const data = await api.listProviders()
@@ -377,6 +380,36 @@ export const useChatStore = defineStore('chat', () => {
             }
           }
         }
+
+        // 插件渠道（Jet Hub 等）：它们**不在 providers.yaml 里**，凭据与端点在插件自己的
+        // 适配器内，所以要从插件端点单独取。不做这一步的话，插件模型在 pi 侧能解析、
+        // 在模型选择器里却根本选不到 —— 融合链路等于断在最后一步。
+        // 取不到（插件停用/未启动）时静默跳过，不影响 Maxma 自身的模型。
+        try {
+          const pluginModels = await api.listPluginModels('codearts-auth')
+          for (const p of Array.isArray(pluginModels?.providers) ? pluginModels.providers : []) {
+            for (const m of Array.isArray(p.models) ? p.models : []) {
+              // ⚠️ name 必须放模型 **id**（发往 chat-ws 的 model_name，插件按 id 解析）；
+              // 展示名放 displayName。真机踩过：把展示名（如「Hy4 preview · x0.29→免费」）
+              // 当 name 发出去 → 插件按 id 找不到模型 → 一条对话都发不出去
+              //（且 finish.failure 明细被丢弃时界面只剩 Unknown agent error）。
+              // pi-providers 注册模型时 id 也按 m.id 对齐，两处不能各写各的。
+              const displayName = m.name && m.name !== m.id ? m.name : undefined
+              models.push({
+                id: `${p.id}/${m.id}`,
+                provider: p.id,
+                providerLabel: p.name || p.id,
+                name: m.id,
+                ...(displayName ? { displayName } : {}),
+                contextWindow: 128000,
+                source: 'plugin',
+              })
+            }
+          }
+        } catch {
+          /* 插件不可用时不影响 Maxma 自身模型列表 */
+        }
+
         availableModels.value = models
       } catch { /* Use defaults */ }
       finally { _modelsFetching = null }

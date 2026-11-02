@@ -125,12 +125,12 @@ function lineText(line: string): string {
 
 .stat.additions {
 	  background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card));
-	  color: var(--status-ok);
+	  color: var(--status-ok-text);
 	}
 
 	.stat.deletions {
 	  background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
-	  color: var(--status-error);
+	  color: var(--status-error-text);
 	}
 
 .diff-file {
@@ -172,18 +172,18 @@ function lineText(line: string): string {
 
 	.diff-line.hunk-header {
 	  background: color-mix(in srgb, var(--status-info) 12%, var(--bg-card));
-	  color: var(--status-info);
+	  color: var(--status-info-text);
 	  padding: 2px 10px;
 	}
 
 	.diff-line.addition {
 	  background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card));
-	  color: var(--status-ok);
+	  color: var(--status-ok-text);
 	}
 
 	.diff-line.deletion {
 	  background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card));
-	  color: var(--status-error);
+	  color: var(--status-error-text);
 	}
 
 .diff-line.context {

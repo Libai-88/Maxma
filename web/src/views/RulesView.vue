@@ -300,7 +300,7 @@ function severityLabel(sev: string): string {
 .header h2 { font-size: var(--fs-display-lg); font-weight: 600; font-family: var(--font-display); letter-spacing: -0.01em; margin: 0; }
 .header-sub { font-size: 0.82em; color: var(--text-tertiary); margin: 4px 0 0; }
 .loading { text-align: center; padding: 40px; color: var(--text-tertiary); }
-.error-banner { padding: 10px 12px; background: color-mix(in srgb, var(--status-error) 10%, transparent); color: var(--status-error); border-radius: 6px; font-size: 0.85em; margin-bottom: 12px; }
+.error-banner { padding: 10px 12px; background: color-mix(in srgb, var(--status-error) 10%, transparent); color: var(--status-error-text); border-radius: 6px; font-size: 0.85em; margin-bottom: 12px; }
 
 .btn-create {
   padding: 8px 16px; background: var(--accent); color: white; border: none;
@@ -327,13 +327,13 @@ function severityLabel(sev: string): string {
 .rule-card.disabled { opacity: 0.5; }
 .rule-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .rule-severity { font-size: 0.7em; padding: 2px 8px; border-radius: 4px; font-weight: 500; }
-.sev-error { background: color-mix(in srgb, var(--status-error) 10%, transparent); color: var(--status-error); }
-.sev-warning { background: color-mix(in srgb, var(--status-warn) 10%, transparent); color: var(--status-warn); }
-.sev-info { background: color-mix(in srgb, var(--status-info) 10%, transparent); color: var(--status-info); }
+.sev-error { background: color-mix(in srgb, var(--status-error) 10%, transparent); color: var(--status-error-text); }
+.sev-warning { background: color-mix(in srgb, var(--status-warn) 10%, transparent); color: var(--status-warn-text); }
+.sev-info { background: color-mix(in srgb, var(--status-info) 10%, transparent); color: var(--status-info-text); }
 .rule-name { font-weight: 600; font-size: 0.9em; color: var(--text-primary); flex: 1; }
 .rule-source-badge {
   font-size: 0.65em; padding: 2px 6px; border-radius: 4px;
-  background: color-mix(in srgb, var(--status-ok) 10%, transparent); color: var(--status-ok); font-weight: 500;
+  background: color-mix(in srgb, var(--status-ok) 10%, transparent); color: var(--status-ok-text); font-weight: 500;
 }
 .rule-lang { font-size: 0.72em; padding: 2px 6px; border-radius: 4px; background: var(--bg-secondary); color: var(--text-tertiary); }
 .rule-desc { font-size: 0.82em; color: var(--text-secondary); line-height: 1.5; }
@@ -361,7 +361,7 @@ function severityLabel(sev: string): string {
   color: var(--text-secondary); cursor: pointer; transition: all 0.15s;
 }
 .action-btn.edit:hover { border-color: var(--accent); color: var(--accent); }
-.action-btn.delete:hover { border-color: var(--status-error); color: var(--status-error); }
+.action-btn.delete:hover { border-color: var(--status-error); color: var(--status-error-text); }
 
 /* Dialog */
 .dialog-overlay {
@@ -385,7 +385,7 @@ function severityLabel(sev: string): string {
 .form-row .form-group { flex: 1; }
 .checkbox-group label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .checkbox-group input[type="checkbox"] { width: auto; }
-.dialog-error { padding: 8px 10px; background: color-mix(in srgb, var(--status-error) 10%, transparent); color: var(--status-error); border-radius: 6px; font-size: 0.8em; margin-bottom: 12px; }
+.dialog-error { padding: 8px 10px; background: color-mix(in srgb, var(--status-error) 10%, transparent); color: var(--status-error-text); border-radius: 6px; font-size: 0.8em; margin-bottom: 12px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 .btn-cancel {
   padding: 8px 16px; border: 1px solid var(--border); border-radius: 6px;

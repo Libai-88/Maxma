@@ -968,7 +968,7 @@ function handleQuickStart(message: string) {
   width: 100%;
   height: 100%;
 }
-.no-provider-icon--warn { color: var(--status-warn); }
+.no-provider-icon--warn { color: var(--status-warn-text); }
 .no-provider-icon--gear { color: var(--text-tertiary); }
 .no-provider-card h3 {
   font-size: 1.2em;
@@ -1360,7 +1360,7 @@ function handleQuickStart(message: string) {
 .task-brief-risk { color: var(--brief-muted); font-size: 12px; white-space: nowrap; }
 .task-brief-readiness.risk-high { border-color: color-mix(in srgb, var(--status-error) 42%, var(--brief-line)); background: color-mix(in srgb, var(--status-error) 8%, var(--brief-surface)); }
 .task-brief-readiness.risk-high .task-brief-readiness-track span { background: var(--status-error); }
-.task-brief-readiness.risk-high .task-brief-risk { color: var(--status-error); }
+.task-brief-readiness.risk-high .task-brief-risk { color: var(--status-error-text); }
 .task-brief-missing, .task-brief-assumptions { display: grid; gap: 5px; padding: 10px 13px; border: 1px solid color-mix(in srgb, var(--status-warn) 32%, var(--brief-line)); border-radius: 9px; background: color-mix(in srgb, var(--status-warn) 10%, var(--brief-surface)); color: var(--brief-ink); font-size: 12px; line-height: 1.5; }
 .task-brief-missing strong, .task-brief-assumptions strong { font-size: 13px; }
 .task-brief-missing span, .task-brief-assumptions span { display: block; }

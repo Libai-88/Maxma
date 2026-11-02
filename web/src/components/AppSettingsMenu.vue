@@ -16,7 +16,7 @@
   <AnimatedModal v-model:open="showSettingsMenu">
     <AnimatedModalBody :lock-scroll="true" :show-close="false" @close="closeSettingsMenu">
       <SettingsModalContent
-        :items="settingsItems"
+        :items="visibleSettingsItems"
         :restarting="restarting"
         :exporting="exportingErrorLog"
         :managing="managingLogs"
@@ -37,14 +37,14 @@ import type { SettingsItem } from '@/components/SettingsModalContent.vue';
 import AnimatedModal from '@/components/inspira/AnimatedModal.vue';
 import AnimatedModalBody from '@/components/inspira/AnimatedModalBody.vue';
 import { api } from '@/api';
-import { invoke } from '@tauri-apps/api/core';
-import { onUnmounted, ref } from 'vue';
+import { computed, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useSessionStore } from '@/stores/session';
 import { useChatStore } from '@/stores/chat';
 import { invalidateTurnsCache } from '@/composables/useChat';
-import { confirmAction } from '@/composables/useConfirm';
+import { useCapabilitiesStore } from '@/stores/capabilities';
 import { showError, showSuccess } from '@/lib/toast';
+import { confirmAction } from '@/composables/useConfirm';
 
 const props = withDefaults(defineProps<{
   compact?: boolean
@@ -67,22 +67,32 @@ const managingLogs = ref(false)
 
 const sessionStore = useSessionStore()
 const chatStore = useChatStore()
+const capabilitiesStore = useCapabilitiesStore()
 
 // ── 设置页面列表 ──
 
+// feature 与 router 的 meta.feature / Dock 的 NavItem.feature 同名：
+// 能力关闭时这里就不渲染入口。此前 插件 / 质量规则 无条件渲染，
+// 用户点进去被路由守卫踢到「功能不可用」页——菜单在骗人。
 const settingsItems: SettingsItem[] = [
   { icon: 'dashboard', title: '能力清单', subtitle: '查看 Agent 的能力、工具与运行配置', route: '/capabilities' },
-  { icon: 'extensions', title: '插件', subtitle: '管理 MCP 服务并查看已发现的 Skills', route: '/extensions' },
-  { icon: 'settings', title: '运行设置', subtitle: '配置上下文压缩、重试与工具审批', route: '/settings' },
+  { icon: 'extensions', title: '扩展', subtitle: '管理 MCP 服务并查看已发现的 Skills', route: '/extensions' },
+  { icon: 'puzzle', title: '插件', subtitle: '启用与配置随 Maxma 分发的插件', route: '/plugins', feature: 'plugins' },
+  { icon: 'settings', title: '运行设置', subtitle: '配置上下文压缩、重试与思考预算', route: '/settings' },
   { icon: 'soul', title: '人设', subtitle: '设定 AI 助手的角色与对话风格', route: '/soul' },
   { icon: 'user', title: '用户', subtitle: '管理用户账户与偏好设置', route: '/user' },
   { icon: 'blocker', title: '拒止锚', subtitle: '在敏感目录强制阻断 AI 文件访问', route: '/maxma-blocker' },
   { icon: 'privacy', title: '隐私仪表盘', subtitle: '查看与控制数据收集与隐私设置', route: '/privacy' },
   { icon: 'appearance', title: '外观', subtitle: '自定义主题颜色与界面布局', route: '/appearance' },
   { icon: 'help', title: '帮助', subtitle: '了解 Maxma 能力、快速上手与常见问题', route: '/help' },
-  { icon: 'ruler', title: '质量规则', subtitle: 'AI 编码规范与质量约束', route: '/rules' },
+  { icon: 'ruler', title: '质量规则', subtitle: 'AI 编码规范与质量约束', route: '/rules', feature: 'rules' },
   { icon: 'activity', title: '资讯', subtitle: '查看最新动态与公告', route: '/news' },
 ]
+
+// 与 Dock.vue 的 visibleNavItems 完全同构的过滤（清单未加载时乐观放行）
+const visibleSettingsItems = computed(() =>
+  settingsItems.filter(item => !item.feature || capabilitiesStore.isFeatureEnabled(item.feature)),
+)
 
 // ── 操作函数 ──
 
@@ -118,6 +128,10 @@ async function handleClearSession() {
   closeSettingsMenu()
 }
 
+// TAURI-RESIDUE-001：此前这里调 invoke('save_text_file')——Tauri 已在阶段二
+// 整体移除，Electron 包里这句必然 reject，用户只看到「导出错误日志失败: …」
+// 且没有任何兜底。改为浏览器下载（Blob + createObjectURL + <a download> +
+// revoke），沿用仓内既有写法（JetHubView 的备份导出），不另造机制。
 async function handleExportErrorLog() {
   if (exportingErrorLog.value) return
   exportingErrorLog.value = true
@@ -126,13 +140,16 @@ async function handleExportErrorLog() {
     const text = await api.getErrorLogText()
     const ts = new Date().toISOString().replace(/[:T]/g, '-').substring(0, 19)
     const filename = `maxma-error-report-${ts}.txt`
-    const result = await invoke<string | null>('save_text_file', {
-      content: text,
-      defaultFilename: filename,
-    })
-    if (result) {
-      showSuccess(`错误日志已保存到:\n${result}`)
-    }
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = filename
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
+    showSuccess(`错误日志已导出为 ${filename}`)
   } catch (e) {
     showError('导出错误日志失败: ' + (e instanceof Error ? e.message : String(e)))
   } finally {

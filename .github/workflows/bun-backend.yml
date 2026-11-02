@@ -27,3 +27,12 @@ jobs:
       - name: Run Bun backend tests
         working-directory: bun-backend
         run: bun test
+
+      # 类型债棘轮。此前**没有任何 workflow 跑 tsc**，于是引擎边界的编译期
+      # 断言长期缺失：kernel/types.ts 从 pi-coding-agent import 了它并不导出的
+      # `Model`（纯类型 import 被擦除，运行时与测试都察觉不到），红了数周无人知。
+      # 两侧基线现已**清零**（2026-10-27）：原有 86 个历史错误全部修完，
+      # 所以这条不再是"容忍存量"，而是与 sidecar 同等的硬门槛——
+      # 任何新增类型错误当场红。详见 scripts/check-type-budget.mjs 头注释。
+      - name: Type-debt ratchet (tsc, baseline 0/0)
+        run: node scripts/check-type-budget.mjs

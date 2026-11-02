@@ -103,12 +103,26 @@ const router = createRouter({
       meta: { transition: 'slide', title: '设置' },
     },
     {
+      // PLUGIN-001：插件管理（真实路由，取代此前的 redirect 死代码）。
+      // meta.feature 走能力清单的 features.plugins 开关；禁用时守卫会重定向到
+      // FeatureUnavailableView，而不是让用户看到一个空壳页面。
       path: '/plugins',
-      redirect: '/extensions',
+      name: 'plugins',
+      component: () => import('@/views/PluginListView.vue'),
+      meta: { transition: 'rise', title: '插件', feature: 'plugins' },
     },
     {
       path: '/plugins/:name',
-      redirect: '/extensions',
+      name: 'plugin-detail',
+      component: () => import('@/views/PluginDetailView.vue'),
+      meta: { transition: 'slide', title: '插件详情', feature: 'plugins' },
+    },
+    {
+      // 插件自带的独立管理界面（Jet Hub）：挂在插件详情之下，同受 plugins 能力守卫。
+      path: '/plugins/:name/jet-hub',
+      name: 'plugin-jet-hub',
+      component: () => import('@/views/JetHubView.vue'),
+      meta: { transition: 'slide', title: 'Jet Hub', feature: 'plugins' },
     },
     {
       path: '/extensions',
@@ -155,6 +169,19 @@ const router = createRouter({
       name: 'automation',
       component: () => import('@/views/AutomationView.vue'),
       meta: { transition: 'rise', title: '自动化', feature: 'automation' },
+    },
+    {
+      path: '/agent-tasks',
+      name: 'agent-tasks',
+      component: () => import('@/views/AgentTasksView.vue'),
+      // 能力守卫：当前 pi 引擎无子任务运行时，后端 features.sub_agents.enabled=false，
+      // 直接输入 URL / 硬刷新也会落到「功能不可用」页，而不是一个永远为空的列表。
+      meta: { transition: 'flip', title: 'Agent 任务', feature: 'sub_agents' },
+    },
+    {
+      // 旧路径保留重定向，避免上一个版本的书签/外链落到 404。
+      path: '/agent-demo',
+      redirect: { name: 'agent-tasks' },
     },
     {
       path: '/feature-unavailable',
