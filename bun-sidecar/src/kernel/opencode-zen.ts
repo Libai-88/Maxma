@@ -47,9 +47,15 @@ export const FREE_LANE_PRIMARY_MODEL_ID = "mimo-v2.6-flash-free";
  * ⚠️ 排除项与理由（**别顺手加回来**）：
  *   - `beam-free` / `flint-40b-free` / `jev-1.13-free`：目录里有，但**上游未标为已验证**；
  *     `beam-free` 另有实测 `403 RegionError`（地区封锁，与额度无关）。
+ *     （flint-40b-free 在 2026-11-08 实测为 429 限流——模型存在、身份被接受，
+ *     是否真可用**无法判定**，维持不放行。）
+ *   - `crouton-alpha-free`：2026-11-08 实测 `403 This model is not available in your
+ *     country`（地区封锁，与 beam-free 同款）。
  *   - `big-pickle` / `space-bunny-free` / `longcat-2.5-preview-free` /
  *     `nemotron-3-ultra-free`：上游表里有，但**当前目录已不再提供**。
  *     其中 `space-bunny-free` 正是上一轮被当作兜底目标、导致"必然失败"的那一个。
+ *   - `iceman-free` / `inkling-2-small-free`：2026-11-08 实测 429——模型存在但
+ *     **无法判定可用性**，与上面 429 待测项同性质，不凭猜测放行。
  *
  * ⚠️ 兜底仍然是"尽力而为"：这几个模型当前也可能因额度（429）而失败，
  * 与主模型一样受上游限流影响。它的价值是**换一条通道**，不是保证成功。
@@ -71,6 +77,8 @@ export const FREE_LANE_FALLBACK_MODEL_IDS: readonly string[] = [
  *     也不该因为"上游列表里有它"就放行。
  *   - `space-bunny-free`：实测已从 `GET /zen/v1/models` 消失（下架），
  *     而它曾被当作兜底目标与便携包内置可选项。
+ *   - `crouton-alpha-free`：2026-11-08 实测 `403 This model is not available in
+ *     your country`（地区封锁，与 beam-free 同款，2026-10-28 探测时还不存在）。
  *
  * 之所以要显式记下来：上游目录随时变，而"不能用"这个结论只能靠实测得出、
  * 读代码读不出来；不记下来就会有人看到列表里有它、顺手放回白名单。
@@ -78,6 +86,7 @@ export const FREE_LANE_FALLBACK_MODEL_IDS: readonly string[] = [
 export const FREE_LANE_KNOWN_UNUSABLE_MODEL_IDS: readonly string[] = [
   "beam-free",
   "space-bunny-free",
+  "crouton-alpha-free",
 ];
 
 function base62From(bytes: Uint8Array): string {

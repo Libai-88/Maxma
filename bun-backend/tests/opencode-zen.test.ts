@@ -7,6 +7,7 @@ import {
 } from "../src/services/opencode-zen";
 import {
   FREE_LANE_FALLBACK_MODEL_IDS,
+  FREE_LANE_KNOWN_UNUSABLE_MODEL_IDS,
   FREE_LANE_PRIMARY_MODEL_ID,
 } from "../../bun-sidecar/src/kernel/opencode-zen";
 
@@ -33,6 +34,17 @@ describe("OpenCode Zen model availability", () => {
   test("不再提供上游已下架的 space-bunny-free", () => {
     expect(FREE_LANE_FALLBACK_MODEL_IDS).not.toContain("space-bunny-free");
     expect(isOpenCodeZenModelAvailable("space-bunny-free")).toBe(false);
+  });
+
+  /**
+   * `crouton-alpha-free` 是 2026-10-28 探测时还不存在的新目录项，2026-11-08
+   * 实测 `403 This model is not available in your country`（与 beam-free 同款的
+   * 地区封锁）。锁两件事：不进正向白名单、进地区受限名单（防将来被顺手放行）。
+   */
+  test("地区受限的 crouton-alpha-free 不进模型列表", () => {
+    expect(FREE_LANE_FALLBACK_MODEL_IDS).not.toContain("crouton-alpha-free");
+    expect(FREE_LANE_KNOWN_UNUSABLE_MODEL_IDS).toContain("crouton-alpha-free");
+    expect(isOpenCodeZenModelAvailable("crouton-alpha-free")).toBe(false);
   });
 
   /**
