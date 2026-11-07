@@ -197,6 +197,28 @@
   to { transform: scale(4); opacity: 0; }
 }
 
+/* ── 思考过程（ThinkingBlock）──────────────────────────────
+ * 思考 = 墨在纸上洇开：块浮起入场、墨滴呼吸、省略号起伏、
+ * 完成时墨环落定。全部 transform/opacity/box-shadow，无布局动画。
+ * 循环项仅在流式期间存在（v-if="!block.done"），属状态反馈，
+ * 与忙碌点同类；一次性入场/落定不设门控，prefers-reduced-motion 全部关闭。 */
+@keyframes maxma-think-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes maxma-ink-breathe {
+  0%, 100% { transform: scale(0.72); opacity: 0.55; }
+  50%      { transform: scale(1);    opacity: 1; }
+}
+@keyframes maxma-think-dot {
+  0%, 100% { opacity: 0.25; transform: translateY(0); }
+  40%      { opacity: 1;    transform: translateY(-2px); }
+}
+@keyframes maxma-ink-settle {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 32%, transparent); }
+  100% { box-shadow: 0 0 0 12px transparent; }
+}
+
 /* ── 消息交错入场 ── */
 @keyframes maxma-msg-stagger-in {
   from { opacity: 0; transform: translateY(8px); }
