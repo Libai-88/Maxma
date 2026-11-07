@@ -219,12 +219,6 @@
   100% { box-shadow: 0 0 0 12px transparent; }
 }
 
-/* ── 消息交错入场 ── */
-@keyframes maxma-msg-stagger-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
 /* ── 无障碍：尊重 prefers-reduced-motion ── */
 @media (prefers-reduced-motion: reduce) {
   *,

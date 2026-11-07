@@ -64,6 +64,13 @@
 
 /* ── 代码块复制按钮（CODE-COPY-001） ──
  * DOM 层由 RenderMarkdown 注入，样式在此（v-html 内容不吃 scoped）。 */
+/* ── markdown 图片淡入（MD-IMG-001）：回答里的插图/贴纸不再生硬弹出；
+ * 缓存图在插入时即播，慢图由浏览器加载完成后的重绘自然衔接。
+ * reduced-motion 由 animations.css 的全局 * 规则覆盖。 */
+.markdown-body img {
+  animation: maxma-fade-in 0.3s var(--ease-out);
+}
+
 .markdown-body .md-code {
   position: relative;
 }

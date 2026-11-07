@@ -380,6 +380,16 @@
   font-size: var(--fs-ui);
 }
 
+/* ── 状态块交错入场（STATE-IN-001）：图标/标题/说明/操作依次浮起，
+ * 40ms 步进（动效纪律：列表交错 ≤10 项）。一次性状态反馈，
+ * 克制模式下保留；prefers-reduced-motion 全局规则覆盖。 */
+.ds-state > * {
+  animation: maxma-fade-up 0.3s var(--ease-out) both;
+}
+.ds-state > :nth-child(2) { animation-delay: 0.04s; }
+.ds-state > :nth-child(3) { animation-delay: 0.08s; }
+.ds-state > :nth-child(n + 4) { animation-delay: 0.12s; }
+
 /* ── 骨架屏 / 旋转指示器（替代 5 份重复的 shimmer/spin keyframes） ── */
 .ds-skeleton {
   position: relative;

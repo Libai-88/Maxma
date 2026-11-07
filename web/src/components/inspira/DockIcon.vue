@@ -131,8 +131,9 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--accent) 12%, var(--bg-card));
   border-top-left-radius: 50px;
   border-bottom-left-radius: 50px;
-  /* 当前页的静态朱砂标尺：克制模式关掉光柱/流星后仍能一眼定位 */
-  box-shadow: inset 3px 0 0 var(--accent);
+  /* 朱砂标尺由 Dock.vue 的滑动指示条承担（DOCK-BAR-001），此处只留同色底；
+   * 底色做过渡，路由切换时与滑动条同步渐变 */
+  transition: background var(--duration-fast) var(--ease-out);
 }
 
 .dock-icon.active::before {

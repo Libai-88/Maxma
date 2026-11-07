@@ -29,6 +29,11 @@
 
       <!-- Nav items: 分组 + 分隔线，把 9 个平铺图标分成「工作 / 工具」两级 -->
       <nav class="dock-section dock-nav" aria-label="页面导航">
+        <span
+          ref="activeBarEl"
+          class="dock-active-bar"
+          aria-hidden="true"
+        ></span>
         <AnimatedBeam
           v-if="!calmMotion && visibleNavItems.length > 1"
           class="dock-beam ds-decor"
@@ -93,7 +98,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import DockIcon from '@/components/inspira/DockIcon.vue'
 import AppSettingsMenu from '@/components/AppSettingsMenu.vue'
@@ -112,13 +117,26 @@ const { calm: calmMotion } = useMotion()
 
 onMounted(() => {
   const el = rootEl.value
-  if (!el || calmMotion.value || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-  const q = gsap.utils.selector(el)
+  if (!el || calmMotion.value || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    // 克制模式仍需指示条落位（只是不补间）
+    void nextTick(() => positionActiveBar(true))
+  } else {
+    const q = gsap.utils.selector(el)
 
-  // 只做一次轻量入场；导航宽度保持固定，避免 hover 时覆盖主内容。
-  gsap.timeline({ defaults: { ease: easeMap.out } })
-    .from(q('.dock-section.dock-top'), { autoAlpha: 0, y: -4, duration: 0.24 })
-    .from(q('.dock-section.dock-nav .dock-icon'), { autoAlpha: 0, y: 4, duration: 0.22, stagger: 0.035 }, '-=0.12')
+    // 只做一次轻量入场；导航宽度保持固定，避免 hover 时覆盖主内容。
+    gsap.timeline({ defaults: { ease: easeMap.out }, onComplete: () => positionActiveBar(true) })
+      .from(q('.dock-section.dock-top'), { autoAlpha: 0, y: -4, duration: 0.24 })
+      .from(q('.dock-section.dock-nav .dock-icon'), { autoAlpha: 0, y: 4, duration: 0.22, stagger: 0.035 }, '-=0.12')
+  }
+
+  // 窄窗口断点（820px）切换 --icon-rail-width 时图标高度不变，但保险起见跟随尺寸
+  barResizeObserver = new ResizeObserver(() => positionActiveBar(true))
+  if (el) barResizeObserver.observe(el)
+})
+
+onUnmounted(() => {
+  barResizeObserver?.disconnect()
+  barResizeObserver = null
 })
 
 withDefaults(defineProps<{
@@ -189,6 +207,38 @@ const beamHeight = computed(() => visibleNavItems.value.length * 56 + (visibleGr
 function isActive(path: string): boolean {
   return path === '/' ? route.path === path : route.path === path || route.path.startsWith(`${path}/`)
 }
+
+// ── 滑动指示条（DOCK-BAR-001）──────────────────────────────
+// 当前页的朱砂标尺不再随路由跳变，而是在分组间滑动过去；
+// 克制模式/减少动效下直接落位不补间。首次出现时不播动画。
+const activeBarEl = ref<HTMLElement | null>(null)
+let barReady = false
+let barResizeObserver: ResizeObserver | null = null
+
+function positionActiveBar(instant = false) {
+  const nav = rootEl.value?.querySelector<HTMLElement>('.dock-nav')
+  const bar = activeBarEl.value
+  if (!nav || !bar) return
+  const active = nav.querySelector<HTMLElement>('.dock-icon.active')
+  if (!active) {
+    bar.style.opacity = '0'
+    return
+  }
+  const navRect = nav.getBoundingClientRect()
+  const rect = active.getBoundingClientRect()
+  const y = rect.top - navRect.top
+  const noTween = instant || !barReady || calmMotion.value
+    || window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (noTween) {
+    gsap.set(bar, { y, height: rect.height, opacity: 1 })
+  } else {
+    gsap.to(bar, { y, height: rect.height, opacity: 1, duration: 0.35, ease: easeMap.out, overwrite: 'auto' })
+  }
+  barReady = true
+}
+
+watch(() => route.path, () => { void nextTick(() => positionActiveBar()) })
+watch(visibleGroups, () => { void nextTick(() => positionActiveBar(true)) })
 </script>
 
 <style scoped>
@@ -232,6 +282,21 @@ function isActive(path: string): boolean {
 
 .dock-nav {
   flex-shrink: 0;
+  position: relative;
+}
+
+/* ── 滑动指示条（DOCK-BAR-001）：当前页的朱砂标尺在分组间滑动，
+ * 由 Dock.vue 测位 + GSAP 补间；克制模式 v-if 移除，落位即静态。 */
+.dock-active-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent);
+  opacity: 0;
+  z-index: 1;
+  pointer-events: none;
 }
 
 .dock-spacer {
