@@ -28,6 +28,7 @@ import {
 } from "../security/credential-envelope";
 import { BunYamlSafeParse, writeYamlAtomic } from "../yaml-store";
 import { ensureOpencodeZenProvider, syncOpencodeZenModels } from "../services/opencode-zen";
+import { ensureKiloFreeProvider, syncKiloModels } from "../services/kilo-free";
 
 export type ProviderEntry = Record<string, unknown>;
 
@@ -689,6 +690,11 @@ export function createProvidersRoutes(): Hono {
     } catch (err) {
       console.warn(`[providers] builtin opencode-zen injection failed (non-fatal): ${String(err)}`);
     }
+    try {
+      ensureKiloFreeProvider();
+    } catch (err) {
+      console.warn(`[providers] builtin kilo-free injection failed (non-fatal): ${String(err)}`);
+    }
     return c.json({ providers: loadProviders().map(publicProvider) });
   });
 
@@ -757,6 +763,20 @@ export function createProvidersRoutes(): Hono {
   app.post("/api/providers/opencode-zen/sync-models", async (c) => {
     try {
       const result = await syncOpencodeZenModels();
+      return c.json({
+        status: result.synced ? "ok" : "error",
+        synced: result.synced,
+        models: result.models,
+      });
+    } catch (err) {
+      return c.json({ status: "error", synced: false, detail: String(err) });
+    }
+  });
+
+  // 端点 12: POST /providers/kilo-free/sync-models（第二免费车道，与 zen 同形状）
+  app.post("/api/providers/kilo-free/sync-models", async (c) => {
+    try {
+      const result = await syncKiloModels();
       return c.json({
         status: result.synced ? "ok" : "error",
         synced: result.synced,
