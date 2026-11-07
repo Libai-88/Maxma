@@ -133,7 +133,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-card);
-  padding: var(--space-20, var(--space-16));
+  padding: var(--space-16);
   box-shadow: var(--shadow-xs);
   transition: border-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
 }

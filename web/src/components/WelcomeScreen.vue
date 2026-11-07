@@ -23,54 +23,44 @@
         :number-of-circles="4"
       />
 
-      <!-- 非对称编排：左侧题字（墨），右侧可执行的起点清单（朱砂序号）。
-           不做「居中头像 + 问候语 + 一排 chip」的通用 AI 模板。 -->
-      <div class="welcome-grid">
-        <div class="welcome-intro">
-          <p class="welcome-eyebrow">MAXMA · 首席思维伙伴</p>
-          <div class="welcome-avatar"><SingularityBackground /></div>
-          <h1 class="welcome-name">{{ store.profile.name || 'Maxma' }}</h1>
-          <p class="welcome-scene">{{ sceneText }}</p>
-          <p class="welcome-greeting">{{ store.profile.greeting || '你好呀，今天想聊些什么？' }}</p>
-          <div class="welcome-rule" aria-hidden="true"></div>
-          <div class="welcome-actions">
-            <button class="action-btn action-btn--primary" @click="handleStart('随便聊聊')">
-              <span class="action-icon" v-html="chatBubbleSvg"></span>
-              <span>随便聊聊</span>
-            </button>
-            <button class="action-btn" @click="handleStart('帮我看看最近有什么好玩的')">
-              <span class="action-icon" v-html="searchSvg"></span>
-              <span>帮我个忙</span>
-            </button>
-          </div>
-        </div>
+      <!-- 单栏居中：对话窗口里的欢迎页不是落地页，居中比双栏更像「等你说第一句」 -->
+      <div class="welcome-avatar"><SingularityBackground /></div>
+      <h1 class="welcome-name">{{ store.profile.name || 'Maxma' }}</h1>
+      <p class="welcome-scene">{{ sceneText }}</p>
+      <p class="welcome-greeting">{{ store.profile.greeting || '你好呀，今天想聊些什么？' }}</p>
+      <div class="welcome-rule" aria-hidden="true"></div>
 
-        <section class="example-prompts" aria-label="试试这些">
-          <div class="example-heading">
-            <p class="example-index">01 / 从一句话开始</p>
-            <h2 class="example-title">试试这些</h2>
-            <p class="example-lead">点击任一示例即可开始；也可以在下方输入框直接输入你的问题。</p>
-          </div>
-          <ol class="example-list">
-            <li v-for="(ex, index) in examples" :key="ex.text">
-              <button
-                type="button"
-                class="prompt-row"
-                @click="handleStart(ex.text)"
-                :title="ex.hint"
-              >
-                <span class="prompt-no">{{ String(index + 1).padStart(2, '0') }}</span>
-                <Icon :name="ex.icon" :size="16" class="prompt-icon" aria-hidden="true" />
-                <span class="prompt-copy">
-                  <strong>{{ ex.label }}</strong>
-                  <small>{{ ex.hint }}</small>
-                </span>
-                <span class="prompt-arrow" aria-hidden="true">→</span>
-              </button>
-            </li>
-          </ol>
-        </section>
+      <div class="welcome-actions">
+        <button class="action-btn action-btn--primary" @click="handleStart('随便聊聊')">
+          <span class="action-icon" v-html="chatBubbleSvg"></span>
+          <span>随便聊聊</span>
+        </button>
+        <button class="action-btn" @click="handleStart('帮我看看最近有什么好玩的')">
+          <span class="action-icon" v-html="searchSvg"></span>
+          <span>帮我个忙</span>
+        </button>
       </div>
+
+      <!-- 示例入口：紧凑两列网格，替代 chip 云；说明放 title 不占版面 -->
+      <section class="example-prompts" aria-label="试试这些">
+        <p class="example-title">
+          <Icon name="sparkles" :size="14" aria-hidden="true" />
+          <span>试试这些</span>
+        </p>
+        <div class="example-grid">
+          <button
+            v-for="ex in examples"
+            :key="ex.text"
+            type="button"
+            class="prompt-row"
+            @click="handleStart(ex.text)"
+            :title="ex.hint"
+          >
+            <Icon :name="ex.icon" :size="14" class="prompt-icon" aria-hidden="true" />
+            <span class="prompt-label">{{ ex.label }}</span>
+          </button>
+        </div>
+      </section>
     </div>
   </div>
 </template>
@@ -130,16 +120,18 @@ useGsap((ctx, contextSafe) => {
 })
 
 // 入场编排同样只在完整模式播放；克制模式下内容从一开始就可见。
-const { contextSafe } = useGsap(() => {
+useGsap((_ctx, contextSafe) => {
   if (calmMotion.value) return
   watch(() => store.loading, contextSafe(async (loading) => {
     if (loading || !contentEl.value) return
     const root = contentEl.value
     const q = gsap.utils.selector(root)
     const tl = gsap.timeline({ defaults: { ease: easeMap.out, duration: 0.45 } })
-    tl.from(q('.welcome-intro'), { autoAlpha: 0, y: 16, duration: 0.5 })
-      .from(q('.example-heading'), { autoAlpha: 0, y: 12 }, '<0.12')
-      .from(q('.prompt-row'), { autoAlpha: 0, y: 10, stagger: 0.04 }, '<0.1')
+    tl.from(q('.welcome-avatar'), { autoAlpha: 0, scale: 0.9, duration: 0.5 })
+      .from(q('.welcome-name'), { autoAlpha: 0, y: 10 }, '<0.1')
+      .from(q('.welcome-scene, .welcome-greeting'), { autoAlpha: 0, y: 8 }, '<0.08')
+      .from(q('.welcome-actions'), { autoAlpha: 0, y: 8 }, '<0.08')
+      .from(q('.prompt-row'), { autoAlpha: 0, y: 8, stagger: 0.035 }, '<0.1')
 
     const nameEl = root.querySelector<HTMLElement>('.welcome-name')
     if (nameEl) {
@@ -160,18 +152,16 @@ const { contextSafe } = useGsap(() => {
       } catch { /* SplitText 加载失败则跳过字符动画 */ }
     }
   }), { immediate: true })
-}, { scope: () => contentEl.value })
+})
 
 // 点击任意入口：完整模式下元素优雅退场后再 emit；克制模式直接开始。
 function handleStart(msg: string) {
   const root = contentEl.value
   if (!root || calmMotion.value) { emit('start', msg); return }
-  contextSafe(() => {
-    gsap.to(root.querySelectorAll(':scope > *:not(.welcome-aura)'), {
-      opacity: 0, y: -18, duration: 0.24, stagger: 0.028, overwrite: 'auto',
-      onComplete: () => emit('start', msg),
-    })
-  })()
+  gsap.to(root.querySelectorAll(':scope > *:not(.welcome-aura)'), {
+    opacity: 0, y: -18, duration: 0.24, stagger: 0.028, overwrite: 'auto',
+    onComplete: () => emit('start', msg),
+  })
 }
 
 const chatBubbleSvg = computed(() => chatBubbleRaw.replace(/<\?xml[^>]*\?>/, '').trim())
@@ -203,7 +193,7 @@ const examples = computed(() => [
   min-height: 0;
   box-sizing: border-box;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   padding: var(--space-24) var(--view-gutter);
   overflow-x: hidden;
@@ -212,13 +202,14 @@ const examples = computed(() => [
 .welcome-content {
   position: relative;
   width: 100%;
-  max-width: var(--view-max-width-narrow);
+  max-width: 560px;
   min-width: 0;
   box-sizing: border-box;
+  text-align: center;
   margin-block: auto;
 }
 .welcome-feedback { max-width: 420px; margin-inline: auto; }
-.welcome-error-text { margin: 0; }
+.welcome-error-text { margin: 0 0 var(--space-12); }
 
 .ripple-bg {
   position: absolute;
@@ -229,38 +220,15 @@ const examples = computed(() => [
   -webkit-mask-image: linear-gradient(to bottom, white 40%, transparent 100%);
 }
 
-/* ── 非对称栅格：题字列 + 起点清单列 ── */
-.welcome-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
-  gap: var(--space-40);
-  align-items: start;
-}
-.welcome-intro {
-  min-width: 0;
-  padding-top: var(--space-8);
-  border-left: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
-  padding-left: var(--space-24);
-}
-.welcome-eyebrow {
-  margin: 0 0 var(--space-16);
-  font-size: var(--fs-hint);
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--accent-text);
-}
-
-/* 圆角方形头像：避开「清一色圆形头像」的通用感 */
 .welcome-avatar {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 64px;
-  height: 64px;
+  width: 88px;
+  height: 88px;
   margin-bottom: var(--space-16);
-  border-radius: var(--radius-lg);
+  border-radius: 50%;
   overflow: hidden;
   background: color-mix(in srgb, var(--accent) 4%, transparent);
   box-shadow: var(--shadow-sm);
@@ -278,7 +246,7 @@ const examples = computed(() => [
   font-size: var(--fs-ui);
   color: var(--text-tertiary);
   line-height: 1.7;
-  margin: 0 0 var(--space-8);
+  margin: 0 0 var(--space-4);
 }
 .welcome-greeting {
   font-size: var(--fs-display-md);
@@ -289,18 +257,22 @@ const examples = computed(() => [
   text-wrap: pretty;
 }
 
-/* 墨痕分隔线：左对齐而非居中 */
+/* 墨痕分隔线 */
 .welcome-rule {
   width: 48px;
   height: 2px;
-  margin: var(--space-24) 0;
-  background: linear-gradient(90deg, var(--accent), transparent);
-  opacity: 0.6;
+  margin: var(--space-24) auto;
+  border-radius: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent) 30%, var(--accent) 70%, transparent);
+  opacity: 0.55;
 }
+
 .welcome-actions {
   display: flex;
+  justify-content: center;
   flex-wrap: wrap;
   gap: var(--space-12);
+  margin-bottom: var(--space-32);
 }
 .action-btn {
   display: inline-flex;
@@ -344,85 +316,63 @@ const examples = computed(() => [
 .action-icon { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; line-height: 0; flex-shrink: 0; }
 .action-icon :deep(svg) { width: 100%; height: 100%; }
 
-/* ── 起点清单：序号 + 说明的有序列，不做 chip 云 ── */
-.example-heading { margin-bottom: var(--space-16); }
-.example-index {
-  margin: 0 0 var(--space-8);
-  font-size: var(--fs-hint);
-  letter-spacing: 0.12em;
-  color: var(--text-tertiary);
-}
+/* ── 示例入口：紧凑两列网格 ── */
 .example-title {
-  margin: 0 0 var(--space-8);
-  font-family: var(--font-display);
-  font-size: var(--fs-display-md);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--text-primary);
-}
-.example-lead {
-  margin: 0;
-  font-size: var(--fs-hint);
-  color: var(--text-tertiary);
-  line-height: 1.6;
-}
-.example-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  border-top: 1px solid var(--border);
-}
-.example-list li { border-bottom: 1px solid var(--border); }
-.prompt-row {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-12);
-  width: 100%;
-  padding: var(--space-12) var(--space-8);
-  border: 0;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
+  gap: var(--space-6);
+  margin: 0 0 var(--space-12);
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+  letter-spacing: 0.3px;
+}
+.example-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-8);
+}
+.prompt-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  min-height: 40px;
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
   font-family: var(--font-body);
+  font-size: var(--fs-ui);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out);
+}
+.prompt-row:hover {
+  background: var(--bg-hover);
   color: var(--text-primary);
-  transition: background var(--duration-fast) var(--ease-out), padding-left var(--duration-fast) var(--ease-out);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
 }
-.prompt-no {
-  flex: 0 0 auto;
-  min-width: 24px;
-  font-family: var(--font-mono);
-  font-size: var(--fs-hint);
-  font-variant-numeric: tabular-nums;
-  color: var(--accent-text);
-}
-.prompt-icon { flex: 0 0 auto; color: var(--text-secondary); }
-.prompt-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
-.prompt-copy strong { font-size: var(--fs-body); font-weight: 500; }
-.prompt-copy small { font-size: var(--fs-hint); color: var(--text-tertiary); line-height: 1.4; }
-.prompt-arrow { flex: 0 0 auto; opacity: 0; color: var(--accent-text); transition: opacity var(--duration-fast) var(--ease-out); }
-@media (hover: hover) and (pointer: fine) {
-  .prompt-row:hover { background: var(--bg-hover); padding-left: var(--space-16); }
-  .prompt-row:hover .prompt-arrow { opacity: 1; }
-}
-.prompt-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.prompt-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.prompt-icon { flex: 0 0 auto; color: var(--accent-text); }
+.prompt-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── 衬线/无衬线字体切换适配 ── */
 .font-sans .welcome-name,
-.font-sans .welcome-greeting,
-.font-sans .example-title { font-family: var(--font-ui); }
+.font-sans .welcome-greeting { font-family: var(--font-ui); }
 
-/* 窄窗口：两列收回单列，清单仍保持有序列形态 */
-@media (max-width: 767px) {
-  .welcome-screen { align-items: flex-start; padding: var(--space-16) var(--space-16) var(--space-32); }
-  .welcome-grid { grid-template-columns: 1fr; gap: var(--space-24); }
-  .welcome-intro { padding-left: var(--space-16); }
-  .welcome-avatar { width: 48px; height: 48px; }
-  .welcome-rule { margin: var(--space-16) 0; }
+/* 窄窗口：两列收回单列，保持可点面积 */
+@media (max-width: 560px) {
+  .welcome-screen { padding: var(--space-16) var(--space-16) var(--space-32); }
+  .welcome-avatar { width: 64px; height: 64px; }
+  .example-grid { grid-template-columns: 1fr; }
   .action-btn { padding: var(--space-8) var(--space-16); }
 }
-@media (max-height: 780px) and (min-width: 768px) {
+@media (max-height: 780px) {
   .welcome-screen { padding-block: var(--space-12); }
-  .welcome-avatar { display: none; }
-  .welcome-rule { margin: var(--space-16) 0; }
+  .welcome-avatar { width: 64px; height: 64px; margin-bottom: var(--space-12); }
+  .welcome-rule { margin: var(--space-16) auto; }
+  .welcome-actions { margin-bottom: var(--space-16); }
 }
 </style>

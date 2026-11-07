@@ -1,7 +1,7 @@
 <template>
-  <div class="mcp-view ds-view ds-view--wide" ref="rootEl">
-    <!-- ── 标题栏 ── -->
-    <div class="header view-header view-header--split">
+  <div class="mcp-view" ref="rootEl">
+    <!-- ── 子区块标题栏：本视图嵌在 ExtensionView 里，不是页面级 view-header ── -->
+    <div class="header">
       <h2>MCP 服务</h2>
       <div class="view-header__actions">
         <button v-if="mode === 'list'" class="ds-btn ds-btn--primary" @click="startAdd">+ 添加 MCP 服务器</button>
@@ -1336,8 +1336,26 @@ onMounted(() => { loadServers(); loadDiscovered() })
 
 <style scoped>
 .mcp-view {
-  flex: 1;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+}
+
+/* 子区块标题：与 ExtensionView 的页面级 view-header 区分，无下划线、更小字号 */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-8) var(--space-16);
+}
+.header h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-display-md);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
 }
 
 .empty-hint {

@@ -1,5 +1,5 @@
 <template>
-  <div class="settings-view ds-view" ref="rootEl">
+  <div class="settings-view ds-view ds-view--narrow" ref="rootEl">
     <div class="header view-header">
       <h2>设置</h2>
     </div>
