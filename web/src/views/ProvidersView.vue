@@ -1,15 +1,17 @@
 <template>
-  <div class="providers-view">
+  <div class="providers-view ds-view">
     <!-- ── 标题栏 ── -->
-    <div class="header">
+    <div class="header view-header view-header--split">
       <h2>模型提供商</h2>
-      <button v-if="mode === 'list'" class="btn primary" @click="startAdd">+ 添加提供商</button>
-      <button v-else class="btn" @click="cancelForm">← 返回列表</button>
+      <div class="view-header__actions">
+        <button v-if="mode === 'list'" class="btn primary" @click="startAdd">+ 添加提供商</button>
+        <button v-else class="btn" @click="cancelForm">← 返回列表</button>
+      </div>
     </div>
 
     <!-- ── 列表模式 ── -->
     <template v-if="mode === 'list'">
-      <div v-if="loading" class="loading">
+      <div v-if="loading" class="loading ds-state ds-state--bare">
         <div class="skeleton-grid">
           <div v-for="n in 6" :key="n" class="skeleton-card">
             <div class="skeleton-header">
@@ -26,13 +28,13 @@
           </div>
         </div>
       </div>
-      <div v-else-if="loadError" class="empty">
+      <div v-else-if="loadError" class="empty ds-state">
         <p>加载失败: {{ loadError }}</p>
         <div class="retry-row" style="margin-top: 8px;">
           <button class="btn primary" @click="retryLoad">重试</button>
         </div>
       </div>
-      <div v-else-if="providers.length === 0" class="empty enhanced-empty">
+      <div v-else-if="providers.length === 0" class="empty enhanced-empty ds-state ds-state--bare">
         <!-- Hero -->
         <div class="empty-hero">
           <svg class="empty-hero-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -833,25 +835,12 @@ onMounted(() => {
   flex: 1;
   min-width: 0;
   overflow-y: auto;
-  padding: clamp(16px, 3vw, 24px);
 }
 
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
 .header > .btn {
   flex-shrink: 0;
   white-space: nowrap;
 }
-.header h2 {
-	  font-size: var(--fs-display-lg);
-	  font-weight: 600;
-	  font-family: var(--font-display);
-	  letter-spacing: -0.01em;
-	}
 
 /* ── 插件渠道区（Jet Hub 只读展示）── */
 .plugin-section {
@@ -895,7 +884,7 @@ onMounted(() => {
 .btn {
   padding: 6px 14px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: var(--bg-card);
   color: var(--text-primary);
   cursor: pointer;
@@ -913,11 +902,6 @@ onMounted(() => {
 .btn.danger { color: var(--status-error-text); border-color: var(--status-error); }
 
 /* ── List ── */
-.loading, .empty {
-  text-align: center;
-  color: var(--text-secondary);
-  padding: 40px 0;
-}
 
 .card-grid {
 	  display: grid;
@@ -980,7 +964,7 @@ onMounted(() => {
 .toggle-btn {
   width: 36px;
   height: 20px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   border: none;
   background: var(--border);
   cursor: pointer;
@@ -1038,7 +1022,7 @@ onMounted(() => {
 	  font-size: 12px;
 	  padding: 4px 10px;
 	  background: var(--bg-secondary);
-	  border-radius: 6px;
+	  border-radius: var(--radius-input);
 	  color: var(--text-secondary);
 	  font-family: 'SF Mono', 'Consolas', monospace;
 	}
@@ -1113,7 +1097,7 @@ onMounted(() => {
 .diagnostic-recheck {
   flex: 0 0 auto;
   border: 1px solid currentColor;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: inherit;
   padding: 4px 8px;
@@ -1134,7 +1118,7 @@ onMounted(() => {
 .test-result {
   font-size: 12px;
   padding: 6px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-input);
 }
 .test-result.ok { background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card)); color: var(--status-ok-text); }
 .test-result.error { background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card)); color: var(--status-error-text); }
@@ -1158,7 +1142,7 @@ onMounted(() => {
 .action-btn {
 	  padding: 7px 16px;
 	  border: 1px solid var(--border);
-	  border-radius: 6px;
+	  border-radius: var(--radius-input);
 	  background: var(--bg-card);
 	  color: var(--text-secondary);
 	  font-size: 13px;
@@ -1205,7 +1189,7 @@ onMounted(() => {
 .input {
   padding: 8px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   font-size: 14px;
   color: var(--text-primary);
   background: var(--bg-card);
@@ -1232,7 +1216,7 @@ select.input { cursor: pointer; }
 .msg {
   font-size: 13px;
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-input);
 }
 .msg.ok { background: color-mix(in srgb, var(--status-ok) 12%, var(--bg-card)); color: var(--status-ok-text); }
 .msg.error { background: color-mix(in srgb, var(--status-error) 12%, var(--bg-card)); color: var(--status-error-text); }
@@ -1244,7 +1228,7 @@ select.input { cursor: pointer; }
   max-height: 240px;
   overflow-y: auto;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   padding: 8px;
 }
 .model-item {
@@ -1252,7 +1236,7 @@ select.input { cursor: pointer; }
   font-family: 'SF Mono', 'Consolas', monospace;
   padding: 4px 6px;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 .model-item:hover { background: var(--bg-secondary); }
 .model-item input { margin-right: 8px; }
@@ -1292,6 +1276,7 @@ select.input { cursor: pointer; }
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
+  width: 100%;
 }
 @media (max-width: 1100px) {
   .skeleton-grid { grid-template-columns: repeat(2, 1fr); }
@@ -1320,14 +1305,14 @@ select.input { cursor: pointer; }
 }
 .skeleton-line {
   height: 14px;
-  border-radius: 7px;
+  border-radius: var(--radius-input);
   background: var(--bg-secondary);
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
 .skeleton-line--title { width: 60%; }
-.skeleton-line--badge { width: 48px; height: 12px; border-radius: 6px; }
+.skeleton-line--badge { width: 48px; height: 12px; border-radius: var(--radius-input); }
 .skeleton-line--url { width: 85%; height: 12px; }
-.skeleton-line--tag { width: 56px; height: 22px; border-radius: 6px; }
+.skeleton-line--tag { width: 56px; height: 22px; border-radius: var(--radius-input); }
 .skeleton-line--action { width: 40%; height: 12px; }
 @keyframes skeleton-pulse {
   0%, 100% { opacity: 0.3; }
@@ -1340,6 +1325,7 @@ select.input { cursor: pointer; }
   padding: 32px 28px;
   max-width: 760px;
   margin: 0 auto;
+  align-items: stretch;
 }
 
 .empty-hero {
@@ -1414,7 +1400,7 @@ select.input { cursor: pointer; }
   font-size: 10px;
   font-weight: 600;
   padding: 2px 8px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   letter-spacing: 0.3px;
   white-space: nowrap;
 }
@@ -1465,7 +1451,7 @@ select.input { cursor: pointer; }
   font-size: 10px;
   font-weight: 700;
   padding: 2px 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--accent);
   color: var(--bg-primary);
   letter-spacing: 0.3px;

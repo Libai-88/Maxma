@@ -7,6 +7,7 @@
           <div class="icon-wrapper">
             <div class="logo-glow-wrapper">
               <GlowingEffect
+                v-if="!calmMotion"
                 :spread="30"
                 :glow="true"
                 :disabled="false"
@@ -15,6 +16,7 @@
                 :blur="4"
                 :movement-duration="1.5"
                 :border-width="1"
+                class="ds-decor"
               />
               <div class="imageBox">
                 <LiquidLogo :image-url="logoUrl" />
@@ -25,59 +27,78 @@
         </router-link>
       </div>
 
-      <!-- Nav items -->
-      <div class="dock-section dock-nav">
+      <!-- Nav items: 分组 + 分隔线，把 9 个平铺图标分成「工作 / 工具」两级 -->
+      <nav class="dock-section dock-nav" aria-label="页面导航">
+        <span
+          ref="activeBarEl"
+          class="dock-active-bar"
+          aria-hidden="true"
+        ></span>
         <AnimatedBeam
-          v-if="visibleNavItems.length > 1"
-          class="dock-beam"
+          v-if="!calmMotion && visibleNavItems.length > 1"
+          class="dock-beam ds-decor"
           :width="4"
-          :height="visibleNavItems.length * 56"
-          :path-d="`M 2 0 Q 2 ${visibleNavItems.length * 28}, 2 ${visibleNavItems.length * 56}`"
+          :height="beamHeight"
+          :path-d="`M 2 0 Q 2 ${beamHeight / 2}, 2 ${beamHeight}`"
           :color="'var(--accent)'"
           :blur="4"
           :duration="4"
           :delay="0.5"
         />
-        <DockIcon
-          v-for="item in visibleNavItems"
-          :key="item.to"
-          :icon="item.icon"
-          :label="item.label"
-          :to="item.to"
-          :active="isActive(item.to)"
-          :busy="item.to === '/' && hasStreaming"
-        />
-      </div>
+        <div
+          v-for="(group, index) in visibleGroups"
+          :key="group.key"
+          class="dock-group"
+          :class="{ 'dock-group--divided': index > 0 }"
+          role="group"
+          :aria-label="group.label"
+        >
+          <p class="dock-group-label" aria-hidden="true">{{ group.label }}</p>
+          <DockIcon
+            v-for="item in group.items"
+            :key="item.to"
+            :icon="item.icon"
+            :label="item.label"
+            :group-label="group.label"
+            :to="item.to"
+            :active="isActive(item.to)"
+            :busy="item.to === '/' && hasStreaming"
+          />
+        </div>
+      </nav>
 
       <!-- Spacer -->
       <div class="dock-spacer"></div>
 
       <!-- Bottom items -->
       <div class="dock-section dock-bottom">
-        <!-- Session toggle -->
-        <DockIcon
-          icon="sessions"
-          label="会话"
-          :active="sessionDrawerOpen"
-          @click="emit('toggle-session-drawer')"
-        />
-
-        <!-- Settings -->
-        <div class="settings-item">
-          <AppSettingsMenu
-            compact
-            :onboarding-enabled="onboardingEnabled"
-            @restart-onboarding="emit('restart-onboarding')"
+        <div class="dock-group dock-group--divided" role="group" aria-label="会话与设置">
+          <p class="dock-group-label" aria-hidden="true">系统</p>
+          <!-- Session toggle -->
+          <DockIcon
+            icon="sessions"
+            label="会话"
+            group-label="系统"
+            :active="sessionDrawerOpen"
+            @click="emit('toggle-session-drawer')"
           />
-        </div>
 
+          <!-- Settings -->
+          <div class="settings-item">
+            <AppSettingsMenu
+              compact
+              :onboarding-enabled="onboardingEnabled"
+              @restart-onboarding="emit('restart-onboarding')"
+            />
+          </div>
+        </div>
       </div>
     </div>
   </aside>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import DockIcon from '@/components/inspira/DockIcon.vue'
 import AppSettingsMenu from '@/components/AppSettingsMenu.vue'
@@ -86,21 +107,36 @@ import GlowingEffect from '@/components/inspira/GlowingEffect.vue'
 import AnimatedBeam from '@/components/inspira/AnimatedBeam.vue'
 import { useCapabilities } from '@/composables/useCapabilities'
 import { useChatStore } from '@/stores/chat'
+import { useMotion } from '@/composables/useMotion'
 import { gsap, easeMap } from '@/composables/useGsap'
 import logoUrl from '@/assets/images/brand/favicon.png'
 
 const rootEl = ref<HTMLElement | null>(null)
 const route = useRoute()
+const { calm: calmMotion } = useMotion()
 
 onMounted(() => {
   const el = rootEl.value
-  if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-  const q = gsap.utils.selector(el)
+  if (!el || calmMotion.value || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    // 克制模式仍需指示条落位（只是不补间）
+    void nextTick(() => positionActiveBar(true))
+  } else {
+    const q = gsap.utils.selector(el)
 
-  // 只做一次轻量入场；导航宽度保持固定，避免 hover 时覆盖主内容。
-  gsap.timeline({ defaults: { ease: easeMap.out } })
-    .from(q('.dock-section.dock-top'), { autoAlpha: 0, y: -4, duration: 0.24 })
-    .from(q('.dock-section.dock-nav .dock-icon'), { autoAlpha: 0, y: 4, duration: 0.22, stagger: 0.035 }, '-=0.12')
+    // 只做一次轻量入场；导航宽度保持固定，避免 hover 时覆盖主内容。
+    gsap.timeline({ defaults: { ease: easeMap.out }, onComplete: () => positionActiveBar(true) })
+      .from(q('.dock-section.dock-top'), { autoAlpha: 0, y: -4, duration: 0.24 })
+      .from(q('.dock-section.dock-nav .dock-icon'), { autoAlpha: 0, y: 4, duration: 0.22, stagger: 0.035 }, '-=0.12')
+  }
+
+  // 窄窗口断点（820px）切换 --icon-rail-width 时图标高度不变，但保险起见跟随尺寸
+  barResizeObserver = new ResizeObserver(() => positionActiveBar(true))
+  if (el) barResizeObserver.observe(el)
+})
+
+onUnmounted(() => {
+  barResizeObserver?.disconnect()
+  barResizeObserver = null
 })
 
 withDefaults(defineProps<{
@@ -128,30 +164,81 @@ interface NavItem {
   feature?: string
 }
 
-const navItems: NavItem[] = [
-  { to: '/', label: '对话', icon: 'chat' },
-  { to: '/providers', label: '模型', icon: 'model' },
-  { to: '/memory', label: '记忆', icon: 'memory', feature: 'memory' },
-  { to: '/evolution', label: '成长', icon: 'sparkles', feature: 'memory' },
-  // 后台子任务：当前 pi 引擎无子 Agent 运行时，enabled 由后端能力清单给出
-  // （见 bun-sidecar/src/kernel/pi-contract.ts 的 ENGINE_EVENT_EXPECTED_BUT_UNPRODUCED）。
-  // 引擎不发 deferred_subagent_submitted 时这里必须消失——上一个版本它无条件渲染，
-  // 用户点进去是一个永远为空的列表。
-  { to: '/agent-tasks', label: 'Agent', icon: 'cpu', feature: 'sub_agents' },
-  { to: '/metrics', label: '运行指标', icon: 'metrics' },
-  { to: '/extensions', label: '扩展', icon: 'extensions' },
-  { to: '/plugins', label: '插件', icon: 'puzzle', feature: 'plugins' },
-  { to: '/activity', label: '活动', icon: 'activity' },
+interface NavGroup {
+  key: string
+  label: string
+  items: NavItem[]
+}
+
+// 能力门控保留：后端不发 deferred_subagent_submitted 时 Agent 项必须消失。
+const navGroups: NavGroup[] = [
+  {
+    key: 'work',
+    label: '工作',
+    items: [
+      { to: '/', label: '对话', icon: 'chat' },
+      { to: '/providers', label: '模型', icon: 'model' },
+      { to: '/memory', label: '记忆', icon: 'memory', feature: 'memory' },
+      { to: '/evolution', label: '成长', icon: 'sparkles', feature: 'memory' },
+      { to: '/agent-tasks', label: 'Agent', icon: 'cpu', feature: 'sub_agents' },
+    ],
+  },
+  {
+    key: 'tools',
+    label: '工具',
+    items: [
+      { to: '/metrics', label: '运行指标', icon: 'metrics' },
+      { to: '/extensions', label: '扩展', icon: 'extensions' },
+      { to: '/plugins', label: '插件', icon: 'puzzle', feature: 'plugins' },
+      { to: '/activity', label: '活动', icon: 'activity' },
+    ],
+  },
 ]
 
-// 根据能力清单动态隐藏被禁用的导航项
-const visibleNavItems = computed(() =>
-  navItems.filter(item => !item.feature || hasFeature(item.feature)),
-)
+const visibleGroups = computed(() => navGroups
+  .map(group => ({ ...group, items: group.items.filter(item => !item.feature || hasFeature(item.feature)) }))
+  .filter(group => group.items.length > 0))
+
+const visibleNavItems = computed(() => visibleGroups.value.flatMap(group => group.items))
+
+/** 光柱高度 = 图标总高 + 分组分隔线预留 */
+const beamHeight = computed(() => visibleNavItems.value.length * 56 + (visibleGroups.value.length - 1) * 26)
 
 function isActive(path: string): boolean {
   return path === '/' ? route.path === path : route.path === path || route.path.startsWith(`${path}/`)
 }
+
+// ── 滑动指示条（DOCK-BAR-001）──────────────────────────────
+// 当前页的朱砂标尺不再随路由跳变，而是在分组间滑动过去；
+// 克制模式/减少动效下直接落位不补间。首次出现时不播动画。
+const activeBarEl = ref<HTMLElement | null>(null)
+let barReady = false
+let barResizeObserver: ResizeObserver | null = null
+
+function positionActiveBar(instant = false) {
+  const nav = rootEl.value?.querySelector<HTMLElement>('.dock-nav')
+  const bar = activeBarEl.value
+  if (!nav || !bar) return
+  const active = nav.querySelector<HTMLElement>('.dock-icon.active')
+  if (!active) {
+    bar.style.opacity = '0'
+    return
+  }
+  const navRect = nav.getBoundingClientRect()
+  const rect = active.getBoundingClientRect()
+  const y = rect.top - navRect.top
+  const noTween = instant || !barReady || calmMotion.value
+    || window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (noTween) {
+    gsap.set(bar, { y, height: rect.height, opacity: 1 })
+  } else {
+    gsap.to(bar, { y, height: rect.height, opacity: 1, duration: 0.35, ease: easeMap.out, overwrite: 'auto' })
+  }
+  barReady = true
+}
+
+watch(() => route.path, () => { void nextTick(() => positionActiveBar()) })
+watch(visibleGroups, () => { void nextTick(() => positionActiveBar(true)) })
 </script>
 
 <style scoped>
@@ -161,7 +248,7 @@ function isActive(path: string): boolean {
   left: 0;
   width: var(--icon-rail-width, 84px);
   height: 100%;
-  background: var(--bg-card, #fff);
+  background: var(--bg-card);
   z-index: 120;
   padding-left: 6px;
   overflow: visible;
@@ -177,6 +264,7 @@ function isActive(path: string): boolean {
 .dock-inner {
   position: relative;
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   padding: 0;
@@ -189,11 +277,26 @@ function isActive(path: string): boolean {
 }
 
 .dock-top {
-  margin: 16px 0 20px 0;
+  margin: 16px 0 12px 0;
 }
 
 .dock-nav {
   flex-shrink: 0;
+  position: relative;
+}
+
+/* ── 滑动指示条（DOCK-BAR-001）：当前页的朱砂标尺在分组间滑动，
+ * 由 Dock.vue 测位 + GSAP 补间；克制模式 v-if 移除，落位即静态。 */
+.dock-active-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent);
+  opacity: 0;
+  z-index: 1;
+  pointer-events: none;
 }
 
 .dock-spacer {
@@ -202,6 +305,26 @@ function isActive(path: string): boolean {
 
 .dock-bottom {
   margin-top: auto;
+}
+
+/* ── 分组：细分隔线 + 小标签，让平铺图标有层级 ── */
+.dock-group {
+  display: flex;
+  flex-direction: column;
+}
+.dock-group--divided {
+  margin-top: var(--space-12);
+  padding-top: var(--space-12);
+  border-top: 1px solid var(--border);
+}
+.dock-group-label {
+  margin: 0 0 2px;
+  text-align: center;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--text-tertiary);
+  user-select: none;
 }
 
 .imageBox {
@@ -240,7 +363,7 @@ function isActive(path: string): boolean {
   align-items: center;
   min-width: 36px;
   height: 52px;
-  color: var(--accent, rgb(110, 90, 240));
+  color: var(--accent);
 }
 
 #logo .dock-label {
@@ -249,7 +372,7 @@ function isActive(path: string): boolean {
   display: flex;
   align-items: center;
   font-size: 15px;
-  color: var(--text-primary, #333);
+  color: var(--text-primary);
   padding-left: 0;
   text-transform: uppercase;
   letter-spacing: 1px;
@@ -279,13 +402,13 @@ function isActive(path: string): boolean {
   border-radius: 0;
   gap: 0;
   background: transparent;
-  color: var(--accent, rgb(110, 90, 240));
+  color: var(--accent);
   transition: color var(--duration-fast, .15s), background var(--duration-fast, .15s);
 }
 
 .settings-item :deep(.settings-btn:hover) {
   background: transparent;
-  color: var(--status-warn-text);
+  color: var(--accent-text);
 }
 
 .settings-item :deep(.settings-btn .icon) {

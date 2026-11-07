@@ -1,6 +1,6 @@
 <!-- web/src/views/FeatureUnavailableView.vue -->
 <template>
-  <div class="fu-view" ref="rootEl">
+  <div class="fu-view ds-view ds-view--narrow" ref="rootEl">
     <div class="fu-card">
       <div class="fu-icon">{{ availabilityIcon }}</div>
       <h1 class="fu-title">功能不可用</h1>
@@ -114,7 +114,6 @@ async function retry() {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 32px 24px;
 }
 .fu-card {
   text-align: center;
@@ -122,7 +121,7 @@ async function retry() {
   padding: 32px 28px;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-soft);
 }
 .fu-icon {
@@ -158,7 +157,7 @@ async function retry() {
   margin: -12px 0 20px;
   padding: 8px 12px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--text-primary) 3%, transparent);
   text-align: left;
 }
@@ -174,7 +173,7 @@ async function retry() {
   gap: 12px;
   padding: 10px 14px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--bg-primary);
   color: var(--text-primary);
   text-decoration: none;

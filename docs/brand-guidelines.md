@@ -1,4 +1,4 @@
-# Maxma 品牌指南 v1.0
+# Maxma 品牌指南 v1.1
 
 > **唯一事实源（Source of Truth）**：本文档定义 Maxma 的品牌身份、视觉规范与声音准则。
 > 代码侧的活规范是 `web/src/assets/styles/tokens.css`（结构 token）与 `web/src/themes/*.css`（34-Token 主题必填契约 + 主题扩展）。
@@ -324,8 +324,46 @@ Maxma 是用户的**首席思维伙伴**——不是搜索引擎、不是执行�
 
 ---
 
+## 9. 页面级规范（v1.1）
+
+> 代码侧的活规范从 `tokens.css` + `themes/*.css` 扩展为三层：
+> `tokens.css`（结构 token）→ `themes/*.css`（6 主题配色）→ `design-system.css`（页面级类）。
+> 三者冲突时以代码为准并回来修订本文档。
+
+### 视图必须复用共享类，不再各写一份
+
+| 职责 | 类 | 位置 |
+|------|-----|------|
+| 页面容器 | `.ds-view` / `--wide` / `--narrow` | `design-system.css` |
+| 页面头部 | `.view-header` / `--split` / `__actions` / `__sub` / `__eyebrow` | 同上 |
+| 区块卡片 | `.ds-section` | 同上 |
+| 空 / 加载 / 错误 | `.ds-state` / `--bare` / `--error` / `__icon` / `__title` / `__desc` / `__actions`、`.ds-inline-error` | 同上 |
+| 骨架 / 旋转 | `.ds-skeleton` / `.ds-skeleton-line` / `.ds-spinner` | 同上 |
+
+**纪律**：视图 `<style scoped>` 因 `[data-v-xxx]` 优先级更高，任何复制的
+`.header h2` / `.header-sub` / `.loading` / `.empty` 声明都会静默盖掉全局规范。
+新增视图只写布局差异，通用外观一律挂共享类。
+
+### 圆角、阴影、断点
+
+- 圆角一律用 `--radius-sm/md/lg/xl/input/card`，禁止字面量 `Npx`；
+  否则 6 主题的圆角设定（尤其 ultraline 的近零圆角）在多数组件失效。
+- 阴影一律用 `--shadow-xs/sm/md/lg/xl`；`0 0 0 Npx` 聚焦环与 inset 阴影除外。
+- 断点口径固定为 767 / 480 / 768–1279 / 1280（CSS 变量不能用于 `@media`，
+  口径登记在 `tokens.css`），不再新增 520/560/600/640/700/720/820/900/1100。
+
+### 动效密度
+
+默认「克制」（`html[data-motion="calm"]`，由 `composables/useMotion.ts` 挂载），
+用户可在外观页切回「完整」。克制模式关闭：光晕 / 流星 / 光柱 / 波纹等纯装饰
+无限循环、GSAP 视图入场、差异化页面位移转场；保留状态反馈（流式光标、忙碌点）。
+纯装饰层挂 `.ds-decor`，循环动画挂 `.ds-decor-anim`。
+
+---
+
 ## 修订记录
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
 | v1.0 | 2026-07-28 | 首版：从生产 token 系统 + 首席思维伙伴定位提炼，取代 DESIGN.md (alpha) |
+| v1.1 | 2026-11-07 | 新增 §9 页面级规范：共享类契约、token 化圆角/阴影/断点、动效密度开关 |

@@ -146,7 +146,7 @@ useTilt(() => rootEl.value)
 }
 
 .btn-icon:hover {
-  background: var(--bg-tertiary);
+  background: var(--bg-hover);
 }
 
 .btn-danger:hover {
@@ -172,8 +172,8 @@ useTilt(() => rootEl.value)
   font-size: 0.7em;
   padding: 2px 8px;
   border-radius: 4px;
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--accent-light);
+  color: var(--accent-text);
 }
 
 .feature {

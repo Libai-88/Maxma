@@ -633,8 +633,8 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
 </script>
 
 <template>
-  <div ref="rootEl" class="jet-hub">
-    <header class="header">
+  <div ref="rootEl" class="jet-hub ds-view ds-view--wide">
+    <header class="header view-header view-header--split">
       <div class="header-copy">
         <h1 class="title">Jet Hub</h1>
         <p class="subtitle">
@@ -642,7 +642,7 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
           {{ store.accountEnabled }}/{{ store.accountTotal }} 已启用
         </p>
       </div>
-      <div class="header-actions">
+      <div class="header-actions view-header__actions">
         <button class="btn" type="button" :class="{ 'btn-active': showUsage }" @click="toggleUsage">Token 用量</button>
         <button class="btn" type="button" :class="{ 'btn-active': showGateway }" @click="toggleGateway">本机网关</button>
         <button class="btn" type="button" :class="{ 'btn-active': showBackup }" @click="toggleBackup">备份 / 迁移</button>
@@ -726,7 +726,7 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
             </span>
           </li>
         </ul>
-        <p v-else class="empty">账本里还没有记录。等 Maxma 里用这些渠道跑过对话后，这里会出现按渠道的用量。</p>
+        <p v-else class="empty ds-state ds-state--bare ds-state__desc">账本里还没有记录。等 Maxma 里用这些渠道跑过对话后，这里会出现按渠道的用量。</p>
         <p class="card-sub">历史采样点：{{ store.usageHistory.length }} 条</p>
       </template>
     </section>
@@ -1242,7 +1242,7 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
               </div>
             </li>
           </ul>
-          <p v-else class="empty">
+          <p v-else class="empty ds-state ds-state--bare ds-state__desc">
             <template v-if="store.canLogin(current.id)">
               该渠道还没有登录账号。点上方<strong>新建账号</strong>，插件会打开浏览器完成授权。
             </template>
@@ -1252,7 +1252,7 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
           </p>
         </template>
 
-        <p v-else class="empty">{{ store.loading ? '正在读取插件状态…' : '未选择渠道' }}</p>
+        <p v-else class="empty ds-state ds-state--bare ds-state__desc">{{ store.loading ? '正在读取插件状态…' : '未选择渠道' }}</p>
       </div>
     </section>
 
@@ -1271,29 +1271,21 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 22px 24px 32px;
   height: 100%;
   overflow: auto;
-}
-
-.header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
 }
 
 .title {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
-  color: var(--text-primary, #1c1c1c);
+  color: var(--text-primary);
 }
 
 .subtitle {
   margin: 4px 0 0;
   font-size: 12px;
-  color: var(--text-tertiary, #8a8a8a);
+  color: var(--text-tertiary);
 }
 
 .layout {
@@ -1308,16 +1300,16 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
   flex-direction: column;
   gap: 2px;
   padding: 8px;
-  border: 1px solid var(--border, #e6e2da);
-  border-radius: var(--radius, 10px);
-  background: var(--bg-secondary, #faf8f4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-secondary);
 }
 
 .rail-group {
   padding: 8px 8px 4px;
   font-size: 11px;
   letter-spacing: 0.04em;
-  color: var(--text-tertiary, #8a8a8a);
+  color: var(--text-tertiary);
 }
 
 .rail-row {
@@ -1326,7 +1318,7 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
   gap: 2px;
   padding: 8px 10px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: transparent;
   text-align: left;
   cursor: pointer;
@@ -1335,16 +1327,16 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
 }
 
 .rail-row:hover {
-  background: var(--bg-card, #fff);
+  background: var(--bg-card);
 }
 
 .rail-row.active {
-  background: var(--bg-card, #fff);
-  border-color: var(--accent, #b4552d);
+  background: var(--bg-card);
+  border-color: var(--accent);
 }
 
 .rail-row-closed .rail-name {
-  color: var(--text-tertiary, #8a8a8a);
+  color: var(--text-tertiary);
 }
 
 .rail-name {
@@ -1354,13 +1346,13 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
 
 .rail-meta {
   font-size: 11px;
-  color: var(--text-tertiary, #8a8a8a);
+  color: var(--text-tertiary);
 }
 
 .rail-empty {
   padding: 12px 8px;
   font-size: 12px;
-  color: var(--text-tertiary, #8a8a8a);
+  color: var(--text-tertiary);
 }
 
 .panel {
@@ -1368,9 +1360,9 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
   flex-direction: column;
   gap: 12px;
   padding: 16px;
-  border: 1px solid var(--border, #e6e2da);
-  border-radius: var(--radius, 10px);
-  background: var(--bg-card, #fff);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
   min-height: 320px;
 }
 
@@ -1397,7 +1389,7 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
 .panel-sub {
   margin: 4px 0 0;
   font-size: 12px;
-  color: var(--text-tertiary, #8a8a8a);
+  color: var(--text-tertiary);
 }
 
 .block-title {
@@ -1423,8 +1415,8 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
   justify-content: space-between;
   gap: 10px;
   padding: 7px 10px;
-  border: 1px solid var(--border, #e6e2da);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   font-size: 12px;
 }
 
@@ -1438,9 +1430,9 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
   flex-direction: column;
   gap: 8px;
   padding: 12px;
-  border: 1px solid var(--accent, #b4552d);
-  border-radius: 10px;
-  background: var(--bg-secondary, #faf8f4);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
 }
 
 .login-head {
@@ -1457,13 +1449,13 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
 
 .login-polls {
   font-size: 11px;
-  color: var(--text-tertiary, #8a8a8a);
+  color: var(--text-tertiary);
 }
 
 .login-hint {
   margin: 0;
   font-size: 12px;
-  color: var(--text-tertiary, #8a8a8a);
+  color: var(--text-tertiary);
 }
 
 .login-url {
@@ -1479,7 +1471,7 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
-  color: var(--accent, #b4552d);
+  color: var(--accent);
 }
 
 .login-msg {
@@ -1494,30 +1486,30 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
 
 .header-actions {
   display: flex;
-  gap: 6px;
+  gap: var(--space-6);
   flex-shrink: 0;
 }
 
 .btn-active {
-  border-color: var(--accent, #b4552d);
-  color: var(--accent, #b4552d);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .card {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 14px 16px;
-  border: 1px solid var(--border, #e6e2da);
-  border-radius: var(--radius, 10px);
-  background: var(--bg-card, #fff);
+  gap: var(--space-8);
+  padding: var(--card-padding);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
 }
 
 .card-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 10px;
+  gap: var(--space-8);
 }
 
 .card-title {
@@ -1529,12 +1521,12 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
 .card-sub {
   margin: 0;
   font-size: 11px;
-  color: var(--text-tertiary, #8a8a8a);
+  color: var(--text-tertiary);
 }
 
 .card-actions {
   display: flex;
-  gap: 6px;
+  gap: var(--space-6);
 }
 
 .stat-grid {
@@ -1545,8 +1537,8 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
 
 .stat {
   padding: 8px 10px;
-  border: 1px solid var(--border, #e6e2da);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
 }
 
 .stat-value {
@@ -1556,7 +1548,7 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
 
 .stat-label {
   font-size: 11px;
-  color: var(--text-tertiary, #8a8a8a);
+  color: var(--text-tertiary);
 }
 
 .kv {
@@ -1574,8 +1566,8 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
   justify-content: space-between;
   gap: 10px;
   padding: 6px 10px;
-  border: 1px solid var(--border, #e6e2da);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   font-size: 12px;
 }
 
@@ -1584,9 +1576,9 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
   flex-direction: column;
   gap: 6px;
   padding: 10px;
-  border: 1px solid var(--border, #e6e2da);
-  border-radius: 10px;
-  background: var(--bg-secondary, #faf8f4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
 }
 
 .credits-head {
@@ -1605,9 +1597,9 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
   flex-direction: column;
   gap: 6px;
   padding: 10px;
-  border: 1px solid var(--border, #e6e2da);
-  border-radius: 10px;
-  background: var(--bg-secondary, #faf8f4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
 }
 
 .pop-list-wide {
@@ -1648,7 +1640,7 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
   display: flex;
   gap: 6px;
   font-size: 11px;
-  color: var(--text-tertiary, #8a8a8a);
+  color: var(--text-tertiary);
 }
 
 .account-main {
@@ -1663,7 +1655,7 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
 
 .account-id {
   font-size: 11px;
-  color: var(--text-tertiary, #8a8a8a);
+  color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1679,9 +1671,9 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
   flex-direction: column;
   gap: 6px;
   padding: 10px;
-  border: 1px solid var(--border, #e6e2da);
-  border-radius: 10px;
-  background: var(--bg-secondary, #faf8f4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
 }
 
 .oc-row {
@@ -1694,9 +1686,9 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
   flex: 1;
   min-width: 0;
   padding: 5px 8px;
-  border: 1px solid var(--border, #e6e2da);
-  border-radius: 6px;
-  background: var(--bg-card, #fff);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  background: var(--bg-card);
   color: inherit;
   font: inherit;
   font-size: 12px;
@@ -1712,7 +1704,7 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
   gap: 6px;
   align-items: center;
   padding-top: 6px;
-  border-top: 1px dashed var(--border, #e6e2da);
+  border-top: 1px dashed var(--border);
 }
 
 .account-row {
@@ -1722,7 +1714,7 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
 .tag {
   padding: 1px 6px;
   border-radius: 999px;
-  border: 1px solid var(--border, #e6e2da);
+  border: 1px solid var(--border);
   font-size: 11px;
 }
 
@@ -1732,15 +1724,15 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
 }
 
 .tag-closed {
-  border-color: var(--border, #e6e2da);
-  color: var(--text-tertiary, #8a8a8a);
+  border-color: var(--border);
+  color: var(--text-tertiary);
 }
 
 .btn {
   padding: 6px 12px;
-  border: 1px solid var(--border, #e6e2da);
-  border-radius: 8px;
-  background: var(--bg-secondary, #faf8f4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
   color: inherit;
   font: inherit;
   font-size: 12px;
@@ -1766,7 +1758,7 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
 .banner {
   margin: 0;
   padding: 9px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 12px;
 }
 
@@ -1776,8 +1768,8 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
 }
 
 .banner-muted {
-  border: 1px solid var(--border, #e6e2da);
-  color: var(--text-tertiary, #8a8a8a);
+  border: 1px solid var(--border);
+  color: var(--text-tertiary);
 }
 
 .banner-warn {
@@ -1799,20 +1791,13 @@ useButtonFx(() => rootEl.value, '.btn', { watchSources: [() => store.error] })
   cursor: pointer;
 }
 
-.empty {
-  margin: 0;
-  padding: 18px 4px;
-  font-size: 13px;
-  color: var(--text-tertiary, #8a8a8a);
-}
-
 .footnote {
   display: flex;
   align-items: center;
   gap: 6px;
   margin: 0;
   font-size: 11px;
-  color: var(--text-tertiary, #8a8a8a);
+  color: var(--text-tertiary);
 }
 
 .footnote code {

@@ -413,6 +413,34 @@ describe('未知入站事件的真实行为', () => {
     expect(warnSpy.mock.calls.map(c => c.join(' ')).some(m => m.includes('未处理的入站事件类型'))).toBe(false)
   })
 
+  it('action_failed 无活跃轮次也弹 warning toast，带动作名与原因（ACTION-FAIL-001）', () => {
+    const ch = setup()
+    expect(ch.currentTurn).toBeNull()
+
+    // 后端 RPC 失败（如 Session not found）此前被 .catch(() => {}) 吞掉，
+    // 乐观 UI 停在错误值上。回执必须穿透到用户可见的 toast。
+    const toasts: Array<{ message: string; level?: string }> = []
+    const onToast = (e: Event) => toasts.push((e as CustomEvent).detail as { message: string; level?: string })
+    window.addEventListener('maxma:toast', onToast)
+    try {
+      handleEventForChannel(SID, {
+        type: 'action_failed',
+        payload: { action: '自动执行开关', message: 'Session not found' },
+      } as never)
+    } finally {
+      window.removeEventListener('maxma:toast', onToast)
+    }
+
+    const hit = toasts.find(t => t.level === 'warning')
+    expect(hit, '应派发一条 warning toast').toBeTruthy()
+    expect(hit!.message).toContain('自动执行开关')
+    expect(hit!.message).toContain('Session not found')
+
+    // 不改动回合状态
+    expect(ch.currentTurn).toBeNull()
+    expect(ch.error).toBeNull()
+  })
+
   it('sendClientMessage 把类型化消息原样序列化到 socket', () => {
     const sent: string[] = []
     const fakeSocket = { send: (data: string) => { sent.push(data) } } as unknown as WebSocket

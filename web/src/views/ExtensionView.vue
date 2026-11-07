@@ -1,6 +1,6 @@
 <template>
-  <div class="ext-view" ref="rootEl">
-    <div class="header">
+  <div class="ext-view ds-view" ref="rootEl">
+    <div class="header view-header">
       <h2>插件与工具</h2>
       <p class="header-sub">管理外部工具连接，查看已加载的 Skills</p>
     </div>
@@ -15,10 +15,10 @@
     <div v-else-if="loading" class="extension-loading" role="status" aria-live="polite" aria-label="正在扫描插件">
       <span class="sr-only">正在扫描插件与 Skills…</span>
       <div class="extension-skeleton-grid" aria-hidden="true">
-        <div v-for="n in 6" :key="n" class="extension-skeleton-card"><span></span><span></span><span></span></div>
+        <div v-for="n in 6" :key="n" class="extension-skeleton-card"><span class="ds-skeleton ds-skeleton-line"></span><span class="ds-skeleton ds-skeleton-line"></span><span class="ds-skeleton ds-skeleton-line"></span></div>
       </div>
     </div>
-    <div v-else-if="error" class="empty extension-error">
+    <div v-else-if="error" class="empty ds-inline-error extension-error">
       <div class="empty-icon" aria-hidden="true">⚠</div>
       <div class="empty-title">插件列表暂时不可用</div>
       <p class="empty-desc">{{ error.includes("操作过于频繁") ? "请求过于频繁，稍后重试即可；页面上的其它功能不受影响。" : error }}</p>
@@ -265,8 +265,8 @@ onMounted(() => { void load() })
 </script>
 
 <style scoped>
-.skill-market { margin: 0 0 24px; padding: 18px; border: 1px solid var(--border); border-radius: 14px; background: var(--bg-secondary); }
-.bundled-skill-note { display: flex; flex-direction: column; gap: 4px; margin-bottom: 16px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border)); border-radius: 10px; background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.skill-market { margin: 0 0 var(--section-gap); padding: var(--card-padding); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-secondary); }
+.bundled-skill-note { display: flex; flex-direction: column; gap: var(--space-4); margin-bottom: var(--space-16); padding: var(--space-12); border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border)); border-radius: var(--radius-lg); background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .bundled-skill-note strong { color: var(--text-primary); font-size: .86rem; }
 .bundled-skill-note span { color: var(--text-secondary); font-size: .78rem; line-height: 1.45; }
 .skill-market-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -274,9 +274,9 @@ onMounted(() => { void load() })
 .skill-market-heading p { margin: 4px 0 0; color: var(--text-tertiary); font-size: .82rem; }
 .skill-market-heading a { color: var(--accent); font-size: .82rem; text-decoration: none; }
 .skill-market-search { display: flex; gap: 8px; margin: 14px 0; }
-.skill-market-search input { flex: 1; min-width: 0; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-primary); color: var(--text-primary); }
+.skill-market-search input { flex: 1; min-width: 0; padding: var(--space-8) var(--space-12); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-primary); color: var(--text-primary); }
 .skill-market-results { display: grid; grid-template-columns: repeat(auto-fill,minmax(220px,1fr)); gap: 10px; }
-.skill-market-card { min-width: 0; padding: 13px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-primary); }
+.skill-market-card { min-width: 0; padding: var(--space-16); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-primary); }
 .skill-market-card-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .skill-market-card-title span { flex: none; color: var(--text-tertiary); font-size: .72rem; }
 .skill-market-card p { min-height: 3.4em; margin: 8px 0; color: var(--text-secondary); font-size: .8rem; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
@@ -284,62 +284,57 @@ onMounted(() => { void load() })
 .skill-market-install { width: 100%; margin-top: 10px; }
 .skill-market-error { color: var(--danger, #c44); font-size: .84rem; }
 .skill-market .marketplace-pagination { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 12px; padding-top: 4px; color: var(--text-tertiary); font-size: .82rem; }
-.ext-view { flex: 1; min-height: 0; overflow-y: auto; max-width: 800px; width: 100%; margin: 0 auto; padding: 24px 16px 80px; }
-.header { margin-bottom: 16px; }
-.header h2 { font-size: var(--fs-display-lg); font-weight: 600; font-family: var(--font-display); letter-spacing: -0.01em; margin: 0; }
-.header-sub { font-size: 0.82em; color: var(--text-tertiary); margin: 4px 0 0; }
-.extension-tabs { display: flex; gap: 4px; margin: 0 0 16px; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-secondary); }
-.extension-tabs button { flex: 1; min-height: 38px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); font: inherit; cursor: pointer; }
-.extension-tabs button.active { background: var(--bg-card); color: var(--text-primary); box-shadow: 0 1px 3px color-mix(in srgb, var(--text-primary) 12%, transparent); }
-.compact-empty { padding: 22px; }
-.loading, .empty { text-align: center; padding: 40px; color: var(--text-tertiary); }
-.extension-loading { padding: 12px 0 28px; }
-.extension-skeleton-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.extension-skeleton-card { display: grid; gap: 9px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); }
-.extension-skeleton-card span { display: block; height: 10px; border-radius: 999px; background: linear-gradient(90deg, var(--bg-secondary) 25%, color-mix(in srgb, var(--accent) 10%, var(--bg-secondary)) 50%, var(--bg-secondary) 75%); background-size: 240% 100%; animation: extension-skeleton-shimmer 1.35s ease-in-out infinite; }
+/* 容器、头部、状态块统一走 design-system.css；骨架屏用 .ds-skeleton */
+.ext-view { flex: 1; min-height: 0; overflow-y: auto; }
+.extension-tabs { display: flex; gap: var(--space-4); margin: 0 0 var(--space-16); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-secondary); }
+.extension-tabs button { flex: 1; min-height: 38px; border: 0; border-radius: var(--radius-input); background: transparent; color: var(--text-secondary); font: inherit; cursor: pointer; }
+.extension-tabs button.active { background: var(--bg-card); color: var(--text-primary); box-shadow: var(--shadow-xs); }
+.compact-empty { padding: var(--space-24); }
+.extension-loading { padding: var(--space-12) 0 var(--space-24); }
+.extension-skeleton-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-12); }
+.extension-skeleton-card { display: grid; gap: var(--space-8); padding: var(--space-16); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-card); }
+.extension-skeleton-card span { display: block; height: 10px; border-radius: 999px; }
 .extension-skeleton-card span:nth-child(2) { width: 78%; }
 .extension-skeleton-card span:nth-child(3) { width: 46%; }
-.extension-error { border: 1px solid color-mix(in srgb, var(--status-warn) 35%, var(--border)); border-radius: var(--radius); background: color-mix(in srgb, var(--status-warn) 5%, transparent); }
-@keyframes extension-skeleton-shimmer { 0% { background-position: 160% 0; } 100% { background-position: -80% 0; } }
-@media (prefers-reduced-motion: reduce) { .extension-skeleton-card span { animation: none; } }
+.extension-error { border: 1px solid color-mix(in srgb, var(--status-warn) 35%, var(--border)); border-radius: var(--radius-md); background: color-mix(in srgb, var(--status-warn) 5%, transparent); }
 @media (max-width: 520px) { .extension-skeleton-grid { grid-template-columns: 1fr; } }
-.empty-icon { font-size: 2em; margin-bottom: 8px; }
-.empty-title { font-size: 1em; font-weight: 600; margin-bottom: 4px; }
-.empty-desc { font-size: 0.85em; line-height: 1.6; }
+.empty-icon { font-size: 2em; margin-bottom: var(--space-8); }
+.empty-title { font-size: 1em; font-weight: 600; margin-bottom: var(--space-4); }
+.empty-desc { font-size: var(--fs-ui); line-height: 1.6; }
 
 .section {
-  margin-bottom: 20px; background: var(--bg-card); border-radius: var(--radius);
-  padding: 16px; border: 1px solid var(--border);
+  margin-bottom: var(--section-gap); background: var(--bg-card); border-radius: var(--radius-lg);
+  padding: var(--card-padding); border: 1px solid var(--border);
 }
-.section h3 { font-size: 1em; font-weight: 600; margin: 0 0 12px; color: var(--text-primary); }
+.section h3 { font-size: 1em; font-weight: 600; margin: 0 0 var(--space-12); color: var(--text-primary); }
 
-.status-section { padding: 14px 16px; }
-.status-grid { display: flex; gap: 24px; flex-wrap: wrap; }
-.status-item { display: flex; align-items: center; gap: 6px; font-size: 0.85em; color: var(--text-secondary); }
+.status-section { padding: var(--space-16); }
+.status-grid { display: flex; gap: var(--space-24); flex-wrap: wrap; }
+.status-item { display: flex; align-items: center; gap: var(--space-6); font-size: var(--fs-ui); color: var(--text-secondary); }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; }
 .status-dot.online { background: var(--status-ok); }
 .status-dot.offline { background: var(--status-error); }
 .status-value { font-weight: 700; font-size: 1.1em; color: var(--text-primary); }
-.status-label { font-size: 0.85em; color: var(--text-tertiary); }
+.status-label { font-size: var(--fs-ui); color: var(--text-tertiary); }
 
-.ext-list { display: flex; flex-direction: column; gap: 6px; }
-.ext-card { padding: 10px 12px; background: var(--bg-secondary); border-radius: 6px; }
-.ext-header { display: flex; align-items: center; gap: 8px; }
-.ext-name { font-weight: 600; font-size: 0.9em; color: var(--text-primary); }
-.ext-source { font-size: 0.75em; padding: 2px 6px; border-radius: 4px; background: var(--bg-card); color: var(--text-tertiary); }
+.ext-list { display: flex; flex-direction: column; gap: var(--space-6); }
+.ext-card { padding: var(--space-12); background: var(--bg-secondary); border-radius: var(--radius-input); }
+.ext-header { display: flex; align-items: center; gap: var(--space-8); }
+.ext-name { font-weight: 600; font-size: var(--fs-body); color: var(--text-primary); }
+.ext-source { font-size: var(--fs-hint); padding: var(--space-2) var(--space-6); border-radius: var(--radius-sm); background: var(--bg-card); color: var(--text-tertiary); }
 .source-ok { color: var(--status-ok-text); }
 .source-warn { color: var(--status-warn-text); }
-.ext-desc { font-size: 0.82em; color: var(--text-secondary); margin-top: 4px; line-height: 1.5; }
+.ext-desc { font-size: var(--fs-ui); color: var(--text-secondary); margin-top: var(--space-4); line-height: 1.5; }
 
-.tool-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.tool-grid { display: flex; flex-wrap: wrap; gap: var(--space-6); }
 .tool-chip {
-  font-size: 0.78em; padding: 4px 10px; border-radius: 4px;
+  font-size: var(--fs-hint); padding: var(--space-4) var(--space-12); border-radius: var(--radius-sm);
   background: var(--bg-secondary); color: var(--text-secondary);
   cursor: default;
 }
 
-.quick-links { display: flex; flex-direction: column; gap: 8px; }
-.quick-link { font-size: 0.85em; color: var(--accent); text-decoration: none; }
+.quick-links { display: flex; flex-direction: column; gap: var(--space-8); }
+.quick-link { font-size: var(--fs-ui); color: var(--accent-text); text-decoration: none; }
 .quick-link:hover { text-decoration: underline; }
-.btn { padding: 6px 16px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-secondary); cursor: pointer; font-size: 0.85em; margin-top: 8px; }
+.btn { padding: var(--space-6) var(--space-16); border: 1px solid var(--border); border-radius: var(--radius-input); background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; font-size: var(--fs-ui); margin-top: var(--space-8); }
 </style>

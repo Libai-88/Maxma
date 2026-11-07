@@ -1,6 +1,6 @@
 <template>
-  <div class="collab-view" ref="rootEl">
-    <div class="header">
+  <div class="collab-view ds-view" ref="rootEl">
+    <div class="header view-header">
       <h2>协作</h2>
       <p class="header-sub">管理会话分享、快照与协作访问</p>
     </div>
@@ -16,15 +16,15 @@
       </select>
     </div>
 
-    <div v-if="!currentSessionId" class="empty">
-      <div class="empty-icon">🤝</div>
-      <div class="empty-title">请选择一个会话</div>
-      <div class="empty-desc">选择会话后可创建分享链接和快照</div>
+    <div v-if="!currentSessionId" class="empty ds-state">
+      <div class="empty-icon ds-state__icon">🤝</div>
+      <div class="empty-title ds-state__title">请选择一个会话</div>
+      <div class="empty-desc ds-state__desc">选择会话后可创建分享链接和快照</div>
     </div>
 
     <template v-else>
       <!-- 错误提示 -->
-      <div v-if="store.error" class="error-banner">
+      <div v-if="store.error" class="error-banner ds-inline-error">
         {{ store.error }}
         <button class="error-close" @click="store.clearError()">✕</button>
       </div>
@@ -38,8 +38,8 @@
           </button>
         </div>
 
-        <div v-if="store.loading" class="loading">加载中...</div>
-        <div v-else-if="store.activeShares.length === 0" class="empty-section">
+        <div v-if="store.loading" class="loading ds-state">加载中...</div>
+        <div v-else-if="store.activeShares.length === 0" class="empty-section ds-state ds-state--bare">
           暂无活跃的分享链接
         </div>
         <div v-else class="share-list">
@@ -85,8 +85,8 @@
           </button>
         </div>
 
-        <div v-if="store.loading" class="loading">加载中...</div>
-        <div v-else-if="store.snapshots.length === 0" class="empty-section">
+        <div v-if="store.loading" class="loading ds-state">加载中...</div>
+        <div v-else-if="store.snapshots.length === 0" class="empty-section ds-state ds-state--bare">
           暂无快照
         </div>
         <div v-else class="snapshot-list">
@@ -308,40 +308,16 @@ function formatDate(dateStr: string): string {
 </script>
 
 <style scoped>
-.collab-view {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  max-width: 800px;
-  width: 100%;
-  margin: 0 auto;
-  padding: 24px 16px 80px;
-}
-
-.header {
-  margin-bottom: 20px;
-}
-
-.header h2 {
-  font-size: var(--fs-display-lg);
-  font-weight: 600;
-  font-family: var(--font-display);
-  letter-spacing: -0.01em;
-  margin: 0;
-}
-
-.header-sub {
-  font-size: 0.82em;
-  color: var(--text-tertiary);
-  margin: 4px 0 0;
-}
+/* 容器、头部、状态块统一走 design-system.css */
+.collab-view { flex: 1; min-height: 0; overflow-y: auto; }
 
 .session-selector {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 24px;
+  gap: var(--space-12);
+  margin-bottom: var(--space-24);
 }
+
 
 .selector-label {
   font-size: 0.9em;
@@ -353,7 +329,7 @@ function formatDate(dateStr: string): string {
   flex: 1;
   padding: 8px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: var(--bg-secondary);
   color: var(--text-primary);
   font-size: 0.9em;
@@ -364,41 +340,10 @@ function formatDate(dateStr: string): string {
   border-color: var(--accent);
 }
 
-.empty {
-  text-align: center;
-  padding: 60px 20px;
-  color: var(--text-tertiary);
-}
-
-.empty-icon {
-  font-size: 3em;
-  margin-bottom: 12px;
-}
-
-.empty-title {
-  font-size: 1.1em;
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-
-.empty-desc {
-  font-size: 0.9em;
-}
-
-.error-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  background: color-mix(in srgb, var(--status-error) 10%, transparent);
-  color: var(--status-error-text);
-  border-radius: 6px;
-  font-size: 0.85em;
-  margin-bottom: 16px;
-}
-
+/* .empty / empty-* 已由 .ds-state 及其子元素类提供 */
+/* error-banner / loading / empty-section 已由 ds-inline-error / ds-state 提供 */
 .error-close {
-  padding: 2px 6px;
+  padding: var(--space-2) var(--space-6);
   border: none;
   background: transparent;
   color: var(--status-error-text);
@@ -407,37 +352,20 @@ function formatDate(dateStr: string): string {
 }
 
 .section {
-  margin-bottom: 28px;
+  margin-bottom: var(--section-gap);
 }
 
 .section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: var(--space-12);
 }
-
 .section-header h3 {
   font-size: 1em;
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
-}
-
-.loading {
-  text-align: center;
-  padding: 20px;
-  color: var(--text-tertiary);
-  font-size: 0.9em;
-}
-
-.empty-section {
-  padding: 20px;
-  text-align: center;
-  color: var(--text-tertiary);
-  font-size: 0.9em;
-  background: var(--bg-secondary);
-  border-radius: 6px;
 }
 
 .share-list,
@@ -473,7 +401,7 @@ function formatDate(dateStr: string): string {
 .share-mode {
   font-size: 0.75em;
   padding: 3px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-weight: 500;
 }
 
@@ -502,7 +430,7 @@ function formatDate(dateStr: string): string {
   flex: 1;
   padding: 6px 10px;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--bg-secondary);
   color: var(--text-secondary);
   font-size: 0.8em;
@@ -517,7 +445,7 @@ function formatDate(dateStr: string): string {
 .btn-copy {
   padding: 6px 12px;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--bg-secondary);
   color: var(--text-secondary);
   cursor: pointer;
@@ -546,7 +474,7 @@ function formatDate(dateStr: string): string {
 .btn {
   padding: 8px 16px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: var(--bg-secondary);
   cursor: pointer;
   font-size: 0.85em;
@@ -563,7 +491,7 @@ function formatDate(dateStr: string): string {
 .btn-icon {
   padding: 4px 10px;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--bg-secondary);
   cursor: pointer;
   font-size: 0.8em;
@@ -627,7 +555,7 @@ function formatDate(dateStr: string): string {
   width: 100%;
   padding: 8px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: var(--bg-secondary);
   color: var(--text-primary);
   font-size: 0.9em;

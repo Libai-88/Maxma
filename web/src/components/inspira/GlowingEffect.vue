@@ -81,6 +81,7 @@ const containerStyles = computed(() => ({
   '--spread': props.spread,
   '--start': '0',
   '--active': '0',
+  '--black': '#000000',
   '--glowingeffect-border-width': `${props.borderWidth}px`,
   '--repeating-conic-gradient-times': '5',
   '--gradient':

@@ -1,8 +1,8 @@
 <template>
-  <div class="metrics-view">
-    <div class="header">
+  <div class="metrics-view ds-view ds-view--wide">
+    <div class="header view-header view-header--split">
       <h2>运行指标</h2>
-      <div class="header-actions">
+      <div class="header-actions view-header__actions">
         <span v-if="loading" class="badge-muted">刷新中…</span>
         <span v-else-if="error" class="badge-error" :title="error">获取失败</span>
         <span v-else-if="snapshot" class="badge-muted">运行 {{ formatUptime(snapshot.uptime_seconds) }}</span>
@@ -341,41 +341,20 @@ function formatTokens(n: number): string {
 <style scoped>
 .metrics-view {
   flex: 1;
-  padding: 24px 32px;
-  max-width: 1100px;
-  margin: 0 auto;
   overflow-y: auto;
-  width: 100%;
-  box-sizing: border-box;
-}
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-.header h2 {
-  font-size: var(--fs-display-lg);
-  font-weight: 600;
-  font-family: var(--font-display);
-  letter-spacing: -0.01em;
-  color: var(--text-primary);
-  margin: 0;
 }
 
 /* ── 引导卡片 ── */
 	.metrics-guide {
-	  margin-bottom: 16px;
+	  margin-bottom: var(--space-16);
 	  padding: 0;
 	  border: 1px solid var(--border);
-	  border-radius: 10px;
+	  border-radius: var(--radius-lg);
 	  background: color-mix(in srgb, var(--accent) 5%, var(--bg-card));
 	  border-color: color-mix(in srgb, var(--accent) 25%, var(--border));
 	}
 .metrics-guide > summary {
-  padding: 12px 16px;
+  padding: var(--space-12) var(--space-16);
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
@@ -387,23 +366,23 @@ function formatTokens(n: number): string {
 .metrics-guide > summary::before {
   content: '▸';
   display: inline-block;
-  margin-right: 8px;
+  margin-right: var(--space-8);
   color: var(--text-tertiary);
   transition: transform 0.15s;
 }
 .metrics-guide[open] > summary::before { transform: rotate(90deg); }
 .guide-body {
-  padding: 0 16px 12px;
+  padding: 0 var(--space-16) var(--space-12);
   font-size: 12.5px;
   color: var(--text-secondary);
   line-height: 1.75;
 }
-.guide-body p { margin: 6px 0; }
-.guide-body ul { margin: 6px 0; padding-left: 22px; }
+.guide-body p { margin: var(--space-6) 0; }
+.guide-body ul { margin: var(--space-6) 0; padding-left: 22px; }
 .guide-body li { margin-bottom: 3px; }
 .guide-body strong { color: var(--text-primary); }
 .guide-note {
-  margin-top: 8px;
+  margin-top: var(--space-8);
   font-size: 12px;
   color: var(--text-tertiary);
 }
@@ -412,12 +391,12 @@ function formatTokens(n: number): string {
   font-size: 12.5px;
   color: var(--text-secondary);
   line-height: 1.6;
-  margin: 0 0 12px;
+  margin: 0 0 var(--space-12);
 }
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-12);
   font-size: 13px;
   color: var(--text-secondary);
 }
@@ -426,15 +405,15 @@ function formatTokens(n: number): string {
   white-space: nowrap;
 }
 .badge-muted {
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: var(--space-2) var(--space-8);
+  border-radius: var(--radius-sm);
   background: var(--bg-secondary);
   color: var(--text-secondary);
   font-size: 12px;
 }
 .badge-error {
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: var(--space-2) var(--space-8);
+  border-radius: var(--radius-sm);
   background: transparent;
   background: transparent;
   background: color-mix(in srgb, var(--status-error) 12%, transparent);
@@ -442,9 +421,9 @@ function formatTokens(n: number): string {
   font-size: 12px;
 }
 .btn-small {
-  padding: 4px 12px;
+  padding: var(--space-4) var(--space-12);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: var(--bg-card);
   color: var(--text-secondary);
   font-size: 12px;
@@ -454,36 +433,36 @@ function formatTokens(n: number): string {
 .auto-toggle {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-4);
   font-size: 12px;
   cursor: pointer;
 }
 .auto-toggle input { cursor: pointer; }
 
 .card {
-  margin-bottom: 16px;
-  padding: 16px;
+  margin-bottom: var(--section-gap);
+  padding: var(--card-padding);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--bg-card);
 }
 .card h3 {
   font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
-  margin: 0 0 12px;
+  margin: 0 0 var(--space-12);
 }
 
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: var(--space-12);
+  margin-bottom: var(--space-16);
 }
 .stat {
   padding: 10px 14px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg-primary);
 }
 .stat-value {
@@ -496,33 +475,33 @@ function formatTokens(n: number): string {
   font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary);
-  margin-left: 2px;
+  margin-left: var(--space-2);
 }
 .stat-value.text-error { color: var(--status-error-text); }
 .stat-label {
   font-size: 11px;
   color: var(--text-secondary);
-  margin-top: 2px;
+  margin-top: var(--space-2);
 }
 
-.sub-section { margin-top: 12px; }
+.sub-section { margin-top: var(--space-12); }
 .sub-title {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary);
-  margin-bottom: 6px;
+  margin-bottom: var(--space-6);
 }
 
 .history-controls {
   display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: var(--space-8);
+  margin-bottom: var(--space-8);
   align-items: center;
 }
 .history-controls select {
-  padding: 4px 8px;
+  padding: var(--space-4) var(--space-8);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: var(--bg-primary);
   color: var(--text-primary);
   font-size: 12px;
@@ -531,7 +510,7 @@ function formatTokens(n: number): string {
 .loading-text, .empty-text {
   color: var(--text-secondary);
   font-size: 13px;
-  padding: 16px 0;
+  padding: var(--space-16) 0;
   text-align: center;
 }
 </style>

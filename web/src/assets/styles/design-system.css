@@ -37,7 +37,7 @@
   .ds-btn:active {
     transform: scale(0.96);
     box-shadow:
-      inset 0 1px 3px rgba(0,0,0,0.1),
+      inset 0 1px 3px var(--shadow-color),
       0 1px 2px var(--shadow-color);
     transition-duration: 80ms;
   }
@@ -56,15 +56,18 @@
   cursor: not-allowed;
 }
 .ds-btn--primary {
-  background: var(--accent);
-  color: #ffffff;
-  border-color: var(--accent);
+  background: var(--accent-solid);
+  color: var(--accent-solid-text);
+  border-color: var(--accent-solid);
 }
+/* 实底按钮悬停不再改背景：--accent-hover 是给描边/图标的色阶，
+   在金継/夜航/子夜配白字会跌到 2.2~3.9:1。只保留抬升 + 有色投影，
+   对比度恒等于 themeTokens.spec.ts 已锁定的 --accent-solid 配对。 */
 .ds-btn--primary:hover:not(:disabled) {
-	  background: var(--accent-hover, var(--accent-dark, var(--accent)));
-	  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 30%, transparent), 0 2px 8px var(--shadow-color);
-	  opacity: 1;
-	}
+  background: var(--accent-solid);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--accent-solid) 28%, transparent),
+              0 2px 8px var(--shadow-color);
+}
 .ds-btn--danger {
   color: var(--status-error-text);
   border-color: var(--status-error);
@@ -74,14 +77,14 @@
   border-color: var(--status-error);
 }
 .ds-btn--danger-filled {
-  background: var(--status-error);
-  border-color: var(--status-error);
-  color: #ffffff;
+  background: var(--status-error-solid);
+  border-color: var(--status-error-solid);
+  color: var(--status-error-solid-text);
 }
 .ds-btn--danger-filled:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--status-error) 85%, #000);
-  border-color: color-mix(in srgb, var(--status-error) 85%, #000);
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--status-error) 30%, transparent);
+  background: var(--status-error-solid);
+  border-color: var(--status-error-solid);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--status-error-solid) 30%, transparent);
 }
 .ds-btn--sm {
   padding: 4px 12px;
@@ -109,20 +112,20 @@
   color: var(--text-primary);
   background: var(--bg-primary);
   outline: none;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,0.04);
+  box-shadow: inset 0 1px 2px var(--shadow-color);
   transition: border-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
   box-sizing: border-box;
 }
 .ds-input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent), inset 0 1px 2px rgba(0,0,0,0.04);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent), inset 0 1px 2px var(--shadow-color);
   animation: maxma-focus-pulse-in 0.3s var(--ease-standard, cubic-bezier(0.77, 0, 0.175, 1)) both;
 }
 .ds-input::placeholder {
   color: var(--text-tertiary);
 }
 .ds-input--mono {
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-family: var(--font-mono);
 }
 
 /* ── 基础卡片 ── */
@@ -130,7 +133,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-card);
-  padding: var(--space-20, var(--space-16));
+  padding: var(--space-16);
   box-shadow: var(--shadow-xs);
   transition: border-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
 }
@@ -204,28 +207,235 @@
   margin-top: var(--space-16);
 }
 
-/* ── 页面通用头部（品牌化：衬线 + 负间距） ── */
-.view-header { margin-bottom: 24px; }
-.view-header h2 {
+/* ══════════════════════════════════════════════════════════════
+   页面级规范 — 全站唯一事实源
+   此前 20+ 视图各自复制 .header h2 / .header-sub / .loading / .empty，
+   导致标题、间距、状态块、圆角逐页漂移，且硬编码 px 绕过主题 token
+   （ultraline 的「无圆角无阴影」在多数页面失效）。
+   视图只保留布局差异，通用外观一律走这里；改这里 = 全站生效。
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── 页面容器 ── */
+.ds-view,
+.ds-view--wide,
+.ds-view--narrow {
+  width: 100%;
+  max-width: var(--view-max-width);
+  margin-inline: auto;
+  padding: var(--view-padding-block) var(--view-gutter) var(--space-40);
+  box-sizing: border-box;
+}
+.ds-view--wide   { max-width: var(--view-max-width-wide); }
+.ds-view--narrow { max-width: var(--view-max-width-narrow); }
+
+/* ── 页面头部 ── */
+.view-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin-bottom: var(--space-24);
+}
+.view-header--split {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8) var(--space-24);
+}
+.view-header--split > .header-sub,
+.view-header--split > .view-header__sub {
+  flex: 1 1 100%;
+  order: 3;
+}
+.view-header h2,
+.view-header h1 {
+  min-width: 0;
+  margin: 0;
+  font-family: var(--font-display);
   font-size: var(--fs-display-lg);
   font-weight: 600;
-  font-family: var(--font-display);
-  letter-spacing: -0.01em;
-  margin: 0;
-  position: relative;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  text-wrap: balance;
 }
-.view-header h2::after {
+.view-header h2::after,
+.view-header h1::after {
   content: '';
   display: block;
-  width: 24px;
+  width: 28px;
   height: 2px;
-  background: var(--accent);
-  margin-top: 6px;
+  margin-top: var(--space-8);
   border-radius: 1px;
-  opacity: 0.5;
+  background: var(--accent);
+  opacity: 0.7;
 }
-.view-header .header-sub {
-  font-size: 0.82em;
+.view-header .header-sub,
+.view-header__sub {
+  margin: 0;
+  font-size: var(--fs-ui);
+  line-height: 1.6;
   color: var(--text-tertiary);
-  margin: 6px 0 0;
+  max-width: var(--text-measure);
+  text-wrap: pretty;
+}
+.view-header__eyebrow {
+  font-size: var(--fs-hint);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-text);
+}
+.view-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+  flex: 0 0 auto;
+}
+
+/* ── 区块卡片 ── */
+.ds-section {
+  padding: var(--card-padding);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-xs);
+  margin-bottom: var(--section-gap);
+}
+.ds-section__title {
+  margin: 0 0 var(--space-4);
+  font-family: var(--font-display);
+  font-size: var(--fs-display-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.ds-section__desc {
+  margin: 0 0 var(--space-16);
+  font-size: var(--fs-ui);
+  line-height: 1.6;
+  color: var(--text-tertiary);
+}
+
+/* ── 状态块（空 / 加载 / 错误） ── */
+.ds-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
+  min-height: 160px;
+  padding: var(--space-32) var(--space-24);
+  text-align: center;
+  color: var(--text-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-card) 70%, transparent);
+  font-size: var(--fs-ui);
+}
+.ds-state--bare {
+  min-height: 0;
+  padding: var(--space-24) var(--space-8);
+  border: 0;
+  background: transparent;
+}
+.ds-state--error {
+  color: var(--status-error-text);
+  border-color: color-mix(in srgb, var(--status-error) 45%, var(--border));
+  background: color-mix(in srgb, var(--status-error) 6%, var(--bg-card));
+}
+.ds-state__icon {
+  font-size: 1.8em;
+  line-height: 1;
+  color: var(--accent-text);
+}
+.ds-state__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-display-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.ds-state__desc {
+  max-width: 46ch;
+  line-height: 1.6;
+}
+.ds-state__actions {
+  display: flex;
+  gap: var(--space-8);
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: var(--space-8);
+}
+.ds-inline-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+  margin-bottom: var(--space-12);
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid color-mix(in srgb, var(--status-error) 35%, var(--border));
+  border-radius: var(--radius-input);
+  background: color-mix(in srgb, var(--status-error) 8%, var(--bg-card));
+  color: var(--status-error-text);
+  font-size: var(--fs-ui);
+}
+
+/* ── 状态块交错入场（STATE-IN-001）：图标/标题/说明/操作依次浮起，
+ * 40ms 步进（动效纪律：列表交错 ≤10 项）。一次性状态反馈，
+ * 克制模式下保留；prefers-reduced-motion 全局规则覆盖。 */
+.ds-state > * {
+  animation: maxma-fade-up 0.3s var(--ease-out) both;
+}
+.ds-state > :nth-child(2) { animation-delay: 0.04s; }
+.ds-state > :nth-child(3) { animation-delay: 0.08s; }
+.ds-state > :nth-child(n + 4) { animation-delay: 0.12s; }
+
+/* ── 骨架屏 / 旋转指示器（替代 5 份重复的 shimmer/spin keyframes） ── */
+.ds-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+}
+.ds-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 8%, var(--bg-secondary)), transparent);
+  transform: translateX(-100%);
+  animation: ds-shimmer 1.35s ease-in-out infinite;
+}
+.ds-skeleton-line { height: 10px; border-radius: 999px; }
+.ds-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: maxma-spin 0.8s linear infinite;
+}
+@keyframes ds-shimmer {
+  to { transform: translateX(100%); }
+}
+
+/* ── 动效密度：默认克制（html[data-motion="calm"]），可在外观页切回 full ──
+   只压制纯装饰的无限循环，不触碰功能动画（流式光标、忙碌点、状态提示）。 */
+html[data-motion="calm"] .ds-decor { display: none !important; }
+html[data-motion="calm"] .ds-decor-anim,
+html[data-motion="calm"] :where(.leaves-layer, .colourful-text, .dock-meteors, .beam-particle, .ripple-circle, .sparkle, .glow) {
+  animation: none !important;
+}
+html[data-motion="calm"] .page-flip-forward-enter-active,
+html[data-motion="calm"] .page-flip-forward-leave-active,
+html[data-motion="calm"] .page-slide-forward-enter-active,
+html[data-motion="calm"] .page-slide-forward-leave-active,
+html[data-motion="calm"] .page-rise-forward-enter-active,
+html[data-motion="calm"] .page-rise-forward-leave-active,
+html[data-motion="calm"] .page-zoom-forward-enter-active,
+html[data-motion="calm"] .page-zoom-forward-leave-active {
+  transform: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ds-decor { display: none !important; }
+  .ds-decor-anim, .ds-skeleton::after, .ds-spinner { animation: none !important; }
 }

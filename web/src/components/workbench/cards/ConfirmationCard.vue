@@ -51,15 +51,15 @@ function submit(actionId: string, token: string) {
 </script>
 
 <style scoped>
-.artifact-card { border: 1px solid var(--border-color, #d9d9d9); border-radius: 8px; background: var(--bg-primary, #fff); padding: 12px; }
+.artifact-card { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-card); padding: 12px; }
 header { font-size: 14px; font-weight: 600; }
 p { margin: 8px 0 12px; white-space: pre-wrap; font-size: 13px; line-height: 1.5; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.artifact-action { border: 1px solid var(--border-color, #d9d9d9); border-radius: 5px; padding: 6px 12px; cursor: pointer; }
-.primary { background: var(--accent-color, #1a73e8); color: var(--text-inverse); border-color: var(--accent-color, #1a73e8); }
-.danger { background: var(--status-error); color: var(--text-inverse); border-color: var(--status-error); }
+.artifact-action { border: 1px solid var(--border); border-radius: var(--radius-input); padding: 6px 12px; cursor: pointer; }
+.primary { background: var(--accent-solid); color: var(--accent-solid-text); border-color: var(--accent-solid); }
+.danger { background: var(--status-error-solid); color: var(--status-error-solid-text); border-color: var(--status-error-solid); }
 .secondary { background: var(--bg-secondary, #f5f5f5); color: var(--text-primary, #222); }
-.artifact-action:focus-visible { outline: 2px solid var(--accent-color, #1a73e8); outline-offset: 2px; }
+.artifact-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .artifact-action:disabled { cursor: not-allowed; opacity: .65; }
 small { display: block; margin-top: 8px; color: var(--text-secondary, #666); }
 </style>

@@ -1,13 +1,13 @@
 <template>
-  <div class="capabilities-view">
-    <div class="header">
+  <div class="capabilities-view ds-view">
+    <div class="header view-header">
       <h2>能力清单</h2>
       <p class="header-sub">Pi Agent 可用工具、接入能力与运行配置</p>
     </div>
 
-    <div v-if="loading" class="loading"><TextGenerateEffect words="加载中..." /></div>
+    <div v-if="loading" class="loading ds-state"><TextGenerateEffect words="加载中..." /></div>
 
-    <div v-else-if="error" class="empty">
+    <div v-else-if="error" class="empty ds-state ds-state--error">
       <p>加载失败: {{ error }}</p>
       <button class="btn" @click="load">重试</button>
     </div>
@@ -286,25 +286,14 @@ onMounted(load)
 </script>
 
 <style scoped>
-.capabilities-view {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 24px 16px 80px;
-  width: 100%;
-}
-
-.header { margin-bottom: 24px; }
-.header h2 { font-size: var(--fs-display-lg); font-weight: 600; font-family: var(--font-display); letter-spacing: -0.01em; margin: 0; }
-.header-sub { font-size: 0.82em; color: var(--text-tertiary); margin: 4px 0 0; }
+/* 容器、头部、状态块统一走 design-system.css；此处只留能力清单独有布局。 */
+.capabilities-view { flex: 1; min-height: 0; overflow-y: auto; }
 
 .section {
-  margin-bottom: 28px;
-  background: var(--bg-card, var(--bg-secondary));
-  border-radius: var(--radius);
-  padding: 16px;
+  margin-bottom: var(--section-gap);
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  padding: var(--card-padding);
   border: 1px solid var(--border);
   overflow-x: auto;
 }
@@ -329,7 +318,7 @@ onMounted(load)
   text-align: center;
   padding: 12px 8px;
   background: var(--bg-secondary);
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
 }
 .stat-value { font-size: 1.6em; font-weight: 700; color: var(--accent); }
@@ -348,7 +337,7 @@ onMounted(load)
 }
 .config-item {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 6px 8px; background: var(--bg-secondary); border-radius: 4px;
+  padding: var(--space-6) var(--space-8); background: var(--bg-secondary); border-radius: var(--radius-sm);
   font-size: 0.8em; min-width: 0;
 }
 .config-key {
@@ -369,7 +358,7 @@ onMounted(load)
   padding: 4px 10px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   font-size: 0.78em;
   color: var(--text-secondary);
   cursor: default;
@@ -384,25 +373,25 @@ onMounted(load)
 .provider-list { display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow-y: auto; }
 .provider-row {
   display: flex; align-items: center; gap: 12px;
-  padding: 8px 10px; background: var(--bg-secondary); border-radius: 6px;
+  padding: var(--space-8) var(--space-12); background: var(--bg-secondary); border-radius: var(--radius-input);
   font-size: 0.83em;
 }
 .provider-name { font-weight: 500; color: var(--text-primary); flex: 1; }
 .provider-model { font-family: var(--font-mono); font-size: 0.9em; color: var(--text-secondary); }
-.provider-type { font-size: 0.85em; color: var(--text-tertiary); padding: 2px 6px; background: var(--bg-card); border-radius: 4px; }
-.provider-status { font-size: 0.85em; padding: 2px 8px; border-radius: 4px; color: var(--text-tertiary); }
+.provider-type { font-size: var(--fs-ui); color: var(--text-tertiary); padding: var(--space-2) var(--space-6); background: var(--bg-card); border-radius: var(--radius-sm); }
+.provider-status { font-size: var(--fs-ui); padding: var(--space-2) var(--space-8); border-radius: var(--radius-sm); color: var(--text-tertiary); }
 .provider-status.active { color: var(--status-ok-text); background: color-mix(in srgb, var(--status-ok) 10%, transparent); }
 
 /* MCP */
 .mcp-list { display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow-y: auto; }
 .mcp-row {
   display: flex; align-items: center; gap: 12px;
-  padding: 8px 10px; background: var(--bg-secondary); border-radius: 6px;
+  padding: var(--space-8) var(--space-12); background: var(--bg-secondary); border-radius: var(--radius-input);
   font-size: 0.83em; min-width: 0;
 }
 .mcp-name { font-weight: 500; color: var(--text-primary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mcp-transport { font-family: var(--font-mono); font-size: 0.9em; color: var(--text-tertiary); }
-.mcp-status { font-size: 0.85em; padding: 2px 8px; border-radius: 4px; color: var(--text-tertiary); }
+.mcp-status { font-size: var(--fs-ui); padding: var(--space-2) var(--space-8); border-radius: var(--radius-sm); color: var(--text-tertiary); }
 .mcp-status.enabled { color: var(--status-ok-text); }
 .mcp-status.connected { color: var(--status-info-text); }
 
@@ -411,7 +400,7 @@ onMounted(load)
 .source-list { display: flex; flex-direction: column; gap: 4px; max-height: 400px; overflow-y: auto; }
 .source-row {
   display: flex; align-items: center; gap: 10px;
-  padding: 6px 10px; border-radius: 6px; font-size: 0.8em; min-width: 0;
+  padding: var(--space-6) var(--space-12); border-radius: var(--radius-input); font-size: var(--fs-caption); min-width: 0;
 }
 .source-row.active { background: var(--bg-secondary); }
 .source-row.inactive { opacity: 0.45; }
@@ -419,22 +408,19 @@ onMounted(load)
 .source-info { flex: 1; min-width: 0; overflow: hidden; }
 .source-name { font-weight: 500; color: var(--text-primary); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .source-desc { font-size: 0.9em; color: var(--text-tertiary); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.source-scope { font-size: 0.85em; padding: 2px 6px; border-radius: 4px; background: var(--bg-card); color: var(--text-tertiary); flex-shrink: 0; }
-.source-status { font-size: 0.85em; padding: 2px 8px; border-radius: 4px; color: var(--text-tertiary); }
+.source-scope { font-size: var(--fs-ui); padding: var(--space-2) var(--space-6); border-radius: var(--radius-sm); background: var(--bg-card); color: var(--text-tertiary); flex-shrink: 0; }
+.source-status { font-size: var(--fs-ui); padding: var(--space-2) var(--space-8); border-radius: var(--radius-sm); color: var(--text-tertiary); }
 .source-status.found { color: var(--status-ok-text); background: color-mix(in srgb, var(--status-ok) 8%, transparent); }
 .conflict-section { margin-top: 12px; }
 .conflict-title { color: var(--status-warn-text); }
-.conflict-card { padding: 8px 10px; background: color-mix(in srgb, var(--status-warn) 6%, transparent); border: 1px solid color-mix(in srgb, var(--status-warn) 20%, transparent); border-radius: 6px; margin-bottom: 6px; }
+.conflict-card { padding: var(--space-8) var(--space-12); background: color-mix(in srgb, var(--status-warn) 6%, transparent); border: 1px solid color-mix(in srgb, var(--status-warn) 20%, transparent); border-radius: var(--radius-input); margin-bottom: var(--space-6); }
 .conflict-scope { font-size: 0.8em; font-weight: 600; color: var(--status-warn-text); }
 .conflict-sources { font-size: 0.85em; color: var(--text-secondary); margin-top: 2px; }
 .conflict-note { font-size: 0.75em; color: var(--text-tertiary); margin-top: 4px; }
 .conflict-clear { font-size: 0.82em; color: var(--status-ok-text); padding: 6px 0; }
-
-.loading, .empty {
-  text-align: center; padding: 40px; color: var(--text-tertiary);
-}
+/* 状态块已由 .ds-state 提供，删除重复声明 */
 .btn {
-  padding: 6px 16px; border: 1px solid var(--border); border-radius: 6px;
-  background: var(--bg-secondary); cursor: pointer; font-size: 0.85em; margin-top: 8px;
+  padding: var(--space-6) var(--space-16); border: 1px solid var(--border); border-radius: var(--radius-input);
+  background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; font-size: var(--fs-ui); margin-top: var(--space-8);
 }
 </style>

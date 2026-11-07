@@ -75,6 +75,7 @@ import {
   registerChatConnection,
   unregisterChatConnection,
   type ChatWsHub,
+  type KernelRpcResult,
   type WsData,
 } from "./routes/chat-ws";
 
@@ -123,7 +124,7 @@ function kernelEventSink(sessionId: string, event: { type: string; payload: Reco
 function callKernelRpc(
   method: string,
   params: Record<string, unknown>,
-): Promise<{ ok: true; result: unknown } | { ok: false; error: string }> {
+): Promise<KernelRpcResult> {
   return new Promise((resolve) => {
     const io = {
       send: (id: number | null, result: unknown) => resolve({ ok: true, result }),

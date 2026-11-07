@@ -430,6 +430,7 @@ export type ServerEvent =
   | TaskReviewUpdateEvent
   | TaskBriefUpdateEvent
   | PermissionModeUpdatedEvent
+  | ActionFailedEvent
 
 // === GAP-B1-001：目标模式状态事件 ===
 
@@ -500,6 +501,22 @@ export interface PermissionModeUpdatedEvent {
   type: 'permission_mode_updated'
   payload: {
     permission_mode: PermissionMode
+  }
+}
+
+/**
+ * ACTION-FAIL-001：会话级动作（ask_user 应答 / 自动执行开关 / 计划操作 /
+ * 计划模式 / 检查点）的 RPC 失败回执。此前这五条路径的失败被
+ * `.catch(() => {})` 吞掉，乐观 UI 停在错误值上、重试毫无反应。
+ * 成功路径各有各的回执（permission_mode_updated / goal_updated /
+ * artifact_result），失败路径统一走这一条 → 全局 toast。
+ */
+export interface ActionFailedEvent {
+  type: 'action_failed'
+  payload: {
+    /** 动作的人类可读名（后端已本地化，如「自动执行开关」） */
+    action: string
+    message: string
   }
 }
 

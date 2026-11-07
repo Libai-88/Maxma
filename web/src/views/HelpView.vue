@@ -1,6 +1,6 @@
 <template>
-  <div class="help-view" ref="rootEl">
-    <div class="header">
+  <div class="help-view ds-view" ref="rootEl">
+    <div class="header view-header">
       <h2><ColourfulText text="帮助 & 关于 HELP" /></h2>
       <p class="header-sub">了解 Maxma 是什么、能做什么、如何开始</p>
     </div>
@@ -330,38 +330,15 @@ const steps: Step[] = [
 </script>
 
 <style scoped>
-.help-view {
-  flex: 1;
-  padding: 24px 32px;
-  max-width: 960px;
-  margin: 0 auto;
-  overflow-y: auto;
-  width: 100%;
-  box-sizing: border-box;
-}
+/* 容器、头部统一走 design-system.css */
+.help-view { flex: 1; min-height: 0; overflow-y: auto; }
 
-.header {
-  margin-bottom: 24px;
-}
-.header h2 {
-  font-size: var(--fs-display-lg);
-  font-weight: 600;
-  font-family: var(--font-display);
-  letter-spacing: -0.01em;
-  color: var(--text-primary);
-  margin: 0 0 6px;
-}
-.header-sub {
-  margin: 0;
-  font-size: 14px;
-  color: var(--text-secondary);
-}
 
 .section {
-  margin-bottom: 24px;
-  padding: 18px 20px;
+  margin-bottom: var(--section-gap);
+  padding: var(--card-padding);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--bg-card);
 }
 .section h3 {
@@ -382,7 +359,7 @@ const steps: Step[] = [
   font-family: 'SF Mono', 'Consolas', monospace;
   font-size: 13px;
   padding: 1px 5px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   background: var(--bg-secondary);
   color: var(--text-primary);
 }
@@ -402,7 +379,7 @@ const steps: Step[] = [
   gap: 12px;
   padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg-primary);
 }
 .capability-icon {
@@ -456,7 +433,7 @@ const steps: Step[] = [
   gap: 12px;
   padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg-primary);
 }
 .step-title {
@@ -487,7 +464,7 @@ const steps: Step[] = [
 }
 .faq-item {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg-primary);
   overflow: hidden;
 }
@@ -527,7 +504,7 @@ const steps: Step[] = [
   font-family: 'SF Mono', 'Consolas', monospace;
   font-size: 12px;
   padding: 1px 4px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   background: var(--bg-secondary);
 }
 
@@ -536,7 +513,7 @@ const steps: Step[] = [
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 .compare-row {
