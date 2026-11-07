@@ -1,6 +1,6 @@
 <template>
-  <div class="automation-view" ref="rootEl">
-    <div class="header">
+  <div class="automation-view ds-view" ref="rootEl">
+    <div class="header view-header">
       <h2>自动化</h2>
       <p class="header-sub">定时任务与自动化调度</p>
     </div>
@@ -304,56 +304,49 @@ async function handleDelete(id: string) {
 </script>
 
 <style scoped>
-.automation-view { flex: 1; min-height: 0; overflow-y: auto; max-width: 800px; width: 100%; margin: 0 auto; padding: 24px 16px 80px; }
-.header { margin-bottom: 16px; }
-.header h2 { font-size: var(--fs-display-lg); font-weight: 600; font-family: var(--font-display); letter-spacing: -0.01em; margin: 0; }
-.header-sub { font-size: 0.82em; color: var(--text-tertiary); margin: 4px 0 0; }
-.loading, .empty { text-align: center; padding: 40px; color: var(--text-tertiary); }
-.empty-icon { font-size: 2em; margin-bottom: 8px; }
-.empty-title { font-size: 1em; font-weight: 600; margin-bottom: 4px; }
-.empty-desc { font-size: 0.85em; }
-.error-banner { padding: 10px 12px; background: color-mix(in srgb, var(--status-error) 10%, transparent); color: var(--status-error-text); border-radius: 6px; font-size: 0.85em; margin-bottom: 12px; }
+/* 容器、头部、空/错状态统一走 design-system.css；此处只留自动化独有样式。 */
+.automation-view { flex: 1; min-height: 0; overflow-y: auto; }
 
-.section { margin-bottom: 20px; }
-.create-section { padding: 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
-.create-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.section { margin-bottom: var(--section-gap); }
+.create-section { padding: var(--space-16); background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.create-row { display: flex; gap: var(--space-8); flex-wrap: wrap; }
 .form-input {
-  flex: 1; min-width: 120px; padding: 8px 12px; border: 1px solid var(--border);
-  border-radius: 6px; background: var(--bg-secondary); color: var(--text-primary); font-size: 0.85em;
+  flex: 1; min-width: 120px; padding: var(--space-8) var(--space-12); border: 1px solid var(--border);
+  border-radius: var(--radius-input); background: var(--bg-secondary); color: var(--text-primary); font-size: var(--fs-ui);
 }
 .form-input:focus { outline: none; border-color: var(--accent); }
 .form-input-error { border-color: var(--status-error) !important; }
-.form-error { width: 100%; color: var(--status-error-text); font-size: 0.78em; margin: 2px 0 0; }
+.form-error { width: 100%; color: var(--status-error-text); font-size: var(--fs-hint); margin: var(--space-2) 0 0; }
 .flex-2 { flex: 2; }
 
-.btn { padding: 8px 16px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-secondary); cursor: pointer; font-size: 0.85em; color: var(--text-secondary); white-space: nowrap; }
-.btn-primary { background: var(--accent); color: white; border-color: var(--accent); }
+.btn { padding: var(--space-8) var(--space-16); border: 1px solid var(--border); border-radius: var(--radius-input); background: var(--bg-secondary); cursor: pointer; font-size: var(--fs-ui); color: var(--text-secondary); white-space: nowrap; }
+.btn-primary { background: var(--accent-solid); color: var(--accent-solid-text); border-color: var(--accent-solid); }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.automation-list { display: flex; flex-direction: column; gap: 8px; }
+.automation-list { display: flex; flex-direction: column; gap: var(--space-8); }
 .automation-card {
-  padding: 14px; background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: var(--radius);
+  padding: var(--space-16); background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-md);
 }
 .automation-card.disabled { opacity: 0.6; }
-.automation-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.automation-name { font-weight: 600; font-size: 0.95em; color: var(--text-primary); }
-.automation-actions { display: flex; gap: 6px; }
+.automation-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-8); }
+.automation-name { font-weight: 600; font-size: var(--fs-body); color: var(--text-primary); }
+.automation-actions { display: flex; gap: var(--space-6); }
 .btn-icon {
-  padding: 4px 10px; border: 1px solid var(--border); border-radius: 4px;
-  background: var(--bg-secondary); cursor: pointer; font-size: 0.78em; transition: all 0.15s;
+  padding: var(--space-4) var(--space-12); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-secondary); cursor: pointer; font-size: var(--fs-hint); transition: all var(--duration-fast) var(--ease-out);
 }
 .btn-icon:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-danger { color: var(--status-error-text); border-color: color-mix(in srgb, var(--status-error) 30%, transparent); }
 .btn-danger:hover { background: color-mix(in srgb, var(--status-error) 10%, transparent); }
-.automation-meta { display: flex; gap: 16px; flex-wrap: wrap; }
-.meta-item { font-size: 0.8em; color: var(--text-tertiary); }
-.history-panel { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
-.history-empty { font-size: 0.8em; color: var(--text-tertiary); padding: 4px 0; }
-.history-list { display: flex; flex-direction: column; gap: 4px; }
-.history-row { display: flex; gap: 12px; align-items: center; font-size: 0.78em; }
+.automation-meta { display: flex; gap: var(--space-16); flex-wrap: wrap; }
+.meta-item { font-size: var(--fs-caption); color: var(--text-tertiary); }
+.history-panel { margin-top: var(--space-12); padding-top: var(--space-12); border-top: 1px solid var(--border); }
+.history-empty { font-size: var(--fs-caption); color: var(--text-tertiary); padding: var(--space-4) 0; }
+.history-list { display: flex; flex-direction: column; gap: var(--space-4); }
+.history-row { display: flex; gap: var(--space-12); align-items: center; font-size: var(--fs-hint); }
 .history-status {
-  padding: 1px 8px; border-radius: 4px; text-transform: uppercase; font-size: 0.85em;
+  padding: var(--space-2) var(--space-8); border-radius: var(--radius-sm); text-transform: uppercase; font-size: var(--fs-ui);
   background: var(--bg-secondary); color: var(--text-secondary);
 }
 .history-status.completed { background: color-mix(in srgb, var(--status-ok) 12%, transparent); color: var(--status-ok-text); }

@@ -16,7 +16,15 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  colors: () => ['#ff6b6b', '#ffd93d', '#6bcb77', '#4d96ff', '#9b59b6'],
+  // 旧的 5 色彩虹是通用 AI 模板指纹（紫/蓝渐变），与「朱砂 + 墨」的单一强调色冲突。
+  // 改为墨 ↔ 朱砂的收敛渐变：--accent-text / --text-* 都随主题走且已过对比度锁。
+  colors: () => [
+    'var(--accent-text)',
+    'var(--text-primary)',
+    'var(--accent-text)',
+    'var(--text-secondary)',
+    'var(--accent-text)',
+  ],
   duration: 3,
   class: '',
 })

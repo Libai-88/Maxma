@@ -722,7 +722,7 @@ onUnmounted(() => {
 <style scoped src="@/assets/styles/chat-input.css"></style>
 
 <style scoped>
-.task-brief-toggle { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 0 9px; border: 1px solid var(--border-subtle, rgba(128,128,128,.24)); border-radius: 999px; background: transparent; color: var(--text-muted, #888); font-size: 11px; white-space: nowrap; cursor: pointer; transition: color .16s ease, border-color .16s ease, background .16s ease; }
-.task-brief-toggle:hover, .task-brief-toggle.active { color: var(--accent, #8b7cff); border-color: color-mix(in srgb, var(--accent, #8b7cff) 48%, transparent); background: color-mix(in srgb, var(--accent, #8b7cff) 10%, transparent); }
+.task-brief-toggle { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 0 9px; border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--text-tertiary); font-size: 11px; white-space: nowrap; cursor: pointer; transition: color .16s ease, border-color .16s ease, background .16s ease; }
+.task-brief-toggle:hover, .task-brief-toggle.active { color: var(--accent-text); border-color: color-mix(in srgb, var(--accent) 48%, transparent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 @media (max-width: 560px) { .task-brief-toggle span { display: none; } .task-brief-toggle { width: 30px; justify-content: center; padding: 0; } }
 </style>

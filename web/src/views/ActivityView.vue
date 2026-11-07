@@ -1,7 +1,7 @@
 <!-- web/src/views/ActivityView.vue -->
 <template>
-  <div class="activity-view">
-    <header class="activity-header">
+  <div class="activity-view ds-view ds-view--wide">
+    <header class="activity-header view-header view-header--split">
       <div class="activity-header-left">
         <h1>活动中心</h1>
         <p class="header-sub">实时查看 Maxma 内部发生的事件——AI 对话轮次、工具调用、计划、审批等都会在这里出现。</p>
@@ -85,7 +85,7 @@
           <span v-if="record.session_id" class="activity-item-session">{{ record.session_id.slice(0, 8) }}</span>
         </div>
       </div>
-      <div v-if="!store.records.length" class="activity-empty">
+      <div v-if="!store.records.length" class="activity-empty ds-state ds-state--bare">
         <Sparkles>
           <div class="empty-icon">{{ store.connectionState === 'connecting' ? '🔌' : '📋' }}</div>
           <div class="empty-title">{{ store.connectionState === 'connecting' ? '正在建立实时连接...' : '暂无活动记录' }}</div>
@@ -238,55 +238,36 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 24px;
   overflow: hidden;
 }
 
-.activity-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.activity-header-left {
-  flex: 1;
-  min-width: 0;
-}
-
-.activity-header h1 {
-  font-size: 1.4em;
-  font-family: var(--font-display);
+/* 头部由 .view-header 统一；此处只保留本页的控件布局 */
+.activity-header { gap: var(--space-16); }
+.activity-header-left { flex: 1; min-width: 0; }
+.activity-controls { display: flex; align-items: center; gap: var(--space-8); text-transform: uppercase; }
+.activity-filter { margin-bottom: var(--space-12); }
+.activity-filter-select {
+  padding: var(--space-6) var(--space-12);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  background: var(--bg-card);
   color: var(--text-primary);
-  margin: 0 0 4px;
+  font-size: var(--fs-ui);
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
 }
-
-.header-sub {
-  margin: 0;
-  font-size: 0.82em;
-  color: var(--text-secondary);
-  line-height: 1.5;
-}
-
-.activity-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
 .activity-status {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.8em;
+  gap: var(--space-6);
+  font-size: var(--fs-caption);
   color: var(--text-tertiary);
   cursor: help;
-  padding: 2px 8px;
+  padding: var(--space-2) var(--space-8);
   border-radius: 100px;
   background: var(--bg-secondary);
-  transition: background 0.2s, color 0.2s;
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
 }
 .activity-status.status-online {
   color: var(--status-ok-text);
@@ -461,7 +442,7 @@ onUnmounted(() => {
 .activity-filter-select {
   padding: 5px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: var(--bg-card);
   color: var(--text-primary);
   font-size: 0.82em;
@@ -545,8 +526,8 @@ onUnmounted(() => {
   font-size: 0.85em;
   color: var(--text-secondary);
   background: var(--bg-secondary);
-  padding: 1px 6px;
-  border-radius: 3px;
+  padding: var(--space-2) var(--space-6);
+  border-radius: var(--radius-sm);
 }
 
 .activity-item-session {
@@ -556,9 +537,7 @@ onUnmounted(() => {
 }
 
 .activity-empty {
-  padding: 48px 32px;
-  text-align: center;
-  color: var(--text-tertiary);
+  padding: var(--space-32);
 }
 .empty-icon { font-size: 40px; margin-bottom: 12px; }
 .empty-title { font-size: 1em; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }

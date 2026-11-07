@@ -1,7 +1,8 @@
 <template>
-  <div class="appearance-view" ref="rootEl">
-    <div class="header">
+  <div class="appearance-view ds-view" ref="rootEl">
+    <div class="header view-header">
       <h2>外观</h2>
+      <p class="header-sub">主题、字体、纸纹与动效密度。改动立即生效并保存在本机。</p>
     </div>
 
     <!-- 主题 -->
@@ -96,12 +97,27 @@
         </button>
       </div>
     </div>
+
+    <!-- 动效 -->
+    <div class="section">
+      <h3>动效</h3>
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <div class="toggle-label">克制动效</div>
+          <div class="toggle-desc">关闭光晕、流星、光柱与页面位移动画，只保留状态反馈。关闭后可回到完整动效。</div>
+        </div>
+        <button class="toggle-btn" :class="{ on: calmMotion }" @click="toggleMotion">
+          {{ calmMotion ? '开' : '关' }}
+        </button>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, nextTick, type ComponentPublicInstance } from 'vue'
 import { useTheme } from '@/composables/useTheme'
+import { useMotion } from '@/composables/useMotion'
 import { safeGetItem, safeSetItem } from '@/lib/storage'
 import { usePaperTexture } from '@/composables/usePaperTexture'
 import { useViewEntrance } from '@/composables/useViewEntrance'
@@ -166,30 +182,17 @@ function toggleSerif() {
 }
 
 const { enabled: paperTexture, toggle: togglePaperTexture } = usePaperTexture()
+const { calm: calmMotion, toggle: toggleMotion } = useMotion()
 </script>
 
 <style scoped>
+/* 容器、头部统一走 design-system.css；此处只留外观页独有的卡片与开关行 */
 .appearance-view {
   flex: 1;
   overflow-y: auto;
-  padding: 24px 32px;
-  max-width: 720px;
-  margin: 0 auto;
-  width: 100%;
-  box-sizing: border-box;
-}
-.header {
-  margin-bottom: 24px;
-}
-.header h2 {
-  font-size: var(--fs-display-lg);
-  font-weight: 600;
-  font-family: var(--font-display);
-  letter-spacing: -0.01em;
-  color: var(--text-primary);
 }
 .section {
-  margin-bottom: 32px;
+  margin-bottom: var(--section-gap);
 }
 .section h3 {
 	  font-size: 1rem;
@@ -276,7 +279,7 @@ const { enabled: paperTexture, toggle: togglePaperTexture } = usePaperTexture()
   right: 8px; bottom: 8px;
   width: 42%;
   height: 4px;
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   background: var(--text-secondary);
   opacity: 0.25;
   box-shadow: 0 8px 0 0 var(--text-secondary, currentColor),

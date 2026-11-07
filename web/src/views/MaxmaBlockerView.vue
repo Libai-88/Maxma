@@ -1,10 +1,12 @@
 <template>
-  <div class="blocker-view" ref="rootEl">
+  <div class="blocker-view ds-view" ref="rootEl">
     <!-- ── 列表 ── -->
     <template v-if="!showForm">
-      <div class="header">
+      <div class="header view-header view-header--split">
         <h2>拒止锚 <span class="subtitle">MaxmaBlocker</span></h2>
-        <button class="btn btn-primary" @click="startAdd">添加</button>
+        <div class="view-header__actions">
+          <button class="btn btn-primary" @click="startAdd">添加</button>
+        </div>
       </div>
 
       <details class="intro-card" open>
@@ -37,12 +39,14 @@
         </div>
       </details>
 
-      <div v-if="loading" class="loading">加载中...</div>
-      <div v-else-if="entries.length === 0" class="empty-state">
-        <div class="empty-icon">🛡️</div>
-        <h3>还没有任何拒止锚</h3>
-        <p class="empty-desc">当前没有放置任何拒止锚，AI 的文件操作只受会话权限模式的逐次确认约束（会话默认「每次确认」，<code>auto</code> 档不弹确认）。如果有不希望 AI 触及的敏感目录（财务 / 私人笔记 / 密钥），点击下方添加拒止锚，将目录强制阻断。</p>
-        <button class="btn btn-primary" @click="startAdd">+ 添加拒止锚</button>
+      <div v-if="loading" class="loading ds-state">加载中...</div>
+      <div v-else-if="entries.length === 0" class="empty-state ds-state">
+        <div class="empty-icon ds-state__icon">🛡️</div>
+        <h3 class="ds-state__title">还没有任何拒止锚</h3>
+        <p class="empty-desc ds-state__desc">当前没有放置任何拒止锚，AI 的文件操作只受会话权限模式的逐次确认约束（会话默认「每次确认」，<code>auto</code> 档不弹确认）。如果有不希望 AI 触及的敏感目录（财务 / 私人笔记 / 密钥），点击下方添加拒止锚，将目录强制阻断。</p>
+        <div class="ds-state__actions">
+          <button class="btn btn-primary" @click="startAdd">+ 添加拒止锚</button>
+        </div>
       </div>
       <div v-else class="entry-list">
         <div v-for="(entry, i) in entries" :key="i" class="entry-card">
@@ -57,7 +61,7 @@
 
     <!-- ── 添加表单 ── -->
     <template v-else>
-      <div class="header">
+      <div class="header view-header">
         <h2>添加拒止锚</h2>
       </div>
       <div class="form-card">
@@ -191,44 +195,25 @@ onMounted(loadEntries)
 .blocker-view {
   flex: 1;
   overflow-y: auto;
-  padding: 24px;
-}
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-.header h2 {
-  font-size: var(--fs-display-lg);
-  font-weight: 600;
-  font-family: var(--font-display);
-  letter-spacing: -0.01em;
 }
 .subtitle {
   font-weight: 400;
   font-size: 14px;
   color: var(--text-tertiary);
-  margin-left: 4px;
-}
-.loading,
-.empty {
-  text-align: center;
-  color: var(--text-secondary);
-  padding: 40px 0;
+  margin-left: var(--space-4);
 }
 
 /* ── Novice 引导卡片 ── */
 .intro-card {
-  margin-bottom: 16px;
+  margin-bottom: var(--section-gap);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--status-error, #ef4444) 5%, var(--bg-card));
-	  border-color: color-mix(in srgb, var(--status-error, #ef4444) 25%, var(--border));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--status-error) 5%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--status-error) 25%, var(--border));
   overflow: hidden;
 }
 .intro-card > summary {
-  padding: 12px 16px;
+  padding: var(--space-12) var(--space-16);
   font-size: 13.5px;
   font-weight: 600;
   color: var(--text-primary);
@@ -240,70 +225,67 @@ onMounted(loadEntries)
 .intro-card > summary::before {
   content: '▸';
   display: inline-block;
-  margin-right: 8px;
+  margin-right: var(--space-8);
   color: var(--text-tertiary);
   transition: transform 0.15s;
 }
 .intro-card[open] > summary::before { transform: rotate(90deg); }
 .intro-body {
-  padding: 0 16px 14px;
+  padding: 0 var(--space-16) var(--space-12);
   font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.75;
 }
-.intro-body p { margin: 6px 0; }
+.intro-body p { margin: var(--space-6) 0; }
 .intro-body strong { color: var(--text-primary); }
-.intro-body ul { margin: 6px 0; padding-left: 22px; }
-.intro-body li { margin-bottom: 4px; }
+.intro-body ul { margin: var(--space-6) 0; padding-left: var(--space-24); }
+.intro-body li { margin-bottom: var(--space-4); }
 .intro-body code {
   font-family: 'SF Mono', 'Consolas', monospace;
   font-size: 12px;
   background: var(--bg-secondary);
-  padding: 1px 5px;
-  border-radius: 3px;
+  padding: var(--space-2) var(--space-6);
+  border-radius: var(--radius-sm);
 }
 .intro-note {
-  margin-top: 10px !important;
-  padding: 8px 12px;
+  margin-top: var(--space-12) !important;
+  padding: var(--space-8) var(--space-12);
   background: var(--bg-secondary);
   border-left: 3px solid var(--accent);
-  border-radius: 0 6px 6px 0;
+  border-radius: 0 var(--radius-input) var(--radius-input) 0;
   font-size: 12.5px;
 }
 
 /* ── 空状态 ── */
 .empty-state {
-  text-align: center;
-  padding: 40px 20px;
   border: 1.5px dashed var(--border);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--status-error, #ef4444) 3%, var(--bg-card));
-	}
-	.empty-icon { font-size: 42px; margin-bottom: 12px; }
-	.empty-state h3 {
+  border-radius: var(--radius-lg);
+}
+.empty-icon { font-size: 42px; margin-bottom: var(--space-12); }
+.empty-state h3 {
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
-  margin: 0 0 8px;
+  margin: 0 0 var(--space-8);
 }
 .empty-desc {
   font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.7;
-  margin: 0 auto 16px;
+  margin: 0 auto var(--space-16);
   max-width: 440px;
 }
 
 /* ── 规则说明 ── */
 .rule-card {
-  margin-bottom: 16px;
+  margin-bottom: var(--section-gap);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--bg-card);
   overflow: hidden;
 }
 .rule-summary {
-  padding: 10px 16px;
+  padding: var(--space-12) var(--space-16);
   font-size: 13px;
   font-weight: 600;
   color: var(--text-secondary);
@@ -314,30 +296,30 @@ onMounted(loadEntries)
   opacity: 0.8;
 }
 .rule-body {
-  padding: 0 16px 12px;
+  padding: 0 var(--space-16) var(--space-12);
   font-size: 13px;
   line-height: 1.7;
   color: var(--text-secondary);
 }
 .rule-body ul {
-  margin: 6px 0;
-  padding-left: 20px;
+  margin: var(--space-6) 0;
+  padding-left: var(--space-24);
 }
 .rule-body li {
-  margin-bottom: 4px;
+  margin-bottom: var(--space-4);
 }
 .rule-body code {
   font-family: 'SF Mono', 'Consolas', monospace;
   font-size: 12px;
   background: var(--bg-secondary);
-  padding: 1px 5px;
-  border-radius: 3px;
+  padding: var(--space-2) var(--space-6);
+  border-radius: var(--radius-sm);
 }
 .rule-note {
-	  margin-top: 8px;
-	  padding: 8px 10px;
-	  background: color-mix(in srgb, var(--status-info) 12%, var(--bg-card));
-	  border-radius: 6px;
+  margin-top: var(--space-8);
+  padding: var(--space-8) var(--space-12);
+  background: color-mix(in srgb, var(--status-info) 12%, var(--bg-card));
+  border-radius: var(--radius-input);
 	  color: var(--text-secondary);
 	  font-size: 12px;
 	}
@@ -345,23 +327,23 @@ onMounted(loadEntries)
 	  font-family: 'SF Mono', 'Consolas', monospace;
 	  font-size: 12px;
 	  background: color-mix(in srgb, var(--status-info) 20%, var(--bg-secondary));
-	  padding: 1px 5px;
-	  border-radius: 3px;
+  padding: var(--space-2) var(--space-6);
+  border-radius: var(--radius-sm);
 	}
 
 .entry-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-8);
 }
 .entry-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 14px 16px;
+  gap: var(--space-16);
+  padding: var(--card-padding);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--bg-card);
   transition: box-shadow 0.15s;
 }
@@ -382,7 +364,7 @@ onMounted(loadEntries)
 .entry-desc {
   font-size: 12px;
   color: var(--text-tertiary);
-  margin-top: 2px;
+  margin-top: var(--space-2);
 }
 
 /* ── 表单 ── */
@@ -390,12 +372,12 @@ onMounted(loadEntries)
   max-width: 560px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--section-gap);
 }
 .form-section {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-4);
 }
 .form-label {
   font-size: 13px;
@@ -404,15 +386,15 @@ onMounted(loadEntries)
 }
 .path-row {
   display: flex;
-  gap: 8px;
+  gap: var(--space-8);
 }
 .path-row .input {
   flex: 1;
 }
 .input {
-  padding: 8px 12px;
+  padding: var(--space-8) var(--space-12);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   font-size: 14px;
   color: var(--text-primary);
   background: var(--bg-card);
@@ -428,11 +410,11 @@ onMounted(loadEntries)
 }
 .form-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-8);
 }
 .msg {
-  padding: 8px 12px;
-  border-radius: 6px;
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--radius-input);
   font-size: 13px;
 }
 .msg.error {
@@ -442,9 +424,9 @@ onMounted(loadEntries)
 
 /* ── 按钮 ── */
 .btn {
-  padding: 6px 14px;
+  padding: var(--space-6) var(--space-12);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: var(--bg-card);
   color: var(--text-primary);
   cursor: pointer;

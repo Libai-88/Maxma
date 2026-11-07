@@ -1,9 +1,9 @@
 <template>
-  <div class="agent-task-center">
-    <header class="page-header">
+  <div class="agent-task-center ds-view ds-view--wide">
+    <header class="page-header view-header view-header--split">
       <div class="header-text">
         <h1>Agent 任务中心</h1>
-        <p class="page-subtitle">
+        <p class="page-subtitle header-sub">
           当前会话的后台子任务。数据来自后端 deferred-runs 接口，不是演示数据。
         </p>
       </div>
@@ -210,40 +210,11 @@ function handleTimelineAction(eventId: string, actionType: string) {
 
 <style scoped>
 .agent-task-center {
-  width: 100%;
-  min-height: 100vh;
-  padding: 32px 20px 64px;
-  background: var(--bg-primary);
+  min-height: 100dvh;
 }
 
-.page-header {
-  max-width: 1200px;
-  margin: 0 auto 24px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.page-header h1 {
-  margin: 0 0 6px;
-  font-size: 28px;
-  font-weight: 700;
-  font-family: var(--font-display);
-  color: var(--text-primary);
-}
-
-.page-subtitle {
-  margin: 0;
-  font-size: 14px;
-  color: var(--text-secondary);
-}
-
-.header-actions {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
-}
+.page-header { margin-bottom: var(--space-24); gap: var(--space-16); }
+.header-actions { display: flex; gap: var(--space-8); flex-shrink: 0; }
 
 .refresh-btn {
   display: inline-flex;

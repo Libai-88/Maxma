@@ -1,6 +1,6 @@
 <template>
-  <div class="plugin-view" ref="rootEl">
-    <div class="header">
+  <div class="plugin-view ds-view" ref="rootEl">
+    <div class="header view-header">
       <h2>插件</h2>
       <!-- 品牌更正：OMP 是上一代引擎（已退役），本产品是 Maxma + pi 引擎。 -->
       <p class="header-sub">管理随 Maxma 分发的插件——启用、配置与卸载</p>
@@ -47,20 +47,20 @@
     <PluginSearchBar @search="handleSearch" />
 
     <!-- 错误提示 -->
-    <div v-if="store.error" class="error-banner">
+    <div v-if="store.error" class="error-banner ds-inline-error">
       {{ store.error }}
       <button class="error-close" @click="store.clearError()">✕</button>
     </div>
 
     <!-- 加载状态 -->
-    <div v-if="store.loading" class="loading">加载中...</div>
+    <div v-if="store.loading" class="loading ds-state">加载中...</div>
 
     <!-- 插件列表 -->
     <template v-else>
-      <div v-if="store.filteredPlugins.length === 0" class="empty">
-        <div class="empty-icon">🧩</div>
-        <div class="empty-title">{{ store.plugins.length === 0 ? '没有可启用的插件' : '没有匹配的插件' }}</div>
-        <div class="empty-desc">
+      <div v-if="store.filteredPlugins.length === 0" class="empty ds-state">
+        <div class="empty-icon ds-state__icon">🧩</div>
+        <div class="empty-title ds-state__title">{{ store.plugins.length === 0 ? '没有可启用的插件' : '没有匹配的插件' }}</div>
+        <div class="empty-desc ds-state__desc">
           {{ store.plugins.length === 0 ? emptyListDesc : '尝试调整搜索条件或过滤器。' }}
         </div>
       </div>
@@ -189,28 +189,6 @@ function handleSearch(query: string, category: PluginCategory | undefined, enabl
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  max-width: 960px;
-  width: 100%;
-  margin: 0 auto;
-  padding: 24px 16px 80px;
-}
-
-.header {
-  margin-bottom: 16px;
-}
-
-.header h2 {
-  font-size: var(--fs-display-lg);
-  font-weight: 600;
-  font-family: var(--font-display);
-  letter-spacing: -0.01em;
-  margin: 0;
-}
-
-.header-sub {
-  font-size: 0.82em;
-  color: var(--text-tertiary);
-  margin: 4px 0 0;
 }
 
 .toolbar {
@@ -245,7 +223,7 @@ function handleSearch(query: string, category: PluginCategory | undefined, enabl
   flex: 1;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: var(--bg-secondary);
   color: var(--text-primary);
   font-size: 0.9em;
@@ -259,7 +237,7 @@ function handleSearch(query: string, category: PluginCategory | undefined, enabl
 .btn {
   padding: 8px 16px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: var(--bg-secondary);
   cursor: pointer;
   font-size: 0.85em;
@@ -283,21 +261,9 @@ function handleSearch(query: string, category: PluginCategory | undefined, enabl
   margin-top: 8px;
   padding: 8px 12px;
   background: var(--bg-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   font-size: 0.85em;
   color: var(--text-secondary);
-}
-
-.error-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  background: color-mix(in srgb, var(--status-error) 10%, transparent);
-  color: var(--status-error-text);
-  border-radius: 6px;
-  font-size: 0.85em;
-  margin-bottom: 12px;
 }
 
 .error-close {
@@ -307,13 +273,6 @@ function handleSearch(query: string, category: PluginCategory | undefined, enabl
   color: var(--status-error-text);
   cursor: pointer;
   font-size: 1.1em;
-}
-
-.loading,
-.empty {
-  text-align: center;
-  padding: 60px 20px;
-  color: var(--text-tertiary);
 }
 
 .empty-icon {

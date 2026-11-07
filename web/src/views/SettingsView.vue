@@ -1,19 +1,19 @@
 <template>
-  <div class="settings-view" ref="rootEl">
-    <div class="header">
+  <div class="settings-view ds-view" ref="rootEl">
+    <div class="header view-header">
       <h2>设置</h2>
     </div>
 
     <!-- 面板配置加载失败提示（PANEL-ERROR-VISIBLE-001）：不阻塞整体设置页 -->
-    <div v-if="panelLoadError" class="panel-error-banner" role="alert">
+    <div v-if="panelLoadError" class="ds-inline-error" role="alert">
       <span>{{ panelLoadError }}</span>
-      <button class="btn" @click="loadPanelConfigs">重试面板</button>
+      <button class="ds-btn ds-btn--sm" @click="loadPanelConfigs">重试面板</button>
     </div>
 
-    <div v-if="loading" class="loading">加载中...</div>
-    <div v-else-if="loadError" class="empty">
+    <div v-if="loading" class="ds-state">正在读取设置…</div>
+    <div v-else-if="loadError" class="ds-state ds-state--error">
       <p>加载失败: {{ loadError }}</p>
-      <button class="btn" @click="loadSettings">重试</button>
+      <div class="ds-state__actions"><button class="ds-btn" @click="loadSettings">重试</button></div>
     </div>
     <template v-else>
       <AnimatedTabs
@@ -23,7 +23,7 @@
         class="settings-tabs"
       />
       <!-- Compaction -->
-      <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
+      <GlowingEffect :disabled="calmMotion" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
         <div class="section" v-show="activeSection === 'compaction'">
           <h3>上下文管理</h3>
           <p class="section-desc">控制 AI 如何管理对话历史和上下文窗口。</p>
@@ -41,7 +41,7 @@
       </GlowingEffect>
 
       <!-- Retry -->
-      <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
+      <GlowingEffect :disabled="calmMotion" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
         <div class="section" v-show="activeSection === 'retry'">
           <h3>容错</h3>
           <p class="section-desc">控制 AI 调用失败时的重试行为。</p>
@@ -68,7 +68,7 @@
       </GlowingEffect>
 
       <!-- Interaction -->
-      <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
+      <GlowingEffect :disabled="calmMotion" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
         <div class="section" v-show="activeSection === 'interaction'">
           <h3>交互</h3>
           <p class="section-desc">控制消息队列和中断行为。</p>
@@ -112,7 +112,7 @@
       </GlowingEffect>
 
       <!-- Thinking -->
-      <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
+      <GlowingEffect :disabled="calmMotion" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
         <div class="section" v-show="activeSection === 'thinking'">
           <h3>推理预算</h3>
           <p class="section-desc">控制 AI 在不同推理级别下的 token 预算。</p>
@@ -134,7 +134,7 @@
       </GlowingEffect>
 
       <!-- Skills -->
-      <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
+      <GlowingEffect :disabled="calmMotion" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
         <div class="section" v-show="activeSection === 'skills'">
           <h3>技能包</h3>
           <p class="section-desc">控制 Pi Skills 的启用状态。</p>
@@ -155,7 +155,7 @@
            零 API 成本。此前整段置灰"即将上线"（UX-FAKE-SETTING-001），
            edge-tts/openai-tts 提供商从未有消费方；现统一为 system 并接通
            消息气泡"朗读"按钮与 auto_read 自动朗读。 -->
-      <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
+      <GlowingEffect :disabled="calmMotion" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
         <div class="section" v-show="activeSection === 'tts'">
           <h3>语音</h3>
           <p class="section-desc">配置文本转语音（TTS）的引擎与朗读行为。使用 Windows 系统语音，无需任何付费服务。</p>
@@ -248,7 +248,7 @@
       </GlowingEffect>
 
       <!-- 系统通知（GAP-A3-001） -->
-      <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
+      <GlowingEffect :disabled="calmMotion" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
         <div class="section" v-show="activeSection === 'notify'">
           <h3>系统通知</h3>
           <p class="section-desc">任务完成、等待审批时在系统层弹出通知（窗口在后台时）。</p>
@@ -277,7 +277,7 @@
       </GlowingEffect>
 
       <!-- 浏览器工具 -->
-      <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
+      <GlowingEffect :disabled="calmMotion" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
         <div class="section" :class="{ 'section-upcoming': browserInert }" v-show="activeSection === 'browser'">
           <h3>浏览器工具<span v-if="browserInert" class="upcoming-badge">暂不生效</span></h3>
           <p class="section-desc">{{ browserInert ? browserInertReason : '配置 AI 内置浏览器自动化的运行方式。' }}</p>
@@ -358,7 +358,7 @@
       </GlowingEffect>
 
       <!-- 子代理 -->
-      <GlowingEffect :disabled="false" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
+      <GlowingEffect :disabled="calmMotion" :glow="true" :spread="30" :proximity="60" :blur="2" :movement-duration="1.5" class="section-glow">
         <div class="section" :class="{ 'section-upcoming': subagentInert }" v-show="activeSection === 'subagent'">
           <h3>子代理<span v-if="subagentInert" class="upcoming-badge">暂不生效</span></h3>
           <p class="section-desc">{{ subagentInert ? subagentInertReason : '控制 AI 派生子代理并行处理任务的行为。' }}</p>
@@ -455,10 +455,12 @@ import { showError, showSuccess } from '@/lib/toast'
 import { useViewEntrance } from '@/composables/useViewEntrance'
 import { useButtonFx } from '@/composables/useButtonFx'
 import GlowingEffect from '@/components/inspira/GlowingEffect.vue'
+import { useMotion } from '@/composables/useMotion'
 import AnimatedTabs from '@/components/inspira/AnimatedTabs.vue'
 import BalanceSlider from '@/components/inspira/BalanceSlider.vue'
 import { useCapabilitiesStore } from '@/stores/capabilities'
 
+const { calm: calmMotion } = useMotion()
 const log = createLogger('SettingsView')
 
 const capabilitiesStore = useCapabilitiesStore()
@@ -824,43 +826,22 @@ onMounted(async () => {
 <style scoped>
 
 
-/* 面板配置加载失败提示（PANEL-ERROR-VISIBLE-001） */
-.panel-error-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 12px;
-  padding: 8px 12px;
-  background: color-mix(in srgb, var(--status-warn) 12%, var(--bg-card));
-  border: 1px solid color-mix(in srgb, var(--status-warn) 35%, var(--border));
-  border-radius: var(--radius);
-  font-size: 13px;
-  color: var(--text-primary);}
+/* 面板横幅、页面容器、头部、区块统一走 design-system.css 共享规范；
+   此处只留设置页独有的行/控件样式，避免 scoped 声明覆盖全局规范。 */
 .settings-view {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  max-width: 640px;
-  margin: 0 auto;
-  padding: 24px 16px;
-  width: 100%;
 }
 
-.header {
-  margin-bottom: 24px;
-}
-
-.header h2 {
-  font-size: var(--fs-display-lg);
-  font-weight: 600;
-  font-family: var(--font-display);
-  letter-spacing: -0.01em;
-  margin: 0;
-}
-
+/* 每个配置段是一张卡，标签左、控件右，密度高于原来的整页平铺 */
 .section {
-  margin-bottom: 28px;
+  padding: var(--card-padding);
+  margin-bottom: var(--section-gap);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-xs);
 }
 
 /* UX-FAKE-SETTING-001：未接入运行时的配置段整体置灰 + "即将上线"徽标 */
@@ -929,64 +910,40 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
 }
-
 .toggle-btn {
-  padding: 4px 12px;
+  padding: var(--space-4) var(--space-12);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: var(--bg-secondary);
   color: var(--text-secondary);
-  font-size: 0.8em;
+  font-size: var(--fs-caption);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
   white-space: nowrap;
 }
 
 .toggle-btn.on {
-  background: var(--accent);
-  color: white;
-  border-color: var(--accent);
+  background: var(--accent-solid);
+  color: var(--accent-solid-text);
+  border-color: var(--accent-solid);
 }
-
-.select {
-  padding: 4px 8px;
+.select,
+.input-number,
+.input-text,
+.textarea {
+  padding: var(--space-4) var(--space-8);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: var(--bg-secondary);
   color: var(--text-primary);
-  font-size: 0.8em;
-  cursor: pointer;
+  font-size: var(--fs-caption);
 }
-
-.input-number {
-  width: 80px;
-  padding: 4px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  font-size: 0.8em;
-  text-align: right;
-}
-
-.input-text {
-  width: 180px;
-  padding: 4px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  font-size: 0.8em;
-}
-
+.input-number { width: 80px; text-align: right; }
+.input-text { width: 180px; }
 .textarea {
   width: 100%;
-  padding: 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  font-size: 0.8em;
+  padding: var(--space-6) var(--space-8);
+  font-size: var(--fs-caption);
   font-family: inherit;
   line-height: 1.5;
   resize: vertical;
@@ -996,53 +953,47 @@ onMounted(async () => {
 .setting-row-block {
   flex-direction: column;
   align-items: stretch;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 .range-value {
-  font-size: 0.8em;
+  font-size: var(--fs-caption);
   color: var(--text-secondary);
   min-width: 36px;
   text-align: right;
 }
 
-input[type="range"] {
-  width: 120px;
-}
+input[type="range"] { width: 120px; }
 
-.loading, .empty {
-  text-align: center;
-  padding: 40px;
-  color: var(--text-tertiary);
-}
-
+/* 局部操作按钮（试听/选择文件等），统一走 token 圆角与间距 */
 .btn {
-  padding: 6px 16px;
+  padding: var(--space-6) var(--space-16);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: var(--bg-secondary);
+  color: var(--text-primary);
   cursor: pointer;
-  font-size: 0.85em;
-  margin-top: 8px;
+  font-size: var(--fs-caption);
+  margin-top: var(--space-8);
 }
 
 .permission-badge {
   display: inline-block;
-  padding: 2px 10px;
-  border-radius: 10px;
-  font-size: 0.8em;
-  margin-right: 8px;
+  padding: var(--space-2) var(--space-12);
+  border-radius: var(--radius-lg);
+  font-size: var(--fs-caption);
+  margin-right: var(--space-8);
   border: 1px solid var(--border);
 }
 
 .permission-granted {
-  color: var(--status-ok, #4caf50);
-  border-color: var(--status-ok, #4caf50);
+  color: var(--status-ok-text);
+  border-color: var(--status-ok);
 }
 
 .permission-denied {
-  color: var(--status-error, #e05252);
-  border-color: var(--status-error, #e05252);
+  color: var(--status-error-text);
+  border-color: var(--status-error);
 }
 
 .permission-default {

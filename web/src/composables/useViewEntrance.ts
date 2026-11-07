@@ -1,5 +1,6 @@
 import { watch } from 'vue'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
+import { useMotion } from '@/composables/useMotion'
 
 export interface ViewEntranceOptions {
   /** 头部选择器（相对根容器）；不传则跳过 header 动画 */
@@ -23,6 +24,8 @@ export function useViewEntrance(
 ) {
   const { header, blocks, duration = 0.5, ready } = options
 
+  // 克制模式：不播入场动画。页面默认就是可见的，跳过不会留下隐藏元素。
+  if (useMotion().calm.value) return
   useGsap((_ctx, contextSafe) => {
     let done = false
     const play = contextSafe(() => {

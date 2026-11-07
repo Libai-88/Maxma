@@ -7,20 +7,21 @@
     @mouseleave="onLeave"
   >
     <Meteors
-      v-if="active"
-      :count="3"
+      v-if="active && !calmMotion"
+      :count="2"
       :size="0.8"
       :speed="1.2"
       :color="'var(--accent)'"
-      class="dock-meteors"
+      class="dock-meteors ds-decor"
     />
     <router-link
       v-if="to"
       :to="to"
       class="dock-link"
-      :aria-label="busy ? `${label}，正在生成回复` : label"
+      :aria-label="busy ? `${label}，正在生成回复` : groupLabel ? `${groupLabel} · ${label}` : label"
       :title="label"
       :data-label="label"
+      :aria-current="active ? 'page' : undefined"
     >
       <div class="icon-wrapper" ref="iconEl">
         <Icon :name="icon" :size="20" />
@@ -32,7 +33,7 @@
       v-else
       type="button"
       class="dock-link"
-      :aria-label="label"
+      :aria-label="groupLabel ? `${groupLabel} · ${label}` : label"
       :title="label"
       :data-label="label"
         @click="$emit('click')"
@@ -51,6 +52,9 @@ import { ref, onUnmounted } from 'vue'
 import Icon from '@/components/Icon.vue'
 import { gsap, easeMap } from '@/composables/useGsap'
 import Meteors from '@/components/inspira/Meteors.vue'
+import { useMotion } from '@/composables/useMotion'
+
+const { calm: calmMotion } = useMotion()
 
 withDefaults(defineProps<{
   icon: string
@@ -58,6 +62,7 @@ withDefaults(defineProps<{
   to?: string
   active?: boolean
   expanded?: boolean
+  groupLabel?: string
   busy?: boolean
 }>(), {
   active: false,
@@ -123,9 +128,11 @@ onUnmounted(() => {
 }
 
 .dock-icon.active {
-  background: color-mix(in srgb, var(--accent) 10%, var(--bg-card));
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-card));
   border-top-left-radius: 50px;
   border-bottom-left-radius: 50px;
+  /* 当前页的静态朱砂标尺：克制模式关掉光柱/流星后仍能一眼定位 */
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .dock-icon.active::before {
@@ -136,7 +143,7 @@ onUnmounted(() => {
   width: 24px;
   height: 24px;
   border-bottom-right-radius: 20px;
-  box-shadow: 5px 5px 0 5px var(--bg-primary, #e4e9f5);
+  box-shadow: 5px 5px 0 5px var(--bg-primary);
   background: transparent;
   pointer-events: none;
 }
@@ -153,7 +160,7 @@ onUnmounted(() => {
   background: var(--bg-card);
   color: var(--text-primary);
   box-shadow: var(--shadow-md);
-  font: 600 12px/1.2 var(--font-body, sans-serif);
+  font: 600 12px/1.2 var(--font-body);
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
@@ -175,7 +182,7 @@ onUnmounted(() => {
   width: 24px;
   height: 24px;
   border-top-right-radius: 20px;
-  box-shadow: 5px -5px 0 5px var(--bg-primary, #e4e9f5);
+  box-shadow: 5px -5px 0 5px var(--bg-primary);
   background: transparent;
   pointer-events: none;
 }
@@ -201,7 +208,7 @@ onUnmounted(() => {
   align-items: center;
   min-width: 36px;
   height: 52px;
-  color: var(--accent, rgb(110, 90, 240));
+  color: var(--accent);
   transition: color var(--duration-fast, .15s), background var(--duration-fast, .15s);
 }
 
@@ -233,7 +240,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   font-size: 15px;
-  color: var(--text-primary, #333);
+  color: var(--text-primary);
   padding-left: 0;
   text-transform: uppercase;
   letter-spacing: 1px;
@@ -255,6 +262,6 @@ onUnmounted(() => {
 
 .dock-icon:hover .icon-wrapper,
 .dock-icon:hover .dock-label {
-  color: var(--status-warn-text);
+  color: var(--accent-text);
 }
 </style>

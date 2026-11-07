@@ -1,7 +1,8 @@
 # MaxmaHere 项目索引
 
-> 代码导航，不是历史记录。与代码/测试冲突时以代码为准并回来改本文。
-> 更新时间：2026-11-02（`version.py` = v2.6.13）
+> **本文件是项目唯一索引**。代码导航，不是历史记录；与代码/测试冲突时以代码为准并回来改本文。
+> **维护约定**：改动触及目录结构、入口、契约、命令、版本或文档清单时，须在同一次改动里同步更新本文。
+> 更新时间：2026-11-07（`version.py` = v2.6.13）
 
 ## 入口
 
@@ -9,6 +10,19 @@
 - [docs/00-当前架构.md](docs/00-当前架构.md) — 架构唯一总览
 - [HANDOFF.md](HANDOFF.md) — 当前状态、闸门、已知缺陷
 - [docs/security-contract.md](docs/security-contract.md) — 安全边界（改动必读）
+
+## 工作区布局
+
+`D:/Maxma/` 是工作区根；根仓库只跟踪 `.gitignore` / `.gitmodules` / `MaxmaHere`（后者自带独立 `.git`）。2026-11-07 清理后根目录只保留：
+
+| 路径 | 定位 | 与本项目关系 |
+| --- | --- | --- |
+| `MaxmaHere/` | 主项目，本索引覆盖对象 | — |
+| `MaxmaHere-Portable/` | Web 便携包构建产物 | `build-portable.bat` 的输出，不进版本控制 |
+| `QQ-agent/` | 独立 QQ 机器人项目（自带 `.git`） | 无关，勿改 |
+| `data/` | Qzone 运行数据 | 无关，勿改 |
+
+约定：根目录不堆放一次性脚本、审计产物、探查目录或配置备份；可复用验证脚本放 `scripts/`。
 
 ## 运行链路
 
@@ -53,7 +67,8 @@ web/src/main.ts
 - 类型 `src/types/`；工具组件注册 `src/components/tools/registry.ts`
 - 组件分组：`components/`（聊天核心）、`workbench/`（工作台 canvas-registry + cards）、`inspira/`（动效）、`ui/`（Ds 基础件）、`plugins/`、`brand/`
 - 页面 `src/views/`：对话（Chat / Share）、记忆角色（Memory / Soul / User）、配置（Providers / Mcp / Settings / Appearance / Privacy / MaxmaBlocker / Capabilities）、扩展（PluginList / PluginDetail / JetHub / Extension / Rules / Collab）、信息（News / Activity / Metrics / Help / Evolution）、流程（Onboarding / FeatureUnavailable / NotFound）
-- 主题：`src/assets/styles/tokens.css`（结构令牌，活规范）+ `src/themes/`（suying 默认 / ultraline / night / kintsugi / grass / midnight，另有 `auto` 解析态）
+- 样式三层活规范：`src/assets/styles/tokens.css`（结构 token / 断点口径）→ `src/themes/`（6 主题配色：suying 默认 / ultraline / night / kintsugi / grass / midnight，另有 `auto` 解析态）→ `src/assets/styles/design-system.css`（页面级共享类 `.ds-view` / `.view-header` / `.ds-state` / `.ds-section` / `.ds-skeleton`，视图 `<style scoped>` 不得复制这些声明）
+- 动效密度 `src/composables/useMotion.ts`：默认 `data-motion="calm"`，外观页可切回 full；视图入场 `useViewEntrance.ts` 与装饰层据此降级
 - Jet Hub 客户端工具：`src/utils/jetHub/`
 
 ## 后端（`bun-backend/src/`）
@@ -89,6 +104,8 @@ web/src/main.ts
 - [dev_docs/permission-modes.md](dev_docs/permission-modes.md) — 权限模式
 - [docs/brand-guidelines.md](docs/brand-guidelines.md) — 品牌唯一事实源
 - [dev_docs/adr/](dev_docs/adr/) — 决策记录（0001 运行时状态、0003 子任务、0004 权限模式、0005 远程与沙箱、0006 Artifact）
+- [dev_docs/realtime-human-agent-collaboration.md](dev_docs/realtime-human-agent-collaboration.md)
+- `dev_docs/typecheck-baseline.json` — 类型债基线（`scripts/check-type-budget.mjs` 消费，只准降）
 
 ## 开发命令
 
@@ -101,6 +118,24 @@ cd bun-sidecar && bun test                   # 引擎
 cd web && npx vitest run                     # 前端
 bash scripts/verify-all-gates.sh             # 交付前全部闸门
 ```
+
+## 工具脚本（`scripts/`）
+
+| 脚本 | 用途 |
+| --- | --- |
+| `verify-all-gates.sh` | 交付前全部闸门，按退出码判定 |
+| `check-type-budget.mjs` | 类型债棘轮，`--write` 下调基线 |
+| `git-pr-flow.sh` | 分支 + PR squash 合并流程（Trunk-Based） |
+| `upgrade-pi.mjs` | 引擎升级：`--check` / `<version>`，两 workspace 同步 + 失败回滚 |
+| `smoke-e2e-roundtrip.mjs` | 端到端回合冒烟（本地假服务，零额度，需后端在跑） |
+| `smoke-compaction-reason.mjs` | 手动压缩 reason 不被钳成 `threshold` |
+| `verify-free-models.mjs` | 免费渠道模型可用性实测（白名单该不该扩的判据） |
+| `verify-portable-user-path.mjs` | 便携包首启人格/免费渠道 |
+| `verify-ui-chat-roundtrip.mjs` | 真实前端打字→收到回复（零额度） |
+| `verify-desktop-render.ps1` | 桌面包渲染层 |
+| `_ui-chat-driver.cjs` | Electron 驱动真实界面的主进程，被 `verify-ui-chat-roundtrip.mjs` 启动，**勿单独跑** |
+
+> 当前测试基线、闸门清单、已知缺陷、引擎版本差等**易变状态**一律看 [HANDOFF.md](HANDOFF.md)；本文不复制会过期的数字。
 
 ## 打包
 

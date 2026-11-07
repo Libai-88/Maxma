@@ -22,10 +22,13 @@
     --fs-caption: 0.84rem;    /* 控件 */
     --fs-hint:    0.78rem;     /* 提示/badge */
 
-  /* ── 圆角 ── */
+  /* ── 圆角（主题文件覆盖 sm/md/lg/xl；input/card 为结构常量） ──
+   * 视图里的字面量一律换成这些 token，否则 ultraline 的「1px 法则」
+   * 与 kintsugi 的陶土圆角只在少数组件生效。 */
   --radius-sm: 5px;
   --radius-md: 8px;
   --radius-lg: 12px;
+  --radius-xl: 16px;
   --radius-input: 6px;
   --radius-card: 8px;
 
@@ -82,9 +85,11 @@
   --shadow-lg: 0 4px 16px var(--shadow-color, rgba(120, 100, 80, 0.14));
   --shadow-xl: 0 8px 32px var(--shadow-color, rgba(120, 100, 80, 0.20));
 
-  /* ── 表面层级（参考 Linear 表面阶梯） ── */
-  --surface-raised: #FFFFFF;
-  --surface-dark: #2C3033;
+  /* ── 悬停/浮起表面 ──
+   * 旧值写死 #FFFFFF：暗色主题 hover 卡片会瞬间泛白、浅色正文直接消失。
+   * 改从主题 --bg-raised（品牌标注的「弹窗/悬停」层）派生，6 主题自动跟随。
+   * --surface-dark 无任何消费点，随旧侧栏一并删除。 */
+  --surface-raised: var(--bg-raised);
 
   /* ── 悬停态表面 ──
    * `--bg-hover` 此前只在消费点出现（StickerPicker / StickerContextMenu 等），
@@ -96,12 +101,13 @@
   --bg-hover: color-mix(in srgb, var(--bg-raised) 82%, var(--text-primary));
 
   /* ── 布局常量 ── */
-  /* ── 标准断点（供所有组件 @media 统一引用）
-       Mobile:  max-width 767px
-       Tablet:  min-width 768px and max-width 1279px
-       Desktop: min-width 1280px
-       Small:   max-width 480px
-    */
+  /* ── 标准断点（CSS 变量不能用于 @media，这里作为唯一口径登记） ──
+   * 组件内 @media 一律只用这四个值，不得再新增 520/560/600/640/700/720/820/900/1100。
+   *   Mobile  max-width: 767px
+   *   Small   max-width: 480px
+   *   Tablet  min-width: 768px and max-width: 1279px
+   *   Desktop min-width: 1280px
+   */
   --sidebar-width: 240px;
   --icon-rail-width: 84px;
   --touch-target-min: 44px;
@@ -110,6 +116,18 @@
   --composer-max-width: 768px;
   --titlebar-h: 44px;
   --chat-column-width: 720px;
+
+  /* ── 页面容器规范 ──
+   * 此前 560/640/680/720/800/1080px 各写一份，且 padding 用 px 硬编码。
+   * 三档宽度覆盖全部视图：窄（表单/编辑）、常规（设置/列表）、宽（看板/表格）。
+   * 视图根元素只挂 .ds-view（+ 可选 --wide/--narrow），不再自写 max-width。 */
+  --view-max-width:        960px;
+  --view-max-width-wide:   1200px;
+  --view-max-width-narrow: 680px;
+  --view-gutter:           clamp(16px, 2.5vw, 32px);
+  --view-padding-block:    var(--space-24);
+  --card-padding:          var(--space-24);
+  --section-gap:           var(--space-24);
 
   /* ── 状态色（默认值，取自品牌矿物色系，与 suying 一致） ──
    * 兜底值必须属于品牌，否则「主题漏定义」会渲染成 Tailwind 默认色。
@@ -164,11 +182,13 @@
   --status-error-solid: var(--status-error);
   --status-error-solid-text: var(--text-inverse);
 
-  /* ── 遮罩层（主题可覆盖） ── */
-  --overlay-subtle: rgba(0, 0, 0, 0.03);
-  --overlay-light:  rgba(0, 0, 0, 0.05);
-  --overlay-medium: rgba(0, 0, 0, 0.08);
-  --overlay-strong: rgba(0, 0, 0, 0.15);
+  /* ── 遮罩层（主题可覆盖） ──
+   * 兜底从 --text-primary 派生：明色主题淡墨、暗色主题淡雪，
+   * 不再像写死 rgba(0,0,0,…) 那样在暗色主题下「黑压黑」。 */
+  --overlay-subtle:  color-mix(in srgb, var(--text-primary) 3%, transparent);
+  --overlay-light:   color-mix(in srgb, var(--text-primary) 5%, transparent);
+  --overlay-medium:  color-mix(in srgb, var(--text-primary) 8%, transparent);
+  --overlay-strong:  color-mix(in srgb, var(--text-primary) 15%, transparent);
 
   /* ── 头部品牌渐变（由当前主题的 --accent 派生，不硬编码上一代色值） ── */
   --header-gradient-from: color-mix(in srgb, var(--accent) 22%, var(--bg-primary));
@@ -203,9 +223,9 @@
   --bg-aura-duration: 90s;
 
   /* ── 精致细节（v2.1 — 主题可覆盖） ── */
-  --selection-bg:      rgba(0, 0, 0, 0.12);
-  --selection-text:    inherit;
-  --scrollbar-thumb:   rgba(0, 0, 0, 0.18);
+  --selection-bg:      color-mix(in srgb, var(--text-primary) 12%, transparent);
+  --selection-text:    var(--text-primary);
+  --scrollbar-thumb:   color-mix(in srgb, var(--text-primary) 18%, transparent);
   --scrollbar-track:   transparent;
   --card-surface:      none;
   --font-smoothing:    auto;
@@ -225,6 +245,10 @@ body {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
+
+/* ── 排版精致度：标题均衡断行、正文避免孤字 ── */
+:where(h1, h2, h3, h4) { text-wrap: balance; }
+:where(p) { text-wrap: pretty; }
 
 /* 字体开关：无衬线模式 */
 body.font-sans {
