@@ -59,6 +59,8 @@ const PROVIDER_API_ALIASES: Record<string, Api> = {
   deepseek: "openai-completions",
   qwen: "openai-completions",
   ollama: "openai-completions",
+  // 1.0.3 起 Azure 的 provider 键改为 `azure`（KnownProvider），api 名不变
+  azure: "azure-openai-responses",
   anthropic: "anthropic-messages",
   google: "google-generative-ai",
   gemini: "google-generative-ai",

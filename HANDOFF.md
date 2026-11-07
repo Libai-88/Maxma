@@ -10,11 +10,17 @@
   要核对就现跑 `git rev-list --left-right --count origin/main...HEAD`。
 - 版本 **v2.6.13**：`version.py` / `web/package.json` / `desktop/package.json` / 便携包
   `portable.flag` 四处一致，两种便携包由该提交重建并验证（见 build 文档 §6.1 的四步验证）。
-- 引擎 `@earendil-works/pi-coding-agent` **0.99.0**（in-process）。**落后上游 11 个版本**（latest 1.4.0），
-  其中 1.0.3 与 1.2.0 自带 Breaking Changes（1.0.3 把 Azure provider 由 `azure-openai-responses` 改名 `azure`，
-  命中 `bun-sidecar/src/kernel/model.ts` 的硬编码白名单）。
-  升级入口 `node scripts/upgrade-pi.mjs --check` / `... 1.4.0`（两个 workspace 一起 bump + overrides + 自动验证 + 失败回滚）。
-  旧的 `upgrade-omp.mjs` / `verify-omp-settings.mjs` 已删除（查的是另一个仍在发版的 `@oh-my-pi` scope，且失败时退出码为 0）。
+- 引擎 `@earendil-works/pi-coding-agent` **1.5.0**（in-process）。**与上游 latest 持平**
+  （2026-11-08 由 0.99.0 受控升级，`scripts/upgrade-pi.mjs 1.5.0 --force`）。
+  0.99→1.5.0 之间三段 Breaking 的消费面对账：1.0.3 的 Azure 改名是 **provider 键**
+  （KnownProvider 新增 `azure`），api 名 `azure-openai-responses` 从未变——改名表据此清空，
+  provider→api 映射在 `kernel/model.ts` 的 `PROVIDER_API_ALIASES`；1.2.0 的 busy 语义、
+  1.5.0 的 pi-schema 校验在本仓均无消费点。Settings 字段 1.5.0 起改由 TypeBox schema
+  声明（settings-schema.d.ts），`pi-contract.test.ts` 的解析器已随之重写。
+  `retry.maxDelayMs` 自 1.5.0 成为真实键（engineReal 翻转）。
+  ⚠️ `upgrade-pi.mjs` 修复过一处自身 bug：overrides 里 DIRECT 三件也各有一份钉死，
+  bump 必须连它们一起改——只 bump 家族五件会装出「新家族+旧引擎」混合树
+  （实测形态：引擎根包在 Bun 下 import 即炸，形似上游断裂，实为工具 bug）。
 - 分发形态：Web 便携包 + Electron 桌面便携包。**构建产物不进版本控制**，交付靠"重建 + 拷走"，
   步骤与踩坑见 [dev_docs/build-and-artifacts.md](dev_docs/build-and-artifacts.md) §6.1。
 

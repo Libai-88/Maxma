@@ -382,25 +382,43 @@ describe("pi 契约对账：安装包必须真实提供 Maxma 声明的消费面
 });
 
 describe("pi 契约对账：settings 点路径必须与引擎 Settings 类型一致", () => {
-  /** 从已安装 pi 的 settings-manager.d.ts 推导"引擎真实存在的点路径"。 */
+  /**
+   * 从已安装 pi 的 settings-schema.d.ts 推导"引擎真实存在的点路径"。
+   *
+   * 1.5.0 起 Settings 字段改由 **TypeBox schema** 声明（1.2.0 的 schema 化迁移）：
+   * `SettingsSchema: Type.TObject<{ ... }>`，字段是对象字面量的键而非 interface
+   * 成员；`Settings` 接口只剩 `extends Omit<SettingsInput, …>` 加回的
+   * `retry`/`skills` 两项（retry 的子键与 schema 内联声明一致）。
+   * 0.99.0 时代"读 settings-manager.d.ts 的 interface Settings"的解析器随之失效
+   * （解析不到 → 对账整段静默跳过，正是这次升级暴露的形状）。
+   */
   function engineSettingPaths(): Set<string> {
-    const file = path.join(pkgDir("@earendil-works/pi-coding-agent"), "dist/core/settings-manager.d.ts");
+    const file = path.join(pkgDir("@earendil-works/pi-coding-agent"), "dist/core/settings-schema.d.ts");
     const text = readOrNull(file);
     expect(text, `找不到 ${file}`).not.toBeNull();
-    const settings = interfaceFields(text!, "Settings");
-    expect(settings, "解析不到 Settings 接口").not.toBeNull();
+
+    const start = text!.indexOf("export declare const SettingsSchema: Type.TObject<{");
+    expect(start, "settings-schema.d.ts 里找不到 SettingsSchema 声明").toBeGreaterThan(-1);
+    const end = text!.indexOf("\n}>;", start);
+    expect(end, "SettingsSchema 块没有闭合").toBeGreaterThan(start);
+    const lines = text!.slice(start, end).split("\n");
 
     const paths = new Set<string>();
-    for (const [key, type] of settings!) {
+    for (let i = 1; i < lines.length; i++) {
+      // 顶层键：4 空格缩进的 `key: Type.T…`
+      const top = /^ {4}([A-Za-z_$][\w$]*): (.+)$/.exec(lines[i]!);
+      if (!top) continue;
+      const [, key, decl] = top;
       paths.add(key);
-      // 命名接口 → 展开一层子字段（compaction.enabled / retry.maxRetries ...）
-      const named = type.replace(/\?\s*$/, "").match(/^([A-Z][\w$]*)/);
-      if (named) {
-        const sub = interfaceFields(text!, named[1]!);
-        if (sub) for (const sk of sub.keys()) paths.add(`${key}.${sk}`);
+      if (/TRecord</.test(decl)) paths.add(`${key}.*`);
+      // 内联嵌套对象（compaction / retry / thinkingBudgets…）：8 空格的子键算存在
+      if (/Type\.TObject<\{\s*$/.test(decl.trim())) {
+        for (let j = i + 1; j < lines.length; j++) {
+          if (/^ {4}\}/.test(lines[j]!)) break;
+          const sub = /^ {8}([A-Za-z_$][\w$]*): /.exec(lines[j]!);
+          if (sub) paths.add(`${key}.${sub[1]!}`);
+        }
       }
-      // Record<string, ...> → 任意单级子键都算存在
-      if (/^Record<\s*string\s*,/.test(type.replace(/\?\s*$/, ""))) paths.add(`${key}.*`);
     }
     return paths;
   }
