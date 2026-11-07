@@ -87,8 +87,19 @@ node scripts/check-type-budget.mjs --write    # 类型债下降后下调基线�
   门禁工具只带 `read` 且带完整 schema、补齐 affinity 头），兜底链扩到 4 个候选并走完整条链
   （`nemotron-3.5-lightning-free` → `deepseek-v4.1-flash-free` → `glm-5.3-flash-free` → `nemotron-3.5-super-vl-free`）；
   全败时回放主模型终态帧（不再静默卡超时）。**本机额度当前耗尽**（上游 429，非代码问题）。
-  `beam-free` / `space-bunny-free` 已记入 `FREE_LANE_KNOWN_UNUSABLE_MODEL_IDS` 显式拒绝。
+  `beam-free` / `space-bunny-free` / `crouton-alpha-free` 已记入 `FREE_LANE_KNOWN_UNUSABLE_MODEL_IDS` 显式拒绝。
   仍开放的产品判断：兜底是否按额度/地区动态挑选（现为固定顺序）。
+- **内置第二免费车道（Kilo 免费池，2026-11-08）**：来自 dsh-our-free-model 插件的免费渠道移植。
+  上游 `api.kilo.ai/api/gateway`（Kilo AI 公共网关）免费池**完全免凭据**——主模型
+  `kilo-auto/free`（上游自动路由，本身就是兜底，故客户端无换名重发链）+ 10 个实测
+  200 的直连候选（kernel `KILO_FALLBACK_MODEL_IDS`，按实测首字延迟排序）；
+  传输层唯一特殊动作是**剥掉授权头**（带任何 bearer 值都 401，实测）。
+  ⚠️ **隐私**：免费池全部模型卡声明 `mayTrainOnYourPrompts: true`——prompt 可能被
+  上游记录用于改进服务，不适合敏感内容。可用性门与 zen 同纪律：实测白名单
+  （11/12 免费模型实测可用，`liquid/lfm-3-1.7b:free` 实测 429 无法判定，已显式拒绝）。
+  参考实现（MIT）来自 github.com/Ebony-Vinyl/dsh-our-free-model（npm 2.1.0），
+  **未整包捆绑**：该插件自带自升级/公告推送/本地网关等敏感能力，与"插件网络安装面
+  刻意未开"的纪律冲突；只移植了 Kilo 车道协议（其 OpenCode Zen 车道与内置渠道同池，无增量）。
 - **自动化 / 工作流：整条表面已删除（2026-11-02），不存在"待接通"的实现。** 旧的 Bun REST 工作流面
   （`routes/workflows.ts` + kernel `execute_workflow_step` + `workflow_*` 四个事件与登记 +
   前端 `types/workflow.ts` + 打包里的 `workflows/` 目录）只能报失败，已连同其依赖一起移除。

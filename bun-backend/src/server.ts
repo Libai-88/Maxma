@@ -62,6 +62,7 @@ import { createFileRoutes } from "./routes/files";
 import { createDiagnosticsRoutes } from "./routes/diagnostics";
 import { createCapabilitiesRoutes } from "./routes/capabilities";
 import { startBackgroundSync } from "./services/opencode-zen";
+import { startKiloBackgroundSync } from "./services/kilo-free";
 import { initializeDatabase } from "./db/core";
 import { getMetrics } from "./metrics";
 import { startLlmUsageRetentionTask } from "./llm-usage-ledger";
@@ -314,6 +315,13 @@ export function createApp(): Hono {
     startBackgroundSync();
   } catch (err) {
     console.warn(`[opencode-zen] startup injection failed (non-fatal): ${String(err)}`);
+  }
+
+  // 第二免费车道（Kilo 免费池）：同款节奏，失败不阻塞启动
+  try {
+    startKiloBackgroundSync();
+  } catch (err) {
+    console.warn(`[kilo-free] startup injection failed (non-fatal): ${String(err)}`);
   }
 
   // 启动事件（对齐 Python server.py record_activity("system","startup")）

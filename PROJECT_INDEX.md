@@ -75,7 +75,7 @@ web/src/main.ts
 
 - 装配 `server.ts`；聊天 `routes/chat-ws.ts`、`chat-turns.ts`、`chat-artifacts.ts`
 - 会话 `routes/sessions.ts`、`session-compress.ts`、`const-session-store.ts`
-- Provider `routes/providers.ts`（凭据信封加密）、`balance.ts`、`services/opencode-zen.ts`
+- Provider `routes/providers.ts`（凭据信封加密）、`balance.ts`、`services/opencode-zen.ts`、`services/kilo-free.ts`（第二免费车道）
 - MCP `routes/mcp.ts`、`mcp-oauth.ts`、`mcp-test.ts`、`mcp-validation.ts`
 - Settings `routes/settings.ts`、`settings-panels.ts`、`settings-global.ts`
 - 记忆 `routes/memory.ts`；能力 `routes/capabilities.ts`；插件 `routes/plugins.ts` + `plugins/`
@@ -89,7 +89,7 @@ web/src/main.ts
 ## 引擎（`bun-sidecar/src/`）
 
 - `kernel/bridge-pi.ts`：`handlePiCreateSession` / `handlePiSessionRpc`（后端 in-process 直调）
-- 支撑：`kernel/{pi-session,prompt,events,approval-gate,plan,goal,mcp,model,tools,skills,plugin-models,opencode-zen,persona-prompt,engine-info}.ts`、`kernel/extensions/`（maxma-approval / maxma-blocker）
+- 支撑：`kernel/{pi-session,prompt,events,approval-gate,plan,goal,mcp,model,tools,skills,plugin-models,opencode-zen,kilo-free,persona-prompt,engine-info}.ts`、`kernel/extensions/`（maxma-approval / maxma-blocker）
 - 自定义工具：`tools/`；RPC 类型：`rpc-types.ts`；拒止锚纯函数：`blocker.ts`
 - `session-bridge.ts` 是旧 stdio 入口，**无运行时调用方**，仅契约测试引用
 - 测试：`bun-sidecar/tests/`

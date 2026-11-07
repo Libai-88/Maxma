@@ -16,6 +16,7 @@ import { ModelRuntime, type ModelRuntime as ModelRuntimeType } from "@earendil-w
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { engineApiNames, resolveEngineApiName } from "./engine-info";
 import { registerOpencodeZenTransport } from "./opencode-zen";
+import { KILO_PROVIDER_ID, registerKiloTransport } from "./kilo-free";
 import { registerPluginProviderOn } from "./plugin-models";
 
 export interface MaxmaModelParams {
@@ -100,6 +101,9 @@ export async function resolvePiModel(
 
   if (provider === "opencode-zen") {
     registerOpencodeZenTransport(modelRuntime, modelId, p.baseUrl);
+  } else if (provider === KILO_PROVIDER_ID) {
+    // 内置第二免费车道（Kilo 免费池）：同 zen 的按请求注册模式。
+    registerKiloTransport(modelRuntime, modelId, p.baseUrl);
   } else {
     // 插件提供的路由（Jet Hub 等）：把该路由的模型与自定义传输注册到本 runtime。
     // 未装注册器时是 no-op，不影响内建 provider。
