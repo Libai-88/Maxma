@@ -439,7 +439,7 @@ onUnmounted(() => {
   border-radius: var(--radius); transition: border-color 0.15s;
   overflow: hidden;
 }
-.fact-card:hover { border-color: var(--accent-soft, var(--border)); }
+.fact-card:hover { border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
 .fact-content { font-size: 0.9em; line-height: 1.6; color: var(--text-primary); word-break: break-word; cursor: pointer; }
 .fact-content:hover { color: var(--accent); }
 .fact-meta { display: flex; align-items: center; gap: var(--space-12); margin-top: var(--space-8); flex-wrap: wrap; }

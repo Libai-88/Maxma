@@ -185,7 +185,7 @@
             >
               <Icon name="mic" :size="16" />
             </button>
-            <BorderBeam v-if="!isStreaming">
+            <BorderBeam v-if="!isStreaming && !calmMotion">
             <button
               ref="sendBtnRef"
               type="button"
@@ -272,6 +272,7 @@ import { useAttachMenu } from '@/composables/useAttachMenu'
 import { useFileRefs } from '@/composables/useFileRefs'
 import { useImageAttachment } from '@/composables/useImageAttachment'
 import { useLinkInput } from '@/composables/useLinkInput'
+import { useMotion } from '@/composables/useMotion'
 import { useChatSend } from '@/composables/useChatSend'
 import { useSpeechInput } from '@/composables/useSpeechInput'
 import { useSlashCommands } from '@/composables/useSlashCommands'
@@ -693,6 +694,7 @@ function moveCursorToEnd() {
 // ── Composer 模型状态 ──
 
 const chatStore = useChatStore()
+const { calm: calmMotion } = useMotion()
 const noProvider = computed(() => chatStore.availableModels.length === 0)
 
 onMounted(loadTools)

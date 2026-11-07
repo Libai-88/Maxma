@@ -71,7 +71,7 @@ const tableData = computed<TableData | null>(() => {
 <style scoped>
 .canvas-card {
   background: var(--bg-primary, #fff);
-  border: 1px solid var(--border-color, #e0e0e0);
+  border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -81,7 +81,7 @@ const tableData = computed<TableData | null>(() => {
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--border-color, #e0e0e0);
+  border-bottom: 1px solid var(--border);
   background: var(--bg-secondary, #f8f9fa);
 }
 
@@ -118,7 +118,7 @@ const tableData = computed<TableData | null>(() => {
 
 .card-body :deep(th),
 .card-body :deep(td) {
-  border: 1px solid var(--border-color, #e0e0e0);
+  border: 1px solid var(--border);
   padding: 4px 8px;
   text-align: left;
 }

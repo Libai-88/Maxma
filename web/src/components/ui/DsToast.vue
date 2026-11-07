@@ -221,7 +221,7 @@ useGsap((_ctx, contextSafe) => {
   transform-origin: left center;
   background: color-mix(in srgb, var(--accent) 38%, transparent);
   animation: maxma-toast-progress linear forwards;
-  animation-duration: var(--toast-duration, 4s);
+  animation-duration: var(--toast-duration, 4s); /* 运行时由 DsToast setProperty 注入实际时长 */
 }
 .ds-toast:hover .ds-toast__progress,
 .ds-toast:focus-within .ds-toast__progress {

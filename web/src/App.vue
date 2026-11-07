@@ -611,7 +611,7 @@ html, body {
 }
 
 .nav-item.router-link-active {
-	  background: var(--accent-soft, transparent);
+	  background: var(--accent-light, transparent);
 	  color: var(--accent);
 	  font-weight: 600;
 	}

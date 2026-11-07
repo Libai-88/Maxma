@@ -138,7 +138,7 @@ useButtonFx(() => rootEl.value, '.canvas-card-fallback button', { hoverScale: 1.
 .canvas-card-fallback {
   padding: 12px;
   background: var(--bg-primary, #fff);
-  border: 1px solid var(--border-color, #e0e0e0);
+  border: 1px solid var(--border);
   border-radius: 8px;
   font-size: 12px;
   color: var(--text-secondary, #999);

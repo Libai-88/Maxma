@@ -58,7 +58,7 @@ const fallbackText = computed(() => {
 <style scoped>
 .bubble-running { display: flex; align-items: center; gap: 8px; padding: 8px 0; font-size: 13px; color: var(--text-secondary); }
 .spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: maxma-spin 0.6s linear infinite; }
-.bubble-error { font-size: 13px; color: var(--error-color, #ef4444); padding: 4px 0; }
+.bubble-error { font-size: 13px; color: var(--status-error-text); padding: 4px 0; }
 .bubble-empty { font-size: 13px; color: var(--text-secondary); padding: 4px 0; }
 .search-query { font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: 8px; }
 .search-results { display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto; }

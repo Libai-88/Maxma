@@ -3,6 +3,13 @@
  * 命名前缀 maxma-*
  */
 
+/* ── 可配置 keyframe 参数（调用方可通过内联样式覆盖） ── */
+:root {
+  --slide-y: 4px;      /* maxma-fade-up/down 的位移量 */
+  --pulse-lo: 0.3;     /* maxma-pulse 低点透明度 */
+  --pulse-hi: 1;       /* maxma-pulse 高点透明度 */
+}
+
 /* ── Spin ── */
 @keyframes maxma-spin {
   from { transform: rotate(0deg); }

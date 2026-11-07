@@ -85,7 +85,7 @@ const displayOutput = computed(() => {
 <style scoped>
 .bubble-running { display: flex; align-items: center; gap: 8px; padding: 8px 0; font-size: 13px; color: var(--text-secondary); }
 .spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: maxma-spin 0.6s linear infinite; }
-.bubble-error { font-size: 13px; color: var(--error-color, #ef4444); padding: 4px 0; white-space: pre-wrap; }
+.bubble-error { font-size: 13px; color: var(--status-error-text); padding: 4px 0; white-space: pre-wrap; }
 .bubble-empty { font-size: 13px; color: var(--text-secondary); padding: 4px 0; }
 .output-done { font-size: 14px; color: var(--accent); font-weight: 500; padding: 4px 0; }
 .output-text { font-size: 12px; }

@@ -262,9 +262,11 @@ useGsap((_ctx, contextSafe) => {
     border-bottom-right-radius: var(--radius-sm);
   }
 .bubble.assistant {
-  background: color-mix(in srgb, var(--bg-card) 85%, var(--accent) 2%);
+  /* 对话即界面：AI 的回答是主要阅读面，用实底素笺，
+     不掺 accent、不透明——氛围渐变从它底下透过时文字依然稳。 */
+  background: var(--bg-card);
   color: var(--text-primary);
-  border: 1px solid color-mix(in srgb, var(--accent) 6%, var(--border));
+  border: 1px solid var(--border);
   border-bottom-left-radius: var(--radius-sm);
   box-shadow:
     0 1px 4px var(--shadow-color),

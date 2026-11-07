@@ -1,6 +1,6 @@
 <template>
   <HtmlSandbox v-if="useSandbox" :html="sandboxHtml" />
-  <div v-else class="markdown-body" v-html="renderedHtml" @click="onImageClick"></div>
+  <div v-else ref="bodyRef" class="markdown-body" v-html="renderedHtml" @click="onContainerClick"></div>
   <p v-if="renderError" class="md-render-error">
     <Icon name="warning" :size="14" />
     Markdown 渲染错误: {{ renderError }}
@@ -8,8 +8,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { renderMarkdown, renderMarkdownRaw, contentNeedsIsolation } from '@/utils/markdown'
+import { safeCopyText } from '@/lib/clipboard'
 import HtmlSandbox from './HtmlSandbox.vue'
 import { useMediaViewer } from '@/composables/useMediaViewer'
 import Icon from '@/components/Icon.vue'
@@ -23,6 +24,45 @@ import('katex/dist/katex.min.css').catch((err) => {
 })
 
 const { open } = useMediaViewer()
+
+// ── 代码块复制（CODE-COPY-001） ──
+// 消毒器会剥离 button 标签，所以复制按钮在 DOM 层注入（不进 markdown 字符串）；
+// 点击用事件委托，流式重渲染后无需重复绑定。
+const bodyRef = ref<HTMLElement | null>(null)
+
+function decorateCodeBlocks(root: HTMLElement) {
+  root.querySelectorAll('pre').forEach((pre) => {
+    if (pre.parentElement?.classList.contains('md-code')) return
+    if (!pre.querySelector('code')) return
+    const wrap = document.createElement('div')
+    wrap.className = 'md-code'
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.className = 'md-code-copy'
+    btn.textContent = '复制'
+    pre.replaceWith(wrap)
+    wrap.append(btn, pre)
+  })
+}
+
+let copyResetTimer: ReturnType<typeof setTimeout> | null = null
+
+async function onContainerClick(e: MouseEvent) {
+  onImageClick(e)
+  const btn = (e.target as HTMLElement).closest?.('.md-code-copy') as HTMLElement | null
+  if (!btn) return
+  const code = btn.closest('.md-code')?.querySelector('pre code')
+  if (!code) return
+  const ok = await safeCopyText(code.textContent ?? '')
+  btn.textContent = ok ? '已复制' : '复制失败'
+  btn.classList.toggle('is-done', ok)
+  btn.classList.toggle('is-failed', !ok)
+  if (copyResetTimer) clearTimeout(copyResetTimer)
+  copyResetTimer = setTimeout(() => {
+    btn.textContent = '复制'
+    btn.classList.remove('is-done', 'is-failed')
+  }, 1600)
+}
 
 function onImageClick(e: MouseEvent) {
   const target = e.target as HTMLElement
@@ -86,6 +126,12 @@ const renderResult = computed(() => {
 
 const renderedHtml = computed(() => renderResult.value.html)
 const renderError = computed(() => renderResult.value.error)
+
+// 每次渲染后给代码块挂复制按钮（v-html 会重建 DOM，需在渲染后补）
+watch(renderedHtml, async () => {
+  await nextTick()
+  if (bodyRef.value) decorateCodeBlocks(bodyRef.value)
+}, { immediate: true, flush: 'post' })
 
 /** 供 iframe 沙箱使用的未消毒 HTML，保留脚本/样式等交互能力。 */
 const sandboxHtml = computed(() => renderResult.value.sandbox)

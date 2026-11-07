@@ -45,7 +45,7 @@ const containerStyle = computed(() => ({
     var(--accent, #6e5af0),
     transparent 30%,
     transparent 60%,
-    var(--accent, #6e5af0),
+    var(--accent),
     transparent 90%
   );
   animation: beam-rotate var(--beam-duration, 4s) linear infinite;
