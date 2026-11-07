@@ -87,6 +87,15 @@ function enrichWithEvolutionContext(message: string, sessionId: string, turnId: 
 /** MEMORY-EVENTS-001：写类记忆工具（done 后合成 memory_* 事件流）。 */
 const MEMORY_WRITE_TOOLS = new Set(["remember_memory"]);
 
+/**
+ * Kernel RPC 的统一结果形态：**永不 reject**——失败解析为 `{ ok: false, error }`
+ * （见 server.ts 的 callKernelRpc）。消费方必须显式处理 `ok:false` 分支，
+ * 不许用 `.catch()` 兜底冒充错误处理（ACTION-FAIL-001）。
+ */
+export type KernelRpcResult =
+  | { ok: true; result: unknown }
+  | { ok: false; error: string };
+
 export interface ChatWsHub {
   sessions: Map<string, PiSessionRecord>;
   pendingPlans: Map<string, PiPendingPlan>;
@@ -98,7 +107,7 @@ export interface ChatWsHub {
   callRpc: (
     method: string,
     params: Record<string, unknown>,
-  ) => Promise<{ ok: true; result: unknown } | { ok: false; error: string }>;
+  ) => Promise<KernelRpcResult>;
   /** 向指定会话广播事件（原始出口，不经富化）。 */
   broadcast: (sessionId: string, event: { type: string; payload?: unknown }) => void;
 }
@@ -731,6 +740,39 @@ export function unregisterChatConnection(hub: ChatWsHub, sessionId: string, ws: 
 
 // ── client 消息分发 ──
 
+/** ACTION-FAIL-001：会话级动作 RPC 的失败不再静默。
+ *
+ * callKernelRpc 永不 throw——失败解析为 `{ ok: false, error }`，所以
+ * `.catch(() => {})` 连兜底都算不上，`ok:false` 路径更是完全不可见：
+ * 乐观 UI（自动执行开关 / 计划卡 / 检查点）会停在错误值上，用户重试
+ * 也毫无反应。这里按 steer/follow_up 的既有模式（collaboration_update）
+ * 把失败广播回客户端，由前端 toast 呈现。cancel 类调用有意不走红：
+ * 本地记录即真相（浏览器看到的事实不变），见 server.ts 的注释。 */
+async function callRpcStrict(
+  hub: ChatWsHub,
+  sessionId: string,
+  method: string,
+  params: Record<string, unknown>,
+  actionLabel: string,
+): Promise<void> {
+  let result: KernelRpcResult;
+  try {
+    result = await hub.callRpc(method, params);
+  } catch (error) {
+    hub.broadcast(sessionId, {
+      type: "action_failed",
+      payload: { action: actionLabel, message: String(error) },
+    });
+    return;
+  }
+  if (!result.ok) {
+    hub.broadcast(sessionId, {
+      type: "action_failed",
+      payload: { action: actionLabel, message: result.error },
+    });
+  }
+}
+
 /** 处理一条 client 消息（server.ts websocket.message 调用）。 */
 export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, raw: string | Buffer): void {
   let msg: Record<string, unknown>;
@@ -892,16 +934,14 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
 
   // ── user_response（ask_user 应答）──
   if (msgType === "user_response") {
-    void hub.callRpc("user_response", { session_id: sessionId, ...payload }).catch(() => {});
+    void callRpcStrict(hub, sessionId, "user_response", { session_id: sessionId, ...payload }, "应答");
     return;
   }
 
   // ── update_auto_approve ──
   if (msgType === "update_auto_approve") {
     const autoApprove = Boolean(payload.auto_approve);
-    void hub
-      .callRpc("set_auto_approve", { session_id: sessionId, auto_approve: autoApprove })
-      .catch(() => {});
+    void callRpcStrict(hub, sessionId, "set_auto_approve", { session_id: sessionId, auto_approve: autoApprove }, "自动执行开关");
     return;
   }
 
@@ -913,15 +953,13 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
       action: String(payload.action ?? ""),
     };
     if (payload.modified_plan) planPayload.modified_plan = payload.modified_plan;
-    void hub.callRpc("plan_action", planPayload).catch(() => {});
+    void callRpcStrict(hub, sessionId, "plan_action", planPayload, "计划操作");
     return;
   }
 
   // ── set_plan_mode ──
   if (msgType === "set_plan_mode") {
-    void hub
-      .callRpc("set_plan_mode", { session_id: sessionId, enabled: Boolean(payload.enabled) })
-      .catch(() => {});
+    void callRpcStrict(hub, sessionId, "set_plan_mode", { session_id: sessionId, enabled: Boolean(payload.enabled) }, "计划模式");
     return;
   }
 
@@ -932,7 +970,7 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
       action: String(payload.action ?? ""),
     };
     if (payload.goal) checkpointPayload.goal = payload.goal;
-    void hub.callRpc("checkpoint_action", checkpointPayload).catch(() => {});
+    void callRpcStrict(hub, sessionId, "checkpoint_action", checkpointPayload, "检查点操作");
     return;
   }
 

@@ -12,6 +12,7 @@ import { chatSessionAliveCache } from '@/composables/sessionAliveCache'
 import { useWorkbenchStore } from '@/stores/workbench'
 import { detectEmotion, getStickerUrl, replaceEmotionTags, replaceStickerDirectives } from './stickerUtils'
 import { showSystemNotification } from '@/lib/notify'
+import { showToast } from '@/lib/toast'
 import { autoReadIfEnabled } from '@/composables/useTts'
 import type { GoalChannelState, TaskBriefState } from '@/stores/chat'
 import { createLogger } from '@/utils/logger'
@@ -112,6 +113,8 @@ export const SERVER_EVENT_HANDLER_TYPES: Record<ServerEvent['type'], true> = {
   goal_updated: true,
   permission_mode_updated: true,
   collaboration_update: true,
+  // 会话级动作失败回执（ACTION-FAIL-001）
+  action_failed: true,
   task_review_update: true,
   task_brief_update: true,
 }
@@ -1295,6 +1298,15 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     ch.permissionMode = mode
     // 「自动执行」= auto 档；两态开关与四档选择器从此读同一份通道状态。
     ch.autoApprove = mode === 'auto'
+    return
+  }
+
+  // ACTION-FAIL-001：会话级动作失败回执 → 全局 toast。会话级事件，
+  // 与回合无关，可能在无活跃轮次时到达 → 必须在 turn 守卫之前处理。
+  if (event.type === 'action_failed') {
+    const { action, message } = event.payload ?? {}
+    if (!message) return
+    showToast(`「${action || '操作'}」失败：${message}`, 'warning')
     return
   }
 

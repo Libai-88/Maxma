@@ -64,6 +64,7 @@
 | `artifact` | 从写类工具 `tool_end` 提取路径合成（`routes/chat-artifacts.ts`） |
 | `memory_start` / `memory_tool_start` / `memory_tool_end` / `memory_tool_error` / `memory_done` | `remember_memory` 工具回合的包装 |
 | `collaboration_update` | `{ status: "queued"\|"error", mode: "steer"\|"follow_up", message }` 实时协作回执 |
+| `action_failed` | `{ action, message }` 会话级动作（`user_response` / `update_auto_approve` / `plan_action` / `set_plan_mode` / `checkpoint_action`）的 RPC **失败**回执，前端 toast 呈现（ACTION-FAIL-001）。成功路径各有回执（`permission_mode_updated` / `goal_updated` / `artifact_result`），不重复广播；`cancel` 类有意不走（本地记录即真相） |
 | `task_review_update` | `{ status: "available"\|"accepted"\|"revising", turn_id, answer?, message? }` 回合验收状态 |
 | `task_brief_update` | `{ turn_id, status: "thinking"\|"clarify"\|"ready"\|"fallback", questions?, execution_prompt?, error? }` 需求澄清状态机 |
 
@@ -77,7 +78,7 @@
 所以将来新增第二条后端发射链，照样会被这条判据抓到，不必等它先漂出一次事故。
 
 - `BACKEND_SYNTHESIZED_EVENTS`：`hello` / `pong` / `artifact` / `artifact_result` /
-  `collaboration_update` / `memory_*` / `task_brief_update` / `task_review_update`。
+  `collaboration_update` / `action_failed` / `memory_*` / `task_brief_update` / `task_review_update`。
 - `MAXMA_ENGINE_WS_EVENTS`（本节只列 §3.1 之外的补充说明）：kernel 产出的事件一律归这张表，
   不许为了少写一条对账而塞进后端合成表——`permission_mode_updated` 就是按这条登记的
   （生产者在 `bridge-pi.ts`，REST/WS 层只是转发）。
