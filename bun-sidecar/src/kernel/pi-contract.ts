@@ -40,7 +40,7 @@
  * `engine-info.ts` 在 pi 报 "0.0.0" 时回落到本值。
  * `scripts/upgrade-pi.mjs` bump 时会一并改写它，避免又多一处手抄。
  */
-export const PI_ENGINE_VERSION = "0.99.0";
+export const PI_ENGINE_VERSION = "1.5.0";
 
 /** Maxma 直接依赖的 pi 包。两处 workspace 必须同版本（engine-boundary 校验）。 */
 export const PI_PACKAGES = [
@@ -266,28 +266,28 @@ export const PI_PROVIDER_APIS = [
 /**
  * 引擎改过名的 api 标识（成对登记，附生效版本）。
  *
- * 上游 1.0.3 的 Breaking Changes 把 Azure provider 从 `azure-openai-responses`
- * 改名为 `azure`，并要求迁移 auth.json / models.json / settings.json 里的
- * provider key。
- *
  * ⚠️ 这里**不是**"两个名字都当合法值"的白名单——那样做会让当前 0.99.0 运行时
  * 接受一个引擎并不认识的 api 名，把"回落 openai-completions"换成"发送时报错"，
  * 等于新造一条用户可见的报错路径。正确做法是按**已安装引擎的版本**选定实名，
  * 两个方向都能解析（见 `engine-info.ts` 的 `engineApiNames()`）。
+ *
+ * ## 1.0.3 Azure 改名的实测结论（2026-11-08 升级 1.5.0 时对账修正）
+ *
+ * 上游 1.0.3 的 Breaking Changes 原文是 "Renamed the Azure provider from
+ * `azure-openai-responses` to `azure`"——当时被误读成 **api 名**改了，登记成
+ * `azure-openai-responses → azure`。对账已安装 1.5.0 的真实面后证伪：
+ * `KnownApi`（pi-ai/dist/types.d.ts）里 `azure-openai-responses` **一直在**，
+ * `azure` 从来不在；真正改的是 **provider 键**（`KnownProvider` 新增 `azure`），
+ * 两者是不同维度的词表。api 名从未变，改名表因此为空；
+ * provider 键 → api 的映射在 `kernel/model.ts` 的 `PROVIDER_API_ALIASES`
+ * （`azure → azure-openai-responses`）。
  */
 export const PI_PROVIDER_API_RENAMES: ReadonlyArray<{
   from: string;
   to: string;
   since: string;
   note: string;
-}> = [
-  {
-    from: "azure-openai-responses",
-    to: "azure",
-    since: "1.0.3",
-    note: "上游 1.0.3 Breaking：Azure provider 更名；用户配置里两个名字都要能用",
-  },
-];
+}> = [];
 
 // ─────────────────────────────────────────────────────────────
 // 4. compaction 词表（引擎值 vs Maxma 契约值，两者不等价）
@@ -413,7 +413,7 @@ export const MAXMA_SETTINGS_KEYS: ReadonlyArray<{
   { path: "compaction.idleEnabled", engineReal: false, consumer: "none", note: "OMP 遗留，无读者" },
   { path: "compaction.idleThresholdTokens", engineReal: false, consumer: "none", note: "OMP 遗留，无读者" },
   { path: "compaction.idleTimeoutSeconds", engineReal: false, consumer: "none", note: "OMP 遗留，无读者" },
-  { path: "retry.maxDelayMs", engineReal: false, consumer: "none", note: "pi 实名是 maxAgentDelayMs（或 provider.maxRetryDelayMs），本键不存在且无读者" },
+  { path: "retry.maxDelayMs", engineReal: true, consumer: "none", note: "1.5.0 起引擎 RetrySettings 新增 maxDelayMs（此前实名是 maxAgentDelayMs）；面板未暴露该键，直接编辑 settings.json 可生效" },
   { path: "retry.modelFallback", engineReal: false, consumer: "none", note: "OMP 遗留：pi RetrySettings 无该键，全仓无读者" },
   { path: "retry.fallbackChains", engineReal: false, consumer: "none", note: "OMP 遗留：pi 无该键，全仓无读者" },
   { path: "tools.approvalMode", engineReal: false, consumer: "none", note: "OMP 遗留：pi 无权限系统，审批由 kernel/approval-gate.ts 经 create_session 的 permission_mode 实现，不经 settings" },

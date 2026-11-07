@@ -39,7 +39,12 @@ const DIRECT = [
   "@earendil-works/pi-agent-core",
   "@earendil-works/pi-ai",
 ];
-/** 家族包：0.99.x 时代上游用 ^0.99.0 声明，必须在 overrides 里钉死，否则两棵树会漂。 */
+/** 家族包 + 直接依赖在 overrides 里也各有一份钉死（两侧 package.json 的
+ *  //overrides 注释：「引擎全家桶必须与直接依赖同版本」）。bump 必须覆盖
+ *  overrides 里**全部** @earendil-works/* 键——只 bump FAMILY 会把 DIRECT
+ *  三件钉在旧版上，override 优先于 dependencies，装出「新家族 + 旧引擎」
+ *  的混合树（实测：pi-codemode@1.x + pi-coding-agent@0.99.0 → 引擎根包
+ *  在 Bun 下 import 即炸，形态恰似上游断裂）。 */
 const FAMILY = [
   "@earendil-works/chord",
   "@earendil-works/pi-codemode",
@@ -249,6 +254,9 @@ for (const ws of WORKSPACES) {
   const pkg = JSON.parse(backups.get(file));
   for (const d of DIRECT) pkg.dependencies[d] = target;
   for (const f of FAMILY) if (pkg.overrides?.[f]) pkg.overrides[f] = target;
+  // DIRECT 三件在两侧 overrides 里也各有一份钉死——与 dependencies 同步，
+  // 否则 override 赢过 dependencies，装出混合依赖树（见 FAMILY 注释）。
+  for (const d of DIRECT) if (pkg.overrides?.[d]) pkg.overrides[d] = target;
   writeFileSync(file, JSON.stringify(pkg, null, 2) + "\n", "utf8");
 }
 // 契约里的声明版本必须跟着走：便携包里 pi 读不到自己的 package.json，
