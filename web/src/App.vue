@@ -1,5 +1,6 @@
 <template>
   <div class="app-layout" :style="sidebarBgStyle">
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
     <Dock
       :onboarding-enabled="onboardingEnabled"
       :session-drawer-open="sessionDrawerOpen"
@@ -74,6 +75,7 @@ import { useRoute, useRouter } from 'vue-router';
 
 import LeavesOverlay from '@/components/LeavesOverlay.vue'
 import { usePaperTexture } from '@/composables/usePaperTexture'
+import { useMotion } from '@/composables/useMotion'
 import { useGlobalShortcut } from '@/composables/useGlobalShortcut'
 import { useHealthPolling } from '@/composables/useHealthPolling'
 import { initCapabilities } from '@/composables/useCapabilities'
@@ -93,6 +95,9 @@ const onboardingPaused = ref(false)
 // 初始化纸质纹理 — 在顶层调用 composable，确保 reactive context 正确
 const { enabled: paperTextureEnabled } = usePaperTexture()
 document.body.classList.toggle('paper-texture', paperTextureEnabled.value)
+
+// 动效密度：模块级 composable 在 setup 顶层调用一次，data-motion 已挂到 <html>
+const { calm: calmMotion } = useMotion()
 
 function openSessionDrawer() {
   sessionDrawerOpen.value = true
@@ -119,7 +124,8 @@ router.beforeResolve((to) => {
   const type = (to.meta.transition as string | undefined) ?? 'flip'
   const direction = pos > lastNavPosition ? 'forward' : pos < lastNavPosition ? 'back' : null
   lastNavPosition = pos
-  pageTransition.value = direction ? `page-${type}-${direction}` : 'page-fade'
+  // 克制模式只保留淡入淡出，不用 flip/slide/rise/zoom 的位移转场
+  pageTransition.value = calmMotion.value || !direction ? 'page-fade' : `page-${type}-${direction}`
 })
 
 async function handleCreateSession() {
@@ -605,7 +611,7 @@ html, body {
 }
 
 .nav-item.router-link-active {
-	  background: var(--accent-soft, transparent);
+	  background: var(--accent-light, transparent);
 	  color: var(--accent);
 	  font-weight: 600;
 	}
@@ -903,5 +909,24 @@ body .editor-wrapper .cm-placeholder {
    800px 等效 640px CSS px） */
 @media (max-width: 820px) {
   :root { --icon-rail-width: 56px; }
+}
+/* ── 跳转主内容：键盘用户 Tab 到首个可聚焦元素时滑入 ── */
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 310;
+  padding: 8px 14px;
+  border-radius: var(--radius-input);
+  background: var(--accent-solid);
+  color: var(--accent-solid-text);
+  font-family: var(--font-body);
+  font-size: var(--fs-ui);
+  text-decoration: none;
+  transform: translateY(-200%);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+.skip-link:focus-visible {
+  transform: translateY(0);
 }
 </style>

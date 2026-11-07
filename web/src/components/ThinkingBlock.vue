@@ -1,9 +1,9 @@
 <template>
-  <div ref="rootEl" class="thinking-block" :class="{ done: block.done }">
+  <div ref="rootEl" class="thinking-block" :class="{ done: block.done, 'just-done': justDone }">
     <div class="thinking-header">
       <span class="thinking-label">
         <span class="spinner" v-if="!block.done"></span>
-        思考中{{ block.done ? '（完成）' : '……' }}
+        思考中<span v-if="!block.done" class="think-dots" aria-hidden="true"><i></i><i></i><i></i></span><span v-else aria-hidden="true">（完成）</span>
       </span>
     </div>
     <div class="thinking-body" v-if="block.tokens">
@@ -140,6 +140,12 @@ watch(streamingText, (val) => {
     displayText.value = streamingText.value
   }, 80)
 }, { immediate: true })
+/** 完成落定（INK-SETTLE-001）：done 翻转瞬间给一圈一次性墨环，
+ * 0.6s 后移除 class，让动画只播一次。历史会话挂载时 done 已为 true，
+ * watch 不触发，不会误播。 */
+const justDone = ref(false)
+let settleTimer: ReturnType<typeof setTimeout> | null = null
+
 watch(() => props.block.done, (done) => {
   if (done) {
     if (mdThrottleTimer) {
@@ -147,12 +153,21 @@ watch(() => props.block.done, (done) => {
       mdThrottleTimer = 0
     }
     displayText.value = streamingText.value
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      justDone.value = true
+      if (settleTimer) clearTimeout(settleTimer)
+      settleTimer = setTimeout(() => { justDone.value = false }, 600)
+    }
   }
 })
 onUnmounted(() => {
   if (mdThrottleTimer) {
     window.clearTimeout(mdThrottleTimer)
     mdThrottleTimer = 0
+  }
+  if (settleTimer) {
+    clearTimeout(settleTimer)
+    settleTimer = null
   }
 })
 
@@ -290,9 +305,15 @@ useGsap(() => {
   border-radius: var(--radius);
   background: var(--bg-secondary);
   overflow: hidden;
+  /* 首个 token 到达：块从纸上浮起（THINK-IN-001），一次性 */
+  animation: maxma-think-in 0.28s var(--ease-out) both;
   transition: background 0.25s var(--ease-out),
               border 0.25s var(--ease-out),
               border-radius 0.25s var(--ease-out);
+}
+/* 完成落定（INK-SETTLE-001）：一次性墨环从边界洇开 */
+.thinking-block.just-done {
+  animation: maxma-ink-settle 0.55s var(--ease-standard) 1;
 }
 .thinking-block.done {
   background: var(--bg-card);
@@ -333,14 +354,30 @@ useGsap(() => {
   align-items: center;
   gap: 6px;
 }
+/* 墨滴呼吸（INK-DOT-001）：替代通用环形 spinner——
+ * 「墨在纸上洇开」是品牌意象，呼吸节奏比匀速转圈更接近思考的起伏 */
 .spinner {
-  width: 12px;
-  height: 12px;
-  border: 2px solid var(--border);
-  border-top-color: var(--accent);
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  animation: maxma-spin 0.8s linear infinite;
+  background: var(--accent);
+  animation: maxma-ink-breathe 1.2s var(--ease-smooth, cubic-bezier(0.22, 0.68, 0, 1)) infinite;
 }
+.think-dots {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  margin-left: 3px;
+}
+.think-dots i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  animation: maxma-think-dot 1.2s var(--ease-smooth, cubic-bezier(0.22, 0.68, 0, 1)) infinite;
+}
+.think-dots i:nth-child(2) { animation-delay: 0.15s; }
+.think-dots i:nth-child(3) { animation-delay: 0.3s; }
 .thinking-body {
   padding: 8px 14px 12px;
   border-top: 1px solid var(--border);
@@ -397,6 +434,8 @@ useGsap(() => {
   vertical-align: text-bottom;
   border-radius: 1px;
   background: var(--accent);
+  /* 墨晕：光标带一圈极淡的朱砂，让「正在写」有温度而不喧哗 */
+  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 35%, transparent);
   animation: maxma-caret-blink 0.9s steps(2, start) infinite;
 }
 
@@ -407,7 +446,14 @@ useGsap(() => {
     transition: none;
   }
 
-  .spinner {
+  .thinking-block,
+  .thinking-block.just-done {
+    animation: none;
+  }
+
+  .spinner,
+  .think-dots i,
+  .stream-caret {
     animation: none;
   }
 }

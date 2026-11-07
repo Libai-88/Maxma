@@ -624,6 +624,12 @@ export const BACKEND_SYNTHESIZED_EVENTS = [
   "artifact",
   "artifact_result",
   "collaboration_update",
+  // ACTION-FAIL-001：会话级动作（user_response / update_auto_approve /
+  // plan_action / set_plan_mode / checkpoint_action）的 RPC 失败回执。
+  // callKernelRpc 永不 throw（失败解析为 {ok:false}），此前五处
+  // `.catch(() => {})` 连 catch 都接不到——失败完全不可见，乐观 UI
+  // 停在错误值上。steer/follow_up 的 collaboration_update 是同形状的先例。
+  "action_failed",
   "memory_start",
   "memory_tool_start",
   "memory_tool_end",

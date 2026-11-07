@@ -1,10 +1,12 @@
 <template>
   <div class="mcp-view" ref="rootEl">
-    <!-- ── 标题栏 ── -->
+    <!-- ── 子区块标题栏：本视图嵌在 ExtensionView 里，不是页面级 view-header ── -->
     <div class="header">
       <h2>MCP 服务</h2>
-      <button v-if="mode === 'list'" class="ds-btn ds-btn--primary" @click="startAdd">+ 添加 MCP 服务器</button>
-      <button v-else class="ds-btn" @click="cancelForm">← 返回列表</button>
+      <div class="view-header__actions">
+        <button v-if="mode === 'list'" class="ds-btn ds-btn--primary" @click="startAdd">+ 添加 MCP 服务器</button>
+        <button v-else class="ds-btn" @click="cancelForm">← 返回列表</button>
+      </div>
     </div>
 
     <!-- ── Tab 切换（仅列表模式） ── -->
@@ -25,17 +27,17 @@
     <template v-if="mode === 'list'">
       <!-- ═══ 服务器 Tab ═══ -->
       <template v-if="activeTab === 'servers'">
-      <div v-if="loading" class="loading">加载中...</div>
-      <div v-else-if="loadError" class="empty">
+      <div v-if="loading" class="loading ds-state">加载中...</div>
+      <div v-else-if="loadError" class="empty ds-state">
         加载失败: {{ loadError }}
-        <div class="retry-row">
+        <div class="retry-row ds-state__actions">
           <button class="ds-btn ds-btn--primary" @click="loadServers">重试</button>
         </div>
       </div>
-      <div v-else-if="servers.length === 0" class="empty enhanced-empty">
+      <div v-else-if="servers.length === 0" class="empty ds-state enhanced-empty">
         <!-- Hero -->
         <div class="empty-hero">
-          <svg class="empty-hero-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <svg class="empty-hero-icon ds-state__icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <!-- Server -->
             <rect x="8" y="6" width="32" height="36" rx="4" />
             <circle cx="24" cy="18" r="3.5" />
@@ -45,8 +47,8 @@
             <path d="M24 6V2M24 42v4" />
           </svg>
           <div class="empty-hero-text">
-            <h3>开始使用 MCP 服务器</h3>
-            <p>MCP 是一种让 Maxma 与外部工具和服务安全连接的通用方式。通过添加 MCP 服务器，你的 AI 就能读取文件、查询信息、运行命令，能力大幅扩展。</p>
+            <h3 class="ds-state__title">开始使用 MCP 服务器</h3>
+            <p class="ds-state__desc">MCP 是一种让 Maxma 与外部工具和服务安全连接的通用方式。通过添加 MCP 服务器，你的 AI 就能读取文件、查询信息、运行命令，能力大幅扩展。</p>
           </div>
         </div>
 
@@ -93,7 +95,7 @@
         </div>
 
         <!-- Action buttons -->
-        <div class="empty-actions">
+        <div class="empty-actions ds-state__actions">
           <button class="ds-btn ds-btn--primary" @click="startAdd">+ 添加 MCP 服务器</button>
           <button class="ds-btn" @click="startAddWithExample">添加示例服务器</button>
         </div>
@@ -210,8 +212,8 @@
             <input v-model="modelScopeQuery" class="input marketplace-search-input" placeholder="搜索中文 MCP 服务，例如地图、搜索" @keydown.enter="searchModelScope" />
             <button class="ds-btn ds-btn--primary" :disabled="modelScopeLoading" @click="searchModelScope">{{ modelScopeLoading ? '搜索中…' : '搜索' }}</button>
           </div>
-          <div v-if="modelScopeError" class="empty">{{ modelScopeError }}<div class="retry-row"><button class="ds-btn ds-btn--primary" @click="loadModelScope">重试</button></div></div>
-          <div v-else-if="modelScopeLoading" class="loading">正在加载魔搭 MCP 市场…</div>
+          <div v-if="modelScopeError" class="empty ds-state ds-state--bare">{{ modelScopeError }}<div class="retry-row ds-state__actions"><button class="ds-btn ds-btn--primary" @click="loadModelScope">重试</button></div></div>
+          <div v-else-if="modelScopeLoading" class="loading ds-state ds-state--bare">正在加载魔搭 MCP 市场…</div>
           <div v-else-if="modelScopeServers.length" class="marketplace-grid">
             <div v-for="item in modelScopeServers" :key="item.id" class="registry-card">
               <div class="registry-card-header">
@@ -227,7 +229,7 @@
               </div>
             </div>
           </div>
-          <div v-else class="empty"><p>暂无搜索结果</p><p class="empty-hint">尝试中文关键词搜索魔搭 MCP 服务</p></div>
+          <div v-else class="empty ds-state ds-state--bare"><p>暂无搜索结果</p><p class="empty-hint ds-state__desc">尝试中文关键词搜索魔搭 MCP 服务</p></div>
           <div v-if="modelScopeTotal > 20" class="marketplace-pagination">
             <button class="ds-btn" :disabled="modelScopePage <= 1 || modelScopeLoading" @click="modelScopePage--; loadModelScope()">上一页</button>
             <span class="page-info">第 {{ modelScopePage }} 页</span>
@@ -248,10 +250,10 @@
         </div>
 
         <!-- 加载状态 -->
-        <div v-if="registryLoading" class="loading">正在加载市场数据...</div>
-        <div v-else-if="registryError" class="empty">
+        <div v-if="registryLoading" class="loading ds-state ds-state--bare">正在加载市场数据...</div>
+        <div v-else-if="registryError" class="empty ds-state ds-state--bare">
           加载失败: {{ registryError }}
-          <div class="retry-row">
+          <div class="retry-row ds-state__actions">
             <button class="ds-btn ds-btn--primary" @click="loadRegistry">重试</button>
           </div>
         </div>
@@ -305,9 +307,9 @@
         </div>
 
         <!-- 空结果 -->
-        <div v-else class="empty">
+        <div v-else class="empty ds-state ds-state--bare">
           <p>暂无搜索结果</p>
-          <p class="empty-hint">尝试其他关键词，或留空搜索浏览全部服务器</p>
+          <p class="empty-hint ds-state__desc">尝试其他关键词，或留空搜索浏览全部服务器</p>
         </div>
 
         <!-- 分页 -->
@@ -1334,50 +1336,44 @@ onMounted(() => { loadServers(); loadDiscovered() })
 
 <style scoped>
 .mcp-view {
-  flex: 1;
-  overflow-y: auto;
-  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
 }
 
+/* 子区块标题：与 ExtensionView 的页面级 view-header 区分，无下划线、更小字号 */
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: var(--space-8) var(--space-16);
 }
-
 .header h2 {
-  font-size: var(--fs-display-lg);
-  font-weight: 600;
+  margin: 0;
   font-family: var(--font-display);
+  font-size: var(--fs-display-md);
+  font-weight: 600;
   letter-spacing: -0.01em;
+  color: var(--text-primary);
 }
 
-.loading, .empty {
-  color: var(--text-secondary);
-  padding: 40px 0;
-  text-align: center;
-}
 .empty-hint {
   font-size: 13px;
-  margin-top: 8px;
+  margin-top: var(--space-8);
   opacity: 0.7;
 }
 
 /* ── 增强空状态引导 ── */
 .enhanced-empty {
-  padding: 48px 24px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 40px;
+  gap: var(--space-40);
 }
 
 .empty-hero {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: var(--space-16);
   max-width: 480px;
 }
 
@@ -1392,7 +1388,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
   font-size: 20px;
   font-weight: 700;
   color: var(--text-primary);
-  margin: 0 0 8px;
+  margin: 0 0 var(--space-8);
 }
 
 .empty-hero-text p {
@@ -1405,7 +1401,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
 .guide-cards {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
+  gap: var(--space-24);
   max-width: 720px;
   width: 100%;
 }
@@ -1414,12 +1410,12 @@ onMounted(() => { loadServers(); loadDiscovered() })
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 24px 20px;
+  padding: var(--card-padding) var(--space-16);
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 12px;
+  gap: var(--space-12);
   transition: transform var(--duration-fast) var(--ease-out),
               box-shadow var(--duration-fast) var(--ease-out);
 }
@@ -1454,14 +1450,14 @@ onMounted(() => { loadServers(); loadDiscovered() })
 
 	.empty-actions {
 	  display: flex;
-	  gap: 12px;
+	  gap: var(--space-12);
 	  align-items: center;
 	}
 
 	/* ── 分角色引导 ── */
 	.role-guidance {
 	  display: flex;
-	  gap: 16px;
+	  gap: var(--space-16);
 	  max-width: 720px;
 	  width: 100%;
 	}
@@ -1469,8 +1465,8 @@ onMounted(() => { loadServers(); loadDiscovered() })
 	  flex: 1;
 	  display: flex;
 	  align-items: center;
-	  gap: 10px;
-	  padding: 12px 16px;
+	  gap: var(--space-12);
+	  padding: var(--space-12) var(--space-16);
 	  border-radius: var(--radius-lg);
 	  border: 1px solid var(--border);
 	  background: var(--bg-card);
@@ -1482,7 +1478,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
 	  flex-shrink: 0;
 	  font-size: 11px;
 	  font-weight: 600;
-	  padding: 2px 10px;
+	  padding: var(--space-2) var(--space-12);
 	  border-radius: 100px;
 	  background: color-mix(in srgb, var(--accent) 10%, var(--bg-card));
 	  color: var(--accent);
@@ -1528,7 +1524,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 16px;
+  gap: var(--space-16);
 }
 @media (max-width: 640px) {
   .card-grid { grid-template-columns: 1fr; }
@@ -1541,7 +1537,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
   padding: var(--space-16);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-12);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -1567,7 +1563,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
   border-radius: 50%;
   background: var(--status-ok);
   flex-shrink: 0;
-  margin-right: 8px;
+  margin-right: var(--space-8);
 }
 .mcp-card:not(:has(.toggle-btn.active)) .card-header::before {
   background: var(--text-tertiary);
@@ -1576,7 +1572,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
 .card-title-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
 }
 
 .card-label {
@@ -1586,8 +1582,8 @@ onMounted(() => { loadServers(); loadDiscovered() })
 
 .transport-badge {
   font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: var(--space-2) var(--space-8);
+  border-radius: var(--radius-sm);
   font-weight: 600;
   text-transform: uppercase;
 }
@@ -1597,7 +1593,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
 .toggle-btn {
   width: 40px;
   height: 22px;
-  border-radius: 11px;
+  border-radius: var(--radius-lg);
   border: none;
   background: var(--border);
   cursor: pointer;
@@ -1652,7 +1648,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
 .card-tools {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   font-size: 13px;
 }
 .tool-count {
@@ -1661,21 +1657,21 @@ onMounted(() => { loadServers(); loadDiscovered() })
 .disabled-tag {
   font-size: 12px;
   padding: 1px 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   background: var(--bg-secondary);
   color: var(--text-tertiary);
 }
 
 .card-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-8);
   margin-top: auto;
 }
 /* UX-MCP-TEST-001：测试结果行 */
 .mcp-test-result {
-  margin-top: 8px;
-  padding: 5px 10px;
-  border-radius: 6px;
+  margin-top: var(--space-8);
+  padding: var(--space-6) var(--space-12);
+  border-radius: var(--radius-input);
   font-size: 0.78em;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1690,8 +1686,8 @@ onMounted(() => { loadServers(); loadDiscovered() })
   color: var(--status-error-text);
 }
 .action-btn {
-  padding: 5px 12px;
-  border-radius: 6px;
+  padding: var(--space-6) var(--space-12);
+  border-radius: var(--radius-input);
   border: 1px solid var(--border);
   background: var(--bg-secondary);
   color: var(--text-primary);
@@ -1717,13 +1713,13 @@ onMounted(() => { loadServers(); loadDiscovered() })
   max-width: 560px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--space-16);
 }
 
 .form-section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-6);
 }
 
 .form-label {
@@ -1738,25 +1734,25 @@ onMounted(() => { loadServers(); loadDiscovered() })
 }
 /* Novice 引导：信息型提示，区别于普通说明文字 */
 .form-hint--info {
-  padding: 8px 10px;
+  padding: var(--space-8) var(--space-12);
   border-left: 3px solid var(--accent);
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--text-secondary);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   line-height: 1.5;
 }
 .form-hint--info code {
   font-family: 'SF Mono', 'Consolas', monospace;
   font-size: 12px;
-  padding: 1px 4px;
+  padding: var(--space-2) var(--space-4);
   background: var(--bg-secondary);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   color: var(--text-primary);
 }
 
 .input {
-  padding: 8px 12px;
-  border-radius: 8px;
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--bg-primary);
   color: var(--text-primary);
@@ -1782,11 +1778,11 @@ select.input {
 .kv-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-6);
 }
 .kv-row {
   display: flex;
-  gap: 6px;
+  gap: var(--space-6);
   align-items: center;
 }
 .kv-row .input {
@@ -1795,7 +1791,7 @@ select.input {
 .kv-remove {
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   border: 1px solid var(--border);
   background: var(--bg-secondary);
   color: var(--text-secondary);
@@ -1808,8 +1804,8 @@ select.input {
   color: var(--status-error-text);
 }
 .kv-add {
-  padding: 6px 12px;
-  border-radius: 6px;
+  padding: var(--space-6) var(--space-12);
+  border-radius: var(--radius-input);
   border: 1px dashed var(--border);
   background: transparent;
   color: var(--text-secondary);
@@ -1826,8 +1822,8 @@ select.input {
 .form-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 8px;
+  gap: var(--space-12);
+  margin-top: var(--space-8);
 }
 .save-msg {
   font-size: 13px;
@@ -1841,11 +1837,11 @@ select.input {
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  padding: 10px 20px;
-  border-radius: 8px;
+  padding: var(--space-12) var(--space-24);
+  border-radius: var(--radius-md);
   font-size: 14px;
   z-index: 100;
-  box-shadow: 0 2px 12px color-mix(in srgb, var(--text-primary) 15%, transparent);
+  box-shadow: var(--shadow-md);
 }
 .global-message.ok {
   background: var(--bg-card);
@@ -1862,20 +1858,20 @@ select.input {
 .chips-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-6);
   align-items: center;
-  padding: 6px;
+  padding: var(--space-6);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg-primary);
   min-height: 38px;
 }
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  border-radius: 4px;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-8);
+  border-radius: var(--radius-sm);
   background: var(--bg-card);
   background: color-mix(in srgb, var(--accent) 12%, var(--bg-card));
   color: var(--accent);
@@ -1905,13 +1901,13 @@ select.input {
   color: var(--text-primary);
   font-size: 13px;
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  padding: 4px;
+  padding: var(--space-4);
 }
 .tool-pick {
   display: inline-block;
   margin: 2px 4px 2px 0;
-  padding: 2px 6px;
-  border-radius: 3px;
+  padding: var(--space-2) var(--space-6);
+  border-radius: var(--radius-sm);
   background: var(--bg-secondary);
   color: var(--text-secondary);
   font-size: 12px;
@@ -1930,7 +1926,7 @@ select.input {
 
 /* ── OMP 自动发现区 ── */
 .retry-row {
-  margin-top: 12px;
+  margin-top: var(--space-12);
 }
 
 .omp-section {
@@ -1943,15 +1939,15 @@ select.input {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--text-secondary);
-  margin-bottom: 8px;
+  margin-bottom: var(--space-8);
 }
 
 .server-card {
-  background: var(--bg-card, #fff);
-  border: 1px solid var(--border, #e0e0e0);
-  border-radius: 8px;
-  padding: 10px 14px;
-  margin: 8px 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-12) var(--space-16);
+  margin: var(--space-8) 0;
   opacity: 0.85;
   transition: opacity 0.15s;
 }
@@ -1961,53 +1957,53 @@ select.input {
 .server-card .server-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
+  gap: var(--space-8);
+  margin-bottom: var(--space-6);
 }
 .server-card .server-name {
   font-weight: 600;
   font-size: 13px;
-  color: var(--text-primary, #333);
+  color: var(--text-primary);
 }
 .server-card .server-status {
   font-size: 11px;
-  padding: 1px 8px;
+  padding: var(--space-2) var(--space-8);
   border-radius: 100px;
 }
 .server-card .server-status.ok {
-  background: color-mix(in srgb, var(--status-ok, #4caf50) 15%, transparent);
-  color: var(--status-ok, #4caf50);
+  background: color-mix(in srgb, var(--status-ok) 15%, transparent);
+  color: var(--status-ok);
 }
 .server-card .server-status.err {
-  background: color-mix(in srgb, var(--status-error, #f44336) 15%, transparent);
-  color: var(--status-error, #f44336);
+  background: color-mix(in srgb, var(--status-error) 15%, transparent);
+  color: var(--status-error);
 }
 .server-card .server-tools {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--space-4);
 }
 .server-card .server-tools .tool-tag {
   font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--bg-secondary, #f5f5f5);
-  color: var(--text-secondary, #666);
+  padding: var(--space-2) var(--space-6);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
 }
 
 .auto-tag {
   font-size: 11px;
-  padding: 1px 6px;
+  padding: var(--space-2) var(--space-6);
   border-radius: 100px;
   background: var(--border);
   color: var(--text-tertiary);
-  margin-left: 8px;
+  margin-left: var(--space-8);
 }
 
 .tool-tag {
   font-size: 12px;
-  padding: 2px 8px;
-	  border-radius: 4px;
+  padding: var(--space-2) var(--space-8);
+  border-radius: var(--radius-sm);
 	  background: var(--bg-secondary);
 	  color: var(--text-secondary);
 	}
@@ -2026,25 +2022,25 @@ select.input {
 .preset-templates {
   max-width: 720px;
   width: 100%;
-  margin-top: 8px;
+  margin-top: var(--space-8);
 }
 .preset-templates-title {
   font-size: 12px;
   color: var(--text-tertiary);
-  margin-bottom: 8px;
+  margin-bottom: var(--space-8);
   text-align: center;
 }
 .preset-template-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-8);
   justify-content: center;
 }
 .preset-template-btn {
-  padding: 6px 12px;
+  padding: var(--space-6) var(--space-12);
   font-size: 13px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: var(--bg-card);
   color: var(--text-secondary);
   cursor: pointer;
@@ -2061,10 +2057,10 @@ select.input {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  padding: 10px 12px;
+  gap: var(--space-6);
+  padding: var(--space-12) var(--space-12);
   border: 1px dashed var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--bg-primary) 60%, transparent);
 }
 .form-templates-label {
@@ -2074,10 +2070,10 @@ select.input {
   margin-right: 4px;
 }
 .form-template-btn {
-  padding: 4px 10px;
+  padding: var(--space-4) var(--space-12);
   font-size: 12px;
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--bg-secondary);
   color: var(--text-secondary);
   cursor: pointer;
@@ -2093,13 +2089,13 @@ select.input {
 /* ── Tab 切换栏 ── */
 .tab-bar {
   display: flex;
-  gap: 4px;
-  margin-bottom: 20px;
+  gap: var(--space-4);
+  margin-bottom: var(--space-24);
   border-bottom: 1px solid var(--border);
   padding-bottom: 0;
 }
 .tab-btn {
-  padding: 8px 20px;
+  padding: var(--space-8) var(--space-24);
   font-size: 14px;
   font-weight: 500;
   border: none;
@@ -2122,8 +2118,8 @@ select.input {
 /* ── 市场搜索栏 ── */
 .marketplace-search {
   display: flex;
-  gap: 10px;
-  margin-bottom: 20px;
+  gap: var(--space-12);
+  margin-bottom: var(--space-24);
   max-width: 560px;
 }
 .marketplace-search-input {
@@ -2134,7 +2130,7 @@ select.input {
 .marketplace-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 16px;
+  gap: var(--space-16);
 }
 @media (max-width: 640px) {
   .marketplace-grid { grid-template-columns: 1fr; }
@@ -2144,10 +2140,10 @@ select.input {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 18px;
+  padding: var(--space-16);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-12);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -2160,13 +2156,13 @@ select.input {
 .registry-card-header {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-12);
 }
 
 .registry-icon {
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   object-fit: cover;
   flex-shrink: 0;
 }
@@ -2174,7 +2170,7 @@ select.input {
 .registry-icon-placeholder {
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--accent) 12%, var(--bg-card));
   color: var(--accent);
   display: flex;
@@ -2188,7 +2184,7 @@ select.input {
 .registry-card-title {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-6);
   min-width: 0;
 }
 
@@ -2228,7 +2224,7 @@ select.input {
 .registry-meta {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-12);
   font-size: 12px;
   color: var(--text-tertiary);
 }
@@ -2249,7 +2245,7 @@ select.input {
 .oauth-badge {
   font-size: 11px;
   font-weight: 600;
-  padding: 2px 10px;
+  padding: var(--space-2) var(--space-12);
   border-radius: 100px;
 }
 .oauth-badge.authorized {
@@ -2263,9 +2259,9 @@ select.input {
 
 .registry-card-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-8);
   margin-top: auto;
-  padding-top: 4px;
+  padding-top: var(--space-4);
 }
 
 .registry-install-btn {
@@ -2281,9 +2277,9 @@ select.input {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  margin-top: 24px;
-  padding-top: 16px;
+  gap: var(--space-16);
+  margin-top: var(--space-24);
+  padding-top: var(--space-16);
   border-top: 1px solid var(--border);
 }
 .page-info {

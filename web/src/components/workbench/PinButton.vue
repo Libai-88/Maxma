@@ -45,10 +45,10 @@ function handleClick() {
 
 .pin-btn:hover {
   background: var(--bg-hover, #f0f0f0);
-  color: var(--accent-color, #1a73e8);
+  color: var(--accent-text);
 }
 
 .pin-btn.pinned {
-  color: var(--accent-color, #1a73e8);
+  color: var(--accent-text);
 }
 </style>

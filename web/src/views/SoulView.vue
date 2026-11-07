@@ -1,7 +1,7 @@
 <template>
-  <div class="md-editor-view" ref="rootEl">
+  <div class="md-editor-view ds-view" ref="rootEl">
     <PersonaCard class="persona-card-spacing" />
-    <div class="header">
+    <div class="header view-header view-header--split">
       <h2>{{ pageTitle }} <span class="subtitle">{{ pageSubtitle }}</span></h2>
       <button class="save-button" :disabled="saving || content === savedContent" @click="saveContent">
         {{ saving ? '保存中...' : '保存' }}
@@ -26,7 +26,7 @@
       <span v-if="saveError" class="save-error">保存失败：{{ saveError }}</span>
       <span v-if="!saveState && content && content !== savedContent" class="save-hint">点击编辑区域外来保存</span>
     </div>
-    <div v-if="loading" class="loading">加载中...</div>
+    <div v-if="loading" class="loading ds-state ds-state--bare">加载中...</div>
     <div v-else-if="loadError" class="load-error">
       <p>加载失败：{{ loadError }}</p>
       <button @click="retryLoad">重试</button>
@@ -397,7 +397,6 @@ onMounted(async () => {
 .md-editor-view {
   flex: 1;
   overflow-y: auto;
-  padding: 24px;
   display: flex;
   flex-direction: column;
 }
@@ -406,15 +405,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
   flex-shrink: 0;
-}
-
-.header h2 {
-  font-size: var(--fs-display-lg);
-  font-weight: 600;
-  font-family: var(--font-display);
-  letter-spacing: -0.01em;
 }
 
 .subtitle {
@@ -426,7 +417,7 @@ onMounted(async () => {
 
 .persona-selector select {
   padding: 4px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   border: 1px solid var(--border);
   background: var(--bg-secondary);
   color: var(--text-primary);
@@ -456,7 +447,7 @@ onMounted(async () => {
 .save-button {
   padding: 5px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: var(--bg-secondary);
   color: var(--text-primary);
   cursor: pointer;
@@ -474,12 +465,6 @@ onMounted(async () => {
 
 .save-error { color: var(--status-error, #c0392b); font-size: 12px; }
 
-.loading {
-  color: var(--text-secondary);
-  padding: 40px 0;
-  text-align: center;
-}
-
 .load-error {
   color: var(--text-secondary);
   padding: 40px 0;
@@ -488,7 +473,7 @@ onMounted(async () => {
 .load-error button {
   margin-top: 12px;
   padding: 6px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   border: 1px solid var(--border);
   background: var(--bg-secondary);
   color: var(--text-primary);
@@ -578,7 +563,7 @@ onMounted(async () => {
 .md-guide {
   margin-bottom: 14px;
   border: 1px solid var(--border);
-  border-radius: var(--radius, 8px);
+  border-radius: var(--radius);
   background: var(--bg-card);
   overflow: hidden;
   flex-shrink: 0;
@@ -616,7 +601,7 @@ onMounted(async () => {
   font-family: 'SF Mono', 'Consolas', monospace;
   font-size: 12px;
   padding: 1px 5px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   background: var(--bg-secondary);
 }
 .md-guide-templates {
@@ -638,7 +623,7 @@ onMounted(async () => {
   padding: 4px 10px;
   font-size: 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: var(--bg-secondary);
   color: var(--text-secondary);
   cursor: pointer;
@@ -715,7 +700,7 @@ onMounted(async () => {
 .create-dialog {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   padding: 24px;
   width: 380px;
   max-width: 90vw;
@@ -740,7 +725,7 @@ onMounted(async () => {
   width: 100%;
   padding: 8px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   font-size: 14px;
   font-family: inherit;
   color: var(--text-primary);
@@ -760,7 +745,7 @@ onMounted(async () => {
 }
 .create-btn {
   padding: 6px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   font-size: 13px;
   cursor: pointer;
   border: 1px solid var(--border);

@@ -1,13 +1,13 @@
 <template>
-  <div class="plugin-detail-view" ref="rootEl">
-    <div class="header">
+  <div class="plugin-detail-view ds-view ds-view--narrow" ref="rootEl">
+    <div class="header view-header view-header--split">
       <button class="back-btn" @click="router.push('/plugins')">← 返回插件市场</button>
       <h2>{{ pluginName }}</h2>
       <p class="header-sub">插件详情与配置</p>
     </div>
 
-    <div v-if="loading" class="loading">加载中...</div>
-    <div v-else-if="error" class="error-banner">{{ error }}</div>
+    <div v-if="loading" class="loading ds-state">加载中...</div>
+    <div v-else-if="error" class="error-banner ds-inline-error">{{ error }}</div>
     <template v-else-if="detail">
       <!-- 基本信息 -->
       <div class="section">
@@ -226,25 +226,17 @@ function formatDate(dateStr: string): string {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  max-width: 800px;
-  width: 100%;
-  margin: 0 auto;
-  padding: 24px 16px 80px;
-}
-
-.header {
-  margin-bottom: 24px;
 }
 
 .back-btn {
-  padding: 6px 12px;
+  padding: var(--space-6) var(--space-12);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: var(--bg-secondary);
   color: var(--text-secondary);
   cursor: pointer;
   font-size: 0.85em;
-  margin-bottom: 12px;
+  margin-bottom: var(--space-12);
   transition: all 0.15s;
 }
 
@@ -253,36 +245,9 @@ function formatDate(dateStr: string): string {
   color: var(--accent);
 }
 
-.header h2 {
-  font-size: var(--fs-display-lg);
-  font-weight: 600;
-  font-family: var(--font-display);
-  letter-spacing: -0.01em;
-  margin: 0;
-}
-
-.header-sub {
-  font-size: 0.82em;
-  color: var(--text-tertiary);
-  margin: 4px 0 0;
-}
-
-.loading,
-.error-banner {
-  padding: 20px;
-  text-align: center;
-  color: var(--text-tertiary);
-}
-
-.error-banner {
-  background: color-mix(in srgb, var(--status-error) 8%, transparent);
-  color: var(--status-error-text);
-  border-radius: 6px;
-}
-
 .section {
-  margin-bottom: 28px;
-  padding-bottom: 20px;
+  margin-bottom: var(--section-gap);
+  padding-bottom: var(--space-24);
   border-bottom: 1px solid var(--border);
 }
 
@@ -294,19 +259,19 @@ function formatDate(dateStr: string): string {
   font-size: 1em;
   font-weight: 600;
   color: var(--text-primary);
-  margin: 0 0 12px;
+  margin: 0 0 var(--space-12);
 }
 
 .info-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 12px;
+  gap: var(--space-12);
 }
 
 .info-item {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-2);
 }
 
 .info-label {
@@ -341,13 +306,13 @@ function formatDate(dateStr: string): string {
 .feature-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-6);
 }
 
 .feature-tag {
   font-size: 0.8em;
-  padding: 4px 10px;
-  border-radius: 4px;
+  padding: var(--space-4) var(--space-12);
+  border-radius: var(--radius-sm);
   background: var(--bg-secondary);
   color: var(--text-secondary);
 }
@@ -355,15 +320,15 @@ function formatDate(dateStr: string): string {
 .dep-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-6);
 }
 
 .dep-item {
   display: flex;
   justify-content: space-between;
-  padding: 6px 10px;
+  padding: var(--space-6) var(--space-12);
   background: var(--bg-secondary);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 0.85em;
 }
 
@@ -381,9 +346,9 @@ function formatDate(dateStr: string): string {
   font-size: 0.9em;
   color: var(--text-secondary);
   line-height: 1.6;
-  padding: 12px;
+  padding: var(--space-12);
   background: var(--bg-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
 }
 
 .no-config {
@@ -394,13 +359,13 @@ function formatDate(dateStr: string): string {
 
 .actions-section {
   display: flex;
-  gap: 12px;
+  gap: var(--space-12);
 }
 
 .btn {
-  padding: 10px 20px;
+  padding: var(--space-12) var(--space-24);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: var(--bg-secondary);
   cursor: pointer;
   font-size: 0.9em;

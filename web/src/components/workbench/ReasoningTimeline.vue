@@ -104,7 +104,7 @@ function formatElapsed(ms: number): string {
   top: 28px;
   bottom: -8px;
   width: 2px;
-  background: var(--border-color, #e0e0e0);
+  background: var(--border);
 }
 
 .timeline-dot {
@@ -117,29 +117,29 @@ function formatElapsed(ms: number): string {
   justify-content: center;
   font-size: 12px;
   background: var(--bg-primary, #fff);
-  border: 2px solid var(--border-color, #e0e0e0);
+  border: 2px solid var(--border);
   z-index: 1;
 }
 
 .timeline-dot.thinking {
-  border-color: var(--accent-color, #1a73e8);
-  background: var(--accent-bg, #e8f0fe);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-card));
 }
 
 .timeline-dot.tool {
-  border-color: var(--success-color, #34a853);
+  border-color: var(--status-ok);
 }
 
 .timeline-dot.answer {
-  border-color: var(--warning-color, #f9ab00);
-  background: var(--warning-bg, #fef7e0);
+  border-color: var(--status-warn);
+  background: color-mix(in srgb, var(--status-warn) 14%, var(--bg-card));
 }
 
 .dot-spinner {
   width: 12px;
   height: 12px;
-  border: 2px solid var(--border-color, #ccc);
-  border-top-color: var(--accent-color, #1a73e8);
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: maxma-spin 0.8s linear infinite;
 }
@@ -170,13 +170,13 @@ function formatElapsed(ms: number): string {
 
 .timeline-status.running {
   font-size: 10px;
-  color: var(--accent-color, #1a73e8);
+  color: var(--accent-text);
   font-weight: 600;
 }
 
 .timeline-status.error {
   font-size: 10px;
-  color: var(--error-color, #ea4335);
+  color: var(--status-error-text);
   font-weight: 600;
 }
 

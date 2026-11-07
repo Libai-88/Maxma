@@ -1,13 +1,13 @@
 <template>
-  <div class="share-view" ref="rootEl">
-    <div v-if="loading" class="loading">加载分享内容...</div>
-    <div v-else-if="error" class="error">
+  <div class="share-view ds-view" ref="rootEl">
+    <div v-if="loading" class="loading ds-state">加载分享内容...</div>
+    <div v-else-if="error" class="error ds-state">
       <h2>无法访问分享</h2>
       <p>{{ error }}</p>
       <router-link to="/" class="back-link">← 返回首页</router-link>
     </div>
     <template v-else>
-      <div class="header">
+      <div class="header view-header view-header--split">
         <h2>分享的会话</h2>
         <router-link to="/" class="back-link">← 返回</router-link>
       </div>
@@ -21,7 +21,7 @@
           <div class="msg-role">{{ msg.role === 'user' ? '用户' : 'AI' }}</div>
           <div class="msg-content">{{ msg.content }}</div>
         </div>
-        <div v-if="messages.length === 0" class="empty-msg">该会话暂无消息</div>
+        <div v-if="messages.length === 0" class="empty-msg ds-state ds-state--bare">该会话暂无消息</div>
       </div>
     </template>
   </div>
@@ -75,22 +75,19 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.share-view { flex: 1; min-height: 0; overflow-y: auto; max-width: 800px; width: 100%; margin: 0 auto; padding: 24px 16px 80px; }
-.loading, .error { text-align: center; padding: 60px 20px; color: var(--text-tertiary); }
+.share-view { flex: 1; min-height: 0; overflow-y: auto; }
 .error h2 { font-size: 1.2em; color: var(--status-error-text); margin-bottom: 8px; }
 .error p { font-size: 0.9em; margin-bottom: 16px; }
 .back-link { color: var(--accent); text-decoration: none; font-size: 0.9em; }
 .back-link:hover { text-decoration: underline; }
-.header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-.header h2 { font-size: var(--fs-display-lg); font-weight: 600; margin: 0; }
 .share-info { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; font-size: 0.85em; color: var(--text-secondary); }
-.share-badge { font-size: 0.75em; padding: 3px 10px; border-radius: 4px; font-weight: 500; }
+.share-badge { font-size: 0.75em; padding: 3px 10px; border-radius: var(--radius-sm); font-weight: 500; }
 .mode-read { background: color-mix(in srgb, var(--status-info) 10%, transparent); color: var(--status-info-text); }
 .mode-comment { background: color-mix(in srgb, var(--status-warn) 10%, transparent); color: var(--status-warn-text); }
 .mode-edit { background: color-mix(in srgb, var(--status-ok) 10%, transparent); color: var(--status-ok-text); }
 .share-expires { color: var(--status-warn-text); }
 .messages { display: flex; flex-direction: column; gap: 12px; }
-.message { padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border); }
+.message { padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--border); }
 .message.user { background: var(--bg-secondary); }
 .message.assistant { background: var(--bg-card); }
 .msg-role { font-size: 0.75em; font-weight: 600; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 6px; }

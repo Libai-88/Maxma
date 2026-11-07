@@ -270,9 +270,9 @@ function copyCode() {
 
 .py-code-block :deep(.py-kw)      { color: var(--accent); font-style: italic; }
 .py-code-block :deep(.py-builtin) { color: var(--accent-dark); }
-.py-code-block :deep(.py-str)     { color: var(--py-str-color, #40a02b); }
+.py-code-block :deep(.py-str)     { color: var(--status-ok-text); }
 .py-code-block :deep(.py-comment) { color: var(--text-secondary); font-style: italic; }
-.py-code-block :deep(.py-num)     { color: var(--py-num-color, #fe640b); }
+.py-code-block :deep(.py-num)     { color: var(--status-info-text); }
 
 .py-stdout {
   font-family: 'SF Mono', 'Consolas', monospace;

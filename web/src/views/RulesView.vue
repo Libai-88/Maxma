@@ -1,6 +1,6 @@
 <template>
-  <div class="rules-view" ref="rootEl">
-    <div class="header">
+  <div class="rules-view ds-view" ref="rootEl">
+    <div class="header view-header">
       <div class="header-top">
         <div>
           <h2>质量规则</h2>
@@ -10,8 +10,8 @@
       </div>
     </div>
 
-    <div v-if="loading" class="loading">加载中...</div>
-    <div v-else-if="error" class="error-banner">{{ error }}</div>
+    <div v-if="loading" class="loading ds-state">加载中...</div>
+    <div v-else-if="error" class="error-banner ds-inline-error">{{ error }}</div>
     <template v-else>
       <!-- 语言过滤 -->
       <div class="filter-bar">
@@ -294,13 +294,8 @@ function severityLabel(sev: string): string {
 </script>
 
 <style scoped>
-.rules-view { flex: 1; min-height: 0; overflow-y: auto; max-width: 800px; width: 100%; margin: 0 auto; padding: 24px 16px 80px; }
-.header { margin-bottom: 16px; }
+.rules-view { flex: 1; min-height: 0; overflow-y: auto; }
 .header-top { display: flex; align-items: flex-start; justify-content: space-between; }
-.header h2 { font-size: var(--fs-display-lg); font-weight: 600; font-family: var(--font-display); letter-spacing: -0.01em; margin: 0; }
-.header-sub { font-size: 0.82em; color: var(--text-tertiary); margin: 4px 0 0; }
-.loading { text-align: center; padding: 40px; color: var(--text-tertiary); }
-.error-banner { padding: 10px 12px; background: color-mix(in srgb, var(--status-error) 10%, transparent); color: var(--status-error-text); border-radius: 6px; font-size: 0.85em; margin-bottom: 12px; }
 
 .btn-create {
   padding: 8px 16px; background: var(--accent); color: white; border: none;
@@ -311,7 +306,7 @@ function severityLabel(sev: string): string {
 
 .filter-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
 .filter-chip {
-  padding: 5px 14px; border: 1px solid var(--border); border-radius: 16px;
+  padding: 5px 14px; border: 1px solid var(--border); border-radius: var(--radius-lg);
   background: var(--bg-secondary); color: var(--text-secondary); cursor: pointer;
   font-size: 0.8em; transition: all 0.15s;
 }
@@ -326,23 +321,23 @@ function severityLabel(sev: string): string {
 }
 .rule-card.disabled { opacity: 0.5; }
 .rule-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-.rule-severity { font-size: 0.7em; padding: 2px 8px; border-radius: 4px; font-weight: 500; }
+.rule-severity { font-size: 0.7em; padding: 2px 8px; border-radius: var(--radius-sm); font-weight: 500; }
 .sev-error { background: color-mix(in srgb, var(--status-error) 10%, transparent); color: var(--status-error-text); }
 .sev-warning { background: color-mix(in srgb, var(--status-warn) 10%, transparent); color: var(--status-warn-text); }
 .sev-info { background: color-mix(in srgb, var(--status-info) 10%, transparent); color: var(--status-info-text); }
 .rule-name { font-weight: 600; font-size: 0.9em; color: var(--text-primary); flex: 1; }
 .rule-source-badge {
-  font-size: 0.65em; padding: 2px 6px; border-radius: 4px;
+  font-size: 0.65em; padding: 2px 6px; border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--status-ok) 10%, transparent); color: var(--status-ok-text); font-weight: 500;
 }
-.rule-lang { font-size: 0.72em; padding: 2px 6px; border-radius: 4px; background: var(--bg-secondary); color: var(--text-tertiary); }
+.rule-lang { font-size: 0.72em; padding: 2px 6px; border-radius: var(--radius-sm); background: var(--bg-secondary); color: var(--text-tertiary); }
 .rule-desc { font-size: 0.82em; color: var(--text-secondary); line-height: 1.5; }
 .rule-pattern { margin-top: 4px; font-size: 0.78em; color: var(--text-tertiary); }
-.rule-pattern code { background: var(--bg-secondary); padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+.rule-pattern code { background: var(--bg-secondary); padding: 2px 6px; border-radius: var(--radius-sm); font-size: 0.9em; }
 
 /* Toggle switch */
 .toggle-btn {
-  position: relative; width: 34px; height: 18px; border-radius: 9px;
+  position: relative; width: 34px; height: 18px; border-radius: var(--radius-md);
   background: var(--border); border: none; cursor: pointer; transition: background 0.2s;
   flex-shrink: 0;
 }
@@ -356,7 +351,7 @@ function severityLabel(sev: string): string {
 /* Rule actions */
 .rule-actions { display: flex; gap: 8px; margin-top: 8px; }
 .action-btn {
-  padding: 4px 10px; font-size: 0.75em; border-radius: 4px;
+  padding: 4px 10px; font-size: 0.75em; border-radius: var(--radius-sm);
   border: 1px solid var(--border); background: var(--bg-secondary);
   color: var(--text-secondary); cursor: pointer; transition: all 0.15s;
 }
@@ -369,14 +364,14 @@ function severityLabel(sev: string): string {
   display: flex; align-items: center; justify-content: center; z-index: 1000;
 }
 .dialog {
-  background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg);
   padding: 24px; width: 90%; max-width: 480px; max-height: 85vh; overflow-y: auto;
 }
 .dialog h3 { margin: 0 0 16px; font-size: 1.1em; font-weight: 600; color: var(--text-primary); }
 .form-group { margin-bottom: 14px; }
 .form-group label { display: block; font-size: 0.8em; color: var(--text-secondary); margin-bottom: 4px; font-weight: 500; }
 .form-group input, .form-group textarea, .form-group select {
-  width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
+  width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-input);
   background: var(--bg-secondary); color: var(--text-primary); font-size: 0.85em;
   box-sizing: border-box;
 }
@@ -385,14 +380,14 @@ function severityLabel(sev: string): string {
 .form-row .form-group { flex: 1; }
 .checkbox-group label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .checkbox-group input[type="checkbox"] { width: auto; }
-.dialog-error { padding: 8px 10px; background: color-mix(in srgb, var(--status-error) 10%, transparent); color: var(--status-error-text); border-radius: 6px; font-size: 0.8em; margin-bottom: 12px; }
+.dialog-error { padding: 8px 10px; background: color-mix(in srgb, var(--status-error) 10%, transparent); color: var(--status-error-text); border-radius: var(--radius-input); font-size: 0.8em; margin-bottom: 12px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 .btn-cancel {
-  padding: 8px 16px; border: 1px solid var(--border); border-radius: 6px;
+  padding: 8px 16px; border: 1px solid var(--border); border-radius: var(--radius-input);
   background: var(--bg-secondary); color: var(--text-secondary); cursor: pointer; font-size: 0.82em;
 }
 .btn-submit {
-  padding: 8px 20px; border: none; border-radius: 6px;
+  padding: 8px 20px; border: none; border-radius: var(--radius-input);
   background: var(--accent); color: white; cursor: pointer; font-size: 0.82em; font-weight: 500;
 }
 .btn-submit:disabled { opacity: 0.6; cursor: not-allowed; }

@@ -61,7 +61,7 @@ const fallbackText = computed(() => {
 <style scoped>
 .bubble-running { display: flex; align-items: center; gap: 8px; padding: 8px 0; font-size: 13px; color: var(--text-secondary); }
 .spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: maxma-spin 0.6s linear infinite; }
-.bubble-error { font-size: 13px; color: var(--error-color, #ef4444); padding: 4px 0; }
+.bubble-error { font-size: 13px; color: var(--status-error-text); padding: 4px 0; }
 .bubble-empty { font-size: 13px; color: var(--text-secondary); padding: 4px 0; }
 .todo-list { display: flex; flex-direction: column; gap: 4px; max-height: 300px; overflow-y: auto; }
 .todo-stats { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; font-weight: 500; }

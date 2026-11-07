@@ -53,7 +53,7 @@ async function copyCode() {
 <style scoped>
 .canvas-card {
   background: var(--bg-primary, #fff);
-  border: 1px solid var(--border-color, #e0e0e0);
+  border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -63,7 +63,7 @@ async function copyCode() {
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--border-color, #e0e0e0);
+  border-bottom: 1px solid var(--border);
   background: var(--bg-secondary, #f8f9fa);
 }
 

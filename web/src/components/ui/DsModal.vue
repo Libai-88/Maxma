@@ -118,7 +118,7 @@ useGsap((_ctx, contextSafe) => {
 .ds-modal__actions {
   display: flex;
   justify-content: flex-end;
-  gap: var(--space-3);
+  gap: var(--space-4);
   padding: var(--space-4) var(--space-6);
   border-top: 1px solid var(--border);
 }

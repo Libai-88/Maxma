@@ -72,7 +72,7 @@ const fallbackText = computed(() => {
 <style scoped>
 .bubble-running { display: flex; align-items: center; gap: 8px; padding: 8px 0; font-size: 13px; color: var(--text-secondary); }
 .spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: maxma-spin 0.6s linear infinite; }
-.bubble-error { font-size: 13px; color: var(--error-color, #ef4444); padding: 4px 0; }
+.bubble-error { font-size: 13px; color: var(--status-error-text); padding: 4px 0; }
 .bubble-empty { font-size: 13px; color: var(--text-secondary); padding: 4px 0; }
 .browser-header { margin-bottom: 8px; }
 .browser-url { font-size: 11px; color: var(--accent); word-break: break-all; font-family: var(--font-mono); }

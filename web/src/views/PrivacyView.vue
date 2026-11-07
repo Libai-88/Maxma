@@ -1,6 +1,6 @@
 <template>
-  <div class="privacy-view" ref="rootEl">
-    <div class="header">
+  <div class="privacy-view ds-view" ref="rootEl">
+    <div class="header view-header">
       <h2>隐私仪表盘</h2>
       <p class="header-sub">查看 Maxma 把数据存在哪里、监控了哪些网络活动，并执行清除 / 加密等数据管理操作。</p>
     </div>
@@ -50,8 +50,8 @@
       <div class="section">
         <h3>网络活动统计</h3>
         <p class="section-desc">展示按事件类型聚合的请求总数与高频目标，帮助确认 AI 行为是否符合预期。</p>
-        <div v-if="statsLoading" class="loading-text">加载中...</div>
-        <div v-else-if="auditStats.total === 0" class="empty-text">暂无审计记录</div>
+        <div v-if="statsLoading" class="loading-text ds-state ds-state--bare">加载中...</div>
+        <div v-else-if="auditStats.total === 0" class="empty-text ds-state ds-state--bare">暂无审计记录</div>
         <div v-else class="stats-grid">
           <div class="stat-card">
             <div class="stat-value">{{ auditStats.total }}</div>
@@ -86,8 +86,8 @@
           </select>
           <button class="btn-small" @click="loadAuditLog">刷新</button>
         </div>
-        <div v-if="logLoading" class="loading-text">加载中...</div>
-        <div v-else-if="auditLog.length === 0" class="empty-text">暂无日志</div>
+        <div v-if="logLoading" class="loading-text ds-state ds-state--bare">加载中...</div>
+        <div v-else-if="auditLog.length === 0" class="empty-text ds-state ds-state--bare">暂无日志</div>
         <div v-else class="log-list">
           <div v-for="(entry, idx) in auditLog" :key="idx" class="log-entry" :class="entry.status">
             <span class="log-time">{{ formatTime(entry.timestamp) }}</span>
@@ -313,23 +313,15 @@ onMounted(() => {
 <style scoped>
 .privacy-view {
   flex: 1;
-  padding: 24px 32px;
-  max-width: 900px;
-  margin: 0 auto;
   overflow-y: auto;
-  width: 100%;
-  box-sizing: border-box;
 }
-.header { margin-bottom: 24px; }
-.header h2 { font-size: var(--fs-display-lg); font-weight: 600; font-family: var(--font-display); letter-spacing: -0.01em; color: var(--text-primary); margin: 0 0 4px; }
-.header-sub { margin: 0; font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
 
 /* ── 总览引导 ── */
 .overview-guide {
   margin-bottom: 16px;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--bg-card);
   background: color-mix(in srgb, var(--accent) 5%, var(--bg-card));
   border-color: color-mix(in srgb, var(--accent) 25%, var(--border));
@@ -397,14 +389,14 @@ onMounted(() => {
   font-size: 11px;
   background: var(--bg-secondary);
   padding: 1px 4px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
 }
 
 .section {
-  margin-bottom: 24px;
-  padding: 16px;
+  margin-bottom: var(--section-gap);
+  padding: var(--space-16);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--bg-card);
 }
 .section h3 {
@@ -434,7 +426,7 @@ onMounted(() => {
   gap: 10px;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg-primary);
 }
 .storage-icon { font-size: 20px; flex-shrink: 0; }
@@ -447,9 +439,9 @@ onMounted(() => {
   gap: 12px;
 }
 .stat-card {
-  padding: 12px 16px;
+  padding: var(--space-12) var(--space-16);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--bg-primary);
   text-align: center;
   min-width: 80px;
@@ -464,7 +456,7 @@ onMounted(() => {
   justify-content: space-between;
   padding: 4px 8px;
   font-size: 12px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--bg-primary);
 }
 .target-name { color: var(--text-primary); font-family: monospace; }
@@ -478,7 +470,7 @@ onMounted(() => {
 .log-filter {
   padding: 4px 8px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: var(--bg-primary);
   color: var(--text-primary);
   font-size: 12px;
@@ -486,7 +478,7 @@ onMounted(() => {
 .btn-small {
   padding: 4px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: var(--bg-primary);
   color: var(--text-secondary);
   font-size: 12px;
@@ -501,13 +493,13 @@ onMounted(() => {
   gap: 8px;
   padding: 4px 8px;
   font-size: 12px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--bg-primary);
 }
 .log-time { color: var(--text-secondary); flex-shrink: 0; font-family: monospace; }
 .log-type {
   padding: 1px 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   background: var(--bg-secondary);
   font-size: 11px;
   flex-shrink: 0;
@@ -522,7 +514,7 @@ onMounted(() => {
 .btn-action {
   padding: 8px 16px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: var(--bg-primary);
   color: var(--text-primary);
   font-size: 13px;
@@ -538,22 +530,16 @@ onMounted(() => {
   margin-top: 8px;
   font-size: 13px;
   padding: 6px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-input);
 }
 .action-message.ok { color: var(--status-ok-text); background: color-mix(in srgb, var(--status-ok) 10%, var(--bg-card)); }
 .action-message.error { color: var(--status-error-text); background: color-mix(in srgb, var(--status-error) 10%, var(--bg-card)); }
-
-.loading-text, .empty-text {
-  color: var(--text-secondary);
-  font-size: 13px;
-  padding: 12px 0;
-}
 
 /* ── 降级 banner ── */
 .omp-disabled-banner {
   padding: 16px 18px;
   border: 1px solid var(--status-warn, #eab308);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--bg-card);
   background: color-mix(in srgb, var(--status-warn, #eab308) 10%, var(--bg-card));
   color: var(--text-primary);

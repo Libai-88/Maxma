@@ -270,19 +270,17 @@
   box-shadow: var(--shadow-md);
   transition: border-color 0.2s, box-shadow 0.2s;
 }
+/* 聚焦态只有一条规则（此前两条同名规则，后者覆盖前者，前者是死代码）；
+ * 边框用 border-accent，阴影双层：soft 抬升 + accent-light 1px 环 + 朱砂泛光 */
 .chat-input:focus-within {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-md), 0 0 18px color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: var(--border-accent, var(--accent));
+  box-shadow: var(--shadow-soft), 0 0 0 1px var(--accent-light),
+              0 0 22px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 .chat-input.is-resizing {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent);
 }
-.chat-input:focus-within {
-    border-color: var(--border-accent, var(--accent));
-    box-shadow: var(--shadow-soft), 0 0 0 1px var(--accent-soft),
-                0 0 22px color-mix(in srgb, var(--accent) 12%, transparent);
-  }
 
 /* 添加文件按钮 */
 .btn-add-file-wrapper {

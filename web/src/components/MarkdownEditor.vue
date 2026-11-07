@@ -8,7 +8,7 @@
     class="md-editor-view"
     :style="{ color: 'var(--text-primary, #1C1C1C)', background: 'var(--bg-card, #FFFEFA)', fontFamily: 'inherit' }"
   >
-    <div class="header">
+    <div class="header view-header view-header--split">
       <h2>{{ title }} <span class="subtitle">{{ subtitle }}</span></h2>
       <button class="save-button" :disabled="saving || content === savedContent" @click="saveContent">
         {{ saving ? '保存中...' : '保存' }}
@@ -38,7 +38,7 @@
         </div>
       </div>
     </details>
-    <div v-if="loading" class="loading">加载中...</div>
+    <div v-if="loading" class="loading ds-state ds-state--bare">加载中...</div>
     <div v-else-if="loadError" class="load-error">
       <p>加载失败：{{ loadError }}</p>
       <button class="retry-button" @click="retryLoad">重试</button>
@@ -136,16 +136,7 @@ onMounted(loadContent)
 }
 
 .header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
   flex-shrink: 0;
-}
-
-.header h2 {
-  font-size: 20px;
-  font-weight: 700;
 }
 
 .subtitle {
@@ -169,7 +160,7 @@ onMounted(loadContent)
 .save-button {
   padding: 5px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: var(--bg-secondary);
   color: var(--text-primary);
   cursor: pointer;
@@ -187,12 +178,6 @@ onMounted(loadContent)
 
 .save-error { color: var(--status-error, #c0392b); font-size: 12px; }
 
-.loading {
-  color: var(--text-secondary);
-  padding: 40px 0;
-  text-align: center;
-}
-
 .load-error {
   color: var(--text-secondary);
   padding: 40px 0;
@@ -201,7 +186,7 @@ onMounted(loadContent)
 .retry-button {
   margin-top: 12px;
   padding: 6px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   border: 1px solid var(--border);
   background: var(--bg-secondary);
   color: var(--text-primary);
@@ -305,7 +290,7 @@ onMounted(loadContent)
 .md-guide {
   margin-bottom: 14px;
   border: 1px solid var(--border);
-  border-radius: var(--radius, 8px);
+  border-radius: var(--radius);
   background: var(--bg-card);
   overflow: hidden;
 }
@@ -342,7 +327,7 @@ onMounted(loadContent)
   font-family: 'SF Mono', 'Consolas', monospace;
   font-size: 12px;
   padding: 1px 5px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   background: var(--bg-secondary);
 }
 .md-guide-templates {
@@ -364,7 +349,7 @@ onMounted(loadContent)
   padding: 4px 10px;
   font-size: 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-input);
   background: var(--bg-secondary);
   color: var(--text-secondary);
   cursor: pointer;

@@ -1,6 +1,6 @@
 <!-- web/src/views/NotFoundView.vue -->
 <template>
-  <div class="not-found-view" ref="rootEl">
+  <div class="not-found-view ds-view ds-view--narrow" ref="rootEl">
     <div class="not-found-card">
       <div class="not-found-icon">🧭</div>
       <h1 class="not-found-code">404</h1>
@@ -51,7 +51,6 @@ useViewEntrance(() => rootEl.value, { blocks: '.not-found-card' })
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 32px 24px;
 }
 .not-found-card {
   text-align: center;
@@ -59,7 +58,7 @@ useViewEntrance(() => rootEl.value, { blocks: '.not-found-card' })
   padding: 32px 28px;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-soft);
 }
 .not-found-icon {
@@ -98,7 +97,7 @@ useViewEntrance(() => rootEl.value, { blocks: '.not-found-card' })
   gap: 12px;
   padding: 10px 14px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--bg-primary);
   color: var(--text-primary);
   text-decoration: none;
