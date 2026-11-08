@@ -792,6 +792,8 @@ function handleToolAction(payload: { action: string; data?: unknown }) {
     handleUndo()
   } else if (payload.action === 'regenerate') {
     handleRegenerate(payload.data as { index: number })
+  } else if (payload.action === 'edit_resend') {
+    handleEditResend(payload.data as { index: number })
   }
 }
 
@@ -905,6 +907,43 @@ async function handleUndo() {
     showError('撤回失败: ' + (e instanceof Error ? e.message : String(e)))
   } finally {
     _undoInFlight = false
+  }
+}
+
+// CHAT-UX-006：用户消息"编辑并重发"——撤回该轮及之后（与重新生成同一
+// undo 通道），内容**填入输入框**而非直发，用户微调后自行发送。
+async function handleEditResend(data: { index: number }) {
+  if (_regenInFlight || _undoInFlight) return
+  if (isStreaming.value) {
+    showError('正在生成回复，请等待本轮完成后重试')
+    return
+  }
+  const ch = chatStore.channels.get(sessionId.value)
+  if (!ch) return
+  const index = typeof data?.index === 'number' ? data.index : -1
+  if (index < 0 || index >= ch.turns.length) return
+  const message = ch.turns[index].userMessage
+  if (!message) return
+
+  const roundsToRemove = ch.turns.length - index
+  if (roundsToRemove > 100) {
+    showError('对话过长，无法编辑该轮（最多撤回 100 轮）')
+    return
+  }
+  _regenInFlight = true
+  try {
+    const result = await api.undoMessages(sessionId.value, roundsToRemove)
+    if (result.deleted_count <= 0) {
+      showError('编辑失败：无法撤回该轮对话')
+      return
+    }
+    removeTurns(roundsToRemove)
+    chatInputInstance.setText(message)
+    window.dispatchEvent(new CustomEvent('maxma:focus-composer'))
+  } catch (e) {
+    showError(`编辑失败：${e instanceof Error ? e.message : String(e)}`)
+  } finally {
+    _regenInFlight = false
   }
 }
 

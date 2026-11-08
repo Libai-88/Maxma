@@ -40,6 +40,11 @@ export function useContextMenu({ turns, emit }: UseContextMenuOptions) {
     ) {
       items.push({ label: '重新生成', action: 'regenerate', icon: 'undo-arrow' })
     }
+    // CHAT-UX-006：用户消息"编辑并重发"——撤回该轮及之后，内容填入输入框
+    // （对标 Claude Desktop/ChatGPT 的编辑消息；不直发，用户可微调）
+    if (pendingSourceType.value === 'user_message' && pendingUserMsgIdx.value !== null) {
+      items.push({ label: '编辑并重发', action: 'edit_resend', icon: 'copy' })
+    }
     if (
       pendingUserMsgIdx.value !== null
       && pendingUserMsgIdx.value === turns.value.length - 1
