@@ -206,35 +206,6 @@
           </span>
         </div>
       </template>
-
-      <template #empty>
-        <!-- 空状态 -->
-        <div v-if="turns.length === 0 && !currentTurn" class="empty-state" :style="emptyStateStyle">
-          <div class="empty-state-overlay"></div>
-          <div class="empty-state-content">
-            <div class="empty-state-text">
-              <p class="empty-title">Maxma</p>
-              <p class="empty-desc">
-                <span class="typewriter">{{ displayedWord }}<span class="typewriter-cursor">|</span></span>
-              </p>
-            </div>
-            <div class="quick-hints" data-qh>
-              <span class="quick-hint">
-                <span class="quick-hint-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg></span>
-                单击开关侧栏
-              </span>
-              <span class="quick-hint">
-                <span class="quick-hint-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
-                <span><kbd>Ctrl</kbd> + <kbd>K</kbd> 切换私密模式</span>
-              </span>
-              <span class="quick-hint"> <!-- will be wired to new-session -->
-                <span class="quick-hint-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></span>
-                点击 <kbd>+</kbd> 新建会话
-              </span>
-            </div>
-          </div>
-        </div>
-      </template>
     </DynamicScroller>
 
     <!-- 用户消息滚动标记 -->
@@ -268,10 +239,8 @@ import type { ParsedRef } from '@/utils/references'
 import { api } from '@/api'
 import { computed, nextTick, onUnmounted, ref, toRef, watch } from 'vue'
 import { createLogger } from '@/utils/logger'
-import { useTheme } from '@/composables/useTheme'
 import { useChatScroll } from '@/composables/useChatScroll'
 import { gsap, useGsap } from '@/composables/useGsap'
-import { useTypewriter } from '@/composables/useTypewriter'
 import { useContextMenu } from '@/composables/useContextMenu'
 import { truncateWithEllipsis } from '@/utils/text'
 import ContextMenu from './ContextMenu.vue'
@@ -282,8 +251,6 @@ import PlanCard from './PlanCard.vue'
 import ApprovalBubble from './ApprovalBubble.vue'
 import SubAgentCard from './SubAgentCard.vue'
 import { toolDisplayName } from './tools/_shared/displayNames'
-import emptyBgDay from '@/assets/images/brand/empty-bg-day.jpg'
-import emptyBgNight from '@/assets/images/brand/empty-bg-night.jpg'
 // 虚拟列表：仅渲染视口内/附近的轮次，长对话性能大幅提升
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
@@ -336,7 +303,6 @@ const {
   currentTurn: toRef(props, 'currentTurn'),
 })
 
-const { displayedWord } = useTypewriter()
 
 const {
   ctxMenuVisible,
@@ -353,7 +319,6 @@ const {
 
 // ── 错误日志一键复制 ──
 
-const { isDark } = useTheme()
 const copySuccess = ref(false)
 
 const errorIconName = computed(() => {
@@ -369,10 +334,6 @@ const errorIconName = computed(() => {
       return 'error'
   }
 })
-
-const emptyStateStyle = computed(() => ({
-  '--empty-bg-image': `url("${isDark.value ? emptyBgNight : emptyBgDay}")`,
-}))
 
 async function copyErrorLog() {
   let text: string
@@ -619,9 +580,6 @@ onUnmounted(() => {
   gap: 6px;
   padding-bottom: 6px;  /* 维持轮次之间的间距 */
 }
-.empty-state {
-  height: 100%;
-}
 .cite-source {
   /* 包装层，不引入额外布局影响 */
 }
@@ -648,123 +606,6 @@ onUnmounted(() => {
 }
 .system-event-text {
   line-height: 1.5;
-}
-.empty-state {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  height: 100%;
-  padding: clamp(24px, 6vh, 72px) clamp(18px, 5vw, 56px) 40px;
-  gap: 16px;
-  background-image: var(--empty-bg-image);
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  border-radius: 14px;
-  overflow: hidden;
-}
-.empty-state-overlay {
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(to bottom, transparent 35%, color-mix(in srgb, var(--bg-primary) 55%, transparent) 100%);
-    pointer-events: none;
-    z-index: 0;
-  }
-.empty-state-content {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-.empty-state-text {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.empty-title {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: clamp(1.7rem, 3.6vw, 2.45rem);
-  font-weight: 700;
-  font-family: var(--font-display);
-  letter-spacing: -0.5px;
-    color: var(--accent);
-    text-shadow: 0 2px 16px color-mix(in srgb, var(--accent) 15%, transparent);
-  }
-  .empty-desc {
-      max-width: var(--text-measure, 68ch);
-      font-size: clamp(1rem, 1.5vw, 1.18rem);
-      color: var(--text-primary);
-      font-weight: 500;
-      text-shadow: 0 1px 12px color-mix(in srgb, var(--accent) 15%, transparent);
-    }
-.typewriter {
-  display: inline-block;
-  min-width: 1ch;
-}
-.typewriter-cursor {
-  display: inline-block;
-  margin-left: 1px;
-  font-weight: 300;
-  color: var(--text-secondary);
-  animation: blink 0.7s step-end infinite;
-}
-@keyframes blink {
-  50% { opacity: 0; }
-}
-
-/* ── Quick hints (from variant D) ── */
-.quick-hints {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  opacity: .86;
-  transition: opacity .2s;
-    text-shadow: 0 1px 8px color-mix(in srgb, var(--accent) 12%, transparent);
-}
-.quick-hints:hover {
-  opacity: .9;
-}
-.quick-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.9em;
-  color: var(--text-secondary);
-  line-height: 1.6;
-  cursor: default;
-  transition: color .15s;
-}
-.quick-hint kbd {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 22px;
-  height: 22px;
-  padding: 0 5px;
-  font-size: 0.75em;
-  font-family: inherit;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text-secondary);
-  box-shadow: 0 1px 0 var(--border);
-}
-.quick-hint-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  color: var(--text-secondary);
-  flex-shrink: 0;
-}
-.quick-hint:hover {
-  color: var(--accent);
-  cursor: pointer;
 }
 .error-banner {
   display: flex;
@@ -1107,27 +948,13 @@ onUnmounted(() => {
   50% { opacity: 0.8; }
 }
 
-/* ── 空状态文字浮动动画 ── */
-.empty-desc {
-  animation: empty-float 3s ease-in-out infinite;
-}
-@keyframes empty-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .typewriter-cursor,
   .memory-spinner,
   .typing-dot,
   .message-skeleton * {
     animation: none;
   }
-  .empty-desc {
-    animation: none;
-  }
 
-  .quick-hints,
   .scroll-mark,
   .assistant-side .memory-tool-log,
   .memory-tool-entry {
