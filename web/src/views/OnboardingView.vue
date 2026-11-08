@@ -116,6 +116,7 @@ useGsap((_ctx, contextSafe) => {
 </script>
 
 <style scoped>
+/* 遮罩色保留硬编码：--overlay-* token 最重只有 15%，撑不起模态遮罩的 44% 压暗 */
 .onboarding-backdrop { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; max-width: none; background: rgba(24, 27, 29, 0.44); }
 .onboarding { width: min(100%, 560px); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-card); box-shadow: var(--shadow-lg); }
 .onboarding-header, .onboarding-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 22px 24px; }.onboarding-header { border-bottom: 1px solid var(--border); }.onboarding-footer { border-top: 1px solid var(--border); }

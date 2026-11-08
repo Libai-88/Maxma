@@ -29,7 +29,7 @@ interface WaveLayer {
 
 function setupWaves(): WaveLayer[] {
   const style = getComputedStyle(document.documentElement)
-  const accent = style.getPropertyValue('--accent').trim() || '#6e5af0'
+  const accent = style.getPropertyValue('--accent').trim() || '#C23B22' // 兜底为品牌朱砂，避免落入上一代品牌紫
   const accentAlt = deriveAltHue(accent)
   const accentLight = style.getPropertyValue('--accent-light').trim() || accent
 

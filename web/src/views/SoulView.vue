@@ -34,7 +34,7 @@
     <template v-else>
       <!-- 写作指引 + 模板：让 Novice 知道 SOUL.md 是什么、该怎么写 -->
       <details class="md-guide">
-        <summary class="md-guide-summary">📝 写作指引与模板</summary>
+        <summary class="md-guide-summary"><Icon name="file-page" :size="14" /> 写作指引与模板</summary>
         <div class="md-guide-body">
           <p>
             <strong>SOUL.md</strong> 是当前人格的「角色设定文件」，定义 AI 在对话中扮演谁、用什么语气、有什么能力边界。
@@ -116,6 +116,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { api } from '@/api'
+import Icon from '@/components/Icon.vue'
 import PersonaCard from '../components/PersonaCard.vue'
 import { useMarkdownPersist } from '@/composables/useMarkdownPersist'
 import { confirmAction } from '@/composables/useConfirm'
@@ -463,7 +464,7 @@ onMounted(async () => {
   opacity: 0.8;
 }
 
-.save-error { color: var(--status-error, #c0392b); font-size: 12px; }
+.save-error { color: var(--status-error); font-size: 12px; }
 
 .load-error {
   color: var(--text-secondary);

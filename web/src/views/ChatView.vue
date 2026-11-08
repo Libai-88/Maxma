@@ -1119,7 +1119,7 @@ function handleQuickStart(message: string) {
   border: none;
   background: transparent;
   font-size: 16px;
-  color: var(--text-secondary, #666);
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 4px 8px;
   border-radius: var(--radius-sm);
@@ -1275,7 +1275,7 @@ function handleQuickStart(message: string) {
 }
 
 .workbench-placeholder {
-  color: var(--text-secondary, #999);
+  color: var(--text-secondary);
   text-align: center;
   padding: 40px 16px;
   font-size: 13px;

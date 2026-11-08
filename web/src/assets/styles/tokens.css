@@ -31,6 +31,13 @@
   --radius-xl: 16px;
   --radius-input: 6px;
   --radius-card: 8px;
+  /* 兼容别名与药丸：--radius/--shadow 有 12+ 处历史消费点，下沉到 base 层
+     让 quick-chat 等只加载 tokens 的入口也拿到主题圆角（此前塌成 0）。
+     新代码请直接用 --radius-md 等实名；药丸统一 --radius-pill，别再写 999px。 */
+  --radius: var(--radius-md);
+  --shadow: var(--shadow-md);
+  --shadow-pink: 0 4px 16px var(--shadow-color, rgba(120, 100, 80, 0.14));
+  --radius-pill: 999px;
 
   /* ── 动效时长（三档制） ── */
   --duration-instant: 0.1s;   /* hover、关闭、退场 */

@@ -26,21 +26,21 @@
       </p>
       <div class="fu-actions">
         <router-link to="/" class="fu-action fu-action-primary">
-          <span class="fu-action-icon">💬</span>
+          <span class="fu-action-icon"><Icon name="chat" :size="16" /></span>
           <span class="fu-action-body">
             <span class="fu-action-title">返回对话</span>
             <span class="fu-action-desc">继续与 AI 聊天</span>
           </span>
         </router-link>
         <router-link to="/capabilities" class="fu-action">
-          <span class="fu-action-icon">📊</span>
+          <span class="fu-action-icon"><Icon name="dashboard" :size="16" /></span>
           <span class="fu-action-body">
             <span class="fu-action-title">能力仪表盘</span>
             <span class="fu-action-desc">查看当前启用的特性</span>
           </span>
         </router-link>
         <button type="button" class="fu-action fu-action-btn" @click="retry">
-          <span class="fu-action-icon">🔄</span>
+          <span class="fu-action-icon"><Icon name="refresh" :size="16" /></span>
           <span class="fu-action-body">
             <span class="fu-action-title">重新检测</span>
             <span class="fu-action-desc">刷新能力清单后返回</span>
@@ -54,6 +54,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute, useRouter, type LocationQueryValue } from 'vue-router'
+import Icon from '@/components/Icon.vue'
 import { useCapabilitiesStore } from '@/stores/capabilities'
 import { useViewEntrance } from '@/composables/useViewEntrance'
 import { useButtonFx } from '@/composables/useButtonFx'
@@ -122,7 +123,7 @@ async function retry() {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-soft);
+  box-shadow: var(--shadow-lg);
 }
 .fu-icon {
   font-size: 2.4em;

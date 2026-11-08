@@ -18,8 +18,8 @@
         <div v-for="n in 6" :key="n" class="extension-skeleton-card"><span class="ds-skeleton ds-skeleton-line"></span><span class="ds-skeleton ds-skeleton-line"></span><span class="ds-skeleton ds-skeleton-line"></span></div>
       </div>
     </div>
-    <div v-else-if="error" class="empty ds-inline-error extension-error">
-      <div class="empty-icon" aria-hidden="true">⚠</div>
+    <div v-else-if="error" class="empty ds-inline-error">
+      <div class="empty-icon" aria-hidden="true"><Icon name="warning" :size="24" /></div>
       <div class="empty-title">插件列表暂时不可用</div>
       <p class="empty-desc">{{ error.includes("操作过于频繁") ? "请求过于频繁，稍后重试即可；页面上的其它功能不受影响。" : error }}</p>
       <button class="btn" @click="load">重试</button>
@@ -115,7 +115,7 @@
       <!-- UX-EXTENSION-EMPTY-001：空态纳入全部数据源——此前只检查 customTools/
            mcpServers，只有内置工具/Skills 时误报"暂未发现扩展" -->
       <div v-if="activeTab === 'tools' && !builtinTools.length && !customTools.length" class="empty">
-        <div class="empty-icon">🧩</div>
+        <div class="empty-icon"><Icon name="extensions" :size="24" /></div>
         <div class="empty-title">暂无可用工具</div>
       </div>
 
@@ -135,6 +135,7 @@ import { api } from '@/api'
 import { useViewEntrance } from '@/composables/useViewEntrance'
 import { useButtonFx } from '@/composables/useButtonFx'
 import McpView from '@/views/McpView.vue'
+import Icon from '@/components/Icon.vue'
 
 interface ToolInfo {
   name: string
@@ -282,7 +283,7 @@ onMounted(() => { void load() })
 .skill-market-card p { min-height: 3.4em; margin: 8px 0; color: var(--text-secondary); font-size: .8rem; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .skill-market-meta { display: flex; gap: 10px; color: var(--text-tertiary); font-size: .72rem; }
 .skill-market-install { width: 100%; margin-top: 10px; }
-.skill-market-error { color: var(--danger, #c44); font-size: .84rem; }
+.skill-market-error { color: var(--status-error-text); font-size: .84rem; }
 .skill-market .marketplace-pagination { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 12px; padding-top: 4px; color: var(--text-tertiary); font-size: .82rem; }
 /* 容器、头部、状态块统一走 design-system.css；骨架屏用 .ds-skeleton */
 .ext-view { flex: 1; min-height: 0; overflow-y: auto; }
@@ -296,7 +297,6 @@ onMounted(() => { void load() })
 .extension-skeleton-card span { display: block; height: 10px; border-radius: 999px; }
 .extension-skeleton-card span:nth-child(2) { width: 78%; }
 .extension-skeleton-card span:nth-child(3) { width: 46%; }
-.extension-error { border: 1px solid color-mix(in srgb, var(--status-warn) 35%, var(--border)); border-radius: var(--radius-md); background: color-mix(in srgb, var(--status-warn) 5%, transparent); }
 @media (max-width: 520px) { .extension-skeleton-grid { grid-template-columns: 1fr; } }
 .empty-icon { font-size: 2em; margin-bottom: var(--space-8); }
 .empty-title { font-size: 1em; font-weight: 600; margin-bottom: var(--space-4); }

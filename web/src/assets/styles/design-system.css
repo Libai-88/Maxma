@@ -151,7 +151,7 @@
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  border-radius: 100px;
+  border-radius: var(--radius-pill);
   font-size: var(--fs-hint);
   font-weight: 500;
   line-height: 1.4;
@@ -390,6 +390,19 @@
 .ds-state > :nth-child(3) { animation-delay: 0.08s; }
 .ds-state > :nth-child(n + 4) { animation-delay: 0.12s; }
 
+/* ── 统计数字（STAT-001）：大数字 + 小标签统一写法。
+ * tabular-nums 让 NumberTicker 逐帧刷新时右边界不抖；等宽族让
+ * 7 个页面的「大数字 + 标签」从 7 套写法收敛成一套。 */
+.ds-stat-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.5em;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
 /* ── 骨架屏 / 旋转指示器（替代 5 份重复的 shimmer/spin keyframes） ── */
 .ds-skeleton {
   position: relative;
@@ -405,7 +418,7 @@
   transform: translateX(-100%);
   animation: ds-shimmer 1.35s ease-in-out infinite;
 }
-.ds-skeleton-line { height: 10px; border-radius: 999px; }
+.ds-skeleton-line { height: 10px; border-radius: var(--radius-pill); }
 .ds-spinner {
   width: 18px;
   height: 18px;
@@ -424,6 +437,14 @@ html[data-motion="calm"] .ds-decor { display: none !important; }
 html[data-motion="calm"] .ds-decor-anim,
 html[data-motion="calm"] :where(.leaves-layer, .colourful-text, .dock-meteors, .beam-particle, .ripple-circle, .sparkle, .glow) {
   animation: none !important;
+}
+/* ColourfulText 只停动画会留下一坨静止的 background-clip 渐变字（比完整模式
+ * 更像模板站）。calm 下把裁剪背景一并撤掉，回落 currentColor 正文色。 */
+html[data-motion="calm"] .colourful-text {
+  background: none !important;
+  -webkit-background-clip: initial !important;
+  background-clip: initial !important;
+  -webkit-text-fill-color: currentColor !important;
 }
 html[data-motion="calm"] .page-flip-forward-enter-active,
 html[data-motion="calm"] .page-flip-forward-leave-active,

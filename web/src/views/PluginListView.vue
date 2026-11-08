@@ -58,7 +58,7 @@
     <!-- 插件列表 -->
     <template v-else>
       <div v-if="store.filteredPlugins.length === 0" class="empty ds-state">
-        <div class="empty-icon ds-state__icon">🧩</div>
+        <div class="empty-icon ds-state__icon"><Icon name="puzzle" :size="24" /></div>
         <div class="empty-title ds-state__title">{{ store.plugins.length === 0 ? '没有可启用的插件' : '没有匹配的插件' }}</div>
         <div class="empty-desc ds-state__desc">
           {{ store.plugins.length === 0 ? emptyListDesc : '尝试调整搜索条件或过滤器。' }}
@@ -83,6 +83,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePluginStore } from '@/stores/plugin'
+import Icon from '@/components/Icon.vue'
 import { confirmAction } from '@/composables/useConfirm'
 import PluginCard from '@/components/plugins/PluginCard.vue'
 import PluginSearchBar from '@/components/plugins/PluginSearchBar.vue'

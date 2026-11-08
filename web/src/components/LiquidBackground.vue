@@ -66,7 +66,7 @@ function setup(canvas: HTMLCanvasElement) {
   // 读取主题色。第二个色相由 --accent 派生（旧代码读 --accent-pink，
   // 而它只有 midnight 一个主题定义，其余主题会静默落到硬编码的紫色）。
   const style = getComputedStyle(document.documentElement)
-  const accent = style.getPropertyValue('--accent').trim() || '#6e5af0'
+  const accent = style.getPropertyValue('--accent').trim() || '#C23B22' // 兜底为品牌朱砂，避免落入上一代品牌紫
   const accentAlt = deriveAltHue(accent)
   const c1 = parseHex(accent)
   const c2 = parseHex(accentAlt)

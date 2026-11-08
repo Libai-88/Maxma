@@ -8,7 +8,7 @@
         placeholder="搜索插件名称、描述、标签..."
         @input="handleSearch"
       />
-      <button v-if="localQuery" class="clear-btn" @click="clearSearch">✕</button>
+      <button v-if="localQuery" class="clear-btn" aria-label="清除搜索" @click="clearSearch"><Icon name="close" :size="14" /></button>
     </div>
     <div class="filter-controls">
       <select v-model="localCategory" class="filter-select" @change="handleFilter">
@@ -32,6 +32,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { PluginCategory } from '@/types/plugin'
+import Icon from '@/components/Icon.vue'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 import { useButtonFx } from '@/composables/useButtonFx'
 

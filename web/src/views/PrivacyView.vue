@@ -385,7 +385,7 @@ onMounted(() => {
 }
 .action-hint strong { color: var(--text-secondary); font-weight: 600; }
 .action-hint code {
-  font-family: 'SF Mono', 'Consolas', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   background: var(--bg-secondary);
   padding: 1px 4px;
@@ -538,10 +538,10 @@ onMounted(() => {
 /* ── 降级 banner ── */
 .omp-disabled-banner {
   padding: 16px 18px;
-  border: 1px solid var(--status-warn, #eab308);
+  border: 1px solid var(--status-warn);
   border-radius: var(--radius-lg);
   background: var(--bg-card);
-  background: color-mix(in srgb, var(--status-warn, #eab308) 10%, var(--bg-card));
+  background: color-mix(in srgb, var(--status-warn) 10%, var(--bg-card));
   color: var(--text-primary);
   line-height: 1.6;
   margin-bottom: 16px;
@@ -549,7 +549,7 @@ onMounted(() => {
 .omp-disabled-title {
   font-size: 15px;
   font-weight: 700;
-  color: var(--status-warn, #b45309);
+  color: var(--status-warn-text);
   margin-bottom: 4px;
 }
 .omp-disabled-detail {
@@ -559,7 +559,7 @@ onMounted(() => {
 .omp-disabled-reason {
   font-size: 11px;
   color: var(--text-tertiary);
-  font-family: monospace;
+  font-family: var(--font-mono);
   margin-top: 8px;
   overflow: hidden;
   text-overflow: ellipsis;

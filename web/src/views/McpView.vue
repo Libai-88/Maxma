@@ -28,7 +28,7 @@
       <!-- ═══ 服务器 Tab ═══ -->
       <template v-if="activeTab === 'servers'">
       <div v-if="loading" class="loading ds-state">加载中...</div>
-      <div v-else-if="loadError" class="empty ds-state">
+      <div v-else-if="loadError" class="empty ds-state ds-state--error">
         加载失败: {{ loadError }}
         <div class="retry-row ds-state__actions">
           <button class="ds-btn ds-btn--primary" @click="loadServers">重试</button>
@@ -251,7 +251,7 @@
 
         <!-- 加载状态 -->
         <div v-if="registryLoading" class="loading ds-state ds-state--bare">正在加载市场数据...</div>
-        <div v-else-if="registryError" class="empty ds-state ds-state--bare">
+        <div v-else-if="registryError" class="empty ds-state ds-state--error">
           加载失败: {{ registryError }}
           <div class="retry-row ds-state__actions">
             <button class="ds-btn ds-btn--primary" @click="loadRegistry">重试</button>
@@ -1634,7 +1634,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
   gap: 2px;
 }
 .card-connection .mono {
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   color: var(--text-secondary);
 }
@@ -1742,7 +1742,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
   line-height: 1.5;
 }
 .form-hint--info code {
-  font-family: 'SF Mono', 'Consolas', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   padding: var(--space-2) var(--space-4);
   background: var(--bg-secondary);
@@ -1763,7 +1763,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
   border-color: var(--accent);
 }
 .input.mono {
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
 }
 .input:disabled {
@@ -1876,7 +1876,7 @@ select.input {
   background: color-mix(in srgb, var(--accent) 12%, var(--bg-card));
   color: var(--accent);
   font-size: 12px;
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-family: var(--font-mono);
 }
 .chip.chip-danger {
   background: var(--bg-card);
@@ -1900,7 +1900,7 @@ select.input {
   background: transparent;
   color: var(--text-primary);
   font-size: 13px;
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-family: var(--font-mono);
   padding: var(--space-4);
 }
 .tool-pick {
@@ -1911,7 +1911,7 @@ select.input {
   background: var(--bg-secondary);
   color: var(--text-secondary);
   font-size: 12px;
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-family: var(--font-mono);
   cursor: pointer;
   border: 1px solid var(--border);
 }

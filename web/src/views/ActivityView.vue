@@ -87,7 +87,10 @@
       </div>
       <div v-if="!store.records.length" class="activity-empty ds-state ds-state--bare">
         <Sparkles>
-          <div class="empty-icon">{{ store.connectionState === 'connecting' ? '🔌' : '📋' }}</div>
+          <div class="empty-icon">
+            <Icon v-if="store.connectionState === 'connecting'" name="info" :size="24" />
+            <Icon v-else name="list" :size="24" />
+          </div>
           <div class="empty-title">{{ store.connectionState === 'connecting' ? '正在建立实时连接...' : '暂无活动记录' }}</div>
           <div class="empty-desc">
             <template v-if="store.connectionState === 'connecting'">
@@ -108,6 +111,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useActivityStore } from '@/stores/activity'
+import Icon from '@/components/Icon.vue'
 import { confirmAction } from '@/composables/useConfirm'
 import type { ActivityStatsResponse } from '@/types'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
@@ -425,6 +429,8 @@ onUnmounted(() => {
 }
 
 .stat-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: 1.4em;
   font-weight: 600;
   color: var(--accent);

@@ -79,7 +79,7 @@
             </div>
           </div>
           <div v-if="!visibleRuns.length" class="empty-state">
-            <span class="empty-icon">📋</span>
+            <span class="empty-icon"><Icon name="list" :size="16" /></span>
             <span>暂无可显示的任务</span>
           </div>
         </template>

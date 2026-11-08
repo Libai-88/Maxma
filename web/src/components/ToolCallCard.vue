@@ -92,7 +92,7 @@
         <!-- 修复 ERROR-EMPTY-001：tool_error 且错误信息为空/null 时，
              卡片不再只剩图标——显示兜底提示，用户能明确知道工具失败了 -->
         <div v-else-if="toolCall.status === 'error'" class="tool-section tool-error-empty">
-          <span class="tool-error-empty-icon" aria-hidden="true">⚠</span>
+          <span class="tool-error-empty-icon" aria-hidden="true"><Icon name="warning" :size="14" /></span>
           工具执行失败
         </div>
       </div>

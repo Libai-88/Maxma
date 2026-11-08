@@ -1,5 +1,6 @@
 import { watch } from 'vue'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
+import { useMotion } from '@/composables/useMotion'
 
 export interface RevealOptions {
   /** 就绪条件：返回 true 才播放入场（如数据加载完成） */
@@ -20,6 +21,10 @@ export function useReveal(
   opts: RevealOptions = {},
 ) {
   const { duration = 0.35, stagger = 0.05, y = 12 } = opts
+
+  // 克制模式下整段 GSAP 入场停用（与 useViewEntrance 同一口径）——
+  // 此前只有 prefers-reduced-motion 一道闸，calm 用户在 5 个页面仍看到 stagger 上浮。
+  if (useMotion().calm.value) return
 
   useGsap((_ctx, contextSafe) => {
     watch(() => (opts.ready ? opts.ready() : true) && container() !== null, contextSafe((ok) => {
