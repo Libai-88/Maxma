@@ -356,7 +356,7 @@ const steps: Step[] = [
 .section p:last-child { margin-bottom: 0; }
 .section strong { color: var(--text-primary); font-weight: 600; }
 .section code {
-  font-family: 'SF Mono', 'Consolas', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   padding: 1px 5px;
   border-radius: var(--radius-sm);
@@ -420,7 +420,7 @@ const steps: Step[] = [
   height: 26px;
   border-radius: 50%;
   background: var(--accent);
-  color: var(--bg-primary, #fff);
+  color: var(--bg-primary);
   font-size: 13px;
   font-weight: 700;
   display: flex;
@@ -501,7 +501,7 @@ const steps: Step[] = [
 }
 .faq-item p :deep(strong) { color: var(--text-primary); font-weight: 600; }
 .faq-item p :deep(code) {
-  font-family: 'SF Mono', 'Consolas', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   padding: 1px 4px;
   border-radius: var(--radius-sm);

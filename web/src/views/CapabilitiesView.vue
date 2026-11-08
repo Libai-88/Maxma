@@ -5,7 +5,7 @@
       <p class="header-sub">Pi Agent 可用工具、接入能力与运行配置</p>
     </div>
 
-    <div v-if="loading" class="loading ds-state"><TextGenerateEffect words="加载中..." /></div>
+    <div v-if="loading" class="loading ds-state"><span class="ds-spinner" aria-hidden="true"></span><span>加载中...</span></div>
 
     <div v-else-if="error" class="empty ds-state ds-state--error">
       <p>加载失败: {{ error }}</p>
@@ -172,7 +172,6 @@ import GlareCard from '@/components/inspira/GlareCard.vue'
 import DirectionAwareHover from '@/components/inspira/DirectionAwareHover.vue'
 import BentoGrid from '@/components/inspira/BentoGrid.vue'
 import NumberTicker from '@/components/inspira/NumberTicker.vue'
-import TextGenerateEffect from '@/components/inspira/TextGenerateEffect.vue'
 
 const loading = ref(true)
 const error = ref('')
@@ -321,7 +320,7 @@ onMounted(load)
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
 }
-.stat-value { font-size: 1.6em; font-weight: 700; color: var(--accent); }
+.stat-value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 1.6em; font-weight: 700; color: var(--accent); }
 .stat-label { font-size: 0.75em; color: var(--text-tertiary); margin-top: 4px; }
 
 /* Env */

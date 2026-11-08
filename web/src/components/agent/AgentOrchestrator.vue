@@ -103,7 +103,7 @@
 
         <!-- 空状态 -->
         <div v-if="agents.length === 0" class="empty-state">
-          <div class="empty-icon">🤖</div>
+          <div class="empty-icon"><Icon name="cpu" :size="24" /></div>
           <h3>暂无 Agent 任务</h3>
           <p>当有后台任务运行时，会在这里显示</p>
         </div>

@@ -289,9 +289,8 @@ onMounted(async () => {
 
 :root {
 	  /* 配色变量由主题文件定义（web/src/themes/*.css），结构 token 由 tokens.css 定义 */
-	  --radius: var(--radius-md);
-	  --shadow: var(--shadow-md);
-	  --shadow-pink: 0 4px 16px var(--shadow-color, rgba(120, 100, 80, 0.14));
+	  /* --radius / --shadow 兼容别名已下沉 tokens.css（quick-chat 入口不加载本文件，
+	     原先在这里定义会导致轻聊天气泡圆角塌成 0） */
 	}
 
 ::selection {

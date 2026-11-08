@@ -1,7 +1,7 @@
 <template>
   <div class="share-view ds-view" ref="rootEl">
     <div v-if="loading" class="loading ds-state">加载分享内容...</div>
-    <div v-else-if="error" class="error ds-state">
+    <div v-else-if="error" class="error ds-state ds-state--error">
       <h2>无法访问分享</h2>
       <p>{{ error }}</p>
       <router-link to="/" class="back-link">← 返回首页</router-link>

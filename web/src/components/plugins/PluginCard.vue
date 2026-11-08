@@ -1,7 +1,7 @@
 <template>
   <div ref="rootEl" class="plugin-card" :class="{ disabled: !plugin.enabled }" @click="emit('open', plugin.name)">
     <div class="plugin-header">
-      <div class="plugin-icon">🧩</div>
+      <div class="plugin-icon"><Icon name="puzzle" :size="20" /></div>
       <div class="plugin-info">
         <div class="plugin-name">{{ plugin.name }}</div>
         <div v-if="plugin.version" class="plugin-version">v{{ plugin.version }}</div>
@@ -44,6 +44,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { Plugin } from '@/types/plugin'
+import Icon from '@/components/Icon.vue'
 import { useTilt } from '@/composables/useTilt'
 
 defineProps<{

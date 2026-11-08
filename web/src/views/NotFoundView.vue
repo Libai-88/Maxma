@@ -2,7 +2,7 @@
 <template>
   <div class="not-found-view ds-view ds-view--narrow" ref="rootEl">
     <div class="not-found-card">
-      <div class="not-found-icon">🧭</div>
+      <div class="not-found-icon"><Icon name="map-pin" :size="24" /></div>
       <h1 class="not-found-code">404</h1>
       <p class="not-found-text">页面不存在或已移动</p>
       <p class="not-found-desc">
@@ -10,21 +10,21 @@
       </p>
       <div class="not-found-actions">
         <router-link to="/" class="nf-action nf-action-primary">
-          <span class="nf-action-icon">💬</span>
+          <span class="nf-action-icon"><Icon name="chat" :size="16" /></span>
           <span class="nf-action-body">
             <span class="nf-action-title">返回对话</span>
             <span class="nf-action-desc">继续与 AI 聊天</span>
           </span>
         </router-link>
         <router-link to="/help" class="nf-action">
-          <span class="nf-action-icon">❓</span>
+          <span class="nf-action-icon"><Icon name="help" :size="16" /></span>
           <span class="nf-action-body">
             <span class="nf-action-title">帮助中心</span>
             <span class="nf-action-desc">了解 Maxma 能力与常见问题</span>
           </span>
         </router-link>
         <router-link to="/appearance" class="nf-action">
-          <span class="nf-action-icon">🎨</span>
+          <span class="nf-action-icon"><Icon name="appearance" :size="16" /></span>
           <span class="nf-action-body">
             <span class="nf-action-title">外观设置</span>
             <span class="nf-action-desc">切换主题、字体与纹理</span>
@@ -37,6 +37,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import Icon from '@/components/Icon.vue'
 import { useViewEntrance } from '@/composables/useViewEntrance'
 
 defineOptions({ name: 'NotFoundView' })
@@ -59,7 +60,7 @@ useViewEntrance(() => rootEl.value, { blocks: '.not-found-card' })
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-soft);
+  box-shadow: var(--shadow-lg);
 }
 .not-found-icon {
   font-size: 2.4em;

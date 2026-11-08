@@ -7,10 +7,10 @@
 
     <!-- 统计栏 -->
     <div class="stats-row" v-if="!store.loading">
-      <div class="stat-card"><div class="stat-value"><NumberTicker :value="stats.total ?? facts.length" /></div><div class="stat-label">总条数</div></div>
-      <div class="stat-card"><div class="stat-value"><template v-if="stats.avg_confidence != null"><NumberTicker :value="stats.avg_confidence" :decimal-places="2" /></template><template v-else>-</template></div><div class="stat-label">平均置信度</div></div>
+      <div class="stat-card"><div class="memory-stat-value"><NumberTicker :value="stats.total ?? facts.length" /></div><div class="stat-label">总条数</div></div>
+      <div class="stat-card"><div class="memory-stat-value"><template v-if="stats.avg_confidence != null"><NumberTicker :value="stats.avg_confidence" :decimal-places="2" /></template><template v-else>-</template></div><div class="stat-label">平均置信度</div></div>
       <div class="stat-card" v-for="(count, cat) in stats.categories ?? {}" :key="cat">
-        <div class="stat-value"><NumberTicker :value="count" /></div>
+        <div class="memory-stat-value"><NumberTicker :value="count" /></div>
         <div class="stat-label">{{ categoryLabel(cat) }}</div>
       </div>
     </div>
@@ -112,7 +112,7 @@
         <div class="skeleton-line ds-skeleton ds-skeleton-line skeleton-line--short"></div>
       </div>
     </div>
-    <div v-else-if="loadError" class="empty error-state ds-state">
+    <div v-else-if="loadError" class="empty error-state ds-state ds-state--error">
       <div class="empty-title ds-state__title">加载失败</div>
       <div class="empty-desc ds-state__desc">{{ loadError }}</div>
       <div class="ds-state__actions">
@@ -122,7 +122,7 @@
     <template v-else>
       <div v-if="facts.length === 0" class="empty ds-state">
         <Sparkles :density="10" />
-        <div class="empty-icon ds-state__icon">🧠</div>
+        <div class="empty-icon ds-state__icon"><Icon name="memory" :size="24" /></div>
         <div class="empty-title ds-state__title">{{ searchQuery ? '未匹配到记忆' : '暂无记忆数据' }}</div>
         <div class="empty-desc ds-state__desc">
           <template v-if="!searchQuery">与 AI 对话后，OMP 会自动记录有价值的事实。</template>
@@ -179,6 +179,7 @@ import HaloSearch from '@/components/inspira/HaloSearch.vue'
 import GlareCard from '@/components/inspira/GlareCard.vue'
 import NumberTicker from '@/components/inspira/NumberTicker.vue'
 import Sparkles from '@/components/inspira/Sparkles.vue'
+import Icon from '@/components/Icon.vue'
 
 const log = createLogger('MemoryView')
 
@@ -404,7 +405,7 @@ onUnmounted(() => {
   padding: var(--space-12) var(--space-8); background: var(--bg-secondary); border-radius: var(--radius);
   border: 1px solid var(--border);
 }
-.stat-value { font-size: 1.4em; font-weight: 700; color: var(--accent); }
+.memory-stat-value { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 1.4em; font-weight: 700; color: var(--accent); }
 .stat-label { font-size: 0.7em; color: var(--text-tertiary); margin-top: var(--space-2); }
 
 /* Toolbar */

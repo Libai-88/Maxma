@@ -11,7 +11,7 @@
 
     <!-- ── 列表模式 ── -->
     <template v-if="mode === 'list'">
-      <div v-if="loading" class="loading ds-state ds-state--bare">
+      <div v-if="loading" class="loading skeleton-state">
         <div class="skeleton-grid">
           <div v-for="n in 6" :key="n" class="skeleton-card">
             <div class="skeleton-header">
@@ -28,13 +28,13 @@
           </div>
         </div>
       </div>
-      <div v-else-if="loadError" class="empty ds-state">
+      <div v-else-if="loadError" class="empty ds-state ds-state--error">
         <p>加载失败: {{ loadError }}</p>
         <div class="retry-row" style="margin-top: 8px;">
           <button class="btn primary" @click="retryLoad">重试</button>
         </div>
       </div>
-      <div v-else-if="providers.length === 0" class="empty enhanced-empty ds-state ds-state--bare">
+      <div v-else-if="providers.length === 0" class="empty enhanced-empty ds-state">
         <!-- Hero -->
         <div class="empty-hero">
           <svg class="empty-hero-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -1024,7 +1024,7 @@ onMounted(() => {
 	  background: var(--bg-secondary);
 	  border-radius: var(--radius-input);
 	  color: var(--text-secondary);
-	  font-family: 'SF Mono', 'Consolas', monospace;
+	  font-family: var(--font-mono);
 	}
 .model-tag.empty {
   color: var(--text-tertiary);
@@ -1197,7 +1197,7 @@ onMounted(() => {
   transition: border-color 0.15s;
 }
 .input:focus { border-color: var(--accent); }
-.input.mono { font-family: 'SF Mono', 'Consolas', monospace; font-size: 13px; }
+.input.mono { font-family: var(--font-mono); font-size: 13px; }
 select.input { cursor: pointer; }
 
 /* 推荐提示：选中推荐 preset 时显示一句话说明 */
@@ -1233,7 +1233,7 @@ select.input { cursor: pointer; }
 }
 .model-item {
   font-size: 13px;
-  font-family: 'SF Mono', 'Consolas', monospace;
+  font-family: var(--font-mono);
   padding: 4px 6px;
   cursor: pointer;
   border-radius: var(--radius-sm);
@@ -1272,6 +1272,13 @@ select.input { cursor: pointer; }
 }
 
 /* ── Skeleton loading ── */
+/* 骨架网格不再塞进 .ds-state（column+center 会压缩网格），
+   用自有容器实现全宽 grid + 水平居中。 */
+.skeleton-state {
+  padding: var(--space-24) 0;
+  display: flex;
+  justify-content: center;
+}
 .skeleton-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

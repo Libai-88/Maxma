@@ -96,7 +96,7 @@
 
       <!-- 空状态 -->
       <div v-if="filteredEvents.length === 0" class="timeline-empty">
-        <div class="empty-icon">📋</div>
+        <div class="empty-icon"><Icon name="list" :size="16" /></div>
         <p>{{ emptyMessage }}</p>
       </div>
 

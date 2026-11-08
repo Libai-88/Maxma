@@ -41,7 +41,7 @@
 
       <div v-if="loading" class="loading ds-state">加载中...</div>
       <div v-else-if="entries.length === 0" class="empty-state ds-state">
-        <div class="empty-icon ds-state__icon">🛡️</div>
+        <div class="empty-icon ds-state__icon"><Icon name="blocker" :size="24" /></div>
         <h3 class="ds-state__title">还没有任何拒止锚</h3>
         <p class="empty-desc ds-state__desc">当前没有放置任何拒止锚，AI 的文件操作只受会话权限模式的逐次确认约束（会话默认「每次确认」，<code>auto</code> 档不弹确认）。如果有不希望 AI 触及的敏感目录（财务 / 私人笔记 / 密钥），点击下方添加拒止锚，将目录强制阻断。</p>
         <div class="ds-state__actions">
@@ -98,6 +98,7 @@
 
 <script setup lang="ts">
 import { api } from '@/api'
+import Icon from '@/components/Icon.vue'
 import type { BlockerEntry } from '@/types'
 import { confirmAction } from '@/composables/useConfirm'
 import { ref, onMounted } from 'vue'
@@ -241,7 +242,7 @@ onMounted(loadEntries)
 .intro-body ul { margin: var(--space-6) 0; padding-left: var(--space-24); }
 .intro-body li { margin-bottom: var(--space-4); }
 .intro-body code {
-  font-family: 'SF Mono', 'Consolas', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   background: var(--bg-secondary);
   padding: var(--space-2) var(--space-6);
@@ -309,7 +310,7 @@ onMounted(loadEntries)
   margin-bottom: var(--space-4);
 }
 .rule-body code {
-  font-family: 'SF Mono', 'Consolas', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   background: var(--bg-secondary);
   padding: var(--space-2) var(--space-6);
@@ -324,7 +325,7 @@ onMounted(loadEntries)
 	  font-size: 12px;
 	}
 	.rule-note code {
-	  font-family: 'SF Mono', 'Consolas', monospace;
+	  font-family: var(--font-mono);
 	  font-size: 12px;
 	  background: color-mix(in srgb, var(--status-info) 20%, var(--bg-secondary));
   padding: var(--space-2) var(--space-6);
@@ -355,7 +356,7 @@ onMounted(loadEntries)
   min-width: 0;
 }
 .entry-path {
-  font-family: 'SF Mono', 'Consolas', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   color: var(--text-primary);
   word-break: break-all;
@@ -405,7 +406,7 @@ onMounted(loadEntries)
   border-color: var(--accent);
 }
 .input.mono {
-  font-family: 'SF Mono', 'Consolas', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
 }
 .form-actions {

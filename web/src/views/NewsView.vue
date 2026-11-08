@@ -23,7 +23,7 @@
         </div>
         <!-- 加载失败：明确告诉用户「加载失败」而非误显示「暂无更新」 -->
         <div v-else-if="loadError" class="empty ds-state ds-state--bare">
-          <div class="empty-icon ds-state__icon">⚠️</div>
+          <div class="empty-icon ds-state__icon"><Icon name="warning" :size="24" /></div>
           <div class="empty-title ds-state__title">加载失败</div>
           <div class="empty-desc ds-state__desc">
             无法获取更新动态，可能是后端未启动或网络异常。<br>
@@ -31,7 +31,7 @@
           </div>
         </div>
         <div v-else-if="news.length === 0" class="empty ds-state ds-state--bare">
-          <div class="empty-icon ds-state__icon">📰</div>
+          <div class="empty-icon ds-state__icon"><Icon name="file-page" :size="24" /></div>
           <div class="empty-title ds-state__title">暂无更新动态</div>
           <div class="empty-desc ds-state__desc">Maxma 新版本与功能更新会在这里展示。</div>
         </div>
@@ -50,6 +50,7 @@
 <script setup lang="ts">
 import { api } from '@/api'
 import type { NewsEntry } from '@/types'
+import Icon from '@/components/Icon.vue'
 import NewsCard from '@/components/NewsCard.vue'
 import { computed, onMounted, ref } from 'vue'
 import { createLogger } from '@/utils/logger'

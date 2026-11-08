@@ -29,7 +29,7 @@
     </details>
 
     <div v-if="!snapshot && loading" class="loading-text">
-      <TextGenerateEffect words="加载中…" />
+      <span class="ds-spinner" aria-hidden="true"></span><span>加载中…</span>
     </div>
     <div v-else-if="!snapshot" class="empty-text">
       <Sparkles>
@@ -206,7 +206,6 @@ import { useReveal } from '@/composables/useReveal'
 import GlareCard from '@/components/inspira/GlareCard.vue'
 import NumberTicker from '@/components/inspira/NumberTicker.vue'
 import Sparkles from '@/components/inspira/Sparkles.vue'
-import TextGenerateEffect from '@/components/inspira/TextGenerateEffect.vue'
 import FloatingCard from '@/components/inspira/FloatingCard.vue'
 
 const metricsStore = useMetricsStore()
@@ -466,6 +465,8 @@ function formatTokens(n: number): string {
   background: var(--bg-primary);
 }
 .stat-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   font-size: 22px;
   font-weight: 700;
   color: var(--text-primary);
@@ -508,6 +509,10 @@ function formatTokens(n: number): string {
 }
 
 .loading-text, .empty-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-8);
   color: var(--text-secondary);
   font-size: 13px;
   padding: var(--space-16) 0;

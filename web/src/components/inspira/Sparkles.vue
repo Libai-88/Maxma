@@ -78,7 +78,8 @@ onMounted(() => {
 .sparkle {
   position: absolute;
   border-radius: 50%;
-  background: var(--accent, #6e5af0);
+  /* 兜底为品牌朱砂，避免落入上一代品牌紫 */
+  background: var(--accent, #C23B22);
   pointer-events: none;
   animation: sparkle-twinkle var(--duration, 2s) ease-in-out infinite;
   animation-delay: var(--delay, 0s);

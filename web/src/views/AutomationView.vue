@@ -22,13 +22,13 @@
       </div>
     </div>
 
-    <div v-if="loading" class="loading">加载中...</div>
-    <div v-else-if="error" class="error-banner">{{ error }}</div>
+    <div v-if="loading" class="loading ds-state">加载中...</div>
+    <div v-else-if="error" class="error-banner ds-inline-error">{{ error }}</div>
     <template v-else>
-      <div v-if="automations.length === 0" class="empty">
-        <div class="empty-icon">⏰</div>
-        <div class="empty-title">暂无自动化任务</div>
-        <div class="empty-desc">创建定时任务来自动执行重复性工作。</div>
+      <div v-if="automations.length === 0" class="empty ds-state">
+        <div class="empty-icon ds-state__icon"><Icon name="clock" :size="24" /></div>
+        <h3 class="ds-state__title">暂无自动化任务</h3>
+        <p class="ds-state__desc">创建定时任务来自动执行重复性工作。</p>
       </div>
       <div v-else class="automation-list">
         <div v-for="a in automations" :key="a.id" class="automation-card" :class="{ disabled: !a.enabled }">
@@ -74,6 +74,7 @@ import { confirmAction } from '@/composables/useConfirm'
 import { showError, showSuccess } from '@/lib/toast'
 import { useViewEntrance } from '@/composables/useViewEntrance'
 import { useButtonFx } from '@/composables/useButtonFx'
+import Icon from '@/components/Icon.vue'
 
 interface AutomationAction {
   type: string
@@ -304,7 +305,7 @@ async function handleDelete(id: string) {
 </script>
 
 <style scoped>
-/* 容器、头部、空/错状态统一走 design-system.css；此处只留自动化独有样式。 */
+/* 容器/头部/空错态已走 design-system.css（ds-state / ds-inline-error）；此处只留自动化独有样式。 */
 .automation-view { flex: 1; min-height: 0; overflow-y: auto; }
 
 .section { margin-bottom: var(--section-gap); }

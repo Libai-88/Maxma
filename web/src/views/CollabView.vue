@@ -17,7 +17,7 @@
     </div>
 
     <div v-if="!currentSessionId" class="empty ds-state">
-      <div class="empty-icon ds-state__icon">🤝</div>
+      <div class="empty-icon ds-state__icon"><Icon name="collab" :size="24" /></div>
       <div class="empty-title ds-state__title">请选择一个会话</div>
       <div class="empty-desc ds-state__desc">选择会话后可创建分享链接和快照</div>
     </div>
@@ -164,6 +164,7 @@ import type { SessionInfo } from '@/types'
 import { useViewEntrance } from '@/composables/useViewEntrance'
 import { useButtonFx } from '@/composables/useButtonFx'
 import { safeCopyText } from '@/lib/clipboard'
+import Icon from '@/components/Icon.vue'
 
 const rootEl = ref<HTMLElement | null>(null)
 useViewEntrance(() => rootEl.value, { header: '.header', blocks: '.section' })
@@ -438,8 +439,9 @@ function formatDate(dateStr: string): string {
   cursor: pointer;
 }
 
-.share-link-input:focus {
-  outline: none;
+.share-link-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .btn-copy {
