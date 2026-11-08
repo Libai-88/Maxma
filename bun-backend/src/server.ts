@@ -103,13 +103,44 @@ const seenClientMsgIds = new Map<string, string[]>();
  * 之前写成 `payload: Record<string, unknown>` 反而是实现方擅自收窄契约，
  * 导致赋值处 tsc 报不兼容（TS2322），而那本应是接口说了算。
  */
+/** STABILITY-005：慢消费者背压记账。Bun `ws.send` 返回 0=消息被丢弃、
+ * -1=背压入队、>0=已发字节。丢帧对 token 流意味着前端假死（done 没了
+ * 就永远转圈）——主动断开(1013)让前端重连拿干净状态，比静默丢帧诚实。
+ * 连续背压达到上限同样断开，防 uWS 侧缓冲无界堆积。 */
+const WS_BACKPRESSURE_LIMIT = 32;
+const wsBackpressure = new WeakMap<ServerWebSocket<WsData>, number>();
+
+function handleSendStatus(sessionId: string, ws: ServerWebSocket<WsData>, status: number): void {
+  if (status > 0) {
+    wsBackpressure.delete(ws);
+    return;
+  }
+  if (status === 0) {
+    console.warn(`[ws] message dropped for slow consumer ${sessionId.slice(0, 8)} → closing(1013)`);
+    try {
+      ws.close(1013, "slow consumer");
+    } catch { /* 已断开 */ }
+    return;
+  }
+  const count = (wsBackpressure.get(ws) ?? 0) + 1;
+  wsBackpressure.set(ws, count);
+  if (count >= WS_BACKPRESSURE_LIMIT) {
+    console.warn(
+      `[ws] backpressure ${count} frames for ${sessionId.slice(0, 8)} → closing(1013)`,
+    );
+    try {
+      ws.close(1013, "slow consumer");
+    } catch { /* 已断开 */ }
+  }
+}
+
 function broadcastEvent(sessionId: string, event: { type: string; payload?: unknown }): void {
   const conns = wsConnections.get(sessionId);
   if (conns && conns.size > 0) {
     const data = JSON.stringify(event);
     for (const ws of conns) {
       try {
-        ws.send(data);
+        handleSendStatus(sessionId, ws, ws.send(data));
       } catch (err) {
         console.warn(`[ws] broadcast failed for ${sessionId.slice(0, 8)}: ${String(err)}`);
       }

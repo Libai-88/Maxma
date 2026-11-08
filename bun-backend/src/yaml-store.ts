@@ -17,11 +17,20 @@ export function BunYamlSafeParse(text: string): unknown {
   }
 }
 
-/** 原子写 YAML（临时文件 + rename，避免半写文件）。 */
+/** 原子写 YAML（临时文件 + fsync + rename，避免半写文件）。
+ * STABILITY-012：rename 前不 fsync，掉电可能留下空/半写目标文件——
+ * providers.yaml / registry.json 是唯一的凭据与供应商事实源，必须落盘。 */
 export function writeYamlAtomic(filePath: string, data: unknown): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const tmp = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-  fs.writeFileSync(tmp, Bun.YAML.stringify(data), "utf8");
+  const payload = Bun.YAML.stringify(data);
+  const fd = fs.openSync(tmp, "w");
+  try {
+    fs.writeFileSync(fd, payload, "utf8");
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
   try {
     fs.renameSync(tmp, filePath);
   } catch (err) {

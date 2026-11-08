@@ -36,6 +36,16 @@ function decorateCodeBlocks(root: HTMLElement) {
     if (!pre.querySelector('code')) return
     const wrap = document.createElement('div')
     wrap.className = 'md-code'
+    // CHAT-UX-004：语言标签（对标 Claude Desktop / Codex）。markdown-it 的
+    // fence 输出 <code class="language-js">；零依赖，只读类名不加高亮。
+    const codeEl = pre.querySelector('code')
+    const langMatch = /language-([\w+-]+)/.exec(codeEl?.className ?? '')
+    if (langMatch) {
+      const label = document.createElement('span')
+      label.className = 'md-code-lang'
+      label.textContent = langMatch[1]!
+      wrap.append(label)
+    }
     const btn = document.createElement('button')
     btn.type = 'button'
     btn.className = 'md-code-copy'

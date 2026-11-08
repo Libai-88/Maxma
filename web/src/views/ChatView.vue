@@ -292,6 +292,7 @@ const { sessionId, sessions } = storeToRefs(sessionStore)
 const { health } = storeToRefs(useHealthStore())
 const {
   connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId, errorDiagnostic,
+  failedTurnIndex,
   taskTrackerData, send, cancel, answerTaskBrief, executeTaskBrief, cancelTaskBrief, sendCollaborationMessage, sendTaskReview,
   sendUserResponse, sendArtifactAction, sendPlanResponse, sendPlanMode, sendCheckpointAction, removeTurns,
   dismissError,
@@ -849,8 +850,13 @@ function handleRetryLast() {
     return
   }
   const ch = chatStore.channels.get(sessionId.value)
-  const last = ch?.turns[ch.turns.length - 1]
-  const message = last?.userMessage
+  // CHAT-UX-012：优先重试最近一次失败轮次的用户消息——失败后又发新消息时，
+  // turns 末尾已是新轮，直接取末尾会重试错位。无失败记录（或索引失效）时
+  // 回退到取最后一轮的现行为。
+  const failedIdx = failedTurnIndex.value
+  const failedTurn = failedIdx != null ? ch?.turns[failedIdx] : undefined
+  const turn = failedTurn ?? ch?.turns[ch.turns.length - 1]
+  const message = turn?.userMessage
   if (!message) {
     showError('没有可重试的消息')
     return
@@ -903,16 +909,11 @@ async function handleUndo() {
 }
 
 function handleQuickStart(message: string) {
-  // 通过 ChatInput 实例的 send 方法发送，确保使用 ChatInput 当前选中的 provider/model，
-  // 而非直接调用 onSend（会丢失用户在 ModelSelector 中的选择）
-  // 修复 QUICKSTART-FEEDBACK-001：发送失败（WS 未就绪/流式中）给出可见提示，
-  // 此前静默丢弃且错误横幅无处显示（空态时 ChatWindow 不渲染）
-  const ok = chatInputInstance.send(message)
-  if (!ok) {
-    window.dispatchEvent(new CustomEvent('maxma:error', {
-      detail: { message: '暂时无法发送，请等待连接完成后再试' },
-    }))
-  }
+  // CHAT-UX-007：建议项**预填输入框**而不是直接发送（对标 Claude Desktop /
+  // ChatGPT）——建议文案多为长模板（周报/翻译要点），直发用户没机会补充
+  // 项目名与时间范围。此前的直发语义保留在 WS 未就绪时的错误提示上。
+  chatInputInstance.setText(message)
+  window.dispatchEvent(new CustomEvent('maxma:focus-composer'))
 }
 </script>
 

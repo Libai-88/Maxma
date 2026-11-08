@@ -55,14 +55,24 @@ export function createActivityRoutes(): Hono {
             // 客户端已断开
           }
         });
-        // 心跳注释行（与 SSE 规范兼容，防代理缓冲断连；前端忽略 ':' 开头行）
+        // 心跳注释行（与 SSE 规范兼容，防代理缓冲断连；前端忽略 ':' 开头行）。
+        // STABILITY-011：enqueue 失败即自愈——消费者异常关闭未必触发 cancel，
+        // 心跳失败的瞬间就清订阅与定时器，不等流被 GC。
         heartbeat = setInterval(() => {
           try {
             controller.enqueue(encoder.encode(": keepalive\n\n"));
           } catch {
-            /* noop */
+            if (unsubscribe) {
+              unsubscribe();
+              unsubscribe = null;
+            }
+            if (heartbeat) {
+              clearInterval(heartbeat);
+              heartbeat = null;
+            }
           }
         }, 15_000);
+        if (typeof heartbeat.unref === "function") heartbeat.unref();
       },
       cancel() {
         if (unsubscribe) unsubscribe();

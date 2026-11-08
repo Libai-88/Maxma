@@ -17,7 +17,7 @@
       </span>
       <span class="tool-name">{{ displayName }}</span>
       <span class="tool-elapsed" v-if="toolCall.elapsed !== null">
-        {{ toolCall.elapsed }}s
+        {{ Number(toolCall.elapsed).toFixed(1) }}s
       </span>
       <PinButton @pin="$emit('pin', getPinPayload())" />
     </div>

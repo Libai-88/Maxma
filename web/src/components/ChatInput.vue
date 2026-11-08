@@ -288,6 +288,8 @@ import ContextUsageBadge from './ContextUsageBadge.vue'
 import FileUpload from './FileUpload.vue'
 import FileUploadGrid from './FileUploadGrid.vue'
 import { useChatStore } from '@/stores/chat'
+import { useSessionStore } from '@/stores/session'
+import { storeToRefs } from 'pinia'
 import BorderBeam from '@/components/inspira/BorderBeam.vue'
 
 // ChatView 通过 provide 注入 useChatInput 实例；ChatInput 直接读写状态、调用方法
@@ -303,7 +305,19 @@ const {
   onReconnect,
 } = chatInput
 
-const text = ref('')
+// CHAT-UX-009：per-session 草稿。此前 text 是组件实例级单例，会话 A 打了
+// 半段话切到会话 B 会原封带过去——发送时按 B 的 provider/model 走，极易
+// 「发错会话」。改为按 sessionId swap（内存级；KeepAlive 下组件不重建，
+// watch(sessionId) 是唯一可靠的换挡点）。
+const drafts = new Map<string, string>()
+const sessionStoreForDraft = useSessionStore()
+const currentDraftSessionId = storeToRefs(sessionStoreForDraft).sessionId
+const text = ref(drafts.get(currentDraftSessionId.value) ?? '')
+watch(currentDraftSessionId, (next, previous) => {
+  if (previous !== undefined) drafts.set(previous, text.value)
+  text.value = drafts.get(next) ?? ''
+  nextTick(() => autoResize())
+})
 const selectedThinkPathId = ref<ThinkPathId | null>(null)
 
 // ── 语音输入（GAP-A1-001） ──
@@ -706,12 +720,22 @@ function autoResize() {
   if (!el) return
   if (customHeight.value !== null) return
   el.style.height = 'auto'
-  el.style.height = Math.min(el.scrollHeight, 160) + 'px'
+  // CHAT-UX-008：160px ≈ 6 行，多段落需求持续「卡在滚动里」；280px ≈ 11 行
+  // 对齐 Claude Desktop / Codex 的可视面积。手动 resize handle 仍可更高。
+  el.style.height = Math.min(el.scrollHeight, 280) + 'px'
 }
 
 // ── 拖拽调整输入框高度 ──
 
 const { customHeight, isResizing, startResize } = useResizeHandle(inputContainerRef, textareaRef)
+
+// CHAT-UX-007：欢迎屏建议项预填后的焦点落点（ChatView 只发事件，
+// 焦点所有权留在输入框组件内）。
+function focusComposer() {
+  textareaRef.value?.focus()
+}
+onMounted(() => window.addEventListener('maxma:focus-composer', focusComposer))
+onUnmounted(() => window.removeEventListener('maxma:focus-composer', focusComposer))
 
 onUnmounted(() => {
   cleanupSendTimers()

@@ -1,12 +1,26 @@
 <template>
   <div ref="rootEl" class="thinking-block" :class="{ done: block.done, 'just-done': justDone }">
-    <div class="thinking-header">
+    <!-- CHAT-UX-002：header 承载耗时与折叠 toggle。完成的推理块默认折叠、
+         点击 header 展开/收起；becameAnswer 的块是正文本身，完成后隐藏 header。 -->
+    <div
+      v-if="showHeader"
+      class="thinking-header"
+      :class="{ collapsible: collapsible, collapsed: collapsed }"
+      :role="collapsible ? 'button' : undefined"
+      :aria-expanded="collapsible ? ariaExpanded : undefined"
+      :tabindex="collapsible ? 0 : undefined"
+      :aria-label="collapsible ? (collapsed ? '展开思考过程' : '折叠思考过程') : undefined"
+      @click="collapsible && toggleCollapsed()"
+      @keydown.enter.prevent="collapsible && toggleCollapsed()"
+      @keydown.space.prevent="collapsible && toggleCollapsed()"
+    >
       <span class="thinking-label">
         <span class="spinner" v-if="!block.done"></span>
-        思考中<span v-if="!block.done" class="think-dots" aria-hidden="true"><i></i><i></i><i></i></span><span v-else aria-hidden="true">（完成）</span>
+        思考中<span v-if="!block.done" class="think-dots" aria-hidden="true"><i></i><i></i><i></i></span><span v-else>{{ headerLabel }}</span>
       </span>
+      <span v-if="collapsible" class="thinking-collapse" aria-hidden="true">{{ collapsed ? '▸' : '▾' }}</span>
     </div>
-    <div class="thinking-body" v-if="block.tokens">
+    <div class="thinking-body" v-if="block.tokens" v-show="bodyVisible">
       <div class="thinking-content">
         <!-- 流式答案（becameAnswer）：纯文本增量逐词 reveal（ANIM-SPLIT-001），实现打字机生长感；
              复杂 markdown（代码/表格）降级走 RenderMarkdown 保证格式正确 -->
@@ -24,8 +38,10 @@
           </template>
         </template>
         <RenderMarkdown v-else :content="displayText" :streaming="!block.done" />
-        <span v-if="!block.done && !block.becameAnswer" class="stream-caret" aria-hidden="true"></span>
-        <span v-if="isStreamingAnswer" class="stream-caret" aria-hidden="true"></span>
+        <!-- CHAT-UX-003：流式光标统一为「回合未完成即显示」。此前 becameAnswer
+             且内容含代码块/表格（非 plain）时两个分支条件都不成立，光标消失，
+             用户误以为回复卡住。 -->
+        <span v-if="!block.done" class="stream-caret" aria-hidden="true"></span>
       </div>
       <!-- GAP-A2-001：TTS 朗读按钮——流式答案（becameAnswer）由本组件承载，
            完成态显示朗读/停止（与 MessageBubble 的按钮同一语义） -->
@@ -65,6 +81,23 @@ import { showError } from '@/lib/toast'
 import { gsap, useGsap, easeMap } from '@/composables/useGsap'
 
 const props = defineProps<{ block: ThinkingBlockType }>()
+
+// CHAT-UX-002：折叠状态。完成的推理块默认折叠（点击 header 展开/收起），
+// 流式期间保持展开；becameAnswer 的块是正文本身，永不折叠。
+const collapsed = ref(false)
+const collapsible = computed(() => props.block.done && !props.block.becameAnswer)
+const showHeader = computed(() => !props.block.becameAnswer || !props.block.done)
+const bodyVisible = computed(() => !collapsible.value || !collapsed.value)
+const ariaExpanded = computed((): 'true' | 'false' => (collapsed.value ? 'false' : 'true'))
+const headerLabel = computed(() => {
+  if (!props.block.done) return ''
+  return props.block.elapsed != null ? `思考 · ${props.block.elapsed.toFixed(1)}s` : '（完成）'
+})
+function toggleCollapsed() { collapsed.value = !collapsed.value }
+// done 翻转瞬间默认折叠；immediate 保证历史会话挂载（done 已为 true）同样折叠。
+watch(() => props.block.done, (done) => {
+  if (done && !props.block.becameAnswer) collapsed.value = true
+}, { immediate: true })
 
 // GAP-A2-001：朗读/停止（与 MessageBubble 同语义；文案 = 已完成的答案内容）。
 // TTS-BUGFIX-001：按 speakText 真实结果给精确反馈，'ok' 后 4s 复查引擎。
@@ -326,12 +359,24 @@ useGsap(() => {
 .thinking-block.done:hover {
   box-shadow: var(--shadow);
 }
+/* CHAT-UX-002：完成态 header 不再隐藏——它是推理块的折叠 toggle（耗时 + 箭头）。
+   becameAnswer 的完成块不渲染 header（正文自足），无需样式兜底。 */
 .thinking-block.done .thinking-header {
-  max-height: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-  opacity: 0;
-  overflow: hidden;
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+}
+.thinking-header.collapsible {
+  cursor: pointer;
+  user-select: none;
+}
+.thinking-header.collapsible:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+.thinking-collapse {
+  margin-left: auto;
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
 }
 .thinking-block.done .thinking-body {
   border-top: none;
