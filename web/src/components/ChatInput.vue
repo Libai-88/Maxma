@@ -318,6 +318,13 @@ watch(currentDraftSessionId, (next, previous) => {
   text.value = drafts.get(next) ?? ''
   nextTick(() => autoResize())
 })
+// CHAT-UX-007：useChatInput.setText 写的是实例内部 ref（useChatInput.ts:198），
+// 而 textarea 绑定的是本组件 text——两个 ref 此前从不同步，setText/预填是
+// 死接口。单向镜像：实例侧变化落到输入框；用户输入不回写（实例侧 ref 无
+// 消费者依赖输入内容）。
+watch(() => chatInput.text.value, (next) => {
+  if (next !== text.value) text.value = next
+})
 const selectedThinkPathId = ref<ThinkPathId | null>(null)
 
 // ── 语音输入（GAP-A1-001） ──

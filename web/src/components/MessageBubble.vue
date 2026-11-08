@@ -26,9 +26,19 @@
       >
         {{ isCollapsed ? '展开' : '收起' }}
       </button>
-      <!-- GAP-A2-001：TTS 朗读按钮——WebView2 speechSynthesis 系统语音，
-           零 API 成本；未启用 TTS 时点击给出引导提示 -->
+      <!-- CHAT-UX-001：hover 操作条（对标 Claude Desktop/Codex）——复制/朗读
+           浮现于气泡右下，右键菜单保留为键盘可达与「引用选中」入口 -->
       <div v-if="role === 'assistant' && content" class="bubble-actions">
+        <button
+          class="bubble-action"
+          type="button"
+          :aria-label="copyState || '复制本条回复'"
+          @click.stop="copyReply"
+        >
+          {{ copyState || '复制' }}
+        </button>
+        <!-- GAP-A2-001：TTS 朗读按钮——WebView2 speechSynthesis 系统语音，
+             零 API 成本；未启用 TTS 时点击给出引导提示 -->
         <button
           class="bubble-action"
           type="button"
@@ -72,6 +82,7 @@ import StickerPreviewOverlay from './StickerPreviewOverlay.vue'
 import { useStickerSegments, type StickerSegment } from '@/composables/useStickerSegments'
 import { stripStickerDirectives } from '@/composables/stickerUtils'
 import { speakText, stopSpeaking, speakingState, lastSpeakError } from '@/composables/useTts'
+import { safeCopyText } from '@/lib/clipboard'
 import { showError } from '@/lib/toast'
 import { gsap, useGsap, easeMap, lazyLoadPlugin } from '@/composables/useGsap'
 
@@ -123,6 +134,16 @@ function previewSticker(sticker: StickerSegment) {
 // 此前静默失败 + 1.5s 盲猜 toast（"TTS 未启用"），WebView2 引擎启动慢时
 // 误报导致用户以为功能坏了。现在按真实结果给精确反馈；'ok' 后复查
 // 4s（引擎初始化），仍未开始才提示检查系统语音。
+// CHAT-UX-001：hover 操作条的复制（与右键菜单「复制」同一剪贴板通道）
+const copyState = ref('')
+let copyResetTimer: ReturnType<typeof setTimeout> | null = null
+async function copyReply() {
+  const ok = await safeCopyText(props.content ?? '')
+  copyState.value = ok ? '已复制' : '复制失败'
+  if (copyResetTimer) clearTimeout(copyResetTimer)
+  copyResetTimer = setTimeout(() => { copyState.value = '' }, 1600)
+}
+
 function toggleRead() {
   if (speakingState.value) {
     stopSpeaking()
@@ -330,11 +351,23 @@ useGsap((_ctx, contextSafe) => {
   border-color: var(--text-secondary);
 }
 
-/* ── 朗读按钮（GAP-A2-001） ── */
+/* ── hover 操作条（CHAT-UX-001）：悬停浮现，触屏常驻 ── */
 .bubble-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 6px;
   margin-top: 6px;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .message-row:hover .bubble-actions,
+  .bubble-actions:focus-within {
+    opacity: 1;
+  }
+}
+@media (hover: none) {
+  .bubble-actions { opacity: 1; }
 }
 
 .bubble-action {

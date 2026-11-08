@@ -409,7 +409,7 @@
   resize: none;
   font-family: inherit;
   min-height: 24px;
-  max-height: 160px;
+  max-height: 280px;
   overflow-y: auto;
   padding: 4px 2px 4px 10px;
 }
