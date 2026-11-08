@@ -297,7 +297,7 @@ onMounted(() => { void load() })
 .extension-skeleton-card span { display: block; height: 10px; border-radius: 999px; }
 .extension-skeleton-card span:nth-child(2) { width: 78%; }
 .extension-skeleton-card span:nth-child(3) { width: 46%; }
-@media (max-width: 520px) { .extension-skeleton-grid { grid-template-columns: 1fr; } }
+@media (max-width: 767px) { .extension-skeleton-grid { grid-template-columns: 1fr; } }
 .empty-icon { font-size: 2em; margin-bottom: var(--space-8); }
 .empty-title { font-size: 1em; font-weight: 600; margin-bottom: var(--space-4); }
 .empty-desc { font-size: var(--fs-ui); line-height: 1.6; }

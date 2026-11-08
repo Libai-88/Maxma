@@ -300,9 +300,9 @@ function severityLabel(sev: string): string {
 .btn-create {
   padding: 8px 16px; background: var(--accent); color: white; border: none;
   border-radius: var(--radius); font-size: 0.82em; font-weight: 500;
-  cursor: pointer; white-space: nowrap; transition: opacity 0.15s;
+  cursor: pointer; white-space: nowrap; transition: filter var(--duration-fast) var(--ease-out);
 }
-.btn-create:hover { opacity: 0.85; }
+.btn-create:hover { filter: brightness(1.08); }
 
 .filter-bar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
 .filter-chip {

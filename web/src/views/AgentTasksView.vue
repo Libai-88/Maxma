@@ -255,7 +255,7 @@ function handleTimelineAction(eventId: string, actionType: string) {
 
 /* 状态面板 */
 .state-panel {
-  max-width: 900px;
+  max-width: var(--view-max-width-narrow);
   margin: 0 auto;
   padding: 56px 24px;
   display: flex;
@@ -304,7 +304,7 @@ function handleTimelineAction(eventId: string, actionType: string) {
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   .page-header {
     flex-direction: column;
   }

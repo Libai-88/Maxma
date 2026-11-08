@@ -991,10 +991,10 @@ function handleQuickStart(message: string) {
   text-decoration: none;
   font-size: 0.95em;
   font-weight: 600;
-  transition: opacity 0.15s;
+  transition: filter var(--duration-fast) var(--ease-out);
 }
 .btn.primary:hover {
-  opacity: 0.85;
+  filter: brightness(1.08);
 }
 
 /* ── 增强版无提供商引导卡片（面向 Novice 画像） ── */
@@ -1350,7 +1350,7 @@ function handleQuickStart(message: string) {
 .task-brief-primary:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
 .task-brief-thinking { display: flex; align-items: center; gap: 10px; margin-top: 18px; color: var(--brief-muted); font-size: 14px; }
 .task-brief-spinner { width: 16px; height: 16px; border: 2px solid color-mix(in srgb, var(--accent) 24%, transparent); border-top-color: var(--accent); border-radius: 50%; animation: task-brief-spin .8s linear infinite; }
-@media (max-width: 640px) { .task-brief-panel { margin: 0 8px 10px; padding: 18px 16px; } .task-brief-header strong { font-size: 18px; } .task-brief-field-footer { flex-direction: column; gap: 3px; } .task-brief-primary { width: 100%; } }
+@media (max-width: 767px) { .task-brief-panel { margin: 0 8px 10px; padding: 18px 16px; } .task-brief-header strong { font-size: 18px; } .task-brief-field-footer { flex-direction: column; gap: 3px; } .task-brief-primary { width: 100%; } }
 .task-brief-readiness { display: grid; grid-template-columns: auto minmax(100px, 1fr) auto; align-items: center; gap: 10px; padding: 11px 13px; border: 1px solid var(--brief-line); border-radius: var(--radius-lg); background: var(--brief-soft); }
 .task-brief-readiness > div:first-child { display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
 .task-brief-readiness-label { color: var(--brief-muted); font-size: 12px; }
@@ -1385,5 +1385,5 @@ function handleQuickStart(message: string) {
 .task-review-copy span:last-child { color: var(--text-secondary); font-size: 12px; }
 .task-review-panel textarea { width: 100%; min-height: 58px; resize: vertical; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--bg-primary); color: var(--text-primary); font: inherit; font-size: 13px; line-height: 1.5; }
 .task-review-panel textarea:focus { outline: none; border-color: var(--status-ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-ok) 16%, transparent); }
-@media (max-width: 640px) { .collaboration-actions { align-items: stretch; flex-direction: column; } .collaboration-actions > div { width: 100%; } .collaboration-secondary, .collaboration-primary { flex: 1; } }
+@media (max-width: 767px) { .collaboration-actions { align-items: stretch; flex-direction: column; } .collaboration-actions > div { width: 100%; } .collaboration-secondary, .collaboration-primary { flex: 1; } }
 </style>

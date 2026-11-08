@@ -556,7 +556,7 @@ onUnmounted(() => {
 }
 .empty-link:hover { text-decoration: underline; }
 
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   .activity-header { flex-direction: column; align-items: stretch; }
   .activity-controls { justify-content: flex-end; }
   .header-sub { font-size: 0.78em; }

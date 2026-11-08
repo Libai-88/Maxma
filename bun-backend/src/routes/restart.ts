@@ -12,6 +12,8 @@ import { Hono } from "hono";
 import * as path from "node:path";
 
 import { record as recordActivity } from "../activity-hub";
+import { getActiveServer, gracefulShutdown } from "../server";
+import { getMetrics } from "../metrics";
 
 export function createRestartRoutes(): Hono {
   const app = new Hono();
@@ -21,13 +23,21 @@ export function createRestartRoutes(): Hono {
 
     const compiled = process.env.MAXMA_BACKEND_COMPILED === "1";
     if (compiled) {
-      // 打包形态：父进程监控负责重新拉起
-      setTimeout(() => process.exit(0), 100);
+      // 打包形态：父进程监控负责重新拉起。优雅收尾后再退（STABILITY-002）：
+      // flush 指标快照、卸插件宿主，不留孤儿定时器。
+      setTimeout(() => {
+        void gracefulShutdown("restart").finally(() => process.exit(0));
+      }, 100);
       return c.json({ status: "restarting" });
     }
 
-    // 开发形态：重新 spawn 自身（对齐 Python dev 分支）
+    // 开发形态：先释放端口再 spawn 自身。
+    // 此前是 spawn 后父进程拖 500ms 才 exit——子进程立刻绑 8000 必然
+    // EADDRINUSE（无重试，直接崩）。STABILITY-003：先 server.stop() 放掉
+    // 端口，子进程一次就能绑上；代价是约 1s 的重启窗口无服务。
     try {
+      getActiveServer()?.stop(true);
+      getMetrics().stopFlushTask();
       const scriptPath = path.resolve(import.meta.dir, "..", "server.ts");
       const proc = Bun.spawn([process.execPath, "run", scriptPath], {
         cwd: process.cwd(),
@@ -40,8 +50,9 @@ export function createRestartRoutes(): Hono {
       return c.json({ detail: `重启失败：${String(err)}` }, 500);
     }
 
-    // 等子进程完成初始化（端口监听就绪）后再退出当前进程
-    setTimeout(() => process.exit(0), 500);
+    // 端口已释放，直接退出（不给新旧进程共存窗口，providers.yaml 的
+    // 读-改-写也不会被两个进程并发踩）
+    setTimeout(() => process.exit(0), 50);
     return c.json({ status: "restarting" });
   });
 

@@ -370,7 +370,7 @@ const steps: Step[] = [
   grid-template-columns: repeat(2, 1fr);
   gap: 10px;
 }
-@media (max-width: 700px) {
+@media (max-width: 767px) {
   .capability-grid { grid-template-columns: 1fr; }
 }
 .capability-card {
@@ -541,7 +541,7 @@ const steps: Step[] = [
   font-weight: 600;
   color: var(--text-primary);
 }
-@media (max-width: 700px) {
+@media (max-width: 767px) {
   .compare-row { grid-template-columns: 1fr 1fr; }
   .compare-cell { font-size: 12px; padding: 6px 8px; }
   .compare-header-row .compare-cell:nth-child(n+3) { display: none; }
