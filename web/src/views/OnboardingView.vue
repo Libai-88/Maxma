@@ -116,8 +116,8 @@ useGsap((_ctx, contextSafe) => {
 </script>
 
 <style scoped>
-/* 遮罩色保留硬编码：--overlay-* token 最重只有 15%，撑不起模态遮罩的 44% 压暗 */
-.onboarding-backdrop { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; max-width: none; background: rgba(24, 27, 29, 0.44); }
+/* 遮罩色使用 --overlay-scrim（模态遮罩的 44% 压暗） */
+.onboarding-backdrop { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; max-width: none; background: var(--overlay-scrim); }
 .onboarding { width: min(100%, 560px); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg-card); box-shadow: var(--shadow-lg); }
 .onboarding-header, .onboarding-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 22px 24px; }.onboarding-header { border-bottom: 1px solid var(--border); }.onboarding-footer { border-top: 1px solid var(--border); }
 h2 { margin: 3px 0 0; font-size: 22px; color: var(--text-primary); }.eyebrow { color: var(--text-tertiary); font-size: 12px; letter-spacing: 0.08em; }
@@ -150,5 +150,5 @@ h2 { margin: 3px 0 0; font-size: 22px; color: var(--text-primary); }.eyebrow { c
 .swatch--night { background: #0D1117; }
 .swatch--midnight { background: #3B4A54; }
 .swatch--high-contrast { background: #FAF8F7; }
-@media (max-width: 520px) { .onboarding-backdrop { padding: 12px; }.onboarding-header, .onboarding-footer, .step-content { padding-left: 18px; padding-right: 18px; }.theme-options { grid-template-columns: 1fr; } }
+@media (max-width: 767px) { .onboarding-backdrop { padding: 12px; }.onboarding-header, .onboarding-footer, .step-content { padding-left: 18px; padding-right: 18px; }.theme-options { grid-template-columns: 1fr; } }
 </style>

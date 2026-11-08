@@ -559,6 +559,8 @@ async function finishTurn(hub: ChatWsHub, sessionId: string, state: TurnState): 
       const ids = hub.seenClientMsgIds.get(sessionId) ?? [];
       if (!ids.includes(state.clientMsgId)) {
         ids.push(state.clientMsgId);
+        // STABILITY-008：环形上限，防长会话无界增长（幂等窗口 200 条足够）
+        if (ids.length > 200) ids.splice(0, ids.length - 200);
         hub.seenClientMsgIds.set(sessionId, ids);
       }
     }
@@ -723,6 +725,12 @@ export function unregisterChatConnection(hub: ChatWsHub, sessionId: string, ws: 
   set.delete(ws);
   if (set.size === 0) {
     hub.connections.delete(sessionId);
+    // STABILITY-008：最后一连接断开时清掉会话级附属表，防按 sessionId 泄漏
+    // （此前只删 connections/turnStates/taskBrief/taskReview，eventChains/
+    //  wsBuckets/seenClientMsgIds 常驻不删，长进程下无界增长）。
+    eventChains.delete(sessionId);
+    wsBuckets.delete(sessionId);
+    hub.seenClientMsgIds.delete(sessionId);
     if (taskBriefStates.has(sessionId)) {
       taskBriefStates.delete(sessionId);
       turnStates.delete(sessionId);
@@ -733,9 +741,79 @@ export function unregisterChatConnection(hub: ChatWsHub, sessionId: string, ws: 
     turnStates.delete(sessionId);
     if (state) {
       state.cancelled = true;
-      void hub.callRpc("cancel", { session_id: sessionId }).catch(() => {});
+      // STABILITY-007：callKernelRpc 永不 reject，`.catch(() => {})` 是死代码；
+      // 取消失败意味着断开后回合仍在上游烧 token——必须可观察。
+      void hub.callRpc("cancel", { session_id: sessionId }).then((result) => {
+        if (!result.ok) {
+          getErrorCollector().addError(
+            "WARN",
+            "turn_cancel",
+            `WS 断开后取消在途回合失败（kernel 未确认），回合可能仍在消耗上游：${result.error}`,
+            { session_id: sessionId },
+          );
+        }
+      });
     }
   }
+}
+
+// ── 回合看门狗（STABILITY-006）──
+// kernel 回合挂起（error 事件未跟随 done）时 turnStates 常驻，后续每条
+// chat 被 BUSY 拒绝直到重连。这里按"已登记时长"硬超时：超时的回合取消
+// （kernel cancel）+ 广播 error，让客户端与 error-collector 都能看到。
+const TURN_STALE_MS = 30 * 60_000;
+export const TURN_WATCHDOG_INTERVAL_MS = 60_000;
+
+export function sweepStaleTurns(hub: ChatWsHub, now: number = performance.now()): string[] {
+  const stale: string[] = [];
+  for (const [sessionId, state] of turnStates) {
+    if (now - state.startedAt < TURN_STALE_MS) continue;
+    turnStates.delete(sessionId);
+    state.cancelled = true;
+    stale.push(sessionId);
+    void hub.callRpc("cancel", { session_id: sessionId }).then((result) => {
+      if (!result.ok) {
+        getErrorCollector().addError(
+          "WARN",
+          "turn_watchdog",
+          `看门狗取消超时回合失败：${result.error}`,
+          { session_id: sessionId },
+        );
+      }
+    });
+    hub.broadcast(sessionId, {
+      type: "error",
+      payload: {
+        code: "turn_timeout",
+        message: "本回合超过 30 分钟未见完成，已自动取消（内核可能无响应）。可重试或新建会话。",
+        turn_id: state.turnId ?? null,
+      },
+    });
+  }
+  if (stale.length > 0) {
+    console.warn(`[chat-ws] watchdog swept ${stale.length} stale turn(s): ${stale.map((s) => s.slice(0, 8)).join(",")}`);
+  }
+  return stale;
+}
+
+let turnWatchdogTimer: ReturnType<typeof setInterval> | undefined;
+
+/** 启动回合看门狗（server.ts 装配；测试可直接调 sweepStaleTurns）。 */
+export function startTurnWatchdog(hub: ChatWsHub): void {
+  if (turnWatchdogTimer) return;
+  turnWatchdogTimer = setInterval(() => {
+    try {
+      sweepStaleTurns(hub);
+    } catch (err) {
+      console.error(`[chat-ws] watchdog iteration failed: ${String(err)}`);
+    }
+  }, TURN_WATCHDOG_INTERVAL_MS);
+  if (typeof turnWatchdogTimer.unref === "function") turnWatchdogTimer.unref();
+}
+
+export function stopTurnWatchdog(): void {
+  clearInterval(turnWatchdogTimer);
+  turnWatchdogTimer = undefined;
 }
 
 // ── client 消息分发 ──

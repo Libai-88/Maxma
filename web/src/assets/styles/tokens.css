@@ -38,6 +38,9 @@
   --shadow: var(--shadow-md);
   --shadow-pink: 0 4px 16px var(--shadow-color, rgba(120, 100, 80, 0.14));
   --radius-pill: 999px;
+  /* 模态遮罩：暖黑 44%（原 OnboardingView 内联值提升为 token）。
+     --overlay-* 档位只到 15%，撑不起模态压暗；主题可覆盖此值。 */
+  --overlay-scrim: rgba(24, 27, 29, 0.44);
 
   /* ── 动效时长（三档制） ── */
   --duration-instant: 0.1s;   /* hover、关闭、退场 */

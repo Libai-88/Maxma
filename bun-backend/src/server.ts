@@ -56,15 +56,16 @@ import { createToolsRoutes } from "./routes/tools";
 import { createRestartRoutes } from "./routes/restart";
 import { createUploadRoutes } from "./routes/upload";
 import { createPluginsRoutes } from "./routes/plugins";
-import { currentPluginHttpHandlers, ensurePluginBridgeInstalled } from "./plugins/dsh";
+import { currentPluginHttpHandlers, ensurePluginBridgeInstalled, disposeDshPluginHost } from "./plugins/dsh";
 import { createPluginHttpBridge } from "./plugins/dsh/http-bridge";
 import { createFileRoutes } from "./routes/files";
 import { createDiagnosticsRoutes } from "./routes/diagnostics";
 import { createCapabilitiesRoutes } from "./routes/capabilities";
-import { startBackgroundSync } from "./services/opencode-zen";
-import { startKiloBackgroundSync } from "./services/kilo-free";
+import { startBackgroundSync, stopBackgroundSync } from "./services/opencode-zen";
+import { startKiloBackgroundSync, stopKiloBackgroundSync } from "./services/kilo-free";
 import { initializeDatabase } from "./db/core";
 import { getMetrics } from "./metrics";
+import { getErrorCollector } from "./error-collector";
 import { startLlmUsageRetentionTask } from "./llm-usage-ledger";
 import { getApiDataDir } from "./app-paths";
 import { record as recordActivity } from "./activity-hub";
@@ -75,6 +76,8 @@ import {
   onKernelEvent,
   registerChatConnection,
   unregisterChatConnection,
+  startTurnWatchdog,
+  stopTurnWatchdog,
   type ChatWsHub,
   type KernelRpcResult,
   type WsData,
@@ -171,6 +174,18 @@ export function createApp(): Hono {
   // 数据库迁移（对齐 Python db/core.py import 时自动初始化：v1-v7 schema）
   initializeDatabase();
   const app = new Hono();
+
+  // STABILITY-009：全局错误边界。路由抛出走 Bun 默认 = 形状不归一、
+  // 不进 error-collector、与 request-log 的 trace_id 断关联。
+  app.onError((err, c) => {
+    getErrorCollector().addError(
+      "ERROR",
+      "http",
+      `${c.req.method} ${c.req.path} → 500: ${err instanceof Error ? err.message : String(err)}`,
+      { exception: err instanceof Error ? (err.stack ?? null) : null },
+    );
+    return c.json({ detail: "内部错误，已记录（详见诊断页）" }, 500);
+  });
 
   // 中间件顺序与 Python 版一致：RequestLog -> RateLimit -> Auth -> CORS -> 路由
   // （Python add_middleware LIFO：后 add 先执行；CORS 最先 add → 最内层。
@@ -382,13 +397,81 @@ export async function serveFrontend(pathname: string, distDir: string = getWebDi
 const app = createApp();
 
 /** 启动 HTTP/WS 监听（仅直接运行时调用；测试只 import createApp/serveFrontend）。 */
+// ── 进程级健壮性（STABILITY-001/002/010）──
+// 此前全仓无 uncaughtException/unhandledRejection/SIGINT/SIGTERM 兜底：
+// 逃逸的 rejection 直接崩掉进程；restart.ts process.exit(0) 硬退出，
+// 不停 flush、不卸插件宿主、不广播 WS close，遗留孤儿子进程。
+
+/** 逃逸错误统一出口：进 error-collector（持久诊断）+ stderr，不静默。 */
+export function reportEscapedError(kind: string, err: unknown): void {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error(`[${kind}] ${message}`, err instanceof Error ? err.stack : "");
+  try {
+    getErrorCollector().addError("ERROR", "process", `[${kind}] ${message}`, {
+      exception: err instanceof Error ? (err.stack ?? null) : null,
+    });
+  } catch {
+    /* 诊断器自身故障时只留 stderr */
+  }
+}
+
+/** 注册逃逸错误兜底（uncaughtException 保持进程存活：记录优先，让上层决定重启）。 */
+export function registerProcessGuards(): void {
+  process.on("unhandledRejection", (reason) => reportEscapedError("unhandledRejection", reason));
+  process.on("uncaughtException", (err) => reportEscapedError("uncaughtException", err));
+}
+
+let activeServer: ReturnType<typeof Bun.serve> | null = null;
+
+/** 供 restart 路由先释放端口再 spawn 子进程（否则新进程 EADDRINUSE）。 */
+export function getActiveServer(): ReturnType<typeof Bun.serve> | null {
+  return activeServer;
+}
+
+/** 优雅关闭：WS 全部广播 close(1001) → 停后台任务 → 卸插件宿主 → flush 指标。 */
+export async function gracefulShutdown(reason: string): Promise<void> {
+  console.info(`[shutdown] graceful shutdown start (${reason})`);
+  try {
+    for (const [sessionId, conns] of wsConnections) {
+      for (const ws of conns) {
+        try {
+          ws.close(1001, "server shutting down");
+        } catch { /* 已断开 */ }
+      }
+      void sessionId;
+    }
+    wsConnections.clear();
+  } catch (err) {
+    console.warn(`[shutdown] ws close failed: ${String(err)}`);
+  }
+  stopBackgroundSync();
+  stopKiloBackgroundSync();
+  stopTurnWatchdog();
+  try {
+    await Promise.race([
+      disposeDshPluginHost(),
+      new Promise((resolve) => setTimeout(resolve, 3000)),
+    ]);
+  } catch (err) {
+    console.warn(`[shutdown] plugin host dispose failed: ${String(err)}`);
+  }
+  try {
+    getMetrics().stopFlushTask();
+  } catch (err) {
+    console.warn(`[shutdown] metrics flush failed: ${String(err)}`);
+  }
+  console.info("[shutdown] graceful shutdown done");
+}
+
 export function startServer() {
   startLlmUsageRetentionTask();
   // 显式带上 WsData 泛型：不写的话 Bun.serve 推导出 `ServerWebSocket<undefined>`，
   // 于是下面 websocket 回调里 `ws.data` 是 undefined、`server.upgrade({data})`
   // 也判为不兼容（实测 5 处 tsc 错误）。泛型是这里唯一的正解——用断言去压会
   // 把"data 形状写错"这类真问题一起盖住。
-  return Bun.serve<WsData>({
+  const server = Bun.serve<WsData>({
+    // STABILITY-004：配合 upgrade idleTimeout
+    idleTimeout: 120,
     port: PORT,
     ...(process.env.MAXMA_BUN_HOST ? { hostname: process.env.MAXMA_BUN_HOST } : {}),
     async fetch(req, server) {
@@ -416,6 +499,9 @@ export function startServer() {
         // 传空对象 {} 会触发 Bun 的 upgrade headers 校验异常。
         const upgraded = server.upgrade(req, {
           data: { sessionId } satisfies WsData,
+          // STABILITY-004：半开连接检测由 serve 顶层的 idleTimeout(120s) 承担——
+          // 此 Bun 版本的 upgrade 选项不接受 idleTimeout（TS2353 已验证）。
+          // 前端 useChat 有自动重连，超时断开可自愈。
         });
         if (!upgraded) return new Response("WebSocket upgrade failed", { status: 400 });
         return undefined as unknown as Response;
@@ -449,9 +535,19 @@ export function startServer() {
       },
     },
   });
+
+  activeServer = server;
+  startTurnWatchdog(chatHub);
+  return server;
 }
 
 if (import.meta.main || process.env.MAXMA_BACKEND_COMPILED === "1") {
+  registerProcessGuards();
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.on(signal, () => {
+      void gracefulShutdown(signal).finally(() => process.exit(0));
+    });
+  }
   const server = startServer();
   console.log(`[bun-backend] listening on http://127.0.0.1:${server.port} (engine=bun-backend)`);
 

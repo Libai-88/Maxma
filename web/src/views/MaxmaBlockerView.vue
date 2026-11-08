@@ -292,9 +292,10 @@ onMounted(loadEntries)
   color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
+  transition: border-color var(--duration-fast) var(--ease-out);
 }
 .rule-summary:hover {
-  opacity: 0.8;
+  border-color: var(--border-strong, color-mix(in srgb, var(--accent) 30%, var(--border)));
 }
 .rule-body {
   padding: 0 var(--space-16) var(--space-12);
@@ -370,7 +371,7 @@ onMounted(loadEntries)
 
 /* ── 表单 ── */
 .form-card {
-  max-width: 560px;
+  max-width: var(--view-max-width-narrow);
   display: flex;
   flex-direction: column;
   gap: var(--section-gap);
@@ -432,10 +433,10 @@ onMounted(loadEntries)
   color: var(--text-primary);
   cursor: pointer;
   font-size: 13px;
-  transition: opacity 0.15s;
+  transition: border-color var(--duration-fast) var(--ease-out);
   white-space: nowrap;
 }
-.btn:hover { opacity: 0.8; }
+.btn:hover { border-color: var(--border-strong, color-mix(in srgb, var(--accent) 30%, var(--border))); }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-primary {
   background: var(--accent);

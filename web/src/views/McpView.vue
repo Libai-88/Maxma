@@ -1402,7 +1402,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: var(--space-24);
-  max-width: 720px;
+  max-width: var(--view-max-width-narrow);
   width: 100%;
 }
 
@@ -1458,7 +1458,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
 	.role-guidance {
 	  display: flex;
 	  gap: var(--space-16);
-	  max-width: 720px;
+	  max-width: var(--view-max-width-narrow);
 	  width: 100%;
 	}
 	.role-card {
@@ -1526,7 +1526,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: var(--space-16);
 }
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   .card-grid { grid-template-columns: 1fr; }
 }
 
@@ -1710,7 +1710,7 @@ onMounted(() => { loadServers(); loadDiscovered() })
 
 /* ── 表单 ── */
 .wizard-form {
-  max-width: 560px;
+  max-width: var(--view-max-width-narrow);
   display: flex;
   flex-direction: column;
   gap: var(--space-16);
@@ -1948,11 +1948,6 @@ select.input {
   border-radius: var(--radius-md);
   padding: var(--space-12) var(--space-16);
   margin: var(--space-8) 0;
-  opacity: 0.85;
-  transition: opacity 0.15s;
-}
-.server-card:hover {
-  opacity: 1;
 }
 .server-card .server-header {
   display: flex;
@@ -2009,7 +2004,7 @@ select.input {
 	}
 
 /* ── 响应式 ── */
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   .guide-cards {
     grid-template-columns: 1fr;
   }
@@ -2020,7 +2015,7 @@ select.input {
 
 /* ── 模板快速入口（空状态） ── */
 .preset-templates {
-  max-width: 720px;
+  max-width: var(--view-max-width-narrow);
   width: 100%;
   margin-top: var(--space-8);
 }
@@ -2120,7 +2115,7 @@ select.input {
   display: flex;
   gap: var(--space-12);
   margin-bottom: var(--space-24);
-  max-width: 560px;
+  max-width: var(--view-max-width-narrow);
 }
 .marketplace-search-input {
   flex: 1;
@@ -2132,7 +2127,7 @@ select.input {
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: var(--space-16);
 }
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   .marketplace-grid { grid-template-columns: 1fr; }
 }
 

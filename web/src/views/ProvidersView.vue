@@ -889,9 +889,11 @@ onMounted(() => {
   color: var(--text-primary);
   cursor: pointer;
   font-size: 13px;
-  transition: opacity 0.15s;
+  transition: border-color var(--duration-fast) var(--ease-out);
 }
-.btn:hover { opacity: 0.8; }
+.btn:hover {
+  border-color: var(--border-strong, color-mix(in srgb, var(--accent) 30%, var(--border)));
+}
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn.primary {
   background: var(--accent);
@@ -908,10 +910,10 @@ onMounted(() => {
 	  grid-template-columns: repeat(3, 1fr);
 	  gap: 20px;
 	}
-@media (max-width: 1100px) {
+@media (min-width: 768px) and (max-width: 1279px) {
   .card-grid { grid-template-columns: repeat(2, 1fr); }
 }
-@media (max-width: 700px) {
+@media (max-width: 767px) {
   .card-grid { grid-template-columns: 1fr; }
 }
 
@@ -1147,10 +1149,10 @@ onMounted(() => {
 	  color: var(--text-secondary);
 	  font-size: 13px;
 	  cursor: pointer;
-	  transition: opacity 0.15s;
+	  transition: border-color var(--duration-fast) var(--ease-out);
 	}
 	.action-btn:hover {
-	  opacity: 0.7;
+	  border-color: var(--border-strong, color-mix(in srgb, var(--accent) 30%, var(--border)));
 	}
 .builtin-managed,
 .builtin-action-note {
@@ -1171,7 +1173,7 @@ onMounted(() => {
 
 /* ── Form ── */
 .wizard-form {
-  max-width: 560px;
+  max-width: var(--view-max-width-narrow);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -1285,10 +1287,10 @@ select.input { cursor: pointer; }
   gap: 16px;
   width: 100%;
 }
-@media (max-width: 1100px) {
+@media (min-width: 768px) and (max-width: 1279px) {
   .skeleton-grid { grid-template-columns: repeat(2, 1fr); }
 }
-@media (max-width: 700px) {
+@media (max-width: 767px) {
   .skeleton-grid { grid-template-columns: 1fr; }
 }
 .skeleton-card {
@@ -1368,7 +1370,7 @@ select.input { cursor: pointer; }
   gap: 12px;
   margin-bottom: 24px;
 }
-@media (max-width: 700px) {
+@media (max-width: 767px) {
   .recommend-grid { grid-template-columns: 1fr; }
 }
 .recommend-card {

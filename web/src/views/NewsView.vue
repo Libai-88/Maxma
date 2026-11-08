@@ -122,7 +122,7 @@ onMounted(() => {
 }
 
 .news-content {
-  max-width: 720px;
+  max-width: var(--chat-column-width);
   margin: 0 auto;
 }
 
