@@ -123,6 +123,20 @@
   .markdown-body .md-code-copy { opacity: 1; }
 }
 
+/* CHAT-UX-004：语言标签（左上角，与复制按钮同排但更轻）。
+   pre 顶部已有 30px 呼吸空间（.md-code pre 规则），标签放得下。 */
+.markdown-body .md-code-lang {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-hint);
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+  pointer-events: none;
+  user-select: none;
+}
+
 .markdown-body pre code {
   background: none;
   padding: 0;

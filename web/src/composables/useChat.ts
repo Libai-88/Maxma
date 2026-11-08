@@ -413,6 +413,19 @@ function getOrCreateChannel(sid: string): SessionChannel {
   return getChatStore().getOrCreateChannel(sid) as SessionChannel
 }
 
+// ── CHAT-UX-012：失败轮次绑定 ──────────────────────────────
+// 轮次以失败（error/超时/连接中断）终结落库时，记录其在 turns 中的索引；
+// handleRetryLast 优先重试该轮的用户消息，避免失败后又发新消息时重试错位
+// 到最新一轮。done（成功完成）到达时清除。字段挂在 channel 状态上（与
+// error 同处），以交叉类型扩展，不改 stores/chat.ts 的 SessionChannel 定义。
+type ChannelWithFailedTurn = SessionChannel & { failedTurnIndex?: number | null }
+
+/** 失败轮次落库 → 记录失败轮索引（该轮刚被推入 turns 末尾）。 */
+function markFailedTurn(ch: SessionChannel): void {
+  ;(ch as ChannelWithFailedTurn).failedTurnIndex = ch.turns.length - 1
+}
+// 轮次成功完成时在 done 分支内联清除 failedTurnIndex（单调用点，不设辅助函数）。
+
 /** 持久化防抖（PERF-002）：流式期间 done/memory/工具事件高频触发 persistTurns，
  *  每次全量 JSON.stringify 到 localStorage 是 O(n) 主线程序列化，长会话下
  *  累计 O(n²) 卡顿。改为 800ms 尾随防抖；关键边界（切会话/断开）用
@@ -849,6 +862,8 @@ async function connectSession(sid: string) {
         interrupted.finalAnswer = '（连接中断，回复未完成）'
       }
       chFinal.turns.push(interrupted)
+      // CHAT-UX-012：中断轮落库 → 绑定失败轮索引供重试定位
+      markFailedTurn(chFinal)
       chFinal.currentTurn = null
       chFinal.isStreaming = false
       chFinal.streamPhase = 'error'
@@ -886,6 +901,8 @@ async function connectSession(sid: string) {
         interrupted.finalAnswer = '（连接中断，回复未完成）'
       }
       chFinal.turns.push(interrupted)
+      // CHAT-UX-012：中断轮落库 → 绑定失败轮索引供重试定位
+      markFailedTurn(chFinal)
       chFinal.currentTurn = null
       chFinal.isStreaming = false
       chFinal.streamPhase = 'error'
@@ -1315,7 +1332,8 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
 
   switch (event.type) {
     case 'thinking_start':
-      turn.events.push({ kind: 'thinking', tokens: '', done: false, becameAnswer: false })
+      // CHAT-UX-002：记录开始时间，thinking_end 时算出耗时供 header 展示
+      turn.events.push({ kind: 'thinking', tokens: '', done: false, becameAnswer: false, startedAt: Date.now() })
       break
 
     case 'token': {
@@ -1366,6 +1384,10 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       const lastThink = findLastThinking(turn.events)
       if (lastThink) {
         lastThink.done = true
+        // CHAT-UX-002：算出思考耗时（秒，1 位小数），完成态 header 显示「思考 · N.Ns」
+        if (lastThink.startedAt != null) {
+          lastThink.elapsed = Math.max(0, Math.round((Date.now() - lastThink.startedAt) / 100) / 10)
+        }
       }
       break
     }
@@ -1540,6 +1562,8 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     case 'done': {
       ch.taskBrief = null
       if (ch._turnWatchdog) { clearTimeout(ch._turnWatchdog); ch._turnWatchdog = null }
+      // CHAT-UX-012：本轮成功完成 → 清除失败轮索引，重试回退「取最后一轮」现行为
+      ;(ch as ChannelWithFailedTurn).failedTurnIndex = null
       ch.isAwaitingUser = false
       ch._awaitingToolName = null
       // TURN-OWNERSHIP-001：记录已终结轮次 id，用于过滤迟到事件
@@ -1643,6 +1667,8 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
           interrupted.finalAnswer = '（发生错误，回复未完成）'
         }
         ch.turns.push(interrupted)
+        // CHAT-UX-012：失败轮落库 → 绑定失败轮索引供重试定位
+        markFailedTurn(ch)
         ch.currentTurn = null
       }
       log.warn(`error: ${event.payload.code} (${event.payload.category ?? 'unknown'})`, event.payload.message)
@@ -1977,6 +2003,14 @@ export function useChat(sessionId: Ref<string>) {
   const errorCategory = computed(() => activeChannel.value.errorCategory)
   const errorTraceId = computed(() => activeChannel.value.errorTraceId)
   const errorDiagnostic = computed(() => activeChannel.value.errorDiagnostic)
+  /** CHAT-UX-012：最近一次失败轮次的索引。索引越界/该轮无用户消息时视为失效，
+   *  返回 null → handleRetryLast 回退到「取最后一轮」的现行为。 */
+  const failedTurnIndex = computed<number | null>(() => {
+    const ch = activeChannel.value as ChannelWithFailedTurn
+    const idx = ch.failedTurnIndex
+    if (idx == null || idx < 0 || idx >= ch.turns.length) return null
+    return ch.turns[idx]?.userMessage ? idx : null
+  })
   const contextUsage = computed(() => activeChannel.value.contextUsage)
   const taskTrackerData = computed(() => activeChannel.value.taskTrackerData)
 
@@ -2176,6 +2210,8 @@ export function useChat(sessionId: Ref<string>) {
           stalled.finalAnswer = '（任务超时，回复未完成）'
         }
         c.turns.push(stalled)
+        // CHAT-UX-012：超时轮落库 → 绑定失败轮索引供重试定位
+        markFailedTurn(c)
         c.currentTurn = null
         c.isAwaitingUser = false
         c._awaitingToolName = null
@@ -2479,6 +2515,7 @@ export function useChat(sessionId: Ref<string>) {
 
   return {
     connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId, errorDiagnostic,
+    failedTurnIndex,
     contextUsage, taskTrackerData,
     reconnectExhausted, reconnect,
     send, cancel, answerTaskBrief, executeTaskBrief, cancelTaskBrief, sendCollaborationMessage, sendTaskReview, sendUserResponse, sendArtifactAction, sendPlanResponse, sendPlanMode, sendCheckpointAction, removeTurns,

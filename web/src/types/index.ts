@@ -707,6 +707,10 @@ export interface ThinkingBlock {
   done: boolean
   becameAnswer: boolean
   consumed?: boolean  // 中间思考块（工具调用前的思考），UI 不渲染
+  /** CHAT-UX-002：thinking_start 到达时间戳（ms），用于计算思考耗时 */
+  startedAt?: number
+  /** CHAT-UX-002：思考耗时（秒，1 位小数）；完成态 header 显示「思考 · N.Ns」 */
+  elapsed?: number
 }
 
 /** ask_user 交互工具在前端存储的交互数据 */
