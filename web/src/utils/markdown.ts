@@ -35,6 +35,32 @@ export function resolveStickerSrc(src: string): string {
   return match ? `/api/stickers/${match[1]}` : src
 }
 
+/**
+ * `<sticker:category/file.webp>` 标记 → 内联 `<img>`。
+ *
+ * 两种来源都会写出这个标记：用户在输入框插入贴纸（前端生成），以及模型
+ * 回显用户消息里的贴纸标记。此前只有用户气泡解析它，assistant 回答里就
+ * 露出裸标签（表现为「表情功能失效」）。这里在 markdown 渲染前统一展开。
+ *
+ * 代码块与行内代码里的同名文本**不展开**（那是被讨论的代码，不是贴纸）。
+ */
+const STICKER_TAG_RE = /<sticker:([^<>\s]+)>/g
+const PROTECTED_CODE_RE = /(```[\s\S]*?```|`[^`\n]*`)/g
+
+export function expandStickerTags(input: string): string {
+  if (!input || !input.includes('<sticker:')) return input
+  return input
+    .split(PROTECTED_CODE_RE)
+    .map((seg, i) => {
+      // split 带捕获组：奇数下标是受保护的代码片段，原样保留
+      if (i % 2 === 1) return seg
+      return seg.replace(STICKER_TAG_RE, (_m, path: string) =>
+        `<img src="/api/stickers/${path}" alt="贴纸" class="md-sticker">`,
+      )
+    })
+    .join('')
+}
+
 // markdown-it 的 image token 渲染：![sticker](日常/xxx.webp) 走这里
 const defaultImageRule = md.renderer.rules.image
 md.renderer.rules.image = function (tokens, idx, options, env, self) {
@@ -253,8 +279,8 @@ function getCachedRender(input: string, sanitize = true): string {
     cache.set(input, cached)
     return cached
   }
-  // 未命中：渲染并缓存
-  const html = md.render(input)
+  // 未命中：渲染并缓存（贴纸标记先展开成 <img>，再走 markdown + 消毒）
+  const html = md.render(expandStickerTags(input))
   const output = sanitize ? sanitizeHtml(html) : html
   if (cache.size >= RENDER_CACHE_MAX) {
     // 删除最早插入的条目
