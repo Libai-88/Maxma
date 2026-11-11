@@ -1,38 +1,47 @@
-import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { create } from 'zustand'
 import { api } from '@/api'
 import type { MetricsSnapshot, MetricsHistoryResponse } from '@/types'
 
-export const useMetricsStore = defineStore('metrics', () => {
-  const snapshot = ref<MetricsSnapshot | null>(null)
-  const history = ref<MetricsHistoryResponse | null>(null)
-  const loading = ref(false)
-  const error = ref<string | null>(null)
+interface MetricsState {
+  snapshot: MetricsSnapshot | null
+  history: MetricsHistoryResponse | null
+  loading: boolean
+  error: string | null
+  refresh: () => Promise<void>
+  loadHistory: (windowSeconds?: number) => Promise<void>
+}
 
+export const useMetricsStore = create<MetricsState>()((set) => {
   async function refresh() {
-    loading.value = true
-    error.value = null
+    set({ loading: true, error: null })
     try {
-      snapshot.value = await api.getMetrics()
+      const snapshot = await api.getMetrics()
+      set({ snapshot })
     } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : String(e)
-      snapshot.value = null
+      set({ error: e instanceof Error ? e.message : String(e), snapshot: null })
     } finally {
-      loading.value = false
+      set({ loading: false })
     }
   }
 
   async function loadHistory(windowSeconds: number = 3600) {
     try {
-      history.value = await api.getMetricsHistory(windowSeconds)
+      const history = await api.getMetricsHistory(windowSeconds)
+      set({ history })
     } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : String(e)
-      history.value = null
+      set({ error: e instanceof Error ? e.message : String(e), history: null })
     }
   }
 
   // 注：轮询由 MetricsView 自行管理（onMounted/onUnmounted 配对），
   // 此 store 不内置定时器（此前 startPolling/stopPolling 无调用者，已移除）
 
-  return { snapshot, history, loading, error, refresh, loadHistory }
+  return {
+    snapshot: null,
+    history: null,
+    loading: false,
+    error: null,
+    refresh,
+    loadHistory,
+  }
 })

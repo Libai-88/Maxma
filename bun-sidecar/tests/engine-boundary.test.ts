@@ -565,32 +565,15 @@ describe("RPC 方法清单与实现必须一致", () => {
 describe("跨侧清单一致性（同一件事不许三处各写各的）", () => {
   test("面板 CORE_PATHS 与面板内每个 set/toggle 的键都必须已登记", () => {
     const registered = new Set(MAXMA_SETTINGS_KEYS.map((k) => k.path));
-    const view = read("web/src/views/SettingsView.vue");
+    const view = read("web/src/views/SettingsView.tsx");
 
-    // 1) 精确解析 CORE_PATHS 数组本体。不靠"像不像配置键"的启发式：上一版用
-    //    首段前缀过滤，`vault.enabled` 因为登记表里没有任何 vault.* 而漏检，
-    //    那个洞是靠人手工发现的，不该依赖人。
-    const block = view.match(/const CORE_PATHS\s*=\s*\[([\s\S]*?)\]/);
-    expect(block, "找不到 CORE_PATHS 数组（面板结构变了请同步本测试）").not.toBeNull();
-    // 先剥注释：数组里夹着 `// consumer: "pi"` 这类分组注释，不剥会把引号里的
-    // 分类名当成配置键（实测误报过 pi / maxma 两条）。
-    const blockBody = block![1]!
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .split("\n")
-      .filter((line) => !/^\s*\/\//.test(line))
-      .join("\n");
-    const corePaths = [...blockBody.matchAll(/['"]([^'"]+)['"]/g)].map((m) => m[1]!);
-    expect(corePaths.length, "CORE_PATHS 解析为空，正则失效").toBeGreaterThan(0);
-    const unregisteredCore = corePaths.filter((p) => !registered.has(p));
-    expect(
-      unregisteredCore,
-      `CORE_PATHS 里有未登记的键（GET 会跳过、PUT 回 422）：\n  ${unregisteredCore.join("\n  ")}`,
-    ).toEqual([]);
-
-    // 2) 面板里实际读写的键：set('a.b', …) / toggle('a.b') / settings['a.b']
+    // 前端重写后不再有 CORE_PATHS 清单（旧架构的 4 份副本之一），改为直接对账
+    // 面板里**实际读写**的每个键：GET 会跳过未登记键、PUT 回 422，静默丢失。
+    // 读取点：set('a.b', …) / toggle('a.b') / settings['a.b'] / num('a.b')
     const written = new Set<string>();
-    for (const m of view.matchAll(/(?:set|toggle)\(\s*['"]([^'"]+)['"]/g)) written.add(m[1]!);
+    for (const m of view.matchAll(/(?:set|toggle|num)\(\s*['"]([^'"]+)['"]/g)) written.add(m[1]!);
     for (const m of view.matchAll(/settings\[\s*['"]([^'"]+)['"]\s*\]/g)) written.add(m[1]!);
+    for (const m of view.matchAll(/k=\{?["']([a-z][a-zA-Z0-9_.]+)["']/g)) written.add(m[1]!);
     const unregisteredWrites = [...written].filter((p) => p.includes(".") && !registered.has(p));
     expect(
       unregisteredWrites,
@@ -630,9 +613,10 @@ describe("跨侧清单一致性（同一件事不许三处各写各的）", () =
 
   test("前端词表必须与契约同源：thinking 档位、compaction reason、goal 状态、工具展示名", () => {
     // 1) thinking level：前端标签表里的档位必须都在引擎档位内
-    const view = read("web/src/views/SettingsView.vue");
+    const view = read("web/src/views/SettingsView.tsx");
     const uiLevels = new Set<string>();
-    for (const m of view.matchAll(/'?(off|minimal|low|medium|high|xhigh|max)'?\s*:/g)) uiLevels.add(m[1]!);
+    // 档位表现在是 `{ value: 'off', label: '关闭' }` 的对象数组
+    for (const m of view.matchAll(/value:\s*'(off|minimal|low|medium|high|xhigh|max)'/g)) uiLevels.add(m[1]!);
     const unknownLevels = [...uiLevels].filter((l) => !(PI_THINKING_LEVELS as readonly string[]).includes(l));
     expect(unknownLevels, `UI 出现引擎不认识的 thinking 档位：${unknownLevels.join(", ")}`).toEqual([]);
 
@@ -697,17 +681,12 @@ describe("跨侧清单一致性（同一件事不许三处各写各的）", () =
       `这些当前会被调用的工具在展示字典里没有映射（气泡标题会退回英文）：\n  ${unmapped.join("\n  ")}`,
     ).toEqual([]);
 
-    // 5) 前端测试自己抄了一份"引擎内置工具"清单（web/tests/toolRegistry.spec.ts）。
-    //    那份清单**只能等于我方的默认启用集**，不许从记忆里的"7 个"手抄——
-    //    本仓的引擎工具数已经从 7 变成 8（powershell 存在但未默认启用），
-    //    这类数字一旦漂移，前端断言就会悄悄守着一张过期的名单。
-    const webTest = read("web/tests/toolRegistry.spec.ts");
-    const webBuiltin = webTest.match(/const PI_BUILTIN_TOOLS\s*=\s*\[([^\]]*)\]/);
-    expect(webBuiltin, "web/tests/toolRegistry.spec.ts 里的内置工具清单结构变了，请同步本校验").not.toBeNull();
-    const listed = [...webBuiltin![1]!.matchAll(/'([^']+)'/g)].map((m) => m[1]!);
+    // 5) 前端测试套件随 React 重写退役（旧断言绑定在已删除的 Vue 组件 DOM 上），
+    //    原先「前端测试别手抄内置清单」的对账已无对象。保留真正在乎的不变量：
+    //    Maxma 默认启用集必须是引擎内置集的子集（引擎改名/删名时约束仍生效）。
     expect(
-      listed,
-      `前端测试的内置工具清单与契约的默认启用集不一致（引擎工具数变化时这里必须同步）`,
-    ).toEqual([...MAXMA_ENABLED_DEFAULT_TOOLS]);
+      MAXMA_ENABLED_DEFAULT_TOOLS.filter((t) => !(PI_BUILTIN_TOOLS as readonly string[]).includes(t)),
+      "默认启用集里出现引擎不认识的工具名",
+    ).toEqual([]);
   });
 });

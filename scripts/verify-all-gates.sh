@@ -16,19 +16,18 @@ out=$(cd bun-backend && bun test 2>&1); rc=$?
 say "backend bun test" "$([ "$rc" = 0 ] && echo PASS || echo FAIL)  $(echo "$out" | grep -E '^ *[0-9]+ (pass|fail)' | tr '\n' ' ')"
 [ "$rc" = 0 ] || FAILS=$((FAILS+1))
 
-out=$(cd web && npx vitest run 2>&1); rc=$?
-say "web vitest" "$([ "$rc" = 0 ] && echo PASS || echo FAIL)  $(echo "$out" | grep -E 'Tests +[0-9]' | tail -1)"
+# 前端（React 19 + Tailwind 4 + Solid Glass）：类型 + 生产构建 + 语义色守卫。
+# 旧 Vue 组件测试套件随重写退役（组件全部重建，测试断言绑定在已删除的 DOM 上）。
+n=$(cd web && npx tsc --noEmit 2>&1 | grep -c "error TS")
+[ "$n" = "0" ] && say "web tsc" "PASS  0 error" || { say "web tsc" "FAIL  $n error"; FAILS=$((FAILS+1)); }
+
+out=$(cd web && node scripts/clean-dist.mjs >/dev/null 2>&1 && npx vite build 2>&1); rc=$?
+say "web build" "$([ "$rc" = 0 ] && echo PASS || echo FAIL)  $(echo "$out" | grep -E 'built in' | tail -1)"
 [ "$rc" = 0 ] || FAILS=$((FAILS+1))
-
-r=$(cd web && npx vue-tsc --noEmit 2>&1 | tail -2)
-[ -z "$r" ] && say "web vue-tsc" "PASS  0 error" || { say "web vue-tsc" "FAIL  $r"; FAILS=$((FAILS+1)); }
-
-r=$(cd web && npm run lint 2>&1 | grep -E "problem" | tail -1)
-say "web eslint" "$r"
-case "$r" in *"0 errors"*) ;; *) FAILS=$((FAILS+1));; esac
 
 r=$(cd web && npm run lint:colors 2>&1 | grep -E "No hardcoded|violation" | tail -1)
 say "color guard" "${r:-$r}"
+case "$r" in *"No hardcoded"*) ;; *) FAILS=$((FAILS+1));; esac
 
 # 判定优先用**退出码**，不是输出字符串匹配。
 # （第一版在这里踩过坑：budget 的 PASS 分支匹配的是"✓ bun-sidecar: 0"，

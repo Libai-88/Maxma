@@ -1,5 +1,4 @@
-import { computed, ref } from 'vue'
-import { defineStore } from 'pinia'
+import { create } from 'zustand'
 import { request } from '@/api'
 import { createLogger } from '@/utils/logger'
 
@@ -78,60 +77,82 @@ export function saveOnboardingSnapshot(snapshot: OnboardingSnapshot, storage: St
 const rawOnboardingFlag = import.meta.env.VITE_ONBOARDING_ENABLED
 export const onboardingEnabled = rawOnboardingFlag === undefined ? true : rawOnboardingFlag === 'true'
 
-export const useOnboardingStore = defineStore('onboarding', () => {
-  const snapshot = ref<OnboardingSnapshot>(copyDefaults())
-  const initialized = ref(false)
-  const shouldShow = computed(() => onboardingEnabled && initialized.value && !snapshot.value.completed)
+interface OnboardingState {
+  snapshot: OnboardingSnapshot
+  initialized: boolean
+  shouldShow: boolean
+  initialize: () => Promise<void>
+  updatePreferences: (preferences: Partial<OnboardingPreferences>) => void
+  complete: () => void
+  restart: () => void
+}
+
+export const useOnboardingStore = create<OnboardingState>()((set, get) => {
+  function patch(p: Partial<OnboardingState>) {
+    set((s) => {
+      const initialized = p.initialized ?? s.initialized
+      const snapshot = p.snapshot ?? s.snapshot
+      return { ...p, shouldShow: onboardingEnabled && initialized && !snapshot.completed }
+    })
+  }
 
   // ONBOARDING-PORTABLE-001：引导状态以后端为准（随数据目录走，便携版与
   // 标准版各自独立）。此前仅存 localStorage，WebView2 profile 共享时互相
   // 污染——任一版本点过"跳过/完成"，另一版本首启便直接跳过引导。
   // 后端不可用（旧版本后端/网络异常）时回退 localStorage，保证兼容。
   async function initialize() {
-    if (initialized.value) return
+    if (get().initialized) return
+    let next: OnboardingSnapshot
     try {
       const data = await request<unknown>('/onboarding/state')
       const normalized = normalizeSnapshot(data)
       // 关键：后端无记录（新用户）时**不信任** localStorage 的 completed——
       // 它可能来自共享 profile 的旧状态。一律按新用户显示引导。
-      snapshot.value = normalized ?? copyDefaults()
+      next = normalized ?? copyDefaults()
     } catch (err) {
       log.warn('onboarding state fetch failed, fallback to localStorage:', err)
-      snapshot.value = loadOnboardingSnapshot()
+      next = loadOnboardingSnapshot()
     }
-    initialized.value = true
+    patch({ snapshot: next, initialized: true })
   }
 
   function persist() {
     // localStorage 仅作缓存/兜底（后端不可用时 initialize 仍能恢复最近状态）
-    const ok = saveOnboardingSnapshot(snapshot.value)
-    if (!ok) {
-      log.warn('Failed to persist onboarding snapshot to localStorage')
-    }
+    const snapshot = get().snapshot
+    const ok = saveOnboardingSnapshot(snapshot)
+    if (!ok) log.warn('Failed to persist onboarding snapshot to localStorage')
     // 同步到后端：状态随数据目录持久化
     void request('/onboarding/state', {
       method: 'PUT',
-      body: JSON.stringify(snapshot.value),
+      body: JSON.stringify(snapshot),
     }).catch((err) => log.warn('onboarding state persist failed:', err))
   }
 
   function updatePreferences(preferences: Partial<OnboardingPreferences>) {
-    snapshot.value = {
-      ...snapshot.value,
-      preferences: { ...snapshot.value.preferences, ...preferences },
-    }
+    const cur = get().snapshot
+    patch({ snapshot: { ...cur, preferences: { ...cur.preferences, ...preferences } } })
     persist()
   }
 
   function complete() {
-    snapshot.value = { ...snapshot.value, completed: true }
+    const cur = get().snapshot
+    patch({ snapshot: { ...cur, completed: true } })
     persist()
   }
 
   function restart() {
-    snapshot.value = { ...snapshot.value, completed: false }
+    const cur = get().snapshot
+    patch({ snapshot: { ...cur, completed: false } })
     persist()
   }
 
-  return { snapshot, initialized, shouldShow, initialize, updatePreferences, complete, restart }
+  return {
+    snapshot: copyDefaults(),
+    initialized: false,
+    shouldShow: false,
+    initialize,
+    updatePreferences,
+    complete,
+    restart,
+  }
 })

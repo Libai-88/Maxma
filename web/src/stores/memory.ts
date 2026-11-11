@@ -1,5 +1,4 @@
-import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { create } from 'zustand'
 import { api } from '@/api'
 import { createLogger } from '@/utils/logger'
 
@@ -13,33 +12,48 @@ export interface MemoryFact {
   updatedAt: string
 }
 
-export const useMemoryStore = defineStore('memory', () => {
-  const facts = ref<MemoryFact[]>([])
-  const loading = ref(false)
+interface MemoryState {
+  facts: MemoryFact[]
+  loading: boolean
+  fetchFacts: () => Promise<void>
+  deleteFact: (id: string) => Promise<void>
+}
 
+export const useMemoryStore = create<MemoryState>()((set, get) => {
   async function fetchFacts() {
-    loading.value = true
+    set({ loading: true })
     try {
       const data: unknown = await api.request<unknown>('/memory')
+      let facts: MemoryFact[] = []
       if (Array.isArray(data)) {
-        facts.value = data
-      } else if (data && typeof data === 'object' && 'facts' in data && Array.isArray((data as Record<string, unknown>).facts)) {
-        facts.value = (data as Record<string, unknown>).facts as MemoryFact[]
-      } else {
-        facts.value = []
+        facts = data as MemoryFact[]
+      } else if (
+        data && typeof data === 'object' && 'facts' in data &&
+        Array.isArray((data as Record<string, unknown>).facts)
+      ) {
+        facts = (data as Record<string, unknown>).facts as MemoryFact[]
       }
-    } catch { facts.value = [] }
-    finally { loading.value = false }
+      set({ facts })
+    } catch {
+      set({ facts: [] })
+    } finally {
+      set({ loading: false })
+    }
   }
 
   async function deleteFact(id: string) {
     try {
       await api.request(`/memory/${encodeURIComponent(id)}`, { method: 'DELETE' })
-      facts.value = facts.value.filter(f => f.id !== id)
+      set({ facts: get().facts.filter(f => f.id !== id) })
     } catch (e) {
       log.warn('deleteFact failed:', e instanceof Error ? e.message : String(e))
     }
   }
 
-  return { facts, loading, fetchFacts, deleteFact }
+  return {
+    facts: [],
+    loading: false,
+    fetchFacts,
+    deleteFact,
+  }
 })

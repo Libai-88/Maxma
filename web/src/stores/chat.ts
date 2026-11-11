@@ -1,21 +1,34 @@
-import { defineStore } from 'pinia'
-import { computed, reactive, ref, shallowRef, watch } from 'vue'
-import type { ChatTurn, ContextUsage, CompactionReason, CompactionAction, TaskReviewState, PermissionMode } from '@/types'
-import type { ModelInfo, ChatContextUsage } from '../types/chat'
-// S4-2: api 已被 30+ 文件静态引用进主 chunk，此处动态导入不会触发拆分（纯噪音），改静态
+import { create } from 'zustand'
+import { safeGetItem, safeKeys, safeRemoveItem, safeSetItem } from '@/lib/storage'
+export { safeGetItem, safeKeys, safeRemoveItem, safeSetItem }
+import type {
+  ChatTurn, ContextUsage, CompactionReason, CompactionAction,
+  TaskReviewState, PermissionMode,
+} from '@/types'
+import type { ModelInfo, ChatContextUsage } from '@/types/chat'
 import { api } from '@/api'
-import { safeGetItem, safeKeys, safeRemoveItem } from '@/lib/storage'
 import { isLocalProvider } from '@/utils/provider'
+import { createLogger } from '@/utils/logger'
+import { parseReferences } from '@/utils/references'
+
+export type { ChatContextUsage, ModelInfo } from '@/types/chat'
+
+const log = createLogger('chat')
 
 export const TURNS_KEY_PREFIX = 'maxma_turns_'
 
-const DEFAULT_CONTEXT_USAGE: ChatContextUsage = {
+export const DEFAULT_CONTEXT_USAGE: ChatContextUsage = {
   estimatedTokens: 0,
   maxTokens: 128000,
   percentage: 0,
   messageCount: 0,
   modelName: '',
 }
+
+// ── COMPAT-STORAGE-001：localStorage 安全访问包装 ───────────────
+// Safari「阻止所有 Cookie」/Firefox 严格隐私模式/被禁用的 WebView2 中，
+// 访问 localStorage 属性本身即抛 SecurityError，写入时抛 QuotaExceededError。
+// 所有读写统一走下列包装，存储不可用时静默降级为「无持久化」。
 
 function finiteNumber(value: unknown): number | undefined {
   if (typeof value !== 'number' && typeof value !== 'string') return undefined
@@ -131,6 +144,8 @@ export interface SessionChannel {
   goalState: GoalChannelState | null
   taskBrief: TaskBriefState | null
   taskReview: TaskReviewState | null
+  /** CHAT-UX-012：最近一次失败轮次在 turns 中的索引，供重试定位。 */
+  failedTurnIndex?: number | null
 }
 
 export interface TaskBriefState {
@@ -174,126 +189,182 @@ function createChannel(): SessionChannel {
     goalState: null,
     taskBrief: null,
     taskReview: null,
+    failedTurnIndex: null,
   }
 }
 
-export const useChatStore = defineStore('chat', () => {
-  const channels = reactive(new Map<string, SessionChannel>())
+/** allSessionStatuses 单条状态（由 channels 派生）。 */
+export interface SessionStatus {
+  connected: boolean
+  isStreaming: boolean
+  isAwaitingUser: boolean
+  streamPhase: SessionChannel['streamPhase']
+  unreadEvents: number
+  streamStartedAt: number | null
+  lastActivityAt: number | null
+}
 
-  // --- New state ---
-  // R1-SETTINGS-PERSIST-001：模型/温度/输出上限/思考开关此前全部为内存态，
-  // 页面刷新（Tauri 崩溃恢复/重启）后全部回默认。现在持久化到 localStorage，
-  // 初始化时恢复、变更时保存。
-  const SETTINGS_STORAGE_KEY = 'maxma_chat_settings'
-  interface PersistedChatSettings { model?: string; temperature?: number; maxTokens?: number; thinking?: boolean; thinkingLevel?: string; taskBriefEnabled?: boolean }
-  function loadPersistedChatSettings(): PersistedChatSettings {
-    try {
-      const raw = localStorage.getItem(SETTINGS_STORAGE_KEY)
-      if (!raw) return {}
-      const parsed = JSON.parse(raw)
-      return parsed && typeof parsed === 'object' ? parsed : {}
-    } catch {
-      return {}
+function computeStatuses(channels: Map<string, SessionChannel>): Record<string, SessionStatus> {
+  const map: Record<string, SessionStatus> = {}
+  for (const [sid, ch] of channels) {
+    map[sid] = {
+      connected: ch.connected,
+      isStreaming: ch.isStreaming,
+      isAwaitingUser: ch.isAwaitingUser,
+      streamPhase: ch.streamPhase,
+      unreadEvents: ch.unreadEvents,
+      streamStartedAt: ch.streamStartedAt,
+      lastActivityAt: ch.lastActivityAt,
     }
   }
-  const _persisted = loadPersistedChatSettings()
+  return map
+}
 
-  const currentModel = ref<string>(typeof _persisted.model === 'string' && _persisted.model ? _persisted.model : 'gpt-4o')
-  const availableModels = shallowRef<ModelInfo[]>([])
-  const temperature = ref<number>(typeof _persisted.temperature === 'number' && Number.isFinite(_persisted.temperature) ? _persisted.temperature : 0.7)
-  const maxTokens = ref<number>(typeof _persisted.maxTokens === 'number' && Number.isFinite(_persisted.maxTokens) ? _persisted.maxTokens : 4096)
-  // THINKING-LEVELS-001：思考强度从 bool 升级为多级字符串（OMP 支持
-  // off/minimal/low/medium/high/xhigh/max）。兼容旧持久化格式（bool → high/off）。
-  const thinkingLevel = ref<string>(
-    typeof _persisted.thinkingLevel === 'string' && _persisted.thinkingLevel
-      ? _persisted.thinkingLevel
-      : typeof _persisted.thinking === 'boolean'
-        ? (_persisted.thinking ? 'high' : 'off')
-        : 'off',
-  )
-  /** 兼容旧 UI 契约：thinkingEnabled = thinkingLevel !== 'off' */
-  const thinkingEnabled = computed(() => thinkingLevel.value !== 'off')
-  const taskBriefEnabled = ref(_persisted.taskBriefEnabled === true)
-  const contextUsage = ref<ChatContextUsage>({ ...DEFAULT_CONTEXT_USAGE })
-  // --- End new state ---
+// ── settings 持久化（R1-SETTINGS-PERSIST-001） ──────────────────
+const SETTINGS_STORAGE_KEY = 'maxma_chat_settings'
+interface PersistedChatSettings {
+  model?: string
+  temperature?: number
+  maxTokens?: number
+  thinking?: boolean
+  thinkingLevel?: string
+  taskBriefEnabled?: boolean
+}
+function loadPersistedChatSettings(): PersistedChatSettings {
+  try {
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+const _persisted = loadPersistedChatSettings()
 
-  function persistChatSettings() {
-    try {
-      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({
-        model: currentModel.value,
-        temperature: temperature.value,
-        maxTokens: maxTokens.value,
-        thinkingLevel: thinkingLevel.value,
-        thinking: thinkingEnabled.value,
-        taskBriefEnabled: taskBriefEnabled.value,
-      }))
-    } catch {
-      // 配额超限时静默失败——设置丢失可接受，不阻塞主流程
+const _initialModel = typeof _persisted.model === 'string' && _persisted.model ? _persisted.model : 'gpt-4o'
+const _initialTemperature = typeof _persisted.temperature === 'number' && Number.isFinite(_persisted.temperature) ? _persisted.temperature : 0.7
+const _initialMaxTokens = typeof _persisted.maxTokens === 'number' && Number.isFinite(_persisted.maxTokens) ? _persisted.maxTokens : 4096
+// THINKING-LEVELS-001：思考强度从 bool 升级为多级字符串，兼容旧持久化格式（bool → high/off）。
+const _initialThinkingLevel = typeof _persisted.thinkingLevel === 'string' && _persisted.thinkingLevel
+  ? _persisted.thinkingLevel
+  : typeof _persisted.thinking === 'boolean'
+    ? (_persisted.thinking ? 'high' : 'off')
+    : 'off'
+
+function persistChatSettings(s: {
+  currentModel: string; temperature: number; maxTokens: number;
+  thinkingLevel: string; taskBriefEnabled: boolean
+}) {
+  try {
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({
+      model: s.currentModel,
+      temperature: s.temperature,
+      maxTokens: s.maxTokens,
+      thinkingLevel: s.thinkingLevel,
+      thinking: s.thinkingLevel !== 'off',
+      taskBriefEnabled: s.taskBriefEnabled,
+    }))
+  } catch {
+    // 配额超限时静默失败——设置丢失可接受，不阻塞主流程
+  }
+}
+
+// ── zustand store ───────────────────────────────────────────────
+export interface ChatState {
+  /** channel 对象保持可变（直接 push/改字段），靠 version 触发 React 重渲染。 */
+  channels: Map<string, SessionChannel>
+  version: number
+  allSessionStatuses: Record<string, SessionStatus>
+  currentModel: string
+  availableModels: ModelInfo[]
+  temperature: number
+  maxTokens: number
+  thinkingEnabled: boolean
+  thinkingLevel: string
+  taskBriefEnabled: boolean
+  contextUsage: ChatContextUsage
+
+  ensureChannel(sid: string): SessionChannel
+  getChannel(sid: string): SessionChannel
+  getOrCreateChannel(sid: string): SessionChannel
+  removeChannel(sid: string): void
+  disconnectChannel(sid: string): void
+  bump(): void
+  setAllSessionStatuses(statuses: Record<string, SessionStatus>): void
+  markSessionView(sid: string, active: boolean): void
+  removeTurnsFromStorage(sid: string): void
+  loadTurnsFromStorage(sid: string): ChatTurn[] | null
+  cleanupOrphanedCaches(validIds: Set<string>): void
+  setModel(modelId: string): void
+  setTemperature(val: number): void
+  setMaxTokens(val: number): void
+  toggleThinking(enabled: boolean): void
+  setThinkingLevel(level: string): void
+  setTaskBriefEnabled(enabled: boolean): void
+  updateContextUsage(usage: Partial<ChatContextUsage>): void
+  fetchAvailableModels(options?: { force?: boolean }): Promise<void>
+}
+
+let _modelsFetching: Promise<void> | null = null
+const builtinModelNames: Record<string, string> = {
+  'mimo-v2.6-flash-free': 'MiMo V2.6 Flash',
+  'space-bunny-free': 'Space Bunny',
+}
+
+export const useChatStore = create<ChatState>()((set, get) => ({
+  channels: new Map<string, SessionChannel>(),
+  version: 0,
+  allSessionStatuses: {},
+  currentModel: _initialModel,
+  availableModels: [],
+  temperature: _initialTemperature,
+  maxTokens: _initialMaxTokens,
+  thinkingEnabled: _initialThinkingLevel !== 'off',
+  thinkingLevel: _initialThinkingLevel,
+  taskBriefEnabled: _persisted.taskBriefEnabled === true,
+  contextUsage: { ...DEFAULT_CONTEXT_USAGE },
+
+  /**
+   * 取得通道；不存在则原地创建（不触发 set，供 render 期安全调用）。
+   * channel 对象稳定可变，所有事件处理直接改它，再由 bump() 通知 React。
+   */
+  getChannel(sid: string): SessionChannel {
+    const s = get()
+    let ch = s.channels.get(sid)
+    if (!ch) {
+      ch = createChannel()
+      s.channels.set(sid, ch)
     }
-  }
-  watch([currentModel, temperature, maxTokens, thinkingLevel, taskBriefEnabled], persistChatSettings)
+    return ch
+  },
 
-  const allSessionStatuses = computed(() => {
-    const map: Record<string, {
-      connected: boolean
-      isStreaming: boolean
-      isAwaitingUser: boolean
-      streamPhase: SessionChannel['streamPhase']
-      unreadEvents: number
-      streamStartedAt: number | null
-      lastActivityAt: number | null
-    }> = {}
-    for (const [sid, ch] of channels) {
-      map[sid] = {
-        connected: ch.connected,
-        isStreaming: ch.isStreaming,
-        isAwaitingUser: ch.isAwaitingUser,
-        streamPhase: ch.streamPhase,
-        unreadEvents: ch.unreadEvents,
-        streamStartedAt: ch.streamStartedAt,
-        lastActivityAt: ch.lastActivityAt,
-      }
-    }
-    return map
-  })
+  getOrCreateChannel(sid: string): SessionChannel {
+    return get().getChannel(sid)
+  },
 
-  /** 标记当前会话是否正在对话页可见；离开时保留任务，回来时清除未读提示。 */
-  function markSessionView(sid: string, active: boolean): void {
-    const ch = channels.get(sid)
-    if (!ch) return
-    ch.isChatViewActive = active
-    if (active) ch.unreadEvents = 0
-  }
+  /** 确保通道存在并 bump（事件处理/连接状态变更后调用）。 */
+  ensureChannel(sid: string): SessionChannel {
+    const ch = get().getChannel(sid)
+    set(s => ({ version: s.version + 1, allSessionStatuses: computeStatuses(s.channels) }))
+    return ch
+  },
 
-  function getOrCreateChannel(sid: string): SessionChannel {
-    if (!channels.has(sid)) {
-      channels.set(sid, createChannel())
-    }
-    return channels.get(sid)!
-  }
-
-  function removeChannel(sid: string) {
-    channels.delete(sid)
-  }
+  removeChannel(sid: string): void {
+    const s = get()
+    s.channels.delete(sid)
+    set(st => ({ version: st.version + 1, allSessionStatuses: computeStatuses(st.channels) }))
+  },
 
   /**
    * 完整断开一个会话通道（DELETE-SESSION-001）。
-   * 删除会话时必须先断开 WS 并终止进行中的 agent 任务——此前只删 localStorage
-   * 缓存，被删会话的 channel 仍存活：流式中删除时任务在后台继续跑、事件继续
-   * 到达、persistTurns 把已删缓存重新写回（缓存复活）。
-   * 放这里而非 useChat.ts：session store 删除流程需要调用，避免循环依赖。
+   * 删除会话时必须先断开 WS 并终止进行中的 agent 任务。
    */
-  function disconnectChannel(sid: string) {
-    const ch = channels.get(sid)
+  disconnectChannel(sid: string): void {
+    const ch = get().channels.get(sid)
     if (!ch) return
-    if (ch.reconnectTimer) {
-      clearTimeout(ch.reconnectTimer)
-      ch.reconnectTimer = null
-    }
-    if (ch._pingTimer) {
-      clearInterval(ch._pingTimer)
-      ch._pingTimer = null
-    }
+    if (ch.reconnectTimer) { clearTimeout(ch.reconnectTimer); ch.reconnectTimer = null }
+    if (ch._pingTimer) { clearInterval(ch._pingTimer); ch._pingTimer = null }
     if (ch.ws) {
       ch.ws.onclose = null
       ch.ws.close()
@@ -301,22 +372,40 @@ export const useChatStore = defineStore('chat', () => {
     }
     ch.connected = false
     ch.initialized = false
-    channels.delete(sid)
-  }
+    get().channels.delete(sid)
+    set(st => ({ version: st.version + 1, allSessionStatuses: computeStatuses(st.channels) }))
+  },
 
-  function removeTurnsFromStorage(sid: string) {
-    // COMPAT-STORAGE-001：安全删除（存储不可用时静默）
+  /** 每次事件处理/状态变更后调用：递增 version 触发订阅组件重渲染，并刷新派生状态。 */
+  bump(): void {
+    set(s => ({ version: s.version + 1, allSessionStatuses: computeStatuses(s.channels) }))
+  },
+
+  setAllSessionStatuses(statuses: Record<string, SessionStatus>): void {
+    set(s => ({ allSessionStatuses: statuses, version: s.version + 1 }))
+  },
+
+  /** 标记当前会话是否正在对话页可见；离开时保留任务，回来时清除未读提示。 */
+  markSessionView(sid: string, active: boolean): void {
+    const ch = get().channels.get(sid)
+    if (!ch) return
+    ch.isChatViewActive = active
+    if (active) ch.unreadEvents = 0
+    set(s => ({ version: s.version + 1, allSessionStatuses: computeStatuses(s.channels) }))
+  },
+
+  removeTurnsFromStorage(sid: string): void {
     safeRemoveItem(TURNS_KEY_PREFIX + sid)
-  }
+  },
 
-  function loadTurnsFromStorage(sid: string): ChatTurn[] | null {
+  loadTurnsFromStorage(sid: string): ChatTurn[] | null {
     try {
       const raw = safeGetItem(TURNS_KEY_PREFIX + sid)
       return raw ? JSON.parse(raw) : null
     } catch { return null }
-  }
+  },
 
-  function cleanupOrphanedCaches(validIds: Set<string>) {
+  cleanupOrphanedCaches(validIds: Set<string>): void {
     // 先收集要删除的 key，再统一删除。直接在遍历中 removeItem 会导致
     // localStorage 索引位移，连续的孤儿缓存会被跳过（每隔一个漏删一个）。
     const keysToRemove: string[] = []
@@ -329,34 +418,64 @@ export const useChatStore = defineStore('chat', () => {
     for (const key of keysToRemove) {
       safeRemoveItem(key)
     }
-  }
+  },
 
-  // --- New actions ---
-  function setModel(modelId: string) { currentModel.value = modelId }
-  function setTemperature(val: number) { temperature.value = Math.max(0, Math.min(2, val)) }
-  // MAXTOKENS-CLAMP-001：输出上限上限 65536——超过该值的"窗口上限"语义值
-  // （如旧默认 128000）会被后端视为未设置（走 provider 默认）
-  function setMaxTokens(val: number) { maxTokens.value = Math.max(256, Math.min(65536, val)) }
-  /** THINKING-LEVELS-001：设置思考强度（off/minimal/low/medium/high/xhigh/max） */
-  function setThinkingLevel(level: string) { thinkingLevel.value = level }
-  function setTaskBriefEnabled(enabled: boolean) { taskBriefEnabled.value = enabled }
-  /** 兼容旧调用：开关 → high/off */
-  function toggleThinking(enabled: boolean) { thinkingLevel.value = enabled ? 'high' : 'off' }
-  function updateContextUsage(usage: Partial<ChatContextUsage>) {
-    contextUsage.value = normalizeContextUsage(usage, contextUsage.value)
-  }
+  setModel(modelId: string): void {
+    set(s => {
+      const next = { ...s, currentModel: modelId }
+      persistChatSettings(next)
+      return { currentModel: modelId, version: s.version + 1 }
+    })
+  },
 
-  let _modelsFetching: Promise<void> | null = null
-  const builtinModelNames: Record<string, string> = {
-    'mimo-v2.6-flash-free': 'MiMo V2.6 Flash',
-    'space-bunny-free': 'Space Bunny',
-  }
+  setTemperature(val: number): void {
+    const temperature = Math.max(0, Math.min(2, val))
+    set(s => {
+      persistChatSettings({ ...s, temperature })
+      return { temperature, version: s.version + 1 }
+    })
+  },
 
-  async function fetchAvailableModels(options?: { force?: boolean }) {
-    // PERF-MODELS-DEDUP-001：多组件（ChatView/ModelSelector/ProvidersView）
-    // 并发调用时复用同一在途请求，避免重复拉取 provider 列表。
-    // force（Jet Hub 登录/删账号后联动刷新）不等复用：先等在途请求落地再重拉，
-    // 否则登录完成时会拿到「登录前」的旧清单，等于没刷。
+  // MAXTOKENS-CLAMP-001：输出上限上限 65536
+  setMaxTokens(val: number): void {
+    const maxTokens = Math.max(256, Math.min(65536, val))
+    set(s => {
+      persistChatSettings({ ...s, maxTokens })
+      return { maxTokens, version: s.version + 1 }
+    })
+  },
+
+  toggleThinking(enabled: boolean): void {
+    const thinkingLevel = enabled ? 'high' : 'off'
+    set(s => {
+      persistChatSettings({ ...s, thinkingLevel })
+      return { thinkingLevel, thinkingEnabled: thinkingLevel !== 'off', version: s.version + 1 }
+    })
+  },
+
+  setThinkingLevel(level: string): void {
+    set(s => {
+      persistChatSettings({ ...s, thinkingLevel: level })
+      return { thinkingLevel: level, thinkingEnabled: level !== 'off', version: s.version + 1 }
+    })
+  },
+
+  setTaskBriefEnabled(enabled: boolean): void {
+    set(s => {
+      persistChatSettings({ ...s, taskBriefEnabled: enabled })
+      return { taskBriefEnabled: enabled, version: s.version + 1 }
+    })
+  },
+
+  updateContextUsage(usage: Partial<ChatContextUsage>): void {
+    set(s => ({
+      contextUsage: normalizeContextUsage(usage, s.contextUsage),
+      version: s.version + 1,
+    }))
+  },
+
+  async fetchAvailableModels(options?: { force?: boolean }): Promise<void> {
+    // PERF-MODELS-DEDUP-001：多组件并发调用时复用同一在途请求。
     if (_modelsFetching && !options?.force) return _modelsFetching
     if (_modelsFetching && options?.force) await _modelsFetching.catch(() => {})
     _modelsFetching = (async () => {
@@ -366,11 +485,8 @@ export const useChatStore = defineStore('chat', () => {
         const providers = Array.isArray(data) ? data : (data as unknown as Record<string, unknown>).providers
         if (Array.isArray(providers)) {
           for (const p of providers) {
-            // 只包含已启用且有 api_key 的 provider（过滤掉默认模板和未配置的 provider）
             const hasApiKey = p.api_key_configured === true || Boolean(p.api_key && p.api_key.trim())
-            if (!p.enabled || (!isLocalProvider(p.provider_type, p.base_url) && !hasApiKey)) {
-              continue
-            }
+            if (!p.enabled || (!isLocalProvider(p.provider_type, p.base_url) && !hasApiKey)) continue
             if (Array.isArray(p.models)) {
               for (const m of p.models) {
                 const modelInfo: ModelInfo = {
@@ -386,20 +502,11 @@ export const useChatStore = defineStore('chat', () => {
             }
           }
         }
-
-        // 插件渠道（Jet Hub 等）：它们**不在 providers.yaml 里**，凭据与端点在插件自己的
-        // 适配器内，所以要从插件端点单独取。不做这一步的话，插件模型在 pi 侧能解析、
-        // 在模型选择器里却根本选不到 —— 融合链路等于断在最后一步。
-        // 取不到（插件停用/未启动）时静默跳过，不影响 Maxma 自身的模型。
         try {
           const pluginModels = await api.listPluginModels('codearts-auth')
           for (const p of Array.isArray(pluginModels?.providers) ? pluginModels.providers : []) {
             for (const m of Array.isArray(p.models) ? p.models : []) {
-              // ⚠️ name 必须放模型 **id**（发往 chat-ws 的 model_name，插件按 id 解析）；
-              // 展示名放 displayName。真机踩过：把展示名（如「Hy4 preview · x0.29→免费」）
-              // 当 name 发出去 → 插件按 id 找不到模型 → 一条对话都发不出去
-              //（且 finish.failure 明细被丢弃时界面只剩 Unknown agent error）。
-              // pi-providers 注册模型时 id 也按 m.id 对齐，两处不能各写各的。
+              // name 必须放模型 id（发往 chat-ws 的 model_name，插件按 id 解析）
               const displayName = m.name && m.name !== m.id ? m.name : undefined
               models.push({
                 id: `${p.id}/${m.id}`,
@@ -415,22 +522,185 @@ export const useChatStore = defineStore('chat', () => {
         } catch {
           /* 插件不可用时不影响 Maxma 自身模型列表 */
         }
-
-        availableModels.value = models
+        set(s => ({ availableModels: models, version: s.version + 1 }))
       } catch { /* Use defaults */ }
       finally { _modelsFetching = null }
     })()
     return _modelsFetching
-  }
-  // --- End new actions ---
+  },
+}))
 
-  return {
-    channels, allSessionStatuses, markSessionView, TURNS_KEY_PREFIX,
-    getOrCreateChannel, removeChannel, disconnectChannel,
-    removeTurnsFromStorage, loadTurnsFromStorage,
-    cleanupOrphanedCaches,
-    // --- New exports ---
-    currentModel, availableModels, temperature, maxTokens, thinkingEnabled, thinkingLevel, taskBriefEnabled, contextUsage,
-    setModel, setTemperature, setMaxTokens, toggleThinking, setThinkingLevel, setTaskBriefEnabled, updateContextUsage, fetchAvailableModels,
+/** 模块级辅助：取当前 store 快照（移植自 Pinia 的 getChatStore()）。 */
+export function getChatStore() { return useChatStore.getState() }
+
+/** 触发一次 React 重渲染（等价于 useChatStore.getState().bump()）。 */
+export function bump() { useChatStore.getState().bump() }
+
+/** Lazy export — 运行时才访问 Store（对齐旧版 getAllSessionStatuses）。 */
+export function getAllSessionStatuses(): Record<string, SessionStatus> {
+  return useChatStore.getState().allSessionStatuses
+}
+
+// ── localStorage turns 缓存 ─────────────────────────────────────
+/** 匹配旧格式尾缀（用于 localStorage 迁移） */
+export const TIME_SUFFIX_RE = /（\d{4}-\d{2}-\d{2} \w{3} \d{2}:\d{2}）$/
+
+/** 将旧格式 turn（userMessage 含 __refs__ 和时间尾缀）迁移为新格式 */
+export function migrateLegacyTurn(turn: Record<string, unknown>): ChatTurn {
+  if (Array.isArray(turn.refs)) {
+    return { memoryEvents: [], ...turn } as unknown as ChatTurn
   }
-})
+  const prevMsg = (turn.userMessage ?? '') as string
+  const { cleanText, refs } = parseReferences(prevMsg || '')
+  const text = refs.length > 0 ? cleanText : prevMsg.replace(TIME_SUFFIX_RE, '')
+  return { ...turn, userMessage: text, refs, memoryEvents: [] } as unknown as ChatTurn
+}
+
+// 从 localStorage 恢复所有会话的消息缓存（页面刷新后仍保留）
+export function loadAllTurnsFromStorage(): Map<string, ChatTurn[]> {
+  const map = new Map<string, ChatTurn[]>()
+  try {
+    const keysFound = safeKeys()
+    for (const key of keysFound) {
+      if (!key.startsWith(TURNS_KEY_PREFIX)) continue
+      const sid = key.slice(TURNS_KEY_PREFIX.length)
+      try {
+        const raw = safeGetItem(key) || '[]'
+        const data = JSON.parse(raw)
+        if (Array.isArray(data)) {
+          const migrated = data.map(migrateLegacyTurn)
+          log.debug(`从 localStorage 加载会话 ${sid}: ${data.length} 条 turn (迁移 ${migrated.length}), 序列化长度 ${raw.length}`)
+          map.set(sid, migrated)
+        } else {
+          log.warn(`键 ${key} 的数据不是数组，跳过`)
+        }
+      } catch (e) {
+        log.error(`解析 localStorage 键 ${key} 失败:`, e)
+      }
+    }
+    log.debug(`localStorage 中共 ${keysFound.length} 个 ${TURNS_KEY_PREFIX}* 键, 恢复 ${map.size} 个会话的缓存`)
+  } catch (e) {
+    log.warn('读取 localStorage 失败（存储不可用？），按空缓存启动:', e)
+  }
+  return map
+}
+
+/** PERF-PERSIST-CAP-001：localStorage 持久化轮次上限（与后端 get_messages limit=500 一致）。 */
+export const MAX_PERSISTED_TURNS = 500
+
+/** 模块级缓存：首次 import 时从 localStorage 恢复所有会话的历史消息。 */
+export const turnsCache: Map<string, ChatTurn[]> = loadAllTurnsFromStorage()
+
+export function saveTurnsToStorage(sid: string, data: ChatTurn[]): void {
+  const key = TURNS_KEY_PREFIX + sid
+  const toPersist = data.length > MAX_PERSISTED_TURNS ? data.slice(-MAX_PERSISTED_TURNS) : data
+  const tryWrite = () => {
+    const serialized = JSON.stringify(toPersist)
+    const size = new Blob([serialized]).size
+    if (!safeSetItem(key, serialized)) {
+      throw new DOMException('storage unavailable', 'QuotaExceededError')
+    }
+    return size
+  }
+  try {
+    const size = tryWrite()
+    log.debug(`保存会话 ${sid} 到 localStorage: ${data.length} 条 turn, 约 ${(size / 1024).toFixed(1)} KB, key=${key}`)
+  } catch (e) {
+    if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+      log.warn(`localStorage 配额超限，尝试清理其他会话缓存后重试 (key=${key})`)
+      const otherKeys = safeKeys().filter(k => k.startsWith(TURNS_KEY_PREFIX) && k !== key)
+      const toEvict = otherKeys.slice(0, Math.max(1, Math.ceil(otherKeys.length / 2)))
+      for (const k of toEvict) {
+        safeRemoveItem(k)
+        const evictedSid = k.slice(TURNS_KEY_PREFIX.length)
+        turnsCache.delete(evictedSid)
+        log.warn(`配额压力下清理会话 ${evictedSid} 的缓存`)
+      }
+      try {
+        const size = tryWrite()
+        log.debug(`清理后重试成功: 会话 ${sid}, ${data.length} 条 turn, 约 ${(size / 1024).toFixed(1)} KB`)
+      } catch (e2) {
+        log.error(`清理后仍无法保存会话 ${sid} (key=${key}):`, e2)
+        safeRemoveItem(key)
+      }
+    } else {
+      log.error(`保存会话 ${sid} 到 localStorage 失败 (key=${key}):`, e)
+      let total = 0
+      for (const k of safeKeys()) {
+        total += k.length + (safeGetItem(k) || '').length
+      }
+      log.warn(`localStorage 当前总估算用量: ${(total * 2 / 1024).toFixed(1)} KB`)
+    }
+  }
+}
+
+// ── 持久化防抖（PERF-002） ──────────────────────────────────────
+const PERSIST_DEBOUNCE_MS = 800
+const _persistTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+export function persistTurns(sid: string): void {
+  const ch = useChatStore.getState().channels.get(sid)
+  if (!ch) {
+    log.warn(`跳过保存 sid="${sid}": 通道不存在`)
+    return
+  }
+  const snapshot = [...ch.turns]
+  log.debug(`持久化会话 ${sid}: ${snapshot.length} 条 turn (防抖 ${PERSIST_DEBOUNCE_MS}ms)`)
+  turnsCache.set(sid, snapshot)
+  const existing = _persistTimers.get(sid)
+  if (existing) clearTimeout(existing)
+  _persistTimers.set(sid, setTimeout(() => {
+    _persistTimers.delete(sid)
+    saveTurnsToStorage(sid, snapshot)
+  }, PERSIST_DEBOUNCE_MS))
+  bump()
+}
+
+/** 同步落盘：取消挂起的防抖定时器并立即写入（切会话/WS 断开/组件卸载前调用）。 */
+export function flushPersistTurns(sid: string): void {
+  const timer = _persistTimers.get(sid)
+  if (timer) {
+    clearTimeout(timer)
+    _persistTimers.delete(sid)
+  }
+  const ch = useChatStore.getState().channels.get(sid)
+  if (!ch) return
+  const snapshot = [...ch.turns]
+  turnsCache.set(sid, snapshot)
+  saveTurnsToStorage(sid, snapshot)
+  bump()
+}
+
+/**
+ * 页面离开（刷新/关闭窗口）兜底落盘（PAGE-LEAVE-001）。
+ * pagehide 在刷新/关闭前同步触发，localStorage 为同步 API 可安全写入。
+ */
+export function flushAllTurnsOnPageLeave(): void {
+  const store = useChatStore.getState()
+  for (const [sid, ch] of store.channels) {
+    if (!ch.initialized) continue
+    if (ch.isStreaming && ch.currentTurn) {
+      const interrupted = ch.currentTurn
+      if (!interrupted.finalAnswer) {
+        interrupted.finalAnswer = '（连接中断，回复未完成）'
+      }
+      ch.turns.push(interrupted)
+      ch.currentTurn = null
+      ch.isStreaming = false
+      ch.streamPhase = ch.error ? 'error' : 'idle'
+      ch.streamStartedAt = null
+      ch.isAwaitingUser = false
+      ch._awaitingToolName = null
+      if (!ch.privateMode) {
+        flushPersistTurns(sid)
+      }
+    } else if (ch.turns.length > 0) {
+      flushPersistTurns(sid)
+    }
+  }
+}
+
+/** 清空会话时失效内存 turnsCache，防止切回会话后已清空的消息复活。 */
+export function invalidateTurnsCache(sid: string): void {
+  turnsCache.delete(sid)
+}

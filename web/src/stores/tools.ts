@@ -1,33 +1,47 @@
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { create } from 'zustand'
 import { api } from '@/api'
 import type { ToolInfo } from '@/types'
 
-export const useToolsStore = defineStore('tools', () => {
-  const tools = ref<ToolInfo[]>([])
-  const loading = ref(false)
+export interface ToolCategoryGroup {
+  category: string
+  tools: ToolInfo[]
+}
 
+interface ToolsState {
+  tools: ToolInfo[]
+  loading: boolean
+  categories: ToolCategoryGroup[]
+  fetchTools: () => Promise<void>
+}
+
+function deriveCategories(tools: ToolInfo[]): ToolCategoryGroup[] {
+  const map = new Map<string, ToolInfo[]>()
+  for (const t of tools) {
+    const cat = t.category || 'other'
+    if (!map.has(cat)) map.set(cat, [])
+    map.get(cat)!.push(t)
+  }
+  return Array.from(map.entries()).map(([cat, items]) => ({ category: cat, tools: items }))
+}
+
+export const useToolsStore = create<ToolsState>()((set) => {
   async function fetchTools() {
-    loading.value = true
+    set({ loading: true })
     try {
       const data = await api.listTools()
-      tools.value = Array.isArray(data) ? data : []
+      const tools = Array.isArray(data) ? data : []
+      set({ tools, categories: deriveCategories(tools) })
     } catch {
-      tools.value = []
+      set({ tools: [], categories: [] })
     } finally {
-      loading.value = false
+      set({ loading: false })
     }
   }
 
-  const categories = computed(() => {
-    const map = new Map<string, ToolInfo[]>()
-    for (const t of tools.value) {
-      const cat = t.category || 'other'
-      if (!map.has(cat)) map.set(cat, [])
-      map.get(cat)!.push(t)
-    }
-    return Array.from(map.entries()).map(([cat, items]) => ({ category: cat, tools: items }))
-  })
-
-  return { tools, loading, categories, fetchTools }
+  return {
+    tools: [],
+    loading: false,
+    categories: [],
+    fetchTools,
+  }
 })

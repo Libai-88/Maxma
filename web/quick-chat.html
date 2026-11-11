@@ -1,20 +1,26 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/src/assets/images/brand/favicon.png" />
+    <link rel="icon" type="image/png" href="/images/brand/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Maxma - Quick Chat" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' ws://localhost:* http://localhost:* ws://127.0.0.1:* http://127.0.0.1:*; img-src 'self' https: http://localhost:* http://127.0.0.1:* data: blob:; frame-src 'self';" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self' ws://localhost:* http://localhost:* ws://127.0.0.1:* http://127.0.0.1:*; img-src 'self' https: http://localhost:* http://127.0.0.1:* data: blob:; frame-src 'self';" />
     <title>Quick Chat</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=LXGW+WenKai+Screen&display=swap" rel="stylesheet" />
+    <style>
+      html { background: oklch(0.16 0 0); color-scheme: dark; }
+      #app-loading {
+        position: fixed; inset: 0; z-index: 9999; display: flex;
+        align-items: center; justify-content: center;
+        font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+        background: oklch(0.16 0 0); color: oklch(0.985 0 0 / 60%); font-size: 13px;
+      }
+    </style>
   </head>
   <body>
     <noscript>请启用 JavaScript 以使用 Quick Chat。</noscript>
-    <div id="app-loading" style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#8C8C8C">正在启动后端服务...</div>
+    <div id="app-loading">正在启动后端服务...</div>
     <div id="app"></div>
-    <script type="module" src="/src/quick-chat/main.ts"></script>
+    <script type="module" src="/src/quick-chat/main.tsx"></script>
   </body>
 </html>

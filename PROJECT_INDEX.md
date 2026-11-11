@@ -27,15 +27,15 @@
 ## 运行链路
 
 ```text
-web/src/main.ts
-  -> web/src/composables/useChat.ts
+web/src/main.tsx
+  -> web/src/hooks/useChat.ts
   -> bun-backend/src/routes/chat-ws.ts（WS 分发 + 回合富化）
   -> bun-backend/src/server.ts callKernelRpc（in-process）
   -> bun-sidecar/src/kernel/bridge-pi.ts
   -> pi AgentSession
 ```
 
-辅入口：`web/src/quick-chat/main.ts` — 独立挂载的轻量聊天页，与主应用共享 Pinia store、主题与后端 API。
+辅入口：`web/src/quick-chat/main.tsx` — 独立挂载的轻量聊天页，与主应用共享 zustand store、主题（Solid Glass）与后端 API。
 
 插件链路：`JetHubView.vue` → `POST /api/jet-hub` → `plugins/dsh/http-bridge.ts` → 插件 jet-hub-rpc 分派器 → `pi-bridge`/`pi-providers` → `pi ModelRuntime.registerProvider`。
 
@@ -43,7 +43,7 @@ web/src/main.ts
 
 | 目录 | 入口 | 责任 |
 | --- | --- | --- |
-| `web/` | `src/main.ts`、`src/quick-chat/main.ts` | Vue 应用、路由、Pinia、REST/WS、主题、工具结果渲染 |
+| `web/` | `src/main.tsx`、`src/quick-chat/main.tsx` | React 19 应用（Vite 6 + Tailwind 4 + shadcn/base-nova + Solid Glass）、react-router、zustand、REST/WS、主题、工具结果渲染 |
 | `bun-backend/` | `src/server.ts` | Hono 后端：鉴权/限流/CORS、REST 路由、chat WS、kernel 装配、静态托管 |
 | `bun-backend/src/plugins/` | `registry.ts`、`dsh/index.ts` | 插件注册表与 DSH 宿主 |
 | `bun-sidecar/` | `src/kernel/bridge-pi.ts` | pi 引擎桥：会话、模型、工具、MCP、审批、计划、目标、检查点、事件映射 |
@@ -61,14 +61,14 @@ web/src/main.ts
 
 ## 前端
 
-- 路由 `src/router/index.ts`（`meta.feature` 能力守卫 → `FeatureUnavailableView`）
-- API `src/api/index.ts`；WS 生命周期 `src/composables/useChat.ts`；斜杠命令 `useSlashCommands.ts`
-- Pinia `src/stores/`：session / chat / memory / provider / persona / capabilities / plugin / jetHub / activity / metrics / health / onboarding / workbench / sidebar / collab / tools
-- 类型 `src/types/`；工具组件注册 `src/components/tools/registry.ts`
-- 组件分组：`components/`（聊天核心）、`workbench/`（工作台 canvas-registry + cards）、`inspira/`（动效）、`ui/`（Ds 基础件）、`plugins/`、`brand/`
+- 路由 `src/router.tsx`（`FeatureGate` 能力守卫 → `FeatureUnavailableView`）
+- API `src/api/index.ts`（框架无关，原样沿用）；WS 生命周期 `src/hooks/useChat.ts`；斜杠命令在 `components/chat/ChatInput.tsx`
+- zustand `src/stores/`：session / chat / memory / provider / persona / capabilities / plugin / jetHub / activity / metrics / health / onboarding / workbench / sidebar / collab / tools
+- 类型 `src/types/`（原样沿用）
+- 组件分组：`components/chat/`（对话核心）、`layout/`（AppShell/Sidebar/SessionDrawer）、`common/`、`ui/`（shadcn + Solid Glass）、`brand/`
 - 页面 `src/views/`：对话（Chat / Share）、记忆角色（Memory / Soul / User）、配置（Providers / Mcp / Settings / Appearance / Privacy / MaxmaBlocker / Capabilities）、扩展（PluginList / PluginDetail / JetHub / Extension / Rules / Collab）、信息（News / Activity / Metrics / Help / Evolution）、流程（Onboarding / FeatureUnavailable / NotFound）
-- 样式三层活规范：`src/assets/styles/tokens.css`（结构 token / 断点口径）→ `src/themes/`（6 主题配色：suying 默认 / ultraline / night / kintsugi / grass / midnight，另有 `auto` 解析态）→ `src/assets/styles/design-system.css`（页面级共享类 `.ds-view` / `.view-header` / `.ds-state` / `.ds-section` / `.ds-skeleton`，视图 `<style scoped>` 不得复制这些声明）
-- 动效密度 `src/composables/useMotion.ts`：默认 `data-motion="calm"`，外观页可切回 full；视图入场 `useViewEntrance.ts` 与装饰层据此降级
+- 样式：`src/solid-glass.css`（Solid Glass 主题：颜色 / 三层玻璃 / 圆角 / 动效，light/dark 两态）+ `src/index.css`（全局基座）；语义色守卫 `scripts/check-hardcoded-colors.mjs`
+- 动效：只用 Solid Glass 时长/缓动；`prefers-reduced-motion` 全局降级。Inspira 装饰件与页面转场已下线
 - Jet Hub 客户端工具：`src/utils/jetHub/`
 
 ## 后端（`bun-backend/src/`）
@@ -112,10 +112,10 @@ web/src/main.ts
 ```text
 install.bat / start.bat
 cd bun-backend && bun run src/server.ts     # :8000
-cd web && npm run dev                        # :5173
+cd web && npm run dev                        # :5173（React + Vite）
 cd bun-backend && bun test                   # 后端
 cd bun-sidecar && bun test                   # 引擎
-cd web && npx vitest run                     # 前端
+cd web && npx tsc --noEmit             # 前端类型
 bash scripts/verify-all-gates.sh             # 交付前全部闸门
 ```
 

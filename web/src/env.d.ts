@@ -1,13 +1,13 @@
 /// <reference types="vite/client" />
 
-declare module '*.vue' {
-  import type { DefineComponent } from 'vue'
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Vue's official shim uses this signature
-  const component: DefineComponent<Record<string, never>, Record<string, never>, any>
-  export default component
+declare module 'markdown-it-texmath' {
+  const plugin: (md: unknown, options?: Record<string, unknown>) => void
+  export default plugin
 }
 
-declare module '*.svg?raw' {
-  const content: string
-  export default content
+declare module 'markdown-it-task-lists' {
+  const plugin: (md: unknown, options?: Record<string, unknown>) => void
+  export default plugin
 }
+
+declare module '*.css'

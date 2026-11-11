@@ -11,13 +11,12 @@
  * （30 分钟一轮的凭据续期、启动首轮的目录预热、自动签到），本地增量维护必然与它分叉。
  */
 
-import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { create } from 'zustand'
 
 import { callJetHub } from '@/api'
 import { request } from '@/api'
 import { toErrorMessage } from '@/utils/error'
-import { supportsPermanentLock } from '@/utils/jetHub/credits-capabilities.js'
+import { supportsPermanentLock } from '@/utils/jetHub/credits-capabilities'
 
 /**
  * 账号增删后同步刷新聊天页的模型清单。
@@ -225,59 +224,139 @@ const EMPTY_STATUS: JetHubProviderStatus = {
   closed: false,
 }
 
-export const useJetHubStore = defineStore('jetHub', () => {
+/** store 数据字段的显式契约（动作经各消费方本地接口收口）。 */
+export interface JetHubData {
+  pluginName: string
+  routes: JetHubProviderRoute[]
+  statuses: Record<string, JetHubProviderStatus>
+  accounts: JetHubAccount[]
+  loading: boolean
+  error: string
+  notReady: string
+  pending: string
+  models: JetHubModel[]
+  modelsLoading: boolean
+  login: JetHubLoginSession | null
+  usage: JetHubUsageTotals | null
+  usageChannels: JetHubUsageChannel[]
+  usageHistory: Array<Record<string, unknown>>
+  usageLoading: boolean
+  gateway: JetHubGatewayStatus | null
+  gatewayLoading: boolean
+  gatewayConfigEnabled: boolean
+  credits: Record<string, JetHubCredits> | null
+  creditsLoading: boolean
+  backupStatus: { accounts: number; withoutExpiry: number } | null
+  backupBusy: boolean
+  backupWarnings: string[]
+  backupResult: JetHubImportResult | null
+  badge: JetHubBadgeReading | null
+  badgeLoading: boolean
+  badgeFailed: boolean
+  badgeError: string
+  badgeProvider: string
+  badgePreference: JetHubBadgePreference
+  autoCheckin: { enabled: boolean; lastDate?: string; ranToday?: boolean; running?: boolean; lastResult?: string } | null
+  permanentLocks: Record<string, { locked: boolean; windowDays?: number }>
+  clineQuota: { accounts: Array<Record<string, unknown>> } | null
+  clineQuotaLoading: boolean
+  clineRequestLog: Array<Record<string, unknown>>
+  clineRequestLogAccount: string
+  clineRequestLogLoading: boolean
+  onboarding: JetHubOnboarding | null
+  onboardingLoading: boolean
+  providerOrder: string[]
+}
+
+export const useJetHubStore = create<JetHubData>()((set, get) => {
+  const initialData = {
+    pluginName: 'codearts-auth',
+    routes: [] as JetHubProviderRoute[],
+    statuses: {} as Record<string, JetHubProviderStatus>,
+    accounts: [] as JetHubAccount[],
+    loading: false,
+    error: '',
+    notReady: '',
+    pending: '',
+    models: [] as JetHubModel[],
+    modelsLoading: false,
+    login: null as JetHubLoginSession | null,
+    usage: null as JetHubUsageTotals | null,
+    usageChannels: [] as JetHubUsageChannel[],
+    usageHistory: [] as Array<Record<string, unknown>>,
+    usageLoading: false,
+    gateway: null as JetHubGatewayStatus | null,
+    gatewayLoading: false,
+    gatewayConfigEnabled: false,
+    credits: {} as Record<string, JetHubCredits> | null,
+    creditsLoading: false,
+    backupStatus: null as { accounts: number; withoutExpiry: number } | null,
+    backupBusy: false,
+    backupWarnings: [] as string[],
+    backupResult: null as JetHubImportResult | null,
+    badge: null as JetHubBadgeReading | null,
+    badgeLoading: false,
+    badgeFailed: false,
+    badgeError: '',
+    badgeProvider: '',
+    badgePreference: 'auto' as JetHubBadgePreference,
+    autoCheckin: null as { enabled: boolean; lastDate?: string; ranToday?: boolean; running?: boolean; lastResult?: string } | null,
+    permanentLocks: {} as Record<string, { locked: boolean; windowDays?: number }>,
+    clineQuota: null as { accounts: Array<Record<string, unknown>> } | null,
+    clineQuotaLoading: false,
+    clineRequestLog: [] as Array<Record<string, unknown>>,
+    clineRequestLogAccount: '',
+    clineRequestLogLoading: false,
+    onboarding: null as JetHubOnboarding | null,
+    onboardingLoading: false,
+    providerOrder: [] as string[],
+  } satisfies JetHubData
+
+
   /** 插件标识（`dsh-codearts-auth` 在 Maxma 里的 id）。 */
-  const pluginName = ref('codearts-auth')
 
-  const routes = ref<JetHubProviderRoute[]>([])
-  const statuses = ref<Record<string, JetHubProviderStatus>>({})
-  const accounts = ref<JetHubAccount[]>([])
 
-  const loading = ref(false)
-  const error = ref('')
   /** 插件未启用/宿主未就绪时的说明（不是错误，界面据此提示「先去启用插件」）。 */
-  const notReady = ref('')
   /** 正在执行的动作标识（按钮据此禁用，避免重复提交）。 */
-  const pending = ref('')
 
   function statusOf(provider: string): JetHubProviderStatus {
-    return statuses.value[provider] ?? EMPTY_STATUS
+    return get().statuses[provider] ?? EMPTY_STATUS
   }
 
   async function run<T>(key: string, task: () => Promise<T>): Promise<T> {
-    pending.value = key
-    error.value = ''
+    set({ pending: key })
+    set({ error: '' })
     try {
       return await task()
     } catch (e) {
-      error.value = toErrorMessage(e)
+      set({ error: toErrorMessage(e) })
       throw e
     } finally {
-      pending.value = ''
+      set({ pending: '' })
     }
   }
 
   /** 已打开的渠道（rail 上半区），顺序即插件的自动选号优先级。 */
-  const openProviders = computed(() => routes.value.filter((route) => !(statuses.value[route.id]?.closed ?? false)))
+  function openProviders() { return get().routes.filter((route) => !(get().statuses[route.id]?.closed ?? false)) }
   /** 已关闭的渠道（rail 下半区）。 */
-  const closedProviders = computed(() => routes.value.filter((route) => statuses.value[route.id]?.closed ?? false))
+  function closedProviders() { return get().routes.filter((route) => get().statuses[route.id]?.closed ?? false) }
 
   /** 全部账号数（页头概览用）。 */
-  const accountTotal = computed(() => routes.value.reduce((sum, route) => sum + (statuses.value[route.id]?.accounts.total ?? 0), 0))
+  function accountTotal() { return get().routes.reduce((sum, route) => sum + (get().statuses[route.id]?.accounts.total ?? 0), 0) }
   /** 已启用账号数。 */
-  const accountEnabled = computed(() => routes.value.reduce((sum, route) => sum + (statuses.value[route.id]?.accounts.enabled ?? 0), 0))
+  function accountEnabled() { return get().routes.reduce((sum, route) => sum + (get().statuses[route.id]?.accounts.enabled ?? 0), 0) }
 
   function accountsOf(provider: string): JetHubAccount[] {
-    return accounts.value.filter((account) => account.provider === provider)
+    return get().accounts.filter((account) => account.provider === provider)
   }
 
   /** 拉取渠道清单（Maxma 后端转出插件注册的路由）。 */
   async function loadProviders() {
     const res = await request<{ providers: JetHubProviderRoute[]; detail?: string }>(
-      `/plugins/${encodeURIComponent(pluginName.value)}/providers`,
+      `/plugins/${encodeURIComponent(get().pluginName)}/providers`,
     )
-    routes.value = Array.isArray(res?.providers) ? res.providers : []
-    notReady.value = routes.value.length === 0 ? (res?.detail || '插件尚未启用或正在启动，请稍后重试。') : ''
+    set({ routes: Array.isArray(res?.providers) ? res.providers : [] })
+    set({ notReady: get().routes.length === 0 ? (res?.detail || '插件尚未启用或正在启动，请稍后重试。') : '' })
   }
 
   /**
@@ -292,16 +371,16 @@ export const useJetHubStore = defineStore('jetHub', () => {
    * 插件客户端一直是逐渠道调的（`rpcCall('account.list', { provider })`）。
    */
   async function refresh() {
-    loading.value = true
-    error.value = ''
+    set({ loading: true })
+    set({ error: '' })
     try {
       await loadProviders()
-      if (routes.value.length === 0) {
-        statuses.value = {}
-        accounts.value = []
+      if (get().routes.length === 0) {
+        set({ statuses: {} })
+        set({ accounts: [] })
         return
       }
-      const ids = routes.value.map((route) => route.id)
+      const ids = get().routes.map((route) => route.id)
       const [statusRes, ...accountResults] = await Promise.all([
         callJetHub<ProviderStatusResponse>('provider.status', { providers: ids }),
         // 逐渠道并发；单个渠道失败不影响其余（未登录的渠道返回空数组是正常的）
@@ -309,43 +388,41 @@ export const useJetHubStore = defineStore('jetHub', () => {
           callJetHub<AccountListResponse>('account.list', { provider: id }).catch(() => ({ accounts: [] })),
         ),
       ])
-      statuses.value = statusRes?.statuses ?? {}
-      accounts.value = accountResults.flatMap((res) =>
+      set({ statuses: statusRes?.statuses ?? {} })
+      set({ accounts: accountResults.flatMap((res) =>
         Array.isArray(res?.accounts) ? res.accounts : [],
-      )
+      ) })
     } catch (e) {
-      error.value = toErrorMessage(e)
+      set({ error: toErrorMessage(e) })
       throw e
     } finally {
-      loading.value = false
+      set({ loading: false })
     }
   }
 
   function setPluginName(name: string) {
-    pluginName.value = name
+    set({ pluginName: name })
   }
 
   // ── 模型列表（按渠道懒加载）──
 
-  const models = ref<JetHubModel[]>([])
-  const modelsLoading = ref(false)
 
   async function loadModels(provider: string) {
-    modelsLoading.value = true
-    error.value = ''
+    set({ modelsLoading: true })
+    set({ error: '' })
     try {
       const res = await callJetHub<{ models: JetHubModel[] }>('model.list', { provider })
-      models.value = Array.isArray(res?.models) ? res.models : []
+      set({ models: Array.isArray(res?.models) ? res.models : [] })
     } catch (e) {
-      error.value = toErrorMessage(e)
-      models.value = []
+      set({ error: toErrorMessage(e) })
+      set({ models: [] })
     } finally {
-      modelsLoading.value = false
+      set({ modelsLoading: false })
     }
   }
 
   function clearModels() {
-    models.value = []
+    set({ models: [] })
   }
 
   // ── 写操作 ──
@@ -424,7 +501,6 @@ export const useJetHubStore = defineStore('jetHub', () => {
   // ⚠️ 这条链路有**可见副作用**（插件可能拉起系统浏览器、开回环回调端口），
   // 所以刻意不放进批量动作，而是独立的一次会话 + 明确的取消入口。
 
-  const login = ref<JetHubLoginSession | null>(null)
   let loginSeq = 0
   let settleResolve: (() => void) | null = null
   let settlePromise: Promise<void> = Promise.resolve()
@@ -450,8 +526,9 @@ export const useJetHubStore = defineStore('jetHub', () => {
   }
 
   function cancelLogin() {
-    if (login.value && (login.value.status === 'waiting')) {
-      login.value = { ...login.value, status: 'cancelled', message: '已取消' }
+    const curLogin = get().login
+    if (curLogin && curLogin.status === 'waiting') {
+      set({ login: { ...curLogin, status: 'cancelled', message: '已取消' } })
       loginSeq += 1
       finishSettle()
     }
@@ -478,7 +555,7 @@ export const useJetHubStore = defineStore('jetHub', () => {
         startedAt: Date.now(),
         polls: 0,
       }
-      login.value = session
+      set({ login: session })
       return session
     }
 
@@ -495,7 +572,7 @@ export const useJetHubStore = defineStore('jetHub', () => {
       startedAt: Date.now(),
       polls: 0,
     }
-    login.value = session
+    set({ login: session })
     const seq = (loginSeq += 1)
 
     void pollLoginUntilDone(session.accountId, intervalMs, timeoutMs, seq)
@@ -504,7 +581,8 @@ export const useJetHubStore = defineStore('jetHub', () => {
 
   async function pollLoginUntilDone(accountId: string, intervalMs: number, timeoutMs: number, seq: number) {
     if (!accountId) {
-      if (login.value) login.value = { ...login.value, status: 'error', message: '插件未返回 accountId' }
+      const noAccount = get().login
+      if (noAccount) set({ login: { ...noAccount, status: 'error', message: '插件未返回 accountId' } })
       finishSettle()
       return
     }
@@ -516,18 +594,19 @@ export const useJetHubStore = defineStore('jetHub', () => {
       for (;;) {
         if (seq !== loginSeq) return // 已被取消或被新会话取代
         if (Date.now() > deadline) {
-          login.value = login.value
-            ? { ...login.value, status: 'timeout', message: '等待授权超时，可重试或取消后重来' }
-            : null
+          set({ login: get().login
+            ? { ...get().login!, status: 'timeout', message: '等待授权超时，可重试或取消后重来' }
+            : null })
           return
         }
-        const current = login.value
-        if (current) login.value = { ...current, polls: current.polls + 1 }
+        const current = get().login
+        if (current) set({ login: { ...current, polls: current.polls + 1 } })
         try {
           const res = await callJetHub<{ done: boolean }>('login.poll', { accountId })
           failures = 0
           if (res?.done === true) {
-            login.value = login.value ? { ...login.value, status: 'done', message: '授权成功，账号已添加' } : null
+            const doneLogin = get().login
+            set({ login: doneLogin ? { ...doneLogin, status: 'done', message: '授权成功，账号已添加' } : null })
             await refresh()
             // 授权成功 → 新渠道模型可选（不 await：不阻塞登录会话收尾）
             void refreshChatModels()
@@ -537,9 +616,9 @@ export const useJetHubStore = defineStore('jetHub', () => {
           // 单次轮询失败不终结会话：插件侧登录仍在后台进行。
           failures += 1
           if (failures >= 5) {
-            login.value = login.value
-              ? { ...login.value, status: 'error', message: toErrorMessage(e) }
-              : null
+            set({ login: get().login
+              ? { ...get().login!, status: 'error', message: toErrorMessage(e) }
+              : null })
             return
           }
         }
@@ -551,34 +630,30 @@ export const useJetHubStore = defineStore('jetHub', () => {
   }
 
   function dismissLogin() {
-    login.value = null
+    set({ login: null })
   }
 
   // ── Token 用量账本（usage.*）──
 
-  const usage = ref<JetHubUsageTotals | null>(null)
-  const usageChannels = ref<JetHubUsageChannel[]>([])
-  const usageHistory = ref<Array<Record<string, unknown>>>([])
-  const usageLoading = ref(false)
 
   async function loadUsage() {
-    usageLoading.value = true
-    error.value = ''
+    set({ usageLoading: true })
+    set({ error: '' })
     try {
       const [ledger, history] = await Promise.all([
         callJetHub<{ snapshot?: { channels?: JetHubUsageChannel[]; totals?: JetHubUsageTotals } }>('usage.tokenLedger', {}),
         callJetHub<{ history?: Array<Record<string, unknown>>; totals?: JetHubUsageTotals }>('usage.tokenLedgerHistory', {}),
       ])
-      usageChannels.value = ledger?.snapshot?.channels ?? []
-      usage.value = ledger?.snapshot?.totals ?? history?.totals ?? null
-      usageHistory.value = Array.isArray(history?.history) ? history.history : []
+      set({ usageChannels: ledger?.snapshot?.channels ?? [] })
+      set({ usage: ledger?.snapshot?.totals ?? history?.totals ?? null })
+      set({ usageHistory: Array.isArray(history?.history) ? history.history : [] })
     } catch (e) {
-      error.value = toErrorMessage(e)
-      usage.value = null
-      usageChannels.value = []
-      usageHistory.value = []
+      set({ error: toErrorMessage(e) })
+      set({ usage: null })
+      set({ usageChannels: [] })
+      set({ usageHistory: [] })
     } finally {
-      usageLoading.value = false
+      set({ usageLoading: false })
     }
   }
 
@@ -589,8 +664,6 @@ export const useJetHubStore = defineStore('jetHub', () => {
   // 也不会让它监听端口（它自己会在状态里回 `blockedByEnv: true`）。
   // 所以这里把开关写进**插件配置**，并如实告知需要重启后端。
 
-  const gateway = ref<JetHubGatewayStatus | null>(null)
-  const gatewayLoading = ref(false)
   /**
    * Maxma 侧设置里的网关开关（真正被这个界面写、并在装配时注入 env 的那个值）。
    *
@@ -598,23 +671,22 @@ export const useJetHubStore = defineStore('jetHub', () => {
    * 而 Maxma 默认是 false —— 只看插件那份会让按钮显示成「停用网关」，
    * 用户点下去写的却已经是 false，完全对不上。
    */
-  const gatewayConfigEnabled = ref(false)
 
   async function loadGateway() {
-    gatewayLoading.value = true
-    error.value = ''
+    set({ gatewayLoading: true })
+    set({ error: '' })
     try {
       const [status, config] = await Promise.all([
         callJetHub<JetHubGatewayStatus>('gateway.getEnabled', {}),
-        request<{ config: Record<string, unknown> }>(`/plugins/${encodeURIComponent(pluginName.value)}/config`),
+        request<{ config: Record<string, unknown> }>(`/plugins/${encodeURIComponent(get().pluginName)}/config`),
       ])
-      gateway.value = status
-      gatewayConfigEnabled.value = config?.config?.gatewayEnabled === true
+      set({ gateway: status })
+      set({ gatewayConfigEnabled: config?.config?.gatewayEnabled === true })
     } catch (e) {
-      error.value = toErrorMessage(e)
-      gateway.value = null
+      set({ error: toErrorMessage(e) })
+      set({ gateway: null })
     } finally {
-      gatewayLoading.value = false
+      set({ gatewayLoading: false })
     }
   }
 
@@ -622,9 +694,9 @@ export const useJetHubStore = defineStore('jetHub', () => {
   async function setGatewayEnabled(enabled: boolean) {
     await run('gateway', async () => {
       const current = await request<{ config: Record<string, unknown> }>(
-        `/plugins/${encodeURIComponent(pluginName.value)}/config`,
+        `/plugins/${encodeURIComponent(get().pluginName)}/config`,
       )
-      await request(`/plugins/${encodeURIComponent(pluginName.value)}/config`, {
+      await request(`/plugins/${encodeURIComponent(get().pluginName)}/config`, {
         method: 'PUT',
         body: JSON.stringify({ config: { ...(current?.config ?? {}), gatewayEnabled: enabled } }),
       })
@@ -634,23 +706,21 @@ export const useJetHubStore = defineStore('jetHub', () => {
 
   // ── 积分与额度（credits.*），按渠道 ──
 
-  const credits = ref<Record<string, JetHubCredits>>({})
-  const creditsLoading = ref(false)
 
   async function loadCredits(provider: string) {
-    creditsLoading.value = true
-    error.value = ''
+    set({ creditsLoading: true })
+    set({ error: '' })
     try {
       const res = await callJetHub<{ accounts?: JetHubCreditsAccount[]; windowDays?: number }>('credits.balances', { provider })
-      credits.value = {
-        ...credits.value,
+      set({ credits: {
+        ...get().credits,
         [provider]: { accounts: res?.accounts ?? [], windowDays: res?.windowDays },
-      }
+      } })
     } catch (e) {
-      error.value = toErrorMessage(e)
-      credits.value = { ...credits.value, [provider]: { accounts: [] } }
+      set({ error: toErrorMessage(e) })
+      set({ credits: { ...get().credits, [provider]: { accounts: [] } } })
     } finally {
-      creditsLoading.value = false
+      set({ creditsLoading: false })
     }
   }
 
@@ -674,53 +744,49 @@ export const useJetHubStore = defineStore('jetHub', () => {
   //      README 里写的 replace/merge 两种模式与这个已发布版本不符。
   //      插件为此专门提供了 `backup.status`：让界面在覆盖前告知「有 N 个账号会被替换」。
 
-  const backupStatus = ref<{ accounts: number; withoutExpiry: number } | null>(null)
-  const backupBusy = ref(false)
-  const backupWarnings = ref<string[]>([])
-  const backupResult = ref<JetHubImportResult | null>(null)
 
   async function loadBackupStatus() {
-    error.value = ''
+    set({ error: '' })
     try {
-      backupStatus.value = await callJetHub<{ accounts: number; withoutExpiry: number }>('backup.status', {})
+      set({ backupStatus: await callJetHub<{ accounts: number; withoutExpiry: number }>('backup.status', {}) })
     } catch (e) {
-      error.value = toErrorMessage(e)
-      backupStatus.value = null
+      set({ error: toErrorMessage(e) })
+      set({ backupStatus: null })
     }
   }
 
   /** 导出快照（**含明文凭据**，调用方必须先让用户确认）。 */
   async function exportBackup() {
-    backupBusy.value = true
-    error.value = ''
+    set({ backupBusy: true })
+    set({ error: '' })
     try {
       const res = await callJetHub<{ payload: unknown; warnings?: string[] }>('backup.export', {})
-      backupWarnings.value = Array.isArray(res?.warnings) ? res.warnings : []
+      set({ backupWarnings: Array.isArray(res?.warnings) ? res.warnings : [] })
       return res?.payload
     } catch (e) {
-      error.value = toErrorMessage(e)
+      set({ error: toErrorMessage(e) })
       throw e
     } finally {
-      backupBusy.value = false
+      set({ backupBusy: false })
     }
   }
 
   /** 导入快照（**整体替换**当前账号池与凭据）。 */
   async function importBackup(payload: unknown) {
-    backupBusy.value = true
-    error.value = ''
-    backupResult.value = null
+    set({ backupBusy: true })
+    set({ error: '' })
+    set({ backupResult: null })
     try {
       const res = await callJetHub<JetHubImportResult>('backup.import', { payload })
-      backupResult.value = res ?? null
+      set({ backupResult: res ?? null })
       await loadBackupStatus()
       await refresh()
       return res
     } catch (e) {
-      error.value = toErrorMessage(e)
+      set({ error: toErrorMessage(e) })
       throw e
     } finally {
-      backupBusy.value = false
+      set({ backupBusy: false })
     }
   }
 
@@ -806,39 +872,33 @@ export const useJetHubStore = defineStore('jetHub', () => {
   //   - 折叠态那行文案完全交给搬运过来的 `badgeView()` 计算（口径：窗口 > 套餐包 > 积分，
   //     已由插件自带的 74 条单测锁住）。
 
-  const badge = ref<JetHubBadgeReading | null>(null)
   /** 首次读数还没回来 —— 必须与「没有账号」区分（插件为此有过真实报障）。 */
-  const badgeLoading = ref(false)
   /** 首次读数失败且无数据 —— 显示「用量不可用」而不是「未配置启用账号」。 */
-  const badgeFailed = ref(false)
-  const badgeError = ref('')
-  const badgeProvider = ref('')
-  const badgePreference = ref<JetHubBadgePreference>('auto')
 
   let badgeTimer: ReturnType<typeof setInterval> | null = null
 
   async function loadBadgeProvider(provider: string, options?: { force?: boolean }) {
     const name = String(provider ?? '').trim()
     if (!name) return null
-    badgeProvider.value = name
-    if (!badge.value) badgeLoading.value = true
-    badgeError.value = ''
+    set({ badgeProvider: name })
+    if (!get().badge) set({ badgeLoading: true })
+    set({ badgeError: '' })
     try {
       const reading = await callJetHub<JetHubBadgeReading>('usage.badge', {
         provider: name,
         ...(options?.force ? { force: true } : {}),
       })
-      badge.value = reading ?? null
-      badgeFailed.value = false
-      if (reading?.preference) badgePreference.value = normalizePreference(reading.preference)
+      set({ badge: reading ?? null })
+      set({ badgeFailed: false })
+      if (reading?.preference) set({ badgePreference: normalizePreference(reading.preference) })
       return reading
     } catch (e) {
       // ⚠️ 保留上次读数：一次抖动不该让徽标变空（插件客户端同款行为）
-      badgeError.value = toErrorMessage(e)
-      if (!badge.value) badgeFailed.value = true
+      set({ badgeError: toErrorMessage(e) })
+      if (!get().badge) set({ badgeFailed: true })
       throw e
     } finally {
-      badgeLoading.value = false
+      set({ badgeLoading: false })
     }
   }
 
@@ -849,7 +909,7 @@ export const useJetHubStore = defineStore('jetHub', () => {
   async function loadBadgePreference() {
     try {
       const res = await callJetHub<{ preference?: string }>('usage.badgePreference', {})
-      badgePreference.value = normalizePreference(res?.preference)
+      set({ badgePreference: normalizePreference(res?.preference) })
     } catch {
       // 偏好读不到不是致命问题，回落 auto
     }
@@ -859,10 +919,10 @@ export const useJetHubStore = defineStore('jetHub', () => {
   async function setBadgePreference(preference: JetHubBadgePreference) {
     const res = await run('badge:preference', async () => {
       const saved = await callJetHub<{ preference?: string }>('usage.badgePreference', { preference })
-      badgePreference.value = normalizePreference(saved?.preference)
+      set({ badgePreference: normalizePreference(saved?.preference) })
       // 偏好影响折叠态那一行，立即重读
-      if (badgeProvider.value) await loadBadgeProvider(badgeProvider.value, { force: true })
-      return badgePreference.value
+      if (get().badgeProvider) await loadBadgeProvider(get().badgeProvider, { force: true })
+      return get().badgePreference
     })
     return res
   }
@@ -980,14 +1040,13 @@ export const useJetHubStore = defineStore('jetHub', () => {
 
   // ── 渠道顺序（provider.getOrder / provider.setOrder）──
 
-  const providerOrder = ref<string[]>([])
 
   async function loadProviderOrder() {
     try {
       const res = await callJetHub<{ order?: string[] }>('provider.getOrder', {})
-      providerOrder.value = Array.isArray(res?.order) ? res.order : []
+      set({ providerOrder: Array.isArray(res?.order) ? res.order : [] })
     } catch {
-      providerOrder.value = []
+      set({ providerOrder: [] })
     }
   }
 
@@ -1001,7 +1060,7 @@ export const useJetHubStore = defineStore('jetHub', () => {
 
   /** 把某渠道上移/下移一位（顺序即自动选号优先级）。 */
   async function moveProvider(provider: string, delta: number) {
-    const ids = routes.value.map((item) => item.id)
+    const ids = get().routes.map((item) => item.id)
     const from = ids.indexOf(provider)
     if (from < 0) return
     const to = from + delta
@@ -1014,22 +1073,21 @@ export const useJetHubStore = defineStore('jetHub', () => {
 
   // ── 自动签到开关（usage.autoCheckin）──
 
-  const autoCheckin = ref<{ enabled: boolean; lastDate?: string; ranToday?: boolean; running?: boolean; lastResult?: string } | null>(null)
 
   async function loadAutoCheckin() {
     try {
-      const res = await callJetHub<{ autoCheckin?: typeof autoCheckin.value }>('usage.autoCheckin', {})
-      autoCheckin.value = res?.autoCheckin ?? null
+      const res = await callJetHub<{ autoCheckin?: { enabled: boolean; lastDate?: string; ranToday?: boolean; running?: boolean; lastResult?: string } }>('usage.autoCheckin', {})
+      set({ autoCheckin: res?.autoCheckin ?? null })
     } catch {
-      autoCheckin.value = null
+      set({ autoCheckin: null })
     }
   }
 
   async function setAutoCheckin(enabled: boolean) {
     return await run('auto-checkin', async () => {
-      const res = await callJetHub<{ autoCheckin?: typeof autoCheckin.value }>('usage.autoCheckin', { enabled })
-      autoCheckin.value = res?.autoCheckin ?? null
-      return autoCheckin.value
+      const res = await callJetHub<{ autoCheckin?: { enabled: boolean; lastDate?: string; ranToday?: boolean; running?: boolean; lastResult?: string } }>('usage.autoCheckin', { enabled })
+      set({ autoCheckin: res?.autoCheckin ?? null })
+      return get().autoCheckin
     })
   }
 
@@ -1043,42 +1101,37 @@ export const useJetHubStore = defineStore('jetHub', () => {
   // 否则用户会拿它对账。另外记录里可能有**失败行**（error 有值）：那是排查
   // 「为什么没回复」的第一线索，与成功行同表展示，不要过滤掉。
 
-  const clineQuota = ref<{ accounts: Array<Record<string, unknown>> } | null>(null)
-  const clineQuotaLoading = ref(false)
-  const clineRequestLog = ref<Array<Record<string, unknown>>>([])
-  const clineRequestLogLoading = ref(false)
-  const clineRequestLogAccount = ref('')
 
   async function loadClineQuota() {
-    clineQuotaLoading.value = true
-    error.value = ''
+    set({ clineQuotaLoading: true })
+    set({ error: '' })
     try {
       const res = await callJetHub<{ accounts?: Array<Record<string, unknown>> }>('cline.quota', { provider: 'cline' })
-      clineQuota.value = { accounts: Array.isArray(res?.accounts) ? res.accounts : [] }
+      set({ clineQuota: { accounts: Array.isArray(res?.accounts) ? res.accounts : [] } })
     } catch (e) {
-      error.value = toErrorMessage(e)
-      clineQuota.value = null
+      set({ error: toErrorMessage(e) })
+      set({ clineQuota: null })
     } finally {
-      clineQuotaLoading.value = false
+      set({ clineQuotaLoading: false })
     }
   }
 
   async function loadClineRequestLog(accountId: string, limit?: number) {
-    clineRequestLogLoading.value = true
-    clineRequestLogAccount.value = accountId
-    error.value = ''
+    set({ clineRequestLogLoading: true })
+    set({ clineRequestLogAccount: accountId })
+    set({ error: '' })
     try {
       const res = await callJetHub<{ rows?: Array<Record<string, unknown>> }>('cline.requestLog', {
         provider: 'cline',
         accountId,
         ...(limit ? { limit } : {}),
       })
-      clineRequestLog.value = Array.isArray(res?.rows) ? res.rows : []
+      set({ clineRequestLog: Array.isArray(res?.rows) ? res.rows : [] })
     } catch (e) {
-      error.value = toErrorMessage(e)
-      clineRequestLog.value = []
+      set({ error: toErrorMessage(e) })
+      set({ clineRequestLog: [] })
     } finally {
-      clineRequestLogLoading.value = false
+      set({ clineRequestLogLoading: false })
     }
   }
 
@@ -1098,8 +1151,6 @@ export const useJetHubStore = defineStore('jetHub', () => {
   // ⚠️ 领取在 Raccoon 侧是**幂等**的：已领过返回 `granted:false`，
   // 此时 `earned` 必须报**累计值**而不是 0（插件记录过这个真实缺陷）。
 
-  const onboarding = ref<JetHubOnboarding | null>(null)
-  const onboardingLoading = ref(false)
 
   /** 把插件的三个平行 Record 合成界面好用的任务行。 */
   function toOnboardingTasks(res: Record<string, unknown>): JetHubOnboardingTask[] {
@@ -1115,22 +1166,22 @@ export const useJetHubStore = defineStore('jetHub', () => {
   }
 
   async function loadOnboarding(provider: string, accountId: string) {
-    onboardingLoading.value = true
-    error.value = ''
+    set({ onboardingLoading: true })
+    set({ error: '' })
     try {
       const res = await callJetHub<Record<string, unknown>>('onboarding.status', { provider, accountId })
-      onboarding.value = {
+      set({ onboarding: {
         provider,
         accountId,
         tasks: toOnboardingTasks(res),
         earned: typeof res?.earned === 'number' ? res.earned : undefined,
         total: typeof res?.total === 'number' ? res.total : undefined,
-      }
+      } })
     } catch (e) {
-      error.value = toErrorMessage(e)
-      onboarding.value = null
+      set({ error: toErrorMessage(e) })
+      set({ onboarding: null })
     } finally {
-      onboardingLoading.value = false
+      set({ onboardingLoading: false })
     }
   }
 
@@ -1144,9 +1195,9 @@ export const useJetHubStore = defineStore('jetHub', () => {
   }
 
   function clearAccountDetail() {
-    clineRequestLog.value = []
-    clineRequestLogAccount.value = ''
-    onboarding.value = null
+    set({ clineRequestLog: [] })
+    set({ clineRequestLogAccount: '' })
+    set({ onboarding: null })
   }
 
   // ── 锁定永久积分（credits.permanentLock）──
@@ -1163,53 +1214,32 @@ export const useJetHubStore = defineStore('jetHub', () => {
   //      `permanentLockCopy()`；
   //   3. Loomy 没有窗口概念（服务端直接给两个命名池），插件对它**不回** windowDays。
 
-  const permanentLocks = ref<Record<string, { locked: boolean; windowDays?: number }>>({})
-
   async function loadPermanentLock(provider: string) {
     if (!supportsPermanentLock(provider)) return
     try {
       const res = await callJetHub<{ provider: string; locked: boolean; windowDays?: number }>('credits.permanentLock', { provider })
-      permanentLocks.value = {
-        ...permanentLocks.value,
+      set({ permanentLocks: {
+        ...get().permanentLocks,
         [provider]: { locked: res?.locked === true, ...(typeof res?.windowDays === 'number' ? { windowDays: res.windowDays } : {}) },
-      }
+      } })
     } catch (e) {
-      error.value = toErrorMessage(e)
+      set({ error: toErrorMessage(e) })
     }
   }
 
   async function setPermanentLock(provider: string, locked: boolean) {
     return await run(`permanent-lock:${provider}`, async () => {
       const res = await callJetHub<{ locked: boolean; windowDays?: number }>('credits.permanentLock', { provider, locked })
-      permanentLocks.value = {
-        ...permanentLocks.value,
+      set({ permanentLocks: {
+        ...get().permanentLocks,
         [provider]: { locked: res?.locked === true, ...(typeof res?.windowDays === 'number' ? { windowDays: res.windowDays } : {}) },
-      }
-      return permanentLocks.value[provider]
+      } })
+      return get().permanentLocks[provider]
     })
   }
 
   return {
-    pluginName,
-    routes,
-    statuses,
-    accounts,
-    models,
-    modelsLoading,
-    login,
-    usage,
-    usageChannels,
-    usageHistory,
-    usageLoading,
-    gateway,
-    gatewayLoading,
-    gatewayConfigEnabled,
-    credits,
-    creditsLoading,
-    loading,
-    error,
-    notReady,
-    pending,
+    ...initialData,
     openProviders,
     closedProviders,
     accountTotal,
@@ -1224,10 +1254,6 @@ export const useJetHubStore = defineStore('jetHub', () => {
     setGatewayEnabled,
     loadCredits,
     claimCredits,
-    backupStatus,
-    backupBusy,
-    backupWarnings,
-    backupResult,
     loadBackupStatus,
     exportBackup,
     importBackup,
@@ -1237,12 +1263,6 @@ export const useJetHubStore = defineStore('jetHub', () => {
     setOpencodeProxy,
     testOpencodeProxy,
     rotateOpencodeFingerprint,
-    badge,
-    badgeLoading,
-    badgeFailed,
-    badgeError,
-    badgeProvider,
-    badgePreference,
     loadBadgeProvider,
     loadBadgePreference,
     setBadgePreference,
@@ -1256,26 +1276,16 @@ export const useJetHubStore = defineStore('jetHub', () => {
     setAllModelsDisabled,
     clearDeadModels,
     setModelsDisabled,
-    providerOrder,
     loadProviderOrder,
     saveProviderOrder,
     moveProvider,
-    autoCheckin,
     loadAutoCheckin,
     setAutoCheckin,
-    clineQuota,
-    clineQuotaLoading,
-    clineRequestLog,
-    clineRequestLogLoading,
-    clineRequestLogAccount,
     loadClineQuota,
     loadClineRequestLog,
-    onboarding,
-    onboardingLoading,
     loadOnboarding,
     claimOnboarding,
     clearAccountDetail,
-    permanentLocks,
     loadPermanentLock,
     setPermanentLock,
     refresh,

@@ -1,5 +1,4 @@
-import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { create } from 'zustand'
 import { api } from '@/api'
 import type {
   CapabilitiesResponse,
@@ -77,6 +76,44 @@ const log = createLogger('capabilities')
 /** 默认刷新间隔（毫秒）—— 5 分钟。 */
 export const CAPABILITIES_REFRESH_INTERVAL_MS = 5 * 60 * 1000
 
+interface CapabilitiesDerived {
+  features: CapabilityFeatures
+  sidecarStatus: SidecarStatus | null
+  toolCount: number
+  version: string | undefined
+}
+
+interface CapabilitiesState extends CapabilitiesDerived {
+  capabilities: CapabilitiesResponse | null
+  loading: boolean
+  error: string | null
+  lastFetched: number | null
+  fetchCapabilities: () => Promise<void>
+  refreshCapabilities: () => Promise<void>
+  isFeatureEnabled: (name: string) => boolean
+  getFeatureConfig: (name: string) => CapabilityFeatureConfig
+  describeFeature: (name: string) => FeatureAvailability
+}
+
+function derive(capabilities: CapabilitiesResponse | null): CapabilitiesDerived {
+  const features = capabilities?.features ?? {}
+  const t = features.tools
+  let toolCount: number
+  if (!t) {
+    toolCount = capabilities?.tools?.length ?? 0
+  } else {
+    const builtin = typeof t.builtin_count === 'number' ? t.builtin_count : 0
+    const custom = typeof t.custom_count === 'number' ? t.custom_count : 0
+    toolCount = builtin + custom
+  }
+  return {
+    features,
+    sidecarStatus: capabilities?.sidecar ?? null,
+    toolCount,
+    version: capabilities?.version,
+  }
+}
+
 /**
  * 能力发现 Store（Phase 4）。
  *
@@ -87,17 +124,9 @@ export const CAPABILITIES_REFRESH_INTERVAL_MS = 5 * 60 * 1000
  *
  * 失败时保留上一次成功的清单（last-known-good），避免界面因瞬时离线而抖动。
  */
-export const useCapabilitiesStore = defineStore('capabilities', () => {
-  // ── State ──
-  const capabilities = ref<CapabilitiesResponse | null>(null)
-  const loading = ref(false)
-  const error = ref<string | null>(null)
-  const lastFetched = ref<number | null>(null)
-
+export const useCapabilitiesStore = create<CapabilitiesState>()((set, get) => {
   // 并发去重：同一时刻仅允许一个 in-flight 请求
   let _inflight: Promise<void> | null = null
-
-  // ── Actions ──
 
   /**
    * 拉取能力清单。若已有请求在途则复用其 Promise，避免重复请求。
@@ -105,18 +134,17 @@ export const useCapabilitiesStore = defineStore('capabilities', () => {
    */
   async function fetchCapabilities(): Promise<void> {
     if (_inflight) return _inflight
-    loading.value = true
-    error.value = null
+    set({ loading: true, error: null })
     _inflight = (async () => {
       try {
         const data = await api.getCapabilities()
-        capabilities.value = data
-        lastFetched.value = Date.now()
+        set({ capabilities: data, lastFetched: Date.now(), ...derive(data) })
       } catch (e) {
-        error.value = e instanceof Error ? e.message : String(e)
-        log.warn('fetchCapabilities failed (keeping last-known-good):', error.value)
+        const message = e instanceof Error ? e.message : String(e)
+        set({ error: message })
+        log.warn('fetchCapabilities failed (keeping last-known-good):', message)
       } finally {
-        loading.value = false
+        set({ loading: false })
         _inflight = null
       }
     })()
@@ -128,17 +156,13 @@ export const useCapabilitiesStore = defineStore('capabilities', () => {
     return fetchCapabilities()
   }
 
-  // ── Getters ──
-
-  const features = computed<CapabilityFeatures>(() => capabilities.value?.features ?? {})
-
   /**
    * 判断某特性是否启用。
    * 规则：清单尚未加载时返回 true（乐观默认，避免在加载期间误隐藏核心导航）；
    * 已加载但特性缺失时返回 false；存在 enabled 字段时以其为准。
    */
   function isFeatureEnabled(name: string): boolean {
-    const manifest = capabilities.value
+    const manifest = get().capabilities
     if (!manifest || !manifest.features) return true
     const feature = manifest.features[name]
     if (!feature) return false
@@ -147,39 +171,21 @@ export const useCapabilitiesStore = defineStore('capabilities', () => {
 
   /** 读取某特性的完整配置对象（缺失时返回空对象）。 */
   function getFeatureConfig(name: string): CapabilityFeatureConfig {
-    return capabilities.value?.features?.[name] ?? {}
+    return get().capabilities?.features?.[name] ?? {}
   }
 
   /** 某特性为何不可用（绑定当前清单的 store 出口，界面不必自己取 features）。 */
   function describeFeature(name: string): FeatureAvailability {
-    return describeFeatureAvailability(capabilities.value?.features, name)
+    return describeFeatureAvailability(get().capabilities?.features, name)
   }
 
-  const sidecarStatus = computed<SidecarStatus | null>(
-    () => capabilities.value?.sidecar ?? null,
-  )
-
-  const toolCount = computed<number>(() => {
-    const t = capabilities.value?.features?.tools
-    if (!t) return capabilities.value?.tools?.length ?? 0
-    const builtin = typeof t.builtin_count === 'number' ? t.builtin_count : 0
-    const custom = typeof t.custom_count === 'number' ? t.custom_count : 0
-    return builtin + custom
-  })
-
-  const version = computed<string | undefined>(() => capabilities.value?.version)
-
   return {
-    // state
-    capabilities,
-    loading,
-    error,
-    lastFetched,
-    // getters
-    features,
-    sidecarStatus,
-    toolCount,
-    version,
+    // state (computed 成员以普通值形式暴露，并在派生的 set 中同步)
+    capabilities: null,
+    loading: false,
+    error: null,
+    lastFetched: null,
+    ...derive(null),
     // actions
     fetchCapabilities,
     refreshCapabilities,

@@ -87,7 +87,7 @@ function stripComments(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 }
 
-/** 递归收集 .ts/.vue（相对仓库根；跳过 node_modules / dist）。 */
+/** 递归收集 .ts/.tsx/.vue（相对仓库根；跳过 node_modules / dist）。 */
 function sourceFiles(dirRel: string): string[] {
   const abs = path.join(REPO, dirRel);
   if (!fs.existsSync(abs)) return [];
@@ -96,7 +96,7 @@ function sourceFiles(dirRel: string): string[] {
     if (entry.name === "node_modules" || entry.name === "dist") continue;
     const rel = `${dirRel}/${entry.name}`;
     if (entry.isDirectory()) out.push(...sourceFiles(rel));
-    else if (entry.name.endsWith(".ts") || entry.name.endsWith(".vue")) out.push(rel);
+    else if (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx") || entry.name.endsWith(".vue")) out.push(rel);
   }
   return out;
 }
@@ -290,53 +290,44 @@ describe("权限模式 REST 契约（AG-PERM-001 / PERM-LIVE-001）", () => {
     ).toEqual([...singleSource].sort());
   });
 
-  test("前端四处副本与单源清单逐字相等（双向）", () => {
-    // 前端不许 import kernel 源码（engine-boundary.test.ts 的纪律），只能是副本，
-    // 所以每一份都要单独对账。顺序敏感：UI 按清单顺序渲染、按 modeRank 排序。
+  test("前端单源清单与内核清单逐字相等，且不许出现第二份副本", () => {
+    // 前端不许 import kernel 源码（engine-boundary 纪律），只能是副本——
+    // 重写后只剩一份真值：types/session.ts 的联合类型 + PermissionModeControl.tsx
+    // 的 MODE_ORDER / MODE_LABELS。任何新增副本都会让下面的反向扫描判红。
     const sessionTypes = stripComments(read("web/src/types/session.ts"));
-    const controlSrc = stripComments(read("web/src/components/PermissionModeControl.vue"));
+    const controlSrc = stripComments(read("web/src/components/chat/PermissionModeControl.tsx"));
 
-    const propDefault = controlSrc.match(/availableModes:\s*\(\)\s*=>\s*\[([^\]]*)\]/);
-    expect(propDefault, "PermissionModeControl.vue 里找不到 availableModes 默认值").not.toBeNull();
+    const union = unionMembers(sessionTypes, "PermissionMode", "'");
+    expect(union, "PermissionMode 联合类型与内核清单不一致").toEqual(singleSource);
 
-    const optionsBlock = controlSrc.match(/const options:\s*PermissionOption\[\]\s*=\s*\[([\s\S]*?)\n\]/);
-    expect(optionsBlock, "PermissionModeControl.vue 里找不到 options 文案表").not.toBeNull();
+    // 顺序即 UI 顺序（限制由强到弱）。
+    const orderBlock = controlSrc.match(/MODE_ORDER:\s*PermissionMode\[\]\s*=\s*\[([^\]]*)\]/);
+    expect(orderBlock, "PermissionModeControl.tsx 里找不到 MODE_ORDER 清单").not.toBeNull();
+    const order = [...orderBlock![1]!.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]!);
+    expect(order, "MODE_ORDER 与内核清单不一致（顺序即 UI 顺序）").toEqual(singleSource);
 
-    const rankBlock = controlSrc.match(
-      /const modeRank:\s*Record<PermissionMode,\s*number>\s*=\s*\{([\s\S]*?)\n\}/,
-    );
-    expect(rankBlock, "PermissionModeControl.vue 里找不到 modeRank 表").not.toBeNull();
-    const rankEntries = [...rankBlock![1]!.matchAll(/^\s*([a-z_]+):\s*(\d+),/gm)];
-
-    const copies: Array<{ name: string; modes: string[] }> = [
-      {
-        name: "PermissionMode 联合类型",
-        modes: unionMembers(sessionTypes, "PermissionMode", "'"),
-      },
-      {
-        name: "availableModes prop 默认值",
-        modes: [...propDefault![1]!.matchAll(/'([a-z_]+)'/g)].map((x) => x[1]!),
-      },
-      {
-        name: "options 文案表",
-        modes: [...optionsBlock![1]!.matchAll(/value:\s*'([a-z_]+)'/g)].map((x) => x[1]!),
-      },
-      {
-        name: "modeRank 排序表",
-        modes: rankEntries.map((x) => x[1]!),
-      },
-    ];
-
-    for (const copy of copies) {
-      expect(copy.modes.length, `前端 ${copy.name} 解析为空，正则失效`).toBeGreaterThan(0);
-      expect(copy.modes, `前端 ${copy.name} 与单源清单不一致（顺序即 UI 顺序）`).toEqual(singleSource);
+    // 文案表必须覆盖每一档，缺一档 = 选项渲染空白。
+    for (const mode of singleSource) {
+      expect(
+        new RegExp(`\\b${mode}:\\s*'`).test(controlSrc),
+        `MODE_LABELS 缺少 ${mode} 的文案`,
+      ).toBe(true);
     }
 
-    // modeRank 的秩必须与清单顺序同向：秩错位 = 用户看到的强弱顺序被排反。
-    expect(
-      rankEntries.map((x) => Number(x[2])),
-      "modeRank 的秩必须是 0..n-1 升序，与清单顺序一致",
-    ).toEqual(singleSource.map((_, i) => i));
+    // 反第二份真值：src 下除这两个文件外，不许再有包含 ≥3 个档位字面量的数组/映射。
+    const allowed = new Set([
+      "web/src/types/session.ts",
+      "web/src/components/chat/PermissionModeControl.tsx",
+    ]);
+    const offenders: string[] = [];
+    for (const rel of sourceFiles("web/src")) {
+      if (allowed.has(rel)) continue;
+      const src = stripComments(read(rel));
+      const hits = singleSource.filter((mode) => new RegExp(`['"]${mode}['"]`).test(src));
+      // 单个档位的比较（如 mode === 'auto'）是消费方，不是副本；≥3 个才算第二份清单。
+      if (hits.length >= 3) offenders.push(rel);
+    }
+    expect(offenders, "前端出现了第二份权限档位清单（必须只留单源）").toEqual([]);
   });
 
   test("清单里每一档 kernel 都收；清单外的档位被拒绝（REST 与 kernel 不许一侧独知）", async () => {
@@ -545,7 +536,7 @@ describe("档位写入必须广播（PERM-ANNOUNCE-001）", () => {
     ).toBe(false);
 
     // 前端必须有真实分支：登记了却没分支正是 WS-EVENT-SINK-001 的原缺陷
-    const useChatSrc = stripComments(read("web/src/composables/useChat.ts"));
+    const useChatSrc = stripComments(read("web/src/hooks/useChat.ts"));
     expect(
       useChatSrc.includes(`'${eventName}'`) &&
         new RegExp(`^\\s{2}${eventName}: true,$`, "m").test(useChatSrc),
