@@ -14,6 +14,7 @@ import type { ChatTurn, ToolCall, TurnEvent, AskUserInteraction } from '@/types'
 import type { ParsedRef } from '@/utils/references'
 import { cn } from '@/lib/utils'
 import { toolDisplayName } from '@/components/tools/_shared/displayNames'
+import { InlineStickers } from '@/components/common/InlineStickers'
 
 export interface ChatWindowProps {
   turns: ChatTurn[]
@@ -197,7 +198,7 @@ function TurnBlock({ turn, isLast, onAction, onCite, onPin }: {
       {turn.userMessage && (
         <div className="flex items-start justify-end gap-2">
           <div className="max-w-[85%] rounded-xl rounded-br-sm bg-primary px-3.5 py-2.5 text-sm leading-relaxed text-primary-foreground">
-            <UserText text={turn.userMessage} />
+            <InlineStickers text={turn.userMessage} />
           </div>
         </div>
       )}
@@ -266,20 +267,6 @@ function TurnBlock({ turn, isLast, onAction, onCite, onPin }: {
         </div>
       )}
     </article>
-  )
-}
-
-/** 用户消息文本：`<sticker:path>` 标记渲染为内联贴纸（与旧 MessageBubble 一致）。 */
-function UserText({ text }: { text: string }) {
-  const parts = text.split(/(<sticker:[^>]+>)/g).filter(Boolean)
-  return (
-    <>
-      {parts.map((part, i) => {
-        const m = part.match(/^<sticker:([^>]+)>$/)
-        if (!m) return <span key={i}>{part}</span>
-        return <img key={i} src={`${'/api/stickers'}/${m[1]}`} alt="贴纸" className="my-1 inline-block max-h-24 rounded-lg" loading="lazy" />
-      })}
-    </>
   )
 }
 

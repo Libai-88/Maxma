@@ -4,6 +4,7 @@ import { api } from '@/api'
 import { Spinner } from '@/components/ui/spinner'
 import { Tag } from '@/components/ui/tag'
 import { Markdown } from '@/components/common/Markdown'
+import { InlineStickers } from '@/components/common/InlineStickers'
 
 interface ShareData {
   share: { access_mode: string; created_at: string; expires_at?: string }
@@ -67,7 +68,7 @@ export default function ShareView() {
           <div key={idx} className="rounded-xl border border-border bg-card p-4">
             <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{msg.role === 'user' ? '用户' : 'AI'}</p>
             {msg.role === 'user'
-              ? <p className="whitespace-pre-wrap text-sm leading-relaxed">{msg.content}</p>
+              ? <InlineStickers text={msg.content} className="whitespace-pre-wrap text-sm leading-relaxed" />
               : <Markdown content={msg.content} className="text-sm leading-relaxed" />}
           </div>
         ))}
