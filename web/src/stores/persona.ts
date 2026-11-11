@@ -1,5 +1,4 @@
-import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { create } from 'zustand'
 import { api } from '@/api'
 
 export interface PersonaProfile {
@@ -12,18 +11,25 @@ export interface PersonaProfile {
   avatar: string
 }
 
-export const usePersonaStore = defineStore('persona', () => {
-  const profile = ref<PersonaProfile>({
-    name: 'Maxma',
-    description: '温暖体贴又有点调皮的大姐姐',
-    nickname: '你',
-    scene: '吵闹的小公寓',
-    style: 'playful · 直接 · 温暖',
-    greeting: '你来啦。',
-    avatar: '✦',
-  })
-  const loading = ref(false)
-  const error = ref<string | null>(null)
+interface PersonaState {
+  profile: PersonaProfile
+  loading: boolean
+  error: string | null
+  fetchProfile: (force?: boolean) => Promise<void>
+  loadProfile: () => Promise<void>
+}
+
+const defaultProfile: PersonaProfile = {
+  name: 'Maxma',
+  description: '温暖体贴又有点调皮的大姐姐',
+  nickname: '你',
+  scene: '吵闹的小公寓',
+  style: 'playful · 直接 · 温暖',
+  greeting: '你来啦。',
+  avatar: '✦',
+}
+
+export const usePersonaStore = create<PersonaState>()((set) => {
   let _loaded = false
 
   async function fetchProfile(force = false) {
@@ -31,22 +37,28 @@ export const usePersonaStore = defineStore('persona', () => {
     // 但保存人设后必须刷新——force=true 绕过守卫强制拉取最新配置，
     // 否则 SoulView 保存走另一条 API，store 里的 profile 永远陈旧。
     if (_loaded && !force) return
-    loading.value = true
-    error.value = null
+    set({ loading: true, error: null })
     try {
       const data = await api.request<PersonaProfile>('/persona/profile')
-      if (data && typeof data === 'object') profile.value = data
+      if (data && typeof data === 'object') set({ profile: data })
       _loaded = true
     } catch (e) {
-      error.value = e instanceof Error ? e.message : '加载失败'
+      set({ error: e instanceof Error ? e.message : '加载失败' })
       /* use defaults */
+    } finally {
+      set({ loading: false })
     }
-    finally { loading.value = false }
   }
 
   async function loadProfile() {
     await fetchProfile(true)
   }
 
-  return { profile, loading, error, fetchProfile, loadProfile }
+  return {
+    profile: { ...defaultProfile },
+    loading: false,
+    error: null,
+    fetchProfile,
+    loadProfile,
+  }
 })

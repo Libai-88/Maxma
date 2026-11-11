@@ -1,7 +1,55 @@
 # MaxmaHere 交接说明
 
 > 当前可执行状态，供下一位接手者。架构请先读 [docs/00-当前架构.md](docs/00-当前架构.md)。
-> 更新时间：2026-11-02（`version.py` = v2.6.13）
+> 更新时间：2026-11-11（`version.py` = v2.6.13）
+
+## 2026-11-11 前端重写（重要）
+
+`web/` 由 **Vue 3 + Pinia + vue-router + 自研 6 主题/CSS 类体系** 整体重写为
+**React 19 + Vite 6 + Tailwind 4 + shadcn/ui（base-nova）+ Solid Glass 材质**；
+状态 zustand，路由 react-router-dom v7，图标 lucide-react。视觉身份从「宣纸 + 朱砂」切换为
+烟熏玻璃（`docs/brand-guidelines.md` v2.0）。
+
+- **未变**：后端契约（REST/WS 事件词表）、`web/src/api/`、`web/src/types/`、`web/src/utils/`（框架无关，原样沿用）、
+  28 条路由与能力门控、双入口（`index.html` / `quick-chat.html` / `splash.html`）、`base: './'`、生产 CSP、便携包/Electron 打包契约。
+- **重写**：`stores/`（zustand）、`hooks/useChat.ts`（完整移植 2563 行 WS 链路与 `SERVER_EVENT_HANDLER_TYPES` 登记）、
+  全部视图与组件、对话输入/窗口/工具步骤/审批/计划/上下文环（Solid Glass agent 组件）。
+- **删除**：`web/src-vue-backup/`、旧 Vue 测试套件（65 文件，随组件重建退役）、`eslint.config.js`（Vue 插件）、
+  `scripts/replace-colors.mjs`、`public/splash.js`、6 主题与 34-Token 契约、Inspira 装饰件与页面转场。
+- **闸门变化**：`scripts/verify-all-gates.sh` 的 web 段改为 `tsc --noEmit` + `vite build` + 语义色守卫
+  （`npm run lint:colors`，脚本已改写为扫描 TSX）；sidecar/backend 闸门不变。
+- **跨侧契约测试已适配新架构**（不是放宽，而是对准新位置/新不变量）：
+  - `bun-sidecar/tests/engine-boundary.test.ts`：设置面板改读 `SettingsView.tsx`，对账「面板实际读写的每个键
+    都必须已登记」；前端测试套件退役后，「前端测试别手抄内置工具清单」改为守护
+    「默认启用集 ⊆ 内置集」；工具展示名改读 `web/src/components/tools/_shared/displayNames.ts`。
+  - `bun-backend/tests/permission-mode-contract.test.ts`：前端 4 份副本对账改为**单源**对账
+    （`types/session.ts` 联合类型 + `PermissionModeControl.tsx` 的 `MODE_ORDER`/`MODE_LABELS`），
+    并新增反向扫描：`web/src` 下除这两个文件外出现 ≥3 个档位字面量即红（防第二份真值）。
+  - 设置登记表 `recap.enabled` 的 note 路径 `composables/` → `hooks/`。
+- **2026-11-11 实测（全部闸门通过）**：sidecar `bun test` 128 pass / 0 fail；sidecar tsc 0 error；
+  backend `bun test` 280 pass / 0 fail；web `tsc --noEmit` 0 error；web `vite build` 通过；
+  语义色守卫 78 个 TSX 0 违规；类型债棘轮双侧 0；后端 bundle `externals OK`。
+- 浏览器实测（构建产物 + mock 后端/假 WS）：25 条路由逐条 SPA 导航 0 控制台错误；
+  完整一轮对话（thinking → 工具步骤含 diff → 流式回答 → done）渲染正确；设置开关 PUT 命中登记键；
+  权限模式四档渲染并成功 PUT；能力门控在 `sub_agents`/`automation` 关闭时落 `FeatureUnavailableView`
+  并原样显示引擎 reason，侧栏入口同步隐藏。
+- **真实链路验收（2026-11-11，非 mock）**：
+  - `scripts/smoke-e2e-roundtrip.mjs`（假 provider + 真后端/引擎）→ `✅ 端到端链路通`，
+    事件 `hello/token×6/answer/done/task_review_update`，累计文本与假服务回复一致。
+  - 后端托管新构建产物（`http://127.0.0.1:8000/`）+ 真实引擎：界面选临时 stub 渠道 →
+    发送 → 界面渲染 `收到，链路通：新前端 → WS → 后端 → 引擎 → provider → SSE`，
+    `task_review_update` 触发「完成后验收」面板，全程 0 控制台错误。验证后已删除临时渠道与会话。
+- 诊断出口：`window.__maxma`（只读 store 快照，不含凭据），供便携包无 DevTools 时排查。
+- 聊天操作面已补齐（与旧 ChatView 对齐）：斜杠命令 10 条（含参数解析，如 `/goal 完成周报`）/
+  附件菜单（图片·文件·文件夹·链接·表情）/ 表情库（全部·最近·收藏）/ 语音输入（Web Speech）/
+  上下文占用环 / 自动执行开关 / 权限模式四档 / 选区引用随消息发送 / 工具中文名 / 用户消息内联贴纸 /
+  `@工具名` 提及补全（懒加载一次 `/tools`）。
+- **已知简化（非功能缺失，是呈现颗粒度）**：工具结果统一按「步骤 + 输出/补丁」渲染，
+  旧版 13 个专用气泡（搜索/待办/Python/浏览器/图片/文件列表…）未逐一对位；输出内容仍在，
+  只是不再按工具类型定制版式。`deferred_subagent_submitted` 的内联子任务卡片并入
+  `/agent-tasks` 任务中心。若后续要恢复专用版式，位置是
+  `web/src/components/chat/ChatWindow.tsx` 的 `toolToStep`。
+
 
 ## 状态
 
@@ -30,7 +78,7 @@
 web -> Bun 后端 /ws/chat/{session_id} -> kernel in-process -> pi AgentSession
 ```
 
-改聊天功能按序检查：`web/src/composables/useChat.ts` → `bun-backend/src/routes/chat-ws.ts` →
+改聊天功能按序检查：`web/src/hooks/useChat.ts`（`src/stores/chat.ts` 是通道状态）→ `bun-backend/src/routes/chat-ws.ts` →
 `bun-backend/src/server.ts`（`callKernelRpc`）→ `bun-sidecar/src/kernel/bridge-pi.ts` → 三侧测试。
 插件渠道的模型仍走这条路径，只是 provider 不在 `providers.yaml` 里，需先问 `isPluginProvider()`。
 
@@ -112,6 +160,11 @@ node scripts/check-type-budget.mjs --write    # 类型债下降后下调基线�
 - 插件网络安装面刻意未开；`/kb` 知识库路由已移除；Memory 事件未实现（pi memory 独立运行，不发事件）。
 
 ## 已修（2026-11-02，均有回归锁）
+
+> ⚠️ 2026-11-11 前端重写后，本表中凡以 `web/tests/*.spec.ts`（Vue 组件测试）为锁的行，
+> 锁已随组件重建退役；对应的**后端/引擎侧锁**（`bun-sidecar/tests/`、`bun-backend/tests/`）
+> 仍在且全绿。WS 事件全集仍由 `SERVER_EVENT_HANDLER_TYPES: Record<ServerEvent['type'], true>`
+> 在编译期强制登记（新增事件不登记 → tsc 报 missing property）。
 
 | 缺陷 | 修法 | 锁 |
 | --- | --- | --- |

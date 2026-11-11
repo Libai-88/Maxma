@@ -1,10 +1,40 @@
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { create } from 'zustand'
 import { api } from '@/api'
 import { createLogger } from '@/utils/logger'
 import type { ProviderConfig } from '@/types'
 
 const log = createLogger('provider')
+
+interface ProviderDerived {
+  enabledProviders: ProviderConfig[]
+  hasProviders: boolean
+  providersNeedingAttention: ProviderConfig[]
+}
+
+interface ProviderState extends ProviderDerived {
+  /** 所有 provider（含已禁用的，供 ProvidersView 管理用） */
+  allProviders: ProviderConfig[]
+  /** 加载状态 */
+  loading: boolean
+  /** 是否已成功加载过至少一次 */
+  loaded: boolean
+  /** 最后一次加载失败的错误信息 */
+  errorMessage: string
+  loadProviders: (retries?: number) => Promise<void>
+  refresh: () => Promise<void>
+}
+
+function derive(providers: ProviderConfig[]): ProviderDerived {
+  const enabledProviders = providers.filter(p => p.enabled)
+  return {
+    enabledProviders,
+    hasProviders: enabledProviders.length > 0,
+    // Providers with a safe runtime reason code that UI surfaces can consume.
+    providersNeedingAttention: providers.filter(
+      p => p.health_status === 'degraded' || p.health_status === 'error',
+    ),
+  }
+}
 
 /**
  * Provider 全局状态 store
@@ -15,23 +45,7 @@ const log = createLogger('provider')
  *
  * 统一通过 store 管理 provider 列表，消除竞态和状态不一致。
  */
-export const useProviderStore = defineStore('provider', () => {
-  /** 所有 provider（含已禁用的，供 ProvidersView 管理用） */
-  const allProviders = ref<ProviderConfig[]>([])
-  /** 已启用的 provider 列表（供 ChatView/ChatInput 使用） */
-  const enabledProviders = computed(() => allProviders.value.filter(p => p.enabled))
-  /** 是否有已启用的 provider */
-  const hasProviders = computed(() => enabledProviders.value.length > 0)
-  /** Providers with a safe runtime reason code that UI surfaces can consume. */
-  const providersNeedingAttention = computed(() => allProviders.value.filter(provider =>
-    provider.health_status === 'degraded' || provider.health_status === 'error',
-  ))
-  /** 加载状态 */
-  const loading = ref(false)
-  /** 是否已成功加载过至少一次 */
-  const loaded = ref(false)
-  /** 最后一次加载失败的错误信息 */
-  const errorMessage = ref('')
+export const useProviderStore = create<ProviderState>()((set) => {
   /** 进行中的加载 promise（并发调用时复用，避免竞态） */
   let _loadingPromise: Promise<void> | null = null
   /** PROVIDER-REFRESH-RACE-001：加载代数——refresh 发起强制刷新时递增，
@@ -46,16 +60,15 @@ export const useProviderStore = defineStore('provider', () => {
    */
   function loadProviders(retries = 3): Promise<void> {
     if (_loadingPromise) return _loadingPromise
-    loading.value = true
+    set({ loading: true })
     const gen = _refreshGen
     _loadingPromise = (async () => {
       try {
         for (let attempt = 0; attempt <= retries; attempt++) {
           try {
             const res = await api.listProviders()
-            if (gen !== _refreshGen) return  // 过期响应丢弃
-            allProviders.value = res.providers
-            loaded.value = true
+            if (gen !== _refreshGen) return // 过期响应丢弃
+            set({ allProviders: res.providers, loaded: true, ...derive(res.providers) })
             return
           } catch (e) {
             if (attempt < retries) {
@@ -63,13 +76,13 @@ export const useProviderStore = defineStore('provider', () => {
               await new Promise(r => setTimeout(r, 200 * Math.pow(2, attempt)))
             } else {
               // 最后一次仍失败：保留现有数据（首次加载时为空数组）
-              errorMessage.value = e instanceof Error ? e.message : String(e)
+              set({ errorMessage: e instanceof Error ? e.message : String(e) })
               log.warn('加载 provider 列表失败（已重试', retries, '次）:', e)
             }
           }
         }
       } finally {
-        loading.value = false
+        set({ loading: false })
         _loadingPromise = null
       }
     })()
@@ -83,19 +96,16 @@ export const useProviderStore = defineStore('provider', () => {
     // 递增代数：丢弃任何在 mutation 前启动、可能后到的旧响应
     _refreshGen++
     _loadingPromise = null
-    loading.value = false
-    errorMessage.value = ''
+    set({ loading: false, errorMessage: '' })
     await loadProviders(0)
   }
 
   return {
-    allProviders,
-    enabledProviders,
-    hasProviders,
-    providersNeedingAttention,
-    loading,
-    loaded,
-    errorMessage,
+    allProviders: [],
+    ...derive([]),
+    loading: false,
+    loaded: false,
+    errorMessage: '',
     loadProviders,
     refresh,
   }

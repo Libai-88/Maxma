@@ -1,95 +1,121 @@
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { create } from 'zustand'
 import { api } from '@/api'
 import { toErrorMessage } from '@/utils/error'
-import type { Plugin, PluginDetail, PluginFilter, InstallPluginRequest } from '@/types/plugin'
+import type {
+  Plugin,
+  PluginDetail,
+  PluginFilter,
+  InstallPluginRequest,
+  InstallPluginResponse,
+} from '@/types/plugin'
 
-export const usePluginStore = defineStore('plugin', () => {
-  // ── State ──
-  const plugins = ref<Plugin[]>([])
-  const loading = ref(false)
-  const error = ref('')
-  const filter = ref<PluginFilter>({})
-  const installing = ref(false)
-  const installProgress = ref<{ spec: string; status: string } | null>(null)
+interface PluginDerived {
+  filteredPlugins: Plugin[]
+  enabledPlugins: Plugin[]
+  disabledPlugins: Plugin[]
+}
 
-  // ── Computed ──
-  const filteredPlugins = computed(() => {
-    let result = plugins.value
+interface PluginState extends PluginDerived {
+  plugins: Plugin[]
+  loading: boolean
+  error: string
+  filter: PluginFilter
+  installing: boolean
+  installProgress: { spec: string; status: string } | null
+  loadPlugins: () => Promise<void>
+  installPlugin: (request: InstallPluginRequest) => Promise<InstallPluginResponse>
+  uninstallPlugin: (name: string) => Promise<void>
+  togglePlugin: (name: string, enabled: boolean) => Promise<void>
+  getPluginDetail: (name: string) => Promise<PluginDetail>
+  setFilter: (newFilter: Partial<PluginFilter>) => void
+  clearFilter: () => void
+  clearError: () => void
+}
 
-    if (filter.value.query) {
-      const q = filter.value.query.toLowerCase()
-      result = result.filter(p =>
-        p.name.toLowerCase().includes(q) ||
-        p.description?.toLowerCase().includes(q) ||
-        p.tags?.some(t => t.toLowerCase().includes(q))
-      )
-    }
+function derive(plugins: Plugin[], filter: PluginFilter): PluginDerived {
+  let result = plugins
 
-    if (filter.value.category) {
-      result = result.filter(p => p.category === filter.value.category)
-    }
+  if (filter.query) {
+    const q = filter.query.toLowerCase()
+    result = result.filter(p =>
+      p.name.toLowerCase().includes(q) ||
+      p.description?.toLowerCase().includes(q) ||
+      p.tags?.some(t => t.toLowerCase().includes(q)),
+    )
+  }
 
-    if (filter.value.enabled !== undefined) {
-      result = result.filter(p => p.enabled === filter.value.enabled)
-    }
+  if (filter.category) {
+    result = result.filter(p => p.category === filter.category)
+  }
 
-    if (filter.value.tags && filter.value.tags.length > 0) {
-      result = result.filter(p =>
-        filter.value.tags!.some(tag => p.tags?.includes(tag))
-      )
-    }
+  if (filter.enabled !== undefined) {
+    result = result.filter(p => p.enabled === filter.enabled)
+  }
 
-    return result
-  })
+  if (filter.tags && filter.tags.length > 0) {
+    result = result.filter(p => filter.tags!.some(tag => p.tags?.includes(tag)))
+  }
 
-  const enabledPlugins = computed(() => plugins.value.filter(p => p.enabled))
-  const disabledPlugins = computed(() => plugins.value.filter(p => !p.enabled))
+  return {
+    filteredPlugins: result,
+    enabledPlugins: plugins.filter(p => p.enabled),
+    disabledPlugins: plugins.filter(p => !p.enabled),
+  }
+}
 
-  // ── Actions ──
+export const usePluginStore = create<PluginState>()((set, get) => {
+  function patch(p: Partial<PluginState>) {
+    set((s) => {
+      const plugins = p.plugins ?? s.plugins
+      const filter = p.filter ?? s.filter
+      return { ...p, ...derive(plugins, filter) }
+    })
+  }
+
   async function loadPlugins() {
-    loading.value = true
-    error.value = ''
+    patch({ loading: true, error: '' })
     try {
-      plugins.value = await api.listPlugins()
+      const data = await api.listPlugins()
+      patch({ plugins: data })
     } catch (e) {
-      error.value = toErrorMessage(e)
+      patch({ error: toErrorMessage(e) })
       throw e
     } finally {
-      loading.value = false
+      patch({ loading: false })
     }
   }
 
-  async function installPlugin(request: InstallPluginRequest) {
-    installing.value = true
-    installProgress.value = { spec: request.spec, status: 'installing' }
-    error.value = ''
+  async function installPlugin(request: InstallPluginRequest): Promise<InstallPluginResponse> {
+    patch({
+      installing: true,
+      installProgress: { spec: request.spec, status: 'installing' },
+      error: '',
+    })
     try {
       const result = await api.installPlugin(request)
       if (result.ok && result.plugin) {
-        plugins.value.push(result.plugin)
+        patch({ plugins: [...get().plugins, result.plugin] })
       } else if (result.ok) {
         // 安装成功但响应中没有 plugin 对象，重新加载列表
         await loadPlugins()
       }
-      installProgress.value = { spec: request.spec, status: 'success' }
+      patch({ installProgress: { spec: request.spec, status: 'success' } })
       return result
     } catch (e) {
-      error.value = toErrorMessage(e)
-      installProgress.value = { spec: request.spec, status: 'error' }
+      patch({ error: toErrorMessage(e), installProgress: { spec: request.spec, status: 'error' } })
       throw e
     } finally {
-      installing.value = false
-      setTimeout(() => { installProgress.value = null }, 3000)
+      patch({ installing: false })
+      setTimeout(() => patch({ installProgress: null }), 3000)
     }
   }
 
   async function uninstallPlugin(name: string) {
     try {
       await api.uninstallPlugin(name)
-      plugins.value = plugins.value.filter(p => p.name !== name)
+      patch({ plugins: get().plugins.filter(p => p.name !== name) })
     } catch (e) {
-      error.value = toErrorMessage(e)
+      patch({ error: toErrorMessage(e) })
       throw e
     }
   }
@@ -97,12 +123,11 @@ export const usePluginStore = defineStore('plugin', () => {
   async function togglePlugin(name: string, enabled: boolean) {
     try {
       await api.togglePlugin(name, enabled)
-      const plugin = plugins.value.find(p => p.name === name)
-      if (plugin) {
-        plugin.enabled = enabled
-      }
+      patch({
+        plugins: get().plugins.map(p => p.name === name ? { ...p, enabled } : p),
+      })
     } catch (e) {
-      error.value = toErrorMessage(e)
+      patch({ error: toErrorMessage(e) })
       throw e
     }
   }
@@ -111,35 +136,33 @@ export const usePluginStore = defineStore('plugin', () => {
     try {
       return await api.getPluginDetail(name)
     } catch (e) {
-      error.value = toErrorMessage(e)
+      patch({ error: toErrorMessage(e) })
       throw e
     }
   }
 
   function setFilter(newFilter: Partial<PluginFilter>) {
-    filter.value = { ...filter.value, ...newFilter }
+    patch({ filter: { ...get().filter, ...newFilter } })
   }
 
   function clearFilter() {
-    filter.value = {}
+    patch({ filter: {} })
   }
 
   function clearError() {
-    error.value = ''
+    patch({ error: '' })
   }
 
   return {
     // state
-    plugins,
-    loading,
-    error,
-    filter,
-    installing,
-    installProgress,
-    // computed
-    filteredPlugins,
-    enabledPlugins,
-    disabledPlugins,
+    plugins: [],
+    loading: false,
+    error: '',
+    filter: {},
+    installing: false,
+    installProgress: null,
+    // computed（以值形式暴露）
+    ...derive([], {}),
     // actions
     loadPlugins,
     installPlugin,

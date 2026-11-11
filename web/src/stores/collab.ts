@@ -1,5 +1,4 @@
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { create } from 'zustand'
 import { api } from '@/api'
 import { toErrorMessage } from '@/utils/error'
 import type {
@@ -9,44 +8,62 @@ import type {
   CollabUser,
 } from '@/types/collab'
 
-export const useCollabStore = defineStore('collab', () => {
-  // ── State ──
-  const shares = ref<SessionShare[]>([])
-  const snapshots = ref<SessionSnapshot[]>([])
-  const activeUsers = ref<CollabUser[]>([])
-  const loading = ref(false)
-  const error = ref('')
+interface CollabDerived {
+  activeShares: SessionShare[]
+  expiredShares: SessionShare[]
+}
 
-  // ── Computed ──
-  const activeShares = computed(() =>
-    shares.value.filter(s => !s.expires_at || new Date(s.expires_at) > new Date())
-  )
+interface CollabState extends CollabDerived {
+  shares: SessionShare[]
+  snapshots: SessionSnapshot[]
+  activeUsers: CollabUser[]
+  loading: boolean
+  error: string
+  loadShares: (sessionId: string) => Promise<void>
+  createShare: (request: CreateShareRequest) => Promise<SessionShare>
+  revokeShare: (shareId: string) => Promise<void>
+  loadSnapshots: (sessionId: string) => Promise<void>
+  createSnapshot: (sessionId: string, title: string) => Promise<SessionSnapshot>
+  deleteSnapshot: (snapshotId: string) => Promise<void>
+  clearError: () => void
+}
 
-  const expiredShares = computed(() =>
-    shares.value.filter(s => s.expires_at && new Date(s.expires_at) <= new Date())
-  )
+function derive(shares: SessionShare[]): CollabDerived {
+  const now = new Date()
+  return {
+    activeShares: shares.filter(s => !s.expires_at || new Date(s.expires_at) > now),
+    expiredShares: shares.filter(s => s.expires_at && new Date(s.expires_at) <= now),
+  }
+}
 
-  // ── Actions ──
+export const useCollabStore = create<CollabState>()((set, get) => {
   // 会话切换竞态守卫（COLLAB-RACE-001）：快速 A→B→A 切换时慢响应后到会
   // 覆盖新会话数据。每次加载递增 seq，响应返回时 seq 已变化则丢弃。
   // shares/snapshots 各用独立计数器（loadCollabData 并发调用互不失效）。
   let _sharesSeq = 0
   let _snapshotsSeq = 0
 
+  // 统一 set：shares 变化时重算 activeShares/expiredShares（computed 以值形式暴露）。
+  function patch(p: Partial<CollabState>) {
+    set((s) => {
+      const shares = p.shares ?? s.shares
+      return { ...p, ...derive(shares) }
+    })
+  }
+
   async function loadShares(sessionId: string) {
     const seq = ++_sharesSeq
-    loading.value = true
-    error.value = ''
+    patch({ loading: true, error: '' })
     try {
       const data = await api.listSessionShares(sessionId)
       if (seq !== _sharesSeq) return // 已被更新的加载取代
-      shares.value = data
+      patch({ shares: data })
     } catch (e) {
       if (seq !== _sharesSeq) return
-      error.value = toErrorMessage(e)
+      patch({ error: toErrorMessage(e) })
       throw e
     } finally {
-      if (seq === _sharesSeq) loading.value = false
+      if (seq === _sharesSeq) patch({ loading: false })
     }
   }
 
@@ -56,10 +73,10 @@ export const useCollabStore = defineStore('collab', () => {
       // COLLAB-MUTATE-RACE-001：mutation 后递增 seq，作废在途 loadShares
       // 响应——否则旧响应（不含新 share）后到会覆盖掉刚创建的 share
       _sharesSeq++
-      shares.value.push(share)
+      patch({ shares: [...get().shares, share] })
       return share
     } catch (e) {
-      error.value = toErrorMessage(e)
+      patch({ error: toErrorMessage(e) })
       throw e
     }
   }
@@ -70,27 +87,26 @@ export const useCollabStore = defineStore('collab', () => {
       // COLLAB-MUTATE-RACE-001：mutation 后递增 seq，作废在途 loadShares
       // 响应——否则旧响应（仍含该 share）后到会让被撤销的 share 复活
       _sharesSeq++
-      shares.value = shares.value.filter(s => s.share_id !== shareId)
+      patch({ shares: get().shares.filter(s => s.share_id !== shareId) })
     } catch (e) {
-      error.value = toErrorMessage(e)
+      patch({ error: toErrorMessage(e) })
       throw e
     }
   }
 
   async function loadSnapshots(sessionId: string) {
     const seq = ++_snapshotsSeq
-    loading.value = true
-    error.value = ''
+    patch({ loading: true, error: '' })
     try {
       const data = await api.listSessionSnapshots(sessionId)
       if (seq !== _snapshotsSeq) return
-      snapshots.value = data
+      patch({ snapshots: data })
     } catch (e) {
       if (seq !== _snapshotsSeq) return
-      error.value = toErrorMessage(e)
+      patch({ error: toErrorMessage(e) })
       throw e
     } finally {
-      if (seq === _snapshotsSeq) loading.value = false
+      if (seq === _snapshotsSeq) patch({ loading: false })
     }
   }
 
@@ -99,10 +115,10 @@ export const useCollabStore = defineStore('collab', () => {
       const snapshot = await api.createSessionSnapshot(sessionId, title)
       // COLLAB-MUTATE-RACE-001：同 shares，作废在途 loadSnapshots 响应
       _snapshotsSeq++
-      snapshots.value.push(snapshot)
+      patch({ snapshots: [...get().snapshots, snapshot] })
       return snapshot
     } catch (e) {
-      error.value = toErrorMessage(e)
+      patch({ error: toErrorMessage(e) })
       throw e
     }
   }
@@ -112,27 +128,27 @@ export const useCollabStore = defineStore('collab', () => {
       await api.deleteSessionSnapshot(snapshotId)
       // COLLAB-MUTATE-RACE-001：同 shares，作废在途 loadSnapshots 响应
       _snapshotsSeq++
-      snapshots.value = snapshots.value.filter(s => s.snapshot_id !== snapshotId)
+      patch({ snapshots: get().snapshots.filter(s => s.snapshot_id !== snapshotId) })
     } catch (e) {
-      error.value = toErrorMessage(e)
+      patch({ error: toErrorMessage(e) })
       throw e
     }
   }
 
   function clearError() {
-    error.value = ''
+    patch({ error: '' })
   }
 
   return {
     // state
-    shares,
-    snapshots,
-    activeUsers,
-    loading,
-    error,
-    // computed
-    activeShares,
-    expiredShares,
+    shares: [],
+    snapshots: [],
+    activeUsers: [],
+    loading: false,
+    error: '',
+    // computed（以值形式暴露）
+    activeShares: [],
+    expiredShares: [],
     // actions
     loadShares,
     createShare,

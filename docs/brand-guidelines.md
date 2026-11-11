@@ -1,17 +1,21 @@
-# Maxma 品牌指南 v1.1
+# Maxma 品牌指南 v2.0
 
 > **唯一事实源（Source of Truth）**：本文档定义 Maxma 的品牌身份、视觉规范与声音准则。
-> 代码侧的活规范是 `web/src/assets/styles/tokens.css`（结构 token）与 `web/src/themes/*.css`（34-Token 主题必填契约 + 主题扩展）。
-> 本文档与代码不一致时，以代码为准并回头修订本文档。
+> 代码侧的活规范是 `web/src/solid-glass.css`（全部颜色 / 三层玻璃材质 / 圆角 / 动效）
+> 与 `web/src/index.css`（全局基座）。本文档与代码不一致时，以代码为准并回头修订本文档。
+>
+> **v2.0（2026-11-11）**：视觉身份由「宣纸白 + 朱砂印」整站切换为 **Solid Glass 烟熏玻璃材质**
+> （见 §2）。品牌定位、声音三特质与文案纪律（§1）保持不变。
 
 ## 快速参考
 
 - **品牌定位**：本地优先的 AI Agent 桌面客户端 · 用户的首席思维伙伴
-- **品牌名由来**：墨色（ink tone）——不是最鲜艳的颜色，但落在纸上最清楚
-- **Tagline**：温润如纸 · 智能如你
-- **主色**：朱砂 `#C23B22`
-- **基底**：宣纸白 `#F4F0E8`
-- **显示字体**：EB Garamond + Noto Serif SC（衬线）
+- **Tagline**：Agent workspace
+- **材质**：Solid Glass —— 远看是实体，近看才是玻璃；厚度即层级
+- **基底**：`--background` 深冷灰（dark 是设计基准），面板为烟熏玻璃
+- **主色**：中性灰阶 + 单一状态色；颜色与动效只用于有意义的反馈
+- **字体**：Geist / Geist Mono（`@fontsource-variable`），中文回落 PingFang SC / Microsoft YaHei
+- **形态**：圆角 `--radius` 0.875rem，控件 0.7rem
 - **声音三特质**：克制 · 有分量 · 有温度
 
 ---
@@ -20,7 +24,7 @@
 
 ### 定位
 
-Maxma 是用户的**首席思维伙伴**——不是搜索引擎、不是执行工具、不是永远正确的导师，而是帮用户想得更深的人。名字取自「墨色」：判断不喧哗，但有分量。
+Maxma 是用户的**首席思维伙伴**——不是搜索引擎、不是执行工具、不是永远正确的导师，而是帮用户想得更深的人。
 
 ### 声音三特质
 
@@ -56,231 +60,80 @@ Maxma 是用户的**首席思维伙伴**——不是搜索引擎、不是执行�
 
 ---
 
-## 2. 色彩体系
+## 2. 视觉体系：Solid Glass
 
-### 旗舰主题「素影」— 宣纸白 + 朱砂印
+### 材质四律（改样式前必读）
 
-**表面四阶**（越浮起越亮）：
+Solid Glass 是 shadcn/ui 的主题样式表，材质规则只有四条（`solid-glass.css` 头注释即其原文）：
 
-| 层级 | 值 | 意象 | 用途 |
-|------|-----|------|------|
-| `--bg-primary` | `#F4F0E8` | 宣纸 | 主画布 |
-| `--bg-secondary` | `#EEE9E0` | 旧纸 | 侧边栏 |
-| `--bg-card` | `#F8F5EF` | 素笺 | 卡片/气泡 |
-| `--bg-raised` | `#FDFBF6` | 雪纸 | 弹窗/悬停 |
+1. **饰面在边缘**：顶边一线光（`--glass-rim`）、内部第二道细线（`--glass-inner`）、外圈发丝边（`--glass-edge`）、脚下阴影（`--glass-shade`）。**不在表面铺渐变**。
+2. **厚重，不飘**：中性灰，模糊只柔化身后内容、不放大它的颜色。
+3. **厚度即层级**：`panel`（最薄）< `card` < `popover`（最厚）。越厚越不透明。
+4. **单一状态**：hover / 选中 / 展开都穿同一件小块清玻璃（`.glass-chosen` / `.glass-held`）。
 
-**文字四阶**（墨分五色）：
+### 颜色
 
-| 层级 | 值 | 意象 | 对比度 |
-|------|-----|------|--------|
-| `--text-primary` | `#1C1C1C` | 浓墨 | ~13:1（AAA） |
-| `--text-secondary` | `#3D3D3D` | 重墨 | ~9:1（AAA） |
-| `--text-tertiary` | `#6E6E6E` | 淡墨 | ≥4.5:1（AA） |
-| `--text-inverse` | `#FFFFFF` | 留白 | 用于暗底亮文 |
+- 全部颜色来自 `solid-glass.css` 的 CSS 变量，经 Tailwind v4 `@theme inline` 暴露为语义类：
+  `bg-background` / `bg-card` / `bg-panel` / `bg-popover` / `text-foreground` / `text-muted-foreground` /
+  `border-border` / `ring-ring` / `bg-primary` / `text-destructive` / `text-status-done` /
+  `text-status-running` / `text-status-interrupted`。
+- **禁止**硬编码 `#hex` / `oklch()` / `rgb()`，**禁止**使用 Tailwind 默认调色板类（`bg-red-500`、`text-emerald-300` 等）。
+  守卫脚本：`web/scripts/check-hardcoded-colors.mjs`（`npm run lint:colors`，豁免 `components/ui/` 框架源码）。
+- 暗色是设计基准；light 是同一批面板在白天下。**不再有 6 套主题**：只有 light / dark 两态。
 
-**强调色四阶**（朱砂印）：
+### 字体
 
-| 层级 | 值 | 用途 |
-|------|-----|------|
-| `--accent` | `#C23B22` | 主强调、品牌印 |
-| `--accent-hover` | `#A8311A` | 悬停 |
-| `--accent-active` | `#8E2814` | 按下 |
-| `--accent-light` | `rgba(194,59,34,0.08)` | 选中背景 |
+- `--font-sans: "Geist Variable"`，`--font-mono: "Geist Mono Variable"`，中文回落 PingFang SC / Microsoft YaHei。
+- 代码、日志、diff、命令一律 `font-mono`；数据列开 `tabular-nums`。
 
-**状态四色**（矿物颜料命名）：
+### 圆角与阴影
 
-| 状态 | 值 | 意象 |
-|------|-----|------|
-| `--status-ok` | `#6B8E6B` | 松烟绿 |
-| `--status-error` | `#C5554A` | 胭脂红 |
-| `--status-warn` | `#C99A5A` | 藤黄 |
-| `--status-info` | `#5A8A9A` | 石青 |
-
-### 色彩纪律
-
-- **单一强调色**：朱砂是唯一的高饱和品牌色，其余颜色一律低饱和融入纸面
-- **阴影带色温**：阴影用暖棕调 `rgba(120,100,80,*)` 或墨调 `rgba(28,28,28,*)`，禁止纯黑高透明度
-- ** tint 用 color-mix**：所有半透明着色通过 `color-mix(in srgb, ...)` 派生，不手写 rgba 魔法值
-- **暗色主题不反色**：暗色主题（夜航/子夜）使用降饱和的暖暗色，而非简单反转
-- **兜底值必须属于品牌**：`tokens.css` 的默认 token 取品牌矿物色，不留上一代品牌或第三方调色板（如 Tailwind）的值。历史事故：用户气泡兜底曾写 `--accent-pink`（只有 1/6 主题定义），其余主题静默渲染成旧品牌粉。见 §2.1。
-- **状态色作文字用 `-text` 变体**：`--status-warn` 这类彩色直接作文字偏淡（藤黄在宣纸底仅 2.34:1），必须改用 `--status-warn-text` 等文字版。
-
-### 2.1 对话可辨性（可访问性硬约束）
-
-**用户气泡与 AI 气泡必须肉眼可分。** 这不是审美偏好，是产品原则——「对话即界面」意味着用户必须能瞬间分辨谁说的。
-
-判据是实测对比度，不是肉眼估计：
-
-| 检查 | 阈值 | 由测试锁定 |
-| --- | --- | --- |
-| `--user-bubble-solid` vs `--bg-card`（AI 气泡） | ≥ 1.2 | `themeTokens.spec.ts` |
-| `--user-bubble-text` vs `--user-bubble-solid` | ≥ 4.5 | `themeTokens.spec.ts` |
-| `--status-*-text` vs `--bg-card`（6 主题 × 4 状态 = 24 组） | ≥ 4.5 | `themeTokens.spec.ts` |
-
-**只用 `--user-bubble-solid` + `--user-bubble-text` 这一对。** 历史上存在四种写法（主题写死 `--user-bubble`、轻量聊天读 `--user-bubble` + `--bg-primary`、iframe 沙箱转发 `--user-bubble`），导致轻量页与主应用对「用户气泡」的理解分叉；现已收敛并有测试守住。
-
-全局兜底是 `--user-bubble-solid: var(--accent)`——跟着主题走，天然满足阈值。
-
-| 主题 | 用户气泡 | 文字 | vs AI 气泡 |
-| --- | --- | --- | --- |
-| 素影 suying | `#C23B22` 朱砂 | 白 | 4.89 |
-| 青原 grass | `#4A7A4E`（主题自有 `--accent-hover`） | 白 | 4.86 |
-| 金継 kintsugi | `#C8A84E` 缮金 | 浓墨 | 2.20 |
-| 夜航 night | `#D4A853` 夜航金 | 墨 | 7.85 |
-| 極線 ultraline | `#0066FF` 讯号蓝 | 白 | 4.83 |
-| 子夜 midnight | `#EAB2A0` 霞粉 | `#3B4A54` | 4.19 |
-
-> 说明：`grass` 用主题既有的 `--accent-hover` 而非 `--accent`——后者配白字仅 3.92:1，达不到 4.5。复用既有色阶，不另造颜色。
-
-**状态色·文字版**用 `color-mix(in srgb, var(--status-*) 30%, var(--text-primary))`：明色主题自动变深、暗色主题自动变亮（它们的 `--text-primary` 本就是浅色），一个公式覆盖 24 组，实测最差 4.71:1。相比逐主题调比例，这是 1 个常数而不是 24 个魔法数。
-
-### 2.2 `--text-inverse` 只用于实底色块（MODAL-THEME-001）
-
-`--text-inverse` 的语义是「**给实底色块用的亮/暗字**」——比如朱砂按钮上的白字。它**不是**「压在页面上的正文色」。
-
-真实事故：设置弹窗的玻璃底是 `color-mix(--text-inverse 8%, transparent)`（半透明，叠在页面之上），而弹窗里的标题、卡片标题也一律用 `--text-inverse`。两者同源 → **同色压同色，对比度 1.00**。
-
-| 主题 | 事故时 | 修法 |
-| --- | --- | --- |
-| 夜航 night / 子夜 midnight | 1.00 | 4.53 ~ 4.60 |
-| 素影 suying / 青原 grass 等 | 1.06 ~ 1.13 | 4.96 ~ 13.90 |
-
-> 明色主题当时也是坏的（1.06~1.13）——只是白底白字比黑底黑字更难被察觉。这个 bug 一直存在，只是在深色主题下才被报障。
-
-**约定**：
-
-- 浮层/弹窗的底从 `--bg-card` / `--bg-raised` 派生，**不用** `--text-inverse`；需要色相就掺少量 `--accent`（`color-mix` 保证深浅主题自动反向，无需分支）。
-- 压在页面或玻璃上的正文用 `--text-primary` / `--text-secondary`。
-- 半透明面上的 tint（`color-mix(..., N%, transparent)`）也要跟着换成 `--text-primary` 系，否则同样是同色压同色。
-- 深色浮层（媒体预览等整体为 72%~92% `--text-primary` 的组件）用 `--text-inverse` 是对的，已列入测试白名单。
-
-硬编码的 `rgba(255,255,255,…)` 同属这一类错误——它在深色主题下方向相反，须改走 `--border` / `--scrollbar-thumb` 等 token。
-
-判据由 `web/tests/themeTokens.spec.ts` 锁定：弹窗标题与次要文字在卡片面上均需 ≥4.5:1，且 `--text-inverse` 不得脱离实底使用。
-
-### 主题家族
-
-| 主题 | 文件 | 性格 |
-|------|------|------|
-| 素影 Shadow & Substance | `suying.css` | 旗舰：宣纸 + 朱砂，数字文房 |
-| 極線 Ultraline | `ultraline.css` | 变体：近零圆角、发丝线、无阴影 |
-| 夜航 Night Voyage | `night.css` | 暗色：暖暗纸面 |
-| 金継 Kintsugi | `kintsugi.css` | 变体：金缮意象 |
-| 青原 Grass | `grass.css` | 变体：松烟绿调 |
-| 子夜 Midnight | `midnight.css` | 暗色：更深的夜 |
-
-每个主题遵守 **34-Token 必填契约**，分两级：
-
-- **必填 34 项**（缺任一项即不合格）：表面 4 + 文字 4 + 强调 4 + 边框 3 + 状态 4 + 圆角 4 + 阴影 4 + 动效 2 + 布局 2 + 专用 3（`--tool-bg` + 对话气泡 2）
-- **主题扩展**：允许额外定义（如 `midnight` 的 `--accent-pink` 系暗色专属变量），但必须在文件头注释登记用途，且**不得被跨主题消费**——只有部分主题定义的 token 被组件读取时，其余主题会静默落到硬编码兜底。
-
-「必填项齐全」由 `web/tests/themeTokens.spec.ts` 断言，新增主题漏填会立刻红。
+- `--radius: 0.875rem`；控件 `--radius-control: 0.7rem`。
+- 阴影只来自 `--glass-shade` / `--glass-contact`（脚下联系阴影），不做大范围柔光。
 
 ---
 
-## 3. 字体体系
+## 3. Agent 语义组件
 
-### 字体族
+聊天与工具界面不再手搓，一律用 Solid Glass 的 agent 组件（`web/src/components/ui/`）：
 
-```css
---font-ui:      'LXGW WenKai Screen', 'Noto Serif SC', serif;   /* 界面/正文 */
---font-serif:   'EB Garamond', 'Noto Serif SC', serif;          /* 显示标题 */
---font-mono:    'JetBrains Mono', ui-monospace, monospace;      /* 代码/数据 */
-```
+| 组件 | 用途 |
+|------|------|
+| `Composer` / `ComposerFooter` / `ComposerPick` | 输入框、附注行、模型/模式选择 |
+| `StatusGlyph` / `DotLoader` | 回合进行中在做什么 |
+| `Reasoning` | 模型思考，默认折叠 |
+| `StepGroup` / `StepRow` / `OutputBlock` | 工具调用步骤与输出 |
+| `DiffView` / `DiffStats` | 补丁 |
+| `AskCard` | Agent 向人提问与选项 |
+| `ContextRing` | 上下文窗口占用 |
+| `TaskNotice` | 任务结束通知 |
+| `Panel` / `Tag` | 容器与标签 |
+| `TurnStatus` | 回合状态行 |
 
-- 仅加载这 3 族（+ Noto Serif SC 的 CJK 支撑），禁止引入新字体族而不更新本文档
-- `body.font-sans` 提供无衬线降级模式（`--font-display` 切回 `--font-ui`）
-
-### 字号梯度
-
-**显示字号**（衬线，标题/区块，须配 `font-family: var(--font-display)` + 负 letter-spacing）：
-
-| Token | 值 | 用途 |
-|-------|-----|------|
-| `--fs-display-xl` | 1.6rem (~26px) | 页面主标题（欢迎屏等焦点场景） |
-| `--fs-display-lg` | 1.35rem (~22px) | 视图页面标题 |
-| `--fs-display-md` | 1.15rem (~18px) | 卡片/面板标题 |
-| `--fs-display-sm` | 1.05rem (~17px) | 小节标题 |
-
-**正文字号**：
-
-| Token | 值 | 用途 |
-|-------|-----|------|
-| `--fs-title` | 1.15rem | 区块标题 |
-| `--fs-body` | 0.95rem | 正文 |
-| `--fs-ui` | 0.88rem | 次级 UI |
-| `--fs-caption` | 0.84rem | 控件 |
-| `--fs-hint` | 0.78rem | 提示/badge |
-
-### 排版纪律
-
-- 大标题用负 letter-spacing（-0.01em ~ -0.02em），小号文字用正 letter-spacing
-- 正文行高 1.6，标题行高 1.3
-- 响应式基准：`font-size: clamp(16px, 15px + 0.2vw, 18px)`
-- 数据/代码用 `--font-mono`，等宽数字场景开 `tabular-nums`
+新增界面优先复用上表；确无对应时，用 shadcn 原语（`Button` / `Card` / `Dialog` / `Select` / `Tabs` / `Field` …）+ 语义类组合。
 
 ---
 
-## 4. 品牌印记
+## 4. 动效体系
 
-### 朱砂印「玛」
-
-- **形态**：52px 朱砂方印，圆角 10px，内含白色「玛」字（衬线 26px）
-- **使用场景**：启动屏呼吸动画、品牌强调处
-- **禁止**：改印色（必须朱砂 `#C23B22`）、改字形、加渐变、当装饰纹样平铺
-
-### Favicon / 应用图标
-
-- 源文件：`web/src/assets/images/brand/favicon.png`
-- 头像类资产（logo-companion / logo-hero）用于人格化场景，不替代 favicon
-
-### 纸面纹理
-
-- 宣纸质感由 SVG 噪声纹理实现（`paper-texture.css`），三层叠加：表面纹理 + 卡片混合 + 亮度补偿
-- 纹理是品牌基底的一部分，暗色主题同样保留（调低不透明度）
+- 时长与缓动来自 Solid Glass（`--ease-out` 等），过渡只用 `transform` / `opacity`。
+- 颜色与运动只用于**有意义的反馈**（流式光标、状态点、面板展开），不做装饰性循环动画。
+- **必须**支持 `prefers-reduced-motion: reduce`（`index.css` 全局 kill switch）。
+- 已下线：Inspira UI 的 32 个光效/流光/极光装饰件与页面转场体系（与「无渐变、克制」材质冲突）。
 
 ---
 
-## 5. 动效体系
+## 5. 反参照（Anti-references）
 
-### 时长三档
-
-| Token | 值 | 用途 |
-|-------|-----|------|
-| `--duration-instant` | 0.1s | hover、关闭、退场 |
-| `--duration-fast` | 0.15–0.2s | 默认：按钮、面板、focus |
-| `--duration-slow` | 0.25s | 模态、大块进场 |
-
-### 缓动曲线
-
-| Token | 曲线 | 用途 |
-|-------|------|------|
-| `--ease-out` | (0.23, 1, 0.32, 1) | 退场、关闭、收起 |
-| `--ease-standard` | (0.77, 0, 0.175, 1) | 位移、转场 |
-| `--ease-smooth` | (0.22, 0.68, 0, 1) | 淡入淡出 |
-| `--ease-drawer` | (0.32, 0.72, 0, 1) | 抽屉、侧栏滑出 |
-| `--ease-spring` | (0.34, 1.56, 0.64, 1) | 点击反馈、活泼交互 |
-
-### 动效纪律
-
-- 只用 `transform` / `opacity` 做动画（GPU 加速），禁止动画 width/height/top/left
-- 进场用 ease-out，退场时长约为进场的 60–70%
-- 列表交错入场 40ms/item，封顶 10 项
-- **必须**支持 `prefers-reduced-motion: reduce`（全局 kill switch 在 animations.css）
-- hover 效果仅在 `(hover: hover) and (pointer: fine)` 下启用
+- **不要 SaaS 模板感**：不做大白卡 + 品牌色左边条 + 渐变背景。
+- **不要液体玻璃**：不做近乎全透明、读者要与背景抢字的浮层。Solid Glass 只透轮廓。
+- **不要 AI 克隆界面**：不追随 ChatGPT/Claude 的 chat UI 范式，保持自己的视觉识别度。
+- **不要紫蓝 AI 渐变**。
+- **不要 emoji 当结构图标**：用 `lucide-react` 图标。
 
 ---
 
-## 6. 反参照（Anti-references）
-
-- **不要 SaaS 模板感** — 不做典型 SaaS Dashboard 的大白卡 + 品牌色左边条 + 渐变背景
-- **不要 AI 克隆界面** — 不追随 ChatGPT/Claude 的 chat UI 范式，保持自己的视觉识别度
-- **不要紫蓝 AI 渐变** — 这是最常见的 AI 设计指纹，朱砂 + 宣纸是我们的回答
-- **不要 emoji 当结构图标** — 用 `web/src/assets/icons/` 下的 SVG 图标
-
----
-
-## 7. 提示词层（人设与品牌）
+## 6. 提示词层（人设与品牌）
 
 **铁律：永不替换引擎原生 prompt**，只通过官方 `appendSystemPrompt` 追加。
 实现在 `bun-sidecar/src/kernel/persona-prompt.ts` 的 `loadPersonaSystemPrompt()`，
@@ -298,72 +151,12 @@ Maxma 是用户的**首席思维伙伴**——不是搜索引擎、不是执行�
 > skills **不在提示词层注入**：由引擎从 `.maxma/skills/`（随包）与工作区/用户目录
 > `.agents/skills/` 自动发现，见 `kernel/skills.ts` `maxmaSkillPaths()`。
 
-### 品牌规范
-
-1. **只做风格引导，不定义 AI 身份** — 禁止「你是 Maxma 不是 ChatGPT」这类身份替换；
-   引擎原生 ROLE 必须完整保留，追加块只加风格约束。
-2. **语气**：克制但有温度，先结论后细节，不寒暄、不推销、不堆感叹号。
-3. **表情指令**：`[表情包:分类]`。分类词表与前端 `web/src/composables/stickerUtils.ts`
-   的 `EMOTION_MAP` **严格对齐**（12 类，与 `config/stickers/` 下 12 个情绪目录一一对应；
-   `custom` 为用户上传目录，不在词表内），保证模型写出的情绪词一定命中贴纸系统。
-4. **墨色**：作为品牌理念（判断有分量但不喧哗），不是 AI 名字。
-
-### 修改纪律
-
-- 贴纸分类变化 → 同步 `STICKER_INSTRUCTIONS` / `EMOTION_MAP` / `config/stickers/` 目录 / 本文档
-- 任何提示词改动必须验证不破坏引擎原生 tool inventory 与内部 URL 体系
-
----
-
-## 8. 设计原则（承自 PRODUCT.md）
-
-1. **对话即界面** — 聊天窗口是产品核心，配置和工具是配角
-2. **克制中的温度** — 纸墨基底保持克制，朱砂点缀赋予个性；不为装饰而装饰
-3. **渐进式复杂度** — 新手觉得简单，老手觉得够用
-4. **本地优先** — 界面传达「私有、安全、属于你」的感觉
-
----
-
-## 9. 页面级规范（v1.1）
-
-> 代码侧的活规范从 `tokens.css` + `themes/*.css` 扩展为三层：
-> `tokens.css`（结构 token）→ `themes/*.css`（6 主题配色）→ `design-system.css`（页面级类）。
-> 三者冲突时以代码为准并回来修订本文档。
-
-### 视图必须复用共享类，不再各写一份
-
-| 职责 | 类 | 位置 |
-|------|-----|------|
-| 页面容器 | `.ds-view` / `--wide` / `--narrow` | `design-system.css` |
-| 页面头部 | `.view-header` / `--split` / `__actions` / `__sub` / `__eyebrow` | 同上 |
-| 区块卡片 | `.ds-section` | 同上 |
-| 空 / 加载 / 错误 | `.ds-state` / `--bare` / `--error` / `__icon` / `__title` / `__desc` / `__actions`、`.ds-inline-error` | 同上 |
-| 骨架 / 旋转 | `.ds-skeleton` / `.ds-skeleton-line` / `.ds-spinner` | 同上 |
-
-**纪律**：视图 `<style scoped>` 因 `[data-v-xxx]` 优先级更高，任何复制的
-`.header h2` / `.header-sub` / `.loading` / `.empty` 声明都会静默盖掉全局规范。
-新增视图只写布局差异，通用外观一律挂共享类。
-
-### 圆角、阴影、断点
-
-- 圆角一律用 `--radius-sm/md/lg/xl/input/card`，禁止字面量 `Npx`；
-  否则 6 主题的圆角设定（尤其 ultraline 的近零圆角）在多数组件失效。
-- 阴影一律用 `--shadow-xs/sm/md/lg/xl`；`0 0 0 Npx` 聚焦环与 inset 阴影除外。
-- 断点口径固定为 767 / 480 / 768–1279 / 1280（CSS 变量不能用于 `@media`，
-  口径登记在 `tokens.css`），不再新增 520/560/600/640/700/720/820/900/1100。
-
-### 动效密度
-
-默认「克制」（`html[data-motion="calm"]`，由 `composables/useMotion.ts` 挂载），
-用户可在外观页切回「完整」。克制模式关闭：光晕 / 流星 / 光柱 / 波纹等纯装饰
-无限循环、GSAP 视图入场、差异化页面位移转场；保留状态反馈（流式光标、忙碌点）。
-纯装饰层挂 `.ds-decor`，循环动画挂 `.ds-decor-anim`。
-
 ---
 
 ## 修订记录
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
-| v1.0 | 2026-07-28 | 首版：从生产 token 系统 + 首席思维伙伴定位提炼，取代 DESIGN.md (alpha) |
+| v1.0 | 2026-10-28 | 初版（宣纸 + 朱砂），34-Token 契约 |
 | v1.1 | 2026-11-07 | 新增 §9 页面级规范：共享类契约、token 化圆角/阴影/断点、动效密度开关 |
+| v2.0 | 2026-11-11 | 前端重写为 React 19 + Tailwind 4 + shadcn(base-nova) + Solid Glass；视觉身份整体切换为烟熏玻璃材质；6 主题收敛为 light/dark；字体换 Geist；新增 §3 Agent 语义组件 |

@@ -403,7 +403,7 @@ export const MAXMA_SETTINGS_KEYS: ReadonlyArray<{
 
   // ── 引擎没有这个键，但 Maxma 自己消费 ──
   { path: "skills.enabled", engineReal: false, consumer: "maxma", note: "pi 的 skills 键是 string[]（包源清单），无 .enabled；由 bun-backend/src/routes/sessions.ts 读 settings.skills.enabled 转成 create_session 的 skills_enabled" },
-  { path: "recap.enabled", engineReal: false, consumer: "maxma", note: "Maxma 应用层闲置回顾开关，读者在 web/src/composables/useChat.ts" },
+  { path: "recap.enabled", engineReal: false, consumer: "maxma", note: "Maxma 应用层闲置回顾开关，读者在 web/src/hooks/useChat.ts" },
   { path: "recap.idleSeconds", engineReal: false, consumer: "maxma", note: "同上，闲置时长阈值" },
 
   // ── 无人消费：上一代引擎遗留，或从来没接线 ──

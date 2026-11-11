@@ -1,12 +1,13 @@
-// web/src/stores/activity.ts
-import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { create } from 'zustand'
 import { api, getToken, ensureTokenLoaded } from '@/api'
 import { getBackendOrigin } from '@/utils/env'
 import { createLogger } from '@/utils/logger'
 import type { ActivityRecord, ActivityStatsResponse } from '@/types'
 
 const log = createLogger('activity')
+
+type ActivityStats = ActivityStatsResponse | Record<string, unknown>
+type ConnectionState = 'connecting' | 'online' | 'offline'
 
 /**
  * 简易 SSE 行读取器。将 ReadableStream<Uint8Array> 按 \n 分割成行，
@@ -37,47 +38,46 @@ function createSSELineReader(
   pump()
 }
 
-export const useActivityStore = defineStore('activity', () => {
-  const records = ref<ActivityRecord[]>([])
-  const stats = ref<ActivityStatsResponse | Record<string, unknown>>({})
-  const connected = ref(false)
-  // 三态视觉反馈：连接中 / 已连接 / 已降级（轮询）。初始为 connecting 让首屏 UI 不显示「离线」误导 Novice。
-  const connecting = ref(true)
-  // 最近一次收到 SSE 事件的时间戳（ms）。组件据此显示「新事件」脉冲，区分静默与活跃流。
-  const lastEventAt = ref<number | null>(null)
+interface ActivityState {
+  records: ActivityRecord[]
+  stats: ActivityStats
+  connected: boolean
+  connecting: boolean
+  lastEventAt: number | null
+  connectionState: ConnectionState
+  fetchRecent: (limit?: number) => Promise<void>
+  fetchStats: () => Promise<void>
+  startStream: () => void
+  stopStream: () => void
+  clear: () => Promise<void>
+}
 
+export const useActivityStore = create<ActivityState>()((set, get) => {
   let abortController: AbortController | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let pollTimer: ReturnType<typeof setInterval> | null = null
   let _intentionalClose = false
   // 修复 RACE-001：连接代数。每次 _connect 递增；旧连接被清理 abort 后，
-  // 其 catch 若发现代数已落后（startStream 已发起新连接），直接静默放弃，
-  // 不再依据全局 _intentionalClose 标志判断（该标志会被 startStream 重置，
-  // 导致旧连接的 AbortError 被误判为「非主动关闭」→ 调度多余重连 → 双连接）。
+  // 其 catch 若发现代数已落后（startStream 已发起新连接），直接静默放弃。
   let _connectGeneration = 0
-  // 重连退避间隔（ms）。必须是 store 级变量：若作为 _onDisconnect 局部变量，
-  // 每次断开都会被重置为 1000，指数退避失效、重连永远间隔 1s。连接成功时重置。
+  // 重连退避间隔（ms）。必须是 store 级变量：连接成功时重置。
   let reconnectDelay = 1000
 
-  /** 连接三态：'connecting' | 'online' | 'offline'。供 UI 显示不同视觉反馈。 */
-  const connectionState = computed<'connecting' | 'online' | 'offline'>(() => {
-    if (connected.value) return 'online'
-    if (connecting.value) return 'connecting'
-    return 'offline'
-  })
+  function setConn(connected: boolean, connecting: boolean) {
+    const connectionState: ConnectionState = connected ? 'online' : connecting ? 'connecting' : 'offline'
+    set({ connected, connecting, connectionState })
+  }
 
   async function fetchRecent(limit = 100) {
     try {
       const data = await api.getActivityRecent(limit)
       const snapshot = data.records || []
       // ACTIVITY-MERGE-001：快照全量替换会覆盖 SSE push 的新记录——
-      // 若 SSE 事件在 fetch 间隙到达，随后到达的旧快照会把它们抹掉。
-      // 合并策略：保留本地时间戳晚于快照最新时间的记录（SSE 实时推送
-      // 尚未进入后端快照），与快照按时间升序合并去重。
+      // 合并策略：保留本地时间戳晚于快照最新时间的记录，与快照按时间升序合并去重。
       const snapshotLatest = snapshot.length > 0
         ? Math.max(...snapshot.map(r => r.timestamp ?? 0))
         : 0
-      const localNewer = records.value.filter(r => (r.timestamp ?? 0) > snapshotLatest)
+      const localNewer = get().records.filter(r => (r.timestamp ?? 0) > snapshotLatest)
       const seen = new Set<string>()
       const merged = [...localNewer, ...snapshot].filter((r) => {
         const key = `${r.timestamp}-${r.category}-${r.event_type}-${r.session_id}-${r.tool_name}-${r.message}`
@@ -85,7 +85,7 @@ export const useActivityStore = defineStore('activity', () => {
         seen.add(key)
         return true
       })
-      records.value = merged.sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0)).slice(-500)
+      set({ records: merged.sort((a, b) => (a.timestamp ?? 0) - (b.timestamp ?? 0)).slice(-500) })
     } catch (e) {
       log.error('Failed to fetch activity:', e)
     }
@@ -93,7 +93,7 @@ export const useActivityStore = defineStore('activity', () => {
 
   async function fetchStats() {
     try {
-      stats.value = await api.getActivityStats()
+      set({ stats: await api.getActivityStats() })
     } catch (e) {
       log.error('Failed to fetch activity stats:', e)
     }
@@ -119,11 +119,13 @@ export const useActivityStore = defineStore('activity', () => {
       if (_currentEventType === 'activity') {
         try {
           const record = JSON.parse(_currentData) as ActivityRecord
-          records.value.push(record)
-          lastEventAt.value = Date.now()
-          if (records.value.length > 500) {
-            records.value = records.value.slice(-500)
-          }
+          set((s) => {
+            const records = [...s.records, record]
+            return {
+              records: records.length > 500 ? records.slice(-500) : records,
+              lastEventAt: Date.now(),
+            }
+          })
         } catch { /* noop */ }
       }
       _resetSSEBuffer()
@@ -134,15 +136,13 @@ export const useActivityStore = defineStore('activity', () => {
   async function _connect() {
     if (_intentionalClose) return
     const gen = ++_connectGeneration
-    connecting.value = true
-    connected.value = false
+    setConn(false, true)
 
     try {
       const base = getBackendOrigin()
       abortController = new AbortController()
 
       // 15s 超时：覆盖 ensureTokenLoaded + fetch 全过程
-      // ensureTokenLoaded 首次可能需 6s+（3 次重试），fetch 需 ~1s，合计 ~8-10s
       const timeoutId = setTimeout(() => abortController?.abort(), 15000)
 
       // 确保 Token 已加载
@@ -171,9 +171,7 @@ export const useActivityStore = defineStore('activity', () => {
       _resetSSEBuffer()
       const reader = body.getReader()
 
-      // 硬超时兜底：SSE 的 ReadableStream 可能在 getReader 后一直不产出任何数据
-      // （后端挂起 / 代理缓冲），导致 UI 永远停在「连接中」。
-      // 若 20s 内未收到任何 SSE 事件行，主动断开降级到轮询。
+      // 硬超时兜底：20s 内未收到任何 SSE 事件行，主动断开降级到轮询。
       let _streamActive = false
       const streamTimeoutId = setTimeout(() => {
         if (!_streamActive) {
@@ -183,19 +181,17 @@ export const useActivityStore = defineStore('activity', () => {
         }
       }, 20000)
 
-      connected.value = true
-      connecting.value = false
-      reconnectDelay = 1000  // 连接成功，重置退避间隔
-      if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
-      // 修复 RACE-001：成功路径必须清理挂起的重连定时器。此前仅清 pollTimer，
-      // 若旧连接 abort 的 catch 已在 startStream 之后调度了 reconnectTimer，
-      // 新连接成功后该定时器仍会触发 → 第二路 SSE 与第一路并存。
-      if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
+      setConn(true, false)
+      reconnectDelay = 1000 // 连接成功，重置退避间隔
+      // 修复 RACE-001：成功路径必须清理挂起的重连定时器。
+      clearInterval(pollTimer!)
+      pollTimer = null
+      clearTimeout(reconnectTimer!)
+      reconnectTimer = null
 
-      const origOnLine = (line: string) => _processSSELine(line)
       const wrappedOnLine = (line: string) => {
-        if (!_streamActive) _streamActive = true  // 收到首行数据，取消 idle 超时
-        origOnLine(line)
+        if (!_streamActive) _streamActive = true // 收到首行数据，取消 idle 超时
+        _processSSELine(line)
       }
 
       createSSELineReader(
@@ -211,12 +207,8 @@ export const useActivityStore = defineStore('activity', () => {
     } catch (err) {
       // 超时 abort = 连接失败，走降级轮询；主动 stopStream/startStream 清理的
       // abort 静默忽略。判断依据：代数落后（已有新连接接管）或主动关闭标志。
-      // 修复 RACE-001：不能用全局 _intentionalClose 单独判断——startStream
-      // 会先把它重置为 false 再发起新连接，旧连接 abort 的 catch 在此刻读到
-      // false，会把「主动清理」误判为「连接失败」而调度多余重连。
       if (err instanceof DOMException && err.name === 'AbortError') {
         if (_intentionalClose || gen !== _connectGeneration) return
-        // 超时触发：走降级
         _onDisconnect()
         return
       }
@@ -227,24 +219,23 @@ export const useActivityStore = defineStore('activity', () => {
 
   function _onDisconnect() {
     if (_intentionalClose) return
-    connected.value = false
-    connecting.value = false
+    setConn(false, false)
 
     // 进入降级轮询
     if (!pollTimer) {
-      pollTimer = setInterval(() => fetchRecent(100), 5000)
+      pollTimer = setInterval(() => void fetchRecent(100), 5000)
     }
 
     // 尝试重连（指数退避：1s → 2s → 4s → 8s，最长 30s）。
-    // reconnectDelay 为 store 级变量，跨多次断开持续递增，连接成功后重置。
     function tryReconnect() {
       if (_intentionalClose) return
-      if (reconnectTimer) clearTimeout(reconnectTimer)
+      clearTimeout(reconnectTimer!)
       reconnectTimer = setTimeout(() => {
         if (_intentionalClose) return
         // 如果轮询还在运行，先清理
-        if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
-        _connect()
+        clearInterval(pollTimer!)
+        pollTimer = null
+        void _connect()
       }, reconnectDelay)
       reconnectDelay = Math.min(reconnectDelay * 2, 30000)
     }
@@ -258,9 +249,11 @@ export const useActivityStore = defineStore('activity', () => {
       abortController.abort()
       abortController = null
     }
-    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
-    _connect()
+    clearTimeout(reconnectTimer!)
+    reconnectTimer = null
+    clearInterval(pollTimer!)
+    pollTimer = null
+    void _connect()
   }
 
   function stopStream() {
@@ -269,21 +262,34 @@ export const useActivityStore = defineStore('activity', () => {
       abortController.abort()
       abortController = null
     }
-    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
-    connected.value = false
-    connecting.value = false
+    clearTimeout(reconnectTimer!)
+    reconnectTimer = null
+    clearInterval(pollTimer!)
+    pollTimer = null
+    setConn(false, false)
   }
 
   async function clear() {
     try {
       await api.clearActivity()
-      records.value = []
-      lastEventAt.value = null
+      set({ records: [], lastEventAt: null })
     } catch (e) {
       log.error('Failed to clear activity:', e)
     }
   }
 
-  return { records, stats, connected, connecting, lastEventAt, connectionState, fetchRecent, fetchStats, startStream, stopStream, clear }
+  return {
+    records: [],
+    stats: {},
+    connected: false,
+    // 三态视觉反馈：初始 connecting 让首屏 UI 不显示「离线」误导 Novice。
+    connecting: true,
+    lastEventAt: null,
+    connectionState: 'connecting',
+    fetchRecent,
+    fetchStats,
+    startStream,
+    stopStream,
+    clear,
+  }
 })
