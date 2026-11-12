@@ -752,6 +752,36 @@ describe("kernel: pi RPC bridge", () => {
     expect(Array.isArray(gm.messages)).toBe(true);
     expect(gm.total).toBe(0);
 
+    // pi 的 assistant 消息自带 usage/provider/model/timestamp，get_messages 必须原样带回：
+    // 只映射 {role, content} 会让"每轮用了多少 token、哪个模型"在历史里永久丢失，
+    // 前端清掉 localStorage 缓存后脚注就没了（清缓存 ≠ 丢事实）。
+    const record = sessions.get(sid)!;
+    (record.session.messages as Array<Record<string, unknown>>).push(
+      { role: "user", content: "hi", timestamp: 1_700_000_000_000 },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "ok" }],
+        provider: "openai",
+        model: "gpt-test",
+        usage: { input: 120, output: 8, cacheRead: 64, cacheWrite: 0 },
+        timestamp: 1_700_000_002_500,
+      },
+    );
+    await handlePiSessionRpc({ io, sessions, pendingPlans }, "get_messages", sid, { limit: 10 }, 26);
+    const withUsage = replies.find((r) => r.id === 26)!.result as {
+      messages: Array<Record<string, unknown>>;
+      total: number;
+    };
+    const assistant = withUsage.messages.find((m) => m.role === "assistant")!;
+    expect(assistant.content).toBe("ok");
+    expect(assistant.usage).toEqual({ input: 120, output: 8, cacheRead: 64, cacheWrite: 0 });
+    expect(assistant.provider).toBe("openai");
+    expect(assistant.model).toBe("gpt-test");
+    expect(assistant.timestamp).toBe(1_700_000_002_500);
+    // 用户消息没有 usage 就不该凭空出现字段
+    const user = withUsage.messages.find((m) => m.role === "user")!;
+    expect("usage" in user).toBe(false);
+
     // set_settings 写入 → get_settings 读回；未知键静默跳过
     await handlePiSessionRpc({ io, sessions, pendingPlans }, "set_settings", sid, { path: "compaction.enabled", value: false }, 22);
     await handlePiSessionRpc({ io, sessions, pendingPlans }, "get_settings", sid, { paths: ["compaction.enabled", "no.such.key"] }, 23);

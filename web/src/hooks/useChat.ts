@@ -1,4 +1,4 @@
-import type { ClientMessage, TaskBriefMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, CompactionReason,  AskUserEvent, ArtifactEvent, PlanProposedEvent, PlanStepStartEvent, PlanStepEndEvent, PlanStepErrorEvent, PlanCompletedEvent, DeferredSubagentSubmittedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent, TurnUsage,
+import type { ClientMessage, TaskBriefMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, CompactionReason,  AskUserEvent, ArtifactEvent, PlanProposedEvent, PlanStepStartEvent, PlanStepEndEvent, PlanStepErrorEvent, PlanCompletedEvent, DeferredSubagentSubmittedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent, TurnUsage, PiUsage,
 } from '@/types'
 import type { ThinkPathId } from '@/utils/thinkPath'
 import { normalizeContextUsage, useChatStore, TURNS_KEY_PREFIX } from '@/stores/chat'
@@ -568,7 +568,17 @@ async function hydrateTurnStickers(sid: string, turns: ChatTurn[]): Promise<void
 }
 
 /** 后端返回 [{role, content}] → ChatTurn[]（一轮 = 1 human + 后续所有非 human 消息） */
-function backendMessagesToTurns(sid: string, messages: { role: string; content: string }[]): ChatTurn[] {
+interface BackendMessage {
+  role: string
+  content: string
+  /** pi 的 assistant 消息自带（`get_messages` 现在原样带回，见 bridge-pi.ts）。 */
+  usage?: PiUsage | null
+  provider?: string | null
+  model?: string | null
+  timestamp?: number
+}
+
+function backendMessagesToTurns(sid: string, messages: BackendMessage[]): ChatTurn[] {
   const turns: ChatTurn[] = []
   let i = 0
   while (i < messages.length) {
@@ -591,14 +601,50 @@ function backendMessagesToTurns(sid: string, messages: { role: string; content: 
       i++
       // 收集后续所有非 human 消息（ai/tool），直到下一个 human
       const aiContents: string[] = []
+      const aiUsages: BackendMessage[] = []
+      const startedAt = typeof msg.timestamp === 'number' ? msg.timestamp : null
+      let lastAiTimestamp: number | null = null
       while (i < messages.length && messages[i].role !== 'human') {
         const m = messages[i]
         if (m.role === 'ai' && m.content) {
           // 收集非空 ai 消息内容，最后一个非空 ai 消息作为 finalAnswer
           aiContents.push(m.content)
         }
+        if (m.role === 'ai' && m.usage) {
+          aiUsages.push(m)
+          if (typeof m.timestamp === 'number') lastAiTimestamp = m.timestamp
+        }
         // tool 消息跳过（历史回看不需要显示工具调用细节）
         i++
+      }
+      if (aiUsages.length > 0) {
+        const n = (v: unknown): number | null =>
+          typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null
+        const sum = (key: keyof PiUsage): number | null => {
+          let total: number | null = null
+          for (const m of aiUsages) {
+            const v = n(m.usage?.[key])
+            if (v !== null) total = (total ?? 0) + v
+          }
+          return total
+        }
+        const last = aiUsages[aiUsages.length - 1]
+        const cacheObserved = n(last.usage?.cacheRead) !== null || n(last.usage?.cacheWrite) !== null
+        turn.usage = {
+          provider: last.provider ?? null,
+          model: last.model ?? null,
+          inputTokens: sum('input'),
+          outputTokens: sum('output'),
+          cacheReadTokens: sum('cacheRead'),
+          cacheWriteTokens: sum('cacheWrite'),
+          durationMs: startedAt !== null && lastAiTimestamp !== null
+            ? Math.max(0, lastAiTimestamp - startedAt)
+            : null,
+          cacheStatus: cacheObserved ? 'observed' : null,
+          priceStatus: null,
+          requests: aiUsages.length,
+          warmCalls: 0,
+        }
       }
       // 最后一个非空 ai 消息作为 finalAnswer
       turn.finalAnswer = aiContents.length > 0 ? aiContents[aiContents.length - 1] : null

@@ -35,6 +35,7 @@ import type {
   PermissionMode,
   SessionPermissionModeResponse,
   CapabilitiesResponse,
+  PiUsage,
 } from '@/types'
 import type {
   CreatePersonaBody,
@@ -303,7 +304,20 @@ export const api = {
     request<ListSessionsResponse>('/sessions'),
 
   getMessages: (id: string, limit: number = 50) =>
-    request<{ session_id: string; messages: { role: string; content: string }[]; total?: number; source?: string }>(`/sessions/${encodeURIComponent(id)}/messages?limit=${limit}`),
+    request<{
+      session_id: string
+      messages: Array<{
+        role: string
+        content: string
+        /** pi 的 assistant 消息原始用量（清掉本地缓存后靠它重建每轮脚注）。 */
+        usage?: PiUsage | null
+        provider?: string | null
+        model?: string | null
+        timestamp?: number
+      }>
+      total?: number
+      source?: string
+    }>(`/sessions/${encodeURIComponent(id)}/messages?limit=${limit}`),
 
   deleteSession: (id: string) =>
     request<{ status: string }>(`/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
