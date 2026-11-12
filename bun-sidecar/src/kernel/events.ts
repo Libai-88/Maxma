@@ -118,6 +118,9 @@ export function mapPiAgentEventToMaxma(
       type: "tool_start",
       payload: {
         tool_name: e.toolName ?? "",
+        // 工具调用的唯一标识：前端据此把 ask_user 审批挂到**具体那一次**调用上。
+        // 只按工具名匹配时，同一轮里两次 bash 的审批会互相覆盖（见 useChat 注释）。
+        ...(typeof e.toolCallId === "string" && e.toolCallId ? { tool_call_id: e.toolCallId } : {}),
         input: JSON.stringify(e.args ?? {}),
       },
     };
@@ -128,6 +131,7 @@ export function mapPiAgentEventToMaxma(
       type: "tool_update",
       payload: {
         tool_name: e.toolName ?? "",
+        ...(typeof e.toolCallId === "string" && e.toolCallId ? { tool_call_id: e.toolCallId } : {}),
         partial_result: typeof e.partialResult === "string"
           ? e.partialResult
           : JSON.stringify(e.partialResult ?? ""),
@@ -142,12 +146,22 @@ export function mapPiAgentEventToMaxma(
     if (e.isError === true) {
       return {
         type: "tool_error",
-        payload: { tool_name: e.toolName ?? "", error: JSON.stringify(e.result ?? {}), elapsed },
+        payload: {
+          tool_name: e.toolName ?? "",
+          ...(typeof e.toolCallId === "string" && e.toolCallId ? { tool_call_id: e.toolCallId } : {}),
+          error: JSON.stringify(e.result ?? {}),
+          elapsed,
+        },
       };
     }
     return {
       type: "tool_end",
-      payload: { tool_name: e.toolName ?? "", output: JSON.stringify(e.result ?? {}), elapsed },
+      payload: {
+        tool_name: e.toolName ?? "",
+        ...(typeof e.toolCallId === "string" && e.toolCallId ? { tool_call_id: e.toolCallId } : {}),
+        output: JSON.stringify(e.result ?? {}),
+        elapsed,
+      },
     };
   }
 

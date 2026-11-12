@@ -6,6 +6,7 @@ import type { ParsedRef } from '@/utils/references'
 import type { ThinkPathId } from '@/utils/thinkPath'
 import { safeCopyText } from '@/lib/clipboard'
 import { api } from '@/api'
+import { MODE_SHORT_LABELS, useSessionPermissionMode } from '@/hooks/useSessionPermissionMode'
 import { Paperclip, X, FileText, FolderOpen, Link2, Sticker, Mic } from 'lucide-react'
 import { StickerPicker, type Sticker as StickerItem } from '@/components/chat/StickerPicker'
 
@@ -30,6 +31,8 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
 ]
 
 export interface ChatInputProps {
+  /** 当前会话（权限模式切换需要它；未提供时不渲染权限选择器）。 */
+  sessionId?: string
   isStreaming: boolean
   connected: boolean
   canSend: boolean
@@ -45,7 +48,8 @@ export interface ChatInputProps {
 }
 
 export function ChatInput(props: ChatInputProps) {
-  const { isStreaming, connected, canSend, models, initialProviderId, initialModelName, onSend, onStop, onModelChange, onSlashCommand, reconnectExhausted, onReconnect } = props
+  const { sessionId, isStreaming, connected, canSend, models, initialProviderId, initialModelName, onSend, onStop, onModelChange, onSlashCommand, reconnectExhausted, onReconnect } = props
+  const permission = useSessionPermissionMode(sessionId)
   const [text, setText] = useState('')
   const [refs, setRefs] = useState<ParsedRef[]>([])
   const [uploading, setUploading] = useState(false)
@@ -377,6 +381,14 @@ export function ChatInput(props: ChatInputProps) {
               if (pid && name) { setProviderId(pid); setModelName(name); onModelChange?.(pid, name) }
             }}
           />
+          {sessionId && (
+            <ComposerPick
+              label="权限"
+              value={permission.current ?? 'ask'}
+              options={permission.modes.map((mode) => ({ value: mode, label: MODE_SHORT_LABELS[mode] }))}
+              onValueChange={(v) => void permission.change(v as Parameters<typeof permission.change>[0])}
+            />
+          )}
           {!connected && <span className="text-[11px] text-muted-foreground">WS 未连接</span>}
           <ComposerFooterEnd>
             <span className="text-[11px] text-muted-foreground">输入 / 唤起命令</span>

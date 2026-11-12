@@ -104,8 +104,9 @@ function AskUserBlock({ interaction, onAction }: { interaction: AskUserInteracti
         ) : interaction.submitted ? (
           <p className="mt-2 text-xs text-muted-foreground">已提交，等待结果…</p>
         ) : (
-          <div className="mt-2.5 flex gap-2">
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
             <Button size="sm" onClick={() => onAction({ action: 'user_response', data: { interactionId: interaction.interactionId, response: 'yes' } })}>批准</Button>
+            <Button size="sm" variant="outline" title="批准这次，并把本会话切到自动执行（不再逐次询问）" onClick={() => onAction({ action: 'approve_and_auto', data: { interactionId: interaction.interactionId } })}>批准并自动执行</Button>
             <Button size="sm" variant="destructive" onClick={() => onAction({ action: 'user_response', data: { interactionId: interaction.interactionId, response: 'no' } })}>拒绝</Button>
           </div>
         )}

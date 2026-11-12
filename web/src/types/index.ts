@@ -27,22 +27,22 @@ export interface ThinkingDeltaEvent {
 
 export interface ToolStartEvent {
   type: 'tool_start'
-  payload: { tool_name: string; input: string }
+  payload: { tool_name: string; input: string; tool_call_id?: string }
 }
 
 export interface ToolEndEvent {
   type: 'tool_end'
-  payload: { tool_name: string; output: string; elapsed: number; tool_data?: Record<string, unknown> }
+  payload: { tool_name: string; output: string; elapsed: number; tool_data?: Record<string, unknown>; tool_call_id?: string }
 }
 
 export interface ToolErrorEvent {
   type: 'tool_error'
-  payload: { tool_name: string; error: string; elapsed?: number }
+  payload: { tool_name: string; error: string; elapsed?: number; tool_call_id?: string }
 }
 
 export interface ToolUpdateEvent {
   type: 'tool_update'
-  payload: { tool_name: string; partial_result: string }
+  payload: { tool_name: string; partial_result: string; tool_call_id?: string }
 }
 
 export interface RetryStartEvent {
@@ -226,6 +226,8 @@ export interface AskUserEvent {
   type: 'ask_user'
   payload: {
     tool_name: string
+    /** 审批对应的那一次工具调用的 id（与 tool_start 的 tool_call_id 同源）。 */
+    tool_call_id?: string
     question: string
     /** 交互模式：qa/single_choice/multi_choice/confirm 为普通询问；approval 为工具执行审批 */
     mode: 'qa' | 'single_choice' | 'multi_choice' | 'confirm' | 'approval'
@@ -778,6 +780,8 @@ export interface AskUserInteraction {
 
 export interface ToolCall {
   kind: 'tool'
+  /** 引擎的 toolCallId（同一轮里同名工具多次调用时区分彼此的**唯一**依据）。 */
+  callId?: string
   name: string
   input: string
   output: string | null

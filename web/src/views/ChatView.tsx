@@ -220,6 +220,19 @@ export default function ChatView() {
         const resp = Array.isArray(d.response) ? d.response[0] : d.response
         if (resp === 'yes' || resp === 'no') markInteractionResponded(d.interactionId, resp)
       }
+    } else if (payload.action === 'approve_and_auto') {
+      const d = payload.data as { interactionId: string }
+      if (!sendUserResponse(d.interactionId, 'yes')) { showToast('连接已断开，无法批准', 'error'); return }
+      markInteractionSubmitted(d.interactionId)
+      markInteractionResponded(d.interactionId, 'yes')
+      // 本会话切到自动执行：内核广播 permission_mode_updated，选择器随之收敛
+      void api.setSessionPermissionMode(sessionId, 'auto')
+        .then((res) => {
+          const ch = useChatStore.getState().getChannel(sessionId)
+          if (ch) { ch.permissionMode = res.permission_mode; useChatStore.getState().bump() }
+          showToast('已切换到自动执行（本会话）')
+        })
+        .catch((e) => showToast('切换权限模式失败: ' + (e instanceof Error ? e.message : String(e)), 'error'))
     } else if (payload.action === 'set_ask_submitted') {
       markInteractionSubmitted((payload.data as { interactionId: string }).interactionId)
     } else if (payload.action === 'set_responded') {
@@ -424,6 +437,7 @@ export default function ChatView() {
             ? <div className="border-t border-border p-3 text-center text-xs text-muted-foreground">🔒 子 Agent 会话 — 只读</div>
             : (
               <ChatInput
+                sessionId={sessionId}
                 isStreaming={isStreaming}
                 connected={connected}
                 canSend={connected && models.length > 0}

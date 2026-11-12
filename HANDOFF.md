@@ -176,6 +176,23 @@
 - 页面实测：记忆页无 Hindsight/置信度字样；偏好页有「它具体怎么工作」+ 预览框，预览按钮点完显示关键词与逐字注入文本，0 console error
 - 后端测试：`evolution-route.test.ts` 新增 preview 用例（命中/未命中/预览不改 `last_used_at`），其余 273 项全绿
 
+## 2026-11-12 审批循环与模式切换（用户实测反馈）
+
+用户实测「查询工作区在哪里」时陷入无限审批；同时抱怨模式切换难找、需要频繁参与。
+两件事的根因都不是模型太笨，而是我们自己的三处缺陷叠在一起：
+
+| 缺陷 | 证据 | 修法 |
+| --- | --- | --- |
+| **审批按工具名归属**：`ask_user` 只带工具名，前端 `findRunningTool(name)` 找「最新一个 running」→ 同一轮两次 `bash` 时，第二次的 tool_start 会改写第一次的输入、第二次的审批会覆盖第一次的 interaction | 抓帧证实：kernel 依次发 `tool_start(call_a)` → `ask_user(call_a)` → `tool_start(call_b)` → `ask_user(call_b)`，而界面出现「无 callId 的事件 + call_a 事件输入变成 b 的命令」 | 全链路透传 `tool_call_id`（kernel 映射 / gate / chat-ws / 前端类型）；前端按 callId 归属，占位事件只在没有 interaction 时复用；更新缓冲键也按 callId |
+| **拒绝后被原样重试 → 无限审批**：模型被拒会再发同一次调用，后端无上限，最多能问到 50 次 | 用同一工具+参数的循环桩复现 | chat-ws 按轮计数：同一 `(tool_name + input)` 审批 ≥3 次或单轮审批 >8 → 发 `APPROVAL_LOOP` 错误并 `cancel`，页面明确说「已停止本轮，可切换权限模式后重试」 |
+| **模式切换入口藏在「···」菜单里**；切到自动执行时，**已在途的审批不会被放行** → 用户看到「已自动执行但还卡着一张批准卡」 | 浏览器实测：点 `批准并自动执行` 后第二张卡仍在等待 | composer 底部常驻「权限」选择器（四档，与 `permission_mode_updated` 收敛）；审批卡新增「批准并自动执行」；`writePermissionMode` 切到 auto 时调用 `approvalGate.approveAllPending()`；前端收到 auto 广播把未答复审批卡标为已批准 |
+
+验证（真实后端 + 受控 provider）：
+- 两次同名 `bash`：两张卡各自对应自己的 callId，逐个批准后输出分别是 `one` / `two`，轮次正常结束，0 console error；
+- `批准并自动执行`：模式变 `auto`，第二张在途审批由内核放行，工具全部 done，界面无残留「批准」按钮；
+- 循环桩 + 连续拒绝：第 3 次请求被判定为循环，错误文案为「Agent 反复请求同一个工具调用（bash），已停止本轮。可切换权限模式后重试。」，不再刷卡。
+- 新增测试：`bun-sidecar/tests/approval-gate.test.ts`（在途放行/拒绝语义）、`chat-ws-2.3b` 的 `APPROVAL_LOOP` 用例。
+
 ## 状态
 
 - 仓库 `https://github.com/Libai-88/Maxma.git`，主分支 `main`；变更一律走分支 + PR squash 合入，

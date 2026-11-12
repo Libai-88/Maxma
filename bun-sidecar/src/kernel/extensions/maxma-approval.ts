@@ -44,7 +44,13 @@ export function createMaxmaApprovalExtension(gate: ApprovalGate): InlineExtensio
         }
         const decision = await gate.decide({ toolName: event.toolName, toolCallId, input, annotations });
         if (!decision.approved) {
-          return { block: true, reason: decision.reason ?? `${event.toolName} was not approved` };
+          // 拒绝原因要能约束模型行为：只说 "was not approved" 时，模型最常见的
+          // 反应是把同一次调用原样再发一遍（实测可连发十几次审批）。
+          // 明确要求不要重试同一调用，配合 chat-ws 的 APPROVAL_LOOP 兜底。
+          const reason = decision.reason === "approval timeout"
+            ? `用户未在时限内确认 ${event.toolName}，本轮不要重试这次调用`
+            : `用户拒绝了 ${event.toolName} 的这次调用；不要重试同一调用，请换一种方式或先询问用户`;
+          return { block: true, reason };
         }
         return undefined;
       });

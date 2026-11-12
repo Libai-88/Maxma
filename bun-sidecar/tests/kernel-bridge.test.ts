@@ -78,15 +78,20 @@ describe("kernel: mapPiAgentEventToMaxma", () => {
   test("tool_execution_start/update/end → tool_start/tool_update/tool_end", () => {
     expect(
       mapPiAgentEventToMaxma({ type: "tool_execution_start", toolCallId: "c1", toolName: "read", args: { path: "a.ts" } }),
-    ).toEqual({ type: "tool_start", payload: { tool_name: "read", input: '{"path":"a.ts"}' } });
+    ).toEqual({
+      type: "tool_start",
+      // tool_call_id 是审批与工具事件的归属键（同名工具并行时唯一区分）
+      payload: { tool_name: "read", tool_call_id: "c1", input: '{"path":"a.ts"}' },
+    });
 
     expect(
       mapPiAgentEventToMaxma({ type: "tool_execution_update", toolCallId: "c1", toolName: "read", partialResult: "..." }),
-    ).toEqual({ type: "tool_update", payload: { tool_name: "read", partial_result: "..." } });
+    ).toEqual({ type: "tool_update", payload: { tool_name: "read", tool_call_id: "c1", partial_result: "..." } });
 
     const end = mapPiAgentEventToMaxma({ type: "tool_execution_end", toolCallId: "c1", toolName: "read", result: "ok", isError: false });
     expect(end?.type).toBe("tool_end");
     expect((end!.payload as any).tool_name).toBe("read");
+    expect((end!.payload as any).tool_call_id).toBe("c1");
     expect((end!.payload as any).output).toBe('"ok"');
 
     const err = mapPiAgentEventToMaxma({ type: "tool_execution_end", toolCallId: "c2", toolName: "bash", result: { e: 1 }, isError: true });
