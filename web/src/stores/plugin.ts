@@ -15,7 +15,7 @@ interface PluginDerived {
   disabledPlugins: Plugin[]
 }
 
-interface PluginState extends PluginDerived {
+export interface PluginState extends PluginDerived {
   plugins: Plugin[]
   loading: boolean
   error: string

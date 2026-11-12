@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { usePluginStore } from '@/stores/plugin'
 import { useCapabilitiesStore } from '@/stores/capabilities'
-import type { Plugin, PluginCategory, PluginFilter } from '@/types/plugin'
+import type { Plugin, PluginCategory } from '@/types/plugin'
 
 /**
  * 「插件」管理页（等价移植自 PluginListView.vue）。
@@ -22,25 +22,6 @@ import type { Plugin, PluginCategory, PluginFilter } from '@/types/plugin'
 
 // 本地契约：store 由另一个 agent 同时产出，这里只声明本视图消费的成员，
 // 保证在 store 精确类型落地前本文件也能独立通过 tsc。
-interface PluginStoreApi {
-  plugins: Plugin[]
-  loading: boolean
-  error: string
-  installing: boolean
-  installProgress: { spec: string; status: string } | null
-  loadPlugins: () => Promise<void>
-  installPlugin: (req: { spec: string }) => Promise<unknown>
-  uninstallPlugin: (name: string) => Promise<void>
-  togglePlugin: (name: string, enabled: boolean) => Promise<void>
-  setFilter: (f: Partial<PluginFilter>) => void
-  clearError: () => void
-}
-
-interface CapabilitiesStoreApi {
-  capabilities: { features?: { plugins?: { marketplace?: boolean } } } | null
-  fetchCapabilities: () => Promise<void>
-}
-
 const CATEGORY_OPTIONS: { value: PluginCategory | ''; label: string }[] = [
   { value: '', label: '所有分类' },
   { value: 'productivity', label: '生产力' },
@@ -66,8 +47,8 @@ function looksLikeNetworkSpec(spec: string): boolean {
 
 export default function PluginListView() {
   const navigate = useNavigate()
-  const store = usePluginStore() as unknown as PluginStoreApi
-  const caps = useCapabilitiesStore() as unknown as CapabilitiesStoreApi
+  const store = usePluginStore()
+  const caps = useCapabilitiesStore()
 
   const [installSpec, setInstallSpec] = useState('')
   const [localError, setLocalError] = useState('')

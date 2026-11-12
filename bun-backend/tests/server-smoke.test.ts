@@ -106,6 +106,18 @@ describe("bun-backend 冒烟", () => {
     expect(spa).not.toBeNull();
     expect((spa!.headers.get("content-type") ?? "")).toContain("text/html");
 
+    // 深链硬刷新：`base: "./"`（Electron/file:// 需要）在后端 http 托管下会把
+    // `./assets/x.js` 解析到 `/plugins/<name>/assets/x.js` → 404 白屏。
+    // SPA fallback 必须把相对资源锚到站点根。
+    const deep = await serveFrontend("/plugins/demo/jet-hub", dist);
+    expect(deep).not.toBeNull();
+    const deepHtml = await deep!.text();
+    expect(deepHtml).toContain('<base href="/" />');
+    expect(deepHtml).toContain('maxma');
+    // 外壳没有内容指纹：重建后入口 hash 变了，缓存旧壳会去取已删除的 chunk。
+    expect(deep!.headers.get("cache-control") ?? "").toContain("no-store");
+    expect(root!.headers.get("cache-control") ?? "").toContain("no-store");
+
     // 目录穿越防护：静态层拒绝后落入 SPA fallback——关键是不返回 dist 外文件内容
     const traversal = await serveFrontend("/../etc/passwd", dist);
     if (traversal !== null) {

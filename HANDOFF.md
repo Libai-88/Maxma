@@ -84,6 +84,31 @@
 | 用户页绕过类型化 api 直调 `api.request('/persona/user')` | 改 `api.getPersona('user')` | `tsc` |
 | 运行时 `api/data/settings_overrides.json` 未被忽略，跑一次设置 PUT 就污染工作树 | 加入 `.gitignore` 运行时段 | — |
 
+## 2026-11-12 最终复查（逐页 + 契约对账）
+
+以真实后端逐页跑过 27 条路由（含深链硬刷新、快速问答入口）并做前后端契约对账，
+再补掉四类「页面在、功能不在 / 界面撒谎 / 部署自伤」的缺陷。
+
+| 问题（证据） | 处理 | 锁 |
+| --- | --- | --- |
+| **`/plugins/<name>/jet-hub` 一进就崩**：`(e.openProviders ?? []) is not iterable`。store 把 `openProviders/closedProviders/accountTotal/accountEnabled` 定义成派生**函数**，视图按数组用（spread/`.length`/`.map`），且用 `as unknown as` 绕过了 tsc | 视图改为调用函数，本地契约类型改为 `() => T`；页面实测渲染出真实数据（15 渠道 / 账号 1/1） | 浏览器实测 0 error |
+| **深链硬刷新白屏**：`base: "./"`（Electron `file://` 需要）在 http 托管下让浏览器把 `./assets/x.js` 解析成 `/plugins/<name>/assets/x.js` → 404，卡在启动页。SPA 内部导航看不出（资源已缓存） | `serveFrontend` 的 SPA fallback 注入 `<base href="/">`（按 mtime 缓存；Electron 读磁盘文件不经此处，相对语义不变） | `server-smoke.test.ts` 断言深链 HTML 含 `<base href="/" />` |
+| **重建一次，所有页面都取不到懒加载 chunk**：index.html 无内容指纹却被浏览器启发式缓存，旧壳去请求已删除的 `ShareView-<oldhash>.js` | 外壳响应加 `cache-control: no-store, must-revalidate`（带指纹的静态资源仍可长缓存） | 同上测试断言 `no-store` |
+| **`/automation` 把「引擎没有调度器」说成「你在设置里关掉了」** | `features.automation` 补 `engine_supported:false` + `reason`，不可用页原样透传引擎原因 | `routes-2.5.test.ts` 断言两字段 |
+| **浏览器工具开关会把自己标成「已启用」**：14 个真实工具里没有任何 `browser_*`，pi 无浏览器运行时 | `features.browser_tools` 恒 `enabled:false, engine_supported:false`，用户偏好改由 `configured` 回显 | 同上测试 |
+| **快速问答吞掉失败原因**：只渲染 `turn.finalAnswer`，失败轮仅剩「（发生错误，回复未完成）」，看不到原因/ trace | 渲染 `chat.error` + `errorTraceId`，可点关闭 | 浏览器实测出现具体原因与 trace |
+| 插件两处视图同样用 `as unknown as` 自造 store 契约（与 jet-hub 同类的定时炸弹） | `PluginState` 导出，两个视图直接 `usePluginStore()`，删掉本地接口与 cast；成员不匹配由 tsc 拦截 | `web tsc` |
+
+对账结果（当前状态）：前端 102 处 `api.*` 调用逐条命中后端注册路由（`/api/jet-hub` 为插件运行时注册，实测 200）；
+155 条后端路由、76 条 GET；WS 事件由 `MAXMA_ENGINE_WS_EVENTS` / `BACKEND_SYNTHESIZED_EVENTS` 两张表与前端
+`SERVER_EVENT_HANDLER_TYPES` 编译期对账。写入路径实测回环：规则建→切→删、MCP 建→列→删、分享建→深链→删、
+四个设置面板 PUT→GET、主题 `data-theme` 刷新持久。
+
+**仍未收口的类型债**：`JetHubView` 仍在用本地 `JetHubStoreApi`（28 个成员）`as unknown as` 收口，
+而它实际消费 74 个成员；本轮只把被误用的四个派生函数改正并在浏览器验证，没有把 74 个签名搬进 store 泛型
+（会牵动 store 内部 `get().action` 的自引用注解）。要彻底消掉这类洞，做法是把动作面抽成
+`JetHubActions` 并与 `JetHubData` 合并成 store 泛型，让 tsc 逐成员校验。
+
 ## 状态
 
 - 仓库 `https://github.com/Libai-88/Maxma.git`，主分支 `main`；变更一律走分支 + PR squash 合入，

@@ -11,12 +11,6 @@ import type { PluginDetail, PluginConfigSchema, PluginConfigProperty } from '@/t
 
 /** 等价移植自 PluginDetailView.vue。 */
 
-interface PluginStoreApi {
-  getPluginDetail: (name: string) => Promise<PluginDetail>
-  togglePlugin: (name: string, enabled: boolean) => Promise<void>
-  uninstallPlugin: (name: string) => Promise<void>
-}
-
 /** 哪些插件有自带的管理界面（目前只有 Jet Hub / codearts-auth）。 */
 const MANAGEMENT_UI: Record<string, true> = { 'codearts-auth': true }
 
@@ -40,7 +34,7 @@ function renderReadme(readme: string): string {
 export default function PluginDetailView() {
   const { name } = useParams<{ name: string }>()
   const navigate = useNavigate()
-  const store = usePluginStore() as unknown as PluginStoreApi
+  const store = usePluginStore()
 
   const pluginName = name ?? ''
   const hasManagementUi = Boolean(MANAGEMENT_UI[pluginName])
