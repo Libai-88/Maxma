@@ -75,11 +75,21 @@ describe("activity REST（阶段 2.3b）", () => {
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
 
+    // 首帧必须是注释帧：Bun 只在首个 body 字节到达时 flush 响应头，否则要等 15s 心跳，
+    // 与客户端 15s 连接超时撞车（活动页会永久退回轮询）。
+    const first = decoder.decode((await reader.read()).value ?? new Uint8Array());
+    expect(first).toBe(": connected\n\n");
+
     const { record } = await import("../src/activity-hub");
     record("test", "sse_probe", { message: "探针" });
 
-    const { value } = await reader.read();
-    const text = decoder.decode(value ?? new Uint8Array());
+    // 首个含 event 的帧（心跳/注释帧不影响判定，循环直到超时由 test timeout 兜底）
+    let text = "";
+    while (!text.includes("event: activity")) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      text += decoder.decode(value ?? new Uint8Array());
+    }
     expect(text).toContain("event: activity");
     expect(text).toContain("sse_probe");
     await reader.cancel();

@@ -993,6 +993,12 @@ export function ensureConnected(sid: string) {
     log.warn(`跳过空 sid`)
     return
   }
+  // 会话尚未初始化时 useChat 用 '__pending__' 占位；等真实 sessionId 到达再连，
+  // 这里不是错误（首屏每次都会走到），用 debug 避免误导性报错噪音。
+  if (sid === '__pending__') {
+    log.debug('会话尚未初始化，等待真实 sessionId 后再连接')
+    return
+  }
   if (!isValidSessionId(sid)) {
     log.error(`拒绝连接：非法的 sessionId "${sid}"`)
     return

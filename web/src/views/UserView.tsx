@@ -57,7 +57,7 @@ export default function UserView() {
   const editorRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
-    void api.request<{ content: string }>('/persona/user')
+    void api.getPersona('user')
       .then((res) => { setContent(res.content ?? ''); setSaved(res.content ?? '') })
       .catch((e) => showToast('加载失败: ' + (e instanceof Error ? e.message : String(e)), 'error'))
       .finally(() => setLoading(false))

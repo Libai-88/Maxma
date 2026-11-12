@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { api } from '@/api'
 import type { MCPServerConfig, MCPServerCreateBody, MCPTransport, DiscoveredServer } from '@/types'
+import { McpMarket } from '@/components/mcp/McpMarket'
 
 /** 扩展管理：MCP 服务器 CRUD 与已加载 Skills。 */
 
@@ -826,6 +827,8 @@ function McpSection() {
           </div>
         ) : (
           <>
+            <McpMarket onInstalled={() => { void loadServers(); void loadDiscovered() }} />
+
             {servers.length === 0 ? (
               <McpEmptyState onAdd={startAdd} onExample={startAddWithExample} />
             ) : (
