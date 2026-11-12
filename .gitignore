@@ -108,7 +108,10 @@ tmp/
 
 # Local docs (security threat model) and build-time downloaded runtimes/assets
 dev_docs/security/
-/resources/
+/resources/*
+# 桌面首启模板属于产品资源，必须随仓库走（其余 resources/ 是下载产物）。
+!/resources/default-config/
+!/resources/default-config/mcp_servers.yaml
 
 # Frontend test/debug residue
 web/dist_old*/
