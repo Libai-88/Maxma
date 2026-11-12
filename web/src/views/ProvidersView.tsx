@@ -168,7 +168,7 @@ export default function ProvidersView() {
         <div className="flex justify-center py-16"><Spinner /></div>
       ) : (
         <>
-          <section className="space-y-3">
+          <section className="flex flex-col gap-3">
             {providers.map((p) => {
               const pid = p.id ?? p.label
               const st = health[pid]

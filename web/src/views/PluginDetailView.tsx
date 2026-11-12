@@ -5,6 +5,7 @@ import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { confirmAction } from '@/components/common/ConfirmDialog'
 import { api } from '@/api'
 import { usePluginStore } from '@/stores/plugin'
 import type { PluginDetail, PluginConfigSchema, PluginConfigProperty } from '@/types/plugin'
@@ -79,7 +80,7 @@ export default function PluginDetailView() {
   }
 
   async function handleUninstall() {
-    if (!window.confirm(`确定要卸载插件 "${pluginName}"？此操作不可撤销。`)) return
+    if (!(await confirmAction({ message: `确定要卸载插件 "${pluginName}"？此操作不可撤销。`, danger: true, confirmText: '卸载' }))) return
     try {
       await store.uninstallPlugin(pluginName)
       navigate('/plugins')

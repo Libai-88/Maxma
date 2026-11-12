@@ -55,11 +55,11 @@ export function Sidebar({ onToggleSessions }: { onToggleSessions: () => void }) 
         <span className="text-sm font-semibold tracking-wide">Maxma</span>
       </div>
 
-      <nav className="flex-1 space-y-5 overflow-y-auto px-2 py-4" aria-label="页面导航">
+      <nav className="flex flex-col flex-1 gap-5 overflow-y-auto px-2 py-4" aria-label="页面导航">
         {visibleGroups.map((group) => (
           <div key={group.key} role="group" aria-label={group.label}>
             <p className="px-2 pb-1.5 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">{group.label}</p>
-            <div className="space-y-0.5">
+            <div className="flex flex-col gap-0.5">
               {group.items.map((item) => {
                 const Icon = item.icon
                 const active = isActive(item.to)
@@ -83,7 +83,7 @@ export function Sidebar({ onToggleSessions }: { onToggleSessions: () => void }) 
         ))}
       </nav>
 
-      <div className="space-y-0.5 border-t border-border px-2 py-3" role="group" aria-label="系统">
+      <div className="flex flex-col gap-0.5 border-t border-border px-2 py-3" role="group" aria-label="系统">
         <p className="px-2 pb-1.5 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">系统</p>
         <Button variant="ghost" size="sm" className="w-full justify-start gap-2.5" onClick={onToggleSessions} aria-label="会话列表">
           <PanelLeft className="size-4" /> 会话

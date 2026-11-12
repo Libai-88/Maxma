@@ -90,7 +90,7 @@ export function QuickChatView() {
           {globalError && (
             <div role="alert" className="cursor-pointer border-b border-border bg-destructive/10 px-3 py-2.5 text-xs text-destructive" onClick={() => setGlobalError('')}>{globalError}</div>
           )}
-          <div ref={messagesRef} className="flex-1 space-y-3 overflow-y-auto p-4">
+          <div ref={messagesRef} className="flex flex-col flex-1 gap-3 overflow-y-auto p-4">
             {mergedTurns.length === 0 && (
               <div className="pt-16 text-center text-sm text-muted-foreground">
                 <p>快速提问，不中断主窗口工作</p>
@@ -98,7 +98,7 @@ export function QuickChatView() {
               </div>
             )}
             {mergedTurns.map((turn) => (
-              <div key={turn.id} className="space-y-2">
+              <div key={turn.id} className="flex flex-col gap-2">
                 <div className="ml-auto max-w-[85%] rounded-xl bg-primary px-3 py-2 text-sm text-primary-foreground">{turn.userMessage}</div>
                 {turn.finalAnswer && (
                   <div className="max-w-[85%] rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm">
@@ -106,7 +106,7 @@ export function QuickChatView() {
                   </div>
                 )}
                 {error && turn.id === mergedTurns[mergedTurns.length - 1]?.id && (
-                  <div role="alert" className="max-w-[85%] space-y-1.5 rounded-xl border border-destructive/40 bg-destructive/10 px-3.5 py-2.5 text-xs text-destructive">
+                  <div role="alert" className="flex flex-col max-w-[85%] gap-1.5 rounded-xl border border-destructive/40 bg-destructive/10 px-3.5 py-2.5 text-xs text-destructive">
                     <button type="button" className="text-left" onClick={() => dismissError()}>{error}</button>
                     {errorTraceId && <p className="break-all font-mono text-[10px] opacity-80">trace: {errorTraceId}</p>}
                   </div>

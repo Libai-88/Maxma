@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle, FileText, GitPullRequest, Tag } from 'lucide-react'
 import { api } from '@/api'
+import { Skeleton } from '@/components/ui/skeleton'
 import type { NewsEntry } from '@/types'
 import { createLogger } from '@/utils/logger'
 
@@ -65,9 +66,9 @@ function NewsCard({ entry }: { entry: NewsEntry }) {
 function SkeletonCard() {
   return (
     <div className="p-4 border border-border rounded-lg bg-card">
-      <div className="h-[18px] w-3/5 mb-3 rounded bg-muted animate-pulse" />
-      <div className="h-3 w-full mb-2 rounded bg-muted animate-pulse" />
-      <div className="h-3 w-[70%] rounded bg-muted animate-pulse" />
+      <Skeleton className="h-[18px] w-3/5 mb-3" />
+      <Skeleton className="h-3 w-full mb-2" />
+      <Skeleton className="h-3 w-[70%]" />
     </div>
   )
 }

@@ -197,7 +197,7 @@ export default function EvolutionView() {
             </Button>
           </div>
           {preview && (
-            <div className="mt-3 space-y-2">
+            <div className="flex flex-col mt-3 gap-2">
               {preview.matches.length === 0 ? (
                 <p className="rounded-lg bg-secondary px-3.5 py-2.5 text-xs text-muted-foreground">这句话不会命中任何偏好，注入内容为空。</p>
               ) : (

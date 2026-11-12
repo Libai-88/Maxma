@@ -294,7 +294,7 @@ export default function SettingsView() {
               </div>
             </Row>
             {logs && (
-              <div className="mt-1 space-y-1.5 rounded-lg border border-border bg-background/40 p-3 text-[11px] text-muted-foreground">
+              <div className="flex flex-col mt-1 gap-1.5 rounded-lg border border-border bg-background/40 p-3 text-[11px] text-muted-foreground">
                 <p className="truncate font-mono">{logs.logs_dir}</p>
                 {logs.files.slice(0, 8).map((f) => (
                   <p key={f.name} className="flex justify-between gap-2"><span className="truncate font-mono">{f.name}</span><span>{f.size_mb.toFixed(2)} MB</span></p>

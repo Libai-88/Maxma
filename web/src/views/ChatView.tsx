@@ -298,7 +298,7 @@ export default function ChatView() {
           <p className="mt-2 text-sm text-muted-foreground">
             {noUsableModels ? '已找到模型提供商，但还没有可选择的模型。请在模型设置中拉取或填写模型 ID。' : 'Maxma 已内置免费模型通道，无需 API Key；也支持云端服务和本地模型。'}
           </p>
-          <ol className="mt-5 space-y-3">
+          <ol className="flex flex-col mt-5 gap-3">
             {[
               '点击下方按钮进入「模型 MODELS」设置页',
               '优先选择内置免费模型；也可以选择 DeepSeek、Qwen 或 OpenAI 等外部服务',
@@ -402,7 +402,7 @@ export default function ChatView() {
               </div>
               {taskBrief.status === 'thinking' && <p className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner /> 正在提取目标、约束和验收标准…</p>}
               {taskBrief.status === 'clarify' && (
-                <div className="space-y-2">
+                <div className="flex flex-col gap-2">
                   <p className="text-xs text-muted-foreground">当前执行准备度 {Math.round((taskBrief.confidence ?? 0.5) * 100)}%</p>
                   <ol className="list-decimal space-y-1 pl-5 text-sm">{taskBrief.questions?.map((q: string, i: number) => <li key={i}>{q}</li>)}</ol>
                   <textarea value={taskBriefAnswer} onChange={(e) => setTaskBriefAnswer(e.target.value)} rows={4} maxLength={4000} placeholder="按问题编号回答即可，也可以写成一段话" className="w-full rounded-lg border border-border bg-background p-3 text-sm outline-none" />
@@ -410,14 +410,14 @@ export default function ChatView() {
                 </div>
               )}
               {taskBrief.status === 'ready' && (
-                <div className="space-y-2">
+                <div className="flex flex-col gap-2">
                   <p className="text-xs text-muted-foreground">执行准备度 {Math.round((taskBrief.confidence ?? 0.9) * 100)}%</p>
                   <textarea value={taskBriefPrompt} onChange={(e) => setTaskBriefPrompt(e.target.value)} rows={6} maxLength={20000} className="w-full rounded-lg border border-border bg-background p-3 text-sm outline-none" />
                   <Button size="sm" disabled={!taskBriefPrompt.trim()} onClick={() => executeTaskBrief(taskBriefPrompt.trim())}>确认并开始执行 →</Button>
                 </div>
               )}
               {taskBrief.status === 'fallback' && (
-                <div className="space-y-2"><p className="text-sm text-destructive">需求对齐暂不可用：{taskBrief.error || '模型没有生成有效指令'}</p><Button size="sm" onClick={() => executeTaskBrief(undefined, true)}>使用原始请求执行</Button></div>
+                <div className="flex flex-col gap-2"><p className="text-sm text-destructive">需求对齐暂不可用：{taskBrief.error || '模型没有生成有效指令'}</p><Button size="sm" onClick={() => executeTaskBrief(undefined, true)}>使用原始请求执行</Button></div>
               )}
             </section>
           )}
@@ -473,7 +473,7 @@ export default function ChatView() {
 function ModelSettings() {
   const { currentModel, maxTokens, thinkingEnabled, setMaxTokens, toggleThinking } = useChatStore()
   return (
-    <div className="space-y-2 rounded-lg border border-border p-3 text-xs">
+    <div className="flex flex-col gap-2 rounded-lg border border-border p-3 text-xs">
       <p className="text-muted-foreground">当前模型：{currentModel || '默认'}</p>
       <label className="block">输出上限
         <input type="number" min={1} value={maxTokens ?? 0} onChange={(e) => setMaxTokens(Number(e.target.value))} className="mt-1 w-full rounded border border-border bg-background px-3 py-2.5" />
@@ -507,9 +507,9 @@ function WorkbenchSidebar({ onArtifactAction, allTurns }: {
           </Button>
         ))}
       </div>
-      <div className="flex-1 space-y-2 overflow-y-auto p-2">
+      <div className="flex flex-col flex-1 gap-2 overflow-y-auto p-2">
         {workbench.activeTab === 'reasoning' && (
-          <div className="space-y-2">
+          <div className="flex flex-col gap-2">
             {allTurns.flatMap((turn, ti) => turn.events
               .filter((ev) => ev.kind === 'thinking')
               .map((ev, ei) => (
