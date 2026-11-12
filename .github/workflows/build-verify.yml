@@ -32,9 +32,9 @@ jobs:
           $py = [regex]::Match((Get-Content -Raw (Join-Path $root "version.py")), '__version__\s*=\s*["'']([^"'']+)["'']').Groups[1].Value.TrimStart('v')
           $web = (Get-Content -Raw (Join-Path $root "web\package.json") | ConvertFrom-Json).version
           $desktop = (Get-Content -Raw (Join-Path $root "desktop\package.json") | ConvertFrom-Json).version
-          if (-not $py) { Write-Error "version.py 缺少 __version__"; exit 1 }
+          if (-not $py) { Write-Error "version.py is missing __version__"; exit 1 }
           if ($py -ne $web -or $py -ne $desktop) {
-            Write-Error "版本不一致：version.py=$py web=$web desktop=$desktop"
+            Write-Error "version mismatch: version.py=$py web=$web desktop=$desktop"
             exit 1
           }
           Write-Host "Versions agree: $py"
@@ -51,11 +51,11 @@ jobs:
           foreach ($f in @("dist\bun-server\server.js", "dist\bun-server\bun.exe", "dist\bun-server\node_modules\sharp")) {
             if (-not (Test-Path $f)) { Write-Error "Missing build artifact: $f"; exit 1 }
           }
-          # 端点级断言：产物必须是当前源码构建的，而不是缓存里的旧 server.js。
-          # 用长期稳定的路由字符串（会话历史/恢复）当 watermark，避免绑定具体文案。
+          # Endpoint-level watermark: the bundle must come from current source, not a
+          # cached server.js. Use long-lived route names instead of user-facing copy.
           $server = Get-Content -Raw "dist\bun-server\server.js"
           foreach ($marker in @("/api/sessions/history", "delete_persisted_session", "list_sessions")) {
-            if (-not $server.Contains($marker)) { Write-Error "server.js 缺少标记：$marker（疑似旧构建产物）"; exit 1 }
+            if (-not $server.Contains($marker)) { Write-Error "server.js is missing marker: $marker"; exit 1 }
           }
           Write-Host "Bun bundle artifacts verified."
 
@@ -86,6 +86,16 @@ jobs:
           Push-Location bun-backend; bun install --frozen-lockfile; Pop-Location
           Push-Location bun-sidecar; bun install --frozen-lockfile; Pop-Location
 
+      - name: Provide the Bun runtime expected by the build script
+        shell: powershell
+        run: |
+          # build-desktop-portable.ps1 intentionally refuses to download Bun itself
+          # (local builds use the D: prepared runtime). In CI we hand it setup-bun's.
+          $bun = (Get-Command bun).Source
+          if (-not $bun) { Write-Error "bun not found on PATH"; exit 1 }
+          Copy-Item -LiteralPath $bun -Destination "bun-sidecar\bun.exe" -Force
+          & "bun-sidecar\bun.exe" --version
+
       - name: Build desktop portable artifact
         shell: powershell
         run: .\build-desktop-portable.ps1 -SkipDependencyInstall -AllowAnyDrive
@@ -94,19 +104,19 @@ jobs:
         shell: powershell
         run: |
           $zip = Get-ChildItem "dist\electron-portable\MaxmaHere-*-portable-x64.zip" | Select-Object -First 1
-          if (-not $zip) { Write-Error "未生成桌面 ZIP"; exit 1 }
-          if (-not (Test-Path "$($zip.FullName).sha256")) { Write-Error "缺少 SHA256 校验文件"; exit 1 }
+          if (-not $zip) { Write-Error "desktop ZIP was not produced"; exit 1 }
+          if (-not (Test-Path "$($zip.FullName).sha256")) { Write-Error "missing SHA256 sidecar"; exit 1 }
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $archive = [System.IO.Compression.ZipFile]::OpenRead($zip.FullName)
           try {
             $names = $archive.Entries | ForEach-Object { $_.FullName -replace '\\', '/' }
             foreach ($required in @("MaxmaHere.exe", "resources/maxma/server.js", "resources/maxma/web/dist/index.html")) {
-              if (-not ($names -contains $required)) { Write-Error "ZIP 缺少：$required"; exit 1 }
+              if (-not ($names -contains $required)) { Write-Error "ZIP is missing: $required"; exit 1 }
             }
             $forbidden = $names | Where-Object { $_ -match '^data/api/data/(maxma\.db|providers\.yaml|credential\.key|onboarding\.json)$' }
-            if ($forbidden) { Write-Error "ZIP 混入用户运行数据：$($forbidden -join ', ')"; exit 1 }
+            if ($forbidden) { Write-Error "ZIP contains user runtime data: $($forbidden -join ', ')"; exit 1 }
             $stale = ($names | Where-Object { $_ -match 'resources/maxma/web/dist/assets/ChatView-.*\.js$' }).Count
-            if ($stale -lt 1) { Write-Error "ZIP 缺少前端 ChatView 资源"; exit 1 }
+            if ($stale -lt 1) { Write-Error "ZIP is missing the frontend ChatView asset"; exit 1 }
             Write-Host "Desktop artifact verified ($($names.Count) entries)."
           } finally {
             $archive.Dispose()
