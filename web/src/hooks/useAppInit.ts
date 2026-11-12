@@ -10,7 +10,7 @@ import { createLogger } from '@/utils/logger'
 
 const log = createLogger('appInit')
 
-/** 对应旧 App.vue 的 onMounted：会话初始化 / 引导 / 能力发现 / 健康轮询 / 全局事件与快捷键。 */
+/** 应用启动编排：会话初始化 / 引导 / 能力发现 / 健康轮询 / 全局事件与快捷键。 */
 export function useAppInit() {
   useEffect(() => {
     let cancelled = false

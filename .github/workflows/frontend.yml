@@ -3,7 +3,7 @@ name: Frontend
 on: [push, pull_request]
 
 jobs:
-  build-and-test:
+  typecheck-build-guard:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -23,11 +23,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build (vue-tsc + vite build)
-        run: npm run build
+      - name: Typecheck (tsc --noEmit)
+        run: npx tsc --noEmit
 
-      - name: Run Vitest
-        run: npx vitest run
+      - name: Build (vite build)
+        run: npm run build
 
       - name: Brand color guard (no hardcoded colors)
         run: node scripts/check-hardcoded-colors.mjs

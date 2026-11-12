@@ -663,7 +663,7 @@ export const BACKEND_SYNTHESIZED_EVENTS = [
  * 前端仍是**副本**，而且是被纪律要求成副本：`engine-boundary.test.ts` 的判据是
  * 「前端只认 Maxma REST/WS 契约」，`web/src` 不许 import kernel 源码，所以前端联合
  * 由 `bun-backend/tests/permission-mode-contract.test.ts` 逐字对账（含
- * `PermissionModeControl.vue` 里那份 prop 默认值清单）。
+ * `web/src/components/chat/PermissionModeControl.tsx` 的 MODE_ORDER/MODE_LABELS）。
  *
  * 新增/改名一档必须同时动 `needsApprovalForMode` 的分支与前端联合——
  * 该测试对"审批门实际分支的档位集合"与本清单做**双向**差集校验，漏一侧当场红。

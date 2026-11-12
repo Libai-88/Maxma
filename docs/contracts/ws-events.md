@@ -1,7 +1,7 @@
 # Maxma WS 事件契约（前端 ↔ 后端）
 
 > 契约源：`bun-sidecar/src/kernel/events.ts`（**pi 事件 → Maxma 事件的映射，§3.1 词表的产生处**）、`bun-backend/src/routes/chat-ws.ts`（入站白名单、转发、回合富化、§3.2 后端合成事件）、`bun-sidecar/src/rpc-types.ts`（payload 类型，滞后项见 §4）
-> 消费方：`web/src/composables/useChat.ts`、`web/src/types/`
+> 消费方：`web/src/hooks/useChat.ts`、`web/src/types/`
 > 与引擎相关的取值域（thinkingLevel、工具名、compaction reason 等）**单一数据源是 `kernel/pi-contract.ts`**，本文不维护副本。
 > 下行事件按"谁负责产出"登记在 `kernel/pi-contract.ts` 的三张清单里：`MAXMA_ENGINE_WS_EVENTS`
 > （引擎/kernel 产出）、`ENGINE_EVENT_EXPECTED_BUT_UNPRODUCED`（**前一张的例外区**：契约还声明着、
@@ -27,7 +27,7 @@
 
 前端 `web/src/types/index.ts` 的 `ClientMessage` 联合现已**覆盖这 16 项**（此前只覆盖 6 项，
 其余 10 项以无类型字面量发出），发送统一经 `useChat.ts` 的 `sendClientMessage` 收口点；
-两侧一致性由 `web/tests/wsEventSink.spec.ts` 与白名单逐字对账。
+前端登记由 `SERVER_EVENT_HANDLER_TYPES`（`Record<ServerEvent['type'], true>`）在 **编译期** 强制：向 `ServerEvent` 联合加成员而不登记，`tsc` 报 missing property。
 
 ## 3. 服务端 → 客户端
 
@@ -124,7 +124,7 @@
   `chat-ws.ts`），那段登记随代码一起撤掉，判据本身仍覆盖整个 `bun-backend/src`。
 - `useChat.ts` 的事件 `switch` 曾**没有 `default` 分支**，声明而未处理的入站类型被静默丢弃；
   现有入口守卫 + `default` 告警 + `SERVER_EVENT_HANDLER_TYPES` 编译期登记表三重叠，
-  由 `web/tests/wsEventSink.spec.ts`（含变异用例）锁死：往 `ServerEvent` 联合加类型而不加
+  由编译期登记锁死：往 `ServerEvent` 联合加类型而不加
   `case`，会直接编译不过/测试红。
 - 曾宣称 `llm_usage` 是"前端漏接"的事件——核实后它**从来不在**前端 `ServerEvent` 联合里，
   且 `chat-ws.ts:410-476` 每条路径都 `return`，永不转发；§3.1 把它列在"服务端→客户端"表内

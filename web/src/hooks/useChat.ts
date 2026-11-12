@@ -24,7 +24,7 @@ const log = createLogger('chat')
  * WS-EVENT-SINK-001：浏览器→服务端 WS 帧的**唯一**出口。
  *
  * 参数类型是 `ClientMessage`（与后端 `chat-ws.ts` 的 `CLIENT_MESSAGE_TYPES`
- * 白名单逐一对账，见 `web/tests/wsEventSink.spec.ts`）。此前 10 种消息以无类型
+ * 白名单逐一对账，由 `ClientMessage` 联合在编译期约束）。此前 10 种消息以无类型
  * 对象字面量散落在各 send 函数里，字段拼错、type 拼错都不会有任何提示——
  * 而白名单外的 type 会被后端静默丢弃。走这一个函数后，出站面重新受类型约束。
  */
@@ -58,8 +58,8 @@ function warnUnknownInboundEvent(sid: string, inboundType: string, inboundPayloa
  * WS-EVENT-SINK-001：**入站事件必须被处理**的编译期锁。
  *
  * 类型是 `Record<ServerEvent['type'], true>`——只要有人往 `ServerEvent` 联合里
- * 加一个成员而不在这里登记，vue-tsc 就报 "missing property"。登记了却没有真实
- * 分支的话，`web/tests/wsEventSink.spec.ts` 会拿这份清单和 `useChat.ts` 源码里
+ * 加一个成员而不在这里登记，tsc 就报 "missing property"。登记了却没有真实
+ * 分支的话，`tsc` 会在本表与事件 switch 之间暴露缺口（登记即分支，见下），
  * 的 `case '…'` / `event.type === '…'` 逐一对账并判红。
  *
  * 背景：此前联合里有四个 workflow_* 成员、事件 switch 没有 `default` 分支，
@@ -343,7 +343,7 @@ export function disconnectSession(sid: string) {
   chatSessionAliveCache.remove(sid)
 }
 
-// Lazy store accessors — Pinia 在模块加载时尚未安装，只能在运行时调用
+// Lazy store accessors —— zustand 的 getState() 只能在运行时访问（模块加载期尚无 store 实例）
 function getChatStore() { return useChatStore.getState() }
 
 /**
@@ -414,7 +414,7 @@ export function invalidateTurnsCache(sid: string) {
 // SessionChannel 定义在 stores/chat.ts，由 @/stores/chat 导出
 type SessionChannel = import('@/stores/chat').SessionChannel
 
-// Lazy export — 运行时才访问 Store（Pinia 在模块加载时尚未安装）
+// Lazy export —— 运行时才访问 Store（模块加载期尚无 store 实例）
 export function getAllSessionStatuses() { return getChatStore().allSessionStatuses }
 
 function getOrCreateChannel(sid: string): SessionChannel {
@@ -1994,7 +1994,7 @@ function handleMemoryToolEvent(ch: SessionChannel, sid: string, event: ServerEve
   }
 }
 
-// ── useChat composable ─────────────────────────────────────
+// ── useChat hook ───────────────────────────────────────────
 
 export function useChat(sessionId: string) {
   const sidRef = useRef(sessionId || '__pending__')

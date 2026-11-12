@@ -6,7 +6,7 @@ import { useMediaViewer } from '@/components/common/MediaViewer'
 /**
  * Markdown 渲染（markdown-it + KaTeX + task lists）。
  *
- * 两条增强与旧 `RenderMarkdown.vue` 对齐，都在 DOM 层完成（消毒器会剥离
+ * 两条增强都在 DOM 层完成（消毒器会剥离
  * `<button>`，因此复制按钮不能进 markdown 字符串）：
  *  - 每个代码块包一层 `.md-code`，注入语言标签与「复制」按钮（事件委托）；
  *  - 点击图片打开全屏媒体查看器（同容器内图片可左右切换）。

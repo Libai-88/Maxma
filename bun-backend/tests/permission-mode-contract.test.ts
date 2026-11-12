@@ -4,7 +4,7 @@
  * ## 这里锁住的是什么事故
  *
  * `routes/sessions.ts` 的 GET/PUT 回的是 `{session_id, permission_mode, enabled}`，
- * 而前端 `SessionPermissionModeControl.vue` 读的是 `permission_modes_enabled`
+ * 而前端权限选择器读的是 `permission_modes_enabled`
  * ——全仓没有任何后端生产者产出这个字段。于是 `enabled.value` 恒为 undefined，
  * `updateMode()` 第一行 `if (!enabled.value) return` 把用户的每一次切换静默吞掉：
  * UI 看着能点，点了什么都没发生，而且四处全绿（后端 200、kernel 正常、前端不报错）。
@@ -80,7 +80,7 @@ afterEach(() => {
 });
 
 /**
- * 剥掉块注释与 `//` 行注释——沿用 web/tests/agentTasksGating.spec.ts 的做法：
+ * 剥掉块注释与 `//` 行注释：
  * 只在注释里提到的字段名不算声明，否则"把契约写进注释"就能骗过这条对账。
  */
 function stripComments(src: string): string {
@@ -96,7 +96,7 @@ function sourceFiles(dirRel: string): string[] {
     if (entry.name === "node_modules" || entry.name === "dist") continue;
     const rel = `${dirRel}/${entry.name}`;
     if (entry.isDirectory()) out.push(...sourceFiles(rel));
-    else if (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx") || entry.name.endsWith(".vue")) out.push(rel);
+    else if (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx")) out.push(rel);
   }
   return out;
 }

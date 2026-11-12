@@ -37,7 +37,7 @@ web/src/main.tsx
 
 辅入口：`web/src/quick-chat/main.tsx` — 独立挂载的轻量聊天页，与主应用共享 zustand store、主题（Solid Glass）与后端 API。
 
-插件链路：`JetHubView.vue` → `POST /api/jet-hub` → `plugins/dsh/http-bridge.ts` → 插件 jet-hub-rpc 分派器 → `pi-bridge`/`pi-providers` → `pi ModelRuntime.registerProvider`。
+插件链路：`web/src/views/JetHubView.tsx` → `POST /api/jet-hub` → `plugins/dsh/http-bridge.ts` → 插件 jet-hub-rpc 分派器 → `pi-bridge`/`pi-providers` → `pi ModelRuntime.registerProvider`。
 
 ## 目录
 
@@ -65,7 +65,7 @@ web/src/main.tsx
 - API `src/api/index.ts`（框架无关，原样沿用）；WS 生命周期 `src/hooks/useChat.ts`；斜杠命令在 `components/chat/ChatInput.tsx`
 - zustand `src/stores/`：session / chat / memory / provider / persona / capabilities / plugin / jetHub / activity / metrics / health / onboarding / workbench / sidebar / collab / tools
 - 类型 `src/types/`（原样沿用）
-- 组件分组：`components/chat/`（对话核心）、`layout/`（AppShell/Sidebar/SessionDrawer）、`common/`、`ui/`（shadcn + Solid Glass）、`brand/`
+- 组件分组：`components/chat/`（对话核心）、`layout/`（AppShell/Sidebar/SessionDrawer）、`common/`（Markdown/贴纸/错误边界/确认框/媒体查看器）、`ui/`（shadcn + Solid Glass）、`tools/_shared/`（工具中文名）
 - 页面 `src/views/`：对话（Chat / Share）、记忆角色（Memory / Soul / User）、配置（Providers / Mcp / Settings / Appearance / Privacy / MaxmaBlocker / Capabilities）、扩展（PluginList / PluginDetail / JetHub / Extension / Rules / Collab）、信息（News / Activity / Metrics / Help / Evolution）、流程（Onboarding / FeatureUnavailable / NotFound）
 - 样式：`src/solid-glass.css`（Solid Glass 主题：颜色 / 三层玻璃 / 圆角 / 动效，light/dark 两态）+ `src/index.css`（全局基座）；语义色守卫 `scripts/check-hardcoded-colors.mjs`
 - 动效：只用 Solid Glass 时长/缓动；`prefers-reduced-motion` 全局降级。Inspira 装饰件与页面转场已下线

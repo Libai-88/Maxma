@@ -22,14 +22,14 @@ MaxmaHere 提供多 LLM Provider、流式对话、Agent 工具、MCP、Skill、�
 | --- | --- |
 | Agent 引擎 | `@earendil-works/pi-coding-agent`（Bun/TypeScript，in-process） |
 | 后端 | Bun + Hono（`bun-backend/`） |
-| 前端 | Vue 3 + Vite + TypeScript + Pinia |
+| 前端 | React 19 + Vite 6 + TypeScript + Tailwind CSS 4 + shadcn/ui（Base UI）+ Solid Glass；zustand + react-router |
 | 持久化 | YAML、SQLite、pi session、浏览器 localStorage |
 | 打包 | Bun bundle（`bun.exe` + `server.js`）+ Web 便携包 |
 
 数据流：
 
 ```text
-Vue -> HTTP/WebSocket -> Bun 后端 -> pi 引擎（in-process）-> LLM/MCP
+React -> HTTP/WebSocket -> Bun 后端 -> pi 引擎（in-process）-> LLM/MCP
 ```
 
 ## 快速开始（Windows 一键）
@@ -64,7 +64,8 @@ start.bat
 后端：cd bun-backend && bun run src/server.ts（默认 :8000）
 前端：cd web && npm run dev
 后端测试：cd bun-backend && bun test
-前端测试：cd web && npx vitest run
+前端类型：cd web && npx tsc --noEmit
+前端语义色守卫：cd web && npm run lint:colors
 引擎测试：cd bun-sidecar && bun test
 ```
 

@@ -108,21 +108,10 @@ dev_docs/security/
 /resources/
 
 # Frontend test/debug residue
-web/round*.cjs
-web/round*-test.cjs
-web/round1-providers-deep.cjs
-web/round8-regression.cjs
-web/tests/comprehensive_test.py
-web/tests/playwright/
-web/tests/screenshots/
-web/test-results/
 web/dist_old*/
 web/tsc-*.txt
 web/tsc-full.txt
 web/tsc-output.txt
-web/vitest-*.log
-web/vitest_*.log
-web/vitest_output.txt
 web/vite.config.ts.timestamp-*.mjs
 
 # Windows reserved-name leftovers (Git Bash artifacts, undeletable via Win32)

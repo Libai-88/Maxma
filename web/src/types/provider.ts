@@ -70,7 +70,7 @@ export interface DiscoverModelsResponse {
   models: string[]
 }
 
-/** Provider preset entry used by ProvidersView.vue form dropdown. */
+/** Provider preset entry used by ProvidersView.tsx form dropdown. */
 export interface ProviderPreset {
   id: string
   label: string

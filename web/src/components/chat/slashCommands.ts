@@ -1,6 +1,6 @@
 /** 斜杠命令执行器（React 版）：把 /命令 分发给既有操作。
  *
- * 与旧 `ChatView.vue` 的 `slashCommandRunner` 逐条对齐；返回值是给用户的
+ * 返回值是给用户的
  * 可见反馈（成功/失败原因），由 `ChatInput` 的提示条展示。 */
 import { api } from '@/api'
 import { useChatStore, invalidateTurnsCache } from '@/stores/chat'

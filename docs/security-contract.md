@@ -41,12 +41,13 @@
   1. `bun-backend/src/db/core.ts` 的 v1 schema 不再创建零读写方的 `path_whitelist` 表
      （就地删声明，不新增 drop 迁移——`initializeDatabase()` 对已有库只跑
      `SCHEMA_MIGRATIONS.slice(current)`，v1 永不重放，故老库保留那张空表、升级路径不变）；
-  2. `MaxmaBlockerView.vue` 的"优先级高于白名单 / 白名单放行条目不生效 / 参见设置页的
+  2. `web/src/views/MaxmaBlockerView.tsx` 的"优先级高于白名单 / 白名单放行条目不生效 / 参见设置页的
      「路径白名单」配置"（该设置分区不存在）已改写为真实机制；
-  3. `PrivacyView.vue` 的数据存储清单不再列 `api/data/path_whitelist.yaml`。
+  3. `web/src/views/PrivacyView.tsx` 的数据存储清单不再列 `api/data/path_whitelist.yaml`。
      用户磁盘上那份 yaml 属未跟踪的个人数据，**刻意不删**，但它已无任何读取方、
      不产生任何拦截效果。
-  回归锁：`web/tests/pathWhitelistClaims.spec.ts`（挂载两个视图、扫渲染后的可见文案）、
+  回归锁：`bun-backend/tests/db-schema.test.ts`（老库升级路径）——前端 Vue 组件测试随重写退役，
+  文案诚实性改由视图实现与本文审查保证；
   `bun-backend/tests/db-schema.test.ts`（新库不建该表 + 老库升级路径不破 + 源码零引用）。
 - **权限模式 UI 链已接通（2026-11-02 修）**：REST 回 `{session_id, permission_mode,
   available_permission_modes}`，前端按该清单渲染并据其非空判定可交互。

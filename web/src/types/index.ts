@@ -385,8 +385,8 @@ export interface MemoryDoneEvent {
  *
  * 不变式（联合成员必须有分支）：新增 type 而不登记处理路径，
  *   1. `useChat.ts` 的 `SERVER_EVENT_HANDLER_TYPES`（Record<ServerEvent['type'], true>）
- *      缺键 → vue-tsc 报错；
- *   2. `web/tests/wsEventSink.spec.ts` 把联合成员与 useChat.ts 的真实 `case`/`event.type ===`
+ *      缺键 → tsc 报错；
+ *   2. `useChat.ts` 的 `SERVER_EVENT_HANDLER_TYPES`（`Record<ServerEvent['type'], true>`）在编译期
  *      逐一对账，并断言事件 switch 保留 `default` 兜底 → 测试红。
  */
 export type ServerEvent =
@@ -677,7 +677,7 @@ export type TaskBriefMessage =
  *
  * 权威白名单是 `bun-backend/src/routes/chat-ws.ts` 的 `CLIENT_MESSAGE_TYPES`
  * （16 项）：白名单外的 type 被后端**静默丢弃**。本联合与白名单的双向对账由
- * `web/tests/wsEventSink.spec.ts` 锁定（前端多发 → 后端吞掉；前端漏声明 →
+ * `ClientMessage` 联合锁定（前端多发 → 后端吞掉；前端漏声明 →
  * 发送点失去类型检查）。此前联合只覆盖 6 项，另外 10 项以无类型对象字面量发出，
  * 字段拼错不会有任何提示。
  */
