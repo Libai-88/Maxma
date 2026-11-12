@@ -149,3 +149,23 @@
 
 /* KaTeX 公式块在窄屏可横向滚动 */
 .markdown-body .katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.25rem 0; }
+
+/* ── 贴纸（表情）图块：与 components/common/Sticker.tsx 同一尺寸纪律 ──
+ * 贴纸库固有尺寸 29×29 ~ 256×256 且含 2.9:1 宽条；固定高 96、最宽 160、
+ * object-fit: contain，既不放大小图失真、也不裁切宽图。
+ * （图片不在 markdown 里走 React 组件，故这里复刻同一套尺寸。）
+ */
+.markdown-body .md-sticker {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin: 0.25rem 0.125rem;
+}
+.markdown-body .md-sticker img {
+  height: 6rem;
+  width: auto;
+  max-width: min(10rem, 100%);
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  cursor: zoom-in;
+}

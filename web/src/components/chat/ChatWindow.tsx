@@ -15,6 +15,7 @@ import type { ParsedRef } from '@/utils/references'
 import { cn } from '@/lib/utils'
 import { toolDisplayName } from '@/components/tools/_shared/displayNames'
 import { InlineStickers } from '@/components/common/InlineStickers'
+import { Sticker } from '@/components/common/Sticker'
 
 export interface ChatWindowProps {
   turns: ChatTurn[]
@@ -242,7 +243,7 @@ function TurnBlock({ turn, isLast, onAction, onCite, onPin }: {
           <div className="text-sm leading-relaxed">
             <Markdown content={answerText} />
           </div>
-          {turn.stickerUrl && <img src={turn.stickerUrl} alt="贴纸" className="mt-1 max-h-28 rounded-lg" loading="lazy" />}
+          {turn.stickerUrl && <Sticker src={turn.stickerUrl} className="mt-1" />}
           <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/answer:opacity-100 focus-within:opacity-100">
             <CopyButton text={answerText} />
             <Button

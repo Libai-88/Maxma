@@ -55,7 +55,7 @@ export function expandStickerTags(input: string): string {
       // split 带捕获组：奇数下标是受保护的代码片段，原样保留
       if (i % 2 === 1) return seg
       return seg.replace(STICKER_TAG_RE, (_m, path: string) =>
-        `<img src="/api/stickers/${path}" alt="贴纸" class="md-sticker">`,
+        `<span class="md-sticker"><img src="/api/stickers/${path}" alt="贴纸" loading="lazy" decoding="async"></span>`,
       )
     })
     .join('')
