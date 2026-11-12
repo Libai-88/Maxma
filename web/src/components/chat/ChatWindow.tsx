@@ -10,7 +10,7 @@ import { StatusGlyph, type Activity } from '@/components/ui/status-glyph'
 import { Markdown } from '@/components/common/Markdown'
 import { safeCopyText } from '@/lib/clipboard'
 import { useTtsRuntime, stopSpeaking, speakText } from '@/hooks/useTts'
-import type { ChatTurn, ToolCall, TurnEvent, AskUserInteraction } from '@/types'
+import type { ChatTurn, ToolCall, TurnEvent, AskUserInteraction, TurnUsage } from '@/types'
 import type { ParsedRef } from '@/utils/references'
 import { cn } from '@/lib/utils'
 import { toolDisplayName } from '@/components/tools/_shared/displayNames'
@@ -244,6 +244,7 @@ function TurnBlock({ turn, isLast, onAction, onCite, onPin }: {
             <Markdown content={answerText} />
           </div>
           {turn.stickerUrl && <Sticker src={turn.stickerUrl} className="mt-1" />}
+          {turn.usage && <TurnUsageLine usage={turn.usage} />}
           <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/answer:opacity-100 focus-within:opacity-100">
             <CopyButton text={answerText} />
             <Button
@@ -268,6 +269,43 @@ function TurnBlock({ turn, isLast, onAction, onCite, onPin }: {
         </div>
       )}
     </article>
+  )
+}
+
+function fmtTokens(n: number | null): string {
+  if (n === null) return '—'
+  if (n < 1000) return String(n)
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}K`
+  return `${(n / 1_000_000).toFixed(2)}M`
+}
+
+/**
+ * 每轮用量脚注（pi 的 `llm_usage` / `answer.usage` 派生）。
+ *
+ * pi 会在每次模型请求结束时给出 input/output/cacheRead/cacheWrite 与耗时；
+ * fallback 或多步轮次会有多次请求，这里按轮累加（耗时取最后一次，那是产出
+ * 最终回答的那次）。缓存预热单独标出——它真实读取缓存，但不进命中率。
+ */
+function TurnUsageLine({ usage }: { usage: TurnUsage }) {
+  const parts: string[] = []
+  if (usage.inputTokens !== null || usage.outputTokens !== null) {
+    parts.push(`↑${fmtTokens(usage.inputTokens)} ↓${fmtTokens(usage.outputTokens)}`)
+  }
+  if (usage.cacheReadTokens !== null && usage.cacheReadTokens > 0) parts.push(`缓存读 ${fmtTokens(usage.cacheReadTokens)}`)
+  if (usage.durationMs !== null) {
+    parts.push(usage.durationMs < 1000 ? `${Math.round(usage.durationMs)}ms` : `${(usage.durationMs / 1000).toFixed(1)}s`)
+  }
+  if (usage.requests > 1) parts.push(`${usage.requests} 次请求`)
+  if (usage.warmCalls > 0) parts.push(`预热 ${usage.warmCalls} 次`)
+  if (usage.cacheStatus === 'unknown') parts.push('缓存未观测')
+  return (
+    <div
+      className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] tabular-nums text-muted-foreground/80"
+      title={[usage.provider, usage.model].filter(Boolean).join(' / ') || undefined}
+    >
+      {usage.model && <span className="truncate max-w-[16ch]">{usage.model}</span>}
+      {parts.map((p) => <span key={p}>{p}</span>)}
+    </div>
   )
 }
 

@@ -9,6 +9,7 @@
  */
 
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 
 import { Hono } from "hono";
@@ -624,6 +625,31 @@ export function startServer() {
 }
 
 if (import.meta.main || process.env.MAXMA_BACKEND_COMPILED === "1") {
+  // 开发模式下的引擎数据落点：便携包/桌面壳由启动器注入 PI_CODING_AGENT_DIR，
+  // 源码直跑时没人注入，pi 就按自己的默认写进用户主目录（~/.pi/agent）——
+  // 会话/凭据与 Maxma 的库分居两处，备份与"数据都在 app 目录里"的承诺都不成立。
+  // 这里补一个与打包形态一致的默认值：<Maxma 数据根>/api/data/pi。
+  // 显式注入的环境变量优先（便携包、自定义部署）；已有主目录数据时不搬动，
+  // 只提示用户可以用环境变量继续指向旧目录。
+  if (!process.env.PI_CODING_AGENT_DIR) {
+    const devAgentDir = path.join(dataDir(), "api", "data", "pi");
+    process.env.PI_CODING_AGENT_DIR = devAgentDir;
+    const legacyAgentDir = path.join(os.homedir(), ".pi", "agent");
+    try {
+      const legacyHasData = fs.existsSync(path.join(legacyAgentDir, "sessions"))
+        && fs.readdirSync(path.join(legacyAgentDir, "sessions")).length > 0;
+      const nextHasData = fs.existsSync(path.join(devAgentDir, "sessions"))
+        && fs.readdirSync(path.join(devAgentDir, "sessions")).length > 0;
+      if (legacyHasData && !nextHasData) {
+        console.warn(
+          `[engine] 检测到主目录里已有引擎会话：${legacyAgentDir}\n` +
+            `  本次起开发模式默认写到 ${devAgentDir}；要沿用旧数据，请显式设置 PI_CODING_AGENT_DIR=${legacyAgentDir}。`,
+        );
+      }
+    } catch {
+      /* 仅提示，读不到不影响启动 */
+    }
+  }
   registerProcessGuards();
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {

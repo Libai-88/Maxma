@@ -109,6 +109,28 @@
 （会牵动 store 内部 `get().action` 的自引用注解）。要彻底消掉这类洞，做法是把动作面抽成
 `JetHubActions` 并与 `JetHubData` 合并成 store 泛型，让 tsc 逐成员校验。
 
+## 2026-11-12 边界修复（pi 适配为主）
+
+承上一轮"最终复查"，本轮只动边界：凡是「引擎已经给了、前端没接」或「两边形状对不上」
+的地方，一律按 pi 的真实契约补到可用。
+
+| 问题（证据） | 处理 | 锁 |
+| --- | --- | --- |
+| **pi 的用量在前端完全不可见**：`llm_usage` 被 `chat-ws.ts` 每条路径 `return` 掉（只落库+打点），`answer` 的 `usage/provider/model/request_duration_ms` 又被前端类型裁成 `{content}`。指标页只有聚合，逐次请求只能翻 SQLite | 后端 `forwardLlmUsage` 落库后转发精简帧（`cache_status` 由 cacheRead/cacheWrite 现场派生，带 `turn_id`）；`finishTurn` 的终态 `answer` 补 `model/provider`（fallback 后才知道谁回了话）；前端 `ServerEvent` 增 `LlmUsageEvent`、`TurnUsage`，`done.context_usage` 的每轮聚合兜底，回答下方渲染脚注（模型 / ↑in ↓out / 缓存读 / 时长 / 多请求 / 预热） | `chat-ws-2.3b.test.ts`：断言 `cache_warm` 转发帧字段与终态 answer 的 `turn_id` 归属；浏览器实测脚注为 `stub-model ↑210 ↓56 缓存读 1.0K 0.2s` |
+| **后端有账本、前端没入口**：`/api/metrics/llm-usage`（summary + recent_calls）零消费者 | 指标页新增「最近模型请求」表（时间/模型/输入/输出/缓存读/耗时/状态，30 天窗口，可刷新），`api.getLlmUsage` 接上 | 浏览器实测 31 行真实记录 |
+| **开发模式引擎数据落在用户主目录**：源码直跑没人注入 `PI_CODING_AGENT_DIR`，pi 默认写 `~/.pi/agent`，会话/凭据与 `api/data/maxma.db` 分居两处 | 启动时若未显式注入，默认 `<Maxma 数据根>/api/data/pi`（与打包形态同构）；主目录已有会话时**只提示不搬动**，给出沿用旧目录的环境变量写法 | 实测启动日志：`配置目录=D:\Maxma\MaxmaHere\api\data\pi（在 Maxma 数据目录内）` |
+| **JetHubView 的 `as unknown as` 契约**（上轮遗留）：本地声明 28 成员、实际消费 74，`openProviders` 等被当数组用 | store 类型改由初始化函数推导（`JetHubStore = JetHubData & ReturnType<...>`），视图直接 `useJetHubStore()`；本地 `AccountRow/ModelRow/CreditsEntry` 改为 store 真类型，备份回执直接用 `JetHubImportResult` | `tsc`：成员缺失/函数当数组当场报错；浏览器实测 15 渠道渲染 |
+| 6ms 请求显示成 `0.0s`、`skipped` 计数与数组混用等展示口径 | 时长 <1s 用 ms；`recent_calls` 表格与脚注同口径 | 浏览器实测 `0.2s` / `6ms` |
+
+**仍存在的边界（如实记录，没有伪装成已实现）**
+
+- 引擎能力缺口（`sub_agents` / `automation` / `browser_tools`）保持不可用，能力清单已带
+  `engine_supported:false` 与真实 reason，页面对用户只说"引擎没有"。
+- `tts` 面板只暴露"开关 + 自动朗读"，provider 仍固定 `system`（浏览器 `speechSynthesis`）；
+  `panel_configs.json` 里遗留的 `openai-tts` 值不会被 UI 展示，首次写入即归一为 `system`。
+- 浏览器控制台在后端重启窗口会出现若干 `Failed to fetch: /api/health`（浏览器网络层自己
+  记的失败请求，不是应用日志；`waitForBackend` 本身是静默重试）。
+
 ## 状态
 
 - 仓库 `https://github.com/Libai-88/Maxma.git`，主分支 `main`；变更一律走分支 + PR squash 合入，

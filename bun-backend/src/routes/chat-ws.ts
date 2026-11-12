@@ -206,6 +206,50 @@ export function onKernelEvent(
   return next;
 }
 
+/**
+ * 把 `llm_usage` 转发给前端（落库之后、原样语义、只留 UI 需要的字段）。
+ *
+ * 此前这两个分支只落库 + 打点就 `return`，客户端永远收不到用量：
+ * 对话里看不到每轮 token、走的模型、缓存是否命中，缓存预热更是完全不可见。
+ * 落库与展示是两件事——记账不能替代回执。
+ */
+function forwardLlmUsage(
+  send: (type: string, payload: Record<string, unknown>) => void,
+  payload: Record<string, unknown>,
+  turnId: string | null,
+): void {
+  const usage = payload.usage !== null && typeof payload.usage === "object"
+    ? payload.usage as Record<string, unknown>
+    : null;
+  // 缓存观测状态按与落库同一规则派生：payload 里常常不写 cache_status，
+  // 只写 cacheRead/cacheWrite 两个数字。直接透传会让前端永远看到 null
+  // （"缓存未观测"），而落库那侧同一帧其实是 observed。
+  const hasBothCache = usage !== null
+    && typeof usage.cacheRead === "number" && Number.isFinite(usage.cacheRead)
+    && typeof usage.cacheWrite === "number" && Number.isFinite(usage.cacheWrite);
+  const derivedCacheStatus = hasBothCache
+    ? "observed"
+    : payload.cache_status === "catalog" ? "catalog" : "unknown";
+  const out: Record<string, unknown> = {
+    kind: payload.kind,
+    usage: usage
+      ? {
+          input: usage.input ?? null,
+          output: usage.output ?? null,
+          cacheRead: usage.cacheRead ?? null,
+          cacheWrite: usage.cacheWrite ?? null,
+        }
+      : null,
+    provider: typeof payload.provider === "string" ? payload.provider : null,
+    model: typeof payload.model === "string" ? payload.model : null,
+    request_duration_ms: typeof payload.request_duration_ms === "number" ? payload.request_duration_ms : null,
+    price_status: typeof payload.price_status === "string" ? payload.price_status : null,
+    cache_status: derivedCacheStatus,
+  };
+  if (turnId) out.turn_id = turnId;
+  send("llm_usage", out);
+}
+
 async function processKernelEvent(
   hub: ChatWsHub,
   sessionId: string,
@@ -451,6 +495,7 @@ async function processKernelEvent(
         } catch (error) {
           console.warn(`[llm-usage] failed to record hidden model request: ${String(error)}`);
         }
+        forwardLlmUsage(send, payload, state?.turnId ?? null);
         return;
       }
       if (payload.kind !== "cache_warm") return;
@@ -480,6 +525,7 @@ async function processKernelEvent(
       } catch (error) {
         console.warn(`[llm-usage] failed to record cache warm usage: ${String(error)}`);
       }
+      forwardLlmUsage(send, payload, null);
       return;
     }
 
@@ -552,7 +598,14 @@ async function finishTurn(hub: ChatWsHub, sessionId: string, state: TurnState): 
   if (state.finalAnswer) {
     hub.broadcast(sessionId, {
       type: "answer",
-      payload: { turn_id: state.turnId, content: state.finalAnswer },
+      payload: {
+        turn_id: state.turnId,
+        content: state.finalAnswer,
+        // 实际产出这句话的模型（fallback 池里可能不是会话默认模型）。
+        // 此前只发 content，客户端无从得知"是谁回的"，用量脚注只能猜。
+        ...(state.modelName ? { model: state.modelName } : {}),
+        ...(state.providerId ? { provider: state.providerId } : {}),
+      },
     });
     // IDEMPOTENCY-001：turn 成功后才登记幂等 id（失败轮次可重试）
     if (state.clientMsgId) {

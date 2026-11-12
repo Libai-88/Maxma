@@ -40,6 +40,7 @@ build_portable.log
 api/data/const-sessions/
 api/data/maxma.db
 api/data/settings_overrides.json
+api/data/pi/
 api/data/user_rules.json
 api/data/session_map.db
 api/data/providers.yaml

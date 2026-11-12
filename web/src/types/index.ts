@@ -72,12 +72,90 @@ export interface IrcMessageEvent {
 
 export interface AnswerEvent {
   type: 'answer'
-  payload: { content: string }
+  payload: {
+    content: string
+    /**
+     * 引擎（pi）在 message_end 上带出的权威用量。bridge 一直发，
+     * 但此前类型只声明 content，前端把整包丢了；这里补上供
+     * llm_usage 缺失时兜底（老引擎/缓存预热轮）。
+     */
+    usage?: PiUsage | null
+    provider?: string | null
+    model?: string | null
+    request_duration_ms?: number | null
+    request_shape_hash?: string | null
+    prefix_fingerprint?: string | null
+    fingerprint_epoch?: number | null
+  }
 }
 
 export interface DoneEvent {
   type: 'done'
   payload: { turn_id?: string; context_usage?: ContextUsage }
+}
+
+/**
+ * pi 的 Usage 形状（官方 message.usage）。字段名与引擎逐字对齐：
+ * `input` / `output` / `cacheRead` / `cacheWrite`，不要按 OpenAI 的
+ * `prompt_tokens` 那套猜。后端 llm-usage-ledger 也按同一组键落库。
+ */
+export interface PiUsage {
+  input?: number
+  output?: number
+  cacheRead?: number
+  cacheWrite?: number
+  total?: number
+  cost?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; total?: number }
+}
+
+/**
+ * 引擎派生用量事件（`MAXMA_ENGINE_WS_EVENTS` 里的 `llm_usage`）。
+ *
+ * 两种 kind：
+ *   - `model_request`：一次真实模型请求结束（bridge 从 message_end 派生），
+ *     带 provider/model/时长/缓存与价格状态；
+ *   - `cache_warm`：pi 的 usage entry（kind=cache_warm），不进对话上下文，
+ *     但确实施了缓存读取 token。
+ *
+ * 此前它既不在 `ServerEvent` 联合、也不在 `SERVER_EVENT_HANDLER_TYPES`，
+ * 前端入口守卫只在控制台 warn 一句就丢掉——于是「每轮用了多少 token、
+ * 走的哪个模型、缓存命没命中」在对话里完全不可见（只有指标页的聚合）。
+ */
+export interface LlmUsageEvent {
+  type: 'llm_usage'
+  payload: {
+    kind: 'model_request' | 'cache_warm'
+    usage_source?: string
+    usage_entry_id?: string | null
+    occurred_at?: string | null
+    usage?: PiUsage | null
+    provider?: string | null
+    model?: string | null
+    request_duration_ms?: number | null
+    price_status?: 'catalog_estimate' | 'unknown' | string | null
+    cache_status?: 'observed' | 'unknown' | string | null
+    request_shape_hash?: string | null
+    prefix_fingerprint?: string | null
+    fingerprint_epoch?: number | null
+  }
+}
+
+/** 单轮对话的用量（由 llm_usage / answer 事件累加得出）。 */
+export interface TurnUsage {
+  provider: string | null
+  model: string | null
+  inputTokens: number | null
+  outputTokens: number | null
+  cacheReadTokens: number | null
+  cacheWriteTokens: number | null
+  /** 最后一次请求的耗时；多请求轮次取最后一次（它是产出最终回答的那次）。 */
+  durationMs: number | null
+  cacheStatus: 'observed' | 'unknown' | null
+  priceStatus: 'catalog_estimate' | 'unknown' | null
+  /** 本轮内真实模型请求数（fallback / 多步会产生多次）。 */
+  requests: number
+  /** 本轮内缓存预热次数与它们的缓存读取 token，单独计数（不进命中率）。 */
+  warmCalls: number
 }
 
 export interface RateLimitDetails {
@@ -404,6 +482,7 @@ export type ServerEvent =
   | NoticeEvent
   | IrcMessageEvent
   | AnswerEvent
+  | LlmUsageEvent
   | DoneEvent
   | ErrorEvent
   | PongEvent
@@ -782,6 +861,8 @@ export interface ChatTurn {
   planCard?: PlanCard
   /** 情绪匹配的贴纸 URL */
   stickerUrl?: string
+  /** pi 报告的每轮用量（模型 / token / 时长 / 缓存）；无 usage 的老轮次为空。 */
+  usage?: TurnUsage
 }
 
 // === 会话叙事与时刻 ===
