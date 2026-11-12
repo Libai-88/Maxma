@@ -30,8 +30,6 @@ import type {
   ActivityRecentResponse,
   ActivityStatsResponse,
   ActivityClearResponse,
-  DeferredRun,
-  ListDeferredRunsResponse,
   PermissionMode,
   SessionPermissionModeResponse,
   CapabilitiesResponse,
@@ -76,16 +74,6 @@ export interface TtsConfig {
   speed: number
   pitch: number
   auto_read: boolean
-}
-
-export interface BrowserToolsConfig {
-  enabled: boolean
-  chrome_path: string
-  headless: boolean
-  viewport_width: number
-  viewport_height: number
-  block_tracking: boolean
-  allowed_domains: string[]
 }
 
 export interface SubAgentConfig {
@@ -358,24 +346,6 @@ export const api = {
     ),
 
   // Server-side feature flag controls availability. No client-side opt-in is needed.
-  getDeferredRun: (sessionId: string, runId: string) =>
-    request<DeferredRun>(
-      `/sessions/${encodeURIComponent(sessionId)}/deferred-runs/${encodeURIComponent(runId)}`,
-    ),
-
-  // 列出当前会话的后台子任务（活跃全量 + 最近一批终态）。
-  // 列表投影不含 result 全文；展开时用 getDeferredRun 补。
-  listDeferredRuns: (sessionId: string) =>
-    request<ListDeferredRunsResponse>(
-      `/sessions/${encodeURIComponent(sessionId)}/deferred-runs`,
-    ),
-
-  cancelDeferredRun: (sessionId: string, runId: string) =>
-    request<DeferredRun>(
-      `/sessions/${encodeURIComponent(sessionId)}/deferred-runs/${encodeURIComponent(runId)}/cancel`,
-      { method: 'POST' },
-    ),
-
   undoMessages: (sessionId: string, n: number = 1) =>
     request<{ deleted_count: number }>(`/sessions/${encodeURIComponent(sessionId)}/undo?n=${n}`, { method: 'POST' }),
 
@@ -479,15 +449,6 @@ export const api = {
 
   updateTtsConfig: (config: Partial<TtsConfig>) =>
     request<TtsConfig>('/settings/tts', {
-      method: 'PUT',
-      body: JSON.stringify(config),
-    }),
-
-  getBrowserToolsConfig: () =>
-    request<BrowserToolsConfig>('/settings/browser-tools'),
-
-  updateBrowserToolsConfig: (config: Partial<BrowserToolsConfig>) =>
-    request<BrowserToolsConfig>('/settings/browser-tools', {
       method: 'PUT',
       body: JSON.stringify(config),
     }),

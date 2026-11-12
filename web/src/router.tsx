@@ -29,7 +29,6 @@ const V = {
   Collab: lazy(() => import('@/views/CollabView')),
   Share: lazy(() => import('@/views/ShareView')),
   Rules: lazy(() => import('@/views/RulesView')),
-  AgentTasks: lazy(() => import('@/views/AgentTasksView')),
   FeatureUnavailable: lazy(() => import('@/views/FeatureUnavailableView')),
   NotFound: lazy(() => import('@/views/NotFoundView')),
   Onboarding: lazy(() => import('@/views/OnboardingView')),
@@ -68,9 +67,6 @@ const ROUTES: RouteDef[] = [
   { path: '/collab', el: <V.Collab />, title: '协作', feature: 'collab' },
   { path: '/share/:id', el: <V.Share />, title: '分享的会话' },
   { path: '/rules', el: <V.Rules />, title: '质量规则', feature: 'rules' },
-  { path: '/automation', el: <V.FeatureUnavailable />, title: '自动化', feature: 'automation' },
-  { path: '/agent-tasks', el: <V.AgentTasks />, title: 'Agent 任务中心', feature: 'sub_agents' },
-  { path: '/agent-demo', el: <Navigate to="/agent-tasks" replace />, title: 'Agent 任务中心' },
   { path: '/feature-unavailable', el: <V.FeatureUnavailable />, title: '功能不可用' },
 ]
 

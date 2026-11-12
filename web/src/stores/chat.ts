@@ -121,7 +121,6 @@ export interface SessionChannel {
   reconnectAttempts: number
   initialized: boolean
   _awaitingToolName: string | null
-  parentSessionId: string | null
   privateMode: boolean
   autoApprove: boolean
   /**
@@ -181,7 +180,7 @@ function createChannel(): SessionChannel {
     isChatViewActive: false, streamPhase: 'idle', unreadEvents: 0,
     streamStartedAt: null, lastActivityAt: null, lastCompletedAt: null,
     reconnectTimer: null, reconnectAttempts: 0, initialized: false,
-    _awaitingToolName: null, parentSessionId: null,
+    _awaitingToolName: null,
     privateMode: false, autoApprove: false, permissionMode: null, _pingTimer: null, _lastPongAt: 0,
     _lastDoneTurnId: null,
     _turnWatchdog: null,

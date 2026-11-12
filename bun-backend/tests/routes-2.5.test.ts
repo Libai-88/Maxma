@@ -433,13 +433,15 @@ describe("capabilities 聚合（阶段 2.5c）", () => {
       expect(value, `manifest 缺少 feature: ${name}`).toBeDefined();
       return value as Record<string, unknown>;
     };
-    expect(feature("automation").enabled).toBe(false); // automation 随 Python 下线
-    // 关闭原因必须是「引擎没有调度器」而不是「用户关了」：前端
-    // describeFeatureAvailability 只认 engine_supported=false 才不改写成
-    // 「可以在设置面板重新开启」——少一个字段，不可用页就开始撒谎。
-    expect(feature("automation").engine_supported).toBe(false);
-    expect(String(feature("automation").reason ?? "")).toContain("pi");
-    expect(feature("automation").scheduler).toBe(false);
+    // 子 Agent 是 pi 支持的：SDK 进程内会话（kernel/subagent.ts）。此前按
+    // "引擎没有子任务运行时" 发 engine_supported=false，是把上一代 deferred 面
+    // 的缺失当成了 pi 的事实。
+    expect(feature("sub_agents").engine_supported).toBe(true);
+    expect(feature("sub_agents").mechanism).toBe("pi-sdk-in-process");
+    expect(feature("sub_agents").reason).toBeNull();
+    // automation / browser_tools 已整体删除（pi 没有调度器与浏览器运行时）
+    expect(features.automation).toBeUndefined();
+    expect(features.browser_tools).toBeUndefined();
     expect(feature("mcp").enabled).toBe(true);
     expect(feature("mcp").transports).toEqual(["stdio", "streamable_http"]);
     expect(feature("memory").enabled).toBe(true);
@@ -449,11 +451,6 @@ describe("capabilities 聚合（阶段 2.5c）", () => {
     expect(feature("extensions").enabled).toBe(true);
     expect(feature("extensions").bundled).toEqual(["maxma-approval", "maxma-blocker", "request-telemetry"]);
     expect(feature("rules").enabled).toBe(true);
-    // 浏览器工具：面板开关只是偏好，引擎没有浏览器运行时——`enabled` 必须恒 false，
-    // 否则前端/未来消费者会把"用户打开过开关"当成"工具可用"。
-    expect(feature("browser_tools").enabled).toBe(false);
-    expect(feature("browser_tools").engine_supported).toBe(false);
-    expect(typeof feature("browser_tools").configured).toBe("boolean");
     expect(feature("tools").builtin_count).toBe(7);
     expect(feature("tools").custom_count).toBe(7);
     // providers 可能含 opencode-zen 内置供应商（后台同步注入，与运行顺序无关）——

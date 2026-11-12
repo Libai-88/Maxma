@@ -13,7 +13,6 @@ import { confirmAction } from '@/components/common/ConfirmDialog'
 
 type Settings = Record<string, unknown>
 
-interface BrowserToolsConfig { enabled: boolean; chrome_path: string; headless: boolean; viewport_width: number; viewport_height: number; block_tracking: boolean; allowed_domains: string[] }
 interface SubAgentConfig { enabled: boolean; max_concurrent: number; auto_approve: boolean; model: string; timeout_seconds: number; show_progress: boolean }
 interface TtsConfig { enabled: boolean; provider: 'system' | 'custom'; voice: string; speed: number; pitch: number; auto_read: boolean }
 
@@ -40,8 +39,7 @@ const SECTIONS = [
   { key: 'skills', label: '技能包' },
   { key: 'voice', label: '语音' },
   { key: 'maintenance', label: '维护' },
-  { key: 'browser', label: '浏览器（暂不生效）' },
-  { key: 'subagent', label: '子代理（暂不生效）' },
+  { key: 'subagent', label: '子 Agent' },
 ]
 
 export default function SettingsView() {
@@ -50,8 +48,7 @@ export default function SettingsView() {
   const [loadError, setLoadError] = useState('')
   const [panelLoadError, setPanelLoadError] = useState('')
   const [activeSection, setActiveSection] = useState('compaction')
-  const [browser, setBrowser] = useState<BrowserToolsConfig>({ enabled: false, chrome_path: '', headless: true, viewport_width: 1280, viewport_height: 800, block_tracking: true, allowed_domains: [] })
-  const [subagent, setSubAgent] = useState<SubAgentConfig>({ enabled: false, max_concurrent: 1, auto_approve: false, model: '', timeout_seconds: 600, show_progress: true })
+  const [subagent, setSubAgent] = useState<SubAgentConfig>({ enabled: false, max_concurrent: 4, auto_approve: false, model: '', timeout_seconds: 300, show_progress: true })
   const [tts, setTts] = useState<TtsConfig>({ enabled: false, provider: 'system', voice: '', speed: 1.0, pitch: 1.0, auto_read: false })
   const [logs, setLogs] = useState<{ files: Array<{ name: string; size_mb: number }>; count: number; total_mb: number; logs_dir: string } | null>(null)
   const [logsBusy, setLogsBusy] = useState<'load' | 'export' | 'clear' | 'restart' | null>(null)
@@ -75,7 +72,6 @@ export default function SettingsView() {
 
   useEffect(() => {
     void loadSettings()
-    void api.getBrowserToolsConfig().then(setBrowser).catch(() => setPanelLoadError('浏览器面板配置读取失败'))
     void api.getSubAgentConfig().then(setSubAgent).catch(() => setPanelLoadError('子代理面板配置读取失败'))
     void api.getTtsConfig().then(setTts).catch(() => setPanelLoadError('语音面板配置读取失败'))
   }, [])
@@ -315,22 +311,32 @@ export default function SettingsView() {
             </Row>
           </Panel>
 
-          <Panel title="浏览器（暂不生效）" className={activeSection === 'browser' ? '' : 'hidden'}>
-            <div className="pointer-events-none opacity-50" aria-disabled>
-              <Row label="启用浏览器工具"><Switch checked={browser.enabled} onCheckedChange={(v) => setBrowser({ ...browser, enabled: v })} aria-label="启用浏览器工具" /></Row>
-              <Row label="无头模式"><Switch checked={browser.headless} onCheckedChange={(v) => setBrowser({ ...browser, headless: v })} aria-label="无头模式" /></Row>
-              <Row label="阻止跟踪"><Switch checked={browser.block_tracking} onCheckedChange={(v) => setBrowser({ ...browser, block_tracking: v })} aria-label="阻止跟踪" /></Row>
-              <Button variant="outline" size="sm" className="mt-3" onClick={() => { void api.updateBrowserToolsConfig(browser).then(() => showToast('已保存')) }}>保存</Button>
-            </div>
-          </Panel>
-
-          <Panel title="子代理（暂不生效）" className={activeSection === 'subagent' ? '' : 'hidden'}>
-            <div className="pointer-events-none opacity-50" aria-disabled>
-              <Row label="启用子代理"><Switch checked={subagent.enabled} onCheckedChange={(v) => setSubAgent({ ...subagent, enabled: v })} aria-label="启用子代理" /></Row>
-              <Row label="自动批准"><Switch checked={subagent.auto_approve} onCheckedChange={(v) => setSubAgent({ ...subagent, auto_approve: v })} aria-label="自动批准" /></Row>
-              <Row label="显示进度"><Switch checked={subagent.show_progress} onCheckedChange={(v) => setSubAgent({ ...subagent, show_progress: v })} aria-label="显示进度" /></Row>
-              <Button variant="outline" size="sm" className="mt-3" onClick={() => { void api.updateSubAgentConfig(subagent).then(() => showToast('已保存')) }}>保存</Button>
-            </div>
+          <Panel title="子 Agent" className={activeSection === 'subagent' ? '' : 'hidden'}>
+            <p className="mb-2 text-xs text-muted-foreground">
+              子 Agent 由 pi 的 SDK 进程内会话实现（每次委派独立上下文，只读文件 + 执行命令，不能再委派）。
+              开启后模型会获得 <code className="font-mono">subagent</code> 工具；改动对新建会话生效。
+            </p>
+            <Row label="启用子 Agent" desc="开启后模型可把独立子任务并行委派出去。">
+              <Switch checked={subagent.enabled} onCheckedChange={(v) => { setSubAgent({ ...subagent, enabled: v }); void api.updateSubAgentConfig({ ...subagent, enabled: v }) }} aria-label="启用子 Agent" />
+            </Row>
+            <Row label="最大并行" desc="1–8。超过的任务排队执行。">
+              <input
+                type="number" min={1} max={8} value={subagent.max_concurrent}
+                onChange={(e) => setSubAgent({ ...subagent, max_concurrent: Number(e.target.value) })}
+                onBlur={() => void api.updateSubAgentConfig(subagent)}
+                className="w-20 rounded-lg border border-border bg-background px-2 py-1 text-sm outline-none focus-visible:border-ring"
+                aria-label="最大并行"
+              />
+            </Row>
+            <Row label="单任务超时（秒）" desc="30–1800。超时的子任务按失败返回给父会话。">
+              <input
+                type="number" min={30} max={1800} value={subagent.timeout_seconds}
+                onChange={(e) => setSubAgent({ ...subagent, timeout_seconds: Number(e.target.value) })}
+                onBlur={() => void api.updateSubAgentConfig(subagent)}
+                className="w-24 rounded-lg border border-border bg-background px-2 py-1 text-sm outline-none focus-visible:border-ring"
+                aria-label="单任务超时"
+              />
+            </Row>
           </Panel>
         </>
       )}

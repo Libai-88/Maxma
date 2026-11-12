@@ -92,7 +92,12 @@
 
 登记在 `pi-contract.ts` 的 `ENGINE_EVENT_EXPECTED_BUT_UNPRODUCED`，由 `tests/engine-boundary.test.ts` 双向校验（声明为引擎产出却查不到生产者 → 红；登记为不产出却查出生产者 → 也红）：
 
-`deferred_subagent_submitted` · `sub_session_created` · `irc_message` · `todo_reminder` · `context_usage` · `plan_step_start` · `plan_step_end` · `plan_step_error`
+`irc_message` · `todo_reminder` · `context_usage` · `plan_step_start` · `plan_step_end` · `plan_step_error`
+
+`deferred_subagent_submitted` / `sub_session_created` 已从本清单删除：子 Agent 改由 pi SDK 的进程内
+会话实现（`bun-sidecar/src/kernel/subagent.ts`），OMP 时代的 deferred 面（事件、`DeferredRunManager`、
+`/api/sessions/:id/deferred-runs`、Agent 任务中心视图、`deferred_runs` 表）一并删除。
+子会话因此没有独立 WS 通道——它的过程就是父会话里的一个 `subagent` 工具调用。
 
 **这些不是文档笔误，而是上一代引擎换代之后的静默断链**：类型仍在 `web/src/types/`、分支仍在 `useChat.ts`、快照仍全绿、页面照得开，只是永远不会再来。勿据以认为功能可用。
 

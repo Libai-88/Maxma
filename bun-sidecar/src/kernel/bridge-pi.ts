@@ -21,6 +21,7 @@ import { loadMaxmaMcpEntries } from "./mcp";
 import { resolvePiModel } from "./model";
 import { loadPersonaSystemPrompt } from "./persona-prompt";
 import { buildPiCustomTools } from "./tools";
+import { createSubagentTool, type SubagentLimits } from "./subagent";
 import {
   createSubmitPlanTool,
   PI_PLAN_MODE_DIRECTIVE,
@@ -290,6 +291,25 @@ export async function handlePiCreateSession(
 
   const thinkingLevel = params?.thinking_level as MaxmaSessionOptions["thinkingLevel"] | undefined;
 
+  // 子 Agent 工具的装配条件与面板契约：
+  //   - 后端在 create_session 里传 `subagent: { enabled, max_concurrent, timeout_seconds }`
+  //   - 未传视为不启用（老客户端/测试不受影响）
+  const subagentCfg = params?.subagent as
+    | { enabled?: boolean; max_concurrent?: number; timeout_seconds?: number }
+    | undefined;
+  const subagentTool = subagentCfg?.enabled === true
+    ? createSubagentTool({
+        cwd,
+        ...(resolved.modelRuntime ? { modelRuntime: resolved.modelRuntime } : {}),
+        ...(resolved.model ? { model: resolved.model } : {}),
+        limits: {
+          ...(Number.isFinite(Number(subagentCfg.max_concurrent)) ? { maxConcurrent: Number(subagentCfg.max_concurrent) } : {}),
+          ...(Number.isFinite(Number(subagentCfg.timeout_seconds)) ? { timeoutMs: Number(subagentCfg.timeout_seconds) * 1000 } : {}),
+        } satisfies Partial<SubagentLimits>,
+        ...(params?.model ? { parentModel: String(params.model) } : {}),
+      })
+    : undefined;
+
   const options: MaxmaSessionOptions = {
     cwd,
     permissionMode,
@@ -304,7 +324,13 @@ export async function handlePiCreateSession(
     ...(thinkingLevel ? { thinkingLevel } : {}),
     ...(mcp && mcp.entries.length > 0 ? { mcpServers: mcp.entries } : {}),
     // Maxma 特色能力层（记忆、规则、办公读取 + 计划模式）
-    customTools: [...buildPiCustomTools(cwd), submitPlanTool],
+    // 子 Agent：pi SDK 的进程内会话（docs/sdk.md + examples/extensions/subagent），
+    // 复用本会话已解析的 ModelRuntime/凭据，不 spawn 外部进程。
+    // 面板值（启用/并行数/超时）由后端在 create_session 的 `subagent` 参数里下发。
+    customTools: [
+      ...buildPiCustomTools(cwd, subagentTool === undefined ? [] : [subagentTool]),
+      submitPlanTool,
+    ],
     ...(systemPrompt !== undefined ? { systemPrompt } : {}),
     skillsEnabled: params?.skills_enabled !== false,
     appendSystemPrompt: [

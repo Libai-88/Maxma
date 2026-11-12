@@ -153,7 +153,7 @@ describe("path_whitelist 死表", () => {
     // 后续版本的表补齐 = 迁移链没断
     expect(tables).toContain("llm_usage_calls");
     expect(tables).toContain("evolution_rules");
-    expect(tables).toContain("deferred_runs");
+    // deferred_runs / automations 已随功能删除（v4/v7 只保留版本号占位）
     // 老库里那张零行遗留表原地保留（不 drop）：无读取方 ⇒ 无行为影响，
     // 而贸然 DROP 会让"回滚到旧版本"的用户丢数据。UI 已不再宣称它存在。
     expect(tables).toContain("path_whitelist");

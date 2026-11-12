@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom'
-import { MessageSquare, Cpu, Brain, Sparkles, Bot, BarChart3, Blocks, Puzzle, Activity, Settings2, PanelLeft, Moon } from 'lucide-react'
+import { MessageSquare, Cpu, Brain, Sparkles, BarChart3, Blocks, Puzzle, Activity, Settings2, PanelLeft, Moon } from 'lucide-react'
 import { useCapabilitiesStore } from '@/stores/capabilities'
 import { useChatStore } from '@/stores/chat'
 import { Button } from '@/components/ui/button'
@@ -15,7 +15,6 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/providers', label: '模型', icon: Cpu },
       { to: '/memory', label: '记忆', icon: Brain, feature: 'memory' },
       { to: '/evolution', label: '成长', icon: Sparkles, feature: 'memory' },
-      { to: '/agent-tasks', label: 'Agent', icon: Bot, feature: 'sub_agents' },
     ],
   },
   {

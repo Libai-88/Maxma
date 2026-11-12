@@ -24,7 +24,6 @@
  *   - PERF-TOOL-OUTPUT-001：tool_end 输出 >100KB / tool_error >20KB 截断
  *   - Phase 2.2 artifact 合成（写类工具输出 → InteractiveArtifact 事件）
  *   - MEMORY-EVENTS-001：remember_memory 工具活动收集，done 后合成 memory_* 事件流
- *   - AG-SUBAGENT-001：deferred_subagent_submitted 写入 DeferredRunManager
  *   - METRICS-WIRE-001：工具/LLM 调用指标接线
  *   - 活动埋点（turn_start / turn_end / turn_cancelled / turn_error / tool 事件）
  *   - WS per-session 限流（capacity 60/60s，错误形状对齐 make_error RATE_LIMITED）
@@ -45,7 +44,6 @@ import { isPluginProvider } from "../plugins/dsh";
 import { getMetrics } from "../metrics";
 import { recordLlmUsageCall, type LlmCacheStatus } from "../llm-usage-ledger";
 import { getErrorCollector } from "../error-collector";
-import { getDeferredRunManager, toDeferredRunView } from "./deferred-runs";
 import { newTurnId, calculateContextUsage } from "./chat-turns";
 import { FILE_WRITING_TOOLS, extractFilePathFromOutput, buildArtifactPayload } from "./chat-artifacts";
 
@@ -532,44 +530,6 @@ async function processKernelEvent(
     case "done": {
       if (!state) return; // 无活跃回合：吞掉（兼容补发的 idle done 不下发前端）
       await finishTurn(hub, sessionId, state);
-      return;
-    }
-
-    case "deferred_subagent_submitted": {
-      // AG-SUBAGENT-001：生命周期状态映射后写入 DeferredRunManager。
-      //
-      // 只落库运行状态，不落 `task` / `name`：那是子任务的完整 prompt/标题，
-      // ADR 0003 不允许进入父会话的数据面（库、HTTP、WS 都不行）。
-      const rawStatus = String(payload.status ?? "queued");
-      const mapped: Record<string, string> = { completed: "succeeded", failed: "failed", aborted: "cancelled" };
-      let forwarded: Record<string, unknown> = {
-        run_id: payload.run_id ?? "",
-        status: mapped[rawStatus] ?? rawStatus,
-      };
-      try {
-        const stored = getDeferredRunManager().addOrUpdate(sessionId, {
-          run_id: payload.run_id ?? "",
-          parent_turn_id: payload.parent_turn_id ?? null,
-          status: mapped[rawStatus] ?? rawStatus,
-          result_ref: payload.result_ref ?? null,
-          result: payload.result ?? null,
-          cancel_reason: payload.cancel_reason ?? null,
-          deadline_at: payload.deadline_at ?? null,
-          attempts: payload.attempts ?? 0,
-          error_code: payload.error_code ?? null,
-          error_message:
-            typeof payload.error_message === "string"
-              ? payload.error_message
-              : typeof payload.error === "string"
-                ? payload.error
-                : null,
-        });
-        // 浏览器只看白名单投影；列表态不重复携带 result 全文。
-        forwarded = toDeferredRunView(stored, { includeResult: false });
-      } catch (err) {
-        console.warn(`[deferred] Failed to store deferred run: ${String(err)}`);
-      }
-      send("deferred_subagent_submitted", forwarded);
       return;
     }
 

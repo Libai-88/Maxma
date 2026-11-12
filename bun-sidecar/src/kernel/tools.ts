@@ -52,7 +52,11 @@ export function adaptDescriptorToPi(descriptor: MaxmaToolDescriptor): ToolDefini
  * pi 引擎的 Maxma 自定义工具集（不含已下线的 list_automations）。
  * remember_memory 的实现在 tools-remember-memory.ts（原 tools/index.ts 内联逻辑平移）。
  */
-export function buildPiCustomTools(cwd?: string): ToolDefinition[] {
+export function buildPiCustomTools(
+  cwd?: string,
+  /** 可选的子 Agent 工具（由 bridge 用已解析的 ModelRuntime 构造，见 kernel/subagent.ts）。 */
+  extra: ToolDefinition[] = [],
+): ToolDefinition[] {
   const descriptors: MaxmaToolDescriptor[] = [
     registerRememberMemoryTool(),
     searchMemoriesTool(),
@@ -61,5 +65,5 @@ export function buildPiCustomTools(cwd?: string): ToolDefinition[] {
     ...(cwd ? [readOfficeFileTool(cwd)] : []),
     ...(cwd ? [writeOfficeFileTool(cwd)] : []),
   ];
-  return descriptors.map(adaptDescriptorToPi);
+  return [...descriptors.map(adaptDescriptorToPi), ...extra];
 }

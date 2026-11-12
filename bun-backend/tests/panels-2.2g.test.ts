@@ -83,30 +83,6 @@ describe("settings_panels（阶段 2.2g）", () => {
     expect(bad.status).toBe(422);
   });
 
-  test("browser-tools：allowed_domains 清洗 + 越界 422", async () => {
-    const app = await makeApp();
-    const h = { "content-type": "application/json", ...authHeader() };
-
-    const put = await app.request("/api/settings/browser-tools", {
-      method: "PUT",
-      headers: h,
-      body: JSON.stringify({
-        allowed_domains: [" a.com ", "", "b.com", "a.com"],
-        viewport_width: 99999,
-      }),
-    });
-    expect(put.status).toBe(422);
-
-    const ok = (await (
-      await app.request("/api/settings/browser-tools", {
-        method: "PUT",
-        headers: h,
-        body: JSON.stringify({ allowed_domains: [" a.com ", "", "b.com", "a.com"] }),
-      })
-    ).json()) as { allowed_domains: string[] };
-    expect(ok.allowed_domains).toEqual(["a.com", "b.com"]);
-  });
-
   test("sub-agents：默认值合并 + max_concurrent 越界 422", async () => {
     const app = await makeApp();
     const h = { "content-type": "application/json", ...authHeader() };
