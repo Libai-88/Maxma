@@ -31,3 +31,6 @@ jobs:
 
       - name: Brand color guard (no hardcoded colors)
         run: node scripts/check-hardcoded-colors.mjs
+
+      - name: Spacing guard (no text touching its own border)
+        run: node scripts/check-spacing.mjs
