@@ -1,21 +1,20 @@
+import { Sticker } from '@/components/common/Sticker'
+
 /**
- * 纯文本里的 `<sticker:category/file.webp>` 标记 → 内联贴纸图片。
+ * 纯文本里的 `<sticker:category/file.webp>` 标记 → 贴纸图块。
  *
- * 用于不走 markdown 的场合（用户气泡、分享页）：
- *  - 用户在输入框插入贴纸时，文本里留下 `<sticker:path>`；
- *  - 分享页/历史回放的 user content 同样保留该标记。
- * markdown 正文由 `expandStickerTags()` 在渲染前统一处理，二者语义一致。
+ * 用于不走 markdown 的场合（用户气泡、分享页）：用户在输入框插入贴纸后文本里
+ * 留下该标记，分享页/历史回放的 user content 也保留它。markdown 正文由
+ * `expandStickerTags()` 在渲染前统一处理，两者视觉一致（同样固定高 96、等比）。
  */
 const STICKER_TAG_RE = /<sticker:([^<>\s]+)>/g
 
 export function InlineStickers({
   text,
   className,
-  imgClassName = 'my-1 inline-block max-h-24 rounded-lg',
 }: {
   text: string
   className?: string
-  imgClassName?: string
 }) {
   const parts: Array<{ sticker: string | null; text: string }> = []
   let last = 0
@@ -31,7 +30,7 @@ export function InlineStickers({
     <span className={className}>
       {parts.map((part, i) =>
         part.sticker
-          ? <img key={i} src={`/api/stickers/${part.sticker}`} alt="贴纸" className={imgClassName} loading="lazy" />
+          ? <Sticker key={i} path={part.sticker} className="mx-0.5 my-1 align-middle" />
           : <span key={i}>{part.text}</span>,
       )}
     </span>

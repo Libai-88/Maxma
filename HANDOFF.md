@@ -49,6 +49,13 @@
   现在 `utils/markdown.ts` 的 `expandStickerTags()` 在 markdown 渲染前统一展开为
   `<img src="/api/stickers/...">`（**代码块与行内代码内不展开**），纯文本场合由
   `components/common/InlineStickers.tsx` 渲染；用户气泡与分享页共用后者。
+- **贴纸尺寸口径（2026-11-12）**：贴纸库固有尺寸 29×29 ~ 256×256，且含 2.9:1
+  宽条；只限高会让小图缩成一角、宽图被拉伸。统一为
+  **固定高 96px + 等比 + 最宽 160px + `object-contain`**：
+  `components/common/Sticker.tsx`（React 场合）与 `markdown.css` 的
+  `.md-sticker img`（markdown 场合）同口径。
+  **不要用 `Attachment`/`AttachmentMedia` 承载贴纸**——它的媒体槽是缩略图语义
+  （`aspect-square` + `object-cover`），会裁掉宽图/高图。
 - **已知简化（非功能缺失，是呈现颗粒度）**：工具结果统一按「步骤 + 输出/补丁」渲染，
   旧版 13 个专用气泡（搜索/待办/Python/浏览器/图片/文件列表…）未逐一对位；输出内容仍在，
   只是不再按工具类型定制版式。`deferred_subagent_submitted` 的内联子任务卡片并入
