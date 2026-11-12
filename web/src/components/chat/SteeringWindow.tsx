@@ -27,6 +27,16 @@ function clamp(p: Pos, w: number, h: number): Pos {
   }
 }
 
+/** 没有保存位置时的默认落点：右下角、输入框上方；窗口矮时贴住视口底边而不是被顶出去。 */
+function defaultAnchor(w: number, h: number): Pos {
+  const margin = 16
+  const composerReserve = 96
+  return {
+    x: Math.max(margin, window.innerWidth - w - margin),
+    y: Math.max(margin, window.innerHeight - h - composerReserve),
+  }
+}
+
 /**
  * 实时纠偏悬浮小窗（替代原先内联在消息区上方的「实时协作」区块）。
  *
@@ -59,12 +69,28 @@ export function SteeringWindow({
   }, [visible])
 
   useEffect(() => {
+    if (!visible) return
+    const box = boxRef.current
+    if (!box) return
+    const r = box.getBoundingClientRect()
     const saved = loadPos()
-    if (saved && boxRef.current) {
-      const r = boxRef.current.getBoundingClientRect()
-      setPos(clamp(saved, r.width, r.height))
-    }
+    setPos((current) => {
+      if (current) return clamp(current, r.width, r.height)
+      return clamp(saved ?? defaultAnchor(r.width, r.height), r.width, r.height)
+    })
   }, [visible])
+
+  // 视口变小（分屏/改窗口）时把窗口拉回可视区，别让它飘到屏幕外
+  useEffect(() => {
+    const onResize = () => {
+      const box = boxRef.current
+      if (!box) return
+      const r = box.getBoundingClientRect()
+      setPos((current) => (current ? clamp(current, r.width, r.height) : current))
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   useEffect(() => {
     try { localStorage.setItem(COLLAPSED_KEY, collapsed ? '1' : '0') } catch { /* 存储不可用 */ }
@@ -109,18 +135,16 @@ export function SteeringWindow({
 
   if (!visible || dismissed) return null
 
-  const floating = pos !== null
-
   return (
     <div
       ref={boxRef}
       role="dialog"
       aria-label="实时调整"
-      className={cn(
-        'z-40 w-[min(340px,calc(100vw-24px))]',
-        floating ? 'fixed' : 'absolute right-4 bottom-32',
-      )}
-      style={floating ? { left: pos.x, top: pos.y } : undefined}
+      className={cn('fixed z-40 w-[min(340px,calc(100vw-24px))]')}
+      // 永远 fixed：此前 `pos === null`（首次使用还没拖过）时退化成
+      // `absolute right-4 bottom-32`，会被聊天滚动容器裁切/跟着消息滚走，
+      // 看上去就"不是悬浮窗"。没有保存位置时用右下的默认锚点。
+      style={pos ? { left: pos.x, top: pos.y } : { right: 16, bottom: 16 }}
     >
       <Panel
         title="实时调整"
@@ -146,7 +170,7 @@ export function SteeringWindow({
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          className={cn('absolute left-0 right-16 top-0 flex h-8 cursor-grab items-center justify-center active:cursor-grabbing')}
+          className={cn('absolute left-0 right-16 top-0 flex h-9 cursor-grab items-center justify-center active:cursor-grabbing')}
           aria-hidden="true"
         >
           <GripVertical className="size-3 text-muted-foreground/50" />
