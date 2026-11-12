@@ -6,6 +6,7 @@ import { Tag } from '@/components/ui/tag'
 import { ChatHeader } from '@/components/chat/ChatHeader'
 import { PermissionModeControl } from '@/components/chat/PermissionModeControl'
 import { runSlashCommand } from '@/components/chat/slashCommands'
+import { SteeringWindow } from '@/components/chat/SteeringWindow'
 import { ContextRing } from '@/components/ui/context-ring'
 import { Switch } from '@/components/ui/switch'
 import { ChatWindow } from '@/components/chat/ChatWindow'
@@ -57,7 +58,6 @@ export default function ChatView() {
   const [modelSettingsOpen, setModelSettingsOpen] = useState(false)
   const [taskBriefAnswer, setTaskBriefAnswer] = useState('')
   const [taskBriefPrompt, setTaskBriefPrompt] = useState('')
-  const [collaborationMessage, setCollaborationMessage] = useState('')
   const [taskReviewFeedback, setTaskReviewFeedback] = useState('')
   const [planMode, setPlanMode] = useState(false)
   const [quotes, setQuotes] = useState<Array<{ label: string; preview: string }>>([])
@@ -249,10 +249,10 @@ export default function ChatView() {
     const answer = taskBriefAnswer.trim()
     if (answer && answerTaskBrief(answer)) setTaskBriefAnswer('')
   }
-  const sendCollaboration = (mode: 'steer' | 'follow_up') => {
-    const message = collaborationMessage.trim()
-    if (!message || !sendCollaborationMessage(mode, message)) return
-    setCollaborationMessage('')
+  const sendCollaboration = (mode: 'steer' | 'follow_up', message: string): boolean => {
+    const text = message.trim()
+    if (!text) return false
+    return sendCollaborationMessage(mode, text)
   }
   const acceptTask = () => { if (sendTaskReview('accept')) setTaskReviewFeedback('') }
   const reviseTask = () => {
@@ -310,7 +310,7 @@ export default function ChatView() {
   const models: ModelInfo[] = availableModels
 
   return (
-    <div ref={rootRef} className="flex h-full flex-col">
+    <div ref={rootRef} className="relative flex h-full flex-col">
       <ChatHeader>
         {contextWindowOf(contextUsage).window > 0 && (
           <ContextRing
@@ -409,17 +409,6 @@ export default function ChatView() {
             </section>
           )}
 
-          {isStreaming && (
-            <section aria-live="polite" className="mx-4 mb-3 rounded-xl border border-border bg-card p-3">
-              <p className="mb-2 text-xs font-medium">实时协作 · 任务进行中，随时调整方向</p>
-              <textarea value={collaborationMessage} onChange={(e) => setCollaborationMessage(e.target.value)} rows={2} maxLength={4000} placeholder="例如：范围缩小到 src 目录；先不要修改文件，先给我看方案" className="w-full rounded-lg border border-border bg-background p-2 text-sm outline-none" />
-              <div className="mt-2 flex justify-end gap-2">
-                <Button variant="outline" size="sm" disabled={!collaborationMessage.trim()} onClick={() => sendCollaboration('follow_up')}>完成当前步骤后处理</Button>
-                <Button size="sm" disabled={!collaborationMessage.trim()} onClick={() => sendCollaboration('steer')}>立即调整</Button>
-              </div>
-            </section>
-          )}
-
           {taskReview && (
             <section aria-live="polite" className="mx-4 mb-3 rounded-xl border border-border bg-card p-3">
               <p className="mb-2 text-xs font-medium">完成后验收 · 结果符合你的预期吗？</p>
@@ -452,6 +441,13 @@ export default function ChatView() {
         </div>
 
         {workbench.isOpen && <WorkbenchSidebar onArtifactAction={handleArtifactAction} allTurns={allTurns} />}
+
+        {/* 实时纠偏：悬浮小窗（只在流式进行中出现，可拖动/收起/关闭） */}
+        <SteeringWindow
+          visible={isStreaming}
+          onSteer={(message) => sendCollaboration('steer', message)}
+          onFollowUp={(message) => sendCollaboration('follow_up', message)}
+        />
       </div>
     </div>
   )
