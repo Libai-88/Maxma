@@ -121,11 +121,18 @@
 | **开发模式引擎数据落在用户主目录**：源码直跑没人注入 `PI_CODING_AGENT_DIR`，pi 默认写 `~/.pi/agent`，会话/凭据与 `api/data/maxma.db` 分居两处 | 启动时若未显式注入，默认 `<Maxma 数据根>/api/data/pi`（与打包形态同构）；主目录已有会话时**只提示不搬动**，给出沿用旧目录的环境变量写法 | 实测启动日志：`配置目录=D:\Maxma\MaxmaHere\api\data\pi（在 Maxma 数据目录内）` |
 | **JetHubView 的 `as unknown as` 契约**（上轮遗留）：本地声明 28 成员、实际消费 74，`openProviders` 等被当数组用 | store 类型改由初始化函数推导（`JetHubStore = JetHubData & ReturnType<...>`），视图直接 `useJetHubStore()`；本地 `AccountRow/ModelRow/CreditsEntry` 改为 store 真类型，备份回执直接用 `JetHubImportResult` | `tsc`：成员缺失/函数当数组当场报错；浏览器实测 15 渠道渲染 |
 | 6ms 请求显示成 `0.0s`、`skipped` 计数与数组混用等展示口径 | 时长 <1s 用 ms；`recent_calls` 表格与脚注同口径 | 浏览器实测 `0.2s` / `6ms` |
+| **「历史里没有用量」被我误判为不可修**：`get_messages` 只映射 `{role, content}`，而 pi 的 `AssistantMessage` 本来就带 `usage/provider/model/timestamp`（`pi-ai/dist/types.d.ts:375`）。清掉 localStorage 缓存后脚注消失，是**我们的映射丢了字段**，不是引擎不给 | `get_messages` 原样带回四个可选字段（老客户端/快照测试不受影响）；前端 `backendMessagesToTurns` 按轮汇总重建 `TurnUsage`（多次请求求和、时长 = 末次 assistant 时间戳 − 用户消息时间戳） | `kernel-bridge.test.ts` 断言字段透传且 user 消息不凭空长出 usage；浏览器实测：删除 `maxma_turns_*` 后重载，脚注仍为 `↑384 ↓9 缓存读 256 176ms` |
 
 **仍存在的边界（如实记录，没有伪装成已实现）**
 
-- 引擎能力缺口（`sub_agents` / `automation` / `browser_tools`）保持不可用，能力清单已带
-  `engine_supported:false` 与真实 reason，页面对用户只说"引擎没有"。
+- **pi 确实没有**：子 Agent 运行时、任务调度器、TTS。证据是引擎导出面（157 个名字，无
+  `spawn*/task*/scheduler*/tts*`）与 `pi-ai` 类型面。能力清单据此发 `engine_supported:false`，
+  页面只说"引擎没有，改设置无效"。
+- **浏览器工具不是 pi 的墙**：pi 核心没有 browser 工具，但支持 MCP（`createMcpExtension`），
+  ModelScope 市场有 12801 个可装 MCP（含网页抓取类）。所以它是**产品决策**（先不内置浏览器运行时，
+  让用户按需装 MCP），不是引擎做不到——`browser_tools` 面板的"暂不生效"仍属实，但文案别再说成"引擎不支持"。
+- **安全评审前置**：`plugins.marketplace=false`（网络安装未过下载校验/路径穿越评审）、
+  MCP stdio 命令白名单、内置渠道模型列表由 Maxma 托管。
 - `tts` 面板只暴露"开关 + 自动朗读"，provider 仍固定 `system`（浏览器 `speechSynthesis`）；
   `panel_configs.json` 里遗留的 `openai-tts` 值不会被 UI 展示，首次写入即归一为 `system`。
 - 浏览器控制台在后端重启窗口会出现若干 `Failed to fetch: /api/health`（浏览器网络层自己

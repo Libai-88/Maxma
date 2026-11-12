@@ -707,7 +707,14 @@ export async function handlePiSessionRpc(
   if (method === "get_messages") {
     // 契约形状与 OMP 版一致：{ messages: [{role, content}], total }（limit<=0 → 空）
     const limit: number = (params?.limit as number) ?? 50;
-    const messages = record.session.messages as Array<{ role?: string; content?: unknown }>;
+    const messages = record.session.messages as Array<{
+      role?: string;
+      content?: unknown;
+      usage?: unknown;
+      provider?: unknown;
+      model?: unknown;
+      timestamp?: unknown;
+    }>;
     const total = messages.length;
     const sliced = limit <= 0 ? [] : messages.slice(-Math.min(limit, total));
     const result = sliced.map((m) => {
@@ -720,7 +727,16 @@ export async function handlePiSessionRpc(
           .map((b) => b.text ?? "")
           .join("");
       }
-      return { role: m.role ?? "unknown", content };
+      // pi 的 assistant 消息本来就带 usage/provider/model/timestamp
+      // （`pi-ai/dist/types.d.ts: AssistantMessage`）。此前只映射 {role, content}，
+      // 于是"每轮用了多少 token、哪个模型"在历史里永久丢失——清掉 localStorage
+      // 缓存后脚注就没了。这里原样带上，字段保持可选：老客户端与既有测试不受影响。
+      const out: Record<string, unknown> = { role: m.role ?? "unknown", content };
+      if (m.usage && typeof m.usage === "object" && !Array.isArray(m.usage)) out.usage = m.usage;
+      if (typeof m.provider === "string" && m.provider) out.provider = m.provider;
+      if (typeof m.model === "string" && m.model) out.model = m.model;
+      if (typeof m.timestamp === "number" && Number.isFinite(m.timestamp)) out.timestamp = m.timestamp;
+      return out;
     });
     io.send(id, { messages: result, total });
     return;
