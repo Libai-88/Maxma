@@ -66,15 +66,26 @@ function previewOf(entries: Array<{ type?: string; message?: { role?: string; co
   return "";
 }
 
+/**
+ * 解析结果按 (路径, mtime, size) 缓存：会话列表在启动与每次刷新都会调用，
+ * 大目录里反复整文件解析会把 UI 卡住。文件一改，mtime/size 变化自然失效。
+ */
+const metaCache = new Map<string, { mtimeMs: number; size: number; info: PersistedSessionInfo | null }>();
+
 function readOne(file: string): PersistedSessionInfo | null {
   try {
+    const stat = fs.statSync(file);
+    const cached = metaCache.get(file);
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) return cached.info;
     const manager = SessionManager.open(file);
     const header = manager.getHeader();
     const sessionId = normalizeSessionId(header?.id);
-    if (!header || !sessionId) return null;
+    if (!header || !sessionId) {
+      metaCache.set(file, { mtimeMs: stat.mtimeMs, size: stat.size, info: null });
+      return null;
+    }
     const entries = manager.getEntries() as Array<{ type?: string; message?: { role?: string; content?: unknown } }>;
-    const stat = fs.statSync(file);
-    return {
+    const info: PersistedSessionInfo = {
       session_id: sessionId,
       file,
       message_count: entries.filter((entry) => entry.type === "message").length,
@@ -83,6 +94,8 @@ function readOne(file: string): PersistedSessionInfo | null {
       preview: previewOf(entries),
       cwd: header.cwd,
     };
+    metaCache.set(file, { mtimeMs: stat.mtimeMs, size: stat.size, info });
+    return info;
   } catch {
     // 损坏/半截文件（崩溃写入）不阻断列表：跳过并在 UI 上自然消失。
     return null;
@@ -141,6 +154,12 @@ export function findPersistedSession(sessionId: string, cwd: string = maxmaProje
     names = fs.readdirSync(dir).filter((name) => name.endsWith(".jsonl"));
   } catch {
     return null;
+  }
+  // 快路径：文件名里就带 id（pi 的 `<timestamp>_<uuid>.jsonl`），先按名字筛。
+  const byName = names.find((name) => name.replace(/-/g, "").toLowerCase().includes(wanted));
+  if (byName) {
+    const info = readOne(path.join(dir, byName));
+    if (info?.session_id === wanted) return info;
   }
   for (const name of names) {
     const info = readOne(path.join(dir, name));
