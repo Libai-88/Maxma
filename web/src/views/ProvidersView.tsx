@@ -190,7 +190,7 @@ export default function ProvidersView() {
                   <Button
                     variant="outline" size="sm"
                     disabled={discovering === pid || p.builtin}
-                    title={p.builtin ? '内置免费模型由 Maxma 管理，不可拉取/修改' : '从该渠道拉取可用模型并写回'}
+                    title={p.builtin ? '内置免费模型的列表由 Maxma 管理，写回会被后端拒绝' : '从该渠道拉取可用模型并写回'}
                     onClick={() => void discoverForExisting(p)}
                   >
                     {discovering === pid ? <Spinner className="size-3" /> : '拉取模型'}
