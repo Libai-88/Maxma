@@ -54,7 +54,7 @@ export function StickerPicker({ onSelect, onClose }: { onSelect: (sticker: Stick
   }
 
   return (
-    <div className="absolute bottom-full left-0 z-30 mb-2 w-[min(420px,80vw)] rounded-xl border border-border bg-popover p-2 shadow-lg" role="dialog" aria-label="表情选择器">
+    <div className="absolute bottom-full left-0 z-30 mb-2 w-[min(420px,80vw)] rounded-xl border border-border bg-popover p-3 shadow-lg" role="dialog" aria-label="表情选择器">
       <div className="mb-2 flex items-center gap-1">
         {([['all', '全部'], ['recent', '最近'], ['fav', '收藏']] as const).map(([k, label]) => (
           <Button key={k} size="sm" variant={tab === k ? 'secondary' : 'ghost'} onClick={() => { setTab(k); setCategory('') }}>{label}</Button>

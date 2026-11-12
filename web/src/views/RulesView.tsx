@@ -82,7 +82,7 @@ export default function RulesView() {
         <div className="flex justify-center py-16"><Spinner /></div>
       ) : (
         <>
-          <section className="space-y-2">
+          <section className="space-y-3">
             {rules.map((rule) => (
               <div key={rule.id} className="rounded-xl border border-border bg-card px-4 py-3">
                 <div className="flex items-center gap-3">
@@ -115,12 +115,12 @@ export default function RulesView() {
                   <Input className="mt-1" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
                 </label>
                 <label className="text-xs text-muted-foreground">语言
-                  <select className="mt-1 h-8 w-full rounded-lg border border-border bg-background px-2 text-sm" value={form.language} onChange={(e) => setForm({ ...form, language: e.target.value })} aria-label="语言">
+                  <select className="mt-1 h-9 w-full rounded-lg border border-border bg-background px-3.5 text-sm" value={form.language} onChange={(e) => setForm({ ...form, language: e.target.value })} aria-label="语言">
                     {['markdown', 'python', 'typescript', 'javascript'].map((l) => <option key={l} value={l}>{l}</option>)}
                   </select>
                 </label>
                 <label className="text-xs text-muted-foreground">严重度
-                  <select className="mt-1 h-8 w-full rounded-lg border border-border bg-background px-2 text-sm" value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value as 'error' | 'warning' | 'info' })} aria-label="严重度">
+                  <select className="mt-1 h-9 w-full rounded-lg border border-border bg-background px-3.5 text-sm" value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value as 'error' | 'warning' | 'info' })} aria-label="严重度">
                     {['info', 'warning', 'error'].map((l) => <option key={l} value={l}>{l}</option>)}
                   </select>
                 </label>
@@ -129,7 +129,7 @@ export default function RulesView() {
                 <Input className="mt-1" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
               </label>
               <label className="block text-xs text-muted-foreground">匹配模式（正则）
-                <textarea className="mt-1 w-full rounded-lg border border-border bg-background p-2 font-mono text-xs" rows={3} value={form.pattern} onChange={(e) => setForm({ ...form, pattern: e.target.value })} />
+                <textarea className="mt-1 w-full rounded-lg border border-border bg-background p-3 font-mono text-xs" rows={3} value={form.pattern} onChange={(e) => setForm({ ...form, pattern: e.target.value })} />
               </label>
               <div className="flex justify-end gap-2">
                 {editingId && <Button variant="ghost" size="sm" onClick={() => { setEditingId(null); setForm({ name: '', description: '', language: 'markdown', severity: 'warning', pattern: '' }) }}>取消</Button>}

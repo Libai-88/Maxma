@@ -137,7 +137,7 @@ export function McpMarket({ onInstalled }: { onInstalled: () => void }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={source === 'smithery' ? '搜索 Registry（如 filesystem、github）' : '搜索 ModelScope MCP'}
-          className="min-w-0 flex-1 rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus-visible:border-ring"
+          className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm outline-none focus-visible:border-ring"
           aria-label="搜索 MCP 市场"
         />
         <Button size="sm" type="submit" variant="outline" disabled={loading}>
@@ -145,7 +145,7 @@ export function McpMarket({ onInstalled }: { onInstalled: () => void }) {
         </Button>
       </form>
 
-      {error && <p className="mb-2 rounded-md border border-destructive/40 px-2 py-1 text-xs text-destructive">市场不可用：{error}</p>}
+      {error && <p className="mb-2 rounded-md border border-destructive/40 px-3 py-2.5 text-xs text-destructive">市场不可用：{error}</p>}
 
       <div className="flex flex-col gap-2">
         {loading && <div className="flex justify-center py-6"><Spinner /></div>}
@@ -160,7 +160,7 @@ export function McpMarket({ onInstalled }: { onInstalled: () => void }) {
           const author = item.author || ''
           const status = isRegistry ? oauth[(item as RegistryServer).name] : undefined
           return (
-            <div key={key} className="rounded-lg border border-border bg-card p-3">
+            <div key={key} className="rounded-lg border border-border bg-card p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-medium text-foreground">{title}</span>
                 {isRegistry && (item as RegistryServer).verified && <Badge variant="secondary" className="text-[10px]">已验证</Badge>}

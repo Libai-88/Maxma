@@ -100,11 +100,11 @@ function AskUserBlock({ interaction, onAction }: { interaction: AskUserInteracti
           <pre className="mt-2 max-h-48 overflow-auto rounded-md bg-muted/40 p-2 font-mono text-[11px] text-muted-foreground">{JSON.stringify(interaction.tool_input, null, 2)}</pre>
         )}
         {responded ? (
-          <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground"><Check className="size-3.5" /> {responded === 'yes' ? '已批准' : '已拒绝'}</p>
+          <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"><Check className="size-3.5" /> {responded === 'yes' ? '已批准' : '已拒绝'}</p>
         ) : interaction.submitted ? (
           <p className="mt-2 text-xs text-muted-foreground">已提交，等待结果…</p>
         ) : (
-          <div className="mt-2.5 flex gap-1.5">
+          <div className="mt-2.5 flex gap-2">
             <Button size="sm" onClick={() => onAction({ action: 'user_response', data: { interactionId: interaction.interactionId, response: 'yes' } })}>批准</Button>
             <Button size="sm" variant="destructive" onClick={() => onAction({ action: 'user_response', data: { interactionId: interaction.interactionId, response: 'no' } })}>拒绝</Button>
           </div>
@@ -135,7 +135,7 @@ function MultiChoiceCard({ interaction, options, onAction }: { interaction: AskU
     <div className="glass-panel rounded-md px-3.5 py-3">
       <p className="text-[11.5px] text-status-interrupted">可多选</p>
       <p className="mt-1 text-[14px] leading-relaxed whitespace-pre-wrap">{interaction.question}</p>
-      <div className="mt-2.5 flex flex-col gap-1.5">
+      <div className="mt-2.5 flex flex-col gap-2">
         {options.map((o) => (
           <label key={o} className="flex cursor-pointer items-center gap-2 text-[13px]">
             <input type="checkbox" checked={picked.includes(o)} disabled={disabled} onChange={(e) => setPicked((p) => e.target.checked ? [...p, o] : p.filter((x) => x !== o))} />
@@ -239,7 +239,7 @@ function TurnBlock({ turn, isLast, onAction, onCite, onPin }: {
       )}
 
       {answerText && (
-        <div className="group/answer flex max-w-[92%] flex-col gap-1 rounded-xl rounded-bl-sm border border-border bg-card px-4 py-3">
+        <div className="group/answer flex max-w-[92%] flex-col gap-2 rounded-xl rounded-bl-sm border border-border bg-card px-4 py-3">
           <div className="text-sm leading-relaxed">
             <Markdown content={answerText} />
           </div>
@@ -367,7 +367,7 @@ export function ChatWindow(props: ChatWindowProps) {
       )}
 
       {error && (
-        <div role="alert" className={cn('mx-4 mb-3 flex items-start justify-between gap-3 rounded-xl border p-3 text-sm', errCls)}>
+        <div role="alert" className={cn('mx-4 mb-3 flex items-start justify-between gap-3 rounded-xl border p-4 text-sm', errCls)}>
           <div className="min-w-0">
             <p>{error}</p>
             {errorTraceId && <p className="mt-1 font-mono text-[11px] opacity-70">trace: {errorTraceId}</p>}
@@ -379,7 +379,7 @@ export function ChatWindow(props: ChatWindowProps) {
         </div>
       )}
       {!connected && !error && (
-        <div className="mx-4 mb-3 rounded-xl border border-border bg-card px-3 py-2 text-xs text-muted-foreground" role="status">
+        <div className="mx-4 mb-3 rounded-xl border border-border bg-card px-3.5 py-2.5 text-xs text-muted-foreground" role="status">
           连接已断开，正在重连…
         </div>
       )}

@@ -168,7 +168,7 @@ export default function ProvidersView() {
         <div className="flex justify-center py-16"><Spinner /></div>
       ) : (
         <>
-          <section className="space-y-2">
+          <section className="space-y-3">
             {providers.map((p) => {
               const pid = p.id ?? p.label
               const st = health[pid]
@@ -212,7 +212,7 @@ export default function ProvidersView() {
           {pluginModels.length > 0 && (
             <section className="mt-6">
               <h3 className="mb-2 text-sm font-medium">插件提供的模型</h3>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-2">
                 {pluginModels.map((m, i) => <Tag key={i}>{m.displayName || m.name}</Tag>)}
               </div>
             </section>
@@ -221,13 +221,13 @@ export default function ProvidersView() {
           <section className="mt-8">
             <h3 className="mb-3 text-sm font-medium">添加渠道</h3>
             <div className="rounded-xl border border-border bg-card p-4">
-              <div className="mb-3 flex flex-wrap gap-1.5">
+              <div className="mb-3 flex flex-wrap gap-2">
                 {PRESETS.map((preset) => (
                   <button
                     key={preset.id}
                     type="button"
                     onClick={() => setForm((f) => ({ ...f, provider_type: preset.id, base_url: preset.baseUrl }))}
-                    className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${form.provider_type === preset.id ? 'border-primary bg-accent text-accent-foreground' : 'border-border text-muted-foreground hover:text-foreground'}`}
+                    className={`rounded-md border px-3.5 py-2 text-xs transition-colors ${form.provider_type === preset.id ? 'border-primary bg-accent text-accent-foreground' : 'border-border text-muted-foreground hover:text-foreground'}`}
                   >
                     {preset.label}
                   </button>
@@ -259,9 +259,9 @@ export default function ProvidersView() {
                 </div>
               </div>
               {formModels.length > 0 && (
-                <div className="mt-3 rounded-lg border border-border bg-background/40 p-2">
+                <div className="mt-3 rounded-lg border border-border bg-background/40 p-3">
                   <p className="mb-1.5 text-xs text-muted-foreground">发现 {formModels.length} 个模型，勾选要启用的（默认全选）</p>
-                  <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto">
+                  <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto">
                     {formModels.map((m) => {
                       const on = pickedModels.includes(m)
                       return (
@@ -270,7 +270,7 @@ export default function ProvidersView() {
                           type="button"
                           onClick={() => setPickedModels((prev) => (on ? prev.filter((x) => x !== m) : [...prev, m]))}
                           aria-pressed={on}
-                          className={`rounded-md border px-2 py-0.5 text-[11px] transition-colors ${on ? 'border-primary bg-accent text-accent-foreground' : 'border-border text-muted-foreground hover:text-foreground'}`}
+                          className={`rounded-md border px-3 py-1.5 text-[11px] transition-colors ${on ? 'border-primary bg-accent text-accent-foreground' : 'border-border text-muted-foreground hover:text-foreground'}`}
                         >
                           {m}
                         </button>

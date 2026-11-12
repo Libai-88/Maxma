@@ -114,7 +114,7 @@ export default function CollabView() {
               <h3 className="text-sm font-medium">分享链接</h3>
               <Button size="sm" disabled={creating} onClick={() => void createShare()}>{creating ? <Spinner className="size-3" /> : <Plus />} 创建分享</Button>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {shares.length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">暂无活跃的分享链接</p>}
               {shares.map((share) => (
                 <div key={share.id} className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
@@ -137,7 +137,7 @@ export default function CollabView() {
               <h3 className="text-sm font-medium">快照</h3>
               <Button size="sm" disabled={snapshotting} onClick={() => void createSnapshot()}>{snapshotting ? <Spinner className="size-3" /> : <Plus />} 创建快照</Button>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {snapshots.length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">暂无快照</p>}
               {snapshots.map((snap) => (
                 <div key={snap.id} className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">

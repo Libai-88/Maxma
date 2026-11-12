@@ -24,7 +24,7 @@ function AskCard({
       <p className="text-[11.5px] text-status-interrupted">{eyebrow}</p>
       <p className="mt-1 text-[14px] leading-relaxed whitespace-pre-wrap">{question}</p>
       {options.length > 0 && (
-        <div className="mt-2.5 flex flex-wrap gap-1.5">
+        <div className="mt-2.5 flex flex-wrap gap-2">
           {options.map((option) => (
             <button
               key={option}

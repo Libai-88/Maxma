@@ -23,7 +23,7 @@ function NewsCard({ entry }: { entry: NewsEntry }) {
     <article className="bg-card border border-border rounded-lg p-5 flex flex-col gap-2.5 transition-colors hover:border-ring">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          <span className="text-[10px] font-semibold tracking-wide px-2 py-0.5 rounded-full bg-secondary text-muted-foreground whitespace-nowrap shrink-0">
+          <span className="text-[10px] font-semibold tracking-wide px-2.5 py-1.5 rounded-full bg-secondary text-muted-foreground whitespace-nowrap shrink-0">
             {TYPE_LABELS[entry.type] ?? entry.type}
           </span>
           <span className="text-[17px] font-bold text-foreground leading-tight truncate">
@@ -31,7 +31,7 @@ function NewsCard({ entry }: { entry: NewsEntry }) {
           </span>
         </div>
         {entry.version && (
-          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-foreground text-background font-mono shrink-0">
+          <span className="text-[11px] font-semibold px-2.5 py-1 rounded-md bg-foreground text-background font-mono shrink-0">
             {entry.version}
           </span>
         )}
@@ -39,15 +39,15 @@ function NewsCard({ entry }: { entry: NewsEntry }) {
       {entry.en_title && (
         <div className="text-[13px] text-muted-foreground -mt-0.5">{entry.title}</div>
       )}
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-2">
         {paragraphs.map((p, i) => (
           <p key={i} className="text-[13px] text-muted-foreground leading-relaxed m-0">{p}</p>
         ))}
       </div>
       {entry.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-2">
           {entry.tags.map(tag => (
-            <span key={tag} className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md bg-secondary text-muted-foreground font-mono">
+            <span key={tag} className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-md bg-secondary text-muted-foreground font-mono">
               <Tag className="size-3" />{tag}
             </span>
           ))}
@@ -126,7 +126,7 @@ export default function NewsView() {
                 无法获取更新动态，可能是后端未启动或网络异常。<br />
                 <button
                   onClick={() => void loadNews()}
-                  className="mt-3 px-4 py-1.5 text-sm border border-border rounded-lg bg-card text-foreground hover:border-ring transition-colors"
+                  className="mt-3 px-4 py-2.5 text-sm border border-border rounded-lg bg-card text-foreground hover:border-ring transition-colors"
                 >
                   重试
                 </button>

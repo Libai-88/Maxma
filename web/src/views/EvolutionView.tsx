@@ -76,15 +76,15 @@ export default function EvolutionView() {
           <p className="text-sm text-muted-foreground leading-relaxed max-w-[620px]">把明确的用户反馈沉淀为可验证、可撤销、按需生效的行为偏好。</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <div className="min-w-[92px] p-3 border border-border rounded-lg bg-card text-center">
+          <div className="min-w-[92px] p-4 border border-border rounded-lg bg-card text-center">
             <strong className="block font-mono text-[22px] tabular-nums text-foreground">{stats.active}</strong>
             <span className="block text-[11px] text-muted-foreground mt-0.5">生效策略</span>
           </div>
-          <div className="min-w-[92px] p-3 border border-border rounded-lg bg-card text-center">
+          <div className="min-w-[92px] p-4 border border-border rounded-lg bg-card text-center">
             <strong className="block font-mono text-[22px] tabular-nums text-foreground">{stats.total}</strong>
             <span className="block text-[11px] text-muted-foreground mt-0.5">策略总数</span>
           </div>
-          <div className="min-w-[92px] p-3 border border-border rounded-lg bg-card text-center">
+          <div className="min-w-[92px] p-4 border border-border rounded-lg bg-card text-center">
             <strong className="block font-mono text-[22px] tabular-nums text-foreground">{Math.round(stats.avg_confidence * 100)}%</strong>
             <span className="block text-[11px] text-muted-foreground mt-0.5">平均置信度</span>
           </div>
@@ -97,7 +97,7 @@ export default function EvolutionView() {
             <h2 className="text-lg font-semibold text-foreground">添加一条长期行为偏好</h2>
             <p className="text-[13px] text-muted-foreground mt-1">只处理明确的偏好或规则，不从普通对话猜测你的性格。</p>
           </div>
-          <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-secondary text-success whitespace-nowrap">无需额外模型调用</span>
+          <span className="text-[11px] font-bold px-2.5 py-1.5 rounded-full bg-secondary text-success whitespace-nowrap">无需额外模型调用</span>
         </div>
         <div className="flex flex-wrap gap-2 mt-4">
           <input
@@ -106,14 +106,14 @@ export default function EvolutionView() {
             onKeyDown={e => { if (e.key === 'Enter') void learn() }}
             maxLength={4000}
             placeholder="例如：以后回答代码时先给出最小可运行示例"
-            className="flex-1 min-w-[120px] px-3 py-2.5 border border-border rounded-lg bg-background text-foreground text-sm outline-none focus:border-ring"
+            className="flex-1 min-w-[120px] px-3.5 py-3 border border-border rounded-lg bg-background text-foreground text-sm outline-none focus:border-ring"
           />
           <input
             value={scope}
             onChange={e => setScope(e.target.value)}
             maxLength={80}
             placeholder="作用域：全局 / 编程"
-            className="w-[170px] px-3 py-2.5 border border-border rounded-lg bg-background text-foreground text-sm outline-none focus:border-ring"
+            className="w-[170px] px-3.5 py-3 border border-border rounded-lg bg-background text-foreground text-sm outline-none focus:border-ring"
           />
           <button
             disabled={!learnText.trim() || saving}

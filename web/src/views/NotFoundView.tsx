@@ -15,7 +15,7 @@ function ActionLink({ to, icon, title, desc, primary }: ActionLinkProps) {
     <Link
       to={to}
       className={
-        'flex items-center gap-3 rounded-lg border p-3 no-underline transition-colors hover:border-primary hover:bg-accent ' +
+        'flex items-center gap-3 rounded-lg border p-4 no-underline transition-colors hover:border-primary hover:bg-accent ' +
         (primary ? 'border-primary bg-accent' : 'border-border bg-panel')
       }
     >

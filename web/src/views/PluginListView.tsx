@@ -182,7 +182,7 @@ export default function PluginListView() {
           {localError && <p className="m-0 text-xs text-destructive">{localError}</p>}
         </div>
         {store.installProgress && (
-          <div className="mt-3 rounded-lg border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
+          <div className="mt-3 rounded-lg border border-border bg-card px-3.5 py-2.5 text-sm text-muted-foreground">
             {store.installProgress.status === 'success'
               ? '✓'
               : store.installProgress.status === 'error'
@@ -221,7 +221,7 @@ export default function PluginListView() {
         </div>
         <div className="flex flex-wrap gap-2">
           <select
-            className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground outline-none focus-visible:border-ring"
+            className="h-9 rounded-lg border border-input bg-transparent px-3.5 text-sm text-foreground outline-none focus-visible:border-ring"
             value={category}
             onChange={(e) => emitFilter(query, e.target.value as PluginCategory | '', enabled)}
           >
@@ -232,7 +232,7 @@ export default function PluginListView() {
             ))}
           </select>
           <select
-            className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground outline-none focus-visible:border-ring"
+            className="h-9 rounded-lg border border-input bg-transparent px-3.5 text-sm text-foreground outline-none focus-visible:border-ring"
             value={enabled}
             onChange={(e) => emitFilter(query, category, e.target.value as '' | 'true' | 'false')}
           >
@@ -245,7 +245,7 @@ export default function PluginListView() {
 
       {/* 错误提示 */}
       {store.error && (
-        <div className="mb-4 flex items-center justify-between rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <div className="mb-4 flex items-center justify-between rounded-lg border border-destructive/40 bg-destructive/10 px-3.5 py-2.5 text-sm text-destructive">
           <span>{store.error}</span>
           <button type="button" aria-label="关闭" onClick={() => store.clearError()} className="text-base leading-none">
             ✕
@@ -316,7 +316,7 @@ function PluginCardView({
           <div className="truncate text-[0.95rem] font-semibold">{plugin.name}</div>
           {plugin.version && <div className="font-mono text-xs text-muted-foreground">v{plugin.version}</div>}
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-2">
           <Button
             size="xs"
             variant={plugin.enabled ? 'default' : 'outline'}

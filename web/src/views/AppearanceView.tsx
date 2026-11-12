@@ -81,7 +81,7 @@ export default function AppearanceView() {
                   type="button"
                   onClick={() => selectTheme(t.id)}
                   className={cn(
-                    'group flex flex-col gap-2 rounded-lg border p-3 text-left transition-colors',
+                    'group flex flex-col gap-2 rounded-lg border p-4 text-left transition-colors',
                     active
                       ? 'border-primary bg-card shadow-sm'
                       : 'border-border bg-panel hover:border-primary/40',
@@ -98,7 +98,7 @@ export default function AppearanceView() {
                     <span className="absolute bottom-2 right-2 text-sm font-semibold text-foreground">Aa</span>
                   </div>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                    <span className="flex items-center gap-2 text-sm font-medium text-foreground">
                       {t.id === 'dark' ? <Moon className="size-4" /> : <Sun className="size-4" />}
                       {t.name}
                     </span>

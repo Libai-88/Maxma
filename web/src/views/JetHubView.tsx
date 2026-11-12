@@ -568,7 +568,7 @@ export default function JetHubView() {
             <Button size="sm" variant="outline" disabled={Boolean(store.backupBusy)} onClick={() => void doExportBackup()}>
               {store.backupBusy ? '处理中…' : '导出备份'}
             </Button>
-            <label className="inline-flex h-8 cursor-pointer items-center rounded-lg border border-border bg-transparent px-2.5 text-sm text-foreground">
+            <label className="inline-flex h-9 cursor-pointer items-center rounded-lg border border-border bg-transparent px-3.5 text-sm text-foreground">
               选择备份文件
               <input type="file" accept="application/json,.json" className="hidden" onChange={(e) => void onBackupFile(e)} />
             </label>
@@ -616,7 +616,7 @@ export default function JetHubView() {
                   {usageChannels.map((channel, idx) => {
                     const totals = channel.totals as { requests?: number; inputTokens?: number; outputTokens?: number } | undefined
                     return (
-                      <li key={idx} className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-1.5 text-sm">
+                      <li key={idx} className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-3.5 py-2.5 text-sm">
                         <span className="text-foreground">{String(channel.provider || channel.channel || `渠道 ${idx + 1}`)}</span>
                         <span className="text-xs text-muted-foreground">
                           {fmtNumber(totals?.requests)} 次 · 输入 {fmtNumber(totals?.inputTokens)} · 输出 {fmtNumber(totals?.outputTokens)}
@@ -655,7 +655,7 @@ export default function JetHubView() {
                 ['可选模型', `${store.gateway.models?.length ?? 0} 个`],
               ]} />
               {store.gateway.blockedByEnv && (
-                <p className="mt-2 rounded-lg border border-border bg-card p-2 text-xs text-muted-foreground">
+                <p className="mt-2 rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">
                   插件报告「已被环境变量停用」。Maxma 在装配插件时按上面的设置注入网关开关 —— 所以在这里启用后需要<strong>重启后端</strong>，插件才会真正开始监听端口。
                 </p>
               )}
@@ -670,14 +670,14 @@ export default function JetHubView() {
       )}
 
       {store.error ? (
-        <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{String(store.error)}</p>
+        <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-3.5 py-2.5 text-sm text-destructive">{String(store.error)}</p>
       ) : store.notReady ? (
-        <p className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-muted-foreground">{String(store.notReady)}</p>
+        <p className="rounded-lg border border-border bg-card px-3.5 py-2.5 text-sm text-muted-foreground">{String(store.notReady)}</p>
       ) : null}
 
       {/* 渠道 rail + 面板 */}
       <section className="grid flex-1 grid-cols-[220px_1fr] gap-4 max-md:grid-cols-1">
-        <nav aria-label="渠道列表" className="glass-panel flex min-h-0 flex-col gap-1 overflow-y-auto rounded-lg border border-border p-2">
+        <nav aria-label="渠道列表" className="glass-panel flex min-h-0 flex-col gap-2 overflow-y-auto rounded-lg border border-border p-3">
           {store.openProviders().length > 0 && (
             <>
               <div className="px-2 py-1 text-xs font-medium text-muted-foreground">已打开 ({store.openProviders().length})</div>
@@ -722,7 +722,7 @@ export default function JetHubView() {
                     {currentStatus.closed && <Badge variant="secondary" className="ml-2 text-xs">已关闭</Badge>}
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-2">
                   {!isOpencode ? (
                     <Button
                       size="xs"
@@ -776,9 +776,9 @@ export default function JetHubView() {
               {(store.models?.length ?? 0) > 0 && (
                 <ul className="flex flex-col gap-1">
                   {store.models.map((model) => (
-                    <li key={model.id} className={cn('flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-1.5 text-sm', (model.disabled || model.dead) && 'opacity-60')}>
+                    <li key={model.id} className={cn('flex items-center justify-between gap-2 rounded-lg border border-border bg-card px-3.5 py-2.5 text-sm', (model.disabled || model.dead) && 'opacity-60')}>
                       <span className="text-foreground">{model.name || model.id}</span>
-                      <span className="flex items-center gap-1.5">
+                      <span className="flex items-center gap-2">
                         {model.disabled && <Badge variant="secondary" className="text-xs">已停用</Badge>}
                         {model.dead && <Badge variant="destructive" className="text-xs">上游失效</Badge>}
                         <ActButton disabled={store.pending === `model:${model.id}`} onClick={() => toggleModel(model.id, !model.disabled)}>
@@ -794,7 +794,7 @@ export default function JetHubView() {
 
               {/* Cline 订阅额度 */}
               {isCline && (
-                <div className="rounded-lg border border-border bg-card p-3">
+                <div className="rounded-lg border border-border bg-card p-4">
                   <div className="mb-2 flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-foreground">订阅额度</h3>
                     <ActButton disabled={Boolean(store.clineQuotaLoading)} onClick={openClineQuota}>{store.clineQuotaLoading ? '读取中…' : '读取额度'}</ActButton>
@@ -812,7 +812,7 @@ export default function JetHubView() {
 
               {/* Cline 请求日志 */}
               {isCline && (store.clineRequestLog?.length || store.clineRequestLogAccount) && (
-                <div className="rounded-lg border border-border bg-card p-3">
+                <div className="rounded-lg border border-border bg-card p-4">
                   <div className="mb-2 flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-foreground">请求日志 · {store.clineRequestLogAccount}</h3>
                     <ActButton onClick={() => store.clearAccountDetail()}>关闭</ActButton>
@@ -823,7 +823,7 @@ export default function JetHubView() {
                   {store.clineRequestLog?.length ? (
                     <ul className="flex flex-col gap-1">
                       {store.clineRequestLog.map((row, idx) => (
-                        <li key={idx} className={cn('flex flex-wrap justify-between gap-2 rounded-lg border border-border px-3 py-1.5 text-xs', Boolean(row.error) && 'text-destructive')}>
+                        <li key={idx} className={cn('flex flex-wrap justify-between gap-2 rounded-lg border border-border px-3.5 py-2.5 text-xs', Boolean(row.error) && 'text-destructive')}>
                           <span>{fmtTs(row.ts)}</span>
                           <span>{String(row.upstream || row.model || '—')}</span>
                           <span>{clineLogTail(row)}</span>
@@ -838,7 +838,7 @@ export default function JetHubView() {
 
               {/* Loomy / Raccoon 新人任务 · 登录奖励 */}
               {canOnboarding && store.onboarding && (
-                <div className="rounded-lg border border-border bg-card p-3">
+                <div className="rounded-lg border border-border bg-card p-4">
                   <div className="mb-2 flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-foreground">
                       {current?.id === 'raccoon' ? '登录奖励' : '新人任务'} · {store.onboarding.accountId}
@@ -863,7 +863,7 @@ export default function JetHubView() {
 
               {/* OpenCode 手动粘贴 API key */}
               {isOpencode && (
-                <div className="rounded-lg border border-border bg-card p-3">
+                <div className="rounded-lg border border-border bg-card p-4">
                   <div className="flex flex-wrap gap-2">
                     <Input type="password" value={ocApiKey} placeholder="粘贴 API key（sk- 开头，20 位以上）" onChange={(e) => setOcApiKey(e.target.value)} className="max-w-xs" />
                     <Input value={ocNickname} placeholder="备注名（可选）" onChange={(e) => setOcNickname(e.target.value)} className="max-w-[160px]" />
@@ -881,10 +881,10 @@ export default function JetHubView() {
 
               {/* 积分 */}
               {(canCreditBalance || canDailyCheckin) && (
-                <div className="rounded-lg border border-border bg-card p-3">
+                <div className="rounded-lg border border-border bg-card p-4">
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <h3 className="text-sm font-semibold text-foreground">积分</h3>
-                    <div className="flex gap-1.5">
+                    <div className="flex gap-2">
                       {canCreditBalance && <ActButton disabled={Boolean(store.creditsLoading)} onClick={refreshCredits}>{store.creditsLoading ? '读取中…' : '刷新积分'}</ActButton>}
                       {canDailyCheckin && (
                         <Button size="xs" disabled={store.pending === `claim:${current.id}`} title="领取该渠道当天的积分（按账号逐个执行）" onClick={() => void claimCredits()}>
@@ -913,7 +913,7 @@ export default function JetHubView() {
 
               {/* 浏览器授权登录会话 */}
               {store.login && store.login.provider === current.id && (
-                <div className="rounded-lg border border-primary/40 bg-primary/5 p-3">
+                <div className="rounded-lg border border-primary/40 bg-primary/5 p-4">
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-sm font-semibold text-foreground">{store.login.status === 'waiting' ? '等待浏览器授权…' : '登录会话'}</span>
                     {store.login.status === 'waiting' && <span className="text-xs text-muted-foreground">已轮询 {store.login.polls} 次</span>}
@@ -938,7 +938,7 @@ export default function JetHubView() {
               {currentAccounts.length ? (
                 <ul className="flex flex-col gap-2">
                   {currentAccounts.map((account) => (
-                    <li key={account.id} className="rounded-lg border border-border bg-card p-3">
+                    <li key={account.id} className="rounded-lg border border-border bg-card p-4">
                       <div className="mb-1 flex flex-wrap items-center gap-2">
                         <span className="text-sm font-medium text-foreground">{account.nickname || account.id}</span>
                         <span className="font-mono text-xs text-muted-foreground">{account.id}</span>
@@ -948,7 +948,7 @@ export default function JetHubView() {
                         {account.enabled === false && <Badge variant="secondary" className="text-xs">已停用</Badge>}
                         {account.refreshable === false && <Badge variant="destructive" className="text-xs">不可续期</Badge>}
                       </div>
-                      <div className="flex flex-wrap gap-1.5">
+                      <div className="flex flex-wrap gap-2">
                         {canRateLimit && (
                           <ActButton disabled={store.pending === `retest:${account.id}`} title="重测该账号并清掉已恢复的限流标记" onClick={() => retestOne(account.id)}>重测</ActButton>
                         )}
@@ -1008,9 +1008,9 @@ export default function JetHubView() {
         </div>
       </section>
 
-      {notice && <p className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-muted-foreground">{notice}</p>}
+      {notice && <p className="rounded-lg border border-border bg-card px-3.5 py-2.5 text-sm text-muted-foreground">{notice}</p>}
 
-      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <Puzzle className="size-3.5" />
         数据来自插件自身的 RPC（<code>provider.status</code> / <code>account.list</code> / <code>model.list</code>），经 Maxma 后端 <code>POST /api/jet-hub</code> 转发。
       </p>
@@ -1063,7 +1063,7 @@ function KVList({ items }: { items: Array<[string, string]> }) {
   return (
     <ul className="mb-2 flex flex-col gap-1">
       {items.map(([k, v], idx) => (
-        <li key={idx} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-1.5 text-sm">
+        <li key={idx} className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3.5 py-2.5 text-sm">
           <span className="shrink-0 text-muted-foreground">{k}</span>
           <span className="text-right text-foreground">{v}</span>
         </li>
@@ -1074,7 +1074,7 @@ function KVList({ items }: { items: Array<[string, string]> }) {
 
 function WarnBanner({ children }: { children: React.ReactNode }) {
   return (
-    <p className="my-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+    <p className="my-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3.5 py-2.5 text-xs leading-relaxed text-muted-foreground">
       {children}
     </p>
   )
@@ -1082,7 +1082,7 @@ function WarnBanner({ children }: { children: React.ReactNode }) {
 
 function Stat({ value, label }: { value: string; label: string }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-3">
+    <div className="rounded-lg border border-border bg-card p-4">
       <div className="text-lg font-semibold text-foreground">{value}</div>
       <div className="text-xs text-muted-foreground">{label}</div>
     </div>

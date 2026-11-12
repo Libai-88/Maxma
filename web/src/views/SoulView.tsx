@@ -87,7 +87,7 @@ export default function SoulView() {
         <div className="flex justify-center py-16"><Spinner /></div>
       ) : (
         <>
-          <section className="space-y-2">
+          <section className="space-y-3">
             {personas.map((p) => (
               <div key={p.id} className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
                 <div className="min-w-0 flex-1">

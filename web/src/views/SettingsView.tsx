@@ -144,7 +144,7 @@ export default function SettingsView() {
   }
 
   const Row = ({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) => (
-    <div className="flex items-center justify-between gap-4 border-b border-border/60 py-3 last:border-0">
+    <div className="flex items-center justify-between gap-4 border-b border-border/60 px-4 py-3.5 last:border-0">
       <div className="min-w-0">
         <p className="text-sm">{label}</p>
         {desc && <p className="mt-0.5 text-xs text-muted-foreground">{desc}</p>}
@@ -166,7 +166,7 @@ export default function SettingsView() {
       <header className="mb-6"><h2 className="text-lg font-semibold">设置</h2></header>
 
       {panelLoadError && (
-        <div role="alert" className="mb-4 flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
+        <div role="alert" className="mb-4 flex items-center justify-between rounded-lg border border-border bg-card px-3.5 py-2.5 text-xs text-muted-foreground">
           <span>{panelLoadError}</span>
           <Button variant="ghost" size="sm" onClick={() => window.location.reload()}>重试面板</Button>
         </div>
@@ -209,7 +209,7 @@ export default function SettingsView() {
             <Field>
               <FieldLabel>转向模式</FieldLabel>
               <FieldDescription>连续发送多条消息时的处理方式。</FieldDescription>
-              <select className="mt-1 w-56 rounded-lg border border-border bg-background px-2 py-1.5 text-sm" aria-label="转向模式"
+              <select className="mt-1 w-56 rounded-lg border border-border bg-background px-3 py-2.5 text-sm" aria-label="转向模式"
                 value={String(settings['steeringMode'] ?? 'all')} onChange={(e) => set('steeringMode', e.target.value)}>
                 <option value="all">全部接受</option>
                 <option value="one-at-a-time">逐条处理</option>
@@ -218,7 +218,7 @@ export default function SettingsView() {
             <Field>
               <FieldLabel>追补模式</FieldLabel>
               <FieldDescription>轮次进行中发出的补充要求如何处理。</FieldDescription>
-              <select className="mt-1 w-56 rounded-lg border border-border bg-background px-2 py-1.5 text-sm" aria-label="追补模式"
+              <select className="mt-1 w-56 rounded-lg border border-border bg-background px-3 py-2.5 text-sm" aria-label="追补模式"
                 value={String(settings['followUpMode'] ?? 'queue')} onChange={(e) => set('followUpMode', e.target.value)}>
                 <option value="queue">排入下一步</option>
                 <option value="steer">立即调整</option>
@@ -228,18 +228,18 @@ export default function SettingsView() {
 
           <Panel title="推理预算" className={activeSection === 'reasoning' ? '' : 'hidden'}>
             <Row label="思考档位" desc="影响 send 时的 thinking 参数（引擎侧预算）。">
-              <select className="w-32 rounded-lg border border-border bg-background px-2 py-1.5 text-sm" aria-label="思考档位"
+              <select className="w-32 rounded-lg border border-border bg-background px-3 py-2.5 text-sm" aria-label="思考档位"
                 value={thinkingLevel} onChange={(e) => setThinkingLevel(e.target.value)}>
                 {THINKING_LEVELS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
               </select>
             </Row>
             <Row label="输出上限" desc="单轮 max_tokens（本地发送参数）。">
               <input type="number" min={1} value={maxTokens} onChange={(e) => setMaxTokens(Number((e.target as HTMLInputElement).value))}
-                className="w-28 rounded-lg border border-border bg-background px-2 py-1.5 text-sm" aria-label="输出上限" />
+                className="w-28 rounded-lg border border-border bg-background px-3 py-2.5 text-sm" aria-label="输出上限" />
             </Row>
             <Row label="温度" desc="0 更确定，1 更多样。">
               <input type="number" min={0} max={2} step={0.1} value={temperature} onChange={(e) => setTemperature(Number((e.target as HTMLInputElement).value))}
-                className="w-24 rounded-lg border border-border bg-background px-2 py-1.5 text-sm" aria-label="温度" />
+                className="w-24 rounded-lg border border-border bg-background px-3 py-2.5 text-sm" aria-label="温度" />
             </Row>
             <Row label="思考预算 · 极简">
               <Slider k="thinkingBudgets.minimal" min={0} max={32000} step={512} fallback={1024} suffix="tokens" />
@@ -296,7 +296,7 @@ export default function SettingsView() {
               </div>
             </Row>
             {logs && (
-              <div className="mt-1 space-y-1 rounded-lg border border-border bg-background/40 p-2 text-[11px] text-muted-foreground">
+              <div className="mt-1 space-y-1.5 rounded-lg border border-border bg-background/40 p-3 text-[11px] text-muted-foreground">
                 <p className="truncate font-mono">{logs.logs_dir}</p>
                 {logs.files.slice(0, 8).map((f) => (
                   <p key={f.name} className="flex justify-between gap-2"><span className="truncate font-mono">{f.name}</span><span>{f.size_mb.toFixed(2)} MB</span></p>
@@ -324,7 +324,7 @@ export default function SettingsView() {
                 type="number" min={1} max={8} value={subagent.max_concurrent}
                 onChange={(e) => setSubAgent({ ...subagent, max_concurrent: Number(e.target.value) })}
                 onBlur={() => void api.updateSubAgentConfig(subagent)}
-                className="w-20 rounded-lg border border-border bg-background px-2 py-1 text-sm outline-none focus-visible:border-ring"
+                className="w-20 rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus-visible:border-ring"
                 aria-label="最大并行"
               />
             </Row>
@@ -333,7 +333,7 @@ export default function SettingsView() {
                 type="number" min={30} max={1800} value={subagent.timeout_seconds}
                 onChange={(e) => setSubAgent({ ...subagent, timeout_seconds: Number(e.target.value) })}
                 onBlur={() => void api.updateSubAgentConfig(subagent)}
-                className="w-24 rounded-lg border border-border bg-background px-2 py-1 text-sm outline-none focus-visible:border-ring"
+                className="w-24 rounded-lg border border-border bg-background px-3 py-2.5 text-sm outline-none focus-visible:border-ring"
                 aria-label="单任务超时"
               />
             </Row>

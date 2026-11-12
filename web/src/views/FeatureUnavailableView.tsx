@@ -57,7 +57,7 @@ export default function FeatureUnavailableView() {
   }
 
   const actionCls =
-    'flex w-full items-center gap-3 rounded-lg border p-3 no-underline transition-colors hover:border-primary hover:bg-accent cursor-pointer'
+    'flex w-full items-center gap-3 rounded-lg border p-4 no-underline transition-colors hover:border-primary hover:bg-accent cursor-pointer'
 
   return (
     <div className="flex h-full items-center justify-center p-6">
@@ -71,12 +71,12 @@ export default function FeatureUnavailableView() {
           {availability.reason}
         </p>
         {availability.kind === 'engine_unsupported' && (
-          <p className="mb-5 rounded-lg border border-border bg-panel p-3 text-left text-xs leading-relaxed text-muted-foreground">
+          <p className="mb-5 rounded-lg border border-border bg-panel p-4 text-left text-xs leading-relaxed text-muted-foreground">
             这一条由 Agent 引擎的能力清单报告，调整本地设置不会改变结果；引擎支持后重新检测即可恢复入口。
           </p>
         )}
         {availability.kind === 'user_disabled' && (
-          <p className="mb-5 rounded-lg border border-border bg-panel p-3 text-left text-xs leading-relaxed text-muted-foreground">
+          <p className="mb-5 rounded-lg border border-border bg-panel p-4 text-left text-xs leading-relaxed text-muted-foreground">
             前往「运行设置」或能力仪表盘可以重新开启。
           </p>
         )}

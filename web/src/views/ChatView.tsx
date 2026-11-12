@@ -292,7 +292,7 @@ export default function ChatView() {
               '云端服务填入 API Key；Ollama 等本地服务无需 Key，保存后拉取模型',
             ].map((text, i) => (
               <li key={i} className="flex gap-3 text-sm">
-                <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-accent text-[11px] font-medium">{i + 1}</span>
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-accent text-[11px] font-medium">{i + 1}</span>
                 <span className="text-muted-foreground">{text}</span>
               </li>
             ))}
@@ -321,14 +321,14 @@ export default function ChatView() {
             freeLabel="剩余"
           />
         )}
-        {planMode && <span className="rounded-md border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">计划模式</span>}
+        {planMode && <span className="rounded-md border border-border px-2.5 py-1.5 text-[10px] text-muted-foreground">计划模式</span>}
         <Button variant="ghost" size="icon-sm" aria-label="工作台" aria-expanded={workbench.isOpen} onClick={() => workbench.toggle()}><PanelRight /></Button>
         <div className="relative">
           <Button variant="ghost" size="icon-sm" aria-label="更多会话操作" aria-expanded={moreMenuOpen} onClick={() => setMoreMenuOpen((v) => !v)}>···</Button>
           {moreMenuOpen && (
-            <div role="menu" aria-label="更多会话操作" className="absolute right-0 top-9 z-40 w-72 rounded-xl border border-border bg-popover p-3 shadow-lg">
+            <div role="menu" aria-label="更多会话操作" className="absolute right-0 top-9 z-40 w-72 rounded-xl border border-border bg-popover p-4 shadow-lg">
               <p className="mb-2 text-xs font-medium">会话设置</p>
-              <p className="mb-3 text-[11px] text-muted-foreground">输入 <code className="rounded bg-muted px-1">/</code> 查看全部命令（如 /goal、/plan、/undo）</p>
+              <p className="mb-3 text-[11px] text-muted-foreground">输入 <code className="rounded bg-muted px-1.5 py-1.5">/</code> 查看全部命令（如 /goal、/plan、/undo）</p>
               {goalState?.goal && (
                 <p className="mb-2 text-xs text-muted-foreground">
                   目标：{goalState.goal.objective}
@@ -339,7 +339,7 @@ export default function ChatView() {
                 模型参数 <span className="ml-auto text-xs text-muted-foreground">{modelSettingsOpen ? '收起' : '展开'}</span>
               </Button>
               {modelSettingsOpen && <ModelSettings />}
-              {taskTrackerData && <div className="mb-2 rounded-lg border border-border p-2 text-xs text-muted-foreground">任务状态：{JSON.stringify(taskTrackerData).slice(0, 120)}</div>}
+              {taskTrackerData && <div className="mb-2 rounded-lg border border-border p-3 text-xs text-muted-foreground">任务状态：{JSON.stringify(taskTrackerData).slice(0, 120)}</div>}
               <div className="flex items-center justify-between px-1 py-1.5 text-sm">
                 <span>自动执行（免确认）</span>
                 <Switch checked={autoApprove} onCheckedChange={setAutoApprove} aria-label="自动执行" />
@@ -392,14 +392,14 @@ export default function ChatView() {
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">当前执行准备度 {Math.round((taskBrief.confidence ?? 0.5) * 100)}%</p>
                   <ol className="list-decimal space-y-1 pl-5 text-sm">{taskBrief.questions?.map((q: string, i: number) => <li key={i}>{q}</li>)}</ol>
-                  <textarea value={taskBriefAnswer} onChange={(e) => setTaskBriefAnswer(e.target.value)} rows={4} maxLength={4000} placeholder="按问题编号回答即可，也可以写成一段话" className="w-full rounded-lg border border-border bg-background p-2 text-sm outline-none" />
+                  <textarea value={taskBriefAnswer} onChange={(e) => setTaskBriefAnswer(e.target.value)} rows={4} maxLength={4000} placeholder="按问题编号回答即可，也可以写成一段话" className="w-full rounded-lg border border-border bg-background p-3 text-sm outline-none" />
                   <Button size="sm" disabled={!taskBriefAnswer.trim()} onClick={submitTaskBriefAnswer}>继续对齐 →</Button>
                 </div>
               )}
               {taskBrief.status === 'ready' && (
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">执行准备度 {Math.round((taskBrief.confidence ?? 0.9) * 100)}%</p>
-                  <textarea value={taskBriefPrompt} onChange={(e) => setTaskBriefPrompt(e.target.value)} rows={6} maxLength={20000} className="w-full rounded-lg border border-border bg-background p-2 text-sm outline-none" />
+                  <textarea value={taskBriefPrompt} onChange={(e) => setTaskBriefPrompt(e.target.value)} rows={6} maxLength={20000} className="w-full rounded-lg border border-border bg-background p-3 text-sm outline-none" />
                   <Button size="sm" disabled={!taskBriefPrompt.trim()} onClick={() => executeTaskBrief(taskBriefPrompt.trim())}>确认并开始执行 →</Button>
                 </div>
               )}
@@ -410,9 +410,9 @@ export default function ChatView() {
           )}
 
           {taskReview && (
-            <section aria-live="polite" className="mx-4 mb-3 rounded-xl border border-border bg-card p-3">
+            <section aria-live="polite" className="mx-4 mb-3 rounded-xl border border-border bg-card p-4">
               <p className="mb-2 text-xs font-medium">完成后验收 · 结果符合你的预期吗？</p>
-              <textarea value={taskReviewFeedback} onChange={(e) => setTaskReviewFeedback(e.target.value)} rows={2} maxLength={4000} placeholder="需要修改时，写出具体差异" className="w-full rounded-lg border border-border bg-background p-2 text-sm outline-none" />
+              <textarea value={taskReviewFeedback} onChange={(e) => setTaskReviewFeedback(e.target.value)} rows={2} maxLength={4000} placeholder="需要修改时，写出具体差异" className="w-full rounded-lg border border-border bg-background p-3 text-sm outline-none" />
               <div className="mt-2 flex justify-end gap-2">
                 <Button variant="outline" size="sm" disabled={!taskReviewFeedback.trim()} onClick={reviseTask}>按反馈修订</Button>
                 <Button size="sm" onClick={acceptTask}>结果符合预期</Button>
@@ -457,10 +457,10 @@ export default function ChatView() {
 function ModelSettings() {
   const { currentModel, maxTokens, thinkingEnabled, setMaxTokens, toggleThinking } = useChatStore()
   return (
-    <div className="space-y-2 rounded-lg border border-border p-2 text-xs">
+    <div className="space-y-2 rounded-lg border border-border p-3 text-xs">
       <p className="text-muted-foreground">当前模型：{currentModel || '默认'}</p>
       <label className="block">输出上限
-        <input type="number" min={1} value={maxTokens ?? 0} onChange={(e) => setMaxTokens(Number(e.target.value))} className="mt-1 w-full rounded border border-border bg-background px-2 py-1" />
+        <input type="number" min={1} value={maxTokens ?? 0} onChange={(e) => setMaxTokens(Number(e.target.value))} className="mt-1 w-full rounded border border-border bg-background px-3 py-2.5" />
       </label>
       <label className="flex items-center gap-2">思考模式
         <input type="checkbox" checked={thinkingEnabled} onChange={() => toggleThinking(!thinkingEnabled)} />
@@ -477,7 +477,7 @@ function WorkbenchSidebar({ onArtifactAction, allTurns }: {
   const workbench = useWorkbenchStore()
   return (
     <aside className="flex w-80 shrink-0 flex-col border-l border-border bg-card/40" aria-label="工作台">
-      <div className="flex items-center justify-between border-b border-border px-3 py-2">
+      <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
         <span className="text-sm font-medium">工作台</span>
         <div className="flex items-center gap-1">
           <Tag>{workbench.cards.length}</Tag>
@@ -497,14 +497,14 @@ function WorkbenchSidebar({ onArtifactAction, allTurns }: {
             {allTurns.flatMap((turn, ti) => turn.events
               .filter((ev) => ev.kind === 'thinking')
               .map((ev, ei) => (
-                <div key={`${ti}-${ei}`} className="rounded-lg border border-border bg-card p-2 text-xs text-muted-foreground">
+                <div key={`${ti}-${ei}`} className="rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">
                   {ev.kind === 'thinking' ? ev.tokens.slice(0, 200) : null}
                 </div>
               )))}
           </div>
         )}
         {workbench.activeTab === 'canvas' && workbench.cards.map((card) => (
-          <div key={card.id} className="rounded-xl border border-border bg-card p-3 text-xs shadow-sm">
+          <div key={card.id} className="rounded-xl border border-border bg-card p-4 text-xs shadow-sm">
             <div className="mb-1 flex items-center justify-between"><strong>{card.title}</strong>
               <Button variant="ghost" size="icon-sm" onClick={() => workbench.removeCard(card.id)} aria-label="移除卡片">✕</Button>
             </div>

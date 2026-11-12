@@ -193,7 +193,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 function renderSegment(seg: FaqSegment, i: number) {
   if (seg.strong) return <strong key={i} className="text-foreground font-semibold">{seg.text}</strong>
-  if (seg.code) return <code key={i} className="rounded-sm bg-muted px-1 font-mono text-xs">{seg.text}</code>
+  if (seg.code) return <code key={i} className="rounded-sm bg-muted px-1.5 py-1.5 font-mono text-xs">{seg.text}</code>
   return <span key={i}>{seg.text}</span>
 }
 
@@ -228,7 +228,7 @@ export default function HelpView() {
         <Section title="核心能力一览">
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             {capabilities.map((cap) => (
-              <div key={cap.title} className="flex items-start gap-3 rounded-md border border-border bg-panel p-3">
+              <div key={cap.title} className="flex items-start gap-3 rounded-lg border border-border bg-panel p-4">
                 <span className="text-2xl leading-none">{cap.icon}</span>
                 <div>
                   <div className="text-sm font-bold text-foreground">{cap.title}</div>
@@ -242,11 +242,12 @@ export default function HelpView() {
         <Section title="三步开始使用">
           <ol className="flex list-none flex-col gap-3 p-0">
             {steps.map((step, idx) => (
-              <li key={idx} className="flex items-start gap-3 rounded-md border border-border bg-panel p-3">
+              <li key={idx} className="flex items-start gap-3 rounded-lg border border-border bg-panel p-4">
                 <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                   {idx + 1}
                 </span>
-                <div>
+                {/* min-w-0 + break-words：flex 子项默认 min-width:auto，长英文串会顶穿右边框 */}
+                <div className="min-w-0 flex-1 break-words">
                   <div className="text-sm font-bold text-foreground">{step.title}</div>
                   <div className="mt-1 text-sm leading-relaxed text-muted-foreground">{step.desc}</div>
                 </div>
@@ -259,10 +260,10 @@ export default function HelpView() {
           <div className="flex flex-col gap-2">
             {faqs.map((faq, idx) => (
               <details key={idx} className="rounded-md border border-border bg-panel">
-                <summary className="cursor-pointer select-none px-3.5 py-2.5 text-sm font-semibold text-foreground">
+                <summary className="cursor-pointer select-none break-words px-4 py-3 text-sm font-semibold text-foreground">
                   {faq.q}
                 </summary>
-                <p className="px-3.5 pb-3 text-sm leading-relaxed text-muted-foreground">
+                <p className="break-words px-4 pb-3.5 text-sm leading-relaxed text-muted-foreground">
                   {faq.segments.map(renderSegment)}
                 </p>
               </details>
@@ -273,17 +274,17 @@ export default function HelpView() {
         <Section title="与 Claude Desktop / ChatGPT Desktop 的区别">
           <div className="flex flex-col overflow-hidden rounded-md border border-border">
             <div className="grid grid-cols-4 border-b border-border bg-muted text-sm font-bold text-foreground">
-              <div className="border-r border-border px-3 py-2">能力</div>
-              <div className="border-r border-border px-3 py-2">Maxma</div>
-              <div className="border-r border-border px-3 py-2">Claude Desktop</div>
-              <div className="px-3 py-2">ChatGPT Desktop</div>
+              <div className="min-w-0 break-words border-r border-border px-3.5 py-2.5">能力</div>
+              <div className="min-w-0 break-words border-r border-border px-3.5 py-2.5">Maxma</div>
+              <div className="min-w-0 break-words border-r border-border px-3.5 py-2.5">Claude Desktop</div>
+              <div className="min-w-0 break-words px-3.5 py-2.5">ChatGPT Desktop</div>
             </div>
             {comparison.map((row) => (
               <div key={row.cap} className="grid grid-cols-4 border-b border-border last:border-b-0">
-                <div className="border-r border-border px-3 py-2 text-sm font-semibold text-foreground">{row.cap}</div>
-                <div className="border-r border-border px-3 py-2 text-sm text-muted-foreground"><CompareCellView cell={row.maxma} /></div>
-                <div className="border-r border-border px-3 py-2 text-sm text-muted-foreground"><CompareCellView cell={row.claude} /></div>
-                <div className="px-3 py-2 text-sm text-muted-foreground"><CompareCellView cell={row.chatgpt} /></div>
+                <div className="min-w-0 break-words border-r border-border px-3.5 py-2.5 text-sm font-semibold text-foreground">{row.cap}</div>
+                <div className="min-w-0 break-words border-r border-border px-3.5 py-2.5 text-sm text-muted-foreground"><CompareCellView cell={row.maxma} /></div>
+                <div className="min-w-0 break-words border-r border-border px-3.5 py-2.5 text-sm text-muted-foreground"><CompareCellView cell={row.claude} /></div>
+                <div className="min-w-0 break-words px-3.5 py-2.5 text-sm text-muted-foreground"><CompareCellView cell={row.chatgpt} /></div>
               </div>
             ))}
           </div>
@@ -292,7 +293,7 @@ export default function HelpView() {
         <Section title="关于">
           <p className="mb-2.5 text-sm leading-relaxed text-muted-foreground">
             Maxma 是一个开源项目，遵循本地优先、隐私优先、可扩展的设计理念。
-            所有数据保存在本地（<code className="rounded-sm bg-muted px-1 font-mono text-xs">{dataPath}</code>），不上传任何对话内容到第三方服务器（仅在你调用模型时直接与模型提供商通信）。
+            所有数据保存在本地（<code className="rounded-sm bg-muted px-1.5 py-1.5 font-mono text-xs">{dataPath}</code>），不上传任何对话内容到第三方服务器（仅在你调用模型时直接与模型提供商通信）。
           </p>
           <p className="flex flex-wrap items-center gap-2 text-sm">
             <Link to="/privacy" className={inlineLink}>隐私仪表盘</Link>
