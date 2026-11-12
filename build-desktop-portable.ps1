@@ -1,12 +1,16 @@
 ﻿param(
-    [switch]$SkipDependencyInstall
+    [switch]$SkipDependencyInstall,
+    # CI（GitHub windows-latest）没有 D: 盘。默认仍只允许 D: 工作区：这条护栏
+    # 是给本地构建的（缓存/临时目录固定落在 D:）。CI 显式声明自己例外，
+    # 其余路径边界检查（dist 内写、拒绝覆盖外部文件）照旧生效。
+    [switch]$AllowAnyDrive
 )
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = (Resolve-Path $PSScriptRoot).Path
 $DriveRoot = [System.IO.Path]::GetPathRoot($ProjectRoot)
-if ($DriveRoot -ne "D:\") {
-    throw "便携桌面构建仅允许在 D: 工作区运行，当前路径：$ProjectRoot"
+if (-not $AllowAnyDrive -and $DriveRoot -ne "D:\") {
+    throw "便携桌面构建仅允许在 D: 工作区运行，当前路径：$ProjectRoot（CI 可传 -AllowAnyDrive）"
 }
 
 $DistRoot = Join-Path $ProjectRoot "dist"

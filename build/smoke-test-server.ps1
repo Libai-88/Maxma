@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
     [int]$Port = 8000,
     [int]$TimeoutSec = 120
@@ -64,6 +64,15 @@ try {
     Write-Host "[smoke] health: $($health.status) (version $($health.version))"
     Write-Host "[smoke] providers: $($providers.providers.Count)"
     Write-Host "[smoke] mcp servers: $($mcpServers.servers.Count)"
+
+    # 协议级端到端：自带 OpenAI 兼容 stub，覆盖会话/对话/历史/恢复幂等/取消/删除。
+    # 放在 smoke 里而不是另一个 CI job：这里已经有"启动好的真实产物"和端口，
+    # 另起一套只会多一次安装+启动。脚本失败必须以非零退出码冒出来。
+    Write-Host "[smoke] running end-to-end protocol checks..."
+    $e2eScript = Join-Path $resolvedRoot "build\e2e-smoke.mjs"
+    if (-not (Test-Path $e2eScript)) { throw "Smoke test failed: missing $e2eScript" }
+    & bun run $e2eScript $Port
+    if ($LASTEXITCODE -ne 0) { throw "Smoke test failed: end-to-end protocol checks" }
     Write-Host "[smoke] bundle startup verification passed"
 } finally {
     if ($proc -and -not $proc.HasExited) {
