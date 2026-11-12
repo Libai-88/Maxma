@@ -1,11 +1,4 @@
 {
-  "hindsight": {
-    "enabled": true,
-    "retention_days": 30,
-    "importance_threshold": 0.5,
-    "processing_mode": "auto",
-    "prompt_template": ""
-  },
   "tts": {
     "enabled": false,
     "provider": "openai-tts",
@@ -17,9 +10,6 @@
   "sub_agents": {
     "enabled": true,
     "max_concurrent": 3,
-    "auto_approve": false,
-    "model": "inherit",
-    "timeout_seconds": 120,
-    "show_progress": true
+    "timeout_seconds": 120
   }
 }

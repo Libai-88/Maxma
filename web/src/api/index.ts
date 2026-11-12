@@ -56,14 +56,6 @@ import { getApiBase } from '@/utils/env'
 
 // ── Panel Config 类型 ──
 
-export interface HindsightConfig {
-  enabled: boolean
-  retention_days: number
-  importance_threshold: number
-  processing_mode: 'auto' | 'manual' | 'scheduled'
-  prompt_template: string
-}
-
 // GAP-A2-001：TTS 提供商收敛为 system（WebView2 speechSynthesis 系统语音，
 // 零 API 成本）。edge-tts/openai-tts 为历史假配置（从未接线），后端读取时
 // 会规范化为 system（见 settings_panels.py）。
@@ -79,10 +71,7 @@ export interface TtsConfig {
 export interface SubAgentConfig {
   enabled: boolean
   max_concurrent: number
-  auto_approve: boolean
-  model: string
   timeout_seconds: number
-  show_progress: boolean
 }
 
 // getApiBase() 返回同源相对路径（/api），运行期恒定，模块加载时算一次即可。
@@ -433,16 +422,7 @@ export const api = {
       body: JSON.stringify({ path, value }),
     }),
 
-  // ── Panel Configs（Hindsight / TTS / Browser Tools / Sub-agents） ──
-
-  getHindsightConfig: () =>
-    request<HindsightConfig>('/memory/hindsight-config'),
-
-  updateHindsightConfig: (config: Partial<HindsightConfig>) =>
-    request<HindsightConfig>('/memory/hindsight-config', {
-      method: 'PUT',
-      body: JSON.stringify(config),
-    }),
+  // ── Panel Configs（TTS / Sub-agents） ──
 
   getTtsConfig: () =>
     request<TtsConfig>('/settings/tts'),
@@ -461,8 +441,6 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(config),
     }),
-
-  // ── Const 固定会话 ──
 
   // ── Persona 人设 ──
 
@@ -879,9 +857,24 @@ export const api = {
       body: JSON.stringify({ enabled }),
     }),
 
-  // ── EvoCore 行为策略 ──
+  // ── 行为偏好（evolution）──
   listEvolutionRules: (status?: string) =>
     request<{ rules: Array<Record<string, unknown>> }>(`/evolution/rules${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  /** 预览：这条消息会命中哪些偏好、注入原文（只读）。 */
+  previewEvolution: (query: string) =>
+    request<{
+      query: string
+      injection: string
+      matches: Array<{
+        id: string
+        rule_text: string
+        scope: string
+        confidence: number
+        score: number
+        matched_keywords: string[]
+        scope_matched: boolean
+      }>
+    }>(`/evolution/preview?q=${encodeURIComponent(query)}`),
   getEvolutionStats: () =>
     request<{ total: number; active: number; candidates: number; paused: number; avg_confidence: number }>('/evolution/stats'),
   learnEvolutionRule: (text: string, scope = 'global') =>

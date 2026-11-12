@@ -2,11 +2,13 @@
  * routes/settings-panels.ts — 四个配置面板持久化（api/routes/settings_panels.py
  * 的 Bun 直译，阶段二 2.2g）。
  *
- * 数据：API_DATA_DIR/panel_configs.json（顶层键 hindsight/tts/sub_agents）。
+ * 数据：API_DATA_DIR/panel_configs.json（顶层键 tts/sub_agents）。
  * 语义保留：默认值合并、None 字段不覆盖（PATCH 语义）、PANEL-CORRUPT-001 损坏拒绝写入。
  *
- * 已删除 `browser_tools`：引擎侧没有任何浏览器运行时，这个面板只是一份没人消费的
- * 偏好文件（"暂不生效"）。浏览器自动化走 MCP（官方 mcp.md），由扩展页的市场安装。
+ * 已删除 `browser_tools`（无浏览器运行时）与 `hindsight`（记忆增强面板从来没有
+ * 消费方：retention/importance/processing_mode/prompt_template 四个字段全仓零读取，
+ * 记忆只由 remember_memory 工具与记忆页直接读写 memory.yaml）。留一个只会显示
+ * 「已停用」的开关就是在卖假功能。
  */
 
 import { Hono } from "hono";
@@ -23,14 +25,6 @@ function configPath(): string {
 
 // ── 默认配置（与 Python 版逐字段一致）──
 
-const DEFAULT_HINDSIGHT: Record<string, unknown> = {
-  enabled: false,
-  retention_days: 90,
-  importance_threshold: 0.5,
-  processing_mode: "auto",
-  prompt_template: "",
-};
-
 const DEFAULT_TTS: Record<string, unknown> = {
   enabled: false,
   provider: "system",
@@ -40,17 +34,16 @@ const DEFAULT_TTS: Record<string, unknown> = {
   auto_read: false,
 };
 
+// 只有这三个字段被 kernel/subagent.ts 消费（开关 / 并行上限 / 单任务超时）。
+// 旧的 auto_approve / model / show_progress 没有读者，已删除——面板上不显示的
+// 键也不该留在文件里冒充可配置项。
 const DEFAULT_SUB_AGENTS: Record<string, unknown> = {
   enabled: false,
   max_concurrent: 3,
-  auto_approve: false,
-  model: "inherit",
   timeout_seconds: 120,
-  show_progress: true,
 };
 
 const DEFAULTS: Record<string, Record<string, unknown>> = {
-  hindsight: DEFAULT_HINDSIGHT,
   tts: DEFAULT_TTS,
   sub_agents: DEFAULT_SUB_AGENTS,
 };
@@ -115,11 +108,6 @@ function validatePanel(
   panel: string,
   updates: Record<string, unknown>,
 ): string | null {
-  if (panel === "hindsight" && updates.processing_mode !== undefined && updates.processing_mode !== null) {
-    if (!["auto", "manual", "scheduled"].includes(String(updates.processing_mode))) {
-      return "processing_mode must be auto/manual/scheduled";
-    }
-  }
   if (panel === "tts" && updates.provider !== undefined && updates.provider !== null) {
     const provider = String(updates.provider);
     if (provider !== "system" && provider !== "custom" && !LEGACY_TTS_PROVIDERS.has(provider)) {
@@ -132,12 +120,6 @@ function validatePanel(
       if (typeof v === "number" && (v < 0.5 || v > 2.0)) return `${key} must be between 0.5 and 2.0`;
     }
   }
-  if (panel === "hindsight") {
-    const rd = updates.retention_days;
-    if (typeof rd === "number" && (rd < 7 || rd > 365)) return "retention_days must be between 7 and 365";
-    const it = updates.importance_threshold;
-    if (typeof it === "number" && (it < 0.1 || it > 1.0)) return "importance_threshold must be between 0.1 and 1.0";
-  }
   if (panel === "sub_agents") {
     const mc = updates.max_concurrent;
     if (typeof mc === "number" && (mc < 1 || mc > 10)) return "max_concurrent must be between 1 and 10";
@@ -149,15 +131,6 @@ function validatePanel(
 
 export function createSettingsPanelRoutes(): Hono {
   const app = new Hono();
-
-  // Hindsight
-  app.get("/api/memory/hindsight-config", (c) => c.json(getPanel("hindsight")));
-  app.put("/api/memory/hindsight-config", async (c) => {
-    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
-    const invalid = validatePanel("hindsight", body);
-    if (invalid) return c.json({ detail: invalid }, 422);
-    return c.json(putPanel("hindsight", body));
-  });
 
   // TTS
   app.get("/api/settings/tts", (c) => {

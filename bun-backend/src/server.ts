@@ -254,7 +254,7 @@ export function createApp(): Hono {
 
   // 2.2 存储批：rules / maxma-blocker / settings / transcripts / memory / audit-log
   // 2.2 存储批：settings-panels 先于 memory 挂载——避免 memory 的
-  // :memoryId 参数路由抢先匹配 /api/memory/hindsight-config（PANEL-ORDER-001）
+  // :memoryId 参数路由的注册顺序（PANEL-ORDER-001：面板路由必须先于参数路由）
   app.route("/", createSettingsPanelRoutes());
   app.route("/", createRulesRoutes());
   app.route("/", createMaxmaBlockerRoutes());

@@ -996,7 +996,7 @@ export interface CapabilitiesResponse {
   providers: ProviderItem[]
   env: Record<string, string>
   system: Record<string, number | boolean>
-  memory?: { total: number; categories: Record<string, number>; avg_confidence: number }
+  memory?: { total: number; categories: Record<string, number> }
   plugins?: Record<string, unknown>[]
   config_sources?: {
     sources: Array<{ name: string; path: string; priority: number; exists: boolean; scope: string; description: string }>

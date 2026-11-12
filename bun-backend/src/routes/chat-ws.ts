@@ -71,7 +71,7 @@ export const CLIENT_MESSAGE_TYPES = new Set([
 const MAX_TOOL_OUTPUT_LEN = 100_000;
 const MAX_TOOL_ERROR_LEN = 20_000;
 
-/** EvoCore：只在已有请求路径上做确定性规则提炼与按需检索，不额外调用模型。 */
+/** 行为偏好：只在已有请求路径上做确定性规则提炼与按需检索，不额外调用模型。 */
 function enrichWithEvolutionContext(message: string, sessionId: string, turnId: string): string {
   try {
     learnFromUserMessage(message, sessionId, turnId);

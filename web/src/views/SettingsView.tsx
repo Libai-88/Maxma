@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from '@/api'
+import { api, type SubAgentConfig, type TtsConfig } from '@/api'
 import { useChatStore } from '@/stores/chat'
 import { Panel } from '@/components/ui/panel'
 import { Switch } from '@/components/ui/switch'
@@ -13,8 +13,6 @@ import { confirmAction } from '@/components/common/ConfirmDialog'
 
 type Settings = Record<string, unknown>
 
-interface SubAgentConfig { enabled: boolean; max_concurrent: number; auto_approve: boolean; model: string; timeout_seconds: number; show_progress: boolean }
-interface TtsConfig { enabled: boolean; provider: 'system' | 'custom'; voice: string; speed: number; pitch: number; auto_read: boolean }
 
 /** 引擎 thinking 档位（与 `PI_THINKING_LEVELS` 同序；enforce 在 engine-boundary 测试）。 */
 const THINKING_LEVELS = [
@@ -48,7 +46,7 @@ export default function SettingsView() {
   const [loadError, setLoadError] = useState('')
   const [panelLoadError, setPanelLoadError] = useState('')
   const [activeSection, setActiveSection] = useState('compaction')
-  const [subagent, setSubAgent] = useState<SubAgentConfig>({ enabled: false, max_concurrent: 4, auto_approve: false, model: '', timeout_seconds: 300, show_progress: true })
+  const [subagent, setSubAgent] = useState<SubAgentConfig>({ enabled: false, max_concurrent: 4, timeout_seconds: 300 })
   const [tts, setTts] = useState<TtsConfig>({ enabled: false, provider: 'system', voice: '', speed: 1.0, pitch: 1.0, auto_read: false })
   const [logs, setLogs] = useState<{ files: Array<{ name: string; size_mb: number }>; count: number; total_mb: number; logs_dir: string } | null>(null)
   const [logsBusy, setLogsBusy] = useState<'load' | 'export' | 'clear' | 'restart' | null>(null)

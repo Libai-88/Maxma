@@ -199,7 +199,7 @@ export const SCHEMA_MIGRATIONS: Migration[] = [
     CREATE INDEX IF NOT EXISTS idx_llm_usage_calls_fingerprint
       ON llm_usage_calls(session_id, fingerprint_epoch, prefix_fingerprint);
     INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (9, julianday('now'));`,
-  // v10: EvoCore 行为策略账本（不保存原始提示词，只保存短规则与统计）
+  // v10: 行为偏好账本（不保存原始提示词，只保存短规则与统计）
   `CREATE TABLE IF NOT EXISTS evolution_rules (
       id TEXT PRIMARY KEY,
       rule_text TEXT NOT NULL,

@@ -62,11 +62,11 @@ describe("memory 路由（阶段 2.2c）", () => {
       id: "mem1",
       content: "用户偏好深色主题",
       category: "偏好",
-      confidence: 0.8,
+      updatedAt: "2026-09-01 10:00:00",
     });
   });
 
-  test("搜索/分类/置信度过滤 + stats", async () => {
+  test("搜索/分类过滤 + stats", async () => {
     fs.writeFileSync(
       MEM_YAML(),
       [
@@ -95,11 +95,9 @@ describe("memory 路由（阶段 2.2c）", () => {
     const stats = (await (await app.request("/api/memory/stats", { headers: authHeader() })).json()) as {
       total: number;
       categories: Record<string, number>;
-      avg_confidence: number;
     };
     expect(stats.total).toBe(2);
     expect(stats.categories).toEqual({ 偏好: 1, 事实: 1 });
-    expect(stats.avg_confidence).toBe(1);
   });
 
   test("PUT 更新 + DELETE 删除 + 404", async () => {

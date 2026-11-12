@@ -219,27 +219,63 @@ export function recordEvolutionFeedback(id: string, feedback: EvolutionFeedback,
   return getEvolutionRule(id);
 }
 
-export function getEvolutionContext(query: string): string {
+export interface EvolutionMatch {
+  rule: EvolutionRule;
+  score: number;
+  /** 命中的关键词（用户消息里真实出现过的那些）。 */
+  matched_keywords: string[];
+  /** 作用域名在消息里出现（scope 不是 global 时才有意义）。 */
+  scope_matched: boolean;
+}
+
+/** 纯函数：给定一条用户消息，返回会被注入的规则（不写 last_used_at）。 */
+export function selectEvolutionRules(query: string): EvolutionMatch[] {
   const queryText = query.toLowerCase();
   const rules = listEvolutionRules("active");
-  const scored = rules.map((rule) => {
-    const matches = rule.keywords.filter((keyword) => keyword.length >= 2 && queryText.includes(keyword.toLowerCase()));
-    const scopeMatch = rule.scope !== "global" && queryText.includes(rule.scope.toLowerCase());
-    return { rule, score: matches.length * 3 + (scopeMatch ? 2 : 0) + rule.confidence };
-  }).filter((item) => item.score >= 1.7).sort((a, b) => b.score - a.score || b.rule.updated_at.localeCompare(a.rule.updated_at));
-  const selected = scored.slice(0, MAX_CONTEXT_RULES);
-  if (selected.length === 0) return "";
+  return rules
+    .map((rule) => {
+      const matches = rule.keywords.filter((keyword) => keyword.length >= 2 && queryText.includes(keyword.toLowerCase()));
+      const scopeMatch = rule.scope !== "global" && queryText.includes(rule.scope.toLowerCase());
+      return {
+        rule,
+        score: matches.length * 3 + (scopeMatch ? 2 : 0) + rule.confidence,
+        matched_keywords: matches.slice(0, 8),
+        scope_matched: scopeMatch,
+      };
+    })
+    .filter((item) => item.score >= 1.7)
+    .sort((a, b) => b.score - a.score || b.rule.updated_at.localeCompare(a.rule.updated_at))
+    .slice(0, MAX_CONTEXT_RULES);
+}
+
+const CONTEXT_HEADER = "\n\n[Maxma 行为偏好：仅以下与本次请求相关的长期偏好适用]\n";
+
+/** 把选中的规则拼成注入文本（长度上限内），顺带记录 last_used_at。 */
+export function renderEvolutionContext(matches: EvolutionMatch[], touchUsage = true): string {
+  if (matches.length === 0) return "";
   const lines: string[] = [];
-  let length = 0;
-  for (const { rule } of selected) {
+  let length = CONTEXT_HEADER.length;
+  for (const { rule } of matches) {
     const line = `- ${rule.rule_text}`;
     if (length + line.length > MAX_CONTEXT_CHARS) break;
     lines.push(line);
     length += line.length;
-    const db = getConnection();
-    try { db.query("UPDATE evolution_rules SET last_used_at = ? WHERE id = ?").run(nowIso(), rule.id); } finally { db.close(); }
+    if (touchUsage) {
+      const db = getConnection();
+      try { db.query("UPDATE evolution_rules SET last_used_at = ? WHERE id = ?").run(nowIso(), rule.id); } finally { db.close(); }
+    }
   }
-  return lines.length ? `\n\n[Maxma EvoCore：仅适用于当前请求的已验证行为策略]\n${lines.join("\n")}` : "";
+  return lines.length ? `${CONTEXT_HEADER}${lines.join("\n")}` : "";
+}
+
+export function getEvolutionContext(query: string): string {
+  return renderEvolutionContext(selectEvolutionRules(query));
+}
+
+/** 预览：给定消息返回会命中的规则与**逐字**的注入文本（不改变任何状态）。 */
+export function previewEvolution(query: string): { matches: EvolutionMatch[]; injection: string } {
+  const matches = selectEvolutionRules(query);
+  return { matches, injection: renderEvolutionContext(matches, false) };
 }
 
 export function evolutionStats(): { total: number; active: number; candidates: number; paused: number; avg_confidence: number } {

@@ -184,11 +184,9 @@ function buildManifest(deps: CapabilitiesDeps, gathered: Record<string, unknown>
   const panels = {
     tts: getPanel("tts"),
     sub_agents: getPanel("sub_agents"),
-    hindsight: getPanel("hindsight"),
   };
   const ttsCfg = panels.tts;
   const subagentCfg = panels.sub_agents;
-  const hindsightCfg = panels.hindsight;
 
   const features: Record<string, unknown> = {};
 
@@ -200,11 +198,10 @@ function buildManifest(deps: CapabilitiesDeps, gathered: Record<string, unknown>
     servers: ((gathered.mcp_servers as unknown[]) ?? []).length,
   };
 
-  features.memory = {
-    enabled: true,
-    hindsight: Boolean(hindsightCfg.enabled ?? false),
-    episodic: true,
-  };
+  // 记忆只有一条真实链路：remember_memory / search_memories 工具 + 记忆页
+  // 直接读写 memory.yaml。旧的 `hindsight`（增强管线）与 `episodic`（情景库）
+  // 从来没有任何读者，字段一并删除——能力清单不许声明不存在的子系统。
+  features.memory = { enabled: true };
 
   const ttsEnabled = Boolean(ttsCfg.enabled ?? false);
   features.tts = {
