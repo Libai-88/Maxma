@@ -37,9 +37,14 @@ const NUM = (v) => Number(v);
 const violations = [];
 
 function checkClassString(file, line, cls) {
-  const hasBorder = /(^|\s)border(\s|$)/.test(cls) || /border-(border|destructive|primary|input|ring)/.test(cls);
+  // 边框包括单向边（border-b 分隔行）——设置面板的行就是这种形态，
+  // 之前只看 `rounded` 会漏掉它们（恰恰是用户反馈最明显的一处）。
+  const hasBorder =
+    /(^|\s)border(\s|$)/.test(cls) ||
+    /border-(border|destructive|primary|input|ring)/.test(cls) ||
+    /(^|\s)border-[btlr](\s|$)/.test(cls);
   const rounded = /(^|\s)rounded/.test(cls);
-  if (!rounded) return;
+  if (!hasBorder && !rounded) return;
 
   const pads = [...cls.matchAll(/\b(p|px|py|pt|pb|pl|pr)-(\d+(?:\.\d+)?)\b/g)].map((m) => [m[1], NUM(m[2])]);
   const hasPadding = pads.length > 0;
@@ -89,5 +94,5 @@ for (const v of violations) {
   seen.add(key);
   console.error(`✗ ${v.file}:${v.line}  ${v.why}\n    ${v.cls.slice(0, 140)}`);
 }
-console.error(`\n共 ${seen.size} 处。修法：带边框容器的 floor 是 p-3 / px-3 / py-2；\n行内 code 与状态胶囊至少要 py-0.5（推荐 py-1）。`);
+console.error(`\n共 ${seen.size} 处。修法：带边框容器的 floor 是 p≥2 / px≥2 / py≥1.5（推荐 p-3 / px-3.5 / py-2.5）；\n行内 code 与状态胶囊至少要 py-0.5（推荐 py-1）。`);
 process.exit(1);

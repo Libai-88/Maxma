@@ -350,9 +350,9 @@ export default function PrivacyView() {
             </Button>
           </div>
           <div className="mt-2.5 flex flex-col gap-1">
-            <div className="border-l-2 border-border bg-panel px-2 py-1 text-xs leading-relaxed text-muted-foreground"><strong className="text-foreground">清除所有对话历史</strong>：删除全部会话（含临时与已固定）及其消息记录，但保留审计日志、配置、密钥。</div>
-            <div className="border-l-2 border-border bg-panel px-2 py-1 text-xs leading-relaxed text-muted-foreground"><strong className="text-foreground">清除审计日志</strong>：仅清空审计数据库（事件记录），不影响对话历史或密钥。</div>
-            <div className="border-l-2 border-border bg-panel px-2 py-1 text-xs leading-relaxed text-muted-foreground"><strong className="text-foreground">加密 API 密钥</strong>：将 <code className="rounded-sm bg-muted px-1.5 py-1.5 font-mono text-[11px]">providers.yaml</code> 中明文存储的 API Key 转为加密形式，重启后仍可正常使用。</div>
+            <div className="border-l-2 border-border bg-panel px-3.5 py-2.5 text-xs leading-relaxed text-muted-foreground"><strong className="text-foreground">清除所有对话历史</strong>：删除全部会话（含临时与已固定）及其消息记录，但保留审计日志、配置、密钥。</div>
+            <div className="border-l-2 border-border bg-panel px-3.5 py-2.5 text-xs leading-relaxed text-muted-foreground"><strong className="text-foreground">清除审计日志</strong>：仅清空审计数据库（事件记录），不影响对话历史或密钥。</div>
+            <div className="border-l-2 border-border bg-panel px-3.5 py-2.5 text-xs leading-relaxed text-muted-foreground"><strong className="text-foreground">加密 API 密钥</strong>：将 <code className="rounded-sm bg-muted px-1.5 py-1.5 font-mono text-[11px]">providers.yaml</code> 中明文存储的 API Key 转为加密形式，重启后仍可正常使用。</div>
           </div>
           {actionMessage && (
             <div className={'mt-2 rounded-md px-3 py-1.5 text-sm ' + (actionMessageType === 'ok' ? 'bg-primary/10 text-primary' : 'bg-destructive/10 text-destructive')}>
