@@ -415,7 +415,7 @@ describe("capabilities 聚合（阶段 2.5c）", () => {
     // 累积活跃会话——只验证为非负数字，不断言 0（与运行顺序无关）
     expect(typeof (body.system as Record<string, unknown>).session_count).toBe("number");
     expect((body.system as Record<string, unknown>).session_count as number).toBeGreaterThanOrEqual(0);
-    expect(body.memory).toEqual({ total: 0, categories: {}, avg_confidence: 0 });
+    expect(body.memory).toEqual({ total: 0, categories: {} });
 
     const cfg = body.config_sources as Record<string, unknown>;
     expect((cfg.sources as unknown[]).length).toBe(12);

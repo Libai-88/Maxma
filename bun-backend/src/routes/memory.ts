@@ -66,16 +66,10 @@ function displayTime(value: unknown): string {
   return String(value);
 }
 
-function confidence(value: unknown): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) return 1.0;
-  return Math.max(0, Math.min(1, value));
-}
-
 interface Fact {
   id: string;
   content: string;
   category: string;
-  confidence: number;
   updatedAt: string;
 }
 
@@ -95,7 +89,6 @@ function projectFacts(document: Record<string, unknown>): Fact[] {
       id: itemId,
       content,
       category: String(category || "other"),
-      confidence: confidence(item.confidence),
       updatedAt: displayTime(item.latest_update_time ?? item.updatedAt),
     });
   }
@@ -118,23 +111,16 @@ function writeDocument(filePath: string, document: Record<string, unknown>): voi
   }
 }
 
-/** 记忆统计（total/categories/avg_confidence）——capabilities 聚合复用。 */
-export function memoryStats(): { total: number; categories: Record<string, number>; avg_confidence: number } {
+/** 记忆统计（total/categories）——capabilities 聚合复用。
+ *  不再给 `avg_confidence`：写入方从不设置 confidence，恒为 1.0 的"平均置信度"
+ *  是凭空造出的可信度信号。 */
+export function memoryStats(): { total: number; categories: Record<string, number> } {
   const document = loadDocument(memoryFilePath());
-  if (document === null) return { total: 0, categories: {}, avg_confidence: 0 };
+  if (document === null) return { total: 0, categories: {} };
   const facts = projectFacts(document);
-  const total = facts.length;
   const categories: Record<string, number> = {};
-  let confSum = 0;
-  for (const f of facts) {
-    categories[f.category] = (categories[f.category] ?? 0) + 1;
-    confSum += f.confidence;
-  }
-  return {
-    total,
-    categories,
-    avg_confidence: total > 0 ? Math.round((confSum / total) * 100) / 100 : 0,
-  };
+  for (const f of facts) categories[f.category] = (categories[f.category] ?? 0) + 1;
+  return { total: facts.length, categories };
 }
 
 export function createMemoryRoutes(): Hono {
@@ -144,8 +130,6 @@ export function createMemoryRoutes(): Hono {
   app.get("/api/memory", (c) => {
     const q = c.req.query("q");
     const category = c.req.query("category");
-    const minConfRaw = c.req.query("min_confidence");
-    const minConfidence = minConfRaw !== undefined && minConfRaw !== "" ? Number(minConfRaw) : null;
 
     const document = loadDocument(filePath());
     if (document === null) return c.json([]);
@@ -156,9 +140,6 @@ export function createMemoryRoutes(): Hono {
     }
     if (category && category !== "all") {
       facts = facts.filter((f) => f.category === category);
-    }
-    if (minConfidence !== null && Number.isFinite(minConfidence)) {
-      facts = facts.filter((f) => f.confidence >= minConfidence);
     }
     return c.json(facts);
   });

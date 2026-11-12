@@ -34,32 +34,6 @@ function authHeader(): Record<string, string> {
 }
 
 describe("settings_panels（阶段 2.2g）", () => {
-  test("hindsight：GET 默认值 → PUT 合并写入 → 422 非法枚举", async () => {
-    const app = await makeApp();
-    const h = { "content-type": "application/json", ...authHeader() };
-
-    const init = (await (await app.request("/api/memory/hindsight-config", { headers: h })).json()) as Record<string, unknown>;
-    expect(init.enabled).toBe(false);
-    expect(init.retention_days).toBe(90);
-
-    const put = await app.request("/api/memory/hindsight-config", {
-      method: "PUT",
-      headers: h,
-      body: JSON.stringify({ enabled: true, retention_days: 180 }),
-    });
-    const merged = (await put.json()) as Record<string, unknown>;
-    expect(merged.enabled).toBe(true);
-    expect(merged.retention_days).toBe(180);
-    expect(merged.processing_mode).toBe("auto"); // 默认补全
-
-    const bad = await app.request("/api/memory/hindsight-config", {
-      method: "PUT",
-      headers: h,
-      body: JSON.stringify({ processing_mode: "never" }),
-    });
-    expect(bad.status).toBe(422);
-  });
-
   test("tts：legacy provider 规范化 + speed 范围 422", async () => {
     const app = await makeApp();
     const h = { "content-type": "application/json", ...authHeader() };

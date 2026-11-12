@@ -4,6 +4,7 @@ import {
   evolutionStats,
   learnFromUserMessage,
   listEvolutionRules,
+  previewEvolution,
   recordEvolutionFeedback,
   setEvolutionRuleStatus,
   type EvolutionFeedback,
@@ -26,6 +27,28 @@ export function createEvolutionRoutes(): Hono {
   });
 
   app.get("/api/evolution/stats", (c) => c.json(evolutionStats()));
+
+  /**
+   * 预览：这条消息会命中哪些偏好、注入的原文是什么（只读，不改 last_used_at）。
+   * 「成长是否可靠」这件事不该靠猜——页面上必须能逐字验证。
+   */
+  app.get("/api/evolution/preview", (c) => {
+    const q = c.req.query("q") ?? "";
+    const { matches, injection } = previewEvolution(q);
+    return c.json({
+      query: q,
+      injection,
+      matches: matches.map((m) => ({
+        id: m.rule.id,
+        rule_text: m.rule.rule_text,
+        scope: m.rule.scope,
+        confidence: m.rule.confidence,
+        score: Math.round(m.score * 100) / 100,
+        matched_keywords: m.matched_keywords,
+        scope_matched: m.scope_matched,
+      })),
+    });
+  });
 
   app.post("/api/evolution/learn", async (c) => {
     const body = bodyRecord(await c.req.json().catch(() => ({})));

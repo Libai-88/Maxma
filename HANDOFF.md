@@ -156,6 +156,26 @@
 
 **这下真的没有"半成品入口"了**：能力清单里剩下的每一项，要么有 pi 机制在跑，要么是纯前端实现（tts），要么是产品安全开关（`plugins.marketplace=false`）。
 
+## 2026-11-12 记忆与行为偏好：删假面，留可验证的真链路
+
+用户质疑两处：记忆页写着「Hindsight 已停用」，成长页「感觉玄幻」。逐条核对后
+一处是纯假面（删），一处是真的但不可验证（补证据链）。
+
+| 项 | 事实 | 处理 |
+| --- | --- | --- |
+| **Hindsight 记忆增强** | 只有 `panel_configs.json` 里一个键 + GET/PUT + 面板：`retention_days` / `importance_threshold` / `processing_mode` / `prompt_template` 四个字段**全仓零读取**（`remember_memory` 写入时不带 expires_at/confidence，检索也不看这些） | 整体删除：面板、`/api/memory/hindsight-config`、默认值与校验、`features.memory.hindsight`、`api.getHindsightConfig`、`HindsightConfig` 类型、`panel_configs` 键、`panels-2.2g` 用例 |
+| **`features.memory.episodic`** | 恒为 true，但没有任何情景库实现；`api/data/episodic_memory.json` / `semantic_memory.json` 是上一代遗留的 2 字节空文件（零读写方） | 删除能力字段与两个数据文件；`features.memory` 只剩 `{enabled:true}` |
+| **记忆「% 把握」/「平均置信度」** | 写入方从不设置 confidence，投影里恒为 1.0，UI 却渲染成「100% 把握」 | 投影、统计、筛选参数与 UI 里的置信度全部删除（`min_confidence` 查询参数一并去掉） |
+| **记忆空态文案** | 原文「与 AI 对话后，OMP 会自动记录有价值的事实」——机制上说错了：只有用户明确要求或 Agent 调 `remember_memory` 才会写 | 改为「只在你明确要求（记住……）或 Agent 调用 remember_memory 时写入，不会自行推断」 |
+| **行为偏好（原「成长」）** | 真实、确定性：只从 4 种句式提炼、字符串关键词命中、最多 3 条注入、反馈调置信度、低于 0.25 自动暂停；但页面没有可验证入口，且用 EvoCore/成长这类玄学措辞 | 页面重写：逐字列出 4 种句式与注入规则；新增 **预览注入**（`GET /api/evolution/preview`，逐字返回会追加的文本、只读不改状态）；规则卡展示关键词/证据/正负反馈/最近使用；导航「成长」→「偏好」，去掉 EVOCORE 品牌词，注入头改为「[Maxma 行为偏好：仅以下与本次请求相关的长期偏好适用]」 |
+| **`sub_agents.auto_approve/model/show_progress`** | 面板不显示、kernel 不消费（只用 enabled/max_concurrent/timeout_seconds） | 从默认值、类型、`panel_configs` 删除，避免文件里留「看似可配」的死键 |
+
+验证：
+- `/api/memory/hindsight-config` → **404**；`features.memory = {enabled:true}`；`/api/memory/stats` 无 `avg_confidence`
+- 预览实测：`帮我写个 Python 脚本` → 命中 1 条（`score 6.72`），注入文本与聊天实际追加内容同源（同一个 `renderEvolutionContext`）；`今天天气怎么样` → 0 命中、注入为空
+- 页面实测：记忆页无 Hindsight/置信度字样；偏好页有「它具体怎么工作」+ 预览框，预览按钮点完显示关键词与逐字注入文本，0 console error
+- 后端测试：`evolution-route.test.ts` 新增 preview 用例（命中/未命中/预览不改 `last_used_at`），其余 273 项全绿
+
 ## 状态
 
 - 仓库 `https://github.com/Libai-88/Maxma.git`，主分支 `main`；变更一律走分支 + PR squash 合入，

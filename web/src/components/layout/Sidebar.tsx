@@ -14,7 +14,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/', label: '对话', icon: MessageSquare },
       { to: '/providers', label: '模型', icon: Cpu },
       { to: '/memory', label: '记忆', icon: Brain, feature: 'memory' },
-      { to: '/evolution', label: '成长', icon: Sparkles, feature: 'memory' },
+      { to: '/evolution', label: '偏好', icon: Sparkles, feature: 'memory' },
     ],
   },
   {
