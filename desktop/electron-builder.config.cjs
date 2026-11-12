@@ -45,9 +45,14 @@ for (const name of externalPackages) {
   }
 }
 
+// Electron 运行时目录：本地预下载时直接用；CI 上 npm 包可能没有 dist
+// （二进制未随包缓存），交给 electron-builder 按 ELECTRON_CACHE 自己取。
+const localElectronDist = path.join(__dirname, "node_modules", "electron", "dist");
+const hasLocalElectronDist = fs.existsSync(localElectronDist);
+
 module.exports = {
   appId: "com.maxmahere.desktop",
-  electronDist: path.join(__dirname, "node_modules", "electron", "dist"),
+  ...(hasLocalElectronDist ? { electronDist: localElectronDist } : {}),
   productName: "MaxmaHere",
   directories: {
     output: outputDir,
