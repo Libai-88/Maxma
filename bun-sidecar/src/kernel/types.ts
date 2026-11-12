@@ -85,6 +85,17 @@ export interface MaxmaSessionOptions {
   mcpServers?: McpServerEntry[];
   /** 不落盘会话（官方 SessionManager.inMemory()），测试与临时会话用。 */
   inMemory?: boolean;
+  /**
+   * 从磁盘恢复会话（官方 `SessionManager.open(file)`）：进程重启后历史会话
+   * 仍可续聊。与 `inMemory` 互斥——`inMemory` 优先。缺省等价新建。
+   */
+  sessionFile?: string;
+  /**
+   * 新建会话时写入 pi 会话 header 的 id（`NewSessionOptions.id`）。
+   * Maxma 的 hub id 与 pi 文件 id 必须是同一个：否则重启后按 id
+   * 恢复会对不上（历史文件里的 id 是 pi 自己生成的）。
+   */
+  sessionId?: string;
   /** 官方 auth/model 运行时（kernel/model.ts resolvePiModel 产物）。 */
   modelRuntime?: ModelRuntime;
   /** 官方 Model 对象（registry 查找或自定义 provider 注册结果）。 */

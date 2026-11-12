@@ -11,6 +11,13 @@ const STORAGE_KEY = 'maxma_session_id'
 // 与 chat store 的 turns 缓存键前缀保持一致（用于孤儿缓存清理）。
 const TURNS_KEY_PREFIX = 'maxma_turns_'
 
+/** 会话时间字段既可能是毫秒数（活会话）也可能是 ISO（磁盘历史），统一成毫秒。 */
+function toMillis(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  const parsed = Date.parse(String(value ?? ''))
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
 /** @/lib/toast 在旧工程里的全局反馈通道：派发语义正确的 toast 事件。 */
 function showError(message: string): void {
   window.dispatchEvent(new CustomEvent('maxma:toast', {
@@ -65,8 +72,38 @@ export const useSessionStore = create<SessionState>()((set, get) => {
           // 在控制台留下红色报错噪音。refreshSessions 失败会抛错，由外层 catch 重试。
           await refreshSessions()
           const stored = safeGetItem(STORAGE_KEY)
-          if (stored && get().sessions.some(s => s.session_id === stored)) {
+          const storedEntry = stored ? get().sessions.find(s => s.session_id === stored) : undefined
+          if (stored && storedEntry) {
+            // 重启后的历史会话：先接回内核，WS 才有东西可连。
+            if (storedEntry.persisted) {
+              try {
+                await api.resumeSession(stored)
+                await refreshSessions()
+              } catch (err) {
+                log.warn('resume stored session failed, starting a new one:', err)
+                await _createSession()
+                await refreshSessions()
+                cleanupOrphanedCaches()
+                _initialized = true
+                return true
+              }
+            }
             set({ sessionId: stored })
+          } else if (get().sessions.length > 0) {
+            // 没有可用的本地记录（首次启动 / 桌面端每次随机端口导致 origin 变化
+            // → localStorage 失效）：默认续上最近一次对话，而不是新建空会话。
+            // 用户想要新会话点「新建」即可；这样重启至少看得见上次聊到哪。
+            const latest = get().sessions[0]!
+            if (latest.persisted) {
+              try {
+                await api.resumeSession(latest.session_id)
+                await refreshSessions()
+              } catch (err) {
+                log.warn('resume latest persisted session failed:', err)
+              }
+            }
+            set({ sessionId: latest.session_id })
+            safeSetItem(STORAGE_KEY, latest.session_id)
           } else {
             await _createSession()
             await refreshSessions()
@@ -103,8 +140,35 @@ export const useSessionStore = create<SessionState>()((set, get) => {
     if (_refreshInFlight) return _refreshInFlight
     _refreshInFlight = (async () => {
       try {
-        const res = await api.listSessions()
-        set({ sessions: res.sessions })
+        // 活会话来自内核内存表，历史会话来自磁盘——两边合并成一个列表。
+        // 历史请求失败不阻断：至少把本进程里活着的会话显示出来。
+        const [live, history] = await Promise.all([
+          api.listSessions(),
+          api.listSessionHistory().catch((err) => {
+            log.warn('listSessionHistory failed, showing live sessions only:', err)
+            return null
+          }),
+        ])
+        const liveIds = new Set(live.sessions.map((s) => s.session_id))
+        const persisted = (history?.sessions ?? [])
+          .filter((h) => !liveIds.has(h.session_id))
+          .map((h) => ({
+            session_id: h.session_id,
+            message_count: h.message_count,
+            created_at: h.created_at,
+            last_active: toMillis(h.updated_at),
+            preview: h.preview,
+            persisted: true,
+            active: false,
+            is_subagent: false,
+          } satisfies SessionInfo))
+          .sort((a, b) => (b.last_active ?? 0) - (a.last_active ?? 0))
+        set({
+          sessions: [
+            ...live.sessions.map((s) => ({ ...s, active: true })),
+            ...persisted,
+          ],
+        })
       } finally {
         _refreshInFlight = null
       }
@@ -135,6 +199,17 @@ export const useSessionStore = create<SessionState>()((set, get) => {
   }
 
   async function switchSession(id: string) {
+    const target = get().sessions.find(s => s.session_id === id)
+    if (target?.persisted) {
+      try {
+        await api.resumeSession(id)
+        await refreshSessions()
+      } catch (e) {
+        log.warn('resumeSession failed:', e)
+        showError('恢复历史会话失败: ' + (e instanceof Error ? e.message : String(e)))
+        return
+      }
+    }
     set({ sessionId: id })
     safeSetItem(STORAGE_KEY, id)
   }

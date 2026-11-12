@@ -12,7 +12,8 @@
 import { randomUUID } from "node:crypto";
 import type { AgentSession as PiAgentSession } from "@earendil-works/pi-coding-agent";
 
-import { createMaxmaSession } from "./pi-session";
+import { MAXMA_DEFAULT_PI_TOOLS, createMaxmaSession } from "./pi-session";
+import { powershellFallbackNote, probeBash, probePowerShell } from "./shell-health";
 import { createMaxmaApprovalGate, type MaxmaApprovalGate } from "./approval-gate";
 import { mapPiAgentEventToMaxma, type PiDoneGuard } from "./events";
 import { createRequestFingerprintEpoch, createRequestFingerprintSecret, type RequestTelemetry } from "./request-telemetry";
@@ -40,6 +41,7 @@ export type { PiPendingPlan } from "./plan";
 import type { MaxmaPermissionMode, MaxmaSessionOptions } from "./types";
 import { MAXMA_PERMISSION_MODES } from "./pi-contract";
 import { maxmaProjectRoot } from "./project-paths";
+import { findPersistedSession, normalizeSessionId } from "./session-catalog";
 
 /** 与 src/events.ts MAX_TOOL_CALLS_PER_TURN 同值——引擎隔离各自持镜像，切换期单源收敛。 */
 export const MAX_TOOL_CALLS_PER_TURN = 50;
@@ -229,7 +231,22 @@ export async function handlePiCreateSession(
 
   // session_id 契约：对齐 Python `uuid.uuid4().hex`（32 位小写 hex，无连字符）——
   // 前端 useChat.ts 以 /^[0-9a-f]{32}$/i 校验并据此建立 WS，带连字符会被拒绝。
-  const sessionId = randomUUID().replace(/-/g, "");
+  //
+  // 恢复（P1）：`resume_session_id` 指向磁盘上的历史会话，id 沿用原 id ——
+  // 前端 localStorage 的会话选择与 turns 缓存都按 id 索引，换 id 等于丢上下文。
+  // 已在 hub 里的会话直接回成功，重复恢复不产生第二个 record。
+  const requestedSessionId = normalizeSessionId(params?.session_id);
+  const resumeSessionId = normalizeSessionId(params?.resume_session_id);
+  if ((resumeSessionId ?? requestedSessionId) && deps.sessions.has((resumeSessionId ?? requestedSessionId)!)) {
+    io.send(id, { session_id: resumeSessionId ?? requestedSessionId, resumed: true });
+    return;
+  }
+  const resume = resumeSessionId ? findPersistedSession(resumeSessionId, cwd) : null;
+  if (resumeSessionId && !resume) {
+    io.sendError(id, `Persisted session not found: ${resumeSessionId}`);
+    return;
+  }
+  const sessionId = resumeSessionId ?? requestedSessionId ?? randomUUID().replace(/-/g, "");
   // record 先行占位（gate 经闭包读 record.permissionMode，set_auto_approve 运行时切换）
   const record = {
     engine: "pi",
@@ -310,6 +327,26 @@ export async function handlePiCreateSession(
       })
     : undefined;
 
+  // Windows 上 bash 可能因目录/ACL 直接起不来（P2）。探测一次：失败时把官方
+  // powershell 工具加进本会话，并把原因写进系统提示，模型不必撞墙后猜。
+  let effectiveTools = tools;
+  const fallbackPrompts: string[] = [];
+  if (process.platform === "win32") {
+    const bash = probeBash();
+    if (!bash.ok) {
+      const ps = probePowerShell();
+      console.warn(
+        `[shell] bash 无法启动（${bash.shell || "未找到"}）：${bash.detail.slice(0, 160)}；` +
+        `powershell ${ps.ok ? "可用 → 本会话启用回退" : `不可用（${ps.detail.slice(0, 120)}）`}`,
+      );
+      if (ps.ok) {
+        const base = tools ?? [...MAXMA_DEFAULT_PI_TOOLS];
+        effectiveTools = base.includes("powershell") ? base : [...base, "powershell"];
+        fallbackPrompts.push(powershellFallbackNote(bash));
+      }
+    }
+  }
+
   const options: MaxmaSessionOptions = {
     cwd,
     permissionMode,
@@ -336,9 +373,12 @@ export async function handlePiCreateSession(
     appendSystemPrompt: [
       ...(appendSystemPrompt !== undefined ? [appendSystemPrompt] : []),
       loadPersonaSystemPrompt(),
+      ...fallbackPrompts,
     ],
-    ...(tools !== undefined ? { tools } : {}),
+    ...(effectiveTools !== undefined ? { tools: effectiveTools } : {}),
     inMemory: params?.in_memory === true,
+    sessionId,
+    ...(resume ? { sessionFile: resume.file } : {}),
   };
 
   let session: PiAgentSession;
@@ -371,7 +411,7 @@ export async function handlePiCreateSession(
   record.unsubscribe = subscribePiSession(sessionId, record, io);
   deps.sessions.set(sessionId, record);
 
-  io.send(id, { session_id: sessionId });
+  io.send(id, { session_id: sessionId, resumed: resume !== null });
 }
 
 /**

@@ -1,6 +1,7 @@
 import type {
   CreateSessionResponse,
   ListSessionsResponse,
+  SessionHistoryResponse,
   HealthResponse,
   ListProvidersResponse,
   ListNewsResponse,
@@ -279,6 +280,17 @@ export const api = {
 
   listSessions: () =>
     request<ListSessionsResponse>('/sessions'),
+
+  /** 磁盘上的历史会话（重启后仍可见）；`active` 标记是否已在本进程 hub 中。 */
+  listSessionHistory: (limit: number = 50) =>
+    request<SessionHistoryResponse>(`/sessions/history?limit=${limit}`),
+
+  /** 把历史会话恢复到内核（id 不变，前端 turns 缓存/WS 直接接上）。 */
+  resumeSession: (id: string) =>
+    request<{ session_id: string, resumed: boolean, active: boolean }>(
+      `/sessions/${encodeURIComponent(id)}/resume`,
+      { method: 'POST' },
+    ),
 
   getMessages: (id: string, limit: number = 50) =>
     request<{
