@@ -440,7 +440,9 @@ export default function ChatView() {
                 sessionId={sessionId}
                 isStreaming={isStreaming}
                 connected={connected}
-                canSend={connected && models.length > 0}
+                // 模型列表可能暂时为空（provider 刷新/插件重载），但已选中的
+                // provider/model 仍可发送；真正缺模型由 ChatInput 给出明确提示。
+                canSend={connected}
                 models={models}
                 initialProviderId={safeGetItem(SELECTED_PROVIDER_KEY) || ''}
                 initialModelName={safeGetItem(SELECTED_MODEL_KEY) || ''}

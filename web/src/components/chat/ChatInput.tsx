@@ -220,9 +220,22 @@ export function ChatInput(props: ChatInputProps) {
       void runSlash(slashMatches[slashActive].name, '')
       return
     }
-    if (!canSend || !connected) return
+    if (!connected) {
+      setNotice('连接尚未就绪，消息没有发出——请稍候或点「重连」')
+      return
+    }
+    if (!canSend) {
+      setNotice('尚未选择模型，消息没有发出')
+      return
+    }
+    if (!providerId || !modelName) {
+      // 列表暂时为空时仍允许用上次选中的模型发送；两者都缺失才提示
+      setNotice('没有可用的模型，消息没有发出——请先在「模型」里添加渠道')
+      return
+    }
     const sent = onSend(value, refs, providerId || undefined, modelName || undefined)
     if (sent) { setText(''); setNotice(''); setRefs([]); setAtOpen(false) }
+    else setNotice('消息发送失败，请检查连接后重试')
   }
 
   const modelOptions = useMemo(
