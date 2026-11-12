@@ -179,6 +179,38 @@ describe("回合富化层（阶段 2.3b）", () => {
     expect(ms.payload.turn_id).toBe(done.payload.turn_id);
   }, 15000);
 
+  test("同一调用被反复审批 → 第三次触发 APPROVAL_LOOP 并停轮", async () => {
+    const { onKernelEvent, handleChatMessage } = await import("../src/routes/chat-ws");
+    const sid = "sess-approval-loop";
+    const { hub, ws, sent, rpcCalls } = makeHub(sid);
+    handleChatMessage(hub as never, ws as never, JSON.stringify({ type: "chat", payload: { message: "查询工作区" } }));
+    await Bun.sleep(10);
+
+    const approval = {
+      type: "ask_user",
+      payload: {
+        mode: "approval",
+        tool_name: "bash",
+        tool_call_id: "call-loop",
+        tool_input: { command: "pwd" },
+        question: "允许调用 bash？",
+        interaction_id: "ia-1",
+        options: ["Approve", "Deny"],
+      },
+    };
+    await onKernelEvent(hub as never, sid, approval);
+    await onKernelEvent(hub as never, sid, { ...approval, payload: { ...approval.payload, interaction_id: "ia-2" } });
+    await onKernelEvent(hub as never, sid, { ...approval, payload: { ...approval.payload, interaction_id: "ia-3" } });
+
+    // 前两次照常转发，第三次被判定为循环，改为 error + cancel
+    const forwarded = sent.filter((f) => f.type === "ask_user");
+    expect(forwarded).toHaveLength(2);
+    const err = sent.find((f) => f.type === "error") as { payload: { code: string; message: string } } | undefined;
+    expect(err?.payload.code).toBe("APPROVAL_LOOP");
+    expect(err?.payload.message).toContain("反复请求");
+    expect(rpcCalls.some((c) => c.method === "cancel")).toBe(true);
+  }, 15000);
+
   test("cancel 在途回合 → done{cancelled:true}", async () => {
     const { onKernelEvent, handleChatMessage } = await import("../src/routes/chat-ws");
     const sid = "sess-cancel";

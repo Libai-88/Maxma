@@ -135,6 +135,10 @@ interface TurnState {
   memoryActivity: Array<Record<string, unknown>>;
   /** cancel 标记（done 到达时按 cancelled 闭合）。 */
   cancelled: boolean;
+  /** 本轮已发出的审批请求数（上限保护，防止模型对同一次调用反复请求）。 */
+  approvalCount: number;
+  /** 同一 (工具名 + 参数) 的审批次数：模型被拒后原样重试会在这里被计数。 */
+  approvalSignatures: Map<string, number>;
 }
 
 const turnStates = new Map<string, TurnState>();
@@ -275,8 +279,15 @@ async function processKernelEvent(
       if (state && MEMORY_WRITE_TOOLS.has(toolName)) {
         state.memoryActivity.push({ kind: "start", tool_name: toolName, input: payload.input ?? "" });
       }
-      if (state) send("tool_start", { turn_id: state.turnId, tool_name: toolName, input: payload.input ?? "" });
-      else send("tool_start", payload);
+      const toolCallId = typeof payload.tool_call_id === "string" ? payload.tool_call_id : undefined;
+      if (state) {
+        send("tool_start", {
+          turn_id: state.turnId,
+          tool_name: toolName,
+          ...(toolCallId ? { tool_call_id: toolCallId } : {}),
+          input: payload.input ?? "",
+        });
+      } else send("tool_start", payload);
       return;
     }
 
@@ -306,6 +317,7 @@ async function processKernelEvent(
       send("tool_end", {
         ...(state ? { turn_id: state.turnId } : {}),
         tool_name: toolName,
+        ...(typeof payload.tool_call_id === "string" ? { tool_call_id: payload.tool_call_id } : {}),
         output: rawOutput,
         elapsed: payload.elapsed ?? 0,
         truncated,
@@ -354,6 +366,7 @@ async function processKernelEvent(
       send("tool_error", {
         ...(state ? { turn_id: state.turnId } : {}),
         tool_name: toolName,
+        ...(typeof payload.tool_call_id === "string" ? { tool_call_id: payload.tool_call_id } : {}),
         error: rawError,
       });
       return;
@@ -412,6 +425,42 @@ async function processKernelEvent(
         category,
         diagnostic: diagnosticContext,
       });
+      return;
+    }
+
+    case "ask_user": {
+      // 审批风暴保护：模型被拒后原样重试同一次调用，会让用户面对几十张一样的
+      // 审批卡（实测「查询工作区在哪里」可连发十几张）。这里按两个维度刹车：
+      //   1) 同一 (tool + input) 的审批 ≥3 次 → 判定为循环，直接停轮；
+      //   2) 单轮审批总数 >8 → 停轮。
+      // 普通询问（qa / *_choice）不计数，也不受影响。
+      if (payload.mode === "approval" && state) {
+        const signature = `${String(payload.tool_name ?? "")}:${JSON.stringify(payload.tool_input ?? {})}`;
+        const seen = (state.approvalSignatures.get(signature) ?? 0) + 1;
+        state.approvalSignatures.set(signature, seen);
+        state.approvalCount += 1;
+        if (seen >= 3 || state.approvalCount > 8) {
+          recordActivity("turn", "approval_loop", {
+            session_id: sessionId,
+            turn_id: state.turnId,
+            level: "error",
+            message: `审批循环：${String(payload.tool_name ?? "工具")} 重复请求 ${seen} 次`,
+          });
+          send("error", {
+            turn_id: state.turnId,
+            code: "APPROVAL_LOOP",
+            message: seen >= 3
+              ? `Agent 反复请求同一个工具调用（${String(payload.tool_name ?? "工具")}），已停止本轮。可切换权限模式后重试。`
+              : "本轮审批请求过多，已停止本轮。可切换权限模式后重试。",
+            trace_id: crypto.randomUUID().replace(/-/g, ""),
+            category: "agent",
+            diagnostic: { tool_name: payload.tool_name ?? null, repeats: seen, approval_count: state.approvalCount },
+          });
+          void hub.callRpc("cancel", { session_id: sessionId });
+          return;
+        }
+      }
+      send("ask_user", payload);
       return;
     }
 
@@ -1173,6 +1222,8 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
       providerId: String(payload.provider_id ?? ""),
       maxTokens: 256_000,
       startedAt: performance.now(),
+      approvalCount: 0,
+      approvalSignatures: new Map(),
       priceStatus: "unknown",
       cacheStatus: "unknown",
       modelUsageRequests: [],

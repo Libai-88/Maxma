@@ -292,17 +292,18 @@ describe("权限模式 REST 契约（AG-PERM-001 / PERM-LIVE-001）", () => {
 
   test("前端单源清单与内核清单逐字相等，且不许出现第二份副本", () => {
     // 前端不许 import kernel 源码（engine-boundary 纪律），只能是副本——
-    // 重写后只剩一份真值：types/session.ts 的联合类型 + PermissionModeControl.tsx
-    // 的 MODE_ORDER / MODE_LABELS。任何新增副本都会让下面的反向扫描判红。
+    // 重写后只剩一份真值：types/session.ts 的联合类型 +
+    // hooks/useSessionPermissionMode.ts 的 MODE_ORDER / MODE_LABELS（2026-11-12
+    // 把散在 PermissionModeControl 里的清单收进 hook，composer 与设置面板共用）。
     const sessionTypes = stripComments(read("web/src/types/session.ts"));
-    const controlSrc = stripComments(read("web/src/components/chat/PermissionModeControl.tsx"));
+    const controlSrc = stripComments(read("web/src/hooks/useSessionPermissionMode.ts"));
 
     const union = unionMembers(sessionTypes, "PermissionMode", "'");
     expect(union, "PermissionMode 联合类型与内核清单不一致").toEqual(singleSource);
 
     // 顺序即 UI 顺序（限制由强到弱）。
     const orderBlock = controlSrc.match(/MODE_ORDER:\s*PermissionMode\[\]\s*=\s*\[([^\]]*)\]/);
-    expect(orderBlock, "PermissionModeControl.tsx 里找不到 MODE_ORDER 清单").not.toBeNull();
+    expect(orderBlock, "useSessionPermissionMode.ts 里找不到 MODE_ORDER 清单").not.toBeNull();
     const order = [...orderBlock![1]!.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]!);
     expect(order, "MODE_ORDER 与内核清单不一致（顺序即 UI 顺序）").toEqual(singleSource);
 
@@ -317,7 +318,7 @@ describe("权限模式 REST 契约（AG-PERM-001 / PERM-LIVE-001）", () => {
     // 反第二份真值：src 下除这两个文件外，不许再有包含 ≥3 个档位字面量的数组/映射。
     const allowed = new Set([
       "web/src/types/session.ts",
-      "web/src/components/chat/PermissionModeControl.tsx",
+      "web/src/hooks/useSessionPermissionMode.ts",
     ]);
     const offenders: string[] = [];
     for (const rel of sourceFiles("web/src")) {

@@ -22,6 +22,8 @@ export interface MaxmaApprovalGate extends ApprovalGate {
   pendingCount(): number;
   /** 会话销毁时拒绝全部在途审批，防止 promise 泄漏挂住 tool_call 钩子。 */
   rejectAll(reason?: string): void;
+  /** 切到自动执行时放行全部在途审批（否则那些卡永远等不到答复）。 */
+  approveAllPending(): number;
 }
 
 export interface CreateMaxmaApprovalGateDeps {
@@ -97,6 +99,8 @@ export function createMaxmaApprovalGate(deps: CreateMaxmaApprovalGateDeps): Maxm
           type: "ask_user",
           payload: {
             tool_name: req.toolName,
+            // 与 tool_start 同一个 id：前端把审批卡挂到那一次调用上，而不是只按工具名。
+            tool_call_id: req.toolCallId,
             question: `允许调用 ${req.toolName}？`,
             mode: "approval",
             options: ["Approve", "Deny"],
@@ -129,6 +133,16 @@ export function createMaxmaApprovalGate(deps: CreateMaxmaApprovalGateDeps): Maxm
         entry.resolve({ approved: false, reason });
       }
       pending.clear();
+    },
+
+    approveAllPending() {
+      const count = pending.size;
+      for (const [, entry] of pending) {
+        clearTimeout(entry.timer);
+        entry.resolve({ approved: true });
+      }
+      pending.clear();
+      return count;
     },
   };
 

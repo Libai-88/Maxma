@@ -762,13 +762,15 @@ function flushToolUpdates() {
   _toolUpdateRafId = null
   touch()
   for (const key of _toolUpdatePending) {
-    const [sid, turnId, toolName] = key.split('\0') as [string, string, string]
+    // key = `${sid}\0${turnId}\0${callId ?? toolName}`：同一轮同名工具并行时按 callId 分开
+    const [sid, turnId, keyTail] = key.split('\0') as [string, string, string]
     const ch = getChatStore().channels.get(sid)
     if (!ch) { _toolUpdateBuffers.delete(key); continue }
     const turn = ch.turns.find(t => t.id === turnId) ?? ch.currentTurn
     if (!turn) { _toolUpdateBuffers.delete(key); continue }
     const tc = turn.events.find(
-      (e): e is ToolCall => e.kind === 'tool' && e.name === toolName && e.status === 'running',
+      (e): e is ToolCall => e.kind === 'tool' && e.status === 'running'
+        && (e.callId === keyTail || (e.callId === undefined && e.name === keyTail)),
     )
     if (tc) {
       const buf = _toolUpdateBuffers.get(key)
@@ -1439,6 +1441,21 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     ch.permissionMode = mode
     // 「自动执行」= auto 档；两态开关与四档选择器从此读同一份通道状态。
     ch.autoApprove = mode === 'auto'
+    // 切到自动执行时内核会放行在途审批；界面把还没答复的审批卡一并标成
+    // 「已批准」，否则用户会看到一张永远点不动的旧卡。
+    if (mode === 'auto') {
+      const markAll = (turnEvents: TurnEvent[]) => {
+        for (const e of turnEvents) {
+          if (e.kind !== 'tool') continue
+          const it = (e as ToolCall).interaction
+          if (it && it.mode === 'approval' && !it.responded) it.responded = 'yes'
+        }
+      }
+      for (const t of ch.turns) markAll(t.events)
+      if (ch.currentTurn) markAll(ch.currentTurn.events)
+      ch.isAwaitingUser = false
+      ch._awaitingToolName = null
+    }
     return
   }
 
@@ -1525,17 +1542,26 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       if (lastThink && !lastThink.becameAnswer) {
         lastThink.consumed = true
       }
-      // ApprovalToolNode 场景：ask_user(approval) 事件先到达时已创建占位 tool event，
-      // 此时 tool_start 到达应更新该 event 的 input（后端 tool_start 携带的 input 更准确），
-      // 而不是重复 push 一个新的 tool event。
-      const existingApprovalTool = findRunningTool(turn.events, event.payload.tool_name)
-      if (existingApprovalTool && existingApprovalTool.interaction?.mode === 'approval') {
-        log.debug('tool_start: 复用已存在的 approval 占位 tool event，更新 input')
-        existingApprovalTool.input = event.payload.input
+      // 归属：有 tool_call_id 时**只认 id**。
+      // 只按工具名找「最新的 running」会让同一轮里第二次 bash 的 tool_start
+      // 改写第一次的输入（实测：A 的审批卡上显示 B 的命令），
+      // 也会让 B 的审批覆盖 A 的 interaction——表现为审批卡反复出现、点了没用。
+      const startCallId = event.payload.tool_call_id
+      const byCallId = findToolCallByCallId(turn.events, startCallId)
+      const legacyApproval = startCallId
+        ? undefined
+        : findRunningTool(turn.events, event.payload.tool_name)
+      const reusable = byCallId
+        ?? (legacyApproval?.interaction?.mode === 'approval' ? legacyApproval : undefined)
+      if (reusable) {
+        if (startCallId) reusable.callId = startCallId
+        reusable.input = event.payload.input
+        reusable.status = 'running'
         break
       }
       turn.events.push({
         kind: 'tool',
+        ...(startCallId ? { callId: startCallId } : {}),
         name: event.payload.tool_name,
         input: event.payload.input,
         output: null,
@@ -1546,10 +1572,11 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     }
 
     case 'tool_end': {
-      const tc = findRunningTool(turn.events, event.payload.tool_name)
+      const endCallId = event.payload.tool_call_id
+      const tc = findToolCallByCallId(turn.events, endCallId) ?? findRunningTool(turn.events, event.payload.tool_name)
       if (tc) {
         // Flush any remaining buffered partial result before finalizing
-        const key = `${sid}\0${turn.id}\0${event.payload.tool_name}`
+        const key = toolBufferKey(sid, turn.id, event.payload.tool_name, endCallId ?? tc.callId)
         const buf = _toolUpdateBuffers.get(key)
         if (buf) {
           tc.partialResult = (tc.partialResult ?? '') + buf
@@ -1582,10 +1609,11 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     }
 
     case 'tool_error': {
-      const tc = findRunningTool(turn.events, event.payload.tool_name)
+      const errCallId = event.payload.tool_call_id
+      const tc = findToolCallByCallId(turn.events, errCallId) ?? findRunningTool(turn.events, event.payload.tool_name)
       if (tc) {
         // Flush buffered partial result before marking error
-        const key = `${sid}\0${turn.id}\0${event.payload.tool_name}`
+        const key = toolBufferKey(sid, turn.id, event.payload.tool_name, errCallId ?? tc.callId)
         const buf = _toolUpdateBuffers.get(key)
         if (buf) {
           tc.partialResult = (tc.partialResult ?? '') + buf
@@ -1600,10 +1628,11 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     }
 
     case 'tool_update': {
-      const tc = findRunningTool(turn.events, event.payload.tool_name)
+      const upCallId = event.payload.tool_call_id
+      const tc = findToolCallByCallId(turn.events, upCallId) ?? findRunningTool(turn.events, event.payload.tool_name)
       if (tc) {
         // Throttle via rAF: accumulate to non-reactive buffer, flush once per frame
-        const key = `${sid}\0${turn.id}\0${event.payload.tool_name}`
+        const key = toolBufferKey(sid, turn.id, event.payload.tool_name, upCallId ?? tc.callId)
         const buf = (_toolUpdateBuffers.get(key) ?? '') + event.payload.partial_result
         _toolUpdateBuffers.set(key, buf)
         if (!_toolUpdatePending.has(key)) {
@@ -1890,11 +1919,17 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
         interaction_id: ae.payload.interaction_id,
         session: sid,
       })
-      let runningTool = findRunningTool(turn.events, ae.payload.tool_name)
-      log.debug('findRunningTool result:', runningTool ? {
+      const approvalCallId = ae.payload.tool_call_id
+      let runningTool = approvalCallId
+        ? findToolCallByCallId(turn.events, approvalCallId)
+        : findRunningTool(turn.events, ae.payload.tool_name)
+      // 该事件已经有交互了 → 这次 ask_user 属于另一次同名调用，必须另建占位，
+      // 否则会把上一张未答复的审批卡覆盖掉（APPROVAL-LOSS-002）。
+      if (runningTool?.interaction) runningTool = undefined
+      log.debug('ask_user target:', runningTool ? {
         name: runningTool.name,
         status: runningTool.status,
-        has_interaction: !!runningTool.interaction,
+        call_id: runningTool.callId ?? null,
       } : 'NOT FOUND')
       // ApprovalToolNode 场景：ask_user 事件先于 tool_start 到达（工具尚未执行，等待审批），
       // 此时 runningTool 不存在，需先创建一个 running 状态的 tool event 承载 interaction 数据，
@@ -1912,13 +1947,16 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
         }
         turn.events.push({
           kind: 'tool',
+          ...(approvalCallId ? { callId: approvalCallId } : {}),
           name: ae.payload.tool_name,
           input: inputText,
           output: null,
           elapsed: null,
           status: 'running',
         })
-        runningTool = findRunningTool(turn.events, ae.payload.tool_name)
+        runningTool = approvalCallId
+          ? findToolCallByCallId(turn.events, approvalCallId)
+          : findRunningTool(turn.events, ae.payload.tool_name)
       }
       if (runningTool) {
         runningTool.interaction = {
@@ -2641,6 +2679,28 @@ function findRunningTool(events: TurnEvent[], toolName: string): ToolCall | unde
     }
   }
   return undefined
+}
+
+/**
+ * 按引擎的 toolCallId 找那次调用。
+ *
+ * 只按工具名匹配是上一版的真 bug：同一轮里模型连续调用两次 `bash` 时，
+ * 第二次的 ask_user 会覆盖第一次挂在同一个 tool event 上的 interaction，
+ * 第一张审批卡从此没有入口——引擎等它的答复，界面却只剩后来那张，看上去就是
+ * 「无限让我批准」。现在审批按 id 找到**自己那一次**调用，找不到就新建占位。
+ */
+function findToolCallByCallId(events: TurnEvent[], callId: string | undefined): ToolCall | undefined {
+  if (!callId) return undefined
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]
+    if (e.kind === 'tool' && e.callId === callId) return e as ToolCall
+  }
+  return undefined
+}
+
+/** 工具事件的更新缓冲键（同一轮同名工具并行时按 callId 分开，避免输出串台）。 */
+function toolBufferKey(sid: string, turnId: string, toolName: string, callId: string | undefined): string {
+  return `${sid}\0${turnId}\0${callId ?? toolName}`
 }
 
 /** 通过后端 turn_id 查找 turn（先在 currentTurn 中找，再在 turns 中找）。 */

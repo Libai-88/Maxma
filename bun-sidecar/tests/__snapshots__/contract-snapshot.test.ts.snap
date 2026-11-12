@@ -48,6 +48,7 @@ exports[`contract snapshot: pi event mapping (ws-events.md §3.1) 工具执行�
 {
   "payload": {
     "input": "{"file_path":"a"}",
+    "tool_call_id": "c1",
     "tool_name": "read",
   },
   "type": "tool_start",
@@ -58,6 +59,7 @@ exports[`contract snapshot: pi event mapping (ws-events.md §3.1) 工具执行�
 {
   "payload": {
     "partial_result": "50%",
+    "tool_call_id": "c1",
     "tool_name": "bash",
   },
   "type": "tool_update",
@@ -69,6 +71,7 @@ exports[`contract snapshot: pi event mapping (ws-events.md §3.1) 工具执行�
   "payload": {
     "elapsed": 0,
     "output": ""ok"",
+    "tool_call_id": "c1",
     "tool_name": "bash",
   },
   "type": "tool_end",
@@ -80,6 +83,7 @@ exports[`contract snapshot: pi event mapping (ws-events.md §3.1) 工具执行�
   "payload": {
     "elapsed": 0,
     "error": "{"e":"x"}",
+    "tool_call_id": "c2",
     "tool_name": "bash",
   },
   "type": "tool_error",
@@ -237,6 +241,7 @@ exports[`contract snapshot: ask_user payload (ws-events.md §3.2) destructive �
   ],
   "question": "允许调用 bash？",
   "risk_level": "medium",
+  "tool_call_id": "t-snap",
   "tool_input": {
     "command": "npm test",
   },

@@ -390,6 +390,19 @@ function writePermissionMode(
   mode: MaxmaPermissionMode,
 ): void {
   record.permissionMode = mode;
+  // 切到自动执行时，之前挂起的审批必须一起放行：模型在上一张卡被批准后
+  // 立刻可能发起下一次 tool_call（审批门按旧档位问了一次），如果只改档位，
+  // 这张卡永远等不到答复——用户看到「已切自动执行，却还卡着一张批准卡」。
+  if (mode === "auto") {
+    try {
+      const released = record.approvalGate.approveAllPending();
+      if (released > 0) {
+        console.log(`[approval] auto mode released ${released} pending approval(s)`);
+      }
+    } catch {
+      /* gate 可能未装配 */
+    }
+  }
   io.sendEvent(sessionId, {
     type: "permission_mode_updated",
     payload: { permission_mode: mode },

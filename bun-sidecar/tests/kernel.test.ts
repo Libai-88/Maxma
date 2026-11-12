@@ -68,7 +68,9 @@ describe("kernel: maxma-approval extension", () => {
     })) as { block?: boolean; reason?: string } | undefined;
 
     expect(result?.block).toBe(true);
-    expect(result?.reason).toBe("denied-by-test");
+    // 拒绝原因必须能约束模型：明确"不要重试同一调用"，而不是只回一句 was not approved
+    expect(result?.reason).toContain("不要重试同一调用");
+    expect(result?.reason).toContain("bash");
   });
 
   test("gate 放行时返回 undefined（官方放行约定）", async () => {
