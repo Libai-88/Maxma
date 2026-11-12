@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { callJetHub } from '@/api'
 import { toErrorMessage } from '@/utils/error'
-import { useJetHubStore } from '@/stores/jetHub'
+import { useJetHubStore, type JetHubAccount } from '@/stores/jetHub'
 import { disablingLeavesNoEnabledAccount } from '@/utils/jetHub/account-model-link.js'
 import {
   supportsAccountTest,
@@ -45,61 +45,7 @@ interface ProviderStatus {
   closed: boolean
 }
 
-interface AccountRow {
-  id: string
-  nickname?: string
-  enabled?: boolean
-  refreshable?: boolean
-  expiresAt?: number
-  provider?: string
-}
-
-interface ModelRow {
-  id: string
-  name?: string
-  disabled?: boolean
-  dead?: boolean
-}
-
-interface CreditsEntry {
-  nickname?: string
-  accountId?: string
-  balance?: { total?: number; packages?: unknown }
-  [key: string]: unknown
-}
-
-interface JetHubStoreApi {
-  routes: RouteItem[]
-  /** store 里是派生函数，不是数组——直接当数组用会 `is not iterable`。 */
-  openProviders: () => RouteItem[]
-  closedProviders: () => RouteItem[]
-  accountTotal: () => number
-  accountEnabled: () => number
-  accounts: AccountRow[]
-  models: ModelRow[]
-  modelsLoading: boolean
-  statusOf: (provider: string) => ProviderStatus
-  accountsOf: (provider: string) => AccountRow[]
-  credits: Record<string, { accounts?: CreditsEntry[]; windowDays?: number }>
-  permanentLocks: Record<string, { locked?: boolean; windowDays?: number }>
-  usageChannels: Array<{ provider?: string; channel?: string; totals?: { requests?: number; inputTokens?: number; outputTokens?: number } }>
-  clineQuota: any
-  clineQuotaLoading: boolean
-  clineRequestLog: Array<Record<string, unknown>>
-  clineRequestLogLoading: boolean
-  clineRequestLogAccount: string
-  onboarding: any
-  onboardingLoading: boolean
-  backupStatus: { accounts: number; withoutExpiry: number } | null
-  backupBusy: boolean
-  backupWarnings: string[]
-  backupResult: any
-  gateway: any
-  gatewayLoading: boolean
-  gatewayConfigEnabled: boolean
-  login: any
-  [key: string]: any
-}
+type AccountRow = JetHubAccount
 
 function fmtTs(ts: unknown): string {
   const n = typeof ts === 'number' ? ts : Number(ts)
@@ -171,14 +117,14 @@ function fmtExpiry(account: Record<string, unknown>): string {
 export default function JetHubView() {
   const { name } = useParams<{ name: string }>()
   const pluginName = name ?? ''
-  const store = useJetHubStore() as unknown as JetHubStoreApi
+  const store = useJetHubStore()
 
   const [selected, setSelected] = useState('')
   const [notice, setNotice] = useState('')
   const [showUsage, setShowUsage] = useState(false)
   const [showGateway, setShowGateway] = useState(false)
   const [showBackup, setShowBackup] = useState(false)
-  const [pendingImport, setPendingImport] = useState<unknown>(null)
+  const [pendingImport, setPendingImport] = useState<Record<string, unknown> | null>(null)
   const [claimSummary, setClaimSummary] = useState<Record<string, unknown> | null>(null)
 
   // OpenCode 专属
@@ -400,7 +346,7 @@ export default function JetHubView() {
     )
     if (!ok) return
     await guard('导入备份', async () => {
-      const result = (await store.importBackup(pendingImport)) as Record<string, unknown> | undefined
+      const result = await store.importBackup(pendingImport)
       setPendingImport(null)
       setNotice(
         result

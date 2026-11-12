@@ -48,7 +48,8 @@
 | `plan_proposed` / `plan_completed` | `{ plan_id, steps, plan_text }` / `{ summary: { total_steps } }` |
 | `goal_updated` | `{ goal, state }` |
 | `permission_mode_updated` | `{ permission_mode }` **不由 `events.ts` 映射**，而是 `bridge-pi.ts` 的 `writePermissionMode` 直发：内核每次真正写 `record.permissionMode`（四档 `set_permission_mode`／两态 `set_auto_approve` 两条路径）都广播一次；档位取值域 = `MAXMA_PERMISSION_MODES`，被拒的写入不发。前端「自动执行」开关与权限选择器都以这条为收敛点（PERM-ANNOUNCE-001） |
-| `llm_usage` | `{ provider, model, usage, … }` 用量记账；由 `entry_appended`（`type==="usage" && kind==="cache_warm"`）映射。**但它是服务端内部事件，不下发前端**：`chat-ws.ts:410-476` 每条路径都 `return`，只落成本台账与 metrics。列在此处是因为它确实经 `events.ts` 进入后端事件流；前端 `ServerEvent` 联合里**没有**它，也不该加。该映射依赖的条目形状登记在 `PI_DUCK_TYPED_ENTRY_SHAPES`：`kind` 改名会让用量**静默不进账** |
+| `llm_usage` | `{ kind: "model_request" \| "cache_warm", usage: { input, output, cacheRead, cacheWrite } \| null, provider, model, request_duration_ms, price_status, cache_status, turn_id? }`。**先落成本台账/metrics，再回执前端**（`forwardLlmUsage`）：只发 UI 需要的字段，`turn_id` 用来归属当前轮。`cache_status` 由 cacheRead/cacheWrite 现场派生（payload 常常只给两个数字）。两种来源：`bridge-pi.ts` 的 `message_end` 派生 `model_request`、`entry_appended`（`type==="usage" && kind==="cache_warm"`）派生 `cache_warm`。该映射依赖的条目形状登记在 `PI_DUCK_TYPED_ENTRY_SHAPES`：`kind` 改名会让用量**静默不进账** |
+| `answer`（回合终态补发） | `{ turn_id, content, model?, provider? }`。`finishTurn` 在 `done` 前补发一次完整回答；`model/provider` 是**实际**产出这句话的模型（fallback 池里未必是会话默认模型），客户端据此渲染用量脚注 |
 
 `context_compressing.reason` 取值域 = `MAXMA_COMPACTION_REASONS_WS`（`manual` / `threshold` / `overflow` 为引擎真实值；`idle` / `incomplete` 为上一代引擎遗留、当前引擎不产出，保留仅为兼容历史转录与前端既有分支）。`action` 在 pi 路径恒为 `context-full`。
 
@@ -126,6 +127,8 @@
   现有入口守卫 + `default` 告警 + `SERVER_EVENT_HANDLER_TYPES` 编译期登记表三重叠，
   由编译期登记锁死：往 `ServerEvent` 联合加类型而不加
   `case`，会直接编译不过/测试红。
-- 曾宣称 `llm_usage` 是"前端漏接"的事件——核实后它**从来不在**前端 `ServerEvent` 联合里，
-  且 `chat-ws.ts:410-476` 每条路径都 `return`，永不转发；§3.1 把它列在"服务端→客户端"表内
-  是本文档自己的措辞错误，已改注为服务端内部事件。
+- `llm_usage` 曾按"服务端内部事件"处理（每条路径都 `return`，只落库）。2026-11-12 复查推翻了
+  这个决定：它让对话里完全看不到"这一轮用了多少 token、走的哪个模型、缓存命中没有"——指标页
+  只有聚合，逐次请求的记录只能翻数据库。现在改为**落库后转发一条精简帧**，前端
+  `TurnUsage`（`useChat.ts` 的 `llm_usage` 分支）+ 回答下方脚注消费；`cache_warm` 单独计数，
+  不进命中率。落库与展示是两件事，记账不能替代回执。

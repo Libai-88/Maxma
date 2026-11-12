@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Sparkles } from 'lucide-react'
 import { useMetricsStore } from '@/stores/metrics'
+import { api } from '@/api'
+import { Button } from '@/components/ui/button'
+import { Spinner } from '@/components/ui/spinner'
+import type { LlmUsageCall } from '@/types'
 import { cn } from '@/lib/utils'
 
 interface BarItem {
@@ -71,14 +75,31 @@ export default function MetricsView() {
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [historyWindow, setHistoryWindow] = useState(3600)
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [recentCalls, setRecentCalls] = useState<LlmUsageCall[]>([])
+  const [callsLoading, setCallsLoading] = useState(false)
+  const [callsError, setCallsError] = useState('')
 
   async function loadHistoryWith(windowSeconds: number) {
     setHistoryLoading(true)
     try { await loadHistory(windowSeconds) } finally { setHistoryLoading(false) }
   }
 
+  const loadRecentCalls = async () => {
+    setCallsLoading(true)
+    setCallsError('')
+    try {
+      const res = await api.getLlmUsage({ windowSeconds: 30 * 24 * 60 * 60 })
+      setRecentCalls(res.recent_calls ?? [])
+    } catch (e) {
+      setCallsError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setCallsLoading(false)
+    }
+  }
+
   useEffect(() => {
     refresh()
+    void loadRecentCalls()
     setHistoryLoading(true)
     loadHistory(3600).finally(() => setHistoryLoading(false))
   }, [])
@@ -218,6 +239,57 @@ export default function MetricsView() {
               <div className="mt-3">
                 <div className="text-xs font-semibold text-muted-foreground mb-1.5">按模型统计轮次</div>
                 <BarChart items={modelItems} height={100} />
+              </div>
+            )}
+          </section>
+
+          <section className="mb-4 p-[22px] border border-border rounded-lg bg-card">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <h3 className="text-[15px] font-semibold text-foreground">最近模型请求</h3>
+              <Button variant="outline" size="sm" disabled={callsLoading} onClick={() => void loadRecentCalls()}>
+                {callsLoading ? <Spinner className="size-3" /> : null} 刷新
+              </Button>
+            </div>
+            <p className="text-[12.5px] text-muted-foreground leading-relaxed mb-3">
+              引擎（pi）逐次上报的用量账本，保留 30 天。预热调用单独成行，不参与命中率计算。
+            </p>
+            {callsError ? (
+              <p className="text-[12.5px] text-destructive">读取失败：{callsError}</p>
+            ) : recentCalls.length === 0 ? (
+              <div className="text-center py-4 text-[13px] text-muted-foreground">暂无请求记录</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-[12px] tabular-nums">
+                  <thead>
+                    <tr className="text-left text-[11px] text-muted-foreground">
+                      <th className="py-1 pr-3 font-medium">时间</th>
+                      <th className="py-1 pr-3 font-medium">模型</th>
+                      <th className="py-1 pr-3 font-medium text-right">输入</th>
+                      <th className="py-1 pr-3 font-medium text-right">输出</th>
+                      <th className="py-1 pr-3 font-medium text-right">缓存读</th>
+                      <th className="py-1 pr-3 font-medium text-right">耗时</th>
+                      <th className="py-1 font-medium">状态</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentCalls.slice(0, 30).map((c) => (
+                      <tr key={c.id} className="border-t border-border/60">
+                        <td className="py-1 pr-3 text-muted-foreground whitespace-nowrap">{new Date(c.occurred_at).toLocaleTimeString()}</td>
+                        <td className="py-1 pr-3 truncate max-w-[22ch]" title={`${c.provider ?? '—'} / ${c.model ?? '—'}`}>{c.model ?? '—'}</td>
+                        <td className="py-1 pr-3 text-right">{formatTokens(c.input_tokens ?? 0)}</td>
+                        <td className="py-1 pr-3 text-right">{formatTokens(c.output_tokens ?? 0)}</td>
+                        <td className="py-1 pr-3 text-right">{c.cache_read_tokens === null ? '—' : formatTokens(c.cache_read_tokens)}</td>
+                        <td className="py-1 pr-3 text-right">{c.duration_ms === null ? '—' : c.duration_ms < 1000 ? `${c.duration_ms}ms` : `${(c.duration_ms / 1000).toFixed(1)}s`}</td>
+                        <td className="py-1 text-muted-foreground">
+                          {c.kind === 'cache_warm' ? '缓存预热' : c.usage_status === 'reported' ? '正常' : c.usage_status === 'partial' ? '用量不全' : '缺用量'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {recentCalls.length > 30 && (
+                  <p className="mt-2 text-[11px] text-muted-foreground">仅显示最近 30 条（共 {recentCalls.length} 条）</p>
+                )}
               </div>
             )}
           </section>

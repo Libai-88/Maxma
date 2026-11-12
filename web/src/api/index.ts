@@ -24,6 +24,7 @@ import type {
   OAuthStatusResponse,
   MetricsSnapshot,
   MetricsHistoryResponse,
+  LlmUsageResponse,
   AuditLogStats,
   AuditLogListResponse,
   ActivityRecentResponse,
@@ -665,6 +666,22 @@ export const api = {
 
   getMetricsHistory: (windowSeconds: number = 3600) =>
     request<MetricsHistoryResponse>(`/metrics/history?window=${windowSeconds}`),
+
+  /**
+   * 逐次模型请求账本（pi 的 llm_usage_calls 表）。
+   *
+   * 后端 `/api/metrics/llm-usage` 一直在跑（summary + recent_calls），但此前
+   * 没有任何前端消费者——聚合数字能在指标页看到，单次请求的模型/耗时/缓存
+   * 状态却只能靠猜。这里接上，供「最近请求」表使用。
+   */
+  getLlmUsage: (params?: { windowSeconds?: number; provider?: string; model?: string }) => {
+    const qs = new URLSearchParams()
+    if (params?.windowSeconds) qs.set('window', String(params.windowSeconds))
+    if (params?.provider) qs.set('provider', params.provider)
+    if (params?.model) qs.set('model', params.model)
+    const q = qs.toString()
+    return request<LlmUsageResponse>(`/metrics/llm-usage${q ? `?${q}` : ''}`)
+  },
 
   // ── 诊断与错误日志导出 ──
 

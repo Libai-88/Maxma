@@ -298,6 +298,24 @@ describe("回合富化层（阶段 2.3b）", () => {
     expect(after.total_calls - before.total_calls).toBe(3);
     expect(after.missing_usage_calls - before.missing_usage_calls).toBe(1);
     expect(after.cache_warm_calls - before.cache_warm_calls).toBe(1);
+
+    // 落库之外必须**回执**：llm_usage 此前只记账就 return，客户端永远看不到
+    // 每轮 token/模型/缓存，缓存预热更是完全不可见（UI-EVIDENCE-001）。
+    const forwarded = sent.filter((f) => f.type === "llm_usage") as Array<{ payload: Record<string, unknown> }>;
+    expect(forwarded.length).toBeGreaterThanOrEqual(1);
+    const warmFrame = forwarded.find((f) => f.payload.kind === "cache_warm");
+    expect(warmFrame).toBeDefined();
+    expect(warmFrame!.payload).toMatchObject({ model: "gpt-test", cache_status: "observed" });
+    expect((warmFrame!.payload.usage as Record<string, unknown>).cacheRead).toBe(70);
+
+    // 终态 answer 必须带实际模型：fallback 池里产出这句话的未必是会话默认模型，
+    // 客户端要据此显示用量脚注的归属。
+    const finalAnswers = sent.filter((f) => f.type === "answer") as Array<{ payload: Record<string, unknown> }>;
+    // 终态 answer 的模型归属只有在会话确实选了模型时才有值（本 fixture 没选），
+    // 这里只锁"回执带上轮次归属"这一必要条件——模型字段由浏览器实测覆盖。
+    expect(finalAnswers.every((f) => typeof f.payload.turn_id === "string")).toBe(true);
+    // 逐次模型请求的转发帧必须带 turn_id（前端据此挂到当前轮，而不是上一轮）
+    expect(forwarded.filter((f) => f.payload.kind === "model_request").every((f) => typeof f.payload.turn_id === "string")).toBe(true);
   }, 15000);
   test("WS 限流：超过 capacity 后 chat → error{RATE_LIMITED}", async () => {
     const { onKernelEvent, handleChatMessage } = await import("../src/routes/chat-ws");

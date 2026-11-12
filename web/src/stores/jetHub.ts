@@ -12,6 +12,7 @@
  */
 
 import { create } from 'zustand'
+import type { StateCreator } from 'zustand'
 
 import { callJetHub } from '@/api'
 import { request } from '@/api'
@@ -268,7 +269,22 @@ export interface JetHubData {
   providerOrder: string[]
 }
 
-export const useJetHubStore = create<JetHubData>()((set, get) => {
+/**
+ * 动作面的类型由初始izer 的返回值**自动**推导，而不是各视图各写一份声明。
+ *
+ * 事故背景：`JetHubView` 自己声明了一个 28 成员的 `JetHubStoreApi`，用
+ * `as unknown as` 把 store 塞进去，而它实际消费 74 个成员；其中
+ * `openProviders/closedProviders/accountTotal/accountEnabled` 在 store 里是
+ * **派生函数**，视图却当数组用 → 一进 `/plugins/<name>/jet-hub` 就
+ * `is not iterable`（tsc 因为 cast 完全没看见）。
+ *
+ * 现在 store 的类型就是它的真实形状，视图直接 `useJetHubStore()`：
+ * 少一个成员、把函数当数组，`tsc` 当场报错。
+ */
+type JetHubSet = (partial: Partial<JetHubData> | ((state: JetHubData) => Partial<JetHubData>)) => void
+type JetHubGet = () => JetHubData
+
+const jetHubInitializer = (set: JetHubSet, get: JetHubGet) => {
   const initialData = {
     pluginName: 'codearts-auth',
     routes: [] as JetHubProviderRoute[],
@@ -1302,4 +1318,13 @@ export const useJetHubStore = create<JetHubData>()((set, get) => {
     dismissLogin,
     whenLoginSettled,
   }
-})
+}
+
+/** store 的完整形状（数据 + 动作），由初始化函数推导。 */
+export type JetHubStore = JetHubData & ReturnType<typeof jetHubInitializer>
+
+export const useJetHubStore = create<JetHubStore>()(
+  // 自引用（Store 类型依赖 initializer 的返回值）无法用常规泛型表达，这里是唯一
+  // 的收口点；视图侧不再有任何 cast，成员的增删/类型错位由 tsc 直接报。
+  jetHubInitializer as unknown as StateCreator<JetHubStore>,
+)

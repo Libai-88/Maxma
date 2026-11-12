@@ -1,4 +1,5 @@
-import type { ClientMessage, TaskBriefMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, CompactionReason,  AskUserEvent, ArtifactEvent, PlanProposedEvent, PlanStepStartEvent, PlanStepEndEvent, PlanStepErrorEvent, PlanCompletedEvent, DeferredSubagentSubmittedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent } from '@/types'
+import type { ClientMessage, TaskBriefMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, CompactionReason,  AskUserEvent, ArtifactEvent, PlanProposedEvent, PlanStepStartEvent, PlanStepEndEvent, PlanStepErrorEvent, PlanCompletedEvent, DeferredSubagentSubmittedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent, TurnUsage,
+} from '@/types'
 import type { ThinkPathId } from '@/utils/thinkPath'
 import { normalizeContextUsage, useChatStore, TURNS_KEY_PREFIX } from '@/stores/chat'
 import { useEffect, useRef } from 'react'
@@ -88,6 +89,9 @@ export const SERVER_EVENT_HANDLER_TYPES: Record<ServerEvent['type'], true> = {
   ask_user: true,
   pong: true,
   // 上下文管理与用量
+  // llm_usage 是 pi 的权威用量（model_request / cache_warm）；此前它既不在联合
+  // 也不在登记表，入口守卫 warn 一句就丢，对话里永远看不到每轮 token/模型。
+  llm_usage: true,
   context_usage: true,
   context_compressing: true,
   context_compressed: true,
@@ -1067,6 +1071,45 @@ function syncContextUsage(sid: string, ch: SessionChannel, payload: unknown) {
   }
 }
 
+/**
+ * 用 done 的 `context_usage` 补全本轮用量。
+ *
+ * `context_usage` 的后端聚合字段是本轮的权威汇总（usage_status /
+ * model_request_count / input_tokens / cache_* / latency_ms），llm_usage
+ * 是逐次请求的实时事件。两者同时存在时保留逐次累加值（它更细），
+ * 只补空字段，避免把一轮内多次请求算成两倍。
+ */
+function applyTurnUsageFromContextUsage(turn: ChatTurn, raw: unknown): void {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return
+  const cu = raw as Record<string, unknown>
+  const num = (v: unknown): number | null =>
+    typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null
+  const hasAggregate = cu.model_request_count !== undefined
+    || cu.input_tokens !== undefined
+    || cu.latency_ms !== undefined
+  if (!hasAggregate) return
+  const prev = turn.usage
+  const cacheObserved = num(cu.cache_read_tokens) !== null || num(cu.cache_write_tokens) !== null
+  turn.usage = {
+    provider: prev?.provider ?? null,
+    model: prev?.model ?? (typeof cu.model_name === 'string' ? cu.model_name : null),
+    inputTokens: prev?.inputTokens ?? num(cu.input_tokens),
+    outputTokens: prev?.outputTokens ?? num(cu.output_tokens),
+    cacheReadTokens: prev?.cacheReadTokens ?? num(cu.cache_read_tokens),
+    cacheWriteTokens: prev?.cacheWriteTokens ?? num(cu.cache_write_tokens),
+    durationMs: prev?.durationMs ?? num(cu.latency_ms),
+    cacheStatus: prev?.cacheStatus ?? (cacheObserved ? 'observed' : cu.cache_hit_rate === null ? 'unknown' : null),
+    priceStatus: prev?.priceStatus ?? null,
+    requests: prev?.requests || num(cu.model_request_count) || 0,
+    warmCalls: prev?.warmCalls ?? 0,
+  }
+  // 一条都没有的轮次（空回复/纯报错）不要留一个空壳
+  if (
+    turn.usage.inputTokens === null && turn.usage.outputTokens === null
+    && turn.usage.durationMs === null && !turn.usage.model
+  ) turn.usage = undefined
+}
+
 export function handleEventForChannel(sid: string, event: ServerEvent) {
   touch()
   // WS-EVENT-SINK-001：未知入站类型必须在**任何**状态判断之前宣告。
@@ -1104,6 +1147,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     && eventTurnId === ch._lastDoneTurnId
     && !event.type.startsWith('memory_')
     && event.type !== 'task_review_update'
+    && event.type !== 'llm_usage'
   ) {
     log.debug(`丢弃已终结轮次 ${eventTurnId} 的迟到事件: ${event.type}`)
     return
@@ -1123,6 +1167,56 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
   // context_usage 可以在无活跃轮次时接收（如连接初始化）
   if (event.type === 'context_usage') {
     syncContextUsage(sid, ch, event.payload)
+    return
+  }
+
+  // llm_usage：pi 的权威用量。可能在 done 之后到达，所以挂在 currentTurn 守卫之前。
+  if (event.type === 'llm_usage') {
+    const target = ch.currentTurn ?? ch.turns[ch.turns.length - 1]
+    if (target) {
+      const p = event.payload
+      const num = (v: unknown): number | null =>
+        typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null
+      const add = (a: number | null, b: number | null): number | null =>
+        a === null && b === null ? null : (a ?? 0) + (b ?? 0)
+      const prev: TurnUsage = target.usage ?? {
+        provider: null, model: null,
+        inputTokens: null, outputTokens: null,
+        cacheReadTokens: null, cacheWriteTokens: null,
+        durationMs: null, cacheStatus: null, priceStatus: null,
+        requests: 0, warmCalls: 0,
+      }
+      const cacheStatus = p.cache_status === 'observed' || p.cache_status === 'unknown'
+        ? p.cache_status
+        : prev.cacheStatus
+      const priceStatus = p.price_status === 'catalog_estimate' || p.price_status === 'unknown'
+        ? p.price_status
+        : prev.priceStatus
+      const usage = p.usage ?? null
+      if (p.kind === 'cache_warm') {
+        // 预热不进对话上下文，也不参与命中率；只累计次数与它真实读取的缓存 token。
+        target.usage = {
+          ...prev,
+          warmCalls: prev.warmCalls + 1,
+          cacheReadTokens: add(prev.cacheReadTokens, num(usage?.cacheRead)),
+          cacheStatus,
+        }
+      } else {
+        target.usage = {
+          ...prev,
+          requests: prev.requests + 1,
+          provider: p.provider ?? prev.provider,
+          model: p.model ?? prev.model,
+          inputTokens: add(prev.inputTokens, num(usage?.input)),
+          outputTokens: add(prev.outputTokens, num(usage?.output)),
+          cacheReadTokens: add(prev.cacheReadTokens, num(usage?.cacheRead)),
+          cacheWriteTokens: add(prev.cacheWriteTokens, num(usage?.cacheWrite)),
+          durationMs: num(p.request_duration_ms) ?? prev.durationMs,
+          cacheStatus,
+          priceStatus,
+        }
+      }
+    }
     return
   }
 
@@ -1528,6 +1622,26 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
         lastThink.done = true
       }
       turn.finalAnswer = event.payload.content
+      // 兜底：answer 自带权威 usage/provider/model（bridge 一直发，类型此前丢了）。
+      // 有 llm_usage 的轮次已由上面累加，这里只在缺失时补一次。
+      if (!turn.usage && (event.payload.usage || event.payload.model)) {
+        const u = event.payload.usage ?? null
+        const n = (v: unknown): number | null =>
+          typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null
+        turn.usage = {
+          provider: event.payload.provider ?? null,
+          model: event.payload.model ?? null,
+          inputTokens: n(u?.input),
+          outputTokens: n(u?.output),
+          cacheReadTokens: n(u?.cacheRead),
+          cacheWriteTokens: n(u?.cacheWrite),
+          durationMs: n(event.payload.request_duration_ms),
+          cacheStatus: n(u?.cacheRead) !== null ? 'observed' : null,
+          priceStatus: null,
+          requests: 1,
+          warmCalls: 0,
+        }
+      }
       // Emotion → sticker matching
       if (event.payload?.content) {
         const emotion = detectEmotion(event.payload.content)
@@ -1615,6 +1729,11 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
           ch.error = '模型未返回内容'
           ch.errorCategory = 'system_error'
         }
+        // 每轮用量收口：done.payload.context_usage 带的是**本轮**聚合
+        // （model_request_count / input/output/cache / latency_ms / model_name），
+        // 一直只喂给了上下文徽标。这里补进 turn.usage，让回答下方能显示
+        // "哪个模型、用了多少 token、多久"；若 llm_usage 已逐次累加则不覆盖。
+        applyTurnUsageFromContextUsage(turnToFinalize, donePayload.context_usage)
         log.debug(`会话 ${sid}: becameAnswer=${trackBecame}, events=${turnToFinalize.events.length}, finalAnswer=${turnToFinalize.finalAnswer?.slice(0, 50) ?? 'null'}`)
         ch.turns.push(turnToFinalize)
         // GAP-A3-001：任务完成系统通知（仅后台窗口时弹出）
