@@ -126,8 +126,7 @@ function interfaceFields(text: string, name: string): Map<string, string> | null
 
 /**
  * 剥掉块注释与整行 `//` 注释——**只在注释里提到的名字不算声明**。
- * 本仓的门禁测试都是这个写法（web/tests/agentTasksGating.spec.ts、
- * jet-hub-capability-gating.spec.ts）：上一版 `ws-events.md` 把 `manual` 写进
+ * 本仓的门禁测试都是这个写法：上一版 `ws-events.md` 把 `manual` 写进
  * 说明文字里，文档看着对、类型照样漏，判据必须只看真实代码。
  */
 function stripComments(src: string): string {

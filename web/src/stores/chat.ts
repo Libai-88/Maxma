@@ -530,7 +530,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   },
 }))
 
-/** 模块级辅助：取当前 store 快照（移植自 Pinia 的 getChatStore()）。 */
+/** 模块级辅助：取当前 zustand store 快照。 */
 export function getChatStore() { return useChatStore.getState() }
 
 /** 触发一次 React 重渲染（等价于 useChatStore.getState().bump()）。 */

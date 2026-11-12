@@ -52,7 +52,7 @@ function maxVersion(dbPath: string): number | null {
   }
 }
 
-/** 逐文件剥注释后搜关键字：注释里提一句不能算数（对齐 web/tests 的同类断言风格）。 */
+/** 逐文件剥注释后搜关键字：注释里提一句不能算数。 */
 function sourceFilesMentioning(root: string, needle: string): string[] {
   const hits: string[] = [];
   function collect(dir: string): void {

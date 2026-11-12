@@ -31,7 +31,7 @@ export type PluginCategory =
   | "utility"
   | "other";
 
-/** 界面可渲染的 JSON Schema 子集（`PluginConfigPanel.vue` 只认这几种）。 */
+/** 界面可渲染的 JSON Schema 子集（前端插件配置面板只认这几种）。 */
 export interface PluginConfigPropertySpec {
   type: "string" | "number" | "boolean" | "array" | "object";
   title?: string;

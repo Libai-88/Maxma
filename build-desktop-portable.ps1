@@ -60,7 +60,7 @@ if (-not (Test-Path (Join-Path $ElectronPackage "node_modules\electron\package.j
     } finally { Pop-Location }
 }
 
-Write-Host "[2/5] 构建 Vue 前端..."
+Write-Host "[2/5] 构建前端（React + Vite）..."
 if (-not (Test-Path (Join-Path $ProjectRoot "web\node_modules"))) {
     if ($SkipDependencyInstall) { throw "web/node_modules 不存在，已停止构建。" }
     Push-Location (Join-Path $ProjectRoot "web")

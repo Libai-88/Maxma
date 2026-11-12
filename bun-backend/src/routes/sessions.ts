@@ -50,7 +50,7 @@ const ROLE_MAP: Record<string, string> = { user: "human", assistant: "ai" };
  * 以前这里另抄一份、`bridge-pi.ts` 再抄一份（模块私有未导出，REST 面拿不到），
  * 四处副本靠对账测试兜着；现在 kernel 校验、REST 返回、类型三者同源，
  * "REST 说可用而 kernel 判非法"这类漂移在源码层就不可能出现。
- * 顺序即 UI 展示顺序（限制由强到弱），前端 `PermissionModeControl.vue` 按它渲染。
+ * 顺序即 UI 展示顺序（限制由强到弱），前端 `web/src/components/chat/PermissionModeControl.tsx` 按它渲染。
  *
  * GET/PUT 共用的响应形状。字段名即前后端契约：`available_permission_modes`
  * 非空 = 该会话可用权限模式，前端据此决定控件是否可交互、并逐项渲染选项。

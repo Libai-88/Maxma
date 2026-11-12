@@ -97,27 +97,28 @@ web -> Bun 后端 /ws/chat/{session_id} -> kernel in-process -> pi AgentSession
 ## 测试基线
 
 > 数字随每次加测试变化，**权威是跑一遍的结果**（或直接 `bash scripts/verify-all-gates.sh`，判定按退出码）。
-> 下列为 2026-11-02 实测。
+> 下列为 2026-11-12 实测（React 重写后）。
 
 ```text
-引擎  cd bun-sidecar && bun test            122 pass / 0 fail（13 文件）
+引擎  cd bun-sidecar && bun test            128 pass / 0 fail（14 文件）
 引擎  cd bun-sidecar && bun x tsc --noEmit  0 error（CI 硬门槛）
-后端  cd bun-backend && bun test            253 pass / 0 fail（37 文件）
+后端  cd bun-backend && bun test            280 pass / 0 fail（40 文件）
 类型  node scripts/check-type-budget.mjs    sidecar 0 / backend 0（只准减）
-前端  cd web && npx vitest run              572 pass / 0 fail（64 文件）
-前端  cd web && npx vue-tsc --noEmit        0 error
-前端  cd web && npm run lint                0 error / 20 warning
-前端  cd web && npm run lint:colors         160 个 Vue 文件 0 违规
+前端  cd web && npx tsc --noEmit            0 error
+前端  cd web && npm run build               PASS（dist: index/quick-chat/splash + assets）
+前端  cd web && npm run lint:colors         0 违规（80 个 TSX）
 端到端 bash scripts/smoke-e2e-roundtrip.mjs 退出码 0（需后端在跑）
 ```
 
-阶段二 Python→Bun 直译遗留的 86 个后端类型错误已全部清零，两侧基线均为 0 并作为硬门槛进 CI。
+前端组件测试套件（旧 Vue 572 例）随组件重建退役；组件级断言改由
+`bun-sidecar` / `bun-backend` 的跨侧契约测试与浏览器实测承担。
+阶段二 Python→Bun 直译遗留的 86 个后端类型错误已清零，两侧基线均为 0 并作为硬门槛进 CI。
 
 ## 交付前闸门
 
 ```text
 bash scripts/verify-all-gates.sh
-  # sidecar bun test + tsc / backend bun test / web vitest + vue-tsc + eslint + 硬编码色
+  # sidecar bun test + tsc / backend bun test / web tsc + vite build + 语义色守卫
   # 类型债棘轮 / 后端 bundle
 ```
 
@@ -197,7 +198,7 @@ node scripts/check-type-budget.mjs --write    # 类型债下降后下调基线�
 
 ## 遗留问题（未修，接手时别当成可用功能）
 
-1. `PluginListView.vue` 的 `plugins.marketplace` 语义：当前 `false` = 「只启用随包插件」，输入框也只接受随包标识。真要开网络安装，前置是安全评审（下载校验、体积/条目上限、路径穿越、原子落盘），见 `routes/plugins.ts` 的 501 分支。
+1. `web/src/views/PluginListView.tsx` 的 `plugins.marketplace` 语义：当前 `false` = 「只启用随包插件」，输入框也只接受随包标识。真要开网络安装，前置是安全评审（下载校验、体积/条目上限、路径穿越、原子落盘），见 `routes/plugins.ts` 的 501 分支。
 2. **`config/personas/` 里的 `AGENTS.md` 与 `MAXMA.md` 随两种便携包分发，但没有任何代码读取它们。** `listPersonas()` 只扫 `SOUL*.md`（`persona.ts:78`），`persona-prompt.ts` 只读 SOUL/USER，pi 的项目上下文读的是 `<cwd>/AGENTS.md` 而非包内这个路径。于是 `AGENTS.md` 的「特殊工具说明」整节是上一代引擎的工具词汇且从不被校验：`ask_user_qa`/`ask_user_single_choice`/`ask_user_multi_choice`、`task_tracker`、`call_sub_agent`、`file_read`、`run_python`、`git_status`、`browser_browse`、`tavily_search` 全都不存在（真实面是 `read/bash/edit/write/grep/find/ls` + 6 个自定义 + `submit_plan`）。本轮只修了它确实错误的 Skills 节；要么按真实工具面重写这两份，要么停止分发（与 `.omp/skills` 同一处置）。
 3. `capabilities.ts` 的配置源清单除已删的 `~/.omp` 外，其余行（`~/.claude`、`~/.cursor`、`.omprc`、`.omprc.json`、`.mcp.json`、`.github`、项目 `AGENTS.md`…）**未逐条核实是否真被 Maxma/pi 读取**，而能力页把它们连同"活跃 N/M"计数展示给用户。要么核实并只留真实读取方，要么把这整张表降级为"可能存在的目录"措辞。另：删掉 `~/.omp` 行后 `priority` 号从 9 跳到 11（仅展示用，未影响判定）。
 4. **`update_auto_approve` 的失败被吞掉。** kernel 侧没有该会话记录时，`callKernelRpc` 解析成 `{ok:false}`，而 `chat-ws.ts:902-905` 以 `void ….catch(() => {})` 丢弃 → 不会有任何回执，「自动执行」开关停在它的乐观值上（权限选择器此时正确地保持内核最后一次宣告的档位）。属既有行为，本轮让分歧从"静默"变成"可见"，真正的修法是给该分支一个回执或错误事件。

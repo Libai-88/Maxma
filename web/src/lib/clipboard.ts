@@ -4,7 +4,7 @@
  * COMPAT-CLIPBOARD-001：navigator.clipboard.writeText 在 WebView2 窗口
  * 失焦/权限被拒时 Promise reject（未捕获 → unhandledrejection → 全局
  * 错误 toast）；Safari 需用户手势。统一走 try/catch + execCommand 兜底
- * （与 ChatWindow.vue 既有实现对齐），任何环境都不抛未处理异常。
+ * （与消息气泡的复制实现对齐），任何环境都不抛未处理异常。
  */
 
 /** 复制文本到剪贴板。返回是否成功（失败时静默，不抛异常）。 */

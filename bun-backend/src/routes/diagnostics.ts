@@ -50,7 +50,7 @@ export function createDiagnosticsRoutes(): Hono {
       }
       const exception = typeof diagnostic.stack === "string" ? diagnostic.stack : null;
       delete diagnostic.stack;
-      const level = ["error", "vue-error", "rejection"].includes(kind) ? "ERROR" : "WARNING";
+      const level = ["error", "rejection"].includes(kind) ? "ERROR" : "WARNING";
       getErrorCollector().addError(level, "frontend", msg, {
         ...(traceId ? { trace_id: traceId } : {}),
         logger_name: "frontend",

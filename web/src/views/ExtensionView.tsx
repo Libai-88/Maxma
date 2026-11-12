@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 import { api } from '@/api'
 import type { MCPServerConfig, MCPServerCreateBody, MCPTransport, DiscoveredServer } from '@/types'
 
-/** 等价移植自 ExtensionView.vue（含内嵌 McpView.vue 的 MCP 服务器 CRUD）。 */
+/** 扩展管理：MCP 服务器 CRUD 与已加载 Skills。 */
 
 const VALID_TABS = ['tools', 'skills', 'mcp'] as const
 type ExtensionTab = (typeof VALID_TABS)[number]
@@ -445,7 +445,7 @@ function ExtCard({
   )
 }
 
-/** 可选社区技能市场（等价移植自 ExtensionView.vue 的 skill-market 区块）。 */
+/** 可选社区技能市场。 */
 function SkillMarket({
   skillQuery,
   setSkillQuery,

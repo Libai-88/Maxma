@@ -8,7 +8,7 @@
  * `action_failed`，成功不得广播。
  *
  * 结构对账（登记表 ↔ 发射点 ↔ 前端分支）由
- * bun-sidecar/tests/engine-boundary.test.ts 与 web/tests/wsEventSink.spec.ts 负责，
+ * bun-sidecar/tests/engine-boundary.test.ts 与前端编译期登记负责，
  * 这里只锁运行时行为。等待信号用广播本身 + 微任务排空，不挂真实时钟。
  */
 

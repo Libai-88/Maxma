@@ -194,7 +194,7 @@ export class ErrorCollector {
         const m = feKindRe.exec(line);
         const kind = m ? m[1]!.trim() : "";
         let level: string;
-        if (["error", "vue-error", "rejection"].includes(kind)) level = "ERROR";
+        if (["error", "rejection"].includes(kind)) level = "ERROR";
         else if (["warn", "warning"].includes(kind)) level = "WARNING";
         else continue;
         const fields = line.split(" | ");
