@@ -40,10 +40,10 @@ function OutputBlock({
 }) {
   return (
     <div data-slot="output-block" className={cn("glass-panel overflow-hidden rounded-md", className)}>
-      <div className="border-b border-border/70 px-3 py-1 text-[11px] text-muted-foreground">{label}</div>
+      <div className="border-b border-border/70 px-3.5 py-2.5 text-[11px] text-muted-foreground">{label}</div>
       <pre
         className={cn(
-          "scrollbar-thin max-h-64 overflow-auto px-3 py-2 font-mono text-[11.5px] leading-[1.6] whitespace-pre-wrap",
+          "scrollbar-thin max-h-64 overflow-auto px-3.5 py-2.5 font-mono text-[11.5px] leading-[1.6] whitespace-pre-wrap",
           tone === "error" && "text-destructive"
         )}
       >
@@ -60,7 +60,7 @@ function StepRow({ step, labels }: { step: Step; labels?: Partial<StepLabels> })
   const canOpen = Boolean(step.patch || step.detail || step.output || step.error)
 
   return (
-    <div data-slot="step-row" className="flex flex-col gap-1.5">
+    <div data-slot="step-row" className="flex flex-col gap-2">
       <button
         type="button"
         aria-expanded={canOpen ? open : undefined}
@@ -77,7 +77,7 @@ function StepRow({ step, labels }: { step: Step; labels?: Partial<StepLabels> })
         (step.patch ? (
           <DiffView patch={step.patch} />
         ) : (
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-2">
             {step.detail && <OutputBlock label={step.detailLabel ?? words.detail} text={step.detail} />}
             {step.error ? (
               <OutputBlock label={words.error} text={step.error} tone="error" />
@@ -98,7 +98,7 @@ function StepList({ steps, labels, className }: { steps: Step[]; labels?: Partia
   return (
     <div data-slot="step-list" className={cn("glass-panel flex flex-col divide-y divide-border rounded-md", className)}>
       {steps.map((step) => (
-        <div key={step.id} className="px-2.5 py-1.5">
+        <div key={step.id} className="px-3.5 py-2.5">
           <StepRow step={step} labels={labels} />
         </div>
       ))}
@@ -139,7 +139,7 @@ function StepGroup({
   if (steps.length === 1 && !running) return <StepRow step={steps[0]} labels={labels} />
 
   return (
-    <div data-slot="step-group" className="flex flex-col gap-1.5">
+    <div data-slot="step-group" className="flex flex-col gap-2">
       <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} className={lineClass}>
         <span className="truncate text-[12.5px]">
           {summary ?? (running ? `Running ${steps.length} steps` : `Ran ${steps.length} steps`)}

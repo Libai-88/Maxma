@@ -17,7 +17,7 @@ interface BarItem {
 
 function Stat({ value, label, error }: { value: string | number; label: string; error?: boolean }) {
   return (
-    <div className="px-3.5 py-2.5 border border-border rounded-lg bg-background">
+    <div className="px-3.5 py-3 border border-border rounded-lg bg-background">
       <div className={cn('font-mono tabular-nums text-[22px] font-bold leading-tight', error ? 'text-destructive' : 'text-foreground')}>{value}</div>
       <div className="text-[11px] text-muted-foreground mt-0.5">{label}</div>
     </div>
@@ -146,13 +146,13 @@ export default function MetricsView() {
         <h2 className="text-xl font-semibold text-foreground">运行指标</h2>
         <div className="flex items-center gap-3 text-[13px] text-muted-foreground flex-wrap">
           {loading ? (
-            <span className="px-2 py-0.5 rounded bg-secondary text-muted-foreground text-xs">刷新中…</span>
+            <span className="px-2.5 py-1.5 rounded bg-secondary text-muted-foreground text-xs">刷新中…</span>
           ) : error ? (
-            <span title={error} className="px-2 py-0.5 rounded bg-destructive/10 text-destructive text-xs">获取失败</span>
+            <span title={error} className="px-2.5 py-1.5 rounded bg-destructive/10 text-destructive text-xs">获取失败</span>
           ) : snapshot ? (
-            <span className="px-2 py-0.5 rounded bg-secondary text-muted-foreground text-xs">运行 {formatUptime(snapshot.uptime_seconds)}</span>
+            <span className="px-2.5 py-1.5 rounded bg-secondary text-muted-foreground text-xs">运行 {formatUptime(snapshot.uptime_seconds)}</span>
           ) : null}
-          <button onClick={() => void refresh()} className="px-2.5 py-1.5 border border-border rounded-lg bg-card text-muted-foreground text-xs hover:border-ring hover:text-foreground transition-colors">刷新</button>
+          <button onClick={() => void refresh()} className="px-3.5 py-2.5 border border-border rounded-lg bg-card text-muted-foreground text-xs hover:border-ring hover:text-foreground transition-colors">刷新</button>
           <label className="flex items-center gap-1 text-xs cursor-pointer">
             <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} className="cursor-pointer" /> 自动刷新 (15s)
           </label>
@@ -262,25 +262,25 @@ export default function MetricsView() {
                 <table className="w-full text-[12px] tabular-nums">
                   <thead>
                     <tr className="text-left text-[11px] text-muted-foreground">
-                      <th className="py-1 pr-3 font-medium">时间</th>
-                      <th className="py-1 pr-3 font-medium">模型</th>
-                      <th className="py-1 pr-3 font-medium text-right">输入</th>
-                      <th className="py-1 pr-3 font-medium text-right">输出</th>
-                      <th className="py-1 pr-3 font-medium text-right">缓存读</th>
-                      <th className="py-1 pr-3 font-medium text-right">耗时</th>
-                      <th className="py-1 font-medium">状态</th>
+                      <th className="py-2 pr-3 font-medium">时间</th>
+                      <th className="py-2 pr-3 font-medium">模型</th>
+                      <th className="py-2 pr-3 font-medium text-right">输入</th>
+                      <th className="py-2 pr-3 font-medium text-right">输出</th>
+                      <th className="py-2 pr-3 font-medium text-right">缓存读</th>
+                      <th className="py-2 pr-3 font-medium text-right">耗时</th>
+                      <th className="py-2 font-medium">状态</th>
                     </tr>
                   </thead>
                   <tbody>
                     {recentCalls.slice(0, 30).map((c) => (
                       <tr key={c.id} className="border-t border-border/60">
-                        <td className="py-1 pr-3 text-muted-foreground whitespace-nowrap">{new Date(c.occurred_at).toLocaleTimeString()}</td>
-                        <td className="py-1 pr-3 truncate max-w-[22ch]" title={`${c.provider ?? '—'} / ${c.model ?? '—'}`}>{c.model ?? '—'}</td>
-                        <td className="py-1 pr-3 text-right">{formatTokens(c.input_tokens ?? 0)}</td>
-                        <td className="py-1 pr-3 text-right">{formatTokens(c.output_tokens ?? 0)}</td>
-                        <td className="py-1 pr-3 text-right">{c.cache_read_tokens === null ? '—' : formatTokens(c.cache_read_tokens)}</td>
-                        <td className="py-1 pr-3 text-right">{c.duration_ms === null ? '—' : c.duration_ms < 1000 ? `${c.duration_ms}ms` : `${(c.duration_ms / 1000).toFixed(1)}s`}</td>
-                        <td className="py-1 text-muted-foreground">
+                        <td className="py-2 pr-3 text-muted-foreground whitespace-nowrap">{new Date(c.occurred_at).toLocaleTimeString()}</td>
+                        <td className="py-2 pr-3 truncate max-w-[22ch]" title={`${c.provider ?? '—'} / ${c.model ?? '—'}`}>{c.model ?? '—'}</td>
+                        <td className="py-2 pr-3 text-right">{formatTokens(c.input_tokens ?? 0)}</td>
+                        <td className="py-2 pr-3 text-right">{formatTokens(c.output_tokens ?? 0)}</td>
+                        <td className="py-2 pr-3 text-right">{c.cache_read_tokens === null ? '—' : formatTokens(c.cache_read_tokens)}</td>
+                        <td className="py-2 pr-3 text-right">{c.duration_ms === null ? '—' : c.duration_ms < 1000 ? `${c.duration_ms}ms` : `${(c.duration_ms / 1000).toFixed(1)}s`}</td>
+                        <td className="py-2 text-muted-foreground">
                           {c.kind === 'cache_warm' ? '缓存预热' : c.usage_status === 'reported' ? '正常' : c.usage_status === 'partial' ? '用量不全' : '缺用量'}
                         </td>
                       </tr>
@@ -315,14 +315,14 @@ export default function MetricsView() {
               <select
                 value={historyWindow}
                 onChange={e => { const w = Number(e.target.value); setHistoryWindow(w); void loadHistoryWith(w) }}
-                className="px-2 py-1 border border-border rounded-lg bg-background text-foreground text-xs outline-none focus:border-ring"
+                className="px-3 py-2 border border-border rounded-lg bg-background text-foreground text-xs outline-none focus:border-ring"
               >
                 <option value={1800}>最近 30 分钟</option>
                 <option value={3600}>最近 1 小时</option>
                 <option value={21600}>最近 6 小时</option>
                 <option value={86400}>最近 24 小时</option>
               </select>
-              <button onClick={() => void loadHistoryWith(historyWindow)} className="px-2.5 py-1.5 border border-border rounded-lg bg-card text-muted-foreground text-xs hover:border-ring hover:text-foreground transition-colors">刷新</button>
+              <button onClick={() => void loadHistoryWith(historyWindow)} className="px-3.5 py-2.5 border border-border rounded-lg bg-card text-muted-foreground text-xs hover:border-ring hover:text-foreground transition-colors">刷新</button>
             </div>
             {historyLoading ? (
               <div className="text-center py-4 text-[13px] text-muted-foreground">历史数据加载中...</div>

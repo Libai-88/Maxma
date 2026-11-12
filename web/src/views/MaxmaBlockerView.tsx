@@ -17,7 +17,7 @@ function confirmAction(
   return Promise.resolve(window.confirm(text))
 }
 
-const codeCls = 'rounded-sm bg-muted px-1.5 py-0.5 font-mono text-xs'
+const codeCls = 'rounded-sm bg-muted px-2 py-1 font-mono text-xs'
 const strongCls = 'font-semibold text-foreground'
 
 export default function MaxmaBlockerView() {
@@ -129,7 +129,7 @@ export default function MaxmaBlockerView() {
                   <li>🔑 <strong className={strongCls}>密钥 / 凭证目录</strong>——<code className={codeCls}>.ssh</code>、<code className={codeCls}>.aws</code>、GPG 密钥等，避免任何 AI 误读。</li>
                   <li>🧪 <strong className={strongCls}>正在实验 / 不稳定的项目目录</strong>——避免 AI 误改或误读未完成的代码。</li>
                 </ul>
-                <p className="rounded-r-md border-l-4 border-primary bg-panel px-3 py-2 text-xs">
+                <p className="rounded-r-md border-l-4 border-primary bg-panel px-3.5 py-2.5 text-xs">
                   📋 拒止锚划定"绝对不能碰哪里"；除此之外没有预先放行清单——一次文件操作能不能落地，取决于会话权限模式（默认「每次确认」）。
                 </p>
               </div>
@@ -182,14 +182,14 @@ export default function MaxmaBlockerView() {
           <>
             <h2 className="text-xl font-semibold text-foreground">添加拒止锚</h2>
             <div className="flex max-w-xl flex-col gap-4 rounded-lg border border-border bg-card p-4 shadow-sm">
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-2">
                 <label className="text-sm font-semibold text-foreground">目录</label>
                 <div className="flex gap-2">
                   <Input className="font-mono" value={formPath} onChange={(e) => setFormPath(e.target.value)} placeholder="输入或选择目录路径" />
                   <Button variant="outline" onClick={pickDir}>选择目录</Button>
                 </div>
               </div>
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-2">
                 <label className="text-sm font-semibold text-foreground">描述（可选）</label>
                 <Input value={formDesc} onChange={(e) => setFormDesc(e.target.value)} placeholder="用途说明" />
               </div>

@@ -237,11 +237,11 @@ export default function PrivacyView() {
         >
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {storageItems.map((item) => (
-              <div key={item.label} className="flex items-center gap-2.5 rounded-md border border-border bg-panel px-3 py-2.5">
+              <div key={item.label} className="flex min-w-0 items-center gap-2.5 rounded-md border border-border bg-panel px-3.5 py-3">
                 <span className="text-xl">{item.icon}</span>
                 <div className="min-w-0">
                   <div className="text-sm font-medium text-foreground">{item.label}</div>
-                  <div className="font-mono text-xs text-muted-foreground">{item.path}</div>
+                  <div className="truncate font-mono text-xs text-muted-foreground" title={item.path}>{item.path}</div>
                 </div>
               </div>
             ))}
@@ -277,7 +277,7 @@ export default function PrivacyView() {
                       <h4 className="mb-2 mt-3 text-sm font-semibold text-muted-foreground">高频目标</h4>
                       <div className="flex flex-col gap-1">
                         {auditStats.top_targets.map((t) => (
-                          <div key={t.target} className="flex justify-between rounded-sm bg-panel px-2 py-1 text-xs">
+                          <div key={t.target} className="flex justify-between rounded-sm bg-panel px-2.5 py-1.5 text-xs">
                             <span className="font-mono text-foreground">{t.target}</span>
                             <span className="text-muted-foreground">{t.count} 次</span>
                           </div>
@@ -295,7 +295,7 @@ export default function PrivacyView() {
             >
               <div className="mb-2 flex gap-2">
                 <select
-                  className="rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground"
+                  className="rounded-md border border-border bg-card px-3 py-2.5 text-xs text-foreground"
                   value={logFilter}
                   onChange={(e) => { setLogFilter(e.target.value); void loadAuditLogWithFilter(e.target.value) }}
                 >
@@ -306,7 +306,7 @@ export default function PrivacyView() {
                 </select>
                 <button
                   type="button"
-                  className="rounded-md border border-border bg-card px-3 py-1 text-xs text-muted-foreground hover:border-primary hover:text-foreground"
+                  className="rounded-md border border-border bg-card px-3.5 py-2.5 text-xs text-muted-foreground hover:border-primary hover:text-foreground"
                   onClick={() => void loadAuditLog()}
                 >
                   刷新
@@ -319,9 +319,9 @@ export default function PrivacyView() {
               ) : (
                 <div className="flex max-h-72 flex-col gap-0.5 overflow-y-auto">
                   {auditLog.map((entry, idx) => (
-                    <div key={idx} className="flex items-center gap-2 rounded-sm bg-panel px-2 py-1 text-xs">
+                    <div key={idx} className="flex items-center gap-2 rounded-sm bg-panel px-2.5 py-1.5 text-xs">
                       <span className="shrink-0 font-mono text-muted-foreground">{formatTime(entry.timestamp)}</span>
-                      <span className="shrink-0 rounded-sm bg-muted px-1.5 text-[11px]">{entry.type}</span>
+                      <span className="shrink-0 rounded-sm bg-muted px-2 py-1.5 text-[11px]">{entry.type}</span>
                       <span className="flex-1 truncate text-foreground">{entry.target}</span>
                       <span className="shrink-0 font-semibold text-muted-foreground">{entry.status}</span>
                     </div>
@@ -352,7 +352,7 @@ export default function PrivacyView() {
           <div className="mt-2.5 flex flex-col gap-1">
             <div className="border-l-2 border-border bg-panel px-2 py-1 text-xs leading-relaxed text-muted-foreground"><strong className="text-foreground">清除所有对话历史</strong>：删除全部会话（含临时与已固定）及其消息记录，但保留审计日志、配置、密钥。</div>
             <div className="border-l-2 border-border bg-panel px-2 py-1 text-xs leading-relaxed text-muted-foreground"><strong className="text-foreground">清除审计日志</strong>：仅清空审计数据库（事件记录），不影响对话历史或密钥。</div>
-            <div className="border-l-2 border-border bg-panel px-2 py-1 text-xs leading-relaxed text-muted-foreground"><strong className="text-foreground">加密 API 密钥</strong>：将 <code className="rounded-sm bg-muted px-1 font-mono text-[11px]">providers.yaml</code> 中明文存储的 API Key 转为加密形式，重启后仍可正常使用。</div>
+            <div className="border-l-2 border-border bg-panel px-2 py-1 text-xs leading-relaxed text-muted-foreground"><strong className="text-foreground">加密 API 密钥</strong>：将 <code className="rounded-sm bg-muted px-1.5 py-1.5 font-mono text-[11px]">providers.yaml</code> 中明文存储的 API Key 转为加密形式，重启后仍可正常使用。</div>
           </div>
           {actionMessage && (
             <div className={'mt-2 rounded-md px-3 py-1.5 text-sm ' + (actionMessageType === 'ok' ? 'bg-primary/10 text-primary' : 'bg-destructive/10 text-destructive')}>

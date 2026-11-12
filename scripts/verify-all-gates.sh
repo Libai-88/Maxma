@@ -29,6 +29,11 @@ r=$(cd web && npm run lint:colors 2>&1 | grep -E "No hardcoded|violation" | tail
 say "color guard" "${r:-$r}"
 case "$r" in *"No hardcoded"*) ;; *) FAILS=$((FAILS+1));; esac
 
+# 间距守卫：自绘边框/底色容器的内边距下限（文字不允许贴着边框）。
+sp_out=$(cd web && npm run lint:spacing 2>&1); sp_rc=$?
+say "spacing guard" "$([ "$sp_rc" = 0 ] && echo PASS || echo FAIL)  $(echo "$sp_out" | grep -E '✓|✗|共' | tail -1)"
+[ "$sp_rc" = 0 ] || FAILS=$((FAILS+1))
+
 # 判定优先用**退出码**，不是输出字符串匹配。
 # （第一版在这里踩过坑：budget 的 PASS 分支匹配的是"✓ bun-sidecar: 0"，
 #   于是 bun-backend 报 ✗ 时整个脚本仍然打「全部闸门通过」——我今天一路在修的

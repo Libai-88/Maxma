@@ -93,6 +93,29 @@ Solid Glass 是 shadcn/ui 的主题样式表，材质规则只有四条（`solid
 
 ---
 
+
+## 2.5 密度与内边距（文字永不贴边）
+
+Solid Glass 的组件用 `--card-spacing` 驱动卡片留白（官方示例在 `card-spacing` 里把同一个
+变量切到 `--spacing(4/5/6/8)`）。Maxma 沿用这条约定，并把它写成了可执行的下限：
+
+| 形态 | 内边距下限 | 说明 |
+| --- | --- | --- |
+| 页面级卡片（`rounded-xl border p-*`） | `p-4`（16px） | 标题 + 正文 + 控件的面板 |
+| 列表行 / 紧凑卡片 | `px-3.5 py-2.5`（14/10px） | provider 卡片、JetHub 行、设置行（`px-4`） |
+| 小按钮（`Button size="sm"`） | `h-8` + `px-3` | 高度由基元保证，文字垂直居中 |
+| 徽标 / 胶囊（`Badge` 或手写 chip） | `px-2.5 py-1`（10/4px） | 状态、分类、版本号 |
+| 行内 `code` | `px-1.5 py-0.5` | 正文里的等宽片段 |
+| 输入 / 下拉 | `h-9` + `px-3.5 py-2` | 与按钮同高 |
+
+**硬规则**：任何自绘边框（`border`）或自绘底色（`bg-*` + `rounded`）的容器里，
+文字到边缘的距离不得小于 4px。`web/scripts/check-spacing.mjs` 在闸门里静态检查这条
+（带边框容器 p≥2 / px≥2 / py≥1.5；底色圆角块有水平内边距就必须有垂直内边距），
+`npm run lint:spacing` 可单独跑。
+
+长内容一律 `min-w-0` + `break-words`（flex/grid 子项默认 `min-width:auto`，
+长英文串/路径会把文字顶穿边框）；确需截断时用 `truncate` 并把全文放进 `title`。
+
 ## 3. Agent 语义组件
 
 聊天与工具界面不再手搓，一律用 Solid Glass 的 agent 组件（`web/src/components/ui/`）：

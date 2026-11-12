@@ -85,7 +85,7 @@ export default function UserView() {
         <p><strong className="text-foreground">USER.md</strong> 是你的「用户档案」，AI 在每次对话时会自动读取这里的内容，用来理解你是谁、喜欢什么、关心什么。写得越具体，AI 越能给你贴心的回答。建议写称呼/身份、偏好、兴趣与禁忌。留空也可以——AI 会基于对话逐步学习你。</p>
       </div>
 
-      <div className="mb-3 flex flex-wrap gap-1.5">
+      <div className="mb-3 flex flex-wrap gap-2">
         {USER_TEMPLATES.map((t) => (
           <Button key={t.label} variant="outline" size="xs" onClick={() => { setContent(t.content); editorRef.current?.focus() }}>{t.label}</Button>
         ))}

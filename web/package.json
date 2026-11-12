@@ -8,7 +8,8 @@
     "build": "node scripts/clean-dist.mjs && tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "lint:colors": "node scripts/check-hardcoded-colors.mjs"
+    "lint:colors": "node scripts/check-hardcoded-colors.mjs",
+    "lint:spacing": "node scripts/check-spacing.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.0.0",

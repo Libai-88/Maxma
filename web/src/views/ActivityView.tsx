@@ -103,7 +103,7 @@ export default function ActivityView() {
           <span
             title={statusTitle}
             className={cn(
-              'inline-flex items-center gap-1.5 text-xs px-2 py-1 rounded-full bg-secondary text-muted-foreground cursor-help',
+              'inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full bg-secondary text-muted-foreground cursor-help',
               activity.connectionState === 'online' && 'text-success',
               activity.connectionState === 'connecting' && 'text-status-interrupted',
             )}
@@ -117,8 +117,8 @@ export default function ActivityView() {
             {statusLabel}
             {recentPulse && <span className="ml-1 px-1.5 text-[0.85em] font-semibold text-link">✦ 新事件</span>}
           </span>
-          <button onClick={() => void activity.fetchRecent(100)} className="px-2.5 py-1.5 text-xs border border-border rounded-lg bg-card text-foreground hover:border-ring transition-colors">刷新</button>
-          <button onClick={handleClear} className="px-2.5 py-1.5 text-xs border border-border rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors">清空</button>
+          <button onClick={() => void activity.fetchRecent(100)} className="px-3.5 py-2.5 text-xs border border-border rounded-lg bg-card text-foreground hover:border-ring transition-colors">刷新</button>
+          <button onClick={handleClear} className="px-3.5 py-2.5 text-xs border border-border rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors">清空</button>
         </div>
       </header>
 
@@ -129,7 +129,7 @@ export default function ActivityView() {
           <div className="flex flex-col gap-1 mb-2">
             {INTRO_CATS.map(c => (
               <div key={c.cat} className="flex items-center gap-2">
-                <span className={cn('inline-block px-2 py-0.5 rounded-full text-[0.85em] font-medium bg-secondary text-muted-foreground whitespace-nowrap shrink-0 min-w-[56px] text-center', c.color)}>{c.label}</span>
+                <span className={cn('inline-block px-2.5 py-1 rounded-full text-[0.85em] font-medium bg-secondary text-muted-foreground whitespace-nowrap shrink-0 min-w-[56px] text-center', c.color)}>{c.label}</span>
                 <span>{c.meaning}</span>
               </div>
             ))}
@@ -142,12 +142,12 @@ export default function ActivityView() {
 
       {statsTotal > 0 && (
         <div className="flex gap-3 mb-4 flex-wrap">
-          <div className="flex flex-col items-center px-4 py-2 bg-card border border-border rounded-lg min-w-[80px]">
+          <div className="flex flex-col items-center px-4 py-2.5 bg-card border border-border rounded-lg min-w-[80px]">
             <span className="font-mono tabular-nums text-xl font-semibold text-link">{statsTotal}</span>
             <span className="text-[0.75em] text-muted-foreground uppercase">总事件</span>
           </div>
           {Object.entries(statsByCategory).map(([cat, count]) => (
-            <div key={cat} className="flex flex-col items-center px-4 py-2 bg-card border border-border rounded-lg min-w-[80px]">
+            <div key={cat} className="flex flex-col items-center px-4 py-2.5 bg-card border border-border rounded-lg min-w-[80px]">
               <span className="font-mono tabular-nums text-xl font-semibold text-link">{count}</span>
               <span className="text-[0.75em] text-muted-foreground uppercase">{CATEGORY_LABELS[cat] ?? cat}</span>
             </div>
@@ -160,7 +160,7 @@ export default function ActivityView() {
           value={categoryFilter}
           onChange={e => setCategoryFilter(e.target.value)}
           aria-label="按类别筛选活动"
-          className="px-2.5 py-1.5 border border-border rounded-lg bg-card text-foreground text-xs outline-none focus:border-ring"
+          className="px-3.5 py-2.5 border border-border rounded-lg bg-card text-foreground text-xs outline-none focus:border-ring"
         >
           <option value="all">全部类别</option>
           {Object.entries(statsByCategory).map(([cat, count]) => (
@@ -181,7 +181,7 @@ export default function ActivityView() {
           >
             <div className="font-mono text-[0.85em] text-muted-foreground whitespace-nowrap">{formatTime(record.timestamp)}</div>
             <div className={cn(
-              'px-2 py-0.5 rounded-full text-[0.75em] font-medium bg-secondary text-muted-foreground whitespace-nowrap',
+              'px-2.5 py-1 rounded-full text-[0.75em] font-medium bg-secondary text-muted-foreground whitespace-nowrap',
               record.category === 'tool' && 'text-link',
               record.category === 'turn' && 'text-success',
               record.category === 'compression' && 'text-status-interrupted',
@@ -191,7 +191,7 @@ export default function ActivityView() {
             </div>
             <div className="flex-1 flex items-center gap-2 min-w-0">
               <span className="text-foreground truncate">{record.message}</span>
-              {record.tool_name && <span className="font-mono text-[0.85em] text-muted-foreground bg-secondary px-1.5 py-0.5 rounded">{record.tool_name}</span>}
+              {record.tool_name && <span className="font-mono text-[0.85em] text-muted-foreground bg-secondary px-2 py-1.5 rounded">{record.tool_name}</span>}
               {record.session_id && <span className="font-mono text-[0.75em] text-muted-foreground">{record.session_id.slice(0, 8)}</span>}
             </div>
           </div>

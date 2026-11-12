@@ -230,7 +230,7 @@ export function ChatInput(props: ChatInputProps) {
   return (
     <div className="shrink-0 px-4 pb-4">
       {notice && (
-        <div className="mx-auto mb-2 flex max-w-3xl items-center justify-between rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground">
+        <div className="mx-auto mb-2 flex max-w-3xl items-center justify-between rounded-lg border border-border bg-card px-3.5 py-2.5 text-xs text-muted-foreground">
           <span className="min-w-0 flex-1 truncate">{notice}</span>
           <div className="flex items-center gap-2">
             <button className="text-foreground hover:underline" onClick={() => { void safeCopyText(notice) }}>复制</button>
@@ -239,14 +239,14 @@ export function ChatInput(props: ChatInputProps) {
         </div>
       )}
       {reconnectExhausted && (
-        <div className="mx-auto mb-2 flex max-w-3xl items-center justify-between rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
+        <div className="mx-auto mb-2 flex max-w-3xl items-center justify-between rounded-lg border border-destructive/40 bg-destructive/10 px-3.5 py-2.5 text-xs text-destructive">
           <span>连接已断开且自动重连失败</span>
           <button className="underline" onClick={onReconnect}>手动重连</button>
         </div>
       )}
       <div className="relative mx-auto max-w-3xl">
         {attachMenu && (
-          <div role="menu" aria-label="附件类型" className="absolute bottom-full left-0 z-30 mb-2 w-44 rounded-xl border border-border bg-popover p-1 shadow-lg">
+          <div role="menu" aria-label="附件类型" className="absolute bottom-full left-0 z-30 mb-2 w-44 rounded-xl border border-border bg-popover p-2 shadow-lg">
             {[
               { key: 'image', icon: Paperclip, label: '图片', run: () => { setAttachMenu(false); fileRef.current?.click() } },
               { key: 'file', icon: FileText, label: '文件', run: () => void addFileRefs('file') },
@@ -262,14 +262,14 @@ export function ChatInput(props: ChatInputProps) {
         )}
         {stickerOpen && <StickerPicker onSelect={insertSticker} onClose={() => setStickerOpen(false)} />}
         {linkMode && (
-          <div className="absolute bottom-full left-0 z-30 mb-2 flex w-full max-w-md items-center gap-2 rounded-xl border border-border bg-popover p-2 shadow-lg">
+          <div className="absolute bottom-full left-0 z-30 mb-2 flex w-full max-w-md items-center gap-2 rounded-xl border border-border bg-popover p-3 shadow-lg">
             <input
               autoFocus
               value={linkValue}
               onChange={(e) => setLinkValue(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') addLinkRef(); if (e.key === 'Escape') setLinkMode(false) }}
               placeholder="粘贴链接，例如 https://example.com/a"
-              className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs outline-none"
+              className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2.5 text-xs outline-none"
               aria-label="链接地址"
             />
             <Button size="sm" onClick={addLinkRef}>添加</Button>
@@ -277,7 +277,7 @@ export function ChatInput(props: ChatInputProps) {
           </div>
         )}
         {atOpen && atMatches.length > 0 && (
-          <div role="listbox" aria-label="工具提及" className="absolute bottom-full left-0 right-0 z-30 mb-2 max-h-56 overflow-y-auto rounded-xl border border-border bg-popover p-1 shadow-lg">
+          <div role="listbox" aria-label="工具提及" className="absolute bottom-full left-0 right-0 z-30 mb-2 max-h-56 overflow-y-auto rounded-xl border border-border bg-popover p-2 shadow-lg">
             {atMatches.map((t) => (
               <button
                 key={t.name}
@@ -294,7 +294,7 @@ export function ChatInput(props: ChatInputProps) {
           </div>
         )}
         {slashOpen && slashMatches.length > 0 && (
-          <div role="listbox" aria-label="斜杠命令" className="absolute bottom-full left-0 right-0 z-30 mb-2 max-h-64 overflow-y-auto rounded-xl border border-border bg-popover p-1 shadow-lg">
+          <div role="listbox" aria-label="斜杠命令" className="absolute bottom-full left-0 right-0 z-30 mb-2 max-h-64 overflow-y-auto rounded-xl border border-border bg-popover p-2 shadow-lg">
             {slashMatches.map((c, i) => (
               <button
                 key={c.name}
@@ -361,7 +361,7 @@ export function ChatInput(props: ChatInputProps) {
             </>
           }
           tags={refs.map((r, i) => (
-            <span key={i} className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground">
+            <span key={i} className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-[11px] text-muted-foreground">
               {r.label}
               <button type="button" onClick={() => setRefs((prev) => prev.filter((_, j) => j !== i))} aria-label={`移除 ${r.label}`} className="hover:text-foreground"><X className="size-3" /></button>
             </span>

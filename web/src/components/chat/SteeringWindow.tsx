@@ -165,9 +165,9 @@ export function SteeringWindow({
               maxLength={4000}
               placeholder="任务进行中，随时调整方向（回车立即调整）"
               aria-label="实时调整内容"
-              className="w-full resize-none rounded-md border border-border bg-background/60 px-2 py-1.5 text-[12.5px] leading-relaxed outline-none placeholder:text-muted-foreground focus-visible:border-ring"
+              className="w-full resize-none rounded-md border border-border bg-background/60 px-3 py-2.5 text-[12.5px] leading-relaxed outline-none placeholder:text-muted-foreground focus-visible:border-ring"
             />
-            <div className="flex items-center justify-between gap-1.5">
+            <div className="flex items-center justify-between gap-2">
               <span className="text-[10.5px] text-muted-foreground">{text.length}/4000</span>
               <div className="flex items-center gap-1">
                 <Button variant="ghost" size="sm" disabled={!text.trim()} onClick={() => submit('follow_up')} title="完成当前步骤后再处理">

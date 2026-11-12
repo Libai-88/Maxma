@@ -37,7 +37,7 @@ const defaultHindsight: HindsightConfig = {
 }
 
 const selectCls =
-  'rounded-lg border border-input bg-background px-2.5 py-1.5 text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 [&>option]:bg-card [&>option]:text-foreground'
+  'rounded-lg border border-input bg-background px-3.5 py-2.5 text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 [&>option]:bg-card [&>option]:text-foreground'
 
 interface ConfirmOpts {
   title?: string
@@ -251,7 +251,7 @@ export default function MemoryView() {
           >
             <span className="text-sm font-semibold text-foreground">
               Hindsight 配置
-              <span className="ml-2 inline-block rounded-full border border-border bg-secondary px-2 py-0.5 align-middle text-xs font-medium text-muted-foreground">
+              <span className="ml-2 inline-block rounded-full border border-border bg-secondary px-3 py-1.5 align-middle text-xs font-medium text-muted-foreground">
                 即将上线
               </span>
             </span>
@@ -266,7 +266,7 @@ export default function MemoryView() {
                   type="button"
                   onClick={() => void setHindsight('enabled', !hindsight.enabled)}
                   className={cn(
-                    'rounded-lg border border-border px-3 py-1 text-sm',
+                    'rounded-lg border border-border px-3.5 py-2 text-sm',
                     hindsight.enabled ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground',
                   )}
                 >
@@ -336,7 +336,7 @@ export default function MemoryView() {
         <input
           value={searchQuery}
           placeholder="搜索记忆内容..."
-          className="min-w-[160px] flex-1 rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="min-w-[160px] flex-1 rounded-lg border border-input bg-background px-3.5 py-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
           onChange={(e) => {
             setSearchQuery(e.target.value)
             filtersRef.current.searchQuery = e.target.value
@@ -445,7 +445,7 @@ export default function MemoryView() {
                       <Badge variant="secondary">{categoryLabel(fact.category)}</Badge>
                       <span
                         className={cn(
-                          'rounded-md bg-secondary px-1.5 py-0.5 text-xs',
+                          'rounded-md bg-secondary px-2 py-1 text-xs',
                           confidenceLevel(fact.confidence) === 'high' && 'text-success',
                           confidenceLevel(fact.confidence) === 'mid' && 'text-foreground',
                           confidenceLevel(fact.confidence) === 'low' && 'text-muted-foreground',
@@ -458,7 +458,7 @@ export default function MemoryView() {
                         type="button"
                         title="编辑"
                         onClick={() => startEdit(fact)}
-                        className="rounded-md px-1.5 py-0.5 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground"
+                        className="rounded-md px-1.5 py-1.5 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground"
                       >
                         ✎
                       </button>
@@ -466,7 +466,7 @@ export default function MemoryView() {
                         type="button"
                         title="删除"
                         onClick={() => void handleDelete(fact.id)}
-                        className="rounded-md px-1.5 py-0.5 text-sm text-muted-foreground hover:bg-secondary hover:text-destructive"
+                        className="rounded-md px-1.5 py-1.5 text-sm text-muted-foreground hover:bg-secondary hover:text-destructive"
                       >
                         ✕
                       </button>
@@ -491,7 +491,7 @@ export default function MemoryView() {
 
 function StatCard({ value, label }: { value: string; label: string }) {
   return (
-    <div className="min-w-[80px] flex-1 rounded-xl border border-border bg-card px-2 py-3 text-center">
+    <div className="min-w-[80px] flex-1 rounded-xl border border-border bg-card px-3 py-3 text-center">
       <div className="font-mono text-xl font-bold tabular-nums text-foreground">{value}</div>
       <div className="mt-0.5 text-xs text-muted-foreground">{label}</div>
     </div>

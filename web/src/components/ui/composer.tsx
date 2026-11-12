@@ -105,7 +105,7 @@ function Composer({
       )}
       {...props}
     >
-      {above && <div className="flex flex-wrap gap-1.5 px-1 pt-0.5 pb-2">{above}</div>}
+      {above && <div className="flex flex-wrap gap-2 px-1.5 pt-0.5 pb-2">{above}</div>}
       {/* items-end keeps both controls pinned to the last line once the
           textarea grows. On one line every child is 32px tall, so that reads
           as centred. Wraps when the tags and the input can no longer share a
@@ -145,7 +145,7 @@ function Composer({
             }}
             className={cn(
               // The placeholder keeps to one line: wrapped, it makes an empty box two lines tall.
-              "scrollbar-thin max-h-50 min-w-0 flex-1 resize-none bg-transparent py-1 text-sm leading-6 text-foreground outline-none placeholder:overflow-hidden placeholder:text-ellipsis placeholder:whitespace-nowrap placeholder:text-muted-foreground"
+              "scrollbar-thin max-h-50 min-w-0 flex-1 resize-none bg-transparent py-1.5 text-sm leading-6 text-foreground outline-none placeholder:overflow-hidden placeholder:text-ellipsis placeholder:whitespace-nowrap placeholder:text-muted-foreground"
             )}
           />
           <Button

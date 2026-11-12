@@ -111,7 +111,7 @@ export default function PluginDetailView() {
       {loading ? (
         <div className="py-12 text-center text-sm text-muted-foreground">加载中...</div>
       ) : error ? (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3.5 py-2.5 text-sm text-destructive">{error}</div>
       ) : detail ? (
         <>
           {/* 基本信息 */}
@@ -138,7 +138,7 @@ export default function PluginDetailView() {
           {detail.features && detail.features.length > 0 && (
             <div className="mb-6 border-b border-border pb-6">
               <SectionTitle>功能特性</SectionTitle>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-2">
                 {detail.features.map((f) => (
                   <Badge key={f} variant="secondary" className="text-xs">
                     {f}
@@ -152,9 +152,9 @@ export default function PluginDetailView() {
           {detail.dependencies && Object.keys(detail.dependencies).length > 0 && (
             <div className="mb-6 border-b border-border pb-6">
               <SectionTitle>依赖</SectionTitle>
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-2">
                 {Object.entries(detail.dependencies).map(([dep, ver]) => (
-                  <div key={dep} className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-1.5 text-sm">
+                  <div key={dep} className="flex items-center justify-between rounded-lg border border-border bg-card px-3.5 py-2.5 text-sm">
                     <span className="font-mono text-foreground">{dep}</span>
                     <span className="font-mono text-muted-foreground">{ver}</span>
                   </div>
@@ -168,7 +168,7 @@ export default function PluginDetailView() {
             <div className="mb-6 border-b border-border pb-6">
               <SectionTitle>README</SectionTitle>
               <div
-                className="rounded-lg border border-border bg-card p-3 text-sm leading-relaxed text-muted-foreground"
+                className="rounded-lg border border-border bg-card p-4 text-sm leading-relaxed text-muted-foreground"
                 dangerouslySetInnerHTML={{ __html: renderReadme(detail.readme) }}
               />
             </div>
@@ -308,7 +308,7 @@ function ConfigField({
       {prop.enum && (
         <select
           id={id}
-          className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground outline-none focus-visible:border-ring"
+          className="h-9 w-full rounded-lg border border-input bg-transparent px-3.5 text-sm text-foreground outline-none focus-visible:border-ring"
           value={value === undefined || value === null ? '' : String(value)}
           onChange={(e) => onChange(e.target.value)}
         >

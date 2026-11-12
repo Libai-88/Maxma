@@ -260,7 +260,7 @@ export default function ExtensionView() {
       </div>
 
       {/* Tabs */}
-      <div role="tablist" aria-label="插件类别" className="mb-4 flex gap-1 rounded-lg border border-border bg-card p-1">
+      <div role="tablist" aria-label="插件类别" className="mb-4 flex gap-2 rounded-lg border border-border bg-card p-2">
         {([
           { id: 'tools', label: '工具' },
           { id: 'skills', label: 'Skills' },
@@ -341,7 +341,7 @@ export default function ExtensionView() {
               <SectionHeading>Pi 默认工具 ({builtinTools.length})</SectionHeading>
               <div className="flex flex-wrap gap-2">
                 {builtinTools.map((t) => (
-                  <div key={t.name} title={t.description} className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-foreground">
+                  <div key={t.name} title={t.description} className="rounded-lg border border-border bg-card px-3.5 py-2.5 text-sm text-foreground">
                     {t.label || t.name}
                   </div>
                 ))}
@@ -434,7 +434,7 @@ function ExtCard({
   description?: string
 }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-3">
+    <div className="rounded-lg border border-border bg-card p-4">
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-medium text-foreground">{name}</span>
         {source && (
@@ -479,7 +479,7 @@ function SkillMarket({
   const totalPages = Math.ceil(marketTotal / marketPageSize)
   return (
     <div className="glass-panel mb-6 rounded-lg border border-border p-4">
-      <div className="mb-4 flex flex-col gap-1 rounded-lg border border-primary/30 bg-primary/5 p-3">
+      <div className="mb-4 flex flex-col gap-2 rounded-lg border border-primary/30 bg-primary/5 p-4">
         <strong className="text-sm text-foreground">Maxma 随包 Skills</strong>
         <span className="text-xs leading-relaxed text-muted-foreground">
           编码、调试、执行流程、研究、文档、表格和安全审计能力已内置，无需下载或额外服务。
@@ -814,14 +814,14 @@ function McpSection() {
       </div>
 
       {globalMessage && (
-        <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-muted-foreground">{globalMessage}</div>
+        <div className="rounded-lg border border-border bg-card px-3.5 py-2.5 text-sm text-muted-foreground">{globalMessage}</div>
       )}
 
       {mode === 'list' ? (
         serversLoading ? (
           <div className="py-10 text-center text-sm text-muted-foreground">加载中...</div>
         ) : loadError ? (
-          <div className="rounded-lg border border-destructive/40 px-3 py-2 text-sm text-destructive">
+          <div className="rounded-lg border border-destructive/40 px-3.5 py-2.5 text-sm text-destructive">
             加载失败: {loadError}
             <div className="mt-2"><Button size="sm" onClick={() => void loadServers()}>重试</Button></div>
           </div>
@@ -883,7 +883,7 @@ function McpSection() {
                 <div className="mb-3 text-sm font-semibold text-foreground">OMP 自动发现</div>
                 <div className="flex flex-col gap-2">
                   {discoveredServers.map((s) => (
-                    <div key={s.id} className="rounded-lg border border-border bg-card p-3">
+                    <div key={s.id} className="rounded-lg border border-border bg-card p-4">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-foreground">{s.name}</span>
                         <Badge variant={s.status === 'connected' ? 'secondary' : 'destructive'} className="text-xs">{s.status}</Badge>
@@ -943,7 +943,7 @@ function McpEmptyState({ onAdd, onExample }: { onAdd: () => void; onExample: () 
 
 function GuideCard({ title, text }: { title: string; text: string }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-3 text-left">
+    <div className="rounded-lg border border-border bg-card p-4 text-left">
       <h4 className="mb-1 text-sm font-semibold text-foreground">{title}</h4>
       <p className="m-0 text-xs leading-relaxed text-muted-foreground">{text}</p>
     </div>
@@ -974,7 +974,7 @@ function McpFormView({
   function patch(p: Partial<McpForm>) {
     setForm({ ...form, ...p })
   }
-  const fieldClass = 'h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground outline-none focus-visible:border-ring'
+  const fieldClass = 'h-9 w-full rounded-lg border border-input bg-transparent px-3.5 text-sm text-foreground outline-none focus-visible:border-ring'
   return (
     <div className="glass-panel flex flex-col gap-4 rounded-lg border border-border p-4">
       <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
@@ -991,7 +991,7 @@ function McpFormView({
           <Input value={form.description} onChange={(e) => patch({ description: e.target.value })} />
         </FormField>
         <FormField label="启用">
-          <label className="flex h-8 items-center gap-2 text-sm text-foreground">
+          <label className="flex h-9 items-center gap-2 text-sm text-foreground">
             <input type="checkbox" className="size-4" checked={form.enabled} onChange={(e) => patch({ enabled: e.target.checked })} />
             保存后启用
           </label>
@@ -1024,7 +1024,7 @@ function McpFormView({
               <textarea className={cn(fieldClass, 'h-20 py-1.5')} value={form.headers} onChange={(e) => patch({ headers: e.target.value })} />
             </FormField>
             <FormField label="TLS 校验">
-              <label className="flex h-8 items-center gap-2 text-sm text-foreground">
+              <label className="flex h-9 items-center gap-2 text-sm text-foreground">
                 <input type="checkbox" className="size-4" checked={form.tls_verify} onChange={(e) => patch({ tls_verify: e.target.checked })} />
                 校验服务端证书
               </label>

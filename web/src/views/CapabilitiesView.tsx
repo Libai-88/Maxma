@@ -47,7 +47,7 @@ function Section({ title, desc, children }: { title: ReactNode; desc?: string; c
 
 function StatCard({ value, label }: { value: number; label: string }) {
   return (
-    <div className="rounded-md border border-border bg-panel px-2 py-3 text-center">
+    <div className="rounded-md border border-border bg-panel px-3 py-3 text-center">
       <div className="font-mono text-2xl font-bold tabular-nums text-primary">{value}</div>
       <div className="mt-1 text-xs text-muted-foreground">{label}</div>
     </div>
@@ -141,7 +141,7 @@ export default function CapabilitiesView() {
               ) : (
                 <div className="grid max-h-90 grid-cols-1 gap-1.5 overflow-y-auto sm:grid-cols-2">
                   {Object.entries(settings).map(([key, value]) => (
-                    <div key={key} className="flex items-center justify-between gap-2 rounded-md bg-panel px-2 py-1.5 text-xs">
+                    <div key={key} className="flex items-center justify-between gap-2 rounded-md bg-panel px-2.5 py-1.5 text-xs">
                       <span className="max-w-[55%] truncate font-mono text-muted-foreground">{key}</span>
                       <span className="max-w-[40%] truncate font-medium text-foreground">{formatValue(value)}</span>
                     </div>
@@ -155,9 +155,9 @@ export default function CapabilitiesView() {
                 {Object.entries(toolCategories).map(([cat, catTools]) => (
                   <div key={cat} className="mb-3">
                     <h4 className="mb-2 text-sm font-medium text-muted-foreground">{categoryLabels[cat] ?? cat} ({catTools.length})</h4>
-                    <div className="flex max-h-60 flex-wrap gap-1.5 overflow-y-auto">
+                    <div className="flex max-h-60 flex-wrap gap-2 overflow-y-auto">
                       {catTools.map((t) => (
-                        <span key={t.name} title={t.description} className="inline-flex items-center rounded-full border border-border bg-panel px-2.5 py-1 text-xs text-muted-foreground">
+                        <span key={t.name} title={t.description} className="inline-flex items-center rounded-full border border-border bg-panel px-3.5 py-2.5 text-xs text-muted-foreground">
                           {t.label ?? t.name}
                         </span>
                       ))}
@@ -169,9 +169,9 @@ export default function CapabilitiesView() {
 
             {extensionsEnabled && (
               <Section title="内置扩展" desc="随 Maxma 启用的 Pi 扩展，用于安全控制与运行观测。">
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-2">
                   {bundledExtensions.map((name) => (
-                    <span key={name} className="rounded-full border border-border bg-panel px-2.5 py-1 text-xs text-muted-foreground">
+                    <span key={name} className="rounded-full border border-border bg-panel px-3.5 py-2.5 text-xs text-muted-foreground">
                       {extensionLabels[name] ?? name}
                     </span>
                   ))}
@@ -181,12 +181,12 @@ export default function CapabilitiesView() {
 
             {providers.length > 0 && (
               <Section title={`模型提供商 (${providers.length})`}>
-                <div className="flex max-h-80 flex-col gap-1.5 overflow-y-auto">
+                <div className="flex max-h-80 flex-col gap-2 overflow-y-auto">
                   {providers.map((p) => (
                     <div key={p.id} className="flex items-center gap-3 rounded-md bg-panel px-3 py-2 text-sm">
                       <span className="flex-1 font-medium text-foreground">{p.name ?? p.id}</span>
                       <span className="font-mono text-xs text-muted-foreground">{p.model}</span>
-                      <span className="rounded-sm bg-card px-1.5 py-0.5 text-xs text-muted-foreground">{p.provider}</span>
+                      <span className="rounded-sm bg-card px-2 py-1.5 text-xs text-muted-foreground">{p.provider}</span>
                       <span className={'rounded-sm px-2 py-0.5 text-xs ' + (p.enabled ? 'text-primary' : 'text-muted-foreground')}>
                         {p.enabled ? '启用' : '禁用'}
                       </span>
@@ -201,7 +201,7 @@ export default function CapabilitiesView() {
                 {mcpServers.length > 0 && (
                   <>
                     <h4 className="mb-2 mt-1 text-sm font-medium text-muted-foreground">已配置</h4>
-                    <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto">
+                    <div className="flex max-h-72 flex-col gap-2 overflow-y-auto">
                       {mcpServers.map((s, idx) => (
                         <div key={s.server_id ?? idx} className="flex items-center gap-3 rounded-md bg-panel px-3 py-2 text-sm">
                           <span className="flex-1 truncate font-medium text-foreground">{s.name ?? s.server_id}</span>
@@ -217,7 +217,7 @@ export default function CapabilitiesView() {
                 {discoveredMcp && discoveredMcp.length > 0 && (
                   <>
                     <h4 className="mb-2 mt-3 text-sm font-medium text-muted-foreground">自动发现</h4>
-                    <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto">
+                    <div className="flex max-h-72 flex-col gap-2 overflow-y-auto">
                       {discoveredMcp.map((s, idx) => (
                         <div key={s.name ?? idx} className="flex items-center gap-3 rounded-md bg-panel px-3 py-2 text-sm">
                           <span className="flex-1 truncate font-medium text-foreground">{s.name}</span>
@@ -244,7 +244,7 @@ export default function CapabilitiesView() {
                         <span className="block truncate font-medium text-foreground">{s.name}</span>
                         <span className="block truncate text-muted-foreground">{s.description}</span>
                       </div>
-                      <span className="shrink-0 rounded-sm bg-card px-1.5 py-0.5 text-muted-foreground">{s.scope}</span>
+                      <span className="shrink-0 rounded-sm bg-card px-2 py-1.5 text-muted-foreground">{s.scope}</span>
                       <span className={'shrink-0 rounded-sm px-2 py-0.5 ' + (s.exists ? 'text-primary' : 'text-muted-foreground')}>
                         {s.exists ? '存在' : '未发现'}
                       </span>
@@ -255,9 +255,9 @@ export default function CapabilitiesView() {
                   <div className="mt-3">
                     <h4 className="mb-2 text-sm text-muted-foreground">⚠️ 配置冲突</h4>
                     {configSources.conflicts.map((c) => (
-                      <div key={c.scope} className="mb-1.5 rounded-md border border-border bg-panel px-3 py-2">
+                      <div key={c.scope} className="mb-2 rounded-lg border border-border bg-panel px-3.5 py-3">
                         <div className="text-xs font-semibold text-foreground">{c.scope}</div>
-                        <div className="mt-0.5 text-sm text-muted-foreground">{c.sources.join(' ↔ ')}</div>
+                        <div className="mt-1 break-words text-sm text-muted-foreground">{c.sources.join(' ↔ ')}</div>
                         <div className="mt-1 text-xs text-muted-foreground">{c.note}</div>
                       </div>
                     ))}

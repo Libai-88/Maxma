@@ -88,7 +88,7 @@ export function QuickChatView() {
       ) : (
         <>
           {globalError && (
-            <div role="alert" className="cursor-pointer border-b border-border bg-destructive/10 px-3 py-2 text-xs text-destructive" onClick={() => setGlobalError('')}>{globalError}</div>
+            <div role="alert" className="cursor-pointer border-b border-border bg-destructive/10 px-3 py-2.5 text-xs text-destructive" onClick={() => setGlobalError('')}>{globalError}</div>
           )}
           <div ref={messagesRef} className="flex-1 space-y-3 overflow-y-auto p-4">
             {mergedTurns.length === 0 && (
@@ -101,12 +101,12 @@ export function QuickChatView() {
               <div key={turn.id} className="space-y-2">
                 <div className="ml-auto max-w-[85%] rounded-xl bg-primary px-3 py-2 text-sm text-primary-foreground">{turn.userMessage}</div>
                 {turn.finalAnswer && (
-                  <div className="max-w-[85%] rounded-xl border border-border bg-card px-3 py-2 text-sm">
+                  <div className="max-w-[85%] rounded-xl border border-border bg-card px-3.5 py-2.5 text-sm">
                     <Markdown content={turn.finalAnswer} />
                   </div>
                 )}
                 {error && turn.id === mergedTurns[mergedTurns.length - 1]?.id && (
-                  <div role="alert" className="max-w-[85%] space-y-1 rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  <div role="alert" className="max-w-[85%] space-y-1.5 rounded-xl border border-destructive/40 bg-destructive/10 px-3.5 py-2.5 text-xs text-destructive">
                     <button type="button" className="text-left" onClick={() => dismissError()}>{error}</button>
                     {errorTraceId && <p className="break-all font-mono text-[10px] opacity-80">trace: {errorTraceId}</p>}
                   </div>
@@ -123,7 +123,7 @@ export function QuickChatView() {
           </div>
 
           <div className="shrink-0 border-t border-border p-3">
-            <div className="flex items-end gap-2 rounded-xl border border-border bg-card p-2">
+            <div className="flex items-end gap-2 rounded-xl border border-border bg-card p-3">
               <textarea
                 ref={textareaRef}
                 value={inputText}
@@ -140,7 +140,7 @@ export function QuickChatView() {
               <select
                 value={selectedSessionId}
                 onChange={(e) => { setSelectedSessionId(e.target.value); switchSession(e.target.value) }}
-                className="min-w-0 flex-1 rounded-lg border border-border bg-card px-2 py-1.5 text-xs outline-none"
+                className="min-w-0 flex-1 rounded-lg border border-border bg-card px-3 py-2.5 text-xs outline-none"
                 aria-label="选择会话"
               >
                 {sessions.map((s) => <option key={s.session_id} value={s.session_id}>{s.const_name || s.session_id.slice(0, 8)}</option>)}
