@@ -1,5 +1,5 @@
 /**
- * tests/routes-2.2h.test.ts — deferred-runs / collab / const-store
+ * tests/routes-2.2h.test.ts — collab / const-store（deferred-runs 已随子任务方案删除）
  * 单测（阶段 2.2h，2.2 批收尾）。工作流 REST 面已于 2026-11-02 作为死代码整体删除
  * （空 deps 挂载 → sidecar 分支永不可达），本文件只剩它剩下的三条路由链。
  */
@@ -46,122 +46,6 @@ async function makeSession(app: Awaited<ReturnType<typeof makeApp>>): Promise<st
   ).json()) as { session_id: string };
   return created.session_id;
 }
-
-describe("deferred-runs（阶段 2.2h）", () => {
-  test("manager upsert/list/cancel 终态 409/404", async () => {
-    const app = await makeApp();
-    const h = authHeader();
-    const sid = await makeSession(app);
-
-    // 直接写一条 run（模拟 WS 事件写入）
-    const { getDeferredRunManager } = await import("../src/routes/deferred-runs");
-    const mgr = getDeferredRunManager();
-    mgr.addOrUpdate(sid, { run_id: "r1", status: "running", tool: "research" });
-
-    const list = (await (
-      await app.request(`/api/sessions/${sid}/deferred-runs`, { headers: h })
-    ).json()) as { runs: Array<{ run_id: string; status: string }> };
-    expect(list.runs.length).toBe(1);
-    expect(list.runs[0]!.run_id).toBe("r1");
-
-    const single = await app.request(`/api/sessions/${sid}/deferred-runs/r1`, { headers: h });
-    expect(single.status).toBe(200);
-
-    const cancelled = (await (
-      await app.request(`/api/sessions/${sid}/deferred-runs/r1/cancel`, { method: "POST", headers: h })
-    ).json()) as { status: string; cancel_reason: string };
-    expect(cancelled.status).toBe("cancelled");
-    expect(cancelled.cancel_reason).toBe("cancelled_by_user");
-
-    // 终态再取消 → 409
-    const again = await app.request(`/api/sessions/${sid}/deferred-runs/r1/cancel`, { method: "POST", headers: h });
-    expect(again.status).toBe(409);
-
-    // 未知 run → 404
-    const missing = await app.request(`/api/sessions/${sid}/deferred-runs/nope`, { headers: h });
-    expect(missing.status).toBe(404);
-  });
-
-  test("浏览器投影：列表不含 task/name/result，单条才返回 result", async () => {
-    const app = await makeApp();
-    const h = authHeader();
-    const sid = await makeSession(app);
-    const { getDeferredRunManager } = await import("../src/routes/deferred-runs");
-    const mgr = getDeferredRunManager();
-
-    mgr.addOrUpdate(sid, {
-      run_id: "secret-1",
-      status: "succeeded",
-      task: "完整子任务提示词",
-      name: "子任务标题",
-      result: "最终结果",
-      error_message: "失败原因",
-    });
-
-    const list = (await (
-      await app.request(`/api/sessions/${sid}/deferred-runs`, { headers: h })
-    ).json()) as { runs: Array<Record<string, unknown>> };
-    const row = list.runs.find((r) => r.run_id === "secret-1")!;
-    expect(row.task).toBeUndefined();
-    expect(row.name).toBeUndefined();
-    expect(row.result).toBeNull();
-
-    const one = (await (
-      await app.request(`/api/sessions/${sid}/deferred-runs/secret-1`, { headers: h })
-    ).json()) as Record<string, unknown>;
-    expect(one.result).toBe("最终结果");
-    expect(one.error_message).toBe("失败原因");
-    expect(one.task).toBeUndefined();
-  });
-
-  test("取消是终态：迟到的 succeeded 事件不会把 cancelled 冲掉", async () => {
-    const app = await makeApp();
-    await makeSession(app);
-    const { getDeferredRunManager } = await import("../src/routes/deferred-runs");
-    const mgr = getDeferredRunManager();
-    const sid = "sess-sticky-cancel";
-
-    mgr.addOrUpdate(sid, { run_id: "r-sticky", status: "running" });
-    mgr.cancelRun(sid, "r-sticky");
-    const after = mgr.addOrUpdate(sid, { run_id: "r-sticky", status: "succeeded", result: "late" });
-    expect(after.status).toBe("cancelled");
-    expect(after.cancel_reason).toBe("cancelled_by_user");
-    mgr.deleteSession(sid);
-  });
-
-  test("分页：活跃任务永不裁剪，终态按 limit 返回并带 has_more", async () => {
-    const app = await makeApp();
-    await makeSession(app);
-    const { getDeferredRunManager } = await import("../src/routes/deferred-runs");
-    const mgr = getDeferredRunManager();
-    const sid = "sess-page";
-
-    mgr.addOrUpdate(sid, { run_id: "active", status: "running", created_at: 1 });
-    for (let i = 0; i < 3; i += 1) {
-      mgr.addOrUpdate(sid, { run_id: `done-${i}`, status: "succeeded", created_at: 100 + i });
-    }
-
-    const page = mgr.listPage(sid, 1);
-    expect(page.runs.map((r) => r.run_id)).toContain("active");
-    expect(page.runs.filter((r) => r.status === "succeeded").length).toBe(1);
-    expect(page.hasMore).toBe(true);
-    mgr.deleteSession(sid);
-  });
-
-  test("超时兜底：过期 running 记录变为 failed/timeout", async () => {
-    const app = await makeApp();
-    await makeSession(app);
-    const { getDeferredRunManager } = await import("../src/routes/deferred-runs");
-    const mgr = getDeferredRunManager();
-    const sid = "sess-timeout";
-
-    mgr.addOrUpdate(sid, { run_id: "r-timeout", status: "running", deadline_at: 1 });
-    const got = mgr.getRun(sid, "r-timeout")!;
-    expect(got.status).toBe("failed");
-    expect(got.error_code).toBe("timeout");
-    mgr.deleteSession(sid);
-  });
-});
 
 describe("collab（阶段 2.2h）", () => {
   test("分享：创建/列表/访问+计数/撤销 404；快照：创建/列表/删除", async () => {

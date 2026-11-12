@@ -10,9 +10,10 @@
  *   - settings：Python 经 sidecar RPC 且要求 client_running；Bun kernel
  *     in-process 直读全局 SettingsManager。
  *   - sidecar：kernel in-process 恒运行；version 读 bun-sidecar/package.json。
- *   - automation feature：Python 恒 True（调度器在 lifespan 启动）；Bun 侧
- *     automation 已确认随 Python 移除下线（§7 决策点 1）→ enabled:false，
- *     前端路由守卫（meta.feature='automation'）自动跳转"功能不可用"页。
+ *   - automation / browser_tools：pi 既无调度器也无浏览器运行时，且不存在第二条
+ *     实现路线 → 2026-11-12 复核后整体删除（能力项、路由、面板、DB 表一并清掉）。
+ *   - sub_agents：pi **支持**，走 SDK 的进程内会话（kernel/subagent.ts），
+ *     能力清单发 mechanism="pi-sdk-in-process"。
  *   - endpoints：Python 枚举 FastAPI routes；Bun 由 server.ts 注入挂载清单。
  */
 
@@ -26,9 +27,8 @@ import { bundleDir, dataDir, getUserSkillsDir } from "../app-paths";
 import { appVersion } from "../app-version";
 import { getSettingValue } from "../settings-global";
 import { agentDirDiagnostics, engineIdentity } from "../../../bun-sidecar/src/kernel/engine-info";
-import { ENGINE_EVENT_EXPECTED_BUT_UNPRODUCED } from "../../../bun-sidecar/src/kernel/pi-contract";
 import { CORE_SETTING_PATHS } from "./settings";
-import { BUILTIN_TOOLS } from "./tools";
+import { currentToolList } from "./tools";
 import { loadRaw as loadMcpRaw } from "./mcp";
 import { redactSensitive } from "./mcp-validation";
 import { loadProviders } from "./providers";
@@ -183,12 +183,10 @@ function analyzeConfigSources(): Record<string, unknown> {
 function buildManifest(deps: CapabilitiesDeps, gathered: Record<string, unknown>): Record<string, unknown> {
   const panels = {
     tts: getPanel("tts"),
-    browser_tools: getPanel("browser_tools"),
     sub_agents: getPanel("sub_agents"),
     hindsight: getPanel("hindsight"),
   };
   const ttsCfg = panels.tts;
-  const browserCfg = panels.browser_tools;
   const subagentCfg = panels.sub_agents;
   const hindsightCfg = panels.hindsight;
 
@@ -214,45 +212,17 @@ function buildManifest(deps: CapabilitiesDeps, gathered: Record<string, unknown>
     providers: ttsEnabled ? [String(ttsCfg.provider ?? "edge-tts")] : [],
   };
 
-  // 浏览器工具与 sub_agents 同形：面板值是**用户意图**，引擎事实是**没有**。
-  // 14 个真实工具里没有任何 browser_*（清单见 capabilities.tools），pi 也没有
-  // 浏览器运行时；把开关值直接当 enabled 回给前端，等于让"已启用"这句话
-  // 没有任何消费者能兑现。`configured` 保留用户写入的偏好，供设置面板回显。
-  const browserToolsConfigured = Boolean(browserCfg.enabled ?? false);
-  features.browser_tools = {
-    enabled: false,
-    engine_supported: false,
-    configured: browserToolsConfigured,
-    reason: "当前 Agent 引擎（pi）没有浏览器运行时，浏览器工具暂不可用；此开关仅保存偏好",
-  };
-
-  // 后台子任务（Agent 任务中心）：面板开关是**用户意图**，引擎支持度是**事实**。
-  // 二者必须分开——上一个版本只看了面板值，于是 Dock 无条件渲染 /agent-tasks，
-  // 用户点进去是一个永远为空的列表：当前 pi 引擎没有任何子 Agent 运行时，
-  // kernel 不会发 deferred_subagent_submitted（登记见 pi-contract.ts 的
-  // ENGINE_EVENT_EXPECTED_BUT_UNPRODUCED）。
-  const engineSupportsSubAgents = !ENGINE_EVENT_EXPECTED_BUT_UNPRODUCED.some(
-    (e) => e.event === "deferred_subagent_submitted",
-  );
+  // 子 Agent：pi **支持**，方式是 SDK 的进程内会话（docs/sdk.md 的
+  // createAgentSession + SessionManager.inMemory；官方示例 examples/extensions/subagent
+  // 用子进程做同一件事，Maxma 因便携包只带 bun、pi CLI 在 bun 下起不来而选 SDK）。
+  // 装配见 kernel/subagent.ts，开关/并发/超时来自本面板。
   features.sub_agents = {
-    enabled: Boolean(subagentCfg.enabled ?? false) && engineSupportsSubAgents,
-    // 面板开着但引擎不支持时，前端可据此给出真实原因而非"你关掉了"。
-    engine_supported: engineSupportsSubAgents,
-    reason: engineSupportsSubAgents
-      ? null
-      : "当前 Agent 引擎（pi）没有子任务运行时，后台子任务暂不可用",
-    max_concurrent: Number(subagentCfg.max_concurrent ?? 3) || 3,
-  };
-
-  // automation 随 Python 移除下线（§7 决策点 1）——前端路由守卫据此隐藏面板。
-  // engine_supported 必须显式发 false：调度器连同 Python 侧一起删除，pi 也没有
-  // 定时/触发调度，用户在任何设置面板都开不回来。缺这个字段时前端只会落到
-  // 「你在设置里关掉了它」——那是把缺能力谎报成用户操作（CAP-HONESTY-001）。
-  features.automation = {
-    enabled: false,
-    engine_supported: false,
-    scheduler: false,
-    reason: "自动化调度器随旧引擎下线，当前 Agent 引擎（pi）没有定时/触发调度，暂不可用",
+    enabled: Boolean(subagentCfg.enabled ?? false),
+    engine_supported: true,
+    mechanism: "pi-sdk-in-process",
+    reason: null,
+    max_concurrent: Number(subagentCfg.max_concurrent ?? 4) || 4,
+    timeout_seconds: Number(subagentCfg.timeout_seconds ?? 300) || 300,
   };
 
   features.collab = { enabled: true, persistence: "sqlite" };
@@ -326,8 +296,9 @@ export function createCapabilitiesRoutes(deps: CapabilitiesDeps): Hono {
 
     // 2. 工具列表
     try {
-      result.tools = BUILTIN_TOOLS;
-      result.tool_categories = categorizeTools(BUILTIN_TOOLS);
+      const toolList = currentToolList();
+      result.tools = toolList;
+      result.tool_categories = categorizeTools(toolList);
     } catch {
       /* noop */
     }

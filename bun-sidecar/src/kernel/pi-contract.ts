@@ -7,8 +7,9 @@
  * 一个工具改名、一个 settings 键删掉，`tsc` 不会报错，测试也不会红——因为
  * 这些名字在 Maxma 侧是**字符串字面量**，散落在 kernel、bun-backend 路由与
  * web 前端三处，各写各的。上一代引擎（OMP → pi）换代时，这条链已经断过一次：
- * `deferred_subagent_submitted` 至今仍在 chat-ws 与前端类型里被消费，而引擎侧
- * 早已没有生产者（bun-sidecar/src 全目录 grep `deferred|subagent` 零命中）。
+ * `deferred_subagent_submitted` 当年被 chat-ws 与前端类型消费，而引擎侧早已没有
+ * 生产者；2026-11-12 复核后用 pi 官方 SDK 的进程内子会话（kernel/subagent.ts）
+ * 取代了那套 OMP 时代的 deferred 面，事件与路由一并删除。
  *
  * 所以这里把"Maxma 向 pi 借用了哪些名字"集中声明，由
  * `bun-sidecar/tests/pi-contract.test.ts` 与 `engine-boundary.test.ts` 逐条
@@ -234,6 +235,12 @@ export const MAXMA_CUSTOM_TOOLS = [
   "write_office_file",
 ] as const;
 
+/**
+ * 条件装配的工具：面板开启时才注册（`/api/tools` 与 capabilities 按同一开关决定是否列出）。
+ * `subagent` = pi SDK 的进程内子会话（kernel/subagent.ts）。
+ */
+export const MAXMA_CONDITIONAL_TOOLS = ["subagent"] as const;
+
 /** kernel 内建的工具型扩展点（计划模式提交）。 */
 export const MAXMA_ENGINE_TOOL_EXTRAS = ["submit_plan"] as const;
 
@@ -422,7 +429,7 @@ export const MAXMA_SETTINGS_KEYS: ReadonlyArray<{
   { path: "thinkingBudgets.xhigh", engineReal: false, consumer: "none", note: "pi 只有 minimal/low/medium/high 四档预算；xhigh/max 无对应键也无读者" },
   { path: "thinkingBudgets.max", engineReal: false, consumer: "none", note: "同上" },
   { path: "advisor.enabled", engineReal: false, consumer: "none", note: "OMP 遗留：pi 无 advisor 子系统，无读者" },
-  { path: "advisor.subagents", engineReal: false, consumer: "none", note: "OMP 遗留：pi 无 subagent 运行时，无读者" },
+  { path: "advisor.subagents", engineReal: false, consumer: "none", note: "OMP 遗留键：pi Settings 无此键。子 Agent 现由 Maxma 工具 subagent（kernel/subagent.ts，pi SDK 进程内会话）实现，与该键无关" },
   { path: "contextPromotion.enabled", engineReal: false, consumer: "none", note: "面板暴露但全仓（web/后端/kernel）除面板自身外无任何读者——从未接线的能力" },
   { path: "autolearn.enabled", engineReal: false, consumer: "none", note: "同上：面板有开关，无实现读者" },
   { path: "async.enabled", engineReal: false, consumer: "none", note: "同上：面板有开关，无实现读者" },
@@ -452,14 +459,13 @@ export const MAXMA_SETTINGS_ENGINE_REAL_PATHS: ReadonlySet<string> = new Set(
  *
  * 由 tests/engine-boundary.test.ts 逐条核对"kernel 里真的有生产者"。
  * 没有生产者又不在下面的显式登记里的，测试红——这正是
- * `deferred_subagent_submitted` 当年静默死亡却全绿的缺口。
+ * `deferred_subagent_submitted` 当年静默死亡却全绿的缺口（现已删除）。
  *
  * 判据分工（三张清单各自回答"谁对这个事件负责"）：
  *   - 本清单：引擎（kernel）负责产出，逐条要求 kernel 里有生产者；
  *   - `ENGINE_EVENT_EXPECTED_BUT_UNPRODUCED`：**本清单的例外区**——契约还声明着"引擎产出"、
- *     但引擎换代后没人产出了。所以一张事件同时出现在这两张表里是有意的（如
- *     `sub_session_created` / `deferred_subagent_submitted`），出现在"本清单 + 后端合成"
- *     两张里才是矛盾。
+ *     但引擎换代后没人产出了。一张事件同时出现在这两张表里是有意的，出现在
+ *     "本清单 + 后端合成"两张里才是矛盾。
  *   - `BACKEND_SYNTHESIZED_EVENTS`：由 bun-backend 路由自行合成，不经引擎，
  *     与前两张互斥（`engine-boundary.test.ts` 查这条互斥）。
  *
@@ -501,8 +507,6 @@ export const MAXMA_ENGINE_WS_EVENTS = [
   "goal_updated",
   "llm_usage",
   "context_usage",
-  "sub_session_created",
-  "deferred_subagent_submitted",
   "permission_mode_updated",
 ] as const;
 
@@ -520,16 +524,6 @@ export const ENGINE_EVENT_EXPECTED_BUT_UNPRODUCED: ReadonlyArray<{
   reason: string;
   handling: string;
 }> = [
-  {
-    event: "deferred_subagent_submitted",
-    reason: "pi 无子 Agent 运行时（已安装引擎包无任何 subagent 导出，由 tests/pi-contract.test.ts 现读对账）；事件与 DeferredRunManager 均为上一代引擎（OMP）时代遗留",
-    handling: "Agent 任务中心入口按能力门控隐藏（capabilities.sub_agents.engine_supported=false），后端追踪面保留待接",
-  },
-  {
-    event: "sub_session_created",
-    reason: "同上：pi 无子会话概念，旧契约文档写的「sidecar 发射」指上一代引擎内核（现登记于本文 §3.3）",
-    handling: "协议保留，前端 SubAgentCard 待与任务中心一并处置",
-  },
   {
     event: "irc_message",
     reason: "多 Agent IRC 是 OMP 专有；pi 无对应事件",

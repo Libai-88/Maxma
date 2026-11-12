@@ -2,11 +2,11 @@
  * routes/settings-panels.ts — 四个配置面板持久化（api/routes/settings_panels.py
  * 的 Bun 直译，阶段二 2.2g）。
  *
- * 数据：API_DATA_DIR/panel_configs.json（顶层键 hindsight/tts/browser_tools/
- * sub_agents）。语义保留：默认值合并、None 字段不覆盖（PATCH 语义）、
- * PANEL-CORRUPT-001 损坏拒绝写入、PANEL-WIRE-001 同步 OMP 运行时设置
- * （browser 与 advisor 配置项直调 kernel 全局 SettingsManager，sidecar 不可用的
- * 降级分支不再需要）。
+ * 数据：API_DATA_DIR/panel_configs.json（顶层键 hindsight/tts/sub_agents）。
+ * 语义保留：默认值合并、None 字段不覆盖（PATCH 语义）、PANEL-CORRUPT-001 损坏拒绝写入。
+ *
+ * 已删除 `browser_tools`：引擎侧没有任何浏览器运行时，这个面板只是一份没人消费的
+ * 偏好文件（"暂不生效"）。浏览器自动化走 MCP（官方 mcp.md），由扩展页的市场安装。
  */
 
 import { Hono } from "hono";
@@ -40,16 +40,6 @@ const DEFAULT_TTS: Record<string, unknown> = {
   auto_read: false,
 };
 
-const DEFAULT_BROWSER_TOOLS: Record<string, unknown> = {
-  enabled: false,
-  chrome_path: "",
-  headless: true,
-  viewport_width: 1280,
-  viewport_height: 800,
-  block_tracking: true,
-  allowed_domains: [],
-};
-
 const DEFAULT_SUB_AGENTS: Record<string, unknown> = {
   enabled: false,
   max_concurrent: 3,
@@ -62,7 +52,6 @@ const DEFAULT_SUB_AGENTS: Record<string, unknown> = {
 const DEFAULTS: Record<string, Record<string, unknown>> = {
   hindsight: DEFAULT_HINDSIGHT,
   tts: DEFAULT_TTS,
-  browser_tools: DEFAULT_BROWSER_TOOLS,
   sub_agents: DEFAULT_SUB_AGENTS,
 };
 
@@ -149,12 +138,6 @@ function validatePanel(
     const it = updates.importance_threshold;
     if (typeof it === "number" && (it < 0.1 || it > 1.0)) return "importance_threshold must be between 0.1 and 1.0";
   }
-  if (panel === "browser_tools") {
-    const vw = updates.viewport_width;
-    if (typeof vw === "number" && (vw < 1 || vw > 7680)) return "viewport_width must be between 1 and 7680";
-    const vh = updates.viewport_height;
-    if (typeof vh === "number" && (vh < 1 || vh > 4320)) return "viewport_height must be between 1 and 4320";
-  }
   if (panel === "sub_agents") {
     const mc = updates.max_concurrent;
     if (typeof mc === "number" && (mc < 1 || mc > 10)) return "max_concurrent must be between 1 and 10";
@@ -191,36 +174,6 @@ export function createSettingsPanelRoutes(): Hono {
     const updates = { ...body };
     if (LEGACY_TTS_PROVIDERS.has(String(updates.provider))) updates.provider = "system";
     return c.json(putPanel("tts", updates));
-  });
-
-  // 浏览器工具
-  app.get("/api/settings/browser-tools", (c) => c.json(getPanel("browser_tools")));
-  app.put("/api/settings/browser-tools", async (c) => {
-    const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
-    const invalid = validatePanel("browser_tools", body);
-    if (invalid) return c.json({ detail: invalid }, 422);
-    const updates = { ...body };
-    if (updates.allowed_domains !== undefined && updates.allowed_domains !== null) {
-      // 去空白、去重（保持顺序）、忽略空项
-      const seen = new Set<string>();
-      const cleaned: string[] = [];
-      for (const d of updates.allowed_domains as unknown[]) {
-        if (typeof d !== "string") continue;
-        const trimmed = d.trim();
-        if (trimmed && !seen.has(trimmed)) {
-          seen.add(trimmed);
-          cleaned.push(trimmed);
-        }
-      }
-      updates.allowed_domains = cleaned;
-    }
-    const result = putPanel("browser_tools", updates);
-    // 面板值只有一个存储：panel_configs.json（capabilities 与前端都从这里读）。
-    // 这里原本还把 enabled/headless 镜像写进 kernel 的全局 SettingsManager
-    // （注释写着"同步 OMP 运行时设置"）。实测那是**纯 no-op**：pi 的 Settings 里
-    // 没有 browser 键（`settings-manager.d.ts` 无此字段），而那个单例是 in-memory、
-    // 也不参与会话。保留注释会误导后来的人以为浏览器开关接到了引擎上。
-    return c.json(result);
   });
 
   // 子代理

@@ -138,6 +138,24 @@
 - 浏览器控制台在后端重启窗口会出现若干 `Failed to fetch: /api/health`（浏览器网络层自己
   记的失败请求，不是应用日志；`waitForBackend` 本身是静默重试）。
 
+## 2026-11-12 边界收口：按 pi 官方方案实现或被删除
+
+上一轮列出的三条边界本轮按「要么找 pi 官方做法，要么彻底删掉」处理完毕，不再有"保留但不可用"的中间态。
+
+| 能力 | pi 有没有 | 结论 | 做法 |
+| --- | --- | --- | --- |
+| 子 Agent（`sub_agents`） | **有**：官方示例 `examples/extensions/subagent/`（"Each subagent runs in a separate pi process"）+ pi 官方 SDK 文档的 `createAgentSession`/`SessionManager.inMemory()`（`PI_CODEMODE_MAX_WORKERS` 注释直接以 "in-process subagents" 举例） | **实现**，不再是门控 | `kernel/subagent.ts`：`subagent({tasks})` 工具 → 每个任务一个 in-memory 子会话（独立上下文、只读工具 read/grep/find/ls/bash、不能再委派、跑完 dispose）。选 SDK 而非 CLI 子进程：实测 pi CLI bundle 在 Bun 1.3.14 下起不来（undici `webidl.util.markAsUncloneable`），便携包又不带 Node。面板（开关/并行/超时）真消费；`/api/tools` 与 capabilities 的清单按面板动态追加 `subagent` |
+| 后台任务中心 / deferred runs | 无（OMP 时代产物，pi 从不发射那两个事件） | **删除** | 事件 `deferred_subagent_submitted` / `sub_session_created`、`DeferredRunManager`、`/api/sessions/:id/deferred-runs`、`AgentTasksView` + `/agent-tasks` 路由与侧栏项、`deferred_runs` 表（v7 迁移保留版本号占位）、前端 `DeferredRun` 类型与 api —— 全部清掉 |
+| 自动化（`automation`） | **无**：导出面 157 个名字无 scheduler/cron，docs 也无 | **删除** | `/automation` 路由、`features.automation`、类型位、`automations`/`automation_run_history` 表（v4 迁移保留占位；v6 的 ALTER 改为空实现） |
+| 浏览器工具（`browser_tools`） | 核心**无**，官方路线是 MCP（pi 官方 mcp 文档） | **删除自研面板**，指向 MCP 市场 | `features.browser_tools`、`/api/settings/browser-tools`、前端面板与类型、`panel_configs` 默认键全部移除；需要有浏览器的用户去扩展页的市场装 browser/playwright 类 MCP（ModelScope 现有 12801 个条目） |
+| TTS（`tts`） | 无（但也不需要） | **保留** | 实现走浏览器 `speechSynthesis`（`hooks/useTts.ts`），与引擎无关；能力清单按用户开关如实体现在 UI |
+
+实测证据（开发后端 + 受控 provider）：
+- `subagent` 工具被审批门拦截（`允许调用 subagent？` + 两个任务的结构化参数）→ 批准 → 子会话执行 → 结果回父会话，`tool` 事件 `done`，0 console error；
+- `/api/capabilities`：`sub_agents = {enabled:true, engine_supported:true, mechanism:"pi-sdk-in-process", max_concurrent:2, timeout_seconds:120}`，工具清单含 `subagent`；`automation` / `browser_tools` 已从清单消失。
+
+**这下真的没有"半成品入口"了**：能力清单里剩下的每一项，要么有 pi 机制在跑，要么是纯前端实现（tts），要么是产品安全开关（`plugins.marketplace=false`）。
+
 ## 状态
 
 - 仓库 `https://github.com/Libai-88/Maxma.git`，主分支 `main`；变更一律走分支 + PR squash 合入，

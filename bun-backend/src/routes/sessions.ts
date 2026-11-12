@@ -23,7 +23,6 @@ import {
 import type { MaxmaPermissionMode } from "../../../bun-sidecar/src/kernel/types";
 import { MAXMA_PERMISSION_MODES } from "../../../bun-sidecar/src/kernel/pi-contract";
 
-import { getDeferredRunManager } from "./deferred-runs";
 import { engineSettingsForNewSession, getSettingValue } from "../settings-global";
 
 /** Bun 后端的会话注册表（kernel 桥经 deps 注入）。 */
@@ -91,6 +90,7 @@ function callRpc<T>(
   });
 }
 
+import { getPanel } from "./settings-panels";
 export function createSessionsRoutes(deps: SessionsDeps): Hono {
   const app = new Hono();
 
@@ -102,9 +102,18 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     // 见 bun-backend/src/settings-global.ts 头注释——旧实现在这里直接读那个
     // in-memory 单例，所以面板改了也不生效。
     const skillsEnabled = getSettingValue("skills.enabled") !== false;
+    // 子 Agent：pi SDK 的进程内会话（kernel/subagent.ts）。开关与并发/超时来自
+    // 设置面板（panel_configs.json 的 sub_agents），在会话创建时随工具一起装配——
+    // 面板改完对新会话生效，与「归引擎消费」的设置同一套时序。
+    const subagentPanel = getPanel("sub_agents") as Record<string, unknown>;
     await callRpc(deps, "create_session", {
       skills_enabled: skillsEnabled,
       settings: engineSettingsForNewSession(),
+      subagent: {
+        enabled: subagentPanel.enabled === true,
+        max_concurrent: Number(subagentPanel.max_concurrent ?? 4),
+        timeout_seconds: Number(subagentPanel.timeout_seconds ?? 300),
+      },
     });
     const created = [...deps.hub.sessions.keys()].at(-1)!;
     const record = deps.hub.sessions.get(created)!;
@@ -295,15 +304,6 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     const record = deps.hub.sessions.get(sid);
     if (!record) return c.json({ detail: "会话不存在" }, 404);
     await callRpc(deps, "destroy_session", { session_id: sid });
-    // 对齐 Python session_manager.remove：取消活跃 deferred run，并删掉记录
-    // （会话已经不存在，留着只是孤儿行）。
-    try {
-      const mgr = getDeferredRunManager();
-      mgr.cancelParent(sid);
-      mgr.deleteSession(sid);
-    } catch {
-      /* best-effort */
-    }
     deps.audit?.("session", "delete", sid, "会话删除");
     return c.json({ status: "deleted" });
   });
@@ -314,13 +314,6 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     for (const sid of body.session_ids ?? []) {
       if (deps.hub.sessions.has(sid)) {
         await callRpc(deps, "destroy_session", { session_id: sid });
-        try {
-          const mgr = getDeferredRunManager();
-          mgr.cancelParent(sid);
-          mgr.deleteSession(sid);
-        } catch {
-          /* best-effort */
-        }
         deleted.push(sid);
       }
     }
@@ -331,13 +324,6 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     const deleted: string[] = [];
     for (const sid of [...deps.hub.sessions.keys()]) {
       await callRpc(deps, "destroy_session", { session_id: sid });
-      try {
-        const mgr = getDeferredRunManager();
-        mgr.cancelParent(sid);
-        mgr.deleteSession(sid);
-      } catch {
-        /* best-effort */
-      }
       deleted.push(sid);
     }
     return c.json({ deleted, count: deleted.length });

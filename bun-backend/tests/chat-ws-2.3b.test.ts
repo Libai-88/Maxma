@@ -3,7 +3,7 @@
  *
  * mock hub（callRpc 桩 + broadcast 捕获）驱动 handleChatMessage + onKernelEvent：
  * turn_id 富化 / answer 吞流+done 重合成 / 工具截断 / artifact 合成 /
- * memory 事件流 / deferred 写入 / cancel 闭合 / WS 限流。
+ * memory 事件流 / cancel 闭合 / WS 限流。
  * 全部内联构造（规避 bun test 跨目录动态 import 挂起）。
  */
 
@@ -177,34 +177,6 @@ describe("回合富化层（阶段 2.3b）", () => {
     const ms = sent[startIdx] as { payload: { turn_id: string } };
     const done = sent[doneIdx] as { payload: { turn_id: string } };
     expect(ms.payload.turn_id).toBe(done.payload.turn_id);
-  }, 15000);
-
-  test("deferred_subagent_submitted → 写入 DeferredRunManager + 白名单转发", async () => {
-    const { onKernelEvent, handleChatMessage } = await import("../src/routes/chat-ws");
-    const { initializeDatabase } = await import("../src/db/core");
-    const { getDeferredRunManager } = await import("../src/routes/deferred-runs");
-    initializeDatabase();
-    const sid = "sess-deferred";
-    const { hub, ws, sent } = makeHub(sid);
-    handleChatMessage(hub as never, ws as never, JSON.stringify({ type: "chat", payload: { message: "子任务" } }));
-    await Bun.sleep(10);
-    await onKernelEvent(hub as never, sid, {
-      type: "deferred_subagent_submitted",
-      payload: { run_id: "run-1", status: "completed", task: "t", name: "n" },
-    });
-    const fwd = sent.find((f) => f.type === "deferred_subagent_submitted") as {
-      payload: { run_id: string; status: string; task?: string; name?: string };
-    };
-    expect(fwd.payload.run_id).toBe("run-1");
-    // 完整 prompt/标题不能过 WS 边界
-    expect(fwd.payload.task).toBeUndefined();
-    expect(fwd.payload.name).toBeUndefined();
-    expect(fwd.payload.status).toBe("succeeded");
-    const stored = getDeferredRunManager().getRun(sid, "run-1");
-    expect(stored).not.toBeNull();
-    expect(stored!.status).toBe("succeeded"); // completed → succeeded 生命周期映射
-    expect(stored!.task).toBeUndefined();
-    expect(stored!.name).toBeUndefined();
   }, 15000);
 
   test("cancel 在途回合 → done{cancelled:true}", async () => {

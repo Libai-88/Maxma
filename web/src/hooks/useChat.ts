@@ -1,4 +1,4 @@
-import type { ClientMessage, TaskBriefMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, CompactionReason,  AskUserEvent, ArtifactEvent, PlanProposedEvent, PlanStepStartEvent, PlanStepEndEvent, PlanStepErrorEvent, PlanCompletedEvent, DeferredSubagentSubmittedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent, TurnUsage, PiUsage,
+import type { ClientMessage, TaskBriefMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, CompactionReason,  AskUserEvent, ArtifactEvent, PlanProposedEvent, PlanStepStartEvent, PlanStepEndEvent, PlanStepErrorEvent, PlanCompletedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent, TurnUsage, PiUsage,
 } from '@/types'
 import type { ThinkPathId } from '@/utils/thinkPath'
 import { normalizeContextUsage, useChatStore, TURNS_KEY_PREFIX } from '@/stores/chat'
@@ -102,8 +102,6 @@ export const SERVER_EVENT_HANDLER_TYPES: Record<ServerEvent['type'], true> = {
   plan_step_error: true,
   plan_completed: true,
   // 子任务
-  sub_session_created: true,
-  deferred_subagent_submitted: true,
   // 卡片（后端合成 / 回执）
   artifact: true,
   artifact_result: true,
@@ -227,9 +225,8 @@ async function runRecap(sid: string): Promise<void> {
   }
 }
 
-/** 追踪所有 useChat 实例创建的子会话 ID，用于组件卸载时清理孤儿 WS。
- *  必须为模块级：handleEventForChannel 是模块级函数（line 628 引用），
- *  若放实例级会在 sub_session_created 时抛 ReferenceError 崩溃。 */
+/** 追踪 useChat 实例打开过的会话通道，用于组件卸载时清理孤儿 WS（模块级）。
+ *  子会话（sub_session）概念已随 pi 的子 Agent 方案删除，这里只剩普通会话。 */
 const _childSessionIds = new Set<string>()
 
 /** 正在从后端加载历史的会话 ID 集合（RACE-002 in-flight 去重）。 */
@@ -359,7 +356,6 @@ function touch() { queueMicrotask(() => getChatStore().bump()) }
 function getSessionStore() { return useSessionStore.getState() }
 
 const refreshSessions = () => getSessionStore().refreshSessions().catch(() => {/* 保留现有列表，静默失败 */})
-const switchSession = (id: string) => getSessionStore().switchSession(id)
 // 模块级缓存：首次 import 时从 localStorage 恢复所有会话的历史消息
 // （修复：此前为 new Map()，导致 loadAllTurnsFromStorage 成为死代码，
 //   页面刷新后 turnsCache 为空，旧会话点击后无历史显示）
@@ -1332,39 +1328,7 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     }
   }
 
-  // sub_session_created 可能在任何时候到达（主 Agent 调用 call_sub_agent）
-  // AG-SUBAGENT-001：真实子 Agent 在父会话内部运行，事件经父会话 WS 转发。
-  // 此前这里 ensureConnected(subId)+switchSession(subId) 会打开一个"全新空
-  // 会话"并把用户切过去——子 Agent 的事件根本不会发到那个会话，用户看到的
-  // 是空白聊天且被强制跳转。现在只在父 turn 中记录一条系统事件，让用户
-  // 感知子任务启动；完成/失败状态由 deferred_subagent_submitted + SubAgentCard
-  // 展示。
-  if (event.type === 'sub_session_created') {
-    void refreshSessions()
-    const taskLabel = event.payload.task || event.payload.name || '子 Agent'
-    if (ch.currentTurn) {
-      ch.currentTurn.events.push({
-        kind: 'system',
-        detail: 'subagent_started',
-        content: `子任务启动：${taskLabel}`,
-        timestamp: Date.now(),
-      })
-    }
-    return
-  }
-
-  // Deferred mode deliberately sends only an opaque ID. The card resolves the
-  // browser-safe run projection lazily instead of caching task/scope details.
-  if (event.type === 'deferred_subagent_submitted') {
-    const submitted = event as DeferredSubagentSubmittedEvent
-    const runId = submitted.payload.run_id
-    if (ch.currentTurn && runId && !ch.currentTurn.deferredRunIds?.includes(runId)) {
-      ch.currentTurn.deferredRunIds = [...(ch.currentTurn.deferredRunIds ?? []), runId]
-    }
-    return
-  }
-
-  // memory_tool_* / memory_start / memory_done 可能在 done 事件之后到达（currentTurn 已清空），
+    // memory_tool_* / memory_start / memory_done 可能在 done 事件之后到达（currentTurn 已清空），
   // 必须在 const turn = ch.currentTurn 守卫之前处理，通过 turn_id 自行查找目标。
   if (event.type === 'memory_start' || event.type === 'memory_tool_start' || event.type === 'memory_tool_end'
     || event.type === 'memory_tool_error' || event.type === 'memory_done') {
@@ -1802,27 +1766,6 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
         log.warn(`会话 ${sid} 的 done 事件到达时 currentTurn 为 null`)
         ch.isStreaming = false
         ch.streamPhase = 'completed'
-      }
-      // 子 Agent 完成 → 仅当用户仍停留在此子会话时才切回父会话，
-      // 避免覆盖用户已切换到其它会话的选择
-      if (ch.parentSessionId) {
-        const currentSid = getSessionStore().sessionId
-        if (currentSid === sid) {
-          setTimeout(() => switchSession(ch.parentSessionId!), 500)
-        }
-        // PERF-SUBCHANNEL-LEAK-001：子会话完成后延迟清理其 channel——
-        // 此前子会话 channel 永久留在 channels map（有 WS、有 turns），
-        // 长时间运行 Agent 频繁调用子 agent 时内存持续增长。
-        // 10 分钟后若仍空闲（无流式/审批），断开 WS 并从 map 移除；
-        // localStorage 缓存保留，用户再次进入时自动恢复。
-        const subSid = sid
-        setTimeout(() => {
-          const subCh = getChatStore().channels.get(subSid)
-          if (subCh && !subCh.isStreaming && !subCh.isAwaitingUser && !subCh.currentTurn) {
-            disconnectSession(subSid)
-            _childSessionIds.delete(subSid)
-          }
-        }, 10 * 60 * 1000)
       }
       break
     }

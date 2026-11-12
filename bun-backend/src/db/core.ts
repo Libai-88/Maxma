@@ -39,13 +39,9 @@ function migrateV3AddPriority(conn: Database): void {
 }
 
 function migrateV6AddClaimToken(conn: Database): void {
-  // v6：automations 表新增 claim_token 列（幂等）
-  const cols = (conn.query("PRAGMA table_info(automations)").all() as Array<{ name: string }>).map(
-    (r) => r.name,
-  );
-  if (!cols.includes("claim_token")) {
-    conn.exec("ALTER TABLE automations ADD COLUMN claim_token TEXT DEFAULT NULL");
-  }
+  // v6（已作废）：原为 automations 表补 claim_token 列。automation 面在 2026-11-12
+  // 复核后整体删除（pi 没有调度器，也没有第二条自动化路线），v4 不再建该表，
+  // 这里只保留版本号占位——迁移序号不能重排，否则老库会把后续迁移当成未执行。
   conn.exec(
     "INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (6, julianday('now'))",
   );
@@ -129,32 +125,9 @@ export const SCHEMA_MIGRATIONS: Migration[] = [
     INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (2, julianday('now'));`,
   // v3: providers.priority（幂等函数迁移）
   migrateV3AddPriority,
-  // v4: 自动化调度器
-  `CREATE TABLE IF NOT EXISTS automations (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      description TEXT NOT NULL DEFAULT '',
-      cron_expr TEXT,
-      interval_seconds INTEGER,
-      action TEXT NOT NULL DEFAULT '{}',
-      enabled INTEGER NOT NULL DEFAULT 1,
-      last_run TEXT,
-      next_run TEXT,
-      run_count INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS automation_run_history (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      automation_id TEXT NOT NULL,
-      started_at TEXT NOT NULL,
-      finished_at TEXT,
-      status TEXT NOT NULL DEFAULT 'running',
-      result TEXT,
-      FOREIGN KEY (automation_id) REFERENCES automations(id) ON DELETE CASCADE
-    );
-    CREATE INDEX IF NOT EXISTS idx_automation_history_automation_id
-      ON automation_run_history(automation_id, started_at DESC);
-    INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (4, julianday('now'));`,
+  // v4（已作废）：自动化调度器表。pi 没有定时/触发调度（引擎导出面与 docs 均无），
+  // 也不存在第二条实现路线，功能与表一并删除。迁移序号保留，避免重排。
+  `INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (4, julianday('now'));`,
   // v5: 协作功能
   `CREATE TABLE IF NOT EXISTS collab_shares (
       id TEXT PRIMARY KEY,
@@ -183,16 +156,9 @@ export const SCHEMA_MIGRATIONS: Migration[] = [
     INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (5, julianday('now'));`,
   // v6: 自动化原子认领
   migrateV6AddClaimToken,
-  // v7: 后台子任务持久化
-  `CREATE TABLE IF NOT EXISTS deferred_runs (
-      session_id TEXT NOT NULL,
-      run_id TEXT NOT NULL,
-      data TEXT NOT NULL DEFAULT '{}',
-      updated_at REAL NOT NULL DEFAULT (julianday('now')),
-      PRIMARY KEY (session_id, run_id)
-    );
-    CREATE INDEX IF NOT EXISTS idx_deferred_runs_session ON deferred_runs(session_id);
-    INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (7, julianday('now'));`,
+  // v7（已作废）：后台子任务持久化。子任务改由 pi SDK 的进程内会话执行
+  // （kernel/subagent.ts），不再有 deferred run 记录可落库。序号保留。
+  `INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (7, julianday('now'));`,
   // v8: 逐模型请求用量账本（不保存提示词或消息内容）
   `CREATE TABLE IF NOT EXISTS llm_usage_calls (
       id TEXT PRIMARY KEY,

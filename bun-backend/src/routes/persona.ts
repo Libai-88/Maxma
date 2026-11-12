@@ -173,7 +173,7 @@ function errorResponse(err: unknown): { status: ContentfulStatusCode; message: s
 
 /**
  * 任意外部给的 status → Hono 认可的 ContentfulStatusCode。
- * 与 `routes/settings.ts` / `routes/deferred-runs.ts` 的处理同一思路：
+ * 与 `routes/settings.ts` 的处理同一思路：
  * 明确列出可透传的码，其余一律 500（不把非法值当合法状态码发给客户端）。
  */
 function toContentfulStatus(raw: unknown): ContentfulStatusCode {

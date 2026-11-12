@@ -46,7 +46,6 @@ import { createStickerFavoritesRoutes } from "./routes/sticker-favorites";
 import { createStickerUploadRoutes } from "./routes/sticker-upload";
 import { createSettingsPanelRoutes } from "./routes/settings-panels";
 import { createCollabRoutes } from "./routes/collab";
-import { createDeferredRunRoutes, setDeferredRunCancelHandler } from "./routes/deferred-runs";
 import { createActivityRoutes } from "./routes/activity";
 import { createSessionCompressRoutes } from "./routes/session-compress";
 import { createProvidersRoutes, migratePlaintextKeysToEncrypted } from "./routes/providers";
@@ -195,11 +194,6 @@ const chatHub: ChatWsHub = {
   broadcast: broadcastEvent,
 };
 
-// 取消子任务时把意图下发给执行侧。执行侧未实现该方法时 callKernelRpc 返回
-// { ok: false }，本地记录仍然是 cancelled（浏览器看到的事实不变）。
-setDeferredRunCancelHandler((sessionId, runId) =>
-  callKernelRpc("cancel_deferred_run", { session_id: sessionId, run_id: runId }),
-);
 
 export function createApp(): Hono {
   const token = loadOrCreateToken();
@@ -274,8 +268,7 @@ export function createApp(): Hono {
   app.route("/", createStickerFavoritesRoutes());
   app.route("/", createStickerUploadRoutes());
 
-  // 2.2h：deferred-runs / collab
-  app.route("/", createDeferredRunRoutes());
+  // 2.2h：collab
   app.route("/", createCollabRoutes({ sessions: hubSessions }));
 
   // 2.3b：activity hub REST+SSE / session-compress

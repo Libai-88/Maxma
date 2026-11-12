@@ -7,6 +7,7 @@
 
 import { Hono } from "hono";
 import { MAXMA_DEFAULT_PI_TOOLS } from "../../../bun-sidecar/src/kernel/pi-session";
+import { getPanel } from "./settings-panels";
 
 type PiToolMetadata = { label: string; description: string; category: string; builtin: true };
 
@@ -22,6 +23,18 @@ const PI_TOOL_METADATA: Record<(typeof MAXMA_DEFAULT_PI_TOOLS)[number], PiToolMe
 
 const PI_TOOLS = MAXMA_DEFAULT_PI_TOOLS.map((name) => ({ name, ...PI_TOOL_METADATA[name] }));
 
+/** 子 Agent 工具（pi SDK 进程内会话，见 bun-sidecar/src/kernel/subagent.ts）。
+ *  它只在设置面板开启时装配进会话，所以清单也必须跟着面板走——
+ *  静态表里常驻会让"工具可用"这句话在关闭时是假的。 */
+const SUBAGENT_TOOL: Record<string, unknown> = {
+  name: "subagent",
+  label: "Subagent",
+  description: "把彼此独立的子任务交给子 Agent 并行执行（独立上下文，只读文件 + 执行命令）",
+  category: "agent",
+  builtin: true,
+  source: "custom",
+};
+
 export const BUILTIN_TOOLS: Array<Record<string, unknown>> = [
   ...PI_TOOLS,
   { name: "remember_memory", label: "Remember Memory", description: "记住一条长期记忆（用户明确要求时）", category: "memory", builtin: true, source: "custom" },
@@ -33,11 +46,22 @@ export const BUILTIN_TOOLS: Array<Record<string, unknown>> = [
   { name: "submit_plan", label: "Submit Plan", description: "提交实施计划供用户审批", category: "interactive", builtin: true, source: "custom" },
 ];
 
+/** 当前真实可用的工具清单：基础表 + 面板开启时的子 Agent 工具。 */
+export function currentToolList(): Array<Record<string, unknown>> {
+  let subagentEnabled = false;
+  try {
+    subagentEnabled = getPanel("sub_agents").enabled === true;
+  } catch {
+    /* 面板文件损坏时按关闭处理 */
+  }
+  return subagentEnabled ? [...BUILTIN_TOOLS, SUBAGENT_TOOL] : [...BUILTIN_TOOLS];
+}
+
 export function createToolsRoutes(): Hono {
   const app = new Hono();
 
   // 裸数组响应（非 {tools:[]} 包裹——前端类型 ToolInfo[]）
-  app.get("/api/tools", (c) => c.json(BUILTIN_TOOLS));
+  app.get("/api/tools", (c) => c.json(currentToolList()));
 
   return app;
 }

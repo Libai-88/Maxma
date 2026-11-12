@@ -332,40 +332,8 @@ export interface PlanCard {
   replanCount?: number
 }
 
-/** 已实现（Phase 3.4）：通过 EventBus 订阅 TASK_SUBAGENT_LIFECYCLE_CHANNEL 实现。
- * session-bridge.ts 在 createAgentSession 后订阅 EventBus，将子任务生命周期
- * 事件映射为 Maxma 的 sub_session_created 事件。 */
-export interface SubSessionCreatedEvent {
-  type: 'sub_session_created'
-  payload: {
-    sub_session_id: string
-    parent_session_id: string | null
-    task: string
-    name: string
-  }
-}
-
 /** 部分实现（Phase 3.4）：后端 deferred_run_manager 已就绪，支持 REST 创建/查询。
  * 需产品决策是否补全 WebSocket 事件推送。 */
-export interface DeferredSubagentSubmittedEvent {
-  type: 'deferred_subagent_submitted'
-  payload: {
-    run_id: string
-    parent_turn_id: string | null
-    status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
-    result_ref: string | null
-    /** 列表/WS 投影恒为 null；全文走 GET /deferred-runs/:runId。 */
-    result: string | null
-    cancel_reason: string | null
-    deadline_at: number | null
-    attempts: number
-    created_at: number
-    updated_at: number
-    error_code?: string | null
-    error_message?: string | null
-  }
-}
-
 /** 已实现：后端 TOOL_END 检测文件写入工具后合成（Phase 2.2）。
  * 事件负载为 InteractiveArtifact（choice 类型），token 中编码文件路径。 */
 export interface ArtifactEvent {
@@ -451,8 +419,6 @@ export interface MemoryDoneEvent {
  * 实现状态（2026-11-02 复核）：
  *   - plan_* — 已实现：后端透传 sidecar 的 plan_proposed/step_start/step_end/step_error/completed
  *   - artifact / artifact_result — 已实现：后端 TOOL_END 检测写文件工具后合成 / 回执
- *   - sub_session_created — 已实现（Phase 3.4）：EventBus 订阅 TASK_SUBAGENT_LIFECYCLE_CHANNEL
- *   - deferred_subagent_submitted — 部分实现：后端 deferred_run_manager 已就绪，需产品决策
  *   - memory_* — 未实现：OMP memory 跑在独立状态，不通过事件流推送
  *   - workflow_step_start/end/error / workflow_completed — 2026-11-02 起**不存在**：
  *     后端那条死的 REST 工作流面（`bun-backend/src/routes/workflows.ts` 空 deps 挂载，
@@ -497,8 +463,6 @@ export type ServerEvent =
   | PlanStepEndEvent
   | PlanStepErrorEvent
   | PlanCompletedEvent
-  | SubSessionCreatedEvent
-  | DeferredSubagentSubmittedEvent
   | MemoryStartEvent
   | MemoryToolStartEvent
   | MemoryToolEndEvent
@@ -855,8 +819,6 @@ export interface ChatTurn {
   finalAnswer: string | null
   /** 后端生成的 turn_id，用于关联后台记忆 consumer 的事件 */
   turnId?: string
-  /** Opaque IDs only; delegated task text and scope never enter the UI cache. */
-  deferredRunIds?: string[]
   /** 计划卡片（plan_proposed 事件） */
   planCard?: PlanCard
   /** 情绪匹配的贴纸 URL */
@@ -1058,9 +1020,7 @@ export interface CapabilityFeatures {
   mcp?: CapabilityFeatureConfig
   memory?: CapabilityFeatureConfig
   tts?: CapabilityFeatureConfig
-  browser_tools?: CapabilityFeatureConfig
   sub_agents?: CapabilityFeatureConfig
-  automation?: CapabilityFeatureConfig
   collab?: CapabilityFeatureConfig
   plugins?: CapabilityFeatureConfig
   rules?: CapabilityFeatureConfig
