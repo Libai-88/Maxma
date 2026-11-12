@@ -185,7 +185,7 @@ export default function MemoryView() {
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 p-6">
       <div className="flex flex-col gap-1">
         <h2 className="text-2xl font-semibold text-foreground">记忆</h2>
-        <p className="text-sm text-muted-foreground">AI 自动记录的长期事实——偏好、背景、历史决策。</p>
+        <p className="text-sm text-muted-foreground">你明确要求记住的长期事实——偏好、背景、历史决策；由 Agent 调用 remember_memory 或你在此编辑。</p>
       </div>
 
       {!loading && (
