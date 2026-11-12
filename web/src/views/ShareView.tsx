@@ -60,7 +60,7 @@ export default function ShareView() {
         <span>创建于 {formatDate(data.share.created_at)}</span>
         {data.share.expires_at && <span className="text-status-warn">过期于 {formatDate(data.share.expires_at)}</span>}
       </div>
-      <div className="space-y-3">
+      <div className="flex flex-col gap-3">
         {data.messages.length === 0 && (
           <p className="py-16 text-center text-sm text-muted-foreground">该会话暂无消息</p>
         )}

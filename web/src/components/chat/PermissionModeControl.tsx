@@ -17,7 +17,7 @@ export function PermissionModeControl({ sessionId }: { sessionId: string }) {
   const disabled = available.length === 0
 
   return (
-    <div className="space-y-1.5">
+    <div className="flex flex-col gap-1.5">
       <p className="text-[11px] text-muted-foreground">权限模式</p>
       <div role="radiogroup" aria-label="权限模式" className="flex flex-col gap-1">
         {modes.map((mode) => (

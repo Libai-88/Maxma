@@ -95,7 +95,7 @@ export default function CapabilitiesView() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto w-full max-w-4xl space-y-4 p-6">
+      <div className="flex flex-col mx-auto w-full max-w-4xl gap-4 p-6">
         <div>
           <h2 className="text-xl font-semibold text-foreground">能力清单</h2>
           <p className="mt-1 text-sm text-muted-foreground">Pi Agent 可用工具、接入能力与运行配置</p>

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { confirmAction } from '@/components/common/ConfirmDialog'
 import { callJetHub } from '@/api'
 import { toErrorMessage } from '@/utils/error'
 import { useJetHubStore, type JetHubAccount } from '@/stores/jetHub'
@@ -297,11 +298,15 @@ export default function JetHubView() {
   }
   async function doExportBackup() {
     const status = store.backupStatus
-    const ok = window.confirm(
-      `即将导出${status ? ` ${status.accounts} 个` : ''}账号的完整快照。\n\n` +
+    const ok = await confirmAction({
+      title: '导出备份',
+      message:
+        `即将导出${status ? ` ${status.accounts} 个` : ''}账号的完整快照。\n\n` +
         '⚠️ 文件里包含**明文凭据**（令牌 / refresh token），任何拿到它的人都能直接使用这些账号，' +
         '请只保存在可信位置，不要提交到仓库或发给别人。',
-    )
+      confirmText: '导出',
+      danger: true,
+    })
     if (!ok) return
     await guard('导出备份', async () => {
       const payload = await store.exportBackup()
@@ -339,11 +344,15 @@ export default function JetHubView() {
   async function doImportBackup() {
     if (!pendingImport) return
     const status = store.backupStatus
-    const ok = window.confirm(
-      '⚠️ 导入是**整体替换**，不是合并：当前账号池会被快照里的内容取代' +
+    const ok = await confirmAction({
+      title: '导入备份',
+      message:
+        '⚠️ 导入是**整体替换**，不是合并：当前账号池会被快照里的内容取代' +
         `${status ? `（当前 ${status.accounts} 个账号将被替换）` : ''}。\n\n` +
         '凭据与模型黑名单都会一并还原。此操作不可撤销。',
-    )
+      confirmText: '导入',
+      danger: true,
+    })
     if (!ok) return
     await guard('导入备份', async () => {
       const result = await store.importBackup(pendingImport)
@@ -432,10 +441,14 @@ export default function JetHubView() {
     const leavesNone = !enabling && disablingLeavesNoEnabledAccount(store.accounts, account.id, provider)
     let alsoDisableModels = false
     if (leavesNone) {
-      alsoDisableModels = window.confirm(
-        `停用后 ${current?.name ?? provider} 不再有任何启用账号，但它的模型仍会留在模型选择器里` +
-          '（插件门控刻意不看启用状态）。是否同时关闭该渠道的全部模型？\n\n确定 = 同时关闭模型，取消 = 只停用账号',
-      )
+      alsoDisableModels = await confirmAction({
+        title: '停用账号',
+        message:
+          `停用后 ${current?.name ?? provider} 不再有任何启用账号，但它的模型仍会留在模型选择器里` +
+          '（插件门控刻意不看启用状态）。是否同时关闭该渠道的全部模型？',
+        confirmText: '同时关闭模型',
+        cancelText: '只停用账号',
+      })
     }
     await guard(enabling ? '启用账号' : '停用账号', async () => {
       await store.updateAccount(account.id, { enabled: enabling })
@@ -467,7 +480,11 @@ export default function JetHubView() {
     if (!current) return
     const id = current.id
     if (disabled) {
-      const ok = window.confirm(`确定停用 ${current.name} 的全部模型？它们会从 Maxma 的模型选择器里消失（可随时重新启用）。`)
+      const ok = await confirmAction({
+        message: `确定停用 ${current.name} 的全部模型？它们会从 Maxma 的模型选择器里消失（可随时重新启用）。`,
+        danger: true,
+        confirmText: '停用',
+      })
       if (!ok) return
     }
     await guard(disabled ? '停用全部模型' : '启用全部模型', () => store.setAllModelsDisabled(id, disabled))
@@ -497,7 +514,11 @@ export default function JetHubView() {
     void guard('凭据续期', () => store.refreshAccount(accountId))
   }
   async function removeAccount(accountId: string) {
-    if (!window.confirm(`确定删除账号 ${accountId}？该账号的凭据会被一并移除，且无法恢复。`)) return
+    if (!(await confirmAction({
+      message: `确定删除账号 ${accountId}？该账号的凭据会被一并移除，且无法恢复。`,
+      danger: true,
+      confirmText: '删除',
+    }))) return
     await guard('删除账号', () => store.deleteAccount(accountId))
   }
   async function resetRateLimits() {

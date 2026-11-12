@@ -59,8 +59,14 @@ export async function createMaxmaSession(opts: MaxmaSessionOptions): Promise<Age
   const cwd = opts.cwd ?? process.cwd();
   const agentDir = getAgentDir();
 
-  // 会话承载：官方两型——持久化（JSONL 树）与内存（inMemory）。
-  const sessionManager = opts.inMemory ? SessionManager.inMemory() : SessionManager.create(cwd);
+  // 会话承载：官方三态——内存（inMemory）/ 从磁盘恢复（sessionFile）/ 新建持久化。
+  // 恢复时传 cwd 覆盖：便携包可能被整体搬目录，跟着旧 header 的绝对路径会指向
+  // 不存在的位置；以当前 cwd 为准，历史消息本身不受影响。
+  const sessionManager = opts.inMemory
+    ? SessionManager.inMemory()
+    : opts.sessionFile
+      ? SessionManager.open(opts.sessionFile, undefined, cwd)
+      : SessionManager.create(cwd, undefined, opts.sessionId ? { id: opts.sessionId } : undefined);
 
   // 内联扩展（官方 DefaultResourceLoaderOptions.extensionFactories: InlineExtension[]）：
   //   1) MaxmaBlocker 拒止锚（与权限无关，恒装配；官方 tool_call 钩子执行前 block）

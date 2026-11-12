@@ -206,7 +206,7 @@ function CompareCellView({ cell }: { cell: CompareCell }) {
 export default function HelpView() {
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto w-full max-w-3xl space-y-4 p-6">
+      <div className="flex flex-col mx-auto w-full max-w-3xl gap-4 p-6">
         <div>
           <h2 className="text-xl font-semibold text-foreground">帮助 &amp; 关于 HELP</h2>
           <p className="mt-1 text-sm text-muted-foreground">了解 Maxma 是什么、能做什么、如何开始</p>

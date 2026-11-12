@@ -5,6 +5,8 @@ import { Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
+import { confirmAction } from '@/components/common/ConfirmDialog'
 import { api } from '@/api'
 import { createLogger } from '@/utils/logger'
 import { toErrorMessage } from '@/utils/error'
@@ -27,20 +29,6 @@ const PAGE_SIZE = 50
 
 const selectCls =
   'rounded-lg border border-input bg-background px-3.5 py-2.5 text-sm text-foreground outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 [&>option]:bg-card [&>option]:text-foreground'
-
-interface ConfirmOpts {
-  title?: string
-  message: string
-  confirmText?: string
-  cancelText?: string
-  danger?: boolean
-}
-
-function confirmAction(opts: ConfirmOpts | string): Promise<boolean> {
-  const o = typeof opts === 'string' ? { message: opts } : opts
-  const text = o.title ? `${o.title}\n\n${o.message}` : o.message
-  return Promise.resolve(window.confirm(text))
-}
 
 function categoryLabel(cat: string): string {
   return cat || '未分类'
@@ -231,9 +219,9 @@ export default function MemoryView() {
           <span className="sr-only">正在加载记忆…</span>
           {[1, 2, 3, 4].map((n) => (
             <div key={n} className="grid gap-3 rounded-xl border border-border bg-card p-4">
-              <div className="h-3 w-[88%] animate-pulse rounded bg-muted" />
-              <div className="h-3 w-[62%] animate-pulse rounded bg-muted" />
-              <div className="h-2 w-[28%] animate-pulse rounded bg-muted" />
+              <Skeleton className="h-3 w-[88%]" />
+              <Skeleton className="h-3 w-[62%]" />
+              <Skeleton className="h-2 w-[28%]" />
             </div>
           ))}
         </div>

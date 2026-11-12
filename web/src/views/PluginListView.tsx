@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { confirmAction } from '@/components/common/ConfirmDialog'
 import { usePluginStore } from '@/stores/plugin'
 import { useCapabilitiesStore } from '@/stores/capabilities'
 import type { Plugin, PluginCategory } from '@/types/plugin'
@@ -137,7 +138,7 @@ export default function PluginListView() {
   }
 
   async function handleUninstall(name: string) {
-    if (!window.confirm(`确定要卸载插件 "${name}"？此操作不可撤销。`)) return
+    if (!(await confirmAction({ message: `确定要卸载插件 "${name}"？此操作不可撤销。`, danger: true, confirmText: '卸载' }))) return
     try {
       await store.uninstallPlugin(name)
     } catch {

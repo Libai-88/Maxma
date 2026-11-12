@@ -229,3 +229,11 @@ git tag
 | `dist\electron-portable\...zip` | 245.6 MB（清掉累积的旧 hash chunk 后） |
 
 插件带来的增量约 **+20MB**（Web 包）—— 插件本体 9.8MB + 23 个依赖。
+
+## 产物里的人格文件
+
+`config/personas/SOUL.md` 是**用户本地人设**（`.gitignore` 已忽略），不属于仓库、
+也不允许进产物。便携/桌面两条构建链统一用已提交的 `SOUL.example.md` 生成默认
+`SOUL.md`；内置人格只要求已提交的 `SOUL.饱饱.md`。因此新 clone 与 CI 不需要
+本地人设文件也能构建——此前两条脚本都把它当必需项，CI 直接失败，本地构建还会
+把开发者私人设定打进安装包。

@@ -167,6 +167,7 @@ exports[`contract snapshot: pi RPC shapes (agent-rpc.md §8) create_session / ge
 {
   "id": 1,
   "result": {
+    "resumed": false,
     "session_id": "<uuid>",
   },
 }

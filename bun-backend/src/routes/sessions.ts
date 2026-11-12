@@ -22,6 +22,8 @@ import {
 } from "../../../bun-sidecar/src/kernel/bridge-pi";
 import type { MaxmaPermissionMode } from "../../../bun-sidecar/src/kernel/types";
 import { MAXMA_PERMISSION_MODES } from "../../../bun-sidecar/src/kernel/pi-contract";
+import { handleDeletePersistedSession, handleListPersistedSessions } from "../../../bun-sidecar/src/kernel/session-catalog-rpc";
+import { normalizeSessionId } from "../../../bun-sidecar/src/kernel/session-catalog";
 
 import { engineSettingsForNewSession, getSettingValue } from "../settings-global";
 
@@ -78,6 +80,14 @@ function callRpc<T>(
       sendEvent: (sessionId, event) => deps.hub.io.sendEvent(sessionId, event),
     };
     const sid = params.session_id as string | undefined;
+    if (method === "list_sessions") {
+      handleListPersistedSessions({ io }, params, 0);
+      return;
+    }
+    if (method === "delete_persisted_session") {
+      handleDeletePersistedSession({ io }, params, 0);
+      return;
+    }
     if (method === "create_session") {
       void handlePiCreateSession({ io, sessions: deps.hub.sessions, pendingPlans: deps.hub.pendingPlans }, params, 0);
       return;
@@ -94,19 +104,14 @@ import { getPanel } from "./settings-panels";
 export function createSessionsRoutes(deps: SessionsDeps): Hono {
   const app = new Hono();
 
-  // ── 创建 ──
-  app.post("/api/sessions", async (c) => {
-    // 让 kernel 使用 Maxma 项目根目录；bun-backend 的 cwd 通常是子目录。
-    // skills.enabled 走应用层参数（显式覆盖优先，缺省视为开启）；其余"归引擎消费"
-    // 的显式改动经 settings 下发，由 kernel 在新会话上 applyOverrides。
-    // 见 bun-backend/src/settings-global.ts 头注释——旧实现在这里直接读那个
-    // in-memory 单例，所以面板改了也不生效。
+  /**
+   * create_session 的统一出口：新会话与恢复会话的参数面只差 `resume_session_id`，
+   * 复制两份必然漂移（skills/subagent/settings 任何一处改动都要记得改两遍）。
+   */
+  async function createSessionViaKernel(extra: Record<string, unknown> = {}) {
     const skillsEnabled = getSettingValue("skills.enabled") !== false;
-    // 子 Agent：pi SDK 的进程内会话（kernel/subagent.ts）。开关与并发/超时来自
-    // 设置面板（panel_configs.json 的 sub_agents），在会话创建时随工具一起装配——
-    // 面板改完对新会话生效，与「归引擎消费」的设置同一套时序。
     const subagentPanel = getPanel("sub_agents") as Record<string, unknown>;
-    await callRpc(deps, "create_session", {
+    return callRpc<{ session_id: string; resumed?: boolean }>(deps, "create_session", {
       skills_enabled: skillsEnabled,
       settings: engineSettingsForNewSession(),
       subagent: {
@@ -114,10 +119,75 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
         max_concurrent: Number(subagentPanel.max_concurrent ?? 4),
         timeout_seconds: Number(subagentPanel.timeout_seconds ?? 300),
       },
+      ...extra,
     });
-    const created = [...deps.hub.sessions.keys()].at(-1)!;
-    const record = deps.hub.sessions.get(created)!;
-    return c.json({ session_id: created, created_at: new Date().toISOString(), engine: record.engine });
+  }
+
+  // ── 创建 ──
+  app.post("/api/sessions", async (c) => {
+    // 让 kernel 使用 Maxma 项目根目录；bun-backend 的 cwd 通常是子目录。
+    // skills.enabled 走应用层参数（显式覆盖优先，缺省视为开启）；其余"归引擎消费"
+    // 的显式改动经 settings 下发，由 kernel 在新会话上 applyOverrides。
+    // 见 bun-backend/src/settings-global.ts 头注释——旧实现在这里直接读那个
+    // in-memory 单例，所以面板改了也不生效。
+    // 子 Agent：pi SDK 的进程内会话（kernel/subagent.ts）。开关与并发/超时来自
+    // 设置面板（panel_configs.json 的 sub_agents），在会话创建时随工具一起装配——
+    // 面板改完对新会话生效，与「归引擎消费」的设置同一套时序。
+    const created = await createSessionViaKernel();
+    if (!created.ok) return c.json({ detail: created.error }, 500);
+    const record = deps.hub.sessions.get(created.result.session_id);
+    return c.json({
+      session_id: created.result.session_id,
+      created_at: new Date().toISOString(),
+      engine: record?.engine ?? "pi",
+    });
+  });
+
+  // ── 历史（磁盘）──
+  /**
+   * 重启后内存会话表清空，但 pi 的 JSONL 还在磁盘上。这里列出"可见的历史"，
+   * 并标记哪些已经在本进程里活着——前端把两份合并成一个列表。
+   * 只读、只列 pi 官方 session 目录：不扫任意路径，`file` 字段也不外泄。
+   */
+  app.get("/api/sessions/history", async (c) => {
+    const limitRaw = c.req.query("limit");
+    const limit = limitRaw !== undefined ? Number(limitRaw) : 50;
+    if (!Number.isFinite(limit) || limit < 1 || limit > 200) {
+      return c.json({ detail: "limit 必须在 1-200 之间" }, 400);
+    }
+    const result = await callRpc<{ sessions: Array<{ session_id: string } & Record<string, unknown>> }>(
+      deps,
+      "list_sessions",
+      { limit },
+    );
+    if (!result.ok) return c.json({ detail: result.error }, 502);
+    const live = deps.hub.sessions;
+    return c.json({
+      sessions: result.result.sessions.map((session) => ({
+        ...session,
+        active: live.has(session.session_id),
+      })),
+    });
+  });
+
+  // ── 恢复 ──
+  /**
+   * 把磁盘历史会话接回内核，id 沿用原 id（前端缓存/WS 都以 id 为键）。
+   * 已在 hub 中的会话直接返回成功——UI 的"点击历史会话"可能手抖点两次。
+   */
+  app.post("/api/sessions/:sessionId/resume", async (c) => {
+    const sid = normalizeSessionId(c.req.param("sessionId"));
+    if (!sid) return c.json({ detail: "会话 id 必须是 32 位十六进制" }, 400);
+    if (deps.hub.sessions.has(sid)) {
+      return c.json({ session_id: sid, resumed: true, active: true });
+    }
+    const result = await createSessionViaKernel({ session_id: sid, resume_session_id: sid });
+    if (!result.ok) {
+      const notFound = result.error.includes("Persisted session not found");
+      return c.json({ detail: "历史会话不存在或已损坏" }, notFound ? 404 : 500);
+    }
+    deps.audit?.("session", "resume", sid, "恢复历史会话");
+    return c.json({ session_id: result.result.session_id, resumed: true, active: true });
   });
 
   // ── 列表 ──
@@ -300,12 +370,22 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
 
   // ── 删除 / 批量删除 / 清理临时 ──
   app.delete("/api/sessions/:sessionId", async (c) => {
-    const sid = c.req.param("sessionId");
+    const raw = c.req.param("sessionId");
+    const sid = normalizeSessionId(raw) ?? raw;
     const record = deps.hub.sessions.get(sid);
-    if (!record) return c.json({ detail: "会话不存在" }, 404);
-    await callRpc(deps, "destroy_session", { session_id: sid });
-    deps.audit?.("session", "delete", sid, "会话删除");
-    return c.json({ status: "deleted" });
+    if (record) {
+      await callRpc(deps, "destroy_session", { session_id: sid });
+      // 内存会话销毁后，磁盘 JSONL 还在——不删就会在历史列表里"复活"
+      // （用户视角：删掉的会话重启后又出现了）。best-effort：从未落盘的会话没有文件。
+      await callRpc(deps, "delete_persisted_session", { session_id: sid });
+      deps.audit?.("session", "delete", sid, "会话删除");
+      return c.json({ status: "deleted" });
+    }
+    // 磁盘历史会话（重启后、未恢复到 hub）：删文件本身。
+    const removed = await callRpc<{ deleted: boolean }>(deps, "delete_persisted_session", { session_id: sid });
+    if (!removed.ok) return c.json({ detail: "会话不存在" }, 404);
+    deps.audit?.("session", "delete", sid, "历史会话删除");
+    return c.json({ status: "deleted", persisted: true });
   });
 
   app.post("/api/sessions/batch-delete", async (c) => {

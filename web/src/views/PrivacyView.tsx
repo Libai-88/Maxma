@@ -1,21 +1,13 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/api'
 import { Button } from '@/components/ui/button'
+import { confirmAction } from '@/components/common/ConfirmDialog'
 import type { AuditLogRecord, AuditLogStats } from '@/types'
 import { useSessionStore } from '@/stores/session'
 import { useChatStore } from '@/stores/chat'
 import { createLogger } from '@/utils/logger'
 
 const log = createLogger('PrivacyView')
-
-/** 全局确认对话框的功能等价实现（原生 window.confirm，返回 Promise<boolean>）。 */
-function confirmAction(
-  options: { title?: string; message: string; confirmText?: string; cancelText?: string; danger?: boolean } | string,
-): Promise<boolean> {
-  const opts = typeof options === 'string' ? { message: options } : options
-  const text = opts.title ? `${opts.title}\n\n${opts.message}` : opts.message
-  return Promise.resolve(window.confirm(text))
-}
 
 interface StorageItem {
   icon: string
@@ -193,7 +185,7 @@ export default function PrivacyView() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto w-full max-w-4xl space-y-4 p-6">
+      <div className="flex flex-col mx-auto w-full max-w-4xl gap-4 p-6">
         <div>
           <h2 className="text-xl font-semibold text-foreground">隐私仪表盘</h2>
           <p className="mt-1 text-sm text-muted-foreground">

@@ -60,7 +60,7 @@ export function SessionDrawer({ open, onClose }: { open: boolean; onClose: () =>
           <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="关闭会话列表"><X /></Button>
         </div>
       </div>
-      <div className="flex-1 space-y-1 overflow-y-auto p-2">
+      <div className="flex flex-1 flex-col gap-1 overflow-y-auto p-2">
         {sessions.length === 0 && <p className="px-2 py-6 text-center text-xs text-muted-foreground">暂无会话</p>}
         {sessions.map((s) => {
           const active = s.session_id === sessionId
@@ -69,7 +69,9 @@ export function SessionDrawer({ open, onClose }: { open: boolean; onClose: () =>
             <div key={s.session_id} className={cn('group flex items-center gap-1 rounded-lg px-1.5 py-1.5 transition-colors', active ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50')}>
               <button className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => handleSwitch(s.session_id)}>
                 <MessageSquare className="size-3.5 shrink-0 opacity-60" />
-                <span className="min-w-0 flex-1 truncate text-[13px]">{s.const_name || s.session_id.slice(0, 8)}</span>
+                <span className="min-w-0 flex-1 truncate text-[13px]" title={s.preview || s.session_id}>
+                  {s.const_name || s.preview || s.session_id.slice(0, 8)}
+                </span>
                 {status && <span className="shrink-0 text-[10px] text-muted-foreground">{status}</span>}
               </button>
               <div className="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">

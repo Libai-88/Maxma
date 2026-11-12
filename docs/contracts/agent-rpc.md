@@ -9,7 +9,9 @@
 
 | 方法 | 参数 | 返回 |
 | --- | --- | --- |
-| `create_session` | `{ model, provider?, base_url?, api_key?, provider_type?, context_window?, max_tokens?, system_prompt?, append_system_prompt?, cwd?, tools?, permission_mode?, thinking_level?, skills_enabled? }` | `{ session_id }` |
+| `create_session` | `{ model, provider?, base_url?, api_key?, provider_type?, context_window?, max_tokens?, system_prompt?, append_system_prompt?, cwd?, tools?, permission_mode?, thinking_level?, skills_enabled?, session_id?, resume_session_id? }` | `{ session_id, resumed }`。`resume_session_id` 从磁盘历史 JSONL 恢复（id 沿用原 id）；`session_id` 用于让新建会话的 pi header id 与 hub id 一致 |
+| `list_sessions`（全局） | `{ limit? }` | `{ sessions: [{ session_id, message_count, created_at, updated_at, preview, cwd, active? }] }`，只列 pi 官方 session 目录，不含文件路径 |
+| `delete_persisted_session`（全局） | `{ session_id }` | `{ deleted, session_id }`，删磁盘历史文件；不影响 hub 中活会话 |
 | `prompt` | `{ session_id, message }` | `{ ok: true }`，事件经订阅层推送 |
 | `steer` / `follow_up` | `{ session_id, message }` | `{ ok, disposition? }`（活跃回合中立即注入 / 排队到回合结束） |
 | `cancel` | `{ session_id }` | `{ ok: true }` |

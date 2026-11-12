@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { confirmAction } from '@/components/common/ConfirmDialog'
 import { api } from '@/api'
 import type { MCPServerConfig, MCPServerCreateBody, MCPTransport, DiscoveredServer } from '@/types'
 import { McpMarket } from '@/components/mcp/McpMarket'
@@ -240,7 +241,7 @@ export default function ExtensionView() {
   }
 
   async function installSkill(skill: MarketSkill) {
-    if (!window.confirm(`确认安装社区技能“${skill.name || skill.slug}”？技能内容来自外部来源，请先确认其可信度。`)) return
+    if (!(await confirmAction({ message: `确认安装社区技能“${skill.name || skill.slug}”？技能内容来自外部来源，请先确认其可信度。` }))) return
     setInstallingSkill(skill.slug)
     try {
       await api.request('/skills/market/install', { method: 'POST', body: JSON.stringify({ slug: skill.slug }) })
@@ -771,7 +772,7 @@ function McpSection() {
 
   async function deleteServer(serverId: string) {
     if (deletingId) return
-    if (!window.confirm(`确定删除 MCP 服务器 "${serverId}" 吗？`)) return
+    if (!(await confirmAction({ message: `确定删除 MCP 服务器 "${serverId}" 吗？`, danger: true, confirmText: '删除' }))) return
     setDeletingId(serverId)
     try {
       const res = await api.deleteMcpServer(serverId)

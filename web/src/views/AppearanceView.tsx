@@ -59,7 +59,7 @@ export default function AppearanceView() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto w-full max-w-3xl space-y-4 p-6">
+      <div className="flex flex-col mx-auto w-full max-w-3xl gap-4 p-6">
         <div>
           <h2 className="text-xl font-semibold text-foreground">外观</h2>
           <p className="mt-1 text-sm text-muted-foreground">

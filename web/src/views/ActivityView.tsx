@@ -4,6 +4,7 @@ import { Info, List } from 'lucide-react'
 import { useActivityStore } from '@/stores/activity'
 import type { ActivityStatsResponse } from '@/types'
 import { cn } from '@/lib/utils'
+import { confirmAction } from '@/components/common/ConfirmDialog'
 
 const CATEGORY_LABELS: Record<string, string> = {
   turn: 'Turn',
@@ -87,8 +88,8 @@ export default function ActivityView() {
   const statusLabel = STATUS_LABELS[activity.connectionState] ?? ''
   const statusTitle = STATUS_TITLES[activity.connectionState] ?? ''
 
-  function handleClear() {
-    if (!window.confirm('确定清空当前活动记录吗？此操作不可撤销（不影响审计日志与已保存的会话）。')) return
+  async function handleClear() {
+    if (!(await confirmAction({ message: '确定清空当前活动记录吗？此操作不可撤销（不影响审计日志与已保存的会话）。', danger: true, confirmText: '清空' }))) return
     void activity.clear()
   }
 

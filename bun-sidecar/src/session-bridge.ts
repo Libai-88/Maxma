@@ -15,6 +15,7 @@ import { createInterface } from "node:readline";
 
 import { send, sendError, sendEvent } from "./rpc";
 import { handlePiCreateSession, handlePiSessionRpc, type PiSessionRecord } from "./kernel/bridge-pi";
+import { handleDeletePersistedSession, handleListPersistedSessions } from "./kernel/session-catalog-rpc";
 import { PI_RPC_METHODS } from "./kernel/pi-contract";
 import { rejectPendingPiPlansForSession, type PiPendingPlan } from "./kernel/plan";
 import type { RpcRequest } from "./rpc-types";
@@ -39,6 +40,16 @@ export async function handleRpcRequest(req: RpcRequest): Promise<void> {
     // 引擎：pi（唯一）。MAXMA_AGENT_ENGINE 回退开关已随 OMP 移除；如需
     // 回滚旧内核请使用 git 历史中的双引擎版本。
     await handlePiCreateSession(bridgeDeps(), params, id);
+    return;
+  }
+
+  // 全局方法（不依赖会话上下文）：历史会话发现。
+  if (method === "list_sessions") {
+    handleListPersistedSessions(bridgeDeps(), params, id);
+    return;
+  }
+  if (method === "delete_persisted_session") {
+    handleDeletePersistedSession(bridgeDeps(), params, id);
     return;
   }
 

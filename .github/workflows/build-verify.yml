@@ -1,6 +1,8 @@
 name: Build Verify
 
 on:
+  push:
+    branches: [main]
   schedule:
     - cron: "0 3 * * 1"
   workflow_dispatch:
@@ -23,6 +25,20 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@v1
 
+      - name: Verify versions agree (version.py = web = desktop)
+        shell: powershell
+        run: |
+          $root = (Resolve-Path ".").Path
+          $py = [regex]::Match((Get-Content -Raw (Join-Path $root "version.py")), '__version__\s*=\s*["'']([^"'']+)["'']').Groups[1].Value.TrimStart('v')
+          $web = (Get-Content -Raw (Join-Path $root "web\package.json") | ConvertFrom-Json).version
+          $desktop = (Get-Content -Raw (Join-Path $root "desktop\package.json") | ConvertFrom-Json).version
+          if (-not $py) { Write-Error "version.py is missing __version__"; exit 1 }
+          if ($py -ne $web -or $py -ne $desktop) {
+            Write-Error "version mismatch: version.py=$py web=$web desktop=$desktop"
+            exit 1
+          }
+          Write-Host "Versions agree: $py"
+
       - name: Build the Bun backend bundle (server.js + runtime)
         shell: cmd
         env:
@@ -35,8 +51,73 @@ jobs:
           foreach ($f in @("dist\bun-server\server.js", "dist\bun-server\bun.exe", "dist\bun-server\node_modules\sharp")) {
             if (-not (Test-Path $f)) { Write-Error "Missing build artifact: $f"; exit 1 }
           }
+          # Endpoint-level watermark: the bundle must come from current source, not a
+          # cached server.js. Use long-lived route names instead of user-facing copy.
+          $server = Get-Content -Raw "dist\bun-server\server.js"
+          foreach ($marker in @("/api/sessions/history", "delete_persisted_session", "list_sessions")) {
+            if (-not $server.Contains($marker)) { Write-Error "server.js is missing marker: $marker"; exit 1 }
+          }
           Write-Host "Bun bundle artifacts verified."
 
-      - name: Smoke test the bundle (start + core endpoints)
+      - name: Smoke test the bundle (start + core endpoints + protocol E2E)
         shell: powershell
         run: .\build\smoke-test-server.ps1 -Port 8000
+
+  desktop-portable-build:
+    runs-on: windows-latest
+    # 桌面产物远离"每周才验一次"的老问题：main 每次合入都重建一次。
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Install dependencies
+        shell: powershell
+        run: |
+          npm --prefix web ci --no-audit --no-fund
+          npm --prefix desktop ci --no-audit --no-fund
+          Push-Location bun-backend; bun install --frozen-lockfile; Pop-Location
+          Push-Location bun-sidecar; bun install --frozen-lockfile; Pop-Location
+
+      - name: Provide the Bun runtime expected by the build script
+        shell: powershell
+        run: |
+          # build-desktop-portable.ps1 intentionally refuses to download Bun itself
+          # (local builds use the D: prepared runtime). In CI we hand it setup-bun's.
+          $bun = (Get-Command bun).Source
+          if (-not $bun) { Write-Error "bun not found on PATH"; exit 1 }
+          Copy-Item -LiteralPath $bun -Destination "bun-sidecar\bun.exe" -Force
+          & "bun-sidecar\bun.exe" --version
+
+      - name: Build desktop portable artifact
+        shell: powershell
+        run: .\build-desktop-portable.ps1 -SkipDependencyInstall -AllowAnyDrive
+
+      - name: Assert packaged artifact is clean and current
+        shell: powershell
+        run: |
+          $zip = Get-ChildItem "dist\electron-portable\MaxmaHere-*-portable-x64.zip" | Select-Object -First 1
+          if (-not $zip) { Write-Error "desktop ZIP was not produced"; exit 1 }
+          if (-not (Test-Path "$($zip.FullName).sha256")) { Write-Error "missing SHA256 sidecar"; exit 1 }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [System.IO.Compression.ZipFile]::OpenRead($zip.FullName)
+          try {
+            $names = $archive.Entries | ForEach-Object { $_.FullName -replace '\\', '/' }
+            foreach ($required in @("MaxmaHere.exe", "resources/maxma/server.js", "resources/maxma/web/dist/index.html")) {
+              if (-not ($names -contains $required)) { Write-Error "ZIP is missing: $required"; exit 1 }
+            }
+            $forbidden = $names | Where-Object { $_ -match '^data/api/data/(maxma\.db|providers\.yaml|credential\.key|onboarding\.json)$' }
+            if ($forbidden) { Write-Error "ZIP contains user runtime data: $($forbidden -join ', ')"; exit 1 }
+            $stale = ($names | Where-Object { $_ -match 'resources/maxma/web/dist/assets/ChatView-.*\.js$' }).Count
+            if ($stale -lt 1) { Write-Error "ZIP is missing the frontend ChatView asset"; exit 1 }
+            Write-Host "Desktop artifact verified ($($names.Count) entries)."
+          } finally {
+            $archive.Dispose()
+          }

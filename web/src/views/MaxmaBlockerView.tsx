@@ -2,20 +2,12 @@ import { useEffect, useState } from 'react'
 import { Ban } from 'lucide-react'
 import { api } from '@/api'
 import { Button } from '@/components/ui/button'
+import { confirmAction } from '@/components/common/ConfirmDialog'
 import { Input } from '@/components/ui/input'
 import type { BlockerEntry } from '@/types'
 import { createLogger } from '@/utils/logger'
 
 const log = createLogger('MaxmaBlockerView')
-
-/** 全局确认对话框的功能等价实现（原生 window.confirm，返回 Promise<boolean>）。 */
-function confirmAction(
-  options: { title?: string; message: string; confirmText?: string; cancelText?: string; danger?: boolean } | string,
-): Promise<boolean> {
-  const opts = typeof options === 'string' ? { message: options } : options
-  const text = opts.title ? `${opts.title}\n\n${opts.message}` : opts.message
-  return Promise.resolve(window.confirm(text))
-}
 
 const codeCls = 'rounded-sm bg-muted px-2 py-1 font-mono text-xs'
 const strongCls = 'font-semibold text-foreground'
@@ -101,7 +93,7 @@ export default function MaxmaBlockerView() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto w-full max-w-3xl space-y-4 p-6">
+      <div className="flex flex-col mx-auto w-full max-w-3xl gap-4 p-6">
         {!showForm ? (
           <>
             <div className="flex items-start justify-between gap-4">
@@ -115,7 +107,7 @@ export default function MaxmaBlockerView() {
               <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-foreground">
                 什么是拒止锚？什么时候需要用到？
               </summary>
-              <div className="space-y-2 px-4 pb-3 text-sm leading-relaxed text-muted-foreground">
+              <div className="flex flex-col gap-2 px-4 pb-3 text-sm leading-relaxed text-muted-foreground">
                 <p>
                   拒止锚（MaxmaBlocker）是 Maxma 的<strong className={strongCls}>执行阻断标记</strong>——在某个目录中放置一个名为 <code className={codeCls}>.maxma_blocker</code> 的标记文件后，AI 的文件类工具调用一旦指向该目录及其子目录，<strong className={strongCls}>会在执行开始前被拦下</strong>，拒绝原因会回给模型。
                 </p>
@@ -139,7 +131,7 @@ export default function MaxmaBlockerView() {
               <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold text-muted-foreground">
                 规则说明
               </summary>
-              <div className="space-y-2 px-4 pb-3 text-sm leading-relaxed text-muted-foreground">
+              <div className="flex flex-col gap-2 px-4 pb-3 text-sm leading-relaxed text-muted-foreground">
                 <p>拒止锚是无条件生效的强制机制，任何会话权限模式都不得绕过：</p>
                 <ul className="list-disc space-y-1 pl-6">
                   <li>在指定目录中创建 <code className={codeCls}>.maxma_blocker</code> 标记文件（无扩展名），AI 的文件类工具调用指向该目录或其子目录时，会在执行前被拦下。</li>

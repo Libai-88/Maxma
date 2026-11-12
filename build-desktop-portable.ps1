@@ -1,12 +1,16 @@
 ﻿param(
-    [switch]$SkipDependencyInstall
+    [switch]$SkipDependencyInstall,
+    # CI（GitHub windows-latest）没有 D: 盘。默认仍只允许 D: 工作区：这条护栏
+    # 是给本地构建的（缓存/临时目录固定落在 D:）。CI 显式声明自己例外，
+    # 其余路径边界检查（dist 内写、拒绝覆盖外部文件）照旧生效。
+    [switch]$AllowAnyDrive
 )
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = (Resolve-Path $PSScriptRoot).Path
 $DriveRoot = [System.IO.Path]::GetPathRoot($ProjectRoot)
-if ($DriveRoot -ne "D:\") {
-    throw "便携桌面构建仅允许在 D: 工作区运行，当前路径：$ProjectRoot"
+if (-not $AllowAnyDrive -and $DriveRoot -ne "D:\") {
+    throw "便携桌面构建仅允许在 D: 工作区运行，当前路径：$ProjectRoot（CI 可传 -AllowAnyDrive）"
 }
 
 $DistRoot = Join-Path $ProjectRoot "dist"
@@ -157,7 +161,7 @@ foreach ($name in @("AGENTS.md", "MAXMA.md", "SOUL.example.md", "USER.example.md
     Copy-Item -LiteralPath (Join-Path $ProjectRoot "config\personas\$name") -Destination $PersonaDir -Force
 }
 # 内置人格是产品资源：两个正式人格必须始终随包提供。
-$BuiltInPersonaNames = @("SOUL.md", "SOUL.饱饱.md")
+$BuiltInPersonaNames = @("SOUL.饱饱.md")
 $BuiltInPersonaSourceDir = Join-Path $ProjectRoot "config\personas"
 foreach ($name in $BuiltInPersonaNames) {
     $source = Join-Path $BuiltInPersonaSourceDir $name
@@ -166,6 +170,9 @@ foreach ($name in $BuiltInPersonaNames) {
     }
     Copy-Item -LiteralPath $source -Destination $PersonaDir -Force
 }
+# SOUL.md 是用户本地人设（gitignore），绝不进产物：用已提交的示例生成
+# 默认人设，避免把开发者/用户的私人设定打进安装包。
+Copy-Item -LiteralPath (Join-Path $BuiltInPersonaSourceDir "SOUL.example.md") -Destination (Join-Path $PersonaDir "SOUL.md") -Force
 $BundledSkillNames = @(
     "coding-starter",
     "office-starter",

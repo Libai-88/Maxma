@@ -78,16 +78,14 @@ xcopy /e /i /q "%PROJECT_ROOT%config\personas\AGENTS.md" "%PORTABLE_DIR%\config\
 xcopy /e /i /q "%PROJECT_ROOT%config\personas\MAXMA.md" "%PORTABLE_DIR%\config\personas" >nul
 xcopy /e /i /q "%PROJECT_ROOT%config\personas\SOUL.example.md" "%PORTABLE_DIR%\config\personas" >nul
 xcopy /e /i /q "%PROJECT_ROOT%config\personas\USER.example.md" "%PORTABLE_DIR%\config\personas" >nul
-if not exist "%PROJECT_ROOT%config\personas\SOUL.md" (
-    echo [ERROR] Missing built-in persona: SOUL.md
-    exit /b 1
-)
+REM SOUL.md 是用户本地人设（gitignore），绝不进产物：用已提交的示例生成
+REM 默认人设，避免把开发者/用户的私人设定打进安装包。
+copy /y "%PROJECT_ROOT%config\personas\SOUL.example.md" "%PORTABLE_DIR%\config\personas\SOUL.md" >nul
 if not exist "%PROJECT_ROOT%config\personas\SOUL.饱饱.md" (
     echo [ERROR] Missing built-in persona: SOUL.饱饱.md
     exit /b 1
 )
-xcopy /e /i /q "%PROJECT_ROOT%config\personas\SOUL.md" "%PORTABLE_DIR%\config\personas" >nul
-xcopy /e /i /q "%PROJECT_ROOT%config\personas\SOUL.饱饱.md" "%PORTABLE_DIR%\config\personas" >nul
+xcopy /y /q "%PROJECT_ROOT%config\personas\SOUL.饱饱.md" "%PORTABLE_DIR%\config\personas" >nul
 for %%P in (SOUL.md SOUL.饱饱.md) do (
     if not exist "%PORTABLE_DIR%\config\personas\%%P" (
         echo [ERROR] Built-in persona missing from portable output: %%P

@@ -82,7 +82,7 @@ export default function RulesView() {
         <div className="flex justify-center py-16"><Spinner /></div>
       ) : (
         <>
-          <section className="space-y-3">
+          <section className="flex flex-col gap-3">
             {rules.map((rule) => (
               <div key={rule.id} className="rounded-xl border border-border bg-card px-4 py-3">
                 <div className="flex items-center gap-3">
@@ -109,7 +109,7 @@ export default function RulesView() {
 
           <section className="mt-8">
             <h3 className="mb-3 text-sm font-medium">{editingId ? '编辑规则' : '新建规则'}</h3>
-            <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+            <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <label className="text-xs text-muted-foreground">名称
                   <Input className="mt-1" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
