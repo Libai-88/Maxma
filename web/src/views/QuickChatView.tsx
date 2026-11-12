@@ -17,7 +17,10 @@ export function QuickChatView() {
   const creatingRef = useRef(false)
 
   const chat = useChat(selectedSessionId)
-  const { turns, currentTurn, isStreaming, send, cancel } = chat
+  // error/errorTraceId 是后端 error 事件的「人话原因 + 追踪号」。主窗口渲染它，
+  // 而这里此前只渲染 turn.finalAnswer → 失败轮只剩一句「（发生错误，回复未完成）」，
+  // 用户看不到模型/额度/网络到底出了什么，也没法反馈 trace。
+  const { turns, currentTurn, isStreaming, send, cancel, error, errorTraceId, dismissError } = chat
 
   // 同步 store 里的会话切换（含子会话 created / done 后切回父会话）
   useEffect(() => {
@@ -100,6 +103,12 @@ export function QuickChatView() {
                 {turn.finalAnswer && (
                   <div className="max-w-[85%] rounded-xl border border-border bg-card px-3 py-2 text-sm">
                     <Markdown content={turn.finalAnswer} />
+                  </div>
+                )}
+                {error && turn.id === mergedTurns[mergedTurns.length - 1]?.id && (
+                  <div role="alert" className="max-w-[85%] space-y-1 rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    <button type="button" className="text-left" onClick={() => dismissError()}>{error}</button>
+                    {errorTraceId && <p className="break-all font-mono text-[10px] opacity-80">trace: {errorTraceId}</p>}
                   </div>
                 )}
               </div>

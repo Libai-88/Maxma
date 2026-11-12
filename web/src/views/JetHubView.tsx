@@ -70,8 +70,11 @@ interface CreditsEntry {
 
 interface JetHubStoreApi {
   routes: RouteItem[]
-  openProviders: RouteItem[]
-  closedProviders: RouteItem[]
+  /** store 里是派生函数，不是数组——直接当数组用会 `is not iterable`。 */
+  openProviders: () => RouteItem[]
+  closedProviders: () => RouteItem[]
+  accountTotal: () => number
+  accountEnabled: () => number
   accounts: AccountRow[]
   models: ModelRow[]
   modelsLoading: boolean
@@ -191,7 +194,7 @@ export default function JetHubView() {
   const [usageHistory, setUsageHistory] = useState<unknown[]>([])
   const [usageLoading, setUsageLoading] = useState(false)
 
-  const allProviders: RouteItem[] = [...(store.openProviders ?? []), ...(store.closedProviders ?? [])]
+  const allProviders: RouteItem[] = [...store.openProviders(), ...store.closedProviders()]
   const current: RouteItem | null = allProviders.find((item) => item.id === selected) ?? allProviders[0] ?? null
   const currentStatus: ProviderStatus | null = current ? store.statusOf(current.id) : null
   const currentAccounts: AccountRow[] = current ? store.accountsOf(current.id) : []
@@ -589,7 +592,7 @@ export default function JetHubView() {
         <div>
           <h1 className="text-2xl font-semibold text-foreground">Jet Hub</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            多账号与渠道管理 · {store.routes?.length ?? 0} 个渠道 · 账号 {store.accountEnabled ?? 0}/{store.accountTotal ?? 0} 已启用
+            多账号与渠道管理 · {store.routes?.length ?? 0} 个渠道 · 账号 {store.accountEnabled()}/{store.accountTotal()} 已启用
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -729,10 +732,10 @@ export default function JetHubView() {
       {/* 渠道 rail + 面板 */}
       <section className="grid flex-1 grid-cols-[220px_1fr] gap-4 max-md:grid-cols-1">
         <nav aria-label="渠道列表" className="glass-panel flex min-h-0 flex-col gap-1 overflow-y-auto rounded-lg border border-border p-2">
-          {(store.openProviders?.length ?? 0) > 0 && (
+          {store.openProviders().length > 0 && (
             <>
-              <div className="px-2 py-1 text-xs font-medium text-muted-foreground">已打开 ({store.openProviders.length})</div>
-              {store.openProviders.map((item) => (
+              <div className="px-2 py-1 text-xs font-medium text-muted-foreground">已打开 ({store.openProviders().length})</div>
+              {store.openProviders().map((item) => (
                 <RailRow
                   key={item.id}
                   name={item.name}
@@ -743,10 +746,10 @@ export default function JetHubView() {
               ))}
             </>
           )}
-          {(store.closedProviders?.length ?? 0) > 0 && (
+          {store.closedProviders().length > 0 && (
             <>
-              <div className="px-2 py-1 text-xs font-medium text-muted-foreground">已关闭 ({store.closedProviders.length})</div>
-              {store.closedProviders.map((item) => (
+              <div className="px-2 py-1 text-xs font-medium text-muted-foreground">已关闭 ({store.closedProviders().length})</div>
+              {store.closedProviders().map((item) => (
                 <RailRow
                   key={item.id}
                   name={item.name}

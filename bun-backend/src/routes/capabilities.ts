@@ -214,7 +214,17 @@ function buildManifest(deps: CapabilitiesDeps, gathered: Record<string, unknown>
     providers: ttsEnabled ? [String(ttsCfg.provider ?? "edge-tts")] : [],
   };
 
-  features.browser_tools = { enabled: Boolean(browserCfg.enabled ?? false) };
+  // 浏览器工具与 sub_agents 同形：面板值是**用户意图**，引擎事实是**没有**。
+  // 14 个真实工具里没有任何 browser_*（清单见 capabilities.tools），pi 也没有
+  // 浏览器运行时；把开关值直接当 enabled 回给前端，等于让"已启用"这句话
+  // 没有任何消费者能兑现。`configured` 保留用户写入的偏好，供设置面板回显。
+  const browserToolsConfigured = Boolean(browserCfg.enabled ?? false);
+  features.browser_tools = {
+    enabled: false,
+    engine_supported: false,
+    configured: browserToolsConfigured,
+    reason: "当前 Agent 引擎（pi）没有浏览器运行时，浏览器工具暂不可用；此开关仅保存偏好",
+  };
 
   // 后台子任务（Agent 任务中心）：面板开关是**用户意图**，引擎支持度是**事实**。
   // 二者必须分开——上一个版本只看了面板值，于是 Dock 无条件渲染 /agent-tasks，
@@ -234,8 +244,16 @@ function buildManifest(deps: CapabilitiesDeps, gathered: Record<string, unknown>
     max_concurrent: Number(subagentCfg.max_concurrent ?? 3) || 3,
   };
 
-  // automation 随 Python 移除下线（§7 决策点 1）——前端路由守卫据此隐藏面板
-  features.automation = { enabled: false, scheduler: false };
+  // automation 随 Python 移除下线（§7 决策点 1）——前端路由守卫据此隐藏面板。
+  // engine_supported 必须显式发 false：调度器连同 Python 侧一起删除，pi 也没有
+  // 定时/触发调度，用户在任何设置面板都开不回来。缺这个字段时前端只会落到
+  // 「你在设置里关掉了它」——那是把缺能力谎报成用户操作（CAP-HONESTY-001）。
+  features.automation = {
+    enabled: false,
+    engine_supported: false,
+    scheduler: false,
+    reason: "自动化调度器随旧引擎下线，当前 Agent 引擎（pi）没有定时/触发调度，暂不可用",
+  };
 
   features.collab = { enabled: true, persistence: "sqlite" };
 

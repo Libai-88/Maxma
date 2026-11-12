@@ -412,15 +412,66 @@ function withMime(res: Response, filePath: string): Response {
  * 非 API 路径的前端服务（静态文件 + SPA fallback）。
  * 独立导出供冒烟测试直测（不依赖端口绑定）；distDir 可注入（测试隔离）。
  */
+/**
+ * index.html 的 `<base>` 注入缓存（按 mtime 失效）。
+ *
+ * `vite.config.ts` 的 `base: "./"` 是 Electron 用 `file://` 加载同一份产物所必需的，
+ * 但后端以 `http://` 托管时会出事：浏览器把 `./assets/x.js` 按**当前深链目录**解析，
+ * 于是硬刷新 `/plugins/<name>/jet-hub`、`/share/<id>` 这类两级以上路径会去取
+ * `/plugins/<name>/assets/x.js` → 404 → 白屏卡在「正在连接后端服务」。
+ * （SPA 内部导航看不出问题：资源早已加载过。）
+ *
+ * 修法只在 http 侧生效：给返回的 HTML 插一行 `<base href="/">`，把相对资源锚到站点根。
+ * Electron 读的是磁盘文件、不经这里，`file://` 的相对语义保持不变。
+ */
+let indexHtmlCache: { path: string; mtimeMs: number; html: string } | null = null;
+
+function readIndexWithBase(index: string): string | null {
+  try {
+    const stat = fs.statSync(index);
+    if (indexHtmlCache && indexHtmlCache.path === index && indexHtmlCache.mtimeMs === stat.mtimeMs) {
+      return indexHtmlCache.html;
+    }
+    const raw = fs.readFileSync(index, "utf8");
+    // 已有 <base> 就不重复插（用户/构建自己加过的情况）
+    const inject = (m: string) => `${m}\n    <base href="/" />`;
+    const html = /<base\s/i.test(raw)
+      ? raw
+      : /<head(\s[^>]*)?>/i.test(raw)
+        ? raw.replace(/<head(\s[^>]*)?>/i, inject)
+        // 没有 <head> 的极简文档也插得上（测试夹具就是这种）
+        : raw.replace(/<html(\s[^>]*)?>/i, inject);
+    indexHtmlCache = { path: index, mtimeMs: stat.mtimeMs, html };
+    return html;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * SPA 外壳（index.html）必须禁缓存。
+ *
+ * 重建后入口文件名变了（`main-<hash>.js`），但 index.html 自身没有指纹：浏览器按
+ * 默认启发式缓存它，就会拿旧壳去请求已删除的懒加载 chunk → 「Failed to fetch
+ * dynamically imported module」或卡在启动页，直到缓存过期。对本地工作站这是纯粹的
+ * 部署自伤：每次 `npm run build` 都会让所有打开/新开的页面踩一次。
+ * 静态资源本身带内容指纹，可长期缓存；只有壳走 no-store。
+ */
+const HTML_NO_STORE = {
+  "content-type": "text/html; charset=utf-8",
+  "cache-control": "no-store, must-revalidate",
+  pragma: "no-cache",
+} as const;
+
 export async function serveFrontend(pathname: string, distDir: string = getWebDistDir()): Promise<Response | null> {
   const staticRes = await serveStaticFile(pathname, distDir);
   if (staticRes) return withMime(staticRes, pathname);
   // SPA fallback（history 模式路由 / 根路径）
   const index = path.join(distDir, "index.html");
   if (fs.existsSync(index)) {
-    return new Response(Bun.file(index), {
-      headers: { "content-type": "text/html; charset=utf-8" },
-    });
+    const html = readIndexWithBase(index);
+    if (html !== null) return new Response(html, { headers: HTML_NO_STORE });
+    return new Response(Bun.file(index), { headers: HTML_NO_STORE });
   }
   return null;
 }
