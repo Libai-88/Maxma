@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Trash2, Pin, PinOff, X, MessageSquare } from 'lucide-react'
+import { Plus, Trash2, X, MessageSquare } from 'lucide-react'
 import { useSessionStore } from '@/stores/session'
 import { useChatStore } from '@/stores/chat'
 import { confirmAction } from '@/components/common/ConfirmDialog'
@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 
 export function SessionDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate()
-  const { sessions, sessionId, createSession, switchSession, deleteSession, constifySession, unconstifySession } = useSessionStore()
+  const { sessions, sessionId, createSession, switchSession, deleteSession } = useSessionStore()
   const channels = useChatStore((s) => s.channels)
   const version = useChatStore((s) => s.version)
   void version
@@ -42,14 +42,6 @@ export function SessionDrawer({ open, onClose }: { open: boolean; onClose: () =>
     if (!await confirmAction({ message: '确定删除这个会话？此操作不可撤销。', danger: true, confirmText: '删除' })) return
     await deleteSession(id)
   }
-  const handleConstify = (id: string) => {
-    const name = window.prompt('给固定会话起个名字')
-    if (name?.trim()) constifySession(id, name.trim())
-  }
-  const handleUnconstify = async (id: string) => {
-    if (!await confirmAction({ message: '确定取消固定此会话？', confirmText: '取消固定' })) return
-    await unconstifySession(id)
-  }
 
   const statusOf = (id: string) => {
     const ch = channels.get(id)
@@ -81,9 +73,6 @@ export function SessionDrawer({ open, onClose }: { open: boolean; onClose: () =>
                 {status && <span className="shrink-0 text-[10px] text-muted-foreground">{status}</span>}
               </button>
               <div className="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-                {s.is_const
-                  ? <Button variant="ghost" size="icon-sm" onClick={() => void handleUnconstify(s.session_id)} aria-label="取消固定"><PinOff /></Button>
-                  : <Button variant="ghost" size="icon-sm" onClick={() => handleConstify(s.session_id)} aria-label="固定会话"><Pin /></Button>}
                 <Button variant="ghost" size="icon-sm" onClick={() => void handleDelete(s.session_id)} aria-label="删除会话"><Trash2 /></Button>
               </div>
             </div>

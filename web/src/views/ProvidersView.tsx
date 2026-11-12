@@ -36,6 +36,11 @@ export default function ProvidersView() {
   const [form, setForm] = useState({ label: '', provider_type: 'openai', base_url: PRESETS[0].baseUrl, api_key: '' })
   const [testing, setTesting] = useState<string | null>(null)
   const [health, setHealth] = useState<Record<string, { ok: boolean; message?: string }>>({})
+  const [discovering, setDiscovering] = useState<string | null>(null)
+  const [rechecking, setRechecking] = useState<string | null>(null)
+  const [formBusy, setFormBusy] = useState<'test' | 'discover' | null>(null)
+  const [formModels, setFormModels] = useState<string[]>([])
+  const [pickedModels, setPickedModels] = useState<string[]>([])
 
   const load = async () => {
     setLoading(true)
@@ -55,9 +60,10 @@ export default function ProvidersView() {
     if (!form.label.trim() || !form.api_key.trim()) { showToast('请填写名称与 API Key', 'warning'); return }
     setCreating(true)
     try {
-      await api.createProvider({ label: form.label.trim(), provider_type: form.provider_type, base_url: form.base_url, api_key: form.api_key } as Partial<ProviderConfig>)
+      await api.createProvider({ label: form.label.trim(), provider_type: form.provider_type, base_url: form.base_url, api_key: form.api_key, ...(pickedModels.length ? { models: pickedModels } : {}) } as Partial<ProviderConfig>)
       showToast('已添加渠道')
       setForm({ label: '', provider_type: 'openai', base_url: PRESETS[0].baseUrl, api_key: '' })
+      setFormModels([]); setPickedModels([])
       await load()
     } catch (e) {
       showToast('添加失败: ' + (e instanceof Error ? e.message : String(e)), 'error')
@@ -67,13 +73,66 @@ export default function ProvidersView() {
   const testProvider = async (id: string) => {
     setTesting(id)
     try {
-      const target = providers.find((x) => (x.id ?? x.label) === id)
-      if (!target?.base_url) return
-      const res = await api.testConnection({ api_key: '', base_url: target.base_url, provider_type: target.provider_type })
+      // 用已保存的 Key 测（旧实现如此；表单里的「测试连接」才测输入的 Key）
+      const res = await api.testExistingProvider(id)
       setHealth((h) => ({ ...h, [id]: { ok: res.status === 'ok', message: res.detail ?? undefined } }))
     } catch (e) {
       setHealth((h) => ({ ...h, [id]: { ok: false, message: e instanceof Error ? e.message : String(e) } }))
     } finally { setTesting(null) }
+  }
+
+  const discoverForExisting = async (p: ProviderConfig) => {
+    const pid = p.id ?? p.label
+    setDiscovering(pid)
+    try {
+      const res = await api.discoverModelsForExisting(pid)
+      if (res.models?.length) {
+        await api.updateProvider(pid, { models: res.models })
+        showToast(`已拉取 ${res.models.length} 个模型并写回该渠道`)
+        await load()
+      } else {
+        showToast('该渠道没有可用模型', 'warning')
+      }
+    } catch (e) {
+      showToast('拉取模型失败: ' + (e instanceof Error ? e.message : String(e)), 'error')
+    } finally { setDiscovering(null) }
+  }
+
+  const recheckHealth = async (p: ProviderConfig) => {
+    const pid = p.id ?? p.label
+    setRechecking(pid)
+    try {
+      const res = await api.checkProviderHealth(pid)
+      setHealth((h) => ({ ...h, [pid]: { ok: res.status === 'ok', message: res.detail ?? res.summary ?? undefined } }))
+      await load()
+    } catch (e) {
+      showToast('检测失败: ' + (e instanceof Error ? e.message : String(e)), 'error')
+    } finally { setRechecking(null) }
+  }
+
+  // 表单级：用输入的 Key 测连接 / 拉取模型（不落库）
+  const testFormConnection = async () => {
+    if (!form.api_key.trim()) { showToast('请先填写 API Key', 'warning'); return }
+    setFormBusy('test')
+    try {
+      const res = await api.testConnection({ api_key: form.api_key, base_url: form.base_url, provider_type: form.provider_type })
+      showToast(res.status === 'ok' ? '连接正常' : `连接失败：${res.detail ?? '未知原因'}`, res.status === 'ok' ? 'success' : 'error')
+    } catch (e) {
+      showToast('测试失败: ' + (e instanceof Error ? e.message : String(e)), 'error')
+    } finally { setFormBusy(null) }
+  }
+
+  const discoverForForm = async () => {
+    if (!form.api_key.trim()) { showToast('请先填写 API Key', 'warning'); return }
+    setFormBusy('discover')
+    try {
+      const res = await api.discoverModels({ api_key: form.api_key, base_url: form.base_url, provider_type: form.provider_type })
+      setFormModels(res.models ?? [])
+      setPickedModels(res.models ?? [])
+      showToast(`发现 ${res.models?.length ?? 0} 个模型（默认全选）`)
+    } catch (e) {
+      showToast('拉取模型失败: ' + (e instanceof Error ? e.message : String(e)), 'error')
+    } finally { setFormBusy(null) }
   }
 
   const toggleProvider = async (p: ProviderConfig) => {
@@ -128,6 +187,17 @@ export default function ProvidersView() {
                   <Button variant="outline" size="sm" disabled={testing === pid} onClick={() => void testProvider(pid)}>
                     {testing === pid ? <Spinner className="size-3" /> : '测试'}
                   </Button>
+                  <Button
+                    variant="outline" size="sm"
+                    disabled={discovering === pid || p.builtin}
+                    title={p.builtin ? '内置免费模型的列表由 Maxma 管理，写回会被后端拒绝' : '从该渠道拉取可用模型并写回'}
+                    onClick={() => void discoverForExisting(p)}
+                  >
+                    {discovering === pid ? <Spinner className="size-3" /> : '拉取模型'}
+                  </Button>
+                  <Button variant="ghost" size="sm" disabled={rechecking === pid} onClick={() => void recheckHealth(p)}>
+                    {rechecking === pid ? <Spinner className="size-3" /> : '检测'}
+                  </Button>
                   <Button variant="ghost" size="icon-sm" aria-label="删除渠道" onClick={() => void removeProvider(pid)}><Trash2 /></Button>
                 </div>
               )
@@ -174,12 +244,41 @@ export default function ProvidersView() {
                   <Input className="mt-1" type="password" value={form.api_key} onChange={(e) => setForm({ ...form, api_key: e.target.value })} placeholder="sk-…（本地服务可留空）" />
                 </label>
               </div>
-              <div className="mt-3 flex items-center justify-between">
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                 <p className="text-xs text-muted-foreground">Key 经信封加密存储，界面只显示脱敏值。</p>
-                <Button size="sm" disabled={creating} onClick={() => void createProvider()}>
-                  {creating ? <Spinner className="size-3" /> : <Plus />} 添加
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" disabled={formBusy !== null} onClick={() => void testFormConnection()}>
+                    {formBusy === 'test' ? <Spinner className="size-3" /> : null} 测试连接
+                  </Button>
+                  <Button variant="outline" size="sm" disabled={formBusy !== null} onClick={() => void discoverForForm()}>
+                    {formBusy === 'discover' ? <Spinner className="size-3" /> : null} 拉取模型
+                  </Button>
+                  <Button size="sm" disabled={creating} onClick={() => void createProvider()}>
+                    {creating ? <Spinner className="size-3" /> : <Plus />} 添加
+                  </Button>
+                </div>
               </div>
+              {formModels.length > 0 && (
+                <div className="mt-3 rounded-lg border border-border bg-background/40 p-2">
+                  <p className="mb-1.5 text-xs text-muted-foreground">发现 {formModels.length} 个模型，勾选要启用的（默认全选）</p>
+                  <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto">
+                    {formModels.map((m) => {
+                      const on = pickedModels.includes(m)
+                      return (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setPickedModels((prev) => (on ? prev.filter((x) => x !== m) : [...prev, m]))}
+                          aria-pressed={on}
+                          className={`rounded-md border px-2 py-0.5 text-[11px] transition-colors ${on ? 'border-primary bg-accent text-accent-foreground' : 'border-border text-muted-foreground hover:text-foreground'}`}
+                        >
+                          {m}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </section>
 

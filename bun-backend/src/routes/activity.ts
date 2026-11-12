@@ -48,6 +48,10 @@ export function createActivityRoutes(): Hono {
 
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
+        // 立刻发出首字节：根据 SSE 规范这是注释帧（前端忽略 ':' 行）。Bun 只在
+        // 首个 body 字节到达时 flush 响应头；此前要等 15s 心跳，正好与客户端
+        // 15s 连接超时撞车 → fetch 被判失败 → 活动页永远「离线→轮询」。
+        controller.enqueue(encoder.encode(": connected\n\n"));
         unsubscribe = getActivityHub().subscribe((record) => {
           try {
             controller.enqueue(encoder.encode(sseFrame(record)));

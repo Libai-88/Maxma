@@ -47,9 +47,6 @@ interface SessionState {
   deleteSession: (id: string) => Promise<void>
   batchDelete: (ids: string[]) => Promise<void>
   clearTempSessions: () => Promise<void>
-  constifySession: (id: string, name: string) => Promise<void>
-  unconstifySession: (id: string) => Promise<void>
-  generateSessionTitle: (id: string) => Promise<string>
 }
 
 export const useSessionStore = create<SessionState>()((set, get) => {
@@ -214,38 +211,8 @@ export const useSessionStore = create<SessionState>()((set, get) => {
     }
   }
 
-  async function constifySession(id: string, name: string) {
-    try {
-      await api.constifySession(id, name)
-    } catch (e) {
-      log.warn('constifySession failed:', e)
-      // UX-FEEDBACK-001：固定失败必须可见（后端 409「Agent 仍在运行中」等原因文案需透传）
-      showError('固定会话失败: ' + (e instanceof Error ? e.message : String(e)))
-      return
-    }
-    await refreshSessions().catch((err) => log.warn('refreshSessions after constify failed:', err))
-  }
-
-  async function unconstifySession(id: string) {
-    try {
-      await api.unconstifySession(id)
-    } catch (e) {
-      log.warn('unconstifySession failed:', e)
-      showError('取消固定失败: ' + (e instanceof Error ? e.message : String(e)))
-      return
-    }
-    await refreshSessions().catch((err) => log.warn('refreshSessions after unconstify failed:', err))
-  }
-
-  async function generateSessionTitle(id: string): Promise<string> {
-    // 失败时向上抛出——此前吞错返回 ''，调用方（SessionSidebar）会把
-    // 用户已输入的会话名覆盖为空且自己的 catch/toast 永不触发
-    const res = await api.generateSessionTitle(id)
-    return res.title
-  }
-
   function cleanupOrphanedCaches() {
-    const validIds = new Set(get().sessions.map(s => s.session_id))
+    const validIds = new Set(get().sessions.map((s) => s.session_id))
     // 防御：sessions 为空时（可能是后端不可用或 refreshSessions 失败），
     // 不清空缓存，避免后端短暂不可用时丢失所有会话历史
     if (validIds.size === 0) {
@@ -276,9 +243,6 @@ export const useSessionStore = create<SessionState>()((set, get) => {
     deleteSession,
     batchDelete,
     clearTempSessions,
-    constifySession,
-    unconstifySession,
-    generateSessionTitle,
   }
 })
 

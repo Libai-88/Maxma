@@ -1,7 +1,7 @@
 # MaxmaHere 交接说明
 
 > 当前可执行状态，供下一位接手者。架构请先读 [docs/00-当前架构.md](docs/00-当前架构.md)。
-> 更新时间：2026-11-11（`version.py` = v2.6.13）
+> 更新时间：2026-11-12
 
 ## 2026-11-11 前端重写（重要）
 
@@ -67,6 +67,22 @@
   `/agent-tasks` 任务中心。若后续要恢复专用版式，位置是
   `web/src/components/chat/ChatWindow.tsx` 的 `toolToStep`。
 
+
+## 2026-11-12 前后端联调收敛（逐页实测 + 补齐半成品）
+
+以真实后端 + 真实 WS/SSE 逐页跑通，把所有「页面在、功能不在」的地方补齐或诚实降级。
+
+| 问题（证据） | 处理 | 锁 |
+| --- | --- | --- |
+| `/api/activity/stream` TTFB 3.0s：Bun 只在首个 body 字节到达时 flush 响应头，而此前首字节要等 15s 心跳 → 前端 fetch 判失败，活动页永远「离线→轮询」 | 流开始即 `enqueue(": connected\n\n")` 注释帧（规范允许、前端忽略）；实测 TTFB 3.0s → 4ms | `routes-2.3b.test.ts` 断言首帧恰为 `: connected\n\n`，再循环读到 `event: activity` |
+| 会话未初始化时 `ensureConnected('__pending__')` 打 `error` → 首屏每次刷新都有红色噪音 | 该占位值走 `debug` 分支，与真实非法 sid 分开 | 同上文件链路，`log.error` 只留给非法 sid |
+| 侧栏「固定会话」按钮背后是已删的 REST 面（`constifySession`/`unconstifySession`/`generateSessionTitle` 三个 api + store 三方法），点击必 404 | 删除按钮与整条链（Button/图标/确认框） | `tsc` + 全量测试 |
+| `/automation` 仍渲染 `AutomationView`（292 行），而引擎侧 `automation` 能力为 false → 展示不可兑现的开关 | 删视图，路由改指 `FeatureUnavailableView`（与 `sub_agents` 等价诚实降级） | 能力门控 `describeFeatureAvailability` |
+| 模型渠道页缺「拉取模型 / 检测」 | 卡片：测试改用 `testExistingProvider`（测已存 Key，此前用空 Key 测 base_url，对需鉴权的渠道恒失败）、新增「拉取模型」（`discover-models` 后写回 `models`，内置渠道禁用以避免 400 守卫）、「检测」（`/health` 同步运行时健康）；添加表单：用输入 Key 测连接 / 拉取模型 + 模型多选（默认全选，创建时写入） | 浏览器实测：`POST /discover-models` 200 + 模型 chip 渲染 + toast |
+| 设置页无诊断入口（旧 AppSettingsMenu 的导出/清理/重启全丢） | 新增「维护」分区：导出错误日志（Blob 下载，Electron sandbox 可用）、日志文件列表+占用、清理旧日志、重启后端（轮询 `/api/health` 后自动重载） | 实测 `GET /diagnostics/logs` 200，面板显示文件名与大小 |
+| MCP 页只有本地 CRUD，市场/授权整块缺失 | 新增 `components/mcp/McpMarket.tsx`：Smithery Registry（搜索/分页/下载量/已验证徽标/安装/OAuth 授权与状态轮询）+ ModelScope（搜索/详情 env 模板导入）；挂到 MCP 页列表顶部，安装后刷新本地列表 | 实测两来源均返回真实条目（Brave Search/Gmail/高德…），安装与授权按钮就位 |
+| 用户页绕过类型化 api 直调 `api.request('/persona/user')` | 改 `api.getPersona('user')` | `tsc` |
+| 运行时 `api/data/settings_overrides.json` 未被忽略，跑一次设置 PUT 就污染工作树 | 加入 `.gitignore` 运行时段 | — |
 
 ## 状态
 

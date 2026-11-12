@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import { showToast } from '@/lib/toast'
+import { Spinner } from '@/components/ui/spinner'
+import { confirmAction } from '@/components/common/ConfirmDialog'
 
 type Settings = Record<string, unknown>
 
@@ -37,6 +39,7 @@ const SECTIONS = [
   { key: 'memory', label: '记忆' },
   { key: 'skills', label: '技能包' },
   { key: 'voice', label: '语音' },
+  { key: 'maintenance', label: '维护' },
   { key: 'browser', label: '浏览器（暂不生效）' },
   { key: 'subagent', label: '子代理（暂不生效）' },
 ]
@@ -50,6 +53,8 @@ export default function SettingsView() {
   const [browser, setBrowser] = useState<BrowserToolsConfig>({ enabled: false, chrome_path: '', headless: true, viewport_width: 1280, viewport_height: 800, block_tracking: true, allowed_domains: [] })
   const [subagent, setSubAgent] = useState<SubAgentConfig>({ enabled: false, max_concurrent: 1, auto_approve: false, model: '', timeout_seconds: 600, show_progress: true })
   const [tts, setTts] = useState<TtsConfig>({ enabled: false, provider: 'system', voice: '', speed: 1.0, pitch: 1.0, auto_read: false })
+  const [logs, setLogs] = useState<{ files: Array<{ name: string; size_mb: number }>; count: number; total_mb: number; logs_dir: string } | null>(null)
+  const [logsBusy, setLogsBusy] = useState<'load' | 'export' | 'clear' | 'restart' | null>(null)
 
   const thinkingLevel = useChatStore((s) => s.thinkingLevel)
   const setThinkingLevel = useChatStore((s) => s.setThinkingLevel)
@@ -83,6 +88,64 @@ export default function SettingsView() {
   const toggle = (key: string) => set(key, settings[key] !== true)
 
   const num = (key: string, fallback: number) => Number(settings[key] ?? fallback)
+
+  const loadLogs = async () => {
+    setLogsBusy('load')
+    try { setLogs(await api.getLogFiles()) } catch (e) {
+      showToast('读取日志列表失败: ' + (e instanceof Error ? e.message : String(e)), 'error')
+    } finally { setLogsBusy(null) }
+  }
+
+  const exportErrorLog = async () => {
+    setLogsBusy('export')
+    try {
+      const text = await api.getErrorLogText()
+      // 浏览器下载：与旧 AppSettingsMenu 同行为（Electron sandbox 下也可用）
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `maxma-error-log-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.txt`
+      a.click()
+      URL.revokeObjectURL(url)
+      showToast('已导出错误日志')
+    } catch (e) {
+      showToast('导出失败: ' + (e instanceof Error ? e.message : String(e)), 'error')
+    } finally { setLogsBusy(null) }
+  }
+
+  const clearOldLogs = async () => {
+    if (!await confirmAction({ message: '清理旧日志轮转文件（保留当前日志）？', confirmText: '清理' })) return
+    setLogsBusy('clear')
+    try {
+      const res = await api.clearOldLogs()
+      showToast(`已清理 ${res.deleted_count} 个文件，释放 ${res.freed_mb.toFixed(1)} MB`)
+      await loadLogs()
+    } catch (e) {
+      showToast('清理失败: ' + (e instanceof Error ? e.message : String(e)), 'error')
+    } finally { setLogsBusy(null) }
+  }
+
+  const restartBackend = async () => {
+    if (!await confirmAction({ message: '重启后端服务？当前对话会短暂中断，页面将自动重连。', danger: true, confirmText: '重启' })) return
+    setLogsBusy('restart')
+    try {
+      await api.restart()
+      showToast('已发送重启指令，等待服务恢复…')
+      // 轮询健康检查后刷新页面
+      const started = Date.now()
+      const timer = setInterval(async () => {
+        try {
+          const res = await fetch('/api/health')
+          if (res.ok) { clearInterval(timer); window.location.reload() }
+        } catch { /* 重启中 */ }
+        if (Date.now() - started > 60000) { clearInterval(timer); showToast('重启超时，请手动刷新页面', 'error') }
+      }, 1500)
+    } catch (e) {
+      showToast('重启失败: ' + (e instanceof Error ? e.message : String(e)), 'error')
+      setLogsBusy(null)
+    }
+  }
 
   const Row = ({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) => (
     <div className="flex items-center justify-between gap-4 border-b border-border/60 py-3 last:border-0">
@@ -217,6 +280,38 @@ export default function SettingsView() {
             </Row>
             <Row label="自动朗读回复" desc="每轮完成后自动朗读。">
               <Switch checked={tts.auto_read} onCheckedChange={(v) => { setTts({ ...tts, auto_read: v }); void api.updateTtsConfig({ ...tts, auto_read: v }) }} aria-label="自动朗读回复" />
+            </Row>
+          </Panel>
+
+          <Panel title="维护" className={activeSection === 'maintenance' ? '' : 'hidden'}>
+            <Row label="错误日志" desc="导出后端最近收集的异常（诊断用）。">
+              <Button variant="outline" size="sm" disabled={logsBusy !== null} onClick={() => void exportErrorLog()}>
+                {logsBusy === 'export' ? <Spinner className="size-3" /> : null} 导出
+              </Button>
+            </Row>
+            <Row label="日志文件" desc={logs ? `${logs.count} 个文件，共 ${logs.total_mb.toFixed(1)} MB` : '查看日志目录与占用'}>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" disabled={logsBusy !== null} onClick={() => void loadLogs()}>
+                  {logsBusy === 'load' ? <Spinner className="size-3" /> : null} 刷新列表
+                </Button>
+                <Button variant="outline" size="sm" disabled={logsBusy !== null} onClick={() => void clearOldLogs()}>
+                  {logsBusy === 'clear' ? <Spinner className="size-3" /> : null} 清理旧日志
+                </Button>
+              </div>
+            </Row>
+            {logs && (
+              <div className="mt-1 space-y-1 rounded-lg border border-border bg-background/40 p-2 text-[11px] text-muted-foreground">
+                <p className="truncate font-mono">{logs.logs_dir}</p>
+                {logs.files.slice(0, 8).map((f) => (
+                  <p key={f.name} className="flex justify-between gap-2"><span className="truncate font-mono">{f.name}</span><span>{f.size_mb.toFixed(2)} MB</span></p>
+                ))}
+                {logs.files.length === 0 && <p>（目录为空）</p>}
+              </div>
+            )}
+            <Row label="重启后端" desc="配置或引擎异常时重启服务；页面会自动重连。">
+              <Button variant="destructive" size="sm" disabled={logsBusy !== null} onClick={() => void restartBackend()}>
+                {logsBusy === 'restart' ? <Spinner className="size-3" /> : null} 重启
+              </Button>
             </Row>
           </Panel>
 

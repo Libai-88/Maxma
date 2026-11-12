@@ -8,7 +8,6 @@ import type {
   TestConnectionResponse,
   ProviderHealthCheckResponse,
   DiscoverModelsResponse,
-  ConstifyResponse,
   BlockerEntry,
   ListBlockerResponse,
   MCPServerInfo,
@@ -488,18 +487,6 @@ export const api = {
     }),
 
   // ── Const 固定会话 ──
-
-  constifySession: (sessionId: string, name: string) =>
-    request<ConstifyResponse>(`/sessions/${encodeURIComponent(sessionId)}/const`, {
-      method: 'POST',
-      body: JSON.stringify({ name }),
-    }),
-
-  unconstifySession: (sessionId: string) =>
-    request<{ status: string }>(`/sessions/${encodeURIComponent(sessionId)}/const`, { method: 'DELETE' }),
-
-  generateSessionTitle: (sessionId: string) =>
-    request<{ title: string }>(`/sessions/${encodeURIComponent(sessionId)}/generate-title`, { method: 'POST' }),
 
   // ── Persona 人设 ──
 
