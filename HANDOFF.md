@@ -374,6 +374,26 @@ pi 的工具可经 `ctx.executeTool()` 发起子调用，事件带 `parentToolCa
 - 前端 `ToolCall.parentCallId` + `Step.nested`，渲染时缩进一级并加左边框
 - 锁：`prompt-templates-and-nesting.test.ts`（5 项），变异验证撤掉透传即红
 
+### 会话状态（STATE-001）
+
+pi 的 `AgentSession` 有 `model` / `routedModel` / `thinkingLevel` / `isIdle` / `isStreaming`，
+Maxma 一个都没读——界面上的「模型」是它自己记的 id，**引擎实际用谁回的话不可见**。
+
+`routedModel` 是虚拟模型（扩展经 `pi.registerVirtualModel` 注册）的关键：选中虚拟模型时
+`model` 是虚拟选择，`routedModel` 才是最近一次真正应答的物理模型。
+
+- RPC `get_session_state` → REST `GET /api/sessions/:id/state`
+- 前端模型选择器旁显示「→ 实际模型」，仅在与所选模型不同时出现，每轮结束刷新
+
+实测：`GET /state` 返回 `{model:{provider,id,name}, routed_model:null, thinking_level, is_streaming, is_idle, session_name}`。
+未注册虚拟模型时 `routed_model` 为 `null`——**这不是缺陷**：没有扩展注册虚拟模型，
+pi 的 `getAllModels()` 里就是 0 个虚拟模型（实测 1712 个模型中 0 个虚拟）。
+
+**仍存在的边界**：Maxma 的模型列表来自 `providers.yaml`，不是 pi 的 `getAllModels()`。
+所以即使扩展注册了虚拟模型，它也**不会出现在 Maxma 的模型选择器里**——
+`routedModel` 只在会话已经选中虚拟模型时才有值。要让虚拟模型可被选中，
+需要把 pi 的模型注册表合并进选择器，这是一项独立工作。
+
 ## 状态
 
 - 仓库 `https://github.com/Libai-88/Maxma.git`，主分支 `main`；变更一律走分支 + PR squash 合入，
