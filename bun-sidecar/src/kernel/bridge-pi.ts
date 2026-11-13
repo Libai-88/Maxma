@@ -10,6 +10,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { SessionManager } from "@earendil-works/pi-coding-agent";
 import type { AgentSession as PiAgentSession } from "@earendil-works/pi-coding-agent";
 
 import { MAXMA_DEFAULT_PI_TOOLS, createMaxmaSession } from "./pi-session";
@@ -794,6 +795,197 @@ export async function handlePiSessionRpc(
 
   if (method === "get_goal_state") {
     io.send(id, { state: record.goalState.enabled ? record.goalState : null });
+    return;
+  }
+
+  // ── 会话树（TREE-001）──
+  //
+  // pi 把会话存成**树**（append-only entry + 活动 leaf），但此前 Maxma 只用过
+  // `getBranch()`（取当前分支）与 `getLeafId()`（checkpoint），从未把整棵树暴露出来。
+  // 用户看不到"这段对话分过哪些支"，也就用不上 pi 的分支能力。
+  //
+  // 这里只做**只读投影**：把官方 SessionTreeNode 压成前端能直接渲染的形状。
+  // 不透传原始 entry——里面含 usage/自定义 entry 等前端不消费的字段，
+  // 且形状随 pi 版本变（engine-boundary 的纪律：前端只认 Maxma 契约）。
+  if (method === "get_tree") {
+    const sm = record.session.sessionManager;
+    const leafId = sm.getLeafId();
+
+    // 官方 `SessionTreeNode` 是判别联合（SessionEntry 各成员形状不同），
+    // 直接当 Record 转会被 tsc 拒绝（TS2352）。这里用 unknown 过渡后按字段读——
+    // 我们只取 id/type/timestamp/message.role 这些**所有成员共有**的字段。
+    type RawEntry = { id?: string; parentId?: string | null; type?: string; timestamp?: string; message?: { role?: string; content?: unknown } };
+
+    /** 从 entry 里抽一段人类可读预览。 */
+    const previewOf = (entry: RawEntry): string => {
+      const type = String(entry.type ?? "");
+      if (type === "message") {
+        const role = String(entry.message?.role ?? "unknown");
+        let text = "";
+        const content = entry.message?.content;
+        if (typeof content === "string") text = content;
+        else if (Array.isArray(content)) {
+          text = content
+            .map((c) => (c && typeof c === "object" && (c as { type?: string }).type === "text"
+              ? String((c as { text?: unknown }).text ?? "")
+              : ""))
+            .join(" ");
+        }
+        const flat = text.replace(/\s+/g, " ").trim();
+        return `${role}: ${flat.length > 80 ? `${flat.slice(0, 80)}…` : flat}`;
+      }
+      if (type === "compaction") return "(上下文压缩摘要)";
+      if (type === "branch_summary") return "(分支摘要)";
+      if (type === "model_change") return "(切换模型)";
+      if (type === "thinking_level_change") return "(切换思考档位)";
+      if (type === "label") return "(书签)";
+      return `(${type || "entry"})`;
+    };
+
+    interface TreeOut {
+      id: string;
+      parentId: string | null;
+      type: string;
+      role: string | null;
+      preview: string;
+      timestamp: string | null;
+      label: string | null;
+      isLeaf: boolean;
+      children: TreeOut[];
+    }
+
+    const project = (node: { entry?: unknown; children?: unknown[]; label?: string }): TreeOut => {
+      const entry = (node.entry ?? {}) as RawEntry;
+      const id = String(entry.id ?? "");
+      return {
+        id,
+        parentId: entry.parentId ?? null,
+        type: String(entry.type ?? ""),
+        role: entry.message?.role ? String(entry.message.role) : null,
+        preview: previewOf(entry),
+        timestamp: entry.timestamp ?? null,
+        label: node.label ?? null,
+        isLeaf: id === leafId,
+        children: (node.children ?? []).map((c) => project(c as never)),
+      };
+    };
+
+    const rawTree = sm.getTree() as unknown as Array<{ entry?: unknown; children?: unknown[]; label?: string }>;
+    io.send(id, {
+      session_id: sessionId,
+      leaf_id: leafId,
+      session_name: sm.getSessionName() ?? null,
+      entry_count: sm.getEntryCount(),
+      tree: rawTree.map(project),
+    });
+    return;
+  }
+
+  // ── 树内导航（TREE-002）──
+  //
+  // 官方 `navigateTree(targetId, {summarize})`：把 leaf 移到某个 entry，
+  // 可选对离开的分支生成 LLM 摘要。**不删除任何条目**（append-only）。
+  if (method === "navigate_tree") {
+    const targetId = params?.target_id as string | undefined;
+    if (!targetId) {
+      io.sendError(id, "Missing required parameter: target_id");
+      return;
+    }
+    const summarize = params?.summarize === true;
+    const customInstructions = typeof params?.custom_instructions === "string"
+      ? params.custom_instructions
+      : undefined;
+    try {
+      const result = await record.session.navigateTree(targetId, {
+        ...(summarize ? { summarize: true } : {}),
+        ...(customInstructions !== undefined ? { customInstructions } : {}),
+      });
+      io.send(id, {
+        cancelled: result.cancelled,
+        aborted: result.aborted === true,
+        leaf_id: record.session.sessionManager.getLeafId(),
+        ...(result.summaryEntry ? { summary: true } : {}),
+        ...(result.editorText !== undefined ? { editor_text: result.editorText } : {}),
+      });
+    } catch (error) {
+      io.sendError(id, `navigateTree failed: ${String(error)}`);
+    }
+    return;
+  }
+
+  // ── 分叉（TREE-003）──
+  //
+  // 从某条 entry 分出新会话。实现路径**实测选定**（见 pi-shell-capability-plan.md §二.3）：
+  //   `SessionManager.forkFrom(src, cwd)` 复制整个会话 → `branch(targetId)` 收窄到分叉点。
+  // 不走 `AgentSessionRuntime.fork`：那需要改 `record` 的会话持有结构与生命周期，风险高。
+  //
+  // 注意：fork 出的是**磁盘上的新会话文件**，调用方（后端）负责用它的路径走
+  // `create_session(resume_session_id)` 把它变成活会话。这里只建文件、返回 id。
+  if (method === "fork_session") {
+    const entryId = params?.entry_id as string | undefined;
+    if (!entryId) {
+      io.sendError(id, "Missing required parameter: entry_id");
+      return;
+    }
+    const sm = record.session.sessionManager;
+    const sourceFile = sm.getSessionFile();
+    if (!sourceFile) {
+      // 内存会话（inMemory）没有磁盘文件可复制。
+      io.sendError(id, "当前会话未持久化，无法分叉");
+      return;
+    }
+    // 分叉点必须是本会话里真实存在的 entry，否则 branch() 会静默落到根。
+    if (!sm.getEntry(entryId)) {
+      io.sendError(id, `找不到分叉点 entry: ${entryId}`);
+      return;
+    }
+    // 空会话没有有效 JSONL（pi 在首次追加内容时才落盘），fork 会被引擎拒绝。
+    // 提前给出可读原因，而不是把引擎的技术性异常原样抛给界面。
+    if (sm.getEntryCount() === 0) {
+      io.sendError(id, "这个会话还没有内容，无法分叉");
+      return;
+    }
+    try {
+      const forked = SessionManager.forkFrom(sourceFile, sm.getCwd());
+      // 收窄到分叉点：forkFrom 复制了整个会话，branch 把 leaf 移过去。
+      forked.branch(entryId);
+      io.send(id, {
+        session_id: forked.getSessionId(),
+        session_file: forked.getSessionFile() ?? null,
+        entry_id: entryId,
+        entry_count: forked.getEntryCount(),
+      });
+    } catch (error) {
+      io.sendError(id, `分叉失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+    return;
+  }
+
+  // ── 会话重命名 / 统计 / 导出（TREE-004）──
+  //
+  // 都是 pi 的 AgentSession 直接能力，此前一个都没接。
+  if (method === "set_session_name") {
+    const name = typeof params?.name === "string" ? params.name.trim() : "";
+    // 空串 = 清除名称（官方语义：写 undefined）。
+    record.session.setSessionName(name);
+    io.send(id, { ok: true, name: name || null });
+    return;
+  }
+
+  if (method === "get_session_stats") {
+    const stats = record.session.getSessionStats();
+    io.send(id, { stats });
+    return;
+  }
+
+  if (method === "export_session_html") {
+    const outputPath = typeof params?.output_path === "string" ? params.output_path : undefined;
+    try {
+      const path = await record.session.exportToHtml(outputPath);
+      io.send(id, { ok: true, path: path ?? outputPath ?? null });
+    } catch (error) {
+      io.sendError(id, `export_session_html failed: ${String(error)}`);
+    }
     return;
   }
 

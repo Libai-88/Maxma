@@ -8,6 +8,7 @@ import { PermissionModeControl } from '@/components/chat/PermissionModeControl'
 import { runSlashCommand } from '@/components/chat/slashCommands'
 import { SteeringWindow } from '@/components/chat/SteeringWindow'
 import { ExtensionPromptDialog } from '@/components/chat/ExtensionPromptDialog'
+import { SessionTreeDialog } from '@/components/chat/SessionTreeDialog'
 import { ContextRing } from '@/components/ui/context-ring'
 import { Switch } from '@/components/ui/switch'
 import { ChatWindow } from '@/components/chat/ChatWindow'
@@ -26,7 +27,7 @@ import { safeGetItem, safeSetItem } from '@/lib/storage'
 import { showToast } from '@/lib/toast'
 import type { ParsedRef } from '@/utils/references'
 import type { ThinkPathId } from '@/utils/thinkPath'
-import { Settings2, PanelRight, AlertTriangle, RotateCcw } from 'lucide-react'
+import { Settings2, PanelRight, AlertTriangle, RotateCcw, GitBranch } from 'lucide-react'
 
 const SELECTED_PROVIDER_KEY = 'maxma_selected_provider'
 const SELECTED_MODEL_KEY = 'maxma_selected_model'
@@ -34,6 +35,7 @@ const SELECTED_MODEL_KEY = 'maxma_selected_model'
 export default function ChatView() {
   const sessionId = useSessionStore((s) => s.sessionId)
   const sessions = useSessionStore((s) => s.sessions)
+  const switchSession = useSessionStore((s) => s.switchSession)
   const { hasProviders, loaded: providerLoaded, loadProviders } = useProviderStore()
   const availableModels = useChatStore((s) => s.availableModels)
   const fetchAvailableModels = useChatStore((s) => s.fetchAvailableModels)
@@ -50,12 +52,13 @@ export default function ChatView() {
     sendCollaborationMessage, sendTaskReview, sendUserResponse, sendExtensionUiResponse, sendArtifactAction, sendPlanResponse,
     removeTurns, dismissError, privateMode, setPrivateMode, autoApprove, setAutoApprove,
     reconnectExhausted, reconnect, goalState, contextUsage,
-    sendPlanMode, sendCheckpointAction, sendGoalAction,
+    sendPlanMode, sendCheckpointAction, sendGoalAction, reloadTurnsFromBackend,
   } = chat
 
   const [providerLoadFailed, setProviderLoadFailed] = useState(false)
   const [providerRetrying, setProviderRetrying] = useState(false)
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
+  const [treeOpen, setTreeOpen] = useState(false)
   const [modelSettingsOpen, setModelSettingsOpen] = useState(false)
   const [taskBriefAnswer, setTaskBriefAnswer] = useState('')
   const [taskBriefPrompt, setTaskBriefPrompt] = useState('')
@@ -351,6 +354,16 @@ export default function ChatView() {
                   <span className="ml-1 opacity-70">（{goalState.goal.status === 'active' ? '进行中' : goalState.goal.status === 'paused' ? '已暂停' : goalState.goal.status === 'complete' ? '已完成' : goalState.goal.status}）</span>
                 </p>
               )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="mb-2 w-full justify-start"
+                onClick={() => { setMoreMenuOpen(false); setTreeOpen(true) }}
+                disabled={!sessionId}
+              >
+                <GitBranch className="mr-1.5 size-3.5" /> 会话分支
+                <span className="ml-auto text-xs text-muted-foreground">查看 / 分叉</span>
+              </Button>
               <Button variant="outline" size="sm" className="mb-2 w-full justify-start" onClick={() => setModelSettingsOpen((v) => !v)}>
                 模型参数 <span className="ml-auto text-xs text-muted-foreground">{modelSettingsOpen ? '收起' : '展开'}</span>
               </Button>
@@ -471,6 +484,15 @@ export default function ChatView() {
         {/* EXT-UI-001：pi 扩展的 ctx.ui 对话框。全局模态——不属于某一轮对话，
             所以挂在这里而不是 ChatWindow 里（回合切换不该把它清掉）。 */}
         <ExtensionPromptDialog onReply={sendExtensionUiResponse} />
+
+        {/* TREE-001..003：pi 的会话树。切回某处后刷新消息；分叉后切到新会话。 */}
+        <SessionTreeDialog
+          sessionId={sessionId ?? ''}
+          open={treeOpen}
+          onClose={() => setTreeOpen(false)}
+          onNavigated={() => void reloadTurnsFromBackend()}
+          onForked={(newId) => { setTreeOpen(false); void switchSession(newId) }}
+        />
       </div>
     </div>
   )

@@ -594,6 +594,14 @@ export const PI_RPC_METHODS = [
   "get_goal_state",
   "reload_mcp_for_session",
   "session_recap",
+  // TREE-001..004：pi 的会话树、树内导航、分叉、重命名/统计/导出。
+  // 此前 Maxma 只用过 getBranch()/getLeafId()，整棵树从未暴露给用户。
+  "get_tree",
+  "navigate_tree",
+  "fork_session",
+  "set_session_name",
+  "get_session_stats",
+  "export_session_html",
   "steer",
   "follow_up",
 ] as const;

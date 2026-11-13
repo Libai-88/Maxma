@@ -284,6 +284,40 @@ pi 只把「整条消息是 `/name` 或 `/name args`」识别为命令。两处�
 - 两个变异验证均确认有效：删掉前端早退分支 → 输出带时间戳被抓；
   后端 `isSlashCommand = false` → 正则缺失被抓。
 
+## 2026-11-13 TREE-001..004：接通 pi 的会话树与分叉
+
+pi 把会话存成 **append-only entry 树 + 活动 leaf**：`/tree` 在同一会话里移动 leaf
+（不删除任何条目），`/fork` 从某条消息分出**新会话**。这是 pi 的核心能力，
+而 Maxma 此前只用过 `getBranch()`/`getLeafId()`（undo 与 checkpoint），
+整棵树从未暴露给用户——用户看不到"这段对话分过哪些支"，也就用不上分支能力。
+
+| 能力 | pi 提供 | 接法 |
+| --- | --- | --- |
+| 读树 | `sessionManager.getTree()`（自带 `label`） | RPC `get_tree` 投影成前端形状；REST `GET /api/sessions/:id/tree` |
+| 树内导航 | `session.navigateTree(id, {summarize})` | RPC `navigate_tree`；REST `POST .../tree/navigate` |
+| 分叉 | `SessionManager.forkFrom()` + `branch(targetId)` | RPC `fork_session`；REST `POST .../tree/fork`（建文件后立刻 resume 成活会话） |
+| 重命名 | `session.setSessionName()` | `PUT /api/sessions/:id/name` |
+| 统计 | `session.getSessionStats()` | `GET /api/sessions/:id/stats`（覆盖含被压缩历史，反映真实计费） |
+| 导出 | `session.exportToHtml()` | `POST /api/sessions/:id/export` |
+
+**分叉路径的选择**（已实测）：不走 `AgentSessionRuntime.fork`（要改 `record` 的
+会话持有结构与生命周期，风险高），改用 `forkFrom` 复制整个会话 + `branch(targetId)`
+收窄 leaf。实测 `forkFrom` 复制的是**全部 entry**（含被弃分支），`branch` 只移动指针——
+所以分叉不裁剪历史，被弃分支仍在文件里（append-only 语义）。
+
+**空会话不能分叉**：pi 在首次追加内容前不落盘 JSONL，`forkFrom` 会拒绝空文件。
+kernel 用 `getEntryCount() === 0` 提前拦截并给可读原因（"这个会话还没有内容，无法分叉"），
+而不是把引擎的技术性异常抛给界面。
+
+界面：`components/chat/SessionTreeDialog.tsx`——菜单「会话分支」打开，树按缩进渲染，
+当前 leaf 高亮，每行有「回到这里」与「分叉」。切分支后走 `reloadTurnsFromBackend()`
+**强制**重建 turns：既有的 `reconcileTurnsWithBackend` 有"轮次数一致就跳过"的守卫，
+切到另一条分支后轮次数可能恰好相同，会被误判为无需校准。
+
+验证：`scripts/verify-ui-session-tree.mjs`（真实界面：菜单 → 树渲染 → 节点可操作，
+零 console 错误）；`bun-sidecar/tests/session-tree.test.ts`（9 项，锁树形状、
+branch 不删条目、forkFrom 产物可 open 恢复、空会话拒绝）。
+
 ## 状态
 
 - 仓库 `https://github.com/Libai-88/Maxma.git`，主分支 `main`；变更一律走分支 + PR squash 合入，
