@@ -34,6 +34,27 @@ const { app, BrowserWindow } = require("electron");
 const BASE = process.env.DRIVE_BASE;
 const REPLY = process.env.DRIVE_REPLY;
 
+/**
+ * 界面选择器 —— **React 重写后的真实钩子**。
+ *
+ * ⚠️ 这份驱动曾经查 `.input-area` / `.btn-send` / `.chat-connection-error-text`，
+ * 那是 Vue 时代的类名。2026-11-11 前端重写为 React + shadcn 后这三个类都不存在了，
+ * 于是脚本永远停在「输入框始终没出现」——而它被列为交付前的真实验证手段之一，
+ * 也就是说**这条验证路径静默失效了近两周**（HANDOFF 里只记了"Vue 测试套件退役"，
+ * 没提这个仍被当作现役手段的脚本）。
+ *
+ * 现在的真实钩子（改界面时请同步这里）：
+ *   - 输入框：`components/ui/composer.tsx` 的 textarea（ChatInput 传 `aria-label`）
+ *   - 发送按钮：同一文件的 Button，`aria-label` 默认 "Send"（流式中变 "Stop"）
+ * 优先用 aria-label / data-slot 这类**语义钩子**，不用样式类名——样式会随设计改，
+ * 语义钩子改的时候通常也会顺手改测试。
+ */
+const SEL = {
+  input: '[data-slot="composer"] textarea',
+  send: '[data-slot="composer"] button[aria-label="Send"]',
+  stop: '[data-slot="composer"] button[aria-label="Stop"]',
+};
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 app.whenReady().then(async () => {
@@ -70,7 +91,7 @@ app.whenReady().then(async () => {
     for (let i = 0; i < 120; i++) {
       await sleep(500);
       const has = await win.webContents
-        .executeJavaScript("!!document.querySelector('.input-area')")
+        .executeJavaScript("!!document.querySelector('" + SEL.input + "')")
         .catch(() => false);
       if (has) {
         inputReady = true;
@@ -80,9 +101,9 @@ app.whenReady().then(async () => {
     if (!inputReady) throw new Error("聊天输入框始终没出现（界面可能停在引导页或未渲染）");
     result.stage = "input-ready";
 
-    // 2) 输入文本：用原生 value setter 再派发 input 事件，让 Vue 的 v-model 收到
+    // 2) 输入文本：用原生 value setter 再派发 input 事件，让 React 的受控组件收到
     await win.webContents.executeJavaScript(`(() => {
-      const ta = document.querySelector('.input-area');
+      const ta = document.querySelector('${SEL.input}');
       ta.focus();
       const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
       setter.call(ta, '请回复：${REPLY}');
@@ -97,15 +118,15 @@ app.whenReady().then(async () => {
       await sleep(500);
       const st = await win.webContents
         .executeJavaScript(`(() => {
-          const ta = document.querySelector('.input-area');
-          const btn = document.querySelector('.btn-send');
-          const err = document.querySelector('.chat-connection-error-text');
+          const ta = document.querySelector('${SEL.input}');
+          const btn = document.querySelector('${SEL.send}');
+          const stopBtn = document.querySelector('${SEL.stop}');
           return {
             hasInput: !!ta,
             hasSend: !!btn,
             disabled: btn ? btn.disabled : null,
-            title: btn ? btn.getAttribute('title') : null,
-            connError: err ? err.textContent : null,
+            label: btn ? btn.getAttribute('aria-label') : null,
+            streaming: !!stopBtn,
             inputValue: ta ? ta.value.slice(0, 20) : null,
             statusText: (document.body.innerText.match(/就绪|连接中|未连接|重连/) || [null])[0],
           };
@@ -119,7 +140,7 @@ app.whenReady().then(async () => {
         result.stage = "send-enabled";
         break;
       }
-      result.stage = "send-disabled:" + (st.title || "(title 为空)");
+      result.stage = "send-disabled:label=" + (st.label || "(无 aria-label)") + ",streaming=" + st.streaming;
     }
     if (!sendUsable) {
       result.gateState = lastState;
@@ -135,7 +156,7 @@ app.whenReady().then(async () => {
     // 4) 点发送
     const clicked = await win.webContents
       .executeJavaScript(`(() => {
-        const btn = document.querySelector('.btn-send');
+        const btn = document.querySelector('${SEL.send}');
         if (!btn || btn.disabled) return false;
         btn.click();
         return true;

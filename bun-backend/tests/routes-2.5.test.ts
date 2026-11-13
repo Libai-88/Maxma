@@ -418,8 +418,31 @@ describe("capabilities 聚合（阶段 2.5c）", () => {
     expect(body.memory).toEqual({ total: 0, categories: {} });
 
     const cfg = body.config_sources as Record<string, unknown>;
-    expect((cfg.sources as unknown[]).length).toBe(12);
-    expect((cfg.resolution_order as string[]).length).toBe(12);
+    expect((cfg.sources as unknown[]).length).toBe(10);
+    expect((cfg.resolution_order as string[]).length).toBe(10);
+
+    // 配置来源清单的**诚实性锁**：只许列真的有读取方的位置。
+    //
+    // 这张表原来是从 Python 后端的 OMP 清单直译的 12 行，其中 8 行在 Maxma + pi
+    // 的真实链路上零读取方（`.omprc`、`.claude`、`.cursor`、`.github`、`.mcp.json`、
+    // `~/.claude`、`~/.cursor`、以及一个没人解析的「CLI 参数」行）。能力页把
+    // 「文件存在」画成打勾，用户就会以为 Maxma 在用它——这是本仓最忌讳的界面撒谎。
+    //
+    // 锁法：每一条都必须给出 `reader`（代码里的读取点），且这些零读取方的名字
+    // 一个都不许出现。新增来源而不写 reader 会当场变红。
+    const sources = cfg.sources as Array<Record<string, unknown>>;
+    for (const s of sources) {
+      expect(typeof s.reader, `配置来源「${s.name}」缺少 reader（读取点）字段`).toBe("string");
+      expect(String(s.reader).length, `配置来源「${s.name}」的 reader 为空`).toBeGreaterThan(0);
+    }
+    const names = sources.map((s) => String(s.name)).join("|");
+    for (const ghost of [".omprc", ".claude", ".cursor", ".github", ".mcp.json", "CLI 参数"]) {
+      expect(names, `配置来源里出现了零读取方的 ${ghost}`).not.toContain(ghost);
+    }
+    // 反方向：真实读取方必须在列。
+    for (const real of ["settings_overrides.json", "panel_configs.json", "providers.yaml", "mcp_servers.yaml", "personas"]) {
+      expect(sources.map((s) => String(s.path)).join("|"), `真实读取方 ${real} 未列出`).toContain(real);
+    }
 
     // Phase4 manifest
     expect(body.version).toBe(EXPECTED_VERSION);

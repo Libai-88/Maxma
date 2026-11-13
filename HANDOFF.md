@@ -1,7 +1,7 @@
 # MaxmaHere 交接说明
 
 > 当前可执行状态，供下一位接手者。架构请先读 [docs/00-当前架构.md](docs/00-当前架构.md)。
-> 更新时间：2026-11-12
+> 更新时间：2026-11-13
 
 ## 2026-11-11 前端重写（重要）
 
@@ -193,6 +193,24 @@
 - 循环桩 + 连续拒绝：第 3 次请求被判定为循环，错误文案为「Agent 反复请求同一个工具调用（bash），已停止本轮。可切换权限模式后重试。」，不再刷卡。
 - 新增测试：`bun-sidecar/tests/approval-gate.test.ts`（在途放行/拒绝语义）、`chat-ws-2.3b` 的 `APPROVAL_LOOP` 用例。
 
+## 2026-11-13 诚实性收口：配置来源、过期注释、丢失的提示词注入
+
+接手后按「界面/文档不许与代码相反」逐条核对 `HANDOFF` 遗留项，三条真缺陷全部修掉并加锁。
+
+| 问题（证据） | 处理 | 锁 |
+| --- | --- | --- |
+| **能力页「配置来源」12 行里 8 行零读取方**：`.omprc` / `.omprc.json` / `.claude` / `~/.claude` / `.cursor` / `~/.cursor` / `.github` / `.mcp.json` 全是从 Python 后端 `_analyze_config_sources` 直译的 OMP 时代清单，在 Maxma + pi 链路上没有任何读取方（pi 读 `~/.pi/agent/mcp.json` 与 `.pi/mcp.json`，Maxma 读 `api/data/mcp_servers.yaml`）。页面把「文件存在」画成打勾的「存在」，等于宣称 Maxma 在用它们 | 清单重写为 10 条**真实读取方**（Maxma 应用层 6 + pi 引擎层 3 + 技能目录），每条新增 `reader` 字段指向代码里的读取点；「冲突」逻辑也从 OMP 的「同 scope 高优先级覆盖」改为只报**代码里真会互相覆盖**的两对（MCP 的 `loadConfig` 整体替换、系统提示词的叠加） | `routes-2.5.test.ts`：每条必须有非空 `reader`、8 个幽灵名一个都不许出现、5 个真实读取方必须在列；`scripts/verify-ui-capabilities.mjs` 在真实界面复核同样条件 |
+| **「人设与规则」被报成「不存在」**：`analyzeConfigSources` 用 `process.cwd()`，而后端从 `bun-backend/` 启动；会话的真实工作目录是 `maxmaProjectRoot()`（`bridge-pi.ts` 的 `params.cwd ?? maxmaProjectRoot()`）。同一处错误也让 `env.cwd` 把 `bun-backend` 显示成「工作目录」 | 统一改用会话工作目录；`env.cwd` 改名语义为「会话工作目录」并保留 `process_cwd` 供排查 | 同上界面验证：`会话工作目录` 不得含 `bun-backend` |
+| **5 个 `memory_*` 事件被标 `UNIMPLEMENTED: 无发射端/无订阅`**，而 `chat-ws.ts` 的 `finishTurn` 确实合成整套事件流、`useChat.ts` 也在消费。注释与代码相反比没有注释更糟——接手者会据此把活代码当死代码删 | 注释改为事实描述；顺手删掉 `:337` 一条指向已删除 `deferred_run_manager` 的孤儿注释（它紧贴 `ArtifactEvent`，会误导读者以为在说 artifact） | `engine-boundary.test.ts` 新增「前端标 UNIMPLEMENTED 的事件必须真的没有后端发射点」：按注释+接口配对取接口体内的 `type` 字面量对账。**第一版判据取错来源（从注释文本里抠 snake_case），实测把注释改回错误内容仍全绿**，已修正并做变异验证 |
+| **`config/personas/AGENTS.md` 与 `MAXMA.md` 随两种便携包分发却零读取**：两者在 Python 后端时代真实注入过（`37ab9b23` 引入 MAXMA.md 进 `agent/prompts.py`），`8d1d864f` 删 Python 源码时注入代码一起消失，文件却还在打包脚本里。AGENTS.md 全篇是上一代工具（`task_tracker`/`call_sub_agent`/`run_python`/`git_status`/`browser_browse`/`tavily_search`/`ask_user_qa`），并宣称有 `[运行时配置]`、`[项目上下文]` 两种注入——全仓都不存在 | **恢复注入**（不是删文件）：`persona-prompt.ts` 按 Python 时代顺序（MAXMA → AGENTS → SOUL → USER → 贴纸）拼进 `appendSystemPrompt`；AGENTS.md 按真实工具面重写；MAXMA.md 修掉「SOUL + Identity + Yuan 三层」（不存在）与「记忆自动记录」（与记忆页「不会自行推断」直接矛盾），页面路径全部核对为真实路由 | `kernel-bridge.test.ts` 断言两段文本真进了 `systemPrompt`；`engine-boundary.test.ts` 断言 AGENTS.md 反引号里点名的工具必须 ∈ 引擎内置∪自定义∪条件装配（实测抓到全部 7 个幽灵工具） |
+| **`scripts/_ui-chat-driver.cjs` 自 2026-11-11 前端重写起静默失效**：它查 `.input-area` / `.btn-send` / `.chat-connection-error-text`（Vue 类名），React 重写后全部不存在，永远停在「输入框始终没出现」。而 HANDOFF 把它列为现役验证手段，且**没有任何闸门/CI 调用它** | 选择器改为语义钩子（`[data-slot="composer"] textarea`、`aria-label="Send"/"Stop"`），实测跑通「输入 → 发送 → 收到回复」；新增 `scripts/verify-ui-capabilities.mjs` + `_ui-capabilities-driver.cjs` 验证能力页 | `script-encoding.test.ts` 新增「界面验证脚本的钩子契约」组：脚本引用的 `data-slot`/`aria-label` 必须在 `web/src` 里存在，且不许再用 Vue 样式类名（剥注释后扫，避免被事故说明文字误判） |
+
+实测（本轮）：
+- `bash scripts/verify-all-gates.sh` → 全部闸门通过（sidecar 133 / backend 281 / web tsc+build / 颜色+间距 / 类型债 0 / bundle）。
+- `bun scripts/verify-ui-capabilities.mjs` → 真实界面：配置来源 10 条全带路径与读取点、零 console 错误；变异塞回 `.cursor` 会红。
+- `bun scripts/verify-ui-chat-roundtrip.mjs` → 真实界面「输入 → 发送 → 收到回复」全链路通（证明新注入的提示词没破坏对话）。
+- 真实会话 `systemPrompt`（44KB）含 MAXMA 自述与 AGENTS 工具面，文档点名的 14 个工具全部存在。
+
 ## 状态
 
 - 仓库 `https://github.com/Libai-88/Maxma.git`，主分支 `main`；变更一律走分支 + PR squash 合入，
@@ -329,9 +347,15 @@ node scripts/check-type-budget.mjs --write    # 类型债下降后下调基线�
 ## 遗留问题（未修，接手时别当成可用功能）
 
 1. `web/src/views/PluginListView.tsx` 的 `plugins.marketplace` 语义：当前 `false` = 「只启用随包插件」，输入框也只接受随包标识。真要开网络安装，前置是安全评审（下载校验、体积/条目上限、路径穿越、原子落盘），见 `routes/plugins.ts` 的 501 分支。
-2. **`config/personas/` 里的 `AGENTS.md` 与 `MAXMA.md` 随两种便携包分发，但没有任何代码读取它们。** `listPersonas()` 只扫 `SOUL*.md`（`persona.ts:78`），`persona-prompt.ts` 只读 SOUL/USER，pi 的项目上下文读的是 `<cwd>/AGENTS.md` 而非包内这个路径。于是 `AGENTS.md` 的「特殊工具说明」整节是上一代引擎的工具词汇且从不被校验：`ask_user_qa`/`ask_user_single_choice`/`ask_user_multi_choice`、`task_tracker`、`call_sub_agent`、`file_read`、`run_python`、`git_status`、`browser_browse`、`tavily_search` 全都不存在（真实面是 `read/bash/edit/write/grep/find/ls` + 6 个自定义 + `submit_plan`）。本轮只修了它确实错误的 Skills 节；要么按真实工具面重写这两份，要么停止分发（与 `.omp/skills` 同一处置）。
-3. `capabilities.ts` 的配置源清单除已删的 `~/.omp` 外，其余行（`~/.claude`、`~/.cursor`、`.omprc`、`.omprc.json`、`.mcp.json`、`.github`、项目 `AGENTS.md`…）**未逐条核实是否真被 Maxma/pi 读取**，而能力页把它们连同"活跃 N/M"计数展示给用户。要么核实并只留真实读取方，要么把这整张表降级为"可能存在的目录"措辞。另：删掉 `~/.omp` 行后 `priority` 号从 9 跳到 11（仅展示用，未影响判定）。
-4. **`update_auto_approve` 的失败被吞掉。** kernel 侧没有该会话记录时，`callKernelRpc` 解析成 `{ok:false}`，而 `chat-ws.ts:902-905` 以 `void ….catch(() => {})` 丢弃 → 不会有任何回执，「自动执行」开关停在它的乐观值上（权限选择器此时正确地保持内核最后一次宣告的档位）。属既有行为，本轮让分歧从"静默"变成"可见"，真正的修法是给该分支一个回执或错误事件。
+2. ~~`AGENTS.md` / `MAXMA.md` 随包分发但无人读取~~ —— **2026-11-13 已修**：恢复注入并按真实工具面重写，见上节。
+3. ~~能力页配置源清单未核实~~ —— **2026-11-13 已修**：清单重写为 10 条真实读取方，每条带 `reader`。
+4. ~~`update_auto_approve` 的失败被吞掉~~ —— **已修**（`03f79ddc` 的 ACTION-FAIL-001）：`callRpcStrict` + `action_failed` 事件 + 前端 toast，五条会话级动作全部接线。
+5. **`config/personas/AGENTS.md` 是给**模型**看的提示词，不是开发者文档。** 改它之前先确认工具名真实存在——
+   `engine-boundary.test.ts` 会把反引号里的标识符当工具名对账，写错即红。历史说明/事故记录不要写进这个文件
+   （它每轮都进系统提示词，负面清单会干扰模型），放 HANDOFF 或代码注释里。
+6. **界面验证脚本没有被任何闸门/CI 调用。** `scripts/verify-ui-*.mjs` 需要 Electron 与真实后端，跑得慢，
+   目前只能手动执行。`script-encoding.test.ts` 的钩子契约能保证选择器不失效，但**保证不了脚本本身还能跑通**。
+   交付前建议手动跑 `verify-ui-chat-roundtrip.mjs` 与 `verify-ui-capabilities.mjs`。
 
 ## 本次文档清理（2026-11-02）
 

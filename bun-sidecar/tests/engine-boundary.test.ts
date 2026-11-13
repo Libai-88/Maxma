@@ -22,6 +22,8 @@ import {
   MAXMA_COMPACTION_ACTION_WS,
   MAXMA_COMPACTION_REASONS_WS,
   MAXMA_CUSTOM_TOOLS,
+  MAXMA_CONDITIONAL_TOOLS,
+  MAXMA_ENGINE_TOOL_EXTRAS,
   MAXMA_GOAL_STATUSES_ENGINE,
   MAXMA_GOAL_STATUSES_WS_SUPERSET,
   MAXMA_SETTINGS_KEYS,
@@ -688,5 +690,96 @@ describe("跨侧清单一致性（同一件事不许三处各写各的）", () =
       MAXMA_ENABLED_DEFAULT_TOOLS.filter((t) => !(PI_BUILTIN_TOOLS as readonly string[]).includes(t)),
       "默认启用集里出现引擎不认识的工具名",
     ).toEqual([]);
+  });
+
+  test("前端标 UNIMPLEMENTED 的事件类型，后端必须真的没有发射点（注释不许与代码相反）", () => {
+    // 事故形状：`web/src/types/index.ts` 把 5 个 memory_* 事件标成
+    // `UNIMPLEMENTED (B4): 无发射端/无订阅`，而 bun-backend 的 chat-ws.ts 在
+    // `finishTurn` 里确实合成并广播了整套事件流，前端 useChat.ts 也在消费。
+    // 注释与代码相反比没有注释更糟——接手者据此会把活代码当死代码删掉。
+    //
+    // 判据：按「`UNIMPLEMENTED` 注释块 + 紧随其后的 `export interface X`」配对，
+    // 从**接口体内**取它真正的 `type: '...'` 字面量，再拿去 bun-backend/src 找发射点。
+    // 找得到 = 注释过期，红。
+    //
+    // 为什么必须这么配对（第一版是错的，写在这里防退化）：第一版把注释块里所有
+    // snake_case 词当事件名去搜。实测变异——把 MemoryDoneEvent 的注释改回
+    // 「无发射端」后测试仍然全绿，因为那条注释里只写了 `MemoryToolStartEvent`
+    // 这个**接口名**，而 `memory_done` 这个事件名只出现在接口体的 `type:` 行里。
+    // 判据取错了来源，就成了会发绿灯的死检查。
+    const webTypes = read("web/src/types/index.ts");
+    const claims: Array<{ event: string; iface: string }> = [];
+    // 标记必须出现在注释**开头**（约定格式 `/** UNIMPLEMENTED (B4): …`）。
+    // 不能全文搜关键词：修好之后我在同一块注释里写了「此前被标成 UNIMPLEMENTED」
+    // 的历史说明，全文匹配会把这段自述当成新的谎话（实测红过一次）。
+    const pattern = /\/\*\*\s*UNIMPLEMENTED(?:(?!\*\/)[\s\S])*?\*\/\s*export interface (\w+)[^{]*\{([\s\S]*?)\n\}/g;
+    for (const m of webTypes.matchAll(pattern)) {
+      const iface = m[1]!;
+      const body = m[2]!;
+      const typeMatch = body.match(/type:\s*['"]([a-z0-9_]+)['"]/);
+      if (typeMatch) claims.push({ event: typeMatch[1]!, iface });
+    }
+    // 自检：当前树里没有 UNIMPLEMENTED 事件类型 → 本锁是空断言，必须红。
+    // （这条防的是"判据失效后静默通过"，与本文件其他机制锁同一纪律。）
+    const anyUnimplemented = /^\/\*\*\s*UNIMPLEMENTED/m.test(webTypes);
+
+    const backendSrc = tsFiles("bun-backend/src")
+      .map((p) => fs.readFileSync(p, "utf8"))
+      .join("\n");
+
+    const liars = claims.filter((c) =>
+      backendSrc.includes(`type: "${c.event}"`) || backendSrc.includes(`type: '${c.event}'`),
+    );
+    expect(
+      liars.map((c) => `${c.event}（${c.iface}）`),
+      "前端把这些事件标成 UNIMPLEMENTED，但后端确实在发它们——注释已过期，请改成事实描述：\n  " +
+        liars.map((c) => `${c.event} ← ${c.iface}`).join("\n  "),
+    ).toEqual([]);
+    if (!anyUnimplemented) {
+      // 没有标记时不空转：确认扫描器本身仍能配对（用一条合成样本自证）。
+      const sample = "/** UNIMPLEMENTED (X): 无发射端 */\nexport interface Foo {\n  type: 'sample_evt'\n  payload: {}\n}";
+      const mm = sample.match(pattern);
+      expect(mm, "UNIMPLEMENTED 扫描器无法配对注释与接口，判据已失效").not.toBeNull();
+    }
+  });
+
+  test("随包分发的 AGENTS.md 只许点名真实存在的工具", () => {
+    // 事故形状：`config/personas/AGENTS.md` 随两种便携包分发，整篇却写着
+    // `task_tracker` / `call_sub_agent` / `run_python` / `git_status` /
+    // `browser_browse` / `tavily_search` / `ask_user_qa` —— 全是上一代引擎的工具，
+    // 在 pi 下一个都不存在。它当时还有个更严重的问题：**没有任何代码读它**，
+    // 所以这堆错误词汇从不会被校验，也没人发现（迁移时注入代码丢了）。
+    //
+    // 现在它真的进了系统提示词（persona-prompt.ts），所以必须锁住：
+    // 文档里用反引号点名的工具，必须是引擎内置 ∪ Maxma 自定义 ∪ 条件装配之一。
+    const doc = read("config/personas/AGENTS.md");
+    const known = new Set<string>([
+      ...PI_BUILTIN_TOOLS,
+      ...MAXMA_CUSTOM_TOOLS,
+      ...MAXMA_CONDITIONAL_TOOLS,
+      ...MAXMA_ENGINE_TOOL_EXTRAS,
+    ]);
+
+    // 只认反引号里的裸标识符（形如 `read` / `submit_plan`），跳过带参数或空格的。
+    const mentioned = new Set<string>();
+    for (const m of doc.matchAll(/`([a-z][a-z0-9_]{2,})`/g)) mentioned.add(m[1]!);
+
+    // 允许的例外：这些反引号内容是**机制名/路径/格式**，不是工具名。
+    const NOT_TOOLS = new Set([
+      "location", "description", "name", "skill", "skills", "agents", "maxma",
+      "config", "personas", "available_skills", "powershell",
+    ]);
+
+    const ghosts = [...mentioned].filter((t) => !known.has(t) && !NOT_TOOLS.has(t));
+    expect(
+      ghosts,
+      "config/personas/AGENTS.md 点名了不存在的工具——它现在真的会进系统提示词，" +
+        `模型会照着去调，然后撞墙。真实工具面：${[...known].join(", ")}\n  幽灵工具：\n  ` +
+        ghosts.join("\n  "),
+    ).toEqual([]);
+
+    // 反向自检：文档必须真的点到几个真实工具，否则上面那条是空断言。
+    const realHits = [...mentioned].filter((t) => known.has(t));
+    expect(realHits.length, "AGENTS.md 里没有点名任何真实工具，工具面一节可能被删空了").toBeGreaterThan(2);
   });
 });

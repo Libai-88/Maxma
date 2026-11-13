@@ -127,3 +127,79 @@ describe("构建脚本编码契约", () => {
     ).toEqual([]);
   });
 });
+
+describe("界面验证脚本的钩子契约", () => {
+  /**
+   * 事故形状：`scripts/_ui-chat-driver.cjs` 用 `.input-area` / `.btn-send` 找元素，
+   * 那是 Vue 时代的类名。2026-11-11 前端重写为 React + shadcn 后这些类全没了，
+   * 脚本永远停在「输入框始终没出现」——而它被 HANDOFF 当作**现役**的真实验证手段。
+   * 失效近两周无人察觉，因为没有任何闸门/CI 调用它，也没有任何测试断言它引用的钩子存在。
+   *
+   * 本锁只查一件事：驱动脚本里写死的选择器，必须在 web/src 里真的能找到。
+   * 它不替代真跑（`verify-ui-*.mjs`），但能在界面重命名钩子时**立刻**变红，
+   * 而不是等到有人手动跑一遍才发现。
+   */
+  const drivers = ["scripts/_ui-chat-driver.cjs", "scripts/_ui-capabilities-driver.cjs"];
+  const webSrc = filesWithExt(path.join(REPO, "web", "src"), ".tsx")
+    .concat(filesWithExt(path.join(REPO, "web", "src"), ".ts"))
+    .map((f) => fs.readFileSync(f, "utf8"))
+    .join("\n");
+
+  test("两个界面驱动脚本都在（防空转）", () => {
+    for (const rel of drivers) {
+      expect(fs.existsSync(path.join(REPO, rel)), `缺少界面驱动脚本：${rel}`).toBe(true);
+    }
+  });
+
+  test("驱动脚本里的 data-slot / aria-label 选择器必须存在于 web/src", () => {
+    const offenders: string[] = [];
+    for (const rel of drivers) {
+      const src = fs.readFileSync(path.join(REPO, rel), "utf8");
+      // 只取选择器字符串里最有辨识度的两个钩子形态。
+      for (const m of src.matchAll(/data-slot="([a-z-]+)"/g)) {
+        const slot = m[1]!;
+        if (!webSrc.includes(`data-slot="${slot}"`) && !webSrc.includes(`"${slot}"`)) {
+          offenders.push(`${rel}: data-slot="${slot}" 在 web/src 里找不到`);
+        }
+      }
+      for (const m of src.matchAll(/aria-label="([^"]+)"/g)) {
+        const label = m[1]!;
+        // 驱动脚本里也有自己的 UI 文案，只校验像钩子的短英文标签。
+        if (!/^[A-Z][A-Za-z ]{2,20}$/.test(label)) continue;
+        if (!webSrc.includes(label)) {
+          offenders.push(`${rel}: aria-label="${label}" 在 web/src 里找不到`);
+        }
+      }
+    }
+    expect(
+      offenders,
+      "界面驱动脚本引用了前端已不存在的钩子——脚本会静默失效（找不到元素就超时）：\n  " +
+        offenders.join("\n  "),
+    ).toEqual([]);
+  });
+
+  test("驱动脚本不许再用 Vue 时代的样式类名当钩子", () => {
+    const offenders: string[] = [];
+    for (const rel of drivers) {
+      // 剥注释再扫：驱动脚本的头部注释**故意**记着这几个死类名（解释事故历史），
+      // 不剥的话这条锁会被自己的说明文字判红。
+      const src = fs
+        .readFileSync(path.join(REPO, rel), "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^[ \t]*\/\/.*$/gm, "");
+      // 这些是已删除的 Vue 组件类名；出现即说明有人照旧模板改了脚本。
+      //
+      // ⚠️ 不能只查 `querySelector('...')` 这种调用形态：第一版就是这么写的，
+      // 实测把选择器挪进 `SEL = { input: '.input-area' }` 常量表后**测试仍全绿**——
+      // 判据绑在了写法上，而不是"脚本里是否还存在这个死钩子"。
+      // 现在扫的是「类名是否作为 CSS 选择器字面量出现」，与它被放在哪儿无关。
+      for (const ghost of [".input-area", ".btn-send", ".chat-connection-error-text"]) {
+        const asSelector = new RegExp(`['"\`]${ghost.replace(/\./g, "\\.")}['"\`]`);
+        if (asSelector.test(src)) {
+          offenders.push(`${rel}: 仍在用 ${ghost}`);
+        }
+      }
+    }
+    expect(offenders, `Vue 时代的样式类名已不存在，请改用语义钩子：\n  ${offenders.join("\n  ")}`).toEqual([]);
+  });
+});

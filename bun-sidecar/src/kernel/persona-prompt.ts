@@ -45,11 +45,29 @@ function activePersonaFile(dataDir: string, bundleDir: string): string {
   return "";
 }
 
+/** 人设目录下的提示词组件：用户目录优先，随包模板兜底。 */
+function readPersonaComponent(dataDir: string, bundleDir: string, name: string): string {
+  return readText(path.join(dataDir, "config", "personas", name))
+    || readText(path.join(bundleDir, "config", "personas", name));
+}
+
+/**
+ * 组装追加系统提示词。
+ *
+ * 顺序对齐 Python 后端时代的 `agent/prompts.py`（稳定内容在前，利于 prompt cache）：
+ *   Maxma 自述（MAXMA.md）→ 行为规则（AGENTS.md）→ 人设（SOUL）→ 用户档案 → 贴纸指引
+ *
+ * ⚠️ `AGENTS.md` 与 `MAXMA.md` 是**迁移回归修复**：两者在 Python 后端里真实注入过
+ * （commit 37ab9b23 引入 MAXMA.md），`8d1d864f` 删 Python 源码时注入代码随之消失，
+ * 但两个文件仍被两种打包脚本拷进产物。结果是随包分发一堆没人读的提示词，
+ * 其中 AGENTS.md 还整篇写着上一代引擎的工具名。现在恢复注入，并按真实工具面重写。
+ */
 export function buildPersonaSystemPrompt(options: { dataDir: string; bundleDir?: string }): string {
   const bundleDir = options.bundleDir ?? options.dataDir;
   const soul = readText(activePersonaFile(options.dataDir, bundleDir));
-  const user = readText(path.join(options.dataDir, "config", "personas", "USER.md"))
-    || readText(path.join(bundleDir, "config", "personas", "USER.md"));
+  const maxmaIdentity = readPersonaComponent(options.dataDir, bundleDir, "MAXMA.md");
+  const behaviorRules = readPersonaComponent(options.dataDir, bundleDir, "AGENTS.md");
+  const user = readPersonaComponent(options.dataDir, bundleDir, "USER.md");
   let userName = "用户";
   try {
     const onboarding = JSON.parse(readText(path.join(options.dataDir, "config", "onboarding.json"))) as { preferences?: { displayName?: unknown } };
@@ -59,7 +77,13 @@ export function buildPersonaSystemPrompt(options: { dataDir: string; bundleDir?:
   } catch {
     // Keep a neutral name when onboarding preferences are absent or invalid.
   }
-  return [soul, user ? `## 用户档案\n${user}` : "", STICKER_INSTRUCTIONS]
+  return [
+    maxmaIdentity,
+    behaviorRules,
+    soul,
+    user ? `## 用户档案\n${user}` : "",
+    STICKER_INSTRUCTIONS,
+  ]
     .filter(Boolean)
     .join("\n\n")
     .replaceAll("{{USER_NAME}}", userName);
