@@ -464,6 +464,22 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     return c.json({ session_id: sid, name: result.result.name });
   });
 
+  // ── 思考档位能力（THINKING-CAP-001）──
+  /**
+   * 当前模型**实际支持**的思考档位（pi 按模型裁剪）。界面据此标注不支持的项，
+   * 而不是让用户选一个会被静默钳掉的档位。
+   */
+  app.get("/api/sessions/:sessionId/thinking-levels", async (c) => {
+    const sid = c.req.param("sessionId");
+    const result = await callRpc<{ available: string[]; current: string }>(
+      deps,
+      "get_thinking_levels",
+      { session_id: sid },
+    );
+    if (!result.ok) return c.json({ detail: result.error }, 404);
+    return c.json({ session_id: sid, ...result.result });
+  });
+
   // ── 资源热重载（RELOAD-001）──
   /**
    * 重新加载扩展/技能/提示词模板/主题，**不重建会话**（历史与分支都保留）。

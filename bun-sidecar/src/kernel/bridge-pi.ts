@@ -992,6 +992,19 @@ export async function handlePiSessionRpc(
   // ── 会话重命名 / 统计 / 导出（TREE-004）──
   //
   // 都是 pi 的 AgentSession 直接能力，此前一个都没接。
+  // ── 思考档位能力（THINKING-CAP-001）──
+  //
+  // pi 按**当前模型**裁剪可用思考档位（`getAvailableThinkingLevels()`），
+  // 不支持的档位会被静默钳到最接近的值。此前 Maxma 的档位选择器无条件列出
+  // 全部 7 档——用户选 `max`、实际跑的是 `medium`，界面上没有任何提示。
+  if (method === "get_thinking_levels") {
+    io.send(id, {
+      available: record.session.getAvailableThinkingLevels(),
+      current: record.session.thinkingLevel,
+    });
+    return;
+  }
+
   // ── 上下文用量（CTX-USAGE-001）──
   //
   // pi 有**权威**的 `getContextUsage()`，返回 `{tokens, contextWindow, percent}`

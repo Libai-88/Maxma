@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, type SubAgentConfig, type TtsConfig } from '@/api'
 import { useChatStore } from '@/stores/chat'
+import { useSessionStore } from '@/stores/session'
 import { Panel } from '@/components/ui/panel'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
@@ -52,6 +53,19 @@ export default function SettingsView() {
   const [tts, setTts] = useState<TtsConfig>({ enabled: false, provider: 'system', voice: '', speed: 1.0, pitch: 1.0, auto_read: false })
   const [logs, setLogs] = useState<{ files: Array<{ name: string; size_mb: number }>; count: number; total_mb: number; logs_dir: string } | null>(null)
   const [logsBusy, setLogsBusy] = useState<'load' | 'export' | 'clear' | 'restart' | null>(null)
+
+  // THINKING-CAP-001：当前模型**实际支持**的思考档位（pi 按模型裁剪）。
+  // 不支持时引擎会静默钳到最接近的值，界面上不标注就等于让用户选了个假的。
+  const sessionId = useSessionStore((s) => s.sessionId)
+  const [availableLevels, setAvailableLevels] = useState<string[] | null>(null)
+  useEffect(() => {
+    if (!sessionId) return
+    let alive = true
+    void api.getThinkingLevels(sessionId)
+      .then((r) => { if (alive) setAvailableLevels(r.available) })
+      .catch(() => { /* 拿不到就不标注：宁可不标，也不要标错 */ })
+    return () => { alive = false }
+  }, [sessionId])
 
   const thinkingLevel = useChatStore((s) => s.thinkingLevel)
   const setThinkingLevel = useChatStore((s) => s.setThinkingLevel)
@@ -273,10 +287,26 @@ export default function SettingsView() {
           </Panel>
 
           <Panel title="推理预算" className={activeSection === 'reasoning' ? '' : 'hidden'}>
-            <Row label="思考档位" desc="影响 send 时的 thinking 参数（引擎侧预算）。">
+            <Row
+              label="思考档位"
+              desc={
+                availableLevels
+                  ? `当前模型支持：${availableLevels.join(' / ')}。不支持的档位会被引擎钳到最接近的值。`
+                  : '影响 send 时的 thinking 参数（引擎侧预算）。'
+              }
+            >
               <select className="w-32 rounded-lg border border-border bg-background px-3 py-2.5 text-sm" aria-label="思考档位"
                 value={thinkingLevel} onChange={(e) => setThinkingLevel(e.target.value)}>
-                {THINKING_LEVELS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+                {THINKING_LEVELS.map((l) => {
+                  // 引擎没报告可用档位时不标注（宁可不标也不要标错）；
+                  // 报告了就把不支持的标出来，避免用户选一个会被静默钳掉的档位。
+                  const unsupported = availableLevels !== null && !availableLevels.includes(l.value)
+                  return (
+                    <option key={l.value} value={l.value}>
+                      {l.label}{unsupported ? '（当前模型不支持）' : ''}
+                    </option>
+                  )
+                })}
               </select>
             </Row>
             <Row label="输出上限" desc="单轮 max_tokens（本地发送参数）。">

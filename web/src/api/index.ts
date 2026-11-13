@@ -392,6 +392,12 @@ export const api = {
       { method: 'PUT', body: JSON.stringify({ name }) },
     ),
 
+  /** 当前模型实际支持的思考档位（pi 按模型裁剪）。 */
+  getThinkingLevels: (sessionId: string) =>
+    request<{ session_id: string; available: string[]; current: string }>(
+      `/sessions/${encodeURIComponent(sessionId)}/thinking-levels`,
+    ),
+
   /** 重新加载扩展/技能/模板，不重建会话（历史与分支保留）。 */
   reloadSessionResources: (sessionId: string) =>
     request<{ session_id: string; ok: boolean; templates: number; tools: number }>(
