@@ -33,7 +33,7 @@ export default function ProvidersView() {
   const [pluginModels, setPluginModels] = useState<Array<{ provider: string; name: string; displayName?: string }>>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
-  const [form, setForm] = useState({ label: '', provider_type: 'openai', base_url: PRESETS[0].baseUrl, api_key: '' })
+  const [form, setForm] = useState({ label: '', provider_type: 'openai', base_url: PRESETS[0].baseUrl, api_key: '', reasoning: false })
   const [testing, setTesting] = useState<string | null>(null)
   const [health, setHealth] = useState<Record<string, { ok: boolean; message?: string }>>({})
   const [discovering, setDiscovering] = useState<string | null>(null)
@@ -60,9 +60,9 @@ export default function ProvidersView() {
     if (!form.label.trim() || !form.api_key.trim()) { showToast('请填写名称与 API Key', 'warning'); return }
     setCreating(true)
     try {
-      await api.createProvider({ label: form.label.trim(), provider_type: form.provider_type, base_url: form.base_url, api_key: form.api_key, ...(pickedModels.length ? { models: pickedModels } : {}) } as Partial<ProviderConfig>)
+      await api.createProvider({ label: form.label.trim(), provider_type: form.provider_type, base_url: form.base_url, api_key: form.api_key, reasoning: form.reasoning, ...(pickedModels.length ? { models: pickedModels } : {}) } as Partial<ProviderConfig>)
       showToast('已添加渠道')
-      setForm({ label: '', provider_type: 'openai', base_url: PRESETS[0].baseUrl, api_key: '' })
+      setForm({ label: '', provider_type: 'openai', base_url: PRESETS[0].baseUrl, api_key: '', reasoning: false })
       setFormModels([]); setPickedModels([])
       await load()
     } catch (e) {
@@ -242,6 +242,12 @@ export default function ProvidersView() {
                 </label>
                 <label className="text-xs text-muted-foreground sm:col-span-2">API Key
                   <Input className="mt-1" type="password" value={form.api_key} onChange={(e) => setForm({ ...form, api_key: e.target.value })} placeholder="sk-…（本地服务可留空）" />
+                </label>
+                {/* THINK-CAP-002：不开这个开关，该渠道的模型在输入框底部只会显示
+                    「关闭」一档——pi 按模型的 reasoning 能力裁剪档位。 */}
+                <label className="flex items-center justify-between gap-2 text-xs text-muted-foreground sm:col-span-2">
+                  <span>该渠道的模型支持思考档位<span className="ml-1 opacity-70">（开启后可在输入框底部切换思考强度）</span></span>
+                  <Switch checked={form.reasoning} onCheckedChange={(v) => setForm({ ...form, reasoning: v })} aria-label="支持思考档位" />
                 </label>
               </div>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2">

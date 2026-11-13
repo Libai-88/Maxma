@@ -1307,6 +1307,8 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
                     apiKey: decryptProviderKey(provider.api_key),
                     providerType: typeof provider.provider_type === "string" ? provider.provider_type : undefined,
                     contextWindow: Number(provider.context_window) || undefined,
+                    // THINK-CAP-002：渠道是否支持思考档位（providers.yaml 的 reasoning）。
+                    reasoning: provider.reasoning === true,
                   }
                 : {}),
               maxTokens: Number(payload.max_tokens) || undefined,

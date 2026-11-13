@@ -105,6 +105,56 @@ describe("providers CRUD（阶段 2.4）", () => {
     expect((await app.request("/api/providers/myprov", { headers: h })).status).toBe(404);
   }, 20000);
 
+  test("可选字段全部落库：reasoning / max_tokens / temperature / top_p / timeout（THINK-CAP-002）", async () => {
+    // 事故形状：POST 只把 context_window 写进条目，max_tokens / temperature /
+    // top_p / timeout / extra_headers 校验完就丢——表单能填、保存后读不回来。
+    // reasoning 更是从来不存在，于是 kernel 对所有自定义渠道硬编码
+    // `reasoning: false`，pi 只报 off 一档，用户选不到思考强度。
+    const app = await makeApp();
+    const h = jsonH();
+    const created = await app.request("/api/providers", {
+      method: "POST",
+      headers: h,
+      body: JSON.stringify({
+        id: "optprov",
+        label: "Opt Prov",
+        base_url: "https://api.example.com/v1",
+        api_key: "k",
+        models: ["m1"],
+        context_window: 32000,
+        max_tokens: 4096,
+        temperature: 0.7,
+        top_p: 0.9,
+        timeout: 60,
+        reasoning: true,
+      }),
+    });
+    expect(created.status).toBe(200);
+    const body = (await created.json()) as Record<string, unknown>;
+    expect(body.reasoning).toBe(true);
+    expect(body.max_tokens).toBe(4096);
+    expect(body.temperature).toBe(0.7);
+    expect(body.top_p).toBe(0.9);
+    expect(body.timeout).toBe(60);
+
+    // 回读一致（列表路径不能只在 create 回执里带字段）
+    const list = (await (await app.request("/api/providers", { headers: h })).json()) as {
+      providers: Array<Record<string, unknown>>;
+    };
+    const again = list.providers.find((p) => p.id === "optprov");
+    expect(again?.reasoning).toBe(true);
+    expect(again?.max_tokens).toBe(4096);
+
+    // 不声明 reasoning 时不写该字段（缺省 = false，不污染既有 providers.yaml）
+    const plain = await app.request("/api/providers", {
+      method: "POST",
+      headers: h,
+      body: JSON.stringify({ id: "plainprov", label: "P", base_url: "https://b.example.com/v1", api_key: "k" }),
+    });
+    expect(plain.status).toBe(200);
+    expect(((await plain.json()) as Record<string, unknown>).reasoning).toBeUndefined();
+  });
+
   test("校验：缺字段/空 label/非法 URL → 422 Pydantic 形状", async () => {
     const app = await makeApp();
     const h = jsonH();

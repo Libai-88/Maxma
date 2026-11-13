@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, type SubAgentConfig, type TtsConfig } from '@/api'
 import { useChatStore } from '@/stores/chat'
 import { useSessionStore } from '@/stores/session'
+import { THINKING_LEVELS } from '@/utils/thinkingLevels'
 import { Panel } from '@/components/ui/panel'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
@@ -15,16 +16,6 @@ import { confirmAction } from '@/components/common/ConfirmDialog'
 type Settings = Record<string, unknown>
 
 
-/** 引擎 thinking 档位（与 `PI_THINKING_LEVELS` 同序；enforce 在 engine-boundary 测试）。 */
-const THINKING_LEVELS = [
-  { value: 'off', label: '关闭' },
-  { value: 'minimal', label: '极简' },
-  { value: 'low', label: '低' },
-  { value: 'medium', label: '中' },
-  { value: 'high', label: '高' },
-  { value: 'xhigh', label: '很高' },
-  { value: 'max', label: '最高' },
-] as const
 
 // 只列**登记表里 consumer 非 none** 的键（拨动必须真的生效）。
 // 其余遗留键（compaction.strategy / retry.modelFallback / advisor.* / async.* /

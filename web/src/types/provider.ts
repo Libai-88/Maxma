@@ -25,6 +25,11 @@ export interface ProviderConfig {
   top_p?: number
   extra_headers?: Record<string, string>
   timeout?: number
+  /**
+   * THINK-CAP-002：该渠道的模型是否支持思考档位。
+   * 不开时 pi 对该模型只报「off」一档，输入框底部的思考选择器就只有「关闭」。
+   */
+  reasoning?: boolean
   // 阶段 3.3：优先级（数字越小优先级越高，0 = 最高），用于 fallback 排序
   priority?: number
   // 阶段 3.3：运行时健康状态（由后台 health_monitor 维护，未持久化）

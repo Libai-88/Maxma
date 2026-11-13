@@ -32,6 +32,14 @@ export interface MaxmaModelParams {
   providerType?: string;
   contextWindow?: number;
   maxTokens?: number;
+  /**
+   * THINK-CAP-002：该渠道的模型是否支持思考档位（providers.yaml 的 `reasoning`）。
+   *
+   * 不提供时按 false 注册：pi 的 `getAvailableThinkingLevels()` 对
+   * `reasoning: false` 的模型只返回 `["off"]`，用户就选不到思考强度。
+   * 由渠道面板显式声明后才放开——乱开会让 reasoning_effort 打到不支持它的模型上。
+   */
+  reasoning?: boolean;
 }
 
 export interface ResolvedPiModel {
@@ -127,7 +135,7 @@ export async function resolvePiModel(
           name: modelId,
           input: ["text"],
           cost: ZERO_COST,
-          reasoning: false,
+          reasoning: p.reasoning === true,
           contextWindow: p.contextWindow ?? 128_000,
           maxTokens: p.maxTokens ?? 8_192,
         },

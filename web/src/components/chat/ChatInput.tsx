@@ -9,6 +9,8 @@ import { api } from '@/api'
 import { MODE_SHORT_LABELS, useSessionPermissionMode } from '@/hooks/useSessionPermissionMode'
 import { Paperclip, X, FileText, FolderOpen, Link2, Sticker, Mic } from 'lucide-react'
 import { StickerPicker, type Sticker as StickerItem } from '@/components/chat/StickerPicker'
+import { useChatStore } from '@/stores/chat'
+import { THINKING_LEVELS, thinkingLevelLabel } from '@/utils/thinkingLevels'
 
 export interface SlashCommandDef {
   name: string
@@ -122,6 +124,12 @@ export function ChatInput(props: ChatInputProps) {
   // PROMPT-TPL-001：pi 发现的提示词模板也进补全列表。
   // 本地 10 条是 Maxma 自己的命令；模板来自 `~/.pi/agent/prompts/*.md`，
   // 由引擎分发（见 slashCommands.ts 的 default 分支）。此前用户放了模板也看不见。
+  // THINK-PICK-001：思考档位直接放在输入框底部——此前只有「设置 → 推理预算」
+  // 能改，聊天时想调要跳两层菜单。
+  const thinkingLevel = useChatStore((s) => s.thinkingLevel)
+  const setThinkingLevel = useChatStore((s) => s.setThinkingLevel)
+  const [thinkingOptions, setThinkingOptions] = useState<string[] | null>(null)
+
   const [templates, setTemplates] = useState<SlashCommandDef[]>([])
   useEffect(() => {
     if (!sessionId) return
@@ -149,6 +157,23 @@ export function ChatInput(props: ChatInputProps) {
     void api.getSessionState(sessionId)
       .then((st) => { if (alive) setRoutedModel(st.routed_model ?? null) })
       .catch(() => { /* 会话未就绪时静默：这是展示增强，不该阻断输入 */ })
+    return () => { alive = false }
+  }, [sessionId, isStreaming])
+
+  // 当前模型**实际支持**的档位（pi 按模型裁剪）。拿不到时不限制——宁可不限，
+  // 也不要凭空隐藏用户能用的档位。
+  //
+  // ⚠️ 依赖里必须有 isStreaming：会话的模型是 chat-ws 按**每条消息的**
+  // provider/model 现切的（`record.session.setModel`），首屏挂载时后端还用着
+  // 建会话时的默认模型。只在 sessionId 变化时取，会拿到"上一个模型"的档位表
+  // （实测：默认会话是 gpt-4o，只有 off；换成免费推理模型后仍显示 off）。
+  // 每轮结束后重取一次即可对齐。
+  useEffect(() => {
+    if (!sessionId || isStreaming) return
+    let alive = true
+    void api.getThinkingLevels(sessionId)
+      .then((r) => { if (alive) setThinkingOptions(r.available) })
+      .catch(() => { /* 静默：这是增强项 */ })
     return () => { alive = false }
   }, [sessionId, isStreaming])
 
@@ -435,6 +460,23 @@ export function ChatInput(props: ChatInputProps) {
               const [pid, name] = v.split('::')
               if (pid && name) { setProviderId(pid); setModelName(name); onModelChange?.(pid, name) }
             }}
+          />
+          {/* THINK-PICK-001：思考档位。只列当前模型支持的档位；当前值若不在
+              支持集里也保留一项并标注，避免选择器显示空白。 */}
+          <ComposerPick
+            label="思考"
+            value={thinkingLevel}
+            options={(() => {
+              const supported: string[] = thinkingOptions ?? THINKING_LEVELS.map((l) => l.value)
+              const opts: { value: string; label: string }[] = THINKING_LEVELS
+                .filter((l) => supported.includes(l.value))
+                .map((l) => ({ value: l.value as string, label: l.label as string }))
+              if (!opts.some((o) => o.value === thinkingLevel)) {
+                opts.push({ value: thinkingLevel, label: `${thinkingLevelLabel(thinkingLevel)}（当前模型不支持）` })
+              }
+              return opts
+            })()}
+            onValueChange={(v) => setThinkingLevel(v)}
           />
           {/* STATE-001：虚拟模型被选中时，显示**实际应答的物理模型**。
               不显示的话，用户永远不知道自动路由把他发给了谁。 */}
