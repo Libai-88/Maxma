@@ -2,7 +2,7 @@
 
 > **本文件是项目唯一索引**。代码导航，不是历史记录；与代码/测试冲突时以代码为准并回来改本文。
 > **维护约定**：改动触及目录结构、入口、契约、命令、版本或文档清单时，须在同一次改动里同步更新本文。
-> 更新时间：2026-11-07（`version.py` = v2.6.13）
+> 更新时间：2026-11-13（`version.py` = v2.6.13）
 
 ## 入口
 
@@ -132,8 +132,15 @@ bash scripts/verify-all-gates.sh             # 交付前全部闸门
 | `verify-free-models.mjs` | 免费渠道模型可用性实测（白名单该不该扩的判据） |
 | `verify-portable-user-path.mjs` | 便携包首启人格/免费渠道 |
 | `verify-ui-chat-roundtrip.mjs` | 真实前端打字→收到回复（零额度） |
+| `verify-ui-capabilities.mjs` | 真实前端能力页：配置来源只列真实读取方、逐条带路径与读取点、零 console 错误 |
 | `verify-desktop-render.ps1` | 桌面包渲染层 |
 | `_ui-chat-driver.cjs` | Electron 驱动真实界面的主进程，被 `verify-ui-chat-roundtrip.mjs` 启动，**勿单独跑** |
+| `_ui-capabilities-driver.cjs` | 同上，被 `verify-ui-capabilities.mjs` 启动 |
+
+界面驱动脚本用**语义钩子**（`data-slot` / `aria-label`）找元素，不用样式类名。
+`bun-backend/tests/script-encoding.test.ts` 的「界面验证脚本的钩子契约」组会校验
+脚本引用的钩子在 `web/src` 里真实存在——2026-11-11 前端重写后，
+`_ui-chat-driver.cjs` 曾因沿用 Vue 时代的 `.input-area` / `.btn-send` 静默失效两周。
 
 > 当前测试基线、闸门清单、已知缺陷、引擎版本差等**易变状态**一律看 [HANDOFF.md](HANDOFF.md)；本文不复制会过期的数字。
 

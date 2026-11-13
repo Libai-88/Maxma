@@ -334,8 +334,6 @@ export interface PlanCard {
   replanCount?: number
 }
 
-/** 部分实现（Phase 3.4）：后端 deferred_run_manager 已就绪，支持 REST 创建/查询。
- * 需产品决策是否补全 WebSocket 事件推送。 */
 /** 已实现：后端 TOOL_END 检测文件写入工具后合成（Phase 2.2）。
  * 事件负载为 InteractiveArtifact（choice 类型），token 中编码文件路径。 */
 export interface ArtifactEvent {
@@ -357,8 +355,17 @@ export interface ArtifactResultEvent {
   }
 }
 
-/** UNIMPLEMENTED (B4): 无发射端/无订阅。OMP memory 跑在 mnemopi 独立 state，
- * 不经 AgentSessionEvent subscribe 流。UI 已就绪待深接。 */
+/**
+ * MEMORY-EVENTS-001：`remember_memory` 的工具活动，由**后端**在 `done` 之后批量
+ * 合成为一整套事件流（`chat-ws.ts` 的 `finishTurn`，顺序：memory_start →
+ * memory_tool_* → memory_done）。
+ *
+ * ⚠️ 这组类型此前被标成 `UNIMPLEMENTED: 无发射端/无订阅`——那是 pi 迁移前的判断。
+ * 事实相反：后端 `MEMORY_WRITE_TOOLS` 命中时收集活动并在回合结束时发射，
+ * 前端 `useChat.ts` 的 `handleMemoryToolEvent` 也在消费（`done` 之后才到达，
+ * 所以它在 `currentTurn` 守卫之前按 `turn_id` 自行查找目标轮次）。
+ * 注释与代码相反，比没有注释更糟——接手者会据此以为这是死代码。
+ */
 export interface MemoryToolStartEvent {
   type: 'memory_tool_start'
   payload: {
@@ -368,7 +375,7 @@ export interface MemoryToolStartEvent {
   }
 }
 
-/** UNIMPLEMENTED (B4): 无发射端/无订阅。同 MemoryToolStartEvent。 */
+/** 记忆工具执行完成（MEMORY-EVENTS-001，由后端在 done 后合成；同 MemoryToolStartEvent）。 */
 export interface MemoryToolEndEvent {
   type: 'memory_tool_end'
   payload: {
@@ -379,7 +386,7 @@ export interface MemoryToolEndEvent {
   }
 }
 
-/** UNIMPLEMENTED (B4): 无发射端/无订阅。同 MemoryToolStartEvent。 */
+/** 记忆工具执行失败（MEMORY-EVENTS-001；同 MemoryToolStartEvent）。 */
 export interface MemoryToolErrorEvent {
   type: 'memory_tool_error'
   payload: {
@@ -389,7 +396,7 @@ export interface MemoryToolErrorEvent {
   }
 }
 
-/** UNIMPLEMENTED (B4): 无发射端/无订阅。同 MemoryToolStartEvent。 */
+/** 记忆活动流开始（MEMORY-EVENTS-001；同 MemoryToolStartEvent）。 */
 export interface MemoryStartEvent {
   type: 'memory_start'
   payload: {
@@ -397,7 +404,7 @@ export interface MemoryStartEvent {
   }
 }
 
-/** UNIMPLEMENTED (B4): 无发射端/无订阅。同 MemoryToolStartEvent。 */
+/** 记忆活动流结束（MEMORY-EVENTS-001；同 MemoryToolStartEvent）。 */
 export interface MemoryDoneEvent {
   type: 'memory_done'
   payload: {
@@ -421,7 +428,8 @@ export interface MemoryDoneEvent {
  * 实现状态（2026-11-02 复核）：
  *   - plan_* — 已实现：后端透传 sidecar 的 plan_proposed/step_start/step_end/step_error/completed
  *   - artifact / artifact_result — 已实现：后端 TOOL_END 检测写文件工具后合成 / 回执
- *   - memory_* — 未实现：OMP memory 跑在独立状态，不通过事件流推送
+ *   - memory_* — 已实现：`remember_memory` 的工具活动由后端在 done 后合成整套事件流
+ *     （chat-ws.ts 的 finishTurn，MEMORY-EVENTS-001），前端 handleMemoryToolEvent 消费
  *   - workflow_step_start/end/error / workflow_completed — 2026-11-02 起**不存在**：
  *     后端那条死的 REST 工作流面（`bun-backend/src/routes/workflows.ts` 空 deps 挂载，
  *     sidecar 分支永远走不到）连同 kernel 的 `execute_workflow_step` 已整体删除，
@@ -1003,7 +1011,8 @@ export interface CapabilitiesResponse {
   memory?: { total: number; categories: Record<string, number> }
   plugins?: Record<string, unknown>[]
   config_sources?: {
-    sources: Array<{ name: string; path: string; priority: number; exists: boolean; scope: string; description: string }>
+    /** `reader` = 该来源在代码里的实际读取点，用于自证「存在 ≠ 生效」。 */
+    sources: Array<{ name: string; path: string; priority: number; exists: boolean; scope: string; description: string; reader?: string }>
     active_count: number
     total_count: number
     conflicts: Array<{ scope: string; sources: string[]; severity: string; note: string }>

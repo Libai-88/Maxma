@@ -498,6 +498,11 @@ describe("kernel: pi RPC bridge", () => {
     fs.writeFileSync(path.join(personaDir, "SOUL.md"), "默认人设，不应覆盖活动人设");
     fs.writeFileSync(path.join(personaDir, "SOUL.测试.md"), "你是测试人设，称呼 {{USER_NAME}}。");
     fs.writeFileSync(path.join(personaDir, "USER.md"), "用户喜欢简短回复。");
+    // 迁移回归锁：AGENTS.md / MAXMA.md 在 Python 后端里真实注入过，Bun 迁移时
+    // 注入代码丢失、文件却还在随包分发（两种打包脚本都拷）。这里断言它们回到了
+    // 系统提示词里——再丢一次就红，不会再静默退化成"分发了但没人读"。
+    fs.writeFileSync(path.join(personaDir, "AGENTS.md"), "行为规则标记：禁止重复调用。");
+    fs.writeFileSync(path.join(personaDir, "MAXMA.md"), "产品自述标记：本地优先。");
     fs.mkdirSync(path.join(dir, "config"), { recursive: true });
     fs.writeFileSync(path.join(dir, "config", "onboarding.json"), JSON.stringify({ preferences: { displayName: "小李" } }));
     const previousDataDir = process.env.MAXMA_DATA_DIR;
@@ -513,6 +518,8 @@ describe("kernel: pi RPC bridge", () => {
       expect(session.systemPrompt).toContain("你是测试人设，称呼 小李。");
       expect(session.systemPrompt).toContain("用户喜欢简短回复。");
       expect(session.systemPrompt).toContain("[表情包:分类]");
+      expect(session.systemPrompt).toContain("行为规则标记：禁止重复调用。");
+      expect(session.systemPrompt).toContain("产品自述标记：本地优先。");
       expect(session.systemPrompt).not.toContain("默认人设，不应覆盖活动人设");
       session.dispose();
     } finally {

@@ -23,7 +23,7 @@ import * as crypto from "node:crypto";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import { bundleDir, dataDir, getUserSkillsDir } from "../app-paths";
+import { bundleDir, dataDir, getApiDataDir, getUserSkillsDir } from "../app-paths";
 import { appVersion } from "../app-version";
 import { getSettingValue } from "../settings-global";
 import { agentDirDiagnostics, engineIdentity } from "../../../bun-sidecar/src/kernel/engine-info";
@@ -127,47 +127,100 @@ function engineVersion(): string | null {
   }
 }
 
-/** OMP 配置来源分析（_analyze_config_sources 直译）。 */
+/**
+ * 配置来源清单 —— **只列真的有读取方的位置**。
+ *
+ * 这张表原来是从 Python 后端 `_analyze_config_sources` 直译的 OMP 时代清单，
+ * 12 行里有 8 行在 Maxma + pi 的真实运行链路上**没有任何读取方**：
+ *
+ *   `.omprc` / `.omprc.json`  —— OMP 自己的配置文件名，pi 与 Maxma 都不读
+ *   `.claude` / `~/.claude`    —— pi 只把 `CLAUDE.md` 当**上下文文件**读，不读这个目录
+ *   `.cursor` / `~/.cursor`    —— 同上，纯编辑器目录，与本产品无关
+ *   `.github`                  —— CI 目录，运行期零读取
+ *   `.mcp.json`                —— MCP 客户端通用名；Maxma 读的是
+ *                                 `api/data/mcp_servers.yaml`，pi 读 `~/.pi/agent/mcp.json`
+ *                                 / `.pi/mcp.json`（见 pi docs/configuration.md）
+ *
+ * 能力页把「存在」和「生效」画等号，用户看到 `~/.claude` 打勾会以为 Maxma 在用
+ * 它——这是本仓最忌讳的「界面撒谎」。所以只留真实读取方，并按**真实优先级**排：
+ * 应用层（Maxma 自己的文件）优先，其次是引擎层（pi 的 agent 目录与项目 `.pi`），
+ * 最后是引擎的上下文文件发现规则。
+ *
+ * 判据可复核：每一条都能在代码里指到读取点，见各条 `reader` 字段。
+ */
 function analyzeConfigSources(): Record<string, unknown> {
-  const home = os.homedir();
-  const cwd = process.cwd();
-  const maxmaRoot = process.env.MAXMA_PROJECT_ROOT ?? cwd;
+  // ⚠️ 不能用 `process.cwd()`：后端通常从 `bun-backend/` 启动，而**会话的工作目录**
+  // 是 `maxmaProjectRoot()`（`bridge-pi.ts` 的 `params.cwd ?? maxmaProjectRoot()`）。
+  // 用 cwd 会让「人设与规则」「项目上下文文件」查错目录，页面显示「不存在」——
+  // 一个把真实存在的东西报成缺失的谎。
+  const sessionCwd = path.resolve(
+    process.env.MAXMA_DATA_DIR ?? process.env.MAXMA_PROJECT_ROOT ?? bundleDir(),
+  );
+  const maxmaRoot = sessionCwd;
+  const agentDir = process.env.PI_CODING_AGENT_DIR
+    ? path.resolve(process.env.PI_CODING_AGENT_DIR)
+    : path.join(os.homedir(), ".pi", "agent");
 
   const existsFile = (p: string) => fs.existsSync(p) && fs.statSync(p).isFile();
   const existsDir = (p: string) => fs.existsSync(p) && fs.statSync(p).isDirectory();
 
   const sources = [
-    { name: "环境变量", path: "OMP_* / MAXMA_* env", priority: 1, exists: true, scope: "global", description: "运行时环境变量覆盖" },
-    { name: "CLI 参数", path: "启动命令行", priority: 2, exists: true, scope: "session", description: "启动时传入的命令行参数" },
-    { name: "项目 .omprc", path: path.join(cwd, ".omprc"), priority: 3, exists: existsFile(path.join(cwd, ".omprc")), scope: "project", description: "项目级 OMP 配置文件" },
-    { name: "项目 .omprc.json", path: path.join(cwd, ".omprc.json"), priority: 4, exists: existsFile(path.join(cwd, ".omprc.json")), scope: "project", description: "项目级 OMP JSON 配置" },
-    { name: "项目 .claude", path: path.join(cwd, ".claude"), priority: 5, exists: existsDir(path.join(cwd, ".claude")), scope: "project", description: "Claude Code 项目配置（skills/MCP 等）" },
-    { name: "项目 .cursor", path: path.join(cwd, ".cursor"), priority: 6, exists: existsDir(path.join(cwd, ".cursor")), scope: "project", description: "Cursor 编辑器项目配置" },
-    { name: "项目 .github", path: path.join(cwd, ".github"), priority: 7, exists: existsDir(path.join(cwd, ".github")), scope: "project", description: "GitHub 项目配置" },
-    { name: "项目 .mcp.json", path: path.join(cwd, ".mcp.json"), priority: 8, exists: existsFile(path.join(cwd, ".mcp.json")), scope: "project", description: "MCP 服务器配置文件" },
-    { name: "项目 agents.md", path: path.join(cwd, "AGENTS.md"), priority: 9, exists: existsFile(path.join(cwd, "AGENTS.md")), scope: "project", description: "项目上下文说明" },
-    { name: "用户 ~/.claude", path: path.join(home, ".claude"), priority: 11, exists: existsDir(path.join(home, ".claude")), scope: "user", description: "Claude Code 全局配置" },
-    { name: "用户 ~/.cursor", path: path.join(home, ".cursor"), priority: 12, exists: existsDir(path.join(home, ".cursor")), scope: "user", description: "Cursor 编辑器全局配置" },
-    { name: "Maxma 数据目录", path: path.join(maxmaRoot, "api", "data"), priority: 13, exists: existsDir(path.join(maxmaRoot, "api", "data")), scope: "app", description: "Maxma 应用数据目录" },
+    // ── 应用层：Maxma 自己读写 ──
+    { name: "Maxma 环境变量", path: "MAXMA_* / PI_CODING_AGENT_DIR", priority: 1, exists: true, scope: "global", description: "数据根、打包目录、引擎配置目录", reader: "app-paths.ts" },
+    { name: "Maxma 设置覆盖", path: path.join(getApiDataDir(), "settings_overrides.json"), priority: 2, exists: existsFile(path.join(getApiDataDir(), "settings_overrides.json")), scope: "app", description: "设置页显式改动的持久化（建会话时下发引擎）", reader: "settings-global.ts" },
+    { name: "Maxma 面板配置", path: path.join(getApiDataDir(), "panel_configs.json"), priority: 3, exists: existsFile(path.join(getApiDataDir(), "panel_configs.json")), scope: "app", description: "TTS / 子 Agent 面板开关", reader: "routes/settings-panels.ts" },
+    { name: "Maxma 模型渠道", path: path.join(getApiDataDir(), "providers.yaml"), priority: 4, exists: existsFile(path.join(getApiDataDir(), "providers.yaml")), scope: "app", description: "用户配置的模型提供商与凭据", reader: "routes/providers.ts" },
+    { name: "Maxma MCP 清单", path: path.join(getApiDataDir(), "mcp_servers.yaml"), priority: 5, exists: existsFile(path.join(getApiDataDir(), "mcp_servers.yaml")), scope: "app", description: "MCP 服务器定义（建会话时装配进引擎）", reader: "routes/mcp.ts" },
+    { name: "Maxma 人设与规则", path: path.join(maxmaRoot, "config", "personas"), priority: 6, exists: existsDir(path.join(maxmaRoot, "config", "personas")), scope: "app", description: "SOUL / USER / AGENTS / MAXMA 提示词组件", reader: "kernel/persona-prompt.ts" },
+
+    // ── 引擎层：pi 自己读写（Maxma 只注入路径）──
+    { name: "引擎配置目录", path: agentDir, priority: 7, exists: existsDir(agentDir), scope: "engine", description: "pi 的 settings/auth/models/mcp/sessions（PI_CODING_AGENT_DIR）", reader: "pi getAgentDir()" },
+    { name: "项目 .pi 目录", path: path.join(sessionCwd, ".pi"), priority: 8, exists: existsDir(path.join(sessionCwd, ".pi")), scope: "project", description: "pi 的项目级设置与资源（需项目信任）", reader: "pi DefaultResourceLoader" },
+    { name: "项目上下文文件", path: path.join(sessionCwd, "AGENTS.md"), priority: 9, exists: existsFile(path.join(sessionCwd, "AGENTS.md")) || existsFile(path.join(sessionCwd, "CLAUDE.md")), scope: "project", description: "AGENTS.md / CLAUDE.md：pi 按目录层级自动注入（免信任）", reader: "pi resource-loader contextFiles" },
+    { name: "技能目录", path: path.join(os.homedir(), ".agents", "skills"), priority: 10, exists: existsDir(path.join(os.homedir(), ".agents", "skills")), scope: "user", description: "用户级与项目级技能（.agents/skills + 随包 .maxma/skills）", reader: "kernel/skills.ts" },
   ];
 
+  /**
+   * 覆盖关系 —— 只报**代码里真的会互相覆盖**的那几对。
+   *
+   * 旧实现按「同 scope 有多个来源」推断覆盖（OMP 的优先级模型），但这份清单里
+   * 应用层各文件职责互不重叠（设置/面板/渠道/MCP/人设各管各的），同 scope 同时
+   * 存在只是正常状态，报成「冲突」等于制造噪音。
+   *
+   * 真实存在的覆盖只有两条，都能在代码里指到：
+   *   1. MCP：`pi-session.ts` 用 `createMcpExtension({loadConfig})` **整体替换**了
+   *      pi 自己的 `mcp.json` 发现——用户在 `~/.pi/agent/mcp.json` 或 `.pi/mcp.json`
+   *      里写的服务器不会生效，只有 Maxma 的 `mcp_servers.yaml` 算数。
+   *   2. 系统提示词：Maxma 以 `appendSystemPrompt` 追加人设，而 pi 仍会按目录层级
+   *      注入 `AGENTS.md` / `CLAUDE.md`——两者都进系统提示，谁也不是"覆盖"谁。
+   */
   const conflicts: Array<Record<string, unknown>> = [];
   const activeSources = sources.filter((s) => s.exists);
-  if (activeSources.length > 1) {
-    const scopeGroups: Record<string, string[]> = {};
-    for (const s of activeSources) {
-      (scopeGroups[s.scope] ??= []).push(s.name);
-    }
-    for (const [scope, names] of Object.entries(scopeGroups)) {
-      if (names.length > 1) {
-        conflicts.push({
-          scope,
-          sources: names,
-          severity: "info",
-          note: `同一作用域(${scope})存在多个配置源，高优先级覆盖低优先级`,
-        });
-      }
-    }
+
+  const mcpYaml = path.join(getApiDataDir(), "mcp_servers.yaml");
+  const piMcpFiles = [
+    path.join(agentDir, "mcp.json"),
+    path.join(sessionCwd, ".pi", "mcp.json"),
+  ].filter(existsFile);
+  if (existsFile(mcpYaml) && piMcpFiles.length > 0) {
+    conflicts.push({
+      scope: "mcp",
+      sources: ["Maxma MCP 清单", ...piMcpFiles.map((p) => path.basename(path.dirname(p)) + "/mcp.json")],
+      severity: "warning",
+      note: "Maxma 用 loadConfig 整体替换了 pi 的 mcp.json 发现：这里的服务器不会生效，只有 Maxma MCP 清单算数。",
+    });
+  }
+
+  const contextFiles = ["AGENTS.md", "CLAUDE.md", "AGENTS.override.md"]
+    .map((n) => path.join(sessionCwd, n))
+    .filter(existsFile);
+  if (contextFiles.length > 0) {
+    conflicts.push({
+      scope: "system_prompt",
+      sources: ["Maxma 人设 (appendSystemPrompt)", ...contextFiles.map((p) => path.basename(p))],
+      severity: "info",
+      note: "两段内容都会进系统提示词，是叠加而非覆盖；项目上下文文件免项目信任即加载。",
+    });
   }
 
   return {
@@ -327,7 +380,12 @@ export function createCapabilitiesRoutes(deps: CapabilitiesDeps): Hono {
     // 5.5 系统环境
     try {
       result.env = {
-        cwd: process.cwd(),
+        // 会话的工作目录，不是后端进程的 cwd（后者通常是 `bun-backend/`，
+        // 页面标成「工作目录」会让用户以为 Agent 在子目录里干活）。
+        cwd: path.resolve(
+          process.env.MAXMA_DATA_DIR ?? process.env.MAXMA_PROJECT_ROOT ?? bundleDir(),
+        ),
+        process_cwd: process.cwd(),
         platform: process.platform,
         project_root: process.env.MAXMA_PROJECT_ROOT ?? "",
       };

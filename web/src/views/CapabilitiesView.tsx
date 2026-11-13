@@ -124,7 +124,7 @@ export default function CapabilitiesView() {
               {env.cwd && (
                 <div className="mt-3 text-xs">
                   <div className="flex gap-2 py-1">
-                    <span className="min-w-20 text-muted-foreground">工作目录</span>
+                    <span className="min-w-20 text-muted-foreground">会话工作目录</span>
                     <span className="break-all font-mono text-foreground">{env.cwd}</span>
                   </div>
                   <div className="flex gap-2 py-1">
@@ -234,7 +234,7 @@ export default function CapabilitiesView() {
             {configSources && (
               <Section
                 title={`配置来源 (${configSources.active_count}/${configSources.total_count} 活跃)`}
-                desc="按优先级从高到低排列，高优先级覆盖低优先级。"
+                desc="只列出代码里真的有读取方的位置。「存在」指文件/目录在磁盘上，「读取方」是消费它的模块。"
               >
                 <div className="flex max-h-96 flex-col gap-1 overflow-y-auto">
                   {configSources.sources.map((s) => (
@@ -243,6 +243,12 @@ export default function CapabilitiesView() {
                       <div className="min-w-0 flex-1 overflow-hidden">
                         <span className="block truncate font-medium text-foreground">{s.name}</span>
                         <span className="block truncate text-muted-foreground">{s.description}</span>
+                        {/* 路径是本页的核心信息：用户要靠它找到/修改文件。
+                            不显示路径的话，"存在/未发现"只是一个无法核实的断言。 */}
+                        <span className="block truncate font-mono text-[11px] text-muted-foreground/80" title={s.path}>{s.path}</span>
+                        {s.reader ? (
+                          <span className="block truncate font-mono text-[11px] text-muted-foreground/60">读取方：{s.reader}</span>
+                        ) : null}
                       </div>
                       <span className="shrink-0 rounded-sm bg-card px-2 py-1.5 text-muted-foreground">{s.scope}</span>
                       <span className={'shrink-0 rounded-sm px-2 py-0.5 ' + (s.exists ? 'text-primary' : 'text-muted-foreground')}>
@@ -253,17 +259,17 @@ export default function CapabilitiesView() {
                 </div>
                 {configSources.conflicts && configSources.conflicts.length > 0 ? (
                   <div className="mt-3">
-                    <h4 className="mb-2 text-sm text-muted-foreground">⚠️ 配置冲突</h4>
+                    <h4 className="mb-2 text-sm text-muted-foreground">配置覆盖与叠加</h4>
                     {configSources.conflicts.map((c) => (
                       <div key={c.scope} className="mb-2 rounded-lg border border-border bg-panel px-3.5 py-3">
-                        <div className="text-xs font-semibold text-foreground">{c.scope}</div>
+                        <div className="text-xs font-semibold text-foreground">
+                          {c.severity === 'warning' ? '⚠️ ' : ''}{c.scope}
+                        </div>
                         <div className="mt-1 break-words text-sm text-muted-foreground">{c.sources.join(' ↔ ')}</div>
                         <div className="mt-1 text-xs text-muted-foreground">{c.note}</div>
                       </div>
                     ))}
                   </div>
-                ) : configSources.active_count > 1 ? (
-                  <div className="mt-3 text-sm text-primary">✓ 未检测到配置冲突</div>
                 ) : null}
               </Section>
             )}
