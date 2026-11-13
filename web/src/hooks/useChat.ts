@@ -1514,9 +1514,17 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       let lastThink = findLastThinking(turn.events)
       // 非推理模型不发 thinking_start，text_delta token 到达时没有 thinking block。
       // 自动创建一个 becameAnswer=true 的 block 作为流式回复容器，否则 token 被静默丢弃。
-      // 同理：思考块已结束（done）或已被工具调用消费（consumed）后到达的 token 属于
-      // 答案正文，必须另起一个 becameAnswer block——否则会拼进折叠的思考里，答案不可见。
-      if (!lastThink || (lastThink.done || lastThink.consumed) && !lastThink.becameAnswer) {
+      //
+      // ⚠️ THINK-SPLIT-001：**不能等 thinking_end**。
+      // pi 的真实事件顺序（受控复现实测）是：
+      //   thinking_start → thinking_delta… → text_delta… → thinking_end → text_end
+      // 即文本增量全部到在 thinking_end **之前**。旧判据是"思考块已结束才另起
+      // 答案块"，于是所有答案文字被拼进思考块，界面上思考与回答混成一段
+      // （用户报障：回复开头是"用户想了解我。用 Maxma 人格介绍自己…"这类思考）。
+      //
+      // 正确判据：`text_delta` 一定是答案正文。只要最后一个块**不是**答案块，
+      // 就另起一个——与我们处理 thinking_delta 的判据正好对称。
+      if (!lastThink || !lastThink.becameAnswer) {
         turn.events.push({
           kind: 'thinking',
           tokens: '',
@@ -1557,7 +1565,10 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     }
 
     case 'thinking_end': {
-      const lastThink = findLastThinking(turn.events)
+      // THINK-SPLIT-001：必须找**纯思考**块。pi 的 thinking_end 在全部 text_delta
+      // 之后才到，此时最后一块已是流式答案块——用 findLastThinking 会把答案块
+      // 标成 done，而真正的思考块永远转圈。
+      const lastThink = findLastPureThinking(turn.events)
       if (lastThink) {
         lastThink.done = true
         // CHAT-UX-002：算出思考耗时（秒，1 位小数），完成态 header 显示「思考 · N.Ns」
@@ -2759,6 +2770,24 @@ function findLastThinking(events: TurnEvent[]): ThinkingBlock | undefined {
   for (let i = events.length - 1; i >= 0; i--) {
     if (events[i].kind === 'thinking') {
       return events[i] as ThinkingBlock
+    }
+  }
+  return undefined
+}
+
+/**
+ * THINK-SPLIT-001：找最后一个**纯思考**块（becameAnswer=false 的那些）。
+ *
+ * 为什么不能直接用 findLastThinking：pi 的 `thinking_end` 在全部 `text_delta`
+ * **之后**才到（受控复现实测顺序见 token 分支注释）。等它到达时，最后一块
+ * 已经是流式答案块——用 findLastThinking 会把答案块标成 done，而真正的思考块
+ * 永远停在 done=false，界面上的"思考中"转圈不消失。
+ */
+function findLastPureThinking(events: TurnEvent[]): ThinkingBlock | undefined {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]
+    if (e.kind === 'thinking' && !(e as ThinkingBlock).becameAnswer) {
+      return e as ThinkingBlock
     }
   }
   return undefined

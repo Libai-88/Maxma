@@ -473,6 +473,46 @@ pi 的 `appendContextEdit(targetId, replacement)` 只影响**未来模型上下�
 2. `replacement` 形状是 `{ content: [...] }`，**不是**裸数组或裸字符串。
    官方校验只接受 `null` 或含 `string`/`array` content 的对象。
 
+## 2026-11-13 THINK-SPLIT-001：思考内容混进回复正文
+
+**用户报障**：回复开头出现"用户想了解我。用 Maxma 人格介绍自己，语气温暖自然……"
+这类**思考文字**，后面才是真正的回答。
+
+### 根因（受控复现）
+
+pi 的流式事件顺序是：
+
+```
+thinking_start → thinking_delta… → text_start → text_delta… → thinking_end → text_end
+```
+
+**`thinking_end` 在全部 `text_delta` 之后才到。** 而前端 `token`（=text_delta）的处理是
+「思考块已结束才另起答案块」——此刻它还没结束，于是**所有答案文字被拼进思考块**。
+
+结束时 `answer` 事件会把答案覆盖回该块，所以**最终态看着是干净的**——这也是这个
+bug 能藏住的原因：只看结束后的截图发现不了。
+
+### 修法
+
+- `token` 的判据改为：「最后一个块不是答案块就另起」——`text_delta` 一定是答案正文，
+  不该等 `thinking_end`。与处理 `thinking_delta` 的判据正好对称。
+- 连带修 `thinking_end`：改用 `findLastPureThinking`（跳过 becameAnswer 块）。
+  否则它会把**答案块**标成 done，而真正的思考块永远停在 done=false，
+  界面上「思考中」转圈不消失。
+
+### 验证（含一次自我纠错）
+
+新增 `scripts/verify-ui-thinking-separation.mjs`：假 provider 逐块**延迟**返回
+`reasoning_content` + `content`，真实前端发消息，在**流式过程中**每 100ms 采样：
+答案文字一旦出现，不得位于 `details[data-slot="reasoning"]` 内。
+
+⚠️ **第一版验证脚本是死的**：它用 `innerText` 探测答案是否出现，而思考块是
+默认关闭的 `<details>`——`innerText` 会排除未渲染的子节点，于是永远判定
+"答案还没出现"，把旧逻辑放行了。改用 `textContent` 后变异立刻被抓。
+
+变异验证（把 token 判据退回旧写法）：`reasoningLeaked: true`，
+报「流式过程中答案文字出现在思考块里」；恢复修复后通过。
+
 ## 状态
 
 - 仓库 `https://github.com/Libai-88/Maxma.git`，主分支 `main`；变更一律走分支 + PR squash 合入，
