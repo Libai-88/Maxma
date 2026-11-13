@@ -440,6 +440,37 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     return c.json({ session_id: sid, name: result.result.name });
   });
 
+  // ── 上下文编辑（CTX-EDIT-001）──
+  /**
+   * 把某条 entry 从**未来模型上下文**中移除（pi 的 `appendContextEdit`）。
+   * 不删除原始历史、不改界面、不改计费——是"这条别让模型再看到"的正确做法。
+   */
+  app.post("/api/sessions/:sessionId/context-edit", async (c) => {
+    const sid = c.req.param("sessionId");
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const targetId = typeof body.target_id === "string" ? body.target_id : "";
+    if (!targetId) return c.json({ detail: "缺少 target_id" }, 400);
+    const record = deps.hub.sessions.get(sid);
+    if (!record) return c.json({ detail: "会话不存在" }, 404);
+    if (record.currentGuard !== null) {
+      return c.json({ detail: "Agent 正在处理中，请等待本轮完成后再改上下文" }, 409);
+    }
+    const omit = body.omit !== false;
+    const result = await callRpc<{ ok: boolean; edit_id: string; target_id: string; omitted: boolean }>(
+      deps,
+      "context_edit",
+      {
+        session_id: sid,
+        target_id: targetId,
+        omit,
+        ...(omit ? {} : { replacement: String(body.replacement ?? "") }),
+      },
+    );
+    if (!result.ok) return c.json({ detail: result.error }, 503);
+    deps.audit?.("session", "context_edit", sid, `${omit ? "移除" : "替换"} entry ${targetId.slice(0, 8)}`);
+    return c.json(result.result);
+  });
+
   // ── 会话状态（STATE-001）──
   /**
    * pi 的会话只读状态：选中模型、**虚拟模型路由后的实际模型**、思考档位、是否空闲。

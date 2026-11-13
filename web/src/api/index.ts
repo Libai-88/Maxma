@@ -392,6 +392,23 @@ export const api = {
       { method: 'PUT', body: JSON.stringify({ name }) },
     ),
 
+  /**
+   * 把某条 entry 从未来模型上下文中移除（不删历史、不改界面、不改计费）。
+   * pi 的 `appendContextEdit(targetId, null)`。
+   */
+  editContext: (sessionId: string, targetId: string, options?: { omit?: boolean; replacement?: string }) =>
+    request<{ ok: boolean; edit_id: string; target_id: string; omitted: boolean }>(
+      `/sessions/${encodeURIComponent(sessionId)}/context-edit`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          target_id: targetId,
+          omit: options?.omit !== false,
+          ...(options?.replacement !== undefined ? { replacement: options.replacement } : {}),
+        }),
+      },
+    ),
+
   /** pi 的会话状态（含虚拟模型路由后的实际模型）。 */
   getSessionState: (sessionId: string) =>
     request<{

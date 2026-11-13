@@ -80,6 +80,7 @@ export type RpcMethodName =
   | "get_session_stats"
   | "list_prompt_templates"
   | "get_session_state"
+  | "context_edit"
   | "export_session_html";
 
 export interface CreateSessionParams {

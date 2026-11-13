@@ -992,6 +992,40 @@ export async function handlePiSessionRpc(
   // ── 会话重命名 / 统计 / 导出（TREE-004）──
   //
   // 都是 pi 的 AgentSession 直接能力，此前一个都没接。
+  // ── 上下文编辑（CTX-EDIT-001）──
+  //
+  // pi 的 `appendContextEdit(targetId, replacement)` 是**只影响未来模型上下文**的
+  // 附录式修改：`replacement: null` 让该条 entry 从此不进入模型上下文，
+  // 但不删除原始历史、不改界面、不改计费。这是"这条别让模型再看到了"的正确做法，
+  // 比真删消息安全得多。
+  if (method === "context_edit") {
+    const targetId = params?.target_id as string | undefined;
+    if (!targetId) {
+      io.sendError(id, "Missing required parameter: target_id");
+      return;
+    }
+    const sm = record.session.sessionManager;
+    if (!sm.getEntry(targetId)) {
+      io.sendError(id, `找不到目标 entry: ${targetId}`);
+      return;
+    }
+    try {
+      // 两种形态：omit=true 从上下文移除；否则按文本替换。
+      // ⚠️ 替换值的形状是 `{ content: [...] }`，不是裸字符串——
+      // 官方校验只接受 null 或含 string/array content 的对象（实测踩过，
+      // 传裸字符串会抛 "must be null or contain string/array content"）。
+      const omit = params?.omit !== false;
+      const replacement = omit
+        ? null
+        : { content: [{ type: "text" as const, text: String(params?.replacement ?? "") }] };
+      const editId = sm.appendContextEdit(targetId, replacement as never);
+      io.send(id, { ok: true, edit_id: editId, target_id: targetId, omitted: omit });
+    } catch (error) {
+      io.sendError(id, `context_edit failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return;
+  }
+
   if (method === "set_session_name") {
     const name = typeof params?.name === "string" ? params.name.trim() : "";
     // 空串 = 清除名称（官方语义：写 undefined）。
