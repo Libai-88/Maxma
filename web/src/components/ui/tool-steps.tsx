@@ -21,6 +21,11 @@ export type Step = {
   error?: string
   /** A unified patch: the row then reads as a diff. */
   patch?: string
+  /**
+   * NEST-001：子调用（工具经 `ctx.executeTool()` 发起，如 codemode 里的脚本调工具）。
+   * 渲染时缩进一级，表示"这一步是上面那个工具内部做的"。
+   */
+  nested?: boolean
 }
 
 const lineClass =
@@ -60,7 +65,10 @@ function StepRow({ step, labels }: { step: Step; labels?: Partial<StepLabels> })
   const canOpen = Boolean(step.patch || step.detail || step.output || step.error)
 
   return (
-    <div data-slot="step-row" className="flex flex-col gap-2">
+    <div
+      data-slot="step-row"
+      className={cn("flex flex-col gap-2", step.nested && "border-l border-border/70 pl-3")}
+    >
       <button
         type="button"
         aria-expanded={canOpen ? open : undefined}

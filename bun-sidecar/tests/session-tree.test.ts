@@ -90,6 +90,73 @@ describe("会话树（TREE-001）", () => {
   });
 });
 
+describe("资源热重载（RELOAD-001）", () => {
+  test("reload() 不丢历史，且重载后模板清单可读", async () => {
+    const { createMaxmaSession } = await import("../src/kernel/pi-session");
+    const session = await createMaxmaSession({ inMemory: true, cwd: process.cwd(), tools: [] });
+    try {
+      const before = session.sessionManager.getEntries().length;
+      await session.reload();
+      const after = session.sessionManager.getEntries().length;
+      // 重载是"重新读资源"，不是重建会话——条目数必须不变。
+      expect(after).toBe(before);
+      // 重载后这两项仍可读（前端 RELOAD 回执用它显示"重载了什么"）。
+      // 注意本用例传了 `tools: []` 显式禁用全部工具，所以工具数是 0 —— 这是
+      // 预期的，断言只验"能读到一个数组"，不验非空。
+      expect(Array.isArray(session.promptTemplates)).toBe(true);
+      expect(Array.isArray(session.getAllTools())).toBe(true);
+    } finally {
+      session.dispose();
+    }
+  });
+});
+
+describe("上下文编辑（CTX-EDIT-001）", () => {
+  test("appendContextEdit(targetId, null) 只影响未来上下文，不删 entry", () => {
+    const { dir, sm, forkPoint } = branchySession();
+    try {
+      const before = sm.getEntries().length;
+      const editId = sm.appendContextEdit(forkPoint, null);
+      expect(typeof editId).toBe("string");
+
+      // 条目数是 **+1**（新增一条 context_edit），不是 −1——原始历史没被删。
+      expect(sm.getEntries().length).toBe(before + 1);
+
+      // 目标 entry 仍然存在、仍然读得到。
+      expect(sm.getEntry(forkPoint)).toBeDefined();
+
+      // 但**应用编辑后的投影**里不应再有它的内容。
+      // ⚠️ 必须用 buildSessionProjection()：buildContextEntries() 只做树遍历，
+      // **不应用** context_edit（实测第一版用错了，断言读到原文才发现的）。
+      const projection = sm.buildSessionProjection();
+      const texts = (projection.messages as Array<{ content?: unknown }>)
+        .flatMap((m) => Array.isArray(m.content) ? m.content : [])
+        .map((c) => (c as { text?: string }).text ?? "")
+        .join(" ");
+      expect(texts, "被移除的 entry 内容仍出现在模型上下文里").not.toContain("问题二");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("替换形态：replacement 非 null 时保留条目但改内容", () => {
+    const { dir, sm, forkPoint } = branchySession();
+    try {
+      // 形状是 { content: [...] }，不是裸数组——官方校验会拒绝（实测踩过）。
+      sm.appendContextEdit(forkPoint, { content: [{ type: "text", text: "（已省略）" }] } as never);
+      const projection = sm.buildSessionProjection();
+      const texts = (projection.messages as Array<{ content?: unknown }>)
+        .flatMap((m) => Array.isArray(m.content) ? m.content : [])
+        .map((c) => (c as { text?: string }).text ?? "")
+        .join(" ");
+      expect(texts, "替换后应能看到替换内容").toContain("（已省略）");
+      expect(texts, "被替换的原文不应再出现").not.toContain("问题二");
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("树内导航（TREE-002）", () => {
   test("branch 移动 leaf 但不删除任何 entry（append-only）", () => {
     const { dir, sm, forkPoint } = branchySession();

@@ -75,6 +75,12 @@ export async function runSlashCommand(name: string, args: string, ctx: SlashCont
         return '没有可撤回的对话'
       } catch (e) { return '撤回失败：' + (e instanceof Error ? e.message : String(e)) }
     }
+    case 'abort-compact': {
+      try {
+        const r = await api.abortCompaction(sid)
+        return r.compacting ? '已请求取消，压缩仍在收尾' : '已取消压缩'
+      } catch (e) { return '取消失败：' + (e instanceof Error ? e.message : String(e)) }
+    }
     case 'retry': { ctx.retryLast(); return }
     case 'compact': {
       try {

@@ -392,6 +392,69 @@ export const api = {
       { method: 'PUT', body: JSON.stringify({ name }) },
     ),
 
+  /** 取消正在进行的压缩/分支摘要（provider 卡住时用）。 */
+  abortCompaction: (sessionId: string, what?: 'branch_summary') =>
+    request<{ session_id: string; ok: boolean; aborted: string; compacting: boolean }>(
+      `/sessions/${encodeURIComponent(sessionId)}/compact/abort`,
+      { method: 'POST', body: JSON.stringify(what ? { what } : {}) },
+    ),
+
+  /** 当前模型实际支持的思考档位（pi 按模型裁剪）。 */
+  getThinkingLevels: (sessionId: string) =>
+    request<{ session_id: string; available: string[]; current: string }>(
+      `/sessions/${encodeURIComponent(sessionId)}/thinking-levels`,
+    ),
+
+  /** 重新加载扩展/技能/模板，不重建会话（历史与分支保留）。 */
+  reloadSessionResources: (sessionId: string) =>
+    request<{ session_id: string; ok: boolean; templates: number; tools: number }>(
+      `/sessions/${encodeURIComponent(sessionId)}/reload`,
+      { method: 'POST' },
+    ),
+
+  /**
+   * 把某条 entry 从未来模型上下文中移除（不删历史、不改界面、不改计费）。
+   * pi 的 `appendContextEdit(targetId, null)`。
+   */
+  editContext: (sessionId: string, targetId: string, options?: { omit?: boolean; replacement?: string }) =>
+    request<{ ok: boolean; edit_id: string; target_id: string; omitted: boolean }>(
+      `/sessions/${encodeURIComponent(sessionId)}/context-edit`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          target_id: targetId,
+          omit: options?.omit !== false,
+          ...(options?.replacement !== undefined ? { replacement: options.replacement } : {}),
+        }),
+      },
+    ),
+
+  /** 导出会话为 JSONL（pi 原始格式，可被 /import 读回）。 */
+  exportSessionJsonl: (sessionId: string, outputPath?: string) =>
+    request<{ session_id: string; path: string | null }>(
+      `/sessions/${encodeURIComponent(sessionId)}/export/jsonl`,
+      { method: 'POST', body: JSON.stringify(outputPath ? { output_path: outputPath } : {}) },
+    ),
+
+  /** pi 的会话状态（含虚拟模型路由后的实际模型）。 */
+  getSessionState: (sessionId: string) =>
+    request<{
+      session_id: string
+      model: { provider: string; id: string; name: string } | null
+      routed_model: { provider: string; id: string; name: string; thinking_level: string | null } | null
+      thinking_level: string
+      is_streaming: boolean
+      is_idle: boolean
+      session_name: string | null
+    }>(`/sessions/${encodeURIComponent(sessionId)}/state`),
+
+  /** pi 发现的提示词模板（文件名即斜杠命令）。 */
+  getPromptTemplates: (sessionId: string) =>
+    request<{
+      session_id: string
+      templates: Array<{ name: string; description: string; argument_hint?: string; source: string }>
+    }>(`/sessions/${encodeURIComponent(sessionId)}/prompt-templates`),
+
   /** 会话统计（覆盖含被压缩历史在内的全部 entry）。 */
   getSessionStats: (sessionId: string) =>
     request<Record<string, unknown>>(`/sessions/${encodeURIComponent(sessionId)}/stats`),

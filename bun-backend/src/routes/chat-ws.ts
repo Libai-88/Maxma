@@ -630,18 +630,53 @@ async function finishTurn(hub: ChatWsHub, sessionId: string, state: TurnState): 
     }
   }
 
-  // 上下文用量（kernel get_messages → 粗估，与 Python _calculate_context_usage 同口径）
-  let messages: Array<Record<string, unknown>> = [];
+  // ── 上下文用量（CTX-USAGE-001）──
+  //
+  // **优先用引擎的权威值**（`session.getContextUsage()` → RPC get_context_usage），
+  // 只在引擎返回"不可知"时回落到字符估算。
+  //
+  // 此前只有估算：后端拿 get_messages 自己按"字符数/2"算——中文场景下这个比例
+  // 与真实分词差得很远，用户看到的上下文环与"快满了会压缩"的提示其实不是
+  // 引擎认为的数字。回落路径保留，因为压缩后到下一次 assistant 响应前，
+  // 引擎有意返回 null（官方语义）。
+  let contextUsage: ReturnType<typeof calculateContextUsage> | null = null;
   try {
-    const result = await hub.callRpc("get_messages", { session_id: sessionId, limit: 200 });
-    if (result.ok) messages = (result.result as { messages?: Array<Record<string, unknown>> }).messages ?? [];
+    const engineUsage = await hub.callRpc("get_context_usage", { session_id: sessionId });
+    if (engineUsage.ok) {
+      const payload = engineUsage.result as {
+        usage?: { tokens?: number | null; contextWindow?: number | null; percent?: number | null } | null;
+        known?: boolean;
+      };
+      const u = payload.usage;
+      if (payload.known && u && typeof u.tokens === "number") {
+        const window = typeof u.contextWindow === "number" && u.contextWindow > 0
+          ? u.contextWindow
+          : (state.maxTokens ?? 0);
+        contextUsage = calculateContextUsage([], "", {
+          maxTokens: window,
+          modelName: state.modelName,
+        });
+        // 用引擎的 tokens 覆盖估算值，其余字段沿用同一形状（前端只认这个形状）。
+        contextUsage.estimated_tokens = Math.round(u.tokens);
+        contextUsage.percentage = window > 0 ? Math.min(100, Math.round((u.tokens / window) * 1000) / 10) : 0;
+      }
+    }
   } catch {
-    /* 用量估算失败不阻断 done */
+    /* 引擎不可知时走下面的估算 */
   }
-  const contextUsage = calculateContextUsage(messages, "", {
-    maxTokens: state.maxTokens,
-    modelName: state.modelName,
-  });
+  if (!contextUsage) {
+    let messages: Array<Record<string, unknown>> = [];
+    try {
+      const result = await hub.callRpc("get_messages", { session_id: sessionId, limit: 200 });
+      if (result.ok) messages = (result.result as { messages?: Array<Record<string, unknown>> }).messages ?? [];
+    } catch {
+      /* 用量估算失败不阻断 done */
+    }
+    contextUsage = calculateContextUsage(messages, "", {
+      maxTokens: state.maxTokens,
+      modelName: state.modelName,
+    });
+  }
   const modelRequests = state.modelUsageRequests;
   if (modelRequests.length > 0) {
     const number = (usage: Record<string, unknown> | null, key: string): number | null => {

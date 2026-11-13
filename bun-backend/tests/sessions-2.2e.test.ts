@@ -110,8 +110,14 @@ describe("sessions 门面（阶段 2.2e）", () => {
 
     const usage = (await (
       await app.request(`/api/sessions/${sid}/context-usage`, { headers: h })
-    ).json()) as { estimated_tokens: number; max_tokens: number; message_count: number };
-    expect(usage.max_tokens).toBe(256000);
+    ).json()) as { estimated_tokens: number; max_tokens: number; message_count: number; source?: string };
+    // CTX-USAGE-001：上下文用量改由引擎的 getContextUsage() 提供权威值，
+    // 不再无条件用"字符数/2"估算。所以这里的窗口大小是**引擎给的**（随模型变化），
+    // 不再是写死的 256000 —— 旧断言把估算口径当成了契约。
+    //
+    // 新不变量：窗口必须来自引擎（正数），且新会话的已用 token 为 0。
+    expect(usage.source).toBe("engine");
+    expect(usage.max_tokens).toBeGreaterThan(0);
     expect(usage.estimated_tokens).toBe(0);
 
     const cleared = (await (

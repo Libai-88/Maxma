@@ -27,17 +27,30 @@ export interface ThinkingDeltaEvent {
 
 export interface ToolStartEvent {
   type: 'tool_start'
-  payload: { tool_name: string; input: string; tool_call_id?: string }
+  payload: {
+    tool_name: string
+    input: string
+    tool_call_id?: string
+    /** NEST-001：工具通过 ctx.executeTool() 发起的子调用会带父调用 id。 */
+    parent_tool_call_id?: string
+  }
 }
 
 export interface ToolEndEvent {
   type: 'tool_end'
-  payload: { tool_name: string; output: string; elapsed: number; tool_data?: Record<string, unknown>; tool_call_id?: string }
+  payload: {
+    tool_name: string
+    output: string
+    elapsed: number
+    tool_data?: Record<string, unknown>
+    tool_call_id?: string
+    parent_tool_call_id?: string
+  }
 }
 
 export interface ToolErrorEvent {
   type: 'tool_error'
-  payload: { tool_name: string; error: string; elapsed?: number; tool_call_id?: string }
+  payload: { tool_name: string; error: string; elapsed?: number; tool_call_id?: string; parent_tool_call_id?: string }
 }
 
 export interface ToolUpdateEvent {
@@ -250,6 +263,20 @@ export interface ExtensionUiRequestEvent {
     notify_type?: 'info' | 'warning' | 'error'
     /** 对话框超时（毫秒）；到期前端可自行收起。 */
     timeout?: number
+  }
+}
+
+/**
+ * QUEUE-001：pi 的 steering / followUp 队列快照。
+ *
+ * 运行中继续发消息时，`steer` 在下一次 LLM 调用前插入、`followUp` 等本轮做完
+ * 再投递，两者都排队。pi 每次给**完整快照**，前端据此显示"还有几条在排队"。
+ */
+export interface QueueUpdateEvent {
+  type: 'queue_update'
+  payload: {
+    steering: string[]
+    follow_up: string[]
   }
 }
 
@@ -500,6 +527,7 @@ export type ServerEvent =
   | ArtifactResultEvent
   | AskUserEvent
   | ExtensionUiRequestEvent
+  | QueueUpdateEvent
   | PlanProposedEvent
   | PlanStepStartEvent
   | PlanStepEndEvent
@@ -838,6 +866,11 @@ export interface ToolCall {
   kind: 'tool'
   /** 引擎的 toolCallId（同一轮里同名工具多次调用时区分彼此的**唯一**依据）。 */
   callId?: string
+  /**
+   * NEST-001：父工具调用的 callId。
+   * 有值时这是**子调用**（工具经 `ctx.executeTool()` 发起），渲染时缩进到父工具下。
+   */
+  parentCallId?: string
   name: string
   input: string
   output: string | null

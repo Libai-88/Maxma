@@ -110,6 +110,8 @@ export interface SessionChannel {
   errorDiagnostic: Record<string, unknown> | null
   contextUsage: ContextUsage | null
   taskTrackerData: Record<string, unknown> | null
+  /** QUEUE-001：pi 的 steering / followUp 队列快照（运行中继续发消息时排队）。 */
+  queue: { steering: string[]; followUp: string[] }
   /** 流式任务连续性：用于导航离开后的状态反馈与未读提示。 */
   isChatViewActive: boolean
   streamPhase: 'idle' | 'streaming' | 'awaiting_user' | 'completed' | 'error'
@@ -177,6 +179,7 @@ function createChannel(): SessionChannel {
     ws: null, connected: false, isStreaming: false, isAwaitingUser: false,
     turns: [], currentTurn: null, error: null, errorCategory: null,
     errorTraceId: null, errorDiagnostic: null, contextUsage: null, taskTrackerData: null,
+    queue: { steering: [], followUp: [] },
     isChatViewActive: false, streamPhase: 'idle', unreadEvents: 0,
     streamStartedAt: null, lastActivityAt: null, lastCompletedAt: null,
     reconnectTimer: null, reconnectAttempts: 0, initialized: false,

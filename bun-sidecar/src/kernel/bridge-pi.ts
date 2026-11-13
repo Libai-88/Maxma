@@ -555,6 +555,34 @@ export async function handlePiSessionRpc(
     return;
   }
 
+  // ── 会话状态（STATE-001）──
+  //
+  // pi 的 `AgentSession` 暴露了一组"当前是什么状态"的只读视图：选中模型、
+  // **虚拟模型路由后的实际模型**（`routedModel`）、思考档位、是否空闲、是否在压缩。
+  // 此前 Maxma 一个都没读——界面上「模型」显示的是它自己记的那个 id，
+  // 引擎实际用谁回的话完全不可见。
+  //
+  // `routedModel` 尤其重要：选中虚拟模型时（扩展通过 `pi.registerVirtualModel`
+  // 注册），`model` 是虚拟选择，`routedModel` 才是**最近一次真正应答的物理模型**。
+  // 不暴露它，用户就永远不知道自动路由把他发给了谁。
+  if (method === "get_session_state") {
+    const session = record.session;
+    const current = session.model;
+    const routed = session.routedModel;
+    io.send(id, {
+      model: current ? { provider: current.provider, id: current.id, name: current.name } : null,
+      // 只有虚拟模型被选中、且已有成功应答时才非空。
+      routed_model: routed?.model
+        ? { provider: routed.model.provider, id: routed.model.id, name: routed.model.name, thinking_level: routed.thinkingLevel ?? null }
+        : null,
+      thinking_level: session.thinkingLevel,
+      is_streaming: session.isStreaming,
+      is_idle: session.isIdle,
+      session_name: session.sessionManager.getSessionName() ?? null,
+    });
+    return;
+  }
+
   if (method === "user_response") {
     const interactionId: string = params?.interaction_id as string;
     const response = params?.response as string | string[] | undefined;
@@ -964,6 +992,108 @@ export async function handlePiSessionRpc(
   // ── 会话重命名 / 统计 / 导出（TREE-004）──
   //
   // 都是 pi 的 AgentSession 直接能力，此前一个都没接。
+  // ── 取消压缩 / 分支摘要（ABORT-COMPACT-001）──
+  //
+  // 压缩要调用模型生成摘要。provider 挂了或网络卡住时，压缩会长时间挂着，
+  // 而此前 Maxma 只有一个「开始压缩」没有「取消」——用户只能干等或杀进程。
+  // pi 有 `abortCompaction()` / `abortBranchSummary()`，接上即可。
+  if (method === "abort_compaction") {
+    const what = params?.what === "branch_summary" ? "branch_summary" : "compaction";
+    try {
+      if (what === "branch_summary") record.session.abortBranchSummary();
+      else record.session.abortCompaction();
+      io.send(id, { ok: true, aborted: what, compacting: record.session.isCompacting });
+    } catch (error) {
+      io.sendError(id, `取消压缩失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+    return;
+  }
+
+  // ── 思考档位能力（THINKING-CAP-001）──
+  //
+  // pi 按**当前模型**裁剪可用思考档位（`getAvailableThinkingLevels()`），
+  // 不支持的档位会被静默钳到最接近的值。此前 Maxma 的档位选择器无条件列出
+  // 全部 7 档——用户选 `max`、实际跑的是 `medium`，界面上没有任何提示。
+  if (method === "get_thinking_levels") {
+    io.send(id, {
+      available: record.session.getAvailableThinkingLevels(),
+      current: record.session.thinkingLevel,
+    });
+    return;
+  }
+
+  // ── 上下文用量（CTX-USAGE-001）──
+  //
+  // pi 有**权威**的 `getContextUsage()`，返回 `{tokens, contextWindow, percent}`
+  // （压缩后到下一次 assistant 响应前 tokens/percent 为 null，这是官方语义）。
+  //
+  // 此前 Maxma 没用它：后端拿 `get_messages` 自己按"字符数/2"估——
+  // 中文场景下这个比例与真实分词差得很远，用户看到的上下文环（与"快满了会压缩"
+  // 的提示）其实不是引擎认为的数字。这条 RPC 把权威值透出来，后端优先用它。
+  if (method === "get_context_usage") {
+    const usage = record.session.getContextUsage();
+    io.send(id, {
+      usage: usage ?? null,
+      // 引擎返回 undefined 表示"当前不可知"（如压缩进行中），调用方据此决定是否回落。
+      known: usage !== undefined,
+    });
+    return;
+  }
+
+  // ── 资源热重载（RELOAD-001）──
+  //
+  // `session.reload()` 重新加载扩展、技能、提示词模板、主题与上下文文件，
+  // **不重建会话**（历史与活动分支都保留）。此前 Maxma 只能靠"新建会话"让
+  // 新装的技能/模板生效——而新建会话意味着丢上下文。
+  //
+  // 与既有的 `reload_mcp_for_session` 不是一回事：那条只针对 MCP 且恒 noop
+  // （MCP 清单由后端在 create_session 时装配），这条是引擎级的全量资源重载。
+  if (method === "reload_session_resources") {
+    try {
+      await record.session.reload();
+      const templates = record.session.promptTemplates.length;
+      const tools = record.session.getAllTools().length;
+      io.send(id, { ok: true, templates, tools });
+    } catch (error) {
+      io.sendError(id, `资源重载失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+    return;
+  }
+
+  // ── 上下文编辑（CTX-EDIT-001）──
+  //
+  // pi 的 `appendContextEdit(targetId, replacement)` 是**只影响未来模型上下文**的
+  // 附录式修改：`replacement: null` 让该条 entry 从此不进入模型上下文，
+  // 但不删除原始历史、不改界面、不改计费。这是"这条别让模型再看到了"的正确做法，
+  // 比真删消息安全得多。
+  if (method === "context_edit") {
+    const targetId = params?.target_id as string | undefined;
+    if (!targetId) {
+      io.sendError(id, "Missing required parameter: target_id");
+      return;
+    }
+    const sm = record.session.sessionManager;
+    if (!sm.getEntry(targetId)) {
+      io.sendError(id, `找不到目标 entry: ${targetId}`);
+      return;
+    }
+    try {
+      // 两种形态：omit=true 从上下文移除；否则按文本替换。
+      // ⚠️ 替换值的形状是 `{ content: [...] }`，不是裸字符串——
+      // 官方校验只接受 null 或含 string/array content 的对象（实测踩过，
+      // 传裸字符串会抛 "must be null or contain string/array content"）。
+      const omit = params?.omit !== false;
+      const replacement = omit
+        ? null
+        : { content: [{ type: "text" as const, text: String(params?.replacement ?? "") }] };
+      const editId = sm.appendContextEdit(targetId, replacement as never);
+      io.send(id, { ok: true, edit_id: editId, target_id: targetId, omitted: omit });
+    } catch (error) {
+      io.sendError(id, `context_edit failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return;
+  }
+
   if (method === "set_session_name") {
     const name = typeof params?.name === "string" ? params.name.trim() : "";
     // 空串 = 清除名称（官方语义：写 undefined）。
@@ -972,9 +1102,39 @@ export async function handlePiSessionRpc(
     return;
   }
 
+  // ── Prompt templates（PROMPT-TPL-001）──
+  //
+  // pi 的 ResourceLoader 本来就会扫 `~/.pi/agent/prompts/*.md` 与 `.pi/prompts/`，
+  // `session.promptTemplates` 直接可读。此前 Maxma 既没暴露清单，前端斜杠补全
+  // 也只认 10 条硬编码命令——用户放进去的模板等于不存在。
+  if (method === "list_prompt_templates") {
+    const templates = record.session.promptTemplates.map((t) => ({
+      name: t.name,
+      description: t.description,
+      ...(t.argumentHint ? { argument_hint: t.argumentHint } : {}),
+      // 不外泄绝对路径：只给来源标签（user/project/package），与技能发现同口径。
+      source: (t.sourceInfo as { source?: string } | undefined)?.source ?? "unknown",
+    }));
+    io.send(id, { templates });
+    return;
+  }
+
   if (method === "get_session_stats") {
     const stats = record.session.getSessionStats();
     io.send(id, { stats });
+    return;
+  }
+
+  if (method === "export_session_jsonl") {
+    const outputPath = typeof params?.output_path === "string" ? params.output_path : undefined;
+    try {
+      // 与 HTML 导出的差别：JSONL 是 pi 的**原始会话格式**，可被 /import 读回，
+      // 也适合程序处理。HTML 只用于人看。
+      const path = record.session.exportToJsonl(outputPath);
+      io.send(id, { ok: true, path: path ?? outputPath ?? null });
+    } catch (error) {
+      io.sendError(id, `export_session_jsonl failed: ${String(error)}`);
+    }
     return;
   }
 

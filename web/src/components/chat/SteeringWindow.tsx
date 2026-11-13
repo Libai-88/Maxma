@@ -48,10 +48,13 @@ export function SteeringWindow({
   visible,
   onSteer,
   onFollowUp,
+  queued = { steering: [], followUp: [] },
 }: {
   visible: boolean
   onSteer: (message: string) => boolean
   onFollowUp: (message: string) => boolean
+  /** QUEUE-001：pi 的排队快照。连发多条时用户要能看到"还有几条在排队"。 */
+  queued?: { steering: string[]; followUp: string[] }
 }) {
   const [text, setText] = useState('')
   const [dismissed, setDismissed] = useState(false)
@@ -178,6 +181,31 @@ export function SteeringWindow({
 
         {!collapsed && (
           <div className="flex flex-col gap-2 p-2.5 pt-0">
+            {/* QUEUE-001：排队中的消息。此前完全不显示，连发几条后像"消息丢了"。 */}
+            {(queued.steering.length > 0 || queued.followUp.length > 0) && (
+              <div className="flex flex-col gap-1 rounded-md border border-border/70 bg-background/40 px-2.5 py-2">
+                {queued.steering.length > 0 && (
+                  <div className="text-[10.5px] text-muted-foreground">
+                    立即调整排队 {queued.steering.length} 条
+                    <ul className="mt-0.5 list-disc pl-4">
+                      {queued.steering.slice(0, 3).map((m, i) => (
+                        <li key={i} className="truncate text-foreground/80">{m}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {queued.followUp.length > 0 && (
+                  <div className="text-[10.5px] text-muted-foreground">
+                    稍后处理排队 {queued.followUp.length} 条
+                    <ul className="mt-0.5 list-disc pl-4">
+                      {queued.followUp.slice(0, 3).map((m, i) => (
+                        <li key={i} className="truncate text-foreground/80">{m}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}

@@ -14,6 +14,8 @@ export interface SlashCommandDef {
   name: string
   description: string
   usage?: string
+  /** PROMPT-TPL-001：来源标记。`template` = pi 发现的提示词模板（非本地命令）。 */
+  source?: 'local' | 'template'
 }
 
 /** 与旧 useSlashCommands.ts 同一份清单（执行器在 ChatView）。 */
@@ -25,6 +27,7 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
   { name: 'undo', description: '撤回上一轮对话', usage: '/undo' },
   { name: 'retry', description: '重试最后一轮', usage: '/retry' },
   { name: 'compact', description: '压缩上下文历史', usage: '/compact' },
+  { name: 'abort-compact', description: '取消正在进行的上下文压缩', usage: '/abort-compact' },
   { name: 'clear', description: '清空当前会话消息', usage: '/clear' },
   { name: 'private', description: '切换私密模式', usage: '/private' },
   { name: 'auto', description: '切换自动执行（免确认）', usage: '/auto' },
@@ -116,11 +119,47 @@ export function ChatInput(props: ChatInputProps) {
     requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-slot="composer"] textarea')?.focus())
   }
 
+  // PROMPT-TPL-001：pi 发现的提示词模板也进补全列表。
+  // 本地 10 条是 Maxma 自己的命令；模板来自 `~/.pi/agent/prompts/*.md`，
+  // 由引擎分发（见 slashCommands.ts 的 default 分支）。此前用户放了模板也看不见。
+  const [templates, setTemplates] = useState<SlashCommandDef[]>([])
+  useEffect(() => {
+    if (!sessionId) return
+    let alive = true
+    void api.getPromptTemplates(sessionId)
+      .then((res) => {
+        if (!alive) return
+        setTemplates((res.templates ?? []).map((t) => ({
+          name: t.name,
+          description: t.description || '提示词模板',
+          usage: t.argument_hint ? `/${t.name} ${t.argument_hint}` : `/${t.name}`,
+          source: 'template' as const,
+        })))
+      })
+      .catch(() => { /* 会话未就绪时静默：模板是增强项，不该阻断输入 */ })
+    return () => { alive = false }
+  }, [sessionId])
+
+  // STATE-001：pi 的会话状态。`routed_model` 只在虚拟模型被选中且已有成功应答时非空。
+  // 每轮结束后刷新一次——路由结果是"最近一次成功应答"的物理模型，跑完才准。
+  const [routedModel, setRoutedModel] = useState<{ provider: string; id: string; name: string } | null>(null)
+  useEffect(() => {
+    if (!sessionId || isStreaming) return
+    let alive = true
+    void api.getSessionState(sessionId)
+      .then((st) => { if (alive) setRoutedModel(st.routed_model ?? null) })
+      .catch(() => { /* 会话未就绪时静默：这是展示增强，不该阻断输入 */ })
+    return () => { alive = false }
+  }, [sessionId, isStreaming])
+
   const slashMatches = useMemo(() => {
     // 只按第一个词过滤：`/goal 完成周报` 仍应命中 goal（参数不算过滤文本）
     const q = slashFilter.trim().split(/\s+/)[0]?.toLowerCase() ?? ''
-    return SLASH_COMMANDS.filter((c) => c.name.startsWith(q))
-  }, [slashFilter])
+    const localNames = new Set(SLASH_COMMANDS.map((c) => c.name))
+    // 本地命令优先，模板里同名的跳过（避免一条命令出现两次）。
+    const extra = templates.filter((t) => !localNames.has(t.name))
+    return [...SLASH_COMMANDS, ...extra].filter((c) => c.name.startsWith(q))
+  }, [slashFilter, templates])
 
   const runSlash = async (name: string, args: string) => {
     setSlashOpen(false)
@@ -324,6 +363,9 @@ export function ChatInput(props: ChatInputProps) {
               >
                 <span className="font-mono text-xs">/{c.name}</span>
                 <span className="truncate text-muted-foreground">{c.description}</span>
+                {c.source === 'template' ? (
+                  <span className="ml-auto shrink-0 rounded-sm bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">模板</span>
+                ) : null}
               </button>
             ))}
           </div>
@@ -394,6 +436,16 @@ export function ChatInput(props: ChatInputProps) {
               if (pid && name) { setProviderId(pid); setModelName(name); onModelChange?.(pid, name) }
             }}
           />
+          {/* STATE-001：虚拟模型被选中时，显示**实际应答的物理模型**。
+              不显示的话，用户永远不知道自动路由把他发给了谁。 */}
+          {routedModel && routedModel.id !== modelName ? (
+            <span
+              className="shrink-0 text-[11px] text-muted-foreground"
+              title={`自动路由：实际由 ${routedModel.provider}/${routedModel.id} 应答`}
+            >
+              → {routedModel.name || routedModel.id}
+            </span>
+          ) : null}
           {sessionId && (
             <ComposerPick
               label="权限"

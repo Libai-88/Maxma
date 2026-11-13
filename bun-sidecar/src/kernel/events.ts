@@ -121,6 +121,10 @@ export function mapPiAgentEventToMaxma(
         // 工具调用的唯一标识：前端据此把 ask_user 审批挂到**具体那一次**调用上。
         // 只按工具名匹配时，同一轮里两次 bash 的审批会互相覆盖（见 useChat 注释）。
         ...(typeof e.toolCallId === "string" && e.toolCallId ? { tool_call_id: e.toolCallId } : {}),
+        // NEST-001：工具通过 `ctx.executeTool()` 发起的子调用带 parentToolCallId。
+        // 不透传的话前端只渲染顶层工具，子调用完全不可见（pi 的 codemode / 复合工具
+        // 都会走这条路径）。
+        ...(typeof e.parentToolCallId === "string" && e.parentToolCallId ? { parent_tool_call_id: e.parentToolCallId } : {}),
         input: JSON.stringify(e.args ?? {}),
       },
     };
@@ -132,6 +136,7 @@ export function mapPiAgentEventToMaxma(
       payload: {
         tool_name: e.toolName ?? "",
         ...(typeof e.toolCallId === "string" && e.toolCallId ? { tool_call_id: e.toolCallId } : {}),
+        ...(typeof e.parentToolCallId === "string" && e.parentToolCallId ? { parent_tool_call_id: e.parentToolCallId } : {}),
         partial_result: typeof e.partialResult === "string"
           ? e.partialResult
           : JSON.stringify(e.partialResult ?? ""),
@@ -149,6 +154,7 @@ export function mapPiAgentEventToMaxma(
         payload: {
           tool_name: e.toolName ?? "",
           ...(typeof e.toolCallId === "string" && e.toolCallId ? { tool_call_id: e.toolCallId } : {}),
+          ...(typeof e.parentToolCallId === "string" && e.parentToolCallId ? { parent_tool_call_id: e.parentToolCallId } : {}),
           error: JSON.stringify(e.result ?? {}),
           elapsed,
         },
@@ -159,6 +165,7 @@ export function mapPiAgentEventToMaxma(
       payload: {
         tool_name: e.toolName ?? "",
         ...(typeof e.toolCallId === "string" && e.toolCallId ? { tool_call_id: e.toolCallId } : {}),
+        ...(typeof e.parentToolCallId === "string" && e.parentToolCallId ? { parent_tool_call_id: e.parentToolCallId } : {}),
         output: JSON.stringify(e.result ?? {}),
         elapsed,
       },
@@ -279,8 +286,34 @@ export function mapPiAgentEventToMaxma(
     };
   }
 
-  // 其余 pi 事件（queue_update/turn_*/message_start/entry_appended/
-  // session_info_changed/thinking_level_changed/summarization_retry_scheduled…）
+  // ── 排队中的消息（QUEUE-001）──
+  //
+  // pi 允许运行中继续发消息：`steer` 在下一次 LLM 调用前插入，`followUp` 等本轮
+  // 全部做完再投递。两者都排队，`queue_update` 每次给**完整快照**。
+  //
+  // 此前 Maxma 完全不消费它——用户连发几条「立即调整」后，界面上看不到排队中
+  // 还有几条、内容是什么，只能等它们依次生效，像"消息丢了"。
+  if (type === "queue_update") {
+    const textOf = (items: unknown): string[] =>
+      Array.isArray(items)
+        ? items.map((it) => {
+            if (typeof it === "string") return it;
+            const obj = it as { text?: unknown; message?: unknown } | null;
+            const raw = obj?.text ?? obj?.message;
+            return typeof raw === "string" ? raw : "";
+          }).filter((s) => s.length > 0)
+        : [];
+    return {
+      type: "queue_update",
+      payload: {
+        steering: textOf((e as { steering?: unknown }).steering),
+        follow_up: textOf((e as { followUp?: unknown }).followUp),
+      },
+    };
+  }
+
+  // 其余 pi 事件（turn_*/message_start/entry_appended/session_info_changed/
+  // thinking_level_changed/summarization_retry_scheduled…）
   // 无 Maxma 等价事件，显式忽略。
   return null;
 }

@@ -78,7 +78,15 @@ export type RpcMethodName =
   | "fork_session"
   | "set_session_name"
   | "get_session_stats"
-  | "export_session_html";
+  | "list_prompt_templates"
+  | "get_session_state"
+  | "context_edit"
+  | "reload_session_resources"
+  | "get_context_usage"
+  | "get_thinking_levels"
+  | "abort_compaction"
+  | "export_session_html"
+  | "export_session_jsonl";
 
 export interface CreateSessionParams {
   model: string;

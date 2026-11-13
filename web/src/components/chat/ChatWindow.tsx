@@ -62,6 +62,8 @@ function toolToStep(tc: ToolCall, turnId: string, index: number): Step {
     status: tc.status,
     detail: tc.input || undefined,
     detailLabel: '调用参数',
+    // NEST-001：子调用缩进显示，让"这次工具是上面那个工具内部发起的"可见。
+    ...(tc.parentCallId ? { nested: true } : {}),
   }
   if (tc.status === 'error') {
     step.error = tc.output ?? '工具执行失败'

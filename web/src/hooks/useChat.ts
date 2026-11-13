@@ -88,6 +88,8 @@ export const SERVER_EVENT_HANDLER_TYPES: Record<ServerEvent['type'], true> = {
   irc_message: true,
   // 审批与心跳
   ask_user: true,
+  // QUEUE-001：pi 的 steering/followUp 队列快照
+  queue_update: true,
   // EXT-UI-001：pi 扩展的 ctx.ui 请求（select/confirm/input/editor/notify）
   extension_ui_request: true,
   pong: true,
@@ -1471,6 +1473,17 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     return
   }
 
+  // QUEUE-001：pi 的 steering/followUp 队列快照。会话级、与回合无关。
+  // 运行中连发几条消息时，界面上要能看到"还有几条在排队"——否则像消息丢了。
+  if (event.type === 'queue_update') {
+    ch.queue = {
+      steering: Array.isArray(event.payload?.steering) ? event.payload.steering : [],
+      followUp: Array.isArray(event.payload?.follow_up) ? event.payload.follow_up : [],
+    }
+    touch()
+    return
+  }
+
   // EXT-UI-001：pi 扩展的 ctx.ui 请求。同样是会话级事件、可能在无活跃轮次时到达
   // （扩展可以在 session_start 或任何钩子里问用户），所以也在 turn 守卫之前处理。
   // notify 是 fire-and-forget → 直接 toast；其余入队交给 ExtensionPromptDialog。
@@ -1582,6 +1595,10 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       turn.events.push({
         kind: 'tool',
         ...(startCallId ? { callId: startCallId } : {}),
+        // NEST-001：子调用（codemode / 复合工具经 ctx.executeTool 发起）带父 id。
+        // 渲染层据此把它们缩进到父工具下面，而不是并排成独立步骤——
+        // 否则一次 codemode 调用会炸出十几条看不出关系的工具行。
+        ...(event.payload.parent_tool_call_id ? { parentCallId: event.payload.parent_tool_call_id } : {}),
         name: event.payload.tool_name,
         input: event.payload.input,
         output: null,
@@ -2724,6 +2741,8 @@ export function useChat(sessionId: string) {
     connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId, errorDiagnostic,
     failedTurnIndex,
     contextUsage, taskTrackerData,
+    // QUEUE-001：排队中的 steering / followUp 消息（运行中连发时可见）
+    queuedMessages: activeChannel.value?.queue ?? { steering: [], followUp: [] },
     reconnectExhausted, reconnect,
     send, cancel, answerTaskBrief, executeTaskBrief, cancelTaskBrief, sendCollaborationMessage, sendTaskReview, sendUserResponse, sendExtensionUiResponse, sendArtifactAction, sendPlanResponse, sendPlanMode, sendCheckpointAction, removeTurns,
     reloadTurnsFromBackend,

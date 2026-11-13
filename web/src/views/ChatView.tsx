@@ -52,7 +52,7 @@ export default function ChatView() {
     sendCollaborationMessage, sendTaskReview, sendUserResponse, sendExtensionUiResponse, sendArtifactAction, sendPlanResponse,
     removeTurns, dismissError, privateMode, setPrivateMode, autoApprove, setAutoApprove,
     reconnectExhausted, reconnect, goalState, contextUsage,
-    sendPlanMode, sendCheckpointAction, sendGoalAction, reloadTurnsFromBackend,
+    sendPlanMode, sendCheckpointAction, sendGoalAction, reloadTurnsFromBackend, queuedMessages,
   } = chat
 
   const [providerLoadFailed, setProviderLoadFailed] = useState(false)
@@ -364,6 +364,25 @@ export default function ChatView() {
                 <GitBranch className="mr-1.5 size-3.5" /> 会话分支
                 <span className="ml-auto text-xs text-muted-foreground">查看 / 分叉</span>
               </Button>
+              {/* RELOAD-001：装了新技能/扩展、放了新提示词模板后，不必重建会话。 */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="mb-2 w-full justify-start"
+                disabled={!sessionId}
+                onClick={async () => {
+                  if (!sessionId) return
+                  try {
+                    const r = await api.reloadSessionResources(sessionId)
+                    showToast(`已重新加载：${r.templates} 个模板、${r.tools} 个工具`, 'info')
+                    setMoreMenuOpen(false)
+                  } catch (e) {
+                    showToast(`重载失败：${e instanceof Error ? e.message : String(e)}`, 'error')
+                  }
+                }}
+              >
+                <RotateCcw className="mr-1.5 size-3.5" /> 重新加载技能与模板
+              </Button>
               <Button variant="outline" size="sm" className="mb-2 w-full justify-start" onClick={() => setModelSettingsOpen((v) => !v)}>
                 模型参数 <span className="ml-auto text-xs text-muted-foreground">{modelSettingsOpen ? '收起' : '展开'}</span>
               </Button>
@@ -479,6 +498,7 @@ export default function ChatView() {
           visible={isStreaming}
           onSteer={(message) => sendCollaboration('steer', message)}
           onFollowUp={(message) => sendCollaboration('follow_up', message)}
+          queued={queuedMessages}
         />
 
         {/* EXT-UI-001：pi 扩展的 ctx.ui 对话框。全局模态——不属于某一轮对话，

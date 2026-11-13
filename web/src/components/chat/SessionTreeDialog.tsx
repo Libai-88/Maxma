@@ -104,6 +104,22 @@ export function SessionTreeDialog({ sessionId, open, onClose, onNavigated, onFor
     }
   }
 
+  /** CTX-EDIT-001：把该条从未来模型上下文中移除（不删历史）。 */
+  async function handleOmit(node: TreeNode) {
+    if (busyId) return
+    setBusyId(node.id)
+    try {
+      await api.editContext(sessionId, node.id, { omit: true })
+      showToast('已从模型上下文中移除（历史仍保留）', 'info')
+      onNavigated?.()
+      await load()
+    } catch (e) {
+      showToast(`移除失败：${e instanceof Error ? e.message : String(e)}`, 'error')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   async function handleFork(node: TreeNode) {
     if (busyId) return
     setBusyId(node.id)
@@ -185,6 +201,17 @@ export function SessionTreeDialog({ sessionId, open, onClose, onNavigated, onFor
                     aria-label={`从 ${node.id.slice(0, 8)} 分叉`}
                   >
                     <GitBranch className="mr-1 size-3" /> 分叉
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-[11px]"
+                    disabled={busyId !== null}
+                    onClick={() => void handleOmit(node)}
+                    aria-label={`把 ${node.id.slice(0, 8)} 从上下文移除`}
+                    title="从模型未来的上下文中移除这一条；历史仍保留，界面不变"
+                  >
+                    移出上下文
                   </Button>
                 </div>
               </div>

@@ -335,6 +335,28 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     const sid = c.req.param("sessionId");
     const record = deps.hub.sessions.get(sid);
     if (!record) return c.json({ detail: "会话不存在" }, 404);
+
+    // CTX-USAGE-001：优先用引擎权威值（session.getContextUsage()）。
+    // 只有引擎说"不可知"（压缩后到下一次 assistant 响应前，官方语义）时，
+    // 才回落到字符估算——此前无条件用估算，中文场景偏差很大。
+    const engine = await callRpc<{
+      usage?: { tokens?: number | null; contextWindow?: number | null; percent?: number | null } | null;
+      known?: boolean;
+    }>(deps, "get_context_usage", { session_id: sid });
+    const u = engine.ok ? engine.result.usage : null;
+    if (engine.ok && engine.result.known && u && typeof u.tokens === "number") {
+      const window = typeof u.contextWindow === "number" && u.contextWindow > 0 ? u.contextWindow : 256_000;
+      return c.json({
+        estimated_tokens: Math.round(u.tokens),
+        max_tokens: window,
+        percentage: Math.min(100, Math.round((u.tokens / window) * 1000) / 10),
+        message_count: 0,
+        model_name: "",
+        session_id: sid,
+        source: "engine",
+      });
+    }
+
     const result = await callRpc<{ messages: Array<Record<string, unknown>> }>(
       deps,
       "get_messages",
@@ -351,6 +373,8 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
       message_count: messages.length,
       model_name: "",
       session_id: sid,
+      // 让前端/排查者一眼看出这是估算值而不是引擎给的
+      source: "estimate",
     });
   });
 
@@ -440,6 +464,121 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     return c.json({ session_id: sid, name: result.result.name });
   });
 
+  // ── 取消压缩（ABORT-COMPACT-001）──
+  /**
+   * 取消正在进行的压缩/分支摘要。压缩要调模型生成摘要，provider 卡住时会长时间
+   * 挂着——此前只有「开始压缩」没有「取消」。
+   */
+  app.post("/api/sessions/:sessionId/compact/abort", async (c) => {
+    const sid = c.req.param("sessionId");
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const result = await callRpc<{ ok: boolean; aborted: string; compacting: boolean }>(
+      deps,
+      "abort_compaction",
+      { session_id: sid, ...(body.what === "branch_summary" ? { what: "branch_summary" } : {}) },
+    );
+    if (!result.ok) return c.json({ detail: result.error }, 503);
+    deps.audit?.("session", "abort_compaction", sid, result.result.aborted);
+    return c.json({ session_id: sid, ...result.result });
+  });
+
+  // ── 思考档位能力（THINKING-CAP-001）──
+  /**
+   * 当前模型**实际支持**的思考档位（pi 按模型裁剪）。界面据此标注不支持的项，
+   * 而不是让用户选一个会被静默钳掉的档位。
+   */
+  app.get("/api/sessions/:sessionId/thinking-levels", async (c) => {
+    const sid = c.req.param("sessionId");
+    const result = await callRpc<{ available: string[]; current: string }>(
+      deps,
+      "get_thinking_levels",
+      { session_id: sid },
+    );
+    if (!result.ok) return c.json({ detail: result.error }, 404);
+    return c.json({ session_id: sid, ...result.result });
+  });
+
+  // ── 资源热重载（RELOAD-001）──
+  /**
+   * 重新加载扩展/技能/提示词模板/主题，**不重建会话**（历史与分支都保留）。
+   * 用户装了新技能或放了新模板后，不必再新建会话来让它生效。
+   */
+  app.post("/api/sessions/:sessionId/reload", async (c) => {
+    const sid = c.req.param("sessionId");
+    const record = deps.hub.sessions.get(sid);
+    if (!record) return c.json({ detail: "会话不存在" }, 404);
+    if (record.currentGuard !== null) {
+      return c.json({ detail: "Agent 正在处理中，请等待本轮完成后再重载" }, 409);
+    }
+    const result = await callRpc<{ ok: boolean; templates: number; tools: number }>(
+      deps,
+      "reload_session_resources",
+      { session_id: sid },
+    );
+    if (!result.ok) return c.json({ detail: result.error }, 503);
+    deps.audit?.("session", "reload", sid, `templates=${result.result.templates} tools=${result.result.tools}`);
+    return c.json({ session_id: sid, ...result.result });
+  });
+
+  // ── 上下文编辑（CTX-EDIT-001）──
+  /**
+   * 把某条 entry 从**未来模型上下文**中移除（pi 的 `appendContextEdit`）。
+   * 不删除原始历史、不改界面、不改计费——是"这条别让模型再看到"的正确做法。
+   */
+  app.post("/api/sessions/:sessionId/context-edit", async (c) => {
+    const sid = c.req.param("sessionId");
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const targetId = typeof body.target_id === "string" ? body.target_id : "";
+    if (!targetId) return c.json({ detail: "缺少 target_id" }, 400);
+    const record = deps.hub.sessions.get(sid);
+    if (!record) return c.json({ detail: "会话不存在" }, 404);
+    if (record.currentGuard !== null) {
+      return c.json({ detail: "Agent 正在处理中，请等待本轮完成后再改上下文" }, 409);
+    }
+    const omit = body.omit !== false;
+    const result = await callRpc<{ ok: boolean; edit_id: string; target_id: string; omitted: boolean }>(
+      deps,
+      "context_edit",
+      {
+        session_id: sid,
+        target_id: targetId,
+        omit,
+        ...(omit ? {} : { replacement: String(body.replacement ?? "") }),
+      },
+    );
+    if (!result.ok) return c.json({ detail: result.error }, 503);
+    deps.audit?.("session", "context_edit", sid, `${omit ? "移除" : "替换"} entry ${targetId.slice(0, 8)}`);
+    return c.json(result.result);
+  });
+
+  // ── 会话状态（STATE-001）──
+  /**
+   * pi 的会话只读状态：选中模型、**虚拟模型路由后的实际模型**、思考档位、是否空闲。
+   * `routed_model` 只在虚拟模型被选中且已有成功应答时非空。
+   */
+  app.get("/api/sessions/:sessionId/state", async (c) => {
+    const sid = c.req.param("sessionId");
+    const result = await callRpc<Record<string, unknown>>(deps, "get_session_state", { session_id: sid });
+    if (!result.ok) return c.json({ detail: result.error }, 404);
+    return c.json({ session_id: sid, ...result.result });
+  });
+
+  // ── Prompt templates（PROMPT-TPL-001）──
+  /**
+   * 列出 pi 发现的提示词模板（`~/.pi/agent/prompts/*.md` 与 `.pi/prompts/`）。
+   * 每个模板的文件名即斜杠命令名，前端据此补全。
+   */
+  app.get("/api/sessions/:sessionId/prompt-templates", async (c) => {
+    const sid = c.req.param("sessionId");
+    const result = await callRpc<{ templates: Array<Record<string, unknown>> }>(
+      deps,
+      "list_prompt_templates",
+      { session_id: sid },
+    );
+    if (!result.ok) return c.json({ detail: result.error }, 404);
+    return c.json({ session_id: sid, templates: result.result.templates });
+  });
+
   // ── 会话统计（TREE-004）──
   // pi 的 getSessionStats 覆盖**全部** entry（含被压缩掉的历史），
   // 所以 token/cost 反映真实计费，而不是当前上下文。
@@ -448,6 +587,22 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     const result = await callRpc<{ stats: Record<string, unknown> }>(deps, "get_session_stats", { session_id: sid });
     if (!result.ok) return c.json({ detail: result.error }, 404);
     return c.json({ session_id: sid, ...result.result.stats });
+  });
+
+  // ── 导出 JSONL（EXPORT-002）──
+  // 与 HTML 导出的差别：JSONL 是 pi 的**原始会话格式**，可被 /import 读回，
+  // 也适合程序处理；HTML 只用于人看。
+  app.post("/api/sessions/:sessionId/export/jsonl", async (c) => {
+    const sid = c.req.param("sessionId");
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const outputPath = typeof body.output_path === "string" ? body.output_path : undefined;
+    const result = await callRpc<{ ok: boolean; path: string | null }>(deps, "export_session_jsonl", {
+      session_id: sid,
+      ...(outputPath !== undefined ? { output_path: outputPath } : {}),
+    });
+    if (!result.ok) return c.json({ detail: result.error }, 503);
+    deps.audit?.("session", "export_jsonl", sid, result.result.path ?? "");
+    return c.json({ session_id: sid, path: result.result.path });
   });
 
   // ── 导出 HTML（TREE-004）──

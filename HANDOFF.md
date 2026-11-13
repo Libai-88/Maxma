@@ -349,6 +349,130 @@ branch 不删条目、forkFrom 产物可 open 恢复、空会话拒绝）。
   `settings-schema.d.ts`（权威，不是文档），并做反向自检（pi 改名时本锁不会变成空断言）。
   变异验证：把 `cacheWarming` 改个名 → 立刻红。
 
+## 2026-11-13 PROMPT-TPL-001 + NEST-001：模板清单与嵌套工具调用
+
+两项都是「引擎早就给了、我们没接」，不属于新功能。
+
+### Prompt templates
+
+pi 的 `ResourceLoader` 本来就会扫 `~/.pi/agent/prompts/*.md` 与 `.pi/prompts/`，
+`session.promptTemplates` 直接可读。上一轮的斜杠透传已经让 `/模板名` 能到引擎，
+但**用户看不到有哪些模板**——前端斜杠补全只认 10 条硬编码命令。
+
+- RPC `list_prompt_templates` → REST `GET /api/sessions/:id/prompt-templates`
+- 前端补全列表合并模板，标「模板」徽标；与本地命令同名的跳过（不重复出现）
+- 实测：放 `weekly.md` 进 prompts 目录 → 端点返回
+  `{name:"weekly", description:"起草周报", argument_hint:"[范围]", source:"auto"}`
+
+### 嵌套工具调用
+
+pi 的工具可经 `ctx.executeTool()` 发起子调用，事件带 `parentToolCallId`。
+此前事件映射只透传 `toolCallId`，子调用在前端**与顶层调用并排显示**——
+一次 codemode 调用会炸出十几条看不出关系的工具行。
+
+- `events.ts` 的 tool_start/update/end/error 四处都透传 `parent_tool_call_id`
+- 前端 `ToolCall.parentCallId` + `Step.nested`，渲染时缩进一级并加左边框
+- 锁：`prompt-templates-and-nesting.test.ts`（5 项），变异验证撤掉透传即红
+
+### 会话状态（STATE-001）
+
+pi 的 `AgentSession` 有 `model` / `routedModel` / `thinkingLevel` / `isIdle` / `isStreaming`，
+Maxma 一个都没读——界面上的「模型」是它自己记的 id，**引擎实际用谁回的话不可见**。
+
+`routedModel` 是虚拟模型（扩展经 `pi.registerVirtualModel` 注册）的关键：选中虚拟模型时
+`model` 是虚拟选择，`routedModel` 才是最近一次真正应答的物理模型。
+
+- RPC `get_session_state` → REST `GET /api/sessions/:id/state`
+- 前端模型选择器旁显示「→ 实际模型」，仅在与所选模型不同时出现，每轮结束刷新
+
+实测：`GET /state` 返回 `{model:{provider,id,name}, routed_model:null, thinking_level, is_streaming, is_idle, session_name}`。
+未注册虚拟模型时 `routed_model` 为 `null`——**这不是缺陷**：没有扩展注册虚拟模型，
+pi 的 `getAllModels()` 里就是 0 个虚拟模型（实测 1712 个模型中 0 个虚拟）。
+
+**仍存在的边界（已实测，属引擎限制而非我方遗漏）**：Maxma 的模型列表来自
+`providers.yaml`，而虚拟模型活在 pi 的 `ModelRuntime` 里。实测确认：
+
+- 虚拟模型**确实**出现在 `getAllModels()` 里（1712 → 1713），`getModel()` 也能解析
+- 但 `virtualModels` 是 `ModelRuntime` 的**私有字段**，`isVirtualModel` 未从包入口导出，
+  `composeProvider()` 也不是公开 API——**没有公开办法枚举"哪些是虚拟模型"**
+- `getAllModels()` vs `getModels()` 的差集里混着图像生成模型与分类器模型
+  （实测差集 120 项，绝大多数不是虚拟模型），据此猜测会把大量非聊天模型塞进选择器
+
+所以要让虚拟模型进选择器，需要 pi 上游先提供枚举 API。当前能力边界：
+扩展**可以**注册虚拟模型，会话**能**使用它（`getModel` 解析通过），
+`routedModel` **能**把实际应答模型显示出来——只有"在选择器里列出来"这一步做不到。
+
+### 思考档位按模型能力标注（THINKING-CAP-001）
+
+pi 按模型裁剪可用思考档位（`getAvailableThinkingLevels()`），不支持的会被**静默钳到
+最接近的值**。此前设置页无条件列出全部 7 档。
+
+**实测最能说明问题**：默认渠道模型的可用档位是 `["off"]` 一档，而界面列着
+最小/低/中/高/很高/最大 六个选项——选了全都会被静默吞掉，用户完全看不出来。
+
+- RPC `get_thinking_levels` → REST `GET /api/sessions/:id/thinking-levels`
+- 设置页按引擎报告标注「（当前模型不支持）」，desc 换成「当前模型支持：off / …」
+- 引擎没报告时不标注——宁可不标，也不要标错
+
+### 上下文用量改用引擎权威值（CTX-USAGE-001）
+
+pi 有权威的 `getContextUsage()`（`{tokens, contextWindow, percent}`）。此前 Maxma
+没用它：后端拿 `get_messages` 自己按「字符数 / 2」估——中文场景下这个比例与真实
+分词差得很远，用户看到的上下文环（以及"快满了会压缩"的提示）**不是引擎认为的数字**。
+
+- RPC `get_context_usage`（`known=false` 表示压缩中不可知）
+- `chat-ws` 的 done 事件与 REST `/context-usage` 都改为**优先引擎值**
+- 只有引擎说不可知时才回落估算（压缩后到下次 assistant 响应前，官方语义）
+- REST 响应加 `source: "engine" | "estimate"`，一眼看出数字来源
+
+实测：`GET /context-usage` → `source=engine`、`max_tokens=128000`（gpt-4o 真实窗口），
+而不是原先写死的 256000。
+
+⚠️ `sessions-2.2e` 的旧断言 `max_tokens === 256000` 把估算口径当成了契约，
+已改为断言 `source=engine` 且窗口 > 0。
+
+### 排队消息可见（QUEUE-001）
+
+pi 允许运行中继续发消息：`steer` 在下一次 LLM 调用前插入，`followUp` 等本轮做完再投递，
+两者都排队，`queue_update` 每次给**完整快照**。
+
+此前 Maxma 完全不消费它——用户连发几条「立即调整」后看不到排队中还有几条，
+只能等它们依次生效，**像消息丢了**。
+
+- `events.ts` 映射 `queue_update`（兼容字符串与 `{ text }` 两种形态）
+- `SteeringWindow` 在输入区上方显示「立即调整排队 N 条 / 稍后处理排队 N 条」+ 前 3 条内容
+
+### 资源热重载（RELOAD-001）
+
+`session.reload()` 重新加载扩展、技能、提示词模板、主题与上下文文件，**不重建会话**
+（历史与活动分支都保留）。此前 Maxma 只能靠"新建会话"让新装的技能/模板生效，
+而新建会话意味着丢上下文。
+
+- RPC `reload_session_resources` → REST `POST /api/sessions/:id/reload`
+- 入口：「更多会话操作」菜单 →「重新加载技能与模板」
+
+与既有的 `reload_mcp_for_session` **不是一回事**：那条只针对 MCP 且恒 noop
+（MCP 清单由后端在 `create_session` 时装配），这条是引擎级全量资源重载。
+
+实测：会话里 0 个模板 → 往 `prompts/` 放一个 `.md` → 调 reload →
+回执 `{ok:true, templates:1, tools:14}` → 模板清单立刻出现新模板。
+
+### 上下文编辑（CTX-EDIT-001）
+
+pi 的 `appendContextEdit(targetId, replacement)` 只影响**未来模型上下文**：
+`replacement=null` 让该条从此不进入上下文，但**不删历史、不改界面、不改计费**。
+比真删消息安全得多，是"这条别让模型再看到了"的正确做法。
+
+- RPC `context_edit` → REST `POST /api/sessions/:id/context-edit`
+- 界面挂在会话树每行的「移出上下文」
+
+⚠️ **两处 API 误判，都已在代码注释里留了坑位说明**：
+
+1. `buildContextEntries()` **不应用** context_edit——它只做树遍历。
+   真正应用编辑的是 `buildSessionProjection()`。第一版测试断言读到原文才发现。
+2. `replacement` 形状是 `{ content: [...] }`，**不是**裸数组或裸字符串。
+   官方校验只接受 `null` 或含 `string`/`array` content 的对象。
+
 ## 状态
 
 - 仓库 `https://github.com/Libai-88/Maxma.git`，主分支 `main`；变更一律走分支 + PR squash 合入，
