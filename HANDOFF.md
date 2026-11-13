@@ -389,10 +389,34 @@ Maxma 一个都没读——界面上的「模型」是它自己记的 id，**引
 未注册虚拟模型时 `routed_model` 为 `null`——**这不是缺陷**：没有扩展注册虚拟模型，
 pi 的 `getAllModels()` 里就是 0 个虚拟模型（实测 1712 个模型中 0 个虚拟）。
 
-**仍存在的边界**：Maxma 的模型列表来自 `providers.yaml`，不是 pi 的 `getAllModels()`。
-所以即使扩展注册了虚拟模型，它也**不会出现在 Maxma 的模型选择器里**——
-`routedModel` 只在会话已经选中虚拟模型时才有值。要让虚拟模型可被选中，
-需要把 pi 的模型注册表合并进选择器，这是一项独立工作。
+**仍存在的边界（已实测，属引擎限制而非我方遗漏）**：Maxma 的模型列表来自
+`providers.yaml`，而虚拟模型活在 pi 的 `ModelRuntime` 里。实测确认：
+
+- 虚拟模型**确实**出现在 `getAllModels()` 里（1712 → 1713），`getModel()` 也能解析
+- 但 `virtualModels` 是 `ModelRuntime` 的**私有字段**，`isVirtualModel` 未从包入口导出，
+  `composeProvider()` 也不是公开 API——**没有公开办法枚举"哪些是虚拟模型"**
+- `getAllModels()` vs `getModels()` 的差集里混着图像生成模型与分类器模型
+  （实测差集 120 项，绝大多数不是虚拟模型），据此猜测会把大量非聊天模型塞进选择器
+
+所以要让虚拟模型进选择器，需要 pi 上游先提供枚举 API。当前能力边界：
+扩展**可以**注册虚拟模型，会话**能**使用它（`getModel` 解析通过），
+`routedModel` **能**把实际应答模型显示出来——只有"在选择器里列出来"这一步做不到。
+
+### 上下文编辑（CTX-EDIT-001）
+
+pi 的 `appendContextEdit(targetId, replacement)` 只影响**未来模型上下文**：
+`replacement=null` 让该条从此不进入上下文，但**不删历史、不改界面、不改计费**。
+比真删消息安全得多，是"这条别让模型再看到了"的正确做法。
+
+- RPC `context_edit` → REST `POST /api/sessions/:id/context-edit`
+- 界面挂在会话树每行的「移出上下文」
+
+⚠️ **两处 API 误判，都已在代码注释里留了坑位说明**：
+
+1. `buildContextEntries()` **不应用** context_edit——它只做树遍历。
+   真正应用编辑的是 `buildSessionProjection()`。第一版测试断言读到原文才发现。
+2. `replacement` 形状是 `{ content: [...] }`，**不是**裸数组或裸字符串。
+   官方校验只接受 `null` 或含 `string`/`array` content 的对象。
 
 ## 状态
 
