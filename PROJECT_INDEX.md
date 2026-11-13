@@ -105,6 +105,7 @@ web/src/main.tsx
 - [docs/brand-guidelines.md](docs/brand-guidelines.md) — 品牌唯一事实源
 - [dev_docs/adr/](dev_docs/adr/) — 决策记录（0001 运行时状态、0003 子任务、0004 权限模式、0005 远程与沙箱、0006 Artifact）
 - [dev_docs/realtime-human-agent-collaboration.md](dev_docs/realtime-human-agent-collaboration.md)
+- [dev_docs/pi-shell-capability-plan.md](dev_docs/pi-shell-capability-plan.md) — pi 能力完整保留计划（扩展 UI / 会话树 / 设置可见性，含实测证据与执行顺序）
 - `dev_docs/typecheck-baseline.json` — 类型债基线（`scripts/check-type-budget.mjs` 消费，只准降）
 
 ## 开发命令
