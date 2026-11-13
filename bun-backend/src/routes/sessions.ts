@@ -589,6 +589,22 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     return c.json({ session_id: sid, ...result.result.stats });
   });
 
+  // ── 导出 JSONL（EXPORT-002）──
+  // 与 HTML 导出的差别：JSONL 是 pi 的**原始会话格式**，可被 /import 读回，
+  // 也适合程序处理；HTML 只用于人看。
+  app.post("/api/sessions/:sessionId/export/jsonl", async (c) => {
+    const sid = c.req.param("sessionId");
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const outputPath = typeof body.output_path === "string" ? body.output_path : undefined;
+    const result = await callRpc<{ ok: boolean; path: string | null }>(deps, "export_session_jsonl", {
+      session_id: sid,
+      ...(outputPath !== undefined ? { output_path: outputPath } : {}),
+    });
+    if (!result.ok) return c.json({ detail: result.error }, 503);
+    deps.audit?.("session", "export_jsonl", sid, result.result.path ?? "");
+    return c.json({ session_id: sid, path: result.result.path });
+  });
+
   // ── 导出 HTML（TREE-004）──
   app.post("/api/sessions/:sessionId/export", async (c) => {
     const sid = c.req.param("sessionId");

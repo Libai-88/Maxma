@@ -1125,6 +1125,19 @@ export async function handlePiSessionRpc(
     return;
   }
 
+  if (method === "export_session_jsonl") {
+    const outputPath = typeof params?.output_path === "string" ? params.output_path : undefined;
+    try {
+      // 与 HTML 导出的差别：JSONL 是 pi 的**原始会话格式**，可被 /import 读回，
+      // 也适合程序处理。HTML 只用于人看。
+      const path = record.session.exportToJsonl(outputPath);
+      io.send(id, { ok: true, path: path ?? outputPath ?? null });
+    } catch (error) {
+      io.sendError(id, `export_session_jsonl failed: ${String(error)}`);
+    }
+    return;
+  }
+
   if (method === "export_session_html") {
     const outputPath = typeof params?.output_path === "string" ? params.output_path : undefined;
     try {

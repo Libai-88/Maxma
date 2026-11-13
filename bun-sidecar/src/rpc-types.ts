@@ -85,7 +85,8 @@ export type RpcMethodName =
   | "get_context_usage"
   | "get_thinking_levels"
   | "abort_compaction"
-  | "export_session_html";
+  | "export_session_html"
+  | "export_session_jsonl";
 
 export interface CreateSessionParams {
   model: string;

@@ -628,6 +628,7 @@ export const PI_RPC_METHODS = [
   "get_thinking_levels",
   "abort_compaction",
   "export_session_html",
+  "export_session_jsonl",
   "steer",
   "follow_up",
 ] as const;

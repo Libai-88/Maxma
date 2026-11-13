@@ -429,6 +429,13 @@ export const api = {
       },
     ),
 
+  /** 导出会话为 JSONL（pi 原始格式，可被 /import 读回）。 */
+  exportSessionJsonl: (sessionId: string, outputPath?: string) =>
+    request<{ session_id: string; path: string | null }>(
+      `/sessions/${encodeURIComponent(sessionId)}/export/jsonl`,
+      { method: 'POST', body: JSON.stringify(outputPath ? { output_path: outputPath } : {}) },
+    ),
+
   /** pi 的会话状态（含虚拟模型路由后的实际模型）。 */
   getSessionState: (sessionId: string) =>
     request<{
