@@ -355,6 +355,115 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
   });
 
   // ── 清空（UX-CLEAR-001：官方 resetLeaf 语义，Bun 后端直调 kernel RPC）──
+  // ── 会话树（TREE-001）──
+  /**
+   * 返回整棵会话树。pi 把会话存成 append-only entry 树 + 活动 leaf，
+   * 但此前 Maxma 只暴露过"当前分支"（消息列表），用户看不到"这段对话分过哪些支"。
+   * 只读，形状由 kernel 投影（不透传原始 entry，见 bridge-pi 的 get_tree）。
+   */
+  app.get("/api/sessions/:sessionId/tree", async (c) => {
+    const sid = c.req.param("sessionId");
+    const result = await callRpc<Record<string, unknown>>(deps, "get_tree", { session_id: sid });
+    if (!result.ok) return c.json({ detail: result.error }, 404);
+    return c.json(result.result);
+  });
+
+  // ── 树内导航（TREE-002）──
+  /**
+   * 把 leaf 移到某个 entry。`summarize=true` 时对离开的分支生成摘要（pi 原生）。
+   * **不删除任何条目**——append-only，只是移动活动指针。
+   */
+  app.post("/api/sessions/:sessionId/tree/navigate", async (c) => {
+    const sid = c.req.param("sessionId");
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const targetId = typeof body.target_id === "string" ? body.target_id : "";
+    if (!targetId) return c.json({ detail: "缺少 target_id" }, 400);
+    const record = deps.hub.sessions.get(sid);
+    if (!record) return c.json({ detail: "会话不存在" }, 404);
+    if (record.currentGuard !== null) {
+      return c.json({ detail: "Agent 正在处理中，请等待本轮完成后再切换分支" }, 409);
+    }
+    const result = await callRpc<Record<string, unknown>>(deps, "navigate_tree", {
+      session_id: sid,
+      target_id: targetId,
+      summarize: body.summarize === true,
+      ...(typeof body.custom_instructions === "string" ? { custom_instructions: body.custom_instructions } : {}),
+    });
+    if (!result.ok) return c.json({ detail: result.error }, 503);
+    deps.audit?.("session", "navigate_tree", sid, `切换到 entry ${targetId.slice(0, 8)}`);
+    return c.json(result.result);
+  });
+
+  // ── 分叉（TREE-003）──
+  /**
+   * 从某条 entry 分出新会话。kernel 建好磁盘文件后，这里立刻把它 resume 成活会话，
+   * 返回新 session_id——前端可以直接切过去。
+   */
+  app.post("/api/sessions/:sessionId/tree/fork", async (c) => {
+    const sid = c.req.param("sessionId");
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const entryId = typeof body.entry_id === "string" ? body.entry_id : "";
+    if (!entryId) return c.json({ detail: "缺少 entry_id" }, 400);
+
+    const forked = await callRpc<{ session_id: string; session_file: string | null; entry_count: number }>(
+      deps,
+      "fork_session",
+      { session_id: sid, entry_id: entryId },
+    );
+    if (!forked.ok) return c.json({ detail: forked.error }, 503);
+    if (!forked.result.session_id) return c.json({ detail: "分叉失败：未生成新会话" }, 500);
+
+    // 把新会话文件变成活会话（复用既有恢复路径，不另造一套）。
+    const resumed = await createSessionViaKernel({ resume_session_id: forked.result.session_id });
+    if (!resumed.ok) {
+      return c.json({ detail: `分叉已落盘但恢复失败：${resumed.error}`, session_id: forked.result.session_id }, 500);
+    }
+    deps.audit?.("session", "fork", sid, `从 entry ${entryId.slice(0, 8)} 分叉 → ${forked.result.session_id}`);
+    return c.json({
+      session_id: forked.result.session_id,
+      source_session_id: sid,
+      entry_id: entryId,
+      entry_count: forked.result.entry_count,
+    });
+  });
+
+  // ── 会话重命名（TREE-004）──
+  app.put("/api/sessions/:sessionId/name", async (c) => {
+    const sid = c.req.param("sessionId");
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const name = typeof body.name === "string" ? body.name.trim().slice(0, 200) : "";
+    const result = await callRpc<{ ok: boolean; name: string | null }>(deps, "set_session_name", {
+      session_id: sid,
+      name,
+    });
+    if (!result.ok) return c.json({ detail: result.error }, 404);
+    return c.json({ session_id: sid, name: result.result.name });
+  });
+
+  // ── 会话统计（TREE-004）──
+  // pi 的 getSessionStats 覆盖**全部** entry（含被压缩掉的历史），
+  // 所以 token/cost 反映真实计费，而不是当前上下文。
+  app.get("/api/sessions/:sessionId/stats", async (c) => {
+    const sid = c.req.param("sessionId");
+    const result = await callRpc<{ stats: Record<string, unknown> }>(deps, "get_session_stats", { session_id: sid });
+    if (!result.ok) return c.json({ detail: result.error }, 404);
+    return c.json({ session_id: sid, ...result.result.stats });
+  });
+
+  // ── 导出 HTML（TREE-004）──
+  app.post("/api/sessions/:sessionId/export", async (c) => {
+    const sid = c.req.param("sessionId");
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const outputPath = typeof body.output_path === "string" ? body.output_path : undefined;
+    const result = await callRpc<{ ok: boolean; path: string | null }>(deps, "export_session_html", {
+      session_id: sid,
+      ...(outputPath !== undefined ? { output_path: outputPath } : {}),
+    });
+    if (!result.ok) return c.json({ detail: result.error }, 503);
+    deps.audit?.("session", "export", sid, result.result.path ?? "");
+    return c.json({ session_id: sid, path: result.result.path });
+  });
+
   app.delete("/api/sessions/:sessionId/messages", async (c) => {
     const sid = c.req.param("sessionId");
     const record = deps.hub.sessions.get(sid);

@@ -350,6 +350,59 @@ export const api = {
   undoMessages: (sessionId: string, n: number = 1) =>
     request<{ deleted_count: number }>(`/sessions/${encodeURIComponent(sessionId)}/undo?n=${n}`, { method: 'POST' }),
 
+  // ── 会话树（TREE-001..004）──
+  /** 整棵会话树（append-only entry 树 + 活动 leaf）。 */
+  getSessionTree: (sessionId: string) =>
+    request<{
+      session_id: string
+      leaf_id: string | null
+      session_name: string | null
+      entry_count: number
+      tree: Array<{
+        id: string
+        parentId: string | null
+        type: string
+        role: string | null
+        preview: string
+        timestamp: string | null
+        label: string | null
+        isLeaf: boolean
+        children: Array<unknown>
+      }>
+    }>(`/sessions/${encodeURIComponent(sessionId)}/tree`),
+
+  /** 把 leaf 移到某个 entry（不删除任何条目）。 */
+  navigateTree: (sessionId: string, targetId: string, summarize = false) =>
+    request<{ cancelled: boolean; aborted?: boolean; leaf_id: string | null }>(
+      `/sessions/${encodeURIComponent(sessionId)}/tree/navigate`,
+      { method: 'POST', body: JSON.stringify({ target_id: targetId, summarize }) },
+    ),
+
+  /** 从某条 entry 分出新会话，返回新 session_id（已 resume 成活会话）。 */
+  forkSession: (sessionId: string, entryId: string) =>
+    request<{ session_id: string; source_session_id: string; entry_id: string; entry_count: number }>(
+      `/sessions/${encodeURIComponent(sessionId)}/tree/fork`,
+      { method: 'POST', body: JSON.stringify({ entry_id: entryId }) },
+    ),
+
+  /** 会话重命名（空串 = 清除名称）。 */
+  setSessionName: (sessionId: string, name: string) =>
+    request<{ session_id: string; name: string | null }>(
+      `/sessions/${encodeURIComponent(sessionId)}/name`,
+      { method: 'PUT', body: JSON.stringify({ name }) },
+    ),
+
+  /** 会话统计（覆盖含被压缩历史在内的全部 entry）。 */
+  getSessionStats: (sessionId: string) =>
+    request<Record<string, unknown>>(`/sessions/${encodeURIComponent(sessionId)}/stats`),
+
+  /** 导出会话为 HTML。 */
+  exportSessionHtml: (sessionId: string, outputPath?: string) =>
+    request<{ session_id: string; path: string | null }>(
+      `/sessions/${encodeURIComponent(sessionId)}/export`,
+      { method: 'POST', body: JSON.stringify(outputPath ? { output_path: outputPath } : {}) },
+    ),
+
   health: () =>
     request<HealthResponse>('/health'),
 

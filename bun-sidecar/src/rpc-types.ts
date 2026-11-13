@@ -71,7 +71,14 @@ export type RpcMethodName =
   | "headless_prompt"
   | "set_auto_approve"
   | "reload_mcp_for_session"
-  | "plan_action";
+  | "plan_action"
+  // TREE-001..004：会话树 / 树内导航 / 分叉 / 重命名与统计导出
+  | "get_tree"
+  | "navigate_tree"
+  | "fork_session"
+  | "set_session_name"
+  | "get_session_stats"
+  | "export_session_html";
 
 export interface CreateSessionParams {
   model: string;

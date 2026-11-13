@@ -2252,6 +2252,36 @@ export function useChat(sessionId: string) {
    * reconcileTurnsWithBackend——模块级 connectSession 的 onopen 也要调用）。
    */
 
+  /**
+   * TREE-002：树内导航后**强制**从后端重建 turns。
+   *
+   * 与 reconcileTurnsWithBackend 的区别：那条是"空闲时校准"，有
+   * `turns.length === 0` 与"内容一致就跳过"两道守卫——切到另一条分支后
+   * 轮次数可能恰好相同（都是 N 轮），于是它判定"无需校准"，界面还停在旧分支。
+   * 这里不做一致性比较，直接以后端为准重建。
+   */
+  async function reloadTurnsFromBackend(): Promise<void> {
+    const sid = sidRef.current
+    if (!sid || sid === '__pending__') return
+    const ch = activeChannel.value
+    if (!ch) return
+    try {
+      const res = await api.getMessages(sid, 500)
+      const rebuilt = res.messages && res.messages.length > 0
+        ? backendMessagesToTurns(sid, res.messages)
+        : []
+      ch.turns.length = 0
+      ch.turns.push(...rebuilt)
+      ch.currentTurn = null
+      turnsCache.set(sid, rebuilt)
+      saveTurnsToStorage(sid, rebuilt)
+      if (rebuilt.length > 0) void hydrateTurnStickers(sid, rebuilt)
+      touch()
+    } catch (e) {
+      log.warn('树内导航后重载消息失败:', e)
+    }
+  }
+
   // Keep at most five inactive sessions alive. Streaming and approval-waiting
   // sessions are protected so a cache eviction never cancels user-visible work.
   // React 移植：watch(sessionId) → useEffect（切会话：持久化旧会话/缓存驱逐/
@@ -2696,6 +2726,7 @@ export function useChat(sessionId: string) {
     contextUsage, taskTrackerData,
     reconnectExhausted, reconnect,
     send, cancel, answerTaskBrief, executeTaskBrief, cancelTaskBrief, sendCollaborationMessage, sendTaskReview, sendUserResponse, sendExtensionUiResponse, sendArtifactAction, sendPlanResponse, sendPlanMode, sendCheckpointAction, removeTurns,
+    reloadTurnsFromBackend,
     dismissError,
     privateMode, setPrivateMode,
     autoApprove, setAutoApprove,
