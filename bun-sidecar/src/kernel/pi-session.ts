@@ -137,8 +137,15 @@ export async function createMaxmaSession(opts: MaxmaSessionOptions): Promise<Age
   });
 
   // 官方文档要求：MCP 扩展在 session_start 时连接服务器，需 bindExtensions 触发。
-  // ExtensionBindings 字段全可选，v1 传空对象（UI 上下文在审批桥接期接入）。
-  await session.bindExtensions({});
+  //
+  // EXT-UI-001：**必须传 uiContext**。此前传的是空对象，ExtensionRunner 于是回落到
+  // `noOpUIContext`——它的 `confirm` 恒返回 false（dist/core/extensions/runner.js），
+  // 任何用 ctx.ui 的扩展都会静默失效：pi 官方示例 confirm-destructive（删除前确认）
+  // 在 Maxma 里会静默拒绝一切操作，不报错也不留痕。
+  // mode 用 "rpc"：官方文档说该模式下 hasUI=true、对话框可用，TUI 专属方法降级为 no-op。
+  await session.bindExtensions({
+    ...(opts.uiContext ? { uiContext: opts.uiContext, mode: "rpc" as const } : {}),
+  });
   if (opts.tools === undefined) {
     session.setActiveToolsByName(session.getAllTools().map((tool) => tool.name));
   }

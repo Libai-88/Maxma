@@ -229,6 +229,61 @@
 ⚠️ 教训：写提示词前先看**引擎实际注入了什么**（`createMaxmaSession` 的 `systemPrompt` 打出来看），
 不要凭"应该有用"往里加——每加一句都是每轮对话的固定开销。
 
+## 2026-11-13 EXT-UI-001：接通 pi 扩展的 ctx.ui（P0）
+
+定位是「pi 的前端壳」，所以先补的是**唯一会让现有功能静默出错**的那一环。
+
+### 问题
+
+`pi-session.ts` 的 `bindExtensions({})` 传的是空对象，`ExtensionRunner` 于是回落到
+`noOpUIContext`——它的 **`confirm` 恒返回 `false`**（`dist/core/extensions/runner.js:132`）。
+
+这不是"少一个弹窗"，是**行为错误**：pi 官方示例 `confirm-destructive.ts`
+（删除前确认）、`dirty-repo-guard.ts` 在 Maxma 里会**静默拒绝一切操作**，
+不报错、不留痕，用户完全看不出原因。
+
+### 顺带查出的两个连带缺陷
+
+接通过程中发现命令根本到不了引擎，两处独立污染：
+
+| 位置 | 污染方式 | 后果 |
+| --- | --- | --- |
+| 前端 `utils/references.ts` 的 `buildFlatMessage` | 在消息尾部追加时间戳 → `/probe-confirm（2026-11-13 Wed 15:20）` | 引擎不再识别为命令 |
+| 后端 `chat-ws.ts` 的 `enrichWithEvolutionContext` | 追加行为偏好注入 → `/probe-confirm\n\n[Maxma 行为偏好…]` | 同上 |
+
+pi 只把「整条消息是 `/name` 或 `/name args`」识别为命令。两处叠加后，
+**所有**扩展命令与 prompt templates 都不可达。症状极具误导性：界面显示
+"（发生错误，回复未完成）"，看起来像模型挂了。
+
+### 做法
+
+- `kernel/extension-ui.ts`：把 `ExtensionUIContext` 桥接到前端。与审批门**同构但不合并**——
+  审批超时默认**拒绝**（安全边界），扩展对话框超时按**官方默认值**回填
+  （`select/input/editor` → undefined，`confirm` → false）。
+- 24 个方法全部实现：对话框 5 个走 WS 往返，TUI 专属 19 个给安全 no-op。
+  **不能只实现 5 个再 `as unknown as`**——扩展调 `ui.getAllThemes()` 拿到 undefined
+  再 `.length` 会当场崩。
+- WS 事件 `extension_ui_request`（出站）/ `extension_ui_response`（入站），三侧登记。
+- 前端 `stores/extensionUi.ts` + `components/chat/ExtensionPromptDialog.tsx`：
+  全局模态队列（不属于某一轮对话，回合切换不该清掉），带超时倒计时。
+- 前端 `slashCommands.ts` 的 `default` 分支改为**透传给引擎**：扩展命令与
+  prompt templates 由 pi 分发，前端无法穷举，不该替引擎裁决"命令不存在"。
+
+### 验证（真实链路，无伪造）
+
+`scripts/verify-ui-extension.mjs`：起真实后端 → 往它的 agentDir 放一个真扩展 →
+真实前端发 `/probe-confirm` → 扩展 `await ctx.ui.confirm` → 界面弹窗 →
+点「是」→ 扩展收到 `true` 并 notify。**零 console 错误**。
+
+### 锁
+
+- `bun-sidecar/tests/extension-ui.test.ts`（9 项）：往返、超时按官方语义回填、
+  `rejectAll` 防泄漏、TUI 方法不是 undefined。
+- `bun-backend/tests/slash-passthrough.test.ts`（4 项）：前后端两侧都不许污染命令，
+  且两处斜杠正则必须**同源**（改一边不改另一边 = 命令时灵时不灵）。
+- 两个变异验证均确认有效：删掉前端早退分支 → 输出带时间戳被抓；
+  后端 `isSlashCommand = false` → 正则缺失被抓。
+
 ## 状态
 
 - 仓库 `https://github.com/Libai-88/Maxma.git`，主分支 `main`；变更一律走分支 + PR squash 合入，

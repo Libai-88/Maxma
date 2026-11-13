@@ -151,8 +151,24 @@ export function buildTimestamp(): string {
   return `（${y}-${mo}-${d} ${wd} ${hh}:${mm}）`
 }
 
-/** 构建 WebSocket 发送用的平面字符串（结构化 → 序列化） */
+/**
+ * 构建 WebSocket 发送用的平面字符串（结构化 → 序列化）。
+ *
+ * ⚠️ SLASH-PASSTHROUGH-001：**斜杠命令原样返回，不追加任何东西**。
+ *
+ * pi 把「整条消息是 `/name` 或 `/name args`」识别为命令（`session.prompt` 的
+ * expandPromptTemplates，默认开），据此分发扩展命令（`pi.registerCommand`）
+ * 与 prompt templates（`~/.pi/agent/prompts/*.md`）。尾部一旦被追加时间戳，
+ * 命令就退化成普通文本发给模型——实测症状是扩展的 `/probe-confirm` 变成
+ * "（发生错误，回复未完成）"，因为模型收到了 `/probe-confirm（2026-11-13 …）`。
+ *
+ * 判定与后端 `chat-ws.ts` 的 `isSlashCommand` 同源，两侧必须一致：
+ * 前端决定"发什么"，后端决定"要不要富化"，任一侧漏了都会让命令失效。
+ */
+const SLASH_COMMAND_RE = /^\/[a-z][\w-]*(\s[\s\S]*)?$/i
+
 export function buildFlatMessage(text: string, timestamp: string, refs: ParsedRef[]): string {
+  if (SLASH_COMMAND_RE.test(text.trim())) return text.trim()
   const base = text + timestamp
   if (refs.length === 0) return base
   return base + buildRefsBlock(refs)

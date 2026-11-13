@@ -508,6 +508,10 @@ export const MAXMA_ENGINE_WS_EVENTS = [
   "llm_usage",
   "context_usage",
   "permission_mode_updated",
+  // EXT-UI-001：pi 扩展的 ctx.ui.select/confirm/input/editor/notify 经 kernel
+  // 转成前端对话框。**不是**引擎原生事件——pi 在 SDK 模式下通过
+  // ExtensionUIContext 回调出站，由 kernel 的 extension-ui.ts 转成 WS 帧。
+  "extension_ui_request",
 ] as const;
 
 /**
@@ -571,6 +575,10 @@ export const PI_RPC_METHODS = [
   "destroy_session",
   "get_health",
   "user_response",
+  // EXT-UI-001：扩展对话框应答（select/confirm/input/editor）。
+  // 与 user_response 分开——那条走审批门（超时默认拒绝），这条走扩展 UI 桥
+  // （超时按官方默认值回填）。混用会让两类超时语义互相污染。
+  "extension_ui_response",
   "undo",
   "compact",
   "get_messages",

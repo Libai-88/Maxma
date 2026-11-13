@@ -133,9 +133,11 @@ bash scripts/verify-all-gates.sh             # 交付前全部闸门
 | `verify-portable-user-path.mjs` | 便携包首启人格/免费渠道 |
 | `verify-ui-chat-roundtrip.mjs` | 真实前端打字→收到回复（零额度） |
 | `verify-ui-capabilities.mjs` | 真实前端能力页：配置来源只列真实读取方、逐条带路径与读取点、零 console 错误 |
+| `verify-ui-extension.mjs` | 真实扩展的 `ctx.ui` 往返：扩展弹窗 → 用户点「是」→ 扩展收到 true |
 | `verify-desktop-render.ps1` | 桌面包渲染层 |
 | `_ui-chat-driver.cjs` | Electron 驱动真实界面的主进程，被 `verify-ui-chat-roundtrip.mjs` 启动，**勿单独跑** |
 | `_ui-capabilities-driver.cjs` | 同上，被 `verify-ui-capabilities.mjs` 启动 |
+| `_ui-extension-driver.cjs` | 同上，被 `verify-ui-extension.mjs` 启动 |
 
 界面驱动脚本用**语义钩子**（`data-slot` / `aria-label`）找元素，不用样式类名。
 `bun-backend/tests/script-encoding.test.ts` 的「界面验证脚本的钩子契约」组会校验

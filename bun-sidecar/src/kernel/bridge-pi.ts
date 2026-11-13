@@ -15,6 +15,7 @@ import type { AgentSession as PiAgentSession } from "@earendil-works/pi-coding-a
 import { MAXMA_DEFAULT_PI_TOOLS, createMaxmaSession } from "./pi-session";
 import { powershellFallbackNote, probeBash, probePowerShell } from "./shell-health";
 import { createMaxmaApprovalGate, type MaxmaApprovalGate } from "./approval-gate";
+import { createExtensionUiBridge, type ExtensionUiBridge } from "./extension-ui";
 import { mapPiAgentEventToMaxma, type PiDoneGuard } from "./events";
 import { createRequestFingerprintEpoch, createRequestFingerprintSecret, type RequestTelemetry } from "./request-telemetry";
 import { orchestratePiPrompt, handlePiCancelGuard } from "./prompt";
@@ -68,6 +69,8 @@ export interface PiSessionRecord {
   latestRequestTelemetry: RequestTelemetry | null;
   requestFingerprintSecret: Uint8Array;
   requestFingerprintEpoch: string;
+  /** 扩展 UI 桥（EXT-UI-001）：扩展的 select/confirm/input 经它转成前端对话框。 */
+  extensionUi: ExtensionUiBridge;
 }
 
 export interface PiBridgeIo {
@@ -266,6 +269,7 @@ export async function handlePiCreateSession(
     latestRequestTelemetry: null,
     requestFingerprintSecret: createRequestFingerprintSecret(),
     requestFingerprintEpoch: createRequestFingerprintEpoch(),
+    extensionUi: undefined as unknown as ExtensionUiBridge,
   } as PiSessionRecord;
 
   const approvalGate = createMaxmaApprovalGate({
@@ -273,6 +277,13 @@ export async function handlePiCreateSession(
     mode: () => record.permissionMode,
   });
   record.approvalGate = approvalGate;
+
+  // 扩展 UI 桥（EXT-UI-001）：与审批门同构但语义不同——审批超时默认拒绝，
+  // 扩展对话框超时按官方默认值回填。两者不合并，见 extension-ui.ts 头注释。
+  const extensionUi = createExtensionUiBridge({
+    emit: (event) => io.sendEvent(sessionId, event),
+  });
+  record.extensionUi = extensionUi;
 
   // 计划模式（§6.2 任务 4 自建）：submit_plan 官方自定义工具
   const submitPlanTool = createSubmitPlanTool({
@@ -351,6 +362,8 @@ export async function handlePiCreateSession(
     cwd,
     permissionMode,
     approvalGate,
+    // EXT-UI-001：扩展的 ctx.ui 必须有真实落点，否则 runner 回落 noOpUIContext。
+    uiContext: extensionUi.uiContext,
     modelRuntime: resolved.modelRuntime,
     model: resolved.model,
     requestFingerprintSecret: record.requestFingerprintSecret,
@@ -509,6 +522,8 @@ export async function handlePiSessionRpc(
     handlePiCancelGuard(record.currentGuard, (event) => io.sendEvent(sessionId, event));
     // 官方 abort()：停止活动操作并等待 idle；同时拒绝全部在途审批防挂起
     record.approvalGate.rejectAll("cancelled");
+    // 扩展对话框同理：不清会让扩展 handler 的 promise 永远悬着。
+    record.extensionUi.rejectAll();
     await record.session.abort().catch(() => {});
     io.send(id, { ok: true });
     return;
@@ -517,6 +532,7 @@ export async function handlePiSessionRpc(
   if (method === "destroy_session") {
     record.unsubscribe();
     record.approvalGate.rejectAll("session destroyed");
+    record.extensionUi.rejectAll();
     rejectPendingPiPlansForSession(deps.pendingPlans, sessionId);
     try {
       record.session.dispose();
@@ -547,6 +563,25 @@ export async function handlePiSessionRpc(
     }
     record.approvalGate.resolveUserApproval(interactionId, response);
     io.send(id, { ok: true });
+    return;
+  }
+
+  // EXT-UI-001：扩展对话框的应答（select/confirm/input/editor）。
+  // 与 user_response 分开：那条走审批门（超时默认拒绝），这条走扩展 UI 桥
+  // （超时按官方默认值回填）。混用会让两类超时语义互相污染。
+  if (method === "extension_ui_response") {
+    const uiId: string = params?.id as string;
+    if (!uiId) {
+      io.sendError(id, "Missing required parameter: id");
+      return;
+    }
+    const hit = record.extensionUi.resolve(uiId, {
+      ...(typeof params?.value === "string" ? { value: params.value } : {}),
+      ...(typeof params?.confirmed === "boolean" ? { confirmed: params.confirmed } : {}),
+      ...(params?.cancelled === true ? { cancelled: true } : {}),
+    });
+    // 未命中不报错：对话框可能已超时或被 abort 撤下，前端迟到的应答属正常竞争。
+    io.send(id, { ok: true, matched: hit });
     return;
   }
 

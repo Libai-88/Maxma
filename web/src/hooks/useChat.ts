@@ -4,6 +4,7 @@ import type { ThinkPathId } from '@/utils/thinkPath'
 import { normalizeContextUsage, useChatStore, TURNS_KEY_PREFIX } from '@/stores/chat'
 import { useEffect, useRef } from 'react'
 import { useSessionStore } from '@/stores/session'
+import { useExtensionUiStore } from '@/stores/extensionUi'
 import { buildFlatMessage, buildTimestamp, parseReferences } from '@/utils/references'
 import type { ParsedRef } from '@/utils/references'
 import { getToken, ensureTokenLoaded, resetToken, api } from '@/api'
@@ -87,6 +88,8 @@ export const SERVER_EVENT_HANDLER_TYPES: Record<ServerEvent['type'], true> = {
   irc_message: true,
   // 审批与心跳
   ask_user: true,
+  // EXT-UI-001：pi 扩展的 ctx.ui 请求（select/confirm/input/editor/notify）
+  extension_ui_request: true,
   pong: true,
   // 上下文管理与用量
   // llm_usage 是 pi 的权威用量（model_request / cache_warm）；此前它既不在联合
@@ -1468,6 +1471,23 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
     return
   }
 
+  // EXT-UI-001：pi 扩展的 ctx.ui 请求。同样是会话级事件、可能在无活跃轮次时到达
+  // （扩展可以在 session_start 或任何钩子里问用户），所以也在 turn 守卫之前处理。
+  // notify 是 fire-and-forget → 直接 toast；其余入队交给 ExtensionPromptDialog。
+  if (event.type === 'extension_ui_request') {
+    const req = event.payload
+    if (!req?.id || !req.method) return
+    if (req.method === 'notify') {
+      const level = req.notify_type === 'error' ? 'error' : req.notify_type === 'warning' ? 'warning' : 'info'
+      showToast(`[扩展] ${req.title}`, level)
+      return
+    }
+    useExtensionUiStore.getState().push(req)
+    // 后台窗口时提示——扩展可能在等用户，不提示会一直挂着。
+    showSystemNotification('Maxma — 扩展请求', req.title.slice(0, 80))
+    return
+  }
+
   const turn = ch.currentTurn
   if (!turn) return
 
@@ -2502,6 +2522,29 @@ export function useChat(sessionId: string) {
     return true
   }
 
+  /**
+   * EXT-UI-001：回扩展对话框的应答。
+   * 与 sendUserResponse 分开——那条走审批门（超时默认拒绝），这条走扩展 UI 桥。
+   * 未命中时后端返回 matched:false，属正常竞争（对话框可能已超时），不报错。
+   */
+  function sendExtensionUiResponse(
+    id: string,
+    reply: { value?: string; confirmed?: boolean; cancelled?: boolean },
+  ): boolean {
+  touch()
+    const ch = activeChannel.value
+    if (!ch.ws || ch.ws.readyState !== WebSocket.OPEN) {
+      log.warn(`sendExtensionUiResponse 失败：WS 未就绪 (id=${id})`)
+      return false
+    }
+    const msg: ClientMessage = {
+      type: 'extension_ui_response',
+      payload: { id, ...reply },
+    }
+    sendClientMessage(ch.ws, msg)
+    return true
+  }
+
   function sendArtifactAction(artifactId: string, actionId: string, token: string): boolean {
   touch()
     const ch = activeChannel.value
@@ -2652,7 +2695,7 @@ export function useChat(sessionId: string) {
     failedTurnIndex,
     contextUsage, taskTrackerData,
     reconnectExhausted, reconnect,
-    send, cancel, answerTaskBrief, executeTaskBrief, cancelTaskBrief, sendCollaborationMessage, sendTaskReview, sendUserResponse, sendArtifactAction, sendPlanResponse, sendPlanMode, sendCheckpointAction, removeTurns,
+    send, cancel, answerTaskBrief, executeTaskBrief, cancelTaskBrief, sendCollaborationMessage, sendTaskReview, sendUserResponse, sendExtensionUiResponse, sendArtifactAction, sendPlanResponse, sendPlanMode, sendCheckpointAction, removeTurns,
     dismissError,
     privateMode, setPrivateMode,
     autoApprove, setAutoApprove,

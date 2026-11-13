@@ -106,4 +106,10 @@ export interface MaxmaSessionOptions {
   requestFingerprintSecret?: Uint8Array;
   requestFingerprintEpoch?: string;
   onRequestTelemetry?: (telemetry: RequestTelemetry) => void;
+  /**
+   * 扩展 UI 上下文（EXT-UI-001）。不提供时 pi 会回落到 `noOpUIContext`，
+   * 而它的 `confirm` 恒返回 false——扩展的安全确认会静默拒绝一切操作。
+   * 由 bridge 用 `createExtensionUiBridge({ emit })` 构造后传入。
+   */
+  uiContext?: import("./extension-ui").ExtensionUiBridge["uiContext"];
 }
