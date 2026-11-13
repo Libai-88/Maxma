@@ -82,6 +82,7 @@ export type RpcMethodName =
   | "get_session_state"
   | "context_edit"
   | "reload_session_resources"
+  | "get_context_usage"
   | "export_session_html";
 
 export interface CreateSessionParams {

@@ -622,6 +622,7 @@ export const PI_RPC_METHODS = [
   "get_session_state",
   "context_edit",
   "reload_session_resources",
+  "get_context_usage",
   "export_session_html",
   "steer",
   "follow_up",

@@ -992,6 +992,24 @@ export async function handlePiSessionRpc(
   // ── 会话重命名 / 统计 / 导出（TREE-004）──
   //
   // 都是 pi 的 AgentSession 直接能力，此前一个都没接。
+  // ── 上下文用量（CTX-USAGE-001）──
+  //
+  // pi 有**权威**的 `getContextUsage()`，返回 `{tokens, contextWindow, percent}`
+  // （压缩后到下一次 assistant 响应前 tokens/percent 为 null，这是官方语义）。
+  //
+  // 此前 Maxma 没用它：后端拿 `get_messages` 自己按"字符数/2"估——
+  // 中文场景下这个比例与真实分词差得很远，用户看到的上下文环（与"快满了会压缩"
+  // 的提示）其实不是引擎认为的数字。这条 RPC 把权威值透出来，后端优先用它。
+  if (method === "get_context_usage") {
+    const usage = record.session.getContextUsage();
+    io.send(id, {
+      usage: usage ?? null,
+      // 引擎返回 undefined 表示"当前不可知"（如压缩进行中），调用方据此决定是否回落。
+      known: usage !== undefined,
+    });
+    return;
+  }
+
   // ── 资源热重载（RELOAD-001）──
   //
   // `session.reload()` 重新加载扩展、技能、提示词模板、主题与上下文文件，

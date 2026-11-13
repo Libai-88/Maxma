@@ -335,6 +335,28 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     const sid = c.req.param("sessionId");
     const record = deps.hub.sessions.get(sid);
     if (!record) return c.json({ detail: "会话不存在" }, 404);
+
+    // CTX-USAGE-001：优先用引擎权威值（session.getContextUsage()）。
+    // 只有引擎说"不可知"（压缩后到下一次 assistant 响应前，官方语义）时，
+    // 才回落到字符估算——此前无条件用估算，中文场景偏差很大。
+    const engine = await callRpc<{
+      usage?: { tokens?: number | null; contextWindow?: number | null; percent?: number | null } | null;
+      known?: boolean;
+    }>(deps, "get_context_usage", { session_id: sid });
+    const u = engine.ok ? engine.result.usage : null;
+    if (engine.ok && engine.result.known && u && typeof u.tokens === "number") {
+      const window = typeof u.contextWindow === "number" && u.contextWindow > 0 ? u.contextWindow : 256_000;
+      return c.json({
+        estimated_tokens: Math.round(u.tokens),
+        max_tokens: window,
+        percentage: Math.min(100, Math.round((u.tokens / window) * 1000) / 10),
+        message_count: 0,
+        model_name: "",
+        session_id: sid,
+        source: "engine",
+      });
+    }
+
     const result = await callRpc<{ messages: Array<Record<string, unknown>> }>(
       deps,
       "get_messages",
@@ -351,6 +373,8 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
       message_count: messages.length,
       model_name: "",
       session_id: sid,
+      // 让前端/排查者一眼看出这是估算值而不是引擎给的
+      source: "estimate",
     });
   });
 
