@@ -402,6 +402,18 @@ pi 的 `getAllModels()` 里就是 0 个虚拟模型（实测 1712 个模型中 0
 扩展**可以**注册虚拟模型，会话**能**使用它（`getModel` 解析通过），
 `routedModel` **能**把实际应答模型显示出来——只有"在选择器里列出来"这一步做不到。
 
+### 思考档位按模型能力标注（THINKING-CAP-001）
+
+pi 按模型裁剪可用思考档位（`getAvailableThinkingLevels()`），不支持的会被**静默钳到
+最接近的值**。此前设置页无条件列出全部 7 档。
+
+**实测最能说明问题**：默认渠道模型的可用档位是 `["off"]` 一档，而界面列着
+最小/低/中/高/很高/最大 六个选项——选了全都会被静默吞掉，用户完全看不出来。
+
+- RPC `get_thinking_levels` → REST `GET /api/sessions/:id/thinking-levels`
+- 设置页按引擎报告标注「（当前模型不支持）」，desc 换成「当前模型支持：off / …」
+- 引擎没报告时不标注——宁可不标，也不要标错
+
 ### 上下文用量改用引擎权威值（CTX-USAGE-001）
 
 pi 有权威的 `getContextUsage()`（`{tokens, contextWindow, percent}`）。此前 Maxma
