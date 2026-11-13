@@ -66,6 +66,23 @@ describe("prompt templates（PROMPT-TPL-001）", () => {
   });
 });
 
+describe("会话状态（STATE-001）", () => {
+  test("会话暴露路由后的实际模型与思考档位", async () => {
+    const session = await createMaxmaSession({ inMemory: true, cwd: process.cwd(), tools: [] });
+    try {
+      // 未选虚拟模型时 routedModel 为 undefined —— 这正是界面不显示箭头的原因。
+      expect(session.routedModel).toBeUndefined();
+      // 但 model / thinkingLevel / isIdle 必须有值，STATE-001 端点依赖它们。
+      expect(session.model).toBeDefined();
+      expect(typeof session.thinkingLevel).toBe("string");
+      expect(typeof session.isIdle).toBe("boolean");
+      expect(typeof session.isStreaming).toBe("boolean");
+    } finally {
+      session.dispose();
+    }
+  });
+});
+
 describe("嵌套工具调用（NEST-001）", () => {
   /** 构造一条引擎形状的 tool_execution_start 事件。 */
   const startEvent = (toolCallId: string, parentToolCallId?: string) => ({

@@ -392,6 +392,18 @@ export const api = {
       { method: 'PUT', body: JSON.stringify({ name }) },
     ),
 
+  /** pi 的会话状态（含虚拟模型路由后的实际模型）。 */
+  getSessionState: (sessionId: string) =>
+    request<{
+      session_id: string
+      model: { provider: string; id: string; name: string } | null
+      routed_model: { provider: string; id: string; name: string; thinking_level: string | null } | null
+      thinking_level: string
+      is_streaming: boolean
+      is_idle: boolean
+      session_name: string | null
+    }>(`/sessions/${encodeURIComponent(sessionId)}/state`),
+
   /** pi 发现的提示词模板（文件名即斜杠命令）。 */
   getPromptTemplates: (sessionId: string) =>
     request<{

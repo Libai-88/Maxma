@@ -555,6 +555,34 @@ export async function handlePiSessionRpc(
     return;
   }
 
+  // ── 会话状态（STATE-001）──
+  //
+  // pi 的 `AgentSession` 暴露了一组"当前是什么状态"的只读视图：选中模型、
+  // **虚拟模型路由后的实际模型**（`routedModel`）、思考档位、是否空闲、是否在压缩。
+  // 此前 Maxma 一个都没读——界面上「模型」显示的是它自己记的那个 id，
+  // 引擎实际用谁回的话完全不可见。
+  //
+  // `routedModel` 尤其重要：选中虚拟模型时（扩展通过 `pi.registerVirtualModel`
+  // 注册），`model` 是虚拟选择，`routedModel` 才是**最近一次真正应答的物理模型**。
+  // 不暴露它，用户就永远不知道自动路由把他发给了谁。
+  if (method === "get_session_state") {
+    const session = record.session;
+    const current = session.model;
+    const routed = session.routedModel;
+    io.send(id, {
+      model: current ? { provider: current.provider, id: current.id, name: current.name } : null,
+      // 只有虚拟模型被选中、且已有成功应答时才非空。
+      routed_model: routed?.model
+        ? { provider: routed.model.provider, id: routed.model.id, name: routed.model.name, thinking_level: routed.thinkingLevel ?? null }
+        : null,
+      thinking_level: session.thinkingLevel,
+      is_streaming: session.isStreaming,
+      is_idle: session.isIdle,
+      session_name: session.sessionManager.getSessionName() ?? null,
+    });
+    return;
+  }
+
   if (method === "user_response") {
     const interactionId: string = params?.interaction_id as string;
     const response = params?.response as string | string[] | undefined;

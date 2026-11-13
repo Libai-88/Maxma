@@ -440,6 +440,18 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     return c.json({ session_id: sid, name: result.result.name });
   });
 
+  // ── 会话状态（STATE-001）──
+  /**
+   * pi 的会话只读状态：选中模型、**虚拟模型路由后的实际模型**、思考档位、是否空闲。
+   * `routed_model` 只在虚拟模型被选中且已有成功应答时非空。
+   */
+  app.get("/api/sessions/:sessionId/state", async (c) => {
+    const sid = c.req.param("sessionId");
+    const result = await callRpc<Record<string, unknown>>(deps, "get_session_state", { session_id: sid });
+    if (!result.ok) return c.json({ detail: result.error }, 404);
+    return c.json({ session_id: sid, ...result.result });
+  });
+
   // ── Prompt templates（PROMPT-TPL-001）──
   /**
    * 列出 pi 发现的提示词模板（`~/.pi/agent/prompts/*.md` 与 `.pi/prompts/`）。

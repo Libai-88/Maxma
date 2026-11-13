@@ -139,6 +139,18 @@ export function ChatInput(props: ChatInputProps) {
     return () => { alive = false }
   }, [sessionId])
 
+  // STATE-001：pi 的会话状态。`routed_model` 只在虚拟模型被选中且已有成功应答时非空。
+  // 每轮结束后刷新一次——路由结果是"最近一次成功应答"的物理模型，跑完才准。
+  const [routedModel, setRoutedModel] = useState<{ provider: string; id: string; name: string } | null>(null)
+  useEffect(() => {
+    if (!sessionId || isStreaming) return
+    let alive = true
+    void api.getSessionState(sessionId)
+      .then((st) => { if (alive) setRoutedModel(st.routed_model ?? null) })
+      .catch(() => { /* 会话未就绪时静默：这是展示增强，不该阻断输入 */ })
+    return () => { alive = false }
+  }, [sessionId, isStreaming])
+
   const slashMatches = useMemo(() => {
     // 只按第一个词过滤：`/goal 完成周报` 仍应命中 goal（参数不算过滤文本）
     const q = slashFilter.trim().split(/\s+/)[0]?.toLowerCase() ?? ''
@@ -423,6 +435,16 @@ export function ChatInput(props: ChatInputProps) {
               if (pid && name) { setProviderId(pid); setModelName(name); onModelChange?.(pid, name) }
             }}
           />
+          {/* STATE-001：虚拟模型被选中时，显示**实际应答的物理模型**。
+              不显示的话，用户永远不知道自动路由把他发给了谁。 */}
+          {routedModel && routedModel.id !== modelName ? (
+            <span
+              className="shrink-0 text-[11px] text-muted-foreground"
+              title={`自动路由：实际由 ${routedModel.provider}/${routedModel.id} 应答`}
+            >
+              → {routedModel.name || routedModel.id}
+            </span>
+          ) : null}
           {sessionId && (
             <ComposerPick
               label="权限"
