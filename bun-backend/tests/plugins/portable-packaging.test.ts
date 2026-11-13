@@ -225,6 +225,29 @@ describe("后端打包契约", () => {
     expect(desktopPs1).toContain("Copy-Item -LiteralPath $source");
   });
 
+  test("Web 便携包启动器必须把后端跑在同一控制台里（关了窗口就不留后台进程）", () => {
+    // 事故形状：启动器用
+    //   start "MaxmaHere" bun.exe run server.js
+    // 把后端**脱离**成独立控制台。关启动器窗口、关浏览器标签页都杀不到它，
+    // 于是每次开关都留一个 bun.exe 在后台（用户实测报障）。
+    //
+    // 判据：启动器模板里不许出现 `start ... bun.exe` 这种脱离式启动，
+    // 且必须存在前台执行的 bun 行。用户改回去就会红。
+    const bat = fs.readFileSync(path.join(repoRoot, "build-portable.bat"), "utf8");
+    const detached = /echo\s+start\s+"[^"]*"\s+"%%SCRIPT_DIR%%bun\.exe"/.test(bat);
+    expect(
+      detached,
+      "启动器又把 bun.exe 用 start 脱离了——关窗口会留后台进程",
+    ).toBe(false);
+    // 前台启动：不带 start，直接在当前控制台执行。
+    expect(bat).toMatch(/echo\s+"%%SCRIPT_DIR%%bun\.exe"\s+run/);
+    // 单实例复用：已有健康后端时只开浏览器，不再叠一个进程。
+    expect(bat).toContain("/api/health");
+    expect(bat).toContain("already running");
+    // 强杀控制台后的兜底出口。
+    expect(bat).toContain("Stop MaxmaHere.bat");
+  });
+
   test("桌面链暂存前必须清空 runtime 目录（否则删掉的资源会复活进包里）", () => {
     // Copy-Item -Force 只做同名覆盖，不删"上次有、这次没有"的条目。
     // 实测踩过：把 .omp/skills 从仓库与暂存清单里删干净后重跑，
