@@ -402,6 +402,34 @@ pi 的 `getAllModels()` 里就是 0 个虚拟模型（实测 1712 个模型中 0
 扩展**可以**注册虚拟模型，会话**能**使用它（`getModel` 解析通过），
 `routedModel` **能**把实际应答模型显示出来——只有"在选择器里列出来"这一步做不到。
 
+### 上下文用量改用引擎权威值（CTX-USAGE-001）
+
+pi 有权威的 `getContextUsage()`（`{tokens, contextWindow, percent}`）。此前 Maxma
+没用它：后端拿 `get_messages` 自己按「字符数 / 2」估——中文场景下这个比例与真实
+分词差得很远，用户看到的上下文环（以及"快满了会压缩"的提示）**不是引擎认为的数字**。
+
+- RPC `get_context_usage`（`known=false` 表示压缩中不可知）
+- `chat-ws` 的 done 事件与 REST `/context-usage` 都改为**优先引擎值**
+- 只有引擎说不可知时才回落估算（压缩后到下次 assistant 响应前，官方语义）
+- REST 响应加 `source: "engine" | "estimate"`，一眼看出数字来源
+
+实测：`GET /context-usage` → `source=engine`、`max_tokens=128000`（gpt-4o 真实窗口），
+而不是原先写死的 256000。
+
+⚠️ `sessions-2.2e` 的旧断言 `max_tokens === 256000` 把估算口径当成了契约，
+已改为断言 `source=engine` 且窗口 > 0。
+
+### 排队消息可见（QUEUE-001）
+
+pi 允许运行中继续发消息：`steer` 在下一次 LLM 调用前插入，`followUp` 等本轮做完再投递，
+两者都排队，`queue_update` 每次给**完整快照**。
+
+此前 Maxma 完全不消费它——用户连发几条「立即调整」后看不到排队中还有几条，
+只能等它们依次生效，**像消息丢了**。
+
+- `events.ts` 映射 `queue_update`（兼容字符串与 `{ text }` 两种形态）
+- `SteeringWindow` 在输入区上方显示「立即调整排队 N 条 / 稍后处理排队 N 条」+ 前 3 条内容
+
 ### 资源热重载（RELOAD-001）
 
 `session.reload()` 重新加载扩展、技能、提示词模板、主题与上下文文件，**不重建会话**
