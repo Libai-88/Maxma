@@ -667,12 +667,24 @@ describe("跨侧清单一致性（同一件事不许三处各写各的）", () =
 
   test("前端词表必须与契约同源：thinking 档位、compaction reason、goal 状态、工具展示名", () => {
     // 1) thinking level：前端标签表里的档位必须都在引擎档位内
-    const view = read("web/src/views/SettingsView.tsx");
+    // 档位表已抽到共享模块（设置页与输入框底部的「思考」选择器同源）。
+    // 读它而不是读某个视图——视图换实现不该让这条锁失效。
+    const levelsFile = read("web/src/utils/thinkingLevels.ts");
     const uiLevels = new Set<string>();
-    // 档位表现在是 `{ value: 'off', label: '关闭' }` 的对象数组
-    for (const m of view.matchAll(/value:\s*'(off|minimal|low|medium|high|xhigh|max)'/g)) uiLevels.add(m[1]!);
+    // 档位表是 `{ value: 'off', label: '关闭' }` 的对象数组
+    for (const m of levelsFile.matchAll(/value:\s*'(off|minimal|low|medium|high|xhigh|max)'/g)) uiLevels.add(m[1]!);
     const unknownLevels = [...uiLevels].filter((l) => !(PI_THINKING_LEVELS as readonly string[]).includes(l));
     expect(unknownLevels, `UI 出现引擎不认识的 thinking 档位：${unknownLevels.join(", ")}`).toEqual([]);
+
+    // 反向：引擎有的档位，界面也必须都列出来。
+    // 旧判据是单向的（只查"UI 不许多"），删掉一个档位不会被发现——
+    // 实测把 `max` 从表里删掉，测试仍然全绿。界面少一档意味着用户选不到
+    // 引擎支持的能力，属于"功能在、入口不在"。
+    const missingLevels = (PI_THINKING_LEVELS as readonly string[]).filter((l) => !uiLevels.has(l));
+    expect(
+      missingLevels,
+      `引擎支持这些 thinking 档位，但界面没有列出：${missingLevels.join(", ")}`,
+    ).toEqual([]);
 
     // 2) compaction reason：前端联合必须等于 WS 契约域
     const types = read("web/src/types/index.ts");

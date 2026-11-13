@@ -124,6 +124,9 @@ try {
       base_url: `http://127.0.0.1:${STUB_PORT}/v1`,
       provider_type: "openai-completions",
       api_key: "sk-stub",
+      // THINK-CAP-002：不开这个开关，pi 对该模型只报 off 一档，
+      // 输入框底部的思考选择器就只有「关闭」——正是用户报障的现象。
+      reasoning: true,
       models: ["think-split-model"],
       enabled: true,
     }),

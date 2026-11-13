@@ -513,6 +513,50 @@ bug 能藏住的原因：只看结束后的截图发现不了。
 变异验证（把 token 判据退回旧写法）：`reasoningLeaked: true`，
 报「流式过程中答案文字出现在思考块里」；恢复修复后通过。
 
+## 2026-11-13 THINK-CAP-002 / THINK-PICK-001：思考档位可调
+
+**用户报障**：「模型思考强度我没有办法主动选择，前端没有对应按钮」。
+
+### 两层问题
+
+| 层 | 事实 |
+| --- | --- |
+| 界面 | 思考档位只存在于「设置 → 推理预算」，聊天界面里没有入口，改一次要跳两层菜单 |
+| **数据** | `kernel/model.ts` 给**所有**用户自建渠道硬编码 `reasoning: false`。pi 的 `getSupportedThinkingLevels()` 对这类模型只返回 `["off"]`——**选了也没有别的档可给** |
+
+免费渠道（opencode-zen / kilo-free）自带 `reasoning: true` 不受影响；
+但用户自己加的渠道永远只有「关闭」。
+
+### 做法
+
+1. **providers.yaml 新增 `reasoning` 字段**（可选，缺省不写 = false，不污染既有配置）：
+   渠道面板加开关「该渠道的模型支持思考档位」。`kernel/model.ts` 改用它而不是硬编码。
+2. **输入框底部新增「思考」选择器**，与模型/权限并排。只列 pi 报告的可用档位；
+   当前值不在支持集里时也保留一项并标注「（当前模型不支持）」，避免选择器空白。
+3. 档位标签表抽到 `web/src/utils/thinkingLevels.ts`——设置页与选择器同源，
+   不再各抄一份（本仓有过 4 份档位副本的教训）。
+
+### 顺带修掉的字段丢失
+
+POST `/api/providers` 只把 `context_window` 写进条目，而 `max_tokens` /
+`temperature` / `top_p` / `timeout` / `extra_headers` **校验完就丢**——
+表单能填、保存后读不回来。一并修复。
+
+### 验证
+
+- 后端实测：建渠道（`reasoning: true`）→ 发一条消息 → `GET /thinking-levels`
+  返回 `["off","minimal","low","medium","high"]`（5 档），会话模型切到该渠道。
+- 界面实测（`verify-ui-thinking-separation.mjs`）：选择器展开出
+  **关闭 / 极简 / 低 / 中 / 高** 5 档。
+- 锁：`providers-2.4.test.ts` 新增「可选字段全部落库」——变异验证（删掉
+  `reasoning` 的写入）立刻红；`engine-boundary.test.ts` 的档位对账改为**双向**
+  （原来只查「界面不许多」，把 `max` 删掉仍全绿，实测发现）。
+
+### 仍存在的边界
+
+思考档位由 pi 按模型裁剪，**`xhigh` / `max` 两档需要模型声明 `thinkingLevelMap`
+才会出现**。自定义渠道没这个字段，所以最多到「高」。这是 pi 的规则，不是 Maxma 的遗漏。
+
 ## 状态
 
 - 仓库 `https://github.com/Libai-88/Maxma.git`，主分支 `main`；变更一律走分支 + PR squash 合入，

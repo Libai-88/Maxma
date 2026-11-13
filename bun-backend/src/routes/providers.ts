@@ -293,6 +293,17 @@ interface CreateBody {
   top_p: number | null;
   timeout: number | null;
   extra_headers: Record<string, unknown> | null;
+  /**
+   * THINK-CAP-002：该渠道的模型是否支持思考档位。
+   *
+   * 此前 kernel 给**所有**自定义渠道硬编码 `reasoning: false`，于是 pi 的
+   * `getAvailableThinkingLevels()` 只返回 `["off"]`——用户自建渠道永远选不到
+   * 思考强度，界面上只有一个「关闭」。这里把它做成渠道字段。
+   *
+   * 默认 null（= false）：不知道的渠道不乱开，避免把 reasoning_effort 发给
+   * 不支持它的模型。
+   */
+  reasoning: boolean | null;
 }
 
 // Pydantic v2 lax 模式标量强转（对齐 Python 可观测行为：前端发正确类型，
@@ -448,6 +459,13 @@ function validateCreate(body: Record<string, unknown>): { ok: true; value: Creat
 
   const str = (v: unknown, d: string): string => (typeof v === "string" ? v : d);
   const models = Array.isArray(body.models) ? body.models.map((m) => String(m)) : [];
+  // THINK-CAP-002：可选布尔；缺失/null 视为 false（不乱猜）。
+  let reasoning: boolean | null = null;
+  if ("reasoning" in body && body.reasoning !== null && body.reasoning !== undefined) {
+    const b = coerceBool(body.reasoning);
+    if (b === null) detail.push(boolTypeError("reasoning", body.reasoning).detail[0]!);
+    else reasoning = b;
+  }
   return {
     ok: true,
     value: {
@@ -467,6 +485,7 @@ function validateCreate(body: Record<string, unknown>): { ok: true; value: Creat
         body.extra_headers && typeof body.extra_headers === "object" && !Array.isArray(body.extra_headers)
           ? (body.extra_headers as Record<string, unknown>)
           : null,
+      reasoning,
     },
   };
 }
@@ -513,6 +532,15 @@ function validateUpdate(body: Record<string, unknown>): { ok: true; fields: Reco
       const b = coerceBool(v);
       if (b === null) detail.push(boolTypeError("enabled", v).detail[0]!);
       else fields.enabled = b;
+    }
+  }
+  if ("reasoning" in body) {
+    const v = body.reasoning;
+    if (v === null) fields.reasoning = null;
+    else {
+      const b = coerceBool(v);
+      if (b === null) detail.push(boolTypeError("reasoning", v).detail[0]!);
+      else fields.reasoning = b;
     }
   }
   for (const key of ["context_window", "max_tokens", "timeout"] as const) {
@@ -718,7 +746,15 @@ export function createProvidersRoutes(): Hono {
       models: [...b.models],
       enabled: b.enabled,
     };
-    if (b.context_window !== null) provider.context_window = b.context_window;
+    // 可选字段逐个落库。此前只写了 context_window，max_tokens / temperature /
+    // top_p / timeout / extra_headers 校验完就丢——表单能填、保存后读不回来，
+    // 用户会以为"设了但没生效"。
+    for (const key of ["context_window", "max_tokens", "temperature", "top_p", "timeout"] as const) {
+      if (b[key] !== null && b[key] !== undefined) provider[key] = b[key];
+    }
+    if (b.extra_headers !== null && b.extra_headers !== undefined) provider.extra_headers = b.extra_headers;
+    // THINK-CAP-002：显式声明才写（缺省不写 = false，不污染既有 providers.yaml）。
+    if (b.reasoning === true) provider.reasoning = true;
     items.push(provider);
     try {
       saveProviders(items);

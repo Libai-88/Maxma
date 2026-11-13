@@ -155,11 +155,45 @@ app.whenReady().then(async () => {
     if (result.reasoningLeaked) {
       throw new Error(`思考内容混进了回复正文：${String(leaked.text).slice(0, 120)}`);
     }
+    // THINK-PICK-001：输入框底部必须有「思考」选择器（此前只有设置页能改）。
+    //
+    // 档位表在**每轮结束后**异步重取（会话模型是 chat-ws 按每条消息的
+    // provider/model 现切的），所以要等它刷新，不能一答完就断言。
+    let opts = [];
+    let pickerText = "";
+    for (let i = 0; i < 20; i++) {
+      await sleep(400);
+      const opened = await win.webContents.executeJavaScript(`(() => {
+        const trigger = [...document.querySelectorAll('button')].find((b) => b.getAttribute('aria-label') === '思考');
+        if (!trigger) return { found: false };
+        trigger.click();
+        return { found: true, text: (trigger.textContent || '').trim() };
+      })()`);
+      if (!opened.found) throw new Error("输入框底部没有「思考」选择器");
+      pickerText = opened.text;
+      await sleep(400);
+      opts = await win.webContents.executeJavaScript(`(() => {
+        return [...document.querySelectorAll('[role="menuitemradio"]')].map((el) => (el.textContent || '').trim());
+      })()`);
+      await win.webContents.executeJavaScript(`(() => { document.body.click(); return true })()`);
+      await sleep(200);
+      if (opts.length > 1) break;
+    }
+
+    result.thinkingPicker = true;
+    result.thinkingPickerLabel = pickerText;
+    result.thinkingOptions = opts;
+    result.thinkingOptionCount = opts.length;
+    if (!opts.length) throw new Error("「思考」选择器没有展开出任何档位");
+    if (opts.length < 2) {
+      throw new Error(`思考档位只有 ${opts.length} 个（${opts.join("/")}）——渠道的 reasoning 标志没有生效`);
+    }
+
     result.stage = "verified";
   } catch (err) {
     result.error = String(err && err.message ? err.message : err);
   }
 
   process.stdout.write("DRIVE_RESULT " + JSON.stringify(result) + "\n");
-  app.exit(result.answerSeen && !result.reasoningLeaked ? 0 : 1);
+  app.exit(result.answerSeen && !result.reasoningLeaked && !result.error ? 0 : 1);
 });
