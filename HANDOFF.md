@@ -402,6 +402,21 @@ pi 的 `getAllModels()` 里就是 0 个虚拟模型（实测 1712 个模型中 0
 扩展**可以**注册虚拟模型，会话**能**使用它（`getModel` 解析通过），
 `routedModel` **能**把实际应答模型显示出来——只有"在选择器里列出来"这一步做不到。
 
+### 资源热重载（RELOAD-001）
+
+`session.reload()` 重新加载扩展、技能、提示词模板、主题与上下文文件，**不重建会话**
+（历史与活动分支都保留）。此前 Maxma 只能靠"新建会话"让新装的技能/模板生效，
+而新建会话意味着丢上下文。
+
+- RPC `reload_session_resources` → REST `POST /api/sessions/:id/reload`
+- 入口：「更多会话操作」菜单 →「重新加载技能与模板」
+
+与既有的 `reload_mcp_for_session` **不是一回事**：那条只针对 MCP 且恒 noop
+（MCP 清单由后端在 `create_session` 时装配），这条是引擎级全量资源重载。
+
+实测：会话里 0 个模板 → 往 `prompts/` 放一个 `.md` → 调 reload →
+回执 `{ok:true, templates:1, tools:14}` → 模板清单立刻出现新模板。
+
 ### 上下文编辑（CTX-EDIT-001）
 
 pi 的 `appendContextEdit(targetId, replacement)` 只影响**未来模型上下文**：
