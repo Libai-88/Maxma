@@ -464,6 +464,24 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     return c.json({ session_id: sid, name: result.result.name });
   });
 
+  // ── 取消压缩（ABORT-COMPACT-001）──
+  /**
+   * 取消正在进行的压缩/分支摘要。压缩要调模型生成摘要，provider 卡住时会长时间
+   * 挂着——此前只有「开始压缩」没有「取消」。
+   */
+  app.post("/api/sessions/:sessionId/compact/abort", async (c) => {
+    const sid = c.req.param("sessionId");
+    const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
+    const result = await callRpc<{ ok: boolean; aborted: string; compacting: boolean }>(
+      deps,
+      "abort_compaction",
+      { session_id: sid, ...(body.what === "branch_summary" ? { what: "branch_summary" } : {}) },
+    );
+    if (!result.ok) return c.json({ detail: result.error }, 503);
+    deps.audit?.("session", "abort_compaction", sid, result.result.aborted);
+    return c.json({ session_id: sid, ...result.result });
+  });
+
   // ── 思考档位能力（THINKING-CAP-001）──
   /**
    * 当前模型**实际支持**的思考档位（pi 按模型裁剪）。界面据此标注不支持的项，

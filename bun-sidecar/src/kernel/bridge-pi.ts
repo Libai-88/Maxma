@@ -992,6 +992,23 @@ export async function handlePiSessionRpc(
   // ── 会话重命名 / 统计 / 导出（TREE-004）──
   //
   // 都是 pi 的 AgentSession 直接能力，此前一个都没接。
+  // ── 取消压缩 / 分支摘要（ABORT-COMPACT-001）──
+  //
+  // 压缩要调用模型生成摘要。provider 挂了或网络卡住时，压缩会长时间挂着，
+  // 而此前 Maxma 只有一个「开始压缩」没有「取消」——用户只能干等或杀进程。
+  // pi 有 `abortCompaction()` / `abortBranchSummary()`，接上即可。
+  if (method === "abort_compaction") {
+    const what = params?.what === "branch_summary" ? "branch_summary" : "compaction";
+    try {
+      if (what === "branch_summary") record.session.abortBranchSummary();
+      else record.session.abortCompaction();
+      io.send(id, { ok: true, aborted: what, compacting: record.session.isCompacting });
+    } catch (error) {
+      io.sendError(id, `取消压缩失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+    return;
+  }
+
   // ── 思考档位能力（THINKING-CAP-001）──
   //
   // pi 按**当前模型**裁剪可用思考档位（`getAvailableThinkingLevels()`），

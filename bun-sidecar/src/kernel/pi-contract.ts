@@ -626,6 +626,7 @@ export const PI_RPC_METHODS = [
   "reload_session_resources",
   "get_context_usage",
   "get_thinking_levels",
+  "abort_compaction",
   "export_session_html",
   "steer",
   "follow_up",

@@ -27,6 +27,7 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
   { name: 'undo', description: '撤回上一轮对话', usage: '/undo' },
   { name: 'retry', description: '重试最后一轮', usage: '/retry' },
   { name: 'compact', description: '压缩上下文历史', usage: '/compact' },
+  { name: 'abort-compact', description: '取消正在进行的上下文压缩', usage: '/abort-compact' },
   { name: 'clear', description: '清空当前会话消息', usage: '/clear' },
   { name: 'private', description: '切换私密模式', usage: '/private' },
   { name: 'auto', description: '切换自动执行（免确认）', usage: '/auto' },

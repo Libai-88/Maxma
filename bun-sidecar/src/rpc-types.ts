@@ -84,6 +84,7 @@ export type RpcMethodName =
   | "reload_session_resources"
   | "get_context_usage"
   | "get_thinking_levels"
+  | "abort_compaction"
   | "export_session_html";
 
 export interface CreateSessionParams {

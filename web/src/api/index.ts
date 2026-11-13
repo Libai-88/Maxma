@@ -392,6 +392,13 @@ export const api = {
       { method: 'PUT', body: JSON.stringify({ name }) },
     ),
 
+  /** 取消正在进行的压缩/分支摘要（provider 卡住时用）。 */
+  abortCompaction: (sessionId: string, what?: 'branch_summary') =>
+    request<{ session_id: string; ok: boolean; aborted: string; compacting: boolean }>(
+      `/sessions/${encodeURIComponent(sessionId)}/compact/abort`,
+      { method: 'POST', body: JSON.stringify(what ? { what } : {}) },
+    ),
+
   /** 当前模型实际支持的思考档位（pi 按模型裁剪）。 */
   getThinkingLevels: (sessionId: string) =>
     request<{ session_id: string; available: string[]; current: string }>(
