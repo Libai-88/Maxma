@@ -147,24 +147,44 @@ REM flattened server.js resolves bundleDir()/dataDir() correctly.
     echo set "MAXMA_ENV=production"
     echo if "%%MAXMA_API_PORT%%"=="" set "MAXMA_API_PORT=8000"
     echo set "MAXMA_BUN_PORT=%%MAXMA_API_PORT%%"
+    echo REM Single instance: if a healthy backend already answers, just open the browser.
+    echo REM Spawning a second one would only fail to bind the port and leave a
+    echo REM short-lived process behind on every launch.
+    echo curl -s --fail http://127.0.0.1:%%MAXMA_API_PORT%%/api/health ^>nul 2^>^&1
+    echo if not errorlevel 1 ^(
+    echo     echo MaxmaHere is already running on http://127.0.0.1:%%MAXMA_API_PORT%%/
+    echo     start "" "http://127.0.0.1:%%MAXMA_API_PORT%%/"
+    echo     exit /b 0
+    echo ^)
     echo echo Starting MaxmaHere on http://127.0.0.1:%%MAXMA_API_PORT%% ...
-    echo start "MaxmaHere" "%%SCRIPT_DIR%%bun.exe" run "%%SCRIPT_DIR%%server.js"
-    echo set "READY=0"
-    echo for /L %%%%i in ^(1,1,60^) do ^(
-    echo     curl -s --fail http://127.0.0.1:%%MAXMA_API_PORT%%/api/health ^>nul 2^>^&1
-    echo     if not errorlevel 1 ^(set "READY=1" ^& goto :backend_ready^)
-    echo     ping -n 2 127.0.0.1 ^>nul
-    echo ^)
-    echo :backend_ready
-    echo if "%%READY%%"=="0" ^(
-    echo     echo Backend did not become ready within 60 seconds.
-    echo     pause
-    echo     exit /b 1
-    echo ^)
+    echo echo Keep this window open while you use MaxmaHere. Closing it stops the app.
+    echo REM Open the browser first: the frontend retries until the backend answers,
+    echo REM so it tolerates the backend not answering for the first second or two.
     echo start "" "http://127.0.0.1:%%MAXMA_API_PORT%%/"
-    echo echo Backend launched. Browser opened automatically.
+    echo REM Run the backend in THIS console on purpose. The old launcher used
+    echo REM   start "MaxmaHere" bun.exe run server.js
+    echo REM which detached the backend into its own console window: closing the
+    echo REM launcher, or the browser tab, never stopped it, so every launch left
+    echo REM a bun.exe running in the background. With a foreground child, closing
+    echo REM this window terminates the backend via CTRL_CLOSE_EVENT.
+    echo "%%SCRIPT_DIR%%bun.exe" run "%%SCRIPT_DIR%%server.js"
+    echo echo.
+    echo echo MaxmaHere stopped.
     echo pause
 ) > "%PORTABLE_DIR%\MaxmaHere.bat"
+
+REM Stop script: kills whatever listens on the portable port. Needed when the
+REM console window itself was force-killed (Task Manager) or when cleaning up
+REM strays left by the old detached-start launcher.
+(
+    echo @echo off
+    echo chcp 65001 ^>nul
+    echo setlocal EnableExtensions
+    echo if "%%MAXMA_API_PORT%%"=="" set "MAXMA_API_PORT=8000"
+    echo powershell -NoProfile -Command "Stop-Process -Id (Get-NetTCPConnection -LocalPort %%MAXMA_API_PORT%% -State Listen -ErrorAction SilentlyContinue).OwningProcess -Force -ErrorAction SilentlyContinue"
+    echo echo MaxmaHere backend on port %%MAXMA_API_PORT%% stopped.
+    echo pause
+) > "%PORTABLE_DIR%\Stop MaxmaHere.bat"
 
 REM Pre-create the data root + seed default configs for first-run UX.
 if not exist "%PORTABLE_DIR%\data\" mkdir "%PORTABLE_DIR%\data"
