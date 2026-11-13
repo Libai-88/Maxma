@@ -408,6 +408,23 @@ export const MAXMA_SETTINGS_KEYS: ReadonlyArray<{
   { path: "thinkingBudgets.medium", engineReal: true, consumer: "pi", note: "pi ThinkingBudgetsSettings.medium" },
   { path: "thinkingBudgets.high", engineReal: true, consumer: "pi", note: "pi ThinkingBudgetsSettings.high" },
 
+  // ── SETTINGS-VIS-001：pi 真实存在、此前 Maxma 全仓零引用的键 ──
+  //
+  // 这些不是"新功能"，是**本来就该让用户调**的旋钮：pi 的 settings.md 有明确默认值，
+  // 但 Maxma 既没登记也没在界面上暴露，用户只能手改 settings.json。
+  // 补齐后由既有机制自动生效（engineSettingsForNewSession 只下发 consumer:"pi" 的
+  // 显式改动；没碰过的键保持 pi 默认值）。
+  { path: "compaction.reserveTokens", engineReal: true, consumer: "pi", note: "pi CompactionSettings.reserveTokens（默认 16384）：上下文余量低于它时触发自动压缩" },
+  { path: "compaction.keepRecentTokens", engineReal: true, consumer: "pi", note: "pi CompactionSettings.keepRecentTokens（默认 20000）：压缩后原样保留的近期 token 数" },
+  { path: "branchSummary.reserveTokens", engineReal: true, consumer: "pi", note: "pi BranchSummarySettings.reserveTokens（默认 16384）：切换分支时生成摘要预留的 token" },
+  { path: "branchSummary.skipPrompt", engineReal: true, consumer: "pi", note: "pi BranchSummarySettings.skipPrompt（默认 false）：切换分支时不询问是否摘要" },
+  { path: "cacheWarming", engineReal: true, consumer: "pi", note: "pi Settings.cacheWarming（off/streaming/idle，默认 streaming）：在跑或空闲时保持 provider 提示缓存热。**仅全局**——pi 文档明示只能写在 agent 目录设置里" },
+  { path: "enabledModels", engineReal: true, consumer: "pi", note: "pi Settings.enabledModels（string[]）：模型循环与启动选择的范围；空=全部可用" },
+  { path: "defaultThinkingLevel", engineReal: true, consumer: "pi", note: "pi Settings.defaultThinkingLevel（默认 medium）：新会话的思考档位" },
+  { path: "hideThinkingBlock", engineReal: true, consumer: "pi", note: "pi Settings.hideThinkingBlock（默认 false）：隐藏思考块" },
+  { path: "images.autoResize", engineReal: true, consumer: "pi", note: "pi ImageSettings.autoResize（默认 true）：发送前把图片缩到 2000×2000 内" },
+  { path: "images.blockImages", engineReal: true, consumer: "pi", note: "pi ImageSettings.blockImages（默认 false）：禁止向模型发送图片" },
+
   // ── 引擎没有这个键，但 Maxma 自己消费 ──
   { path: "skills.enabled", engineReal: false, consumer: "maxma", note: "pi 的 skills 键是 string[]（包源清单），无 .enabled；由 bun-backend/src/routes/sessions.ts 读 settings.skills.enabled 转成 create_session 的 skills_enabled" },
   { path: "recap.enabled", engineReal: false, consumer: "maxma", note: "Maxma 应用层闲置回顾开关，读者在 web/src/hooks/useChat.ts" },
