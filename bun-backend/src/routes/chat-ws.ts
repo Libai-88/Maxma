@@ -53,6 +53,8 @@ export const CLIENT_MESSAGE_TYPES = new Set([
   "chat",
   "cancel",
   "user_response",
+  // EXT-UI-001：扩展对话框应答（select/confirm/input/editor）
+  "extension_ui_response",
   "plan_response",
   "update_auto_approve",
   "set_plan_mode",
@@ -1078,6 +1080,12 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
     return;
   }
 
+  // ── extension_ui_response（扩展对话框应答，EXT-UI-001）──
+  if (msgType === "extension_ui_response") {
+    void callRpcStrict(hub, sessionId, "extension_ui_response", { session_id: sessionId, ...payload }, "扩展对话框应答");
+    return;
+  }
+
   // ── update_auto_approve ──
   if (msgType === "update_auto_approve") {
     const autoApprove = Boolean(payload.auto_approve);
@@ -1313,7 +1321,18 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
           await updateTaskBrief(hub, sessionId, pending);
           return { ok: true as const, result: null };
         }
-        const enrichedMessage = enrichWithEvolutionContext(userMessage, sessionId, turnId);
+        // SLASH-PASSTHROUGH-001：斜杠命令**不做行为偏好富化**。
+        //
+        // `enrichWithEvolutionContext` 会在消息**尾部追加**注入文本。而 pi 只把
+        // 「整条消息以 /name 开头且不含其他内容」识别为命令（`session.prompt` 的
+        // expandPromptTemplates）。一旦尾部被追加，命令就退化成普通文本发给模型——
+        // 实测症状：扩展的 /probe-confirm 变成了"（发生错误，回复未完成）"，
+        // 因为模型收到了 `/probe-confirm\n\n[Maxma 行为偏好…]`。
+        // 扩展命令与 prompt templates 是 pi 的能力面，不能被我们的富化挡掉。
+        const isSlashCommand = /^\/[a-z][\w-]*(\s[\s\S]*)?$/i.test(userMessage);
+        const enrichedMessage = isSlashCommand
+          ? userMessage
+          : enrichWithEvolutionContext(userMessage, sessionId, turnId);
         return hub.callRpc("prompt", {
           session_id: sessionId,
           message: enrichedMessage,

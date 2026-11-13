@@ -222,6 +222,37 @@ export interface ContextCompressingEvent {
 }
 
 /** ask_user 交互工具向用户展示的问题和选项 */
+/**
+ * EXT-UI-001：pi 扩展的 `ctx.ui` 请求。
+ *
+ * 由 kernel 的 `extension-ui.ts` 把 `ExtensionUIContext` 回调转成 WS 帧。
+ * `method` 为对话框类（select/confirm/input/editor）时需要前端回
+ * `extension_ui_response`；`notify` 是 fire-and-forget，不需要回。
+ *
+ * 为什么不复用 ask_user：那条走审批门，超时**默认拒绝**；扩展对话框超时按
+ * pi 官方默认值回填（select/input/editor → undefined，confirm → false）。
+ * 合并会让两类超时语义互相污染。
+ */
+export interface ExtensionUiRequestEvent {
+  type: 'extension_ui_request'
+  payload: {
+    id: string
+    method: 'select' | 'confirm' | 'input' | 'editor' | 'notify'
+    title: string
+    /** select 的候选项。 */
+    options?: string[]
+    /** confirm 的正文说明。 */
+    message?: string
+    /** input 的占位符 / editor 的预填内容。 */
+    placeholder?: string
+    prefill?: string
+    /** notify 的级别。 */
+    notify_type?: 'info' | 'warning' | 'error'
+    /** 对话框超时（毫秒）；到期前端可自行收起。 */
+    timeout?: number
+  }
+}
+
 export interface AskUserEvent {
   type: 'ask_user'
   payload: {
@@ -468,6 +499,7 @@ export type ServerEvent =
   | ArtifactEvent
   | ArtifactResultEvent
   | AskUserEvent
+  | ExtensionUiRequestEvent
   | PlanProposedEvent
   | PlanStepStartEvent
   | PlanStepEndEvent
@@ -625,6 +657,21 @@ export interface UserResponseMessage {
   }
 }
 
+/**
+ * EXT-UI-001：回扩展对话框的应答。
+ * 与 UserResponseMessage 分开——那条走审批门（超时默认拒绝），这条走扩展 UI 桥
+ * （超时按 pi 官方默认值回填）。混用会让两类超时语义互相污染。
+ */
+export interface ExtensionUiResponseMessage {
+  type: 'extension_ui_response'
+  payload: {
+    id: string
+    value?: string
+    confirmed?: boolean
+    cancelled?: boolean
+  }
+}
+
 /** 会话中途更新 auto_approve 设置 */
 export interface UpdateAutoApproveMessage {
   type: 'update_auto_approve'
@@ -739,6 +786,7 @@ export type ClientMessage =
   | CancelMessage
   | PingMessage
   | UserResponseMessage
+  | ExtensionUiResponseMessage
   | UpdateAutoApproveMessage
   | ArtifactActionMessage
   | PlanResponseMessage

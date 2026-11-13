@@ -20,6 +20,13 @@ export interface SlashContext {
   sendCheckpointAction: (action: 'save' | 'restore', goal?: string) => boolean
   removeTurns: (n: number) => void
   retryLast: () => void
+  /**
+   * EXT-UI-001 / PROMPT-TPL-001：把未登记的命令原样发给引擎。
+   *
+   * 存在的理由：pi 的扩展命令与 prompt templates 由引擎分发，前端无法穷举。
+   * 不提供时回落到「未知命令」——那是**降级**，不是等价行为。
+   */
+  sendRaw?: (text: string) => boolean
 }
 
 export async function runSlashCommand(name: string, args: string, ctx: SlashContext): Promise<string | void> {
@@ -100,6 +107,20 @@ export async function runSlashCommand(name: string, args: string, ctx: SlashCont
       return next ? '已开启自动执行' : '已切换为逐次确认'
     }
     default:
+      // EXT-UI-001 / PROMPT-TPL-001：**未在本地登记的斜杠命令必须透传给引擎**。
+      //
+      // 此前这里一律回「未知命令」并中止，于是 pi 的两类真实能力全部不可达：
+      //   1. 扩展用 `pi.registerCommand()` 注册的命令（如安全类扩展的确认命令）；
+      //   2. `~/.pi/agent/prompts/*.md` 的 prompt templates（文件名即命令名）。
+      // 两者都由 pi 在 `session.prompt()` 里分发（`expandPromptTemplates` 默认 true），
+      // 前端不该替引擎决定"这个命令不存在"。
+      //
+      // 透传后由引擎裁决：真是未知命令时，模型会看到这段文本并如实回复。
+      if (ctx.sendRaw) {
+        const text = args ? `/${name} ${args}` : `/${name}`
+        const ok = ctx.sendRaw(text)
+        return ok ? undefined : '发送失败：连接未就绪'
+      }
       return `未知命令：/${name}（输入 /help 查看全部命令）`
   }
 }

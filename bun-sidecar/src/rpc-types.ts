@@ -52,6 +52,7 @@ export type RpcMethodName =
   | "undo"
   | "get_messages"
   | "user_response"
+  | "extension_ui_response"
   | "get_settings"
   | "set_settings"
   | "get_health"

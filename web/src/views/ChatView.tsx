@@ -7,6 +7,7 @@ import { ChatHeader } from '@/components/chat/ChatHeader'
 import { PermissionModeControl } from '@/components/chat/PermissionModeControl'
 import { runSlashCommand } from '@/components/chat/slashCommands'
 import { SteeringWindow } from '@/components/chat/SteeringWindow'
+import { ExtensionPromptDialog } from '@/components/chat/ExtensionPromptDialog'
 import { ContextRing } from '@/components/ui/context-ring'
 import { Switch } from '@/components/ui/switch'
 import { ChatWindow } from '@/components/chat/ChatWindow'
@@ -46,7 +47,7 @@ export default function ChatView() {
   const {
     connected, isStreaming, turns, currentTurn, error, errorCategory, errorTraceId, errorDiagnostic,
     failedTurnIndex, taskTrackerData, send, cancel, answerTaskBrief, executeTaskBrief, cancelTaskBrief,
-    sendCollaborationMessage, sendTaskReview, sendUserResponse, sendArtifactAction, sendPlanResponse,
+    sendCollaborationMessage, sendTaskReview, sendUserResponse, sendExtensionUiResponse, sendArtifactAction, sendPlanResponse,
     removeTurns, dismissError, privateMode, setPrivateMode, autoApprove, setAutoApprove,
     reconnectExhausted, reconnect, goalState, contextUsage,
     sendPlanMode, sendCheckpointAction, sendGoalAction,
@@ -133,6 +134,8 @@ export default function ChatView() {
     setPrivateMode, setAutoApprove, setPlanMode: setPlanMode,
     sendPlanMode, sendGoalAction, sendCheckpointAction, removeTurns,
     retryLast: handleRetryLast,
+    // EXT-UI-001 / PROMPT-TPL-001：未登记的命令透传给引擎（扩展命令 / prompt templates）
+    sendRaw: (text: string) => send(text),
   })
 
   const handleQuickStart = (message: string) => {
@@ -464,6 +467,10 @@ export default function ChatView() {
           onSteer={(message) => sendCollaboration('steer', message)}
           onFollowUp={(message) => sendCollaboration('follow_up', message)}
         />
+
+        {/* EXT-UI-001：pi 扩展的 ctx.ui 对话框。全局模态——不属于某一轮对话，
+            所以挂在这里而不是 ChatWindow 里（回合切换不该把它清掉）。 */}
+        <ExtensionPromptDialog onReply={sendExtensionUiResponse} />
       </div>
     </div>
   )
