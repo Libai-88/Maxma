@@ -1582,6 +1582,10 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       turn.events.push({
         kind: 'tool',
         ...(startCallId ? { callId: startCallId } : {}),
+        // NEST-001：子调用（codemode / 复合工具经 ctx.executeTool 发起）带父 id。
+        // 渲染层据此把它们缩进到父工具下面，而不是并排成独立步骤——
+        // 否则一次 codemode 调用会炸出十几条看不出关系的工具行。
+        ...(event.payload.parent_tool_call_id ? { parentCallId: event.payload.parent_tool_call_id } : {}),
         name: event.payload.tool_name,
         input: event.payload.input,
         output: null,

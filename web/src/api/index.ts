@@ -392,6 +392,13 @@ export const api = {
       { method: 'PUT', body: JSON.stringify({ name }) },
     ),
 
+  /** pi 发现的提示词模板（文件名即斜杠命令）。 */
+  getPromptTemplates: (sessionId: string) =>
+    request<{
+      session_id: string
+      templates: Array<{ name: string; description: string; argument_hint?: string; source: string }>
+    }>(`/sessions/${encodeURIComponent(sessionId)}/prompt-templates`),
+
   /** 会话统计（覆盖含被压缩历史在内的全部 entry）。 */
   getSessionStats: (sessionId: string) =>
     request<Record<string, unknown>>(`/sessions/${encodeURIComponent(sessionId)}/stats`),

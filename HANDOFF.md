@@ -349,6 +349,31 @@ branch 不删条目、forkFrom 产物可 open 恢复、空会话拒绝）。
   `settings-schema.d.ts`（权威，不是文档），并做反向自检（pi 改名时本锁不会变成空断言）。
   变异验证：把 `cacheWarming` 改个名 → 立刻红。
 
+## 2026-11-13 PROMPT-TPL-001 + NEST-001：模板清单与嵌套工具调用
+
+两项都是「引擎早就给了、我们没接」，不属于新功能。
+
+### Prompt templates
+
+pi 的 `ResourceLoader` 本来就会扫 `~/.pi/agent/prompts/*.md` 与 `.pi/prompts/`，
+`session.promptTemplates` 直接可读。上一轮的斜杠透传已经让 `/模板名` 能到引擎，
+但**用户看不到有哪些模板**——前端斜杠补全只认 10 条硬编码命令。
+
+- RPC `list_prompt_templates` → REST `GET /api/sessions/:id/prompt-templates`
+- 前端补全列表合并模板，标「模板」徽标；与本地命令同名的跳过（不重复出现）
+- 实测：放 `weekly.md` 进 prompts 目录 → 端点返回
+  `{name:"weekly", description:"起草周报", argument_hint:"[范围]", source:"auto"}`
+
+### 嵌套工具调用
+
+pi 的工具可经 `ctx.executeTool()` 发起子调用，事件带 `parentToolCallId`。
+此前事件映射只透传 `toolCallId`，子调用在前端**与顶层调用并排显示**——
+一次 codemode 调用会炸出十几条看不出关系的工具行。
+
+- `events.ts` 的 tool_start/update/end/error 四处都透传 `parent_tool_call_id`
+- 前端 `ToolCall.parentCallId` + `Step.nested`，渲染时缩进一级并加左边框
+- 锁：`prompt-templates-and-nesting.test.ts`（5 项），变异验证撤掉透传即红
+
 ## 状态
 
 - 仓库 `https://github.com/Libai-88/Maxma.git`，主分支 `main`；变更一律走分支 + PR squash 合入，

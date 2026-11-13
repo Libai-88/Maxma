@@ -121,6 +121,10 @@ export function mapPiAgentEventToMaxma(
         // 工具调用的唯一标识：前端据此把 ask_user 审批挂到**具体那一次**调用上。
         // 只按工具名匹配时，同一轮里两次 bash 的审批会互相覆盖（见 useChat 注释）。
         ...(typeof e.toolCallId === "string" && e.toolCallId ? { tool_call_id: e.toolCallId } : {}),
+        // NEST-001：工具通过 `ctx.executeTool()` 发起的子调用带 parentToolCallId。
+        // 不透传的话前端只渲染顶层工具，子调用完全不可见（pi 的 codemode / 复合工具
+        // 都会走这条路径）。
+        ...(typeof e.parentToolCallId === "string" && e.parentToolCallId ? { parent_tool_call_id: e.parentToolCallId } : {}),
         input: JSON.stringify(e.args ?? {}),
       },
     };
@@ -132,6 +136,7 @@ export function mapPiAgentEventToMaxma(
       payload: {
         tool_name: e.toolName ?? "",
         ...(typeof e.toolCallId === "string" && e.toolCallId ? { tool_call_id: e.toolCallId } : {}),
+        ...(typeof e.parentToolCallId === "string" && e.parentToolCallId ? { parent_tool_call_id: e.parentToolCallId } : {}),
         partial_result: typeof e.partialResult === "string"
           ? e.partialResult
           : JSON.stringify(e.partialResult ?? ""),
@@ -149,6 +154,7 @@ export function mapPiAgentEventToMaxma(
         payload: {
           tool_name: e.toolName ?? "",
           ...(typeof e.toolCallId === "string" && e.toolCallId ? { tool_call_id: e.toolCallId } : {}),
+          ...(typeof e.parentToolCallId === "string" && e.parentToolCallId ? { parent_tool_call_id: e.parentToolCallId } : {}),
           error: JSON.stringify(e.result ?? {}),
           elapsed,
         },
@@ -159,6 +165,7 @@ export function mapPiAgentEventToMaxma(
       payload: {
         tool_name: e.toolName ?? "",
         ...(typeof e.toolCallId === "string" && e.toolCallId ? { tool_call_id: e.toolCallId } : {}),
+        ...(typeof e.parentToolCallId === "string" && e.parentToolCallId ? { parent_tool_call_id: e.parentToolCallId } : {}),
         output: JSON.stringify(e.result ?? {}),
         elapsed,
       },

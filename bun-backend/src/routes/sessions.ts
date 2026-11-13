@@ -440,6 +440,22 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     return c.json({ session_id: sid, name: result.result.name });
   });
 
+  // ── Prompt templates（PROMPT-TPL-001）──
+  /**
+   * 列出 pi 发现的提示词模板（`~/.pi/agent/prompts/*.md` 与 `.pi/prompts/`）。
+   * 每个模板的文件名即斜杠命令名，前端据此补全。
+   */
+  app.get("/api/sessions/:sessionId/prompt-templates", async (c) => {
+    const sid = c.req.param("sessionId");
+    const result = await callRpc<{ templates: Array<Record<string, unknown>> }>(
+      deps,
+      "list_prompt_templates",
+      { session_id: sid },
+    );
+    if (!result.ok) return c.json({ detail: result.error }, 404);
+    return c.json({ session_id: sid, templates: result.result.templates });
+  });
+
   // ── 会话统计（TREE-004）──
   // pi 的 getSessionStats 覆盖**全部** entry（含被压缩掉的历史），
   // 所以 token/cost 反映真实计费，而不是当前上下文。

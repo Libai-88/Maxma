@@ -27,17 +27,30 @@ export interface ThinkingDeltaEvent {
 
 export interface ToolStartEvent {
   type: 'tool_start'
-  payload: { tool_name: string; input: string; tool_call_id?: string }
+  payload: {
+    tool_name: string
+    input: string
+    tool_call_id?: string
+    /** NEST-001：工具通过 ctx.executeTool() 发起的子调用会带父调用 id。 */
+    parent_tool_call_id?: string
+  }
 }
 
 export interface ToolEndEvent {
   type: 'tool_end'
-  payload: { tool_name: string; output: string; elapsed: number; tool_data?: Record<string, unknown>; tool_call_id?: string }
+  payload: {
+    tool_name: string
+    output: string
+    elapsed: number
+    tool_data?: Record<string, unknown>
+    tool_call_id?: string
+    parent_tool_call_id?: string
+  }
 }
 
 export interface ToolErrorEvent {
   type: 'tool_error'
-  payload: { tool_name: string; error: string; elapsed?: number; tool_call_id?: string }
+  payload: { tool_name: string; error: string; elapsed?: number; tool_call_id?: string; parent_tool_call_id?: string }
 }
 
 export interface ToolUpdateEvent {
@@ -838,6 +851,11 @@ export interface ToolCall {
   kind: 'tool'
   /** 引擎的 toolCallId（同一轮里同名工具多次调用时区分彼此的**唯一**依据）。 */
   callId?: string
+  /**
+   * NEST-001：父工具调用的 callId。
+   * 有值时这是**子调用**（工具经 `ctx.executeTool()` 发起），渲染时缩进到父工具下。
+   */
+  parentCallId?: string
   name: string
   input: string
   output: string | null

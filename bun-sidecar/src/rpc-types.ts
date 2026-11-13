@@ -78,6 +78,7 @@ export type RpcMethodName =
   | "fork_session"
   | "set_session_name"
   | "get_session_stats"
+  | "list_prompt_templates"
   | "export_session_html";
 
 export interface CreateSessionParams {

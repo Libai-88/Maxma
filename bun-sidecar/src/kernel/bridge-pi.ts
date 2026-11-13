@@ -972,6 +972,23 @@ export async function handlePiSessionRpc(
     return;
   }
 
+  // ── Prompt templates（PROMPT-TPL-001）──
+  //
+  // pi 的 ResourceLoader 本来就会扫 `~/.pi/agent/prompts/*.md` 与 `.pi/prompts/`，
+  // `session.promptTemplates` 直接可读。此前 Maxma 既没暴露清单，前端斜杠补全
+  // 也只认 10 条硬编码命令——用户放进去的模板等于不存在。
+  if (method === "list_prompt_templates") {
+    const templates = record.session.promptTemplates.map((t) => ({
+      name: t.name,
+      description: t.description,
+      ...(t.argumentHint ? { argument_hint: t.argumentHint } : {}),
+      // 不外泄绝对路径：只给来源标签（user/project/package），与技能发现同口径。
+      source: (t.sourceInfo as { source?: string } | undefined)?.source ?? "unknown",
+    }));
+    io.send(id, { templates });
+    return;
+  }
+
   if (method === "get_session_stats") {
     const stats = record.session.getSessionStats();
     io.send(id, { stats });

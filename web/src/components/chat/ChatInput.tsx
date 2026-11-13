@@ -14,6 +14,8 @@ export interface SlashCommandDef {
   name: string
   description: string
   usage?: string
+  /** PROMPT-TPL-001：来源标记。`template` = pi 发现的提示词模板（非本地命令）。 */
+  source?: 'local' | 'template'
 }
 
 /** 与旧 useSlashCommands.ts 同一份清单（执行器在 ChatView）。 */
@@ -116,11 +118,35 @@ export function ChatInput(props: ChatInputProps) {
     requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-slot="composer"] textarea')?.focus())
   }
 
+  // PROMPT-TPL-001：pi 发现的提示词模板也进补全列表。
+  // 本地 10 条是 Maxma 自己的命令；模板来自 `~/.pi/agent/prompts/*.md`，
+  // 由引擎分发（见 slashCommands.ts 的 default 分支）。此前用户放了模板也看不见。
+  const [templates, setTemplates] = useState<SlashCommandDef[]>([])
+  useEffect(() => {
+    if (!sessionId) return
+    let alive = true
+    void api.getPromptTemplates(sessionId)
+      .then((res) => {
+        if (!alive) return
+        setTemplates((res.templates ?? []).map((t) => ({
+          name: t.name,
+          description: t.description || '提示词模板',
+          usage: t.argument_hint ? `/${t.name} ${t.argument_hint}` : `/${t.name}`,
+          source: 'template' as const,
+        })))
+      })
+      .catch(() => { /* 会话未就绪时静默：模板是增强项，不该阻断输入 */ })
+    return () => { alive = false }
+  }, [sessionId])
+
   const slashMatches = useMemo(() => {
     // 只按第一个词过滤：`/goal 完成周报` 仍应命中 goal（参数不算过滤文本）
     const q = slashFilter.trim().split(/\s+/)[0]?.toLowerCase() ?? ''
-    return SLASH_COMMANDS.filter((c) => c.name.startsWith(q))
-  }, [slashFilter])
+    const localNames = new Set(SLASH_COMMANDS.map((c) => c.name))
+    // 本地命令优先，模板里同名的跳过（避免一条命令出现两次）。
+    const extra = templates.filter((t) => !localNames.has(t.name))
+    return [...SLASH_COMMANDS, ...extra].filter((c) => c.name.startsWith(q))
+  }, [slashFilter, templates])
 
   const runSlash = async (name: string, args: string) => {
     setSlashOpen(false)
@@ -324,6 +350,9 @@ export function ChatInput(props: ChatInputProps) {
               >
                 <span className="font-mono text-xs">/{c.name}</span>
                 <span className="truncate text-muted-foreground">{c.description}</span>
+                {c.source === 'template' ? (
+                  <span className="ml-auto shrink-0 rounded-sm bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">模板</span>
+                ) : null}
               </button>
             ))}
           </div>

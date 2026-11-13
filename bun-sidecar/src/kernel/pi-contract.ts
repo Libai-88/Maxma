@@ -618,6 +618,7 @@ export const PI_RPC_METHODS = [
   "fork_session",
   "set_session_name",
   "get_session_stats",
+  "list_prompt_templates",
   "export_session_html",
   "steer",
   "follow_up",
