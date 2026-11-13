@@ -78,8 +78,15 @@ xcopy /e /i /q "%PROJECT_ROOT%config\personas\AGENTS.md" "%PORTABLE_DIR%\config\
 xcopy /e /i /q "%PROJECT_ROOT%config\personas\MAXMA.md" "%PORTABLE_DIR%\config\personas" >nul
 xcopy /e /i /q "%PROJECT_ROOT%config\personas\SOUL.example.md" "%PORTABLE_DIR%\config\personas" >nul
 xcopy /e /i /q "%PROJECT_ROOT%config\personas\USER.example.md" "%PORTABLE_DIR%\config\personas" >nul
-REM SOUL.md 是用户本地人设（gitignore），绝不进产物：用已提交的示例生成
-REM 默认人设，避免把开发者/用户的私人设定打进安装包。
+REM SOUL.md is the user's local persona (gitignored): never ship it.
+REM Generate the default from the committed example instead, so packaging
+REM never leaks the developer's or a user's private persona.
+REM
+REM NOTE: keep batch-file comments ASCII. cmd advances its file pointer by
+REM characters rather than bytes under "chcp 65001", so a run of multi-byte
+REM characters can desync the pointer into the middle of a later line and
+REM execute the remainder as a command. Observed right after [2/3]: the tail
+REM of a Chinese comment line was executed as a command.
 copy /y "%PROJECT_ROOT%config\personas\SOUL.example.md" "%PORTABLE_DIR%\config\personas\SOUL.md" >nul
 if not exist "%PROJECT_ROOT%config\personas\SOUL.饱饱.md" (
     echo [ERROR] Missing built-in persona: SOUL.饱饱.md
