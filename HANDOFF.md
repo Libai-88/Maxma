@@ -206,10 +206,28 @@
 | **`scripts/_ui-chat-driver.cjs` 自 2026-11-11 前端重写起静默失效**：它查 `.input-area` / `.btn-send` / `.chat-connection-error-text`（Vue 类名），React 重写后全部不存在，永远停在「输入框始终没出现」。而 HANDOFF 把它列为现役验证手段，且**没有任何闸门/CI 调用它** | 选择器改为语义钩子（`[data-slot="composer"] textarea`、`aria-label="Send"/"Stop"`），实测跑通「输入 → 发送 → 收到回复」；新增 `scripts/verify-ui-capabilities.mjs` + `_ui-capabilities-driver.cjs` 验证能力页 | `script-encoding.test.ts` 新增「界面验证脚本的钩子契约」组：脚本引用的 `data-slot`/`aria-label` 必须在 `web/src` 里存在，且不许再用 Vue 样式类名（剥注释后扫，避免被事故说明文字误判） |
 
 实测（本轮）：
-- `bash scripts/verify-all-gates.sh` → 全部闸门通过（sidecar 133 / backend 281 / web tsc+build / 颜色+间距 / 类型债 0 / bundle）。
+- `bash scripts/verify-all-gates.sh` → 全部闸门通过（sidecar 133 / backend 284 / web tsc+build / 颜色+间距 / 类型债 0 / bundle）。
 - `bun scripts/verify-ui-capabilities.mjs` → 真实界面：配置来源 10 条全带路径与读取点、零 console 错误；变异塞回 `.cursor` 会红。
 - `bun scripts/verify-ui-chat-roundtrip.mjs` → 真实界面「输入 → 发送 → 收到回复」全链路通（证明新注入的提示词没破坏对话）。
-- 真实会话 `systemPrompt`（44KB）含 MAXMA 自述与 AGENTS 工具面，文档点名的 14 个工具全部存在。
+- 真实会话 `systemPrompt` 含 MAXMA 自述与 AGENTS 行为规则，文档点名的 14 个工具全部存在。
+
+### 随后精简 AGENTS.md（3213 → 1220 字符，−62%）
+
+恢复注入后发现两处**纯重复**，删掉不损失信息：
+
+| 删掉的 | 为什么是重复 |
+| --- | --- |
+| 「Skills（引擎原生）」整节 514 字符 | pi **原生注入**完整的 `<available_skills>` 段，含每个技能的 name/description/location 与「按路径 `read`、相对路径相对 SKILL.md 目录解析」的说明。我们那段是在复述引擎已经说的话。 |
+| 「表情贴纸」整节 296 字符 | `persona-prompt.ts` 的 `STICKER_INSTRUCTIONS` 有同义文案（格式、12 个分类、不要放代码块、不要机械添加），逐字重复。 |
+
+同时把「逐条列工具名」改为「以引擎给的清单为准」：pi 的 `<tools>` 段已列出全部内置工具及其描述，
+自定义工具经 API 的 tools 参数带描述下发，再抄一遍只会在工具增删时漂移。
+
+**保留**的是引擎不会说的三件事：禁止相同参数重复调用（含连续两次无进展就停）、
+`subagent` 的边界（只读、不能再委派、何时不该用）、`submit_plan` 的批准/修订循环。
+
+⚠️ 教训：写提示词前先看**引擎实际注入了什么**（`createMaxmaSession` 的 `systemPrompt` 打出来看），
+不要凭"应该有用"往里加——每加一句都是每轮对话的固定开销。
 
 ## 状态
 
