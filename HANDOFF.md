@@ -557,6 +557,44 @@ POST `/api/providers` 只把 `context_window` 写进条目，而 `max_tokens` /
 思考档位由 pi 按模型裁剪，**`xhigh` / `max` 两档需要模型声明 `thinkingLevelMap`
 才会出现**。自定义渠道没这个字段，所以最多到「高」。这是 pi 的规则，不是 Maxma 的遗漏。
 
+## 2026-11-14 复盘：Kilo 自动路由把推理写进正文（上游行为，非我方缺陷）
+
+用户复报「回复仍含思考内容」。核实后**与 THINK-SPLIT-001 不是同一个问题**。
+
+### 证据链
+
+从便携包的真实会话文件（`data/pi/sessions/…/*.jsonl`）读到的 assistant 消息：
+
+```
+provider: kilo-free | model: kilo-auto/free
+[text] len=216 :: '用户正向 Maxma 打招呼。我在思考如何温暖、随意地回应…
+                    \n嘿嘿，这么晚还没睡呀？\n\n我在呢。今天怎么样？'
+```
+
+**只有 `[text]` 一个块，没有 `[thinking]` 块**——说明推理是被上游写进 `content` 的，
+不是 pi 拆错、也不是前端拼错。
+
+### 三件事已分别核实
+
+| 疑问 | 结论 |
+| --- | --- |
+| pi 认不认这个字段？ | 认。`pi-ai/api/openai-completions.js:376` 的 `reasoningFields = ["reasoning_content","reasoning","reasoning_text"]`，命中就发 `thinking_delta` 并建 thinking 块 |
+| Kilo 网关发不发 reasoning？ | 发。实测 `delta.reasoning` + `reasoning_details`（字段名是 `reasoning`，不是 `reasoning_content`），pi 能识别 |
+| 那为什么这次没有？ | **自动路由落到不同上游**。`kilo-auto/free` 每次请求由上游挑选模型：实测直连模型（nemotron / cohere）都正常发 `reasoning` 字段，而这一次落到的上游把推理直接写进了 `content` |
+
+### 能做什么、不能做什么
+
+- **不能**靠解析修：`content` 里推理与回答之间**没有任何分隔标记**（只有 `\n` 或 `\n\n`），
+  任何按文本切分的启发式都会误伤正常回答。
+- **可靠的规避**：在模型选择器里**改用 Kilo 的直连模型**（如
+  `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`），不要用 `kilo-auto/free`。
+  直连模型的上游固定，实测都走标准 `reasoning` 字段。
+
+### 结论
+
+THINK-SPLIT-001 修的是**真实的前端缺陷**（流式时答案拼进思考块），仍然有效；
+本条是**上游模型的输出习惯**，两件事叠加让用户以为"没修好"。
+
 ## 状态
 
 - 仓库 `https://github.com/Libai-88/Maxma.git`，主分支 `main`；变更一律走分支 + PR squash 合入，
