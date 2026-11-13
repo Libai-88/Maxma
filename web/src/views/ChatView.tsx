@@ -52,7 +52,7 @@ export default function ChatView() {
     sendCollaborationMessage, sendTaskReview, sendUserResponse, sendExtensionUiResponse, sendArtifactAction, sendPlanResponse,
     removeTurns, dismissError, privateMode, setPrivateMode, autoApprove, setAutoApprove,
     reconnectExhausted, reconnect, goalState, contextUsage,
-    sendPlanMode, sendCheckpointAction, sendGoalAction, reloadTurnsFromBackend,
+    sendPlanMode, sendCheckpointAction, sendGoalAction, reloadTurnsFromBackend, queuedMessages,
   } = chat
 
   const [providerLoadFailed, setProviderLoadFailed] = useState(false)
@@ -498,6 +498,7 @@ export default function ChatView() {
           visible={isStreaming}
           onSteer={(message) => sendCollaboration('steer', message)}
           onFollowUp={(message) => sendCollaboration('follow_up', message)}
+          queued={queuedMessages}
         />
 
         {/* EXT-UI-001：pi 扩展的 ctx.ui 对话框。全局模态——不属于某一轮对话，

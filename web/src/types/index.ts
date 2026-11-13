@@ -266,6 +266,20 @@ export interface ExtensionUiRequestEvent {
   }
 }
 
+/**
+ * QUEUE-001：pi 的 steering / followUp 队列快照。
+ *
+ * 运行中继续发消息时，`steer` 在下一次 LLM 调用前插入、`followUp` 等本轮做完
+ * 再投递，两者都排队。pi 每次给**完整快照**，前端据此显示"还有几条在排队"。
+ */
+export interface QueueUpdateEvent {
+  type: 'queue_update'
+  payload: {
+    steering: string[]
+    follow_up: string[]
+  }
+}
+
 export interface AskUserEvent {
   type: 'ask_user'
   payload: {
@@ -513,6 +527,7 @@ export type ServerEvent =
   | ArtifactResultEvent
   | AskUserEvent
   | ExtensionUiRequestEvent
+  | QueueUpdateEvent
   | PlanProposedEvent
   | PlanStepStartEvent
   | PlanStepEndEvent

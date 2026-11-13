@@ -525,6 +525,8 @@ export const MAXMA_ENGINE_WS_EVENTS = [
   "llm_usage",
   "context_usage",
   "permission_mode_updated",
+  // QUEUE-001：pi 的 steering/followUp 队列快照（queue_update）。
+  "queue_update",
   // EXT-UI-001：pi 扩展的 ctx.ui.select/confirm/input/editor/notify 经 kernel
   // 转成前端对话框。**不是**引擎原生事件——pi 在 SDK 模式下通过
   // ExtensionUIContext 回调出站，由 kernel 的 extension-ui.ts 转成 WS 帧。

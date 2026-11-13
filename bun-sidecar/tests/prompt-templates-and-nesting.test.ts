@@ -132,3 +132,32 @@ describe("嵌套工具调用（NEST-001）", () => {
     expect((err!.payload as Record<string, unknown>).parent_tool_call_id).toBe("call-a");
   });
 });
+
+describe("队列可见性（QUEUE-001）", () => {
+  test("queue_update 映射成前端可渲染的字符串数组快照", () => {
+    const mapped = mapPiAgentEventToMaxma({
+      type: "queue_update",
+      steering: ["先看 A", "再看 B"],
+      followUp: ["最后总结"],
+    } as never);
+    expect(mapped).not.toBeNull();
+    expect(mapped!.type).toBe("queue_update");
+    const payload = mapped!.payload as { steering: string[]; follow_up: string[] };
+    expect(payload.steering).toEqual(["先看 A", "再看 B"]);
+    expect(payload.follow_up).toEqual(["最后总结"]);
+  });
+
+  test("对象形态的消息也能取出文本；空队列给空数组", () => {
+    const mapped = mapPiAgentEventToMaxma({
+      type: "queue_update",
+      steering: [{ text: "对象形态" }],
+      followUp: [],
+    } as never);
+    const payload = mapped!.payload as { steering: string[]; follow_up: string[] };
+    expect(payload.steering).toEqual(["对象形态"]);
+    expect(payload.follow_up).toEqual([]);
+
+    const empty = mapPiAgentEventToMaxma({ type: "queue_update" } as never);
+    expect((empty!.payload as { steering: string[] }).steering).toEqual([]);
+  });
+});

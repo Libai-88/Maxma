@@ -170,7 +170,9 @@ describe("kernel: mapPiAgentEventToMaxma", () => {
   });
 
   test("未知/无 Maxma 等价事件 → null", () => {
-    expect(mapPiAgentEventToMaxma({ type: "queue_update", steering: [], followUp: [] })).toBeNull();
+    // queue_update 此前也在这一组里（当时完全不消费）。QUEUE-001 起它有了
+    // 真实映射（排队的 steering/followUp 快照），所以从这里移走——
+    // 留在这里会让"未知事件"的判据把一条已知事件当成应当忽略的。
     expect(mapPiAgentEventToMaxma({ type: "turn_start" })).toBeNull();
     expect(mapPiAgentEventToMaxma({})).toBeNull();
   });
