@@ -90,6 +90,27 @@ describe("会话树（TREE-001）", () => {
   });
 });
 
+describe("资源热重载（RELOAD-001）", () => {
+  test("reload() 不丢历史，且重载后模板清单可读", async () => {
+    const { createMaxmaSession } = await import("../src/kernel/pi-session");
+    const session = await createMaxmaSession({ inMemory: true, cwd: process.cwd(), tools: [] });
+    try {
+      const before = session.sessionManager.getEntries().length;
+      await session.reload();
+      const after = session.sessionManager.getEntries().length;
+      // 重载是"重新读资源"，不是重建会话——条目数必须不变。
+      expect(after).toBe(before);
+      // 重载后这两项仍可读（前端 RELOAD 回执用它显示"重载了什么"）。
+      // 注意本用例传了 `tools: []` 显式禁用全部工具，所以工具数是 0 —— 这是
+      // 预期的，断言只验"能读到一个数组"，不验非空。
+      expect(Array.isArray(session.promptTemplates)).toBe(true);
+      expect(Array.isArray(session.getAllTools())).toBe(true);
+    } finally {
+      session.dispose();
+    }
+  });
+});
+
 describe("上下文编辑（CTX-EDIT-001）", () => {
   test("appendContextEdit(targetId, null) 只影响未来上下文，不删 entry", () => {
     const { dir, sm, forkPoint } = branchySession();

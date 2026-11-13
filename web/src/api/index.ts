@@ -392,6 +392,13 @@ export const api = {
       { method: 'PUT', body: JSON.stringify({ name }) },
     ),
 
+  /** 重新加载扩展/技能/模板，不重建会话（历史与分支保留）。 */
+  reloadSessionResources: (sessionId: string) =>
+    request<{ session_id: string; ok: boolean; templates: number; tools: number }>(
+      `/sessions/${encodeURIComponent(sessionId)}/reload`,
+      { method: 'POST' },
+    ),
+
   /**
    * 把某条 entry 从未来模型上下文中移除（不删历史、不改界面、不改计费）。
    * pi 的 `appendContextEdit(targetId, null)`。

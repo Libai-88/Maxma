@@ -992,6 +992,26 @@ export async function handlePiSessionRpc(
   // ── 会话重命名 / 统计 / 导出（TREE-004）──
   //
   // 都是 pi 的 AgentSession 直接能力，此前一个都没接。
+  // ── 资源热重载（RELOAD-001）──
+  //
+  // `session.reload()` 重新加载扩展、技能、提示词模板、主题与上下文文件，
+  // **不重建会话**（历史与活动分支都保留）。此前 Maxma 只能靠"新建会话"让
+  // 新装的技能/模板生效——而新建会话意味着丢上下文。
+  //
+  // 与既有的 `reload_mcp_for_session` 不是一回事：那条只针对 MCP 且恒 noop
+  // （MCP 清单由后端在 create_session 时装配），这条是引擎级的全量资源重载。
+  if (method === "reload_session_resources") {
+    try {
+      await record.session.reload();
+      const templates = record.session.promptTemplates.length;
+      const tools = record.session.getAllTools().length;
+      io.send(id, { ok: true, templates, tools });
+    } catch (error) {
+      io.sendError(id, `资源重载失败：${error instanceof Error ? error.message : String(error)}`);
+    }
+    return;
+  }
+
   // ── 上下文编辑（CTX-EDIT-001）──
   //
   // pi 的 `appendContextEdit(targetId, replacement)` 是**只影响未来模型上下文**的

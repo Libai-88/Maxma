@@ -621,6 +621,7 @@ export const PI_RPC_METHODS = [
   "list_prompt_templates",
   "get_session_state",
   "context_edit",
+  "reload_session_resources",
   "export_session_html",
   "steer",
   "follow_up",

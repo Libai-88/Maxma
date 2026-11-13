@@ -440,6 +440,28 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
     return c.json({ session_id: sid, name: result.result.name });
   });
 
+  // ── 资源热重载（RELOAD-001）──
+  /**
+   * 重新加载扩展/技能/提示词模板/主题，**不重建会话**（历史与分支都保留）。
+   * 用户装了新技能或放了新模板后，不必再新建会话来让它生效。
+   */
+  app.post("/api/sessions/:sessionId/reload", async (c) => {
+    const sid = c.req.param("sessionId");
+    const record = deps.hub.sessions.get(sid);
+    if (!record) return c.json({ detail: "会话不存在" }, 404);
+    if (record.currentGuard !== null) {
+      return c.json({ detail: "Agent 正在处理中，请等待本轮完成后再重载" }, 409);
+    }
+    const result = await callRpc<{ ok: boolean; templates: number; tools: number }>(
+      deps,
+      "reload_session_resources",
+      { session_id: sid },
+    );
+    if (!result.ok) return c.json({ detail: result.error }, 503);
+    deps.audit?.("session", "reload", sid, `templates=${result.result.templates} tools=${result.result.tools}`);
+    return c.json({ session_id: sid, ...result.result });
+  });
+
   // ── 上下文编辑（CTX-EDIT-001）──
   /**
    * 把某条 entry 从**未来模型上下文**中移除（pi 的 `appendContextEdit`）。
