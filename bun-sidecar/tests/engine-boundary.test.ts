@@ -596,6 +596,58 @@ describe("跨侧清单一致性（同一件事不许三处各写各的）", () =
     ).toEqual([]);
   });
 
+  test("pi 明确有默认值的键不许漏登记（SETTINGS-VIS-001）", () => {
+    // 事故形状：`compaction.reserveTokens` / `keepRecentTokens` / `cacheWarming` /
+    // `defaultThinkingLevel` / `images.*` 等 pi 真实存在的键，在 Maxma 全仓零引用——
+    // 用户想调只能手改 settings.json，而界面上的「上下文管理」只给了个开关。
+    //
+    // 判据：直接读 pi 的 settings-schema.d.ts（**权威**，不是文档），
+    // 取其中带默认值/常用键，逐个要求在登记表里出现。pi 新增一个键而 Maxma 没跟，
+    // 这条会红——提醒决定"要不要暴露给用户"，而不是静默缺失。
+    const registered = new Set(MAXMA_SETTINGS_KEYS.map((k) => k.path));
+    const schema = read("bun-sidecar/node_modules/@earendil-works/pi-coding-agent/dist/core/settings-schema.d.ts");
+
+    // 只锁**面向宿主调优**的键。刻意排除：终端/TUI 专属（theme/tuiMode/terminal.*/
+    // fullscreen*/keybindings）、纯显示微调（editorPaddingX/outputPad/…）、
+    // 以及 Maxma 自己另有实现路径的（skills/packages/extensions 资源清单）。
+    const mustExpose = [
+      "compaction.enabled",
+      "compaction.reserveTokens",
+      "compaction.keepRecentTokens",
+      "branchSummary.reserveTokens",
+      "branchSummary.skipPrompt",
+      "cacheWarming",
+      "defaultThinkingLevel",
+      "enabledModels",
+      "hideThinkingBlock",
+      "images.autoResize",
+      "images.blockImages",
+      "steeringMode",
+      "followUpMode",
+      "retry.enabled",
+      "retry.maxRetries",
+      "retry.baseDelayMs",
+    ];
+
+    const missingInRegistry = mustExpose.filter((p) => !registered.has(p));
+    expect(
+      missingInRegistry,
+      `这些键在 pi 的 settings-schema 里真实存在，但 Maxma 登记表没有——用户无法调节：\n  ` +
+        missingInRegistry.join("\n  "),
+    ).toEqual([]);
+
+    // 反向自检：schema 里确实还有这些名字（防 pi 改名后本锁变成空断言）。
+    const absentInPi = mustExpose.filter((p) => {
+      const leaf = p.split(".").pop()!;
+      return !new RegExp(`\\b${leaf}\\b`).test(schema);
+    });
+    expect(
+      absentInPi,
+      `pi 的 settings-schema 里已经找不到这些键（可能改名了），请同步登记表与面板：\n  ` +
+        absentInPi.join("\n  "),
+    ).toEqual([]);
+  });
+
   test("登记表不变量：consumer 与 engineReal 不许自相矛盾，消费者必须真实存在", () => {
     const problems: string[] = [];
     for (const k of MAXMA_SETTINGS_KEYS) {

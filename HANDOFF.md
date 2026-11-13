@@ -318,6 +318,37 @@ kernel 用 `getEntryCount() === 0` 提前拦截并给可读原因（"这个会�
 零 console 错误）；`bun-sidecar/tests/session-tree.test.ts`（9 项，锁树形状、
 branch 不删条目、forkFrom 产物可 open 恢复、空会话拒绝）。
 
+## 2026-11-13 SETTINGS-VIS-001：补齐 pi 真实存在但 Maxma 零引用的设置键
+
+`pi/docs/settings.md` 里有明确默认值的键，Maxma 登记表里**一个都没有**——
+用户想调只能手改 `settings.json`，而界面上的「上下文管理」只有一个总开关。
+
+补 10 个（全部 `consumer:"pi"`，由既有机制自动下发到新会话）：
+
+| 键 | pi 默认 | 用户价值 |
+| --- | --- | --- |
+| `compaction.reserveTokens` | 16384 | 压缩触发点，直接影响长对话体验 |
+| `compaction.keepRecentTokens` | 20000 | 压缩后保留多少原文 |
+| `branchSummary.reserveTokens` | 16384 | 切分支时摘要预留量 |
+| `branchSummary.skipPrompt` | false | 切分支不弹「是否摘要」 |
+| `cacheWarming` | `streaming` | 缓存预热（省钱）。**仅全局**——pi 文档明示 |
+| `enabledModels` | 全部 | 模型循环范围 |
+| `defaultThinkingLevel` | `medium` | 新会话思考档位 |
+| `hideThinkingBlock` | false | 隐藏思考块 |
+| `images.autoResize` | true | 发送前缩放 |
+| `images.blockImages` | false | 禁止发图 |
+
+界面：`SettingsView.tsx` 的「上下文管理」补 3 个字段，新增「模型行为」「图片」两个面板。
+
+验证：
+- 后端实测：PUT → GET 回环一致；`engineSettingsForNewSession()` 产出正确的嵌套结构
+  （`{compaction:{reserveTokens:24000}, cacheWarming:"off", …}`）；
+  `SettingsManager.applyOverrides()` 接受且 `drainErrors()` 为空——**pi 真的认这些值**。
+- 界面实测：`scripts/verify-ui-settings.mjs` 三个面板全部渲染，零 console 错误。
+- 锁：`engine-boundary.test.ts` 新增「pi 明确有默认值的键不许漏登记」——直接读
+  `settings-schema.d.ts`（权威，不是文档），并做反向自检（pi 改名时本锁不会变成空断言）。
+  变异验证：把 `cacheWarming` 改个名 → 立刻红。
+
 ## 状态
 
 - 仓库 `https://github.com/Libai-88/Maxma.git`，主分支 `main`；变更一律走分支 + PR squash 合入，

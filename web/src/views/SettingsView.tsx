@@ -30,6 +30,8 @@ const THINKING_LEVELS = [
 // bash.autoBackground.* / vault.enabled …）登记为 consumer:"none"，面板不得出现。
 const SECTIONS = [
   { key: 'compaction', label: '上下文管理' },
+  { key: 'model', label: '模型行为' },
+  { key: 'images', label: '图片' },
   { key: 'retry', label: '容错' },
   { key: 'interaction', label: '交互' },
   { key: 'reasoning', label: '推理预算' },
@@ -188,6 +190,52 @@ export default function SettingsView() {
           <Panel title="上下文管理" className={activeSection === 'compaction' ? '' : 'hidden'}>
             <Row label="启用上下文压缩" desc="当对话过长时自动压缩历史消息，保留结论与关键事实。">
               <Switch checked={settings['compaction.enabled'] !== false} onCheckedChange={() => toggle('compaction.enabled')} aria-label="启用上下文压缩" />
+            </Row>
+            {/* SETTINGS-VIS-001：这三个键 pi 一直有（默认 16384 / 20000），
+                但 Maxma 此前没登记也没暴露，用户只能手改 settings.json。 */}
+            <Row label="压缩触发余量" desc="上下文剩余量低于该值就开始压缩。调大=更早压缩、更安全；调小=省更多原文。">
+              <Slider k="compaction.reserveTokens" min={2000} max={64000} step={1000} fallback={16384} suffix=" token" />
+            </Row>
+            <Row label="压缩后保留" desc="压缩时原样保留的近期内容量。调大=保留更多上下文，但更费 token。">
+              <Slider k="compaction.keepRecentTokens" min={2000} max={80000} step={1000} fallback={20000} suffix=" token" />
+            </Row>
+            <Row label="分支摘要不询问" desc="切换分支时直接按默认行为处理，不弹「是否总结离开的分支」。">
+              <Switch checked={settings['branchSummary.skipPrompt'] === true} onCheckedChange={() => toggle('branchSummary.skipPrompt')} aria-label="分支摘要不询问" />
+            </Row>
+          </Panel>
+
+          <Panel title="模型行为" className={activeSection === 'model' ? '' : 'hidden'}>
+            <Row label="缓存预热" desc="在跑或空闲时保持模型侧提示缓存的热度，减少重复计费。仅全局生效。">
+              <select className="rounded-lg border border-border bg-background px-3 py-2.5 text-sm" aria-label="缓存预热"
+                value={String(settings['cacheWarming'] ?? 'streaming')} onChange={(e) => set('cacheWarming', e.target.value)}>
+                <option value="streaming">运行中预热</option>
+                <option value="idle">空闲也预热</option>
+                <option value="off">关闭</option>
+              </select>
+            </Row>
+            <Row label="默认思考档位" desc="新会话使用的推理强度。已有会话不受影响。">
+              <select className="rounded-lg border border-border bg-background px-3 py-2.5 text-sm" aria-label="默认思考档位"
+                value={String(settings['defaultThinkingLevel'] ?? 'medium')} onChange={(e) => set('defaultThinkingLevel', e.target.value)}>
+                <option value="off">关闭</option>
+                <option value="minimal">最简</option>
+                <option value="low">低</option>
+                <option value="medium">中</option>
+                <option value="high">高</option>
+                <option value="xhigh">很高</option>
+                <option value="max">最大</option>
+              </select>
+            </Row>
+            <Row label="隐藏思考过程" desc="不展示模型的推理块，只显示最终回答。">
+              <Switch checked={settings['hideThinkingBlock'] === true} onCheckedChange={() => toggle('hideThinkingBlock')} aria-label="隐藏思考过程" />
+            </Row>
+          </Panel>
+
+          <Panel title="图片" className={activeSection === 'images' ? '' : 'hidden'}>
+            <Row label="自动缩放" desc="发送前把大图缩到 2000×2000 以内，避免超出模型限制。">
+              <Switch checked={settings['images.autoResize'] !== false} onCheckedChange={() => toggle('images.autoResize')} aria-label="图片自动缩放" />
+            </Row>
+            <Row label="禁止发送图片" desc="开启后图片不会随消息发给模型（仍可留在本地对话里）。">
+              <Switch checked={settings['images.blockImages'] === true} onCheckedChange={() => toggle('images.blockImages')} aria-label="禁止发送图片" />
             </Row>
           </Panel>
 
