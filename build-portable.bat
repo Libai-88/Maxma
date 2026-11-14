@@ -173,16 +173,24 @@ REM flattened server.js resolves bundleDir()/dataDir() correctly.
     echo pause
 ) > "%PORTABLE_DIR%\MaxmaHere.bat"
 
-REM Stop script: kills whatever listens on the portable port. Needed when the
-REM console window itself was force-killed (Task Manager) or when cleaning up
-REM strays left by the old detached-start launcher.
+REM Stop script: kills the MaxmaHere backend listening on the portable port.
+REM Needed when the console window itself was force-killed (Task Manager) or
+REM when cleaning up strays left by the old detached-start launcher.
+REM
+REM The null guard is load-bearing: after a normal exit the launcher's
+REM foreground child is already gone, so Get-NetTCPConnection returns nothing
+REM and .OwningProcess is $null. Passing that straight to Stop-Process raises a
+REM PARAMETER BINDING error (NullNotAllowed), which -ErrorAction cannot
+REM suppress -- the user sees red PowerShell noise just for double-checking
+REM that the app really stopped (reported on port 8000).
+REM Only kill a process named bun: the default port 8000 is also a common dev
+REM port, so a stop-script click must not destroy some unrelated server.
 (
     echo @echo off
     echo chcp 65001 ^>nul
     echo setlocal EnableExtensions
     echo if "%%MAXMA_API_PORT%%"=="" set "MAXMA_API_PORT=8000"
-    echo powershell -NoProfile -Command "Stop-Process -Id (Get-NetTCPConnection -LocalPort %%MAXMA_API_PORT%% -State Listen -ErrorAction SilentlyContinue).OwningProcess -Force -ErrorAction SilentlyContinue"
-    echo echo MaxmaHere backend on port %%MAXMA_API_PORT%% stopped.
+    echo powershell -NoProfile -Command "$p = (Get-NetTCPConnection -LocalPort %%MAXMA_API_PORT%% -State Listen -ErrorAction SilentlyContinue).OwningProcess; if (-not $p) { Write-Host 'No MaxmaHere backend is running on port %%MAXMA_API_PORT%%.' } elseif ((Get-Process -Id $p -ErrorAction SilentlyContinue).ProcessName -eq 'bun') { Stop-Process -Id $p -Force -ErrorAction SilentlyContinue; Write-Host 'MaxmaHere backend on port %%MAXMA_API_PORT%% stopped.' } else { Write-Host 'Port %%MAXMA_API_PORT%% is held by another program; not stopping it.' }"
     echo pause
 ) > "%PORTABLE_DIR%\Stop MaxmaHere.bat"
 

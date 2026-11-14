@@ -248,6 +248,26 @@ describe("后端打包契约", () => {
     expect(bat).toContain("Stop MaxmaHere.bat");
   });
 
+  test("Stop 脚本在端口空闲时必须明确报告，而不是抛参数绑定错误", () => {
+    // 事故形状（用户报障）：正常关闭应用后后端已随控制台退出，用户再点一次
+    // Stop MaxmaHere.bat 确认干净 —— 旧模板把空集合的 .OwningProcess 直接内联
+    // 进 Stop-Process 的 -Id 实参，PowerShell 在**参数绑定阶段**抛
+    // NullNotAllowed。绑定错误发生在 cmdlet 运行之前，-ErrorAction
+    // SilentlyContinue 拦不住，用户白看一段红字。
+    //
+    // 判据：PID 必须先取到变量里判空，不许把表达式直接内联进 -Id；端口空闲时
+    // 要有"无需停止"的明确输出；只杀 bun，避免误杀占着同一端口的其他程序。
+    const bat = fs.readFileSync(path.join(repoRoot, "build-portable.bat"), "utf8");
+    expect(
+      /Stop-Process\s+-Id\s+\(Get-NetTCPConnection/.test(bat),
+      "Stop 脚本又把空的 OwningProcess 直接内联进 Stop-Process -Id 了",
+    ).toBe(false);
+    expect(bat).toContain("if (-not $p)");
+    expect(bat).toContain("No MaxmaHere backend is running on port");
+    expect(bat).toContain("ProcessName -eq 'bun'");
+    expect(bat).toContain("not stopping it");
+  });
+
   test("桌面链暂存前必须清空 runtime 目录（否则删掉的资源会复活进包里）", () => {
     // Copy-Item -Force 只做同名覆盖，不删"上次有、这次没有"的条目。
     // 实测踩过：把 .omp/skills 从仓库与暂存清单里删干净后重跑，

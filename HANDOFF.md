@@ -1,7 +1,7 @@
 # MaxmaHere 交接说明
 
 > 当前可执行状态，供下一位接手者。架构请先读 [docs/00-当前架构.md](docs/00-当前架构.md)。
-> 更新时间：2026-11-13
+> 更新时间：2026-11-14
 
 ## 2026-11-11 前端重写（重要）
 
@@ -630,6 +630,35 @@ THINK-SPLIT-001 修的是**真实的前端缺陷**（流式时答案拼进思考
 第一次改动就因为在注释里写了 `(waitForBackend)`，`)` 提前闭合了块，
 `MaxmaHere.bat` 整个没生成（`[VERIFY FAIL] MaxmaHere.bat is missing`）。
 引号内的 `^` 是字面量，不要用它转义括号。
+
+## 2026-11-14 PORTABLE-STOP-001：Stop 脚本在端口空闲时抛参数绑定错误
+
+**用户报障**：便携包正常关闭后再点 `Stop MaxmaHere.bat`，PowerShell 报
+`Stop-Process : Cannot bind argument to parameter 'Id' because it is null.`
+
+### 根因
+
+`Get-NetTCPConnection -State Listen` 在端口无人监听时返回空集合，
+`.OwningProcess` 就是 `$null`。旧模板把它**内联**进 `Stop-Process -Id (...)`：
+参数绑定错误发生在 cmdlet 运行**之前**，`-ErrorAction SilentlyContinue` 拦不住
+（它只覆盖绑定成功后的非终止错误）。而正常关闭应用后后端已随控制台退出——
+所以「再点一次确认干净」这个最常见的用法**必定**触发红字。
+
+### 做法
+
+生成模板改为先把 PID 取到变量里判空，再分三支：
+
+- 无监听者 → `No MaxmaHere backend is running on port N.`（明确报告，不报错）
+- 监听者是 `bun` → 强杀并报告 stopped
+- 其他程序占着端口 → 报告且**不动它**（默认端口 8000 也是常见开发端口，
+  旧脚本按端口格杀会误伤别人的服务）
+
+### 锁
+
+`portable-packaging.test.ts` 新增：禁止 `Stop-Process -Id (Get-NetTCPConnection`
+这种内联写法；要求判空分支、空闲文案与 `ProcessName -eq 'bun'` 白名单。
+实测：空闲端口跑脚本 rc=0 无红字；后端在跑时脚本正常杀掉（health 000、无残留）；
+重建后便携包冒烟 PASS。
 
 ## 状态
 
