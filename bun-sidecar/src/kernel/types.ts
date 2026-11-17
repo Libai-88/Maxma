@@ -112,4 +112,15 @@ export interface MaxmaSessionOptions {
    * 由 bridge 用 `createExtensionUiBridge({ emit })` 构造后传入。
    */
   uiContext?: import("./extension-ui").ExtensionUiBridge["uiContext"];
+  /**
+   * 被禁用的用户扩展 id 列表（相对 `<agentDir>/extensions` 的 posix 路径）。
+   * 由后端从 `api/data/disabled_extensions.json` 读出后随 create_session 下发。
+   * 只对 `sourceInfo.scope === "user"` 的扩展生效；Maxma 内联安全扩展不受影响。
+   */
+  disabledExtensions?: string[];
+  /**
+   * 覆盖 pi 的 agent 目录（`getAgentDir()` 产物）。仅测试与多实例隔离使用：
+   * 用户扩展发现、设置读取都基于这个目录。
+   */
+  agentDir?: string;
 }

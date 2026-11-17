@@ -21,6 +21,7 @@ import {
   getAgentDir,
   type AgentSession,
   type InlineExtension,
+  type LoadExtensionsResult,
   type McpServerEntry,
   type ModelRuntime,
 } from "@earendil-works/pi-coding-agent";
@@ -28,6 +29,12 @@ import {
 import { createMaxmaApprovalExtension } from "./extensions/maxma-approval";
 import { MAXMA_ENABLED_DEFAULT_TOOLS } from "./pi-contract";
 import { createMaxmaBlockerExtension } from "./extensions/maxma-blocker";
+import {
+  buildExtensionsSnapshot,
+  filterDisabledExtensions,
+  recordExtensionsSnapshot,
+  type ExtensionsSnapshot,
+} from "./extensions";
 import { maxmaSkillPaths } from "./skills";
 import { createRequestTelemetryExtension } from "./request-telemetry";
 import type { ApprovalGate, MaxmaPermissionMode, MaxmaSessionOptions } from "./types";
@@ -51,28 +58,17 @@ export function approvalExtensionFor(
 }
 
 /**
- * 创建 Maxma 会话（pi 承载）。
- * 返回原始 AgentSession——迁移期内 bridge 仍需会话细节（messages/undo 等），
- * 逐 handler 迁移完成后收敛为更窄的 MaxmaSession 门面。
+ * 内联扩展清单（官方 DefaultResourceLoaderOptions.extensionFactories）：
+ *   1) MaxmaBlocker 拒止锚（与权限无关，恒装配；官方 tool_call 钩子执行前 block）
+ *   2) 审批扩展（read_only/ask/operate 三档需要；auto 不装）
+ *   3) 遥测扩展（提供指纹 secret + epoch + 回调时）
+ *   4) MCP 扩展（官方 createMcpExtension，loadConfig 注入 Maxma 的 mcp_servers.yaml
+ *      清单；未提供清单时不装配——SDK 会话默认不加载任何内置扩展，官方文档明示）
+ *
+ * 这四项**不接受禁用**：审批/拒止是安全机制，关掉等于静默降级；遥测只在显式
+ * 配置指纹时装配。禁用接口在 `kernel/extensions.ts` 里按 scope 硬拒。
  */
-export async function createMaxmaSession(opts: MaxmaSessionOptions): Promise<AgentSession> {
-  const cwd = opts.cwd ?? process.cwd();
-  const agentDir = getAgentDir();
-
-  // 会话承载：官方三态——内存（inMemory）/ 从磁盘恢复（sessionFile）/ 新建持久化。
-  // 恢复时传 cwd 覆盖：便携包可能被整体搬目录，跟着旧 header 的绝对路径会指向
-  // 不存在的位置；以当前 cwd 为准，历史消息本身不受影响。
-  const sessionManager = opts.inMemory
-    ? SessionManager.inMemory()
-    : opts.sessionFile
-      ? SessionManager.open(opts.sessionFile, undefined, cwd)
-      : SessionManager.create(cwd, undefined, opts.sessionId ? { id: opts.sessionId } : undefined);
-
-  // 内联扩展（官方 DefaultResourceLoaderOptions.extensionFactories: InlineExtension[]）：
-  //   1) MaxmaBlocker 拒止锚（与权限无关，恒装配；官方 tool_call 钩子执行前 block）
-  //   2) 审批扩展（read_only/ask/operate 三档需要；auto 不装）
-  //   3) MCP 扩展（官方 createMcpExtension，loadConfig 注入 Maxma 的 mcp_servers.yaml 清单；
-  //      未提供清单时不装配——SDK 会话默认不加载任何内置扩展，官方文档明示）
+export function buildExtensionFactories(opts: MaxmaSessionOptions): InlineExtension[] {
   const extensionFactories: InlineExtension[] = [createMaxmaBlockerExtension()];
   if (opts.requestFingerprintSecret && opts.requestFingerprintEpoch && opts.onRequestTelemetry) {
     extensionFactories.push(createRequestTelemetryExtension(
@@ -99,11 +95,29 @@ export async function createMaxmaSession(opts: MaxmaSessionOptions): Promise<Age
       }),
     );
   }
+  return extensionFactories;
+}
 
-  const resourceLoader = new DefaultResourceLoader({
+/** 归一禁用列表：只认非空字符串，去重（后端已做过白名单校验，这里不做二次裁决）。 */
+function normalizeDisabledIds(ids: string[] | undefined): string[] {
+  return [...new Set((ids ?? []).filter((id): id is string => typeof id === "string" && id.length > 0))];
+}
+
+/**
+ * 构建资源加载器。`onDiscovered` 拿到过滤前的官方结果——那是"用户装了但被禁用"
+ * 的唯一证据（`extensionsOverride` 之后再无痕迹）。
+ */
+function buildResourceLoader(
+  opts: MaxmaSessionOptions,
+  agentDir: string,
+  onDiscovered: (base: LoadExtensionsResult) => void,
+): DefaultResourceLoader {
+  const cwd = opts.cwd ?? process.cwd();
+  const disabledIds = normalizeDisabledIds(opts.disabledExtensions);
+  const loaderOptions: ConstructorParameters<typeof DefaultResourceLoader>[0] = {
     cwd,
     agentDir,
-    extensionFactories,
+    extensionFactories: buildExtensionFactories(opts),
     additionalSkillPaths: maxmaSkillPaths(cwd, opts.skillsEnabled !== false),
     ...(opts.skillsEnabled === false ? { noSkills: true } : {}),
     // 官方选项：整体替换 / 追加系统提示词（直映 create_session RPC 的
@@ -112,6 +126,47 @@ export async function createMaxmaSession(opts: MaxmaSessionOptions): Promise<Age
     ...(opts.appendSystemPrompt !== undefined && opts.appendSystemPrompt.length > 0
       ? { appendSystemPromptOverride: (base: string[]) => [...base, ...opts.appendSystemPrompt!] }
       : {}),
+  };
+  if (disabledIds.length > 0) {
+    // EXT-TOGGLE-001：唯一的禁用挂点。官方在 load 完成后调用它，
+    // 被过滤掉的扩展不进入 bindExtensions，handler/tool 一律不注册。
+    loaderOptions.extensionsOverride = (base) => {
+      onDiscovered(base);
+      return filterDisabledExtensions(base, disabledIds, agentDir);
+    };
+  }
+  return new DefaultResourceLoader(loaderOptions);
+}
+
+export interface MaxmaSessionResult {
+  session: AgentSession;
+  /** 本次加载的扩展快照（清单 + 错误 + 警告），同时写入进程内缓存。 */
+  extensions: ExtensionsSnapshot;
+}
+
+/**
+ * 创建 Maxma 会话（pi 承载），并同时返回扩展加载结果。
+ * `createMaxmaSession` 是它的窄化包装（老调用方只要 session）。
+ */
+export async function createMaxmaSessionWithExtensions(
+  opts: MaxmaSessionOptions,
+): Promise<MaxmaSessionResult> {
+  const cwd = opts.cwd ?? process.cwd();
+  const agentDir = opts.agentDir ?? getAgentDir();
+  const disabledIds = normalizeDisabledIds(opts.disabledExtensions);
+
+  // 会话承载：官方三态——内存（inMemory）/ 从磁盘恢复（sessionFile）/ 新建持久化。
+  // 恢复时传 cwd 覆盖：便携包可能被整体搬目录，跟着旧 header 的绝对路径会指向
+  // 不存在的位置；以当前 cwd 为准，历史消息本身不受影响。
+  const sessionManager = opts.inMemory
+    ? SessionManager.inMemory()
+    : opts.sessionFile
+      ? SessionManager.open(opts.sessionFile, undefined, cwd)
+      : SessionManager.create(cwd, undefined, opts.sessionId ? { id: opts.sessionId } : undefined);
+
+  let discovered: LoadExtensionsResult | undefined;
+  const resourceLoader = buildResourceLoader(opts, agentDir, (base) => {
+    discovered = base;
   });
   await resourceLoader.reload();
 
@@ -120,7 +175,7 @@ export async function createMaxmaSession(opts: MaxmaSessionOptions): Promise<Age
     ...(opts.customTools ?? []).map((tool) => tool.name),
   ];
 
-  const { session } = await createAgentSession({
+  const { session, extensionsResult } = await createAgentSession({
     cwd,
     sessionManager,
     resourceLoader,
@@ -150,5 +205,56 @@ export async function createMaxmaSession(opts: MaxmaSessionOptions): Promise<Age
     session.setActiveToolsByName(session.getAllTools().map((tool) => tool.name));
   }
 
+  // EXT-VISIBLE-001：官方返回的 extensionsResult 此前被整个丢掉——用户扩展
+  // "在跑但看不见"、加载失败"零提示"。现在归一成快照写入进程内缓存，
+  // 由 GET /api/extensions 暴露给界面。
+  const loaded = extensionsResult ?? resourceLoader.getExtensions();
+  const snapshot = buildExtensionsSnapshot({
+    loaded,
+    ...(discovered !== undefined ? { discovered } : {}),
+    agentDir,
+    disabledIds,
+  });
+  recordExtensionsSnapshot(snapshot);
+
+  return { session, extensions: snapshot };
+}
+
+/**
+ * 创建 Maxma 会话（pi 承载）。
+ * 返回原始 AgentSession——迁移期内 bridge 仍需会话细节（messages/undo 等），
+ * 逐 handler 迁移完成后收敛为更窄的 MaxmaSession 门面。
+ */
+export async function createMaxmaSession(opts: MaxmaSessionOptions): Promise<AgentSession> {
+  const { session } = await createMaxmaSessionWithExtensions(opts);
   return session;
+}
+
+/**
+ * 只加载扩展、不建会话：供 `POST /api/extensions/refresh` 显式探测用。
+ * 装配面刻意收窄（只有拒止锚 + 用户扩展，不含审批/遥测/MCP），
+ * 结果会标记为 probe，避免界面把"探测清单"误当成某个活会话的状态。
+ */
+export async function probeExtensionsSnapshot(opts: MaxmaSessionOptions = {}): Promise<ExtensionsSnapshot> {
+  const cwd = opts.cwd ?? process.cwd();
+  const agentDir = opts.agentDir ?? getAgentDir();
+  const disabledIds = normalizeDisabledIds(opts.disabledExtensions);
+  let discovered: LoadExtensionsResult | undefined;
+  const resourceLoader = buildResourceLoader(
+    { ...opts, mcpServers: undefined, permissionMode: "auto", requestFingerprintSecret: undefined },
+    agentDir,
+    (base) => {
+      discovered = base;
+    },
+  );
+  await resourceLoader.reload();
+  const loaded = resourceLoader.getExtensions();
+  const snapshot = buildExtensionsSnapshot({
+    loaded,
+    ...(discovered !== undefined ? { discovered } : {}),
+    agentDir,
+    disabledIds,
+  });
+  recordExtensionsSnapshot(snapshot);
+  return snapshot;
 }

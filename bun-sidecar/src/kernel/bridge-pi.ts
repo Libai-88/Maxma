@@ -25,6 +25,7 @@ import { resolvePiModel } from "./model";
 import { loadPersonaSystemPrompt } from "./persona-prompt";
 import { buildPiCustomTools } from "./tools";
 import { createSubagentTool, type SubagentLimits } from "./subagent";
+import { normalizeDisabledExtensionIds } from "./extensions";
 import {
   createSubmitPlanTool,
   PI_PLAN_MODE_DIRECTIVE,
@@ -376,8 +377,8 @@ export async function handlePiCreateSession(
     ...(mcp && mcp.entries.length > 0 ? { mcpServers: mcp.entries } : {}),
     // Maxma 特色能力层（记忆、规则、办公读取 + 计划模式）
     // 子 Agent：pi SDK 的进程内会话（docs/sdk.md + examples/extensions/subagent），
-    // 复用本会话已解析的 ModelRuntime/凭据，不 spawn 外部进程。
-    // 面板值（启用/并行数/超时）由后端在 create_session 的 `subagent` 参数里下发。
+    // 复用本会话已解析的 ModelRuntime/凭据，不 spawn 外部进程；面板值（启用/并行数/超时）
+    // 由后端在 create_session 的 `subagent` 参数里下发。
     customTools: [
       ...buildPiCustomTools(cwd, subagentTool === undefined ? [] : [subagentTool]),
       submitPlanTool,
@@ -393,6 +394,7 @@ export async function handlePiCreateSession(
     inMemory: params?.in_memory === true,
     sessionId,
     ...(resume ? { sessionFile: resume.file } : {}),
+    disabledExtensions: normalizeDisabledExtensionIds(params?.disabled_extensions),
   };
 
   let session: PiAgentSession;
@@ -829,12 +831,9 @@ export async function handlePiSessionRpc(
   // ── 会话树（TREE-001）──
   //
   // pi 把会话存成**树**（append-only entry + 活动 leaf），但此前 Maxma 只用过
-  // `getBranch()`（取当前分支）与 `getLeafId()`（checkpoint），从未把整棵树暴露出来。
-  // 用户看不到"这段对话分过哪些支"，也就用不上 pi 的分支能力。
-  //
-  // 这里只做**只读投影**：把官方 SessionTreeNode 压成前端能直接渲染的形状。
-  // 不透传原始 entry——里面含 usage/自定义 entry 等前端不消费的字段，
-  // 且形状随 pi 版本变（engine-boundary 的纪律：前端只认 Maxma 契约）。
+  // `getBranch()` 与 `getLeafId()`，整棵树从未暴露，用户看不到"分过哪些支"。
+  // 这里只做**只读投影**：把官方 SessionTreeNode 压成前端能直接渲染的形状，
+  // 不透传原始 entry——它含前端不消费的字段且随 pi 版本变化（前端只认 Maxma 契约）。
   if (method === "get_tree") {
     const sm = record.session.sessionManager;
     const leafId = sm.getLeafId();
