@@ -28,7 +28,16 @@ export interface MaxmaEventLike {
   payload: Record<string, unknown>;
 }
 
-/** 工具执行耗时测算（与 OMP 版 toolStartTimestamps 同语义，kernel 自持）。 */
+/**
+ * 工具执行耗时测算（与 OMP 版 toolStartTimestamps 同语义，kernel 自持）。
+ *
+ * 这个 map 是**模块级**的，只在 tool_execution_end 里按 id 删除。以下路径会让条目永久滞留：
+ * 工具中途崩溃、会话被中断/切走、上游丢了一个 end 事件。侧车进程长驻并连续服务多个会话，
+ * 于是它成了一个只增不减的跨会话增长点——同一进程里跑多个测试文件时，残留时间戳
+ * 甚至会把后一个会话的 elapsed 算成"从上次 start 到现在"（实测快照 0 → 8）。
+ * 正常路径（start → end 配对）仍然精确；这里只加一个容量上限兜底，保证内存有界。
+ */
+const TOOL_START_LIMIT = 512;
 const toolStartTimestamps = new Map<string, number>();
 
 interface PiMessageLike {
@@ -113,7 +122,15 @@ export function mapPiAgentEventToMaxma(
 
   // ── 工具执行 ──
   if (type === "tool_execution_start") {
-    if (e.toolCallId) toolStartTimestamps.set(e.toolCallId, Date.now());
+    if (e.toolCallId) {
+      toolStartTimestamps.set(e.toolCallId, Date.now());
+      // 超限时淘汰最早插入的一条（Map 保留插入顺序）——见 TOOL_START_LIMIT 的说明。
+      while (toolStartTimestamps.size > TOOL_START_LIMIT) {
+        const oldest = toolStartTimestamps.keys().next();
+        if (oldest.done) break;
+        toolStartTimestamps.delete(oldest.value);
+      }
+    }
     return {
       type: "tool_start",
       payload: {
