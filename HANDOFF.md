@@ -61,6 +61,32 @@
 三项断言全绿（面板上能看到 `probe-confirm / 用户扩展 / 已启用 / 禁用`，
 以及 `maxma-blocker`、`maxma-approval` 标"Maxma 内置 / 不可禁用"）。
 
+### 推送记录：git 协议不通，改走 GitHub REST API
+
+本机 DNS 对 `github.com` 返回劫持地址（`198.51.44.x` 等，443 不可达），到真实 IP
+（`20.205.243.166` / `20.6.7.17`）的 TLS 也被持续重置：`git push` / `ls-remote` 连续
+10 次、约 20 分钟全部失败，SSH over 443 能握手但没有注册公钥。`api.github.com` 可用，
+因此用 REST 的 git data 接口（blob → tree → commit → PATCH ref）推送：
+
+- 每个提交逐条校验"远端 tree sha == 本地 `rev-parse <commit>^{tree}`"，不一致立刻中止；
+- 7 个提交一次性推到 `fix/portable-stop-null-guard`，远端尖端
+  `4589d0d9af9ce475fbf7686d3d71bd5099168f78`，tree `fd2920d9` 与本地 `16fa80c2` 相同；
+- 根仓库 `Maxma-workspace` 的 master 推到 `eca842930fc064c94422e3a53168a7894155fbd9`，
+  子模块指针直接指向远端实际的 `4589d0d9`（原来指向本地 `16fa80c2`，那个 SHA 远端不存在）。
+
+**副作用，接手时注意**：API 新建的提交对象与本地对象只有 tree 相同、SHA 不同，
+本地仓库里没有这 7 个远端提交对象。网络恢复后本地要与远端对齐一次：
+
+```bash
+git fetch origin fix/portable-stop-null-guard
+git reset --hard origin/fix/portable-stop-null-guard   # 内容相同，只换 SHA
+git submodule update --init --recursive                # 让根仓库 gitlink 的"脏"状态消失
+```
+
+对齐前不要 `git push`，会因历史分叉被拒；本地旧提交保留在分支
+`backup-pre-api-push-20261118`。推送脚本在 `%TEMP%\maxma-api-push.mjs`（不入库，含凭据读取，
+仅从 `git credential fill` 取 token 到内存）。
+
 ## 2026-11-17 开发质量诊断后的 P0/P1 修复
 
 诊断报告在 `D:\Maxma\Maxma-开发质量诊断-20261117.md`（工作区根，不在本仓库）。本节的数字全部是
