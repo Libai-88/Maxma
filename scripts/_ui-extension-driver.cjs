@@ -133,10 +133,27 @@ app.whenReady().then(async () => {
     }
     if (!result.replied) throw new Error("点「是」后扩展没有收到答复（notify 未出现）");
     result.stage = "replied";
+
+    // 扩展管理页的「扩展」tab：外部扩展与状态必须真的看得见（EXT-VISIBLE-UI-001）。
+    // API 单测只能证明数据对，这里证明它确实渲染到了界面上。
+    await win.loadURL(BASE + "/extensions?tab=extensions");
+    let extText = "";
+    for (let i = 0; i < 20; i++) {
+      await sleep(500);
+      extText = await win.webContents.executeJavaScript("document.body.innerText").catch(() => "");
+      if (extText.includes("probe-confirm.ts")) break;
+    }
+    result.extensionsText = extText.slice(0, 1500);
+    if (!extText.includes("probe-confirm.ts")) {
+      throw new Error("扩展 tab 没有列出 probe-confirm.ts（外部扩展在界面上不可见）");
+    }
+    if (!extText.includes("已启用")) throw new Error("扩展 tab 没有显示启用/禁用状态");
+    result.extensionsTab = true;
+    result.stage = "extensions-tab";
   } catch (err) {
     result.error = String(err && err.message ? err.message : err);
   }
 
   process.stdout.write("DRIVE_RESULT " + JSON.stringify(result) + "\n");
-  app.exit(result.replied ? 0 : 1);
+  app.exit(result.replied && result.extensionsTab ? 0 : 1);
 });

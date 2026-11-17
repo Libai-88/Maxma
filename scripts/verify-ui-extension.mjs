@@ -191,9 +191,59 @@ try {
     } else {
       console.log("✅ 扩展 ctx.ui 真实链路：扩展弹窗 → 用户点「是」→ 扩展收到 true");
     }
+    if (!r.extensionsTab) {
+      fail(`扩展页「扩展」tab 未验证通过（stage=${r.stage}${r.error ? ", error=" + r.error : ""}）`);
+      if (r.extensionsText) console.error("扩展页文字片段：\n" + r.extensionsText.slice(0, 1200));
+    } else {
+      console.log("✅ 扩展页「扩展」tab：外部扩展与启用状态在真实界面上可见");
+    }
     if (r.consoleErrors?.length) fail(`浏览器 console 有 ${r.consoleErrors.length} 条错误`);
   }
   if (code !== 0 && !failures.length) fail(`界面驱动退出码非 0：${code}`);
+
+  // ── 5. 扩展清单与启停（EXT-VISIBLE-001 / EXT-TOGGLE-001）──
+  // 用刚放进去的真实扩展验证：清单看得见 → 能禁用 → 能恢复。
+  // 这一步比单测更硬：走的是真实后端 + 真实 agent 目录里的真实文件。
+  {
+    const listRes = await fetch(base + "/api/extensions", { headers: H });
+    const list = await listRes.json().catch(() => ({}));
+    if (!listRes.ok) fail(`GET /api/extensions HTTP ${listRes.status}`);
+    if (!list.loaded) fail("GET /api/extensions 显示未加载（刚建过会话，应已记录加载结果）");
+    const probe = (list.extensions ?? []).find((e) => e.id === "probe-confirm.ts");
+    if (!probe) fail("清单里没有 probe-confirm.ts（外部扩展不可见）");
+    else if (!probe.enabled) fail("probe-confirm.ts 在清单里不是已启用状态");
+    else if (!probe.disablable) fail("probe-confirm.ts 应可禁用（它是用户扩展）");
+    if ((list.errors ?? []).length) fail(`扩展加载有 ${list.errors.length} 条错误`);
+
+    // 内置安全扩展必须在清单里且不可禁用
+    const bundled = (list.extensions ?? []).find((e) => e.id === "<inline:maxma-blocker>");
+    if (!bundled) fail("清单里缺少 maxma-blocker（内置拒止扩展）");
+    else if (bundled.disablable) fail("内置拒止扩展被标成可禁用（安全回归）");
+
+    const offRes = await fetch(base + "/api/extensions", {
+      method: "PUT",
+      headers: H,
+      body: JSON.stringify({ id: "probe-confirm.ts", enabled: false }),
+    });
+    if (!offRes.ok) fail(`禁用 probe-confirm.ts 失败 HTTP ${offRes.status}`);
+    const off = await offRes.json().catch(() => ({}));
+    const offItem = (off.extensions ?? []).find((e) => e.id === "probe-confirm.ts");
+    if (!offItem) fail("禁用后清单里找不到该扩展（应显示为已禁用，而不是消失）");
+    else if (offItem.enabled) fail("禁用后清单仍显示已启用");
+    if (!(off.disabled ?? []).includes("probe-confirm.ts")) fail("禁用清单没有落盘");
+
+    const onRes = await fetch(base + "/api/extensions", {
+      method: "PUT",
+      headers: H,
+      body: JSON.stringify({ id: "probe-confirm.ts", enabled: true }),
+    });
+    if (!onRes.ok) fail(`恢复启用失败 HTTP ${onRes.status}`);
+    const on = await onRes.json().catch(() => ({}));
+    const onItem = (on.extensions ?? []).find((e) => e.id === "probe-confirm.ts");
+    if (!onItem || !onItem.enabled) fail("恢复启用后清单仍不是已启用状态");
+    if ((on.disabled ?? []).includes("probe-confirm.ts")) fail("恢复启用后禁用清单里仍有它");
+    console.log("✅ 扩展清单/启停：外部扩展可见、可禁用、可恢复，内置扩展不可禁用");
+  }
 } catch (err) {
   fail(String(err?.message ?? err));
 } finally {
