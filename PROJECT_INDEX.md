@@ -109,6 +109,7 @@ web/src/main.tsx
 - `dev_docs/typecheck-baseline.json` — 类型债基线（`scripts/check-type-budget.mjs` 消费，只准降）
 - `dev_docs/file-size-baseline.json` — 巨型文件体量基线（`scripts/check-file-size-budget.mjs` 消费，只准降）
 - [dev_docs/adr/0007-dependency-pinning-and-prereleases.md](dev_docs/adr/0007-dependency-pinning-and-prereleases.md) — 依赖口径：`@deepseek-ai/dsh-*` 预发布钉死、`@types/bun` 对齐运行时、未用依赖清零
+- [dev_docs/quality-audit-2026-11-17.md](dev_docs/quality-audit-2026-11-17.md) — 全量开发质量诊断（分维度评分、三条 P0 死检查的复现证据）+ 同日修复执行记录（闸门前后对照）
 
 ## 开发命令
 
