@@ -1,9 +1,121 @@
 # MaxmaHere 交接说明
 
 > 当前可执行状态，供下一位接手者。架构请先读 [docs/00-当前架构.md](docs/00-当前架构.md)。
-> 更新时间：2026-11-14
+> 更新时间：2026-11-17
 
-## 2026-11-11 前端重写（重要）
+## 2026-11-17 开发质量诊断后的 P0/P1 修复
+
+诊断报告在 `D:\Maxma\Maxma-开发质量诊断-20261117.md`（工作区根，不在本仓库）。本节的数字全部是
+**2026-11-17 本机实测**（Windows + Bun 1.3.14 + Node 22.23.2），不是估算。
+
+### 新基线（`bash scripts/verify-all-gates.sh` 全绿，exit 0）
+
+| 闸门 | 结果 |
+| --- | --- |
+| sidecar `bun test --coverage` | **194 pass / 0 fail / 25 snapshots**，行覆盖 85.42% |
+| 核心模块行覆盖率（14 项，≥65%） | PASS（最低 `tools.ts` 81.08%，`bridge-pi.ts` 由 55.30 → **87.34**） |
+| sidecar tsc | 0 error |
+| backend `bun test` | 291 pass / 0 fail |
+| web tsc（含 `web/tests`） | 0 error |
+| web `bun test`（**新增**） | 30 pass / 0 fail / 682 expect |
+| web ESLint（**新增**，只查改动） | 0 error |
+| web vite build | ✓ 7.7s |
+| 语义色守卫 / 间距守卫 | 82 个 TSX 全通过 |
+| 类型债棘轮 | 双侧 0 |
+| 体量棘轮（**新增**） | 10 个 >800 行文件均在基线内 |
+| 后端 bundle | `externals OK`（23 个包） |
+
+### P0-1 COV-PASS-001：CI 覆盖率门槛是死检查
+
+`[ "$COV" -lt 65 ]` 拿 `51.15` 这种小数去比整数：bash 报 `integer expression expected` 并返回 **2**，
+`if` 里非 0 一律按假 → `::error::` 永不打印、恒 exit 0。证据是 run `43571147741`：
+日志里写着 `bridge-pi.ts line coverage: 51.15%`，作业结论却是 success。
+判据现在抽成 `scripts/check-core-coverage.sh`（CI 与本地 gate **共用**，不再两套口径）：
+awk 数值比较（必须 `+0`，否则 `"100.00" < "65"` 按字典序成立）、三条判据自检、
+名单漂移守卫（匹配不足 10 行直接报"门槛空转"）。用真实覆盖率表 + 两个负例验证：
+`bridge-pi 51.15` → exit 1 并打印 `::error::`；只留 3 行 → exit 1 报名单漂移。
+
+### P0-1b：`bridge-pi.ts` 从 55.30% 补到 87.34%
+
+新增 `bun-sidecar/tests/bridge-pi-rpc.test.ts`（31 用例 / 141 expect / 8s）：`subscribePiSession`
+（此前的 0 测试区，含工具循环熔断 TOOL_LOOP_LIMIT、闲置回顾 `usage_source:"pi_message_end"`、
+cache_warm 价格态沿用）与全部 RPC 分支（未知会话、缺参、树/编辑/权限/undo/fork/clear 等）。
+**踩过的坑**：`kernel/events.ts` 的 `toolStartTimestamps` 是模块级 map，测试里复用 `c1/c2` 会把
+时间戳留给 `contract-snapshot.test.ts` 的同名 `toolCallId`，把快照的 `elapsed` 从 0 变成 8。
+现在所有新增 toolCallId 一律 `cov-` 前缀。
+
+### P0-2：前端从 0 个测试文件到 30 个用例
+
+`useChat.ts`（2842 行）里真正承载历史缺陷的那几段是纯计算，抽到 `web/src/hooks/chatTurns.ts`：
+`backendMessagesToTurns`（HISTORY-REFS-001：剥时间尾缀与 `__refs__`、按轮汇总用量）、
+`migrateLegacyTurn`、`mapLimit`、`isValidSessionId`、`getReconnectDelay`、
+`findLastPureThinking`（THINK-SPLIT-001）、`findToolCallByCallId`（审批卡被覆盖）、`toolBufferKey` 等。
+`useChat.ts` 改为 import 同名函数，call site 一处未动（2842 → 2645 行）。
+测试 `web/tests/chatTurns.test.ts` 由 `bun test` 跑（不引入 vitest 第二套栈），
+并已接入 `verify-all-gates.sh` 与 `.github/workflows/frontend.yml`。
+
+### P0-3：根仓库 `.gitmodules`
+
+根仓库 `D:\Maxma` 有 `MaxmaHere` gitlink（`160000 … ed4d472c = origin/main`）却**没有 `.gitmodules`**，
+`git submodule status` 直接 `fatal: no submodule mapping found in .gitmodules for path 'MaxmaHere'`，
+新克隆只能拿到空目录。已补 `.gitmodules`（url 指向 `https://github.com/Libai-88/Maxma.git`，branch=main）
+并加根 `README.md` 写明 `--recurse-submodules`。**未提交**：根仓库的 gitlink 需一次 commit 才对克隆生效，
+且本地 HEAD（`f1094714`）与记录指针（`ed4d472c`）不一致（`git submodule status` 行首 `+`）。
+
+### P1-1：ESLint（只对改动开闸）
+
+`web/eslint.config.js`（flat config + typescript-eslint `projectService` + react-hooks）+
+`web/scripts/lint-changed.mjs`：目标集合 = `base...HEAD` ∪ 工作区 ∪ 未跟踪，只取 `web/src|tests` 的 `.ts/.tsx`。
+规则只挑会出事故的：`rules-of-hooks`、`no-floating-promises`、`no-misused-promises`、`no-explicit-any`、
+`no-unused-vars`、空 catch。存量 2.6 万行不开闸（否则只能被 `--quiet` 关掉）。
+CI 侧 `frontend.yml` 用 `fetch-depth: 0` + 显式 `LINT_BASE`（浅克隆会让 merge-base 失败 → 目标为空 → 又是一道死检查）。
+
+### P1-2：巨型文件体量棘轮
+
+`scripts/check-file-size-budget.mjs` + `dev_docs/file-size-baseline.json`：>800 行的 10 个文件记账，
+**只准降**；新文件越界直接红。实测负例：把 `useChat.ts` 基线改成 2600 → 报"长了 45 行"并 exit 1。
+不做大重构（诊断已说明理由：回归风险高于收益，且这一轮的目标是"先别继续长"）。
+
+### P1-3 / P1-4：依赖口径（ADR 0007）
+
+- 删 web 侧 9 个未用依赖（6 个 `@codemirror/*` + `codemirror` + `recharts` + `next-themes`），
+  连带删 `vite.config.ts` 的 `dedupe` 与 `manualChunks.codemirror`——**这一步只有构建才会暴露**：
+  `codemirror` 作为 manualChunks 的入口名，包一删就是 `Could not resolve entry module "codemirror"`。
+  同时删 `solid-glass.css` 的两条 `.recharts-*` 规则（`.bg-chart-*` 颜色词汇保留）。
+- `bun-backend` 的 `@types/bun` 由 `latest`（实测解析到 1.4.2）钉回 `1.3.14`，与运行时/`bun-sidecar` 对齐。
+- `dev_docs/adr/0007-dependency-pinning-and-prereleases.md` 记录 `@deepseek-ai/dsh-*` 四个 `0.1.7-rc.2` 的
+  钉死理由与升级流程。
+
+### 顺带修掉的两处"死检查"（同一症状家族）
+
+1. `scripts/check-type-budget.mjs` 在 `bun` 不在 PATH 时，`execFileSync` 抛错被当成"输出里没有 error TS"
+   → 计成 **0 个错误** → `✓ bun-backend: 0`。本机 PowerShell 实测复现（`'bun' is not recognized` + 绿）。
+   现在：先解析可执行的 bun（`BUN_BIN` → PATH → `bun-sidecar/bun.exe`），解析不到直接红；
+   tsc 退出非 0 且一条 `error TS` 都匹配不到时，报"工具故障"而不是 0；`--write` 拒绝记账。
+2. `scripts/verify-all-gates.sh` 的 `web tsc` 用 `npx`，Git Bash 里 `npx` 是 `.cmd` 包装找不到 →
+   退化后 grep 计数为 0 → PASS。现在全部改 `node <入口>`（`node_modules/typescript/bin/tsc`、
+   `node_modules/vite/bin/vite.js`、`scripts/check-*.mjs`），并按退出码判定。
+
+### 未验证 / 本轮未做
+
+- 两个仓库都**没有 commit / push**（按约定不擅自提交）。本地 diff 清单见下。
+- 根仓库 `MaxmaHere` 指针仍是 `ed4d472c`（origin/main 尖端），本地工作区停在 `f1094714`（未合入的分支），
+  `M MaxmaHere` 是常态；要不要把指针挪到某个新提交，取决于主项目何时合入 main。
+- `kernel/events.ts` 的模块级 `toolStartTimestamps` 只增不减（除非 end 到达）：跨会话/跨测试的
+  潜在泄漏点，本轮只做了测试隔离（`cov-` 前缀），**没有改实现**。
+- ESLint 尚未对全量存量开闸；`react-hooks/exhaustive-deps` 是 warn（不计入退出码）。
+- `-rc` 依赖在异地 registry 的可得性未复现。
+
+### 本轮改动清单（未提交，供 commit 时核对）
+
+改：`.github/workflows/{frontend,sidecar}.yml`、`bun-backend/{package.json,bun.lock}`、
+`scripts/{check-type-budget.mjs,verify-all-gates.sh}`、`web/{package.json,package-lock.json,tsconfig.json,vite.config.ts}`、
+`web/src/hooks/useChat.ts`、`web/src/solid-glass.css`、`PROJECT_INDEX.md`、`HANDOFF.md`
+新增：`bun-sidecar/tests/bridge-pi-rpc.test.ts`、`web/src/hooks/chatTurns.ts`、`web/tests/chatTurns.test.ts`、
+`web/eslint.config.js`、`web/scripts/lint-changed.mjs`、`scripts/{check-core-coverage.sh,check-file-size-budget.mjs}`、
+`dev_docs/{file-size-baseline.json,adr/0007-dependency-pinning-and-prereleases.md}`
+根仓库（`D:\Maxma`）：新增 `.gitmodules`、`README.md`。
+
 
 `web/` 由 **Vue 3 + Pinia + vue-router + 自研 6 主题/CSS 类体系** 整体重写为
 **React 19 + Vite 6 + Tailwind 4 + shadcn/ui（base-nova）+ Solid Glass 材质**；

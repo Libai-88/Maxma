@@ -107,6 +107,8 @@ web/src/main.tsx
 - [dev_docs/realtime-human-agent-collaboration.md](dev_docs/realtime-human-agent-collaboration.md)
 - [dev_docs/pi-shell-capability-plan.md](dev_docs/pi-shell-capability-plan.md) — pi 能力完整保留计划（扩展 UI / 会话树 / 设置可见性，含实测证据与执行顺序）
 - `dev_docs/typecheck-baseline.json` — 类型债基线（`scripts/check-type-budget.mjs` 消费，只准降）
+- `dev_docs/file-size-baseline.json` — 巨型文件体量基线（`scripts/check-file-size-budget.mjs` 消费，只准降）
+- [dev_docs/adr/0007-dependency-pinning-and-prereleases.md](dev_docs/adr/0007-dependency-pinning-and-prereleases.md) — 依赖口径：`@deepseek-ai/dsh-*` 预发布钉死、`@types/bun` 对齐运行时、未用依赖清零
 
 ## 开发命令
 
@@ -116,7 +118,10 @@ cd bun-backend && bun run src/server.ts     # :8000
 cd web && npm run dev                        # :5173（React + Vite）
 cd bun-backend && bun test                   # 后端
 cd bun-sidecar && bun test                   # 引擎
-cd web && npx tsc --noEmit             # 前端类型
+cd web && npx tsc --noEmit             # 前端类型（含 tests/）
+cd web && bun test    # 前端单测（web/tests，目前覆盖 hooks/chatTurns.ts 纯函数层）
+cd web && npm run lint    # ESLint，只查本次改动触及的 .ts/.tsx（存量不开闸）
+node scripts/check-file-size-budget.mjs      # 体量棘轮
 bash scripts/verify-all-gates.sh             # 交付前全部闸门
 ```
 
@@ -124,8 +129,10 @@ bash scripts/verify-all-gates.sh             # 交付前全部闸门
 
 | 脚本 | 用途 |
 | --- | --- |
-| `verify-all-gates.sh` | 交付前全部闸门，按退出码判定 |
-| `check-type-budget.mjs` | 类型债棘轮，`--write` 下调基线 |
+| `verify-all-gates.sh` | 交付前全部闸门，按退出码判定（含核心模块覆盖率、上文两条棘轮、前端单测与 ESLint） |
+| `check-type-budget.mjs` | 类型债棘轮，`--write` 下调基线；工具链缺失时报红而不是记 0 |
+| `check-core-coverage.sh` | 核心模块行覆盖率门槛（≥65%），CI 与本地闸门共用同一实现 |
+| `check-file-size-budget.mjs` | 巨型文件体量棘轮（>800 行入基线，只准降），`--write` 收紧 |
 | `git-pr-flow.sh` | 分支 + PR squash 合并流程（Trunk-Based） |
 | `upgrade-pi.mjs` | 引擎升级：`--check` / `<version>`，两 workspace 同步 + 失败回滚 |
 | `smoke-e2e-roundtrip.mjs` | 端到端回合冒烟（本地假服务，零额度，需后端在跑） |
