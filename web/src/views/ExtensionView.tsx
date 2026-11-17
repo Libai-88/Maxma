@@ -10,10 +10,12 @@ import { confirmAction } from '@/components/common/ConfirmDialog'
 import { api } from '@/api'
 import type { MCPServerConfig, MCPServerCreateBody, MCPTransport, DiscoveredServer } from '@/types'
 import { McpMarket } from '@/components/mcp/McpMarket'
+import { ExtensionsPanel } from '@/components/extensions/ExtensionsPanel'
+import { emptyForm, linesToArray, linesToObj, objToLines, type McpForm } from '@/components/extensions/mcpForm'
 
 /** 扩展管理：MCP 服务器 CRUD 与已加载 Skills。 */
 
-const VALID_TABS = ['tools', 'skills', 'mcp'] as const
+const VALID_TABS = ['tools', 'skills', 'mcp', 'extensions'] as const
 type ExtensionTab = (typeof VALID_TABS)[number]
 const MARKET_PAGE_SIZE = 12
 
@@ -58,68 +60,7 @@ interface DiscoveredSkill {
   file_path?: string
 }
 
-// ── 表单结构：把数组/对象字段都以「每行一条」的文本表示，保存时再解析 ──
-interface McpForm {
-  server_id: string
-  transport: MCPTransport
-  enabled: boolean
-  description: string
-  command: string
-  args: string
-  env: string
-  cwd: string
-  url: string
-  headers: string
-  timeout: string
-  tls_verify: boolean
-  allowed_tools: string
-  blocked_tools: string
-}
-
-function emptyForm(): McpForm {
-  return {
-    server_id: '',
-    transport: 'stdio',
-    enabled: true,
-    description: '',
-    command: '',
-    args: '',
-    env: '',
-    cwd: '',
-    url: '',
-    headers: '',
-    timeout: '',
-    tls_verify: true,
-    allowed_tools: '',
-    blocked_tools: '',
-  }
-}
-
-function linesToArray(lines: string): string[] {
-  return lines
-    .split(/[\n,]/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-}
-
-function linesToObj(lines: string): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const line of lines.split('\n')) {
-    const i = line.indexOf('=')
-    if (i > 0) {
-      const key = line.slice(0, i).trim()
-      if (key) out[key] = line.slice(i + 1).trim()
-    }
-  }
-  return out
-}
-
-function objToLines(obj?: Record<string, string>): string {
-  if (!obj) return ''
-  return Object.entries(obj)
-    .map(([k, v]) => `${k}=${v}`)
-    .join('\n')
-}
+// ── MCP 表单（纯数据转换在 components/extensions/mcpForm.ts）──
 
 export default function ExtensionView() {
   const location = useLocation()
@@ -131,7 +72,7 @@ export default function ExtensionView() {
     : 'tools'
 
   function setTab(tab: ExtensionTab) {
-    navigate(
+    void navigate(
       { pathname: location.pathname, search: tab === 'tools' ? '' : `?tab=${tab}` },
       { replace: true },
     )
@@ -266,6 +207,7 @@ export default function ExtensionView() {
           { id: 'tools', label: '工具' },
           { id: 'skills', label: 'Skills' },
           { id: 'mcp', label: 'MCP 服务' },
+          { id: 'extensions', label: '扩展' },
         ] as { id: ExtensionTab; label: string }[]).map((t) => (
           <button
             key={t.id}
@@ -283,7 +225,9 @@ export default function ExtensionView() {
       </div>
 
       {/* MCP 服务（独立 CRUD 子视图，内嵌） */}
-      {activeTab === 'mcp' ? (
+      {activeTab === 'extensions' ? (
+        <ExtensionsPanel />
+      ) : activeTab === 'mcp' ? (
         <McpSection />
       ) : loading ? (
         <div role="status" aria-live="polite" className="py-3">
