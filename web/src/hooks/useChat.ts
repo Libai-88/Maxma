@@ -1,11 +1,11 @@
-import type { ClientMessage, TaskBriefMessage, ServerEvent, ChatTurn, ToolCall, ThinkingBlock, TurnEvent, ContextUsage, CompactionReason,  AskUserEvent, ArtifactEvent, PlanProposedEvent, PlanStepStartEvent, PlanStepEndEvent, PlanStepErrorEvent, PlanCompletedEvent, MemoryToolEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent, TurnUsage, PiUsage,
+import type { ClientMessage, TaskBriefMessage, ServerEvent, ChatTurn, ToolCall, TurnEvent, ContextUsage, CompactionReason,  AskUserEvent, ArtifactEvent, PlanProposedEvent, PlanStepStartEvent, PlanStepEndEvent, PlanStepErrorEvent, PlanCompletedEvent, MemoryToolStartEvent, MemoryToolEndEvent, MemoryToolErrorEvent, MemoryStartEvent, MemoryDoneEvent, TurnUsage,
 } from '@/types'
 import type { ThinkPathId } from '@/utils/thinkPath'
 import { normalizeContextUsage, useChatStore, TURNS_KEY_PREFIX } from '@/stores/chat'
 import { useEffect, useRef } from 'react'
 import { useSessionStore } from '@/stores/session'
 import { useExtensionUiStore } from '@/stores/extensionUi'
-import { buildFlatMessage, buildTimestamp, parseReferences } from '@/utils/references'
+import { buildFlatMessage, buildTimestamp } from '@/utils/references'
 import type { ParsedRef } from '@/utils/references'
 import { getToken, ensureTokenLoaded, resetToken, api } from '@/api'
 import { waitForBackend, getWsBase, getApiBase, generateUUID } from '@/utils/env'
@@ -19,6 +19,20 @@ import { autoReadIfEnabled } from '@/hooks/useTts'
 import type { GoalChannelState, TaskBriefState } from '@/stores/chat'
 import { createLogger } from '@/utils/logger'
 import { userFacingModelError } from '@/utils/modelErrors'
+import {
+  mapLimit,
+  isValidSessionId,
+  getReconnectDelay,
+  backendMessagesToTurns,
+  migrateLegacyTurn,
+  findLastThinking,
+  findLastPureThinking,
+  findRunningTool,
+  findToolCallByCallId,
+  toolBufferKey,
+  findTurnByBackendId,
+  findRunningMemoryTool,
+} from '@/hooks/chatTurns'
 
 const log = createLogger('chat')
 
@@ -237,20 +251,7 @@ const _childSessionIds = new Set<string>()
 /** 正在从后端加载历史的会话 ID 集合（RACE-002 in-flight 去重）。 */
 const _historyLoadingSids = new Set<string>()
 
-/** 匹配旧格式尾缀（用于 localStorage 迁移） */
-const TIME_SUFFIX_RE = /（\d{4}-\d{2}-\d{2} \w{3} \d{2}:\d{2}）$/
-
-/** 将旧格式 turn（userMessage 含 __refs__ 和时间尾缀）迁移为新格式 */
-function migrateLegacyTurn(turn: Record<string, unknown>): ChatTurn {
-  if (Array.isArray(turn.refs)) {
-    return { memoryEvents: [], ...turn } as unknown as ChatTurn
-  }
-  // 旧格式：从 userMessage 中提取 refs 和时间尾缀
-  const prevMsg = (turn.userMessage ?? '') as string
-  const { cleanText, refs } = parseReferences(prevMsg || '')
-  const text = refs.length > 0 ? cleanText : prevMsg.replace(TIME_SUFFIX_RE, '')
-  return { ...turn, userMessage: text, refs, memoryEvents: [] } as unknown as ChatTurn
-}
+// TIME_SUFFIX_RE / migrateLegacyTurn 已抽到 hooks/chatTurns.ts（可单测的纯函数层）
 
 // 从 localStorage 恢复所有会话的消息缓存（页面刷新后仍保留）
 function loadAllTurnsFromStorage(): Map<string, ChatTurn[]> {
@@ -546,21 +547,6 @@ async function hydrateTurnSticker(turn: ChatTurn): Promise<boolean> {
   }
 }
 
-/** 并发执行 map 回调，最多 limit 个同时在途（PERF-HYDRATE-001） */
-async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length)
-  let next = 0
-  async function worker() {
-    while (next < items.length) {
-      const idx = next++
-      results[idx] = await fn(items[idx])
-    }
-  }
-  const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker())
-  await Promise.all(workers)
-  return results
-}
-
 async function hydrateTurnStickers(sid: string, turns: ChatTurn[]): Promise<void> {
   // PERF-HYDRATE-001：长会话恢复时此前 Promise.all 一次性并发 N 个
   // 贴纸请求（100+ 轮 = 100+ 并发请求），限制为 4 并发。
@@ -568,100 +554,7 @@ async function hydrateTurnStickers(sid: string, turns: ChatTurn[]): Promise<void
   if (changed) persistTurns(sid)
 }
 
-/** 后端返回 [{role, content}] → ChatTurn[]（一轮 = 1 human + 后续所有非 human 消息） */
-interface BackendMessage {
-  role: string
-  content: string
-  /** pi 的 assistant 消息自带（`get_messages` 现在原样带回，见 bridge-pi.ts）。 */
-  usage?: PiUsage | null
-  provider?: string | null
-  model?: string | null
-  timestamp?: number
-}
-
-function backendMessagesToTurns(sid: string, messages: BackendMessage[]): ChatTurn[] {
-  const turns: ChatTurn[] = []
-  let i = 0
-  while (i < messages.length) {
-    const msg = messages[i]
-    if (msg.role === 'human') {
-      // 修复 HISTORY-REFS-001：剥离发送时附加的时间尾缀与 __refs__ JSON 标记
-      // （与 migrateLegacyTurn 的 localStorage 迁移逻辑一致）。此前原样透传，
-      // 用户气泡直接显示 "（时间）__refs__[{...}]__/refs__" 原始序列化内容，
-      // 且引用的 chip 渲染丢失。
-      const { cleanText, refs } = parseReferences(msg.content || '')
-      const userMessage = refs.length > 0 ? cleanText : (msg.content || '').replace(TIME_SUFFIX_RE, '')
-      const turn: ChatTurn = {
-        id: `history-${sid}-${i}`,
-        userMessage,
-        refs,
-        events: [],
-        memoryEvents: [],
-        finalAnswer: null,
-      }
-      i++
-      // 收集后续所有非 human 消息（ai/tool），直到下一个 human
-      const aiContents: string[] = []
-      const aiUsages: BackendMessage[] = []
-      const startedAt = typeof msg.timestamp === 'number' ? msg.timestamp : null
-      let lastAiTimestamp: number | null = null
-      while (i < messages.length && messages[i].role !== 'human') {
-        const m = messages[i]
-        if (m.role === 'ai' && m.content) {
-          // 收集非空 ai 消息内容，最后一个非空 ai 消息作为 finalAnswer
-          aiContents.push(m.content)
-        }
-        if (m.role === 'ai' && m.usage) {
-          aiUsages.push(m)
-          if (typeof m.timestamp === 'number') lastAiTimestamp = m.timestamp
-        }
-        // tool 消息跳过（历史回看不需要显示工具调用细节）
-        i++
-      }
-      if (aiUsages.length > 0) {
-        const n = (v: unknown): number | null =>
-          typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null
-        const sum = (key: keyof PiUsage): number | null => {
-          let total: number | null = null
-          for (const m of aiUsages) {
-            const v = n(m.usage?.[key])
-            if (v !== null) total = (total ?? 0) + v
-          }
-          return total
-        }
-        const last = aiUsages[aiUsages.length - 1]
-        const cacheObserved = n(last.usage?.cacheRead) !== null || n(last.usage?.cacheWrite) !== null
-        turn.usage = {
-          provider: last.provider ?? null,
-          model: last.model ?? null,
-          inputTokens: sum('input'),
-          outputTokens: sum('output'),
-          cacheReadTokens: sum('cacheRead'),
-          cacheWriteTokens: sum('cacheWrite'),
-          durationMs: startedAt !== null && lastAiTimestamp !== null
-            ? Math.max(0, lastAiTimestamp - startedAt)
-            : null,
-          cacheStatus: cacheObserved ? 'observed' : null,
-          priceStatus: null,
-          requests: aiUsages.length,
-          warmCalls: 0,
-        }
-      }
-      // 最后一个非空 ai 消息作为 finalAnswer
-      turn.finalAnswer = aiContents.length > 0 ? aiContents[aiContents.length - 1] : null
-      // 兜底：如果 finalAnswer 为空（如 agent 被取消、工具失败后图直接结束），
-      // 设置占位提示，避免用户感知为"整轮对话被吞掉"
-      if (!turn.finalAnswer) {
-        turn.finalAnswer = '（这一轮处理未生成文字回复，请查看工具执行结果或重新提问。）'
-      }
-      turns.push(turn)
-    } else {
-      // 非 human 消息但没有前置 human（异常情况），跳过
-      i++
-    }
-  }
-  return turns
-}
+// BackendMessage / backendMessagesToTurns 已抽到 hooks/chatTurns.ts
 
 /**
  * CACHE-RECONCILE-001：本地 turns 缓存与后端真相校准。
@@ -723,22 +616,7 @@ async function reconcileTurnsWithBackend(sid: string, ch: SessionChannel) {
 
 // ── WebSocket 生命周期（每 Session 独立管理） ──────────────
 
-/** 会话 ID 格式验证：由后端 uuid.uuid4().hex 生成（32 位 hex） */
-const SID_RE = /^[0-9a-f]{32}$/i
-
-function isValidSessionId(sid: string): boolean {
-  return SID_RE.test(sid)
-}
-
-/** 计算指数退避延迟（毫秒）：1s → 2s → 4s → 8s → ... → 最大 30s，附加 ±25% jitter 防止 thundering herd */
-function getReconnectDelay(attempts: number): number {
-  const base = 1000
-  const maxDelay = 30000
-  const raw = Math.min(base * Math.pow(2, attempts), maxDelay)
-  // ±25% jitter：最终延迟在 0.75x ~ 1.25x 之间随机
-  const jitter = 0.75 + Math.random() * 0.5
-  return Math.round(raw * jitter)
-}
+// isValidSessionId / getReconnectDelay 已抽到 hooks/chatTurns.ts
 
 /** 最大重连次数，超过后停止重连 */
 const MAX_RECONNECT_ATTEMPTS = 20
@@ -2763,79 +2641,5 @@ export function useChat(sessionId: string) {
     goalState, sendGoalAction,
   }
 }
-
-
-
-function findLastThinking(events: TurnEvent[]): ThinkingBlock | undefined {
-  for (let i = events.length - 1; i >= 0; i--) {
-    if (events[i].kind === 'thinking') {
-      return events[i] as ThinkingBlock
-    }
-  }
-  return undefined
-}
-
-/**
- * THINK-SPLIT-001：找最后一个**纯思考**块（becameAnswer=false 的那些）。
- *
- * 为什么不能直接用 findLastThinking：pi 的 `thinking_end` 在全部 `text_delta`
- * **之后**才到（受控复现实测顺序见 token 分支注释）。等它到达时，最后一块
- * 已经是流式答案块——用 findLastThinking 会把答案块标成 done，而真正的思考块
- * 永远停在 done=false，界面上的"思考中"转圈不消失。
- */
-function findLastPureThinking(events: TurnEvent[]): ThinkingBlock | undefined {
-  for (let i = events.length - 1; i >= 0; i--) {
-    const e = events[i]
-    if (e.kind === 'thinking' && !(e as ThinkingBlock).becameAnswer) {
-      return e as ThinkingBlock
-    }
-  }
-  return undefined
-}
-
-function findRunningTool(events: TurnEvent[], toolName: string): ToolCall | undefined {
-  for (let i = events.length - 1; i >= 0; i--) {
-    const e = events[i]
-    if (e.kind === 'tool' && e.name === toolName && e.status === 'running') {
-      return e as ToolCall
-    }
-  }
-  return undefined
-}
-
-/**
- * 按引擎的 toolCallId 找那次调用。
- *
- * 只按工具名匹配是上一版的真 bug：同一轮里模型连续调用两次 `bash` 时，
- * 第二次的 ask_user 会覆盖第一次挂在同一个 tool event 上的 interaction，
- * 第一张审批卡从此没有入口——引擎等它的答复，界面却只剩后来那张，看上去就是
- * 「无限让我批准」。现在审批按 id 找到**自己那一次**调用，找不到就新建占位。
- */
-function findToolCallByCallId(events: TurnEvent[], callId: string | undefined): ToolCall | undefined {
-  if (!callId) return undefined
-  for (let i = events.length - 1; i >= 0; i--) {
-    const e = events[i]
-    if (e.kind === 'tool' && e.callId === callId) return e as ToolCall
-  }
-  return undefined
-}
-
-/** 工具事件的更新缓冲键（同一轮同名工具并行时按 callId 分开，避免输出串台）。 */
-function toolBufferKey(sid: string, turnId: string, toolName: string, callId: string | undefined): string {
-  return `${sid}\0${turnId}\0${callId ?? toolName}`
-}
-
-/** 通过后端 turn_id 查找 turn（先在 currentTurn 中找，再在 turns 中找）。 */
-function findTurnByBackendId(ch: SessionChannel, turnId: string): ChatTurn | undefined {
-  if (ch.currentTurn?.turnId === turnId) return ch.currentTurn
-  return ch.turns.find(t => t.turnId === turnId)
-}
-
-/** 在 memoryEvents 中查找指定工具名的 running 状态事件。 */
-function findRunningMemoryTool(events: MemoryToolEvent[], toolName: string): MemoryToolEvent | undefined {
-  for (let i = events.length - 1; i >= 0; i--) {
-    const e = events[i]
-    if (e.name === toolName && e.status === 'running') return e
-  }
-  return undefined
-}
+// 事件扫描 finders 已抽到 hooks/chatTurns.ts（findLastThinking / findLastPureThinking / findRunningTool /
+// findToolCallByCallId / toolBufferKey / findTurnByBackendId / findRunningMemoryTool）
