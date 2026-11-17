@@ -1004,22 +1004,12 @@
 
    A bar is a pane of glass standing on its edge: the series' own colour let
    through a little, a hairline round it, and the line of light along its top.
-   An SVG shape has no inset shadow to draw that line with, so it is the bar's
-   own shape drawn again one pixel higher, behind it.
+   The chart library that drew these shapes is no longer a dependency
+   (`recharts` removed 2026-11-17, 0 imports in src), so the shapes' own rules
+   are gone with it. What remains is the colour vocabulary: a chart's colour
+   can still be put on a box or a badge, and it is finished like any other
+   pane — which is what the two rules below do. */
 
-   The bar itself is kept whole and the whole of it, line and all, is then let
-   through together. Thinning the fill instead put the white copy behind a
-   see-through face: it showed through all of it, and the bar came out a flat
-   pale block with no line to be seen. (A filter that drew the line inside the
-   bar was tried too: the bars vanished whenever an ancestor was zoomed, so
-   this stays with what every browser draws the same.) */
-
-[data-slot="chart"] :is(.recharts-bar-rectangle .recharts-rectangle, .recharts-pie-sector .recharts-sector, .recharts-radial-bar-sector) {
-  stroke: var(--mark-line);
-  stroke-width: 1px;
-  filter: drop-shadow(0 -1px 0 var(--mark-rim));
-  opacity: var(--mark-solid);
-}
 /* The same mark made of a box rather than drawn in a chart: a bar in a row of
    them, a meter, anything filled with one of the chart's colours. It is the
    same pane on its edge, so it gets the same three things, and here an inset
@@ -1070,23 +1060,11 @@ svg.fill-primary:has(> circle) > circle {
   stroke: none;
 }
 
-/* What a chart says under the pointer floats over it: the thickest glass, like
-   any other popover, and with a control's corners rather than a pill's. */
-.recharts-tooltip-wrapper > .bg-background {
-  /* No border: the hairline is outside the edge and the shade inside it, and
-     a see-through border between them doubled the line along the foot. */
-  border-width: 0;
-  border-radius: var(--radius-md);
-  background-color: var(--popover);
-  -webkit-backdrop-filter: var(--glass-blur);
-  backdrop-filter: var(--glass-blur);
-  box-shadow:
-    inset 0 1px 0 var(--glass-rim),
-    inset 0 -1px 0 var(--popover-under),
-    0 0 0 1px var(--popover-edge),
-    0 24px 60px -18px var(--glass-shade),
-    0 6px 16px -6px var(--glass-lift);
-}
+/* What a chart used to say under the pointer is gone with the chart library:
+   the only rule that carried `.recharts-tooltip-wrapper` was this one, and no
+   component in src ever rendered that wrapper (recharts removed 2026-11-17).
+   Popovers in general take the rule further down. */
+
 
 /* The one state. What is chosen, held open, or under the pointer in a menu
    is a small pane of clear glass rather than a flat grey fill: a faint tint,

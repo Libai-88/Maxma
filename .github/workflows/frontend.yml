@@ -12,6 +12,10 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          # Lint 门槛只查"本次改动"，需要能算出与 base 的 merge-base；浅克隆会让
+          # merge-base 失败 → 目标集合为空 → 又是一道发绿灯的死检查。
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -20,11 +24,44 @@ jobs:
           cache: "npm"
           cache-dependency-path: web/package-lock.json
 
+      - name: Resolve lint base
+        id: base
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "ref=origin/${{ github.base_ref }}" >> "$GITHUB_OUTPUT"
+          elif [ -n "${{ github.event.before }}" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            echo "ref=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+
       - name: Install dependencies
         run: npm ci
 
       - name: Typecheck (tsc --noEmit)
         run: npx tsc --noEmit
+
+      # P0-2：前端此前 0 个测试文件（web/tests 是第一批，覆盖 hooks/chatTurns.ts
+      # 的纯函数层）。用 bun 当唯一 runner，不引入 vitest 等第二套栈。
+      - name: Unit tests (bun test)
+        run: bun test
+
+      # P1-1：只对本次改动触及的文件跑 ESLint（存量 2.6 万行不开闸，见 eslint.config.js 注释）。
+      - name: Lint changed files (ESLint)
+        run: node scripts/lint-changed.mjs
+        env:
+          LINT_BASE: ${{ steps.base.outputs.ref }}
+
+      # P1-2：巨型文件体量棘轮（存量记账、只准降不准涨），跨 workspace，从仓库根跑。
+      - name: File size ratchet
+        working-directory: ${{ github.workspace }}
+        run: node scripts/check-file-size-budget.mjs
 
       - name: Build (vite build)
         run: npm run build

@@ -31,8 +31,10 @@ export default defineConfig(({ mode }) => {
     base: mode === 'production' ? './' : '/',
     plugins: [react(), tailwindcss(), relaxDevCsp()],
     resolve: {
+      // 2026-11-17：`dedupe` 原本钉着 @codemirror/*，而 src 里没有任何 import——
+      // 这 7 个包（含 codemirror 本体）连同下面的 manualChunks 一起移除后，
+      // rollup 才不会把一个不存在的入口当成构建目标（"Could not resolve entry module codemirror"）。
       alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
-      dedupe: ['@codemirror/state', '@codemirror/view', '@codemirror/language', '@codemirror/commands'],
     },
     build: {
       minify: 'esbuild',
@@ -48,10 +50,6 @@ export default defineConfig(({ mode }) => {
           manualChunks: {
             'react-vendor': ['react', 'react-dom', 'react-router-dom'],
             'markdown-vendor': ['markdown-it', 'markdown-it-task-lists', 'markdown-it-texmath', 'katex'],
-            codemirror: [
-              'codemirror', '@codemirror/lang-markdown', '@codemirror/theme-one-dark',
-              '@codemirror/view', '@codemirror/state', '@codemirror/language', '@codemirror/commands',
-            ],
           },
         },
       },
