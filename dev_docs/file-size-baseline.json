@@ -1,0 +1,46 @@
+{
+  "_comment": "巨型文件体量棘轮基线（每个文件 >800 行）。存量只准降不准涨；新文件越界必须拆分，不许加进基线。",
+  "limit": 800,
+  "files": {
+    "bun-backend/src/routes/chat-ws.ts": {
+      "lines": 1433,
+      "meaningful": 1356
+    },
+    "bun-backend/src/routes/mcp.ts": {
+      "lines": 936,
+      "meaningful": 864
+    },
+    "bun-backend/src/routes/providers.ts": {
+      "lines": 918,
+      "meaningful": 846
+    },
+    "bun-sidecar/src/kernel/bridge-pi.ts": {
+      "lines": 1262,
+      "meaningful": 1190
+    },
+    "web/src/api/index.ts": {
+      "lines": 1095,
+      "meaningful": 943
+    },
+    "web/src/hooks/useChat.ts": {
+      "lines": 2645,
+      "meaningful": 2497
+    },
+    "web/src/stores/jetHub.ts": {
+      "lines": 1330,
+      "meaningful": 1199
+    },
+    "web/src/types/index.ts": {
+      "lines": 1167,
+      "meaningful": 1047
+    },
+    "web/src/views/ExtensionView.tsx": {
+      "lines": 1070,
+      "meaningful": 1001
+    },
+    "web/src/views/JetHubView.tsx": {
+      "lines": 1111,
+      "meaningful": 1055
+    }
+  }
+}

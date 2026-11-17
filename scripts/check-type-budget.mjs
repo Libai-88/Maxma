@@ -32,21 +32,62 @@ const BASELINE_FILE = path.join(ROOT, "dev_docs", "typecheck-baseline.json");
 const WORKSPACES = ["bun-sidecar", "bun-backend"];
 const WRITE = process.argv.includes("--write");
 
+/**
+ * 找一个**真的能跑**的 bun。
+ *
+ * 本机 PowerShell / cmd 的 PATH 里没有 bun，只有 `bun-sidecar/bun.exe`（便携运行时就放在那儿）。
+ * 之前 `execFileSync("bun", …, { shell: true })` 在这种情况下会退化成
+ * `'bun' is not recognized` → 输出里 0 个 `error TS` → 计成 0 个错误 → 棘轮发绿灯。
+ * 优先顺序：环境变量 BUN_BIN → PATH 上的 bun → 仓内的便携运行时。
+ * 都找不到就返回 null，由调用方报"工具链缺失"并且红——绝不静默当成 0。
+ */
+function resolveBun() {
+  const candidates = [];
+  if (process.env.BUN_BIN) candidates.push(process.env.BUN_BIN);
+  candidates.push("bun");
+  candidates.push(path.join(ROOT, "bun-sidecar", "bun.exe"));
+  candidates.push(path.join(ROOT, "bun-sidecar", "bun"));
+  for (const c of candidates) {
+    try {
+      execFileSync(c, ["--version"], { encoding: "utf8", stdio: "ignore" });
+      return c;
+    } catch {
+      // 下一个候选
+    }
+  }
+  return null;
+}
+
+const BUN = resolveBun();
+if (!BUN) {
+  console.error("✗ 找不到可执行的 bun（PATH、BUN_BIN、bun-sidecar/bun(.exe) 都试过了）");
+  console.error("  类型债棘轮无法校验——这是工具链缺失，不是'0 个错误'。");
+  process.exit(1);
+}
+
 function countErrors(ws) {
   let out = "";
+  let toolError = null;
   try {
-    out = execFileSync("bun", ["x", "tsc", "--noEmit"], {
+    out = execFileSync(BUN, ["x", "tsc", "--noEmit"], {
       encoding: "utf8",
       cwd: path.join(ROOT, ws),
-      shell: true,
+      shell: false,
     });
   } catch (err) {
     out = `${err.stdout ?? ""}${err.stderr ?? ""}`;
+    // 关键区分：tsc **有**类型错误时自身也返回非 0，但 stdout 里一定有 `error TS…`。
+    // 若退出非 0 且一条都匹配不到，说明工具根本没跑起来（bun 不在 PATH、依赖缺失…），
+    // 这种情况必须报"工具故障"，绝不能计成 0 个错误——否则棘轮会为一次跑不动的检查
+    // 发绿灯（2026-11-17 在本机 PowerShell 下实测到：`'bun' is not recognized` + `✓ 0`）。
+    if (!/error TS\d+/.test(String(out))) {
+      toolError = `tsc 未产出可解析输出（exit ${err.status ?? "?"}）：${String(out).trim().slice(0, 200) || "无输出"}`;
+    }
   }
   const lines = String(out)
     .split("\n")
     .filter((l) => /error TS\d+/.test(l));
-  return { count: lines.length, lines };
+  return { count: lines.length, lines, toolError };
 }
 
 const raw = existsSync(BASELINE_FILE)
@@ -59,7 +100,12 @@ const baseline = raw.baseline ?? raw;
 if (WRITE) {
   const next = {};
   for (const ws of WORKSPACES) {
-    const { count } = countErrors(ws);
+    const { count, toolError } = countErrors(ws);
+    if (toolError) {
+      console.error(`✗ ${ws}: ${toolError}`);
+      console.error("  拒绝把'跑不动的检查'写成 0 —— 先修好工具链再记账。");
+      process.exit(1);
+    }
     next[ws] = count;
     console.log(`${ws}: ${count}`);
   }
@@ -83,7 +129,12 @@ for (const ws of WORKSPACES) {
     failed = true;
     continue;
   }
-  const { count, lines } = countErrors(ws);
+  const { count, lines, toolError } = countErrors(ws);
+  if (toolError) {
+    failed = true;
+    console.error(`✗ ${ws}: ${toolError}`);
+    continue;
+  }
   if (count > limit) {
     failed = true;
     console.error(`✗ ${ws}: 类型错误 ${count} > 基线 ${limit}（新增 ${count - limit} 个）`);
