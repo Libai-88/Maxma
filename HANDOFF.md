@@ -59,8 +59,11 @@ cache_warm 价格态沿用）与全部 RPC 分支（未知会话、缺参、树/
 根仓库 `D:\Maxma` 有 `MaxmaHere` gitlink（`160000 … ed4d472c = origin/main`）却**没有 `.gitmodules`**，
 `git submodule status` 直接 `fatal: no submodule mapping found in .gitmodules for path 'MaxmaHere'`，
 新克隆只能拿到空目录。已补 `.gitmodules`（url 指向 `https://github.com/Libai-88/Maxma.git`，branch=main）
-并加根 `README.md` 写明 `--recurse-submodules`。**未提交**：根仓库的 gitlink 需一次 commit 才对克隆生效，
-且本地 HEAD（`f1094714`）与记录指针（`ed4d472c`）不一致（`git submodule status` 行首 `+`）。
+并加根 `README.md` 写明 `--recurse-submodules`。**已提交并推送**（根仓库 `411a722`）。
+验收不是靠读代码：实跑 `git clone --recurse-submodules --depth 1` 成功了（80s，子仓检出
+`ed4d472c`、33 个文件，`git submodule status` 无 `fatal`、无 `+`/`-` 前缀）。
+本地 HEAD（`313947af`）与记录指针（`ed4d472c`）仍不一致（行首 `+`），因为该分支尚未合入
+`main`——指针只在合入后才该挪。
 
 ### P1-1：ESLint（只对改动开闸）
 
@@ -98,7 +101,10 @@ CI 侧 `frontend.yml` 用 `fetch-depth: 0` + 显式 `LINT_BASE`（浅克隆会�
 
 ### 未验证 / 本轮未做
 
-- 两个仓库都**没有 commit / push**（按约定不擅自提交）。本地 diff 清单见下。
+- 两个仓库都已 commit + push：主仓 7 个提交推到 `origin/fix/portable-stop-null-guard`
+  （`313947af`），根仓库 `411a722` 推到 `origin/master`。提交清单见本节末尾。
+- CI（ubuntu）**未复跑**：本轮数字全部来自本机（Windows / Bun 1.3.14），与 CI 有 ±2% 浮动；
+  但 `bridge-pi` 87.34% 距 65% 门槛有充足余量。
 - 根仓库 `MaxmaHere` 指针仍是 `ed4d472c`（origin/main 尖端），本地工作区停在 `f1094714`（未合入的分支），
   `M MaxmaHere` 是常态；要不要把指针挪到某个新提交，取决于主项目何时合入 main。
 - `kernel/events.ts` 的模块级 `toolStartTimestamps` 只增不减（除非 end 到达）：跨会话/跨测试的
@@ -106,8 +112,23 @@ CI 侧 `frontend.yml` 用 `fetch-depth: 0` + 显式 `LINT_BASE`（浅克隆会�
 - ESLint 尚未对全量存量开闸；`react-hooks/exhaustive-deps` 是 warn（不计入退出码）。
 - `-rc` 依赖在异地 registry 的可得性未复现。
 
-### 本轮改动清单（未提交，供 commit 时核对）
+### 本轮改动清单（已提交并推送，2026-11-17）
 
+提交（`fix/portable-stop-null-guard`，相对 `origin/main` 领先 8 个提交）：
+
+```
+313947af docs: 同步索引与交接基线，补 ADR 0007 依赖口径
+914dccc1 chore(build): 本地闸门补齐覆盖率/单测/ESLint，并加两条棘轮
+195c0cca chore(web): 删 9 个未用依赖，加增量 ESLint 与前端单测入口
+a1b2e2ea test(web): 抽出 chatTurns 纯函数层并补第一批单测
+2b35a3e5 test(sidecar): 补 pi RPC 订阅与全部分支，bridge-pi 行覆盖 55.30→87.34
+93b16ad7 ci(sidecar): 覆盖率门槛抽成共享脚本，浮点比较不再恒发绿灯
+7005e087 chore(backend): @types/bun 钉回 1.3.14 与运行时对齐
+```
+
+根仓库 `411a722 chore: 补回 .gitmodules，修掉克隆即报错的 gitlink`（`origin/master`）。
+
+内容：
 改：`.github/workflows/{frontend,sidecar}.yml`、`bun-backend/{package.json,bun.lock}`、
 `scripts/{check-type-budget.mjs,verify-all-gates.sh}`、`web/{package.json,package-lock.json,tsconfig.json,vite.config.ts}`、
 `web/src/hooks/useChat.ts`、`web/src/solid-glass.css`、`PROJECT_INDEX.md`、`HANDOFF.md`
