@@ -26,6 +26,7 @@ import { handleDeletePersistedSession, handleListPersistedSessions } from "../..
 import { normalizeSessionId } from "../../../bun-sidecar/src/kernel/session-catalog";
 
 import { engineSettingsForNewSession, getSettingValue } from "../settings-global";
+import { readDisabledExtensions } from "../extensions-config";
 
 /** Bun 后端的会话注册表（kernel 桥经 deps 注入）。 */
 export interface SessionHub {
@@ -119,6 +120,9 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
         max_concurrent: Number(subagentPanel.max_concurrent ?? 4),
         timeout_seconds: Number(subagentPanel.timeout_seconds ?? 300),
       },
+      // EXT-TOGGLE-001：用户扩展禁用清单（相对 `<agentDir>/extensions` 的路径）。
+      // 内核只看 scope=user 的扩展，内联安全扩展不受影响。
+      disabled_extensions: readDisabledExtensions(),
       ...extra,
     });
   }

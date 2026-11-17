@@ -53,6 +53,7 @@ import { createBalanceRoutes } from "./routes/balance";
 import { createMcpRoutes } from "./routes/mcp";
 import { createMcpTestRoutes } from "./routes/mcp-test";
 import { createToolsRoutes } from "./routes/tools";
+import { createExtensionsRoutes } from "./routes/extensions";
 import { createRestartRoutes } from "./routes/restart";
 import { createUploadRoutes } from "./routes/upload";
 import { createPluginsRoutes } from "./routes/plugins";
@@ -285,6 +286,7 @@ export function createApp(): Hono {
 
   // 2.5a：tools / restart / upload / plugins 桩 / files 桩
   app.route("/", createToolsRoutes());
+app.route("/", createExtensionsRoutes());
   app.route("/", createRestartRoutes());
   app.route("/", createUploadRoutes());
   app.route("/", createPluginsRoutes());
@@ -589,7 +591,7 @@ export function startServer() {
         if (frontendRes) return frontendRes;
       }
 
-      return app.fetch(req);
+      return app.fetch(req, { server });
     },
     websocket: {
       // ── chat WS 生命周期（2.3：kernel in-process 事件直连）──
