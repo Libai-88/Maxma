@@ -99,16 +99,34 @@ CI 侧 `frontend.yml` 用 `fetch-depth: 0` + 显式 `LINT_BASE`（浅克隆会�
    退化后 grep 计数为 0 → PASS。现在全部改 `node <入口>`（`node_modules/typescript/bin/tsc`、
    `node_modules/vite/bin/vite.js`、`scripts/check-*.mjs`），并按退出码判定。
 
+### 后续补齐（同日，第二轮）
+
+1. **`toolStartTimestamps` 泄漏已修**（不再是未验证项）：`kernel/events.ts` 的模块级 Map
+   只在 `tool_execution_end` 删条目，工具崩溃 / 会话中断 / 上游丢 end 时条目永久滞留；
+   侧车进程长驻并连续服务多会话，等于只增不减。现在加了容量上限 512 条 + FIFO 淘汰
+   （Map 保留插入顺序），正常 start→end 配对不受影响。
+   回归测试 `tests/event-tool-timing.test.ts` 用**可控时钟**（临时替换 `Date.now`）把两件事
+   分开断言：配对仍精确（1000→6000 得 5s）、超限后最早一条被淘汰（同一 id 在洪水后得 0 而非 5）。
+   反向验证过：把上限那三行注释掉，该用例立刻 `Expected 0 / Received 5` 失败——说明它真能
+   区分新旧实现，不是摆设。全量 sidecar 从 194 涨到 **199 pass**。
+2. **6 个 `verify-ui-*.mjs` 全部实跑通过**（此前一直"未执行"）：能力页 / 聊天往返 /
+   设置页 / 会话树 / 扩展确认 / 思考分离，六项均 `consoleErrors: []`。它们自动起后端 +
+   临时数据目录，用 Electron 自带的 Chromium 驱动真实 DOM，不花额度、不出外网。
+3. **同时修掉这些脚本的"跑不起来"**：它们原来 `spawn(process.env.MAXMA_BUN ?? "bun")`，
+   本机 PATH 里没有 bun → `ENOENT: uv_spawn 'bun'`（第一次跑就撞上了）。新增
+   `scripts/_bun-bin.mjs`（`resolveBun` / `requireBun`，解析顺序
+   MAXMA_BUN → BUN_BIN → PATH → `bun-sidecar/bun.exe` → `bun-sidecar/bun`，每个候选都实跑
+   `--version` 才认），6 个脚本改为 `requireBun({ root: REPO, what: ... })`，解析不到直接退出并说明原因。
+   验证：不设 `MAXMA_BUN` 重跑能力页 → RC 0。
+
 ### 未验证 / 本轮未做
 
-- 两个仓库都已 commit + push：主仓 7 个提交推到 `origin/fix/portable-stop-null-guard`
-  （`313947af`），根仓库 `411a722` 推到 `origin/master`。提交清单见本节末尾。
+- 两个仓库都已 commit + push：主仓提交推到 `origin/fix/portable-stop-null-guard`，
+  根仓库 `411a722` 推到 `origin/master`。提交清单见本节末尾。
 - CI（ubuntu）**未复跑**：本轮数字全部来自本机（Windows / Bun 1.3.14），与 CI 有 ±2% 浮动；
   但 `bridge-pi` 87.34% 距 65% 门槛有充足余量。
-- 根仓库 `MaxmaHere` 指针仍是 `ed4d472c`（origin/main 尖端），本地工作区停在 `f1094714`（未合入的分支），
+- 根仓库 `MaxmaHere` 指针仍是 `ed4d472c`（origin/main 尖端），本地工作区停在未合入的分支，
   `M MaxmaHere` 是常态；要不要把指针挪到某个新提交，取决于主项目何时合入 main。
-- `kernel/events.ts` 的模块级 `toolStartTimestamps` 只增不减（除非 end 到达）：跨会话/跨测试的
-  潜在泄漏点，本轮只做了测试隔离（`cov-` 前缀），**没有改实现**。
 - ESLint 尚未对全量存量开闸；`react-hooks/exhaustive-deps` 是 warn（不计入退出码）。
 - `-rc` 依赖在异地 registry 的可得性未复现。
 
@@ -128,10 +146,18 @@ a1b2e2ea test(web): 抽出 chatTurns 纯函数层并补第一批单测
 
 根仓库 `411a722 chore: 补回 .gitmodules，修掉克隆即报错的 gitlink`（`origin/master`）。
 
+第二轮追加（同一分支）：
+
+```
+211bb287 fix(sidecar): 工具起点时间戳加容量上限，止住跨会话只增不减
+800b42ec chore(scripts): UI 验证脚本自动解析可执行的 bun
+```
+
 内容：
 改：`.github/workflows/{frontend,sidecar}.yml`、`bun-backend/{package.json,bun.lock}`、
 `scripts/{check-type-budget.mjs,verify-all-gates.sh}`、`web/{package.json,package-lock.json,tsconfig.json,vite.config.ts}`、
-`web/src/hooks/useChat.ts`、`web/src/solid-glass.css`、`PROJECT_INDEX.md`、`HANDOFF.md`
+`web/src/hooks/useChat.ts`、`web/src/solid-glass.css`、`PROJECT_INDEX.md`、`HANDOFF.md`、
+`bun-sidecar/src/kernel/events.ts`、`scripts/verify-ui-{capabilities,chat-roundtrip,settings,session-tree,extension,thinking-separation}.mjs`
 新增：`bun-sidecar/tests/bridge-pi-rpc.test.ts`、`web/src/hooks/chatTurns.ts`、`web/tests/chatTurns.test.ts`、
 `web/eslint.config.js`、`web/scripts/lint-changed.mjs`、`scripts/{check-core-coverage.sh,check-file-size-budget.mjs}`、
 `dev_docs/{file-size-baseline.json,adr/0007-dependency-pinning-and-prereleases.md}`
