@@ -79,6 +79,7 @@ web/src/main.tsx
 - MCP `routes/mcp.ts`、`mcp-oauth.ts`、`mcp-test.ts`、`mcp-validation.ts`
 - Settings `routes/settings.ts`、`settings-panels.ts`、`settings-global.ts`
 - 记忆 `routes/memory.ts`；能力 `routes/capabilities.ts`；插件 `routes/plugins.ts` + `plugins/`
+- 扩展 `routes/extensions.ts` + `extensions-config.ts`（扩展清单/错误可见、用户扩展启停与禁用清单落盘）
 - 贴纸 `routes/stickers.ts`、`sticker-upload.ts`、`sticker-favorites.ts`；人设 `persona.ts`；引导 `onboarding.ts`；动态 `news.ts`；规则 `rules.ts`；工具清单 `tools.ts`
 - 可观测 `routes/activity.ts`（SSE）、`metrics-route.ts`、`metrics.ts`、`diagnostics.ts`、`error-collector.ts`、`health.ts`、`runtime-status.ts`、`audit-log.ts`、`transcripts.ts`
 - 其他 `files.ts`、`upload.ts`、`collab.ts`、`deferred-runs.ts`、`restart.ts`、`maxma-blocker.ts`、`core.ts`
@@ -89,7 +90,9 @@ web/src/main.tsx
 ## 引擎（`bun-sidecar/src/`）
 
 - `kernel/bridge-pi.ts`：`handlePiCreateSession` / `handlePiSessionRpc`（后端 in-process 直调）
-- 支撑：`kernel/{pi-session,prompt,events,approval-gate,plan,goal,mcp,model,tools,skills,plugin-models,opencode-zen,kilo-free,persona-prompt,engine-info}.ts`、`kernel/extensions/`（maxma-approval / maxma-blocker）
+- 支撑：`kernel/{pi-session,prompt,events,approval-gate,plan,goal,mcp,model,tools,skills,subagent,extensions,plugin-models,opencode-zen,kilo-free,persona-prompt,engine-info}.ts`、`kernel/extensions/`（maxma-approval / maxma-blocker）
+- `kernel/extensions.ts`：扩展身份归一（inline/builtin/user/other）、加载结果快照、禁用过滤（只丢 `scope=user`）
+- `kernel/subagent.ts`：子 Agent 编排（并发上限 / 超时 abort / 父会话取消），已进 CORE 覆盖率名单
 - 自定义工具：`tools/`；RPC 类型：`rpc-types.ts`；拒止锚纯函数：`blocker.ts`
 - `session-bridge.ts` 是旧 stdio 入口，**无运行时调用方**，仅契约测试引用
 - 测试：`bun-sidecar/tests/`
@@ -142,7 +145,7 @@ bash scripts/verify-all-gates.sh             # 交付前全部闸门
 | `verify-portable-user-path.mjs` | 便携包首启人格/免费渠道 |
 | `verify-ui-chat-roundtrip.mjs` | 真实前端打字→收到回复（零额度） |
 | `verify-ui-capabilities.mjs` | 真实前端能力页：配置来源只列真实读取方、逐条带路径与读取点、零 console 错误 |
-| `verify-ui-extension.mjs` | 真实扩展的 `ctx.ui` 往返：扩展弹窗 → 用户点「是」→ 扩展收到 true |
+| `verify-ui-extension.mjs` | 真实扩展的 `ctx.ui` 往返（扩展弹窗 → 点「是」→ 收到 true）+ 扩展页「扩展」tab 可见性 + `/api/extensions` 可见/禁用/恢复 |
 | `verify-ui-session-tree.mjs` | 真实界面的会话树：菜单入口 → 树渲染 → 节点可操作 |
 | `verify-ui-settings.mjs` | 设置页三个面板的 pi 真实键可见，零 console 错误 |
 | `verify-ui-thinking-separation.mjs` | 思考内容不混进回复正文（流式过程中采样） |

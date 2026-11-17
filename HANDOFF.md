@@ -1,7 +1,65 @@
 # MaxmaHere 交接说明
 
 > 当前可执行状态，供下一位接手者。架构请先读 [docs/00-当前架构.md](docs/00-当前架构.md)。
-> 更新时间：2026-11-17
+> 更新时间：2026-11-18
+
+## 2026-11-18 使命评估后的三处补齐（扩展可见性 / 扩展启停 / subagent 编排）
+
+「Maxma 作为 pi 前端是否达成使命」的评估点出三处真实缺口，本轮全部补完并各自带回归锁。
+
+### 1) 外部扩展在界面上可见，加载错误不再被吞（EXT-VISIBLE-001）
+
+- `kernel/pi-session.ts` 新增 `createMaxmaSessionWithExtensions`：解构官方
+  `createAgentSession` 返回的 `extensionsResult`（旧代码写的是 `const { session }`，把整包丢了），
+  再交给 `kernel/extensions.ts` 归一并缓存（`extensionIdentity` 区分 `inline` / `builtin` / `user` / `other`）。
+- 后端 `GET /api/extensions`（清单 + `errors` + `warnings` + `loaded`）、`POST /api/extensions/refresh`。
+- 前端 `ExtensionView` 新增「扩展」tab（`components/extensions/ExtensionsPanel.tsx`）：
+  错误优先展示、清单卡片、启用状态、重新探测。
+
+### 2) 用户扩展可启停，且关不掉安全机制（EXT-TOGGLE-001）
+
+- 过滤点是官方 `DefaultResourceLoaderOptions.extensionsOverride`（会话级），**不写 pi 全局 settings**。
+- 只允许禁用 `<agentDir>/extensions` 下的 `scope=user` 扩展；`maxma-approval` / `maxma-blocker` /
+  `request-telemetry` 硬拒（接口 403，过滤函数按 scope 拒绝）。
+- 持久化 `api/data/disabled_extensions.json`；`PUT /api/extensions {id, enabled}`。
+- 边界已写进 `docs/security-contract.md` §3.1：与当前会话同权限、只影响**新建**会话、
+  是"不参与会话"而非沙箱（模块顶层仍在加载期执行）。
+
+### 3) subagent 编排补真实实现 + 回归锁（SUBAGENT-TIMEOUT-001）
+
+旧 `kernel/subagent.ts` 把"单个任务超时 300s"只写在工具描述里，**代码从不计时**，
+也不响应父会话取消——任务卡住就永远卡住，父会话取消后子任务还在烧额度。现在：
+
+- `setTimeout(limits.timeoutMs)` → `session.abort()`，结果标 `子任务超时（Ns）`；
+  父 `signal` abort → 中止在跑子会话并标 `父会话已取消，子任务中止`；`finally` 清 timer/监听/dispose。
+- 新增 `bun-sidecar/tests/subagent-orchestration.test.ts`（7 用例 / 35 expect）：并发上限、
+  超时、取消、取消前已 abort（不建会话）、空 tasks、结果与描述文案。
+- `subagent.ts` 行覆盖 0 → **96.99%**；`subagent` 与 `extensions` 已进 CORE 覆盖率名单（14 → 16 项）。
+
+### 4) 真实界面验证时抓到的另外两个真缺陷（都已修 + 有锁）
+
+- **STABILITY-005 限流把本机界面挡住了**：`clientIpOf` 只读 `x-forwarded-for`/`x-real-ip`，
+  而 Bun 的 `Request` 没有套接字地址 → **所有本机请求落进同一个 `"unknown"` 桶**
+  （容量 30 / 补充 2 每秒）。症状：界面加载两三次后满屏"操作过于频繁，请稍后再试"，
+  扩展页、能力页、引导态全部降级为空/失败。修法：`server.ts` 用
+  `app.fetch(req, { server })` 把 `Bun.serve` 的 server 传进 Hono 环境，`clientIpOf`
+  退回 `server.requestIP(req).address`，回环地址才真正命中既有 `EXEMPT_IPS`。
+  取不到 IP 时仍按 `"unknown"` 限流（不放宽成"全放行"）。锁：`bun-backend/tests/rate-limit-ip.test.ts`（6 用例）。
+- **内联扩展展示名少一条尾巴**：`displayName` 只去 `<inline:` 前缀、没去结尾 `>`，
+  界面上显示成 `maxma-blocker>`。锁：`extensions-visibility.test.ts` 新增一例。
+
+### 本轮数字（本机实测）
+| 闸门 | 结果 |
+| --- | --- |
+| sidecar `bun test --coverage` | **219 pass / 0 fail / 25 snapshots**（22 文件） |
+| 核心模块行覆盖率（16 项，≥65%） | PASS（`subagent` 96.99、`extensions` 100.00、`pi-session` 97.79） |
+| `bash scripts/verify-all-gates.sh` | **14 项全 PASS，exit 0**（backend 307 pass / web 30 pass / tsc 双侧 0 / build ✓7.3s） |
+
+真实界面验证：`scripts/verify-ui-extension.mjs` 本轮新增两段——扩展页「扩展」tab
+必须列出临时扩展并显示启用状态；`GET/PUT /api/extensions` 走真实后端验证"可见 → 可禁用 → 可恢复"，
+并断言内置拒止扩展**不可禁用**。第四次实跑：`stage=extensions-tab`、`consoleErrors: []`、
+三项断言全绿（面板上能看到 `probe-confirm / 用户扩展 / 已启用 / 禁用`，
+以及 `maxma-blocker`、`maxma-approval` 标"Maxma 内置 / 不可禁用"）。
 
 ## 2026-11-17 开发质量诊断后的 P0/P1 修复
 

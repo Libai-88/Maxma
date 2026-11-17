@@ -15,9 +15,10 @@
 | Provider URL 校验 | `bun-backend/src/routes/providers.ts`（含 `169.254.169.254`、`metadata.google.internal` 等云元数据主机拒绝） | 危险协议/元数据地址 → 拒绝保存与请求前拦截 | `bun-backend/tests/` |
 | 凭据加密 | `bun-backend/src/security/credential-envelope.ts`（Fernet 规范逐字节互操作 + `encv1:` 信封层） | HMAC 校验失败 → 空串；前端只拿脱敏值 | 向量测试锁定 |
 | Token 鉴权 | `bun-backend/src/middleware/auth.ts`：仅 `/api/**` 与 `/ws/**`；`X-Maxma-Token` 头 → `?token=` → WS subprotocol | 401 / WS close 4001；白名单仅 `/api/health`、`/api/auth/token`、`GET /api/mcp/oauth/callback`、贴纸静态 GET/HEAD | `bun-backend/tests/` |
-| 限流 | `bun-backend/src/middleware/rate-limit.ts` | 超限 429 + `RATE_LIMITED` 结构；本地回环豁免 | 同上 |
+| 限流 | `bun-backend/src/middleware/rate-limit.ts` | 超限 429 + `RATE_LIMITED` 结构；本地回环豁免（IP 取自 `server.requestIP`，取不到则按 `unknown` 限流，不放宽） | `bun-backend/tests/rate-limit-ip.test.ts` |
 | CORS | `bun-backend/src/cors-config.ts` 精确 origin 集合 | 非白名单 origin 不放行 | 同上 |
 | 敏感字段脱敏 | `mcp-validation.ts` `REDACTED` + `bun-backend/src/runtime-status.ts` | 写日志/事件/前端响应前脱敏 | 同上 |
+| 扩展启停边界 | `bun-sidecar/src/kernel/extensions.ts` `filterDisabledExtensions`（只过滤 `scope=user`）+ `bun-backend/src/routes/extensions.ts`（`isValidExtensionId` 拒绝绝对路径/穿越/`<inline:…>`，内置名 403）+ `extensions-config.ts`（落盘前同校验） | 非用户扩展、内置安全扩展（approval/blocker/telemetry）一律拒绝禁用；非法 id → 400；内置名 → 403 | `bun-sidecar/tests/extensions-visibility.test.ts`、`bun-backend/tests/extensions-route.test.ts` |
 
 ## 2. 不可回退的原则
 
@@ -59,3 +60,20 @@
   `read_only`/`operate` 改写掉——它不是四档切换的兜底通道。
 - **`dev_docs/security/` 已被 `.gitignore` 屏蔽**，不会出现在 `git status`；
   该目录不再存放现行规范，安全事实以本文为准。
+
+### 3.1 扩展（2026-11-18 起）
+
+扩展是 pi 的能力面之一，但**不是沙箱**：扩展代码以与当前会话相同的系统权限运行。
+因此启停机制按"能关、但关不掉安全机制"设计：
+
+1. **可禁用的只有 `<agentDir>/extensions` 下的用户扩展**（`scope=user`，id 为相对该目录的
+   posix 路径）。Maxma 内联装配的 `maxma-approval` / `maxma-blocker` / `request-telemetry`
+   **硬拒**（接口 403、过滤函数按 scope 拒绝）——关掉审批扩展等于静默取消审批门。
+2. 过滤点是官方 `DefaultResourceLoaderOptions.extensionsOverride`（会话级），
+   **不写 pi 的全局 settings**：一次 Maxma 内的开关不应扩散到用户命令行里的 pi。
+   持久化只在本机 `api/data/disabled_extensions.json`，值是相对路径，换机不会误伤。
+3. 禁用语义是"不参与会话"（handler/tool 不注册），**不是隔离**：扩展模块在加载期仍会被
+   import，顶层副作用仍会执行。UI 文案必须与此一致。
+4. 生效时机是**之后新建的会话**；当前会话保持创建时的扩展集合（扩展在会话创建时加载并绑定）。
+5. 加载失败（`extensionsResult.errors`）必须可见：`GET /api/extensions` 与扩展页直接呈现，
+   不允许静默吞掉。

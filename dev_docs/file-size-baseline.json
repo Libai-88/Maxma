@@ -15,8 +15,8 @@
       "meaningful": 846
     },
     "bun-sidecar/src/kernel/bridge-pi.ts": {
-      "lines": 1262,
-      "meaningful": 1190
+      "lines": 1261,
+      "meaningful": 1189
     },
     "web/src/api/index.ts": {
       "lines": 1095,
@@ -35,8 +35,8 @@
       "meaningful": 1047
     },
     "web/src/views/ExtensionView.tsx": {
-      "lines": 1070,
-      "meaningful": 1001
+      "lines": 1014,
+      "meaningful": 949
     },
     "web/src/views/JetHubView.tsx": {
       "lines": 1111,

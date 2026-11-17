@@ -46,10 +46,13 @@
    - 复用现有 `AlertDialog` 底座与 `confirmAction` 风格。
    - 超时按后端给的 `timeout` 倒计时，到期自动按官方默认值回填。
 
-4. **扩展管理页新增 tab**
-   - 列出已加载扩展（名称、路径、来源 scope、是否有错误）。
+4. **扩展管理页新增 tab** ✅（2026-11-18 完成）
+   - 列出已加载扩展（名称、路径、来源 scope、是否启用/禁用）。
    - 错误要可见：`extensionsResult.errors` 直接呈现，不再静默吞掉。
-   - 只读为主（启用/禁用需要 pi 的 `disabledBuiltinExtensions` 与 settings `extensions` 键，属二期）。
+   - 启用/禁用：走 `DefaultResourceLoaderOptions.extensionsOverride`（**不写 pi 全局 settings**），
+     只允许禁用 `<agentDir>/extensions` 下的用户扩展；Maxma 内联的审批/拒止/遥测硬拒。
+     边界与文案见 `docs/security-contract.md`「扩展」一节，实现见 `kernel/extensions.ts` +
+     `routes/extensions.ts` + `components/extensions/ExtensionsPanel.tsx`。
 
 ### 锁
 
@@ -209,7 +212,10 @@ pi 的 `settings.md` 里有、Maxma `MAXMA_SETTINGS_KEYS` 里**没有**的真实
 
 1. ~~分叉走 A 还是 B~~ —— **已验证走 B**（`forkFrom` + `branch`），见 §二.3。
 2. **虚拟模型要不要接** —— 它是 pi 的高级能力，但产品上如何呈现"自动路由"（`session.model` 是虚拟选择，`session.routedModel` 才是实际模型）需要设计，建议单独讨论。
-3. **扩展的启用/禁用** —— 需要 pi 的 settings `extensions` 键与 `disabledBuiltinExtensions`，且涉及安全（扩展有完整系统权限），建议二期并配套安全说明。
+3. ~~**扩展的启用/禁用**~~ —— **已实现（2026-11-18）**，但换了挂点：不写 pi 的全局
+   settings（那会把 Maxma 的一次开关扩散到 pi CLI），改用官方
+   `DefaultResourceLoaderOptions.extensionsOverride` 在会话级过滤；持久化在
+   `api/data/disabled_extensions.json`。安全边界见 `docs/security-contract.md`。
 
 ## 八、已完成的调研（避免重复劳动）
 
@@ -223,3 +229,20 @@ pi 的 `settings.md` 里有、Maxma `MAXMA_SETTINGS_KEYS` 里**没有**的真实
 | `getTree()` 可用 | 实测 2 条 entry → 1 个根节点 |
 | 按 entry 分叉可行 | `forkFrom` + `branch(targetId)` → leaf 与分支长度均正确 |
 | pi 的 `reserveTokens`/`keepRecentTokens`/`cacheWarming`/`enabledModels`/`defaultThinkingLevel` 在 Maxma 零引用 | 全仓 grep 无命中 |
+
+---
+
+## 九、2026-11-18 收尾记录（使命评估后的三处未达标）
+
+使命评估结论是"能力侧约 85% 达标、纪律侧刚补齐"，点出三处未达标；本轮全部处理完：
+
+| # | 缺口 | 处理 | 证据 |
+|---|---|---|---|
+| 1 | 外部扩展在界面上不可见、`extensionsResult.errors` 被丢弃 | `createMaxmaSessionWithExtensions` 解构官方 `extensionsResult`；`kernel/extensions.ts` 归一成快照并缓存；`GET /api/extensions` 暴露清单/错误/警告；`ExtensionView` 新增「扩展」tab（组件独立成 `ExtensionsPanel.tsx`，避免撑大 800 行棘轮） | `bun-sidecar/tests/extensions-visibility.test.ts`（12 用例，真实 pi 加载 + 临时 agentDir）；`bun-backend/tests/extensions-route.test.ts`（10 用例） |
+| 2 | 扩展启用/禁用未接（且缺安全说明） | 官方 `extensionsOverride` 会话级过滤；`PUT /api/extensions` + `api/data/disabled_extensions.json`；只允许用户扩展，内置三项硬拒；界面二次确认 + 边界文案 | 同上；`docs/security-contract.md`「扩展」节 |
+| 3 | `kernel/subagent.ts` 0 覆盖、超时只写在描述里不执行 | 补真实计时：超时/父会话取消都转 `session.abort()` 并在结果里标注原因；并发上限、取消前已 abort、空 tasks 等 7 条用例 | `bun-sidecar/tests/subagent-orchestration.test.ts`；subagent 行覆盖 0 → 96.99%，已进 CORE 覆盖率名单 |
+
+**顺带修正的一处"文案撒谎"**：`subagent` 工具描述一直写着"单个任务超时 300s"，但旧代码
+只把 `limits` 塞进文案、从不计时——任务卡住就永远卡住。现在描述与实现一致，并由上面的
+超时用例锁住（旧实现跑该用例会一直挂到测试超时）。
+
