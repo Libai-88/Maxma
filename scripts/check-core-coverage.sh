@@ -45,8 +45,12 @@ if below "100.00"; then
   exit 1
 fi
 
-# CORE 名单：引擎边界上"改错了会静默出错"的模块（14 项）。
-CORE="src[\\\\/]kernel[\\\\/](events|approval-gate|mcp|model|bridge-pi|plan|goal|pi-session|pi-contract|skills|tools|prompt|request-telemetry|project-paths)\.ts"
+# CORE 名单：引擎边界上"改错了会静默出错"的模块（16 项）。
+# subagent 于 2026-11-18 加入：它的并发上限/超时/取消此前无任何测试锁（覆盖率 0），
+# 且"超时"曾只写在工具描述里、代码不计时——这类"文案承诺了但没实现"的模块
+# 必须进名单，否则会安静地退回去。
+# extensions 同批加入：扩展过滤（禁用）直接决定审批/拒止扩展是否被误伤。
+CORE="src[\\\\/]kernel[\\\\/](events|approval-gate|mcp|model|bridge-pi|plan|goal|pi-session|pi-contract|skills|tools|prompt|request-telemetry|project-paths|subagent|extensions)\.ts"
 
 ROWS=$(mktemp)
 trap 'rm -f "$ROWS"' EXIT

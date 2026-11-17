@@ -64,7 +64,16 @@ export interface CreateSubagentToolDeps {
   limits?: Partial<SubagentLimits>
   /** 父会话模型名（结果里回给模型看，便于判断是谁干的活）。 */
   parentModel?: string
+  /**
+   * 建子会话的工厂（默认 `createMaxmaSession`）。测试注入点：
+   * 只有可替换工厂，才能在没有真实模型的情况下验证并发上限、超时与取消。
+   */
+  createSession?: (options: Parameters<typeof createMaxmaSession>[0]) => Promise<AgentSession>
 }
+
+/** 超时/取消的失败文案（测试与 UI 都按这两个前缀判定）。 */
+export const SUBAGENT_TIMEOUT_PREFIX = "子任务超时"
+export const SUBAGENT_CANCEL_MESSAGE = "父会话已取消，子任务中止"
 
 interface SubagentTaskInput {
   /** 任务描述（必填）。 */
@@ -86,8 +95,9 @@ function normalizeLimits(partial?: Partial<SubagentLimits>): SubagentLimits {
   const maxConcurrent = Number.isFinite(partial?.maxConcurrent)
     ? Math.min(8, Math.max(1, Math.floor(Number(partial?.maxConcurrent))))
     : SUBAGENT_DEFAULT_LIMITS.maxConcurrent
+  // 下限 1s：面板正常值在数百秒量级，但测试与调试需要能压到秒级验证超时路径。
   const timeoutMs = Number.isFinite(partial?.timeoutMs)
-    ? Math.min(1_800_000, Math.max(30_000, Math.floor(Number(partial?.timeoutMs))))
+    ? Math.min(1_800_000, Math.max(1_000, Math.floor(Number(partial?.timeoutMs))))
     : SUBAGENT_DEFAULT_LIMITS.timeoutMs
   return { maxConcurrent, timeoutMs }
 }
@@ -131,6 +141,7 @@ function readResult(session: AgentSession): {
  */
 export function createSubagentTool(deps: CreateSubagentToolDeps): ToolDefinition {
   const limits = normalizeLimits(deps.limits)
+  const factory = deps.createSession ?? createMaxmaSession
   return defineTool({
     name: "subagent",
     label: "Subagent",
@@ -148,7 +159,7 @@ export function createSubagentTool(deps: CreateSubagentToolDeps): ToolDefinition
       ),
     }),
     annotations: { readOnlyHint: false },
-    async execute(_toolCallId, params, _signal, onUpdate) {
+    async execute(_toolCallId, params, signal, onUpdate) {
       const input = params as { tasks?: SubagentTaskInput[] }
       const tasks = (input.tasks ?? []).filter((t) => typeof t.prompt === "string" && t.prompt.trim())
       if (tasks.length === 0) {
@@ -158,12 +169,37 @@ export function createSubagentTool(deps: CreateSubagentToolDeps): ToolDefinition
       let cursor = 0
       let finished = 0
 
-      const runOne = async (task: SubagentTaskInput, index: number): Promise<void> => {
+      /**
+       * 单个子任务。SUBAGENT-TIMEOUT-001：描述里写了"单个任务超时 X 秒"，
+       * 但旧实现只把 limits 塞进文案，从不真的计时——任务卡住就永远卡住。
+       * 现在超时与父会话取消都转成 `session.abort()`，并标记失败的**原因**，
+       * 让父 Agent 看到"是超时/被取消"，而不是笼统的 aborted。
+       */
+      const runOne = async (
+        task: SubagentTaskInput,
+        index: number,
+        abortSignal: AbortSignal | undefined,
+      ): Promise<void> => {
         const label = (task.label ?? "").trim() || `任务 ${index + 1}`
         const startedAt = Date.now()
         let session: AgentSession | undefined
+        let timer: ReturnType<typeof setTimeout> | undefined
+        let timedOut = false
+        let cancelled = false
+        const abortChild = () => {
+          try {
+            void session?.abort().catch(() => {})
+          } catch {
+            /* 已释放 */
+          }
+        }
+        const onParentAbort = () => {
+          cancelled = true
+          abortChild()
+        }
         try {
-          session = await createMaxmaSession({
+          if (abortSignal?.aborted) throw new Error(SUBAGENT_CANCEL_MESSAGE)
+          session = await factory({
             cwd: deps.cwd,
             inMemory: true,
             tools: [...SUBAGENT_TOOL_NAMES],
@@ -174,20 +210,36 @@ export function createSubagentTool(deps: CreateSubagentToolDeps): ToolDefinition
             ...(deps.modelRuntime ? { modelRuntime: deps.modelRuntime } : {}),
             ...(deps.model ? { model: deps.model } : {}),
           })
-          await session.bindExtensions({})
+          if (abortSignal?.aborted) throw new Error(SUBAGENT_CANCEL_MESSAGE)
+          timer = setTimeout(() => {
+            timedOut = true
+            abortChild()
+          }, limits.timeoutMs)
+          abortSignal?.addEventListener("abort", onParentAbort, { once: true })
           await session.prompt(task.prompt)
+          if (timedOut) throw new Error(`${SUBAGENT_TIMEOUT_PREFIX}（${Math.round(limits.timeoutMs / 1000)}s）`)
+          if (cancelled) throw new Error(SUBAGENT_CANCEL_MESSAGE)
           const { output, usage } = readResult(session)
           results[index] = { label, ok: true, output: output || "（子 Agent 未产出文字结论）", durationMs: Date.now() - startedAt, usage }
         } catch (error) {
+          const reason = timedOut
+            ? `${SUBAGENT_TIMEOUT_PREFIX}（${Math.round(limits.timeoutMs / 1000)}s）`
+            : cancelled
+              ? SUBAGENT_CANCEL_MESSAGE
+              : error instanceof Error
+                ? error.message
+                : String(error)
           results[index] = {
             label,
             ok: false,
             output: "",
             durationMs: Date.now() - startedAt,
             usage: { input: null, output: null, cacheRead: null, cacheWrite: null },
-            error: error instanceof Error ? error.message : String(error),
+            error: reason,
           }
         } finally {
+          if (timer !== undefined) clearTimeout(timer)
+          abortSignal?.removeEventListener("abort", onParentAbort)
           try { session?.dispose() } catch { /* 已释放 */ }
           finished += 1
           onUpdate?.({
@@ -203,7 +255,7 @@ export function createSubagentTool(deps: CreateSubagentToolDeps): ToolDefinition
           if (index >= tasks.length) return
           const task = tasks[index]
           if (!task) return
-          await runOne(task, index)
+          await runOne(task, index, signal)
         }
       })
       await Promise.all(workers)
