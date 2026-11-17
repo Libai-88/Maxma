@@ -41,6 +41,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { spawn } from "node:child_process";
+import { requireBun } from "./_bun-bin.mjs";
 
 const REPO = path.resolve(import.meta.dir, "..");
 const STUB_PORT = Number(process.env.STUB_PORT ?? 8101);
@@ -109,7 +110,7 @@ if (!process.env.BASE) {
   // 既污染 `git status`，也让人误以为它是仓库内容。
   // 另一边修：`.gitignore` 也加上 `.tmp-*` 兜底（双保险）。
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "maxma-uichat-"));
-  backend = spawn(process.env.MAXMA_BUN ?? "bun", ["run", path.join(REPO, "bun-backend", "src", "server.ts")], {
+  backend = spawn(requireBun({ root: REPO, what: "聊天往返验证" }), ["run", path.join(REPO, "bun-backend", "src", "server.ts")], {
     cwd: path.join(REPO, "bun-backend"),
     env: {
       ...process.env,

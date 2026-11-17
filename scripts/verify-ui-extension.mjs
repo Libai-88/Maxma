@@ -22,6 +22,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { spawn } from "node:child_process";
+import { requireBun } from "./_bun-bin.mjs";
 
 const REPO = path.resolve(import.meta.dir, "..");
 const BACKEND_PORT = Number(process.env.BACKEND_PORT ?? 8122);
@@ -80,7 +81,7 @@ try {
   console.log(`临时扩展：${extFile}`);
 
   if (!process.env.BASE) {
-    backend = spawn(process.env.MAXMA_BUN ?? "bun", ["run", path.join(REPO, "bun-backend", "src", "server.ts")], {
+    backend = spawn(requireBun({ root: REPO, what: "扩展页验证" }), ["run", path.join(REPO, "bun-backend", "src", "server.ts")], {
       cwd: path.join(REPO, "bun-backend"),
       env: {
         ...process.env,
