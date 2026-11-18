@@ -22,11 +22,28 @@
 .app-main { flex: 1; min-width: 0; overflow: hidden; display: flex; flex-direction: column; }
 .app-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 
+/* 密度：只切纵向节奏（导航行高 / 页面留白 / 列表间距），不动字号与控件尺寸。
+   字号属于尺度（--text-* 六档），密度属于呼吸感；绑在一起会让"更紧凑"顺势
+   牺牲可读性，控件缩到 30px 以下还会误触。 */
+:root {
+  --density-row: 0.5rem;
+  --density-stack: 1.25rem;
+  --density-page: 1.5rem;
+}
+:root[data-density='compact'] {
+  --density-row: 0.3125rem;
+  --density-stack: 0.75rem;
+  --density-page: 1.125rem;
+}
+@utility density-row { padding-block: var(--density-row); }
+@utility density-stack { gap: var(--density-stack); }
+@utility density-page { padding: var(--density-page); }
+
 /* 页面框架。ExtensionView / PluginListView / PluginDetailView / JetHubView 的根容器
    一直写着 `.ds-view`，但这个类在样式表里**并不存在**（Vue 时代留下的约定）。
    于是那几页的标题贴着窗口上沿被切掉，而 Metrics / News 又没有内边距——
-   同一件"页边距"的事，四处各自为政。这里把它定义成真东西。 */
-.ds-view { padding: 1.5rem; }
+   同一件"页边距"的事，四处各自为政。这里把它定义成真东西，并且读密度变量。 */
+.ds-view { padding: var(--density-page); }
 .ds-view--wide { max-width: 76rem; width: 100%; margin-inline: auto; }
 .ds-view--narrow { max-width: 56rem; width: 100%; }
 

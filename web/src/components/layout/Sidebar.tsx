@@ -41,7 +41,7 @@ function NavRow({ to, label, icon: Icon, active, trailing }: {
       to={to}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'group relative flex items-center gap-2.5 rounded-lg px-3.5 py-2 text-ui',
+        'group relative flex items-center gap-2.5 rounded-lg px-3.5 density-row text-ui',
         interactive, focusRing,
         active
           ? 'bg-accent text-accent-foreground'
@@ -100,7 +100,7 @@ export function Sidebar({ onToggleSessions }: { onToggleSessions: () => void }) 
         <span className="text-subtitle font-semibold tracking-tight">Maxma</span>
       </div>
 
-      <nav ref={navScrollRef} className="flex flex-col flex-1 gap-5 overflow-y-auto scrollbar-thin scroll-fade px-2 py-4" aria-label="页面导航">
+      <nav ref={navScrollRef} className="flex flex-col flex-1 density-stack overflow-y-auto scrollbar-thin scroll-fade px-2 py-4" aria-label="页面导航">
         {visibleGroups.map((group) => (
           <div key={group.key} role="group" aria-label={group.label}>
             <p className="px-3.5 pb-1.5 text-caption font-medium uppercase tracking-widest text-muted-foreground">{group.label}</p>

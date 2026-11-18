@@ -145,7 +145,7 @@ export default function MetricsView() {
   const llmHistorySeries = history ? history.snapshots.map(s => s.llm?.total_tokens_out ?? 0) : []
 
   return (
-    <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-thin scroll-fade p-6">
+    <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-thin scroll-fade density-page">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <h2 className="text-xl font-semibold text-foreground">运行指标</h2>
         <div className="flex items-center gap-3 text-ui text-muted-foreground flex-wrap">

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Check, Moon, Sun } from 'lucide-react'
+import { Check, Maximize2, Minimize2, Moon, Sun } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { applyTheme, readStoredTheme, setTheme, type ThemeId } from '@/lib/theme'
+import { readDensity, setDensity, type DensityId } from '@/lib/density'
 
 interface ThemeMeta {
   id: ThemeId
@@ -14,8 +15,20 @@ const THEMES: ThemeMeta[] = [
   { id: 'dark', name: '深色', desc: '烟熏深色玻璃，Maxma 默认，适合专注与夜间。' },
 ]
 
+interface DensityMeta {
+  id: DensityId
+  name: string
+  desc: string
+}
+
+const DENSITIES: DensityMeta[] = [
+  { id: 'comfortable', name: '舒适', desc: '导航行高与页面留白更松，适合长时间盯着看。' },
+  { id: 'compact', name: '紧凑', desc: '同样的内容占用更少高度，适合小屏与并排窗口。' },
+]
+
 export default function AppearanceView() {
   const [theme, setThemeState] = useState<ThemeId>(readStoredTheme)
+  const [density, setDensityState] = useState<DensityId>(readDensity)
 
   useEffect(() => {
     applyTheme(theme)
@@ -24,6 +37,11 @@ export default function AppearanceView() {
   function selectTheme(next: ThemeId) {
     setTheme(next)
     setThemeState(next)
+  }
+
+  function selectDensity(next: DensityId) {
+    setDensity(next)
+    setDensityState(next)
   }
 
   return (
@@ -77,6 +95,51 @@ export default function AppearanceView() {
                     {active && <Check className="size-4 text-primary" />}
                   </div>
                   <p className="text-xs leading-relaxed text-muted-foreground">{t.desc}</p>
+                </button>
+              )
+            })}
+          </div>
+        </section>
+
+        <section className="rounded-lg bg-card p-4">
+          <h3 className="text-base font-semibold text-foreground">密度</h3>
+          <p className="mb-4 mt-1 text-xs text-muted-foreground">
+            只调整纵向节奏（导航行高、页面留白、列表间距）。字号与控件尺寸不随之变化，
+            所以「紧凑」不会牺牲可读性，也不会把点击区压到误触的程度。
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            {DENSITIES.map((d) => {
+              const active = density === d.id
+              return (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => selectDensity(d.id)}
+                  className={cn(
+                    'flex flex-col gap-2 rounded-lg border p-4 text-left transition-colors duration-fast ease-standard',
+                    active ? 'glass-chosen' : 'border-border bg-panel hover:border-primary/40',
+                  )}
+                  aria-pressed={active}
+                >
+                  {/* 两行示意：行高差就是这档密度唯一的差别 */}
+                  <div
+                    className={cn(
+                      'flex w-full flex-col justify-center overflow-hidden rounded-md border border-border bg-muted px-2',
+                      d.id === 'compact' ? 'gap-1 py-1.5' : 'gap-2 py-2.5',
+                    )}
+                    aria-hidden="true"
+                  >
+                    <span className="h-1.5 w-full rounded-sm bg-foreground/25" />
+                    <span className="h-1.5 w-2/3 rounded-sm bg-foreground/25" />
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-2 text-sm font-medium text-foreground">
+                      {d.id === 'compact' ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+                      {d.name}
+                    </span>
+                    {active && <Check className="size-4 text-primary" />}
+                  </div>
+                  <p className="text-xs leading-relaxed text-muted-foreground">{d.desc}</p>
                 </button>
               )
             })}

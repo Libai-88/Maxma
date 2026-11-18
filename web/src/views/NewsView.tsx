@@ -108,7 +108,7 @@ export default function NewsView() {
   })()
 
   return (
-    <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-thin scroll-fade p-6">
+    <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-thin scroll-fade density-page">
       <div className="flex items-center justify-between gap-4 mb-6">
         <h2 className="text-xl font-semibold text-foreground">更新动态</h2>
         {!loading && !loadError && (

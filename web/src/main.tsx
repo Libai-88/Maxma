@@ -4,6 +4,7 @@ import { App } from './router'
 import { request } from '@/api'
 import { waitForBackend } from '@/utils/env'
 import { restoreTheme } from '@/lib/theme'
+import { restoreDensity } from '@/lib/density'
 
 /**
  * 前端运行时诊断上报（便携版无 DevTools 时的排查通道）。
@@ -57,9 +58,10 @@ window.addEventListener('unhandledrejection', (e) => {
 })
 
 async function boot() {
-  // 先把上次保存的主题贴上再等后端：否则选了浅色的人每次启动都会先看到
-  // 一屏深色（等后端就绪的这段时间不短，闪烁很明显）。
+  // 先把上次保存的主题与密度贴上再等后端：否则选了浅色/紧凑的人每次启动
+  // 都会先看到一屏默认外观（等后端就绪的这段时间不短，闪烁很明显）。
   restoreTheme()
+  restoreDensity()
   const splash = document.getElementById('app-loading')
   const setBootStatus = (text: string) => {
     const el = document.getElementById('boot-status-text')
