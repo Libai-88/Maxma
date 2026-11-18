@@ -91,12 +91,26 @@ app.whenReady().then(async () => {
           `(() => {
             const main = document.querySelector('main');
             const text = (document.body.innerText || '').replace(/\\s+/g, ' ');
+            // 离屏渲染跳过（.turn-virtual = content-visibility:auto）的实际生效情况：
+            // auto 数量证明规则挂上了元素，skipped 数量证明引擎真的跳过了屏外轮次
+            // （checkVisibility 在 contentVisibilityAuto 模式下对跳过的子树返回 false）。
+            const turns = Array.from(document.querySelectorAll('main article'));
+            const autos = turns.filter((el) => getComputedStyle(el).contentVisibility === 'auto');
+            const skipped = autos.filter((el) =>
+              el.checkVisibility ? !el.checkVisibility({ contentVisibilityAuto: true }) : false,
+            );
             return {
               path: location.pathname,
               text: text.slice(0, 160),
               mainLen: main ? (main.innerText || '').replace(/\\s+/g, ' ').length : -1,
               mainKids: main ? main.children.length : -1,
               mainText: main ? (main.innerText || '').replace(/\\s+/g, ' ').slice(0, 200) : '',
+              turns: turns.length,
+              hosted: turns.length - autos.length,
+              virtual: autos.length,
+              skipped: skipped.length,
+              scrollTop: (document.querySelector('.app-scroll') || {}).scrollTop ?? -1,
+              scrollHeight: (document.querySelector('.app-scroll') || {}).scrollHeight ?? -1,
             };
           })()`,
         )
@@ -121,12 +135,18 @@ app.whenReady().then(async () => {
         mainLen: probe.mainLen,
         mainKids: probe.mainKids,
         mainText: probe.mainText,
+        turns: probe.turns,
+        hosted: probe.hosted,
+        virtual: probe.virtual,
+        skipped: probe.skipped,
+        scrollTop: probe.scrollTop,
+        scrollHeight: probe.scrollHeight,
         width: size.width,
         height: size.height,
         meanLuma: count ? Number((sum / count).toFixed(1)) : 0,
         bytes: png.length,
       });
-      console.log(`  · ${page.name}  ${size.width}x${size.height}  ${(png.length / 1024).toFixed(1)}KB  luma ${count ? (sum / count).toFixed(1) : 0}  @${probe.path}`);
+      console.log(`  · ${page.name}  ${size.width}x${size.height}  ${(png.length / 1024).toFixed(1)}KB  luma ${count ? (sum / count).toFixed(1) : 0}  turns ${probe.turns ?? "-"}(virtual ${probe.virtual ?? "-"}/skipped ${probe.skipped ?? "-"})  @${probe.path}`);
     }
     console.log("VISUAL_RESULT " + JSON.stringify({ results, consoleErrors: logs, stage: "done" }));
     app.exit(0);

@@ -60,6 +60,17 @@
   --scroll-fade-mask: linear-gradient(to bottom, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
 }
 
+/* 离屏轮次跳过渲染。长会话（几百轮、每轮含整段 Markdown + 工具步骤 + 推理块）里，
+   视口外的轮次每一帧都在参与布局与重绘，滚动越来越卡，而用户根本看不到它们。
+   `content-visibility: auto` 让 Chromium 直接跳过屏外子树，`contain-intrinsic-size`
+   给一个估算高度占位（`auto` 记住上次实测值，避免滚动条跳动）。
+   代价：屏外内容不在渲染树里，Ctrl+F 页内查找、跨屏大范围选择只能命中已渲染部分；
+   滚动条长度在"从没进过视口"的区间按估算值算，所以跳到底部要连续几帧校正（见 ChatWindow.scrollToBottom）。 */
+.turn-virtual {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 600px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

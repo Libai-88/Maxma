@@ -175,8 +175,7 @@ function TurnBlock({ turn, isLast, onAction, onCite, onPin }: {
   onAction: ChatWindowProps['onAction']
   onCite: ChatWindowProps['onCite']
   onPin: ChatWindowProps['onPin']
-}) {
-  const speaking = useTtsRuntime((s) => s.speaking)
+}) {  const speaking = useTtsRuntime((s) => s.speaking)
   const steps = turn.events
     .filter((e): e is ToolCall => e.kind === 'tool')
     .map((tc, i) => toolToStep(tc, turn.id, i))
@@ -198,7 +197,7 @@ function TurnBlock({ turn, isLast, onAction, onCite, onPin }: {
   const planCard = turn.planCard
 
   return (
-    <article className="group/turn flex flex-col gap-2" aria-label={turn.userMessage ? '对话轮次' : undefined}>
+    <article className={cn('group/turn flex flex-col gap-2', !isLast && 'turn-virtual')} aria-label={turn.userMessage ? '对话轮次' : undefined}>
       {turn.userMessage && (
         <div className="flex items-start justify-end gap-2">
           <div className="max-w-[85%] rounded-xl rounded-br-sm bg-primary px-3.5 py-2.5 text-sm leading-relaxed text-primary-foreground">
@@ -312,9 +311,23 @@ function TurnUsageLine({ usage }: { usage: TurnUsage }) {
   )
 }
 
+/**
+ * 滚到底部。为什么要连续校正几帧：离屏轮次用 `content-visibility: auto` 跳过渲染，
+ * 高度先按 `contain-intrinsic-size` 估算（600px），真正落进视口后才换成实测值
+ * （实测一轮常在 700–900px）。第一次 scrollTop = scrollHeight 之后页面会"变高"，
+ * 于是停在新消息上方；再校两帧才稳定。只有贴底（pinned）时才走这里，不会抢用户手势。
+ */
+function scrollToBottom(el: HTMLDivElement) {
+  let frames = 0
+  const settle = () => {
+    el.scrollTop = el.scrollHeight
+    if (frames < 3) { frames += 1; requestAnimationFrame(settle) }
+  }
+  settle()
+}
+
 /** 对话窗口：轮次渲染 + 错误横幅 + 自动滚动/跳到最新。 */
-export function ChatWindow(props: ChatWindowProps) {
-  const { turns, currentTurn, isStreaming, connected, error, errorCategory, errorTraceId, onAction, onRetry, onDismissError, onCite, onPin } = props
+export function ChatWindow(props: ChatWindowProps) {  const { turns, currentTurn, isStreaming, connected, error, errorCategory, errorTraceId, onAction, onRetry, onDismissError, onCite, onPin } = props
   const scrollRef = useRef<HTMLDivElement>(null)
   const [pinned, setPinned] = useState(true)
   const [tick, setTick] = useState(0)
@@ -323,7 +336,7 @@ export function ChatWindow(props: ChatWindowProps) {
   // 流式跟随：仅当用户停在底部时自动滚
   useEffect(() => {
     const el = scrollRef.current
-    if (el && pinned) el.scrollTop = el.scrollHeight
+    if (el && pinned) scrollToBottom(el)
   }, [merged.length, currentTurn?.events.length, currentTurn?.finalAnswer, pinned, tick])
 
   useEffect(() => {
@@ -340,7 +353,7 @@ export function ChatWindow(props: ChatWindowProps) {
 
   const jumpToLatest = () => {
     const el = scrollRef.current
-    if (el) { el.scrollTop = el.scrollHeight; setPinned(true) }
+    if (el) { scrollToBottom(el); setPinned(true) }
   }
 
   const errCls = errorCategory === 'rate_limit'
