@@ -1,6 +1,7 @@
 # 设计系统（尺度、材质、状态）
 
-> 主题的唯一事实源是 `web/src/solid-glass.css`；这份文档说明**为什么**是这些数，以及**新页面该用哪一档**。
+> 材质与基础 token 的事实源是 `web/src/solid-glass.css`；五套主题配色的事实源是
+> `web/src/theme-palettes.css`。这份文档说明**为什么**是这些数，以及**新页面该用哪一档**。
 > 建立于 2026-11-18 的排版整理（此前 33 个视图写了 125 处任意字号、11 个档位）。
 
 ## 一、五条材质规则（来自 Solid Glass 主题）
@@ -59,23 +60,25 @@ press       // active:translate-y-px duration-fast ease-out-quint
 - 玻璃面 **不要**再写 `shadow-sm/lg/2xl`——那些类从来没生效过，留着只会误导下一个人。
 - 非玻璃面（`bg-background`、`bg-muted`）要抬起来时用 `elev-1/2/3`。
 
-## 五、四道自动化守卫
+## 五、五道自动化守卫
 
 | 脚本 | 断言 | 失败时怎么办 |
 |---|---|---|
 | `web/scripts/check-type-scale.mjs` | 无任意字号、`transition` 必须有时长、无散落 `shadow-*` | 按提示改成 token；确属例外才动基线 |
 | `web/scripts/check-css-weight.mjs` | `backdrop-filter` 生效声明 ≤ 8 组 | 不要靠加模糊变美 |
 | `web/scripts/check-spacing.mjs` | 自绘边框/底色容器的内边距下限 | 补 `p-2 / px-2 / py-1.5` |
-| `scripts/check-contrast.mjs` | 主题 token 的 WCAG 比值（fg/bg ≥ 7、muted 各场景 ≥ 4.5） | 改 token，不要靠"看起来还行" |
+| `scripts/check-contrast.mjs` | 12 组主题 token 的 WCAG 比值（fg/bg ≥ 7、muted / 按钮 / 链接 ≥ 4.5） | 改 token，不要靠"看起来还行" |
+| `scripts/check-no-purple.mjs` | 两份主题 CSS 里没有 270°–325° 的紫罗兰色相 | 换成蓝/青/粉，不要用紫灰“显高级” |
 
 全部挂在 `bash scripts/verify-all-gates.sh` 里。排版守卫是**棘轮**：存量记在
 `web/scripts/type-scale-baseline.json`，只准降不准涨；当前已降到 **0 条**（即硬约束）。
 改动后跑一次 `node scripts/check-type-scale.mjs --prune` 收敛基线。
 
-对比度守卫**不维护第二份色表**：它直接读 `web/src/solid-glass.css` 里的 `:root` 与 `.dark`，
-把 OKLCH 转成线性 sRGB 再按 WCAG 相对亮度算；玻璃卡片（`--card` 带 60%/46% alpha）和芯片
-（`--secondary` 带 9%/7% alpha）先与页面底色做 alpha 合成，再跟文字比——否则算的是"叠好后的景"
-对"没叠的色"，结论会虚高。它守的是 10 组搭配（浅/深各 5）。
+对比度守卫**不维护第二份色表**：它直接读 `web/src/solid-glass.css` 的 `:root` / `.dark`，
+以及 `web/src/theme-palettes.css` 的 10 个 `[data-theme]` 块，把 OKLCH 转成线性 sRGB 再按
+WCAG 相对亮度算；玻璃卡片（`--card` 带 alpha）和芯片（`--secondary` 带 alpha）先与页面底色
+做 alpha 合成，再跟文字比——否则算的是"叠好后的景"对"没叠的色"，结论会虚高。它守的是
+**12 组**搭配（基础浅/深 + 五套主题 × 明暗），共 **84 项**。
 
 ## 六、视觉验收（截图存证）
 
@@ -86,7 +89,7 @@ press       // active:translate-y-px duration-fast ease-out-quint
 ```bash
 bun scripts/verify-ui-visual.mjs                 # 存证到当天目录
 bun scripts/verify-ui-visual.mjs --update-baseline  # 覆盖 dev_docs/visual/baseline/
-VISUAL_THEME=light bun scripts/verify-ui-visual.mjs # 亮色抽查（主题由 DRIVE_THEME 钉住）
+VISUAL_THEME=flexoki-light bun scripts/verify-ui-visual.mjs # 亮色抽查（完整 ThemeId，不是旧的 light/dark）
 ```
 
 驱动每次运行都换一个干净的 Electron profile（`app.setPath('userData', mkdtemp)`）。
@@ -114,9 +117,34 @@ VISUAL_THEME=light bun scripts/verify-ui-visual.mjs # 亮色抽查（主题由 D
 
 ## 八、主题与密度的唯一入口
 
-`web/src/lib/theme.ts`（读 / 写 / 应用 / 启动恢复）。此前主题只在"打开外观页"时生效，
+`web/src/lib/theme.ts`（读 / 写 / 应用 / 启动恢复）是唯一入口。此前主题只在"打开外观页"时生效，
 重启后选了浅色的人照样看到深色；引导页还往另一个键（`maxma-theme`）写。
 现在 `main.tsx` 在等后端之前调用 `restoreTheme()`，组件只调 `setTheme`。
+
+`ThemeId` 是 `family-mode` 的完整 ID，例如 `flexoki-dark`、`sakura-light`；`applyTheme`
+按模式切 `.dark`，并把完整 ID 写到 `<html data-theme>`，让 `theme-palettes.css` 按家族覆盖 token。
+旧的 `light` / `dark` 仍在读取层迁移到 `flexoki-light` / `flexoki-dark`，已有用户的
+`maxma.theme` 不会失效。
+
+### 五套无紫主题
+
+| 家族 | 中文名 | 气质 | ID 前缀 |
+|---|---|---|---|
+| Flexoki | 暖纸 | 奶油纸、墨黑与铜青，白天最耐看 | `flexoki-` |
+| Everforest | 苔原 | 奶油纸与苔绿，低饱和、护眼 | `everforest-` |
+| Primrose Peach | 蜜桃 | 蜜桃、报春粉与薄荷 | `primrose-` |
+| Light Pink | 樱花 | 灰粉与炭黑，轻但不幼 | `sakura-` |
+| Kanagawa | 墨浪 | 墨蓝、浪白与橘，安静里有锋利的边 | `kanagawa-` |
+
+每套都有 `light` / `dark` 两态；默认 `flexoki-dark`。外观页用五张家族卡，每张卡里放
+**真实的 `data-theme` token 预览块**，不在 TSX 里另抄一份 hex；引导页只给
+`暖纸 · 浅色` 与 `墨浪 · 深色` 两个起点，完整五套留在外观页。
+
+**无紫是硬约束。** 所有主题 token、语法高亮、背景第二色相都不落进 OKLCH 的
+270°–330° 紫色带（`check-no-purple.mjs` 按 **270°–325°** 拦紫罗兰，325° 以上归樱花粉）。
+`themeColor.ts` 的 `deriveAltHue` 在 `+28°` 落入紫色带时先试 `-28°`，两边都落入时落到
+冷侧 `235°`；浅色的 `--syn-name` 也改成蓝而不是紫。
+被否决的候选（Rosé Pine、Catppuccin Mocha、Lavender）都是因为深色底或强调色偏紫。
 
 `web/src/lib/density.ts` 同构，存 `maxma.density`，值只有 `comfortable` / `compact`，
 写到 `<html data-density>`。CSS 侧三档变量：
@@ -132,7 +160,7 @@ VISUAL_THEME=light bun scripts/verify-ui-visual.mjs # 亮色抽查（主题由 D
 
 ## 九、亮色主题复查与实测对比度（2026-11-18）
 
-用 `VISUAL_THEME=light` 截了六页逐张目检（对话空态 / 有会话 / 指标 / 设置 / 扩展 / 外观）：
+用 `VISUAL_THEME=flexoki-light` 截了六页逐张目检（对话空态 / 有会话 / 指标 / 设置 / 扩展 / 外观）：
 
 - 没有发现"反色错位"（白字压白底、深色卡片残留深底图）一类的问题；
 - 侧栏当前项与选中卡片都落在 `.glass-chosen`，浅色下靠亮度差 + 勾号区分，可辨。
@@ -158,7 +186,7 @@ VISUAL_THEME=light bun scripts/verify-ui-visual.mjs # 亮色抽查（主题由 D
 - `--muted-foreground: 0.72 → 0.82`（次要文字整体提亮一档）
 - `--secondary: 10% → 7%`（芯片更收敛，不再把底抬那么高）
 
-改完 10 组全部 ≥ 门槛，`node scripts/check-contrast.mjs` 退出码 0。
+改完 12 组全部 ≥ 门槛，`node scripts/check-contrast.mjs` 退出码 0（84/84 项）。
 
 ## 十、长会话的离屏渲染（2026-09 起）
 

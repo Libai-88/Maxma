@@ -48,10 +48,22 @@ export function hslToHex(h: number, s: number, l: number): string {
 /**
  * 强调色的邻近色，用于背景动效的第二色相。
  *
- * 偏移 +28° 让两个色相在色轮上可辨又同族；轻微提亮/压暗避免呆板对称。
+ * 偏移 +28° 让两个色相在色轮上可辨又同族；但蓝紫/蓝青强调色加上 28°
+ * 会正好落进紫色区（270°–330°），看起来就像“AI 默认紫”。所以一旦落进
+ * 这个区间，就先试相反方向；两边都进紫色区时，落到冷侧的 235°。
+ * 轻微提亮/压暗避免呆板对称。
  */
 export function deriveAltHue(accent: string, deg = 28): string {
   const [h, s, l] = hexToHsl(accent)
-  const shifted = (h + deg) % 360
+  let shifted = (h + deg) % 360
+  if (isPurpleHue(shifted)) {
+    const back = (h - deg + 360) % 360
+    shifted = isPurpleHue(back) ? 235 : back
+  }
   return hslToHex(shifted, s, l > 50 ? Math.max(l - 6, 0) : Math.min(l + 8, 100))
+}
+
+/** 270°–330° 是肉眼最容易读成“紫”的色相带；主题第二色相不进入这里。 */
+function isPurpleHue(hue: number): boolean {
+  return hue >= 270 && hue <= 330
 }

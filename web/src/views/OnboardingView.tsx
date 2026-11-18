@@ -4,7 +4,7 @@ import { MessageSquare, Wrench, Sparkles, Brain, Lock, Info, type LucideIcon } f
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useHealthStore } from '@/stores/health'
 import { cn } from '@/lib/utils'
-import { readStoredTheme, setTheme, type ThemeId } from '@/lib/theme'
+import { getThemeMode, readStoredTheme, setTheme, themeId, type ThemeId } from '@/lib/theme'
 
 const titles = ['欢迎使用', '连接模型', '设定工作区', '快速了解']
 
@@ -13,6 +13,12 @@ const titles = ['欢迎使用', '连接模型', '设定工作区', '快速了解
 function readTheme(): ThemeId {
   return readStoredTheme()
 }
+
+/** 引导页只给两个起点，五套主题的完整选择留给外观页。 */
+const ONBOARDING_THEMES: { id: ThemeId; name: string }[] = [
+  { id: themeId('flexoki', 'light'), name: '暖纸 · 浅色' },
+  { id: themeId('kanagawa', 'dark'), name: '墨浪 · 深色' },
+]
 
 const INTRO_CHIPS: { label: string; Icon: LucideIcon }[] = [
   { label: '多模型对话', Icon: MessageSquare },
@@ -152,15 +158,15 @@ function OnboardingInner({ paused }: { paused: boolean }) {
 
           {step === 2 && (
             <>
-              <p className="text-sm">选择你偏好的界面主题和工作方式。</p>
+              <p className="text-sm">选择一个起点。五套主题都可以稍后在外观页切换，并各自支持浅色与深色。</p>
               <div className="grid grid-cols-2 gap-2">
-                {([{ id: 'light', name: '浅色' }, { id: 'dark', name: '深色' }] as { id: ThemeId; name: string }[]).map(t => (
+                {ONBOARDING_THEMES.map(t => (
                   <button
                     key={t.id}
                     onClick={() => chooseTheme(t.id)}
                     className={cn('flex items-center gap-2 px-3.5 py-3 border rounded-lg text-sm text-muted-foreground hover:bg-secondary transition-colors duration-fast ease-standard', themeMode === t.id ? 'border-ring text-foreground bg-secondary' : 'border-border')}
                   >
-                    <span className={cn('size-4 rounded-md border border-border', t.id === 'light' ? 'bg-background' : 'bg-foreground')} />
+                    <span className={cn('size-4 rounded-md border border-border', getThemeMode(t.id) === 'light' ? 'bg-background' : 'bg-foreground')} />
                     {t.name}
                   </button>
                 ))}

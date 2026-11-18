@@ -1,19 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Check, Maximize2, Minimize2, Moon, Sun } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { applyTheme, readStoredTheme, setTheme, type ThemeId } from '@/lib/theme'
+import {
+  applyTheme,
+  getThemeFamily,
+  readStoredTheme,
+  setTheme,
+  themeId,
+  THEME_FAMILIES,
+  type ThemeId,
+  type ThemeMode,
+} from '@/lib/theme'
 import { readDensity, setDensity, type DensityId } from '@/lib/density'
-
-interface ThemeMeta {
-  id: ThemeId
-  name: string
-  desc: string
-}
-
-const THEMES: ThemeMeta[] = [
-  { id: 'light', name: '浅色', desc: '明亮通透的日光玻璃，适合白天与强光环境。' },
-  { id: 'dark', name: '深色', desc: '烟熏深色玻璃，Maxma 默认，适合专注与夜间。' },
-]
 
 interface DensityMeta {
   id: DensityId
@@ -25,6 +23,8 @@ const DENSITIES: DensityMeta[] = [
   { id: 'comfortable', name: '舒适', desc: '导航行高与页面留白更松，适合长时间盯着看。' },
   { id: 'compact', name: '紧凑', desc: '同样的内容占用更少高度，适合小屏与并排窗口。' },
 ]
+
+const MODES: ThemeMode[] = ['light', 'dark']
 
 export default function AppearanceView() {
   const [theme, setThemeState] = useState<ThemeId>(readStoredTheme)
@@ -50,25 +50,23 @@ export default function AppearanceView() {
         <div>
           <h2 className="text-xl font-semibold text-foreground">外观</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            在浅色与深色主题之间切换。改动立即生效并保存在本机。
+            五套主题，每套都有浅色与深色。改动立即生效并保存在本机。
           </p>
         </div>
 
         <section className="rounded-lg bg-card p-4">
           <h3 className="text-base font-semibold text-foreground">主题</h3>
           <p className="mb-4 mt-1 text-xs text-muted-foreground">
-            Solid Glass 提供浅色与深色两种材质基调，选择后立即生效并保存在本机。
+            Solid Glass 的五套材质基调，全部不含紫色；每套都能单独切换明暗。
           </p>
-          <div className="grid grid-cols-2 gap-3">
-            {THEMES.map((t) => {
-              const active = theme === t.id
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {THEME_FAMILIES.map((family) => {
+              const active = getThemeFamily(theme) === family.id
               return (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => selectTheme(t.id)}
+                <div
+                  key={family.id}
                   className={cn(
-                    'group flex flex-col gap-2 rounded-lg border p-4 text-left transition-colors duration-fast ease-standard',
+                    'group flex flex-col gap-3 rounded-lg border p-4 transition-colors duration-fast ease-standard',
                     active
                       // 选中态用主题自己的「the one state」：.glass-chosen 画的是
                       // 一块被点亮的玻璃。原来这里写 border-primary + bg-card，
@@ -77,25 +75,62 @@ export default function AppearanceView() {
                       : 'border-border bg-panel hover:border-primary/40',
                   )}
                 >
-                  <div
-                    className={cn(
-                      'relative h-20 w-full overflow-hidden rounded-md border border-border',
-                      t.id === 'dark' ? 'bg-foreground/10' : 'bg-muted',
-                    )}
-                  >
-                    <span className="absolute left-0 top-0 h-full w-1/3 border-r border-border bg-card/40" />
-                    <span className="absolute left-2 top-2 size-2.5 rounded-full bg-primary" />
-                    <span className="absolute bottom-2 right-2 text-sm font-semibold text-foreground">Aa</span>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                        <span className="text-sm font-medium text-foreground">{family.name}</span>
+                        <span className="text-meta text-muted-foreground">{family.en}</span>
+                      </div>
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{family.desc}</p>
+                    </div>
+                    {active && <Check className="mt-0.5 size-4 shrink-0 text-primary" aria-label="当前主题" />}
                   </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-2 text-sm font-medium text-foreground">
-                      {t.id === 'dark' ? <Moon className="size-4" /> : <Sun className="size-4" />}
-                      {t.name}
-                    </span>
-                    {active && <Check className="size-4 text-primary" />}
+
+                  {/* 预览使用真实的 data-theme token，不在 TSX 里另抄一份色值。 */}
+                  <div className="grid grid-cols-2 gap-2" aria-hidden="true">
+                    {MODES.map((mode) => (
+                      <div
+                        key={mode}
+                        data-theme={themeId(family.id, mode)}
+                        className={cn(
+                          'relative h-20 overflow-hidden rounded-md border border-border bg-background',
+                          mode === 'dark' && 'dark',
+                        )}
+                      >
+                        <span className="absolute left-0 top-0 h-full w-1/3 border-r border-border bg-panel" />
+                        <span className="absolute left-2 top-2 size-2.5 rounded-full bg-primary" />
+                        <span className="absolute bottom-2 right-2 text-sm font-semibold text-foreground">Aa</span>
+                        <span className="absolute bottom-2 left-2 text-caption text-muted-foreground">
+                          {mode === 'light' ? '浅' : '深'}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                  <p className="text-xs leading-relaxed text-muted-foreground">{t.desc}</p>
-                </button>
+
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {MODES.map((mode) => {
+                      const id = themeId(family.id, mode)
+                      const selected = theme === id
+                      return (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => selectTheme(id)}
+                          aria-pressed={selected}
+                          className={cn(
+                            'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-meta transition-colors duration-fast ease-standard',
+                            selected
+                              ? 'border-ring bg-secondary text-foreground'
+                              : 'border-border text-muted-foreground hover:bg-secondary',
+                          )}
+                        >
+                          {mode === 'light' ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
+                          {mode === 'light' ? '浅色' : '深色'}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
               )
             })}
           </div>

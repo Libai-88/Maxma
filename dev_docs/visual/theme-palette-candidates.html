@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>Maxma 主题配色候选</title>
+<style>
+  :root {
+    --canvas: #0b0c0f;
+    --card: #14161a;
+    --line: rgba(255,255,255,.10);
+    --ink: #f1f2f4;
+    --muted: #9aa0aa;
+    --soft: #6c727c;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--canvas); color: var(--ink); }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif;
+    width: 1800px;
+    min-height: 1460px;
+    padding: 42px 40px 28px;
+    background:
+      radial-gradient(900px 400px at 12% -5%, rgba(72,106,120,.18), transparent 70%),
+      radial-gradient(800px 420px at 92% 4%, rgba(120,84,112,.13), transparent 72%),
+      var(--canvas);
+  }
+  .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; margin-bottom: 28px; }
+  .eyebrow { font: 600 11px/1.3 "Geist", "Segoe UI", sans-serif; letter-spacing: .22em; text-transform: uppercase; color: #9fb3ba; }
+  h1 { margin: 9px 0 8px; font-size: 34px; line-height: 1.12; letter-spacing: -.02em; font-weight: 650; }
+  .sub { margin: 0; max-width: 760px; color: #9aa0aa; font-size: 13px; line-height: 1.75; }
+  .legend { flex: 0 0 auto; display: flex; gap: 8px; align-items: center; color: #8b929c; font-size: 11px; }
+  .legend span { border: 1px solid var(--line); background: rgba(255,255,255,.035); padding: 7px 10px; border-radius: 999px; }
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px; }
+  .theme {
+    position: relative; border: 1px solid var(--line); border-radius: 18px;
+    background: linear-gradient(160deg, rgba(255,255,255,.045), rgba(255,255,255,.012) 44%, rgba(0,0,0,.18));
+    box-shadow: 0 24px 60px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.09);
+    padding: 22px 22px 19px; overflow: hidden;
+  }
+  .theme::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(440px 150px at 15% 0%, var(--glow), transparent 72%);
+    opacity: .22;
+  }
+  .theme-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 15px; position: relative; }
+  .name { display: flex; align-items: baseline; gap: 10px; }
+  .name strong { font-size: 20px; letter-spacing: -.01em; font-weight: 650; }
+  .name em { font-style: normal; font-size: 12px; color: #aeb4bd; letter-spacing: .01em; }
+  .source { margin-top: 5px; font-size: 10.5px; color: #737a84; letter-spacing: .04em; }
+  .badge { flex: none; margin-top: 2px; border: 1px solid var(--line); border-radius: 999px; padding: 5px 9px; font-size: 9.5px; letter-spacing: .13em; color: #aeb5be; background: rgba(255,255,255,.04); }
+  .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; position: relative; }
+  .mode { min-width: 0; }
+  .mode-label { display: flex; align-items: center; justify-content: space-between; margin-bottom: 7px; font-size: 10px; letter-spacing: .13em; color: #828994; text-transform: uppercase; }
+  .mode-label b { font-weight: 600; color: #b9c0c8; letter-spacing: .06em; }
+  .screen {
+    height: 208px; border-radius: 12px; overflow: hidden; position: relative;
+    background: var(--bg); color: var(--tx);
+    border: 1px solid var(--bd);
+    box-shadow: 0 10px 22px rgba(0,0,0,.18), inset 0 1px 0 rgba(255,255,255,calc(var(--rim) * 1));
+  }
+  .screen-top {
+    height: 30px; display: flex; align-items: center; gap: 7px; padding: 0 10px;
+    background: color-mix(in srgb, var(--panel) 88%, transparent);
+    border-bottom: 1px solid var(--bd); font-size: 9px; color: var(--mut);
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ac); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ac) 18%, transparent); }
+  .screen-top strong { font-size: 10px; font-weight: 600; color: var(--tx); letter-spacing: .02em; }
+  .screen-top .mini-actions { margin-left: auto; display: flex; gap: 4px; opacity: .65; }
+  .mini-actions i { display: block; width: 12px; height: 12px; border: 1px solid var(--bd); border-radius: 4px; }
+  .chat { padding: 11px 11px 0; display: flex; flex-direction: column; gap: 7px; height: 139px; }
+  .bubble { max-width: 87%; border-radius: 9px; padding: 7px 9px; font-size: 9.5px; line-height: 1.45; }
+  .bubble.user { align-self: flex-end; background: color-mix(in srgb, var(--ac2) 20%, var(--panel)); border: 1px solid color-mix(in srgb, var(--ac2) 34%, transparent); color: var(--tx); }
+  .bubble.ai { align-self: flex-start; background: var(--card); border: 1px solid var(--bd); color: var(--tx); }
+  .bubble.ai b { display: block; font-size: 9px; color: var(--ac); margin-bottom: 3px; font-weight: 650; }
+  .bubble.ai span { color: var(--mut); }
+  .composer {
+    margin: 0 10px 9px; height: 30px; border-radius: 8px; display: flex; align-items: center; gap: 8px;
+    padding: 0 7px 0 9px; background: color-mix(in srgb, var(--card) 76%, var(--bg));
+    border: 1px solid var(--bd); color: var(--mut); font-size: 8.5px;
+  }
+  .composer .send { margin-left: auto; width: 19px; height: 19px; border-radius: 6px; display: grid; place-items: center; background: var(--ac); color: var(--acTx); font-size: 11px; font-weight: 700; }
+  .chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-top: 9px; }
+  .chip { min-width: 0; display: flex; align-items: center; gap: 6px; padding: 5px 6px; border: 1px solid rgba(255,255,255,.06); border-radius: 7px; background: rgba(255,255,255,.026); }
+  .chip i { flex: 0 0 15px; width: 15px; height: 15px; border-radius: 4px; border: 1px solid rgba(255,255,255,.16); }
+  .chip div { min-width: 0; }
+  .chip label { display: block; font-size: 8px; line-height: 1.15; color: #858c96; letter-spacing: .06em; text-transform: uppercase; }
+  .chip code { display: block; margin-top: 2px; font: 8px/1.1 "Cascadia Mono", Consolas, monospace; color: #cbd0d7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .note-body { position: relative; display: flex; flex-direction: column; gap: 12px; padding: 4px 2px 6px; }
+  .note-body p { margin: 0; color: #9aa0aa; font-size: 12px; line-height: 1.8; }
+  .note-body .k { color: #f1f2f4; font-weight: 600; }
+  .rule-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+  .rule-chip { display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: rgba(255,255,255,.03); border-radius: 999px; padding: 5px 8px; font-size: 9px; color: #aeb5be; }
+  .rule-chip i { width: 10px; height: 10px; border-radius: 50%; }
+  .foot { display: flex; justify-content: space-between; gap: 30px; margin-top: 24px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.07); color: #626974; font-size: 10px; line-height: 1.6; }
+  .foot b { color: #8b939d; font-weight: 500; }
+</style>
+</head>
+<body>
+  <header class="head">
+    <div>
+      <div class="eyebrow">Maxma · Built-in Theme Directions</div>
+      <h1>五套内置主题，全系无紫</h1>
+      <p class="sub">紫色全部撤掉。色值来自各项目的官方主题包；下面的界面缩略是「在 Maxma 的 Solid Glass 材质里怎么用」的建议映射，不是原主题的官方 UI。每一套都同时给了浅色与深色两个方向。</p>
+    </div>
+    <div class="legend"><span>官方主题包取色</span><span>浅 / 深成对</span><span>全系无紫</span></div>
+  </header>
+  <main class="grid" id="grid"></main>
+  <footer class="foot">
+    <div><b>来源</b>：Flexoki · stephango.com/flexoki；Everforest · github.com/sainnhe/everforest；Primrose Peach · marketplace.visualstudio.com/items?itemName=lilinhuang.primrose-peach-theme；Light Pink · marketplace.visualstudio.com/items?itemName=mgwg.light-pink-theme；Kanagawa · github.com/rebelot/kanagawa.nvim</div>
+    <div style="text-align:right"><b>读法</b>：bg 页面 · panel 面板 · card 卡片 · tx 正文 · mut 弱文 · bd 分隔 · ac 主色 · ac2 副色</div>
+  </footer>
+<script>
+  const themes = [
+    {
+      name: "暖纸", en: "Flexoki", source: "Flexoki · Steph Ango", glow: "#bc5215",
+      light: { label: "Light · Paper", bg: "#FFFCF0", panel: "#F2F0E5", card: "#E6E4D9", tx: "#100F0F", mut: "#6F6E69", bd: "#CECDC3", ac: "#24837B", ac2: "#BC5215" },
+      dark:  { label: "Dark · Ink",   bg: "#100F0F", panel: "#1C1B1A", card: "#282726", tx: "#CECDC3", mut: "#878580", bd: "#403E3C", ac: "#3AA99F", ac2: "#DA702C" }
+    },
+    {
+      name: "苔原", en: "Everforest", source: "Everforest · sainnhe", glow: "#a7c080",
+      light: { label: "Light · Medium", bg: "#FDF6E3", panel: "#F4F0D9", card: "#EFEBD4", tx: "#5C6A72", mut: "#829181", bd: "#E6E2CC", ac: "#8DA101", ac2: "#3A94C5" },
+      dark:  { label: "Dark · Medium",  bg: "#2D353B", panel: "#343F44", card: "#3D484D", tx: "#D3C6AA", mut: "#9DA9A0", bd: "#475258", ac: "#A7C080", ac2: "#7FBBB3" }
+    },
+    {
+      name: "蜜桃", en: "Primrose Peach", source: "Primrose Peach · lilinhuang", glow: "#fcd6b4", badge: "NEW · 无紫",
+      light: { label: "Light · Peach Garden", bg: "#FFFFFF", panel: "#FFFAF7", card: "#CFEDEA", tx: "#46302C", mut: "#5A4034", bd: "#F0E2D8", ac: "#B04E63", ac2: "#4FA8A5" },
+      dark:  { label: "Dark · Moss Night",    bg: "#22302A", panel: "#1F2A25", card: "#27332C", tx: "#F0E6DC", mut: "#D6CEC2", bd: "#33443B", ac: "#FFACBD", ac2: "#FCD6B4" }
+    },
+    {
+      name: "樱花", en: "Light Pink", source: "Light Pink Theme · mgwg", glow: "#ff7ab3", badge: "NEW · 无紫",
+      light: { label: "Light Pink", bg: "#F5F5F5", panel: "#F5F0F3", card: "#F1DDE9", tx: "#54494B", mut: "#736A6D", bd: "#E3CFD6", ac: "#9D3C5E", ac2: "#FF7AB3" },
+      dark:  { label: "Dark Pink",  bg: "#1E1E1E", panel: "#252526", card: "#2D2D2D", tx: "#F5F5F5", mut: "#A6A6A6", bd: "#454545", ac: "#F15FB4", ac2: "#FF7AB3" }
+    },
+    {
+      name: "墨浪", en: "Kanagawa", source: "Kanagawa · rebelot", glow: "#ffa066",
+      light: { label: "Lotus · Light", bg: "#F2ECBC", panel: "#E5DDB0", card: "#DCD5AC", tx: "#545464", mut: "#716E61", bd: "rgba(138,137,128,.42)", ac: "#4D699B", ac2: "#CC6D00" },
+      dark:  { label: "Wave · Dark",  bg: "#1F1F28", panel: "#2A2A37", card: "#363646", tx: "#DCD7BA", mut: "#C8C093", bd: "#54546D", ac: "#7E9CD8", ac2: "#FFA066" }
+    }
+  ];
+
+  function luminance(hex) {
+    if (!hex.startsWith("#")) return .5;
+    const c = hex.slice(1);
+    const rgb = [0, 2, 4].map(i => parseInt(c.slice(i, i + 2), 16) / 255)
+      .map(v => v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4));
+    return .2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2];
+  }
+  function inkFor(hex) { return luminance(hex) > .52 ? "#17181B" : "#FFFFFF"; }
+
+  function chips(v) {
+    const rows = [
+      ["bg", v.bg], ["panel", v.panel], ["card", v.card], ["tx", v.tx],
+      ["mut", v.mut], ["bd", v.bd], ["ac", v.ac], ["ac2", v.ac2]
+    ];
+    return `<div class="chips">${rows.map(([label, value]) => `
+      <div class="chip"><i style="background:${value}"></i><div><label>${label}</label><code>${value}</code></div></div>`).join("")}</div>`;
+  }
+
+  function screen(v) {
+    return `<div class="screen" style="--bg:${v.bg};--panel:${v.panel};--card:${v.card};--tx:${v.tx};--mut:${v.mut};--bd:${v.bd};--ac:${v.ac};--ac2:${v.ac2};--acTx:${inkFor(v.ac)};--rim:${luminance(v.bg) > .5 ? .9 : .18}">
+      <div class="screen-top"><span class="dot"></span><strong>Maxma</strong><span>· ${v.label.split(" · ")[0]}</span><span class="mini-actions"><i></i><i></i></span></div>
+      <div class="chat">
+        <div class="bubble user">把今天这段周报理一下</div>
+        <div class="bubble ai"><b>已完成 · 3 个项目</b><span>已按项目分组，保留了原来的数字。</span></div>
+      </div>
+      <div class="composer"><span>输入消息…</span><span class="send">↑</span></div>
+    </div>`;
+  }
+
+  document.getElementById("grid").innerHTML = themes.map(t => `
+    <section class="theme" style="--glow:${t.glow}">
+      <div class="theme-head">
+        <div><div class="name"><strong>${t.name}</strong><em>${t.en}</em></div><div class="source">${t.source}</div></div>
+        <span class="badge">${t.badge || "LIGHT + DARK"}</span>
+      </div>
+      <div class="modes">
+        ${["light", "dark"].map(mode => `
+          <div class="mode">
+            <div class="mode-label"><b>${mode === "light" ? "浅色" : "深色"}</b><span>${t[mode].label}</span></div>
+            ${screen(t[mode])}
+            ${chips(t[mode])}
+          </div>`).join("")}
+      </div>
+    </section>`).join("") + `
+    <section class="theme" style="--glow:#e8a9b5">
+      <div class="theme-head">
+        <div><div class="name"><strong>去紫原则</strong><em>No Purple</em></div><div class="source">Maxma · 2026-11-18</div></div>
+        <span class="badge">5 FAMILIES</span>
+      </div>
+      <div class="note-body">
+        <p><span class="k">这一版把紫色全部清掉。</span>薰衣草撤掉；雾玫的深色底、暮云的紫强调也都偏紫，按同一标准一起退出候选。</p>
+        <p>保留的五套是 <span class="k">暖纸、苔原、蜜桃、樱花、墨浪</span>。蜜桃和樱花是这次新补的女性向方向：一个偏蜜桃/薄荷，一个偏樱花/炭黑，都不是紫色。</p>
+        <div class="rule-chips">
+          <span class="rule-chip"><i style="background:#B04E63"></i>蜜桃 · 玫瑰粉</span>
+          <span class="rule-chip"><i style="background:#4FA8A5"></i>蜜桃 · 薄荷青</span>
+          <span class="rule-chip"><i style="background:#F15FB4"></i>樱花 · 亮粉</span>
+          <span class="rule-chip"><i style="background:#FFACBD"></i>樱花 · 浅粉</span>
+          <span class="rule-chip"><i style="background:#22302A"></i>蜜桃 · 苔藓夜</span>
+        </div>
+        <p>下一步你只需要选「留哪几套」；选完我再把它们落成 <span class="k">ThemeId</span> 和 <span class="k">solid-glass.css</span> 的 token，不会先改代码。</p>
+        <p><span class="k">我的建议：</span>主选暖纸、蜜桃、墨浪；樱花作为可选女性向；苔原留着给喜欢绿色护眼的人。</p>
+      </div>
+    </section>`;
+</script>
+</body>
+</html>

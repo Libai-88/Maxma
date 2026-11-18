@@ -108,10 +108,17 @@ say "glass weight guard" "$([ "$gw_rc" = 0 ] && echo PASS || echo FAIL)  $(echo 
 
 # 配色对比度守卫：直接从 CSS 读 token 算 WCAG 比值（OKLCH → 线性 sRGB，卡片玻璃按 alpha 合成）。
 # 为什么需要：次要文字的"淡"没有量。深色下 muted 压在 10% 白芯片上是 2.75:1，
-# 目测只觉得"有点灰"，换个芯片底色就掉到看不见。门槛 fg/bg ≥7、muted ≥4.5。
+# 目测只觉得"有点灰"，换个芯片底色就掉到看不见。门槛 fg/bg ≥7、muted / 按钮 / 链接 ≥4.5。
+# 现在覆盖基础两态 + 五套主题 × 明暗，共 12 组 84 项。
 ct_out=$(node scripts/check-contrast.mjs 2>&1); ct_rc=$?
-say "contrast guard" "$([ "$ct_rc" = 0 ] && echo PASS || echo FAIL)  $(echo "$ct_out" | grep -E '✓ 浅色|✗' | tail -1)"
+say "contrast guard" "$([ "$ct_rc" = 0 ] && echo PASS || echo FAIL)  $(echo "$ct_out" | grep -E '✓ 基础|✗' | tail -1)"
 [ "$ct_rc" = 0 ] || FAILS=$((FAILS+1))
+
+# 无紫守卫：用户明确禁止紫色（270°–325° 蓝紫/紫罗兰带）。CSS 里的 oklch 与 hex
+# 都会换算成色相检查，避免下一套“看起来高级”的紫灰把这条硬约束悄悄破掉。
+np_out=$(node scripts/check-no-purple.mjs 2>&1); np_rc=$?
+say "no purple guard" "$([ "$np_rc" = 0 ] && echo PASS || echo FAIL)  $(echo "$np_out" | grep -E '✓|✗' | tail -1)"
+[ "$np_rc" = 0 ] || FAILS=$((FAILS+1))
 
 # 判定优先用**退出码**，不是输出字符串匹配。
 # （第一版在这里踩过坑：budget 的 PASS 分支匹配的是"✓ bun-sidecar: 0"，

@@ -14,6 +14,8 @@
  *   - foreground        vs background  >= 7:1（主文字，留足余量）
  *   - muted-foreground  vs background  >= 4.5:1
  *   - muted-foreground  vs card（合成后）>= 4.5:1
+ *   - primary-foreground vs primary     >= 4.5:1（按钮字）
+ *   - link              vs background  >= 4.5:1（正文里的链接）
  *
  * 退出码 0 = 全部达标；1 = 有项不达标或解析失败（不能让守卫静默空转）。
  */
@@ -22,7 +24,11 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const CSS = path.join(path.resolve(HERE, ".."), "web", "src", "solid-glass.css");
+const WEB_SRC = path.join(path.resolve(HERE, ".."), "web", "src");
+const CSS_FILES = [
+  path.join(WEB_SRC, "solid-glass.css"),
+  path.join(WEB_SRC, "theme-palettes.css"),
+];
 
 /** 从 CSS 里切出某个选择器块（够用即可：主题块都是单层、不含嵌套）。 */
 function block(css, selector) {
@@ -108,6 +114,9 @@ function checkTheme(css, label, selector, limits) {
   const cardRaw = parseColor(token(b, "card"));
   const secondaryRaw = parseColor(token(b, "secondary"));
   const secondaryFg = parseColor(token(b, "secondary-foreground"));
+  const primary = parseColor(token(b, "primary"));
+  const primaryFg = parseColor(token(b, "primary-foreground"));
+  const link = parseColor(token(b, "link"));
   const card = composite(cardRaw, bg);
   const secondary = composite(secondaryRaw, bg);
 
@@ -118,6 +127,8 @@ function checkTheme(css, label, selector, limits) {
     // 芯片/标签：bg-secondary 上常放 muted 文字（如「运行 14s」、分类标签）
     { what: "muted vs secondary", value: contrast(muted, secondary), min: limits.mutedBg },
     { what: "secondary-fg vs secondary", value: contrast(secondaryFg, secondary), min: limits.mutedBg },
+    { what: "primary-fg vs primary", value: contrast(primaryFg, primary), min: limits.mutedBg },
+    { what: "link vs background", value: contrast(link, bg), min: limits.mutedBg },
   ];
   let fail = false;
   console.log(`\n${label}`);
@@ -131,20 +142,41 @@ function checkTheme(css, label, selector, limits) {
 
 let css;
 try {
-  css = fs.readFileSync(CSS, "utf8");
+  css = CSS_FILES.map((file) => fs.readFileSync(file, "utf8")).join("\n");
 } catch (err) {
-  console.error(`✗ 读不到 ${CSS}：${err.message}`);
+  console.error(`✗ 读不到主题 CSS：${err.message}`);
   process.exit(1);
 }
 
+const THEME_SELECTORS = [
+  ["暖纸 · 浅色", '[data-theme="flexoki-light"]'],
+  ["暖纸 · 深色", '[data-theme="flexoki-dark"]'],
+  ["苔原 · 浅色", '[data-theme="everforest-light"]'],
+  ["苔原 · 深色", '[data-theme="everforest-dark"]'],
+  ["蜜桃 · 浅色", '[data-theme="primrose-light"]'],
+  ["蜜桃 · 深色", '[data-theme="primrose-dark"]'],
+  ["樱花 · 浅色", '[data-theme="sakura-light"]'],
+  ["樱花 · 深色", '[data-theme="sakura-dark"]'],
+  ["墨浪 · 浅色", '[data-theme="kanagawa-light"]'],
+  ["墨浪 · 深色", '[data-theme="kanagawa-dark"]'],
+];
+
 try {
-  const light = checkTheme(css, "浅色（:root）", ":root", { fgBg: 7, mutedBg: 4.5 });
-  const dark = checkTheme(css, "深色（.dark）", "\n.dark {", { fgBg: 7, mutedBg: 4.5 });
-  if (light.fail || dark.fail) {
-    console.error("\n✗ 有配色未达 WCAG 门槛");
+  const checks = [
+    checkTheme(css, "基础浅色（:root）", ":root", { fgBg: 7, mutedBg: 4.5 }),
+    checkTheme(css, "基础深色（.dark）", "\n.dark {", { fgBg: 7, mutedBg: 4.5 }),
+    ...THEME_SELECTORS.map(([label, selector]) =>
+      checkTheme(css, label, selector, { fgBg: 7, mutedBg: 4.5 }),
+    ),
+  ];
+  const failed = checks.filter((item) => item.fail).length;
+  if (failed > 0) {
+    console.error(`\n✗ ${failed} 组配色未达 WCAG 门槛`);
     process.exit(1);
   }
-  console.log(`\n✓ 浅色与深色的主文字 / 次要文字均达 WCAG 门槛（${light.passed + dark.passed}/${light.total + dark.total} 项）`);
+  const passed = checks.reduce((sum, item) => sum + item.passed, 0);
+  const total = checks.reduce((sum, item) => sum + item.total, 0);
+  console.log(`\n✓ 基础两态与五套主题的主文字 / 次要文字 / 按钮 / 链接均达 WCAG 门槛（${passed}/${total} 项）`);
   process.exit(0);
 } catch (err) {
   console.error(`\n✗ 解析失败（守卫不能空转）：${err.message}`);

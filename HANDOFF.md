@@ -168,9 +168,33 @@ TypeBox 用法、命令签名、以及改完怎么让 Maxma 重新探测；这�
   而是补 `bun-sidecar/tests/session-catalog.test.ts`（4 例，含 name 回读、预览两种 content 形态、
   find/delete、归一化），行覆盖 100%，顺手从 DEBT 升入 CORE（CORE 22 → 23 项，DEBT 5 → 4 项）。
 
+### 第五轮：五套无紫主题（2026-11-18）
+
+- **最终五套**：暖纸 Flexoki、苔原 Everforest、蜜桃 Primrose Peach、樱花 Light Pink、墨浪 Kanagawa。
+  每套 `light` / `dark` 两态，`ThemeId` 统一为 `family-mode`（如 `flexoki-dark`），默认 `flexoki-dark`。
+  旧的 `light` / `dark` 在 `readStoredTheme` 里迁移到 `flexoki-light` / `flexoki-dark`，老用户不受影响。
+- **为什么删掉三套**：用户明确要求“禁止紫色”。Lavender 是整片浅紫；Rosé Pine 的深色底
+  `#191724` 与 iris 强调偏紫；Catppuccin Mocha 的深色底与 mauve 也偏紫。它们被替换为
+  蜜桃与樱花两套无紫女性向主题。候选色卡来自真实 VS Code Marketplace 主题（Primrose Peach
+  作者 `lilinhuang`、Light Pink 作者 `mgwg`），不是自拟。
+- **落地**：新增 `web/src/theme-palettes.css`（10 个 `[data-theme]` token 块），`index.css`
+  的导入顺序是 `solid-glass.css` → `theme-palettes.css` → `markdown.css`。`theme.ts` 统一
+  读写/应用/迁移；外观页改成五张家族卡 + 每张卡浅/深真实 token 预览；引导页保留两个起点
+  （`暖纸 · 浅色` / `墨浪 · 深色`）。
+- **无紫守卫**：`themeColor.ts` 的 `deriveAltHue` 规避 270°–330°；`solid-glass.css` 的基础
+  中性 hue 265 改 240，`--syn-name` 浅色 310→210、深色 305→205；theme 块里无紫色语法色。
+  新增 `scripts/check-no-purple.mjs`：扫描两份主题 CSS 的 `oklch` 与 hex 色相，命中
+  270°–325° 直接红；已接进 `verify-all-gates.sh`。
+- **验证**：`node scripts/check-contrast.mjs` 12 组 **84/84** 通过；`bun run typecheck` 0 error；
+  `bun test` **48 pass / 741 expect**；`bun run build` 成功；`bash scripts/verify-all-gates.sh`
+  **全部闸门通过**（sidecar 228 / backend 318 / web 48，color / spacing / type-scale / glass-weight /
+  contrast / no-purple 全 PASS）。真实 Electron 截图：`dev_docs/visual/2026-11-18/appearance.png`（flexoki-dark）与
+  `dev_docs/visual/2026-11-18/appearance-light.png`（primrose-light），页面均正常渲染；
+  `dev_docs/visual/baseline/` 六张基线已按新的默认 `flexoki-dark` 重拍。主题改动尚未提交。
+
 ### 性能账
 
-- 主题 CSS：+5.2KB raw / **+1.2KB gzip**（预算 +4KB）。
+- 主题 CSS：新增 5 套调色板（10 个 token 块，27.6KB raw），构建产物 CSS 164.19KB / **gzip 26.13KB**；仍在 +4KB 预算内。
 - JS 产物：无逻辑改动，体积持平（`ChatView` 182.94 → 182.94 KB）。
 - `backdrop-filter` 层数：8 → 8（不增）。
 - 代价：字号归并会让少数密集表格的行高变化 0.5–1px，`tabular-nums` 已覆盖数字列。
