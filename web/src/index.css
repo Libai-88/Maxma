@@ -30,6 +30,19 @@
 .ds-view--wide { max-width: 76rem; width: 100%; margin-inline: auto; }
 .ds-view--narrow { max-width: 56rem; width: 100%; }
 
+/* 滚动区边缘渐隐：由 useScrollFade 写出 data-fade-top / data-fade-bottom。
+   兜底是 `none`——没滚动的容器不建合成层，首屏标题也不会被永久淡掉。 */
+.scroll-fade { mask-image: var(--scroll-fade-mask, none); }
+.scroll-fade[data-fade-top='true'] {
+  --scroll-fade-mask: linear-gradient(to bottom, transparent 0, #000 24px, #000 100%, transparent 100%);
+}
+.scroll-fade[data-fade-bottom='true'] {
+  --scroll-fade-mask: linear-gradient(to bottom, #000 0, #000 calc(100% - 24px), transparent 100%);
+}
+.scroll-fade[data-fade-top='true'][data-fade-bottom='true'] {
+  --scroll-fade-mask: linear-gradient(to bottom, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

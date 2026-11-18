@@ -4,6 +4,7 @@ import { api } from '@/api'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { NewsEntry } from '@/types'
 import { createLogger } from '@/utils/logger'
+import { useScrollFade } from '@/lib/useScrollFade'
 
 const log = createLogger('NewsView')
 
@@ -77,6 +78,7 @@ export default function NewsView() {
   const [news, setNews] = useState<NewsEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState(false)
+  const scrollRef = useScrollFade()
 
   async function loadNews() {
     setLoading(true)
@@ -106,7 +108,7 @@ export default function NewsView() {
   })()
 
   return (
-    <div className="flex-1 overflow-y-auto scrollbar-thin p-6">
+    <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-thin scroll-fade p-6">
       <div className="flex items-center justify-between gap-4 mb-6">
         <h2 className="text-xl font-semibold text-foreground">更新动态</h2>
         {!loading && !loadError && (

@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { confirmAction } from '@/components/common/ConfirmDialog'
+import { useScrollFade } from '@/lib/useScrollFade'
 import { api } from '@/api'
 import type { MCPServerConfig, MCPServerCreateBody, MCPTransport, DiscoveredServer } from '@/types'
 import { McpMarket } from '@/components/mcp/McpMarket'
@@ -65,6 +66,7 @@ interface DiscoveredSkill {
 export default function ExtensionView() {
   const location = useLocation()
   const navigate = useNavigate()
+  const scrollRef = useScrollFade()
 
   const tabParam = new URLSearchParams(location.search).get('tab')
   const activeTab: ExtensionTab = VALID_TABS.includes(tabParam as ExtensionTab)
@@ -195,7 +197,7 @@ export default function ExtensionView() {
   }
 
   return (
-    <div className="ds-view flex flex-1 min-h-0 flex-col overflow-y-auto scrollbar-thin">
+    <div ref={scrollRef} className="ds-view scroll-fade flex flex-1 min-h-0 flex-col overflow-y-auto scrollbar-thin">
       <div className="view-header mb-4">
         <h2 className="text-xl font-semibold text-foreground">插件与工具</h2>
         <p className="mt-1 text-sm text-muted-foreground">管理外部工具连接，查看已加载的 Skills</p>

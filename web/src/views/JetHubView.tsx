@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { confirmAction } from '@/components/common/ConfirmDialog'
+import { useScrollFade } from '@/lib/useScrollFade'
 import { callJetHub } from '@/api'
 import { toErrorMessage } from '@/utils/error'
 import { useJetHubStore, type JetHubAccount } from '@/stores/jetHub'
@@ -119,6 +120,7 @@ export default function JetHubView() {
   const { name } = useParams<{ name: string }>()
   const pluginName = name ?? ''
   const store = useJetHubStore()
+  const scrollRef = useScrollFade()
 
   const [selected, setSelected] = useState('')
   const [notice, setNotice] = useState('')
@@ -553,7 +555,7 @@ export default function JetHubView() {
   }
 
   return (
-    <div className="jet-hub ds-view ds-view--wide flex flex-1 min-h-0 flex-col gap-4 overflow-y-auto scrollbar-thin">
+    <div ref={scrollRef} className="jet-hub ds-view ds-view--wide scroll-fade flex flex-1 min-h-0 flex-col gap-4 overflow-y-auto scrollbar-thin">
       {/* 页头 */}
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>

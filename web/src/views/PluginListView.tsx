@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { confirmAction } from '@/components/common/ConfirmDialog'
+import { useScrollFade } from '@/lib/useScrollFade'
 import { usePluginStore } from '@/stores/plugin'
 import { useCapabilitiesStore } from '@/stores/capabilities'
 import type { Plugin, PluginCategory } from '@/types/plugin'
@@ -50,6 +51,7 @@ export default function PluginListView() {
   const navigate = useNavigate()
   const store = usePluginStore()
   const caps = useCapabilitiesStore()
+  const scrollRef = useScrollFade()
 
   const [installSpec, setInstallSpec] = useState('')
   const [localError, setLocalError] = useState('')
@@ -147,7 +149,7 @@ export default function PluginListView() {
   }
 
   return (
-    <div className="ds-view flex flex-1 min-h-0 flex-col overflow-y-auto scrollbar-thin">
+    <div ref={scrollRef} className="ds-view scroll-fade flex flex-1 min-h-0 flex-col overflow-y-auto scrollbar-thin">
       <div className="view-header mb-6">
         <h2 className="text-xl font-semibold text-foreground">插件</h2>
         <p className="mt-1 text-sm text-muted-foreground">管理随 Maxma 分发的插件——启用、配置与卸载</p>

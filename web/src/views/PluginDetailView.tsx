@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { confirmAction } from '@/components/common/ConfirmDialog'
+import { useScrollFade } from '@/lib/useScrollFade'
 import { api } from '@/api'
 import { usePluginStore } from '@/stores/plugin'
 import type { PluginDetail, PluginConfigSchema, PluginConfigProperty } from '@/types/plugin'
@@ -36,6 +37,7 @@ export default function PluginDetailView() {
   const { name } = useParams<{ name: string }>()
   const navigate = useNavigate()
   const store = usePluginStore()
+  const scrollRef = useScrollFade()
 
   const pluginName = name ?? ''
   const hasManagementUi = Boolean(MANAGEMENT_UI[pluginName])
@@ -99,7 +101,7 @@ export default function PluginDetailView() {
   }
 
   return (
-    <div className="ds-view ds-view--narrow mx-auto flex flex-1 min-h-0 flex-col overflow-y-auto scrollbar-thin">
+    <div ref={scrollRef} className="ds-view ds-view--narrow mx-auto scroll-fade flex flex-1 min-h-0 flex-col overflow-y-auto scrollbar-thin">
       <div className="view-header mb-6">
         <Button variant="outline" size="sm" className="mb-3" onClick={() => navigate('/plugins')}>
           <ArrowLeft className="size-3.5" />

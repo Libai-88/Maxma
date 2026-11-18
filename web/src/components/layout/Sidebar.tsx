@@ -4,6 +4,7 @@ import { useCapabilitiesStore } from '@/stores/capabilities'
 import { useChatStore } from '@/stores/chat'
 import { cn } from '@/lib/utils'
 import { focusRing, interactive } from '@/lib/ui'
+import { useScrollFade } from '@/lib/useScrollFade'
 
 interface NavItem { to: string; label: string; icon: typeof MessageSquare; feature?: string }
 interface NavGroup { key: string; label: string; items: NavItem[] }
@@ -71,6 +72,7 @@ export function Sidebar({ onToggleSessions }: { onToggleSessions: () => void }) 
   void version
   const hasStreaming = Array.from(channels.values()).some((c) => c.isStreaming)
   const location = useLocation()
+  const navScrollRef = useScrollFade<HTMLElement>()
 
   const hasFeature = (name?: string) => {
     if (!name) return true
@@ -98,7 +100,7 @@ export function Sidebar({ onToggleSessions }: { onToggleSessions: () => void }) 
         <span className="text-subtitle font-semibold tracking-tight">Maxma</span>
       </div>
 
-      <nav className="flex flex-col flex-1 gap-5 overflow-y-auto scrollbar-thin px-2 py-4" aria-label="页面导航">
+      <nav ref={navScrollRef} className="flex flex-col flex-1 gap-5 overflow-y-auto scrollbar-thin scroll-fade px-2 py-4" aria-label="页面导航">
         {visibleGroups.map((group) => (
           <div key={group.key} role="group" aria-label={group.label}>
             <p className="px-3.5 pb-1.5 text-caption font-medium uppercase tracking-widest text-muted-foreground">{group.label}</p>

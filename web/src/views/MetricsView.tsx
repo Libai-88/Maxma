@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Sparkles } from 'lucide-react'
 import { useMetricsStore } from '@/stores/metrics'
@@ -9,6 +9,7 @@ import type { LlmUsageCall } from '@/types'
 import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/common/EmptyState'
+import { useScrollFade } from '@/lib/useScrollFade'
 
 interface BarItem {
   label: string
@@ -30,7 +31,7 @@ function BarChart({ items, maxValue, height = 140 }: { items: BarItem[]; maxValu
   if (items.length === 0) return <div className="text-muted-foreground text-xs text-center py-3">无数据</div>
   const maxVal = maxValue !== undefined && maxValue > 0 ? maxValue : Math.max(...items.map(i => i.value), 1)
   return (
-    <div className="flex flex-col gap-1 overflow-y-auto scrollbar-thin" style={{ height }}>
+    <div className="flex flex-col gap-1 overflow-y-auto scrollbar-thin" style={{ maxHeight: height }}>
       {items.map((item, idx) => {
         const percent = maxVal > 0 ? Math.max(2, (item.value / maxVal) * 100) : 0
         return (
@@ -80,13 +81,14 @@ export default function MetricsView() {
   const [recentCalls, setRecentCalls] = useState<LlmUsageCall[]>([])
   const [callsLoading, setCallsLoading] = useState(false)
   const [callsError, setCallsError] = useState('')
+  const scrollRef = useScrollFade()
 
   async function loadHistoryWith(windowSeconds: number) {
     setHistoryLoading(true)
     try { await loadHistory(windowSeconds) } finally { setHistoryLoading(false) }
   }
 
-  const loadRecentCalls = async () => {
+  const loadRecentCalls = useCallback(async () => {
     setCallsLoading(true)
     setCallsError('')
     try {
@@ -97,14 +99,14 @@ export default function MetricsView() {
     } finally {
       setCallsLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     void refresh()
     void loadRecentCalls()
     setHistoryLoading(true)
     void loadHistory(3600).finally(() => setHistoryLoading(false))
-  }, [])
+  }, [refresh, loadHistory, loadRecentCalls])
 
   useEffect(() => {
     if (!autoRefresh) return
@@ -143,7 +145,7 @@ export default function MetricsView() {
   const llmHistorySeries = history ? history.snapshots.map(s => s.llm?.total_tokens_out ?? 0) : []
 
   return (
-    <div className="flex-1 overflow-y-auto scrollbar-thin p-6">
+    <div ref={scrollRef} className="flex-1 overflow-y-auto scrollbar-thin scroll-fade p-6">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <h2 className="text-xl font-semibold text-foreground">运行指标</h2>
         <div className="flex items-center gap-3 text-ui text-muted-foreground flex-wrap">
