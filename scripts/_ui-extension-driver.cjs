@@ -150,10 +150,40 @@ app.whenReady().then(async () => {
     if (!extText.includes("已启用")) throw new Error("扩展 tab 没有显示启用/禁用状态");
     result.extensionsTab = true;
     result.stage = "extensions-tab";
+
+    // 新建扩展：点「创建」必须真的落盘，并立刻出现在清单里（不是只弹提示）。
+    const scaffoldClicked = await win.webContents.executeJavaScript(`(() => {
+      const input = document.querySelector('input[aria-label="新扩展名"]');
+      if (!input) return false;
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, 'ui-scaffold');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      const btn = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === '创建');
+      if (!btn || btn.disabled) return false;
+      btn.click();
+      return true;
+    })()`);
+    if (!scaffoldClicked) throw new Error("扩展页找不到「新建扩展」输入框或创建按钮");
+
+    let scaffoldText = "";
+    for (let i = 0; i < 30; i++) {
+      await sleep(400);
+      scaffoldText = await win.webContents.executeJavaScript("document.body.innerText").catch(() => "");
+      if (scaffoldText.includes("已创建") && scaffoldText.includes("ui-scaffold")) break;
+    }
+    result.scaffoldText = scaffoldText.slice(0, 1500);
+    if (!scaffoldText.includes("已创建")) {
+      throw new Error("点「创建」后没有出现创建结果提示（scaffold 接口未接通）");
+    }
+    if (!scaffoldText.includes("ui_scaffold_hello")) {
+      throw new Error("创建结果里没有示例工具名（返回的 created 信息没渲染）");
+    }
+    result.scaffoldCreated = true;
+    result.stage = "scaffold-created";
   } catch (err) {
     result.error = String(err && err.message ? err.message : err);
   }
 
   process.stdout.write("DRIVE_RESULT " + JSON.stringify(result) + "\n");
-  app.exit(result.replied && result.extensionsTab ? 0 : 1);
+  app.exit(result.replied && result.extensionsTab && result.scaffoldCreated ? 0 : 1);
 });

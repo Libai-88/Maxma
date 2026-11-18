@@ -185,7 +185,11 @@ $BundledSkillNames = @(
     "research-evidence",
     "document-quality",
     "security-review",
-    "clarify-before-action"
+    "clarify-before-action",
+    "repo-onboarding",
+    "release-notes",
+    "meeting-notes",
+    "writing-polish"
 )
 $StickersDir = Join-Path $RuntimeDir "config\stickers"
 Copy-Item -Path (Join-Path $ProjectRoot "config\rules") -Destination (Join-Path $RuntimeDir "config") -Recurse -Force

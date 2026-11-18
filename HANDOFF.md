@@ -3,6 +3,51 @@
 > 当前可执行状态，供下一位接手者。架构请先读 [docs/00-当前架构.md](docs/00-当前架构.md)。
 > 更新时间：2026-11-18
 
+## 2026-11-18 第五轮：开箱即用的技能与"插件开发不再抓瞎"
+
+### 问题
+
+扩展机制本身完整，但"从零写一个"要同时知道目录、默认导出形状、`defineTool` /
+TypeBox 用法、命令签名、以及改完怎么让 Maxma 重新探测；这些散在 pi 的 README 与
+仓库多处代码里。随包技能只有 12 条，面向"接手陌生仓库 / 写发布说明 / 整理会议记录 /
+中文润色"四条高频需求的空白没补。
+
+### 做了什么
+
+- **模板单一真源**：`bun-sidecar/src/kernel/extension-template.ts`（名字校验、
+  `renderExtensionIndex` / `renderExtensionReadme` / `renderExtensionScaffold`）。
+  生成的 `index.ts` 是一个**能跑**的扩展：一个示例工具 + 一个 `/<name>` 命令 +
+  注释掉的 `tool_call` 拦截示例。
+- **两条生成入口共用模板**：`scripts/new-extension.mjs`（仓库内，bun 执行）与
+  `POST /api/extensions/scaffold`（便携包用户在「扩展」页点「新建扩展」）。
+  后端写盘前做名字校验与越界护栏，已存在返回 409，写盘后**立即重新探测**再返回。
+- **前端**：`ExtensionsPanel` 增加"新建扩展"块（输入名 → 创建 → 显示 created 的
+  工具名/命令名）；空态文案同步。
+- **四个随包技能**：`repo-onboarding`、`release-notes`、`meeting-notes`、`writing-polish`；
+  两个打包脚本的技能清单（12 → 16）同步。
+- **文档**：`docs/plugin-development.md`（三种加能力方式的分工、五分钟起步、加载规则、
+  工具/命令/钩子写法、排错表、随包 vs 不随包、安全边界、Skill 写法、交付自查）；
+  README / PROJECT_INDEX / 架构文档的修改导航均加链接。
+
+### 新增守卫
+
+- `bun-sidecar/tests/extension-template.test.ts`：渲染到临时目录 → 动态 import →
+  假 pi 收集注册结果 → **真的执行一次工具**。模板与 pi 契约脱节会立刻红。
+- `bun-backend/tests/extensions-scaffold.test.ts`：非法名字/非 JSON/越界 400、
+  写盘内容、同名 409 不覆盖、写盘后探测结果里 `errors` 为空。
+- `bun-backend/tests/builtin-skills.test.ts`：frontmatter 名字等于目录名、描述长度、
+  至少两个小节、正文 ≥250 字；所有技能必须同时出现在两个打包脚本的清单里。
+- `scripts/check-core-coverage.sh`：`extension-template` 进 CORE（实测 100%），
+  CORE 24 项、DEBT 4 项。
+
+### 验证（本机实测）
+
+- sidecar 228 pass / 0 fail（新增 5）；backend 318 pass / 0 fail（新增 9）。
+- 三处 tsc、增量 eslint、web build 全绿；`verify-all-gates.sh` 17 项通过。
+- `verify-ui-extension.mjs` 扩展为真实链路：界面点「创建」→ 后端写盘 →
+  扩展立即出现在清单 → 磁盘上确有 `index.ts`（含 default 导出与示例工具名）。
+- 截图基线重生（6 页）。
+
 ## 2026-11-18 排版与动效整理（前端美学，不动功能）
 
 用户的问题是「直接引入组件库之后，还能不能在不影响性能和功能的前提下更好看」。

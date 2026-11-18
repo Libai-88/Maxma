@@ -104,7 +104,7 @@ xcopy /e /i /q "%PROJECT_ROOT%config\stickers" "%PORTABLE_DIR%\config\stickers" 
 REM custom stickers are user uploads — never ship them
 if exist "%PORTABLE_DIR%\config\stickers\custom" rmdir /s /q "%PORTABLE_DIR%\config\stickers\custom"
 xcopy /e /i /q "%PROJECT_ROOT%.maxma\skills" "%PORTABLE_DIR%\.maxma\skills" >nul
-for %%S in (coding-starter office-starter debugging-starter document-starter spreadsheet-starter mcp-starter) do (
+for %%S in (coding-starter office-starter debugging-starter document-starter spreadsheet-starter mcp-starter execution-playbook cost-aware research-evidence document-quality security-review clarify-before-action repo-onboarding release-notes meeting-notes writing-polish) do (
     if not exist "%PROJECT_ROOT%.maxma\skills\%%S\SKILL.md" (
         echo [ERROR] Bundled skill missing from source: %%S
         exit /b 1

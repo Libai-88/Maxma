@@ -58,7 +58,7 @@ fi
 # extensions（扩展过滤直接决定审批扩展是否被误伤）、session-catalog（会话目录的状态机）。
 CORE_NAMES="events approval-gate mcp model bridge-pi plan goal pi-session pi-contract skills tools
 prompt request-telemetry project-paths subagent extensions maxma-approval maxma-blocker
-extension-ui opencode-zen persona-prompt shell-health session-catalog"
+extension-ui opencode-zen persona-prompt shell-health session-catalog extension-template"
 
 # 2026-11-18 补：session-catalog 从 DEBT 升进 CORE。它此前是 DEBT（下限 11%），
 # 而"重启后会话名还在吗"这条路径只能靠回读会话文件验证——补上

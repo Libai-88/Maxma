@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, Puzzle, RefreshCw } from 'lucide-react'
+import { AlertTriangle, Puzzle, RefreshCw, Sparkles } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { confirmAction } from '@/components/common/ConfirmDialog'
 import { api } from '@/api'
@@ -39,6 +40,8 @@ interface ExtensionsPayload {
   disabled: string[]
   protected_bundled: string[]
   notes: string[]
+  /** 仅「新建扩展」返回：这次实际创建了什么。 */
+  created?: { id: string; dir: string; tool_name: string; command: string }
 }
 
 const SCOPE_LABEL: Record<ExtensionInfo['scope'], string> = {
@@ -53,6 +56,9 @@ export function ExtensionsPanel() {
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState('')
   const [error, setError] = useState('')
+  const [newName, setNewName] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [createNote, setCreateNote] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -106,6 +112,39 @@ export function ExtensionsPanel() {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setBusyId('')
+    }
+  }
+
+  /**
+   * 新建扩展：后端用与 CLI 相同的模板生成 index.ts + README，写盘后立即探测。
+   * 界面上只做一次轻校验，命名规则以后端为准（避免两套正则漂移）。
+   */
+  async function createExtension() {
+    const name = newName.trim()
+    if (!name) {
+      setError('先填一个扩展名，例如 hello-tools')
+      return
+    }
+    setCreating(true)
+    setError('')
+    setCreateNote('')
+    try {
+      const payload = await api.request<ExtensionsPayload>('/extensions/scaffold', {
+        method: 'POST',
+        body: JSON.stringify({ name }),
+      })
+      setData(payload)
+      const created = payload.created
+      setCreateNote(
+        created
+          ? `已创建 ${created.id}；工具 ${created.tool_name}，命令 /${created.command}。新建会话后生效。`
+          : '已创建扩展。新建会话后生效。',
+      )
+      setNewName('')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setCreating(false)
     }
   }
 
@@ -195,6 +234,38 @@ export function ExtensionsPanel() {
         </Button>
       </div>
 
+      {/* 新建扩展：让"从零写一个"变成"点一下就有能跑的骨架" */}
+      <div className="mb-4 rounded-lg border border-border bg-card p-4">
+        <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-foreground">
+          <Sparkles className="size-4 text-muted-foreground" />
+          新建扩展
+        </div>
+        <p className="mb-3 text-xs leading-5 text-muted-foreground">
+          生成可直接运行的 <code className="text-foreground">index.ts</code>（一个示例工具 +
+          一个斜杠命令）与 README，创建后立即探测；加载失败会出现在上方错误区。
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !creating) void createExtension()
+            }}
+            placeholder="hello-tools"
+            aria-label="新扩展名"
+            className="max-w-60"
+            disabled={creating}
+          />
+          <Button disabled={creating} onClick={() => void createExtension()}>
+            {creating ? '创建中…' : '创建'}
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            小写字母开头，a-z / 0-9 / 连字符，2–32 字符
+          </span>
+        </div>
+        {createNote && <div className="mt-2 break-all text-xs text-status-done">{createNote}</div>}
+      </div>
+
       {extensions.length === 0 ? (
         <div className="glass-panel flex flex-col items-center rounded-lg border border-border px-4 py-10 text-center">
           <div className="mb-3 text-muted-foreground">
@@ -202,7 +273,7 @@ export function ExtensionsPanel() {
           </div>
           <div className="mb-1 text-base font-semibold text-foreground">未发现任何扩展</div>
           <p className="mb-2 text-sm text-muted-foreground">
-            把扩展文件放进下面的目录，pi 会在下次会话创建时自动加载：
+            用上面的「新建扩展」生成一个能跑的骨架；也可以把已有扩展放进下面的目录，pi 会在下次会话创建时加载：
           </p>
           <code className="break-all rounded-md border border-border bg-card px-3 py-1.5 text-xs text-foreground">
             {data?.extensions_dir ?? '~/.pi/agent/extensions'}

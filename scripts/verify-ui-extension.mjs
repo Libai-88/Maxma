@@ -44,6 +44,8 @@ export default function (pi: ExtensionAPI) {
 let backend = null;
 let dataDir = process.env.MAXMA_DATA_DIR ?? "";
 let extFile = "";
+let agentDir = "";
+let scaffoldDir = "";
 const base = process.env.BASE ?? `http://127.0.0.1:${BACKEND_PORT}`;
 
 async function waitHealth(timeoutMs = 60_000) {
@@ -69,11 +71,12 @@ try {
   if (!process.env.BASE) {
     dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "maxma-uiext-"));
   }
-  const agentDir = process.env.PI_CODING_AGENT_DIR
+  const agentDirResolved = process.env.PI_CODING_AGENT_DIR
     ? path.resolve(process.env.PI_CODING_AGENT_DIR)
     : dataDir
       ? path.join(dataDir, "api", "data", "pi")
       : path.join(os.homedir(), ".pi", "agent");
+  agentDir = agentDirResolved;
   const extDir = path.join(agentDir, "extensions");
   fs.mkdirSync(extDir, { recursive: true });
   extFile = path.join(extDir, "probe-confirm.ts");
@@ -197,6 +200,12 @@ try {
     } else {
       console.log("✅ 扩展页「扩展」tab：外部扩展与启用状态在真实界面上可见");
     }
+    if (!r.scaffoldCreated) {
+      fail(`扩展页「新建扩展」未验证通过（stage=${r.stage}${r.error ? ", error=" + r.error : ""}）`);
+      if (r.scaffoldText) console.error("扩展页文字片段：\n" + r.scaffoldText.slice(0, 1200));
+    } else {
+      console.log("✅ 新建扩展：界面点「创建」→ 后端写盘 → 立即出现在清单里");
+    }
     if (r.consoleErrors?.length) fail(`浏览器 console 有 ${r.consoleErrors.length} 条错误`);
   }
   if (code !== 0 && !failures.length) fail(`界面驱动退出码非 0：${code}`);
@@ -244,11 +253,28 @@ try {
     if ((on.disabled ?? []).includes("probe-confirm.ts")) fail("恢复启用后禁用清单里仍有它");
     console.log("✅ 扩展清单/启停：外部扩展可见、可禁用、可恢复，内置扩展不可禁用");
   }
+
+  // ── 6. 新建扩展的落盘证据（界面点了按钮，磁盘上必须真的有东西） ──
+  {
+    scaffoldDir = path.join(agentDir, "extensions", "ui-scaffold");
+    const indexFile = path.join(scaffoldDir, "index.ts");
+    const readmeFile = path.join(scaffoldDir, "README.md");
+    if (!fs.existsSync(indexFile)) {
+      fail(`新建扩展未落盘：${indexFile} 不存在`);
+    } else {
+      const index = fs.readFileSync(indexFile, "utf8");
+      if (!index.includes("export default function")) fail("生成的 index.ts 缺少 default 导出");
+      if (!index.includes("ui_scaffold_hello")) fail("生成的 index.ts 缺少示例工具名");
+      if (!fs.existsSync(readmeFile)) fail("新建扩展缺少 README.md");
+      console.log(`✅ 新建扩展开箱即用：${scaffoldDir}`);
+    }
+  }
 } catch (err) {
   fail(String(err?.message ?? err));
 } finally {
-  // 清理临时扩展——它装在用户真实 agent 目录里，必须删掉。
+  // 清理临时内容——它们装在真实 agent 目录里，必须删掉。
   try { if (extFile) fs.rmSync(extFile, { force: true }); } catch { /* */ }
+  try { if (scaffoldDir) fs.rmSync(scaffoldDir, { recursive: true, force: true }); } catch { /* */ }
   try { backend?.kill(); } catch { /* */ }
   if (dataDir && !process.env.MAXMA_DATA_DIR) {
     try { fs.rmSync(dataDir, { recursive: true, force: true }); } catch { /* */ }

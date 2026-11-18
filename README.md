@@ -16,6 +16,10 @@ MaxmaHere 提供多 LLM Provider、流式对话、Agent 工具、MCP、Skill、�
 - [docs/security-contract.md](docs/security-contract.md)
 - [dev_docs/permission-modes.md](dev_docs/permission-modes.md)
 
+想自己加能力（工具、命令、技能）先读：
+
+- [docs/plugin-development.md](docs/plugin-development.md) — 扩展与技能开发（含 `bun scripts/new-extension.mjs` 与界面上手）
+
 ## 技术栈
 
 | 层 | 技术 |

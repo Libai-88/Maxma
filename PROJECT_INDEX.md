@@ -100,6 +100,7 @@ web/src/main.tsx
 ## 契约与规范
 
 - [docs/security-contract.md](docs/security-contract.md) — 安全边界
+- [docs/plugin-development.md](docs/plugin-development.md) — 扩展与技能开发（用户扩展 / 内联扩展 / Skill 的分工与生成器）
 - [docs/contracts/agent-rpc.md](docs/contracts/agent-rpc.md) — kernel RPC 方法面
 - [docs/contracts/ws-events.md](docs/contracts/ws-events.md) — WS 事件词表
 - [dev_docs/build-and-artifacts.md](dev_docs/build-and-artifacts.md) — 构建与产物（唯一事实源）

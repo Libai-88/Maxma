@@ -15,6 +15,8 @@
  */
 
 import { Hono } from "hono";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 import {
   defaultAgentDir,
@@ -22,6 +24,11 @@ import {
   getLastExtensionsSnapshot,
   type ExtensionsSnapshot,
 } from "../../../bun-sidecar/src/kernel/extensions";
+import {
+  isValidExtensionName,
+  renderExtensionScaffold,
+  toolNameFor,
+} from "../../../bun-sidecar/src/kernel/extension-template";
 import { probeExtensionsSnapshot } from "../../../bun-sidecar/src/kernel/pi-session";
 import { maxmaProjectRoot } from "../../../bun-sidecar/src/kernel/project-paths";
 import {
@@ -107,6 +114,58 @@ export function createExtensionsRoutes(): Hono {
       disabledExtensions: readDisabledExtensions(),
     });
     return c.json(payloadFromSnapshot(snapshot, { probe: true, agentDir: snapshot.agent_dir }));
+  });
+
+  // 新建扩展：便携包用户没有仓库与脚本，只能靠界面。生成的模板与仓库内
+  // `scripts/new-extension.mjs` 同源（kernel/extension-template.ts），不各写一套。
+  app.post("/api/extensions/scaffold", async (c) => {
+    let body: { name?: unknown };
+    try {
+      body = (await c.req.json()) as { name?: unknown };
+    } catch {
+      return c.json({ detail: "请求体必须是 JSON" }, 400);
+    }
+    if (!isValidExtensionName(body.name)) {
+      return c.json(
+        { detail: "扩展名不合法：小写字母开头，只允许 a-z、0-9 与连字符，长度 2–32（如 hello-tools）" },
+        400,
+      );
+    }
+    const name = body.name;
+    const agentDir = defaultAgentDir();
+    const extRoot = path.resolve(extensionsDirFor(agentDir));
+    const target = path.resolve(extRoot, name);
+    // 路径护栏：即使校验被绕过，也绝不写到 extensions 目录之外。
+    if (target !== path.join(extRoot, name) || !target.startsWith(extRoot + path.sep)) {
+      return c.json({ detail: "扩展名不合法：解析后的目录越界" }, 400);
+    }
+    if (fs.existsSync(target)) {
+      return c.json({ detail: `同名扩展已存在：${target}` }, 409);
+    }
+
+    const files = renderExtensionScaffold({ name, dir: target });
+    try {
+      fs.mkdirSync(target, { recursive: true });
+      fs.writeFileSync(path.join(target, "index.ts"), files.index, "utf8");
+      fs.writeFileSync(path.join(target, "README.md"), files.readme, "utf8");
+    } catch (error) {
+      return c.json({ detail: `写入扩展失败：${(error as Error).message}` }, 500);
+    }
+
+    // 立刻探测一次：新文件是否真的被 pi 接受，要让界面马上看到（而不是"写盘即成功"）。
+    const snapshot = await probeExtensionsSnapshot({
+      cwd: maxmaProjectRoot(),
+      disabledExtensions: readDisabledExtensions(),
+    });
+    return c.json({
+      ...payloadFromSnapshot(snapshot, { probe: true, agentDir: snapshot.agent_dir }),
+      created: {
+        id: `${name}/index.ts`,
+        dir: target,
+        tool_name: toolNameFor(name),
+        command: name,
+      },
+    });
   });
 
   // 启用/禁用。body: { id: string, enabled: boolean }
