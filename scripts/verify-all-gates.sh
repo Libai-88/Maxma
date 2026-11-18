@@ -106,6 +106,13 @@ gw_out=$(cd web && node scripts/check-css-weight.mjs 2>&1); gw_rc=$?
 say "glass weight guard" "$([ "$gw_rc" = 0 ] && echo PASS || echo FAIL)  $(echo "$gw_out" | tail -1)"
 [ "$gw_rc" = 0 ] || FAILS=$((FAILS+1))
 
+# 配色对比度守卫：直接从 CSS 读 token 算 WCAG 比值（OKLCH → 线性 sRGB，卡片玻璃按 alpha 合成）。
+# 为什么需要：次要文字的"淡"没有量。深色下 muted 压在 10% 白芯片上是 2.75:1，
+# 目测只觉得"有点灰"，换个芯片底色就掉到看不见。门槛 fg/bg ≥7、muted ≥4.5。
+ct_out=$(node scripts/check-contrast.mjs 2>&1); ct_rc=$?
+say "contrast guard" "$([ "$ct_rc" = 0 ] && echo PASS || echo FAIL)  $(echo "$ct_out" | grep -E '✓ 浅色|✗' | tail -1)"
+[ "$ct_rc" = 0 ] || FAILS=$((FAILS+1))
+
 # 判定优先用**退出码**，不是输出字符串匹配。
 # （第一版在这里踩过坑：budget 的 PASS 分支匹配的是"✓ bun-sidecar: 0"，
 #   于是 bun-backend 报 ✗ 时整个脚本仍然打「全部闸门通过」——我今天一路在修的
