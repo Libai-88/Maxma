@@ -44,6 +44,22 @@
 
 规范与自查清单见 [dev_docs/design-system.md](dev_docs/design-system.md)。
 
+### 第二轮：滚动边缘、主题入口与存量 lint
+
+- **滚动边缘渐隐**：`web/src/lib/scrollFade.ts`（纯函数 `computeScrollEdges` + 监听）+ `.scroll-fade` 规则。
+  静态遮罩会把首屏标题永久淡掉，所以按"还能不能往上/往下滚"决定两侧，兜底 `mask-image: none`；
+  已接到 6 个内容页与侧栏导航，判定有 5 条单测。
+  `MetricsView` 的 `BarChart` 顺带改成 `maxHeight`——只有一条状态码时它仍占着 140px 的空白带。
+- **主题有了唯一入口** `web/src/lib/theme.ts`。此前主题只在"打开外观页"那一刻生效，
+  重启后选了浅色的人照样看到深色；引导页更往另一个键 `maxma-theme` 写，两边互不相识。
+  现在 `main.tsx` 在等后端之前 `restoreTheme()`，引导页与外观页共用同一个 `setTheme`。
+  证据：截图驱动把 `localStorage.maxma.theme` 设为 `light` 后 reload，`/metrics`（从不渲染外观页）
+  拍出亮色（平均亮度 225），改动前该页仍是深色。
+- **存量 lint 清零**：全仓 `eslint src tests` 由 15 error 降到 **0 error**。其中
+  `stores/jetHub.ts` 那一条是真的缺陷——`useChatStore()` 在非组件上下文被调用会抛
+  （zustand v5 走 `useSyncExternalStore`，实测报 "Invalid hook call"），异常被外层 catch 吞掉，
+  于是 Jet Hub 授权成功后聊天页的模型清单**永远刷不到**。改为 `useChatStore.getState()`。
+
 ### 性能账
 
 - 主题 CSS：+5.2KB raw / **+1.2KB gzip**（预算 +4KB）。

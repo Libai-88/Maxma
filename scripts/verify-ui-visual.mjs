@@ -110,6 +110,7 @@ try {
     DRIVE_OUT: outDir,
     DRIVE_SESSION_ID: sessionId,
     DRIVE_PAGES: JSON.stringify(PAGES),
+    DRIVE_THEME: process.env.VISUAL_THEME ?? "",
   };
   delete driverEnv.ELECTRON_RUN_AS_NODE;
   delete driverEnv.ELECTRON_NO_ATTACH_CONSOLE;

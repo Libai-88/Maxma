@@ -80,11 +80,31 @@ press       // active:translate-y-px duration-fast ease-out-quint
 ```bash
 bun scripts/verify-ui-visual.mjs                 # 存证到当天目录
 bun scripts/verify-ui-visual.mjs --update-baseline  # 覆盖 dev_docs/visual/baseline/
+VISUAL_THEME=light bun scripts/verify-ui-visual.mjs # 亮色抽查（主题由 DRIVE_THEME 钉住）
 ```
+
+驱动每次运行都换一个干净的 Electron profile（`app.setPath('userData', mkdtemp)`）。
+不这么做，上一次亮色抽查写进 `localStorage` 的 `maxma.theme` 会留到下一次，
+"深色基线"就悄悄变成亮色（本轮真踩过：基线平均亮度从 17 跳到 228）。
 
 像素级 diff 没有做：要自己解 PNG（zlib + filter），维护成本高于收益。改动前后人工对照这两组图即可。
 
-## 七、新页面自查清单
+## 七、滚动边缘
+
+滚动容器加 `scroll-fade` 类 + `ref={useScrollFade()}`（`web/src/lib/useScrollFade.ts`）。
+它在滚动时写 `data-fade-top` / `data-fade-bottom`，CSS 据此加 24px 遮罩：
+
+- **没滚动就不渐隐**：静态 `mask-image` 会把首屏标题永久淡掉，比不渐隐更糟；
+- 内容不足一屏两侧都不渐隐（判定见 `lib/scrollFade.ts` 的 `computeScrollEdges`，有单测）；
+- 遮罩兜底是 `none`，未滚动时不给内容建合成层。
+
+## 八、主题的唯一入口
+
+`web/src/lib/theme.ts`（读 / 写 / 应用 / 启动恢复）。此前主题只在"打开外观页"时生效，
+重启后选了浅色的人照样看到深色；引导页还往另一个键（`maxma-theme`）写。
+现在 `main.tsx` 在等后端之前调用 `restoreTheme()`，组件只调 `setTheme`。
+
+## 九、新页面自查清单
 
 - [ ] 字号只用六档 token（`text-caption/meta/ui/body/subtitle/display`）
 - [ ] 段落用 `text-body`，表格与行内信息用 `text-meta`，导航与按钮用 `text-ui`
@@ -93,3 +113,5 @@ bun scripts/verify-ui-visual.mjs --update-baseline  # 覆盖 dev_docs/visual/bas
 - [ ] 不新增 `backdrop-blur`
 - [ ] 数字列加 `tabular-nums`
 - [ ] 空态用 `components/common/EmptyState`，加载用 `components/ui/skeleton`
+- [ ] 可滚动长列表加 `scroll-fade` + `useScrollFade`
+- [ ] 主题相关一律走 `lib/theme.ts`，不要自己碰 `localStorage` 或 `document.documentElement`

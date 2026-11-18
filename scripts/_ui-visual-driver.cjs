@@ -18,13 +18,21 @@ delete process.env.ELECTRON_NO_ATTACH_CONSOLE;
 
 const fs = require("node:fs");
 const path = require("node:path");
+const os = require("node:os");
 const { app, BrowserWindow } = require("electron");
+
+// 每次启动换一个干净的 profile：Electron 默认复用 %APPDATA% 下的同一份
+// userData，上一次跑亮色抽查写进 localStorage 的 maxma.theme 会留到下一次，
+// 让"深色基线"悄悄变成亮色（本轮真踩过：基线 luma 从 17 跳到 228）。
+app.setPath("userData", fs.mkdtempSync(path.join(os.tmpdir(), "maxma-visual-profile-")));
 
 const BASE = process.env.DRIVE_BASE;
 const OUT = process.env.DRIVE_OUT;
 const PAGES = JSON.parse(process.env.DRIVE_PAGES || "[]");
 const SESSION_KEY = process.env.DRIVE_SESSION_KEY || "maxma_session_id";
 const SESSION_ID = process.env.DRIVE_SESSION_ID || "";
+/** 主题：默认钉成 dark（基线必须可复现）；"light" 用于亮色抽查。 */
+const THEME = process.env.DRIVE_THEME || "dark";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 app.whenReady().then(async () => {
@@ -43,6 +51,7 @@ app.whenReady().then(async () => {
   });
 
   const results = [];
+  let themeApplied = false;
   try {
     // 先建立同源 origin 再写会话键，最后 reload——与 chat 驱动同一套启动顺序。
     await win.loadURL(BASE + "/");
@@ -58,6 +67,17 @@ app.whenReady().then(async () => {
     }
 
     for (const page of PAGES) {
+      if (THEME && !themeApplied) {        // 主题存在 localStorage 里、由启动时的 restoreTheme 读回：改完必须 reload。
+        await win.webContents
+          .executeJavaScript(
+            `(() => { localStorage.setItem('maxma.theme', ${JSON.stringify(THEME)}); return true })()`,
+          )
+          .catch(() => null);
+        await win.webContents.reload();
+        await sleep(2500);
+        logs.length = 0;
+        themeApplied = true;
+      }
       await win.loadURL(BASE + page.path);
       // 等首屏与玻璃层稳定（字体、主题、图标的异步加载都在 2 秒内落定）。
       await sleep(Number(process.env.DRIVE_SETTLE_MS ?? 5000));
