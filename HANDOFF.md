@@ -68,6 +68,9 @@ TypeBox 用法、命令签名、以及改完怎么让 Maxma 重新探测；这�
   期望回复串（导致"模型报错也算看到回复"）；未选中假渠道（会跑真实渠道撞 429）。
   现在先建新会话、写入 provider/model，再断言浮窗 `fixed`、滚动不移动、1.5s 后仍在。
 - 截图存证 `dev_docs/visual/task-review-floating.png`；设计系统补第十二节。
+- 打包卫生：桌面便携产物改为整目录清理 `win-unpacked`（原先只删 `data`），
+  并从产物剔除 Electron 源分发带进来的 `debug.log`；跨版本旧 zip 按命名模式
+  清理；zip 里出现运行日志直接判失败。实测旧包曾把 19:49 的 `debug.log` 打进去。
 
 验证：web 44 pass / 0 fail、tsc 0 error、build 通过、lint 0 error；
 `verify-ui-chat-roundtrip.mjs` 真实界面通过（浮窗 360×177，fixed，滚动位移 0）。

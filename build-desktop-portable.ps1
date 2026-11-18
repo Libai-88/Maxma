@@ -251,12 +251,11 @@ $webPackage = Get-Content -LiteralPath (Join-Path $ProjectRoot "web\package.json
 if ([string]$webPackage.version -ne $canonicalVersion) {
     throw "版本不一致：web/package.json=$($webPackage.version)，version.py=$canonicalVersion。"
 }
-$staleDataDir = Join-Path $OutputDir "win-unpacked\data"
-# ⚠️ 清理前先检测运行中的桌面实例：win-unpacked\data 被 MaxmaHere.exe（或它拉起的
+$unpackedRoot = Join-Path $OutputDir "win-unpacked"
+# ⚠️ 清理前先检测运行中的桌面实例：win-unpacked 被 MaxmaHere.exe（或它拉起的
 # bun 后端）占用时，Remove-Item 会抛 IOException（lockfile 不可删），原始报错完全
 # 看不出原因 —— 真机踩过两次（冒烟测试残留实例 / 用户正在测试旧构建时重建）。
 # 给出可操作的报错，而不是一个裸堆栈。
-$unpackedRoot = Join-Path $OutputDir "win-unpacked"
 $runningApp = Get-Process -ErrorAction SilentlyContinue | Where-Object {
     if ($_.ProcessName -ne 'MaxmaHere' -and $_.ProcessName -ne 'bun') { return $false }
     # 读取其他用户的进程 Path 会抛 Access denied；脚本全局 Stop，必须兜住，
@@ -270,14 +269,19 @@ $runningApp = Get-Process -ErrorAction SilentlyContinue | Where-Object {
 }
 if ($runningApp) {
     $pids = ($runningApp | Select-Object -ExpandProperty Id) -join ', '
-    throw ("桌面便携版正在运行（PID $pids），占用 win-unpacked\data，无法清理。请先关闭应用再重新构建。")
+    throw ("桌面便携版正在运行（PID $pids），占用 win-unpacked，无法清理。请先关闭应用再重新构建。")
 }
-if (Test-Path -LiteralPath $staleDataDir) {
-    $resolvedStaleData = [System.IO.Path]::GetFullPath($staleDataDir)
-    if (-not $resolvedStaleData.StartsWith([System.IO.Path]::GetFullPath($OutputDir), [System.StringComparison]::OrdinalIgnoreCase)) {
-        throw "拒绝清理输出目录之外的运行数据：$resolvedStaleData"
+
+# ⚠️ 必须整目录清空，不能只删 data。
+# 实测 2026-11-18：win-unpacked 根目录留着上一轮运行产生的 debug.log（19:49），
+# electron-builder 只覆盖自己的分发文件、不会删它，随后手工 CreateFromDirectory
+# 把它原样打进了 zip。构建产物目录按“镜像”语义处理：这一轮没有的，就不该留下。
+if (Test-Path -LiteralPath $unpackedRoot) {
+    $resolvedUnpacked = [System.IO.Path]::GetFullPath($unpackedRoot)
+    if (-not $resolvedUnpacked.StartsWith([System.IO.Path]::GetFullPath($OutputDir), [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "拒绝清理输出目录之外的运行目录：$resolvedUnpacked"
     }
-    Remove-Item -LiteralPath $resolvedStaleData -Recurse -Force
+    Remove-Item -LiteralPath $resolvedUnpacked -Recurse -Force
 }
 Push-Location $ElectronPackage
 try {
@@ -319,24 +323,41 @@ $BundledSkillNames | ForEach-Object {
     }
 }
 $artifactPath = Join-Path $OutputDir ("MaxmaHere-{0}-portable-x64.zip" -f $desktopPackage.version)
-if (Test-Path -LiteralPath $artifactPath) {
-    $resolvedArtifact = [System.IO.Path]::GetFullPath($artifactPath)
-    if (-not $resolvedArtifact.StartsWith([System.IO.Path]::GetFullPath($OutputDir), [System.StringComparison]::OrdinalIgnoreCase)) {
-        throw "拒绝覆盖输出目录之外的文件：$resolvedArtifact"
+$checksumPath = "$artifactPath.sha256"
+
+# 跨版本也要清：版本号一变，上一版 zip 的文件名就不同，只删“当前名字”
+# 会把旧版本永久留在输出目录里。这里按产品命名模式统一收口，且逐个做路径护栏。
+$oldArtifacts = @(Get-ChildItem -LiteralPath $OutputDir -File -Force -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -match '^MaxmaHere-.*-portable-x64\.zip(\.sha256)?$' })
+foreach ($old in $oldArtifacts) {
+    $resolvedOld = [System.IO.Path]::GetFullPath($old.FullName)
+    if (-not $resolvedOld.StartsWith([System.IO.Path]::GetFullPath($OutputDir), [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "拒绝覆盖输出目录之外的文件：$resolvedOld"
     }
-    Remove-Item -LiteralPath $resolvedArtifact -Force
+    Remove-Item -LiteralPath $old.FullName -Force
 }
+
+# 打包前最后一道卫生检查：electron-builder 用的是自定义 Electron 分发
+# （desktop\node_modules\electron\dist），会**原样整目录复制**；而界面测试
+# 跑 electron.exe 时，Chromium 会往那个源目录写 debug.log。实测 2026-11-18：
+# 清空 win-unpacked 后重打，debug.log 仍随源分发复活，时间戳还是上一轮的。
+# 因此这里从产物目录删除运行日志，而不是只靠“清空输出目录”。
+foreach ($forbiddenLog in @("debug.log", "chrome_debug.log")) {
+    $logPath = Join-Path $unpackedDir $forbiddenLog
+    if (Test-Path -LiteralPath $logPath) {
+        Remove-Item -LiteralPath $logPath -Force
+        Write-Host "      [clean] 已剔除运行日志：$forbiddenLog"
+    }
+}
+foreach ($forbiddenLog in @("debug.log", "chrome_debug.log")) {
+    if (Test-Path -LiteralPath (Join-Path $unpackedDir $forbiddenLog)) {
+        throw "桌面运行目录仍有运行日志，拒绝打包：$forbiddenLog"
+    }
+}
+
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [System.IO.Compression.ZipFile]::CreateFromDirectory($unpackedDir, $artifactPath, [System.IO.Compression.CompressionLevel]::Optimal, $false)
 $artifact = Get-Item -LiteralPath $artifactPath
-$checksumPath = "$artifactPath.sha256"
-if (Test-Path -LiteralPath $checksumPath) {
-    $resolvedChecksum = [System.IO.Path]::GetFullPath($checksumPath)
-    if (-not $resolvedChecksum.StartsWith([System.IO.Path]::GetFullPath($OutputDir), [System.StringComparison]::OrdinalIgnoreCase)) {
-        throw "拒绝覆盖输出目录之外的校验文件：$resolvedChecksum"
-    }
-    Remove-Item -LiteralPath $resolvedChecksum -Force
-}
 $hash = (Get-FileHash -LiteralPath $artifact.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
 # 校验文件的格式有讲究，两处都会让下载方验不过：
 #   1) 两空格分隔在 coreutils 语义里是**文本模式**，对 zip 是错的，要用 `*` 标二进制模式；
@@ -358,6 +379,11 @@ try {
         $zipEntryNames | Where-Object { $_ -eq $entryName } | Select-Object -First 1
     })
     if (-not $exeEntry -or -not $runtimeEntry) { throw "便携 ZIP 缺少桌面程序或 Maxma 后端资源。" }
+    foreach ($forbiddenLog in @("debug.log", "chrome_debug.log")) {
+        if ($zipEntryNames -contains $forbiddenLog) {
+            throw "便携 ZIP 混入运行日志：$forbiddenLog（构建目录未清干净）"
+        }
+    }
     if ($personaEntries.Count -ne $BuiltInPersonaNames.Count -or $personaEntries -contains $null) {
         throw "便携 ZIP 缺少内置人格文件。"
     }
