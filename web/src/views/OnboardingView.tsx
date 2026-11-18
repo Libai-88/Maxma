@@ -4,18 +4,14 @@ import { MessageSquare, Wrench, Sparkles, Brain, Lock, Info, type LucideIcon } f
 import { useOnboardingStore } from '@/stores/onboarding'
 import { useHealthStore } from '@/stores/health'
 import { cn } from '@/lib/utils'
+import { readStoredTheme, setTheme, type ThemeId } from '@/lib/theme'
 
 const titles = ['欢迎使用', '连接模型', '设定工作区', '快速了解']
 
-type ThemeMode = 'light' | 'dark'
-
-function readTheme(): ThemeMode {
-  return typeof document !== 'undefined' && document.documentElement.classList.contains('dark') ? 'dark' : 'light'
-}
-
-function applyTheme(mode: ThemeMode) {
-  document.documentElement.classList.toggle('dark', mode === 'dark')
-  try { localStorage.setItem('maxma-theme', mode) } catch { /* 忽略持久化失败 */ }
+// 引导页的主题开关与外观页共用同一份实现（同一个键、同一个应用函数）。
+// 此前它往 `maxma-theme` 写，外观页读 `maxma.theme`，两边互不相识。
+function readTheme(): ThemeId {
+  return readStoredTheme()
 }
 
 const INTRO_CHIPS: { label: string; Icon: LucideIcon }[] = [
@@ -55,7 +51,7 @@ function OnboardingInner({ paused }: { paused: boolean }) {
   const [displayName, setDisplayName] = useState(() => useOnboardingStore.getState().snapshot.preferences.displayName)
   const [language, setLanguage] = useState<'zh-CN' | 'en'>(() => useOnboardingStore.getState().snapshot.preferences.language)
   const [workspace, setWorkspace] = useState<'personal' | 'project'>(() => useOnboardingStore.getState().snapshot.preferences.workspace)
-  const [themeMode, setThemeMode] = useState<ThemeMode>(readTheme)
+  const [themeMode, setThemeMode] = useState<ThemeId>(readTheme)
 
   useEffect(() => {
     updatePreferences({ displayName, language, workspace })
@@ -67,9 +63,9 @@ function OnboardingInner({ paused }: { paused: boolean }) {
     if (step === titles.length - 1) complete()
     else setStep(s => s + 1)
   }
-  function chooseTheme(mode: ThemeMode) {
+  function chooseTheme(mode: ThemeId) {
     setThemeMode(mode)
-    applyTheme(mode)
+    setTheme(mode)
   }
 
   return (
@@ -158,7 +154,7 @@ function OnboardingInner({ paused }: { paused: boolean }) {
             <>
               <p className="text-sm">选择你偏好的界面主题和工作方式。</p>
               <div className="grid grid-cols-2 gap-2">
-                {([{ id: 'light', name: '浅色' }, { id: 'dark', name: '深色' }] as { id: ThemeMode; name: string }[]).map(t => (
+                {([{ id: 'light', name: '浅色' }, { id: 'dark', name: '深色' }] as { id: ThemeId; name: string }[]).map(t => (
                   <button
                     key={t.id}
                     onClick={() => chooseTheme(t.id)}

@@ -17,7 +17,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const onNavigate = (e: Event) => {
       const path = (e as CustomEvent<string>).detail
-      if (path) navigate(path)
+      if (path) void navigate(path)
     }
     window.addEventListener('maxma:navigate', onNavigate)
     return () => window.removeEventListener('maxma:navigate', onNavigate)

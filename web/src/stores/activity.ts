@@ -35,7 +35,7 @@ function createSSELineReader(
     }).catch(onError)
   }
 
-  pump()
+  void pump()
 }
 
 interface ActivityState {

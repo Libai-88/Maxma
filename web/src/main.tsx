@@ -3,6 +3,7 @@ import './index.css'
 import { App } from './router'
 import { request } from '@/api'
 import { waitForBackend } from '@/utils/env'
+import { restoreTheme } from '@/lib/theme'
 
 /**
  * 前端运行时诊断上报（便携版无 DevTools 时的排查通道）。
@@ -56,6 +57,9 @@ window.addEventListener('unhandledrejection', (e) => {
 })
 
 async function boot() {
+  // 先把上次保存的主题贴上再等后端：否则选了浅色的人每次启动都会先看到
+  // 一屏深色（等后端就绪的这段时间不短，闪烁很明显）。
+  restoreTheme()
   const splash = document.getElementById('app-loading')
   const setBootStatus = (text: string) => {
     const el = document.getElementById('boot-status-text')

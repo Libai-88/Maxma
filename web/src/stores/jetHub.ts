@@ -31,7 +31,10 @@ import { supportsPermanentLock } from '@/utils/jetHub/credits-capabilities'
 async function refreshChatModels(): Promise<void> {
   try {
     const { useChatStore } = await import('@/stores/chat')
-    await useChatStore().fetchAvailableModels({ force: true })
+    // 这里不在 React 渲染树里：zustand 的 hook 在组件外调用会抛（v5 走
+    // useSyncExternalStore），异常会被下面的 catch 吞掉，模型清单就永远
+    // 刷不到。非组件上下文必须走 getState()。
+    await useChatStore.getState().fetchAvailableModels({ force: true })
   } catch {
     /* 模型清单刷新失败不影响本页动作（下次进入聊天页挂载时会再拉） */
   }
