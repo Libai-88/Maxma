@@ -31,6 +31,8 @@ const OUT = process.env.DRIVE_OUT;
 const PAGES = JSON.parse(process.env.DRIVE_PAGES || "[]");
 const SESSION_KEY = process.env.DRIVE_SESSION_KEY || "maxma_session_id";
 const SESSION_ID = process.env.DRIVE_SESSION_ID || "";
+/** 空态页专用：一个刚建的空会话（不能靠删 localStorage 键，store 会自动续上最近会话）。 */
+const EMPTY_SESSION_ID = process.env.DRIVE_EMPTY_SESSION_ID || "";
 /** 主题：默认钉成 dark（基线必须可复现）；"light" 用于亮色抽查。 */
 const THEME = process.env.DRIVE_THEME || "dark";
 /** 密度：留空则沿用默认（comfortable）；"compact" 用于紧凑档抽查。 */
@@ -69,6 +71,21 @@ app.whenReady().then(async () => {
     }
 
     for (const page of PAGES) {
+      // 空态页与有会话页都挂在 "/"：靠 localStorage 里的会话键区分。
+      // 每次 loadURL 都是一次全新页面加载，所以只要在加载前把键设好即可。
+      if (page.session && SESSION_ID) {
+        const want = page.session === 'empty' ? EMPTY_SESSION_ID : SESSION_ID;
+        const cur = await win.webContents
+          .executeJavaScript(`localStorage.getItem(${JSON.stringify(SESSION_KEY)})`)
+          .catch(() => null);
+        if (want && (cur || '') !== want) {
+          await win.webContents
+            .executeJavaScript(
+              `(() => { localStorage.setItem(${JSON.stringify(SESSION_KEY)}, ${JSON.stringify(want)}); return true })()`,
+            )
+            .catch(() => null);
+        }
+      }
       if ((THEME || DENSITY) && !themeApplied) {
         // 主题与密度都存在 localStorage 里、由启动时的 restore* 读回：改完必须 reload。
         const sets = [];

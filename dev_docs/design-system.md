@@ -93,6 +93,14 @@ VISUAL_THEME=light bun scripts/verify-ui-visual.mjs # 亮色抽查（主题由 D
 不这么做，上一次亮色抽查写进 `localStorage` 的 `maxma.theme` 会留到下一次，
 "深色基线"就悄悄变成亮色（本轮真踩过：基线平均亮度从 17 跳到 228）。
 
+**"有会话的对话页"以前是假绿。** 早先脚本只 `POST /api/sessions` 建个空会话就截图，
+于是 `chat-empty` 与 `chat-session` 是同一张图（连字节数都一样）。现在脚本先起一个本地假模型
+（OpenAI 兼容 SSE，端口 8135），用 WS 真发三个回合（带标题、列表、行内代码的回答），
+再回读 `/messages` 确认落库；空态页则另建一个**空会话**——不能靠删 `localStorage` 键，
+会话 store 在没有本地记录时会"默认续上最近一次对话"，删键反而拿到有消息那条。
+两张图各自断言轮次数：`chat-session` ≥ 3、`chat-empty` = 0，做不到就直接红。
+（`article` 是一个回合一个，不是一条消息一个。）
+
 像素级 diff 没有做：要自己解 PNG（zlib + filter），维护成本高于收益。改动前后人工对照这两组图即可。
 
 ## 七、滚动边缘
