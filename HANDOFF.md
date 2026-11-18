@@ -76,9 +76,10 @@
 
 **副作用，接手时注意**：API 新建的提交对象与本地对象只有 tree 相同、SHA 不同。
 **已于 2026-11-18 用下面三条命令对齐完毕**：本地 `fix/portable-stop-null-guard` 现为
-`433ed057`，与远端一致（`git status -sb` 无 `ahead/behind`，`push --dry-run` 报 up-to-date），
-子模块 `git submodule status` 干净。原始本地提交保留在分支 `backup-pre-api-push-20261118`
-（与本轮 HEAD 的差异只有 HANDOFF 这 26 行新增，可用 `git diff --stat` 复核后删除该分支）。
+`418975d9`，与远端一致（`git status -sb` 无 `ahead/behind`，`push --dry-run` 报 up-to-date），
+子模块 `git submodule status` 干净。对齐时用过的备份分支 `backup-pre-api-push-20261118` 已删除：
+删前用 `git diff --stat` 复核过，它与对齐后 HEAD 的差异只有本文这 26 行新增，旧 SHA 提交
+仅留在本地 reflog。
 
 ```bash
 git fetch origin fix/portable-stop-null-guard
@@ -87,8 +88,9 @@ git submodule update --init --recursive                # 让根仓库 gitlink �
 ```
 
 **新克隆/新机器不需要做任何对齐**——远端本身就是权威历史，直接 clone 即可。
-推送脚本在 `%TEMP%\maxma-api-push-generic.mjs`（不入库，含凭据读取，
-仅从 `git credential fill` 取 token 到内存，支持"本地基底与远端父提交不同"的分叉续推）。
+推送脚本（`%TEMP%\maxma-api-push-generic.mjs` 之类）属一次性中间产物，用完已删除；
+真实 `git push` 恢复可用后不再需要。确需重跑时照上面"blob → tree → commit → PATCH ref"的做法重建，
+每步必须校验远端 tree == 本地 tree。
 
 ## 2026-11-17 开发质量诊断后的 P0/P1 修复
 
