@@ -60,6 +60,19 @@
   （zustand v5 走 `useSyncExternalStore`，实测报 "Invalid hook call"），异常被外层 catch 吞掉，
   于是 Jet Hub 授权成功后聊天页的模型清单**永远刷不到**。改为 `useChatStore.getState()`。
 
+### 第三轮：密度开关与亮色复查
+
+- **密度**（`web/src/lib/density.ts` + 外观页第二分区）：`comfortable` / `compact`，存
+  `maxma.density`，写到 `<html data-density>`，CSS 侧三个变量（`--density-row` /
+  `--density-stack` / `--density-page`）配合 `.density-row` / `.density-stack` / `.density-page`
+  三个工具类。**只动纵向节奏，不动字号与控件尺寸**——密度属于呼吸感，字号属于尺度，
+  绑在一起会让"紧凑"牺牲可读性；控件也不缩，避免点击区过小误触。已接到侧栏导航与
+  页面留白（`.ds-view` / 指标页 / 动态页）。
+- **亮色逐页复查**：`VISUAL_THEME=light` 截六页逐张看，未见反色错位；已知不足是
+  浅色下 `text-muted-foreground` 用于页脚提示时偏淡（临界而非不可读），要达 AA 需单独提墨色。
+- 截图驱动新增 `DRIVE_DENSITY` / `VISUAL_DENSITY`，用于紧凑档抽查（证据：紧凑档下页面留白
+  与导航行高同时收紧，见 `dev_docs/visual/baseline/` 的舒适档基线对照）。
+
 ### 性能账
 
 - 主题 CSS：+5.2KB raw / **+1.2KB gzip**（预算 +4KB）。

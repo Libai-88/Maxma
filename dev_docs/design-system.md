@@ -98,13 +98,34 @@ VISUAL_THEME=light bun scripts/verify-ui-visual.mjs # 亮色抽查（主题由 D
 - 内容不足一屏两侧都不渐隐（判定见 `lib/scrollFade.ts` 的 `computeScrollEdges`，有单测）；
 - 遮罩兜底是 `none`，未滚动时不给内容建合成层。
 
-## 八、主题的唯一入口
+## 八、主题与密度的唯一入口
 
 `web/src/lib/theme.ts`（读 / 写 / 应用 / 启动恢复）。此前主题只在"打开外观页"时生效，
 重启后选了浅色的人照样看到深色；引导页还往另一个键（`maxma-theme`）写。
 现在 `main.tsx` 在等后端之前调用 `restoreTheme()`，组件只调 `setTheme`。
 
-## 九、新页面自查清单
+`web/src/lib/density.ts` 同构，存 `maxma.density`，值只有 `comfortable` / `compact`，
+写到 `<html data-density>`。CSS 侧三档变量：
+
+| 变量 | comfortable | compact | 作用点 |
+| --- | --- | --- | --- |
+| `--density-row` | 0.5rem | 0.3125rem | 导航行高（`.density-row`） |
+| `--density-stack` | 1.25rem | 0.75rem | 列表/分组间距（`.density-stack`） |
+| `--density-page` | 1.5rem | 1.125rem | 页面留白（`.density-page`、`.ds-view`） |
+
+**密度只管纵向节奏**，不动字号、不动控件尺寸：字号属于尺度（六档 `--text-*`），
+密度属于呼吸感；绑在一起会让"更紧凑"顺势牺牲可读性，控件缩到 30px 以下还会误触。
+
+## 九、亮色主题复查（2026-11-18）
+
+用 `VISUAL_THEME=light` 截了六页逐张目检（对话空态 / 有会话 / 指标 / 设置 / 扩展 / 外观）：
+
+- 没有发现"反色错位"（白字压白底、深色卡片残留深底图）一类的问题；
+- 侧栏当前项与选中卡片都落在 `.glass-chosen`，浅色下靠亮度差 + 勾号区分，可辨；
+- 已知不足：`text-muted-foreground` 在浅色下用于**页脚提示**（"输入 / 唤起命令"）时偏淡，
+  属于对比度临界而非不可读；若要达到 WCAG AA 的 4.5:1，需要为浅色单独提高这一档墨色。
+
+## 十、新页面自查清单
 
 - [ ] 字号只用六档 token（`text-caption/meta/ui/body/subtitle/display`）
 - [ ] 段落用 `text-body`，表格与行内信息用 `text-meta`，导航与按钮用 `text-ui`
@@ -114,4 +135,5 @@ VISUAL_THEME=light bun scripts/verify-ui-visual.mjs # 亮色抽查（主题由 D
 - [ ] 数字列加 `tabular-nums`
 - [ ] 空态用 `components/common/EmptyState`，加载用 `components/ui/skeleton`
 - [ ] 可滚动长列表加 `scroll-fade` + `useScrollFade`
-- [ ] 主题相关一律走 `lib/theme.ts`，不要自己碰 `localStorage` 或 `document.documentElement`
+- [ ] 主题相关一律走 `lib/theme.ts`，密度相关走 `lib/density.ts`，不要自己碰 `localStorage` 或 `document.documentElement`
+- [ ] 纵向节奏用 `.density-row` / `.density-stack` / `.density-page`，不要写死 `py-*`、`gap-*`、`p-6`（否则密度开关对这块无效）

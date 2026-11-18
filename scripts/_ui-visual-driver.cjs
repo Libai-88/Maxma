@@ -33,6 +33,8 @@ const SESSION_KEY = process.env.DRIVE_SESSION_KEY || "maxma_session_id";
 const SESSION_ID = process.env.DRIVE_SESSION_ID || "";
 /** 主题：默认钉成 dark（基线必须可复现）；"light" 用于亮色抽查。 */
 const THEME = process.env.DRIVE_THEME || "dark";
+/** 密度：留空则沿用默认（comfortable）；"compact" 用于紧凑档抽查。 */
+const DENSITY = process.env.DRIVE_DENSITY || "";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 app.whenReady().then(async () => {
@@ -67,11 +69,13 @@ app.whenReady().then(async () => {
     }
 
     for (const page of PAGES) {
-      if (THEME && !themeApplied) {        // 主题存在 localStorage 里、由启动时的 restoreTheme 读回：改完必须 reload。
+      if ((THEME || DENSITY) && !themeApplied) {
+        // 主题与密度都存在 localStorage 里、由启动时的 restore* 读回：改完必须 reload。
+        const sets = [];
+        if (THEME) sets.push(`localStorage.setItem('maxma.theme', ${JSON.stringify(THEME)})`);
+        if (DENSITY) sets.push(`localStorage.setItem('maxma.density', ${JSON.stringify(DENSITY)})`);
         await win.webContents
-          .executeJavaScript(
-            `(() => { localStorage.setItem('maxma.theme', ${JSON.stringify(THEME)}); return true })()`,
-          )
+          .executeJavaScript(`(() => { ${sets.join('; ')}; return true })()`)
           .catch(() => null);
         await win.webContents.reload();
         await sleep(2500);
