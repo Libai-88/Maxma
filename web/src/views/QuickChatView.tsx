@@ -143,7 +143,7 @@ export function QuickChatView() {
                 className="min-w-0 flex-1 rounded-lg border border-border bg-card px-3 py-2.5 text-xs outline-none"
                 aria-label="选择会话"
               >
-                {sessions.map((s) => <option key={s.session_id} value={s.session_id}>{s.const_name || s.session_id.slice(0, 8)}</option>)}
+                {sessions.map((s) => <option key={s.session_id} value={s.session_id}>{s.name || s.const_name || s.preview || s.session_id.slice(0, 8)}</option>)}
               </select>
               <Button variant="outline" size="icon-sm" onClick={() => void createNewSession()} aria-label="新会话">+</Button>
             </div>

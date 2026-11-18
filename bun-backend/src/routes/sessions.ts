@@ -45,6 +45,31 @@ export interface SessionsDeps {
 const ROLE_MAP: Record<string, string> = { user: "human", assistant: "ai" };
 
 /**
+ * 会话标题的兜底：第一条用户消息的纯文本（≤60 字）。
+ *
+ * 为什么后端自己算：前端 header 只有 session_id，用户在没命名的会话里看到
+ * 「会话 e941c2cb」——一串 id 既不像成品，也没法在两个会话之间分辨。
+ * 首条用户消息是最天然的标题，且不需要让前端为了标题把整段历史拉下来。
+ */
+function firstUserText(messages: ReadonlyArray<Record<string, unknown>> | undefined): string {
+  for (const m of messages ?? []) {
+    const role = String(m.role ?? "");
+    if (role !== "user" && role !== "human") continue;
+    const content = m.content;
+    const text = typeof content === "string"
+      ? content
+      : Array.isArray(content)
+        ? content
+          .map((part) => (part && typeof (part as { text?: unknown }).text === "string" ? (part as { text: string }).text : ""))
+          .join("")
+        : "";
+    const clean = text.replace(/\s+/g, " ").trim();
+    if (clean) return clean.slice(0, 60);
+  }
+  return "";
+}
+
+/**
  * 档位清单**不在这里声明**：单源是 `bun-sidecar/src/kernel/pi-contract.ts` 的
  * `MAXMA_PERMISSION_MODES`，本路由运行时 import 它（先例：
  * `routes/capabilities.ts:29` 同样跨 workspace 取 kernel 常量，不属
@@ -204,6 +229,9 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
       is_const: false,
       const_name: "",
       engine: record.engine,
+      // 标题来源：用户设的名字优先，其次首条用户消息；两者都没有时才由前端退回 id。
+      name: record.session.sessionName ?? "",
+      preview: firstUserText(record.session.messages as unknown as Array<Record<string, unknown>>),
     }));
     return c.json({ sessions });
   });
@@ -221,6 +249,8 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
       is_const: false,
       const_name: "",
       engine: record.engine,
+      name: record.session.sessionName ?? "",
+      preview: firstUserText(record.session.messages as unknown as Array<Record<string, unknown>>),
     });
   });
 

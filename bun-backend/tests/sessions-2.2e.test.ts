@@ -134,6 +134,54 @@ describe("sessions 门面（阶段 2.2e）", () => {
     expect(gone.status).toBe(404);
   });
 
+  test("会话名：PUT 后列表与详情都带 name；空串即清除", async () => {
+    const app = await makeApp();
+    const h = { "content-type": "application/json", ...authHeader() };
+    const created = (await (
+      await app.request("/api/sessions", { method: "POST", headers: h })
+    ).json()) as { session_id: string };
+    const sid = created.session_id;
+
+    // 新会话没有名字，也没有消息：两个字段都要有，且都是空串（不是 undefined）。
+    const listBefore = (await (await app.request("/api/sessions", { headers: h })).json()) as {
+      sessions: Array<{ session_id: string; name?: string; preview?: string }>;
+    };
+    const row = listBefore.sessions.find((s) => s.session_id === sid);
+    expect(row?.name).toBe("");
+    expect(row?.preview).toBe("");
+
+    const renamed = (await (
+      await app.request(`/api/sessions/${sid}/name`, {
+        method: "PUT",
+        headers: h,
+        body: JSON.stringify({ name: "排版与空态的收口" }),
+      })
+    ).json()) as { session_id: string; name: string | null };
+    expect(renamed.name).toBe("排版与空态的收口");
+
+    // 改完之后列表与详情必须立刻回读得到——否则前端刷新一次就又退回 id。
+    const listAfter = (await (await app.request("/api/sessions", { headers: h })).json()) as {
+      sessions: Array<{ session_id: string; name?: string }>;
+    };
+    expect(listAfter.sessions.find((s) => s.session_id === sid)?.name).toBe("排版与空态的收口");
+    const detail = (await (await app.request(`/api/sessions/${sid}`, { headers: h })).json()) as { name?: string };
+    expect(detail.name).toBe("排版与空态的收口");
+
+    // 空串 = 清除（官方语义：写 undefined），读回来必须是空串。
+    const cleared = (await (
+      await app.request(`/api/sessions/${sid}/name`, {
+        method: "PUT",
+        headers: h,
+        body: JSON.stringify({ name: "" }),
+      })
+    ).json()) as { name: string | null };
+    expect(cleared.name).toBeNull();
+    const listCleared = (await (await app.request("/api/sessions", { headers: h })).json()) as {
+      sessions: Array<{ session_id: string; name?: string }>;
+    };
+    expect(listCleared.sessions.find((s) => s.session_id === sid)?.name).toBe("");
+  });
+
   test("batch-delete：best-effort 批量删除", async () => {
     const app = await makeApp();
     const h = { "content-type": "application/json", ...authHeader() };

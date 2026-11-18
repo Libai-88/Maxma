@@ -69,8 +69,8 @@ export function SessionDrawer({ open, onClose }: { open: boolean; onClose: () =>
             <div key={s.session_id} className={cn('group flex items-center gap-1 rounded-lg px-1.5 py-1.5 transition-colors duration-fast ease-standard', active ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50')}>
               <button className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => handleSwitch(s.session_id)}>
                 <MessageSquare className="size-3.5 shrink-0 opacity-60" />
-                <span className="min-w-0 flex-1 truncate text-ui" title={s.preview || s.session_id}>
-                  {s.const_name || s.preview || s.session_id.slice(0, 8)}
+                <span className="min-w-0 flex-1 truncate text-ui" title={s.name || s.preview || s.session_id}>
+                  {s.name || s.const_name || s.preview || s.session_id.slice(0, 8)}
                 </span>
                 {status && <span className="shrink-0 text-caption text-muted-foreground">{status}</span>}
               </button>

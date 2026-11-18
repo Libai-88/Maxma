@@ -29,6 +29,8 @@ export interface PersistedSessionInfo {
   updated_at: string;
   /** 最后一条用户消息的纯文本摘要（≤60 字），用于会话列表。 */
   preview: string;
+  /** 用户设的会话名（pi 的 session name，未设时为空串）。 */
+  name: string;
   cwd: string;
 }
 
@@ -92,6 +94,9 @@ function readOne(file: string): PersistedSessionInfo | null {
       created_at: header.timestamp,
       updated_at: new Date(stat.mtimeMs).toISOString(),
       preview: previewOf(entries),
+      // 名字存在会话文件里（pi 的 session name），历史列表也要能看见它——
+      // 否则重命名过的会话在重启后又退回"会话 <id 前 8 位>"。
+      name: manager.getSessionName() ?? "",
       cwd: header.cwd,
     };
     metaCache.set(file, { mtimeMs: stat.mtimeMs, size: stat.size, info });

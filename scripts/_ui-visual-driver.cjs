@@ -128,6 +128,8 @@ app.whenReady().then(async () => {
               skipped: skipped.length,
               scrollTop: (document.querySelector('.app-scroll') || {}).scrollTop ?? -1,
               scrollHeight: (document.querySelector('.app-scroll') || {}).scrollHeight ?? -1,
+              // 页头标题：会话名/首条消息的兜底效果在这里落地（以前恒为「会话 <id 前 8 位>」）。
+              header: (document.querySelector('header h1')?.textContent ?? '').trim(),
             };
           })()`,
         )
@@ -144,6 +146,14 @@ app.whenReady().then(async () => {
         sum += 0.114 * bmp[i] + 0.587 * bmp[i + 1] + 0.299 * bmp[i + 2];
         count += 1;
       }
+      // 截图之后再跑交互脚本：它可能点开菜单、改名字，不能让基线图带上这些副作用。
+      // page.probeAfter 是一段**返回对象的** JS 体（驱动包成 async 函数执行）。
+      let extra = null;
+      if (page.probeAfter) {
+        extra = await win.webContents
+          .executeJavaScript(`(async () => { ${page.probeAfter} })()`, true)
+          .catch((err) => ({ ok: false, why: `probeAfter threw: ${String(err)}` }));
+      }
       results.push({
         name: page.name,
         path: page.path,
@@ -158,12 +168,14 @@ app.whenReady().then(async () => {
         skipped: probe.skipped,
         scrollTop: probe.scrollTop,
         scrollHeight: probe.scrollHeight,
+        header: probe.header,
         width: size.width,
         height: size.height,
         meanLuma: count ? Number((sum / count).toFixed(1)) : 0,
         bytes: png.length,
+        extra,
       });
-      console.log(`  · ${page.name}  ${size.width}x${size.height}  ${(png.length / 1024).toFixed(1)}KB  luma ${count ? (sum / count).toFixed(1) : 0}  turns ${probe.turns ?? "-"}(virtual ${probe.virtual ?? "-"}/skipped ${probe.skipped ?? "-"})  @${probe.path}`);
+      console.log(`  · ${page.name}  ${size.width}x${size.height}  ${(png.length / 1024).toFixed(1)}KB  luma ${count ? (sum / count).toFixed(1) : 0}  turns ${probe.turns ?? "-"}(virtual ${probe.virtual ?? "-"}/skipped ${probe.skipped ?? "-"})  header ${JSON.stringify(probe.header ?? "")}  @${probe.path}`);
     }
     console.log("VISUAL_RESULT " + JSON.stringify({ results, consoleErrors: logs, stage: "done" }));
     app.exit(0);

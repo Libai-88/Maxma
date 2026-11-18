@@ -78,6 +78,24 @@
 - 截图驱动新增 `DRIVE_DENSITY` / `VISUAL_DENSITY`，用于紧凑档抽查（证据：紧凑档下页面留白
   与导航行高同时收紧，见 `dev_docs/visual/baseline/` 的舒适档基线对照）。
 
+### 第四轮：会话标题不再是一串 id
+
+- 症状：每个普通会话的页头都是「会话 e941c2cb」。根因是 `ChatHeader` 只读 `const_name`，
+  而 `GET /api/sessions` 与详情都不带 `name`——`PUT /api/sessions/:id/name` 早就存在，
+  但既没有界面入口，也没人回读。
+- 后端：`kernel/session-catalog.ts` 给 `PersistedSessionInfo` 加 `name`（pi 把会话名存成
+  一条 `session_info` 条目，不回读它，重命名过的会话**一重启**就退回 id）；`routes/sessions.ts`
+  新增 `firstUserText()`，列表与详情都带 `name` + `preview`（首条用户消息，≤60 字）。
+- 前端：三档回退 `name → preview(首条消息) → 新会话 / 会话 <id>`；`SessionDrawer`、
+  `QuickChatView` 同口径；`ChatView` 的「更多会话操作」顶部加了「会话名称」输入 + 保存
+  （Enter 可提交，空串即清除）。
+- 验收：截图脚本给灌好的会话起名「排版与空态的收口」，驱动回读 `header h1` 断言相等；
+  空会话页断言等于「新会话」；截图后再跑 `RENAME_PROBE`（真点菜单 → 填名 → 保存 → 读回页头）。
+  负向验证：把 `ChatHeader` 的 `name` 去掉重跑，断言立刻点名失败并显示页头退回了首条消息。
+- 覆盖率：`session-catalog.ts` 因这一行从 11.01% 掉到 10.71%（DEBT 下限 11%）——没有下调下限，
+  而是补 `bun-sidecar/tests/session-catalog.test.ts`（4 例，含 name 回读、预览两种 content 形态、
+  find/delete、归一化），行覆盖 100%，顺手从 DEBT 升入 CORE（CORE 22 → 23 项，DEBT 5 → 4 项）。
+
 ### 性能账
 
 - 主题 CSS：+5.2KB raw / **+1.2KB gzip**（预算 +4KB）。

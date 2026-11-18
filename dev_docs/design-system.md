@@ -187,7 +187,38 @@ VISUAL_THEME=light bun scripts/verify-ui-visual.mjs # 亮色抽查（主题由 D
 它省不到的地方：React 的挂载与协调成本（几百轮仍是几百个组件）。真要做完整虚拟化，
 就得卸载 DOM——历史消息将不可选中、不可页内查找、搜索锚点失效，权衡后没这么做。
 
-## 十一、新页面自查清单
+## 十一、会话标题与重命名（2026-11-18）
+
+标题曾经恒为「会话 <id 前 8 位>」：`ChatHeader` 只读 `const_name`，后端的列表与详情
+都不带 `name`，重命名的 `PUT /api/sessions/:id/name` 早就存在却没有任何界面入口。
+
+现在分三档回退，越靠前越"人话"：
+
+| 档 | 来源 | 何时出现 |
+|---|---|---|
+| 1 | `name` | 用户在「更多会话操作 → 会话名称」里设过 |
+| 2 | `preview` | 没设名字但有消息：后端取**第一条**用户消息，压成一行、≤60 字 |
+| 3 | `新会话` / `会话 <id 前 8 位>` | 还没聊过 → `新会话`；聊过却仍没名字 → id |
+
+落点：
+
+- `bun-sidecar/src/kernel/session-catalog.ts`：`PersistedSessionInfo` 加 `name`，
+  由 `manager.getSessionName()` 读回。pi 把会话名存成一条 `session_info` 条目，
+  不回读它，重命名过的会话**一重启**就退回 id。
+- `bun-backend/src/routes/sessions.ts`：`firstUserText()` 算 `preview`；活会话的列表与
+  详情都带 `name` + `preview`。
+- `web/src/components/chat/ChatHeader.tsx` 三档回退；`SessionDrawer` /
+  `QuickChatView` 的下拉同口径（`name → const_name → preview → id`）。
+- `web/src/views/ChatView.tsx`：更多菜单顶部一个 `#session-name-input` + 保存，
+  Enter 亦可提交；空串即清除，提示写明"没设名字时标题取首条消息"。
+
+验收不是"看一眼标题"：截图脚本给灌好的会话起名 `排版与空态的收口`，驱动回读
+`header h1` 断言**等于**这个名字；空会话页断言等于 `新会话`。截图之后再跑一段
+`RENAME_PROBE`（`page.probeAfter`）——真的点开菜单、填名字、按保存、读回页头，
+所以"入口存在但保存无效"也会红。负向验证做过一次：把 `ChatHeader` 里的 `name`
+去掉重跑，断言立刻点名失败（页头退回首条消息），证明守卫生效而不是摆设。
+
+## 十二、新页面自查清单
 
 - [ ] 字号只用六档 token（`text-caption/meta/ui/body/subtitle/display`）
 - [ ] 段落用 `text-body`，表格与行内信息用 `text-meta`，导航与按钮用 `text-ui`

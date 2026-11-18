@@ -11,6 +11,8 @@ export interface SessionInfo {
   auto_approve?: boolean
   is_const?: boolean
   const_name?: string
+  /** 用户设的会话名（`PUT /api/sessions/:id/name`）。未设时为空串。 */
+  name?: string
   /** 只在磁盘历史里存在、尚未恢复到内核（点击时需要先 resume）。 */
   persisted?: boolean
   /** 已在本进程 hub 中存活。 */
@@ -27,6 +29,8 @@ export interface SessionHistoryEntry {
   created_at: string
   updated_at: string
   preview: string
+  /** 用户设的会话名（存在会话文件里），未设时为空串。 */
+  name?: string
   active?: boolean
 }
 

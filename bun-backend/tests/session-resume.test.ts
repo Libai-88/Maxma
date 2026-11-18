@@ -41,7 +41,7 @@ afterEach(() => {
 
 const SID = "0123456789abcdef0123456789abcdef";
 
-function writeSession(id = SID, preview = "重启前的问题"): string {
+function writeSession(id = SID, preview = "重启前的问题", name?: string): string {
   const dir = sessionDir();
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `2026-11-12T10-00-00-000Z_${id}.jsonl`);
@@ -50,6 +50,11 @@ function writeSession(id = SID, preview = "重启前的问题"): string {
     JSON.stringify({ type: "message", id: "m1", parentId: null, timestamp: "2026-11-12T10:00:01.000Z", message: { role: "user", content: preview } }),
     JSON.stringify({ type: "message", id: "m2", parentId: "m1", timestamp: "2026-11-12T10:00:02.000Z", message: { role: "assistant", content: [{ type: "text", text: "好的" }] } }),
   ];
+  // pi 把会话名存成一条 `session_info` 条目（取最后一条），所以"重启后名字还在"这条路
+  // 只能靠回读文件验证；不加这条的话，重命名过的会话一重启就退回「会话 <id 前 8 位>」。
+  if (name !== undefined) {
+    lines.push(JSON.stringify({ type: "session_info", id: "m3", parentId: "m2", timestamp: "2026-11-12T10:00:03.000Z", name }));
+  }
   fs.writeFileSync(file, lines.join("\n") + "\n");
   return file;
 }
@@ -78,6 +83,18 @@ describe("session catalog（磁盘发现）", () => {
     writeSession(dashed);
     expect(normalizeSessionId(dashed)).toBe(SID);
     expect(findPersistedSession(SID)?.session_id).toBe(SID);
+  });
+
+  test("会话名随文件回读：重启后标题不退回 id", async () => {
+    writeSession(SID, "重启前的问题", "排版与空态的收口");
+    const list = listPersistedSessions();
+    expect(list).toHaveLength(1);
+    expect(list[0]!.name).toBe("排版与空态的收口");
+    // 同一份磁盘数据经 REST 出去也要带 name（历史列表用它当标题）。
+    const body = (await (await makeApp().request("/api/sessions/history")).json()) as {
+      sessions: Array<{ name?: string }>;
+    };
+    expect(body.sessions[0]!.name).toBe("排版与空态的收口");
   });
 
   test("损坏文件跳过，不影响其它会话", () => {

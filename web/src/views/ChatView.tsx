@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
 import { Tag } from '@/components/ui/tag'
 import { ChatHeader } from '@/components/chat/ChatHeader'
@@ -36,6 +37,7 @@ export default function ChatView() {
   const sessionId = useSessionStore((s) => s.sessionId)
   const sessions = useSessionStore((s) => s.sessions)
   const switchSession = useSessionStore((s) => s.switchSession)
+  const refreshSessions = useSessionStore((s) => s.refreshSessions)
   const { hasProviders, loaded: providerLoaded, loadProviders } = useProviderStore()
   const availableModels = useChatStore((s) => s.availableModels)
   const fetchAvailableModels = useChatStore((s) => s.fetchAvailableModels)
@@ -58,6 +60,20 @@ export default function ChatView() {
   const [providerLoadFailed, setProviderLoadFailed] = useState(false)
   const [providerRetrying, setProviderRetrying] = useState(false)
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
+  /** 会话重命名草稿：打开菜单时用当前名字回填（没有名字就是空，不是 id）。 */
+  const [nameDraft, setNameDraft] = useState('')
+  const currentSession = sessions.find((s) => s.session_id === sessionId)
+
+  const saveSessionName = async () => {
+    if (!sessionId) return
+    try {
+      const r = await api.setSessionName(sessionId, nameDraft.trim())
+      await refreshSessions()
+      showToast(r.name ? `已命名为「${r.name}」` : '已清除会话名，标题退回首条消息', 'info')
+    } catch (e) {
+      showToast(`重命名失败：${e instanceof Error ? e.message : String(e)}`, 'error')
+    }
+  }
   const [treeOpen, setTreeOpen] = useState(false)
   const [modelSettingsOpen, setModelSettingsOpen] = useState(false)
   const [taskBriefAnswer, setTaskBriefAnswer] = useState('')
@@ -343,10 +359,26 @@ export default function ChatView() {
         {planMode && <span className="rounded-md border border-border px-2.5 py-1.5 text-caption text-muted-foreground">计划模式</span>}
         <Button variant="ghost" size="icon-sm" aria-label="工作台" aria-expanded={workbench.isOpen} onClick={() => workbench.toggle()}><PanelRight /></Button>
         <div className="relative">
-          <Button variant="ghost" size="icon-sm" aria-label="更多会话操作" aria-expanded={moreMenuOpen} onClick={() => setMoreMenuOpen((v) => !v)}>···</Button>
+          <Button variant="ghost" size="icon-sm" aria-label="更多会话操作" aria-expanded={moreMenuOpen} onClick={() => { setMoreMenuOpen((v) => !v); setNameDraft(currentSession?.name ?? '') }}>···</Button>
           {moreMenuOpen && (
             <div role="menu" aria-label="更多会话操作" className="absolute right-0 top-9 z-40 w-72 rounded-xl bg-popover p-4">
               <p className="mb-2 text-meta font-medium">会话设置</p>
+              {/* 会话名此前只有 API、没有入口：每个会话的标题都是「会话 e941c2cb」。 */}
+              <label className="mb-1 block text-caption text-muted-foreground" htmlFor="session-name-input">会话名称</label>
+              <div className="mb-1 flex items-center gap-1.5">
+                <Input
+                  id="session-name-input"
+                  value={nameDraft}
+                  maxLength={80}
+                  placeholder={currentSession?.preview?.slice(0, 20) || '给它起个名字'}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void saveSessionName() } }}
+                  className="h-8 min-w-0 flex-1 text-ui"
+                  disabled={!sessionId}
+                />
+                <Button variant="outline" size="sm" className="h-8 shrink-0" disabled={!sessionId} onClick={() => void saveSessionName()}>保存</Button>
+              </div>
+              <p className="mb-3 text-caption text-muted-foreground">留空即清除；没设名字时标题取首条消息。</p>
               <p className="mb-3 text-caption text-muted-foreground">输入 <code className="rounded bg-muted px-1.5 py-1.5">/</code> 查看全部命令（如 /goal、/plan、/undo）</p>
               {goalState?.goal && (
                 <p className="mb-2 text-meta text-muted-foreground">

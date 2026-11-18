@@ -39,6 +39,35 @@ const PROVIDER_ID = "visual-stub";
 const MODEL_ID = "visual-stub-model";
 const base = process.env.BASE ?? `http://127.0.0.1:${BACKEND_PORT}`;
 
+/** 灌会话后给会话起的名字：页头标题应当**就是**它（以前只认 const_name，恒显示 id）。 */
+const SEED_NAME = "排版与空态的收口";
+
+/**
+ * 截完图之后跑的一段交互（不影响基线图）：打开「更多会话操作」→ 在「会话名称」里
+ * 输入新名字 → 点保存 → 读回页头标题。以前会话名的 PUT 路由存在、前端没有入口，
+ * 光看截图看不出这条链路通不通，所以用一次真实的点按来验收。
+ */
+const RENAME_PROBE = `
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const open = document.querySelector('[aria-label="更多会话操作"]');
+if (!open) return { ok: false, why: 'no-more-button' };
+open.click();
+await sleep(600);
+const input = document.querySelector('#session-name-input');
+if (!input) return { ok: false, why: 'no-name-input' };
+const before = (document.querySelector('header h1')?.textContent ?? '').trim();
+const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+setter.call(input, '重命名自检');
+input.dispatchEvent(new Event('input', { bubbles: true }));
+await sleep(300);
+const save = Array.from(document.querySelectorAll('[role="menu"] button')).find((b) => (b.textContent ?? '').trim() === '保存');
+if (!save) return { ok: false, why: 'no-save-button', before };
+save.click();
+await sleep(1500);
+const after = (document.querySelector('header h1')?.textContent ?? '').trim();
+return { ok: after === '重命名自检', before, after, draft: input.value };
+`;
+
 const updateBaseline = process.argv.includes("--update-baseline");
 const stamp = new Date().toISOString().slice(0, 10);
 const outDir = updateBaseline
@@ -58,7 +87,7 @@ const PAGES = process.env.VISUAL_PAGES
   ? JSON.parse(process.env.VISUAL_PAGES)
   : [
     { name: "chat-empty", path: "/", session: "empty" },
-    { name: "chat-session", path: "/", session: true },
+    { name: "chat-session", path: "/", session: true, probeAfter: RENAME_PROBE },
     { name: "metrics", path: "/metrics" },
     { name: "settings", path: "/settings" },
     { name: "extensions", path: "/extensions" },
@@ -266,7 +295,7 @@ try {
       await fetch(`${base}/api/sessions/${sessionId}/name`, {
         method: "PUT",
         headers: H,
-        body: JSON.stringify({ name: "排版与空态的收口" }),
+        body: JSON.stringify({ name: SEED_NAME }),
       }).catch(() => null);
     } catch (err) {
       failures.push(`灌会话失败：${err?.message ?? err}`);
@@ -316,7 +345,7 @@ try {
   // 所以按「宽高比 + 一页渲染出文字」判定，而不是钉死像素。
   for (const r of result.results) {
     const ratio = r.width / r.height;
-    console.log(`  ${r.name.padEnd(14)} ${r.width}x${r.height}  ${(r.bytes / 1024).toFixed(1)}KB  luma ${r.meanLuma}  轮次 ${r.turns ?? "-"}  路由 ${r.landed}  文字 ${String(r.text ?? "").slice(0, 40)}`);
+    console.log(`  ${r.name.padEnd(14)} ${r.width}x${r.height}  ${(r.bytes / 1024).toFixed(1)}KB  luma ${r.meanLuma}  轮次 ${r.turns ?? "-"}  页头 ${JSON.stringify(r.header ?? "")}  路由 ${r.landed}  文字 ${String(r.text ?? "").slice(0, 40)}`);
     if (r.landed !== r.path) failures.push(`${r.name} 没有落到 ${r.path}（实际 ${r.landed}）`);
     if (ratio < 1.5 || ratio > 1.65) failures.push(`${r.name} 宽高比异常：${r.width}x${r.height}（1280×800 经 DPI 缩放应约为 1.6）`);
     if (r.meanLuma < 4 || r.meanLuma > 250) failures.push(`${r.name} 平均亮度异常：${r.meanLuma}（页面可能是空白或全黑）`);
@@ -330,6 +359,19 @@ try {
     }
     if (r.name === "chat-empty" && r.turns !== 0) {
       failures.push(`chat-empty 出现了 ${r.turns} 个轮次（期望 0，空态页拿错会话了）`);
+    }
+    // 标题链路（name → 首条消息 → id）的端到端证据：页头必须等于灌会话时起的名字。
+    // 以前这里恒为「会话 <id 前 8 位>」，因为后端没暴露 name、页头也不读它。
+    if (seedEnabled && r.name === "chat-session" && r.header !== SEED_NAME) {
+      failures.push(`chat-session 页头是「${r.header ?? ""}」，期望「${SEED_NAME}」（会话名没传到界面）`);
+    }
+    // 空会话不该顶着「会话 <id>」的标题：没有内容就叫「新会话」。
+    if (seedEnabled && r.name === "chat-empty" && r.header !== "新会话") {
+      failures.push(`chat-empty 页头是「${r.header ?? ""}」，期望「新会话」`);
+    }
+    // 重命名入口：截图之后再点一次真实的保存，读回页头。
+    if (seedEnabled && r.name === "chat-session" && r.extra?.ok !== true) {
+      failures.push(`重命名入口未生效：${JSON.stringify(r.extra)}`);
     }
   }
 
