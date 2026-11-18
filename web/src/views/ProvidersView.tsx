@@ -227,7 +227,7 @@ export default function ProvidersView() {
                     key={preset.id}
                     type="button"
                     onClick={() => setForm((f) => ({ ...f, provider_type: preset.id, base_url: preset.baseUrl }))}
-                    className={`rounded-md border px-3.5 py-2 text-xs transition-colors ${form.provider_type === preset.id ? 'border-primary bg-accent text-accent-foreground' : 'border-border text-muted-foreground hover:text-foreground'}`}
+                    className={`rounded-md border px-3.5 py-2 text-xs transition-colors duration-fast ease-standard ${form.provider_type === preset.id ? 'border-primary bg-accent text-accent-foreground' : 'border-border text-muted-foreground hover:text-foreground'}`}
                   >
                     {preset.label}
                   </button>
@@ -267,7 +267,7 @@ export default function ProvidersView() {
               {formModels.length > 0 && (
                 <div className="mt-3 rounded-lg border border-border bg-background/40 p-3">
                   <p className="mb-1.5 text-xs text-muted-foreground">发现 {formModels.length} 个模型，勾选要启用的（默认全选）</p>
-                  <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto">
+                  <div className="flex max-h-40 flex-wrap gap-2 overflow-y-auto scrollbar-thin">
                     {formModels.map((m) => {
                       const on = pickedModels.includes(m)
                       return (
@@ -276,7 +276,7 @@ export default function ProvidersView() {
                           type="button"
                           onClick={() => setPickedModels((prev) => (on ? prev.filter((x) => x !== m) : [...prev, m]))}
                           aria-pressed={on}
-                          className={`rounded-md border px-3 py-1.5 text-[11px] transition-colors ${on ? 'border-primary bg-accent text-accent-foreground' : 'border-border text-muted-foreground hover:text-foreground'}`}
+                          className={`rounded-md border px-3 py-1.5 text-caption transition-colors duration-fast ease-standard ${on ? 'border-primary bg-accent text-accent-foreground' : 'border-border text-muted-foreground hover:text-foreground'}`}
                         >
                           {m}
                         </button>

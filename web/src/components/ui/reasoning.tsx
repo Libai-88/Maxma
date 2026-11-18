@@ -24,11 +24,11 @@ function Reasoning({
 }) {
   return (
     <details data-slot="reasoning" open={defaultOpen || undefined} className={cn("group/reasoning", className)}>
-      <summary className="flex w-fit cursor-pointer list-none items-center gap-2 text-[12.5px] text-muted-foreground transition-colors outline-none select-none hover:text-foreground focus-visible:text-foreground [&::-webkit-details-marker]:hidden">
+      <summary className="flex w-fit cursor-pointer list-none items-center gap-2 text-ui text-muted-foreground transition-colors duration-fast ease-standard outline-none select-none hover:text-foreground focus-visible:text-foreground [&::-webkit-details-marker]:hidden">
         <span className={cn(thinking && "status-shimmer")}>{thinking ? thinkingLabel : label}</span>
-        <ChevronRight className="size-3.5 transition-transform group-open/reasoning:rotate-90" />
+        <ChevronRight className="size-3.5 transition-transform duration-base ease-out-quint group-open/reasoning:rotate-90" />
       </summary>
-      <p className="mt-2 border-l-2 border-border pl-3 text-[13px] leading-relaxed whitespace-pre-wrap text-muted-foreground">
+      <p className="mt-2 border-l-2 border-border pl-3 text-ui leading-relaxed whitespace-pre-wrap text-muted-foreground">
         {children}
       </p>
     </details>

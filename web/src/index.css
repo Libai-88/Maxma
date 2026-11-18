@@ -22,6 +22,14 @@
 .app-main { flex: 1; min-width: 0; overflow: hidden; display: flex; flex-direction: column; }
 .app-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 
+/* 页面框架。ExtensionView / PluginListView / PluginDetailView / JetHubView 的根容器
+   一直写着 `.ds-view`，但这个类在样式表里**并不存在**（Vue 时代留下的约定）。
+   于是那几页的标题贴着窗口上沿被切掉，而 Metrics / News 又没有内边距——
+   同一件"页边距"的事，四处各自为政。这里把它定义成真东西。 */
+.ds-view { padding: 1.5rem; }
+.ds-view--wide { max-width: 76rem; width: 100%; margin-inline: auto; }
+.ds-view--narrow { max-width: 56rem; width: 100%; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

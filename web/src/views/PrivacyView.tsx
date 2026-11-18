@@ -40,7 +40,7 @@ function formatTime(ts: string): string {
 
 function Section({ title, desc, children }: { title: string; desc: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
+    <section className="rounded-lg bg-card p-4">
       <h3 className="mb-3 text-base font-semibold text-foreground">{title}</h3>
       <p className="mb-3 text-xs leading-relaxed text-muted-foreground">{desc}</p>
       {children}
@@ -184,7 +184,7 @@ export default function PrivacyView() {
   }, [])
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="h-full overflow-y-auto scrollbar-thin">
       <div className="flex flex-col mx-auto w-full max-w-4xl gap-4 p-6">
         <div>
           <h2 className="text-xl font-semibold text-foreground">隐私仪表盘</h2>
@@ -309,11 +309,11 @@ export default function PrivacyView() {
               ) : auditLog.length === 0 ? (
                 <div className="text-sm text-muted-foreground">暂无日志</div>
               ) : (
-                <div className="flex max-h-72 flex-col gap-0.5 overflow-y-auto">
+                <div className="flex max-h-72 flex-col gap-0.5 overflow-y-auto scrollbar-thin">
                   {auditLog.map((entry, idx) => (
                     <div key={idx} className="flex items-center gap-2 rounded-sm bg-panel px-2.5 py-1.5 text-xs">
                       <span className="shrink-0 font-mono text-muted-foreground">{formatTime(entry.timestamp)}</span>
-                      <span className="shrink-0 rounded-sm bg-muted px-2 py-1.5 text-[11px]">{entry.type}</span>
+                      <span className="shrink-0 rounded-sm bg-muted px-2 py-1.5 text-caption">{entry.type}</span>
                       <span className="flex-1 truncate text-foreground">{entry.target}</span>
                       <span className="shrink-0 font-semibold text-muted-foreground">{entry.status}</span>
                     </div>
@@ -344,7 +344,7 @@ export default function PrivacyView() {
           <div className="mt-2.5 flex flex-col gap-1">
             <div className="border-l-2 border-border bg-panel px-3.5 py-2.5 text-xs leading-relaxed text-muted-foreground"><strong className="text-foreground">清除所有对话历史</strong>：删除全部会话（含临时与已固定）及其消息记录，但保留审计日志、配置、密钥。</div>
             <div className="border-l-2 border-border bg-panel px-3.5 py-2.5 text-xs leading-relaxed text-muted-foreground"><strong className="text-foreground">清除审计日志</strong>：仅清空审计数据库（事件记录），不影响对话历史或密钥。</div>
-            <div className="border-l-2 border-border bg-panel px-3.5 py-2.5 text-xs leading-relaxed text-muted-foreground"><strong className="text-foreground">加密 API 密钥</strong>：将 <code className="rounded-sm bg-muted px-1.5 py-1.5 font-mono text-[11px]">providers.yaml</code> 中明文存储的 API Key 转为加密形式，重启后仍可正常使用。</div>
+            <div className="border-l-2 border-border bg-panel px-3.5 py-2.5 text-xs leading-relaxed text-muted-foreground"><strong className="text-foreground">加密 API 密钥</strong>：将 <code className="rounded-sm bg-muted px-1.5 py-1.5 font-mono text-caption">providers.yaml</code> 中明文存储的 API Key 转为加密形式，重启后仍可正常使用。</div>
           </div>
           {actionMessage && (
             <div className={'mt-2 rounded-md px-3 py-1.5 text-sm ' + (actionMessageType === 'ok' ? 'bg-primary/10 text-primary' : 'bg-destructive/10 text-destructive')}>

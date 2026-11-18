@@ -80,7 +80,7 @@ function ContextRing({
           disabled={!parts.length}
           aria-expanded={detailed}
           onClick={() => setDetailed((open) => !open)}
-          className="flex items-baseline gap-2 text-left text-[12.5px] outline-none"
+          className="flex items-baseline gap-2 text-left text-ui outline-none"
         >
           <span className="mr-auto text-muted-foreground">{title}</span>
           <span className="tabular-nums">
@@ -88,7 +88,7 @@ function ContextRing({
           </span>
           {parts.length > 0 && (
             <ChevronDown
-              className={cn("size-3 self-center text-muted-foreground transition-transform", !detailed && "-rotate-90")}
+              className={cn("size-3 self-center text-muted-foreground transition-transform duration-base ease-out-quint", !detailed && "-rotate-90")}
             />
           )}
         </button>
@@ -109,7 +109,7 @@ function ContextRing({
         </div>
 
         {detailed && parts.length > 0 && (
-          <ul className="flex flex-col gap-1 text-[12px]">
+          <ul className="flex flex-col gap-1 text-meta">
             {[...parts, { key: "free", label: freeLabel, tokens: free, tint: "bg-secondary" }].map((part) => (
               <li key={part.key} className="flex items-center gap-2">
                 <span aria-hidden="true" className={cn("size-2 shrink-0 rounded-[2px]", part.tint)} />
@@ -121,7 +121,7 @@ function ContextRing({
           </ul>
         )}
 
-        <p className="text-[11.5px] leading-relaxed text-muted-foreground">{note}</p>
+        <p className="text-meta leading-relaxed text-muted-foreground">{note}</p>
       </PopoverContent>
     </Popover>
   )

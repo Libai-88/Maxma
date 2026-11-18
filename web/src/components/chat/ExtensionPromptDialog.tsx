@@ -96,7 +96,7 @@ export function ExtensionPromptDialog({ onReply }: ExtensionPromptDialogProps) {
         </DialogHeader>
 
         {req.method === 'select' ? (
-          <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto">
+          <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto scrollbar-thin">
             {(req.options ?? []).map((opt) => (
               <Button
                 key={opt}

@@ -66,7 +66,7 @@ export default function ShareView() {
         )}
         {data.messages.map((msg, idx) => (
           <div key={idx} className="rounded-xl border border-border bg-card p-4">
-            <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{msg.role === 'user' ? '用户' : 'AI'}</p>
+            <p className="mb-2 text-caption font-semibold uppercase tracking-widest text-muted-foreground">{msg.role === 'user' ? '用户' : 'AI'}</p>
             {msg.role === 'user'
               ? <InlineStickers text={msg.content} className="whitespace-pre-wrap text-sm leading-relaxed" />
               : <Markdown content={msg.content} className="text-sm leading-relaxed" />}

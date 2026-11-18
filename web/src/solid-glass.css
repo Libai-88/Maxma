@@ -94,6 +94,70 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* ---- The scale -------------------------------------------------------------
+
+   Type, motion and lift as tokens, not as numbers written per view.
+
+   Five steps of type read as five steps. Eleven do not: 10.5px next to 11px is
+   not a smaller size, and 12.5px next to 13px is not a step down — they are
+   the same size twice, and a page set in them looks soft rather than close.
+
+   So: caption (what is read once, or not at all), meta (a time, a count), ui
+   (a label, a nav item), body (prose), subtitle (a section's head), display
+   (a number that is the point of the screen). A view that needs a seventh
+   size does not have a seventh size — it has a spacing problem.
+
+   Tailwind's own text-xs/text-sm stay: the shadcn components are built on
+   them and they are not being renamed. These are what a view uses. */
+
+@theme {
+  /* 11 — a group's name, a code line, a footnote. */
+  --text-caption: 0.6875rem;
+  --text-caption--line-height: 1.45;
+
+  /* 12 — a timestamp, a count, a tag. */
+  --text-meta: 0.75rem;
+  --text-meta--line-height: 1.45;
+
+  /* 13 — a nav item, a panel row, a button's label. */
+  --text-ui: 0.8125rem;
+  --text-ui--line-height: 1.5;
+
+  /* 14 — prose, a message, a form's value. */
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.65;
+
+  /* 16 — the head of a section inside a pane. */
+  --text-subtitle: 1rem;
+  --text-subtitle--line-height: 1.35;
+
+  /* 22 — the one number a screen exists to show. */
+  --text-display: 1.375rem;
+  --text-display--line-height: 1.15;
+
+  /* Motion. Fast for a colour, base for anything that moves or resizes, slow
+     for a whole slab of the page. The curve is the one float-in already used:
+     it leaves quickly and arrives without a bounce. */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --motion-slow: 320ms;
+}
+
+/* Durations to pair with the curves above. Without one of these a transition
+   runs at Tailwind's default and the page has two speeds in the same corner. */
+@utility duration-fast {
+  transition-duration: var(--motion-fast);
+}
+@utility duration-base {
+  transition-duration: var(--motion-base);
+}
+@utility duration-slow {
+  transition-duration: var(--motion-slow);
+}
+
+
 /* ---- The panes in daylight ------------------------------------------------ */
 
 :root {
@@ -470,6 +534,48 @@
     inset 0 -1px 0 var(--primary-under),
     inset 0 0 0 1px var(--primary-inner),
     0 1px 1px var(--glass-contact),
+    var(--tw-ring-shadow, 0 0 #0000);
+}
+
+/* ---- Lift -----------------------------------------------------------------
+
+   Three heights, and only three. What lies on the page (1), what a page is
+   laid out in (2), what floats over it (3).
+
+   The glass rules above already draw these on .glass-panel, .bg-card and
+   .bg-popover: a surface that is already one of those needs no class here,
+   and putting one on it is worse than leaving it off, because a shadow drawn
+   twice reads as a thicker pane. These classes are for everything else — a
+   chip, a row, a card painted in a flat colour, which used to reach for
+   shadow-sm, shadow-lg and shadow-2xl in the same screen.
+
+   They are outside a layer for the reason the material rules are: a utility
+   must not be able to switch the lift off. */
+.elev-1 {
+  box-shadow:
+    inset 0 1px 0 var(--glass-rim),
+    0 0 0 1px var(--glass-edge),
+    0 1px 2px var(--glass-contact),
+    var(--tw-ring-shadow, 0 0 #0000);
+}
+
+.elev-2 {
+  box-shadow:
+    inset 0 1px 0 var(--glass-rim),
+    inset 0 0 0 1px var(--glass-inner),
+    0 0 0 1px var(--glass-edge),
+    0 1px 2px var(--glass-contact),
+    0 12px 32px -14px var(--glass-shade),
+    var(--tw-ring-shadow, 0 0 #0000);
+}
+
+.elev-3 {
+  box-shadow:
+    inset 0 1px 0 var(--glass-rim),
+    inset 0 -1px 0 var(--popover-under),
+    0 0 0 1px var(--popover-edge),
+    0 24px 60px -18px var(--glass-shade),
+    0 6px 16px -6px var(--glass-lift),
     var(--tw-ring-shadow, 0 0 #0000);
 }
 

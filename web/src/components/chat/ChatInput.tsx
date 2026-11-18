@@ -11,6 +11,8 @@ import { Paperclip, X, FileText, FolderOpen, Link2, Sticker, Mic } from 'lucide-
 import { StickerPicker, type Sticker as StickerItem } from '@/components/chat/StickerPicker'
 import { useChatStore } from '@/stores/chat'
 import { THINKING_LEVELS, thinkingLevelLabel } from '@/utils/thinkingLevels'
+import { cn } from '@/lib/utils'
+import { focusRing, interactive } from '@/lib/ui'
 
 export interface SlashCommandDef {
   name: string
@@ -311,23 +313,23 @@ export function ChatInput(props: ChatInputProps) {
   return (
     <div className="shrink-0 px-4 pb-4">
       {notice && (
-        <div className="mx-auto mb-2 flex max-w-3xl items-center justify-between rounded-lg border border-border bg-card px-3.5 py-2.5 text-xs text-muted-foreground">
+        <div className="mx-auto mb-2 flex max-w-3xl items-center justify-between rounded-lg bg-card px-3.5 py-2.5 text-meta text-muted-foreground">
           <span className="min-w-0 flex-1 truncate">{notice}</span>
           <div className="flex items-center gap-2">
             <button className="text-foreground hover:underline" onClick={() => { void safeCopyText(notice) }}>复制</button>
-            <button className="hover:text-foreground" onClick={() => setNotice('')} aria-label="关闭提示">✕</button>
+            <button className={cn('rounded-sm px-1', interactive, focusRing, 'hover:text-foreground')} onClick={() => setNotice('')} aria-label="关闭提示">✕</button>
           </div>
         </div>
       )}
       {reconnectExhausted && (
-        <div className="mx-auto mb-2 flex max-w-3xl items-center justify-between rounded-lg border border-destructive/40 bg-destructive/10 px-3.5 py-2.5 text-xs text-destructive">
+        <div className="mx-auto mb-2 flex max-w-3xl items-center justify-between rounded-lg border border-destructive/40 bg-destructive/10 px-3.5 py-2.5 text-meta text-destructive">
           <span>连接已断开且自动重连失败</span>
           <button className="underline" onClick={onReconnect}>手动重连</button>
         </div>
       )}
       <div className="relative mx-auto max-w-3xl">
         {attachMenu && (
-          <div role="menu" aria-label="附件类型" className="absolute bottom-full left-0 z-30 mb-2 w-44 rounded-xl border border-border bg-popover p-2 shadow-lg">
+          <div role="menu" aria-label="附件类型" className="absolute bottom-full left-0 z-30 mb-2 w-44 rounded-xl bg-popover p-2">
             {[
               { key: 'image', icon: Paperclip, label: '图片', run: () => { setAttachMenu(false); fileRef.current?.click() } },
               { key: 'file', icon: FileText, label: '文件', run: () => void addFileRefs('file') },
@@ -335,7 +337,7 @@ export function ChatInput(props: ChatInputProps) {
               { key: 'link', icon: Link2, label: '链接', run: () => { setAttachMenu(false); setLinkMode(true) } },
               { key: 'sticker', icon: Sticker, label: '表情', run: () => { setAttachMenu(false); setStickerOpen(true) } },
             ].map(({ key, icon: Icon, label, run }) => (
-              <button key={key} type="button" role="menuitem" onClick={run} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] hover:bg-accent/60">
+              <button key={key} type="button" role="menuitem" onClick={run} className={cn('flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-ui', interactive, focusRing, 'hover:bg-accent/60')}>
                 <Icon className="size-3.5" /> {label}
               </button>
             ))}
@@ -343,14 +345,14 @@ export function ChatInput(props: ChatInputProps) {
         )}
         {stickerOpen && <StickerPicker onSelect={insertSticker} onClose={() => setStickerOpen(false)} />}
         {linkMode && (
-          <div className="absolute bottom-full left-0 z-30 mb-2 flex w-full max-w-md items-center gap-2 rounded-xl border border-border bg-popover p-3 shadow-lg">
+          <div className="absolute bottom-full left-0 z-30 mb-2 flex w-full max-w-md items-center gap-2 rounded-xl bg-popover p-3">
             <input
               autoFocus
               value={linkValue}
               onChange={(e) => setLinkValue(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') addLinkRef(); if (e.key === 'Escape') setLinkMode(false) }}
               placeholder="粘贴链接，例如 https://example.com/a"
-              className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2.5 text-xs outline-none"
+              className={cn('min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-2.5 text-meta', focusRing)}
               aria-label="链接地址"
             />
             <Button size="sm" onClick={addLinkRef}>添加</Button>
@@ -358,38 +360,38 @@ export function ChatInput(props: ChatInputProps) {
           </div>
         )}
         {atOpen && atMatches.length > 0 && (
-          <div role="listbox" aria-label="工具提及" className="absolute bottom-full left-0 right-0 z-30 mb-2 max-h-56 overflow-y-auto rounded-xl border border-border bg-popover p-2 shadow-lg">
+          <div role="listbox" aria-label="工具提及" className="absolute bottom-full left-0 right-0 z-30 mb-2 max-h-56 overflow-y-auto scrollbar-thin rounded-xl bg-popover p-2">
             {atMatches.map((t) => (
               <button
                 key={t.name}
                 type="button"
                 role="option"
                 aria-selected={false}
-                className="flex w-full items-baseline gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] hover:bg-accent/50"
+                className={cn('flex w-full items-baseline gap-2 rounded-lg px-2.5 py-1.5 text-left text-ui', interactive, focusRing, 'hover:bg-accent/50')}
                 onClick={() => insertToolMention(t.name)}
               >
-                <span className="font-mono text-xs">@{t.name}</span>
+                <span className="font-mono text-meta">@{t.name}</span>
                 <span className="truncate text-muted-foreground">{t.label || t.description || ''}</span>
               </button>
             ))}
           </div>
         )}
         {slashOpen && slashMatches.length > 0 && (
-          <div role="listbox" aria-label="斜杠命令" className="absolute bottom-full left-0 right-0 z-30 mb-2 max-h-64 overflow-y-auto rounded-xl border border-border bg-popover p-2 shadow-lg">
+          <div role="listbox" aria-label="斜杠命令" className="absolute bottom-full left-0 right-0 z-30 mb-2 max-h-64 overflow-y-auto scrollbar-thin rounded-xl bg-popover p-2">
             {slashMatches.map((c, i) => (
               <button
                 key={c.name}
                 type="button"
                 role="option"
                 aria-selected={i === slashActive}
-                className="flex w-full items-baseline gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] hover:bg-accent/50 aria-selected:bg-accent"
+                className={cn('flex w-full items-baseline gap-2 rounded-lg px-2.5 py-1.5 text-left text-ui', interactive, focusRing, 'hover:bg-accent/50 aria-selected:bg-accent')}
                 onMouseEnter={() => setSlashActive(i)}
                 onClick={() => void runSlash(c.name, '')}
               >
-                <span className="font-mono text-xs">/{c.name}</span>
+                <span className="font-mono text-meta">/{c.name}</span>
                 <span className="truncate text-muted-foreground">{c.description}</span>
                 {c.source === 'template' ? (
-                  <span className="ml-auto shrink-0 rounded-sm bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">模板</span>
+                  <span className="ml-auto shrink-0 rounded-sm bg-muted px-1.5 py-0.5 text-caption text-muted-foreground">模板</span>
                 ) : null}
               </button>
             ))}
@@ -415,7 +417,7 @@ export function ChatInput(props: ChatInputProps) {
           onStop={onStop}
           running={isStreaming}
           canSubmit={canSend && connected && text.trim().length > 0}
-          placeholder={connected ? '输入消息… (Enter 发送，Shift+Enter 换行，/ 唤起命令)' : '连接已断开…'}
+          placeholder={connected ? '输入消息…（Enter 发送，Shift+Enter 换行）' : '连接已断开…'}
           className="bg-card"
           textareaProps={{ 'aria-label': '消息输入框', id: 'composer-textarea' }}
           leading={
@@ -423,7 +425,7 @@ export function ChatInput(props: ChatInputProps) {
               <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => void onPickFiles(e.target.files)} aria-label="添加附件" />
               <button
                 type="button"
-                className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 disabled:opacity-50"
+                className={cn('flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground', interactive, focusRing, 'hover:bg-accent hover:text-foreground disabled:opacity-50')}
                 onClick={() => setAttachMenu((v) => !v)}
                 disabled={uploading || isStreaming}
                 aria-label="添加附件：文件、文件夹、图片、链接或表情"
@@ -433,7 +435,8 @@ export function ChatInput(props: ChatInputProps) {
               </button>
               <button
                 type="button"
-                className={listening ? 'flex size-7 shrink-0 items-center justify-center rounded-md text-foreground' : 'flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground'}
+                className={cn('flex size-7 shrink-0 items-center justify-center rounded-md', interactive, focusRing,
+                  listening ? 'text-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground')}
                 onClick={toggleDictation}
                 disabled={isStreaming}
                 aria-pressed={listening}
@@ -445,7 +448,7 @@ export function ChatInput(props: ChatInputProps) {
             </>
           }
           tags={refs.map((r, i) => (
-            <span key={i} className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-[11px] text-muted-foreground">
+            <span key={i} className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-caption text-muted-foreground">
               {r.label}
               <button type="button" onClick={() => setRefs((prev) => prev.filter((_, j) => j !== i))} aria-label={`移除 ${r.label}`} className="hover:text-foreground"><X className="size-3" /></button>
             </span>
@@ -482,7 +485,7 @@ export function ChatInput(props: ChatInputProps) {
               不显示的话，用户永远不知道自动路由把他发给了谁。 */}
           {routedModel && routedModel.id !== modelName ? (
             <span
-              className="shrink-0 text-[11px] text-muted-foreground"
+              className="shrink-0 text-caption text-muted-foreground"
               title={`自动路由：实际由 ${routedModel.provider}/${routedModel.id} 应答`}
             >
               → {routedModel.name || routedModel.id}
@@ -496,9 +499,9 @@ export function ChatInput(props: ChatInputProps) {
               onValueChange={(v) => void permission.change(v as Parameters<typeof permission.change>[0])}
             />
           )}
-          {!connected && <span className="text-[11px] text-muted-foreground">WS 未连接</span>}
+          {!connected && <span className="text-caption text-muted-foreground">WS 未连接</span>}
           <ComposerFooterEnd>
-            <span className="text-[11px] text-muted-foreground">输入 / 唤起命令</span>
+            <span className="text-caption text-muted-foreground">输入 / 唤起命令</span>
           </ComposerFooterEnd>
         </ComposerFooter>
       </div>

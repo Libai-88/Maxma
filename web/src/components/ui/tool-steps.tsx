@@ -29,7 +29,7 @@ export type Step = {
 }
 
 const lineClass =
-  "flex w-fit max-w-full items-center gap-2 text-[13px] text-muted-foreground transition-colors hover:text-foreground disabled:hover:text-muted-foreground"
+  "flex w-fit max-w-full items-center gap-2 text-ui text-muted-foreground transition-colors duration-fast ease-standard hover:text-foreground disabled:hover:text-muted-foreground"
 
 /** A command or its output, kept in its own scroll box so a long one fits. */
 function OutputBlock({
@@ -45,10 +45,10 @@ function OutputBlock({
 }) {
   return (
     <div data-slot="output-block" className={cn("glass-panel overflow-hidden rounded-md", className)}>
-      <div className="border-b border-border/70 px-3.5 py-2.5 text-[11px] text-muted-foreground">{label}</div>
+      <div className="border-b border-border/70 px-3.5 py-2.5 text-caption text-muted-foreground">{label}</div>
       <pre
         className={cn(
-          "scrollbar-thin max-h-64 overflow-auto px-3.5 py-2.5 font-mono text-[11.5px] leading-[1.6] whitespace-pre-wrap",
+          "scrollbar-thin max-h-64 overflow-auto px-3.5 py-2.5 font-mono text-meta leading-[1.6] whitespace-pre-wrap",
           tone === "error" && "text-destructive"
         )}
       >
@@ -76,9 +76,9 @@ function StepRow({ step, labels }: { step: Step; labels?: Partial<StepLabels> })
         onClick={() => setOpen((value) => !value)}
         className={cn(lineClass, step.status === "running" && "animate-pulse")}
       >
-        <span className="truncate text-[12.5px]">{step.label}</span>
+        <span className="truncate text-ui">{step.label}</span>
         {step.patch && <DiffStats {...patchStats(step.patch)} />}
-        {canOpen && <ChevronRight className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-90")} />}
+        {canOpen && <ChevronRight className={cn("size-3.5 shrink-0 transition-transform duration-base ease-out-quint", open && "rotate-90")} />}
       </button>
 
       {open &&
@@ -149,11 +149,11 @@ function StepGroup({
   return (
     <div data-slot="step-group" className="flex flex-col gap-2">
       <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)} className={lineClass}>
-        <span className="truncate text-[12.5px]">
+        <span className="truncate text-ui">
           {summary ?? (running ? `Running ${steps.length} steps` : `Ran ${steps.length} steps`)}
         </span>
         {stats && <DiffStats {...stats} />}
-        <ChevronRight className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-90")} />
+        <ChevronRight className={cn("size-3.5 shrink-0 transition-transform duration-base ease-out-quint", open && "rotate-90")} />
       </button>
       {open && <StepList steps={steps} labels={labels} />}
     </div>

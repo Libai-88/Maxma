@@ -61,8 +61,8 @@ export default function ActivityView() {
 
   useEffect(() => {
     const s = useActivityStore.getState()
-    s.fetchRecent(100)
-    s.fetchStats()
+    void s.fetchRecent(100)
+    void s.fetchStats()
     s.startStream()
     return () => { useActivityStore.getState().stopStream() }
   }, [])
@@ -116,21 +116,21 @@ export default function ActivityView() {
               activity.connectionState === 'offline' && 'border border-muted-foreground',
             )} />
             {statusLabel}
-            {recentPulse && <span className="ml-1 px-1.5 text-[0.85em] font-semibold text-link">✦ 新事件</span>}
+            {recentPulse && <span className="ml-1 px-1.5 text-body font-semibold text-link">✦ 新事件</span>}
           </span>
-          <button onClick={() => void activity.fetchRecent(100)} className="px-3.5 py-2.5 text-xs border border-border rounded-lg bg-card text-foreground hover:border-ring transition-colors">刷新</button>
-          <button onClick={handleClear} className="px-3.5 py-2.5 text-xs border border-border rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors">清空</button>
+          <button onClick={() => void activity.fetchRecent(100)} className="px-3.5 py-2.5 text-xs border border-border rounded-lg bg-card text-foreground hover:border-ring transition-colors duration-fast ease-standard">刷新</button>
+          <button onClick={handleClear} className="px-3.5 py-2.5 text-xs border border-border rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors duration-fast ease-standard">清空</button>
         </div>
       </header>
 
       <details open className="border border-border rounded-lg bg-card mb-4">
         <summary className="px-3.5 py-2.5 text-sm font-semibold text-foreground cursor-pointer select-none">这是什么页面？事件类别含义说明</summary>
-        <div className="px-3.5 pb-3 text-[13px] text-muted-foreground leading-relaxed">
+        <div className="px-3.5 pb-3 text-ui text-muted-foreground leading-relaxed">
           <p className="mb-2">活动中心聚合了 Maxma 运行时的所有内部事件，便于排查问题或了解 AI 实际做了什么。每条记录显示：时间、类别、消息内容、（若涉及）工具名与会话 ID。</p>
           <div className="flex flex-col gap-1 mb-2">
             {INTRO_CATS.map(c => (
               <div key={c.cat} className="flex items-center gap-2">
-                <span className={cn('inline-block px-2.5 py-1 rounded-full text-[0.85em] font-medium bg-secondary text-muted-foreground whitespace-nowrap shrink-0 min-w-[56px] text-center', c.color)}>{c.label}</span>
+                <span className={cn('inline-block px-2.5 py-1 rounded-full text-body font-medium bg-secondary text-muted-foreground whitespace-nowrap shrink-0 min-w-[56px] text-center', c.color)}>{c.label}</span>
                 <span>{c.meaning}</span>
               </div>
             ))}
@@ -145,12 +145,12 @@ export default function ActivityView() {
         <div className="flex gap-3 mb-4 flex-wrap">
           <div className="flex flex-col items-center px-4 py-2.5 bg-card border border-border rounded-lg min-w-[80px]">
             <span className="font-mono tabular-nums text-xl font-semibold text-link">{statsTotal}</span>
-            <span className="text-[0.75em] text-muted-foreground uppercase">总事件</span>
+            <span className="text-meta text-muted-foreground uppercase">总事件</span>
           </div>
           {Object.entries(statsByCategory).map(([cat, count]) => (
             <div key={cat} className="flex flex-col items-center px-4 py-2.5 bg-card border border-border rounded-lg min-w-[80px]">
               <span className="font-mono tabular-nums text-xl font-semibold text-link">{count}</span>
-              <span className="text-[0.75em] text-muted-foreground uppercase">{CATEGORY_LABELS[cat] ?? cat}</span>
+              <span className="text-meta text-muted-foreground uppercase">{CATEGORY_LABELS[cat] ?? cat}</span>
             </div>
           ))}
         </div>
@@ -170,7 +170,7 @@ export default function ActivityView() {
         </select>
       </div>
 
-      <div className="flex-1 overflow-y-auto border border-border rounded-lg bg-card">
+      <div className="flex-1 overflow-y-auto scrollbar-thin border border-border rounded-lg bg-card">
         {displayRecords.map(record => (
           <div
             key={`${record.timestamp}-${record.event_type}-${record.session_id || record.turn_id || ''}`}
@@ -180,9 +180,9 @@ export default function ActivityView() {
               record.level === 'error' && 'bg-destructive/5',
             )}
           >
-            <div className="font-mono text-[0.85em] text-muted-foreground whitespace-nowrap">{formatTime(record.timestamp)}</div>
+            <div className="font-mono text-body text-muted-foreground whitespace-nowrap">{formatTime(record.timestamp)}</div>
             <div className={cn(
-              'px-2.5 py-1 rounded-full text-[0.75em] font-medium bg-secondary text-muted-foreground whitespace-nowrap',
+              'px-2.5 py-1 rounded-full text-meta font-medium bg-secondary text-muted-foreground whitespace-nowrap',
               record.category === 'tool' && 'text-link',
               record.category === 'turn' && 'text-success',
               record.category === 'compression' && 'text-status-interrupted',
@@ -192,8 +192,8 @@ export default function ActivityView() {
             </div>
             <div className="flex-1 flex items-center gap-2 min-w-0">
               <span className="text-foreground truncate">{record.message}</span>
-              {record.tool_name && <span className="font-mono text-[0.85em] text-muted-foreground bg-secondary px-2 py-1.5 rounded">{record.tool_name}</span>}
-              {record.session_id && <span className="font-mono text-[0.75em] text-muted-foreground">{record.session_id.slice(0, 8)}</span>}
+              {record.tool_name && <span className="font-mono text-body text-muted-foreground bg-secondary px-2 py-1.5 rounded">{record.tool_name}</span>}
+              {record.session_id && <span className="font-mono text-meta text-muted-foreground">{record.session_id.slice(0, 8)}</span>}
             </div>
           </div>
         ))}

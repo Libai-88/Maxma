@@ -92,7 +92,7 @@ export default function RulesView() {
                       <span className="ml-2 text-xs text-muted-foreground">{rule.language} · {rule.severity}{rule.source === 'builtin' ? ' · 内置' : ''}</span>
                     </p>
                     <p className="truncate text-xs text-muted-foreground">{rule.description}</p>
-                    {!rule.editable && <p className="mt-1 text-[11px] text-muted-foreground">内置规则不可编辑</p>}
+                    {!rule.editable && <p className="mt-1 text-caption text-muted-foreground">内置规则不可编辑</p>}
                   </div>
                   <Switch checked={rule.enabled} onCheckedChange={() => void toggleRule(rule)} disabled={!rule.editable} aria-label={`启用 ${rule.name}`} />
                   {rule.editable && (

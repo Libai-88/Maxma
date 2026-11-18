@@ -38,7 +38,7 @@ function Panel({
       {...props}
     >
       <header data-slot="panel-header" className={cn("flex h-9 shrink-0 items-center gap-1 pr-1.5", bar ? "pl-1.5" : "pl-3.5")}>
-        {bar ?? <h2 className="mr-auto truncate text-[12.5px] font-medium text-foreground/90">{title}</h2>}
+        {bar ?? <h2 className="mr-auto truncate text-ui font-medium text-foreground/90">{title}</h2>}
         {actions}
         {onClose && (
           <Button
@@ -69,7 +69,7 @@ function PanelRow({
       data-slot="panel-row"
       aria-current={chosen || undefined}
       className={cn(
-        "flex h-8 w-full items-center gap-2 rounded-sm px-2.5 text-left text-[12.5px] text-foreground/85 transition-colors outline-none hover:bg-accent focus-visible:bg-accent [&_svg]:size-3.5 [&_svg]:shrink-0 [&_svg]:text-muted-foreground",
+        "flex h-8 w-full items-center gap-2 rounded-sm px-2.5 text-left text-ui text-foreground/85 transition-colors duration-fast ease-standard outline-none hover:bg-accent focus-visible:bg-accent [&_svg]:size-3.5 [&_svg]:shrink-0 [&_svg]:text-muted-foreground",
         chosen && "glass-chosen text-foreground",
         className
       )}

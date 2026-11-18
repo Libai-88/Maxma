@@ -18,7 +18,7 @@ export function PermissionModeControl({ sessionId }: { sessionId: string }) {
 
   return (
     <div className="flex flex-col gap-1.5">
-      <p className="text-[11px] text-muted-foreground">权限模式</p>
+      <p className="text-caption text-muted-foreground">权限模式</p>
       <div role="radiogroup" aria-label="权限模式" className="flex flex-col gap-1">
         {modes.map((mode) => (
           <Button
@@ -28,15 +28,15 @@ export function PermissionModeControl({ sessionId }: { sessionId: string }) {
             variant={current === mode ? 'secondary' : 'ghost'}
             size="sm"
             disabled={busy || disabled}
-            className="w-full justify-start text-[12px]"
+            className="w-full justify-start text-meta"
             onClick={() => void change(mode)}
           >
             {MODE_LABELS[mode]}
-            {current === mode && <span className="ml-auto text-[10px] text-muted-foreground">当前</span>}
+            {current === mode && <span className="ml-auto text-caption text-muted-foreground">当前</span>}
           </Button>
         ))}
       </div>
-      {disabled && <p className="text-[11px] text-muted-foreground">服务端未提供可用档位</p>}
+      {disabled && <p className="text-caption text-muted-foreground">服务端未提供可用档位</p>}
     </div>
   )
 }

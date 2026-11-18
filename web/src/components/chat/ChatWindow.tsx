@@ -95,11 +95,11 @@ function AskUserBlock({ interaction, onAction }: { interaction: AskUserInteracti
     const responded = interaction.responded
     return (
       <div className="glass-panel rounded-md px-3.5 py-3">
-        <p className="text-[11.5px] text-status-interrupted">需要你的确认{interaction.risk_level ? ` · 风险 ${interaction.risk_level === 'high' ? '高' : interaction.risk_level === 'medium' ? '中' : '低'}` : ''}</p>
-        <p className="mt-1 text-[14px] leading-relaxed whitespace-pre-wrap">{interaction.question}</p>
-        {interaction.code && <pre className="mt-2 max-h-48 overflow-auto rounded-md bg-muted/40 p-2 font-mono text-[11px] text-muted-foreground">{interaction.code}</pre>}
+        <p className="text-meta text-status-interrupted">需要你的确认{interaction.risk_level ? ` · 风险 ${interaction.risk_level === 'high' ? '高' : interaction.risk_level === 'medium' ? '中' : '低'}` : ''}</p>
+        <p className="mt-1 text-body whitespace-pre-wrap">{interaction.question}</p>
+        {interaction.code && <pre className="mt-2 max-h-48 overflow-auto scrollbar-thin rounded-md bg-muted/40 p-2.5 font-mono text-caption text-muted-foreground">{interaction.code}</pre>}
         {interaction.tool_input && (
-          <pre className="mt-2 max-h-48 overflow-auto rounded-md bg-muted/40 p-2 font-mono text-[11px] text-muted-foreground">{JSON.stringify(interaction.tool_input, null, 2)}</pre>
+          <pre className="mt-2 max-h-48 overflow-auto scrollbar-thin rounded-md bg-muted/40 p-2.5 font-mono text-caption text-muted-foreground">{JSON.stringify(interaction.tool_input, null, 2)}</pre>
         )}
         {responded ? (
           <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground"><Check className="size-3.5" /> {responded === 'yes' ? '已批准' : '已拒绝'}</p>
@@ -136,11 +136,11 @@ function MultiChoiceCard({ interaction, options, onAction }: { interaction: AskU
   const disabled = interaction.submitted || interaction.responded != null
   return (
     <div className="glass-panel rounded-md px-3.5 py-3">
-      <p className="text-[11.5px] text-status-interrupted">可多选</p>
-      <p className="mt-1 text-[14px] leading-relaxed whitespace-pre-wrap">{interaction.question}</p>
+      <p className="text-meta text-status-interrupted">可多选</p>
+      <p className="mt-1 text-body whitespace-pre-wrap">{interaction.question}</p>
       <div className="mt-2.5 flex flex-col gap-2">
         {options.map((o) => (
-          <label key={o} className="flex cursor-pointer items-center gap-2 text-[13px]">
+          <label key={o} className="flex cursor-pointer items-center gap-2 text-ui">
             <input type="checkbox" checked={picked.includes(o)} disabled={disabled} onChange={(e) => setPicked((p) => e.target.checked ? [...p, o] : p.filter((x) => x !== o))} />
             {o}
           </label>
@@ -225,15 +225,15 @@ function TurnBlock({ turn, isLast, onAction, onCite, onPin }: {
 
       {planCard && (
         <div className="glass-panel rounded-md px-3.5 py-3">
-          <p className="text-[11.5px] text-status-interrupted">执行计划 · {planCard.status === 'approved' ? '已完成' : planCard.status === 'running' ? '执行中' : planCard.status === 'pending' ? '待确认' : planCard.status}</p>
-          <ol className="mt-2 list-decimal space-y-1 pl-5 text-[13px]">
+          <p className="text-meta text-status-interrupted">执行计划 · {planCard.status === 'approved' ? '已完成' : planCard.status === 'running' ? '执行中' : planCard.status === 'pending' ? '待确认' : planCard.status}</p>
+          <ol className="mt-2 list-decimal space-y-1 pl-5 text-ui">
             {planCard.steps.map((st, i) => (
               <li key={i} className={cn(planCard.stepStatuses?.[String(i)] === 'done' && 'text-muted-foreground line-through')}>
                 {typeof st === 'string' ? st : (st as { description?: string }).description ?? JSON.stringify(st)}
               </li>
             ))}
           </ol>
-          {planCard.planText && <pre className="mt-2 max-h-56 overflow-auto rounded-md bg-muted/40 p-2 font-mono text-[11px] text-muted-foreground">{planCard.planText}</pre>}
+          {planCard.planText && <pre className="mt-2 max-h-56 overflow-auto scrollbar-thin rounded-md bg-muted/40 p-2.5 font-mono text-caption text-muted-foreground">{planCard.planText}</pre>}
         </div>
       )}
 
@@ -248,7 +248,7 @@ function TurnBlock({ turn, isLast, onAction, onCite, onPin }: {
           </div>
           {turn.stickerUrl && <Sticker src={turn.stickerUrl} className="mt-1" />}
           {turn.usage && <TurnUsageLine usage={turn.usage} />}
-          <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/answer:opacity-100 focus-within:opacity-100">
+          <div className="flex items-center gap-0.5 opacity-0 transition-opacity duration-fast ease-standard group-hover/answer:opacity-100 focus-within:opacity-100">
             <CopyButton text={answerText} />
             <Button
               variant="ghost" size="icon-sm" aria-label={speaking ? '停止朗读' : '朗读回复'}
@@ -303,7 +303,7 @@ function TurnUsageLine({ usage }: { usage: TurnUsage }) {
   if (usage.cacheStatus === 'unknown') parts.push('缓存未观测')
   return (
     <div
-      className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] tabular-nums text-muted-foreground/80"
+      className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-caption tabular-nums text-muted-foreground/80"
       title={[usage.provider, usage.model].filter(Boolean).join(' / ') || undefined}
     >
       {usage.model && <span className="truncate max-w-[16ch]">{usage.model}</span>}
@@ -364,7 +364,7 @@ export function ChatWindow(props: ChatWindowProps) {
       </div>
 
       {!pinned && (
-        <Button variant="outline" size="icon-sm" className="absolute bottom-4 left-1/2 -translate-x-1/2 shadow-lg" onClick={jumpToLatest} aria-label="跳到最新">
+        <Button variant="outline" size="icon-sm" className="absolute bottom-4 left-1/2 -translate-x-1/2 elev-1" onClick={jumpToLatest} aria-label="跳到最新">
           <ArrowDown />
         </Button>
       )}
@@ -373,7 +373,7 @@ export function ChatWindow(props: ChatWindowProps) {
         <div role="alert" className={cn('mx-4 mb-3 flex items-start justify-between gap-3 rounded-xl border p-4 text-sm', errCls)}>
           <div className="min-w-0">
             <p>{error}</p>
-            {errorTraceId && <p className="mt-1 font-mono text-[11px] opacity-70">trace: {errorTraceId}</p>}
+            {errorTraceId && <p className="mt-1 font-mono text-caption opacity-70">trace: {errorTraceId}</p>}
           </div>
           <div className="flex shrink-0 items-center gap-1">
             <Button variant="outline" size="sm" onClick={onRetry}>重试</Button>

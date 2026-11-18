@@ -3,6 +3,54 @@
 > 当前可执行状态，供下一位接手者。架构请先读 [docs/00-当前架构.md](docs/00-当前架构.md)。
 > 更新时间：2026-11-18
 
+## 2026-11-18 排版与动效整理（前端美学，不动功能）
+
+用户的问题是「直接引入组件库之后，还能不能在不影响性能和功能的前提下更好看」。
+结论是**不用换组件库**：配色与材质已有 token 和守卫，缺的是**尺度**——字号、时长、层级
+全是手写的数字。实测起点：33 个视图 **125 处任意字号 / 11 个档位**（含 10.5 / 11.5 / 12.5
+三个半像素档）、**34 处 transition 只有 1 处带时长**、**30 处散落 `shadow-*`**。
+
+### 做了什么
+
+- `solid-glass.css` 新增 `@theme` 尺度：`--text-caption/meta/ui/body/subtitle/display`
+  （11/12/13/14/16/22，带行高配对）、`--ease-out-quint` / `--ease-standard`、
+  `--motion-fast/base/slow`（120/200/320ms）、`duration-fast/base/slow` 工具类，
+  以及**无层**的 `.elev-1/2/3`（三级高度，值是现有玻璃盒影的复刻）。
+- 全站字号归并到六档（125 → 0）；`transition` 补齐时长与曲线（50 处）；
+  `shadow-*` 清零（玻璃面本来就画了影，那些类从来没生效过）。
+- `web/src/lib/ui.ts`：`focusRing` / `interactive` / `press` 三个公共类名，
+  收掉 `ring-3`、`ring-2 /60`、无 ring 三种焦点写法。
+- 导航：品牌区由**纯色方块**换成内联 M 标记（`bg-brand/12` + `stroke`），
+  当前项加 2px 竖向指示条（`aria-current` 驱动，纯 CSS），三处重复的 NavLink 类串抽成 `NavRow`。
+- 新组件 `components/common/EmptyState.tsx`；`MetricsView` 补骨架、三处空态；
+  `MetricsView` / `NewsView` 补上缺失的页面内边距（此前标题是贴着窗口上沿被切掉的）。
+- `AppearanceView` 的选中主题卡改用主题自己的 `.glass-chosen`——原来写的
+  `border-primary + bg-card` 里，`.bg-card` 会把 `border-width` 归零，**那圈边框从来没被画出来过**。
+  `OnboardingView` 去掉 `backdrop-blur-xl`（第 9 层模糊；`bg-card` 本来就带）。
+
+### 两道新守卫（已进 `verify-all-gates.sh`，14 → 16 项）
+
+- `web/scripts/check-type-scale.mjs`：任意字号 / `transition` 缺时长 / 散落 `shadow-*`。
+  棘轮按 **文件 + 写法 + 条数** 记账（不记行号——行号会随任何编辑漂移，那种守卫最后一定被关掉）。
+  基线已收敛到 **0 条**，即全量硬约束。
+- `web/scripts/check-css-weight.mjs`：`backdrop-filter` 生效声明 **≤ 8 组**（当前 8/8）。
+
+### 视觉验收
+
+`scripts/verify-ui-visual.mjs` + `scripts/_ui-visual-driver.cjs`：起真实后端 + 真实 Electron
+窗口（1280×800 DIP，Windows 150% 缩放下截图为 1920×1203），六页截图落 `dev_docs/visual/baseline/`，
+并断言「路由落点正确 / 宽高比正常 / 平均亮度正常 / 页面有文字」。此前全仓 `capturePage` 0 命中，
+六个 `verify-ui-*.mjs` 只断言文本，看不见"挤了没、断了没"。像素 diff 刻意没做（要自解 PNG，收益不抵维护）。
+
+规范与自查清单见 [dev_docs/design-system.md](dev_docs/design-system.md)。
+
+### 性能账
+
+- 主题 CSS：+5.2KB raw / **+1.2KB gzip**（预算 +4KB）。
+- JS 产物：无逻辑改动，体积持平（`ChatView` 182.94 → 182.94 KB）。
+- `backdrop-filter` 层数：8 → 8（不增）。
+- 代价：字号归并会让少数密集表格的行高变化 0.5–1px，`tabular-nums` 已覆盖数字列。
+
 ## 2026-11-18 使命评估后的三处补齐（扩展可见性 / 扩展启停 / subagent 编排）
 
 「Maxma 作为 pi 前端是否达成使命」的评估点出三处真实缺口，本轮全部补完并各自带回归锁。

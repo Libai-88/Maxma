@@ -195,7 +195,7 @@ export default function ExtensionView() {
   }
 
   return (
-    <div className="ds-view flex flex-1 min-h-0 flex-col overflow-y-auto">
+    <div className="ds-view flex flex-1 min-h-0 flex-col overflow-y-auto scrollbar-thin">
       <div className="view-header mb-4">
         <h2 className="text-xl font-semibold text-foreground">插件与工具</h2>
         <p className="mt-1 text-sm text-muted-foreground">管理外部工具连接，查看已加载的 Skills</p>
@@ -214,7 +214,7 @@ export default function ExtensionView() {
             role="tab"
             aria-selected={activeTab === t.id}
             className={cn(
-              'min-h-9 flex-1 rounded-lg text-sm text-muted-foreground transition-colors',
+              'min-h-9 flex-1 rounded-lg text-sm text-muted-foreground transition-colors duration-fast ease-standard',
               activeTab === t.id && 'bg-background text-foreground shadow-sm',
             )}
             onClick={() => setTab(t.id)}

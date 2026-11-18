@@ -141,7 +141,7 @@ export default function EvolutionView() {
   useEffect(() => { void load() }, [])
 
   return (
-    <div className="flex-1 overflow-y-auto text-foreground">
+    <div className="flex-1 overflow-y-auto scrollbar-thin text-foreground">
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 p-6">
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -161,7 +161,7 @@ export default function EvolutionView() {
             { label: '已暂停', value: stats.paused },
           ].map((s) => (
             <div key={s.label} className="rounded-xl border border-border bg-card px-4 py-3 text-center">
-              <div className="font-mono text-[22px] font-bold tabular-nums text-foreground">{s.value}</div>
+              <div className="font-mono text-display font-bold tabular-nums text-foreground">{s.value}</div>
               <div className="mt-0.5 text-xs text-muted-foreground">{s.label}</div>
             </div>
           ))}
@@ -169,14 +169,14 @@ export default function EvolutionView() {
 
         <section className="rounded-xl border border-border bg-card p-4">
           <h2 className="text-sm font-semibold text-foreground">它具体怎么工作</h2>
-          <ul className="mt-2 list-disc space-y-1.5 pl-5 text-[13px] leading-relaxed text-muted-foreground">
+          <ul className="mt-2 list-disc space-y-1.5 pl-5 text-ui leading-relaxed text-muted-foreground">
             <li>只从<strong className="text-foreground">你明确说出的</strong>四种句式里提炼，普通对话不会被拿来猜性格：
               <ul className="mt-1 list-[circle] space-y-0.5 pl-4">
-                {TRIGGER_PATTERNS.map((p) => <li key={p}><code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[12px]">{p}</code></li>)}
+                {TRIGGER_PATTERNS.map((p) => <li key={p}><code className="rounded bg-muted px-1.5 py-0.5 font-mono text-meta">{p}</code></li>)}
               </ul>
             </li>
             <li>每条规则由「一句话 + 作用域 + 自动切词得到的关键词」组成；命中判断是<strong className="text-foreground">字符串包含</strong>，不是模型判断。</li>
-            <li>只有 <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[12px]">active</code> 且关键词命中的规则才会进入上下文，一次最多 3 条、总长不超过 900 字符。</li>
+            <li>只有 <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-meta">active</code> 且关键词命中的规则才会进入上下文，一次最多 3 条、总长不超过 900 字符。</li>
             <li>「有效 / 降低权重」直接改这条规则的置信度；置信度低于 0.25 会自动暂停。全程不产生额外模型调用。</li>
           </ul>
         </section>
@@ -204,13 +204,13 @@ export default function EvolutionView() {
                 <>
                   <div className="flex flex-wrap gap-1.5">
                     {preview.matches.map((m) => (
-                      <span key={m.id} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-panel px-2.5 py-1.5 text-[11px]">
+                      <span key={m.id} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-panel px-2.5 py-1.5 text-caption">
                         <span className="text-foreground">{m.matched_keywords.slice(0, 2).join(' / ') || m.scope}</span>
                         <span className="text-muted-foreground">score {m.score}</span>
                       </span>
                     ))}
                   </div>
-                  <pre className="max-h-40 overflow-auto rounded-lg bg-muted/40 px-3.5 py-3 font-mono text-[11.5px] leading-relaxed whitespace-pre-wrap text-muted-foreground">{preview.injection}</pre>
+                  <pre className="max-h-40 overflow-auto rounded-lg bg-muted/40 px-3.5 py-3 font-mono text-meta leading-relaxed whitespace-pre-wrap text-muted-foreground">{preview.injection}</pre>
                 </>
               )}
             </div>
@@ -238,7 +238,7 @@ export default function EvolutionView() {
             />
             <Button size="sm" onClick={() => void learn()} disabled={!learnText.trim() || saving}>{saving ? '保存中…' : '记录'}</Button>
           </div>
-          {notice && <p className="mt-2.5 text-[13px] text-primary">{notice}</p>}
+          {notice && <p className="mt-2.5 text-ui text-primary">{notice}</p>}
         </section>
 
         <section className="rounded-xl border border-border bg-card p-4">
@@ -260,7 +260,7 @@ export default function EvolutionView() {
                     <span className={cn('mt-1.5 size-2 shrink-0 rounded-full bg-muted-foreground', rule.status === 'active' && 'bg-primary')} />
                     <p className="min-w-0 break-words text-sm text-foreground">{rule.rule_text}</p>
                   </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 pl-[18px] text-[11px] text-muted-foreground">
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 pl-[18px] text-caption text-muted-foreground">
                     <span className="rounded bg-secondary px-2 py-0.5">{rule.scope}</span>
                     <span>置信度 {Math.round(rule.confidence * 100)}%</span>
                     <span>证据 {rule.evidence_count}（+{rule.positive_count} / −{rule.negative_count}）</span>
@@ -269,9 +269,9 @@ export default function EvolutionView() {
                   {rule.keywords.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1.5 pl-[18px]">
                       {rule.keywords.slice(0, 6).map((k) => (
-                        <span key={k} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10.5px] text-muted-foreground">{k}</span>
+                        <span key={k} className="rounded bg-muted px-1.5 py-0.5 font-mono text-caption text-muted-foreground">{k}</span>
                       ))}
-                      {rule.keywords.length > 6 && <span className="text-[10.5px] text-muted-foreground">+{rule.keywords.length - 6}</span>}
+                      {rule.keywords.length > 6 && <span className="text-caption text-muted-foreground">+{rule.keywords.length - 6}</span>}
                     </div>
                   )}
                   <div className="mt-2.5 flex flex-wrap justify-end gap-2">

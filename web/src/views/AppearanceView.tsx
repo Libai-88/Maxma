@@ -58,7 +58,7 @@ export default function AppearanceView() {
   }
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="h-full overflow-y-auto scrollbar-thin">
       <div className="flex flex-col mx-auto w-full max-w-3xl gap-4 p-6">
         <div>
           <h2 className="text-xl font-semibold text-foreground">外观</h2>
@@ -67,7 +67,7 @@ export default function AppearanceView() {
           </p>
         </div>
 
-        <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
+        <section className="rounded-lg bg-card p-4">
           <h3 className="text-base font-semibold text-foreground">主题</h3>
           <p className="mb-4 mt-1 text-xs text-muted-foreground">
             Solid Glass 提供浅色与深色两种材质基调，选择后立即生效并保存在本机。
@@ -81,9 +81,12 @@ export default function AppearanceView() {
                   type="button"
                   onClick={() => selectTheme(t.id)}
                   className={cn(
-                    'group flex flex-col gap-2 rounded-lg border p-4 text-left transition-colors',
+                    'group flex flex-col gap-2 rounded-lg border p-4 text-left transition-colors duration-fast ease-standard',
                     active
-                      ? 'border-primary bg-card shadow-sm'
+                      // 选中态用主题自己的「the one state」：.glass-chosen 画的是
+                      // 一块被点亮的玻璃。原来这里写 border-primary + bg-card，
+                      // 而 .bg-card 会把 border-width 归零——那圈边框从来没被画出来过。
+                      ? 'glass-chosen'
                       : 'border-border bg-panel hover:border-primary/40',
                   )}
                 >

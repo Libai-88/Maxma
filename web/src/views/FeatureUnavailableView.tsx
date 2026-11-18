@@ -49,19 +49,19 @@ export default function FeatureUnavailableView() {
     if (featureKey && isFeatureEnabled(featureKey)) {
       const to = searchParams.get('from')
       if (to) {
-        navigate(to, { replace: true })
+        void navigate(to, { replace: true })
         return
       }
     }
-    navigate('/', { replace: true })
+    void navigate('/', { replace: true })
   }
 
   const actionCls =
-    'flex w-full items-center gap-3 rounded-lg border p-4 no-underline transition-colors hover:border-primary hover:bg-accent cursor-pointer'
+    'flex w-full items-center gap-3 rounded-lg border p-4 no-underline transition-colors duration-fast ease-standard hover:border-primary hover:bg-accent cursor-pointer'
 
   return (
     <div className="flex h-full items-center justify-center p-6">
-      <div className="w-full max-w-md rounded-lg border border-border bg-card p-8 text-center shadow-lg">
+      <div className="w-full max-w-md rounded-lg bg-card p-8 text-center">
         <div className="mb-2 text-3xl leading-none">{availabilityIcon}</div>
         <h1 className="m-0 text-2xl font-bold tracking-tight text-primary">功能不可用</h1>
         <p className="mb-2 mt-2 font-semibold text-foreground">

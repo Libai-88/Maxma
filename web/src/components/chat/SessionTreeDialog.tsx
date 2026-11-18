@@ -160,7 +160,7 @@ export function SessionTreeDialog({ sessionId, open, onClose, onNavigated, onFor
         ) : rows.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted-foreground">这个会话还没有内容</p>
         ) : (
-          <div className="max-h-[55vh] overflow-y-auto rounded-md border border-border">
+          <div className="max-h-[55vh] overflow-y-auto scrollbar-thin rounded-md border border-border">
             {rows.map(({ node, depth }) => (
               <div
                 key={node.id}
@@ -170,22 +170,22 @@ export function SessionTreeDialog({ sessionId, open, onClose, onNavigated, onFor
                 )}
                 style={{ paddingLeft: 12 + depth * 16 }}
               >
-                <span className="mt-1 shrink-0 font-mono text-[10px] text-muted-foreground/70">
+                <span className="mt-1 shrink-0 font-mono text-caption text-muted-foreground/70">
                   {node.role === 'user' ? '你' : node.role === 'assistant' ? 'AI' : '·'}
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="break-words text-xs text-foreground">{node.preview}</p>
-                  <p className="mt-0.5 font-mono text-[10px] text-muted-foreground/70">
+                  <p className="mt-0.5 font-mono text-caption text-muted-foreground/70">
                     {node.id.slice(0, 8)}
                     {node.label ? ` · ${node.label}` : ''}
                     {node.isLeaf ? ' · 当前位置' : ''}
                   </p>
                 </div>
-                <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity duration-fast ease-standard group-hover:opacity-100 focus-within:opacity-100">
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-6 px-2 text-[11px]"
+                    className="h-6 px-2 text-caption"
                     disabled={busyId !== null || node.isLeaf}
                     onClick={() => void handleNavigate(node)}
                     aria-label={`回到 ${node.id.slice(0, 8)}`}
@@ -195,7 +195,7 @@ export function SessionTreeDialog({ sessionId, open, onClose, onNavigated, onFor
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-6 px-2 text-[11px]"
+                    className="h-6 px-2 text-caption"
                     disabled={busyId !== null}
                     onClick={() => void handleFork(node)}
                     aria-label={`从 ${node.id.slice(0, 8)} 分叉`}
@@ -205,7 +205,7 @@ export function SessionTreeDialog({ sessionId, open, onClose, onNavigated, onFor
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-6 px-2 text-[11px]"
+                    className="h-6 px-2 text-caption"
                     disabled={busyId !== null}
                     onClick={() => void handleOmit(node)}
                     aria-label={`把 ${node.id.slice(0, 8)} 从上下文移除`}
@@ -220,7 +220,7 @@ export function SessionTreeDialog({ sessionId, open, onClose, onNavigated, onFor
         )}
 
         <div className="flex items-center justify-between pt-1">
-          <span className="text-[11px] text-muted-foreground">{rows.length} 个节点</span>
+          <span className="text-caption text-muted-foreground">{rows.length} 个节点</span>
           <Button variant="ghost" size="sm" onClick={onClose}>
             <X className="mr-1 size-3.5" /> 关闭
           </Button>

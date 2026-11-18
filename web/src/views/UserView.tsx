@@ -101,7 +101,7 @@ export default function UserView() {
             onChange={(e) => setContent(e.target.value)}
             rows={20}
             placeholder="编辑用户描述…"
-            className="w-full rounded-xl border border-border bg-card p-4 font-mono text-[13px] leading-relaxed outline-none focus:border-ring"
+            className="w-full rounded-xl border border-border bg-card p-4 font-mono text-ui leading-relaxed outline-none focus:border-ring"
             aria-label="用户档案编辑器"
           />
           <div className="mt-3 flex items-center justify-between">

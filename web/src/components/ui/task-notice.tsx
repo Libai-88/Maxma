@@ -23,7 +23,7 @@ function TaskNotice({ notices, className }: { notices: Notice[]; className?: str
   return (
     <div data-slot="task-notice" className={cn("flex flex-col gap-1", className)}>
       {notices.map((notice) => (
-        <div key={notice.id} className="flex max-w-full items-center gap-2 text-[12.5px] text-muted-foreground">
+        <div key={notice.id} className="flex max-w-full items-center gap-2 text-ui text-muted-foreground">
           <span
             aria-hidden="true"
             className={cn(

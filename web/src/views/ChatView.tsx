@@ -283,7 +283,7 @@ export default function ChatView() {
   if (providerLoadFailed) {
     return (
       <div className="flex h-full items-center justify-center p-6">
-        <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 text-center shadow-lg">
+        <div className="w-full max-w-md rounded-xl bg-card p-6 text-center">
           <AlertTriangle className="mx-auto mb-3 size-6 text-muted-foreground" />
           <h3 className="text-base font-semibold">无法加载模型配置</h3>
           <p className="mt-2 text-sm text-muted-foreground">后端服务可能未就绪，请稍后重试。</p>
@@ -298,7 +298,7 @@ export default function ChatView() {
   if (!hasProviders || noUsableModels) {
     return (
       <div className="flex h-full items-center justify-center p-6">
-        <div className="w-full max-w-lg rounded-xl border border-border bg-card p-7 shadow-lg">
+        <div className="w-full max-w-lg rounded-xl bg-card p-7">
           <Settings2 className="mb-4 size-7 text-muted-foreground" />
           <h3 className="text-lg font-semibold">{noUsableModels ? '还差一步即可开始' : '开始使用 Maxma'}</h3>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -311,7 +311,7 @@ export default function ChatView() {
               '云端服务填入 API Key；Ollama 等本地服务无需 Key，保存后拉取模型',
             ].map((text, i) => (
               <li key={i} className="flex gap-3 text-sm">
-                <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-accent text-[11px] font-medium">{i + 1}</span>
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-accent text-caption font-medium tabular-nums">{i + 1}</span>
                 <span className="text-muted-foreground">{text}</span>
               </li>
             ))}
@@ -340,16 +340,16 @@ export default function ChatView() {
             freeLabel="剩余"
           />
         )}
-        {planMode && <span className="rounded-md border border-border px-2.5 py-1.5 text-[10px] text-muted-foreground">计划模式</span>}
+        {planMode && <span className="rounded-md border border-border px-2.5 py-1.5 text-caption text-muted-foreground">计划模式</span>}
         <Button variant="ghost" size="icon-sm" aria-label="工作台" aria-expanded={workbench.isOpen} onClick={() => workbench.toggle()}><PanelRight /></Button>
         <div className="relative">
           <Button variant="ghost" size="icon-sm" aria-label="更多会话操作" aria-expanded={moreMenuOpen} onClick={() => setMoreMenuOpen((v) => !v)}>···</Button>
           {moreMenuOpen && (
-            <div role="menu" aria-label="更多会话操作" className="absolute right-0 top-9 z-40 w-72 rounded-xl border border-border bg-popover p-4 shadow-lg">
-              <p className="mb-2 text-xs font-medium">会话设置</p>
-              <p className="mb-3 text-[11px] text-muted-foreground">输入 <code className="rounded bg-muted px-1.5 py-1.5">/</code> 查看全部命令（如 /goal、/plan、/undo）</p>
+            <div role="menu" aria-label="更多会话操作" className="absolute right-0 top-9 z-40 w-72 rounded-xl bg-popover p-4">
+              <p className="mb-2 text-meta font-medium">会话设置</p>
+              <p className="mb-3 text-caption text-muted-foreground">输入 <code className="rounded bg-muted px-1.5 py-1.5">/</code> 查看全部命令（如 /goal、/plan、/undo）</p>
               {goalState?.goal && (
-                <p className="mb-2 text-xs text-muted-foreground">
+                <p className="mb-2 text-meta text-muted-foreground">
                   目标：{goalState.goal.objective}
                   <span className="ml-1 opacity-70">（{goalState.goal.status === 'active' ? '进行中' : goalState.goal.status === 'paused' ? '已暂停' : goalState.goal.status === 'complete' ? '已完成' : goalState.goal.status}）</span>
                 </p>
@@ -432,7 +432,7 @@ export default function ChatView() {
           {taskBrief && (
             <section aria-live="polite" className="mx-4 mb-3 rounded-xl border border-border bg-card p-4">
               <div className="mb-2 flex items-center justify-between">
-                <div><span className="text-[10px] uppercase tracking-widest text-muted-foreground">执行前确认</span><strong className="block text-sm">把任务说清楚，Agent 才能一次做对</strong></div>
+                <div><span className="text-caption uppercase tracking-widest text-muted-foreground">执行前确认</span><strong className="block text-sm">把任务说清楚，Agent 才能一次做对</strong></div>
                 <Button variant="ghost" size="sm" onClick={cancelTaskBrief}>取消</Button>
               </div>
               {taskBrief.status === 'thinking' && <p className="flex items-center gap-2 text-sm text-muted-foreground"><Spinner /> 正在提取目标、约束和验收标准…</p>}
@@ -556,7 +556,7 @@ function WorkbenchSidebar({ onArtifactAction, allTurns }: {
           </Button>
         ))}
       </div>
-      <div className="flex flex-col flex-1 gap-2 overflow-y-auto p-2">
+      <div className="flex flex-col flex-1 gap-2 overflow-y-auto scrollbar-thin p-2">
         {workbench.activeTab === 'reasoning' && (
           <div className="flex flex-col gap-2">
             {allTurns.flatMap((turn, ti) => turn.events
@@ -569,11 +569,11 @@ function WorkbenchSidebar({ onArtifactAction, allTurns }: {
           </div>
         )}
         {workbench.activeTab === 'canvas' && workbench.cards.map((card) => (
-          <div key={card.id} className="rounded-xl border border-border bg-card p-4 text-xs shadow-sm">
+          <div key={card.id} className="rounded-xl bg-card p-4 text-meta">
             <div className="mb-1 flex items-center justify-between"><strong>{card.title}</strong>
               <Button variant="ghost" size="icon-sm" onClick={() => workbench.removeCard(card.id)} aria-label="移除卡片">✕</Button>
             </div>
-            <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-[11px] text-muted-foreground">{card.content}</pre>
+            <pre className="max-h-40 overflow-auto scrollbar-thin whitespace-pre-wrap text-caption text-muted-foreground">{card.content}</pre>
             {card.artifact && card.artifact.actions.map((a) => (
               <Button key={a.id} variant="outline" size="sm" className="mt-2 mr-1" onClick={() => onArtifactAction({ artifactId: card.artifact!.id, actionId: a.id, token: a.token })}>{a.label}</Button>
             ))}

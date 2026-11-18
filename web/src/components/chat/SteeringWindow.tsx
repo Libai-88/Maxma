@@ -153,7 +153,7 @@ export function SteeringWindow({
         title="实时调整"
         onClose={() => setDismissed(true)}
         closeLabel="关闭实时调整"
-        className="glass-panel shadow-xl"
+        className="glass-panel"
         actions={
           <Button
             variant="ghost"
@@ -163,7 +163,7 @@ export function SteeringWindow({
             onClick={() => setCollapsed((v) => !v)}
             className="text-muted-foreground hover:text-foreground"
           >
-            <ChevronDown className={cn('size-3.5 transition-transform', collapsed && '-rotate-90')} />
+            <ChevronDown className={cn('size-3.5 transition-transform duration-base ease-out-quint', collapsed && '-rotate-90')} />
           </Button>
         }
       >
@@ -185,7 +185,7 @@ export function SteeringWindow({
             {(queued.steering.length > 0 || queued.followUp.length > 0) && (
               <div className="flex flex-col gap-1 rounded-md border border-border/70 bg-background/40 px-2.5 py-2">
                 {queued.steering.length > 0 && (
-                  <div className="text-[10.5px] text-muted-foreground">
+                  <div className="text-caption text-muted-foreground">
                     立即调整排队 {queued.steering.length} 条
                     <ul className="mt-0.5 list-disc pl-4">
                       {queued.steering.slice(0, 3).map((m, i) => (
@@ -195,7 +195,7 @@ export function SteeringWindow({
                   </div>
                 )}
                 {queued.followUp.length > 0 && (
-                  <div className="text-[10.5px] text-muted-foreground">
+                  <div className="text-caption text-muted-foreground">
                     稍后处理排队 {queued.followUp.length} 条
                     <ul className="mt-0.5 list-disc pl-4">
                       {queued.followUp.slice(0, 3).map((m, i) => (
@@ -217,10 +217,10 @@ export function SteeringWindow({
               maxLength={4000}
               placeholder="任务进行中，随时调整方向（回车立即调整）"
               aria-label="实时调整内容"
-              className="w-full resize-none rounded-md border border-border bg-background/60 px-3 py-2.5 text-[12.5px] leading-relaxed outline-none placeholder:text-muted-foreground focus-visible:border-ring"
+              className="w-full resize-none rounded-md border border-border bg-background/60 px-3 py-2.5 text-ui leading-relaxed outline-none placeholder:text-muted-foreground focus-visible:border-ring"
             />
             <div className="flex items-center justify-between gap-2">
-              <span className="text-[10.5px] text-muted-foreground">{text.length}/4000</span>
+              <span className="text-caption text-muted-foreground">{text.length}/4000</span>
               <div className="flex items-center gap-1">
                 <Button variant="ghost" size="sm" disabled={!text.trim()} onClick={() => submit('follow_up')} title="完成当前步骤后再处理">
                   <StepForward data-icon="inline-start" /> 稍后

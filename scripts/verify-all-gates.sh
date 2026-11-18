@@ -94,6 +94,18 @@ sp_out=$(cd web && node scripts/check-spacing.mjs 2>&1); sp_rc=$?
 say "spacing guard" "$([ "$sp_rc" = 0 ] && echo PASS || echo FAIL)  $(echo "$sp_out" | grep -E '✓|✗|共' | tail -1)"
 [ "$sp_rc" = 0 ] || FAILS=$((FAILS+1))
 
+# 排版守卫：字号必须落在六档阶梯内、动效必须有时长、阴影必须走 elev-1/2/3。
+# 存量记在 web/scripts/type-scale-baseline.json（棘轮，只准缩不准涨）。
+# 2026-11-18 起因：33 个视图 125 处任意字号、11 个档位（含 10.5/11.5/12.5 三个半像素档）。
+ts_out=$(cd web && node scripts/check-type-scale.mjs 2>&1); ts_rc=$?
+say "type scale guard" "$([ "$ts_rc" = 0 ] && echo PASS || echo FAIL)  $(echo "$ts_out" | tail -1)"
+[ "$ts_rc" = 0 ] || FAILS=$((FAILS+1))
+
+# 玻璃层数守卫：backdrop-filter 生效声明上限（性能与可读性的硬边界）。
+gw_out=$(cd web && node scripts/check-css-weight.mjs 2>&1); gw_rc=$?
+say "glass weight guard" "$([ "$gw_rc" = 0 ] && echo PASS || echo FAIL)  $(echo "$gw_out" | tail -1)"
+[ "$gw_rc" = 0 ] || FAILS=$((FAILS+1))
+
 # 判定优先用**退出码**，不是输出字符串匹配。
 # （第一版在这里踩过坑：budget 的 PASS 分支匹配的是"✓ bun-sidecar: 0"，
 #   于是 bun-backend 报 ✗ 时整个脚本仍然打「全部闸门通过」——我今天一路在修的

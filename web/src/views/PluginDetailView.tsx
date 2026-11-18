@@ -83,7 +83,7 @@ export default function PluginDetailView() {
     if (!(await confirmAction({ message: `确定要卸载插件 "${pluginName}"？此操作不可撤销。`, danger: true, confirmText: '卸载' }))) return
     try {
       await store.uninstallPlugin(pluginName)
-      navigate('/plugins')
+      void navigate('/plugins')
     } catch {
       // Error handled by store
     }
@@ -99,7 +99,7 @@ export default function PluginDetailView() {
   }
 
   return (
-    <div className="ds-view ds-view--narrow mx-auto flex flex-1 min-h-0 flex-col overflow-y-auto">
+    <div className="ds-view ds-view--narrow mx-auto flex flex-1 min-h-0 flex-col overflow-y-auto scrollbar-thin">
       <div className="view-header mb-6">
         <Button variant="outline" size="sm" className="mb-3" onClick={() => navigate('/plugins')}>
           <ArrowLeft className="size-3.5" />

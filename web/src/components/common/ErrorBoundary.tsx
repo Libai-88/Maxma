@@ -26,9 +26,9 @@ export class ErrorBoundary extends Component<Props, State> {
     if (!this.state.error) return this.props.children
     return (
       <div role="alert" className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
-        <div className="rounded-xl border border-border bg-card px-6 py-5 shadow-sm">
-          <p className="text-sm font-medium text-foreground">界面渲染出错</p>
-          <p className="mt-2 max-w-md text-xs text-muted-foreground">{this.state.error.message}</p>
+        <div className="rounded-xl bg-card px-6 py-5">
+          <p className="text-ui font-medium text-foreground">界面渲染出错</p>
+          <p className="mt-2 max-w-md text-meta text-muted-foreground">{this.state.error.message}</p>
           <Button className="mt-4" size="sm" onClick={() => this.setState({ error: null })}>重试</Button>
         </div>
       </div>

@@ -163,15 +163,15 @@ export function McpMarket({ onInstalled }: { onInstalled: () => void }) {
             <div key={key} className="rounded-lg border border-border bg-card p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-medium text-foreground">{title}</span>
-                {isRegistry && (item as RegistryServer).verified && <Badge variant="secondary" className="text-[10px]">已验证</Badge>}
-                {author && <span className="text-[11px] text-muted-foreground">by {author}</span>}
+                {isRegistry && (item as RegistryServer).verified && <Badge variant="secondary" className="text-caption">已验证</Badge>}
+                {author && <span className="text-caption text-muted-foreground">by {author}</span>}
                 {status && (
-                  <Badge variant={status.authorized ? 'secondary' : 'outline'} className="text-[10px]">
+                  <Badge variant={status.authorized ? 'secondary' : 'outline'} className="text-caption">
                     <ShieldCheck className="mr-1 size-3" />{status.authorized ? `已授权（${status.status}）` : '未授权'}
                   </Badge>
                 )}
                 {isRegistry && typeof (item as RegistryServer).downloads === 'number' && (
-                  <span className="ml-auto text-[11px] text-muted-foreground">
+                  <span className="ml-auto text-caption text-muted-foreground">
                     {((item as RegistryServer).downloads / 1000).toFixed(1)}k 次下载
                   </span>
                 )}

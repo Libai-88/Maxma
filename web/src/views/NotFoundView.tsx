@@ -15,7 +15,7 @@ function ActionLink({ to, icon, title, desc, primary }: ActionLinkProps) {
     <Link
       to={to}
       className={
-        'flex items-center gap-3 rounded-lg border p-4 no-underline transition-colors hover:border-primary hover:bg-accent ' +
+        'flex items-center gap-3 rounded-lg border p-4 no-underline transition-colors duration-fast ease-standard hover:border-primary hover:bg-accent ' +
         (primary ? 'border-primary bg-accent' : 'border-border bg-panel')
       }
     >
@@ -31,7 +31,7 @@ function ActionLink({ to, icon, title, desc, primary }: ActionLinkProps) {
 export default function NotFoundView() {
   return (
     <div className="flex h-full items-center justify-center p-6">
-      <div className="w-full max-w-md rounded-lg border border-border bg-card p-8 text-center shadow-lg">
+      <div className="w-full max-w-md rounded-lg bg-card p-8 text-center">
         <div className="mb-2 text-muted-foreground">
           <MapPin className="mx-auto size-6" />
         </div>

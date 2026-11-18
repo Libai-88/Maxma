@@ -184,7 +184,7 @@ const steps: Step[] = [
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
+    <section className="rounded-lg bg-card p-4">
       <h3 className="mb-3 text-base font-bold text-foreground">{title}</h3>
       {children}
     </section>
@@ -205,7 +205,7 @@ function CompareCellView({ cell }: { cell: CompareCell }) {
 
 export default function HelpView() {
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="h-full overflow-y-auto scrollbar-thin">
       <div className="flex flex-col mx-auto w-full max-w-3xl gap-4 p-6">
         <div>
           <h2 className="text-xl font-semibold text-foreground">帮助 &amp; 关于 HELP</h2>

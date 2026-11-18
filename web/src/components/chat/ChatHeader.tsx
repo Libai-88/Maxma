@@ -11,7 +11,7 @@ export function ChatHeader({ children }: { children?: React.ReactNode }) {
   return (
     <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
       <div className="flex min-w-0 items-center gap-2.5">
-        <h1 className="truncate text-sm font-medium">{title}</h1>
+        <h1 className="truncate text-body font-medium">{title}</h1>
         {current?.is_const && <Tag>固定</Tag>}
       </div>
       <div className="ml-auto flex items-center gap-1">{children}</div>

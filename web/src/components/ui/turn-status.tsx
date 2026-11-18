@@ -88,13 +88,13 @@ function TurnStatus({
             role="status"
             aria-expanded={open}
             onClick={() => setOpen((value) => !value)}
-            className="flex w-fit max-w-full items-center gap-2 text-[12.5px] text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:text-foreground"
+            className="flex w-fit max-w-full items-center gap-2 text-ui text-muted-foreground transition-colors duration-fast ease-standard outline-none hover:text-foreground focus-visible:text-foreground"
           >
             {line}
-            <ChevronRight className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-90")} />
+            <ChevronRight className={cn("size-3.5 shrink-0 transition-transform duration-base ease-out-quint", open && "rotate-90")} />
           </button>
         ) : (
-          <div role="status" className="flex w-fit max-w-full items-center gap-2 text-[12.5px] text-muted-foreground">
+          <div role="status" className="flex w-fit max-w-full items-center gap-2 text-ui text-muted-foreground">
             {line}
           </div>
         )}

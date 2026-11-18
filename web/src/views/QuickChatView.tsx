@@ -90,7 +90,7 @@ export function QuickChatView() {
           {globalError && (
             <div role="alert" className="cursor-pointer border-b border-border bg-destructive/10 px-3 py-2.5 text-xs text-destructive" onClick={() => setGlobalError('')}>{globalError}</div>
           )}
-          <div ref={messagesRef} className="flex flex-col flex-1 gap-3 overflow-y-auto p-4">
+          <div ref={messagesRef} className="flex flex-col flex-1 gap-3 overflow-y-auto scrollbar-thin p-4">
             {mergedTurns.length === 0 && (
               <div className="pt-16 text-center text-sm text-muted-foreground">
                 <p>快速提问，不中断主窗口工作</p>
@@ -108,7 +108,7 @@ export function QuickChatView() {
                 {error && turn.id === mergedTurns[mergedTurns.length - 1]?.id && (
                   <div role="alert" className="flex flex-col max-w-[85%] gap-1.5 rounded-xl border border-destructive/40 bg-destructive/10 px-3.5 py-2.5 text-xs text-destructive">
                     <button type="button" className="text-left" onClick={() => dismissError()}>{error}</button>
-                    {errorTraceId && <p className="break-all font-mono text-[10px] opacity-80">trace: {errorTraceId}</p>}
+                    {errorTraceId && <p className="break-all font-mono text-caption opacity-80">trace: {errorTraceId}</p>}
                   </div>
                 )}
               </div>
@@ -139,7 +139,7 @@ export function QuickChatView() {
             <div className="mt-2 flex items-center gap-2">
               <select
                 value={selectedSessionId}
-                onChange={(e) => { setSelectedSessionId(e.target.value); switchSession(e.target.value) }}
+                onChange={(e) => { setSelectedSessionId(e.target.value); void switchSession(e.target.value) }}
                 className="min-w-0 flex-1 rounded-lg border border-border bg-card px-3 py-2.5 text-xs outline-none"
                 aria-label="选择会话"
               >

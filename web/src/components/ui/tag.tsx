@@ -40,7 +40,7 @@ function Tag({
       data-slot="tag"
       title={error}
       className={cn(
-        "glass-chosen relative flex h-7 w-fit max-w-44 items-center gap-1.5 overflow-hidden rounded-sm pl-2 text-[12px] text-foreground/90 [&_svg]:size-3.5 [&_svg]:shrink-0",
+        "glass-chosen relative flex h-7 w-fit max-w-44 items-center gap-1.5 overflow-hidden rounded-sm pl-2 text-meta text-foreground/90 [&_svg]:size-3.5 [&_svg]:shrink-0",
         onRemove ? "pr-1" : "pr-2",
         error && "text-destructive",
         armed && "glass-armed",
@@ -60,7 +60,7 @@ function Tag({
       </span>
       <span className="relative truncate">{children}</span>
       {/* As wide as "100%" from the start, so the tag does not grow, and push its neighbours along, as the count gains a digit. */}
-      {going && <span className="relative min-w-[4ch] shrink-0 text-right text-[10px] text-muted-foreground tabular-nums">{percent}%</span>}
+      {going && <span className="relative min-w-[4ch] shrink-0 text-right text-caption text-muted-foreground tabular-nums">{percent}%</span>}
       {onRemove && (
         <button
           type="button"

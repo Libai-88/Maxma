@@ -42,7 +42,7 @@ function patchStats(patch: string): { added: number; removed: number } {
 
 function DiffStats({ added, removed, className }: { added: number; removed: number; className?: string }) {
   return (
-    <span data-slot="diff-stats" className={cn("shrink-0 text-[12px] tabular-nums", className)}>
+    <span data-slot="diff-stats" className={cn("shrink-0 text-meta tabular-nums", className)}>
       <span className="text-emerald-600 dark:text-emerald-400">+{added}</span>{" "}
       <span className="text-rose-600 dark:text-rose-400">−{removed}</span>
     </span>
@@ -55,7 +55,7 @@ function DiffView({ patch, className }: { patch: string; className?: string }) {
   return (
     <div
       data-slot="diff-view"
-      className={cn("glass-panel scrollbar-thin max-h-80 overflow-auto rounded-md py-1 font-mono text-[11.5px] leading-[1.6]", className)}
+      className={cn("glass-panel scrollbar-thin max-h-80 overflow-auto rounded-md py-1 font-mono text-meta leading-[1.6]", className)}
     >
       {lines.map((line, index) => (
         <div

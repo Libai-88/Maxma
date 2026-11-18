@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import type { LlmUsageCall } from '@/types'
 import { cn } from '@/lib/utils'
+import { Skeleton } from '@/components/ui/skeleton'
+import { EmptyState } from '@/components/common/EmptyState'
 
 interface BarItem {
   label: string
@@ -18,8 +20,8 @@ interface BarItem {
 function Stat({ value, label, error }: { value: string | number; label: string; error?: boolean }) {
   return (
     <div className="px-3.5 py-3 border border-border rounded-lg bg-background">
-      <div className={cn('font-mono tabular-nums text-[22px] font-bold leading-tight', error ? 'text-destructive' : 'text-foreground')}>{value}</div>
-      <div className="text-[11px] text-muted-foreground mt-0.5">{label}</div>
+      <div className={cn('font-mono tabular-nums text-display font-bold leading-tight', error ? 'text-destructive' : 'text-foreground')}>{value}</div>
+      <div className="text-caption text-muted-foreground mt-0.5">{label}</div>
     </div>
   )
 }
@@ -28,7 +30,7 @@ function BarChart({ items, maxValue, height = 140 }: { items: BarItem[]; maxValu
   if (items.length === 0) return <div className="text-muted-foreground text-xs text-center py-3">无数据</div>
   const maxVal = maxValue !== undefined && maxValue > 0 ? maxValue : Math.max(...items.map(i => i.value), 1)
   return (
-    <div className="flex flex-col gap-1 overflow-y-auto" style={{ height }}>
+    <div className="flex flex-col gap-1 overflow-y-auto scrollbar-thin" style={{ height }}>
       {items.map((item, idx) => {
         const percent = maxVal > 0 ? Math.max(2, (item.value / maxVal) * 100) : 0
         return (
@@ -37,7 +39,7 @@ function BarChart({ items, maxValue, height = 140 }: { items: BarItem[]; maxValu
             <div className="flex-1 h-2 bg-secondary rounded overflow-hidden">
               <div className={cn('h-full rounded', item.kind === 'error' ? 'bg-destructive' : 'bg-primary')} style={{ width: `${percent}%` }} />
             </div>
-            <div className="w-[60px] shrink-0 text-right text-foreground font-semibold text-[11px] truncate">{item.display ?? String(item.value)}</div>
+            <div className="w-[60px] shrink-0 text-right text-foreground font-semibold text-caption truncate">{item.display ?? String(item.value)}</div>
           </div>
         )
       })}
@@ -98,10 +100,10 @@ export default function MetricsView() {
   }
 
   useEffect(() => {
-    refresh()
+    void refresh()
     void loadRecentCalls()
     setHistoryLoading(true)
-    loadHistory(3600).finally(() => setHistoryLoading(false))
+    void loadHistory(3600).finally(() => setHistoryLoading(false))
   }, [])
 
   useEffect(() => {
@@ -141,10 +143,10 @@ export default function MetricsView() {
   const llmHistorySeries = history ? history.snapshots.map(s => s.llm?.total_tokens_out ?? 0) : []
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div className="flex-1 overflow-y-auto scrollbar-thin p-6">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <h2 className="text-xl font-semibold text-foreground">运行指标</h2>
-        <div className="flex items-center gap-3 text-[13px] text-muted-foreground flex-wrap">
+        <div className="flex items-center gap-3 text-ui text-muted-foreground flex-wrap">
           {loading ? (
             <span className="px-2.5 py-1.5 rounded bg-secondary text-muted-foreground text-xs">刷新中…</span>
           ) : error ? (
@@ -152,7 +154,7 @@ export default function MetricsView() {
           ) : snapshot ? (
             <span className="px-2.5 py-1.5 rounded bg-secondary text-muted-foreground text-xs">运行 {formatUptime(snapshot.uptime_seconds)}</span>
           ) : null}
-          <button onClick={() => void refresh()} className="px-3.5 py-2.5 border border-border rounded-lg bg-card text-muted-foreground text-xs hover:border-ring hover:text-foreground transition-colors">刷新</button>
+          <button onClick={() => void refresh()} className="px-3.5 py-2.5 border border-border rounded-lg bg-card text-muted-foreground text-xs hover:border-ring hover:text-foreground transition-colors duration-fast ease-standard">刷新</button>
           <label className="flex items-center gap-1 text-xs cursor-pointer">
             <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} className="cursor-pointer" /> 自动刷新 (15s)
           </label>
@@ -160,8 +162,8 @@ export default function MetricsView() {
       </div>
 
       <details className="mb-4 border border-border rounded-lg bg-card">
-        <summary className="px-4 py-3 text-[13px] font-semibold text-foreground cursor-pointer select-none">这些指标是什么？我该关注什么？</summary>
-        <div className="px-4 pb-3 text-[12.5px] text-muted-foreground leading-[1.75]">
+        <summary className="px-4 py-3 text-ui font-semibold text-foreground cursor-pointer select-none">这些指标是什么？我该关注什么？</summary>
+        <div className="px-4 pb-3 text-body text-muted-foreground leading-[1.75]">
           <p className="my-1.5">本页展示 Maxma 后端进程的实时运行数据，帮助判断应用是否健康、AI 是否按预期工作。</p>
           <ul className="my-1.5 pl-[22px] list-disc">
             <li><strong className="text-foreground">HTTP 请求</strong>：前端与本地后端通信的请求数与延迟。延迟突然飙高说明后端响应变慢。</li>
@@ -175,19 +177,23 @@ export default function MetricsView() {
       </details>
 
       {!snapshot && loading ? (
-        <div className="flex items-center justify-center gap-2 py-4 text-[13px] text-muted-foreground">
-          <span className="size-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          <span>加载中…</span>
+        // 数据页首屏：骨架比转圈更少"白等"，因为它先画出形状。
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 w-full rounded-lg" />
+          ))}
         </div>
       ) : !snapshot ? (
-        <div className="flex items-center justify-center gap-2 py-4 text-[13px] text-muted-foreground">
-          <Sparkles className="size-4 text-muted-foreground" />暂无数据
-        </div>
+        <EmptyState
+          icon={<Sparkles className="size-4" />}
+          title="暂无数据"
+          hint="后端还没收到指标，或服务刚启动。刷新一次试试。"
+        />
       ) : (
         <>
           <section className="mb-4 p-[22px] border border-border rounded-lg bg-card">
-            <h3 className="text-[15px] font-semibold text-foreground mb-3">HTTP 请求</h3>
-            <p className="text-[12.5px] text-muted-foreground leading-relaxed mb-3">前端发往本地后端的 HTTP 请求总量、延迟分布与状态码构成。延迟飙升或 5xx 占比高，通常意味着后端卡顿或异常。</p>
+            <h3 className="text-subtitle font-semibold text-foreground mb-3">HTTP 请求</h3>
+            <p className="text-body text-muted-foreground mb-3">前端发往本地后端的 HTTP 请求总量、延迟分布与状态码构成。延迟飙升或 5xx 占比高，通常意味着后端卡顿或异常。</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 mb-4">
               <Stat value={snapshot.http.total_requests} label="总请求数" />
               <Stat value={snapshot.http.latency_ms.count} label="采样数" />
@@ -205,8 +211,8 @@ export default function MetricsView() {
           </section>
 
           <section className="mb-4 p-[22px] border border-border rounded-lg bg-card">
-            <h3 className="text-[15px] font-semibold text-foreground mb-3">工具调用</h3>
-            <p className="text-[12.5px] text-muted-foreground leading-relaxed mb-3">AI 在对话中实际调用的工具（搜索 / 文件读写 / MCP / 内置能力等）的总次数、错误数与按工具的分布。</p>
+            <h3 className="text-subtitle font-semibold text-foreground mb-3">工具调用</h3>
+            <p className="text-body text-muted-foreground mb-3">AI 在对话中实际调用的工具（搜索 / 文件读写 / MCP / 内置能力等）的总次数、错误数与按工具的分布。</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 mb-4">
               <Stat value={snapshot.tools.total_calls} label="总调用数" />
               <Stat value={snapshot.tools.total_errors} label="错误总数" error={snapshot.tools.total_errors > 0} />
@@ -219,13 +225,13 @@ export default function MetricsView() {
           </section>
 
           <section className="mb-4 p-[22px] border border-border rounded-lg bg-card">
-            <h3 className="text-[15px] font-semibold text-foreground mb-3">模型用量</h3>
-            <p className="text-[12.5px] text-muted-foreground leading-relaxed mb-3">按助手模型响应逐次统计。缓存预热单独计数；缓存字段或 usage 缺失时，缓存命中率显示为未知。</p>
+            <h3 className="text-subtitle font-semibold text-foreground mb-3">模型用量</h3>
+            <p className="text-body text-muted-foreground mb-3">按助手模型响应逐次统计。缓存预热单独计数；缓存字段或 usage 缺失时，缓存命中率显示为未知。</p>
             {(snapshot.llm.missing_usage_calls || snapshot.llm.cache_unobserved_calls) ? (
-              <p className="text-[12.5px] text-muted-foreground leading-relaxed mb-3">{snapshot.llm.missing_usage_calls || 0} 次请求未返回完整 Token 用量；{snapshot.llm.cache_unobserved_calls || 0} 次请求的缓存字段不可确认，命中率不会把它们当作未命中。</p>
+              <p className="text-body text-muted-foreground mb-3">{snapshot.llm.missing_usage_calls || 0} 次请求未返回完整 Token 用量；{snapshot.llm.cache_unobserved_calls || 0} 次请求的缓存字段不可确认，命中率不会把它们当作未命中。</p>
             ) : null}
             {snapshot.llm.cache_warm_calls ? (
-              <p className="text-[12.5px] text-muted-foreground leading-relaxed mb-3">缓存预热调用：{snapshot.llm.cache_warm_calls} 次，读取 Token 计入总用量，但不计入对话缓存命中率。</p>
+              <p className="text-body text-muted-foreground mb-3">缓存预热调用：{snapshot.llm.cache_warm_calls} 次，读取 Token 计入总用量，但不计入对话缓存命中率。</p>
             ) : null}
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 mb-4">
               <Stat value={snapshot.llm.total_calls} label="模型请求" />
@@ -245,23 +251,23 @@ export default function MetricsView() {
 
           <section className="mb-4 p-[22px] border border-border rounded-lg bg-card">
             <div className="flex items-center justify-between gap-2 mb-3">
-              <h3 className="text-[15px] font-semibold text-foreground">最近模型请求</h3>
+              <h3 className="text-subtitle font-semibold text-foreground">最近模型请求</h3>
               <Button variant="outline" size="sm" disabled={callsLoading} onClick={() => void loadRecentCalls()}>
                 {callsLoading ? <Spinner className="size-3" /> : null} 刷新
               </Button>
             </div>
-            <p className="text-[12.5px] text-muted-foreground leading-relaxed mb-3">
+            <p className="text-body text-muted-foreground mb-3">
               引擎（pi）逐次上报的用量账本，保留 30 天。预热调用单独成行，不参与命中率计算。
             </p>
             {callsError ? (
-              <p className="text-[12.5px] text-destructive">读取失败：{callsError}</p>
+              <p className="text-ui text-destructive">读取失败：{callsError}</p>
             ) : recentCalls.length === 0 ? (
-              <div className="text-center py-4 text-[13px] text-muted-foreground">暂无请求记录</div>
+              <EmptyState title="暂无请求记录" hint="对话一发起，这里就会出现逐次请求的 Token 与耗时。" className="py-6" />
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-[12px] tabular-nums">
+                <table className="w-full text-meta tabular-nums">
                   <thead>
-                    <tr className="text-left text-[11px] text-muted-foreground">
+                    <tr className="text-left text-caption text-muted-foreground">
                       <th className="py-2 pr-3 font-medium">时间</th>
                       <th className="py-2 pr-3 font-medium">模型</th>
                       <th className="py-2 pr-3 font-medium text-right">输入</th>
@@ -288,17 +294,17 @@ export default function MetricsView() {
                   </tbody>
                 </table>
                 {recentCalls.length > 30 && (
-                  <p className="mt-2 text-[11px] text-muted-foreground">仅显示最近 30 条（共 {recentCalls.length} 条）</p>
+                  <p className="mt-2 text-caption text-muted-foreground">仅显示最近 30 条（共 {recentCalls.length} 条）</p>
                 )}
               </div>
             )}
           </section>
 
           <section className="mb-4 p-[22px] border border-border rounded-lg bg-card">
-            <h3 className="text-[15px] font-semibold text-foreground mb-3">错误统计</h3>
-            <p className="text-[12.5px] text-muted-foreground leading-relaxed mb-3">按类别聚合的应用级错误。健康状态下应该为空或数量极少；某类别突增说明对应子系统可能异常。</p>
+            <h3 className="text-subtitle font-semibold text-foreground mb-3">错误统计</h3>
+            <p className="text-body text-muted-foreground mb-3">按类别聚合的应用级错误。健康状态下应该为空或数量极少；某类别突增说明对应子系统可能异常。</p>
             {Object.keys(snapshot.errors).length === 0 ? (
-              <div className="text-center py-4 text-[13px] text-muted-foreground">暂无错误</div>
+              <EmptyState title="暂无错误" hint="健康状态下这里应该是空的。" className="py-6" />
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
                 {Object.entries(snapshot.errors).map(([category, count]) => (
@@ -309,8 +315,8 @@ export default function MetricsView() {
           </section>
 
           <section className="mb-4 p-[22px] border border-border rounded-lg bg-card">
-            <h3 className="text-[15px] font-semibold text-foreground mb-3">历史趋势</h3>
-            <p className="text-[12.5px] text-muted-foreground leading-relaxed mb-3">按时间窗口采样的历史指标，用于观察趋势（例如请求量高峰、错误突增、Token 消耗累积）。</p>
+            <h3 className="text-subtitle font-semibold text-foreground mb-3">历史趋势</h3>
+            <p className="text-body text-muted-foreground mb-3">按时间窗口采样的历史指标，用于观察趋势（例如请求量高峰、错误突增、Token 消耗累积）。</p>
             <div className="flex gap-2 mb-2 items-center">
               <select
                 value={historyWindow}
@@ -322,12 +328,12 @@ export default function MetricsView() {
                 <option value={21600}>最近 6 小时</option>
                 <option value={86400}>最近 24 小时</option>
               </select>
-              <button onClick={() => void loadHistoryWith(historyWindow)} className="px-3.5 py-2.5 border border-border rounded-lg bg-card text-muted-foreground text-xs hover:border-ring hover:text-foreground transition-colors">刷新</button>
+              <button onClick={() => void loadHistoryWith(historyWindow)} className="px-3.5 py-2.5 border border-border rounded-lg bg-card text-muted-foreground text-xs hover:border-ring hover:text-foreground transition-colors duration-fast ease-standard">刷新</button>
             </div>
             {historyLoading ? (
-              <div className="text-center py-4 text-[13px] text-muted-foreground">历史数据加载中...</div>
+              <Skeleton className="h-24 w-full rounded-lg" />
             ) : !history || history.snapshots.length < 2 ? (
-              <div className="text-center py-4 text-[13px] text-muted-foreground">暂无足够的历史快照</div>
+              <EmptyState title="暂无足够的历史快照" hint="历史趋势需要至少两个采样点；等一会儿再来。" className="py-6" />
             ) : (
               <>
                 <div className="mt-3">

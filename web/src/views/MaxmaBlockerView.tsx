@@ -92,7 +92,7 @@ export default function MaxmaBlockerView() {
   }
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="h-full overflow-y-auto scrollbar-thin">
       <div className="flex flex-col mx-auto w-full max-w-3xl gap-4 p-6">
         {!showForm ? (
           <>
@@ -159,7 +159,7 @@ export default function MaxmaBlockerView() {
             ) : (
               <div className="flex flex-col gap-2">
                 {entries.map((entry, i) => (
-                  <div key={i} className="flex items-center justify-between gap-4 rounded-lg border border-border bg-card p-4 shadow-sm">
+                  <div key={i} className="flex items-center justify-between gap-4 rounded-lg bg-card p-4">
                     <div className="min-w-0 flex-1">
                       <div className="break-all font-mono text-sm text-foreground">{entry.path}</div>
                       {entry.description && <div className="mt-1 text-xs text-muted-foreground">{entry.description}</div>}
@@ -173,7 +173,7 @@ export default function MaxmaBlockerView() {
         ) : (
           <>
             <h2 className="text-xl font-semibold text-foreground">添加拒止锚</h2>
-            <div className="flex max-w-xl flex-col gap-4 rounded-lg border border-border bg-card p-4 shadow-sm">
+            <div className="flex max-w-xl flex-col gap-4 rounded-lg bg-card p-4">
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-semibold text-foreground">目录</label>
                 <div className="flex gap-2">

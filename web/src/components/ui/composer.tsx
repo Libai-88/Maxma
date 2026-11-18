@@ -100,7 +100,7 @@ function Composer({
     <div
       data-slot="composer"
       className={cn(
-        "group/composer relative rounded-xl bg-card py-2 pr-1 pl-2 transition-colors focus-within:border-ring/60",
+        "group/composer relative rounded-xl bg-card py-2 pr-1 pl-2 transition-colors duration-fast ease-standard focus-within:border-ring/60",
         className
       )}
       {...props}
@@ -154,7 +154,7 @@ function Composer({
             disabled={!stops && !ready}
             onClick={stops ? onStop : submit}
             className={cn(
-              "shrink-0 rounded-md bg-transparent transition-colors hover:bg-accent",
+              "shrink-0 rounded-md bg-transparent transition-colors duration-fast ease-standard hover:bg-accent",
               stops
                 ? "text-muted-foreground hover:text-foreground"
                 : ready
@@ -216,7 +216,7 @@ function ComposerPick<T extends string>({
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={label}
-        className="glass-held flex h-6 items-center gap-1 rounded-sm px-1.5 text-[12px] text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:text-foreground aria-expanded:text-foreground"
+        className="glass-held flex h-6 items-center gap-1 rounded-sm px-1.5 text-meta text-muted-foreground transition-colors duration-fast ease-standard outline-none hover:text-foreground focus-visible:text-foreground aria-expanded:text-foreground"
       >
         <span className="max-w-40 truncate">{shown ?? options.find((option) => option.value === value)?.label}</span>
         <ChevronDown className="size-3 opacity-60" />
@@ -224,18 +224,18 @@ function ComposerPick<T extends string>({
       <DropdownMenuContent side="top" align={align} className={explained ? "w-72" : "min-w-36"}>
         <DropdownMenuRadioGroup value={value} onValueChange={(next) => onValueChange(next as T)}>
           {/* Inside the group: a label outside one has nothing to name. */}
-          <DropdownMenuLabel className="text-[11px]">{label}</DropdownMenuLabel>
+          <DropdownMenuLabel className="text-caption">{label}</DropdownMenuLabel>
           {options.map((option) => (
             <DropdownMenuRadioItem
               key={option.value}
               value={option.value}
               closeOnClick
-              className={cn("text-[13px]", option.hint && "items-start py-1.5")}
+              className={cn("text-ui", option.hint && "items-start py-1.5")}
             >
               {option.hint ? (
                 <span className="flex min-w-0 flex-col gap-0.5">
                   <span>{option.label}</span>
-                  <span className="text-[12px] leading-snug whitespace-normal text-muted-foreground">{option.hint}</span>
+                  <span className="text-meta leading-snug whitespace-normal text-muted-foreground">{option.hint}</span>
                 </span>
               ) : (
                 option.label

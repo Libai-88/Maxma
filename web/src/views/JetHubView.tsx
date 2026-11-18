@@ -553,7 +553,7 @@ export default function JetHubView() {
   }
 
   return (
-    <div className="jet-hub ds-view ds-view--wide flex flex-1 min-h-0 flex-col gap-4 overflow-y-auto">
+    <div className="jet-hub ds-view ds-view--wide flex flex-1 min-h-0 flex-col gap-4 overflow-y-auto scrollbar-thin">
       {/* 页头 */}
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -698,7 +698,7 @@ export default function JetHubView() {
 
       {/* 渠道 rail + 面板 */}
       <section className="grid flex-1 grid-cols-[220px_1fr] gap-4 max-md:grid-cols-1">
-        <nav aria-label="渠道列表" className="glass-panel flex min-h-0 flex-col gap-2 overflow-y-auto rounded-lg border border-border p-3">
+        <nav aria-label="渠道列表" className="glass-panel flex min-h-0 flex-col gap-2 overflow-y-auto scrollbar-thin rounded-lg border border-border p-3">
           {store.openProviders().length > 0 && (
             <>
               <div className="px-2 py-1 text-xs font-medium text-muted-foreground">已打开 ({store.openProviders().length})</div>
@@ -731,7 +731,7 @@ export default function JetHubView() {
           {!(store.routes?.length) && !store.loading && <p className="px-2 py-4 text-sm text-muted-foreground">暂无可用渠道</p>}
         </nav>
 
-        <div className="glass-panel flex min-h-0 flex-col gap-3 overflow-y-auto rounded-lg border border-border p-4">
+        <div className="glass-panel flex min-h-0 flex-col gap-3 overflow-y-auto scrollbar-thin rounded-lg border border-border p-4">
           {current && currentStatus ? (
             <>
               {/* 面板头 */}
@@ -1068,7 +1068,7 @@ function RailRow({ name, meta, active, closed, onClick }: { name: string; meta: 
     <button
       type="button"
       className={cn(
-        'flex w-full flex-col items-start gap-0.5 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors',
+        'flex w-full flex-col items-start gap-0.5 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors duration-fast ease-standard',
         active ? 'bg-accent text-foreground' : 'text-foreground/85 hover:bg-accent',
         closed && 'opacity-60',
       )}

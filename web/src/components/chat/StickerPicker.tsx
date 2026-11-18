@@ -54,7 +54,7 @@ export function StickerPicker({ onSelect, onClose }: { onSelect: (sticker: Stick
   }
 
   return (
-    <div className="absolute bottom-full left-0 z-30 mb-2 w-[min(420px,80vw)] rounded-xl border border-border bg-popover p-3 shadow-lg" role="dialog" aria-label="表情选择器">
+    <div className="absolute bottom-full left-0 z-30 mb-2 w-[min(420px,80vw)] rounded-xl bg-popover p-3" role="dialog" aria-label="表情选择器">
       <div className="mb-2 flex items-center gap-1">
         {([['all', '全部'], ['recent', '最近'], ['fav', '收藏']] as const).map(([k, label]) => (
           <Button key={k} size="sm" variant={tab === k ? 'secondary' : 'ghost'} onClick={() => { setTab(k); setCategory('') }}>{label}</Button>
@@ -79,7 +79,7 @@ export function StickerPicker({ onSelect, onClose }: { onSelect: (sticker: Stick
             <button
               type="button"
               onClick={() => onSelect(s)}
-              className="flex size-12 items-center justify-center rounded-md transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"
+              className="flex size-12 items-center justify-center rounded-md transition-colors duration-fast ease-standard hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"
               aria-label={s.label || s.path}
               title={s.label || s.path}
             >
@@ -88,7 +88,7 @@ export function StickerPicker({ onSelect, onClose }: { onSelect: (sticker: Stick
             <button
               type="button"
               onClick={() => void toggleFavorite(s)}
-              className={cn('absolute right-0 top-0 rounded-full bg-popover/80 p-0.5 opacity-0 transition-opacity group-hover:opacity-100', favorites.some((f) => f.path === s.path) && 'text-status-warn opacity-100')}
+              className={cn('absolute right-0 top-0 rounded-full bg-popover/80 p-0.5 opacity-0 transition-opacity duration-fast ease-standard group-hover:opacity-100', favorites.some((f) => f.path === s.path) && 'text-status-warn opacity-100')}
               aria-label="收藏表情"
             >
               <Star className="size-2.5" />

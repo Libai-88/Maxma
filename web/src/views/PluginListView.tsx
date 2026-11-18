@@ -134,7 +134,7 @@ export default function PluginListView() {
   }
 
   function handleConfigure(name: string) {
-    navigate(`/plugins/${encodeURIComponent(name)}`)
+    void navigate(`/plugins/${encodeURIComponent(name)}`)
   }
 
   async function handleUninstall(name: string) {
@@ -147,7 +147,7 @@ export default function PluginListView() {
   }
 
   return (
-    <div className="ds-view flex flex-1 min-h-0 flex-col overflow-y-auto">
+    <div className="ds-view flex flex-1 min-h-0 flex-col overflow-y-auto scrollbar-thin">
       <div className="view-header mb-6">
         <h2 className="text-xl font-semibold text-foreground">插件</h2>
         <p className="mt-1 text-sm text-muted-foreground">管理随 Maxma 分发的插件——启用、配置与卸载</p>
@@ -156,7 +156,7 @@ export default function PluginListView() {
       {/* 安装 / 启用框 */}
       <div className="glass-panel mb-4 rounded-lg border border-border p-4">
         <div className="flex flex-col gap-2">
-          <label htmlFor="plugin-install-spec" className="text-[0.82rem] font-semibold text-muted-foreground">
+          <label htmlFor="plugin-install-spec" className="text-ui font-semibold text-muted-foreground">
             {installBoxTitle}
           </label>
           <div className="flex gap-2">
@@ -304,7 +304,7 @@ function PluginCardView({
   return (
     <div
       className={cn(
-        'glass-panel flex cursor-pointer flex-col gap-2 rounded-lg border border-border p-4 text-foreground transition-colors hover:border-primary/40',
+        'glass-panel flex cursor-pointer flex-col gap-2 rounded-lg border border-border p-4 text-foreground transition-colors duration-fast ease-standard hover:border-primary/40',
         !plugin.enabled && 'opacity-60',
       )}
       onClick={onOpen}
@@ -314,7 +314,7 @@ function PluginCardView({
           <Puzzle className="size-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[0.95rem] font-semibold">{plugin.name}</div>
+          <div className="truncate text-subtitle font-semibold">{plugin.name}</div>
           {plugin.version && <div className="font-mono text-xs text-muted-foreground">v{plugin.version}</div>}
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -357,7 +357,7 @@ function PluginCardView({
       {plugin.tags && plugin.tags.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {plugin.tags.map((tag) => (
-            <Badge key={tag} variant="secondary" className="text-[0.7rem]">
+            <Badge key={tag} variant="secondary" className="text-caption">
               {tag}
             </Badge>
           ))}
@@ -366,7 +366,7 @@ function PluginCardView({
       {plugin.features && plugin.features.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {plugin.features.map((feature) => (
-            <Badge key={feature} variant="outline" className="text-[0.7rem]">
+            <Badge key={feature} variant="outline" className="text-caption">
               {feature}
             </Badge>
           ))}

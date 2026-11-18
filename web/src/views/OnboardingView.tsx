@@ -83,19 +83,19 @@ function OnboardingInner({ paused }: { paused: boolean }) {
         aria-labelledby="onboarding-title"
         tabIndex={-1}
         onKeyDown={e => { if (e.key === 'Escape') complete() }}
-        className="w-full max-w-[560px] border border-border rounded-lg bg-card backdrop-blur-xl shadow-2xl"
+        className="w-full max-w-[560px] rounded-lg bg-card"
       >
         <div className="flex items-center justify-between gap-4 px-6 py-[22px] border-b border-border">
           <div>
             <p className="text-xs tracking-[0.08em] text-muted-foreground">MAXMAHERE</p>
-            <h2 id="onboarding-title" className="text-[22px] font-semibold text-foreground mt-0.5">{titles[step]}</h2>
+            <h2 id="onboarding-title" className="text-display font-semibold text-foreground mt-0.5">{titles[step]}</h2>
           </div>
-          <button onClick={() => complete()} className="px-4 py-3 border border-border rounded-lg text-sm text-muted-foreground hover:bg-secondary transition-colors">跳过</button>
+          <button onClick={() => complete()} className="px-4 py-3 border border-border rounded-lg text-sm text-muted-foreground hover:bg-secondary transition-colors duration-fast ease-standard">跳过</button>
         </div>
 
         <div className="flex gap-2 px-6 pt-[18px]" aria-label="引导进度">
           {titles.map((_, index) => (
-            <span key={index} className={cn('block h-[3px] flex-1 rounded-full bg-border transition-colors', (index === step || index < step) && 'bg-primary')} />
+            <span key={index} className={cn('block h-[3px] flex-1 rounded-full bg-border transition-colors duration-fast ease-standard', (index === step || index < step) && 'bg-primary')} />
           ))}
         </div>
 
@@ -103,7 +103,7 @@ function OnboardingInner({ paused }: { paused: boolean }) {
           {step === 0 && (
             <>
               <div className="grid gap-3 p-3.5 border border-border rounded-lg bg-secondary">
-                <p className="text-[13px] leading-[1.7] text-muted-foreground">
+                <p className="text-ui leading-[1.7] text-muted-foreground">
                   <strong className="text-foreground font-semibold">Maxma</strong> 是一款本地优先的 AI 桌面工作站——把大模型对话、工具调用、长期记忆与人设系统整合在一个应用里，所有数据都保存在你的电脑上。
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -150,7 +150,7 @@ function OnboardingInner({ paused }: { paused: boolean }) {
                 <Info className="size-3.5 shrink-0 text-muted-foreground" />
                 <div>想立即开始就选内置免费模型；需要更高配额或完全离线时，再添加 <strong className="text-foreground font-semibold">DeepSeek</strong> 或 <strong className="text-foreground font-semibold">Ollama</strong>。</div>
               </div>
-              <button onClick={() => navigate('/providers')} className="justify-self-start px-4 py-3 border border-border rounded-lg text-sm text-muted-foreground hover:bg-secondary transition-colors">前往模型设置</button>
+              <button onClick={() => navigate('/providers')} className="justify-self-start px-4 py-3 border border-border rounded-lg text-sm text-muted-foreground hover:bg-secondary transition-colors duration-fast ease-standard">前往模型设置</button>
             </>
           )}
 
@@ -162,7 +162,7 @@ function OnboardingInner({ paused }: { paused: boolean }) {
                   <button
                     key={t.id}
                     onClick={() => chooseTheme(t.id)}
-                    className={cn('flex items-center gap-2 px-3.5 py-3 border rounded-lg text-sm text-muted-foreground hover:bg-secondary transition-colors', themeMode === t.id ? 'border-ring text-foreground bg-secondary' : 'border-border')}
+                    className={cn('flex items-center gap-2 px-3.5 py-3 border rounded-lg text-sm text-muted-foreground hover:bg-secondary transition-colors duration-fast ease-standard', themeMode === t.id ? 'border-ring text-foreground bg-secondary' : 'border-border')}
                   >
                     <span className={cn('size-4 rounded-md border border-border', t.id === 'light' ? 'bg-background' : 'bg-foreground')} />
                     {t.name}
@@ -185,13 +185,13 @@ function OnboardingInner({ paused }: { paused: boolean }) {
 
           {step === 3 && (
             <>
-              <p className="text-[15px] font-semibold text-foreground">准备就绪！现在可以开始使用 Maxma 了。</p>
+              <p className="text-subtitle font-semibold text-foreground">准备就绪！现在可以开始使用 Maxma 了。</p>
               <div className="grid gap-2.5">
                 {NEXT_STEPS.map(s => (
                   <div key={s.no} className="flex gap-3 p-3.5 border border-border rounded-lg bg-secondary">
                     <span className="size-[22px] rounded-full bg-primary text-primary-foreground text-xs font-bold inline-flex items-center justify-center shrink-0">{s.no}</span>
                     <div className="min-w-0">
-                      <div className="text-[13px] font-semibold text-foreground mb-0.5">{s.title}</div>
+                      <div className="text-ui font-semibold text-foreground mb-0.5">{s.title}</div>
                       <div className="text-xs text-muted-foreground leading-[1.5]">{s.desc}</div>
                     </div>
                   </div>
@@ -204,9 +204,9 @@ function OnboardingInner({ paused }: { paused: boolean }) {
 
         <div className="flex items-center justify-between gap-4 px-6 py-[22px] border-t border-border">
           {step > 0 ? (
-            <button onClick={() => setStep(s => s - 1)} className="px-4 py-3 border border-border rounded-lg text-sm text-muted-foreground hover:bg-secondary transition-colors">上一步</button>
+            <button onClick={() => setStep(s => s - 1)} className="px-4 py-3 border border-border rounded-lg text-sm text-muted-foreground hover:bg-secondary transition-colors duration-fast ease-standard">上一步</button>
           ) : <span />}
-          <button autoFocus onClick={next} className="px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold transition-colors">
+          <button autoFocus onClick={next} className="px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold transition-colors duration-fast ease-standard">
             {step === titles.length - 1 ? '开始使用' : '继续'}
           </button>
         </div>
