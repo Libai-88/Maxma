@@ -218,7 +218,33 @@ VISUAL_THEME=light bun scripts/verify-ui-visual.mjs # 亮色抽查（主题由 D
 所以"入口存在但保存无效"也会红。负向验证做过一次：把 `ChatHeader` 里的 `name`
 去掉重跑，断言立刻点名失败（页头退回首条消息），证明守卫生效而不是摆设。
 
-## 十二、新页面自查清单
+## 十二、收尾浮窗：完成后验收常驻（2026-11-18）
+
+「完成后验收」原先内联在消息区与 composer 之间：回答一结束就多出一条卡片，
+把输入框往下顶，长对话里还会把刚读到的段落挤出视口。它本质是**对上一轮的收尾
+操作**，不该参与消息流排版。
+
+现在与「实时调整」同属浮窗家族，但生命周期不同：
+
+| 窗口 | 何时出现 | 何时消失 | 关闭方式 |
+|---|---|---|---|
+| 实时调整 `SteeringWindow` | 流式进行中 | 回合结束 | 收起 / 关闭（本轮不再弹） |
+| 完成后验收 `TaskReviewWindow` | 回合结束且 `task_review_update(available)` | 用户「结果符合预期」或「按反馈修订」 | 只收起，**不关闭**——一直悬浮 |
+
+两条窗口共用 `utils/floatingWindow.ts` 的钳制/默认锚点/存储逻辑：拖动位置与
+收起态存 localStorage，视口变小时自动拉回可视区，窗口永远不会被拖出屏幕。
+验收窗默认停靠右下、输入框上方，宽 `min(360px, 100vw-24px)`，`position: fixed`，
+滚动聊天区时位置不变。
+
+为什么没有关闭按钮：这一轮还没被确认或修订，关掉只会让用户以为"已经处理过了"。
+需要腾地方时收起成标题条即可，它仍在那儿等着。
+
+验收方式（`verify-ui-chat-roundtrip.mjs` 真实界面）：
+回答结束后断言 `[data-slot="task-review-window"]` 存在、`position=fixed`、
+在视口内；再滚动聊天区，窗口位移必须 ≤1px；等 1.5 秒仍在。截图存证
+[task-review-floating.png](visual/task-review-floating.png)。
+
+## 十三、新页面自查清单
 
 - [ ] 字号只用六档 token（`text-caption/meta/ui/body/subtitle/display`）
 - [ ] 段落用 `text-body`，表格与行内信息用 `text-meta`，导航与按钮用 `text-ui`

@@ -48,6 +48,30 @@ TypeBox 用法、命令签名、以及改完怎么让 Maxma 重新探测；这�
   扩展立即出现在清单 → 磁盘上确有 `index.ts`（含 default 导出与示例工具名）。
 - 截图基线重生（6 页）。
 
+## 2026-11-18 第六轮：完成后验收改为常驻浮窗
+
+用户指出「完成后验收」回答结束后自动出现，但它是内联卡片，会顶高 composer
+并随消息区滚动；希望它**一直保持悬浮**。
+
+改动：
+
+- 新增 `web/src/components/chat/TaskReviewWindow.tsx`：`position: fixed` 的
+  Solid Glass `Panel`，可拖动、可收起，位置与收起态存 localStorage；**没有关闭
+  按钮**（本轮未被确认/修订前只能收起，避免"关掉即处理完"的错觉）。
+- `ChatView` 删除内联 section，改挂浮窗；`taskReview` 为空即不渲染，接受/修订
+  后自动消失，下一轮回答再出现。
+- 抽出 `web/src/utils/floatingWindow.ts`（钳制、默认锚点、读写位置），
+  `SteeringWindow` 同步改用它，两个浮窗边界行为只有一份实现。
+- 新增 `web/tests/floatingWindow.test.ts`（6 例）：越界钳回、小视口上下界
+  不交叉、坏存储回退、写入失败不抛。
+- `_ui-chat-driver.cjs` 修复两处**验证脚本自身**的缺陷：用户消息里曾包含
+  期望回复串（导致"模型报错也算看到回复"）；未选中假渠道（会跑真实渠道撞 429）。
+  现在先建新会话、写入 provider/model，再断言浮窗 `fixed`、滚动不移动、1.5s 后仍在。
+- 截图存证 `dev_docs/visual/task-review-floating.png`；设计系统补第十二节。
+
+验证：web 44 pass / 0 fail、tsc 0 error、build 通过、lint 0 error；
+`verify-ui-chat-roundtrip.mjs` 真实界面通过（浮窗 360×177，fixed，滚动位移 0）。
+
 ## 2026-11-18 排版与动效整理（前端美学，不动功能）
 
 用户的问题是「直接引入组件库之后，还能不能在不影响性能和功能的前提下更好看」。

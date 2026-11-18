@@ -30,9 +30,13 @@ delete process.env.ELECTRON_RUN_AS_NODE;
 delete process.env.ELECTRON_NO_ATTACH_CONSOLE;
 
 const { app, BrowserWindow } = require("electron");
+const fs = require("node:fs");
 
 const BASE = process.env.DRIVE_BASE;
 const REPLY = process.env.DRIVE_REPLY;
+const SESSION_ID = process.env.DRIVE_SESSION_ID || "";
+const PROVIDER_ID = process.env.DRIVE_PROVIDER || "";
+const MODEL_NAME = process.env.DRIVE_MODEL || "";
 
 /**
  * 界面选择器 —— **React 重写后的真实钩子**。
@@ -75,6 +79,21 @@ app.whenReady().then(async () => {
   //（web/src/api/index.ts 的 ensureTokenLoaded），也没有 localStorage 持久化。
   await win.loadURL(BASE + "/");
 
+  // 选中假渠道：否则界面会沿用上次真实渠道（实测跑到 MiMo 免费额度上，
+  // 上游 429 直接结束回合，验收窗口自然不会出现——这不是界面缺陷）。
+  // 先把 session/provider/model 写进 localStorage，再 reload 让应用读到。
+  if (SESSION_ID) {
+    await win.webContents.executeJavaScript(`(() => {
+      localStorage.setItem('maxma_session_id', ${JSON.stringify(SESSION_ID)});
+      ${PROVIDER_ID ? `localStorage.setItem('maxma_selected_provider', ${JSON.stringify(PROVIDER_ID)});` : ''}
+      ${MODEL_NAME ? `localStorage.setItem('maxma_selected_model', ${JSON.stringify(MODEL_NAME)});` : ''}
+      return true;
+    })()`).catch(() => null);
+    await win.webContents.reload();
+    await sleep(3000);
+    logs.length = 0;
+  }
+
   const result = { stage: "start", replySeen: false, sendEnabled: false, consoleErrors: logs };
 
   try {
@@ -102,11 +121,15 @@ app.whenReady().then(async () => {
     result.stage = "input-ready";
 
     // 2) 输入文本：用原生 value setter 再派发 input 事件，让 React 的受控组件收到
+    //
+    // 注意：这里**不能**把 REPLY 本身写进用户消息。第一版写的是
+    // `请回复：${REPLY}`，于是 `document.body.innerText` 在用户气泡里就命中了 REPLY——
+    // 即使模型报错、根本没有回复，脚本也会判定"看到回复"（实测 2026-11-18 踩到）。
     await win.webContents.executeJavaScript(`(() => {
       const ta = document.querySelector('${SEL.input}');
       ta.focus();
       const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
-      setter.call(ta, '请回复：${REPLY}');
+      setter.call(ta, '请回复一句验证语');
       ta.dispatchEvent(new Event('input', { bubbles: true }));
       return ta.value;
     })()`);
@@ -175,6 +198,87 @@ app.whenReady().then(async () => {
       }
     }
     if (!result.replySeen) throw new Error("界面上始终没出现回复正文（stage=" + result.stage + "）");
+
+    // 5) 完成后验收必须是一个**一直悬浮**的窗口：
+    //    - position=fixed（不跟消息区滚动、不占消息区高度）；
+    //    - 停靠在视口内；
+    //    - 滚动聊天区后位置不变；
+    //    - 等一会儿仍在（不是闪现）。
+    let review = null;
+    for (let i = 0; i < 30; i++) {
+      await sleep(500);
+      review = await win.webContents.executeJavaScript(`(() => {
+        const el = document.querySelector('[data-slot="task-review-window"]');
+        if (!el) return null;
+        const cs = getComputedStyle(el);
+        const r = el.getBoundingClientRect();
+        return {
+          position: cs.position,
+          rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
+          vw: innerWidth, vh: innerHeight,
+          text: el.innerText.slice(0, 160),
+        };
+      })()`).catch(() => null);
+      if (review) break;
+    }
+    if (!review) throw new Error("回答结束后没有出现「完成后验收」悬浮窗");
+    if (review.position !== "fixed") throw new Error("完成后验收不是 fixed 定位（position=" + review.position + "）");
+    if (review.rect.x < 0 || review.rect.y < 0 || review.rect.x + review.rect.w > review.vw || review.rect.y + review.rect.h > review.vh) {
+      throw new Error("完成后验收窗口超出视口：" + JSON.stringify(review));
+    }
+
+    const scrolled = await win.webContents.executeJavaScript(`(() => {
+      const el = document.querySelector('[data-slot="task-review-window"]');
+      const before = el.getBoundingClientRect();
+      const scrollers = [...document.querySelectorAll('*')].filter((node) => {
+        const s = getComputedStyle(node);
+        return /(auto|scroll)/.test(s.overflowY) && node.scrollHeight > node.clientHeight + 40;
+      });
+      (scrollers[0] || document.scrollingElement).scrollTop += 600;
+      const after = el.getBoundingClientRect();
+      return { dx: Math.round(after.x - before.x), dy: Math.round(after.y - before.y), scrollers: scrollers.length };
+    })()`);
+    if (Math.abs(scrolled.dx) > 1 || Math.abs(scrolled.dy) > 1) {
+      throw new Error("滚动聊天区后验收窗口跟着移动了（dx=" + scrolled.dx + ", dy=" + scrolled.dy + "）");
+    }
+    await sleep(1500);
+    const stillThere = await win.webContents.executeJavaScript("!!document.querySelector('[data-slot=\"task-review-window\"]')").catch(() => false);
+    if (!stillThere) throw new Error("验收窗口在回答结束后自行消失（未保持悬浮）");
+
+    result.reviewFloating = true;
+    result.reviewState = review;
+    result.stage = "review-floating";
+
+    // 可选存证：DRIVE_SHOT=<png 路径>。默认不写盘，避免验证脚本留下垃圾文件。
+    // 放在点击「结果符合预期」之前——点完窗口就收起了，那样只截到一张没有浮窗的图。
+    if (process.env.DRIVE_SHOT) {
+      try {
+        const image = await win.webContents.capturePage();
+        fs.writeFileSync(process.env.DRIVE_SHOT, image.toPNG());
+        result.shot = process.env.DRIVE_SHOT;
+      } catch (err) {
+        result.shotError = String(err && err.message ? err.message : err);
+      }
+    }
+
+    // 决策后必须收起：点「结果符合预期」→ 后端 accepted → 窗口消失。
+    // 若这里不清，用户会以为"已经处理过"却一直看到同一张卡片。
+    await win.webContents.executeJavaScript(`(() => {
+      const btns = [...document.querySelectorAll('[data-slot="task-review-window"] button')];
+      const accept = btns.find((b) => b.textContent.trim() === '结果符合预期');
+      if (!accept) return false;
+      accept.click();
+      return true;
+    })()`);
+    let cleared = false;
+    for (let i = 0; i < 16; i++) {
+      await sleep(400);
+      cleared = await win.webContents.executeJavaScript("!document.querySelector('[data-slot=\"task-review-window\"]')").catch(() => false);
+      if (cleared) break;
+    }
+    if (!cleared) throw new Error("点「结果符合预期」后验收窗口没有收起");
+    result.reviewCleared = true;
+    result.stage = "review-cleared";
   } catch (err) {
     result.error = String(err && err.message ? err.message : err);
     result.pageText = await win.webContents
@@ -183,5 +287,5 @@ app.whenReady().then(async () => {
   }
 
   process.stdout.write("DRIVE_RESULT " + JSON.stringify(result) + "\n");
-  app.exit(result.replySeen ? 0 : 1);
+  app.exit(result.replySeen && result.reviewFloating ? 0 : 1);
 });

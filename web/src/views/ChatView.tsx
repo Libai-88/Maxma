@@ -8,6 +8,7 @@ import { ChatHeader } from '@/components/chat/ChatHeader'
 import { PermissionModeControl } from '@/components/chat/PermissionModeControl'
 import { runSlashCommand } from '@/components/chat/slashCommands'
 import { SteeringWindow } from '@/components/chat/SteeringWindow'
+import { TaskReviewWindow } from '@/components/chat/TaskReviewWindow'
 import { ExtensionPromptDialog } from '@/components/chat/ExtensionPromptDialog'
 import { SessionTreeDialog } from '@/components/chat/SessionTreeDialog'
 import { ContextRing } from '@/components/ui/context-ring'
@@ -489,17 +490,6 @@ export default function ChatView() {
             </section>
           )}
 
-          {taskReview && (
-            <section aria-live="polite" className="mx-4 mb-3 rounded-xl border border-border bg-card p-4">
-              <p className="mb-2 text-xs font-medium">完成后验收 · 结果符合你的预期吗？</p>
-              <textarea value={taskReviewFeedback} onChange={(e) => setTaskReviewFeedback(e.target.value)} rows={2} maxLength={4000} placeholder="需要修改时，写出具体差异" className="w-full rounded-lg border border-border bg-background p-3 text-sm outline-none" />
-              <div className="mt-2 flex justify-end gap-2">
-                <Button variant="outline" size="sm" disabled={!taskReviewFeedback.trim()} onClick={reviseTask}>按反馈修订</Button>
-                <Button size="sm" onClick={acceptTask}>结果符合预期</Button>
-              </div>
-            </section>
-          )}
-
           {isSubagent
             ? <div className="border-t border-border p-3 text-center text-xs text-muted-foreground">🔒 子 Agent 会话 — 只读</div>
             : (
@@ -531,6 +521,16 @@ export default function ChatView() {
           onSteer={(message) => sendCollaboration('steer', message)}
           onFollowUp={(message) => sendCollaboration('follow_up', message)}
           queued={queuedMessages}
+        />
+
+        {/* 完成后验收：悬浮小窗。回答结束即出现并**一直保持悬浮**，直到
+            用户接受或提交修订；不再内联占消息区与输入框之间的高度。 */}
+        <TaskReviewWindow
+          turnId={taskReview?.turnId ?? null}
+          feedback={taskReviewFeedback}
+          onFeedbackChange={setTaskReviewFeedback}
+          onRevise={reviseTask}
+          onAccept={acceptTask}
         />
 
         {/* EXT-UI-001：pi 扩展的 ctx.ui 对话框。全局模态——不属于某一轮对话，

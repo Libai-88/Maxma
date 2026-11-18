@@ -172,6 +172,13 @@ try {
   });
   if (!ob.ok) fail(`标记引导完成失败 HTTP ${ob.status}`);
 
+  // ── 3.6 建一个全新会话：不续用历史会话，避免上一轮的错误气泡干扰断言。
+  const sessRes = await fetch(base + "/api/sessions", { method: "POST", headers: H });
+  const sessBody = await sessRes.json().catch(() => ({}));
+  const freshSessionId = sessBody.session_id;
+  if (!freshSessionId) fail(`建新会话失败 HTTP ${sessRes.status}`);
+  else console.log(`新会话：${freshSessionId}`);
+
   // ── 4. 用 Electron 驱动真实界面 ──────────────────────────
   // 驱动脚本是**仓库里的真实文件**，不是内联模板字符串：
   // 内联版本得在 String.raw 里再转义反引号，既脆弱又难读 ——
@@ -188,7 +195,15 @@ try {
   // 而输出末尾的 `Node.js v24.21.0` 才是真正的线索（不是 Electron 的版本）。
   // 这与 `scripts/verify-desktop-render.ps1` 里记录的是同一个坑，
   // 区别只在那边用的是 PowerShell 的 `Remove-Item Env:`。
-  const driverEnv = { ...process.env, DRIVE_BASE: base, DRIVE_REPLY: REPLY };
+  const driverEnv = {
+    ...process.env,
+    DRIVE_BASE: base,
+    DRIVE_REPLY: REPLY,
+    DRIVE_SESSION_ID: freshSessionId ?? "",
+    // 选中假渠道：否则界面沿用上次的真实渠道，可能撞上游 429（与界面无关）。
+    DRIVE_PROVIDER: "local-ui-stub",
+    DRIVE_MODEL: "ui-stub-model",
+  };
   delete driverEnv.ELECTRON_RUN_AS_NODE;
   delete driverEnv.ELECTRON_NO_ATTACH_CONSOLE;
 
@@ -220,6 +235,14 @@ try {
     } else {
       console.log("✅ 真实界面：输入 → 发送 → 收到回复，全链路通");
     }
+    if (!r.reviewFloating) {
+      fail(`「完成后验收」没有保持悬浮（stage=${r.stage}${r.error ? ", error=" + r.error : ""}）`);
+      if (r.pageText) console.error("页面文字片段：\n" + r.pageText);
+    } else {
+      console.log(`✅ 完成后验收悬浮窗：position=fixed，滚动聊天区不移动，结束后仍在 ${JSON.stringify(r.reviewState?.rect)}`);
+    }
+    if (!r.reviewCleared) fail("点「结果符合预期」后验收窗口没有收起");
+    else console.log("✅ 验收决策后窗口自动收起，不会残留到下一轮");
   }
   if (code !== 0 && !failures.length) fail(`界面驱动退出码非 0：${code}`);
   // ⚠️ 这里**曾经**有一行 `fs.rmSync(driverPath)`（内联模板时代的清理，当时驱动是临时文件）。

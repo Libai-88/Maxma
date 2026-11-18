@@ -3,39 +3,17 @@ import { ChevronDown, GripVertical, Send, StepForward } from 'lucide-react'
 import { Panel } from '@/components/ui/panel'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import {
+  clampFloatingPos,
+  defaultFloatingPos,
+  readStoredPos,
+  writeStoredPos,
+  type FloatingPos as Pos,
+} from '@/utils/floatingWindow'
 
 const POS_KEY = 'maxma_steering_window_pos'
 const COLLAPSED_KEY = 'maxma_steering_window_collapsed'
 
-type Pos = { x: number; y: number }
-
-function loadPos(): Pos | null {
-  try {
-    const raw = localStorage.getItem(POS_KEY)
-    if (!raw) return null
-    const p = JSON.parse(raw) as Pos
-    return typeof p?.x === 'number' && typeof p?.y === 'number' ? p : null
-  } catch { return null }
-}
-
-/** 把窗口限制在视口内（留出边距，避免拖到屏幕外找不回来）。 */
-function clamp(p: Pos, w: number, h: number): Pos {
-  const margin = 8
-  return {
-    x: Math.min(Math.max(margin, p.x), Math.max(margin, window.innerWidth - w - margin)),
-    y: Math.min(Math.max(margin, p.y), Math.max(margin, window.innerHeight - h - margin)),
-  }
-}
-
-/** 没有保存位置时的默认落点：右下角、输入框上方；窗口矮时贴住视口底边而不是被顶出去。 */
-function defaultAnchor(w: number, h: number): Pos {
-  const margin = 16
-  const composerReserve = 96
-  return {
-    x: Math.max(margin, window.innerWidth - w - margin),
-    y: Math.max(margin, window.innerHeight - h - composerReserve),
-  }
-}
 
 /**
  * 实时纠偏悬浮小窗（替代原先内联在消息区上方的「实时协作」区块）。
@@ -76,10 +54,10 @@ export function SteeringWindow({
     const box = boxRef.current
     if (!box) return
     const r = box.getBoundingClientRect()
-    const saved = loadPos()
+    const viewport = { width: window.innerWidth, height: window.innerHeight }
     setPos((current) => {
-      if (current) return clamp(current, r.width, r.height)
-      return clamp(saved ?? defaultAnchor(r.width, r.height), r.width, r.height)
+      if (current) return clampFloatingPos(current, r, viewport)
+      return clampFloatingPos(readStoredPos(POS_KEY, localStorage) ?? defaultFloatingPos(r, viewport), r, viewport)
     })
   }, [visible])
 
@@ -89,7 +67,7 @@ export function SteeringWindow({
       const box = boxRef.current
       if (!box) return
       const r = box.getBoundingClientRect()
-      setPos((current) => (current ? clamp(current, r.width, r.height) : current))
+      setPos((current) => (current ? clampFloatingPos(current, r, { width: window.innerWidth, height: window.innerHeight }) : current))
     }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
@@ -115,7 +93,7 @@ export function SteeringWindow({
     const box = boxRef.current
     if (!drag || !box) return
     const r = box.getBoundingClientRect()
-    setPos(clamp({ x: e.clientX - drag.dx, y: e.clientY - drag.dy }, r.width, r.height))
+    setPos(clampFloatingPos({ x: e.clientX - drag.dx, y: e.clientY - drag.dy }, r, { width: window.innerWidth, height: window.innerHeight }))
   }, [])
 
   const onPointerUp = useCallback((e: React.PointerEvent) => {
@@ -124,7 +102,7 @@ export function SteeringWindow({
     const el = e.currentTarget as HTMLElement
     if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId)
     setPos((p) => {
-      if (p) { try { localStorage.setItem(POS_KEY, JSON.stringify(p)) } catch { /* 存储不可用 */ } }
+      if (p) writeStoredPos(POS_KEY, p, localStorage)
       return p
     })
   }, [])
