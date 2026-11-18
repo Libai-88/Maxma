@@ -68,8 +68,13 @@
   三个工具类。**只动纵向节奏，不动字号与控件尺寸**——密度属于呼吸感，字号属于尺度，
   绑在一起会让"紧凑"牺牲可读性；控件也不缩，避免点击区过小误触。已接到侧栏导航与
   页面留白（`.ds-view` / 指标页 / 动态页）。
-- **亮色逐页复查**：`VISUAL_THEME=light` 截六页逐张看，未见反色错位；已知不足是
-  浅色下 `text-muted-foreground` 用于页脚提示时偏淡（临界而非不可读），要达 AA 需单独提墨色。
+- **亮色逐页复查**：`VISUAL_THEME=light` 截六页逐张看，未见反色错位。
+- **"浅色 muted 偏淡"是目测误判，已用测量纠正**：新增 `scripts/check-contrast.mjs`（直接读
+  `solid-glass.css` 的 token，OKLCH → 线性 sRGB，玻璃与芯片先做 alpha 合成）实测浅色 muted
+  vs 背景 **5.47:1**，本来就达 AA。守卫反而在**深色**抓到真缺陷：芯片（10% 白）上的 muted 文字
+  只有 **2.75:1**（指标页「运行 14s」、类别标签都是这个搭配）。修法只动两处深色 token：
+  `--muted-foreground 0.72 → 0.82`、`--secondary 10% → 7%`，改后 10 组全部 ≥4.5（4.86–11.12）。
+  守卫已接进 `verify-all-gates.sh`（16 → 17 项）。
 - 截图驱动新增 `DRIVE_DENSITY` / `VISUAL_DENSITY`，用于紧凑档抽查（证据：紧凑档下页面留白
   与导航行高同时收紧，见 `dev_docs/visual/baseline/` 的舒适档基线对照）。
 

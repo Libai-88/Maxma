@@ -59,17 +59,23 @@ press       // active:translate-y-px duration-fast ease-out-quint
 - 玻璃面 **不要**再写 `shadow-sm/lg/2xl`——那些类从来没生效过，留着只会误导下一个人。
 - 非玻璃面（`bg-background`、`bg-muted`）要抬起来时用 `elev-1/2/3`。
 
-## 五、三道自动化守卫
+## 五、四道自动化守卫
 
 | 脚本 | 断言 | 失败时怎么办 |
 |---|---|---|
 | `web/scripts/check-type-scale.mjs` | 无任意字号、`transition` 必须有时长、无散落 `shadow-*` | 按提示改成 token；确属例外才动基线 |
 | `web/scripts/check-css-weight.mjs` | `backdrop-filter` 生效声明 ≤ 8 组 | 不要靠加模糊变美 |
 | `web/scripts/check-spacing.mjs` | 自绘边框/底色容器的内边距下限 | 补 `p-2 / px-2 / py-1.5` |
+| `scripts/check-contrast.mjs` | 主题 token 的 WCAG 比值（fg/bg ≥ 7、muted 各场景 ≥ 4.5） | 改 token，不要靠"看起来还行" |
 
-前两个都挂在 `bash scripts/verify-all-gates.sh` 里。排版守卫是**棘轮**：存量记在
+全部挂在 `bash scripts/verify-all-gates.sh` 里。排版守卫是**棘轮**：存量记在
 `web/scripts/type-scale-baseline.json`，只准降不准涨；当前已降到 **0 条**（即硬约束）。
 改动后跑一次 `node scripts/check-type-scale.mjs --prune` 收敛基线。
+
+对比度守卫**不维护第二份色表**：它直接读 `web/src/solid-glass.css` 里的 `:root` 与 `.dark`，
+把 OKLCH 转成线性 sRGB 再按 WCAG 相对亮度算；玻璃卡片（`--card` 带 60%/46% alpha）和芯片
+（`--secondary` 带 9%/7% alpha）先与页面底色做 alpha 合成，再跟文字比——否则算的是"叠好后的景"
+对"没叠的色"，结论会虚高。它守的是 10 组搭配（浅/深各 5）。
 
 ## 六、视觉验收（截图存证）
 
@@ -116,16 +122,64 @@ VISUAL_THEME=light bun scripts/verify-ui-visual.mjs # 亮色抽查（主题由 D
 **密度只管纵向节奏**，不动字号、不动控件尺寸：字号属于尺度（六档 `--text-*`），
 密度属于呼吸感；绑在一起会让"更紧凑"顺势牺牲可读性，控件缩到 30px 以下还会误触。
 
-## 九、亮色主题复查（2026-11-18）
+## 九、亮色主题复查与实测对比度（2026-11-18）
 
 用 `VISUAL_THEME=light` 截了六页逐张目检（对话空态 / 有会话 / 指标 / 设置 / 扩展 / 外观）：
 
 - 没有发现"反色错位"（白字压白底、深色卡片残留深底图）一类的问题；
-- 侧栏当前项与选中卡片都落在 `.glass-chosen`，浅色下靠亮度差 + 勾号区分，可辨；
-- 已知不足：`text-muted-foreground` 在浅色下用于**页脚提示**（"输入 / 唤起命令"）时偏淡，
-  属于对比度临界而非不可读；若要达到 WCAG AA 的 4.5:1，需要为浅色单独提高这一档墨色。
+- 侧栏当前项与选中卡片都落在 `.glass-chosen`，浅色下靠亮度差 + 勾号区分，可辨。
 
-## 十、新页面自查清单
+**"浅色 muted 偏淡"这个判断是错的，已用测量推翻。** 当轮目检时我把
+`--muted-foreground: oklch(0.47 0 0)` 判成"对比度临界"，写进了本文件与 HANDOFF；
+`scripts/check-contrast.mjs` 实测是 **5.47:1**（背景 0.925），早已过 WCAG AA 的 4.5:1。
+目测在浅色上尤其不可靠——低了看不出来，高了也看不出来。
+
+守卫第一次跑就把**深色**的短板量出来了（浅色反而没问题）：
+
+| 场景（深色） | 修前 | 修后 |
+|---|---|---|
+| muted vs background | 7.82:1 | 11.12:1 |
+| muted vs card（46% 玻璃） | 6.42:1 | 9.12:1 |
+| muted vs **secondary**（芯片/标签，10% 白） | **2.75:1 ✗** | 4.86:1 |
+| secondary-fg vs secondary | 6.54:1 | 8.12:1 |
+
+2.75:1 的来源：芯片是 10% 白叠在 `oklch(0.16)` 上，底色被抬到约 L≈0.24，而
+`--muted-foreground` 是 0.72 的灰，两者太近。指标页的「运行 14s」、类别标签都是这个搭配。
+修法是抬深色的两处 token（不动浅色、不动任何组件）：
+
+- `--muted-foreground: 0.72 → 0.82`（次要文字整体提亮一档）
+- `--secondary: 10% → 7%`（芯片更收敛，不再把底抬那么高）
+
+改完 10 组全部 ≥ 门槛，`node scripts/check-contrast.mjs` 退出码 0。
+
+## 十、长会话的离屏渲染（2026-09 起）
+
+`ChatWindow` 的 `TurnBlock` 给除最后一轮之外的 `<article>` 加 `.turn-virtual`：
+
+```css
+.turn-virtual { content-visibility: auto; contain-intrinsic-size: auto 600px; }
+```
+
+它让 Chromium 跳过**屏外子树**的样式计算 / 布局 / 绘制，不需要 JS 介入，也不动 DOM 与滚动位置。
+用 `scripts/measure-turn-virtual.cjs` 在真实 Electron 里铺 300 个"富轮次"量过（可复现）：
+
+| | 插入后首次同步布局 | 总高度 |
+|---|---|---|
+| 不加 `.turn-virtual` | **62.9ms** | 244,108px |
+| 加 `.turn-virtual` | **1.5ms** | 194,408px（按 600px 估算） |
+
+代价两条，都写进代码注释里：
+
+1. **估算高度比真实偏小约 20%**（600px vs 实测约 814px/轮）。所以滚动条长度在"从没进过视口"
+   的区间偏短，跳到底部要连续几帧校正——`scrollToBottom()` 因此改成最多 4 帧的循环；
+   用 `contain-intrinsic-size: auto` 让访问过的轮次记住实测值，误差会随浏览收敛。
+2. **屏外内容不在渲染树里**：Ctrl+F 页内查找、跨屏大范围选中文字，只能命中已渲染部分。
+   对"看最近几轮"的对话场景可以接受；若要全文检索历史，走会话搜索而不是页面查找。
+
+它省不到的地方：React 的挂载与协调成本（几百轮仍是几百个组件）。真要做完整虚拟化，
+就得卸载 DOM——历史消息将不可选中、不可页内查找、搜索锚点失效，权衡后没这么做。
+
+## 十一、新页面自查清单
 
 - [ ] 字号只用六档 token（`text-caption/meta/ui/body/subtitle/display`）
 - [ ] 段落用 `text-body`，表格与行内信息用 `text-meta`，导航与按钮用 `text-ui`
