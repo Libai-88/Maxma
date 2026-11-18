@@ -74,8 +74,11 @@
 - 根仓库 `Maxma-workspace` 的 master 推到 `eca842930fc064c94422e3a53168a7894155fbd9`，
   子模块指针直接指向远端实际的 `4589d0d9`（原来指向本地 `16fa80c2`，那个 SHA 远端不存在）。
 
-**副作用，接手时注意**：API 新建的提交对象与本地对象只有 tree 相同、SHA 不同，
-本地仓库里没有这 7 个远端提交对象。网络恢复后本地要与远端对齐一次：
+**副作用，接手时注意**：API 新建的提交对象与本地对象只有 tree 相同、SHA 不同。
+**已于 2026-11-18 用下面三条命令对齐完毕**：本地 `fix/portable-stop-null-guard` 现为
+`433ed057`，与远端一致（`git status -sb` 无 `ahead/behind`，`push --dry-run` 报 up-to-date），
+子模块 `git submodule status` 干净。原始本地提交保留在分支 `backup-pre-api-push-20261118`
+（与本轮 HEAD 的差异只有 HANDOFF 这 26 行新增，可用 `git diff --stat` 复核后删除该分支）。
 
 ```bash
 git fetch origin fix/portable-stop-null-guard
@@ -83,9 +86,9 @@ git reset --hard origin/fix/portable-stop-null-guard   # 内容相同，只换 S
 git submodule update --init --recursive                # 让根仓库 gitlink 的"脏"状态消失
 ```
 
-对齐前不要 `git push`，会因历史分叉被拒；本地旧提交保留在分支
-`backup-pre-api-push-20261118`。推送脚本在 `%TEMP%\maxma-api-push.mjs`（不入库，含凭据读取，
-仅从 `git credential fill` 取 token 到内存）。
+**新克隆/新机器不需要做任何对齐**——远端本身就是权威历史，直接 clone 即可。
+推送脚本在 `%TEMP%\maxma-api-push-generic.mjs`（不入库，含凭据读取，
+仅从 `git credential fill` 取 token 到内存，支持"本地基底与远端父提交不同"的分叉续推）。
 
 ## 2026-11-17 开发质量诊断后的 P0/P1 修复
 
