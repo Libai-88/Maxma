@@ -7,14 +7,13 @@ import { AskCard } from '@/components/ui/ask-card'
 import { TaskNotice, type Notice } from '@/components/ui/task-notice'
 import { DotLoader } from '@/components/ui/dot-loader'
 import { StatusGlyph, type Activity } from '@/components/ui/status-glyph'
-import { Markdown } from '@/components/common/Markdown'
 import { safeCopyText } from '@/lib/clipboard'
 import { useTtsRuntime, stopSpeaking, speakText } from '@/hooks/useTts'
 import type { ChatTurn, ToolCall, TurnEvent, AskUserInteraction, TurnUsage } from '@/types'
 import type { ParsedRef } from '@/utils/references'
 import { cn } from '@/lib/utils'
 import { toolDisplayName } from '@/components/tools/_shared/displayNames'
-import { InlineStickers } from '@/components/common/InlineStickers'
+import { StickerRichText } from '@/components/common/StickerRichText'
 import { Sticker } from '@/components/common/Sticker'
 
 export interface ChatWindowProps {
@@ -201,7 +200,7 @@ function TurnBlock({ turn, isLast, onAction, onCite, onPin }: {
       {turn.userMessage && (
         <div className="flex items-start justify-end gap-2">
           <div className="max-w-[85%] rounded-xl rounded-br-sm bg-primary px-3.5 py-2.5 text-sm leading-relaxed text-primary-foreground">
-            <InlineStickers text={turn.userMessage} />
+            <StickerRichText content={turn.userMessage} markdown={false} />
           </div>
         </div>
       )}
@@ -243,7 +242,7 @@ function TurnBlock({ turn, isLast, onAction, onCite, onPin }: {
       {answerText && (
         <div className="group/answer flex max-w-[92%] flex-col gap-2 rounded-xl rounded-bl-sm border border-border bg-card px-4 py-3">
           <div className="text-sm leading-relaxed">
-            <Markdown content={answerText} />
+            <StickerRichText content={answerText} />
           </div>
           {turn.stickerUrl && <Sticker src={turn.stickerUrl} className="mt-1" />}
           {turn.usage && <TurnUsageLine usage={turn.usage} />}

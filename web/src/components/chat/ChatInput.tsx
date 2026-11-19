@@ -9,6 +9,7 @@ import { api } from '@/api'
 import { MODE_SHORT_LABELS, useSessionPermissionMode } from '@/hooks/useSessionPermissionMode'
 import { Paperclip, X, FileText, FolderOpen, Link2, Sticker, Mic } from 'lucide-react'
 import { StickerPicker, type Sticker as StickerItem } from '@/components/chat/StickerPicker'
+import { StickerManagerDialog } from '@/components/chat/StickerManagerDialog'
 import { useChatStore } from '@/stores/chat'
 import { THINKING_LEVELS, thinkingLevelLabel } from '@/utils/thinkingLevels'
 import { cn } from '@/lib/utils'
@@ -63,6 +64,8 @@ export function ChatInput(props: ChatInputProps) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [attachMenu, setAttachMenu] = useState(false)
   const [stickerOpen, setStickerOpen] = useState(false)
+  const [stickerManagerOpen, setStickerManagerOpen] = useState(false)
+  const restoreStickerFocus = useRef(false)
   const [linkMode, setLinkMode] = useState(false)
   const [linkValue, setLinkValue] = useState('')
   const [listening, setListening] = useState(false)
@@ -225,9 +228,41 @@ export function ChatInput(props: ChatInputProps) {
   }
 
   const insertSticker = (sticker: StickerItem) => {
-    setText((prev) => (prev ? `${prev} <sticker:${sticker.path}>` : `<sticker:${sticker.path}>`))
+    const marker = sticker.marker ?? `<sticker:${sticker.path}>`
+    setText((prev) => (prev ? `${prev} ${marker}` : marker))
+    closeStickerPicker()
+  }
+
+  const closeStickerPicker = () => {
+    restoreStickerFocus.current = true
     setStickerOpen(false)
-    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-slot="composer"] textarea')?.focus())
+  }
+
+  // 等 React 真正卸载浮层后再聚焦，避免 requestAnimationFrame 抢在提交前。
+  useEffect(() => {
+    if (stickerOpen || !restoreStickerFocus.current) return
+    restoreStickerFocus.current = false
+    document.querySelector<HTMLTextAreaElement>('[data-slot="composer"] textarea')?.focus()
+  }, [stickerOpen])
+
+  /** 点击即发送：把当前输入和表情标记一起发出，成功才清空。 */
+  const sendStickerNow = (sticker: StickerItem) => {
+    if (!connected || !canSend) {
+      setNotice('连接尚未就绪，表情没有发出')
+      return
+    }
+    if (!providerId || !modelName) {
+      setNotice('没有可用的模型，表情没有发出')
+      return
+    }
+    const marker = sticker.marker ?? `<sticker:${sticker.path}>`
+    const value = text.trim() ? `${text.trim()}\n${marker}` : marker
+    const sent = onSend(value, refs, providerId || undefined, modelName || undefined)
+    if (sent) {
+      setText(''); setRefs([]); setNotice(''); closeStickerPicker()
+    } else {
+      setNotice('表情发送失败，请检查连接后重试')
+    }
   }
 
   /** 语音输入（Web Speech API 听写，零付费 API）。 */
@@ -343,7 +378,15 @@ export function ChatInput(props: ChatInputProps) {
             ))}
           </div>
         )}
-        {stickerOpen && <StickerPicker onSelect={insertSticker} onClose={() => setStickerOpen(false)} />}
+        {stickerOpen && (
+          <StickerPicker
+            onSelect={insertSticker}
+            onSendNow={sendStickerNow}
+            onManage={() => { setStickerOpen(false); setStickerManagerOpen(true) }}
+            onClose={closeStickerPicker}
+          />
+        )}
+        <StickerManagerDialog open={stickerManagerOpen} onOpenChange={setStickerManagerOpen} />
         {linkMode && (
           <div className="absolute bottom-full left-0 z-30 mb-2 flex w-full max-w-md items-center gap-2 rounded-xl bg-popover p-3">
             <input

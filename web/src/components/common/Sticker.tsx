@@ -16,14 +16,18 @@ import { cn } from '@/lib/utils'
  * 颜色/圆角走 token，不写死值）。
  */
 export function Sticker({ path, src, alt = '贴纸', className }: {
-  /** 相对贴纸根的路径（`category/file.webp`），对应消息里的 `<sticker:path>`。 */
+  /** 贴纸路径：旧 `category/file.webp` 或新 `<packId>/<path>`。 */
   path?: string
   /** 已带 `/api/stickers/...` 前缀的完整地址（例如通道回传的 stickerUrl）。 */
   src?: string
   alt?: string
   className?: string
 }) {
-  const resolved = path ? `/api/stickers/${path}` : src
+  const resolved = path
+    ? path.split('/').length >= 3
+      ? `/api/stickers/file/${path}`
+      : `/api/stickers/${path}`
+    : src
   if (!resolved) return null
   return (
     <img

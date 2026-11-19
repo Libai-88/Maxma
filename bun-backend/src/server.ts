@@ -41,7 +41,7 @@ import { createEvolutionRoutes } from "./routes/evolution";
 import { createAuditLogRoutes } from "./routes/audit-log";
 import { createPersonaRoutes } from "./routes/persona";
 import { createSessionsRoutes } from "./routes/sessions";
-import { createStickerFileRoutes } from "./routes/stickers";
+import { createLegacyStickerCompatRoutes, createStickerRoutes } from "./routes/stickers";
 import { createStickerFavoritesRoutes } from "./routes/sticker-favorites";
 import { createStickerUploadRoutes } from "./routes/sticker-upload";
 import { createSettingsPanelRoutes } from "./routes/settings-panels";
@@ -265,9 +265,14 @@ export function createApp(): Hono {
   app.route("/", createEvolutionRoutes());
   app.route("/", createAuditLogRoutes());
   app.route("/", createPersonaRoutes());
-  app.route("/", createStickerFileRoutes());
-  app.route("/", createStickerFavoritesRoutes());
-  app.route("/", createStickerUploadRoutes());
+  if (process.env.MAXMA_STICKER_ENGINE === "legacy") {
+    // 回滚开关：保留旧 YAML/custom 实现和旧 index 形状；图片/分类 shim 只为旧前端补齐。
+    app.route("/", createLegacyStickerCompatRoutes());
+    app.route("/", createStickerUploadRoutes());
+    app.route("/", createStickerFavoritesRoutes());
+  } else {
+    app.route("/", createStickerRoutes());
+  }
 
   // 2.2h：collab
   app.route("/", createCollabRoutes({ sessions: hubSessions }));

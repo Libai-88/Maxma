@@ -36,6 +36,13 @@ dist-portable/
 build-portable.log
 build_portable.log
 
+# Generated sticker pack index (rebuilt on startup / before packaging)
+config/stickers/index.db
+config/stickers/manifest.json
+
+# Local verification logs
+/.tmp-*.log
+
 # Runtime user data (never commit)
 api/data/const-sessions/
 api/data/maxma.db

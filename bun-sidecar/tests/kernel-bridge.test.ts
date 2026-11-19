@@ -519,7 +519,7 @@ describe("kernel: pi RPC bridge", () => {
       });
       expect(session.systemPrompt).toContain("你是测试人设，称呼 小李。");
       expect(session.systemPrompt).toContain("用户喜欢简短回复。");
-      expect(session.systemPrompt).toContain("[表情包:分类]");
+      expect(session.systemPrompt).toContain("[表情: 描述]");
       expect(session.systemPrompt).toContain("行为规则标记：禁止重复调用。");
       expect(session.systemPrompt).toContain("产品自述标记：本地优先。");
       expect(session.systemPrompt).not.toContain("默认人设，不应覆盖活动人设");

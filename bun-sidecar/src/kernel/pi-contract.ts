@@ -229,6 +229,10 @@ export const MAXMA_ENABLED_DEFAULT_TOOLS = [
 export const MAXMA_CUSTOM_TOOLS = [
   "remember_memory",
   "search_memories",
+  "send_meme",
+  "learn_meme",
+  "meme_list",
+  "meme_update",
   "get_sticker",
   "list_rules",
   "read_office_file",

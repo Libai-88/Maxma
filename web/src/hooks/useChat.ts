@@ -8,11 +8,11 @@ import { useExtensionUiStore } from '@/stores/extensionUi'
 import { buildFlatMessage, buildTimestamp } from '@/utils/references'
 import type { ParsedRef } from '@/utils/references'
 import { getToken, ensureTokenLoaded, resetToken, api } from '@/api'
-import { waitForBackend, getWsBase, getApiBase, generateUUID } from '@/utils/env'
+import { waitForBackend, getWsBase, generateUUID } from '@/utils/env'
 import { safeGetItem, safeRemoveItem, safeSetItem, safeKeys } from '@/lib/storage'
 import { chatSessionAliveCache } from '@/hooks/sessionAliveCache'
 import { useWorkbenchStore } from '@/stores/workbench'
-import { detectEmotion, getStickerUrl, replaceEmotionTags, replaceStickerDirectives } from '@/utils/stickerUtils'
+import { replaceStickerDirectives } from '@/utils/stickerUtils'
 import { showSystemNotification } from '@/lib/notify'
 import { showToast } from '@/lib/toast'
 import { autoReadIfEnabled } from '@/hooks/useTts'
@@ -517,34 +517,11 @@ export function flushAllTurnsOnPageLeave(): void {
 // 共享 lastIndex（REGEX-STATE-001）。局部新建正则避免两难。
 
 async function hydrateTurnSticker(turn: ChatTurn): Promise<boolean> {
-  if (!turn.finalAnswer || turn.stickerUrl) return false
-  const emotion = detectEmotion(turn.finalAnswer)
-  if (!emotion) return false
-
-  try {
-    // 先尝试替换全部显式指令（[表情包:xxx]）；有指令且替换成功则结束
-    const withDirectives = await replaceStickerDirectives(turn.finalAnswer)
-    if (withDirectives !== turn.finalAnswer) {
-      turn.finalAnswer = withDirectives
-      return true
-    }
-    // 无显式指令：取一张该情绪的贴纸——裸情感词标记原位替换，否则末尾附加
-    const response = await fetch(getStickerUrl(emotion))
-    if (!response.ok) return false
-    const data = await response.json()
-    if (!data?.path) return false
-    const next = turn.finalAnswer
-    if (next.includes(`[${emotion}]`)) {
-      // 裸情感词标记（[爱心] 等）：替换为内联贴纸
-      turn.finalAnswer = replaceEmotionTags(next, emotion, data.path)
-    } else {
-      turn.stickerUrl = getApiBase() + '/stickers/' + data.path
-    }
-    return true
-  } catch (err) {
-    log.warn('hydrate sticker failed:', err)
-    return false
-  }
+  if (!turn.finalAnswer) return false
+  const withDirectives = await replaceStickerDirectives(turn.finalAnswer)
+  if (withDirectives === turn.finalAnswer) return false
+  turn.finalAnswer = withDirectives
+  return true
 }
 
 async function hydrateTurnStickers(sid: string, turns: ChatTurn[]): Promise<void> {
@@ -1607,55 +1584,15 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
           warmCalls: 0,
         }
       }
-      // Emotion → sticker matching
+      // 显式表情指令 → 稳定贴纸标记（不做情绪随机附加）
       if (event.payload?.content) {
-        const emotion = detectEmotion(event.payload.content)
-        if (emotion) {
-          // Fire-and-forget: 不阻塞消息显示。先替换全部显式指令
-          // （STICKER-MULTI-001：此前只替换第一条，其余被剥除），
-          // 无指令时取一张该情绪贴纸——裸标记原位替换，否则末尾附加。
-          // 原生 fetch 即可：两种已发布形态都是同源 HTTP 页面，上一代桌面壳
-          // 需要代理层绕开的跨协议限制已不存在。
-          void replaceStickerDirectives(turn.finalAnswer).then((withDirectives) => {
-            if (!turn.finalAnswer) return
-            if (withDirectives !== turn.finalAnswer) {
-              turn.finalAnswer = withDirectives
-              // 同步更新正在显示的 thinking block，避免流式阶段露出明文标记
-              const lastThink = findLastThinking(turn.events)
-              if (lastThink) lastThink.tokens = withDirectives
-              return
-            }
-            return fetch(getStickerUrl(emotion))
-              .then((r) => {
-                if (!r.ok) {
-                  log.warn('sticker fetch non-ok response:', r.status)
-                  return null
-                }
-                return r.json()
-              })
-              .then((data) => {
-                if (data?.path && turn.finalAnswer) {
-                  let next = turn.finalAnswer
-                  if (next.includes(`[${emotion}]`)) {
-                    // 裸情感词标记（[爱心] 等）：AI 直接在正文写的情绪标签，替换为内联贴纸
-                    next = replaceEmotionTags(next, emotion, data.path)
-                  } else {
-                    // 无显式标记：整条消息末尾附带一个贴纸
-                    turn.stickerUrl = `${getApiBase()}/stickers/${data.path}`
-                  }
-                  if (next !== turn.finalAnswer) {
-                    turn.finalAnswer = next
-                    // 同步更新正在显示的 thinking block，避免流式阶段露出明文标记
-                    const lastThink = findLastThinking(turn.events)
-                    if (lastThink) {
-                      lastThink.tokens = next
-                    }
-                  }
-                }
-              })
-              .catch((err) => log.warn('sticker fetch failed:', err))
-          })
-        }
+        void replaceStickerDirectives(turn.finalAnswer).then((withDirectives) => {
+          if (!turn.finalAnswer || withDirectives === turn.finalAnswer) return
+          turn.finalAnswer = withDirectives
+          // 同步更新正在显示的 thinking block，避免流式阶段露出明文标记
+          const lastThink = findLastThinking(turn.events)
+          if (lastThink) lastThink.tokens = withDirectives
+        })
       }
       break
     }

@@ -19,7 +19,7 @@ import { Type } from "typebox";
 
 import type { MaxmaToolDescriptor } from "../tools/descriptor";
 import { listRulesTool } from "../tools/rules";
-import { getStickerTool } from "../tools/stickers";
+import { getStickerTool, learnMemeTool, memeListTool, memeUpdateTool, sendMemeTool } from "../tools/stickers";
 import { searchMemoriesTool } from "../tools/memory";
 import { registerRememberMemoryTool } from "../tools/remember-memory";
 import { readOfficeFileTool, writeOfficeFileTool } from "../tools/office";
@@ -60,6 +60,10 @@ export function buildPiCustomTools(
   const descriptors: MaxmaToolDescriptor[] = [
     registerRememberMemoryTool(),
     searchMemoriesTool(),
+    sendMemeTool(),
+    learnMemeTool(),
+    memeListTool(),
+    memeUpdateTool(),
     getStickerTool(),
     listRulesTool(),
     ...(cwd ? [readOfficeFileTool(cwd)] : []),

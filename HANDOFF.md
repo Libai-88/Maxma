@@ -1,7 +1,29 @@
 # MaxmaHere 交接说明
 
 > 当前可执行状态，供下一位接手者。架构请先读 [docs/00-当前架构.md](docs/00-当前架构.md)。
-> 更新时间：2026-11-18
+> 更新时间：2026-11-19
+
+## 2026-11-19：表情系统升级为 dsh-meme 源码移植（v2.7.0）
+
+- 存储改为 **每 pack 一个 `index.db` + `manifest.json` + 图片**；无全局 stickers.db。
+- 内置 `config/stickers` 原地成为 `maxma_builtin`，旧 URL / `<sticker:...>` / `[表情包:分类]` 继续可读；
+  新用户图库 `dsh-meme-user`、旧 custom 副本 `maxma_legacy_custom`。
+- Agent 工具：`send_meme/learn_meme/meme_list/meme_update`；`get_sticker` 仅兼容别名。
+- 新协议 `[表情: 描述]`；前端不再随机换图。
+- 市场接 `dsh-meme-packs` 默认目录 + GitHub/jsDelivr/镜像；SHA-256 强制、ZIP 安全边界、不自动安装。
+- 迁移：旧 YAML/custom 备份 + favorites 复制到用户 pack + 幂等 marker；回滚
+  `MAXMA_STICKER_ENGINE=legacy`（旧路由 + 旧 index/图片 shim）。
+- 构建：`build-desktop-portable.ps1` 复制前重建内置索引，继续清理 `custom/` 与旧 runtime；
+  `portable-smoke-test.ps1` 增加内置 pack/图片/管理鉴权检查。
+- 2026-11-19 收尾实测：backend 328 pass / 0 fail、sidecar 234 pass / 0 fail、web 52 pass / 0 fail；
+  `bun scripts/verify-ui-stickers.mjs` 真实界面通过（焦点/Tab/Escape、CDP 触控、键盘 Enter、管理面板，
+  以及 `dev_docs/visual/sticker-baseline/` 两张像素基线）；桌面便携包
+  `dist/electron-portable/MaxmaHere-2.7.0-portable-x64.zip` 与 Web 便携包 `..\MaxmaHere-Portable` 均 smoke 通过。
+- `MAXMA_STICKER_ENGINE=legacy` 的完整 `createApp()` 装配已由 `tests/stickers-legacy-server.test.ts` 覆盖；
+  市场目录不可达时本地索引仍可用，市场条目透传 `license/homepage` 并在 UI 展示。
+- 仍未验：内置 328 张图的人工语义 caption、视觉识图（需要模型/服务能力）、第三方版权人工审核；见
+  `dev_docs/sticker-system.md` §6。
+- 详细文档：`dev_docs/sticker-system.md`；第三方许可：`THIRD_PARTY_NOTICES.md`。
 
 ## 2026-11-18 第五轮：开箱即用的技能与"插件开发不再抓瞎"
 

@@ -30,12 +30,30 @@ beforeEach(() => {
   fs.mkdirSync(path.join(dataDir, "api", "data"), { recursive: true });
 });
 
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/** Windows + Bun SQLite 的句柄会晚几十毫秒释放，测试清理必须重试。 */
+function removeDirWithRetry(dir: string): void {
+  for (let i = 0; i < 40; i++) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+      return;
+    } catch {
+      sleepSync(50);
+    }
+  }
+  // Windows 上 Bun SQLite 的句柄偶尔会跨测试存活；临时目录由系统清理，
+  // 不让清理失败把功能测试判红。
+}
+
 afterEach(() => {
   if (prevDataDir === undefined) delete process.env.MAXMA_DATA_DIR;
   else process.env.MAXMA_DATA_DIR = prevDataDir;
   if (prevBundleDir === undefined) delete process.env.MAXMA_BUNDLE_DIR;
   else process.env.MAXMA_BUNDLE_DIR = prevBundleDir;
-  fs.rmSync(dataDir, { recursive: true, force: true });
+  removeDirWithRetry(dataDir);
 });
 
 async function makeApp() {
@@ -75,7 +93,22 @@ describe("stickers 文件服务（阶段 2.2f）", () => {
     const file = await app.request(`/api/stickers/${encodeURIComponent("开心")}/a.webp`, { headers: h });
     expect(file.status).toBe(200);
     expect(file.headers.get("content-type")).toBe("image/webp");
-    expect(file.headers.get("cache-control")).toContain("immutable");
+    expect(file.headers.get("cache-control")).toContain("max-age=86400");
+
+    const packs = (await (await app.request("/api/stickers/packs", { headers: h })).json()) as {
+      packs: Array<{ id: string; count: number }>;
+    };
+    expect(packs.packs.some((p) => p.id === "maxma_builtin" && p.count === 2)).toBe(true);
+
+    // 新图片路由：中文目录必须从 URL path 正确解出（Hono 的 * 参数不暴露）。
+    const index = (await (await app.request("/api/stickers/index?packId=maxma_builtin", { headers: h })).json()) as {
+      memes: Array<{ path: string }>;
+    };
+    const meme = index.memes.find((m) => m.path === "开心/a.webp")!;
+    const encoded = meme.path.split("/").map((s) => encodeURIComponent(s)).join("/");
+    const newFile = await app.request(`/api/stickers/file/maxma_builtin/${encoded}`, { headers: h });
+    expect(newFile.status).toBe(200);
+    expect(newFile.headers.get("content-type")).toBe("image/webp");
 
     const badCat = await app.request("/api/stickers/bad..cat/a.webp", { headers: h });
     expect(badCat.status).toBe(400);
@@ -137,7 +170,7 @@ describe("stickers favorites（阶段 2.2f）", () => {
     }
   });
 
-  test("recommendations 返回 limit 条以内 + index 双目录", async () => {
+  test("recommendations 返回 limit 条以内 + 新旧索引形状", async () => {
     const app = await makeApp();
     const h = authHeader();
     const rec = (await (
@@ -147,14 +180,19 @@ describe("stickers favorites（阶段 2.2f）", () => {
     expect(rec.recommendations.length).toBeLessThanOrEqual(4);
 
     const index = (await (await app.request("/api/stickers/index", { headers: h })).json()) as {
+      memes: Array<{ path: string }>;
+    };
+    expect(index.memes.some((m) => m.path === "开心/a.webp")).toBe(true);
+
+    const legacy = (await (await app.request("/api/stickers/legacy/index", { headers: h })).json()) as {
       index: Record<string, unknown>;
     };
-    expect(Object.keys(index.index)).toContain("开心/a.webp");
+    expect(Object.keys(legacy.index)).toContain("开心/a.webp");
   });
 });
 
 describe("stickers upload（阶段 2.2f）", () => {
-  test("上传 PNG → 转 WebP 落盘 → 列表 → 删除；重复上传幂等", async () => {
+  test("上传 PNG → 写用户图库 → 列表 → 删除；重复上传幂等", async () => {
     const app = await makeApp();
     const h = authHeader();
 
@@ -162,10 +200,12 @@ describe("stickers upload（阶段 2.2f）", () => {
     form.append("file", new File([tinyPng()], "sticker.png", { type: "image/png" }));
     const upload = (await (
       await app.request("/api/stickers/upload", { method: "POST", headers: h, body: form })
-    ).json()) as { success: boolean; filename: string; path: string };
+    ).json()) as { success: boolean; filename: string; path: string; packId: string };
     expect(upload.success).toBe(true);
-    expect(upload.filename).toMatch(/^custom_[0-9a-f]{16}\.webp$/);
-    expect(fs.existsSync(path.join(dataDir, "config", "stickers", "custom", upload.filename))).toBe(true);
+    expect(upload.packId).toBe("dsh-meme-user");
+    expect(upload.filename).toMatch(/^sticker_[0-9a-f]{16}\.png$/);
+    expect(upload.path).toMatch(/^memes\/daily\/sticker_[0-9a-f]{16}\.png$/);
+    expect(fs.existsSync(path.join(dataDir, "stickers", "packs", "dsh-meme-user", ...upload.path.split("/")))).toBe(true);
 
     // 重复上传（同内容同哈希）
     const form2 = new FormData();
@@ -175,7 +215,7 @@ describe("stickers upload（阶段 2.2f）", () => {
     ).json()) as { message: string };
     expect(again.message).toContain("已存在");
 
-    // custom 列表
+    // 旧 custom shim 也要能看到用户图库
     const list = (await (await app.request("/api/stickers/custom", { headers: h })).json()) as {
       stickers: Array<{ filename: string }>;
     };

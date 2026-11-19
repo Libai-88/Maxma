@@ -55,6 +55,19 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM Rebuild the built-in sticker index before copying it, so the web package
+REM never ships a stale index.db from a previous source tree.
+echo [2/3] Rebuilding built-in sticker index...
+"%SERVER_DIR%\bun.exe" run "scripts\build-sticker-pack.ts"
+if errorlevel 1 (
+    echo [ERROR] Built-in sticker index rebuild failed.
+    exit /b 1
+)
+if not exist "%PROJECT_ROOT%config\stickers\index.db" (
+    echo [ERROR] Built-in sticker index missing after rebuild.
+    exit /b 1
+)
+
 REM Backend runtime bundle (server.js + bun.exe + sharp native node_modules)
 xcopy /e /i /q "%SERVER_DIR%" "%PORTABLE_DIR%" >nul
 if errorlevel 1 (

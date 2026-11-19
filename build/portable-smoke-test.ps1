@@ -118,6 +118,7 @@ try {
         -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
 
     $apiBase = "http://127.0.0.1:$Port/api"
+    $rootUrl = "http://127.0.0.1:$Port"
 
     # 1. auth
     $auth = Wait-HttpJson -Url "$apiBase/auth/token" -TimeoutSeconds $TimeoutSec
@@ -202,6 +203,21 @@ try {
         if ($freeModels -contains $dropped) { throw "built-in free list still offers upstream-dropped model: $dropped" }
     }
     Write-Host "[portable-smoke] built-in free models: $($freeModels -join ', ')"
+
+    # 6b. dsh-meme 表情包：内置 pack 必须可索引、图片可取；管理接口必须仍然鉴权。
+    $stickerIndex = Wait-HttpJson -Url "$apiBase/stickers/index?packId=all" -Headers $headers -TimeoutSeconds 15
+    if (-not $stickerIndex.ok) { throw "sticker index not ok: $($stickerIndex | ConvertTo-Json -Compress)" }
+    if (@($stickerIndex.packs | Where-Object { $_.id -eq 'maxma_builtin' }).Count -lt 1) {
+        throw "portable bundle has no maxma_builtin sticker pack"
+    }
+    $firstMeme = @($stickerIndex.memes) | Select-Object -First 1
+    if (-not $firstMeme -or -not $firstMeme.url) { throw "maxma_builtin has no indexed memes" }
+    $imageUrl = if ([string]$firstMeme.url -match '^https?://') { [string]$firstMeme.url } else { "$rootUrl$([string]$firstMeme.url)" }
+    $imageRes = Invoke-WebRequest -Uri $imageUrl -Method Get -SkipHttpErrorCheck
+    if ($imageRes.StatusCode -ne 200) { throw "sticker image route returned $($imageRes.StatusCode) url=$imageUrl body=$($imageRes.Content)" }
+    $unauthPacks = Invoke-WebRequest -Uri "$apiBase/stickers/packs" -Method Get -SkipHttpErrorCheck
+    if ($unauthPacks.StatusCode -ne 401) { throw "sticker management route is not protected (status=$($unauthPacks.StatusCode))" }
+    Write-Host "[portable-smoke] stickers: $($stickerIndex.total) memes, image 200, management 401"
 
     # 7. 引擎配置目录落点自检必须真的在启动日志里留痕。
     #    便携包一定注入了 PI_CODING_AGENT_DIR，所以期望是"在数据目录内"；

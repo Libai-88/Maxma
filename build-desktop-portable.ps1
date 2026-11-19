@@ -192,6 +192,12 @@ $BundledSkillNames = @(
     "writing-polish"
 )
 $StickersDir = Join-Path $RuntimeDir "config\stickers"
+# 每次构建前重生成内置 pack 的 index.db/manifest.json，避免把上一轮的旧索引带进包。
+Push-Location $ProjectRoot
+try {
+    & $BunExe run "scripts/build-sticker-pack.ts"
+    if ($LASTEXITCODE -ne 0) { throw "内置表情索引生成失败（exit=$LASTEXITCODE）" }
+} finally { Pop-Location }
 Copy-Item -Path (Join-Path $ProjectRoot "config\rules") -Destination (Join-Path $RuntimeDir "config") -Recurse -Force
 Copy-Item -Path (Join-Path $ProjectRoot "config\stickers") -Destination (Join-Path $RuntimeDir "config") -Recurse -Force
 $CustomStickerDir = Join-Path $StickersDir "custom"

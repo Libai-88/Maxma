@@ -20,15 +20,41 @@ import { timingSafeEqualStr } from "./crypto-equal";
 /** 无需鉴权的精确路径。 */
 const EXACT_WHITELIST = new Set(["/api/health", "/api/auth/token"]);
 
+/** 表情图片/随机图这类 <img> 无法带自定义头的 GET/HEAD 才放行。 */
+const STICKER_RESERVED = new Set([
+  "file",
+  "packs",
+  "index",
+  "settings",
+  "health",
+  "legacy",
+  "favorites",
+  "recent",
+  "recommendations",
+  "custom",
+  "upload",
+  "market",
+  "usage",
+  "skip",
+  "memes",
+  "packs",
+]);
+
 function isWhitelisted(path: string, method: string): boolean {
   if (EXACT_WHITELIST.has(path)) return true;
   if (path === "/api/mcp/oauth/callback" && method === "GET") return true;
-  // 表情包静态资源：GET/HEAD 且子路径 >= 2 段（{category}/{filename}、random/{category}）
-  if (path.startsWith("/api/stickers/")) {
-    const sub = path.slice("/api/stickers/".length);
-    const parts = sub.split("/").filter((p) => p.length > 0);
-    if ((method === "GET" || method === "HEAD") && parts.length >= 2) return true;
-  }
+  if (method !== "GET" && method !== "HEAD") return false;
+  if (!path.startsWith("/api/stickers/")) return false;
+  const parts = path
+    .slice("/api/stickers/".length)
+    .split("/")
+    .filter((p) => p.length > 0);
+  // 新图片路由：/api/stickers/file/<packId>/<path...>
+  if (parts[0] === "file" && parts.length >= 3) return true;
+  // 旧随机图：/api/stickers/random/<category>
+  if (parts[0] === "random" && parts.length === 2) return true;
+  // 旧图片：/api/stickers/<category>/<filename>，排除具体 API 前缀
+  if (parts.length === 2 && !STICKER_RESERVED.has(parts[0]!)) return true;
   return false;
 }
 

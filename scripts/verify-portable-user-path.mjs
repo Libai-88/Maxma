@@ -28,7 +28,8 @@ if (!fs.existsSync(bunExe) || !fs.existsSync(serverJs)) {
  * 验证结束后按冒烟脚本同样的规则清理运行时产物（保留预置配置）。
  */
 const dataDir = path.join(portableDir, "data");
-fs.mkdirSync(path.join(dataDir, "api", "data"), { recursive: true });
+const apiDataDir = path.join(dataDir, "api", "data");
+if (!fs.existsSync(apiDataDir)) fs.mkdirSync(apiDataDir, { recursive: true });
 const port = 8123;
 
 const proc = Bun.spawn([bunExe, "run", serverJs], {

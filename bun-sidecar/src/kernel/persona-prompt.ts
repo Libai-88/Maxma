@@ -1,12 +1,70 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-const STICKER_INSTRUCTIONS = [
-  "## 表情贴纸",
-  "根据当前活动人设和对话情绪，在自然合适的位置主动使用贴纸指令，格式必须为 [表情包:分类]。",
-  "可用分类：开心、无语、委屈、悲伤、害羞、生气、惊讶、尴尬、撒娇、得意、爱心、日常。",
-  "不要把指令放进代码块；不要每条回复机械添加。系统会将有效指令渲染为贴纸。",
-].join("\n");
+import { MemesStore, scanPacks } from "../../../bun-shared/dsh-meme/memes";
+
+function stickerPrompt(dataDir: string, bundleDir: string): string {
+  let settings: {
+    promptEnabled?: boolean;
+    enabledPacks?: string[];
+    sendGear?: string;
+  } = {};
+  try {
+    settings = JSON.parse(fs.readFileSync(path.join(dataDir, "stickers", "settings.json"), "utf8")) as typeof settings;
+  } catch {
+    /* 首次启动还没写 settings：按默认开启、全部图库处理 */
+  }
+  if (settings.promptEnabled === false) return "";
+
+  let packs: Array<{ id: string; name: string; path: string }> = [];
+  try {
+    packs = scanPacks(
+      path.join(bundleDir, "config", "stickers"),
+      path.join(dataDir, "stickers", "packs"),
+    ).map((p) =>
+      path.resolve(p.path) === path.resolve(path.join(bundleDir, "config", "stickers"))
+        ? { ...p, id: "maxma_builtin" }
+        : p,
+    );
+  } catch {
+    /* 索引尚未生成时仍注入协议说明，避免模型完全不知道表情能力 */
+  }
+  const enabled = Array.isArray(settings.enabledPacks)
+    ? settings.enabledPacks
+    : packs.map((p) => p.id);
+  const counts = new Map<string, number>();
+  for (const pack of packs) {
+    if (!enabled.includes(pack.id)) continue;
+    try {
+      const store = new MemesStore(pack.path);
+      for (const row of store.rows) counts.set(row.tag, (counts.get(row.tag) ?? 0) + 1);
+    } catch {
+      /* 坏库跳过 */
+    }
+  }
+  const tags = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 15)
+    .map(([tag, count]) => `${tag}(${count})`)
+    .join(" ");
+  const gear = settings.sendGear || "auto";
+  const gearLine =
+    gear === "off"
+      ? "主动发图档位：关闭。只有用户明确要求发表情/发图/斗图时才发。"
+      : gear === "always"
+        ? "主动发图档位：每轮都发。没有合适候选才允许纯文字。"
+        : gear === "active"
+          ? "主动发图档位：积极。气氛合适就发，但别每条机械加。"
+          : "主动发图档位：自动。看气氛，正事/严肃话题克制。";
+  return [
+    "## 表情贴纸",
+    "需要表情时先调用 send_meme 拿候选；候选里的 [表情: 描述] 必须原样抄，不要自己编描述。",
+    "发图标记用半角冒号：[表情: 描述]；不要把图片路径贴进回复，也不要写 markdown 图片。",
+    "用户只是发表情不算收藏请求；只有明确要求收藏/收录图片时才调用 learn_meme。",
+    "可用分类（来自当前启用图库）：" + (tags || "happy angry sad shy confused daily"),
+    gearLine,
+  ].join("\n");
+}
 
 function readText(file: string): string {
   try {
@@ -82,7 +140,7 @@ export function buildPersonaSystemPrompt(options: { dataDir: string; bundleDir?:
     behaviorRules,
     soul,
     user ? `## 用户档案\n${user}` : "",
-    STICKER_INSTRUCTIONS,
+    stickerPrompt(options.dataDir, bundleDir),
   ]
     .filter(Boolean)
     .join("\n\n")

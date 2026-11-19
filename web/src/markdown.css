@@ -169,3 +169,12 @@
   border-radius: var(--radius-md);
   cursor: zoom-in;
 }
+
+/* StickerRichText：把普通段落与表情放在同一行内（独立的 Markdown 片段不再撑开整段）。 */
+.sticker-rich { display: inline; }
+.markdown-body.md-inline,
+.markdown-body.md-inline p {
+  display: inline;
+  margin: 0;
+}
+.markdown-body.md-inline > * + * { margin-left: 0.15em; }

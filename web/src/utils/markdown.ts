@@ -20,7 +20,7 @@ const md = new MarkdownIt({
 // `stickers/日常/x.webp`、`config/stickers/日常/x.webp`。统一剥掉前缀再匹配。
 // 不处理以 `/` 开头的绝对路径：那是站内资源（如 `/uploads/a.webp`），
 // 不能当成贴纸改写。匹配规则与后端 stickers.ts 的 CATEGORY_RE / FILENAME_RE 对齐。
-const STICKER_SRC_RE = /^(?:\.\/)?(?:config\/)?(?:stickers\/)?([\w\u4e00-\u9fff-]+\/[\w-]+\.webp)$/
+const STICKER_SRC_RE = /^(?:\.\/)?(?:config\/)?(?:stickers\/)?((?:[\w\u4e00-\u9fff-]+\/)+[\w-]+\.(?:webp|png|jpe?g|gif))$/i
 
 /** 贴纸相对路径 → 后端 API URL；非贴纸形状的 src 原样返回。 */
 export function resolveStickerSrc(src: string): string {
@@ -32,7 +32,11 @@ export function resolveStickerSrc(src: string): string {
     /* 畸形 % 序列：按原文匹配 */
   }
   const match = STICKER_SRC_RE.exec(decoded)
-  return match ? `/api/stickers/${match[1]}` : src
+  if (!match) return src
+  const rel = match[1]!
+  return rel.split('/').length >= 3
+    ? `/api/stickers/file/${rel}`
+    : `/api/stickers/${rel}`
 }
 
 /**
@@ -54,9 +58,12 @@ export function expandStickerTags(input: string): string {
     .map((seg, i) => {
       // split 带捕获组：奇数下标是受保护的代码片段，原样保留
       if (i % 2 === 1) return seg
-      return seg.replace(STICKER_TAG_RE, (_m, path: string) =>
-        `<span class="md-sticker"><img src="/api/stickers/${path}" alt="贴纸" loading="lazy" decoding="async"></span>`,
-      )
+      return seg.replace(STICKER_TAG_RE, (_m, path: string) => {
+        const img = path.split('/').length >= 3
+          ? `/api/stickers/file/${path}`
+          : `/api/stickers/${path}`
+        return `<span class="md-sticker"><img src="${img}" alt="贴纸" loading="lazy" decoding="async"></span>`
+      })
     })
     .join('')
 }
