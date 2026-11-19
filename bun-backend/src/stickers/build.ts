@@ -20,6 +20,31 @@ export interface BuildBuiltinResult {
   rebuilt: boolean;
 }
 
+export interface CaptionEntry {
+  caption?: string;
+  keywords?: string;
+}
+
+/** 读取随包的离线语义标注；文件不存在或某条损坏时退回分类+文件名，不阻断索引生成。 */
+function readCaptions(dir: string): Map<string, CaptionEntry> {
+  const out = new Map<string, CaptionEntry>();
+  const file = path.join(dir, "captions.json");
+  if (!fs.existsSync(file)) return out;
+  try {
+    const raw = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
+    for (const [rel, value] of Object.entries(raw)) {
+      if (!value || typeof value !== "object") continue;
+      const v = value as Record<string, unknown>;
+      const caption = typeof v.caption === "string" ? v.caption.trim().slice(0, 200) : "";
+      const keywords = typeof v.keywords === "string" ? v.keywords.trim().slice(0, 200) : "";
+      if (caption || keywords) out.set(rel.replace(/\\/g, "/"), { caption, keywords });
+    }
+  } catch {
+    /* 标注文件损坏时不阻断图库可用性 */
+  }
+  return out;
+}
+
 function imageFiles(dir: string): string[] {
   return walkPackImages(dir)
     .filter((rel) => {
@@ -66,7 +91,7 @@ function removeWithRetry(file: string): void {
   throw last instanceof Error ? last : new Error(String(last));
 }
 
-function writeIndex(dir: string, images: string[], reuseExisting = false): void {
+function writeIndex(dir: string, images: string[], reuseExisting = false, captions = new Map<string, CaptionEntry>()): void {
   const indexPath = path.join(dir, "index.db");
   // Windows 上 SQLite close 后源文件句柄可能仍被占用，tmp→rename 会 EBUSY。
   // 如果索引本来就能读，优先在同一个文件里清空重写，避免删除正被 SQLite 句柄
@@ -103,6 +128,7 @@ function writeIndex(dir: string, images: string[], reuseExisting = false): void 
       const file = segs[segs.length - 1] || "";
       const stem = path.basename(file, path.extname(file));
       const abs = path.join(dir, ...segs);
+      const annotated = captions.get(posix);
       let mtime = Date.now();
       try {
         mtime = fs.statSync(abs).mtimeMs;
@@ -113,10 +139,10 @@ function writeIndex(dir: string, images: string[], reuseExisting = false): void 
         posix,
         legacyTagForCategory(category),
         file,
-        `${category} ${stem}`.slice(0, 200),
-        category,
+        (annotated?.caption || `${category} ${stem}`).slice(0, 200),
+        (annotated?.keywords || category).slice(0, 200),
         mtime,
-        null,
+        annotated ? Date.now() : null,
       );
     }
     db.exec("COMMIT");
@@ -168,7 +194,7 @@ function writeManifest(dir: string, count: number, images: string[]): void {
 }
 
 /**
- * 生成/校验内置 pack。若索引存在且行集合与图片集合一致，不重写。
+ * 生成/校验内置 pack。若索引存在、行集合与图片集合一致，且索引不比 captions.json 旧，不重写。
  * @param force true 时强制重建
  */
 export function buildBuiltinPack(dir: string, force = false): BuildBuiltinResult {
@@ -183,21 +209,36 @@ export function buildBuiltinPack(dir: string, force = false): BuildBuiltinResult
     !force &&
     existing !== null &&
     existing.length === images.length &&
-    existing.every((p, i) => p === images[i]);
+    existing.every((p, i) => p === images[i]) &&
+    captionsNotNewerThanIndex(abs);
   if (same) {
     return { dir: abs, count: images.length, rebuilt: false };
   }
-  writeIndex(abs, images, existing !== null);
+  writeIndex(abs, images, existing !== null, readCaptions(abs));
   writeManifest(abs, images.length, images);
   return { dir: abs, count: images.length, rebuilt: true };
 }
 
 export function builtinIndexIsCurrent(dir: string): boolean {
-  const images = imageFiles(path.resolve(dir));
-  const existing = readExistingPaths(path.join(path.resolve(dir), "index.db"));
+  const abs = path.resolve(dir);
+  const images = imageFiles(abs);
+  const existing = readExistingPaths(path.join(abs, "index.db"));
   return (
     existing !== null &&
     existing.length === images.length &&
-    existing.every((p, i) => p === images[i])
+    existing.every((p, i) => p === images[i]) &&
+    captionsNotNewerThanIndex(abs)
   );
+}
+
+/** captions.json 是人工标注数据；它比 index.db 新时必须重建索引。 */
+function captionsNotNewerThanIndex(dir: string): boolean {
+  const captions = path.join(dir, "captions.json");
+  const index = path.join(dir, "index.db");
+  if (!fs.existsSync(captions)) return true;
+  try {
+    return fs.statSync(index).mtimeMs >= fs.statSync(captions).mtimeMs;
+  } catch {
+    return false;
+  }
 }

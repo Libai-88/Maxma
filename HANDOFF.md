@@ -15,15 +15,24 @@
   `MAXMA_STICKER_ENGINE=legacy`（旧路由 + 旧 index/图片 shim）。
 - 构建：`build-desktop-portable.ps1` 复制前重建内置索引，继续清理 `custom/` 与旧 runtime；
   `portable-smoke-test.ps1` 增加内置 pack/图片/管理鉴权检查。
-- 2026-11-19 收尾实测：backend 328 pass / 0 fail、sidecar 234 pass / 0 fail、web 52 pass / 0 fail；
-  `bun scripts/verify-ui-stickers.mjs` 真实界面通过（焦点/Tab/Escape、CDP 触控、键盘 Enter、管理面板，
-  以及 `dev_docs/visual/sticker-baseline/` 两张像素基线）；桌面便携包
-  `dist/electron-portable/MaxmaHere-2.7.0-portable-x64.zip` 与 Web 便携包 `..\MaxmaHere-Portable` 均 smoke 通过。
-- `MAXMA_STICKER_ENGINE=legacy` 的完整 `createApp()` 装配已由 `tests/stickers-legacy-server.test.ts` 覆盖；
-  市场目录不可达时本地索引仍可用，市场条目透传 `license/homepage` 并在 UI 展示。
-- 仍未验：内置 328 张图的人工语义 caption、视觉识图（需要模型/服务能力）、第三方版权人工审核；见
-  `dev_docs/sticker-system.md` §6。
-- 详细文档：`dev_docs/sticker-system.md`；第三方许可：`THIRD_PARTY_NOTICES.md`。
+- 2026-11-19 收尾实测：backend 331 pass / 0 fail（51 files，2183 expect）、sidecar 234 pass / 0 fail
+  + `tsc --noEmit`、web 52 pass / 0 fail + typecheck/build/两道 lint；`bun scripts/verify-ui-stickers.mjs`
+  三个场景（1280×900 深色、1280×900 浅色、768×900 窄窗）全通过，console warning/error 为 0，
+  6 张像素基线在 `dev_docs/visual/sticker-baseline/`（2% 阈值，产品回归基线，不是外部设计稿）。
+- 内置 328 张图已全部写入离线语义 caption：`config/stickers/captions.json` 328 条，
+  构建后 `index.db` 328 行且 `captioned_at` 328；`captions.json` 比索引新时自动失效重建。
+  生成方式与边界见 `dev_docs/sticker-captions.md`；这是离线标注，不是运行时视觉模型，
+  `learn_meme` 仍不内置识图。
+- 市场：`scripts/audit-sticker-licenses.ts --strict` 实测 20 包、0 fatal、6 个 homepage 警告；
+  市场行显示许可证/来源，缺来源显示「来源未提供」并固定提示授权需自行核对。字段审计
+  **不等于**版权审核，`personal`/`noncommercial-fan` 是否可用仍需 owner 判断。
+- UI 边界：CDP 双指捏合和 Chromium IME 组合输入已覆盖；真机触屏硬件、系统级中文输入法候选窗、
+  跨平台字体差异未验证。最低支持窗口 768px，390px 手机宽度不属于桌面应用支持范围。
+- 桌面便携包 `dist/electron-portable/MaxmaHere-2.7.0-portable-x64.zip`
+  （252,201,690 bytes，SHA-256 `6988917631426c2190a8e1ac5561273ffe31fedf2f8434b584a6e1ed33e6f840`）
+  与 Web 便携包 `dist/web-portable/MaxmaHere-Portable-2.7.0.zip`
+  （83,265,091 bytes，SHA-256 `1ca40874e3fc87ad25f2209b230b42b8ff948392ef39ecc5400cc3b421399718`）
+  均 smoke 通过；两个 zip 内 `index.db` 均为 328/328 已标注。
 
 ## 2026-11-18 第五轮：开箱即用的技能与"插件开发不再抓瞎"
 

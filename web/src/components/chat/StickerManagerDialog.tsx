@@ -3,7 +3,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
-import { Download, RefreshCw, Store, Trash2, Upload } from 'lucide-react'
+import { Download, ExternalLink, RefreshCw, Store, Trash2, Upload } from 'lucide-react'
+import { openExternal } from '@/utils/env'
 import {
   deleteStickerPack,
   downloadStickerPack,
@@ -175,7 +176,7 @@ export function StickerManagerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>表情图库管理</DialogTitle>
           <DialogDescription>
@@ -186,7 +187,7 @@ export function StickerManagerDialog({
         {loading ? (
           <p className="py-8 text-center text-xs text-muted-foreground">加载图库…</p>
         ) : (
-          <div className="grid max-h-[65vh] gap-4 overflow-y-auto pr-1">
+          <div className="grid max-h-[65vh] gap-4 overflow-x-hidden overflow-y-auto pr-1">
             <section>
               <h3 className="mb-2 text-xs font-medium text-muted-foreground">图库</h3>
               <div className="space-y-1.5">
@@ -253,6 +254,9 @@ export function StickerManagerDialog({
               />
               {marketWarning && <p className="text-xs text-muted-foreground">{marketWarning}</p>}
               {market.length > 0 && (
+                <p className="text-micro text-muted-foreground">许可证与来源由目录声明，安装前请自行核对授权范围；应用不会执行图库内的脚本。</p>
+              )}
+              {market.length > 0 && (
                 <div className="grid max-h-52 gap-1.5 overflow-y-auto rounded-lg border border-border p-2">
                   {market.map((entry) => (
                     <div key={entry.id} className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted/40">
@@ -261,6 +265,18 @@ export function StickerManagerDialog({
                         <p className="truncate text-micro text-muted-foreground">
                           {entry.count || '?'} 张 · {entry.maintainer || '未知作者'} · {entry.license || '许可证未声明'} · {entry.description || entry.id}
                         </p>
+                        {entry.homepage ? (
+                          <button
+                            type="button"
+                            className="mt-0.5 inline-flex items-center text-micro text-primary/80 hover:underline"
+                            onClick={() => openExternal(entry.homepage)}
+                            aria-label={`打开 ${entry.name} 的来源`}
+                          >
+                            <ExternalLink className="mr-1 size-3" />来源
+                          </button>
+                        ) : (
+                          <span className="mt-0.5 inline-flex items-center text-micro text-muted-foreground">来源未提供</span>
+                        )}
                       </div>
                       <Button
                         size="xs"

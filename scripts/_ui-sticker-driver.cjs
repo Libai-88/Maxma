@@ -17,6 +17,9 @@ const OUT = process.env.DRIVE_OUT || "";
 const BASELINE_DIR = process.env.DRIVE_BASELINE_DIR || "";
 const UPDATE_BASELINE = process.env.DRIVE_UPDATE_BASELINE === "1";
 const THEME = process.env.DRIVE_THEME || "dark";
+const WIDTH = Number(process.env.DRIVE_WIDTH || 1280);
+const HEIGHT = Number(process.env.DRIVE_HEIGHT || 900);
+const SHOT_SUFFIX = process.env.DRIVE_SHOT_SUFFIX || "";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function js(win, code) {
@@ -78,11 +81,12 @@ function comparePng(currentPng, baselinePath) {
 
 async function captureShot(win, name, results) {
   if (!OUT) return;
+  const shotName = `${name}${SHOT_SUFFIX}`;
   fs.mkdirSync(OUT, { recursive: true });
   const png = (await win.webContents.capturePage()).toPNG();
-  const currentPath = path.join(OUT, `${name}.png`);
+  const currentPath = path.join(OUT, `${shotName}.png`);
   fs.writeFileSync(currentPath, png);
-  const baselinePath = BASELINE_DIR ? path.join(BASELINE_DIR, `${name}.png`) : "";
+  const baselinePath = BASELINE_DIR ? path.join(BASELINE_DIR, `${shotName}.png`) : "";
   let visual = { status: "not-configured", currentPath };
   if (baselinePath) {
     if (UPDATE_BASELINE) {
@@ -93,7 +97,7 @@ async function captureShot(win, name, results) {
       visual = comparePng(png, baselinePath);
     }
   }
-  results.push({ name, currentPath, ...visual });
+  results.push({ name: shotName, currentPath, ...visual });
 }
 
 /** 打开附件菜单并点「表情」。 */
@@ -145,37 +149,132 @@ async function touchClick(win, code) {
   await sleep(800);
 }
 
+/** 双指捏合：验证多指触摸不会误触发表情按钮或把选择器关掉。 */
+async function multiTouchPinch(win, code) {
+  const box = await js(win, `(() => {
+    const el = ${code};
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + Math.min(r.height * 0.4, 260) };
+  })()`);
+  if (!box) throw new Error("多指触控目标不存在");
+  if (!win.webContents.debugger.isAttached()) win.webContents.debugger.attach("1.3");
+  try {
+    await win.webContents.debugger.sendCommand("Emulation.setTouchEmulationEnabled", {
+      enabled: true,
+      maxTouchPoints: 5,
+    });
+    await win.webContents.debugger.sendCommand("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [
+        { x: box.x - 40, y: box.y, id: 1 },
+        { x: box.x + 40, y: box.y, id: 2 },
+      ],
+    });
+    await win.webContents.debugger.sendCommand("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [
+        { x: box.x - 90, y: box.y, id: 1 },
+        { x: box.x + 90, y: box.y, id: 2 },
+      ],
+    });
+    await win.webContents.debugger.sendCommand("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+  } finally {
+    try { win.webContents.debugger.detach(); } catch { /* 已断开 */ }
+  }
+  await sleep(800);
+}
+
+/** CDP IME 组合输入：走 Chromium 的 composition 路径，验证中文输入不被 React 吞掉。 */
+async function imeCommit(win, text) {
+  await js(win, `(() => {
+    const ta = document.querySelector('[data-slot="composer"] textarea');
+    if (!ta) return false;
+    ta.focus();
+    return true;
+  })()`);
+  if (!win.webContents.debugger.isAttached()) win.webContents.debugger.attach("1.3");
+  try {
+    await win.webContents.debugger.sendCommand("Input.imeSetComposition", {
+      text,
+      selectionStart: text.length,
+      selectionEnd: text.length,
+      replacementStart: 0,
+      replacementEnd: 0,
+    });
+    await sleep(200);
+    await win.webContents.debugger.sendCommand("Input.insertText", { text });
+  } finally {
+    try { win.webContents.debugger.detach(); } catch { /* 已断开 */ }
+  }
+  await sleep(400);
+}
+
 app.whenReady().then(async () => {
+  // 先用一个一次性窗口写 localStorage（主题/会话），再销毁它。
+  // 不能在同一个窗口 reload：旧页面的 init 请求和 console 事件会跨 reload 串进来，
+  // 把测试自身的中断误记成产品错误。新窗口从干净上下文开始。
+  const bootstrap = new BrowserWindow({
+    show: false,
+    width: WIDTH,
+    height: HEIGHT,
+    webPreferences: { sandbox: true, contextIsolation: true, backgroundThrottling: false },
+  });
+  await bootstrap.loadURL(BASE + "/");
+  await js(bootstrap, `(() => { localStorage.setItem('maxma.theme', ${JSON.stringify(THEME)}); return true })()`);
+  if (SESSION_ID) {
+    await js(bootstrap, `(() => {
+      localStorage.setItem('maxma_session_id', ${JSON.stringify(SESSION_ID)});
+      return true;
+    })()`);
+  }
+  // 保留 bootstrap 窗口（隐藏），否则 Windows 上所有窗口关闭会触发 Electron 默认退出，
+  // 后续新窗口 loadURL 会直接 ERR_FAILED。
+  bootstrap.hide();
+
   const win = new BrowserWindow({
     show: false,
-    width: 1280,
-    height: 900,
-    webPreferences: { sandbox: true, contextIsolation: true },
+    width: WIDTH,
+    height: HEIGHT,
+    webPreferences: { sandbox: true, contextIsolation: true, backgroundThrottling: false },
   });
   const logs = [];
   win.webContents.on("console-message", (_e, level, message) => {
     if (level >= 2) logs.push(message);
   });
-
   await win.loadURL(BASE + "/");
-  // 固定主题，截图才可跨次比较；主题存放在 localStorage，写完必须 reload。
-  await js(win, `(() => { localStorage.setItem('maxma.theme', ${JSON.stringify(THEME)}); return true })()`);
-  if (SESSION_ID) {
-    await js(win, `(() => {
-      localStorage.setItem('maxma_session_id', ${JSON.stringify(SESSION_ID)});
-      return true;
-    })()`);
-  }
-  await win.webContents.reload();
+  // 隐藏窗口会被 Chromium 判定为 occluded，CSS 入场动画停在 opacity:0，capturePage 也拿不到新帧。
+  // 只 showInactive，不抢用户焦点；这是真实界面验收，不是无头渲染。
+  win.showInactive();
   await sleep(2500);
 
   // 等聊天输入框出现；没有 provider 也能打开表情面板。
   const composer = await waitFor(win, `!!document.querySelector('[data-slot="composer"] textarea')`, 90_000);
-  const result = { stage: "start", pickerOpened: false, searchFocused: false, tabFocusInDialog: false, escapeClosed: false, focusRestored: false, imagesLoaded: false, searchHit: false, markerInserted: false, keyboardInserted: false, touchInserted: false, managerOpened: false, inputValue: "", shots: [], consoleErrors: logs };
+  const result = { stage: "start", pickerOpened: false, searchFocused: false, tabFocusInDialog: false, escapeClosed: false, focusRestored: false, imagesLoaded: false, searchHit: false, markerInserted: false, keyboardInserted: false, touchInserted: false, multiTouchStable: false, imeCommitted: false, managerOpened: false, viewport: { width: WIDTH, height: HEIGHT, theme: THEME }, inputValue: "", shots: [], consoleErrors: logs };
 
   try {
     if (!composer) throw new Error("聊天输入框始终没出现（界面可能停在引导页）");
     result.stage = "composer-ready";
+
+    // IME：用 Chromium 的组合输入路径写中文，确认 React 受控输入框能收到并保留。
+    await imeCommit(win, "爸爸");
+    const imeValue = (await js(win, `document.querySelector('[data-slot="composer"] textarea')?.value || ''`)) || "";
+    result.imeCommitted = imeValue.includes("爸爸");
+    result.stage = "ime-checked";
+    if (!result.imeCommitted) throw new Error("IME 组合输入没有进入消息输入框");
+    await js(win, `(() => {
+      const ta = document.querySelector('[data-slot="composer"] textarea');
+      if (!ta) return false;
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+      setter.call(ta, '');
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    })()`);
+    await sleep(300);
+
     await openStickerPicker(win);
     result.pickerOpened = true;
     result.stage = "picker-opened";
@@ -277,6 +376,19 @@ app.whenReady().then(async () => {
     result.stage = "keyboard-inserted";
     if (!result.keyboardInserted) throw new Error("键盘 Enter 没有插入第二个表情标记");
 
+    // 多指：在选择器网格上做双指捏合；不得误插入，也不得把选择器弄关。
+    // 这是 CDP 多触点模拟，不等价于真机触屏硬件；真机由 UI smoke 负责。
+    await openStickerPicker(win);
+    const beforePinch = (await js(win, `document.querySelector('[data-slot="composer"] textarea')?.value || ''`)) || "";
+    await multiTouchPinch(win, `document.querySelector('[role="dialog"][aria-label="表情选择器"]')`);
+    const pickerStillOpen = !!(await js(win, `!!document.querySelector('[role="dialog"][aria-label="表情选择器"]')`));
+    const afterPinch = (await js(win, `document.querySelector('[data-slot="composer"] textarea')?.value || ''`)) || "";
+    result.multiTouchStable = pickerStillOpen && afterPinch === beforePinch;
+    result.stage = "multi-touch-checked";
+    if (!result.multiTouchStable) throw new Error("双指捏合导致选择器关闭或误插入表情");
+    await pressKey(win, "Escape");
+    await waitFor(win, `!document.querySelector('[role="dialog"][aria-label="表情选择器"]')`, 5_000);
+
     // 重新打开选择器，进入管理面板并截取第二张基线图。
     await openStickerPicker(win);
     const manage = await js(win, `(() => {
@@ -291,7 +403,30 @@ app.whenReady().then(async () => {
     })()`, 15_000);
     if (!manager) throw new Error("管理对话框没有出现");
     await sleep(800);
+    result.dialogDebug = await js(win, `(() => [...document.querySelectorAll('[role="dialog"]')].map((d) => {
+      const r = d.getBoundingClientRect();
+      const cs = getComputedStyle(d);
+      return {
+        label: d.getAttribute('aria-label') || '',
+        text: (d.textContent || '').trim().slice(0, 40),
+        rect: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) },
+        display: cs.display,
+        visibility: cs.visibility,
+        opacity: cs.opacity,
+        z: cs.zIndex,
+      };
+    }))()`);
     await captureShot(win, "sticker-manager", result.shots);
+    result.pageMetrics = await js(win, `(() => {
+      const doc = document.documentElement;
+      const overflowing = [...document.querySelectorAll('*')].filter((e) => e.scrollWidth > e.clientWidth + 2).slice(0, 12).map((e) => ({
+        tag: e.tagName,
+        cls: String(e.className || '').slice(0, 90),
+        scrollWidth: e.scrollWidth,
+        clientWidth: e.clientWidth,
+      }));
+      return { clientWidth: doc.clientWidth, scrollWidth: doc.scrollWidth, bodyScrollWidth: document.body.scrollWidth, overflowing };
+    })()`);
     result.managerOpened = true;
     result.stage = "manager-opened";
   } catch (err) {

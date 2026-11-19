@@ -179,7 +179,7 @@ export function StickerPicker({ onSelect, onSendNow, onManage, onClose }: Sticke
       ) : shown.length === 0 ? (
         <p className="py-10 text-center text-xs text-muted-foreground">没有匹配的表情</p>
       ) : (
-        <div className="scrollbar-thin grid max-h-[min(22rem,50vh)] grid-cols-6 gap-1 overflow-y-auto">
+        <div className="scrollbar-thin grid max-h-[min(22rem,50vh)] grid-cols-6 gap-1 overflow-x-hidden overflow-y-auto">
           {shown.map((m) => {
             const s = toPickerSticker(m)
             return (
