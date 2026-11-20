@@ -213,12 +213,15 @@ try {
     $firstMeme = @($stickerIndex.memes) | Select-Object -First 1
     if (-not $firstMeme -or -not $firstMeme.url) { throw "maxma_builtin has no indexed memes" }
     $imageUrl = if ([string]$firstMeme.url -match '^https?://') { [string]$firstMeme.url } else { "$rootUrl$([string]$firstMeme.url)" }
-    $imageRes = Invoke-WebRequest -Uri $imageUrl -Method Get
+    # Windows PowerShell 5.1 默认走 IE/COM 解析管线；在无交互会话里首次初始化会
+    # 卡死（后端日志里连请求都没发出）。图片/状态码检查不需要 DOM 解析，显式
+    # -UseBasicParsing 绕开 IE，保证冒烟在无人值守环境里可重复。
+    $imageRes = Invoke-WebRequest -Uri $imageUrl -Method Get -UseBasicParsing
     if ($imageRes.StatusCode -ne 200) { throw "sticker image route returned $($imageRes.StatusCode) url=$imageUrl body=$($imageRes.Content)" }
     # Windows PowerShell 5.1 没有 -SkipHttpErrorCheck：401 会抛异常，从 Response 取状态码。
     $unauthStatus = 200
     try {
-        $unauthPacks = Invoke-WebRequest -Uri "$apiBase/stickers/packs" -Method Get
+        $unauthPacks = Invoke-WebRequest -Uri "$apiBase/stickers/packs" -Method Get -UseBasicParsing
         $unauthStatus = [int]$unauthPacks.StatusCode
     } catch {
         if ($_.Exception.Response) { $unauthStatus = [int]$_.Exception.Response.StatusCode } else { throw }

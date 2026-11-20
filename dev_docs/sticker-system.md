@@ -158,13 +158,13 @@ sidecar 234 pass / 0 fail + `tsc --noEmit` 通过；web 52 pass / 0 fail + typec
 warning/error 为 0；市场 strict 审计 20 包、0 fatal、6 个 homepage 警告。桌面与 Web
 便携 smoke 见下方最终产物。
 
-最终产物（2026-11-19 重建，含本轮 caption/UI/测试改动）：
+最终产物（2026-11-21 按 Workbench/CDP 提交重建；贴纸内容未变）：
 
-- 桌面：`dist/electron-portable/MaxmaHere-2.7.0-portable-x64.zip`，252,201,690 bytes，SHA-256
-  `6988917631426c2190a8e1ac5561273ffe31fedf2f8434b584a6e1ed33e6f840`。
-- Web：`dist/web-portable/MaxmaHere-Portable-2.7.0.zip`，83,265,091 bytes，SHA-256
-  `1ca40874e3fc87ad25f2209b230b42b8ff948392ef39ecc5400cc3b421399718`；包内
+- 桌面：`dist/electron-portable/MaxmaHere-2.7.0-portable-x64.zip`，246,160,020 bytes，SHA-256
+  `c930bfb34c8eb3956a50e1255d6a75f8f88b10e1efceaf75155b4580eda54ed4`。
+- Web：`dist/web-portable/MaxmaHere-Portable-2.7.0.zip`，83,547,592 bytes，SHA-256
+  `ea8416a362302aa10e46a1346817e0f1dc5581bc0f81085e90c76438436c8015`；包内
   `config/stickers/index.db` 实测 328 行、`captioned_at` 328，且包含 `bun.exe`、`web/dist`。
-- 两个 zip 内均为最新前端 `web/dist/assets/ChatView-Dnuefhr4.js`；桌面包内资源路径带
+- 两个 zip 内均为最新前端 `web/dist/assets/ChatView-PbNBRldm.js`；桌面包内资源路径带
   `resources/maxma/` 前缀。桌面与 Web 便携 smoke 均通过（328 张内置图、图片 200、
   管理路由无 Token 401、插件运行时 23 个外部包 0 缺失）。

@@ -204,12 +204,14 @@ Workbench 2.0 把右侧工作台从「只有推理/画布」扩成桌面 Agent �
 
 ### 4.3 便携包
 
+2026-11-21 按 `9fa2b882` 重建（桌面 `build-desktop-portable.ps1 -SkipDependencyInstall`；Web `build-portable.bat` 后打包目录）。桌面包走 `verify-desktop-render.ps1`，Web 包与桌面 `resources/maxma` 都走 `build/portable-smoke-test.ps1`。
+
 | 包 | 体积 | SHA-256 | 验证 |
 | --- | --- | --- | --- |
-| `dist/electron-portable/MaxmaHere-2.7.0-portable-x64.zip` | 252,479,795 B | `a51c62289173fc57a940783841cc98281740ae90261273ca05c7766c91371382` | `verify-desktop-render.ps1`: 后端监听、渲染 WS、主进程存活、残留 0 |
-| `dist/web-portable/MaxmaHere-Portable-2.7.0.zip` | 83,535,555 B | `bd870d5514359b2ee9e2fa61f601cdcd73dcc3d6c9a8e7a4b8ebc4734ea66b53` | `portable-smoke-test.ps1`: 启动/health/插件/免费模型/328 表情/图片 200/管理 401 |
+| `dist/electron-portable/MaxmaHere-2.7.0-portable-x64.zip` | 246,160,020 B | `c930bfb34c8eb3956a50e1255d6a75f8f88b10e1efceaf75155b4580eda54ed4` | `verify-desktop-render.ps1`: 后端监听、渲染 WS、主进程存活、残留 0 |
+| `dist/web-portable/MaxmaHere-Portable-2.7.0.zip` | 83,547,592 B | `ea8416a362302aa10e46a1346817e0f1dc5581bc0f81085e90c76438436c8015` | `portable-smoke-test.ps1`: 启动/health/插件/免费模型/328 表情/图片 200/管理 401 |
 
-Web 包明确降级：没有 preload 时不显示文件/变更/命令/浏览器 tab；UI smoke 的 `webTabs=["推理","画布","任务"]` 是直接证据。压缩包含 2,872 个条目，`.maxma/skills/coding-starter/SKILL.md` 与 `web/dist/index.html` 均在包内。
+Web 包明确降级：没有 preload 时不显示文件/变更/命令/浏览器 tab；UI smoke 的 `webTabs=["推理","画布","任务"]` 是直接证据。压缩包含 2,881 个条目，`.maxma/skills/coding-starter/SKILL.md` 与 `web/dist/index.html` 均在包内。打包冒烟脚本同时补了 `Invoke-WebRequest -UseBasicParsing`：Windows PowerShell 5.1 默认 IE/COM 解析管线在无交互会话里首次初始化会卡死，显式关掉 DOM 解析后测试可重复。
 
 ## 5. 已知边界（范围外，不是待办）
 

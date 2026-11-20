@@ -27,6 +27,11 @@
 - **本轮闸门全绿**：sidecar 234 pass、backend 360 pass、web 74 pass；tsc/ESLint/build/颜色/间距/字号/
   对比度/无紫/玻璃/体量/类型债全部 PASS，根 `scripts/verify-all-gates.sh` 18 项全 PASS。
   Pane 懒加载把 ChatView 从 286.73 kB 降到 217.24 kB。
+- **便携包已按本提交重建**（`9fa2b882`）：桌面 `246,160,020 B`，SHA-256
+  `c930bfb3…54ed4`，`verify-desktop-render.ps1` PASS（后端监听、渲染 WS、主进程存活、残留 0）；
+  Web `83,547,592 B`，SHA-256 `ea8416a3…c8015`，`portable-smoke-test.ps1` PASS
+  （328 表情、图片 200、管理 401、23 个外部包 0 缺失）。冒烟脚本补 `-UseBasicParsing`，
+  避免 Windows PowerShell 5.1 的 IE 解析管线在无交互会话里卡死。
 - 仍范围外：浏览器网络 allowlist、多浏览器页签、下载落盘策略、真实系统文件对话框人工点选、
   真实 Windows 系统 DPI 人工抽查、Git discard、Side chat、系统通知、PR 创建、P4。
 
