@@ -288,6 +288,16 @@ function buildManifest(deps: CapabilitiesDeps, gathered: Record<string, unknown>
 
   features.rules = { enabled: true, custom_rules: true };
 
+  // Workbench 2.0：P0 只开放只读文件接口；浏览器/编辑器/终端按阶段打开。
+  // 这些是 UI 能力，不是 Agent 工具的路径白名单。
+  features.workbench = {
+    files: { enabled: true, scope: "workspace", mode: "readonly", desktop_only: true },
+    browser: { enabled: false, reason: "phase1" },
+    editor: { enabled: false, reason: "phase2" },
+    terminal: { enabled: false, reason: "phase2" },
+    git: { enabled: false, reason: "phase2" },
+  };
+
   const tools = (gathered.tools as Array<Record<string, unknown>>) ?? [];
   const builtinCount = tools.filter((t) => t.source !== "custom").length;
   const customCount = tools.filter((t) => t.source === "custom").length;

@@ -50,13 +50,17 @@ export default function MaxmaBlockerView() {
 
   async function pickDir() {
     try {
-      const res = await api.selectFolder()
-      if (res.path) {
-        setFormPath(res.path)
-        setFormError('')
+      const bridge = window.maxmaDesktop
+      if (!bridge?.pickPath) {
+        setFormError('目录选择只在 Maxma 桌面端可用；Web 端请手动填写路径。')
+        return
       }
-    } catch {
-      setFormError('选择目录失败')
+      const picked = await bridge.pickPath('folder')
+      if (picked.canceled || !picked.path) return
+      setFormPath(picked.path)
+      setFormError('')
+    } catch (e) {
+      setFormError(e instanceof Error ? `选择目录失败：${e.message}` : '选择目录失败')
     }
   }
 

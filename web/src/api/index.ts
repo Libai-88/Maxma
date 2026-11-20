@@ -53,6 +53,11 @@ import type {
   CreateShareRequest,
   SessionSnapshot,
 } from '@/types/collab'
+import type {
+  WorkspaceRoot,
+  WorkspaceTreeResult,
+  WorkspaceTextFile,
+} from '@/types/workspace'
 import { getApiBase } from '@/utils/env'
 
 // ── Panel Config 类型 ──
@@ -221,6 +226,12 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
         if (res.status >= 400 && res.status < 500) {
           userMsg = typeof body.detail === 'string' ? body.detail : userMsg
         }
+      }
+      // Workbench 文件接口使用 {error:{code,message}}；4xx 的 message 是
+      // 面向本机用户的明确原因（如“路径不能跳出工作区”），可以展示。
+      const structured = body as { error?: { code?: unknown; message?: unknown } }
+      if (res.status >= 400 && res.status < 500 && typeof structured.error?.message === 'string') {
+        userMsg = structured.error.message
       }
     } catch { /* ignore parse errors */ }
     throw new Error(userMsg)
@@ -614,6 +625,49 @@ export const api = {
   selectFolder: () =>
     request<{ path: string | null }>('/select-file?type=folder'),
 
+  // ── Workbench 工作区（P0 只读） ──
+
+  listWorkspaceRoots: () =>
+    request<{ roots: WorkspaceRoot[] }>('/workspace/roots'),
+
+  addWorkspaceRoot: (path: string, label?: string) =>
+    request<{ root: WorkspaceRoot }>('/workspace/roots', {
+      method: 'POST',
+      body: JSON.stringify({ path, label }),
+    }),
+
+  removeWorkspaceRoot: (id: string) =>
+    request<{ removed: WorkspaceRoot }>(`/workspace/roots/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }),
+
+  workspaceTree: (rootId: string, path = '', showIgnored = false) => {
+    const params = new URLSearchParams({ root_id: rootId, path })
+    if (showIgnored) params.set('show_ignored', '1')
+    return request<WorkspaceTreeResult>(`/workspace/tree?${params.toString()}`)
+  },
+
+  workspaceFile: (rootId: string, path: string) => {
+    const params = new URLSearchParams({ root_id: rootId, path })
+    return request<{ file: WorkspaceTextFile }>(`/workspace/file?${params.toString()}`)
+  },
+
+  workspaceBlob: async (rootId: string, path: string): Promise<Blob> => {
+    if (!tokenFetchedAtRuntime) await ensureTokenLoaded()
+    const params = new URLSearchParams({ root_id: rootId, path })
+    const res = await fetch(`${BASE}/workspace/blob?${params.toString()}`, {
+      headers: token ? { 'X-Maxma-Token': token } : undefined,
+    })
+    if (!res.ok) {
+      let message = `文件读取失败 (${res.status})`
+      try {
+        const body = await res.json() as { error?: { message?: unknown } }
+        if (typeof body.error?.message === 'string') message = body.error.message
+      } catch { /* 二进制错误体或空体 */ }
+      throw new Error(message)
+    }
+    return res.blob()
+  },
   // ── 路径安全检查 ──
 
   checkPathBlocked: (path: string) =>

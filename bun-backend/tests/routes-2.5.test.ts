@@ -90,11 +90,11 @@ describe("tools / plugins / files（阶段 2.5a）", () => {
     expect(toggle.status).toBe(404);
   });
 
-  test("select-file 桩：GET /api/select-file → {path:null}", async () => {
+  test("select-file 桩：Web/无桌面壳时明确返回 desktop_required", async () => {
     const app = await makeApp();
     const res = await app.request("/api/select-file?type=file", { headers: authHeader() });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ path: null });
+    expect(res.status).toBe(501);
+    expect(await res.json()).toMatchObject({ path: null, reason: "desktop_required" });
   });
 
   test("upload 全链路：上传 → 列表 → 删除；非法扩展名 400；非法 file_id 400", async () => {

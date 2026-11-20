@@ -1,11 +1,10 @@
 /**
- * routes/files.ts — 本地文件服务（api/routes/files.py 的 Bun 等价，
- * 阶段二 2.5a）。
+ * routes/files.ts — 文件选择桩的显式降级出口。
  *
- * select-file 决策（用户 2026-10-01 确认）：Python 版用 tkinter 弹服务器端
- * 桌面对话框——Web 形态下该能力本就无法工作（对话框弹在后端机器）。桩实现
- * 返回 {path:null}，与"用户取消对话框"同行为；前端 3 处调用方（附件菜单/
- * 设置页/拒止锚页）均已容忍 null，静默无操作。
+ * 原生文件/文件夹选择必须发生在桌面壳（Electron dialog + preload），
+ * 不能在后端进程里弹出一个用户看不到的对话框。Web 形态没有 preload 时，
+ * 这里返回 501 + desktop_required，让前端显示明确原因；绝不再返回
+ * {path:null} 这种与“用户取消”无法区分的静默结果。
  */
 
 import { Hono } from "hono";
@@ -14,8 +13,14 @@ export function createFileRoutes(): Hono {
   const app = new Hono();
 
   app.get("/api/select-file", (c) => {
-    void c.req.query("type"); // file / folder——桩不区分
-    return c.json({ path: null });
+    return c.json(
+      {
+        path: null,
+        reason: "desktop_required",
+        message: "原生文件选择只在 Maxma 桌面端可用；Web 端请使用上传入口。",
+      },
+      501,
+    );
   });
 
   return app;

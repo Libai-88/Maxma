@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 const http = require("node:http");
@@ -44,6 +44,7 @@ let backend = null;
 let backendLog = null;
 let mainWindow = null;
 let backendPort = null;
+let appOrigin = null;
 let isQuitting = false;
 
 const lockAcquired = app.requestSingleInstanceLock();
@@ -191,6 +192,40 @@ function openExternalUrl(url) {
   }
 }
 
+function isTrustedSender(event) {
+  if (!appOrigin) return false;
+  const senderUrl = event?.senderFrame?.url ?? "";
+  return senderUrl === appOrigin || senderUrl.startsWith(`${appOrigin}/`);
+}
+
+function registerDesktopIpc() {
+  ipcMain.handle("maxma:pick-path", async (event, kind) => {
+    if (!isTrustedSender(event)) throw new Error("拒绝来自非应用页面的文件选择请求");
+    if (kind !== "file" && kind !== "folder") throw new Error("未知的文件选择类型");
+    const owner = BrowserWindow.fromWebContents(event.sender);
+    if (!app.isPackaged && process.env.MAXMA_UI_TEST_PICK_PATH) {
+      return { path: process.env.MAXMA_UI_TEST_PICK_PATH };
+    }
+    const result = await dialog.showOpenDialog(owner ?? mainWindow, {
+      title: kind === "folder" ? "选择工作区文件夹" : "选择文件",
+      properties: kind === "folder" ? ["openDirectory"] : ["openFile"],
+    });
+    if (result.canceled || result.filePaths.length === 0) return { canceled: true };
+    return { path: result.filePaths[0] };
+  });
+
+  ipcMain.handle("maxma:reveal-path", async (event, pathValue) => {
+    if (!isTrustedSender(event)) throw new Error("拒绝来自非应用页面的资源管理器请求");
+    if (typeof pathValue !== "string" || pathValue.length === 0 || pathValue.includes("\x00")) {
+      throw new Error("无效路径");
+    }
+    if (!fs.existsSync(pathValue)) throw new Error("路径不存在");
+    shell.showItemInFolder(pathValue);
+  });
+}
+
+registerDesktopIpc();
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -201,6 +236,7 @@ function createWindow() {
     backgroundColor: "#101114",
     autoHideMenuBar: true,
     webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -208,7 +244,7 @@ function createWindow() {
     },
   });
 
-  const appOrigin = `http://127.0.0.1:${backendPort}`;
+  appOrigin = `http://127.0.0.1:${backendPort}`;
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     openExternalUrl(url);
     return { action: "deny" };

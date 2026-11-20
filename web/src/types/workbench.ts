@@ -1,7 +1,7 @@
 /** 工作台层类型定义 */
 
 /** 工作台面板标签页 */
-export type WorkbenchTab = 'reasoning' | 'canvas'
+export type WorkbenchTab = 'reasoning' | 'canvas' | 'files' | 'browser'
 
 /** Canvas 卡片类型 */
 export type CanvasCardType =

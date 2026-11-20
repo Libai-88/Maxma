@@ -2,9 +2,10 @@
  * 运行时环境工具：后端基址、健康轮询、外链打开、UUID 生成。
  *
  * 两种已发布形态都是同源 HTTP 页面 —— Web 便携包由后端直接托管
- * web/dist，Electron 壳（desktop/electron/main.cjs，sandbox:true、无 preload）
- * 加载的也是后端自身 origin。因此 API/WS 一律用相对路径 + location.host，
- * 原生 fetch 即可；上一代桌面壳的 IPC 探测与 Rust HTTP 代理层已随壳一并移除。
+ * web/dist，Electron 壳（desktop/electron/main.cjs，sandbox:true、contextIsolation:true，
+ * 通过 preload 只暴露文件选择/定位两个窄接口）加载的也是后端自身 origin。
+ * 因此 API/WS 一律用相对路径 + location.host，原生 fetch 即可；上一代桌面壳的
+ * Rust HTTP 代理层已随壳一并移除。
  */
 
 /**

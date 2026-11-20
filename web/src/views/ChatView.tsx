@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Spinner } from '@/components/ui/spinner'
-import { Tag } from '@/components/ui/tag'
 import { ChatHeader } from '@/components/chat/ChatHeader'
 import { PermissionModeControl } from '@/components/chat/PermissionModeControl'
 import { runSlashCommand } from '@/components/chat/slashCommands'
@@ -16,7 +15,7 @@ import { Switch } from '@/components/ui/switch'
 import { ChatWindow } from '@/components/chat/ChatWindow'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { WelcomeScreen } from '@/components/chat/WelcomeScreen'
-import type { ChatTurn } from '@/types'
+import { WorkbenchHost } from '@/components/workbench/WorkbenchHost'
 import type { ModelInfo } from '@/types/chat'
 import { useChat } from '@/hooks/useChat'
 import { useChatStore } from '@/stores/chat'
@@ -513,7 +512,7 @@ export default function ChatView() {
             )}
         </div>
 
-        {workbench.isOpen && <WorkbenchSidebar onArtifactAction={handleArtifactAction} allTurns={allTurns} />}
+        {workbench.isOpen && <WorkbenchHost onArtifactAction={handleArtifactAction} allTurns={allTurns} />}
 
         {/* 实时纠偏：悬浮小窗（只在流式进行中出现，可拖动/收起/关闭） */}
         <SteeringWindow
@@ -563,56 +562,6 @@ function ModelSettings() {
         <input type="checkbox" checked={thinkingEnabled} onChange={() => toggleThinking(!thinkingEnabled)} />
       </label>
     </div>
-  )
-}
-
-/** 工作台侧栏：推理时间线 + Canvas 卡片。 */
-function WorkbenchSidebar({ onArtifactAction, allTurns }: {
-  onArtifactAction: (p: { artifactId: string; actionId: string; token: string }) => void
-  allTurns: ChatTurn[]
-}) {
-  const workbench = useWorkbenchStore()
-  return (
-    <aside className="flex w-80 shrink-0 flex-col border-l border-border bg-card/40" aria-label="工作台">
-      <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
-        <span className="text-sm font-medium">工作台</span>
-        <div className="flex items-center gap-1">
-          <Tag>{workbench.cards.length}</Tag>
-          <Button variant="ghost" size="icon-sm" onClick={() => workbench.close()} aria-label="关闭工作台">✕</Button>
-        </div>
-      </div>
-      <div className="flex gap-1 border-b border-border px-2 py-1.5">
-        {(['reasoning', 'canvas'] as const).map((tab) => (
-          <Button key={tab} variant={workbench.activeTab === tab ? 'secondary' : 'ghost'} size="sm" onClick={() => workbench.setTab(tab)}>
-            {tab === 'reasoning' ? '推理' : '画布'}
-          </Button>
-        ))}
-      </div>
-      <div className="flex flex-col flex-1 gap-2 overflow-y-auto scrollbar-thin p-2">
-        {workbench.activeTab === 'reasoning' && (
-          <div className="flex flex-col gap-2">
-            {allTurns.flatMap((turn, ti) => turn.events
-              .filter((ev) => ev.kind === 'thinking')
-              .map((ev, ei) => (
-                <div key={`${ti}-${ei}`} className="rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">
-                  {ev.kind === 'thinking' ? ev.tokens.slice(0, 200) : null}
-                </div>
-              )))}
-          </div>
-        )}
-        {workbench.activeTab === 'canvas' && workbench.cards.map((card) => (
-          <div key={card.id} className="rounded-xl bg-card p-4 text-meta">
-            <div className="mb-1 flex items-center justify-between"><strong>{card.title}</strong>
-              <Button variant="ghost" size="icon-sm" onClick={() => workbench.removeCard(card.id)} aria-label="移除卡片">✕</Button>
-            </div>
-            <pre className="max-h-40 overflow-auto scrollbar-thin whitespace-pre-wrap text-caption text-muted-foreground">{card.content}</pre>
-            {card.artifact && card.artifact.actions.map((a) => (
-              <Button key={a.id} variant="outline" size="sm" className="mt-2 mr-1" onClick={() => onArtifactAction({ artifactId: card.artifact!.id, actionId: a.id, token: a.token })}>{a.label}</Button>
-            ))}
-          </div>
-        ))}
-      </div>
-    </aside>
   )
 }
 

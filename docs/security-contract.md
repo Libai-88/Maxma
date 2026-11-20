@@ -17,6 +17,7 @@
 | Token 鉴权 | `bun-backend/src/middleware/auth.ts`：仅 `/api/**` 与 `/ws/**`；`X-Maxma-Token` 头 → `?token=` → WS subprotocol | 401 / WS close 4001；白名单仅 `/api/health`、`/api/auth/token`、`GET /api/mcp/oauth/callback`、贴纸静态 GET/HEAD | `bun-backend/tests/` |
 | 限流 | `bun-backend/src/middleware/rate-limit.ts` | 超限 429 + `RATE_LIMITED` 结构；本地回环豁免（IP 取自 `server.requestIP`，取不到则按 `unknown` 限流，不放宽） | `bun-backend/tests/rate-limit-ip.test.ts` |
 | CORS | `bun-backend/src/cors-config.ts` 精确 origin 集合 | 非白名单 origin 不放行 | 同上 |
+| 工作区只读面板授权 | `bun-backend/src/routes/workspace.ts` + `services/workspace-fs.ts` + `services/workspace-store.ts`：根目录由用户在桌面壳显式选择，存 `<data>/api/data/workspaces.json`；路径先规范化再逐段 `lstat`，拒绝绝对路径/盘符/UNC/NUL/ADS/`..`/符号链接逃逸；读取前跑 MaxmaBlocker | 400/403 结构化错误；文本 2 MiB、图片/PDF 50 MiB；目录最多 2000 项；非回环 403 | `bun-backend/tests/workspace-p0.test.ts` |
 | 敏感字段脱敏 | `mcp-validation.ts` `REDACTED` + `bun-backend/src/runtime-status.ts` | 写日志/事件/前端响应前脱敏 | 同上 |
 | 扩展启停边界 | `bun-sidecar/src/kernel/extensions.ts` `filterDisabledExtensions`（只过滤 `scope=user`）+ `bun-backend/src/routes/extensions.ts`（`isValidExtensionId` 拒绝绝对路径/穿越/`<inline:…>`，内置名 403）+ `extensions-config.ts`（落盘前同校验） | 非用户扩展、内置安全扩展（approval/blocker/telemetry）一律拒绝禁用；非法 id → 400；内置名 → 403 | `bun-sidecar/tests/extensions-visibility.test.ts`、`bun-backend/tests/extensions-route.test.ts` |
 
@@ -28,8 +29,10 @@
    只能收紧，任何模式都不得绕过 MaxmaBlocker、MCP 命令白名单、Provider URL 校验。
    判据只看官方 `Tool.annotations`（`readOnlyHint` / `destructiveHint`）与工具名族，不猜语义。
 4. 取消与断线必须经 kernel `cancel`；只取消前端会让 Agent 继续跑并烧模型额度。
-5. Electron 壳不引入特权：`contextIsolation` + `sandbox` + `nodeIntegration:false` + 无 preload，
-   渲染层只走 HTTP/WS；`setWindowOpenHandler` 拒绝新窗口，外链仅放行 `https:`/`http:`/`mailto:`。
+5. Electron 壳不引入特权：`contextIsolation` + `sandbox` + `nodeIntegration:false`，
+   preload 只暴露 `pickPath` / `revealPath` 两个窄接口；IPC 校验 sender frame 必须是
+   `appOrigin`，渲染层其余能力仍只走 HTTP/WS。`setWindowOpenHandler` 拒绝新窗口，
+   外链仅放行 `https:`/`http:`/`mailto:`。
 
 ## 3. 已知缺口（不要当成已具备的保证）
 
@@ -37,6 +40,8 @@
   MaxmaBlocker（用户主动放置的拒止锚）+ 审批门逐次确认；`auto` 模式下审批门不装配，
   此时拒止锚是仅存的文件拦截层。**不存在"预先放行清单"**，因此任何文档/UI 都不得
   宣称"默认拒绝"或"仅受白名单约束"。恢复该层属独立工作项。
+  Workbench 的 `workspace roots` 只是**文件面板的读取授权**（用户显式选中的目录），
+  **不是 Agent 的全局路径白名单**，也不改变 Agent 工具的文件访问边界。
 - **已收口（2026-11-02）：白名单的残留不再伪装成保护。** 阶段二 cutover 删掉了执行层，
   但留下了三处"看起来还在"的残迹，现已全部清除：
   1. `bun-backend/src/db/core.ts` 的 v1 schema 不再创建零读写方的 `path_whitelist` 表

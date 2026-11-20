@@ -23,10 +23,12 @@ import { generateUUID } from '@/utils/env'
 /** 最大保留的 turn 数量（推理时间线） */
 const MAX_TURNS = 3
 const WORKSPACE_STORAGE_KEY = 'maxmahere.canvas-workspace.v1'
-const WORKSPACE_UI_STORAGE_KEY = 'maxmahere.canvas-ui-state.v1'
+const WORKSPACE_UI_STORAGE_KEY = 'maxmahere.workbench-ui.v2'
+const LEGACY_WORKSPACE_UI_STORAGE_KEY = 'maxmahere.canvas-ui-state.v1'
 const MAX_PERSISTED_CARDS = 24
 /** 单张卡片内容的最大长度（UTF-16 code units，非字节数）。 */
 const MAX_CARD_CONTENT_LENGTH = 262_144
+const WORKBENCH_TABS: ReadonlySet<WorkbenchTab> = new Set(['reasoning', 'canvas', 'files', 'browser'])
 
 const CARD_TYPES: ReadonlySet<CanvasCardType> = new Set([
   'code', 'table', 'summary', 'confirmation', 'choice', 'html', 'json', 'markdown',
@@ -87,12 +89,18 @@ function deriveCards(cards: CanvasCard[], activeCardId: string | null): Workbenc
 function loadUiState(): { isOpen: boolean; activeTab: WorkbenchTab } {
   if (typeof localStorage === 'undefined') return { isOpen: false, activeTab: 'reasoning' }
   try {
-    const value = JSON.parse(localStorage.getItem(WORKSPACE_UI_STORAGE_KEY) ?? 'null') as
+    // v2 是当前键；v1 只读一次用于迁移，避免用户升级后工作台突然回到推理页。
+    const raw = localStorage.getItem(WORKSPACE_UI_STORAGE_KEY)
+      ?? localStorage.getItem(LEGACY_WORKSPACE_UI_STORAGE_KEY)
+    const value = JSON.parse(raw ?? 'null') as
       | { isOpen?: unknown; activeTab?: unknown }
       | null
+    const activeTab = typeof value?.activeTab === 'string' && WORKBENCH_TABS.has(value.activeTab as WorkbenchTab)
+      ? value.activeTab as WorkbenchTab
+      : 'reasoning'
     return {
       isOpen: value?.isOpen === true,
-      activeTab: value?.activeTab === 'canvas' || value?.activeTab === 'reasoning' ? value.activeTab : 'reasoning',
+      activeTab,
     }
   } catch {
     return { isOpen: false, activeTab: 'reasoning' }

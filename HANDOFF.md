@@ -1,7 +1,38 @@
 # MaxmaHere 交接说明
 
 > 当前可执行状态，供下一位接手者。架构请先读 [docs/00-当前架构.md](docs/00-当前架构.md)。
-> 更新时间：2026-11-19
+> 更新时间：2026-11-20
+
+## 2026-11-20：Workbench 2.0 P0（文件面板 + 原生选择器 + 只读工作区 API）
+
+- P0 仍未完成 P1：内置浏览器、编辑器、变更/diff、终端都没有实现；能力清单里
+  `browser/editor/terminal/git` 全部 `enabled:false`，分别标 `phase1`/`phase2`。
+- 原生文件/文件夹选择从后端死桩迁到 Electron preload：`maxma:pick-path` /
+  `maxma:reveal-path` 两个 IPC，校验 `senderFrame.url` 必须匹配 `appOrigin`；
+  `GET /api/select-file` 在无桌面壳时改回 **501 `desktop_required`**，不再假装成功。
+- 新只读工作区 API：`GET/POST/DELETE /api/workspace/roots`、
+  `GET /api/workspace/tree|file|blob`；根存 `<data>/api/data/workspaces.json`，
+  路径逐段 `lstat` 拒绝绝对路径/盘符/UNC/NUL/ADS/`..`/symlink 逃逸，读取前跑 MaxmaBlocker；
+  文本 2 MiB、图片/PDF 50 MiB、目录 2000 项；要求 Token + loopback。
+- 对话右侧工作台从 `WorkbenchSidebar` 换成 `WorkbenchHost`，注册
+  「推理 / 画布 / 文件」；`FilesPane` 支持选根、切根、浏览、返回上级、刷新、
+  显示忽略项，以及文本/图片/PDF 预览。纯 Web 无 preload 时不显示文件入口。
+- 工作台 UI 状态迁到 `maxmahere.workbench-ui.v2`，兼容读取旧
+  `maxmahere.canvas-ui-state.v1`；`WorkbenchTab` 已含 `files|browser`，但 browser 无 Pane。
+- 新增测试 `bun-backend/tests/workspace-p0.test.ts`（7 例：读写、blob、
+  路径逃逸、symlink/junction、MaxmaBlocker、鉴权/loopback、删除根只撤销授权、
+  select-file 501）；`routes-2.5.test.ts` 的旧 200 断言已同步。
+- **本轮已验证**：backend 全量 **338 pass / 0 fail**（52 files，含新增 7 例 workspace）；
+  web **52 pass / 0 fail**、`tsc --noEmit`、生产 build、ESLint 全通过；
+  `scripts/verify-ui-workbench.mjs` 真实 Electron 界面通过：preload 暴露 bridge → 点「文件」
+  → 选文件夹 → 目录树含 `README.md/src/dot.png` → 点 `README.md` 读到正文；
+  同一脚本的纯 Web 窗口 tab 只有「推理/画布」，无文件入口；截图在
+  `dev_docs/visual/workbench-p0.png`，console error 为 0；768 窄窗实测
+  `scrollWidth=754 / clientWidth=754`，无横向溢出。
+- **尚未验证**：真实系统文件对话框没有人工点选（UI 脚本用 IPC 返回测试目录，模拟 preload 调用）；
+  Electron 打包/便携包冒烟、真实 portable 端口下的 picker 尚未跑；backend `tsc` 仍有
+  贴纸模块的历史类型错误（本轮新增文件不在错误清单内）。
+
 
 ## 2026-11-19：表情系统升级为 dsh-meme 源码移植（v2.7.0）
 

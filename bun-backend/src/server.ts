@@ -60,6 +60,7 @@ import { createPluginsRoutes } from "./routes/plugins";
 import { currentPluginHttpHandlers, ensurePluginBridgeInstalled, disposeDshPluginHost } from "./plugins/dsh";
 import { createPluginHttpBridge } from "./plugins/dsh/http-bridge";
 import { createFileRoutes } from "./routes/files";
+import { createWorkspaceRoutes } from "./routes/workspace";
 import { createDiagnosticsRoutes } from "./routes/diagnostics";
 import { createCapabilitiesRoutes } from "./routes/capabilities";
 import { startBackgroundSync, stopBackgroundSync } from "./services/opencode-zen";
@@ -296,6 +297,7 @@ app.route("/", createExtensionsRoutes());
   app.route("/", createUploadRoutes());
   app.route("/", createPluginsRoutes());
   app.route("/", createFileRoutes());
+  app.route("/", createWorkspaceRoutes());
 
   // 2.5b：diagnostics（错误报告 + 前端诊断上报）
   app.route("/", createDiagnosticsRoutes());

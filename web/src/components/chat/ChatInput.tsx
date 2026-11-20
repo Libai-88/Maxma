@@ -203,10 +203,14 @@ export function ChatInput(props: ChatInputProps) {
   const addFileRefs = async (kind: 'file' | 'folder') => {
     setAttachMenu(false)
     try {
-      const res = kind === 'file' ? await api.selectFile('file') : await api.selectFolder()
-      const picked = res as unknown as { path?: string; paths?: string[] }
-      const paths = picked.paths ?? (picked.path ? [picked.path] : [])
-      if (!paths.length) return
+      const bridge = window.maxmaDesktop
+      if (!bridge?.pickPath) {
+        setNotice('文件/文件夹选择只在 Maxma 桌面端可用；Web 端请使用上传入口。')
+        return
+      }
+      const picked = await bridge.pickPath(kind)
+      if (picked.canceled || !picked.path) return
+      const paths = [picked.path]
       setRefs((prev) => [...prev, ...paths.map((p) => ({
         type: kind === 'file' ? 'file' : 'folder',
         label: p.split(/[\\/]/).pop() || p,
