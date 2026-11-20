@@ -4,7 +4,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 
-import { browserNavigateTool, browserReadTool } from "../../bun-sidecar/src/tools/browser";
+import { browserActTool, browserNavigateTool, browserReadTool } from "../../bun-sidecar/src/tools/browser";
 
 let dataDir = "";
 let server: http.Server | null = null;
@@ -71,7 +71,11 @@ describe("browser agent tools", () => {
     expect(shot.content).toHaveLength(2);
     expect(shot.content[1]).toEqual({ type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" });
 
-    expect(requests.map((item) => item.action)).toEqual(["open", "snapshot", "screenshot"]);
+    const act = await browserActTool().execute("t5", { action: "click", ref: "e3" });
+    expect(act.content[0]).toMatchObject({ type: "text" });
+
+    expect(requests.map((item) => item.action)).toEqual(["open", "snapshot", "screenshot", "act"]);
+    expect(requests[3]?.args).toMatchObject({ action: "click", ref: "e3" });
   });
 
   test("端点失败时返回明确错误，不伪装成功", async () => {

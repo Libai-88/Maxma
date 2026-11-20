@@ -20,7 +20,7 @@
 | 工作区面板授权 | `bun-backend/src/routes/workspace.ts` + `services/workspace-fs.ts` + `services/workspace-store.ts`：根目录由用户在桌面壳显式选择，存 `<data>/api/data/workspaces.json`；路径先规范化再逐段 `lstat`，拒绝绝对路径/盘符/UNC/NUL/ADS/`..`/符号链接逃逸；读取/写入/执行前跑 MaxmaBlocker | 400/403 结构化错误；文本 2 MiB、图片/PDF 50 MiB；目录最多 2000 项；非回环 403 | `bun-backend/tests/workspace-p0.test.ts` |
 | 工作区写入与命令执行 | `PUT /api/workspace/file` 带 `base_hash` 乐观并发，临时文件 `wx` + `rename`；`POST /api/workspace/run` 无 TTY、cwd 锁工作区根、默认 60s/上限 120s、超时杀进程树、输出 1 MiB 截断；两者都只允许回环 + Token，并在读取/执行前跑 MaxmaBlocker | 冲突 `409 FILE_CONFLICT`；路径/大小/二进制错误结构化拒绝；命令超时返回 `timedOut` 而不是假装成功 | `bun-backend/tests/workspace-p0.test.ts` |
 | Git 写操作 | `bun-backend/src/services/git-service.ts` + `routes/git.ts`：全部 async `spawn`（12s / commit 20s，输出上限 8 MiB），path 加 `:(literal)`；`commit` 必须 `confirm:true`，不 push | 未确认 commit 400；非法 path/超时/非 Git 仓库返回结构化错误；不自动 stage/push | `bun-backend/tests/workspace-p0.test.ts` |
-| 浏览器 Agent 控制 | `desktop/electron/browser-agent-server.cjs`：只监听 `127.0.0.1`，每次启动随机 32-byte hex secret，配置 `0600`；`POST /execute` 校验 `x-maxma-browser-secret`；动作白名单 open/snapshot/extract/screenshot/scroll/back/forward | 未知动作拒绝；无 secret/错 secret 拒绝；未打开 tab 时创建隐藏 view，不擅自显示原生层 | `bun-backend/tests/browser-agent.test.ts`、`browser-tools.test.ts` |
+| 浏览器 Agent 控制 | `desktop/electron/browser-agent-server.cjs`：只监听 `127.0.0.1`，每次启动随机 32-byte hex secret，配置 `0600`；`POST /execute` 校验 `x-maxma-browser-secret`；端点与控制器双层动作白名单 open/snapshot/extract/screenshot/scroll/back/forward/act/console；`request_id` 60s 去重（最多 200 条） | 未知动作 400；无 secret/错 secret 拒绝；未打开 tab 时创建隐藏 view，不擅自显示原生层；同 id 重放不再触发第二次点击 | `bun-backend/tests/browser-agent.test.ts`、`browser-cdp.test.ts`、`browser-tools.test.ts` |
 | 截图标注与元素拾取 | `BrowserPane` 截图像素在渲染层标注后作为图片附件；元素拾取只在用户主动点击时执行，返回 DOM 路径/bbox/样式摘要；事件按 `sessionId` 过滤 | 不把截图或元素写入其它会话；不回传浏览器 cookie/Token | `scripts/verify-ui-workbench.mjs` |
 | 内置浏览器隔离 | `desktop/electron/browser-view.cjs`：独立 `persist:maxma-browser` 会话；`WebContentsView` 开 `contextIsolation`、关 `nodeIntegration`、开 `sandbox`；只允许 http(s)/`about:blank`，`will-navigate`/`will-redirect`/`window.open` 同规则；权限请求全部拒绝；窗口打开只交给系统浏览器 | 非法协议/重定向被取消；页面拿不到 Node、preload 或 Maxma 主界面；清除数据只清浏览器会话 | `scripts/verify-ui-workbench.mjs` |
 | HTML 外部打开守卫 | `desktop/electron/path-actions.cjs` `assertOpenableHtml`：必须是存在、普通的 `.html/.htm` 文件 | 其他文件/目录/符号链接 → 拒绝，不启动任意可执行文件 | `bun-backend/tests/desktop-path-actions.test.ts` |
@@ -55,9 +55,10 @@
   loopback 与局域网地址；这与普通浏览器一致。Maxma 的 `/api/**` 仍需 Token，浏览器会话
   拿不到该 Token，但未鉴权的本地服务仍可被页面访问。需要网络隔离时属后续企业策略/代理工作，
   当前不得宣称“浏览器只能访问外网”或“浏览器被完全隔离”。
-- **浏览器 Agent 只开放只读动作。** open/snapshot/extract/screenshot/scroll/back/forward 可执行；
-  点击/输入/提交尚未接线，因此不存在“可能已点击却报成功”的路径。开放写动作前必须先补
-  `request_id` + 超时 + `outcome_unknown`，且不得自动重试副作用动作。
+- **浏览器 Agent 现在开放写动作，但边界明确。** `browser_navigate` 与 `browser_act` 都是 write，走审批门；`browser_act` 的 click/fill/select/check/upload 会改变页面甚至提交表单。端点层只接受固定动作白名单；每次调用带 `request_id`，服务端 60 秒内对同 id 返回同一结果，避免重试造成二次副作用。超时返回 `outcome_unknown` 并带 request_id，要求先 snapshot 复核，不得自动重试。
+- **CDP 只连内置浏览器的独立 WebContentsView。** `webContents.debugger` 接 Chromium DevTools Protocol，页面仍是 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`；CDP 不暴露 Electron 对象，也不给页面主界面 DOM/本地文件能力。无障碍快照只保留可操作/可聚焦节点，最多 120 个；ref 只在当前快照内有效。坐标点击/拖拽只发 `Input.dispatchMouseEvent`，不通过页面脚本点元素。
+- **上传是本机文件外发面，必须按写动作看。** `upload` 用 `DOM.setFileInputFiles` 把调用方给的绝对路径写进页面 `input[type=file]`：只收已存在普通文件、最多 10 个、单文件 ≤512 MiB，拒绝相对路径/目录/NUL；它不会读取文件内容进模型上下文，但会把文件提交给当前网页。审批模式应把每次 `browser_act`（含 upload）当作可能外发数据确认；`auto` 模式下没有二次确认，这是与普通浏览器一致的能力边界，不是沙箱。
+- **原生输入不等于网页信任。** 点击/键盘/拖拽/上传都是真实输入事件，会触发页面自身校验、风控与确认；Maxma 不替网页绕过验证码、支付密码或二次确认。
 - **已收口（2026-11-02）：白名单的残留不再伪装成保护。** 阶段二 cutover 删掉了执行层，
   但留下了三处"看起来还在"的残迹，现已全部清除：
   1. `bun-backend/src/db/core.ts` 的 v1 schema 不再创建零读写方的 `path_whitelist` 表

@@ -48,6 +48,7 @@ web/src/main.tsx
 | `bun-backend/src/plugins/` | `registry.ts`、`dsh/index.ts` | 插件注册表与 DSH 宿主 |
 | `bun-sidecar/` | `src/kernel/bridge-pi.ts` | pi 引擎桥：会话、模型、工具、MCP、审批、计划、目标、检查点、事件映射 |
 | `desktop/` | `electron/main.cjs`、`electron-builder.config.cjs` | Electron 桌面壳（仅打包形态） |
+| `desktop/electron/` | `browser-view.cjs`、`browser-cdp.cjs`、`browser-agent-server.cjs` | 内置 `WebContentsView` 与 IPC；Chromium CDP 无障碍快照 + 原生鼠标/键盘/拖拽/文件上传/坐标点击；Agent loopback 端点（secret + 动作白名单 + request_id 去重） |
 | `config/` | — | 内置模板与人设/规则/贴纸数据 |
 | `build/` | `build-server.bat` | 后端 bundle 与便携冒烟 |
 | `api/data/` | — | 运行时数据目录（历史路径名保留） |
@@ -65,7 +66,7 @@ web/src/main.tsx
 - API `src/api/index.ts`（框架无关，原样沿用）；WS 生命周期 `src/hooks/useChat.ts`；斜杠命令在 `components/chat/ChatInput.tsx`
 - zustand `src/stores/`：session / chat / memory / provider / persona / capabilities / plugin / jetHub / activity / metrics / health / onboarding / workbench / sidebar / collab / tools
 - 类型 `src/types/`（原样沿用）
-- 组件分组：`components/chat/`（对话核心与会话 tab）、`layout/`（AppShell/Sidebar/SessionDrawer）、`workbench/`（`WorkbenchHost` + 推理/画布/文件/变更/命令/浏览器/任务 Pane；文件树纯函数 `fileTreeModel.ts`、任务投影 `tasksModel.ts`、CodeMirror `FileEditor.tsx`、截图标注 `ScreenshotAnnotator.tsx`）、`common/`（Markdown/贴纸/错误边界/确认框/媒体查看器）、`ui/`（shadcn + Solid Glass）、`tools/_shared/`（工具中文名）
+- 组件分组：`components/chat/`（对话核心与会话 tab）、`layout/`（AppShell/Sidebar/SessionDrawer；左侧全局路由）、`workbench/`（`WorkbenchHost` + `panes.ts` 注册表（含布局与懒加载器）+ `paneProps.ts` 统一上下文 + `WorkbenchPaneShell` 保活/错误边界 + 推理/画布/文件/变更/命令/浏览器/任务 Pane；文件树纯函数 `fileTreeModel.ts`、任务投影 `tasksModel.ts`、CodeMirror `FileEditor.tsx`、截图标注 `ScreenshotAnnotator.tsx`）、`common/`（Markdown/贴纸/错误边界/确认框/媒体查看器）、`ui/`（shadcn + Solid Glass）、`tools/_shared/`（工具中文名）
 - 页面 `src/views/`：对话（Chat / Share）、记忆角色（Memory / Soul / User）、配置（Providers / Mcp / Settings / Appearance / Privacy / MaxmaBlocker / Capabilities）、扩展（PluginList / PluginDetail / JetHub / Extension / Rules / Collab）、信息（News / Activity / Metrics / Help / Evolution）、流程（Onboarding / FeatureUnavailable / NotFound）
 - 样式：`src/solid-glass.css`（Solid Glass 主题：颜色 / 三层玻璃 / 圆角 / 动效，light/dark 两态）+ `src/index.css`（全局基座）；语义色守卫 `scripts/check-hardcoded-colors.mjs`
 - 动效：只用 Solid Glass 时长/缓动；`prefers-reduced-motion` 全局降级。Inspira 装饰件与页面转场已下线

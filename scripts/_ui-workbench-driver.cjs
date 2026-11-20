@@ -11,9 +11,10 @@ delete process.env.ELECTRON_NO_ATTACH_CONSOLE;
 
 const { app, BrowserWindow, desktopCapturer, ipcMain } = require("electron");
 const fs = require("node:fs");
+const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
-const { execFileSync } = require("node:child_process");
+const { execFileSync, spawn } = require("node:child_process");
 const { createBrowserController } = require("../desktop/electron/browser-view.cjs");
 const { startBrowserAgentServer } = require("../desktop/electron/browser-agent-server.cjs");
 const { assertOpenableHtml } = require("../desktop/electron/path-actions.cjs");
@@ -33,6 +34,8 @@ let browserController = null;
 let browserAgent = null;
 let browserAgentDir = "";
 const externalUrls = [];
+let interactivePage = null;
+let interactivePageUrl = "";
 
 async function waitText(target, needle, stage, timeoutMs = 45_000) {
   const deadline = Date.now() + timeoutMs;
@@ -63,7 +66,9 @@ async function js(target, code) {
 async function clickButton(target, matcherSource) {
   const ok = await js(target, `(() => {
     const match = ${matcherSource};
-    const button = [...document.querySelectorAll("button")].find(match);
+    const button = [...document.querySelectorAll("button")]
+      .filter((node) => node.getClientRects().length > 0)
+      .find(match);
     if (!button || button.disabled) return false;
     button.click();
     return true;
@@ -83,7 +88,8 @@ async function clickTab(target, label) {
 
 async function setInput(target, selector, value) {
   const ok = await js(target, `(() => {
-    const el = document.querySelector(${JSON.stringify(selector)});
+    const el = [...document.querySelectorAll(${JSON.stringify(selector)})]
+      .find((node) => node.getClientRects().length > 0);
     if (!el) return false;
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
     setter.call(el, ${JSON.stringify(value)});
@@ -97,7 +103,8 @@ async function setInput(target, selector, value) {
 
 async function pressKeyOn(target, selector, key) {
   const ok = await js(target, `(() => {
-    const el = document.querySelector(${JSON.stringify(selector)});
+    const el = [...document.querySelectorAll(${JSON.stringify(selector)})]
+      .find((node) => node.getClientRects().length > 0);
     if (!el) return false;
     el.focus();
     el.dispatchEvent(new KeyboardEvent("keydown", { key: ${JSON.stringify(key)}, code: ${JSON.stringify(key)}, bubbles: true }));
@@ -161,6 +168,44 @@ async function agentExecute(action, args = {}) {
     body: JSON.stringify({ action, args }),
   });
   return response.json();
+}
+
+/** 真实验证：Maxma 自己的 browser_* 工具 → loopback → 原生 WebContentsView。 */
+async function runBrowserToolSmoke() {
+  const bun = path.join(__dirname, "..", "bun-sidecar", "bun.exe");
+  const script = path.join(__dirname, "_browser-tool-smoke.mjs");
+  const uploadFile = path.join(browserAgentDir, "browser-upload.txt");
+  fs.writeFileSync(uploadFile, "maxma browser upload", "utf8");
+  return await new Promise((resolve, reject) => {
+    const child = spawn(bun, [script, interactivePageUrl, uploadFile], {
+      cwd: path.join(__dirname, ".."),
+      env: { ...process.env, MAXMA_DATA_DIR: browserAgentDir },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error(`浏览器工具端到端超时；stderr=${stderr.slice(0, 1200)}`));
+    }, 30_000);
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.on("exit", (code) => {
+      clearTimeout(timer);
+      const line = stdout.trim().split(/\r?\n/).pop() || "";
+      let parsed = null;
+      try { parsed = JSON.parse(line); } catch { /* handled below */ }
+      if (code !== 0 || !parsed?.ok) {
+        reject(new Error(`浏览器工具端到端失败 code=${code}：${line || stderr.slice(0, 1200)}`));
+        return;
+      }
+      resolve(parsed);
+    });
+  });
 }
 
 async function captureWithRetry(read, tries = 3) {
@@ -253,6 +298,60 @@ app.whenReady().then(async () => {
     logger: { info() {}, warn() {} },
   });
   await browserAgent.start();
+
+  // 本地交互页：只用于验收“真实输入能改变页面状态”，不依赖外网。
+  interactivePage = http.createServer((_request, response) => {
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.end(`<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>Maxma Native Gate</title></head>
+<body>
+  <h1>Maxma Native Gate</h1>
+  <label for="name">Your name</label>
+  <input id="name" aria-label="Your name" autocomplete="off">
+  <label for="choice">Choice</label>
+  <select id="choice" aria-label="Choice"><option value="a">Alpha</option><option value="b">Beta</option></select>
+  <label><input id="agree" type="checkbox" aria-label="I agree"> I agree</label>
+  <button id="greet" type="button">Greet</button>
+  <div id="out">Waiting</div>
+  <label for="doc">Document</label>
+  <input id="doc" type="file" aria-label="Document">
+  <div id="fileout">No file</div>
+  <div id="pad" aria-label="Drag pad" style="width:240px;height:120px;background:#d8d8d8;margin-top:12px">Drag here</div>
+  <div id="dragout">No drag</div>
+  <pre id="note">native pre block</pre>
+  <script>
+    const name = document.querySelector('#name');
+    const choice = document.querySelector('#choice');
+    const agree = document.querySelector('#agree');
+    const out = document.querySelector('#out');
+    const doc = document.querySelector('#doc');
+    const fileout = document.querySelector('#fileout');
+    const pad = document.querySelector('#pad');
+    const dragout = document.querySelector('#dragout');
+    name.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') out.textContent = 'Enter ' + name.value;
+    });
+    document.querySelector('#greet').addEventListener('click', () => {
+      out.textContent = 'Hello ' + name.value + ' ' + choice.value + ' ' + (agree.checked ? 'yes' : 'no');
+      console.log('maxma-greeted');
+    });
+    doc.addEventListener('change', () => {
+      fileout.textContent = 'File ' + (doc.files[0] ? doc.files[0].name : 'none');
+    });
+    let dragStart = null;
+    pad.addEventListener('mousedown', (event) => {
+      dragStart = { x: Math.round(event.offsetX), y: Math.round(event.offsetY) };
+      dragout.textContent = 'Start ' + dragStart.x + ',' + dragStart.y;
+    });
+    pad.addEventListener('mousemove', (event) => {
+      if (!dragStart) return;
+      dragout.textContent = 'Drag ' + dragStart.x + ',' + dragStart.y + ' -> ' + Math.round(event.offsetX) + ',' + Math.round(event.offsetY);
+    });
+    document.addEventListener('mouseup', () => { dragStart = null; });
+  </script>
+</body></html>`);
+  });
+  await new Promise((resolve) => interactivePage.listen(0, "127.0.0.1", resolve));
+  interactivePageUrl = `http://127.0.0.1:${interactivePage.address().port}/`;
 
   const logs = [];
   const ignoredWarnings = [];
@@ -437,6 +536,27 @@ app.whenReady().then(async () => {
     if (!saved.includes("maxma-editor-smoke")) throw new Error("编辑器保存没有落到磁盘");
     await waitText(win, "已保存", "保存成功提示");
     result.checks.editor = { saved: true, bytes: Buffer.byteLength(saved), mode: "codemirror" };
+
+    // ── 架构验收：关闭工作台/切走 tab 都不许丢未保存草稿 ─────
+    await js(win, `(() => { const el = document.querySelector('.cm-content'); el.focus(); return true; })()`);
+    win.webContents.insertText("<!--maxma-keepalive-->\n");
+    await waitFor(win, `document.querySelector('.cm-content')?.innerText.includes("maxma-keepalive")`, "输入未保存草稿");
+    await waitFor(win, `(() => { const b = document.querySelector('button[aria-label="保存文件"]'); return b && !b.disabled; })()`, "草稿 dirty");
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "关闭工作台"`);
+    await waitFor(win, `document.querySelector('aside[aria-label="工作台"]')?.classList.contains("hidden")`, "工作台关闭只隐藏");
+    await ensureWorkbenchOpen(win);
+    await waitFor(win, `document.querySelector('.cm-content')?.innerText.includes("maxma-keepalive")`, "重开工作台后草稿仍在");
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "保存文件"`);
+    let keepSaved = "";
+    const keepDeadline = Date.now() + 5000;
+    while (Date.now() < keepDeadline) {
+      keepSaved = fs.readFileSync(path.join(WORKSPACE, "README.md"), "utf8");
+      if (keepSaved.includes("maxma-keepalive")) break;
+      await sleep(250);
+    }
+    if (!keepSaved.includes("maxma-keepalive")) throw new Error("keep-alive 草稿没有保存成功");
+    result.checks.paneKeepAlive = { draftPreserved: true, closedHidden: true, saved: true };
+
     result.screenshots.editor = await captureWindow("workbench-p2-editor.png");
 
     // ── P2 命令运行器：默认关闭、显式启用、真实执行 ─────────
@@ -533,7 +653,13 @@ app.whenReady().then(async () => {
       snapshotChars: agentSnapshot.result.text.length,
       screenshotBytes: shotBytes,
       unknownRejected: String(agentUnknown.error ?? ""),
+      elements: Array.isArray(agentSnapshot.result.elements) ? agentSnapshot.result.elements.length : 0,
     };
+
+    // ── 工具端到端：Maxma browser_* 工具 → 本机端点 → 原生 view ───
+    const browserTools = await runBrowserToolSmoke();
+    result.checks.browserToolE2E = browserTools;
+
 
     // ── P3 截图标注：真实截图 → 画框 → 上传为对话图片附件 ─────
     await clickButton(win, `(button) => button.getAttribute("aria-label") === "截图并标注"`);
@@ -744,6 +870,7 @@ app.whenReady().then(async () => {
     result.pageText = await win.webContents.executeJavaScript("document.body.innerText").catch(() => "");
   } finally {
     console.log("DRIVE_RESULT " + JSON.stringify(result));
+    try { interactivePage?.close(); } catch { /* */ }
     try { browserAgent?.stop(); } catch { /* */ }
     try { if (browserAgentDir) fs.rmSync(browserAgentDir, { recursive: true, force: true }); } catch { /* */ }
     try { browserController?.destroy(); } catch { /* */ }

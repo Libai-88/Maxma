@@ -34,6 +34,7 @@ export const TOOL_DISPLAY_NAMES: Record<string, string> = {
   submit_plan: '提交计划',
   browser_navigate: '浏览器打开页面',
   browser_read: '浏览器读页面',
+  browser_act: '浏览器原生操作',
 }
 
 /** 其它常见/历史名称（非契约，按需展示）。 */

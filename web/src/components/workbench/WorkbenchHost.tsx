@@ -1,12 +1,12 @@
 /**
  * WorkbenchHost — Workbench 2.0 的 Pane 容器。
  *
- * P1 注册四类 Pane：推理、画布、文件、浏览器。文件与浏览器依赖桌面壳的
- * 窄接口；纯 Web 形态不出现对应入口。浏览器是原生 WebContentsView，
- * 命令面板等浮层打开时必须让原生 view 先隐藏。
+ * Pane 顺序、可用性由 `panes.ts` 单源声明；本文件只负责布局与挂载策略。
+ * 已访问 Pane 保活（不因切 tab 丢草稿），关闭工作台也只隐藏不卸载。
+ * 浏览器是原生 WebContentsView，非当前 tab 或浮层打开时必须先隐藏。
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { Maximize2, Minimize2, Search, X } from 'lucide-react'
 
@@ -17,21 +17,21 @@ import { Button } from '@/components/ui/button'
 import { Tag } from '@/components/ui/tag'
 import { cn } from '@/lib/utils'
 import { useWorkbenchStore, WORKBENCH_MAX_WIDTH, WORKBENCH_MIN_WIDTH } from '@/stores/workbench'
-import { BrowserPane } from './BrowserPane'
-import { ChangesPane } from './ChangesPane'
-import { CommandPane } from './CommandPane'
-import { FilesPane } from './FilesPane'
-import { TasksPane } from './TasksPane'
+import type { WorkbenchPaneProps } from './paneProps'
+import { WorkbenchPaneShell } from './WorkbenchPaneShell'
+import {
+  WORKBENCH_PANES,
+  WORKBENCH_PANE_LABELS,
+  availableWorkbenchTabs,
+  rememberVisitedPane,
+  resolveWorkbenchTab,
+} from './panes'
 
-const TAB_LABELS: Record<WorkbenchTab, string> = {
-  reasoning: '推理',
-  canvas: '画布',
-  files: '文件',
-  browser: '浏览器',
-  changes: '变更',
-  tasks: '任务',
-  commands: '命令',
-}
+/** Pane 组件只在首次访问时动态加载；注册表是唯一来源。 */
+const PANE_BY_ID = new Map(WORKBENCH_PANES.map((pane) => [pane.id, pane] as const))
+const PANE_COMPONENTS = new Map(
+  WORKBENCH_PANES.map((pane) => [pane.id, lazy(pane.load)] as const),
+)
 
 interface PaletteCommand {
   id: string
@@ -41,6 +41,8 @@ interface PaletteCommand {
 }
 
 interface WorkbenchHostProps {
+  /** 工作台是否可见；关闭时只隐藏，Pane 状态继续保留。 */
+  isOpen: boolean
   onArtifactAction: (payload: { artifactId: string; actionId: string; token: string }) => void
   allTurns: ChatTurn[]
   sessionId?: string
@@ -155,27 +157,36 @@ function CommandPalette({
   )
 }
 
-export function WorkbenchHost({ onArtifactAction, allTurns, sessionId, taskTrackerData, goalState }: WorkbenchHostProps) {
+export function WorkbenchHost({ isOpen, onArtifactAction, allTurns, sessionId, taskTrackerData, goalState }: WorkbenchHostProps) {
   const workbench = useWorkbenchStore()
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [dragWidth, setDragWidth] = useState<number | null>(null)
   const [viewportWidth, setViewportWidth] = useState(() => typeof window === 'undefined' ? 1440 : window.innerWidth)
   const dragRef = useRef<{ startX: number; startWidth: number; current: number } | null>(null)
-  // 文件面板依赖原生文件夹选择器；纯 Web 形态没有 preload，不能放出死入口。
+  // 文件/命令 Pane 依赖原生 preload；浏览器还要 WebContentsView 桥。纯 Web
+  // 形态不能放出点了没反应的死入口，因此可用 tab 由真实桥能力生成。
   const hasDesktopBridge = typeof window !== 'undefined' && Boolean(window.maxmaDesktop?.pickPath)
   const hasBrowser = typeof window !== 'undefined' && Boolean(window.maxmaDesktop?.browser)
-  const tabs: WorkbenchTab[] = [
-    'reasoning',
-    'canvas',
-    ...(hasDesktopBridge ? ['files' as const, 'changes' as const, 'commands' as const] : []),
-    ...(hasBrowser ? ['browser' as const] : []),
-    'tasks',
-  ]
-  const activeTab = tabs.includes(
+  const tabs = availableWorkbenchTabs({ desktop: hasDesktopBridge, browser: hasBrowser })
+  const activeTab = resolveWorkbenchTab(
+    tabs,
     (sessionId ? workbench.sessionTabs[sessionId] : undefined) ?? workbench.activeTab,
   )
-    ? ((sessionId ? workbench.sessionTabs[sessionId] : undefined) ?? workbench.activeTab)
-    : 'reasoning'
+  const sessionKey = sessionId ?? 'global'
+  // Pane 一经访问就保持挂载：切到浏览器再切回文件，FileEditor 的未保存草稿
+  // 和 CommandPane 的运行输出还在。按会话隔离，换会话不会把上一个会话的
+  // Pane 状态串过来；切回原会话时恢复它自己的已访问集合。
+  const [visitedBySession, setVisitedBySession] = useState<Record<string, WorkbenchTab[]>>({})
+  const visitedTabs = visitedBySession[sessionKey] ?? [activeTab]
+  useEffect(() => {
+    setVisitedBySession((current) => {
+      const previous = current[sessionKey] ?? [activeTab]
+      const next = rememberVisitedPane(previous, activeTab)
+      if (next.length === previous.length && next.every((tab, index) => tab === previous[index])) return current
+      return { ...current, [sessionKey]: next }
+    })
+  }, [activeTab, sessionKey])
+  const mountedTabs = visitedTabs.includes(activeTab) ? visitedTabs : [...visitedTabs, activeTab]
   const width = Math.min(
     dragWidth ?? workbench.width,
     // 给聊天区留约 400px（视口较宽时）；真正挤不下时走下面的整宽覆盖。
@@ -194,6 +205,7 @@ export function WorkbenchHost({ onArtifactAction, allTurns, sessionId, taskTrack
   }, [])
 
   useEffect(() => {
+    if (!isOpen) return
     const keyDown = (event: globalThis.KeyboardEvent) => {
       if (event.defaultPrevented) return
       const key = event.key.toLowerCase()
@@ -204,7 +216,7 @@ export function WorkbenchHost({ onArtifactAction, allTurns, sessionId, taskTrack
     }
     window.addEventListener('keydown', keyDown)
     return () => window.removeEventListener('keydown', keyDown)
-  }, [])
+  }, [isOpen])
 
   useEffect(() => {
     return () => {
@@ -243,7 +255,7 @@ export function WorkbenchHost({ onArtifactAction, allTurns, sessionId, taskTrack
   const commands: PaletteCommand[] = [
     ...tabs.map((tab) => ({
       id: `tab-${tab}`,
-      label: `切到${TAB_LABELS[tab]}`,
+      label: `切到${WORKBENCH_PANE_LABELS[tab]}`,
       hint: '工作台标签',
       run: () => workbench.setTab(tab, sessionId),
     })),
@@ -261,6 +273,19 @@ export function WorkbenchHost({ onArtifactAction, allTurns, sessionId, taskTrack
     },
   ].filter((command) => !(narrowOverlay && command.id === 'maximize'))
 
+  const paneProps: WorkbenchPaneProps = {
+    isOpen,
+    activeTab,
+    overlayOpen: paletteOpen,
+    sessionId,
+    allTurns,
+    taskTrackerData,
+    goalState,
+    cards: workbench.cards,
+    onArtifactAction,
+    onRemoveCard: workbench.removeCard,
+  }
+
   return (
     <>
       <aside
@@ -268,9 +293,11 @@ export function WorkbenchHost({ onArtifactAction, allTurns, sessionId, taskTrack
           'flex min-w-0 flex-col border-l border-border',
           fullBleed ? 'absolute inset-0 z-20 w-auto bg-background' : 'relative shrink-0 bg-card/40',
           dragWidth !== null && 'select-none',
+          !isOpen && 'hidden',
         )}
         style={fullBleed ? undefined : { width }}
         aria-label="工作台"
+        aria-hidden={isOpen ? undefined : 'true'}
         aria-maximized={maximized}
         data-maximized={maximized ? 'true' : 'false'}
         data-narrow-overlay={narrowOverlay ? 'true' : 'false'}
@@ -337,47 +364,39 @@ export function WorkbenchHost({ onArtifactAction, allTurns, sessionId, taskTrack
               className="shrink-0"
               onClick={() => workbench.setTab(tab, sessionId)}
             >
-              {TAB_LABELS[tab]}
+              {WORKBENCH_PANE_LABELS[tab]}
             </Button>
           ))}
         </div>
         <div
           className={cn(
             'flex min-h-0 flex-1 flex-col',
-            activeTab === 'browser'
-              ? 'overflow-hidden'
-              : activeTab === 'files' || activeTab === 'changes' || activeTab === 'commands'
-                ? 'overflow-hidden p-2'
-                : 'overflow-y-auto scrollbar-thin p-2',
+            PANE_BY_ID.get(activeTab)?.bodyClassName ?? 'overflow-y-auto scrollbar-thin p-2',
           )}
         >
-          {activeTab === 'reasoning' && (
-            <div className="flex flex-col gap-2">
-              {allTurns.flatMap((turn, ti) => turn.events
-                .filter((ev) => ev.kind === 'thinking')
-                .map((ev, ei) => (
-                  <div key={`${ti}-${ei}`} className="rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">
-                    {ev.kind === 'thinking' ? ev.tokens.slice(0, 200) : null}
-                  </div>
-                )))}
-            </div>
-          )}
-          {activeTab === 'canvas' && workbench.cards.map((card) => (
-            <div key={card.id} className="mb-2 rounded-xl bg-card p-4 text-meta">
-              <div className="mb-1 flex items-center justify-between"><strong>{card.title}</strong>
-                <Button variant="ghost" size="icon-sm" onClick={() => workbench.removeCard(card.id)} aria-label="移除卡片">✕</Button>
-              </div>
-              <pre className="max-h-40 overflow-auto scrollbar-thin whitespace-pre-wrap text-caption text-muted-foreground">{card.content}</pre>
-              {card.artifact && card.artifact.actions.map((action) => (
-                <Button key={action.id} variant="outline" size="sm" className="mt-2 mr-1" onClick={() => onArtifactAction({ artifactId: card.artifact!.id, actionId: action.id, token: action.token })}>{action.label}</Button>
-              ))}
-            </div>
-          ))}
-          {activeTab === 'files' && <FilesPane sessionId={sessionId} />}
-          {activeTab === 'changes' && <ChangesPane />}
-          {activeTab === 'tasks' && <TasksPane turns={allTurns} taskTrackerData={taskTrackerData} goalState={goalState} />}
-          {activeTab === 'commands' && <CommandPane />}
-          {activeTab === 'browser' && <BrowserPane overlayOpen={paletteOpen} sessionId={sessionId ?? null} />}
+          {mountedTabs.filter((tab) => tabs.includes(tab)).map((tab) => {
+            const Pane = PANE_COMPONENTS.get(tab)
+            const meta = PANE_BY_ID.get(tab)
+            if (!Pane || !meta) return null
+            return (
+              <WorkbenchPaneShell
+                key={tab}
+                id={tab}
+                active={activeTab === tab}
+                className={meta.bodyClassName}
+              >
+                <Suspense
+                  fallback={(
+                    <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
+                      <p className="text-micro text-muted-foreground">正在加载面板…</p>
+                    </div>
+                  )}
+                >
+                  <Pane {...paneProps} />
+                </Suspense>
+              </WorkbenchPaneShell>
+            )
+          })}
         </div>
       </aside>
       {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}

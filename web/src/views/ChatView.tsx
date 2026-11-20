@@ -514,7 +514,7 @@ export default function ChatView() {
             )}
         </div>
 
-        {workbench.isOpen && <WorkbenchHost onArtifactAction={handleArtifactAction} allTurns={allTurns} sessionId={sessionId} taskTrackerData={taskTrackerData} goalState={goalState} />}
+        <WorkbenchHost isOpen={workbench.isOpen} onArtifactAction={handleArtifactAction} allTurns={allTurns} sessionId={sessionId} taskTrackerData={taskTrackerData} goalState={goalState} />
 
         {/* 实时纠偏：悬浮小窗（只在流式进行中出现，可拖动/收起/关闭） */}
         <SteeringWindow

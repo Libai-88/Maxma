@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import type { BrowserBounds, BrowserCapture, BrowserState } from '@/types/desktop'
+import type { WorkbenchPaneProps } from './paneProps'
 import { ScreenshotAnnotator } from '@/components/workbench/ScreenshotAnnotator'
 
 const DEFAULT_URL = 'https://www.bing.com'
@@ -32,14 +33,9 @@ function errorText(error: BrowserState['error']): string {
   return `${error.description || '页面加载失败'}（${error.code}）`
 }
 
-interface BrowserPaneProps {
-  /** 命令面板等浮层打开时，原生 view 必须让开。 */
-  overlayOpen: boolean
-  /** 截图/元素引用只回填到当前会话。 */
-  sessionId: string | null
-}
-
-export function BrowserPane({ overlayOpen, sessionId }: BrowserPaneProps) {
+export function BrowserPane({ isOpen, activeTab, overlayOpen, sessionId }: WorkbenchPaneProps) {
+  const active = isOpen && activeTab === 'browser'
+  const chatSessionId = sessionId ?? null
   const bridge = window.maxmaDesktop?.browser
   const [state, setState] = useState<BrowserState | null>(null)
   const [address, setAddress] = useState(DEFAULT_URL)
@@ -78,7 +74,7 @@ export function BrowserPane({ overlayOpen, sessionId }: BrowserPaneProps) {
 
   useEffect(() => {
     if (!bridge) return
-    if (overlayOpen || shot) {
+    if (!active || overlayOpen || shot) {
       visibleRef.current = false
       void bridge.hide()
       return
@@ -131,7 +127,7 @@ export function BrowserPane({ overlayOpen, sessionId }: BrowserPaneProps) {
       observer.disconnect()
       window.removeEventListener('resize', schedule)
     }
-  }, [bridge, overlayOpen, shot])
+  }, [bridge, active, overlayOpen, shot])
 
   const annotate = async () => {
     if (!bridge) return
@@ -155,7 +151,7 @@ export function BrowserPane({ overlayOpen, sessionId }: BrowserPaneProps) {
         return
       }
       const text = `引用网页元素：${picked.selector}${picked.text ? `（${picked.text.slice(0, 80)}）` : ''}`
-      window.dispatchEvent(new CustomEvent('maxma:append-composer', { detail: { text, sessionId } }))
+      window.dispatchEvent(new CustomEvent('maxma:append-composer', { detail: { text, sessionId: chatSessionId } }))
       setNotice(`已拾取 ${picked.tag} 元素并插入输入框`)
     } catch (reason) {
       setNotice(reason instanceof Error ? reason.message : String(reason))
@@ -166,7 +162,7 @@ export function BrowserPane({ overlayOpen, sessionId }: BrowserPaneProps) {
 
   const sendShot = (dataUrl: string) => {
     window.dispatchEvent(new CustomEvent('maxma:add-image-ref', {
-      detail: { dataUrl, label: `browser-${Date.now()}.png`, sessionId },
+      detail: { dataUrl, label: `browser-${Date.now()}.png`, sessionId: chatSessionId },
     }))
     setShot(null)
     setNotice('截图已加入对话输入框')

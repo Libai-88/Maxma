@@ -8,8 +8,7 @@
 import { CheckCircle2, Circle, CircleDashed, ListTodo, Target, XCircle } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
-import type { ChatTurn } from '@/types'
-import type { GoalChannelState } from '@/stores/chat'
+import type { WorkbenchPaneProps } from './paneProps'
 import { normalizeTasks, recentPlans } from './tasksModel'
 
 function statusIcon(status: string) {
@@ -29,14 +28,10 @@ function statusText(status: string) {
 }
 
 export function TasksPane({
-  turns,
+  allTurns: turns,
   goalState,
   taskTrackerData,
-}: {
-  turns: ChatTurn[]
-  goalState: GoalChannelState | null
-  taskTrackerData: Record<string, unknown> | null
-}) {
+}: WorkbenchPaneProps) {
   const tasks = normalizeTasks(taskTrackerData)
   const plans = recentPlans(turns).flatMap((turn) => turn.planCard ? [{ turn, plan: turn.planCard }] : [])
   const empty = !goalState?.goal && tasks.length === 0 && plans.length === 0

@@ -1,7 +1,34 @@
 # MaxmaHere 交接说明
 
 > 当前可执行状态，供下一位接手者。架构请先读 [docs/00-当前架构.md](docs/00-当前架构.md)。
-> 更新时间：2026-11-20
+> 更新时间：2026-11-21
+
+## 2026-11-21：Workbench 架构收口 + 浏览器 CDP 原生操控
+
+- **侧边栏不是两套导航**：左侧 `Sidebar` 仍是全局路由；右侧 `WorkbenchHost` 是会话级工作台。
+  `workbench/panes.ts` 单源声明七类 Pane 的顺序/中文名/preload 依赖/布局策略/组件加载器；宿主按注册表
+  映射 `React.lazy`，没有 `activeTab === ...` 分支。纯 Web 只出推理/画布/任务。
+- **Pane 保活**：已访问 Pane 按会话记录，不再因切 tab 卸载；关闭工作台只给 `aside` 加 `hidden`。CodeMirror 草稿、
+  命令输出、文件树状态都在。`BrowserPane active` 在关闭/切走时立即隐藏原生 view，避免悬浮。
+  每个 Pane 独立错误边界。真实 Electron 证据：输入未保存草稿 → 关闭工作台 → 重开 → 草稿仍在 → 保存落盘。
+- **浏览器原生操控**：`browser-cdp.cjs` 通过 `webContents.debugger` 接 Chromium CDP：
+  `Accessibility.getFullAXTree` 出稳定 ref、`DOM.getBoxModel` + `Input.dispatchMouseEvent` 真实点击/拖拽、
+  `Input.dispatchKeyEvent`/`insertText` 真实输入、`DOM.setFileInputFiles` 原生上传；支持 click（ref/坐标）/
+  fill/type/press/hover/select/check/uncheck/drag/upload/scrollIntoView/wait(selector|text|ms)/evaluate/
+  console。新增 `browser_act`（write，审批门），与 `browser_navigate`/`browser_read` 一起进入 pi 活动工具表。
+- **工具端到端已取证**：真实 Electron 运行期间，独立 bun 进程调用 Maxma 自己的 `browser_navigate/
+  browser_read/browser_act` → loopback → 原生 view，完成导航、AX snapshot、fill/press/select/check/
+  click/坐标点击/20 步拖拽/原生文件上传/scrollIntoView/wait/evaluate/console；页面变成
+  `Hello Maxma b yes`、拖拽留下 `Drag 20,20 -> 180,80`、上传显示 `File browser-upload.txt`，
+  `console` 读到 `maxma-greeted`，失效 ref 明确拒绝。
+- **副作用重试边界**：工具每次带 `request_id`，端点 60s 内同 id 去重（最多 200 条）；超时返回
+  `outcome_unknown`，不得自动重试。未知动作在端点层 400 拒绝。上传只收已存在普通文件（≤10 个、
+  单文件 ≤512 MiB），但它是本机文件外发面，必须按 write 审批看待。
+- **本轮闸门全绿**：sidecar 234 pass、backend 360 pass、web 74 pass；tsc/ESLint/build/颜色/间距/字号/
+  对比度/无紫/玻璃/体量/类型债全部 PASS，根 `scripts/verify-all-gates.sh` 18 项全 PASS。
+  Pane 懒加载把 ChatView 从 286.73 kB 降到 217.24 kB。
+- 仍范围外：浏览器网络 allowlist、多浏览器页签、下载落盘策略、真实系统文件对话框人工点选、
+  真实 Windows 系统 DPI 人工抽查、Git discard、Side chat、系统通知、PR 创建、P4。
 
 ## 2026-11-20：Workbench 2.0 P0–P3 完成（文件/编辑/变更/命令/浏览器/任务）
 
@@ -32,7 +59,8 @@
   Web `83,535,555 B`，SHA-256 `bd870d55…66b53`，`portable-smoke-test.ps1` PASS
   （328 表情、图片 200、管理 401）；Web 降级由 `webTabs=["推理","画布","任务"]` 证明。
 - **范围外，不是待办**：真实系统文件对话框人工点选、真实 Windows 系统 DPI 人工抽查、
-  浏览器网络 allowlist、浏览器点击/输入/提交、Git discard 按钮、Side chat、系统通知、PR 创建、P4。
+  浏览器网络 allowlist、Git discard 按钮、Side chat、系统通知、PR 创建、P4。
+  （当时浏览器点击/输入/提交也未开放；2026-11-21 已按上面的 CDP 方案开放并加 write 审批。）
 - 贴纸历史债已清：`service.ts` 拆到 748 行 + `stickers/legacy.ts`，`check-type-budget` / `check-file-size-budget`
   不再报红；这是本轮为保证全量闸门全绿做的顺手拆分，行为由原有贴纸测试覆盖。
 

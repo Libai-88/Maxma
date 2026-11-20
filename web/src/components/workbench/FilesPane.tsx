@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import type { WorkspaceRoot, WorkspaceTreeEntry } from '@/types/workspace'
+import type { WorkbenchPaneProps } from './paneProps'
 import { FilePreview, type EditorDraft, type PreviewData, type PreviewTab } from './FilePreview'
 import { FileTree } from './FileTree'
 
@@ -43,7 +44,7 @@ function disposePreview(preview: PreviewData | undefined) {
   }
 }
 
-export function FilesPane({ sessionId }: { sessionId?: string }) {
+export function FilesPane({ sessionId }: WorkbenchPaneProps) {
   const bridge = window.maxmaDesktop
   const [roots, setRoots] = useState<WorkspaceRoot[]>([])
   const [rootId, setRootId] = useState('')

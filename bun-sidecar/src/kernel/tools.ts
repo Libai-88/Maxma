@@ -21,7 +21,7 @@ import type { MaxmaToolDescriptor } from "../tools/descriptor";
 import { listRulesTool } from "../tools/rules";
 import { getStickerTool, learnMemeTool, memeListTool, memeUpdateTool, sendMemeTool } from "../tools/stickers";
 import { searchMemoriesTool } from "../tools/memory";
-import { browserNavigateTool, browserReadTool } from "../tools/browser";
+import { browserActTool, browserNavigateTool, browserReadTool } from "../tools/browser";
 import { registerRememberMemoryTool } from "../tools/remember-memory";
 import { readOfficeFileTool, writeOfficeFileTool } from "../tools/office";
 
@@ -63,6 +63,7 @@ export function buildPiCustomTools(
     searchMemoriesTool(),
     browserNavigateTool(),
     browserReadTool(),
+    browserActTool(),
     sendMemeTool(),
     learnMemeTool(),
     memeListTool(),

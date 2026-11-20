@@ -570,7 +570,7 @@ describe("kernel: pi RPC bridge", () => {
       // 此处直接等价传入以验证 kernel 装配
       const session = await createMaxmaSession({ inMemory: true, cwd: import.meta.dir, customTools: buildPiCustomTools() });
       const names = session.getActiveToolNames();
-      for (const t of ["remember_memory", "search_memories", "get_sticker", "list_rules"]) {
+      for (const t of ["remember_memory", "search_memories", "get_sticker", "list_rules", "browser_navigate", "browser_read", "browser_act"]) {
         expect(names).toContain(t);
       }
       session.dispose();

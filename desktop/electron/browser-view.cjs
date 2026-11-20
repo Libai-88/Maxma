@@ -7,6 +7,7 @@
  */
 
 const { WebContentsView, session: electronSession } = require("electron");
+const { createCdpBrowser } = require("./browser-cdp.cjs");
 
 function isAllowedBrowserUrl(url) {
   if (url === "about:blank") return true;
@@ -48,6 +49,7 @@ function createBrowserController({
 }) {
   let view = null;
   let visible = false;
+  const cdp = createCdpBrowser(() => view);
 
   function state(extra = {}) {
     const contents = view?.webContents;
@@ -136,6 +138,7 @@ function createBrowserController({
 
   function destroy() {
     if (!view) return;
+    cdp.detach();
     const current = view;
     view = null;
     visible = false;
@@ -287,20 +290,9 @@ function createBrowserController({
       return { ...current(), action };
     }
     if (action === "snapshot") {
-      const snapshot = await contents.executeJavaScript(`(() => {
-        const text = (document.body && document.body.innerText || "").slice(0, 12000);
-        const links = Array.from(document.querySelectorAll("a[href]")).slice(0, 50).map((a) => ({
-          text: (a.innerText || "").trim().slice(0, 80),
-          href: a.href,
-        }));
-        const controls = Array.from(document.querySelectorAll("input,textarea,button,select")).slice(0, 50).map((el) => ({
-          tag: el.tagName.toLowerCase(),
-          type: el.getAttribute("type") || "",
-          name: el.getAttribute("name") || "",
-          label: (el.getAttribute("aria-label") || el.innerText || el.getAttribute("placeholder") || "").trim().slice(0, 80),
-        }));
-        return { url: location.href, title: document.title, text, links, controls };
-      })()`, true);
+      // CDP 无障碍树给每个可操作节点一个本次快照内稳定的 ref；正文仍走
+      // 页面 innerText，避免模型面对一堆重复的 inline text 节点。
+      const snapshot = await cdp.snapshot();
       return { ...current(), action, ...snapshot };
     }
     if (action === "extract") {
@@ -323,6 +315,14 @@ function createBrowserController({
     if (action === "screenshot") {
       const image = await contents.capturePage();
       return { ...current(), action, mime: "image/png", data: image.toPNG().toString("base64") };
+    }
+    if (action === "act") {
+      const result = await cdp.act(args);
+      return { ...current(), action, ...result };
+    }
+    if (action === "console") {
+      const result = await cdp.console({ clear: args.clear === true });
+      return { ...current(), action, ...result };
     }
     if (action === "scroll") {
       const dx = Math.max(-5000, Math.min(5000, Number(args.dx) || 0));

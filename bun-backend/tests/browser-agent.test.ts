@@ -26,7 +26,7 @@ describe("browser agent server", () => {
       controller: {
         agentExecute: async (action: string, args: unknown) => {
           calls.push({ action, args });
-          if (action === "explode") throw new Error("boom");
+          if (action === "extract") throw new Error("boom");
           return { action, echoed: args };
         },
       },
@@ -52,19 +52,45 @@ describe("browser agent server", () => {
     const ok = await fetch(endpoint, {
       method: "POST",
       headers: { "content-type": "application/json", "x-maxma-browser-secret": config.secret },
-      body: JSON.stringify({ action: "open", args: { url: "https://example.com" } }),
+      body: JSON.stringify({ action: "open", args: { url: "https://example.com" }, request_id: "req-open-0001" }),
     });
     expect(ok.status).toBe(200);
-    expect(await ok.json()).toEqual({ ok: true, result: { action: "open", echoed: { url: "https://example.com" } } });
+    expect(await ok.json()).toEqual({ ok: true, request_id: "req-open-0001", result: { action: "open", echoed: { url: "https://example.com" } } });
     expect(calls).toEqual([{ action: "open", args: { url: "https://example.com" } }]);
+
+    // 同一个 request_id 重放：返回缓存结果，不再执行第二次副作用。
+    const replay = await fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-maxma-browser-secret": config.secret },
+      body: JSON.stringify({ action: "open", args: { url: "https://example.com" }, request_id: "req-open-0001" }),
+    });
+    expect(await replay.json()).toEqual({ ok: true, request_id: "req-open-0001", result: { action: "open", echoed: { url: "https://example.com" } } });
+    expect(calls).toHaveLength(1);
+
+    const newRequest = await fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-maxma-browser-secret": config.secret },
+      body: JSON.stringify({ action: "snapshot", request_id: "req-snap-0002" }),
+    });
+    expect(newRequest.status).toBe(200);
+    expect(calls.map((call) => call.action)).toEqual(["open", "snapshot"]);
 
     const failed = await fetch(endpoint, {
       method: "POST",
       headers: { "content-type": "application/json", "x-maxma-browser-secret": config.secret },
-      body: JSON.stringify({ action: "explode" }),
+      body: JSON.stringify({ action: "extract" }),
     });
     expect(failed.status).toBe(200);
     expect(await failed.json()).toEqual({ ok: false, error: "boom" });
+
+    const unknown = await fetch(endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-maxma-browser-secret": config.secret },
+      body: JSON.stringify({ action: "explode", args: { nested: true } }),
+    });
+    expect(unknown.status).toBe(400);
+    expect(await unknown.json()).toEqual({ ok: false, error: "unknown action: explode" });
+    expect(calls.map((call) => call.action)).toEqual(["open", "snapshot", "extract"]);
 
     const malformed = await fetch(endpoint, {
       method: "POST",

@@ -231,6 +231,7 @@ export const MAXMA_CUSTOM_TOOLS = [
   "search_memories",
   "browser_navigate",
   "browser_read",
+  "browser_act",
   "send_meme",
   "learn_meme",
   "meme_list",

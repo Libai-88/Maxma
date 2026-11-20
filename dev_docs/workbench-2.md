@@ -1,9 +1,9 @@
 # Workbench 2.0 — P0 / P1 / P2 / P3 实施记录
 
-> 更新：2026-11-20  
+> 更新：2026-11-21  
 > 分支：`fix/portable-stop-null-guard`  
-> P0 commit：`5fd622e3`；P1 commit：`bfd29b9d`
-> 结论：P0–P3 全部开发任务已完成并验收，计划待办为空；P2/P3 代码进入最终交付提交。
+> P0 commit：`5fd622e3`；P1 commit：`bfd29b9d`；P0–P3 收口 commit：`74b4375c`
+> 结论：P0–P3 已交付；2026-11-21 追加“架构收口 + Agent 真实调用取证 + CDP 原生操控”，不再以“入口存在”代替可调用证据。
 
 ## 1. 范围
 
@@ -17,14 +17,16 @@ Workbench 2.0 把右侧工作台从「只有推理/画布」扩成桌面 Agent �
 - 命令运行器：无 TTY、cwd 锁工作区根、超时杀进程树、输出截断；
 - 任务/计划 Pane：只投影 goal/task_tracker/planCard，不新增第二套状态；
 - 内置浏览器（`WebContentsView`）：地址栏、前进/后退/刷新/停止、外部打开、清除数据；
-- 浏览器 Agent 控制：open/snapshot/extract/screenshot/scroll/back/forward，UI 未打开时也可隐藏执行；
+- 浏览器 Agent 控制：open/snapshot/extract/screenshot/scroll/back/forward/act/console，UI 未打开时也可隐藏执行；`browser_act` 走 Chromium CDP 真实鼠标/键盘/拖拽/文件上传，不用 `element.click()` 模拟；
+- Pane 注册表单源：tab 顺序、中文名、桥依赖、布局策略与组件加载器只声明一次；已访问 Pane 按会话保活，关闭工作台只隐藏不卸载；
+- 每个 Pane 独立错误边界：单个面板崩溃不拖黑对话或其他面板；
 - 并行会话 tab（最多 3 个）与每个会话独立工作台状态；
 - 截图标注（矩形/箭头/文字/撤销/清空）与网页元素拾取，结果回填输入框；
 - Git 写操作：stage/unstage/commit，commit 必须显式确认，不 push；
 - 拖拽调宽、双击最大化、`Ctrl/⌘+P` 命令面板；
 - Web 端明确降级：文件与浏览器入口不出现，不留下点了没反应的按钮。
 
-本轮范围外（不是待办）：Side chat、系统通知、PR 创建、浏览器点击/输入/提交、浏览器网络 allowlist、P4（远程/移动、多窗口、computer use、Chrome cookie 导入、Office 深度预览、自动更新/签名、完整 IDE）。
+本轮范围外（不是待办）：Side chat、系统通知、PR 创建、浏览器网络 allowlist、多 tab 浏览器页签、文件上传/下载、P4（远程/移动、多窗口、computer use、Chrome cookie 导入、Office 深度预览、自动更新/签名、完整 IDE）。
 
 ## 2. 文件与职责
 
@@ -34,16 +36,17 @@ Workbench 2.0 把右侧工作台从「只有推理/画布」扩成桌面 Agent �
 - `bun-backend/src/services/workspace-fs.ts`：路径解析与读取；拒绝绝对路径、盘符、UNC、`..`、NUL、ADS、symlink/junction；文本 2 MiB、图片/PDF 50 MiB、目录条目 2000。
 - `bun-backend/src/routes/workspace.ts`：`roots` / `tree` / `file` / `blob` 只读接口，PATCH 改名，错误码映射。
 - `bun-backend/src/routes/files.ts`：无桌面 bridge 时返回 `501 desktop_required`，不再静默 `{path:null}`。
-- `bun-backend/src/routes/capabilities.ts`：`features.workbench.browser` 为桌面可用；files 只读、桌面专属。
-
-### 前端
-
-- `web/src/components/workbench/WorkbenchHost.tsx`：四个 tab、拖拽调宽、最大化、命令面板、窄窗整宽覆盖；打开浮层或切 tab 时隐藏 native view。
+- `bun-backend/src/routes/capabilities.ts`：能力清单描述 `files readwrite`、`editor codemirror`、`terminal command-runner-only`、`git` 按 `Bun.which("git")`、`browser agent_control`；它是**描述层**，渲染层可执行事实源仍是 preload bridge。
+- `web/src/components/workbench/WorkbenchHost.tsx`：Pane 布局、拖拽调宽、最大化、命令面板、窄窗整宽覆盖；按注册表把 Pane 映射成懒加载组件，不写 tab 专属分支。
+- `web/src/components/workbench/panes.ts`：tab 顺序/中文名/desktop-browser 依赖/布局类名/组件加载器的唯一声明。
+- `web/src/components/workbench/paneProps.ts`：所有 Pane 的统一上下文，宿主与 Pane 之间不互相认识。
+- `web/src/components/workbench/{ReasoningPane,CanvasPane}.tsx`：原先内联在宿主的两个 Pane 抽成独立模块。
+- `web/src/components/workbench/WorkbenchPaneShell.tsx`：Pane 保活外壳 + 独立错误边界；非当前 Pane 只 `hidden`，不卸载。
 - `FilesPane.tsx`：根管理、刷新/忽略项、38% 树 + 预览、右键菜单、复制相对路径、资源管理器定位、加入当前会话引用；根切换 epoch 防止旧异步回写泄漏 blob。
 - `FileTree.tsx`：懒加载一层、目录优先、过滤、键盘、右键、`revealPath` 展开祖先。
 - `fileTreeModel.ts`：展开/过滤/键盘/面包屑的纯函数，供单测直接覆盖。
 - `FilePreview.tsx`：多 tab、行号、自研轻量 token 高亮、Markdown 安全渲染、图片/PDF blob、HTML 仅源码、面包屑。
-- `BrowserPane.tsx`：地址栏、工具栏、错误条、DOM bounds 同步、缩放换算、native view 隐藏。
+- `BrowserPane.tsx`：地址栏、工具栏、错误条、DOM bounds 同步、缩放换算；`active=false` 时隐藏 native view，保活但不悬浮。
 - `web/src/stores/workbench.ts`：v2 存储键、v1 迁移、宽度 320–860 夹紧。
 - `web/src/api/workspace.ts`：工作区 API 从 `api/index.ts` 拆出，主 API 文件回到体量基线内。
 
@@ -58,9 +61,9 @@ Workbench 2.0 把右侧工作台从「只有推理/画布」扩成桌面 Agent �
 
 - 后端：`services/git-service.ts`（全部 async `spawn`，12s/commit 20s 超时，输出上限 8 MiB）、`routes/git.ts`（status/diff/stage/unstage/commit）、`services/command-runner.ts`、`workspace-fs.ts` 的 `writeTextFile`/`searchWorkspaceFiles`、`routes/workspace.ts` 的 `PUT /file`/`GET /search`/`POST /run`。
 - 前端：`workbench/FileEditor.tsx`（CodeMirror 6，`React.lazy` 拆包）、`ChangesPane.tsx`、`CommandPane.tsx`、`TasksPane.tsx` + `tasksModel.ts`、`ScreenshotAnnotator.tsx`；`BrowserPane.tsx` 增加截图/元素拾取；`chat/SessionTabs.tsx` + `stores/sessionTabs.ts`；`ChatInput.tsx` 接收截图与元素回填。
-- 侧边车：`tools/browser.ts`（`browser_navigate` / `browser_read`），`kernel/tools.ts`、`pi-contract.ts` 登记；`web/src/components/tools/_shared/displayNames.ts` 同步中文名。
-- 桌面：`browser-agent-server.cjs`（loopback + 每次启动随机 secret + 0600 配置 + 动作白名单）、`browser-view.cjs` 的 `agentExecute`/`captureData`/`pickElement`。
-- 测试：`bun-backend/tests/{workspace-p0,browser-agent,browser-tools}.test.ts`、`web/tests/{sessionTabs,tasksModel}.test.ts`、`web/tests/fileTreeModel.test.ts` 的搜索/树投影。
+- 侧边车：`tools/browser.ts`（`browser_navigate` / `browser_read` / `browser_act`），`kernel/tools.ts`、`pi-contract.ts` 登记；`web/src/components/tools/_shared/displayNames.ts` 同步中文名。
+- 桌面：`browser-agent-server.cjs`（loopback + 每次启动随机 secret + 0600 配置 + 动作白名单 + request_id 去重）、`browser-cdp.cjs`（AX 快照 / 原生输入）、`browser-view.cjs` 的 `agentExecute`/`captureData`/`pickElement`。
+- 测试：`bun-backend/tests/{workspace-p0,browser-agent,browser-cdp,browser-tools}.test.ts`、`web/tests/{sessionTabs,tasksModel,workbenchPanes}.test.ts`、`web/tests/fileTreeModel.test.ts` 的搜索/树投影；`scripts/_browser-tool-smoke.mjs` 走真实工具端到端。
 
 ## 3. 关键实现细节
 
@@ -105,13 +108,22 @@ Workbench 2.0 把右侧工作台从「只有推理/画布」扩成桌面 Agent �
 - 默认关闭，用户首次启用需确认；cwd 固定为当前工作区根，渲染层不能传任意 cwd。
 - 默认 60s、上限 120s；超时杀进程树；输出上限 1 MiB，超出标记 `truncated`；返回 `stdout/stderr/exitCode/signal/timedOut/durationMs`。
 
-### 3.7 浏览器 Agent 控制
+### 3.7 浏览器 Agent 控制与 CDP 原生操控
 
 - `browser-agent-server.cjs` 只监听 `127.0.0.1`，每次启动生成 32-byte hex secret，配置写 `0600`；请求必须带 `x-maxma-browser-secret`。
-- 动作白名单：open/snapshot/extract/screenshot/scroll/back/forward；未知动作直接拒绝。
-- Agent 在 UI 未打开浏览器 tab 时也会 `ensure()` 创建隐藏 `WebContentsView`（1200×900），不擅自显示原生层；截图通过 `capturePage` 返回 base64。
-- 工具侧 `browser_navigate`（write）与 `browser_read`（read）注册进 kernel 契约；结果带 URL/title/文本或截图大小。
-- 只读边界：点击/输入/提交尚未开放，避免“可能已点击”却报成功；网络 allowlist 仍为已知缺口。
+- 端点层与控制器双层动作白名单：open/snapshot/extract/screenshot/scroll/back/forward/act/console；未知动作返回 400，不再出现“服务端声称白名单、实际只靠控制器”的伪边界。
+- 工具调用生成 `request_id`；服务端 60 秒内对同 id 返回同一 Promise/结果，最多缓存 200 条，避免网络重试造成第二次点击。超时返回 `outcome_unknown` 并带 request_id，明确要求先 snapshot 复核、不得自动重试。
+- `browser-cdp.cjs` 用 `webContents.debugger` 接 Chromium DevTools Protocol：
+  - `Accessibility.getFullAXTree` 生成 `ref → backendDOMNodeId` 映射，只保留可操作/可聚焦节点，最多 120 个；ref 只在当前快照有效，失效后明确报错；快照同时返回页面 `viewport`（宽高与滚动位置），供视觉定位；
+  - `DOM.getBoxModel` 取元素中心，`Input.dispatchMouseEvent` 发真实鼠标按下/释放；`click` 既支持 ref/selector，也支持 `x/y` 视口坐标（截图视觉定位），不依赖元素句柄；
+  - `drag` 从 ref/坐标拖到另一个 ref/坐标，真实 `mousePressed → N 次 mouseMoved → mouseReleased`，默认 20 步；
+  - `DOM.setFileInputFiles` 把本机绝对路径写入真实 `input[type=file]`，最多 10 个、单文件 ≤512 MiB，拒绝相对路径、目录、NUL 与不存在文件；
+  - `Input.dispatchKeyEvent` / `Input.insertText` 发真实按键与文本输入；支持 Enter/Tab/Esc/方向键/Backspace、`Control+A` 等组合键；
+  - 支持 click / fill / type / press / hover / select / check / uncheck / drag / upload / scrollIntoView / wait / evaluate；`select` 通过 DOM 属性 + `input/change` 事件，因为原生 select 没有稳定的纯键盘路径；`wait` 可等 selector、正文文本或固定时长；
+  - `Runtime.consoleAPICalled`、`exceptionThrown`、`Log.entryAdded` 进环形缓冲，`browser_read console` 可取页面日志和最近异常。
+- 工具侧 `browser_navigate`（write）、`browser_read`（read）、`browser_act`（write）注册进 kernel 契约与 pi 会话活动工具表；`browser_act` 走审批门，不是只读工具。
+- 不做 DOM `element.click()` 冒充：真实输入测试断言页面状态变化（`Hello Maxma b yes`）、`Enter Maxma` 键盘事件、坐标点击、20 步拖拽（`Drag 20,20 -> 180,80`）、原生文件上传（`File browser-upload.txt`）、`console.log` 回读、失效 ref 拒绝。
+- 仍属范围外：浏览器网络 allowlist、多页签、下载落盘策略；`request_id` 去重是服务端 60 秒内存缓存，进程重启不保留。见 §5。
 
 ### 3.8 并行会话与截图标注
 
@@ -120,18 +132,30 @@ Workbench 2.0 把右侧工作台从「只有推理/画布」扩成桌面 Agent �
 - 截图标注画布支持矩形、箭头、文字、颜色、撤销、清空、Esc 关闭；保存为 PNG 后通过 `maxma:add-image-ref` 回填当前会话输入框。
 - 元素拾取返回 DOM 路径、bbox 与样式摘要，通过 `maxma:append-composer` 回填；两个事件都按 `sessionId` 严格过滤，不串会话。
 
+### 3.9 Workbench 架构收口（2026-11-21）
+
+**结论：左右两层职责分离，不是两套并列导航。** 左侧 `Sidebar` 是全局路由（对话/模型/记忆/工具/设置等），不承载会话级工作台；右侧 `WorkbenchHost` 是当前会话的上下文工作台，按会话保存 active tab，最多三个并行会话各自独立。两者不做合并，也不把全局路由塞进 Workbench tab。
+
+**Pane 注册表是唯一入口。** `panes.ts` 声明七类 Pane 的顺序、中文名、桥依赖、布局类名、保活策略与组件加载器；`WorkbenchHost` 只按注册表映射成 `React.lazy` 组件，不再写 `activeTab === ...` 或 tab 专属 padding 分支。首次访问才加载 Pane，CodeMirror/浏览器面板不挤进 ChatView 首屏 chunk：ChatView 由 286.73 kB 降到 217.24 kB，文件/浏览器/变更/命令/任务/画布/推理各自独立 chunk；已访问集合按 `sessionId` 分开，换会话不会把上一个会话的 Pane 状态串过来。纯 Web 形态由 `availableWorkbenchTabs({desktop:false,browser:false})` 直接得出「推理/画布/任务」，不出现文件/变更/命令/浏览器死入口。
+
+**桥是运行时事实源。** `window.maxmaDesktop.pickPath` 与 `window.maxmaDesktop.browser` 是渲染层真正能执行的事实；后端 `/api/capabilities` 是描述层，给设置/诊断看，不反过来替 preload 造入口。两者不一致时以 preload 为准，避免“清单说有、点了没反应”。
+
+**保活与错误隔离。** 已访问 Pane 只增不减地挂载：切到浏览器再切回文件，CodeMirror 未保存草稿、命令输出、文件树展开状态都在；关闭工作台仅给 `aside` 加 `hidden`，不卸载，重开即恢复。`BrowserPane` 新增 `active` 门：工作台关闭或切走时原生 `WebContentsView` 立即 `hide()`，不会隔着 `display:none` 悬浮在界面上。每个 Pane 独立错误边界，单个面板异常只降级自己。
+
+**保活回归证据。** 真实 Electron 驱动输入 `<!--maxma-keepalive-->` 草稿 → 关闭工作台（断言 `aside.hidden`）→ 重开 → 草稿仍在 → 保存落盘；`paneKeepAlive={draftPreserved:true,closedHidden:true,saved:true}`。
+
 ## 4. 验收证据
 
 ### 4.1 自动化
 
 | 项 | 结果 |
 | --- | --- |
-| 后端全量 | `351 pass / 0 fail`，55 文件，2310 expect，62.21s |
-| sidecar 全量 | `234 pass / 0 fail`，25 文件，1035 expect，17.74s |
-| 前端单测 | `68 pass / 0 fail`，10 文件；P2 新增任务投影 3 例 |
+| 后端全量 | `360 pass / 0 fail`，56 文件，2345 expect，54.91s |
+| sidecar 全量 | `234 pass / 0 fail`，25 文件，1038 expect，17.74s |
+| 前端单测 | `74 pass / 0 fail`，12 文件，841 expect；Pane 注册表 6 例 |
 | 前端 typecheck | 通过 |
 | ESLint | 通过，0 error |
-| 前端构建 | 通过，11.78s；ChatView 284.75 kB、FileEditor 662.32 kB（懒加载独立 chunk） |
+| 前端构建 | 通过，9.76s；ChatView 217.24 kB（Pane 懒加载拆分后较 286.73 kB 下降 69.49 kB）；文件/浏览器/变更/命令/任务/画布/推理各自独立 chunk；FileEditor 仍为 662.32 kB 懒加载 chunk |
 | 颜色/间距/字号/对比度/无紫/玻璃层数守卫 | 全部通过 |
 | 文件体量棘轮 | 通过；贴纸 `service.ts` 由 854 行拆为 748 行 + `legacy.ts`，类型债归零 |
 | 类型债闸门 | sidecar 0、backend 0 |
@@ -146,12 +170,23 @@ Workbench 2.0 把右侧工作台从「只有推理/画布」扩成桌面 Agent �
 - CodeMirror 编辑 README 并保存，磁盘内容变化；变更面板显示 `src/main.ts` 与 README，diff 含 `+<!--maxma-editor-smoke-->`；
 - 命令运行器启用后 `echo maxma-command-ok` exit 0 / 74 ms；Git 暂存、提交信息 `UI acceptance commit`，`git log -1` 与 `git status --porcelain` 证明只本地提交；
 - 浏览器加载 `http://127.0.0.1:8137/api/health`、前进/后退/刷新、外部打开、125%/150% bounds 对齐；
-- 浏览器 Agent 隐藏打开 `visible=false`、snapshot 734 字符、screenshot 91,312 B、未知动作 `rm-rf` 被拒绝；
-- 截图标注 Esc 关闭、重新打开后矩形 checksum `356253886→2146416392`、文字再变到 `3281676662`、撤销栈生效、加入对话提示出现；元素拾取点中页面 `pre` 并回填 `引用网页元素：… > pre:nth-of-type(1)`；
+- 浏览器 Agent 隐藏打开 `visible=false`、snapshot 734 字符、screenshot 88,929 B、未知动作 `rm-rf` 被端点 400 拒绝；
+- 真实工具端到端（独立 bun 进程、实际 `browser_navigate/browser_read/browser_act`）：
+  - `snapshot` 得到 textbox/combobox/button/checkbox/option 共 7 个可操作元素（RootWebArea 不计）；
+  - `fill` 输入 Maxma 后 `press Enter` 触发 `Enter Maxma`；
+  - `select` 选中 `b`、`check` 勾选成功；
+  - `click` 原生坐标 `(110,129)` 命中按钮，页面变 `Hello Maxma b yes`；再用同一坐标走 `x/y` 视觉定位点击，`coordinates=true`；
+  - `drag` 从 `(28,244)` 拖到 `(188,304)`，20 步真实鼠标移动，页面记录 `Drag 20,20 -> 180,80`；
+  - `upload` 把本机 `browser-upload.txt` 写入 `input[type=file]`，页面显示 `File browser-upload.txt`；
+  - `wait` 用正文文本等待成功；`scrollIntoView` 返回元素几何坐标；
+  - `evaluate` 读回同一文本，`console` 读到 `maxma-greeted`；
+  - 失效 ref `e999` 明确返回“已失效，请重新 snapshot”；
+- 架构保活：未保存草稿在关闭工作台并重开后仍在，保存后落盘 `maxma-keepalive`；
+- 截图标注 Esc 关闭、重新打开后矩形 checksum `2563510462→1129061470`、文字再变到 `2099209095`、撤销栈生效、加入对话提示出现；元素拾取点中页面 `pre` 并回填 `引用网页元素：#note`；
 - 并行会话：新建后旧 tab 保留，切回后两张 tab 都在，`max=2`；切换期间旧 session 未被主动断开；
 - 命令面板与切 tab 隐藏 native view；768×900 整宽覆盖、`scrollWidth=754=clientWidth`；
-- 浅色 `flexoki-light` 恢复；Web 模式 tab 仅 `推理 / 画布`；
-- `consoleErrors=[]`；3 条 `ResizeObserver loop completed with undelivered notifications` 记为良性忽略警告。
+- 浅色 `flexoki-light` 恢复；Web 模式 tab 仅 `推理 / 画布 / 任务`；
+- `consoleErrors=[]`；2 条 `ResizeObserver loop completed with undelivered notifications` 记为良性忽略警告。
 
 截图（均 1280×900 或 768×900 真实窗口）：
 
@@ -181,7 +216,9 @@ Web 包明确降级：没有 preload 时不显示文件/变更/命令/浏览器 
 - **真实系统文件对话框**：自动化通过 `maxma:pick-path` 测试钩子返回固定路径；真实 Windows 对话框的人工点选不在本轮自动化范围。系统交互本身由 Electron 原生 API 提供，未改动其行为。
 - **系统级 DPI**：125%/150% 通过 `webContents.setZoomFactor` 做等价 bounds 校验；真实 Windows 显示缩放的人工抽查属于发布前设备验收，不是代码缺口。
 - **浏览器网络 allowlist**：未实现，已在 `docs/security-contract.md` 披露；浏览器与普通浏览器一致可访问任意 http(s)。
-- **浏览器写动作**：点击/输入/提交未开放，避免副作用动作丢失时误报成功；开放前需补 `request_id` + 超时 + `outcome_unknown`。
+- **浏览器页签/文件上传下载**：当前是单 view 单页面；多页签、上传文件、下载保存不在本轮。
+- **CDP 元素 ref 生命周期**：ref 只在最近一次 snapshot 内有效；页面结构变化后必须重新 snapshot，这是有意的安全/正确性边界，不是“ref 会永久记住节点”。
+- **浏览器高风险动作**：点击/输入/提交已开放并走 write 审批，但没有支付/密码等业务级二次确认；涉及真实账户操作仍由用户审批门与页面自身确认共同约束。
 - **Git discard**：UI 不提供 discard；回滚说明为提交前 `git reset` / 提交后 `git revert`，不是按钮缺口。
 - **终端**：本轮按计划允许降级为无 TTY 命令运行器，UI 与文档都不称其为终端。
 - **Side chat / 系统通知**：范围外，需独立临时会话设计与通知权限/回跳策略。
