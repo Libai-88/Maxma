@@ -201,8 +201,7 @@ function normalizeCatalog(raw: unknown): MarketPack[] {
   if (list.length > MAX_ITEMS) throw new Error(`目录超过 ${MAX_ITEMS} 条`);
   const packs = listPacks();
   const installed = new Map(packs.map((p) => [p.id, p.version]));
-  return list
-    .map((entry) => {
+  const mapped: Array<MarketPack | null> = list.map((entry) => {
       const e = (entry ?? {}) as Record<string, unknown>;
       const archiveUrl = String(e.archiveUrl || "").trim();
       if (!/^https?:\/\//i.test(archiveUrl)) return null;
@@ -222,10 +221,11 @@ function normalizeCatalog(raw: unknown): MarketPack[] {
         preview: String(e.preview || "").trim(),
         keywords: Array.isArray(e.keywords) ? e.keywords.map(String).slice(0, 10) : [],
         installed: installed.has(id),
-        installedVersion: installed.get(id),
+        installedVersion: installed.get(id) ?? "",
       } satisfies MarketPack;
-    })
-    .filter((e): e is MarketPack => Boolean(e))
+    });
+  return mapped
+    .filter((e): e is MarketPack => e !== null)
     .filter((e) => e.sha256.length === 64);
 }
 

@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld("maxmaDesktop", {
     reload: () => invoke("maxma:browser:reload"),
     stop: () => invoke("maxma:browser:stop"),
     external: () => invoke("maxma:browser:external"),
+    capture: () => invoke("maxma:browser:capture"),
+    pickElement: () => invoke("maxma:browser:pick-element"),
     clearData: () => invoke("maxma:browser:clear-data"),
     onState: (callback) => {
       ipcRenderer.on("maxma:browser-event", (_event, state) => callback(state));

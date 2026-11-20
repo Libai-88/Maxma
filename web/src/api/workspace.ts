@@ -5,7 +5,16 @@
  * 存量 api/index.ts 已有 1095 行基线）。这里只做请求拼装，安全边界仍在后端。
  */
 
-import type { WorkspaceRoot, WorkspaceTextFile, WorkspaceTreeResult } from '@/types/workspace'
+import type {
+  CommandResult,
+  GitCommitResult,
+  GitDiffResult,
+  GitStatusResult,
+  WorkspaceRoot,
+  WorkspaceTextFile,
+  WorkspaceTreeEntry,
+  WorkspaceTreeResult,
+} from '@/types/workspace'
 import { getApiBase } from '@/utils/env'
 
 interface WorkspaceApiDeps {
@@ -42,6 +51,53 @@ export function createWorkspaceApi({ request, getToken, ensureTokenLoaded }: Wor
       const params = new URLSearchParams({ root_id: rootId, path })
       if (showIgnored) params.set('show_ignored', '1')
       return request<WorkspaceTreeResult>(`/workspace/tree?${params.toString()}`)
+    },
+
+    workspaceWrite: (rootId: string, path: string, content: string, baseHash: string) =>
+      request<{ file: WorkspaceTextFile }>('/workspace/file', {
+        method: 'PUT',
+        body: JSON.stringify({ root_id: rootId, path, content, base_hash: baseHash }),
+      }),
+
+    workspaceRun: (rootId: string, command: string, timeoutMs = 60000) =>
+      request<CommandResult>('/workspace/run', {
+        method: 'POST',
+        body: JSON.stringify({ root_id: rootId, command, timeout_ms: timeoutMs }),
+      }),
+
+    gitStatus: (rootId: string) =>
+      request<GitStatusResult>(`/git/status?root_id=${encodeURIComponent(rootId)}`),
+
+    gitDiff: (rootId: string, path: string, staged = false) => {
+      const params = new URLSearchParams({ root_id: rootId, path })
+      if (staged) params.set('staged', '1')
+      return request<GitDiffResult>(`/git/diff?${params.toString()}`)
+    },
+
+    gitStage: (rootId: string, paths: string[]) =>
+      request<GitStatusResult>('/git/stage', {
+        method: 'POST',
+        body: JSON.stringify({ root_id: rootId, paths }),
+      }),
+
+    gitUnstage: (rootId: string, paths: string[]) =>
+      request<GitStatusResult>('/git/unstage', {
+        method: 'POST',
+        body: JSON.stringify({ root_id: rootId, paths }),
+      }),
+
+    gitCommit: (rootId: string, message: string) =>
+      request<GitCommitResult>('/git/commit', {
+        method: 'POST',
+        body: JSON.stringify({ root_id: rootId, message, confirm: true }),
+      }),
+
+    workspaceSearch: (rootId: string, q: string, showIgnored = false) => {
+      const params = new URLSearchParams({ root_id: rootId, q })
+      if (showIgnored) params.set('show_ignored', '1')
+      return request<{ query: string; entries: WorkspaceTreeEntry[]; truncated: boolean; scanned: number }>(
+        `/workspace/search?${params.toString()}`,
+      )
     },
 
     workspaceFile: (rootId: string, path: string) => {

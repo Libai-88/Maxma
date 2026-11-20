@@ -22,6 +22,19 @@ export interface BrowserState {
   error?: { code: number; description: string; url: string }
 }
 
+export interface BrowserCapture {
+  dataUrl: string
+  width: number
+  height: number
+}
+
+export interface BrowserPickedElement {
+  selector: string
+  tag: string
+  text: string
+  href: string
+}
+
 export interface MaxmaBrowserBridge {
   show: (bounds: BrowserBounds) => Promise<BrowserState>
   hide: () => Promise<void>
@@ -33,6 +46,8 @@ export interface MaxmaBrowserBridge {
   reload: () => Promise<void>
   stop: () => Promise<void>
   external: () => Promise<void>
+  capture: () => Promise<BrowserCapture>
+  pickElement: () => Promise<BrowserPickedElement | null>
   clearData: () => Promise<BrowserState>
   onState: (callback: (state: BrowserState) => void) => void
   offState: () => void

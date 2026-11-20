@@ -98,6 +98,51 @@ export function ChatInput(props: ChatInputProps) {
     return () => window.removeEventListener('maxma:add-file-ref', handler)
   }, [sessionId])
 
+  // 浏览器截图标注：data URL → 上传 → 图片引用，和普通粘贴图片走同一条链路。
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ dataUrl?: unknown; label?: unknown; sessionId?: unknown }>).detail
+      if (!detail || typeof detail.dataUrl !== 'string' || typeof detail.label !== 'string') return
+      if ((detail.sessionId ?? null) !== (sessionId ?? null)) return
+      void (async () => {
+        setUploading(true)
+        try {
+          const comma = (detail.dataUrl as string).indexOf(',')
+          const binary = atob((detail.dataUrl as string).slice(comma + 1))
+          const bytes = new Uint8Array(binary.length)
+          for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index)
+          const file = new File([bytes], detail.label as string, { type: 'image/png' })
+          const res = await api.uploadImage(file)
+          setRefs((prev) => [...prev, {
+            type: 'image',
+            label: res.filename,
+            path: res.path,
+            preview: URL.createObjectURL(file),
+          } as ParsedRef])
+          setNotice('截图已加入对话')
+        } catch (e) {
+          setNotice('截图上传失败：' + (e instanceof Error ? e.message : String(e)))
+        } finally {
+          setUploading(false)
+        }
+      })()
+    }
+    window.addEventListener('maxma:add-image-ref', handler)
+    return () => window.removeEventListener('maxma:add-image-ref', handler)
+  }, [sessionId])
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ text?: unknown; sessionId?: unknown }>).detail
+      if (!detail || typeof detail.text !== 'string') return
+      if ((detail.sessionId ?? null) !== (sessionId ?? null)) return
+      setText((prev) => prev ? `${prev}\n${detail.text}` : detail.text as string)
+      setNotice('已插入元素选择器')
+    }
+    window.addEventListener('maxma:append-composer', handler)
+    return () => window.removeEventListener('maxma:append-composer', handler)
+  }, [sessionId])
+
   useEffect(() => {
     if (!providerId && models[0]) setProviderId(models[0].provider)
     if (!modelName && models[0]) setModelName(models[0].name)

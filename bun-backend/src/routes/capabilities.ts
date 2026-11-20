@@ -288,14 +288,15 @@ function buildManifest(deps: CapabilitiesDeps, gathered: Record<string, unknown>
 
   features.rules = { enabled: true, custom_rules: true };
 
-  // Workbench 2.0：P0/P1 开放只读文件接口与桌面内置浏览器；编辑器/终端按阶段打开。
+  // Workbench 2.0：文件读写、编辑器、变更/diff、命令运行器、任务面板与浏览器
+  // 均已在桌面端落地；终端仍是诚实降级：只有无 TTY 的命令运行器。
   // 这些是 UI 能力，不是 Agent 工具的路径白名单。
   features.workbench = {
-    files: { enabled: true, scope: "workspace", mode: "readonly", desktop_only: true },
-    browser: { enabled: true, scope: "desktop", desktop_only: true, reason: null },
-    editor: { enabled: false, reason: "phase2" },
-    terminal: { enabled: false, reason: "phase2" },
-    git: { enabled: false, reason: "phase2" },
+    files: { enabled: true, scope: "workspace", mode: "readwrite", desktop_only: true },
+    browser: { enabled: true, scope: "desktop", desktop_only: true, reason: null, agent_control: true },
+    editor: { enabled: true, runtime: "codemirror", conflict: "base_hash" },
+    terminal: { enabled: false, reason: "command-runner-only", commands: true },
+    git: { enabled: Boolean(Bun.which("git")), runtime: "system-git", write: "approval-required", push: false },
   };
 
   const tools = (gathered.tools as Array<Record<string, unknown>>) ?? [];

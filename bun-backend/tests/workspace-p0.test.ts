@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { spawnSync } from "node:child_process";
 import type { Hono } from "hono";
 
 import { authHeaderFor } from "./_helpers/auth";
@@ -239,6 +240,172 @@ describe("workspace P0", () => {
       body: JSON.stringify({ label: "不存在" }),
     });
     expect(missing.status).toBe(404);
+  });
+
+  test("search：递归匹配文件名，跳过忽略目录，拒绝空查询", async () => {
+    fs.mkdirSync(path.join(workspaceDir, "src", "deep"), { recursive: true });
+    fs.mkdirSync(path.join(workspaceDir, "node_modules", "pkg"), { recursive: true });
+    fs.writeFileSync(path.join(workspaceDir, "src", "deep", "needle-notes.md"), "nested\n", "utf8");
+    fs.writeFileSync(path.join(workspaceDir, "node_modules", "pkg", "needle-hidden.js"), "hidden\n", "utf8");
+    fs.writeFileSync(path.join(workspaceDir, "root-needle.txt"), "root\n", "utf8");
+    const app = await makeApp();
+    const root = await addRoot(app, workspaceDir);
+
+    const found = await call(app, `/api/workspace/search?root_id=${encodeURIComponent(root.id)}&q=${encodeURIComponent("needle")}`);
+    expect(found.status).toBe(200);
+    const body = (await found.json()) as { entries: Array<{ path: string }>; truncated: boolean };
+    expect(body.entries.map((item) => item.path)).toEqual([
+      "root-needle.txt",
+      "src/deep/needle-notes.md",
+    ]);
+    expect(body.truncated).toBe(false);
+
+    const ignored = await call(app, `/api/workspace/search?root_id=${encodeURIComponent(root.id)}&q=needle&show_ignored=1`);
+    expect(ignored.status).toBe(200);
+    expect(((await ignored.json()) as { entries: Array<{ path: string }> }).entries).toContainEqual(
+      expect.objectContaining({ path: "node_modules/pkg/needle-hidden.js" }),
+    );
+
+    const empty = await call(app, `/api/workspace/search?root_id=${encodeURIComponent(root.id)}&q=`);
+    expect(empty.status).toBe(400);
+  });
+
+  test("write：base_hash 保护、原子保存与冲突拒绝", async () => {
+    fs.writeFileSync(path.join(workspaceDir, "edit-me.txt"), "first\n", "utf8");
+    const app = await makeApp();
+    const root = await addRoot(app, workspaceDir);
+    const read = await call(app, `/api/workspace/file?root_id=${encodeURIComponent(root.id)}&path=edit-me.txt`);
+    const file = ((await read.json()) as { file: { hash: string; content: string } }).file;
+    expect(file.content).toBe("first\n");
+
+    const saved = await call(app, "/api/workspace/file", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ root_id: root.id, path: "edit-me.txt", content: "second\n", base_hash: file.hash }),
+    });
+    expect(saved.status).toBe(200);
+    expect(fs.readFileSync(path.join(workspaceDir, "edit-me.txt"), "utf8")).toBe("second\n");
+
+    const stale = await call(app, "/api/workspace/file", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ root_id: root.id, path: "edit-me.txt", content: "stale\n", base_hash: file.hash }),
+    });
+    expect(stale.status).toBe(409);
+    expect(fs.readFileSync(path.join(workspaceDir, "edit-me.txt"), "utf8")).toBe("second\n");
+  });
+
+  test("git：只读 status/diff，非仓库降级", async () => {
+    const run = (...args: string[]) => {
+      const result = spawnSync("git", args, { cwd: workspaceDir, encoding: "utf8" });
+      if (result.status !== 0) throw new Error(result.stderr || `git ${args.join(" ")} failed`);
+      return result.stdout.trim();
+    };
+    run("init", "-b", "main");
+    run("config", "user.email", "test@example.com");
+    run("config", "user.name", "Tester");
+    fs.writeFileSync(path.join(workspaceDir, "tracked.txt"), "one\n", "utf8");
+    run("add", "tracked.txt");
+    run("commit", "-m", "init");
+    fs.writeFileSync(path.join(workspaceDir, "tracked.txt"), "two\n", "utf8");
+    fs.writeFileSync(path.join(workspaceDir, "new.txt"), "untracked\n", "utf8");
+
+    const app = await makeApp();
+    const root = await addRoot(app, workspaceDir);
+    const status = await call(app, `/api/git/status?root_id=${encodeURIComponent(root.id)}`);
+    expect(status.status).toBe(200);
+    const body = (await status.json()) as {
+      isRepo: boolean;
+      branch: string | null;
+      files: Array<{ path: string; untracked: boolean; worktree: string }>;
+    };
+    expect(body.isRepo).toBe(true);
+    expect(body.branch).toBe("main");
+    expect(body.files).toContainEqual(expect.objectContaining({ path: "tracked.txt", worktree: "M" }));
+    expect(body.files).toContainEqual(expect.objectContaining({ path: "new.txt", untracked: true }));
+
+    const diff = await call(app, `/api/git/diff?root_id=${encodeURIComponent(root.id)}&path=tracked.txt`);
+    expect(diff.status).toBe(200);
+    const diffBody = (await diff.json()) as { patch: string; untracked: boolean };
+    expect(diffBody.patch).toContain("-one");
+    expect(diffBody.patch).toContain("+two");
+    expect(diffBody.untracked).toBe(false);
+
+    const untrackedDiff = await call(app, `/api/git/diff?root_id=${encodeURIComponent(root.id)}&path=new.txt`);
+    expect(untrackedDiff.status).toBe(200);
+    expect(((await untrackedDiff.json()) as { untracked: boolean }).untracked).toBe(true);
+  });
+
+  test("git：非仓库根返回 isRepo=false", async () => {
+    const app = await makeApp();
+    const root = await addRoot(app, workspaceDir);
+    const response = await call(app, `/api/git/status?root_id=${encodeURIComponent(root.id)}`);
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as { isRepo: boolean }).isRepo).toBe(false);
+  });
+
+  test("run：命令在工作区根执行、空命令拒绝", async () => {
+    const app = await makeApp();
+    const root = await addRoot(app, workspaceDir);
+    const response = await call(app, "/api/workspace/run", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ root_id: root.id, command: 'node -e "console.log(process.cwd())"', timeout_ms: 10000 }),
+    });
+    expect(response.status).toBe(200);
+    const result = (await response.json()) as { exitCode: number; stdout: string; timedOut: boolean };
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.toLowerCase()).toContain(path.basename(workspaceDir).toLowerCase());
+    expect(result.timedOut).toBe(false);
+
+    const empty = await call(app, "/api/workspace/run", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ root_id: root.id, command: "" }),
+    });
+    expect(empty.status).toBe(400);
+  });
+
+  test("git 写：stage/commit 需显式确认，不自动 push", async () => {
+    const run = (...args: string[]) => {
+      const result = spawnSync("git", args, { cwd: workspaceDir, encoding: "utf8" });
+      if (result.status !== 0) throw new Error(result.stderr || `git ${args.join(" ")} failed`);
+      return result.stdout.trim();
+    };
+    run("init", "-b", "main");
+    run("config", "user.email", "test@example.com");
+    run("config", "user.name", "Tester");
+    fs.writeFileSync(path.join(workspaceDir, "a.txt"), "hello\n", "utf8");
+
+    const app = await makeApp();
+    const root = await addRoot(app, workspaceDir);
+    const staged = await call(app, "/api/git/stage", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ root_id: root.id, paths: ["a.txt"] }),
+    });
+    expect(staged.status).toBe(200);
+    expect(((await staged.json()) as { files: Array<{ path: string; staged: boolean }> }).files).toContainEqual(
+      expect.objectContaining({ path: "a.txt", staged: true }),
+    );
+
+    const noConfirm = await call(app, "/api/git/commit", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ root_id: root.id, message: "add a", confirm: false }),
+    });
+    expect(noConfirm.status).toBe(400);
+
+    const committed = await call(app, "/api/git/commit", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ root_id: root.id, message: "add a", confirm: true }),
+    });
+    expect(committed.status).toBe(200);
+    const commitBody = (await committed.json()) as { commit: string | null; branch: string | null };
+    expect(commitBody.commit).toBeTruthy();
+    expect(commitBody.branch).toBe("main");
+    expect(run("log", "-1", "--pretty=%s")).toBe("add a");
   });
 
   test("select-file 不再静默成功", async () => {

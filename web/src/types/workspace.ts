@@ -33,3 +33,49 @@ export interface WorkspaceTextFile {
   size: number
   hash: string
 }
+
+export interface GitFileStatus {
+  path: string
+  oldPath?: string
+  index: string
+  worktree: string
+  staged: boolean
+  untracked: boolean
+  deleted: boolean
+  renamed: boolean
+}
+
+export interface GitStatusResult {
+  isRepo: boolean
+  branch: string | null
+  head: string | null
+  detached: boolean
+  files: GitFileStatus[]
+  truncated: boolean
+  repoRoot: string | null
+}
+
+export interface GitDiffResult {
+  path: string
+  staged: boolean
+  patch: string
+  untracked: boolean
+  truncated: boolean
+}
+
+export interface CommandResult {
+  command: string
+  stdout: string
+  stderr: string
+  exitCode: number | null
+  signal: string | null
+  timedOut: boolean
+  truncated: boolean
+  durationMs: number
+}
+
+export interface GitCommitResult {
+  commit: string | null
+  branch: string | null
+  summary: string
+}

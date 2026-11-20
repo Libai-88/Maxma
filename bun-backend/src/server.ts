@@ -61,6 +61,7 @@ import { currentPluginHttpHandlers, ensurePluginBridgeInstalled, disposeDshPlugi
 import { createPluginHttpBridge } from "./plugins/dsh/http-bridge";
 import { createFileRoutes } from "./routes/files";
 import { createWorkspaceRoutes } from "./routes/workspace";
+import { createGitRoutes } from "./routes/git";
 import { createDiagnosticsRoutes } from "./routes/diagnostics";
 import { createCapabilitiesRoutes } from "./routes/capabilities";
 import { startBackgroundSync, stopBackgroundSync } from "./services/opencode-zen";
@@ -298,6 +299,7 @@ app.route("/", createExtensionsRoutes());
   app.route("/", createPluginsRoutes());
   app.route("/", createFileRoutes());
   app.route("/", createWorkspaceRoutes());
+  app.route("/", createGitRoutes());
 
   // 2.5b：diagnostics（错误报告 + 前端诊断上报）
   app.route("/", createDiagnosticsRoutes());

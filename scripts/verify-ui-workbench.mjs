@@ -9,7 +9,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import { requireBun } from "./_bun-bin.mjs";
 
 const REPO = path.resolve(import.meta.dir, "..");
@@ -19,6 +19,7 @@ const localBun = path.join(REPO, "bun-sidecar", process.platform === "win32" ? "
 let backend = null;
 let dataDir = "";
 let workspaceDir = "";
+let backendOut = "";
 
 async function waitHealth(timeoutMs = 60_000) {
   const deadline = Date.now() + timeoutMs;
@@ -51,6 +52,16 @@ if (!process.env.BASE) {
     path.join(workspaceDir, "dot.png"),
     Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64"),
   );
+  fs.writeFileSync(path.join(workspaceDir, ".gitignore"), "node_modules/\n*.maxma-*.tmp\n", "utf8");
+
+  // P2/P3 变更面板需要真实 Git 仓库；初始提交后再制造一处工作区修改。
+  const git = (...args) => execFileSync("git", args, { cwd: workspaceDir, encoding: "utf8" });
+  git("init", "-b", "main");
+  git("config", "user.name", "Maxma UI");
+  git("config", "user.email", "ui@maxma.local");
+  git("add", "-A");
+  git("commit", "-m", "initial workspace");
+  fs.writeFileSync(path.join(workspaceDir, "src", "main.ts"), "export const ok = true;\nexport const changedOnDisk = true;\n", "utf8");
 
   const bun = fs.existsSync(localBun) ? localBun : requireBun({ root: REPO, what: "Workbench 文件面板验证" });
   backend = spawn(bun, ["run", path.join(REPO, "bun-backend", "src", "server.ts")], {    cwd: path.join(REPO, "bun-backend"),
@@ -66,6 +77,8 @@ if (!process.env.BASE) {
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
+  backend.stdout?.on("data", (chunk) => { backendOut += String(chunk); });
+  backend.stderr?.on("data", (chunk) => { backendOut += String(chunk); });
 }
 
 const failures = [];
@@ -121,6 +134,9 @@ try {
     if (result.consoleErrors?.length) fail(`浏览器 console 有 ${result.consoleErrors.length} 条错误`);
   }
   if (exitCode !== 0 && !failures.length) fail(`界面驱动退出码非 0：${exitCode}`);
+  if (failures.length && backendOut) {
+    console.error("后端输出尾部：\n" + backendOut.slice(-2500));
+  }
 } catch (error) {
   fail(String(error?.message ?? error));
 } finally {

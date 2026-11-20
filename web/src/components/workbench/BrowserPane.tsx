@@ -7,12 +7,13 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { ArrowLeft, ArrowRight, ExternalLink, Globe2, Loader2, RotateCw, ShieldCheck, Trash2, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Camera, ExternalLink, Globe2, Loader2, MousePointerClick, RotateCw, ShieldCheck, Trash2, X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import type { BrowserBounds, BrowserState } from '@/types/desktop'
+import type { BrowserBounds, BrowserCapture, BrowserState } from '@/types/desktop'
+import { ScreenshotAnnotator } from '@/components/workbench/ScreenshotAnnotator'
 
 const DEFAULT_URL = 'https://www.bing.com'
 
@@ -34,14 +35,19 @@ function errorText(error: BrowserState['error']): string {
 interface BrowserPaneProps {
   /** 命令面板等浮层打开时，原生 view 必须让开。 */
   overlayOpen: boolean
+  /** 截图/元素引用只回填到当前会话。 */
+  sessionId: string | null
 }
 
-export function BrowserPane({ overlayOpen }: BrowserPaneProps) {
+export function BrowserPane({ overlayOpen, sessionId }: BrowserPaneProps) {
   const bridge = window.maxmaDesktop?.browser
   const [state, setState] = useState<BrowserState | null>(null)
   const [address, setAddress] = useState(DEFAULT_URL)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [notice, setNotice] = useState('')
+  const [shot, setShot] = useState<BrowserCapture | null>(null)
+  const [picking, setPicking] = useState(false)
   const viewportRef = useRef<HTMLDivElement>(null)
   const addressRef = useRef<HTMLInputElement>(null)
   const visibleRef = useRef(false)
@@ -72,7 +78,7 @@ export function BrowserPane({ overlayOpen }: BrowserPaneProps) {
 
   useEffect(() => {
     if (!bridge) return
-    if (overlayOpen) {
+    if (overlayOpen || shot) {
       visibleRef.current = false
       void bridge.hide()
       return
@@ -125,7 +131,46 @@ export function BrowserPane({ overlayOpen }: BrowserPaneProps) {
       observer.disconnect()
       window.removeEventListener('resize', schedule)
     }
-  }, [bridge, overlayOpen])
+  }, [bridge, overlayOpen, shot])
+
+  const annotate = async () => {
+    if (!bridge) return
+    setError('')
+    try {
+      const capture = await bridge.capture()
+      setShot(capture)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    }
+  }
+
+  const pickElement = async () => {
+    if (!bridge || picking) return
+    setPicking(true)
+    setNotice('在网页里点击要引用的元素，Esc 取消')
+    try {
+      const picked = await bridge.pickElement()
+      if (!picked) {
+        setNotice('已取消元素拾取')
+        return
+      }
+      const text = `引用网页元素：${picked.selector}${picked.text ? `（${picked.text.slice(0, 80)}）` : ''}`
+      window.dispatchEvent(new CustomEvent('maxma:append-composer', { detail: { text, sessionId } }))
+      setNotice(`已拾取 ${picked.tag} 元素并插入输入框`)
+    } catch (reason) {
+      setNotice(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setPicking(false)
+    }
+  }
+
+  const sendShot = (dataUrl: string) => {
+    window.dispatchEvent(new CustomEvent('maxma:add-image-ref', {
+      detail: { dataUrl, label: `browser-${Date.now()}.png`, sessionId },
+    }))
+    setShot(null)
+    setNotice('截图已加入对话输入框')
+  }
 
   const go = async (url: string) => {
     if (!bridge) return
@@ -230,6 +275,28 @@ export function BrowserPane({ overlayOpen }: BrowserPaneProps) {
           size="icon"
           variant="ghost"
           className="h-7 w-7"
+          aria-label="截图并标注"
+          title="截图并标注"
+          disabled={!bridge || !state?.url || state.url === 'about:blank'}
+          onClick={() => void annotate()}
+        >
+          <Camera className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7"
+          aria-label="拾取网页元素"
+          title="拾取网页元素并插入输入框"
+          disabled={!bridge || !state?.url || state.url === 'about:blank' || picking}
+          onClick={() => void pickElement()}
+        >
+          <MousePointerClick className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7"
           aria-label="在系统浏览器打开"
           title="在系统浏览器打开"
           disabled={!bridge || !state?.url}
@@ -253,6 +320,11 @@ export function BrowserPane({ overlayOpen }: BrowserPaneProps) {
       {error && (
         <div className="border-b border-destructive/30 bg-destructive/10 px-3 py-1.5 text-caption text-destructive" role="status">
           {error}
+        </div>
+      )}
+      {notice && (
+        <div className="border-b border-border/60 bg-accent/30 px-3 py-1.5 text-caption text-muted-foreground" role="status">
+          {notice}
         </div>
       )}
 
@@ -280,6 +352,14 @@ export function BrowserPane({ overlayOpen }: BrowserPaneProps) {
         <ShieldCheck className="h-3 w-3 text-success" aria-hidden />
         <span>独立浏览器会话 · 网页无本地文件与 Maxma 界面访问权限</span>
       </div>
+
+      {shot && (
+        <ScreenshotAnnotator
+          image={shot}
+          onClose={() => setShot(null)}
+          onSend={sendShot}
+        />
+      )}
     </div>
   )
 }

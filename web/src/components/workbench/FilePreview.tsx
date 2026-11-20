@@ -6,14 +6,17 @@
  * 不引入完整 highlight.js，避免为右侧预览增加启动成本。
  */
 
-import { useMemo } from 'react'
-import { Copy, ExternalLink, FileWarning, FolderOpen, Plus, X } from 'lucide-react'
+import { lazy, Suspense, useMemo } from 'react'
+import { Copy, ExternalLink, FileWarning, FolderOpen, Pencil, Plus, Save, X } from 'lucide-react'
 
 import { Markdown } from '@/components/common/Markdown'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { WorkspaceTreeEntry } from '@/types/workspace'
 import { breadcrumbSegments } from './fileTreeModel'
+
+// CodeMirror 只在进入编辑态才加载，避免拖慢聊天主包。
+const FileEditor = lazy(() => import('./FileEditor').then((module) => ({ default: module.FileEditor })))
 
 export interface PreviewTab {
   path: string
@@ -26,17 +29,30 @@ export interface PreviewTab {
 export type PreviewData =
   | { kind: 'loading' }
   | { kind: 'text'; content: string; hash?: string; truncated?: boolean }
-  | { kind: 'markdown'; content: string; truncated?: boolean }
+  | { kind: 'markdown'; content: string; hash?: string; truncated?: boolean }
   | { kind: 'image'; url: string; size: number; mime: string }
   | { kind: 'pdf'; url: string; size: number }
   | { kind: 'binary'; message: string }
   | { kind: 'error'; message: string }
+
+export interface EditorDraft {
+  content: string
+  original: string
+  baseHash: string
+  dirty: boolean
+  saving: boolean
+  error: string
+  conflict: boolean
+}
 
 interface FilePreviewProps {
   tabs: PreviewTab[]
   activePath: string
   rootLabel: string
   preview: PreviewData | null
+  editing: boolean
+  draft: EditorDraft | null
+  dirtyPaths: Set<string>
   onSelect: (path: string) => void
   onClose: (path: string) => void
   onNavigate: (path: string) => void
@@ -44,6 +60,10 @@ interface FilePreviewProps {
   onReveal: (tab: PreviewTab) => void
   onCopyPath: (tab: PreviewTab) => void
   onOpenExternal?: (tab: PreviewTab) => void
+  onToggleEdit: () => void
+  onChangeDraft: (content: string) => void
+  onSave: () => void
+  onReload: () => void
 }
 
 const LANGS = new Set(['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'json', 'css', 'scss', 'html', 'py', 'go', 'rs', 'sh', 'bash', 'yml', 'yaml', 'toml', 'sql', 'md'])
@@ -123,7 +143,23 @@ function CodeView({ content, name }: { content: string; name: string }) {
   )
 }
 
-function PreviewBody({ tab, preview, onOpenExternal }: { tab: PreviewTab; preview: PreviewData | null; onOpenExternal?: (tab: PreviewTab) => void }) {
+function PreviewBody({
+  tab,
+  preview,
+  editing,
+  draft,
+  onChangeDraft,
+  onSave,
+  onOpenExternal,
+}: {
+  tab: PreviewTab
+  preview: PreviewData | null
+  editing: boolean
+  draft: EditorDraft | null
+  onChangeDraft: (content: string) => void
+  onSave: () => void
+  onOpenExternal?: (tab: PreviewTab) => void
+}) {
   if (!preview || preview.kind === 'loading') {
     return <div className="flex flex-1 items-center justify-center text-caption text-muted-foreground">加载中…</div>
   }
@@ -144,6 +180,18 @@ function PreviewBody({ tab, preview, onOpenExternal }: { tab: PreviewTab; previe
   }
   if (preview.kind === 'pdf') {
     return <iframe src={preview.url} title={tab.name} className="min-h-0 flex-1 rounded-md border border-border bg-card" />
+  }
+  if (editing && draft && !preview.truncated) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col gap-1">
+        {extOf(tab.name) === 'html' || extOf(tab.name) === 'htm' ? (
+          <div className="rounded-md border border-border bg-accent/30 px-2 py-1.5 text-caption text-muted-foreground">编辑 HTML 源码；保存后仍需从文件面板显式用系统浏览器打开，不会注入主界面。</div>
+        ) : null}
+        <Suspense fallback={<div className="grid min-h-0 flex-1 place-items-center text-xs text-muted-foreground">正在加载编辑器…</div>}>
+          <FileEditor path={tab.path} name={tab.name} value={draft.content} onChange={onChangeDraft} onSave={onSave} autoFocus />
+        </Suspense>
+      </div>
+    )
   }
   if (preview.kind === 'markdown') {
     return (
@@ -168,22 +216,45 @@ function PreviewBody({ tab, preview, onOpenExternal }: { tab: PreviewTab; previe
   )
 }
 
-export function FilePreview({ tabs, activePath, rootLabel, preview, onSelect, onClose, onNavigate, onAddToChat, onReveal, onCopyPath, onOpenExternal }: FilePreviewProps) {
+export function FilePreview({
+  tabs,
+  activePath,
+  rootLabel,
+  preview,
+  editing,
+  draft,
+  dirtyPaths,
+  onSelect,
+  onClose,
+  onNavigate,
+  onAddToChat,
+  onReveal,
+  onCopyPath,
+  onOpenExternal,
+  onToggleEdit,
+  onChangeDraft,
+  onSave,
+  onReload,
+}: FilePreviewProps) {
   const active = tabs.find((tab) => tab.path === activePath) ?? null
   if (!active) {
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border p-6 text-center">
         <FolderOpen className="size-6 text-muted-foreground" />
-        <p className="text-caption text-muted-foreground">从左侧文件树选一个文件；预览只读。</p>
+        <p className="text-caption text-muted-foreground">从左侧文件树选一个文件；文本文件可编辑。</p>
       </div>
     )
   }
+  const editable = Boolean(preview && (preview.kind === 'text' || preview.kind === 'markdown') && !preview.truncated)
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-1.5">
       <div className="flex min-h-8 items-center gap-1 overflow-x-auto scrollbar-thin border-b border-border pb-2">
         {tabs.map((tab) => (
           <span key={tab.path} className={cn('flex shrink-0 items-center rounded-md border border-border text-caption', tab.path === activePath ? 'bg-accent text-foreground' : 'bg-card/40 text-muted-foreground')}>
-            <button type="button" className="max-w-40 truncate px-2 py-1 text-left" title={tab.path} onClick={() => onSelect(tab.path)}>{tab.name}</button>
+            <button type="button" className="max-w-40 truncate px-2 py-1 text-left" title={tab.path} onClick={() => onSelect(tab.path)}>
+              {dirtyPaths.has(tab.path) && <span className="mr-1 inline-block size-1.5 rounded-full bg-primary align-middle" aria-label="有未保存修改" />}
+              {tab.name}
+            </button>
             <button type="button" className="px-1 py-1 hover:text-foreground" aria-label={`关闭 ${tab.name}`} onClick={() => onClose(tab.path)}><X className="size-3" /></button>
           </span>
         ))}
@@ -203,15 +274,42 @@ export function FilePreview({ tabs, activePath, rootLabel, preview, onSelect, on
               </span>
             ))}
           </nav>
-          <p className="text-micro text-muted-foreground">{formatBytes(active.size)} · {new Date(active.mtime).toLocaleString()}</p>
+          <p className="text-micro text-muted-foreground">
+            {formatBytes(active.size)} · {new Date(active.mtime).toLocaleString()}
+            {draft?.dirty ? ' · 未保存' : ''}
+          </p>
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
+          {editable && (
+            <Button variant={editing ? 'secondary' : 'ghost'} size="xs" aria-pressed={editing} onClick={onToggleEdit}>
+              <Pencil className="mr-1 size-3.5" />{editing ? '预览' : '编辑'}
+            </Button>
+          )}
+          {editing && (
+            <Button variant="ghost" size="icon-xs" aria-label="保存文件" title="保存（Ctrl+S）" disabled={!draft?.dirty || draft.saving} onClick={onSave}>
+              <Save className="size-3.5" />
+            </Button>
+          )}
           <Button variant="ghost" size="icon-xs" aria-label="加入对话" title="加入对话" onClick={() => onAddToChat(active)}><Plus className="size-3.5" /></Button>
           <Button variant="ghost" size="icon-xs" aria-label="复制相对路径" title="复制相对路径" onClick={() => onCopyPath(active)}><Copy className="size-3.5" /></Button>
           <Button variant="ghost" size="icon-xs" aria-label="在资源管理器显示" title="在资源管理器显示" onClick={() => onReveal(active)}><FolderOpen className="size-3.5" /></Button>
         </div>
       </div>
-      <PreviewBody tab={active} preview={preview} onOpenExternal={onOpenExternal} />
+      {draft?.error && (
+        <div className="flex items-center justify-between gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-caption text-destructive">
+          <span className="min-w-0 flex-1">{draft.error}</span>
+          {draft.conflict && <Button variant="ghost" size="xs" onClick={onReload}>重新加载</Button>}
+        </div>
+      )}
+      <PreviewBody
+        tab={active}
+        preview={preview}
+        editing={editing}
+        draft={draft}
+        onChangeDraft={onChangeDraft}
+        onSave={onSave}
+        onOpenExternal={onOpenExternal}
+      />
     </div>
   )
 }

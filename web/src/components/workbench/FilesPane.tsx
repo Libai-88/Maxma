@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import type { WorkspaceRoot, WorkspaceTreeEntry } from '@/types/workspace'
-import { FilePreview, type PreviewData, type PreviewTab } from './FilePreview'
+import { FilePreview, type EditorDraft, type PreviewData, type PreviewTab } from './FilePreview'
 import { FileTree } from './FileTree'
 
 interface ContextMenuState {
@@ -53,6 +53,9 @@ export function FilesPane({ sessionId }: { sessionId?: string }) {
   const [tabs, setTabs] = useState<PreviewTab[]>([])
   const [activePath, setActivePath] = useState('')
   const [previews, setPreviews] = useState<Record<string, PreviewData>>({})
+  const [drafts, setDrafts] = useState<Record<string, EditorDraft>>({})
+  const [statPatch, setStatPatch] = useState<{ path: string; size: number; mtime: number; token: number } | null>(null)
+  const [editingPath, setEditingPath] = useState('')
   const [loadingRoots, setLoadingRoots] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -66,6 +69,11 @@ export function FilesPane({ sessionId }: { sessionId?: string }) {
   const activeRoot = useMemo(() => roots.find((root) => root.id === rootId) ?? roots[0] ?? null, [roots, rootId])
   const activeTab = tabs.find((tab) => tab.path === activePath) ?? null
   const activePreview = activeTab ? previews[activeTab.path] ?? { kind: 'loading' as const } : null
+  const activeDraft = activeTab ? drafts[activeTab.path] ?? null : null
+  const dirtyPaths = useMemo(
+    () => new Set(tabs.filter((tab) => drafts[tab.path]?.dirty).map((tab) => tab.path)),
+    [drafts, tabs],
+  )
 
   useEffect(() => {
     previewsRef.current = previews
@@ -74,9 +82,10 @@ export function FilesPane({ sessionId }: { sessionId?: string }) {
   // 关闭当前 tab 后自动落到最后一个 tab；用副作用收敛状态，
   // 不再在关闭回调里读渲染期的 tabs 闭包（快速连点会互相覆盖）。
   useEffect(() => {
+    if (editingPath && !tabs.some((tab) => tab.path === editingPath)) setEditingPath('')
     if (tabs.some((tab) => tab.path === activePath)) return
     setActivePath(tabs[tabs.length - 1]?.path ?? '')
-  }, [tabs, activePath])
+  }, [tabs, activePath, editingPath])
 
   useEffect(() => {
     return () => {
@@ -114,11 +123,22 @@ export function FilesPane({ sessionId }: { sessionId?: string }) {
     setRootId((current) => sorted.some((root) => root.id === current) ? current : sorted[0]?.id ?? '')
   }
 
+  function hasDirtyFiles(): boolean {
+    return Object.values(drafts).some((draft) => draft.dirty)
+  }
+
+  function confirmDiscardDirty(): boolean {
+    if (!hasDirtyFiles()) return true
+    return window.confirm('有未保存的文件修改。继续操作会丢弃这些修改，确定？')
+  }
+
   function resetFiles() {
     rootEpochRef.current += 1
     for (const preview of Object.values(previewsRef.current)) disposePreview(preview)
     previewsRef.current = {}
     setPreviews({})
+    setDrafts({})
+    setEditingPath('')
     setTabs([])
     setActivePath('')
     setFilter('')
@@ -128,12 +148,14 @@ export function FilesPane({ sessionId }: { sessionId?: string }) {
 
   function switchRoot(nextId: string) {
     if (nextId === rootId) return
+    if (!confirmDiscardDirty()) return
     resetFiles()
     setRootId(nextId)
     setRoots((current) => current.map((root) => root.id === nextId ? { ...root, last_used_at: Date.now() } : root))
   }
 
   async function chooseRoot() {
+    if (!confirmDiscardDirty()) return
     setError('')
     try {
       if (!bridge?.pickPath) {
@@ -153,6 +175,7 @@ export function FilesPane({ sessionId }: { sessionId?: string }) {
 
   async function removeRoot() {
     if (!activeRoot) return
+    if (!confirmDiscardDirty()) return
     if (!window.confirm(`移除工作区「${activeRoot.label}」？只撤销读取授权，不会删除磁盘文件。`)) return
     try {
       await api.removeWorkspaceRoot(activeRoot.id)
@@ -209,7 +232,7 @@ export function FilesPane({ sessionId }: { sessionId?: string }) {
       const result = await api.workspaceFile(root.id, entry.path)
       if (epoch !== rootEpochRef.current) return
       const preview: PreviewData = MARKDOWN_EXT.has(ext)
-        ? { kind: 'markdown', content: result.file.content }
+        ? { kind: 'markdown', content: result.file.content, hash: result.file.hash }
         : { kind: 'text', content: result.file.content, hash: result.file.hash }
       previewsRef.current = { ...previewsRef.current, [entry.path]: preview }
       setPreviews(previewsRef.current)
@@ -233,13 +256,119 @@ export function FilesPane({ sessionId }: { sessionId?: string }) {
     void loadPreview(entry)
   }
 
+  function toggleEdit() {
+    if (!activeTab) return
+    if (editingPath === activeTab.path) {
+      setEditingPath('')
+      return
+    }
+    const preview = previewsRef.current[activeTab.path]
+    if (!preview || (preview.kind !== 'text' && preview.kind !== 'markdown') || preview.truncated) {
+      setError('该文件不能编辑：只支持未截断的 UTF-8 文本。')
+      return
+    }
+    setDrafts((current) => current[activeTab.path] ? current : {
+      ...current,
+      [activeTab.path]: {
+        content: preview.content,
+        original: preview.content,
+        baseHash: preview.hash ?? '',
+        dirty: false,
+        saving: false,
+        error: '',
+        conflict: false,
+      },
+    })
+    setEditingPath(activeTab.path)
+  }
+
+  function changeDraft(content: string) {
+    if (!activeTab) return
+    setDrafts((current) => {
+      const draft = current[activeTab.path]
+      if (!draft) return current
+      return { ...current, [activeTab.path]: { ...draft, content, dirty: content !== draft.original, error: '', conflict: false } }
+    })
+  }
+
+  async function saveDraft() {
+    const root = activeRoot
+    const tab = activeTab
+    const draft = tab ? drafts[tab.path] : null
+    if (!root || !tab || !draft || !draft.dirty || draft.saving) return
+    setDrafts((current) => current[tab.path] ? { ...current, [tab.path]: { ...current[tab.path], saving: true, error: '', conflict: false } } : current)
+    try {
+      const result = await api.workspaceWrite(root.id, tab.path, draft.content, draft.baseHash)
+      const file = result.file
+      const preview: PreviewData = MARKDOWN_EXT.has(extOf(tab.name))
+        ? { kind: 'markdown', content: file.content, hash: file.hash }
+        : { kind: 'text', content: file.content, hash: file.hash }
+      previewsRef.current = { ...previewsRef.current, [tab.path]: preview }
+      setPreviews(previewsRef.current)
+      setTabs((current) => current.map((item) => item.path === tab.path ? { ...item, size: file.size, mtime: file.mtime } : item))
+      setStatPatch({ path: tab.path, size: file.size, mtime: file.mtime, token: Date.now() })
+      setDrafts((current) => ({
+        ...current,
+        [tab.path]: { content: file.content, original: file.content, baseHash: file.hash, dirty: false, saving: false, error: '', conflict: false },
+      }))
+      setNotice('已保存')
+      setTimeout(() => setNotice(''), 1800)
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      const conflict = message.includes('外部修改') || message.includes('409') || message.includes('FILE_CONFLICT')
+      setDrafts((current) => current[tab.path] ? {
+        ...current,
+        [tab.path]: { ...current[tab.path], saving: false, conflict, error: message },
+      } : current)
+    }
+  }
+
+  async function reloadDraft() {
+    const root = activeRoot
+    const tab = activeTab
+    if (!root || !tab) return
+    try {
+      const result = await api.workspaceFile(root.id, tab.path)
+      const preview: PreviewData = MARKDOWN_EXT.has(extOf(tab.name))
+        ? { kind: 'markdown', content: result.file.content, hash: result.file.hash }
+        : { kind: 'text', content: result.file.content, hash: result.file.hash }
+      previewsRef.current = { ...previewsRef.current, [tab.path]: preview }
+      setPreviews(previewsRef.current)
+      setTabs((current) => current.map((item) => item.path === tab.path ? { ...item, size: result.file.size, mtime: result.file.mtime } : item))
+      setStatPatch({ path: tab.path, size: result.file.size, mtime: result.file.mtime, token: Date.now() })
+      setDrafts((current) => ({
+        ...current,
+        [tab.path]: {
+          content: result.file.content,
+          original: result.file.content,
+          baseHash: result.file.hash,
+          dirty: false,
+          saving: false,
+          error: '',
+          conflict: false,
+        },
+      }))
+      setNotice('已重新加载磁盘版本')
+      setTimeout(() => setNotice(''), 1800)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   function closeTab(path: string) {
+    if (drafts[path]?.dirty && !window.confirm(`「${tabs.find((tab) => tab.path === path)?.name ?? path}」有未保存修改，关闭会丢弃。确定？`)) return
     const preview = previewsRef.current[path]
     disposePreview(preview)
     const nextPreviews = { ...previewsRef.current }
     delete nextPreviews[path]
     previewsRef.current = nextPreviews
     setPreviews(nextPreviews)
+    setDrafts((current) => {
+      const next = { ...current }
+      delete next[path]
+      return next
+    })
+    if (editingPath === path) setEditingPath('')
     setTabs((current) => current.filter((tab) => tab.path !== path))
   }
 
@@ -376,6 +505,7 @@ export function FilesPane({ sessionId }: { sessionId?: string }) {
           refreshToken={refreshToken}
           currentPath={activePath}
           revealPath={revealPath}
+          statPatch={statPatch}
           onOpenFile={openFile}
           onContextMenu={(entry, event: ReactMouseEvent) => {
             setMenu({ entry, x: event.clientX, y: event.clientY })
@@ -388,6 +518,9 @@ export function FilesPane({ sessionId }: { sessionId?: string }) {
         activePath={activePath}
         rootLabel={activeRoot.label}
         preview={activePreview}
+        editing={editingPath === activePath}
+        draft={activeDraft}
+        dirtyPaths={dirtyPaths}
         onSelect={(path) => setActivePath(path)}
         onClose={closeTab}
         onNavigate={(path) => {
@@ -398,6 +531,10 @@ export function FilesPane({ sessionId }: { sessionId?: string }) {
         onReveal={reveal}
         onCopyPath={copyPath}
         onOpenExternal={openExternal}
+        onToggleEdit={toggleEdit}
+        onChangeDraft={changeDraft}
+        onSave={() => void saveDraft()}
+        onReload={() => void reloadDraft()}
       />
 
       {menu && (

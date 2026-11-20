@@ -36,7 +36,7 @@ import {
   normalizeLayoutMode,
   normalizeSendMode,
   openIndexWriter,
-  PackMeta,
+  type PackMeta,
   walkPackImages,
 } from "../../../bun-shared/dsh-meme/memes";
 
@@ -87,8 +87,20 @@ function safeJsonRead<T>(file: string, fallback: T): T {
   }
 }
 
-function writeJsonAtomic(file: string, value: unknown): void {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
+/** 迁移阶段只读旧 YAML 收藏；对外投影在 legacy.ts，避免 service ↔ legacy 循环依赖。 */
+function readLegacyFavoritesYaml(): Array<Record<string, unknown>> {
+  try {
+    if (!fs.existsSync(legacyFavoritesPath())) return [];
+    const parsed = Bun.YAML.parse(fs.readFileSync(legacyFavoritesPath(), "utf8")) as {
+      favorites?: Array<Record<string, unknown>>;
+    } | null;
+    return Array.isArray(parsed?.favorites) ? parsed.favorites : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeJsonAtomic(file: string, value: unknown): void {  fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
   try {
     fs.writeFileSync(tmp, JSON.stringify(value, null, 2), "utf8");
@@ -305,7 +317,7 @@ export function runStickerMigration(): StickerMigrationReport {
     ensurePackAt(userPackDir(), { id: USER_PACK_ID, name: "我的收藏" });
 
     // M4 旧 YAML favorites → dsh-meme-user：复制图片并写索引行。
-    const favorites = legacyFavorites();
+    const favorites = readLegacyFavoritesYaml();
     if (favorites.length > 0) {
       const writer = openIndexWriter(userPackDir());
       try {
@@ -410,12 +422,12 @@ export function migrationStatus(): StickerMigrationReport | null {
 
 const CATEGORY_SAFE_RE = /^[\w\u4e00-\u9fff-]+$/;
 
-export function listPacks(): PackMeta[] {
+export function listPacks(): Array<PackMeta & { enabled: boolean }> {
   initStickerSystem();
   return scanPacksAll().map((pack) => ({
     ...pack,
     enabled: settingsEnabledIds().includes(pack.id),
-  }) as PackMeta & { enabled: boolean });
+  }));
 }
 
 function scanPacksAll(): PackMeta[] {
@@ -584,47 +596,6 @@ export function indexPayload(opts: {
     packs,
     memes: all.slice(0, limit),
   };
-}
-
-export function legacyIndex(): Record<string, unknown> {
-  initStickerSystem();
-  const out: Record<string, unknown> = {};
-  for (const id of [BUILTIN_PACK_ID, LEGACY_CUSTOM_PACK_ID]) {
-    const store = getStore(id);
-    if (!store) continue;
-    for (const row of store.rows) {
-      const category = row.path.startsWith("custom/") ? "custom" : row.path.split("/")[0] || "custom";
-      const filename = row.file_name;
-      out[row.path] = { category, filename, path: row.path };
-    }
-  }
-  return out;
-}
-
-export function legacyCategories(): Record<string, number> {
-  initStickerSystem();
-  const categories: Record<string, number> = {};
-  const builtin = getStore(BUILTIN_PACK_ID);
-  if (builtin) {
-    for (const row of builtin.rows) {
-      const category = row.path.split("/")[0] || "";
-      if (!category || category === "custom") continue;
-      categories[category] = (categories[category] || 0) + 1;
-    }
-  }
-  const legacy = getStore(LEGACY_CUSTOM_PACK_ID);
-  if (legacy?.rows.length) categories.custom = legacy.rows.length;
-  return categories;
-}
-
-export function randomByCategory(category: string): { path: string; category: string; url: string } | null {
-  initStickerSystem();
-  const store = getStore(BUILTIN_PACK_ID);
-  if (!store) return null;
-  const rows = store.rows.filter((r) => r.path.startsWith(`${category}/`));
-  if (rows.length === 0) return null;
-  const pick = rows[Math.floor(Math.random() * rows.length)]!;
-  return { path: pick.path, category, url: packUrl(BUILTIN_PACK_ID, pick.path) };
 }
 
 export function scanPack(packId: string): { added: number; removed: number } {
@@ -800,55 +771,4 @@ export function addRecent(item: Record<string, unknown>): void {
   const key = String(item.path || "");
   const next = [item, ...current.filter((x) => String(x.path || "") !== key)].slice(0, 50);
   writeJsonAtomic(recentPath(), { recent: next });
-}
-
-export function legacyFavorites(): Array<Record<string, unknown>> {
-  try {
-    if (!fs.existsSync(legacyFavoritesPath())) return [];
-    const parsed = Bun.YAML.parse(fs.readFileSync(legacyFavoritesPath(), "utf8")) as {
-      favorites?: Array<Record<string, unknown>>;
-    } | null;
-    const list = Array.isArray(parsed?.favorites) ? parsed.favorites : [];
-    return list.map((item) => ({
-      ...item,
-      path: `${item.category ?? ""}/${item.filename ?? ""}`,
-      usage_count: 0,
-    }));
-  } catch {
-    return [];
-  }
-}
-
-export function legacyRecent(): Array<Record<string, unknown>> {
-  try {
-    if (!fs.existsSync(legacyRecentPath())) return recentItems();
-    const parsed = Bun.YAML.parse(fs.readFileSync(legacyRecentPath(), "utf8")) as {
-      recent?: Array<Record<string, unknown>>;
-    } | null;
-    return Array.isArray(parsed?.recent) ? parsed.recent : [];
-  } catch {
-    return [];
-  }
-}
-
-export function recommendations(limit = 4): Array<{ category: string; filename: string; path: string; url: string }> {
-  initStickerSystem();
-  const store = getStore(BUILTIN_PACK_ID);
-  if (!store) return [];
-  const preferred = ["happy", "daily", "sad", "confused"];
-  const out: Array<{ category: string; filename: string; path: string; url: string }> = [];
-  for (const mood of preferred) {
-    const rows = store.rows.filter((r) => r.tag === mood).slice(0, 1);
-    for (const row of rows) {
-      const category = row.path.split("/")[0] || "daily";
-      out.push({
-        category,
-        filename: row.file_name,
-        path: row.path,
-        url: packUrl(BUILTIN_PACK_ID, row.path),
-      });
-    }
-    if (out.length >= limit) break;
-  }
-  return out.slice(0, Math.max(1, Math.min(12, limit)));
 }

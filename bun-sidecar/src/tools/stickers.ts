@@ -17,7 +17,7 @@ import {
   openIndexWriter,
   scanPacks,
 } from "../../../bun-shared/dsh-meme/memes";
-import { MOOD_DICT, normalizeSendMode, PackMeta, resolveMood } from "../../../bun-shared/dsh-meme/memes";
+import { MOOD_DICT, normalizeSendMode, type PackMeta, resolveMood } from "../../../bun-shared/dsh-meme/memes";
 
 const BUILTIN_PACK_ID = "maxma_builtin";
 const USER_PACK_ID = "dsh-meme-user";

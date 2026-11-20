@@ -28,7 +28,7 @@ const LEGACY_WORKSPACE_UI_STORAGE_KEY = 'maxmahere.canvas-ui-state.v1'
 const MAX_PERSISTED_CARDS = 24
 /** 单张卡片内容的最大长度（UTF-16 code units，非字节数）。 */
 const MAX_CARD_CONTENT_LENGTH = 262_144
-const WORKBENCH_TABS: ReadonlySet<WorkbenchTab> = new Set(['reasoning', 'canvas', 'files', 'browser'])
+const WORKBENCH_TABS: ReadonlySet<WorkbenchTab> = new Set(['reasoning', 'canvas', 'files', 'browser', 'changes', 'tasks', 'commands'])
 export const WORKBENCH_MIN_WIDTH = 320
 export const WORKBENCH_MAX_WIDTH = 860
 const WORKBENCH_DEFAULT_WIDTH = 380
@@ -50,6 +50,8 @@ interface WorkbenchDerived {
 interface WorkbenchState extends WorkbenchDerived {
   isOpen: boolean
   activeTab: WorkbenchTab
+  /** 每个会话最后停留的工作台 tab（并行会话切回来时不串台）。 */
+  sessionTabs: Record<string, WorkbenchTab>
   width: number
   maximized: boolean
   cards: CanvasCard[]
@@ -58,7 +60,7 @@ interface WorkbenchState extends WorkbenchDerived {
   open: () => void
   close: () => void
   toggle: () => void
-  setTab: (tab: WorkbenchTab) => void
+  setTab: (tab: WorkbenchTab, sessionId?: string) => void
   setWidth: (width: number) => void
   toggleMaximized: () => void
   addCard: (params: {
@@ -266,8 +268,11 @@ export const useWorkbenchStore = create<WorkbenchState>()((set, get) => {
     persistUiState()
   }
 
-  function setTab(tab: WorkbenchTab) {
-    patch({ activeTab: tab })
+  function setTab(tab: WorkbenchTab, sessionId?: string) {
+    patch({
+      activeTab: tab,
+      ...(sessionId ? { sessionTabs: { ...get().sessionTabs, [sessionId]: tab } } : {}),
+    })
     persistUiState()
   }
 
@@ -449,6 +454,7 @@ export const useWorkbenchStore = create<WorkbenchState>()((set, get) => {
   return {
     isOpen: _uiState.isOpen,
     activeTab: _uiState.activeTab,
+    sessionTabs: {},
     width: _uiState.width,
     maximized: _uiState.maximized,
     cards: restored.cards,

@@ -11,8 +11,11 @@ delete process.env.ELECTRON_NO_ATTACH_CONSOLE;
 
 const { app, BrowserWindow, desktopCapturer, ipcMain } = require("electron");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
+const { execFileSync } = require("node:child_process");
 const { createBrowserController } = require("../desktop/electron/browser-view.cjs");
+const { startBrowserAgentServer } = require("../desktop/electron/browser-agent-server.cjs");
 const { assertOpenableHtml } = require("../desktop/electron/path-actions.cjs");
 
 const BASE = process.env.DRIVE_BASE;
@@ -27,6 +30,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let win = null;
 let browserController = null;
+let browserAgent = null;
+let browserAgentDir = "";
 const externalUrls = [];
 
 async function waitText(target, needle, stage, timeoutMs = 45_000) {
@@ -148,6 +153,16 @@ async function checkZoomAlignment(factor) {
   return { factor, rect, native };
 }
 
+async function agentExecute(action, args = {}) {
+  const config = JSON.parse(fs.readFileSync(browserAgent.configPath, "utf8"));
+  const response = await fetch(`http://127.0.0.1:${config.port}/execute`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-maxma-browser-secret": config.secret },
+    body: JSON.stringify({ action, args }),
+  });
+  return response.json();
+}
+
 async function captureWithRetry(read, tries = 3) {
   let lastError = null;
   for (let attempt = 0; attempt < tries; attempt += 1) {
@@ -231,19 +246,47 @@ app.whenReady().then(async () => {
     partition: BROWSER_PARTITION,
   });
   browserController.registerIpc(ipcMain);
+  browserAgentDir = fs.mkdtempSync(path.join(os.tmpdir(), "maxma-uiwb-agent-"));
+  browserAgent = startBrowserAgentServer({
+    controller: browserController,
+    dataDir: browserAgentDir,
+    logger: { info() {}, warn() {} },
+  });
+  await browserAgent.start();
 
   const logs = [];
+  const ignoredWarnings = [];
   win.webContents.on("console-message", (_event, level, message) => {
-    if (level >= 2) logs.push(message);
+    if (level < 2) return;
+    // Chromium 在 CodeMirror / 滚动的 ResizeObserver 里会发这条良性循环警告；
+    // 单独记录，不混进真正的错误门禁。
+    if (message.startsWith("ResizeObserver loop completed with undelivered notifications")) {
+      ignoredWarnings.push(message);
+      return;
+    }
+    logs.push(message);
   });
   win.webContents.on("render-process-gone", (_event, details) => logs.push("render-process-gone: " + JSON.stringify(details)));
 
-  const result = { stage: "start", ok: false, checks: {}, consoleErrors: logs, externalUrls };
+  const result = { stage: "start", ok: false, checks: {}, consoleErrors: logs, ignoredWarnings, externalUrls };
   try {
     await win.webContents.session.clearCache();
     await win.loadURL(ORIGIN + "/");
     result.stage = "loaded";
     await waitText(win, "Maxma", "等待对话页加载");
+
+    // P3 浏览器 Agent：未打开浏览器 tab 时也能创建一个隐藏 view 完成加载/读取，
+    // 且绝不能突然盖住聊天区。
+    const agentHealth = ORIGIN + "/api/health";
+    const agentOpen = await agentExecute("open", { url: agentHealth });
+    if (!agentOpen.ok || !String(agentOpen.result?.url ?? "").includes("/api/health")) {
+      throw new Error("浏览器 Agent 隐藏打开失败：" + JSON.stringify(agentOpen));
+    }
+    const hiddenState = await waitBrowser((state) => state.url.includes("/api/health") && !state.loading, "Agent 隐藏加载");
+    if (hiddenState.visible) throw new Error("Agent 擅自显示了浏览器原生 view");
+    result.checks.agentHiddenView = { url: hiddenState.url, visible: hiddenState.visible };
+
+    await win.webContents.executeJavaScript("(() => { window.confirm = () => true; return true; })()");
     await ensureWorkbenchOpen(win);
     result.stage = "workbench-open";
     await waitFor(win, `[...document.querySelectorAll('[role="tab"]')].some((node) => node.innerText.trim() === "文件")`, "等待文件 tab");
@@ -363,6 +406,83 @@ app.whenReady().then(async () => {
     // 文件面板基线截图（含真实文件树/预览）
     result.screenshots.files = await captureWindow("workbench-p1-files.png");
 
+    // ── P1 收口：后端递归搜索 ─────────────────────────────
+    await setInput(win, 'input[placeholder="按文件名过滤…"]', "main");
+    await waitFor(win, `(() => {
+      const text = document.querySelector('[role="tree"]')?.innerText ?? "";
+      return text.includes("main.ts") && !text.includes("递归搜索中");
+    })()`, "递归搜索结果");
+    await waitText(win, "递归搜索", "递归搜索结果提示");
+    result.checks.search = await js(win, `({
+      tree: document.querySelector('[role="tree"]')?.innerText ?? "",
+      hint: [...document.querySelectorAll("p")].find((node) => node.innerText.includes("递归搜索"))?.innerText ?? "",
+    })`);
+    await setInput(win, 'input[placeholder="按文件名过滤…"]', "");
+
+    // ── P2 编辑器：CodeMirror、dirty、Ctrl+S 原子保存 ───────
+    await clickButton(win, `(button) => button.innerText.trim() === "编辑"`);
+    await waitFor(win, `document.querySelector('.cm-content')`, "进入编辑模式");
+    await js(win, `(() => { const el = document.querySelector('.cm-content'); el.focus(); return true; })()`);
+    win.webContents.insertText("<!--maxma-editor-smoke-->\n");
+    await waitFor(win, `document.querySelector('.cm-content')?.innerText.includes("maxma-editor-smoke")`, "输入编辑内容");
+    await waitFor(win, `(() => { const b = document.querySelector('button[aria-label="保存文件"]'); return b && !b.disabled; })()`, "dirty 保存按钮可用");
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "保存文件"`);
+    let saved = "";
+    const saveDeadline = Date.now() + 4000;
+    while (Date.now() < saveDeadline) {
+      saved = fs.readFileSync(path.join(WORKSPACE, "README.md"), "utf8");
+      if (saved.includes("maxma-editor-smoke")) break;
+      await sleep(250);
+    }
+    if (!saved.includes("maxma-editor-smoke")) throw new Error("编辑器保存没有落到磁盘");
+    await waitText(win, "已保存", "保存成功提示");
+    result.checks.editor = { saved: true, bytes: Buffer.byteLength(saved), mode: "codemirror" };
+    result.screenshots.editor = await captureWindow("workbench-p2-editor.png");
+
+    // ── P2 命令运行器：默认关闭、显式启用、真实执行 ─────────
+    await clickTab(win, "命令");
+    await waitText(win, "命令运行器默认关闭", "命令运行器默认关闭");
+    await clickButton(win, `(button) => button.innerText.includes("启用命令运行器")`);
+    await waitFor(win, `document.querySelector('input[aria-label="命令"]')`, "启用命令运行器");
+    await setInput(win, 'input[aria-label="命令"]', "echo maxma-command-ok");
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "运行命令"`);
+    await waitText(win, "maxma-command-ok", "命令真实输出");
+    await waitText(win, "exit 0", "命令退出码");
+    result.checks.commandRunner = await js(win, `({
+      output: [...document.querySelectorAll("pre")].map((node) => node.innerText).join("\\n"),
+      enabled: Boolean(document.querySelector('input[aria-label="命令"]')),
+    })`);
+    result.screenshots.commands = await captureWindow("workbench-p2-commands.png");
+
+    // ── P2 变更/diff + P3 Git 写：暂存、diff、提交、不 push ──
+    await clickTab(win, "变更");
+    await waitText(win, "README.md", "变更面板列出 README");
+    await waitText(win, "src/main.ts", "变更面板列出 main.ts");
+    await clickButton(win, `(button) => button.innerText.includes("README.md")`);
+    await waitText(win, "maxma-editor-smoke", "diff 显示编辑内容");
+    result.checks.diff = await js(win, `({
+      header: [...document.querySelectorAll("span")].map((node) => node.innerText).find((text) => text.includes("已修改")) ?? "",
+      patch: [...document.querySelectorAll("pre")].map((node) => node.innerText).join("\\n").slice(0, 500),
+    })`);
+    result.screenshots.changes = await captureWindow("workbench-p2-changes.png");
+    await clickButton(win, `(button) => button.innerText.trim() === "全部暂存"`);
+    await waitText(win, "已暂存到索引", "暂存到索引");
+    await setInput(win, 'input[aria-label="提交信息"]', "UI acceptance commit");
+    await clickButton(win, `(button) => button.innerText.trim() === "提交"`);
+    await waitText(win, "已提交", "本地提交");
+    await waitText(win, "工作区是干净的", "提交后工作区干净");
+    const gitSubject = execFileSync("git", ["log", "-1", "--pretty=%s"], { cwd: WORKSPACE, encoding: "utf8" }).trim();
+    const gitStatus = execFileSync("git", ["status", "--porcelain"], { cwd: WORKSPACE, encoding: "utf8" }).trim();
+    if (gitSubject !== "UI acceptance commit") throw new Error(`提交信息不符：${gitSubject}`);
+    if (gitStatus) throw new Error(`提交后仍有未提交变更：${gitStatus}`);
+    result.checks.gitWrite = { subject: gitSubject, clean: true, pushed: false };
+
+    // ── P2 任务/计划面板：复用现有状态，无第二套模型 ─────────
+    await clickTab(win, "任务");
+    await waitText(win, "还没有任务或计划", "任务面板空态");
+    result.checks.tasks = true;
+    result.screenshots.tasks = await captureWindow("workbench-p3-tasks.png");
+
     // 命令面板：Ctrl+P 打开，过滤并切换到浏览器
     await js(win, `window.dispatchEvent(new KeyboardEvent("keydown", { key: "p", ctrlKey: true, bubbles: true }))`);
     await waitFor(win, `document.querySelector('[role="dialog"][aria-label="命令面板"]')`, "打开命令面板");
@@ -398,6 +518,119 @@ app.whenReady().then(async () => {
     await sleep(300);
     if (externalUrls.length === 0) throw new Error("外部打开没有触发受控回调");
     result.checks.browserNav = { externalUrls: [...externalUrls] };
+
+    // ── P3 浏览器 Agent：snapshot / screenshot / 错误动作 ────
+    const agentSnapshot = await agentExecute("snapshot");
+    if (!agentSnapshot.ok || typeof agentSnapshot.result?.text !== "string" || !agentSnapshot.result.text.trim()) {
+      throw new Error("浏览器 Agent snapshot 失败：" + JSON.stringify(agentSnapshot).slice(0, 500));
+    }
+    const agentShot = await agentExecute("screenshot");
+    const shotBytes = typeof agentShot.result?.data === "string" ? Buffer.from(agentShot.result.data, "base64").length : 0;
+    if (!agentShot.ok || shotBytes < 2000) throw new Error(`浏览器 Agent 截图失败：${shotBytes} bytes`);
+    const agentUnknown = await agentExecute("rm-rf");
+    if (agentUnknown.ok) throw new Error("浏览器 Agent 接受了未知动作");
+    result.checks.browserAgent = {
+      snapshotChars: agentSnapshot.result.text.length,
+      screenshotBytes: shotBytes,
+      unknownRejected: String(agentUnknown.error ?? ""),
+    };
+
+    // ── P3 截图标注：真实截图 → 画框 → 上传为对话图片附件 ─────
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "截图并标注"`);
+    await waitFor(win, `document.querySelector('[role="dialog"][aria-label="截图标注"] canvas')`, "打开截图标注");
+    await waitBrowser((state) => state.visible === false, "标注时隐藏原生浏览器");
+    // Esc 关闭：先验证只关闭标注层，再重新打开继续下面的绘制。
+    await js(win, `(() => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); return true; })()`);
+    await waitFor(win, `!document.querySelector('[role="dialog"][aria-label="截图标注"]')`, "Esc 关闭截图标注");
+    result.checks.annotatorEscape = true;
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "截图并标注"`);
+    await waitFor(win, `document.querySelector('[role="dialog"][aria-label="截图标注"] canvas')`, "重新打开截图标注");
+    await waitBrowser((state) => state.visible === false, "重新标注时隐藏原生浏览器");
+    const canvasBefore = await js(win, `(() => {
+      const canvas = document.querySelector('[role="dialog"][aria-label="截图标注"] canvas');
+      window.__annotChecksum = () => {
+        const probe = document.createElement("canvas");
+        probe.width = canvas.width;
+        probe.height = canvas.height;
+        const context = probe.getContext("2d", { willReadFrequently: true });
+        context.drawImage(canvas, 0, 0);
+        const data = context.getImageData(0, 0, probe.width, probe.height).data;
+        let hash = 0;
+        for (let index = 0; index < data.length; index += 64) hash = (hash * 31 + data[index]) >>> 0;
+        return hash;
+      };
+      return window.__annotChecksum();
+    })()`);
+    await js(win, `(() => {
+      const canvas = document.querySelector('[role="dialog"][aria-label="截图标注"] canvas');
+      const rect = canvas.getBoundingClientRect();
+      const fire = (type, x, y) => canvas.dispatchEvent(new PointerEvent(type, {
+        bubbles: true, pointerId: 1, pointerType: "mouse", clientX: x, clientY: y,
+      }));
+      fire("pointerdown", rect.left + 24, rect.top + 24);
+      fire("pointermove", rect.left + Math.min(160, rect.width - 24), rect.top + Math.min(120, rect.height - 24));
+      fire("pointerup", rect.left + Math.min(160, rect.width - 24), rect.top + Math.min(120, rect.height - 24));
+      return true;
+    })()`);
+    await sleep(350);
+    const rectChecksum = await js(win, `window.__annotChecksum()`);
+    if (rectChecksum === canvasBefore) throw new Error(`矩形没有改变像素：${canvasBefore} → ${rectChecksum}`);
+    // 文字工具：prompt 由测试替换，点击画布落下文字标注。
+    await clickButton(win, `(button) => button.innerText.trim() === "文字"`);
+    await js(win, `(() => { window.prompt = () => "E2E 标注文字"; return true; })()`);
+    await js(win, `(() => {
+      const canvas = document.querySelector('[role="dialog"][aria-label="截图标注"] canvas');
+      const rect = canvas.getBoundingClientRect();
+      canvas.dispatchEvent(new PointerEvent("pointerdown", {
+        bubbles: true, pointerId: 2, pointerType: "mouse",
+        clientX: rect.left + 40, clientY: rect.top + 160,
+      }));
+      return true;
+    })()`);
+    await sleep(250);
+    const textShapeAdded = await js(win, `(() => {
+      const button = [...document.querySelectorAll('button')].find((node) => node.innerText.trim() === "撤销");
+      return Boolean(button && !button.disabled);
+    })()`);
+    if (!textShapeAdded) throw new Error("文字标注没有进入撤销栈");
+    const undoEnabled = await js(win, `(() => {
+      const button = [...document.querySelectorAll('button')].find((node) => node.innerText.trim() === "撤销");
+      return Boolean(button && !button.disabled);
+    })()`);
+    if (!undoEnabled) throw new Error("标注形状没有进入撤销栈（指针事件未生效）");
+    const canvasAfter = await js(win, `window.__annotChecksum()`);
+    if (canvasAfter === rectChecksum) throw new Error(`文字标注没有改变像素：${rectChecksum} → ${canvasAfter}`);
+    result.checks.annotator = { before: canvasBefore, rect: rectChecksum, after: canvasAfter, text: true };
+    result.screenshots.annotator = await captureWindow("workbench-p3-annotate.png");
+    await clickButton(win, `(button) => button.innerText.trim() === "加入对话"`);
+    await waitFor(win, `!document.querySelector('[role="dialog"][aria-label="截图标注"]')`, "关闭截图标注");
+    await waitText(win, "截图已加入对话", "截图回填附件");
+    await waitBrowser((state) => state.visible === true, "标注后恢复浏览器");
+    result.checks.screenshotToChat = true;
+
+    // ── P3 元素拾取：页面内点选 → 选择器插入输入框 ───────────
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "拾取网页元素"`);
+    const pickDeadline = Date.now() + 4000;
+    let overlayReady = false;
+    while (Date.now() < pickDeadline) {
+      overlayReady = await browserController.ensure().webContents.executeJavaScript('Boolean(document.querySelector("[data-maxma-pick]"))').catch(() => false);
+      if (overlayReady) break;
+      await sleep(150);
+    }
+    if (!overlayReady) throw new Error("元素拾取覆盖层没有注入页面");
+    const pickTarget = await browserController.ensure().webContents.executeJavaScript(
+      'Boolean(document.querySelector("pre"))',
+    );
+    if (!pickTarget) throw new Error("测试页面没有 pre 元素，无法验证非 body 拾取");
+    await browserController.ensure().webContents.executeJavaScript(
+      'document.querySelector("pre").dispatchEvent(new MouseEvent("click", { bubbles: true }))',
+    );
+    await waitText(win, "已拾取", "元素拾取结果");
+    const composer = await js(win, `Array.from(document.querySelectorAll("textarea")).map((node) => node.value).join("\\n")`);
+    if (!composer.includes("引用网页元素") || !composer.includes("pre")) {
+      throw new Error("元素选择器没有回填 pre 元素：" + composer.slice(0, 200));
+    }
+    result.checks.elementPicker = { overlay: true, target: "pre", composer: composer.slice(-120) };
 
     // Windows 缩放等价：webContents zoom 125%/150%，native view 必须跟着 DIP 缩放
     result.checks.zoom = [await checkZoomAlignment(1.25), await checkZoomAlignment(1.5)];
@@ -464,6 +697,29 @@ app.whenReady().then(async () => {
     result.checks.lightTheme = theme;
     result.screenshots.light = await captureWindow("workbench-p1-files-light.png");
 
+    // ── P3 并行会话：最多 3 个 tab，切换不丢 tab 状态 ───────────
+    await waitFor(win, `document.querySelector('[aria-label="并行会话"]')`, "并行会话 tab");
+    const oldLabel = await js(win, `document.querySelector('[aria-label="并行会话"] [role="tab"]')?.innerText.trim() ?? ""`);
+    if (!oldLabel) throw new Error("并行会话没有当前 tab");
+    await clickButton(win, `(button) => button.innerText.trim() === "新会话"`);
+    await waitFor(win, `document.querySelectorAll('[aria-label="并行会话"] [role="tab"]').length >= 2`, "新会话 tab");
+    const newTabs = await js(win, `[...document.querySelectorAll('[aria-label="并行会话"] [role="tab"]')].map((node) => node.innerText.trim())`);
+    if (!newTabs.some((label) => label.includes(oldLabel))) throw new Error("新会话后旧 tab 消失：" + JSON.stringify(newTabs));
+    const switchBack = await js(win, `(() => {
+      const tablist = document.querySelector('[aria-label="并行会话"]');
+      const tab = tablist && [...tablist.querySelectorAll('[role="tab"]')].find((node) => node.innerText.includes(${JSON.stringify(oldLabel)}));
+      if (!tab) return false;
+      tab.click();
+      return true;
+    })()`);
+    if (!switchBack) throw new Error("找不到旧会话 tab");
+    await sleep(500);
+    const backTabs = await js(win, `[...document.querySelectorAll('[aria-label="并行会话"] [role="tab"]')].map((node) => node.innerText.trim())`);
+    if (!backTabs.some((label) => label.includes(oldLabel))) throw new Error("切回后旧 tab 消失：" + JSON.stringify(backTabs));
+    const maxTabs = await js(win, `document.querySelectorAll('[aria-label="并行会话"] [role="tab"]').length`);
+    if (maxTabs > 3) throw new Error("并行 tab 超过 3 个");
+    result.checks.sessionTabs = { before: oldLabel, afterNew: newTabs, afterBack: backTabs, max: maxTabs };
+
     // 纯 Web 形态：没有 preload 时不得出现文件/浏览器 tab
     const web = new BrowserWindow({
       show: false,
@@ -488,6 +744,8 @@ app.whenReady().then(async () => {
     result.pageText = await win.webContents.executeJavaScript("document.body.innerText").catch(() => "");
   } finally {
     console.log("DRIVE_RESULT " + JSON.stringify(result));
+    try { browserAgent?.stop(); } catch { /* */ }
+    try { if (browserAgentDir) fs.rmSync(browserAgentDir, { recursive: true, force: true }); } catch { /* */ }
     try { browserController?.destroy(); } catch { /* */ }
     try { win.destroy(); } catch { /* */ }
     app.quit();

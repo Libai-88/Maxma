@@ -5,6 +5,7 @@ const http = require("node:http");
 const net = require("node:net");
 const path = require("node:path");
 const { createBrowserController } = require("./browser-view.cjs");
+const { startBrowserAgentServer } = require("./browser-agent-server.cjs");
 const { assertOpenableHtml } = require("./path-actions.cjs");
 
 const isWindows = process.platform === "win32";
@@ -48,6 +49,7 @@ let mainWindow = null;
 let backendPort = null;
 let appOrigin = null;
 let browserController = null;
+let browserAgentServer = null;
 let isQuitting = false;
 
 const lockAcquired = app.requestSingleInstanceLock();
@@ -294,6 +296,14 @@ if (lockAcquired) {
     try {
       await startBackend();
       createWindow();
+      if (!browserAgentServer && browserController) {
+        browserAgentServer = startBrowserAgentServer({
+          controller: browserController,
+          dataDir,
+          logger: console,
+        });
+        await browserAgentServer.start();
+      }
     } catch (error) {
       dialog.showErrorBox("MaxmaHere 启动失败", error instanceof Error ? error.message : String(error));
       app.quit();
@@ -307,6 +317,7 @@ if (lockAcquired) {
 
 app.on("before-quit", () => {
   isQuitting = true;
+  browserAgentServer?.stop();
   if (backend && backend.exitCode === null) backend.kill();
   if (backendLog) {
     backendLog.end();

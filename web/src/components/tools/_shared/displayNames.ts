@@ -32,6 +32,8 @@ export const TOOL_DISPLAY_NAMES: Record<string, string> = {
   write_office_file: '写入 Office 文件',
   // ── kernel 扩展点 ──
   submit_plan: '提交计划',
+  browser_navigate: '浏览器打开页面',
+  browser_read: '浏览器读页面',
 }
 
 /** 其它常见/历史名称（非契约，按需展示）。 */

@@ -11,19 +11,26 @@ import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerE
 import { Maximize2, Minimize2, Search, X } from 'lucide-react'
 
 import type { ChatTurn } from '@/types'
+import type { GoalChannelState } from '@/stores/chat'
 import type { WorkbenchTab } from '@/types/workbench'
 import { Button } from '@/components/ui/button'
 import { Tag } from '@/components/ui/tag'
 import { cn } from '@/lib/utils'
 import { useWorkbenchStore, WORKBENCH_MAX_WIDTH, WORKBENCH_MIN_WIDTH } from '@/stores/workbench'
 import { BrowserPane } from './BrowserPane'
+import { ChangesPane } from './ChangesPane'
+import { CommandPane } from './CommandPane'
 import { FilesPane } from './FilesPane'
+import { TasksPane } from './TasksPane'
 
 const TAB_LABELS: Record<WorkbenchTab, string> = {
   reasoning: '推理',
   canvas: '画布',
   files: '文件',
   browser: '浏览器',
+  changes: '变更',
+  tasks: '任务',
+  commands: '命令',
 }
 
 interface PaletteCommand {
@@ -37,6 +44,8 @@ interface WorkbenchHostProps {
   onArtifactAction: (payload: { artifactId: string; actionId: string; token: string }) => void
   allTurns: ChatTurn[]
   sessionId?: string
+  taskTrackerData: Record<string, unknown> | null
+  goalState: GoalChannelState | null
 }
 
 function clampWidth(value: number): number {
@@ -146,7 +155,7 @@ function CommandPalette({
   )
 }
 
-export function WorkbenchHost({ onArtifactAction, allTurns, sessionId }: WorkbenchHostProps) {
+export function WorkbenchHost({ onArtifactAction, allTurns, sessionId, taskTrackerData, goalState }: WorkbenchHostProps) {
   const workbench = useWorkbenchStore()
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [dragWidth, setDragWidth] = useState<number | null>(null)
@@ -158,10 +167,15 @@ export function WorkbenchHost({ onArtifactAction, allTurns, sessionId }: Workben
   const tabs: WorkbenchTab[] = [
     'reasoning',
     'canvas',
-    ...(hasDesktopBridge ? ['files' as const] : []),
+    ...(hasDesktopBridge ? ['files' as const, 'changes' as const, 'commands' as const] : []),
     ...(hasBrowser ? ['browser' as const] : []),
+    'tasks',
   ]
-  const activeTab = tabs.includes(workbench.activeTab) ? workbench.activeTab : 'reasoning'
+  const activeTab = tabs.includes(
+    (sessionId ? workbench.sessionTabs[sessionId] : undefined) ?? workbench.activeTab,
+  )
+    ? ((sessionId ? workbench.sessionTabs[sessionId] : undefined) ?? workbench.activeTab)
+    : 'reasoning'
   const width = Math.min(
     dragWidth ?? workbench.width,
     // 给聊天区留约 400px（视口较宽时）；真正挤不下时走下面的整宽覆盖。
@@ -231,7 +245,7 @@ export function WorkbenchHost({ onArtifactAction, allTurns, sessionId }: Workben
       id: `tab-${tab}`,
       label: `切到${TAB_LABELS[tab]}`,
       hint: '工作台标签',
-      run: () => workbench.setTab(tab),
+      run: () => workbench.setTab(tab, sessionId),
     })),
     {
       id: 'maximize',
@@ -321,7 +335,7 @@ export function WorkbenchHost({ onArtifactAction, allTurns, sessionId }: Workben
               variant={activeTab === tab ? 'secondary' : 'ghost'}
               size="sm"
               className="shrink-0"
-              onClick={() => workbench.setTab(tab)}
+              onClick={() => workbench.setTab(tab, sessionId)}
             >
               {TAB_LABELS[tab]}
             </Button>
@@ -332,7 +346,7 @@ export function WorkbenchHost({ onArtifactAction, allTurns, sessionId }: Workben
             'flex min-h-0 flex-1 flex-col',
             activeTab === 'browser'
               ? 'overflow-hidden'
-              : activeTab === 'files'
+              : activeTab === 'files' || activeTab === 'changes' || activeTab === 'commands'
                 ? 'overflow-hidden p-2'
                 : 'overflow-y-auto scrollbar-thin p-2',
           )}
@@ -360,7 +374,10 @@ export function WorkbenchHost({ onArtifactAction, allTurns, sessionId }: Workben
             </div>
           ))}
           {activeTab === 'files' && <FilesPane sessionId={sessionId} />}
-          {activeTab === 'browser' && <BrowserPane overlayOpen={paletteOpen} />}
+          {activeTab === 'changes' && <ChangesPane />}
+          {activeTab === 'tasks' && <TasksPane turns={allTurns} taskTrackerData={taskTrackerData} goalState={goalState} />}
+          {activeTab === 'commands' && <CommandPane />}
+          {activeTab === 'browser' && <BrowserPane overlayOpen={paletteOpen} sessionId={sessionId ?? null} />}
         </div>
       </aside>
       {paletteOpen && <CommandPalette commands={commands} onClose={() => setPaletteOpen(false)} />}

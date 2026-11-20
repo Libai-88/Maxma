@@ -12,20 +12,24 @@ import { ChevronRight, File, FileCode2, FileText, Folder, FolderOpen, Image as I
 import { api } from '@/api'
 import { cn } from '@/lib/utils'
 import type { WorkspaceRoot, WorkspaceTreeEntry } from '@/types/workspace'
-import { ancestorsOf, buildTreeRows, filterTreeRows, resolveTreeKey } from './fileTreeModel'
+import { ancestorsOf, buildTreeRows, filterTreeRows, parentPath, resolveTreeKey, type TreeRow } from './fileTreeModel'
 
 interface NodeState {
   entries: WorkspaceTreeEntry[]
   truncated?: boolean
   loading?: boolean
   error?: string
-}interface FileTreeProps {
+}
+
+interface FileTreeProps {
   root: WorkspaceRoot
   showIgnored: boolean
   filter: string
   refreshToken: number
   currentPath: string
   revealPath: { path: string; token: number } | null
+  /** 保存/重新加载后只更新对应文件行的 size/mtime，不重载整棵树。 */
+  statPatch?: { path: string; size: number; mtime: number; token: number } | null
   onOpenFile: (entry: WorkspaceTreeEntry) => void
   onContextMenu: (entry: WorkspaceTreeEntry, event: ReactMouseEvent) => void
 }
@@ -52,12 +56,34 @@ function iconOf(entry: WorkspaceTreeEntry) {
   return <File className="size-3.5 shrink-0 text-muted-foreground" />
 }
 
-export function FileTree({ root, showIgnored, filter, refreshToken, currentPath, revealPath, onOpenFile, onContextMenu }: FileTreeProps) {
+export function FileTree({ root, showIgnored, filter, refreshToken, currentPath, revealPath, statPatch, onOpenFile, onContextMenu }: FileTreeProps) {
   const [nodes, setNodes] = useState<Record<string, NodeState>>({})
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [focusedPath, setFocusedPath] = useState('')
   const [activePath, setActivePath] = useState('')
+  const [remoteRows, setRemoteRows] = useState<TreeRow[] | null>(null)
+  const [searching, setSearching] = useState(false)
+  const [searchError, setSearchError] = useState('')
   const treeRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!statPatch) return
+    setNodes((current) => {
+      let changed = false
+      const next: Record<string, NodeState> = { ...current }
+      for (const [key, state] of Object.entries(current)) {
+        if (!state.entries.some((entry) => entry.path === statPatch.path)) continue
+        next[key] = {
+          ...state,
+          entries: state.entries.map((entry) => entry.path === statPatch.path
+            ? { ...entry, size: statPatch.size, mtime: statPatch.mtime }
+            : entry),
+        }
+        changed = true
+      }
+      return changed ? next : current
+    })
+  }, [statPatch])
 
   const loadDir = useCallback(async (path: string) => {
     setNodes((current) => ({ ...current, [path]: { ...(current[path] ?? { entries: [] }), loading: true, error: undefined } }))
@@ -97,10 +123,47 @@ export function FileTree({ root, showIgnored, filter, refreshToken, currentPath,
 
   const rows = useMemo(() => buildTreeRows(nodes, expanded), [expanded, nodes])
   const visibleRows = useMemo(() => filterTreeRows(rows, filter), [filter, rows])
+  const displayRows = remoteRows ?? visibleRows
+  const [searchTruncated, setSearchTruncated] = useState(false)
 
   useEffect(() => {
-    if (!focusedPath && visibleRows[0]) setFocusedPath(visibleRows[0].entry.path)
-  }, [focusedPath, visibleRows])
+    const query = filter.trim()
+    if (query.length < 2) {
+      setRemoteRows(null)
+      setSearching(false)
+      setSearchError('')
+      setSearchTruncated(false)
+      return
+    }
+    let cancelled = false
+    setSearching(true)
+    setSearchError('')
+    const timer = setTimeout(() => {
+      void api.workspaceSearch(root.id, query, showIgnored)
+        .then((result) => {
+          if (cancelled) return
+          setRemoteRows(result.entries.map((entry) => ({ entry, depth: 0 })))
+          setSearchTruncated(result.truncated)
+        })
+        .catch((error) => {
+          if (cancelled) return
+          setRemoteRows([])
+          setSearchTruncated(false)
+          setSearchError(error instanceof Error ? error.message : String(error))
+        })
+        .finally(() => {
+          if (!cancelled) setSearching(false)
+        })
+    }, 220)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [filter, refreshToken, root.id, showIgnored])
+
+  useEffect(() => {
+    if (!focusedPath && displayRows[0]) setFocusedPath(displayRows[0].entry.path)
+  }, [focusedPath, displayRows])
 
   useEffect(() => {
     if (currentPath) {
@@ -130,7 +193,7 @@ export function FileTree({ root, showIgnored, filter, refreshToken, currentPath,
   }, [loadDir, nodes, revealPath])
 
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    const action = resolveTreeKey(visibleRows, focusedPath, event.key, expanded)
+    const action = resolveTreeKey(displayRows, focusedPath, event.key, expanded)
     if (action.type === 'none') return
     event.preventDefault()
     if (action.type === 'move') setFocusedPath(action.path)
@@ -154,10 +217,17 @@ export function FileTree({ root, showIgnored, filter, refreshToken, currentPath,
     >
       {rootNode?.loading && <div className="flex items-center gap-2 px-3 py-2 text-caption text-muted-foreground"><Loader2 className="size-3.5 animate-spin" />加载中…</div>}
       {rootNode?.error && <p className="px-3 py-2 text-caption text-destructive">{rootNode.error}</p>}
-      {!rootNode?.loading && !rootNode?.error && visibleRows.length === 0 && (
+      {searching && <div className="flex items-center gap-2 px-3 py-2 text-caption text-muted-foreground"><Loader2 className="size-3.5 animate-spin" />递归搜索中…</div>}
+      {searchError && <p className="px-3 py-2 text-caption text-destructive">{searchError}</p>}
+      {remoteRows && !searching && !searchError && (
+        <p className="px-3 py-1.5 text-micro text-muted-foreground">
+          {remoteRows.length > 0 ? `递归搜索：${remoteRows.length} 个文件${searchTruncated ? '（已截断）' : ''}` : '没有匹配的文件'}
+        </p>
+      )}
+      {!rootNode?.loading && !rootNode?.error && !searching && displayRows.length === 0 && (
         <p className="px-3 py-4 text-center text-caption text-muted-foreground">{filter ? '没有匹配的文件' : '空文件夹'}</p>
       )}
-      {visibleRows.map(({ entry, depth }) => {
+      {displayRows.map(({ entry, depth }) => {
         const isDir = entry.type === 'dir'
         const isOpen = isDir && expanded.has(entry.path)
         const isFocused = entry.path === focusedPath
@@ -194,7 +264,12 @@ export function FileTree({ root, showIgnored, filter, refreshToken, currentPath,
                   {isOpen ? <FolderOpen className="size-3.5 shrink-0 text-muted-foreground" /> : iconOf(entry)}
                 </>
               ) : iconOf(entry)}
-              <span className="min-w-0 flex-1 truncate">{entry.name}</span>
+              <span className="min-w-0 flex-1 truncate">
+                {entry.name}
+                {remoteRows && parentPath(entry.path) && (
+                  <span className="text-muted-foreground/70"> · {parentPath(entry.path)}</span>
+                )}
+              </span>
               {entry.type === 'symlink' && <span className="shrink-0 text-micro text-muted-foreground">链接</span>}
               {!isDir && <span className="shrink-0 text-micro tabular-nums text-muted-foreground/70">{sizeLabel(entry.size)}</span>}
               {node?.loading && <Loader2 className="size-3 animate-spin text-muted-foreground" />}

@@ -22,6 +22,8 @@ export type WorkspaceErrorCode =
   | "PATH_INVALID"
   | "PATH_OUTSIDE_ROOT"
   | "PATH_BLOCKED"
+  | "FILE_CONFLICT"
+  | "FILE_WRITE_FAILED"
   | "FILE_TOO_LARGE"
   | "BINARY_NOT_PREVIEWABLE"
   | "WORKSPACE_ROOT_NOT_FOUND";
@@ -253,8 +255,83 @@ export function listTree(root: WorkspaceRoot, relative: string, showIgnored: boo
   return { path: relativeDisplay(root, fullPath), entries, truncated };
 }
 
-export function readTextFile(root: WorkspaceRoot, relative: string): TextFileResult {
-  const fullPath = resolveWorkspacePath(root, relative);
+export interface SearchResult {
+  query: string;
+  entries: TreeEntry[];
+  truncated: boolean;
+  scanned: number;
+}
+
+/**
+ * 递归文件名搜索（P1）：只按名称/路径匹配，不读文件内容。
+ * 逐段拒绝符号链接；跳过默认忽略目录；最多返回 200 条、扫描 5000 个条目，
+ * 防止在工作区根上把磁盘扫穿。
+ */
+export function searchWorkspaceFiles(
+  root: WorkspaceRoot,
+  query: string,
+  showIgnored = false,
+): SearchResult {
+  const needle = query.trim().toLowerCase();
+  if (!needle) fail("PATH_INVALID", 400, "搜索词不能为空");
+  if (needle.length > 120) fail("PATH_INVALID", 400, "搜索词过长");
+
+  const rootPath = resolveWorkspacePath(root, "", true);
+  const entries: TreeEntry[] = [];
+  let scanned = 0;
+  let truncated = false;
+  const dirs: string[] = [rootPath];
+
+  while (dirs.length > 0 && !truncated) {
+    const dir = dirs.shift() as string;
+    let list: fs.Dirent[];
+    try {
+      list = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const item of list) {
+      scanned += 1;
+      if (scanned >= 5000) {
+        truncated = true;
+        break;
+      }
+      if (!showIgnored && IGNORED_NAMES.has(item.name.toLowerCase())) continue;
+      if (item.isSymbolicLink()) continue;
+      const child = path.join(dir, item.name);
+      if (item.isDirectory()) {
+        dirs.push(child);
+        continue;
+      }
+      if (!item.isFile()) continue;
+      const lowerName = item.name.toLowerCase();
+      const lowerPath = relativeDisplay(root, child).toLowerCase();
+      if (!lowerName.includes(needle) && !lowerPath.includes(needle)) continue;
+      let childStat: fs.Stats;
+      try {
+        childStat = fs.lstatSync(child);
+      } catch {
+        continue;
+      }
+      entries.push({
+        name: item.name,
+        path: relativeDisplay(root, child),
+        type: "file",
+        size: childStat.size,
+        mtime: childStat.mtimeMs,
+      });
+      if (entries.length >= 200) {
+        truncated = true;
+        break;
+      }
+    }
+  }
+
+  entries.sort((a, b) => a.path.localeCompare(b.path, "zh-CN"));
+  return { query, entries, truncated, scanned };
+}
+
+export function readTextFile(root: WorkspaceRoot, relative: string): TextFileResult {  const fullPath = resolveWorkspacePath(root, relative);
   blockerOf(fullPath);
   assertRegularFile(fullPath);
 
@@ -282,6 +359,45 @@ export function readTextFile(root: WorkspaceRoot, relative: string): TextFileRes
   } finally {
     try { fs.closeSync(fd); } catch { /* best effort */ }
   }
+}
+
+export function writeTextFile(
+  root: WorkspaceRoot,
+  relative: string,
+  content: string,
+  baseHash: string,
+): TextFileResult {
+  if (typeof content !== "string") fail("PATH_INVALID", 400, "文件内容必须是字符串");
+  const byteLength = Buffer.byteLength(content, "utf8");
+  if (byteLength > MAX_TEXT_BYTES) fail("FILE_TOO_LARGE", 413, `文本文件超过 ${MAX_TEXT_BYTES} 字节`);
+  const fullPath = resolveWorkspacePath(root, relative);
+  blockerOf(fullPath);
+  assertRegularFile(fullPath);
+
+  const currentBuffer = fs.readFileSync(fullPath);
+  if (isProbablyBinary(currentBuffer)) fail("BINARY_NOT_PREVIEWABLE", 415, "二进制文件不能按文本编辑");
+  const currentHash = hashBuffer(currentBuffer);
+  if (!baseHash || baseHash !== currentHash) {
+    fail("FILE_CONFLICT", 409, "文件已在外部修改；请重新加载后再保存");
+  }
+
+  const tempPath = `${fullPath}.maxma-${process.pid}-${Date.now().toString(36)}.tmp`;
+  try {
+    fs.writeFileSync(tempPath, content, { encoding: "utf8", flag: "wx" });
+    fs.renameSync(tempPath, fullPath);
+  } catch {
+    try { fs.unlinkSync(tempPath); } catch { /* best effort */ }
+    fail("FILE_WRITE_FAILED", 500, "写入文件失败，请检查磁盘权限");
+  }
+
+  const next = fs.statSync(fullPath);
+  return {
+    path: relativeDisplay(root, fullPath),
+    content,
+    mtime: next.mtimeMs,
+    size: next.size,
+    hash: hashBuffer(Buffer.from(content, "utf8")),
+  };
 }
 
 const IMAGE_TYPES: Record<string, string> = {

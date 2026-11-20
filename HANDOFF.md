@@ -3,40 +3,38 @@
 > 当前可执行状态，供下一位接手者。架构请先读 [docs/00-当前架构.md](docs/00-当前架构.md)。
 > 更新时间：2026-11-20
 
-## 2026-11-20：Workbench 2.0 P0 + P1（文件面板 + 内置浏览器 + 命令面板）
+## 2026-11-20：Workbench 2.0 P0–P3 完成（文件/编辑/变更/命令/浏览器/任务）
 
-- P1 已落地：文件树、只读预览、多文件 tab、工作区根改名/不可用提示、内置浏览器、
-  拖拽调宽/最大化/命令面板、窄窗整宽覆盖；Web 端只保留推理/画布，文件与浏览器入口不出现。
-- 文件面板只读；编辑器/保存、变更/diff、终端、Git 写操作、浏览器多 tab 仍是 P2/P3，
-  能力清单里 `editor/terminal/git` 仍为 `false`。
-- 原生选择器：`maxma:pick-path` / `maxma:reveal-path` / `maxma:open-path`（仅存在、普通的
-  `.html/.htm`）；`GET /api/select-file` 在无桌面壳时返回 **501 `desktop_required`**。
-- 工作区 API：`GET/POST/DELETE /api/workspace/roots`、`PATCH .../:id`（label 1–240 字）、
-  `GET tree|file|blob`；根存 `<data>/api/data/workspaces.json`，路径逐段 `lstat` 拒绝
-  绝对路径/盘符/UNC/NUL/ADS/`..`/symlink 逃逸，读取前跑 MaxmaBlocker；文本 2 MiB、
-  图片/PDF 50 MiB、目录 2000 项；Token + loopback。
-- 内置浏览器：`WebContentsView` + 独立 `persist:maxma-browser` 会话，开 sandbox/关 Node；
-  http(s) 与 `about:blank` 之外全部取消，`will-navigate`/`will-redirect`/`window.open` 同规则；
-  权限全拒；bounds 按 DOM rect + `getZoomFactor()` 同步；后退/前进后延迟补发一次状态，
-  修复历史标志滞后。安全边界与“无网络 allowlist”已知缺口见 `docs/security-contract.md`。
-- UI 状态键 `maxmahere.workbench-ui.v2`，兼容旧 `maxmahere.canvas-ui-state.v1`；
-  宽度 320–860；窄窗 <1000px 改为覆盖聊天区整宽，不再挤压欢迎卡。
-- **本轮已验证**：backend 全量 **341 pass / 0 fail**（53 files，2239 expect）；
-  web **62 pass / 0 fail**（9 files，含文件树纯函数与 UI 状态迁移）、`tsc --noEmit`、
-  生产 build、ESLint、间距/字号/颜色守卫通过；
-  `scripts/verify-ui-workbench.mjs` 真实 Electron 界面通过：懒加载树、面包屑、多 tab、
-  过滤、改名、HTML 源码、二进制/图片、380→404 拖拽、最大化、125%/150% bounds、
-  前进/后退/刷新、命令面板隐藏 native view、768 窄窗整宽 `754/754`、浅色恢复、
-  Web tab 仅「推理/画布」，`consoleErrors=[]`。
-- 视觉证据 6 张：`dev_docs/visual/workbench-p1-{files,files-light,maximized,browser,browser-page,narrow}.png`。
-- 便携包：桌面 `245,888,830 B`，SHA-256 `fe7aad61…2edf4`，`verify-desktop-render.ps1` PASS；
-  Web `83,281,980 B`，SHA-256 `78d9ab65…a7c2`，`portable-smoke-test.ps1` PASS
-  （328 表情、图片 200、管理 401）；Web 包降级由 `webTabs=["推理","画布"]` 直接证明。
-- **尚未人工验证**：真实系统文件对话框点选；`clear-data` 的确认框；真实 Windows 125%/150%
-  系统 DPI（当前用 webContents zoom 等价验证）。
-- **已知历史债**：backend `tsc` 仍有贴纸模块错误，`check-file-size-budget` 仍报
-  `bun-backend/src/stickers/service.ts` 854 行、`check-type-budget` 仍报贴纸 10 个错误；
-  P1 新增文件不在其中，未顺手重构贴纸服务。
+- P0 `5fd622e3`、P1 `bfd29b9d` 已提交；P2/P3 同批完成：
+  文件搜索、CodeMirror 编辑器与 `base_hash` 冲突保存、变更/diff、Git stage/commit（显式确认、不 push）、
+  无 TTY 命令运行器、任务/计划 Pane、浏览器 Agent 只读动作、并行会话 tab、截图标注、网页元素拾取。
+- 工作台 tab：推理 / 画布 / 文件 / 变更 / 命令 / 浏览器 / 任务；纯 Web 仅推理/画布/任务。
+  编辑器/命令/Git 都只在桌面壳有 preload 时出现；终端明确降级为命令运行器，不冒充 PTY。
+- 工作区 API：`GET/POST/DELETE /api/workspace/roots`、`PATCH .../:id`、`GET tree|file|blob|search`、
+  `PUT file`（`base_hash`，冲突 `409 FILE_CONFLICT`）、`POST run`（默认 60s/上限 120s，杀进程树，1 MiB 截断）。
+  根存 `<data>/api/data/workspaces.json`；路径逐段 `lstat` 拒绝绝对路径/盘符/UNC/NUL/ADS/`..`/symlink 逃逸。
+- Git API：`GET /api/git/status|diff`、`POST /api/git/stage|unstage|commit`；commit 必须 `confirm:true`；
+  所有 Git 调用 async `spawn`（12s / commit 20s，输出 8 MiB），path 用 `:(literal)`，不 push。
+- 浏览器：`WebContentsView` + 独立 `persist:maxma-browser` 会话。Agent 端点
+  `browser-agent-server.cjs` 只监听 `127.0.0.1`，每次启动随机 secret、配置 0600、动作白名单；
+  `browser_navigate` / `browser_read` 已登记进 kernel 契约与中文展示名。UI 未打开 tab 时可隐藏执行。
+- 并行会话 `MAX_SESSION_TABS=3`，`maxmahere.session-tabs.v1` 只存 id；切 tab 不主动断 WS，
+  组件卸载时断开本次访问过的 session。截图与元素回填按 `sessionId` 过滤。
+- **本轮已验证**：sidecar **234 pass / 0 fail**；backend **351 pass / 0 fail**；
+  web **68 pass / 0 fail**、`tsc --noEmit`、ESLint、生产 build；颜色/间距/字号/对比度/无紫/玻璃/体量/类型债
+  全部通过；根 `scripts/verify-all-gates.sh` 18 项全绿。
+- 真实 Electron：`scripts/verify-ui-workbench.mjs` 通过；保存后文件树 size 49→75 B 同步、
+  diff 可见、命令 exit 0、Git 提交 `UI acceptance commit` 后工作区干净且未 push；
+  浏览器 snapshot/截图/未知动作拒绝、截图矩形+文字、元素拾取 `pre`、并行 tab 保留；
+  `consoleErrors=[]`。截图 11 张 `dev_docs/visual/workbench-*.png`。
+- 便携包：
+  桌面 `252,479,795 B`，SHA-256 `a51c6228…71382`，`verify-desktop-render.ps1` PASS；
+  Web `83,535,555 B`，SHA-256 `bd870d55…66b53`，`portable-smoke-test.ps1` PASS
+  （328 表情、图片 200、管理 401）；Web 降级由 `webTabs=["推理","画布","任务"]` 证明。
+- **范围外，不是待办**：真实系统文件对话框人工点选、真实 Windows 系统 DPI 人工抽查、
+  浏览器网络 allowlist、浏览器点击/输入/提交、Git discard 按钮、Side chat、系统通知、PR 创建、P4。
+- 贴纸历史债已清：`service.ts` 拆到 748 行 + `stickers/legacy.ts`，`check-type-budget` / `check-file-size-budget`
+  不再报红；这是本轮为保证全量闸门全绿做的顺手拆分，行为由原有贴纸测试覆盖。
 
 <details>
 <summary>P0 记录（2026-11-20，已含在 P1 提交里）</summary>

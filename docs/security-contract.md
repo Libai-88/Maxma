@@ -17,7 +17,11 @@
 | Token 鉴权 | `bun-backend/src/middleware/auth.ts`：仅 `/api/**` 与 `/ws/**`；`X-Maxma-Token` 头 → `?token=` → WS subprotocol | 401 / WS close 4001；白名单仅 `/api/health`、`/api/auth/token`、`GET /api/mcp/oauth/callback`、贴纸静态 GET/HEAD | `bun-backend/tests/` |
 | 限流 | `bun-backend/src/middleware/rate-limit.ts` | 超限 429 + `RATE_LIMITED` 结构；本地回环豁免（IP 取自 `server.requestIP`，取不到则按 `unknown` 限流，不放宽） | `bun-backend/tests/rate-limit-ip.test.ts` |
 | CORS | `bun-backend/src/cors-config.ts` 精确 origin 集合 | 非白名单 origin 不放行 | 同上 |
-| 工作区只读面板授权 | `bun-backend/src/routes/workspace.ts` + `services/workspace-fs.ts` + `services/workspace-store.ts`：根目录由用户在桌面壳显式选择，存 `<data>/api/data/workspaces.json`；路径先规范化再逐段 `lstat`，拒绝绝对路径/盘符/UNC/NUL/ADS/`..`/符号链接逃逸；读取前跑 MaxmaBlocker | 400/403 结构化错误；文本 2 MiB、图片/PDF 50 MiB；目录最多 2000 项；非回环 403 | `bun-backend/tests/workspace-p0.test.ts` |
+| 工作区面板授权 | `bun-backend/src/routes/workspace.ts` + `services/workspace-fs.ts` + `services/workspace-store.ts`：根目录由用户在桌面壳显式选择，存 `<data>/api/data/workspaces.json`；路径先规范化再逐段 `lstat`，拒绝绝对路径/盘符/UNC/NUL/ADS/`..`/符号链接逃逸；读取/写入/执行前跑 MaxmaBlocker | 400/403 结构化错误；文本 2 MiB、图片/PDF 50 MiB；目录最多 2000 项；非回环 403 | `bun-backend/tests/workspace-p0.test.ts` |
+| 工作区写入与命令执行 | `PUT /api/workspace/file` 带 `base_hash` 乐观并发，临时文件 `wx` + `rename`；`POST /api/workspace/run` 无 TTY、cwd 锁工作区根、默认 60s/上限 120s、超时杀进程树、输出 1 MiB 截断；两者都只允许回环 + Token，并在读取/执行前跑 MaxmaBlocker | 冲突 `409 FILE_CONFLICT`；路径/大小/二进制错误结构化拒绝；命令超时返回 `timedOut` 而不是假装成功 | `bun-backend/tests/workspace-p0.test.ts` |
+| Git 写操作 | `bun-backend/src/services/git-service.ts` + `routes/git.ts`：全部 async `spawn`（12s / commit 20s，输出上限 8 MiB），path 加 `:(literal)`；`commit` 必须 `confirm:true`，不 push | 未确认 commit 400；非法 path/超时/非 Git 仓库返回结构化错误；不自动 stage/push | `bun-backend/tests/workspace-p0.test.ts` |
+| 浏览器 Agent 控制 | `desktop/electron/browser-agent-server.cjs`：只监听 `127.0.0.1`，每次启动随机 32-byte hex secret，配置 `0600`；`POST /execute` 校验 `x-maxma-browser-secret`；动作白名单 open/snapshot/extract/screenshot/scroll/back/forward | 未知动作拒绝；无 secret/错 secret 拒绝；未打开 tab 时创建隐藏 view，不擅自显示原生层 | `bun-backend/tests/browser-agent.test.ts`、`browser-tools.test.ts` |
+| 截图标注与元素拾取 | `BrowserPane` 截图像素在渲染层标注后作为图片附件；元素拾取只在用户主动点击时执行，返回 DOM 路径/bbox/样式摘要；事件按 `sessionId` 过滤 | 不把截图或元素写入其它会话；不回传浏览器 cookie/Token | `scripts/verify-ui-workbench.mjs` |
 | 内置浏览器隔离 | `desktop/electron/browser-view.cjs`：独立 `persist:maxma-browser` 会话；`WebContentsView` 开 `contextIsolation`、关 `nodeIntegration`、开 `sandbox`；只允许 http(s)/`about:blank`，`will-navigate`/`will-redirect`/`window.open` 同规则；权限请求全部拒绝；窗口打开只交给系统浏览器 | 非法协议/重定向被取消；页面拿不到 Node、preload 或 Maxma 主界面；清除数据只清浏览器会话 | `scripts/verify-ui-workbench.mjs` |
 | HTML 外部打开守卫 | `desktop/electron/path-actions.cjs` `assertOpenableHtml`：必须是存在、普通的 `.html/.htm` 文件 | 其他文件/目录/符号链接 → 拒绝，不启动任意可执行文件 | `bun-backend/tests/desktop-path-actions.test.ts` |
 | 敏感字段脱敏 | `mcp-validation.ts` `REDACTED` + `bun-backend/src/runtime-status.ts` | 写日志/事件/前端响应前脱敏 | 同上 |
@@ -44,12 +48,16 @@
   MaxmaBlocker（用户主动放置的拒止锚）+ 审批门逐次确认；`auto` 模式下审批门不装配，
   此时拒止锚是仅存的文件拦截层。**不存在"预先放行清单"**，因此任何文档/UI 都不得
   宣称"默认拒绝"或"仅受白名单约束"。恢复该层属独立工作项。
-  Workbench 的 `workspace roots` 只是**文件面板的读取授权**（用户显式选中的目录），
-  **不是 Agent 的全局路径白名单**，也不改变 Agent 工具的文件访问边界。
-- **内置浏览器没有网络 allowlist（P1 已知边界）。** 它可访问任意 http(s)，包括本机
+  Workbench 的 `workspace roots` 只是**文件面板的读写授权**（用户显式选中的目录），
+  **不是 Agent 的全局路径白名单**，也不改变 Agent 工具的文件访问边界。命令运行器同样只在
+  当前工作区根内执行，但它使用你的本机用户权限，不是沙箱。
+- **内置浏览器没有网络 allowlist（已知边界，本轮未消除）。** 它可访问任意 http(s)，包括本机
   loopback 与局域网地址；这与普通浏览器一致。Maxma 的 `/api/**` 仍需 Token，浏览器会话
-  拿不到该 Token，但未鉴权的本地服务仍可被页面访问。需要网络隔离时属 P3 浏览器代理/企业策略范畴，
-  当前不得宣称"浏览器只能访问外网"或"浏览器被完全隔离"。
+  拿不到该 Token，但未鉴权的本地服务仍可被页面访问。需要网络隔离时属后续企业策略/代理工作，
+  当前不得宣称“浏览器只能访问外网”或“浏览器被完全隔离”。
+- **浏览器 Agent 只开放只读动作。** open/snapshot/extract/screenshot/scroll/back/forward 可执行；
+  点击/输入/提交尚未接线，因此不存在“可能已点击却报成功”的路径。开放写动作前必须先补
+  `request_id` + 超时 + `outcome_unknown`，且不得自动重试副作用动作。
 - **已收口（2026-11-02）：白名单的残留不再伪装成保护。** 阶段二 cutover 删掉了执行层，
   但留下了三处"看起来还在"的残迹，现已全部清除：
   1. `bun-backend/src/db/core.ts` 的 v1 schema 不再创建零读写方的 `path_whitelist` 表

@@ -13,6 +13,7 @@ import { SessionTreeDialog } from '@/components/chat/SessionTreeDialog'
 import { ContextRing } from '@/components/ui/context-ring'
 import { Switch } from '@/components/ui/switch'
 import { ChatWindow } from '@/components/chat/ChatWindow'
+import { SessionTabs } from '@/components/chat/SessionTabs'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { WelcomeScreen } from '@/components/chat/WelcomeScreen'
 import { WorkbenchHost } from '@/components/workbench/WorkbenchHost'
@@ -346,6 +347,7 @@ export default function ChatView() {
 
   return (
     <div ref={rootRef} className="relative flex h-full flex-col">
+      <SessionTabs />
       <ChatHeader>
         {contextWindowOf(contextUsage).window > 0 && (
           <ContextRing
@@ -512,7 +514,7 @@ export default function ChatView() {
             )}
         </div>
 
-        {workbench.isOpen && <WorkbenchHost onArtifactAction={handleArtifactAction} allTurns={allTurns} sessionId={sessionId} />}
+        {workbench.isOpen && <WorkbenchHost onArtifactAction={handleArtifactAction} allTurns={allTurns} sessionId={sessionId} taskTrackerData={taskTrackerData} goalState={goalState} />}
 
         {/* 实时纠偏：悬浮小窗（只在流式进行中出现，可拖动/收起/关闭） */}
         <SteeringWindow

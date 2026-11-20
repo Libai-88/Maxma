@@ -24,8 +24,11 @@ import {
   listTree,
   readBlobFile,
   readTextFile,
+  searchWorkspaceFiles,
+  writeTextFile,
   WorkspaceError,
 } from "../services/workspace-fs";
+import { runWorkspaceCommand } from "../services/command-runner";
 
 interface BunServerLike {
   requestIP?: (req: Request) => { address?: string } | null;
@@ -121,6 +124,17 @@ export function createWorkspaceRoutes(): Hono {
     }
   });
 
+  app.get("/api/workspace/search", (c) => {
+    try {
+      const root = rootFor(c, c.req.query("root_id") ?? "");
+      touchWorkspaceRoot(root.id);
+      const result = searchWorkspaceFiles(root, c.req.query("q") ?? "", c.req.query("show_ignored") === "1");
+      return c.json(result);
+    } catch (error) {
+      return workspaceError(c, error);
+    }
+  });
+
   app.get("/api/workspace/tree", (c) => {
     try {
       const root = rootFor(c, c.req.query("root_id") ?? "");
@@ -139,6 +153,41 @@ export function createWorkspaceRoutes(): Hono {
       return c.json({ file: readTextFile(root, c.req.query("path") ?? "") });
     } catch (error) {
       return workspaceError(c, error);
+    }
+  });
+
+  app.put("/api/workspace/file", async (c) => {
+    try {
+      const body = await c.req.json<{
+        root_id?: string;
+        path?: string;
+        content?: string;
+        base_hash?: string;
+      }>().catch(() => null);
+      if (!body || typeof body !== "object") {
+        throw new WorkspaceError("PATH_INVALID", 400, "请求体必须是 JSON 对象");
+      }
+      const root = rootFor(c, body.root_id ?? "");
+      touchWorkspaceRoot(root.id);
+      return c.json({
+        file: writeTextFile(root, body.path ?? "", body.content ?? "", body.base_hash ?? ""),
+      });
+    } catch (error) {
+      return workspaceError(c, error);
+    }
+  });
+
+  app.post("/api/workspace/run", async (c) => {
+    try {
+      const body = await c.req.json<{ root_id?: string; command?: string; timeout_ms?: number }>().catch(() => null);
+      if (!body || typeof body !== "object") throw new WorkspaceError("PATH_INVALID", 400, "请求体必须是 JSON 对象");
+      const root = rootFor(c, body.root_id ?? "");
+      touchWorkspaceRoot(root.id);
+      const result = await runWorkspaceCommand(root, body.command ?? "", body.timeout_ms);
+      return c.json(result);
+    } catch (error) {
+      if (error instanceof WorkspaceError) return workspaceError(c, error);
+      return c.json({ error: "COMMAND_FAILED", message: error instanceof Error ? error.message : String(error) }, 400);
     }
   });
 

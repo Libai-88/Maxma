@@ -21,17 +21,11 @@ import {
   indexPayload,
   initStickerSystem,
   isSafeRelPath,
-  legacyCategories,
-  legacyFavorites,
-  legacyIndex,
-  legacyRecent,
   legacyResolve,
   listPacks,
   loadSettings,
   migrationStatus,
-  randomByCategory,
   recentItems,
-  recommendations,
   resolveMemeFile,
   saveSettings,
   scanPack,
@@ -41,6 +35,14 @@ import {
   updateMeme,
   uploadSticker,
 } from "../stickers/service";
+import {
+  legacyCategories,
+  legacyFavorites,
+  legacyIndex,
+  legacyRecent,
+  randomByCategory,
+  recommendations,
+} from "../stickers/legacy";
 import {
   deleteRemotePack,
   exportPack,
@@ -213,7 +215,7 @@ export function createStickerRoutes(): Hono {
   app.get("/api/stickers/market", async (c) => {
     if (stickerInitError()) return c.json({ detail: stickerInitError() }, 500);
     const data = await fetchMarketCatalog(c.req.query("refresh") === "1");
-    return c.json({ ok: data.ok, ...data }, data.ok ? 200 : 502);
+    return c.json({ ...data, ok: data.ok }, data.ok ? 200 : 502);
   });
 
   async function installHandler(c: Context) {
@@ -296,7 +298,7 @@ export function createStickerRoutes(): Hono {
 
   function deletePackHandler(c: Context) {
     const id = c.req.param("id");
-    if (!isSafePackId(id)) return c.json({ detail: "非法图库 id" }, 400);
+    if (!id || !isSafePackId(id)) return c.json({ detail: "非法图库 id" }, 400);
     try {
       if (!deleteRemotePack(id)) {
         return c.json({ detail: "只能删除带远程来源标记的图库" }, 409);
@@ -382,7 +384,7 @@ export function createStickerRoutes(): Hono {
   });
 
   app.get("/api/stickers/health", (c) => {
-    const packs = listPacks() as Array<Record<string, unknown>>;
+    const packs = listPacks();
     return c.json({
       ok: !stickerInitError(),
       error: stickerInitError(),

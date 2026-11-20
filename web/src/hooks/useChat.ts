@@ -2014,6 +2014,9 @@ function handleMemoryToolEvent(ch: SessionChannel, sid: string, event: ServerEve
 export function useChat(sessionId: string) {
   const sidRef = useRef(sessionId || '__pending__')
   sidRef.current = sessionId || '__pending__'
+  // 并行会话期间同一 hook 实例可能连过多个 session；卸载时要全部断开，
+  // 否则离开对话页后后台会话的 WS 会泄漏。
+  const seenSessionsRef = useRef(new Set<string>())
   // 与旧实现同名同形：getter 形态让下方所有 `activeChannel.value` 引用零改动。
   const activeChannel = { get value() { return getOrCreateChannel(sidRef.current) } }
   // 订阅版本号：通道对象可变，任何 bump()（WS 事件/发送/重连后调用）触发本 hook 重渲染，
@@ -2131,6 +2134,7 @@ export function useChat(sessionId: string) {
   // 连接新会话/恢复缓存或后端加载历史）。onUnmounted → cleanup。
   useEffect(() => {
     const newId = sidRef.current
+    if (newId && newId !== '__pending__' && isValidSessionId(newId)) seenSessionsRef.current.add(newId)
     void (async () => {
       if (newId) {
         const targetCh = getChatStore().channels.get(newId)
@@ -2168,15 +2172,27 @@ export function useChat(sessionId: string) {
       getChatStore().bump()
     })()
     return () => {
+      // 并行会话：切走时不主动断 WS，交给 chatSessionAliveCache 驱逐
+      // （流式/等待审批的会话受保护）。真正的断开在组件卸载 effect 里做。
+      _childSessionIds.clear()
+    }
+  }, [sessionId])
+
+  // 组件卸载才断开当前/子会话；切会话不能让后台流式输出断线。
+  useEffect(() => {
+    const seen = seenSessionsRef.current
+    return () => {
+      for (const seenId of seen) disconnectSession(seenId)
       const sid = sidRef.current
-      if (sid) disconnectSession(sid)
+      if (sid && !seen.has(sid)) disconnectSession(sid)
       for (const childId of _childSessionIds) {
         if (childId !== sid) disconnectSession(childId)
       }
+      seen.clear()
       _childSessionIds.clear()
       chatSessionAliveCache.clear()
     }
-  }, [sessionId])
+  }, [])
 
   function send(text: string, refs: ParsedRef[] = [], providerId?: string, modelName?: string, thinkPathId?: ThinkPathId, clientMsgId?: string): boolean {
   touch()
