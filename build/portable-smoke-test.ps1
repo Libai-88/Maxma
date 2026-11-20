@@ -213,10 +213,17 @@ try {
     $firstMeme = @($stickerIndex.memes) | Select-Object -First 1
     if (-not $firstMeme -or -not $firstMeme.url) { throw "maxma_builtin has no indexed memes" }
     $imageUrl = if ([string]$firstMeme.url -match '^https?://') { [string]$firstMeme.url } else { "$rootUrl$([string]$firstMeme.url)" }
-    $imageRes = Invoke-WebRequest -Uri $imageUrl -Method Get -SkipHttpErrorCheck
+    $imageRes = Invoke-WebRequest -Uri $imageUrl -Method Get
     if ($imageRes.StatusCode -ne 200) { throw "sticker image route returned $($imageRes.StatusCode) url=$imageUrl body=$($imageRes.Content)" }
-    $unauthPacks = Invoke-WebRequest -Uri "$apiBase/stickers/packs" -Method Get -SkipHttpErrorCheck
-    if ($unauthPacks.StatusCode -ne 401) { throw "sticker management route is not protected (status=$($unauthPacks.StatusCode))" }
+    # Windows PowerShell 5.1 没有 -SkipHttpErrorCheck：401 会抛异常，从 Response 取状态码。
+    $unauthStatus = 200
+    try {
+        $unauthPacks = Invoke-WebRequest -Uri "$apiBase/stickers/packs" -Method Get
+        $unauthStatus = [int]$unauthPacks.StatusCode
+    } catch {
+        if ($_.Exception.Response) { $unauthStatus = [int]$_.Exception.Response.StatusCode } else { throw }
+    }
+    if ($unauthStatus -ne 401) { throw "sticker management route is not protected (status=$unauthStatus)" }
     Write-Host "[portable-smoke] stickers: $($stickerIndex.total) memes, image 200, management 401"
 
     # 7. 引擎配置目录落点自检必须真的在启动日志里留痕。

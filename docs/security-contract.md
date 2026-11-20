@@ -18,6 +18,8 @@
 | 限流 | `bun-backend/src/middleware/rate-limit.ts` | 超限 429 + `RATE_LIMITED` 结构；本地回环豁免（IP 取自 `server.requestIP`，取不到则按 `unknown` 限流，不放宽） | `bun-backend/tests/rate-limit-ip.test.ts` |
 | CORS | `bun-backend/src/cors-config.ts` 精确 origin 集合 | 非白名单 origin 不放行 | 同上 |
 | 工作区只读面板授权 | `bun-backend/src/routes/workspace.ts` + `services/workspace-fs.ts` + `services/workspace-store.ts`：根目录由用户在桌面壳显式选择，存 `<data>/api/data/workspaces.json`；路径先规范化再逐段 `lstat`，拒绝绝对路径/盘符/UNC/NUL/ADS/`..`/符号链接逃逸；读取前跑 MaxmaBlocker | 400/403 结构化错误；文本 2 MiB、图片/PDF 50 MiB；目录最多 2000 项；非回环 403 | `bun-backend/tests/workspace-p0.test.ts` |
+| 内置浏览器隔离 | `desktop/electron/browser-view.cjs`：独立 `persist:maxma-browser` 会话；`WebContentsView` 开 `contextIsolation`、关 `nodeIntegration`、开 `sandbox`；只允许 http(s)/`about:blank`，`will-navigate`/`will-redirect`/`window.open` 同规则；权限请求全部拒绝；窗口打开只交给系统浏览器 | 非法协议/重定向被取消；页面拿不到 Node、preload 或 Maxma 主界面；清除数据只清浏览器会话 | `scripts/verify-ui-workbench.mjs` |
+| HTML 外部打开守卫 | `desktop/electron/path-actions.cjs` `assertOpenableHtml`：必须是存在、普通的 `.html/.htm` 文件 | 其他文件/目录/符号链接 → 拒绝，不启动任意可执行文件 | `bun-backend/tests/desktop-path-actions.test.ts` |
 | 敏感字段脱敏 | `mcp-validation.ts` `REDACTED` + `bun-backend/src/runtime-status.ts` | 写日志/事件/前端响应前脱敏 | 同上 |
 | 扩展启停边界 | `bun-sidecar/src/kernel/extensions.ts` `filterDisabledExtensions`（只过滤 `scope=user`）+ `bun-backend/src/routes/extensions.ts`（`isValidExtensionId` 拒绝绝对路径/穿越/`<inline:…>`，内置名 403）+ `extensions-config.ts`（落盘前同校验） | 非用户扩展、内置安全扩展（approval/blocker/telemetry）一律拒绝禁用；非法 id → 400；内置名 → 403 | `bun-sidecar/tests/extensions-visibility.test.ts`、`bun-backend/tests/extensions-route.test.ts` |
 
@@ -30,9 +32,11 @@
    判据只看官方 `Tool.annotations`（`readOnlyHint` / `destructiveHint`）与工具名族，不猜语义。
 4. 取消与断线必须经 kernel `cancel`；只取消前端会让 Agent 继续跑并烧模型额度。
 5. Electron 壳不引入特权：`contextIsolation` + `sandbox` + `nodeIntegration:false`，
-   preload 只暴露 `pickPath` / `revealPath` 两个窄接口；IPC 校验 sender frame 必须是
-   `appOrigin`，渲染层其余能力仍只走 HTTP/WS。`setWindowOpenHandler` 拒绝新窗口，
-   外链仅放行 `https:`/`http:`/`mailto:`。
+   preload 只暴露原生选择/定位、HTML-only 外部打开和浏览器控制这些窄接口；IPC 校验
+   sender frame 必须是 `appOrigin`，渲染层其余能力仍只走 HTTP/WS。主窗口
+   `setWindowOpenHandler` 拒绝新窗口，外链仅放行 `https:`/`http:`/`mailto:`。
+6. 内置浏览器是**独立、可清除的会话**：不得复用 Maxma 主会话的 cookie/缓存，不得向页面
+   暴露 `maxmaDesktop` bridge；清除数据是显式用户动作，不随导航自动发生。
 
 ## 3. 已知缺口（不要当成已具备的保证）
 
@@ -42,6 +46,10 @@
   宣称"默认拒绝"或"仅受白名单约束"。恢复该层属独立工作项。
   Workbench 的 `workspace roots` 只是**文件面板的读取授权**（用户显式选中的目录），
   **不是 Agent 的全局路径白名单**，也不改变 Agent 工具的文件访问边界。
+- **内置浏览器没有网络 allowlist（P1 已知边界）。** 它可访问任意 http(s)，包括本机
+  loopback 与局域网地址；这与普通浏览器一致。Maxma 的 `/api/**` 仍需 Token，浏览器会话
+  拿不到该 Token，但未鉴权的本地服务仍可被页面访问。需要网络隔离时属 P3 浏览器代理/企业策略范畴，
+  当前不得宣称"浏览器只能访问外网"或"浏览器被完全隔离"。
 - **已收口（2026-11-02）：白名单的残留不再伪装成保护。** 阶段二 cutover 删掉了执行层，
   但留下了三处"看起来还在"的残迹，现已全部清除：
   1. `bun-backend/src/db/core.ts` 的 v1 schema 不再创建零读写方的 `path_whitelist` 表

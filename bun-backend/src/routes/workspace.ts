@@ -16,6 +16,7 @@ import {
   getWorkspaceRoot,
   listWorkspaceRoots,
   removeWorkspaceRoot,
+  renameWorkspaceRoot,
   touchWorkspaceRoot,
   type WorkspaceRoot,
 } from "../services/workspace-store";
@@ -102,6 +103,22 @@ export function createWorkspaceRoutes(): Hono {
       return c.json({ error: { code: "WORKSPACE_ROOT_NOT_FOUND", message: "工作区不存在" } }, 404);
     }
     return c.json({ removed });
+  });
+
+  app.patch("/api/workspace/roots/:id", async (c) => {
+    const body = await c.req.json().catch(() => null) as { label?: unknown } | null;
+    if (!body || typeof body.label !== "string") {
+      return c.json({ error: { code: "PATH_INVALID", message: "缺少标签" } }, 400);
+    }
+    try {
+      const renamed = renameWorkspaceRoot(c.req.param("id"), body.label);
+      if (!renamed) {
+        return c.json({ error: { code: "WORKSPACE_ROOT_NOT_FOUND", message: "工作区不存在" } }, 404);
+      }
+      return c.json({ root: { ...renamed, available: fs.existsSync(renamed.realpath) } });
+    } catch (error) {
+      return workspaceError(c, new WorkspaceError("PATH_INVALID", 400, error instanceof Error ? error.message : "无法重命名工作区"));
+    }
   });
 
   app.get("/api/workspace/tree", (c) => {

@@ -4,6 +4,8 @@ const fs = require("node:fs");
 const http = require("node:http");
 const net = require("node:net");
 const path = require("node:path");
+const { createBrowserController } = require("./browser-view.cjs");
+const { assertOpenableHtml } = require("./path-actions.cjs");
 
 const isWindows = process.platform === "win32";
 const executableDir = app.isPackaged
@@ -45,6 +47,7 @@ let backendLog = null;
 let mainWindow = null;
 let backendPort = null;
 let appOrigin = null;
+let browserController = null;
 let isQuitting = false;
 
 const lockAcquired = app.requestSingleInstanceLock();
@@ -222,6 +225,22 @@ function registerDesktopIpc() {
     if (!fs.existsSync(pathValue)) throw new Error("路径不存在");
     shell.showItemInFolder(pathValue);
   });
+
+  ipcMain.handle("maxma:open-path", async (event, pathValue) => {
+    if (!isTrustedSender(event)) throw new Error("拒绝来自非应用页面的系统打开请求");
+    // P1 只用于文件面板的 HTML「系统打开」。不能把 shell.openPath 变成
+    // 任意可执行文件的启动器——渲染层一旦被注入，这就是一条执行链。
+    assertOpenableHtml(pathValue);
+    const result = await shell.openPath(pathValue);
+    if (result) throw new Error(result);
+  });
+
+  browserController = createBrowserController({
+    getWindow: () => mainWindow,
+    isTrustedSender,
+    openExternal: openExternalUrl,
+  });
+  browserController.registerIpc(ipcMain);
 }
 
 registerDesktopIpc();
@@ -256,7 +275,10 @@ function createWindow() {
     }
   });
   mainWindow.once("ready-to-show", () => mainWindow && mainWindow.show());
-  mainWindow.on("closed", () => { mainWindow = null; });
+  mainWindow.on("closed", () => {
+    browserController?.destroy();
+    mainWindow = null;
+  });
   void mainWindow.loadURL(appOrigin);
 }
 

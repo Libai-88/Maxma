@@ -207,7 +207,7 @@ export function StickerPicker({ onSelect, onSendNow, onManage, onClose }: Sticke
                   <img src={s.url} alt={s.label} className="size-10 rounded object-contain" loading="lazy" decoding="async" />
                 </button>
                 {settings?.pickerSendOnClick && (
-                  <span className="pointer-events-none absolute right-1 top-1 rounded-full bg-primary/90 p-0.5 text-primary-foreground opacity-0 transition-opacity group-hover:opacity-100">
+                  <span className="pointer-events-none absolute right-1 top-1 rounded-full bg-primary/90 p-0.5 text-primary-foreground opacity-0 transition-opacity duration-fast group-hover:opacity-100">
                     <Send className="size-2.5" />
                   </span>
                 )}

@@ -81,6 +81,23 @@ export function ChatInput(props: ChatInputProps) {
   const [slashActive, setSlashActive] = useState(0)
   const [notice, setNotice] = useState('')
 
+  // 文件面板的“加入对话”：桌面工作台不直接持有输入框状态，用窄事件桥回传。
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ path?: unknown; label?: unknown; sessionId?: unknown }>).detail
+      if (!detail || typeof detail.path !== 'string' || typeof detail.label !== 'string') return
+      // Workbench 只属于当前会话；QuickChat 等其他输入框不能收到这条引用。
+      if ((detail.sessionId ?? null) !== (sessionId ?? null)) return
+      setRefs((prev) => {
+        if (prev.some((ref) => ref.type === 'file' && ref.path === detail.path)) return prev
+        return [...prev, { type: 'file', label: detail.label, path: detail.path } as ParsedRef]
+      })
+      setNotice('已加入对话引用')
+    }
+    window.addEventListener('maxma:add-file-ref', handler)
+    return () => window.removeEventListener('maxma:add-file-ref', handler)
+  }, [sessionId])
+
   useEffect(() => {
     if (!providerId && models[0]) setProviderId(models[0].provider)
     if (!modelName && models[0]) setModelName(models[0].name)

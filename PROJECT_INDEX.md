@@ -2,7 +2,7 @@
 
 > **本文件是项目唯一索引**。代码导航，不是历史记录；与代码/测试冲突时以代码为准并回来改本文。
 > **维护约定**：改动触及目录结构、入口、契约、命令、版本或文档清单时，须在同一次改动里同步更新本文。
-> 更新时间：2026-11-20（`version.py` = v2.7.0）；Workbench 2.0 P0 已接入只读文件面板。
+> 更新时间：2026-11-20（`version.py` = v2.7.0）；Workbench 2.0 P0+P1 已接入只读文件面板与内置浏览器。
 
 ## 入口
 
@@ -65,7 +65,7 @@ web/src/main.tsx
 - API `src/api/index.ts`（框架无关，原样沿用）；WS 生命周期 `src/hooks/useChat.ts`；斜杠命令在 `components/chat/ChatInput.tsx`
 - zustand `src/stores/`：session / chat / memory / provider / persona / capabilities / plugin / jetHub / activity / metrics / health / onboarding / workbench / sidebar / collab / tools
 - 类型 `src/types/`（原样沿用）
-- 组件分组：`components/chat/`（对话核心）、`layout/`（AppShell/Sidebar/SessionDrawer）、`workbench/`（`WorkbenchHost` + 推理/画布/只读文件 Pane）、`common/`（Markdown/贴纸/错误边界/确认框/媒体查看器）、`ui/`（shadcn + Solid Glass）、`tools/_shared/`（工具中文名）
+- 组件分组：`components/chat/`（对话核心）、`layout/`（AppShell/Sidebar/SessionDrawer）、`workbench/`（`WorkbenchHost` + 推理/画布/只读文件/内置浏览器 Pane，文件树纯函数在 `fileTreeModel.ts`）、`common/`（Markdown/贴纸/错误边界/确认框/媒体查看器）、`ui/`（shadcn + Solid Glass）、`tools/_shared/`（工具中文名）
 - 页面 `src/views/`：对话（Chat / Share）、记忆角色（Memory / Soul / User）、配置（Providers / Mcp / Settings / Appearance / Privacy / MaxmaBlocker / Capabilities）、扩展（PluginList / PluginDetail / JetHub / Extension / Rules / Collab）、信息（News / Activity / Metrics / Help / Evolution）、流程（Onboarding / FeatureUnavailable / NotFound）
 - 样式：`src/solid-glass.css`（Solid Glass 主题：颜色 / 三层玻璃 / 圆角 / 动效，light/dark 两态）+ `src/index.css`（全局基座）；语义色守卫 `scripts/check-hardcoded-colors.mjs`
 - 动效：只用 Solid Glass 时长/缓动；`prefers-reduced-motion` 全局降级。Inspira 装饰件与页面转场已下线
@@ -83,7 +83,7 @@ web/src/main.tsx
 - 贴纸 `routes/stickers.ts`、`sticker-upload.ts`、`sticker-favorites.ts`；人设 `persona.ts`；引导 `onboarding.ts`；动态 `news.ts`；规则 `rules.ts`；工具清单 `tools.ts`
 - 可观测 `routes/activity.ts`（SSE）、`metrics-route.ts`、`metrics.ts`、`diagnostics.ts`、`error-collector.ts`、`health.ts`、`runtime-status.ts`、`audit-log.ts`、`transcripts.ts`
 - 其他 `files.ts`、`upload.ts`、`collab.ts`、`deferred-runs.ts`、`restart.ts`、`maxma-blocker.ts`、`core.ts`
-- Workbench P0 `workspace.ts` + `services/{workspace-store,workspace-fs}.ts`：只读工作区 roots/tree/file/blob；`files.ts` 的 `select-file` 在无桌面壳时返回 501 `desktop_required`，不再静默 `{path:null}`
+- Workbench `workspace.ts` + `services/{workspace-store,workspace-fs}.ts`：只读工作区 roots/tree/file/blob + PATCH 根改名；`files.ts` 的 `select-file` 在无桌面壳时返回 501 `desktop_required`，不再静默 `{path:null}`
   （`workflows.ts` 已于 2026-11-02 作为死代码删除：空 deps 挂载 → sidecar 分支永不可达）
 - 安全 `auth.ts`、`middleware/{auth,rate-limit,request-log}.ts`、`security/credential-envelope.ts`
 - 路径与存储 `app-paths.ts`、`config-settings.ts`、`cors-config.ts`、`app-version.ts`、`db/core.ts`（bun:sqlite，v1–v10 迁移）、`yaml-store.ts`
@@ -111,7 +111,7 @@ web/src/main.tsx
 - [dev_docs/adr/](dev_docs/adr/) — 决策记录（0001 运行时状态、0003 子任务、0004 权限模式、0005 远程与沙箱、0006 Artifact）
 - [dev_docs/realtime-human-agent-collaboration.md](dev_docs/realtime-human-agent-collaboration.md)
 - [dev_docs/pi-shell-capability-plan.md](dev_docs/pi-shell-capability-plan.md) — pi 能力完整保留计划（扩展 UI / 会话树 / 设置可见性，含实测证据与执行顺序）
-- [dev_docs/workbench-2.md](dev_docs/workbench-2.md) — Workbench 2.0 P0：Pane 注册、只读工作区 API、IPC 安全边界、验证证据与 P1 入口条件
+- [dev_docs/workbench-2.md](dev_docs/workbench-2.md) — Workbench 2.0 P0+P1：文件树/预览、内置浏览器、Pane 布局、IPC 安全边界、验证证据与已知边界
 - `dev_docs/typecheck-baseline.json` — 类型债基线（`scripts/check-type-budget.mjs` 消费，只准降）
 - `dev_docs/file-size-baseline.json` — 巨型文件体量基线（`scripts/check-file-size-budget.mjs` 消费，只准降）
 - [dev_docs/adr/0007-dependency-pinning-and-prereleases.md](dev_docs/adr/0007-dependency-pinning-and-prereleases.md) — 依赖口径：`@deepseek-ai/dsh-*` 预发布钉死、`@types/bun` 对齐运行时、未用依赖清零
@@ -152,7 +152,7 @@ bash scripts/verify-all-gates.sh             # 交付前全部闸门
 | `verify-ui-session-tree.mjs` | 真实界面的会话树：菜单入口 → 树渲染 → 节点可操作 |
 | `verify-ui-settings.mjs` | 设置页三个面板的 pi 真实键可见，零 console 错误 |
 | `verify-ui-thinking-separation.mjs` | 思考内容不混进回复正文（流式过程中采样） |
-| `verify-ui-workbench.mjs` | Workbench P0：桌面 preload 选文件夹 → 文件树 → 文本预览；纯 Web 无 preload 不出现文件入口；截图 `dev_docs/visual/workbench-p0.png` |
+| `verify-ui-workbench.mjs` | Workbench P1：懒加载树/面包屑/多 tab/过滤/改名/HTML 源码/图片、调宽/最大化/命令面板、内置浏览器与 125%/150% bounds、768 窄窗整宽、浅色、Web 降级；6 张截图 `dev_docs/visual/workbench-p1-*.png` |
 | `verify-desktop-render.ps1` | 桌面包渲染层 |
 | `_ui-chat-driver.cjs` | Electron 驱动真实界面的主进程，被 `verify-ui-chat-roundtrip.mjs` 启动，**勿单独跑** |
 | `_ui-capabilities-driver.cjs` | 同上，被 `verify-ui-capabilities.mjs` 启动 |

@@ -121,6 +121,17 @@ export function removeWorkspaceRoot(id: string): WorkspaceRoot | null {
   return removed ?? null;
 }
 
+export function renameWorkspaceRoot(id: string, label: string): WorkspaceRoot | null {
+  const normalized = label.trim();
+  if (!normalized || normalized.length > 240) throw new Error("标签必须为 1–240 个字符");
+  const store = readStore();
+  const root = store.roots.find((candidate) => candidate.id === id);
+  if (!root) return null;
+  root.label = normalized;
+  writeStore(store);
+  return root;
+}
+
 export function touchWorkspaceRoot(id: string): void {
   const store = readStore();
   const root = store.roots.find((candidate) => candidate.id === id);

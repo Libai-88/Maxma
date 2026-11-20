@@ -435,7 +435,7 @@ export default function ChatView() {
         </div>
       </ChatHeader>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
           {hasMessages ? (
             <ChatWindow
@@ -512,7 +512,7 @@ export default function ChatView() {
             )}
         </div>
 
-        {workbench.isOpen && <WorkbenchHost onArtifactAction={handleArtifactAction} allTurns={allTurns} />}
+        {workbench.isOpen && <WorkbenchHost onArtifactAction={handleArtifactAction} allTurns={allTurns} sessionId={sessionId} />}
 
         {/* 实时纠偏：悬浮小窗（只在流式进行中出现，可拖动/收起/关闭） */}
         <SteeringWindow

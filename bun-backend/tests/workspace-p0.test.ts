@@ -201,6 +201,46 @@ describe("workspace P0", () => {
     expect(((await roots.json()) as { roots: unknown[] }).roots).toHaveLength(0);
   });
 
+  test("PATCH 根标签：改名持久化、空/超长/不存在被拒绝", async () => {
+    const app = await makeApp();
+    const root = await addRoot(app, workspaceDir);
+
+    const renamed = await call(app, `/api/workspace/roots/${encodeURIComponent(root.id)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ label: "我的项目" }),
+    });
+    expect(renamed.status).toBe(200);
+    const body = (await renamed.json()) as { root: { id: string; label: string; available: boolean } };
+    expect(body.root).toMatchObject({ id: root.id, label: "我的项目", available: true });
+
+    const secondApp = await makeApp();
+    const roots = await call(secondApp, "/api/workspace/roots");
+    const rootsBody = (await roots.json()) as { roots: Array<{ id: string; label: string }> };
+    expect(rootsBody.roots.find((item) => item.id === root.id)?.label).toBe("我的项目");
+
+    const empty = await call(app, `/api/workspace/roots/${encodeURIComponent(root.id)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ label: "   " }),
+    });
+    expect(empty.status).toBe(400);
+
+    const tooLong = await call(app, `/api/workspace/roots/${encodeURIComponent(root.id)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ label: "x".repeat(241) }),
+    });
+    expect(tooLong.status).toBe(400);
+
+    const missing = await call(app, "/api/workspace/roots/wr_0000000000000000", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ label: "不存在" }),
+    });
+    expect(missing.status).toBe(404);
+  });
+
   test("select-file 不再静默成功", async () => {
     const app = await makeApp();
     const response = await call(app, "/api/select-file?type=file");

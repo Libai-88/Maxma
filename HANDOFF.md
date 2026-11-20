@@ -3,35 +3,48 @@
 > 当前可执行状态，供下一位接手者。架构请先读 [docs/00-当前架构.md](docs/00-当前架构.md)。
 > 更新时间：2026-11-20
 
-## 2026-11-20：Workbench 2.0 P0（文件面板 + 原生选择器 + 只读工作区 API）
+## 2026-11-20：Workbench 2.0 P0 + P1（文件面板 + 内置浏览器 + 命令面板）
 
-- P0 仍未完成 P1：内置浏览器、编辑器、变更/diff、终端都没有实现；能力清单里
-  `browser/editor/terminal/git` 全部 `enabled:false`，分别标 `phase1`/`phase2`。
-- 原生文件/文件夹选择从后端死桩迁到 Electron preload：`maxma:pick-path` /
-  `maxma:reveal-path` 两个 IPC，校验 `senderFrame.url` 必须匹配 `appOrigin`；
-  `GET /api/select-file` 在无桌面壳时改回 **501 `desktop_required`**，不再假装成功。
-- 新只读工作区 API：`GET/POST/DELETE /api/workspace/roots`、
-  `GET /api/workspace/tree|file|blob`；根存 `<data>/api/data/workspaces.json`，
-  路径逐段 `lstat` 拒绝绝对路径/盘符/UNC/NUL/ADS/`..`/symlink 逃逸，读取前跑 MaxmaBlocker；
-  文本 2 MiB、图片/PDF 50 MiB、目录 2000 项；要求 Token + loopback。
-- 对话右侧工作台从 `WorkbenchSidebar` 换成 `WorkbenchHost`，注册
-  「推理 / 画布 / 文件」；`FilesPane` 支持选根、切根、浏览、返回上级、刷新、
-  显示忽略项，以及文本/图片/PDF 预览。纯 Web 无 preload 时不显示文件入口。
-- 工作台 UI 状态迁到 `maxmahere.workbench-ui.v2`，兼容读取旧
-  `maxmahere.canvas-ui-state.v1`；`WorkbenchTab` 已含 `files|browser`，但 browser 无 Pane。
-- 新增测试 `bun-backend/tests/workspace-p0.test.ts`（7 例：读写、blob、
-  路径逃逸、symlink/junction、MaxmaBlocker、鉴权/loopback、删除根只撤销授权、
-  select-file 501）；`routes-2.5.test.ts` 的旧 200 断言已同步。
-- **本轮已验证**：backend 全量 **338 pass / 0 fail**（52 files，含新增 7 例 workspace）；
-  web **52 pass / 0 fail**、`tsc --noEmit`、生产 build、ESLint 全通过；
-  `scripts/verify-ui-workbench.mjs` 真实 Electron 界面通过：preload 暴露 bridge → 点「文件」
-  → 选文件夹 → 目录树含 `README.md/src/dot.png` → 点 `README.md` 读到正文；
-  同一脚本的纯 Web 窗口 tab 只有「推理/画布」，无文件入口；截图在
-  `dev_docs/visual/workbench-p0.png`，console error 为 0；768 窄窗实测
-  `scrollWidth=754 / clientWidth=754`，无横向溢出。
-- **尚未验证**：真实系统文件对话框没有人工点选（UI 脚本用 IPC 返回测试目录，模拟 preload 调用）；
-  Electron 打包/便携包冒烟、真实 portable 端口下的 picker 尚未跑；backend `tsc` 仍有
-  贴纸模块的历史类型错误（本轮新增文件不在错误清单内）。
+- P1 已落地：文件树、只读预览、多文件 tab、工作区根改名/不可用提示、内置浏览器、
+  拖拽调宽/最大化/命令面板、窄窗整宽覆盖；Web 端只保留推理/画布，文件与浏览器入口不出现。
+- 文件面板只读；编辑器/保存、变更/diff、终端、Git 写操作、浏览器多 tab 仍是 P2/P3，
+  能力清单里 `editor/terminal/git` 仍为 `false`。
+- 原生选择器：`maxma:pick-path` / `maxma:reveal-path` / `maxma:open-path`（仅存在、普通的
+  `.html/.htm`）；`GET /api/select-file` 在无桌面壳时返回 **501 `desktop_required`**。
+- 工作区 API：`GET/POST/DELETE /api/workspace/roots`、`PATCH .../:id`（label 1–240 字）、
+  `GET tree|file|blob`；根存 `<data>/api/data/workspaces.json`，路径逐段 `lstat` 拒绝
+  绝对路径/盘符/UNC/NUL/ADS/`..`/symlink 逃逸，读取前跑 MaxmaBlocker；文本 2 MiB、
+  图片/PDF 50 MiB、目录 2000 项；Token + loopback。
+- 内置浏览器：`WebContentsView` + 独立 `persist:maxma-browser` 会话，开 sandbox/关 Node；
+  http(s) 与 `about:blank` 之外全部取消，`will-navigate`/`will-redirect`/`window.open` 同规则；
+  权限全拒；bounds 按 DOM rect + `getZoomFactor()` 同步；后退/前进后延迟补发一次状态，
+  修复历史标志滞后。安全边界与“无网络 allowlist”已知缺口见 `docs/security-contract.md`。
+- UI 状态键 `maxmahere.workbench-ui.v2`，兼容旧 `maxmahere.canvas-ui-state.v1`；
+  宽度 320–860；窄窗 <1000px 改为覆盖聊天区整宽，不再挤压欢迎卡。
+- **本轮已验证**：backend 全量 **341 pass / 0 fail**（53 files，2239 expect）；
+  web **62 pass / 0 fail**（9 files，含文件树纯函数与 UI 状态迁移）、`tsc --noEmit`、
+  生产 build、ESLint、间距/字号/颜色守卫通过；
+  `scripts/verify-ui-workbench.mjs` 真实 Electron 界面通过：懒加载树、面包屑、多 tab、
+  过滤、改名、HTML 源码、二进制/图片、380→404 拖拽、最大化、125%/150% bounds、
+  前进/后退/刷新、命令面板隐藏 native view、768 窄窗整宽 `754/754`、浅色恢复、
+  Web tab 仅「推理/画布」，`consoleErrors=[]`。
+- 视觉证据 6 张：`dev_docs/visual/workbench-p1-{files,files-light,maximized,browser,browser-page,narrow}.png`。
+- 便携包：桌面 `245,888,830 B`，SHA-256 `fe7aad61…2edf4`，`verify-desktop-render.ps1` PASS；
+  Web `83,281,980 B`，SHA-256 `78d9ab65…a7c2`，`portable-smoke-test.ps1` PASS
+  （328 表情、图片 200、管理 401）；Web 包降级由 `webTabs=["推理","画布"]` 直接证明。
+- **尚未人工验证**：真实系统文件对话框点选；`clear-data` 的确认框；真实 Windows 125%/150%
+  系统 DPI（当前用 webContents zoom 等价验证）。
+- **已知历史债**：backend `tsc` 仍有贴纸模块错误，`check-file-size-budget` 仍报
+  `bun-backend/src/stickers/service.ts` 854 行、`check-type-budget` 仍报贴纸 10 个错误；
+  P1 新增文件不在其中，未顺手重构贴纸服务。
+
+<details>
+<summary>P0 记录（2026-11-20，已含在 P1 提交里）</summary>
+
+- P0 commit `5fd622e3`：文件面板 + 原生选择器 + 只读工作区 API；当时 backend 338 pass、
+  web 52 pass，UI smoke 通过，截图 `dev_docs/visual/workbench-p0.png`。
+
+</details>
 
 
 ## 2026-11-19：表情系统升级为 dsh-meme 源码移植（v2.7.0）

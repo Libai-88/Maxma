@@ -1,81 +1,95 @@
 /**
- * FilesPane — Workbench 2.0 的只读文件浏览器（P0）。
+ * FilesPane — 工作区文件面板（P1）。
  *
- * P0 先交付可用的最小闭环：选择工作区、浏览当前目录、打开文本/图片/PDF。
- * 目录树、快捷键、编辑器、diff 在后续阶段接入，不在这里伪装已有能力。
+ * 树 + 预览的只读闭环。根目录由桌面壳显式选择；Web 形态不渲染本 Pane。
+ * 所有文件内容来自后端 workspace API，预览组件不直接读取本地路径。
  */
 
-import { useEffect, useMemo, useState } from 'react'
-import {
-  ChevronLeft,
-  File,
-  FileCode2,
-  FileText,
-  Folder,
-  FolderOpen,
-  Image as ImageIcon,
-  Loader2,
-  RefreshCw,
-} from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
+import { AlertCircle, ChevronDown, FolderOpen, FolderPlus, MoreHorizontal, Pencil, RefreshCw, Search, Trash2, X } from 'lucide-react'
 
 import { api } from '@/api'
 import { Button } from '@/components/ui/button'
-import { Spinner } from '@/components/ui/spinner'
+import { Input } from '@/components/ui/input'
+import { cn } from '@/lib/utils'
 import type { WorkspaceRoot, WorkspaceTreeEntry } from '@/types/workspace'
+import { FilePreview, type PreviewData, type PreviewTab } from './FilePreview'
+import { FileTree } from './FileTree'
 
-type Preview =
-  | { kind: 'empty' }
-  | { kind: 'text'; path: string; content: string; size: number }
-  | { kind: 'image'; path: string; url: string }
-  | { kind: 'pdf'; path: string; url: string }
-  | { kind: 'error'; path: string; message: string }
+interface ContextMenuState {
+  entry: WorkspaceTreeEntry
+  x: number
+  y: number
+}
 
 const IMAGE_EXT = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'avif', 'svg'])
-const PDF_EXT = new Set(['pdf'])
+const MARKDOWN_EXT = new Set(['md', 'markdown'])
 
-function extensionOf(name: string): string {
+function extOf(name: string): string {
   const dot = name.lastIndexOf('.')
   return dot >= 0 ? name.slice(dot + 1).toLowerCase() : ''
 }
 
-function formatBytes(size: number): string {
-  if (size < 1024) return `${size} B`
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`
+function joinAbsolute(rootPath: string, relative: string): string {
+  if (!relative) return rootPath
+  const separator = rootPath.includes('\\') ? '\\' : '/'
+  return `${rootPath.replace(/[\\/]$/, '')}${separator}${relative.split('/').join(separator)}`
 }
 
-function entryIcon(entry: WorkspaceTreeEntry) {
-  if (entry.type === 'dir') return <Folder className="size-4 text-muted-foreground" />
-  if (entry.type === 'symlink') return <File className="size-4 text-muted-foreground" />
-  if (IMAGE_EXT.has(extensionOf(entry.name))) return <ImageIcon className="size-4 text-muted-foreground" />
-  if (['ts', 'tsx', 'js', 'jsx', 'json', 'css', 'html', 'py', 'go', 'rs', 'sh'].includes(extensionOf(entry.name))) {
-    return <FileCode2 className="size-4 text-muted-foreground" />
+function disposePreview(preview: PreviewData | undefined) {
+  if (preview && (preview.kind === 'image' || preview.kind === 'pdf')) {
+    URL.revokeObjectURL(preview.url)
   }
-  return <FileText className="size-4 text-muted-foreground" />
 }
 
-export function FilesPane() {
+export function FilesPane({ sessionId }: { sessionId?: string }) {
+  const bridge = window.maxmaDesktop
   const [roots, setRoots] = useState<WorkspaceRoot[]>([])
   const [rootId, setRootId] = useState('')
-  const [treePath, setTreePath] = useState('')
-  const [entries, setEntries] = useState<WorkspaceTreeEntry[]>([])
   const [showIgnored, setShowIgnored] = useState(false)
-  const [selected, setSelected] = useState<WorkspaceTreeEntry | null>(null)
-  const [preview, setPreview] = useState<Preview>({ kind: 'empty' })
+  const [filter, setFilter] = useState('')
+  const [refreshToken, setRefreshToken] = useState(0)
+  const [tabs, setTabs] = useState<PreviewTab[]>([])
+  const [activePath, setActivePath] = useState('')
+  const [previews, setPreviews] = useState<Record<string, PreviewData>>({})
   const [loadingRoots, setLoadingRoots] = useState(true)
-  const [loadingTree, setLoadingTree] = useState(false)
-  const [loadingFile, setLoadingFile] = useState(false)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [renaming, setRenaming] = useState(false)
+  const [renameValue, setRenameValue] = useState('')
+  const [menu, setMenu] = useState<ContextMenuState | null>(null)
+  const [revealPath, setRevealPath] = useState<{ path: string; token: number } | null>(null)
+  const previewsRef = useRef<Record<string, PreviewData>>({})
+  const rootEpochRef = useRef(0)
 
   const activeRoot = useMemo(() => roots.find((root) => root.id === rootId) ?? roots[0] ?? null, [roots, rootId])
+  const activeTab = tabs.find((tab) => tab.path === activePath) ?? null
+  const activePreview = activeTab ? previews[activeTab.path] ?? { kind: 'loading' as const } : null
+
+  useEffect(() => {
+    previewsRef.current = previews
+  }, [previews])
+
+  // 关闭当前 tab 后自动落到最后一个 tab；用副作用收敛状态，
+  // 不再在关闭回调里读渲染期的 tabs 闭包（快速连点会互相覆盖）。
+  useEffect(() => {
+    if (tabs.some((tab) => tab.path === activePath)) return
+    setActivePath(tabs[tabs.length - 1]?.path ?? '')
+  }, [tabs, activePath])
+
+  useEffect(() => {
+    return () => {
+      for (const preview of Object.values(previewsRef.current)) disposePreview(preview)
+    }
+  }, [])
 
   useEffect(() => {
     let alive = true
     void api.listWorkspaceRoots()
       .then((result) => {
         if (!alive) return
-        setRoots(result.roots)
-        if (result.roots[0]) setRootId(result.roots[0].id)
+        applyRoots(result.roots)
       })
       .catch((e) => { if (alive) setError(e instanceof Error ? e.message : String(e)) })
       .finally(() => { if (alive) setLoadingRoots(false) })
@@ -83,181 +97,321 @@ export function FilesPane() {
   }, [])
 
   useEffect(() => {
-    if (!activeRoot) {
-      setEntries([])
-      return
-    }
-    let alive = true
-    setLoadingTree(true)
-    setError('')
-    void api.workspaceTree(activeRoot.id, treePath, showIgnored)
-      .then((result) => {
-        if (!alive) return
-        setEntries(result.entries)
-      })
-      .catch((e) => { if (alive) setError(e instanceof Error ? e.message : String(e)) })
-      .finally(() => { if (alive) setLoadingTree(false) })
-    return () => { alive = false }
-  }, [activeRoot, treePath, showIgnored])
-
-  useEffect(() => {
-    const url = preview.kind === 'image' || preview.kind === 'pdf' ? preview.url : null
+    if (!menu) return
+    const close = () => setMenu(null)
+    const key = (event: KeyboardEvent) => { if (event.key === 'Escape') close() }
+    window.addEventListener('pointerdown', close)
+    window.addEventListener('keydown', key)
     return () => {
-      if (url) URL.revokeObjectURL(url)
+      window.removeEventListener('pointerdown', close)
+      window.removeEventListener('keydown', key)
     }
-  }, [preview])
+  }, [menu])
+
+  function applyRoots(next: WorkspaceRoot[]) {
+    const sorted = [...next].sort((a, b) => Number(b.available !== false) - Number(a.available !== false) || b.last_used_at - a.last_used_at)
+    setRoots(sorted)
+    setRootId((current) => sorted.some((root) => root.id === current) ? current : sorted[0]?.id ?? '')
+  }
+
+  function resetFiles() {
+    rootEpochRef.current += 1
+    for (const preview of Object.values(previewsRef.current)) disposePreview(preview)
+    previewsRef.current = {}
+    setPreviews({})
+    setTabs([])
+    setActivePath('')
+    setFilter('')
+    setRevealPath(null)
+    setRefreshToken((token) => token + 1)
+  }
+
+  function switchRoot(nextId: string) {
+    if (nextId === rootId) return
+    resetFiles()
+    setRootId(nextId)
+    setRoots((current) => current.map((root) => root.id === nextId ? { ...root, last_used_at: Date.now() } : root))
+  }
 
   async function chooseRoot() {
-    const bridge = window.maxmaDesktop
-    if (!bridge?.pickPath) {
-      setError('目录选择只在 Maxma 桌面端可用；Web 端请使用上传入口。')
-      return
-    }
+    setError('')
     try {
+      if (!bridge?.pickPath) {
+        setError('原生文件夹选择只在 Maxma 桌面端可用。')
+        return
+      }
       const picked = await bridge.pickPath('folder')
-      if (picked.canceled || !picked.path) return
+      if (!picked.path) return
       const result = await api.addWorkspaceRoot(picked.path)
-      setRoots((prev) => [result.root, ...prev.filter((root) => root.id !== result.root.id)])
+      applyRoots([...roots.filter((root) => root.id !== result.root.id), result.root])
+      resetFiles()
       setRootId(result.root.id)
-      setTreePath('')
-      setSelected(null)
-      setPreview({ kind: 'empty' })
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
   }
 
-  async function openFile(entry: WorkspaceTreeEntry) {
+  async function removeRoot() {
     if (!activeRoot) return
-    setSelected(entry)
-    setError('')
-    setLoadingFile(true)
-    const ext = extensionOf(entry.name)
+    if (!window.confirm(`移除工作区「${activeRoot.label}」？只撤销读取授权，不会删除磁盘文件。`)) return
     try {
-      if (IMAGE_EXT.has(ext) || PDF_EXT.has(ext)) {
-        const blob = await api.workspaceBlob(activeRoot.id, entry.path)
-        const url = URL.createObjectURL(blob)
-        setPreview(IMAGE_EXT.has(ext)
-          ? { kind: 'image', path: entry.path, url }
-          : { kind: 'pdf', path: entry.path, url })
-      } else {
-        const result = await api.workspaceFile(activeRoot.id, entry.path)
-        setPreview({ kind: 'text', path: entry.path, content: result.file.content, size: result.file.size })
-      }
+      await api.removeWorkspaceRoot(activeRoot.id)
+      applyRoots(roots.filter((root) => root.id !== activeRoot.id))
+      resetFiles()
     } catch (e) {
-      setPreview({ kind: 'error', path: entry.path, message: e instanceof Error ? e.message : String(e) })
-    } finally {
-      setLoadingFile(false)
+      setError(e instanceof Error ? e.message : String(e))
     }
   }
 
-  function goUp() {
-    if (!treePath) return
-    const parts = treePath.split('/').filter(Boolean)
-    setTreePath(parts.slice(0, -1).join('/'))
-    setSelected(null)
-    setPreview({ kind: 'empty' })
+  function beginRename() {
+    if (!activeRoot) return
+    setRenameValue(activeRoot.label)
+    setRenaming(true)
+  }
+
+  async function commitRename() {
+    if (!activeRoot) return
+    const label = renameValue.trim()
+    if (!label) { setRenaming(false); return }
+    try {
+      const result = await api.renameWorkspaceRoot(activeRoot.id, label)
+      applyRoots(roots.map((root) => root.id === result.root.id ? result.root : root))
+      setRenaming(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  async function loadPreview(entry: WorkspaceTreeEntry) {
+    if (previewsRef.current[entry.path]) return
+    const root = activeRoot
+    if (!root) return
+    const epoch = rootEpochRef.current
+    const ext = extOf(entry.name)
+    const loading: PreviewData = { kind: 'loading' }
+    previewsRef.current = { ...previewsRef.current, [entry.path]: loading }
+    setPreviews(previewsRef.current)
+    try {
+      if (IMAGE_EXT.has(ext) || ext === 'pdf') {
+        const blob = await api.workspaceBlob(root.id, entry.path)
+        const url = URL.createObjectURL(blob)
+        if (epoch !== rootEpochRef.current) {
+          URL.revokeObjectURL(url)
+          return
+        }
+        const preview: PreviewData = ext === 'pdf'
+          ? { kind: 'pdf', url, size: blob.size }
+          : { kind: 'image', url, size: blob.size, mime: blob.type }
+        previewsRef.current = { ...previewsRef.current, [entry.path]: preview }
+        setPreviews(previewsRef.current)
+        return
+      }
+      const result = await api.workspaceFile(root.id, entry.path)
+      if (epoch !== rootEpochRef.current) return
+      const preview: PreviewData = MARKDOWN_EXT.has(ext)
+        ? { kind: 'markdown', content: result.file.content }
+        : { kind: 'text', content: result.file.content, hash: result.file.hash }
+      previewsRef.current = { ...previewsRef.current, [entry.path]: preview }
+      setPreviews(previewsRef.current)
+    } catch (e) {
+      if (epoch !== rootEpochRef.current) return
+      const message = e instanceof Error ? e.message : String(e)
+      const preview: PreviewData = message.includes('二进制') || message.includes('BINARY')
+        ? { kind: 'binary', message: '该文件不是可预览的 UTF-8 文本。' }
+        : { kind: 'error', message }
+      previewsRef.current = { ...previewsRef.current, [entry.path]: preview }
+      setPreviews(previewsRef.current)
+    }
+  }
+
+  function openFile(entry: WorkspaceTreeEntry) {
+    if (!activeRoot || entry.type !== 'file') return
+    setActivePath(entry.path)
+    setTabs((current) => current.some((tab) => tab.path === entry.path)
+      ? current
+      : [...current, { path: entry.path, name: entry.name, size: entry.size, mtime: entry.mtime, type: entry.type }])
+    void loadPreview(entry)
+  }
+
+  function closeTab(path: string) {
+    const preview = previewsRef.current[path]
+    disposePreview(preview)
+    const nextPreviews = { ...previewsRef.current }
+    delete nextPreviews[path]
+    previewsRef.current = nextPreviews
+    setPreviews(nextPreviews)
+    setTabs((current) => current.filter((tab) => tab.path !== path))
+  }
+
+  function addToChat(tab: PreviewTab) {
+    if (!activeRoot) return
+    const absolute = joinAbsolute(activeRoot.path, tab.path)
+    window.dispatchEvent(new CustomEvent('maxma:add-file-ref', { detail: { path: absolute, label: tab.name, sessionId } }))
+    setNotice('已加入对话引用')
+    setTimeout(() => setNotice(''), 1800)
+  }
+
+  function copyPath(tab: PreviewTab) {
+    void navigator.clipboard.writeText(tab.path).then(
+      () => { setNotice('已复制相对路径'); setTimeout(() => setNotice(''), 1800) },
+      () => setError('复制失败，请检查剪贴板权限'),
+    )
+  }
+
+  function reveal(tab: PreviewTab) {
+    if (!activeRoot) return
+    const absolute = joinAbsolute(activeRoot.path, tab.path)
+    if (!bridge?.revealPath) { setError('在资源管理器显示只在 Maxma 桌面端可用。'); return }
+    void bridge.revealPath(absolute).catch((e) => setError(e instanceof Error ? e.message : String(e)))
+  }
+
+  function revealEntry(entry: WorkspaceTreeEntry) {
+    if (!activeRoot) return
+    const absolute = joinAbsolute(activeRoot.path, entry.path)
+    if (!bridge?.revealPath) { setError('在资源管理器显示只在 Maxma 桌面端可用。'); return }
+    void bridge.revealPath(absolute).catch((e) => setError(e instanceof Error ? e.message : String(e)))
+  }
+
+  function openExternal(tab: PreviewTab) {
+    if (!activeRoot || !bridge?.openPath) { setError('系统打开只在 Maxma 桌面端可用。'); return }
+    const absolute = joinAbsolute(activeRoot.path, tab.path)
+    void bridge.openPath(absolute).catch((e) => setError(e instanceof Error ? e.message : String(e)))
+  }
+
+  function contextAction(action: 'open' | 'reveal' | 'copy' | 'chat', entry: WorkspaceTreeEntry) {
+    setMenu(null)
+    if (action === 'open') { openFile(entry); return }
+    if (action === 'reveal') { revealEntry(entry); return }
+    if (!activeRoot) return
+    if (action === 'copy') {
+      void navigator.clipboard.writeText(entry.path).then(
+        () => { setNotice('已复制相对路径'); setTimeout(() => setNotice(''), 1800) },
+        () => setError('复制失败，请检查剪贴板权限'),
+      )
+      return
+    }
+    const absolute = joinAbsolute(activeRoot.path, entry.path)
+    window.dispatchEvent(new CustomEvent('maxma:add-file-ref', { detail: { path: absolute, label: entry.name, sessionId } }))
+    setNotice('已加入对话引用')
+    setTimeout(() => setNotice(''), 1800)
   }
 
   if (loadingRoots) {
-    return <div className="flex h-full items-center justify-center"><Spinner /></div>
+    return <div className="flex flex-1 items-center justify-center text-caption text-muted-foreground">加载工作区…</div>
   }
 
   if (!activeRoot) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 px-4 text-center">
-        <FolderOpen className="size-8 text-muted-foreground" />
-        <p className="text-sm font-medium">还没有工作区</p>
-        <p className="max-w-64 text-caption text-muted-foreground">选择一个本地文件夹后，就能在这里浏览文件；不会把整台机器的路径自动暴露给 Agent。</p>
-        <Button size="sm" onClick={() => void chooseRoot()}>选择文件夹</Button>
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border p-6 text-center">
+        <FolderOpen className="size-7 text-muted-foreground" />
+        <div>
+          <p className="text-caption text-foreground">还没有工作区</p>
+          <p className="mt-1 text-micro text-muted-foreground">选择一个本地文件夹后，就能在这里浏览文件；不会把整台机器的路径自动暴露给 Agent。</p>
+        </div>
+        {error && <p className="text-micro text-destructive">{error}</p>}
+        <Button size="sm" onClick={() => void chooseRoot()}><FolderPlus className="mr-1 size-3.5" />选择文件夹</Button>
       </div>
     )
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center gap-1.5 border-b border-border px-2 py-1.5">
-        <select
-          aria-label="工作区"
-          className="h-7 min-w-0 flex-1 rounded-md border border-border bg-background px-1.5 text-caption text-foreground"
-          value={activeRoot.id}
-          onChange={(event) => {
-            setRootId(event.target.value)
-            setTreePath('')
-            setSelected(null)
-            setPreview({ kind: 'empty' })
-          }}
-        >
-          {roots.map((root) => <option key={root.id} value={root.id}>{root.label}</option>)}
-        </select>
-        <Button variant="ghost" size="icon-sm" aria-label="选择新工作区" title="选择新工作区" onClick={() => void chooseRoot()}>
-          <FolderOpen className="size-4" />
-        </Button>
-        <Button variant="ghost" size="icon-sm" aria-label="刷新文件列表" title="刷新" onClick={() => {
-          if (activeRoot) void api.workspaceTree(activeRoot.id, treePath, showIgnored).then((result) => setEntries(result.entries)).catch((e) => setError(e instanceof Error ? e.message : String(e)))
-        }}>
-          <RefreshCw className="size-4" />
-        </Button>
-      </div>
-
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex items-center gap-1 overflow-hidden px-2 py-1.5 text-caption text-muted-foreground">
-          {treePath && (
-            <Button variant="ghost" size="icon-xs" aria-label="返回上级目录" onClick={goUp}>
-              <ChevronLeft className="size-3.5" />
-            </Button>
-          )}
-          <span className="truncate">{activeRoot.label}{treePath ? ` / ${treePath}` : ''}</span>
-          <label className="ml-auto flex shrink-0 items-center gap-1" title="显示 node_modules/.git 等目录">
-            <input type="checkbox" checked={showIgnored} onChange={(event) => setShowIgnored(event.target.checked)} />
-            <span>忽略项</span>
-          </label>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin border-t border-border">
-          {loadingTree && <div className="flex items-center gap-2 px-3 py-3 text-caption text-muted-foreground"><Loader2 className="size-3.5 animate-spin" /> 正在加载…</div>}
-          {!loadingTree && entries.length === 0 && <p className="px-3 py-4 text-caption text-muted-foreground">这个目录是空的。</p>}
-          {entries.map((entry) => (
-            <button
-              key={entry.path}
-              type="button"
-              className={`flex w-full items-center gap-2 border-b border-border/40 px-3 py-1.5 text-left text-caption hover:bg-accent/50 ${selected?.path === entry.path ? 'bg-accent/60' : ''}`}
-              onClick={() => { if (entry.type === 'dir') { setTreePath(entry.path); setSelected(null); setPreview({ kind: 'empty' }) } else void openFile(entry) }}
-              title={entry.type === 'symlink' ? 'P0 不跟随符号链接' : entry.path}
-            >
-              {entryIcon(entry)}
-              <span className="min-w-0 flex-1 truncate">{entry.name}</span>
-              {entry.type === 'dir' ? <span className="text-muted-foreground">›</span> : <span className="shrink-0 text-muted-foreground">{formatBytes(entry.size)}</span>}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {(error || preview.kind !== 'empty') && (
-        <div className="min-h-0 max-h-[46%] shrink-0 overflow-hidden border-t border-border">
-          {error && <p className="px-3 py-2 text-caption text-destructive">{error}</p>}
-          {preview.kind === 'text' && (
-            <div className="flex h-full min-h-0 flex-col">
-              <div className="flex shrink-0 items-center justify-between gap-2 px-3 py-1.5 text-caption text-muted-foreground">
-                <span className="truncate">{preview.path}</span>
-                <span>{formatBytes(preview.size)}</span>
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-1">
+          {renaming ? (
+            <div className="flex min-w-0 flex-1 items-center gap-1">
+              <Input value={renameValue} onChange={(event) => setRenameValue(event.target.value)} className="h-7 text-caption" autoFocus aria-label="工作区名称"
+                onKeyDown={(event) => { if (event.key === 'Enter') void commitRename(); if (event.key === 'Escape') setRenaming(false) }} />
+              <Button size="icon-xs" variant="ghost" onClick={() => void commitRename()} aria-label="保存名称">✓</Button>
+              <Button size="icon-xs" variant="ghost" onClick={() => setRenaming(false)} aria-label="取消重命名"><X className="size-3" /></Button>
+            </div>
+          ) : (
+            <>
+              <div className="relative min-w-0 flex-1">
+                <select
+                  aria-label="切换工作区"
+                  value={activeRoot.id}
+                  onChange={(event) => switchRoot(event.target.value)}
+                  className="h-7 w-full appearance-none truncate rounded-md border border-border bg-card/50 pl-2 pr-7 text-caption outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {roots.map((root) => <option key={root.id} value={root.id}>{root.label}{root.available === false ? '（不可用）' : ''}</option>)}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2 top-1.5 size-3.5 text-muted-foreground" />
               </div>
-              <pre className="min-h-0 flex-1 overflow-auto scrollbar-thin whitespace-pre-wrap px-3 pb-3 font-mono text-caption">{preview.content}</pre>
-            </div>
+              <Button size="icon-xs" variant="ghost" onClick={() => void chooseRoot()} aria-label="选择文件夹" title="选择文件夹"><FolderPlus className="size-3.5" /></Button>
+              <Button size="icon-xs" variant="ghost" onClick={beginRename} aria-label="重命名工作区" title="重命名工作区"><Pencil className="size-3.5" /></Button>
+              <Button size="icon-xs" variant="ghost" onClick={() => void removeRoot()} aria-label="移除工作区" title="移除工作区"><Trash2 className="size-3.5" /></Button>
+            </>
           )}
-          {preview.kind === 'image' && (
-            <div className="flex h-full min-h-0 items-center justify-center p-3">
-              <img src={preview.url} alt={preview.path} className="max-h-full max-w-full object-contain" />
-            </div>
-          )}
-          {preview.kind === 'pdf' && (
-            <iframe src={preview.url} title={`PDF：${preview.path}`} className="h-full min-h-48 w-full bg-background" />
-          )}
-          {preview.kind === 'error' && <p className="px-3 py-2 text-caption text-destructive">{preview.message}</p>}
+        </div>
+        {!renaming && <p className="truncate text-micro text-muted-foreground" title={activeRoot.path}>{activeRoot.path}</p>}
+        {activeRoot.available === false && (
+          <div className="flex items-center gap-1 rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-micro text-destructive">
+            <AlertCircle className="size-3 shrink-0" />文件夹已不存在或不可访问；请重新选择或移除授权。
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center gap-1">
+        <div className="relative min-w-0 flex-1">
+          <Search className="pointer-events-none absolute left-2 top-1.5 size-3.5 text-muted-foreground" />
+          <Input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="按文件名过滤…" className="h-7 pl-7 text-caption" />
+        </div>
+        <Button size="icon-xs" variant="ghost" onClick={() => setRefreshToken((token) => token + 1)} aria-label="刷新文件树" title="刷新"><RefreshCw className="size-3.5" /></Button>
+        <Button size="icon-xs" variant="ghost" aria-pressed={showIgnored} onClick={() => setShowIgnored((value) => !value)} aria-label={showIgnored ? '隐藏忽略项' : '显示忽略项'} title="显示忽略项"><MoreHorizontal className={cn('size-3.5', showIgnored && 'text-foreground')} /></Button>
+      </div>
+
+      {(error || notice) && (
+        <div className={cn('flex items-start justify-between gap-2 rounded-md border px-2 py-1.5 text-micro', error ? 'border-destructive/40 bg-destructive/10 text-destructive' : 'border-border bg-accent/40 text-muted-foreground')}>
+          <span className="min-w-0 flex-1">{error || notice}</span>
+          <button type="button" aria-label="关闭提示" onClick={() => { setError(''); setNotice('') }}><X className="size-3" /></button>
         </div>
       )}
 
-      {loadingFile && <div className="px-3 py-1.5 text-caption text-muted-foreground"><Loader2 className="mr-1 inline size-3.5 animate-spin" /> 正在读取文件…</div>}
+      <div className="flex h-[38%] min-h-28 flex-col">
+        <FileTree
+          root={activeRoot}
+          showIgnored={showIgnored}
+          filter={filter}
+          refreshToken={refreshToken}
+          currentPath={activePath}
+          revealPath={revealPath}
+          onOpenFile={openFile}
+          onContextMenu={(entry, event: ReactMouseEvent) => {
+            setMenu({ entry, x: event.clientX, y: event.clientY })
+          }}
+        />
+      </div>
+
+      <FilePreview
+        tabs={tabs}
+        activePath={activePath}
+        rootLabel={activeRoot.label}
+        preview={activePreview}
+        onSelect={(path) => setActivePath(path)}
+        onClose={closeTab}
+        onNavigate={(path) => {
+          setFilter('')
+          setRevealPath({ path, token: Date.now() })
+        }}
+        onAddToChat={addToChat}
+        onReveal={reveal}
+        onCopyPath={copyPath}
+        onOpenExternal={openExternal}
+      />
+
+      {menu && (
+        <div
+          className="fixed z-50 min-w-40 rounded-lg border border-border bg-popover p-2 text-caption"
+          style={{ left: Math.min(menu.x, window.innerWidth - 180), top: Math.min(menu.y, window.innerHeight - 150) }}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          {menu.entry.type === 'file' && <button type="button" className="flex w-full rounded-md px-2 py-1.5 text-left hover:bg-accent" onClick={() => contextAction('open', menu.entry)}>打开</button>}
+          <button type="button" className="flex w-full rounded-md px-2 py-1.5 text-left hover:bg-accent" onClick={() => contextAction('reveal', menu.entry)}>在资源管理器显示</button>
+          <button type="button" className="flex w-full rounded-md px-2 py-1.5 text-left hover:bg-accent" onClick={() => contextAction('copy', menu.entry)}>复制相对路径</button>
+          {menu.entry.type === 'file' && <button type="button" className="flex w-full rounded-md px-2 py-1.5 text-left hover:bg-accent" onClick={() => contextAction('chat', menu.entry)}>加入对话</button>}
+        </div>
+      )}
     </div>
   )
 }

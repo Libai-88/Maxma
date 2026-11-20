@@ -29,6 +29,9 @@ const MAX_PERSISTED_CARDS = 24
 /** 单张卡片内容的最大长度（UTF-16 code units，非字节数）。 */
 const MAX_CARD_CONTENT_LENGTH = 262_144
 const WORKBENCH_TABS: ReadonlySet<WorkbenchTab> = new Set(['reasoning', 'canvas', 'files', 'browser'])
+export const WORKBENCH_MIN_WIDTH = 320
+export const WORKBENCH_MAX_WIDTH = 860
+const WORKBENCH_DEFAULT_WIDTH = 380
 
 const CARD_TYPES: ReadonlySet<CanvasCardType> = new Set([
   'code', 'table', 'summary', 'confirmation', 'choice', 'html', 'json', 'markdown',
@@ -47,6 +50,8 @@ interface WorkbenchDerived {
 interface WorkbenchState extends WorkbenchDerived {
   isOpen: boolean
   activeTab: WorkbenchTab
+  width: number
+  maximized: boolean
   cards: CanvasCard[]
   activeCardId: string | null
   artifactResults: Map<string, { content: string; error?: string }>
@@ -54,6 +59,8 @@ interface WorkbenchState extends WorkbenchDerived {
   close: () => void
   toggle: () => void
   setTab: (tab: WorkbenchTab) => void
+  setWidth: (width: number) => void
+  toggleMaximized: () => void
   addCard: (params: {
     type: CanvasCardType
     title: string
@@ -86,25 +93,56 @@ function deriveCards(cards: CanvasCard[], activeCardId: string | null): Workbenc
   }
 }
 
-function loadUiState(): { isOpen: boolean; activeTab: WorkbenchTab } {
-  if (typeof localStorage === 'undefined') return { isOpen: false, activeTab: 'reasoning' }
-  try {
-    // v2 是当前键；v1 只读一次用于迁移，避免用户升级后工作台突然回到推理页。
-    const raw = localStorage.getItem(WORKSPACE_UI_STORAGE_KEY)
-      ?? localStorage.getItem(LEGACY_WORKSPACE_UI_STORAGE_KEY)
-    const value = JSON.parse(raw ?? 'null') as
-      | { isOpen?: unknown; activeTab?: unknown }
-      | null
-    const activeTab = typeof value?.activeTab === 'string' && WORKBENCH_TABS.has(value.activeTab as WorkbenchTab)
-      ? value.activeTab as WorkbenchTab
-      : 'reasoning'
-    return {
-      isOpen: value?.isOpen === true,
-      activeTab,
-    }
-  } catch {
-    return { isOpen: false, activeTab: 'reasoning' }
+export interface WorkbenchUiState {
+  isOpen: boolean
+  activeTab: WorkbenchTab
+  width: number
+  maximized: boolean
+}
+
+interface StorageLike {
+  getItem: (key: string) => string | null
+}
+
+/** 把持久化 JSON 归一化成 UI 状态；未知/损坏值一律回退，不抛给调用方。 */
+export function parseWorkspaceUiState(value: unknown): WorkbenchUiState {
+  const fallback: WorkbenchUiState = {
+    isOpen: false,
+    activeTab: 'reasoning',
+    width: WORKBENCH_DEFAULT_WIDTH,
+    maximized: false,
   }
+  if (!value || typeof value !== 'object') return fallback
+  const raw = value as { isOpen?: unknown; activeTab?: unknown; width?: unknown; maximized?: unknown }
+  const activeTab = typeof raw.activeTab === 'string' && WORKBENCH_TABS.has(raw.activeTab as WorkbenchTab)
+    ? raw.activeTab as WorkbenchTab
+    : 'reasoning'
+  const width = typeof raw.width === 'number' && Number.isFinite(raw.width)
+    ? Math.min(WORKBENCH_MAX_WIDTH, Math.max(WORKBENCH_MIN_WIDTH, Math.round(raw.width)))
+    : WORKBENCH_DEFAULT_WIDTH
+  return {
+    isOpen: raw.isOpen === true,
+    activeTab,
+    width,
+    maximized: raw.maximized === true,
+  }
+}
+
+/** 读 v2 键；只有 v2 缺失时才读旧 v1 键，避免升级后工作台回到推理页。 */
+export function readWorkspaceUiState(storage?: StorageLike | null): WorkbenchUiState {
+  const source = storage ?? (typeof localStorage === 'undefined' ? null : localStorage)
+  if (!source) return parseWorkspaceUiState(null)
+  try {
+    const raw = source.getItem(WORKSPACE_UI_STORAGE_KEY)
+      ?? source.getItem(LEGACY_WORKSPACE_UI_STORAGE_KEY)
+    return parseWorkspaceUiState(JSON.parse(raw ?? 'null'))
+  } catch {
+    return parseWorkspaceUiState(null)
+  }
+}
+
+function loadUiState(): WorkbenchUiState {
+  return readWorkspaceUiState()
 }
 
 function restoreWorkspace(): PersistedWorkspace {
@@ -181,6 +219,8 @@ export const useWorkbenchStore = create<WorkbenchState>()((set, get) => {
       localStorage.setItem(WORKSPACE_UI_STORAGE_KEY, JSON.stringify({
         isOpen: get().isOpen,
         activeTab: get().activeTab,
+        width: get().width,
+        maximized: get().maximized,
       }))
     } catch {
       // 配额异常时静默——面板状态丢失可接受
@@ -228,6 +268,17 @@ export const useWorkbenchStore = create<WorkbenchState>()((set, get) => {
 
   function setTab(tab: WorkbenchTab) {
     patch({ activeTab: tab })
+    persistUiState()
+  }
+
+  function setWidth(width: number) {
+    const clamped = Math.min(WORKBENCH_MAX_WIDTH, Math.max(WORKBENCH_MIN_WIDTH, Math.round(width)))
+    patch({ width: clamped, maximized: false })
+    persistUiState()
+  }
+
+  function toggleMaximized() {
+    patch({ maximized: !get().maximized })
     persistUiState()
   }
 
@@ -398,6 +449,8 @@ export const useWorkbenchStore = create<WorkbenchState>()((set, get) => {
   return {
     isOpen: _uiState.isOpen,
     activeTab: _uiState.activeTab,
+    width: _uiState.width,
+    maximized: _uiState.maximized,
     cards: restored.cards,
     activeCardId: restored.activeCardId,
     artifactResults: new Map<string, { content: string; error?: string }>(),
@@ -406,6 +459,8 @@ export const useWorkbenchStore = create<WorkbenchState>()((set, get) => {
     close,
     toggle,
     setTab,
+    setWidth,
+    toggleMaximized,
     addCard,
     addArtifact,
     markArtifactActionSubmitted,
