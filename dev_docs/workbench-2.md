@@ -449,19 +449,19 @@ consoleErrors=[]`。截图：`workbench-design-canvas-blank.png`、`workbench-de
 
 ### 4.3 便携包
 
-2026-11-21 按画布纠偏后的源码重建：桌面 `build-desktop-portable.ps1 -SkipDependencyInstall`；Web
+2026-11-21 按 Agent 接管画布后的源码重建：桌面 `build-desktop-portable.ps1 -SkipDependencyInstall`；Web
 `build-portable.bat` 生成 `..\MaxmaHere-Portable\`，再打包为 zip。桌面包与 Web 包分别走
 `build/portable-smoke-test.ps1`，桌面包另走 `scripts/verify-desktop-render.ps1`。
 
 | 包 | 体积 | SHA-256 | 验证 |
 | --- | --- | --- | --- |
-| `dist/electron-portable/MaxmaHere-2.7.0-portable-x64.zip` | 252,638,597 B | `521b1d4a0671461dca225a4627a272bfa16af40fd16a4688b36e492dc143d732` | `verify-desktop-render.ps1`: 后端监听、渲染 WS、主进程存活、残留 0；`portable-smoke-test.ps1`: auth/health/news 52/settings/plugins 1/plugin routes 15/externals 23 缺 0/5 个免费模型/328 表情/图片 200/管理 401/PASS |
-| `dist/web-portable/MaxmaHere-Portable-2.7.0.zip` | 83,679,219 B | `2daa450f478344447b7469ac601bef8759f70fead97e93ad846e35e153d51b69` | `portable-smoke-test.ps1`: auth/health/news 52/settings/plugins 1/plugin routes 15/externals 23 缺 0/5 个免费模型/328 表情/图片 200/管理 401/PASS |
+| `dist/electron-portable/MaxmaHere-2.7.0-portable-x64.zip` | 252,646,397 B | `c081f62f95ea5702ebcc0d82b632831d7be0b256d91c82db6f06810448853945` | `verify-desktop-render.ps1`: 后端监听、渲染 WS、主进程存活、残留 0；`portable-smoke-test.ps1`: auth/health/news 52/settings/plugins 1/plugin routes 15/externals 23 缺 0/5 个免费模型/328 表情/图片 200/管理 401/PASS |
+| `dist/web-portable/MaxmaHere-Portable-2.7.0.zip` | 83,687,234 B | `6b9d3180fba7f16ae463a98aff3bd50ea4808eeaeb5e5b97f0ca9618e5fb87f` | `portable-smoke-test.ps1`: auth/health/news 52/settings/plugins 1/plugin routes 15/externals 23 缺 0/5 个免费模型/328 表情/图片 200/管理 401/PASS |
 
 Web 包明确降级：没有 preload 时不显示文件/变更/命令/浏览器 tab；UI smoke 的
 `webTabs=["推理","任务","画布"]` 是直接证据。新 Web zip 含 2,885 个条目，
 `.maxma/skills/coding-starter/SKILL.md`、`web/dist/index.html` 与
-`web/dist/assets/CanvasPane-abYYCTdn.js` 均在包内。打包冒烟脚本保留
+`web/dist/assets/CanvasPane-rFyUmIIt.js` 均在包内。打包冒烟脚本保留
 `Invoke-WebRequest -UseBasicParsing`：Windows PowerShell 5.1 默认 IE/COM 解析管线在无交互会话里首次初始化会卡死，
 显式关掉 DOM 解析后测试可重复。
 

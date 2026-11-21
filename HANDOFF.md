@@ -3,6 +3,43 @@
 > 当前可执行状态，供下一位接手者。架构请先读 [docs/00-当前架构.md](docs/00-当前架构.md)。
 > 更新时间：2026-11-21
 
+## 2026-11-21：Agent 接管设计画布（canvas_read / canvas_apply / canvas_export）
+
+- **要求**：Maxma 的内置功能必须能由 Maxma 自己操作，不能出现「Maxma 在对话里说、用户同时在右侧手动改」的割裂。
+- **工具链**：新增 `bun-sidecar/src/tools/canvas.ts`（`canvas_read` 只读摘要、`canvas_apply` 批量编辑、
+  `canvas_export` 导出 PNG/进对话）与 `canvas-broker.ts`（request_id + sessionId 匹回执，20s 超时）。
+  `buildPiCustomTools` 增加画布上下文，`handlePiCreateSession` 传入 `sessionId/cwd/io.sendEvent`；
+  `MAXMA_CUSTOM_TOOLS`、`TOOL_DISPLAY_NAMES` 与 `config/personas/AGENTS.md` 同步登记“先读再整批写”。
+- **WS 控制面**：下行 `canvas_command {request_id,action,args}` 由 `chat-ws` 透传到当前会话；渲染端在真实
+  `DesignCanvasPane` 控制器执行后回 `canvas_agent_result {request_id,result?|error?}`，broker 唤醒工具
+  Promise，不进聊天事件流。入站白名单抽到 `routes/client-message-types.ts`（17 项），`chat-ws.ts` 再导出。
+- **纯操作模型**：`canvasAgentOperations.ts` 支持 rename/preset/artboard/add_text/add_shape/add_image/update/
+  remove/duplicate/reorder/select/clear；一次最多 60 操作，整批只压**一条**撤销；元素上限 200，坐标/字号/
+  颜色/层级全部夹紧。`useDesignCanvas.commitProject` 批量提交，`createDesignAssetFromDataUrl` 统一把
+  Agent 本地图片压缩后写 IndexedDB。
+- **前端桥**：`designCanvasAgentBridge.ts` 只允许当前会话，画布未打开自动 `workbench.open()` +
+  `setTab('canvas', sessionId)` 并等 Pane 注册（6s）；多窗口用 `navigator.locks` 选一个执行者；
+  `canvas_export toChat` 走 `maxma:add-image-ref` 进入输入框。全局 `window.__maxmaCanvasAgent` 供真实
+  Electron UI 驱动。
+- **真实 UI 证据**：A4 3 元素基线上一次提交 6 个操作（改名/切方图/清板/文字/矩形/本地图片 data URL）→
+  `Agent 接管画布`、1080×1080、3 元素、图片有真实 `assetId`；`read` 回读文字正确；`export toChat` 得到
+  `Agent接管画布.png`；撤销一层回 A4/3 元素，重做回 Agent 构图。整轮 `stage=done / ok=true /
+  consoleErrors=[]`，仅 2 条良性 `ResizeObserver loop` 警告。截图
+  `dev_docs/visual/workbench-design-canvas-agent.png`。
+- **自动化**：根 `scripts/verify-all-gates.sh` 全绿；sidecar `241 pass / 0 fail`（26 文件，1068 expect，
+  15.27s）、backend `367 pass / 0 fail`、web `93 pass / 0 fail`（14 文件，954 expect）、ESLint 135 目标 0 error；
+  web build `16.39s`，`ChatView 224.88 kB`、`CanvasPane 395.55 kB`（gzip 121.87 kB）。新增
+  `web/tests/designCanvasAgent.test.ts` 5 例、`bun-sidecar/tests/canvas-tools.test.ts` 7 例、
+  `bun-backend/tests/canvas-ws.test.ts` 2 例。
+- **提交与包**：源码提交 `17f93bfc`，分支 `fix/portable-stop-null-guard`。桌面便携包
+  `dist/electron-portable/MaxmaHere-2.7.0-portable-x64.zip` `252,646,397 B`，SHA-256
+  `c081f62f…3945`，`verify-desktop-render.ps1` PASS、包内冒烟 PASS；Web 便携包
+  `dist/web-portable/MaxmaHere-Portable-2.7.0.zip` `83,687,234 B`，SHA-256
+  `6b9d3180…b87f`，2,885 个条目，`portable-smoke-test.ps1` PASS。
+- **边界**：真实 LLM 自发调用三个工具的路径没有在无凭据的临时后端里实测，本轮证据是工具注册 + broker/WS
+  回执 + 真实 renderer 执行；`toChat` 只把图放进输入框，不发发送回执，聊天输入框未挂载时事件可能丢失；
+  `add_image` 不支持 SVG；图片渲染/属性面板仍只暴露 cover；写工具在“逐次确认”模式下仍走审批门。
+
 ## 2026-11-21：画布纠偏为真实设计画布（Konva 画板 / 图层 / 素材 / 导出）
 
 - **方向纠偏**：旧 `CanvasPane.tsx` 只有 34 行，把消息流的 code/table 卡片竖排钉起来，没有画板、图层、选择、
