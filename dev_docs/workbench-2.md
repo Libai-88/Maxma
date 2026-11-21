@@ -156,7 +156,10 @@ Workbench 2.0 把右侧工作台从「只有推理/画布」扩成桌面 Agent �
   - `Runtime.consoleAPICalled`、`exceptionThrown`、`Log.entryAdded` 进环形缓冲，`browser_read console` 可取页面日志和最近异常。
 - 工具侧 `browser_navigate`（write）、`browser_read`（read）、`browser_act`（write）注册进 kernel 契约与 pi 会话活动工具表；`browser_act` 走审批门，不是只读工具。
 - 不做 DOM `element.click()` 冒充：真实输入测试断言页面状态变化（`Hello Maxma b yes`）、`Enter Maxma` 键盘事件、坐标点击、20 步拖拽（`Drag 20,20 -> 180,80`）、原生文件上传（`File browser-upload.txt`）、`console.log` 回读、失效 ref 拒绝。
-- **焦点回归**：`act` 前对目标 `webContents.focus()` 并等 50ms；`browser-cdp.press` 先 `Page.bringToFront`、再 `focus()`、等 30ms；Enter 用 `contents.sendInputEvent({type:"keyDown",keyCode:"Return"})` + `keyUp`。驱动在工具 smoke 期间把窗口 `setAlwaysOnTop(true,"floating")`、`show()`、`focus()`，结束后再关闭置顶，避免自动化终端抢焦点导致页面 `#out` 停在 `Waiting`。
+- **焦点回归**：`act` 前对目标 `webContents.focus()`；`browser-cdp` attach 时开启
+  `Emulation.setFocusEmulationEnabled`，`press` 先 `Page.bringToFront`、`focus()`、等 30ms，再用 CDP
+  `Input.dispatchKeyEvent` 的 `keyDown`（带 text）/`keyUp`；不再依赖 `sendInputEvent` 是否拿到 OS 前台焦点。
+  驱动在工具 smoke 期间仍把窗口 `setAlwaysOnTop(true,"floating")`、`show()`、`focus()`，结束后关闭置顶。
 - 浏览器 P1 已补齐多页签/下载/allowlist（见 §3.10）；`request_id` 去重仍是服务端 60 秒内存缓存，进程重启不保留，见 §5。
 
 ### 3.8 并行会话与截图标注
@@ -170,7 +173,7 @@ Workbench 2.0 把右侧工作台从「只有推理/画布」扩成桌面 Agent �
 
 **结论：左右两层职责分离，不是两套并列导航。** 左侧 `Sidebar` 是全局路由（对话/模型/记忆/工具/设置等），不承载会话级工作台；右侧 `WorkbenchHost` 是当前会话的上下文工作台，按会话保存 active tab，最多三个并行会话各自独立。两者不做合并，也不把全局路由塞进 Workbench tab。
 
-**Pane 注册表是唯一入口。** `panes.ts` 声明七类 Pane 的顺序、中文名、桥依赖、布局类名、保活策略与组件加载器；`WorkbenchHost` 只按注册表映射成 `React.lazy` 组件，不再写 `activeTab === ...` 或 tab 专属 padding 分支。首次访问才加载 Pane，CodeMirror/浏览器面板不挤进 ChatView 首屏 chunk：ChatView 由 286.73 kB 降到 217.24 kB，文件/浏览器/变更/命令/任务/画布/推理各自独立 chunk；已访问集合按 `sessionId` 分开，换会话不会把上一个会话的 Pane 状态串过来。纯 Web 形态由 `availableWorkbenchTabs({desktop:false,browser:false})` 直接得出「推理/画布/任务」，不出现文件/变更/命令/浏览器死入口。
+**Pane 注册表是唯一入口。** `panes.ts` 声明七类 Pane 的顺序、中文名、桥依赖、布局类名、保活策略与组件加载器；`WorkbenchHost` 只按注册表映射成 `React.lazy` 组件，不再写 `activeTab === ...` 或 tab 专属 padding 分支。首次访问才加载 Pane，CodeMirror/浏览器面板不挤进 ChatView 首屏 chunk：ChatView 由 286.73 kB 降到当前 224.64 kB，文件/浏览器/变更/命令/任务/画布/推理各自独立 chunk；已访问集合按 `sessionId` 分开，换会话不会把上一个会话的 Pane 状态串过来。纯 Web 形态由 `availableWorkbenchTabs({desktop:false,browser:false})` 直接得出「推理/画布/任务」，不出现文件/变更/命令/浏览器死入口。
 
 **桥是运行时事实源。** `window.maxmaDesktop.pickPath` 与 `window.maxmaDesktop.browser` 是渲染层真正能执行的事实；后端 `/api/capabilities` 是描述层，给设置/诊断看，不反过来替 preload 造入口。两者不一致时以 preload 为准，避免“清单说有、点了没反应”。
 
@@ -233,6 +236,48 @@ HTTP(S) 主请求和子资源，记录最近 20 条；顶层导航先做 `assert
    已返回 tab 对象，驱动改为 `ensure().view.webContents.executeJavaScript(...)`。
 9. 页签条 `pl-1 pr-2` 触发 spacing guard，改 `px-2`；颜色 fallback 的硬编码 hex 触发 color guard，改命名色。
 
+### 3.11 工作台面板入口：单主标签 + 加号 + 分组面板库（2026-11-21）
+
+**问题不是“入口不够多”，而是入口同时铺开。** 旧顶部第二行把七个 `role=tab` 按钮无条件横排；宽度 380px 时全部挤在
+一行，窄窗更明显。用户要求学习主流 Agent 桌面端：只露当前面板，旁边一个 `+`，展开后再按用途选择，层级要清楚。
+
+**入口结构。**
+
+- 顶部第二行只有一个 `role=tab` 的当前面板主标签：图标、当前面板名、`ChevronDown`；按钮带
+  `aria-haspopup="dialog"`、`aria-expanded`、`aria-controls="workbench-pane-picker"`。
+- 主标签右侧独立 `+`（`aria-label="添加工作台面板"`）。主标签与 `+` 打开同一个 `PanePicker`，仅标题随
+  「切换面板 / 打开面板」变化，不造两套菜单。
+- `PanePicker` 是 `role="dialog" aria-label="工作台面板"` 的非模态浮层，纵向列出分组；每项含图标、名称、
+  `summary` 和当前态 `Check`，点击仍走 `workbench.setTab(tab, sessionId)`，保留每会话 `activeTab`、
+  `visitedTabs` 与 Pane keep-alive。菜单项不再带第二个同名 `role=tab`。
+- 打开后聚焦第一项；`Esc` 或点外部遮罩关闭；关闭后用 `requestAnimationFrame` 把焦点还给触发按钮。
+  `activeTab`/`sessionId`/工作台关闭时自动收起；`Ctrl/⌘+P` 打开命令面板前先收起面板库。
+
+**分组与单源。** `panes.ts` 的 `WorkbenchPaneMeta` 增加 `group/summary/icon`，并新增
+`WORKBENCH_PANE_GROUPS` 与 `groupedWorkbenchPanes(tabs)`：
+
+| 分组 | Pane |
+| --- | --- |
+| 对话 | 推理、画布、任务 |
+| 工作区 | 文件、变更、命令 |
+| 网页 | 浏览器 |
+
+宿主不再手写「哪个 tab 属于哪组」；组内没有可用 Pane 时整组不出现。纯 Web 只有对话组三项，桌面/浏览器入口仍由
+真实 preload 桥决定。
+
+**原生层。** `paneProps.overlayOpen` 从仅 `paletteOpen` 改为 `paletteOpen || pickerOpen`。`BrowserPane` 的 effect
+据此调用 `bridge.hide()`，所以面板库浮在浏览器 Pane 上时，原生 `WebContentsView` 不会盖住 React 菜单；关闭后恢复。
+真实驱动断言 `pickerHidesNative={hiddenWhileOpen:true,restoredAfterClose:true}`。
+
+**横向铺满。** 面板库用 `inset-x-2` 占满工作台宽度，而不是固定 340px 窄卡。否则浏览器 Pane 最右侧的新建页签、
+刷新、外部打开等按钮和底部「N 个页签」会从菜单右侧的缝隙露出来，形成新的视觉堆叠；这是复看
+`workbench-pane-picker-browser.png` 后修掉的一处真实问题。
+
+**证据。** `workbench-pane-picker.png`（推理面板上的分组库：对话/工作区/网页与当前勾选）、
+`workbench-pane-picker-browser.png`（浏览器面板上打开面板库，原生 view 已隐藏）、
+`workbench-p1-files.png`（顶部只剩「文件」主标签 + `+`，不再七项横排）。UI 驱动同时断言
+`paneMenu` 顺序为 `reasoning,canvas,tasks,files,changes,commands,browser`，纯 Web `webTabs` 仅三项。
+
 ## 4. 验收证据
 
 ### 4.1 自动化
@@ -241,14 +286,14 @@ HTTP(S) 主请求和子资源，记录最近 20 条；顶层导航先做 `assert
 | --- | --- |
 | 后端全量 | `365 pass / 0 fail`（含 `browser-policy.test.ts` 5 tests / 36 expect） |
 | sidecar 全量 | `234 pass / 0 fail`，25 文件，1038 expect，17.74s |
-| 前端单测 | `74 pass / 0 fail`，12 文件，841 expect；Pane 注册表 6 例 |
+| 前端单测 | `75 pass / 0 fail`，12 文件，865 expect；Pane 注册表 7 例（含分组元数据与顺序断言） |
 | 前端 typecheck | 通过 |
 | ESLint | 通过，0 error |
-| 前端构建 | 通过，9.76s；ChatView 217.24 kB（Pane 懒加载拆分后较 286.73 kB 下降 69.49 kB）；文件/浏览器/变更/命令/任务/画布/推理各自独立 chunk，`BrowserPane-*.js ≈23.34 kB`；FileEditor 仍为 662.32 kB 懒加载 chunk |
+| 前端构建 | 通过，10.90s；ChatView 224.64 kB（Pane 懒加载拆分后较 286.73 kB 下降 62.09 kB）；文件/浏览器/变更/命令/任务/画布/推理各自独立 chunk，`BrowserPane-*.js ≈22.84 kB`；FileEditor 仍为 662.32 kB 懒加载 chunk |
 | 颜色/间距/字号/对比度/无紫/玻璃层数守卫 | 全部通过 |
 | 文件体量棘轮 | 通过；贴纸 `service.ts` 由 854 行拆为 748 行 + `legacy.ts`，类型债归零 |
 | 类型债闸门 | sidecar 0、backend 0 |
-| 根闸门 | `scripts/verify-all-gates.sh` 全绿（18 项 PASS） |
+| 根闸门 | `scripts/verify-all-gates.sh` 全绿（含 type scale 守卫，修复 `shadow-xl`/裸 `transition` 后复跑） |
 
 ### 4.2 Electron UI smoke
 
@@ -280,11 +325,16 @@ HTTP(S) 主请求和子资源，记录最近 20 条；顶层导航先做 `assert
 - 截图标注 Esc 关闭、重新打开后矩形 checksum `2563510462→1129061470`、文字再变到 `2099209095`、撤销栈生效、加入对话提示出现；元素拾取点中页面 `pre` 并回填 `引用网页元素：#note`；
 - 并行会话：新建后旧 tab 保留，切回后两张 tab 都在，`max=2`；切换期间旧 session 未被主动断开；
 - 命令面板与切 tab 隐藏 native view；768×900 整宽覆盖、`scrollWidth=754=clientWidth`；
+- 工作台面板入口：主标签只显示当前面板，`+` 打开分组面板库；`paneMenu` 顺序为
+  `reasoning,canvas,tasks,files,changes,commands,browser`，分组为对话/工作区/网页；浏览器面板上打开时
+  `pickerHidesNative.hiddenWhileOpen=true`、关闭后 `restoredAfterClose=true`，菜单横向铺满、无控件露出。
 - 浅色 `flexoki-light` 恢复；Web 模式 tab 仅 `推理 / 画布 / 任务`；
 - `consoleErrors=[]`；2 条 `ResizeObserver loop completed with undelivered notifications` 记为良性忽略警告。
 
 截图（均 1280×900 或 768×900 真实窗口）：
 
+- `dev_docs/visual/workbench-pane-picker.png`
+- `dev_docs/visual/workbench-pane-picker-browser.png`
 - `dev_docs/visual/workbench-p1-files.png`
 - `dev_docs/visual/workbench-p1-files-light.png`
 - `dev_docs/visual/workbench-p1-maximized.png`

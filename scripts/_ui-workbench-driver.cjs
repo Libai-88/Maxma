@@ -76,14 +76,56 @@ async function clickButton(target, matcherSource) {
   if (!ok) throw new Error(`找不到目标按钮：${matcherSource}`);
 }
 
+const WORKBENCH_PANE_IDS = {
+  推理: "reasoning",
+  画布: "canvas",
+  文件: "files",
+  变更: "changes",
+  命令: "commands",
+  浏览器: "browser",
+  任务: "tasks",
+};
+
+async function openPaneMenu(target, triggerLabel = "添加工作台面板") {
+  const matcher = triggerLabel === "switcher"
+    ? `(button) => button.matches('[data-workbench-pane-switcher="true"]')`
+    : `(button) => button.getAttribute("aria-label") === ${JSON.stringify(triggerLabel)}`;
+  await clickButton(target, matcher);
+  await waitFor(target, `document.querySelector('[role="dialog"][aria-label="工作台面板"]')`, "展开工作台面板库");
+  await sleep(150);
+}
+
+async function readPaneMenu(target) {
+  return js(target, `[...document.querySelectorAll('[role="dialog"][aria-label="工作台面板"] [data-workbench-pane]')]
+    .map((node) => ({ id: node.dataset.workbenchPane, label: node.getAttribute("aria-label").split("：").pop() }))`);
+}
+
+async function closePaneMenu(target) {
+  await clickButton(target, `(button) => button.getAttribute("aria-label") === "关闭面板列表"`);
+  await waitFor(target, `!document.querySelector('[role="dialog"][aria-label="工作台面板"]')`, "关闭工作台面板库");
+}
+
 async function clickTab(target, label) {
+  const paneId = WORKBENCH_PANE_IDS[label];
+  if (!paneId) throw new Error(`未知工作台面板：${label}`);
+  const expanded = await js(target, `document.querySelector('[data-workbench-pane-switcher="true"]')?.getAttribute("aria-expanded") ?? null`);
+  if (expanded === null) throw new Error("找不到工作台面板切换器");
+  if (expanded !== "true") {
+    await openPaneMenu(target, "switcher");
+  }
+  await waitFor(target, `document.querySelector('[role="dialog"][aria-label="工作台面板"]')`, "打开工作台面板库");
   const ok = await js(target, `(() => {
-    const tab = [...document.querySelectorAll('[role="tab"]')].find((node) => node.innerText.trim() === ${JSON.stringify(label)});
-    if (!tab) return false;
-    tab.click();
+    const item = document.querySelector('[role="dialog"][aria-label="工作台面板"] [data-workbench-pane="${paneId}"]');
+    if (!item || item.getClientRects().length === 0) return false;
+    item.click();
     return true;
   })()`);
-  if (!ok) throw new Error(`找不到「${label}」tab`);
+  if (!ok) throw new Error(`面板库里没有「${label}」（${paneId}）`);
+  await waitFor(
+    target,
+    `[...document.querySelectorAll('[role="tab"]')].some((node) => node.getAttribute("aria-selected") === "true" && node.innerText.trim() === ${JSON.stringify(label)})`,
+    `切换到${label}面板`,
+  );
 }
 
 async function setInput(target, selector, value) {
@@ -120,7 +162,7 @@ async function ensureWorkbenchOpen(target) {
   if (expanded !== "true") {
     await clickButton(target, `(button) => button.getAttribute("aria-label") === "工作台"`);
   }
-  await waitFor(target, `[...document.querySelectorAll('[role="tab"]')].length > 0`, "打开工作台");
+  await waitFor(target, `document.querySelector('[data-workbench-pane-switcher="true"]')`, "打开工作台");
 }
 
 async function waitBrowser(predicate, stage, timeoutMs = 30_000) {
@@ -379,7 +421,7 @@ app.whenReady().then(async () => {
   });
   win.webContents.on("render-process-gone", (_event, details) => logs.push("render-process-gone: " + JSON.stringify(details)));
 
-  const result = { stage: "start", ok: false, checks: {}, consoleErrors: logs, ignoredWarnings, externalUrls };
+  const result = { stage: "start", ok: false, checks: {}, screenshots: {}, consoleErrors: logs, ignoredWarnings, externalUrls };
   try {
     await win.webContents.session.clearCache();
     await win.loadURL(ORIGIN + "/");
@@ -400,8 +442,16 @@ app.whenReady().then(async () => {
     await win.webContents.executeJavaScript("(() => { window.confirm = () => true; return true; })()");
     await ensureWorkbenchOpen(win);
     result.stage = "workbench-open";
-    await waitFor(win, `[...document.querySelectorAll('[role="tab"]')].some((node) => node.innerText.trim() === "文件")`, "等待文件 tab");
-    await waitFor(win, `[...document.querySelectorAll('[role="tab"]')].some((node) => node.innerText.trim() === "浏览器")`, "等待浏览器 tab");
+    await waitFor(win, `document.querySelector('[data-workbench-pane-switcher="true"]')`, "等待面板切换器");
+    await openPaneMenu(win);
+    const desktopPanes = await readPaneMenu(win);
+    const desktopPaneIds = desktopPanes.map((pane) => pane.id);
+    if (!desktopPaneIds.includes("files") || !desktopPaneIds.includes("browser")) {
+      throw new Error("工作台面板库缺少桌面 Pane：" + JSON.stringify(desktopPanes));
+    }
+    result.checks.paneMenu = desktopPanes;
+    result.screenshots.paneMenu = await captureWindow("workbench-pane-picker.png");
+    await closePaneMenu(win);
 
     const hasBridge = await js(win, "Boolean(window.maxmaDesktop && window.maxmaDesktop.pickPath && window.maxmaDesktop.browser)");
     if (!hasBridge) throw new Error("preload 没有暴露 pickPath/browser");
@@ -677,8 +727,14 @@ app.whenReady().then(async () => {
     // 先显式把窗口提到前台并聚焦，再走真实键盘输入，避免把环境失焦误判成产品失败。
     win.setAlwaysOnTop(true, "floating");
     win.show();
+    win.moveTop();
     win.focus();
     await sleep(300);
+    result.checks.smokeFocus = {
+      window: win.isFocused(),
+      webContents: win.webContents.isFocused(),
+      alwaysOnTop: win.isAlwaysOnTop(),
+    };
     const browserTools = await runBrowserToolSmoke();
     win.setAlwaysOnTop(false);
     result.checks.browserToolE2E = browserTools;
@@ -700,6 +756,13 @@ app.whenReady().then(async () => {
     await waitBrowser((state) => state.tabs.length === 2 && state.url.includes("tab=2") && !state.loading, "第二页签加载");
     const browserTabLabels = await js(win, `[...document.querySelectorAll('[aria-label="浏览器页签"] [role="tab"]')].map((node) => node.innerText.trim())`);
     if (browserTabLabels.length !== 2) throw new Error(`浏览器页签数量不是 2：${JSON.stringify(browserTabLabels)}`);
+    // 面板库是 React 浮层：原生 WebContentsView 必须临时隐藏，否则会盖住菜单。
+    await openPaneMenu(win, "switcher");
+    await waitBrowser((state) => state.visible === false, "面板库隐藏原生浏览器");
+    result.screenshots.paneMenuBrowser = await captureWindow("workbench-pane-picker-browser.png");
+    await closePaneMenu(win);
+    await waitBrowser((state) => state.visible === true, "关闭面板库恢复原生浏览器");
+    result.checks.pickerHidesNative = { hiddenWhileOpen: true, restoredAfterClose: true };
     const switched = await js(win, `(() => {
       const first = document.querySelector('[aria-label="浏览器页签"] [role="tab"]');
       if (!first) return false;
@@ -982,9 +1045,13 @@ app.whenReady().then(async () => {
     await web.loadURL(ORIGIN + "/");
     await waitText(web, "Maxma", "等待纯 Web 对话页");
     await ensureWorkbenchOpen(web);
-    const tabLabels = await js(web, `[...document.querySelectorAll('[role="tab"]')].map((node) => node.innerText.trim())`);
-    if (tabLabels.includes("文件") || tabLabels.includes("浏览器")) throw new Error(`纯 Web 形态不应显示桌面 tab：${tabLabels.join(",")}`);
-    result.checks.webTabs = tabLabels;
+    await openPaneMenu(web);
+    const webPanes = await readPaneMenu(web);
+    if (webPanes.some((pane) => pane.id === "files" || pane.id === "browser")) {
+      throw new Error(`纯 Web 形态不应显示桌面 Pane：${webPanes.map((pane) => pane.label).join(",")}`);
+    }
+    result.checks.webTabs = webPanes;
+    await closePaneMenu(web);
     result.stage = "web-no-desktop-tabs";
     web.destroy();
 

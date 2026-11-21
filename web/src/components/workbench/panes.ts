@@ -11,15 +11,42 @@
  */
 
 import type { ComponentType } from 'react'
+import {
+  FolderClosed,
+  GitCompareArrows,
+  Globe2,
+  LayoutGrid,
+  ListChecks,
+  Sparkles,
+  SquareTerminal,
+  type LucideIcon,
+} from 'lucide-react'
 
 import type { WorkbenchPaneProps } from './paneProps'
 import type { WorkbenchTab } from '@/types/workbench'
 
 export type WorkbenchPaneComponent = ComponentType<WorkbenchPaneProps>
+export type WorkbenchPaneGroup = 'conversation' | 'workspace' | 'browse'
+
+export interface WorkbenchPaneGroupMeta {
+  id: WorkbenchPaneGroup
+  label: string
+}
+
+export const WORKBENCH_PANE_GROUPS: readonly WorkbenchPaneGroupMeta[] = [
+  { id: 'conversation', label: '对话' },
+  { id: 'workspace', label: '工作区' },
+  { id: 'browse', label: '网页' },
+] as const
 
 export interface WorkbenchPaneMeta {
   id: WorkbenchTab
   label: string
+  /** 面板在选择器里的用途分组；宿主不再手写第二份层级。 */
+  group: WorkbenchPaneGroup
+  /** 一句话说明，展开目录时帮助用户判断该打开哪个面板。 */
+  summary: string
+  icon: LucideIcon
   /** `desktop` 需要 preload 的文件/命令桥；`browser` 还需要原生浏览器桥。 */
   requires: 'none' | 'desktop' | 'browser'
   /** 挂载后是否保留状态。编辑器草稿、命令输出必须保活。 */
@@ -34,6 +61,9 @@ export const WORKBENCH_PANES: readonly WorkbenchPaneMeta[] = [
   {
     id: 'reasoning',
     label: '推理',
+    group: 'conversation',
+    summary: '查看思考过程与工具时间线',
+    icon: Sparkles,
     requires: 'none',
     keepAlive: true,
     bodyClassName: 'overflow-y-auto scrollbar-thin p-2',
@@ -42,6 +72,9 @@ export const WORKBENCH_PANES: readonly WorkbenchPaneMeta[] = [
   {
     id: 'canvas',
     label: '画布',
+    group: 'conversation',
+    summary: '固定代码、表格与结果卡片',
+    icon: LayoutGrid,
     requires: 'none',
     keepAlive: true,
     bodyClassName: 'overflow-y-auto scrollbar-thin p-2',
@@ -50,6 +83,9 @@ export const WORKBENCH_PANES: readonly WorkbenchPaneMeta[] = [
   {
     id: 'files',
     label: '文件',
+    group: 'workspace',
+    summary: '浏览、编辑并保存工作区文件',
+    icon: FolderClosed,
     requires: 'desktop',
     keepAlive: true,
     bodyClassName: 'overflow-hidden p-2',
@@ -58,6 +94,9 @@ export const WORKBENCH_PANES: readonly WorkbenchPaneMeta[] = [
   {
     id: 'changes',
     label: '变更',
+    group: 'workspace',
+    summary: '审阅 diff，暂存并提交',
+    icon: GitCompareArrows,
     requires: 'desktop',
     keepAlive: true,
     bodyClassName: 'overflow-hidden p-2',
@@ -66,6 +105,9 @@ export const WORKBENCH_PANES: readonly WorkbenchPaneMeta[] = [
   {
     id: 'commands',
     label: '命令',
+    group: 'workspace',
+    summary: '运行命令并查看输出',
+    icon: SquareTerminal,
     requires: 'desktop',
     keepAlive: true,
     bodyClassName: 'overflow-hidden p-2',
@@ -74,6 +116,9 @@ export const WORKBENCH_PANES: readonly WorkbenchPaneMeta[] = [
   {
     id: 'browser',
     label: '浏览器',
+    group: 'browse',
+    summary: '隔离会话打开网页，交给 Agent',
+    icon: Globe2,
     requires: 'browser',
     keepAlive: true,
     bodyClassName: 'overflow-hidden',
@@ -82,6 +127,9 @@ export const WORKBENCH_PANES: readonly WorkbenchPaneMeta[] = [
   {
     id: 'tasks',
     label: '任务',
+    group: 'conversation',
+    summary: '跟踪目标、计划与进度',
+    icon: ListChecks,
     requires: 'none',
     keepAlive: true,
     bodyClassName: 'overflow-y-auto scrollbar-thin p-2',
@@ -107,6 +155,16 @@ export function availableWorkbenchTabs(bridge: WorkbenchBridgeAvailability): Wor
     if (pane.requires === 'browser') return bridge.desktop && bridge.browser
     return true
   }).map((pane) => pane.id)
+}
+
+/** 按用途分组，供“展开面板”选择器直接渲染；不把全部入口横排堆在标题下。 */
+export function groupedWorkbenchPanes(tabs: readonly WorkbenchTab[]): Array<
+  WorkbenchPaneGroupMeta & { panes: WorkbenchPaneMeta[] }
+> {
+  return WORKBENCH_PANE_GROUPS.flatMap((group) => {
+    const panes = WORKBENCH_PANES.filter((pane) => pane.group === group.id && tabs.includes(pane.id))
+    return panes.length ? [{ ...group, panes }] : []
+  })
 }
 
 /**

@@ -8,7 +8,7 @@
 
 import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
-import { Maximize2, Minimize2, Search, X } from 'lucide-react'
+import { Maximize2, Minimize2, Check, ChevronDown, Plus, Search, X } from 'lucide-react'
 
 import type { ChatTurn } from '@/types'
 import type { GoalChannelState } from '@/stores/chat'
@@ -23,6 +23,7 @@ import {
   WORKBENCH_PANES,
   WORKBENCH_PANE_LABELS,
   availableWorkbenchTabs,
+  groupedWorkbenchPanes,
   rememberVisitedPane,
   resolveWorkbenchTab,
 } from './panes'
@@ -157,9 +158,113 @@ function CommandPalette({
   )
 }
 
+type PaneGroup = ReturnType<typeof groupedWorkbenchPanes>[number]
+type PickerSource = 'switch' | 'add'
+
+function PanePicker({
+  groups,
+  activeTab,
+  source,
+  onSelect,
+  onClose,
+}: {
+  groups: PaneGroup[]
+  activeTab: WorkbenchTab
+  source: PickerSource
+  onSelect: (tab: WorkbenchTab) => void
+  onClose: () => void
+}) {
+  const firstItemRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    firstItemRef.current?.focus()
+  }, [])
+
+  const keyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Escape') return
+    event.preventDefault()
+    event.stopPropagation()
+    onClose()
+  }
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40" aria-hidden="true" onPointerDown={onClose} />
+      <div
+        id="workbench-pane-picker"
+        role="dialog"
+        aria-label="工作台面板"
+        className="absolute inset-x-2 top-full z-50 mt-1 overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground elev-3"
+        onPointerDown={(event) => event.stopPropagation()}
+        onKeyDown={keyDown}
+      >
+        <div className="border-b border-border px-3 py-2.5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-caption font-medium">{source === 'add' ? '打开面板' : '切换面板'}</p>
+              <p className="mt-0.5 text-micro text-muted-foreground">按用途分组，当前面板会保持挂载</p>
+            </div>
+            <Button variant="ghost" size="icon-sm" className="-mr-1 -mt-1 shrink-0" aria-label="关闭面板列表" onClick={onClose}>
+              <X className="size-3.5" />
+            </Button>
+          </div>
+        </div>
+        <div className="max-h-[min(540px,calc(100vh-300px))] overflow-y-auto scrollbar-thin p-1.5">
+          {groups.map((group, groupIndex) => (
+            <div key={group.id} role="group" aria-labelledby={`workbench-pane-group-${group.id}`}>
+              <div
+                id={`workbench-pane-group-${group.id}`}
+                className={cn(
+                  'px-2 pb-1 text-micro font-medium text-muted-foreground',
+                  groupIndex === 0 ? 'pt-1' : 'pt-3',
+                )}
+              >
+                {group.label}
+              </div>
+              {group.panes.map((pane, paneIndex) => {
+                const PaneIcon = pane.icon
+                const active = pane.id === activeTab
+                return (
+                  <button
+                    key={pane.id}
+                    ref={groupIndex === 0 && paneIndex === 0 ? firstItemRef : undefined}
+                    type="button"
+                    data-workbench-pane={pane.id}
+                    aria-label={`${active ? '当前面板' : '打开面板'}：${pane.label}`}
+                    aria-current={active ? 'page' : undefined}
+                    onClick={() => onSelect(pane.id)}
+                    className={cn(
+                      'flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left outline-none transition-colors',
+                      'focus-visible:ring-2 focus-visible:ring-ring',
+                      active ? 'bg-secondary text-secondary-foreground' : 'hover:bg-accent/60',
+                    )}
+                  >
+                    <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md border border-border bg-background/60">
+                      <PaneIcon className="size-3.5 text-muted-foreground" aria-hidden="true" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-caption font-medium">{pane.label}</span>
+                      <span className="mt-0.5 block text-micro leading-relaxed text-muted-foreground">{pane.summary}</span>
+                    </span>
+                    {active && <Check className="mt-1 size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}
+                  </button>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+        <div className="border-t border-border px-3 py-1.5 text-micro text-muted-foreground">Tab 浏览 · Esc 关闭</div>
+      </div>
+    </>
+  )
+}
+
 export function WorkbenchHost({ isOpen, onArtifactAction, allTurns, sessionId, taskTrackerData, goalState }: WorkbenchHostProps) {
   const workbench = useWorkbenchStore()
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerSource, setPickerSource] = useState<PickerSource>('switch')
+  const pickerTriggerRef = useRef<HTMLButtonElement>(null)
   const [dragWidth, setDragWidth] = useState<number | null>(null)
   const [viewportWidth, setViewportWidth] = useState(() => typeof window === 'undefined' ? 1440 : window.innerWidth)
   const dragRef = useRef<{ startX: number; startWidth: number; current: number } | null>(null)
@@ -172,6 +277,10 @@ export function WorkbenchHost({ isOpen, onArtifactAction, allTurns, sessionId, t
     tabs,
     (sessionId ? workbench.sessionTabs[sessionId] : undefined) ?? workbench.activeTab,
   )
+  const activeMeta = PANE_BY_ID.get(activeTab)
+  const ActivePaneIcon = activeMeta?.icon
+  const paneGroups = groupedWorkbenchPanes(tabs)
+  const activeLabel = WORKBENCH_PANE_LABELS[activeTab]
   const sessionKey = sessionId ?? 'global'
   // Pane 一经访问就保持挂载：切到浏览器再切回文件，FileEditor 的未保存草稿
   // 和 CommandPane 的运行输出还在。按会话隔离，换会话不会把上一个会话的
@@ -199,6 +308,14 @@ export function WorkbenchHost({ isOpen, onArtifactAction, allTurns, sessionId, t
   const fullBleed = maximized || narrowOverlay
 
   useEffect(() => {
+    if (!isOpen) setPickerOpen(false)
+  }, [isOpen])
+
+  useEffect(() => {
+    setPickerOpen(false)
+  }, [activeTab, sessionId])
+
+  useEffect(() => {
     const onResize = () => setViewportWidth(window.innerWidth)
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
@@ -211,6 +328,7 @@ export function WorkbenchHost({ isOpen, onArtifactAction, allTurns, sessionId, t
       const key = event.key.toLowerCase()
       if ((event.ctrlKey || event.metaKey) && key === 'p') {
         event.preventDefault()
+        setPickerOpen(false)
         setPaletteOpen(true)
       }
     }
@@ -273,10 +391,26 @@ export function WorkbenchHost({ isOpen, onArtifactAction, allTurns, sessionId, t
     },
   ].filter((command) => !(narrowOverlay && command.id === 'maximize'))
 
+  const openPicker = (source: PickerSource, trigger: HTMLButtonElement) => {
+    pickerTriggerRef.current = trigger
+    setPickerSource(source)
+    setPickerOpen(true)
+  }
+
+  const closePicker = () => {
+    setPickerOpen(false)
+    requestAnimationFrame(() => pickerTriggerRef.current?.focus())
+  }
+
+  const selectPane = (tab: WorkbenchTab) => {
+    workbench.setTab(tab, sessionId)
+    closePicker()
+  }
+
   const paneProps: WorkbenchPaneProps = {
     isOpen,
     activeTab,
-    overlayOpen: paletteOpen,
+    overlayOpen: paletteOpen || pickerOpen,
     sessionId,
     allTurns,
     taskTrackerData,
@@ -333,8 +467,19 @@ export function WorkbenchHost({ isOpen, onArtifactAction, allTurns, sessionId, t
             {narrowOverlay && <span className="text-micro font-normal text-muted-foreground">窄窗全宽</span>}
           </span>
           <div className="flex items-center gap-1">
-            <Tag>{workbench.cards.length}</Tag>
-            <Button variant="ghost" size="icon-sm" onClick={() => setPaletteOpen(true)} aria-label="命令面板" title="命令面板（Ctrl/⌘+Shift+P）">
+            {workbench.cards.length > 0 && (
+              <Tag title="画布卡片">{workbench.cards.length}</Tag>
+            )}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => {
+                setPickerOpen(false)
+                setPaletteOpen(true)
+              }}
+              aria-label="命令面板"
+              title="命令面板（Ctrl/⌘+P）"
+            >
               <Search className="size-3.5" />
             </Button>
             {!narrowOverlay && (
@@ -353,20 +498,51 @@ export function WorkbenchHost({ isOpen, onArtifactAction, allTurns, sessionId, t
             </Button>
           </div>
         </div>
-        <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-2 py-1.5 scrollbar-none" role="tablist" aria-label="工作台标签">
-          {tabs.map((tab) => (
+        <div className="relative shrink-0 border-b border-border px-2 py-1.5">
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <div role="tablist" aria-label="当前工作台面板" className="min-w-0">
+              <Button
+                role="tab"
+                aria-selected="true"
+                aria-haspopup="dialog"
+                aria-expanded={pickerOpen}
+                aria-controls="workbench-pane-picker"
+                aria-label={`${activeLabel}，展开面板列表`}
+                data-workbench-pane-switcher="true"
+                variant="secondary"
+                size="sm"
+                className="h-7 min-w-0 max-w-full justify-start gap-1.5 px-2"
+                title="展开面板列表"
+                onClick={(event) => openPicker('switch', event.currentTarget)}
+              >
+                {ActivePaneIcon && <ActivePaneIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}
+                <span className="truncate">{activeLabel}</span>
+                <ChevronDown
+                  className={cn('size-3 shrink-0 text-muted-foreground transition-transform duration-base ease-out-quint', pickerOpen && 'rotate-180')}
+                  aria-hidden="true"
+                />
+              </Button>
+            </div>
             <Button
-              key={tab}
-              role="tab"
-              aria-selected={activeTab === tab}
-              variant={activeTab === tab ? 'secondary' : 'ghost'}
-              size="sm"
+              variant="ghost"
+              size="icon-sm"
               className="shrink-0"
-              onClick={() => workbench.setTab(tab, sessionId)}
+              aria-label="添加工作台面板"
+              title="打开更多面板"
+              onClick={(event) => openPicker('add', event.currentTarget)}
             >
-              {WORKBENCH_PANE_LABELS[tab]}
+              <Plus className="size-3.5" />
             </Button>
-          ))}
+          </div>
+          {pickerOpen && (
+            <PanePicker
+              groups={paneGroups}
+              activeTab={activeTab}
+              source={pickerSource}
+              onSelect={selectPane}
+              onClose={closePicker}
+            />
+          )}
         </div>
         <div
           className={cn(

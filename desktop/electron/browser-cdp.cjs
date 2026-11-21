@@ -341,6 +341,9 @@ function createCdpBrowser(getView) {
       await rawSend(contents, "Log.enable").catch(() => undefined);
       await rawSend(contents, "Page.enable").catch(() => undefined);
       await rawSend(contents, "Accessibility.enable").catch(() => undefined);
+      // WebContentsView 在主窗口不活跃时会让页面进入 blur 状态，Chromium
+      // 会丢弃 Input 域发来的键盘/鼠标事件。AI 操控需要页面始终接受输入。
+      await rawSend(contents, "Emulation.setFocusEmulationEnabled", { enabled: true }).catch(() => undefined);
       return contents;
     })();
     try {
@@ -569,12 +572,10 @@ function createCdpBrowser(getView) {
       nativeVirtualKeyCode: definition.nativeVirtualKeyCode,
     };
     if (definition.text) {
-      // Chromium 的 CDP 键盘序列：rawKeyDown 负责派发 keydown，char 负责
-      // 文本/回车字符。直接用 keyDown 带 text 在部分 Electron 版本会跳过
-      // 页面 keydown 监听，导致 Enter 看似发送成功却没有触发页面事件。
-      await send("Input.dispatchKeyEvent", { type: "rawKeyDown", ...base });
+      // keyDown 会同时产生 keydown 与 char；rawKeyDown + char 在窗口失焦的
+      // WebContentsView 上曾被 Chromium 丢弃，页面收不到 keydown。
       await send("Input.dispatchKeyEvent", {
-        type: "char",
+        type: "keyDown",
         ...base,
         text: definition.text,
         unmodifiedText: definition.text,
@@ -599,13 +600,8 @@ function createCdpBrowser(getView) {
     }
     const chord = typeof args.key === "string" ? args.key.slice(0, 100) : "";
     if (!chord) throw new Error("press 需要 key，例如 Enter、Tab、Control+A");
-    if (chord === "Enter") {
-      // WebContentsView 的 CDP 键盘事件在窗口/视图焦点切换瞬间可能被
-      // Chromium 丢掉；Enter 是表单提交类操作，走 Electron 原生输入更稳。
-      contents.sendInputEvent({ type: "keyDown", keyCode: "Return" });
-      contents.sendInputEvent({ type: "keyUp", keyCode: "Return" });
-      return { acted: "press", key: chord, transport: "sendInputEvent", webContentsFocused: contents.isFocused() };
-    }
+    // CDP 的 rawKeyDown + char 序列不依赖宿主窗口是否拿到 OS 前台焦点；
+    // sendInputEvent 在窗口被终端遮挡/失焦时会静默丢键，页面收不到 keydown。
     const result = await dispatchKey(chord);
     return { ...result, transport: "cdp", webContentsFocused: contents.isFocused() };
   }

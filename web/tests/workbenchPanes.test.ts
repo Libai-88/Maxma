@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 
 import {
+  WORKBENCH_PANE_GROUPS,
   WORKBENCH_PANES,
   WORKBENCH_PANE_LABELS,
   availableWorkbenchTabs,
+  groupedWorkbenchPanes,
   rememberVisitedPane,
   resolveWorkbenchTab,
 } from '../src/components/workbench/panes.ts'
@@ -48,6 +50,21 @@ describe('Workbench Pane 注册表', () => {
       expect(typeof pane.load).toBe('function')
       expect(pane.bodyClassName.trim().length).toBeGreaterThan(0)
       expect(pane.keepAlive).toBe(true)
+      expect(pane.summary.trim().length).toBeGreaterThan(0)
+      expect(WORKBENCH_PANE_GROUPS.some((group) => group.id === pane.group)).toBe(true)
+      expect(typeof pane.icon).toBe('object')
     }
+  })
+
+  test('面板选择器按用途分组，且只列出当前运行时真实可用的 Pane', () => {
+    const groups = groupedWorkbenchPanes(availableWorkbenchTabs({ desktop: true, browser: true }))
+    expect(groups.map((group) => group.label)).toEqual(['对话', '工作区', '网页'])
+    expect(groups.flatMap((group) => group.panes.map((pane) => pane.id))).toEqual([
+      'reasoning', 'canvas', 'tasks', 'files', 'changes', 'commands', 'browser',
+    ])
+    const webGroups = groupedWorkbenchPanes(availableWorkbenchTabs({ desktop: false, browser: false }))
+    expect(webGroups.flatMap((group) => group.panes.map((pane) => pane.id))).toEqual([
+      'reasoning', 'canvas', 'tasks',
+    ])
   })
 })

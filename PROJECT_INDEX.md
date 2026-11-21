@@ -66,7 +66,7 @@ web/src/main.tsx
 - API `src/api/index.ts`（框架无关，原样沿用）；WS 生命周期 `src/hooks/useChat.ts`；斜杠命令在 `components/chat/ChatInput.tsx`
 - zustand `src/stores/`：session / chat / memory / provider / persona / capabilities / plugin / jetHub / activity / metrics / health / onboarding / workbench / sidebar / collab / tools
 - 类型 `src/types/`（原样沿用）
-- 组件分组：`components/chat/`（对话核心与会话 tab）、`layout/`（AppShell/Sidebar/SessionDrawer；左侧全局路由）、`workbench/`（`WorkbenchHost` + `panes.ts` 注册表（含布局与懒加载器）+ `paneProps.ts` 统一上下文 + `WorkbenchPaneShell` 保活/错误边界 + 推理/画布/文件/变更/命令/浏览器/任务 Pane；文件树纯函数 `fileTreeModel.ts`、任务投影 `tasksModel.ts`、CodeMirror `FileEditor.tsx`、截图标注 `ScreenshotAnnotator.tsx`）、`common/`（Markdown/贴纸/错误边界/确认框/媒体查看器）、`ui/`（shadcn + Solid Glass）、`tools/_shared/`（工具中文名）
+- 组件分组：`components/chat/`（对话核心与会话 tab）、`layout/`（AppShell/Sidebar/SessionDrawer；左侧全局路由）、`workbench/`（`WorkbenchHost` + `panes.ts` 注册表（含分组、说明、图标与懒加载器）+ `paneProps.ts` 统一上下文 + `WorkbenchPaneShell` 保活/错误边界 + 推理/画布/文件/变更/命令/浏览器/任务 Pane；工作台顶部只保留单主标签 + `+`，面板库按「对话/工作区/网页」分组展开；文件树纯函数 `fileTreeModel.ts`、任务投影 `tasksModel.ts`、CodeMirror `FileEditor.tsx`、截图标注 `ScreenshotAnnotator.tsx`）、`common/`（Markdown/贴纸/错误边界/确认框/媒体查看器）、`ui/`（shadcn + Solid Glass）、`tools/_shared/`（工具中文名）
 - 页面 `src/views/`：对话（Chat / Share）、记忆角色（Memory / Soul / User）、配置（Providers / Mcp / Settings / Appearance / Privacy / MaxmaBlocker / Capabilities）、扩展（PluginList / PluginDetail / JetHub / Extension / Rules / Collab）、信息（News / Activity / Metrics / Help / Evolution）、流程（Onboarding / FeatureUnavailable / NotFound）
 - 样式：`src/solid-glass.css`（Solid Glass 主题：颜色 / 三层玻璃 / 圆角 / 动效，light/dark 两态）+ `src/index.css`（全局基座）；语义色守卫 `scripts/check-hardcoded-colors.mjs`
 - 动效：只用 Solid Glass 时长/缓动；`prefers-reduced-motion` 全局降级。Inspira 装饰件与页面转场已下线

@@ -68,7 +68,8 @@
 - P0 `5fd622e3`、P1 `bfd29b9d` 已提交；P2/P3 同批完成：
   文件搜索、CodeMirror 编辑器与 `base_hash` 冲突保存、变更/diff、Git stage/commit（显式确认、不 push）、
   无 TTY 命令运行器、任务/计划 Pane、浏览器 Agent 只读动作、并行会话 tab、截图标注、网页元素拾取。
-- 工作台 tab：推理 / 画布 / 文件 / 变更 / 命令 / 浏览器 / 任务；纯 Web 仅推理/画布/任务。
+- 工作台入口：顶部只显示当前面板主标签与 `+`，展开按「对话 / 工作区 / 网页」分组的面板库
+  （推理/画布/任务、文件/变更/命令、浏览器），不再横排七项；纯 Web 仅推理/画布/任务。
   编辑器/命令/Git 都只在桌面壳有 preload 时出现；终端明确降级为命令运行器，不冒充 PTY。
 - 工作区 API：`GET/POST/DELETE /api/workspace/roots`、`PATCH .../:id`、`GET tree|file|blob|search`、
   `PUT file`（`base_hash`，冲突 `409 FILE_CONFLICT`）、`POST run`（默认 60s/上限 120s，杀进程树，1 MiB 截断）。
