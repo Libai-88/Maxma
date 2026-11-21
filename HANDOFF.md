@@ -27,6 +27,11 @@
   `workbench-design-canvas-light.png`。
 - **边界**：本轮是本地优先设计画板，尚无 AI 生成/生成式改图入口；图片 contain 几何有模型与测试，但渲染和属性
   面板仍只暴露 cover；右键菜单、多指手势、文字自动增高未做；380px 窄工作台里 A4 初始 fit 约 19%–21%。
+- **提交与包**：画布源码提交 `6025773c`，已推送 `origin/fix/portable-stop-null-guard`。桌面便携包
+  `dist/electron-portable/MaxmaHere-2.7.0-portable-x64.zip` `252,638,597 B`，SHA-256
+  `521b1d4a…43d732`，`verify-desktop-render.ps1` PASS、包内冒烟 PASS；Web 便携包
+  `dist/web-portable/MaxmaHere-Portable-2.7.0.zip` `83,679,219 B`，SHA-256
+  `2daa450f…1b69`，2,885 个条目，`portable-smoke-test.ps1` PASS。
 
 ## 2026-11-21：工作台面板入口重做（单主标签 + 加号 + 分组面板库）
 

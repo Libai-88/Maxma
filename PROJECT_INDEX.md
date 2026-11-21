@@ -153,7 +153,7 @@ bash scripts/verify-all-gates.sh             # 交付前全部闸门
 | `verify-ui-session-tree.mjs` | 真实界面的会话树：菜单入口 → 树渲染 → 节点可操作 |
 | `verify-ui-settings.mjs` | 设置页三个面板的 pi 真实键可见，零 console 错误 |
 | `verify-ui-thinking-separation.mjs` | 思考内容不混进回复正文（流式过程中采样） |
-| `verify-ui-workbench.mjs` | Workbench P0–P3：文件树/搜索/保存、变更/diff/暂存/提交、命令运行器、任务面板、内置浏览器与 125%/150% bounds、Agent 隐藏 view/snapshot/截图、截图标注与元素拾取、并行会话 tab、调宽/最大化、768 窄窗、浅色、Web 降级；设计画布空板/文字/像素哈希/撤销重做/矩形/拖入图片/图层/A4/导出回对话/刷新持久化；25 张截图 `dev_docs/visual/workbench-*.png` |
+| `verify-ui-workbench.mjs` | Workbench P0–P3：文件树/搜索/保存、变更/diff/暂存/提交、命令运行器、任务面板、内置浏览器与 125%/150% bounds、Agent 隐藏 view/snapshot/截图、截图标注与元素拾取、并行会话 tab、调宽/最大化、768 窄窗、浅色、Web 降级；设计画布空板/文字/像素哈希/撤销重做/矩形/拖入图片/图层/A4/导出回对话/刷新持久化；23 张截图 `dev_docs/visual/workbench-*.png` |
 | `verify-desktop-render.ps1` | 桌面包渲染层 |
 | `_ui-chat-driver.cjs` | Electron 驱动真实界面的主进程，被 `verify-ui-chat-roundtrip.mjs` 启动，**勿单独跑** |
 | `_ui-capabilities-driver.cjs` | 同上，被 `verify-ui-capabilities.mjs` 启动 |
