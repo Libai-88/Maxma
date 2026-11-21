@@ -353,18 +353,19 @@ HTTP(S) 主请求和子资源，记录最近 20 条；顶层导航先做 `assert
 
 ### 4.3 便携包
 
-2026-11-21 按本轮浏览器 P1 源码重建：桌面 `build-desktop-portable.ps1 -SkipDependencyInstall`；Web
+2026-11-21 按本轮面板入口改造后的源码重建：桌面 `build-desktop-portable.ps1 -SkipDependencyInstall`；Web
 `build-portable.bat` 生成 `..\MaxmaHere-Portable\`，再打包为 zip。桌面包与 Web 包分别走
 `build/portable-smoke-test.ps1`，桌面包另走 `scripts/verify-desktop-render.ps1`。
 
 | 包 | 体积 | SHA-256 | 验证 |
 | --- | --- | --- | --- |
-| `dist/electron-portable/MaxmaHere-2.7.0-portable-x64.zip` | 246,169,583 B | `57a6d144f456e13dda5ab09c84bc34f0df6e1c86573b6483fca44827501a2da3` | `verify-desktop-render.ps1`: 后端监听、渲染 WS、主进程存活、残留 0；`portable-smoke-test.ps1`: auth/health/news 52/settings/plugins 1/plugin routes 15/externals 23 缺 0/328 表情/图片 200/管理 401/PASS |
-| `dist/web-portable/MaxmaHere-Portable-2.7.0.zip` | 83,548,248 B | `7f5361aa7a790297e4978ed58916bd5fbe13e8a2d3e704f81071353f75456573` | `portable-smoke-test.ps1`: auth/health/news 52/settings/plugins 1/plugin routes 15/externals 23 缺 0/5 个免费模型/328 表情/图片 200/管理 401/PASS |
+| `dist/electron-portable/MaxmaHere-2.7.0-portable-x64.zip` | 252,511,068 B | `b720b4f7f7f1d48c601980bc0375abf6b9d738a5d731eb145089ba2a75f1088a` | `verify-desktop-render.ps1`: 后端监听、渲染 WS、主进程存活、残留 0；`portable-smoke-test.ps1`: auth/health/news 52/settings/plugins 1/plugin routes 15/externals 23 缺 0/5 个免费模型/328 表情/图片 200/管理 401/PASS |
+| `dist/web-portable/MaxmaHere-Portable-2.7.0.zip` | 83,662,340 B | `a8a8bba137959d7d3d88f04b60ce35570f9a03880f5c587526dfc55324954cc4` | `portable-smoke-test.ps1`: auth/health/news 52/settings/plugins 1/plugin routes 15/externals 23 缺 0/5 个免费模型/328 表情/图片 200/管理 401/PASS |
 
 Web 包明确降级：没有 preload 时不显示文件/变更/命令/浏览器 tab；UI smoke 的
-`webTabs=["推理","画布","任务"]` 是直接证据。新 Web zip 含 2,866 个条目，
-`.maxma/skills/coding-starter/SKILL.md` 与 `web/dist/index.html` 均在包内。打包冒烟脚本保留
+`webTabs=["推理","画布","任务"]` 是直接证据。新 Web zip 含 2,887 个条目，
+`.maxma/skills/coding-starter/SKILL.md`、`web/dist/index.html` 与
+`web/dist/assets/ChatView-C_iLwSy1.js` 均在包内。打包冒烟脚本保留
 `Invoke-WebRequest -UseBasicParsing`：Windows PowerShell 5.1 默认 IE/COM 解析管线在无交互会话里首次初始化会卡死，
 显式关掉 DOM 解析后测试可重复。
 

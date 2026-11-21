@@ -3,6 +3,29 @@
 > 当前可执行状态，供下一位接手者。架构请先读 [docs/00-当前架构.md](docs/00-当前架构.md)。
 > 更新时间：2026-11-21
 
+## 2026-11-21：工作台面板入口重做（单主标签 + 加号 + 分组面板库）
+
+- **入口**：顶部第二行只显示当前面板主标签（图标 + 名称 + `ChevronDown`），右侧独立 `+`；两者打开同一个
+  `PanePicker`，仅标题在「切换面板 / 打开面板」间变化。旧的七项横排 `role=tablist` 已删除，当前面板仍保留
+  唯一 `role=tab`，带 `aria-haspopup="dialog"`、`aria-expanded`、`aria-controls`。
+- **层级**：`panes.ts` 新增 `group/summary/icon` 与 `groupedWorkbenchPanes`，按「对话（推理/画布/任务）→
+  工作区（文件/变更/命令）→ 网页（浏览器）」纵向分组；每项有图标、名称、一句说明与当前勾选，组内无可用 Pane
+  时整组不出现。选择仍走 `workbench.setTab(tab, sessionId)`，保留每会话 `activeTab`、`visitedTabs` 与 keep-alive。
+- **浮层**：`inset-x-2` 横向铺满工作台，避免浏览器 Pane 右侧控件从缝隙露出；`overlayOpen = paletteOpen ||
+  pickerOpen` 让原生 `WebContentsView` 在菜单打开时隐藏、关闭后恢复。打开聚焦首项，`Esc`/外部点击关闭并把焦点
+  还给触发按钮；`activeTab`/`sessionId`/关闭工作台时自动收起，`Ctrl/⌘+P` 先收起面板库。
+- **顺带修复**：`WorkbenchPaneShell` 去掉非当前 Pane 的 `aria-hidden`，保留 `hidden`，消除 CodeMirror 聚焦时的
+  Chromium console error；`browser-cdp.cjs` 开启 `Emulation.setFocusEmulationEnabled`，带文本按键改走 CDP
+  `keyDown`，`press` 统一 CDP，修复窗口失焦时 Enter 丢键。真实 UI 端到端已覆盖 Enter/select/check/拖拽/上传/下载。
+- **验收**：根 `scripts/verify-all-gates.sh` 全绿；sidecar 234 pass、backend 365 pass、web 75 pass；生产构建
+  10.90s，ChatView 224.64 kB；UI 驱动 `stage=done, ok=true, consoleErrors=[]`，
+  `paneMenu` 顺序七项、`pickerHidesNative={hiddenWhileOpen:true,restoredAfterClose:true}`、纯 Web 仅三项。
+- **便携包已按本轮源码重建**：桌面 `dist/electron-portable/MaxmaHere-2.7.0-portable-x64.zip`
+  `252,511,068 B`，SHA-256 `b720b4f7…1088a`，`verify-desktop-render.ps1` PASS、包内后端冒烟 PASS；
+  Web `dist/web-portable/MaxmaHere-Portable-2.7.0.zip` `83,662,340 B`，SHA-256
+  `a8a8bba1…954cc4`，2,887 个条目，`portable-smoke-test.ps1` PASS（news 52 / 5 个免费模型 / 328 表情 /
+  23 个外部包 0 缺失）。提交 `bee75510`，分支 `fix/portable-stop-null-guard`。
+
 ## 2026-11-21：内置浏览器 P1（多页签 / 下载落盘 / 网络 allowlist）
 
 - **多页签**：`browser-view.cjs` 从单 `view` 改为 `tabs: BrowserTab[]`，每个页签独立 `WebContentsView` 与独立 CDP，
