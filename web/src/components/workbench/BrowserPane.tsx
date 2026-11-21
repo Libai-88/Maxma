@@ -28,6 +28,8 @@ import {
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { normalizeContextItem } from '@/context/contextItems'
+import { emitContextItem } from '@/context/contextBus'
 import { cn } from '@/lib/utils'
 import type { BrowserBounds, BrowserCapture, BrowserNetworkPolicy, BrowserState, BrowserTabState } from '@/types/desktop'
 import type { WorkbenchPaneProps } from './paneProps'
@@ -198,8 +200,16 @@ export function BrowserPane({ isOpen, activeTab, overlayOpen, sessionId }: Workb
         return
       }
       const text = `引用网页元素：${picked.selector}${picked.text ? `（${picked.text.slice(0, 80)}）` : ''}`
-      window.dispatchEvent(new CustomEvent('maxma:append-composer', { detail: { text, sessionId: chatSessionId } }))
-      setNotice(`已拾取 ${picked.tag} 元素并插入输入框`)
+      const item = normalizeContextItem({
+        kind: 'browser-selection',
+        label: `网页元素 ${picked.tag || 'element'}`,
+        url: state?.url && state.url !== 'about:blank' ? state.url : undefined,
+        text: picked.text ? picked.text.slice(0, 2_000) : `选择器：${picked.selector}`,
+        meta: { 选择器: picked.selector, 标签: picked.tag || 'element' },
+      }, chatSessionId ?? '')
+      if (item) emitContextItem(item)
+      else window.dispatchEvent(new CustomEvent('maxma:append-composer', { detail: { text, sessionId: chatSessionId } }))
+      setNotice('已引用网页元素，可在输入框移除')
     } catch (reason) {
       setNotice(reason instanceof Error ? reason.message : String(reason))
     } finally {

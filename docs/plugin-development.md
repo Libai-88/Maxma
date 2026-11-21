@@ -173,7 +173,56 @@ description: 一句话说清"什么时候用"，模型据此选择技能。
 `bun-backend/tests/builtin-skills.test.ts` 的对账（frontmatter 名字等于目录名、
 描述非空且 ≤90 字、至少两个小节、正文 ≥250 字）。新技能建议写到三个小节以上。
 
-## 10. 交付前自查
+## 10. 生命周期 Hooks（不写扩展代码，也能拦工具）
+
+Hooks 是**用户自己的配置文件**，不是扩展市场：默认 `<data>/config/hooks.json`，也可用环境变量
+`MAXMA_HOOKS_FILE` 指向另一份文件。配置必须整份签名，签名缺失/不匹配时**整份不加载**；改完配置要重新签名，
+且在新会话里才生效（Hooks 在会话创建时装配）。
+
+```json
+{
+  "version": 1,
+  "hooks": [
+    {
+      "id": "block-recursive-delete",
+      "events": ["PreToolUse"],
+      "matcher": "bash",
+      "description": "拒绝递归删除",
+      "handler": {
+        "type": "command",
+        "command": "node",
+        "args": ["scripts/block-rm.mjs"],
+        "timeoutMs": 5000
+      }
+    }
+  ]
+}
+```
+
+签名：
+
+```bash
+bun bun-sidecar/src/hooks-sign.ts                    # 默认 <data>/config/hooks.json
+bun bun-sidecar/src/hooks-sign.ts path/to/hooks.json # 指定文件
+```
+
+事件与处理器边界：
+
+- 事件：`PreToolUse`、`PostToolUse`、`SessionStart`、`SessionEnd`、`PreCompact`；工具事件可用
+  `matcher`（对工具名的正则）过滤，会话事件忽略 matcher。
+- `command`：`command`+`args` 直接 spawn，**不经过 shell**；payload 从 stdin 传入 JSON，
+  stdout 读 JSON 决策，stderr 用于错误摘要。相对命令带路径分隔符时按会话 cwd 解析。
+- `http`：只发 `POST`，只允许 `http(s)`，URL 不允许带用户名/密码；响应体是 JSON 或纯文本。
+- `prompt`：不调用模型；`PreToolUse` 下直接作为拒绝原因，其它事件作为附加上下文。
+- 决策字段：PreToolUse 支持 `{"decision":"block","reason":"…"}` 或
+  `{"decision":"allow","inputPatch":{…}}`；PostToolUse 支持 `contentAppend`；SessionStart 支持
+  `additionalContext`；PreCompact 支持 `cancel` 与 `customInstructions`。
+- 顺序是 **hooks(PreToolUse) → blocker → path-policy → approval → audit → tool**。钩子改写的入参仍会被
+  PathPolicy 复检；钩子失败 fail-open，但会写 `<data>/api/data/hooks_audit.jsonl`。
+
+Hooks 以当前用户权限运行，签名只证明配置来自持有本机密钥的人，**不证明脚本内容安全**；启用前自己审阅。
+
+## 11. 交付前自查
 
 - [ ] 扩展页显示「已启用」，没有红色错误
 - [ ] 工具有 `description`，模型知道何时调用；参数都有说明

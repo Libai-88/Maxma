@@ -59,6 +59,21 @@
 权限模式是**附加限制层**：只收紧，任何一档都不能绕过 MaxmaBlocker 拒止锚、MCP stdio 命令白名单、
 Provider URL 校验或凭据加密。没有兼容性开关，四档始终生效。
 
+## Hooks 与权限模式
+
+已签名的生命周期 Hooks 在 `tool_call` 阶段排在审批门之前：`PreToolUse` 的 `block` 直接拒绝本次调用，
+`inputPatch` 只改入参，之后仍依次经过 MaxmaBlocker、PathPolicy、审批门与审计。因此：
+
+- `read_only` 下即使钩子放行/改写，写入与执行仍会被审批门 `deny`；
+- 钩子不能把 `read_only` 变成可写，也不能替用户批准 `ask` 下的调用；
+- 钩子未签名整份不加载；坏钩子 fail-open，但不改变权限模式判定。
+
+## 本地模型回退
+
+`chat-ws` 在开轮前对**本机渠道**做一次 `/models` 预检；不可达时按“有凭据的云渠道 → 另一台可达本机服务”
+的顺序换一次，并广播 `model_fallback`。回退只改变本轮的 provider/model，**不改变权限模式**，也不重试
+已经开始的回合；`read_only`/`ask` 的审批与 PathPolicy 仍按原规则执行。失败探测缓存 30s、成功 60s。
+
 ## REST 契约
 
 `GET` / `PUT` `/api/sessions/:sessionId/permission-mode` 都回同一个形状

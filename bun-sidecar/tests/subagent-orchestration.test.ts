@@ -209,6 +209,116 @@ describe("取消", () => {
   })
 })
 
+describe("任务依赖（A2）", () => {
+    test("依赖任务真正等上游完成；结果按输入顺序", async () => {
+        const order: string[] = []
+        const tool = createSubagentTool({
+            cwd: process.cwd(),
+            limits: { maxConcurrent: 2, timeoutMs: 10_000 },
+            createSession: async () => {
+                const session = makeFakeSession(5)
+                const original = session.prompt.bind(session)
+                session.prompt = async (text: string) => {
+                    order.push(text)
+                    await original(text)
+                }
+                return session as never
+            },
+        })
+
+        const result = await executeOf(tool)("call-dep", {
+            tasks: [
+                { id: "a", prompt: "A", label: "A" },
+                { id: "b", prompt: "B", label: "B", depends_on: ["a"] },
+                { id: "c", prompt: "C", label: "C" },
+            ],
+        })
+
+        expect(order.indexOf("B")).toBeGreaterThan(order.indexOf("A"))
+        const tasks = (result.details as { tasks: Array<{ id: string; ok: boolean }> }).tasks
+        expect(tasks.map((t) => t.id)).toEqual(["a", "b", "c"])
+        expect(tasks.every((t) => t.ok)).toBe(true)
+        const graph = (result.details as { graph: Array<{ id: string; status: string }> }).graph
+        expect(graph.every((n) => n.status === "succeeded")).toBe(true)
+    })
+
+    test("上游失败只阻塞下游，独立任务照常执行", async () => {
+        let created = 0
+        const tool = createSubagentTool({
+            cwd: process.cwd(),
+            limits: { maxConcurrent: 2, timeoutMs: 10_000 },
+            createSession: async () => {
+                created += 1
+                const session = makeFakeSession(0)
+                session.prompt = async (text: string) => {
+                    if (text === "A") throw new Error("A 失败")
+                }
+                return session as never
+            },
+        })
+
+        const result = await executeOf(tool)("call-fail", {
+            tasks: [
+                { id: "a", prompt: "A", label: "A" },
+                { id: "b", prompt: "B", label: "B", depends_on: ["a"] },
+                { id: "c", prompt: "C", label: "C" },
+            ],
+        })
+
+        expect(created).toBe(2)
+        const tasks = (result.details as { tasks: Array<{ id: string; ok: boolean; error?: string; blockedBy?: string }> }).tasks
+        expect(tasks[0]!.ok).toBe(false)
+        expect(tasks[1]!.ok).toBe(false)
+        expect(tasks[1]!.blockedBy).toBe("a")
+        expect(tasks[1]!.error).toContain("阻塞")
+        expect(tasks[2]!.ok).toBe(true)
+        expect(result.content[0]!.text).toContain("完成 1/3 个任务")
+    })
+
+    test("retries 会真的再建会话重跑，最终成功", async () => {
+        let attempts = 0
+        const tool = createSubagentTool({
+            cwd: process.cwd(),
+            limits: { maxConcurrent: 1, timeoutMs: 10_000 },
+            createSession: async () => {
+                attempts += 1
+                const session = makeFakeSession(attempts === 1 ? 0 : 5)
+                if (attempts === 1) {
+                    session.prompt = async () => { throw new Error("第一次失败") }
+                }
+                return session as never
+            },
+        })
+
+        const result = await executeOf(tool)("call-retry", {
+            tasks: [{ id: "a", prompt: "A", label: "A", retries: 1 }],
+        })
+
+        expect(attempts).toBe(2)
+        const tasks = (result.details as { tasks: Array<{ ok: boolean }> }).tasks
+        expect(tasks[0]!.ok).toBe(true)
+        const graph = (result.details as { graph: Array<{ attempts: number; status: string }> }).graph
+        expect(graph[0]!.attempts).toBe(2)
+        expect(graph[0]!.status).toBe("succeeded")
+    })
+
+    test("非法依赖整批拒绝，不建任何会话", async () => {
+        let created = 0
+        const tool = createSubagentTool({
+            cwd: process.cwd(),
+            createSession: async () => {
+                created += 1
+                return makeFakeSession(5) as never
+            },
+        })
+        const result = await executeOf(tool)("call-bad", {
+            tasks: [{ id: "a", prompt: "A", depends_on: ["nope"] }],
+        })
+        expect(created).toBe(0)
+        expect(result.content[0]!.text).toContain("任务计划无效")
+    })
+})
+
 describe("输入边界与结果结构", () => {
     test("空 tasks → 提示文案，不建会话", async () => {
         let created = 0

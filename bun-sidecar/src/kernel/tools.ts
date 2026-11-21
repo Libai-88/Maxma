@@ -21,10 +21,14 @@ import type { MaxmaToolDescriptor } from "../tools/descriptor";
 import { listRulesTool } from "../tools/rules";
 import { getStickerTool, learnMemeTool, memeListTool, memeUpdateTool, sendMemeTool } from "../tools/stickers";
 import { searchMemoriesTool } from "../tools/memory";
+import { mergeMemoriesTool } from "../tools/merge-memory";
 import { browserActTool, browserNavigateTool, browserReadTool } from "../tools/browser";
 import { registerRememberMemoryTool } from "../tools/remember-memory";
 import { readOfficeFileTool, writeOfficeFileTool } from "../tools/office";
 import { canvasApplyTool, canvasExportTool, canvasReadTool, type CanvasToolContext } from "../tools/canvas";
+import { codeDefinitionTool, codeDiagnosticsTool, codeReferencesTool, codeSearchTool, codeSymbolsTool } from "../tools/code";
+import { applyPatchTool } from "../tools/patch";
+import { webFetchTool, webSearchTool } from "../tools/web";
 
 /** OMP approval 字段 → 官方 ToolAnnotations（审批门 needsApprovalForMode 消费）。 */
 function annotationsFor(approval: MaxmaToolDescriptor["approval"]): ToolDefinition["annotations"] {
@@ -64,15 +68,22 @@ export function buildPiCustomTools(
   const descriptors: MaxmaToolDescriptor[] = [
     registerRememberMemoryTool(),
     searchMemoriesTool(),
+    mergeMemoriesTool(),
     browserNavigateTool(),
     browserReadTool(),
     browserActTool(),
+    webSearchTool(),
+    webFetchTool(),
     sendMemeTool(),
     learnMemeTool(),
     memeListTool(),
     memeUpdateTool(),
     getStickerTool(),
     listRulesTool(),
+    codeSearchTool(),
+    codeDefinitionTool(),
+    codeReferencesTool(),
+    ...(cwd ? [codeSymbolsTool(cwd), codeDiagnosticsTool(cwd), applyPatchTool(cwd)] : []),
     ...(cwd ? [readOfficeFileTool(cwd)] : []),
     ...(cwd ? [writeOfficeFileTool(cwd)] : []),
     ...(canvas ? [

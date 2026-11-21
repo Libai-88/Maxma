@@ -12,7 +12,7 @@ import { api } from '@/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import type { GitDiffResult, GitFileStatus, GitStatusResult, WorkspaceRoot } from '@/types/workspace'
+import type { GitDiffResult, GitFileStatus, GitRemoteStatus, GitStatusResult, WorkspaceRoot } from '@/types/workspace'
 
 function statusLabel(file: GitFileStatus): string {
   if (file.untracked) return '未跟踪'
@@ -71,6 +71,11 @@ export function ChangesPane() {
   const [commitMessage, setCommitMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [refreshToken, setRefreshToken] = useState(0)
+  const [remote, setRemote] = useState<GitRemoteStatus | null>(null)
+  const [prOpen, setPrOpen] = useState(false)
+  const [prTitle, setPrTitle] = useState('')
+  const [prBody, setPrBody] = useState('')
+  const [prBase, setPrBase] = useState('main')
 
   const activeRoot = useMemo(() => roots.find((root) => root.id === rootId) ?? roots[0] ?? null, [rootId, roots])
 
@@ -98,6 +103,7 @@ export function ChangesPane() {
       setDiff(null)
     }).catch((e) => { if (alive) setError(e instanceof Error ? e.message : String(e)) })
       .finally(() => { if (alive) setLoading(false) })
+    void api.gitRemote(activeRoot.id).then((result) => { if (alive) setRemote(result) }).catch(() => { if (alive) setRemote(null) })
     return () => { alive = false }
   }, [activeRoot, refreshToken])
 
@@ -165,6 +171,44 @@ export function ChangesPane() {
       setNotice(`已提交 ${result.commit ?? ''}（未推送）`)
       setSelected(null)
       setDiff(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function push() {
+    if (!activeRoot) return
+    if (!remote?.remote) { setError('没有 origin 远端，无法推送。'); return }
+    if (!window.confirm(`推送当前分支到 origin？这是显式网络动作，不会 force。`)) return
+    setBusy(true)
+    setError('')
+    try {
+      const result = await api.gitPush(activeRoot.id)
+      setNotice(`已推送 ${result.branch} → ${result.remote}`)
+      setRefreshToken((value) => value + 1)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function createPr() {
+    if (!activeRoot) return
+    if (!prTitle.trim()) { setError('请填写 PR 标题'); return }
+    if (!prBase.trim()) { setError('请填写 base 分支'); return }
+    if (!window.confirm(`用 GitHub CLI 创建 PR（${prBase} ← ${remote?.branch ?? '当前分支'}）？`)) return
+    setBusy(true)
+    setError('')
+    try {
+      const result = await api.gitPr(activeRoot.id, prTitle.trim(), prBody, prBase.trim())
+      setNotice(result.url ? `PR 已创建：${result.url}` : 'PR 已创建（gh 未返回 URL）')
+      setPrOpen(false)
+      setPrTitle('')
+      setPrBody('')
+      setRefreshToken((value) => value + 1)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -280,6 +324,43 @@ export function ChangesPane() {
               />
               <Button size="xs" disabled={busy || !commitMessage.trim() || status.files.every((file) => !file.staged)} onClick={() => void commit()}>提交</Button>
             </div>
+          </div>
+
+          <div className="flex flex-col gap-1 rounded-md border border-border bg-card/40 p-2">
+            <div className="flex items-center justify-between gap-2 text-micro text-muted-foreground">
+              <span className="min-w-0 truncate" title={remote?.remote ?? ''}>
+                {remote?.remote ? `origin：${remote.remote}` : '未配置 origin 远端'}
+              </span>
+              <Button size="xs" variant="ghost" disabled={busy || !remote?.remote || status.detached} onClick={() => void push()}>推送</Button>
+            </div>
+            {remote?.upstream && (
+              <p className="text-micro text-muted-foreground">上游 {remote.upstream} · ahead {remote.ahead} / behind {remote.behind}</p>
+            )}
+            {remote?.remote && (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-micro text-muted-foreground">GitHub PR（需要本机 gh）</span>
+                <Button size="xs" variant="ghost" disabled={busy || status.detached} onClick={() => setPrOpen((value) => !value)}>{prOpen ? '收起' : '创建 PR'}</Button>
+              </div>
+            )}
+            {prOpen && (
+              <div className="flex flex-col gap-1 border-t border-border/60 px-2 pt-2">
+                <div className="flex items-center gap-1">
+                  <Input value={prTitle} onChange={(event) => setPrTitle(event.target.value)} placeholder="PR 标题" maxLength={200} className="h-7 min-w-0 flex-1 text-caption" aria-label="PR 标题" />
+                  <Input value={prBase} onChange={(event) => setPrBase(event.target.value)} placeholder="base" maxLength={120} className="h-7 w-24 text-caption" aria-label="PR base 分支" />
+                </div>
+                <textarea
+                  value={prBody}
+                  onChange={(event) => setPrBody(event.target.value)}
+                  placeholder="PR 正文（可选）"
+                  maxLength={10000}
+                  aria-label="PR 正文"
+                  className="min-h-16 resize-y rounded-md border border-border bg-card/60 px-2 py-1.5 text-caption outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+                <div className="flex justify-end">
+                  <Button size="xs" disabled={busy || !prTitle.trim()} onClick={() => void createPr()}>创建 PR</Button>
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}

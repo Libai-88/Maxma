@@ -3,12 +3,7 @@ import type {
   ListSessionsResponse,
   SessionHistoryResponse,
   HealthResponse,
-  ListProvidersResponse,
   ListNewsResponse,
-  ProviderConfig,
-  TestConnectionResponse,
-  ProviderHealthCheckResponse,
-  DiscoverModelsResponse,
   BlockerEntry,
   ListBlockerResponse,
   MCPServerInfo,
@@ -40,6 +35,7 @@ import type { CreatePersonaBody, CreatePersonaResponse, ListPersonasResponse, Sw
 import type { Plugin, PluginDetail, InstallPluginRequest, InstallPluginResponse } from '@/types/plugin'
 import type { SessionShare, CreateShareRequest, SessionSnapshot } from '@/types/collab'
 import { createWorkspaceApi } from './workspace'
+import { createProvidersApi } from './providers'
 import { getApiBase } from '@/utils/env'
 
 // ── Panel Config 类型 ──
@@ -211,9 +207,16 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
       }
       // Workbench 文件接口使用 {error:{code,message}}；4xx 的 message 是
       // 面向本机用户的明确原因（如“路径不能跳出工作区”），可以展示。
-      const structured = body as { error?: { code?: unknown; message?: unknown } }
-      if (res.status >= 400 && res.status < 500 && typeof structured.error?.message === 'string') {
-        userMsg = structured.error.message
+      const structured = body as { error?: unknown }
+      if (res.status >= 400 && res.status < 500 && typeof structured.error === 'string') {
+        userMsg = structured.error
+      }
+      if (
+        res.status >= 400 && res.status < 500 &&
+        structured.error && typeof structured.error === 'object' &&
+        typeof (structured.error as { message?: unknown }).message === 'string'
+      ) {
+        userMsg = (structured.error as { message: string }).message
       }
     } catch { /* ignore parse errors */ }
     throw new Error(userMsg)
@@ -475,51 +478,7 @@ export const api = {
 
   // ── Provider ──
 
-  listProviders: () =>
-    request<ListProvidersResponse>('/providers'),
-
-  createProvider: (body: Partial<ProviderConfig>) =>
-    request<ProviderConfig>('/providers', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-
-  updateProvider: (id: string, body: Partial<ProviderConfig>) =>
-    request<ProviderConfig>(`/providers/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(body),
-    }),
-
-  deleteProvider: (id: string) =>
-    request<{ status: string }>(`/providers/${id}`, { method: 'DELETE' }),
-
-  testConnection: (body: { api_key: string; base_url: string; provider_type?: string }) =>
-    request<TestConnectionResponse>('/providers/test', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-
-  discoverModels: (body: { api_key: string; base_url: string; provider_type?: string }) =>
-    request<DiscoverModelsResponse>('/providers/discover-models', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    }),
-
-  discoverModelsForExisting: (id: string) =>
-    request<DiscoverModelsResponse>(`/providers/${id}/discover-models`, {
-      method: 'POST',
-    }),
-
-  testExistingProvider: (id: string) =>
-    request<TestConnectionResponse>(`/providers/${id}/test`, {
-      method: 'POST',
-    }),
-
-  // 阶段 3.3：按需触发健康检查并同步运行时健康状态（影响 fallback 链路）
-  checkProviderHealth: (id: string) =>
-    request<ProviderHealthCheckResponse>(`/providers/${id}/health`, {
-      method: 'POST',
-    }),
+  ...createProvidersApi(request),
 
   // ── News ──
 

@@ -37,7 +37,7 @@ import type { PiPendingPlan, PiSessionRecord } from "../../../bun-sidecar/src/ke
 import { canvasCommandBroker } from "../../../bun-sidecar/src/tools/canvas-broker";
 import { resolvePiModel } from "../../../bun-sidecar/src/kernel/model";
 import { createTaskBrief, type TaskBriefResult } from "../plugins/task-brief";
-import { getEvolutionContext, learnFromUserMessage } from "../evolution-ledger";
+import { enrichWithEvolutionContext } from "./chat-evolution";
 
 import { record as recordActivity } from "../activity-hub";
 import { decryptProviderKey, findProvider, loadProviders } from "./providers";
@@ -48,23 +48,13 @@ import { getErrorCollector } from "../error-collector";
 import { newTurnId, calculateContextUsage } from "./chat-turns";
 import { CLIENT_MESSAGE_TYPES } from "./client-message-types";
 import { FILE_WRITING_TOOLS, extractFilePathFromOutput, buildArtifactPayload } from "./chat-artifacts";
+import { applyLocalModelFallback } from "./chat-model-fallback";
 
 export { CLIENT_MESSAGE_TYPES };
 
 /** PERF-TOOL-OUTPUT-001：工具输出/错误截断（与 Python 版同阈值）。 */
 const MAX_TOOL_OUTPUT_LEN = 100_000;
 const MAX_TOOL_ERROR_LEN = 20_000;
-
-/** 行为偏好：只在已有请求路径上做确定性规则提炼与按需检索，不额外调用模型。 */
-function enrichWithEvolutionContext(message: string, sessionId: string, turnId: string): string {
-  try {
-    learnFromUserMessage(message, sessionId, turnId);
-    return `${message}${getEvolutionContext(message)}`;
-  } catch (error) {
-    console.warn(`[evolution] context unavailable: ${String(error)}`);
-    return message;
-  }
-}
 
 /** MEMORY-EVENTS-001：写类记忆工具（done 后合成 memory_* 事件流）。 */
 const MEMORY_WRITE_TOOLS = new Set(["remember_memory"]);
@@ -1268,11 +1258,11 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
 
     void (async () => {
       try {
-        const providerId = typeof payload.provider_id === "string" ? payload.provider_id : "";
-        const modelName = typeof payload.model_name === "string" ? payload.model_name : "";
+        let providerId = typeof payload.provider_id === "string" ? payload.provider_id : "";
+        let modelName = typeof payload.model_name === "string" ? payload.model_name : "";
         let selectedModel = record?.session.model;
         if (providerId && modelName) {
-          const provider = findProvider(loadProviders(), providerId);
+          let provider = findProvider(loadProviders(), providerId);
           // 插件提供的渠道**不在 providers.yaml 里**（凭据与端点在插件自己的适配器里），
           // 所以「查不到就报错」会把插件模型整条链路挡在门外
           //（pi 侧其实已经能解析 —— 见 kernel/model.ts 的 registerPluginProviderOn）。
@@ -1283,7 +1273,7 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
           if (provider && provider.enabled === false) {
             throw new Error(`所选提供商不可用：${providerId}`);
           }
-          const resolved = await resolvePiModel(
+          let resolved = await resolvePiModel(
             {
               model: modelName,
               provider: providerId,
@@ -1304,6 +1294,25 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
             record?.session.modelRuntime,
           );
           if (!record) throw new Error(`会话不存在：${sessionId}`);
+
+          // MOD-1：本地模型不可达时，先换到排序后的下一个候选，再开始本轮。
+          // 只做一次短路回退，且只对 providers.yaml 里的本机渠道预检。
+          if (provider) {
+            const switched = await applyLocalModelFallback({
+              provider,
+              providerId,
+              modelName,
+              maxTokens: Number(payload.max_tokens) || undefined,
+              modelRuntime: record.session.modelRuntime,
+              sessionId,
+              turnId,
+              broadcast: (id, event) => hub.broadcast(id, event),
+            });
+            if (switched) {
+              ({ providerId, modelName, resolved } = switched);
+            }
+          }
+
           selectedModel = resolved.model;
           record.modelPriceStatus = resolved.priceStatus;
           record.modelCacheStatus = resolved.cacheStatus;
@@ -1311,6 +1320,8 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
           if (activeTurn?.turnId === turnId) {
             activeTurn.priceStatus = resolved.priceStatus;
             activeTurn.cacheStatus = resolved.cacheStatus;
+            activeTurn.providerId = providerId;
+            activeTurn.modelName = modelName;
           }
           await record.session.setModel(resolved.model);
         }
@@ -1320,8 +1331,8 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
             : typeof payload.thinking === "boolean"
               ? { thinking_level: payload.thinking ? "high" : "off" }
               : {}),
-          ...(payload.model_name ? { model_name: payload.model_name } : {}),
-          ...(payload.provider_id ? { provider_id: payload.provider_id } : {}),
+          ...(providerId ? { provider_id: providerId } : {}),
+          ...(modelName ? { model_name: modelName } : {}),
           ...(typeof payload.temperature === "number" && payload.temperature >= -1 && payload.temperature <= 2
             ? { temperature: payload.temperature }
             : {}),

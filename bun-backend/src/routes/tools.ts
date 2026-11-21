@@ -29,7 +29,7 @@ const PI_TOOLS = MAXMA_DEFAULT_PI_TOOLS.map((name) => ({ name, ...PI_TOOL_METADA
 const SUBAGENT_TOOL: Record<string, unknown> = {
   name: "subagent",
   label: "Subagent",
-  description: "把彼此独立的子任务交给子 Agent 并行执行（独立上下文，只读文件 + 执行命令）",
+  description: "把彼此独立的子任务交给子 Agent 并行执行（独立上下文；默认只读，writable=true 时在隔离 git worktree 中写入并回传 patch）",
   category: "agent",
   builtin: true,
   source: "custom",
@@ -38,11 +38,20 @@ const SUBAGENT_TOOL: Record<string, unknown> = {
 export const BUILTIN_TOOLS: Array<Record<string, unknown>> = [
   ...PI_TOOLS,
   { name: "remember_memory", label: "Remember Memory", description: "记住一条长期记忆（用户明确要求时）", category: "memory", builtin: true, source: "custom" },
-  { name: "search_memories", label: "Search Memories", description: "检索长期记忆", category: "memory", builtin: true, source: "custom" },
+  { name: "search_memories", label: "Search Memories", description: "检索长期记忆（人格/项目/会话三层）", category: "memory", builtin: true, source: "custom" },
+  { name: "merge_memories", label: "Merge Memories", description: "合并重复/冲突记忆并记录裁决理由", category: "memory", builtin: true, source: "custom" },
   { name: "get_sticker", label: "Get Sticker", description: "获取内置贴纸", category: "fun", builtin: true, source: "custom" },
   { name: "list_rules", label: "List Rules", description: "查询质量规则", category: "system", builtin: true, source: "custom" },
+  { name: "web_search", label: "Web Search", description: "DuckDuckGo 网页搜索，返回来源 URL 与摘要", category: "web", builtin: true, source: "custom" },
+  { name: "web_fetch", label: "Web Fetch", description: "抓取公开网页正文，拒绝私网与元数据地址", category: "web", builtin: true, source: "custom" },
   { name: "read_office_file", label: "Read Office File", description: "读取当前工作区内的 DOCX、XLSX、PDF 和常见文本办公文件", category: "office", builtin: true, source: "custom" },
   { name: "write_office_file", label: "Write Office File", description: "在当前工作区内生成 DOCX、XLSX、CSV 和常见文本办公文件", category: "office", builtin: true, source: "custom" },
+  { name: "code_search", label: "Code Search", description: "在已索引工作区做全文代码检索", category: "code", builtin: true, source: "custom" },
+  { name: "code_symbols", label: "Code Symbols", description: "列出文件符号或按名称检索符号", category: "code", builtin: true, source: "custom" },
+  { name: "code_definition", label: "Code Definition", description: "按符号名查找定义位置", category: "code", builtin: true, source: "custom" },
+  { name: "code_references", label: "Code References", description: "查找标识符引用（文本级）", category: "code", builtin: true, source: "custom" },
+  { name: "code_diagnostics", label: "Code Diagnostics", description: "TS/JS 语法级诊断", category: "code", builtin: true, source: "custom" },
+  { name: "code_apply_patch", label: "Apply Patch", description: "事务式多文件编辑，失败回滚；可 typecheck", category: "code", builtin: true, source: "custom" },
   { name: "submit_plan", label: "Submit Plan", description: "提交实施计划供用户审批", category: "interactive", builtin: true, source: "custom" },
 ];
 

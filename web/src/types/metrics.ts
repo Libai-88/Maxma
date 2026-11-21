@@ -87,6 +87,10 @@ export interface LlmUsageResponse {
   cache_write_tokens?: number
   cache_hit_rate?: number | null
   cache_warm_calls?: number
+  /** 目录价估算成本（美元）；有任何一次成本未知时聚合值可能为 null。 */
+  cost_total?: number | null
+  cost_known_calls?: number
+  cost_unknown_calls?: number
   by_model?: Record<string, unknown>
   recent_calls: LlmUsageCall[]
 }

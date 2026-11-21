@@ -7,6 +7,7 @@
  */
 
 import type { ExtensionAPI, InlineExtension, ToolCallEvent, ToolCallEventResult } from "@earendil-works/pi-coding-agent";
+import * as path from "node:path";
 import { extractPaths } from "../../blocker";
 import type { PathIntent, PathPolicy } from "../path-policy";
 import { evaluateCommandPolicy, shellEnvPrefix } from "../command-policy";
@@ -14,8 +15,8 @@ import { recordToolDenied } from "../agent-audit";
 
 export const MAXMA_PATH_POLICY_EXTENSION_NAME = "maxma-path-policy";
 
-const READ_TOOLS = new Set(["read", "grep", "find", "ls", "read_office_file", "read_file"]);
-const WRITE_TOOLS = new Set(["write", "edit", "write_office_file", "write_file", "mkdir"]);
+const READ_TOOLS = new Set(["read", "grep", "find", "ls", "read_office_file", "read_file", "code_diagnostics"]);
+const WRITE_TOOLS = new Set(["write", "edit", "write_office_file", "write_file", "mkdir", "code_apply_patch"]);
 
 function intentFor(toolName: string): PathIntent | null {
   const name = toolName.toLowerCase();
@@ -67,6 +68,27 @@ export function createMaxmaPathPolicyExtension(
           // 不改写命令语义，只在前面重建 HOME/TMP 并清掉常见凭据变量。
           // 真正防越权读取仍需 OS 沙箱；这里明确标记为 policy-only。
           input.command = `${shellEnvPrefix(name === "powershell" ? "powershell" : "bash", shellRoot)}${command}`;
+          return undefined;
+        }
+
+        if (name === "code_apply_patch") {
+          const edits = Array.isArray(input.edits) ? input.edits : [];
+          if (edits.length === 0 || edits.length > 20) {
+            return deny("多文件编辑必须包含 1–20 项 edits");
+          }
+          for (const edit of edits) {
+            const rawPath = edit && typeof edit === "object" ? (edit as { path?: unknown }).path : null;
+            if (typeof rawPath !== "string" || !rawPath.trim()) {
+              return deny("多文件编辑的每个 edit 都必须有非空 path");
+            }
+            const absolute = path.resolve(shellRoot, rawPath);
+            const decision = policy.check(absolute, "write");
+            if (!decision.allowed) {
+              return deny(
+                `多文件编辑路径被拒绝（${decision.code ?? "PATH_OUTSIDE_ROOT"}）：${decision.reason ?? "路径不在授权工作区内"}；不要重试同一路径`,
+              );
+            }
+          }
           return undefined;
         }
 

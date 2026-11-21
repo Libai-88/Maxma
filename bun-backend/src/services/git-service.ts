@@ -283,3 +283,96 @@ export async function gitCommit(root: WorkspaceRoot, message: string, confirm: b
   };
 }
 
+export interface GitRemoteStatus {
+  branch: string | null;
+  detached: boolean;
+  remote: string | null;
+  upstream: string | null;
+  ahead: number;
+  behind: number;
+}
+
+export async function gitRemoteStatus(root: WorkspaceRoot): Promise<GitRemoteStatus> {
+  const remote = await git(root.realpath, ["remote", "get-url", "origin"]);
+  const branch = await git(root.realpath, ["symbolic-ref", "--short", "-q", "HEAD"]);
+  const detached = branch.status !== 0;
+  const upstream = await git(root.realpath, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
+  let ahead = 0;
+  let behind = 0;
+  if (upstream.status === 0) {
+    const counts = await git(root.realpath, ["rev-list", "--left-right", "--count", "HEAD...@{u}"]);
+    if (counts.status === 0) {
+      const [left, right] = counts.stdout.trim().split(/\s+/).map((value) => Number.parseInt(value, 10));
+      ahead = Number.isFinite(left) ? left ?? 0 : 0;
+      behind = Number.isFinite(right) ? right ?? 0 : 0;
+    }
+  }
+  return {
+    branch: detached ? null : branch.stdout.trim() || null,
+    detached,
+    remote: remote.status === 0 ? remote.stdout.trim() : null,
+    upstream: upstream.status === 0 ? upstream.stdout.trim() : null,
+    ahead,
+    behind,
+  };
+}
+
+export interface GitPushResult {
+  branch: string;
+  remote: string;
+  output: string;
+}
+
+/**
+ * 推送只允许显式的 `confirm=true`，且固定 origin + 当前分支（不做任意 refspec）。
+ * 不提供 force；网络动作由用户在工作台里按下按钮触发，不是 Agent 自作主张。
+ */
+export async function gitPush(root: WorkspaceRoot, confirm: boolean): Promise<GitPushResult> {
+  await assertRepo(root);
+  if (confirm !== true) throw new GitError("GIT_FAILED", 400, "推送必须显式确认");
+  const branch = await git(root.realpath, ["symbolic-ref", "--short", "-q", "HEAD"]);
+  const branchName = branch.status === 0 ? branch.stdout.trim() : "";
+  if (!branchName) throw new GitError("GIT_FAILED", 400, "detached HEAD 不能推送；请先切到分支");
+  const remote = await git(root.realpath, ["remote", "get-url", "origin"]);
+  if (remote.status !== 0 || !remote.stdout.trim()) throw new GitError("GIT_FAILED", 400, "没有 origin 远端，无法推送");
+  const result = await git(root.realpath, ["push", "--porcelain", "origin", `HEAD:refs/heads/${branchName}`], 60_000);
+  if (result.status !== 0) throw new GitError("GIT_FAILED", 500, result.stderr.trim() || result.stdout.trim() || "推送失败");
+  return { branch: branchName, remote: remote.stdout.trim(), output: result.stdout.trim().slice(0, 4000) };
+}
+
+export interface GitPrResult {
+  url: string | null;
+  output: string;
+}
+
+/** 用 GitHub CLI 创建 PR；机器上没有 gh 或仓库不是 GitHub 时返回可读失败，不假装成功。 */
+export async function gitCreatePullRequest(
+  root: WorkspaceRoot,
+  input: { title: string; body: string; base: string; confirm: boolean },
+): Promise<GitPrResult> {
+  await assertRepo(root);
+  if (input.confirm !== true) throw new GitError("GIT_FAILED", 400, "创建 PR 必须显式确认");
+  const title = input.title.trim();
+  const base = input.base.trim();
+  if (!title) throw new GitError("PATH_INVALID", 400, "PR 标题不能为空");
+  if (title.length > 200) throw new GitError("PATH_INVALID", 400, "PR 标题过长（上限 200 字）");
+  if (!base) throw new GitError("PATH_INVALID", 400, "base 分支不能为空");
+  if (input.body.length > 10_000) throw new GitError("PATH_INVALID", 400, "PR 正文过长（上限 10000 字）");
+  const branch = await git(root.realpath, ["symbolic-ref", "--short", "-q", "HEAD"]);
+  const branchName = branch.status === 0 ? branch.stdout.trim() : "";
+  if (!branchName) throw new GitError("GIT_FAILED", 400, "detached HEAD 不能创建 PR");
+  const gh = Bun.which("gh");
+  if (!gh) throw new GitError("GIT_UNAVAILABLE", 503, "未找到 GitHub CLI（gh）；可手动推送后在网页创建 PR");
+  const child = Bun.spawn([gh, "pr", "create", "--base", base, "--head", branchName, "--title", title, "--body", input.body], {
+    cwd: root.realpath,
+    stdout: "pipe",
+    stderr: "pipe",
+    env: { ...process.env, GH_PROMPT_DISABLED: "1" },
+  });
+  const [stdout, stderr] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text()]);
+  const code = await child.exited;
+  if (code !== 0) throw new GitError("GIT_FAILED", 500, stderr.trim() || stdout.trim() || `gh 退出码 ${code}`);
+  const url = /https?:\/\/\S+/.exec(stdout)?.[0] ?? null;
+  return { url, output: stdout.trim().slice(0, 4000) };
+}
+

@@ -7,13 +7,23 @@ import type { ThinkPathId } from '@/utils/thinkPath'
 import { safeCopyText } from '@/lib/clipboard'
 import { api } from '@/api'
 import { MODE_SHORT_LABELS, useSessionPermissionMode } from '@/hooks/useSessionPermissionMode'
-import { Paperclip, X, FileText, FolderOpen, Link2, Sticker, Mic } from 'lucide-react'
+import { Paperclip, X, FileText, FolderOpen, Link2, Sticker, Mic, Layers } from 'lucide-react'
 import { StickerPicker, type Sticker as StickerItem } from '@/components/chat/StickerPicker'
 import { StickerManagerDialog } from '@/components/chat/StickerManagerDialog'
 import { useChatStore } from '@/stores/chat'
 import { THINKING_LEVELS, thinkingLevelLabel } from '@/utils/thinkingLevels'
 import { cn } from '@/lib/utils'
 import { focusRing, interactive } from '@/lib/ui'
+import {
+  clearContextSnapshot,
+  contextItemsToRefs,
+  loadContextSnapshot,
+  mergeContextItems,
+  removeContextItem,
+  saveContextSnapshot,
+  type ContextItem,
+} from '@/context/contextItems'
+import { subscribeContextItems } from '@/context/contextBus'
 
 export interface SlashCommandDef {
   name: string
@@ -60,6 +70,7 @@ export function ChatInput(props: ChatInputProps) {
   const permission = useSessionPermissionMode(sessionId)
   const [text, setText] = useState('')
   const [refs, setRefs] = useState<ParsedRef[]>([])
+  const [contextItems, setContextItems] = useState<ContextItem[]>([])
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const [attachMenu, setAttachMenu] = useState(false)
@@ -80,6 +91,54 @@ export function ChatInput(props: ChatInputProps) {
   const [slashFilter, setSlashFilter] = useState('')
   const [slashActive, setSlashActive] = useState(0)
   const [notice, setNotice] = useState('')
+
+  // C5：工作台上下文总线。面板只发 ContextItem，输入框按会话接收；
+  // 快照存 localStorage（会话级 key），关掉工作台/刷新后引用还在。
+  useEffect(() => {
+    let storage: Storage | null = null
+    try { storage = window.localStorage } catch { /* 隐私模式 */ }
+    if (!sessionId) {
+      setContextItems([])
+      return
+    }
+    setContextItems(storage ? loadContextSnapshot(storage, sessionId) : [])
+    const unsubscribe = subscribeContextItems(sessionId, (item) => {
+      setContextItems((prev) => {
+        const next = mergeContextItems(prev, item)
+        if (storage) saveContextSnapshot(storage, sessionId, next)
+        return next
+      })
+      setNotice(`已引用：${item.label}`)
+    })
+    return unsubscribe
+  }, [sessionId])
+
+  const dropContextItem = (id: string) => {
+    setContextItems((prev) => {
+      const next = removeContextItem(prev, id)
+      try {
+        if (sessionId) saveContextSnapshot(window.localStorage, sessionId, next)
+      } catch { /* 隐私模式 */ }
+      return next
+    })
+  }
+
+  const allRefs = useMemo(() => {
+    const fromContext = contextItemsToRefs(contextItems)
+    // 同一文件既被手动引用又被上下文引用时只留一条。
+    const seen = new Set<string>()
+    return [...refs, ...fromContext].filter((ref) => {
+      const key = `${ref.type}|${'path' in ref ? ref.path : ''}|${'url' in ref ? ref.url : ''}|${'text' in ref ? (ref as { text?: string }).text?.slice(0, 64) : ''}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  }, [refs, contextItems])
+
+  const clearContext = () => {
+    setContextItems([])
+    try { if (sessionId) clearContextSnapshot(window.localStorage, sessionId) } catch { /* 隐私模式 */ }
+  }
 
   // 文件面板的“加入对话”：桌面工作台不直接持有输入框状态，用窄事件桥回传。
   useEffect(() => {
@@ -323,9 +382,9 @@ export function ChatInput(props: ChatInputProps) {
     }
     const marker = sticker.marker ?? `<sticker:${sticker.path}>`
     const value = text.trim() ? `${text.trim()}\n${marker}` : marker
-    const sent = onSend(value, refs, providerId || undefined, modelName || undefined)
+    const sent = onSend(value, allRefs, providerId || undefined, modelName || undefined)
     if (sent) {
-      setText(''); setRefs([]); setNotice(''); closeStickerPicker()
+      setText(''); setRefs([]); clearContext(); setNotice(''); closeStickerPicker()
     } else {
       setNotice('表情发送失败，请检查连接后重试')
     }
@@ -400,8 +459,8 @@ export function ChatInput(props: ChatInputProps) {
       setNotice('没有可用的模型，消息没有发出——请先在「模型」里添加渠道')
       return
     }
-    const sent = onSend(value, refs, providerId || undefined, modelName || undefined)
-    if (sent) { setText(''); setNotice(''); setRefs([]); setAtOpen(false) }
+    const sent = onSend(value, allRefs, providerId || undefined, modelName || undefined)
+    if (sent) { setText(''); setNotice(''); setRefs([]); clearContext(); setAtOpen(false) }
     else setNotice('消息发送失败，请检查连接后重试')
   }
 
@@ -556,12 +615,21 @@ export function ChatInput(props: ChatInputProps) {
               </button>
             </>
           }
-          tags={refs.map((r, i) => (
-            <span key={i} className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-caption text-muted-foreground">
-              {r.label}
-              <button type="button" onClick={() => setRefs((prev) => prev.filter((_, j) => j !== i))} aria-label={`移除 ${r.label}`} className="hover:text-foreground"><X className="size-3" /></button>
-            </span>
-          ))}
+          tags={<>
+            {refs.map((r, i) => (
+              <span key={`ref-${i}`} className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-caption text-muted-foreground">
+                {r.label}
+                <button type="button" onClick={() => setRefs((prev) => prev.filter((_, j) => j !== i))} aria-label={`移除 ${r.label}`} className="hover:text-foreground"><X className="size-3" /></button>
+              </span>
+            ))}
+            {contextItems.map((item) => (
+              <span key={item.id} className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-caption text-muted-foreground" title={item.kind}>
+                <Layers className="size-3" />
+                {item.label}
+                <button type="button" onClick={() => dropContextItem(item.id)} aria-label={`移除 ${item.label}`} className="hover:text-foreground"><X className="size-3" /></button>
+              </span>
+            ))}
+          </>}
         />
         <ComposerFooter>
           <ComposerPick

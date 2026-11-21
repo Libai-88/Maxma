@@ -22,6 +22,7 @@ export const TOOL_DISPLAY_NAMES: Record<string, string> = {
   // ── Maxma 自定义 ──
   remember_memory: '记住记忆',
   search_memories: '检索记忆',
+  merge_memories: '合并记忆',
   get_sticker: '获取贴纸',
   send_meme: '发表情',
   learn_meme: '收录表情',
@@ -33,11 +34,19 @@ export const TOOL_DISPLAY_NAMES: Record<string, string> = {
   canvas_read: '读取设计画布',
   canvas_apply: '编辑设计画布',
   canvas_export: '导出设计画布',
+  code_search: '代码检索',
+  code_symbols: '代码符号',
+  code_definition: '查找定义',
+  code_references: '查找引用',
+  code_diagnostics: '代码诊断',
+  code_apply_patch: '多文件编辑',
   // ── kernel 扩展点 ──
   submit_plan: '提交计划',
   browser_navigate: '浏览器打开页面',
   browser_read: '浏览器读页面',
   browser_act: '浏览器原生操作',
+  web_search: '联网搜索',
+  web_fetch: '抓取网页',
 }
 
 /** 其它常见/历史名称（非契约，按需展示）。 */

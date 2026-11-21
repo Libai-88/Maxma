@@ -5,7 +5,7 @@ import { useMetricsStore } from '@/stores/metrics'
 import { api } from '@/api'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
-import type { LlmUsageCall } from '@/types'
+import type { LlmUsageCall, LlmUsageResponse } from '@/types'
 import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -73,12 +73,20 @@ function formatTokens(n: number): string {
   return `${(n / 1000000).toFixed(2)}M`
 }
 
+function formatCost(n: number): string {
+  if (n === 0) return '$0'
+  if (n < 0.001) return `$${n.toFixed(5)}`
+  if (n < 1) return `$${n.toFixed(4)}`
+  return `$${n.toFixed(2)}`
+}
+
 export default function MetricsView() {
   const { snapshot, history, loading, error, refresh, loadHistory } = useMetricsStore()
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [historyWindow, setHistoryWindow] = useState(3600)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [recentCalls, setRecentCalls] = useState<LlmUsageCall[]>([])
+  const [usageSummary, setUsageSummary] = useState<LlmUsageResponse | null>(null)
   const [callsLoading, setCallsLoading] = useState(false)
   const [callsError, setCallsError] = useState('')
   const scrollRef = useScrollFade()
@@ -93,6 +101,7 @@ export default function MetricsView() {
     setCallsError('')
     try {
       const res = await api.getLlmUsage({ windowSeconds: 30 * 24 * 60 * 60 })
+      setUsageSummary(res)
       setRecentCalls(res.recent_calls ?? [])
     } catch (e) {
       setCallsError(e instanceof Error ? e.message : String(e))
@@ -242,7 +251,16 @@ export default function MetricsView() {
               <Stat value={formatTokens(snapshot.llm.cache_read_tokens)} label="缓存读取 Tokens（含预热）" />
               <Stat value={snapshot.llm.cache_hit_rate === null ? '—' : `${(snapshot.llm.cache_hit_rate * 100).toFixed(1)}%`} label="缓存命中率" />
               <Stat value={`${snapshot.llm.latency_ms.avg_ms.toFixed(1)}ms`} label="平均轮次时长" />
+              <Stat
+                value={usageSummary?.cost_total != null ? formatCost(usageSummary.cost_total) : usageSummary ? '未知' : '—'}
+                label="估算成本（美元 / 30 天）"
+              />
             </div>
+            {usageSummary && (usageSummary.cost_unknown_calls || 0) > 0 && (
+              <p className="mb-3 text-body text-muted-foreground">
+                {usageSummary.cost_known_calls || 0} 次请求有目录价，{usageSummary.cost_unknown_calls} 次无可用单价；未知部分不会计成 0，成本合计可能显示为“未知”。
+              </p>
+            )}
             {Object.keys(snapshot.llm.by_model).length > 0 && (
               <div className="mt-3">
                 <div className="text-xs font-semibold text-muted-foreground mb-1.5">按模型统计轮次</div>
@@ -276,6 +294,7 @@ export default function MetricsView() {
                       <th className="py-2 pr-3 font-medium text-right">输出</th>
                       <th className="py-2 pr-3 font-medium text-right">缓存读</th>
                       <th className="py-2 pr-3 font-medium text-right">耗时</th>
+                      <th className="py-2 pr-3 font-medium text-right">估算成本</th>
                       <th className="py-2 font-medium">状态</th>
                     </tr>
                   </thead>
@@ -288,6 +307,9 @@ export default function MetricsView() {
                         <td className="py-2 pr-3 text-right">{formatTokens(c.output_tokens ?? 0)}</td>
                         <td className="py-2 pr-3 text-right">{c.cache_read_tokens === null ? '—' : formatTokens(c.cache_read_tokens)}</td>
                         <td className="py-2 pr-3 text-right">{c.duration_ms === null ? '—' : c.duration_ms < 1000 ? `${c.duration_ms}ms` : `${(c.duration_ms / 1000).toFixed(1)}s`}</td>
+                        <td className="py-2 pr-3 text-right" title={c.cost_status === 'catalog_estimate' ? '按模型目录价估算' : '该模型没有目录价'}>
+                          {c.cost_status === 'catalog_estimate' && c.cost_total !== null ? formatCost(c.cost_total) : '—'}
+                        </td>
                         <td className="py-2 text-muted-foreground">
                           {c.kind === 'cache_warm' ? '缓存预热' : c.usage_status === 'reported' ? '正常' : c.usage_status === 'partial' ? '用量不全' : '缺用量'}
                         </td>

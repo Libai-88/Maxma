@@ -63,6 +63,8 @@ import { createFileRoutes } from "./routes/files";
 import { createWorkspaceRoutes } from "./routes/workspace";
 import { createSecurityRoutes } from "./routes/security";
 import { createGitRoutes } from "./routes/git";
+import { createCodeIndexRoutes } from "./routes/code-index";
+import { createHardwareRoutes } from "./routes/hardware";
 import { createDiagnosticsRoutes } from "./routes/diagnostics";
 import { createCapabilitiesRoutes } from "./routes/capabilities";
 import { startBackgroundSync, stopBackgroundSync } from "./services/opencode-zen";
@@ -302,6 +304,8 @@ app.route("/", createExtensionsRoutes());
   app.route("/", createWorkspaceRoutes());
   app.route("/", createSecurityRoutes());
   app.route("/", createGitRoutes());
+  app.route("/", createCodeIndexRoutes());
+  app.route("/", createHardwareRoutes());
 
   // 2.5b：diagnostics（错误报告 + 前端诊断上报）
   app.route("/", createDiagnosticsRoutes());

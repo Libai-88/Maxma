@@ -543,7 +543,7 @@ export type ServerEvent =
   | TaskBriefUpdateEvent
   | PermissionModeUpdatedEvent
   | ActionFailedEvent
-
+  | import('./model-fallback').ModelFallbackEvent
 // === GAP-B1-001：目标模式状态事件 ===
 
 export interface TaskBriefUpdateEvent {

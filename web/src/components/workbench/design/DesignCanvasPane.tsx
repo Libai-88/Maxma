@@ -6,23 +6,15 @@
  * 导出 PNG 或把图发回对话输入框。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
 import {
   ChevronDown,
-  Circle,
   Download,
   Frame,
-  Hand,
-  Image as ImageIcon,
   Layers,
   Maximize2,
-  Minus,
-  MousePointer2,
   Redo2,
   Send,
   SlidersHorizontal,
-  Square,
-  Type,
   Undo2,
   X,
   ZoomIn,
@@ -30,12 +22,16 @@ import {
   Check,
   Loader2,
   FolderOpen,
+  LayoutTemplate,
+  FileCode2,
+  Upload,
+  MessageSquarePlus,
 } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
 
 import type { WorkbenchPaneProps } from '../paneProps'
 import type { CanvasTool, CanvasView, DesignElement, DesignImageElement } from '@/types/designCanvas'
 import { CanvasStage, type CanvasStageHandle } from './CanvasStage'
+import { TOOLS, RailButton } from './DesignCanvasRail'
 import { CanvasInspector } from './CanvasInspector'
 import { CanvasLayers } from './CanvasLayers'
 import { CanvasCardsDrawer } from './CanvasCardsDrawer'
@@ -49,72 +45,14 @@ import {
 import { useDesignCanvas } from './useDesignCanvas'
 import { registerDesignCanvasAgent } from './designCanvasAgentBridge'
 import { createDesignAsset, useDesignImages } from './useDesignImages'
-
-interface ToolMeta {
-  id: CanvasTool
-  label: string
-  hint: string
-  icon: LucideIcon
-  key: string
-}
-
-const TOOLS: readonly ToolMeta[] = [
-  { id: 'select', label: '选择', hint: '拖拽移动 · 双击改字 · 右侧改属性', icon: MousePointer2, key: 'V' },
-  { id: 'pan', label: '手型', hint: '拖动画布查看', icon: Hand, key: 'H' },
-  { id: 'text', label: '文字', hint: '点画板加文字', icon: Type, key: 'T' },
-  { id: 'image', label: '图片', hint: '导入图片到画板', icon: ImageIcon, key: 'I' },
-  { id: 'rect', label: '矩形', hint: '在画板上拖出矩形', icon: Square, key: 'R' },
-  { id: 'ellipse', label: '椭圆', hint: '在画板上拖出椭圆', icon: Circle, key: 'O' },
-  { id: 'line', label: '线条', hint: '拖出水平分割线', icon: Minus, key: 'L' },
-] as const
+import { CANVAS_TEMPLATES, exportDesignSvg, importDesignSvg } from './canvasSvg'
+import { loadDesignAsset } from './designCanvasStorage'
+import { isEditableTarget, safeFileName } from './designCanvasHelpers'
+import { normalizeContextItem } from '@/context/contextItems'
+import { emitContextItem } from '@/context/contextBus'
+import type { DesignProject } from '@/types/designCanvas'
 
 type SidePanel = 'layers' | 'inspector' | null
-
-function isEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false
-  return target.tagName === 'INPUT'
-    || target.tagName === 'TEXTAREA'
-    || target.tagName === 'SELECT'
-    || target.isContentEditable
-    || Boolean(target.closest('button, a, [role="button"], [role="menuitem"], [role="menuitemradio"]'))
-}
-
-function safeFileName(name: string): string {
-  const cleaned = name.replace(/[\\/:*?"<>|]+/g, '-').trim()
-  return cleaned || '设计画布'
-}
-
-function RailButton({
-  label,
-  active,
-  disabled,
-  onClick,
-  children,
-}: {
-  label: string
-  active?: boolean
-  disabled?: boolean
-  onClick: () => void
-  children: ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      aria-pressed={active}
-      disabled={disabled}
-      onClick={onClick}
-      className={`inline-flex h-7 w-7 items-center justify-center rounded-md border text-muted-foreground duration-fast ${
-        active
-          ? 'border-primary/50 bg-primary/10 text-primary'
-          : 'border-border/60 hover:bg-muted/50 hover:text-foreground'
-      } disabled:cursor-not-allowed disabled:opacity-40`}
-    >
-      {children}
-    </button>
-  )
-}
 
 export function DesignCanvasPane({
   isOpen,
@@ -142,6 +80,7 @@ export function DesignCanvasPane({
   const [panel, setPanel] = useState<SidePanel>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [presetOpen, setPresetOpen] = useState(false)
+  const [templateOpen, setTemplateOpen] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
@@ -226,12 +165,56 @@ export function DesignCanvasPane({
   }
 
   const handleFiles = useCallback(async (files: FileList | File[]) => {
-    const list = Array.from(files).filter((file) => file.type.startsWith('image/'))
+    const all = Array.from(files)
+    const list = all.filter((file) => file.type.startsWith('image/'))
     if (list.length === 0) return
     const replaceId = replaceTargetRef.current
     replaceTargetRef.current = null
     setBusy(true)
     try {
+      const svgFiles = list.filter((file) => file.name.toLowerCase().endsWith('.svg') || file.type === 'image/svg+xml')
+      if (svgFiles.length > 0) {
+        if (replaceId) {
+          setNotice('替换图片只接受位图；SVG 请用“导入 SVG”追加到画板')
+          return
+        }
+        let imported = 0
+        let skipped = 0
+        for (const file of svgFiles) {
+          const parsed = importDesignSvg(await file.text())
+          if (parsed.elements.length === 0) {
+            skipped += parsed.warnings.length || 1
+            continue
+          }
+          const artboard = canvasRef.current.project?.artboard
+          const scale = Math.min(
+            (artboard?.width ?? parsed.width) / parsed.width,
+            (artboard?.height ?? parsed.height) / parsed.height,
+            1,
+          )
+          const mapped = parsed.elements.map((element) => {
+            const next = {
+              ...element,
+              x: Math.round(element.x * scale),
+              y: Math.round(element.y * scale),
+              width: Math.max(1, Math.round(element.width * scale)),
+              height: Math.max(1, Math.round(element.height * scale)),
+            }
+            if (next.type === 'text') next.fontSize = Math.max(6, Math.round(next.fontSize * scale))
+            return next
+          })
+          canvas.commitProject((current) => ({
+            ...current,
+            elements: [...current.elements, ...mapped].slice(0, 200),
+            updatedAt: Date.now(),
+          }))
+          imported += mapped.length
+          skipped += parsed.warnings.length
+        }
+        setNotice(`已导入 SVG：${imported} 个元素${skipped > 0 ? `，跳过 ${skipped} 个不支持项` : ''}`)
+        setTool('select')
+        return
+      }
       if (replaceId) {
         const asset = await createDesignAsset(list[0])
         if (asset) canvas.replaceElementImage(replaceId, asset)
@@ -304,6 +287,79 @@ export function DesignCanvasPane({
     }
   }
 
+  const handleExportSvg = async () => {
+    if (!project) return
+    setBusy(true)
+    try {
+      const assets = new Map<string, Awaited<ReturnType<typeof loadDesignAsset>>>()
+      await Promise.all(project.elements
+        .filter((element) => element.type === 'image')
+        .map(async (element) => {
+          const asset = await loadDesignAsset(element.assetId)
+          if (asset) assets.set(element.assetId, asset)
+        }))
+      const svg = exportDesignSvg(project, Array.from(assets.values()).filter((asset): asset is NonNullable<typeof asset> => asset !== null))
+      const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${safeFileName(project.name)}.svg`
+      link.click()
+      URL.revokeObjectURL(url)
+      setNotice('已导出 SVG（文本与矢量元素可继续编辑）')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'SVG 导出失败')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const applyTemplate = (template: typeof CANVAS_TEMPLATES[number]) => {
+    const next: DesignProject = {
+      ...template.project,
+      name: template.project.name,
+      elements: template.project.elements.map((element) => ({ ...element })),
+      updatedAt: Date.now(),
+    }
+    canvas.commitProject(() => next)
+    setTemplateOpen(false)
+    setNotice(`已应用模板：${template.name}`)
+  }
+
+  /** C5：把当前选中元素作为上下文引用送进对话（不导出整张图）。 */
+  const referenceSelected = () => {
+    if (!selectedElement) {
+      setNotice('先在画布上选中一个元素')
+      return
+    }
+    const lines = [
+      `元素：${selectedElement.name}（${selectedElement.type}）`,
+      `位置：x=${Math.round(selectedElement.x)} y=${Math.round(selectedElement.y)} 尺寸=${Math.round(selectedElement.width)}×${Math.round(selectedElement.height)}`,
+    ]
+    if (selectedElement.type === 'text') {
+      lines.push(`文本：${selectedElement.text}`)
+      lines.push(`字号：${selectedElement.fontSize} 字重：${selectedElement.fontWeight} 对齐：${selectedElement.align}`)
+    } else if (selectedElement.type === 'image') {
+      lines.push(`图片：${selectedElement.alt || selectedElement.assetId} 适配：${selectedElement.fit}`)
+    } else {
+      lines.push(`填充：${selectedElement.fill} 描边：${selectedElement.stroke} 圆角：${selectedElement.radius}`)
+    }
+    const item = normalizeContextItem({
+      kind: 'canvas-element',
+      label: `画布 · ${selectedElement.name}`,
+      text: lines.join('\n'),
+      meta: {
+        画板: `${project?.artboard.width ?? 0}×${project?.artboard.height ?? 0}`,
+        元素: selectedElement.id,
+        项目: project?.name ?? '设计画布',
+      },
+    }, sessionId ?? '')
+    if (item) {
+      emitContextItem(item)
+      setNotice(`已引用画布元素「${selectedElement.name}」`)
+    }
+  }
+
   const handleSendToChat = async () => {
     setBusy(true)
     try {
@@ -342,6 +398,7 @@ export function DesignCanvasPane({
       }
       if (event.key === 'Escape') {
         if (presetOpen) setPresetOpen(false)
+        else if (templateOpen) setTemplateOpen(false)
         else if (drawerOpen) setDrawerOpen(false)
         else if (panel) setPanel(null)
         else canvas.select(null)
@@ -368,7 +425,7 @@ export function DesignCanvasPane({
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [isOpen, activeTab, presetOpen, drawerOpen, panel, selectedElement, canvas])
+  }, [isOpen, activeTab, presetOpen, templateOpen, drawerOpen, panel, selectedElement, canvas])
 
   const toolMeta = useMemo(() => TOOLS.find((item) => item.id === tool) ?? TOOLS[0], [tool])
 
@@ -400,10 +457,10 @@ export function DesignCanvasPane({
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,.svg"
         multiple
         className="hidden"
-        aria-label="导入画布图片"
+        aria-label="导入画布图片或 SVG"
         onChange={(event) => {
           const files = event.target.files
           if (files) void handleFiles(files)
@@ -448,6 +505,18 @@ export function DesignCanvasPane({
           <span className="truncate">{preset?.label ?? `${project.artboard.width}×${project.artboard.height}`}</span>
           <ChevronDown className={`size-3 shrink-0 duration-fast ${presetOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
         </button>
+        <RailButton label="导入图片或 SVG" disabled={busy} onClick={() => openImagePicker()}>
+          <Upload className="size-3.5" />
+        </RailButton>
+        <RailButton label="导出 SVG" disabled={busy} onClick={() => { void handleExportSvg() }}>
+          <FileCode2 className="size-3.5" />
+        </RailButton>
+        <RailButton label="套用模板" disabled={busy} onClick={() => { setTemplateOpen((open) => !open); setPresetOpen(false) }}>
+          <LayoutTemplate className="size-3.5" />
+        </RailButton>
+        <RailButton label="引用选中元素到对话" disabled={!selectedElement} onClick={referenceSelected}>
+          <MessageSquarePlus className="size-3.5" />
+        </RailButton>
         <RailButton label="撤销" disabled={!canvas.canUndo} onClick={canvas.undo}><Undo2 className="size-3.5" /></RailButton>
         <RailButton label="重做" disabled={!canvas.canRedo} onClick={canvas.redo}><Redo2 className="size-3.5" /></RailButton>
         <RailButton label="导出 PNG" disabled={busy} onClick={() => { void handleExport() }}>
@@ -492,6 +561,30 @@ export function DesignCanvasPane({
                   </button>
                 )
               })}
+            </div>
+          </>
+        )}
+        {templateOpen && (
+          <>
+            <div className="fixed inset-0 z-40" aria-hidden="true" onClick={() => setTemplateOpen(false)} />
+            <div
+              role="menu"
+              aria-label="画布模板"
+              className="elev-3 absolute left-2 top-full z-50 mt-1 w-72 overflow-hidden rounded-xl ring-1 ring-border bg-popover p-1"
+            >
+              <p className="px-2 pb-1 pt-1 text-caption text-muted-foreground">内置模板 · 应用后会替换当前画板内容，可用撤销恢复</p>
+              {CANVAS_TEMPLATES.map((template) => (
+                <button
+                  key={template.id}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => applyTemplate(template)}
+                  className="flex w-full flex-col items-start rounded-md px-2 py-2 text-left duration-fast hover:bg-accent/60"
+                >
+                  <span className="text-caption font-medium">{template.name}</span>
+                  <span className="mt-0.5 text-caption text-muted-foreground">{template.description}</span>
+                </button>
+              ))}
             </div>
           </>
         )}

@@ -31,6 +31,8 @@ import { MAXMA_ENABLED_DEFAULT_TOOLS } from "./pi-contract";
 import { createMaxmaBlockerExtension } from "./extensions/maxma-blocker";
 import { createMaxmaPathPolicyExtension } from "./extensions/maxma-path-policy";
 import { createMaxmaAuditExtension } from "./extensions/maxma-audit";
+import { createMaxmaHooksExtension } from "./extensions/maxma-hooks";
+import { loadHooksConfig } from "./hooks/config";
 import { PathPolicy } from "./path-policy";
 import {
   buildExtensionsSnapshot,
@@ -75,8 +77,22 @@ export function approvalExtensionFor(
  * 配置指纹时装配。禁用接口在 `kernel/extensions.ts` 里按 scope 硬拒。
  */
 export function buildExtensionFactories(opts: MaxmaSessionOptions): InlineExtension[] {
-  const extensionFactories: InlineExtension[] = [createMaxmaBlockerExtension()];
+  const extensionFactories: InlineExtension[] = [];
   const cwd = opts.cwd ?? process.cwd();
+  // A4：用户钩子最先跑（可改写工具入参），之后 blocker/path-policy 再校验一次。
+  // 未签名/签名不匹配的配置整份不加载；没有配置时不装扩展，零开销。
+  const hooksConfig = loadHooksConfig();
+  if (hooksConfig.status === "invalid") {
+    console.warn("[hooks] 配置未加载:", hooksConfig.errors.join("；"));
+  }
+  if (hooksConfig.hooks.length > 0) {
+    extensionFactories.push(createMaxmaHooksExtension({
+      sessionId: opts.sessionId ?? "unknown",
+      cwd,
+      hooks: hooksConfig.hooks,
+    }));
+  }
+  extensionFactories.push(createMaxmaBlockerExtension());
   const pathPolicy = new PathPolicy({
     cwd,
     roots: opts.allowedRoots && opts.allowedRoots.length > 0 ? opts.allowedRoots : [cwd],

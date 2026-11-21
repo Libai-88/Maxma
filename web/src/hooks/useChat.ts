@@ -139,6 +139,8 @@ export const SERVER_EVENT_HANDLER_TYPES: Record<ServerEvent['type'], true> = {
   action_failed: true,
   task_review_update: true,
   task_brief_update: true,
+  // MOD-1：本地模型失败自动回退的系统提示
+  model_fallback: true,
 }
 
 /**
@@ -1759,6 +1761,17 @@ export function handleEventForChannel(sid: string, event: ServerEvent) {
       }
       break
     }
+
+    case 'model_fallback':
+      if (turn) {
+        turn.events.push({
+          kind: 'system',
+          detail: 'model_fallback',
+          content: `本地模型不可用，已自动切换：${event.payload.from.label} / ${event.payload.from.model} → ${event.payload.to.label} / ${event.payload.to.model}（${event.payload.reason}）`,
+          timestamp: Date.now(),
+        })
+      }
+      break
 
     case 'irc_message':
       if (turn) {

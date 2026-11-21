@@ -162,7 +162,7 @@ describe("chat WS（阶段 2.3）", () => {
         provider_type: "openai-completions",
         label: "Test provider",
         api_key: "test-secret",
-        base_url: "http://127.0.0.1:1234/v1",
+        base_url: "https://api.example.com/v1",
         models: ["test-model"],
         enabled: true,
       }],
@@ -178,6 +178,58 @@ describe("chat WS（阶段 2.3）", () => {
     const record = hub.sessions.get(sid) as { session: { model?: { provider: string; id: string } } };
     expect(record.session.model).toMatchObject({ provider: "test-provider", id: "test-model" });
   }, 15000);
+
+  test("local model unreachable falls back to a reachable provider before prompting", async () => {
+    const { handleChatMessage } = await import("../src/routes/chat-ws");
+    const { sid, hub, ws, sent } = await makeSession();
+    const providersFile = path.join(dataDir, "api", "data", "providers.yaml");
+    fs.writeFileSync(providersFile, Bun.YAML.stringify({
+      providers: [
+        {
+          id: "local-ollama",
+          provider_type: "openai-completions",
+          label: "本机 Ollama",
+          api_key: "",
+          base_url: "http://127.0.0.1:9/v1",
+          models: ["qwen2.5:7b"],
+          enabled: true,
+        },
+        {
+          id: "cloud-fallback",
+          provider_type: "openai-completions",
+          label: "Cloud Fallback",
+          api_key: "test-secret",
+          base_url: "https://api.example.com/v1",
+          models: ["gpt-4o-mini"],
+          enabled: true,
+        },
+      ],
+    }));
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => new Response("down", { status: 503 })) as unknown as typeof fetch;
+    hub.callRpc = async (method: string) => ({ ok: true as const, result: method === "prompt" ? { ok: true } : null });
+    try {
+      handleChatMessage(hub, ws, JSON.stringify({
+        type: "chat",
+        payload: { message: "hello", provider_id: "local-ollama", model_name: "qwen2.5:7b" },
+      }));
+      for (let i = 0; i < 80; i += 1) {
+        const record = hub.sessions.get(sid) as { session: { model?: { provider: string; id: string } } };
+        if (record.session.model?.provider === "cloud-fallback") break;
+        await Bun.sleep(50);
+      }
+      const record = hub.sessions.get(sid) as { session: { model?: { provider: string; id: string } } };
+      expect(record.session.model).toMatchObject({ provider: "cloud-fallback", id: "gpt-4o-mini" });
+      const fallbackEvent = sent.find((f) => f.type === "model_fallback") as { payload: Record<string, any> } | undefined;
+      expect(fallbackEvent?.payload).toMatchObject({
+        from: { provider_id: "local-ollama", model: "qwen2.5:7b" },
+        to: { provider_id: "cloud-fallback", model: "gpt-4o-mini" },
+      });
+      expect(fallbackEvent?.payload.reason).toContain("本机模型不可达");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  }, 20000);
 
   test("artifact_action：token=base64(路径) → artifact_result completed/404", async () => {
     const { handleChatMessage } = await import("../src/routes/chat-ws");

@@ -85,7 +85,8 @@
 所以将来新增第二条后端发射链，照样会被这条判据抓到，不必等它先漂出一次事故。
 
 - `BACKEND_SYNTHESIZED_EVENTS`：`hello` / `pong` / `artifact` / `artifact_result` /
-  `collaboration_update` / `action_failed` / `memory_*` / `task_brief_update` / `task_review_update`。
+  `collaboration_update` / `action_failed` / `memory_*` / `task_brief_update` / `task_review_update` /
+  `model_fallback`。
   这张表要求每条都能在 `bun-backend/src` 查到字面发射点；`canvas_command` 由 kernel 工具产出、
   后端 default 分支按 `event.type` 透传（没有字面量），因此**有意不登记**，避免制造永远命不中的幻影条目。
 - `MAXMA_ENGINE_WS_EVENTS`（本节只列 §3.1 之外的补充说明）：kernel 产出的事件一律归这张表，

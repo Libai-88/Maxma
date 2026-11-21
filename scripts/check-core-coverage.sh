@@ -59,7 +59,8 @@ fi
 CORE_NAMES="events approval-gate mcp model bridge-pi plan goal pi-session pi-contract skills tools
 prompt request-telemetry project-paths subagent extensions maxma-approval maxma-blocker
 extension-ui opencode-zen persona-prompt shell-health session-catalog extension-template
-path-policy command-policy agent-audit maxma-path-policy maxma-audit"
+path-policy command-policy agent-audit maxma-path-policy maxma-audit
+task-graph maxma-hooks hook-types config runner audit"
 
 # 2026-11-18 补：session-catalog 从 DEBT 升进 CORE。它此前是 DEBT（下限 11%），
 # 而"重启后会话名还在吗"这条路径只能靠回读会话文件验证——补上

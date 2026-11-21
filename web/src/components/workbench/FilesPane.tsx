@@ -7,12 +7,14 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
-import { AlertCircle, ChevronDown, FolderOpen, FolderPlus, MoreHorizontal, Pencil, RefreshCw, Search, Trash2, X } from 'lucide-react'
+import { AlertCircle, ChevronDown, Database, FolderOpen, FolderPlus, MoreHorizontal, Pencil, RefreshCw, Search, Trash2, X } from 'lucide-react'
 
 import { api } from '@/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { normalizeContextItem } from '@/context/contextItems'
+import { emitContextItem } from '@/context/contextBus'
 import type { WorkspaceRoot, WorkspaceTreeEntry } from '@/types/workspace'
 import type { WorkbenchPaneProps } from './paneProps'
 import { FilePreview, type EditorDraft, type PreviewData, type PreviewTab } from './FilePreview'
@@ -36,6 +38,12 @@ function joinAbsolute(rootPath: string, relative: string): string {
   if (!relative) return rootPath
   const separator = rootPath.includes('\\') ? '\\' : '/'
   return `${rootPath.replace(/[\\/]$/, '')}${separator}${relative.split('/').join(separator)}`
+}
+
+/** C5：文件/文件夹引用统一走上下文总线，不再各自发一套事件。 */
+function emitFileContext(path: string, label: string, sessionId: string | undefined, kind: 'file' | 'folder' = 'file') {
+  const item = normalizeContextItem({ kind, path, label }, sessionId ?? '')
+  if (item) emitContextItem(item)
 }
 
 function disposePreview(preview: PreviewData | undefined) {
@@ -64,6 +72,7 @@ export function FilesPane({ sessionId }: WorkbenchPaneProps) {
   const [renameValue, setRenameValue] = useState('')
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
   const [revealPath, setRevealPath] = useState<{ path: string; token: number } | null>(null)
+  const [indexing, setIndexing] = useState(false)
   const previewsRef = useRef<Record<string, PreviewData>>({})
   const rootEpochRef = useRef(0)
 
@@ -376,7 +385,7 @@ export function FilesPane({ sessionId }: WorkbenchPaneProps) {
   function addToChat(tab: PreviewTab) {
     if (!activeRoot) return
     const absolute = joinAbsolute(activeRoot.path, tab.path)
-    window.dispatchEvent(new CustomEvent('maxma:add-file-ref', { detail: { path: absolute, label: tab.name, sessionId } }))
+    emitFileContext(absolute, tab.name, sessionId)
     setNotice('已加入对话引用')
     setTimeout(() => setNotice(''), 1800)
   }
@@ -408,6 +417,31 @@ export function FilesPane({ sessionId }: WorkbenchPaneProps) {
     void bridge.openPath(absolute).catch((e) => setError(e instanceof Error ? e.message : String(e)))
   }
 
+  async function buildCodeIndex() {
+    if (!activeRoot || indexing) return
+    setIndexing(true)
+    setError('')
+    try {
+      await api.codeIndexBuild(activeRoot.id, true)
+      for (let attempt = 0; attempt < 80; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 500))
+        const result = await api.codeIndexStatus()
+        const row = result.roots.find((candidate) => candidate.root_id === activeRoot.id)
+        if (row?.status === 'error') throw new Error(row.error ?? '代码索引失败')
+        if (row?.status === 'ready') {
+          setNotice(`代码索引就绪：${row.fileCount} 个文件`)
+          setTimeout(() => setNotice(''), 3000)
+          return
+        }
+      }
+      throw new Error('代码索引仍在后台进行，可稍后重试或查看服务日志')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setIndexing(false)
+    }
+  }
+
   function contextAction(action: 'open' | 'reveal' | 'copy' | 'chat', entry: WorkspaceTreeEntry) {
     setMenu(null)
     if (action === 'open') { openFile(entry); return }
@@ -421,7 +455,7 @@ export function FilesPane({ sessionId }: WorkbenchPaneProps) {
       return
     }
     const absolute = joinAbsolute(activeRoot.path, entry.path)
-    window.dispatchEvent(new CustomEvent('maxma:add-file-ref', { detail: { path: absolute, label: entry.name, sessionId } }))
+    emitFileContext(absolute, entry.name, sessionId)
     setNotice('已加入对话引用')
     setTimeout(() => setNotice(''), 1800)
   }
@@ -488,6 +522,9 @@ export function FilesPane({ sessionId }: WorkbenchPaneProps) {
           <Input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="按文件名过滤…" className="h-7 pl-7 text-caption" />
         </div>
         <Button size="icon-xs" variant="ghost" onClick={() => setRefreshToken((token) => token + 1)} aria-label="刷新文件树" title="刷新"><RefreshCw className="size-3.5" /></Button>
+        <Button size="icon-xs" variant="ghost" disabled={indexing} onClick={() => void buildCodeIndex()} aria-label="重建代码索引" title="重建代码索引（供代码检索/符号工具使用）">
+          <Database className={cn('size-3.5', indexing && 'animate-pulse text-muted-foreground')} />
+        </Button>
         <Button size="icon-xs" variant="ghost" aria-pressed={showIgnored} onClick={() => setShowIgnored((value) => !value)} aria-label={showIgnored ? '隐藏忽略项' : '显示忽略项'} title="显示忽略项"><MoreHorizontal className={cn('size-3.5', showIgnored && 'text-foreground')} /></Button>
       </div>
 

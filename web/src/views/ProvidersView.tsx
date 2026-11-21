@@ -9,7 +9,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { confirmAction } from '@/components/common/ConfirmDialog'
 import { showToast } from '@/lib/toast'
 import type { ProviderConfig } from '@/types'
-import { Trash2, Plus, RefreshCw, CheckCircle2, XCircle } from 'lucide-react'
+import { Trash2, Plus, RefreshCw, CheckCircle2, XCircle, Cpu, MemoryStick, MonitorCog, Download } from 'lucide-react'
 
 const PRESETS: Array<{ id: string; label: string; baseUrl: string }> = [
   { id: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1' },
@@ -41,6 +41,11 @@ export default function ProvidersView() {
   const [formBusy, setFormBusy] = useState<'test' | 'discover' | null>(null)
   const [formModels, setFormModels] = useState<string[]>([])
   const [pickedModels, setPickedModels] = useState<string[]>([])
+  const [hardware, setHardware] = useState<Awaited<ReturnType<typeof api.systemHardware>> | null>(null)
+  const [routing, setRouting] = useState<Awaited<ReturnType<typeof api.modelRouting>> | null>(null)
+  const [probing, setProbing] = useState(false)
+  const [localPreset, setLocalPreset] = useState<'ollama' | 'lmstudio'>('ollama')
+  const [localSetupBusy, setLocalSetupBusy] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -51,10 +56,44 @@ export default function ProvidersView() {
       const flat = (('providers' in models ? models.providers : []) as Array<{ id: string; name: string; models: Array<{ id: string; name?: string }> }>)
         .flatMap((p) => (p.models ?? []).map((m) => ({ provider: p.id, name: m.id, displayName: m.name })))
       setPluginModels(flat)
+      const [probe, route] = await Promise.all([
+        api.systemHardware().catch(() => null),
+        api.modelRouting().catch(() => null),
+      ])
+      setHardware(probe)
+      setRouting(route)
     } finally { setLoading(false) }
   }
 
   useEffect(() => { void load() }, [])
+
+  const refreshHardware = async () => {
+    setProbing(true)
+    try {
+      const [probe, route] = await Promise.all([api.systemHardware(true), api.modelRouting(true)])
+      setHardware(probe)
+      setRouting(route)
+    } catch (e) {
+      showToast('硬件探测失败: ' + (e instanceof Error ? e.message : String(e)), 'error')
+    } finally { setProbing(false) }
+  }
+
+  const setupLocalModel = async () => {
+    setLocalSetupBusy(true)
+    try {
+      const res = await api.setupLocalProvider({ preset: localPreset })
+      const count = res.models.length
+      showToast(`${res.created ? '已接入' : '已更新'} ${res.provider.label}${count ? `，发现 ${count} 个模型` : ''}`)
+      await load()
+      await refreshHardware()
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      const extra = message.includes('未检测到本机模型服务')
+        ? (localPreset === 'lmstudio' ? '；请先在 LM Studio 打开 Local Server（端口 1234）' : '；请先启动 Ollama（端口 11434）')
+        : ''
+      showToast(message + extra, 'error')
+    } finally { setLocalSetupBusy(false) }
+  }
 
   const createProvider = async () => {
     if (!form.label.trim() || !form.api_key.trim()) { showToast('请填写名称与 API Key', 'warning'); return }
@@ -168,6 +207,53 @@ export default function ProvidersView() {
         <div className="flex justify-center py-16"><Spinner /></div>
       ) : (
         <>
+          {hardware && (
+            <section className="mb-6 rounded-xl border border-border bg-card p-4">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-sm font-medium"><MonitorCog className="size-4 text-muted-foreground" /> 本机运行能力</div>
+                <Button variant="ghost" size="sm" disabled={probing} onClick={() => void refreshHardware()}>
+                  {probing ? <Spinner className="size-3" /> : <RefreshCw className="size-3.5" />} 重新探测
+                </Button>
+              </div>
+              <div className="grid grid-cols-1 gap-2 text-xs text-muted-foreground sm:grid-cols-3">
+                <div className="flex items-center gap-2"><Cpu className="size-3.5" /> {hardware.cpuModel} · {hardware.cpuCores} 线程</div>
+                <div className="flex items-center gap-2"><MemoryStick className="size-3.5" /> {(hardware.memoryTotalBytes / 1024 ** 3).toFixed(1)} GB 内存 · 可用 {(hardware.memoryFreeBytes / 1024 ** 3).toFixed(1)} GB</div>
+                <div className="flex items-center gap-2"><MonitorCog className="size-3.5" /> {hardware.gpus.length > 0 ? hardware.gpus.map((gpu) => `${gpu.name}${gpu.memoryBytes ? ` ${(gpu.memoryBytes / 1024 ** 3).toFixed(1)}GB` : ''}`).join(' / ') : '未识别到独显'}</div>
+              </div>
+              {routing?.recommended && (
+                <p className="mt-3 rounded-lg bg-accent/60 px-3 py-2 text-xs text-accent-foreground">
+                  建议优先：<span className="font-medium">{routing.recommended.model}</span>（{routing.recommended.providerLabel}）— {routing.recommended.reason}
+                </p>
+              )}
+              {hardware.warnings.length > 0 && <p className="mt-2 text-caption text-muted-foreground">{hardware.warnings.join('；')}</p>}
+              {routing && routing.notes.length > 0 && <p className="mt-1 text-caption text-muted-foreground">{routing.notes[0]}</p>}
+            </section>
+          )}
+
+          <section className="mb-6 rounded-xl border border-border bg-card p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-sm font-medium"><Download className="size-4 text-muted-foreground" /> 本地模型一键接入</div>
+              <Tag>无需 API Key</Tag>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={localPreset}
+                disabled={localSetupBusy}
+                onChange={(e) => setLocalPreset(e.target.value === 'lmstudio' ? 'lmstudio' : 'ollama')}
+                className="rounded-md border border-border bg-background px-3 py-2 text-xs text-foreground outline-none focus:border-ring"
+              >
+                <option value="ollama">Ollama（127.0.0.1:11434）</option>
+                <option value="lmstudio">LM Studio（127.0.0.1:1234）</option>
+              </select>
+              <Button size="sm" disabled={localSetupBusy} onClick={() => void setupLocalModel()}>
+                {localSetupBusy ? <Spinner className="size-3" /> : <Download className="size-3.5" />} 探测并接入
+              </Button>
+            </div>
+            <p className="mt-2 text-caption text-muted-foreground">
+              只探测本机服务；可达且有模型时才写入渠道，连不上不会留下死配置。接入后本地推理成本为 0，失败会自动切到下一个有凭据的渠道。
+            </p>
+          </section>
+
           <section className="flex flex-col gap-3">
             {providers.map((p) => {
               const pid = p.id ?? p.label

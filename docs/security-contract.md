@@ -15,6 +15,10 @@
 | Agent 命令守卫（降级） | `bun-sidecar/src/kernel/command-policy.ts` + path 扩展：网络命令默认拒绝、系统破坏性命令拒绝、路径逃逸复用 PathPolicy；Agent bash/powershell 在命令前重建 HOME/TMP 并清掉常见凭据变量 | 策略拒绝时 `tool_call` block；放行时只改环境前缀，不改命令语义。**不是 OS 级沙箱**，不能阻止任意可执行文件读取用户权限下的文件 | `bun-sidecar/tests/path-policy.test.ts` |
 | 工作区命令守卫（降级） | `bun-backend/src/services/command-sandbox.ts` + `command-runner.ts`：同一 `evaluateCommandPolicy`，子进程环境白名单（`sanitizedEnv`），HOME/USERPROFILE/TMP 指向工作区；`POST /api/workspace/run` 支持显式 `allow_network` | 路径/网络/危险命令 403 `COMMAND_*`；超时/输出超限杀进程树。**Windows 无受限 token / Job Object 原生辅助器，当前是 policy-only，不是完整沙箱** | `bun-backend/tests/command-sandbox.test.ts`、`workspace-p0.test.ts` |
 | Agent 工具审计与写入快照 | `bun-sidecar/src/kernel/agent-audit.ts` + `extensions/maxma-audit.ts`：`tool_execution_start/end` 写 `<data>/api/data/agent_audit.jsonl`；write/edit 前把已存在普通文件快照到 `agent_snapshots/<session>/`（上限 8 MiB）；拒绝由 path/approval 扩展写 `denied` 记录 | 审计写入失败只告警，不影响工具；`GET /api/audit-log` 合并 JSONL；`GET /api/audit-log/snapshots` + `POST .../:id/restore` 仅回环，恢复前用 PathPolicy 复核目标 | `bun-sidecar/tests/agent-audit.test.ts`、`bun-backend/tests/audit-agent.test.ts` |
+| 生命周期 Hooks | `bun-sidecar/src/kernel/hooks/config.ts`：默认 `<data>/config/hooks.json`，`MAXMA_HOOKS_FILE` 覆盖；整份 HMAC-SHA256 签名（`hooks.secret`，0600）；处理器仅 `command`（不经 shell）/`http`（仅 POST http(s) 且拒绝带凭据 URL）/`prompt`（不调模型） | 配置存在但签名缺失/不匹配 → **整份不加载**；坏钩子 fail-open、写 `<data>/api/data/hooks_audit.jsonl`；`command` 仍以本机用户权限运行，不是沙箱 | `bun-sidecar/tests/hooks.test.ts` |
+| 代码索引 | `bun-sidecar/src/codeintel/*` + `tools/code.ts`：只读索引与单个源文件；索引库 `<data>/api/data/code-index.db`；路径仍由 `maxma-path-policy` 在 `tool_call` 前统一检查 | 越界路径被 PathPolicy 拒绝；`code_apply_patch` 预检失败/回滚，不执行任意命令（验证命令固定为 `typecheck`） | `bun-sidecar/tests/{codeintel,code-patch}.test.ts` |
+| 本地模型接入 | `bun-backend/src/services/model-fallback.ts` + `routes/hardware.ts` `POST /api/models/local-setup`：只探测 loopback 的 OpenAI 兼容 `/models`，自定义 `base_url` 也必须是本机地址 | 不可达 409 `LOCAL_MODEL_UNREACHABLE` 且**不写** `providers.yaml`；可达但无模型 409 `LOCAL_MODEL_EMPTY`；探测超时 2.5s，网络/HTTP/坏 JSON 一律按不可达处理 | `bun-backend/tests/{model-fallback,local-model-setup}.test.ts` |
+| Office 读写 | `bun-sidecar/src/tools/office.ts`：`read_office_file`/`write_office_file` 仅接受当前工作区内路径，单文件上限 20 MiB；DOCX/XLSX 用内存 ZIP 解析 | 越界/非普通文件/超大文件拒绝；解析失败返回错误而不是部分写入 | `bun-sidecar/tests/office.test.ts` |
 | MCP stdio 命令白名单 | `bun-backend/src/routes/mcp-validation.ts` `ALLOWED_STDIO_COMMANDS` / `validateStdioCommand` | 不在白名单 → 400 拒绝保存 | `bun-backend/tests/` |
 | MCP 环境变量黑名单 | 同上 `validateEnvVars` | 命中敏感 key → 400 | 同上 |
 | Provider URL 校验 | `bun-backend/src/routes/providers.ts`（含 `169.254.169.254`、`metadata.google.internal` 等云元数据主机拒绝） | 危险协议/元数据地址 → 拒绝保存与请求前拦截 | `bun-backend/tests/` |
@@ -99,6 +103,16 @@
   双向核对。
   注意：`set_auto_approve`（WS `update_auto_approve`）只有 auto/ask 两态，会把已选的
   `read_only`/`operate` 改写掉——它不是四档切换的兜底通道。
+- **Hooks 是用户自己的代码，不是受控插件市场。** 签名只证明配置来自持有本机 `hooks.secret` 的人；
+  `command` 处理器以当前用户权限运行，`http` 处理器会把工具入参/结果发到它配置的远端。启用前必须自己审阅；
+  未签名配置整份不加载，但加载后的钩子失败是 fail-open（审计留痕，不阻断主流程）。
+  PreToolUse 可以改写工具入参，因此它排在 PathPolicy 之前，改写后的入参仍会被 PathPolicy 复检；
+  这不能把“用户自己签名的代码”变成沙箱。
+- **本地模型探测只覆盖 loopback，不等于本机模型安全。** `POST /api/models/local-setup` 只允许
+  `127.0.0.1`/`localhost`/`::1` 等本机地址，避免把内网或云元数据端点当模型探针；但 Ollama/LM Studio
+  本身加载的模型文件、插件和推理内容不在 Maxma 的路径策略内。回退只换渠道，不重试已开始的回合。
+- **代码索引是只读加速层，不是权限来源。** 索引库可能包含源码片段与符号名，默认落在用户数据目录；
+  是否允许建索引仍由工作区根与 PathPolicy 决定。删除索引库只影响检索，不影响源码。
 - **`dev_docs/security/` 已被 `.gitignore` 屏蔽**，不会出现在 `git status`；
   该目录不再存放现行规范，安全事实以本文为准。
 

@@ -6,9 +6,13 @@
  */
 
 import type {
+  CodeIndexRootStatus,
   CommandResult,
   GitCommitResult,
   GitDiffResult,
+  GitPrResult,
+  GitPushResult,
+  GitRemoteStatus,
   GitStatusResult,
   WorkspaceRoot,
   WorkspaceTextFile,
@@ -90,6 +94,29 @@ export function createWorkspaceApi({ request, getToken, ensureTokenLoaded }: Wor
       request<GitCommitResult>('/git/commit', {
         method: 'POST',
         body: JSON.stringify({ root_id: rootId, message, confirm: true }),
+      }),
+
+    gitRemote: (rootId: string) =>
+      request<GitRemoteStatus>(`/git/remote?root_id=${encodeURIComponent(rootId)}`),
+
+    gitPush: (rootId: string) =>
+      request<GitPushResult>('/git/push', {
+        method: 'POST',
+        body: JSON.stringify({ root_id: rootId, confirm: true }),
+      }),
+
+    gitPr: (rootId: string, title: string, body: string, base: string) =>
+      request<GitPrResult>('/git/pr', {
+        method: 'POST',
+        body: JSON.stringify({ root_id: rootId, title, body, base, confirm: true }),
+      }),
+
+    codeIndexStatus: () => request<{ roots: CodeIndexRootStatus[] }>('/code-index/status'),
+
+    codeIndexBuild: (rootId: string, force = false) =>
+      request<{ ok: boolean; status: CodeIndexRootStatus }>('/code-index/build', {
+        method: 'POST',
+        body: JSON.stringify({ root_id: rootId, force }),
       }),
 
     workspaceSearch: (rootId: string, q: string, showIgnored = false) => {

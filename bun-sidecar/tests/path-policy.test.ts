@@ -191,4 +191,29 @@ describe("Maxma PathPolicy extension", () => {
     expect(input.command).toContain("MAXMA_COMMAND_SANDBOX");
     expect(input.command.endsWith("bun test")).toBe(true);
   });
+
+  test("多文件编辑：嵌套 edits 的每个 path 都过 PathPolicy", async () => {
+    const { handler } = handlerFor(policy());
+    const inside = await handler({
+      toolName: "code_apply_patch",
+      toolCallId: "p5",
+      input: { edits: [{ path: "src/new-file.ts", content: "export const ok = 1;" }] },
+    });
+    expect(inside).toBeUndefined();
+
+    const outsideEdit = await handler({
+      toolName: "code_apply_patch",
+      toolCallId: "p6",
+      input: { edits: [{ path: path.join(outside, "escape.ts"), content: "x" }] },
+    });
+    expect(outsideEdit).toMatchObject({ block: true });
+    expect((outsideEdit as { reason: string }).reason).toContain("多文件编辑路径被拒绝");
+
+    const missingPath = await handler({
+      toolName: "code_apply_patch",
+      toolCallId: "p7",
+      input: { edits: [{ content: "x" }] },
+    });
+    expect(missingPath).toMatchObject({ block: true });
+  });
 });

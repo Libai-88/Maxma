@@ -79,3 +79,36 @@ export interface GitCommitResult {
   branch: string | null
   summary: string
 }
+
+export interface GitRemoteStatus {
+  branch: string | null
+  detached: boolean
+  remote: string | null
+  upstream: string | null
+  ahead: number
+  behind: number
+}
+
+export interface GitPushResult {
+  branch: string
+  remote: string
+  output: string
+}
+
+export interface GitPrResult {
+  url: string | null
+  output: string
+}
+
+export interface CodeIndexRootStatus {
+  root: string
+  label: string
+  root_id: string | null
+  indexedAt: number | null
+  status: 'idle' | 'indexing' | 'ready' | 'error' | 'cancelled'
+  fileCount: number
+  error: string | null
+  progress: number
+  running: boolean
+  startedAt: number | null
+}

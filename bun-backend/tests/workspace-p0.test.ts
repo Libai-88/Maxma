@@ -408,6 +408,57 @@ describe("workspace P0", () => {
     expect(run("log", "-1", "--pretty=%s")).toBe("add a");
   });
 
+  test("git 推送：必须显式确认，固定 origin，推送到本地 bare 远端", async () => {
+    const run = (...args: string[]) => {
+      const result = spawnSync("git", args, { cwd: workspaceDir, encoding: "utf8" });
+      if (result.status !== 0) throw new Error(result.stderr || `git ${args.join(" ")} failed`);
+      return result.stdout.trim();
+    };
+    const remote = fs.mkdtempSync(path.join(os.tmpdir(), "maxma-bare-"));
+    try {
+      spawnSync("git", ["init", "--bare", remote], { encoding: "utf8" });
+      run("init", "-b", "main");
+      run("config", "user.email", "test@example.com");
+      run("config", "user.name", "Tester");
+      fs.writeFileSync(path.join(workspaceDir, "push.txt"), "v1\n", "utf8");
+      run("add", "push.txt");
+      run("commit", "-m", "push init");
+      run("remote", "add", "origin", remote);
+
+      const app = await makeApp();
+      const root = await addRoot(app, workspaceDir);
+      const remoteStatus = await call(app, `/api/git/remote?root_id=${encodeURIComponent(root.id)}`);
+      expect(remoteStatus.status).toBe(200);
+      expect(((await remoteStatus.json()) as { remote: string }).remote).toBe(remote);
+
+      const noConfirm = await call(app, "/api/git/push", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ root_id: root.id, confirm: false }),
+      });
+      expect(noConfirm.status).toBe(400);
+
+      const pushed = await call(app, "/api/git/push", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ root_id: root.id, confirm: true }),
+      });
+      expect(pushed.status).toBe(200);
+      const remoteHead = spawnSync("git", ["--git-dir", remote, "rev-parse", "main"], { encoding: "utf8" });
+      expect(remoteHead.status).toBe(0);
+      expect(remoteHead.stdout.trim()).toBe(run("rev-parse", "HEAD"));
+
+      const prNoConfirm = await call(app, "/api/git/pr", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ root_id: root.id, title: "x", body: "", base: "main", confirm: false }),
+      });
+      expect(prNoConfirm.status).toBe(400);
+    } finally {
+      fs.rmSync(remote, { recursive: true, force: true });
+    }
+  });
+
   test("select-file 不再静默成功", async () => {
     const app = await makeApp();
     const response = await call(app, "/api/select-file?type=file");

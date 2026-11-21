@@ -55,7 +55,20 @@ export interface SelectionRef {
   preview: string
 }
 
-export type ParsedRef = FileRef | FolderRef | CiteRef | WebLinkRef | ToolRef | ImageRef | SelectionRef
+/**
+ * 工作台上下文引用（C5）：文件/网页选区/画布元素/代码符号/命令输出统一走这里。
+ * 正文放在 `text`，来源放在 `path`/`url`，模型能从 JSON 里直接读到内容与出处。
+ */
+export interface ContextRef {
+  type: 'context'
+  label: string
+  kind: string
+  text: string
+  path?: string
+  url?: string
+}
+
+export type ParsedRef = FileRef | FolderRef | CiteRef | WebLinkRef | ToolRef | ImageRef | SelectionRef | ContextRef
 
 /**
  * 引用 chip 渲染配置，每种 type 自注册 icon 名与 tooltip 函数。
@@ -82,6 +95,10 @@ export const REF_CHIP_CONFIG: Record<string, RefChipConfig> = {
   selection: {
     icon: 'cite',
     tooltip: (r: ParsedRef) => (r as SelectionRef).preview,
+  },
+  context: {
+    icon: 'cite-speech',
+    tooltip: (r: ParsedRef) => (r as ContextRef).text,
   },
   web_link: {
     icon: 'link',

@@ -9,7 +9,7 @@ import type { Context } from "hono";
 import { Hono } from "hono";
 
 import { getWorkspaceRoot } from "../services/workspace-store";
-import { GitError, gitCommit, gitDiff, gitStage, gitStatus, gitUnstage } from "../services/git-service";
+import { GitError, gitCommit, gitCreatePullRequest, gitDiff, gitPush, gitRemoteStatus, gitStage, gitStatus, gitUnstage } from "../services/git-service";
 
 interface BunServerLike {
   requestIP?: (req: Request) => { address?: string } | null;
@@ -84,6 +84,39 @@ export function createGitRoutes(): Hono {
       const body = await c.req.json<{ root_id?: string; message?: string; confirm?: boolean }>().catch(() => null);
       if (!body || typeof body !== "object") throw new GitError("PATH_INVALID", 400, "请求体必须是 JSON 对象");
       return c.json(await gitCommit(rootFor(c, body.root_id ?? ""), body.message ?? "", body.confirm === true));
+    } catch (error) {
+      return gitErrorResponse(c, error);
+    }
+  });
+
+  app.get("/api/git/remote", async (c) => {
+    try {
+      return c.json(await gitRemoteStatus(rootFor(c, c.req.query("root_id") ?? "")));
+    } catch (error) {
+      return gitErrorResponse(c, error);
+    }
+  });
+
+  app.post("/api/git/push", async (c) => {
+    try {
+      const body = await c.req.json<{ root_id?: string; confirm?: boolean }>().catch(() => null);
+      if (!body || typeof body !== "object") throw new GitError("PATH_INVALID", 400, "请求体必须是 JSON 对象");
+      return c.json(await gitPush(rootFor(c, body.root_id ?? ""), body.confirm === true));
+    } catch (error) {
+      return gitErrorResponse(c, error);
+    }
+  });
+
+  app.post("/api/git/pr", async (c) => {
+    try {
+      const body = await c.req.json<{ root_id?: string; title?: string; body?: string; base?: string; confirm?: boolean }>().catch(() => null);
+      if (!body || typeof body !== "object") throw new GitError("PATH_INVALID", 400, "请求体必须是 JSON 对象");
+      return c.json(await gitCreatePullRequest(rootFor(c, body.root_id ?? ""), {
+        title: body.title ?? "",
+        body: body.body ?? "",
+        base: body.base ?? "",
+        confirm: body.confirm === true,
+      }));
     } catch (error) {
       return gitErrorResponse(c, error);
     }

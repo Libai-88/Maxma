@@ -229,9 +229,12 @@ export const MAXMA_ENABLED_DEFAULT_TOOLS = [
 export const MAXMA_CUSTOM_TOOLS = [
   "remember_memory",
   "search_memories",
+  "merge_memories",
   "browser_navigate",
   "browser_read",
   "browser_act",
+  "web_search",
+  "web_fetch",
   "send_meme",
   "learn_meme",
   "meme_list",
@@ -243,6 +246,12 @@ export const MAXMA_CUSTOM_TOOLS = [
   "canvas_read",
   "canvas_apply",
   "canvas_export",
+  "code_search",
+  "code_symbols",
+  "code_definition",
+  "code_references",
+  "code_diagnostics",
+  "code_apply_patch",
 ] as const;
 
 /**
@@ -684,6 +693,8 @@ export const BACKEND_SYNTHESIZED_EVENTS = [
   "memory_done",
   "task_brief_update",
   "task_review_update",
+  // MOD-1：本地模型不可达时后端在开轮前换到回退渠道，并广播一条系统提示。
+  "model_fallback",
 ] as const;
 
 // ─────────────────────────────────────────────────────────────

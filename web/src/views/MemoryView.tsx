@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
-import { Sparkles } from 'lucide-react'
+import { Sparkles, Download, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
@@ -18,11 +18,23 @@ interface MemoryFact {
   content: string
   category: string
   updatedAt: string
+  scope?: 'persona' | 'project' | 'session'
+  source?: string
 }
 
 interface MemoryStats {
   total: number
   categories: Record<string, number>
+  scopes?: Record<string, number>
+}
+
+type MemoryScopeFilter = 'all' | 'persona' | 'project' | 'session'
+
+const SCOPE_LABELS: Record<MemoryScopeFilter, string> = {
+  all: '全部',
+  persona: '人格',
+  project: '项目',
+  session: '会话',
 }
 
 const PAGE_SIZE = 50
@@ -46,6 +58,9 @@ function formatTime(t: string): string {
 export default function MemoryView() {
   const [searchQuery, setSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
+  const [scope, setScope] = useState<MemoryScopeFilter>('all')
+  const [importing, setImporting] = useState(false)
+  const importRef = useRef<HTMLInputElement>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
   const [editCategory, setEditCategory] = useState('preference')
@@ -59,21 +74,22 @@ export default function MemoryView() {
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const refreshTimer = useRef<ReturnType<typeof setInterval> | null>(null)
   const mountedRef = useRef(true)
-  const filtersRef = useRef({ searchQuery: '', categoryFilter: 'all' })
-  filtersRef.current = { searchQuery, categoryFilter }
+  const filtersRef = useRef<{ searchQuery: string; categoryFilter: string; scope: MemoryScopeFilter }>({ searchQuery: '', categoryFilter: 'all', scope: 'all' })
+  filtersRef.current = { searchQuery, categoryFilter, scope }
 
   const resetPagination = useCallback(() => setVisibleCount(PAGE_SIZE), [])
 
   const loadFacts = useCallback(
     async (reset = true) => {
       const seq = ++factsSeq.current
-      const { searchQuery: q0, categoryFilter: cf } = filtersRef.current
+      const { searchQuery: q0, categoryFilter: cf, scope: sc } = filtersRef.current
       try {
         const q = q0.trim()
         const cat = cf !== 'all' ? cf : undefined
         const params = new URLSearchParams()
         if (q) params.set('q', q)
         if (cat) params.set('category', cat)
+        if (sc !== 'all') params.set('scope', sc)
         const qs = params.toString()
         const data = await api.request<MemoryFact[]>(`/memory${qs ? '?' + qs : ''}`)
         if (seq !== factsSeq.current || !mountedRef.current) return
@@ -85,7 +101,7 @@ export default function MemoryView() {
         setLoadError(toErrorMessage(e))
       }
       try {
-        const statsData = await api.request<MemoryStats>('/memory/stats')
+        const statsData = await api.request<MemoryStats>(`/memory/stats?scope=${sc}`)
         if (seq === factsSeq.current && mountedRef.current) setStats(statsData)
       } catch {
         /* ignore */
@@ -169,11 +185,78 @@ export default function MemoryView() {
     }
   }
 
+  const handleExport = async () => {
+    try {
+      const bundle = await api.request<Record<string, unknown>>('/memory/export')
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `maxma-memory-${new Date().toISOString().slice(0, 10)}.json`
+      link.click()
+      URL.revokeObjectURL(url)
+      toast.success('记忆已导出（人格/项目/会话三层）')
+    } catch (e) {
+      toast.error('导出失败: ' + toErrorMessage(e))
+    }
+  }
+
+  const handleImport = async (file: File | undefined) => {
+    if (!file) return
+    setImporting(true)
+    try {
+      const text = await file.text()
+      const bundle = JSON.parse(text) as unknown
+      const result = await api.request<{ persona: number; projects: number; sessions: number }>('/memory/import', {
+        method: 'POST',
+        body: JSON.stringify({ bundle, mode: 'merge' }),
+      })
+      await loadFacts(true)
+      toast.success(`已合并导入：人格 ${result.persona} 条、项目 ${result.projects} 个、会话 ${result.sessions} 个`)
+    } catch (e) {
+      log.warn('[memory] import failed:', e)
+      toast.error('导入失败: ' + toErrorMessage(e))
+    } finally {
+      setImporting(false)
+      if (importRef.current) importRef.current.value = ''
+    }
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 p-6">
       <div className="flex flex-col gap-1">
         <h2 className="text-2xl font-semibold text-foreground">记忆</h2>
-        <p className="text-sm text-muted-foreground">你明确要求记住的长期事实——偏好、背景、历史决策；由 Agent 调用 remember_memory 或你在此编辑。</p>
+        <p className="text-sm text-muted-foreground">你明确要求记住的长期事实——偏好、背景、历史决策；由 Agent 调用 remember_memory 或你在此编辑。人格/项目/会话三层可分别查看，支持 JSON 导出与导入。</p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {(['all', 'persona', 'project', 'session'] as MemoryScopeFilter[]).map((item) => (
+          <button
+            key={item}
+            type="button"
+            aria-pressed={scope === item}
+            onClick={() => { setScope(item); filtersRef.current.scope = item; resetPagination(); void loadFacts(true) }}
+            className={`rounded-lg border px-3 py-1.5 text-sm transition-colors duration-fast ${scope === item ? 'border-ring bg-accent text-foreground' : 'border-border bg-card text-muted-foreground hover:text-foreground'}`}
+          >
+            {SCOPE_LABELS[item]}
+          </button>
+        ))}
+        <div className="ml-auto flex items-center gap-2">
+          <input
+            ref={importRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            aria-label="导入记忆 JSON"
+            onChange={(e) => void handleImport(e.target.files?.[0])}
+          />
+          <Button variant="outline" size="sm" onClick={() => void handleExport()}>
+            <Download className="mr-1.5 size-3.5" /> 导出
+          </Button>
+          <Button variant="outline" size="sm" disabled={importing} onClick={() => importRef.current?.click()}>
+            <Upload className="mr-1.5 size-3.5" /> {importing ? '导入中…' : '导入'}
+          </Button>
+        </div>
       </div>
 
       {!loading && (
@@ -282,6 +365,12 @@ export default function MemoryView() {
                       {fact.content}
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-3">
+                      {fact.scope && (
+                        <Badge variant="outline">
+                          {fact.scope === 'persona' ? '人格' : fact.scope === 'project' ? '项目' : '会话'}
+                          {fact.source ? ` · ${fact.source}` : ''}
+                        </Badge>
+                      )}
                       <Badge variant="secondary">{categoryLabel(fact.category)}</Badge>
                       <span className="ml-auto text-xs text-muted-foreground">{formatTime(fact.updatedAt)}</span>
                       <button
