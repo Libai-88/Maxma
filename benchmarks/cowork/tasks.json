@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "suite": "cowork-baseline-v2.7.0",
+  "baseline_commit": "9aee7a4a",
+  "baseline_version": "2.7.0",
+  "notes": "M0 只建立基准套件骨架。v2.7.0 没有任务对象/交付物层，这三条任务在基线里无法作为 Cowork 任务执行；结果见 results-v2.7.0.json。",
+  "tasks": [
+    {
+      "id": "student-report",
+      "audience": "学生",
+      "title": "把观察记录整理成课程报告",
+      "prompt": "把 fixture 里的观察记录整理成一份 1500 字以内的课程报告，保留来源和局限，输出 DOCX。",
+      "fixture": "fixtures/student-report.md",
+      "expected_outputs": ["docx"],
+      "acceptance": [
+        "标题/摘要/观察/局限/来源结构完整",
+        "来源可追溯到 fixture 的观察日期和访谈编号",
+        "不把相关性写成因果"
+      ]
+    },
+    {
+      "id": "weekly-report",
+      "audience": "职场",
+      "title": "把本周素材整理成周报",
+      "prompt": "把 fixture 里的本周素材整理成一份周报，包含已完成/进行中/风险/下周计划，输出 DOCX 和 5 页 PPTX。",
+      "fixture": "fixtures/weekly-report.md",
+      "expected_outputs": ["docx", "pptx"],
+      "acceptance": [
+        "四段结构齐全，风险和下周计划不能混在一起",
+        "竞品折扣只写“销售口述、公开页面未证实”",
+        "PPTX 页面可编辑且能打开"
+      ]
+    },
+    {
+      "id": "meeting-notes",
+      "audience": "职场",
+      "title": "把会议记录整理成纪要和行动表",
+      "prompt": "把 fixture 里的会议记录整理成会议纪要 DOCX 和行动项 XLSX，行动项必须有人和截止日期。",
+      "fixture": "fixtures/meeting-notes.md",
+      "expected_outputs": ["docx", "xlsx"],
+      "acceptance": [
+        "决议/讨论/行动项/未决四块齐全",
+        "行动项负责人和截止日期不缺失",
+        "未决项不能被写成已决定"
+      ]
+    }
+  ]
+}

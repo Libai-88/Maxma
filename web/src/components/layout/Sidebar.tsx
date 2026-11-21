@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom'
-import { MessageSquare, Cpu, Brain, Sparkles, BarChart3, Blocks, Puzzle, Activity, Settings2, PanelLeft, Moon } from 'lucide-react'
+import { MessageSquare, Cpu, Brain, Sparkles, BarChart3, Blocks, Puzzle, Activity, Settings2, PanelLeft, Moon, ClipboardList } from 'lucide-react'
 import { useCapabilitiesStore } from '@/stores/capabilities'
 import { useChatStore } from '@/stores/chat'
 import { cn } from '@/lib/utils'
@@ -13,6 +13,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     key: 'work', label: '工作', items: [
       { to: '/', label: '对话', icon: MessageSquare },
+      { to: '/cowork', label: '任务', icon: ClipboardList, feature: 'cowork' },
       { to: '/providers', label: '模型', icon: Cpu },
       { to: '/memory', label: '记忆', icon: Brain, feature: 'memory' },
       { to: '/evolution', label: '偏好', icon: Sparkles, feature: 'memory' },
@@ -76,7 +77,9 @@ export function Sidebar({ onToggleSessions }: { onToggleSessions: () => void }) 
 
   const hasFeature = (name?: string) => {
     if (!name) return true
-    if (!capabilities) return true // 清单未加载时乐观放行，与旧 Dock 一致
+    // 清单未加载时，既有入口乐观放行（与旧 Dock 一致）；Cowork 是 M0 新入口，
+    // 在拿到清单前必须默认隐藏，不能先闪一个未启用的“任务”入口。
+    if (!capabilities) return name !== 'cowork'
     const cfg = capabilities.features?.[name]
     return !cfg || cfg.enabled !== false
   }

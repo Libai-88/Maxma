@@ -8,6 +8,7 @@ import { QuickChatView } from '@/views/QuickChatView'
 import { useAppInit } from '@/hooks/useAppInit'
 const V = {
   Chat: lazy(() => import('@/views/ChatView')),
+  Cowork: lazy(() => import('@/views/CoworkView')),
   Memory: lazy(() => import('@/views/MemoryView')),
   Evolution: lazy(() => import('@/views/EvolutionView')),
   News: lazy(() => import('@/views/NewsView')),
@@ -43,6 +44,7 @@ interface RouteDef {
 
 const ROUTES: RouteDef[] = [
   { path: '/', el: <V.Chat />, title: '对话' },
+  { path: '/cowork', el: <V.Cowork />, title: '任务', feature: 'cowork' },
   { path: '/memory', el: <V.Memory />, title: '记忆', feature: 'memory' },
   { path: '/evolution', el: <V.Evolution />, title: '行为偏好', feature: 'memory' },
   { path: '/kb', el: <Navigate to="/memory" replace />, title: '记忆' },

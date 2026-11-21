@@ -27,7 +27,7 @@ interface Shape {
 
 const COLOR_VARS = ['--destructive', '--primary', '--foreground'] as const
 const COLOR_LABELS = ['红', '主色', '墨']
-// Canvas 2D 对主题里的 oklch() 支持不稳定：赋值可能通过但绘制透明。
+// Canvas 2D 对主题里的 oklch 颜色函数支持不稳定：赋值可能通过但绘制透明。
 // 先在 1×1 canvas 上实测，拿到真实 RGB；不可绘制时回退到等价的高对比色。
 const COLOR_FALLBACKS = ['crimson', 'steelblue', 'black'] as const
 
@@ -45,7 +45,7 @@ function resolveColor(cssVar: string, fallback: string): string {
   context.fillRect(0, 0, 1, 1)
   const pixel = context.getImageData(0, 0, 1, 1).data
   // 这个 Electron/Chromium 的 Canvas 2D 只稳定接受十六进制/颜色名，
-  // rgb(...) 与 oklch(...) 会被静默忽略；统一转成 #rrggbb 再交给画布。
+  // rgb / oklch 颜色函数会被静默忽略；统一转成 #rrggbb 再交给画布。
   return `#${[pixel[0], pixel[1], pixel[2]].map((channel) => channel.toString(16).padStart(2, '0')).join('')}`
 }
 

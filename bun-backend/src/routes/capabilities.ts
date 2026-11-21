@@ -316,6 +316,27 @@ function buildManifest(deps: CapabilitiesDeps, gathered: Record<string, unknown>
     total_models: providers.length,
   };
 
+  // Cowork 任务层（M0 基线）：默认关闭。M0 只落地基线、开关、备份/回滚与
+  // 基准套件骨架；任务/交付物/索引/定时/连接器在后续里程碑逐项打开。
+  // `user_toggleable: false` 是诚实性字段：这不是用户可在设置里打开的开关，
+  // 而是版本能力尚未发布，FeatureUnavailable 页不能谎称“去设置里开启”。
+  features.cowork = {
+    enabled: false,
+    engine_supported: true,
+    user_toggleable: false,
+    stage: "m0-baseline",
+    reason: "Cowork 任务层将在 M1 启用；M0 只完成基线、开关与回滚护栏",
+    tasks: { enabled: false },
+    artifacts: { enabled: false },
+    pptx: { enabled: false },
+    office_com: { enabled: false },
+    doc_index: { enabled: false },
+    schedules: { enabled: false },
+    connectors: { enabled: false },
+    model_router: { enabled: false },
+    share: { enabled: false },
+  };
+
   return {
     version: appVersion(),
     features,
