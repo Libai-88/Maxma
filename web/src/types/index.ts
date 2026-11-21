@@ -1106,8 +1106,7 @@ export interface CapabilitiesResponse {
   endpoints?: string[]
 }
 
-/** 单个特性的配置形状（各特性字段不同，统一为宽松记录）。 */
-export type CapabilityFeatureConfig = Record<string, unknown> & { enabled?: boolean }
+export type CapabilityFeatureConfig = Record<string, unknown> & { enabled?: boolean; engine_supported?: boolean; user_toggleable?: boolean; reason?: string | null }
 
 /** 能力发现清单的特性集合。键为特性名，值为该特性的运行时配置。 */
 export interface CapabilityFeatures {

@@ -64,6 +64,7 @@ api/data/sticker_preferences.yaml
 api/data/sticker_recent.yaml
 api/data/agent_audit.jsonl
 api/data/agent_snapshots/
+api/data/backups/
 api/data/path-allowlist.json
 api/data/code-index.db
 api/data/code-index.db-wal

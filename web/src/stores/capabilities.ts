@@ -67,7 +67,19 @@ export function describeFeatureAvailability(
       actionable: false,
     }
   }
-  if (cfg.enabled === false) return { kind: 'user_disabled', reason: USER_DISABLED_REASON, actionable: true }
+  if (cfg.enabled === false) {
+    // 版本能力（如 M0 的 Cowork）不是用户在设置里关掉的，不能让界面把
+    // “尚未发布”说成“去设置里开启”。后端用 user_toggleable:false 标记。
+    if (cfg.user_toggleable === false) {
+      const backendReason = typeof cfg.reason === 'string' ? cfg.reason.trim() : ''
+      return {
+        kind: 'not_deployed',
+        reason: backendReason || NOT_DEPLOYED_REASON,
+        actionable: false,
+      }
+    }
+    return { kind: 'user_disabled', reason: USER_DISABLED_REASON, actionable: true }
+  }
   return { kind: 'available', reason: AVAILABLE_REASON, actionable: false }
 }
 

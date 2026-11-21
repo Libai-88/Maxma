@@ -28,10 +28,12 @@ function readSkill(name: string): string {
 }
 
 function frontmatter(content: string): Record<string, string> {
-  const match = /^---\n([\s\S]*?)\n---\n/.exec(content);
+  // Windows 工作树（core.autocrlf=true）会把 SKILL.md 写成 CRLF；格式契约
+  // 不该依赖某台机器的换行风格。解析时统一接受 LF/CRLF。
+  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/.exec(content);
   if (!match) return {};
   const out: Record<string, string> = {};
-  for (const line of match[1]!.split("\n")) {
+  for (const line of match[1]!.split(/\r?\n/)) {
     const m = /^([a-z_]+):\s*(.+)$/.exec(line);
     if (m) out[m[1]!] = m[2]!.trim();
   }

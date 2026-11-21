@@ -475,6 +475,16 @@ describe("capabilities 聚合（阶段 2.5c）", () => {
     expect(feature("extensions").enabled).toBe(true);
     expect(feature("extensions").bundled).toEqual(["maxma-approval", "maxma-blocker", "request-telemetry"]);
     expect(feature("rules").enabled).toBe(true);
+    // Cowork M0：入口默认关闭，且不是用户设置开关；不能把“未发布”说成
+    // “去设置里开启”。子能力也必须是关闭状态。
+    const cowork = feature("cowork");
+    expect(cowork.enabled).toBe(false);
+    expect(cowork.engine_supported).toBe(true);
+    expect(cowork.user_toggleable).toBe(false);
+    expect(cowork.stage).toBe("m0-baseline");
+    for (const key of ["tasks", "artifacts", "pptx", "office_com", "doc_index", "schedules", "connectors", "model_router", "share"]) {
+      expect((cowork[key] as Record<string, unknown>).enabled).toBe(false);
+    }
     expect(feature("tools").builtin_count).toBe(7);
     expect(feature("tools").custom_count).toBe(16);
     // providers 可能含 opencode-zen 内置供应商（后台同步注入，与运行顺序无关）——

@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "suite": "cowork-baseline-v2.7.0",
+  "baseline_commit": "9aee7a4a",
+  "baseline_version": "2.7.0",
+  "generated_at": "2026-11-22T12:00:00+08:00",
+  "method": "M0 骨架：v2.7.0 没有 Cowork 任务 API，三条任务均无法作为任务执行；记录为 unsupported，不用聊天回合冒充任务完成。",
+  "tasks": [
+    {
+      "id": "student-report",
+      "status": "unsupported",
+      "duration_seconds": null,
+      "manual_edit_minutes": null,
+      "file_usable": null,
+      "notes": "v2.7.0 可以读写 DOCX，但没有任务对象、计划审批和交付物版本；基线不执行。"
+    },
+    {
+      "id": "weekly-report",
+      "status": "unsupported",
+      "duration_seconds": null,
+      "manual_edit_minutes": null,
+      "file_usable": null,
+      "notes": "v2.7.0 没有 PPTX 生成器；周报任务只能手工拼，不能作为 Cowork 基线。"
+    },
+    {
+      "id": "meeting-notes",
+      "status": "unsupported",
+      "duration_seconds": null,
+      "manual_edit_minutes": null,
+      "file_usable": null,
+      "notes": "v2.7.0 没有任务级行动项抽取与 XLSX 台账链路；基线不执行。"
+    }
+  ]
+}
