@@ -12,7 +12,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 import { mapPiAgentEventToMaxma } from "../src/kernel/events";
-import { createMaxmaApprovalGate, needsApprovalForMode } from "../src/kernel/approval-gate";
+import { createMaxmaApprovalGate, needsApprovalForMode, permissionDecisionForMode } from "../src/kernel/approval-gate";
 import { createMaxmaBlockerExtension } from "../src/kernel/extensions/maxma-blocker";
 import { loadMaxmaMcpEntries } from "../src/kernel/mcp";
 import { resolvePiModel } from "../src/kernel/model";
@@ -186,7 +186,8 @@ describe("kernel: approval gate", () => {
     const annWrite = { readOnlyHint: false, destructiveHint: true };
     expect(needsApprovalForMode("auto", "bash", undefined)).toBe(false);
     expect(needsApprovalForMode("read_only", "read", ann)).toBe(false);
-    expect(needsApprovalForMode("read_only", "write", annWrite)).toBe(true);
+    expect(permissionDecisionForMode("read_only", "write", annWrite)).toBe("deny");
+    expect(needsApprovalForMode("read_only", "write", annWrite)).toBe(false);
     expect(needsApprovalForMode("ask", "read", ann)).toBe(false);
     expect(needsApprovalForMode("ask", "write", annWrite)).toBe(true);
     // operate：读+写放行，bash / 破坏性工具需审批

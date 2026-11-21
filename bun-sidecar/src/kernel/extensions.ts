@@ -79,7 +79,7 @@ function isInside(parent: string, child: string): boolean {
 /**
  * 官方 `Extension.path` → Maxma 侧 id / scope。
  *
- * 实测（pi 0.99 dist/core/resource-loader.js + 真实加载探针）：
+ * 实测（pi 1.5.0 dist/core/resource-loader.js + 真实加载探针）：
  *   - 内联工厂：`<inline:name>`（sourceInfo.source="inline"）
  *   - 用户扩展：绝对路径，位于 `<agentDir>/extensions` 下（sourceInfo.scope="user"）
  *   - 内置：`builtin:name`

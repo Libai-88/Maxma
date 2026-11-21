@@ -61,6 +61,7 @@ import { currentPluginHttpHandlers, ensurePluginBridgeInstalled, disposeDshPlugi
 import { createPluginHttpBridge } from "./plugins/dsh/http-bridge";
 import { createFileRoutes } from "./routes/files";
 import { createWorkspaceRoutes } from "./routes/workspace";
+import { createSecurityRoutes } from "./routes/security";
 import { createGitRoutes } from "./routes/git";
 import { createDiagnosticsRoutes } from "./routes/diagnostics";
 import { createCapabilitiesRoutes } from "./routes/capabilities";
@@ -299,6 +300,7 @@ app.route("/", createExtensionsRoutes());
   app.route("/", createPluginsRoutes());
   app.route("/", createFileRoutes());
   app.route("/", createWorkspaceRoutes());
+  app.route("/", createSecurityRoutes());
   app.route("/", createGitRoutes());
 
   // 2.5b：diagnostics（错误报告 + 前端诊断上报）

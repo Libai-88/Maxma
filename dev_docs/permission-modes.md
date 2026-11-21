@@ -9,10 +9,10 @@
 
 | 模式 | 读操作 | 本地写入 | 执行/破坏性操作 |
 | --- | --- | --- | --- |
-| `read_only` | 允许 | 审批 | 审批 |
+| `read_only` | 允许 | 拒绝 | 拒绝 |
 | `ask` | 允许 | 审批 | 审批 |
 | `operate` | 允许 | 允许 | 审批 |
-| `auto` | 允许 | 允许 | 放行（仍受 MaxmaBlocker、MCP 命令白名单、Provider URL 校验约束） |
+| `auto` | 允许 | 允许 | 放行（仍受 PathPolicy、命令守卫、MaxmaBlocker、MCP 命令白名单、Provider URL 校验约束） |
 
 判据只看官方 `Tool.annotations`，不猜语义：`readOnlyHint === true` 视为只读；
 `operate` 下的"执行类"= `destructiveHint === true` 或工具名属于 bash / powershell 族。
@@ -20,13 +20,13 @@
 
 两点必须写明白，否则文档会承诺代码没有的行为：
 
-- **`read_only` 与 `ask` 当前判定完全相同**（`needsApprovalForMode`：
-  `if (mode === "read_only" || mode === "ask") return !readOnly`）——都是"非只读工具逐次审批"，
-  `read_only` 并不额外拒绝写入。它作为独立档位保留是给未来的收紧留位置；
-  UI 文案（`web/src/components/chat/PermissionModeControl.tsx`）不许写成"只读会拒绝写入"。
+- **`read_only` 的写入/执行是硬拒绝，不是审批**（`permissionDecisionForMode` 返回 `deny`）。
+  它不会发 `ask_user`，也不产生在途审批；用户无法通过逐次批准把它变成可写。
+  扩展层在 `tool_call` 阶段直接 block，工具不会执行，因而不存在部分副作用。
 - **`auto` 不装配审批门**（`pi-session.ts` `approvalExtensionFor`：`mode === "auto"` → 不装），
-  所以 auto 下**没有任何逐次确认**，只剩 MaxmaBlocker 拒止锚、MCP stdio 命令白名单与
-  Provider URL 校验。UI 文案不许承诺"高风险操作仍会要求确认"。
+  所以 auto 下**没有任何逐次确认**；但 PathPolicy 扩展恒装配，越界路径仍然被拒绝。
+  另有 MaxmaBlocker 拒止锚、MCP stdio 命令白名单与 Provider URL 校验。UI 文案不许承诺
+  "高风险操作仍会要求确认"。
 
 ## 生效链路
 
@@ -81,7 +81,7 @@ Provider URL 校验或凭据加密。没有兼容性开关，四档始终生效�
   REST/WS 契约」，`web/src` 不许 import kernel 源码。所以前端那几处（`web/src/types/session.ts`
   的 `PermissionMode` 联合、`PermissionModeControl.tsx` 的 `MODE_ORDER` / `MODE_LABELS`）
   由 `bun-backend/tests/permission-mode-contract.test.ts` 与单源清单逐字**双向**对账，
-  并反向扫描 `web/src`：除这两个文件外出现 ≥3 个档位字面量即红（防第二份真值）；同一个测试还把 `needsApprovalForMode` 实际分支的档位集合
+  并反向扫描 `web/src`：除这两个文件外出现 ≥3 个档位字面量即红（防第二份真值）；同一个测试还把 `permissionDecisionForMode` 实际分支的档位集合
   与清单对账（漏分支的档位会落进函数末尾的兜底 `return true`：名字收下、语义全错）。
 - 新增/改名一档要动的地方：单源清单 → 审批门分支 → 前端 `MODE_ORDER` 与 `MODE_LABELS`；
   少任何一处，上面那条测试当场红。

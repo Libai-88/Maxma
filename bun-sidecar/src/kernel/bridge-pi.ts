@@ -18,6 +18,7 @@ import { powershellFallbackNote, probeBash, probePowerShell } from "./shell-heal
 import { createMaxmaApprovalGate, type MaxmaApprovalGate } from "./approval-gate";
 import { createExtensionUiBridge, type ExtensionUiBridge } from "./extension-ui";
 import { mapPiAgentEventToMaxma, type PiDoneGuard } from "./events";
+import { nonEmptyStringList } from "./path-policy";
 import { createRequestFingerprintEpoch, createRequestFingerprintSecret, type RequestTelemetry } from "./request-telemetry";
 import { orchestratePiPrompt, handlePiCancelGuard } from "./prompt";
 import { loadMaxmaMcpEntries } from "./mcp";
@@ -228,6 +229,8 @@ export async function handlePiCreateSession(
   const systemPrompt: string | undefined = params?.system_prompt;
   const appendSystemPrompt: string | undefined = params?.append_system_prompt;
   const tools: string[] | undefined = Array.isArray(params?.tools) ? params.tools : undefined;
+  const allowedRoots = [...new Set([...nonEmptyStringList(params?.allowed_roots), cwd])];
+  const pathAllowlist = nonEmptyStringList(params?.path_allowlist);
   const rawMode = params?.permission_mode as string | undefined;
   const permissionMode: MaxmaPermissionMode =
     MAXMA_PERMISSION_MODES.includes(rawMode as MaxmaPermissionMode)
@@ -363,6 +366,8 @@ export async function handlePiCreateSession(
   const options: MaxmaSessionOptions = {
     cwd,
     permissionMode,
+    allowedRoots,
+    pathAllowlist,
     approvalGate,
     // EXT-UI-001：扩展的 ctx.ui 必须有真实落点，否则 runner 回落 noOpUIContext。
     uiContext: extensionUi.uiContext,

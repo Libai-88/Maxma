@@ -29,6 +29,9 @@ import {
 import { createMaxmaApprovalExtension } from "./extensions/maxma-approval";
 import { MAXMA_ENABLED_DEFAULT_TOOLS } from "./pi-contract";
 import { createMaxmaBlockerExtension } from "./extensions/maxma-blocker";
+import { createMaxmaPathPolicyExtension } from "./extensions/maxma-path-policy";
+import { createMaxmaAuditExtension } from "./extensions/maxma-audit";
+import { PathPolicy } from "./path-policy";
 import {
   buildExtensionsSnapshot,
   filterDisabledExtensions,
@@ -52,24 +55,34 @@ export const MAXMA_DEFAULT_PI_TOOLS = MAXMA_ENABLED_DEFAULT_TOOLS;
 export function approvalExtensionFor(
   mode: MaxmaPermissionMode,
   gate?: ApprovalGate,
+  sessionId = "unknown",
 ): InlineExtension | undefined {
   if (!gate || mode === "auto") return undefined;
-  return createMaxmaApprovalExtension(gate);
+  return createMaxmaApprovalExtension(gate, sessionId);
 }
 
 /**
  * 内联扩展清单（官方 DefaultResourceLoaderOptions.extensionFactories）：
  *   1) MaxmaBlocker 拒止锚（与权限无关，恒装配；官方 tool_call 钩子执行前 block）
- *   2) 审批扩展（read_only/ask/operate 三档需要；auto 不装）
- *   3) 遥测扩展（提供指纹 secret + epoch + 回调时）
- *   4) MCP 扩展（官方 createMcpExtension，loadConfig 注入 Maxma 的 mcp_servers.yaml
+ *   2) PathPolicy（工作区根 / allowlist 内的路径 preflight，恒装配）
+ *   3) 审批扩展（read_only/ask/operate 三档需要；auto 不装）
+ *   4) 审计扩展（tool_execution_start/end 写入 JSONL + 写入前快照，恒装配）
+ *   5) 遥测扩展（提供指纹 secret + epoch + 回调时）
+ *   6) MCP 扩展（官方 createMcpExtension，loadConfig 注入 Maxma 的 mcp_servers.yaml
  *      清单；未提供清单时不装配——SDK 会话默认不加载任何内置扩展，官方文档明示）
  *
- * 这四项**不接受禁用**：审批/拒止是安全机制，关掉等于静默降级；遥测只在显式
+ * 这几项**不接受禁用**：路径/审批/拒止是安全机制，关掉等于静默降级；遥测只在显式
  * 配置指纹时装配。禁用接口在 `kernel/extensions.ts` 里按 scope 硬拒。
  */
 export function buildExtensionFactories(opts: MaxmaSessionOptions): InlineExtension[] {
   const extensionFactories: InlineExtension[] = [createMaxmaBlockerExtension()];
+  const cwd = opts.cwd ?? process.cwd();
+  const pathPolicy = new PathPolicy({
+    cwd,
+    roots: opts.allowedRoots && opts.allowedRoots.length > 0 ? opts.allowedRoots : [cwd],
+    allowlist: opts.pathAllowlist,
+  });
+  extensionFactories.push(createMaxmaPathPolicyExtension(pathPolicy, cwd, opts.sessionId));
   if (opts.requestFingerprintSecret && opts.requestFingerprintEpoch && opts.onRequestTelemetry) {
     extensionFactories.push(createRequestTelemetryExtension(
       opts.requestFingerprintSecret,
@@ -77,8 +90,11 @@ export function buildExtensionFactories(opts: MaxmaSessionOptions): InlineExtens
       opts.onRequestTelemetry,
     ));
   }
-  const approval = approvalExtensionFor(opts.permissionMode ?? "ask", opts.approvalGate);
+  const approval = approvalExtensionFor(opts.permissionMode ?? "ask", opts.approvalGate, opts.sessionId);
   if (approval) extensionFactories.push(approval);
+  // 审计在审批之后：只有获准执行的调用才进入 tool_execution_start；拒绝由
+  // path/approval 扩展直接记 denied。auto 模式没有审批门，审计仍恒装配。
+  extensionFactories.push(createMaxmaAuditExtension({ sessionId: opts.sessionId ?? "unknown", cwd }));
   if (opts.mcpServers && opts.mcpServers.length > 0) {
     const servers: McpServerEntry[] = opts.mcpServers.map((s) => ({
       name: s.name,

@@ -18,10 +18,10 @@ import type { PermissionMode } from '@/types'
 export const MODE_ORDER: PermissionMode[] = ['read_only', 'ask', 'operate', 'auto']
 
 export const MODE_LABELS: Record<PermissionMode, string> = {
-  read_only: '只读（仅读取与查询）',
-  ask: '逐次确认',
-  operate: '执行前确认',
-  auto: '自动执行（免确认）',
+  read_only: '只读（拒绝写入与执行）',
+  ask: '逐次确认（写入与执行）',
+  operate: '执行前确认（写入放行）',
+  auto: '自动执行（策略内免确认）',
 }
 
 /** 组合框里用的短标签（长标签留给设置面板）。 */

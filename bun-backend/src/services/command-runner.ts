@@ -4,11 +4,25 @@
  * 不是终端：不分配 PTY、不保持交互会话。每次运行都是一次性进程，
  * cwd 固定为已授权工作区根，超时或输出超限会杀进程树。该接口只允许
  * loopback；UI 默认关闭，用户显式启用后才发请求。
+ *
+ * M1/T3：命令先过 `evaluateCommand`（路径/网络/危险命令策略），子进程环境
+ * 从白名单重建。它仍不是 OS 级沙箱；文档必须如实标注。
  */
 
 import { spawn } from "node:child_process";
 import * as fs from "node:fs";
 import type { WorkspaceRoot } from "./workspace-store";
+import { evaluateCommand, sanitizedEnv } from "./command-sandbox";
+
+export class CommandPolicyError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "CommandPolicyError";
+  }
+}
 
 export interface CommandResult {
   command: string;
@@ -49,6 +63,7 @@ export function runWorkspaceCommand(
   root: WorkspaceRoot,
   command: string,
   timeoutMs?: number,
+  options: { allowNetwork?: boolean } = {},
 ): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
     if (typeof command !== "string" || !command.trim()) {
@@ -63,6 +78,11 @@ export function runWorkspaceCommand(
       reject(new Error("工作区根不存在或不可访问"));
       return;
     }
+    const policy = evaluateCommand(root, command, options);
+    if (!policy.allowed) {
+      reject(new CommandPolicyError(policy.code ?? "COMMAND_DENIED", policy.reason ?? "命令被安全策略拒绝"));
+      return;
+    }
     const timeout = Math.min(MAX_TIMEOUT_MS, Math.max(1000, timeoutMs ?? DEFAULT_TIMEOUT_MS));
     const started = Date.now();
     let stdout = "";
@@ -75,7 +95,7 @@ export function runWorkspaceCommand(
       shell: true,
       windowsHide: true,
       detached: process.platform !== "win32",
-      env: { ...process.env, MAXMA_WORKSPACE_ROOT: root.realpath },
+      env: sanitizedEnv(root),
     });
 
     const timer = setTimeout(() => {

@@ -423,7 +423,7 @@ export default function ChatView() {
               {modelSettingsOpen && <ModelSettings />}
               {taskTrackerData && <div className="mb-2 rounded-lg border border-border p-3 text-xs text-muted-foreground">任务状态：{JSON.stringify(taskTrackerData).slice(0, 120)}</div>}
               <div className="flex items-center justify-between px-1 py-1.5 text-sm">
-                <span>自动执行（免确认）</span>
+                <span>自动执行（策略内免确认）</span>
                 <Switch checked={autoApprove} onCheckedChange={setAutoApprove} aria-label="自动执行" />
               </div>
               <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => setPrivateMode(!privateMode)}>

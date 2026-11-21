@@ -43,6 +43,37 @@ describe("kernel: approvalExtensionFor", () => {
 });
 
 describe("kernel: maxma-approval extension", () => {
+  test("read_only 写入在扩展层直接 block，不调用 decide", async () => {
+    let decideCalls = 0;
+    const readOnlyGate: ApprovalGate = {
+      decision: () => "deny",
+      needsApproval: () => false,
+      async decide(): Promise<ApprovalDecision> {
+        decideCalls += 1;
+        return { approved: true };
+      },
+    };
+    const ext = createMaxmaApprovalExtension(readOnlyGate) as { factory: (pi: unknown) => void };
+    let handler: ((event: unknown) => Promise<unknown>) | undefined;
+    ext.factory({
+      on: (_e: string, h: (e: unknown) => Promise<unknown>) => {
+        handler = h;
+        return () => {};
+      },
+      getAllTools: () => [{ name: "write", annotations: { readOnlyHint: false } }],
+    });
+    const result = await handler!({
+      type: "tool_call",
+      toolName: "write",
+      toolCallId: "t3",
+      input: { file_path: "a.txt" },
+    }) as { block?: boolean; reason?: string };
+    expect(result.block).toBe(true);
+    expect(result.reason).toContain("只读");
+    expect(result.reason).toContain("不要重试同一调用");
+    expect(decideCalls).toBe(0);
+  });
+
   test("gate 拒绝时返回官方 block 结果", async () => {
     const ext = createMaxmaApprovalExtension(denyGate()) as {
       factory: (pi: unknown) => void;

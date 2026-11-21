@@ -1,15 +1,20 @@
 # Maxma 安全边界契约
 
 > **Status: Active.** 定义当前代码真实执行的安全检查。改动任一检查必须同步本文与对应测试。
-> 上一代 Python 路径白名单（`path_whitelist.yaml` + `check_path_access`）已随 Python 后端整体移除，
-> **今天没有任何代码执行它**；本文只描述现存机制。
+> Python 时代的 `path_whitelist.yaml` / `check_path_access` 已随 Python 后端移除；2026-11-21 起
+> **Agent 文件工具重新有了 PathPolicy 层**（工作区根 + 用户显式 allowlist），但它不是 OS 沙箱，
+> 也不能约束所有 shell 语义。本文只描述现存机制，不把“策略层”写成“隔离层”。
 
 ## 1. 执行中的检查
 
 | 检查 | 实现 | 失败语义 | 测试 |
 | --- | --- | --- | --- |
 | MaxmaBlocker 拒止锚 | `bun-sidecar/src/blocker.ts` `findBlockerPath`/`checkToolBlocked`；kernel 侧 `kernel/extensions/maxma-blocker.ts` 挂官方 `tool_call` 钩子 | 命中即 block 单次调用并把原因回给 agent，整轮不中断；NUL 字节/解析异常视为存在 blocker（**fail-closed**） | `bun-sidecar/tests/`、`bun-backend/tests/` |
-| 审批门（权限模式） | `bun-sidecar/src/kernel/approval-gate.ts` `needsApprovalForMode` + `extensions/maxma-approval.ts` | 超时默认拒绝（5 分钟）；会话销毁 `rejectAll` 防 promise 泄漏 | `bun-sidecar/tests/plan-bridge.test.ts` 等 |
+| 审批门（权限模式） | `bun-sidecar/src/kernel/approval-gate.ts` `permissionDecisionForMode`（三值 allow/ask/deny）+ `extensions/maxma-approval.ts` | `read_only` 对写入/执行 **deny**（不弹审批卡）；`ask` 全审批；`operate` 执行类审批；`auto` 不装审批门。审批超时默认拒绝（5 分钟）；会话销毁 `rejectAll` 防 promise 泄漏 | `bun-sidecar/tests/approval-gate.test.ts`、`bun-backend/tests/permission-mode-contract.test.ts` |
+| Agent 路径策略 | `bun-sidecar/src/kernel/path-policy.ts` + `extensions/maxma-path-policy.ts`；根来自 `workspaces.json` 的 realpath 与用户显式 `path_allowlist.json`；后端 `GET/POST/DELETE /api/security/path-allowlist` 管理 allowlist | 绝对越界、盘符相对、UNC、Win32 设备命名空间、ADS、NUL/控制字符、`..`、`~`/环境变量展开、符号链接/junction 一律在 `tool_call` 执行前 block；读取目标不存在也拒绝（fail-closed） | `bun-sidecar/tests/path-policy.test.ts`、`bun-backend/tests/security-path-allowlist.test.ts` |
+| Agent 命令守卫（降级） | `bun-sidecar/src/kernel/command-policy.ts` + path 扩展：网络命令默认拒绝、系统破坏性命令拒绝、路径逃逸复用 PathPolicy；Agent bash/powershell 在命令前重建 HOME/TMP 并清掉常见凭据变量 | 策略拒绝时 `tool_call` block；放行时只改环境前缀，不改命令语义。**不是 OS 级沙箱**，不能阻止任意可执行文件读取用户权限下的文件 | `bun-sidecar/tests/path-policy.test.ts` |
+| 工作区命令守卫（降级） | `bun-backend/src/services/command-sandbox.ts` + `command-runner.ts`：同一 `evaluateCommandPolicy`，子进程环境白名单（`sanitizedEnv`），HOME/USERPROFILE/TMP 指向工作区；`POST /api/workspace/run` 支持显式 `allow_network` | 路径/网络/危险命令 403 `COMMAND_*`；超时/输出超限杀进程树。**Windows 无受限 token / Job Object 原生辅助器，当前是 policy-only，不是完整沙箱** | `bun-backend/tests/command-sandbox.test.ts`、`workspace-p0.test.ts` |
+| Agent 工具审计与写入快照 | `bun-sidecar/src/kernel/agent-audit.ts` + `extensions/maxma-audit.ts`：`tool_execution_start/end` 写 `<data>/api/data/agent_audit.jsonl`；write/edit 前把已存在普通文件快照到 `agent_snapshots/<session>/`（上限 8 MiB）；拒绝由 path/approval 扩展写 `denied` 记录 | 审计写入失败只告警，不影响工具；`GET /api/audit-log` 合并 JSONL；`GET /api/audit-log/snapshots` + `POST .../:id/restore` 仅回环，恢复前用 PathPolicy 复核目标 | `bun-sidecar/tests/agent-audit.test.ts`、`bun-backend/tests/audit-agent.test.ts` |
 | MCP stdio 命令白名单 | `bun-backend/src/routes/mcp-validation.ts` `ALLOWED_STDIO_COMMANDS` / `validateStdioCommand` | 不在白名单 → 400 拒绝保存 | `bun-backend/tests/` |
 | MCP 环境变量黑名单 | 同上 `validateEnvVars` | 命中敏感 key → 400 | 同上 |
 | Provider URL 校验 | `bun-backend/src/routes/providers.ts`（含 `169.254.169.254`、`metadata.google.internal` 等云元数据主机拒绝） | 危险协议/元数据地址 → 拒绝保存与请求前拦截 | `bun-backend/tests/` |
@@ -34,8 +39,9 @@
 1. **异常一律视为拒绝**，禁止 `catch { /* 继续 */ }` 出现在安全检查路径上。
 2. **Token 不进前端构建产物；API Key 不进日志、事件、前端响应。**
 3. 权限模式（`read_only` / `ask` / `operate` / `auto`，`kernel/types.ts`）是**附加限制层**：
-   只能收紧，任何模式都不得绕过 MaxmaBlocker、MCP 命令白名单、Provider URL 校验。
+   只能收紧，任何模式都不得绕过 MaxmaBlocker、PathPolicy、命令守卫、MCP 命令白名单、Provider URL 校验。
    判据只看官方 `Tool.annotations`（`readOnlyHint` / `destructiveHint`）与工具名族，不猜语义。
+   `read_only` 的写入/执行是 deny，不是 ask；`auto` 不装审批门，但仍装 PathPolicy / 命令守卫 / 审计。
 4. 取消与断线必须经 kernel `cancel`；只取消前端会让 Agent 继续跑并烧模型额度。
 5. Electron 壳不引入特权：`contextIsolation` + `sandbox` + `nodeIntegration:false`，
    preload 只暴露原生选择/定位、HTML-only 外部打开和浏览器控制这些窄接口；IPC 校验
@@ -49,13 +55,14 @@
 
 ## 3. 已知缺口（不要当成已具备的保证）
 
-- **没有路径白名单层（产品级缺口，非缺陷清单里的"待接线"）。** 文件访问的约束只剩
-  MaxmaBlocker（用户主动放置的拒止锚）+ 审批门逐次确认；`auto` 模式下审批门不装配，
-  此时拒止锚是仅存的文件拦截层。**不存在"预先放行清单"**，因此任何文档/UI 都不得
-  宣称"默认拒绝"或"仅受白名单约束"。恢复该层属独立工作项。
-  Workbench 的 `workspace roots` 只是**文件面板的读写授权**（用户显式选中的目录），
-  **不是 Agent 的全局路径白名单**，也不改变 Agent 工具的文件访问边界。命令运行器同样只在
-  当前工作区根内执行，但它使用你的本机用户权限，不是沙箱。
+- **PathPolicy 是策略层，不是 OS 沙箱。** 它约束 Agent 的 read/write/edit/grep/find/ls 与可识别的
+  bash/powershell 路径参数；工作区根来自用户显式选择，allowlist 来自用户显式追加，二者都不是自动发现。
+  `auto` 模式下没有审批门，PathPolicy / 命令守卫 / 审计仍在，但 shell 仍以本机用户权限运行：
+  任意可执行文件、编码/脚本/动态拼接路径、环境变量/注册表/COM 等语义无法被字符串策略完全覆盖。
+  Windows 的受限 token + Job Object 原生辅助器尚未落地，现状明确标记 `MAXMA_COMMAND_SANDBOX=policy-only`；
+  不得宣称“命令被沙箱隔离”或“只能访问工作区”。
+  Workbench `workspace roots` 同时是文件面板授权与 Agent PathPolicy 根；删除根只撤销授权，不删磁盘目录。
+  旧 `path_whitelist.yaml` 已无读取方，用户磁盘上残留的文件不产生任何拦截效果。
 - **网络 allowlist 是可选策略，默认仍全放行。** 默认 `mode:"all"` 与普通浏览器一样可访问任意
   http(s)，包括本机 loopback 与局域网地址；只有用户在浏览器面板显式切到 `allowlist` 并保存域名后，
   才会拦截不在列表中的 HTTP(S) 主请求和子资源。该策略是**浏览器会话级、全局生效**，不按页签隔离；
@@ -101,8 +108,9 @@
 因此启停机制按"能关、但关不掉安全机制"设计：
 
 1. **可禁用的只有 `<agentDir>/extensions` 下的用户扩展**（`scope=user`，id 为相对该目录的
-   posix 路径）。Maxma 内联装配的 `maxma-approval` / `maxma-blocker` / `request-telemetry`
-   **硬拒**（接口 403、过滤函数按 scope 拒绝）——关掉审批扩展等于静默取消审批门。
+   posix 路径）。Maxma 内联装配的 `maxma-approval` / `maxma-blocker` / `maxma-path-policy` /
+   `maxma-audit` / `request-telemetry` **硬拒**（接口 403、过滤函数按 scope 拒绝）——关掉审批扩展
+   等于静默取消审批门，关掉路径策略等于静默取消文件边界。
 2. 过滤点是官方 `DefaultResourceLoaderOptions.extensionsOverride`（会话级），
    **不写 pi 的全局 settings**：一次 Maxma 内的开关不应扩散到用户命令行里的 pi。
    持久化只在本机 `api/data/disabled_extensions.json`，值是相对路径，换机不会误伤。

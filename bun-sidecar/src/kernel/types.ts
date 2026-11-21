@@ -15,6 +15,7 @@
 import type { McpServerEntry, ToolDefinition, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { RequestTelemetry } from "./request-telemetry";
+import type { PermissionDecision } from "./permission-decision";
 
 /**
  * Maxma 权限模式 4 档：档位清单与类型都单源在 `pi-contract.ts`
@@ -33,6 +34,18 @@ export type ToolAnnotations = {
   destructiveHint?: boolean;
   openWorldHint?: boolean;
 } & Record<string, unknown>;
+
+/**
+ * 权限矩阵的三值结果。
+ *
+ * - allow：直接执行；
+ * - ask：进入审批门，等待用户答复（超时拒绝）；
+ * - deny：在执行前硬拒绝，不产生审批卡，也不产生任何工具副作用。
+ *
+ * `read_only` 的写入/执行必须落在 deny，而不是 ask——否则用户仍可逐次
+ * 批准，档位承诺的“只读”就不成立。
+ */
+export type { PermissionDecision } from "./permission-decision";
 
 /** 一次待审批的工具调用（官方 ToolCallEvent 的 Maxma 侧投影）。 */
 export interface ApprovalRequest {
@@ -54,6 +67,11 @@ export interface ApprovalDecision {
  * decide 等待用户应答（异步、可超时，超时默认拒绝——沿用现有 APPROVAL_TIMEOUT_MS 语义）。
  */
 export interface ApprovalGate {
+  /**
+   * 三值权限判定。实现可省略（旧门只提供 needsApproval 时，扩展会回落为
+   * ask/allow 两态）；新的 Maxma 门必须提供，才能让 read_only 硬拒绝写入。
+   */
+  decision?(req: Pick<ApprovalRequest, "toolName" | "annotations" | "input">): PermissionDecision;
   needsApproval(req: Pick<ApprovalRequest, "toolName" | "annotations">): boolean;
   decide(req: ApprovalRequest): Promise<ApprovalDecision>;
 }
@@ -71,6 +89,13 @@ export interface MaxmaSessionOptions {
   tools?: string[];
   /** 权限模式，默认 "ask"。 */
   permissionMode?: MaxmaPermissionMode;
+  /**
+   * 本次会话允许 Agent 访问的工作区根（绝对路径、已由用户显式授权）。
+   * 缺省时至少使用 cwd；PathPolicy 对所有文件类工具调用做 preflight。
+   */
+  allowedRoots?: string[];
+  /** 用户显式追加的 allowlist 根（与工作区根同一信任级）。 */
+  pathAllowlist?: string[];
   /** 审批门；不提供时视为全部自动批准（等效 auto）。 */
   approvalGate?: ApprovalGate;
   /** 自定义工具（官方 CreateAgentSessionOptions.customTools，ToolDefinition）。 */

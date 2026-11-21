@@ -28,7 +28,7 @@ import {
   writeTextFile,
   WorkspaceError,
 } from "../services/workspace-fs";
-import { runWorkspaceCommand } from "../services/command-runner";
+import { runWorkspaceCommand, CommandPolicyError } from "../services/command-runner";
 
 interface BunServerLike {
   requestIP?: (req: Request) => { address?: string } | null;
@@ -179,14 +179,19 @@ export function createWorkspaceRoutes(): Hono {
 
   app.post("/api/workspace/run", async (c) => {
     try {
-      const body = await c.req.json<{ root_id?: string; command?: string; timeout_ms?: number }>().catch(() => null);
+      const body = await c.req.json<{ root_id?: string; command?: string; timeout_ms?: number; allow_network?: boolean }>().catch(() => null);
       if (!body || typeof body !== "object") throw new WorkspaceError("PATH_INVALID", 400, "请求体必须是 JSON 对象");
       const root = rootFor(c, body.root_id ?? "");
       touchWorkspaceRoot(root.id);
-      const result = await runWorkspaceCommand(root, body.command ?? "", body.timeout_ms);
+      const result = await runWorkspaceCommand(root, body.command ?? "", body.timeout_ms, {
+        allowNetwork: body.allow_network === true,
+      });
       return c.json(result);
     } catch (error) {
       if (error instanceof WorkspaceError) return workspaceError(c, error);
+      if (error instanceof CommandPolicyError) {
+        return c.json({ error: { code: error.code, message: error.message } }, 403);
+      }
       return c.json({ error: "COMMAND_FAILED", message: error instanceof Error ? error.message : String(error) }, 400);
     }
   });

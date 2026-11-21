@@ -32,6 +32,8 @@ const categoryLabels: Record<string, string> = {
 const extensionLabels: Record<string, string> = {
   'maxma-approval': '工具审批',
   'maxma-blocker': '路径拒止锚',
+  'maxma-path-policy': 'Agent 路径策略',
+  'maxma-audit': '工具审计与快照',
   'request-telemetry': '请求观测',
 }
 

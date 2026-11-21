@@ -281,12 +281,12 @@ describe("权限模式 REST 契约（AG-PERM-001 / PERM-LIVE-001）", () => {
 
   test("审批门分支的档位集合等于单源清单（双向）", () => {
     const gateSrc = stripComments(read("bun-sidecar/src/kernel/approval-gate.ts"));
-    const fn = gateSrc.match(/export function needsApprovalForMode\([\s\S]*?\n\}/);
-    expect(fn, "approval-gate.ts 里找不到 needsApprovalForMode（结构变了请同步本测试）").not.toBeNull();
+    const fn = gateSrc.match(/export function permissionDecisionForMode\([\s\S]*?\n\}/);
+    expect(fn, "approval-gate.ts 里找不到 permissionDecisionForMode（结构变了请同步本测试）").not.toBeNull();
     const branched = [...new Set([...fn![0].matchAll(/mode\s*===\s*"([a-z_]+)"/g)].map((m) => m[1]!))].sort();
     expect(
       branched,
-      "审批门实际分支的档位与单源清单不一致：清单里有而门里没分支的档位会落进末尾兜底 return true（名收下、语义全错）",
+      "权限矩阵实际分支的档位与单源清单不一致：清单里有而矩阵里没分支的档位会落进末尾 fail-closed（名收下、语义全错）",
     ).toEqual([...singleSource].sort());
   });
 
@@ -390,7 +390,12 @@ describe("权限模式 REST 契约（AG-PERM-001 / PERM-LIVE-001）", () => {
     });
     expect(back.status).toBe(200);
     expect(record!.permissionMode).toBe("read_only");
-    expect(record!.approvalGate.needsApproval(writeTool)).toBe(true);
+    expect(record!.approvalGate.decision!({
+      toolName: "write",
+      input: { file_path: "a.txt" },
+      annotations: { readOnlyHint: false },
+    }), "read_only 必须硬拒绝写入，而不是转成审批").toBe("deny");
+    expect(record!.approvalGate.needsApproval(writeTool), "read_only 的拒绝不是审批").toBe(false);
   });
 
   test("PUT 非法档位 422；未知会话 GET/PUT 404", async () => {

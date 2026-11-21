@@ -8,7 +8,13 @@
  *   - 超时默认拒绝语义沿用（state.ts APPROVAL_TIMEOUT_MS）。
  */
 
-import type { ApprovalDecision, ApprovalGate, ApprovalRequest, MaxmaPermissionMode } from "./types";
+import type {
+  ApprovalDecision,
+  ApprovalGate,
+  ApprovalRequest,
+  MaxmaPermissionMode,
+  PermissionDecision,
+} from "./types";
 import type { MaxmaEventLike } from "./events";
 
 /** 官方 Tool.annotations 的读取形状。 */
@@ -35,26 +41,46 @@ export interface CreateMaxmaApprovalGateDeps {
   timeoutMs?: number;
 }
 
+/** 是否属于“执行类”工具：官方 destructiveHint 或 bash/powershell 工具族。 */
+function isExecuteFamily(toolName: string, annotations: Annotations): boolean {
+  const name = toolName.toLowerCase();
+  return name === "bash" || name === "powershell" || annotations?.destructiveHint === true;
+}
+
 /**
- * 权限模式 + 官方注解 → 是否需要审批：
- *   read_only / ask → 非只读工具逐次审批
- *   operate         → 仅执行类（官方 destructiveHint / bash·PowerShell 工具族）审批
- *   auto            → 全部放行（gate 本就不装配，此处兜底）
+ * 四档权限矩阵（纯函数，单一判据）。
+ *
+ *   read_only：只读放行，写入/执行一律 deny（不是 ask：用户不能把“只读”逐次批准成写入）；
+ *   ask      ：只读放行，其余逐次 ask；
+ *   operate  ：只读与写入放行，执行类 ask；
+ *   auto     ：全部 allow，但仍受 PathPolicy / 命令守卫 / MaxmaBlocker 约束。
+ *
+ * 判据只看官方注解和工具名族，不猜工具语义。未知档位一律 deny（fail-closed）。
+ */
+export function permissionDecisionForMode(
+  mode: MaxmaPermissionMode,
+  toolName: string,
+  annotations: Annotations,
+): PermissionDecision {
+  if (mode === "auto") return "allow";
+  const readOnly = annotations?.readOnlyHint === true;
+  if (mode === "read_only") return readOnly ? "allow" : "deny";
+  if (mode === "ask") return readOnly ? "allow" : "ask";
+  if (mode === "operate") return readOnly || !isExecuteFamily(toolName, annotations) ? "allow" : "ask";
+  return "deny";
+}
+
+/**
+ * 兼容旧调用点的二值投影：仅供“是否需要审批”使用。
+ * 注意 deny 也返回 false——调用方必须先看 `permissionDecisionForMode`；
+ * 审批扩展已经按三值判定，不会把 read_only 的拒绝误当放行。
  */
 export function needsApprovalForMode(
   mode: MaxmaPermissionMode,
   toolName: string,
   annotations: Annotations,
 ): boolean {
-  if (mode === "auto") return false;
-  const readOnly = annotations?.readOnlyHint === true;
-  if (mode === "read_only" || mode === "ask") return !readOnly;
-  if (mode === "operate") {
-    const name = toolName.toLowerCase();
-    const executeFamily = name === "bash" || name === "powershell" || annotations?.destructiveHint === true;
-    return executeFamily;
-  }
-  return true;
+  return permissionDecisionForMode(mode, toolName, annotations) === "ask";
 }
 
 /** 风险等级：官方注解结构化推导（取代 OMP 标题关键词启发式）。 */
@@ -74,6 +100,10 @@ export function createMaxmaApprovalGate(deps: CreateMaxmaApprovalGateDeps): Maxm
   const timeoutMs = deps.timeoutMs ?? 5 * 60 * 1000;
 
   const gate: MaxmaApprovalGate = {
+    decision({ toolName, annotations }) {
+      return permissionDecisionForMode(deps.mode(), toolName, annotations);
+    },
+
     needsApproval({ toolName, annotations }) {
       return needsApprovalForMode(deps.mode(), toolName, annotations);
     },

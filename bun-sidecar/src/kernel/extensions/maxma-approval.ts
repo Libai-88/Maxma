@@ -14,6 +14,7 @@
 
 import type { ExtensionAPI, InlineExtension, ToolCallEvent, ToolCallEventResult } from "@earendil-works/pi-coding-agent";
 import type { ApprovalGate } from "../types";
+import { recordToolDenied } from "../agent-audit";
 
 /** 审批扩展名（官方 InlineExtension.name，诊断与启动清单可见）。 */
 export const MAXMA_APPROVAL_EXTENSION_NAME = "maxma-approval";
@@ -24,7 +25,7 @@ export const MAXMA_APPROVAL_EXTENSION_NAME = "maxma-approval";
  *   - decide：等待前端 user_response 应答（超时默认拒绝）。
  * 门不提供时不应装配本扩展（pi-session.ts 保证）。
  */
-export function createMaxmaApprovalExtension(gate: ApprovalGate): InlineExtension {
+export function createMaxmaApprovalExtension(gate: ApprovalGate, sessionId = "unknown"): InlineExtension {
   return {
     name: MAXMA_APPROVAL_EXTENSION_NAME,
     factory: (pi: ExtensionAPI) => {
@@ -38,18 +39,33 @@ export function createMaxmaApprovalExtension(gate: ApprovalGate): InlineExtensio
 
         const input = (event as { input?: Record<string, unknown> }).input ?? {};
         const toolCallId = event.toolCallId;
+        const request = { toolName: event.toolName, toolCallId, input, annotations };
 
-        if (!gate.needsApproval({ toolName: event.toolName, annotations })) {
+        // 新门提供三值矩阵：read_only 的写入/执行在这里直接 deny，不发审批卡。
+        // 旧门没提供 decision 时退回二值语义，保持兼容。
+        const decision = gate.decision
+          ? gate.decision({ toolName: event.toolName, annotations, input })
+          : gate.needsApproval({ toolName: event.toolName, annotations })
+            ? "ask"
+            : "allow";
+
+        if (decision === "deny") {
+          const reason = `当前权限模式只读：${event.toolName} 属于写入或执行类调用，已拒绝；不要重试同一调用，请让用户切换权限模式`;
+          recordToolDenied({ sessionId, toolName: event.toolName, toolCallId, args: input, reason });
+          return { block: true, reason };
+        }
+        if (decision === "allow") {
           return undefined; // 官方约定：返回 undefined 即放行
         }
-        const decision = await gate.decide({ toolName: event.toolName, toolCallId, input, annotations });
-        if (!decision.approved) {
+        const approval = await gate.decide(request);
+        if (!approval.approved) {
           // 拒绝原因要能约束模型行为：只说 "was not approved" 时，模型最常见的
           // 反应是把同一次调用原样再发一遍（实测可连发十几次审批）。
           // 明确要求不要重试同一调用，配合 chat-ws 的 APPROVAL_LOOP 兜底。
-          const reason = decision.reason === "approval timeout"
+          const reason = approval.reason === "approval timeout"
             ? `用户未在时限内确认 ${event.toolName}，本轮不要重试这次调用`
             : `用户拒绝了 ${event.toolName} 的这次调用；不要重试同一调用，请换一种方式或先询问用户`;
+          recordToolDenied({ sessionId, toolName: event.toolName, toolCallId, args: input, reason });
           return { block: true, reason };
         }
         return undefined;

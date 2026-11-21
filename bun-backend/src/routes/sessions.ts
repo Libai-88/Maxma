@@ -27,6 +27,8 @@ import { normalizeSessionId } from "../../../bun-sidecar/src/kernel/session-cata
 
 import { engineSettingsForNewSession, getSettingValue } from "../settings-global";
 import { readDisabledExtensions } from "../extensions-config";
+import { listWorkspaceRoots } from "../services/workspace-store";
+import { listPathAllowlist } from "../services/path-allowlist";
 
 /** Bun 后端的会话注册表（kernel 桥经 deps 注入）。 */
 export interface SessionHub {
@@ -137,8 +139,14 @@ export function createSessionsRoutes(deps: SessionsDeps): Hono {
   async function createSessionViaKernel(extra: Record<string, unknown> = {}) {
     const skillsEnabled = getSettingValue("skills.enabled") !== false;
     const subagentPanel = getPanel("sub_agents") as Record<string, unknown>;
+    // 工作区根是用户在文件面板里显式授权的目录；PathPolicy 把它们作为
+    // Agent 文件工具的允许根。只传 realpath，避免把词法链接路径交给内核。
+    const allowedRoots = listWorkspaceRoots().map((root) => root.realpath);
+    const pathAllowlist = listPathAllowlist().map((entry) => entry.realpath);
     return callRpc<{ session_id: string; resumed?: boolean }>(deps, "create_session", {
       skills_enabled: skillsEnabled,
+      allowed_roots: allowedRoots,
+      path_allowlist: pathAllowlist,
       settings: engineSettingsForNewSession(),
       subagent: {
         enabled: subagentPanel.enabled === true,
