@@ -1,6 +1,5 @@
 import type { ParsedRef } from '@/utils/references'
-
-import type { InteractiveArtifact } from './workbench'
+import type { CanvasAgentResultMessage, InteractiveArtifact } from './workbench'
 import type { PermissionMode } from './session'
 
 // === WebSocket 服务端 → 客户端事件 ===
@@ -804,7 +803,7 @@ export type TaskBriefMessage =
  * ClientMessage 联合 —— 浏览器→服务端 WS 消息。
  *
  * 权威白名单是 `bun-backend/src/routes/chat-ws.ts` 的 `CLIENT_MESSAGE_TYPES`
- * （16 项）：白名单外的 type 被后端**静默丢弃**。本联合与白名单的双向对账由
+ * （17 项）：白名单外的 type 被后端**静默丢弃**。本联合与白名单的双向对账由
  * `ClientMessage` 联合锁定（前端多发 → 后端吞掉；前端漏声明 →
  * 发送点失去类型检查）。此前联合只覆盖 6 项，另外 10 项以无类型对象字面量发出，
  * 字段拼错不会有任何提示。
@@ -827,6 +826,7 @@ export type ClientMessage =
   | TaskBriefAnswerMessage
   | TaskBriefExecuteMessage
   | TaskBriefCancelMessage
+  | CanvasAgentResultMessage
 
 // === 前端 UI 状态类型 ===
 

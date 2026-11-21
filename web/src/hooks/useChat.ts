@@ -16,6 +16,7 @@ import { replaceStickerDirectives } from '@/utils/stickerUtils'
 import { showSystemNotification } from '@/lib/notify'
 import { showToast } from '@/lib/toast'
 import { autoReadIfEnabled } from '@/hooks/useTts'
+import { handleCanvasAgentCommand } from '@/components/workbench/design/designCanvasAgentBridge'
 import type { GoalChannelState, TaskBriefState } from '@/stores/chat'
 import { createLogger } from '@/utils/logger'
 import { userFacingModelError } from '@/utils/modelErrors'
@@ -882,6 +883,17 @@ async function connectSession(sid: string) {
       if (rawType === 'hello') {
         const pv = (msg as { payload?: { protocol_version?: number } }).payload?.protocol_version
         log.info('WS hello: protocol_version =', pv ?? 'unknown', 'session:', sid)
+        return
+      }
+      // 设计画布 Agent 命令走真实 renderer 画布执行，结果用同一会话 WS 回传；
+      // 它不属于 ServerEvent 事件流，避免进入聊天 turn 状态机。
+      if (rawType === 'canvas_command') {
+        const payload = (msg as { payload?: unknown }).payload
+        void handleCanvasAgentCommand(
+          sid,
+          payload && typeof payload === 'object' ? payload as Record<string, unknown> : {},
+          (result) => sendClientMessage(ws, { type: 'canvas_agent_result', payload: result }),
+        )
         return
       }
       log.debug('WS event received:', msg.type, 'session:', sid, msg.type === 'ask_user' ? {

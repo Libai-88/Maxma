@@ -380,7 +380,7 @@ export async function handlePiCreateSession(
     // 复用本会话已解析的 ModelRuntime/凭据，不 spawn 外部进程；面板值（启用/并行数/超时）
     // 由后端在 create_session 的 `subagent` 参数里下发。
     customTools: [
-      ...buildPiCustomTools(cwd, subagentTool === undefined ? [] : [subagentTool]),
+      ...buildPiCustomTools(cwd, subagentTool === undefined ? [] : [subagentTool], { sessionId, cwd, sendEvent: io.sendEvent }),
       submitPlanTool,
     ],
     ...(systemPrompt !== undefined ? { systemPrompt } : {}),

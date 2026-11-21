@@ -24,6 +24,7 @@ import { searchMemoriesTool } from "../tools/memory";
 import { browserActTool, browserNavigateTool, browserReadTool } from "../tools/browser";
 import { registerRememberMemoryTool } from "../tools/remember-memory";
 import { readOfficeFileTool, writeOfficeFileTool } from "../tools/office";
+import { canvasApplyTool, canvasExportTool, canvasReadTool, type CanvasToolContext } from "../tools/canvas";
 
 /** OMP approval 字段 → 官方 ToolAnnotations（审批门 needsApprovalForMode 消费）。 */
 function annotationsFor(approval: MaxmaToolDescriptor["approval"]): ToolDefinition["annotations"] {
@@ -57,6 +58,8 @@ export function buildPiCustomTools(
   cwd?: string,
   /** 可选的子 Agent 工具（由 bridge 用已解析的 ModelRuntime 构造，见 kernel/subagent.ts）。 */
   extra: ToolDefinition[] = [],
+  /** 画布工具需要真实会话与事件出口；缺省时不注册，避免静态/测试环境误发命令。 */
+  canvas?: CanvasToolContext,
 ): ToolDefinition[] {
   const descriptors: MaxmaToolDescriptor[] = [
     registerRememberMemoryTool(),
@@ -72,6 +75,11 @@ export function buildPiCustomTools(
     listRulesTool(),
     ...(cwd ? [readOfficeFileTool(cwd)] : []),
     ...(cwd ? [writeOfficeFileTool(cwd)] : []),
+    ...(canvas ? [
+      canvasReadTool(canvas),
+      canvasApplyTool(canvas),
+      canvasExportTool(canvas),
+    ] : []),
   ];
   return [...descriptors.map(adaptDescriptorToPi), ...extra];
 }

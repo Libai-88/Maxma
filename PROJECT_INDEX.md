@@ -2,7 +2,7 @@
 
 > **本文件是项目唯一索引**。代码导航，不是历史记录；与代码/测试冲突时以代码为准并回来改本文。
 > **维护约定**：改动触及目录结构、入口、契约、命令、版本或文档清单时，须在同一次改动里同步更新本文。
-> 更新时间：2026-11-21（`version.py` = v2.7.0）；Workbench 2.0 P0–P3 已接入文件/编辑器/变更/命令/浏览器/任务，画布已从产物卡片钉板纠偏为 Konva 设计画板，浏览器 P1 已补齐多页签、下载落盘与网络 allowlist。
+> 更新时间：2026-11-21（`version.py` = v2.7.0）；Workbench 2.0 P0–P3 已接入文件/编辑器/变更/命令/浏览器/任务，画布已从产物卡片钉板纠偏为 Konva 设计画板并由 Agent 工具接管，浏览器 P1 已补齐多页签、下载落盘与网络 allowlist。
 
 ## 入口
 
@@ -66,7 +66,7 @@ web/src/main.tsx
 - API `src/api/index.ts`（框架无关，原样沿用）；WS 生命周期 `src/hooks/useChat.ts`；斜杠命令在 `components/chat/ChatInput.tsx`
 - zustand `src/stores/`：session / chat / memory / provider / persona / capabilities / plugin / jetHub / activity / metrics / health / onboarding / workbench / sidebar / collab / tools
 - 类型 `src/types/`（原样沿用；设计画布模型见 `types/designCanvas.ts`）
-- 组件分组：`components/chat/`（对话核心与会话 tab）、`layout/`（AppShell/Sidebar/SessionDrawer；左侧全局路由）、`workbench/`（`WorkbenchHost` + `panes.ts` 注册表（含分组、说明、图标与懒加载器）+ `paneProps.ts` 统一上下文 + `WorkbenchPaneShell` 保活/错误边界 + 推理/任务/画布/文件/变更/命令/浏览器 Pane；工作台顶部只保留单主标签 + `+`，面板库按「对话/设计/工作区/网页」分组展开；`workbench/design/` 为 Konva 设计画布：`DesignCanvasPane`、`CanvasStage`、`CanvasLayers`、`CanvasInspector`、`CanvasCardsDrawer`、`canvasModel`、`designCanvasStorage`、`useDesignCanvas`、`useDesignImages`；文件树纯函数 `fileTreeModel.ts`、任务投影 `tasksModel.ts`、CodeMirror `FileEditor.tsx`、截图标注 `ScreenshotAnnotator.tsx`）、`common/`（Markdown/贴纸/错误边界/确认框/媒体查看器）、`ui/`（shadcn + Solid Glass）、`tools/_shared/`（工具中文名）
+- 组件分组：`components/chat/`（对话核心与会话 tab）、`layout/`（AppShell/Sidebar/SessionDrawer；左侧全局路由）、`workbench/`（`WorkbenchHost` + `panes.ts` 注册表（含分组、说明、图标与懒加载器）+ `paneProps.ts` 统一上下文 + `WorkbenchPaneShell` 保活/错误边界 + 推理/任务/画布/文件/变更/命令/浏览器 Pane；工作台顶部只保留单主标签 + `+`，面板库按「对话/设计/工作区/网页」分组展开；`workbench/design/` 为 Konva 设计画布：`DesignCanvasPane`、`CanvasStage`、`CanvasLayers`、`CanvasInspector`、`CanvasCardsDrawer`、`canvasModel`、`designCanvasStorage`、`useDesignCanvas`、`useDesignImages`、`canvasAgentOperations`、`designCanvasAgentBridge`；文件树纯函数 `fileTreeModel.ts`、任务投影 `tasksModel.ts`、CodeMirror `FileEditor.tsx`、截图标注 `ScreenshotAnnotator.tsx`）、`common/`（Markdown/贴纸/错误边界/确认框/媒体查看器）、`ui/`（shadcn + Solid Glass）、`tools/_shared/`（工具中文名）
 - 页面 `src/views/`：对话（Chat / Share）、记忆角色（Memory / Soul / User）、配置（Providers / Mcp / Settings / Appearance / Privacy / MaxmaBlocker / Capabilities）、扩展（PluginList / PluginDetail / JetHub / Extension / Rules / Collab）、信息（News / Activity / Metrics / Help / Evolution）、流程（Onboarding / FeatureUnavailable / NotFound）
 - 样式：`src/solid-glass.css`（Solid Glass 主题：颜色 / 三层玻璃 / 圆角 / 动效，light/dark 两态）+ `src/index.css`（全局基座）；语义色守卫 `scripts/check-hardcoded-colors.mjs`
 - 动效：只用 Solid Glass 时长/缓动；`prefers-reduced-motion` 全局降级。Inspira 装饰件与页面转场已下线
@@ -112,7 +112,7 @@ web/src/main.tsx
 - [dev_docs/adr/](dev_docs/adr/) — 决策记录（0001 运行时状态、0003 子任务、0004 权限模式、0005 远程与沙箱、0006 Artifact）
 - [dev_docs/realtime-human-agent-collaboration.md](dev_docs/realtime-human-agent-collaboration.md)
 - [dev_docs/pi-shell-capability-plan.md](dev_docs/pi-shell-capability-plan.md) — pi 能力完整保留计划（扩展 UI / 会话树 / 设置可见性，含实测证据与执行顺序）
-- [dev_docs/workbench-2.md](dev_docs/workbench-2.md) — Workbench 2.0 P0–P3：文件/编辑器/变更/命令/浏览器/任务、并行会话、截图标注、IPC 与 Agent 安全边界、验证证据与已知边界；浏览器 P1 多页签/下载落盘/allowlist 见 §3.10，画布纠偏为 Konva 设计画板见 §3.12，验证见 §4
+- [dev_docs/workbench-2.md](dev_docs/workbench-2.md) — Workbench 2.0 P0–P3：文件/编辑器/变更/命令/浏览器/任务、并行会话、截图标注、IPC 与 Agent 安全边界、验证证据与已知边界；浏览器 P1 多页签/下载落盘/allowlist 见 §3.10，画布纠偏为 Konva 设计画板见 §3.12，Agent 工具接管画布见 §3.13，验证见 §4
 - `dev_docs/typecheck-baseline.json` — 类型债基线（`scripts/check-type-budget.mjs` 消费，只准降）
 - `dev_docs/file-size-baseline.json` — 巨型文件体量基线（`scripts/check-file-size-budget.mjs` 消费，只准降）
 - [dev_docs/adr/0007-dependency-pinning-and-prereleases.md](dev_docs/adr/0007-dependency-pinning-and-prereleases.md) — 依赖口径：`@deepseek-ai/dsh-*` 预发布钉死、`@types/bun` 对齐运行时、未用依赖清零
@@ -153,7 +153,7 @@ bash scripts/verify-all-gates.sh             # 交付前全部闸门
 | `verify-ui-session-tree.mjs` | 真实界面的会话树：菜单入口 → 树渲染 → 节点可操作 |
 | `verify-ui-settings.mjs` | 设置页三个面板的 pi 真实键可见，零 console 错误 |
 | `verify-ui-thinking-separation.mjs` | 思考内容不混进回复正文（流式过程中采样） |
-| `verify-ui-workbench.mjs` | Workbench P0–P3：文件树/搜索/保存、变更/diff/暂存/提交、命令运行器、任务面板、内置浏览器与 125%/150% bounds、Agent 隐藏 view/snapshot/截图、截图标注与元素拾取、并行会话 tab、调宽/最大化、768 窄窗、浅色、Web 降级；设计画布空板/文字/像素哈希/撤销重做/矩形/拖入图片/图层/A4/导出回对话/刷新持久化；23 张截图 `dev_docs/visual/workbench-*.png` |
+| `verify-ui-workbench.mjs` | Workbench P0–P3：文件树/搜索/保存、变更/diff/暂存/提交、命令运行器、任务面板、内置浏览器与 125%/150% bounds、Agent 隐藏 view/snapshot/截图、截图标注与元素拾取、并行会话 tab、调宽/最大化、768 窄窗、浅色、Web 降级；设计画布空板/文字/像素哈希/撤销重做/矩形/拖入图片/图层/A4/导出回对话/刷新持久化、Agent 批量构图/读回/批量撤销/重做/导出进对话；24 张截图 `dev_docs/visual/workbench-*.png` |
 | `verify-desktop-render.ps1` | 桌面包渲染层 |
 | `_ui-chat-driver.cjs` | Electron 驱动真实界面的主进程，被 `verify-ui-chat-roundtrip.mjs` 启动，**勿单独跑** |
 | `_ui-capabilities-driver.cjs` | 同上，被 `verify-ui-capabilities.mjs` 启动 |

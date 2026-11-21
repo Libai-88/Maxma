@@ -21,6 +21,16 @@ export interface ArtifactAction {
   style: 'primary' | 'secondary' | 'danger'
 }
 
+/** 画布 Agent 命令的执行回执；request_id 对应 canvas_command。 */
+export interface CanvasAgentResultMessage {
+  type: 'canvas_agent_result'
+  payload: {
+    request_id: string
+    result?: unknown
+    error?: string
+  }
+}
+
 /** A server-issued, schema-validated card. It never contains HTML or scripts. */
 export interface InteractiveArtifact {
   version: 1

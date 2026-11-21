@@ -30,6 +30,9 @@ export const TOOL_DISPLAY_NAMES: Record<string, string> = {
   list_rules: '列出规则',
   read_office_file: '读取 Office 文件',
   write_office_file: '写入 Office 文件',
+  canvas_read: '读取设计画布',
+  canvas_apply: '编辑设计画布',
+  canvas_export: '导出设计画布',
   // ── kernel 扩展点 ──
   submit_plan: '提交计划',
   browser_navigate: '浏览器打开页面',

@@ -39,6 +39,11 @@ export interface DesignCanvasController {
   removeElement: (id: string) => void
   duplicateElement: (id: string) => void
   reorder: (id: string, direction: 'up' | 'down') => void
+  /** Agent 批量操作入口：一次 recipe 只压一条撤销记录。 */
+  commitProject: (
+    recipe: (current: DesignProject) => DesignProject | null,
+    options?: { history?: boolean },
+  ) => DesignProject | null
   beginHistory: () => void
   undo: () => void
   redo: () => void
@@ -140,6 +145,11 @@ export function useDesignCanvas(sessionId: string | undefined): DesignCanvasCont
       redo: [],
     }))
   }, [])
+
+  const commitProject = useCallback((
+    recipe: (current: DesignProject) => DesignProject | null,
+    options?: { history?: boolean },
+  ) => mutate(recipe, options?.history !== false), [mutate])
 
   const select = useCallback((id: string | null) => {
     setSelectedId(id)
@@ -319,6 +329,7 @@ export function useDesignCanvas(sessionId: string | undefined): DesignCanvasCont
     removeElement,
     duplicateElement,
     reorder,
+    commitProject,
     beginHistory,
     undo,
     redo,

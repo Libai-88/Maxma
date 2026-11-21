@@ -19,15 +19,20 @@
 
 ## 2. 客户端 → 服务端
 
-入站白名单的**权威是 `chat-ws.ts` 的 `CLIENT_MESSAGE_TYPES`**（16 项），分发在 `handleChatMessage`：
+入站白名单的**权威定义在 `bun-backend/src/routes/client-message-types.ts` 的 `CLIENT_MESSAGE_TYPES`（17 项）**，`chat-ws.ts` 只再导出；分发在 `handleChatMessage`：
 
-`ping` · `chat` · `cancel` · `user_response` · `update_auto_approve` · `plan_response` · `set_plan_mode` · `checkpoint_action` · `goal_action` · `artifact_action` · `steer` · `follow_up` · `task_review` · `task_brief_answer` · `task_brief_execute` · `task_brief_cancel`
+`ping` · `chat` · `cancel` · `user_response` · `update_auto_approve` · `plan_response` · `set_plan_mode` · `checkpoint_action` · `goal_action` · `artifact_action` · `steer` · `follow_up` · `task_review` · `task_brief_answer` · `task_brief_execute` · `task_brief_cancel` · `canvas_agent_result`
 
 要点：`chat` 携带 `message, turn_id, client_msg_id, private, auto_approve, provider_id, model_name, temperature, max_tokens, thinking, task_brief?, think_path_id?`；`client_msg_id` 做幂等去重；同会话单连接持有 turn（其他连接发 `chat` → `BUSY` error）；断开不销毁会话。
 
-前端 `web/src/types/index.ts` 的 `ClientMessage` 联合现已**覆盖这 16 项**（此前只覆盖 6 项，
-其余 10 项以无类型字面量发出），发送统一经 `useChat.ts` 的 `sendClientMessage` 收口点；
-前端登记由 `SERVER_EVENT_HANDLER_TYPES`（`Record<ServerEvent['type'], true>`）在 **编译期** 强制：向 `ServerEvent` 联合加成员而不登记，`tsc` 报 missing property。
+`canvas_agent_result` 是画布工具请求的**控制面回执**，不是聊天事件：渲染端执行完
+`canvas_command` 后发 `{ request_id, result? , error? }`，`chat-ws` 直接交给 `canvasCommandBroker`
+唤醒工具 Promise，不广播、不进入回合状态机。它与 `canvas_command` 一起由
+`request_id + sessionId` 双重匹配；请求超时或有别的会话伪造回执都不会串改。
+
+前端 `web/src/types/index.ts` 的 `ClientMessage` 联合现已**覆盖这 17 项**（此前只覆盖 6 项，
+其余以无类型字面量发出），发送统一经 `useChat.ts` 的 `sendClientMessage` 收口点；
+前端登记由 `SERVER_EVENT_HANDLER_TYPES`（`Record<ServerEvent['type'], true>`）在 **编译期** 强制：向 `ServerEvent` 联合加成员而不登记，`tsc` 报 missing property。`canvas_command` / `canvas_agent_result` 是控制面帧，**有意不进** `ServerEvent` 联合。
 
 ## 3. 服务端 → 客户端
 
@@ -68,6 +73,7 @@
 | `action_failed` | `{ action, message }` 会话级动作（`user_response` / `update_auto_approve` / `plan_action` / `set_plan_mode` / `checkpoint_action`）的 RPC **失败**回执，前端 toast 呈现（ACTION-FAIL-001）。成功路径各有回执（`permission_mode_updated` / `goal_updated` / `artifact_result`），不重复广播；`cancel` 类有意不走（本地记录即真相） |
 | `task_review_update` | `{ status: "available"\|"accepted"\|"revising", turn_id, answer?, message? }` 回合验收状态 |
 | `task_brief_update` | `{ turn_id, status: "thinking"\|"clarify"\|"ready"\|"fallback", questions?, execution_prompt?, error? }` 需求澄清状态机 |
+| `canvas_command` | `{ request_id, action: "read"\|"apply"\|"export", args }` 画布工具 → 当前会话渲染端。由 `chat-ws` 的 default 分支透传；不属于引擎事件表，也不进聊天回合。执行结果走入站 `canvas_agent_result` |
 
 登记归属分两张表，由 `bun-sidecar/tests/engine-boundary.test.ts` 与全部后端发射点**双向**对账
 （后端发得出却没任何清单认领 → 红；清单登记了却查不到发射点 → 也红；同一条事件既被说成
@@ -80,6 +86,8 @@
 
 - `BACKEND_SYNTHESIZED_EVENTS`：`hello` / `pong` / `artifact` / `artifact_result` /
   `collaboration_update` / `action_failed` / `memory_*` / `task_brief_update` / `task_review_update`。
+  这张表要求每条都能在 `bun-backend/src` 查到字面发射点；`canvas_command` 由 kernel 工具产出、
+  后端 default 分支按 `event.type` 透传（没有字面量），因此**有意不登记**，避免制造永远命不中的幻影条目。
 - `MAXMA_ENGINE_WS_EVENTS`（本节只列 §3.1 之外的补充说明）：kernel 产出的事件一律归这张表，
   不许为了少写一条对账而塞进后端合成表——`permission_mode_updated` 就是按这条登记的
   （生产者在 `bridge-pi.ts`，REST/WS 层只是转发）。

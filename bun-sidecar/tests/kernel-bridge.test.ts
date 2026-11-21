@@ -566,11 +566,18 @@ describe("kernel: pi RPC bridge", () => {
     const prevRoot = process.env.MAXMA_PROJECT_ROOT;
     process.env.MAXMA_PROJECT_ROOT = dir;
     try {
-      // bridge 层（handlePiCreateSession）注入 customTools: buildPiCustomTools()；
+      // bridge 层（handlePiCreateSession）注入 customTools: buildPiCustomTools(cwd, …, canvasContext)；
       // 此处直接等价传入以验证 kernel 装配
-      const session = await createMaxmaSession({ inMemory: true, cwd: import.meta.dir, customTools: buildPiCustomTools() });
+      const session = await createMaxmaSession({
+        inMemory: true,
+        cwd: import.meta.dir,
+        customTools: buildPiCustomTools(undefined, [], {
+          sessionId: "canvas-test-session",
+          sendEvent: () => {},
+        }),
+      });
       const names = session.getActiveToolNames();
-      for (const t of ["remember_memory", "search_memories", "get_sticker", "list_rules", "browser_navigate", "browser_read", "browser_act"]) {
+      for (const t of ["remember_memory", "search_memories", "get_sticker", "list_rules", "browser_navigate", "browser_read", "browser_act", "canvas_read", "canvas_apply", "canvas_export"]) {
         expect(names).toContain(t);
       }
       session.dispose();

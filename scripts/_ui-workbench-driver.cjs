@@ -635,6 +635,77 @@ app.whenReady().then(async () => {
     await sleep(500);
     result.screenshots.designA4 = await captureWindow("workbench-design-canvas-a4.png");
 
+    // ── Agent 接管：同一会话的全局桥直接改真实画布，整批只压一条撤销 ─────
+    await waitFor(win, `Boolean(window.__maxmaCanvasAgent)`, "画布 Agent 桥注册");
+    const agentImageDataUrl = await js(win, `(() => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 320;
+      canvas.height = 180;
+      const context = canvas.getContext("2d");
+      context.fillStyle = "#2F5D7C";
+      context.fillRect(0, 0, 320, 180);
+      context.fillStyle = "#F7F3EA";
+      context.font = "600 28px sans-serif";
+      context.fillText("Agent 素材", 24, 100);
+      return canvas.toDataURL("image/png");
+    })()`);
+    const agentApply = await js(win, `window.__maxmaCanvasAgent.execute('apply', ${JSON.stringify({
+      operations: [
+        { op: "rename", name: "Agent 接管画布" },
+        { op: "preset", preset: "社媒方图" },
+        { op: "clear" },
+        {
+          op: "add_text",
+          text: "Maxma 自己接管画布",
+          x: 80, y: 120, width: 920, height: 260,
+          name: "Agent 标题", fontSize: 72, fontWeight: 700, color: "#16181D",
+        },
+        {
+          op: "add_shape", shape: "rect",
+          x: 80, y: 520, width: 540, height: 260,
+          name: "Agent 色块", fill: "#C96F4A", radius: 28,
+        },
+        {
+          op: "add_image",
+          dataUrl: agentImageDataUrl,
+          fileName: "agent-material.png",
+          name: "Agent 素材",
+          x: 660, y: 520, width: 340, height: 260,
+          fit: "cover",
+        },
+      ],
+    })})`);
+    if (!agentApply?.ok) throw new Error(`Agent 画布编辑失败：${JSON.stringify(agentApply)}`);
+    await waitFor(win, `document.querySelector('[data-design-canvas="true"]')?.dataset.projectName === "Agent 接管画布"`, "Agent 改项目名");
+    await waitFor(win, `Number(document.querySelector('[data-design-canvas="true"]')?.dataset.elementCount || 0) === 3`, "Agent 重建三个元素");
+    const agentRead = await js(win, `window.__maxmaCanvasAgent.execute('read')`);
+    if (!agentRead?.ok || agentRead.result?.elementCount !== 3) {
+      throw new Error(`Agent 读画布不符：${JSON.stringify(agentRead)}`);
+    }
+    if (!String(agentRead.result?.elements?.[0]?.text ?? "").includes("Maxma 自己接管画布")) {
+      throw new Error(`Agent 读不到新建文字：${JSON.stringify(agentRead.result?.elements?.[0])}`);
+    }
+    if (agentRead.result?.elements?.[2]?.type !== "image" || !agentRead.result?.elements?.[2]?.assetId) {
+      throw new Error(`Agent 图片没有落成画布元素：${JSON.stringify(agentRead.result?.elements?.[2])}`);
+    }
+    result.screenshots.designAgent = await captureWindow("workbench-design-canvas-agent.png");
+
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "撤销"`);
+    await waitFor(win, `Number(document.querySelector('[data-design-canvas="true"]')?.dataset.artboardHeight || 0) === 1754 && Number(document.querySelector('[data-design-canvas="true"]')?.dataset.elementCount || 0) === 3`, "Agent 整批操作只回退一层");
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "重做"`);
+    await waitFor(win, `document.querySelector('[data-design-canvas="true"]')?.dataset.projectName === "Agent 接管画布" && Number(document.querySelector('[data-design-canvas="true"]')?.dataset.elementCount || 0) === 3`, "重做恢复 Agent 构图");
+
+    const agentExport = await js(win, `window.__maxmaCanvasAgent.execute('export', { toChat: true })`);
+    if (!agentExport?.ok || agentExport.result?.queuedForChat !== true) {
+      throw new Error(`Agent 导出失败：${JSON.stringify({ ok: agentExport?.ok, error: agentExport?.error })}`);
+    }
+    await waitText(win, "Agent接管画布.png", "Agent 导出图进入对话输入框", 60_000);
+    await waitFor(win, `Boolean(document.querySelector('[data-design-canvas="true"]'))`, "Agent 导出后画布仍在");
+
+    // 回到手动路径的 A4 基线，后续“发到对话”与刷新持久化断言保持不变。
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "撤销"`);
+    await waitFor(win, `document.querySelector('[data-design-canvas="true"]')?.dataset.projectName === "E2E 设计画布" && Number(document.querySelector('[data-design-canvas="true"]')?.dataset.artboardHeight || 0) === 1754 && Number(document.querySelector('[data-design-canvas="true"]')?.dataset.elementCount || 0) === 3`, "回到 A4 手动基线");
+
     await clickButton(win, `(button) => button.getAttribute("aria-label") === "发到对话"`);
     await waitText(win, "已发到对话输入框", "画布导出并发回对话", 60_000);
     await waitText(win, "截图已加入对话", "对话输入框收到画布图片", 60_000);
@@ -645,6 +716,14 @@ app.whenReady().then(async () => {
       shape: { count: 2, layers: layers.buttons, text: layers.text.slice(0, 200) },
       image: { count: 3, layerPresent: layers.text.includes("图片") },
       presetA4: { width: a4.artboardWidth, height: a4.artboardHeight, count: a4.count },
+      agent: {
+        applied: agentApply.ok,
+        readCount: agentRead.result?.elementCount,
+        exported: agentExport.result?.name,
+        queuedForChat: agentExport.result?.queuedForChat === true,
+        batchUndo: true,
+        redo: true,
+      },
       exportedToChat: true,
     };
 

@@ -46,20 +46,19 @@ function resizedDataUrl(image: HTMLImageElement, mime: string): string {
   return webp.startsWith('data:image/webp') ? webp : canvas.toDataURL('image/png')
 }
 
-/** 把用户选择的图片转成可持久化的资源；太大时缩到 2400px。 */
-export async function createDesignAsset(file: File): Promise<DesignAsset | null> {
-  if (!file.type.startsWith('image/') || file.size > MAX_SOURCE_BYTES) return null
-  const source = await readAsDataUrl(file)
+/** 把已解码的 data URL 归一化、缩放并写入资源库；Agent 导入与用户选图共用。 */
+async function persistDesignAsset(source: string, name: string, mimeHint: string): Promise<DesignAsset | null> {
   if (!source.startsWith('data:image/')) return null
+  if (source.length > MAX_SOURCE_BYTES * 1.4) return null
   const image = await loadHtmlImage(source)
   const width = image.naturalWidth || image.width
   const height = image.naturalHeight || image.height
   if (!width || !height) return null
-  const dataUrl = resizedDataUrl(image, file.type)
+  const dataUrl = resizedDataUrl(image, mimeHint)
   const finalImage = dataUrl === source ? image : await loadHtmlImage(dataUrl)
   const asset: DesignAsset = {
     id: generateUUID(),
-    name: file.name || '图片',
+    name: name || '图片',
     mime: dataUrl.slice(5, dataUrl.indexOf(';')),
     width: finalImage.naturalWidth || width,
     height: finalImage.naturalHeight || height,
@@ -70,6 +69,22 @@ export async function createDesignAsset(file: File): Promise<DesignAsset | null>
   void stored
   imageCache.set(asset.id, finalImage)
   return asset
+}
+
+/** 把用户选择的图片转成可持久化的资源；太大时缩到 2400px。 */
+export async function createDesignAsset(file: File): Promise<DesignAsset | null> {
+  if (!file.type.startsWith('image/') || file.size > MAX_SOURCE_BYTES) return null
+  const source = await readAsDataUrl(file)
+  return persistDesignAsset(source, file.name, file.type)
+}
+
+/** Agent 从本地路径导入时，由工具侧读成 data URL；这里只负责落库与缩放。 */
+export async function createDesignAssetFromDataUrl(
+  source: string,
+  name: string,
+  mimeHint = 'image/png',
+): Promise<DesignAsset | null> {
+  return persistDesignAsset(source, name, mimeHint)
 }
 
 async function ensureCachedImage(id: string): Promise<HTMLImageElement | null> {

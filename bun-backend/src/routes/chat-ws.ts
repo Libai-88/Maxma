@@ -34,6 +34,7 @@ import type { ServerWebSocket } from "bun";
 import * as crypto from "node:crypto";
 
 import type { PiPendingPlan, PiSessionRecord } from "../../../bun-sidecar/src/kernel/bridge-pi";
+import { canvasCommandBroker } from "../../../bun-sidecar/src/tools/canvas-broker";
 import { resolvePiModel } from "../../../bun-sidecar/src/kernel/model";
 import { createTaskBrief, type TaskBriefResult } from "../plugins/task-brief";
 import { getEvolutionContext, learnFromUserMessage } from "../evolution-ledger";
@@ -45,29 +46,10 @@ import { getMetrics } from "../metrics";
 import { recordLlmUsageCall, type LlmCacheStatus } from "../llm-usage-ledger";
 import { getErrorCollector } from "../error-collector";
 import { newTurnId, calculateContextUsage } from "./chat-turns";
+import { CLIENT_MESSAGE_TYPES } from "./client-message-types";
 import { FILE_WRITING_TOOLS, extractFilePathFromOutput, buildArtifactPayload } from "./chat-artifacts";
 
-/** client → server 消息类型白名单（api/ws_protocol.py WsMessageType）。 */
-export const CLIENT_MESSAGE_TYPES = new Set([
-  "ping",
-  "chat",
-  "cancel",
-  "user_response",
-  // EXT-UI-001：扩展对话框应答（select/confirm/input/editor）
-  "extension_ui_response",
-  "plan_response",
-  "update_auto_approve",
-  "set_plan_mode",
-  "checkpoint_action",
-  "goal_action",
-  "artifact_action",
-  "task_brief_answer",
-  "task_brief_execute",
-  "task_brief_cancel",
-  "steer",
-  "follow_up",
-  "task_review",
-]);
+export { CLIENT_MESSAGE_TYPES };
 
 /** PERF-TOOL-OUTPUT-001：工具输出/错误截断（与 Python 版同阈值）。 */
 const MAX_TOOL_OUTPUT_LEN = 100_000;
@@ -1179,6 +1161,12 @@ export function handleChatMessage(hub: ChatWsHub, ws: ServerWebSocket<WsData>, r
         }
       })
       .catch(() => {});
+    return;
+  }
+
+  // ── canvas_agent_result（回执唤醒 canvas 工具，不进聊天事件流）──
+  if (msgType === "canvas_agent_result") {
+    canvasCommandBroker.resolve(sessionId, payload);
     return;
   }
 

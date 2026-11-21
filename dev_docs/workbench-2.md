@@ -306,8 +306,8 @@ HTTP(S) 主请求和子资源，记录最近 20 条；顶层导航先做 `assert
 - 数据层：`types/designCanvas.ts`、`design/canvasModel.ts`（预设、色板、归一化、吸附、图片 cover/contain 几何、
   层级、字体栈、`computeFitView`）、`design/designCanvasStorage.ts`（IndexedDB `maxma-design-canvas` 的
   `projects`/`assets` 两 store，localStorage 回退）、`design/useDesignCanvas.ts`（按会话加载、30 步撤销、
-  420ms 防抖落盘、元素增删改/复制/层级/图片替换）、`design/useDesignImages.ts`（20 MiB 上限、最长边 2400、
-  WebP 0.9、按 assetId 懒加载）。项目只引用 `assetId`，图片二进制不与元素混存。
+  420ms 防抖落盘、元素增删改/复制/层级/图片替换、`commitProject` 批量单事务）、`design/useDesignImages.ts`（20 MiB 上限、最长边 2400、
+  WebP 0.9、按 assetId 懒加载、`createDesignAssetFromDataUrl` 供 Agent 路径入图）。项目只引用 `assetId`，图片二进制不与元素混存。
 - 面板分组：画布从「对话」移到新「设计」组，顺序为 `reasoning,tasks,canvas,files,changes,commands,browser`；
   纯 Web 为 `reasoning,tasks,canvas`。旧资料卡片仍可从画布内抽屉访问，不丢历史产物。
 
@@ -321,8 +321,46 @@ consoleErrors=[]`。截图：`workbench-design-canvas-blank.png`、`workbench-de
 `workbench-design-canvas-light.png`。
 
 **尚未做（不是本轮完成项）。** 图片 `contain` 几何已有纯函数与测试，但渲染/属性面板只暴露 cover；
-画布暂无 AI 生成或生成式改图入口，本轮是本地优先的设计画板；右键菜单、多指手势、文字自动增高未做。
+画布暂无生成式改图入口，本轮是本地优先的设计画板；右键菜单、多指手势、文字自动增高未做。
 窄工作台里 A4 初始 fit 约 19%–21%，需要用户用宿主最大化或放大查看。
+
+### 3.13 Agent 接管画布：工具 → WS → 真实 React 画布（2026-11-21）
+
+**要求。** 内置功能必须由 Maxma 自己操作，不能出现“Maxma 在对话里说、用户同时在右侧手动改”的割裂。
+浏览器面板早已有 `browser_navigate/browser_read/browser_act`，设计画布同样要长出 Agent 工具，而不是只做 UI。
+
+**链路。** `canvas_read` / `canvas_apply` / `canvas_export`（`bun-sidecar/src/tools/canvas.ts`）经
+`buildPiCustomTools` 注入会话；工具不直接改 React/IndexedDB，而是由 `canvasCommandBroker`
+发出 `canvas_command {request_id,action,args}`，后端 `chat-ws` 透传到当前会话，前端
+`designCanvasAgentBridge` 在真实 `DesignCanvasPane` 控制器上执行，再以 `canvas_agent_result`
+回传唤醒工具 Promise。
+
+- `canvas_read`：返回画板尺寸/背景、元素 id/类型/坐标/尺寸/文字/颜色/素材等摘要，改之前先拿 id。
+- `canvas_apply`：一次最多 60 个操作（rename/preset/artboard/add_text/add_shape/add_image/update/remove/
+  duplicate/reorder/select/clear），整批只产生**一条**撤销记录。`add_image` 接受本地 `imagePath`，
+  工具侧校验 png/jpg/jpeg/webp/gif、20 MB 上限，读成 data URL；渲染端经 `createDesignAssetFromDataUrl`
+  缩放/落库后再引用 `assetId`。
+- `canvas_export`：按画板尺寸导出 PNG，默认落盘到工作区 `canvas-exports/` 并把图片返回给模型查看；
+  `toChat:true` 时走现有 `maxma:add-image-ref` 进入当前会话输入框（仍需用户按发送）。
+- 安全/一致性：命令只允许当前会话；`request_id + sessionId` 双重匹配；多窗口用 Web Locks 选一个执行者；
+  画布未打开时自动打开「设计」页并等待 Pane 注册；前端 6s 未就绪、工具 20s 未回执都给可读错误。
+- 会话装配：`handlePiCreateSession` 把 `sessionId`、`cwd`、`io.sendEvent` 作为画布上下文传给
+  `buildPiCustomTools`；`MAXMA_CUSTOM_TOOLS` 与前端 `TOOL_DISPLAY_NAMES` 同步登记三个工具，
+  `config/personas/AGENTS.md` 明确要求“做视觉稿时先读再整批写，不要让用户手动点”。
+
+**真实 UI 证据。** 在 A4 3 元素基线上，`window.__maxmaCanvasAgent.execute('apply', …)` 一次提交
+改名、切回社媒方图、清板、加文字、加矩形、加图片六步：项目名变「Agent 接管画布」、1080×1080、
+3 元素，图片有真实 `assetId`；读回元素文字正确；导出 `Agent接管画布.png` 并进入对话输入框；
+撤销**一层**回到 A4/3 元素、重做回到 Agent 构图。截图 `workbench-design-canvas-agent.png`。
+整轮 `stage=done / ok=true / consoleErrors=[]`。
+
+**单测。** `web/tests/designCanvasAgent.test.ts` 5 例（批量顺序/选中、图片等比、update/remove/reorder、
+坐标夹紧与非法操作、读摘要截断）；`bun-sidecar/tests/canvas-tools.test.ts` 7 例（broker 回执/跨会话/
+超时/取消、工具装配、read 包装、export 落盘、本地图片转 data URL）；`bun-backend/tests/canvas-ws.test.ts`
+2 例（回执白名单与兑现、伪 session 不唤醒）。
+
+**尚未做。** 画布命令没有“生成式改图”或自然语言排版模型；导出到对话仍是加入输入框，不自动发送；
+工具中断/画布 Pane 崩溃时只报超时或就绪失败，没有重试队列。
 
 ## 4. 验收证据
 
@@ -330,12 +368,12 @@ consoleErrors=[]`。截图：`workbench-design-canvas-blank.png`、`workbench-de
 
 | 项 | 结果 |
 | --- | --- |
-| 后端全量 | `365 pass / 0 fail`（含 `browser-policy.test.ts` 5 tests / 36 expect） |
-| sidecar 全量 | `234 pass / 0 fail`，25 文件，1038 expect，17.74s |
-| 前端单测 | `88 pass / 0 fail`，13 文件，928 expect；其中设计画布纯模型 13 例（预设、归一化、吸附、层级、cover/contain、fit、缩放） |
+| 后端全量 | `367 pass / 0 fail`（新增 `canvas-ws.test.ts` 2 例：回执兑现、跨会话不唤醒） |
+| sidecar 全量 | `241 pass / 0 fail`，26 文件，1068 expect，15.27s（新增 `canvas-tools.test.ts` 7 例） |
+| 前端单测 | `93 pass / 0 fail`，14 文件，954 expect；其中设计画布纯模型 13 例（预设、归一化、吸附、层级、cover/contain、fit、缩放），Agent 操作模型 5 例 |
 | 前端 typecheck | 通过 |
-| ESLint | 通过，0 error（131 个目标文件） |
-| 前端构建 | 通过，11.18s；ChatView 224.78 kB；设计画布独立 chunk `CanvasPane-*.js 404.95 kB`（gzip 124.44 kB，Konva 体积）；FileEditor 仍为 662.32 kB 懒加载 chunk |
+| ESLint | 通过，0 error（135 个目标文件） |
+| 前端构建 | 通过，16.39s；ChatView 224.88 kB；设计画布独立 chunk `CanvasPane-*.js 395.55 kB`（gzip 121.87 kB，Konva 体积）；FileEditor 仍为 662.32 kB 懒加载 chunk |
 | 颜色/间距/字号/对比度/无紫/玻璃层数守卫 | 全部通过 |
 | 文件体量棘轮 | 通过；贴纸 `service.ts` 由 854 行拆为 748 行 + `legacy.ts`，类型债归零 |
 | 类型债闸门 | sidecar 0、backend 0 |
@@ -377,6 +415,9 @@ consoleErrors=[]`。截图：`workbench-design-canvas-blank.png`、`workbench-de
 - 设计画布：空板 → 新建文字 → 改文字并验证画板像素哈希变化 → 属性改 Y/X → 撤销/重做 → 拖框矩形 →
   拖入图片素材 → 图层 3 项 → 切 A4 保留 3 元素 → 导出并发回对话 `E2E设计画布.png`；
   浅色 reload 后从 IndexedDB 恢复项目名、A4 尺寸与 3 元素。
+- Agent 接管画布：`window.__maxmaCanvasAgent.execute('apply', …)` 一次提交 6 个操作（改名/切方图/清板/
+  文字/矩形/本地图片 data URL），得到 1080×1080、3 元素、图片有 `assetId`；`read` 回读文字正确；
+  `export toChat` 导出 `Agent接管画布.png` 进入对话输入框；撤销一层回 A4/3 元素，重做回 Agent 构图。
 - 浅色 `flexoki-light` 恢复；Web 模式 tab 为 `推理 / 任务 / 画布`；
 - `consoleErrors=[]`；2 条 `ResizeObserver loop completed with undelivered notifications` 记为良性忽略警告。
 
@@ -403,6 +444,7 @@ consoleErrors=[]`。截图：`workbench-design-canvas-blank.png`、`workbench-de
 - `dev_docs/visual/workbench-design-canvas.png`
 - `dev_docs/visual/workbench-design-canvas-editor.png`
 - `dev_docs/visual/workbench-design-canvas-a4.png`
+- `dev_docs/visual/workbench-design-canvas-agent.png`
 - `dev_docs/visual/workbench-design-canvas-light.png`
 
 ### 4.3 便携包

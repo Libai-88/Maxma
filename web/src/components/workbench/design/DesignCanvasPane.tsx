@@ -47,6 +47,7 @@ import {
   findArtboardPreset,
 } from './canvasModel'
 import { useDesignCanvas } from './useDesignCanvas'
+import { registerDesignCanvasAgent } from './designCanvasAgentBridge'
 import { createDesignAsset, useDesignImages } from './useDesignImages'
 
 interface ToolMeta {
@@ -132,6 +133,8 @@ export function DesignCanvasPane({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const replaceTargetRef = useRef<string | null>(null)
   const fittedRef = useRef('')
+  const canvasRef = useRef(canvas)
+  canvasRef.current = canvas
 
   const [tool, setTool] = useState<CanvasTool>('select')
   const [view, setView] = useState<CanvasView>({ x: 0, y: 0, scale: 1 })
@@ -148,6 +151,17 @@ export function DesignCanvasPane({
     : null
   const preset = project ? findArtboardPreset(project.artboard.width, project.artboard.height) : null
   const canvasReady = project !== null
+
+  useEffect(() => {
+    if (!canvasReady) return
+    return registerDesignCanvasAgent(sessionId ?? 'global', {
+      getProject: () => canvasRef.current.project,
+      getSelectedId: () => canvasRef.current.selectedId,
+      commitProject: (recipe) => canvasRef.current.commitProject(recipe),
+      select: (id) => canvasRef.current.select(id),
+      exportPng: () => stageRef.current?.exportPng() ?? Promise.reject(new Error('画布尚未就绪')),
+    })
+  }, [canvasReady, sessionId])
 
   useEffect(() => {
     setNameDraft(project?.name ?? '')
