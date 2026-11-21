@@ -23,6 +23,9 @@ const AGENT_ACTIONS = new Set([
   "forward",
   "act",
   "console",
+  "tabs",
+  "close_tab",
+  "downloads",
 ]);
 
 function writeConfig(configPath, payload) {

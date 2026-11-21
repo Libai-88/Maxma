@@ -22,6 +22,7 @@ const backendExe = path.join(bundleDir, "bun.exe");
 const backendScript = path.join(bundleDir, "server.js");
 const backendLogDir = path.join(dataDir, "logs");
 const piAgentDir = path.join(dataDir, "pi");
+const downloadsDir = path.join(dataDir, "downloads");
 const runtimeDirs = [
   dataDir,
   path.join(dataDir, "electron"),
@@ -30,6 +31,7 @@ const runtimeDirs = [
   path.join(dataDir, "temp"),
   piAgentDir,
   backendLogDir,
+  downloadsDir,
 ];
 for (const directory of runtimeDirs) fs.mkdirSync(directory, { recursive: true });
 
@@ -241,6 +243,8 @@ function registerDesktopIpc() {
     getWindow: () => mainWindow,
     isTrustedSender,
     openExternal: openExternalUrl,
+    downloadsDir,
+    policyPath: path.join(dataDir, "api", "data", "browser-policy.json"),
   });
   browserController.registerIpc(ipcMain);
 }

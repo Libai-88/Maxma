@@ -569,7 +569,16 @@ function createCdpBrowser(getView) {
       nativeVirtualKeyCode: definition.nativeVirtualKeyCode,
     };
     if (definition.text) {
-      await send("Input.dispatchKeyEvent", { type: "keyDown", ...base, text: definition.text, unmodifiedText: definition.text });
+      // Chromium 的 CDP 键盘序列：rawKeyDown 负责派发 keydown，char 负责
+      // 文本/回车字符。直接用 keyDown 带 text 在部分 Electron 版本会跳过
+      // 页面 keydown 监听，导致 Enter 看似发送成功却没有触发页面事件。
+      await send("Input.dispatchKeyEvent", { type: "rawKeyDown", ...base });
+      await send("Input.dispatchKeyEvent", {
+        type: "char",
+        ...base,
+        text: definition.text,
+        unmodifiedText: definition.text,
+      });
     } else {
       await send("Input.dispatchKeyEvent", { type: "rawKeyDown", ...base });
     }
@@ -578,13 +587,27 @@ function createCdpBrowser(getView) {
   }
 
   async function press(args) {
+    const { contents } = currentView();
+    // 先把页面置于调试器前台并重新聚焦，避免宿主窗口/React 地址栏在
+    // 页签切换后短暂抢走焦点，导致键盘事件被 Chromium 丢弃。
+    try { await send("Page.bringToFront"); } catch { /* older target */ }
+    try { contents.focus(); } catch { /* closing */ }
+    await new Promise((resolve) => setTimeout(resolve, 30));
     if (args.ref || args.selector) {
       const target = await resolveTarget(args);
       await focus(target.objectId);
     }
     const chord = typeof args.key === "string" ? args.key.slice(0, 100) : "";
     if (!chord) throw new Error("press 需要 key，例如 Enter、Tab、Control+A");
-    return dispatchKey(chord);
+    if (chord === "Enter") {
+      // WebContentsView 的 CDP 键盘事件在窗口/视图焦点切换瞬间可能被
+      // Chromium 丢掉；Enter 是表单提交类操作，走 Electron 原生输入更稳。
+      contents.sendInputEvent({ type: "keyDown", keyCode: "Return" });
+      contents.sendInputEvent({ type: "keyUp", keyCode: "Return" });
+      return { acted: "press", key: chord, transport: "sendInputEvent", webContentsFocused: contents.isFocused() };
+    }
+    const result = await dispatchKey(chord);
+    return { ...result, transport: "cdp", webContentsFocused: contents.isFocused() };
   }
 
   async function fill(args) {

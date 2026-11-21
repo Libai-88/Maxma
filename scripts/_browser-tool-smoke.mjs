@@ -5,6 +5,7 @@
  * browser-agent.json 所在的数据目录。输出最后一行是给驱动解析的 JSON。
  */
 
+import fs from "node:fs";
 import {
   browserActTool,
   browserNavigateTool,
@@ -13,8 +14,10 @@ import {
 
 const url = process.argv[2];
 const uploadPath = process.argv[3];
+const downloadUrl = process.argv[4];
 if (!url) throw new Error("缺少本地交互页 URL");
 if (!uploadPath) throw new Error("缺少上传验收文件路径");
+if (!downloadUrl) throw new Error("缺少下载验收 URL");
 
 function textOf(result) {
   const block = (result?.content ?? []).find((item) => item.type === "text");
@@ -57,9 +60,22 @@ async function main() {
   let page = await snapshot("e2e-snap-2");
   if (!page.text.includes("Maxma")) throw new Error(`输入后正文没有 Maxma：${page.text}`);
 
-  await call(browserActTool(), "e2e-enter", { action: "press", ref: name.ref, key: "Enter" });
+  await call(browserActTool(), "e2e-enter-diag", {
+    action: "evaluate",
+    expression: "(() => { window.__maxmaKeys = []; document.addEventListener('keydown', (event) => window.__maxmaKeys.push({ key: event.key, target: event.target && event.target.id }), true); return true; })()",
+  });
+  const enterPress = await call(browserActTool(), "e2e-enter", { action: "press", ref: name.ref, key: "Enter" });
+  const enterPressJson = jsonOf(enterPress, "enter press");
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  const enterDiag = jsonOf(
+    await call(browserActTool(), "e2e-enter-diag-read", {
+      action: "evaluate",
+      expression: "({ active: document.activeElement && document.activeElement.id, focused: document.hasFocus(), keys: window.__maxmaKeys || [] })",
+    }),
+    "enter diag",
+  ).value;
   page = await snapshot("e2e-snap-3");
-  if (!page.text.includes("Enter Maxma")) throw new Error(`Enter 没有触发页面事件：${page.text}`);
+  if (!page.text.includes("Enter Maxma")) throw new Error(`Enter 没有触发页面事件：${JSON.stringify(enterDiag)}；press=${JSON.stringify({ acted: enterPressJson.acted, key: enterPressJson.key, transport: enterPressJson.transport, webContentsFocused: enterPressJson.webContentsFocused })}；${page.text}`);
 
   const select = jsonOf(
     await call(browserActTool(), "e2e-select", { action: "select", ref: choice.ref, value: "b" }),
@@ -159,6 +175,43 @@ async function main() {
   );
   if (!badRef.includes("已失效")) throw new Error(`失效 ref 没有明确报错：${badRef}`);
 
+  // 多页签：工具新建后台页签，不抢当前页面；接着定向关闭。
+  const tabsBefore = jsonOf(await call(browserReadTool(), "e2e-tabs-1", { action: "tabs" }), "tabs before");
+  if (!Array.isArray(tabsBefore.tabs) || tabsBefore.tabs.length !== 1) {
+    throw new Error(`初始页签数量不对：${JSON.stringify(tabsBefore)}`);
+  }
+  const downloadTab = jsonOf(
+    await call(browserNavigateTool(), "e2e-new-tab", { url: downloadUrl, newTab: true }),
+    "download new tab",
+  );
+  if (typeof downloadTab.tabId !== "string") throw new Error(`新页签没有返回 tabId：${JSON.stringify(downloadTab)}`);
+  const tabsAfter = jsonOf(await call(browserReadTool(), "e2e-tabs-2", { action: "tabs" }), "tabs after");
+  if (tabsAfter.tabs.length !== 2 || !tabsAfter.tabs.some((tab) => tab.id === downloadTab.tabId)) {
+    throw new Error(`新建页签没有进入 tab 列表：${JSON.stringify(tabsAfter)}`);
+  }
+
+  // 下载落盘：页面触发 will-download，文件必须保存在 Maxma downloads 目录并可读。
+  let download = null;
+  let downloadsPayload = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    downloadsPayload = jsonOf(await call(browserReadTool(), `e2e-downloads-${attempt}`, { action: "downloads" }), "downloads");
+    download = (downloadsPayload.downloads ?? []).find((item) => item.state === "completed") ?? null;
+    if (download) break;
+  }
+  if (!download) throw new Error(`下载没有完成：${JSON.stringify(downloadsPayload)}`);
+  if (!fs.existsSync(download.path)) throw new Error(`下载文件不在磁盘：${download.path}`);
+  if (!fs.readFileSync(download.path, "utf8").includes("maxma download body")) {
+    throw new Error(`下载文件内容不对：${download.path}`);
+  }
+  if (!String(download.path).includes("downloads")) throw new Error(`下载不在 downloads 目录：${download.path}`);
+
+  const closed = jsonOf(
+    await call(browserActTool(), "e2e-close-tab", { action: "closeTab", tabId: downloadTab.tabId }),
+    "close tab",
+  );
+  if (closed.tabs.length !== 1) throw new Error(`关闭页签后数量不对：${JSON.stringify(closed.tabs)}`);
+
   return {
     ok: true,
     url: navigate.url,
@@ -180,6 +233,13 @@ async function main() {
     evaluated: evaluated.value,
     consoleLog: (logs.logs ?? []).find((entry) => String(entry.text).includes("maxma-greeted"))?.text,
     invalidRefRejected: badRef.slice(0, 160),
+    tabCountBefore: tabsBefore.tabs.length,
+    tabCountAfterNew: tabsAfter.tabs.length,
+    downloadTabId: downloadTab.tabId,
+    downloadName: download.filename,
+    downloadPath: download.path,
+    downloadBytes: download.receivedBytes,
+    tabCountAfterClose: closed.tabs.length,
   };
 }
 

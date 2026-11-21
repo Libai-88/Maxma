@@ -2,7 +2,7 @@
 
 > **本文件是项目唯一索引**。代码导航，不是历史记录；与代码/测试冲突时以代码为准并回来改本文。
 > **维护约定**：改动触及目录结构、入口、契约、命令、版本或文档清单时，须在同一次改动里同步更新本文。
-> 更新时间：2026-11-20（`version.py` = v2.7.0）；Workbench 2.0 P0+P1 已接入只读文件面板与内置浏览器。
+> 更新时间：2026-11-21（`version.py` = v2.7.0）；Workbench 2.0 P0–P3 已接入文件/编辑器/变更/命令/浏览器/任务，浏览器 P1 已补齐多页签、下载落盘与网络 allowlist。
 
 ## 入口
 
@@ -48,7 +48,7 @@ web/src/main.tsx
 | `bun-backend/src/plugins/` | `registry.ts`、`dsh/index.ts` | 插件注册表与 DSH 宿主 |
 | `bun-sidecar/` | `src/kernel/bridge-pi.ts` | pi 引擎桥：会话、模型、工具、MCP、审批、计划、目标、检查点、事件映射 |
 | `desktop/` | `electron/main.cjs`、`electron-builder.config.cjs` | Electron 桌面壳（仅打包形态） |
-| `desktop/electron/` | `browser-view.cjs`、`browser-cdp.cjs`、`browser-agent-server.cjs` | 内置 `WebContentsView` 与 IPC；Chromium CDP 无障碍快照 + 原生鼠标/键盘/拖拽/文件上传/坐标点击；Agent loopback 端点（secret + 动作白名单 + request_id 去重） |
+| `desktop/electron/` | `browser-view.cjs`、`browser-cdp.cjs`、`browser-agent-server.cjs`、`browser-net-policy.cjs`、`browser-downloads.cjs` | 多页签内置 `WebContentsView`（最多 8 个，独立 CDP/共享隔离会话）；Chromium CDP 无障碍快照 + 原生鼠标/键盘/拖拽/文件上传/坐标点击；Agent loopback 端点（secret + 动作白名单 + request_id 去重，含 tabs/close_tab/downloads）；下载固定落盘 `<data>/downloads`（文件名清洗、512 MiB 上限）；可选网络 allowlist（默认 all，域名/子域/IP，主请求+子资源拦截） |
 | `config/` | — | 内置模板与人设/规则/贴纸数据 |
 | `build/` | `build-server.bat` | 后端 bundle 与便携冒烟 |
 | `api/data/` | — | 运行时数据目录（历史路径名保留） |
@@ -112,7 +112,7 @@ web/src/main.tsx
 - [dev_docs/adr/](dev_docs/adr/) — 决策记录（0001 运行时状态、0003 子任务、0004 权限模式、0005 远程与沙箱、0006 Artifact）
 - [dev_docs/realtime-human-agent-collaboration.md](dev_docs/realtime-human-agent-collaboration.md)
 - [dev_docs/pi-shell-capability-plan.md](dev_docs/pi-shell-capability-plan.md) — pi 能力完整保留计划（扩展 UI / 会话树 / 设置可见性，含实测证据与执行顺序）
-- [dev_docs/workbench-2.md](dev_docs/workbench-2.md) — Workbench 2.0 P0–P3：文件/编辑器/变更/命令/浏览器/任务、并行会话、截图标注、IPC 与 Agent 安全边界、验证证据与已知边界
+- [dev_docs/workbench-2.md](dev_docs/workbench-2.md) — Workbench 2.0 P0–P3：文件/编辑器/变更/命令/浏览器/任务、并行会话、截图标注、IPC 与 Agent 安全边界、验证证据与已知边界；浏览器 P1 多页签/下载落盘/allowlist 见同文 §3.10 与 §4
 - `dev_docs/typecheck-baseline.json` — 类型债基线（`scripts/check-type-budget.mjs` 消费，只准降）
 - `dev_docs/file-size-baseline.json` — 巨型文件体量基线（`scripts/check-file-size-budget.mjs` 消费，只准降）
 - [dev_docs/adr/0007-dependency-pinning-and-prereleases.md](dev_docs/adr/0007-dependency-pinning-and-prereleases.md) — 依赖口径：`@deepseek-ai/dsh-*` 预发布钉死、`@types/bun` 对齐运行时、未用依赖清零

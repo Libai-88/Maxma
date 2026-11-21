@@ -27,10 +27,26 @@ interface Shape {
 
 const COLOR_VARS = ['--destructive', '--primary', '--foreground'] as const
 const COLOR_LABELS = ['红', '主色', '墨']
+// Canvas 2D 对主题里的 oklch() 支持不稳定：赋值可能通过但绘制透明。
+// 先在 1×1 canvas 上实测，拿到真实 RGB；不可绘制时回退到等价的高对比色。
+const COLOR_FALLBACKS = ['crimson', 'steelblue', 'black'] as const
 
-function resolveColor(cssVar: string): string {
+function resolveColor(cssVar: string, fallback: string): string {
   const value = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim()
-  return value || 'currentColor'
+  if (!value) return fallback
+  const probe = document.createElement('canvas')
+  probe.width = 1
+  probe.height = 1
+  const context = probe.getContext('2d')
+  if (!context) return fallback
+  context.fillStyle = fallback
+  context.fillRect(0, 0, 1, 1)
+  context.fillStyle = value
+  context.fillRect(0, 0, 1, 1)
+  const pixel = context.getImageData(0, 0, 1, 1).data
+  // 这个 Electron/Chromium 的 Canvas 2D 只稳定接受十六进制/颜色名，
+  // rgb(...) 与 oklch(...) 会被静默忽略；统一转成 #rrggbb 再交给画布。
+  return `#${[pixel[0], pixel[1], pixel[2]].map((channel) => channel.toString(16).padStart(2, '0')).join('')}`
 }
 
 export function ScreenshotAnnotator({
@@ -59,7 +75,7 @@ export function ScreenshotAnnotator({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  const colors = COLOR_VARS.map(resolveColor)
+  const colors = COLOR_VARS.map((cssVar, index) => resolveColor(cssVar, COLOR_FALLBACKS[index]))
 
   useEffect(() => {
     const element = new Image()
@@ -168,7 +184,7 @@ export function ScreenshotAnnotator({
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-background/95 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="截图标注">
+    <div className="fixed inset-0 z-[60] flex flex-col bg-background/95 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="截图标注" data-tool={tool} data-shape-count={shapes.length}>
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
         <div className="flex items-center gap-1">
           {[
@@ -176,7 +192,7 @@ export function ScreenshotAnnotator({
             { value: 'arrow' as const, icon: ArrowUpRight, label: '箭头' },
             { value: 'text' as const, icon: TextIcon, label: '文字' },
           ].map((item) => (
-            <Button key={item.value} size="xs" variant={tool === item.value ? 'secondary' : 'ghost'} onClick={() => setTool(item.value)}>
+            <Button key={item.value} size="xs" variant={tool === item.value ? 'secondary' : 'ghost'} aria-pressed={tool === item.value} onClick={() => setTool(item.value)}>
               <item.icon className="mr-1 size-3.5" />{item.label}
             </Button>
           ))}

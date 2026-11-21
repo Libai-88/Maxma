@@ -22,6 +22,9 @@ contextBridge.exposeInMainWorld("maxmaDesktop", {
     setBounds: (bounds) => invoke("maxma:browser:set-bounds", bounds),
     getState: () => invoke("maxma:browser:get-state"),
     navigate: (url) => invoke("maxma:browser:navigate", url),
+    newTab: (url) => invoke("maxma:browser:new-tab", url),
+    selectTab: (tabId) => invoke("maxma:browser:select-tab", tabId),
+    closeTab: (tabId) => invoke("maxma:browser:close-tab", tabId),
     back: () => invoke("maxma:browser:back"),
     forward: () => invoke("maxma:browser:forward"),
     reload: () => invoke("maxma:browser:reload"),
@@ -29,6 +32,8 @@ contextBridge.exposeInMainWorld("maxmaDesktop", {
     external: () => invoke("maxma:browser:external"),
     capture: () => invoke("maxma:browser:capture"),
     pickElement: () => invoke("maxma:browser:pick-element"),
+    setPolicy: (policy) => invoke("maxma:browser:set-policy", policy),
+    revealDownload: (id) => invoke("maxma:browser:reveal-download", id),
     clearData: () => invoke("maxma:browser:clear-data"),
     onState: (callback) => {
       ipcRenderer.on("maxma:browser-event", (_event, state) => callback(state));

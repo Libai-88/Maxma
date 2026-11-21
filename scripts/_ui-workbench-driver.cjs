@@ -73,7 +73,7 @@ async function clickButton(target, matcherSource) {
     button.click();
     return true;
   })()`);
-  if (!ok) throw new Error("找不到目标按钮");
+  if (!ok) throw new Error(`找不到目标按钮：${matcherSource}`);
 }
 
 async function clickTab(target, label) {
@@ -175,9 +175,10 @@ async function runBrowserToolSmoke() {
   const bun = path.join(__dirname, "..", "bun-sidecar", "bun.exe");
   const script = path.join(__dirname, "_browser-tool-smoke.mjs");
   const uploadFile = path.join(browserAgentDir, "browser-upload.txt");
+  const downloadUrl = `http://127.0.0.1:${interactivePage.address().port}/download.txt`;
   fs.writeFileSync(uploadFile, "maxma browser upload", "utf8");
   return await new Promise((resolve, reject) => {
-    const child = spawn(bun, [script, interactivePageUrl, uploadFile], {
+    const child = spawn(bun, [script, interactivePageUrl, uploadFile, downloadUrl], {
       cwd: path.join(__dirname, ".."),
       env: { ...process.env, MAXMA_DATA_DIR: browserAgentDir },
       stdio: ["ignore", "pipe", "pipe"],
@@ -281,6 +282,7 @@ app.whenReady().then(async () => {
     },
   });
 
+  browserAgentDir = fs.mkdtempSync(path.join(os.tmpdir(), "maxma-uiwb-agent-"));
   browserController = createBrowserController({
     getWindow: () => win,
     isTrustedSender: (event) => {
@@ -289,9 +291,10 @@ app.whenReady().then(async () => {
     },
     openExternal: (url) => externalUrls.push(url),
     partition: BROWSER_PARTITION,
+    downloadsDir: path.join(browserAgentDir, "downloads"),
+    policyPath: path.join(browserAgentDir, "browser-policy.json"),
   });
   browserController.registerIpc(ipcMain);
-  browserAgentDir = fs.mkdtempSync(path.join(os.tmpdir(), "maxma-uiwb-agent-"));
   browserAgent = startBrowserAgentServer({
     controller: browserController,
     dataDir: browserAgentDir,
@@ -300,7 +303,15 @@ app.whenReady().then(async () => {
   await browserAgent.start();
 
   // 本地交互页：只用于验收“真实输入能改变页面状态”，不依赖外网。
-  interactivePage = http.createServer((_request, response) => {
+  interactivePage = http.createServer((request, response) => {
+    if (request.url === "/download.txt") {
+      response.writeHead(200, {
+        "content-type": "text/plain; charset=utf-8",
+        "content-disposition": 'attachment; filename="maxma-e2e-download.txt"',
+      });
+      response.end("maxma download body\n");
+      return;
+    }
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     response.end(`<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>Maxma Native Gate</title></head>
 <body>
@@ -318,6 +329,7 @@ app.whenReady().then(async () => {
   <div id="pad" aria-label="Drag pad" style="width:240px;height:120px;background:#d8d8d8;margin-top:12px">Drag here</div>
   <div id="dragout">No drag</div>
   <pre id="note">native pre block</pre>
+  <img id="allowlist-probe" src="http://blocked.invalid/pixel.png" alt="" width="1" height="1">
   <script>
     const name = document.querySelector('#name');
     const choice = document.querySelector('#choice');
@@ -612,7 +624,9 @@ app.whenReady().then(async () => {
     await waitFor(win, `[...document.querySelectorAll('[role="tab"]')].some((node) => node.getAttribute("aria-selected") === "true" && node.innerText.trim() === "浏览器")`, "切到浏览器");
     result.stage = "browser-tab";
 
-    // 地址栏提交到本机 health 接口，验证真实 WebContentsView 加载
+    // BrowserPane 是懒加载 chunk；命令面板切过来后要等地址栏真正挂载，不能
+    // 只凭 tab aria-selected 就假设组件已经渲染完成。
+    await waitFor(win, `document.querySelector('input[aria-label="地址栏"]')`, "等待浏览器地址栏挂载");
     const healthUrl = ORIGIN + "/api/health";
     await setInput(win, 'input[aria-label="地址栏"]', healthUrl);
     await js(win, `document.querySelector('input[aria-label="地址栏"]').closest('form').requestSubmit()`);
@@ -646,7 +660,9 @@ app.whenReady().then(async () => {
     }
     const agentShot = await agentExecute("screenshot");
     const shotBytes = typeof agentShot.result?.data === "string" ? Buffer.from(agentShot.result.data, "base64").length : 0;
-    if (!agentShot.ok || shotBytes < 2000) throw new Error(`浏览器 Agent 截图失败：${shotBytes} bytes`);
+    if (!agentShot.ok || shotBytes < 2000) {
+      throw new Error(`浏览器 Agent 截图失败：${shotBytes} bytes ${JSON.stringify(agentShot).slice(0, 600)}`);
+    }
     const agentUnknown = await agentExecute("rm-rf");
     if (agentUnknown.ok) throw new Error("浏览器 Agent 接受了未知动作");
     result.checks.browserAgent = {
@@ -657,9 +673,107 @@ app.whenReady().then(async () => {
     };
 
     // ── 工具端到端：Maxma browser_* 工具 → 本机端点 → 原生 view ───
+    // CDP/原生键盘事件需要一个有焦点的宿主窗口；测试机窗口可能被终端盖住，
+    // 先显式把窗口提到前台并聚焦，再走真实键盘输入，避免把环境失焦误判成产品失败。
+    win.setAlwaysOnTop(true, "floating");
+    win.show();
+    win.focus();
+    await sleep(300);
     const browserTools = await runBrowserToolSmoke();
+    win.setAlwaysOnTop(false);
     result.checks.browserToolE2E = browserTools;
 
+    // ── 多页签 UI：新建、切回、关闭，原生 view 只显示 active 页签 ──
+    result.stage = "browser-tabs-ui";
+    result.checks.browserUiBeforeTabs = await js(win, `(() => ({
+      newTab: document.querySelectorAll('button[aria-label="新建浏览器页签"]').length,
+      newTabVisible: [...document.querySelectorAll('button[aria-label="新建浏览器页签"]')].some((node) => node.getClientRects().length > 0),
+      newTabDisabled: document.querySelector('button[aria-label="新建浏览器页签"]')?.disabled ?? null,
+      tabLabels: [...document.querySelectorAll('[aria-label="浏览器页签"] [role="tab"]')].map((node) => node.innerText.trim()),
+      addressVisible: [...document.querySelectorAll('input[aria-label="地址栏"]')].some((node) => node.getClientRects().length > 0),
+      bodyText: document.querySelector('[aria-label="浏览器页面区域"]')?.innerText.slice(0, 80) ?? null,
+    }))()`);
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "新建浏览器页签"`);
+    const twoTabs = await waitBrowser((state) => state.tabs.length === 2, "新建第二个浏览器页签");
+    await setInput(win, 'input[aria-label="地址栏"]', healthUrl + "?tab=2");
+    await js(win, `document.querySelector('input[aria-label="地址栏"]').closest('form').requestSubmit()`);
+    await waitBrowser((state) => state.tabs.length === 2 && state.url.includes("tab=2") && !state.loading, "第二页签加载");
+    const browserTabLabels = await js(win, `[...document.querySelectorAll('[aria-label="浏览器页签"] [role="tab"]')].map((node) => node.innerText.trim())`);
+    if (browserTabLabels.length !== 2) throw new Error(`浏览器页签数量不是 2：${JSON.stringify(browserTabLabels)}`);
+    const switched = await js(win, `(() => {
+      const first = document.querySelector('[aria-label="浏览器页签"] [role="tab"]');
+      if (!first) return false;
+      first.click();
+      return true;
+    })()`);
+    if (!switched) throw new Error("无法点击第一个浏览器页签");
+    await waitBrowser((state) => state.activeTabId === "tab-1" && !state.url.includes("tab=2"), "切回第一个页签");
+    result.screenshots.browserTabs = await captureWindow("workbench-p1-browser-tabs.png");
+    const closeSecond = await js(win, `(() => {
+      const buttons = [...document.querySelectorAll('button[aria-label^="关闭页签"]')];
+      if (buttons.length < 2) return false;
+      buttons[1].click();
+      return true;
+    })()`);
+    if (!closeSecond) throw new Error("找不到第二个页签的关闭按钮");
+    await waitBrowser((state) => state.tabs.length === 1, "关闭第二个页签");
+    result.checks.browserTabs = {
+      before: 1,
+      afterNew: twoTabs.tabs.length,
+      labels: browserTabLabels,
+      afterClose: 1,
+    };
+
+    // 下载面板：工具产生的下载记录必须由 UI 读到，打开面板时原生 view 隐藏。
+    result.stage = "browser-downloads-panel";
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "浏览器下载"`);
+    await waitText(win, browserTools.downloadName, "下载面板显示文件名");
+    await waitBrowser((state) => state.visible === false, "下载面板隐藏原生浏览器");
+    result.screenshots.browserDownloads = await captureWindow("workbench-p1-browser-downloads.png");
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "关闭下载面板"`);
+    await waitBrowser((state) => state.visible === true, "关闭下载面板恢复浏览器");
+    result.checks.browserDownloads = {
+      name: browserTools.downloadName,
+      bytes: browserTools.downloadBytes,
+      panel: true,
+    };
+
+    // 网络 allowlist：先验证白名单 UI 可打开，再用真实请求验证主请求与子资源拦截。
+    result.stage = "browser-allowlist-panel";
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "网络 allowlist"`);
+    await waitText(win, "网络 allowlist", "网络 allowlist 面板");
+    result.screenshots.browserAllowlist = await captureWindow("workbench-p1-browser-allowlist.png");
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "取消网络设置"`);
+    await waitBrowser((state) => state.visible === true, "关闭 allowlist 面板恢复浏览器");
+
+    const blockedOpen = await agentExecute("open", { url: interactivePageUrl });    if (!blockedOpen.ok) throw new Error("默认 all 模式下本地页被拦截：" + JSON.stringify(blockedOpen));
+    result.checks.networkAllowlistDefault = "allowed";
+
+    browserController.setNetworkPolicy({ mode: "allowlist", domains: ["example.com"] });
+    const deniedOpen = await agentExecute("open", { url: interactivePageUrl });
+    if (deniedOpen.ok || !String(deniedOpen.error ?? "").includes("网络 allowlist")) {
+      throw new Error("allowlist 没有拒绝白名单外的主请求：" + JSON.stringify(deniedOpen));
+    }
+    result.checks.networkAllowlistMain = deniedOpen.error;
+
+    browserController.setNetworkPolicy({ mode: "allowlist", domains: ["127.0.0.1"] });
+    const allowedLocal = await agentExecute("open", { url: interactivePageUrl });
+    if (!allowedLocal.ok) throw new Error("allowlist 误拦了白名单内主请求：" + JSON.stringify(allowedLocal));
+    await sleep(700);
+    const blockedState = browserController.state();
+    if (!blockedState.network.blocked.some((item) => item.host === "blocked.invalid")) {
+      throw new Error("allowlist 没有拦截页面子资源：" + JSON.stringify(blockedState.network.blocked));
+    }
+    result.checks.networkAllowlistSubresource = blockedState.network.blocked[0];
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "网络 allowlist"`);
+    await waitBrowser((state) => state.visible === false, "拦截后打开 allowlist 面板");
+    result.screenshots.browserAllowlistBlocked = await captureWindow("workbench-p1-browser-allowlist-blocked.png");
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "取消网络设置"`);
+    await waitBrowser((state) => state.visible === true, "关闭 allowlist 面板");
+    browserController.setNetworkPolicy({ mode: "all", domains: [] });
+    result.checks.networkAllowlistReset = browserController.state().network.mode;
+
+    // 注意：上一个 allowlist 测试把当前页切回了交互页；截图/拾取测试继续使用它。
 
     // ── P3 截图标注：真实截图 → 画框 → 上传为对话图片附件 ─────
     await clickButton(win, `(button) => button.getAttribute("aria-label") === "截图并标注"`);
@@ -682,7 +796,9 @@ app.whenReady().then(async () => {
         context.drawImage(canvas, 0, 0);
         const data = context.getImageData(0, 0, probe.width, probe.height).data;
         let hash = 0;
-        for (let index = 0; index < data.length; index += 64) hash = (hash * 31 + data[index]) >>> 0;
+        // 全通道哈希：只取 R 通道时，红色文字落在白底上 R 不变，
+        // 会误判“没有改变像素”。必须把 G/B/A 一起算进来。
+        for (let index = 0; index < data.length; index += 1) hash = (hash * 31 + data[index]) >>> 0;
         return hash;
       };
       return window.__annotChecksum();
@@ -700,9 +816,14 @@ app.whenReady().then(async () => {
     })()`);
     await sleep(350);
     const rectChecksum = await js(win, `window.__annotChecksum()`);
-    if (rectChecksum === canvasBefore) throw new Error(`矩形没有改变像素：${canvasBefore} → ${rectChecksum}`);
-    // 文字工具：prompt 由测试替换，点击画布落下文字标注。
+    if (rectChecksum === canvasBefore) throw new Error(`矩形没有改变像素：${canvasBefore} → ${rectChecksum}`);    // 文字工具：prompt 由测试替换，点击画布落下文字标注。
     await clickButton(win, `(button) => button.innerText.trim() === "文字"`);
+    await waitFor(win, `[...document.querySelectorAll('button[aria-pressed="true"]')].some((node) => node.innerText.trim() === "文字")`, "选中文字工具");
+    result.checks.annotatorPrompt = await js(win, `(() => {
+      const original = window.prompt;
+      window.prompt = () => "E2E 标注文字";
+      return { replaced: window.prompt !== original, sample: window.prompt("probe") };
+    })()`);
     await js(win, `(() => { window.prompt = () => "E2E 标注文字"; return true; })()`);
     await js(win, `(() => {
       const canvas = document.querySelector('[role="dialog"][aria-label="截图标注"] canvas');
@@ -714,10 +835,15 @@ app.whenReady().then(async () => {
       return true;
     })()`);
     await sleep(250);
-    const textShapeAdded = await js(win, `(() => {
-      const button = [...document.querySelectorAll('button')].find((node) => node.innerText.trim() === "撤销");
-      return Boolean(button && !button.disabled);
+    const annotatorState = await js(win, `(() => {
+      const dialog = document.querySelector('[role="dialog"][aria-label="截图标注"]');
+      const undo = [...document.querySelectorAll('button')].find((node) => node.innerText.trim() === "撤销");
+      return { tool: dialog?.dataset.tool, shapeCount: Number(dialog?.dataset.shapeCount || 0), undoEnabled: Boolean(undo && !undo.disabled) };
     })()`);
+    result.checks.annotatorState = annotatorState;
+    if (annotatorState.tool !== "text") throw new Error(`文字工具未选中：${JSON.stringify(annotatorState)}`);
+    if (annotatorState.shapeCount < 2) throw new Error(`文字标注没有进入形状栈：${JSON.stringify(annotatorState)}`);
+    const textShapeAdded = annotatorState.undoEnabled;
     if (!textShapeAdded) throw new Error("文字标注没有进入撤销栈");
     const undoEnabled = await js(win, `(() => {
       const button = [...document.querySelectorAll('button')].find((node) => node.innerText.trim() === "撤销");
@@ -739,16 +865,16 @@ app.whenReady().then(async () => {
     const pickDeadline = Date.now() + 4000;
     let overlayReady = false;
     while (Date.now() < pickDeadline) {
-      overlayReady = await browserController.ensure().webContents.executeJavaScript('Boolean(document.querySelector("[data-maxma-pick]"))').catch(() => false);
+      overlayReady = await browserController.ensure().view.webContents.executeJavaScript('Boolean(document.querySelector("[data-maxma-pick]"))').catch(() => false);
       if (overlayReady) break;
       await sleep(150);
     }
     if (!overlayReady) throw new Error("元素拾取覆盖层没有注入页面");
-    const pickTarget = await browserController.ensure().webContents.executeJavaScript(
+    const pickTarget = await browserController.ensure().view.webContents.executeJavaScript(
       'Boolean(document.querySelector("pre"))',
     );
     if (!pickTarget) throw new Error("测试页面没有 pre 元素，无法验证非 body 拾取");
-    await browserController.ensure().webContents.executeJavaScript(
+    await browserController.ensure().view.webContents.executeJavaScript(
       'document.querySelector("pre").dispatchEvent(new MouseEvent("click", { bubbles: true }))',
     );
     await waitText(win, "已拾取", "元素拾取结果");

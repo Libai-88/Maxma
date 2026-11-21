@@ -3,6 +3,34 @@
 > 当前可执行状态，供下一位接手者。架构请先读 [docs/00-当前架构.md](docs/00-当前架构.md)。
 > 更新时间：2026-11-21
 
+## 2026-11-21：内置浏览器 P1（多页签 / 下载落盘 / 网络 allowlist）
+
+- **多页签**：`browser-view.cjs` 从单 `view` 改为 `tabs: BrowserTab[]`，每个页签独立 `WebContentsView` 与独立 CDP，
+  共享隔离的 `persist:maxma-browser` 会话；同一时间只让 active 页签 `setVisible(true)`，后台页签仍可被 Agent
+  定向读取/操作。页签上限 `MAX_TABS=8`，关闭最后一个自动补 `about:blank`。Agent `open` 支持
+  `new_tab`/`newTab` 与 `tab_id`/`tabId`，新增 `tabs`、`close_tab`；工具层对应 `browser_navigate.newTab/tabId`、
+  `browser_read.tabs`、`browser_act.closeTab`。
+- **下载落盘**：新增纯函数 `browser-downloads.cjs`（文件名清洗、Windows 保留名/末尾点空格、超长截断、同名
+  `name (1).ext`、`512 MiB` 上限）。`will-download` 固定写入 `<data>/downloads`，不使用页面提供的路径；
+  记录文件名/路径/状态/进度/页签/URL，最多保留 20 条；取消或中断删除半成品；UI 可“在文件夹中显示”，
+  `reveal-download` 只允许 downloads 目录内已存在的文件。Agent 新增只读 `downloads`。
+- **网络 allowlist**：新增纯函数 `browser-net-policy.cjs`；策略默认 `mode:"all"`，可显式切到 `allowlist`，
+  只允许列表域名及其子域，IPv4/IPv6 精确匹配；输入支持 URL/端口/`*.example.com`/逗号换行归一，最多
+  200 个域名。策略存 `<data>/api/data/browser-policy.json`（临时文件 + rename，坏文件回退 all）。
+  `browserSession.webRequest.onBeforeRequest` 同时拦截 HTTP(S) 主请求和子资源；拦截记录最多 20 条；
+  顶层 `open`/`navigate` 也先做策略检查。策略只能由 UI/主进程设置，Agent 工具没有修改入口。
+- **真实 Electron 验收**：`scripts/verify-ui-workbench.mjs` 返回 `stage=done, ok=true`；
+  `browserTabs` 1→2→1、`browserDownloads` 读到 `maxma-e2e-download.txt` 20 B、allowlist 拒绝主请求并记录
+  `blocked.invalid/pixel.png` 子资源；`consoleErrors=[]`。证据图新增
+  `workbench-p1-browser-tabs.png`、`workbench-p1-browser-downloads.png`、
+  `workbench-p1-browser-allowlist.png`、`workbench-p1-browser-allowlist-blocked.png`。
+- **闸门**：sidecar **234 pass**、backend **365 pass**、web **74 pass**；根 `scripts/verify-all-gates.sh`
+  18 项全 PASS，含 tsc/ESLint/生产构建/颜色/间距/字号/对比度/无紫/玻璃/体量/类型债。
+- **便携包已按本轮源码重建**：桌面 `dist/electron-portable/MaxmaHere-2.7.0-portable-x64.zip`
+  `246,169,583 B`，SHA-256 `57a6d144…01a2da3`，`verify-desktop-render.ps1` PASS、包内后端冒烟 PASS；
+  Web `dist/web-portable/MaxmaHere-Portable-2.7.0.zip` `83,548,248 B`，SHA-256
+  `7f5361aa…56573`，`portable-smoke-test.ps1` PASS（news 52 / 5 个免费模型 / 328 表情 / 23 个外部包 0 缺失）。
+
 ## 2026-11-21：Workbench 架构收口 + 浏览器 CDP 原生操控
 
 - **侧边栏不是两套导航**：左侧 `Sidebar` 仍是全局路由；右侧 `WorkbenchHost` 是会话级工作台。
@@ -24,16 +52,16 @@
 - **副作用重试边界**：工具每次带 `request_id`，端点 60s 内同 id 去重（最多 200 条）；超时返回
   `outcome_unknown`，不得自动重试。未知动作在端点层 400 拒绝。上传只收已存在普通文件（≤10 个、
   单文件 ≤512 MiB），但它是本机文件外发面，必须按 write 审批看待。
-- **本轮闸门全绿**：sidecar 234 pass、backend 360 pass、web 74 pass；tsc/ESLint/build/颜色/间距/字号/
+- **当时闸门全绿**：sidecar 234 pass、backend 360 pass、web 74 pass；tsc/ESLint/build/颜色/间距/字号/
   对比度/无紫/玻璃/体量/类型债全部 PASS，根 `scripts/verify-all-gates.sh` 18 项全 PASS。
   Pane 懒加载把 ChatView 从 286.73 kB 降到 217.24 kB。
-- **便携包已按本提交重建**（`9fa2b882`）：桌面 `246,160,020 B`，SHA-256
+- **上一构建（`9fa2b882`）的便携包**（源码此后已变，仅作历史）：桌面 `246,160,020 B`，SHA-256
   `c930bfb3…54ed4`，`verify-desktop-render.ps1` PASS（后端监听、渲染 WS、主进程存活、残留 0）；
   Web `83,547,592 B`，SHA-256 `ea8416a3…c8015`，`portable-smoke-test.ps1` PASS
-  （328 表情、图片 200、管理 401、23 个外部包 0 缺失）。冒烟脚本补 `-UseBasicParsing`，
-  避免 Windows PowerShell 5.1 的 IE 解析管线在无交互会话里卡死。
-- 仍范围外：浏览器网络 allowlist、多浏览器页签、下载落盘策略、真实系统文件对话框人工点选、
-  真实 Windows 系统 DPI 人工抽查、Git discard、Side chat、系统通知、PR 创建、P4。
+  （328 表情、图片 200、管理 401、23 个外部包 0 缺失）。当前交付包见本文新一节与
+  `dev_docs/workbench-2.md` §4.3。
+- 仍范围外：真实系统文件对话框人工点选、真实 Windows 系统 DPI 人工抽查、按页签隔离的网络策略、
+  Git discard、Side chat、系统通知、PR 创建、P4。
 
 ## 2026-11-20：Workbench 2.0 P0–P3 完成（文件/编辑/变更/命令/浏览器/任务）
 
@@ -63,9 +91,10 @@
   桌面 `252,479,795 B`，SHA-256 `a51c6228…71382`，`verify-desktop-render.ps1` PASS；
   Web `83,535,555 B`，SHA-256 `bd870d55…66b53`，`portable-smoke-test.ps1` PASS
   （328 表情、图片 200、管理 401）；Web 降级由 `webTabs=["推理","画布","任务"]` 证明。
-- **范围外，不是待办**：真实系统文件对话框人工点选、真实 Windows 系统 DPI 人工抽查、
+- **当时范围外，不是待办**：真实系统文件对话框人工点选、真实 Windows 系统 DPI 人工抽查、
   浏览器网络 allowlist、Git discard 按钮、Side chat、系统通知、PR 创建、P4。
-  （当时浏览器点击/输入/提交也未开放；2026-11-21 已按上面的 CDP 方案开放并加 write 审批。）
+  （其中浏览器网络 allowlist、多页签、下载落盘已于 2026-11-21 补齐；当时浏览器点击/输入/提交也未开放，
+  同日已按 CDP 方案开放并加 write 审批。）
 - 贴纸历史债已清：`service.ts` 拆到 748 行 + `stickers/legacy.ts`，`check-type-budget` / `check-file-size-budget`
   不再报红；这是本轮为保证全量闸门全绿做的顺手拆分，行为由原有贴纸测试覆盖。
 

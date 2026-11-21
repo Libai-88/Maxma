@@ -85,17 +85,19 @@ export function browserNavigateTool(): MaxmaToolDescriptor {
     name: "browser_navigate",
     label: "浏览器打开页面",
     description:
-      "在 Maxma 桌面端内置浏览器里打开一个 http/https 页面。这是写动作（会改变当前页面），审批模式可能要求用户确认。没有桌面端时返回 desktop_required。",
+      "在 Maxma 桌面端内置浏览器里打开一个 http/https 页面。默认在当前页签导航；传 newTab 会新建后台页签，返回 tabId，后续 browser_read/browser_act 用它定向操作该页签，避免抢走用户当前页面。这是写动作（会改变页面），审批模式可能要求用户确认。没有桌面端时返回 desktop_required。",
     parameters: {
       type: "object",
       properties: {
         url: { type: "string", description: "要打开的 http/https 地址；裸域名或 localhost 也接受，由 UI 归一化。" },
+        tabId: { type: "string", description: "要导航的已有页签 id；不传则用当前页签。" },
+        newTab: { type: "boolean", description: "新建一个后台页签再导航，不切换用户当前页签。" },
       },
       required: ["url"],
     },
     approval: "write",
     async execute(_id, params) {
-      return callBrowser("open", { url: params.url });
+      return callBrowser("open", { url: params.url, tab_id: params.tabId, new_tab: params.newTab === true });
     },
   };
 }
@@ -105,11 +107,12 @@ export function browserReadTool(): MaxmaToolDescriptor {
     name: "browser_read",
     label: "浏览器读页面",
     description:
-      "读取或观察 Maxma 内置浏览器：snapshot 返回正文和带 ref 的可操作元素（role/name/value/checked 等，ref 只在本次快照内有效）；extract 按 CSS selector 取文本；screenshot 返回 PNG；scroll 滚动；back/forward 切换历史；console 取页面日志和最近异常。只读工具，不提交表单。",
+      "读取或观察 Maxma 内置浏览器：snapshot 返回正文和带 ref 的可操作元素（role/name/value/checked 等，ref 只在本次快照内有效）；extract 按 CSS selector 取文本；screenshot 返回 PNG；scroll 滚动；back/forward 切换历史；console 取页面日志和最近异常；tabs 列出页签；downloads 列出下载落盘结果。只读工具，不提交表单。可用 tabId 定向后台页签。",
     parameters: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["snapshot", "extract", "screenshot", "scroll", "back", "forward", "console"], description: "观察动作" },
+        action: { type: "string", enum: ["snapshot", "extract", "screenshot", "scroll", "back", "forward", "console", "tabs", "downloads"], description: "观察动作" },
+        tabId: { type: "string", description: "目标页签 id；不传则用当前页签。tabs/downloads 不需要。" },
         selector: { type: "string", description: "extract 使用的 CSS selector" },
         limit: { type: "number", description: "extract 最多返回多少个元素（1-50，默认 20）" },
         dx: { type: "number", description: "scroll 横向位移" },
@@ -122,6 +125,7 @@ export function browserReadTool(): MaxmaToolDescriptor {
     async execute(_id, params) {
       const action = typeof params.action === "string" ? params.action : "";
       return callBrowser(action, {
+        tab_id: params.tabId,
         selector: params.selector,
         limit: params.limit,
         dx: params.dx,
@@ -137,15 +141,16 @@ export function browserActTool(): MaxmaToolDescriptor {
     name: "browser_act",
     label: "浏览器原生操作",
     description:
-      "对 Maxma 内置浏览器执行原生输入：click 用真实鼠标点击（可点 ref/selector，也可用截图坐标 x/y 视觉定位）；drag 用真实鼠标从 ref/坐标拖到另一个 ref/坐标；fill/type 先聚焦再输入（fill 会清空原值）；press 发真实按键（Enter、Tab、Control+A 等）；hover 悬停；select 选择下拉值；check/uncheck 切换勾选；upload 给 input[type=file] 设置本机绝对路径文件；scrollIntoView 把元素滚到视口中央；wait 等元素、正文文本或时长；evaluate 在页面执行只读或调试脚本。目标用 browser_read snapshot 返回的 ref（推荐）或 CSS selector。会改变页面或提交数据，审批模式可能要求确认。",
+      "对 Maxma 内置浏览器执行原生输入：click 用真实鼠标点击（可点 ref/selector，也可用截图坐标 x/y 视觉定位）；drag 用真实鼠标从 ref/坐标拖到另一个 ref/坐标；fill/type 先聚焦再输入（fill 会清空原值）；press 发真实按键（Enter、Tab、Control+A 等）；hover 悬停；select 选择下拉值；check/uncheck 切换勾选；upload 给 input[type=file] 设置本机绝对路径文件；scrollIntoView 把元素滚到视口中央；wait 等元素、正文文本或时长；evaluate 在页面执行只读或调试脚本；closeTab 关闭指定页签。目标用 browser_read snapshot 返回的 ref（推荐）或 CSS selector，也可用 tabId 定向后台页签。会改变页面或提交数据，审批模式可能要求确认。",
     parameters: {
       type: "object",
       properties: {
         action: {
           type: "string",
-          enum: ["click", "fill", "type", "press", "hover", "select", "check", "uncheck", "drag", "upload", "scrollIntoView", "wait", "evaluate"],
+          enum: ["click", "fill", "type", "press", "hover", "select", "check", "uncheck", "drag", "upload", "scrollIntoView", "wait", "evaluate", "closeTab"],
           description: "原生操作类型",
         },
+        tabId: { type: "string", description: "目标页签 id；不传则用当前页签。" },
         ref: { type: "string", description: "snapshot 返回的 ref，例如 e3；页面变化后失效" },
         selector: { type: "string", description: "CSS selector；没有 ref 时可用" },
         text: { type: "string", description: "fill/type 要输入的文本（最长 5000 字符）；wait 时可作为正文等待文本" },
@@ -172,8 +177,13 @@ export function browserActTool(): MaxmaToolDescriptor {
     },
     approval: "write",
     async execute(_id, params) {
+      const action = typeof params.action === "string" ? params.action : "";
+      if (action === "closeTab") {
+        return callBrowser("close_tab", { tab_id: params.tabId });
+      }
       return callBrowser("act", {
-        action: params.action,
+        tab_id: params.tabId,
+        action,
         ref: params.ref,
         selector: params.selector,
         text: params.text,

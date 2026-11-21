@@ -20,6 +20,55 @@ export interface BrowserState {
   canGoForward: boolean
   visible: boolean
   error?: { code: number; description: string; url: string }
+  tabs: BrowserTabState[]
+  activeTabId: string | null
+  downloads: BrowserDownload[]
+  network: BrowserNetworkState
+}
+
+export interface BrowserTabState {
+  id: string
+  url: string
+  title: string
+  loading: boolean
+  canGoBack: boolean
+  canGoForward: boolean
+  active: boolean
+  error?: { code: number; description: string; url: string }
+}
+
+export type BrowserDownloadState = 'progressing' | 'completed' | 'cancelled' | 'interrupted'
+
+export interface BrowserDownload {
+  id: string
+  filename: string
+  path: string
+  state: BrowserDownloadState
+  receivedBytes: number
+  totalBytes: number
+  tabId?: string
+  url: string
+  startedAt: number
+  error?: string
+}
+
+export interface BrowserNetworkBlock {
+  host: string
+  url: string
+  tabId?: string
+  at: number
+}
+
+export interface BrowserNetworkState {
+  mode: 'all' | 'allowlist'
+  domains: string[]
+  allowAll: boolean
+  blocked: BrowserNetworkBlock[]
+}
+
+export interface BrowserNetworkPolicy {
+  mode: 'all' | 'allowlist'
+  domains: string[]
 }
 
 export interface BrowserCapture {
@@ -41,6 +90,9 @@ export interface MaxmaBrowserBridge {
   setBounds: (bounds: BrowserBounds) => Promise<void>
   getState: () => Promise<BrowserState>
   navigate: (url: string) => Promise<BrowserState>
+  newTab: (url?: string) => Promise<BrowserState>
+  selectTab: (tabId: string) => Promise<BrowserState>
+  closeTab: (tabId: string) => Promise<BrowserState>
   back: () => Promise<void>
   forward: () => Promise<void>
   reload: () => Promise<void>
@@ -48,6 +100,8 @@ export interface MaxmaBrowserBridge {
   external: () => Promise<void>
   capture: () => Promise<BrowserCapture>
   pickElement: () => Promise<BrowserPickedElement | null>
+  setPolicy: (policy: BrowserNetworkPolicy) => Promise<BrowserState>
+  revealDownload: (id: string) => Promise<void>
   clearData: () => Promise<BrowserState>
   onState: (callback: (state: BrowserState) => void) => void
   offState: () => void

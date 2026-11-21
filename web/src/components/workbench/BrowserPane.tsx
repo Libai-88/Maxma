@@ -3,20 +3,38 @@
  *
  * 页面本体由 Electron WebContentsView 承载，React 只画工具栏和定位空白视口。
  * 这样远程页面永远拿不到主界面的 DOM、preload 或本地文件能力。
+ *
+ * 多页签、下载与 allowlist 面板都在 React 层；原生 view 只负责页面本身。
  */
 
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { ArrowLeft, ArrowRight, Camera, ExternalLink, Globe2, Loader2, MousePointerClick, RotateCw, ShieldCheck, Trash2, X } from 'lucide-react'
+import {
+  ArrowLeft,
+  ArrowRight,
+  Camera,
+  Download,
+  ExternalLink,
+  FolderOpen,
+  Globe2,
+  Loader2,
+  MousePointerClick,
+  Plus,
+  RotateCw,
+  ShieldCheck,
+  Trash2,
+  X,
+} from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import type { BrowserBounds, BrowserCapture, BrowserState } from '@/types/desktop'
+import type { BrowserBounds, BrowserCapture, BrowserNetworkPolicy, BrowserState, BrowserTabState } from '@/types/desktop'
 import type { WorkbenchPaneProps } from './paneProps'
 import { ScreenshotAnnotator } from '@/components/workbench/ScreenshotAnnotator'
 
 const DEFAULT_URL = 'https://www.bing.com'
+const MAX_TABS = 8
 
 function normalizeAddress(raw: string): string | null {
   const value = raw.trim()
@@ -33,6 +51,28 @@ function errorText(error: BrowserState['error']): string {
   return `${error.description || '页面加载失败'}（${error.code}）`
 }
 
+function tabLabel(tab: BrowserTabState): string {
+  if (tab.title?.trim()) return tab.title.trim()
+  if (tab.url && tab.url !== 'about:blank') {
+    try { return new URL(tab.url).hostname } catch { return tab.url }
+  }
+  return '新页面'
+}
+
+function formatBytes(value: number | undefined): string {
+  const bytes = Math.max(0, Number(value) || 0)
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+const DOWNLOAD_LABEL: Record<string, string> = {
+  progressing: '下载中',
+  completed: '已完成',
+  cancelled: '已取消',
+  interrupted: '中断',
+}
+
 export function BrowserPane({ isOpen, activeTab, overlayOpen, sessionId }: WorkbenchPaneProps) {
   const active = isOpen && activeTab === 'browser'
   const chatSessionId = sessionId ?? null
@@ -44,9 +84,14 @@ export function BrowserPane({ isOpen, activeTab, overlayOpen, sessionId }: Workb
   const [notice, setNotice] = useState('')
   const [shot, setShot] = useState<BrowserCapture | null>(null)
   const [picking, setPicking] = useState(false)
+  const [panel, setPanel] = useState<'downloads' | 'network' | null>(null)
+  const [policyMode, setPolicyMode] = useState<BrowserNetworkPolicy['mode']>('all')
+  const [policyDomains, setPolicyDomains] = useState('')
   const viewportRef = useRef<HTMLDivElement>(null)
   const addressRef = useRef<HTMLInputElement>(null)
   const visibleRef = useRef(false)
+  const tabs = state?.tabs ?? []
+  const downloads = state?.downloads ?? []
 
   useEffect(() => {
     if (!bridge) return
@@ -57,7 +102,7 @@ export function BrowserPane({ isOpen, activeTab, overlayOpen, sessionId }: Workb
       setLoading(next.loading)
       if (next.error) setError(errorText(next.error))
       if (document.activeElement !== addressRef.current) {
-        setAddress(next.url && next.url !== 'about:blank' ? next.url : DEFAULT_URL)
+        setAddress(next.url && next.url !== 'about:blank' ? next.url : '')
       }
     }
     bridge.onState(onState)
@@ -74,7 +119,7 @@ export function BrowserPane({ isOpen, activeTab, overlayOpen, sessionId }: Workb
 
   useEffect(() => {
     if (!bridge) return
-    if (!active || overlayOpen || shot) {
+    if (!active || overlayOpen || shot || panel) {
       visibleRef.current = false
       void bridge.hide()
       return
@@ -127,10 +172,11 @@ export function BrowserPane({ isOpen, activeTab, overlayOpen, sessionId }: Workb
       observer.disconnect()
       window.removeEventListener('resize', schedule)
     }
-  }, [bridge, active, overlayOpen, shot])
+  }, [bridge, active, overlayOpen, shot, panel])
 
   const annotate = async () => {
     if (!bridge) return
+    setPanel(null)
     setError('')
     try {
       const capture = await bridge.capture()
@@ -142,6 +188,7 @@ export function BrowserPane({ isOpen, activeTab, overlayOpen, sessionId }: Workb
 
   const pickElement = async () => {
     if (!bridge || picking) return
+    setPanel(null)
     setPicking(true)
     setNotice('在网页里点击要引用的元素，Esc 取消')
     try {
@@ -172,6 +219,7 @@ export function BrowserPane({ isOpen, activeTab, overlayOpen, sessionId }: Workb
     if (!bridge) return
     setError('')
     setLoading(true)
+    setPanel(null)
     try {
       const next = await bridge.navigate(url)
       setState(next)
@@ -192,6 +240,59 @@ export function BrowserPane({ isOpen, activeTab, overlayOpen, sessionId }: Workb
     void go(url)
   }
 
+  const createTab = () => {
+    if (!bridge || tabs.length >= MAX_TABS) return
+    setPanel(null)
+    setError('')
+    void bridge.newTab('about:blank').then((next) => {
+      setState(next)
+      setAddress('')
+    }).catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)))
+  }
+
+  const chooseTab = (tab: BrowserTabState) => {
+    if (!bridge || tab.active) return
+    setPanel(null)
+    void bridge.selectTab(tab.id).then((next) => {
+      setState(next)
+      setAddress(next.url && next.url !== 'about:blank' ? next.url : '')
+    }).catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)))
+  }
+
+  const removeTab = (tabId: string) => {
+    if (!bridge) return
+    void bridge.closeTab(tabId).then((next) => {
+      setState(next)
+      setAddress(next.url && next.url !== 'about:blank' ? next.url : '')
+    }).catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)))
+  }
+
+  const openNetworkPanel = () => {
+    if (panel === 'network') {
+      setPanel(null)
+      return
+    }
+    setPanel('network')
+    setPolicyMode(state?.network.mode ?? 'all')
+    setPolicyDomains((state?.network.domains ?? []).join('\n'))
+  }
+
+  const savePolicy = async () => {
+    if (!bridge) return
+    setError('')
+    try {
+      const next = await bridge.setPolicy({
+        mode: policyMode,
+        domains: policyMode === 'all' ? [] : policyDomains.split(/[\s,，;；]+/).filter(Boolean),
+      })
+      setState(next)
+      setPanel(null)
+      setNotice(policyMode === 'allowlist' ? '网络 allowlist 已生效' : '网络访问已恢复为全部 http/https')
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    }
+  }
+
   const clearData = () => {
     if (!bridge) return
     if (!window.confirm('清空内置浏览器的 Cookie 和缓存？这不会影响 Maxma 登录状态。')) return
@@ -203,6 +304,58 @@ export function BrowserPane({ isOpen, activeTab, overlayOpen, sessionId }: Workb
 
   return (
     <div className="flex h-full min-w-0 flex-col bg-background">
+      <div className="flex min-w-0 items-center gap-1 border-b border-border/60 bg-muted/20 px-2">
+        <div role="tablist" aria-label="浏览器页签" className="flex min-w-0 flex-1 overflow-x-auto py-1">
+          {tabs.map((tab) => {
+            const label = tabLabel(tab)
+            return (
+              <div
+                key={tab.id}
+                className={cn(
+                  'group flex h-7 max-w-[13rem] shrink-0 items-center rounded-md border text-caption transition-colors',
+                  tab.active
+                    ? 'border-border bg-background text-foreground shadow-sm'
+                    : 'border-transparent text-muted-foreground hover:bg-accent/50',
+                )}
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={tab.active}
+                  title={label}
+                  className="flex min-w-0 flex-1 items-center gap-1 px-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => chooseTab(tab)}
+                >
+                  {tab.loading && <Loader2 className="h-3 w-3 shrink-0 animate-spin" aria-hidden />}
+                  <span className="truncate">{label}</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label={`关闭页签 ${label}`}
+                  title="关闭页签"
+                  className="mr-1 grid h-5 w-5 shrink-0 place-items-center rounded text-muted-foreground opacity-60 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                  onClick={() => removeTab(tab.id)}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )
+          })}
+          {!tabs.length && <span className="px-2 py-1 text-caption text-muted-foreground">正在准备浏览器…</span>}
+        </div>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7 shrink-0"
+          aria-label="新建浏览器页签"
+          title="新建页签"
+          disabled={!bridge || tabs.length >= MAX_TABS}
+          onClick={createTab}
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+
       <div className="flex items-center gap-1 border-b border-border/60 px-2 py-1.5">
         <Button
           size="icon"
@@ -256,7 +409,7 @@ export function BrowserPane({ isOpen, activeTab, overlayOpen, sessionId }: Workb
             onFocus={(event) => event.currentTarget.select()}
             onKeyDown={(event) => {
               if (event.key === 'Escape') {
-                setAddress(state?.url || DEFAULT_URL)
+                setAddress(state?.url || '')
                 event.currentTarget.blur()
               }
             }}
@@ -267,6 +420,28 @@ export function BrowserPane({ isOpen, activeTab, overlayOpen, sessionId }: Workb
           />
         </form>
         {loading && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" aria-hidden />}
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7"
+          aria-label="浏览器下载"
+          title="下载列表"
+          disabled={!bridge}
+          onClick={() => setPanel(panel === 'downloads' ? null : 'downloads')}
+        >
+          <Download className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7"
+          aria-label="网络 allowlist"
+          title="网络 allowlist"
+          disabled={!bridge}
+          onClick={openNetworkPanel}
+        >
+          <ShieldCheck className="h-3.5 w-3.5" />
+        </Button>
         <Button
           size="icon"
           variant="ghost"
@@ -325,7 +500,76 @@ export function BrowserPane({ isOpen, activeTab, overlayOpen, sessionId }: Workb
       )}
 
       <div ref={viewportRef} aria-label="浏览器页面区域" data-browser-viewport="true" className={cn('relative min-h-0 flex-1 bg-background')}>
-        {bridge ? (
+        {panel === 'downloads' ? (
+          <div className="h-full overflow-y-auto p-3" aria-label="浏览器下载列表">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-sm font-medium">下载</p>
+              <Button size="sm" variant="ghost" aria-label="关闭下载面板" onClick={() => setPanel(null)}>关闭</Button>
+            </div>
+            {!downloads.length ? (
+              <p className="text-xs text-muted-foreground">还没有下载。页面触发的下载会保存到 Maxma 数据目录的 downloads 文件夹。</p>
+            ) : (
+              <div className="space-y-2">
+                {downloads.map((item) => (
+                  <div key={item.id} className="rounded-md border border-border/60 p-2">
+                    <div className="flex min-w-0 items-center justify-between gap-2">
+                      <span className="min-w-0 truncate text-xs font-medium" title={item.filename}>{item.filename}</span>
+                      <span className="shrink-0 text-caption text-muted-foreground">{DOWNLOAD_LABEL[item.state] ?? item.state}</span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between gap-2 text-caption text-muted-foreground">
+                      <span>{formatBytes(item.receivedBytes)}{item.totalBytes > 0 ? ` / ${formatBytes(item.totalBytes)}` : ''}</span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 gap-1 px-2"
+                        disabled={item.state !== 'completed'}
+                        aria-label={`在文件夹中显示 ${item.filename}`}
+                        onClick={() => void bridge?.revealDownload(item.id)}
+                      >
+                        <FolderOpen className="h-3 w-3" /> 在文件夹中显示
+                      </Button>
+                    </div>
+                    {item.error && <p className="mt-1 text-caption text-destructive">{item.error}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : panel === 'network' ? (
+          <div className="h-full overflow-y-auto p-3" aria-label="网络 allowlist 设置">
+            <p className="text-sm font-medium">网络 allowlist</p>
+            <p className="mt-1 text-xs text-muted-foreground">默认允许 http/https。切换后只允许列表中的主机及其子域；页面主请求和图片/脚本等子资源都会被拦截。</p>
+            <label className="mt-3 block text-caption font-medium" htmlFor="browser-network-mode">网络模式</label>
+            <select
+              id="browser-network-mode"
+              aria-label="网络访问模式"
+              className="mt-1 h-8 w-full rounded-md border border-input bg-background px-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={policyMode}
+              onChange={(event) => setPolicyMode(event.target.value as BrowserNetworkPolicy['mode'])}
+            >
+              <option value="all">全部 http/https</option>
+              <option value="allowlist">仅 allowlist</option>
+            </select>
+            <label className="mt-3 block text-caption font-medium" htmlFor="browser-network-domains">允许的域名</label>
+            <textarea
+              id="browser-network-domains"
+              aria-label="允许的域名"
+              className="mt-1 min-h-24 w-full resize-y rounded-md border border-input bg-background px-2 py-1.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+              placeholder="example.com&#10;docs.example.com"
+              disabled={policyMode === 'all'}
+              value={policyDomains}
+              onChange={(event) => setPolicyDomains(event.target.value)}
+            />
+            <p className="mt-1 text-caption text-muted-foreground">每行一个或用逗号分隔；写 example.com 会同时允许其子域。最多 200 个。</p>
+            {(state?.network.blocked.length ?? 0) > 0 && (
+              <p className="mt-2 text-caption text-destructive">已拦截 {state?.network.blocked.length} 个请求，最近：{state?.network.blocked[0]?.host}</p>
+            )}
+            <div className="mt-3 flex gap-2">
+              <Button size="sm" onClick={() => void savePolicy()}>保存策略</Button>
+              <Button size="sm" variant="ghost" aria-label="取消网络设置" onClick={() => setPanel(null)}>取消</Button>
+            </div>
+          </div>
+        ) : bridge ? (
           <div className="pointer-events-none absolute inset-0 grid place-items-center p-6 text-center">
             <div className="max-w-xs space-y-1.5 text-muted-foreground">
               <Globe2 className="mx-auto h-6 w-6 opacity-40" />
@@ -345,8 +589,13 @@ export function BrowserPane({ isOpen, activeTab, overlayOpen, sessionId }: Workb
       </div>
 
       <div className="flex items-center gap-1.5 border-t border-border/60 px-2 py-1.5 text-caption text-muted-foreground">
-        <ShieldCheck className="h-3 w-3 text-success" aria-hidden />
-        <span>独立浏览器会话 · 网页无本地文件与 Maxma 界面访问权限</span>
+        <ShieldCheck className="h-3 w-3 shrink-0 text-success" aria-hidden />
+        <span className="min-w-0 truncate">
+          {state?.network.mode === 'allowlist'
+            ? `网络 allowlist：${state.network.domains.length} 个域名`
+            : '网络访问：全部 http/https'}
+        </span>
+        <span className="ml-auto shrink-0">{tabs.length} 个页签</span>
       </div>
 
       {shot && (
