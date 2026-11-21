@@ -13,15 +13,15 @@ import {
 describe('Workbench Pane 注册表', () => {
   test('桌面 + 浏览器桥：七类 Pane 顺序固定，且每个都有中文名', () => {
     const tabs = availableWorkbenchTabs({ desktop: true, browser: true })
-    expect(tabs).toEqual(['reasoning', 'canvas', 'files', 'changes', 'commands', 'browser', 'tasks'])
+    expect(tabs).toEqual(['reasoning', 'tasks', 'canvas', 'files', 'changes', 'commands', 'browser'])
     for (const tab of tabs) expect(WORKBENCH_PANE_LABELS[tab]).toBeTruthy()
   })
 
   test('纯 Web：不出现文件/变更/命令/浏览器死入口', () => {
     expect(availableWorkbenchTabs({ desktop: false, browser: false })).toEqual([
       'reasoning',
-      'canvas',
       'tasks',
+      'canvas',
     ])
   })
 
@@ -32,8 +32,8 @@ describe('Workbench Pane 注册表', () => {
   })
 
   test('持久化的旧 tab 失效时回退到第一个可用 Pane', () => {
-    expect(resolveWorkbenchTab(['reasoning', 'canvas', 'tasks'], 'browser')).toBe('reasoning')
-    expect(resolveWorkbenchTab(['reasoning', 'canvas', 'tasks'], 'canvas')).toBe('canvas')
+    expect(resolveWorkbenchTab(['reasoning', 'tasks', 'canvas'], 'browser')).toBe('reasoning')
+    expect(resolveWorkbenchTab(['reasoning', 'tasks', 'canvas'], 'canvas')).toBe('canvas')
     expect(resolveWorkbenchTab([], 'browser')).toBe('reasoning')
   })
 
@@ -58,13 +58,13 @@ describe('Workbench Pane 注册表', () => {
 
   test('面板选择器按用途分组，且只列出当前运行时真实可用的 Pane', () => {
     const groups = groupedWorkbenchPanes(availableWorkbenchTabs({ desktop: true, browser: true }))
-    expect(groups.map((group) => group.label)).toEqual(['对话', '工作区', '网页'])
+    expect(groups.map((group) => group.label)).toEqual(['对话', '设计', '工作区', '网页'])
     expect(groups.flatMap((group) => group.panes.map((pane) => pane.id))).toEqual([
-      'reasoning', 'canvas', 'tasks', 'files', 'changes', 'commands', 'browser',
+      'reasoning', 'tasks', 'canvas', 'files', 'changes', 'commands', 'browser',
     ])
     const webGroups = groupedWorkbenchPanes(availableWorkbenchTabs({ desktop: false, browser: false }))
     expect(webGroups.flatMap((group) => group.panes.map((pane) => pane.id))).toEqual([
-      'reasoning', 'canvas', 'tasks',
+      'reasoning', 'tasks', 'canvas',
     ])
   })
 })

@@ -173,7 +173,7 @@ Workbench 2.0 把右侧工作台从「只有推理/画布」扩成桌面 Agent �
 
 **结论：左右两层职责分离，不是两套并列导航。** 左侧 `Sidebar` 是全局路由（对话/模型/记忆/工具/设置等），不承载会话级工作台；右侧 `WorkbenchHost` 是当前会话的上下文工作台，按会话保存 active tab，最多三个并行会话各自独立。两者不做合并，也不把全局路由塞进 Workbench tab。
 
-**Pane 注册表是唯一入口。** `panes.ts` 声明七类 Pane 的顺序、中文名、桥依赖、布局类名、保活策略与组件加载器；`WorkbenchHost` 只按注册表映射成 `React.lazy` 组件，不再写 `activeTab === ...` 或 tab 专属 padding 分支。首次访问才加载 Pane，CodeMirror/浏览器面板不挤进 ChatView 首屏 chunk：ChatView 由 286.73 kB 降到当前 224.64 kB，文件/浏览器/变更/命令/任务/画布/推理各自独立 chunk；已访问集合按 `sessionId` 分开，换会话不会把上一个会话的 Pane 状态串过来。纯 Web 形态由 `availableWorkbenchTabs({desktop:false,browser:false})` 直接得出「推理/画布/任务」，不出现文件/变更/命令/浏览器死入口。
+**Pane 注册表是唯一入口。** `panes.ts` 声明七类 Pane 的顺序、中文名、桥依赖、布局类名、保活策略与组件加载器；`WorkbenchHost` 只按注册表映射成 `React.lazy` 组件，不再写 `activeTab === ...` 或 tab 专属 padding 分支。首次访问才加载 Pane，CodeMirror/浏览器面板不挤进 ChatView 首屏 chunk：ChatView 由 286.73 kB 降到当前 224.64 kB，文件/浏览器/变更/命令/任务/画布/推理各自独立 chunk；已访问集合按 `sessionId` 分开，换会话不会把上一个会话的 Pane 状态串过来。纯 Web 形态由 `availableWorkbenchTabs({desktop:false,browser:false})` 直接得出「推理/任务/画布 + 设计分组」，不出现文件/变更/命令/浏览器死入口。
 
 **桥是运行时事实源。** `window.maxmaDesktop.pickPath` 与 `window.maxmaDesktop.browser` 是渲染层真正能执行的事实；后端 `/api/capabilities` 是描述层，给设置/诊断看，不反过来替 preload 造入口。两者不一致时以 preload 为准，避免“清单说有、点了没反应”。
 
@@ -258,12 +258,13 @@ HTTP(S) 主请求和子资源，记录最近 20 条；顶层导航先做 `assert
 
 | 分组 | Pane |
 | --- | --- |
-| 对话 | 推理、画布、任务 |
+| 对话 | 推理、任务 |
+| 设计 | 画布 |
 | 工作区 | 文件、变更、命令 |
 | 网页 | 浏览器 |
 
-宿主不再手写「哪个 tab 属于哪组」；组内没有可用 Pane 时整组不出现。纯 Web 只有对话组三项，桌面/浏览器入口仍由
-真实 preload 桥决定。
+宿主不再手写「哪个 tab 属于哪组」；组内没有可用 Pane 时整组不出现。纯 Web 为「对话：推理/任务 + 设计：画布」三项，
+桌面/浏览器入口仍由真实 preload 桥决定。
 
 **原生层。** `paneProps.overlayOpen` 从仅 `paletteOpen` 改为 `paletteOpen || pickerOpen`。`BrowserPane` 的 effect
 据此调用 `bridge.hide()`，所以面板库浮在浏览器 Pane 上时，原生 `WebContentsView` 不会盖住 React 菜单；关闭后恢复。
@@ -273,10 +274,55 @@ HTTP(S) 主请求和子资源，记录最近 20 条；顶层导航先做 `assert
 刷新、外部打开等按钮和底部「N 个页签」会从菜单右侧的缝隙露出来，形成新的视觉堆叠；这是复看
 `workbench-pane-picker-browser.png` 后修掉的一处真实问题。
 
-**证据。** `workbench-pane-picker.png`（推理面板上的分组库：对话/工作区/网页与当前勾选）、
+**证据。** `workbench-pane-picker.png`（推理面板上的分组库：对话/设计/工作区/网页与当前勾选）、
 `workbench-pane-picker-browser.png`（浏览器面板上打开面板库，原生 view 已隐藏）、
 `workbench-p1-files.png`（顶部只剩「文件」主标签 + `+`，不再七项横排）。UI 驱动同时断言
-`paneMenu` 顺序为 `reasoning,canvas,tasks,files,changes,commands,browser`，纯 Web `webTabs` 仅三项。
+`paneMenu` 顺序为 `reasoning,tasks,canvas,files,changes,commands,browser`，纯 Web `webTabs` 为
+`reasoning,tasks,canvas`。
+
+### 3.12 设计画布纠偏：从产物钉板到真实画板（2026-11-21）
+
+**旧方向错在把「画布」当成第二消息流。** 原 `CanvasPane.tsx` 只有 34 行，把 `cards` 映射成
+`<div><pre>{card.content}</pre></div>`，能移除卡片、执行 artifact action，但没有画板、图层、选择、变换、素材或导出。
+`panes.ts` 把它放在「对话」组、摘要写「固定代码、表格与结果卡片」，等于承认它只是产物便签板。画布应辅助设计，
+不是把聊天结果竖排钉起来。
+
+**新结构。** 画布改为 Konva 驱动的本地设计画板（`konva@10.10.0` + `react-konva@19.3.2`）：
+
+- `design/DesignCanvasPane.tsx`：项目名、六个画板预设、撤销/重做、导出 PNG、发到对话、左侧工具轨、
+  画板、右侧图层/属性/资料浮层、缩放与适应画板、键盘快捷键、拖入/粘贴图片；顶部预设覆盖
+  社媒方图 / 竖版故事 / 横版封面 / A4 海报 / 手机界面 / 网页首屏。
+- `design/CanvasStage.tsx`：Stage 视口 `x/y/scale`，画板固定在世界坐标 `0,0`，元素用 `Group` 裁在画板内；
+  text/image/rect/ellipse/line 五类节点；单选 `Transformer`；拖拽吸附画板与其他元素边缘并画参考线；
+  选择/手型/文字/图片/矩形/椭圆/线条工具；文字双击浮层编辑；滚轮缩放/平移；拖入/粘贴图片；
+  `exportPng()` 临时 fit 画板、隐藏 Transformer、按画板区域裁切导出后恢复。画布主体给左右工具轨留出
+  44px 内边距，避免初始 fit 时画板左缘被工具栏盖住。
+- `design/CanvasLayers.tsx`：逆序图层、选中高亮、显隐/锁定、上移/下移一层。
+- `design/CanvasInspector.tsx`：未选中时显示画板尺寸与底色；选中后显示变换（X/Y/宽/高/旋转/透明度）、
+  对齐画板、层级、复制/删除；文字内容/字体/字号/字重/行高/字间距/对齐/色板；图片圆角/透明度/替换；
+  形状填充/描边/描边宽/圆角。色板刻意不含紫色。
+- `design/CanvasCardsDrawer.tsx`：旧 code/table/summary/confirm/choice/html/json/markdown 卡片收进可折叠
+  「资料」抽屉，仍可移除或把卡片文字放到画板；旧 `CanvasPane.tsx` 只保留兼容再导出，Pane 懒加载入口不变。
+- 数据层：`types/designCanvas.ts`、`design/canvasModel.ts`（预设、色板、归一化、吸附、图片 cover/contain 几何、
+  层级、字体栈、`computeFitView`）、`design/designCanvasStorage.ts`（IndexedDB `maxma-design-canvas` 的
+  `projects`/`assets` 两 store，localStorage 回退）、`design/useDesignCanvas.ts`（按会话加载、30 步撤销、
+  420ms 防抖落盘、元素增删改/复制/层级/图片替换）、`design/useDesignImages.ts`（20 MiB 上限、最长边 2400、
+  WebP 0.9、按 assetId 懒加载）。项目只引用 `assetId`，图片二进制不与元素混存。
+- 面板分组：画布从「对话」移到新「设计」组，顺序为 `reasoning,tasks,canvas,files,changes,commands,browser`；
+  纯 Web 为 `reasoning,tasks,canvas`。旧资料卡片仍可从画布内抽屉访问，不丢历史产物。
+
+**真实 UI 证据。** `scripts/_ui-workbench-driver.cjs` 新增画布读取、像素哈希、真实鼠标事件 helper 与断言：
+空白画板 1080×1080 → 文字工具点击画板（元素 1 且自动选中）→ 属性面板改文字后画板像素哈希必须变化 →
+改 Y=80、X=40 → 撤销回原 X（360）→ 重做回 40 → 拖框矩形（元素 2）→ 拖入 320×180 PNG（元素 3，
+图层出现「图片」）→ 图层 3 项 → A4 1240×1754 且保留 3 元素 → 导出并发回对话
+`E2E设计画布.png`。浅色主题 reload 后从 IndexedDB 恢复项目名、A4 与 3 元素。整轮 `stage=done / ok=true /
+consoleErrors=[]`。截图：`workbench-design-canvas-blank.png`、`workbench-design-canvas.png`（图层）、
+`workbench-design-canvas-editor.png`（干净画板）、`workbench-design-canvas-a4.png`、
+`workbench-design-canvas-light.png`。
+
+**尚未做（不是本轮完成项）。** 图片 `contain` 几何已有纯函数与测试，但渲染/属性面板只暴露 cover；
+画布暂无 AI 生成或生成式改图入口，本轮是本地优先的设计画板；右键菜单、多指手势、文字自动增高未做。
+窄工作台里 A4 初始 fit 约 19%–21%，需要用户用宿主最大化或放大查看。
 
 ## 4. 验收证据
 
@@ -286,10 +332,10 @@ HTTP(S) 主请求和子资源，记录最近 20 条；顶层导航先做 `assert
 | --- | --- |
 | 后端全量 | `365 pass / 0 fail`（含 `browser-policy.test.ts` 5 tests / 36 expect） |
 | sidecar 全量 | `234 pass / 0 fail`，25 文件，1038 expect，17.74s |
-| 前端单测 | `75 pass / 0 fail`，12 文件，865 expect；Pane 注册表 7 例（含分组元数据与顺序断言） |
+| 前端单测 | `88 pass / 0 fail`，13 文件，928 expect；其中设计画布纯模型 13 例（预设、归一化、吸附、层级、cover/contain、fit、缩放） |
 | 前端 typecheck | 通过 |
-| ESLint | 通过，0 error |
-| 前端构建 | 通过，10.90s；ChatView 224.64 kB（Pane 懒加载拆分后较 286.73 kB 下降 62.09 kB）；文件/浏览器/变更/命令/任务/画布/推理各自独立 chunk，`BrowserPane-*.js ≈22.84 kB`；FileEditor 仍为 662.32 kB 懒加载 chunk |
+| ESLint | 通过，0 error（131 个目标文件） |
+| 前端构建 | 通过，11.27s；ChatView 224.78 kB；设计画布独立 chunk `CanvasPane-*.js 404.97 kB`（gzip 124.43 kB，Konva 体积）；FileEditor 仍为 662.32 kB 懒加载 chunk |
 | 颜色/间距/字号/对比度/无紫/玻璃层数守卫 | 全部通过 |
 | 文件体量棘轮 | 通过；贴纸 `service.ts` 由 854 行拆为 748 行 + `legacy.ts`，类型债归零 |
 | 类型债闸门 | sidecar 0、backend 0 |
@@ -326,9 +372,12 @@ HTTP(S) 主请求和子资源，记录最近 20 条；顶层导航先做 `assert
 - 并行会话：新建后旧 tab 保留，切回后两张 tab 都在，`max=2`；切换期间旧 session 未被主动断开；
 - 命令面板与切 tab 隐藏 native view；768×900 整宽覆盖、`scrollWidth=754=clientWidth`；
 - 工作台面板入口：主标签只显示当前面板，`+` 打开分组面板库；`paneMenu` 顺序为
-  `reasoning,canvas,tasks,files,changes,commands,browser`，分组为对话/工作区/网页；浏览器面板上打开时
+  `reasoning,tasks,canvas,files,changes,commands,browser`，分组为对话/设计/工作区/网页；浏览器面板上打开时
   `pickerHidesNative.hiddenWhileOpen=true`、关闭后 `restoredAfterClose=true`，菜单横向铺满、无控件露出。
-- 浅色 `flexoki-light` 恢复；Web 模式 tab 仅 `推理 / 画布 / 任务`；
+- 设计画布：空板 → 新建文字 → 改文字并验证画板像素哈希变化 → 属性改 Y/X → 撤销/重做 → 拖框矩形 →
+  拖入图片素材 → 图层 3 项 → 切 A4 保留 3 元素 → 导出并发回对话 `E2E设计画布.png`；
+  浅色 reload 后从 IndexedDB 恢复项目名、A4 尺寸与 3 元素。
+- 浅色 `flexoki-light` 恢复；Web 模式 tab 为 `推理 / 任务 / 画布`；
 - `consoleErrors=[]`；2 条 `ResizeObserver loop completed with undelivered notifications` 记为良性忽略警告。
 
 截图（均 1280×900 或 768×900 真实窗口）：
@@ -350,6 +399,11 @@ HTTP(S) 主请求和子资源，记录最近 20 条；顶层导航先做 `assert
 - `dev_docs/visual/workbench-p2-changes.png`
 - `dev_docs/visual/workbench-p3-tasks.png`
 - `dev_docs/visual/workbench-p3-annotate.png`
+- `dev_docs/visual/workbench-design-canvas-blank.png`
+- `dev_docs/visual/workbench-design-canvas.png`
+- `dev_docs/visual/workbench-design-canvas-editor.png`
+- `dev_docs/visual/workbench-design-canvas-a4.png`
+- `dev_docs/visual/workbench-design-canvas-light.png`
 
 ### 4.3 便携包
 

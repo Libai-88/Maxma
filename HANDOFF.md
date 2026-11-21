@@ -3,14 +3,40 @@
 > 当前可执行状态，供下一位接手者。架构请先读 [docs/00-当前架构.md](docs/00-当前架构.md)。
 > 更新时间：2026-11-21
 
+## 2026-11-21：画布纠偏为真实设计画布（Konva 画板 / 图层 / 素材 / 导出）
+
+- **方向纠偏**：旧 `CanvasPane.tsx` 只有 34 行，把消息流的 code/table 卡片竖排钉起来，没有画板、图层、选择、
+  变换、素材或导出。用户明确否定该方向：画布应辅助设计。现在画布是本地优先的设计画板，旧产物卡片收进画布内
+  可折叠「资料」抽屉，仍可移除或把卡片文字放到画板。
+- **画板**：`workbench/design/` 新增 `DesignCanvasPane` + `CanvasStage` + `CanvasLayers` + `CanvasInspector` +
+  `CanvasCardsDrawer` + `canvasModel` + `designCanvasStorage` + `useDesignCanvas` + `useDesignImages`；
+  依赖 `konva@10.10.0`、`react-konva@19.3.2`。支持六个画板预设（社媒方图/竖版故事/横版封面/A4 海报/手机界面/
+  网页首屏）、文字/图片/矩形/椭圆/线条、选择与 Transformer 缩放旋转、拖拽吸附与参考线、图层显隐/锁定/层级、
+  属性面板、图片拖入/粘贴/替换、滚轮缩放平移、文字双击编辑、PNG 裁切导出、`maxma:add-image-ref` 发回对话。
+- **持久化**：项目按会话存 IndexedDB `maxma-design-canvas`（`projects`/`assets` 分离），localStorage 回退；
+  30 步撤销、420ms 防抖落盘；图片 20 MiB 上限、最长边 2400、WebP 0.9，画布只引用 `assetId`。
+- **面板**：画布从「对话」移到新「设计」组；顺序 `reasoning,tasks,canvas,files,changes,commands,browser`，
+  纯 Web `reasoning,tasks,canvas`。画布主体给左右工具轨留 44px 内边距，避免初始 fit 时画板左缘被工具栏遮挡；
+  默认文字框 720×220 / 56px，落点夹在画板内。
+- **验收**：前端 `88 pass / 0 fail`（含画布纯模型 13 例）；typecheck/lint/build 通过；Electron UI 驱动
+  `stage=done, ok=true, consoleErrors=[]`。真实交互：空板 1080×1080 → 文字像素哈希变化 → Y=80/X=40 →
+  撤销回 360/重做回 40 → 拖框矩形 → 拖入 320×180 PNG（图层 3 项）→ A4 1240×1754 保留 3 元素 →
+  导出并发回对话 `E2E设计画布.png`；浅色 reload 后从 IndexedDB 恢复项目名、A4 与 3 元素。
+- **截图**：`dev_docs/visual/workbench-design-canvas-blank.png`、`workbench-design-canvas.png`（图层）、
+  `workbench-design-canvas-editor.png`（干净画板）、`workbench-design-canvas-a4.png`、
+  `workbench-design-canvas-light.png`。
+- **边界**：本轮是本地优先设计画板，尚无 AI 生成/生成式改图入口；图片 contain 几何有模型与测试，但渲染和属性
+  面板仍只暴露 cover；右键菜单、多指手势、文字自动增高未做；380px 窄工作台里 A4 初始 fit 约 19%–21%。
+
 ## 2026-11-21：工作台面板入口重做（单主标签 + 加号 + 分组面板库）
 
 - **入口**：顶部第二行只显示当前面板主标签（图标 + 名称 + `ChevronDown`），右侧独立 `+`；两者打开同一个
   `PanePicker`，仅标题在「切换面板 / 打开面板」间变化。旧的七项横排 `role=tablist` 已删除，当前面板仍保留
   唯一 `role=tab`，带 `aria-haspopup="dialog"`、`aria-expanded`、`aria-controls`。
-- **层级**：`panes.ts` 新增 `group/summary/icon` 与 `groupedWorkbenchPanes`，按「对话（推理/画布/任务）→
-  工作区（文件/变更/命令）→ 网页（浏览器）」纵向分组；每项有图标、名称、一句说明与当前勾选，组内无可用 Pane
-  时整组不出现。选择仍走 `workbench.setTab(tab, sessionId)`，保留每会话 `activeTab`、`visitedTabs` 与 keep-alive。
+- **层级**：`panes.ts` 新增 `group/summary/icon` 与 `groupedWorkbenchPanes`，按「对话（推理/任务）→
+  设计（画布）→ 工作区（文件/变更/命令）→ 网页（浏览器）」纵向分组（分组表最初为对话含画布，画布纠偏后已调整）；
+  每项有图标、名称、一句说明与当前勾选，组内无可用 Pane 时整组不出现。选择仍走 `workbench.setTab(tab, sessionId)`，
+  保留每会话 `activeTab`、`visitedTabs` 与 keep-alive。
 - **浮层**：`inset-x-2` 横向铺满工作台，避免浏览器 Pane 右侧控件从缝隙露出；`overlayOpen = paletteOpen ||
   pickerOpen` 让原生 `WebContentsView` 在菜单打开时隐藏、关闭后恢复。打开聚焦首项，`Esc`/外部点击关闭并把焦点
   还给触发按钮；`activeTab`/`sessionId`/关闭工作台时自动收起，`Ctrl/⌘+P` 先收起面板库。

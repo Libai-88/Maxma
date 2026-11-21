@@ -13,9 +13,9 @@
 import type { ComponentType } from 'react'
 import {
   FolderClosed,
+  Frame,
   GitCompareArrows,
   Globe2,
-  LayoutGrid,
   ListChecks,
   Sparkles,
   SquareTerminal,
@@ -26,7 +26,7 @@ import type { WorkbenchPaneProps } from './paneProps'
 import type { WorkbenchTab } from '@/types/workbench'
 
 export type WorkbenchPaneComponent = ComponentType<WorkbenchPaneProps>
-export type WorkbenchPaneGroup = 'conversation' | 'workspace' | 'browse'
+export type WorkbenchPaneGroup = 'conversation' | 'design' | 'workspace' | 'browse'
 
 export interface WorkbenchPaneGroupMeta {
   id: WorkbenchPaneGroup
@@ -35,6 +35,7 @@ export interface WorkbenchPaneGroupMeta {
 
 export const WORKBENCH_PANE_GROUPS: readonly WorkbenchPaneGroupMeta[] = [
   { id: 'conversation', label: '对话' },
+  { id: 'design', label: '设计' },
   { id: 'workspace', label: '工作区' },
   { id: 'browse', label: '网页' },
 ] as const
@@ -70,14 +71,25 @@ export const WORKBENCH_PANES: readonly WorkbenchPaneMeta[] = [
     load: () => import('./ReasoningPane').then((module) => ({ default: module.ReasoningPane })),
   },
   {
-    id: 'canvas',
-    label: '画布',
+    id: 'tasks',
+    label: '任务',
     group: 'conversation',
-    summary: '固定代码、表格与结果卡片',
-    icon: LayoutGrid,
+    summary: '跟踪目标、计划与进度',
+    icon: ListChecks,
     requires: 'none',
     keepAlive: true,
     bodyClassName: 'overflow-y-auto scrollbar-thin p-2',
+    load: () => import('./TasksPane').then((module) => ({ default: module.TasksPane })),
+  },
+  {
+    id: 'canvas',
+    label: '画布',
+    group: 'design',
+    summary: '设计画板：图层、变换、素材与导出',
+    icon: Frame,
+    requires: 'none',
+    keepAlive: true,
+    bodyClassName: 'overflow-hidden',
     load: () => import('./CanvasPane').then((module) => ({ default: module.CanvasPane })),
   },
   {
@@ -123,17 +135,6 @@ export const WORKBENCH_PANES: readonly WorkbenchPaneMeta[] = [
     keepAlive: true,
     bodyClassName: 'overflow-hidden',
     load: () => import('./BrowserPane').then((module) => ({ default: module.BrowserPane })),
-  },
-  {
-    id: 'tasks',
-    label: '任务',
-    group: 'conversation',
-    summary: '跟踪目标、计划与进度',
-    icon: ListChecks,
-    requires: 'none',
-    keepAlive: true,
-    bodyClassName: 'overflow-y-auto scrollbar-thin p-2',
-    load: () => import('./TasksPane').then((module) => ({ default: module.TasksPane })),
   },
 ] as const
 

@@ -133,7 +133,8 @@ async function setInput(target, selector, value) {
     const el = [...document.querySelectorAll(${JSON.stringify(selector)})]
       .find((node) => node.getClientRects().length > 0);
     if (!el) return false;
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+    const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
     setter.call(el, ${JSON.stringify(value)});
     el.dispatchEvent(new Event("input", { bubbles: true }));
     el.focus();
@@ -141,6 +142,59 @@ async function setInput(target, selector, value) {
   })()`);
   if (!ok) throw new Error(`找不到输入框：${selector}`);
   await sleep(120);
+}
+
+async function readDesignCanvas(target) {
+  return js(target, `(() => {
+    const root = document.querySelector('[data-design-canvas="true"]');
+    if (!root) return null;
+    const stage = document.querySelectorAll('[data-design-stage="true"] canvas')[0] || null;
+    const rect = stage ? stage.getBoundingClientRect() : null;
+    return {
+      count: Number(root.dataset.elementCount || 0),
+      selectedId: root.dataset.selectedId || "",
+      selectedX: root.dataset.selectedX === "" ? null : Number(root.dataset.selectedX),
+      selectedY: root.dataset.selectedY === "" ? null : Number(root.dataset.selectedY),
+      tool: root.dataset.tool || "",
+      artboardWidth: Number(root.dataset.artboardWidth || 0),
+      artboardHeight: Number(root.dataset.artboardHeight || 0),
+      viewX: Number(root.dataset.viewX || 0),
+      viewY: Number(root.dataset.viewY || 0),
+      viewScale: Number(root.dataset.viewScale || 0),
+      name: document.querySelector('input[aria-label="设计项目名称"]')?.value ?? "",
+      projectName: root.dataset.projectName || "",
+      stage: rect ? { x: rect.left, y: rect.top, width: rect.width, height: rect.height } : null,
+    };
+  })()`);
+}
+
+async function canvasPixelHash(target) {
+  return js(target, `(() => {
+    const canvas = document.querySelectorAll('[data-design-stage="true"] canvas')[0];
+    if (!canvas) return null;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context || canvas.width === 0 || canvas.height === 0) return null;
+    const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    let hash = 0;
+    for (let index = 0; index < data.length; index += 16) {
+      hash = (hash * 31 + data[index]) >>> 0;
+    }
+    return { width: canvas.width, height: canvas.height, hash };
+  })()`);
+}
+
+async function dispatchCanvasMouse(target, type, x, y) {
+  const ok = await js(target, `(() => {
+    const canvas = document.querySelectorAll('[data-design-stage="true"] canvas')[0];
+    if (!canvas) return false;
+    canvas.dispatchEvent(new MouseEvent(${JSON.stringify(type)}, {
+      bubbles: true, cancelable: true, clientX: ${x}, clientY: ${y},
+      buttons: ${type === "mousedown" ? 1 : 0}, button: 0,
+    }));
+    return true;
+  })()`);
+  if (!ok) throw new Error("找不到设计画布的 Konva 画布");
+  await sleep(140);
 }
 
 async function pressKeyOn(target, selector, key) {
@@ -449,12 +503,150 @@ app.whenReady().then(async () => {
     if (!desktopPaneIds.includes("files") || !desktopPaneIds.includes("browser")) {
       throw new Error("工作台面板库缺少桌面 Pane：" + JSON.stringify(desktopPanes));
     }
+    const expectedDesktopOrder = ["reasoning", "tasks", "canvas", "files", "changes", "commands", "browser"];
+    if (JSON.stringify(desktopPaneIds) !== JSON.stringify(expectedDesktopOrder)) {
+      throw new Error(`工作台面板顺序不符：${JSON.stringify(desktopPaneIds)}`);
+    }
     result.checks.paneMenu = desktopPanes;
     result.screenshots.paneMenu = await captureWindow("workbench-pane-picker.png");
     await closePaneMenu(win);
 
     const hasBridge = await js(win, "Boolean(window.maxmaDesktop && window.maxmaDesktop.pickPath && window.maxmaDesktop.browser)");
     if (!hasBridge) throw new Error("preload 没有暴露 pickPath/browser");
+
+    // ── 设计画布：真实画板、文字、变换、图层、预设、导出回对话 ─────
+    result.stage = "design-canvas";
+    await clickTab(win, "画布");
+    await waitFor(win, `document.querySelector('[data-design-canvas="true"]')`, "进入设计画布");
+    const designInitial = await readDesignCanvas(win);
+    if (!designInitial?.stage) throw new Error("设计画布没有挂载 Konva 画布：" + JSON.stringify(designInitial));
+    if (designInitial.count !== 0) throw new Error(`新画布不应带元素：${designInitial.count}`);
+    if (designInitial.artboardWidth !== 1080 || designInitial.artboardHeight !== 1080) {
+      throw new Error(`默认画板尺寸不符：${designInitial.artboardWidth}×${designInitial.artboardHeight}`);
+    }
+    result.screenshots.designBlank = await captureWindow("workbench-design-canvas-blank.png");
+
+    await setInput(win, 'input[aria-label="设计项目名称"]', "E2E 设计画布");
+    await js(win, `(() => { document.querySelector('input[aria-label="设计项目名称"]')?.blur(); return true; })()`);
+    const afterRename = await readDesignCanvas(win);
+    if (afterRename?.projectName !== "E2E 设计画布") {
+      throw new Error(`重命名未提交：${JSON.stringify(afterRename)} input=${await js(win, `document.querySelector('input[aria-label="设计项目名称"]')?.value ?? null`)}`);
+    }
+
+    const pointAt = (state, rx, ry) => ({
+      x: state.stage.x + state.viewX + state.artboardWidth * state.viewScale * rx,
+      y: state.stage.y + state.viewY + state.artboardHeight * state.viewScale * ry,
+    });
+
+    const hashBlank = await canvasPixelHash(win);
+    if (!hashBlank?.hash) throw new Error("空白画布像素读取失败");
+
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "文字（T）"`);
+    await waitFor(win, `document.querySelector('[data-design-canvas="true"]')?.dataset.tool === "text"`, "选中文字工具");
+    const center = pointAt(designInitial, 0.5, 0.5);
+    await dispatchCanvasMouse(win, "mousedown", center.x, center.y);
+    await dispatchCanvasMouse(win, "mouseup", center.x, center.y);
+    await waitFor(win, `Number(document.querySelector('[data-design-canvas="true"]')?.dataset.elementCount || 0) === 1`, "文字落到画板");
+    const afterTextAdd = await readDesignCanvas(win);
+    if (!afterTextAdd.selectedId) throw new Error("新增文字后没有自动选中");
+
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "属性"`);
+    await waitFor(win, `document.querySelector('textarea[aria-label="画布文字内容"]')`, "打开属性面板");
+
+    await setInput(win, 'textarea[aria-label="画布文字内容"]', "Maxma 设计画布 E2E");
+    await waitFor(win, `document.querySelector('textarea[aria-label="画布文字内容"]')?.value === "Maxma 设计画布 E2E"`, "修改画布文字");
+    await sleep(600);
+    const hashText = await canvasPixelHash(win);
+    if (!hashText || hashText.hash === hashBlank.hash) {
+      throw new Error(`文字没有改变画板像素：${hashBlank.hash} → ${hashText?.hash}`);
+    }
+
+    const beforeX = (await readDesignCanvas(win)).selectedX;
+    await setInput(win, 'input[aria-label="Y"]', "80");
+    await waitFor(win, `Number(document.querySelector('[data-design-canvas="true"]')?.dataset.selectedY || 0) === 80`, "属性面板改 Y");
+    await setInput(win, 'input[aria-label="X"]', "40");
+    await waitFor(win, `Number(document.querySelector('[data-design-canvas="true"]')?.dataset.selectedX || 0) === 40`, "属性面板改 X");
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "撤销"`);
+    await waitFor(win, `Number(document.querySelector('[data-design-canvas="true"]')?.dataset.selectedX || 0) !== 40`, "撤销回退 X");
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "重做"`);
+    await waitFor(win, `Number(document.querySelector('[data-design-canvas="true"]')?.dataset.selectedX || 0) === 40`, "重做恢复 X");
+    result.checks.designUndoRedo = { beforeX, applied: 40, undo: true, redo: true };
+
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "关闭侧栏"`);
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "矩形（R）"`);
+    await waitFor(win, `document.querySelector('[data-design-canvas="true"]')?.dataset.tool === "rect"`, "选中矩形工具");
+    const rectStart = pointAt(designInitial, 0.08, 0.55);
+    const rectEnd = pointAt(designInitial, 0.35, 0.72);
+    await dispatchCanvasMouse(win, "mousedown", rectStart.x, rectStart.y);
+    await dispatchCanvasMouse(win, "mousemove", rectEnd.x, rectEnd.y);
+    await sleep(260);
+    await js(win, `(() => {
+      window.dispatchEvent(new PointerEvent("pointerup", {
+        bubbles: true, pointerId: 1, pointerType: "mouse",
+        clientX: ${rectEnd.x}, clientY: ${rectEnd.y},
+      }));
+      return true;
+    })()`);
+    await waitFor(win, `Number(document.querySelector('[data-design-canvas="true"]')?.dataset.elementCount || 0) === 2`, "拖框创建矩形");
+
+    await js(win, `(async () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 320;
+      canvas.height = 180;
+      const context = canvas.getContext("2d");
+      context.fillStyle = "#2F5D7C";
+      context.fillRect(0, 0, 320, 180);
+      context.fillStyle = "#F7F3EA";
+      context.beginPath();
+      context.arc(58, 90, 32, 0, Math.PI * 2);
+      context.fill();
+      context.font = "600 28px sans-serif";
+      context.fillText("素材画布", 104, 100);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([blob], "canvas-material.png", { type: "image/png" }));
+      const stage = document.querySelector('[data-design-stage="true"]');
+      stage.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+      stage.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: transfer }));
+      return true;
+    })()`);
+    await waitFor(win, `Number(document.querySelector('[data-design-canvas="true"]')?.dataset.elementCount || 0) === 3`, "拖入图片素材");
+
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "图层"`);
+    await waitFor(win, `document.querySelector('[data-design-canvas="true"] aside')?.innerText.includes("图片")`, "图片素材进入图层");
+    await waitFor(win, `document.querySelector('[data-design-canvas="true"] aside')?.innerText.includes("矩形")`, "图层列表出现矩形");
+    const layers = await js(win, `({
+      text: document.querySelector('[data-design-canvas="true"] aside')?.innerText ?? "",
+      buttons: [...document.querySelectorAll('[data-design-canvas="true"] aside button[aria-label="上移一层"]')].length,
+    })`);
+    if (!layers.text.includes("Maxma 设计画布 E2E") || !layers.text.includes("图片") || layers.buttons !== 3) {
+      throw new Error(`图层列表不完整：${JSON.stringify(layers)}`);
+    }
+    result.screenshots.design = await captureWindow("workbench-design-canvas.png");
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "关闭侧栏"`);
+    result.screenshots.designEditor = await captureWindow("workbench-design-canvas-editor.png");
+
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "画板尺寸预设"`);
+    await waitFor(win, `document.querySelector('[role="menu"][aria-label="画板尺寸预设"]')`, "打开画板预设");
+    await clickButton(win, `(button) => button.getAttribute("role") === "menuitemradio" && button.innerText.includes("A4 海报")`);
+    await waitFor(win, `Number(document.querySelector('[data-design-canvas="true"]')?.dataset.artboardHeight || 0) === 1754`, "切换 A4 画板");
+    const a4 = await readDesignCanvas(win);
+    if (a4.artboardWidth !== 1240 || a4.count !== 3) throw new Error(`A4 预设未保留元素：${JSON.stringify(a4)}`);
+    await sleep(500);
+    result.screenshots.designA4 = await captureWindow("workbench-design-canvas-a4.png");
+
+    await clickButton(win, `(button) => button.getAttribute("aria-label") === "发到对话"`);
+    await waitText(win, "已发到对话输入框", "画布导出并发回对话", 60_000);
+    await waitText(win, "截图已加入对话", "对话输入框收到画布图片", 60_000);
+    await waitText(win, "E2E设计画布.png", "对话引用里出现画布文件名", 60_000);
+    result.checks.designCanvas = {
+      blank: { width: designInitial.artboardWidth, height: designInitial.artboardHeight, count: 0, hash: hashBlank.hash },
+      text: { count: afterTextAdd.count, selected: Boolean(afterTextAdd.selectedId), hash: hashText.hash },
+      shape: { count: 2, layers: layers.buttons, text: layers.text.slice(0, 200) },
+      image: { count: 3, layerPresent: layers.text.includes("图片") },
+      presetA4: { width: a4.artboardWidth, height: a4.artboardHeight, count: a4.count },
+      exportedToChat: true,
+    };
 
     await clickTab(win, "文件");
     await waitText(win, "还没有工作区", "切到文件面板");
@@ -1012,6 +1204,21 @@ app.whenReady().then(async () => {
     result.checks.lightTheme = theme;
     result.screenshots.light = await captureWindow("workbench-p1-files-light.png");
 
+    // 设计画布跨刷新持久化：项目名、A4 尺寸与三个元素都来自 IndexedDB。
+    await clickTab(win, "画布");
+    await waitFor(win, `Number(document.querySelector('[data-design-canvas="true"]')?.dataset.elementCount || 0) === 3`, "刷新后恢复画布元素");
+    const restoredCanvas = await readDesignCanvas(win);
+    if (restoredCanvas.name !== "E2E 设计画布" || restoredCanvas.artboardHeight !== 1754) {
+      throw new Error(`画布刷新恢复不完整：${JSON.stringify(restoredCanvas)}`);
+    }
+    result.checks.designCanvasPersistence = {
+      name: restoredCanvas.name,
+      width: restoredCanvas.artboardWidth,
+      height: restoredCanvas.artboardHeight,
+      count: restoredCanvas.count,
+    };
+    result.screenshots.designLight = await captureWindow("workbench-design-canvas-light.png");
+
     // ── P3 并行会话：最多 3 个 tab，切换不丢 tab 状态 ───────────
     await waitFor(win, `document.querySelector('[aria-label="并行会话"]')`, "并行会话 tab");
     const oldLabel = await js(win, `document.querySelector('[aria-label="并行会话"] [role="tab"]')?.innerText.trim() ?? ""`);
@@ -1049,6 +1256,10 @@ app.whenReady().then(async () => {
     const webPanes = await readPaneMenu(web);
     if (webPanes.some((pane) => pane.id === "files" || pane.id === "browser")) {
       throw new Error(`纯 Web 形态不应显示桌面 Pane：${webPanes.map((pane) => pane.label).join(",")}`);
+    }
+    const expectedWebOrder = ["reasoning", "tasks", "canvas"];
+    if (JSON.stringify(webPanes.map((pane) => pane.id)) !== JSON.stringify(expectedWebOrder)) {
+      throw new Error(`纯 Web 面板顺序不符：${JSON.stringify(webPanes)}`);
     }
     result.checks.webTabs = webPanes;
     await closePaneMenu(web);
