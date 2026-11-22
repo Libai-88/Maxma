@@ -1,0 +1,20 @@
+bun                                D:\NodeGlobal\node_modules\bun\bin\bun.exe
+sidecar bun test                   PASS   332 pass  0 fail 
+core coverage >=65%                PASS  CORE 名单 35 项全部 ≥ 65%，DEBT 4 项不低于各自下限，kernel 无未分类模块 
+sidecar tsc                        PASS  0 error
+backend bun test                   PASS   442 pass  0 fail 
+web tsc                            PASS  0 error
+web bun test                       PASS   111 pass  0 fail 
+web eslint (changed)               PASS  lint 目标（相对 web/，共 12 个）： ✓ ESLint 通过（0 error） 
+web build                          PASS  [32m✓ built in 22.00s[39m
+color guard                        PASS  ✓ No hardcoded colors in 124 TSX files.
+spacing guard                      PASS  ✓ 间距守卫通过：124 个 TSX，自绘边框/底色容器均有内边距
+type scale guard                   PASS  ✓ 排版/动效/阴影守卫通过（存量 0 条在基线内）
+glass weight guard                 PASS  ✓ 玻璃层数守卫通过（8/8 组）
+contrast guard                     PASS  ✓ 基础两态与五套主题的主文字 / 次要文字 / 按钮 / 链接均达 WCAG 门槛（84/84 项）
+no purple guard                    PASS  ✓ 无紫守卫通过：2 个 CSS 文件，0 个 270°–325° 色相
+type budget ratchet                PASS  ✓ bun-sidecar: 0（持平基线） ✓ bun-backend: 0（持平基线） 
+backend bundle                     PASS  [bundle] server.js 34.7MB -> D:\Maxma\MaxmaHere\dist\bun-server\server.js [bundle] externals OK (23 个包保留为运行时依赖) [bundle] externals manifest -> D:\Maxma\MaxmaHere\dist\bun-server\externals.json 
+file size ratchet                  PASS  ✓ 体量棘轮通过：3 个源码目录，10 个文件 >800 行（均未超出基线）   可收紧（node scripts/check-file-size-budget.mjs --write）： 
+
+全部闸门通过

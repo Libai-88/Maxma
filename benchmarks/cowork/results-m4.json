@@ -1,0 +1,103 @@
+{
+  "suite": "cowork-m4-trust",
+  "date": "2026-11-22",
+  "base_commit": "2bae798907afbdeef9b1d9d06eaf787bf9468827",
+  "code_commit": "73343c6c634a4410b579b3c88a7f06189e79dfa2",
+  "environment": {
+    "backend": "http://127.0.0.1:8000",
+    "data_dir": "D:\\Temp\\maxma-m3a-data",
+    "workspace": "D:\\Temp\\maxma-m3a-ws",
+    "web": "http://127.0.0.1:5199",
+    "db_schema": 13,
+    "migration_backup": "D:\\Temp\\maxma-m3a-data\\api\\data\\backups\\maxma-before-m4-2026-11-22T15-56-29-134Z.db"
+  },
+  "checks": [
+    {
+      "id": "T4.1-approval-gate",
+      "status": "pass",
+      "evidence": [
+        "跨任务审批中心显示 1 项待处理，导出目标 D:\\Temp\\maxma-m3a-ws\\m4-验收摘要.txt，风险 medium，30 分钟有效",
+        "批准前工作区无该文件；批准后才写入",
+        "导出/删除审批不允许批量；批量接口对计划/写工具返回 409",
+        "cowork-m4.test.ts 覆盖只读低风险白名单与计划/写入/导出逐项审批"
+      ]
+    },
+    {
+      "id": "T4.2-local-only",
+      "status": "pass",
+      "evidence": [
+        "项目 M3 验收项目 data_policy=local_only；新建任务时平衡/质量档禁用并显示“仅本地 · 0 次云端请求”",
+        "模型预检 local_only 返回 409，响应不含 api_key/params",
+        "真实任务 b518f1ac-8d30-4022-adff-324ec8074dbb：3 次运行，最终 completed；事件 cowork.model.routed 的 provider_id=local-m4-stub、location=local、estimated_usd=0、data_policy=local_only",
+        "本地桩只监听 127.0.0.1:4321；请求日志 artifacts/m4-local-stub-requests.log 全部 host=127.0.0.1:4321，未出现云端渠道调用"
+      ]
+    },
+    {
+      "id": "T4.3-model-routing-cost",
+      "status": "pass",
+      "evidence": [
+        "private 本机不可达直接抛错，不偷上云；balanced 本机可达走本机，不可达才回退云端；quality 长文档优先云端",
+        "云端未配置单价时 estimated_usd=null，note 含“无法估算”，不写 0",
+        "真实本地任务 UI：“本次模型路由 M4 本地桩 · local-stub-model · 本机 · 无 API 费用”"
+      ]
+    },
+    {
+      "id": "T4.4-source-safety",
+      "status": "pass",
+      "evidence": [
+        "导出写盘 sha256=35fa51f6316c52a2bed6835a3e5333771c66fcc961374e4f5f7d7b1bb1614af6，与 artifact 源字节一致",
+        "备份 ledger de76b4c5-583d-4e0b-9c65-dadedbb86341 reason=export；恢复后 restored_at=2026-11-22T16:00:15.713Z",
+        "恢复前自动生成 pre_restore 备份 533d4f1e-db85-4a18-a13c-693b7318576b",
+        "同名文件自动 report.v2.docx，不静默覆盖；目录 junction 越界与目标目录不存在均拒绝",
+        "删除后 staging 文件不存在，trash/4e96d316-...-m4-验收摘要.txt 保留 176 B；同路径历史版本一起置 deleted；回收站不因再次删除被清空"
+      ]
+    },
+    {
+      "id": "T4.5-delivery-package",
+      "status": "pass",
+      "evidence": [
+        "UI 下载文件名“5 篇 PDF 热导率汇总-交付包.zip”，1443 B",
+        "ZIP 条目：artifacts/m4-验收摘要.txt（176 B）、sources.json（587 B）、README.md（689 B）",
+        "README 含任务目标、生成时间、源工作区、交付物、来源与只读快照说明",
+        "新建任务模板 chips 可一次填入标题与目标；项目内新建任务自动锁 local_only 并预填项目根"
+      ]
+    },
+    {
+      "id": "T4.6-negative-regression",
+      "status": "pass",
+      "evidence": [
+        "路径越界、目录 junction 越界、目标目录不存在、local_only 云端候选、显式云端覆盖、批量计划/写入、未知成本、无产物打包均被拒绝或明确失败",
+        "全量闸门 artifacts/verify-all-gates-m4.log：全部通过",
+        "M4 单测 12 pass / 50 expect；M4 REST 3 pass / 33 expect"
+      ]
+    },
+    {
+      "id": "exit-zero-config-first-task",
+      "status": "blocked_external",
+      "evidence": [
+        "零配置云任务 M4 零配置验证 走到发送前确认并已启动；内置 Maxma 免费模型返回 429 FreeUsageLimitError: Free usage limit reached",
+        "代码路径与确认弹窗（provider/model/成本未知/回退原因）已跑通；真实首任务完成证据因上游免费额度耗尽而缺失，不记为通过"
+      ]
+    }
+  ],
+  "gates": {
+    "sidecar": "332 pass / 0 fail",
+    "backend": "442 pass / 0 fail",
+    "web": "111 pass / 0 fail",
+    "sidecar_tsc": "0 error",
+    "web_tsc": "0 error",
+    "web_build_seconds": 22.0,
+    "guards": "color/spacing/type-scale/glass/contrast/no-purple/type-budget/file-size/backend-bundle 全部 PASS"
+  },
+  "screenshots": [
+    "artifacts/m4-cowork-overview.png",
+    "artifacts/m4-new-task.png",
+    "artifacts/m4-artifacts.png",
+    "artifacts/m4-approval-export.png",
+    "artifacts/m4-backups.png",
+    "artifacts/m4-package-button.png",
+    "artifacts/m4-local-plan.png",
+    "artifacts/m4-local-completed.png",
+    "artifacts/m4-project-workspace.png"
+  ]
+}
