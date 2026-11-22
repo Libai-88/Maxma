@@ -20,3 +20,11 @@ Workbench 的只读 Office 预览使用以下 npm 包，均为运行时动态加
 
 `pptx-preview` 自身依赖 `jszip`、`lodash`、`echarts`、`tslib`、`uuid`，其许可证随各自 npm 包分发。
 
+## Office generation
+
+- `pptxgenjs` 4.0.1 — MIT，https://github.com/gitbrent/PptxGenJS
+- `fflate` 0.8.3 — MIT，https://github.com/101arrowz/fflate
+- 用途：`bun-sidecar/src/tools/pptx.ts` 生成原生可编辑 PPTX（文本框、形状、演讲者备注），不生成图片幻灯片；
+  `sanitizePptxPackage` 用 fflate 重打包并移除 `[Content_Types].xml` 中指向缺失部件的 Override。
+- 依赖：`jszip`、`image-size`、`https`，许可证随各自 npm 包分发。
+

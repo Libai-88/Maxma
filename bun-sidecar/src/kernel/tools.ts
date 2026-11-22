@@ -24,7 +24,7 @@ import { searchMemoriesTool } from "../tools/memory";
 import { mergeMemoriesTool } from "../tools/merge-memory";
 import { browserActTool, browserNavigateTool, browserReadTool } from "../tools/browser";
 import { registerRememberMemoryTool } from "../tools/remember-memory";
-import { readOfficeFileTool, writeOfficeFileTool } from "../tools/office";
+import { editOfficeFileTool, readOfficeFileTool, writeOfficeFileTool } from "../tools/office";
 import { canvasApplyTool, canvasExportTool, canvasReadTool, type CanvasToolContext } from "../tools/canvas";
 import { coworkUpdateStepsTool } from "../tools/cowork";
 import { codeDefinitionTool, codeDiagnosticsTool, codeReferencesTool, codeSearchTool, codeSymbolsTool } from "../tools/code";
@@ -90,8 +90,9 @@ export function buildPiCustomTools(
     codeDefinitionTool(),
     codeReferencesTool(),
     ...(cwd ? [codeSymbolsTool(cwd), codeDiagnosticsTool(cwd), applyPatchTool(cwd)] : []),
-    ...(cwd ? [readOfficeFileTool(cwd)] : []),
+    ...(cwd ? [readOfficeFileTool(cwd, options?.writeRoots)] : []),
     ...(cwd ? [writeOfficeFileTool(cwd, options?.writeRoots)] : []),
+    ...(cwd ? [editOfficeFileTool(cwd, options?.writeRoots)] : []),
     ...(options?.cowork ? [coworkUpdateStepsTool(options.cowork)] : []),
     ...(canvas ? [
       canvasReadTool(canvas),

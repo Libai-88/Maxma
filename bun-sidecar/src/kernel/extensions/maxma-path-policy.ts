@@ -16,7 +16,7 @@ import { recordToolDenied } from "../agent-audit";
 export const MAXMA_PATH_POLICY_EXTENSION_NAME = "maxma-path-policy";
 
 const READ_TOOLS = new Set(["read", "grep", "find", "ls", "read_office_file", "read_file", "code_diagnostics"]);
-const WRITE_TOOLS = new Set(["write", "edit", "write_office_file", "write_file", "mkdir", "code_apply_patch"]);
+const WRITE_TOOLS = new Set(["write", "edit", "write_office_file", "edit_office_file", "write_file", "mkdir", "code_apply_patch"]);
 
 function intentFor(toolName: string): PathIntent | null {
   const name = toolName.toLowerCase();

@@ -15,6 +15,7 @@ import {
   CoworkNotFoundError,
   CoworkStore,
   CoworkValidationError,
+  coworkArtifactSnapshotPath,
   type CoworkArtifact,
   type CoworkEvent,
   type CoworkTask,
@@ -155,6 +156,37 @@ export function createCoworkRoutes(deps: CoworkRoutesDeps): Hono {
     }
   });
 
+  app.post("/api/cowork/tasks/:id/revise", async (c) => {
+    try {
+      const task = getStore().getTask(c.req.param("id"));
+      const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
+      const artifactId = cleanText(body.artifact_id, 200);
+      const instruction = cleanText(body.instruction, 20_000);
+      if (!artifactId) throw new CoworkValidationError("artifact_id 不能为空");
+      if (!instruction) throw new CoworkValidationError("instruction 不能为空");
+      const artifact = getStore().getTaskDetail(task.id).artifacts
+        .find((item: CoworkArtifact) => item.id === artifactId);
+      if (!artifact) throw new CoworkNotFoundError("交付物不存在");
+      const selection = body.selection && typeof body.selection === "object" && !Array.isArray(body.selection)
+        ? (body.selection as Record<string, unknown>)
+        : {};
+      if (!["docx", "pptx", "xlsx"].includes(artifact.kind)) {
+        throw new CoworkValidationError("结构化选改只支持 DOCX、PPTX、XLSX");
+      }
+      const result = await getOrchestrator().reviseTask(task.id, {
+        artifactId: artifact.id,
+        path: artifact.path,
+        kind: artifact.kind,
+        version: artifact.version,
+        selection,
+        instruction,
+      });
+      return c.json(result, 202);
+    } catch (err) {
+      return errorResponse(c, err);
+    }
+  });
+
   app.get("/api/cowork/tasks/:id/events/history", (c) => {
     try {
       const task = getStore().getTask(c.req.param("id"));
@@ -177,25 +209,29 @@ export function createCoworkRoutes(deps: CoworkRoutesDeps): Hono {
         .artifacts.find((item: CoworkArtifact) => item.id === c.req.param("artifactId"));
       if (!artifact) throw new CoworkNotFoundError("交付物不存在");
       const staging = path.resolve(task.staging_root);
-      const filePath = path.resolve(artifact.path);
-      const rel = path.relative(staging, filePath);
+      const artifactPath = path.resolve(artifact.path);
+      const rel = path.relative(staging, artifactPath);
       if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) {
         throw new CoworkNotFoundError("交付物不在任务 staging 内");
       }
+      const snapshot = coworkArtifactSnapshotPath(task.id, artifact.id, artifact.path);
+      const filePath = fs.existsSync(snapshot) ? snapshot : artifact.path;
       if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
         throw new CoworkNotFoundError("交付物文件已不存在");
       }
-      const rawName = path.basename(filePath);
+      const rawName = path.basename(artifact.path);
       const asciiName = rawName
         .replace(/[^\x20-\x7E]/g, "_")
         .replace(/["\\\r\n]/g, "_") || "artifact";
       const encoded = encodeURIComponent(rawName);
+      const inline = c.req.query("inline") === "1";
       const file = Bun.file(filePath);
       return new Response(file, {
         headers: {
           "content-type": file.type || "application/octet-stream",
-          "content-disposition": `attachment; filename="${asciiName}"; filename*=UTF-8''${encoded}`,
+          "content-disposition": `${inline ? "inline" : "attachment"}; filename="${asciiName}"; filename*=UTF-8''${encoded}`,
           "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
         },
       });
     } catch (err) {

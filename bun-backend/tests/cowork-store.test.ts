@@ -13,6 +13,7 @@ import {
   CoworkConflictError,
   CoworkStore,
   CoworkValidationError,
+  coworkArtifactSnapshotPath,
   coworkTaskStagingRoot,
 } from "../src/services/cowork-store";
 
@@ -134,6 +135,12 @@ describe("CoworkStore 步骤、产物与审批", () => {
     const a2 = store!.addArtifact({ taskId: task.id, runId: run.id, path: output, kind: "markdown" });
     expect(a2.version).toBe(2);
     expect(a2.sha256).not.toBe(a1.sha256);
+
+    // v1 的字节快照必须独立于同路径覆盖；否则历史版本只剩一条 sha256 记录。
+    const v1Snapshot = coworkArtifactSnapshotPath(task.id, a1.id, output);
+    expect(fs.readFileSync(v1Snapshot, "utf8")).toBe("# 复盘\n");
+    const v2Snapshot = coworkArtifactSnapshotPath(task.id, a2.id, output);
+    expect(fs.readFileSync(v2Snapshot, "utf8")).toBe("# 复盘 v2\n");
   });
 
   test("产物只能登记在任务 staging 内（源工作区文件不可被当成交付物）", () => {

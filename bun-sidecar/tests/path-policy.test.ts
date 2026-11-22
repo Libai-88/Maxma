@@ -95,6 +95,20 @@ describe("PathPolicy 负例", () => {
       // staging 内写入放行（目标可以尚不存在）。
       expect(p.check(path.join(staging, "deliverable.md"), "write").allowed).toBe(true);
 
+      // Cowork 的读根显式包含 staging：Agent 能读回刚写出的产物，但不能读源工作区外。
+      fs.writeFileSync(path.join(staging, "deliverable.md"), "done");
+      const scoped = new PathPolicy({
+        roots: [root],
+        readRoots: [root, staging],
+        writeRoots: [staging],
+        cwd: root,
+      });
+      expect(scoped.check(path.join(staging, "deliverable.md"), "read").allowed).toBe(true);
+      expect(scoped.check(path.join(root, "src", "nested", "file.ts"), "read").allowed).toBe(true);
+      const outsideRead = scoped.check(path.join(os.tmpdir(), "maxma-path-outside.txt"), "read");
+      expect(outsideRead.allowed).toBe(false);
+      expect(outsideRead.code).toBe("PATH_OUTSIDE_ROOT");
+
       // 显式 write_roots: [] 不得退化为 roots。
       const closed = new PathPolicy({ roots: [root, staging], writeRoots: [], cwd: root });
       expect(closed.writeRootCount).toBe(0);

@@ -31,6 +31,7 @@ export const TOOL_DISPLAY_NAMES: Record<string, string> = {
   list_rules: '列出规则',
   read_office_file: '读取 Office 文件',
   write_office_file: '写入 Office 文件',
+  edit_office_file: '按选区修改 Office',
   canvas_read: '读取设计画布',
   canvas_apply: '编辑设计画布',
   canvas_export: '导出设计画布',

@@ -167,7 +167,7 @@ const TASK_TRANSITIONS: Record<CoworkTaskStatus, CoworkTaskStatus[]> = {
   awaiting_approval: ["running", "paused", "failed", "cancelled"],
   paused: ["running", "planning", "cancelled"],
   review: ["completed", "planning", "cancelled"],
-  completed: [],
+  completed: ["planning"],
   failed: ["planning", "cancelled"],
   cancelled: ["planning"],
 };
@@ -186,6 +186,14 @@ export function coworkTaskRoot(): string {
 
 export function coworkTaskStagingRoot(taskId: string): string {
   return path.join(coworkTaskRoot(), taskId, "staging");
+}
+
+/**
+ * 每个交付物版本独立保存一份字节快照，避免同路径覆盖后历史版本只剩 sha256。
+ * 目录放在任务根下、staging 之外；下载路由按 artifact id 取快照，不依赖 DB 新列。
+ */
+export function coworkArtifactSnapshotPath(taskId: string, artifactId: string, sourcePath: string): string {
+  return path.join(coworkTaskRoot(), taskId, "artifact-versions", artifactId, path.basename(sourcePath));
 }
 
 function nowIso(): string {
@@ -574,6 +582,9 @@ export class CoworkStore {
       sources_json: JSON.stringify(input.sources ?? []),
       created_at: nowIso(),
     };
+    const snapshot = coworkArtifactSnapshotPath(input.taskId, artifact.id, absPath);
+    fs.mkdirSync(path.dirname(snapshot), { recursive: true });
+    fs.copyFileSync(absPath, snapshot);
     this.db
       .query(
         `INSERT INTO cowork_artifacts

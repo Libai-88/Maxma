@@ -2,12 +2,16 @@ import { useState } from 'react'
 import {
   AlertTriangle,
   Check,
+  ChevronDown,
+  ChevronRight,
   ClipboardList,
   Download,
+  Eye,
   FileText,
   History,
   Loader2,
   Pause,
+  PencilLine,
   Play,
   RotateCcw,
   Square,
@@ -40,6 +44,7 @@ import {
   StatusPill,
   StepIcon,
 } from './taskUi'
+import { CoworkArtifactStudio } from './CoworkArtifactStudio'
 
 function PlanApprovalCard({ approval, busy, onDecide }: {
   approval: CoworkApproval
@@ -228,31 +233,83 @@ function StepsTimeline({ steps }: { steps: CoworkStep[] }) {
   )
 }
 
-function ArtifactsList({ artifacts, onDownload }: { artifacts: CoworkArtifact[]; onDownload: (artifact: CoworkArtifact) => void }) {
+function ArtifactsList({ artifacts, onDownload, onPreview }: {
+  artifacts: CoworkArtifact[]
+  onDownload: (artifact: CoworkArtifact) => void
+  onPreview: (artifact: CoworkArtifact) => void
+}) {
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   if (artifacts.length === 0) {
     return <p className="px-4 py-6 text-sm text-muted-foreground">还没有交付物。产物只会落在任务 staging 目录。</p>
   }
+  const groups = new Map<string, CoworkArtifact[]>()
+  for (const artifact of artifacts) {
+    const list = groups.get(artifact.path) ?? []
+    list.push(artifact)
+    groups.set(artifact.path, list)
+  }
+  const ordered = [...groups.values()]
+    .map((list) => list.sort((a, b) => b.version - a.version))
+    .sort((a, b) => (b[0]?.created_at ?? '').localeCompare(a[0]?.created_at ?? ''))
+
   return (
     <ul className="divide-y divide-border">
-      {artifacts.map((artifact) => (
-        <li key={artifact.id} className="flex items-center gap-3 px-4 py-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-panel">
-            <FileText className="size-4 text-muted-foreground" aria-hidden />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-foreground">{baseName(artifact.path)}</p>
-            <p className="mt-0.5 text-caption text-muted-foreground">
-              v{artifact.version} <span aria-hidden>·</span> {formatBytes(artifact.size_bytes)}
-              <span className="mx-1.5" aria-hidden>·</span>
-              <code className="font-mono">{artifact.sha256.slice(0, 10)}</code>
-            </p>
-          </div>
-          <Button variant="outline" size="sm" onClick={() => onDownload(artifact)}>
-            <Download className="size-3.5" aria-hidden />
-            下载
-          </Button>
-        </li>
-      ))}
+      {ordered.map((versions) => {
+        const current = versions[0]!
+        const older = versions.slice(1)
+        const open = Boolean(expanded[current.path])
+        return (
+          <li key={current.path} className="px-4 py-3">
+            <div className="flex items-center gap-3">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-panel">
+                <FileText className="size-4 text-muted-foreground" aria-hidden />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-foreground">{baseName(current.path)}</p>
+                <p className="mt-0.5 text-caption text-muted-foreground">
+                  v{current.version} <span aria-hidden>·</span> {formatBytes(current.size_bytes)}
+                  <span className="mx-1.5" aria-hidden>·</span>
+                  <code className="font-mono">{current.sha256.slice(0, 10)}</code>
+                  {older.length > 0 && <span className="ml-1.5">· {older.length} 个历史版本</span>}
+                </p>
+              </div>
+              {['docx', 'xlsx', 'pptx'].includes(current.kind) && (
+                <Button variant="ghost" size="sm" onClick={() => onPreview(current)}>
+                  <PencilLine className="size-3.5" aria-hidden />
+                  预览 / 选改
+                </Button>
+              )}
+              {older.length > 0 && (
+                <Button variant="ghost" size="icon-sm" aria-label="历史版本" onClick={() => setExpanded((state) => ({ ...state, [current.path]: !open }))}>
+                  {open ? <ChevronDown className="size-3.5" aria-hidden /> : <ChevronRight className="size-3.5" aria-hidden />}
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={() => onDownload(current)}>
+                <Download className="size-3.5" aria-hidden />
+                下载
+              </Button>
+            </div>
+            {open && older.length > 0 && (
+              <ul className="mt-2 ml-12 divide-y divide-border rounded-md border border-border bg-muted/25">
+                {older.map((version) => (
+                  <li key={version.id} className="flex items-center gap-2 px-3 py-2">
+                    <span className="shrink-0 rounded-sm border border-border bg-card px-2 py-1.5 font-mono text-caption text-muted-foreground">v{version.version}</span>
+                    <span className="min-w-0 flex-1 truncate text-caption text-muted-foreground">
+                      {formatBytes(version.size_bytes)} <span aria-hidden>·</span> {new Date(version.created_at).toLocaleString('zh-CN')}
+                    </span>
+                    <Button variant="ghost" size="icon-xs" aria-label={`预览 v${version.version}`} onClick={() => onPreview(version)}>
+                      <Eye className="size-3.5" aria-hidden />
+                    </Button>
+                    <Button variant="ghost" size="icon-xs" aria-label={`下载 v${version.version}`} onClick={() => onDownload(version)}>
+                      <Download className="size-3.5" aria-hidden />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+        )
+      })}
     </ul>
   )
 }
@@ -366,6 +423,7 @@ export function TaskDetail({ onDownload }: { onDownload: (artifact: CoworkArtifa
   const action = useCoworkStore((state) => state.action)
   const connection = useCoworkStore((state) => state.connection)
   const decideApproval = useCoworkStore((state) => state.decideApproval)
+  const [studio, setStudio] = useState<CoworkArtifact | null>(null)
 
   if (detailLoading && !detail) {
     return (
@@ -458,7 +516,7 @@ export function TaskDetail({ onDownload }: { onDownload: (artifact: CoworkArtifa
             <StepsTimeline steps={steps} />
           </SectionCard>
           <SectionCard title="交付物" extra={<span className="text-caption text-muted-foreground">{artifacts.length} 个</span>}>
-            <ArtifactsList artifacts={artifacts} onDownload={onDownload} />
+            <ArtifactsList artifacts={artifacts} onDownload={onDownload} onPreview={setStudio} />
           </SectionCard>
         </div>
         <div className="flex min-w-0 flex-col gap-4">
@@ -467,6 +525,13 @@ export function TaskDetail({ onDownload }: { onDownload: (artifact: CoworkArtifa
           </SectionCard>
         </div>
       </div>
+      {studio && (
+        <CoworkArtifactStudio
+          taskId={task.id}
+          artifact={studio}
+          onClose={() => setStudio(null)}
+        />
+      )}
     </div>
   )
 }

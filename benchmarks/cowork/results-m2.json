@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "suite": "cowork-baseline-v2.7.0",
+  "baseline_commit": "9aee7a4a",
+  "baseline_version": "2.7.0",
+  "milestone": "cowork-m2",
+  "generated_at": "2026-11-22T19:45:00+08:00",
+  "method": "M2 真实任务重跑：在临时后端 8011 上以 Kilo 模型创建 Cowork 任务，逐条人工批准计划；产物从 artifact 快照下载后用 Office COM 与 python-docx/python-pptx/openpyxl 双重打开校验。手动修改分钟数只统计到“结构验收通过”，不包括主观润色。",
+  "tasks": [
+    {
+      "id": "student-report",
+      "status": "completed",
+      "duration_seconds": 38.4,
+      "manual_edit_minutes": 0,
+      "file_usable": "yes",
+      "task_id": "bbca2e20-3cb9-44ae-8aa0-e58b9fcb1fbb",
+      "outputs": [
+        {
+          "kind": "docx",
+          "version": 2,
+          "sha256": "022bc17492b22bad6686824656682191b82395f77cf97b084b3de42e4264d1b6",
+          "size_bytes": 2536
+        }
+      ],
+      "notes": "标题/摘要/观察/局限/来源齐全；来源日期和访谈编号 A01–A18 可追溯；明确写“可能相关、不构成因果”。Word COM 打开 28 段 570 字符。"
+    },
+    {
+      "id": "weekly-report",
+      "status": "completed",
+      "duration_seconds": 28.3,
+      "manual_edit_minutes": 0,
+      "file_usable": "yes",
+      "task_id": "af7ea444-0aed-429e-94dd-55dd2c30b54e",
+      "outputs": [
+        {
+          "kind": "docx",
+          "version": 1,
+          "sha256": "bebd893fbdd2703c5b73fa4fcf1553a3ed3967a4507599f73b0db8a885f65452",
+          "size_bytes": 2393
+        },
+        {
+          "kind": "pptx",
+          "version": 1,
+          "sha256": "d33b2ee48e40aa361d0792f8a3c9fd47b9a965a50614ddf5da324a6504c634f5",
+          "size_bytes": 26447
+        }
+      ],
+      "notes": "DOCX 已完成/进行中/风险/下周计划四段齐全，风险与计划分开；竞品 B 折扣只写“销售口述、公开页面未证实”。PPTX 5 页，PowerPoint COM 打开 5 页，第 2 页标题“已完成”，文本框可选中；DOCX Word COM 打开 29 段 439 字符。"
+    },
+    {
+      "id": "meeting-notes",
+      "status": "completed",
+      "duration_seconds": 28.3,
+      "manual_edit_minutes": 0,
+      "file_usable": "yes",
+      "task_id": "5340397d-422c-4859-a1db-214c0bd691c2",
+      "outputs": [
+        {
+          "kind": "docx",
+          "version": 1,
+          "sha256": "328468e17e79f63bd0e795524faea1fc4d315bc82cadf1cd34c5e212b3fcf044",
+          "size_bytes": 2436
+        },
+        {
+          "kind": "xlsx",
+          "version": 1,
+          "sha256": "ebd890eb0c9c67f1c380bb1a7529d9e0f673495ec2ae0525212e38aa5679d99a",
+          "size_bytes": 1873
+        }
+      ],
+      "notes": "DOCX 决议/讨论/行动项/未决四块齐全；XLSX 6 行 3 列，负责人与截止日期无缺失，Excel COM 打开 A1=负责人、C6=11-26；未决的 PPTX 模板数量与定时任务文案仍留在“未决”，没有写成已决定。"
+    }
+  ]
+}

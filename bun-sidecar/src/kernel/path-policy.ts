@@ -43,6 +43,8 @@ interface PolicyRoot {
 export interface PathPolicyOptions {
   roots: string[];
   allowlist?: string[];
+  /** 读根；不传时沿用 roots。Cowork 显式把 staging 加入读根，让 Agent 能读回刚写出的产物。 */
+  readRoots?: string[];
   /** Cowork 等场景的独立写根；不传时沿用 roots（保持旧会话语义）。 */
   writeRoots?: string[];
   writeAllowlist?: string[];
@@ -154,6 +156,7 @@ function nearestExistingAncestor(candidate: string): string | null {
 
 export class PathPolicy {
   private readonly roots: PolicyRoot[];
+  private readonly readRoots: PolicyRoot[];
   private readonly writeRoots: PolicyRoot[];
   private readonly cwd: string;
 
@@ -166,6 +169,7 @@ export class PathPolicy {
       return unique;
     };
     this.roots = toRoots([...options.roots, ...(options.allowlist ?? [])]);
+    this.readRoots = options.readRoots === undefined ? this.roots : toRoots(options.readRoots);
     // writeRoots 是“显式独立写根”：传入空数组表示 fail-closed，而不是退回 roots。
     this.writeRoots = options.writeRoots === undefined
       ? this.roots
@@ -191,7 +195,7 @@ export class PathPolicy {
     if (syntaxError) return deny("PATH_INVALID", syntaxError, typeof rawPath === "string" ? rawPath : "");
 
     const candidate = path.isAbsolute(rawPath) ? path.resolve(rawPath) : path.resolve(this.cwd, rawPath);
-    const roots = intent === "write" ? this.writeRoots : this.roots;
+    const roots = intent === "write" ? this.writeRoots : intent === "read" ? this.readRoots : this.roots;
     if (roots.length === 0) {
       return deny(
         "PATH_OUTSIDE_ROOT",

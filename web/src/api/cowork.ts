@@ -31,8 +31,9 @@ export function coworkEventsUrl(taskId: string, token: string, after = 0): strin
   return `${getApiBase()}/cowork/tasks/${encodeURIComponent(taskId)}/events?${params.toString()}`
 }
 
-export function coworkArtifactUrl(taskId: string, artifactId: string, token: string): string {
+export function coworkArtifactUrl(taskId: string, artifactId: string, token: string, inline = false): string {
   const params = new URLSearchParams({ token })
+  if (inline) params.set('inline', '1')
   return `${getApiBase()}/cowork/tasks/${encodeURIComponent(taskId)}/artifacts/${encodeURIComponent(artifactId)}/file?${params.toString()}`
 }
 
@@ -76,6 +77,16 @@ export function createCoworkApi({ request, getToken, ensureTokenLoaded }: Cowork
         method: 'POST',
       }),
 
+    reviseCoworkTask: (id: string, input: {
+      artifact_id: string
+      instruction: string
+      selection: Record<string, unknown>
+    }) =>
+      request<{ task: CoworkTask; run_id: string }>(`/cowork/tasks/${encodeURIComponent(id)}/revise`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+
     decideCoworkApproval: (id: string, decision: CoworkApprovalDecision) =>
       request<CoworkTaskDetail>(`/cowork/approvals/${encodeURIComponent(id)}/decide`, {
         method: 'POST',
@@ -88,9 +99,9 @@ export function createCoworkApi({ request, getToken, ensureTokenLoaded }: Cowork
       return coworkEventsUrl(taskId, getToken(), after)
     },
 
-    prepareCoworkArtifact: async (taskId: string, artifactId: string): Promise<string> => {
+    prepareCoworkArtifact: async (taskId: string, artifactId: string, inline = false): Promise<string> => {
       await ensureTokenLoaded()
-      return coworkArtifactUrl(taskId, artifactId, getToken())
+      return coworkArtifactUrl(taskId, artifactId, getToken(), inline)
     },
   }
 }

@@ -141,6 +141,29 @@ describe("Cowork REST", () => {
       expect(download.status).toBe(200);
       expect(await download.text()).toBe("artifact-body");
 
+      // 同路径覆盖后，旧 artifact id 必须仍下载旧版本字节，而不是当前磁盘内容。
+      fs.writeFileSync(file, "artifact-body-v2", "utf8");
+      const artifact2 = store.addArtifact({ taskId: task.id, runId: run.id, path: file, kind: "text" });
+      const oldDownload = await instance.request(
+        `/api/cowork/tasks/${task.id}/artifacts/${artifact.id}/file`,
+        { headers: h },
+      );
+      expect(await oldDownload.text()).toBe("artifact-body");
+      const newDownload = await instance.request(
+        `/api/cowork/tasks/${task.id}/artifacts/${artifact2.id}/file?inline=1`,
+        { headers: h },
+      );
+      expect(await newDownload.text()).toBe("artifact-body-v2");
+      expect(newDownload.headers.get("content-disposition")).toContain("inline");
+
+      const badRevision = await instance.request(`/api/cowork/tasks/${task.id}/revise`, {
+        method: "POST",
+        headers: h,
+        body: JSON.stringify({ artifact_id: artifact.id, instruction: "改一下" }),
+      });
+      expect(badRevision.status).toBe(400);
+      expect(((await badRevision.json()) as { detail: string }).detail).toContain("只支持 DOCX");
+
       // 越权路径不能借 artifact id 读取 staging 外的文件（store 侧已拦，路由侧再拦一次）。
       const fake = await instance.request(
         `/api/cowork/tasks/${task.id}/artifacts/not-an-artifact/file`,

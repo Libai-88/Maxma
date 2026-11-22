@@ -243,6 +243,7 @@ export const MAXMA_CUSTOM_TOOLS = [
   "list_rules",
   "read_office_file",
   "write_office_file",
+  "edit_office_file",
   "canvas_read",
   "canvas_apply",
   "canvas_export",

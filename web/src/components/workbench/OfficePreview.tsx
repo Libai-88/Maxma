@@ -19,10 +19,19 @@ interface SheetPreview {
   truncated: boolean
 }
 
+export type OfficeSelection = {
+  text: string
+  slide?: number
+  sheet?: string
+  cell?: string
+}
+
 interface OfficePreviewProps {
   format: OfficeFormat
   blob: Blob
   name: string
+  /** 用户在当前只读预览里选了一段文本/点了一个单元格；用于结构化选改，不直接修改文件。 */
+  onSelection?: (selection: OfficeSelection) => void
 }
 
 const MAX_PREVIEW_ROWS = 100
@@ -34,9 +43,21 @@ function cellText(value: unknown): string {
   return String(value)
 }
 
-function SheetTable({ sheet }: { sheet: SheetPreview }) {
+function columnLetter(index: number): string {
+  let value = index + 1
+  let name = ''
+  while (value > 0) {
+    const remainder = (value - 1) % 26
+    name = String.fromCharCode(65 + remainder) + name
+    value = Math.floor((value - 1) / 26)
+  }
+  return name
+}
+
+function SheetTable({ sheet, onSelection }: { sheet: SheetPreview; onSelection?: (selection: OfficeSelection) => void }) {
   const rows = sheet.rows.slice(0, MAX_PREVIEW_ROWS)
   const colCount = Math.min(MAX_PREVIEW_COLS, Math.max(1, ...rows.map((row) => row.length)))
+  const [selected, setSelected] = useState('')
   return (
     <div className="min-h-0 flex-1 overflow-auto scrollbar-thin rounded-md border border-border bg-card/40">
       <table className="min-w-max border-collapse text-caption">
@@ -45,7 +66,7 @@ function SheetTable({ sheet }: { sheet: SheetPreview }) {
             <th className="sticky left-0 z-20 w-10 border-b border-r border-border bg-card px-2 py-1.5 text-right font-normal text-muted-foreground">#</th>
             {Array.from({ length: colCount }, (_, index) => (
               <th key={index} className="min-w-24 border-b border-r border-border bg-card px-2 py-1.5 text-left font-normal text-muted-foreground">
-                {String.fromCharCode(65 + (index % 26))}{index >= 26 ? Math.floor(index / 26) : ''}
+                {columnLetter(index)}
               </th>
             ))}
           </tr>
@@ -54,11 +75,23 @@ function SheetTable({ sheet }: { sheet: SheetPreview }) {
           {rows.map((row, rowIndex) => (
             <tr key={rowIndex} className="even:bg-accent/20">
               <td className="sticky left-0 z-10 border-b border-r border-border bg-card px-2 py-1.5 text-right tabular-nums text-muted-foreground">{rowIndex + 1}</td>
-              {Array.from({ length: colCount }, (_, colIndex) => (
-                <td key={colIndex} className="max-w-72 truncate border-b border-r border-border px-2 py-1.5" title={cellText(row[colIndex])}>
-                  {cellText(row[colIndex])}
-                </td>
-              ))}
+              {Array.from({ length: colCount }, (_, colIndex) => {
+                const reference = `${columnLetter(colIndex)}${rowIndex + 1}`
+                const text = cellText(row[colIndex])
+                return (
+                  <td
+                    key={colIndex}
+                    className={`max-w-72 cursor-text truncate border-b border-r border-border px-2 py-1.5 ${selected === reference ? 'bg-primary/15 outline outline-1 outline-primary/40' : ''}`}
+                    title={text}
+                    onClick={() => {
+                      setSelected(reference)
+                      onSelection?.({ text, sheet: sheet.name, cell: reference })
+                    }}
+                  >
+                    {text}
+                  </td>
+                )
+              })}
             </tr>
           ))}
         </tbody>
@@ -72,7 +105,7 @@ function SheetTable({ sheet }: { sheet: SheetPreview }) {
   )
 }
 
-function XlsxPreview({ blob }: { blob: Blob }) {
+function XlsxPreview({ blob, onSelection }: { blob: Blob; onSelection?: (selection: OfficeSelection) => void }) {
   const [sheets, setSheets] = useState<SheetPreview[]>([])
   const [active, setActive] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -121,12 +154,12 @@ function XlsxPreview({ blob }: { blob: Blob }) {
           ))}
         </div>
       )}
-      <SheetTable sheet={sheets[active]!} />
+      <SheetTable sheet={sheets[active]!} onSelection={onSelection} />
     </div>
   )
 }
 
-function DocxPreview({ blob }: { blob: Blob }) {
+function DocxPreview({ blob, onSelection }: { blob: Blob; onSelection?: (selection: OfficeSelection) => void }) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -168,12 +201,23 @@ function DocxPreview({ blob }: { blob: Blob }) {
     <div className="relative min-h-0 flex-1 overflow-auto scrollbar-thin rounded-md border border-border bg-muted/30 p-3">
       {loading && <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-background/60 text-caption text-muted-foreground"><Loader2 className="size-3.5 animate-spin" />正在排版文档…</div>}
       {error && <div className="flex items-center gap-2 p-4 text-caption text-destructive"><FileWarning className="size-4" />{error}</div>}
-      <div ref={hostRef} className="office-docx" />
+      <div
+        ref={hostRef}
+        className="office-docx"
+        onMouseUp={() => {
+          const selection = window.getSelection()
+          if (!selection || selection.isCollapsed) return
+          const text = selection.toString().trim()
+          const host = hostRef.current
+          if (!host || !text || !host.contains(selection.anchorNode)) return
+          onSelection?.({ text })
+        }}
+      />
     </div>
   )
 }
 
-function PptxPreview({ blob, name }: { blob: Blob; name: string }) {
+function PptxPreview({ blob, name, onSelection }: { blob: Blob; name: string; onSelection?: (selection: OfficeSelection) => void }) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const previewerRef = useRef<ReturnType<typeof import('pptx-preview').init> | null>(null)
   const [viewportWidth, setViewportWidth] = useState(0)
@@ -227,6 +271,7 @@ function PptxPreview({ blob, name }: { blob: Blob; name: string }) {
         setTotal(instance.slideCount)
         setIndex(instance.currentIndex)
       } catch (err) {
+        console.error('[OfficePreview] pptx parse failed', err)
         if (!cancelled) setError(err instanceof Error ? err.message : '演示文稿解析失败')
       } finally {
         if (!cancelled) setLoading(false)
@@ -264,14 +309,25 @@ function PptxPreview({ blob, name }: { blob: Blob; name: string }) {
         {loading && <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-background/60 text-caption text-muted-foreground"><Loader2 className="size-3.5 animate-spin" />正在解析演示文稿…</div>}
         {!loading && !error && total === 0 && <div className="absolute inset-0 z-10 flex items-center justify-center text-caption text-muted-foreground">演示文稿没有可显示的幻灯片</div>}
         {error && <div className="absolute inset-0 z-10 flex items-center gap-2 bg-background/80 p-4 text-caption text-destructive"><FileWarning className="size-4" />{error}</div>}
-        <div ref={hostRef} className="office-pptx" />
+        <div
+          ref={hostRef}
+          className="office-pptx"
+          onMouseUp={() => {
+            const selection = window.getSelection()
+            if (!selection || selection.isCollapsed) return
+            const text = selection.toString().trim()
+            const host = hostRef.current
+            if (!host || !text || !host.contains(selection.anchorNode)) return
+            onSelection?.({ text, slide: index + 1 })
+          }}
+        />
       </div>
     </div>
   )
 }
 
-export function OfficePreview({ format, blob, name }: OfficePreviewProps) {
-  if (format === 'docx') return <DocxPreview blob={blob} />
-  if (format === 'xlsx') return <XlsxPreview blob={blob} />
-  return <PptxPreview blob={blob} name={name} />
+export function OfficePreview({ format, blob, name, onSelection }: OfficePreviewProps) {
+  if (format === 'docx') return <DocxPreview blob={blob} onSelection={onSelection} />
+  if (format === 'xlsx') return <XlsxPreview blob={blob} onSelection={onSelection} />
+  return <PptxPreview blob={blob} name={name} onSelection={onSelection} />
 }

@@ -18,7 +18,7 @@ export function buildCoworkPrompt(task: CoworkTask, opts: { resume?: boolean; ch
 ## 路径边界（硬约束）
 - 源工作区：${task.workspace_root}
   - 只读。你可以读取用户资料，但绝对不要写、覆盖、删除源工作区里的任何文件。
-  - 需要修改源文件时，先说明原因并等待用户在任务审批里确认；不要用 write/edit/write_office_file 直接改源文件。
+  - 需要修改源文件时，先说明原因并等待用户在任务审批里确认；不要用 write/edit/write_office_file/edit_office_file 直接改源文件。
 - staging 输出目录：${task.staging_root}
   - 所有新产物只能写到这个目录下；写文件时传绝对路径（例如 ${task.staging_root}\\report.docx）。
   - 不要把聊天回复当成交付物；交付物必须是 staging 里真实存在的文件。
@@ -30,8 +30,11 @@ export function buildCoworkPrompt(task: CoworkTask, opts: { resume?: boolean; ch
 4. 输出格式优先用可编辑文件：
    - Word：write_office_file，扩展名 .docx，content 为结构化 Markdown 文本。
    - Excel：write_office_file，扩展名 .xlsx，rows 为二维数组；可用 sheets。
+   - PPTX：write_office_file，扩展名 .pptx。优先传 slides：[{title, subtitle?, bullets?, body?}]，第一张是封面，其余是标题+正文；也可以用 content 传 Markdown（# 封面，## 分页，- 要点）。生成的是原生可编辑文本框，不是图片。
    - Markdown/CSV/TXT：write_office_file 或 write。
-5. 本轮没有 PPTX 生成能力；如果目标要求 PPTX，诚实说明当前只能交付大纲/Markdown，不要伪造一个 .pptx。
+5. 需要迭代已有 Office 产物时，先用 read_office_file 读回真实内容（PPTX 会按页返回文本）；不要凭记忆猜文件内容。
+   - 只改用户选中的段落/幻灯片文本/单元格时，用 edit_office_file 精确替换（DOCX/PPTX 传唯一 find + replace，XLSX 传 sheet/cell/value），保留其余内容和版式。
+   - 需要整体改写时才用 write_office_file，并显式传 overwrite=true；每次覆盖都会生成新版本，旧版本字节会保留。
 6. 最后用简短文字列出产物绝对路径、每份产物的用途和未完成项。用户会在任务详情里验收。
 
 ## 安全

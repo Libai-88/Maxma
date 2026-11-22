@@ -93,6 +93,24 @@ Workbench 2.0 把右侧工作台从「只有推理/画布」扩成桌面 Agent �
   后按请求序号重拉 blob，旧请求不会覆盖新画面。文件正被手工编辑且草稿 dirty 时只提示
   「磁盘文件已更新」，不自动覆盖。
 
+### 3.1.1 Office 产物：生成、版本与选改（M2-B/C）
+
+- PPTX 走 PptxGenJS 4.0.1，生成原生文本框和形状而不是图片；`pptxGenerate` 返回前由
+  `sanitizePptxPackage` 用 fflate 重打包，删除 `[Content_Types].xml` 里指向不存在部件的
+  `Override`，否则 `pptx-preview` 会在读母版时得到 `slides=0` 并在背景渲染阶段崩溃。
+- `write_office_file` 支持 `slides[{title,subtitle?,bullets?,body?,notes?}]`；没有 `slides` 时把
+  Markdown 的 `#` 当封面、`##` 分页、`-` 当项目符号。`read_office_file` 按 `sldIdLst` 顺序读回，
+  跳过页码和眉标。
+- `coworkStore.addArtifact` 在插入 DB 前把当前字节复制到
+  `<taskRoot>/artifact-versions/<artifactId>/<basename>`；下载路由优先返回快照，找不到才回退
+  staging。同路径覆盖后仍能用旧 artifact id 取回旧字节，不依赖新 DB 列。
+- `edit_office_file` 面向选区：DOCX 按 `<w:p>` 唯一匹配并跨 run 替换，PPTX 按 `<p:sp>`/`<a:p>`
+  替换并保留 `<a:pPr>` 与首个 `<a:rPr>`，XLSX 只改已有单元格并保留 `s` 样式。跨段、跨页、
+  模糊匹配一律拒绝，避免改错位置。
+- 前端 `CoworkArtifactStudio.tsx` 复用 `OfficePreview`，DOCX/PPTX 用 `window.getSelection()`
+  抓文本并带当前 PPTX 页码，XLSX 点单元格生成 `sheet + cell`；提交 `POST .../revise` 后创建新的
+  planning run，仍要用户批准计划才写入。`TaskDetailPane` 按路径分组版本，历史版本可单独预览和下载。
+
 ### 3.2 内置浏览器
 
 - **多页签**：控制器持有 `tabs: BrowserTab[]`，每个 tab 是独立 `WebContentsView` + 独立 `browser-cdp`，共享同一个

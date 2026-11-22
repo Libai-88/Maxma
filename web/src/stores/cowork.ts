@@ -104,6 +104,11 @@ interface CoworkState {
   resumeTask: () => Promise<void>
   cancelTask: () => Promise<void>
   acceptTask: () => Promise<void>
+  reviseTask: (input: {
+    artifact_id: string
+    instruction: string
+    selection: Record<string, unknown>
+  }) => Promise<void>
   decideApproval: (
     approvalId: string,
     action: 'approve' | 'reject' | 'modify',
@@ -334,6 +339,15 @@ export const useCoworkStore = create<CoworkState>()((set, get) => {
       await api.acceptCoworkTask(id)
       await get().refreshDetail()
       await get().fetchTasks()
+    }),
+
+    reviseTask: (input) => withAction('revise', async () => {
+      const id = get().selectedId
+      if (!id) return
+      const result = await api.reviseCoworkTask(id, input)
+      await get().fetchTasks()
+      await get().refreshDetail()
+      if (result.run_id) await connect(id)
     }),
 
     decideApproval: (approvalId, action, options) =>

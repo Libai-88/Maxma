@@ -11,9 +11,6 @@
  *     把已完成步骤与 checkpoint 交给模型，只继续未完成部分。
  */
 
-import * as fs from "node:fs";
-import * as path from "node:path";
-
 import {
   handlePiCreateSession,
   handlePiSessionRpc,
@@ -26,10 +23,12 @@ import {
   CoworkConflictError,
   CoworkStore,
 } from "./cowork-store";
-import type { CoworkTask, CoworkTaskStatus } from "./cowork-store";
+import type { CoworkTask } from "./cowork-store";
+import { artifactFromToolResult } from "./cowork-artifacts";
 import { buildCoworkPrompt, buildCoworkResumePrompt } from "./cowork-prompt";
 import { resolveCoworkModelParams } from "./cowork-model";
-import { asRecord, isInside, str, truncate } from "./cowork-utils";
+import { finishCoworkRun } from "./cowork-run-finish";
+import { asRecord, str, truncate } from "./cowork-utils";
 
 const COWORK_TOOLS = [
   "read",
@@ -40,6 +39,7 @@ const COWORK_TOOLS = [
   "ls",
   "read_office_file",
   "write_office_file",
+  "edit_office_file",
   "cowork_update_steps",
   "submit_plan",
 ] as const;
@@ -221,6 +221,71 @@ export class CoworkOrchestrator {
     });
     void this.launchPlan(next, run.id);
     return { task: next, run_id: run.id };
+  }
+
+  /**
+   * 结构化选改：在任务已交付/已验收后，以已有产物 + 选区为输入开新一轮。
+   * 不直接写文件；仍走 plan → 用户批准 → 执行，保持 M1 的审批链。
+   */
+  async reviseTask(taskId: string, input: {
+    artifactId: string;
+    path: string;
+    kind: string;
+    version: number;
+    selection: Record<string, unknown>;
+    instruction: string;
+  }): Promise<{ task: CoworkTask; run_id: string }> {
+    const task = this.store.getTask(taskId);
+    if (!["review", "completed", "failed"].includes(task.status)) {
+      throw new CoworkConflictError(`当前状态 ${task.status} 不能发起结构化选改`);
+    }
+    const run = this.store.createRun(taskId, { freshSession: true });
+    const next = this.store.transitionTask(taskId, "planning");
+    this.rememberSession(next, run.id);
+    this.store.appendEvent(taskId, run.id, "cowork.revision.requested", {
+      message: "已收到结构化选改，等待计划",
+      artifact_id: input.artifactId,
+      path: input.path,
+      version: input.version,
+      selection: input.selection,
+      instruction: input.instruction,
+    });
+    void this.launchRevision(next, run.id, input);
+    return { task: next, run_id: run.id };
+  }
+
+  private async launchRevision(
+    task: CoworkTask,
+    runId: string,
+    input: {
+      artifactId: string;
+      path: string;
+      kind: string;
+      version: number;
+      selection: Record<string, unknown>;
+      instruction: string;
+    },
+  ): Promise<void> {
+    try {
+      await this.ensureSession(task, "start", true);
+      const planReply = await this.rpcSession(task.session_id!, "set_plan_mode", { enabled: true });
+      if (!planReply.ok) throw new Error(planReply.error ?? "set_plan_mode failed");
+      const promptReply = await this.rpcSession(task.session_id!, "prompt", {
+        message: [
+          "这是一次结构化选改，不是重做整个任务。",
+          `目标产物：${input.path}（artifact ${input.artifactId}，v${input.version}）`,
+          `选区：${JSON.stringify(input.selection)}`,
+          `用户修改要求：${input.instruction}`,
+          "先 read_office_file 读回目标产物，确认选区原文仍存在；",
+          "再用 edit_office_file 按选区精确修改（DOCX/PPTX 传 find/replace，XLSX 传 sheet/cell/value），",
+          "保留文件其余内容和版式；不要用 write_office_file 重写整份文件。",
+          "完成后 read_office_file 复核，并提交一份 3–5 步计划等待批准；计划批准前不要写文件。",
+        ].join("\n"),
+      });
+      if (!promptReply.ok) throw new Error(promptReply.error ?? "prompt failed");
+    } catch (err) {
+      this.failRun(task.id, runId, err instanceof Error ? err.message : String(err));
+    }
   }
 
   private async launchPlan(task: CoworkTask, runId: string): Promise<void> {
@@ -690,106 +755,24 @@ export class CoworkOrchestrator {
       tool_call_id: str(payload.tool_call_id),
       elapsed: payload.elapsed ?? null,
     });
-    // write_office_file 在 details.path 回传绝对路径；内置 write/edit 只在入参里带 path。
-    if (!["write", "write_office_file", "edit"].includes(toolName)) return;
-    try {
-      const parsed = JSON.parse(str(payload.output, "{}")) as Record<string, unknown>;
-      const details = asRecord(parsed.details);
-      const inputRecord = input ? asRecord(JSON.parse(input) as unknown) : {};
-      const artifactPath = str(details.path) || str(inputRecord.path);
-      const ok = details.ok !== false;
-      const task = this.store.getTask(taskId);
-      const staging = task.staging_root;
-      if (!ok || !artifactPath || !fs.existsSync(artifactPath) || !isInside(staging, artifactPath)) return;
-      const ext = path.extname(artifactPath).toLowerCase();
-      const kind = ext === ".docx" ? "docx"
-        : ext === ".xlsx" ? "xlsx"
-        : ext === ".pdf" ? "pdf"
-        : ext === ".pptx" ? "pptx"
-        : ext === ".csv" ? "csv"
-        : "markdown";
-      this.store.addArtifact({
-        taskId,
-        runId,
-        path: artifactPath,
-        kind,
-        status: "staged",
-        sources: [taskId],
-      });
-    } catch {
-      // 工具输出不是模型可见产物时不影响任务
-    }
+    const task = this.store.getTask(taskId);
+    const artifact = artifactFromToolResult(toolName, payload.output, input, task.staging_root);
+    if (!artifact) return;
+    this.store.addArtifact({
+      taskId,
+      runId,
+      path: artifact.path,
+      kind: artifact.kind,
+      status: "staged",
+      sources: [taskId],
+    });
   }
 
   private onDone(taskId: string, runId: string): void {
-    const task = this.store.getTask(taskId);
-    if (task.status === "paused" || task.status === "cancelled" || task.status === "completed") return;
-    // 计划阶段没有提交计划就结束：不能停在 planning 让用户误以为还在跑。
-    if (task.status === "planning") {
-      const message = "Agent 在计划阶段结束，但没有提交计划";
-      this.store.appendEvent(taskId, runId, "cowork.run.failed", { error: message });
-      try {
-        this.store.transitionTask(taskId, "failed");
-        const latest = this.store.getLatestRun(taskId);
-        if (latest && latest.id === runId && latest.status === "running") {
-          this.store.updateRunStatus(runId, "failed", { error: message });
-        }
-        this.expirePendingApprovals(taskId, "run ended in planning");
-      } catch {
-        // 状态已变化时保持原状
-      }
-      if (task.session_id) this.active.delete(task.session_id);
-      return;
-    }
-    for (const step of this.store.getSteps(runId)) {
-      if (step.status === "pending" || step.status === "running") {
-        this.store.upsertStep({
-          runId,
-          seq: step.seq,
-          label: step.label,
-          status: "skipped",
-          detail: { reason: "agent finished without explicit step status" },
-          endedAt: new Date().toISOString(),
-        });
-      }
-    }
-    try {
-      if (task.status === "running" || task.status === "awaiting_approval" || task.status === "awaiting_plan") {
-        this.store.transitionTask(taskId, "review");
-      }
-      const latest = this.store.getLatestRun(taskId);
-      if (latest && latest.id === runId && latest.status === "running") {
-        this.expirePendingApprovals(taskId, "run completed");
-        this.store.updateRunStatus(runId, "completed", {
-          checkpoint: { completed_at: new Date().toISOString() },
-        });
-      }
-      this.store.appendEvent(taskId, runId, "cowork.run.completed", {
-        message: "本轮执行结束，等待验收",
-        artifacts: this.store.getTaskDetail(taskId).artifacts.length,
-      });
-    } catch {
-      // 状态已由用户改变（暂停/取消）时不再强推 review
-    } finally {
-      const sessionId = task.session_id;
-      if (sessionId) this.active.delete(sessionId);
-    }
-  }
-}
-
-/** 把任务状态翻译成 UI 可读文案的唯一处（前端只做展示映射，不自行判断状态机）。 */
-export function coworkStatusLabel(status: CoworkTaskStatus): string {
-  switch (status) {
-    case "draft": return "待启动";
-    case "planning": return "生成计划";
-    case "awaiting_plan": return "等待批准计划";
-    case "running": return "执行中";
-    case "awaiting_approval": return "等待工具审批";
-    case "paused": return "已暂停";
-    case "review": return "待验收";
-    case "completed": return "已完成";
-    case "failed": return "失败";
-    case "cancelled": return "已取消";
-    default: return status;
+    finishCoworkRun({
+      store: this.store,
+      expirePendingApprovals: (id, reason) => this.expirePendingApprovals(id, reason),
+      deactivateSession: (sessionId) => this.active.delete(sessionId),
+    }, taskId, runId);
   }
 }

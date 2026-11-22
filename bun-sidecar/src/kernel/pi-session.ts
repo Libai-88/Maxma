@@ -93,11 +93,13 @@ export function buildExtensionFactories(opts: MaxmaSessionOptions): InlineExtens
     }));
   }
   extensionFactories.push(createMaxmaBlockerExtension());
+  const rootPaths = opts.allowedRoots && opts.allowedRoots.length > 0 ? opts.allowedRoots : [cwd];
   const pathPolicy = new PathPolicy({
     cwd,
-    roots: opts.allowedRoots && opts.allowedRoots.length > 0 ? opts.allowedRoots : [cwd],
+    roots: rootPaths,
     allowlist: opts.pathAllowlist,
     ...(opts.writeRoots !== undefined ? { writeRoots: opts.writeRoots } : {}),
+    ...(opts.writeRoots !== undefined ? { readRoots: [...rootPaths, ...opts.writeRoots] } : {}),
     ...(opts.writeAllowlist !== undefined ? { writeAllowlist: opts.writeAllowlist } : {}),
   });
   extensionFactories.push(createMaxmaPathPolicyExtension(pathPolicy, cwd, opts.sessionId));
