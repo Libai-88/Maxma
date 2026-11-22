@@ -67,6 +67,9 @@ import { createCodeIndexRoutes } from "./routes/code-index";
 import { createHardwareRoutes } from "./routes/hardware";
 import { createDiagnosticsRoutes } from "./routes/diagnostics";
 import { createCapabilitiesRoutes } from "./routes/capabilities";
+import { createCoworkRoutes } from "./routes/cowork";
+import { CoworkStore } from "./services/cowork-store";
+import { CoworkOrchestrator } from "./services/cowork-orchestrator";
 import { startBackgroundSync, stopBackgroundSync } from "./services/opencode-zen";
 import { startKiloBackgroundSync, stopKiloBackgroundSync } from "./services/kilo-free";
 import { initializeDatabase } from "./db/core";
@@ -201,11 +204,53 @@ const chatHub: ChatWsHub = {
 };
 
 
+/** 测试用：关闭某个 app 实例懒加载出来的 Cowork 连接与定时器。 */
+const coworkDisposers = new WeakMap<Hono, () => void>();
+const coworkInitializers = new WeakMap<Hono, () => void>();
+
+export function disposeAppCowork(app: Hono): void {
+  const dispose = coworkDisposers.get(app);
+  if (!dispose) return;
+  coworkDisposers.delete(app);
+  dispose();
+}
+
+/** 真实服务启动时主动打开任务库并执行重启恢复；测试仍走懒加载，避免临时目录 EBUSY。 */
+export function initAppCowork(app: Hono): void {
+  coworkInitializers.get(app)?.();
+}
+
 export function createApp(): Hono {
   const token = loadOrCreateToken();
   // 数据库迁移（对齐 Python db/core.py import 时自动初始化：v1-v7 schema）
   initializeDatabase();
+  // Cowork 任务库懒加载：页面未启用/从未访问任务时，不额外占用一个 SQLite 连接
+  // （测试会反复创建/删除临时数据目录，常驻连接会让清理报 EBUSY）。
+  let coworkStore: CoworkStore | null = null;
+  let coworkOrchestrator: CoworkOrchestrator | null = null;
+  const ensureCoworkStore = (): CoworkStore => {
+    if (!coworkStore) {
+      coworkStore = new CoworkStore();
+      const recovered = coworkStore.recoverInterruptedTasks();
+      if (recovered > 0) console.info(`[cowork] recovered ${recovered} interrupted task(s) as paused`);
+    }
+    return coworkStore;
+  };
+  const ensureCoworkOrchestrator = (): CoworkOrchestrator => {
+    if (!coworkOrchestrator) {
+      coworkOrchestrator = new CoworkOrchestrator({
+        store: ensureCoworkStore(),
+        sessions: hubSessions,
+        pendingPlans: hubPlans,
+      });
+    }
+    return coworkOrchestrator;
+  };
+  const coworkEnabled = () => process.env.MAXMA_COWORK !== "0";
   const app = new Hono();
+  coworkInitializers.set(app, () => {
+    if (coworkEnabled()) ensureCoworkStore();
+  });
 
   // STABILITY-009：全局错误边界。路由抛出走 Bun 默认 = 形状不归一、
   // 不进 error-collector、与 request-log 的 trace_id 断关联。
@@ -310,6 +355,15 @@ app.route("/", createExtensionsRoutes());
   // 2.5b：diagnostics（错误报告 + 前端诊断上报）
   app.route("/", createDiagnosticsRoutes());
 
+  // M1：Cowork 任务域 REST + 任务级 SSE
+  // 始终挂载：关闭时 tasks/approvals 返回 503，health 仍可读且不触碰任务库。
+  // 这样前端能区分“环境变量关闭”和“路由不存在”，也不会在禁用时多开连接。
+  app.route("/", createCoworkRoutes({
+    store: ensureCoworkStore,
+    orchestrator: ensureCoworkOrchestrator,
+    enabled: coworkEnabled,
+  }));
+
   // 2.5c：capabilities 聚合 + skills/discovered 桩（endpoints 由 app.routes 派生）
   app.route(
     "/",
@@ -383,6 +437,13 @@ app.route("/", createExtensionsRoutes());
 
   // 启动事件（对齐 Python server.py record_activity("system","startup")）
   recordActivity("system", "startup", { message: `MaxmaHere 后端启动完成 (${VERSION})` });
+
+  coworkDisposers.set(app, () => {
+    coworkOrchestrator?.stop();
+    coworkOrchestrator = null;
+    coworkStore?.close();
+    coworkStore = null;
+  });
 
   return app;
 }
@@ -558,6 +619,7 @@ export async function gracefulShutdown(reason: string): Promise<void> {
 
 export function startServer() {
   startLlmUsageRetentionTask();
+  initAppCowork(app);
   // 显式带上 WsData 泛型：不写的话 Bun.serve 推导出 `ServerWebSocket<undefined>`，
   // 于是下面 websocket 回调里 `ws.data` 是 undefined、`server.upgrade({data})`
   // 也判为不兼容（实测 5 处 tsc 错误）。泛型是这里唯一的正解——用断言去压会

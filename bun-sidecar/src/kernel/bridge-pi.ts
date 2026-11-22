@@ -24,7 +24,7 @@ import { orchestratePiPrompt, handlePiCancelGuard } from "./prompt";
 import { loadMaxmaMcpEntries } from "./mcp";
 import { resolvePiModel } from "./model";
 import { loadPersonaSystemPrompt } from "./persona-prompt";
-import { buildPiCustomTools } from "./tools";
+import { buildSessionCustomTools } from "./tools";
 import { createSubagentTool, type SubagentLimits } from "./subagent";
 import { normalizeDisabledExtensionIds } from "./extensions";
 import {
@@ -231,18 +231,16 @@ export async function handlePiCreateSession(
   const tools: string[] | undefined = Array.isArray(params?.tools) ? params.tools : undefined;
   const allowedRoots = [...new Set([...nonEmptyStringList(params?.allowed_roots), cwd])];
   const pathAllowlist = nonEmptyStringList(params?.path_allowlist);
+  // Cowork 的写根是独立契约：显式 `[]` 表示 fail-closed，没传则沿用 allowedRoots。
+  const writeRoots = Array.isArray(params?.write_roots) ? nonEmptyStringList(params?.write_roots) : undefined;
+  const writeAllowlist = writeRoots === undefined ? undefined : nonEmptyStringList(params?.write_allowlist);
   const rawMode = params?.permission_mode as string | undefined;
   const permissionMode: MaxmaPermissionMode =
     MAXMA_PERMISSION_MODES.includes(rawMode as MaxmaPermissionMode)
       ? (rawMode as MaxmaPermissionMode)
       : "ask";
 
-  // session_id 契约：对齐 Python `uuid.uuid4().hex`（32 位小写 hex，无连字符）——
-  // 前端 useChat.ts 以 /^[0-9a-f]{32}$/i 校验并据此建立 WS，带连字符会被拒绝。
-  //
-  // 恢复（P1）：`resume_session_id` 指向磁盘上的历史会话，id 沿用原 id ——
-  // 前端 localStorage 的会话选择与 turns 缓存都按 id 索引，换 id 等于丢上下文。
-  // 已在 hub 里的会话直接回成功，重复恢复不产生第二个 record。
+  // session_id 必须是 32 位 hex（前端据此建 WS）；恢复沿用原 id，已在 hub 的会话直接回 resumed。
   const requestedSessionId = normalizeSessionId(params?.session_id);
   const resumeSessionId = normalizeSessionId(params?.resume_session_id);
   if ((resumeSessionId ?? requestedSessionId) && deps.sessions.has((resumeSessionId ?? requestedSessionId)!)) {
@@ -368,6 +366,8 @@ export async function handlePiCreateSession(
     permissionMode,
     allowedRoots,
     pathAllowlist,
+    ...(writeRoots !== undefined ? { writeRoots } : {}),
+    ...(writeAllowlist !== undefined ? { writeAllowlist } : {}),
     approvalGate,
     // EXT-UI-001：扩展的 ctx.ui 必须有真实落点，否则 runner 回落 noOpUIContext。
     uiContext: extensionUi.uiContext,
@@ -380,12 +380,9 @@ export async function handlePiCreateSession(
     },
     ...(thinkingLevel ? { thinkingLevel } : {}),
     ...(mcp && mcp.entries.length > 0 ? { mcpServers: mcp.entries } : {}),
-    // Maxma 特色能力层（记忆、规则、办公读取 + 计划模式）
-    // 子 Agent：pi SDK 的进程内会话（docs/sdk.md + examples/extensions/subagent），
-    // 复用本会话已解析的 ModelRuntime/凭据，不 spawn 外部进程；面板值（启用/并行数/超时）
-    // 由后端在 create_session 的 `subagent` 参数里下发。
+    // 能力层（记忆/规则/办公）+ 子 Agent（进程内复用 ModelRuntime）；Cowork 仅隔离会话注册。
     customTools: [
-      ...buildPiCustomTools(cwd, subagentTool === undefined ? [] : [subagentTool], { sessionId, cwd, sendEvent: io.sendEvent }),
+      ...buildSessionCustomTools(cwd, subagentTool, { sessionId, cwd, sendEvent: io.sendEvent }, params, writeRoots),
       submitPlanTool,
     ],
     ...(systemPrompt !== undefined ? { systemPrompt } : {}),

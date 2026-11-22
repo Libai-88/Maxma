@@ -77,6 +77,36 @@ describe("PathPolicy 负例", () => {
     expect(decision.code).toBe("PATH_OUTSIDE_ROOT");
   });
 
+  test("独立写根：源工作区可读不可写，staging 可写；显式空写根 fail-closed", () => {
+    const staging = fs.mkdtempSync(path.join(os.tmpdir(), "maxma-path-staging-"));
+    try {
+      const p = new PathPolicy({
+        roots: [root, staging],
+        writeRoots: [staging],
+        cwd: root,
+      });
+      expect(p.writeRootCount).toBe(1);
+      // 源工作区里的读取仍放行。
+      expect(p.check("src/nested/file.ts", "read").allowed).toBe(true);
+      // 同一个会话里，源工作区的写入必须被写根拒绝。
+      const sourceWrite = p.check(path.join(root, "src", "new.ts"), "write");
+      expect(sourceWrite.allowed).toBe(false);
+      expect(sourceWrite.code).toBe("PATH_OUTSIDE_ROOT");
+      // staging 内写入放行（目标可以尚不存在）。
+      expect(p.check(path.join(staging, "deliverable.md"), "write").allowed).toBe(true);
+
+      // 显式 write_roots: [] 不得退化为 roots。
+      const closed = new PathPolicy({ roots: [root, staging], writeRoots: [], cwd: root });
+      expect(closed.writeRootCount).toBe(0);
+      const denied = closed.check(path.join(staging, "deliverable.md"), "write");
+      expect(denied.allowed).toBe(false);
+      expect(denied.code).toBe("PATH_OUTSIDE_ROOT");
+      expect(denied.reason).toContain("fail-closed");
+    } finally {
+      fs.rmSync(staging, { recursive: true, force: true });
+    }
+  });
+
   test("读取目录允许；读取非普通文件/目录拒绝", () => {
     const p = policy();
     expect(p.check("src", "read").allowed).toBe(true);

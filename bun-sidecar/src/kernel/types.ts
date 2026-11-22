@@ -96,6 +96,13 @@ export interface MaxmaSessionOptions {
   allowedRoots?: string[];
   /** 用户显式追加的 allowlist 根（与工作区根同一信任级）。 */
   pathAllowlist?: string[];
+  /**
+   * 独立写入根（Cowork 用）：有值时写类工具只能落在这些根内，
+   * 不传时沿用 allowedRoots（保持旧会话读写同根的语义）。
+   */
+  writeRoots?: string[];
+  /** 写根 allowlist；仅在 writeRoots 存在时生效。 */
+  writeAllowlist?: string[];
   /** 审批门；不提供时视为全部自动批准（等效 auto）。 */
   approvalGate?: ApprovalGate;
   /** 自定义工具（官方 CreateAgentSessionOptions.customTools，ToolDefinition）。 */

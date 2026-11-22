@@ -36,6 +36,7 @@ import type { Plugin, PluginDetail, InstallPluginRequest, InstallPluginResponse 
 import type { SessionShare, CreateShareRequest, SessionSnapshot } from '@/types/collab'
 import { createWorkspaceApi } from './workspace'
 import { createProvidersApi } from './providers'
+import { createCoworkApi } from './cowork'
 import { getApiBase } from '@/utils/env'
 
 // ── Panel Config 类型 ──
@@ -568,6 +569,8 @@ export const api = {
 
   // ── Workbench 工作区（只读文件面板） ──
   ...createWorkspaceApi({ request, getToken, ensureTokenLoaded }),
+  // ── Cowork 任务域 ──
+  ...createCoworkApi({ request, getToken, ensureTokenLoaded }),
   // ── 路径安全检查 ──
 
   checkPathBlocked: (path: string) =>

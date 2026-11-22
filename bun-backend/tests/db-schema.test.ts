@@ -108,6 +108,19 @@ describe("path_whitelist 死表", () => {
     expect(tables).toContain("auth_tokens");
     expect(tables).toContain("const_sessions");
     expect(tables).toContain("event_hooks");
+    // v11：Cowork 任务域八表必须随新库一次性建齐。
+    for (const table of [
+      "cowork_projects",
+      "cowork_tasks",
+      "cowork_runs",
+      "cowork_steps",
+      "cowork_artifacts",
+      "cowork_approvals",
+      "cowork_schedules",
+      "cowork_task_events",
+    ]) {
+      expect(tables).toContain(table);
+    }
     expect(maxVersion(dbFile())).toBe(SCHEMA_VERSION);
   });
 
@@ -153,6 +166,8 @@ describe("path_whitelist 死表", () => {
     // 后续版本的表补齐 = 迁移链没断
     expect(tables).toContain("llm_usage_calls");
     expect(tables).toContain("evolution_rules");
+    expect(tables).toContain("cowork_tasks");
+    expect(tables).toContain("cowork_task_events");
     // deferred_runs / automations 已随功能删除（v4/v7 只保留版本号占位）
     // 老库里那张零行遗留表原地保留（不 drop）：无读取方 ⇒ 无行为影响，
     // 而贸然 DROP 会让"回滚到旧版本"的用户丢数据。UI 已不再宣称它存在。

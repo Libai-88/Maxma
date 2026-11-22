@@ -77,8 +77,8 @@ export function Sidebar({ onToggleSessions }: { onToggleSessions: () => void }) 
 
   const hasFeature = (name?: string) => {
     if (!name) return true
-    // 清单未加载时，既有入口乐观放行（与旧 Dock 一致）；Cowork 是 M0 新入口，
-    // 在拿到清单前必须默认隐藏，不能先闪一个未启用的“任务”入口。
+    // 清单未加载时，既有入口乐观放行（与旧 Dock 一致）；Cowork 需等清单确认，
+    // 避免 MAXMA_COWORK=0 时先闪出一个实际不可用的“任务”入口。
     if (!capabilities) return name !== 'cowork'
     const cfg = capabilities.features?.[name]
     return !cfg || cfg.enabled !== false

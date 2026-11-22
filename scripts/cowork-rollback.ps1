@@ -102,6 +102,17 @@ if (-not $NoConfig) {
     }
 }
 
+# Cowork staging 产物与 DB 记录一起回滚；否则任务详情里的产物会变成空引用。
+$coworkBackup = Join-Path $backupPayload "cowork"
+if (Test-Path -LiteralPath $coworkBackup) {
+    $coworkDest = Join-Path $DataDir "cowork"
+    if (Test-Path -LiteralPath $coworkDest) {
+        Remove-Item -LiteralPath $coworkDest -Recurse -Force
+    }
+    New-Item -ItemType Directory -Force -Path $coworkDest | Out-Null
+    Copy-Item -Path (Join-Path $coworkBackup "*") -Destination $coworkDest -Recurse -Force
+}
+
 $checkedOut = ""
 if (-not $NoGit) {
     & git -C $RepoRoot switch --detach $Ref

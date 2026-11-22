@@ -21,7 +21,7 @@ export function dbPath(): string {
   return path.join(getApiDataDir(), "maxma.db");
 }
 
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 
 type Migration = string | ((conn: Database) => void);
 
@@ -229,6 +229,123 @@ export const SCHEMA_MIGRATIONS: Migration[] = [
     CREATE INDEX IF NOT EXISTS idx_evolution_events_rule_time
       ON evolution_events(rule_id, created_at DESC);
     INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (10, julianday('now'));`,
+  // v11: Cowork 任务域。只追加新表，不改已有表；M1 只使用 tasks / runs / steps /
+  // artifacts / approvals / task_events，projects 与 schedules 先建空壳给 M2/M3 复用。
+  // 所有时间用 ISO-8601 TEXT（与 evolution 一致），事件 id 用全局自增做 SSE 游标。
+  `CREATE TABLE IF NOT EXISTS cowork_projects (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      instructions TEXT NOT NULL DEFAULT '',
+      workspace_roots_json TEXT NOT NULL DEFAULT '[]',
+      default_template_ids_json TEXT NOT NULL DEFAULT '[]',
+      model_policy_json TEXT NOT NULL DEFAULT '{}',
+      data_policy TEXT NOT NULL DEFAULT 'local_only',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS cowork_tasks (
+      id TEXT PRIMARY KEY,
+      project_id TEXT,
+      title TEXT NOT NULL,
+      objective TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'draft',
+      workspace_root TEXT NOT NULL,
+      staging_root TEXT NOT NULL,
+      permission_mode TEXT NOT NULL DEFAULT 'ask',
+      model_policy_json TEXT NOT NULL DEFAULT '{}',
+      data_policy TEXT NOT NULL DEFAULT 'local_only',
+      inputs_json TEXT NOT NULL DEFAULT '{}',
+      session_id TEXT,
+      schedule_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      completed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_cowork_tasks_status_updated
+      ON cowork_tasks(status, updated_at DESC);
+    CREATE TABLE IF NOT EXISTS cowork_runs (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      attempt INTEGER NOT NULL DEFAULT 1,
+      status TEXT NOT NULL DEFAULT 'running',
+      started_at TEXT NOT NULL,
+      ended_at TEXT,
+      error TEXT,
+      checkpoint_json TEXT NOT NULL DEFAULT '{}',
+      usage_json TEXT NOT NULL DEFAULT '{}',
+      FOREIGN KEY (task_id) REFERENCES cowork_tasks(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_cowork_runs_task_attempt
+      ON cowork_runs(task_id, attempt DESC);
+    CREATE TABLE IF NOT EXISTS cowork_steps (
+      id TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL,
+      seq INTEGER NOT NULL,
+      label TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      detail_json TEXT NOT NULL DEFAULT '{}',
+      started_at TEXT,
+      ended_at TEXT,
+      FOREIGN KEY (run_id) REFERENCES cowork_runs(id) ON DELETE CASCADE
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_cowork_steps_run_seq
+      ON cowork_steps(run_id, seq);
+    CREATE TABLE IF NOT EXISTS cowork_artifacts (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      run_id TEXT,
+      kind TEXT NOT NULL,
+      path TEXT NOT NULL,
+      version INTEGER NOT NULL DEFAULT 1,
+      sha256 TEXT NOT NULL DEFAULT '',
+      size_bytes INTEGER NOT NULL DEFAULT 0,
+      template_id TEXT,
+      status TEXT NOT NULL DEFAULT 'staged',
+      sources_json TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (task_id) REFERENCES cowork_tasks(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_cowork_artifacts_task_created
+      ON cowork_artifacts(task_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS cowork_approvals (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      run_id TEXT,
+      kind TEXT NOT NULL,
+      payload_json TEXT NOT NULL DEFAULT '{}',
+      status TEXT NOT NULL DEFAULT 'pending',
+      decision_reason TEXT,
+      expires_at TEXT,
+      created_at TEXT NOT NULL,
+      resolved_at TEXT,
+      FOREIGN KEY (task_id) REFERENCES cowork_tasks(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_cowork_approvals_task_status
+      ON cowork_approvals(task_id, status, created_at DESC);
+    CREATE TABLE IF NOT EXISTS cowork_schedules (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      cron TEXT NOT NULL,
+      timezone TEXT NOT NULL DEFAULT 'Asia/Shanghai',
+      enabled INTEGER NOT NULL DEFAULT 1,
+      next_run_at TEXT,
+      last_run_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (task_id) REFERENCES cowork_tasks(id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS cowork_task_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id TEXT NOT NULL,
+      run_id TEXT,
+      type TEXT NOT NULL,
+      payload_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (task_id) REFERENCES cowork_tasks(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_cowork_task_events_task_id
+      ON cowork_task_events(task_id, id);
+    INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (11, julianday('now'));`,
 ];
 
 let initializedForPath: string | null = null;
